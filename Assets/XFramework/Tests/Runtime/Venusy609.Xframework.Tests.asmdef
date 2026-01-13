@@ -1,0 +1,11 @@
+{
+    "name": "Venusy609.Xframework.Tests",
+    "references": [
+        "Venusy609.Xframework"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

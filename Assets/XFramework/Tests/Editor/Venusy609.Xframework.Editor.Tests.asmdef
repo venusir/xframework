@@ -1,0 +1,14 @@
+{
+    "name": "Venusy609.Xframework.Editor.Tests",
+    "references": [
+        "Venusy609.Xframework.Editor",
+        "Venusy609.Xframework"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}
