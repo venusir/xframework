@@ -21,7 +21,7 @@ namespace Venusy609.Xframework
         /// </summary>
         public void CountThingsAndDoStuffAndOutputIt()
         {
-            var result = new MyPublicRuntimeExampleClass().CountThingsAndDoStuff(1, 2, false);
+            //var result = new MyPublicRuntimeExampleClass().CountThingsAndDoStuff(1, 2, false);
             //Debug.Log("Call CountThingsAndDoStuffAndOutputIt returns " + result);
         }
     }
