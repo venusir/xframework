@@ -1,52 +1,120 @@
 using System;
 using System.Collections.Generic;
-using UnityEngine;
 
 namespace XFramework
 {
+    /// <summary>
+    /// 实体节点，按类型（Type）缓存子节点，提供高效的组件式访问。
+    /// <para>类似于 Unity 的 GetComponent/AddComponent 模式，但基于纯 C# 节点树实现。</para>
+    /// </summary>
     public abstract class EntityNode : ParentNode
     {
-        Dictionary<Type, BaseNode> dicts = new Dictionary<Type, BaseNode>();
+        #region Private Fields
 
-        public T Get<T>() where T : BaseNode
+        /// <summary>按具体类类型缓存的子节点字典。</summary>
+        private Dictionary<Type, BaseNode> _typeCache = new Dictionary<Type, BaseNode>();
+
+        /// <summary>按接口类型缓存的子节点字典。</summary>
+        private Dictionary<Type, IBaseNode> _interfaceCache = new Dictionary<Type, IBaseNode>();
+
+        #endregion
+
+        #region Public Methods
+
+        /// <summary>
+        /// 获取指定类型的子节点。优先从缓存中查找，未命中则遍历子节点。
+        /// </summary>
+        /// <typeparam name="T">子节点类型。</typeparam>
+        /// <returns>匹配的子节点，未找到则返回 null。</returns>
+        public T GetComponent<T>() where T : IBaseNode
         {
-            if (dicts.TryGetValue(typeof(T), out var node) && node is T)
-                return (T)node;
+            Type type = typeof(T);
 
+            // 优先从对应缓存中查找
+            if (type.IsInterface)
+            {
+                if (_interfaceCache.TryGetValue(type, out var cached) && cached is T node)
+                    return node;
+            }
+            else
+            {
+                if (_typeCache.TryGetValue(type, out var cached) && cached is T node)
+                    return node;
+            }
+
+            // 遍历子节点查找
             foreach (var child in children)
             {
-                if (child is T)
+                if (child is T match)
                 {
-                    dicts[typeof(T)] = child as T;
-                    return (T)child;
+                    if (type.IsInterface)
+                        _interfaceCache[type] = match;
+                    else
+                        _typeCache[type] = match as BaseNode;
+
+                    return match;
                 }
             }
-            return null;
+            return default;
         }
 
-        public T Add<T>() where T : BaseNode, new()
+        /// <summary>
+        /// 添加指定类型的子节点。如果已存在同类型节点则直接返回。
+        /// </summary>
+        /// <typeparam name="T">要创建的子节点类型，必须有无参构造函数。</typeparam>
+        /// <returns>创建或已存在的子节点。</returns>
+        public T AddComponent<T>() where T : BaseNode, new()
         {
-            if (dicts.TryGetValue(typeof(T), out BaseNode node))
+            if (_typeCache.TryGetValue(typeof(T), out BaseNode node))
                 return (T)node;
 
             T component = new T();
-            dicts[typeof(T)] = component;
+            _typeCache[typeof(T)] = component;
             AddChild(component);
             return component;
         }
 
-        public bool Remove<T>() where T : BaseNode
+        /// <summary>
+        /// 移除指定类型的子节点。
+        /// </summary>
+        /// <typeparam name="T">要移除的子节点类型。</typeparam>
+        /// <returns>是否成功移除。</returns>
+        public bool RemoveComponent<T>() where T : IBaseNode
         {
-            if (dicts.TryGetValue(typeof(T), out BaseNode node))
+            Type type = typeof(T);
+
+            if (type.IsInterface)
             {
-                dicts.Remove(typeof(T));
-                RemoveChild(node);
-                return true;
+                if (_interfaceCache.TryGetValue(type, out var cached))
+                {
+                    _interfaceCache.Remove(type);
+                    RemoveFromAllCaches((BaseNode)cached);
+                    RemoveChild((BaseNode)cached);
+                    return true;
+                }
+                return false;
             }
-            return false;
+            else
+            {
+                if (_typeCache.TryGetValue(type, out BaseNode node))
+                {
+                    _typeCache.Remove(type);
+                    RemoveFromAllCaches(node);
+                    RemoveChild(node);
+                    return true;
+                }
+                return false;
+            }
         }
 
-        public BaseNode Add(Type type)
+        /// <summary>
+        /// 通过运行时类型添加子节点。
+        /// </summary>
+        /// <param name="type">要创建的子节点类型，必须是 <see cref="BaseNode"/> 的子类。</param>
+        /// <returns>创建或已存在的子节点。</returns>
+        /// <exception cref="ArgumentNullException">type 为 null。</exception>
+        /// <exception cref="ArgumentException">type 不是 BaseNode 的子类。</exception>
+        public BaseNode AddComponent(Type type)
         {
             if (type == null)
                 throw new ArgumentNullException(nameof(type));
@@ -54,24 +122,66 @@ namespace XFramework
             if (!typeof(BaseNode).IsAssignableFrom(type))
                 throw new ArgumentException($"Add {type} failed, it is not a BaseNode");
 
-            if (dicts.TryGetValue(type, out BaseNode node))
+            if (_typeCache.TryGetValue(type, out BaseNode node))
                 return node;
 
             node = Activator.CreateInstance(type) as BaseNode;
-            dicts[type] = node;
+            _typeCache[type] = node;
             AddChild(node);
             return node;
         }
 
-        public bool Remove(BaseNode node)
+        /// <summary>
+        /// 移除指定的子节点实例。
+        /// </summary>
+        /// <param name="node">要移除的子节点。</param>
+        /// <returns>是否成功移除。</returns>
+        public bool RemoveComponent(BaseNode node)
         {
             if (node == null) return false;
-            if (dicts.ContainsKey(node.GetType()))
-            {
-                dicts.Remove(node.GetType());
-            }
+
+            RemoveFromAllCaches(node);
             RemoveChild(node);
             return true;
         }
+
+        #endregion
+
+        #region Private Methods
+
+        /// <summary>
+        /// 从两个缓存中同时移除该节点相关的所有条目。
+        /// </summary>
+        /// <param name="node">要移除的节点。</param>
+        private void RemoveFromAllCaches(BaseNode node)
+        {
+            // 从 _typeCache 中移除（按具体类型）
+            Type concreteType = node.GetType();
+            if (_typeCache.TryGetValue(concreteType, out var cachedNode) && cachedNode == node)
+            {
+                _typeCache.Remove(concreteType);
+            }
+
+            // 从 _interfaceCache 中移除所有指向该节点的条目
+            // 使用手动遍历而非 LINQ 以避免分配
+            List<Type> keysToRemove = null;
+            foreach (var kvp in _interfaceCache)
+            {
+                if (kvp.Value == node)
+                {
+                    keysToRemove ??= new List<Type>();
+                    keysToRemove.Add(kvp.Key);
+                }
+            }
+            if (keysToRemove != null)
+            {
+                foreach (var key in keysToRemove)
+                {
+                    _interfaceCache.Remove(key);
+                }
+            }
+        }
+
+        #endregion
     }
 }
