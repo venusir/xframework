@@ -8,22 +8,65 @@ namespace XFramework
     /// <typeparam name="TKey">键的类型。</typeparam>
     public abstract class DictionaryNode<TKey> : ParentNode
     {
-        /// <summary>按键缓存的子节点字典。</summary>
-        private Dictionary<TKey, BaseNode> _nodeCache = new Dictionary<TKey, BaseNode>();
+        /// <summary>按键映射子节点的字典。</summary>
+        private Dictionary<TKey, BaseNode> _nodeDict;
+
+        /// <summary>子节点数量。</summary>
+        public int NodeCount => _nodeDict.Count;
+
+        /// <summary>所有键的集合。</summary>
+        public Dictionary<TKey, BaseNode>.KeyCollection Keys => _nodeDict.Keys;
+
+        /// <summary>所有子节点的集合。</summary>
+        public Dictionary<TKey, BaseNode>.ValueCollection Values => _nodeDict.Values;
 
         /// <summary>
         /// 添加子节点并关联指定键。
+        /// <para>如果键已存在，会输出警告并忽略本次操作。</para>
         /// </summary>
         /// <typeparam name="T">子节点类型。</typeparam>
         /// <param name="key">关联的键。</param>
         /// <param name="node">要添加的子节点。</param>
         public void AddNode<T>(TKey key, T node) where T : BaseNode
         {
-            if (node != null && !_nodeCache.ContainsKey(key))
+            if (node == null)
             {
-                _nodeCache[key] = node;
-                AddChild(node);
+                UnityEngine.Debug.LogWarning($"DictionaryNode.AddNode: node is null, key '{key}'.");
+                return;
             }
+
+            if (_nodeDict.ContainsKey(key))
+            {
+                UnityEngine.Debug.LogWarning($"DictionaryNode.AddNode: key '{key}' already exists. Use SetNode to overwrite.");
+                return;
+            }
+
+            _nodeDict[key] = node;
+            AddChild(node);
+        }
+
+        /// <summary>
+        /// 设置子节点并关联指定键。如果键已存在，会先移除旧的子节点再添加新的。
+        /// </summary>
+        /// <typeparam name="T">子节点类型。</typeparam>
+        /// <param name="key">关联的键。</param>
+        /// <param name="node">要设置的子节点。</param>
+        public void SetNode<T>(TKey key, T node) where T : BaseNode
+        {
+            if (node == null)
+            {
+                UnityEngine.Debug.LogWarning($"DictionaryNode.SetNode: node is null, key '{key}'.");
+                return;
+            }
+
+            if (_nodeDict.TryGetValue(key, out var oldNode))
+            {
+                _nodeDict.Remove(key);
+                RemoveChild(oldNode);
+            }
+
+            _nodeDict[key] = node;
+            AddChild(node);
         }
 
         /// <summary>
@@ -32,10 +75,23 @@ namespace XFramework
         /// <param name="key">要移除的键。</param>
         public void RemoveNode(TKey key)
         {
-            if (_nodeCache.TryGetValue(key, out BaseNode node))
+            if (_nodeDict.TryGetValue(key, out BaseNode node))
             {
-                _nodeCache.Remove(key);
+                _nodeDict.Remove(key);
                 RemoveChild(node);
+            }
+        }
+
+        /// <summary>
+        /// 清空所有子节点。
+        /// </summary>
+        public void ClearNodes()
+        {
+            // 收集所有键，避免遍历时修改字典
+            var keys = new List<TKey>(_nodeDict.Keys);
+            foreach (var key in keys)
+            {
+                RemoveNode(key);
             }
         }
 
@@ -46,7 +102,18 @@ namespace XFramework
         /// <returns>如果存在该键则返回 true。</returns>
         public bool ContainsNode(TKey key)
         {
-            return _nodeCache.ContainsKey(key);
+            return _nodeDict.ContainsKey(key);
+        }
+
+        /// <summary>
+        /// 尝试获取指定键关联的子节点（非泛型版本）。
+        /// </summary>
+        /// <param name="key">要查找的键。</param>
+        /// <param name="node">输出参数，找到的节点。</param>
+        /// <returns>是否成功找到。</returns>
+        public bool TryGetNode(TKey key, out BaseNode node)
+        {
+            return _nodeDict.TryGetValue(key, out node);
         }
 
         /// <summary>
@@ -58,33 +125,61 @@ namespace XFramework
         /// <returns>是否成功找到且类型匹配。</returns>
         public bool TryGetNode<T>(TKey key, out T node) where T : BaseNode
         {
-            if (_nodeCache.TryGetValue(key, out var outNode))
+            if (_nodeDict.TryGetValue(key, out var outNode))
             {
-                if (outNode is T)
-                {
-                    node = outNode as T;
+                node = outNode as T;
+                if (node != null)
                     return true;
-                }
-                else
-                {
-                    UnityEngine.Debug.LogError($"DictionaryNode.TryGet: key {key} is not type of {typeof(T)}");
-                }
+
+                UnityEngine.Debug.LogError($"DictionaryNode.TryGetNode: key '{key?.ToString() ?? "null"}' is not of type {typeof(T)}");
             }
+
             node = null;
             return false;
         }
 
         /// <summary>
         /// 获取指定键关联的指定类型子节点。
+        /// <para>未找到或类型不匹配时返回 null，并输出警告日志。</para>
         /// </summary>
         /// <typeparam name="T">子节点类型。</typeparam>
         /// <param name="key">要查找的键。</param>
         /// <returns>找到的节点，未找到或类型不匹配则返回 null。</returns>
         public T GetNode<T>(TKey key) where T : BaseNode
         {
-            if (_nodeCache.TryGetValue(key, out BaseNode node))
-                return node as T;
+            if (_nodeDict.TryGetValue(key, out BaseNode node))
+            {
+                var result = node as T;
+                if (result == null)
+                {
+                    UnityEngine.Debug.LogWarning($"DictionaryNode.GetNode: key '{key?.ToString() ?? "null"}' exists but is not of type {typeof(T)}");
+                }
+                return result;
+            }
+
             return null;
         }
+
+        #region Lifecycle Overrides
+
+        internal sealed override void AwakeInternal()
+        {
+            base.AwakeInternal();
+
+            _nodeDict = new Dictionary<TKey, BaseNode>();
+        }
+
+        /// <summary>
+        /// 节点销毁时的回调。清理字典。
+        /// </summary>
+        internal override void DestroyInternal()
+        {
+            _nodeDict.Clear();
+            _nodeDict = null;
+
+            base.DestroyInternal();
+        }
+
+        #endregion
     }
 }

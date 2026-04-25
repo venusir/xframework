@@ -82,7 +82,7 @@ namespace XFramework
         /// <summary>
         /// 内部初始化方法。初始化子节点列表。
         /// </summary>
-        internal sealed override void AwakeInternal()
+        internal override void AwakeInternal()
         {
             base.AwakeInternal();
 
@@ -92,7 +92,7 @@ namespace XFramework
         /// <summary>
         /// 内部销毁方法。递归销毁所有子节点后清理列表。
         /// </summary>
-        internal sealed override void DestroyInternal()
+        internal override void DestroyInternal()
         {
             foreach (var child in children)
             {

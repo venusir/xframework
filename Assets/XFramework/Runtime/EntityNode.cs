@@ -12,10 +12,10 @@ namespace XFramework
         #region Private Fields
 
         /// <summary>按具体类类型缓存的子节点字典。</summary>
-        private Dictionary<Type, BaseNode> _typeCache = new Dictionary<Type, BaseNode>();
+        private Dictionary<Type, BaseNode> _typeCache;
 
         /// <summary>按接口类型缓存的子节点字典。</summary>
-        private Dictionary<Type, IBaseNode> _interfaceCache = new Dictionary<Type, IBaseNode>();
+        private Dictionary<Type, IBaseNode> _interfaceCache;
 
         #endregion
 
@@ -143,6 +143,28 @@ namespace XFramework
             RemoveFromAllCaches(node);
             RemoveChild(node);
             return true;
+        }
+
+        #endregion
+
+        #region Internal Methods
+
+        internal sealed override void AwakeInternal()
+        {
+            base.AwakeInternal();
+
+            _typeCache = new Dictionary<Type, BaseNode>();
+            _interfaceCache = new Dictionary<Type, IBaseNode>();
+        }
+
+        internal sealed override void DestroyInternal()
+        {
+            _typeCache.Clear();
+            _typeCache = null;
+            _interfaceCache.Clear();
+            _interfaceCache = null;
+
+            base.DestroyInternal();
         }
 
         #endregion
