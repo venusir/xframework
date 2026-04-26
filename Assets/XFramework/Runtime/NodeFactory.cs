@@ -49,7 +49,6 @@ namespace XFramework
 
         /// <summary>
         /// 手动回收节点到缓存池中。
-
         /// <para>通常不需要手动调用，节点调用 <see cref="BaseNode.Destroy"/> 后会自动回池。</para>
         /// </summary>
         /// <typeparam name="T">节点类型。</typeparam>
@@ -107,7 +106,32 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 通过运行时类型获取节点，并传入初始化参数。
+        /// <para>优先从缓存池中复用，池为空时创建新节点。</para>
+        /// <para>内部会自动调用 <see cref="BaseNode.Init{TArg}(TArg)"/> 来设置参数，但不会调用 Awake。</para>
+        /// <para>返回的节点仍处于"已销毁"状态，需通过 <see cref="ParentNode.AddChild"/> 或手动调用 Awake 完成初始化。</para>
+        /// </summary>
+        /// <param name="type">节点类型，必须是 <see cref="BaseNode"/> 的子类且有无参构造函数。</param>
+        /// <param name="arg">初始化参数。</param>
+        /// <returns>节点实例（参数已设置，但尚未 Awake）。</returns>
+        /// <exception cref="ArgumentNullException">type 为 null。</exception>
+        /// <exception cref="ArgumentException">type 不是 BaseNode 的子类。</exception>
+        public static BaseNode GetNode(Type type, object arg)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            if (!typeof(BaseNode).IsAssignableFrom(type))
+                throw new ArgumentException($"GetNode failed: {type} is not a BaseNode.");
+
+            BaseNode node = GetOrCreatePool(type).Get();
+            node.Init(arg);
+            return node;
+        }
+
+        /// <summary>
         /// 手动回收节点到缓存池中。
+
         /// <para>通过 <paramref name="node"/> 的运行时类型自动查找对应的缓存池。</para>
         /// </summary>
         /// <param name="node">要回收的节点。</param>
