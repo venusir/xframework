@@ -94,20 +94,17 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 通过运行时类型手动回收节点到缓存池中。
+        /// 手动回收节点到缓存池中。
+        /// <para>通过 <paramref name="node"/> 的运行时类型自动查找对应的缓存池。</para>
         /// </summary>
-        /// <param name="type">节点类型。</param>
         /// <param name="node">要回收的节点。</param>
-        /// <exception cref="ArgumentNullException">type 或 node 为 null。</exception>
-        public static void ReturnNode(Type type, BaseNode node)
+        /// <exception cref="ArgumentNullException">node 为 null。</exception>
+        public static void ReturnNode(BaseNode node)
         {
-            if (type == null)
-                throw new ArgumentNullException(nameof(type));
-
             if (node == null)
                 throw new ArgumentNullException(nameof(node));
 
-            var pool = GetOrCreatePool(type);
+            var pool = GetOrCreatePool(node.GetType());
             pool.Return(node);
         }
 
