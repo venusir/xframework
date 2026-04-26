@@ -24,6 +24,12 @@ namespace XFramework
         public BaseNode this[int index] => children[index];
 
         /// <summary>
+        /// 获取遍历子节点的迭代器，支持 foreach 语法。
+        /// </summary>
+        /// <returns>子节点迭代器。</returns>
+        public IEnumerator<BaseNode> GetEnumerator() => children.GetEnumerator();
+
+        /// <summary>
         /// 获取第一个指定类型的子节点。
         /// </summary>
         /// <typeparam name="T">子节点类型。</typeparam>

@@ -1,9 +1,8 @@
 {
 	"name": "com.venusy609.xframework",
-	"displayName":"XFramework",
+	"displayName": "XFramework",
 	"version": "0.1.0",
 	"unity": "6000.3",
-	"description": "Replace this string with your own description of the package. This description appears in the Package Manager window when the user selects this package from the list. \n\nFor best results, use this text to summarize: \n\u25AA What the package does \n\u25AA How it can benefit the user \n\nNote: Special formatting characters are supported, including line breaks ('\\n') and bullets ('\\u25AA').",
-	"dependencies": {
-	}
+	"description": "XFramework is a tree-based node system for Unity. It provides a hierarchical node structure with object pooling, component-style access (EntityNode), key-value access (DictionaryNode), and a unified factory API (NodeFactory) for node creation and recycling.",
+	"dependencies": {}
 }
