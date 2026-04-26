@@ -98,10 +98,8 @@ namespace XFramework
                 Parent.RemoveChild(this, false);
                 SetParent(null);
             }
-            else
-            {
-                DestroyInternal();
-            }
+
+            DestroyInternal();
         }
 
         #endregion
