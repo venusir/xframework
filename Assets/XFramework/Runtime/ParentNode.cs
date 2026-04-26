@@ -9,6 +9,9 @@ namespace XFramework
     /// </summary>
     public abstract class ParentNode : BaseNode
     {
+        /// <summary>子节点列表。</summary>
+        List<BaseNode> children;
+
         /// <summary>子节点数量。</summary>
         public int ChildCount => children.Count;
 
@@ -16,9 +19,6 @@ namespace XFramework
         /// <param name="index">子节点索引。</param>
         /// <returns>指定索引处的子节点。</returns>
         public BaseNode this[int index] => children[index];
-
-        /// <summary>子节点列表。</summary>
-        private List<BaseNode> children;
 
         /// <summary>
         /// 获取第一个指定类型的子节点。
@@ -59,21 +59,6 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 获取所有匹配指定类型的子节点。
-        /// <para>创建一个新的 <see cref="List{T}"/> 并返回所有匹配的子节点。</para>
-        /// </summary>
-        /// <typeparam name="T">要查找的子节点类型。</typeparam>
-        /// <param name="recursive">是否递归查找所有子孙节点。</param>
-        /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
-        /// <returns>包含所有匹配子节点的列表。未找到时返回空列表。</returns>
-        public List<T> GetNodes<T>(bool recursive, Predicate<T> predicate = null) where T : BaseNode
-        {
-            List<T> nodes = new List<T>();
-            GetNodes(nodes, recursive, predicate);
-            return nodes;
-        }
-
-        /// <summary>
         /// 获取所有匹配指定类型的子节点，并填充到指定列表中。
         /// <para>此方法允许调用方复用已有的 <see cref="List{T}"/> 实例以减少 GC 分配。</para>
         /// </summary>
@@ -102,29 +87,18 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 递归收集指定父节点下所有匹配的子节点。
+        /// 获取所有匹配指定类型的子节点。
+        /// <para>创建一个新的 <see cref="List{T}"/> 并返回所有匹配的子节点。</para>
         /// </summary>
         /// <typeparam name="T">要查找的子节点类型。</typeparam>
-        /// <param name="parent">要遍历的父节点。</param>
-        /// <param name="recursive">是否继续向下递归。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
         /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
-        /// <param name="nodes">用于存储匹配结果的列表。</param>
-        private void CollectNodesRecursive<T>(ParentNode parent, List<T> nodes, bool recursive, Predicate<T> predicate) where T : BaseNode
+        /// <returns>包含所有匹配子节点的列表。未找到时返回空列表。</returns>
+        public List<T> GetNodes<T>(bool recursive, Predicate<T> predicate = null) where T : BaseNode
         {
-            for (int i = 0; i < parent.ChildCount; i++)
-            {
-                var child = parent[i];
-
-                if (child is T node && (predicate == null || predicate(node)))
-                {
-                    nodes.Add(node);
-                }
-
-                if (recursive && child is ParentNode childParent)
-                {
-                    CollectNodesRecursive(childParent, nodes, recursive, predicate);
-                }
-            }
+            List<T> nodes = new List<T>();
+            GetNodes(nodes, recursive, predicate);
+            return nodes;
         }
 
         /// <summary>
@@ -161,6 +135,32 @@ namespace XFramework
                 children.Remove(node);
                 OnChildRemoved(node, internalCall);
                 node.Destroy();
+            }
+        }
+
+        /// <summary>
+        /// 递归收集指定父节点下所有匹配的子节点。
+        /// </summary>
+        /// <typeparam name="T">要查找的子节点类型。</typeparam>
+        /// <param name="parent">要遍历的父节点。</param>
+        /// <param name="recursive">是否继续向下递归。</param>
+        /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
+        /// <param name="nodes">用于存储匹配结果的列表。</param>
+        void CollectNodesRecursive<T>(ParentNode parent, List<T> nodes, bool recursive, Predicate<T> predicate) where T : BaseNode
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+
+                if (child is T node && (predicate == null || predicate(node)))
+                {
+                    nodes.Add(node);
+                }
+
+                if (recursive && child is ParentNode childParent)
+                {
+                    CollectNodesRecursive(childParent, nodes, recursive, predicate);
+                }
             }
         }
 
