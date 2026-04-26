@@ -154,6 +154,13 @@ namespace XFramework
             base.DestroyInternal();
         }
 
+        protected override void OnChildRemoved(BaseNode node)
+        {
+            base.OnChildRemoved(node);
+
+            RemoveFromAllCaches(node);
+        }
+
         #endregion
 
         #region Private Methods

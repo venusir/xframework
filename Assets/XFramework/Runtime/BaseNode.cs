@@ -37,6 +37,9 @@ namespace XFramework
         /// <summary>是否为根节点（没有父节点）。</summary>
         public bool IsRoot => Parent == null;
 
+        /// <summary>是否已执行过 Start，防止重复调用。</summary>
+        internal bool Started { get; private set; }
+
         #endregion
 
         #region Static Methods
@@ -65,12 +68,17 @@ namespace XFramework
         /// </summary>
         internal void Awake()
         {
-            if (Destroyed)
-            {
-                throw new InvalidOperationException("Cannot initialize a destroyed node.");
-            }
-
             AwakeInternal();
+        }
+
+        /// <summary>
+        /// 启动节点。应在 Awake 完成、所有组件已添加完毕后显式调用。
+        /// <para>调用链: Start() → StartInternal() → OnStart()</para>
+        /// <para>调用 Start 后，_started 置为 true，后续重复调用无效。</para>
+        /// </summary>
+        public void Start()
+        {
+            StartInternal();
         }
 
         /// <summary>
@@ -81,19 +89,16 @@ namespace XFramework
         {
             if (Destroyed) return;
 
-            DestroyInternal();
-        }
-
-        /// <summary>
-        /// 启动节点。应在 Awake 完成、所有组件已添加完毕后显式调用。
-        /// <para>调用链: Start() → StartInternal() → OnStart()</para>
-        /// <para>调用 Start 后，_started 置为 true，后续重复调用无效。</para>
-        /// </summary>
-        public void Start()
-        {
-            if (_started || Destroyed) return;
-            _started = true;
-            StartInternal();
+            // 销毁前先从父节点脱离
+            if (Parent != null)
+            {
+                Parent.RemoveChild(this);
+                SetParent(null);
+            }
+            else
+            {
+                DestroyInternal();
+            }
         }
 
         #endregion
@@ -121,7 +126,6 @@ namespace XFramework
         {
             Depth = 0;
             Parent = null;
-            Destroyed = false;
 
             OnAwake();
         }
@@ -132,6 +136,8 @@ namespace XFramework
         /// </summary>
         internal virtual void DestroyInternal()
         {
+            if (Destroyed) return;
+
             OnDestroyed();
 
             Depth = 0;
@@ -145,6 +151,10 @@ namespace XFramework
         /// </summary>
         internal virtual void StartInternal()
         {
+            if (Started || Destroyed) return;
+
+            Started = true;
+
             OnStart();
         }
 
@@ -168,20 +178,6 @@ namespace XFramework
         /// <para>在 <see cref="StartInternal"/> 末尾调用。</para>
         /// </summary>
         protected virtual void OnStart() { }
-
-        #endregion
-
-        #region Internal Properties
-
-        /// <summary>是否已执行过 Start，防止重复调用。</summary>
-        internal bool Started => _started;
-
-        #endregion
-
-        #region Private Fields
-
-        /// <summary>是否已执行过 Start，防止重复调用。</summary>
-        private bool _started;
 
         #endregion
     }

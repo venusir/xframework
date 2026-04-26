@@ -164,21 +164,6 @@ namespace XFramework
             }
         }
 
-        /// <summary>
-        /// 将子节点从当前父节点分离，但不销毁。
-        /// <para>分离后子节点的 Parent 会被置为 null，成为根节点。</para>
-        /// </summary>
-        /// <param name="node">要分离的子节点。</param>
-        internal void DetachChild(BaseNode node)
-        {
-            if (node != null && children.Contains(node))
-            {
-                children.Remove(node);
-                node.SetParent(null);
-                OnChildRemoved(node);
-            }
-        }
-
         #region Lifecycle Overrides
 
         /// <summary>

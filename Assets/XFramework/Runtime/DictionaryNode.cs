@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.VisualScripting.YamlDotNet.Core.Tokens;
 
 namespace XFramework
 {
@@ -180,6 +181,35 @@ namespace XFramework
             base.DestroyInternal();
         }
 
+        protected override void OnChildRemoved(BaseNode node)
+        {
+            base.OnChildRemoved(node);
+
+            RemoveFromAllNodes(node);
+        }
+
         #endregion
+
+        void RemoveFromAllNodes(BaseNode node)
+        {
+            // 从 _nodeDict 中移除所有指向该节点的条目
+            // 使用手动遍历而非 LINQ 以避免分配
+            List<TKey> keysToRemove = null;
+            foreach (var kvp in _nodeDict)
+            {
+                if (kvp.Value == node)
+                {
+                    keysToRemove ??= new List<TKey>();
+                    keysToRemove.Add(kvp.Key);
+                }
+            }
+            if (keysToRemove != null)
+            {
+                foreach (var key in keysToRemove)
+                {
+                    _nodeDict.Remove(key);
+                }
+            }
+        }
     }
 }
