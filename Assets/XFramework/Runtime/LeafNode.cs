@@ -8,11 +8,19 @@ namespace XFramework
     /// </summary>
     public class LeafNode : BaseNode
     {
-        protected override void OnDestroyed()
+        internal sealed override void AwakeInternal()
         {
-            base.OnDestroyed();
+            base.AwakeInternal();
+        }
 
-            Debug.Log("LeafNode destroyed");
+        internal sealed override void StartInternal()
+        {
+            base.StartInternal();
+        }
+
+        internal sealed override void DestroyInternal()
+        {
+            base.DestroyInternal();
         }
     }
 }

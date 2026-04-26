@@ -26,5 +26,20 @@ namespace XFramework
         {
             RemoveChild(node);
         }
+
+        internal sealed override void AwakeInternal()
+        {
+            base.AwakeInternal();
+        }
+
+        internal sealed override void StartInternal()
+        {
+            base.StartInternal();
+        }
+
+        internal sealed override void DestroyInternal()
+        {
+            base.DestroyInternal();
+        }
     }
 }

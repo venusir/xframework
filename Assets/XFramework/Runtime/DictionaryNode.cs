@@ -170,10 +170,15 @@ namespace XFramework
             _nodeDict = new Dictionary<TKey, BaseNode>();
         }
 
+        internal sealed override void StartInternal()
+        {
+            base.StartInternal();
+        }
+
         /// <summary>
         /// 节点销毁时的回调。清理字典。
         /// </summary>
-        internal override void DestroyInternal()
+        internal sealed override void DestroyInternal()
         {
             _nodeDict.Clear();
             _nodeDict = null;

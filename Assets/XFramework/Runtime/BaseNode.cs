@@ -123,7 +123,7 @@ namespace XFramework
         {
             if (_destroyed) return;
 
-            OnDestroyed();
+            OnDestroy();
 
             _depth = 0;
             _parent = null;
@@ -158,7 +158,7 @@ namespace XFramework
         /// <summary>
         /// 节点销毁时的回调。在 <see cref="DestroyInternal"/> 末尾调用。
         /// </summary>
-        protected virtual void OnDestroyed() { }
+        protected virtual void OnDestroy() { }
 
         /// <summary>
         /// 节点启动时的回调。类似于 Unity 的 Start 方法，

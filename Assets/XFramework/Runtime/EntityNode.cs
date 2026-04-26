@@ -147,6 +147,11 @@ namespace XFramework
             _interfaceCache = new Dictionary<Type, IBaseNode>();
         }
 
+        internal sealed override void StartInternal()
+        {
+            base.StartInternal();
+        }
+
         internal sealed override void DestroyInternal()
         {
             _typeCache.Clear();
