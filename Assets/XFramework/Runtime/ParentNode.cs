@@ -129,6 +129,7 @@ namespace XFramework
 
         /// <summary>
         /// 添加子节点。添加前会自动调用 <see cref="BaseNode.Awake"/> 初始化该节点。
+        /// <para>如果父节点已执行过 <see cref="BaseNode.Start"/>，则新添加的子节点会立即自动调用 <see cref="BaseNode.Start"/>。</para>
         /// </summary>
         /// <param name="node">要添加的子节点。</param>
         internal void AddChild(BaseNode node)
@@ -139,6 +140,12 @@ namespace XFramework
                 children.Add(node);
                 node.SetParent(this);
                 OnChildAdded(node);
+
+                // 如果父节点已 Start，新子节点应自动 Start（递归传播给其子节点）
+                if (Started)
+                {
+                    node.Start();
+                }
             }
         }
 
@@ -206,7 +213,8 @@ namespace XFramework
             {
                 children[i].Start();
             }
-            OnStart();
+
+            base.StartInternal();
         }
 
         /// <summary>

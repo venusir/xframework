@@ -171,6 +171,13 @@ namespace XFramework
 
         #endregion
 
+        #region Internal Properties
+
+        /// <summary>是否已执行过 Start，防止重复调用。</summary>
+        internal bool Started => _started;
+
+        #endregion
+
         #region Private Fields
 
         /// <summary>是否已执行过 Start，防止重复调用。</summary>
