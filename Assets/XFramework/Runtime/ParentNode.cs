@@ -154,12 +154,12 @@ namespace XFramework
         /// <para>注意：如果仅需从当前父节点移除而不销毁，请使用 <see cref="DetachChild"/>。</para>
         /// </summary>
         /// <param name="node">要移除并销毁的子节点。</param>
-        internal void RemoveChild(BaseNode node)
+        internal void RemoveChild(BaseNode node, bool internalCall = true)
         {
             if (node != null && children.Contains(node))
             {
                 children.Remove(node);
-                OnChildRemoved(node);
+                OnChildRemoved(node, internalCall);
                 node.Destroy();
             }
         }
@@ -176,7 +176,7 @@ namespace XFramework
         /// 子节点移除时的回调。
         /// </summary>
         /// <param name="node">被移除的子节点。</param>
-        protected virtual void OnChildRemoved(BaseNode node) { }
+        protected virtual void OnChildRemoved(BaseNode node, bool internalCall = true) { }
 
         /// <summary>
         /// 内部初始化方法。初始化子节点列表。

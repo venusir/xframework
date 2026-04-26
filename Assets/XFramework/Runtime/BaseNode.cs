@@ -15,6 +15,9 @@ namespace XFramework
 
         /// <summary>父节点引用，根节点为 null。</summary>
         ParentNode Parent { get; }
+
+        /// <summary>销毁节点。</summary>
+        void Destroy();
     }
 
     /// <summary>
@@ -92,7 +95,7 @@ namespace XFramework
             // 销毁前先从父节点脱离
             if (Parent != null)
             {
-                Parent.RemoveChild(this);
+                Parent.RemoveChild(this, false);
                 SetParent(null);
             }
             else

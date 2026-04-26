@@ -181,9 +181,9 @@ namespace XFramework
             base.DestroyInternal();
         }
 
-        protected override void OnChildRemoved(BaseNode node)
+        protected override void OnChildRemoved(BaseNode node, bool internalCall = true)
         {
-            base.OnChildRemoved(node);
+            base.OnChildRemoved(node, internalCall);
 
             RemoveFromAllNodes(node);
         }

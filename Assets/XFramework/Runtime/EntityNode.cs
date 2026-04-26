@@ -75,8 +75,11 @@ namespace XFramework
                 if (_interfaceCache.TryGetValue(type, out var cached))
                 {
                     _interfaceCache.Remove(type);
-                    RemoveFromAllCaches((BaseNode)cached);
-                    RemoveChild((BaseNode)cached);
+
+                    var node = cached as BaseNode;
+                    if (node == null) return false;
+                    RemoveFromAllCaches(node);
+                    RemoveChild(node);
                     return true;
                 }
                 return false;
@@ -154,11 +157,14 @@ namespace XFramework
             base.DestroyInternal();
         }
 
-        protected override void OnChildRemoved(BaseNode node)
+        protected override void OnChildRemoved(BaseNode node, bool internalCall = true)
         {
-            base.OnChildRemoved(node);
+            base.OnChildRemoved(node, internalCall);
 
-            RemoveFromAllCaches(node);
+            if (!internalCall)
+            {
+                RemoveFromAllCaches(node);
+            }
         }
 
         #endregion
