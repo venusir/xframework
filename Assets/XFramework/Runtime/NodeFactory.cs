@@ -31,7 +31,25 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 获取指定类型的节点，并传入初始化参数。
+        /// <para>优先从缓存池中复用，池为空时创建新节点。</para>
+        /// <para>内部会自动调用 <see cref="BaseNode.Init{TArg}(TArg)"/> 来设置参数，但不会调用 Awake。</para>
+        /// <para>返回的节点仍处于"已销毁"状态，需通过 <see cref="ParentNode.AddChild"/> 或手动调用 Awake 完成初始化。</para>
+        /// </summary>
+        /// <typeparam name="T">节点类型，必须有无参构造函数。</typeparam>
+        /// <typeparam name="TArg">参数类型。</typeparam>
+        /// <param name="arg">初始化参数。</param>
+        /// <returns>节点实例（参数已设置，但尚未 Awake）。</returns>
+        public static T GetNode<T, TArg>(TArg arg) where T : BaseNode, new()
+        {
+            T node = GetOrCreatePool<T>().Get();
+            node.Init(arg);
+            return node;
+        }
+
+        /// <summary>
         /// 手动回收节点到缓存池中。
+
         /// <para>通常不需要手动调用，节点调用 <see cref="BaseNode.Destroy"/> 后会自动回池。</para>
         /// </summary>
         /// <typeparam name="T">节点类型。</typeparam>

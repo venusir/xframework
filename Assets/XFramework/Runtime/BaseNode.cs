@@ -171,7 +171,31 @@ namespace XFramework
 
         #endregion
 
+        #region Init
+
+        /// <summary>
+        /// 参数初始化。在 Awake 之前调用，相当于构造函数的替代。
+        /// 子类重写 <see cref="OnInit{TArg}(TArg)"/> 来接收参数化初始化数据。
+        /// </summary>
+        /// <typeparam name="TArg">参数类型。</typeparam>
+        /// <param name="arg">初始化参数。</param>
+        internal void Init<TArg>(TArg arg)
+        {
+            OnInit(arg);
+        }
+
+        /// <summary>
+        /// 参数初始化回调。在 Awake 之前触发。
+        /// <para>子类重写此方法以接收 <see cref="NodeFactory.GetNode{T, TArg}(TArg)"/> 传入的参数。</para>
+        /// </summary>
+        /// <typeparam name="TArg">参数类型。</typeparam>
+        /// <param name="arg">初始化参数。</param>
+        protected virtual void OnInit<TArg>(TArg arg) { }
+
+        #endregion
+
         #region Pooling
+
 
         /// <summary>
         /// 节点销毁完成时触发，用于通知缓存池回收节点。
