@@ -45,7 +45,7 @@ namespace XFramework
         {
             if (predicate == null)
             {
-                return GetNode<T>();
+                throw new ArgumentNullException(nameof(predicate));
             }
 
             foreach (var child in children)
@@ -96,7 +96,7 @@ namespace XFramework
 
                 if (recursive && child is ParentNode parentNode)
                 {
-                    CollectNodesRecursive(parentNode, true, predicate, nodes);
+                    CollectNodesRecursive(parentNode, nodes, recursive, predicate);
                 }
             }
         }
@@ -109,7 +109,7 @@ namespace XFramework
         /// <param name="recursive">是否继续向下递归。</param>
         /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
         /// <param name="nodes">用于存储匹配结果的列表。</param>
-        private void CollectNodesRecursive<T>(ParentNode parent, bool recursive, Predicate<T> predicate, List<T> nodes) where T : BaseNode
+        private void CollectNodesRecursive<T>(ParentNode parent, List<T> nodes, bool recursive, Predicate<T> predicate) where T : BaseNode
         {
             for (int i = 0; i < parent.ChildCount; i++)
             {
@@ -122,7 +122,7 @@ namespace XFramework
 
                 if (recursive && child is ParentNode childParent)
                 {
-                    CollectNodesRecursive(childParent, true, predicate, nodes);
+                    CollectNodesRecursive(childParent, nodes, recursive, predicate);
                 }
             }
         }
