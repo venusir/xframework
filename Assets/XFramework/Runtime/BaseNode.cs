@@ -57,6 +57,7 @@ namespace XFramework
 
         /// <summary>
         /// 销毁节点。如果已销毁则直接返回。
+        /// <para>销毁前会自动从父节点脱离（如果存在父节点），确保父节点的子节点列表不再持有此节点引用。</para>
         /// <para>调用链: Destroy() → DestroyInternal() → OnDestroyed()</para>
         /// </summary>
         public void Destroy()
@@ -76,6 +77,11 @@ namespace XFramework
         #endregion
 
         #region Internal Methods
+
+        /// <summary>
+        /// 节点是否已被销毁。
+        /// </summary>
+        internal bool Destroyed => _destroyed;
 
         /// <summary>
         /// 获取节点是否已执行过 Start。
@@ -103,6 +109,8 @@ namespace XFramework
         {
             _depth = 0;
             _parent = null;
+            _destroyed = false;
+            _started = false;
 
             OnAwake();
         }
@@ -120,6 +128,9 @@ namespace XFramework
             _depth = 0;
             _parent = null;
             _destroyed = true;
+
+            // 通知缓存池：节点已销毁，可以回收
+            OnReturnToPool?.Invoke(this);
         }
 
         /// <summary>
@@ -155,6 +166,16 @@ namespace XFramework
         /// <para>在 <see cref="StartInternal"/> 末尾调用。</para>
         /// </summary>
         protected virtual void OnStart() { }
+
+        #endregion
+
+        #region Pooling
+
+        /// <summary>
+        /// 节点销毁完成时触发，用于通知缓存池回收节点。
+        /// <para>由 <see cref="NodePool{T}"/> 内部订阅使用。</para>
+        /// </summary>
+        internal event Action<BaseNode> OnReturnToPool;
 
         #endregion
     }
