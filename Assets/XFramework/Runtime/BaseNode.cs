@@ -7,15 +7,6 @@ namespace XFramework
     /// </summary>
     public interface IBaseNode
     {
-        /// <summary>节点在树中的深度（根节点为 0）。</summary>
-        int Depth { get; }
-
-        /// <summary>节点是否已被销毁。</summary>
-        bool Destroyed { get; }
-
-        /// <summary>父节点引用，根节点为 null。</summary>
-        ParentNode Parent { get; }
-
         /// <summary>销毁节点。</summary>
         void Destroy();
     }
@@ -29,36 +20,18 @@ namespace XFramework
         #region Public Properties
 
         /// <summary>节点在树中的深度（根节点为 0）。</summary>
-        public int Depth { get; private set; }
-
-        /// <summary>节点是否已被销毁。</summary>
-        public bool Destroyed { get; private set; }
-
-        /// <summary>父节点引用，根节点为 null。</summary>
-        public ParentNode Parent { get; private set; }
-
-        /// <summary>是否为根节点（没有父节点）。</summary>
-        public bool IsRoot => Parent == null;
+        int _depth;
 
         /// <summary>是否已执行过 Start，防止重复调用。</summary>
-        internal bool Started { get; private set; }
+        bool _started;
 
-        #endregion
+        /// <summary>节点是否已被销毁。</summary>
+        bool _destroyed;
 
-        #region Static Methods
+        /// <summary>父节点引用，根节点为 null。</summary>
+        ParentNode _parent;
 
-        /// <summary>
-        /// 创建并初始化一个节点。
-        /// <para>这是创建独立节点的推荐方式，确保 <see cref="OnAwake"/> 被正确调用。</para>
-        /// </summary>
-        /// <typeparam name="T">节点类型，必须有无参构造函数。</typeparam>
-        /// <returns>已初始化的节点实例。</returns>
-        public static T Create<T>() where T : BaseNode, new()
-        {
-            T node = new T();
-            node.Awake();
-            return node;
-        }
+        internal bool Started => _started;
 
         #endregion
 
@@ -90,13 +63,13 @@ namespace XFramework
         /// </summary>
         public void Destroy()
         {
-            if (Destroyed) return;
+            if (_destroyed) return;
 
             // 销毁前先从父节点脱离
-            if (Parent != null)
+            if (_parent != null)
             {
-                Parent.RemoveChild(this, false);
-                SetParent(null);
+                _parent.RemoveChild(this, false);
+                _parent = null;
             }
 
             DestroyInternal();
@@ -112,10 +85,10 @@ namespace XFramework
         /// <param name="parent">新的父节点，null 表示成为根节点。</param>
         internal void SetParent(ParentNode parent)
         {
-            if (Parent != parent)
+            if (_parent != parent)
             {
-                Parent = parent;
-                Depth = parent?.Depth + 1 ?? 0;
+                _parent = parent;
+                _depth = parent?._depth + 1 ?? 0;
             }
         }
 
@@ -125,8 +98,8 @@ namespace XFramework
         /// </summary>
         internal virtual void AwakeInternal()
         {
-            Depth = 0;
-            Parent = null;
+            _depth = 0;
+            _parent = null;
 
             OnAwake();
         }
@@ -137,13 +110,13 @@ namespace XFramework
         /// </summary>
         internal virtual void DestroyInternal()
         {
-            if (Destroyed) return;
+            if (_destroyed) return;
 
             OnDestroyed();
 
-            Depth = 0;
-            Parent = null;
-            Destroyed = true;
+            _depth = 0;
+            _parent = null;
+            _destroyed = true;
         }
 
         /// <summary>
@@ -152,9 +125,9 @@ namespace XFramework
         /// </summary>
         internal virtual void StartInternal()
         {
-            if (Started || Destroyed) return;
+            if (Started || _destroyed) return;
 
-            Started = true;
+            _started = true;
 
             OnStart();
         }
