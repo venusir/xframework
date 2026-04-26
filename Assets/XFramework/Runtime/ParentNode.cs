@@ -18,17 +18,124 @@ namespace XFramework
         public BaseNode this[int index] => children[index];
 
         /// <summary>子节点列表。</summary>
-        protected List<BaseNode> children;
+        private List<BaseNode> children;
 
         /// <summary>
-        /// 添加子节点。添加前会自动调用 <see cref="BaseNode.Initialize"/> 初始化该节点。
+        /// 获取第一个指定类型的子节点。
+        /// </summary>
+        /// <typeparam name="T">子节点类型。</typeparam>
+        /// <returns>第一个匹配的子节点，未找到则返回 null。</returns>
+        public T GetNode<T>() where T : BaseNode
+        {
+            foreach (var child in children)
+            {
+                if (child is T node)
+                    return node;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取第一个满足条件的指定类型子节点。
+        /// </summary>
+        /// <typeparam name="T">子节点类型。</typeparam>
+        /// <param name="predicate">筛选条件。为 null 时等同于 <see cref="GetNode{T}"/>。</param>
+        /// <returns>第一个匹配的子节点，未找到则返回 null。</returns>
+        public T GetNode<T>(Predicate<T> predicate) where T : BaseNode
+        {
+            if (predicate == null)
+            {
+                return GetNode<T>();
+            }
+
+            foreach (var child in children)
+            {
+                if (child is T node && predicate(node))
+                {
+                    return node;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取所有匹配指定类型的子节点。
+        /// <para>创建一个新的 <see cref="List{T}"/> 并返回所有匹配的子节点。</para>
+        /// </summary>
+        /// <typeparam name="T">要查找的子节点类型。</typeparam>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
+        /// <returns>包含所有匹配子节点的列表。未找到时返回空列表。</returns>
+        public List<T> GetNodes<T>(bool recursive, Predicate<T> predicate = null) where T : BaseNode
+        {
+            List<T> nodes = new List<T>();
+            GetNodes(nodes, recursive, predicate);
+            return nodes;
+        }
+
+        /// <summary>
+        /// 获取所有匹配指定类型的子节点，并填充到指定列表中。
+        /// <para>此方法允许调用方复用已有的 <see cref="List{T}"/> 实例以减少 GC 分配。</para>
+        /// </summary>
+        /// <typeparam name="T">要查找的子节点类型。</typeparam>
+        /// <param name="nodes">用于存储匹配结果的列表。不能为 null。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nodes"/> 为 null 时抛出。</exception>
+        public void GetNodes<T>(List<T> nodes, bool recursive, Predicate<T> predicate = null) where T : BaseNode
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+
+            foreach (var child in children)
+            {
+                if (child is T node && (predicate == null || predicate(node)))
+                {
+                    nodes.Add(node);
+                }
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    CollectNodesRecursive(parentNode, true, predicate, nodes);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 递归收集指定父节点下所有匹配的子节点。
+        /// </summary>
+        /// <typeparam name="T">要查找的子节点类型。</typeparam>
+        /// <param name="parent">要遍历的父节点。</param>
+        /// <param name="recursive">是否继续向下递归。</param>
+        /// <param name="predicate">筛选条件。为 null 时匹配所有指定类型的节点。</param>
+        /// <param name="nodes">用于存储匹配结果的列表。</param>
+        private void CollectNodesRecursive<T>(ParentNode parent, bool recursive, Predicate<T> predicate, List<T> nodes) where T : BaseNode
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+
+                if (child is T node && (predicate == null || predicate(node)))
+                {
+                    nodes.Add(node);
+                }
+
+                if (recursive && child is ParentNode childParent)
+                {
+                    CollectNodesRecursive(childParent, true, predicate, nodes);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 添加子节点。添加前会自动调用 <see cref="BaseNode.Awake"/> 初始化该节点。
         /// </summary>
         /// <param name="node">要添加的子节点。</param>
         internal void AddChild(BaseNode node)
         {
             if (node != null && !children.Contains(node))
             {
-                node.Initialize();
+                node.Awake();
                 children.Add(node);
                 node.SetParent(this);
                 OnChildAdded(node);

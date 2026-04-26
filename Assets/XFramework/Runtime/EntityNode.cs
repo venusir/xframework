@@ -42,19 +42,6 @@ namespace XFramework
                     return node;
             }
 
-            // 遍历子节点查找
-            foreach (var child in children)
-            {
-                if (child is T match)
-                {
-                    if (type.IsInterface)
-                        _interfaceCache[type] = match;
-                    else
-                        _typeCache[type] = match as BaseNode;
-
-                    return match;
-                }
-            }
             return default;
         }
 

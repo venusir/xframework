@@ -19,10 +19,12 @@ namespace XFramework
 
     /// <summary>
     /// 树节点系统的抽象基类。
-    /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy）等核心功能。</para>
+    /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy/Start）等核心功能。</para>
     /// </summary>
     public abstract class BaseNode : IBaseNode
     {
+        #region Public Properties
+
         /// <summary>节点在树中的深度（根节点为 0）。</summary>
         public int Depth { get; private set; }
 
@@ -35,20 +37,9 @@ namespace XFramework
         /// <summary>是否为根节点（没有父节点）。</summary>
         public bool IsRoot => Parent == null;
 
-        /// <summary>
-        /// 默认构造函数。
-        /// 注意：初始化逻辑通过 <see cref="Initialize"/> 方法完成，
-        /// 避免在构造函数中调用虚方法（C# anti-pattern）。
-        /// <para>
-        /// 推荐通过 <see cref="Create{T}"/> 工厂方法创建节点，
-        /// 或通过 <see cref="ParentNode.AddChild"/> 添加子节点（会自动初始化）。
-        /// </para>
-        /// </summary>
-        public BaseNode()
-        {
-            // 初始化逻辑移至 Initialize 方法，
-            // 由工厂方法或 AddChild 在合适的时机调用。
-        }
+        #endregion
+
+        #region Static Methods
 
         /// <summary>
         /// 创建并初始化一个节点。
@@ -59,16 +50,20 @@ namespace XFramework
         public static T Create<T>() where T : BaseNode, new()
         {
             T node = new T();
-            node.Initialize();
+            node.Awake();
             return node;
         }
+
+        #endregion
+
+        #region Lifecycle Methods
 
         /// <summary>
         /// 初始化节点。在节点创建后显式调用。
         /// <para>替代在构造函数中调用虚方法，避免 C# 构造函数调用虚方法的 anti-pattern。</para>
         /// <para>通常由 <see cref="Create{T}"/> 或 <see cref="ParentNode.AddChild"/> 自动调用。</para>
         /// </summary>
-        internal void Initialize()
+        internal void Awake()
         {
             if (Destroyed)
             {
@@ -90,6 +85,22 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 启动节点。应在 Awake 完成、所有组件已添加完毕后显式调用。
+        /// <para>调用链: Start() → StartInternal() → OnStart()</para>
+        /// <para>调用 Start 后，_started 置为 true，后续重复调用无效。</para>
+        /// </summary>
+        public void Start()
+        {
+            if (_started || Destroyed) return;
+            _started = true;
+            StartInternal();
+        }
+
+        #endregion
+
+        #region Internal Methods
+
+        /// <summary>
         /// 设置父节点并更新深度。
         /// </summary>
         /// <param name="parent">新的父节点，null 表示成为根节点。</param>
@@ -103,7 +114,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 内部初始化方法。由 <see cref="Initialize"/> 调用。
+        /// 内部初始化方法。由 <see cref="Awake"/> 调用。
         /// <para>派生类可 override 此方法添加自定义初始化逻辑，但必须调用 base.AwakeInternal()。</para>
         /// </summary>
         internal virtual void AwakeInternal()
@@ -121,12 +132,25 @@ namespace XFramework
         /// </summary>
         internal virtual void DestroyInternal()
         {
+            OnDestroyed();
+
             Depth = 0;
             Parent = null;
             Destroyed = true;
-
-            OnDestroyed();
         }
+
+        /// <summary>
+        /// 内部启动方法。由 <see cref="Start"/> 调用。
+        /// <para>派生类可 override 此方法添加自定义启动逻辑，但必须调用 base.StartInternal()。</para>
+        /// </summary>
+        internal virtual void StartInternal()
+        {
+            OnStart();
+        }
+
+        #endregion
+
+        #region Virtual Callbacks
 
         /// <summary>
         /// 节点初始化时的回调。在 <see cref="AwakeInternal"/> 末尾调用。
@@ -137,5 +161,21 @@ namespace XFramework
         /// 节点销毁时的回调。在 <see cref="DestroyInternal"/> 末尾调用。
         /// </summary>
         protected virtual void OnDestroyed() { }
+
+        /// <summary>
+        /// 节点启动时的回调。类似于 Unity 的 Start 方法，
+        /// 在 Awake 完成且所有组件添加完毕后触发。
+        /// <para>在 <see cref="StartInternal"/> 末尾调用。</para>
+        /// </summary>
+        protected virtual void OnStart() { }
+
+        #endregion
+
+        #region Private Fields
+
+        /// <summary>是否已执行过 Start，防止重复调用。</summary>
+        private bool _started;
+
+        #endregion
     }
 }
