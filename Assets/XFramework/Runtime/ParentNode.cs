@@ -197,6 +197,19 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 内部启动方法。先递归启动所有子节点，再调用自身的 OnStart。
+        /// <para>传播顺序与 Unity 语义一致：先子节点后父节点。</para>
+        /// </summary>
+        internal override void StartInternal()
+        {
+            for (int i = 0; i < children.Count; i++)
+            {
+                children[i].Start();
+            }
+            OnStart();
+        }
+
+        /// <summary>
         /// 内部销毁方法。递归销毁所有子节点后清理列表。
         /// </summary>
         internal override void DestroyInternal()
