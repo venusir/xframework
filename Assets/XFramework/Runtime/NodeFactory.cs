@@ -27,8 +27,7 @@ namespace XFramework
         /// <returns>节点实例。</returns>
         public static T GetNode<T>() where T : BaseNode, new()
         {
-            var pool = GetOrCreatePool<T>();
-            return pool.Get();
+            return GetOrCreatePool<T>().Get();
         }
 
         /// <summary>
@@ -41,8 +40,7 @@ namespace XFramework
         {
             if (node == null) return;
 
-            var pool = GetOrCreatePool<T>();
-            pool.Return(node);
+            GetOrCreatePool<T>().Return(node);
         }
 
         /// <summary>
@@ -52,8 +50,7 @@ namespace XFramework
         /// <param name="count">预创建的数量。</param>
         public static void Prewarm<T>(int count) where T : BaseNode, new()
         {
-            var pool = GetOrCreatePool<T>();
-            pool.Prewarm(count);
+            GetOrCreatePool<T>().Prewarm(count);
         }
 
         /// <summary>
@@ -62,8 +59,7 @@ namespace XFramework
         /// <typeparam name="T">节点类型。</typeparam>
         public static void ClearPool<T>() where T : BaseNode, new()
         {
-            var type = typeof(T);
-            if (_pools.TryGetValue(type, out var pool))
+            if (_pools.TryGetValue(typeof(T), out var pool))
             {
                 pool.Clear();
             }
@@ -89,8 +85,7 @@ namespace XFramework
             if (!typeof(BaseNode).IsAssignableFrom(type))
                 throw new ArgumentException($"GetNode failed: {type} is not a BaseNode.");
 
-            var pool = GetOrCreatePool(type);
-            return pool.Get();
+            return GetOrCreatePool(type).Get();
         }
 
         /// <summary>
@@ -104,8 +99,7 @@ namespace XFramework
             if (node == null)
                 throw new ArgumentNullException(nameof(node));
 
-            var pool = GetOrCreatePool(node.GetType());
-            pool.Return(node);
+            GetOrCreatePool(node.GetType()).Return(node);
         }
 
         /// <summary>
@@ -119,8 +113,10 @@ namespace XFramework
             if (type == null)
                 throw new ArgumentNullException(nameof(type));
 
-            var pool = GetOrCreatePool(type);
-            pool.Prewarm(count);
+            if (!typeof(BaseNode).IsAssignableFrom(type))
+                throw new ArgumentException($"Prewarm failed: {type} is not a BaseNode.");
+
+            GetOrCreatePool(type).Prewarm(count);
         }
 
         /// <summary>
