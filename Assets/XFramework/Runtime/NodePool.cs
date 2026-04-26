@@ -3,11 +3,32 @@ using System.Collections.Generic;
 namespace XFramework
 {
     /// <summary>
+    /// 节点缓存池的非泛型接口，用于以 Type 为 key 统一管理不同类型的池。
+    /// </summary>
+    internal interface INodePool
+    {
+        /// <summary>从池中获取一个节点。</summary>
+        BaseNode Get();
+
+        /// <summary>将节点回收到池中。</summary>
+        void Return(BaseNode node);
+
+        /// <summary>预热池，预创建指定数量的节点。</summary>
+        void Prewarm(int count);
+
+        /// <summary>清空池中所有节点。</summary>
+        void Clear();
+
+        /// <summary>池中当前可用节点数量。</summary>
+        int Count { get; }
+    }
+
+    /// <summary>
     /// 节点缓存池。节点销毁时自动回池，减少 GC 分配。
     /// <para>通过 <see cref="NodeFactory"/> 使用，也可独立创建使用。</para>
     /// </summary>
     /// <typeparam name="T">节点类型，必须有无参构造函数。</typeparam>
-    public class NodePool<T> where T : BaseNode, new()
+    public class NodePool<T> : INodePool where T : BaseNode, new()
     {
         #region Private Fields
 
@@ -76,6 +97,20 @@ namespace XFramework
 
         /// <summary>池中当前可用节点数量。</summary>
         public int Count => _pool.Count;
+
+        #endregion
+
+        #region INodePool Explicit Implementation
+
+        BaseNode INodePool.Get()
+        {
+            return Get();
+        }
+
+        void INodePool.Return(BaseNode node)
+        {
+            Return((T)node);
+        }
 
         #endregion
 
