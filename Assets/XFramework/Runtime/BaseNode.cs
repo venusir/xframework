@@ -17,7 +17,7 @@ namespace XFramework
     /// </summary>
     public abstract class BaseNode : IBaseNode
     {
-        #region Public Properties
+        #region Private Properties
 
         /// <summary>节点在树中的深度（根节点为 0）。</summary>
         int _depth;
@@ -30,8 +30,6 @@ namespace XFramework
 
         /// <summary>父节点引用，根节点为 null。</summary>
         ParentNode _parent;
-
-        internal bool Started => _started;
 
         #endregion
 
@@ -78,6 +76,11 @@ namespace XFramework
         #endregion
 
         #region Internal Methods
+
+        /// <summary>
+        /// 获取节点是否已执行过 Start。
+        /// </summary>
+        internal bool Started => _started;
 
         /// <summary>
         /// 设置父节点并更新深度。
