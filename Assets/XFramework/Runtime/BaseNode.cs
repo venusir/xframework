@@ -33,17 +33,7 @@ namespace XFramework
 
         #endregion
 
-        #region Lifecycle Methods
-
-        /// <summary>
-        /// 初始化节点。在节点创建后显式调用。
-        /// <para>替代在构造函数中调用虚方法，避免 C# 构造函数调用虚方法的 anti-pattern。</para>
-        /// <para>通常由 <see cref="Create{T}"/> 或 <see cref="ParentNode.AddChild"/> 自动调用。</para>
-        /// </summary>
-        internal void Awake()
-        {
-            AwakeInternal();
-        }
+        #region Public Methods
 
         /// <summary>
         /// 启动节点。应在 Awake 完成、所有组件已添加完毕后显式调用。
@@ -78,6 +68,8 @@ namespace XFramework
 
         #region Internal Methods
 
+        internal ParentNode Parent => _parent;
+
         /// <summary>
         /// 节点是否已被销毁。
         /// </summary>
@@ -89,6 +81,16 @@ namespace XFramework
         internal bool Started => _started;
 
         /// <summary>
+        /// 初始化节点。在节点创建后显式调用。
+        /// <para>替代在构造函数中调用虚方法，避免 C# 构造函数调用虚方法的 anti-pattern。</para>
+        /// <para>通常由 <see cref="Create{T}"/> 或 <see cref="ParentNode.AddChild"/> 自动调用。</para>
+        /// </summary>
+        internal void Awake()
+        {
+            AwakeInternal();
+        }
+
+        /// <summary>
         /// 设置父节点并更新深度。
         /// </summary>
         /// <param name="parent">新的父节点，null 表示成为根节点。</param>
@@ -97,7 +99,7 @@ namespace XFramework
             if (_parent != parent)
             {
                 _parent = parent;
-                _depth = parent?._depth + 1 ?? 0;
+                _depth = _parent != null ? _parent._depth + 1 : 0;
             }
         }
 

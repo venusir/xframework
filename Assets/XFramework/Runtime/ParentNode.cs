@@ -9,6 +9,9 @@ namespace XFramework
     /// </summary>
     public abstract class ParentNode : BaseNode
     {
+        public event Action<BaseNode> OnNodeAdded;
+        public event Action<BaseNode> OnNodeRemoved;
+
         /// <summary>子节点列表。</summary>
         List<BaseNode> children;
 
@@ -114,6 +117,7 @@ namespace XFramework
                 children.Add(node);
                 node.SetParent(this);
                 OnChildAdded(node);
+                OnNodeAdded?.Invoke(node);
 
                 // 如果父节点已 Start，新子节点应自动 Start（递归传播给其子节点）
                 if (Started)
@@ -133,6 +137,7 @@ namespace XFramework
             if (node != null && children.Contains(node))
             {
                 children.Remove(node);
+                OnNodeRemoved?.Invoke(node);
                 OnChildRemoved(node, internalCall);
                 node.Destroy();
             }
