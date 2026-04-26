@@ -1,6 +1,8 @@
 {
     "name": "Venusy609.Xframework",
-    "references": [],
+    "references": [
+        "UniTask"
+    ],
     "includePlatforms": [],
     "excludePlatforms": []
 }
