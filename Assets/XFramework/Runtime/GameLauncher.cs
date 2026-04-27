@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -7,25 +6,46 @@ namespace XFramework
 {
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
-    /// <para>挂载在场景中的 GameObject 上，负责创建和管理 <see cref="RootNode"/> 的生命周期。</para>
-    /// <para>启动时自动收集所有 <see cref="ILoadable"/> 子节点，等待全部加载完成后才调用 <see cref="BaseNode.Start"/>。</para>
+    /// <para>全局单例，挂载在场景中的 GameObject 上，负责创建和管理 <see cref="RootNode"/> 的生命周期。</para>
+    /// <para>内部持有 <see cref="LoadingManager"/>，通过 <see cref="LoadingMgr"/> 属性暴露给外部直接使用。</para>
     /// </summary>
     public class GameLauncher : MonoBehaviour
     {
+        #region Public Properties
+
         /// <summary>
-        /// 加载进度变更事件。参数为 (整体进度 0~1, 当前描述文字)。
-        /// <para>外部 UI 可订阅此事件以显示加载进度条。</para>
+        /// 全局单例实例。
         /// </summary>
-        public event Action<float, string> OnLoadingProgress;
+        public static GameLauncher Instance { get; private set; }
 
         /// <summary>
         /// 当前节点树的根节点。
         /// </summary>
         public RootNode Root { get; private set; }
 
+        /// <summary>
+        /// 加载管理器。外部通过此属性订阅加载事件或执行加载任务。
+        /// <para>例如：<c>GameLauncher.Instance.LoadingMgr.OnProgressUpdate += ...</c></para>
+        /// <para>例如：<c>await GameLauncher.Instance.LoadingMgr.ExecuteAsync(tasks);</c></para>
+        /// </summary>
+        public LoadingManager LoadingMgr { get; private set; }
+
+        #endregion
+
+        #region Lifecycle Methods
+
         void Awake()
         {
+            if (Instance != null)
+            {
+                Debug.LogWarning("GameLauncher: duplicate instance detected, destroying self.");
+                Destroy(gameObject);
+                return;
+            }
+
+            Instance = this;
             Root = RootNode.Create();
+            LoadingMgr = new LoadingManager();
             DontDestroyOnLoad(gameObject);
         }
 
@@ -36,6 +56,11 @@ namespace XFramework
 
         void OnDestroy()
         {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
             if (Root != null)
             {
                 Root.Destroy();
@@ -43,9 +68,13 @@ namespace XFramework
             }
         }
 
+        #endregion
+
+        #region Private Methods
+
         /// <summary>
         /// 加载并启动异步流程。
-        /// <para>流程：收集所有 ILoadable → 同时启动加载 → 每帧轮询进度 → 全部完成 → 调用 Root.Start()</para>
+        /// <para>流程：收集所有 ILoadable → 通过 LoadingManager 统一加载 → 全部完成 → 调用 Root.Start()</para>
         /// </summary>
         async UniTask LoadAndStartAsync()
         {
@@ -60,47 +89,13 @@ namespace XFramework
                 return;
             }
 
-            // 2. 同时启动所有加载任务
-            UniTask[] tasks = new UniTask[loadables.Count];
-            for (int i = 0; i < loadables.Count; i++)
-            {
-                tasks[i] = loadables[i].LoadAsync();
-            }
+            // 2. 通过 LoadingManager 统一加载
+            await LoadingMgr.ExecuteLoadAsync(loadables);
 
-            // 3. 每帧轮询进度，直到全部加载完成
-            while (true)
-            {
-                float totalProgress = 0f;
-                string currentDesc = null;
-                bool allDone = true;
-
-                for (int i = 0; i < loadables.Count; i++)
-                {
-                    float p = loadables[i].Progress;
-                    totalProgress += p;
-
-                    if (p < 1f)
-                    {
-                        allDone = false;
-                        currentDesc = loadables[i].Description;
-                    }
-                }
-
-                float overallProgress = totalProgress / loadables.Count;
-                OnLoadingProgress?.Invoke(overallProgress, currentDesc ?? "加载完成");
-
-                if (allDone)
-                    break;
-
-                // 等待下一帧
-                await UniTask.Yield(PlayerLoopTiming.Update);
-            }
-
-            // 4. 等待所有加载任务完成（确保所有协程已结束）
-            await UniTask.WhenAll(tasks);
-
-            // 5. 全部加载完成，启动节点树
+            // 3. 全部加载完成，启动节点树
             Root.Start();
         }
+
+        #endregion
     }
 }
