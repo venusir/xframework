@@ -152,6 +152,9 @@ namespace XFramework
             _started = true;
 
             OnStart();
+
+            // 通知外部（如 NodeUpdater）：节点已启动，可以开始接收 Update
+            OnStarted?.Invoke(this);
         }
 
         #endregion
@@ -206,6 +209,11 @@ namespace XFramework
         /// <para>由 <see cref="NodePool{T}"/> 内部订阅使用。</para>
         /// </summary>
         internal event Action<BaseNode> OnReturnToPool;
+
+        /// <summary>
+        /// 节点启动完成时触发，用于通知外部（如 <see cref="NodeUpdater"/>）节点已可接收 Update。
+        /// </summary>
+        internal event Action<BaseNode> OnStarted;
 
         #endregion
     }

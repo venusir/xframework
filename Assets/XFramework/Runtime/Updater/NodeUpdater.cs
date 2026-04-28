@@ -3,6 +3,8 @@ namespace XFramework
     /// <summary>
     /// 节点更新管理器。将 <see cref="Updater"/> 与节点树事件订阅封装在一起，
     /// 自动注册/注销树中所有 <see cref="IUpdateable"/> 节点。
+    /// <para>节点只有在 <see cref="BaseNode.Start"/> 完成后才会注册到 <see cref="Updater"/>，
+    /// 确保加载中的节点不会收到 Update 调用。</para>
     /// </summary>
     public class NodeUpdater
     {
@@ -72,8 +74,7 @@ namespace XFramework
             for (int i = 0; i < parent.ChildCount; i++)
             {
                 var child = parent[i];
-                if (child is IUpdateable u)
-                    _updater.Register(u, child.Depth);
+                TryRegister(child);
 
                 if (child is ParentNode childParent)
                     SubscribeTree(childParent);
@@ -81,12 +82,41 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 尝试注册 <see cref="IUpdateable"/> 节点。
+        /// <para>如果节点已 Start 则立即注册，否则订阅 <see cref="BaseNode.OnStarted"/> 延迟注册。</para>
+        /// </summary>
+        void TryRegister(BaseNode node)
+        {
+            if (node is IUpdateable u)
+            {
+                if (node.Started)
+                {
+                    _updater.Register(u, node.Depth);
+                }
+                else
+                {
+                    node.OnStarted += OnNodeStarted;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 节点启动完成时触发，将节点注册到 <see cref="Updater"/>。
+        /// </summary>
+        void OnNodeStarted(BaseNode node)
+        {
+            node.OnStarted -= OnNodeStarted;
+
+            if (node is IUpdateable u)
+                _updater.Register(u, node.Depth);
+        }
+
+        /// <summary>
         /// 子节点添加时，注册 <see cref="IUpdateable"/> 并递归订阅其子节点事件。
         /// </summary>
         void OnNodeAdded(BaseNode node)
         {
-            if (node is IUpdateable u)
-                _updater.Register(u, node.Depth);
+            TryRegister(node);
 
             if (node is ParentNode parent)
             {
@@ -97,8 +127,7 @@ namespace XFramework
                 for (int i = 0; i < parent.ChildCount; i++)
                 {
                     var child = parent[i];
-                    if (child is IUpdateable u2)
-                        _updater.Register(u2, child.Depth);
+                    TryRegister(child);
                     if (child is ParentNode childParent)
                         SubscribeTree(childParent);
                 }
@@ -122,6 +151,9 @@ namespace XFramework
                 parent.OnNodeAdded -= OnNodeAdded;
                 parent.OnNodeRemoved -= OnNodeRemoved;
             }
+
+            // 取消 OnStarted 订阅（如果尚未触发）
+            node.OnStarted -= OnNodeStarted;
 
             if (node is IUpdateable u)
                 _updater.Unregister(u);

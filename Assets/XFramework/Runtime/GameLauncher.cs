@@ -28,8 +28,9 @@ namespace XFramework
 
         async void Start()
         {
-            await _root.StartupAsync();
+            // 加载前绑定，确保加载过程中 Update 即可正常调度
             _nodeUpdater.Bind(_root);
+            await _root.StartupAsync();
         }
 
         void Update()
