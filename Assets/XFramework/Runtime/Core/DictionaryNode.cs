@@ -87,7 +87,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 设置子节点并关联指定键。如果键已存在，会先移除旧的子节点再添加新的。
+        /// 设置子节点并关联指定键。如果键已存在，会先移除并销毁旧的子节点再添加新的。
         /// </summary>
         /// <typeparam name="T">子节点类型。</typeparam>
         /// <param name="key">关联的键。</param>
@@ -104,6 +104,7 @@ namespace XFramework
             {
                 _nodeDict.Remove(key);
                 RemoveChild(oldNode);
+                oldNode.Destroy();
             }
 
             _nodeDict[key] = node;
@@ -111,7 +112,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 移除指定键关联的子节点。
+        /// 移除指定键关联的子节点。移除后会自动销毁该子节点。
         /// </summary>
         /// <param name="key">要移除的键。</param>
         public void RemoveNode(TKey key)
@@ -120,6 +121,7 @@ namespace XFramework
             {
                 _nodeDict.Remove(key);
                 RemoveChild(node);
+                node.Destroy();
             }
         }
 
@@ -226,11 +228,14 @@ namespace XFramework
             base.DestroyInternal();
         }
 
-        protected override void OnChildRemoved(BaseNode node, bool internalCall = true)
+        protected override void OnChildRemoved(BaseNode node, bool fromChild = false)
         {
-            base.OnChildRemoved(node, internalCall);
+            base.OnChildRemoved(node, fromChild);
 
-            RemoveFromAllNodes(node);
+            if (fromChild)
+            {
+                RemoveFromAllNodes(node);
+            }
         }
 
         #endregion

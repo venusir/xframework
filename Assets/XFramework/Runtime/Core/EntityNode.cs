@@ -268,7 +268,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 移除指定类型的子节点。
+        /// 移除指定类型的子节点。移除后会自动销毁该子节点。
         /// </summary>
         /// <typeparam name="T">要移除的子节点类型。</typeparam>
         /// <returns>是否成功移除。</returns>
@@ -286,6 +286,7 @@ namespace XFramework
                     if (node == null) return false;
                     RemoveFromAllCaches(node);
                     RemoveChild(node);
+                    node.Destroy();
                     return true;
                 }
                 return false;
@@ -297,6 +298,7 @@ namespace XFramework
                     _typeCache.Remove(type);
                     RemoveFromAllCaches(node);
                     RemoveChild(node);
+                    node.Destroy();
                     return true;
                 }
                 return false;
@@ -304,7 +306,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 通过运行时类型移除子节点。
+        /// 通过运行时类型移除子节点。移除后会自动销毁该子节点。
         /// </summary>
         /// <param name="type">要移除的子节点类型。</param>
         /// <returns>是否成功移除。</returns>
@@ -322,6 +324,7 @@ namespace XFramework
                     if (node == null) return false;
                     RemoveFromAllCaches(node);
                     RemoveChild(node);
+                    node.Destroy();
                     return true;
                 }
                 return false;
@@ -333,6 +336,7 @@ namespace XFramework
                     _typeCache.Remove(type);
                     RemoveFromAllCaches(node);
                     RemoveChild(node);
+                    node.Destroy();
                     return true;
                 }
                 return false;
@@ -340,7 +344,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 移除指定的子节点实例。
+        /// 移除指定的子节点实例。移除后会自动销毁该子节点。
         /// </summary>
         /// <param name="node">要移除的子节点。</param>
         /// <returns>是否成功移除。</returns>
@@ -350,6 +354,7 @@ namespace XFramework
 
             RemoveFromAllCaches(node);
             RemoveChild(node);
+            node.Destroy();
             return true;
         }
 
@@ -380,11 +385,11 @@ namespace XFramework
             base.DestroyInternal();
         }
 
-        protected override void OnChildRemoved(BaseNode node, bool internalCall = true)
+        protected override void OnChildRemoved(BaseNode node, bool fromChild = false)
         {
-            base.OnChildRemoved(node, internalCall);
+            base.OnChildRemoved(node, fromChild);
 
-            if (!internalCall)
+            if (fromChild)
             {
                 RemoveFromAllCaches(node);
             }

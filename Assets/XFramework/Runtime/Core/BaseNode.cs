@@ -48,17 +48,18 @@ namespace XFramework
         /// <summary>
         /// 销毁节点。如果已销毁则直接返回。
         /// <para>销毁前会自动从父节点脱离（如果存在父节点），确保父节点的子节点列表不再持有此节点引用。</para>
-        /// <para>调用链: Destroy() → DestroyInternal() → OnDestroyed()</para>
+        /// <para>调用链: Destroy() → RemoveChild()（从父节点脱离）→ DestroyInternal() → OnDestroy()</para>
         /// </summary>
         public void Destroy()
         {
             if (_destroyed) return;
 
-            // 销毁前先从父节点脱离
+            // 销毁前先从父节点脱离（RemoveChild 会从父节点的子节点列表中移除并触发 OnNodeRemoved 事件）
             if (_parent != null)
             {
-                _parent.RemoveChild(this, false);
+                var parent = _parent;
                 _parent = null;
+                parent.RemoveChild(this, fromChild: true);
             }
 
             DestroyInternal();

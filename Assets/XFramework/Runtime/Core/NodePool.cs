@@ -56,6 +56,8 @@ namespace XFramework
         /// 手动将节点回收到池中。
         /// <para>通常不需要手动调用，节点调用 <see cref="BaseNode.Destroy"/> 后会自动回池。</para>
         /// <para>如果节点尚未销毁，会先调用 <see cref="BaseNode.Destroy"/>。</para>
+        /// <para>注意：如果节点已通过自动回池机制入池（即 <see cref="BaseNode.Destroy"/> 触发了 <see cref="OnNodeReturned"/>），
+        /// 此方法会检测并跳过重复入池。</para>
         /// </summary>
         /// <param name="node">要回收的节点。</param>
         public void Return(T node)
@@ -69,7 +71,11 @@ namespace XFramework
                 node.Destroy();
             }
 
-            _pool.Push(node);
+            // 防重复入池：如果节点已通过自动回池机制入池（Destroy 触发了 OnNodeReturned），则不再入池
+            if (!_pool.Contains(node))
+            {
+                _pool.Push(node);
+            }
         }
 
         /// <summary>

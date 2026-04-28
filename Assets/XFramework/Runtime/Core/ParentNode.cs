@@ -171,18 +171,19 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 移除子节点。移除后会自动销毁该子节点。
-        /// <para>注意：如果仅需从当前父节点移除而不销毁，请使用 <see cref="DetachChild"/>。</para>
+        /// 从父节点的子节点列表中移除指定节点。
+        /// <para>此方法仅负责从列表移除和事件通知，不调用节点的销毁逻辑。</para>
+        /// <para>节点的销毁由调用方通过 <see cref="BaseNode.Destroy"/> 或 <see cref="DestroyInternal"/> 负责。</para>
         /// </summary>
-        /// <param name="node">要移除并销毁的子节点。</param>
-        internal void RemoveChild(BaseNode node, bool internalCall = true)
+        /// <param name="node">要移除的子节点。</param>
+        /// <param name="fromChild">是否为子节点自身触发的移除（即子节点调用 Destroy 时）。</param>
+        internal void RemoveChild(BaseNode node, bool fromChild = false)
         {
             if (node != null && children.Contains(node))
             {
                 children.Remove(node);
                 OnNodeRemoved?.Invoke(node);
-                OnChildRemoved(node, internalCall);
-                node.DestroyInternal();
+                OnChildRemoved(node, fromChild);
             }
         }
 
@@ -224,7 +225,8 @@ namespace XFramework
         /// 子节点移除时的回调。
         /// </summary>
         /// <param name="node">被移除的子节点。</param>
-        protected virtual void OnChildRemoved(BaseNode node, bool internalCall = true) { }
+        /// <param name="fromChild">是否为子节点自身触发的移除（即子节点调用 Destroy 时）。</param>
+        protected virtual void OnChildRemoved(BaseNode node, bool fromChild = false) { }
 
         /// <summary>
         /// 内部初始化方法。初始化子节点列表。
@@ -252,12 +254,17 @@ namespace XFramework
 
         /// <summary>
         /// 内部销毁方法。递归销毁所有子节点后清理列表。
+        /// <para>通过 <see cref="RemoveChild"/> 移除子节点，确保 <see cref="OnNodeRemoved"/> 事件被触发。</para>
+        /// <para>使用反向遍历避免额外的堆分配（无需复制列表快照）。</para>
         /// </summary>
         internal override void DestroyInternal()
         {
-            foreach (var child in children)
+            // 反向遍历：从后往前移除，已移除的元素不会影响前面未遍历元素的索引
+            for (int i = children.Count - 1; i >= 0; i--)
             {
-                child.DestroyInternal();
+                var child = children[i];
+                RemoveChild(child, fromChild: false);
+                child.Destroy();
             }
             children.Clear();
             children = null;

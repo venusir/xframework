@@ -37,6 +37,7 @@ namespace XFramework
         public void RemoveNode(BaseNode node)
         {
             RemoveChild(node);
+            node.Destroy();
         }
 
         internal sealed override void AwakeInternal()
