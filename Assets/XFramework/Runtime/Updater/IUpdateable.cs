@@ -23,6 +23,9 @@ namespace XFramework
 
         /// <summary>每 32 帧更新一次</summary>
         Every32Frames = 5,
+
+        /// <summary>最大 LOD 等级标记，用于 <see cref="Updater"/> 内部推导数组大小。</summary>
+        Max = Every32Frames,
     }
 
     /// <summary>

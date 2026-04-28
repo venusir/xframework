@@ -13,8 +13,8 @@ namespace XFramework
     {
         #region Constants
 
-        /// <summary>最大 LOD 等级（含）。</summary>
-        private const int MaxLOD = 5;
+        /// <summary>最大 LOD 等级（含），由 <see cref="UpdateLOD.Max"/> 推导。</summary>
+        private const int MaxLOD = (int)UpdateLOD.Max;
 
         /// <summary>LOD 等级总数。</summary>
         private const int LODCount = MaxLOD + 1;
@@ -51,6 +51,9 @@ namespace XFramework
         /// <summary>内部帧计数器，用于计算当前时间片索引。</summary>
         private int _frameCount;
 
+        /// <summary>按 LOD 切片索引的累积时间器。_sliceAccumulators[lod][sliceIndex]。</summary>
+        private readonly float[][] _sliceAccumulators;
+
         #endregion
 
         #region Constructor
@@ -68,6 +71,12 @@ namespace XFramework
                 _pendingAdd[i] = new List<Entry>();
             }
             _pendingRemove = new List<IUpdateable>();
+
+            _sliceAccumulators = new float[LODCount][];
+            for (int lod = 1; lod < LODCount; lod++)
+            {
+                _sliceAccumulators[lod] = new float[1 << lod];
+            }
         }
 
         #endregion
@@ -126,6 +135,14 @@ namespace XFramework
         {
             _isIterating = true;
 
+            // 累积所有 LOD 切片的时间器
+            for (int lod = 1; lod < LODCount; lod++)
+            {
+                var acc = _sliceAccumulators[lod];
+                for (int s = 0; s < acc.Length; s++)
+                    acc[s] += deltaTime;
+            }
+
             // LOD=0: 每帧全量更新
             var lod0 = _lodEntries[0];
             for (int i = 0; i < lod0.Count; i++)
@@ -153,6 +170,10 @@ namespace XFramework
                 // 当前帧应处理的切片索引
                 int sliceIndex = (_frameCount >> (lod - 1)) % sliceCount;
 
+                // 读取该切片的累积时间并清零
+                float realDelta = _sliceAccumulators[lod][sliceIndex];
+                _sliceAccumulators[lod][sliceIndex] = 0f;
+
                 int start = sliceIndex * sliceSize;
                 int end = (sliceIndex + 1) * sliceSize;
                 if (end > count) end = count;
@@ -160,7 +181,7 @@ namespace XFramework
                 for (int i = start; i < end; i++)
                 {
                     var entry = entries[i];
-                    int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
+                    int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta), 0, MaxLOD);
                     if (newLOD != lod)
                     {
                         _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
@@ -188,6 +209,13 @@ namespace XFramework
             }
             _pendingRemove.Clear();
             _frameCount = 0;
+
+            for (int lod = 1; lod < LODCount; lod++)
+            {
+                var acc = _sliceAccumulators[lod];
+                for (int s = 0; s < acc.Length; s++)
+                    acc[s] = 0f;
+            }
         }
 
         /// <summary>

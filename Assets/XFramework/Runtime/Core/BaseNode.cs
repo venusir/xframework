@@ -72,6 +72,11 @@ namespace XFramework
         internal ParentNode Parent => _parent;
 
         /// <summary>
+        /// 节点在树中的深度（根节点为 0）。
+        /// </summary>
+        internal int Depth => _depth;
+
+        /// <summary>
         /// 节点是否已被销毁。
         /// </summary>
         internal bool Destroyed => _destroyed;
