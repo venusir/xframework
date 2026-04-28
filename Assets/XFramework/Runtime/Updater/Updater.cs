@@ -8,6 +8,7 @@ namespace XFramework
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。
     /// <para>LOD 等级与帧间隔：LOD=0(1帧) LOD=1(2帧) LOD=2(4帧) LOD=3(8帧) LOD=4(16帧) LOD=5(32帧)</para>
     /// <para>同一 LOD 内的节点按深度升序排列，确保父节点先于子节点更新。</para>
+    /// <para>节点的 LOD 由 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值决定，每次更新后自动调整。</para>
     /// </summary>
     public class Updater
     {
@@ -80,15 +81,15 @@ namespace XFramework
         /// </summary>
         /// <param name="node">可更新节点。</param>
         /// <param name="depth">节点在树中的深度。</param>
-        public void Register(IUpdateable node, int depth)
+        /// <param name="initialLOD">初始 LOD 等级，默认 0（每帧更新）。</param>
+        public void Register(IUpdateable node, int depth, int initialLOD = 0)
         {
             if (node == null) return;
 
-            int lod = Mathf.Clamp(node.LOD, 0, MaxLOD);
+            int lod = Mathf.Clamp(initialLOD, 0, MaxLOD);
 
             if (_isIterating)
             {
-                // 迭代中：暂存到 pending 缓冲
                 _pendingAdd[lod].Add(new Entry { Node = node, Depth = depth });
             }
             else
@@ -119,6 +120,7 @@ namespace XFramework
         /// <summary>
         /// 执行一帧更新。按 LOD 时间切片算法分发更新。
         /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
+        /// <para>更新后根据 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值自动调整 LOD 桶。</para>
         /// </summary>
         /// <param name="deltaTime">帧时间差。</param>
         public void Tick(float deltaTime)
@@ -129,7 +131,14 @@ namespace XFramework
             var lod0 = _lodEntries[0];
             for (int i = 0; i < lod0.Count; i++)
             {
-                lod0[i].Node.OnUpdate(deltaTime);
+                var entry = lod0[i];
+                int newLOD = Mathf.Clamp(entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
+                if (newLOD != 0)
+                {
+                    // LOD 变化：标记移除，待添加到新桶
+                    _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
+                    _pendingRemove.Add(entry.Node);
+                }
             }
 
             // LOD=1~5: 时间切片更新
@@ -152,18 +161,22 @@ namespace XFramework
 
                 for (int i = start; i < end; i++)
                 {
-                    entries[i].Node.OnUpdate(deltaTime);
+                    var entry = entries[i];
+                    int newLOD = Mathf.Clamp(entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
+                    if (newLOD != lod)
+                    {
+                        // LOD 变化：标记移除，待添加到新桶
+                        _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
+                        _pendingRemove.Add(entry.Node);
+                    }
                 }
             }
 
             _frameCount++;
             _isIterating = false;
 
-            // 迭代结束后统一处理 pending 缓冲
+            // 迭代结束后统一处理 pending 缓冲（移除旧桶 + 插入新桶）
             FlushPending();
-
-            // 全量遍历所有条目，重读 LOD，自动迁移到新桶
-            RefreshLODs();
         }
 
         /// <summary>
@@ -249,49 +262,14 @@ namespace XFramework
         /// </summary>
         private void FlushPending()
         {
-            // 先处理移除
+            // 先处理移除（包括 LOD 变化导致的旧桶移除）
             for (int i = 0; i < _pendingRemove.Count; i++)
             {
                 RemoveFromList(_lodEntries, _pendingRemove[i]);
             }
             _pendingRemove.Clear();
 
-            // 再处理添加
-            for (int lod = 0; lod < LODCount; lod++)
-            {
-                var pending = _pendingAdd[lod];
-                for (int i = 0; i < pending.Count; i++)
-                {
-                    var entry = pending[i];
-                    InsertSorted(_lodEntries[lod], entry.Node, entry.Depth);
-                }
-                pending.Clear();
-            }
-        }
-
-        /// <summary>
-        /// 全量遍历所有条目，重读 <see cref="IUpdateable.LOD"/>，自动迁移到新桶。
-        /// <para>在每次 <see cref="Tick"/> 末尾调用，确保 LOD 变化在下一帧生效。</para>
-        /// </summary>
-        private void RefreshLODs()
-        {
-            for (int lod = 0; lod < LODCount; lod++)
-            {
-                var entries = _lodEntries[lod];
-                for (int i = entries.Count - 1; i >= 0; i--)
-                {
-                    var entry = entries[i];
-                    int newLOD = Mathf.Clamp(entry.Node.LOD, 0, MaxLOD);
-                    if (newLOD != lod)
-                    {
-                        // LOD 发生变化：从当前桶移除，加入 pending 待添加到新桶
-                        entries.RemoveAt(i);
-                        _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
-                    }
-                }
-            }
-
-            // 将 pending 中的迁移条目刷新到主列表
+            // 再处理添加（包括 LOD 变化导致的新桶插入）
             for (int lod = 0; lod < LODCount; lod++)
             {
                 var pending = _pendingAdd[lod];
