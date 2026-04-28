@@ -4,9 +4,8 @@ using UnityEngine;
 namespace XFramework
 {
     /// <summary>
-    /// 更新调度器。按 LOD 等级分桶管理 <see cref="IUpdateable"/> 节点，
+    /// 更新调度器。按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。
-    /// <para>LOD 等级与帧间隔：LOD=0(1帧) LOD=1(2帧) LOD=2(4帧) LOD=3(8帧) LOD=4(16帧) LOD=5(32帧)</para>
     /// <para>同一 LOD 内的节点按深度升序排列，确保父节点先于子节点更新。</para>
     /// <para>节点的 LOD 由 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值决定，每次更新后自动调整。</para>
     /// </summary>
@@ -81,12 +80,12 @@ namespace XFramework
         /// </summary>
         /// <param name="node">可更新节点。</param>
         /// <param name="depth">节点在树中的深度。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认 0（每帧更新）。</param>
-        public void Register(IUpdateable node, int depth, int initialLOD = 0)
+        /// <param name="initialLOD">初始 <see cref="UpdateLOD"/> 等级，默认 <see cref="UpdateLOD.EveryFrame"/>。</param>
+        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.EveryFrame)
         {
             if (node == null) return;
 
-            int lod = Mathf.Clamp(initialLOD, 0, MaxLOD);
+            int lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD);
 
             if (_isIterating)
             {
@@ -118,7 +117,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 执行一帧更新。按 LOD 时间切片算法分发更新。
+        /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
         /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
         /// <para>更新后根据 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值自动调整 LOD 桶。</para>
         /// </summary>
@@ -132,10 +131,9 @@ namespace XFramework
             for (int i = 0; i < lod0.Count; i++)
             {
                 var entry = lod0[i];
-                int newLOD = Mathf.Clamp(entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
+                int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
                 if (newLOD != 0)
                 {
-                    // LOD 变化：标记移除，待添加到新桶
                     _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
                     _pendingRemove.Add(entry.Node);
                 }
@@ -162,10 +160,9 @@ namespace XFramework
                 for (int i = start; i < end; i++)
                 {
                     var entry = entries[i];
-                    int newLOD = Mathf.Clamp(entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
+                    int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(deltaTime), 0, MaxLOD);
                     if (newLOD != lod)
                     {
-                        // LOD 变化：标记移除，待添加到新桶
                         _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
                         _pendingRemove.Add(entry.Node);
                     }
@@ -194,12 +191,13 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 获取指定 LOD 等级的节点数量。
+        /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量。
         /// </summary>
-        public int GetCount(int lod)
+        public int GetCount(UpdateLOD lod)
         {
-            if (lod < 0 || lod > MaxLOD) return 0;
-            return _lodEntries[lod].Count;
+            int index = (int)lod;
+            if (index < 0 || index > MaxLOD) return 0;
+            return _lodEntries[index].Count;
         }
 
         /// <summary>
@@ -225,7 +223,6 @@ namespace XFramework
         /// </summary>
         private static void InsertSorted(List<Entry> entries, IUpdateable node, int depth)
         {
-            // 二分查找插入位置（按 depth 升序）
             int lo = 0, hi = entries.Count;
             while (lo < hi)
             {
@@ -251,7 +248,7 @@ namespace XFramework
                     if (entries[i].Node == node)
                     {
                         entries.RemoveAt(i);
-                        return; // 一个节点只在一个 LOD 列表中
+                        return;
                     }
                 }
             }
