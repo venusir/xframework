@@ -112,6 +112,12 @@ namespace XFramework
         /// 执行加载。装载所有已注册的 <see cref="ILoadableProvider"/> 提供的加载任务并统一调度。
         /// </summary>
         UniTask LoadAsync();
+
+        /// <summary>
+        /// 销毁加载器，清理内部状态和事件订阅。
+        /// <para>调用后不应再使用此实例。</para>
+        /// </summary>
+        void Destroy();
     }
 
     #endregion
@@ -356,6 +362,20 @@ namespace XFramework
             {
                 IsLoading = false;
             }
+        }
+
+        public void Destroy()
+        {
+            _loadables.Clear();
+            _providers.Clear();
+
+            OnProgressUpdate = null;
+            OnLoadCompleted = null;
+            OnLoadFailed = null;
+
+            IsLoading = false;
+            Progress = 0f;
+            Description = null;
         }
 
         #endregion

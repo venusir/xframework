@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
 
 namespace XFramework
 {
@@ -69,6 +70,26 @@ namespace XFramework
                     MountLoadables(childParent, provider);
                 }
             }
+        }
+
+        /// <summary>
+        /// 启动节点树。依次执行装载、加载、启动、回收四个阶段：
+        /// <para>1. 装载：扫描节点树，收集 <see cref="ILoadableProvider"/> 的加载任务。</para>
+        /// <para>2. 加载：等待所有加载任务完成。</para>
+        /// <para>3. 启动：递归启动所有节点的 <see cref="BaseNode.OnStart"/>。</para>
+        /// <para>4. 回收：销毁加载器，清理资源。</para>
+        /// </summary>
+        /// <param name="root">节点树的根节点。</param>
+        public static async UniTask StartupAsync(this ParentNode root)
+        {
+            if (root == null)
+                return;
+
+            ILoadingProvider loader = new LoadingManager();
+            root.MountLoadables(loader);
+            await loader.LoadAsync();
+            root.Start();
+            loader.Destroy();
         }
     }
 }
