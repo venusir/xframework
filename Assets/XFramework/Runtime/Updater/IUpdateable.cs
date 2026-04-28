@@ -30,7 +30,7 @@ namespace XFramework
 
     /// <summary>
     /// 可更新接口。节点实现此接口后，通过 <see cref="Updater"/> 自动管理更新。
-    /// <para><see cref="OnUpdate(float)"/> 的返回值决定下一帧的 <see cref="UpdateLOD"/> 等级。</para>
+    /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一帧的 <see cref="UpdateLOD"/> 等级。</para>
     /// </summary>
     public interface IUpdateable
     {
@@ -38,7 +38,8 @@ namespace XFramework
         /// 执行更新并返回下一帧的 <see cref="UpdateLOD"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次更新的时间差。</param>
+        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），可用于绝对时间计算。</param>
         /// <returns>下一帧的更新频率等级。</returns>
-        UpdateLOD OnUpdate(float deltaTime);
+        UpdateLOD OnUpdate(float deltaTime, float time);
     }
 }

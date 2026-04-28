@@ -35,7 +35,7 @@ namespace XFramework
 
         void Update()
         {
-            _nodeUpdater.Tick(Time.deltaTime);
+            _nodeUpdater.Tick(Time.time);
         }
 
         void OnDestroy()

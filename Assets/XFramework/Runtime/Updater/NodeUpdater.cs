@@ -42,11 +42,11 @@ namespace XFramework
         /// <summary>
         /// 执行一帧更新。内部委托给 <see cref="Updater.Tick(float)"/>。
         /// </summary>
-        /// <param name="deltaTime">帧时间差。</param>
-        public void Tick(float deltaTime)
+        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），由外部传入避免重复获取。</param>
+        public void Tick(float time)
         {
             if (!_disposed)
-                _updater.Tick(deltaTime);
+                _updater.Tick(time);
         }
 
         /// <summary>
@@ -55,10 +55,11 @@ namespace XFramework
         /// </summary>
         /// <param name="node">要立即更新的节点。</param>
         /// <param name="deltaTime">传入的时间差。</param>
-        public void RequestImmediateUpdate(IUpdateable node, float deltaTime)
+        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>）。</param>
+        public void RequestImmediateUpdate(IUpdateable node, float deltaTime, float time)
         {
             if (!_disposed)
-                _updater.ProcessImmediate(node, deltaTime);
+                _updater.ProcessImmediate(node, deltaTime, time);
         }
 
         /// <summary>
