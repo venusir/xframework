@@ -145,7 +145,7 @@ namespace XFramework
                 children.Remove(node);
                 OnNodeRemoved?.Invoke(node);
                 OnChildRemoved(node, internalCall);
-                node.Destroy();
+                node.DestroyInternal();
             }
         }
 
