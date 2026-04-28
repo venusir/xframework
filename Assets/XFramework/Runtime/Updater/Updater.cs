@@ -161,6 +161,9 @@ namespace XFramework
 
             // 迭代结束后统一处理 pending 缓冲
             FlushPending();
+
+            // 全量遍历所有条目，重读 LOD，自动迁移到新桶
+            RefreshLODs();
         }
 
         /// <summary>
@@ -254,6 +257,41 @@ namespace XFramework
             _pendingRemove.Clear();
 
             // 再处理添加
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var pending = _pendingAdd[lod];
+                for (int i = 0; i < pending.Count; i++)
+                {
+                    var entry = pending[i];
+                    InsertSorted(_lodEntries[lod], entry.Node, entry.Depth);
+                }
+                pending.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 全量遍历所有条目，重读 <see cref="IUpdateable.LOD"/>，自动迁移到新桶。
+        /// <para>在每次 <see cref="Tick"/> 末尾调用，确保 LOD 变化在下一帧生效。</para>
+        /// </summary>
+        private void RefreshLODs()
+        {
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var entries = _lodEntries[lod];
+                for (int i = entries.Count - 1; i >= 0; i--)
+                {
+                    var entry = entries[i];
+                    int newLOD = Mathf.Clamp(entry.Node.LOD, 0, MaxLOD);
+                    if (newLOD != lod)
+                    {
+                        // LOD 发生变化：从当前桶移除，加入 pending 待添加到新桶
+                        entries.RemoveAt(i);
+                        _pendingAdd[newLOD].Add(new Entry { Node = entry.Node, Depth = entry.Depth });
+                    }
+                }
+            }
+
+            // 将 pending 中的迁移条目刷新到主列表
             for (int lod = 0; lod < LODCount; lod++)
             {
                 var pending = _pendingAdd[lod];
