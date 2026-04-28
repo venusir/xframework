@@ -45,27 +45,28 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 从指定根节点开始，递归收集所有实现了 <see cref="ILoadable"/> 接口的节点。
+        /// 从指定根节点开始，递归查找所有实现了 <see cref="ILoadableProvider"/> 的节点并注册到 <see cref="ILoadingProvider"/>。
+        /// <para>注册后，<see cref="ILoadingProvider.LoadAsync"/> 时会统一装载这些 provider 提供的加载任务。</para>
         /// </summary>
         /// <param name="root">搜索的起始节点。</param>
-        /// <param name="results">用于存储结果的列表。不能为 null。</param>
-        public static void CollectLoadables(this ParentNode root, List<ILoadable> results)
+        /// <param name="provider">加载器实例。</param>
+        public static void MountLoadables(this ParentNode root, ILoadingProvider provider)
         {
-            if (root == null || results == null)
+            if (root == null || provider == null)
                 return;
 
             for (int i = 0; i < root.ChildCount; i++)
             {
                 var child = root[i];
 
-                if (child is ILoadable loadable)
+                if (child is ILoadableProvider loadableProvider)
                 {
-                    results.Add(loadable);
+                    provider.AddProvider(loadableProvider);
                 }
 
                 if (child is ParentNode childParent)
                 {
-                    CollectLoadables(childParent, results);
+                    MountLoadables(childParent, provider);
                 }
             }
         }

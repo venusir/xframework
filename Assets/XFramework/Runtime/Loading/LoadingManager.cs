@@ -30,25 +30,17 @@ namespace XFramework
     #region Interfaces
 
     /// <summary>
-    /// 可加载接口。实现此接口的对象可被 <see cref="LoadingManager"/> 统一调度执行。
-    /// <para>不强制要求实现者必须是 <see cref="BaseNode"/>，可以是任何纯 C# 对象。</para>
+    /// 可加载接口。实现此接口的对象可被 <see cref="ILoadingProvider"/> 统一调度执行。
     /// </summary>
     public interface ILoadable
     {
-        /// <summary>
-        /// 当前加载进度，取值范围 0.0 ~ 1.0。
-        /// </summary>
+        /// <summary>当前加载进度，取值范围 0.0 ~ 1.0。</summary>
         float Progress { get; }
 
-        /// <summary>
-        /// 当前加载阶段的描述文字。
-        /// <para>例如 "正在加载配置..."、"正在初始化资源..."。</para>
-        /// </summary>
+        /// <summary>当前加载阶段的描述文字。</summary>
         string Description { get; }
 
-        /// <summary>
-        /// 当前加载状态。
-        /// </summary>
+        /// <summary>当前加载状态。</summary>
         LoadState State { get; }
 
         /// <summary>
@@ -58,11 +50,152 @@ namespace XFramework
         float Weight { get; }
 
         /// <summary>
-        /// 异步加载任务。
-        /// <para>加载过程中应持续更新 <see cref="Progress"/> 和 <see cref="State"/>。</para>
+        /// 异步加载任务。加载过程中应持续更新 <see cref="Progress"/> 和 <see cref="State"/>。
         /// </summary>
-        /// <returns>加载任务。</returns>
         UniTask LoadAsync();
+    }
+
+    /// <summary>
+    /// 加载任务装载器。供 <see cref="ILoadableProvider"/> 装载任务用，仅暴露 <see cref="AddLoadable"/>。
+    /// <para>防止 provider 误调用 <see cref="ILoadingProvider"/> 的其他方法。</para>
+    /// </summary>
+    public interface ILoadableLoader
+    {
+        /// <summary>装载一个加载任务。</summary>
+        void AddLoadable(ILoadable loadable);
+    }
+
+    /// <summary>
+    /// 加载任务提供者接口。节点实现此接口，通过 <see cref="MountLoadables"/> 向 <see cref="ILoadingProvider"/> 装载加载任务。
+    /// <para>节点本身不实现 <see cref="ILoadable"/>，而是提供一组纯 C# 的加载器，不破坏节点的继承结构。</para>
+    /// </summary>
+    public interface ILoadableProvider
+    {
+        /// <summary>
+        /// 向 <paramref name="loader"/> 装载加载任务。
+        /// <para>通过 <c>loader.AddLoadable(...)</c> 添加纯 C# 的 <see cref="LoadableBase"/> 对象。</para>
+        /// </summary>
+        /// <param name="loader">加载任务装载器。</param>
+        void MountLoadables(ILoadableLoader loader);
+    }
+
+    /// <summary>
+    /// 加载器接口。对外暴露的加载调度入口，隐藏 <see cref="LoadingManager"/> 实现。
+    /// <para>通过 <see cref="AddProvider"/> 注册 <see cref="ILoadableProvider"/>，调用 <see cref="LoadAsync"/> 统一调度。</para>
+    /// </summary>
+    public interface ILoadingProvider
+    {
+        /// <summary>是否正在加载中。</summary>
+        bool IsLoading { get; }
+
+        /// <summary>当前总体进度，取值范围 0.0 ~ 1.0。</summary>
+        float Progress { get; }
+
+        /// <summary>当前加载阶段的描述文字。</summary>
+        string Description { get; }
+
+        /// <summary>加载进度变更事件。参数为 (整体进度 0~1, 当前描述文字)。</summary>
+        event Action<float, string> OnProgressUpdate;
+
+        /// <summary>全部加载完成事件。</summary>
+        event Action OnLoadCompleted;
+
+        /// <summary>加载失败事件。参数为失败原因描述。</summary>
+        event Action<string> OnLoadFailed;
+
+        /// <summary>
+        /// 注册一个 <see cref="ILoadableProvider"/>，其提供的加载任务将在 <see cref="LoadAsync"/> 时被装载。
+        /// </summary>
+        void AddProvider(ILoadableProvider provider);
+
+        /// <summary>
+        /// 执行加载。装载所有已注册的 <see cref="ILoadableProvider"/> 提供的加载任务并统一调度。
+        /// </summary>
+        UniTask LoadAsync();
+    }
+
+    #endregion
+
+    #region LoadableBase
+
+    /// <summary>
+    /// 加载任务基类。实现 <see cref="ILoadable"/> 并提供属性默认实现。
+    /// <para>纯 C# 类，不继承节点。子类只需重写 <see cref="LoadAsync"/> 实现具体加载逻辑。</para>
+    /// <para>自动管理 State 流转：Pending → Loading → Completed / Failed。</para>
+    /// </summary>
+    public abstract class LoadableBase : ILoadable
+    {
+        #region Public Properties
+
+        /// <summary>当前加载进度，取值范围 0.0 ~ 1.0。</summary>
+        public float Progress { get; private set; }
+
+        /// <summary>当前加载阶段的描述文字。</summary>
+        public string Description { get; private set; }
+
+        /// <summary>当前加载状态。</summary>
+        public LoadState State { get; private set; } = LoadState.Pending;
+
+        /// <summary>
+        /// 加载权重。子类可在构造函数中修改此值。
+        /// </summary>
+        public float Weight { get; protected set; } = 1f;
+
+        #endregion
+
+        #region ILoadable Implementation
+
+        async UniTask ILoadable.LoadAsync()
+        {
+            SetState(LoadState.Loading);
+
+            try
+            {
+                await LoadAsync();
+
+                if (State != LoadState.Failed)
+                {
+                    SetProgress(1f);
+                    SetState(LoadState.Completed);
+                }
+            }
+            catch (Exception ex)
+            {
+                SetDescription($"加载异常: {ex.Message}");
+                SetState(LoadState.Failed);
+            }
+        }
+
+        #endregion
+
+        #region Protected Methods
+
+        /// <summary>
+        /// 子类在此实现具体的加载逻辑。
+        /// <para>加载过程中应调用 <see cref="SetProgress"/>、<see cref="SetDescription"/> 更新进度和描述。</para>
+        /// <para>如果加载失败，可调用 <see cref="SetState"/>(<see cref="LoadState.Failed"/>) 标记失败，或直接抛出异常由基类统一处理。</para>
+        /// </summary>
+        protected abstract UniTask LoadAsync();
+
+        /// <summary>设置当前加载进度，会自动 clamp 到 0~1 范围。</summary>
+        protected void SetProgress(float progress)
+        {
+            Progress = Mathf.Clamp01(progress);
+        }
+
+        /// <summary>设置当前加载阶段的描述文字。</summary>
+        protected void SetDescription(string description)
+        {
+            Description = description;
+        }
+
+        /// <summary>设置当前加载状态。</summary>
+        protected void SetState(LoadState state)
+        {
+            State = state;
+        }
+
+        #endregion
     }
 
     #endregion
@@ -70,101 +203,97 @@ namespace XFramework
     #region LoadingManager
 
     /// <summary>
-    /// 加载管理器。负责统一调度一批 <see cref="ILoadable"/> 任务，并行执行并汇报进度。
+    /// 加载管理器。纯 C# 类，作为加载任务的调度器。
+    /// <para>通过 <see cref="ILoadingProvider"/> 接口对外暴露，外部不可直接访问此类。</para>
     /// </summary>
-    public class LoadingManager : LeafNode
+    class LoadingManager : ILoadingProvider, ILoadableLoader
     {
-        #region Public Properties
+        #region ILoadingProvider Properties
 
-        /// <summary>
-        /// 是否正在加载中。
-        /// </summary>
         public bool IsLoading { get; private set; }
-
-        /// <summary>
-        /// 当前总体进度，取值范围 0.0 ~ 1.0。
-        /// </summary>
         public float Progress { get; private set; }
-
-        /// <summary>
-        /// 当前加载阶段的描述文字。
-        /// </summary>
         public string Description { get; private set; }
 
         #endregion
 
-        #region Events
+        #region ILoadingProvider Events
 
-        /// <summary>
-        /// 加载进度变更事件。参数为 (整体进度 0~1, 当前描述文字)。
-        /// </summary>
         public event Action<float, string> OnProgressUpdate;
-
-        /// <summary>
-        /// 全部加载完成事件。
-        /// </summary>
         public event Action OnLoadCompleted;
-
-        /// <summary>
-        /// 加载失败事件。参数为失败原因描述。
-        /// </summary>
         public event Action<string> OnLoadFailed;
 
         #endregion
 
-        #region Public Methods
+        #region ILoadableLoader (显式接口实现)
 
-        /// <summary>
-        /// 统一的加载入口。接收一批 <see cref="ILoadable"/> 任务，并行执行并汇报进度。
-        /// <para>如果正在加载中，会直接返回并输出警告。</para>
-        /// </summary>
-        /// <param name="loadables">待执行的加载任务列表。</param>
-        /// <param name="phaseDescriptions">
-        /// 可选：加载阶段描述列表。如果提供，会在加载过程中按阶段切换描述文字。
-        /// <para>例如 ["正在初始化资源...", "正在加载场景...", "正在准备数据..."]。</para>
-        /// </param>
-        /// <returns>加载任务。</returns>
-        public async UniTask ExecuteLoadAsync(IList<ILoadable> loadables, IList<string> phaseDescriptions = null)
+        void ILoadableLoader.AddLoadable(ILoadable loadable)
         {
-            if (loadables == null || loadables.Count == 0)
+            if (loadable != null && !_loadables.Contains(loadable))
             {
-                Debug.LogWarning("LoadingManager.ExecuteLoadAsync: loadables is null or empty.");
-                OnLoadCompleted?.Invoke();
+                _loadables.Add(loadable);
+            }
+        }
+
+        #endregion
+
+        #region ILoadingProvider Methods
+
+        public void AddProvider(ILoadableProvider provider)
+        {
+            if (provider != null && !_providers.Contains(provider))
+            {
+                _providers.Add(provider);
+            }
+        }
+
+        public async UniTask LoadAsync()
+        {
+            if (IsLoading)
+            {
+                Debug.LogWarning("LoadingManager.LoadAsync: already loading, ignore this call.");
                 return;
             }
 
-            if (IsLoading)
+            // 1. 装载阶段：从所有 provider 中解析出加载任务
+            _loadables.Clear();
+            for (int i = 0; i < _providers.Count; i++)
             {
-                Debug.LogWarning("LoadingManager.ExecuteLoadAsync: already loading, ignore this call.");
+                _providers[i].MountLoadables(this);
+            }
+
+            if (_loadables.Count == 0)
+            {
+                Debug.LogWarning("LoadingManager.LoadAsync: no loadable tasks found.");
+                OnLoadCompleted?.Invoke();
                 return;
             }
 
             IsLoading = true;
             Progress = 0f;
-            Description = phaseDescriptions?[0] ?? "加载中...";
+            Description = "Loading...";
 
             try
             {
-                // 1. 计算总权重
+                // 2. 计算总权重
                 float totalWeight = 0f;
-                for (int i = 0; i < loadables.Count; i++)
+                for (int i = 0; i < _loadables.Count; i++)
                 {
-                    totalWeight += loadables[i].Weight;
+                    totalWeight += _loadables[i].Weight;
                 }
 
                 if (totalWeight <= 0f)
                 {
-                    totalWeight = loadables.Count;
+                    totalWeight = _loadables.Count;
                 }
 
-                // 2. 同时启动所有加载任务
-                UniTask[] tasks = new UniTask[loadables.Count];
-                for (int i = 0; i < loadables.Count; i++)
+                // 3. 同时启动所有加载任务
+                UniTask[] tasks = new UniTask[_loadables.Count];
+                for (int i = 0; i < _loadables.Count; i++)
                 {
-                    tasks[i] = loadables[i].LoadAsync();
+                    tasks[i] = _loadables[i].LoadAsync();
                 }
 
-                // 3. 每帧轮询进度，直到全部加载完成
+                // 4. 轮询阶段：每帧检查进度，直到全部完成或失败
                 while (true)
                 {
                     float weightedProgress = 0f;
@@ -172,9 +301,9 @@ namespace XFramework
                     bool allDone = true;
                     bool anyFailed = false;
 
-                    for (int i = 0; i < loadables.Count; i++)
+                    for (int i = 0; i < _loadables.Count; i++)
                     {
-                        var loadable = loadables[i];
+                        var loadable = _loadables[i];
                         float p = loadable.Progress;
                         weightedProgress += p * loadable.Weight;
 
@@ -193,50 +322,55 @@ namespace XFramework
 
                     float overallProgress = Mathf.Clamp01(weightedProgress / totalWeight);
                     Progress = overallProgress;
-                    Description = currentDesc ?? "加载完成";
-
-                    // 如果提供了阶段描述，根据进度切换描述
-                    if (phaseDescriptions != null && phaseDescriptions.Count > 0)
-                    {
-                        int phaseIndex = Mathf.FloorToInt(overallProgress * phaseDescriptions.Count);
-                        phaseIndex = Mathf.Clamp(phaseIndex, 0, phaseDescriptions.Count - 1);
-                        Description = phaseDescriptions[phaseIndex];
-                    }
+                    Description = currentDesc ?? "Completed";
 
                     OnProgressUpdate?.Invoke(Progress, Description);
 
                     if (anyFailed)
                     {
-                        OnLoadFailed?.Invoke($"加载失败: {currentDesc}");
+                        OnLoadFailed?.Invoke($"Failed: {currentDesc}");
                         return;
                     }
 
                     if (allDone)
                         break;
 
-                    // 等待下一帧
                     await UniTask.Yield(PlayerLoopTiming.Update);
                 }
 
-                // 4. 等待所有加载任务完成（确保所有协程已结束）
+                // 5. 等待所有任务完成
                 await UniTask.WhenAll(tasks);
 
-                // 5. 全部加载完成
+                // 6. 完成
                 Progress = 1f;
-                Description = "加载完成";
+                Description = "Completed";
                 OnProgressUpdate?.Invoke(Progress, Description);
                 OnLoadCompleted?.Invoke();
             }
             catch (Exception ex)
             {
-                Debug.LogError($"LoadingManager.ExecuteLoadAsync failed: {ex.Message}\n{ex.StackTrace}");
-                OnLoadFailed?.Invoke($"加载异常: {ex.Message}");
+                Debug.LogError($"LoadingManager.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
+                OnLoadFailed?.Invoke($"Exception: {ex.Message}");
             }
             finally
             {
                 IsLoading = false;
             }
         }
+
+        #endregion
+
+        #region Private Fields
+
+        /// <summary>
+        /// 加载任务列表。生命周期：
+        /// <para>1. 装载阶段：由 <see cref="ILoadableLoader.AddLoadable"/> 填充。</para>
+        /// <para>2. 执行阶段：直接用于进度轮询和 <see cref="UniTask.WhenAll"/>。</para>
+        /// </summary>
+        List<ILoadable> _loadables = new List<ILoadable>();
+
+        /// <summary>已注册的 <see cref="ILoadableProvider"/> 列表。</summary>
+        List<ILoadableProvider> _providers = new List<ILoadableProvider>();
 
         #endregion
     }
