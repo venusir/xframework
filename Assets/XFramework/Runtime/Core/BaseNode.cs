@@ -40,7 +40,7 @@ namespace XFramework
         /// <para>调用链: Start() → StartInternal() → OnStart()</para>
         /// <para>调用 Start 后，_started 置为 true，后续重复调用无效。</para>
         /// </summary>
-        public void Start()
+        internal void Start()
         {
             StartInternal();
         }

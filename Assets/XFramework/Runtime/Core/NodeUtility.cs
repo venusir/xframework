@@ -13,7 +13,7 @@ namespace XFramework
         /// <para>逐行输出，避免大树的字符串拼接开销。</para>
         /// </summary>
         /// <param name="root">要打印的子树的根节点。</param>
-        public static void PrintTree(this ParentNode root)
+        public static void PrintTree(this IParentNode root)
         {
             if (root == null)
             {
@@ -29,7 +29,7 @@ namespace XFramework
         /// <summary>
         /// 递归打印节点及其子节点。
         /// </summary>
-        static void PrintNode(ParentNode parent, int depth)
+        static void PrintNode(IParentNode parent, int depth)
         {
             string indent = new string(' ', depth * 2);
 
@@ -38,7 +38,7 @@ namespace XFramework
                 var child = parent[i];
                 UnityEngine.Debug.Log($"{indent}|- {child.GetType().Name} (Depth: {depth})");
 
-                if (child is ParentNode childParent)
+                if (child is IParentNode childParent)
                 {
                     PrintNode(childParent, depth + 1);
                 }
@@ -51,7 +51,7 @@ namespace XFramework
         /// </summary>
         /// <param name="root">搜索的起始节点。</param>
         /// <param name="provider">加载器实例。</param>
-        public static void MountLoadables(this ParentNode root, ILoadingProvider provider)
+        public static void MountLoadables(this IParentNode root, ILoadingProvider provider)
         {
             if (root == null || provider == null)
                 return;
@@ -65,7 +65,7 @@ namespace XFramework
                     provider.AddProvider(loadableProvider);
                 }
 
-                if (child is ParentNode childParent)
+                if (child is IParentNode childParent)
                 {
                     MountLoadables(childParent, provider);
                 }
@@ -80,7 +80,7 @@ namespace XFramework
         /// <para>4. 回收：销毁加载器，清理资源。</para>
         /// </summary>
         /// <param name="root">节点树的根节点。</param>
-        public static async UniTask StartupAsync(this ParentNode root)
+        public static async UniTask StartupAsync(this IParentNode root)
         {
             if (root == null)
                 return;
@@ -88,7 +88,8 @@ namespace XFramework
             ILoadingProvider loader = new LoadingManager();
             root.MountLoadables(loader);
             await loader.LoadAsync();
-            root.Start();
+            if (root is BaseNode baseNode)
+                baseNode.Start();
             loader.Destroy();
         }
     }

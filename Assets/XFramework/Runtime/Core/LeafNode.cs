@@ -12,10 +12,10 @@ namespace XFramework
         /// </summary>
         /// <typeparam name="T">要查找的组件类型，必须实现 IBaseNode 且有无参构造函数。</typeparam>
         /// <returns>找到的组件，未找到则返回 null。</returns>
-        protected T GetComponent<T>() where T : class, IBaseNode, new()
+        protected T GetComponent<T>(bool autoCreate = true) where T : class, IBaseNode, new()
         {
             var entity = Parent as EntityNode;
-            return entity?.GetComponent<T>();
+            return entity?.GetComponent<T>(autoCreate);
         }
 
         /// <summary>
@@ -31,7 +31,7 @@ namespace XFramework
             {
                 if (current is EntityNode entity)
                 {
-                    var component = entity.GetComponent<T>();
+                    var component = entity.GetComponent<T>(false);
                     if (component != null)
                         return component;
                 }

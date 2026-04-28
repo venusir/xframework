@@ -4,10 +4,44 @@ using System;
 namespace XFramework
 {
     /// <summary>
+    /// 可包含子节点的接口。提供只读的子节点访问能力。
+    /// <para>外部代码应通过此接口访问 <see cref="ParentNode"/> 的公共只读 API。</para>
+    /// </summary>
+    public interface IParentNode : IBaseNode
+    {
+        /// <summary>子节点数量。</summary>
+        int ChildCount { get; }
+
+        /// <summary>按索引访问子节点。</summary>
+        BaseNode this[int index] { get; }
+
+        /// <summary>子节点添加事件。</summary>
+        event Action<BaseNode> OnNodeAdded;
+
+        /// <summary>子节点移除事件。</summary>
+        event Action<BaseNode> OnNodeRemoved;
+
+        /// <summary>获取遍历子节点的迭代器，支持 foreach 语法。</summary>
+        IEnumerator<BaseNode> GetEnumerator();
+
+        /// <summary>获取第一个指定类型的子节点。</summary>
+        T GetNode<T>() where T : BaseNode;
+
+        /// <summary>获取第一个满足条件的指定类型子节点。</summary>
+        T GetNode<T>(Predicate<T> predicate) where T : BaseNode;
+
+        /// <summary>获取所有匹配指定类型的子节点，并填充到指定列表中。</summary>
+        void GetNodes<T>(List<T> nodes, bool recursive, Predicate<T> predicate = null) where T : BaseNode;
+
+        /// <summary>获取所有匹配指定类型的子节点。</summary>
+        List<T> GetNodes<T>(bool recursive, Predicate<T> predicate = null) where T : BaseNode;
+    }
+
+    /// <summary>
     /// 可包含子节点的抽象基类。
     /// <para>管理子节点列表，提供添加/移除子节点的功能，并在销毁时递归销毁所有子节点。</para>
     /// </summary>
-    public abstract class ParentNode : BaseNode
+    public abstract class ParentNode : BaseNode, IParentNode
     {
         public event Action<BaseNode> OnNodeAdded;
         public event Action<BaseNode> OnNodeRemoved;
@@ -115,7 +149,9 @@ namespace XFramework
         /// <para>如果父节点已执行过 <see cref="BaseNode.Start"/>，则新添加的子节点会立即自动调用 <see cref="BaseNode.Start"/>。</para>
         /// </summary>
         /// <param name="node">要添加的子节点。</param>
-        internal void AddChild(BaseNode node)
+        /// <param name="deferStart">是否延迟 Start 调用。为 true 时，即使父节点已 Start 也不会立即调用子节点的 Start，
+        /// 适用于需要先异步加载再触发 Start 的场景。</param>
+        internal void AddChild(BaseNode node, bool deferStart = false)
         {
             if (node != null && !children.Contains(node))
             {
@@ -126,7 +162,8 @@ namespace XFramework
                 OnNodeAdded?.Invoke(node);
 
                 // 如果父节点已 Start，新子节点应自动 Start（递归传播给其子节点）
-                if (Started)
+                // deferStart 为 true 时跳过，由调用方在异步加载完成后手动触发 Start
+                if (Started && !deferStart)
                 {
                     node.Start();
                 }

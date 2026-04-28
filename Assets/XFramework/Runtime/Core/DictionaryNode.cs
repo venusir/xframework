@@ -1,13 +1,53 @@
 using System.Collections.Generic;
-using Unity.VisualScripting.YamlDotNet.Core.Tokens;
+using System;
 
 namespace XFramework
 {
     /// <summary>
+    /// 字典节点接口。按自定义键（Key）缓存子节点，提供高效的键值对式访问。
+    /// </summary>
+    /// <typeparam name="TKey">键的类型。</typeparam>
+    public interface IDictionaryNode<TKey> : IParentNode
+    {
+        /// <summary>子节点数量。</summary>
+        int NodeCount { get; }
+
+        /// <summary>所有键的集合。</summary>
+        IEnumerable<TKey> Keys { get; }
+
+        /// <summary>所有子节点的集合。</summary>
+        IEnumerable<BaseNode> Values { get; }
+
+        /// <summary>添加子节点并关联指定键。</summary>
+        void AddNode<T>(TKey key, T node) where T : BaseNode;
+
+        /// <summary>设置子节点并关联指定键。如果键已存在，会先移除旧的子节点再添加新的。</summary>
+        void SetNode<T>(TKey key, T node) where T : BaseNode;
+
+        /// <summary>移除指定键关联的子节点。</summary>
+        void RemoveNode(TKey key);
+
+        /// <summary>清空所有子节点。</summary>
+        void ClearNodes();
+
+        /// <summary>是否包含指定键。</summary>
+        bool ContainsNode(TKey key);
+
+        /// <summary>尝试获取指定键关联的子节点（非泛型版本）。</summary>
+        bool TryGetNode(TKey key, out BaseNode node);
+
+        /// <summary>尝试获取指定键关联的指定类型子节点。</summary>
+        bool TryGetNode<T>(TKey key, out T node) where T : BaseNode;
+
+        /// <summary>获取指定键关联的指定类型子节点。</summary>
+        T GetNode<T>(TKey key) where T : BaseNode;
+    }
+
+    /// <summary>
     /// 字典节点，按自定义键（Key）缓存子节点，提供高效的键值对式访问。
     /// </summary>
     /// <typeparam name="TKey">键的类型。</typeparam>
-    public abstract class DictionaryNode<TKey> : ParentNode
+    public abstract class DictionaryNode<TKey> : ParentNode, IDictionaryNode<TKey>
     {
         /// <summary>按键映射子节点的字典。</summary>
         private Dictionary<TKey, BaseNode> _nodeDict;
@@ -16,10 +56,10 @@ namespace XFramework
         public int NodeCount => _nodeDict.Count;
 
         /// <summary>所有键的集合。</summary>
-        public Dictionary<TKey, BaseNode>.KeyCollection Keys => _nodeDict.Keys;
+        public IEnumerable<TKey> Keys => _nodeDict.Keys;
 
         /// <summary>所有子节点的集合。</summary>
-        public Dictionary<TKey, BaseNode>.ValueCollection Values => _nodeDict.Values;
+        public IEnumerable<BaseNode> Values => _nodeDict.Values;
 
         /// <summary>
         /// 添加子节点并关联指定键。

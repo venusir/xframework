@@ -4,10 +4,22 @@ using System.Collections.Generic;
 namespace XFramework
 {
     /// <summary>
+    /// 复合节点接口。提供子节点的添加和移除能力。
+    /// </summary>
+    public interface ICompositeNode : IParentNode
+    {
+        /// <summary>添加子节点。</summary>
+        void AddNode(BaseNode node);
+
+        /// <summary>移除并销毁子节点。</summary>
+        void RemoveNode(BaseNode node);
+    }
+
+    /// <summary>
     /// 复合节点。
     /// <para>继承自 <see cref="ParentNode"/> 。</para>
     /// </summary>
-    public abstract class CompositeNode : ParentNode
+    public abstract class CompositeNode : ParentNode, ICompositeNode
     {
         /// <summary>
         /// 添加子节点。

@@ -4,10 +4,38 @@ using System.Collections.Generic;
 namespace XFramework
 {
     /// <summary>
+    /// 实体节点接口。按类型（Type）缓存子节点，提供高效的组件式访问。
+    /// <para>类似于 Unity 的 GetComponent/AddComponent 模式，但基于纯 C# 节点树实现。</para>
+    /// </summary>
+    public interface IEntityNode : IParentNode
+    {
+        /// <summary>获取指定类型的子节点。优先从缓存中查找，未找到时可根据参数自动创建。</summary>
+        T GetComponent<T>(bool autoCreate = true) where T : IBaseNode;
+
+        /// <summary>添加指定类型的子节点。如果已存在同类型节点则直接返回。</summary>
+        T AddComponent<T>() where T : BaseNode, new();
+
+        /// <summary>添加指定类型的子节点，并传入初始化参数。如果已存在同类型节点则直接返回。</summary>
+        T AddComponent<T>(object arg) where T : BaseNode, new();
+
+        /// <summary>通过运行时类型添加子节点。如果已存在同类型节点则直接返回。</summary>
+        BaseNode AddComponent(Type type);
+
+        /// <summary>通过运行时类型添加子节点，并传入初始化参数。如果已存在同类型节点则直接返回。</summary>
+        BaseNode AddComponent(Type type, object arg);
+
+        /// <summary>移除指定类型的子节点。</summary>
+        bool RemoveComponent<T>() where T : IBaseNode;
+
+        /// <summary>移除指定的子节点实例。</summary>
+        bool RemoveComponent(BaseNode node);
+    }
+
+    /// <summary>
     /// 实体节点，按类型（Type）缓存子节点，提供高效的组件式访问。
     /// <para>类似于 Unity 的 GetComponent/AddComponent 模式，但基于纯 C# 节点树实现。</para>
     /// </summary>
-    public abstract class EntityNode : ParentNode
+    public abstract class EntityNode : ParentNode, IEntityNode
     {
         #region Private Fields
 
@@ -22,11 +50,13 @@ namespace XFramework
         #region Public Methods
 
         /// <summary>
-        /// 获取指定类型的子节点。优先从缓存中查找，未命中则遍历子节点。
+        /// 获取指定类型的子节点。优先从缓存中查找，未找到时可根据参数自动创建。
         /// </summary>
         /// <typeparam name="T">子节点类型。</typeparam>
-        /// <returns>匹配的子节点，未找到则返回 null。</returns>
-        public T GetComponent<T>() where T : IBaseNode
+        /// <param name="autoCreate">未找到时是否自动创建。默认为 true。
+        /// <para>注意：当 T 为接口类型时，无法自动创建，此参数无效。</para></param>
+        /// <returns>匹配的子节点，未找到且无法自动创建时返回 null。</returns>
+        public T GetComponent<T>(bool autoCreate = true) where T : IBaseNode
         {
             Type type = typeof(T);
 
@@ -42,11 +72,22 @@ namespace XFramework
                     return node;
             }
 
+            // 未找到且允许自动创建，且 T 是具体类（非接口）且是 BaseNode 的子类
+            if (autoCreate && !type.IsInterface && typeof(BaseNode).IsAssignableFrom(type))
+            {
+                // 通过 NodeFactory 创建节点
+                var component = NodeFactory.GetNode(type);
+                _typeCache[type] = component;
+                AddChild(component);
+                return (T)(IBaseNode)component;
+            }
+
             return default;
         }
 
         /// <summary>
         /// 添加指定类型的子节点。如果已存在同类型节点则直接返回。
+        /// <para>节点通过 <see cref="NodeFactory"/> 获取，支持缓存池复用。</para>
         /// </summary>
         /// <typeparam name="T">要创建的子节点类型，必须有无参构造函数。</typeparam>
         /// <returns>创建或已存在的子节点。</returns>
@@ -55,7 +96,25 @@ namespace XFramework
             if (_typeCache.TryGetValue(typeof(T), out BaseNode node))
                 return (T)node;
 
-            T component = new T();
+            T component = NodeFactory.GetNode<T>();
+            _typeCache[typeof(T)] = component;
+            AddChild(component);
+            return component;
+        }
+
+        /// <summary>
+        /// 添加指定类型的子节点，并传入初始化参数。如果已存在同类型节点则直接返回。
+        /// <para>节点通过 <see cref="NodeFactory"/> 获取，支持缓存池复用。</para>
+        /// </summary>
+        /// <typeparam name="T">要创建的子节点类型，必须有无参构造函数。</typeparam>
+        /// <param name="arg">初始化参数。</param>
+        /// <returns>创建或已存在的子节点。</returns>
+        public T AddComponent<T>(object arg) where T : BaseNode, new()
+        {
+            if (_typeCache.TryGetValue(typeof(T), out BaseNode node))
+                return (T)node;
+
+            T component = NodeFactory.GetNode<T>(arg);
             _typeCache[typeof(T)] = component;
             AddChild(component);
             return component;
@@ -98,7 +157,8 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 通过运行时类型添加子节点。
+        /// 通过运行时类型添加子节点。如果已存在同类型节点则直接返回。
+        /// <para>节点通过 <see cref="NodeFactory"/> 获取，支持缓存池复用。</para>
         /// </summary>
         /// <param name="type">要创建的子节点类型，必须是 <see cref="BaseNode"/> 的子类。</param>
         /// <returns>创建或已存在的子节点。</returns>
@@ -115,7 +175,33 @@ namespace XFramework
             if (_typeCache.TryGetValue(type, out BaseNode node))
                 return node;
 
-            node = Activator.CreateInstance(type) as BaseNode;
+            node = NodeFactory.GetNode(type);
+            _typeCache[type] = node;
+            AddChild(node);
+            return node;
+        }
+
+        /// <summary>
+        /// 通过运行时类型添加子节点，并传入初始化参数。如果已存在同类型节点则直接返回。
+        /// <para>节点通过 <see cref="NodeFactory"/> 获取，支持缓存池复用。</para>
+        /// </summary>
+        /// <param name="type">要创建的子节点类型，必须是 <see cref="BaseNode"/> 的子类。</param>
+        /// <param name="arg">初始化参数。</param>
+        /// <returns>创建或已存在的子节点。</returns>
+        /// <exception cref="ArgumentNullException">type 为 null。</exception>
+        /// <exception cref="ArgumentException">type 不是 BaseNode 的子类。</exception>
+        public BaseNode AddComponent(Type type, object arg)
+        {
+            if (type == null)
+                throw new ArgumentNullException(nameof(type));
+
+            if (!typeof(BaseNode).IsAssignableFrom(type))
+                throw new ArgumentException($"Add {type} failed, it is not a BaseNode");
+
+            if (_typeCache.TryGetValue(type, out BaseNode node))
+                return node;
+
+            node = NodeFactory.GetNode(type, arg);
             _typeCache[type] = node;
             AddChild(node);
             return node;
