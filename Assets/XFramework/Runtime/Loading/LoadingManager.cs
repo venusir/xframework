@@ -71,9 +71,8 @@ namespace XFramework
 
     /// <summary>
     /// 加载管理器。负责统一调度一批 <see cref="ILoadable"/> 任务，并行执行并汇报进度。
-    /// <para>纯 C# 类，不继承任何节点基类，由 <see cref="GameLauncher"/> 内部持有。</para>
     /// </summary>
-    public class LoadingManager
+    public class LoadingManager : LeafNode
     {
         #region Public Properties
 
