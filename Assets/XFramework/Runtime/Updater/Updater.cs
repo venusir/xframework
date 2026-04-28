@@ -242,6 +242,39 @@ namespace XFramework
             }
         }
 
+        /// <summary>
+        /// 立即对指定节点执行一次更新并重新调整 LOD。
+        /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
+        /// <para>此操作不经过 pending 缓冲，直接操作主列表。</para>
+        /// </summary>
+        /// <param name="node">要立即更新的节点。</param>
+        /// <param name="deltaTime">传入的时间差。</param>
+        public void ProcessImmediate(IUpdateable node, float deltaTime)
+        {
+            if (node == null) return;
+
+            // 查找节点当前所在的 LOD 桶
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var entries = _lodEntries[lod];
+                for (int i = entries.Count - 1; i >= 0; i--)
+                {
+                    if (entries[i].Node == node)
+                    {
+                        int depth = entries[i].Depth;
+                        int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime), 0, MaxLOD);
+
+                        if (newLOD != lod)
+                        {
+                            entries.RemoveAt(i);
+                            InsertSorted(_lodEntries[newLOD], node, depth);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+
         #endregion
 
         #region Private Methods

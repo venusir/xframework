@@ -50,6 +50,18 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 立即对指定节点执行一次更新并重新调整 LOD。
+        /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
+        /// </summary>
+        /// <param name="node">要立即更新的节点。</param>
+        /// <param name="deltaTime">传入的时间差。</param>
+        public void RequestImmediateUpdate(IUpdateable node, float deltaTime)
+        {
+            if (!_disposed)
+                _updater.ProcessImmediate(node, deltaTime);
+        }
+
+        /// <summary>
         /// 释放资源。清空 <see cref="Updater"/> 内部状态。
         /// </summary>
         public void Dispose()
