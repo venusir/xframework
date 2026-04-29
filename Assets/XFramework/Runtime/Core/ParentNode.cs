@@ -155,6 +155,13 @@ namespace XFramework
         {
             if (node != null && !children.Contains(node))
             {
+                // 防止将已销毁的节点添加到树中
+                if (node.Destroyed)
+                {
+                    UnityEngine.Debug.LogWarning($"ParentNode.AddChild: node {node.GetType().Name} is already destroyed, ignoring.");
+                    return;
+                }
+
                 node.Awake();
                 children.Add(node);
                 node.SetParent(this);
@@ -254,17 +261,18 @@ namespace XFramework
 
         /// <summary>
         /// 内部销毁方法。递归销毁所有子节点后清理列表。
-        /// <para>通过 <see cref="RemoveChild"/> 移除子节点，确保 <see cref="OnNodeRemoved"/> 事件被触发。</para>
+        /// <para>子节点的 <see cref="BaseNode.Destroy"/> 会自动触发 <see cref="RemoveChild"/>，
+        /// 因此无需在此处手动调用 <see cref="RemoveChild"/>，避免重复事件触发。</para>
         /// <para>使用反向遍历避免额外的堆分配（无需复制列表快照）。</para>
         /// </summary>
         internal override void DestroyInternal()
         {
-            // 反向遍历：从后往前移除，已移除的元素不会影响前面未遍历元素的索引
+            // 反向遍历：从后往前销毁，已销毁的元素不会影响前面未遍历元素的索引
+            // child.Destroy() 内部会自动调用 RemoveChild(this, fromChild: true)，
+            // 触发 OnNodeRemoved 事件，因此无需在此处手动 RemoveChild
             for (int i = children.Count - 1; i >= 0; i--)
             {
-                var child = children[i];
-                RemoveChild(child, fromChild: false);
-                child.Destroy();
+                children[i].Destroy();
             }
             children.Clear();
             children = null;

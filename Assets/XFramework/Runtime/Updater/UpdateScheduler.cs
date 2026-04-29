@@ -10,7 +10,7 @@ namespace XFramework
     /// <para>节点的 LOD 由 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值决定，每次更新后自动调整。</para>
     /// <para>deltaTime 通过 <see cref="Time.time"/> 差值计算，不受 LOD 迁移影响，帧率波动时仍保持正确。</para>
     /// </summary>
-    public class Updater
+    public class UpdateScheduler
     {
         #region Constants
 
@@ -60,7 +60,7 @@ namespace XFramework
         /// <summary>
         /// 创建更新调度器实例。
         /// </summary>
-        public Updater()
+        public UpdateScheduler()
         {
             _lodEntries = new List<Entry>[LODCount];
             _pendingAdd = new List<Entry>[LODCount];

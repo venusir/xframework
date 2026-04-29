@@ -4,9 +4,9 @@ using System.Collections.Generic;
 namespace XFramework
 {
     /// <summary>
-    /// 复合节点接口。提供子节点的添加和移除能力。
+    /// 容器节点接口。提供子节点的添加和移除能力。
     /// </summary>
-    public interface ICompositeNode : IParentNode
+    public interface IContainerNode : IParentNode
     {
         /// <summary>添加子节点。</summary>
         void AddNode(BaseNode node);
@@ -16,10 +16,10 @@ namespace XFramework
     }
 
     /// <summary>
-    /// 复合节点。
-    /// <para>继承自 <see cref="ParentNode"/> 。</para>
+    /// 容器节点。
+    /// <para>继承自 <see cref="ParentNode"/>，对外暴露添加/移除子节点的公共 API。</para>
     /// </summary>
-    public abstract class CompositeNode : ParentNode, ICompositeNode
+    public abstract class ContainerNode : ParentNode, IContainerNode
     {
         /// <summary>
         /// 添加子节点。

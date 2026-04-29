@@ -24,12 +24,12 @@ namespace XFramework
         /// <summary>每 32 帧更新一次</summary>
         Every32Frames = 5,
 
-        /// <summary>最大 LOD 等级标记，用于 <see cref="Updater"/> 内部推导数组大小。</summary>
+        /// <summary>最大 LOD 等级标记，用于 <see cref="UpdateScheduler"/> 内部推导数组大小。</summary>
         Max = Every32Frames,
     }
 
     /// <summary>
-    /// 可更新接口。节点实现此接口后，通过 <see cref="Updater"/> 自动管理更新。
+    /// 可更新接口。节点实现此接口后，通过 <see cref="UpdateScheduler"/> 自动管理更新。
     /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一帧的 <see cref="UpdateLOD"/> 等级。</para>
     /// </summary>
     public interface IUpdateable

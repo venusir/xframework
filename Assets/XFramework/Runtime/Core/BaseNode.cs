@@ -153,7 +153,7 @@ namespace XFramework
 
             OnStart();
 
-            // 通知外部（如 NodeUpdater）：节点已启动，可以开始接收 Update
+            // 通知外部（如 UpdateBinder）：节点已启动，可以开始接收 Update
             OnStarted?.Invoke(this);
         }
 
@@ -211,7 +211,7 @@ namespace XFramework
         internal event Action<BaseNode> OnReturnToPool;
 
         /// <summary>
-        /// 节点启动完成时触发，用于通知外部（如 <see cref="NodeUpdater"/>）节点已可接收 Update。
+        /// 节点启动完成时触发，用于通知外部（如 <see cref="UpdateBinder"/>）节点已可接收 Update。
         /// </summary>
         internal event Action<BaseNode> OnStarted;
 

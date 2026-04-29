@@ -46,14 +46,14 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 从指定根节点开始，递归查找所有实现了 <see cref="ILoadableProvider"/> 的节点并注册到 <see cref="ILoadingProvider"/>。
-        /// <para>注册后，<see cref="ILoadingProvider.LoadAsync"/> 时会统一装载这些 provider 提供的加载任务。</para>
+        /// 从指定根节点开始，递归查找所有实现了 <see cref="ILoadableProvider"/> 的节点并注册到 <see cref="ILoadCoordinator"/>。
+        /// <para>注册后，<see cref="ILoadCoordinator.LoadAsync"/> 时会统一装载这些 provider 提供的加载任务。</para>
         /// </summary>
         /// <param name="root">搜索的起始节点。</param>
-        /// <param name="provider">加载器实例。</param>
-        public static void MountLoadables(this IParentNode root, ILoadingProvider provider)
+        /// <param name="coordinator">加载协调器实例。</param>
+        public static void MountLoadables(this IParentNode root, ILoadCoordinator coordinator)
         {
-            if (root == null || provider == null)
+            if (root == null || coordinator == null)
                 return;
 
             for (int i = 0; i < root.ChildCount; i++)
@@ -62,12 +62,12 @@ namespace XFramework
 
                 if (child is ILoadableProvider loadableProvider)
                 {
-                    provider.AddProvider(loadableProvider);
+                    coordinator.AddProvider(loadableProvider);
                 }
 
                 if (child is IParentNode childParent)
                 {
-                    MountLoadables(childParent, provider);
+                    MountLoadables(childParent, coordinator);
                 }
             }
         }
@@ -85,7 +85,7 @@ namespace XFramework
             if (root == null)
                 return;
 
-            ILoadingProvider loader = new LoadingManager();
+            ILoadCoordinator loader = new LoadCoordinator();
             root.MountLoadables(loader);
             await loader.LoadAsync();
             if (root is BaseNode baseNode)

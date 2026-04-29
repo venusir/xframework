@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -30,7 +31,7 @@ namespace XFramework
     #region Interfaces
 
     /// <summary>
-    /// 可加载接口。实现此接口的对象可被 <see cref="ILoadingProvider"/> 统一调度执行。
+    /// 可加载接口。实现此接口的对象可被 <see cref="ILoadCoordinator"/> 统一调度执行。
     /// </summary>
     public interface ILoadable
     {
@@ -56,34 +57,34 @@ namespace XFramework
     }
 
     /// <summary>
-    /// 加载任务装载器。供 <see cref="ILoadableProvider"/> 装载任务用，仅暴露 <see cref="AddLoadable"/>。
-    /// <para>防止 provider 误调用 <see cref="ILoadingProvider"/> 的其他方法。</para>
+    /// 加载任务收集器。供 <see cref="ILoadableProvider"/> 装载任务用，仅暴露 <see cref="AddLoadable"/>。
+    /// <para>防止 provider 误调用 <see cref="ILoadCoordinator"/> 的其他方法。</para>
     /// </summary>
-    public interface ILoadableLoader
+    public interface ILoadCollector
     {
         /// <summary>装载一个加载任务。</summary>
         void AddLoadable(ILoadable loadable);
     }
 
     /// <summary>
-    /// 加载任务提供者接口。节点实现此接口，通过 <see cref="MountLoadables"/> 向 <see cref="ILoadingProvider"/> 装载加载任务。
+    /// 加载任务提供者接口。节点实现此接口，通过 <see cref="MountLoadables"/> 向 <see cref="ILoadCoordinator"/> 装载加载任务。
     /// <para>节点本身不实现 <see cref="ILoadable"/>，而是提供一组纯 C# 的加载器，不破坏节点的继承结构。</para>
     /// </summary>
     public interface ILoadableProvider
     {
         /// <summary>
-        /// 向 <paramref name="loader"/> 装载加载任务。
-        /// <para>通过 <c>loader.AddLoadable(...)</c> 添加纯 C# 的 <see cref="LoadableBase"/> 对象。</para>
+        /// 向 <paramref name="collector"/> 装载加载任务。
+        /// <para>通过 <c>collector.AddLoadable(...)</c> 添加纯 C# 的 <see cref="LoadableTask"/> 对象。</para>
         /// </summary>
-        /// <param name="loader">加载任务装载器。</param>
-        void MountLoadables(ILoadableLoader loader);
+        /// <param name="collector">加载任务收集器。</param>
+        void MountLoadables(ILoadCollector collector);
     }
 
     /// <summary>
-    /// 加载器接口。对外暴露的加载调度入口，隐藏 <see cref="LoadingManager"/> 实现。
+    /// 加载协调器接口。对外暴露的加载调度入口，隐藏 <see cref="LoadCoordinator"/> 实现。
     /// <para>通过 <see cref="AddProvider"/> 注册 <see cref="ILoadableProvider"/>，调用 <see cref="LoadAsync"/> 统一调度。</para>
     /// </summary>
-    public interface ILoadingProvider
+    public interface ILoadCoordinator
     {
         /// <summary>是否正在加载中。</summary>
         bool IsLoading { get; }
@@ -122,14 +123,14 @@ namespace XFramework
 
     #endregion
 
-    #region LoadableBase
+    #region LoadableTask
 
     /// <summary>
     /// 加载任务基类。实现 <see cref="ILoadable"/> 并提供属性默认实现。
     /// <para>纯 C# 类，不继承节点。子类只需重写 <see cref="LoadAsync"/> 实现具体加载逻辑。</para>
     /// <para>自动管理 State 流转：Pending → Loading → Completed / Failed。</para>
     /// </summary>
-    public abstract class LoadableBase : ILoadable
+    public abstract class LoadableTask : ILoadable
     {
         #region Public Properties
 
@@ -206,15 +207,15 @@ namespace XFramework
 
     #endregion
 
-    #region LoadingManager
+    #region LoadCoordinator
 
     /// <summary>
-    /// 加载管理器。纯 C# 类，作为加载任务的调度器。
-    /// <para>通过 <see cref="ILoadingProvider"/> 接口对外暴露，外部不可直接访问此类。</para>
+    /// 加载协调器。纯 C# 类，作为加载任务的调度器。
+    /// <para>通过 <see cref="ILoadCoordinator"/> 接口对外暴露，外部不可直接访问此类。</para>
     /// </summary>
-    class LoadingManager : ILoadingProvider, ILoadableLoader
+    class LoadCoordinator : ILoadCoordinator, ILoadCollector
     {
-        #region ILoadingProvider Properties
+        #region ILoadCoordinator Properties
 
         public bool IsLoading { get; private set; }
         public float Progress { get; private set; }
@@ -222,7 +223,7 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadingProvider Events
+        #region ILoadCoordinator Events
 
         public event Action<float, string> OnProgressUpdate;
         public event Action OnLoadCompleted;
@@ -230,9 +231,9 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadableLoader (显式接口实现)
+        #region ILoadCollector (显式接口实现)
 
-        void ILoadableLoader.AddLoadable(ILoadable loadable)
+        void ILoadCollector.AddLoadable(ILoadable loadable)
         {
             if (loadable != null && !_loadables.Contains(loadable))
             {
@@ -242,7 +243,7 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadingProvider Methods
+        #region ILoadCoordinator Methods
 
         public void AddProvider(ILoadableProvider provider)
         {
@@ -256,7 +257,7 @@ namespace XFramework
         {
             if (IsLoading)
             {
-                Debug.LogWarning("LoadingManager.LoadAsync: already loading, ignore this call.");
+                Debug.LogWarning("LoadCoordinator.LoadAsync: already loading, ignore this call.");
                 return;
             }
 
@@ -269,7 +270,7 @@ namespace XFramework
 
             if (_loadables.Count == 0)
             {
-                Debug.LogWarning("LoadingManager.LoadAsync: no loadable tasks found.");
+                Debug.LogWarning("LoadCoordinator.LoadAsync: no loadable tasks found.");
                 OnLoadCompleted?.Invoke();
                 return;
             }
@@ -277,6 +278,9 @@ namespace XFramework
             IsLoading = true;
             Progress = 0f;
             Description = "Loading...";
+
+            // 创建 CancellationTokenSource 用于失败时取消其他任务
+            using var cts = new CancellationTokenSource();
 
             try
             {
@@ -300,7 +304,7 @@ namespace XFramework
                 }
 
                 // 4. 轮询阶段：每帧检查进度，直到全部完成或失败
-                while (true)
+                while (!cts.Token.IsCancellationRequested)
                 {
                     float weightedProgress = 0f;
                     string currentDesc = null;
@@ -334,6 +338,8 @@ namespace XFramework
 
                     if (anyFailed)
                     {
+                        // 取消其他仍在运行的任务
+                        cts.Cancel();
                         OnLoadFailed?.Invoke($"Failed: {currentDesc}");
                         return;
                     }
@@ -344,18 +350,19 @@ namespace XFramework
                     await UniTask.Yield(PlayerLoopTiming.Update);
                 }
 
-                // 5. 等待所有任务完成
-                await UniTask.WhenAll(tasks);
-
-                // 6. 完成
+                // 5. 完成
                 Progress = 1f;
                 Description = "Completed";
                 OnProgressUpdate?.Invoke(Progress, Description);
                 OnLoadCompleted?.Invoke();
             }
+            catch (OperationCanceledException)
+            {
+                // 取消操作是预期的，不做额外处理
+            }
             catch (Exception ex)
             {
-                Debug.LogError($"LoadingManager.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError($"LoadCoordinator.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
                 OnLoadFailed?.Invoke($"Exception: {ex.Message}");
             }
             finally
@@ -384,8 +391,8 @@ namespace XFramework
 
         /// <summary>
         /// 加载任务列表。生命周期：
-        /// <para>1. 装载阶段：由 <see cref="ILoadableLoader.AddLoadable"/> 填充。</para>
-        /// <para>2. 执行阶段：直接用于进度轮询和 <see cref="UniTask.WhenAll"/>。</para>
+        /// <para>1. 装载阶段：由 <see cref="ILoadCollector.AddLoadable"/> 填充。</para>
+        /// <para>2. 执行阶段：直接用于进度轮询。</para>
         /// </summary>
         List<ILoadable> _loadables = new List<ILoadable>();
 

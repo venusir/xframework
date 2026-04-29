@@ -1,16 +1,16 @@
 namespace XFramework
 {
     /// <summary>
-    /// 节点更新管理器。将 <see cref="Updater"/> 与节点树事件订阅封装在一起，
+    /// 更新绑定器。将 <see cref="UpdateScheduler"/> 与节点树事件订阅封装在一起，
     /// 自动注册/注销树中所有 <see cref="IUpdateable"/> 节点。
-    /// <para>节点只有在 <see cref="BaseNode.Start"/> 完成后才会注册到 <see cref="Updater"/>，
+    /// <para>节点只有在 <see cref="BaseNode.Start"/> 完成后才会注册到 <see cref="UpdateScheduler"/>，
     /// 确保加载中的节点不会收到 Update 调用。</para>
     /// </summary>
-    public class NodeUpdater
+    public class UpdateBinder
     {
         #region Private Fields
 
-        readonly Updater _updater;
+        readonly UpdateScheduler _scheduler;
         bool _disposed;
 
         #endregion
@@ -18,11 +18,11 @@ namespace XFramework
         #region Constructor
 
         /// <summary>
-        /// 创建节点更新管理器实例。
+        /// 创建更新绑定器实例。
         /// </summary>
-        public NodeUpdater()
+        public UpdateBinder()
         {
-            _updater = new Updater();
+            _scheduler = new UpdateScheduler();
         }
 
         #endregion
@@ -40,13 +40,13 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 执行一帧更新。内部委托给 <see cref="Updater.Tick(float)"/>。
+        /// 执行一帧更新。内部委托给 <see cref="UpdateScheduler.Tick(float)"/>。
         /// </summary>
         /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），由外部传入避免重复获取。</param>
         public void Tick(float time)
         {
             if (!_disposed)
-                _updater.Tick(time);
+                _scheduler.Tick(time);
         }
 
         /// <summary>
@@ -59,17 +59,17 @@ namespace XFramework
         public void RequestImmediateUpdate(IUpdateable node, float deltaTime, float time)
         {
             if (!_disposed)
-                _updater.ProcessImmediate(node, deltaTime, time);
+                _scheduler.ProcessImmediate(node, deltaTime, time);
         }
 
         /// <summary>
-        /// 释放资源。清空 <see cref="Updater"/> 内部状态。
+        /// 释放资源。清空 <see cref="UpdateScheduler"/> 内部状态。
         /// </summary>
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-            _updater.Clear();
+            _scheduler.Clear();
         }
 
         #endregion
@@ -104,7 +104,7 @@ namespace XFramework
             {
                 if (node.Started)
                 {
-                    _updater.Register(u, node.Depth);
+                    _scheduler.Register(u, node.Depth);
                 }
                 else
                 {
@@ -114,14 +114,14 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 节点启动完成时触发，将节点注册到 <see cref="Updater"/>。
+        /// 节点启动完成时触发，将节点注册到 <see cref="UpdateScheduler"/>。
         /// </summary>
         void OnNodeStarted(BaseNode node)
         {
             node.OnStarted -= OnNodeStarted;
 
             if (node is IUpdateable u)
-                _updater.Register(u, node.Depth);
+                _scheduler.Register(u, node.Depth);
         }
 
         /// <summary>
@@ -129,21 +129,14 @@ namespace XFramework
         /// </summary>
         void OnNodeAdded(BaseNode node)
         {
-            TryRegister(node);
-
+            // 复用 SubscribeTree 逻辑，消除代码重复
             if (node is ParentNode parent)
             {
-                parent.OnNodeAdded += OnNodeAdded;
-                parent.OnNodeRemoved += OnNodeRemoved;
-
-                // 新加入的 ParentNode 可能已有子节点（如批量添加）
-                for (int i = 0; i < parent.ChildCount; i++)
-                {
-                    var child = parent[i];
-                    TryRegister(child);
-                    if (child is ParentNode childParent)
-                        SubscribeTree(childParent);
-                }
+                SubscribeTree(parent);
+            }
+            else
+            {
+                TryRegister(node);
             }
         }
 
@@ -157,7 +150,9 @@ namespace XFramework
             if (node is ParentNode parent)
             {
                 // 先递归处理子节点（注销 + 取消订阅）
-                for (int i = parent.ChildCount - 1; i >= 0; i--)
+                // 使用快照遍历避免在事件回调中修改列表的潜在问题
+                int childCount = parent.ChildCount;
+                for (int i = childCount - 1; i >= 0; i--)
                     OnNodeRemoved(parent[i]);
 
                 // 取消订阅该父节点的事件
@@ -169,7 +164,7 @@ namespace XFramework
             node.OnStarted -= OnNodeStarted;
 
             if (node is IUpdateable u)
-                _updater.Unregister(u);
+                _scheduler.Unregister(u);
         }
 
         #endregion
