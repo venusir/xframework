@@ -124,6 +124,8 @@ namespace XFramework
         /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
         /// <para>更新后根据 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值自动调整 LOD 桶。</para>
         /// <para>deltaTime 通过 <paramref name="time"/> 与 <see cref="Entry.LastUpdateTime"/> 的差值计算。</para>
+        /// <para>单个节点的 <see cref="IUpdateable.OnUpdate(float, float)"/> 异常不会影响其他节点的正常更新，
+        /// 异常节点会被自动注销并打印错误日志。</para>
         /// </summary>
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免每节点重复获取。</param>
         public void Tick(float time)
@@ -136,7 +138,18 @@ namespace XFramework
             {
                 var entry = lod0[i];
                 float realDelta = time - entry.LastUpdateTime;
-                int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+
+                int newLOD;
+                try
+                {
+                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+                }
+                catch (System.Exception e)
+                {
+                    UnityEngine.Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                    _pendingRemove.Add(entry.Node);
+                    continue;
+                }
 
                 // 更新 LastUpdateTime
                 entry.LastUpdateTime = time;
@@ -171,7 +184,18 @@ namespace XFramework
                 {
                     var entry = entries[i];
                     float realDelta = time - entry.LastUpdateTime;
-                    int newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+
+                    int newLOD;
+                    try
+                    {
+                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+                    }
+                    catch (System.Exception e)
+                    {
+                        UnityEngine.Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                        _pendingRemove.Add(entry.Node);
+                        continue;
+                    }
 
                     // 更新 LastUpdateTime
                     entry.LastUpdateTime = time;
