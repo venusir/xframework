@@ -321,7 +321,7 @@ _nodeUpdater.RequestImmediateUpdate(this, deltaTime, Time.time);
 
 ## 异步启动
 
-`NodeUtility.StartupAsync()` 扩展方法提供了完整的异步启动管线：
+`StartupExtensions.StartupAsync()` 扩展方法提供了完整的异步启动管线：
 
 ```
 StartupAsync()
@@ -394,15 +394,49 @@ public class LoadingSceneNode : EntityNode, ILoadableProvider
 
 ### 加载进度监听
 
+`ILoadCoordinator` 每帧轮询时通过 `OnProgressUpdate` 事件广播 `LoadProgressSnapshot` 快照：
+
 ```csharp
-var loader = new LoadingManager();
-loader.OnProgressUpdate += (progress, desc) =>
+var loader = new LoadCoordinator();
+loader.OnProgressUpdate += snapshot =>
 {
-    Debug.Log($"{desc}: {progress:P0}");
+    Debug.Log($"[{snapshot.CurrentTaskName}] {snapshot.Description}: {snapshot.OverallProgress:P0}");
+    Debug.Log($"  Tasks: {snapshot.CompletedCount}/{snapshot.TotalTaskCount}");
 };
 loader.OnLoadCompleted += () => Debug.Log("All done!");
 loader.OnLoadFailed += (reason) => Debug.LogError($"Failed: {reason}");
 ```
+
+`LoadProgressSnapshot` 包含以下字段：
+
+| 字段              | 类型   | 说明                   |
+| ----------------- | ------ | ---------------------- |
+| `OverallProgress` | float  | 总体进度 0~1           |
+| `Description`     | string | 当前描述文字           |
+| `CurrentTaskName` | string | 当前正在执行的任务名称 |
+| `TotalTaskCount`  | int    | 总任务数               |
+| `CompletedCount`  | int    | 已完成数               |
+| `FailedCount`     | int    | 失败数                 |
+
+### 启动阶段报告
+
+`StartupAsync` 支持传入 `IProgress<LoadProgressSnapshot>` 接收启动各阶段的进度：
+
+```csharp
+await _root.StartupAsync(new System.Progress<LoadProgressSnapshot>(snapshot =>
+{
+    Debug.Log($"{snapshot.Description}: {snapshot.OverallProgress:P0}");
+}));
+```
+
+启动管线分为四个阶段，每个阶段都会通过 progress 报告：
+
+| 阶段    | Description            | 说明                       |
+| ------- | ---------------------- | -------------------------- |
+| 1. 装载 | "Scanning nodes..."    | 扫描节点树，收集加载任务   |
+| 2. 加载 | 由各 LoadableTask 提供 | 执行所有加载任务           |
+| 3. 启动 | "Starting nodes..."    | 递归启动所有节点的 OnStart |
+| 4. 回收 | —                      | 销毁加载器，清理资源       |
 
 ---
 

@@ -1,6 +1,3 @@
-using System.Collections.Generic;
-using Cysharp.Threading.Tasks;
-
 namespace XFramework
 {
     /// <summary>
@@ -43,54 +40,6 @@ namespace XFramework
                     PrintNode(childParent, depth + 1);
                 }
             }
-        }
-
-        /// <summary>
-        /// 从指定根节点开始，递归查找所有实现了 <see cref="ILoadableProvider"/> 的节点并注册到 <see cref="ILoadCoordinator"/>。
-        /// <para>注册后，<see cref="ILoadCoordinator.LoadAsync"/> 时会统一装载这些 provider 提供的加载任务。</para>
-        /// </summary>
-        /// <param name="root">搜索的起始节点。</param>
-        /// <param name="coordinator">加载协调器实例。</param>
-        public static void MountLoadables(this IParentNode root, ILoadCoordinator coordinator)
-        {
-            if (root == null || coordinator == null)
-                return;
-
-            for (int i = 0; i < root.ChildCount; i++)
-            {
-                var child = root[i];
-
-                if (child is ILoadableProvider loadableProvider)
-                {
-                    coordinator.AddProvider(loadableProvider);
-                }
-
-                if (child is IParentNode childParent)
-                {
-                    MountLoadables(childParent, coordinator);
-                }
-            }
-        }
-
-        /// <summary>
-        /// 启动节点树。依次执行装载、加载、启动、回收四个阶段：
-        /// <para>1. 装载：扫描节点树，收集 <see cref="ILoadableProvider"/> 的加载任务。</para>
-        /// <para>2. 加载：等待所有加载任务完成。</para>
-        /// <para>3. 启动：递归启动所有节点的 <see cref="BaseNode.OnStart"/>。</para>
-        /// <para>4. 回收：销毁加载器，清理资源。</para>
-        /// </summary>
-        /// <param name="root">节点树的根节点。</param>
-        public static async UniTask StartupAsync(this IParentNode root)
-        {
-            if (root == null)
-                return;
-
-            ILoadCoordinator loader = new LoadCoordinator();
-            root.MountLoadables(loader);
-            await loader.LoadAsync();
-            if (root is BaseNode baseNode)
-                baseNode.Start();
-            loader.Destroy();
         }
     }
 }

@@ -22,7 +22,7 @@ namespace XFramework
 
         #region ILoadCoordinator Events
 
-        public event Action<float, string> OnProgressUpdate;
+        public event Action<LoadProgressSnapshot> OnProgressUpdate;
         public event Action OnLoadCompleted;
         public event Action<string> OnLoadFailed;
 
@@ -105,8 +105,11 @@ namespace XFramework
                 {
                     float weightedProgress = 0f;
                     string currentDesc = null;
+                    string currentTaskName = null;
                     bool allDone = true;
                     bool anyFailed = false;
+                    int completedCount = 0;
+                    int failedCount = 0;
 
                     for (int i = 0; i < _loadables.Count; i++)
                     {
@@ -114,16 +117,25 @@ namespace XFramework
                         float p = loadable.Progress;
                         weightedProgress += p * loadable.Weight;
 
-                        if (loadable.State == LoadState.Failed)
+                        switch (loadable.State)
                         {
-                            anyFailed = true;
-                            currentDesc = loadable.Description;
-                        }
-
-                        if (p < 1f || loadable.State != LoadState.Completed)
-                        {
-                            allDone = false;
-                            currentDesc = loadable.Description;
+                            case LoadState.Completed:
+                                completedCount++;
+                                break;
+                            case LoadState.Failed:
+                                failedCount++;
+                                anyFailed = true;
+                                currentDesc = loadable.Description;
+                                currentTaskName = loadable.Name;
+                                break;
+                            case LoadState.Loading:
+                                allDone = false;
+                                currentDesc = loadable.Description;
+                                currentTaskName = loadable.Name;
+                                break;
+                            default:
+                                allDone = false;
+                                break;
                         }
                     }
 
@@ -131,7 +143,17 @@ namespace XFramework
                     Progress = overallProgress;
                     Description = currentDesc ?? "Completed";
 
-                    OnProgressUpdate?.Invoke(Progress, Description);
+                    // 生成快照并广播
+                    var snapshot = new LoadProgressSnapshot
+                    {
+                        OverallProgress = Progress,
+                        Description = Description,
+                        CurrentTaskName = currentTaskName,
+                        TotalTaskCount = _loadables.Count,
+                        CompletedCount = completedCount,
+                        FailedCount = failedCount,
+                    };
+                    OnProgressUpdate?.Invoke(snapshot);
 
                     if (anyFailed)
                     {
@@ -150,7 +172,16 @@ namespace XFramework
                 // 5. 完成
                 Progress = 1f;
                 Description = "Completed";
-                OnProgressUpdate?.Invoke(Progress, Description);
+                var finalSnapshot = new LoadProgressSnapshot
+                {
+                    OverallProgress = 1f,
+                    Description = "Completed",
+                    CurrentTaskName = null,
+                    TotalTaskCount = _loadables.Count,
+                    CompletedCount = _loadables.Count,
+                    FailedCount = 0,
+                };
+                OnProgressUpdate?.Invoke(finalSnapshot);
                 OnLoadCompleted?.Invoke();
             }
             catch (OperationCanceledException)

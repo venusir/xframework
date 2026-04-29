@@ -42,8 +42,8 @@ namespace XFramework
         /// <summary>当前加载阶段的描述文字。</summary>
         string Description { get; }
 
-        /// <summary>加载进度变更事件。参数为 (整体进度 0~1, 当前描述文字)。</summary>
-        event Action<float, string> OnProgressUpdate;
+        /// <summary>加载进度变更事件。每帧轮询时触发，传递当前进度快照。</summary>
+        event Action<LoadProgressSnapshot> OnProgressUpdate;
 
         /// <summary>全部加载完成事件。</summary>
         event Action OnLoadCompleted;

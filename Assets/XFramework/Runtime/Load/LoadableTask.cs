@@ -13,6 +13,9 @@ namespace XFramework
     {
         #region Public Properties
 
+        /// <summary>任务名称。默认取类名，子类可在构造函数中修改。</summary>
+        public string Name { get; protected set; }
+
         /// <summary>当前加载进度，取值范围 0.0 ~ 1.0。</summary>
         public float Progress { get; private set; }
 
@@ -26,6 +29,15 @@ namespace XFramework
         /// 加载权重。子类可在构造函数中修改此值。
         /// </summary>
         public float Weight { get; protected set; } = 1f;
+
+        #endregion
+
+        #region Constructor
+
+        protected LoadableTask()
+        {
+            Name = GetType().Name;
+        }
 
         #endregion
 

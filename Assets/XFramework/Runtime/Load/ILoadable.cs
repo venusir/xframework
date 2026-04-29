@@ -25,6 +25,9 @@ namespace XFramework
     /// </summary>
     public interface ILoadable
     {
+        /// <summary>任务名称。静态标识，用于 UI 显示当前正在执行的任务。</summary>
+        string Name { get; }
+
         /// <summary>当前加载进度，取值范围 0.0 ~ 1.0。</summary>
         float Progress { get; }
 
