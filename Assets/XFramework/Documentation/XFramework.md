@@ -142,18 +142,25 @@ player.RemoveNode(healthComponent);
 player.RemoveNode(typeof(HealthComponent));
 ```
 
-### 向上查找
+### 服务查找
 
-`LeafNode` 提供 `GetNodeInParent<T>()` 沿父链向上查找：
+`BaseNode` 提供 `Get<T>()` 沿父链向上遍历，在所有祖先 EntityNode 中查找第一个匹配指定接口类型的节点。
+通常用于获取挂载在 RootNode 下的全局服务。所有节点类型（LeafNode、EntityNode 等）均可调用。
 
 ```csharp
-public class DamageNode : LeafNode
+public class DamageLeaf : LeafNode
 {
+    IAudioService _audio;
+
+    protected override void OnStart()
+    {
+        // 在 Start 中缓存服务引用，避免每帧遍历
+        _audio = Get<IAudioService>();
+    }
+
     void ApplyDamage(int damage)
     {
-        // 向上查找父 EntityNode 上的 HealthComponent
-        var health = GetNodeInParent<HealthComponent>();
-        if (health != null) health.TakeDamage(damage);
+        _audio?.PlaySFX("hit");
     }
 }
 ```

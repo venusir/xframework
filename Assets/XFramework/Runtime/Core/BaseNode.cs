@@ -201,6 +201,32 @@ namespace XFramework
 
         #endregion
 
+        #region Service Resolution
+
+        /// <summary>
+        /// 沿父链向上遍历，在所有祖先 EntityNode 中查找第一个匹配指定接口类型的节点。
+        /// <para>通常用于获取挂载在 RootNode 下的全局服务。</para>
+        /// </summary>
+        /// <typeparam name="T">要查找的接口类型，必须实现 IBaseNode。</typeparam>
+        /// <returns>找到的节点，未找到则返回 null。</returns>
+        protected T Get<T>() where T : IBaseNode
+        {
+            BaseNode current = Parent;
+            while (current != null)
+            {
+                if (current is EntityNode entity)
+                {
+                    var component = entity.GetNode<T>(false);
+                    if (component != null)
+                        return component;
+                }
+                current = current.Parent;
+            }
+            return default;
+        }
+
+        #endregion
+
         #region Pooling
 
 
