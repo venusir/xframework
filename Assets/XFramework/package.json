@@ -5,6 +5,7 @@
 	"unity": "6000.3",
 	"description": "XFramework is a tree-based node system for Unity. It provides a hierarchical node structure with object pooling, component-style access (EntityNode), key-value access (DictionaryNode), and a unified factory API (NodeFactory) for node creation and recycling.",
 	"dependencies": {
-		"com.cysharp.unitask": "2.5.10"
+		"com.cysharp.unitask": "2.5.10",
+		"com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset"
 	}
 }
