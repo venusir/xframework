@@ -41,6 +41,49 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 同步实例化 GameObject 资源。
+        /// <para>如果资源不是 GameObject 类型，返回 null。</para>
+        /// </summary>
+        /// <param name="parent">父 Transform。</param>
+        /// <returns>实例化后的 GameObject，失败返回 null。</returns>
+        public GameObject Instantiate(Transform parent = null)
+        {
+            var prefab = _asset as GameObject;
+            if (prefab == null)
+                return null;
+
+            return parent != null
+                ? UnityEngine.Object.Instantiate(prefab, parent)
+                : UnityEngine.Object.Instantiate(prefab);
+        }
+
+        /// <summary>
+        /// 同步实例化 GameObject 资源，并设置位置和旋转。
+        /// </summary>
+        /// <param name="position">世界坐标位置。</param>
+        /// <param name="rotation">世界坐标旋转。</param>
+        /// <param name="parent">父 Transform。</param>
+        /// <returns>实例化后的 GameObject，失败返回 null。</returns>
+        public GameObject Instantiate(Vector3 position, Quaternion rotation, Transform parent = null)
+        {
+            var prefab = _asset as GameObject;
+            if (prefab == null)
+                return null;
+
+            return parent != null
+                ? UnityEngine.Object.Instantiate(prefab, position, rotation, parent)
+                : UnityEngine.Object.Instantiate(prefab, position, rotation);
+        }
+
+        /// <summary>
+        /// 释放资源。与 <see cref="Release"/> 行为一致，支持 using 语法。
+        /// </summary>
+        public void Dispose()
+        {
+            Release();
+        }
+
+        /// <summary>
         /// 释放此句柄引用的资源（引用计数减一）。
         /// <para>调用后不应再使用此句柄。</para>
         /// </summary>
@@ -50,14 +93,6 @@ namespace XFramework
             {
                 _owner.Release(this);
             }
-        }
-
-        /// <summary>
-        /// 释放资源。与 <see cref="Release"/> 行为一致，支持 using 语法。
-        /// </summary>
-        public void Dispose()
-        {
-            Release();
         }
     }
 }
