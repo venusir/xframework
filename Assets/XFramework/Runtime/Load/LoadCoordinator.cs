@@ -77,7 +77,7 @@ namespace XFramework
             Description = "Loading...";
 
             // 创建 CancellationTokenSource 用于失败时取消其他任务
-            using var cts = new CancellationTokenSource();
+            var cts = new CancellationTokenSource();
 
             try
             {
@@ -93,11 +93,11 @@ namespace XFramework
                     totalWeight = _loadables.Count;
                 }
 
-                // 3. 同时启动所有加载任务
+                // 3. 同时启动所有加载任务，传入 CancellationToken 以便失败时取消
                 UniTask[] tasks = new UniTask[_loadables.Count];
                 for (int i = 0; i < _loadables.Count; i++)
                 {
-                    tasks[i] = _loadables[i].LoadAsync();
+                    tasks[i] = _loadables[i].LoadAsync(cts.Token);
                 }
 
                 // 4. 轮询阶段：每帧检查进度，直到全部完成或失败

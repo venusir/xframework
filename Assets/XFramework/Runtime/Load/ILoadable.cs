@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace XFramework
@@ -45,7 +46,8 @@ namespace XFramework
 
         /// <summary>
         /// 异步加载任务。加载过程中应持续更新 <see cref="Progress"/> 和 <see cref="State"/>。
+        /// <para>通过 <paramref name="cancellationToken"/> 可取消正在运行的任务。</para>
         /// </summary>
-        UniTask LoadAsync();
+        UniTask LoadAsync(CancellationToken cancellationToken);
     }
 }

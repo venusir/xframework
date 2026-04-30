@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -43,19 +44,24 @@ namespace XFramework
 
         #region ILoadable Implementation
 
-        async UniTask ILoadable.LoadAsync()
+        async UniTask ILoadable.LoadAsync(CancellationToken cancellationToken)
         {
             SetState(LoadState.Loading);
 
             try
             {
-                await LoadAsync();
+                await LoadAsync(cancellationToken);
 
                 if (State != LoadState.Failed)
                 {
                     SetProgress(1f);
                     SetState(LoadState.Completed);
                 }
+            }
+            catch (OperationCanceledException)
+            {
+                SetDescription("已取消");
+                SetState(LoadState.Failed);
             }
             catch (Exception ex)
             {
@@ -72,8 +78,9 @@ namespace XFramework
         /// 子类在此实现具体的加载逻辑。
         /// <para>加载过程中应调用 <see cref="SetProgress"/>、<see cref="SetDescription"/> 更新进度和描述。</para>
         /// <para>如果加载失败，可调用 <see cref="SetState"/>(<see cref="LoadState.Failed"/>) 标记失败，或直接抛出异常由基类统一处理。</para>
+        /// <para>通过 <paramref name="cancellationToken"/> 可监听取消信号，在取消时停止加载。</para>
         /// </summary>
-        protected abstract UniTask LoadAsync();
+        protected abstract UniTask LoadAsync(CancellationToken cancellationToken);
 
         /// <summary>设置当前加载进度，会自动 clamp 到 0~1 范围。</summary>
         protected void SetProgress(float progress)
