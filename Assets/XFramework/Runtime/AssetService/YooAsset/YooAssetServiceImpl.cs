@@ -90,6 +90,20 @@ namespace XFramework
             ReleaseAsset(location);
         }
 
+        public void Destroy()
+        {
+            // 强制释放所有缓存的 YooAsset 句柄，卸载底层资源
+            foreach (var kvp in _yooHandles)
+            {
+                kvp.Value.Release();
+            }
+
+            _yooHandles.Clear();
+            _cache.Clear();
+            _refCounts.Clear();
+            _package = null;
+        }
+
         #endregion
 
         #region Internal Methods

@@ -5,11 +5,11 @@ using Cysharp.Threading.Tasks;
 namespace XFramework
 {
     /// <summary>
-    /// 资源服务节点。作为 <see cref="EntityNode"/> 挂载到节点树中，提供全局资源加载能力。
+    /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
     /// <para>内部使用 YooAsset 实现资源加载，对外仅暴露 <see cref="IAssetService"/> 接口。</para>
     /// </summary>
-    public class AssetServiceNode : EntityNode, IAssetService, ILoadableProvider
+    public class AssetServiceNode : LeafNode, IAssetService, ILoadableProvider
     {
         #region Private Fields
 
@@ -27,6 +27,7 @@ namespace XFramework
 
         protected override void OnDestroy()
         {
+            _serviceImpl?.Destroy();
             _serviceImpl = null;
             base.OnDestroy();
         }

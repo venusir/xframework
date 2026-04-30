@@ -31,5 +31,11 @@ namespace XFramework
         /// <para>当引用计数归零时，资源将被卸载。</para>
         /// </summary>
         void Release(AssetHandle handle);
+
+        /// <summary>
+        /// 销毁资源服务，释放所有缓存的资源。
+        /// <para>调用后不应再使用此服务。</para>
+        /// </summary>
+        void Destroy();
     }
 }
