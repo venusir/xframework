@@ -8,10 +8,11 @@ using YooAsset;
 namespace XFramework
 {
     /// <summary>
-    /// 基于 YooAsset 的资源服务实现。
+    /// 基于 YooAsset 的资源服务底层实现。
     /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetService"/> 接口访问。</para>
+    /// <para>职责：资源加载/卸载、引用计数、延迟卸载。</para>
     /// </summary>
-    class YooAssetServiceImpl : IAssetService
+    class YooAssetServiceImpl
     {
         private readonly string _packageName;
         private ResourcePackage _package;
@@ -25,10 +26,10 @@ namespace XFramework
         /// <summary>YooAsset 资源句柄缓存，用于释放时通知 YooAsset 卸载底层资源。</summary>
         private readonly Dictionary<string, YooAsset.AssetHandle> _yooHandles = new Dictionary<string, YooAsset.AssetHandle>();
 
-        /// <summary>待释放队列：引用计数归零后记录的时间戳（Time.realtimeSinceStartup）。</summary>
+        /// <summary>待释放队列：引用计数归零后记录的时间戳。</summary>
         private readonly Dictionary<string, float> _pendingReleaseTimes = new Dictionary<string, float>();
 
-        /// <summary>资源卸载延迟时间（秒）。引用计数归零后等待此时间才真正卸载，避免频繁加载/卸载。</summary>
+        /// <summary>资源卸载延迟时间（秒）。</summary>
         private readonly float _unloadDelaySeconds = 5f;
 
         /// <summary>统一卸载 Tick 协程是否正在运行。</summary>
@@ -39,97 +40,59 @@ namespace XFramework
             _packageName = packageName;
         }
 
-        #region IAssetService
-
-        public async UniTask<AssetHandle> LoadAssetAsync(string location, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 获取资源包实例。如果尚未初始化则尝试获取。
+        /// </summary>
+        private ResourcePackage GetOrCreatePackage()
         {
             if (_package == null)
             {
                 _package = YooAssets.TryGetPackage(_packageName);
-                if (_package == null)
-                {
-                    return default;
-                }
             }
+            return _package;
+        }
+
+        /// <summary>
+        /// 异步加载资源（引用计数 +1）。
+        /// </summary>
+        public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        {
+            var package = GetOrCreatePackage();
+            if (package == null)
+                return null;
 
             // 检查是否有待释放记录，有则取消延迟，恢复引用计数
             if (_pendingReleaseTimes.ContainsKey(location))
             {
                 _pendingReleaseTimes.Remove(location);
-
-                // 恢复引用计数（之前归零了，现在重新加回 1）
                 _refCounts[location] = 1;
-
-                return new AssetHandle(_cache[location], this, location);
+                return _cache[location] as T;
             }
 
             // 检查缓存中是否已有此资源
             if (_cache.TryGetValue(location, out var cachedAsset))
             {
                 _refCounts[location]++;
-                return new AssetHandle(cachedAsset, this, location);
+                return cachedAsset as T;
             }
 
-            var operation = _package.LoadAssetAsync(location);
+            var operation = package.LoadAssetAsync(location);
             await operation.WithCancellation(cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
-            {
-                return default;
-            }
+                return null;
 
-            // 增加引用计数
             _refCounts[location] = 1;
-
             _cache[location] = operation.AssetObject;
             _yooHandles[location] = operation;
 
-            return new AssetHandle(operation.AssetObject, this, location);
+            return operation.AssetObject as T;
         }
-
-        public async void LoadAssetAsync(string location, Action<AssetHandle> onCompleted, Action<string> onError = null)
-        {
-            var result = await LoadAssetAsync(location);
-            if (result.IsValid)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to load asset: {location}");
-        }
-
-        public void Release(AssetHandle handle)
-        {
-            string location = handle.Location;
-            if (string.IsNullOrEmpty(location))
-                return;
-
-            ReleaseAsset(location);
-        }
-
-        public void Destroy()
-        {
-            _pendingReleaseTimes.Clear();
-
-            // 强制释放所有缓存的 YooAsset 句柄，卸载底层资源
-            foreach (var kvp in _yooHandles)
-            {
-                kvp.Value.Release();
-            }
-
-            _yooHandles.Clear();
-            _cache.Clear();
-            _refCounts.Clear();
-            _package = null;
-        }
-
-        #endregion
-
-        #region Internal Methods
 
         /// <summary>
-        /// 内部释放指定位置的资源。
-        /// <para>引用计数归零时记录时间戳，由统一 Tick 协程延迟卸载。</para>
+        /// 释放资源（引用计数 -1）。归零时启动延迟卸载。
         /// </summary>
-        internal void ReleaseAsset(string location)
+        public void Release(string location)
         {
             if (!_refCounts.ContainsKey(location))
                 return;
@@ -140,7 +103,6 @@ namespace XFramework
                 _refCounts.Remove(location);
                 _pendingReleaseTimes[location] = Time.realtimeSinceStartup;
 
-                // 确保 Tick 协程正在运行
                 if (!_tickRunning)
                 {
                     _tickRunning = true;
@@ -151,7 +113,6 @@ namespace XFramework
 
         /// <summary>
         /// 统一卸载 Tick 协程。每帧检查所有待释放记录，到期则真正卸载。
-        /// <para>待释放列表为空时自动结束。</para>
         /// </summary>
         private async UniTaskVoid UnloadTickAsync()
         {
@@ -196,6 +157,22 @@ namespace XFramework
             }
         }
 
-        #endregion
+        /// <summary>
+        /// 销毁服务，强制释放所有资源。
+        /// </summary>
+        public void Destroy()
+        {
+            _pendingReleaseTimes.Clear();
+
+            foreach (var kvp in _yooHandles)
+            {
+                kvp.Value.Release();
+            }
+
+            _yooHandles.Clear();
+            _cache.Clear();
+            _refCounts.Clear();
+            _package = null;
+        }
     }
 }
