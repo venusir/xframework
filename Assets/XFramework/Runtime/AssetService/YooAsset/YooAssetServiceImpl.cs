@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -69,6 +70,15 @@ namespace XFramework
             _yooHandles[location] = operation;
 
             return new AssetHandle(operation.AssetObject, this, location);
+        }
+
+        public async void LoadAssetAsync(string location, Action<AssetHandle> onCompleted, Action<string> onError = null)
+        {
+            var result = await LoadAssetAsync(location);
+            if (result.IsValid)
+                onCompleted?.Invoke(result);
+            else
+                onError?.Invoke($"Failed to load asset: {location}");
         }
 
         public void Release(AssetHandle handle)

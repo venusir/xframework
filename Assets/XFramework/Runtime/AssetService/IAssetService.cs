@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -10,12 +11,20 @@ namespace XFramework
     public interface IAssetService
     {
         /// <summary>
-        /// 异步加载资源。
+        /// 异步加载资源（UniTask 版本）。
         /// </summary>
         /// <param name="location">资源定位地址。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>资源句柄，可通过 <see cref="AssetHandle.GetAsset{T}"/> 获取具体资源。</returns>
         UniTask<AssetHandle> LoadAssetAsync(string location, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 异步加载资源（回调版本）。
+        /// </summary>
+        /// <param name="location">资源定位地址。</param>
+        /// <param name="onCompleted">加载成功回调，参数为资源句柄。</param>
+        /// <param name="onError">加载失败回调，参数为错误信息。</param>
+        void LoadAssetAsync(string location, Action<AssetHandle> onCompleted, Action<string> onError = null);
 
         /// <summary>
         /// 释放指定句柄引用的资源（引用计数减一）。

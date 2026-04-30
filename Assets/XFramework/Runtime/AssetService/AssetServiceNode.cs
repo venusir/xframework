@@ -1,3 +1,4 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -49,6 +50,11 @@ namespace XFramework
         public UniTask<AssetHandle> LoadAssetAsync(string location, CancellationToken cancellationToken = default)
         {
             return _serviceImpl.LoadAssetAsync(location, cancellationToken);
+        }
+
+        public void LoadAssetAsync(string location, Action<AssetHandle> onCompleted, Action<string> onError = null)
+        {
+            _serviceImpl.LoadAssetAsync(location, onCompleted, onError);
         }
 
         public void Release(AssetHandle handle)
