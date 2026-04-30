@@ -1,7 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace XFramework
 {
@@ -17,6 +19,11 @@ namespace XFramework
         /// 异步加载资源，返回资源本体（引用计数 +1）。
         /// </summary>
         UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
+
+        /// <summary>
+        /// 异步加载资源，带优先级。
+        /// </summary>
+        UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
 
         /// <summary>
         /// 加载资源并实例化，返回实例 GameObject（自动管理引用生命周期）。
@@ -37,6 +44,20 @@ namespace XFramework
         /// 加载资源并实例化，带位置旋转，返回实例上 GetComponent{T}() 的结果。
         /// </summary>
         UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component;
+
+        /// <summary>
+        /// 异步加载场景。
+        /// </summary>
+        /// <param name="location">场景资源地址。</param>
+        /// <param name="additive">是否叠加加载（<see cref="LoadSceneMode.Additive"/>）。</param>
+        /// <param name="progress">加载进度回调（0~1）。</param>
+        UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null);
+
+        /// <summary>
+        /// 批量预加载资源到缓存（引用计数不增加）。
+        /// </summary>
+        /// <param name="locations">要预加载的资源地址列表。</param>
+        UniTask PreloadAllAsync(IEnumerable<string> locations);
 
         #endregion
 
@@ -59,6 +80,17 @@ namespace XFramework
 
         #endregion
 
+        #region Pool Config
+
+        /// <summary>
+        /// 设置指定预制体的对象池最大容量。
+        /// </summary>
+        /// <param name="location">预制体资源地址。</param>
+        /// <param name="maxSize">最大闲置实例数。</param>
+        void SetPoolMaxSize(string location, int maxSize);
+
+        #endregion
+
         #region Lifecycle
 
         /// <summary>
@@ -76,11 +108,6 @@ namespace XFramework
         /// 销毁/回收实例（Component 版本）。内部调用 <see cref="DestroyInstance(GameObject)"/>。
         /// </summary>
         void DestroyInstance<T>(T component) where T : Component;
-
-        /// <summary>
-        /// 销毁服务，清理所有缓存和池。
-        /// </summary>
-        void Destroy();
 
         #endregion
     }

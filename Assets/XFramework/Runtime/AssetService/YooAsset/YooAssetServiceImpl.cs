@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 using YooAsset;
 
@@ -10,7 +11,7 @@ namespace XFramework
     /// <summary>
     /// 基于 YooAsset 的资源服务底层实现。
     /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetService"/> 接口访问。</para>
-    /// <para>职责：资源加载/卸载、引用计数、延迟卸载。</para>
+    /// <para>职责：资源加载/卸载、引用计数、延迟卸载、场景加载、预加载。</para>
     /// </summary>
     class YooAssetServiceImpl
     {
@@ -55,7 +56,7 @@ namespace XFramework
         /// <summary>
         /// 异步加载资源（引用计数 +1）。
         /// </summary>
-        public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public async UniTask<T> LoadAsync<T>(string location, uint priority = 0, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             var package = GetOrCreatePackage();
             if (package == null)
@@ -76,7 +77,8 @@ namespace XFramework
                 return cachedAsset as T;
             }
 
-            var operation = package.LoadAssetAsync(location);
+            var assetInfo = package.GetAssetInfo(location);
+            var operation = package.LoadAssetAsync(assetInfo, priority);
             await operation.WithCancellation(cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
@@ -87,6 +89,58 @@ namespace XFramework
             _yooHandles[location] = operation;
 
             return operation.AssetObject as T;
+        }
+
+        /// <summary>
+        /// 预加载资源到缓存（引用计数不增加）。
+        /// </summary>
+        public async UniTask PreloadAsync(string location)
+        {
+            if (_cache.ContainsKey(location) || _pendingReleaseTimes.ContainsKey(location))
+                return;
+
+            var package = GetOrCreatePackage();
+            if (package == null) return;
+
+            var operation = package.LoadAssetAsync(location);
+            await operation;
+
+            if (operation.Status == EOperationStatus.Succeed)
+            {
+                _cache[location] = operation.AssetObject;
+                _yooHandles[location] = operation;
+                // 注意：不增加 _refCounts，预加载的资源引用计数为 0
+                // 当用户首次 LoadAsync 时，会从缓存取并 +1
+            }
+        }
+
+        /// <summary>
+        /// 异步加载场景。
+        /// </summary>
+        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var mode = additive ? LoadSceneMode.Additive : LoadSceneMode.Single;
+            var operation = package.LoadSceneAsync(location, mode);
+
+            // 轮询进度
+            while (!operation.IsDone)
+            {
+                progress?.Invoke(operation.Progress);
+                await UniTask.Yield(PlayerLoopTiming.Update);
+            }
+
+            progress?.Invoke(1f);
+
+            if (operation.Status != EOperationStatus.Succeed)
+                return default;
+
+            // SceneHandle 的 Scene 属性在不同 YooAsset 版本中可能为 SceneName 或 Scene
+            // 通过 SceneManager.GetSceneByName 获取 Scene 结构体
+            var scene = SceneManager.GetSceneByName(operation.SceneName);
+            return scene;
         }
 
         /// <summary>

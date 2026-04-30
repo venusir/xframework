@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 
 namespace XFramework
@@ -10,7 +11,7 @@ namespace XFramework
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
     /// <para>内部使用 YooAsset 实现资源加载，对外暴露 <see cref="IAssetService"/> 接口。</para>
-    /// <para>自动管理引用计数、对象池、延迟卸载。</para>
+    /// <para>自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// </summary>
     public class AssetServiceNode : LeafNode, IAssetService, ILoadableProvider
     {
@@ -30,8 +31,11 @@ namespace XFramework
         /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
         private readonly Dictionary<string, Stack<GameObject>> _pools = new Dictionary<string, Stack<GameObject>>();
 
-        /// <summary>每种预制体最多保留的闲置实例数。</summary>
-        private const int MaxPoolSize = 5;
+        /// <summary>location → 对象池最大容量。</summary>
+        private readonly Dictionary<string, int> _poolMaxSizes = new Dictionary<string, int>();
+
+        /// <summary>默认每种预制体最多保留的闲置实例数。</summary>
+        private const int DefaultPoolSize = 5;
 
         #endregion
 
@@ -80,7 +84,17 @@ namespace XFramework
 
         public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
-            var asset = await _serviceImpl.LoadAsync<T>(location, cancellationToken);
+            var asset = await _serviceImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
+            if (asset != null)
+            {
+                _assetToLocation[asset] = location;
+            }
+            return asset;
+        }
+
+        public async UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        {
+            var asset = await _serviceImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
             if (asset != null)
             {
                 _assetToLocation[asset] = location;
@@ -108,6 +122,19 @@ namespace XFramework
         {
             var go = await InstantiateAsyncInternal(location, position, rotation, parent);
             return go != null ? go.GetComponent<T>() : null;
+        }
+
+        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+        {
+            return await _serviceImpl.LoadSceneAsync(location, additive, progress);
+        }
+
+        public async UniTask PreloadAllAsync(IEnumerable<string> locations)
+        {
+            foreach (var location in locations)
+            {
+                await _serviceImpl.PreloadAsync(location);
+            }
         }
 
         #endregion
@@ -143,6 +170,15 @@ namespace XFramework
 
         #endregion
 
+        #region IAssetService — Pool Config
+
+        public void SetPoolMaxSize(string location, int maxSize)
+        {
+            _poolMaxSizes[location] = Math.Max(1, maxSize);
+        }
+
+        #endregion
+
         #region IAssetService — Lifecycle
 
         public void Release(UnityEngine.Object asset)
@@ -159,6 +195,13 @@ namespace XFramework
         public void DestroyInstance(GameObject instance)
         {
             if (instance == null) return;
+
+            // 标记 tracker 避免重复通知
+            var tracker = instance.GetComponent<InstanceTracker>();
+            if (tracker != null)
+            {
+                tracker.IsBeingReleased = true;
+            }
 
             if (_instanceToLocation.TryGetValue(instance, out var location))
             {
@@ -195,9 +238,32 @@ namespace XFramework
             DestroyInstance(component.gameObject);
         }
 
-        public void Destroy()
+        /// <summary>
+        /// 由 <see cref="InstanceTracker.OnDestroy"/> 调用。当用户直接 Destroy(go) 时自动释放引用。
+        /// </summary>
+        internal void OnInstanceDestroyed(string location, GameObject instance)
         {
-            OnDestroy();
+            if (instance == null) return;
+
+            _instanceToLocation.Remove(instance);
+
+            // 引用计数 -1
+            if (_locationCounts.TryGetValue(location, out var count))
+            {
+                count--;
+                if (count <= 0)
+                {
+                    _locationCounts.Remove(location);
+                    _serviceImpl.Release(location);
+                }
+                else
+                {
+                    _locationCounts[location] = count;
+                }
+            }
+
+            // 直接销毁（不经过回池，因为用户已经 Destroy 了）
+            // 注意：此时 instance 已经被 Unity 标记为待销毁，不需要再调用 Destroy
         }
 
         #endregion
@@ -247,7 +313,12 @@ namespace XFramework
                 go = UnityEngine.Object.Instantiate(prefab, parent);
             }
 
-            // 4. 记录实例映射
+            // 4. 挂载 InstanceTracker（自动防泄漏）
+            var tracker = go.AddComponent<InstanceTracker>();
+            tracker.Owner = this;
+            tracker.Location = location;
+
+            // 5. 记录实例映射
             _instanceToLocation[go] = location;
             _locationCounts[location] = _locationCounts.TryGetValue(location, out var cnt) ? cnt + 1 : 1;
 
@@ -268,7 +339,9 @@ namespace XFramework
                 _pools[location] = pool;
             }
 
-            if (pool.Count < MaxPoolSize)
+            int maxSize = _poolMaxSizes.TryGetValue(location, out var configuredSize) ? configuredSize : DefaultPoolSize;
+
+            if (pool.Count < maxSize)
             {
                 pool.Push(instance);
             }
