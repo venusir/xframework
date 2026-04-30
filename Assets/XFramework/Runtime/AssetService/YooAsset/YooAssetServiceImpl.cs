@@ -11,7 +11,7 @@ namespace XFramework
     /// 基于 YooAsset 的资源服务实现。
     /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetService"/> 接口访问。</para>
     /// </summary>
-    class YooAssetServiceImpl : IAssetService, ILoadableProvider
+    class YooAssetServiceImpl : IAssetService
     {
         private readonly string _packageName;
         private ResourcePackage _package;
@@ -38,16 +38,6 @@ namespace XFramework
         {
             _packageName = packageName;
         }
-
-        #region ILoadableProvider
-
-        void ILoadableProvider.MountLoadables(ILoadCollector collector)
-        {
-            var initTask = new YooAssetInitTask(_packageName);
-            collector.AddLoadable(initTask);
-        }
-
-        #endregion
 
         #region IAssetService
 

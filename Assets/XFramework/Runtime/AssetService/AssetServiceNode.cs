@@ -38,10 +38,7 @@ namespace XFramework
 
         void ILoadableProvider.MountLoadables(ILoadCollector collector)
         {
-            if (_serviceImpl is ILoadableProvider provider)
-            {
-                provider.MountLoadables(collector);
-            }
+            collector.AddLoadable(new YooAssetInitTask());
         }
 
         #endregion
