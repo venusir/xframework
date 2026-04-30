@@ -89,6 +89,13 @@ namespace XFramework
         /// <param name="maxSize">最大闲置实例数。</param>
         void SetPoolMaxSize(string location, int maxSize);
 
+        /// <summary>
+        /// 获取指定资源地址的对象池状态（调试用）。
+        /// </summary>
+        /// <param name="location">资源地址。</param>
+        /// <returns>池中闲置数、活跃实例数、池最大容量。</returns>
+        (int pooledCount, int activeCount, int maxPoolSize) GetPoolStatus(string location);
+
         #endregion
 
         #region Lifecycle

@@ -131,10 +131,12 @@ namespace XFramework
 
         public async UniTask PreloadAllAsync(IEnumerable<string> locations)
         {
+            var tasks = new List<UniTask>();
             foreach (var location in locations)
             {
-                await _serviceImpl.PreloadAsync(location);
+                tasks.Add(_serviceImpl.PreloadAsync(location));
             }
+            await UniTask.WhenAll(tasks);
         }
 
         #endregion
@@ -175,6 +177,14 @@ namespace XFramework
         public void SetPoolMaxSize(string location, int maxSize)
         {
             _poolMaxSizes[location] = Math.Max(1, maxSize);
+        }
+
+        public (int pooledCount, int activeCount, int maxPoolSize) GetPoolStatus(string location)
+        {
+            int pooled = _pools.TryGetValue(location, out var pool) ? pool.Count : 0;
+            int active = _locationCounts.TryGetValue(location, out var cnt) ? cnt : 0;
+            int maxSize = _poolMaxSizes.TryGetValue(location, out var size) ? size : DefaultPoolSize;
+            return (pooled, active, maxSize);
         }
 
         #endregion
@@ -281,10 +291,11 @@ namespace XFramework
                 var pooled = pool.Pop();
                 if (pooled != null)
                 {
-                    // 重置变换
+                    // 重置变换（即使不传参数也重置为默认值）
                     pooled.transform.SetParent(parent);
-                    if (position.HasValue) pooled.transform.position = position.Value;
-                    if (rotation.HasValue) pooled.transform.rotation = rotation.Value;
+                    pooled.transform.localPosition = position ?? Vector3.zero;
+                    pooled.transform.localRotation = rotation ?? Quaternion.identity;
+                    pooled.transform.localScale = Vector3.one;
                     pooled.SetActive(true);
 
                     // 记录映射

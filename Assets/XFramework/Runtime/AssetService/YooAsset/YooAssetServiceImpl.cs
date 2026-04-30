@@ -70,10 +70,10 @@ namespace XFramework
                 return _cache[location] as T;
             }
 
-            // 检查缓存中是否已有此资源
+            // 检查缓存中是否已有此资源（预加载或之前加载过）
             if (_cache.TryGetValue(location, out var cachedAsset))
             {
-                _refCounts[location]++;
+                _refCounts[location] = _refCounts.TryGetValue(location, out var rc) ? rc + 1 : 1;
                 return cachedAsset as T;
             }
 
