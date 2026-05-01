@@ -115,13 +115,33 @@ namespace XFramework
         public async UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component
         {
             var go = await InstantiateAsyncInternal(location, null, null, parent);
-            return go != null ? go.GetComponent<T>() : null;
+            if (go == null) return null;
+
+            var component = go.GetComponent<T>();
+            if (component == null)
+            {
+                Debug.LogWarning($"[AssetServiceNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                                 "Destroying instance to prevent resource leak.");
+                DestroyInstance(go);
+                return null;
+            }
+            return component;
         }
 
         public async UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
         {
             var go = await InstantiateAsyncInternal(location, position, rotation, parent);
-            return go != null ? go.GetComponent<T>() : null;
+            if (go == null) return null;
+
+            var component = go.GetComponent<T>();
+            if (component == null)
+            {
+                Debug.LogWarning($"[AssetServiceNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                                 "Destroying instance to prevent resource leak.");
+                DestroyInstance(go);
+                return null;
+            }
+            return component;
         }
 
         public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
