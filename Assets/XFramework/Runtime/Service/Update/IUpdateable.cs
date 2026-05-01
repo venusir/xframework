@@ -7,25 +7,25 @@ namespace XFramework
     public enum UpdateLOD
     {
         /// <summary>每帧更新（帧间隔 = 1 帧）</summary>
-        EveryFrame = 0,
+        Frame1 = 0,
 
         /// <summary>每 2 帧更新一次</summary>
-        Every2Frames = 1,
+        Frame2 = 1,
 
         /// <summary>每 4 帧更新一次</summary>
-        Every4Frames = 2,
+        Frame4 = 2,
 
         /// <summary>每 8 帧更新一次</summary>
-        Every8Frames = 3,
+        Frame8 = 3,
 
         /// <summary>每 16 帧更新一次</summary>
-        Every16Frames = 4,
+        Frame16 = 4,
 
         /// <summary>每 32 帧更新一次</summary>
-        Every32Frames = 5,
+        Frame32 = 5,
 
         /// <summary>最大 LOD 等级标记，用于 <see cref="UpdateScheduler"/> 内部推导数组大小。</summary>
-        Max = Every32Frames,
+        Max = Frame32,
     }
 
     /// <summary>

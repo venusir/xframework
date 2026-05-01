@@ -169,8 +169,8 @@ namespace XFramework
         /// </summary>
         /// <param name="node">要注册的节点。</param>
         /// <param name="depth">节点在树中的深度，用于排序。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.EveryFrame"/>。</param>
-        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.EveryFrame)
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
+        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
         {
             if (node == null) return;
 
