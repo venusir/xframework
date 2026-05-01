@@ -4,6 +4,7 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
+using YooAsset;
 
 namespace XFramework
 {
@@ -13,11 +14,12 @@ namespace XFramework
     /// <para>内部使用 YooAsset 实现资源加载，对外暴露 <see cref="IAssetService"/> 接口。</para>
     /// <para>自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// </summary>
-    public class AssetServiceNode : LeafNode, IAssetService, ILoadableProvider
+    public class AssetServiceNode : LeafNode, IAssetService, ILoadable
     {
         #region Private Fields
 
         private YooAssetServiceImpl _serviceImpl;
+        private ResourcePackage _package;
 
         /// <summary>资源实例 → location 映射（用于 Release 通过资源实例查找 location）。</summary>
         private readonly Dictionary<UnityEngine.Object, string> _assetToLocation = new Dictionary<UnityEngine.Object, string>();
@@ -71,11 +73,72 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadableProvider
+        #region ILoadable
 
-        void ILoadableProvider.MountLoadables(ILoadCollector collector)
+        async UniTask ILoadable.LoadAsync(LoadContext context, CancellationToken cancellationToken)
         {
-            collector.AddLoadable(new YooAssetInitTask());
+            context.SetDescription("Initializing YooAsset...");
+
+            // 1. 初始化 YooAsset 全局环境
+            if (!YooAssets.Initialized)
+            {
+                YooAssets.Initialize();
+            }
+
+            context.SetProgress(0.2f);
+
+            // 2. 获取或创建资源包
+            _package = YooAssets.TryGetPackage("DefaultPackage");
+            if (_package == null)
+            {
+                _package = YooAssets.CreatePackage("DefaultPackage");
+            }
+
+            context.SetProgress(0.4f);
+            context.SetDescription("Initializing resource package...");
+
+            // 3. 初始化资源包（使用离线模式参数）
+            var initParameters = new OfflinePlayModeParameters();
+            var initOperation = _package.InitializeAsync(initParameters);
+            await initOperation.WithCancellation(cancellationToken);
+
+            if (initOperation.Status != EOperationStatus.Succeed)
+            {
+                context.SetDescription($"Package init failed: {initOperation.Error}");
+                context.SetState(LoadState.Failed);
+                return;
+            }
+
+            context.SetProgress(0.7f);
+            context.SetDescription("Requesting package version...");
+
+            // 4. 获取资源版本号
+            var versionOperation = _package.RequestPackageVersionAsync();
+            await versionOperation.WithCancellation(cancellationToken);
+
+            if (versionOperation.Status != EOperationStatus.Succeed)
+            {
+                context.SetDescription($"Version request failed: {versionOperation.Error}");
+                context.SetState(LoadState.Failed);
+                return;
+            }
+
+            context.SetProgress(0.8f);
+            context.SetDescription("Updating package manifest...");
+
+            // 5. 更新资源清单
+            var updateOperation = _package.UpdatePackageManifestAsync(versionOperation.PackageVersion);
+            await updateOperation.WithCancellation(cancellationToken);
+
+            if (updateOperation.Status != EOperationStatus.Succeed)
+            {
+                context.SetDescription($"Manifest update failed: {updateOperation.Error}");
+                context.SetState(LoadState.Failed);
+                return;
+            }
+
+            context.SetProgress(1f);
+            context.SetDescription("YooAsset initialized.");
         }
 
         #endregion

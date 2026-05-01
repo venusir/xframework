@@ -7,12 +7,12 @@ using UnityEngine;
 namespace XFramework
 {
     /// <summary>
-    /// 加载协调器。纯 C# 类，作为加载任务的调度器。
-    /// <para>通过 <see cref="ILoadCoordinator"/> 接口对外暴露，外部不可直接访问此类。</para>
+    /// 加载器。纯 C# 类，作为加载任务的调度器。
+    /// <para>通过 <see cref="ILoader"/> 接口对外暴露，外部不可直接访问此类。</para>
     /// </summary>
-    class LoadCoordinator : ILoadCoordinator, ILoadCollector
+    class Loader : ILoader
     {
-        #region ILoadCoordinator Properties
+        #region ILoader Properties
 
         public bool IsLoading { get; private set; }
         public float Progress { get; private set; }
@@ -20,7 +20,7 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadCoordinator Events
+        #region ILoader Events
 
         public event Action<LoadProgressSnapshot> OnProgressUpdate;
         public event Action OnLoadCompleted;
@@ -28,46 +28,41 @@ namespace XFramework
 
         #endregion
 
-        #region ILoadCollector (显式接口实现)
+        #region ILoader Methods
 
-        void ILoadCollector.AddLoadable(ILoadable loadable)
+        public void AddLoadable(ILoadable loadable, string name = null, float weight = 1f)
         {
-            if (loadable != null && !_loadables.Contains(loadable))
+            if (loadable == null) return;
+
+            // 避免重复添加
+            for (int i = 0; i < _entries.Count; i++)
             {
-                _loadables.Add(loadable);
+                if (_entries[i].Loadable == loadable)
+                    return;
             }
-        }
 
-        #endregion
-
-        #region ILoadCoordinator Methods
-
-        public void AddProvider(ILoadableProvider provider)
-        {
-            if (provider != null && !_providers.Contains(provider))
+            _entries.Add(new LoadEntry
             {
-                _providers.Add(provider);
-            }
+                Loadable = loadable,
+                Context = new LoadContext
+                {
+                    Name = name ?? loadable.GetType().Name,
+                    Weight = Mathf.Max(0.01f, weight),
+                }
+            });
         }
 
         public async UniTask LoadAsync()
         {
             if (IsLoading)
             {
-                Debug.LogWarning("LoadCoordinator.LoadAsync: already loading, ignore this call.");
+                Debug.LogWarning("Loader.LoadAsync: already loading, ignore this call.");
                 return;
             }
 
-            // 1. 装载阶段：从所有 provider 中解析出加载任务
-            _loadables.Clear();
-            for (int i = 0; i < _providers.Count; i++)
+            if (_entries.Count == 0)
             {
-                _providers[i].MountLoadables(this);
-            }
-
-            if (_loadables.Count == 0)
-            {
-                Debug.LogWarning("LoadCoordinator.LoadAsync: no loadable tasks found.");
+                Debug.LogWarning("Loader.LoadAsync: no loadable tasks found.");
                 OnLoadCompleted?.Invoke();
                 return;
             }
@@ -81,23 +76,30 @@ namespace XFramework
 
             try
             {
-                // 2. 计算总权重
+                // 1. 计算总权重
                 float totalWeight = 0f;
-                for (int i = 0; i < _loadables.Count; i++)
+                for (int i = 0; i < _entries.Count; i++)
                 {
-                    totalWeight += _loadables[i].Weight;
+                    totalWeight += _entries[i].Context.Weight;
                 }
 
                 if (totalWeight <= 0f)
                 {
-                    totalWeight = _loadables.Count;
+                    totalWeight = _entries.Count;
                 }
 
-                // 3. 同时启动所有加载任务，传入 CancellationToken 以便失败时取消
-                UniTask[] tasks = new UniTask[_loadables.Count];
-                for (int i = 0; i < _loadables.Count; i++)
+                // 2. 将所有任务标记为 Loading 状态
+                for (int i = 0; i < _entries.Count; i++)
                 {
-                    tasks[i] = _loadables[i].LoadAsync(cts.Token);
+                    _entries[i].Context.SetState(LoadState.Loading);
+                }
+
+                // 3. 同时启动所有加载任务，传入 Context 和 CancellationToken
+                UniTask[] tasks = new UniTask[_entries.Count];
+                for (int i = 0; i < _entries.Count; i++)
+                {
+                    var entry = _entries[i];
+                    tasks[i] = entry.Loadable.LoadAsync(entry.Context, cts.Token);
                 }
 
                 // 4. 轮询阶段：每帧检查进度，直到全部完成或失败
@@ -111,13 +113,13 @@ namespace XFramework
                     int completedCount = 0;
                     int failedCount = 0;
 
-                    for (int i = 0; i < _loadables.Count; i++)
+                    for (int i = 0; i < _entries.Count; i++)
                     {
-                        var loadable = _loadables[i];
-                        float p = loadable.Progress;
-                        weightedProgress += p * loadable.Weight;
+                        var ctx = _entries[i].Context;
+                        float p = ctx.Progress;
+                        weightedProgress += p * ctx.Weight;
 
-                        switch (loadable.State)
+                        switch (ctx.State)
                         {
                             case LoadState.Completed:
                                 completedCount++;
@@ -125,13 +127,13 @@ namespace XFramework
                             case LoadState.Failed:
                                 failedCount++;
                                 anyFailed = true;
-                                currentDesc = loadable.Description;
-                                currentTaskName = loadable.Name;
+                                currentDesc = ctx.Description;
+                                currentTaskName = ctx.Name;
                                 break;
                             case LoadState.Loading:
                                 allDone = false;
-                                currentDesc = loadable.Description;
-                                currentTaskName = loadable.Name;
+                                currentDesc = ctx.Description;
+                                currentTaskName = ctx.Name;
                                 break;
                             default:
                                 allDone = false;
@@ -149,7 +151,7 @@ namespace XFramework
                         OverallProgress = Progress,
                         Description = Description,
                         CurrentTaskName = currentTaskName,
-                        TotalTaskCount = _loadables.Count,
+                        TotalTaskCount = _entries.Count,
                         CompletedCount = completedCount,
                         FailedCount = failedCount,
                     };
@@ -177,8 +179,8 @@ namespace XFramework
                     OverallProgress = 1f,
                     Description = "Completed",
                     CurrentTaskName = null,
-                    TotalTaskCount = _loadables.Count,
-                    CompletedCount = _loadables.Count,
+                    TotalTaskCount = _entries.Count,
+                    CompletedCount = _entries.Count,
                     FailedCount = 0,
                 };
                 OnProgressUpdate?.Invoke(finalSnapshot);
@@ -190,7 +192,7 @@ namespace XFramework
             }
             catch (Exception ex)
             {
-                Debug.LogError($"LoadCoordinator.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError($"Loader.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
                 OnLoadFailed?.Invoke($"Exception: {ex.Message}");
             }
             finally
@@ -201,8 +203,7 @@ namespace XFramework
 
         public void Destroy()
         {
-            _loadables.Clear();
-            _providers.Clear();
+            _entries.Clear();
 
             OnProgressUpdate = null;
             OnLoadCompleted = null;
@@ -215,17 +216,22 @@ namespace XFramework
 
         #endregion
 
-        #region Private Fields
+        #region Private Types
 
         /// <summary>
-        /// 加载任务列表。生命周期：
-        /// <para>1. 装载阶段：由 <see cref="ILoadCollector.AddLoadable"/> 填充。</para>
-        /// <para>2. 执行阶段：直接用于进度轮询。</para>
+        /// 加载条目。将 <see cref="ILoadable"/> 与 <see cref="LoadContext"/> 配对存储。
         /// </summary>
-        List<ILoadable> _loadables = new List<ILoadable>();
+        private struct LoadEntry
+        {
+            public ILoadable Loadable;
+            public LoadContext Context;
+        }
 
-        /// <summary>已注册的 <see cref="ILoadableProvider"/> 列表。</summary>
-        List<ILoadableProvider> _providers = new List<ILoadableProvider>();
+        #endregion
+
+        #region Private Fields
+
+        List<LoadEntry> _entries = new List<LoadEntry>();
 
         #endregion
     }

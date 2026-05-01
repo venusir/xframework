@@ -2,7 +2,7 @@ namespace XFramework
 {
     /// <summary>
     /// 加载进度快照。供 UI 读取当前加载状态的全部信息。
-    /// <para>由 <see cref="ILoadCoordinator"/> 在每帧轮询时生成，通过 <see cref="ILoadCoordinator.OnProgressUpdate"/> 事件广播。</para>
+    /// <para>由 <see cref="ILoader"/> 在每帧轮询时生成，通过 <see cref="ILoader.OnProgressUpdate"/> 事件广播。</para>
     /// </summary>
     public struct LoadProgressSnapshot
     {
