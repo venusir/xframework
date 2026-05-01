@@ -114,6 +114,7 @@ namespace XFramework
 
             T component = NodeFactory.GetNode<T>();
             _typeCache[typeof(T)] = component;
+            AddToInterfaceCache(component);
             AddChild(component);
             return component;
         }
@@ -132,6 +133,7 @@ namespace XFramework
 
             T component = NodeFactory.GetNode<T>(arg);
             _typeCache[typeof(T)] = component;
+            AddToInterfaceCache(component);
             AddChild(component);
             return component;
         }
@@ -157,6 +159,7 @@ namespace XFramework
 
             node = NodeFactory.GetNode(type);
             _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node);
             return node;
         }
@@ -183,6 +186,7 @@ namespace XFramework
 
             node = NodeFactory.GetNode(type, arg);
             _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node);
             return node;
         }
@@ -398,6 +402,30 @@ namespace XFramework
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// 将节点实现的接口注册到 <see cref="_interfaceCache"/>。
+        /// <para>使得通过接口类型（如 <see cref="IUpdateService"/>）也能查找到此节点。</para>
+        /// </summary>
+        /// <param name="node">要注册的节点。</param>
+        private void AddToInterfaceCache(BaseNode node)
+        {
+            Type type = node.GetType();
+            Type[] interfaces = type.GetInterfaces();
+            for (int i = 0; i < interfaces.Length; i++)
+            {
+                Type iface = interfaces[i];
+                // 只缓存 IBaseNode 的子接口，避免缓存无关接口
+                if (typeof(IBaseNode).IsAssignableFrom(iface) && iface != typeof(IBaseNode))
+                {
+                    // 不覆盖已有条目（先到先得）
+                    if (!_interfaceCache.ContainsKey(iface))
+                    {
+                        _interfaceCache[iface] = (IBaseNode)node;
+                    }
+                }
+            }
+        }
 
         /// <summary>
         /// 从两个缓存中同时移除该节点相关的所有条目。

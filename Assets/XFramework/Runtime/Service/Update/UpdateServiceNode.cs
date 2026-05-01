@@ -10,7 +10,7 @@ namespace XFramework
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
     /// <para>自动监听节点树的添加/移除事件，注册/注销 <see cref="IUpdateable"/> 节点。</para>
     /// </summary>
-    public class UpdateServiceNode : LeafNode
+    public class UpdateServiceNode : LeafNode, IUpdateService
     {
         #region Constants
 
