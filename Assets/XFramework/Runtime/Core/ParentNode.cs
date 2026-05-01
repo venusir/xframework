@@ -163,8 +163,8 @@ namespace XFramework
                 }
 
                 node.Awake();
-                children.Add(node);
                 node.SetParent(this);
+                children.Add(node);
                 OnChildAdded(node);
                 OnNodeAdded?.Invoke(node);
 

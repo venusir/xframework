@@ -4,14 +4,13 @@ using UnityEngine;
 namespace XFramework
 {
     /// <summary>
-    /// 更新调度器。按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
-    /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。
-    /// <para>同一 LOD 内的节点按深度升序排列，确保父节点先于子节点更新。</para>
-    /// <para>节点的 LOD 由 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值决定，每次更新后自动调整。</para>
-    /// <para>deltaTime 通过 <see cref="Time.time"/> 差值计算，不受 LOD 迁移影响，帧率波动时仍保持正确。</para>
-    /// <para>通过 <see cref="Disable(IUpdateable)"/> 可暂停节点更新，<see cref="Enable(IUpdateable)"/> 恢复。</para>
+    /// 更新服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局 Update 调度能力。
+    /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
+    /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
+    /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
+    /// <para>自动监听节点树的添加/移除事件，注册/注销 <see cref="IUpdateable"/> 节点。</para>
     /// </summary>
-    public class UpdateScheduler
+    public class UpdateServiceNode : LeafNode
     {
         #region Constants
 
@@ -62,9 +61,9 @@ namespace XFramework
         #region Constructor
 
         /// <summary>
-        /// 创建更新调度器实例。
+        /// 创建更新服务节点实例。
         /// </summary>
-        public UpdateScheduler()
+        public UpdateServiceNode()
         {
             _lodEntries = new List<Entry>[LODCount];
             _pendingAdd = new List<Entry>[LODCount];
@@ -78,56 +77,128 @@ namespace XFramework
 
         #endregion
 
+        #region Lifecycle
+
+        protected override void OnAwake()
+        {
+            base.OnAwake();
+        }
+
+        protected override void OnStart()
+        {
+            base.OnStart();
+
+            // 自动绑定到父节点（即 RootNode），订阅事件并注册现有 IUpdateable 节点
+            if (Parent != null)
+            {
+                Parent.OnNodeAdded += OnNodeAdded;
+                Parent.OnNodeRemoved += OnNodeRemoved;
+
+                for (int i = 0; i < Parent.ChildCount; i++)
+                    TryRegister(Parent[i]);
+            }
+        }
+
+        protected override void OnDestroy()
+        {
+            Clear();
+            base.OnDestroy();
+        }
+
+        #endregion
+
         #region Public Methods
 
         /// <summary>
-        /// 注册一个可更新节点。
-        /// <para>如果当前正在迭代中，会暂存到待添加缓冲，迭代结束后统一处理。</para>
+        /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
+        /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
         /// </summary>
-        /// <param name="node">可更新节点。</param>
-        /// <param name="depth">节点在树中的深度。</param>
-        /// <param name="initialLOD">初始 <see cref="UpdateLOD"/> 等级，默认 <see cref="UpdateLOD.EveryFrame"/>。</param>
-        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.EveryFrame)
+        /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
+        public void Tick(float time)
         {
-            if (node == null) return;
+            _isIterating = true;
 
-            int lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD);
-            var entry = new Entry { Node = node, Depth = depth, LastUpdateTime = Time.time };
+            // LOD=0: 每帧全量更新
+            var lod0 = _lodEntries[0];
+            for (int i = 0; i < lod0.Count; i++)
+            {
+                var entry = lod0[i];
+                float realDelta = time - entry.LastUpdateTime;
 
-            if (_isIterating)
-            {
-                _pendingAdd[lod].Add(entry);
+                int newLOD;
+                try
+                {
+                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[UpdateServiceNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                    _pendingRemove.Add(entry.Node);
+                    continue;
+                }
+
+                entry.LastUpdateTime = time;
+                lod0[i] = entry;
+
+                if (newLOD != 0)
+                {
+                    _pendingAdd[newLOD].Add(entry);
+                    _pendingRemove.Add(entry.Node);
+                }
             }
-            else
+
+            // LOD=1~5: 时间切片更新
+            for (int lod = 1; lod < LODCount; lod++)
             {
-                InsertSorted(_lodEntries[lod], entry);
+                var entries = _lodEntries[lod];
+                int count = entries.Count;
+                if (count == 0) continue;
+
+                int sliceCount = 1 << lod;
+                int sliceSize = (count + sliceCount - 1) / sliceCount;
+                int sliceIndex = _frameCount % sliceCount;
+
+                int start = sliceIndex * sliceSize;
+                int end = sliceIndex * sliceSize + sliceSize;
+                if (end > count) end = count;
+
+                for (int i = start; i < end; i++)
+                {
+                    var entry = entries[i];
+                    float realDelta = time - entry.LastUpdateTime;
+
+                    int newLOD;
+                    try
+                    {
+                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"[UpdateServiceNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                        _pendingRemove.Add(entry.Node);
+                        continue;
+                    }
+
+                    entry.LastUpdateTime = time;
+                    entries[i] = entry;
+
+                    if (newLOD != lod)
+                    {
+                        _pendingAdd[newLOD].Add(entry);
+                        _pendingRemove.Add(entry.Node);
+                    }
+                }
             }
+
+            _frameCount++;
+            _isIterating = false;
+
+            FlushPending();
         }
 
         /// <summary>
-        /// 注销一个可更新节点。
-        /// <para>如果当前正在迭代中，会暂存到待移除缓冲，迭代结束后统一处理。</para>
-        /// </summary>
-        /// <param name="node">可更新节点。</param>
-        public void Unregister(IUpdateable node)
-        {
-            if (node == null) return;
-
-            if (_isIterating)
-            {
-                _pendingRemove.Add(node);
-            }
-            else
-            {
-                RemoveFromList(_lodEntries, node);
-                RemoveFromDisabled(node);
-            }
-        }
-
-        /// <summary>
-        /// 启用一个被禁用的节点。恢复其 Update 调用。
-        /// <para>节点会插回原 LOD 桶（默认 <see cref="UpdateLOD.EveryFrame"/>），
-        /// 并触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// 启用指定节点的 Update 调用。
+        /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
         public void Enable(IUpdateable node)
@@ -141,7 +212,6 @@ namespace XFramework
                     var entry = _disabledEntries[i];
                     _disabledEntries.RemoveAt(i);
 
-                    // 插回 EveryFrame 桶，让节点重新开始
                     entry.LastUpdateTime = Time.time;
                     InsertSorted(_lodEntries[0], entry);
 
@@ -152,16 +222,14 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 禁用一个节点。暂停其 Update 调用。
-        /// <para>节点会从当前 LOD 桶移入禁用列表，
-        /// 并触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// 禁用指定节点的 Update 调用。
+        /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
         /// </summary>
         /// <param name="node">要禁用的节点。</param>
         public void Disable(IUpdateable node)
         {
             if (node == null) return;
 
-            // 从所有 LOD 桶中查找并移除
             for (int lod = 0; lod < LODCount; lod++)
             {
                 var entries = _lodEntries[lod];
@@ -181,10 +249,10 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 检查节点是否已被禁用。
+        /// 检查节点是否处于启用状态。
         /// </summary>
         /// <param name="node">要检查的节点。</param>
-        /// <returns>如果节点在禁用列表中则返回 true。</returns>
+        /// <returns>如果节点未被禁用则返回 true。</returns>
         public bool IsEnabled(IUpdateable node)
         {
             if (node == null) return false;
@@ -198,100 +266,60 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
-        /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
-        /// <para>更新后根据 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值自动调整 LOD 桶。</para>
-        /// <para>deltaTime 通过 <paramref name="time"/> 与 <see cref="Entry.LastUpdateTime"/> 的差值计算。</para>
-        /// <para>单个节点的 <see cref="IUpdateable.OnUpdate(float, float)"/> 异常不会影响其他节点的正常更新，
-        /// 异常节点会被自动注销并打印错误日志。</para>
+        /// 立即对指定节点执行一次更新并重新调整 LOD。
+        /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
         /// </summary>
-        /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免每节点重复获取。</param>
-        public void Tick(float time)
+        /// <param name="node">要立即更新的节点。</param>
+        /// <param name="deltaTime">传入的时间差。</param>
+        /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
+        public void ProcessImmediate(IUpdateable node, float deltaTime, float time)
         {
-            _isIterating = true;
+            if (node == null) return;
 
-            // LOD=0: 每帧全量更新
-            var lod0 = _lodEntries[0];
-            for (int i = 0; i < lod0.Count; i++)
+            if (_isIterating)
             {
-                var entry = lod0[i];
-                float realDelta = time - entry.LastUpdateTime;
-
-                int newLOD;
-                try
+                for (int lod = 0; lod < LODCount; lod++)
                 {
-                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
+                    var entries = _lodEntries[lod];
+                    for (int i = entries.Count - 1; i >= 0; i--)
+                    {
+                        if (entries[i].Node == node)
+                        {
+                            var entry = entries[i];
+                            entry.LastUpdateTime = time;
+                            entries[i] = entry;
+                            return;
+                        }
+                    }
                 }
-                catch (System.Exception e)
-                {
-                    UnityEngine.Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                    _pendingRemove.Add(entry.Node);
-                    continue;
-                }
-
-                // 更新 LastUpdateTime
-                entry.LastUpdateTime = time;
-                lod0[i] = entry;
-
-                if (newLOD != 0)
-                {
-                    _pendingAdd[newLOD].Add(entry);
-                    _pendingRemove.Add(entry.Node);
-                }
+                return;
             }
 
-            // LOD=1~5: 时间切片更新
-            for (int lod = 1; lod < LODCount; lod++)
+            for (int lod = 0; lod < LODCount; lod++)
             {
                 var entries = _lodEntries[lod];
-                int count = entries.Count;
-                if (count == 0) continue;
-
-                // 切片数量 = 1 << lod
-                int sliceCount = 1 << lod;
-                // 切片大小（向上取整）
-                int sliceSize = (count + sliceCount - 1) / sliceCount;
-                // 当前帧应处理的切片索引（每帧轮换一个切片）
-                int sliceIndex = _frameCount % sliceCount;
-
-                int start = sliceIndex * sliceSize;
-                int end = sliceIndex * sliceSize + sliceSize;
-                if (end > count) end = count;
-
-                for (int i = start; i < end; i++)
+                for (int i = entries.Count - 1; i >= 0; i--)
                 {
-                    var entry = entries[i];
-                    float realDelta = time - entry.LastUpdateTime;
-
-                    int newLOD;
-                    try
+                    if (entries[i].Node == node)
                     {
-                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
-                    }
-                    catch (System.Exception e)
-                    {
-                        UnityEngine.Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                        _pendingRemove.Add(entry.Node);
-                        continue;
-                    }
+                        var entry = entries[i];
+                        int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, time), 0, MaxLOD);
 
-                    // 更新 LastUpdateTime
-                    entry.LastUpdateTime = time;
-                    entries[i] = entry;
+                        entry.LastUpdateTime = time;
 
-                    if (newLOD != lod)
-                    {
-                        _pendingAdd[newLOD].Add(entry);
-                        _pendingRemove.Add(entry.Node);
+                        if (newLOD != lod)
+                        {
+                            entries.RemoveAt(i);
+                            InsertSorted(_lodEntries[newLOD], entry);
+                        }
+                        else
+                        {
+                            entries[i] = entry;
+                        }
+                        return;
                     }
                 }
             }
-
-            _frameCount++;
-            _isIterating = false;
-
-            // 迭代结束后统一处理 pending 缓冲（移除旧桶 + 插入新桶）
-            FlushPending();
         }
 
         /// <summary>
@@ -338,73 +366,135 @@ namespace XFramework
         /// </summary>
         public int DisabledCount => _disabledEntries.Count;
 
+        #endregion
+
+        #region Private Methods - Event Subscription
+
         /// <summary>
-        /// 立即对指定节点执行一次更新并重新调整 LOD。
-        /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
-        /// <para>如果当前正在迭代中（即节点自身的 <see cref="IUpdateable.OnUpdate(float, float)"/> 内调用），
-        /// 则仅重置 <see cref="Entry.LastUpdateTime"/> 而不操作列表，
-        /// <see cref="IUpdateable.OnUpdate(float, float)"/> 由本轮 <see cref="Tick(float)"/> 自然处理。</para>
+        /// 递归订阅指定父节点及其所有子节点的事件，并注册 <see cref="IUpdateable"/>。
         /// </summary>
-        /// <param name="node">要立即更新的节点。</param>
-        /// <param name="deltaTime">传入的时间差。</param>
-        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>）。</param>
-        public void ProcessImmediate(IUpdateable node, float deltaTime, float time)
+        void SubscribeTree(ParentNode parent)
         {
-            if (node == null) return;
+            parent.OnNodeAdded += OnNodeAdded;
+            parent.OnNodeRemoved += OnNodeRemoved;
 
-            // 迭代期间：只更新 LastUpdateTime，不修改列表
-            // OnUpdate 由本轮 Tick 自然处理，且后续 deltaTime 正确
-            if (_isIterating)
+            for (int i = 0; i < parent.ChildCount; i++)
             {
-                for (int lod = 0; lod < LODCount; lod++)
-                {
-                    var entries = _lodEntries[lod];
-                    for (int i = entries.Count - 1; i >= 0; i--)
-                    {
-                        if (entries[i].Node == node)
-                        {
-                            var entry = entries[i];
-                            entry.LastUpdateTime = time;
-                            entries[i] = entry;
-                            return;
-                        }
-                    }
-                }
-                return;
+                var child = parent[i];
+                TryRegister(child);
+
+                if (child is ParentNode childParent)
+                    SubscribeTree(childParent);
             }
+        }
 
-            // 非迭代期间：执行 OnUpdate + 调整 LOD
-            for (int lod = 0; lod < LODCount; lod++)
+        /// <summary>
+        /// 尝试注册 <see cref="IUpdateable"/> 节点。
+        /// <para>如果节点已 Start 则立即注册，否则订阅 <see cref="BaseNode.OnStarted"/> 延迟注册。</para>
+        /// </summary>
+        void TryRegister(BaseNode node)
+        {
+            if (node is IUpdateable u)
             {
-                var entries = _lodEntries[lod];
-                for (int i = entries.Count - 1; i >= 0; i--)
+                if (node.Started)
                 {
-                    if (entries[i].Node == node)
-                    {
-                        var entry = entries[i];
-                        int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, time), 0, MaxLOD);
-
-                        // 重置 LastUpdateTime，避免下次正常更新时收到累积 deltaTime
-                        entry.LastUpdateTime = time;
-
-                        if (newLOD != lod)
-                        {
-                            entries.RemoveAt(i);
-                            InsertSorted(_lodEntries[newLOD], entry);
-                        }
-                        else
-                        {
-                            entries[i] = entry;
-                        }
-                        return;
-                    }
+                    Register(u, node.Depth);
+                }
+                else
+                {
+                    node.OnStarted += OnNodeStarted;
                 }
             }
         }
 
+        /// <summary>
+        /// 节点启动完成时触发，将节点注册到调度器。
+        /// </summary>
+        void OnNodeStarted(BaseNode node)
+        {
+            node.OnStarted -= OnNodeStarted;
+
+            if (node is IUpdateable u)
+                Register(u, node.Depth);
+        }
+
+        /// <summary>
+        /// 子节点添加时，注册 <see cref="IUpdateable"/> 并递归订阅其子节点事件。
+        /// </summary>
+        void OnNodeAdded(BaseNode node)
+        {
+            if (node is ParentNode parent)
+            {
+                SubscribeTree(parent);
+            }
+            else
+            {
+                TryRegister(node);
+            }
+        }
+
+        /// <summary>
+        /// 子节点移除时，注销 <see cref="IUpdateable"/> 并取消订阅其子节点事件。
+        /// </summary>
+        void OnNodeRemoved(BaseNode node)
+        {
+            if (node is ParentNode parent)
+            {
+                int childCount = parent.ChildCount;
+                for (int i = childCount - 1; i >= 0; i--)
+                    OnNodeRemoved(parent[i]);
+
+                parent.OnNodeAdded -= OnNodeAdded;
+                parent.OnNodeRemoved -= OnNodeRemoved;
+            }
+
+            node.OnStarted -= OnNodeStarted;
+
+            if (node is IUpdateable u)
+                Unregister(u);
+        }
+
         #endregion
 
-        #region Private Methods
+        #region Private Methods - Scheduling
+
+        /// <summary>
+        /// 注册一个可更新节点。
+        /// </summary>
+        void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.EveryFrame)
+        {
+            if (node == null) return;
+
+            int lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD);
+            var entry = new Entry { Node = node, Depth = depth, LastUpdateTime = Time.time };
+
+            if (_isIterating)
+            {
+                _pendingAdd[lod].Add(entry);
+            }
+            else
+            {
+                InsertSorted(_lodEntries[lod], entry);
+            }
+        }
+
+        /// <summary>
+        /// 注销一个可更新节点。
+        /// </summary>
+        void Unregister(IUpdateable node)
+        {
+            if (node == null) return;
+
+            if (_isIterating)
+            {
+                _pendingRemove.Add(node);
+            }
+            else
+            {
+                RemoveFromList(_lodEntries, node);
+                RemoveFromDisabled(node);
+            }
+        }
 
         /// <summary>
         /// 按深度升序插入到指定 LOD 列表。
@@ -462,14 +552,12 @@ namespace XFramework
         /// </summary>
         private void FlushPending()
         {
-            // 先处理移除（包括 LOD 变化导致的旧桶移除）
             for (int i = 0; i < _pendingRemove.Count; i++)
             {
                 RemoveFromList(_lodEntries, _pendingRemove[i]);
             }
             _pendingRemove.Clear();
 
-            // 再处理添加（包括 LOD 变化导致的新桶插入）
             for (int lod = 0; lod < LODCount; lod++)
             {
                 var pending = _pendingAdd[lod];
