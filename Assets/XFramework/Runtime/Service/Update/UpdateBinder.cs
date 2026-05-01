@@ -5,6 +5,7 @@ namespace XFramework
     /// 自动注册/注销树中所有 <see cref="IUpdateable"/> 节点。
     /// <para>节点只有在 <see cref="BaseNode.Start"/> 完成后才会注册到 <see cref="UpdateScheduler"/>，
     /// 确保加载中的节点不会收到 Update 调用。</para>
+    /// <para>通过 <see cref="EnableNode(IUpdateable)"/> 和 <see cref="DisableNode(IUpdateable)"/> 手动控制节点更新开关。</para>
     /// </summary>
     public class UpdateBinder
     {
@@ -47,6 +48,38 @@ namespace XFramework
         {
             if (!_disposed)
                 _scheduler.Tick(time);
+        }
+
+        /// <summary>
+        /// 启用指定节点的 Update 调用。
+        /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// </summary>
+        /// <param name="node">要启用的节点。</param>
+        public void EnableNode(IUpdateable node)
+        {
+            if (!_disposed)
+                _scheduler.Enable(node);
+        }
+
+        /// <summary>
+        /// 禁用指定节点的 Update 调用。
+        /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// </summary>
+        /// <param name="node">要禁用的节点。</param>
+        public void DisableNode(IUpdateable node)
+        {
+            if (!_disposed)
+                _scheduler.Disable(node);
+        }
+
+        /// <summary>
+        /// 检查指定节点是否处于启用状态。
+        /// </summary>
+        /// <param name="node">要检查的节点。</param>
+        /// <returns>如果节点未被禁用则返回 true。</returns>
+        public bool IsNodeEnabled(IUpdateable node)
+        {
+            return !_disposed && _scheduler.IsEnabled(node);
         }
 
         /// <summary>

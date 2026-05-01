@@ -12,12 +12,6 @@ namespace XFramework
         /// <summary>是否正在加载中。</summary>
         bool IsLoading { get; }
 
-        /// <summary>当前总体进度，取值范围 0.0 ~ 1.0。</summary>
-        float Progress { get; }
-
-        /// <summary>当前加载阶段的描述文字。</summary>
-        string Description { get; }
-
         /// <summary>加载进度变更事件。每帧轮询时触发，传递当前进度快照。</summary>
         event Action<LoadContext> OnProgressUpdate;
 
@@ -30,10 +24,10 @@ namespace XFramework
         /// <summary>
         /// 注册一个实现了 <see cref="ILoadable"/> 的加载任务。
         /// </summary>
-        void AddLoadable(ILoadable loadable, string name = null, float weight = 1f);
+        void AddLoadable(ILoadable loadable);
 
         /// <summary>
-        /// 执行加载。调度所有已注册的加载任务并统一调度。
+        /// 执行加载。按 Phase 分组调度所有已注册的加载任务。
         /// </summary>
         UniTask LoadAsync();
 

@@ -31,9 +31,22 @@ namespace XFramework
     /// <summary>
     /// 可更新接口。节点实现此接口后，通过 <see cref="UpdateScheduler"/> 自动管理更新。
     /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一帧的 <see cref="UpdateLOD"/> 等级。</para>
+    /// <para>通过 <see cref="BaseNode.Enabled"/> 控制启用/禁用，禁用时不会收到 <see cref="OnUpdate"/> 调用。</para>
     /// </summary>
     public interface IUpdateable
     {
+        /// <summary>
+        /// 节点启用时调用。恢复 Update 前重置状态。
+        /// <para>由 <see cref="UpdateScheduler.Enable(IUpdateable)"/> 触发。</para>
+        /// </summary>
+        void OnEnable();
+
+        /// <summary>
+        /// 节点禁用时调用。清理 Update 中的临时状态。
+        /// <para>由 <see cref="UpdateScheduler.Disable(IUpdateable)"/> 触发。</para>
+        /// </summary>
+        void OnDisable();
+
         /// <summary>
         /// 执行更新并返回下一帧的 <see cref="UpdateLOD"/> 等级。
         /// </summary>

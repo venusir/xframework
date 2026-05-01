@@ -9,6 +9,7 @@ namespace XFramework
     /// <para>同一 LOD 内的节点按深度升序排列，确保父节点先于子节点更新。</para>
     /// <para>节点的 LOD 由 <see cref="IUpdateable.OnUpdate(float)"/> 的返回值决定，每次更新后自动调整。</para>
     /// <para>deltaTime 通过 <see cref="Time.time"/> 差值计算，不受 LOD 迁移影响，帧率波动时仍保持正确。</para>
+    /// <para>通过 <see cref="Disable(IUpdateable)"/> 可暂停节点更新，<see cref="Enable(IUpdateable)"/> 恢复。</para>
     /// </summary>
     public class UpdateScheduler
     {
@@ -52,6 +53,9 @@ namespace XFramework
 
         /// <summary>内部帧计数器，用于计算当前时间片索引。</summary>
         private int _frameCount;
+
+        /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原 LOD 桶。</summary>
+        private readonly List<Entry> _disabledEntries = new List<Entry>();
 
         #endregion
 
@@ -116,7 +120,81 @@ namespace XFramework
             else
             {
                 RemoveFromList(_lodEntries, node);
+                RemoveFromDisabled(node);
             }
+        }
+
+        /// <summary>
+        /// 启用一个被禁用的节点。恢复其 Update 调用。
+        /// <para>节点会插回原 LOD 桶（默认 <see cref="UpdateLOD.EveryFrame"/>），
+        /// 并触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// </summary>
+        /// <param name="node">要启用的节点。</param>
+        public void Enable(IUpdateable node)
+        {
+            if (node == null) return;
+
+            for (int i = _disabledEntries.Count - 1; i >= 0; i--)
+            {
+                if (_disabledEntries[i].Node == node)
+                {
+                    var entry = _disabledEntries[i];
+                    _disabledEntries.RemoveAt(i);
+
+                    // 插回 EveryFrame 桶，让节点重新开始
+                    entry.LastUpdateTime = Time.time;
+                    InsertSorted(_lodEntries[0], entry);
+
+                    node.OnEnable();
+                    return;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 禁用一个节点。暂停其 Update 调用。
+        /// <para>节点会从当前 LOD 桶移入禁用列表，
+        /// 并触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// </summary>
+        /// <param name="node">要禁用的节点。</param>
+        public void Disable(IUpdateable node)
+        {
+            if (node == null) return;
+
+            // 从所有 LOD 桶中查找并移除
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var entries = _lodEntries[lod];
+                for (int i = entries.Count - 1; i >= 0; i--)
+                {
+                    if (entries[i].Node == node)
+                    {
+                        var entry = entries[i];
+                        entries.RemoveAt(i);
+                        _disabledEntries.Add(entry);
+
+                        node.OnDisable();
+                        return;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 检查节点是否已被禁用。
+        /// </summary>
+        /// <param name="node">要检查的节点。</param>
+        /// <returns>如果节点在禁用列表中则返回 true。</returns>
+        public bool IsEnabled(IUpdateable node)
+        {
+            if (node == null) return false;
+
+            for (int i = 0; i < _disabledEntries.Count; i++)
+            {
+                if (_disabledEntries[i].Node == node)
+                    return false;
+            }
+            return true;
         }
 
         /// <summary>
@@ -217,7 +295,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 清空所有 LOD 列表和 pending 缓冲。
+        /// 清空所有 LOD 列表、禁用列表和 pending 缓冲。
         /// </summary>
         public void Clear()
         {
@@ -227,6 +305,7 @@ namespace XFramework
                 _pendingAdd[i].Clear();
             }
             _pendingRemove.Clear();
+            _disabledEntries.Clear();
             _frameCount = 0;
         }
 
@@ -241,7 +320,7 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 获取所有 LOD 等级的节点总数。
+        /// 获取所有 LOD 等级的节点总数（不含禁用节点）。
         /// </summary>
         public int TotalCount
         {
@@ -253,6 +332,11 @@ namespace XFramework
                 return count;
             }
         }
+
+        /// <summary>
+        /// 获取禁用节点数量。
+        /// </summary>
+        public int DisabledCount => _disabledEntries.Count;
 
         /// <summary>
         /// 立即对指定节点执行一次更新并重新调整 LOD。
@@ -354,6 +438,21 @@ namespace XFramework
                         entries.RemoveAt(i);
                         return;
                     }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 从禁用列表中移除指定节点。
+        /// </summary>
+        private void RemoveFromDisabled(IUpdateable node)
+        {
+            for (int i = _disabledEntries.Count - 1; i >= 0; i--)
+            {
+                if (_disabledEntries[i].Node == node)
+                {
+                    _disabledEntries.RemoveAt(i);
+                    return;
                 }
             }
         }

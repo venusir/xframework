@@ -22,6 +22,7 @@ namespace XFramework
         void Awake()
         {
             _updateBinder = new UpdateBinder();
+            IUpdateableExtensions.SetBinder(_updateBinder);
             _root = RootNode.Create();
             DontDestroyOnLoad(gameObject);
         }

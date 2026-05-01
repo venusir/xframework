@@ -28,6 +28,11 @@ namespace XFramework
     public interface ILoadable
     {
         /// <summary>
+        /// 加载阶段号。相同值的节点并行执行，不同值的节点按值从小到大串行执行。
+        /// </summary>
+        int Phase { get; }
+
+        /// <summary>
         /// 异步加载任务。加载过程中应通过 <paramref name="context"/> 更新进度和状态。
         /// <para>通过 <paramref name="cancellationToken"/> 可取消正在运行的任务。</para>
         /// </summary>

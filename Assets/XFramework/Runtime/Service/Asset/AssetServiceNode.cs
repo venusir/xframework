@@ -75,6 +75,8 @@ namespace XFramework
 
         #region ILoadable
 
+        int ILoadable.Phase => 0;
+
         async UniTask ILoadable.LoadAsync(LoadContext context, CancellationToken cancellationToken)
         {
             context.SetDescription("Initializing YooAsset...");

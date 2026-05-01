@@ -229,7 +229,6 @@ namespace XFramework
 
         #region Pooling
 
-
         /// <summary>
         /// 节点销毁完成时触发，用于通知缓存池回收节点。
         /// <para>由 <see cref="NodePool{T}"/> 内部订阅使用。</para>
