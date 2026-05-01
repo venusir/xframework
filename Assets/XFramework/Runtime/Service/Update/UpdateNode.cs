@@ -88,14 +88,15 @@ namespace XFramework
         {
             base.OnStart();
 
-            // 自动绑定到父节点（即 RootNode），订阅事件并注册现有 IUpdateable 节点
+            // 自动绑定到父节点（即 RootNode），订阅递归冒泡事件并注册现有 IUpdateable 节点
             if (Parent != null)
             {
-                Parent.OnNodeAdded += OnNodeAdded;
-                Parent.OnNodeRemoved += OnNodeRemoved;
+                Parent.OnDescendantAdded += OnDescendantAdded;
+                Parent.OnDescendantRemoved += OnDescendantRemoved;
+                Parent.OnDescendantStarted += OnDescendantStarted;
 
-                for (int i = 0; i < Parent.ChildCount; i++)
-                    TryRegister(Parent[i]);
+                // 注册树中已有的 IUpdateable 节点
+                Parent.ForEach(child => TryRegister(child), recursive: true);
             }
         }
 
@@ -371,85 +372,38 @@ namespace XFramework
         #region Private Methods - Event Subscription
 
         /// <summary>
-        /// 递归订阅指定父节点及其所有子节点的事件，并注册 <see cref="IUpdateable"/>。
-        /// </summary>
-        void SubscribeTree(ParentNode parent)
-        {
-            parent.OnNodeAdded += OnNodeAdded;
-            parent.OnNodeRemoved += OnNodeRemoved;
-
-            for (int i = 0; i < parent.ChildCount; i++)
-            {
-                var child = parent[i];
-                TryRegister(child);
-
-                if (child is ParentNode childParent)
-                    SubscribeTree(childParent);
-            }
-        }
-
-        /// <summary>
         /// 尝试注册 <see cref="IUpdateable"/> 节点。
-        /// <para>如果节点已 Start 则立即注册，否则订阅 <see cref="BaseNode.OnStarted"/> 延迟注册。</para>
+        /// <para>仅当节点已 Start 时才立即注册，否则等待 <see cref="OnDescendantStarted"/> 事件。</para>
         /// </summary>
         void TryRegister(BaseNode node)
         {
-            if (node is IUpdateable u)
-            {
-                if (node.Started)
-                {
-                    Register(u, node.Depth);
-                }
-                else
-                {
-                    node.OnStarted += OnNodeStarted;
-                }
-            }
+            if (node is IUpdateable u && node.Started)
+                Register(u, node.Depth);
         }
 
         /// <summary>
-        /// 节点启动完成时触发，将节点注册到调度器。
+        /// 子孙节点添加时触发。已 Start 的 <see cref="IUpdateable"/> 立即注册，未 Start 的等待 Start 事件。
         /// </summary>
-        void OnNodeStarted(BaseNode node)
+        void OnDescendantAdded(BaseNode node)
         {
-            node.OnStarted -= OnNodeStarted;
+            if (node is IUpdateable u && node.Started)
+                Register(u, node.Depth);
+        }
 
+        /// <summary>
+        /// 子孙节点 Start 完成时触发。注册 <see cref="IUpdateable"/> 节点。
+        /// </summary>
+        void OnDescendantStarted(BaseNode node)
+        {
             if (node is IUpdateable u)
                 Register(u, node.Depth);
         }
 
         /// <summary>
-        /// 子节点添加时，注册 <see cref="IUpdateable"/> 并递归订阅其子节点事件。
+        /// 子孙节点移除时触发。注销 <see cref="IUpdateable"/> 节点。
         /// </summary>
-        void OnNodeAdded(BaseNode node)
+        void OnDescendantRemoved(BaseNode node)
         {
-            if (node is ParentNode parent)
-            {
-                SubscribeTree(parent);
-            }
-            else
-            {
-                TryRegister(node);
-            }
-        }
-
-        /// <summary>
-        /// 子节点移除时，注销 <see cref="IUpdateable"/> 并取消订阅其子节点事件。
-        /// </summary>
-        void OnNodeRemoved(BaseNode node)
-        {
-            if (node is ParentNode parent)
-            {
-                int childCount = parent.ChildCount;
-                for (int i = childCount - 1; i >= 0; i--)
-                    OnNodeRemoved(parent[i]);
-
-                parent.OnNodeAdded -= OnNodeAdded;
-                parent.OnNodeRemoved -= OnNodeRemoved;
-            }
-
-            node.OnStarted -= OnNodeStarted;
-
             if (node is IUpdateable u)
                 Unregister(u);
         }
