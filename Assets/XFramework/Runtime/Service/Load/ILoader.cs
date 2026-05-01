@@ -19,7 +19,7 @@ namespace XFramework
         string Description { get; }
 
         /// <summary>加载进度变更事件。每帧轮询时触发，传递当前进度快照。</summary>
-        event Action<LoadProgressSnapshot> OnProgressUpdate;
+        event Action<LoadContext> OnProgressUpdate;
 
         /// <summary>全部加载完成事件。</summary>
         event Action OnLoadCompleted;

@@ -22,7 +22,7 @@ namespace XFramework
 
         #region ILoader Events
 
-        public event Action<LoadProgressSnapshot> OnProgressUpdate;
+        public event Action<LoadContext> OnProgressUpdate;
         public event Action OnLoadCompleted;
         public event Action<string> OnLoadFailed;
 
@@ -145,16 +145,13 @@ namespace XFramework
                     Progress = overallProgress;
                     Description = currentDesc ?? "Completed";
 
-                    // 生成快照并广播
-                    var snapshot = new LoadProgressSnapshot
-                    {
-                        OverallProgress = Progress,
-                        Description = Description,
-                        CurrentTaskName = currentTaskName,
-                        TotalTaskCount = _entries.Count,
-                        CompletedCount = completedCount,
-                        FailedCount = failedCount,
-                    };
+                    // 填充全局级字段并广播
+                    var snapshot = _entries[0].Context;
+                    snapshot.OverallProgress = Progress;
+                    snapshot.CurrentTaskName = currentTaskName;
+                    snapshot.TotalTaskCount = _entries.Count;
+                    snapshot.CompletedCount = completedCount;
+                    snapshot.FailedCount = failedCount;
                     OnProgressUpdate?.Invoke(snapshot);
 
                     if (anyFailed)
@@ -174,15 +171,12 @@ namespace XFramework
                 // 5. 完成
                 Progress = 1f;
                 Description = "Completed";
-                var finalSnapshot = new LoadProgressSnapshot
-                {
-                    OverallProgress = 1f,
-                    Description = "Completed",
-                    CurrentTaskName = null,
-                    TotalTaskCount = _entries.Count,
-                    CompletedCount = _entries.Count,
-                    FailedCount = 0,
-                };
+                var finalSnapshot = _entries[0].Context;
+                finalSnapshot.OverallProgress = 1f;
+                finalSnapshot.CurrentTaskName = null;
+                finalSnapshot.TotalTaskCount = _entries.Count;
+                finalSnapshot.CompletedCount = _entries.Count;
+                finalSnapshot.FailedCount = 0;
                 OnProgressUpdate?.Invoke(finalSnapshot);
                 OnLoadCompleted?.Invoke();
             }
