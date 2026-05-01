@@ -9,6 +9,9 @@ namespace XFramework
     {
         /// <summary>销毁节点。</summary>
         void Destroy();
+
+        /// <summary>节点 Start 完成时触发。</summary>
+        event Action<BaseNode> OnNodeStarted;
     }
 
     /// <summary>
@@ -155,6 +158,9 @@ namespace XFramework
 
             // 通知外部（如 UpdateBinder）：节点已启动，可以开始接收 Update
             OnStarted?.Invoke(this);
+
+            // 通知外部（接口公开版本）：节点 Start 完成
+            OnNodeStarted?.Invoke(this);
         }
 
         #endregion
@@ -239,6 +245,11 @@ namespace XFramework
         /// 节点启动完成时触发，用于通知外部（如 <see cref="UpdateBinder"/>）节点已可接收 Update。
         /// </summary>
         internal event Action<BaseNode> OnStarted;
+
+        /// <summary>
+        /// 节点 Start 完成时触发（接口公开版本）。
+        /// </summary>
+        public event Action<BaseNode> OnNodeStarted;
 
         #endregion
     }
