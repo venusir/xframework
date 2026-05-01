@@ -11,10 +11,10 @@ namespace XFramework
     /// <summary>
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
-    /// <para>内部使用 YooAsset 实现资源加载，对外暴露 <see cref="IAssetService"/> 接口。</para>
+    /// <para>内部使用 YooAsset 实现资源加载，对外暴露 <see cref="IAssetNode"/> 接口。</para>
     /// <para>自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// </summary>
-    public class AssetServiceNode : LeafNode, IAssetService, ILoadable
+    public class AssetNode : LeafNode, IAssetNode, ILoadable
     {
         #region Private Fields
 
@@ -145,7 +145,7 @@ namespace XFramework
 
         #endregion
 
-        #region IAssetService — UniTask
+        #region IAssetNode — UniTask
 
         public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
@@ -185,7 +185,7 @@ namespace XFramework
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetServiceNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                Debug.LogWarning($"[AssetNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
                                  "Destroying instance to prevent resource leak.");
                 DestroyInstance(go);
                 return null;
@@ -201,7 +201,7 @@ namespace XFramework
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetServiceNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                Debug.LogWarning($"[AssetNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
                                  "Destroying instance to prevent resource leak.");
                 DestroyInstance(go);
                 return null;
@@ -226,7 +226,7 @@ namespace XFramework
 
         #endregion
 
-        #region IAssetService — Callback
+        #region IAssetNode — Callback
 
         public async void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
         {
@@ -257,7 +257,7 @@ namespace XFramework
 
         #endregion
 
-        #region IAssetService — Pool Config
+        #region IAssetNode — Pool Config
 
         public void SetPoolMaxSize(string location, int maxSize)
         {
@@ -274,7 +274,7 @@ namespace XFramework
 
         #endregion
 
-        #region IAssetService — Lifecycle
+        #region IAssetNode — Lifecycle
 
         public void Release(UnityEngine.Object asset)
         {

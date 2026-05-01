@@ -405,7 +405,7 @@ namespace XFramework
 
         /// <summary>
         /// 将节点实现的接口注册到 <see cref="_interfaceCache"/>。
-        /// <para>使得通过接口类型（如 <see cref="IUpdateService"/>）也能查找到此节点。</para>
+        /// <para>使得通过接口类型（如 <see cref="IUpdateNode"/>）也能查找到此节点。</para>
         /// </summary>
         /// <param name="node">要注册的节点。</param>
         private void AddToInterfaceCache(BaseNode node)

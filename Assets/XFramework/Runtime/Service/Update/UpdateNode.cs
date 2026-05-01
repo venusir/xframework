@@ -10,7 +10,7 @@ namespace XFramework
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
     /// <para>自动监听节点树的添加/移除事件，注册/注销 <see cref="IUpdateable"/> 节点。</para>
     /// </summary>
-    public class UpdateServiceNode : LeafNode, IUpdateService
+    public class UpdateNode : LeafNode, IUpdateNode
     {
         #region Constants
 
@@ -63,7 +63,7 @@ namespace XFramework
         /// <summary>
         /// 创建更新服务节点实例。
         /// </summary>
-        public UpdateServiceNode()
+        public UpdateNode()
         {
             _lodEntries = new List<Entry>[LODCount];
             _pendingAdd = new List<Entry>[LODCount];
@@ -132,7 +132,7 @@ namespace XFramework
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"[UpdateServiceNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                    Debug.LogError($"[UpdateNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
                     _pendingRemove.Add(entry.Node);
                     continue;
                 }
@@ -174,7 +174,7 @@ namespace XFramework
                     }
                     catch (System.Exception e)
                     {
-                        Debug.LogError($"[UpdateServiceNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                        Debug.LogError($"[UpdateNode] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
                         _pendingRemove.Add(entry.Node);
                         continue;
                     }

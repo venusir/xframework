@@ -3,14 +3,14 @@ using UnityEngine;
 namespace XFramework
 {
     /// <summary>
-    /// 实例追踪器。自动挂载到 <see cref="AssetServiceNode"/> 实例化的 GameObject 上。
-    /// <para>当用户直接调用 <see cref="Object.Destroy(GameObject)"/> 时，通过 OnDestroy 自动通知 AssetServiceNode 释放引用。</para>
+    /// 实例追踪器。自动挂载到 <see cref="AssetNode"/> 实例化的 GameObject 上。
+    /// <para>当用户直接调用 <see cref="Object.Destroy(GameObject)"/> 时，通过 OnDestroy 自动通知 AssetNode 释放引用。</para>
     /// <para>内部类，用户无感知。</para>
     /// </summary>
     internal class InstanceTracker : MonoBehaviour
     {
         /// <summary>所属的资源服务节点。</summary>
-        internal AssetServiceNode Owner;
+        internal AssetNode Owner;
 
         /// <summary>资源定位地址。</summary>
         internal string Location;
