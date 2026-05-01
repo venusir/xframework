@@ -15,11 +15,17 @@ namespace XFramework
         /// <summary>按索引访问子节点。</summary>
         BaseNode this[int index] { get; }
 
-        /// <summary>子节点添加事件。</summary>
+        /// <summary>直接子节点添加事件。</summary>
         event Action<BaseNode> OnNodeAdded;
 
-        /// <summary>子节点移除事件。</summary>
+        /// <summary>直接子节点移除事件。</summary>
         event Action<BaseNode> OnNodeRemoved;
+
+        /// <summary>任意子孙节点添加事件（递归冒泡）。</summary>
+        event Action<BaseNode> OnDescendantAdded;
+
+        /// <summary>任意子孙节点移除事件（递归冒泡）。</summary>
+        event Action<BaseNode> OnDescendantRemoved;
 
         /// <summary>获取遍历子节点的迭代器，支持 foreach 语法。</summary>
         IEnumerator<BaseNode> GetEnumerator();
@@ -35,6 +41,9 @@ namespace XFramework
 
         /// <summary>获取所有匹配指定类型的子节点。</summary>
         List<T> GetNodes<T>(bool recursive, Predicate<T> predicate = null) where T : BaseNode;
+
+        /// <summary>遍历所有子节点并执行回调，支持递归。</summary>
+        void ForEach(Action<BaseNode> callback, bool recursive = false);
     }
 
     /// <summary>
@@ -45,6 +54,8 @@ namespace XFramework
     {
         public event Action<BaseNode> OnNodeAdded;
         public event Action<BaseNode> OnNodeRemoved;
+        public event Action<BaseNode> OnDescendantAdded;
+        public event Action<BaseNode> OnDescendantRemoved;
 
         /// <summary>子节点列表。</summary>
         List<BaseNode> children;
@@ -145,6 +156,28 @@ namespace XFramework
         }
 
         /// <summary>
+        /// 遍历所有子节点并执行回调，支持递归。
+        /// </summary>
+        /// <param name="callback">对每个子节点执行的回调。</param>
+        /// <param name="recursive">是否递归遍历所有子孙节点。</param>
+        public void ForEach(Action<BaseNode> callback, bool recursive = false)
+        {
+            if (callback == null)
+                throw new ArgumentNullException(nameof(callback));
+
+            for (int i = 0; i < children.Count; i++)
+            {
+                var child = children[i];
+                callback(child);
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    parentNode.ForEach(callback, recursive: true);
+                }
+            }
+        }
+
+        /// <summary>
         /// 添加子节点。添加前会自动调用 <see cref="BaseNode.Awake"/> 初始化该节点。
         /// <para>如果父节点已执行过 <see cref="BaseNode.Start"/>，则新添加的子节点会立即自动调用 <see cref="BaseNode.Start"/>。</para>
         /// </summary>
@@ -167,6 +200,7 @@ namespace XFramework
                 children.Add(node);
                 OnChildAdded(node);
                 OnNodeAdded?.Invoke(node);
+                OnDescendantAdded?.Invoke(node);
 
                 // 如果父节点已 Start，新子节点应自动 Start（递归传播给其子节点）
                 // deferStart 为 true 时跳过，由调用方在异步加载完成后手动触发 Start
@@ -190,6 +224,7 @@ namespace XFramework
             {
                 children.Remove(node);
                 OnNodeRemoved?.Invoke(node);
+                OnDescendantRemoved?.Invoke(node);
                 OnChildRemoved(node, fromChild);
             }
         }
@@ -224,16 +259,43 @@ namespace XFramework
 
         /// <summary>
         /// 子节点添加时的回调。
+        /// <para>如果子节点是 <see cref="ParentNode"/>，则订阅其 <see cref="OnDescendantAdded"/> 和 <see cref="OnDescendantRemoved"/> 事件，
+        /// 实现递归冒泡，使祖先节点也能收到所有子孙节点的添加/移除通知。</para>
         /// </summary>
         /// <param name="node">被添加的子节点。</param>
-        protected virtual void OnChildAdded(BaseNode node) { }
+        protected virtual void OnChildAdded(BaseNode node)
+        {
+            if (node is ParentNode parentNode)
+            {
+                parentNode.OnDescendantAdded += RelayDescendantAdded;
+                parentNode.OnDescendantRemoved += RelayDescendantRemoved;
+            }
+        }
 
         /// <summary>
         /// 子节点移除时的回调。
+        /// <para>取消订阅子 <see cref="ParentNode"/> 的事件。</para>
         /// </summary>
         /// <param name="node">被移除的子节点。</param>
         /// <param name="fromChild">是否为子节点自身触发的移除（即子节点调用 Destroy 时）。</param>
-        protected virtual void OnChildRemoved(BaseNode node, bool fromChild = false) { }
+        protected virtual void OnChildRemoved(BaseNode node, bool fromChild = false)
+        {
+            if (node is ParentNode parentNode)
+            {
+                parentNode.OnDescendantAdded -= RelayDescendantAdded;
+                parentNode.OnDescendantRemoved -= RelayDescendantRemoved;
+            }
+        }
+
+        /// <summary>
+        /// 中继子 <see cref="ParentNode"/> 的 <see cref="OnDescendantAdded"/> 事件，向上冒泡。
+        /// </summary>
+        void RelayDescendantAdded(BaseNode node) => OnDescendantAdded?.Invoke(node);
+
+        /// <summary>
+        /// 中继子 <see cref="ParentNode"/> 的 <see cref="OnDescendantRemoved"/> 事件，向上冒泡。
+        /// </summary>
+        void RelayDescendantRemoved(BaseNode node) => OnDescendantRemoved?.Invoke(node);
 
         /// <summary>
         /// 内部初始化方法。初始化子节点列表。
