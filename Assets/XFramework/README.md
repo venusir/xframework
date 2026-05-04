@@ -97,4 +97,30 @@ public class MovementNode : LeafNode, IUpdateable
 ## 依赖
 
 - Unity 6000.3 或更新版本
-- [UniTask](https://github.com/Cysharp/UniTask) 2.5.10+
+
+### 第三方依赖
+
+XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这些依赖需要在**项目根目录的 `Packages/manifest.json`** 中声明，而非在 XFramework 的 `package.json` 中。
+
+| 包名                                                         | 版本/URL                                                                         | 说明         |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------- | ------------ |
+| [UniTask](https://github.com/Cysharp/UniTask)                | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` | 异步操作库   |
+| [YooAsset](https://github.com/tuyoogame/YooAsset)            | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset`                 | 资源管理系统 |
+| [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) | `https://github.com/GlitchEnzo/NuGetForUnity.git?path=src/NuGetForUnity`         | NuGet 包管理 |
+
+### 安装依赖
+
+**方式一（推荐）：** 在 Unity Editor 中，点击菜单栏 `XFramework -> Install Dependencies`，脚本会自动将上述依赖添加到 `Packages/manifest.json`。
+
+**方式二（手动）：** 将以下内容添加到项目根目录的 `Packages/manifest.json` 的 `dependencies` 节点中：
+
+```json
+{
+  "dependencies": {
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset",
+    "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=src/NuGetForUnity"
+  }
+}
+```
+
