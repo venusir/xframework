@@ -136,6 +136,8 @@ namespace XFramework
 
             OnDestroy();
 
+            OnNodeDestroyed?.Invoke(this);
+
             _depth = 0;
             _parent = null;
             _destroyed = true;
@@ -250,6 +252,11 @@ namespace XFramework
         /// 节点 Start 完成时触发（接口公开版本）。
         /// </summary>
         public event Action<BaseNode> OnNodeStarted;
+
+        /// <summary>
+        /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
+        /// </summary>
+        public event Action<BaseNode> OnNodeDestroyed;
 
         #endregion
     }

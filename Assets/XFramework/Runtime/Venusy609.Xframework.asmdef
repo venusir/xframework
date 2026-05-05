@@ -2,8 +2,7 @@
     "name": "Venusy609.Xframework",
     "references": [
         "UniTask",
-        "YooAsset",
-        "R3"
+        "YooAsset"
     ],
     "includePlatforms": [],
     "excludePlatforms": []
