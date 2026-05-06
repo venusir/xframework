@@ -10,7 +10,11 @@ namespace XFramework
     {
         private readonly R3.ReactiveProperty<T> _property;
 
-        public T Value => _property.Value;
+        public T Value
+        {
+            get => _property.Value;
+            internal set => _property.Value = value;
+        }
 
         public ReactiveProperty(T initialValue)
         {

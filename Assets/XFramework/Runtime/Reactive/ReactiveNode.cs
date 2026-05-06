@@ -7,7 +7,7 @@ namespace XFramework
     /// <para>适用于血量、分数、状态等需要被监听的属性。</para>
     /// </summary>
     /// <typeparam name="T">值的类型。</typeparam>
-    public class ReactiveNode<T> : BaseNode
+    public class ReactiveNode<T> : LeafNode
     {
         #region Private Fields
 
@@ -41,7 +41,7 @@ namespace XFramework
 
         protected override void OnAwake()
         {
-            _value = new ReactiveProperty<T>(default);
+            _value ??= new ReactiveProperty<T>(default);
         }
 
         protected override void OnDestroy()
@@ -64,14 +64,7 @@ namespace XFramework
 
         private void SetValueInternal(T value)
         {
-            // 由于 ReactiveProperty 是 internal 的，无法直接设置 Value
-            // 这里通过反射设置 R3 ReactiveProperty 的值
-            var field = typeof(ReactiveProperty<T>).GetField("_property",
-                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            if (field?.GetValue(_value) is R3.ReactiveProperty<T> rp)
-            {
-                rp.Value = value;
-            }
+            _value.Value = value;
         }
 
         #endregion
