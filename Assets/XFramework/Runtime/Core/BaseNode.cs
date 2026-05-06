@@ -124,9 +124,6 @@ namespace XFramework
             _started = false;
 
             OnAwake();
-
-            // 通知外部（如 ReactiveLifecycle）：节点已完成 Awake
-            OnNodeAwakened?.Invoke(this);
         }
 
         /// <summary>
@@ -161,10 +158,7 @@ namespace XFramework
 
             OnStart();
 
-            // 通知外部（如 UpdateBinder）：节点已启动，可以开始接收 Update
-            OnStarted?.Invoke(this);
-
-            // 通知外部（接口公开版本）：节点 Start 完成
+            // 通知外部：节点 Start 完成
             OnNodeStarted?.Invoke(this);
         }
 
@@ -238,7 +232,7 @@ namespace XFramework
 
         #endregion
 
-        #region Pooling
+        #region Events
 
         /// <summary>
         /// 节点销毁完成时触发，用于通知缓存池回收节点。
@@ -247,12 +241,7 @@ namespace XFramework
         internal event Action<BaseNode> OnReturnToPool;
 
         /// <summary>
-        /// 节点启动完成时触发，用于通知外部（如 <see cref="UpdateBinder"/>）节点已可接收 Update。
-        /// </summary>
-        internal event Action<BaseNode> OnStarted;
-
-        /// <summary>
-        /// 节点 Start 完成时触发（接口公开版本）。
+        /// 节点 Start 完成时触发。
         /// </summary>
         public event Action<BaseNode> OnNodeStarted;
 
@@ -260,11 +249,6 @@ namespace XFramework
         /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
         /// </summary>
         public event Action<BaseNode> OnNodeDestroyed;
-
-        /// <summary>
-        /// 节点 Awake 完成时触发。用于响应式扩展中感知节点被池复用后重新初始化。
-        /// </summary>
-        public event Action<BaseNode> OnNodeAwakened;
 
         #endregion
     }

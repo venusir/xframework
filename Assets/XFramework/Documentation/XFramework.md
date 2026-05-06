@@ -71,13 +71,11 @@ Assets/XFramework/
 │   │   ├── IReactiveProperty.cs      # 响应式属性接口
 │   │   ├── IMessageBroker.cs         # 发布/订阅接口（含Async/Buffered）
 │   │   ├── IEventNode.cs             # 事件节点接口
-│   │   ├── IReactiveLifecycle.cs     # 响应式生命周期接口
 │   │   ├── IMessageFilter.cs         # 消息过滤器接口
 │   │   ├── IRequestNode.cs           # 请求-响应节点接口
 │   │   ├── Signal.cs                 # R3 实现 (internal)
 │   │   ├── MessageBroker.cs          # R3 实现 (internal)
 │   │   ├── EventNode.cs              # 事件节点
-│   │   ├── ReactiveLifecycle.cs      # 生命周期扩展
 │   │   ├── ReactiveProperty.cs       # 响应式属性节点（节点树末端）
 │   │   ├── RequestNode.cs            # 请求-响应节点
 │   │   ├── ReactiveExtensions.cs     # AddTo 等扩展
@@ -846,14 +844,13 @@ public interface IAssetService
 │  IReadonlySignal<T>  IReactiveProperty<T>    │
 │  IMessagePublisher    IMessageSubscriber      │
 │  IEventNode           IRequestNode            │
-│  IReactiveLifecycle   IMessageFilter<T>       │
+│  IMessageFilter<T>                           │
 └──────────────────────┬──────────────────────┘
                        │ 依赖接口，不依赖 R3
 ┌──────────────────────▼──────────────────────┐
 │     Venusy609.Xframework.Reactive 程序集      │
 │  Signal<T>  ReactiveProperty<T>              │
 │  MessageBroker  EventNode  RequestNode       │
-│  ReactiveLifecycle  ReactiveProperty<T>      │
 │  ReactiveExtensions                          │
 └──────────────────────┬──────────────────────┘
                        │ 内部使用 R3
@@ -1029,21 +1026,6 @@ healthProp.Subscribe(value =>
 healthProp.Value = 80;
 ```
 
-#### 响应式生命周期
-
-```csharp
-// 直接订阅节点的生命周期信号，首次访问时自动创建生命周期处理器
-// 无参数版信号无需写弃元
-root.OnInitializedSignal.Subscribe(() =>
-    Debug.Log("节点初始化完成")).AddTo(this);
-
-root.OnStartedSignal.Subscribe(() =>
-    Debug.Log("节点 Start 完成")).AddTo(this);
-
-root.OnDestroyedSignal.Subscribe(() =>
-    Debug.Log("节点销毁")).AddTo(this);
-```
-
 ### 接口总览
 
 | 接口                   | 说明                            |
@@ -1055,7 +1037,6 @@ root.OnDestroyedSignal.Subscribe(() =>
 | `IMessageSubscriber`   | 消息订阅器（含 Async/Buffered） |
 | `IMessageBroker`       | 消息代理（发布+订阅）           |
 | `IEventNode`           | 事件节点（树作用域消息）        |
-| `IReactiveLifecycle`   | 响应式生命周期                  |
 | `IMessageFilter<T>`    | 消息过滤器                      |
 | `IRequestNode`         | 请求-响应节点                   |
 
@@ -1300,14 +1281,13 @@ Reactive 程序集 `Venusy609.Xframework.Reactive.asmdef` 依赖 `R3`、`UniTask
 
 ### 响应式操作
 
-| 操作         | 代码                                              |
-| ------------ | ------------------------------------------------- |
-| 发布消息     | `events.Publish<T>(msg)`                          |
-| 订阅消息     | `events.Subscribe<T>().Subscribe(cb).AddTo(this)` |
-| 键值消息     | `events.Publish<TKey,T>(key, msg)`                |
-| 异步订阅     | `events.SubscribeAsync<T>(async cb)`              |
-| 缓冲订阅     | `events.SubscribeBuffered<T>()`                   |
-| 注册过滤器   | `eventNode.AddFilter(new LoggingFilter<T>())`     |
-| 请求-响应    | `reqNode.RequestAsync<TReq, TRes>(req)`           |
-| 响应式属性   | `node.Subscribe(cb)`                              |
-| 生命周期信号 | `node.OnStartedSignal.Subscribe(cb)`              |
+| 操作       | 代码                                              |
+| ---------- | ------------------------------------------------- |
+| 发布消息   | `events.Publish<T>(msg)`                          |
+| 订阅消息   | `events.Subscribe<T>().Subscribe(cb).AddTo(this)` |
+| 键值消息   | `events.Publish<TKey,T>(key, msg)`                |
+| 异步订阅   | `events.SubscribeAsync<T>(async cb)`              |
+| 缓冲订阅   | `events.SubscribeBuffered<T>()`                   |
+| 注册过滤器 | `eventNode.AddFilter(new LoggingFilter<T>())`     |
+| 请求-响应  | `reqNode.RequestAsync<TReq, TRes>(req)`           |
+| 响应式属性 | `node.Subscribe(cb)`                              |
