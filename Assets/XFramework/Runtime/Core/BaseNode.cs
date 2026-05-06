@@ -134,9 +134,9 @@ namespace XFramework
         {
             if (_destroyed) return;
 
-            OnDestroy();
-
             OnNodeDestroyed?.Invoke(this);
+
+            OnDestroy();
 
             _depth = 0;
             _parent = null;
