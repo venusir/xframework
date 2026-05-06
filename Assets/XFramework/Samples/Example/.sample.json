@@ -1,5 +1,5 @@
 {
-	"displayName":"Example Sample",
-	"description": "Replace this string with your own description of the sample. Delete the Samples folder if not needed.",
+	"displayName": "Reactive Property Example",
+	"description": "展示 XFramework Reactive 模块的响应式属性用法。通过 ReactiveProperty<T> 节点实现属性值变化的自动推送与订阅，适用于血量、分数、状态等需要被监听的属性。",
 	"createSeparatePackage": false
 }

@@ -75,11 +75,10 @@ Assets/XFramework/
 │   │   ├── IMessageFilter.cs         # 消息过滤器接口
 │   │   ├── IRequestNode.cs           # 请求-响应节点接口
 │   │   ├── Signal.cs                 # R3 实现 (internal)
-│   │   ├── ReactiveProperty.cs       # R3 实现 (internal)
 │   │   ├── MessageBroker.cs          # R3 实现 (internal)
 │   │   ├── EventNode.cs              # 事件节点
 │   │   ├── ReactiveLifecycle.cs      # 生命周期扩展
-│   │   ├── ReactiveNode.cs           # 响应式值节点
+│   │   ├── ReactiveProperty.cs       # 响应式属性节点（节点树末端）
 │   │   ├── RequestNode.cs            # 请求-响应节点
 │   │   ├── ReactiveExtensions.cs     # AddTo 等扩展
 │   │   └── Venusy609.Xframework.Reactive.asmdef
@@ -854,7 +853,7 @@ public interface IAssetService
 │     Venusy609.Xframework.Reactive 程序集      │
 │  Signal<T>  ReactiveProperty<T>              │
 │  MessageBroker  EventNode  RequestNode       │
-│  ReactiveLifecycle  ReactiveNode<T>          │
+│  ReactiveLifecycle  ReactiveProperty<T>      │
 │  ReactiveExtensions                          │
 └──────────────────────┬──────────────────────┘
                        │ 内部使用 R3
@@ -1014,20 +1013,20 @@ Debug.Log($"治疗量: {result.HealedAmount}");
 #### 响应式属性
 
 ```csharp
-// 创建响应式节点
-var healthNode = root.AddNode<ReactiveNode<int>>("Health");
+// 创建响应式属性节点
+var healthProp = root.AddNode<ReactiveProperty<int>>("Health");
 
 // 初始化值
-healthNode.Init(100);
+healthProp.Init(100);
 
-// 监听值变化
-healthNode.ValueProperty.Subscribe(value =>
+// 监听值变化（节点本身实现了 IReactiveProperty，可直接订阅）
+healthProp.Subscribe(value =>
 {
     UpdateHealthBar(value);
 }).AddTo(this);
 
 // 更新值（自动通知订阅者）
-healthNode.Value = 80;
+healthProp.Value = 80;
 ```
 
 #### 响应式生命周期
@@ -1312,5 +1311,5 @@ Reactive 程序集 `Venusy609.Xframework.Reactive.asmdef` 依赖 `R3`、`UniTask
 | 缓冲订阅     | `events.SubscribeBuffered<T>()`                     |
 | 注册过滤器   | `eventNode.AddFilter(new LoggingFilter<T>())`       |
 | 请求-响应    | `reqNode.RequestAsync<TReq, TRes>(req)`             |
-| 响应式属性   | `node.ValueProperty.Subscribe(cb)`                  |
+| 响应式属性   | `node.Subscribe(cb)`                                |
 | 生命周期信号 | `node.AddLifecycle().OnStartedSignal.Subscribe(cb)` |
