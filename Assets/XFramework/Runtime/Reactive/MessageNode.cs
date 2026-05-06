@@ -4,10 +4,10 @@ using Cysharp.Threading.Tasks;
 namespace XFramework
 {
     /// <summary>
-    /// 事件节点。挂载在节点树下，提供树作用域的消息传递能力。
-    /// <para>通过 <see cref="BaseNode.Get{T}"/> 沿父链向上查找 IEventNode 即可使用。</para>
+    /// 消息节点。挂载在节点树下，提供树作用域的消息传递能力。
+    /// <para>通过 <see cref="BaseNode.Get{T}"/> 沿父链向上查找 IMessageNode 即可使用。</para>
     /// </summary>
-    public class EventNode : LeafNode, IEventNode
+    public class MessageNode : LeafNode, IMessageNode
     {
         #region Private Fields
 

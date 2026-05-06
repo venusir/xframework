@@ -70,12 +70,12 @@ Assets/XFramework/
 │   │   ├── ISignal.cs                # 只读/完整信号接口
 │   │   ├── IReactiveProperty.cs      # 响应式属性接口
 │   │   ├── IMessageBroker.cs         # 发布/订阅接口（含Async/Buffered）
-│   │   ├── IEventNode.cs             # 事件节点接口
+│   │   ├── IMessageNode.cs           # 消息节点接口
 │   │   ├── IMessageFilter.cs         # 消息过滤器接口
 │   │   ├── IRequestNode.cs           # 请求-响应节点接口
 │   │   ├── Signal.cs                 # R3 实现 (internal)
 │   │   ├── MessageBroker.cs          # R3 实现 (internal)
-│   │   ├── EventNode.cs              # 事件节点
+│   │   ├── MessageNode.cs            # 消息节点
 │   │   ├── ReactiveProperty.cs       # 响应式属性节点（节点树末端）
 │   │   ├── RequestNode.cs            # 请求-响应节点
 │   │   ├── ReactiveExtensions.cs     # AddTo 等扩展
@@ -843,14 +843,14 @@ public interface IAssetService
 │             外部代码（仅引用接口）              │
 │  IReadonlySignal<T>  IReactiveProperty<T>    │
 │  IMessagePublisher    IMessageSubscriber      │
-│  IEventNode           IRequestNode            │
+│  IMessageNode         IRequestNode            │
 │  IMessageFilter<T>                           │
 └──────────────────────┬──────────────────────┘
                        │ 依赖接口，不依赖 R3
 ┌──────────────────────▼──────────────────────┐
 │     Venusy609.Xframework.Reactive 程序集      │
 │  Signal<T>  ReactiveProperty<T>              │
-│  MessageBroker  EventNode  RequestNode       │
+│  MessageBroker  MessageNode  RequestNode     │
 │  ReactiveExtensions                          │
 └──────────────────────┬──────────────────────┘
                        │ 内部使用 R3
@@ -863,16 +863,16 @@ public interface IAssetService
 
 ### 快速开始
 
-#### 1. 创建事件节点
+#### 1. 创建消息节点
 
 ```csharp
-// 在根节点下挂载事件节点
+// 在根节点下挂载消息节点
 var root = new ParentNode("Root");
-var events = root.AddNode<EventNode>("Events");
+var events = root.AddNode<MessageNode>("Events");
 
 // 在子节点中通过 Get 沿父链查找
 var child = root.AddNode<BaseNode>("Child");
-var eventNode = child.Get<IEventNode>(); // 沿父链向上找到 events
+var msgNode = child.Get<IMessageNode>(); // 沿父链向上找到 events
 ```
 
 #### 2. 发布和订阅消息
@@ -982,9 +982,9 @@ public class AuthFilter<T> : IMessageFilter<T>
 }
 
 // 注册过滤器
-var eventNode = root.GetNode<EventNode>("Events");
-eventNode.AddFilter(new LoggingFilter<DamageEvent>());
-eventNode.AddFilter(new AuthFilter<DamageEvent>());
+var msgNode = root.GetNode<MessageNode>("Events");
+msgNode.AddFilter(new LoggingFilter<DamageEvent>());
+msgNode.AddFilter(new AuthFilter<DamageEvent>());
 ```
 
 #### Request/Response 模式
@@ -1036,7 +1036,7 @@ healthProp.Value = 80;
 | `IMessagePublisher`    | 消息发布器                      |
 | `IMessageSubscriber`   | 消息订阅器（含 Async/Buffered） |
 | `IMessageBroker`       | 消息代理（发布+订阅）           |
-| `IEventNode`           | 事件节点（树作用域消息）        |
+| `IMessageNode`         | 消息节点（树作用域消息）        |
 | `IMessageFilter<T>`    | 消息过滤器                      |
 | `IRequestNode`         | 请求-响应节点                   |
 
@@ -1288,6 +1288,6 @@ Reactive 程序集 `Venusy609.Xframework.Reactive.asmdef` 依赖 `R3`、`UniTask
 | 键值消息   | `events.Publish<TKey,T>(key, msg)`                |
 | 异步订阅   | `events.SubscribeAsync<T>(async cb)`              |
 | 缓冲订阅   | `events.SubscribeBuffered<T>()`                   |
-| 注册过滤器 | `eventNode.AddFilter(new LoggingFilter<T>())`     |
+| 注册过滤器 | `msgNode.AddFilter(new LoggingFilter<T>())`       |
 | 请求-响应  | `reqNode.RequestAsync<TReq, TRes>(req)`           |
 | 响应式属性 | `node.Subscribe(cb)`                              |
