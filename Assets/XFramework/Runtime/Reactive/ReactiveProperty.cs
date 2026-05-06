@@ -59,15 +59,8 @@ namespace XFramework
         {
             if (arg is T initialValue)
             {
-                if (_value != null)
-                {
-                    _value.Dispose();
-                    _value = new R3.ReactiveProperty<T>(initialValue);
-                }
-                else
-                {
-                    _value = new R3.ReactiveProperty<T>(initialValue);
-                }
+                _value?.Dispose();
+                _value = new R3.ReactiveProperty<T>(initialValue);
             }
         }
 
