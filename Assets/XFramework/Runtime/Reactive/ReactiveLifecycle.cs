@@ -5,7 +5,7 @@ namespace XFramework
 {
     /// <summary>
     /// 为 BaseNode 添加响应式生命周期支持的扩展类。
-    /// <para>通过 <see cref="AddLifecycle(BaseNode)"/> 激活，不侵入 Core 层节点树。</para>
+    /// <para>通过 <see cref="GetLifecycle(BaseNode)"/> 获取生命周期信号，首次访问时自动创建。</para>
     /// <para>内部使用 <see cref="ConditionalWeakTable{TKey,TValue}"/> 管理生命周期处理器，
     /// 节点销毁时自动释放，不会阻止 GC 回收。</para>
     /// </summary>
@@ -24,28 +24,33 @@ namespace XFramework
         #region Public Methods
 
         /// <summary>
-        /// 为节点添加响应式生命周期支持。
-        /// <para>激活后可通过 <see cref="GetLifecycle(BaseNode)"/> 获取生命周期信号。</para>
-        /// <para>多次调用同一节点会返回同一个实例。</para>
+        /// 获取节点上的生命周期信号。首次访问时自动创建。
+        /// <para>可通过返回的接口订阅节点的 Awake/Start/Destroy 事件。</para>
         /// </summary>
-        /// <param name="node">要添加生命周期支持的节点。</param>
+        /// <param name="node">要获取生命周期信号的节点。</param>
         /// <returns>生命周期信号接口。</returns>
-        public static IReactiveLifecycle AddLifecycle(this BaseNode node)
+        public static IReactiveLifecycle GetLifecycle(this BaseNode node)
         {
             return _handlers.GetValue(node, n => new LifecycleHandler(n));
         }
 
         /// <summary>
-        /// 获取节点上的生命周期信号。
-        /// <para>如果未调用过 <see cref="AddLifecycle(BaseNode)"/>，返回 null。</para>
+        /// 获取节点 Awake 完成时的信号。首次访问时自动创建生命周期处理器。
         /// </summary>
-        /// <param name="node">要获取生命周期信号的节点。</param>
-        /// <returns>生命周期信号接口，未找到则返回 null。</returns>
-        public static IReactiveLifecycle GetLifecycle(this BaseNode node)
-        {
-            _handlers.TryGetValue(node, out var handler);
-            return handler;
-        }
+        public static IReadonlySignal OnInitializedSignal(this BaseNode node)
+            => node.GetLifecycle().OnInitializedSignal;
+
+        /// <summary>
+        /// 获取节点 Start 完成时的信号。首次访问时自动创建生命周期处理器。
+        /// </summary>
+        public static IReadonlySignal OnStartedSignal(this BaseNode node)
+            => node.GetLifecycle().OnStartedSignal;
+
+        /// <summary>
+        /// 获取节点 Destroy 时的信号。首次访问时自动创建生命周期处理器。
+        /// </summary>
+        public static IReadonlySignal OnDestroyedSignal(this BaseNode node)
+            => node.GetLifecycle().OnDestroyedSignal;
 
         #endregion
 
@@ -60,18 +65,18 @@ namespace XFramework
         {
             #region Private Fields
 
-            private Signal<Unit> _onInitialized;
-            private Signal<Unit> _onStarted;
-            private Signal<Unit> _onDestroyed;
+            private Signal _onInitialized;
+            private Signal _onStarted;
+            private Signal _onDestroyed;
             private readonly BaseNode _target;
 
             #endregion
 
             #region IReactiveLifecycle
 
-            public IReadonlySignal<Unit> OnInitializedSignal => _onInitialized;
-            public IReadonlySignal<Unit> OnStartedSignal => _onStarted;
-            public IReadonlySignal<Unit> OnDestroyedSignal => _onDestroyed;
+            public IReadonlySignal OnInitializedSignal => _onInitialized;
+            public IReadonlySignal OnStartedSignal => _onStarted;
+            public IReadonlySignal OnDestroyedSignal => _onDestroyed;
 
             #endregion
 
@@ -94,9 +99,9 @@ namespace XFramework
 
             private void CreateSignals()
             {
-                _onInitialized = new Signal<Unit>();
-                _onStarted = new Signal<Unit>();
-                _onDestroyed = new Signal<Unit>();
+                _onInitialized = new Signal();
+                _onStarted = new Signal();
+                _onDestroyed = new Signal();
             }
 
             private void DisposeSignals()
@@ -132,18 +137,18 @@ namespace XFramework
                 CreateSignals();
 
                 // 发布初始化信号
-                _onInitialized.Publish(default);
+                _onInitialized.Publish();
             }
 
             private void OnNodeStarted(BaseNode _)
             {
-                _onStarted.Publish(default);
+                _onStarted.Publish();
             }
 
             private void OnNodeDestroyed(BaseNode _)
             {
                 // 先发布销毁信号
-                _onDestroyed.Publish(default);
+                _onDestroyed.Publish();
 
                 // 清理事件订阅
                 UnsubscribeEvents();

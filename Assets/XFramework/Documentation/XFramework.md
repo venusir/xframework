@@ -1032,17 +1032,15 @@ healthProp.Value = 80;
 #### 响应式生命周期
 
 ```csharp
-// 为节点激活生命周期信号
-var lifecycle = root.AddLifecycle();
-
-// 订阅生命周期事件
-lifecycle.OnInitializedSignal.Subscribe(_ =>
+// 直接订阅节点的生命周期信号，首次访问时自动创建生命周期处理器
+// 无参数版信号无需写弃元
+root.OnInitializedSignal.Subscribe(() =>
     Debug.Log("节点初始化完成")).AddTo(this);
 
-lifecycle.OnStartedSignal.Subscribe(_ =>
+root.OnStartedSignal.Subscribe(() =>
     Debug.Log("节点 Start 完成")).AddTo(this);
 
-lifecycle.OnDestroyedSignal.Subscribe(_ =>
+root.OnDestroyedSignal.Subscribe(() =>
     Debug.Log("节点销毁")).AddTo(this);
 ```
 
@@ -1302,14 +1300,14 @@ Reactive 程序集 `Venusy609.Xframework.Reactive.asmdef` 依赖 `R3`、`UniTask
 
 ### 响应式操作
 
-| 操作         | 代码                                                |
-| ------------ | --------------------------------------------------- |
-| 发布消息     | `events.Publish<T>(msg)`                            |
-| 订阅消息     | `events.Subscribe<T>().Subscribe(cb).AddTo(this)`   |
-| 键值消息     | `events.Publish<TKey,T>(key, msg)`                  |
-| 异步订阅     | `events.SubscribeAsync<T>(async cb)`                |
-| 缓冲订阅     | `events.SubscribeBuffered<T>()`                     |
-| 注册过滤器   | `eventNode.AddFilter(new LoggingFilter<T>())`       |
-| 请求-响应    | `reqNode.RequestAsync<TReq, TRes>(req)`             |
-| 响应式属性   | `node.Subscribe(cb)`                                |
-| 生命周期信号 | `node.AddLifecycle().OnStartedSignal.Subscribe(cb)` |
+| 操作         | 代码                                              |
+| ------------ | ------------------------------------------------- |
+| 发布消息     | `events.Publish<T>(msg)`                          |
+| 订阅消息     | `events.Subscribe<T>().Subscribe(cb).AddTo(this)` |
+| 键值消息     | `events.Publish<TKey,T>(key, msg)`                |
+| 异步订阅     | `events.SubscribeAsync<T>(async cb)`              |
+| 缓冲订阅     | `events.SubscribeBuffered<T>()`                   |
+| 注册过滤器   | `eventNode.AddFilter(new LoggingFilter<T>())`     |
+| 请求-响应    | `reqNode.RequestAsync<TReq, TRes>(req)`           |
+| 响应式属性   | `node.Subscribe(cb)`                              |
+| 生命周期信号 | `node.OnStartedSignal.Subscribe(cb)`              |
