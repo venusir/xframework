@@ -21,7 +21,7 @@ namespace XFramework
             if (node == null)
                 throw new ArgumentNullException(nameof(node));
 
-            node.OnNodeDestroyed += _ => disposable.Dispose();
+            node.OnNodeDestroy += _ => disposable.Dispose();
             return disposable;
         }
     }

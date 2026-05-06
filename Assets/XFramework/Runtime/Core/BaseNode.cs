@@ -134,7 +134,7 @@ namespace XFramework
         {
             if (_destroyed) return;
 
-            OnNodeDestroyed?.Invoke(this);
+            OnNodeDestroy?.Invoke(this);
 
             OnDestroy();
 
@@ -248,7 +248,7 @@ namespace XFramework
         /// <summary>
         /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
         /// </summary>
-        public event Action<BaseNode> OnNodeDestroyed;
+        public event Action<BaseNode> OnNodeDestroy;
 
         #endregion
     }
