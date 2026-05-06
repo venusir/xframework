@@ -54,14 +54,16 @@ namespace XFramework
         /// <summary>
         /// 生命周期处理器。通过订阅目标节点的事件来提供生命周期信号。
         /// <para>不继承 BaseNode，不挂入节点树，完全在外部监听。</para>
+        /// <para>支持节点池复用：节点销毁后重新 Awake 时，Signal 会被重建。</para>
         /// </summary>
         private sealed class LifecycleHandler : IReactiveLifecycle
         {
             #region Private Fields
 
-            private readonly Signal<Unit> _onInitialized = new();
-            private readonly Signal<Unit> _onStarted = new();
-            private readonly Signal<Unit> _onDestroyed = new();
+            private Signal<Unit> _onInitialized;
+            private Signal<Unit> _onStarted;
+            private Signal<Unit> _onDestroyed;
+            private readonly BaseNode _target;
 
             #endregion
 
@@ -81,22 +83,73 @@ namespace XFramework
             /// <param name="target">要监听的目标节点。</param>
             public LifecycleHandler(BaseNode target)
             {
-                // 如果节点已 Awake 完成，立即触发初始化信号
-                // 注意：AddLifecycle 可能在节点 Awake 之前或之后调用，
-                // 这里假设调用 AddLifecycle 时节点已 Awake（通常如此）
-                _onInitialized.Publish(default);
+                _target = target;
+                CreateSignals();
+                SubscribeEvents();
+            }
+
+            #endregion
+
+            #region Private Methods
+
+            private void CreateSignals()
+            {
+                _onInitialized = new Signal<Unit>();
+                _onStarted = new Signal<Unit>();
+                _onDestroyed = new Signal<Unit>();
+            }
+
+            private void DisposeSignals()
+            {
+                _onInitialized?.Dispose();
+                _onStarted?.Dispose();
+                _onDestroyed?.Dispose();
+            }
+
+            private void SubscribeEvents()
+            {
+                // 订阅 Awake 事件：节点被池复用后重新 Awake 时重建 Signal
+                _target.OnNodeAwakened += OnNodeAwakened;
 
                 // 订阅 Start 事件
-                target.OnNodeStarted += _ => _onStarted.Publish(default);
+                _target.OnNodeStarted += OnNodeStarted;
 
                 // 订阅 Destroy 事件，并在销毁时清理资源
-                target.OnNodeDestroyed += _ =>
-                {
-                    _onDestroyed.Publish(default);
-                    _onInitialized.Dispose();
-                    _onStarted.Dispose();
-                    _onDestroyed.Dispose();
-                };
+                _target.OnNodeDestroyed += OnNodeDestroyed;
+            }
+
+            private void UnsubscribeEvents()
+            {
+                _target.OnNodeAwakened -= OnNodeAwakened;
+                _target.OnNodeStarted -= OnNodeStarted;
+                _target.OnNodeDestroyed -= OnNodeDestroyed;
+            }
+
+            private void OnNodeAwakened(BaseNode _)
+            {
+                // 节点被池复用后重新 Awake，需要重建 Signal
+                // 注意：此时旧的 Signal 已在 OnNodeDestroyed 中被 Dispose
+                CreateSignals();
+
+                // 发布初始化信号
+                _onInitialized.Publish(default);
+            }
+
+            private void OnNodeStarted(BaseNode _)
+            {
+                _onStarted.Publish(default);
+            }
+
+            private void OnNodeDestroyed(BaseNode _)
+            {
+                // 先发布销毁信号
+                _onDestroyed.Publish(default);
+
+                // 清理事件订阅
+                UnsubscribeEvents();
+
+                // 销毁 Signal
+                DisposeSignals();
             }
 
             #endregion

@@ -38,7 +38,14 @@ namespace XFramework
 
         /// <summary>订阅值变化。节点销毁时自动取消订阅。</summary>
         public IDisposable Subscribe(Action<T> onNext)
-            => _value?.Subscribe(onNext);
+        {
+            if (_value == null)
+            {
+                // 节点尚未 Awake 时订阅，返回空订阅防止 null 引用
+                return Disposable.Empty;
+            }
+            return _value.Subscribe(onNext);
+        }
 
         #endregion
 

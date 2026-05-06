@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Cysharp.Threading.Tasks;
 using R3;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -137,48 +139,35 @@ namespace XFramework
         private bool ApplyFilters<TMessage>(Type type, TMessage message)
         {
             // 收集该类型的所有过滤器
-            var filters = new List<IMessageFilter<TMessage>>();
-            foreach (var (filterType, filter) in _globalFilters)
-            {
-                if (filterType == type && filter is IMessageFilter<TMessage> typedFilter)
-                {
-                    filters.Add(typedFilter);
-                }
-            }
+            var filters = _globalFilters
+                .Where(f => f.type == type)
+                .Select(f => f.filter)
+                .Cast<IMessageFilter<TMessage>>()
+                .ToList();
 
             if (filters.Count == 0)
                 return true;
 
-            // 构建过滤器管道
+            // 构建过滤器管道（类似 ASP.NET Core Middleware）
             int index = 0;
-            bool passed = true;
             Action<TMessage> next = null;
-            next = (msg) =>
+            next = msg =>
             {
-                if (index < filters.Count)
-                {
-                    var currentFilter = filters[index++];
-                    currentFilter.Invoke(msg, next);
-                }
+                if (index >= filters.Count) return;
+                var filter = filters[index++];
+                filter.Invoke(msg, next);
             };
 
             try
             {
-                filters[0].Invoke(message, (msg) =>
-                {
-                    index = 1;
-                    if (index < filters.Count)
-                    {
-                        filters[index++].Invoke(msg, next);
-                    }
-                });
+                next(message);
+                return true;
             }
-            catch
+            catch (Exception e)
             {
-                passed = false;
+                Debug.LogException(e);
+                return false;
             }
-
-            return passed;
         }
 
         #endregion

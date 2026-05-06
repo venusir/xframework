@@ -124,6 +124,9 @@ namespace XFramework
             _started = false;
 
             OnAwake();
+
+            // 通知外部（如 ReactiveLifecycle）：节点已完成 Awake
+            OnNodeAwakened?.Invoke(this);
         }
 
         /// <summary>
@@ -257,6 +260,11 @@ namespace XFramework
         /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
         /// </summary>
         public event Action<BaseNode> OnNodeDestroyed;
+
+        /// <summary>
+        /// 节点 Awake 完成时触发。用于响应式扩展中感知节点被池复用后重新初始化。
+        /// </summary>
+        public event Action<BaseNode> OnNodeAwakened;
 
         #endregion
     }
