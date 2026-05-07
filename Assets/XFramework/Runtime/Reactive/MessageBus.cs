@@ -210,7 +210,7 @@ namespace XFramework
         {
             if (subscriber is IDestroyCancellationToken provider)
             {
-                disposable.AddTo(provider.DestroyCancellationToken);
+                disposable.RegisterTo(provider.DestroyCancellationToken);
             }
         }
 
