@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using R3;
+using UnityEngine;
 
 namespace XFramework
 {
@@ -212,6 +213,17 @@ namespace XFramework
             {
                 disposable.RegisterTo(provider.DestroyCancellationToken);
             }
+            else if (subscriber is MonoBehaviour mono)
+            {
+                disposable.RegisterTo(mono.destroyCancellationToken);
+            }
+        }
+
+        /// <summary>将 disposable 绑定到节点的生命周期，节点销毁时自动释放。</summary>
+        public static IDisposable AttachTo(this IDisposable disposable, IDestroyCancellationToken token)
+        {
+            disposable.RegisterTo(token.DestroyCancellationToken);
+            return disposable;
         }
 
         #endregion
