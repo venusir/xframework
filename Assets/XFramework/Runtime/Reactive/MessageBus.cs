@@ -38,6 +38,10 @@ namespace XFramework
         public static IDisposable Subscribe<TKey, TMessage>(TKey key, Action<TMessage> handler)
             => _broker.Subscribe<TKey, TMessage>(key).Subscribe(handler);
 
+        /// <summary>订阅指定键值的消息，并附加过滤条件。</summary>
+        public static IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+            => _broker.Subscribe<TKey, TMessage>(key).Subscribe(m => { if (filter(m)) handler(m); });
+
         /// <summary>异步订阅。消息到达时执行异步处理器。</summary>
         public static IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
             => _broker.SubscribeAsync(asyncHandler).Subscribe(_ => { });
@@ -53,6 +57,13 @@ namespace XFramework
         /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
             => _broker.SubscribeBuffered<TKey, TMessage>(key).Subscribe(handler);
+
+        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。</summary>
+        public static IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
+            => _broker.SubscribeBuffered<TMessage>().Subscribe(m => { if (filter(m)) handler(m); });
+
+        /// <summary>注册全局消息过滤器。</summary>
+        public static void AddFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.AddFilter(filter);
 
         /// <summary>清理所有订阅和缓存。</summary>
         public static void Clear()
@@ -101,6 +112,14 @@ namespace XFramework
             return disposable;
         }
 
+        /// <summary>订阅指定键值的消息，并附加过滤条件。订阅会自动绑定到节点的生命周期。</summary>
+        public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+        {
+            var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(m => { if (filter(m)) handler(m); });
+            TryBindToNode(subscriber, disposable);
+            return disposable;
+        }
+
         /// <summary>异步订阅。消息到达时执行异步处理器。订阅会自动绑定到节点的生命周期。</summary>
         public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Func<TMessage, UniTask> asyncHandler)
         {
@@ -129,6 +148,14 @@ namespace XFramework
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered<TKey, TMessage>(key).Subscribe(handler);
+            TryBindToNode(subscriber, disposable);
+            return disposable;
+        }
+
+        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到节点的生命周期。</summary>
+        public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
+        {
+            var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(m => { if (filter(m)) handler(m); });
             TryBindToNode(subscriber, disposable);
             return disposable;
         }
