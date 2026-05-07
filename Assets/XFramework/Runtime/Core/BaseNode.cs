@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 
 namespace XFramework
 {
@@ -18,7 +19,7 @@ namespace XFramework
     /// 树节点系统的抽象基类。
     /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy/Start）等核心功能。</para>
     /// </summary>
-    public abstract class BaseNode : IBaseNode
+    public abstract class BaseNode : IBaseNode, IDestroyCancellationToken
     {
         #region Private Properties
 
@@ -33,6 +34,9 @@ namespace XFramework
 
         /// <summary>父节点引用，根节点为 null。</summary>
         ParentNode _parent;
+
+        /// <summary>节点销毁时的 CancellationTokenSource，用于自动取消订阅。</summary>
+        CancellationTokenSource _destroyCts;
 
         #endregion
 
@@ -122,6 +126,7 @@ namespace XFramework
             _parent = null;
             _destroyed = false;
             _started = false;
+            _destroyCts = new CancellationTokenSource();
 
             OnAwake();
         }
@@ -133,6 +138,14 @@ namespace XFramework
         internal virtual void DestroyInternal()
         {
             if (_destroyed) return;
+
+            // 触发取消，所有通过 DestroyCancellationToken 绑定的订阅自动释放
+            if (_destroyCts != null)
+            {
+                _destroyCts.Cancel();
+                _destroyCts.Dispose();
+                _destroyCts = null;
+            }
 
             OnNodeDestroy?.Invoke(this);
 
@@ -249,6 +262,17 @@ namespace XFramework
         /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
         /// </summary>
         public event Action<BaseNode> OnNodeDestroy;
+
+        #endregion
+
+        #region CancellationToken
+
+        /// <summary>
+        /// 节点销毁时的 CancellationToken。绑定到此 Token 的订阅会在节点销毁时自动取消。
+        /// <para>类似于 MonoBehaviour.destroyCancellationToken。</para>
+        /// <para>使用方式: <c>disposable.AddTo(node.DestroyCancellationToken)</c></para>
+        /// </summary>
+        public CancellationToken DestroyCancellationToken => _destroyCts?.Token ?? CancellationToken.None;
 
         #endregion
     }

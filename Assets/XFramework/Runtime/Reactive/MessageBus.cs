@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using R3;
 
 namespace XFramework
 {
@@ -88,75 +89,75 @@ namespace XFramework
 
         #region Extension Methods (for IMessageSubscriber)
 
-        /// <summary>订阅指定类型的消息。订阅会自动绑定到节点的生命周期，节点销毁时自动取消。</summary>
+        /// <summary>订阅指定类型的消息。订阅会自动绑定到对象的生命周期，对象销毁时自动取消。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe<TMessage>().Subscribe(handler);
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅指定类型的消息，并附加过滤条件。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅指定类型的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(filter).Subscribe(handler);
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅指定键值的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(handler);
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息，并附加过滤条件。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅指定键值的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(m => { if (filter(m)) handler(m); });
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>异步订阅。消息到达时执行异步处理器。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>异步订阅。消息到达时执行异步处理器。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Func<TMessage, UniTask> asyncHandler)
         {
             var disposable = _broker.SubscribeAsync(asyncHandler).Subscribe(_ => { });
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>异步订阅，并附加过滤条件。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>异步订阅，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
         {
             var disposable = _broker.SubscribeAsync(filter, asyncHandler).Subscribe(_ => { });
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(handler);
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered<TKey, TMessage>(key).Subscribe(handler);
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到节点的生命周期。</summary>
+        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(m => { if (filter(m)) handler(m); });
-            TryBindToNode(subscriber, disposable);
+            TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
@@ -170,13 +171,14 @@ namespace XFramework
         internal static void Replace(MessageBroker broker) => _broker = broker;
 
         /// <summary>
-        /// 如果订阅者是 BaseNode，将订阅绑定到节点生命周期，节点销毁时自动取消。
+        /// 如果订阅者实现了 <see cref="IDestroyCancellationToken"/>，将订阅绑定到其生命周期，对象销毁时自动取消。
+        /// <para>通过 <see cref="IDestroyCancellationToken.DestroyCancellationToken"/> 实现，类似于 MonoBehaviour.destroyCancellationToken。</para>
         /// </summary>
-        private static void TryBindToNode(object subscriber, IDisposable disposable)
+        private static void TryBindToDestroy(object subscriber, IDisposable disposable)
         {
-            if (subscriber is BaseNode node)
+            if (subscriber is IDestroyCancellationToken provider)
             {
-                node.OnNodeDestroy += _ => disposable.Dispose();
+                disposable.AddTo(provider.DestroyCancellationToken);
             }
         }
 
