@@ -16,6 +16,7 @@ namespace XFramework
         #region Private Fields
 
         private static MessageBroker _broker = new MessageBroker();
+        private static readonly Dictionary<Type, object> _requestHandlers = new();
 
         #endregion
 
@@ -66,11 +67,42 @@ namespace XFramework
         /// <summary>注册全局消息过滤器。</summary>
         public static void AddFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.AddFilter(filter);
 
-        /// <summary>清理所有订阅和缓存。</summary>
+        /// <summary>注册请求处理器。一个请求类型只能注册一个处理器。</summary>
+        /// <typeparam name="TRequest">请求类型。</typeparam>
+        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <param name="handler">异步处理器。</param>
+        /// <exception cref="InvalidOperationException">同一请求类型重复注册时抛出。</exception>
+        public static void Register<TRequest, TResponse>(Func<TRequest, UniTask<TResponse>> handler)
+        {
+            var type = typeof(TRequest);
+            if (_requestHandlers.ContainsKey(type))
+                throw new InvalidOperationException(
+                    $"A handler for request type '{type.Name}' is already registered.");
+            _requestHandlers[type] = handler;
+        }
+
+        /// <summary>发送请求并等待响应。</summary>
+        /// <typeparam name="TRequest">请求类型。</typeparam>
+        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <param name="request">请求对象。</param>
+        /// <returns>响应对象。</returns>
+        /// <exception cref="InvalidOperationException">未注册对应的处理器时抛出。</exception>
+        public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(TRequest request)
+        {
+            if (_requestHandlers.TryGetValue(typeof(TRequest), out var handler))
+            {
+                return ((Func<TRequest, UniTask<TResponse>>)handler)(request);
+            }
+            throw new InvalidOperationException(
+                $"No handler registered for request type '{typeof(TRequest).Name}'.");
+        }
+
+        /// <summary>清理所有订阅、缓存和请求处理器。</summary>
         public static void Clear()
         {
             _broker.Clear();
             _broker = new MessageBroker();
+            _requestHandlers.Clear();
         }
 
         #endregion
