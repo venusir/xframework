@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace XFramework
 {
@@ -8,9 +9,13 @@ namespace XFramework
     /// <para>使用示例:</para>
     /// <code>
     /// LockSystem.Initialize();
-    /// using (LockSystem.Acquire(LockType.Input, this))
+    /// using (LockSystem.Acquire(LockType.Input, myLock))
     /// {
     ///     // 锁定输入期间的操作
+    /// }
+    /// using (LockSystem.Acquire(player, LockType.Update, playerLock))
+    /// {
+    ///     // 针对 player 的 Update 锁
     /// }
     /// if (LockSystem.IsLocked(LockType.Update))
     ///     return;
@@ -88,33 +93,61 @@ namespace XFramework
 
         #endregion
 
-        #region Static Delegates
+        #region Static Delegates - Acquire
 
         /// <inheritdoc cref="ILockService.Acquire(int, object)"/>
-        public static LockHandle Acquire(int lockType, object owner)
-            => Instance.Acquire(lockType, owner);
+        public static LockHandle Acquire(int lockType, object lockObj)
+            => Instance.Acquire(lockType, lockObj);
+
+        /// <inheritdoc cref="ILockService.Acquire(object, int, object)"/>
+        public static LockHandle Acquire(object lockSubject, int lockType, object lockObj)
+            => Instance.Acquire(lockSubject, lockType, lockObj);
+
+        #endregion
+
+        #region Static Delegates - Release
 
         /// <inheritdoc cref="ILockService.Release(int, object)"/>
-        public static void Release(int lockType, object owner)
-            => Instance.Release(lockType, owner);
+        public static void Release(int lockType, object lockObj)
+            => Instance.Release(lockType, lockObj);
+
+        /// <inheritdoc cref="ILockService.Release(object, int, object)"/>
+        public static void Release(object lockSubject, int lockType, object lockObj)
+            => Instance.Release(lockSubject, lockType, lockObj);
+
+        #endregion
+
+        #region Static Delegates - Query
 
         /// <inheritdoc cref="ILockService.IsLocked(int)"/>
         public static bool IsLocked(int lockType)
             => Instance.IsLocked(lockType);
 
+        /// <inheritdoc cref="ILockService.IsLocked(object, int)"/>
+        public static bool IsLocked(object lockSubject, int lockType)
+            => Instance.IsLocked(lockSubject, lockType);
+
         /// <inheritdoc cref="ILockService.GetLockCount(int)"/>
         public static int GetLockCount(int lockType)
             => Instance.GetLockCount(lockType);
 
+        /// <inheritdoc cref="ILockService.GetLockObjects(int)"/>
+        public static IReadOnlyList<object> GetLockObjects(int lockType)
+            => Instance.GetLockObjects(lockType);
+
+        #endregion
+
+        #region Static Delegates - Events
+
         /// <inheritdoc cref="ILockService.OnLocked"/>
-        public static event Action<int, object> OnLocked
+        public static event Action<object, int, object> OnLocked
         {
             add => Instance.OnLocked += value;
             remove => Instance.OnLocked -= value;
         }
 
         /// <inheritdoc cref="ILockService.OnUnlocked"/>
-        public static event Action<int, object> OnUnlocked
+        public static event Action<object, int, object> OnUnlocked
         {
             add => Instance.OnUnlocked += value;
             remove => Instance.OnUnlocked -= value;
