@@ -4,70 +4,29 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
-using YooAsset;
 
 namespace XFramework
 {
     /// <summary>
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
-    /// <para>内部使用 YooAsset 实现资源加载，对外暴露 <see cref="IAssetNode"/> 接口。</para>
+    /// <para>内部委托到 <see cref="AssetSystem"/> 的全局 <see cref="IAssetService"/> 实例。</para>
     /// <para>自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// </summary>
     public class AssetNode : LeafNode, IAssetNode, ILoadable
     {
         #region Private Fields
 
-        private YooAssetServiceImpl _serviceImpl;
-        private ResourcePackage _package;
-
-        /// <summary>资源实例 → location 映射（用于 Release 通过资源实例查找 location）。</summary>
-        private readonly Dictionary<UnityEngine.Object, string> _assetToLocation = new Dictionary<UnityEngine.Object, string>();
-
-        /// <summary>实例 GameObject → location 映射（用于 DestroyInstance 查找 location）。</summary>
-        private readonly Dictionary<GameObject, string> _instanceToLocation = new Dictionary<GameObject, string>();
-
-        /// <summary>location → 当前活跃实例数。</summary>
-        private readonly Dictionary<string, int> _locationCounts = new Dictionary<string, int>();
-
-        /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
-        private readonly Dictionary<string, Stack<GameObject>> _pools = new Dictionary<string, Stack<GameObject>>();
-
-        /// <summary>location → 对象池最大容量。</summary>
-        private readonly Dictionary<string, int> _poolMaxSizes = new Dictionary<string, int>();
-
-        /// <summary>默认每种预制体最多保留的闲置实例数。</summary>
-        private const int DefaultPoolSize = 5;
+        private IAssetService _service;
 
         #endregion
 
         #region Lifecycle
 
-        protected override void OnAwake()
-        {
-            base.OnAwake();
-            _serviceImpl = new YooAssetServiceImpl();
-        }
-
         protected override void OnDestroy()
         {
-            // 清理所有池中的实例
-            foreach (var kvp in _pools)
-            {
-                foreach (var go in kvp.Value)
-                {
-                    UnityEngine.Object.Destroy(go);
-                }
-            }
-            _pools.Clear();
-
-            _serviceImpl?.Destroy();
-            _serviceImpl = null;
-
-            _assetToLocation.Clear();
-            _instanceToLocation.Clear();
-            _locationCounts.Clear();
-
+            // AssetNode 不销毁 AssetSystem 的全局实例（由 GameLauncher 统一管理）
+            _service = null;
             base.OnDestroy();
         }
 
@@ -79,374 +38,82 @@ namespace XFramework
 
         async UniTask ILoadable.LoadAsync(LoadContext context, CancellationToken cancellationToken)
         {
-            context.SetDescription("Initializing YooAsset...");
-
-            // 1. 初始化 YooAsset 全局环境
-            if (!YooAssets.Initialized)
+            // 确保 AssetSystem 已初始化（带进度报告）
+            if (!AssetSystem.IsInitialized)
             {
-                YooAssets.Initialize();
+                var progress = new LoadContextProgress(context);
+                await AssetSystem.InitializeAsync(progress, cancellationToken);
             }
 
-            context.SetProgress(0.2f);
-
-            // 2. 获取或创建资源包
-            _package = YooAssets.TryGetPackage("DefaultPackage");
-            if (_package == null)
-            {
-                _package = YooAssets.CreatePackage("DefaultPackage");
-            }
-
-            context.SetProgress(0.4f);
-            context.SetDescription("Initializing resource package...");
-
-            // 3. 初始化资源包（使用离线模式参数）
-            var initParameters = new OfflinePlayModeParameters();
-            var initOperation = _package.InitializeAsync(initParameters);
-            await initOperation.WithCancellation(cancellationToken);
-
-            if (initOperation.Status != EOperationStatus.Succeed)
-            {
-                context.SetDescription($"Package init failed: {initOperation.Error}");
-                context.SetState(LoadState.Failed);
-                return;
-            }
-
-            context.SetProgress(0.7f);
-            context.SetDescription("Requesting package version...");
-
-            // 4. 获取资源版本号
-            var versionOperation = _package.RequestPackageVersionAsync();
-            await versionOperation.WithCancellation(cancellationToken);
-
-            if (versionOperation.Status != EOperationStatus.Succeed)
-            {
-                context.SetDescription($"Version request failed: {versionOperation.Error}");
-                context.SetState(LoadState.Failed);
-                return;
-            }
-
-            context.SetProgress(0.8f);
-            context.SetDescription("Updating package manifest...");
-
-            // 5. 更新资源清单
-            var updateOperation = _package.UpdatePackageManifestAsync(versionOperation.PackageVersion);
-            await updateOperation.WithCancellation(cancellationToken);
-
-            if (updateOperation.Status != EOperationStatus.Succeed)
-            {
-                context.SetDescription($"Manifest update failed: {updateOperation.Error}");
-                context.SetState(LoadState.Failed);
-                return;
-            }
-
-            context.SetProgress(1f);
-            context.SetDescription("YooAsset initialized.");
+            _service = AssetSystem.Instance;
         }
 
         #endregion
 
         #region IAssetNode — UniTask
 
-        public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
-        {
-            var asset = await _serviceImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
-            if (asset != null)
-            {
-                _assetToLocation[asset] = location;
-            }
-            return asset;
-        }
+        public UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+            => _service.LoadAsync<T>(location, cancellationToken);
 
-        public async UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
-        {
-            var asset = await _serviceImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
-            if (asset != null)
-            {
-                _assetToLocation[asset] = location;
-            }
-            return asset;
-        }
+        public UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+            => _service.LoadAsync<T>(location, priority, cancellationToken);
 
-        public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
-        {
-            return await InstantiateAsyncInternal(location, null, null, parent);
-        }
+        public UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
+            => _service.InstantiateAsync(location, parent);
 
-        public async UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
-        {
-            return await InstantiateAsyncInternal(location, position, rotation, parent);
-        }
+        public UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+            => _service.InstantiateAsync(location, position, rotation, parent);
 
-        public async UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component
-        {
-            var go = await InstantiateAsyncInternal(location, null, null, parent);
-            if (go == null) return null;
+        public UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component
+            => _service.InstantiateAsync<T>(location, parent);
 
-            var component = go.GetComponent<T>();
-            if (component == null)
-            {
-                Debug.LogWarning($"[AssetNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
-                                 "Destroying instance to prevent resource leak.");
-                DestroyInstance(go);
-                return null;
-            }
-            return component;
-        }
+        public UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
+            => _service.InstantiateAsync<T>(location, position, rotation, parent);
 
-        public async UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
-        {
-            var go = await InstantiateAsyncInternal(location, position, rotation, parent);
-            if (go == null) return null;
+        public UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+            => _service.LoadSceneAsync(location, additive, progress);
 
-            var component = go.GetComponent<T>();
-            if (component == null)
-            {
-                Debug.LogWarning($"[AssetNode] Prefab at '{location}' lacks component {typeof(T).Name}. " +
-                                 "Destroying instance to prevent resource leak.");
-                DestroyInstance(go);
-                return null;
-            }
-            return component;
-        }
-
-        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
-        {
-            return await _serviceImpl.LoadSceneAsync(location, additive, progress);
-        }
-
-        public async UniTask PreloadAllAsync(IEnumerable<string> locations)
-        {
-            var tasks = new List<UniTask>();
-            foreach (var location in locations)
-            {
-                tasks.Add(_serviceImpl.PreloadAsync(location));
-            }
-            await UniTask.WhenAll(tasks);
-        }
+        public UniTask PreloadAllAsync(IEnumerable<string> locations)
+            => _service.PreloadAllAsync(locations);
 
         #endregion
 
         #region IAssetNode — Callback
 
-        public async void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
-        {
-            var result = await LoadAsync<T>(location);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to load asset: {location}");
-        }
+        public void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
+            => _service.LoadAsync(location, onCompleted, onError);
 
-        public async void InstantiateAsync(string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null)
-        {
-            var result = await InstantiateAsync(location, parent);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to instantiate: {location}");
-        }
+        public void InstantiateAsync(string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null)
+            => _service.InstantiateAsync(location, onCompleted, onError, parent);
 
-        public async void InstantiateAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component
-        {
-            var result = await InstantiateAsync<T>(location, parent);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to instantiate: {location}");
-        }
+        public void InstantiateAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component
+            => _service.InstantiateAsync(location, onCompleted, onError, parent);
 
         #endregion
 
         #region IAssetNode — Pool Config
 
         public void SetPoolMaxSize(string location, int maxSize)
-        {
-            _poolMaxSizes[location] = Math.Max(1, maxSize);
-        }
+            => _service.SetPoolMaxSize(location, maxSize);
 
         public (int pooledCount, int activeCount, int maxPoolSize) GetPoolStatus(string location)
-        {
-            int pooled = _pools.TryGetValue(location, out var pool) ? pool.Count : 0;
-            int active = _locationCounts.TryGetValue(location, out var cnt) ? cnt : 0;
-            int maxSize = _poolMaxSizes.TryGetValue(location, out var size) ? size : DefaultPoolSize;
-            return (pooled, active, maxSize);
-        }
+            => _service.GetPoolStatus(location);
 
         #endregion
 
         #region IAssetNode — Lifecycle
 
         public void Release(UnityEngine.Object asset)
-        {
-            if (asset == null) return;
-
-            if (_assetToLocation.TryGetValue(asset, out var location))
-            {
-                _serviceImpl.Release(location);
-                _assetToLocation.Remove(asset);
-            }
-        }
+            => _service.Release(asset);
 
         public void DestroyInstance(GameObject instance)
-        {
-            if (instance == null) return;
-
-            // 标记 tracker 避免重复通知
-            var tracker = instance.GetComponent<InstanceTracker>();
-            if (tracker != null)
-            {
-                tracker.IsBeingReleased = true;
-            }
-
-            if (_instanceToLocation.TryGetValue(instance, out var location))
-            {
-                _instanceToLocation.Remove(instance);
-
-                // 引用计数 -1
-                if (_locationCounts.TryGetValue(location, out var count))
-                {
-                    count--;
-                    if (count <= 0)
-                    {
-                        _locationCounts.Remove(location);
-                        _serviceImpl.Release(location);
-                    }
-                    else
-                    {
-                        _locationCounts[location] = count;
-                    }
-                }
-
-                // 回池或销毁
-                ReturnToPoolOrDestroy(location, instance);
-            }
-            else
-            {
-                // 非托管实例，直接销毁
-                UnityEngine.Object.Destroy(instance);
-            }
-        }
+            => _service.DestroyInstance(instance);
 
         public void DestroyInstance<T>(T component) where T : Component
-        {
-            if (component == null) return;
-            DestroyInstance(component.gameObject);
-        }
-
-        /// <summary>
-        /// 由 <see cref="InstanceTracker.OnDestroy"/> 调用。当用户直接 Destroy(go) 时自动释放引用。
-        /// </summary>
-        internal void OnInstanceDestroyed(string location, GameObject instance)
-        {
-            if (instance == null) return;
-
-            _instanceToLocation.Remove(instance);
-
-            // 引用计数 -1
-            if (_locationCounts.TryGetValue(location, out var count))
-            {
-                count--;
-                if (count <= 0)
-                {
-                    _locationCounts.Remove(location);
-                    _serviceImpl.Release(location);
-                }
-                else
-                {
-                    _locationCounts[location] = count;
-                }
-            }
-
-            // 直接销毁（不经过回池，因为用户已经 Destroy 了）
-            // 注意：此时 instance 已经被 Unity 标记为待销毁，不需要再调用 Destroy
-        }
-
-        #endregion
-
-        #region Internal Methods
-
-        /// <summary>
-        /// 内部实例化逻辑。优先从对象池获取，否则加载资源并实例化。
-        /// </summary>
-        private async UniTask<GameObject> InstantiateAsyncInternal(string location, Vector3? position, Quaternion? rotation, Transform parent)
-        {
-            // 1. 优先从对象池获取
-            if (_pools.TryGetValue(location, out var pool) && pool.Count > 0)
-            {
-                var pooled = pool.Pop();
-                if (pooled != null)
-                {
-                    // 重置变换（即使不传参数也重置为默认值）
-                    pooled.transform.SetParent(parent);
-                    pooled.transform.localPosition = position ?? Vector3.zero;
-                    pooled.transform.localRotation = rotation ?? Quaternion.identity;
-                    pooled.transform.localScale = Vector3.one;
-                    pooled.SetActive(true);
-
-                    // 记录映射
-                    _instanceToLocation[pooled] = location;
-                    _locationCounts[location] = _locationCounts.TryGetValue(location, out var c) ? c + 1 : 1;
-
-                    return pooled;
-                }
-            }
-
-            // 2. 加载资源
-            var prefab = await _serviceImpl.LoadAsync<GameObject>(location);
-            if (prefab == null) return null;
-
-            // 记录资源映射（首次加载时）
-            _assetToLocation[prefab] = location;
-
-            // 3. 实例化
-            GameObject go;
-            if (position.HasValue && rotation.HasValue)
-            {
-                go = UnityEngine.Object.Instantiate(prefab, position.Value, rotation.Value, parent);
-            }
-            else
-            {
-                go = UnityEngine.Object.Instantiate(prefab, parent);
-            }
-
-            // 4. 挂载 InstanceTracker（自动防泄漏）
-            var tracker = go.AddComponent<InstanceTracker>();
-            tracker.Owner = this;
-            tracker.Location = location;
-
-            // 5. 记录实例映射
-            _instanceToLocation[go] = location;
-            _locationCounts[location] = _locationCounts.TryGetValue(location, out var cnt) ? cnt + 1 : 1;
-
-            return go;
-        }
-
-        /// <summary>
-        /// 将实例回池或销毁。池满时销毁最旧的实例。
-        /// </summary>
-        private void ReturnToPoolOrDestroy(string location, GameObject instance)
-        {
-            instance.SetActive(false);
-            instance.transform.SetParent(null);
-
-            if (!_pools.TryGetValue(location, out var pool))
-            {
-                pool = new Stack<GameObject>();
-                _pools[location] = pool;
-            }
-
-            int maxSize = _poolMaxSizes.TryGetValue(location, out var configuredSize) ? configuredSize : DefaultPoolSize;
-
-            if (pool.Count < maxSize)
-            {
-                pool.Push(instance);
-            }
-            else
-            {
-                UnityEngine.Object.Destroy(instance);
-            }
-        }
+            => _service.DestroyInstance(component);
 
         #endregion
     }
 }
+
+
