@@ -28,10 +28,13 @@ namespace XFramework
 
         async void Start()
         {
-            // 1. 显式初始化全局资源系统（非节点对象也可通过 AssetSystem 访问）
+            // 1. 初始化全局逻辑锁系统（非节点对象也可通过 LockSystem 访问）
+            LockSystem.Initialize();
+
+            // 2. 显式初始化全局资源系统（非节点对象也可通过 AssetSystem 访问）
             await AssetSystem.InitializeAsync();
 
-            // 2. 启动节点树（AssetNode 的 ILoadable 会检测到 AssetSystem 已初始化，跳过重复初始化）
+            // 3. 启动节点树（AssetNode 的 ILoadable 会检测到 AssetSystem 已初始化，跳过重复初始化）
             await _root.StartupAsync();
         }
 
@@ -45,8 +48,12 @@ namespace XFramework
             // 销毁全局资源系统
             AssetSystem.Destroy();
 
+            // 销毁全局逻辑锁系统
+            LockSystem.Destroy();
+
             _root?.Destroy();
         }
+
 
         #endregion
     }

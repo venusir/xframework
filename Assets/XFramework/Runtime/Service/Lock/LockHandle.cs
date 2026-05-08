@@ -3,18 +3,18 @@ using System;
 namespace XFramework
 {
     /// <summary>
-    /// 锁句柄。通过 <see cref="ILockNode.Acquire"/> 获取，Dispose 时自动释放锁。
+    /// 锁句柄。通过 <see cref="ILockNode.Acquire"/> 或 <see cref="ILockService.Acquire"/> 获取，Dispose 时自动释放锁。
     /// <para>支持 <c>using</c> 语法，也支持手动 <see cref="Dispose"/>。</para>
     /// </summary>
     public readonly struct LockHandle : IDisposable
     {
-        readonly LockNode _node;
+        readonly ILockService _service;
         readonly int _lockType;
         readonly object _owner;
 
-        internal LockHandle(LockNode node, int lockType, object owner)
+        internal LockHandle(ILockService service, int lockType, object owner)
         {
-            _node = node;
+            _service = service;
             _lockType = lockType;
             _owner = owner;
         }
@@ -25,7 +25,8 @@ namespace XFramework
         /// </summary>
         public void Dispose()
         {
-            _node?.Release(_lockType, _owner);
+            _service?.Release(_lockType, _owner);
         }
     }
+
 }
