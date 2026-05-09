@@ -66,6 +66,12 @@ Assets/XFramework/
 │   │       ├── YooAssetServiceImpl.cs    # 资源加载/引用计数/延迟卸载
 │   │       └── YooAssetInitTask.cs       # YooAsset 初始化加载任务
 │   │
+│   ├── Lock/                         # ── 逻辑锁模块 ──
+│   │   ├── ILockable.cs              # 可锁定标记接口
+│   │   ├── LockableExtensions.cs     # 扩展方法（Acquire/Release/IsLocked/OnLocked）
+│   │   ├── LockHandle.cs             # 锁句柄（Dispose 时自动释放）
+│   │   └── LockService.cs            # 全局锁静态服务
+│   │
 │   ├── Reactive/                     # ── 响应式模块 ──
 │   │   ├── ISignal.cs                # 只读/完整信号接口
 │   │   ├── IReactiveProperty.cs      # 响应式属性接口
@@ -1042,6 +1048,203 @@ healthProp.Value = 80;
 
 ---
 
+## LockService 逻辑锁模块
+
+LockService 提供了一套基于 **锁主体（ILockable）、锁类型（lockType）、锁对象（lock）** 三要素的全局锁管理能力。任何实现 `ILockable` 接口的对象都可以通过扩展方法获得上锁、解锁、查询和事件订阅功能。
+
+### 设计理念
+
+- **标记接口** — `ILockable` 是一个空标记接口，任何类（节点、MonoBehaviour、纯 C# 对象）实现它即可获得锁能力
+- **扩展方法** — 所有锁操作通过 `LockableExtensions` 扩展方法提供，`this` 自动作为锁主体
+- **全局锁** — `LockService.Global` 作为全局锁哨兵，全局锁生效时所有主体均视为被锁定
+- **事件订阅** — 支持 per-subject 的锁定/解锁事件，全局锁自动通知所有订阅者
+- **using 语法** — `Acquire` 返回 `LockHandle`，支持 `using` 自动释放
+
+### 快速开始
+
+#### 1. 实现 ILockable
+
+```csharp
+public class PlayerController : EntityNode, ILockable
+{
+    // 无需额外实现，ILockable 是空标记接口
+}
+```
+
+#### 2. 上锁与解锁
+
+```csharp
+public class PlayerController : EntityNode, ILockable
+{
+    void OnAttack()
+    {
+        // 方式1：using 自动释放（推荐）
+        using (this.Acquire(LockType.Move, this))
+        {
+            // 攻击期间禁止移动
+            PlayAttackAnimation();
+            await UniTask.Delay(500);
+        }
+        // 离开 using 作用域时自动解锁
+    }
+
+    void OnStun()
+    {
+        // 方式2：手动释放
+        var handle = this.Acquire(LockType.Move, this);
+        // ... 一段时间后
+        handle.Dispose(); // 释放锁
+    }
+}
+```
+
+#### 3. 查询锁状态
+
+```csharp
+// 检查自身是否被锁定（含全局锁）
+if (this.IsLocked(LockType.Move))
+{
+    // 移动被锁定
+}
+
+// 获取锁对象数量（含全局锁）
+int count = this.GetLockCount(LockType.Move);
+
+// 获取所有锁对象（调试用）
+IReadOnlyList<object> locks = this.GetLockObjects(LockType.Move);
+```
+
+#### 4. 订阅锁定/解锁事件
+
+```csharp
+public class PlayerController : EntityNode, ILockable
+{
+    IDisposable _lockSub;
+    IDisposable _unlockSub;
+
+    protected override void OnStart()
+    {
+        // 订阅自身的锁定事件
+        _lockSub = this.OnLocked(lockType =>
+        {
+            Debug.Log($"Player locked: type={lockType}");
+            UpdateUI();
+        });
+
+        // 订阅自身的解锁事件
+        _unlockSub = this.OnUnlocked(lockType =>
+        {
+            Debug.Log($"Player unlocked: type={lockType}");
+            UpdateUI();
+        });
+    }
+
+    protected override void OnDestroy()
+    {
+        _lockSub?.Dispose();
+        _unlockSub?.Dispose();
+    }
+}
+```
+
+### 全局锁
+
+全局锁通过 `LockService.Global` 作为锁主体，对所有 `ILockable` 生效。
+
+```csharp
+// 上全局锁（所有 IsLocked 查询都会返回 true）
+LockService.Acquire(LockService.Global, LockType.Move, "global_stun");
+
+// 查询任意主体时，全局锁也会被计入
+player.IsLocked(LockType.Move); // true（全局锁生效）
+
+// 释放全局锁
+LockService.Release(LockService.Global, LockType.Move, "global_stun");
+```
+
+### 锁类型定义
+
+锁类型是一个 `int`，建议使用常量或枚举定义：
+
+```csharp
+public static class LockType
+{
+    public const int Move = 1;
+    public const int Attack = 2;
+    public const int Skill = 3;
+    public const int UI = 4;
+    public const int Input = 5;
+}
+```
+
+### 完整示例
+
+```csharp
+public class PlayerEntity : EntityNode, ILockable
+{
+    IDisposable _onLocked;
+    IDisposable _onUnlocked;
+
+    protected override void OnStart()
+    {
+        // 订阅锁定/解锁事件
+        _onLocked = this.OnLocked(type => Debug.Log($"Locked: {type}"));
+        _onUnlocked = this.OnUnlocked(type => Debug.Log($"Unlocked: {type}"));
+    }
+
+    async UniTaskVoid CastSkill()
+    {
+        // 技能期间锁定移动和攻击
+        using (this.Acquire(LockType.Move, "skill_cast"))
+        using (this.Acquire(LockType.Attack, "skill_cast"))
+        {
+            await PlaySkillAnimation();
+        }
+        // 自动解锁
+    }
+
+    protected override void OnDestroy()
+    {
+        _onLocked?.Dispose();
+        _onUnlocked?.Dispose();
+    }
+}
+
+// 全局暂停
+public class GameManager
+{
+    public void PauseAll()
+    {
+        LockService.Acquire(LockService.Global, LockType.Input, "game_pause");
+    }
+
+    public void ResumeAll()
+    {
+        LockService.Release(LockService.Global, LockType.Input, "game_pause");
+    }
+}
+```
+
+### 接口总览
+
+| 方法                           | 签名                                          | 说明                       |
+| ------------------------------ | --------------------------------------------- | -------------------------- |
+| `this.Acquire`                 | `(int lockType, object lockObj) → LockHandle` | 上锁，返回句柄             |
+| `this.Release`                 | `(int lockType, object lockObj)`              | 解锁                       |
+| `this.IsLocked`                | `(int lockType) → bool`                       | 查询是否被锁定（含全局锁） |
+| `this.GetLockCount`            | `(int lockType) → int`                        | 获取锁对象数量（含全局锁） |
+| `this.GetLockObjects`          | `(int lockType) → IReadOnlyList<object>`      | 获取所有锁对象（调试用）   |
+| `this.OnLocked`                | `(Action<int> handler) → IDisposable`         | 订阅锁定事件               |
+| `this.OnUnlocked`              | `(Action<int> handler) → IDisposable`         | 订阅解锁事件               |
+| `LockService.Acquire`          | `(ILockable, int, object) → LockHandle`       | 指定主体的上锁             |
+| `LockService.Release`          | `(ILockable, int, object)`                    | 指定主体的解锁             |
+| `LockService.OnLocked`         | `(ILockable, Action<int>) → IDisposable`      | 指定主体的事件订阅         |
+| `LockService.OnUnlocked`       | `(ILockable, Action<int>) → IDisposable`      | 指定主体的事件订阅         |
+| `LockService.OnGlobalLocked`   | `event Action<ILockable, int, object>`        | 全局锁定事件               |
+| `LockService.OnGlobalUnlocked` | `event Action<ILockable, int, object>`        | 全局解锁事件               |
+
+---
+
 ## GameLauncher
 
 `GameLauncher` 是 Unity 与节点树之间的生命周期桥接。在场景中挂载此脚本即可启动节点树。
@@ -1291,3 +1494,18 @@ Reactive 程序集 `Venusy609.Xframework.Reactive.asmdef` 依赖 `R3`、`UniTask
 | 注册过滤器 | `msgNode.AddFilter(new LoggingFilter<T>())`       |
 | 请求-响应  | `reqNode.RequestAsync<TReq, TRes>(req)`           |
 | 响应式属性 | `node.Subscribe(cb)`                              |
+
+### 锁操作
+
+| 操作         | 代码                                                         |
+| ------------ | ------------------------------------------------------------ |
+| 上锁         | `this.Acquire(lockType, lockObj)`                            |
+| 解锁         | `this.Release(lockType, lockObj)`                            |
+| 查询锁定     | `this.IsLocked(lockType)`                                    |
+| 查询锁数量   | `this.GetLockCount(lockType)`                                |
+| 获取锁对象   | `this.GetLockObjects(lockType)`                              |
+| 订阅锁定事件 | `this.OnLocked(type => { }).AddTo(this)`                     |
+| 订阅解锁事件 | `this.OnUnlocked(type => { }).AddTo(this)`                   |
+| 全局上锁     | `LockService.Acquire(LockService.Global, lockType, lockObj)` |
+| 全局解锁     | `LockService.Release(LockService.Global, lockType, lockObj)` |
+| 全局事件     | `LockService.OnGlobalLocked += (sub, type, obj) => {}`       |

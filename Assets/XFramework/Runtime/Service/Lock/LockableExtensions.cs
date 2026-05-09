@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace XFramework
@@ -48,6 +49,26 @@ namespace XFramework
         /// </summary>
         public static IReadOnlyList<object> GetLockObjects(this ILockable self, int lockType)
             => LockService.GetLockObjects(self, lockType);
+
+        #endregion
+
+        #region Subject Event Subscription
+
+        /// <summary>
+        /// 订阅 <c>this</c> 的锁定事件。
+        /// <para>全局锁（<see cref="LockService.Global"/>）的锁定也会触发此回调。</para>
+        /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
+        /// </summary>
+        public static IDisposable OnLocked(this ILockable self, Action<int> handler)
+            => LockService.OnLocked(self, handler);
+
+        /// <summary>
+        /// 订阅 <c>this</c> 的解锁事件。
+        /// <para>全局锁（<see cref="LockService.Global"/>）的解锁也会触发此回调。</para>
+        /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
+        /// </summary>
+        public static IDisposable OnUnlocked(this ILockable self, Action<int> handler)
+            => LockService.OnUnlocked(self, handler);
 
         #endregion
     }

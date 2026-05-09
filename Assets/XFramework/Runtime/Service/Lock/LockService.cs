@@ -25,16 +25,16 @@ namespace XFramework
         #region Events
 
         /// <summary>
-        /// 锁定事件：当某锁被添加时触发。
+        /// 全局锁定事件：当某锁被添加时触发。
         /// <para>参数为 (lockSubject, lockType, lock)。</para>
         /// </summary>
-        public static event Action<ILockable, int, object> OnLocked;
+        public static event Action<ILockable, int, object> OnGlobalLocked;
 
         /// <summary>
-        /// 解锁事件：当某锁被移除时触发。
+        /// 全局解锁事件：当某锁被移除时触发。
         /// <para>参数为 (lockSubject, lockType, lock)。</para>
         /// </summary>
-        public static event Action<ILockable, int, object> OnUnlocked;
+        public static event Action<ILockable, int, object> OnGlobalUnlocked;
 
         #endregion
 
@@ -44,8 +44,122 @@ namespace XFramework
         private static readonly Dictionary<ILockable, Dictionary<int, HashSet<object>>> _locks
             = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
 
+        /// <summary>每个 subject 的锁定事件订阅。</summary>
+        private static readonly Dictionary<ILockable, Action<int>> _onLockedSubjects
+            = new Dictionary<ILockable, Action<int>>();
+
+        /// <summary>每个 subject 的解锁事件订阅。</summary>
+        private static readonly Dictionary<ILockable, Action<int>> _onUnlockedSubjects
+            = new Dictionary<ILockable, Action<int>>();
+
         /// <summary>是否已释放。</summary>
         private static bool _disposed;
+
+        #endregion
+
+        #region Subject Event Subscription
+
+        /// <summary>
+        /// 订阅指定 <see cref="ILockable"/> 的锁定事件。
+        /// <para>全局锁（<see cref="Global"/>）的锁定也会触发此回调。</para>
+        /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
+        /// </summary>
+        public static IDisposable OnLocked(ILockable subject, Action<int> handler)
+        {
+            if (!_onLockedSubjects.TryGetValue(subject, out var handlers))
+            {
+                handlers = null;
+                _onLockedSubjects[subject] = handlers;
+            }
+            _onLockedSubjects[subject] += handler;
+
+            return new ActionDisposable(() =>
+            {
+                _onLockedSubjects[subject] -= handler;
+                if (_onLockedSubjects[subject] == null)
+                {
+                    _onLockedSubjects.Remove(subject);
+                }
+            });
+        }
+
+        /// <summary>
+        /// 订阅指定 <see cref="ILockable"/> 的解锁事件。
+        /// <para>全局锁（<see cref="Global"/>）的解锁也会触发此回调。</para>
+        /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
+        /// </summary>
+        public static IDisposable OnUnlocked(ILockable subject, Action<int> handler)
+        {
+            if (!_onUnlockedSubjects.TryGetValue(subject, out var handlers))
+            {
+                handlers = null;
+                _onUnlockedSubjects[subject] = handlers;
+            }
+            _onUnlockedSubjects[subject] += handler;
+
+            return new ActionDisposable(() =>
+            {
+                _onUnlockedSubjects[subject] -= handler;
+                if (_onUnlockedSubjects[subject] == null)
+                {
+                    _onUnlockedSubjects.Remove(subject);
+                }
+            });
+        }
+
+        /// <summary>
+        /// 通知指定 subject 的锁定事件订阅者。
+        /// <para>如果是全局锁，通知所有非 Global 的订阅者。</para>
+        /// </summary>
+        private static void NotifyOnLocked(ILockable lockSubject, int lockType, object lockObj)
+        {
+            if (lockSubject == Global)
+            {
+                // 全局锁：通知所有订阅者
+                foreach (var kvp in _onLockedSubjects)
+                {
+                    if (kvp.Key != Global)
+                    {
+                        kvp.Value?.Invoke(lockType);
+                    }
+                }
+            }
+            else
+            {
+                // 普通锁：只通知该 subject 的订阅者
+                if (_onLockedSubjects.TryGetValue(lockSubject, out var handler))
+                {
+                    handler?.Invoke(lockType);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 通知指定 subject 的解锁事件订阅者。
+        /// <para>如果是全局锁，通知所有非 Global 的订阅者。</para>
+        /// </summary>
+        private static void NotifyOnUnlocked(ILockable lockSubject, int lockType, object lockObj)
+        {
+            if (lockSubject == Global)
+            {
+                // 全局锁：通知所有订阅者
+                foreach (var kvp in _onUnlockedSubjects)
+                {
+                    if (kvp.Key != Global)
+                    {
+                        kvp.Value?.Invoke(lockType);
+                    }
+                }
+            }
+            else
+            {
+                // 普通锁：只通知该 subject 的订阅者
+                if (_onUnlockedSubjects.TryGetValue(lockSubject, out var handler))
+                {
+                    handler?.Invoke(lockType);
+                }
+            }
+        }
 
         #endregion
 
@@ -80,7 +194,8 @@ namespace XFramework
 
             if (wasEmpty && lockSet.Count == 1)
             {
-                OnLocked?.Invoke(lockSubject, lockType, lockObj);
+                OnGlobalLocked?.Invoke(lockSubject, lockType, lockObj);
+                NotifyOnLocked(lockSubject, lockType, lockObj);
             }
 
             return new LockHandle(() => Release(lockSubject, lockType, lockObj));
@@ -112,7 +227,8 @@ namespace XFramework
 
             if (wasNonEmpty && lockSet.Count == 0)
             {
-                OnUnlocked?.Invoke(lockSubject, lockType, lockObj);
+                OnGlobalUnlocked?.Invoke(lockSubject, lockType, lockObj);
+                NotifyOnUnlocked(lockSubject, lockType, lockObj);
 
                 typeDict.Remove(lockType);
                 if (typeDict.Count == 0)
@@ -220,10 +336,30 @@ namespace XFramework
             _disposed = true;
 
             _locks.Clear();
-            OnLocked = null;
-            OnUnlocked = null;
+            _onLockedSubjects.Clear();
+            _onUnlockedSubjects.Clear();
+            OnGlobalLocked = null;
+            OnGlobalUnlocked = null;
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// 简单的 <see cref="IDisposable"/> 实现，包装一个委托。
+    /// </summary>
+    internal sealed class ActionDisposable : IDisposable
+    {
+        private Action _action;
+        public ActionDisposable(Action action) => _action = action;
+        public void Dispose()
+        {
+            var action = _action;
+            if (action != null)
+            {
+                _action = null;
+                action();
+            }
+        }
     }
 }
