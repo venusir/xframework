@@ -3,22 +3,22 @@ using System;
 namespace XFramework
 {
     /// <summary>
-    /// 锁句柄。通过 <see cref="ILockService.Acquire(int, object)"/> 或 <see cref="ILockService.Acquire(object, int, object)"/> 获取，Dispose 时自动释放锁。
+    /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="ILockable.Acquire(object, int, object)"/> 获取，Dispose 时自动释放锁。
     /// <para>支持 <c>using</c> 语法，也支持手动 <see cref="Dispose"/>。</para>
     /// </summary>
     public readonly struct LockHandle : IDisposable
     {
-        readonly ILockService _service;
-        readonly object _lockSubject;
-        readonly int _lockType;
-        readonly object _lockObj;
+        readonly Action _releaseAction;
+        readonly bool _active;
 
-        internal LockHandle(ILockService service, object lockSubject, int lockType, object lockObj)
+        /// <summary>
+        /// 创建一个锁句柄。
+        /// </summary>
+        /// <param name="releaseAction">释放锁时调用的委托。通常为 <c>() => service.Release(lockSubject, lockType, lockObj)</c>。</param>
+        internal LockHandle(Action releaseAction)
         {
-            _service = service;
-            _lockSubject = lockSubject;
-            _lockType = lockType;
-            _lockObj = lockObj;
+            _releaseAction = releaseAction;
+            _active = true;
         }
 
         /// <summary>
@@ -27,13 +27,9 @@ namespace XFramework
         /// </summary>
         public void Dispose()
         {
-            if (_lockSubject != null)
+            if (_active)
             {
-                _service?.Release(_lockSubject, _lockType, _lockObj);
-            }
-            else
-            {
-                _service?.Release(_lockType, _lockObj);
+                _releaseAction?.Invoke();
             }
         }
     }
