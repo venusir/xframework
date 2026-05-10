@@ -183,7 +183,7 @@ namespace XFramework.XLock
                 NotifyOnLocked(lockSubject, lockType, lockObj);
             }
 
-            return new LockHandle(() => Release(lockSubject, lockType, lockObj));
+            return new LockHandle(lockSubject, lockType, lockObj);
         }
 
         #endregion

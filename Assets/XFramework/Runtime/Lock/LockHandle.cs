@@ -4,21 +4,28 @@ namespace XFramework.XLock
 {
 
     /// <summary>
-    /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="ILockable.Acquire(object, int, object)"/> 获取，Dispose 时自动释放锁。
+    /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="LockService.Acquire"/> 获取，Dispose 时自动释放锁。
     /// <para>支持 <c>using</c> 语法，也支持手动 <see cref="Dispose"/>。</para>
+    /// <para>零 GC 分配：直接存储锁的三要素，而非委托。</para>
     /// </summary>
     public readonly struct LockHandle : IDisposable
     {
-        readonly Action _releaseAction;
+        readonly ILockable _lockSubject;
+        readonly int _lockType;
+        readonly object _lockObj;
         readonly bool _active;
 
         /// <summary>
         /// 创建一个锁句柄。
         /// </summary>
-        /// <param name="releaseAction">释放锁时调用的委托。通常为 <c>() => service.Release(lockSubject, lockType, lockObj)</c>。</param>
-        internal LockHandle(Action releaseAction)
+        /// <param name="lockSubject">锁主体。</param>
+        /// <param name="lockType">锁类型。</param>
+        /// <param name="lockObj">锁对象。</param>
+        internal LockHandle(ILockable lockSubject, int lockType, object lockObj)
         {
-            _releaseAction = releaseAction;
+            _lockSubject = lockSubject;
+            _lockType = lockType;
+            _lockObj = lockObj;
             _active = true;
         }
 
@@ -30,7 +37,7 @@ namespace XFramework.XLock
         {
             if (_active)
             {
-                _releaseAction?.Invoke();
+                LockService.Release(_lockSubject, _lockType, _lockObj);
             }
         }
     }
