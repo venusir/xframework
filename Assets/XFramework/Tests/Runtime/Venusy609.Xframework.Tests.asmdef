@@ -1,7 +1,10 @@
 {
     "name": "Venusy609.Xframework.Tests",
     "references": [
-        "Venusy609.Xframework"
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.Reactive",
+        "UniTask",
+        "R3"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

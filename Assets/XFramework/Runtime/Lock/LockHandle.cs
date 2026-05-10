@@ -30,6 +30,11 @@ namespace XFramework.XLock
         }
 
         /// <summary>
+        /// 锁句柄是否有效（即是否已成功获取锁）。
+        /// </summary>
+        public bool IsValid => _active;
+
+        /// <summary>
         /// 释放锁。
         /// <para>多次调用是安全的，第二次及后续调用不会产生任何效果。</para>
         /// </summary>
