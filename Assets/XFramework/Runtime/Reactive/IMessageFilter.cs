@@ -1,6 +1,7 @@
 using System;
 
-namespace XFramework
+namespace XFramework.XReactive
+
 {
     /// <summary>
     /// 消息过滤器。类似 ASP.NET Core Middleware，在消息传递时执行横切逻辑。

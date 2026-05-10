@@ -4,8 +4,11 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using XFramework.XCore;
 
-namespace XFramework
+namespace XFramework.XAsset
+
+
 {
     /// <summary>
     /// 资源服务接口。提供统一的资源加载、实例化与生命周期管理。

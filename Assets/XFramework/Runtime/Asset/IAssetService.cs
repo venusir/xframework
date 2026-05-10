@@ -4,8 +4,11 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XAsset
+
+
 {
     /// <summary>
     /// 资源服务公共接口。与节点树无关，可供任何对象（MonoBehaviour、纯 C# 类等）直接使用。

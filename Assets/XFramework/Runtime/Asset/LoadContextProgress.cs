@@ -1,6 +1,9 @@
 using System;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XAsset
+
+
 {
     /// <summary>
     /// 将 <see cref="LoadContext"/> 适配为 <see cref="IProgress{LoadContext}"/>。

@@ -5,7 +5,8 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.XLoad
+
 {
     /// <summary>
     /// 加载器。纯 C# 类，作为加载任务的调度器。

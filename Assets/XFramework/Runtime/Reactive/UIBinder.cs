@@ -3,8 +3,11 @@ using R3;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using XFramework.XCore;
 
-namespace XFramework
+namespace XFramework.XReactive
+
+
 {
     /// <summary>
     /// UI 数据绑定工具。将 <see cref="IReadonlySignal{T}"/> 自动绑定到 UI 组件。

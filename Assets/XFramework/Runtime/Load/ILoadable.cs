@@ -1,7 +1,8 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
-namespace XFramework
+namespace XFramework.XLoad
+
 {
     /// <summary>
     /// 加载状态。

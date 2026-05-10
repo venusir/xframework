@@ -1,6 +1,7 @@
 using System;
 
-namespace XFramework
+namespace XFramework.XLock
+
 {
     /// <summary>
     /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="ILockable.Acquire(object, int, object)"/> 获取，Dispose 时自动释放锁。

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.XUpdate
+
 {
     /// <summary>
     /// 纯 Update 调度器，不依赖节点树。

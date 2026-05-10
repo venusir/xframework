@@ -4,8 +4,13 @@ using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
+using XFramework.XCore;
+using XFramework.XLoad;
+using XFramework.XAsset;
 
-namespace XFramework
+
+namespace XFramework.XAsset
+
 {
     /// <summary>
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。

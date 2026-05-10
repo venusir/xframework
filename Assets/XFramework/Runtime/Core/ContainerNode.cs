@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 
-namespace XFramework
+namespace XFramework.XCore
+
 {
     /// <summary>
     /// 容器节点接口。提供子节点的添加和移除能力。

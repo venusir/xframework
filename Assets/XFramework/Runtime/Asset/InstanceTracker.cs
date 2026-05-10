@@ -1,6 +1,7 @@
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.XAsset
+
 {
     /// <summary>
     /// 实例追踪器。自动挂载到 <see cref="AssetService"/> 实例化的 GameObject 上。

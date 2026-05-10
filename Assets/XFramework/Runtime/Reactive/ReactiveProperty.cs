@@ -1,7 +1,10 @@
 using System;
 using R3;
+using XFramework.XCore;
 
-namespace XFramework
+namespace XFramework.XReactive
+
+
 {
     /// <summary>
     /// 响应式属性节点。包含一个可自动推送变化的响应式值。

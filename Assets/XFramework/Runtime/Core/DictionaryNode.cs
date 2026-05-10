@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System;
 
-namespace XFramework
+namespace XFramework.XCore
+
 {
     /// <summary>
     /// 字典节点接口。按自定义键（Key）缓存子节点，提供高效的键值对式访问。

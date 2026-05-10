@@ -5,8 +5,11 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using YooAsset;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XAsset
+
+
 {
     /// <summary>
     /// 资源服务独立实现。与节点树无关，可直接 <c>new AssetService()</c> 创建使用。

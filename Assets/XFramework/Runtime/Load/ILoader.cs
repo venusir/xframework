@@ -1,7 +1,8 @@
 using System;
 using Cysharp.Threading.Tasks;
 
-namespace XFramework
+namespace XFramework.XLoad
+
 {
     /// <summary>
     /// 加载器接口。对外暴露的加载调度入口，隐藏 <see cref="Loader"/> 实现。

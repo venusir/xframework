@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 
-namespace XFramework
+namespace XFramework.XLock
+
 {
     /// <summary>
     /// <see cref="ILockable"/> 的扩展方法，提供全局锁服务的快捷访问。

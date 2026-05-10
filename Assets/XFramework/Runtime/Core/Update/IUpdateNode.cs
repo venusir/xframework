@@ -1,4 +1,5 @@
-namespace XFramework
+namespace XFramework.XUpdate
+
 {
     /// <summary>
     /// 更新服务接口。提供对 <see cref="IUpdateable"/> 节点的启用/禁用控制。

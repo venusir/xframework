@@ -1,4 +1,5 @@
-namespace XFramework
+namespace XFramework.XUpdate
+
 {
     /// <summary>
     /// 更新 LOD 等级，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。

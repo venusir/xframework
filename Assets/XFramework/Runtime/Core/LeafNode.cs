@@ -1,4 +1,5 @@
-namespace XFramework
+namespace XFramework.XCore
+
 {
     /// <summary>
     /// 叶子节点，不包含子节点。

@@ -1,7 +1,8 @@
 using System.Collections.Generic;
 using System;
 
-namespace XFramework
+namespace XFramework.XCore
+
 {
     /// <summary>
     /// 可包含子节点的接口。提供只读的子节点访问能力。

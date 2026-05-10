@@ -3,8 +3,11 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using R3;
 using UnityEngine;
+using XFramework.XCore;
 
-namespace XFramework
+namespace XFramework.XReactive
+
+
 {
     /// <summary>
     /// 全局消息总线。提供静态 API 和节点扩展方法两种使用方式。

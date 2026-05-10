@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XCore
+
+
 {
     /// <summary>
     /// 实体节点接口。按类型（Type）缓存子节点，提供高效的组件式访问。

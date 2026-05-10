@@ -4,8 +4,12 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using XFramework.XCore;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XAsset
+
+
 {
     /// <summary>
     /// 全局资源系统静态入口。提供与节点树无关的公共资源加载 API。

@@ -1,6 +1,7 @@
 using UnityEngine;
 
-namespace XFramework
+namespace XFramework.XLoad
+
 {
     /// <summary>
     /// 加载上下文。作为 <see cref="ILoadable.LoadAsync"/> 的参数传入，提供进度/状态/权重的读写能力。

@@ -1,6 +1,7 @@
 using System;
 
-namespace XFramework
+namespace XFramework.XReactive
+
 {
     /// <summary>
     /// 消息发布器标记接口。

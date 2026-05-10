@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 
-namespace XFramework
+namespace XFramework.XCore
+
 {
     /// <summary>
     /// 节点工厂。按节点类型自动管理缓存池，提供统一的创建/回收 API。

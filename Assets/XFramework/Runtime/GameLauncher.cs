@@ -1,7 +1,13 @@
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XCore;
+using XFramework.XUpdate;
+using XFramework.XAsset;
+using XFramework.XLoad;
 
-namespace XFramework
+namespace XFramework.XCore
+
+
 {
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
