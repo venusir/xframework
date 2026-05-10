@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using System;
 
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 可包含子节点的接口。提供只读的子节点访问能力。
     /// <para>外部代码应通过此接口访问 <see cref="ParentNode"/> 的公共只读 API。</para>

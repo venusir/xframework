@@ -1,8 +1,8 @@
 using System.Threading;
 
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 提供销毁时的 CancellationToken，用于自动取消订阅和释放资源。
     /// <para>类似于 MonoBehaviour.destroyCancellationToken。</para>

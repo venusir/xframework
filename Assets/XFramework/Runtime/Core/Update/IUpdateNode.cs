@@ -1,6 +1,6 @@
 namespace XFramework.XUpdate
-
 {
+
     /// <summary>
     /// 更新服务接口。提供对 <see cref="IUpdateable"/> 节点的启用/禁用控制。
     /// <para>通过 <see cref="BaseNode.Get{T}"/> 获取此服务：<c>this.Get<IUpdateNode>()</c></para>

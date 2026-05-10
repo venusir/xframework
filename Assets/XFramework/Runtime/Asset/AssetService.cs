@@ -8,9 +8,8 @@ using YooAsset;
 using XFramework.XLoad;
 
 namespace XFramework.XAsset
-
-
 {
+
     /// <summary>
     /// 资源服务独立实现。与节点树无关，可直接 <c>new AssetService()</c> 创建使用。
     /// <para>内部使用 YooAsset 实现资源加载，自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>

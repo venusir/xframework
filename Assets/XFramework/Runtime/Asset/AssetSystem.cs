@@ -8,9 +8,8 @@ using XFramework.XCore;
 using XFramework.XLoad;
 
 namespace XFramework.XAsset
-
-
 {
+
     /// <summary>
     /// 全局资源系统静态入口。提供与节点树无关的公共资源加载 API。
     /// <para>所有方法委托到 <see cref="Instance"/>，需先调用 <see cref="InitializeAsync"/> 初始化。</para>

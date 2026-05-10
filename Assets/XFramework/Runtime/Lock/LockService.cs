@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 
 namespace XFramework.XLock
-
 {
+
     /// <summary>
     /// 全局锁服务静态类。提供基于 <see cref="ILockable"/>、lockType、lock 三要素的全局锁管理能力。
     /// <para>锁由三要素组成：锁主体（<see cref="ILockable"/>，null 表示全局）、锁类型（lockType）、锁本身（lock，不能为 null）。</para>

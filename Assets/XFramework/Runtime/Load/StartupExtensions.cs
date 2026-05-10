@@ -3,8 +3,8 @@ using Cysharp.Threading.Tasks;
 using XFramework.XCore;
 
 namespace XFramework.XLoad
-
 {
+
     /// <summary>
     /// 节点树启动扩展方法。
     /// <para>提供 <see cref="IParentNode"/> 的启动管线：装载 → 加载 → 启动 → 回收。</para>

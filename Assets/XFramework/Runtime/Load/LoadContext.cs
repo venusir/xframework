@@ -1,8 +1,8 @@
 using UnityEngine;
 
 namespace XFramework.XLoad
-
 {
+
     /// <summary>
     /// 加载上下文。作为 <see cref="ILoadable.LoadAsync"/> 的参数传入，提供进度/状态/权重的读写能力。
     /// <para>由 <see cref="ILoader"/> 在装载时创建并注入，节点在加载过程中通过此对象报告进度。</para>

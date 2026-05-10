@@ -6,9 +6,8 @@ using TMPro;
 using XFramework.XCore;
 
 namespace XFramework.XReactive
-
-
 {
+
     /// <summary>
     /// UI 数据绑定工具。将 <see cref="IReadonlySignal{T}"/> 自动绑定到 UI 组件。
     /// <para>所有绑定方法都返回 <see cref="IDisposable"/>，可通过 <see cref="AttachTo"/> 绑定到 <see cref="IDestroyCancellationToken"/> 自动取消。</para>

@@ -1,8 +1,8 @@
 using System;
 
 namespace XFramework.XReactive
-
 {
+
     /// <summary>
     /// 只读信号（无参数版）。可订阅但不可推送。
     /// </summary>

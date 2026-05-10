@@ -2,8 +2,8 @@ using UnityEngine;
 using XFramework.XCore;
 
 namespace XFramework.XUpdate
-
 {
+
     /// <summary>
     /// 更新服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局 Update 调度能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>

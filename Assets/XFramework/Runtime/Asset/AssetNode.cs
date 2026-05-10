@@ -8,10 +8,9 @@ using XFramework.XCore;
 using XFramework.XLoad;
 using XFramework.XAsset;
 
-
 namespace XFramework.XAsset
-
 {
+
     /// <summary>
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>

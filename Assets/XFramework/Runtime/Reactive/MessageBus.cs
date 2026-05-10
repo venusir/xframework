@@ -6,9 +6,8 @@ using UnityEngine;
 using XFramework.XCore;
 
 namespace XFramework.XReactive
-
-
 {
+
     /// <summary>
     /// 全局消息总线。提供静态 API 和节点扩展方法两种使用方式。
     /// <para>静态 API：非节点类可通过 <see cref="MessageBus"/> 直接发布/订阅消息。</para>

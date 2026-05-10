@@ -1,8 +1,8 @@
 using System;
 
 namespace XFramework.XReactive
-
 {
+
     /// <summary>
     /// 消息发布器标记接口。
     /// <para>节点实现此接口后，可通过 <see cref="MessageBus"/> 的扩展方法发布消息。</para>

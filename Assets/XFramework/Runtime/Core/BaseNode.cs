@@ -2,8 +2,8 @@ using System;
 using System.Threading;
 
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 树节点系统的核心接口，定义了节点的基本契约。
     /// </summary>

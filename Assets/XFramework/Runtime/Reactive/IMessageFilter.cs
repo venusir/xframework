@@ -1,8 +1,8 @@
 using System;
 
 namespace XFramework.XReactive
-
 {
+
     /// <summary>
     /// 消息过滤器。类似 ASP.NET Core Middleware，在消息传递时执行横切逻辑。
     /// <para>可用于日志记录、权限检查、数据校验等场景。</para>

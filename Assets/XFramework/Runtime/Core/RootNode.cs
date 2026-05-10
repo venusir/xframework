@@ -1,8 +1,8 @@
 using System;
 
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 根节点。作为节点树的入口，提供便捷的节点创建方法。
     /// </summary>

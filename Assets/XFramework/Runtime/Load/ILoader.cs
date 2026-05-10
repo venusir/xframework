@@ -2,8 +2,8 @@ using System;
 using Cysharp.Threading.Tasks;
 
 namespace XFramework.XLoad
-
 {
+
     /// <summary>
     /// 加载器接口。对外暴露的加载调度入口，隐藏 <see cref="Loader"/> 实现。
     /// <para>通过 <see cref="AddLoadable"/> 注册实现了 <see cref="ILoadable"/> 的节点，调用 <see cref="LoadAsync"/> 统一调度。</para>

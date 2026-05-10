@@ -6,8 +6,8 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace XFramework.XLoad
-
 {
+
     /// <summary>
     /// 加载器。纯 C# 类，作为加载任务的调度器。
     /// <para>通过 <see cref="ILoader"/> 接口对外暴露，外部不可直接访问此类。</para>

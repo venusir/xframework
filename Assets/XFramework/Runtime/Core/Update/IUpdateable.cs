@@ -1,6 +1,6 @@
 namespace XFramework.XUpdate
-
 {
+
     /// <summary>
     /// 更新 LOD 等级，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
     /// <para>等级越高，更新间隔越大，帧消耗越低。</para>

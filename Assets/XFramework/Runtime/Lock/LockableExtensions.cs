@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 
 namespace XFramework.XLock
-
 {
+
     /// <summary>
     /// <see cref="ILockable"/> 的扩展方法，提供全局锁服务的快捷访问。
     /// <para>实现 <see cref="ILockable"/> 的节点可直接通过 <c>this.Acquire(...)</c> 等语法调用全局锁服务，<c>this</c> 自动作为 lockSubject。</para>

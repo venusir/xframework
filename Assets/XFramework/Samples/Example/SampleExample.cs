@@ -1,8 +1,11 @@
 using System;
 using UnityEngine;
+using XFramework.XCore;
+using XFramework.XReactive;
 
 namespace XFramework.Example
 {
+
     /// <summary>
     /// 展示 XFramework Reactive 模块的响应式属性用法。
     /// <para>通过 <see cref="ReactiveProperty{T}"/> 节点实现属性值变化的自动推送与订阅。</para>

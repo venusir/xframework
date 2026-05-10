@@ -2,9 +2,8 @@ using System;
 using XFramework.XLoad;
 
 namespace XFramework.XAsset
-
-
 {
+
     /// <summary>
     /// 将 <see cref="LoadContext"/> 适配为 <see cref="IProgress{LoadContext}"/>。
     /// <para>用于 <see cref="AssetNode"/> 的 <see cref="ILoadable.LoadAsync"/> 将节点树启动管线的进度报告桥接到 <see cref="AssetSystem.InitializeAsync(IProgress{LoadContext}, System.Threading.CancellationToken)"/>。</para>

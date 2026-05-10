@@ -1,6 +1,6 @@
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 节点系统工具类。提供节点树的诊断、遍历等通用辅助方法。
     /// </summary>

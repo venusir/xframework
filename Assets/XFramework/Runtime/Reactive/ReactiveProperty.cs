@@ -3,9 +3,8 @@ using R3;
 using XFramework.XCore;
 
 namespace XFramework.XReactive
-
-
 {
+
     /// <summary>
     /// 响应式属性节点。包含一个可自动推送变化的响应式值。
     /// <para>适用于血量、分数、状态等需要被监听的属性。</para>

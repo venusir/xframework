@@ -7,9 +7,8 @@ using UnityEngine.SceneManagement;
 using XFramework.XCore;
 
 namespace XFramework.XAsset
-
-
 {
+
     /// <summary>
     /// 资源服务接口。提供统一的资源加载、实例化与生命周期管理。
     /// <para>实现此接口的服务节点可通过 <see cref="BaseNode.Get{T}"/> 被其他节点访问。</para>

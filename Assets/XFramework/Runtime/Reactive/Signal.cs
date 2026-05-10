@@ -2,8 +2,8 @@ using System;
 using R3;
 
 namespace XFramework.XReactive
-
 {
+
     /// <summary>
     /// 基于 R3 Subject 的信号实现（无参数版）。
     /// </summary>

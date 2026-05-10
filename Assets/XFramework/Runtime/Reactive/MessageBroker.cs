@@ -6,8 +6,8 @@ using R3;
 using UnityEngine;
 
 namespace XFramework.XReactive
-
 {
+
     /// <summary>
     /// 基于 R3 的消息代理实现。支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>

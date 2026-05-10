@@ -2,8 +2,8 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace XFramework.XUpdate
-
 {
+
     /// <summary>
     /// 纯 Update 调度器，不依赖节点树。
     /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，

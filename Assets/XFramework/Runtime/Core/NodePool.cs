@@ -1,8 +1,8 @@
 using System.Collections.Generic;
 
 namespace XFramework.XCore
-
 {
+
     /// <summary>
     /// 节点缓存池的非泛型接口，用于以 Type 为 key 统一管理不同类型的池。
     /// </summary>

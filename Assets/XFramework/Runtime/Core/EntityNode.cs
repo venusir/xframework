@@ -4,9 +4,8 @@ using Cysharp.Threading.Tasks;
 using XFramework.XLoad;
 
 namespace XFramework.XCore
-
-
 {
+
     /// <summary>
     /// 实体节点接口。按类型（Type）缓存子节点，提供高效的组件式访问。
     /// <para>类似于 Unity 的 GetComponent/AddComponent 模式，但基于纯 C# 节点树实现。</para>

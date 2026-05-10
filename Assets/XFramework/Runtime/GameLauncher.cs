@@ -6,9 +6,8 @@ using XFramework.XAsset;
 using XFramework.XLoad;
 
 namespace XFramework.XCore
-
-
 {
+
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
     /// <para>负责初始化 <see cref="AssetSystem"/>、创建 <see cref="RootNode"/> 并调用 <see cref="NodeUtility.StartupAsync"/> 启动节点树。</para>
