@@ -1,7 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 
-namespace XFramework.XLoad
+namespace XFramework.XLoader
 {
 
     /// <summary>

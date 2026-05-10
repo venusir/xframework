@@ -5,7 +5,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using YooAsset;
-using XFramework.XLoad;
+using XFramework.XLoader;
 
 namespace XFramework.XAsset
 {

@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace XFramework.XLoad
+namespace XFramework.XLoader
 {
 
     /// <summary>

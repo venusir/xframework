@@ -3,7 +3,7 @@ using UnityEngine;
 using XFramework.XCore;
 using XFramework.XUpdate;
 using XFramework.XAsset;
-using XFramework.XLoad;
+using XFramework.XLoader;
 
 namespace XFramework.XCore
 {

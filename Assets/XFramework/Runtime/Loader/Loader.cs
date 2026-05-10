@@ -5,7 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace XFramework.XLoad
+namespace XFramework.XLoader
 {
 
     /// <summary>

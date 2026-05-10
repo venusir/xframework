@@ -17,7 +17,6 @@ namespace XFramework.Example
         private RootNode _root;
         private ReactiveProperty<int> _healthProp;
         private ReactiveProperty<float> _scoreProp;
-
         #endregion
 
         #region Unity Lifecycle

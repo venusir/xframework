@@ -1,5 +1,5 @@
 using System;
-using XFramework.XLoad;
+using XFramework.XLoader;
 
 namespace XFramework.XAsset
 {

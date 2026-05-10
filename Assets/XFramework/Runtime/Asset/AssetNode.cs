@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 using XFramework.XCore;
-using XFramework.XLoad;
+using XFramework.XLoader;
 using XFramework.XAsset;
 
 namespace XFramework.XAsset
