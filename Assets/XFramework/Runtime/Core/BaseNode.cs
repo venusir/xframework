@@ -33,8 +33,9 @@ namespace XFramework.XCore
     /// <summary>
     /// 树节点系统的抽象基类。
     /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy/Start）等核心功能。</para>
+    /// <para>实现 <see cref="IDisposable"/>，支持 <c>using</c> 语法和 <c>AddTo</c> 扩展。</para>
     /// </summary>
-    public abstract class BaseNode : IBaseNode, IDestroyCancellationToken
+    public abstract class BaseNode : IBaseNode, IDestroyCancellationToken, IDisposable
     {
         #region Private Properties
 
@@ -86,6 +87,12 @@ namespace XFramework.XCore
 
             DestroyInternal();
         }
+
+        /// <summary>
+        /// 释放所有资源。等价于 <see cref="Destroy()"/>。
+        /// <para>实现 <see cref="IDisposable"/> 以支持 <c>using</c> 语法和 <c>AddTo</c> 扩展。</para>
+        /// </summary>
+        public void Dispose() => Destroy();
 
         #endregion
 

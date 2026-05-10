@@ -207,24 +207,24 @@ namespace XFramework.XReactive
 
         /// <summary>
         /// 如果订阅者实现了 <see cref="IDestroyCancellationToken"/>，将订阅绑定到其生命周期，对象销毁时自动取消。
-        /// <para>通过 <see cref="IDestroyCancellationToken.DestroyCancellationToken"/> 实现，类似于 MonoBehaviour.destroyCancellationToken。</para>
+        /// <para>通过 <see cref="NodeExtensions.AddTo{T}(T, CancellationToken)"/> 实现，复用统一的绑定逻辑。</para>
         /// </summary>
         private static void TryBindToDestroy(object subscriber, IDisposable disposable)
         {
             if (subscriber is IDestroyCancellationToken provider)
             {
-                disposable.RegisterTo(provider.DestroyCancellationToken);
+                disposable.AddTo(provider.DestroyCancellationToken);
             }
             else if (subscriber is MonoBehaviour mono)
             {
-                disposable.RegisterTo(mono.destroyCancellationToken);
+                disposable.AddTo(mono.destroyCancellationToken);
             }
         }
 
         /// <summary>将 disposable 绑定到节点的生命周期，节点销毁时自动释放。</summary>
         public static IDisposable AttachTo(this IDisposable disposable, IDestroyCancellationToken token)
         {
-            disposable.RegisterTo(token.DestroyCancellationToken);
+            disposable.AddTo(token.DestroyCancellationToken);
             return disposable;
         }
 
