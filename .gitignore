@@ -105,3 +105,7 @@ InitTestScene*.unity*
 # NuGetForUnity downloaded packages
 /[Aa]ssets/Packages/
 /[Aa]ssets/Packages.meta
+
+# Test runner generated logs and results
+TestLog_*.txt
+TestResults_*.xml
