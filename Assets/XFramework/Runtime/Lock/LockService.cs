@@ -67,21 +67,13 @@ namespace XFramework.XLock
         /// </summary>
         public static IDisposable OnLocked(ILockable subject, Action<int> handler)
         {
-            if (!_onLockedSubjects.TryGetValue(subject, out var handlers))
+            if (!_onLockedSubjects.ContainsKey(subject))
             {
-                handlers = null;
-                _onLockedSubjects[subject] = handlers;
+                _onLockedSubjects[subject] = null;
             }
             _onLockedSubjects[subject] += handler;
 
-            return new ActionDisposable(() =>
-            {
-                _onLockedSubjects[subject] -= handler;
-                if (_onLockedSubjects[subject] == null)
-                {
-                    _onLockedSubjects.Remove(subject);
-                }
-            });
+            return ActionDisposable.Rent(subject, handler, _onLockedSubjects);
         }
 
         /// <summary>
@@ -91,21 +83,13 @@ namespace XFramework.XLock
         /// </summary>
         public static IDisposable OnUnlocked(ILockable subject, Action<int> handler)
         {
-            if (!_onUnlockedSubjects.TryGetValue(subject, out var handlers))
+            if (!_onUnlockedSubjects.ContainsKey(subject))
             {
-                handlers = null;
-                _onUnlockedSubjects[subject] = handlers;
+                _onUnlockedSubjects[subject] = null;
             }
             _onUnlockedSubjects[subject] += handler;
 
-            return new ActionDisposable(() =>
-            {
-                _onUnlockedSubjects[subject] -= handler;
-                if (_onUnlockedSubjects[subject] == null)
-                {
-                    _onUnlockedSubjects.Remove(subject);
-                }
-            });
+            return ActionDisposable.Rent(subject, handler, _onUnlockedSubjects);
         }
 
         /// <summary>
@@ -347,20 +331,57 @@ namespace XFramework.XLock
     }
 
     /// <summary>
-    /// 简单的 <see cref="IDisposable"/> 实现，包装一个委托。
+    /// 可复用的 <see cref="IDisposable"/> 实现，存储取消订阅所需原始数据而非委托，实现零 GC。
+    /// <para>内部维护静态对象池，避免频繁 GC Alloc。</para>
     /// </summary>
     internal sealed class ActionDisposable : IDisposable
     {
-        private Action _action;
-        public ActionDisposable(Action action) => _action = action;
+        private static readonly Stack<ActionDisposable> _pool = new(capacity: 8);
+
+        private ILockable _subject;
+        private Action<int> _handler;
+        private Dictionary<ILockable, Action<int>> _targetDict;
+
+        /// <summary>
+        /// 从池中租用一个 <see cref="IDisposable"/>，
+        /// <see cref="Dispose()"/> 时会从 <paramref name="targetDict"/> 中移除 <paramref name="handler"/>。
+        /// </summary>
+        public static IDisposable Rent(ILockable subject, Action<int> handler, Dictionary<ILockable, Action<int>> targetDict)
+        {
+            if (_pool.Count > 0)
+            {
+                var d = _pool.Pop();
+                d.Set(subject, handler, targetDict);
+                return d;
+            }
+            var d2 = new ActionDisposable();
+            d2.Set(subject, handler, targetDict);
+            return d2;
+        }
+
+        private void Set(ILockable subject, Action<int> handler, Dictionary<ILockable, Action<int>> targetDict)
+        {
+            _subject = subject;
+            _handler = handler;
+            _targetDict = targetDict;
+        }
+
         public void Dispose()
         {
-            var action = _action;
-            if (action != null)
+            if (_targetDict == null) return;
+
+            // 执行取消订阅逻辑（原本由 lambda 完成）
+            _targetDict[_subject] -= _handler;
+            if (_targetDict[_subject] == null)
             {
-                _action = null;
-                action();
+                _targetDict.Remove(_subject);
             }
+
+            // 清空引用，归还至池中
+            _subject = null;
+            _handler = null;
+            _targetDict = null;
+            _pool.Push(this);
         }
     }
 }
