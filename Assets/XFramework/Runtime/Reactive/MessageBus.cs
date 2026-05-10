@@ -220,14 +220,6 @@ namespace XFramework.XReactive
                 disposable.AddTo(mono.destroyCancellationToken);
             }
         }
-
-        /// <summary>将 disposable 绑定到节点的生命周期，节点销毁时自动释放。</summary>
-        public static IDisposable AttachTo(this IDisposable disposable, IDestroyCancellationToken token)
-        {
-            disposable.AddTo(token.DestroyCancellationToken);
-            return disposable;
-        }
-
         #endregion
     }
 }
