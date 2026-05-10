@@ -107,5 +107,5 @@ InitTestScene*.unity*
 /[Aa]ssets/Packages.meta
 
 # Test runner generated logs and results
-TestLog_*.txt
-TestResults_*.xml
+TestLog*.txt
+TestResults*.xml
