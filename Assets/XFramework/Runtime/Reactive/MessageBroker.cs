@@ -142,6 +142,8 @@ namespace XFramework.XReactive
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
         {
             // 带 asyncHandler 的订阅无法缓存
+            // GC 说明: lambda 体包含 .Forget() + return m 的额外逻辑，无法用 asyncHandler.Invoke 替代，
+            // 存在 1 个闭包 + 1 个委托分配（初始化时一次性，非热路径）
             var subject = GetOrAddSubject<TMessage>();
             return new ObservableSignal<TMessage>(
                 subject.Select(m =>
@@ -155,6 +157,8 @@ namespace XFramework.XReactive
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
         {
             // 带 filter + asyncHandler 的订阅无法缓存
+            // GC 说明: filter.Invoke 消除了 filter 的闭包（1 委托），但 Select 的 lambda 仍有 1 闭包 + 1 委托
+            //（初始化时一次性，非热路径）
             // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配
             var subject = GetOrAddSubject<TMessage>();
             return new ObservableSignal<TMessage>(
