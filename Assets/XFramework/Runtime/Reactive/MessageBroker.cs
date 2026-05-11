@@ -37,6 +37,18 @@ namespace XFramework.XReactive
         /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
         private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
+        /// <summary>按消息类型缓存的 ObservableSignal（避免每次 Subscribe 都 new）。</summary>
+        private readonly Dictionary<Type, object> _signalCache = new();
+
+        /// <summary>按 (消息类型 -> TKey -> ObservableSignal) 缓存的键值信号。</summary>
+        private readonly Dictionary<Type, object> _keyedSignalCache = new();
+
+        /// <summary>按消息类型缓存的缓冲 ObservableSignal。</summary>
+        private readonly Dictionary<Type, object> _bufferedSignalCache = new();
+
+        /// <summary>按 (消息类型 -> TKey -> ObservableSignal) 缓存的键值缓冲信号。</summary>
+        private readonly Dictionary<Type, object> _keyedBufferedSignalCache = new();
+
         #endregion
 
         #region IMessagePublisher
@@ -89,24 +101,47 @@ namespace XFramework.XReactive
 
         public IReadonlySignal<TMessage> Subscribe<TMessage>()
         {
-            var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject);
+            var type = typeof(TMessage);
+            if (!_signalCache.TryGetValue(type, out var cached))
+            {
+                cached = new ObservableSignal<TMessage>(GetOrAddSubject<TMessage>());
+                _signalCache[type] = cached;
+            }
+            return (IReadonlySignal<TMessage>)cached;
         }
 
         public IReadonlySignal<TMessage> Subscribe<TMessage>(Predicate<TMessage> filter)
         {
+            // 带 filter 的订阅无法缓存，每个 filter 是不同的 Observable 链
+            // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配（仅 1 个委托，无闭包）
             var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject.Where(m => filter(m)));
+            return new ObservableSignal<TMessage>(subject.Where(filter.Invoke));
         }
 
         public IReadonlySignal<TMessage> Subscribe<TKey, TMessage>(TKey key)
         {
-            var subject = GetOrAddKeyedSubject<TKey, TMessage>(key);
-            return new ObservableSignal<TMessage>(subject);
+            var type = typeof(TMessage);
+            if (!_keyedSignalCache.TryGetValue(type, out var innerObj))
+            {
+                var dict = new Dictionary<TKey, IReadonlySignal<TMessage>>();
+                _keyedSignalCache[type] = dict;
+                var signal = new ObservableSignal<TMessage>(GetOrAddKeyedSubject<TKey, TMessage>(key));
+                dict[key] = signal;
+                return signal;
+            }
+
+            var innerDict = (Dictionary<TKey, IReadonlySignal<TMessage>>)innerObj;
+            if (!innerDict.TryGetValue(key, out var cached))
+            {
+                cached = new ObservableSignal<TMessage>(GetOrAddKeyedSubject<TKey, TMessage>(key));
+                innerDict[key] = cached;
+            }
+            return cached;
         }
 
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
         {
+            // 带 asyncHandler 的订阅无法缓存
             var subject = GetOrAddSubject<TMessage>();
             return new ObservableSignal<TMessage>(
                 subject.Select(m =>
@@ -119,9 +154,11 @@ namespace XFramework.XReactive
 
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
         {
+            // 带 filter + asyncHandler 的订阅无法缓存
+            // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配
             var subject = GetOrAddSubject<TMessage>();
             return new ObservableSignal<TMessage>(
-                subject.Where(m => filter(m)).Select(m =>
+                subject.Where(filter.Invoke).Select(m =>
                 {
                     asyncHandler(m).Forget();
                     return m;
@@ -131,14 +168,34 @@ namespace XFramework.XReactive
 
         public IReadonlySignal<TMessage> SubscribeBuffered<TMessage>()
         {
-            var subject = GetOrAddBufferedSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject);
+            var type = typeof(TMessage);
+            if (!_bufferedSignalCache.TryGetValue(type, out var cached))
+            {
+                cached = new ObservableSignal<TMessage>(GetOrAddBufferedSubject<TMessage>());
+                _bufferedSignalCache[type] = cached;
+            }
+            return (IReadonlySignal<TMessage>)cached;
         }
 
         public IReadonlySignal<TMessage> SubscribeBuffered<TKey, TMessage>(TKey key)
         {
-            var subject = GetOrAddKeyedBufferedSubject<TKey, TMessage>(key);
-            return new ObservableSignal<TMessage>(subject);
+            var type = typeof(TMessage);
+            if (!_keyedBufferedSignalCache.TryGetValue(type, out var innerObj))
+            {
+                var dict = new Dictionary<TKey, IReadonlySignal<TMessage>>();
+                _keyedBufferedSignalCache[type] = dict;
+                var signal = new ObservableSignal<TMessage>(GetOrAddKeyedBufferedSubject<TKey, TMessage>(key));
+                dict[key] = signal;
+                return signal;
+            }
+
+            var innerDict = (Dictionary<TKey, IReadonlySignal<TMessage>>)innerObj;
+            if (!innerDict.TryGetValue(key, out var cached))
+            {
+                cached = new ObservableSignal<TMessage>(GetOrAddKeyedBufferedSubject<TKey, TMessage>(key));
+                innerDict[key] = cached;
+            }
+            return cached;
         }
 
         #endregion
@@ -229,6 +286,10 @@ namespace XFramework.XReactive
             _keyedBufferedSubjects.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
+            _signalCache.Clear();
+            _keyedSignalCache.Clear();
+            _bufferedSignalCache.Clear();
+            _keyedBufferedSignalCache.Clear();
         }
 
         #endregion
