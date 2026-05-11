@@ -1,16 +1,20 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
 using Cysharp.Threading.Tasks;
 using R3;
 using UnityEngine;
 
 namespace XFramework.XReactive
 {
-
     /// <summary>
     /// 基于 R3 的消息代理实现。支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>
+    /// <remarks>
+    /// GC 优化说明:
+    /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历，无过滤器时零分配
+    /// - 键值消息使用两层字典结构，值类型 Key 无 boxing
+    /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
         #region Private Fields
@@ -18,17 +22,20 @@ namespace XFramework.XReactive
         /// <summary>按消息类型缓存的 Subject。</summary>
         private readonly Dictionary<Type, object> _subjects = new();
 
-        /// <summary>按 (消息类型, Key) 缓存的 Subject。</summary>
-        private readonly Dictionary<(Type type, object key), object> _keyedSubjects = new();
+        /// <summary>按消息类型 -> (TKey -> Subject{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
+        private readonly Dictionary<Type, object> _keyedSubjects = new();
 
         /// <summary>按消息类型缓存的 ReplaySubject（缓冲 1 条）。</summary>
         private readonly Dictionary<Type, object> _bufferedSubjects = new();
 
-        /// <summary>按 (消息类型, Key) 缓存的 ReplaySubject（缓冲 1 条）。</summary>
-        private readonly Dictionary<(Type type, object key), object> _keyedBufferedSubjects = new();
+        /// <summary>按消息类型 -> (TKey -> ReplaySubject{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
+        private readonly Dictionary<Type, object> _keyedBufferedSubjects = new();
 
-        /// <summary>全局消息过滤器列表。</summary>
-        private readonly List<(Type type, object filter)> _globalFilters = new();
+        /// <summary>按消息类型存储的过滤器列表。</summary>
+        private readonly Dictionary<Type, List<object>> _filtersByType = new();
+
+        /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
+        private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
         #endregion
 
@@ -38,7 +45,7 @@ namespace XFramework.XReactive
         {
             var type = typeof(TMessage);
 
-            // 执行过滤器管道
+            // 执行过滤器管道（无过滤器时零分配）
             if (!ApplyFilters(type, message))
                 return;
 
@@ -53,19 +60,27 @@ namespace XFramework.XReactive
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
         {
-            var lookup = (typeof(TMessage), (object)key);
+            var type = typeof(TMessage);
 
             // 执行过滤器管道
-            if (!ApplyFilters(typeof(TMessage), message))
+            if (!ApplyFilters(type, message))
                 return;
 
-            // 推送给键值订阅者
-            if (_keyedSubjects.TryGetValue(lookup, out var sub))
-                ((Subject<TMessage>)sub).OnNext(message);
+            // 推送给键值订阅者（使用两层字典，值类型 TKey 无 boxing）
+            if (_keyedSubjects.TryGetValue(type, out var innerObj))
+            {
+                var dict = (Dictionary<TKey, Subject<TMessage>>)innerObj;
+                if (dict.TryGetValue(key, out var subject))
+                    subject.OnNext(message);
+            }
 
             // 推送给键值缓冲订阅者
-            if (_keyedBufferedSubjects.TryGetValue(lookup, out var bufSub))
-                ((ReplaySubject<TMessage>)bufSub).OnNext(message);
+            if (_keyedBufferedSubjects.TryGetValue(type, out var innerBufObj))
+            {
+                var dict = (Dictionary<TKey, ReplaySubject<TMessage>>)innerBufObj;
+                if (dict.TryGetValue(key, out var subject))
+                    subject.OnNext(message);
+            }
         }
 
         #endregion
@@ -133,35 +148,41 @@ namespace XFramework.XReactive
         /// <summary>注册全局消息过滤器。</summary>
         public void AddFilter<TMessage>(IMessageFilter<TMessage> filter)
         {
-            _globalFilters.Add((typeof(TMessage), filter));
+            var type = typeof(TMessage);
+            if (!_filtersByType.TryGetValue(type, out var list))
+            {
+                list = new List<object>();
+                _filtersByType[type] = list;
+            }
+            list.Add(filter);
+            // 使缓存 pipeline 失效，下次 Publish 时重建
+            _filterPipelines.Remove(type);
         }
 
-        /// <summary>应用过滤器管道。返回 false 表示消息被拦截。</summary>
+        /// <summary>
+        /// 应用过滤器管道。返回 false 表示消息被拦截。
+        /// 无过滤器时零堆分配。
+        /// </summary>
         private bool ApplyFilters<TMessage>(Type type, TMessage message)
         {
-            // 收集该类型的所有过滤器
-            var filters = _globalFilters
-                .Where(f => f.type == type)
-                .Select(f => f.filter)
-                .Cast<IMessageFilter<TMessage>>()
-                .ToList();
-
-            if (filters.Count == 0)
+            // 快速路径：该类型无过滤器 -> 零分配
+            if (!_filtersByType.TryGetValue(type, out var filters) || filters.Count == 0)
                 return true;
 
-            // 构建过滤器管道（类似 ASP.NET Core Middleware）
-            int index = 0;
-            Action<TMessage> next = null;
-            next = msg =>
+            // 获取或构建缓存的 pipeline
+            if (!_filterPipelines.TryGetValue(type, out var pipelineObj) || pipelineObj == null)
             {
-                if (index >= filters.Count) return;
-                var filter = filters[index++];
-                filter.Invoke(msg, next);
-            };
+                var pipeline = BuildFilterPipeline<TMessage>(filters);
+                _filterPipelines[type] = pipeline;
+                pipelineObj = pipeline;
+            }
+
+            if (pipelineObj == null)
+                return true;
 
             try
             {
-                next(message);
+                ((Action<TMessage>)pipelineObj)(message);
                 return true;
             }
             catch (Exception e)
@@ -171,6 +192,27 @@ namespace XFramework.XReactive
             }
         }
 
+        /// <summary>
+        /// 构建过滤器管道（类似 ASP.NET Core Middleware）。
+        /// 在注册过滤器时分配（一次性开销），Publish 时零分配。
+        /// </summary>
+        private static Action<TMessage> BuildFilterPipeline<TMessage>(List<object> filterObjects)
+        {
+            var typedFilters = new IMessageFilter<TMessage>[filterObjects.Count];
+            for (int i = 0; i < filterObjects.Count; i++)
+                typedFilters[i] = (IMessageFilter<TMessage>)filterObjects[i];
+
+            // 构建调用链：终端为 no-op
+            Action<TMessage> pipeline = msg => { };
+            for (int i = typedFilters.Length - 1; i >= 0; i--)
+            {
+                var filter = typedFilters[i];
+                var next = pipeline;
+                pipeline = msg => filter.Invoke(msg, next);
+            }
+            return pipeline;
+        }
+
         #endregion
 
         #region IMessageBroker
@@ -178,14 +220,15 @@ namespace XFramework.XReactive
         public void Clear()
         {
             DisposeAll(_subjects);
-            DisposeAll(_keyedSubjects);
+            DisposeAllKeyed(_keyedSubjects);
             DisposeAll(_bufferedSubjects);
-            DisposeAll(_keyedBufferedSubjects);
+            DisposeAllKeyed(_keyedBufferedSubjects);
             _subjects.Clear();
             _keyedSubjects.Clear();
             _bufferedSubjects.Clear();
             _keyedBufferedSubjects.Clear();
-            _globalFilters.Clear();
+            _filtersByType.Clear();
+            _filterPipelines.Clear();
         }
 
         #endregion
@@ -205,13 +248,23 @@ namespace XFramework.XReactive
 
         private Subject<TMessage> GetOrAddKeyedSubject<TKey, TMessage>(TKey key)
         {
-            var lookup = (typeof(TMessage), (object)key);
-            if (!_keyedSubjects.TryGetValue(lookup, out var sub))
+            var type = typeof(TMessage);
+            if (!_keyedSubjects.TryGetValue(type, out var innerObj))
             {
-                sub = new Subject<TMessage>();
-                _keyedSubjects[lookup] = sub;
+                var dict = new Dictionary<TKey, Subject<TMessage>>();
+                _keyedSubjects[type] = dict;
+                var newSubject = new Subject<TMessage>();
+                dict[key] = newSubject;
+                return newSubject;
             }
-            return (Subject<TMessage>)sub;
+
+            var innerDict = (Dictionary<TKey, Subject<TMessage>>)innerObj;
+            if (!innerDict.TryGetValue(key, out var found))
+            {
+                found = new Subject<TMessage>();
+                innerDict[key] = found;
+            }
+            return found;
         }
 
         private ReplaySubject<TMessage> GetOrAddBufferedSubject<TMessage>()
@@ -227,13 +280,23 @@ namespace XFramework.XReactive
 
         private ReplaySubject<TMessage> GetOrAddKeyedBufferedSubject<TKey, TMessage>(TKey key)
         {
-            var lookup = (typeof(TMessage), (object)key);
-            if (!_keyedBufferedSubjects.TryGetValue(lookup, out var sub))
+            var type = typeof(TMessage);
+            if (!_keyedBufferedSubjects.TryGetValue(type, out var innerObj))
             {
-                sub = new ReplaySubject<TMessage>(1);
-                _keyedBufferedSubjects[lookup] = sub;
+                var dict = new Dictionary<TKey, ReplaySubject<TMessage>>();
+                _keyedBufferedSubjects[type] = dict;
+                var newSubject = new ReplaySubject<TMessage>(1);
+                dict[key] = newSubject;
+                return newSubject;
             }
-            return (ReplaySubject<TMessage>)sub;
+
+            var innerDict = (Dictionary<TKey, ReplaySubject<TMessage>>)innerObj;
+            if (!innerDict.TryGetValue(key, out var found))
+            {
+                found = new ReplaySubject<TMessage>(1);
+                innerDict[key] = found;
+            }
+            return found;
         }
 
         private static void DisposeAll(IEnumerable<KeyValuePair<Type, object>> dict)
@@ -245,12 +308,18 @@ namespace XFramework.XReactive
             }
         }
 
-        private static void DisposeAll(IEnumerable<KeyValuePair<(Type, object), object>> dict)
+        private static void DisposeAllKeyed(IEnumerable<KeyValuePair<Type, object>> dict)
         {
             foreach (var kv in dict)
             {
-                if (kv.Value is IDisposable d)
-                    d.Dispose();
+                if (kv.Value is not IDictionary inner)
+                    continue;
+
+                foreach (var value in inner.Values)
+                {
+                    if (value is IDisposable d)
+                        d.Dispose();
+                }
             }
         }
 
