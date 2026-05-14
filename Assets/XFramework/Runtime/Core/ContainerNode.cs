@@ -37,8 +37,10 @@ namespace XFramework.XCore
         /// <param name="node">要移除的子节点。</param>
         public void RemoveNode(BaseNode node)
         {
-            RemoveChild(node);
-            node.Destroy();
+            if (RemoveChild(node))
+            {
+                node.Destroy();
+            }
         }
 
         internal sealed override void AwakeInternal()

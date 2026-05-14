@@ -66,18 +66,18 @@ namespace XFramework.XCore
         List<BaseNode> children;
 
         /// <summary>子节点数量。</summary>
-        public int ChildCount => children.Count;
+        public int ChildCount => children != null ? children.Count : 0;
 
         /// <summary>按索引访问子节点。</summary>
         /// <param name="index">子节点索引。</param>
         /// <returns>指定索引处的子节点。</returns>
-        public BaseNode this[int index] => children[index];
+        public BaseNode this[int index] => children != null ? children[index] : null;
 
         /// <summary>
         /// 获取遍历子节点的迭代器，支持 foreach 语法。
         /// </summary>
         /// <returns>子节点迭代器。</returns>
-        public IEnumerator<BaseNode> GetEnumerator() => children.GetEnumerator();
+        public IEnumerator<BaseNode> GetEnumerator() => children != null ? children.GetEnumerator() : null;
 
         /// <summary>
         /// 获取第一个指定类型的子节点。
@@ -223,7 +223,7 @@ namespace XFramework.XCore
         /// </summary>
         /// <param name="node">要移除的子节点。</param>
         /// <param name="fromChild">是否为子节点自身触发的移除（即子节点调用 Destroy 时）。</param>
-        internal void RemoveChild(BaseNode node, bool fromChild = false)
+        internal bool RemoveChild(BaseNode node, bool fromChild = false)
         {
             if (node != null && children.Contains(node))
             {
@@ -231,7 +231,9 @@ namespace XFramework.XCore
                 OnNodeRemoved?.Invoke(node);
                 OnDescendantRemoved?.Invoke(node);
                 OnChildRemoved(node, fromChild);
+                return true;
             }
+            return false;
         }
 
         /// <summary>

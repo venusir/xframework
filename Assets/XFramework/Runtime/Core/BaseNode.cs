@@ -169,13 +169,13 @@ namespace XFramework.XCore
                 _destroyCts = null;
             }
 
+            _destroyed = true;
+            _depth = 0;
+            _parent = null;
+
             OnNodeDestroy?.Invoke(this);
 
             OnDestroy();
-
-            _depth = 0;
-            _parent = null;
-            _destroyed = true;
 
             // 通知缓存池：节点已销毁，可以回收
             OnReturnToPool?.Invoke(this);

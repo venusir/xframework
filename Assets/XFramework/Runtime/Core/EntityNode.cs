@@ -383,12 +383,13 @@ namespace XFramework.XCore
 
         internal sealed override void DestroyInternal()
         {
+            base.DestroyInternal();
+
             _typeCache.Clear();
             _typeCache = null;
             _interfaceCache.Clear();
             _interfaceCache = null;
 
-            base.DestroyInternal();
         }
 
         protected override void OnChildRemoved(BaseNode node, bool fromChild = false)

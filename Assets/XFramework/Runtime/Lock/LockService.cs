@@ -98,7 +98,9 @@ namespace XFramework.XLock
         /// </summary>
         private static void NotifyOnLocked(ILockable lockSubject, int lockType, object lockObj)
         {
-            if (lockSubject == Global)
+            ILockable subjectKey = lockSubject ?? Global;
+
+            if (subjectKey == Global)
             {
                 // 全局锁：通知所有订阅者
                 foreach (var kvp in _onLockedSubjects)
@@ -112,7 +114,7 @@ namespace XFramework.XLock
             else
             {
                 // 普通锁：只通知该 subject 的订阅者
-                if (_onLockedSubjects.TryGetValue(lockSubject, out var handler))
+                if (_onLockedSubjects.TryGetValue(subjectKey, out var handler))
                 {
                     handler?.Invoke(lockType);
                 }
@@ -125,7 +127,9 @@ namespace XFramework.XLock
         /// </summary>
         private static void NotifyOnUnlocked(ILockable lockSubject, int lockType, object lockObj)
         {
-            if (lockSubject == Global)
+            ILockable subjectKey = lockSubject ?? Global;
+
+            if (subjectKey == Global)
             {
                 // 全局锁：通知所有订阅者
                 foreach (var kvp in _onUnlockedSubjects)
@@ -139,7 +143,7 @@ namespace XFramework.XLock
             else
             {
                 // 普通锁：只通知该 subject 的订阅者
-                if (_onUnlockedSubjects.TryGetValue(lockSubject, out var handler))
+                if (_onUnlockedSubjects.TryGetValue(subjectKey, out var handler))
                 {
                     handler?.Invoke(lockType);
                 }
