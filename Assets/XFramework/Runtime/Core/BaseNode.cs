@@ -161,6 +161,8 @@ namespace XFramework.XCore
         {
             if (_destroyed) return;
 
+            _destroyed = true;
+
             // 触发取消，所有通过 DestroyCancellationToken 绑定的订阅自动释放
             if (_destroyCts != null)
             {
@@ -169,7 +171,6 @@ namespace XFramework.XCore
                 _destroyCts = null;
             }
 
-            _destroyed = true;
             _depth = 0;
             _parent = null;
 
