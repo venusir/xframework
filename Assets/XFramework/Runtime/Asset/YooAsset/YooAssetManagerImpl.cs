@@ -13,7 +13,7 @@ namespace XFramework
     /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetNode"/> 接口访问。</para>
     /// <para>职责：资源加载/卸载、引用计数、延迟卸载、场景加载、预加载。</para>
     /// </summary>
-    class YooAssetServiceImpl
+    class YooAssetManagerImpl
     {
         private readonly string _packageName;
         private ResourcePackage _package;
@@ -36,7 +36,7 @@ namespace XFramework
         /// <summary>统一卸载 Tick 协程是否正在运行。</summary>
         private bool _tickRunning;
 
-        public YooAssetServiceImpl(string packageName = "DefaultPackage")
+        public YooAssetManagerImpl(string packageName = "DefaultPackage")
         {
             _packageName = packageName;
         }

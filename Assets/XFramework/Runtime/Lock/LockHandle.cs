@@ -4,7 +4,7 @@ namespace XFramework.XLock
 {
 
     /// <summary>
-    /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="LockService.Acquire"/> 获取，Dispose 时自动释放锁。
+    /// 锁句柄。通过 <see cref="ILockable.Acquire(int, object)"/> 或 <see cref="LockManager.AddLock"/> 获取，Dispose 时自动释放锁。
     /// <para>支持 <c>using</c> 语法，也支持手动 <see cref="Dispose"/>。</para>
     /// <para>零 GC 分配：直接存储锁的三要素，而非委托。</para>
     /// </summary>
@@ -42,7 +42,7 @@ namespace XFramework.XLock
         {
             if (_active)
             {
-                LockService.Release(_lockSubject, _lockType, _lockObj);
+                LockManager.RemoveLock(_lockSubject, _lockType, _lockObj);
             }
         }
     }

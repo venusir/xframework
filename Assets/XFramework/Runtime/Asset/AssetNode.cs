@@ -14,14 +14,14 @@ namespace XFramework.XAsset
     /// <summary>
     /// 资源服务节点。作为 <see cref="LeafNode"/> 挂载到节点树中，提供全局资源加载能力。
     /// <para>其他节点通过 <see cref="BaseNode.Get{T}"/> 获取此服务。</para>
-    /// <para>内部委托到 <see cref="AssetSystem"/> 的全局 <see cref="IAssetService"/> 实例。</para>
+    /// <para>内部委托到 <see cref="AssetSystem"/> 的全局 <see cref="IAssetManager"/> 实例。</para>
     /// <para>自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// </summary>
     public class AssetNode : LeafNode, IAssetNode, ILoadable
     {
         #region Private Fields
 
-        private IAssetService _service;
+        private IAssetManager _service;
 
         #endregion
 

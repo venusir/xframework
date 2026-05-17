@@ -5,17 +5,17 @@ namespace XFramework.XLock
 {
 
     /// <summary>
-    /// 全局锁服务静态类。提供基于 <see cref="ILockable"/>、lockType、lock 三要素的全局锁管理能力。
+    /// 全局锁管理器静态类。提供基于 <see cref="ILockable"/>、lockType、lock 三要素的全局锁管理能力。
     /// <para>锁由三要素组成：锁主体（<see cref="ILockable"/>，null 表示全局）、锁类型（lockType）、锁本身（lock，不能为 null）。</para>
     /// <para>全局锁请使用 <see cref="Global"/> 作为 lockSubject。</para>
     /// </summary>
-    public static class LockService
+    public static class LockManager
     {
         #region Global Sentinel
 
         /// <summary>
         /// 全局锁哨兵。实现 <see cref="ILockable"/>，作为全局锁的 lockSubject 使用。
-        /// <para>例如：<c>LockService.Acquire(LockService.Global, lockType, lockObj)</c></para>
+        /// <para>例如：<c>LockManager.Acquire(LockManager.Global, lockType, lockObj)</c></para>
         /// </summary>
         private sealed class GlobalSentinel : ILockable { }
 
@@ -42,19 +42,16 @@ namespace XFramework.XLock
         #region Private Fields
 
         /// <summary>lockSubject → lockType → HashSet<lock>。</summary>
-        private static readonly Dictionary<ILockable, Dictionary<int, HashSet<object>>> _locks
+        private static Dictionary<ILockable, Dictionary<int, HashSet<object>>> _locks
             = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
 
         /// <summary>每个 subject 的锁定事件订阅。</summary>
-        private static readonly Dictionary<ILockable, Action<int>> _onLockedSubjects
+        private static Dictionary<ILockable, Action<int>> _onLockedSubjects
             = new Dictionary<ILockable, Action<int>>();
 
         /// <summary>每个 subject 的解锁事件订阅。</summary>
-        private static readonly Dictionary<ILockable, Action<int>> _onUnlockedSubjects
+        private static Dictionary<ILockable, Action<int>> _onUnlockedSubjects
             = new Dictionary<ILockable, Action<int>>();
-
-        /// <summary>是否已释放。</summary>
-        private static bool _disposed;
 
         #endregion
 
@@ -159,7 +156,7 @@ namespace XFramework.XLock
         /// <para>返回 <see cref="LockHandle"/>，可通过 <c>using</c> 自动释放。</para>
         /// <para>全局锁请使用 <see cref="Global"/> 作为 lockSubject。</para>
         /// </summary>
-        public static LockHandle Acquire(ILockable lockSubject, int lockType, object lockObj)
+        public static LockHandle AddLock(ILockable lockSubject, int lockType, object lockObj)
         {
             if (lockObj == null)
                 throw new ArgumentNullException(nameof(lockObj), "lock cannot be null.");
@@ -190,6 +187,13 @@ namespace XFramework.XLock
             return new LockHandle(lockSubject, lockType, lockObj);
         }
 
+        /// <summary>
+        /// 请求一个全局锁（lockSubject 自动设为 <see cref="Global"/>）。
+        /// <para>返回 <see cref="LockHandle"/>，可通过 <c>using</c> 自动释放。</para>
+        /// </summary>
+        public static LockHandle AddLock(int lockType, object lockObj)
+            => AddLock(Global, lockType, lockObj);
+
         #endregion
 
         #region Release
@@ -198,7 +202,7 @@ namespace XFramework.XLock
         /// 释放一个针对特定 <see cref="ILockable"/> 的锁。
         /// <para>全局锁请使用 <see cref="Global"/> 作为 lockSubject。</para>
         /// </summary>
-        public static void Release(ILockable lockSubject, int lockType, object lockObj)
+        public static void RemoveLock(ILockable lockSubject, int lockType, object lockObj)
         {
             if (lockObj == null)
                 throw new ArgumentNullException(nameof(lockObj), "lock cannot be null.");
@@ -226,6 +230,12 @@ namespace XFramework.XLock
                 }
             }
         }
+
+        /// <summary>
+        /// 释放一个全局锁（lockSubject 自动设为 <see cref="Global"/>）。
+        /// </summary>
+        public static void RemoveLock(int lockType, object lockObj)
+            => RemoveLock(Global, lockType, lockObj);
 
         #endregion
 
@@ -314,19 +324,18 @@ namespace XFramework.XLock
 
         #endregion
 
-        #region IDisposable
+        #region Reset
 
         /// <summary>
-        /// 释放所有锁资源，清空锁状态。
+        /// 重置所有锁状态，清空锁数据和事件订阅。
+        /// <para>多次调用是安全的，每次都会重新分配内部集合，彻底切断旧引用。</para>
+        /// <para>主要用于单元测试隔离，生产环境中通常不需要调用此方法。</para>
         /// </summary>
         public static void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-
-            _locks.Clear();
-            _onLockedSubjects.Clear();
-            _onUnlockedSubjects.Clear();
+            _locks = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
+            _onLockedSubjects = new Dictionary<ILockable, Action<int>>();
+            _onUnlockedSubjects = new Dictionary<ILockable, Action<int>>();
             OnGlobalLocked = null;
             OnGlobalUnlocked = null;
         }

@@ -11,15 +11,15 @@ namespace XFramework.XAsset
 {
 
     /// <summary>
-    /// 资源服务独立实现。与节点树无关，可直接 <c>new AssetService()</c> 创建使用。
+    /// 资源服务独立实现。与节点树无关，可直接 <c>new AssetManager()</c> 创建使用。
     /// <para>内部使用 YooAsset 实现资源加载，自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
     /// <para>通过 <see cref="AssetSystem"/> 获取全局单例，或自行创建独立实例。</para>
     /// </summary>
-    public class AssetService : IAssetService
+    public class AssetManager : IAssetManager
     {
         #region Private Fields
 
-        private YooAssetServiceImpl _serviceImpl;
+        private YooAssetManagerImpl _managerImpl;
         private ResourcePackage _package;
         private bool _initialized;
 
@@ -63,7 +63,7 @@ namespace XFramework.XAsset
         {
             if (_initialized) return;
 
-            _serviceImpl = new YooAssetServiceImpl();
+            _managerImpl = new YooAssetManagerImpl();
 
             ReportProgress(progress, 0f, "Initializing YooAsset...");
 
@@ -137,7 +137,7 @@ namespace XFramework.XAsset
         public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
-            var asset = await _serviceImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
+            var asset = await _managerImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
             if (asset != null)
             {
                 _assetToLocation[asset] = location;
@@ -148,7 +148,7 @@ namespace XFramework.XAsset
         public async UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
-            var asset = await _serviceImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
+            var asset = await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
             if (asset != null)
             {
                 _assetToLocation[asset] = location;
@@ -174,7 +174,7 @@ namespace XFramework.XAsset
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetService] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                Debug.LogWarning($"[AssetManager] Prefab at '{location}' lacks component {typeof(T).Name}. " +
                                  "Destroying instance to prevent resource leak.");
                 DestroyInstance(go);
                 return null;
@@ -190,7 +190,7 @@ namespace XFramework.XAsset
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetService] Prefab at '{location}' lacks component {typeof(T).Name}. " +
+                Debug.LogWarning($"[AssetManager] Prefab at '{location}' lacks component {typeof(T).Name}. " +
                                  "Destroying instance to prevent resource leak.");
                 DestroyInstance(go);
                 return null;
@@ -201,7 +201,7 @@ namespace XFramework.XAsset
         public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
         {
             EnsureInitialized();
-            return await _serviceImpl.LoadSceneAsync(location, additive, progress);
+            return await _managerImpl.LoadSceneAsync(location, additive, progress);
         }
 
         public async UniTask PreloadAllAsync(IEnumerable<string> locations)
@@ -210,7 +210,7 @@ namespace XFramework.XAsset
             var tasks = new List<UniTask>();
             foreach (var location in locations)
             {
-                tasks.Add(_serviceImpl.PreloadAsync(location));
+                tasks.Add(_managerImpl.PreloadAsync(location));
             }
             await UniTask.WhenAll(tasks);
         }
@@ -273,7 +273,7 @@ namespace XFramework.XAsset
 
             if (_assetToLocation.TryGetValue(asset, out var location))
             {
-                _serviceImpl?.Release(location);
+                _managerImpl?.Release(location);
                 _assetToLocation.Remove(asset);
             }
         }
@@ -300,7 +300,7 @@ namespace XFramework.XAsset
                     if (count <= 0)
                     {
                         _locationCounts.Remove(location);
-                        _serviceImpl?.Release(location);
+                        _managerImpl?.Release(location);
                     }
                     else
                     {
@@ -340,7 +340,7 @@ namespace XFramework.XAsset
                 if (count <= 0)
                 {
                     _locationCounts.Remove(location);
-                    _serviceImpl?.Release(location);
+                    _managerImpl?.Release(location);
                 }
                 else
                 {
@@ -369,8 +369,8 @@ namespace XFramework.XAsset
             }
             _pools.Clear();
 
-            _serviceImpl?.Destroy();
-            _serviceImpl = null;
+            _managerImpl?.Destroy();
+            _managerImpl = null;
 
             _assetToLocation.Clear();
             _instanceToLocation.Clear();
@@ -413,7 +413,7 @@ namespace XFramework.XAsset
             }
 
             // 2. 加载资源
-            var prefab = await _serviceImpl.LoadAsync<GameObject>(location);
+            var prefab = await _managerImpl.LoadAsync<GameObject>(location);
             if (prefab == null) return null;
 
             // 记录资源映射（首次加载时）
@@ -432,7 +432,7 @@ namespace XFramework.XAsset
 
             // 4. 挂载 InstanceTracker（自动防泄漏）
             var tracker = go.AddComponent<InstanceTracker>();
-            tracker.OwnerService = this;
+            tracker.OwnerManager = this;
             tracker.Location = location;
 
             // 5. 记录实例映射
@@ -471,7 +471,7 @@ namespace XFramework.XAsset
         private void EnsureInitialized()
         {
             if (!_initialized)
-                throw new InvalidOperationException("AssetService is not initialized. Call InitializeAsync() first.");
+                throw new InvalidOperationException("AssetManager is not initialized. Call InitializeAsync() first.");
         }
 
         #endregion
