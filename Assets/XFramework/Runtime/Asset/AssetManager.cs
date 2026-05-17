@@ -11,12 +11,89 @@ namespace XFramework.XAsset
 {
 
     /// <summary>
-    /// 资源服务独立实现。与节点树无关，可直接 <c>new AssetManager()</c> 创建使用。
+    /// 全局资源管理器。提供单例访问、资源加载、实例化与生命周期管理。
     /// <para>内部使用 YooAsset 实现资源加载，自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
-    /// <para>通过 <see cref="AssetSystem"/> 获取全局单例，或自行创建独立实例。</para>
+    /// <para>通过静态成员获取全局实例，也可自行 <c>new AssetManager()</c> 创建独立实例。</para>
     /// </summary>
     public class AssetManager : IAssetManager
     {
+        #region Static — Global Singleton
+
+        private static IAssetManager _instance;
+        private static bool _instanceInitialized;
+
+        /// <summary>
+        /// 全局资源管理器实例。未初始化时访问会抛出 <see cref="InvalidOperationException"/>。
+        /// </summary>
+        public static IAssetManager Instance
+        {
+            get
+            {
+                if (!_instanceInitialized || _instance == null)
+                    throw new InvalidOperationException(
+                        "AssetManager is not initialized. Call AssetManager.InitializeAsync() first.");
+                return _instance;
+            }
+        }
+
+        /// <summary>
+        /// 全局资源管理器是否已初始化。
+        /// </summary>
+        public static bool IsInitialized => _instanceInitialized && _instance != null;
+
+        /// <summary>
+        /// 初始化全局资源管理器（无进度版本）。
+        /// </summary>
+        public static async UniTask InitializeAsync(CancellationToken cancellationToken = default)
+        {
+            if (_instanceInitialized) return;
+
+            var manager = new AssetManager();
+            await ((IAssetManager)manager).InitializeAsync(cancellationToken);
+
+            _instance = manager;
+            _instanceInitialized = true;
+        }
+
+        /// <summary>
+        /// 初始化全局资源管理器（带进度报告版本）。
+        /// </summary>
+        public static async UniTask InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
+        {
+            if (_instanceInitialized) return;
+
+            var manager = new AssetManager();
+            await ((IAssetManager)manager).InitializeAsync(progress, cancellationToken);
+
+            _instance = manager;
+            _instanceInitialized = true;
+        }
+
+        /// <summary>
+        /// 设置外部已创建的实例作为全局管理器。
+        /// <para>适用于依赖注入或单元测试场景。</para>
+        /// </summary>
+        public static void SetInstance(IAssetManager manager)
+        {
+            _instance = manager ?? throw new ArgumentNullException(nameof(manager));
+            _instanceInitialized = true;
+        }
+
+        /// <summary>
+        /// 销毁全局资源管理器，释放所有资源。
+        /// </summary>
+        public static void Destroy()
+        {
+            if (_instance != null)
+            {
+                _instance.Dispose();
+                _instance = null;
+            }
+            _instanceInitialized = false;
+        }
+
+        #endregion
+
         #region Private Fields
 
         private YooAssetManagerImpl _managerImpl;
@@ -46,20 +123,19 @@ namespace XFramework.XAsset
 
         #endregion
 
-        #region Initialize
+        #region IAssetManager.Initialize — explicit interface implementation
 
-        /// <summary>
-        /// 初始化资源服务（无进度版本）。
-        /// </summary>
-        public async UniTask InitializeAsync(CancellationToken cancellationToken = default)
+        async UniTask IAssetManager.InitializeAsync(CancellationToken cancellationToken)
         {
-            await InitializeAsync(null, cancellationToken);
+            await InitializeInstanceAsync(null, cancellationToken);
         }
 
-        /// <summary>
-        /// 初始化资源服务（带进度报告版本）。
-        /// </summary>
-        public async UniTask InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
+        async UniTask IAssetManager.InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken)
+        {
+            await InitializeInstanceAsync(progress, cancellationToken);
+        }
+
+        private async UniTask InitializeInstanceAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
         {
             if (_initialized) return;
 

@@ -10,7 +10,7 @@ namespace XFramework.XCore
 
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
-    /// <para>负责初始化 <see cref="AssetSystem"/>、创建 <see cref="RootNode"/> 并调用 <see cref="NodeUtility.StartupAsync"/> 启动节点树。</para>
+    /// <para>负责初始化 <see cref="AssetManager"/>、创建 <see cref="RootNode"/> 并调用 <see cref="NodeUtility.StartupAsync"/> 启动节点树。</para>
     /// <para>通过 <see cref="UpdateNode"/> 自动管理树中所有 <see cref="IUpdateable"/> 节点的更新。</para>
     /// </summary>
     public class GameLauncher : MonoBehaviour
@@ -33,10 +33,10 @@ namespace XFramework.XCore
 
         async void Start()
         {
-            // 1. 显式初始化全局资源系统（非节点对象也可通过 AssetSystem 访问）
-            await AssetSystem.InitializeAsync();
+            // 1. 显式初始化全局资源管理器（非节点对象也可通过 AssetManager 访问）
+            await AssetManager.InitializeAsync();
 
-            // 2. 启动节点树（AssetNode 的 ILoadable 会检测到 AssetSystem 已初始化，跳过重复初始化）
+            // 2. 启动节点树
             await _root.StartupAsync();
         }
 
@@ -47,8 +47,8 @@ namespace XFramework.XCore
 
         void OnDestroy()
         {
-            // 销毁全局资源系统
-            AssetSystem.Destroy();
+            // 销毁全局资源管理器
+            AssetManager.Destroy();
 
             _root?.Destroy();
         }

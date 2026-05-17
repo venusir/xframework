@@ -10,7 +10,7 @@ namespace XFramework
 {
     /// <summary>
     /// 基于 YooAsset 的资源服务底层实现。
-    /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetNode"/> 接口访问。</para>
+    /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetManager"/> 接口或 <see cref="AssetManager"/> 访问。</para>
     /// <para>职责：资源加载/卸载、引用计数、延迟卸载、场景加载、预加载。</para>
     /// </summary>
     class YooAssetManagerImpl
