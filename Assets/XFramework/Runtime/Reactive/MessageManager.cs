@@ -10,11 +10,11 @@ namespace XFramework.XReactive
 
     /// <summary>
     /// 全局消息总线。提供静态 API 和节点扩展方法两种使用方式。
-    /// <para>静态 API：非节点类可通过 <see cref="MessageBus"/> 直接发布/订阅消息。</para>
+    /// <para>静态 API：非节点类可通过 <see cref="MessageManager"/> 直接发布/订阅消息。</para>
     /// <para>扩展方法：节点实现 <see cref="IMessagePublisher"/> / <see cref="IMessageSubscriber"/> 后，
     /// 可通过 <c>this.Publish()</c> / <c>this.Subscribe()</c> 使用，订阅会自动绑定节点生命周期。</para>
     /// </summary>
-    public static class MessageBus
+    public static class MessageManager
     {
         #region Private Fields
 
