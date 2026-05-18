@@ -11,7 +11,7 @@ namespace XFramework.XAsset
 
     /// <summary>
     /// 资源管理器公共接口。与节点树无关，可供任何对象（MonoBehaviour、纯 C# 类等）直接使用。
-    /// <para>通过 <see cref="AssetManager.Instance"/> 获取全局实例，或自行 <c>new AssetManager()</c> 创建独立实例。</para>
+    /// <para>通过 <see cref="AssetManager"/> 的静态方法直接调用，或注入 <see cref="IAssetManager"/> 实例使用。</para>
     /// </summary>
     public interface IAssetManager : IDisposable
     {

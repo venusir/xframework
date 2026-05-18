@@ -11,7 +11,7 @@ namespace XFramework.XAsset
     internal class InstanceTracker : MonoBehaviour
     {
         /// <summary>所属的资源服务实例。</summary>
-        internal AssetManager OwnerManager;
+        internal AssetManagerImpl OwnerManager;
 
         /// <summary>资源定位地址。</summary>
         internal string Location;
