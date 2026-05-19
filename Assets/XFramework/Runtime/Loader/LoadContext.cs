@@ -52,6 +52,12 @@ namespace XFramework.XLoader
         /// <summary>总体加载进度，取值范围 0.0 ~ 1.0。</summary>
         public float OverallProgress { get; internal set; }
 
+        /// <summary>设置总体加载进度，自动 clamp 到 0~1 范围。</summary>
+        public void SetOverallProgress(float value)
+        {
+            OverallProgress = Mathf.Clamp01(value);
+        }
+
         /// <summary>当前正在执行的任务名称。</summary>
         public string CurrentTaskName { get; internal set; }
 

@@ -2,7 +2,9 @@
     "name": "Venusy609.Xframework",
     "references": [
         "UniTask",
-        "YooAsset"
+        "YooAsset",
+        "R3",
+        "Unity.TextMeshPro"
     ],
     "includePlatforms": [],
     "excludePlatforms": []
