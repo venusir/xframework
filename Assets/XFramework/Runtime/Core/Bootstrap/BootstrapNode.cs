@@ -3,9 +3,10 @@ namespace XFramework.XCore
     /// <summary>
     /// 引导节点。在启动阶段统一管理所有非节点树的模块（如 AssetManager、LockManager、
     /// MessageManager 等）的生命周期。
-    /// <para>模块初始化由子节点（<see cref="AssetBootstrapNode"/>、<see cref="LockBootstrapNode"/>、
-    /// <see cref="MessageBootstrapNode"/>）分别以 <see cref="XLoader.ILoadable"/> 的形式承载，
-    /// 由 <see cref="XLoader.StartupExtensions"/> 自动收集并按 Phase 顺序执行。</para>
+    /// <para><see cref="AssetBootstrapNode"/> 实现了 <see cref="XLoader.ILoadable"/>，
+    /// 在加载管线中异步初始化 <see cref="XAsset.AssetManager"/>。</para>
+    /// <para><see cref="LockBootstrapNode"/> 和 <see cref="MessageBootstrapNode"/> 仅用于
+    /// <see cref="OnDestroy"/> 时的资源清理，不参与加载管线。</para>
     /// <para>模块销毁由子节点的 <see cref="OnDestroy"/> 自动处理，BootstrapNode 本身无需管理销毁逻辑。</para>
     /// <para>可子类化并重写 <see cref="OnRegisterModules"/> 来自定义启动模块列表。</para>
     /// </summary>
