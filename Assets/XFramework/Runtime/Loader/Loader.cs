@@ -23,7 +23,7 @@ namespace XFramework.XLoader
 
         #region ILoader Events
 
-        public event Action<LoadContext> OnProgressUpdate;
+        public event Action<LoadProgress> OnProgressUpdate;
         public event Action OnLoadCompleted;
         public event Action<string> OnLoadFailed;
 
@@ -86,7 +86,7 @@ namespace XFramework.XLoader
                     int taskCount = tasks.Count;
 
                     // 为当前 Phase 的每个任务创建临时 Context
-                    var phaseContexts = tasks.Select(t => new LoadContext
+                    var phaseContexts = tasks.Select(t => new LoadProgress
                     {
                         Name = t.GetType().Name,
                     }).ToList();
@@ -210,7 +210,7 @@ namespace XFramework.XLoader
         #region Private Fields
 
         readonly List<ILoadable> _entries = new List<ILoadable>();
-        readonly LoadContext _context = new LoadContext();
+        readonly LoadProgress _context = new LoadProgress();
 
         #endregion
     }

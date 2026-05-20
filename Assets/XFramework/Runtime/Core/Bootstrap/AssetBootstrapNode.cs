@@ -20,21 +20,20 @@ namespace XFramework.XCore
         /// </summary>
         public int Phase => 0;
 
-        public async UniTask LoadAsync(LoadContext context, CancellationToken cancellationToken)
+        public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
         {
             if (AssetManager.IsInitialized)
             {
-                context.SetProgress(1f);
-                context.SetState(LoadState.Completed);
+                progress.SetProgress(1f);
+                progress.SetState(LoadState.Completed);
                 return;
             }
 
-            context.SetDescription("Initializing Asset Manager...");
-            var progress = new LoadContextProgress(context);
+            progress.SetDescription("Initializing Asset Manager...");
             await AssetManager.InitializeAsync(progress, cancellationToken);
 
-            context.SetProgress(1f);
-            context.SetState(LoadState.Completed);
+            progress.SetProgress(1f);
+            progress.SetState(LoadState.Completed);
         }
 
         #endregion
@@ -49,34 +48,5 @@ namespace XFramework.XCore
 
         #endregion
 
-        #region Private Types
-
-        /// <summary>
-        /// 将 <see cref="LoadContext"/> 适配为 <see cref="IProgress{T}"/>，
-        /// 使得 AssetManager 的进度报告能映射到加载管线的上下文中。
-        /// </summary>
-        private sealed class LoadContextProgress : IProgress<LoadContext>
-        {
-            private readonly LoadContext _context;
-
-            public LoadContextProgress(LoadContext context)
-            {
-                _context = context;
-            }
-
-            public void Report(LoadContext value)
-            {
-                if (value == null) return;
-
-                _context.SetProgress(value.OverallProgress);
-
-                if (!string.IsNullOrEmpty(value.Description))
-                {
-                    _context.SetDescription(value.Description);
-                }
-            }
-        }
-
-        #endregion
     }
 }

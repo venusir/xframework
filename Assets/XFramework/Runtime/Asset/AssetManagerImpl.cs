@@ -48,17 +48,12 @@ namespace XFramework.XAsset
 
         #region Initialize
 
-        public async UniTask InitializeAsync(CancellationToken cancellationToken = default)
-        {
-            await InitializeInstanceAsync(null, cancellationToken);
-        }
-
-        public async UniTask InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
+        public async UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default)
         {
             await InitializeInstanceAsync(progress, cancellationToken);
         }
 
-        private async UniTask InitializeInstanceAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
+        private async UniTask InitializeInstanceAsync(LoadProgress progress, CancellationToken cancellationToken = default)
         {
             if (_initialized) return;
 
@@ -120,13 +115,13 @@ namespace XFramework.XAsset
             _initialized = true;
         }
 
-        private static void ReportProgress(IProgress<LoadContext> progress, float value, string description)
+        private static void ReportProgress(LoadProgress progress, float value, string description)
         {
-            progress?.Report(new LoadContext
+            if (progress != null)
             {
-                OverallProgress = value,
-                Description = description,
-            });
+                progress.SetOverallProgress(value);
+                progress.SetDescription(description);
+            }
         }
 
         #endregion

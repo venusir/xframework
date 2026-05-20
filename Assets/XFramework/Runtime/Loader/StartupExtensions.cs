@@ -20,13 +20,13 @@ namespace XFramework.XLoader
         /// </summary>
         /// <param name="root">节点树的根节点。</param>
         /// <param name="progress">可选的进度报告回调，用于接收启动各阶段的进度快照。</param>
-        public static async UniTask StartupAsync(this IParentNode root, System.IProgress<LoadContext> progress = null)
+        public static async UniTask StartupAsync(this IParentNode root, System.IProgress<LoadProgress> progress = null)
         {
             if (root == null)
                 return;
 
             // 阶段 1: 装载 — 扫描节点树，收集加载任务
-            progress?.Report(new LoadContext
+            progress?.Report(new LoadProgress
             {
                 OverallProgress = 0f,
                 Description = "Scanning nodes...",
@@ -40,7 +40,7 @@ namespace XFramework.XLoader
             await loader.LoadAsync();
 
             // 阶段 3: 启动 — 递归启动所有节点
-            progress?.Report(new LoadContext
+            progress?.Report(new LoadProgress
             {
                 OverallProgress = 1f,
                 Description = "Starting nodes...",

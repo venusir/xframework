@@ -24,7 +24,7 @@ namespace XFramework.XLoader
 
     /// <summary>
     /// 可加载接口。节点实现此接口后，可在启动管线的加载阶段被 <see cref="ILoader"/> 统一调度执行。
-    /// <para>通过 <see cref="LoadContext"/> 参数报告进度、描述和状态。</para>
+    /// <para>通过 <see cref="LoadProgress"/> 参数报告进度、描述和状态。</para>
     /// </summary>
     public interface ILoadable
     {
@@ -34,9 +34,9 @@ namespace XFramework.XLoader
         int Phase { get; }
 
         /// <summary>
-        /// 异步加载任务。加载过程中应通过 <paramref name="context"/> 更新进度和状态。
+        /// 异步加载任务。加载过程中应通过 <paramref name="progress"/> 更新进度和状态。
         /// <para>通过 <paramref name="cancellationToken"/> 可取消正在运行的任务。</para>
         /// </summary>
-        UniTask LoadAsync(LoadContext context, CancellationToken cancellationToken);
+        UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken);
     }
 }

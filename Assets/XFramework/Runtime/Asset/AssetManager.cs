@@ -20,71 +20,27 @@ namespace XFramework.XAsset
 
         private static IAssetManager _instance;
         private static bool _instanceInitialized;
-        private static bool _isInitializing;
-
         /// <summary>
         /// 全局资源管理器是否已初始化。
         /// </summary>
         public static bool IsInitialized => _instanceInitialized && _instance != null;
 
         /// <summary>
-        /// 初始化全局资源管理器（无进度版本）。
+        /// 初始化全局资源管理器。
         /// </summary>
-        public static async UniTask InitializeAsync(CancellationToken cancellationToken = default)
+        public static async UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default)
         {
-            if (_instanceInitialized) return;
-            if (_isInitializing) return;
-            _isInitializing = true;
-
-            try
+            if (_instanceInitialized)
             {
-                var impl = new AssetManagerImpl();
-                await impl.InitializeAsync(cancellationToken);
-
-                if (!_instanceInitialized)
-                {
-                    _instance = impl;
-                    _instanceInitialized = true;
-                }
-                else
-                {
-                    impl.Dispose();
-                }
+                Debug.LogWarning("[AssetManager] InitializeAsync was called more than once. Ignoring duplicate.");
+                return;
             }
-            finally
-            {
-                _isInitializing = false;
-            }
-        }
 
-        /// <summary>
-        /// 初始化全局资源管理器（带进度报告版本）。
-        /// </summary>
-        public static async UniTask InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default)
-        {
-            if (_instanceInitialized) return;
-            if (_isInitializing) return;
-            _isInitializing = true;
+            var impl = new AssetManagerImpl();
+            await impl.InitializeAsync(progress, cancellationToken);
 
-            try
-            {
-                var impl = new AssetManagerImpl();
-                await impl.InitializeAsync(progress, cancellationToken);
-
-                if (!_instanceInitialized)
-                {
-                    _instance = impl;
-                    _instanceInitialized = true;
-                }
-                else
-                {
-                    impl.Dispose();
-                }
-            }
-            finally
-            {
-                _isInitializing = false;
-            }
+            _instance = impl;
+            _instanceInitialized = true;
         }
 
         /// <summary>

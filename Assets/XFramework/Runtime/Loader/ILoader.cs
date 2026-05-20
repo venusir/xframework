@@ -14,7 +14,7 @@ namespace XFramework.XLoader
         bool IsLoading { get; }
 
         /// <summary>加载进度变更事件。每帧轮询时触发，传递当前进度快照。</summary>
-        event Action<LoadContext> OnProgressUpdate;
+        event Action<LoadProgress> OnProgressUpdate;
 
         /// <summary>全部加载完成事件。</summary>
         event Action OnLoadCompleted;

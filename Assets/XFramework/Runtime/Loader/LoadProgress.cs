@@ -4,11 +4,12 @@ namespace XFramework.XLoader
 {
 
     /// <summary>
-    /// 加载上下文。作为 <see cref="ILoadable.LoadAsync"/> 的参数传入，提供进度/状态/权重的读写能力。
+    /// 加载进度。作为 <see cref="ILoadable.LoadAsync"/> 的参数传入，提供进度/状态/权重的读写能力。
     /// <para>由 <see cref="ILoader"/> 在装载时创建并注入，节点在加载过程中通过此对象报告进度。</para>
     /// <para>全局级字段由 Loader 在每帧轮询时填充，供 UI 读取当前加载状态的全部信息。</para>
+    /// <para>实现 <see cref="System.IProgress{LoadProgress}"/>，可直接作为进度回调传递给下游 API。</para>
     /// </summary>
-    public class LoadContext
+    public class LoadProgress : System.IProgress<LoadProgress>
     {
         #region 任务级（节点写入）
 
@@ -69,6 +70,22 @@ namespace XFramework.XLoader
 
         /// <summary>失败的任务数。</summary>
         public int FailedCount { get; internal set; }
+
+        #endregion
+
+        #region IProgress<LoadProgress>
+
+        void System.IProgress<LoadProgress>.Report(LoadProgress value)
+        {
+            if (value == null) return;
+
+            OverallProgress = value.OverallProgress;
+
+            if (!string.IsNullOrEmpty(value.Description))
+            {
+                Description = value.Description;
+            }
+        }
 
         #endregion
     }

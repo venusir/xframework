@@ -18,15 +18,10 @@ namespace XFramework.XAsset
         #region Initialize
 
         /// <summary>
-        /// 初始化资源服务（无进度版本）。
+        /// 初始化资源服务。
         /// </summary>
-        UniTask InitializeAsync(CancellationToken cancellationToken = default);
-
-        /// <summary>
-        /// 初始化资源服务（带进度报告版本）。
-        /// </summary>
-        /// <param name="progress">初始化进度回调，<see cref="LoadContext"/> 包含进度和描述信息。</param>
-        UniTask InitializeAsync(IProgress<LoadContext> progress, CancellationToken cancellationToken = default);
+        /// <param name="progress">初始化进度回调，<see cref="LoadProgress"/> 包含进度和描述信息。</param>
+        UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default);
 
         #endregion
 
