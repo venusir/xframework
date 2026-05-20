@@ -2,19 +2,23 @@
 
 ## 概述
 
-XFramework 本地化模块提供多语言文本管理能力。本模块**只提供框架层**，不关心数据来源，使用者可通过任意方式（Luban、JSON、CSV 等）生成数据字典后注入。
+XFramework 本地化模块提供多语言文本管理功能。通过 `ILocalizationManager` 接口抽象，支持 JSON 格式的本地化配置表加载，运行时切换语言，以及通过 `LocalizedString` 组件实现 UI 文本的自动更新。
 
-**语言标识使用 `string`**，无限制扩展。常见约定值：`"zh_Hans"`, `"zh_Hant"`, `"en"`, `"ja"`, `"ko"`，也可自定义如 `"vi"`, `"fr"`, `"th"`。
+**命名空间**: `XFramework.XLocalization`
+
+**语言标识**: 使用 `string` 类型（如 `"zh-CN"`, `"en-US"`, `"ja-JP"`），兼容 .NET `CultureInfo.Name` 格式。
 
 ## 架构设计
 
 ```
 Runtime/Localization/
-├── ILocalizationManager.cs           # 接口（可替换实现）
-├── LocalizationManager.cs            # 静态外观（常用入口）
-├── LocalizationManagerImpl.cs        # 默认实现
-├── LocalizationBootstrapNode.cs      # 启动加载节点
-└── README.md
+├── ILocalizationManager.cs        # 本地化管理器公共接口
+├── LocalizationManager.cs         # 静态外观（全局入口）
+├── LocalizationManagerImpl.cs     # 默认实现
+├── LocalizedString.cs             # 本地化字符串组件（挂载到 UI）
+├── LocalizedText.cs               # 本地化文本组件（旧版，已废弃）
+├── LocalizedTextMeshProUGUI.cs    # TextMeshPro 本地化组件（旧版，已废弃）
+└── LocalizationBootstrapNode.cs   # 启动节点（注册到 Bootstrap 管线）
 ```
 
 ## 快速使用
@@ -22,131 +26,145 @@ Runtime/Localization/
 ### 1. 初始化
 
 ```csharp
-var data = new Dictionary<string, string>
-{
-    ["ui_btn_start"] = "开始游戏",
-    ["ui_btn_exit"]  = "退出游戏",
-};
-LocalizationManager.Initialize("zh_Hans", data);
+using XFramework.XLocalization;
+
+// 方式一：通过 Bootstrap 自动初始化（推荐）
+// BootstrapNode 添加 LocalizationBootstrapNode，自动处理初始化
+
+// 方式二：手动初始化（需要先注册 JSON 数据源）
+await LocalizationManager.InitializeAsync(jsonConfigData);
 ```
 
-### 2. 获取文本
+### 2. 获取本地化文本
 
 ```csharp
-string text = LocalizationManager.Get("ui_btn_start");         // "开始游戏"
-string fmt  = LocalizationManager.GetFormat("ui_damage", 50);  // 带参数格式化
+// 通过 key 获取当前语言的文本
+string text = LocalizationManager.GetText("ui_main_title");
+string text = LocalizationManager.GetText("ui_confirm_button");
+string text = LocalizationManager.GetText("error_connection_timeout");
+
+// 带默认值（当 key 不存在时返回默认值）
+string text = LocalizationManager.GetText("unknown_key", "未知文本");
+
+// 获取指定语言的文本
+string text = LocalizationManager.GetText("ui_play", "en-US");
 ```
 
 ### 3. 切换语言
 
 ```csharp
-// 注入其他语言数据
-LocalizationManager.SetLanguageData("en", englishData);
-LocalizationManager.SetLanguageData("ja", japaneseData);
+// 切换到英文
+await LocalizationManager.SetLanguageAsync("en-US");
 
-// 使用者可自定义任意语言标识
-LocalizationManager.SetLanguageData("vi", vietnameseData);
-LocalizationManager.SetLanguageData("fr", frenchData);
+// 切换到简体中文
+await LocalizationManager.SetLanguageAsync("zh-CN");
 
-// 切换语言
-LocalizationManager.SetLanguage("en");
+// 获取当前语言
+string currentLang = LocalizationManager.CurrentLanguage;
+
+// 查询所有可用语言
+var languages = LocalizationManager.GetAvailableLanguages();
 ```
 
-### 4. 语言切换事件
+### 4. 检查 Key 是否存在
 
 ```csharp
-LocalizationManager.OnLanguageChanged += lang =>
-{
-    Debug.Log($"语言已切换至: {lang}");
-};
+bool exists = LocalizationManager.HasKey("ui_settings_title");
+bool enExists = LocalizationManager.HasKey("ui_settings_title", "en-US");
 ```
 
-### 5. UI 自动刷新（建议在项目层实现）
+### 5. 添加/更新本地化条目
 
 ```csharp
-using UnityEngine;
-using UnityEngine.UI;
-using XFramework.XLocalization;
-
-/// <summary>
-/// 项目层实现的本地化 Text 组件。
-/// 挂载到带 Text 组件的 GameObject 上，设置 Key 后自动在语言切换时刷新。
-/// </summary>
-[DisallowMultipleComponent]
-[RequireComponent(typeof(Text))]
-public class LocalizedText : MonoBehaviour
+// 添加或更新一个本地化条目
+LocalizationManager.SetEntry("new_key", new Dictionary<string, string>
 {
-    [SerializeField] private string _key;
-    private Text _text;
+    { "zh-CN", "新条目" },
+    { "en-US", "New Entry" },
+    { "ja-JP", "新しいエントリ" }
+});
+```
 
-    private void Awake() => _text = GetComponent<Text>();
+### 6. 格式化文本
 
-    private void OnEnable()
-    {
-        LocalizationManager.OnLanguageChanged += OnLanguageChanged;
-        UpdateText();
-    }
+```csharp
+// 带占位符的本地化文本（支持 string.Format 语法）
+string text = LocalizationManager.GetFormattedText("ui_player_gold", gold, amount);
+// JSON 数据: { "ui_player_gold": { "zh-CN": "金币: {0} / {1}" } }
+```
 
-    private void OnDisable()
-    {
-        LocalizationManager.OnLanguageChanged -= OnLanguageChanged;
-    }
+## 本地化数据格式
 
-    private void OnLanguageChanged(string lang) => UpdateText();
+### JSON 配置表结构
 
-    private void UpdateText()
-    {
-        if (_text != null && !string.IsNullOrEmpty(_key))
-            _text.text = LocalizationManager.Get(_key);
-    }
+```json
+{
+  "ui_main_title": {
+    "zh-CN": "主菜单",
+    "en-US": "Main Menu",
+    "ja-JP": "メインメニュー"
+  },
+  "ui_play_button": {
+    "zh-CN": "开始游戏",
+    "en-US": "Play",
+    "ja-JP": "ゲーム開始"
+  },
+  "ui_gold_format": {
+    "zh-CN": "金币: {0}",
+    "en-US": "Gold: {0}",
+    "ja-JP": "ゴールド: {0}"
+  }
 }
 ```
 
-> **说明**：XFramework 不内置 UI 绑定组件，以此避免 TMPro 等不必要依赖，使用者按需在项目层实现。
+## UI 绑定
 
----
+### LocalizedString 组件
 
-## 与 Luban 配合使用
-
-> Luban 是独立的配置生成工具，**不属于 XFramework 的一部分**，需由使用方在项目层自行安装和配置。
-
-### 安装 Luban
-
-```bash
-dotnet tool install -g luban
-```
-
-### 桥接代码示例
+将 `LocalizedString` 组件挂载到 UI 元素上，即可自动响应语言切换：
 
 ```csharp
-public static class LubanLocalizationBridge
+// 在 GameObject 上挂载 LocalizedString 组件
+var localizedString = uiText.AddComponent<LocalizedString>();
+localizedString.Key = "ui_main_title";
+
+// 语言切换时，UI 文本会自动更新
+await LocalizationManager.SetLanguageAsync("en-US");
+// 组件文本自动变为 "Main Menu"
+```
+
+## 节点扩展方法
+
+实现了 `ILocalizable` 接口的节点可以使用扩展方法：
+
+```csharp
+public class MyNode : EntityNode, ILocalizable
 {
-    public static void Load(string lang, Func<string, string> valueGetter)
+    protected override void OnStart()
     {
-        // 从 Luban 生成的表读取数据后注入
-        // LocalizationManager.SetLanguageData(lang, data);
+        base.OnStart();
+
+        // 获取本地化文本
+        string title = this.GetLocalizedText("ui_main_title");
+        string button = this.GetLocalizedText("ui_confirm_button");
+
+        // 格式化文本
+        string goldText = this.GetFormattedText("ui_player_gold", currentGold, maxGold);
     }
 }
 ```
-
-### 与 Bootstrap 集成
-
-```csharp
-var node = NodeFactory.Create<LocalizationBootstrapNode>();
-node.SetInitData("zh_Hans", chineseData);
-// 或直接调用 LocalizationManager.Initialize("zh_Hans", data);
-```
-
----
 
 ## 设计原则
 
-- **数据源无关** — 不强制绑定任何配置工具（Luban、CSV、JSON 等）
-- **语言无限制** — `string` 标识，使用者可自由扩展
-- **轻量级** — 纯 Dictionary 查找，无外部依赖
-- **可替换** — 通过 `ILocalizationManager` 接口可替换为自定义实现
-- **零侵入** — 不使用本模块的项目零负担
+- **接口可替换** — 通过 `ILocalizationManager` 接口，可替换底层实现
+- **静态外观** — `LocalizationManager` 提供全局入口，任意位置可调用
+- **语言标识标准化** — 使用 `string` 类型，兼容 .NET `CultureInfo`
+- **UI 自动绑定** — `LocalizedString` 组件自动响应语言切换，无需手动刷新
+- **JSON 驱动** — 配置数据以 JSON 格式维护，方便策划编辑和版本管理
+- **格式化支持** — 支持带参数的格式化文本（`string.Format` 语法）
 
 ## 依赖
 
-- 无外部依赖（`LocalizationBootstrapNode` 依赖 `UniTask`，框架层已提供）
+- `XFramework.XCore` — 节点系统依赖
+- `XFramework.XLoader` — 启动加载流程依赖
+- `UniTask`（框架层已提供）
