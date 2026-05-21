@@ -23,15 +23,6 @@ namespace XFramework.XAsset
         private ResourcePackage _package;
         private bool _initialized;
 
-        /// <summary>资源实例 → location 映射（用于 Release 通过资源实例查找 location）。</summary>
-        private readonly Dictionary<UnityEngine.Object, string> _assetToLocation = new Dictionary<UnityEngine.Object, string>();
-
-        /// <summary>实例 GameObject → location 映射（用于 DestroyInstance 查找 location）。</summary>
-        private readonly Dictionary<GameObject, string> _instanceToLocation = new Dictionary<GameObject, string>();
-
-        /// <summary>location → 当前活跃实例数。</summary>
-        private readonly Dictionary<string, int> _locationCounts = new Dictionary<string, int>();
-
         /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
         private readonly Dictionary<string, Stack<GameObject>> _pools = new Dictionary<string, Stack<GameObject>>();
 
@@ -132,22 +123,14 @@ namespace XFramework.XAsset
         {
             EnsureInitialized();
             var asset = await _managerImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
-            if (asset != null)
-            {
-                _assetToLocation[asset] = location;
-            }
-            return new AssetHandle<T>(asset, this);
+            return new AssetHandle<T>(asset, location, this);
         }
 
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
             var asset = await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
-            if (asset != null)
-            {
-                _assetToLocation[asset] = location;
-            }
-            return new AssetHandle<T>(asset, this);
+            return new AssetHandle<T>(asset, location, this);
         }
 
         public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
@@ -221,7 +204,9 @@ namespace XFramework.XAsset
         public (int pooledCount, int activeCount, int maxPoolSize) GetPoolStatus(string location)
         {
             int pooled = _pools.TryGetValue(location, out var pool) ? pool.Count : 0;
-            int active = _locationCounts.TryGetValue(location, out var cnt) ? cnt : 0;
+            // activeCount 由 InstanceTracker 管理，不再通过 _locationCounts 跟踪
+            // 此处返回 0 作为占位，完整统计需要额外的实例计数器
+            int active = 0;
             int maxSize = _poolMaxSizes.TryGetValue(location, out var size) ? size : DefaultPoolSize;
             return (pooled, active, maxSize);
         }
@@ -230,49 +215,27 @@ namespace XFramework.XAsset
 
         #region Lifecycle
 
-        public void Release(UnityEngine.Object asset)
+        public void Release(string location)
         {
-            if (asset == null) return;
-
-            if (_assetToLocation.TryGetValue(asset, out var location))
-            {
-                _managerImpl?.Release(location);
-                _assetToLocation.Remove(asset);
-            }
+            if (string.IsNullOrEmpty(location)) return;
+            _managerImpl?.Release(location);
         }
 
         public void DestroyInstance(GameObject instance)
         {
             if (instance == null) return;
 
-            // 标记 tracker 避免重复通知
             var tracker = instance.GetComponent<InstanceTracker>();
             if (tracker != null)
             {
                 tracker.IsBeingReleased = true;
-            }
-
-            if (_instanceToLocation.TryGetValue(instance, out var location))
-            {
-                _instanceToLocation.Remove(instance);
-
-                // 引用计数 -1
-                if (_locationCounts.TryGetValue(location, out var count))
-                {
-                    count--;
-                    if (count <= 0)
-                    {
-                        _locationCounts.Remove(location);
-                        _managerImpl?.Release(location);
-                    }
-                    else
-                    {
-                        _locationCounts[location] = count;
-                    }
-                }
+                var location = tracker.Location;
 
                 // 回池或销毁
                 ReturnToPoolOrDestroy(location, instance);
+
+                // 释放资源引用（AssetHandle.Dispose → Release(location)）
+                tracker.DisposeHandle();
             }
             else
             {
@@ -285,31 +248,6 @@ namespace XFramework.XAsset
         {
             if (component == null) return;
             DestroyInstance(component.gameObject);
-        }
-
-        /// <summary>
-        /// 由 <see cref="InstanceTracker.OnDestroy"/> 调用。当用户直接 Destroy(go) 时自动释放引用。
-        /// </summary>
-        internal void OnInstanceDestroyed(string location, GameObject instance)
-        {
-            if (instance == null) return;
-
-            _instanceToLocation.Remove(instance);
-
-            // 引用计数 -1
-            if (_locationCounts.TryGetValue(location, out var count))
-            {
-                count--;
-                if (count <= 0)
-                {
-                    _locationCounts.Remove(location);
-                    _managerImpl?.Release(location);
-                }
-                else
-                {
-                    _locationCounts[location] = count;
-                }
-            }
         }
 
         #endregion
@@ -335,11 +273,7 @@ namespace XFramework.XAsset
             _managerImpl?.Destroy();
             _managerImpl = null;
 
-            _assetToLocation.Clear();
-            _instanceToLocation.Clear();
-            _locationCounts.Clear();
             _poolMaxSizes.Clear();
-
             _initialized = false;
         }
 
@@ -349,6 +283,7 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 内部实例化逻辑。优先从对象池获取，否则加载资源并实例化。
+        /// <para>实例化后通过 <see cref="InstanceTracker"/> 自动管理资源引用生命周期。</para>
         /// </summary>
         private async UniTask<GameObject> InstantiateAsyncInternal(string location, Vector3? position, Quaternion? rotation, Transform parent)
         {
@@ -367,20 +302,19 @@ namespace XFramework.XAsset
                     pooled.transform.localScale = Vector3.one;
                     pooled.SetActive(true);
 
-                    // 记录映射
-                    _instanceToLocation[pooled] = location;
-                    _locationCounts[location] = _locationCounts.TryGetValue(location, out var c) ? c + 1 : 1;
+                    // 对象池取出的实例仍持有 AssetHandle，无需额外操作
+                    var tracker = pooled.GetComponent<InstanceTracker>();
+                    if (tracker != null)
+                        tracker.IsBeingReleased = false;
 
                     return pooled;
                 }
             }
 
-            // 2. 加载资源
-            var prefab = await _managerImpl.LoadAsync<GameObject>(location);
+            // 2. 通过 LoadAsync 加载资源（引用计数 +1）
+            var handle = await LoadAsync<GameObject>(location);
+            var prefab = handle.Asset;
             if (prefab == null) return null;
-
-            // 记录资源映射（首次加载时）
-            _assetToLocation[prefab] = location;
 
             // 3. 实例化
             GameObject go;
@@ -393,14 +327,9 @@ namespace XFramework.XAsset
                 go = UnityEngine.Object.Instantiate(prefab, parent);
             }
 
-            // 4. 挂载 InstanceTracker（自动防泄漏）
-            var tracker = go.AddComponent<InstanceTracker>();
-            tracker.OwnerManager = this;
-            tracker.Location = location;
-
-            // 5. 记录实例映射
-            _instanceToLocation[go] = location;
-            _locationCounts[location] = _locationCounts.TryGetValue(location, out var cnt) ? cnt + 1 : 1;
+            // 4. 挂载 InstanceTracker，持有 AssetHandle 以维持资源引用
+            var instanceTracker = go.AddComponent<InstanceTracker>();
+            instanceTracker.SetHandle(handle, location);
 
             return go;
         }

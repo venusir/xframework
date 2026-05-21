@@ -74,9 +74,9 @@ namespace XFramework.XAsset
 
         #region Lifecycle
 
-        /// <inheritdoc cref="IAssetManager.Release(UnityEngine.Object)"/>
-        public static void ReleaseAsset(this IBaseNode self, UnityEngine.Object asset)
-            => AssetManager.Release(asset);
+        /// <inheritdoc cref="IAssetManager.Release(string)"/>
+        public static void ReleaseAsset(this IBaseNode self, string location)
+            => AssetManager.Release(location);
 
         /// <inheritdoc cref="IAssetManager.DestroyInstance(GameObject)"/>
         public static void DestroyAssetInstance(this IBaseNode self, GameObject instance)

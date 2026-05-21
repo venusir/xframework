@@ -149,11 +149,11 @@ namespace XFramework.XAsset
 
         #region Public API — Lifecycle
 
-        /// <inheritdoc cref="IAssetManager.Release(UnityEngine.Object)"/>
-        public static void Release(UnityEngine.Object asset)
+        /// <inheritdoc cref="IAssetManager.Release(string)"/>
+        public static void Release(string location)
         {
             EnsureGlobalInitialized();
-            _instance.Release(asset);
+            _instance.Release(location);
         }
 
         /// <inheritdoc cref="IAssetManager.DestroyInstance(GameObject)"/>

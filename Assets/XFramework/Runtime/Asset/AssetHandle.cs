@@ -26,6 +26,11 @@ namespace XFramework.XAsset
         public T Asset { get; }
 
         /// <summary>
+        /// 资源定位地址。
+        /// </summary>
+        public string Location { get; }
+
+        /// <summary>
         /// 句柄是否有效（是否已 Dispose 或来自未初始化的构造）。
         /// </summary>
         public bool IsValid => _manager != null;
@@ -33,22 +38,23 @@ namespace XFramework.XAsset
         private readonly IAssetManager _manager;
 
         /// <summary>
-        /// 内部构造。由 <see cref="AssetManagerImpl"/> 在加载成功时创建。
+        /// 内部构造。由 <see cref="AssetManagerImpl"/> 在加载时创建。
         /// </summary>
-        internal AssetHandle(T asset, IAssetManager manager)
+        internal AssetHandle(T asset, string location, IAssetManager manager)
         {
             Asset = asset;
+            Location = location;
             _manager = manager;
         }
 
         /// <summary>
-        /// 释放资源引用。调用 <see cref="IAssetManager.Release"/> 将资源引用计数 -1。
+        /// 释放资源引用。调用 <see cref="IAssetManager.Release(string)"/> 将资源引用计数 -1。
         /// <para>建议通过 <c>using</c> 块自动调用，无需手动调用。</para>
         /// </summary>
         public void Dispose()
         {
-            if (_manager != null && Asset != null)
-                _manager.Release(Asset);
+            if (_manager != null && Location != null)
+                _manager.Release(Location);
         }
     }
 }

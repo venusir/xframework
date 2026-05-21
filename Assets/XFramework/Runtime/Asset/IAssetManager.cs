@@ -94,9 +94,9 @@ namespace XFramework.XAsset
         #region Lifecycle
 
         /// <summary>
-        /// 释放资源（引用计数 -1）。通过资源实例查找映射 location。
+        /// 释放资源（引用计数 -1）。通过 location 直接查找，消除 asset→location 映射。
         /// </summary>
-        void Release(UnityEngine.Object asset);
+        void Release(string location);
 
         /// <summary>
         /// 销毁/回收实例。引用计数归零时自动释放资源。
