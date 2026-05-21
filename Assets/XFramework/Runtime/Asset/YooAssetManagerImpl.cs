@@ -82,7 +82,10 @@ namespace XFramework
             await operation.WithCancellation(cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
                 return null;
+            }
 
             _refCounts[location] = 1;
             _cache[location] = operation.AssetObject;

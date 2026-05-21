@@ -67,78 +67,33 @@ namespace XFramework.XLocalization
             }
 
             // 通过 AssetManager 加载 JSON 文件
+            // 注：AssetManager 底层（YooAssetManagerImpl）已在加载失败时统一记录 Debug.LogError
             var assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
 
-            AssetHandle<TextAsset> handle;
-            try
+            using var handle = await AssetManager.LoadAsync<TextAsset>(assetLocation, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var textAsset = handle.Asset;
+            if (textAsset == null)
             {
-                handle = await AssetManager.LoadAsync<TextAsset>(assetLocation, cancellationToken);
-            }
-            catch (Exception ex)
-            {
-                if (progress != null)
-                {
-                    progress.SetState(LoadState.Failed);
-                    progress.SetDescription($"Failed to load language asset '{assetLocation}': {ex.Message}");
-                }
                 throw new InvalidOperationException(
-                    $"[LanguageSwitchNode] Failed to load asset '{assetLocation}' for language '{_targetLanguage}'.", ex);
+                    $"[LanguageSwitchNode] AssetManager returned null for '{assetLocation}'.");
             }
 
-            using (handle)
+            // 解析 JSON
+            var data = ParseJson(textAsset.text);
+            if (data == null || data.Count == 0)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-
-                var textAsset = handle.Asset;
-                if (textAsset == null)
-                {
-                    if (progress != null)
-                    {
-                        progress.SetState(LoadState.Failed);
-                        progress.SetDescription($"AssetManager returned null for '{assetLocation}'");
-                    }
-                    throw new InvalidOperationException(
-                        $"[LanguageSwitchNode] AssetManager returned null for '{assetLocation}'.");
-                }
-
-                // 解析 JSON
-                Dictionary<string, string> data;
-                try
-                {
-                    data = ParseJson(textAsset.text);
-                }
-                catch (Exception ex)
-                {
-                    if (progress != null)
-                    {
-                        progress.SetState(LoadState.Failed);
-                        progress.SetDescription($"Failed to parse JSON from '{assetLocation}': {ex.Message}");
-                    }
-                    throw new InvalidOperationException(
-                        $"[LanguageSwitchNode] Failed to parse JSON for language '{_targetLanguage}'.", ex);
-                }
-
-                if (data == null || data.Count == 0)
-                {
-                    if (progress != null)
-                    {
-                        progress.SetState(LoadState.Failed);
-                        progress.SetDescription($"Empty language data for '{_targetLanguage}'");
-                    }
-                    throw new InvalidOperationException(
-                        $"[LanguageSwitchNode] Parsed empty language data for '{_targetLanguage}'.");
-                }
-
-                // 注入缓存并同步切换
-                LocalizationManager.SetLanguageData(_targetLanguage, data);
-                LocalizationManager.SetLanguage(_targetLanguage);
-
-                if (progress != null)
-                {
-                    progress.SetProgress(1f);
-                    progress.SetState(LoadState.Completed);
-                }
+                throw new InvalidOperationException(
+                    $"[LanguageSwitchNode] Parsed empty language data for '{_targetLanguage}'.");
             }
+
+            // 注入缓存并同步切换
+            LocalizationManager.SetLanguageData(_targetLanguage, data);
+            LocalizationManager.SetLanguage(_targetLanguage);
+
+            progress?.SetProgress(1f);
+            progress?.SetState(LoadState.Completed);
         }
 
         #endregion
