@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 资源管理模块提供异步资源加载、实例化、场景切换和对象池功能。基于 **YooAsset** 底层实现，通过 `IAssetManager` 接口解耦，支持回调式和 `UniTask` 两种调用方式。
+XFramework 资源管理模块提供异步资源加载、实例化、场景切换和对象池功能。基于 **YooAsset** 底层实现，通过 `IAssetManager` 接口解耦，统一使用 `UniTask` 异步风格。
 
 **命名空间**: `XFramework.XAsset`
 
@@ -12,9 +12,10 @@ XFramework 资源管理模块提供异步资源加载、实例化、场景切换
 Runtime/Asset/
 ├── IAssetManager.cs               # 资源管理器公共接口
 ├── AssetManager.cs                # 静态外观（全局入口）
-├── AssetManagerImpl.cs            # 默认实现（封装 YooAsset）
+├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
 ├── YooAssetManagerImpl.cs         # YooAsset 底层适配器
-├── InstanceTracker.cs             # 实例引用追踪（内部）
+├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
+├── InstanceTracker.cs             # 实例引用追踪组件（内部）
 └── AssetExtensions.cs             # 节点扩展方法
 ```
 
@@ -37,22 +38,45 @@ await AssetManager.InitializeAsync(progress);
 AssetManager.SetInstance(myAssetManager);
 ```
 
-### 2. 加载资源（UniTask）
+### 2. 加载资源
+
+`LoadAsync<T>` 返回 `AssetHandle<T>`，需通过 `using` 语句管理生命周期，块结束时自动释放引用计数：
 
 ```csharp
-// 加载资源本体（引用计数 +1）
-var prefab = await AssetManager.LoadAsync<GameObject>("characters/player");
-var config = await AssetManager.LoadAsync<TextAsset>("configs/game_settings");
-var sprite = await AssetManager.LoadAsync<Sprite>("ui/icons/coin");
+// 加载资源（返回 AssetHandle<T>）
+using (var handle = await AssetManager.LoadAsync<GameObject>("characters/player"))
+{
+    var prefab = handle.Asset;
+}
 
-// 带优先级加载
-var prefab = await AssetManager.LoadAsync<GameObject>("characters/player", priority: 10);
+// 加载 TextAsset（优先级用法类似）
+var handle = await AssetManager.LoadAsync<TextAsset>("configs/game_settings");
+using (handle)
+{
+    var text = handle.Asset.text;
+}
 ```
 
-### 3. 加载并实例化
+### 3. AssetHandle\<T\>
+
+`AssetHandle<T>` 是一个只读结构体，直接委托 YooAsset 的 `AssetHandle`。主要属性和用法：
 
 ```csharp
-// 加载预制体并实例化
+using (var handle = await AssetManager.LoadAsync<TextAsset>(location))
+{
+    T asset = handle.Asset;     // 资源本体，加载失败时为 null
+    string loc = handle.Location; // 资源定位路径
+    bool valid = handle.IsValid;  // 句柄是否有效
+    bool done = handle.IsDone;    // 加载是否已完成
+    float prog = handle.Progress; // 加载进度 0~1
+    string err = handle.LastError;// 错误信息
+} // 离开 using 块时自动 Release
+```
+
+### 4. 加载并实例化
+
+```csharp
+// 加载预制体并实例化（自动走对象池）
 var go = await AssetManager.InstantiateAsync("characters/player", parent: transform);
 
 // 指定位置和旋转
@@ -62,26 +86,23 @@ var go = await AssetManager.InstantiateAsync("characters/enemy", position, rotat
 var healthBar = await AssetManager.InstantiateAsync<HealthBar>("ui/health_bar", parent: uiRoot);
 ```
 
-### 4. 场景加载
+### 5. 场景加载
 
 ```csharp
-// 加载场景
+// 单场景加载
 var scene = await AssetManager.LoadSceneAsync("scenes/main");
 
-// 叠加式加载
-var scene = await AssetManager.LoadSceneAsync("scenes/main", additive: true);
-
-// 带进度回调
-var scene = await AssetManager.LoadSceneAsync("scenes/main", additive: false, p => 
+// 叠加式加载 + 进度回调
+var scene = await AssetManager.LoadSceneAsync("scenes/main", additive: true, p =>
 {
     Debug.Log($"场景加载进度: {p * 100}%");
 });
 ```
 
-### 5. 批量预加载
+### 6. 批量预加载
 
 ```csharp
-var locations = new[] 
+var locations = new[]
 {
     "characters/hero",
     "characters/enemy_soldier",
@@ -91,31 +112,28 @@ var locations = new[]
 await AssetManager.PreloadAllAsync(locations);
 ```
 
-### 6. 释放与回收
+### 7. 释放与回收
 
 ```csharp
-// 释放资源（引用计数 -1）
-AssetManager.Release(loadedAsset);
-
-// 回收实例（自动走对象池或销毁）
+// 回收实例（自动走对象池，满则销毁）
 AssetManager.DestroyInstance(gameObject);
 AssetManager.DestroyInstance(component);
 ```
 
-### 7. 对象池配置
+### 8. 对象池配置
 
 ```csharp
-// 设置指定预制体的对象池最大容量
+// 设置指定预制体的对象池最大容量（默认 5）
 AssetManager.SetPoolMaxSize("characters/bullet", maxSize: 50);
 
 // 查看对象池状态（调试用）
 var (pooled, active, max) = AssetManager.GetPoolStatus("characters/bullet");
-Debug.Log($"池中: {pooled}, 活跃: {active}, 上限: {max}");
+Debug.Log($"池中: {pooled}, 上限: {max}");
 ```
 
 ## 节点扩展方法
 
-通过 `AssetExtensions`，节点树中的任意节点可以直接使用 `this.LoadAssetAsync()` 等便捷语法：
+通过 `AssetExtensions`，节点树中的任意节点（实现 `IBaseNode`）可直接调用便捷方法：
 
 ```csharp
 public class MyNode : EntityNode
@@ -139,17 +157,33 @@ public class MyNode : EntityNode
 }
 ```
 
+## 内部机制
+
+### InstanceTracker
+
+每次 `InstantiateAsync` 创建的实例上会自动挂载 `InstanceTracker` 组件。该组件持有 `AssetHandle<GameObject>`，确保实例存活期间底层资源引用计数 > 0。用户无需感知此组件：
+
+- 调用 `DestroyInstance` 时，先回池（`SetActive(false)`），再释放句柄
+- 用户直接调用 `Object.Destroy` 时，`OnDestroy` 自动释放句柄
+
+### 对象池
+
+默认每种预制体最多保留 5 个闲置实例，池满时销毁最旧的。可通过 `SetPoolMaxSize` 调整上限。
+
 ## 设计原则
 
 - **接口可替换** — 通过 `IAssetManager` 接口，可替换底层实现（当前基于 YooAsset）
-- **双 API 风格** — 同时支持 `UniTask` 异步和回调式
-- **对象池** — `InstantiateAsync` 自动走对象池，减少 GC
-- **引用计数** — 自动管理资源生命周期，防止过早释放
+- **句柄生命周期** — `AssetHandle<T>` 实现 `IDisposable`，推荐 `using` 语句管理
+- **对象池** — `InstantiateAsync` 优先从池获取，减少 `Instantiate`/`Destroy` 开销
+- **引用计数** — `InstanceTracker` 自动管理资源生命周期，防止过早释放
 - **静态外观** — `AssetManager` 提供全局入口，任意位置可调用
 
 ## 依赖
 
-- `YooAsset` — Git URL 依赖，需在 README 中引导用户手动安装
+- **YooAsset** — Git URL 依赖。由于 Unity Package Manager 不支持在 package.json 中直接引用 Git URL 作为传递依赖，第三方接入时需手动安装：
+  ```
+  https://github.com/tuyoogame/YooAsset.git
+  ```
+  在 Unity 中通过 Package Manager → "Add package from git URL..." 添加。
 - `UniTask`（框架层已提供）
 - `XFramework.XCore` — 节点扩展依赖 Core 模块
-- `XFramework.XLoader` — 启动加载流程依赖 Loader 模块
