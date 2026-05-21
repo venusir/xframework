@@ -128,7 +128,7 @@ namespace XFramework.XAsset
 
         #region Load — UniTask
 
-        public async UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
             var asset = await _managerImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
@@ -136,10 +136,10 @@ namespace XFramework.XAsset
             {
                 _assetToLocation[asset] = location;
             }
-            return asset;
+            return new AssetHandle<T>(asset, this);
         }
 
-        public async UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
             var asset = await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
@@ -147,7 +147,7 @@ namespace XFramework.XAsset
             {
                 _assetToLocation[asset] = location;
             }
-            return asset;
+            return new AssetHandle<T>(asset, this);
         }
 
         public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
@@ -207,37 +207,6 @@ namespace XFramework.XAsset
                 tasks.Add(_managerImpl.PreloadAsync(location));
             }
             await UniTask.WhenAll(tasks);
-        }
-
-        #endregion
-
-        #region Load — Callback
-
-        public async void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
-        {
-            var result = await LoadAsync<T>(location);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to load asset: {location}");
-        }
-
-        public async void InstantiateAsync(string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null)
-        {
-            var result = await InstantiateAsync(location, parent);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to instantiate: {location}");
-        }
-
-        public async void InstantiateAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component
-        {
-            var result = await InstantiateAsync<T>(location, parent);
-            if (result != null)
-                onCompleted?.Invoke(result);
-            else
-                onError?.Invoke($"Failed to instantiate: {location}");
         }
 
         #endregion

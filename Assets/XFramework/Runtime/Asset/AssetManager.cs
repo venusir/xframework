@@ -71,14 +71,14 @@ namespace XFramework.XAsset
         #region Public API — Load (UniTask)
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, CancellationToken)"/>
-        public static UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public static UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureGlobalInitialized();
             return _instance.LoadAsync<T>(location, cancellationToken);
         }
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, int, CancellationToken)"/>
-        public static UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public static UniTask<AssetHandle<T>> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureGlobalInitialized();
             return _instance.LoadAsync<T>(location, priority, cancellationToken);
@@ -128,30 +128,6 @@ namespace XFramework.XAsset
 
         #endregion
 
-        #region Public API — Load (Callback)
-
-        /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, Action{T}, Action{string})"/>
-        public static void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
-        {
-            EnsureGlobalInitialized();
-            _instance.LoadAsync(location, onCompleted, onError);
-        }
-
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Action{GameObject}, Action{string}, Transform)"/>
-        public static void InstantiateAsync(string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null)
-        {
-            EnsureGlobalInitialized();
-            _instance.InstantiateAsync(location, onCompleted, onError, parent);
-        }
-
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Action{T}, Action{string}, Transform)"/>
-        public static void InstantiateAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component
-        {
-            EnsureGlobalInitialized();
-            _instance.InstantiateAsync(location, onCompleted, onError, parent);
-        }
-
-        #endregion
 
         #region Public API — Pool Config
 

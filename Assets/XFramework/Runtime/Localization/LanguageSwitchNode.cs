@@ -68,10 +68,11 @@ namespace XFramework.XLocalization
 
             // 通过 AssetManager 加载 JSON 文件
             var assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
-            TextAsset textAsset;
+
+            AssetHandle<TextAsset> handle;
             try
             {
-                textAsset = await AssetManager.LoadAsync<TextAsset>(assetLocation, cancellationToken);
+                handle = await AssetManager.LoadAsync<TextAsset>(assetLocation, cancellationToken);
             }
             catch (Exception ex)
             {
@@ -84,10 +85,11 @@ namespace XFramework.XLocalization
                     $"[LanguageSwitchNode] Failed to load asset '{assetLocation}' for language '{_targetLanguage}'.", ex);
             }
 
-            try
+            using (handle)
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
+                var textAsset = handle.Asset;
                 if (textAsset == null)
                 {
                     if (progress != null)
@@ -136,12 +138,6 @@ namespace XFramework.XLocalization
                     progress.SetProgress(1f);
                     progress.SetState(LoadState.Completed);
                 }
-            }
-            finally
-            {
-                // 无论成功或异常，TextAsset 已解析完毕，释放资源避免 AssetManager 缓存积压
-                if (textAsset != null)
-                    AssetManager.Release(textAsset);
             }
         }
 

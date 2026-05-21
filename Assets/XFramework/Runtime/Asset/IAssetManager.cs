@@ -28,14 +28,22 @@ namespace XFramework.XAsset
         #region Load — UniTask
 
         /// <summary>
-        /// 异步加载资源，返回资源本体（引用计数 +1）。
+        /// 异步加载资源，返回 <see cref="AssetHandle{T}"/> 句柄。调用方应通过 <c>using</c> 块自动管理资源生命周期。
         /// </summary>
-        UniTask<T> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
+        /// <example>
+        /// <code>
+        /// using (var handle = await LoadAsync<TextAsset>(location, ct))
+        /// {
+        ///     var text = handle.Asset.text;
+        /// }
+        /// </code>
+        /// </example>
+        UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
 
         /// <summary>
-        /// 异步加载资源，带优先级。
+        /// 异步加载资源（带优先级），返回 <see cref="AssetHandle{T}"/> 句柄。
         /// </summary>
-        UniTask<T> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
+        UniTask<AssetHandle<T>> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
 
         /// <summary>
         /// 加载资源并实例化，返回实例 GameObject（自动管理引用生命周期）。
@@ -66,25 +74,6 @@ namespace XFramework.XAsset
         /// 批量预加载资源到缓存（引用计数不增加）。
         /// </summary>
         UniTask PreloadAllAsync(IEnumerable<string> locations);
-
-        #endregion
-
-        #region Load — Callback
-
-        /// <summary>
-        /// 异步加载资源（回调版本）。
-        /// </summary>
-        void LoadAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object;
-
-        /// <summary>
-        /// 加载资源并实例化（回调版本）。
-        /// </summary>
-        void InstantiateAsync(string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null);
-
-        /// <summary>
-        /// 加载资源并实例化，返回组件（回调版本）。
-        /// </summary>
-        void InstantiateAsync<T>(string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component;
 
         #endregion
 

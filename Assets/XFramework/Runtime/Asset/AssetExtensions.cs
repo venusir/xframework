@@ -26,11 +26,11 @@ namespace XFramework.XAsset
         #region UniTask — Load
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, CancellationToken)"/>
-        public static UniTask<T> LoadAssetAsync<T>(this IBaseNode self, string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public static UniTask<AssetHandle<T>> LoadAssetAsync<T>(this IBaseNode self, string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
             => AssetManager.LoadAsync<T>(location, cancellationToken);
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, int, CancellationToken)"/>
-        public static UniTask<T> LoadAssetAsync<T>(this IBaseNode self, string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        public static UniTask<AssetHandle<T>> LoadAssetAsync<T>(this IBaseNode self, string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
             => AssetManager.LoadAsync<T>(location, priority, cancellationToken);
 
         /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Transform)"/>
@@ -59,21 +59,6 @@ namespace XFramework.XAsset
 
         #endregion
 
-        #region Callback — Load
-
-        /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, Action{T}, Action{string})"/>
-        public static void LoadAssetAsync<T>(this IBaseNode self, string location, Action<T> onCompleted, Action<string> onError = null) where T : UnityEngine.Object
-            => AssetManager.LoadAsync(location, onCompleted, onError);
-
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Action{GameObject}, Action{string}, Transform)"/>
-        public static void InstantiateAssetAsync(this IBaseNode self, string location, Action<GameObject> onCompleted, Action<string> onError = null, Transform parent = null)
-            => AssetManager.InstantiateAsync(location, onCompleted, onError, parent);
-
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Action{T}, Action{string}, Transform)"/>
-        public static void InstantiateAssetAsync<T>(this IBaseNode self, string location, Action<T> onCompleted, Action<string> onError = null, Transform parent = null) where T : Component
-            => AssetManager.InstantiateAsync(location, onCompleted, onError, parent);
-
-        #endregion
 
         #region Pool Config
 
