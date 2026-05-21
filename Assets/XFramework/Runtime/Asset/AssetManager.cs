@@ -149,13 +149,6 @@ namespace XFramework.XAsset
 
         #region Public API — Lifecycle
 
-        /// <inheritdoc cref="IAssetManager.Release(string)"/>
-        public static void Release(string location)
-        {
-            EnsureGlobalInitialized();
-            _instance.Release(location);
-        }
-
         /// <inheritdoc cref="IAssetManager.DestroyInstance(GameObject)"/>
         public static void DestroyInstance(GameObject instance)
         {

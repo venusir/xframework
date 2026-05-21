@@ -12,7 +12,8 @@ namespace XFramework.XAsset
 
     /// <summary>
     /// 资源管理器具体实现。实现 <see cref="IAssetManager"/>，提供资源加载、实例化与生命周期管理。
-    /// <para>内部使用 YooAsset，自动管理引用计数、对象池、延迟卸载、场景加载、预加载。</para>
+    /// <para>内部使用 YooAsset。生命周期由 <see cref="AssetHandle{T}"/> 管理，
+    /// Dispose 时直接调用 <see cref="YooAsset.AssetHandle.Release"/>。</para>
     /// <para>通常不直接使用，由 <see cref="AssetManager"/> 外观类持有并委派调用。</para>
     /// </summary>
     internal class AssetManagerImpl : IAssetManager
@@ -122,15 +123,13 @@ namespace XFramework.XAsset
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
-            var asset = await _managerImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
-            return new AssetHandle<T>(asset, location, this);
+            return await _managerImpl.LoadAsync<T>(location, cancellationToken: cancellationToken);
         }
 
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
         {
             EnsureInitialized();
-            var asset = await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
-            return new AssetHandle<T>(asset, location, this);
+            return await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
         }
 
         public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
@@ -215,12 +214,6 @@ namespace XFramework.XAsset
 
         #region Lifecycle
 
-        public void Release(string location)
-        {
-            if (string.IsNullOrEmpty(location)) return;
-            _managerImpl?.Release(location);
-        }
-
         public void DestroyInstance(GameObject instance)
         {
             if (instance == null) return;
@@ -234,7 +227,7 @@ namespace XFramework.XAsset
                 // 回池或销毁
                 ReturnToPoolOrDestroy(location, instance);
 
-                // 释放资源引用（AssetHandle.Dispose → Release(location)）
+                // 释放资源引用（AssetHandle.Dispose → YooAsset.AssetHandle.Release）
                 tracker.DisposeHandle();
             }
             else
