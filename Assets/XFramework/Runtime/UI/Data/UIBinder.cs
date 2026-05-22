@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
+using XFramework.XLocalization;
 using XFramework.XReactive;
 
 namespace XFramework.XUI.Data
@@ -133,6 +134,23 @@ namespace XFramework.XUI.Data
             var handler = new UnityEngine.Events.UnityAction(onClick);
             button.onClick.AddListener(handler);
             return R3.Disposable.Create(() => button.onClick.RemoveListener(handler));
+        }
+
+        #endregion
+
+        #region Localization
+
+        /// <summary>将 TMP_Text 绑定到本地化键值。语言切换时自动刷新文本。</summary>
+        public static IDisposable BindToLocalizedText(this TMP_Text text, string localizationKey)
+        {
+            if (text == null || string.IsNullOrEmpty(localizationKey)) return null;
+
+            // 设置初始文本
+            text.text = LocalizationManager.Get(localizationKey);
+
+            // 订阅语言变更消息，自动刷新
+            return MessageManager.Subscribe<LanguageChangedMessage>(_ =>
+                text.text = LocalizationManager.Get(localizationKey));
         }
 
         #endregion

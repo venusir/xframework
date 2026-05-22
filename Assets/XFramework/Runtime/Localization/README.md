@@ -177,11 +177,19 @@ LocalizationManager.ClearPlaceholders();
 
 ### 8. 语言切换事件
 
+语言切换通过 `MessageManager` 发布订阅，无需直接引用 `LocalizationManager` 的事件：
+
 ```csharp
-LocalizationManager.OnLanguageChanged += lang =>
+using XFramework.XReactive;
+
+// 订阅语言变更消息
+var subscription = MessageManager.Subscribe<LanguageChangedMessage>(msg =>
 {
-    Debug.Log($"语言已切换为: {lang}");
-};
+    Debug.Log($"语言已切换为: {msg.Language}");
+});
+
+// 取消订阅
+subscription.Dispose();
 ```
 
 ### 9. 当前状态

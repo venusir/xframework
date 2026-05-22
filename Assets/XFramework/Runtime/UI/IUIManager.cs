@@ -194,11 +194,6 @@ namespace XFramework.XUI
         /// </summary>
         event Action OnAllPanelsClosed;
 
-        /// <summary>
-        /// 语言切换事件转发。与 <see cref="XLocalization.LocalizationManager"/> 联动，通知所有已打开面板刷新文本。
-        /// </summary>
-        void OnLanguageChanged(string lang);
-
         #endregion
     }
 }

@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XLocalization;
+using XFramework.XReactive;
 using XFramework.XUI.Controller;
 using XFramework.XUI.View;
 
@@ -72,6 +74,11 @@ namespace XFramework.XUI
         /// </summary>
         private IUIController _controller;
 
+        /// <summary>
+        /// 语言变更消息订阅句柄。Dispose 时取消订阅。
+        /// </summary>
+        private IDisposable _languageChangedSubscription;
+
         #endregion
 
         #region Properties
@@ -110,6 +117,9 @@ namespace XFramework.XUI
 
             // 默认使用 UIDefaultController（所有操作直接放行）
             _controller = new UIDefaultController();
+
+            // 订阅语言变更消息，自动通知所有已打开面板刷新文本
+            _languageChangedSubscription = MessageManager.Subscribe<LanguageChangedMessage>(OnLanguageChangedMessage);
         }
 
         /// <summary>
@@ -127,6 +137,10 @@ namespace XFramework.XUI
         /// </summary>
         public void Dispose()
         {
+            // 取消消息订阅
+            _languageChangedSubscription?.Dispose();
+            _languageChangedSubscription = null;
+
             // 同步关闭所有面板（回池而非 Destroy）
             var panels = new List<UIPanelBase>(_activePanels.Values);
             foreach (var panel in panels)
@@ -556,24 +570,6 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Localization Event
-
-        /// <summary>
-        /// 语言切换时，通知所有已打开面板。
-        /// </summary>
-        public void OnLanguageChanged(string lang)
-        {
-            foreach (var kv in _activePanels)
-            {
-                if (kv.Value != null && kv.Value.IsOpen)
-                {
-                    kv.Value.OnLanguageChanged(lang);
-                }
-            }
-        }
-
-        #endregion
-
         #region Internal — Panel Instantiation
 
         /// <summary>
@@ -730,6 +726,24 @@ namespace XFramework.XUI
             counter++;
             _sortOrderCounters[layer] = counter;
             return layer * SortOrderBase + counter;
+        }
+
+        #endregion
+
+        #region Internal — Message Handlers
+
+        /// <summary>
+        /// 接收 <see cref="LanguageChangedMessage"/>，自动通知所有已打开面板刷新文本。
+        /// </summary>
+        private void OnLanguageChangedMessage(LanguageChangedMessage msg)
+        {
+            foreach (var kv in _activePanels)
+            {
+                if (kv.Value != null && kv.Value.IsOpen)
+                {
+                    kv.Value.OnLanguageChanged(msg.Language);
+                }
+            }
         }
 
         #endregion

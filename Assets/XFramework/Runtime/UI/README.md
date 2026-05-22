@@ -627,17 +627,9 @@ UIManager.ClearAssetCache();
 
 ### 10. 语言切换联动
 
-与 `LocalizationManager` 联动，语言切换时自动通知所有已打开面板刷新：
+语言切换通过 `MessageManager` 发布 `LanguageChangedMessage`，`UIManager` 自动订阅并刷新所有已打开面板，**无需手动注册**。
 
-```csharp
-// 注册语言切换回调
-XLocalization.LocalizationManager.OnLanguageChanged += UIManager.OnLanguageChanged;
-
-// 或手动触发刷新（不经过 LocalizationManager）
-UIManager.OnLanguageChanged("ja");
-```
-
-面板中重写 `OnLanguageChanged` 方法：
+面板中重写 `OnLanguageChanged` 方法即可：
 
 ```csharp
 public class MainMenuPanel : UIPanelBase
@@ -649,6 +641,15 @@ public class MainMenuPanel : UIPanelBase
         titleText.text = LocalizationManager.Get("ui_main_title");
     }
 }
+```
+
+或者使用 `UIBinder.BindToLocalizedText` 扩展方法，**无需重写 `OnLanguageChanged`**：
+
+```csharp
+using XFramework.XUI.Data;
+
+// 绑定后语言切换时自动刷新，返回 IDisposable 可存入 UIPanelBinding._bindings 统一管理
+titleText.BindToLocalizedText("ui_main_title");
 ```
 
 ### 11. 事件监听

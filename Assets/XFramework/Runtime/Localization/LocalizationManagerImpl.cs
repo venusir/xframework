@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using XFramework.XReactive;
 
 namespace XFramework.XLocalization
 {
@@ -7,6 +8,7 @@ namespace XFramework.XLocalization
     /// <see cref="ILocalizationManager"/> 的默认实现。
     /// <para>内存中维护一个小缓存（最多 4 种语言），当前语言和回退语言始终保留，其余按 LRU 淘汰。</para>
     /// <para>切换语言时优先从缓存命中，未命中时由 <see cref="LanguageSwitchNode"/> 通过 <see cref="LanguageAssetPath"/> 异步加载。</para>
+    /// <para>切换语言时通过 <see cref="MessageManager.Publish"/> 发送 <see cref="LanguageChangedMessage"/>。</para>
     /// </summary>
     internal sealed class LocalizationManagerImpl : ILocalizationManager
     {
@@ -69,12 +71,6 @@ namespace XFramework.XLocalization
 
         #endregion
 
-        #region Events
-
-        public event Action<string> OnLanguageChanged;
-
-        #endregion
-
         #region I18n
 
         public void SetLanguageData(string lang, Dictionary<string, string> data)
@@ -112,7 +108,7 @@ namespace XFramework.XLocalization
 
             _currentLanguage = lang;
             TouchLanguage(lang); // 标记为最近使用
-            OnLanguageChanged?.Invoke(lang);
+            MessageManager.Publish(new LanguageChangedMessage(lang));
         }
 
         /// <summary>
@@ -355,7 +351,6 @@ namespace XFramework.XLocalization
             _placeholders?.Clear();
             _placeholders = null;
             IsInitialized = false;
-            OnLanguageChanged = null;
             LanguageAssetPath = null;
         }
 

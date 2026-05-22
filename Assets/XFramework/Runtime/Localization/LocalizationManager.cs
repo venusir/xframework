@@ -10,6 +10,8 @@ namespace XFramework.XLocalization
     /// <para>内部持有 <see cref="ILocalizationManager"/> 实例（<see cref="LocalizationManagerImpl"/>），所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 注入至少一个语言的数据。</para>
     /// <para>内存中维护小缓存（最多 4 种语言），当前语言和回退语言始终保留，其余按 LRU 淘汰。切换语言时优先从缓存命中，未命中时通过 <see cref="LanguageAssetPath"/> 异步加载对应语言的 JSON 文件。</para>
+    /// <para>语言切换通知通过 <see cref="XReactive.MessageManager.Publish{TMessage}"/> 发送 <see cref="LanguageChangedMessage"/>，
+    /// 可通过 <c>MessageManager.Subscribe<LanguageChangedMessage>(handler)</c> 监听。</para>
     /// </summary>
     public static class LocalizationManager
     {
@@ -231,27 +233,6 @@ namespace XFramework.XLocalization
         {
             EnsureGlobalInitialized();
             return _instance.HasPlaceholder(key);
-        }
-
-        #endregion
-
-        #region Public API — Event
-
-        /// <summary>
-        /// 语言切换事件。参数为新语言标识。
-        /// </summary>
-        public static event Action<string> OnLanguageChanged
-        {
-            add
-            {
-                EnsureGlobalInitialized();
-                _instance.OnLanguageChanged += value;
-            }
-            remove
-            {
-                EnsureGlobalInitialized();
-                _instance.OnLanguageChanged -= value;
-            }
         }
 
         #endregion

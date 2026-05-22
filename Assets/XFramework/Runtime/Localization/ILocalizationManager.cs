@@ -8,28 +8,20 @@ namespace XFramework.XLocalization
     /// <para>通过 <see cref="LocalizationManager"/> 的静态方法直接调用，或注入 <see cref="ILocalizationManager"/> 实例使用。</para>
     /// <para>数据来源于 JSON 文件（如 Luban 生成的表），通过 <see cref="LocalizationManager.SwitchLanguageAsync"/> 按需异步加载。</para>
     /// <para>语言使用 <see cref="string"/> 标识，如 <c>"zh_Hans"</c>, <c>"en"</c>, <c>"ja"</c>，也可自定义任意标识。</para>
+    /// <para>语言切换通知通过 <see cref="XReactive.MessageManager.Publish{TMessage}"/> 发送 <see cref="LanguageChangedMessage"/>，
+    /// 可通过 <c>MessageManager.Subscribe<LanguageChangedMessage>(handler)</c> 监听。</para>
     /// </summary>
     public interface ILocalizationManager : IDisposable
     {
         /// <summary>
-        /// 是否已初始化。
-        /// </summary>
-        bool IsInitialized { get; }
-
-        /// <summary>
-        /// 当前语言。
+        /// 当前使用的语言代码。
         /// </summary>
         string CurrentLanguage { get; }
 
         /// <summary>
-        /// 默认回退语言。当当前语言找不到对应键值时使用。
+        /// 获取或设置回退语言。当目标键在当前语言中不存在时自动使用回退语言的值。
         /// </summary>
         string FallbackLanguage { get; set; }
-
-        /// <summary>
-        /// 语言切换事件。参数为新语言标识。
-        /// </summary>
-        event Action<string> OnLanguageChanged;
 
         /// <summary>
         /// 语言数据文件的 YooAsset 地址模板。
@@ -47,9 +39,9 @@ namespace XFramework.XLocalization
         void SetLanguageData(string lang, Dictionary<string, string> data);
 
         /// <summary>
-        /// 同步切换到指定语言。切换后触发 <see cref="OnLanguageChanged"/> 事件。
+        /// 同步切换到指定语言。切换后通过 <see cref="XReactive.MessageManager"/> 发送 <see cref="LanguageChangedMessage"/>。
         /// <para>仅当目标语言已在缓存中时可用，否则抛 <see cref="InvalidOperationException"/>。</para>
-        /// <para>目标语言未缓存时，请使用 <see cref="LanguageSwitchNode"/> 进行异步加载切换。</para>
+        /// <para>目标语言未缓存时，请使用 <see cref="LocalizationManager.SwitchLanguageAsync"/> 进行异步加载切换。</para>
         /// </summary>
         void SetLanguage(string lang);
 
@@ -78,7 +70,8 @@ namespace XFramework.XLocalization
 
         /// <summary>
         /// 设置全局占位符。在 <see cref="Get"/> / <see cref="GetFormat"/> 时自动替换文本中的 <c>{Key}</c>。
-        /// <para>示例：<c>SetPlaceholder("PlayerName", "张三")</c> 后，<c>Get("ui_welcome")</c> 中 <c>{PlayerName}</c> 将被替换为 <c>"张三"</c>。</para>
+        /// <para>示例：<c>SetPlaceholder("PlayerName", "张三")</c> 后，
+        /// <c>Get("ui_welcome")</c> 中 <c>{PlayerName}</c> 将被替换为 <c>"张三"</c>。</para>
         /// <para>占位符替换在 <see cref="GetFormat"/> 的 <c>string.Format</c> 之前执行。</para>
         /// </summary>
         void SetPlaceholder(string key, string value);

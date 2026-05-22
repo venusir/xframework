@@ -302,20 +302,6 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Public API — Localization
-
-        /// <summary>
-        /// 语言切换事件转发。与 <see cref="XLocalization.LocalizationManager"/> 联动，通知所有已打开面板刷新文本。
-        /// <para>用法: <c>XLocalization.LocalizationManager.OnLanguageChanged += XUI.UIManager.OnLanguageChanged;</c></para>
-        /// </summary>
-        public static void OnLanguageChanged(string lang)
-        {
-            EnsureGlobalInitialized();
-            _instance.OnLanguageChanged(lang);
-        }
-
-        #endregion
-
         #region Public API — UI Controller
 
         /// <summary>
