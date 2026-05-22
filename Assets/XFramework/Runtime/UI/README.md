@@ -210,6 +210,40 @@ public class GameHudPanel : UIPanelBase
 }
 ```
 
+> ⚠️ **OnUpdate 与 ReactiveProperty 的使用边界**
+>
+> **ReactiveProperty 是推模式（事件驱动），OnUpdate 是拉模式（帧驱动），两者职责互补，不应混用。**
+>
+> - **ReactiveProperty** — 数据变化时自动推送，绑定后无需手动更新 UI。适用于健康值、货币数量、开关状态等**事件驱动**的数据刷新。
+> - **OnUpdate** — 每帧执行，适用于倒计时、进度条插值、拖拽跟随、位置追踪等**帧驱动**的持续逻辑。
+>
+> ❌ **反模式：在 OnUpdate 中轮询 ReactiveProperty 手动刷新 UI**
+> ```csharp
+> protected override void OnUpdate()
+> {
+>     // 错误：_vm.Health 已通过 UIBinder 绑定到 healthText，
+>     // 每帧再手动 Set 健康值是一种冗余更新
+>     healthText.text = _vm.Health.Value.ToString();
+> }
+> ```
+>
+> ✅ **正确区分：绑定用 ReactiveProperty，帧驱动用 OnUpdate**
+> ```csharp
+> protected override async UniTask OnOpen(object userData)
+> {
+>     // ReactiveProperty 绑定 — 值变化自动推送到 UI，无需 OnUpdate 参与
+>     _vm.Health.BindToText(healthText, v => $"HP: {v}");
+>     _vm.Score.BindToText(scoreText, v => $"{v:N0}");
+> }
+>
+> protected override void OnUpdate()
+> {
+>     // OnUpdate — 纯帧驱动逻辑，与 ReactiveProperty 无关
+>     _countdownTimer -= Time.deltaTime;
+>     _countdownText.text = Mathf.CeilToInt(_countdownTimer).ToString();
+> }
+> ```
+
 ### 资源缓存
 
 预加载面板预制体到内存缓存，后续 `OpenAsync` 时直接从缓存实例化：

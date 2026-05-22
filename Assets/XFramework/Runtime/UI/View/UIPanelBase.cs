@@ -170,8 +170,11 @@ namespace XFramework.XUI.View
         protected internal virtual void OnLanguageChanged(string lang) { }
 
         /// <summary>
-        /// 每帧更新。由 <see cref="UIManager"/> 统一驱动，仅当 IsOpen 为 true 时调用。
+        /// 每帧更新。由 <see cref="UIManager"/> 统一驱动，仅当 IsOpen 为 true 且未暂停时调用。
         /// <para>替代直接使用 MonoBehaviour.Update()，避免分散的 Update 开销，并确保暂停状态下不会执行。</para>
+        /// <para>适用场景：倒计时、进度条插值、拖拽跟随、非数据驱动的每帧逻辑。</para>
+        /// <para>警告：如果已在 OnOpen 中通过 UIBinder / BindByConvention 将 ReactiveProperty 绑定到 UI 组件，
+        /// 请勿在 OnUpdate 中重复手动更新相同 UI 组件，<see cref="ReactiveProperty{T}"/> 的值变更会自动推送到 UI。</para>
         /// </summary>
         protected internal virtual void OnUpdate() { }
 
