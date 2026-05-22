@@ -242,6 +242,17 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Update
+
+        /// <inheritdoc cref="IUIManager.Update"/>
+        public static void Update()
+        {
+            EnsureGlobalInitialized();
+            _instance.Update();
+        }
+
+        #endregion
+
         #region Public API — Events
 
         /// <inheritdoc cref="IUIManager.OnPanelOpened"/>

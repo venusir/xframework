@@ -167,6 +167,16 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Per-Frame Update
+
+        /// <summary>
+        /// 每帧更新。应在 UIRootNode 或场景中驱动此方法，内部遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>。
+        /// <para>借鉴 GameFramework UIFormLogic.OnUpdate 的设计，由管理器统一驱动而非每个面板独立 Update。</para>
+        /// </summary>
+        void Update();
+
+        #endregion
+
         #region Events
 
         /// <summary>

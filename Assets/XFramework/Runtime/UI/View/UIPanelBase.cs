@@ -169,6 +169,12 @@ namespace XFramework.XUI.View
         /// </summary>
         protected internal virtual void OnLanguageChanged(string lang) { }
 
+        /// <summary>
+        /// 每帧更新。由 <see cref="UIManager"/> 统一驱动，仅当 IsOpen 为 true 时调用。
+        /// <para>替代直接使用 MonoBehaviour.Update()，避免分散的 Update 开销，并确保暂停状态下不会执行。</para>
+        /// </summary>
+        protected internal virtual void OnUpdate() { }
+
         #endregion
 
         #region Animation Methods
@@ -225,7 +231,7 @@ namespace XFramework.XUI.View
         }
 
         /// <summary>
-        /// 面板关闭时由 UIManager 调用，执行动画、OnClose，最后销毁。
+        /// 面板关闭时由 UIManager 调用，执行动画、OnClose。不自行销毁，回池由 UIManagerImpl 调度。
         /// </summary>
         internal async UniTask DoCloseAsync(bool immediate)
         {
@@ -238,8 +244,21 @@ namespace XFramework.XUI.View
 
             await OnClose();
 
-            // 销毁/回收实例
-            Destroy(gameObject);
+            // 设置未激活状态，等待 UIManagerImpl 调用 AssetManager.DestroyInstance 回池
+            gameObject.SetActive(false);
+        }
+
+        /// <summary>
+        /// 面板即将回池时由 UIManager 调用。子类可重写以重置自定义状态（如清空输入字段、重置滚动位置等）。
+        /// <para>基类实现重置 Canvas.sortingOrder 和 overrideSorting。</para>
+        /// </summary>
+        protected internal virtual void OnPoolRecycle()
+        {
+            if (Canvas != null)
+            {
+                Canvas.sortingOrder = 0;
+                Canvas.overrideSorting = false;
+            }
         }
 
         #endregion

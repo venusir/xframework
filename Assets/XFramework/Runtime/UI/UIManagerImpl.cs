@@ -11,7 +11,7 @@ namespace XFramework.XUI
     /// <summary>
     /// <see cref="IUIManager"/> 的默认实现。
     /// <para>维护活动面板字典、导航堆栈、层级排序计数器和资源缓存。</para>
-    /// <para>面板实例化使用 <see cref="AssetManager.InstantiateAsync{T}(string, Transform)"/>。</para>
+    /// <para>面板实例化使用 <see cref="AssetManager.InstantiateAsync(string, Transform)"/>，关闭时回池。</para>
     /// </summary>
     internal sealed class UIManagerImpl : IUIManager
     {
@@ -50,11 +50,11 @@ namespace XFramework.XUI
             = new Dictionary<int, int>(4);
 
         /// <summary>
-        /// 预加载资源缓存。key: 类型, value: (assetPath, GameObject)。
-        /// <para>预制体被预加载后缓存于此，OpenAsync 时直接实例化。</para>
+        /// 预加载资源路径缓存。key: 类型, value: assetPath。
+        /// <para>标记哪些面板已被预加载到 AssetManager 的对象池中。</para>
         /// </summary>
-        private readonly Dictionary<Type, (string path, GameObject prefab)> _assetCache
-            = new Dictionary<Type, (string, GameObject)>(8);
+        private readonly Dictionary<Type, string> _assetCache
+            = new Dictionary<Type, string>(8);
 
         /// <summary>
         /// 遮罩 GameObject 实例。
@@ -123,17 +123,17 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 销毁所有内容。
+        /// 销毁所有内容。面板实例回池由 AssetManager 管理。
         /// </summary>
         public void Dispose()
         {
-            // 同步关闭所有面板
+            // 同步关闭所有面板（回池而非 Destroy）
             var panels = new List<UIPanelBase>(_activePanels.Values);
             foreach (var panel in panels)
             {
                 if (panel != null && panel.gameObject != null)
                 {
-                    UnityEngine.Object.Destroy(panel.gameObject);
+                    AssetManager.DestroyInstance(panel.gameObject);
                 }
             }
 
@@ -141,18 +141,13 @@ namespace XFramework.XUI
             _navStack.Clear();
             _sortOrderCounters.Clear();
 
-            // 清理缓存
-            foreach (var kv in _assetCache)
-            {
-                if (kv.Value.prefab != null)
-                    AssetManager.DestroyInstance(kv.Value.prefab);
-            }
+            // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
             _assetCache.Clear();
 
             // 隐藏遮罩
             if (_maskInstance != null)
             {
-                UnityEngine.Object.Destroy(_maskInstance);
+                AssetManager.DestroyInstance(_maskInstance);
                 _maskInstance = null;
             }
 
@@ -188,7 +183,7 @@ namespace XFramework.XUI
                 return null;
             }
 
-            // 实例化面板
+            // 实例化面板（AssetManager 管理对象池）
             var panel = await InstantiatePanelAsync<T>(assetPath, layer);
 
             if (panel == null)
@@ -462,34 +457,53 @@ namespace XFramework.XUI
             if (_assetCache.ContainsKey(type))
                 return;
 
-            var prefab = await LoadPrefabAsync(assetPath);
-            if (prefab != null)
-            {
-                // 不激活，只缓存预制体引用
-                prefab.SetActive(false);
-                _assetCache[type] = (assetPath, prefab);
-            }
+            // 通过 AssetManager 预热对象池（加载资源但不实例化到场景中）
+            await AssetManager.PreloadAllAsync(new[] { assetPath });
+            _assetCache[type] = assetPath;
         }
 
         public void UnloadAsset<T>() where T : UIPanelBase
         {
             var type = typeof(T);
-            if (_assetCache.TryGetValue(type, out var entry))
-            {
-                if (entry.prefab != null)
-                    AssetManager.DestroyInstance(entry.prefab);
-                _assetCache.Remove(type);
-            }
+            _assetCache.Remove(type);
         }
 
         public void ClearAssetCache()
         {
-            foreach (var kv in _assetCache)
-            {
-                if (kv.Value.prefab != null)
-                    AssetManager.DestroyInstance(kv.Value.prefab);
-            }
             _assetCache.Clear();
+        }
+
+        #endregion
+
+        #region Layer Management
+
+        public void SetLayerVisibility(int layer, bool visible)
+        {
+            var container = GetLayerContainer(layer);
+            if (container != null)
+                container.gameObject.SetActive(visible);
+        }
+
+        public void SetLayerInteractive(int layer, bool interactive)
+        {
+            var container = GetLayerContainer(layer);
+            if (container != null)
+            {
+                var childRaycasters = container.GetComponentsInChildren<UnityEngine.UI.GraphicRaycaster>();
+                foreach (var raycaster in childRaycasters)
+                {
+                    raycaster.enabled = interactive;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取指定层级的容器节点（可能已存在）。
+        /// </summary>
+        private Transform GetLayerContainer(int layer)
+        {
+            var containerName = $"Layer_{layer}";
+            return UIRoot?.Find(containerName);
         }
 
         #endregion
@@ -521,6 +535,27 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Per-Frame Update
+
+        /// <inheritdoc cref="IUIManager.Update"/>
+        public void Update()
+        {
+            if (!IsInitialized)
+                return;
+
+            // 遍历所有活动面板，仅驱动 IsOpen 的（OnBlur 的面板不执行 OnUpdate）
+            foreach (var kv in _activePanels)
+            {
+                var panel = kv.Value;
+                if (panel != null && panel.IsOpen)
+                {
+                    panel.OnUpdate();
+                }
+            }
+        }
+
+        #endregion
+
         #region Localization Event
 
         /// <summary>
@@ -542,58 +577,37 @@ namespace XFramework.XUI
         #region Internal — Panel Instantiation
 
         /// <summary>
-        /// 实例化面板预制体。优先从缓存获取，否则通过 AssetManager 加载。
+        /// 实例化面板预制体。直接通过 AssetManager 加载/复用对象池实例。
         /// </summary>
         private async UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer) where T : UIPanelBase
         {
             var type = typeof(T);
 
-            // 从缓存中获取预制体
-            GameObject prefab = null;
-            if (_assetCache.TryGetValue(type, out var cacheEntry))
-            {
-                prefab = cacheEntry.prefab;
-            }
-
-            // 未缓存，通过 AssetManager 加载
-            if (prefab == null)
-            {
-                prefab = await LoadPrefabAsync(assetPath);
-            }
-
-            if (prefab == null)
-                return null;
-
             // 确定父节点（同一层级的 Container）
             var parent = GetOrCreateLayerContainer(layer);
-            var go = UnityEngine.Object.Instantiate(prefab, parent, false);
+
+            // AssetManager.InstantiateAsync 内部已处理对象池逻辑：
+            // 池中有闲置实例 → 直接复用，池中无 → 加载资源并实例化
+            var go = await AssetManager.InstantiateAsync(assetPath, parent);
+            if (go == null)
+                return null;
+
             go.name = type.Name;
 
-            return go.GetComponent<T>();
-        }
-
-        /// <summary>
-        /// 异步加载预制体。
-        /// </summary>
-        private async UniTask<GameObject> LoadPrefabAsync(string assetPath)
-        {
-            try
+            var panel = go.GetComponent<T>();
+            if (panel == null)
             {
-                var go = await AssetManager.InstantiateAsync(assetPath, null);
-                go.SetActive(false);
-                ObjectVisibilityHelper.DontDestroyOnLoad(go);
-                return go;
-            }
-            catch (Exception ex)
-            {
-                Debug.LogError($"[UIManager] Failed to load panel prefab at path: {assetPath}. Error: {ex.Message}");
+                Debug.LogError($"[UIManager] Prefab at '{assetPath}' lacks component {type.Name}. Destroying instance.");
+                AssetManager.DestroyInstance(go);
                 return null;
             }
+
+            return panel;
         }
 
         /// <summary>
         /// 获取或创建指定层级的容器节点。
-        /// <para>每个层级在 UIRoot 下有一个独立的子节点，包含 Canvas，用于控制该层级内面板间的排序。</para>
+        /// <para>每个层级在 UIRoot 下有一个独立的子节点，自带 Canvas 实现层级间 Sorting Order 隔离。</para>
         /// </summary>
         private Transform GetOrCreateLayerContainer(int layer)
         {
@@ -610,6 +624,12 @@ namespace XFramework.XUI
             rt.sizeDelta = Vector2.zero;
             rt.anchoredPosition = Vector2.zero;
 
+            // 层级容器自带 Canvas，实现层级间渲染隔离
+            var canvas = go.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+            canvas.sortingOrder = layer * SortOrderBase;
+            go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
             return go.transform;
         }
 
@@ -622,18 +642,18 @@ namespace XFramework.XUI
         /// </summary>
         private void RegisterPanel(Type type, UIPanelBase panel)
         {
-            // 如果同类型已存在，先移除旧的
+            // 如果同类型已存在，先移除旧的（回池而非 Destroy）
             if (_activePanels.TryGetValue(type, out var oldPanel) && oldPanel != null)
             {
                 if (oldPanel.gameObject != null)
-                    UnityEngine.Object.Destroy(oldPanel.gameObject);
+                    AssetManager.DestroyInstance(oldPanel.gameObject);
             }
 
             _activePanels[type] = panel;
         }
 
         /// <summary>
-        /// 关闭面板的内部实现。
+        /// 关闭面板的内部实现。面板回池由 UIManagerImpl 控制。
         /// </summary>
         private async UniTask ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate)
         {
@@ -652,8 +672,14 @@ namespace XFramework.XUI
             _activePanels.Remove(type);
             _navStack.Remove(type);
 
-            // 执行关闭逻辑
+            // 执行关闭逻辑（动画 + OnClose，不再自行 Destroy）
             await panel.DoCloseAsync(immediate);
+
+            // 回池前通知面板，允许重置自定义状态
+            panel.OnPoolRecycle();
+
+            // 回池（AssetManager 内部管理引用计数和池容量）
+            AssetManager.DestroyInstance(panel.gameObject);
             OnPanelClosed?.Invoke(type);
 
             // ★ Controller 拦截点：关闭后回调
@@ -718,28 +744,5 @@ namespace XFramework.XUI
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// 内部辅助类，用于控制实例化对象的 DontDestroyOnLoad 行为。
-    /// </summary>
-    internal static class ObjectVisibilityHelper
-    {
-        /// <summary>
-        /// 设置对象在场景加载时不销毁。
-        /// <para>DontDestroyOnLoad 要求根对象激活，此方法自动处理未激活对象的激活/回复状态。</para>
-        /// </summary>
-        public static void DontDestroyOnLoad(GameObject go)
-        {
-            if (go == null)
-                return;
-
-            var wasActive = go.activeSelf;
-            if (!wasActive)
-                go.SetActive(true);
-            UnityEngine.Object.DontDestroyOnLoad(go);
-            if (!wasActive)
-                go.SetActive(false);
-        }
     }
 }

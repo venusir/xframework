@@ -52,6 +52,14 @@ namespace XFramework.XUI.View
             }
         }
 
+        private void Update()
+        {
+            if (UIManager.IsInitialized)
+            {
+                UIManager.Update();
+            }
+        }
+
         private void OnDestroy()
         {
             // 销毁 UIManager
