@@ -31,7 +31,6 @@ Runtime/UI/
 ```
 
 > **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，不在 UI 模块目录下。
-```
 
 ## 四层架构
 
