@@ -1,6 +1,8 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XUI.Controller;
+using XFramework.XUI.View;
 
 namespace XFramework.XUI
 {
@@ -27,7 +29,8 @@ namespace XFramework.XUI
         /// <para>每个场景只需调用一次。</para>
         /// </summary>
         /// <param name="uiRoot">场景中 UIRootNode 的 Transform。</param>
-        public static void Initialize(Transform uiRoot)
+        /// <param name="controller">自定义 UI 控制器（可选），用于拦截面板打开/关闭逻辑。</param>
+        public static void Initialize(Transform uiRoot, IUIController controller = null)
         {
             if (_instanceInitialized)
             {
@@ -37,6 +40,10 @@ namespace XFramework.XUI
 
             var impl = new UIManagerImpl();
             impl.Initialize(uiRoot);
+
+            // 如果传入了自定义控制器，立即设置
+            if (controller != null)
+                impl.SetController(controller);
 
             _instance = impl;
             _instanceInitialized = true;
@@ -294,6 +301,25 @@ namespace XFramework.XUI
         {
             EnsureGlobalInitialized();
             _instance.OnLanguageChanged(lang);
+        }
+
+        #endregion
+
+        #region Public API — UI Controller
+
+        /// <summary>
+        /// 设置自定义 UI 控制器，用于拦截面板打开/关闭流程。
+        /// <para>需要在 <see cref="Initialize"/> 后调用。设置为 null 则恢复默认控制器（全部放行）。</para>
+        /// </summary>
+        /// <param name="controller">自定义控制器实例，或 null 以恢复默认。</param>
+        public static void SetController(IUIController controller)
+        {
+            EnsureGlobalInitialized();
+            if (_instance is UIManagerImpl impl)
+                impl.SetController(controller);
+            else
+                Debug.LogWarning(
+                    "[UIManager] SetController: Current instance is not UIManagerImpl, controller not set.");
         }
 
         #endregion

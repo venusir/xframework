@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace XFramework.XUI
+namespace XFramework.XUI.View
 {
     /// <summary>
     /// UI 根节点。挂载在场景中的 Canvas（或包含多个 Canvas 的根 GameObject）上。

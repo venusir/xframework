@@ -2,14 +2,17 @@ using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using XFramework.XReactive;
+using XFramework.XUI.Data;
 
-namespace XFramework.XUI
+namespace XFramework.XUI.View
 {
     /// <summary>
     /// UI 面板基类。所有面板需继承此类。
     /// <para>面板生命周期由 <see cref="UIManager"/> 驱动：OnOpen → OnFocus/OnBlur → OnClose。</para>
     /// <para>支持打开/关闭动画：重写 <see cref="PlayOpenAnimation"/> 和 <see cref="PlayCloseAnimation"/>。</para>
     /// <para>多语言刷新：重写 <see cref="OnLanguageChanged"/>，与 <see cref="XLocalization.LocalizationManager"/> 联动。</para>
+    /// <para>MVVM 绑定：通过 <see cref="Binding"/> 组件与 <see cref="IViewModel"/> 绑定，详情参见 <see cref="UIPanelBinding"/>。</para>
     /// </summary>
     [RequireComponent(typeof(Canvas))]
     [RequireComponent(typeof(GraphicRaycaster))]
@@ -19,6 +22,57 @@ namespace XFramework.XUI
 
         private Canvas _canvas;
         private GraphicRaycaster _raycaster;
+
+        #endregion
+
+        #region ViewModel Support
+
+        /// <summary>
+        /// 面板上的 UIPanelBinding 组件。懒加载，在 Awake 时自动获取。
+        /// </summary>
+        private UIPanelBinding _binding;
+
+        /// <summary>
+        /// 面板的 ViewModel 绑定组件。面板预制体上需挂载 <see cref="UIPanelBinding"/>。
+        /// <para>如果预制体未挂载此组件，则返回 null。</para>
+        /// </summary>
+        public UIPanelBinding Binding
+        {
+            get
+            {
+                if (_binding == null)
+                    _binding = GetComponent<UIPanelBinding>();
+                return _binding;
+            }
+        }
+
+        /// <summary>
+        /// 绑定 ViewModel 到此面板。
+        /// <para>通常在 <see cref="OnOpen"/> 中调用。内部调用 <see cref="UIPanelBinding.Bind"/>。</para>
+        /// </summary>
+        protected void BindViewModel(IViewModel viewModel)
+        {
+            if (Binding == null)
+            {
+                Debug.LogWarning($"[UIPanelBase] Cannot bind ViewModel: UIPanelBinding component not found on '{gameObject.name}'.");
+                return;
+            }
+            Binding.Bind(viewModel);
+        }
+
+        /// <summary>
+        /// 按命名约定绑定 ViewModel 的 ReactiveProperty 到 UI 组件。
+        /// <para>约简化写法，内部转发到 <see cref="UIPanelBinding.BindByConvention{T}"/>。</para>
+        /// </summary>
+        protected void BindByConvention<T>(string propertyName, ReactiveProperty<T> source)
+        {
+            if (Binding == null)
+            {
+                Debug.LogWarning($"[UIPanelBase] Cannot bind by convention: UIPanelBinding component not found on '{gameObject.name}'.");
+                return;
+            }
+            Binding.BindByConvention(propertyName, source);
+        }
 
         #endregion
 

@@ -1,6 +1,6 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
-using XFramework.XCore;
 using XFramework.XReactive;
 
 namespace XFramework.Example
@@ -8,60 +8,54 @@ namespace XFramework.Example
 
     /// <summary>
     /// 展示 XFramework Reactive 模块的响应式属性用法。
-    /// <para>通过 <see cref="ReactiveProperty{T}"/> 节点实现属性值变化的自动推送与订阅。</para>
+    /// <para><see cref="ReactiveProperty{T}"/> 是轻量可观察属性，不依赖节点树，直接 new 即可使用。</para>
+    /// <para>订阅产生的 disposable 由 <see cref="ViewModelBase"/> 或手动管理。</para>
     /// </summary>
     public class SampleExample : MonoBehaviour
     {
         #region Private Fields
 
-        private RootNode _root;
-        private ReactiveProperty<int> _healthProp;
-        private ReactiveProperty<float> _scoreProp;
+        private ReactiveProperty<int> _healthProp = new ReactiveProperty<int>(100);
+        private ReactiveProperty<float> _scoreProp = new ReactiveProperty<float>(0f);
+
+        /// <summary>
+        /// 储存所有订阅，销毁时统一释放。
+        /// </summary>
+        private readonly List<IDisposable> _subscriptions = new List<IDisposable>(4);
+
         #endregion
 
         #region Unity Lifecycle
 
-        private void Awake()
-        {
-            // 1. 创建节点树
-            _root = RootNode.Create();
-
-            // 2. 创建响应式属性节点
-            //    ReactiveProperty<T> 继承 LeafNode，可直接挂入节点树
-            //    通过 NodeFactory.GetNode<T>(arg) 创建并初始化初始值
-            _healthProp = _root.AddNode<ReactiveProperty<int>>("Health");
-            _scoreProp = _root.AddNode<ReactiveProperty<float>>("Score");
-        }
-
         private void Start()
         {
-            // 3. 设置初始值（设置 Value 会自动通知订阅者）
-            _healthProp.Value = 100;
-            _scoreProp.Value = 0f;
-
-            // 4. 订阅值变化
-            //    ReactiveProperty<T> 实现了 IReactiveProperty<T>，
-            //    节点本身可直接被订阅，无需通过中间属性
-            _healthProp.Subscribe(value =>
+            // 1. 订阅值变化
+            _subscriptions.Add(_healthProp.Subscribe(value =>
             {
                 Debug.Log($"[Health] 当前血量: {value}");
                 UpdateHealthBar(value);
-            });
+            }));
 
-            _scoreProp.Subscribe(value =>
+            _subscriptions.Add(_scoreProp.Subscribe(value =>
             {
                 Debug.Log($"[Score] 当前分数: {value}");
                 UpdateScoreUI(value);
-            });
+            }));
 
-            // 5. 模拟值变化
+            // 2. 模拟值变化
             SimulateGameplay();
         }
 
         private void OnDestroy()
         {
-            // 6. 销毁节点树（自动回池）
-            _root?.Destroy();
+            // 3. 释放所有订阅
+            foreach (var sub in _subscriptions)
+                sub?.Dispose();
+            _subscriptions.Clear();
+
+            // 4. 释放属性（如果不再需要）
+            _healthProp?.Dispose();
+            _scoreProp?.Dispose();
         }
 
         #endregion

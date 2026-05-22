@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XUI.Controller;
+using XFramework.XUI.View;
 
 namespace XFramework.XUI
 {
@@ -64,6 +66,12 @@ namespace XFramework.XUI
         /// </summary>
         private bool _maskClickToClose;
 
+        /// <summary>
+        /// UI 控制器。用于拦截面板打开/关闭流程。
+        /// <para>默认使用 <see cref="UIDefaultController"/>，可通过 <see cref="SetController"/> 替换。</para>
+        /// </summary>
+        private IUIController _controller;
+
         #endregion
 
         #region Properties
@@ -99,6 +107,19 @@ namespace XFramework.XUI
 
             UIRoot = uiRoot;
             IsInitialized = true;
+
+            // 默认使用 UIDefaultController（所有操作直接放行）
+            _controller = new UIDefaultController();
+        }
+
+        /// <summary>
+        /// 设置 UI 控制器。可在 Initialize 后随时替换。
+        /// <para>设置为 null 则恢复默认控制器（全部放行）。</para>
+        /// </summary>
+        /// <param name="controller">自定义控制器实例，或 null 以恢复默认。</param>
+        internal void SetController(IUIController controller)
+        {
+            _controller = controller ?? new UIDefaultController();
         }
 
         /// <summary>
@@ -152,11 +173,19 @@ namespace XFramework.XUI
             EnsureInitialized();
             var type = typeof(T);
 
-            // 已打开的面板直接聚焦
+            // 已打开的面板直接聚焦（不触发 Controller 拦截）
             if (_activePanels.TryGetValue(type, out var existingPanel))
             {
                 BringToFront(existingPanel);
                 return existingPanel as T;
+            }
+
+            // ★ Controller 拦截点：打开前校验
+            var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData);
+            if (!canOpen)
+            {
+                Debug.LogWarning($"[UIManager] 面板打开被 Controller 拦截: {type.Name}");
+                return null;
             }
 
             // 实例化面板
@@ -180,6 +209,9 @@ namespace XFramework.XUI
             RegisterPanel(type, panel);
             await panel.DoOpenAsync(userData);
             OnPanelOpened?.Invoke(type);
+
+            // ★ Controller 拦截点：打开后回调
+            await _controller.OnAfterOpenAsync(type, panel, userData);
 
             return panel;
         }
@@ -259,6 +291,9 @@ namespace XFramework.XUI
             }
 
             OnAllPanelsClosed?.Invoke();
+
+            // ★ Controller 拦截点：全部关闭后回调
+            await _controller.OnAllPanelsClosedAsync();
         }
 
         #endregion
@@ -605,6 +640,14 @@ namespace XFramework.XUI
             if (panel == null)
                 return;
 
+            // ★ Controller 拦截点：关闭前校验
+            var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate);
+            if (!canClose)
+            {
+                Debug.LogWarning($"[UIManager] 面板关闭被 Controller 拦截: {type.Name}");
+                return;
+            }
+
             // 从字典和堆栈中移除
             _activePanels.Remove(type);
             _navStack.Remove(type);
@@ -612,6 +655,9 @@ namespace XFramework.XUI
             // 执行关闭逻辑
             await panel.DoCloseAsync(immediate);
             OnPanelClosed?.Invoke(type);
+
+            // ★ Controller 拦截点：关闭后回调
+            await _controller.OnAfterCloseAsync(type);
         }
 
         /// <summary>
