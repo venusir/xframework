@@ -203,6 +203,38 @@ namespace XFramework.XLocalization
 
         #endregion
 
+        #region Public API — Placeholder
+
+        /// <inheritdoc cref="ILocalizationManager.SetPlaceholder"/>
+        public static void SetPlaceholder(string key, string value)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetPlaceholder(key, value);
+        }
+
+        /// <inheritdoc cref="ILocalizationManager.RemovePlaceholder"/>
+        public static void RemovePlaceholder(string key)
+        {
+            EnsureGlobalInitialized();
+            _instance.RemovePlaceholder(key);
+        }
+
+        /// <inheritdoc cref="ILocalizationManager.ClearPlaceholders"/>
+        public static void ClearPlaceholders()
+        {
+            EnsureGlobalInitialized();
+            _instance.ClearPlaceholders();
+        }
+
+        /// <inheritdoc cref="ILocalizationManager.HasPlaceholder"/>
+        public static bool HasPlaceholder(string key)
+        {
+            EnsureGlobalInitialized();
+            return _instance.HasPlaceholder(key);
+        }
+
+        #endregion
+
         #region Public API — Event
 
         /// <summary>

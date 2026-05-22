@@ -73,5 +73,31 @@ namespace XFramework.XLocalization
         /// 判断指定键在当前语言或回退语言中是否存在。
         /// </summary>
         bool ContainsKey(string key);
+
+        #region Placeholder
+
+        /// <summary>
+        /// 设置全局占位符。在 <see cref="Get"/> / <see cref="GetFormat"/> 时自动替换文本中的 <c>{Key}</c>。
+        /// <para>示例：<c>SetPlaceholder("PlayerName", "张三")</c> 后，<c>Get("ui_welcome")</c> 中 <c>{PlayerName}</c> 将被替换为 <c>"张三"</c>。</para>
+        /// <para>占位符替换在 <see cref="GetFormat"/> 的 <c>string.Format</c> 之前执行。</para>
+        /// </summary>
+        void SetPlaceholder(string key, string value);
+
+        /// <summary>
+        /// 移除指定全局占位符。
+        /// </summary>
+        void RemovePlaceholder(string key);
+
+        /// <summary>
+        /// 清空所有全局占位符。
+        /// </summary>
+        void ClearPlaceholders();
+
+        /// <summary>
+        /// 判断指定全局占位符是否存在。
+        /// </summary>
+        bool HasPlaceholder(string key);
+
+        #endregion
     }
 }

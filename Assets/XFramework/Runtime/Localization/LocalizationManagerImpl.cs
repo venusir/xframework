@@ -33,6 +33,11 @@ namespace XFramework.XLocalization
         /// </summary>
         private readonly List<string> _loadOrder = new List<string>(MaxCachedLanguages);
 
+        /// <summary>
+        /// 全局占位符表。key: 占位符名称, value: 替换值。
+        /// </summary>
+        private Dictionary<string, string> _placeholders;
+
         private string _currentLanguage;
         private string _fallbackLanguage;
 
@@ -121,23 +126,31 @@ namespace XFramework.XLocalization
 
         public string Get(string key)
         {
+            string raw;
+
             // 先从当前语言查找
             if (_cache.TryGetValue(_currentLanguage, out var currentDict)
-                && currentDict.TryGetValue(key, out var value))
-                return value;
+                && currentDict.TryGetValue(key, out raw))
+            {
+                return ReplacePlaceholders(raw);
+            }
 
             // 回退语言查找（仅当回退与当前不同）
             if (_currentLanguage != _fallbackLanguage
                 && _cache.TryGetValue(_fallbackLanguage, out var fallbackDict)
-                && fallbackDict.TryGetValue(key, out var fallbackValue))
-                return fallbackValue;
+                && fallbackDict.TryGetValue(key, out raw))
+            {
+                return ReplacePlaceholders(raw);
+            }
 
-            return key; // 找不到返回键本身，方便调试
+            // 找不到返回键本身，但也做占位符替换
+            return ReplacePlaceholders(key);
         }
 
         public string GetFormat(string key, params object[] args)
         {
-            return string.Format(Get(key), args);
+            var raw = ReplacePlaceholders(GetRaw(key));
+            return string.Format(raw, args);
         }
 
         public bool ContainsKey(string key)
@@ -212,12 +225,135 @@ namespace XFramework.XLocalization
 
         #endregion
 
+        #region Placeholder
+
+        public void SetPlaceholder(string key, string value)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            if (_placeholders == null)
+                _placeholders = new Dictionary<string, string>();
+
+            _placeholders[key] = value;
+        }
+
+        public void RemovePlaceholder(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return;
+
+            _placeholders?.Remove(key);
+        }
+
+        public void ClearPlaceholders()
+        {
+            _placeholders?.Clear();
+        }
+
+        public bool HasPlaceholder(string key)
+        {
+            if (string.IsNullOrEmpty(key))
+                return false;
+
+            return _placeholders != null && _placeholders.ContainsKey(key);
+        }
+
+        #endregion
+
+        #region Internal — Placeholder Replacement
+
+        /// <summary>
+        /// 获取原始本地化文本（不做占位符替换），供 <see cref="GetFormat"/> 使用。
+        /// </summary>
+        private string GetRaw(string key)
+        {
+            if (_cache.TryGetValue(_currentLanguage, out var currentDict)
+                && currentDict.TryGetValue(key, out var value))
+                return value;
+
+            if (_currentLanguage != _fallbackLanguage
+                && _cache.TryGetValue(_fallbackLanguage, out var fallbackDict)
+                && fallbackDict.TryGetValue(key, out var fallbackValue))
+                return fallbackValue;
+
+            return key;
+        }
+
+        /// <summary>
+        /// 将文本中的 <c>{Key}</c> 占位符替换为对应值。
+        /// <para>使用一次扫描 + StringBuilder 实现，避免多次 string.Replace 的 GC 分配。</para>
+        /// <para>未找到对应值的占位符保持原样。</para>
+        /// </summary>
+        private string ReplacePlaceholders(string text)
+        {
+            if (_placeholders == null || _placeholders.Count == 0)
+                return text;
+
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var span = text.AsSpan();
+            // 快速检查是否包含 '{'，避免不必要的 StringBuilder 分配
+            var firstBrace = span.IndexOf('{');
+            if (firstBrace < 0)
+                return text;
+
+            var sb = new System.Text.StringBuilder(text.Length + 64);
+            var pos = 0;
+
+            while (pos < span.Length)
+            {
+                var braceIdx = span.Slice(pos).IndexOf('{');
+                if (braceIdx < 0)
+                {
+                    // 没有更多 '{'，追加剩余部分
+                    sb.Append(span.Slice(pos));
+                    break;
+                }
+
+                // 追加 '{' 之前的文本
+                sb.Append(span.Slice(pos, braceIdx));
+
+                var scanPos = pos + braceIdx + 1; // 跳过 '{'
+                var closeIdx = span.Slice(scanPos).IndexOf('}');
+                if (closeIdx < 0)
+                {
+                    // 没有匹配的 '}'，原样输出剩余的 '{'
+                    sb.Append('{');
+                    pos = scanPos;
+                    continue;
+                }
+
+                var placeholderKey = span.Slice(scanPos, closeIdx).ToString();
+                if (_placeholders.TryGetValue(placeholderKey, out var replacement))
+                {
+                    sb.Append(replacement);
+                }
+                else
+                {
+                    // 未注册的占位符保持原样
+                    sb.Append('{');
+                    sb.Append(placeholderKey);
+                    sb.Append('}');
+                }
+
+                pos = scanPos + closeIdx + 1;
+            }
+
+            return sb.ToString();
+        }
+
+        #endregion
+
         #region IDisposable
 
         public void Dispose()
         {
             _cache.Clear();
             _loadOrder.Clear();
+            _placeholders?.Clear();
+            _placeholders = null;
             IsInitialized = false;
             OnLanguageChanged = null;
             LanguageAssetPath = null;

@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 本地化模块提供多语言文本管理功能。通过 `ILocalizationManager` 接口抽象，支持初始化时注入默认语言数据，运行时按需异步加载目标语言、LRU 缓存管理，以及格式化文本。
+XFramework 本地化模块提供多语言文本管理功能。通过 `ILocalizationManager` 接口抽象，支持初始化时注入默认语言数据，运行时按需异步加载目标语言、LRU 缓存管理，以及格式化文本和全局占位符替换。
 
 **命名空间**: `XFramework.XLocalization`
 
@@ -131,7 +131,51 @@ LocalizationManager.SetLanguageData("en", enData);
 
 注入后该语言即进入缓存，`HasLanguage("en")` 返回 `true`。
 
-### 7. 语言切换事件
+### 7. 全局占位符
+
+通过全局占位符，可以在所有本地化文本中自动替换命名变量（如玩家名、等级等），无需每次调用 `GetFormat` 传递参数：
+
+```csharp
+// 注册全局占位符
+LocalizationManager.SetPlaceholder("PlayerName", "张三");
+LocalizationManager.SetPlaceholder("GuildName", "传奇公会");
+
+// 本地化文本（JSON 文件中）
+// "ui_welcome": "欢迎回来，{PlayerName}！"
+// "ui_guild_info": "{GuildName} - 等级 {GuildLevel}"
+
+// Get 时自动替换
+string welcome = LocalizationManager.Get("ui_welcome");
+// → "欢迎回来，张三！"
+
+// 与 GetFormat 混用：先替换占位符，再执行 string.Format
+string info = LocalizationManager.GetFormat("ui_guild_info", "5");
+// → "传奇公会 - 等级 5"
+```
+
+**占位符替换规则：**
+- 语法：`{Key}`（`{` + 占位符名称 + `}`）
+- 替换在 `string.Format` 之前执行，两者可安全混用
+- 未注册的占位符保持原样输出
+- 未设置任何占位符时无 GC 开销（快速路径跳过）
+
+**管理占位符：**
+
+```csharp
+// 更新占位符值（如玩家改名）
+LocalizationManager.SetPlaceholder("PlayerName", "李四");
+
+// 移除单个占位符
+LocalizationManager.RemovePlaceholder("PlayerName");
+
+// 判断占位符是否存在
+bool exists = LocalizationManager.HasPlaceholder("PlayerName");
+
+// 清空所有占位符（如退出登录）
+LocalizationManager.ClearPlaceholders();
+```
+
+### 8. 语言切换事件
 
 ```csharp
 LocalizationManager.OnLanguageChanged += lang =>
@@ -140,7 +184,7 @@ LocalizationManager.OnLanguageChanged += lang =>
 };
 ```
 
-### 8. 当前状态
+### 9. 当前状态
 
 ```csharp
 string current = LocalizationManager.CurrentLanguage;   // 如 "ja"
@@ -200,6 +244,7 @@ bootstrapNode.SetInitData("zh_Hans", defaultLanguageData);
 - **零外部依赖** — JSON 解析自实现，不依赖 Newtonsoft.Json
 - **静态外观** — `LocalizationManager` 提供全局入口，任意位置可调用
 - **格式化支持** — 支持 `string.Format` 语法的参数化文本
+- **全局占位符** — 支持 `{Key}` 语法全局替换，减少重复传参
 
 ## 依赖
 
