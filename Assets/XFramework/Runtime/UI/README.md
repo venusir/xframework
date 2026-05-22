@@ -15,19 +15,22 @@ Runtime/UI/
 ├── IUIManager.cs              # UI 管理器公共接口
 ├── UIManager.cs               # 静态外观（全局入口）
 ├── UIManagerImpl.cs           # 默认实现（面板字典、导航堆栈、资源缓存）
-├── UIPanelBase.cs             # 面板基类（所有 UI 面板需继承）
-├── UIRootNode.cs              # 场景 Canvas 载体（初始化 UIManager）
 ├── README.md                  # 使用说明
 ├── Controller/
 │   ├── IUIController.cs       # 调度控制接口（五阶段生命周期拦截）
 │   ├── UIDefaultController.cs # 默认控制器（全部放行）
 │   └── PreconditionChain.cs   # 前提条件链（链式组合异步校验条件）
-└── Data/
-    ├── IViewModel.cs          # ViewModel 接口
-    ├── ViewModelBase.cs       # ViewModel 抽象基类
-    ├── UIPanelBinding.cs      # UI 绑定组件（挂载在 Panel Prefab 上，约定式绑定）
-    ├── UIBinder.cs            # UI 绑定工具（静态扩展方法，手动精确绑定）
-    └── ReactiveProperty.cs    # 响应式属性（View ↔ ViewModel 数据绑定核心）
+├── Data/
+│   ├── IViewModel.cs          # ViewModel 接口
+│   ├── ViewModelBase.cs       # ViewModel 抽象基类
+│   ├── UIPanelBinding.cs      # UI 绑定组件（挂载在 Panel Prefab 上，约定式绑定）
+│   └── UIBinder.cs            # UI 绑定工具（静态扩展方法，手动精确绑定）
+└── View/
+    ├── UIPanelBase.cs         # 面板基类（所有 UI 面板需继承）
+    └── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
+```
+
+> **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，不在 UI 模块目录下。
 ```
 
 ## 四层架构
@@ -138,21 +141,21 @@ sequenceDiagram
 
 ## 核心类型
 
-| 类型                      | 所属层 | 职责                                                                                                                             |
-| ------------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
-| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                   |
-| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                |
-| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、导航堆栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                    |
-| **UIPanelBase**           | 面板层 | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnLanguageChanged 生命周期与动画钩子，内置 ViewModel 绑定方法。             |
-| **UIRootNode**            | 场景层 | 挂在场景 Canvas 上的 Mono。自动初始化 UIManager。                                                                                |
-| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                         |
-| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                |
-| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                    |
-| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                     |
-| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建，提供 Initialize/Activate/Deactivate 生命周期。                                 |
-| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                |
-| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。 |
-| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                       |
+| 类型                      | 所属层 | 职责                                                                                                                              |
+| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                    |
+| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                 |
+| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、导航堆栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                     |
+| **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。 |
+| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。通过 Update() 驱动 UIManager 更新所有已打开面板的 OnUpdate，提供层级预设常量。                         |
+| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                          |
+| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                 |
+| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                     |
+| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                      |
+| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建，提供 Initialize/Activate/Deactivate 生命周期。                                  |
+| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                 |
+| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。  |
+| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                        |
 
 ## 核心概念
 
@@ -186,6 +189,27 @@ Mask (500)       — 模态遮罩层
 - 支持设置透明度（alpha 0-1）
 - 支持点击关闭（clickToClose）—— 点击遮罩自动 Pop 栈顶面板
 - 遮罩位于独立层级（默认 Mask 层），不影响面板排序
+
+### 面板驱动更新（OnUpdate）
+
+与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**所有已打开面板的 `OnUpdate` 方法。`UIRootNode` 在 `Update()` 中调用 `UIManager.Update()`，后者遍历活动面板列表，仅对 `IsOpen = true` 且未被暂停（未处于 OnBlur 状态）的面板执行 `OnUpdate`。
+
+**优势：**
+- **性能可控** — 仅一个 `Update()` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
+- **状态感知** — 暂停的面板（失焦状态）自动跳过更新，无需面板内部自行判断
+- **可扩展** — 未来可按优先级、分组等策略精细控制更新顺序
+
+```csharp
+public class GameHudPanel : UIPanelBase
+{
+    protected override void OnUpdate()
+    {
+        // 仅在面板打开且未暂停时执行
+        UpdateHealthBar();
+        UpdateAmmoDisplay();
+    }
+}
+```
 
 ### 资源缓存
 
@@ -638,6 +662,7 @@ UIManager.SetController(new MyCustomController());
 - **多语言联动** — `OnLanguageChanged` 与 `LocalizationManager` 无缝集成
 - **AOP 调度控制** — 通过 IUIController 五阶段生命周期拦截 + PreconditionChain 链式校验
 - **MVVM 数据绑定** — 基于 ReactiveProperty 的 View ↔ ViewModel 双向/单向绑定，支持约定式（UIPanelBinding）与精确式（UIBinder）两种风格
+- **面板驱动更新** — UIManager 集中驱动 OnUpdate，仅已打开且未暂停的面板执行（借鉴 GameFramework 设计）
 - **避免 GC** — 使用固定字典容量（8/4）、值类型遍历、List 复用，减少 GC 分配
 
 ## 已完成功能
@@ -650,6 +675,7 @@ UIManager.SetController(new MyCustomController());
 - [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
 - [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
 - [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
+- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
 - [ ] 资源卸载回收 — 支持按 LRU 卸载非活动面板的预制体资源
 - [ ] 场景切换安全 — 自动检测跨场景引用并处理
 - [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
