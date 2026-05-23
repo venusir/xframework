@@ -659,21 +659,34 @@ titleText.BindToLocalizedText("ui_main_title");
 
 ### 11. 事件监听
 
+面板生命周期事件通过 `MessageManager` 发布/订阅。消息体使用 `readonly struct`，零 GC 分配。
+
 ```csharp
+using XFramework.XUI.Data;
+using XFramework.XReactive;
+
 // 面板打开事件
-UIManager.OnPanelOpened += type => {
-    Debug.Log($"Panel opened: {type.Name}");
-};
+var token1 = MessageManager.Subscribe<PanelOpenedMessage>(msg =>
+{
+    Debug.Log($"Panel opened: {msg.PanelType.Name}");
+});
 
 // 面板关闭事件
-UIManager.OnPanelClosed += type => {
-    Debug.Log($"Panel closed: {type.Name}");
-};
+var token2 = MessageManager.Subscribe<PanelClosedMessage>(msg =>
+{
+    Debug.Log($"Panel closed: {msg.PanelType.Name}");
+});
 
 // 所有面板关闭事件
-UIManager.OnAllPanelsClosed += () => {
+var token3 = MessageManager.Subscribe<AllPanelsClosedMessage>(_ =>
+{
     Debug.Log("All panels closed.");
-};
+});
+
+// 取消订阅（避免内存泄漏）
+// MessageManager.Unsubscribe(token1);
+// MessageManager.Unsubscribe(token2);
+// MessageManager.Unsubscribe(token3);
 ```
 
 ### 12. 依赖注入

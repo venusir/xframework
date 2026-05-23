@@ -6,6 +6,7 @@ using XFramework.XAsset;
 using XFramework.XLocalization;
 using XFramework.XReactive;
 using XFramework.XUI.Controller;
+using XFramework.XUI.Data;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI
@@ -93,14 +94,6 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Events
-
-        public event Action<Type> OnPanelOpened;
-        public event Action<Type> OnPanelClosed;
-        public event Action OnAllPanelsClosed;
-
-        #endregion
-
         #region Initialization
 
         /// <summary>
@@ -170,9 +163,6 @@ namespace XFramework.XUI
 
             UIRoot = null;
             IsInitialized = false;
-            OnPanelOpened = null;
-            OnPanelClosed = null;
-            OnAllPanelsClosed = null;
         }
 
         #endregion
@@ -196,7 +186,7 @@ namespace XFramework.XUI
             var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData);
             if (!canOpen)
             {
-                Debug.LogWarning($"[UIManager] 面板打开被 Controller 拦截: {type.Name}");
+                Debug.LogWarning($"[UIManager] Panel open blocked by Controller: {type.Name}");
                 return null;
             }
 
@@ -220,7 +210,7 @@ namespace XFramework.XUI
             // 注册并打开
             RegisterPanel(type, panel);
             await panel.DoOpenAsync(userData);
-            OnPanelOpened?.Invoke(type);
+            MessageManager.Publish(new PanelOpenedMessage(type));
 
             // ★ Controller 拦截点：打开后回调
             await _controller.OnAfterOpenAsync(type, panel, userData);
@@ -305,7 +295,7 @@ namespace XFramework.XUI
                 await ClosePanelInternalAsync(item.panel, item.type, immediate);
             }
 
-            OnAllPanelsClosed?.Invoke();
+            MessageManager.Publish(new AllPanelsClosedMessage());
 
             // ★ Controller 拦截点：全部关闭后回调
             await _controller.OnAllPanelsClosedAsync();
@@ -669,7 +659,7 @@ namespace XFramework.XUI
             var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate);
             if (!canClose)
             {
-                Debug.LogWarning($"[UIManager] 面板关闭被 Controller 拦截: {type.Name}");
+                Debug.LogWarning($"[UIManager] Panel close blocked by Controller: {type.Name}");
                 return;
             }
 
@@ -685,7 +675,7 @@ namespace XFramework.XUI
 
             // 回池（AssetManager 内部管理引用计数和池容量）
             AssetManager.DestroyInstance(panel.gameObject);
-            OnPanelClosed?.Invoke(type);
+            MessageManager.Publish(new PanelClosedMessage(type));
 
             // ★ Controller 拦截点：关闭后回调
             await _controller.OnAfterCloseAsync(type);

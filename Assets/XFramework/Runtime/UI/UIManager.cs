@@ -303,55 +303,6 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Public API — Events
-
-        /// <inheritdoc cref="IUIManager.OnPanelOpened"/>
-        public static event Action<Type> OnPanelOpened
-        {
-            add
-            {
-                EnsureGlobalInitialized();
-                _instance.OnPanelOpened += value;
-            }
-            remove
-            {
-                EnsureGlobalInitialized();
-                _instance.OnPanelOpened -= value;
-            }
-        }
-
-        /// <inheritdoc cref="IUIManager.OnPanelClosed"/>
-        public static event Action<Type> OnPanelClosed
-        {
-            add
-            {
-                EnsureGlobalInitialized();
-                _instance.OnPanelClosed += value;
-            }
-            remove
-            {
-                EnsureGlobalInitialized();
-                _instance.OnPanelClosed -= value;
-            }
-        }
-
-        /// <inheritdoc cref="IUIManager.OnAllPanelsClosed"/>
-        public static event Action OnAllPanelsClosed
-        {
-            add
-            {
-                EnsureGlobalInitialized();
-                _instance.OnAllPanelsClosed += value;
-            }
-            remove
-            {
-                EnsureGlobalInitialized();
-                _instance.OnAllPanelsClosed -= value;
-            }
-        }
-
-        #endregion
-
         #region Public API — UI Controller
 
         /// <summary>

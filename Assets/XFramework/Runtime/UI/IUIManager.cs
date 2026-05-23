@@ -177,23 +177,5 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Events
-
-        /// <summary>
-        /// 面板打开事件。参数为面板类型。
-        /// </summary>
-        event Action<Type> OnPanelOpened;
-
-        /// <summary>
-        /// 面板关闭事件。参数为面板类型。
-        /// </summary>
-        event Action<Type> OnPanelClosed;
-
-        /// <summary>
-        /// 所有面板关闭事件（<see cref="CloseAllAsync"/> 后触发）。
-        /// </summary>
-        event Action OnAllPanelsClosed;
-
-        #endregion
     }
 }
