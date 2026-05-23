@@ -44,14 +44,6 @@ namespace XFramework.XInput.Default
 
         #endregion
 
-        #region Events
-
-        public event Action<GamepadType> OnGamepadTypeChanged;
-        public event Action OnDeviceConnected;
-        public event Action OnDeviceDisconnected;
-
-        #endregion
-
         #region Initialize
 
         public void Initialize()
@@ -340,22 +332,18 @@ namespace XFramework.XInput.Default
             switch (change)
             {
                 case InputDeviceChange.Added:
-                    OnDeviceConnected?.Invoke();
                     MessageManager.Publish(new Messages.DeviceConnectedMessage());
                     break;
 
                 case InputDeviceChange.Removed:
-                    OnDeviceDisconnected?.Invoke();
                     MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
                     break;
 
                 case InputDeviceChange.Reconnected:
-                    OnDeviceConnected?.Invoke();
                     MessageManager.Publish(new Messages.DeviceConnectedMessage());
                     break;
 
                 case InputDeviceChange.Disconnected:
-                    OnDeviceDisconnected?.Invoke();
                     MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
                     break;
             }
@@ -386,7 +374,6 @@ namespace XFramework.XInput.Default
             {
                 var previousType = _activeGamepadType;
                 _activeGamepadType = currentType;
-                OnGamepadTypeChanged?.Invoke(currentType);
                 MessageManager.Publish(new Messages.GamepadTypeChangedMessage(previousType, currentType));
             }
         }

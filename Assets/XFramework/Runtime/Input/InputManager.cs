@@ -233,61 +233,6 @@ namespace XFramework.XInput
 
         #endregion
 
-        #region Public API — Events
-
-        /// <summary>
-        /// 手柄类型变化时触发。
-        /// </summary>
-        public static event Action<GamepadType> OnGamepadTypeChanged
-        {
-            add
-            {
-                if (_provider != null)
-                    _provider.OnGamepadTypeChanged += value;
-            }
-            remove
-            {
-                if (_provider != null)
-                    _provider.OnGamepadTypeChanged -= value;
-            }
-        }
-
-        /// <summary>
-        /// 有新输入设备连接时触发。
-        /// </summary>
-        public static event Action OnDeviceConnected
-        {
-            add
-            {
-                if (_provider != null)
-                    _provider.OnDeviceConnected += value;
-            }
-            remove
-            {
-                if (_provider != null)
-                    _provider.OnDeviceConnected -= value;
-            }
-        }
-
-        /// <summary>
-        /// 有输入设备断开时触发。
-        /// </summary>
-        public static event Action OnDeviceDisconnected
-        {
-            add
-            {
-                if (_provider != null)
-                    _provider.OnDeviceDisconnected += value;
-            }
-            remove
-            {
-                if (_provider != null)
-                    _provider.OnDeviceDisconnected -= value;
-            }
-        }
-
-        #endregion
-
         #region Public API — Vibration
 
         /// <summary>

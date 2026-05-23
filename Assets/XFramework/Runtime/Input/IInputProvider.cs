@@ -109,21 +109,6 @@ namespace XFramework.XInput
         /// </summary>
         InputDeviceType LastActiveDeviceType { get; }
 
-        /// <summary>
-        /// 手柄类型变化时触发。
-        /// </summary>
-        event Action<GamepadType> OnGamepadTypeChanged;
-
-        /// <summary>
-        /// 有新输入设备连接时触发。
-        /// </summary>
-        event Action OnDeviceConnected;
-
-        /// <summary>
-        /// 有输入设备断开时触发。
-        /// </summary>
-        event Action OnDeviceDisconnected;
-
         #endregion
 
         #region 振动
