@@ -160,5 +160,52 @@ namespace XFramework.XInput
         void DisableAllActionMaps();
 
         #endregion
+
+        #region 绑定查询
+
+        /// <summary>
+        /// 获取指定动作当前最佳绑定的人类可读显示名称。
+        /// <para>用于 UI 按键提示（如显示 "W"、"X 按钮"）。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        string GetBindingDisplayString(string action, uint playerId = 0);
+
+        /// <summary>
+        /// 获取指定动作的所有绑定信息列表。
+        /// <para>用于按键设置 UI 展示当前设备下的所有绑定。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        System.Collections.Generic.IReadOnlyList<InputBindingInfo> GetBindings(string action, uint playerId = 0);
+
+        #endregion
+
+        #region 绑定持久化
+
+        /// <summary>
+        /// 将所有自定义绑定覆盖序列化为字符串（格式由各 Provider 自行决定）。
+        /// <para>Unity Input System 返回 JSON，Rewired 返回 XML。</para>
+        /// </summary>
+        string SaveBindingOverrides();
+
+        /// <summary>
+        /// 从字符串恢复自定义绑定覆盖。
+        /// </summary>
+        /// <param name="data">由 <see cref="SaveBindingOverrides"/> 生成的字符串</param>
+        void LoadBindingOverrides(string data);
+
+        /// <summary>
+        /// 重置指定动作的所有绑定覆盖为默认值。
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        void ResetBindingOverrides(string action);
+
+        /// <summary>
+        /// 重置所有动作的绑定覆盖为默认值。
+        /// </summary>
+        void ResetAllBindingOverrides();
+
+        #endregion
     }
 }

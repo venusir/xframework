@@ -303,6 +303,118 @@ namespace XFramework.XInput.Default
 
         #endregion
 
+        #region 绑定查询
+
+        public string GetBindingDisplayString(string action, uint playerId = 0)
+        {
+            var inputAction = GetAction(action);
+            if (inputAction == null) return string.Empty;
+
+            // 根据当前活跃设备类型选择合适的 Control Scheme
+            var bindingIndex = GetEffectiveBindingIndex(inputAction);
+            if (bindingIndex < 0) return string.Empty;
+
+            return inputAction.GetBindingDisplayString(bindingIndex) ?? string.Empty;
+        }
+
+        public IReadOnlyList<InputBindingInfo> GetBindings(string action, uint playerId = 0)
+        {
+            var inputAction = GetAction(action);
+            if (inputAction == null) return Array.Empty<InputBindingInfo>();
+
+            var bindings = inputAction.bindings;
+            var result = new InputBindingInfo[bindings.Count];
+
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                var b = bindings[i];
+                result[i] = new InputBindingInfo
+                {
+                    Id = b.id.ToString(),
+                    DisplayName = inputAction.GetBindingDisplayString(i) ?? string.Empty,
+                    Group = b.groups,
+                    IsComposite = b.isComposite,
+                    IsPartOfComposite = b.isPartOfComposite
+                };
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// 根据当前活跃设备类型，选择一个有效的 binding index。
+        /// <para>优先选择当前设备 Control Scheme 下的第一个绑定，否则回退到第一个非 composite 绑定。</para>
+        /// </summary>
+        private int GetEffectiveBindingIndex(InputAction inputAction)
+        {
+            var bindings = inputAction.bindings;
+            if (bindings.Count == 0) return -1;
+
+            // 尝试按当前活跃设备类型匹配 Control Scheme
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                var b = bindings[i];
+                if (b.isComposite || b.isPartOfComposite) continue;
+
+                if (MatchesActiveDevice(b.groups))
+                    return i;
+            }
+
+            // 回退：返回第一个非 composite 且非 part 的绑定
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                var b = bindings[i];
+                if (b.isComposite || b.isPartOfComposite) continue;
+                return i;
+            }
+
+            return -1;
+        }
+
+        private bool MatchesActiveDevice(string group)
+        {
+            return _lastActiveDeviceType switch
+            {
+                InputDeviceType.KeyboardMouse => group.Contains("Keyboard&Mouse", StringComparison.OrdinalIgnoreCase),
+                InputDeviceType.Gamepad => group.Contains("Gamepad", StringComparison.OrdinalIgnoreCase),
+                InputDeviceType.Touch => group.Contains("Touch", StringComparison.OrdinalIgnoreCase),
+                _ => false
+            };
+        }
+
+        #endregion
+
+        #region 绑定持久化
+
+        public string SaveBindingOverrides()
+        {
+            if (_actionAsset == null) return string.Empty;
+            return _actionAsset.SaveBindingOverridesAsJson();
+        }
+
+        public void LoadBindingOverrides(string data)
+        {
+            if (_actionAsset == null || string.IsNullOrEmpty(data)) return;
+            _actionAsset.LoadBindingOverridesFromJson(data);
+        }
+
+        public void ResetBindingOverrides(string action)
+        {
+            var inputAction = GetAction(action);
+            inputAction?.RemoveAllBindingOverrides();
+        }
+
+        public void ResetAllBindingOverrides()
+        {
+            if (_actionAsset == null) return;
+            foreach (var map in _actionAsset.actionMaps)
+            {
+                map.RemoveAllBindingOverrides();
+            }
+        }
+
+        #endregion
+
         #region Dispose
 
         public void Dispose()

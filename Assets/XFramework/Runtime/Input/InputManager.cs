@@ -304,5 +304,71 @@ namespace XFramework.XInput
         }
 
         #endregion
+
+        #region Public API — Binding
+
+        /// <summary>
+        /// 获取指定动作当前最佳绑定的人类可读显示名称。
+        /// <para>根据当前活跃设备类型自动选择对应的按键提示（如键盘显示 "W"，手柄显示 "X 按钮"）。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        public static string GetBindingDisplayString(string action, uint playerId = 0)
+        {
+            return _provider?.GetBindingDisplayString(action, playerId) ?? string.Empty;
+        }
+
+        /// <summary>
+        /// 获取指定动作的所有绑定信息列表。
+        /// <para>用于按键设置 UI 展示当前设备下的所有绑定。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        public static System.Collections.Generic.IReadOnlyList<InputBindingInfo> GetBindings(string action, uint playerId = 0)
+        {
+            return _provider?.GetBindings(action, playerId);
+        }
+
+        #endregion
+
+        #region Public API — Binding Override Persistence
+
+        /// <summary>
+        /// 将所有自定义绑定覆盖序列化为字符串。
+        /// <para>Unity Input System 返回 JSON，Rewired 适配器返回 XML。</para>
+        /// <para>调用方应自行将返回的字符串写入 PlayerPrefs 或文件。</para>
+        /// </summary>
+        public static string SaveBindingOverrides()
+        {
+            return _provider?.SaveBindingOverrides() ?? string.Empty;
+        }
+
+        /// <summary>
+        /// 从字符串恢复自定义绑定覆盖。
+        /// </summary>
+        /// <param name="data">由 <see cref="SaveBindingOverrides"/> 生成的字符串</param>
+        public static void LoadBindingOverrides(string data)
+        {
+            _provider?.LoadBindingOverrides(data);
+        }
+
+        /// <summary>
+        /// 重置指定动作的所有绑定覆盖为默认值。
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        public static void ResetBindingOverrides(string action)
+        {
+            _provider?.ResetBindingOverrides(action);
+        }
+
+        /// <summary>
+        /// 重置所有动作的绑定覆盖为默认值。
+        /// </summary>
+        public static void ResetAllBindingOverrides()
+        {
+            _provider?.ResetAllBindingOverrides();
+        }
+
+        #endregion
     }
 }

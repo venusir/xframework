@@ -15,6 +15,7 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 Runtime/Input/
 ├── IInputProvider.cs                 # 输入提供者接口（核心抽象）
 ├── InputManager.cs                   # 全局静态外观（静态类，直接调用）
+├── InputBindingInfo.cs               # 绑定信息结构体（UI 按键提示用）
 ├── InputDeviceType.cs                # 输入设备类型枚举
 ├── GamepadType.cs                    # 手柄类型枚举
 ├── Messages/                         # 消息定义
@@ -106,10 +107,6 @@ InputDeviceType deviceType = InputManager.LastActiveDeviceType;  // KeyboardMous
 // 当前手柄类型
 GamepadType gamepadType = InputManager.ActiveGamepadType;  // Xbox / PS4 / PS5 / SwitchPro / Generic / None
 
-// 事件订阅
-InputManager.OnDeviceConnected += OnDeviceConnected;
-InputManager.OnDeviceDisconnected += OnDeviceDisconnected;
-InputManager.OnGamepadTypeChanged += OnGamepadTypeChanged;
 ```
 
 ### 6. 手柄振动
@@ -123,6 +120,33 @@ InputManager.StopVibration(0);
 
 // 停止所有手柄振动
 InputManager.StopAllVibration();
+```
+
+### 7. 按键绑定（UI 提示 & 持久化）
+
+```csharp
+// 获取当前设备对应的按键显示名（如键盘返回 "W"，手柄返回 "X 按钮"）
+string displayName = InputManager.GetBindingDisplayString("Jump");
+uiPromptText.text = displayName;
+
+// 获取某个动作的所有绑定信息（用于按键设置 UI）
+IReadOnlyList<InputBindingInfo> bindings = InputManager.GetBindings("Jump");
+foreach (var b in bindings)
+{
+    Debug.Log($"绑定: {b.DisplayName} | 设备组: {b.Group} | 复合: {b.IsComposite}");
+}
+
+// 保存自定义按键设置到 PlayerPrefs
+string overridesJson = InputManager.SaveBindingOverrides();
+PlayerPrefs.SetString("InputOverrides", overridesJson);
+
+// 下次启动时恢复
+string saved = PlayerPrefs.GetString("InputOverrides", "");
+InputManager.LoadBindingOverrides(saved);
+
+// 重置按键
+InputManager.ResetBindingOverrides("Jump");   // 重置单个
+InputManager.ResetAllBindingOverrides();      // 重置所有
 ```
 
 ## 自定义输入封装（第三方游戏必须做）
@@ -313,7 +337,8 @@ public class RewiredProvider : IInputProvider
 
 ## 版本记录
 
-| 版本  | 说明                                                                                            |
-| ----- | ----------------------------------------------------------------------------------------------- |
-| 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入 |
-| 1.0.0 | 初始版本                                                                                        |
+| 版本  | 说明                                                                                                                                                              |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1.0 | 新增运行时绑定 API：`GetBindingDisplayString`、`GetBindings`、`SaveBindingOverrides`、`LoadBindingOverrides`、`ResetBindingOverrides`、`ResetAllBindingOverrides` |
+| 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入                                                                   |
+| 1.0.0 | 初始版本                                                                                                                                                          |
