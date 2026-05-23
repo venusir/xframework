@@ -4,7 +4,7 @@
 
 XFramework UI 模块提供完整的 UI 面板管理功能。通过 `IUIManager` 接口抽象，支持面板打开/关闭、导航堆栈、模态遮罩、资源预加载缓存、层级排序以及与本地化模块的联动。所有面板预制体通过 YooAsset（`AssetManager`）异步加载，支持打开/关闭动画。
 
-此外还提供 **MVVM 数据绑定**（View ↔ ViewModel 基于 ReactiveProperty）和 **调度控制**（通过 IUIController + PreconditionChain 实现面板生命周期 AOP 拦截）。
+此外还提供 **MVVM 数据绑定**（View ↔ ViewModel 基于 ReactiveProperty）、**调度控制**（通过 IUIController + PreconditionChain 实现面板生命周期 AOP 拦截）以及 **世界空间 HUD**（NPC名/血条 3D 跟踪）和 **临时提示 Tip**（扣血/浮动文字）。
 
 **命名空间**: `XFramework.XUI`
 
@@ -16,6 +16,7 @@ Runtime/UI/
 ├── UIManager.cs               # 静态外观（全局入口）
 ├── UIManagerImpl.cs           # 默认实现（面板字典、导航堆栈、资源缓存）
 ├── README.md                  # 使用说明
+├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal static）
 ├── Controller/
 │   ├── IUIController.cs       # 调度控制接口（五阶段生命周期拦截）
 │   ├── UIDefaultController.cs # 默认控制器（全部放行）
@@ -26,7 +27,9 @@ Runtime/UI/
 │   ├── UIPanelBinding.cs      # UI 绑定组件（挂载在 Panel Prefab 上，约定式绑定）
 │   └── UIBinder.cs            # UI 绑定工具（静态扩展方法，手动精确绑定）
 └── View/
+    ├── UIViewBase.cs          # UI 控件抽象基类（Canvas/层级/OnUpdate），UIPanelBase 与 UIHudItem 的公共父类
     ├── UIPanelBase.cs         # 面板基类（所有 UI 面板需继承）
+    ├── UIHudItem.cs           # HUD 项基类（3D 世界坐标跟踪、目标丢失自动回收）
     └── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
 ```
 
@@ -140,21 +143,23 @@ sequenceDiagram
 
 ## 核心类型
 
-| 类型                      | 所属层 | 职责                                                                                                                              |
-| ------------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------- |
-| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                    |
-| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                 |
-| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、导航堆栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                     |
-| **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。 |
-| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。通过 Update() 驱动 UIManager 更新所有已打开面板的 OnUpdate，提供层级预设常量。                         |
-| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                          |
-| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                 |
-| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                     |
-| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                      |
-| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建，提供 Initialize/Activate/Deactivate 生命周期。                                  |
-| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                 |
-| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。  |
-| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                        |
+| 类型                      | 所属层 | 职责                                                                                                                                      |
+| ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                            |
+| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                         |
+| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、导航堆栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
+| **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
+| **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
+| **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
+| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。通过 Update() 驱动 UIManager 更新所有已打开面板的 OnUpdate，提供层级预设常量。                                 |
+| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
+| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
+| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
+| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                              |
+| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建，提供 Initialize/Activate/Deactivate 生命周期。                                          |
+| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                         |
+| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
+| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                                |
 
 ## 核心概念
 
@@ -697,7 +702,127 @@ UIManager.SetController(new MyCustomController());
 - **AOP 调度控制** — 通过 IUIController 五阶段生命周期拦截 + PreconditionChain 链式校验
 - **MVVM 数据绑定** — 基于 ReactiveProperty 的 View ↔ ViewModel 双向/单向绑定，支持约定式（UIPanelBinding）与精确式（UIBinder）两种风格
 - **面板驱动更新** — UIManager 集中驱动 OnUpdate，仅已打开且未暂停的面板执行（借鉴 GameFramework 设计）
+- **HUD 世界空间** — UIHudItem 自动 3D→屏幕坐标转换，目标丢失自动回收，与面板共享 UIViewBase 驱动
 - **避免 GC** — 使用固定字典容量（8/4）、值类型遍历、List 复用，减少 GC 分配
+
+## HUD 世界空间 UI（NPC / 怪物头顶名字、血条、标记）
+
+`UIHudManager` + `UIHudItem` 提供持久化的世界空间 HUD，适用于需要持续跟随 3D 目标的 UI，如 NPC/怪物头顶名字、血条、状态图标、距离指示器等。HUD 与面板共享 `UIViewBase` 的 OnUpdate 集中驱动，内部通过 `AssetManager` 管理对象池。
+
+**命名空间**: `XFramework.XUI` / `XFramework.XUI.View`
+
+> **HUD 与 Tip 的区别**：Tip 是**临时一次性**提示（扣血数字飘几秒消失），HUD 是**持久跟随**目标的 UI（血条始终挂在怪物头上直到目标死亡或手动隐藏）。
+
+### 架构
+
+```
+UIManager.ShowHud<T>(target, assetPath, offset)  →  静态外观
+    │
+    └── UIHudManager.AttachAsync<T>()              →  内部管理器（去重、映射、容器）
+            │
+            ├── AssetManager.InstantiateAsync()     →  从对象池获取实例
+            ├── hud.DoOpenAsync()                   →  打开 HUD（初始化 Camera 等）
+            └── ActiveHudList.Add(hud)              →  注册到每帧更新列表
+                    │
+            UIManager.Update()                      →  集中驱动
+                    │
+            hud.OnUpdate()                          →  世界坐标转屏幕坐标 + 跟随
+                    │
+            FollowTarget == null?  →  自动触发 OnTargetLost → Detach + 回池
+```
+
+- `UIHudManager` 为 `internal static` 类，在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 999000），确保 HUD 始终在所有面板之上
+- `UIHudItem` 继承自 `UIViewBase`，与面板共享 `OnUpdate` 集中驱动机制
+- 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHud` 会自动替换旧 HUD
+
+### 快速使用
+
+```csharp
+using XFramework.XUI;
+using XFramework.XUI.View;
+
+// 1. 自定义 HUD 脚本（挂载到 HUD 预制体上）
+public class MonsterHpBar : UIHudItem
+{
+    [SerializeField] private Image _hpFill;
+    [SerializeField] private TMP_Text _nameText;
+
+    private Monster _monster;
+
+    protected override async UniTask OnOpenImpl(object userData)
+    {
+        await base.OnOpenImpl(userData);
+    }
+
+    protected override void OnUpdate()
+    {
+        base.OnUpdate(); // 必须调用 base，执行位置跟随逻辑
+
+        if (_monster == null)
+            return;
+
+        if (_hpFill != null)
+            _hpFill.fillAmount = _monster.Hp / _monster.MaxHp;
+    }
+
+    public void Bind(Monster monster)
+    {
+        _monster = monster;
+        if (_nameText != null)
+            _nameText.text = monster.Name;
+    }
+}
+
+// 2. 显示 HUD
+var hud = await UIManager.ShowHud<MonsterHpBar>(
+    monster.transform,               // 跟随的 3D 目标
+    "ui/hud/monster_hpbar",          // 预制体地址
+    new Vector2(0, 80)               // 屏幕偏移（头顶上方 80 像素）
+);
+hud.Bind(monster);
+
+// 3. 隐藏 HUD（目标死亡 / 离开视野时）
+UIManager.HideHud(monster.transform);
+```
+
+### API 说明
+
+| API                                               | 说明                                                      |
+| ------------------------------------------------- | --------------------------------------------------------- |
+| `UIManager.ShowHud<T>(target, assetPath, offset)` | 为目标附加 HUD，返回实例。同一目标重复调用自动替换旧 HUD  |
+| `UIManager.HideHud(target)`                       | 分离指定目标的 HUD，自动回池。target 为 null 时无操作     |
+| `UIHudItem.FollowTarget`                          | 要跟随的 3D 目标 Transform。设为 null 会触发自动回收      |
+| `UIHudItem.ScreenOffset`                          | 屏幕坐标偏移（像素），常用于将 HUD 移到目标头顶上方       |
+| `UIHudItem.CanvasGroup`                           | 懒加载的 CanvasGroup 引用，用于控制整体透明度             |
+| `UIHudItem.RectTransform`                         | 懒加载的 RectTransform 引用，OnUpdate 中自动更新 position |
+
+### 生命周期与自动回收
+
+目标丢失时 HUD 会自动回收，无需手动管理：
+
+- **目标被销毁**（`FollowTarget == null`）：下一帧 `OnUpdate` 检测到 → 触发 `OnTargetLost` 事件 → `UIHudManager` 自动 Detach + 回池
+- **目标移到镜头后方**（`screenPos.z <= 0`）：CanvasGroup.alpha 自动设为 0（隐藏但未回收）
+- **场景切换 / 全部关闭**：`UIManager.CloseAllAsync` 会触发 `UIHudManager.DetachAll()`，回收所有 HUD
+
+### 预制体要求
+
+第三方项目需自行设计 HUD 预制体，要求如下：
+
+- **根节点挂载自定义脚本**：继承 `UIHudItem` 的脚本（如 `MonsterHpBar`）
+- **Canvas**：由 `UIViewBase` 的 `[RequireComponent(typeof(Canvas))]` 自动添加
+- **GraphicRaycaster**：由 `UIViewBase` 的 `[RequireComponent(typeof(GraphicRaycaster))]` 自动添加
+- **CanvasGroup**：由 `UIHudItem` 的 `[RequireComponent(typeof(CanvasGroup))]` 自动添加
+
+> 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManager` 统一控制（独立 Canvas，sortingOrder = 999000）。
+
+### 设计要点
+
+- **一对一绑定** — 一个 3D 目标同时仅一个 HUD，重复 Attach 自动替换旧实例
+- **自动回收** — 目标丢失或为 null 时自动触发回收，无需手动释放
+- **独立 Canvas** — `Layer_HUD` 容器拥有独立 Canvas（sortingOrder = 999000），确保 HUD 渲染在最高层
+- **集中驱动** — 与 UIPanel 共享 `UIViewBase.OnUpdate` 集中驱动，避免分散的 `MonoBehaviour.Update` 开销
+- **对象池** — 由 `AssetManager` 管理实例化与回池，避免频繁创建/销毁
+- **镜头感知** — 目标在镜头后方时自动隐藏（alpha=0），回到视野时自动恢复
 
 ## Tip 临时提示（扣血提示 / 浮动文字）
 
@@ -775,6 +900,7 @@ UIManager.ShowTip("暴击！999", new TipConfig
 - [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
 - [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
 - [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
+- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
 - [ ] 资源卸载回收 — 支持按 LRU 卸载非活动面板的预制体资源
 - [ ] 场景切换安全 — 自动检测跨场景引用并处理
 - [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
