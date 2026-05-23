@@ -30,5 +30,10 @@ namespace XFramework.XInput
         /// 是否为复合绑定的子项。
         /// </summary>
         public bool IsPartOfComposite;
+
+        /// <summary>
+        /// 该绑定是否已被用户覆盖（非默认值）。UI 可据此显示"重置"按钮。
+        /// </summary>
+        public bool IsOverridden;
     }
 }

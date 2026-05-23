@@ -323,18 +323,28 @@ namespace XFramework.XInput.Default
             if (inputAction == null) return Array.Empty<InputBindingInfo>();
 
             var bindings = inputAction.bindings;
-            var result = new InputBindingInfo[bindings.Count];
-
+            // 先收集符合条件的绑定索引（排除复合结构本身及其子项）
+            var validIndices = new List<int>(bindings.Count);
             for (int i = 0; i < bindings.Count; i++)
             {
                 var b = bindings[i];
+                if (b.isComposite || b.isPartOfComposite) continue;
+                validIndices.Add(i);
+            }
+
+            var result = new InputBindingInfo[validIndices.Count];
+            for (int i = 0; i < validIndices.Count; i++)
+            {
+                var idx = validIndices[i];
+                var b = bindings[idx];
                 result[i] = new InputBindingInfo
                 {
                     Id = b.id.ToString(),
-                    DisplayName = inputAction.GetBindingDisplayString(i) ?? string.Empty,
+                    DisplayName = inputAction.GetBindingDisplayString(idx) ?? string.Empty,
                     Group = b.groups,
-                    IsComposite = b.isComposite,
-                    IsPartOfComposite = b.isPartOfComposite
+                    IsComposite = false,
+                    IsPartOfComposite = false,
+                    IsOverridden = !string.IsNullOrEmpty(b.overridePath)
                 };
             }
 
@@ -411,6 +421,81 @@ namespace XFramework.XInput.Default
             {
                 map.RemoveAllBindingOverrides();
             }
+        }
+
+        #endregion
+
+        #region 运行时重新绑定
+
+        public IRebindingOperation StartRebinding(string action, string bindingId, uint playerId = 0)
+        {
+            if (string.IsNullOrEmpty(action))
+            {
+                Debug.LogError("[InputSystemProvider] StartRebinding failed: action is null or empty.");
+                return null;
+            }
+
+            var inputAction = GetAction(action);
+            if (inputAction == null)
+            {
+                Debug.LogError($"[InputSystemProvider] StartRebinding failed: action '{action}' not found.");
+                return null;
+            }
+
+            // 根据 bindingId 查找对应的 binding index
+            var bindingIndex = FindBindingIndexById(inputAction, bindingId);
+            if (bindingIndex < 0)
+            {
+                // 如果找不到，全新绑定（使用第一个有效的非复合绑定）
+                bindingIndex = GetFirstBindableIndex(inputAction);
+                if (bindingIndex < 0)
+                {
+                    Debug.LogError($"[InputSystemProvider] StartRebinding failed: action '{action}' has no bindable binding.");
+                    return null;
+                }
+            }
+
+            var rebindOp = inputAction.PerformInteractiveRebinding(bindingIndex)
+                .WithControlsExcluding("<Mouse>/position")
+                .WithControlsExcluding("<Mouse>/delta")
+                .WithControlsExcluding("<Pointer>/position")
+                .WithControlsExcluding("<Pointer>/delta")
+                .WithControlsExcluding("<Gamepad>/leftStick")
+                .OnMatchWaitForAnother(0.1f)
+                .Start();
+
+            return new SystemRebindingOperation(rebindOp, inputAction, bindingIndex, bindingId ?? string.Empty);
+        }
+
+        /// <summary>
+        /// 根据 bindingId 在 Action 的所有绑定中查找索引。
+        /// </summary>
+        private int FindBindingIndexById(InputAction inputAction, string bindingId)
+        {
+            if (string.IsNullOrEmpty(bindingId)) return -1;
+
+            var bindings = inputAction.bindings;
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                if (bindings[i].id.ToString() == bindingId)
+                    return i;
+            }
+            return -1;
+        }
+
+        /// <summary>
+        /// 获取第一个可绑定的普通绑定索引（跳过复合及其子项）。
+        /// </summary>
+        private int GetFirstBindableIndex(InputAction inputAction)
+        {
+            var bindings = inputAction.bindings;
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                var b = bindings[i];
+                if (b.isComposite || b.isPartOfComposite) continue;
+                return i;
+            }
+            return -1;
         }
 
         #endregion

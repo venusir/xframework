@@ -14,6 +14,7 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 ```
 Runtime/Input/
 ├── IInputProvider.cs                 # 输入提供者接口（核心抽象）
+├── IRebindingOperation.cs            # 交互式按键重绑定操作句柄接口
 ├── InputManager.cs                   # 全局静态外观（静态类，直接调用）
 ├── InputBindingInfo.cs               # 绑定信息结构体（UI 按键提示用）
 ├── InputDeviceType.cs                # 输入设备类型枚举
@@ -23,7 +24,8 @@ Runtime/Input/
 │   ├── DeviceDisconnectedMessage.cs
 │   └── GamepadTypeChangedMessage.cs
 ├── Default/
-│   └── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
+│   ├── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
+│   └── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
 └── README.md
 ```
 
@@ -147,6 +149,53 @@ InputManager.LoadBindingOverrides(saved);
 // 重置按键
 InputManager.ResetBindingOverrides("Jump");   // 重置单个
 InputManager.ResetAllBindingOverrides();      // 重置所有
+```
+
+### 8. 交互式按键重绑定（按键设置 UI）
+
+> GetBindings 现在会自动过滤复合绑定（如 WASD 组合），只返回最终可绑定的普通绑定项。
+> 每个 InputBindingInfo 现在包含 `IsOverridden` 字段，UI 可据此显示"重置为默认"按钮。
+
+```csharp
+// 获取某个动作的所有可绑定项（已过滤复合绑定）
+IReadOnlyList<InputBindingInfo> bindings = InputManager.GetBindings("Jump");
+foreach (var b in bindings)
+{
+    // b.Id            — 绑定唯一标识
+    // b.DisplayName   — 当前人类可读名称（如 "W"、"X 按钮"）
+    // b.Group         — 设备分组（"Keyboard&Mouse"、"Gamepad"）
+    // b.IsOverridden  — 用户是否已覆盖此绑定（UI 可据此显示"重置"按钮）
+
+    Debug.Log($"{b.DisplayName} ({b.Group}) 覆盖:{b.IsOverridden}");
+}
+
+// 开始重新绑定：用户选择一个绑定项后，调用 StartRebinding
+var rebindOp = InputManager.StartRebinding("Jump", bindings[0].Id);
+
+// 绑定完成事件
+rebindOp.OnCompleted += (newBinding) =>
+{
+    Debug.Log($"新按键: {newBinding.DisplayName}");
+
+    // 保存到 PlayerPrefs
+    string overridesJson = InputManager.SaveBindingOverrides();
+    PlayerPrefs.SetString("InputOverrides", overridesJson);
+};
+
+// 绑定取消事件（如用户按了 Esc）
+rebindOp.OnCancelled += () =>
+{
+    Debug.Log("重绑定已取消");
+};
+
+// 实时预览按键名（可选）
+rebindOp.OnPotentialMatch += (keyName) =>
+{
+    waitingPromptText.text = $"请按下新按键... 当前检测: {keyName}";
+};
+
+// 可在任意时刻取消
+// rebindOp.Cancel();
 ```
 
 ## 自定义输入封装（第三方游戏必须做）
@@ -339,6 +388,7 @@ public class RewiredProvider : IInputProvider
 
 | 版本  | 说明                                                                                                                                                              |
 | ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.2.0 | 新增 `IRebindingOperation` 接口与 `StartRebinding` 交互式按键重绑定 API；`GetBindings` 过滤复合绑定并填充 `IsOverridden`；新增 `SystemRebindingOperation` 实现    |
 | 2.1.0 | 新增运行时绑定 API：`GetBindingDisplayString`、`GetBindings`、`SaveBindingOverrides`、`LoadBindingOverrides`、`ResetBindingOverrides`、`ResetAllBindingOverrides` |
 | 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入                                                                   |
 | 1.0.0 | 初始版本                                                                                                                                                          |
