@@ -4,7 +4,8 @@
         "UniTask",
         "YooAsset",
         "R3",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.InputSystem"
     ],
     "includePlatforms": [],
     "excludePlatforms": []
