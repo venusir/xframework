@@ -198,6 +198,72 @@ rebindOp.OnPotentialMatch += (keyName) =>
 // rebindOp.Cancel();
 ```
 
+### 9. 响应式订阅（可选）
+
+> 替代轮询 `Update()` 的声明式输入方式。所有 `ObserveXxx` 方法返回 `IDisposable`，传入 `this` 可自动随组件销毁取消订阅。
+> 公共 API 零依赖 R3 — 调用方不需要了解任何响应式库。
+
+#### 按钮事件
+
+```csharp
+using XFramework.XInput;
+using UnityEngine;
+
+public class PlayerController : MonoBehaviour
+{
+    void Awake()
+    {
+        // 按下事件（替代 WasPressedThisFrame 轮询）
+        InputManager.ObservePressed("Jump", OnJump, this);
+        InputManager.ObserveReleased("Guard", OnUnguard, this);
+
+        // 按住状态变化（true/false 切换时回调）
+        InputManager.ObserveHeld("Sprint", held => playerSpeed = held ? sprintSpeed : normalSpeed, this);
+
+        // 持续按下时长（秒，仅值变化时回调）
+        InputManager.ObservePressDuration("Charge", duration => chargeBar.fillAmount = duration / maxCharge, this);
+    }
+
+    void OnJump() => Debug.Log("Jump!");
+    void OnUnguard() => isGuarding = false;
+}
+```
+
+#### 值输入
+
+```csharp
+void Awake()
+{
+    // Vector2 轴（如移动摇杆），仅值变化时回调，内置 DistinctUntilChanged
+    InputManager.ObserveVector2("Move", v => transform.Translate(v * speed * Time.deltaTime), this);
+
+    // float 轴（如扳机键），值变化时回调
+    InputManager.ObserveFloat("Throttle", f => enginePower = f, this);
+
+    // 原始值（不平滑），适合相机等场景
+    InputManager.ObserveVector2Raw("Look", delta => camera.Rotate(delta), this);
+}
+```
+
+#### 手动管理生命周期
+
+```csharp
+// 不传 context 时，需要手动保存返回的 IDisposable 并自行 Dispose
+IDisposable sub = InputManager.ObservePressed("Fire", OnFire);
+// 稍后取消：
+sub.Dispose();
+```
+
+#### 与轮询模式的对比
+
+| 轮询模式                         | 响应式订阅                            |
+| -------------------------------- | ------------------------------------- |
+| `void Update()` 中每帧 `if` 判断 | `Awake` 中一行注册，回调自动触发      |
+| 需要手动管理状态（如上一帧值）   | 内置 `DistinctUntilChanged`，自动去重 |
+| 需要记得在 `OnDestroy` 中清理    | 传入 `this` 自动绑定生命周期          |
+
+两种模式可混合使用，不影响现有代码。
+
 ## 自定义输入封装（第三方游戏必须做）
 
 由于框架不定义任何动作名，每个游戏应**自行封装**专属的输入类。
@@ -386,9 +452,10 @@ public class RewiredProvider : IInputProvider
 
 ## 版本记录
 
-| 版本  | 说明                                                                                                                                                              |
-| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2.2.0 | 新增 `IRebindingOperation` 接口与 `StartRebinding` 交互式按键重绑定 API；`GetBindings` 过滤复合绑定并填充 `IsOverridden`；新增 `SystemRebindingOperation` 实现    |
-| 2.1.0 | 新增运行时绑定 API：`GetBindingDisplayString`、`GetBindings`、`SaveBindingOverrides`、`LoadBindingOverrides`、`ResetBindingOverrides`、`ResetAllBindingOverrides` |
-| 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入                                                                   |
-| 1.0.0 | 初始版本                                                                                                                                                          |
+| 版本  | 说明                                                                                                                                                                         |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.3.0 | 新增响应式输入订阅 API：`ObservePressed`、`ObserveReleased`、`ObserveHeld`、`ObservePressDuration`、`ObserveVector2`、`ObserveFloat`、`ObserveVector2Raw`、`ObserveFloatRaw` |
+| 2.2.0 | 新增 `IRebindingOperation` 接口与 `StartRebinding` 交互式按键重绑定 API；`GetBindings` 过滤复合绑定并填充 `IsOverridden`；新增 `SystemRebindingOperation` 实现               |
+| 2.1.0 | 新增运行时绑定 API：`GetBindingDisplayString`、`GetBindings`、`SaveBindingOverrides`、`LoadBindingOverrides`、`ResetBindingOverrides`、`ResetAllBindingOverrides`            |
+| 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入                                                                              |
+| 1.0.0 | 初始版本                                                                                                                                                                     |

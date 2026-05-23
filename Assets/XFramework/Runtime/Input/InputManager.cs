@@ -1,4 +1,6 @@
 using System;
+using R3;
+using UnityEngine;
 using XFramework.XInput.Default;
 
 namespace XFramework.XInput
@@ -387,6 +389,186 @@ namespace XFramework.XInput
         public static IRebindingOperation StartRebinding(string action, string bindingId, uint playerId = 0)
         {
             return _provider?.StartRebinding(action, bindingId, playerId);
+        }
+
+        #endregion
+
+        #region Reactive Input
+
+        /// <summary>
+        /// 订阅按钮按下事件。每帧检测 <see cref="WasPressedThisFrame"/>，触发时回调一次。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">按下时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObservePressed(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Where(_ => WasPressedThisFrame(action, playerId))
+                .Subscribe(_ => callback());
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅按钮释放事件。每帧检测 <see cref="WasReleasedThisFrame"/>，触发时回调一次。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">释放时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveReleased(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Where(_ => WasReleasedThisFrame(action, playerId))
+                .Subscribe(_ => callback());
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅按钮按住状态。每帧读取 <see cref="IsPressed"/> 的值，仅当状态发生变化时回调。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">状态变化时回调，参数为当前是否按住</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveHeld(string action, Action<bool> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => IsPressed(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅按钮持续按下时长（秒）。每帧回调当前按住时长。
+        /// <para>使用 <see cref="DistinctUntilChanged"/> 去重，仅值变化时触发回调。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">每帧回调当前按住时长（秒）</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObservePressDuration(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => GetButtonPressDuration(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅 Vector2 轴输入（如移动摇杆）。使用 <see cref="ReadVector2"/> 读取平滑值，
+        /// 仅当值变化时回调。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称，如 "Move"</param>
+        /// <param name="callback">值变化时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveVector2(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => ReadVector2(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅 float 轴输入。使用 <see cref="ReadFloat"/> 读取平滑值，仅当值变化时回调。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">值变化时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveFloat(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => ReadFloat(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅 Vector2 原始轴输入（不平滑）。使用 <see cref="ReadVector2Raw"/>，仅当值变化时回调。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">值变化时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveVector2Raw(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => ReadVector2Raw(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅 float 原始轴输入（不平滑）。使用 <see cref="ReadFloatRaw"/>，仅当值变化时回调。
+        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// </summary>
+        /// <param name="action">动作名称</param>
+        /// <param name="callback">值变化时回调</param>
+        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="playerId">玩家 ID，默认 0</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable ObserveFloatRaw(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        {
+            var sub = Observable.EveryUpdate()
+                .Select(_ => ReadFloatRaw(action, playerId))
+                .DistinctUntilChanged()
+                .Subscribe(callback);
+
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+
+            return sub;
         }
 
         #endregion
