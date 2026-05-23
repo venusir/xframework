@@ -253,6 +253,22 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Tip
+
+        /// <summary>
+        /// 显示一个临时提示文本（Tip）。
+        /// <para>通过 <see cref="TipConfig"/> 配置显示行为：世界坐标定位、颜色、持续时长、上飘距离、字号。</para>
+        /// <para>内部自动管理实例化和回池，无需手动关闭。可直接调用：<c>UIManager.ShowTip("-10", new TipConfig { WorldPos = enemyPos, Color = Color.red });</c></para>
+        /// </summary>
+        /// <param name="text">显示文字。</param>
+        /// <param name="config">显示配置。传 default 使用全部默认值（屏幕居中、白色、2秒、不飘动）。</param>
+        public static void ShowTip(string text, TipConfig config = default)
+        {
+            UITipManager.ShowTip(text, config);
+        }
+
+        #endregion
+
         #region Public API — Events
 
         /// <inheritdoc cref="IUIManager.OnPanelOpened"/>
