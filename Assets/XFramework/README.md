@@ -84,15 +84,114 @@ public class MovementNode : LeafNode, IUpdateable
 
 ## 主要功能
 
-| 功能           | 说明                                                           |
-| -------------- | -------------------------------------------------------------- |
-| **节点树**     | 层级化节点结构，支持深度排序、递归遍历                         |
-| **对象池**     | `NodeFactory` + `NodePool<T>`，自动回池复用                    |
-| **组件模式**   | `EntityNode.GetNode<T>()` / `AddNode<T>()` / `RemoveNode<T>()` |
-| **键值对模式** | `DictionaryNode<TKey>` 按 Key 缓存子节点                       |
-| **更新调度**   | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移            |
-| **异步加载**   | `ILoadableProvider` + `LoadableBase` + `LoadingManager`        |
-| **生命周期**   | Init → Awake → Start → Destroy，与 Unity 语义一致              |
+| 功能             | 说明                                                                 |
+| ---------------- | -------------------------------------------------------------------- |
+| **节点树**       | 层级化节点结构，支持深度排序、递归遍历                               |
+| **对象池**       | `NodeFactory` + `NodePool<T>`，自动回池复用                          |
+| **组件模式**     | `EntityNode.GetNode<T>()` / `AddNode<T>()` / `RemoveNode<T>()`       |
+| **键值对模式**   | `DictionaryNode<TKey>` 按 Key 缓存子节点                             |
+| **更新调度**     | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移                  |
+| **异步加载**     | `ILoadableProvider` + `LoadableBase` + `LoadingManager`              |
+| **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                    |
+| **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩 |
+| **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用  |
+
+## UI 系统
+
+XFramework 提供一套完整的 UI 管理方案，包括面板生命周期管理和临时提示（Tip）。UI 基于 Canvas + UGUI 渲染，通过 `UIRootNode` 挂载在场景中作为 UI 根节点。
+
+### 初始化
+
+```csharp
+// 在场景中挂载 UIRootNode，然后初始化
+var uiRoot = FindObjectOfType<UIRootNode>();
+if (uiRoot != null)
+{
+    UIManager.Initialize(uiRoot.transform);
+}
+```
+
+### 面板管理
+
+面板继承 `UIPanelBase`，通过 `UIManager` 静态方法管理生命周期：
+
+```csharp
+// 打开面板
+var panel = await UIManager.OpenAsync<MainMenuPanel>("PF_MainMenu", layer: 100);
+
+// 关闭面板
+await UIManager.CloseAsync<MainMenuPanel>();
+
+// 栈式导航
+var settings = await UIManager.PushAsync<SettingsPanel>("PF_Settings", layer: 200);
+await UIManager.PopAsync();  // 返回上一个面板
+
+// 模态遮罩
+UIManager.ShowMask(maskLayer: 500, alpha: 0.5f);
+UIManager.HideMask();
+```
+
+### 临时提示（Tip / 扣血提示）
+
+用于显示无需交互的浮动提示文字，如扣血数字、暴击提示、获得物品等。内部通过 `AssetManager` 泛型接口实例化预制体并复用对象池，动画完成后自动回收。
+
+#### 快速使用
+
+```csharp
+// 最简单的版本 — 屏幕居中白色文字，2秒后消失
+UIManager.ShowTip("-10");
+
+// 扣血提示 — 红色、上飘、跟随敌人世界坐标
+UIManager.ShowTip("-50", new TipConfig 
+{ 
+    WorldPos = enemy.transform.position, 
+    Color = Color.red, 
+    FloatDistance = 50f 
+});
+
+// 暴击提示 — 黄色大字
+UIManager.ShowTip("暴击！999", new TipConfig 
+{ 
+    Color = Color.yellow, 
+    FontSize = 36f, 
+    Duration = 3f 
+});
+```
+
+#### TipConfig 参数
+
+| 参数            | 类型       | 默认值             | 说明                                         |
+| --------------- | ---------- | ------------------ | -------------------------------------------- |
+| `WorldPos`      | `Vector3?` | `null`（屏幕居中） | 3D 世界坐标，自动转为屏幕坐标                |
+| `Color`         | `Color`    | `Color.white`      | 文字颜色                                     |
+| `Duration`      | `float`    | `2f`               | 显示时长（秒）。前半程保持不透明，后半程渐隐 |
+| `FloatDistance` | `float`    | `0f`（不飘）       | 上飘像素距离                                 |
+| `FontSize`      | `float`    | `0f`（预制体默认） | 字号，0 表示使用预制体默认值                 |
+
+#### 预制体要求
+
+第三方项目需在资源包中提供名为 `PF_UITipText` 的预制体，需挂载以下组件：
+
+- **TextMeshPro - Text (UI)** — 文字渲染，名称不限，`UITipItem` 会通过 `GetComponentInChildren` 自动查找
+- **CanvasGroup** — 透明度控制（`UITipItem` 通过 `[RequireComponent(typeof(CanvasGroup))]` 自动添加）
+- **UITipItem** — Tip 播放逻辑（框架提供，挂载到预制体根节点）
+
+预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
+
+#### 架构说明
+
+```
+UIManager.ShowTip(text, config)  →  静态外观
+    │
+    └── UITipManager.ShowTip()    →  内部管理器（实例化、容器、回池）
+            │
+            ├── AssetManager.InstantiateAsync<UITipItem>()  →  获取组件实例（含对象池）
+            ├── tipItem.PlayAsync()                         →  异步播放动画
+            └── AssetManager.DestroyInstance()              →  回池
+```
+
+- **UITipManager** 为 `internal static` 类，在 UIRoot 下自动创建 `Layer_Tip` 独立层级（sorting order 极高），确保 Tip 始终在所有面板之上
+- **UITipItem** 基于 UniTask 的异步循环驱动帧动画，支持 `CancellationToken` 取消
 
 ## 依赖
 
