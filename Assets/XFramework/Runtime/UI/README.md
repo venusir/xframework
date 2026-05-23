@@ -699,6 +699,70 @@ UIManager.SetController(new MyCustomController());
 - **面板驱动更新** — UIManager 集中驱动 OnUpdate，仅已打开且未暂停的面板执行（借鉴 GameFramework 设计）
 - **避免 GC** — 使用固定字典容量（8/4）、值类型遍历、List 复用，减少 GC 分配
 
+## Tip 临时提示（扣血提示 / 浮动文字）
+
+`UITipManager` + `UITipItem` 提供无需交互的临时浮动提示，如扣血数字、暴击提示、获得物品等。内部通过 `AssetManager` 泛型接口实例化预制体并复用对象池，动画完成后自动回收。
+
+**命名空间**: `XFramework.XUI`
+
+### 架构
+
+```
+UIManager.ShowTip(text, config)  →  静态外观
+    │
+    └── UITipManager.ShowTip()    →  内部管理器（实例化、容器、回池）
+            │
+            ├── AssetManager.InstantiateAsync<UITipItem>()  →  获取组件实例（含对象池）
+            ├── tipItem.PlayAsync()                         →  异步播放动画
+            └── AssetManager.DestroyInstance()              →  回池
+```
+
+- `UITipManager` 为 `internal static` 类，在 UIRoot 下自动创建 `Layer_Tip` 独立子 Canvas（sorting order 极高），确保 Tip 始终在所有面板之上
+- `UITipItem` 基于 UniTask 的异步循环驱动帧动画，支持 `CancellationToken` 取消
+
+### 快速使用
+
+```csharp
+// 最简单的版本 — 屏幕居中白色文字，2 秒后消失
+UIManager.ShowTip("-10");
+
+// 扣血提示 — 红色、上飘、跟随敌人世界坐标
+UIManager.ShowTip("-50", new TipConfig 
+{ 
+    WorldPos = enemy.transform.position, 
+    Color = Color.red, 
+    FloatDistance = 50f 
+});
+
+// 暴击提示 — 黄色大字
+UIManager.ShowTip("暴击！999", new TipConfig 
+{ 
+    Color = Color.yellow, 
+    FontSize = 36f, 
+    Duration = 3f 
+});
+```
+
+### TipConfig 参数
+
+| 参数            | 类型       | 默认值             | 说明                                         |
+| --------------- | ---------- | ------------------ | -------------------------------------------- |
+| `WorldPos`      | `Vector3?` | `null`（屏幕居中） | 3D 世界坐标，自动转为屏幕坐标                |
+| `Color`         | `Color`    | `Color.white`      | 文字颜色                                     |
+| `Duration`      | `float`    | `2f`               | 显示时长（秒）。前半程保持不透明，后半程渐隐 |
+| `FloatDistance` | `float`    | `0f`（不飘）       | 上飘像素距离                                 |
+| `FontSize`      | `float`    | `0f`（预制体默认） | 字号，0 表示使用预制体默认值                 |
+
+### 预制体要求
+
+第三方项目需在资源包中提供名为 `PF_UITipText` 的预制体，需挂载以下组件：
+
+- **TextMeshPro - Text (UI)** — 文字渲染，名称不限，`UITipItem` 会通过 `GetComponentInChildren` 自动查找
+- **CanvasGroup** — 透明度控制（`UITipItem` 通过 `[RequireComponent(typeof(CanvasGroup))]` 自动添加）
+- **UITipItem** — Tip 播放逻辑（框架提供，挂载到预制体根节点）
+
+预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
+
 ## 已完成功能
 
 - [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
@@ -710,6 +774,7 @@ UIManager.SetController(new MyCustomController());
 - [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
 - [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
 - [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
+- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
 - [ ] 资源卸载回收 — 支持按 LRU 卸载非活动面板的预制体资源
 - [ ] 场景切换安全 — 自动检测跨场景引用并处理
 - [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
