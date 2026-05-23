@@ -141,6 +141,9 @@ namespace XFramework.XUI
             _languageChangedSubscription?.Dispose();
             _languageChangedSubscription = null;
 
+            // 关闭所有 HUD
+            UIHudManager.DetachAll();
+
             // 同步关闭所有面板（回池而非 Destroy）
             var panels = new List<UIPanelBase>(_activePanels.Values);
             foreach (var panel in panels)
@@ -286,6 +289,9 @@ namespace XFramework.XUI
         public async UniTask CloseAllAsync(bool immediate = false)
         {
             EnsureInitialized();
+
+            // 关闭所有 HUD
+            UIHudManager.DetachAll();
 
             // 收集所有面板
             var toClose = new List<(UIPanelBase panel, Type type)>();
@@ -566,6 +572,9 @@ namespace XFramework.XUI
                     panel.OnUpdate();
                 }
             }
+
+            // 驱动所有活跃的 HUD
+            UIHudManager.Update();
         }
 
         #endregion

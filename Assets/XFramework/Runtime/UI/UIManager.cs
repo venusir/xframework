@@ -4,6 +4,7 @@ using UnityEngine;
 using XFramework.XUI.Controller;
 using XFramework.XUI.View;
 
+
 namespace XFramework.XUI
 {
     /// <summary>
@@ -265,6 +266,39 @@ namespace XFramework.XUI
         public static void ShowTip(string text, TipConfig config = default)
         {
             UITipManager.ShowTip(text, config);
+        }
+
+        #endregion
+
+        #region Public API — HUD（世界空间 HUD）
+
+        /// <summary>
+        /// 为 3D 目标附加一个 HUD（例如 NPC/怪物头顶的名字、血条）。
+        /// <para>HUD 每帧自动跟随 <paramref name="target"/> 的屏幕位置，当 target 为 null 或目标丢失时自动回收。</para>
+        /// <para>同一个 target 同时只能绑定一个 HUD，重复调用会先 Detach 旧的。</para>
+        /// <para>HUD 预制体由第三方自由设计，只需挂载继承 <see cref="UIHudItem"/> 的脚本即可。</para>
+        /// </summary>
+        /// <typeparam name="T">HUD 类型（继承 <see cref="UIHudItem"/>）。</typeparam>
+        /// <param name="target">要跟随的 3D 目标 Transform。</param>
+        /// <param name="assetPath">HUD 预制体的 YooAsset 地址。</param>
+        /// <param name="offset">屏幕坐标偏移（像素）。例如 (0, 80) 将 HUD 移到目标头顶上方。</param>
+        /// <returns>附加的 HUD 实例。如果初始化未完成或加载失败则返回 null。</returns>
+        public static UniTask<T> ShowHud<T>(Transform target, string assetPath, Vector2? offset = null)
+            where T : UIHudItem
+        {
+            EnsureGlobalInitialized();
+            // UIManagerImpl 持有 UIRoot 引用，直接传给 UIHudManager
+            return UIHudManager.AttachAsync<T>(target, assetPath, _instance.UIRoot, offset);
+        }
+
+        /// <summary>
+        /// 分离指定目标绑定的 HUD。
+        /// <para>HUD 会自动回池，无需手动控制生命周期。</para>
+        /// </summary>
+        /// <param name="target">3D 目标 Transform。如果传入 null 则不执行任何操作。</param>
+        public static void HideHud(Transform target)
+        {
+            UIHudManager.Detach(target);
         }
 
         #endregion
