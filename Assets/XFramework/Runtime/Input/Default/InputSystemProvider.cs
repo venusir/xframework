@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.LowLevel;
+using XFramework.XReactive;
 
 namespace XFramework.XInput.Default
 {
@@ -340,18 +341,22 @@ namespace XFramework.XInput.Default
             {
                 case InputDeviceChange.Added:
                     OnDeviceConnected?.Invoke();
+                    MessageManager.Publish(new Messages.DeviceConnectedMessage());
                     break;
 
                 case InputDeviceChange.Removed:
                     OnDeviceDisconnected?.Invoke();
+                    MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
                     break;
 
                 case InputDeviceChange.Reconnected:
                     OnDeviceConnected?.Invoke();
+                    MessageManager.Publish(new Messages.DeviceConnectedMessage());
                     break;
 
                 case InputDeviceChange.Disconnected:
                     OnDeviceDisconnected?.Invoke();
+                    MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
                     break;
             }
         }
@@ -379,8 +384,10 @@ namespace XFramework.XInput.Default
 
             if (currentType != _activeGamepadType)
             {
+                var previousType = _activeGamepadType;
                 _activeGamepadType = currentType;
                 OnGamepadTypeChanged?.Invoke(currentType);
+                MessageManager.Publish(new Messages.GamepadTypeChangedMessage(previousType, currentType));
             }
         }
 
