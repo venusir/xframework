@@ -5,12 +5,13 @@ using XFramework.XAsset;
 namespace XFramework.XUI
 {
     /// <summary>
-    /// Tip 管理器（内部实现）。
+    /// Tip 管理器默认实现。实现 <see cref="IUITipProvider"/> 接口。
     /// <para>负责 Tip 预制体的实例化、层级容器的管理、生命周期调度。</para>
     /// <para>Tip 实例通过 <see cref="XAsset.AssetManager"/> 获取和回池，不自行维护对象池。</para>
     /// <para>所有 Tip 挂载在 UIRoot 下独立的 Layer_Tip 容器中，使用极高的 sorting order 确保在最顶层显示。</para>
+    /// <para>第三方可通过 <see cref="UIManager.SetTipProvider"/> 替换此实现。</para>
     /// </summary>
-    internal static class UITipManager
+    internal sealed class UITipManagerImpl : IUITipProvider
     {
         #region Constants
 
@@ -32,22 +33,27 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region Cached References
+        #region Fields
 
-        private static Transform _tipContainer;
-        private static Canvas _tipContainerCanvas;
+        private Transform _tipContainer;
+        private Canvas _tipContainerCanvas;
+        private Transform _uiRoot;
 
         #endregion
 
-        #region Public API
+        #region IUITipProvider
 
-        /// <summary>
-        /// 显示一个 Tip。
-        /// <para>异步加载预制体，实例化后播放动画，结束后自动回池。</para>
-        /// </summary>
-        /// <param name="text">显示文字。</param>
-        /// <param name="config">显示配置。传 default 使用全部默认值。</param>
-        public static async void ShowTip(string text, TipConfig config = default)
+        /// <inheritdoc/>
+        public void SetUIRoot(Transform uiRoot)
+        {
+            _uiRoot = uiRoot;
+            // 更换 UIRoot 时重置容器引用
+            _tipContainer = null;
+            _tipContainerCanvas = null;
+        }
+
+        /// <inheritdoc/>
+        public async void ShowTip(string text, TipConfig config = default)
         {
             if (string.IsNullOrEmpty(text))
                 return;
@@ -84,17 +90,19 @@ namespace XFramework.XUI
         /// <summary>
         /// 确保层级容器存在。在 UIRoot 下创建 Layer_Tip 节点。
         /// </summary>
-        private static void EnsureContainer()
+        private void EnsureContainer()
         {
             if (_tipContainer != null)
                 return;
 
-            var uiRoot = GetUIRoot();
-            if (uiRoot == null)
+            if (_uiRoot == null)
+            {
+                Debug.LogWarning("[UITipManager] UIRoot is not set. Call SetUIRoot first.");
                 return;
+            }
 
             // 查找已有的容器
-            var existing = uiRoot.Find(TipLayerContainerName);
+            var existing = _uiRoot.Find(TipLayerContainerName);
             if (existing != null)
             {
                 _tipContainer = existing;
@@ -105,7 +113,7 @@ namespace XFramework.XUI
             // 创建新容器
             var go = new GameObject(TipLayerContainerName, typeof(RectTransform));
             var rt = go.GetComponent<RectTransform>();
-            rt.SetParent(uiRoot, false);
+            rt.SetParent(_uiRoot, false);
             rt.anchorMin = Vector2.zero;
             rt.anchorMax = Vector2.one;
             rt.sizeDelta = Vector2.zero;
@@ -121,34 +129,16 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 获取 UIRoot Transform。优先通过 UIRootNode，其次通过初始化后的 UIManager。
-        /// </summary>
-        private static Transform GetUIRoot()
-        {
-            // 优先使用场景中 UIRootNode
-            var node = UIRootNode.FindInScene();
-            if (node != null)
-                return node.transform;
-
-            Debug.LogWarning("[UITipManager] UIRootNode not found in scene. Cannot show Tip.");
-            return null;
-        }
-
-        /// <summary>
         /// 用默认值填充未设置的配置字段（因为 struct 不能使用 default 参数带非字面量）。
         /// </summary>
         private static TipConfig GetOrDefault(TipConfig config)
         {
             // 当 Color 为默认黑色（未初始化）时使用白色
-            // 注意：Color 的默认值是 (0,0,0,0)，但有含义的默认我们想用白色
-            // 使用一个标记检查
             if (config.Color == default)
                 config.Color = Color.white;
 
             if (config.Duration <= 0f)
                 config.Duration = 2f;
-
-            // FloatDistance 和 FontSize 的默认值 0 本身就有含义（不飘/默认字号），无需覆盖
 
             return config;
         }

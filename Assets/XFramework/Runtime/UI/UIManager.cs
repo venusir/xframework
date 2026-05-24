@@ -21,6 +21,16 @@ namespace XFramework.XUI
         private static bool _instanceInitialized;
 
         /// <summary>
+        /// Tip 提供者（默认使用 <see cref="UITipManagerImpl"/>，可通过 <see cref="SetTipProvider"/> 替换）。
+        /// </summary>
+        private static IUITipProvider _tipProvider;
+
+        /// <summary>
+        /// HUD 提供者（默认使用 <see cref="UIHudManagerImpl"/>，可通过 <see cref="SetHudProvider"/> 替换）。
+        /// </summary>
+        private static IUiHudProvider _hudProvider;
+
+        /// <summary>
         /// 全局 UI 管理器是否已初始化。
         /// </summary>
         public static bool IsInitialized => _instanceInitialized && _instance != null;
@@ -48,6 +58,10 @@ namespace XFramework.XUI
 
             _instance = impl;
             _instanceInitialized = true;
+
+            // 初始化默认 Tip / HUD Provider
+            EnsureTipProvider();
+            EnsureHudProvider();
         }
 
         /// <summary>
@@ -65,6 +79,13 @@ namespace XFramework.XUI
         /// </summary>
         public static void Destroy()
         {
+            if (_hudProvider != null)
+            {
+                _hudProvider.DetachAll();
+                _hudProvider = null;
+            }
+            _tipProvider = null;
+
             if (_instance != null)
             {
                 _instance.Dispose();
@@ -124,6 +145,8 @@ namespace XFramework.XUI
         public static UniTask CloseAllAsync(bool immediate = false)
         {
             EnsureGlobalInitialized();
+            if (_hudProvider != null)
+                _hudProvider.DetachAll();
             return _instance.CloseAllAsync(immediate);
         }
 
@@ -250,6 +273,8 @@ namespace XFramework.XUI
         {
             EnsureGlobalInitialized();
             _instance.Update();
+            if (_hudProvider != null)
+                _hudProvider.Update();
         }
 
         #endregion
@@ -260,12 +285,34 @@ namespace XFramework.XUI
         /// 显示一个临时提示文本（Tip）。
         /// <para>通过 <see cref="TipConfig"/> 配置显示行为：世界坐标定位、颜色、持续时长、上飘距离、字号。</para>
         /// <para>内部自动管理实例化和回池，无需手动关闭。可直接调用：<c>UIManager.ShowTip("-10", new TipConfig { WorldPos = enemyPos, Color = Color.red });</c></para>
+        /// <para>可通过 <see cref="SetTipProvider"/> 注入自定义 Tip 实现。</para>
         /// </summary>
         /// <param name="text">显示文字。</param>
         /// <param name="config">显示配置。传 default 使用全部默认值（屏幕居中、白色、2秒、不飘动）。</param>
         public static void ShowTip(string text, TipConfig config = default)
         {
-            UITipManager.ShowTip(text, config);
+            EnsureTipProvider();
+            _tipProvider.ShowTip(text, config);
+        }
+
+        /// <summary>
+        /// 设置自定义 Tip 提供者。传入 null 则恢复默认 <see cref="UITipManagerImpl"/>。
+        /// <para>需要在 <see cref="Initialize"/> 后调用。</para>
+        /// </summary>
+        /// <param name="provider">自定义 Tip 提供者，或 null 恢复默认。</param>
+        public static void SetTipProvider(IUITipProvider provider)
+        {
+            if (provider == null)
+            {
+                var defaultProvider = new UITipManagerImpl();
+                if (_instanceInitialized && _instance?.UIRoot != null)
+                    defaultProvider.SetUIRoot(_instance.UIRoot);
+                _tipProvider = defaultProvider;
+            }
+            else
+            {
+                _tipProvider = provider;
+            }
         }
 
         #endregion
@@ -277,6 +324,7 @@ namespace XFramework.XUI
         /// <para>HUD 每帧自动跟随 <paramref name="target"/> 的屏幕位置，当 target 为 null 或目标丢失时自动回收。</para>
         /// <para>同一个 target 同时只能绑定一个 HUD，重复调用会先 Detach 旧的。</para>
         /// <para>HUD 预制体由第三方自由设计，只需挂载继承 <see cref="UIHudItem"/> 的脚本即可。</para>
+        /// <para>可通过 <see cref="SetHudProvider"/> 注入自定义 HUD 实现。</para>
         /// </summary>
         /// <typeparam name="T">HUD 类型（继承 <see cref="UIHudItem"/>）。</typeparam>
         /// <param name="target">要跟随的 3D 目标 Transform。</param>
@@ -286,9 +334,8 @@ namespace XFramework.XUI
         public static UniTask<T> ShowHud<T>(Transform target, string assetPath, Vector2? offset = null)
             where T : UIHudItem
         {
-            EnsureGlobalInitialized();
-            // UIManagerImpl 持有 UIRoot 引用，直接传给 UIHudManager
-            return UIHudManager.AttachAsync<T>(target, assetPath, _instance.UIRoot, offset);
+            EnsureHudProvider();
+            return _hudProvider.AttachAsync<T>(target, assetPath, offset);
         }
 
         /// <summary>
@@ -298,7 +345,28 @@ namespace XFramework.XUI
         /// <param name="target">3D 目标 Transform。如果传入 null 则不执行任何操作。</param>
         public static void HideHud(Transform target)
         {
-            UIHudManager.Detach(target);
+            if (_hudProvider != null)
+                _hudProvider.Detach(target);
+        }
+
+        /// <summary>
+        /// 设置自定义 HUD 提供者。传入 null 则恢复默认 <see cref="UIHudManagerImpl"/>。
+        /// <para>需要在 <see cref="Initialize"/> 后调用。</para>
+        /// </summary>
+        /// <param name="provider">自定义 HUD 提供者，或 null 恢复默认。</param>
+        public static void SetHudProvider(IUiHudProvider provider)
+        {
+            if (provider == null)
+            {
+                var defaultProvider = new UIHudManagerImpl();
+                if (_instanceInitialized && _instance?.UIRoot != null)
+                    defaultProvider.SetUIRoot(_instance.UIRoot);
+                _hudProvider = defaultProvider;
+            }
+            else
+            {
+                _hudProvider = provider;
+            }
         }
 
         #endregion
@@ -329,6 +397,32 @@ namespace XFramework.XUI
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
                     "UIManager is not initialized. Call UIManager.Initialize(uiRoot) first.");
+        }
+
+        /// <summary>
+        /// 确保 Tip 提供者已创建（懒初始化）。首次调用时使用默认实现。
+        /// </summary>
+        private static void EnsureTipProvider()
+        {
+            if (_tipProvider != null)
+                return;
+
+            _tipProvider = new UITipManagerImpl();
+            if (_instanceInitialized && _instance?.UIRoot != null)
+                _tipProvider.SetUIRoot(_instance.UIRoot);
+        }
+
+        /// <summary>
+        /// 确保 HUD 提供者已创建（懒初始化）。首次调用时使用默认实现。
+        /// </summary>
+        private static void EnsureHudProvider()
+        {
+            if (_hudProvider != null)
+                return;
+
+            _hudProvider = new UIHudManagerImpl();
+            if (_instanceInitialized && _instance?.UIRoot != null)
+                _hudProvider.SetUIRoot(_instance.UIRoot);
         }
 
         #endregion
