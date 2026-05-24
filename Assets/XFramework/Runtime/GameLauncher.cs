@@ -9,14 +9,15 @@ namespace XFramework.XCore
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
     /// <para><see cref="ServiceInitializerNode"/> 在 <see cref="OnAwake"/> 中自动添加启动子节点（AssetBootstrapNode），
     /// 由 <see cref="NodeUtility.StartupAsync"/> 统一加载调度。</para>
-    /// <para>通过 <see cref="UpdateNode"/> 自动管理树中所有 <see cref="XUpdate.IUpdateable"/> 节点的更新。</para>
+    /// <para><see cref="UpdateNode"/> 作为节点树中的桥梁，自动将树中 <see cref="XUpdate.IUpdateable"/> 节点注册到
+    /// <see cref="UpdateManager"/>（静态服务），统一管理节点树及静态服务的更新需求。</para>
+    /// <para>每帧通过 <see cref="UpdateManager.Tick(float)"/> 驱动所有已注册的更新对象。</para>
     /// </summary>
     public class GameLauncher : MonoBehaviour
     {
         #region Private Fields
 
         RootNode _root;
-        UpdateNode _updateService;
 
         #endregion
 
@@ -25,7 +26,9 @@ namespace XFramework.XCore
         void Awake()
         {
             _root = RootNode.Create();
-            _updateService = _root.AddNode<UpdateNode>();
+
+            // UpdateNode 作为节点树到 UpdateManager 的桥梁，自动监听树的增删事件
+            _root.AddNode<UpdateNode>();
 
             // ServiceInitializerNode 自动在 OnAwake 中添加 AssetBootstrapNode 启动子节点
             _root.AddNode<ServiceInitializerNode>();
@@ -41,7 +44,8 @@ namespace XFramework.XCore
 
         void Update()
         {
-            _updateService.Tick(Time.time);
+            // 统一通过 UpdateManager 驱动所有已注册的更新（包括节点树节点和静态服务）
+            UpdateManager.Tick(Time.time);
         }
 
         void OnDestroy()
