@@ -15,6 +15,12 @@ XPool 是一个**零 GC 分配**的泛型对象池系统，用于复用频繁创
 
 ```
 Runtime/Pool/
+├── CollectionPool/
+│   ├── ListPool.cs                # List<T> 池，Return 自动 Clear()
+│   ├── HashSetPool.cs             # HashSet<T> 池，Return 自动 Clear()
+│   ├── DictionaryPool.cs          # Dictionary<K,V> 池，Return 自动 Clear()
+│   ├── StringBuilderPool.cs       # StringBuilder 池，Return 自动 Clear()
+│   └── CollectionPoolManager.cs   # 集合池统一管理器，一键 ClearAll()
 ├── IPoolable.cs                   # 生命周期回调接口（OnRent / OnReturn）
 ├── PoolConfig.cs                  # 配置结构体（值类型，零装箱）
 ├── IPool.cs                       # 池操作接口（用于 DI / 测试）
@@ -229,6 +235,86 @@ class MyComponent : MonoBehaviour
 }
 ```
 
+## 集合池（CollectionPool）
+
+XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`**，无需手动清空。
+
+### 集合池 API
+
+| API                                       | 说明                                       |
+| ----------------------------------------- | ------------------------------------------ |
+| `ListPool<T>.Get()`                       | 获取 `List<T>`，池空时自动 `new List<T>()` |
+| `ListPool<T>.Return(list)`                | 归还 `List<T>`，自动 `Clear()`             |
+| `HashSetPool<T>.Get()`                    | 获取 `HashSet<T>`                          |
+| `HashSetPool<T>.Return(set)`              | 归还 `HashSet<T>`，自动 `Clear()`          |
+| `DictionaryPool<K,V>.Get()`               | 获取 `Dictionary<K,V>`                     |
+| `DictionaryPool<K,V>.Return(dict)`        | 归还 `Dictionary<K,V>`，自动 `Clear()`     |
+| `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                       |
+| `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`       |
+| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）            |
+| `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转     |
+| `CollectionPoolManager.ClearAll()`        | 一键清空所有合集池的闲置实例               |
+
+> **注意：** 泛型集合池按闭合泛型类型独立建池。例如 `ListPool<int>` 和 `ListPool<Vector3>` 是两个独立的池，仅在首次 `Get()` 时创建。
+
+### 使用示例 5：集合池
+
+```csharp
+using XFramework.XPool;
+
+// List<T> — 临时收集查询结果
+var hitResults = ListPool<int>.Get();
+Physics.OverlapSphereNonAlloc(position, radius, colliders);
+foreach (var col in colliders)
+    hitResults.Add(col.GetInstanceID());
+// 处理逻辑...
+ListPool<int>.Return(hitResults);
+
+// Dictionary<K,V> — 临时映射表
+var scoreMap = DictionaryPool<string, int>.Get();
+scoreMap["player_a"] = 100;
+scoreMap["player_b"] = 200;
+int aScore = scoreMap["player_a"];
+DictionaryPool<string, int>.Return(scoreMap);
+
+// HashSet<T> — 去重集合
+var uniqueIds = HashSetPool<int>.Get();
+uniqueIds.Add(1);
+uniqueIds.Add(1); // 去重
+HashSetPool<int>.Return(uniqueIds);
+
+// StringBuilder — 高频字符串拼接（UI / 日志）
+var sb = StringBuilderPool.Get();
+sb.Append("HP: ").Append(currentHp).Append("/").Append(maxHp);
+healthText.text = sb.ToString();
+StringBuilderPool.Return(sb);
+```
+
+### 示例 6：预配置集合池容量
+
+```csharp
+// 在初始化阶段（如 GameLauncher.Awake 中）预配置高频集合池
+ListPool<Vector3>.Configure(new PoolConfig { PrewarmSize = 8, MaxSize = 64 });
+DictionaryPool<string, object>.Configure(new PoolConfig { PrewarmSize = 4, MaxSize = 32 });
+StringBuilderPool.Configure(new PoolConfig { PrewarmSize = 4, MaxSize = 32 });
+
+// 之后在运行时代码中无感知使用
+var vecList = ListPool<Vector3>.Get();
+vecList.Add(transform.position);
+ListPool<Vector3>.Return(vecList);
+```
+
+### 示例 7：切场景时一键清空
+
+```csharp
+// 在 SceneManager.sceneUnloaded 回调中
+void OnSceneUnloaded(Scene scene)
+{
+    CollectionPoolManager.ClearAll();  // 清空所有被触碰过的集合池
+    PoolManager.ClearAll();            // 清空业务对象池
+}
+```
+
 ## 依赖
 
 - Unity 2022.3 LTS 或更新版本
@@ -236,6 +322,7 @@ class MyComponent : MonoBehaviour
 
 ## 版本记录
 
-| 版本  | 说明     |
-| ----- | -------- |
-| 1.0.0 | 初始版本 |
+| 版本  | 说明                                                                |
+| ----- | ------------------------------------------------------------------- |
+| 1.1.0 | 新增 CollectionPool 集合池（List/HashSet/Dictionary/StringBuilder） |
+| 1.0.0 | 初始版本                                                            |
