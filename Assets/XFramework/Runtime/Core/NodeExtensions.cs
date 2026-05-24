@@ -1,12 +1,13 @@
 using System;
 using System.Threading;
+using XFramework.XReactive;
 
 namespace XFramework.XCore
 {
 
     /// <summary>
-    /// <see cref="IDisposable"/> 的扩展方法，提供将订阅绑定到节点生命周期的便捷 API。
-    /// <para>配合 <see cref="BaseNode.Dispose()"/> 使用，节点销毁时自动释放所有绑定的订阅。</para>
+    /// 所有关于节点的扩展方法统一入口。
+    /// <para>包括生命周期绑定（AddTo）和消息订阅自动绑定（Subscribe）等。</para>
     /// </summary>
     public static class NodeExtensions
     {
@@ -47,5 +48,23 @@ namespace XFramework.XCore
         {
             return AddTo(disposable, token.DestroyCancellationToken);
         }
+
+        #region Subscribe (auto-bind to node lifecycle)
+
+        /// <summary>
+        /// 订阅指定类型的消息，订阅自动绑定到节点销毁时取消。
+        /// <para>要求调用者同时实现 <see cref="IMessageSubscriber"/> 和 <see cref="IDestroyCancellationToken"/>，
+        /// 订阅将在节点销毁时自动取消。</para>
+        /// </summary>
+        public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
+            where TMessage : class
+        {
+            var disposable = MessageManager.Subscribe<TMessage>(handler);
+            if (subscriber is IDestroyCancellationToken dt)
+                disposable.AddTo(dt.DestroyCancellationToken);
+            return disposable;
+        }
+
+        #endregion
     }
 }
