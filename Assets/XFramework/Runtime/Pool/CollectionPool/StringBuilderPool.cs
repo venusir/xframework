@@ -39,6 +39,16 @@ namespace XFramework.XPool
         }
 
         /// <summary>
+        /// 以 using 方式获取 <see cref="StringBuilder"/>，并在 using 块结束时自动归还（自动 Clear()）。
+        /// </summary>
+        /// <param name="sb">从池中取出的 StringBuilder 实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        public static PooledObject<StringBuilder> GetPooled(out StringBuilder sb)
+        {
+            return _pool.GetPooled(out sb);
+        }
+
+        /// <summary>
         /// 归还 <see cref="StringBuilder"/> 到池，归还前自动 <c>Clear()</c>。
         /// </summary>
         /// <param name="sb">要归还的 StringBuilder 实例</param>

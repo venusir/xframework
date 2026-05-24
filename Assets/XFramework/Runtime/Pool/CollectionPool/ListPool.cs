@@ -36,6 +36,16 @@ namespace XFramework.XPool
         }
 
         /// <summary>
+        /// 以 using 方式获取 <see cref="List{T}"/>，并在 using 块结束时自动归还（自动 Clear()）。
+        /// </summary>
+        /// <param name="list">从池中取出的列表实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        public static PooledObject<List<T>> GetPooled(out List<T> list)
+        {
+            return _pool.GetPooled(out list);
+        }
+
+        /// <summary>
         /// 归还 <see cref="List{T}"/> 到池，归还前自动 <c>Clear()</c>。
         /// </summary>
         /// <param name="list">要归还的列表实例</param>

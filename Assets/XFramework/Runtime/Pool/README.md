@@ -23,6 +23,7 @@ Runtime/Pool/
 │   └── CollectionPoolManager.cs   # 集合池统一管理器，一键 ClearAll()
 ├── IPoolable.cs                   # 生命周期回调接口（OnRent / OnReturn）
 ├── PoolConfig.cs                  # 配置结构体（值类型，零装箱）
+├── PooledObject.cs                # using 包装器（struct，零 GC）
 ├── IPool.cs                       # 池操作接口（用于 DI / 测试）
 ├── Pool.cs                        # 泛型池实现（核心）
 ├── PoolManager.cs                 # 全局静态管理器
@@ -68,20 +69,22 @@ class BulletSystem
 
 ## API 速查
 
-| API                                           | 说明                               |
-| --------------------------------------------- | ---------------------------------- |
-| `PoolManager.Get<T>()`                        | 从池获取实例，池空时 `new T()`     |
-| `PoolManager.Get<T>(generator)`               | 从池获取实例，自定义生成器         |
-| `PoolManager.Return(item)`                    | 归还实例到池                       |
-| `PoolManager.Configure<T>(config)`            | 预配置池（预热数量、最大容量）     |
-| `PoolManager.Configure<T>(config, generator)` | 预配置池 + 自定义生成器            |
-| `PoolManager.HasPool<T>()`                    | 指定类型的池是否已创建             |
-| `PoolManager.GetPool<T>()`                    | 获取 IPool<T> 实例（用于高级操作） |
-| `PoolManager.RemovePool<T>()`                 | 移除并清空指定类型的池             |
-| `PoolManager.ClearAll()`                      | 清空所有池                         |
-| `this.GetFromPool<T>()`                       | 扩展方法，从池获取                 |
-| `this.GetFromPool<T>(generator)`              | 扩展方法，从池获取（自定义生成器） |
-| `item.ReturnToPool()`                         | 扩展方法，归还实例                 |
+| API                                             | 说明                               |
+| ----------------------------------------------- | ---------------------------------- |
+| `PoolManager.Get<T>()`                          | 从池获取实例，池空时 `new T()`     |
+| `PoolManager.Get<T>(generator)`                 | 从池获取实例，自定义生成器         |
+| `PoolManager.GetPooled<T>(out item)`            | using 方式获取实例，块结束自动归还 |
+| `PoolManager.GetPooled<T>(generator, out item)` | using + 自定义生成器               |
+| `PoolManager.Return(item)`                      | 归还实例到池                       |
+| `PoolManager.Configure<T>(config)`              | 预配置池（预热数量、最大容量）     |
+| `PoolManager.Configure<T>(config, generator)`   | 预配置池 + 自定义生成器            |
+| `PoolManager.HasPool<T>()`                      | 指定类型的池是否已创建             |
+| `PoolManager.GetPool<T>()`                      | 获取 IPool<T> 实例（用于高级操作） |
+| `PoolManager.RemovePool<T>()`                   | 移除并清空指定类型的池             |
+| `PoolManager.ClearAll()`                        | 清空所有池                         |
+| `this.GetFromPool<T>()`                         | 扩展方法，从池获取                 |
+| `this.GetFromPool<T>(generator)`                | 扩展方法，从池获取（自定义生成器） |
+| `item.ReturnToPool()`                           | 扩展方法，归还实例                 |
 
 ## 配置
 
@@ -235,25 +238,72 @@ class MyComponent : MonoBehaviour
 }
 ```
 
+### 示例 4.5：using 语法自动归还（零 GC）
+
+```csharp
+using XFramework.XPool;
+
+// ===== PoolManager using 语法 =====
+void ProcessDamage(DamageMessage msg)
+{
+    // GetPooled 返回 PooledObject（struct），与 using 配合自动归还，零 GC
+    using (PoolManager.GetPooled<BulletData>(out var bullet))
+    {
+        bullet.Position = transform.position;
+        bullet.Velocity = transform.forward * 10f;
+        // 使用 bullet...
+    } // using 结束自动调用 PoolManager.Return(bullet)
+}
+
+// ===== 集合池 using 语法 =====
+List<Vector3> CalculatePath(Vector3 start, Vector3 end)
+{
+    var result = new List<Vector3>();
+    using (ListPool<Vector3>.GetPooled(out var waypoints))
+    {
+        // 临时计算路径点...
+        waypoints.Add(start);
+        waypoints.Add((start + end) * 0.5f);
+        waypoints.Add(end);
+        result.AddRange(waypoints);  // 取走需要的数据
+    } // using 结束自动 Clear() + Return()
+    return result;
+}
+
+// ===== StringBuilder using 语法（高频日志场景） =====
+void LogHealth(int currentHp, int maxHp)
+{
+    using (StringBuilderPool.GetPooled(out var sb))
+    {
+        sb.Append("HP: ").Append(currentHp).Append("/").Append(maxHp);
+        Debug.Log(sb.ToString());  // ToString() 后数据已取出
+    } // using 结束自动 Clear() + Return()
+}
+```
+
 ## 集合池（CollectionPool）
 
 XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`**，无需手动清空。
 
 ### 集合池 API
 
-| API                                       | 说明                                       |
-| ----------------------------------------- | ------------------------------------------ |
-| `ListPool<T>.Get()`                       | 获取 `List<T>`，池空时自动 `new List<T>()` |
-| `ListPool<T>.Return(list)`                | 归还 `List<T>`，自动 `Clear()`             |
-| `HashSetPool<T>.Get()`                    | 获取 `HashSet<T>`                          |
-| `HashSetPool<T>.Return(set)`              | 归还 `HashSet<T>`，自动 `Clear()`          |
-| `DictionaryPool<K,V>.Get()`               | 获取 `Dictionary<K,V>`                     |
-| `DictionaryPool<K,V>.Return(dict)`        | 归还 `Dictionary<K,V>`，自动 `Clear()`     |
-| `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                       |
-| `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`       |
-| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）            |
-| `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转     |
-| `CollectionPoolManager.ClearAll()`        | 一键清空所有合集池的闲置实例               |
+| API                                       | 说明                                             |
+| ----------------------------------------- | ------------------------------------------------ |
+| `ListPool<T>.Get()`                       | 获取 `List<T>`，池空时自动 `new List<T>()`       |
+| `ListPool<T>.GetPooled(out list)`         | using 方式获取 `List<T>`，块结束自动归还         |
+| `ListPool<T>.Return(list)`                | 归还 `List<T>`，自动 `Clear()`                   |
+| `HashSetPool<T>.Get()`                    | 获取 `HashSet<T>`                                |
+| `HashSetPool<T>.GetPooled(out set)`       | using 方式获取 `HashSet<T>`，块结束自动归还      |
+| `HashSetPool<T>.Return(set)`              | 归还 `HashSet<T>`，自动 `Clear()`                |
+| `DictionaryPool<K,V>.Get()`               | 获取 `Dictionary<K,V>`                           |
+| `DictionaryPool<K,V>.GetPooled(out dict)` | using 方式获取 `Dictionary<K,V>`，块结束自动归还 |
+| `DictionaryPool<K,V>.Return(dict)`        | 归还 `Dictionary<K,V>`，自动 `Clear()`           |
+| `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                             |
+| `StringBuilderPool.GetPooled(out sb)`     | using 方式获取 `StringBuilder`，块结束自动归还   |
+| `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`             |
+| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）                  |
+| `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转           |
+| `CollectionPoolManager.ClearAll()`        | 一键清空所有合集池的闲置实例                     |
 
 > **注意：** 泛型集合池按闭合泛型类型独立建池。例如 `ListPool<int>` 和 `ListPool<Vector3>` 是两个独立的池，仅在首次 `Get()` 时创建。
 

@@ -37,6 +37,16 @@ namespace XFramework.XPool
         }
 
         /// <summary>
+        /// 以 using 方式获取 <see cref="Dictionary{TKey, TValue}"/>，并在 using 块结束时自动归还（自动 Clear()）。
+        /// </summary>
+        /// <param name="dict">从池中取出的字典实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        public static PooledObject<Dictionary<TKey, TValue>> GetPooled(out Dictionary<TKey, TValue> dict)
+        {
+            return _pool.GetPooled(out dict);
+        }
+
+        /// <summary>
         /// 归还 <see cref="Dictionary{TKey, TValue}"/> 到池，归还前自动 <c>Clear()</c>。
         /// </summary>
         /// <param name="dict">要归还的字典实例</param>

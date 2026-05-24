@@ -13,6 +13,14 @@ namespace XFramework.XPool
         T Get();
 
         /// <summary>
+        /// 以 using 方式获取实例，并在 using 块结束时自动归还。
+        /// <para>返回的 <see cref="PooledObject{T}"/> 是值类型（struct），零 GC。</para>
+        /// </summary>
+        /// <param name="item">从池中取出的实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        PooledObject<T> GetPooled(out T item);
+
+        /// <summary>
         /// 归还实例。池满时（超出 <see cref="PoolConfig.MaxSize"/>）丢弃。
         /// </summary>
         void Return(T item);

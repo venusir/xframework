@@ -65,6 +65,30 @@ namespace XFramework.XPool
         }
 
         /// <summary>
+        /// 以 using 方式获取实例，并在 using 块结束时自动归还。
+        /// </summary>
+        /// <typeparam name="T">对象类型，需为引用类型且具有无参构造函数</typeparam>
+        /// <param name="item">从池中取出的实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        public static PooledObject<T> GetPooled<T>(out T item) where T : class, new()
+        {
+            return GetPool<T>().GetPooled(out item);
+        }
+
+        /// <summary>
+        /// 以 using 方式获取实例（自定义生成器），并在 using 块结束时自动归还。
+        /// </summary>
+        /// <typeparam name="T">对象类型，需为引用类型</typeparam>
+        /// <param name="generator">池空时的实例生成器</param>
+        /// <param name="item">从池中取出的实例</param>
+        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        public static PooledObject<T> GetPooled<T>(Func<T> generator, out T item) where T : class
+        {
+            var pool = GetOrCreatePool(generator, PoolConfig.Default);
+            return pool.GetPooled(out item);
+        }
+
+        /// <summary>
         /// 归还实例到池。
         /// <para>若类型从未注册（从未调用 <c>Get<T>()</c>），则静默忽略。</para>
         /// <para>归还后可安全将引用置 null，池会保留实例供后续复用。</para>
