@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using R3;
 using UnityEngine;
-using XFramework.XCore;
 
 namespace XFramework.XReactive
 {
@@ -248,16 +247,13 @@ namespace XFramework.XReactive
         internal static void Replace(MessageBroker broker) => _broker = broker;
 
         /// <summary>
-        /// 如果订阅者实现了 <see cref="IDestroyCancellationToken"/>，将订阅绑定到其生命周期，对象销毁时自动取消。
-        /// <para>通过 <see cref="NodeExtensions.AddTo{T}(T, CancellationToken)"/> 实现，复用统一的绑定逻辑。</para>
+        /// 将订阅绑定到订阅者的生命周期，对象销毁时自动取消。
+        /// <para>如果订阅者是 <see cref="MonoBehaviour"/>，使用其 <see cref="MonoBehaviour.destroyCancellationToken"/>。</para>
+        /// <para>其他生命周期类型（如节点树的 <c>IDestroyCancellationToken</c>）由 Core 层扩展方法负责桥接。</para>
         /// </summary>
         private static void TryBindToDestroy(object subscriber, IDisposable disposable)
         {
-            if (subscriber is IDestroyCancellationToken provider)
-            {
-                disposable.AddTo(provider.DestroyCancellationToken);
-            }
-            else if (subscriber is MonoBehaviour mono)
+            if (subscriber is MonoBehaviour mono)
             {
                 disposable.AddTo(mono.destroyCancellationToken);
             }
