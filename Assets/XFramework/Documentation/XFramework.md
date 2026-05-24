@@ -39,6 +39,7 @@ XFramework 是一个基于**节点树**的 Unity 组合式架构框架，完全�
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
 | **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式：消息总线、响应式属性、信号（基于 R3）                 |
+| **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
 | **Lock**         | `XFramework.XLock`         | [README](../Runtime/Lock/README.md)         | 逻辑锁：多类型锁叠加、全局锁、using 自动释放                  |
 
 ---
@@ -54,6 +55,7 @@ Assets/XFramework/
 │   ├── Localization/             # 本地化
 │   ├── Reactive/                 # 响应式（消息/R3）
 │   ├── Lock/                     # 逻辑锁
+│   ├── Update/                   # 统一更新调度
 │   └── GameLauncher.cs           # Unity ↔ 节点树生命周期桥接
 ├── Documentation/
 │   └── XFramework.md             # 本文档
