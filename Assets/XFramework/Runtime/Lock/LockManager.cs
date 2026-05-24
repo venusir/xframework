@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace XFramework.XLock
 {
@@ -20,6 +21,24 @@ namespace XFramework.XLock
         private sealed class GlobalSentinel : ILockable { }
 
         public static readonly ILockable Global = new GlobalSentinel();
+
+        #endregion
+
+        #region Auto Lifecycle
+
+        /// <summary>
+        /// 自动在游戏退出时清理锁状态，无需外部调用。
+        /// <para>在 Editor 中 Domain Reload 或停止播放时也会触发清理。</para>
+        /// </summary>
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#else
+        [RuntimeInitializeOnLoadMethod]
+#endif
+        static void AutoInit()
+        {
+            Application.quitting += Dispose;
+        }
 
         #endregion
 

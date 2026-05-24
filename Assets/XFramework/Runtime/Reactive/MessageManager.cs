@@ -128,6 +128,24 @@ namespace XFramework.XReactive
 
         #endregion
 
+        #region Auto Lifecycle
+
+        /// <summary>
+        /// 自动在游戏退出时清理消息总线，无需外部调用。
+        /// <para>在 Editor 中 Domain Reload 或停止播放时也会触发清理。</para>
+        /// </summary>
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#else
+        [RuntimeInitializeOnLoadMethod]
+#endif
+        static void AutoInit()
+        {
+            Application.quitting += Clear;
+        }
+
+        #endregion
+
         #region Extension Methods (for IMessagePublisher)
 
         /// <summary>发布指定类型的消息。</summary>

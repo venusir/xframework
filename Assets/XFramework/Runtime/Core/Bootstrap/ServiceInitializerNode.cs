@@ -1,16 +1,13 @@
 namespace XFramework.XCore
 {
     /// <summary>
-    /// 引导节点。在启动阶段统一管理所有非节点树的模块（如 AssetManager、LockManager、
-    /// MessageManager 等）的生命周期。
+    /// 服务初始化节点。在启动阶段统一管理需要参与加载管线的模块（如 AssetManager 等）的生命周期。
+    /// <para>LockManager、MessageManager 等纯静态服务已通过 [RuntimeInitializeOnLoadMethod] 自动管理生命周期，无需在此注册。</para>
     /// <para><see cref="AssetBootstrapNode"/> 实现了 <see cref="XLoader.ILoadable"/>，
     /// 在加载管线中异步初始化 <see cref="XAsset.AssetManager"/>。</para>
-    /// <para><see cref="LockBootstrapNode"/> 和 <see cref="MessageBootstrapNode"/> 仅用于
-    /// <see cref="OnDestroy"/> 时的资源清理，不参与加载管线。</para>
-    /// <para>模块销毁由子节点的 <see cref="OnDestroy"/> 自动处理，BootstrapNode 本身无需管理销毁逻辑。</para>
     /// <para>可子类化并重写 <see cref="OnRegisterModules"/> 来自定义启动模块列表。</para>
     /// </summary>
-    public class BootstrapNode : EntityNode
+    public class ServiceInitializerNode : EntityNode
     {
         #region Protected API
 
@@ -21,8 +18,6 @@ namespace XFramework.XCore
         protected virtual void OnRegisterModules()
         {
             AddNode<AssetBootstrapNode>();
-            AddNode<LockBootstrapNode>();
-            AddNode<MessageBootstrapNode>();
         }
 
         #endregion

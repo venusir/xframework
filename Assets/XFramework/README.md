@@ -1,13 +1,28 @@
 # XFramework
 
-XFramework 是一个基于树形结构的 Unity 节点系统框架。它提供了层级化的节点结构、对象池管理、组件式访问（EntityNode）、键值对访问（DictionaryNode）、LOD 分级的更新调度以及异步加载管线。
+XFramework 是一个为 Unity 设计的**组合式框架插件**。目标：**引入插件后即可直接编写 GamePlay 逻辑**，无需额外的框架配置。
+
+## 设计哲学
+
+- **组合优于继承** — EntityNode 按类型缓存子节点，类似 Unity 的 GetComponent/AddComponent
+- **对象池内置** — 所有节点通过 `NodeFactory` 创建，`Destroy()` 后自动回池
+- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，自动调整更新频率
+- **异步加载管线** — 节点实现 `ILoadable` 装载加载任务，`StartupAsync` 统一调度
+- **零配置初始化** — 纯静态服务（LockManager、MessageManager 等）通过 `[RuntimeInitializeOnLoadMethod]` 在游戏启动时自动就绪，无需手动初始化
+- **静态外观 + 接口 + 内部实现** — 非节点服务采用静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
 
 ## 核心架构
+
+XFramework 服务分为两条路径：
+
+### 路径 A：节点树（有状态 / 可组合服务）
 
 ```
 GameLauncher (MonoBehaviour)
     │
     ├── RootNode ─── 节点树入口
+    │       │
+    │       ├── ServiceInitializerNode ─── 按需挂载的初始化节点（如 AssetBootstrapNode）
     │       │
     │       ├── EntityNode ─── 组件模式（按类型缓存子节点）
     │       │       ├── LeafNode (行为/数据)
@@ -15,69 +30,56 @@ GameLauncher (MonoBehaviour)
     │       │
     │       └── DictionaryNode<TKey> ─── 键值对模式
     │
-    ├── NodeUpdater ─── 自动注册/注销 IUpdateable 节点
-    │       └── Updater ─── LOD 时间切片调度
-    │
-    └── NodeFactory ─── 统一创建/回收，自动对象池
+    └── UpdateNode ─── 自动注册/注销 IUpdateable 节点 LOD 时间切片调度
 ```
 
-## 设计哲学
+### 路径 B：静态外观（无状态 / 全局服务）
 
-- **组合优于继承** — EntityNode 按类型缓存子节点，类似 Unity 的 GetComponent/AddComponent
-- **对象池内置** — 所有节点通过 `NodeFactory` 创建，`Destroy()` 后自动回池
-- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，自动调整更新频率
-- **异步加载管线** — 节点实现 `ILoadableProvider` 装载加载任务，`StartupAsync` 统一调度
+各服务独立管理自身生命周期，无需统一的中心化入口：
+
+| 服务                    | 初始化方式                                   | 说明                                                |
+| ----------------------- | -------------------------------------------- | --------------------------------------------------- |
+| **LockManager**         | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
+| **MessageManager**      | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
+| **FileManager**         | 首次调用时懒加载（自动选平台 Provider）      | 零配置；也可显式 `Initialize()` 注入自定义 Provider |
+| **UIManager**           | `UIManager.Initialize(canvasTransform)`      | 需传入 Canvas 根节点                                |
+| **UIHudManager**        | 随 UIManager 自动就绪                        | —                                                   |
+| **UITipManager**        | 随 UIManager 自动就绪                        | —                                                   |
+| **LocalizationManager** | `LocalizationManager.Initialize(lang, data)` | 需传入语言数据                                      |
+
+> **关键设计决策：** 纯静态服务不依赖节点树生命周期。无需参数的服务通过 `[RuntimeInitializeOnLoadMethod]` 或懒加载自动就绪；需要参数的服务由调用方显式 `Initialize()`。不存在统一的中心化入口。节点树仅承载需要生命周期插件的服务（如 AssetManager）。
 
 ## 快速开始
 
-### 1. 挂载 GameLauncher
-
-在场景中创建一个 GameObject，挂载 `GameLauncher` 脚本。
-
-### 2. 定义节点
+### 方式一：零配置使用
 
 ```csharp
-using XFramework;
+// 无需手动初始化任何服务！LockManager、MessageManager 已自动就绪。
 
-public class PlayerNode : LeafNode
+// 直接使用消息系统
+MessageManager.Subscribe<PlayerDiedMessage>(msg =>
 {
-    int _hp;
+    Debug.Log($"Player {msg.PlayerId} died!");
+});
 
-    protected override void OnInit(object arg)
-    {
-        if (arg is int hp) _hp = hp;
-    }
-
-    protected override void OnAwake()
-    {
-        UnityEngine.Debug.Log($"PlayerNode Awake, HP: {_hp}");
-    }
+// 直接使用锁系统
+using (LockManager.AddLock(player, LockType.InputBlock, this))
+{
+    // 此时玩家输入被锁
 }
 ```
 
-### 3. 在 GameLauncher 中构建节点树
+### 方式二：完整节点树
 
 ```csharp
+// 在场景中挂载 GameLauncher 组件
+
 public class MyGameLauncher : GameLauncher
 {
     async void Start()
     {
-        // 添加子节点
         var player = _root.AddNode<PlayerNode>(100);
         await _root.StartupAsync();
-    }
-}
-```
-
-### 4. 实现更新
-
-```csharp
-public class MovementNode : LeafNode, IUpdateable
-{
-    public UpdateLOD OnUpdate(float deltaTime, float time)
-    {
-        // 每帧更新，返回 EveryFrame 保持每帧更新
-        return UpdateLOD.EveryFrame;
     }
 }
 ```
