@@ -67,13 +67,6 @@ namespace XFramework.XConfig
             }
         }
 
-        async UniTask<Dictionary<Type, object>> IConfigLoader.LoadTablesAsync<TTables>(string assetPath)
-        {
-            throw new ConfigException(
-                $"{nameof(JsonLoader)} does not support loading Luban Tables. " +
-                $"Use {nameof(ConfigFormat.Luban)} for Luban-generated Tables.");
-        }
-
         #endregion
 
         #region Internal

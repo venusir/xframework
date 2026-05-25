@@ -26,34 +26,12 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// Loader 实例缓存，按 <see cref="ConfigFormat"/> 索引。
-        /// <para>LubanLoader 通过反射动态解析，避免主程序集硬依赖 Luban 程序集。</para>
         /// </summary>
         private static readonly Dictionary<ConfigFormat, IConfigLoader> Loaders = new()
         {
             { ConfigFormat.Json, new JsonLoader() },
             { ConfigFormat.ScriptableObject, new ScriptableObjectLoader() },
-            { ConfigFormat.Luban, TryCreateLubanLoader() },
         };
-
-        /// <summary>
-        /// 通过反射尝试创建 LubanLoader 实例。
-        /// <para>如果未安装 Luban（缺少 <c>Venusy609.Xframework.Luban</c> 程序集），
-        /// 则返回 <c>null</c>，后续 Luban 操作会抛出明确的错误信息。</para>
-        /// </summary>
-        private static IConfigLoader TryCreateLubanLoader()
-        {
-            try
-            {
-                var type = Type.GetType("XFramework.XConfig.LubanLoader, Venusy609.Xframework.Luban");
-                if (type != null && typeof(IConfigLoader).IsAssignableFrom(type))
-                    return (IConfigLoader)Activator.CreateInstance(type);
-            }
-            catch
-            {
-                // Silently fail — 将返回 null
-            }
-            return null;
-        }
 
         #endregion
 
@@ -119,57 +97,49 @@ namespace XFramework.XConfig
 
         #endregion
 
-        #region Load (Luban Tables)
+        #region Register (第三方注入)
 
         /// <summary>
-        /// 加载 Luban 生成的 Tables（完整格式）。
-        /// <para>自动反射提取所有 Tb 表，逐表写入 <c>_tables</c>。重复调用时跳过已加载的表。</para>
-        /// <para>若未安装 Luban 程序集则抛出 <see cref="ConfigException"/>。</para>
+        /// 注册已反序列化的 Table 数据到配置管理器。
+        /// <para>第三方使用 Luban / protobuf / MessagePack 等工具自行反序列化后，
+        /// 调用此方法将数据注入，后续可通过 <see cref="Get{T}(int)"/> 等接口统一查询。</para>
         /// </summary>
-        /// <typeparam name="TTables">Luban 生成的 Tables 类型。</typeparam>
-        /// <param name="assetPath">Tables 二进制文件的资源路径。</param>
-        /// <exception cref="ConfigException">Luban 未安装或加载失败时抛出。</exception>
-        public async UniTask LoadAsync<TTables>(string assetPath)
-            where TTables : class, new()
+        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
+        /// <param name="data">按 Id 索引的字典。</param>
+        public void RegisterTable<T>(Dictionary<int, T> data) where T : IConfigRow
         {
-            if (string.IsNullOrEmpty(assetPath))
+            if (data == null)
                 throw new ConfigException(
-                    $"assetPath must be provided when loading Luban Tables " +
-                    $"'{typeof(TTables).Name}' for the first time.");
+                    $"Cannot register null data for Table '{typeof(T).Name}'.");
+            _tables[typeof(T)] = data;
+        }
 
-            var loader = Loaders[ConfigFormat.Luban];
-            if (loader == null)
+        /// <summary>
+        /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
+        /// </summary>
+        /// <param name="rowType">配置行类型。</param>
+        /// <param name="data">按 Id 索引的 <see cref="System.Collections.IDictionary"/>。</param>
+        public void RegisterTable(Type rowType, System.Collections.IDictionary data)
+        {
+            if (rowType == null)
+                throw new ConfigException("rowType cannot be null.");
+            if (data == null)
                 throw new ConfigException(
-                    "LubanLoader is not available. To use this feature, " +
-                    "install the Luban package and generate code with XFramework's Luban templates. " +
-                    "See README for details.");
+                    $"Cannot register null data for Table '{rowType.Name}'.");
+            _tables[rowType] = data;
+        }
 
-            try
-            {
-                var allTables = await loader.LoadTablesAsync<TTables>(assetPath);
-                if (allTables == null || allTables.Count == 0)
-                    throw new ConfigException(
-                        $"Luban Tables '{typeof(TTables).Name}' from '{assetPath}' " +
-                        "produced no table data.");
-
-                // 逐表写入 _tables，已加载的表跳过
-                foreach (var kv in allTables)
-                {
-                    var rowType = kv.Key;
-                    if (!_tables.ContainsKey(rowType))
-                        _tables[rowType] = kv.Value;
-                }
-            }
-            catch (ConfigException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
+        /// <summary>
+        /// 注册 Global 配置单例到配置管理器。
+        /// </summary>
+        /// <typeparam name="T">配置类型，必须为 class。</typeparam>
+        /// <param name="config">配置单例实例。</param>
+        public void RegisterGlobal<T>(T config) where T : class
+        {
+            if (config == null)
                 throw new ConfigException(
-                    $"Failed to load Luban Tables '{typeof(TTables).Name}' " +
-                    $"from '{assetPath}': {ex.Message}", ex);
-            }
+                    $"Cannot register null config for Global '{typeof(T).Name}'.");
+            _globals[typeof(T)] = config;
         }
 
         #endregion

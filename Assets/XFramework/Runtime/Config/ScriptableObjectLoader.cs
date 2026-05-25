@@ -43,13 +43,6 @@ namespace XFramework.XConfig
                 $"Failed to load Global SO config '{typeof(T).Name}' from '{assetPath}': loaded object is not of expected type.");
         }
 
-        async UniTask<Dictionary<Type, object>> IConfigLoader.LoadTablesAsync<TTables>(string assetPath)
-        {
-            throw new ConfigException(
-                $"{nameof(ScriptableObjectLoader)} does not support loading Luban Tables. " +
-                $"Use {nameof(ConfigFormat.Luban)} for Luban-generated Tables.");
-        }
-
         #endregion
 
         #region Internal

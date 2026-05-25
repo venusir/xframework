@@ -1,67 +1,71 @@
-# 配置管理（ConfigManager）
+# Config 配置系统
 
-`ConfigManager` 提供统一的配置加载与查询接口，支持三种配置格式。
+## 概述
 
-## 快速使用
+`XConfig` 提供统一的配置加载与查询接口。内置 JSON / ScriptableObject 格式支持，并可通过 `RegisterTable<T>` / `RegisterGlobal<T>` 注入其他格式（Luban、protobuf 等）的配置数据，保持查询 API 一致。
+
+## 基本使用
 
 ```csharp
-using XFramework.XConfig;
+// 1. 初始化
+ConfigManager.Initialize();
 
-// 1. 加载配置（异步）
+// 2. 加载 JSON 表
 await ConfigManager.PreloadTableAsync<ItemRow>("config/items");
 
-// 2. 查询配置
+// 3. 查询
 var item = ConfigManager.Get<ItemRow>(1001);
-var allItems = ConfigManager.GetAll<ItemRow>();
-var hero = ConfigManager.GetFirst<HeroRow>(h => h.Name == "mage");
+Debug.Log(item.Name);
 ```
 
-## 支持格式
+## 核心接口
 
-| 格式                 | 用途                | 示例                                                                    |
-| -------------------- | ------------------- | ----------------------------------------------------------------------- |
-| **JSON**             | 本地测试 / 快速原型 | `.json` 文件 → `TextAsset` → `JsonUtility.FromJson`                     |
-| **ScriptableObject** | Editor 可视化编辑   | `ScriptableObject` 资产，运行时零解析开销                               |
-| **Luban**            | 生产级大型配置      | Luban 工具链导出 `.bytes` → 原生反序列化，支持嵌套 bean、多态等高级特性 |
+| 方法                                   | 说明                 |
+| -------------------------------------- | -------------------- |
+| `Initialize()`                         | 初始化配置管理器     |
+| `Destroy()`                            | 销毁并释放所有配置   |
+| `PreloadTableAsync<T>(path, format?)`  | 预加载 Table 配置    |
+| `PreloadGlobalAsync<T>(path, format?)` | 预加载 Global 配置   |
+| `Get<T>(id)`                           | 按 Id 查询 Table 行  |
+| `TryGet<T>(id, out T)`                 | 安全查询 Table 行    |
+| `GetAll<T>()`                          | 获取 Table 所有行    |
+| `Contains<T>(id)`                      | 是否存在某 Id        |
+| `Count<T>()`                           | Table 行数           |
+| `GetGlobal<T>()`                       | 获取 Global 配置     |
+| `TryGetGlobal<T>(out T)`               | 安全获取 Global 配置 |
+| `RegisterTable<T>(Dictionary<int,T>)`  | 注入 Table 数据      |
+| `RegisterGlobal<T>(T config)`          | 注入 Global 数据     |
+| `Unload<T>()`                          | 卸载指定配置         |
 
-## 自定义格式
+## 扩展自定义格式
 
-实现 `IConfigLoader` 接口并通过 `ConfigManager.SetLoader()` 注入即可。
-
----
-
-## Luban 集成（可选）
-
-Luban 集成由独立程序集 `Venusy609.Xframework.Luban` 提供。**不使用 Luban 的项目直接删除 `Config/Luban/` 目录即可，零副作用。**
-
-### 安装 Luban
-
-```bash
-dotnet tool install -g Luban.Tool
-```
-
-或在项目 `NuGet.Config` 中配置 Bright.Serialization 包源。
-
-### 使用步骤
-
-1. **配置 Luban 项目**（`.conf` / `.xml`），参考 [Luban 官方文档](https://luban.doc.code-philosophy.com/)
-2. **使用 XFramework 提供的模板**生成代码（模板位于 `Editor/LubanTemplates/`）
-   - `LubanRowTemplate.cs.txt` — Row 类型模板（实现 `IConfigRow`）
-   - `LubanTablesTemplate.cs.txt` — Tables 入口类型模板
-3. **生成配置二进制**：`luban --conf luban.conf`
-4. **将 `.bytes` 文件放入 YooAsset 资源包**
-5. **一行代码加载**：
+第一步：定义行类型（实现 `IConfigRow`）：
 
 ```csharp
-using XFramework.XConfig;
-
-// 加载 Luban 生成的完整 Tables
-await ConfigManager.LoadAsync<GameTables>("config/tables");
-
-// 加载后，所有 Row 类型自动注册，与 JSON/SO 使用方式完全一致
-var item = ConfigManager.Get<ItemRow>(1001);
+public partial class MyRow : IConfigRow
+{
+    public int Id { get; set; }
+    public int Value;
+}
 ```
 
-### 程序集隔离
+第二步：自行反序列化后注册：
 
-LubanLoader 位于独立程序集 `Venusy609.Xframework.Luban.asmdef`，仅引用 `Venusy609.Xframework`、`UniTask` 和 `YooAsset`。主框架通过反射动态发现 LubanLoader——如果程序集不存在，ConfigManager 自动跳过，不报任何异常。
+```csharp
+// 例如使用 Luban 的 ByteBuf 反序列化
+var tables = new GameTables(new ByteBuf(bytes));
+
+// 遍历 Tb 表注册到 ConfigManager
+ConfigManager.RegisterTable(tables.TbItem.DataList.ToDictionary(r => r.Id));
+ConfigManager.RegisterTable(tables.TbHero.DataList.ToDictionary(r => r.Id));
+```
+
+第三步：使用统一接口查询：
+
+```csharp
+var item = ConfigManager.Get<ItemRow>(1001);
+var hero = ConfigManager.Get<HeroRow>(1);
+```
+
+- 如果仅需注入单个 Global 配置，使用 `ConfigManager.RegisterGlobal(config)`。
+- 如果使用静态反射遍历所有 Tb 表，可使用非泛型重载 `RegisterTable(Type, IDictionary)`。

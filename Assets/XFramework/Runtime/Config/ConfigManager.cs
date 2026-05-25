@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -9,8 +10,9 @@ namespace XFramework.XConfig
     /// 全局配置管理器外观。提供静态方法直接访问配置数据的注册、加载、查询和卸载。
     /// <para>内部持有 <see cref="ConfigManagerImpl"/> 实例，所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 初始化（无参，仅创建内部实例）。</para>
-    /// <para>支持三种配置格式：<see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/>、
-    /// <see cref="ConfigFormat.Luban"/>，由各 <see cref="IConfigLoader"/> 实现加载。</para>
+    /// <para>内置 <see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/> 加载器。
+    /// 第三方可自行实现 <see cref="IConfigLoader"/> 并调用 <see cref="RegisterTable{T}"/> /
+    /// <see cref="RegisterGlobal{T}"/> 注入自定义格式的配置数据。</para>
     /// <para>Table 类型按 <see cref="IConfigRow.Id"/> 索引查询，Global 类型直接获取单例。</para>
     /// <para>所有配置加载后常驻内存，不进行 LRU 淘汰（配置数据体量小，不会造成显著内存压力），
     /// 仅在显式调用 <see cref="Unload{T}"/> 时释放。</para>
@@ -116,34 +118,50 @@ namespace XFramework.XConfig
 
         #endregion
 
-        #region Public API — Load (Luban Tables)
+        #region Public API — Register (第三方注入)
 
         /// <summary>
-        /// 加载 Luban 生成的 Tables（完整格式）。
-        /// <para>一次加载所有表，自动按 Row 类型注册到 ConfigManager 中。
-        /// 后续通过 <see cref="Get{T}(int)"/>、<see cref="TryGet{T}(int, out T)"/> 等查询接口直接使用。</para>
-        /// <para>重复调用时，跳过已加载的表。</para>
-        /// <para>若 XFramework 的 Luban 程序集未安装，则抛出 <see cref="ConfigException"/>。</para>
+        /// 注册已反序列化的 Table 数据到配置管理器。
+        /// <para>第三方使用 Luban / protobuf / MessagePack 等工具自行反序列化后，
+        /// 调用此方法将数据注入，后续可通过 <see cref="Get{T}(int)"/> 等接口统一查询。</para>
+        /// <para>注意：LineType 需实现 <see cref="IConfigRow"/> 接口。</para>
         /// </summary>
-        /// <typeparam name="TTables">Luban 生成的 Tables 类型。</typeparam>
-        /// <param name="assetPath">Tables 二进制文件的资源路径。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
-        /// <exception cref="ConfigException">Luban 未安装或加载失败时抛出。</exception>
+        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
+        /// <param name="data">按 Id 索引的 Dictionary。</param>
         /// <example>
         /// <code>
-        /// // 加载 Luban 生成的全部配置表
-        /// await ConfigManager.LoadAsync<GameTables>("config/tables");
-        ///
-        /// // 按 Row 类型直接查询
-        /// var item = ConfigManager.Get<ItemRow>(1001);
-        /// var hero = ConfigManager.Get<HeroRow>(1);
+        /// // Luban 示例：反序列化后注册
+        /// var tables = new GameTables(byteBuf);
+        /// ConfigManager.RegisterTable(tables.TbItem.DataList.ToDictionary(r => r.Id));
+        /// // 之后可通过 ConfigManager.Get<T>(id) 查询
         /// </code>
         /// </example>
-        public static async UniTask LoadAsync<TTables>(string assetPath, CancellationToken cancellationToken = default)
-            where TTables : class, new()
+        public static void RegisterTable<T>(Dictionary<int, T> data) where T : IConfigRow
         {
             EnsureGlobalInitialized();
-            await _instance.LoadAsync<TTables>(assetPath).AttachExternalCancellation(cancellationToken);
+            _instance.RegisterTable(data);
+        }
+
+        /// <summary>
+        /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
+        /// </summary>
+        /// <param name="rowType">配置行类型。</param>
+        /// <param name="data">按 Id 索引的 <see cref="System.Collections.IDictionary"/>。</param>
+        public static void RegisterTable(Type rowType, System.Collections.IDictionary data)
+        {
+            EnsureGlobalInitialized();
+            _instance.RegisterTable(rowType, data);
+        }
+
+        /// <summary>
+        /// 注册 Global 配置单例到配置管理器。
+        /// </summary>
+        /// <typeparam name="T">配置类型，必须为 class。</typeparam>
+        /// <param name="config">配置单例实例。</param>
+        public static void RegisterGlobal<T>(T config) where T : class
+        {
+            EnsureGlobalInitialized();
+            _instance.RegisterGlobal(config);
         }
 
         #endregion
