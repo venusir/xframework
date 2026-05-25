@@ -6,11 +6,11 @@ using UnityEngine;
 namespace XFramework.XConfig
 {
     /// <summary>
-    /// <see cref="ConfigManager"/> 的内部实现，管理所有配置的注册、加载、查询和卸载。
+    /// <see cref="IConfigManager"/> 的默认实现，管理所有配置的注册、加载、查询和卸载。
     /// <para>Table 类型缓存为 <c>Dictionary<TKey, T></c>，Global 类型缓存为单个 <c>T</c> 实例。</para>
     /// <para>所有配置加载后常驻内存，不进行 LRU 淘汰（配置数据体量小，不会造成显著内存压力）。</para>
     /// </summary>
-    internal sealed class ConfigManagerImpl
+    internal sealed class ConfigManagerImpl : IConfigManager
     {
         #region Fields
 

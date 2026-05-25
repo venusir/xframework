@@ -8,7 +8,7 @@ namespace XFramework.XConfig
 {
     /// <summary>
     /// 全局配置管理器外观。提供静态方法直接访问配置数据的注册、加载、查询和卸载。
-    /// <para>内部持有 <see cref="ConfigManagerImpl"/> 实例，所有调用委托到该实例。</para>
+    /// <para>内部持有 <see cref="IConfigManager"/> 实例（<see cref="ConfigManagerImpl"/>），所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 初始化（无参，仅创建内部实例）。</para>
     /// <para>内置 <see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/> 加载器。
     /// 第三方可自行实现 <see cref="IConfigLoader"/> 并调用 <see cref="RegisterTable{T, TKey}(Dictionary{TKey, T})"/> /
@@ -41,7 +41,7 @@ namespace XFramework.XConfig
     {
         #region Static — Global Singleton
 
-        private static ConfigManagerImpl _instance;
+        private static IConfigManager _instance;
         private static bool _instanceInitialized;
 
         /// <summary>
