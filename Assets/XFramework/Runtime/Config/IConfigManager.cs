@@ -13,16 +13,16 @@ namespace XFramework.XConfig
         #region Preload
 
         /// <summary>
-        /// 预加载 Table 类型的配置。首次调用时自动注册并加载。
-        /// <para>如果已加载则直接返回（传入的 <paramref name="assetPath"/> 在重复调用时可选不传）。</para>
+        /// 预加载 Table 类型的配置。主键类型由 <typeparamref name="T"/> 通过反射自动提取。
+        /// <para>首次调用时自动注册并加载，已加载则直接返回现有包装器。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="format">配置格式，默认 JSON。</param>
-        /// <exception cref="ConfigException">assetPath 为空或加载失败时抛出。</exception>
-        UniTask PreloadTableAsync<T, TKey>(string assetPath, ConfigFormat format = ConfigFormat.Json)
-            where T : IConfigRow<TKey>, new();
+        /// <returns>可缓存的 <see cref="ConfigTable{T}"/> 只读包装器，通过 .Get(key) / .TryGet(key) 查询。</returns>
+        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json)
+            where T : IConfigRow, new();
 
         /// <summary>
         /// 预加载 Global 类型的配置。首次调用时自动注册并加载。
@@ -38,16 +38,15 @@ namespace XFramework.XConfig
         /// <summary>
         /// 使用自定义 Loader 预加载 Table 配置。
         /// <para>Loader 为临时策略对象，调用后不被持有，可由 GC 回收。</para>
-        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。
-        /// 对于一文件多表的格式（如 Luban），请使用 <see cref="RegisterTable{T, TKey}(Dictionary{TKey, T})"/>。</para>
+        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="loader">自定义配置加载器。</param>
-        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
-        UniTask PreloadTableAsync<T, TKey>(string assetPath, IConfigLoader loader)
-            where T : IConfigRow<TKey>, new();
+        /// <returns>可缓存的 <see cref="ConfigTable{T}"/> 只读包装器。</returns>
+        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
+            where T : IConfigRow, new();
 
         /// <summary>
         /// 使用自定义 Loader 预加载 Global 配置。
@@ -67,13 +66,19 @@ namespace XFramework.XConfig
         /// <summary>
         /// 注册已反序列化的 Table 数据到配置管理器。
         /// <para>第三方使用 Luban / protobuf / MessagePack 等工具自行反序列化后，
-        /// 调用此方法将数据注入，后续可通过 <see cref="Get{T, TKey}(TKey)"/> 等接口统一查询。</para>
+        /// 构造 <see cref="ConfigTable{T}"/> 并调用此方法注入，后续可通过 <see cref="GetTable{T}"/> 统一查询。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="data">按 Id 索引的字典。</param>
-        /// <exception cref="ConfigException">data 为 null 时抛出。</exception>
-        void RegisterTable<T, TKey>(Dictionary<TKey, T> data) where T : IConfigRow<TKey>;
+        /// <param name="table">Table 包装器实例。</param>
+        /// <exception cref="ConfigException">table 为 null 时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
+        /// var table = new ConfigTable<ItemRow>(dict, dict.Count);
+        /// ConfigManager.RegisterTable(table);
+        /// </code>
+        /// </example>
+        void RegisterTable<T>(ConfigTable<T> table);
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
@@ -111,53 +116,6 @@ namespace XFramework.XConfig
         /// <param name="table">输出的包装器实例。</param>
         /// <returns>Table 已加载时返回 <c>true</c>。</returns>
         bool TryGetTable<T>(out ConfigTable<T> table);
-
-        /// <summary>
-        /// 获取 Table 中指定 Id 的配置行。不存在时抛异常。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <returns>对应的配置行实例。</returns>
-        /// <exception cref="ConfigException">Table 未加载或 Id 不存在时抛出。</exception>
-        T Get<T, TKey>(TKey id) where T : IConfigRow<TKey>;
-
-        /// <summary>
-        /// 安全查询 Table 中指定 Id 的配置行。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <param name="row">输出的配置行实例，如果不存在则为 <c>default</c>。</param>
-        /// <returns>成功获取时返回 <c>true</c>。</returns>
-        bool TryGet<T, TKey>(TKey id, out T row) where T : IConfigRow<TKey>;
-
-        /// <summary>
-        /// 获取 Table 中所有配置行（复制为新数组）。
-        /// <para>会产生少量 GC（数组分配），频繁调用请使用 <see cref="Get{T, TKey}(TKey)"/> 按 Id 查询。</para>
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <returns>所有配置行的数组。</returns>
-        /// <exception cref="ConfigException">Table 未加载时抛出。</exception>
-        T[] GetAll<T, TKey>() where T : IConfigRow<TKey>;
-
-        /// <summary>
-        /// 判断 Table 中是否包含指定 Id 的配置行。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <returns>存在时返回 <c>true</c>。</returns>
-        bool Contains<T, TKey>(TKey id) where T : IConfigRow<TKey>;
-
-        /// <summary>
-        /// 获取 Table 中配置行的数量。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <returns>配置行数量，未加载时返回 0。</returns>
-        int Count<T, TKey>() where T : IConfigRow<TKey>;
 
         #endregion
 

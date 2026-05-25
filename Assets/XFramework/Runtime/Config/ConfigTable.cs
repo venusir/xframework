@@ -14,9 +14,12 @@ namespace XFramework.XConfig
         private readonly int _count;
 
         /// <summary>
-        /// 由 <see cref="ConfigManagerImpl"/> 内部构造，外部不应直接创建。
+        /// 构造 <see cref="ConfigTable{T}"/>。
+        /// <para>通常由框架内部创建，第三方注入数据时也可直接构造（如 Luban / protobuf 等自定义格式）。</para>
         /// </summary>
-        internal ConfigTable(object dict, int count)
+        /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，装箱为 object）。</param>
+        /// <param name="count">字典中元素数量。</param>
+        public ConfigTable(object dict, int count)
         {
             _dict = dict;
             _count = count;

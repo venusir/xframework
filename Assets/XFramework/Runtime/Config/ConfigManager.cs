@@ -11,9 +11,10 @@ namespace XFramework.XConfig
     /// <para>内部持有 <see cref="IConfigManager"/> 实例（<see cref="ConfigManagerImpl"/>），所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 初始化（无参，仅创建内部实例）。</para>
     /// <para>内置 <see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/> 加载器。
-    /// 第三方可自行实现 <see cref="IConfigLoader"/> 并调用 <see cref="RegisterTable{T, TKey}(Dictionary{TKey, T})"/> /
+    /// 第三方可自行实现 <see cref="IConfigLoader"/> 并调用 <see cref="RegisterTable{T}(ConfigTable{T})"/> /
     /// <see cref="RegisterGlobal{T}"/> 注入自定义格式的配置数据。</para>
-    /// <para>Table 类型按 <see cref="IConfigRow{TKey}.Id"/> 索引查询，Global 类型直接获取单例。</para>
+    /// <para>Table 类型通过 <see cref="ConfigTable{T}"/> 包装器查询，主键类型由实参自动推断。
+    /// Global 类型直接获取单例。</para>
     /// <para>所有配置加载后常驻内存，不进行 LRU 淘汰（配置数据体量小，不会造成显著内存压力），
     /// 仅在显式调用 <see cref="Unload{T}"/> 时释放。</para>
     /// </summary>
@@ -30,10 +31,10 @@ namespace XFramework.XConfig
     /// 
     /// // 2. 初始化 & 预加载
     /// ConfigManager.Initialize();
-    /// await ConfigManager.PreloadTableAsync<ItemRow, int>("config/items");
+    /// var items = await ConfigManager.PreloadTableAsync<ItemRow>("config/items");
     /// 
-    /// // 3. 查询
-    /// var row = ConfigManager.Get<ItemRow, int>(1001);
+    /// // 3. 查询（TKey 由实参自动推断）
+    /// var row = items.Get(1001);
     /// Debug.Log($"Item: {row.Name}, Price: {row.Price}");
     /// </code>
     /// </example>
@@ -51,7 +52,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 初始化全局配置管理器（无参，仅创建内部实现实例）。
-        /// <para>初始化后可立即调用 <see cref="PreloadTableAsync{T, TKey}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 加载配置。</para>
+        /// <para>初始化后可立即调用 <see cref="PreloadTableAsync{T}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 加载配置。</para>
         /// </summary>
         public static void Initialize()
         {
@@ -83,26 +84,32 @@ namespace XFramework.XConfig
         #region Public API — Preload
 
         /// <summary>
-        /// 预加载 Table 类型的配置。如果已加载则直接返回。
+        /// 预加载 Table 类型的配置。主键类型由 <typeparamref name="T"/> 通过反射自动提取。
         /// <para>首次调用时需传入 <paramref name="assetPath"/> 指定资源位置；已加载后重复调用可省略路径。</para>
+        /// <para>返回 <see cref="ConfigTable{T}"/> 包装器，后续通过 .Get(key) / .TryGet(key, out) 直接按 Id 查询，完全无需关心 TKey。</para>
         /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">资源路径（YooAsset 地址），首次加载时必填。</param>
         /// <param name="format">配置格式，默认 <see cref="ConfigFormat.Json"/>。</param>
         /// <param name="cancellationToken">取消令牌（可选）。</param>
-        /// <exception cref="ConfigException">assetPath 为空或加载失败时抛出。</exception>
-        public static async UniTask PreloadTableAsync<T, TKey>(string assetPath, ConfigFormat format = ConfigFormat.Json, CancellationToken cancellationToken = default)
-            where T : IConfigRow<TKey>, new()
+        /// <returns>Table 包装器实例。</returns>
+        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// var items = await ConfigManager.PreloadTableAsync<ItemRow>("config/items");
+        /// var row = items.Get(1001); // TKey 自动推断为 int
+        /// </code>
+        /// </example>
+        public static async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json, CancellationToken cancellationToken = default)
+            where T : IConfigRow, new()
         {
             EnsureGlobalInitialized();
-            await _instance.PreloadTableAsync<T, TKey>(assetPath, format).AttachExternalCancellation(cancellationToken);
+            return await _instance.PreloadTableAsync<T>(assetPath, format).AttachExternalCancellation(cancellationToken);
         }
 
         /// <summary>
         /// 预加载 Global 类型的配置。如果已加载则直接返回。
-        /// <para>首次调用时需传入 <paramref name="assetPath"/> 指定资源位置；已加载后重复调用可省略路径。</para>
         /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
@@ -120,20 +127,20 @@ namespace XFramework.XConfig
         /// <summary>
         /// 使用自定义 Loader 预加载 Table 配置。
         /// <para>Loader 为临时策略对象，框架不持有引用，调用后可由 GC 回收。</para>
-        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。
-        /// 对于一文件多表的格式（如 Luban），请使用 <see cref="RegisterTable{T, TKey}(Dictionary{TKey, T})"/>。</para>
+        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。</para>
+        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
         /// <param name="loader">自定义加载器实例。</param>
         /// <param name="cancellationToken">取消令牌（可选）。</param>
-        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
-        public static async UniTask PreloadTableAsync<T, TKey>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
-            where T : IConfigRow<TKey>, new()
+        /// <returns>Table 包装器实例。</returns>
+        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        public static async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
+            where T : IConfigRow, new()
         {
             EnsureGlobalInitialized();
-            await _instance.PreloadTableAsync<T, TKey>(assetPath, loader).AttachExternalCancellation(cancellationToken);
+            return await _instance.PreloadTableAsync<T>(assetPath, loader).AttachExternalCancellation(cancellationToken);
         }
 
         /// <summary>
@@ -159,24 +166,25 @@ namespace XFramework.XConfig
         /// <summary>
         /// 注册已反序列化的 Table 数据到配置管理器。
         /// <para>第三方使用 Luban / protobuf / MessagePack 等工具自行反序列化后，
-        /// 调用此方法将数据注入，后续可通过 <see cref="Get{T, TKey}(TKey)"/> 等接口统一查询。</para>
+        /// 构造 <see cref="ConfigTable{T}"/> 并调用此方法注入，后续可通过 <see cref="GetTable{T}"/> 统一查询。</para>
         /// <para>注意：配置行类型需实现 <see cref="IConfigRow{TKey}"/> 接口。</para>
         /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="data">按 Id 索引的 Dictionary。</param>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <param name="table">Table 包装器实例。</param>
         /// <example>
         /// <code>
-        /// // Luban 示例：反序列化后注册
+        /// // Luban 示例：反序列化后构造 ConfigTable 注册
         /// var tables = new GameTables(byteBuf);
-        /// ConfigManager.RegisterTable(tables.TbItem.DataList.ToDictionary(r => r.Id));
-        /// // 之后可通过 ConfigManager.Get<ItemRow, int>(id) 查询
+        /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
+        /// var table = new ConfigTable<ItemRow>(dict, dict.Count);
+        /// ConfigManager.RegisterTable(table);
+        /// // 之后可通过 ConfigManager.GetTable<ItemRow>().Get(id) 查询
         /// </code>
         /// </example>
-        public static void RegisterTable<T, TKey>(Dictionary<TKey, T> data) where T : IConfigRow<TKey>
+        public static void RegisterTable<T>(ConfigTable<T> table)
         {
             EnsureGlobalInitialized();
-            _instance.RegisterTable<T, TKey>(data);
+            _instance.RegisterTable(table);
         }
 
         /// <summary>
@@ -207,7 +215,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 获取指定 Table 的只读包装器。未加载时抛出 <see cref="ConfigException"/>。
-        /// <para>包装器可缓存，后续通过 .Get(key) 查询时主键类型由实参自动推断，无需每次指定 TKey。</para>
+        /// <para>包装器可缓存，后续通过 .Get(key) / .TryGet(key, out) 查询时主键类型由实参自动推断，无需每次指定 TKey。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型。</typeparam>
         /// <returns>Table 包装器实例。</returns>
@@ -215,9 +223,9 @@ namespace XFramework.XConfig
         /// <example>
         /// <code>
         /// var items = ConfigManager.GetTable<ItemRow>();
-        /// var row = items.Get(1001); // TKey 自动推断为 int，无需指定
+        /// var row = items.Get(1001);        // TKey 自动推断为 int
         /// items.TryGet(1002, out var row2);
-        /// var all = items.GetAll(); // 完全不涉及 TKey
+        /// var all = items.GetAll();          // 完全不涉及 TKey
         /// </code>
         /// </example>
         public static ConfigTable<T> GetTable<T>()
@@ -236,72 +244,6 @@ namespace XFramework.XConfig
         {
             EnsureGlobalInitialized();
             return _instance.TryGetTable(out table);
-        }
-
-        /// <summary>
-        /// 获取 Table 中指定 Id 的配置行。不存在时抛出 <see cref="ConfigException"/>。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <returns>对应的配置行。</returns>
-        /// <exception cref="ConfigException">Table 未加载或 Id 不存在时抛出。</exception>
-        public static T Get<T, TKey>(TKey id) where T : IConfigRow<TKey>
-        {
-            EnsureGlobalInitialized();
-            return _instance.Get<T, TKey>(id);
-        }
-
-        /// <summary>
-        /// 安全查询 Table 中指定 Id 的配置行。Table 未加载或 Id 不存在时返回 <c>false</c>。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <param name="row">输出的配置行，失败时为 <c>default</c>。</param>
-        /// <returns>成功获取时返回 <c>true</c>。</returns>
-        public static bool TryGet<T, TKey>(TKey id, out T row) where T : IConfigRow<TKey>
-        {
-            EnsureGlobalInitialized();
-            return _instance.TryGet<T, TKey>(id, out row);
-        }
-
-        /// <summary>
-        /// 获取 Table 中所有配置行（复制为新数组）。
-        /// <para>会产生少量 GC（数组分配），频繁调用请使用 <see cref="Get{T, TKey}(TKey)"/> 按 Id 查询。</para>
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <returns>所有配置行的数组。</returns>
-        public static T[] GetAll<T, TKey>() where T : IConfigRow<TKey>
-        {
-            EnsureGlobalInitialized();
-            return _instance.GetAll<T, TKey>();
-        }
-
-        /// <summary>
-        /// 判断 Table 中是否包含指定 Id 的配置行。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <param name="id">配置行主键。</param>
-        /// <returns>存在时返回 <c>true</c>。</returns>
-        public static bool Contains<T, TKey>(TKey id) where T : IConfigRow<TKey>
-        {
-            EnsureGlobalInitialized();
-            return _instance.Contains<T, TKey>(id);
-        }
-
-        /// <summary>
-        /// 获取 Table 中配置行的总数。Table 未加载时返回 0。
-        /// </summary>
-        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-        /// <typeparam name="TKey">配置行主键类型。</typeparam>
-        /// <returns>配置行数量。</returns>
-        public static int Count<T, TKey>() where T : IConfigRow<TKey>
-        {
-            EnsureGlobalInitialized();
-            return _instance.Count<T, TKey>();
         }
 
         #endregion
@@ -338,7 +280,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 卸载指定类型的配置（Table 或 Global），释放引用。
-        /// <para>卸载后再次调用 <see cref="PreloadTableAsync{T, TKey}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 可重新加载。</para>
+        /// <para>卸载后再次调用 <see cref="PreloadTableAsync{T}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 可重新加载。</para>
         /// </summary>
         public static void Unload<T>()
         {
