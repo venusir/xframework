@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 
 namespace XFramework.XNode
@@ -48,11 +49,23 @@ namespace XFramework.XNode
         /// <summary>节点是否已被销毁。</summary>
         bool _destroyed;
 
+        /// <summary>节点是否启用。禁用后跳过 Update 和事件响应。</summary>
+        bool _enabled = true;
+
         /// <summary>父节点引用，根节点为 null。</summary>
         ParentNode _parent;
 
         /// <summary>节点销毁时的 CancellationTokenSource，用于自动取消订阅。</summary>
         CancellationTokenSource _destroyCts;
+
+        /// <summary>
+        /// 通过 <see cref="NodeExtensions.AddToNode{T}(T, BaseNode)"/> 绑定的 Disposable 列表。
+        /// <para>节点销毁时统一 Dispose，避免 CancellationToken.Register 的逐个分配开销。</para>
+        /// </summary>
+        List<IDisposable> _autoDisposables;
+
+        /// <summary>节点关联的标签集合。延迟初始化以节约内存。</summary>
+        HashSet<string> _tags;
 
         #endregion
 
@@ -116,6 +129,16 @@ namespace XFramework.XNode
         internal bool Started => _started;
 
         /// <summary>
+        /// 节点是否启用。禁用后跳过 Update 和事件响应。
+        /// <para>默认为 true。设置为 false 后，Update 系统将跳过此节点。</para>
+        /// </summary>
+        public bool Enabled
+        {
+            get => _enabled;
+            set => SetEnabled(value);
+        }
+
+        /// <summary>
         /// 初始化节点。在节点创建后显式调用。
         /// <para>替代在构造函数中调用虚方法，避免 C# 构造函数调用虚方法的 anti-pattern。</para>
         /// <para>通常由 <see cref="Create{T}"/> 或 <see cref="ParentNode.AddChild"/> 自动调用。</para>
@@ -171,8 +194,27 @@ namespace XFramework.XNode
                 _destroyCts = null;
             }
 
+            // 统一 Dispose _autoDisposables 列表中的所有 disposable
+            // 相比 CancellationToken.Register 逐个注册，此方案单次分配开销更低
+            if (_autoDisposables != null)
+            {
+                for (int i = 0; i < _autoDisposables.Count; i++)
+                {
+                    _autoDisposables[i].Dispose();
+                }
+                _autoDisposables.Clear();
+                _autoDisposables = null;
+            }
+
             _depth = 0;
             _parent = null;
+
+            // 清理标签
+            if (_tags != null)
+            {
+                _tags.Clear();
+                _tags = null;
+            }
 
             OnNodeDestroy?.Invoke(this);
 
@@ -218,6 +260,95 @@ namespace XFramework.XNode
         /// <para>在 <see cref="StartInternal"/> 末尾调用。</para>
         /// </summary>
         protected virtual void OnStart() { }
+
+        /// <summary>
+        /// 节点启用时的回调。当 <see cref="Enabled"/> 从 false 变为 true 时触发。
+        /// <para>仅在节点已 Start 且未销毁时触发。</para>
+        /// </summary>
+        protected virtual void OnEnable() { }
+
+        /// <summary>
+        /// 节点禁用时的回调。当 <see cref="Enabled"/> 从 true 变为 false 时触发。
+        /// <para>仅在节点已 Start 且未销毁时触发。</para>
+        /// </summary>
+        protected virtual void OnDisable() { }
+
+        #endregion
+
+        #region Enable / Disable
+
+        /// <summary>
+        /// 设置启用状态。仅在值变化、节点已 Start 且未销毁时触发回调。
+        /// </summary>
+        /// <param name="value">目标启用状态。</param>
+        void SetEnabled(bool value)
+        {
+            if (_enabled == value) return;
+            if (!_started || _destroyed) return;
+
+            _enabled = value;
+            if (value)
+                OnEnable();
+            else
+                OnDisable();
+        }
+
+        #endregion
+
+        #region Tags
+
+        /// <summary>
+        /// 节点关联的所有标签（只读）。
+        /// <para>用于分类、筛选节点，支持按标签批量查询。</para>
+        /// </summary>
+        public IReadOnlyCollection<string> Tags => _tags;
+
+        /// <summary>
+        /// 添加标签。同一标签重复添加无副作用（HashSet 去重）。
+        /// <para>标签延迟初始化，未添加过标签的节点不分配额外内存。</para>
+        /// </summary>
+        /// <param name="tag">要添加的标签。</param>
+        public void AddTag(string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return;
+            _tags ??= new HashSet<string>();
+            _tags.Add(tag);
+        }
+
+        /// <summary>
+        /// 移除标签。
+        /// </summary>
+        /// <param name="tag">要移除的标签。</param>
+        public void RemoveTag(string tag)
+        {
+            _tags?.Remove(tag);
+        }
+
+        /// <summary>
+        /// 是否拥有指定标签。
+        /// </summary>
+        /// <param name="tag">要检查的标签。</param>
+        /// <returns>如果拥有该标签则返回 true。</returns>
+        public bool HasTag(string tag)
+        {
+            return _tags != null && _tags.Contains(tag);
+        }
+
+        /// <summary>
+        /// 是否拥有所有指定标签（AND 逻辑）。
+        /// </summary>
+        /// <param name="tags">要检查的标签数组。</param>
+        /// <returns>如果拥有所有指定标签则返回 true，参数为 null 或空数组返回 false。</returns>
+        public bool HasTags(params string[] tags)
+        {
+            if (tags == null || tags.Length == 0) return false;
+            if (_tags == null) return false;
+            for (int i = 0; i < tags.Length; i++)
+            {
+                if (!_tags.Contains(tags[i])) return false;
+            }
+            return true;
+        }
 
         #endregion
 
@@ -296,6 +427,37 @@ namespace XFramework.XNode
         /// <para>使用方式: <c>disposable.AddTo(node.DestroyCancellationToken)</c></para>
         /// </summary>
         public CancellationToken DestroyCancellationToken => _destroyCts?.Token ?? CancellationToken.None;
+
+        #endregion
+
+        #region Auto Disposables
+
+        /// <summary>
+        /// 将 <paramref name="disposable"/> 注册到此节点的自动清理列表。
+        /// <para>节点销毁时会自动调用 <see cref="IDisposable.Dispose()"/>。</para>
+        /// <para>如果节点已销毁，则立即 Dispose。</para>
+        /// </summary>
+        /// <param name="disposable">要管理的 disposable。</param>
+        internal void RegisterAutoDispose(IDisposable disposable)
+        {
+            if (_destroyed)
+            {
+                disposable.Dispose();
+                return;
+            }
+
+            _autoDisposables ??= new List<IDisposable>();
+            _autoDisposables.Add(disposable);
+        }
+
+        /// <summary>
+        /// 从自动清理列表中移除 <paramref name="disposable"/>。
+        /// </summary>
+        /// <param name="disposable">要移除的 disposable。</param>
+        internal void UnregisterAutoDispose(IDisposable disposable)
+        {
+            _autoDisposables?.Remove(disposable);
+        }
 
         #endregion
     }

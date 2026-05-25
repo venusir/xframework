@@ -48,6 +48,36 @@ namespace XFramework.XNode
 
         /// <summary>遍历所有子节点并执行回调，支持递归。</summary>
         void ForEach(Action<BaseNode> callback, bool recursive = false);
+
+        /// <summary>获取第一个带有指定标签的节点。</summary>
+        BaseNode GetNodeByTag(string tag);
+
+        /// <summary>获取第一个带有指定标签且匹配类型的节点。</summary>
+        T GetNodeByTag<T>(string tag) where T : BaseNode;
+
+        /// <summary>获取所有带有指定标签的节点，并填充到指定列表中。</summary>
+        void GetNodesByTag(List<BaseNode> nodes, string tag, bool recursive);
+
+        /// <summary>获取所有带有指定标签的节点。</summary>
+        List<BaseNode> GetNodesByTag(string tag, bool recursive);
+
+        /// <summary>获取所有带有指定标签且匹配类型的节点，并填充到指定列表中。</summary>
+        void GetNodesByTag<T>(List<T> nodes, string tag, bool recursive) where T : BaseNode;
+
+        /// <summary>获取所有带有指定标签且匹配类型的节点。</summary>
+        List<T> GetNodesByTag<T>(string tag, bool recursive) where T : BaseNode;
+
+        /// <summary>获取所有拥有全部指定标签的节点（AND 逻辑），并填充到指定列表中。</summary>
+        void GetNodesByTags(List<BaseNode> nodes, string[] tags, bool recursive);
+
+        /// <summary>获取所有拥有全部指定标签的节点（AND 逻辑）。</summary>
+        List<BaseNode> GetNodesByTags(string[] tags, bool recursive);
+
+        /// <summary>获取所有拥有全部指定标签且匹配类型的节点（AND 逻辑），并填充到指定列表中。</summary>
+        void GetNodesByTags<T>(List<T> nodes, string[] tags, bool recursive) where T : BaseNode;
+
+        /// <summary>获取所有拥有全部指定标签且匹配类型的节点（AND 逻辑）。</summary>
+        List<T> GetNodesByTags<T>(string[] tags, bool recursive) where T : BaseNode;
     }
 
     /// <summary>
@@ -364,6 +394,335 @@ namespace XFramework.XNode
             children = null;
 
             base.DestroyInternal();
+        }
+
+        #endregion
+
+        #region Tags
+
+        /// <summary>
+        /// 获取第一个带有指定标签的节点。
+        /// <para>先序遍历，找到第一个匹配即返回，无 GC 分配。</para>
+        /// </summary>
+        /// <param name="tag">要查找的标签。</param>
+        /// <returns>第一个匹配的节点，未找到则返回 null。</returns>
+        public BaseNode GetNodeByTag(string tag)
+        {
+            if (string.IsNullOrEmpty(tag)) return null;
+
+            foreach (var child in children)
+            {
+                if (child.HasTag(tag))
+                    return child;
+
+                if (child is ParentNode parentNode)
+                {
+                    var found = FindNodeByTagRecursive(parentNode, tag);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取第一个带有指定标签且匹配类型的节点。
+        /// <para>先序遍历，找到第一个匹配即返回，无 GC 分配。</para>
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="tag">要查找的标签。</param>
+        /// <returns>第一个匹配的节点，未找到则返回 null。</returns>
+        public T GetNodeByTag<T>(string tag) where T : BaseNode
+        {
+            if (string.IsNullOrEmpty(tag)) return null;
+
+            foreach (var child in children)
+            {
+                if (child is T node && child.HasTag(tag))
+                    return node;
+
+                if (child is ParentNode parentNode)
+                {
+                    var found = FindNodeByTagRecursive<T>(parentNode, tag);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 获取所有带有指定标签的节点，并填充到指定列表中。
+        /// </summary>
+        /// <param name="nodes">用于存储匹配结果的列表。不能为 null。</param>
+        /// <param name="tag">要查找的标签。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nodes"/> 为 null 时抛出。</exception>
+        public void GetNodesByTag(List<BaseNode> nodes, string tag, bool recursive)
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+            if (string.IsNullOrEmpty(tag)) return;
+
+            foreach (var child in children)
+            {
+                if (child.HasTag(tag))
+                    nodes.Add(child);
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    CollectNodesByTagRecursive(parentNode, nodes, tag);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取所有带有指定标签的节点。
+        /// <para>创建一个新的 <see cref="List{BaseNode}"/> 并返回所有匹配的节点。</para>
+        /// </summary>
+        /// <param name="tag">要查找的标签。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <returns>包含所有匹配节点的列表。未找到时返回空列表。</returns>
+        public List<BaseNode> GetNodesByTag(string tag, bool recursive)
+        {
+            var nodes = new List<BaseNode>();
+            GetNodesByTag(nodes, tag, recursive);
+            return nodes;
+        }
+
+        /// <summary>
+        /// 获取所有带有指定标签且匹配类型的节点，并填充到指定列表中。
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="nodes">用于存储匹配结果的列表。不能为 null。</param>
+        /// <param name="tag">要查找的标签。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nodes"/> 为 null 时抛出。</exception>
+        public void GetNodesByTag<T>(List<T> nodes, string tag, bool recursive) where T : BaseNode
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+            if (string.IsNullOrEmpty(tag)) return;
+
+            foreach (var child in children)
+            {
+                if (child is T node && child.HasTag(tag))
+                    nodes.Add(node);
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    CollectNodesByTagRecursive<T>(parentNode, nodes, tag);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取所有带有指定标签且匹配类型的节点。
+        /// <para>创建一个新的 <see cref="List{T}"/> 并返回所有匹配的节点。</para>
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="tag">要查找的标签。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <returns>包含所有匹配节点的列表。未找到时返回空列表。</returns>
+        public List<T> GetNodesByTag<T>(string tag, bool recursive) where T : BaseNode
+        {
+            var nodes = new List<T>();
+            GetNodesByTag(nodes, tag, recursive);
+            return nodes;
+        }
+
+        /// <summary>
+        /// 获取所有拥有全部指定标签的节点（AND 逻辑），并填充到指定列表中。
+        /// </summary>
+        /// <param name="nodes">用于存储匹配结果的列表。不能为 null。</param>
+        /// <param name="tags">要查找的标签数组。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nodes"/> 或 <paramref name="tags"/> 为 null 时抛出。</exception>
+        public void GetNodesByTags(List<BaseNode> nodes, string[] tags, bool recursive)
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+            if (tags == null || tags.Length == 0) return;
+
+            foreach (var child in children)
+            {
+                if (child.HasTags(tags))
+                    nodes.Add(child);
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    CollectNodesByTagsRecursive(parentNode, nodes, tags);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取所有拥有全部指定标签的节点（AND 逻辑）。
+        /// <para>创建一个新的 <see cref="List{BaseNode}"/> 并返回所有匹配的节点。</para>
+        /// </summary>
+        /// <param name="tags">要查找的标签数组。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <returns>包含所有匹配节点的列表。未找到时返回空列表。</returns>
+        public List<BaseNode> GetNodesByTags(string[] tags, bool recursive)
+        {
+            var nodes = new List<BaseNode>();
+            GetNodesByTags(nodes, tags, recursive);
+            return nodes;
+        }
+
+        /// <summary>
+        /// 获取所有拥有全部指定标签且匹配类型的节点（AND 逻辑），并填充到指定列表中。
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="nodes">用于存储匹配结果的列表。不能为 null。</param>
+        /// <param name="tags">要查找的标签数组。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="nodes"/> 或 <paramref name="tags"/> 为 null 时抛出。</exception>
+        public void GetNodesByTags<T>(List<T> nodes, string[] tags, bool recursive) where T : BaseNode
+        {
+            if (nodes == null)
+                throw new ArgumentNullException(nameof(nodes));
+            if (tags == null || tags.Length == 0) return;
+
+            foreach (var child in children)
+            {
+                if (child is T node && child.HasTags(tags))
+                    nodes.Add(node);
+
+                if (recursive && child is ParentNode parentNode)
+                {
+                    CollectNodesByTagsRecursive<T>(parentNode, nodes, tags);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取所有拥有全部指定标签且匹配类型的节点（AND 逻辑）。
+        /// <para>创建一个新的 <see cref="List{T}"/> 并返回所有匹配的节点。</para>
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="tags">要查找的标签数组。</param>
+        /// <param name="recursive">是否递归查找所有子孙节点。</param>
+        /// <returns>包含所有匹配节点的列表。未找到时返回空列表。</returns>
+        public List<T> GetNodesByTags<T>(string[] tags, bool recursive) where T : BaseNode
+        {
+            var nodes = new List<T>();
+            GetNodesByTags(nodes, tags, recursive);
+            return nodes;
+        }
+
+        #endregion
+
+        #region Tag Private Helpers
+
+        /// <summary>
+        /// 递归查找第一个带有指定标签的节点（非泛型）。
+        /// </summary>
+        BaseNode FindNodeByTagRecursive(ParentNode parent, string tag)
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child.HasTag(tag))
+                    return child;
+
+                if (child is ParentNode childParent)
+                {
+                    var found = FindNodeByTagRecursive(childParent, tag);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 递归查找第一个带有指定标签且匹配类型的节点。
+        /// </summary>
+        T FindNodeByTagRecursive<T>(ParentNode parent, string tag) where T : BaseNode
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child is T node && child.HasTag(tag))
+                    return node;
+
+                if (child is ParentNode childParent)
+                {
+                    var found = FindNodeByTagRecursive<T>(childParent, tag);
+                    if (found != null) return found;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 递归收集所有带有指定标签的节点（非泛型）。
+        /// </summary>
+        void CollectNodesByTagRecursive(ParentNode parent, List<BaseNode> nodes, string tag)
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child.HasTag(tag))
+                    nodes.Add(child);
+
+                if (child is ParentNode childParent)
+                {
+                    CollectNodesByTagRecursive(childParent, nodes, tag);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 递归收集所有带有指定标签且匹配类型的节点。
+        /// </summary>
+        void CollectNodesByTagRecursive<T>(ParentNode parent, List<T> nodes, string tag) where T : BaseNode
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child is T node && child.HasTag(tag))
+                    nodes.Add(node);
+
+                if (child is ParentNode childParent)
+                {
+                    CollectNodesByTagRecursive<T>(childParent, nodes, tag);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 递归收集所有拥有全部指定标签的节点（非泛型，AND 逻辑）。
+        /// </summary>
+        void CollectNodesByTagsRecursive(ParentNode parent, List<BaseNode> nodes, string[] tags)
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child.HasTags(tags))
+                    nodes.Add(child);
+
+                if (child is ParentNode childParent)
+                {
+                    CollectNodesByTagsRecursive(childParent, nodes, tags);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 递归收集所有拥有全部指定标签且匹配类型的节点（AND 逻辑）。
+        /// </summary>
+        void CollectNodesByTagsRecursive<T>(ParentNode parent, List<T> nodes, string[] tags) where T : BaseNode
+        {
+            for (int i = 0; i < parent.ChildCount; i++)
+            {
+                var child = parent[i];
+                if (child is T node && child.HasTags(tags))
+                    nodes.Add(node);
+
+                if (child is ParentNode childParent)
+                {
+                    CollectNodesByTagsRecursive<T>(childParent, nodes, tags);
+                }
+            }
         }
 
         #endregion

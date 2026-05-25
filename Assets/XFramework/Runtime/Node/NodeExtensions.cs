@@ -49,6 +49,30 @@ namespace XFramework.XNode
             return AddTo(disposable, token.DestroyCancellationToken);
         }
 
+        /// <summary>
+        /// 将 <paramref name="disposable"/> 绑定到目标 <see cref="BaseNode"/> 的自动清理列表。
+        /// <para>节点销毁时统一 Dispose，相比 <see cref="AddTo{T}(T, CancellationToken)"/> 
+        /// 减少了 <see cref="CancellationToken.Register"/> 的逐个分配开销。</para>
+        /// <para>推荐在 <see cref="BaseNode"/> 派生类内部使用此方法绑定 disposable。</para>
+        /// <para>返回 <paramref name="disposable"/> 自身，支持链式调用。</para>
+        /// </summary>
+        /// <typeparam name="T"><see cref="IDisposable"/> 或其实现类型。</typeparam>
+        /// <param name="disposable">要绑定的 disposable。</param>
+        /// <param name="node">目标节点。</param>
+        /// <returns><paramref name="disposable"/> 自身。</returns>
+        public static T AddToNode<T>(this T disposable, BaseNode node)
+            where T : IDisposable
+        {
+            if (node == null)
+            {
+                disposable.Dispose();
+                return disposable;
+            }
+
+            node.RegisterAutoDispose(disposable);
+            return disposable;
+        }
+
         #region Subscribe (auto-bind to node lifecycle)
 
         /// <summary>

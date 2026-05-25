@@ -33,15 +33,15 @@ Runtime/Node/
 
 ## 节点类型速览
 
-| 类型                   | 继承自       | 用途                   | 特点                                         |
-| ---------------------- | ------------ | ---------------------- | -------------------------------------------- |
-| `BaseNode`             | -            | 所有节点的抽象基类     | 生命周期、父子关系、DestroyCancellationToken |
-| `LeafNode`             | `BaseNode`   | 末端节点，不包含子节点 | 最轻量                                       |
-| `ParentNode`           | `BaseNode`   | 可包含子节点的抽象基类 | `IParentNode`，子节点管理、事件冒泡          |
-| `ContainerNode`        | `ParentNode` | 对外暴露添加/移除 API  | `IContainerNode`                             |
-| `EntityNode`           | `ParentNode` | 按类型缓存子节点       | 类似 Unity `GetComponent`/`AddComponent`     |
-| `DictionaryNode<TKey>` | `ParentNode` | 按键缓存子节点         | 键值对式访问                                 |
-| `RootNode`             | `EntityNode` | 树根节点               | 静态 `Create()` 工厂方法                     |
+| 类型                   | 继承自       | 用途                   | 特点                                                   |
+| ---------------------- | ------------ | ---------------------- | ------------------------------------------------------ |
+| `BaseNode`             | -            | 所有节点的抽象基类     | 生命周期、父子关系、DestroyCancellationToken、标签系统 |
+| `LeafNode`             | `BaseNode`   | 末端节点，不包含子节点 | 最轻量                                                 |
+| `ParentNode`           | `BaseNode`   | 可包含子节点的抽象基类 | `IParentNode`，子节点管理、事件冒泡                    |
+| `ContainerNode`        | `ParentNode` | 对外暴露添加/移除 API  | `IContainerNode`                                       |
+| `EntityNode`           | `ParentNode` | 按类型缓存子节点       | 类似 Unity `GetComponent`/`AddComponent`               |
+| `DictionaryNode<TKey>` | `ParentNode` | 按键缓存子节点         | 键值对式访问                                           |
+| `RootNode`             | `EntityNode` | 树根节点               | 静态 `Create()` 工厂方法                               |
 
 ## 生命周期
 
@@ -122,7 +122,43 @@ public class PlayerNode : EntityNode
 }
 ```
 
-### 3. 获取节点（类型查找）
+### 3. 标签系统（Tags）
+
+每个节点支持多个字符串标签，可动态添加/移除，用于语义分组和灵活筛选。
+
+```csharp
+// 添加/移除标签
+player.AddTag("Player");
+player.AddTag("TeamA");
+player.RemoveTag("TeamA");
+
+// 检查标签
+bool isPlayer = player.HasTag("Player");
+bool isSpecial = player.HasTags(new[] { "Player", "Elite" });  // 拥有全部标签（AND）
+```
+
+**标签查询与类型查询的组合使用** — 从 `IParentNode` 沿树查询：
+
+```csharp
+// 查找第一个带有指定标签的节点
+var player = root.GetNodeByTag("Player");
+
+// 查找第一个带有指定标签且匹配类型的节点
+var hero = root.GetNodeByTag<PlayerNode>("Hero");
+
+// 查找所有带有指定标签的节点
+List<BaseNode> teamA = root.GetNodesByTag("TeamA", recursive: true);
+
+// 查找所有拥有全部指定标签的节点（AND 逻辑）
+List<BaseNode> elites = root.GetNodesByTags(new[] { "Player", "Elite" }, recursive: true);
+
+// 查找所有拥有全部指定标签且匹配类型的节点
+List<EnemyNode> enemyElites = root.GetNodesByTags<EnemyNode>(new[] { "Enemy", "Elite" }, recursive: true);
+```
+
+> 所有 GetNodesBy* 方法均提供两个重载版本：返回值列表版本和填充已存在列表版本（减少 GC 分配）。
+
+### 4. 获取节点（类型查找）
 
 ```csharp
 // EntityNode: 按类型自动缓存
@@ -139,14 +175,14 @@ var child = parent.GetNode<HealthNode>();
 var node = dict.GetNode<PlayerNode>("player_1");
 ```
 
-### 4. 服务解析（沿父链查找）
+### 5. 服务解析（沿父链查找）
 
 ```csharp
 // 从任意节点获取挂载在祖先 EntityNode 上的服务
 var updateService = this.Get<IUpdateNode>();      // 沿父链向上查找
 ```
 
-### 5. 生命周期绑定（自动取消订阅）
+### 6. 生命周期绑定（自动取消订阅）
 
 ```csharp
 protected override void OnStart()
@@ -159,7 +195,7 @@ protected override void OnStart()
 }
 ```
 
-### 6. 对象池
+### 7. 对象池
 
 ```csharp
 // 预热
