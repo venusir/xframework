@@ -95,6 +95,66 @@ namespace XFramework.XConfig
             }
         }
 
+        /// <summary>
+        /// 使用自定义 Loader 预加载 Table 配置。
+        /// <para>Loader 为临时策略对象，调用后不被持有，可由 GC 回收。</para>
+        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。
+        /// 对于一文件多表的格式（如 Luban），请使用 <see cref="RegisterTable{T}(Dictionary{int, T})"/>。</para>
+        /// </summary>
+        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        public async UniTask PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
+            where T : IConfigRow, new()
+        {
+            if (loader == null)
+                throw new ConfigException($"loader cannot be null when preloading Table '{typeof(T).Name}'.");
+            if (string.IsNullOrEmpty(assetPath))
+                throw new ConfigException($"assetPath must be provided when preloading Table '{typeof(T).Name}'.");
+
+            var type = typeof(T);
+            if (_tables.ContainsKey(type))
+                return;
+
+            try
+            {
+                var dict = await loader.LoadTableAsync<T>(assetPath);
+                _tables[type] = dict;
+            }
+            catch (Exception ex) when (ex is not ConfigException)
+            {
+                throw new ConfigException(
+                    $"Failed to preload Table '{type.Name}' with custom loader: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 使用自定义 Loader 预加载 Global 配置。
+        /// <para>Loader 为临时策略对象，调用后不被持有。</para>
+        /// </summary>
+        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        public async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader)
+            where T : class, new()
+        {
+            if (loader == null)
+                throw new ConfigException($"loader cannot be null when preloading Global config '{typeof(T).Name}'.");
+            if (string.IsNullOrEmpty(assetPath))
+                throw new ConfigException($"assetPath must be provided when preloading Global config '{typeof(T).Name}'.");
+
+            var type = typeof(T);
+            if (_globals.ContainsKey(type))
+                return;
+
+            try
+            {
+                var config = await loader.LoadGlobalAsync<T>(assetPath);
+                _globals[type] = config;
+            }
+            catch (Exception ex) when (ex is not ConfigException)
+            {
+                throw new ConfigException(
+                    $"Failed to preload Global config '{type.Name}' with custom loader: {ex.Message}", ex);
+            }
+        }
+
         #endregion
 
         #region Register (第三方注入)

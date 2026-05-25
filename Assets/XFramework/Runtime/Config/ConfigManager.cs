@@ -116,6 +116,40 @@ namespace XFramework.XConfig
             await _instance.PreloadGlobalAsync<T>(assetPath, format).AttachExternalCancellation(cancellationToken);
         }
 
+        /// <summary>
+        /// 使用自定义 Loader 预加载 Table 配置。
+        /// <para>Loader 为临时策略对象，框架不持有引用，调用后可由 GC 回收。</para>
+        /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。
+        /// 对于一文件多表的格式（如 Luban），请使用 <see cref="RegisterTable{T}(Dictionary{int, T})"/>。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/> 并有无参构造函数。</typeparam>
+        /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
+        /// <param name="loader">自定义加载器实例。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        public static async UniTask PreloadTableAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
+            where T : IConfigRow, new()
+        {
+            EnsureGlobalInitialized();
+            await _instance.PreloadTableAsync<T>(assetPath, loader).AttachExternalCancellation(cancellationToken);
+        }
+
+        /// <summary>
+        /// 使用自定义 Loader 预加载 Global 配置。
+        /// <para>Loader 为临时策略对象，框架不持有引用。</para>
+        /// </summary>
+        /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
+        /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
+        /// <param name="loader">自定义加载器实例。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        public static async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
+            where T : class, new()
+        {
+            EnsureGlobalInitialized();
+            await _instance.PreloadGlobalAsync<T>(assetPath, loader).AttachExternalCancellation(cancellationToken);
+        }
+
         #endregion
 
         #region Public API — Register (第三方注入)
