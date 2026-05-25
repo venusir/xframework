@@ -9,11 +9,12 @@ namespace XFramework.XConfig
     public interface IConfigLoader
     {
         /// <summary>加载 Table 类型的配置数据（多行，按 Id 索引）。</summary>
-        /// <typeparam name="T">实现 <see cref="IConfigRow"/> 的配置行类型。</typeparam>
+        /// <typeparam name="T">实现 <see cref="IConfigRow{TKey}"/> 的配置行类型。</typeparam>
+        /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">资源路径。</param>
         /// <returns>按 Id 索引的字典。</returns>
-        UniTask<System.Collections.Generic.Dictionary<int, T>> LoadTableAsync<T>(string assetPath)
-            where T : IConfigRow, new();
+        UniTask<System.Collections.Generic.Dictionary<TKey, T>> LoadTableAsync<T, TKey>(string assetPath)
+            where T : IConfigRow<TKey>, new();
 
         /// <summary>加载 Global 类型的配置数据（单份，全局唯一）。</summary>
         /// <typeparam name="T">配置类型，必须为 class。</typeparam>

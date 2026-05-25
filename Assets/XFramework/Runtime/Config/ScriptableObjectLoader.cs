@@ -16,14 +16,14 @@ namespace XFramework.XConfig
     {
         #region IConfigLoader
 
-        async UniTask<Dictionary<int, T>> IConfigLoader.LoadTableAsync<T>(string assetPath)
+        async UniTask<Dictionary<TKey, T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
-            var tableAsset = await LoadSOAsync<ScriptableObjectTable<T>>(assetPath);
+            var tableAsset = await LoadSOAsync<ScriptableObjectTable<T, TKey>>(assetPath);
             if (tableAsset?.Items == null || tableAsset.Items.Count == 0)
                 throw new ConfigException(
                     $"SO Table '{typeof(T).Name}' from '{assetPath}' contains no items.");
 
-            var dict = new Dictionary<int, T>(tableAsset.Items.Count);
+            var dict = new Dictionary<TKey, T>(tableAsset.Items.Count);
             foreach (var item in tableAsset.Items)
             {
                 if (dict.ContainsKey(item.Id))
@@ -73,8 +73,9 @@ namespace XFramework.XConfig
     /// SO Table 包装类，承载 <typeparamref name="TRow"/> 列表。
     /// <para>第三方创建 SO 资源时需继承此类，将具体配置行填入 <see cref="Items"/> 列表。</para>
     /// </summary>
-    /// <typeparam name="TRow">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
-    public abstract class ScriptableObjectTable<TRow> : ScriptableObject where TRow : IConfigRow
+    /// <typeparam name="TRow">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
+    /// <typeparam name="TKey">配置行主键类型。</typeparam>
+    public abstract class ScriptableObjectTable<TRow, TKey> : ScriptableObject where TRow : IConfigRow<TKey>
     {
         /// <summary>
         /// 配置行列表。在 Editor 中编辑此列表。

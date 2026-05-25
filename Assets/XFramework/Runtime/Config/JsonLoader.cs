@@ -15,7 +15,7 @@ namespace XFramework.XConfig
     {
         #region IConfigLoader
 
-        async UniTask<Dictionary<int, T>> IConfigLoader.LoadTableAsync<T>(string assetPath)
+        async UniTask<Dictionary<TKey, T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
             var text = await LoadTextAsync(assetPath);
             try
@@ -24,7 +24,7 @@ namespace XFramework.XConfig
                 if (list?.Items == null)
                     throw new ConfigException(
                         $"Failed to deserialize Table '{typeof(T).Name}' from '{assetPath}': result is null.");
-                var dict = new Dictionary<int, T>(list.Items.Count);
+                var dict = new Dictionary<TKey, T>(list.Items.Count);
                 foreach (var item in list.Items)
                 {
                     if (dict.ContainsKey(item.Id))
