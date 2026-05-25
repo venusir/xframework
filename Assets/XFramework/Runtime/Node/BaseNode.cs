@@ -52,6 +52,12 @@ namespace XFramework.XNode
         /// <summary>节点是否启用。禁用后跳过 Update 和事件响应。</summary>
         bool _enabled = true;
 
+        /// <summary>
+        /// 级联活跃状态。仅当自身 Enabled 为 true 且所有祖先节点均活跃时为 true。
+        /// <para>用于快速判断节点是否处于活跃状态。</para>
+        /// </summary>
+        bool _active = true;
+
         /// <summary>父节点引用，根节点为 null。</summary>
         ParentNode _parent;
 
@@ -139,6 +145,12 @@ namespace XFramework.XNode
         }
 
         /// <summary>
+        /// 节点是否处于级联活跃状态（自身启用且所有祖先节点均活跃）。
+        /// <para>用于快速判断节点是否应接收 Update、事件等。</para>
+        /// </summary>
+        public bool Active => _active;
+
+        /// <summary>
         /// 初始化节点。在节点创建后显式调用。
         /// <para>替代在构造函数中调用虚方法，避免 C# 构造函数调用虚方法的 anti-pattern。</para>
         /// <para>通常由 <see cref="Create{T}"/> 或 <see cref="ParentNode.AddChild"/> 自动调用。</para>
@@ -149,7 +161,7 @@ namespace XFramework.XNode
         }
 
         /// <summary>
-        /// 设置父节点并更新深度。
+        /// 设置父节点并更新深度和级联活跃状态。
         /// </summary>
         /// <param name="parent">新的父节点，null 表示成为根节点。</param>
         internal void SetParent(ParentNode parent)
@@ -158,6 +170,31 @@ namespace XFramework.XNode
             {
                 _parent = parent;
                 _depth = _parent != null ? _parent._depth + 1 : 0;
+
+                // 根据新父节点更新级联活跃状态
+                RefreshActive();
+            }
+        }
+
+        /// <summary>
+        /// 刷新当前节点及其所有子节点的级联活跃状态。
+        /// <para>当自身或祖先节点启用状态变化时调用。</para>
+        /// </summary>
+        internal virtual void RefreshActive()
+        {
+            bool parentActive = _parent == null || _parent._active;
+            bool newActive = _enabled && parentActive;
+
+            if (_active != newActive)
+            {
+                _active = newActive;
+                if (_started && !_destroyed)
+                {
+                    if (newActive)
+                        OnEnable();
+                    else
+                        OnDisable();
+                }
             }
         }
 
@@ -171,6 +208,8 @@ namespace XFramework.XNode
             _parent = null;
             _destroyed = false;
             _started = false;
+            _enabled = true;
+            _active = true;
             _destroyCts = new CancellationTokenSource();
 
             OnAwake();
@@ -178,15 +217,19 @@ namespace XFramework.XNode
 
         /// <summary>
         /// 内部销毁方法。由 <see cref="Destroy"/> 调用。
+        /// <para>分为三个阶段：</para>
+        /// <para>Phase 1 — 标记销毁 + 取消令牌 + 清理 auto-disposables + 通知外部即将销毁。</para>
+        /// <para>Phase 2 — 调用 <see cref="OnDestroy"/> 用户清理回调（此时树引用仍有效，可安全查询）。</para>
+        /// <para>Phase 3 — 清理内部引用 + 通知缓存池回收。</para>
         /// <para>派生类可 override 此方法添加自定义销毁逻辑，但必须调用 base.DestroyInternal()。</para>
         /// </summary>
         internal virtual void DestroyInternal()
         {
             if (_destroyed) return;
 
+            // ===== Phase 1: 标记销毁 + 取消令牌 + 清理 auto-disposables + 通知外部 =====
             _destroyed = true;
 
-            // 触发取消，所有通过 DestroyCancellationToken 绑定的订阅自动释放
             if (_destroyCts != null)
             {
                 _destroyCts.Cancel();
@@ -195,7 +238,6 @@ namespace XFramework.XNode
             }
 
             // 统一 Dispose _autoDisposables 列表中的所有 disposable
-            // 相比 CancellationToken.Register 逐个注册，此方案单次分配开销更低
             if (_autoDisposables != null)
             {
                 for (int i = 0; i < _autoDisposables.Count; i++)
@@ -206,9 +248,12 @@ namespace XFramework.XNode
                 _autoDisposables = null;
             }
 
-            _depth = 0;
-            _parent = null;
+            OnNodeDestroy?.Invoke(this);
 
+            // ===== Phase 2: 用户自定义清理（树引用仍有效） =====
+            OnDestroy();
+
+            // ===== Phase 3: 清理内部引用 + 通知缓存池回收 =====
             // 清理标签
             if (_tags != null)
             {
@@ -216,11 +261,9 @@ namespace XFramework.XNode
                 _tags = null;
             }
 
-            OnNodeDestroy?.Invoke(this);
+            _depth = 0;
+            _parent = null;
 
-            OnDestroy();
-
-            // 通知缓存池：节点已销毁，可以回收
             OnReturnToPool?.Invoke(this);
         }
 
@@ -238,6 +281,12 @@ namespace XFramework.XNode
 
             // 通知外部：节点 Start 完成
             OnNodeStarted?.Invoke(this);
+
+            // 若节点初始即处于活跃状态，补调首次 OnEnable。
+            // RefreshActive 的 _active != newActive guard 在 _active 初始为 true
+            // 且重新计算后仍为 true 时会跳过，需在此补齐，与 Unity 行为一致。
+            if (_active)
+                OnEnable();
         }
 
         #endregion
@@ -250,7 +299,8 @@ namespace XFramework.XNode
         protected virtual void OnAwake() { }
 
         /// <summary>
-        /// 节点销毁时的回调。在 <see cref="DestroyInternal"/> 末尾调用。
+        /// 节点销毁时的回调。在 <see cref="DestroyInternal"/> Phase 2 调用。
+        /// <para>此时树引用仍有效，可安全访问父子节点。</para>
         /// </summary>
         protected virtual void OnDestroy() { }
 
@@ -262,13 +312,15 @@ namespace XFramework.XNode
         protected virtual void OnStart() { }
 
         /// <summary>
-        /// 节点启用时的回调。当 <see cref="Enabled"/> 从 false 变为 true 时触发。
+        /// 节点激活时的回调。当节点的级联活跃状态 <see cref="Active"/> 从 false 变为 true 时触发。
+        /// <para>可能由自身启用或祖先节点激活引起，语义与 Unity MonoBehaviour.OnEnable 一致。</para>
         /// <para>仅在节点已 Start 且未销毁时触发。</para>
         /// </summary>
         protected virtual void OnEnable() { }
 
         /// <summary>
-        /// 节点禁用时的回调。当 <see cref="Enabled"/> 从 true 变为 false 时触发。
+        /// 节点失活时的回调。当节点的级联活跃状态 <see cref="Active"/> 从 true 变为 false 时触发。
+        /// <para>可能由自身禁用或祖先节点失活引起，语义与 Unity MonoBehaviour.OnDisable 一致。</para>
         /// <para>仅在节点已 Start 且未销毁时触发。</para>
         /// </summary>
         protected virtual void OnDisable() { }
@@ -278,19 +330,21 @@ namespace XFramework.XNode
         #region Enable / Disable
 
         /// <summary>
-        /// 设置启用状态。仅在值变化、节点已 Start 且未销毁时触发回调。
+        /// 设置启用状态。修改 <c>_enabled</c> 后通过 <see cref="RefreshActive"/> 统一计算 <c>_active</c> 并触发回调，
+        /// 无论状态变化由自身还是祖先引起，回调语义一致。
+        /// <para>Start 前也可设置，<c>_enabled</c> 和 <c>_active</c> 会立即更新，但 <see cref="OnEnable"/> / <see cref="OnDisable"/> 回调
+        /// 只在 <c>_started == true</c> 时触发，与 Unity MonoBehaviour 行为一致。</para>
         /// </summary>
         /// <param name="value">目标启用状态。</param>
         void SetEnabled(bool value)
         {
             if (_enabled == value) return;
-            if (!_started || _destroyed) return;
+            if (_destroyed) return;
 
             _enabled = value;
-            if (value)
-                OnEnable();
-            else
-                OnDisable();
+
+            // RefreshActive 会立即更新 _active，但回调保护在 RefreshActive 内部（_started && !_destroyed）
+            RefreshActive();
         }
 
         #endregion

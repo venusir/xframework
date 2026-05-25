@@ -96,6 +96,7 @@ namespace XFramework.XNode
                 // 通过 NodeFactory 创建节点
                 var component = NodeFactory.GetNode(type);
                 _typeCache[type] = component;
+                AddToInterfaceCache(component);
                 AddChild(component);
                 return (T)(IBaseNode)component;
             }
@@ -202,7 +203,13 @@ namespace XFramework.XNode
         /// <returns>已添加并完成异步启动的子节点实例。</returns>
         public async UniTask<T> AddNodeAsync<T>() where T : BaseNode, IParentNode, new()
         {
+            Type type = typeof(T);
+            if (_typeCache.TryGetValue(type, out var existing) && existing is T existingNode)
+                return existingNode;
+
             T node = NodeFactory.GetNode<T>();
+            _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node, deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
@@ -216,7 +223,13 @@ namespace XFramework.XNode
         /// <returns>已添加并完成异步启动的子节点实例。</returns>
         public async UniTask<T> AddNodeAsync<T>(object arg) where T : BaseNode, IParentNode, new()
         {
+            Type type = typeof(T);
+            if (_typeCache.TryGetValue(type, out var existing) && existing is T existingNode)
+                return existingNode;
+
             T node = NodeFactory.GetNode<T>(arg);
+            _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node, deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
@@ -242,7 +255,12 @@ namespace XFramework.XNode
             if (!typeof(IParentNode).IsAssignableFrom(type))
                 throw new ArgumentException($"AddNodeAsync {type} failed, it does not implement IParentNode");
 
+            if (_typeCache.TryGetValue(type, out var existing))
+                return existing;
+
             BaseNode node = NodeFactory.GetNode(type);
+            _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node, deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
@@ -267,7 +285,12 @@ namespace XFramework.XNode
             if (!typeof(IParentNode).IsAssignableFrom(type))
                 throw new ArgumentException($"AddNodeAsync {type} failed, it does not implement IParentNode");
 
+            if (_typeCache.TryGetValue(type, out var existing))
+                return existing;
+
             BaseNode node = NodeFactory.GetNode(type, arg);
+            _typeCache[type] = node;
+            AddToInterfaceCache(node);
             AddChild(node, deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;

@@ -396,6 +396,23 @@ namespace XFramework.XNode
             base.DestroyInternal();
         }
 
+        /// <summary>
+        /// 刷新当前节点及其所有子节点的级联活跃状态。
+        /// <para>覆盖 <see cref="BaseNode.RefreshActive"/>，递归传播给所有子节点。</para>
+        /// </summary>
+        internal override void RefreshActive()
+        {
+            base.RefreshActive();
+
+            if (children != null)
+            {
+                for (int i = 0; i < children.Count; i++)
+                {
+                    children[i].RefreshActive();
+                }
+            }
+        }
+
         #endregion
 
         #region Tags

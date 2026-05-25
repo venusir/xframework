@@ -45,33 +45,170 @@ Runtime/Node/
 
 ## 生命周期
 
+### 核心状态标志位
+
+节点有四个核心 bool 标志位，共同定义节点在生命周期中所处的阶段：
+
+| 字段         | 访问                        | 含义                                                                    | 初始值（Awake 后） | 设置时机                                                       |
+| ------------ | --------------------------- | ----------------------------------------------------------------------- | ------------------ | -------------------------------------------------------------- |
+| `_destroyed` | `Destroyed`（internal get） | 节点是否已销毁                                                          | `false`            | `DestroyInternal()` 入口立即置 `true`                          |
+| `_started`   | `Started`（internal get）   | 是否已完成 Start                                                        | `false`            | `StartInternal()` 中置 `true`，不可逆                          |
+| `_enabled`   | `Enabled`（public get/set） | 本地启用意图 — 节点自身是否希望处于活跃状态                             | `true`             | `AwakeInternal()` 重置为 `true`；`SetEnabled()` 修改           |
+| `_active`    | `Active`（public get）      | 级联活跃状态 — 考虑祖先链后的有效状态（= `_enabled && parent._active`） | `true`（瞬态）     | `AwakeInternal()` 重置；`SetParent()` / `RefreshActive()` 推导 |
+
+> **分离设计**：`_enabled` 是**本地意图**，`_active` 是**级联现实**。  
+> 当父节点禁用再恢复时，`_enabled` 保存了每个子节点的独立意图，只有 `_enabled = true` 的节点恢复活跃。
+
+### 合法状态组合
+
+| 状态阶段                  | `_destroyed` | `_started` | `_enabled` | `_active`        |
+| ------------------------- | ------------ | ---------- | ---------- | ---------------- |
+| Awake 后 / 挂树前（瞬态） | F            | F          | T          | T                |
+| 挂树后 / Start 前         | F            | F          | T          | 父节点 `_active` |
+| 正常运行                  | F            | T          | T          | T                |
+| 自身禁用                  | F            | T          | F          | F                |
+| 祖先禁用（被动）          | F            | T          | T          | F                |
+| 自身禁用 + 祖先禁用       | F            | T          | F          | F                |
+| 已销毁（终态）            | T            | —          | —          | —                |
+
+### 完整生命周期状态机
+
 ```
-创建 → Init(arg) → Awake() → 挂入树（SetParent） → Start() → ... → Destroy()
-        │              │           │                    │               │
-        ▼              ▼           ▼                    ▼               ▼
-     OnInit()     AwakeInternal()  添加到父节点     StartInternal()  DestroyInternal()
-                  → OnAwake()                      → OnStart()     → OnDestroy()
-                                                                   → Cancel(Cts)
-                                                                   → 回池
+                        NodeFactory.GetNode<T>()
+  ┌──────────────────────────────────────────────────┐
+  │  1. Init(arg)                                    │
+  │     └─ OnInit(arg)  ← 参数初始化                  │
+  │                                                  │
+  │  2. Awake()                                      │
+  │     └─ AwakeInternal()                           │
+  │        ├─ 重置 _depth / _parent / _destroyed     │
+  │        │  / _started / _enabled / _active        │
+  │        ├─ 创建 _destroyCts                       │
+  │        └─ OnAwake()                              │
+  │                                                 │
+  │        ┌──────────────────────┐                 │
+  │        │ _destroyed = false  │                 │
+  │        │ _started   = false  │                 │
+  │        │ _enabled   = true   │                 │
+  │        │ _active    = true   │ (瞬态，挂树后修正)│
+  │        └──────────────────────┘                 │
+  └──────────────┬───────────────────────────────────┘
+                 │  AddChild(node) 或 手动挂入
+                 ▼
+  ┌──────────────────────────────────────────────────┐
+  │  3. SetParent(parent)                            │
+  │     └─ RefreshActive()                           │
+  │        _active = _enabled && parent._active      │
+  │                                                 │
+  │        ┌──────────────────────┐                 │
+  │        │ _active  = parent    │ ← 实际生效       │
+  │        │ 其余标志位不变        │                 │
+  │        └──────────────────────┘                 │
+  └──────────────┬───────────────────────────────────┘
+                 │  父节点 Start 时自动传播，或手动调用
+                 ▼
+  ┌──────────────────────────────────────────────────┐
+   │  4. Start() / StartInternal()                    │
+   │     ├─ _started = true                           │
+   │     ├─ OnStart()                                 │
+   │     ├─ 触发 OnNodeStarted 事件                   │
+   │     └─ 若 _active = true → OnEnable()           │
+   │        （补调首次 OnEnable，与 Unity 行为一致）    │
+   │                                                 │
+   │        ┌──────────────────────┐                 │
+   │        │ _started   = true   │ ← 里程碑          │
+   │        │ 其余不变             │                 │
+   │        └──────────────────────┘                 │
+  └──────────────┬───────────────────────────────────┘
+                 │
+        ┌────────┴────────┐
+        ▼                 ▼
+  ┌──────────────┐  ┌──────────────────────────┐
+  │ 自身 Enabled  │  │ 祖先 Enabled 变化          │
+  │ 变化          │  │ (RefreshActive 递归传播)   │
+  └──────────────┘  └──────────────────────────┘
+
+  自身或祖先禁用:                           自身或祖先恢复:
+  ┌──────────────────────────┐        ┌──────────────────────────────┐
+  │ RefreshActive()          │        │ RefreshActive()              │
+  │ ├─ _active = false       │        │ ├─ _active = _enabled         │
+  │ └─ OnDisable()           │        │ │           && parent._active │
+  │                          │        │ └─ 若新 _active = true        │
+  │ 注意: _enabled 不变!     │        │    → OnEnable()              │
+  └──────────────────────────┘        │ 若新 _active = false          │
+                                       │    → 无变化                  │
+                                       └──────────────────────────────┘
+                 │
+                 ▼
+  ┌──────────────────────────────────────────────────┐
+  │  5. Destroy() / DestroyInternal()                 │
+  │                                                  │
+  │  Phase 1: 标记 + 清理订阅                         │
+  │   ├─ _destroyed = true  ← 第一步，阻止重入         │
+  │   ├─ _destroyCts.Cancel() + Dispose()             │
+  │   ├─ Dispose _autoDisposables[]                   │
+  │   └─ 触发 OnNodeDestroy 事件                      │
+  │                                                  │
+  │  Phase 2: 用户自定义清理                           │
+  │   └─ OnDestroy()  ← 此时树引用仍有效              │
+  │                                                  │
+  │  Phase 3: 清理内部引用 + 回池通知                  │
+  │   ├─ 清理 _tags                                   │
+  │   ├─ _depth = 0, _parent = null                   │
+  │   └─ 触发 OnReturnToPool（通知对象池回收）          │
+  │                                                  │
+  │        ┌──────────────────────┐                  │
+  │        │ _destroyed = true   │ ← 终态            │
+  │        │ 其余字段无意义        │                  │
+  │        └──────────────────────┘                  │
+  └──────────────────────────────────────────────────┘
 ```
 
 ### 关键方法
 
-| 方法        | 访问级别   | 说明                                                |
-| ----------- | ---------- | --------------------------------------------------- |
-| `Awake()`   | `internal` | 初始化节点，由 `NodeFactory` 或 `AddChild` 自动调用 |
-| `Start()`   | `internal` | 启动节点（父节点 Start 时自动传播给子节点）         |
-| `Destroy()` | `public`   | 销毁节点，自动从父节点脱离并回池                    |
-| `Dispose()` | `public`   | 等同于 `Destroy()`，支持 `using` 语法               |
+| 方法        | 访问级别   | 说明                                                      |
+| ----------- | ---------- | --------------------------------------------------------- |
+| `Awake()`   | `internal` | 初始化节点，由 `NodeFactory` 或 `AddChild` 自动调用       |
+| `Start()`   | `internal` | 启动节点（父节点 Start 时自动传播给子节点），只会执行一次 |
+| `Destroy()` | `public`   | 销毁节点，自动从父节点脱离并回池                          |
+| `Dispose()` | `public`   | 等同于 `Destroy()`，支持 `using` 语法                     |
 
-### 可重写回调
+### 全部可重写回调
 
-| 回调                 | 说明                           |
-| -------------------- | ------------------------------ |
-| `OnInit(object arg)` | 参数初始化（在 Awake 之前）    |
-| `OnAwake()`          | 初始化完成                     |
-| `OnStart()`          | 启动完成（所有子节点已 Start） |
-| `OnDestroy()`        | 销毁时                         |
+| 回调                 | 触发时机                                          | 前置条件                  |
+| -------------------- | ------------------------------------------------- | ------------------------- |
+| `OnInit(object arg)` | 参数初始化，在 Awake 之前                         | —                         |
+| `OnAwake()`          | 初始化完成                                        | —                         |
+| `OnStart()`          | 启动完成（所有子节点已 Start）                    | —                         |
+| `OnEnable()`         | 级联活跃状态 <see cref="Active"/> 从 false → true | `_started && !_destroyed` |
+| `OnDisable()`        | 级联活跃状态 <see cref="Active"/> 从 true → false | `_started && !_destroyed` |
+| `OnDestroy()`        | 节点销毁，树引用仍有效                            | —（Phase 2 调用）         |
+
+> `OnEnable/OnDisable` 响应**级联活跃状态**（`Active`）变化，语义与 Unity MonoBehaviour.OnEnable/OnDisable 一致。  
+> 无论状态变化由自身 `Enabled` 改变还是祖先节点启用/禁用引起，回调行为统一，无需区分。
+
+### 级联活跃机制 (`_enabled` vs `_active`)
+
+**公式**：`_active = _enabled && (parent == null || parent._active)`
+
+Update 系统及其他外部调用方只需检查 `Active` 即可 O(1) 判断节点是否应接收 Tick：
+
+```csharp
+// UpdateScheduler 伪代码
+foreach (var node in allUpdatables)
+{
+    if (node.Active) node.Tick();
+}
+```
+
+**典型场景**：
+
+| 操作                                         | `_enabled` | `_active` | 效果                                                             |
+| -------------------------------------------- | ---------- | --------- | ---------------------------------------------------------------- |
+| 关闭 UI 面板 `panel.Enabled = false`         | F          | F         | 面板及所有子孙停止 Update，`OnDisable` 递归触发                  |
+| 重新打开面板 `panel.Enabled = true`          | T          | T         | 面板恢复，但之前被单独禁用的子按钮 `_enabled=false` **不会**恢复 |
+| 暂停整棵树（游戏暂停）`root.Enabled = false` | T          | F         | 所有节点暂停 Tick，但保留各自的 `_enabled` 意图                  |
+| 恢复游戏 `root.Enabled = true`               | T          | T         | 只有 `_enabled=true` 的节点恢复 Tick                             |
 
 ## 快速使用
 
