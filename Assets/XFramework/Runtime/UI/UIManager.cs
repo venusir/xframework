@@ -1,7 +1,9 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XReactive;
 using XFramework.XUI.Controller;
+using XFramework.XUI.Data;
 using XFramework.XUI.View;
 
 
@@ -262,6 +264,55 @@ namespace XFramework.XUI
         {
             EnsureGlobalInitialized();
             _instance.BringToFront(panel);
+        }
+
+        #endregion
+
+        #region Public API — Event Subscriptions
+
+        /// <summary>
+        /// 订阅面板打开事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">面板打开时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<PanelOpenedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅面板关闭事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">面板关闭时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<PanelClosedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅全部面板关闭事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">全部面板关闭时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<AllPanelsClosedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
         }
 
         #endregion

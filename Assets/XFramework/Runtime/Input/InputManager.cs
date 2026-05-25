@@ -2,6 +2,8 @@ using System;
 using R3;
 using UnityEngine;
 using XFramework.XInput.Default;
+using XFramework.XInput.Messages;
+using XFramework.XReactive;
 
 namespace XFramework.XInput
 {
@@ -568,6 +570,55 @@ namespace XFramework.XInput
             if (context != null)
                 context.destroyCancellationToken.Register(() => sub.Dispose());
 
+            return sub;
+        }
+
+        #endregion
+
+        #region Public API — Event Subscriptions
+
+        /// <summary>
+        /// 订阅输入设备连接事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">设备连接时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<DeviceConnectedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅输入设备断开事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">设备断开时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<DeviceDisconnectedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
+
+        /// <summary>
+        /// 订阅手柄类型变化事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">手柄类型变化时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<GamepadTypeChangedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
             return sub;
         }
 

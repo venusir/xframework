@@ -149,7 +149,7 @@ namespace XFramework.XUI.Data
             text.text = LocalizationManager.Get(localizationKey);
 
             // 订阅语言变更消息，自动刷新
-            return MessageManager.Subscribe<LanguageChangedMessage>(_ =>
+            return LocalizationManager.Subscribe(_ =>
                 text.text = LocalizationManager.Get(localizationKey));
         }
 

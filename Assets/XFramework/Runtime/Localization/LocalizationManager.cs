@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
+using XFramework.XReactive;
 
 namespace XFramework.XLocalization
 {
@@ -233,6 +235,25 @@ namespace XFramework.XLocalization
         {
             EnsureGlobalInitialized();
             return _instance.HasPlaceholder(key);
+        }
+
+        #endregion
+
+        #region Public API — Event Subscriptions
+
+        /// <summary>
+        /// 订阅语言切换事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">语言切换时的回调，参数为新语言标识（如 "zh_Hans"）</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<LanguageChangedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
         }
 
         #endregion
