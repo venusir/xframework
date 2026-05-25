@@ -1,0 +1,10 @@
+{
+    "name": "Venusy609.Xframework.Luban",
+    "references": [
+        "Venusy609.Xframework",
+        "UniTask",
+        "YooAsset"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": []
+}

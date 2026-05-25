@@ -1,0 +1,43 @@
+// ============================================================
+// XFramework Luban Tables Template
+// ============================================================
+// Luban 生成的 Tables 类型模板参考。
+//
+// Tables 类型是 Luban 的入口点，包含所有 TbXxx 表。
+// LubanLoader 通过反射遍历 Tables 的所有属性提取每张表的数据。
+//
+// 使用方式：
+//   await ConfigManager.LoadAsync<GameTables>("config/tables");
+//
+// 加载后，所有 Row 类型自动注册到 ConfigManager：
+//   var item = ConfigManager.Get<ItemRow>(1001);
+//   var allItems = ConfigManager.GetAll<ItemRow>();
+// ============================================================
+
+using Bright.Serialization;
+
+namespace {{Namespace}}
+{
+    /// <summary>
+    /// Luban 生成的 Tables 入口类型。
+    /// <para>包含所有 TbXxx 表属性。必须有一个接收 ByteBuf 的构造函数。</para>
+    /// </summary>
+    public partial class {{TablesName}}
+    {
+        /// <summary>
+        /// Luban 原生反序列化入口。
+        /// </summary>
+        public {{TablesName}}(ByteBuf buf)
+        {
+            // Luban 生成的代码会自动填充以下属性：
+            // TbItem = new TbItem(buf);
+            // TbHero = new TbHero(buf);
+            // ...
+        }
+
+        // Tb 表属性示例（由 Luban 工具自动生成）：
+        // public TbItem TbItem { get; }
+        // public TbHero TbHero { get; }
+        // public TbSkill TbSkill { get; }
+    }
+}
