@@ -181,7 +181,7 @@ namespace XFramework.XConfig
         /// // 之后可通过 ConfigManager.GetTable<ItemRow>().Get(id) 查询
         /// </code>
         /// </example>
-        public static void RegisterTable<T>(ConfigTable<T> table)
+        public static void RegisterTable<T>(ConfigTable<T> table) where T : IConfigRow
         {
             EnsureGlobalInitialized();
             _instance.RegisterTable(table);
@@ -228,7 +228,7 @@ namespace XFramework.XConfig
         /// var all = items.GetAll();          // 完全不涉及 TKey
         /// </code>
         /// </example>
-        public static ConfigTable<T> GetTable<T>()
+        public static ConfigTable<T> GetTable<T>() where T : IConfigRow
         {
             EnsureGlobalInitialized();
             return _instance.GetTable<T>();
@@ -240,7 +240,7 @@ namespace XFramework.XConfig
         /// <typeparam name="T">配置行类型。</typeparam>
         /// <param name="table">输出的包装器实例。</param>
         /// <returns>Table 已加载时返回 <c>true</c>。</returns>
-        public static bool TryGetTable<T>(out ConfigTable<T> table)
+        public static bool TryGetTable<T>(out ConfigTable<T> table) where T : IConfigRow
         {
             EnsureGlobalInitialized();
             return _instance.TryGetTable(out table);

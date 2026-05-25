@@ -12,8 +12,8 @@ namespace XFramework.XConfig
         /// <typeparam name="T">实现 <see cref="IConfigRow{TKey}"/> 的配置行类型。</typeparam>
         /// <typeparam name="TKey">配置行主键类型。</typeparam>
         /// <param name="assetPath">资源路径。</param>
-        /// <returns>按 Id 索引的字典。</returns>
-        UniTask<System.Collections.Generic.Dictionary<TKey, T>> LoadTableAsync<T, TKey>(string assetPath)
+        /// <returns>ConfigTable 包装器。</returns>
+        UniTask<ConfigTable<T>> LoadTableAsync<T, TKey>(string assetPath)
             where T : IConfigRow<TKey>, new();
 
         /// <summary>加载 Global 类型的配置数据（单份，全局唯一）。</summary>

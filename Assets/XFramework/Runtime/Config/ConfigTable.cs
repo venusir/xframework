@@ -1,3 +1,4 @@
+using System.Collections;
 using System.Collections.Generic;
 
 namespace XFramework.XConfig
@@ -7,19 +8,19 @@ namespace XFramework.XConfig
     /// <para>TKey 隐藏在类型内部，通过 .Get(key) / .TryGet(key) 查询时由实参自动推断主键类型。</para>
     /// <para>建议缓存此包装器以复用后续查询，避免每次查字典。</para>
     /// </summary>
-    /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
-    public sealed class ConfigTable<T>
+    /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
+    public sealed class ConfigTable<T> where T : IConfigRow
     {
-        private readonly object _dict; // Dictionary<TKey, T>
+        internal readonly IDictionary _dict;
         private readonly int _count;
 
         /// <summary>
         /// 构造 <see cref="ConfigTable{T}"/>。
         /// <para>通常由框架内部创建，第三方注入数据时也可直接构造（如 Luban / protobuf 等自定义格式）。</para>
         /// </summary>
-        /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，装箱为 object）。</param>
+        /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，存储为 <see cref="IDictionary"/>）。</param>
         /// <param name="count">字典中元素数量。</param>
-        public ConfigTable(object dict, int count)
+        public ConfigTable(IDictionary dict, int count)
         {
             _dict = dict;
             _count = count;
@@ -39,14 +40,15 @@ namespace XFramework.XConfig
         /// </example>
         public T Get<TKey>(TKey key)
         {
-            var d = _dict as Dictionary<TKey, T>;
-            if (d == null)
-                throw new ConfigException(
-                    $"Table '{typeof(T).Name}' key type mismatch. Expected '{typeof(TKey).Name}'.");
-            if (!d.TryGetValue(key, out var value))
+            if (_dict is Dictionary<TKey, T> d)
+            {
+                if (d.TryGetValue(key, out var value))
+                    return value;
                 throw new ConfigException(
                     $"Id '{key}' not found in Table '{typeof(T).Name}'.");
-            return value;
+            }
+            throw new ConfigException(
+                $"Table '{typeof(T).Name}' key type mismatch. Expected '{typeof(TKey).Name}'.");
         }
 
         /// <summary>
@@ -76,7 +78,7 @@ namespace XFramework.XConfig
         public T[] GetAll()
         {
             var arr = new T[_count];
-            ((System.Collections.IDictionary)_dict).Values.CopyTo(arr, 0);
+            _dict.Values.CopyTo(arr, 0);
             return arr;
         }
 

@@ -78,7 +78,7 @@ namespace XFramework.XConfig
         /// ConfigManager.RegisterTable(table);
         /// </code>
         /// </example>
-        void RegisterTable<T>(ConfigTable<T> table);
+        void RegisterTable<T>(ConfigTable<T> table) where T : IConfigRow;
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
@@ -107,7 +107,7 @@ namespace XFramework.XConfig
         /// <typeparam name="T">配置行类型。</typeparam>
         /// <returns>Table 包装器实例。</returns>
         /// <exception cref="ConfigException">Table 未加载时抛出。</exception>
-        ConfigTable<T> GetTable<T>();
+        ConfigTable<T> GetTable<T>() where T : IConfigRow;
 
         /// <summary>
         /// 安全获取 Table 包装器。未加载时返回 <c>false</c>。
@@ -115,7 +115,7 @@ namespace XFramework.XConfig
         /// <typeparam name="T">配置行类型。</typeparam>
         /// <param name="table">输出的包装器实例。</param>
         /// <returns>Table 已加载时返回 <c>true</c>。</returns>
-        bool TryGetTable<T>(out ConfigTable<T> table);
+        bool TryGetTable<T>(out ConfigTable<T> table) where T : IConfigRow;
 
         #endregion
 

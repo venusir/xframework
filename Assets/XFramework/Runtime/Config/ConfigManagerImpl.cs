@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
@@ -7,7 +8,7 @@ namespace XFramework.XConfig
 {
     /// <summary>
     /// <see cref="IConfigManager"/> 的默认实现，管理所有配置的注册、加载、查询和卸载。
-    /// <para>Table 类型缓存为 <c>Dictionary{TKey, T}</c>（装箱为 object），Global 类型缓存为单个 <c>T</c> 实例。</para>
+    /// <para>Table 类型缓存为 <c>Dictionary{TKey, T}</c>（存储为 <see cref="IDictionary"/>），Global 类型缓存为单个 <c>T</c> 实例。</para>
     /// <para>所有配置加载后常驻内存，不进行 LRU 淘汰（配置数据体量小，不会造成显著内存压力）。</para>
     /// </summary>
     internal sealed class ConfigManagerImpl : IConfigManager
@@ -15,9 +16,9 @@ namespace XFramework.XConfig
         #region Fields
 
         /// <summary>
-        /// 已加载的 Table 数据。key: 配置行类型, value: Dictionary<TKey, T>（存储为 object 以避免额外泛型开销）。
+        /// 已加载的 Table 数据。key: 配置行类型, value: Dictionary{TKey, T}（存储为 <see cref="IDictionary"/>）。
         /// </summary>
-        private readonly Dictionary<Type, object> _tables = new();
+        private readonly Dictionary<Type, IDictionary> _tables = new();
 
         /// <summary>
         /// 已加载的 Global 数据。key: 配置类型, value: 配置实例（class）。
@@ -47,8 +48,8 @@ namespace XFramework.XConfig
             var type = typeof(T);
 
             // 已加载直接返回包装器
-            if (_tables.TryGetValue(type, out var existing))
-                return new ConfigTable<T>(existing, ((System.Collections.IDictionary)existing).Count);
+            if (_tables.TryGetValue(type, out var existingDict))
+                return new ConfigTable<T>(existingDict, existingDict.Count);
 
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException(
@@ -58,9 +59,10 @@ namespace XFramework.XConfig
             try
             {
                 var loader = Loaders[format];
-                var dict = await InvokeLoader(loader, type, keyType, assetPath);
-                _tables[type] = dict;
-                return new ConfigTable<T>(dict, dict.Count);
+                var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
+                var table = (ConfigTable<T>)tableObj;
+                _tables[type] = table._dict;
+                return table;
             }
             catch (ConfigException)
             {
@@ -111,8 +113,8 @@ namespace XFramework.XConfig
             var type = typeof(T);
 
             // 已加载直接返回包装器
-            if (_tables.TryGetValue(type, out var existing))
-                return new ConfigTable<T>(existing, ((System.Collections.IDictionary)existing).Count);
+            if (_tables.TryGetValue(type, out var existingDict))
+                return new ConfigTable<T>(existingDict, existingDict.Count);
 
             if (loader == null)
                 throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
@@ -122,9 +124,10 @@ namespace XFramework.XConfig
             var keyType = ConfigTypeHelper.GetKeyType(type);
             try
             {
-                var dict = await InvokeLoader(loader, type, keyType, assetPath);
-                _tables[type] = dict;
-                return new ConfigTable<T>(dict, dict.Count);
+                var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
+                var table = (ConfigTable<T>)tableObj;
+                _tables[type] = table._dict;
+                return table;
             }
             catch (ConfigException)
             {
@@ -174,18 +177,18 @@ namespace XFramework.XConfig
         /// <para>第三方使用 Luban / protobuf / MessagePack 等工具自行反序列化后，
         /// 构造 <see cref="ConfigTable{T}"/> 并调用此方法注入。</para>
         /// </summary>
-        public void RegisterTable<T>(ConfigTable<T> table)
+        public void RegisterTable<T>(ConfigTable<T> table) where T : IConfigRow
         {
             if (table == null)
                 throw new ConfigException(
                     $"Cannot register null table for Table '{typeof(T).Name}'.");
-            _tables[typeof(T)] = ConfigTableUtil.GetDict(table);
+            _tables[typeof(T)] = table._dict;
         }
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
         /// </summary>
-        public void RegisterTable(Type rowType, System.Collections.IDictionary data)
+        public void RegisterTable(Type rowType, IDictionary data)
         {
             if (rowType == null)
                 throw new ConfigException("rowType cannot be null.");
@@ -213,23 +216,23 @@ namespace XFramework.XConfig
         /// <summary>
         /// 获取指定 Table 的只读包装器。未加载时抛出 <see cref="ConfigException"/>。
         /// </summary>
-        public ConfigTable<T> GetTable<T>()
+        public ConfigTable<T> GetTable<T>() where T : IConfigRow
         {
             var type = typeof(T);
             if (!_tables.TryGetValue(type, out var dict))
                 throw new ConfigException(
                     $"Table '{type.Name}' is not loaded. Call PreloadAsync<{type.Name}>() first.");
-            return new ConfigTable<T>(dict, ((System.Collections.IDictionary)dict).Count);
+            return new ConfigTable<T>(dict, dict.Count);
         }
 
         /// <summary>
         /// 安全获取 Table 包装器。未加载时返回 <c>false</c>。
         /// </summary>
-        public bool TryGetTable<T>(out ConfigTable<T> table)
+        public bool TryGetTable<T>(out ConfigTable<T> table) where T : IConfigRow
         {
             if (_tables.TryGetValue(typeof(T), out var dict))
             {
-                table = new ConfigTable<T>(dict, ((System.Collections.IDictionary)dict).Count);
+                table = new ConfigTable<T>(dict, dict.Count);
                 return true;
             }
             table = null;
@@ -294,45 +297,26 @@ namespace XFramework.XConfig
         #region Internal
 
         /// <summary>
-        /// 通过反射调用 IConfigLoader.LoadTableAsync<T, TKey>。
+        /// 通过反射调用 IConfigLoader.LoadTableAsync<T, TKey>，返回装箱的 ConfigTable。
         /// <para>每次行类型首次加载时反射一次 MakeGenericMethod，后续同类型走缓存字典路径，零反射开销。</para>
         /// <para>UniTask<T> 是值类型，需通过 AsTask() 转为 Task<T> 再 await，避免装箱后丢失状态。</para>
         /// </summary>
-        private static async UniTask<System.Collections.IDictionary> InvokeLoader(
+        private static async UniTask<object> InvokeLoader(
             IConfigLoader loader, Type rowType, Type keyType, string assetPath)
         {
             var method = typeof(IConfigLoader)
                 .GetMethod(nameof(IConfigLoader.LoadTableAsync), BindingFlags.Instance | BindingFlags.Public);
             var genericMethod = method.MakeGenericMethod(rowType, keyType);
             var taskObj = genericMethod.Invoke(loader, new object[] { assetPath });
-            // UniTask<T> 是值类型，不能直接 (UniTask) 转型。
-            // 通过 AsTask() 转为 Task<T>（class），await 其父类 Task 等待完成，再读 Result。
+            // UniTask<ConfigTable<T>> 是值类型，不能直接转型。
+            // 通过 AsTask() 转为 Task<ConfigTable<T>>（class），await 其父类 Task 等待完成，再读 Result。
             var asTaskMethod = taskObj.GetType().GetMethod("AsTask");
             var task = (System.Threading.Tasks.Task)asTaskMethod.Invoke(taskObj, null);
             await task;
             var resultProp = task.GetType().GetProperty("Result");
-            return (System.Collections.IDictionary)resultProp.GetValue(task);
+            return resultProp.GetValue(task);
         }
 
         #endregion
-    }
-
-    /// <summary>
-    /// 内部工具类，用于提取 <see cref="ConfigTable{T}"/> 包装的内部 Dictionary。
-    /// </summary>
-    internal static class ConfigTableUtil
-    {
-        private static readonly FieldInfo DictField = typeof(ConfigTable<>).GetField("_dict",
-            BindingFlags.Instance | BindingFlags.NonPublic);
-
-        /// <summary>
-        /// 提取 ConfigTable 内部存储的 Dictionary<TKey, T>（装箱为 object）。
-        /// </summary>
-        internal static object GetDict<T>(ConfigTable<T> table)
-        {
-            var field = typeof(ConfigTable<T>).GetField("_dict",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-            return field.GetValue(table);
-        }
     }
 }

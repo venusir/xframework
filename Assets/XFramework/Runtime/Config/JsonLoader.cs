@@ -15,7 +15,7 @@ namespace XFramework.XConfig
     {
         #region IConfigLoader
 
-        async UniTask<Dictionary<TKey, T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
+        async UniTask<ConfigTable<T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
             var text = await LoadTextAsync(assetPath);
             try
@@ -32,7 +32,7 @@ namespace XFramework.XConfig
                             $"Duplicate Id '{item.Id}' found in Table '{typeof(T).Name}' from '{assetPath}'.");
                     dict[item.Id] = item;
                 }
-                return dict;
+                return new ConfigTable<T>(dict, dict.Count);
             }
             catch (ConfigException)
             {
