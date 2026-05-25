@@ -2,7 +2,7 @@ using System.Collections;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XCore;
+using XFramework.XNode;
 using XFramework.XUpdate;
 
 namespace XFramework.XUpdate.Tests

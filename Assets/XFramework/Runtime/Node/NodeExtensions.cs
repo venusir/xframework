@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using XFramework.XReactive;
 
-namespace XFramework.XCore
+namespace XFramework.XNode
 {
 
     /// <summary>

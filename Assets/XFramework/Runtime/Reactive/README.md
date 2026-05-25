@@ -197,4 +197,4 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 ## 依赖
 
 - `R3` — GitHub/OpenUPM 依赖，响应式编程库
-- `XFramework.XCore` — 节点系统依赖
+- `XFramework.XNode` — 节点系统依赖

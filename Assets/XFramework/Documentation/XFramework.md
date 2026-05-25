@@ -43,7 +43,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 
 | 模块             | 命名空间                   | 文档                                        | 职责                                                          |
 | ---------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
-| **Core**         | `XFramework.XCore`         | [README](../Runtime/Core/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
+| **Core**         | `XFramework.XNode`         | [README](../Runtime/Core/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
 | **Loader**       | `XFramework.XLoader`       | [README](../Runtime/Loader/README.md)       | 启动管线：Phase 分组调度、一键启动、进度广播                  |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |

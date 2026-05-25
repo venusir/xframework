@@ -1,15 +1,15 @@
-# XFramework / Core 模块
+# XFramework / Node 模块
 
 ## 概述
 
 XFramework 核心模块提供了一套轻量级、纯 C# 的**树节点系统**，是框架所有子模块的基础。它不依赖 `MonoBehaviour`，具有完整的生命周期管理、组件式缓存、对象池复用和自动取消订阅等特性。
 
-**命名空间**: `XFramework.XCore`
+**命名空间**: `XFramework.XNode`
 
 ## 架构设计
 
 ```
-Runtime/Core/
+Runtime/Node/
 ├── IBaseNode / BaseNode          # 节点基类：生命周期、父子关系、销毁令牌
 ├── ParentNode / ContainerNode    # 含子节点的节点
 ├── EntityNode                     # 按类型缓存子节点（类似 GetComponent）
@@ -78,7 +78,7 @@ Runtime/Core/
 ### 1. 创建节点树
 
 ```csharp
-using XFramework.XCore;
+using XFramework.XNode;
 
 // 创建根节点
 var root = RootNode.Create();

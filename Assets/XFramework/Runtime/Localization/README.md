@@ -256,7 +256,7 @@ bootstrapNode.SetInitData("zh_Hans", defaultLanguageData);
 
 ## 依赖
 
-- `XFramework.XCore` — 节点系统（`EntityNode`, `LeafNode`, `IBaseNode`）
+- `XFramework.XNode` — 节点系统（`EntityNode`, `LeafNode`, `IBaseNode`）
 - `XFramework.XAsset` — 通过 `AssetManager` 加载语言 JSON 文件
 - `XFramework.XLoader` — `ILoadable`, `LoadProgress` 接口
 - `UniTask`（框架层已提供）

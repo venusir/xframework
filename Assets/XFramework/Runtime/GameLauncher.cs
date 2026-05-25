@@ -3,7 +3,7 @@ using UnityEngine;
 using XFramework.XLoader;
 using XFramework.XUpdate;
 
-namespace XFramework.XCore
+namespace XFramework.XNode
 {
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。

@@ -1,6 +1,6 @@
 using System;
 
-namespace XFramework.XCore
+namespace XFramework.XNode
 {
 
     /// <summary>

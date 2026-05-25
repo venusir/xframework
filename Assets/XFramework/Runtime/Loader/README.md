@@ -55,7 +55,7 @@ StartupAsync(rootNode)
 
 ```csharp
 using XFramework.XLoader;
-using XFramework.XCore;
+using XFramework.XNode;
 using Cysharp.Threading.Tasks;
 using System.Threading;
 
@@ -82,7 +82,7 @@ public class ConfigBootstrapNode : EntityNode, ILoadable
 
 ```csharp
 using XFramework.XLoader;
-using XFramework.XCore;
+using XFramework.XNode;
 
 // 构建节点树
 var root = RootNode.Create();
@@ -177,5 +177,5 @@ public class LoadProgress
 
 ## 依赖
 
-- `XFramework.XCore` — 节点系统（`IParentNode` 遍历、`BaseNode` 生命周期）
+- `XFramework.XNode` — 节点系统（`IParentNode` 遍历、`BaseNode` 生命周期）
 - `UniTask`（框架层已提供）

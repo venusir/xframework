@@ -1,6 +1,6 @@
 using System;
 using Cysharp.Threading.Tasks;
-using XFramework.XCore;
+using XFramework.XNode;
 
 namespace XFramework.XLoader
 {

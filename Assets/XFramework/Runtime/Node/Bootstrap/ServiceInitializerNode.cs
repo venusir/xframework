@@ -1,4 +1,4 @@
-namespace XFramework.XCore
+namespace XFramework.XNode
 {
     /// <summary>
     /// 服务初始化节点。在启动阶段统一管理需要参与加载管线的模块（如 AssetManager 等）的生命周期。

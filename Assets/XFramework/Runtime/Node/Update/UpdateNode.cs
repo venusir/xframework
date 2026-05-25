@@ -1,5 +1,5 @@
 using UnityEngine;
-using XFramework.XCore;
+using XFramework.XNode;
 
 namespace XFramework.XUpdate
 {

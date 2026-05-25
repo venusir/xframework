@@ -186,4 +186,4 @@ public class MyNode : EntityNode
   ```
   在 Unity 中通过 Package Manager → "Add package from git URL..." 添加。
 - `UniTask`（框架层已提供）
-- `XFramework.XCore` — 节点扩展依赖 Core 模块
+- `XFramework.XNode` — 节点扩展依赖 Core 模块

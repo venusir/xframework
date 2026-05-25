@@ -26,7 +26,7 @@ Core/Update/
 实现 `IUpdateable` 的节点树节点会被 `UpdateNode` 自动注册到 `UpdateManager`，**无需手动操作**：
 
 ```csharp
-using XFramework.XCore;
+using XFramework.XNode;
 using XFramework.XUpdate;
 
 public class MyNode : EntityNode, IUpdateable
@@ -82,4 +82,4 @@ public static class MyStaticService : IUpdateable
 
 ## 依赖
 
-- `XFramework.XCore` — 节点系统依赖（`IUpdateable` / `BaseNode` / `UpdateNode`）
+- `XFramework.XNode` — 节点系统依赖（`IUpdateable` / `BaseNode` / `UpdateNode`）

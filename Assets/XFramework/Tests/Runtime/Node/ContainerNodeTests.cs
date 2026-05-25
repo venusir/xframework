@@ -1,7 +1,7 @@
 using NUnit.Framework;
-using XFramework.XCore;
+using XFramework.XNode;
 
-namespace XFramework.XCore.Tests
+namespace XFramework.XNode.Tests
 {
     [TestFixture]
     public class ContainerNodeTests

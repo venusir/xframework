@@ -3,7 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using System.Collections.Generic;
 using UnityEngine;
-using XFramework.XCore;
+using XFramework.XNode;
 
 namespace XFramework.XLocalization
 {

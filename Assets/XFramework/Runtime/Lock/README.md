@@ -183,4 +183,4 @@ LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
 
 ## 依赖
 
-- `XFramework.XCore` — 节点系统依赖（`ILockable` 标记接口）
+- `XFramework.XNode` — 节点系统依赖（`ILockable` 标记接口）
