@@ -96,6 +96,23 @@ namespace XFramework.XConfig
         #region Query — Table
 
         /// <summary>
+        /// 获取指定 Table 的只读包装器。未加载时抛出 <see cref="ConfigException"/>。
+        /// <para>包装器可缓存，后续通过 .Get(key) / .TryGet(key) 查询，主键类型由实参自动推断。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <returns>Table 包装器实例。</returns>
+        /// <exception cref="ConfigException">Table 未加载时抛出。</exception>
+        ConfigTable<T> GetTable<T>();
+
+        /// <summary>
+        /// 安全获取 Table 包装器。未加载时返回 <c>false</c>。
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <param name="table">输出的包装器实例。</param>
+        /// <returns>Table 已加载时返回 <c>true</c>。</returns>
+        bool TryGetTable<T>(out ConfigTable<T> table);
+
+        /// <summary>
         /// 获取 Table 中指定 Id 的配置行。不存在时抛异常。
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>

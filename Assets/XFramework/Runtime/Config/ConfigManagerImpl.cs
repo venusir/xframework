@@ -208,6 +208,32 @@ namespace XFramework.XConfig
         #region Query — Table
 
         /// <summary>
+        /// 获取指定 Table 的只读包装器。未加载时抛出 <see cref="ConfigException"/>。
+        /// </summary>
+        public ConfigTable<T> GetTable<T>()
+        {
+            var type = typeof(T);
+            if (!_tables.TryGetValue(type, out var dict))
+                throw new ConfigException(
+                    $"Table '{type.Name}' is not loaded. Call PreloadAsync<{type.Name}>() first.");
+            return new ConfigTable<T>(dict, ((System.Collections.IDictionary)dict).Count);
+        }
+
+        /// <summary>
+        /// 安全获取 Table 包装器。未加载时返回 <c>false</c>。
+        /// </summary>
+        public bool TryGetTable<T>(out ConfigTable<T> table)
+        {
+            if (_tables.TryGetValue(typeof(T), out var dict))
+            {
+                table = new ConfigTable<T>(dict, ((System.Collections.IDictionary)dict).Count);
+                return true;
+            }
+            table = null;
+            return false;
+        }
+
+        /// <summary>
         /// 获取 Table 中指定 Id 的配置行。不存在时抛异常。
         /// </summary>
         public T Get<T, TKey>(TKey id) where T : IConfigRow<TKey>

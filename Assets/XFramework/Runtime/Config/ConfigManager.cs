@@ -206,6 +206,39 @@ namespace XFramework.XConfig
         #region Public API — Query Table
 
         /// <summary>
+        /// 获取指定 Table 的只读包装器。未加载时抛出 <see cref="ConfigException"/>。
+        /// <para>包装器可缓存，后续通过 .Get(key) 查询时主键类型由实参自动推断，无需每次指定 TKey。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <returns>Table 包装器实例。</returns>
+        /// <exception cref="ConfigException">Table 未加载时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// var items = ConfigManager.GetTable<ItemRow>();
+        /// var row = items.Get(1001); // TKey 自动推断为 int，无需指定
+        /// items.TryGet(1002, out var row2);
+        /// var all = items.GetAll(); // 完全不涉及 TKey
+        /// </code>
+        /// </example>
+        public static ConfigTable<T> GetTable<T>()
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetTable<T>();
+        }
+
+        /// <summary>
+        /// 安全获取 Table 包装器。未加载时返回 <c>false</c>。
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <param name="table">输出的包装器实例。</param>
+        /// <returns>Table 已加载时返回 <c>true</c>。</returns>
+        public static bool TryGetTable<T>(out ConfigTable<T> table)
+        {
+            EnsureGlobalInitialized();
+            return _instance.TryGetTable(out table);
+        }
+
+        /// <summary>
         /// 获取 Table 中指定 Id 的配置行。不存在时抛出 <see cref="ConfigException"/>。
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</typeparam>
