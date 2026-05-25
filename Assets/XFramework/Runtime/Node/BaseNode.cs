@@ -191,9 +191,15 @@ namespace XFramework.XNode
                 if (_started && !_destroyed)
                 {
                     if (newActive)
+                    {
                         OnEnable();
+                        OnNodeEnabled?.Invoke(this);
+                    }
                     else
+                    {
                         OnDisable();
+                        OnNodeDisabled?.Invoke(this);
+                    }
                 }
             }
         }
@@ -286,7 +292,10 @@ namespace XFramework.XNode
             // RefreshActive 的 _active != newActive guard 在 _active 初始为 true
             // 且重新计算后仍为 true 时会跳过，需在此补齐，与 Unity 行为一致。
             if (_active)
+            {
                 OnEnable();
+                OnNodeEnabled?.Invoke(this);
+            }
         }
 
         #endregion
@@ -465,6 +474,22 @@ namespace XFramework.XNode
         /// 节点 Start 完成时触发。
         /// </summary>
         public event Action<BaseNode> OnNodeStarted;
+
+        /// <summary>
+        /// 节点激活时触发。级联活跃状态 <see cref="Active"/> 从 false 变为 true 时触发。
+        /// <para>可能由自身启用或祖先节点激活引起。</para>
+        /// <para>仅在节点已 Start 且未销毁时触发。</para>
+        /// <para>可能在高频场景（如父节点频繁切换）下多次调用，避免在 handler 中执行重型操作。</para>
+        /// </summary>
+        public event Action<BaseNode> OnNodeEnabled;
+
+        /// <summary>
+        /// 节点失活时触发。级联活跃状态 <see cref="Active"/> 从 true 变为 false 时触发。
+        /// <para>可能由自身禁用或祖先节点失活引起。</para>
+        /// <para>仅在节点已 Start 且未销毁时触发。</para>
+        /// <para>可能在高频场景下多次调用，避免在 handler 中执行重型操作。</para>
+        /// </summary>
+        public event Action<BaseNode> OnNodeDisabled;
 
         /// <summary>
         /// 节点销毁时触发。用于响应式扩展中自动取消订阅。
