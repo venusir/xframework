@@ -176,7 +176,7 @@ namespace XFramework.XConfig
         /// // Luban 示例：反序列化后构造 ConfigTable 注册
         /// var tables = new GameTables(byteBuf);
         /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
-        /// var table = new ConfigTable<ItemRow>(dict, dict.Count);
+        /// var table = new ConfigTable<ItemRow>(dict);
         /// ConfigManager.RegisterTable(table);
         /// // 之后可通过 ConfigManager.GetTable<ItemRow>().Get(id) 查询
         /// </code>
@@ -189,13 +189,14 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
+        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口）。</para>
         /// </summary>
-        /// <param name="rowType">配置行类型。</param>
-        /// <param name="data">按 Id 索引的 <see cref="System.Collections.IDictionary"/>。</param>
-        public static void RegisterTable(Type rowType, System.Collections.IDictionary data)
+        /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>
+        /// <param name="table"><see cref="IConfigTable"/> 实例。</param>
+        public static void RegisterTable(Type rowType, IConfigTable table)
         {
             EnsureGlobalInitialized();
-            _instance.RegisterTable(rowType, data);
+            _instance.RegisterTable(rowType, table);
         }
 
         /// <summary>

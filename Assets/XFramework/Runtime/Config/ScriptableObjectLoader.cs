@@ -31,7 +31,7 @@ namespace XFramework.XConfig
                         $"Duplicate Id '{item.Id}' found in SO Table '{typeof(T).Name}' from '{assetPath}'.");
                 dict[item.Id] = item;
             }
-            return new ConfigTable<T>(dict, dict.Count);
+            return new ConfigTable<T>(dict);
         }
 
         async UniTask<T> IConfigLoader.LoadGlobalAsync<T>(string assetPath)

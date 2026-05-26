@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 
 namespace XFramework.XConfig
 {
@@ -26,6 +27,18 @@ namespace XFramework.XConfig
         private readonly Dictionary<Type, object> _globals = new();
 
         /// <summary>
+        /// 已缓存的 Table 包装器。key: 配置行类型, value: <c>ConfigTable<T></c> 实例（存储为 object）。
+        /// <para>与 <see cref="_tables"/> 生命周期同步，避免每次查询时重复分配包装器。</para>
+        /// </summary>
+        private readonly Dictionary<Type, object> _tableWrappers = new();
+
+        /// <summary>
+        /// 已加载配置的 assetPath 记录。key: 类型, value: 首次加载时使用的路径。
+        /// <para>用于检测重复加载时路径变化并给出 Warning。</para>
+        /// </summary>
+        private readonly Dictionary<Type, string> _assetPaths = new();
+
+        /// <summary>
         /// Loader 实例缓存，按 <see cref="ConfigFormat"/> 索引。
         /// </summary>
         private static readonly Dictionary<ConfigFormat, IConfigLoader> Loaders = new()
@@ -47,9 +60,13 @@ namespace XFramework.XConfig
         {
             var type = typeof(T);
 
-            // 已加载直接返回包装器
+            // 已加载：检查 assetPath 变化 + 返回缓存的包装器
             if (_tables.TryGetValue(type, out var existingDict))
-                return new ConfigTable<T>(existingDict, existingDict.Count);
+            {
+                if (HasAssetPathChanged(type, assetPath))
+                    LogAssetPathChanged(type.Name, _assetPaths[type], assetPath);
+                return GetOrCreateWrapper<T>(type, existingDict);
+            }
 
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException(
@@ -62,6 +79,8 @@ namespace XFramework.XConfig
                 var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
+                _tableWrappers[type] = table;
+                _assetPaths[type] = assetPath;
                 return table;
             }
             catch (ConfigException)
@@ -88,13 +107,18 @@ namespace XFramework.XConfig
 
             var type = typeof(T);
             if (_globals.ContainsKey(type))
+            {
+                if (HasAssetPathChanged(type, assetPath))
+                    LogAssetPathChanged(type.Name, _assetPaths[type], assetPath);
                 return;
+            }
 
             try
             {
                 var loader = Loaders[format];
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
+                _assetPaths[type] = assetPath;
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -112,9 +136,13 @@ namespace XFramework.XConfig
         {
             var type = typeof(T);
 
-            // 已加载直接返回包装器
+            // 已加载：检查 assetPath 变化 + 返回缓存的包装器
             if (_tables.TryGetValue(type, out var existingDict))
-                return new ConfigTable<T>(existingDict, existingDict.Count);
+            {
+                if (HasAssetPathChanged(type, assetPath))
+                    LogAssetPathChanged(type.Name, _assetPaths[type], assetPath);
+                return GetOrCreateWrapper<T>(type, existingDict);
+            }
 
             if (loader == null)
                 throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
@@ -127,6 +155,8 @@ namespace XFramework.XConfig
                 var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
+                _tableWrappers[type] = table;
+                _assetPaths[type] = assetPath;
                 return table;
             }
             catch (ConfigException)
@@ -154,12 +184,17 @@ namespace XFramework.XConfig
 
             var type = typeof(T);
             if (_globals.ContainsKey(type))
+            {
+                if (HasAssetPathChanged(type, assetPath))
+                    LogAssetPathChanged(type.Name, _assetPaths[type], assetPath);
                 return;
+            }
 
             try
             {
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
+                _assetPaths[type] = assetPath;
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -182,20 +217,25 @@ namespace XFramework.XConfig
             if (table == null)
                 throw new ConfigException(
                     $"Cannot register null table for Table '{typeof(T).Name}'.");
-            _tables[typeof(T)] = table._dict;
+            var type = typeof(T);
+            _tables[type] = table._dict;
+            _tableWrappers[type] = table;
         }
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
+        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口），
+        /// 通过 <see cref="IConfigTable.Data"/> 直接获取内部字典，零反射开销。</para>
         /// </summary>
-        public void RegisterTable(Type rowType, IDictionary data)
+        public void RegisterTable(Type rowType, IConfigTable table)
         {
             if (rowType == null)
                 throw new ConfigException("rowType cannot be null.");
-            if (data == null)
+            if (table == null)
                 throw new ConfigException(
-                    $"Cannot register null data for Table '{rowType.Name}'.");
-            _tables[rowType] = data;
+                    $"Cannot register null table for Table '{rowType.Name}'.");
+            _tables[rowType] = table.Data;
+            _tableWrappers[rowType] = table;
         }
 
         /// <summary>
@@ -222,7 +262,7 @@ namespace XFramework.XConfig
             if (!_tables.TryGetValue(type, out var dict))
                 throw new ConfigException(
                     $"Table '{type.Name}' is not loaded. Call PreloadAsync<{type.Name}>() first.");
-            return new ConfigTable<T>(dict, dict.Count);
+            return GetOrCreateWrapper<T>(type, dict);
         }
 
         /// <summary>
@@ -232,7 +272,7 @@ namespace XFramework.XConfig
         {
             if (_tables.TryGetValue(typeof(T), out var dict))
             {
-                table = new ConfigTable<T>(dict, dict.Count);
+                table = GetOrCreateWrapper<T>(typeof(T), dict);
                 return true;
             }
             table = null;
@@ -281,6 +321,8 @@ namespace XFramework.XConfig
             var type = typeof(T);
             _tables.Remove(type);
             _globals.Remove(type);
+            _tableWrappers.Remove(type);
+            _assetPaths.Remove(type);
         }
 
         /// <summary>
@@ -315,6 +357,44 @@ namespace XFramework.XConfig
             await task;
             var resultProp = task.GetType().GetProperty("Result");
             return resultProp.GetValue(task);
+        }
+
+        /// <summary>
+        /// 获取或创建 Table 包装器。优先返回缓存的 <c>ConfigTable<T></c>，避免重复分配。
+        /// </summary>
+        private ConfigTable<T> GetOrCreateWrapper<T>(Type type, IDictionary dict) where T : IConfigRow
+        {
+            if (_tableWrappers.TryGetValue(type, out var cached) && cached is ConfigTable<T> table)
+                return table;
+            var newTable = new ConfigTable<T>(dict);
+            _tableWrappers[type] = newTable;
+            return newTable;
+        }
+
+        /// <summary>
+        /// 检查 assetPath 是否与首次加载时不同。
+        /// </summary>
+        /// <returns><c>true</c> 表示路径已变化（需要 Warning）。</returns>
+        private bool HasAssetPathChanged(Type type, string assetPath)
+        {
+            if (_assetPaths.TryGetValue(type, out var oldPath))
+            {
+                // assetPath 为 null 或空时视为"未指定"，不报警
+                if (!string.IsNullOrEmpty(assetPath) && oldPath != assetPath)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 打印 assetPath 变化的 Warning 日志。
+        /// </summary>
+        private static void LogAssetPathChanged(string typeName, string oldPath, string newPath)
+        {
+            Debug.LogWarning(
+                $"[Config] '{typeName}' is already loaded from '{oldPath}', " +
+                $"ignoring new assetPath '{newPath}'. " +
+                $"To load from a different path, call Unload<{typeName}>() first.");
         }
 
         #endregion

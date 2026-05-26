@@ -32,7 +32,7 @@ namespace XFramework.XConfig
                             $"Duplicate Id '{item.Id}' found in Table '{typeof(T).Name}' from '{assetPath}'.");
                     dict[item.Id] = item;
                 }
-                return new ConfigTable<T>(dict, dict.Count);
+                return new ConfigTable<T>(dict);
             }
             catch (ConfigException)
             {

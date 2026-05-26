@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace XFramework.XConfig
 {
@@ -9,21 +10,21 @@ namespace XFramework.XConfig
     /// <para>建议缓存此包装器以复用后续查询，避免每次查字典。</para>
     /// </summary>
     /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
-    public sealed class ConfigTable<T> where T : IConfigRow
+    public sealed class ConfigTable<T> : IConfigTable where T : IConfigRow
     {
         internal readonly IDictionary _dict;
-        private readonly int _count;
+        private readonly T[] _allValues;
 
         /// <summary>
         /// 构造 <see cref="ConfigTable{T}"/>。
         /// <para>通常由框架内部创建，第三方注入数据时也可直接构造（如 Luban / protobuf 等自定义格式）。</para>
         /// </summary>
         /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，存储为 <see cref="IDictionary"/>）。</param>
-        /// <param name="count">字典中元素数量。</param>
-        public ConfigTable(IDictionary dict, int count)
+        public ConfigTable(IDictionary dict)
         {
             _dict = dict;
-            _count = count;
+            _allValues = new T[_dict.Count];
+            _dict.Values.CopyTo(_allValues, 0);
         }
 
         #region Query
@@ -57,8 +58,17 @@ namespace XFramework.XConfig
         /// </summary>
         public bool TryGet<TKey>(TKey key, out T value)
         {
-            if (_dict is Dictionary<TKey, T> d && d.TryGetValue(key, out value))
-                return true;
+            if (_dict is Dictionary<TKey, T> d)
+            {
+                if (d.TryGetValue(key, out value))
+                    return true;
+                value = default;
+                return false;
+            }
+            Debug.LogWarning(
+                $"[Config] Table '{typeof(T).Name}' key type mismatch in TryGet. " +
+                $"Actual key type is unknown (stored as IDictionary). " +
+                $"You passed '{typeof(TKey).Name}', but the Table was loaded with a different key type.");
             value = default;
             return false;
         }
@@ -68,22 +78,34 @@ namespace XFramework.XConfig
         /// </summary>
         public bool Contains<TKey>(TKey key)
         {
-            return _dict is Dictionary<TKey, T> d && d.ContainsKey(key);
+            if (_dict is Dictionary<TKey, T> d)
+                return d.ContainsKey(key);
+            Debug.LogWarning(
+                $"[Config] Table '{typeof(T).Name}' key type mismatch in Contains. " +
+                $"Actual key type is unknown (stored as IDictionary). " +
+                $"You passed '{typeof(TKey).Name}', but the Table was loaded with a different key type.");
+            return false;
         }
 
         /// <summary>
-        /// 获取表中所有配置行（复制为新数组，有少量 GC 分配）。
+        /// 获取表中所有配置行（零 GC 分配，返回构造函数中预缓存的数组）。
+        /// <para>返回的是内部数组引用，请勿修改元素（struct 类型修改不生效，class 类型应遵守只读约定）。</para>
         /// <para>完全不涉及 TKey，无需指定主键类型。</para>
         /// </summary>
         public T[] GetAll()
         {
-            var arr = new T[_count];
-            _dict.Values.CopyTo(arr, 0);
-            return arr;
+            return _allValues;
         }
 
         /// <summary>表中行数。</summary>
-        public int Count => _count;
+        public int Count => _allValues.Length;
+
+        #endregion
+
+        #region IConfigTable
+
+        /// <summary>暴露内部字典，供非泛型反射路径访问。</summary>
+        IDictionary IConfigTable.Data => _dict;
 
         #endregion
     }

@@ -74,7 +74,7 @@ namespace XFramework.XConfig
         /// <example>
         /// <code>
         /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
-        /// var table = new ConfigTable<ItemRow>(dict, dict.Count);
+        /// var table = new ConfigTable<ItemRow>(dict);
         /// ConfigManager.RegisterTable(table);
         /// </code>
         /// </example>
@@ -82,11 +82,13 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
+        /// <para>传入装箱的 <c>ConfigTable<T></c> 实例，框架通过反射提取内部字典。</para>
+        /// <para>第三方反射调用示例（推荐使用泛型版，避免手动构造 ConfigTable）：</para>
         /// </summary>
-        /// <param name="rowType">配置行类型。</param>
-        /// <param name="data">按 Id 索引的 <see cref="System.Collections.IDictionary"/>。</param>
-        /// <exception cref="ConfigException">rowType 或 data 为 null 时抛出。</exception>
-        void RegisterTable(Type rowType, System.Collections.IDictionary data);
+        /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>
+        /// <param name="table"><see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口）。</param>
+        /// <exception cref="ConfigException">rowType 或 table 为 null 时抛出。</exception>
+        void RegisterTable(Type rowType, IConfigTable table);
 
         /// <summary>
         /// 注册 Global 配置单例到配置管理器。
