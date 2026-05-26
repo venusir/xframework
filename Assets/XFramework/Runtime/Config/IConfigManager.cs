@@ -119,6 +119,29 @@ namespace XFramework.XConfig
         /// <returns>Table 已加载时返回 <c>true</c>。</returns>
         bool TryGetTable<T>(out ConfigTable<T> table) where T : IConfigRow;
 
+        /// <summary>
+        /// 按主键直接获取配置行。
+        /// <para>Table 未加载或键不存在时抛出 <see cref="ConfigException"/>。
+        /// 适合零散的单次查询，无需先获取包装器。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <typeparam name="TKey">主键类型。</typeparam>
+        /// <param name="key">主键值。</param>
+        /// <returns>配置行实例。</returns>
+        /// <exception cref="ConfigException">Table 未加载或键不存在时抛出。</exception>
+        T Get<T, TKey>(TKey key) where T : IConfigRow;
+
+        /// <summary>
+        /// 安全按主键获取配置行。
+        /// <para>Table 未加载或键不存在时返回 <c>false</c>。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <typeparam name="TKey">主键类型。</typeparam>
+        /// <param name="key">主键值。</param>
+        /// <param name="value">输出的配置行，失败时为 <c>default</c>。</param>
+        /// <returns>成功获取时返回 <c>true</c>。</returns>
+        bool TryGet<T, TKey>(TKey key, out T value) where T : IConfigRow;
+
         #endregion
 
         #region Query — Global

@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -76,7 +75,7 @@ namespace XFramework.XConfig
             try
             {
                 var loader = Loaders[format];
-                var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
+                var tableObj = await InvokeLoader<T>(loader, keyType, assetPath);
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
@@ -152,7 +151,7 @@ namespace XFramework.XConfig
             var keyType = ConfigTypeHelper.GetKeyType(type);
             try
             {
-                var tableObj = await InvokeLoader(loader, type, keyType, assetPath);
+                var tableObj = await InvokeLoader<T>(loader, keyType, assetPath);
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
@@ -279,6 +278,25 @@ namespace XFramework.XConfig
             return false;
         }
 
+        /// <summary>
+        /// 按主键直接获取配置行。Table 未加载或键不存在时抛异常。
+        /// </summary>
+        public T Get<T, TKey>(TKey key) where T : IConfigRow
+        {
+            return GetTable<T>().Get(key);
+        }
+
+        /// <summary>
+        /// 安全按主键获取配置行。Table 未加载或键不存在时返回 <c>false</c>。
+        /// </summary>
+        public bool TryGet<T, TKey>(TKey key, out T value) where T : IConfigRow
+        {
+            if (TryGetTable<T>(out var table))
+                return table.TryGet(key, out value);
+            value = default;
+            return false;
+        }
+
         #endregion
 
         #region Query — Global
@@ -339,24 +357,13 @@ namespace XFramework.XConfig
         #region Internal
 
         /// <summary>
-        /// 通过反射调用 IConfigLoader.LoadTableAsync<T, TKey>，返回装箱的 ConfigTable。
-        /// <para>每次行类型首次加载时反射一次 MakeGenericMethod，后续同类型走缓存字典路径，零反射开销。</para>
-        /// <para>UniTask<T> 是值类型，需通过 AsTask() 转为 Task<T> 再 await，避免装箱后丢失状态。</para>
+        /// 通过缓存的强类型委托调用 IConfigLoader.LoadTableAsync<T, TKey>，返回装箱的 ConfigTable。
+        /// <para>每对 (rowType, keyType) 仅首次通过反射构造委托，后续走缓存零反射开销。</para>
         /// </summary>
-        private static async UniTask<object> InvokeLoader(
-            IConfigLoader loader, Type rowType, Type keyType, string assetPath)
+        private static UniTask<object> InvokeLoader<T>(
+            IConfigLoader loader, Type keyType, string assetPath)
         {
-            var method = typeof(IConfigLoader)
-                .GetMethod(nameof(IConfigLoader.LoadTableAsync), BindingFlags.Instance | BindingFlags.Public);
-            var genericMethod = method.MakeGenericMethod(rowType, keyType);
-            var taskObj = genericMethod.Invoke(loader, new object[] { assetPath });
-            // UniTask<ConfigTable<T>> 是值类型，不能直接转型。
-            // 通过 AsTask() 转为 Task<ConfigTable<T>>（class），await 其父类 Task 等待完成，再读 Result。
-            var asTaskMethod = taskObj.GetType().GetMethod("AsTask");
-            var task = (System.Threading.Tasks.Task)asTaskMethod.Invoke(taskObj, null);
-            await task;
-            var resultProp = task.GetType().GetProperty("Result");
-            return resultProp.GetValue(task);
+            return ConfigLoadHelper.InvokeAsync(loader, typeof(T), keyType, assetPath);
         }
 
         /// <summary>

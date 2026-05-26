@@ -247,6 +247,47 @@ namespace XFramework.XConfig
             return _instance.TryGetTable(out table);
         }
 
+        /// <summary>
+        /// 按主键直接获取配置行。
+        /// <para>Table 未加载或键不存在时抛出 <see cref="ConfigException"/>。
+        /// 适合零散的单次查询，无需先获取包装器。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <typeparam name="TKey">主键类型。</typeparam>
+        /// <param name="key">主键值。</param>
+        /// <returns>配置行实例。</returns>
+        /// <exception cref="ConfigException">Table 未加载或键不存在时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// var row = ConfigManager.Get<ItemRow, int>(1001);
+        /// </code>
+        /// </example>
+        public static T Get<T, TKey>(TKey key) where T : IConfigRow
+        {
+            EnsureGlobalInitialized();
+            return _instance.Get<T, TKey>(key);
+        }
+
+        /// <summary>
+        /// 安全按主键获取配置行。
+        /// <para>Table 未加载或键不存在时返回 <c>false</c>。</para>
+        /// </summary>
+        /// <typeparam name="T">配置行类型。</typeparam>
+        /// <typeparam name="TKey">主键类型。</typeparam>
+        /// <param name="key">主键值。</param>
+        /// <param name="value">输出的配置行，失败时为 <c>default</c>。</param>
+        /// <returns>成功获取时返回 <c>true</c>。</returns>
+        /// <example>
+        /// <code>
+        /// ConfigManager.TryGet<ItemRow, int>(1002, out var row);
+        /// </code>
+        /// </example>
+        public static bool TryGet<T, TKey>(TKey key, out T value) where T : IConfigRow
+        {
+            EnsureGlobalInitialized();
+            return _instance.TryGet(key, out value);
+        }
+
         #endregion
 
         #region Public API — Query Global
