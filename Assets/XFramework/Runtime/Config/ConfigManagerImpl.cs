@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -44,7 +45,13 @@ namespace XFramework.XConfig
         {
             { ConfigFormat.Json, new JsonLoader() },
             { ConfigFormat.ScriptableObject, new ScriptableObjectLoader() },
+            { ConfigFormat.Csv, new CsvLoader() },
         };
+
+        /// <summary>
+        /// 内部配置变更事件，由 <see cref="ConfigManager"/> 订阅以驱动 <c>ConfigManager.ConfigChanged</c>。
+        /// </summary>
+        internal event Action<Type> InternalConfigChanged;
 
         #endregion
 
@@ -80,6 +87,7 @@ namespace XFramework.XConfig
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
                 _assetPaths[type] = assetPath;
+                InternalConfigChanged?.Invoke(type);
                 return table;
             }
             catch (ConfigException)
@@ -118,6 +126,7 @@ namespace XFramework.XConfig
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
                 _assetPaths[type] = assetPath;
+                InternalConfigChanged?.Invoke(type);
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -156,6 +165,7 @@ namespace XFramework.XConfig
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
                 _assetPaths[type] = assetPath;
+                InternalConfigChanged?.Invoke(type);
                 return table;
             }
             catch (ConfigException)
@@ -194,12 +204,121 @@ namespace XFramework.XConfig
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
                 _assetPaths[type] = assetPath;
+                InternalConfigChanged?.Invoke(type);
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
                 throw new ConfigException(
                     $"Failed to preload Global config '{type.Name}' with custom loader: {ex.Message}", ex);
             }
+        }
+
+        #endregion
+
+        #region Batch Preload
+
+        /// <inheritdoc/>
+        public async UniTask PreloadGroupAsync(string groupName, ConfigManifest manifest)
+        {
+            if (manifest == null)
+                throw new ArgumentNullException(nameof(manifest));
+            if (string.IsNullOrEmpty(groupName))
+                throw new ArgumentException("groupName cannot be null or empty.", nameof(groupName));
+
+            foreach (var entry in manifest.Entries)
+            {
+                if (entry.Group != groupName)
+                    continue;
+                await LoadManifestEntry(entry);
+            }
+        }
+
+        /// <inheritdoc/>
+        public async UniTask PreloadAllAsync(ConfigManifest manifest)
+        {
+            if (manifest == null)
+                throw new ArgumentNullException(nameof(manifest));
+
+            foreach (var entry in manifest.Entries)
+            {
+                await LoadManifestEntry(entry);
+            }
+        }
+
+        /// <summary>
+        /// 按清单条目调度到正确的泛型加载方法（仅首次未加载时触发加载）。
+        /// <para>已加载的条目自动跳过，零额外开销。</para>
+        /// <para>通过反射调用泛型版本，仅清单加载时用一次，非热路径。</para>
+        /// </summary>
+        private async UniTask LoadManifestEntry(ConfigManifestEntry entry)
+        {
+            if (entry.IsTable)
+            {
+                // 已加载则跳过
+                if (_tables.ContainsKey(entry.RowType))
+                    return;
+
+                var keyType = ConfigTypeHelper.GetKeyType(entry.RowType);
+                try
+                {
+                    var loader = Loaders[entry.Format];
+                    var tableObj = await InvokeLoaderByType(loader, entry.RowType, keyType, entry.AssetPath);
+                    _tables[entry.RowType] = ((IDictionary)tableObj.GetType().GetProperty("_dict",
+                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?.GetValue(tableObj))
+                        ?? throw new ConfigException($"Failed to get _dict from loaded Table '{entry.RowType.Name}'.");
+                    _tableWrappers[entry.RowType] = tableObj;
+                    _assetPaths[entry.RowType] = entry.AssetPath;
+                    InternalConfigChanged?.Invoke(entry.RowType);
+                }
+                catch (ConfigException) { throw; }
+                catch (Exception ex) when (ex is not ConfigException)
+                {
+                    throw new ConfigException(
+                        $"Failed to preload Table '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
+                }
+            }
+            else
+            {
+                // Global
+                if (_globals.ContainsKey(entry.RowType))
+                    return;
+
+                try
+                {
+                    var method = typeof(IConfigLoader).GetMethod(nameof(IConfigLoader.LoadGlobalAsync),
+                        BindingFlags.Instance | BindingFlags.Public);
+                    var genericMethod = method.MakeGenericMethod(entry.RowType);
+                    var loader = Loaders[entry.Format];
+                    var taskObj = genericMethod.Invoke(loader, new object[] { entry.AssetPath });
+                    await (UniTask)typeof(UniTask)
+                        .GetMethod("Await", BindingFlags.Static | BindingFlags.Public)
+                        ?.Invoke(null, new[] { taskObj });
+                    // 完成后从 taskObj 提取 Result（AsTask 路径）
+                    var asTaskMethod = taskObj.GetType().GetMethod("AsTask");
+                    var task = (System.Threading.Tasks.Task)asTaskMethod.Invoke(taskObj, null);
+                    await task;
+                    var resultProp = task.GetType().GetProperty("Result");
+                    var config = resultProp.GetValue(task);
+                    _globals[entry.RowType] = config;
+                    _assetPaths[entry.RowType] = entry.AssetPath;
+                    InternalConfigChanged?.Invoke(entry.RowType);
+                }
+                catch (ConfigException) { throw; }
+                catch (Exception ex) when (ex is not ConfigException)
+                {
+                    throw new ConfigException(
+                        $"Failed to preload Global '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 非泛型版本的 Loader 调用（运行时 Type），仅用于清单批量加载。
+        /// </summary>
+        private static UniTask<object> InvokeLoaderByType(
+            IConfigLoader loader, Type rowType, Type keyType, string assetPath)
+        {
+            return ConfigLoadHelper.InvokeAsync(loader, rowType, keyType, assetPath);
         }
 
         #endregion
@@ -219,6 +338,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             _tables[type] = table._dict;
             _tableWrappers[type] = table;
+            InternalConfigChanged?.Invoke(type);
         }
 
         /// <summary>
@@ -235,6 +355,7 @@ namespace XFramework.XConfig
                     $"Cannot register null table for Table '{rowType.Name}'.");
             _tables[rowType] = table.Data;
             _tableWrappers[rowType] = table;
+            InternalConfigChanged?.Invoke(rowType);
         }
 
         /// <summary>
@@ -246,6 +367,7 @@ namespace XFramework.XConfig
                 throw new ConfigException(
                     $"Cannot register null config for Global '{typeof(T).Name}'.");
             _globals[typeof(T)] = config;
+            InternalConfigChanged?.Invoke(typeof(T));
         }
 
         #endregion
@@ -341,6 +463,7 @@ namespace XFramework.XConfig
             _globals.Remove(type);
             _tableWrappers.Remove(type);
             _assetPaths.Remove(type);
+            InternalConfigChanged?.Invoke(type);
         }
 
         /// <summary>

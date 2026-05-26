@@ -46,6 +46,13 @@ namespace XFramework.XConfig
         private static bool _instanceInitialized;
 
         /// <summary>
+        /// 配置变更事件。Table 注册/加载、Global 注册/加载、卸载后触发。类型为配置行类型或 Global 配置类型。
+        /// <para>仅在静态类全局实例（通过 <see cref="Initialize"/> 或 <see cref="SetInstance"/> 设置）操作时触发。
+        /// 注入的自定义实现需要自行派发。</para>
+        /// </summary>
+        public static event Action<Type> ConfigChanged;
+
+        /// <summary>
         /// 全局配置管理器是否已初始化。
         /// </summary>
         public static bool IsInitialized => _instanceInitialized && _instance != null;
@@ -62,20 +69,41 @@ namespace XFramework.XConfig
                 return;
             }
 
-            _instance = new ConfigManagerImpl();
+            var impl = new ConfigManagerImpl();
+            SubscribeImplEvents(impl);
+            _instance = impl;
+            _instanceInitialized = true;
+        }
+
+        /// <summary>
+        /// 注入自定义 <see cref="IConfigManager"/> 实例（可用于测试、依赖注入或完全替换内部实现）。
+        /// <para>调用前若已有实例将被覆盖，请确保之前未 Initialize 或已 Destroy。</para>
+        /// <para>注入的实例生命周期由调用方管理，框架仅持有弱引用概念（单引用），不会主动销毁。</para>
+        /// </summary>
+        /// <param name="instance">自定义实现实例，为 null 时报错。</param>
+        public static void SetInstance(IConfigManager instance)
+        {
+            if (instance == null)
+                throw new ArgumentNullException(nameof(instance));
+
+            // 如果之前已通过 Initialize 创建了内部实例，先清理事件订阅
+            if (_instance is ConfigManagerImpl oldImpl)
+                UnsubscribeImplEvents(oldImpl);
+
+            SubscribeImplEvents(instance);
+            _instance = instance;
             _instanceInitialized = true;
         }
 
         /// <summary>
         /// 销毁全局配置管理器，释放所有已加载的配置数据。
-        /// <para>销毁后需重新 <see cref="Initialize"/> 才能使用，通常仅在应用退出或场景完全重置时调用。</para>
+        /// <para>销毁后需重新 <see cref="Initialize"/> 或 <see cref="SetInstance"/> 才能使用，通常仅在应用退出或场景完全重置时调用。</para>
         /// </summary>
         public static void Destroy()
         {
-            if (_instance != null)
-            {
-                _instance = null;
-            }
+            if (_instance is ConfigManagerImpl impl)
+                UnsubscribeImplEvents(impl);
+            _instance = null;
             _instanceInitialized = false;
         }
 
@@ -157,6 +185,40 @@ namespace XFramework.XConfig
         {
             EnsureGlobalInitialized();
             await _instance.PreloadGlobalAsync<T>(assetPath, loader).AttachExternalCancellation(cancellationToken);
+        }
+
+        #endregion
+
+        #region Public API — Batch Preload
+
+        /// <summary>
+        /// 按分组名批量预加载 <paramref name="manifest"/> 中匹配的配置。
+        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
+        /// </summary>
+        /// <param name="groupName">分组名，仅加载 <see cref="ConfigManifest.AddTable{T}"/> /
+        /// <see cref="ConfigManifest.AddGlobal{T}"/> 时传入相同 group 的条目。</param>
+        /// <param name="manifest">配置加载清单。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        public static async UniTask PreloadGroupAsync(string groupName, ConfigManifest manifest,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            await _instance.PreloadGroupAsync(groupName, manifest)
+                .AttachExternalCancellation(cancellationToken);
+        }
+
+        /// <summary>
+        /// 预加载 <paramref name="manifest"/> 中的所有配置。
+        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
+        /// </summary>
+        /// <param name="manifest">配置加载清单。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        public static async UniTask PreloadAllAsync(ConfigManifest manifest,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            await _instance.PreloadAllAsync(manifest)
+                .AttachExternalCancellation(cancellationToken);
         }
 
         #endregion
@@ -348,6 +410,32 @@ namespace XFramework.XConfig
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
                     "ConfigManager is not initialized. Call ConfigManager.Initialize() first.");
+        }
+
+        /// <summary>
+        /// 订阅 ConfigManagerImpl 的内部事件以驱动 <see cref="ConfigChanged"/>。
+        /// </summary>
+        private static void SubscribeImplEvents(IConfigManager instance)
+        {
+            if (instance is ConfigManagerImpl impl)
+                impl.InternalConfigChanged += OnInternalConfigChanged;
+        }
+
+        /// <summary>
+        /// 取消订阅 ConfigManagerImpl 的内部事件。
+        /// </summary>
+        private static void UnsubscribeImplEvents(IConfigManager instance)
+        {
+            if (instance is ConfigManagerImpl impl)
+                impl.InternalConfigChanged -= OnInternalConfigChanged;
+        }
+
+        /// <summary>
+        /// 传播内部事件到公共静态事件。
+        /// </summary>
+        private static void OnInternalConfigChanged(Type type)
+        {
+            ConfigChanged?.Invoke(type);
         }
 
         #endregion

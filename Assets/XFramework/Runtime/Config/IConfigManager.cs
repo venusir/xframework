@@ -164,6 +164,26 @@ namespace XFramework.XConfig
 
         #endregion
 
+        #region Batch Preload
+
+        /// <summary>
+        /// 按分组名批量预加载 <paramref name="manifest"/> 中匹配的配置。
+        /// <para>已加载的条目自动跳过。</para>
+        /// </summary>
+        /// <param name="groupName">分组名，仅加载 <see cref="ConfigManifest.AddTable{T}"/> /
+        /// <see cref="ConfigManifest.AddGlobal{T}"/> 时传入相同 group 的条目。</param>
+        /// <param name="manifest">配置加载清单。</param>
+        UniTask PreloadGroupAsync(string groupName, ConfigManifest manifest);
+
+        /// <summary>
+        /// 预加载 <paramref name="manifest"/> 中的所有配置。
+        /// <para>已加载的条目自动跳过。</para>
+        /// </summary>
+        /// <param name="manifest">配置加载清单。</param>
+        UniTask PreloadAllAsync(ConfigManifest manifest);
+
+        #endregion
+
         #region Unload
 
         /// <summary>

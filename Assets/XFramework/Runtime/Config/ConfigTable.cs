@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -14,6 +15,7 @@ namespace XFramework.XConfig
     {
         internal readonly IDictionary _dict;
         private readonly T[] _allValues;
+        private readonly Dictionary<string, object> _indices = new();
 
         /// <summary>
         /// 构造 <see cref="ConfigTable{T}"/>。
@@ -99,6 +101,48 @@ namespace XFramework.XConfig
 
         /// <summary>表中行数。</summary>
         public int Count => _allValues.Length;
+
+        #endregion
+
+        #region Index
+
+        /// <summary>
+        /// 构建或获取非主键索引，按 <paramref name="keySelector"/> 分组。
+        /// <para>同一 <paramref name="indexName"/> 只构建一次，后续调用直接返回缓存。</para>
+        /// <para>构建时 O(n) 遍历全表，查询 O(1)，零额外 GC。</para>
+        /// </summary>
+        /// <typeparam name="TIndex">索引键类型。</typeparam>
+        /// <param name="indexName">索引名称（同表内唯一），建议使用字段名如 "Quality"。</param>
+        /// <param name="keySelector">索引键选择器，如 r => r.Quality。</param>
+        /// <returns><see cref="ConfigIndexView{T, TIndex}"/> 只读视图。</returns>
+        /// <example>
+        /// <code>
+        /// var items = ConfigManager.GetTable<ItemRow>();
+        /// var byQuality = items.BuildIndex("Quality", r => r.Quality);
+        /// var epics = byQuality.Get(ItemQuality.Epic); // List<ItemRow>
+        /// </code>
+        /// </example>
+        public ConfigIndexView<T, TIndex> BuildIndex<TIndex>(string indexName, Func<T, TIndex> keySelector)
+        {
+            if (_indices.TryGetValue(indexName, out var cached))
+                return (ConfigIndexView<T, TIndex>)cached;
+
+            var dict = new Dictionary<TIndex, List<T>>();
+            var all = GetAll();
+            for (int i = 0; i < all.Length; i++)
+            {
+                var key = keySelector(all[i]);
+                if (!dict.TryGetValue(key, out var list))
+                {
+                    list = new List<T>();
+                    dict[key] = list;
+                }
+                list.Add(all[i]);
+            }
+            var view = new ConfigIndexView<T, TIndex>(dict);
+            _indices[indexName] = view;
+            return view;
+        }
 
         #endregion
 
