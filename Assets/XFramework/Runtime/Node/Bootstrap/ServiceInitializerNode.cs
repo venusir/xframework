@@ -1,3 +1,5 @@
+using XFramework.XData;
+
 namespace XFramework.XNode
 {
     /// <summary>
@@ -18,6 +20,7 @@ namespace XFramework.XNode
         protected virtual void OnRegisterModules()
         {
             AddNode<AssetBootstrapNode>();
+            AddNode<GameDataNode>();
         }
 
         #endregion
