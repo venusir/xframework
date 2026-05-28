@@ -1,6 +1,3 @@
-using System.Threading;
-using Cysharp.Threading.Tasks;
-
 namespace XFramework.XData
 {
     /// <summary>
@@ -8,15 +5,17 @@ namespace XFramework.XData
     /// <para>由 <see cref="GameDataNode"/> 在 Awake 时创建 <see cref="DataManagerImpl"/> 并注入，
     /// 外部业务代码通过本类静态方法访问。</para>
     /// <para>使用前必须调用 <see cref="Initialize"/>（或由 GameDataNode 自动调用）。</para>
+    /// <para>数据按 <see cref="IDataBlock"/>（GamePlay 模块）组织。</para>
+    /// <para>存读档职责由 SaveLoadModule 负责，本类仅暴露 <see cref="CreateSnapshot"/> / <see cref="ApplySnapshot"/> 序列化接口。</para>
     /// </summary>
     /// <example>
     /// <code>
     /// // 在节点树中挂载 GameDataNode 即可自动完成初始化。
     /// // 业务代码直接使用静态调用：
-    /// var table = DataManager.GetOrCreateTable<PlayerData>();
-    /// var player = table.Get("player_001");
-    /// player.hp -= 10;
-    /// await DataManager.SaveAsync("autosave");
+    /// var bag = DataManager.GetOrCreateBlock<BagData>();
+    /// bag.Items.Add(new BagItem { id = 1001, count = 1 });
+    /// bag.Gold += 100;
+    /// var snapshot = DataManager.CreateSnapshot(); // 供 SaveLoadModule 持久化
     /// </code>
     /// </example>
     public static class DataManager
@@ -47,119 +46,59 @@ namespace XFramework.XData
 
         #endregion
 
-        #region Table
+        #region Block
 
-        /// <inheritdoc cref="IDataManager.GetOrCreateTable{T}"/>
-        public static DataTable<T> GetOrCreateTable<T>() where T : IDataRow, new()
+        /// <inheritdoc cref="IDataManager.GetOrCreateBlock{T}"/>
+        public static T GetOrCreateBlock<T>() where T : class, IDataBlock, new()
         {
             EnsureInitialized();
-            return _impl.GetOrCreateTable<T>();
+            return _impl.GetOrCreateBlock<T>();
         }
 
-        /// <inheritdoc cref="IDataManager.TryGetTable{T}"/>
-        public static bool TryGetTable<T>(out DataTable<T> table) where T : IDataRow
+        /// <inheritdoc cref="IDataManager.TryGetBlock{T}"/>
+        public static bool TryGetBlock<T>(out T block) where T : class, IDataBlock
         {
             EnsureInitialized();
-            return _impl.TryGetTable(out table);
+            return _impl.TryGetBlock(out block);
         }
 
-        /// <inheritdoc cref="IDataManager.RegisterTable{T}"/>
-        public static void RegisterTable<T>(DataTable<T> table) where T : IDataRow
+        /// <inheritdoc cref="IDataManager.RegisterBlock{T}"/>
+        public static void RegisterBlock<T>(T block) where T : class, IDataBlock
         {
             EnsureInitialized();
-            _impl.RegisterTable(table);
+            _impl.RegisterBlock(block);
         }
 
-        /// <inheritdoc cref="IDataManager.RemoveTable{T}"/>
-        public static bool RemoveTable<T>() where T : IDataRow
+        /// <inheritdoc cref="IDataManager.RemoveBlock{T}"/>
+        public static bool RemoveBlock<T>() where T : class, IDataBlock
         {
             EnsureInitialized();
-            return _impl.RemoveTable<T>();
+            return _impl.RemoveBlock<T>();
         }
 
-        /// <inheritdoc cref="IDataManager.HasTable{T}"/>
-        public static bool HasTable<T>()
+        /// <inheritdoc cref="IDataManager.HasBlock{T}"/>
+        public static bool HasBlock<T>() where T : class, IDataBlock
         {
             EnsureInitialized();
-            return _impl.HasTable<T>();
-        }
-
-        #endregion
-
-        #region Global
-
-        /// <inheritdoc cref="IDataManager.GetOrCreateGlobal{T}"/>
-        public static T GetOrCreateGlobal<T>() where T : class, new()
-        {
-            EnsureInitialized();
-            return _impl.GetOrCreateGlobal<T>();
-        }
-
-        /// <inheritdoc cref="IDataManager.TryGetGlobal{T}"/>
-        public static bool TryGetGlobal<T>(out T global) where T : class
-        {
-            EnsureInitialized();
-            return _impl.TryGetGlobal(out global);
-        }
-
-        /// <inheritdoc cref="IDataManager.RegisterGlobal{T}"/>
-        public static void RegisterGlobal<T>(T global) where T : class
-        {
-            EnsureInitialized();
-            _impl.RegisterGlobal(global);
-        }
-
-        /// <inheritdoc cref="IDataManager.RemoveGlobal{T}"/>
-        public static bool RemoveGlobal<T>() where T : class
-        {
-            EnsureInitialized();
-            return _impl.RemoveGlobal<T>();
-        }
-
-        /// <inheritdoc cref="IDataManager.HasGlobal{T}"/>
-        public static bool HasGlobal<T>()
-        {
-            EnsureInitialized();
-            return _impl.HasGlobal<T>();
+            return _impl.HasBlock<T>();
         }
 
         #endregion
 
-        #region Save / Load
+        #region Snapshot
 
-        /// <inheritdoc cref="IDataManager.SaveAsync"/>
-        public static UniTask SaveAsync(string name, CancellationToken ct = default)
+        /// <inheritdoc cref="IDataManager.CreateSnapshot"/>
+        public static SaveData CreateSnapshot()
         {
             EnsureInitialized();
-            return _impl.SaveAsync(name, ct);
+            return _impl.CreateSnapshot();
         }
 
-        /// <inheritdoc cref="IDataManager.LoadAsync"/>
-        public static UniTask LoadAsync(string name, CancellationToken ct = default)
+        /// <inheritdoc cref="IDataManager.ApplySnapshot"/>
+        public static void ApplySnapshot(SaveData data)
         {
             EnsureInitialized();
-            return _impl.LoadAsync(name, ct);
-        }
-
-        /// <inheritdoc cref="IDataManager.DeleteSave"/>
-        public static void DeleteSave(string name)
-        {
-            EnsureInitialized();
-            _impl.DeleteSave(name);
-        }
-
-        /// <inheritdoc cref="IDataManager.HasSave"/>
-        public static bool HasSave(string name)
-        {
-            EnsureInitialized();
-            return _impl.HasSave(name);
-        }
-
-        /// <inheritdoc cref="IDataManager.SetStore"/>
-        public static void SetStore(IDataStore store)
-        {
-            EnsureInitialized();
-            _impl.SetStore(store);
+            _impl.ApplySnapshot(data);
         }
 
         #endregion

@@ -1,121 +1,71 @@
 using System;
-using System.Collections.Generic;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 
 namespace XFramework.XData
 {
     /// <summary>
-    /// 运行时数据管理器公共接口。
-    /// <para>管理 Table（多行，按主键索引）和 Global（全局单例）两类运行时可变数据。</para>
-    /// <para>支持本地存档的保存/加载，内置 <see cref="JsonFileDataStore"/> 默认实现。</para>
+    /// 运行时数据管理器的内部接口，定义 Block 管理 / 数据快照能力。
+    /// <para>外部业务代码通过 <see cref="DataManager"/> 静态门面访问。</para>
+    /// <para>存读档职责由 SaveLoadModule 负责，DataManager 仅提供 <see cref="SaveData"/> 序列化/反序列化接口。</para>
     /// </summary>
     public interface IDataManager
     {
-        #region Table
+        #region Block
 
         /// <summary>
-        /// 获取或自动创建指定类型的 DataTable。
-        /// <para>首次调用时自动创建空表，后续直接返回已有实例。</para>
+        /// 获取或自动创建指定类型的数据块。
+        /// <para>首次调用时通过无参构造函数自动创建并注册，后续直接返回已有实例。</para>
         /// </summary>
-        /// <typeparam name="T">数据行类型，需实现 <see cref="IDataRow{TKey}"/> 并有无参构造函数。</typeparam>
-        /// <returns><see cref="DataTable{T}"/> 包装器实例。</returns>
-        DataTable<T> GetOrCreateTable<T>() where T : IDataRow, new();
+        /// <typeparam name="T">数据块类型，需实现 <see cref="IDataBlock"/> 并有无参构造函数。</typeparam>
+        T GetOrCreateBlock<T>() where T : class, IDataBlock, new();
 
         /// <summary>
-        /// 安全获取已创建的 DataTable。未创建时返回 <c>false</c>。
+        /// 安全获取已创建的数据块。未创建时返回 <c>false</c>。
         /// </summary>
-        bool TryGetTable<T>(out DataTable<T> table) where T : IDataRow;
+        bool TryGetBlock<T>(out T block) where T : class, IDataBlock;
 
         /// <summary>
-        /// 注册已创建的 DataTable。
+        /// 注册已创建的数据块实例。
         /// </summary>
-        void RegisterTable<T>(DataTable<T> table) where T : IDataRow;
+        void RegisterBlock<T>(T block) where T : class, IDataBlock;
 
         /// <summary>
-        /// 移除并清空指定类型的 DataTable。
+        /// 移除并清空指定类型的数据块。
         /// </summary>
-        bool RemoveTable<T>() where T : IDataRow;
+        bool RemoveBlock<T>() where T : class, IDataBlock;
 
         /// <summary>
-        /// 判断指定类型的 DataTable 是否已创建。
+        /// 判断指定类型的数据块是否已注册。
         /// </summary>
-        bool HasTable<T>();
+        bool HasBlock<T>() where T : class, IDataBlock;
+
+        /// <summary>
+        /// 遍历当前所有已注册的 <see cref="IDataBlock"/> 并执行指定操作。
+        /// <para>仅在存档、清空等低频路径使用。</para>
+        /// </summary>
+        void ForEachBlock(Action<IDataBlock> action);
 
         #endregion
 
-        #region Global
+        #region Snapshot
 
         /// <summary>
-        /// 获取或自动创建 Global 类型单例。
+        /// 遍历所有已注册的 <see cref="IDataBlock"/>，调用 <see cref="IDataBlock.OnSave"/> 构建 <see cref="SaveData"/> 快照。
+        /// <para>返回值由 SaveLoadModule 负责写入到存储后端。</para>
         /// </summary>
-        /// <typeparam name="T">Global 类型，需为 class 并有无参构造函数。</typeparam>
-        /// <returns>Global 实例。</returns>
-        T GetOrCreateGlobal<T>() where T : class, new();
+        SaveData CreateSnapshot();
 
         /// <summary>
-        /// 安全获取 Global 单例。
+        /// 将 <see cref="SaveData"/> 快照恢复到当前内存数据中。
+        /// <para>加载前会清空现有数据，逐一创建 <see cref="IDataBlock"/> 实例并调用 <see cref="IDataBlock.OnLoad"/>。</para>
         /// </summary>
-        bool TryGetGlobal<T>(out T global) where T : class;
-
-        /// <summary>
-        /// 注册 Global 实例（可注册已有实例，如从存档恢复）。
-        /// </summary>
-        void RegisterGlobal<T>(T global) where T : class;
-
-        /// <summary>
-        /// 移除 Global 单例。
-        /// </summary>
-        bool RemoveGlobal<T>() where T : class;
-
-        /// <summary>
-        /// 判断 Global 单例是否已注册。
-        /// </summary>
-        bool HasGlobal<T>();
-
-        #endregion
-
-        #region Save / Load
-
-        /// <summary>
-        /// 异步保存所有已注册的 DataTable 和 Global 数据。
-        /// <para>需先通过 <see cref="SetStore"/> 设置存储后端。</para>
-        /// </summary>
-        /// <param name="name">存档名称（如 "autosave", "slot1"）。</param>
-        /// <param name="ct">取消令牌。</param>
-        UniTask SaveAsync(string name, CancellationToken ct = default);
-
-        /// <summary>
-        /// 异步从存储加载存档，恢复所有 DataTable 和 Global 数据。
-        /// <para>加载前会清空现有数据。</para>
-        /// </summary>
-        /// <param name="name">存档名称。</param>
-        /// <param name="ct">取消令牌。</param>
-        UniTask LoadAsync(string name, CancellationToken ct = default);
-
-        /// <summary>
-        /// 删除指定存档。
-        /// </summary>
-        void DeleteSave(string name);
-
-        /// <summary>
-        /// 判断指定存档是否存在。
-        /// </summary>
-        bool HasSave(string name);
-
-        /// <summary>
-        /// 设置数据存储后端。
-        /// <para>默认提供 <see cref="JsonFileDataStore"/>（JsonUtility 本地文件），
-        /// 也可传入自定义实现（如 Protobuf、云端存储）。</para>
-        /// </summary>
-        void SetStore(IDataStore store);
+        void ApplySnapshot(SaveData data);
 
         #endregion
 
         #region Clear
 
         /// <summary>
-        /// 清空所有已注册的 DataTable 和 Global 数据。
+        /// 清空所有已注册的 Block 数据（触发每个 Block 的 <see cref="IDataBlock.OnClear"/>）。
         /// </summary>
         void ClearAll();
 

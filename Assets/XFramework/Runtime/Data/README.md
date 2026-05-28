@@ -2,176 +2,226 @@
 
 ## 概述
 
-XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并提供存档/读档能力。
+XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 SaveLoadModule 提供序列化/反序列化接口。
+
+> **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **SaveLoadModule**（独立模块，待实现）负责。DataManager 仅暴露 `CreateSnapshot()` 和 `ApplySnapshot(data)` 两个序列化接口。
+
+数据按 **GamePlay 模块** 组织——一个 `IDataBlock` 对应一个游戏子系统，内部自行管理数据结构，不再强制主键约束。
+
+> **从 Table 模型迁移**：v2 版本已将 `DataTable<T>` + `IDataRow` 体系替换为 `IDataBlock`。如果你还在使用旧版 `GetOrCreateTable<T>()` 等 API，请按[迁移指南](#迁移指南)更新代码。
 
 ### 与 Config 模块的区别
 
-| 特性     | Config (XConfig)                  | Data (XData)               |
-| -------- | --------------------------------- | -------------------------- |
-| 数据来源 | CSV / ScriptableObject 等只读配置 | 运行时动态产生             |
-| 可变性   | 只读                              | 可增删改                   |
-| 存档     | 不参与                            | 可序列化存档               |
-| 存储     | 内存表                            | 内存表 + 文件持久化        |
-| 泛型约束 | `IConfigRow<TKey>` (只读 Id)      | `IDataRow<TKey>` (可写 Id) |
+| 特性     | Config (XConfig)                  | Data (XData)                               |
+| -------- | --------------------------------- | ------------------------------------------ |
+| 数据来源 | CSV / ScriptableObject 等只读配置 | 运行时动态产生                             |
+| 可变性   | 只读                              | 可增删改                                   |
+| 存档     | 不参与                            | 可序列化存档                               |
+| 存储     | 内存表                            | 内存 Block（持久化由 SaveLoadModule 负责） |
+| 数据模型 | `IConfigRow<TKey>` (按主键索引)   | `IDataBlock` (按模块组织)                  |
 
 ## 架构
 
 ```
 GameDataNode (节点树启动)
     └── DataManagerImpl (内部实现)
-            ├── Table : Dictionary<Type, IDataTable>
-            ├── Global : Dictionary<Type, object>
-            └── Store  : IDataStore (持久化)
+            └── Blocks : Dictionary<Type, IDataBlock>   ← 按 GamePlay 模块组织
 
 DataManager (静态门面)
     └── 转发到 DataManagerImpl
+
+SaveLoadModule (独立模块，待实现)
+    └── 持有 IDataStore，通过 DataManager.CreateSnapshot() / ApplySnapshot() 实现持久化
 ```
 
 ### 设计原则
 
 - **节点树 + 静态服务混合**：`GameDataNode` 挂载在节点树上管理生命周期，初始化后注入 `DataManager` 静态门面供全局访问。
-- **Table / Global 两种数据模型**：
-  - **Table**：按主键索引的集合数据（如多个背包物品），对应 `DataTable<T>`。
-  - **Global**：单一实例数据（如玩家金币数），对应直接类型注册。
-- **可插拔存储**：通过 `IDataStore` 接口支持多种序列化方案，默认提供 `JsonFileDataStore`（基于 `JsonUtility` + `PlayerPrefs` / 文件系统）。
+- **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
+- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `SaveData`；`ApplySnapshot(data)` 恢复数据。
+- **存读档分离**：文件读写、加密、云同步等持久化操作由 SaveLoadModule（独立模块）负责，不在 DataManager 职责范围内。
 
 ## 快速开始
 
-### 一、定义数据模型
+### 一、定义数据块
 
 ```csharp
 using System;
+using System.Collections.Generic;
 using XFramework.XData;
 
 [Serializable]
-public class InventoryItem : IDataRow<int>
+public class BagItem
 {
-    public int Id { get; set; }        // 主键
-    public string Name;
-    public int Count;
+    public int id;
+    public string name;
+    public int count;
 }
 
 [Serializable]
-public class PlayerProgress : IDataRow<string>
+public class BagData : IDataBlock
 {
-    public string Id { get; set; }     // 主键，例如 "main_story"
-    public int CompletedLevel;
-    public int TotalScore;
-}
+    public string BlockName => "Bag";
 
-[Serializable]
-public class PlayerCurrency
-{
+    public List<BagItem> Items = new();
     public int Gold;
-    public int Gems;
+
+    // 快照结构（推荐定义内部 [Serializable] struct）
+    [Serializable]
+    private struct SaveSnap
+    {
+        public List<BagItem> items;
+        public int gold;
+    }
+
+    public object OnSave()
+    {
+        return new SaveSnap { items = Items, gold = Gold };
+    }
+
+    public void OnLoad(object data)
+    {
+        if (data is SaveSnap s)
+        {
+            Items = s.items ?? new List<BagItem>();
+            Gold = s.gold;
+        }
+    }
+
+    public void OnClear()
+    {
+        Items.Clear();
+        Gold = 0;
+    }
 }
 ```
 
-### 二、读写 Table 数据
+```csharp
+[Serializable]
+public class QuestData : IDataBlock
+{
+    public string BlockName => "Quest";
+
+    public Dictionary<string, int> CompletedQuests = new(); // 任务ID -> 完成次数
+    public string ActiveQuestId;
+
+    [Serializable]
+    private struct SaveSnap
+    {
+        public List<KeyValuePair<string, int>> completedQuests;
+        public string activeQuestId;
+    }
+
+    public object OnSave()
+    {
+        return new SaveSnap
+        {
+            completedQuests = new List<KeyValuePair<string, int>>(CompletedQuests),
+            activeQuestId = ActiveQuestId
+        };
+    }
+
+    public void OnLoad(object data)
+    {
+        if (data is SaveSnap s)
+        {
+            CompletedQuests.Clear();
+            if (s.completedQuests != null)
+            {
+                foreach (var kv in s.completedQuests)
+                    CompletedQuests[kv.Key] = kv.Value;
+            }
+            ActiveQuestId = s.activeQuestId;
+        }
+    }
+
+    public void OnClear()
+    {
+        CompletedQuests.Clear();
+        ActiveQuestId = null;
+    }
+}
+```
+
+### 二、读写 Block 数据
 
 ```csharp
 using XFramework.XData;
 
-// 获取或创建 Table
-var inventory = DataManager.GetOrCreateTable<InventoryItem>();
+// 获取或创建数据块
+var bag = DataManager.GetOrCreateBlock<BagData>();
 
-// 添加物品
-var sword = new InventoryItem { Id = 1, Name = "铁剑", Count = 1 };
-inventory.Upsert(sword);
+// 操作数据
+bag.Items.Add(new BagItem { id = 1001, name = "铁剑", count = 1 });
+bag.Gold += 100;
 
-// 查询
-if (inventory.TryGet(1, out var item))
-    Debug.Log($"物品: {item.Name}, 数量: {item.Count}");
+// 安全获取（可能未创建）
+if (DataManager.TryGetBlock<BagData>(out var existingBag))
+    Debug.Log($"背包物品数量: {existingBag.Items.Count}");
 
-// 更新（同 Upsert）
-item.Count += 5;
-inventory.Upsert(item);
+// 检查是否存在
+if (!DataManager.HasBlock<QuestData>())
+    DataManager.GetOrCreateBlock<QuestData>();
 
-// 遍历
-foreach (var invItem in inventory.GetAll())
-    Debug.Log($"ID: {invItem.Id}, {invItem.Name} x{invItem.Count}");
-
-// 删除
-inventory.Remove(1);
+// 移除模块（触发 OnClear）
+DataManager.RemoveBlock<QuestData>();
 ```
 
-### 三、读写 Global 数据
+### 三、创建与恢复数据快照
 
 ```csharp
-// 获取或创建
-var currency = DataManager.GetOrCreateGlobal<PlayerCurrency>();
-currency.Gold += 100;
+using XFramework.XData;
 
-// 查询
-if (DataManager.TryGetGlobal<PlayerCurrency>(out var cur))
-    Debug.Log($"金币: {cur.Gold}, 宝石: {cur.Gems}");
+// 导出当前所有 Block 的快照（供 SaveLoadModule 写入文件）
+var snapshot = DataManager.CreateSnapshot();
+
+// 从快照恢复（清空现有数据后加载）
+DataManager.ApplySnapshot(snapshot);
 ```
 
-### 四、存档与读档
+## 序列化原理
 
-```csharp
-using Cysharp.Threading.Tasks;
+1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `JsonUtility.ToJson` 序列化后存入 `SaveData.blocks`。
+2. **恢复快照**：`ApplySnapshot(data)` 清空当前数据，遍历 `SaveData.blocks` 反序列化，通过 `AssemblyQualifiedName` 匹配类型，创建 `IDataBlock` 实例并调用 `OnLoad(saveData)`。
+3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
 
-// 保存
-await DataManager.SaveAsync("slot_1");
+> 文件 I/O 等持久化逻辑由 **SaveLoadModule**（独立模块，待实现）负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
 
-// 加载
-await DataManager.LoadAsync("slot_1");
-
-// 检查存档是否存在
-if (DataManager.HasSave("slot_1"))
-    await DataManager.DeleteSave("slot_1");
-```
-
-## 自定义存储
-
-实现 `IDataStore` 或继承 `FileDataStore`：
-
-```csharp
-public class BinaryFileDataStore : FileDataStore
-{
-    protected override string GetPath(string name)
-        => Path.Combine(Application.persistentDataPath, $"{name}.dat");
-
-    // 重写 Save/Load 实现二进制序列化
-}
-
-// 设置自定义存储
-DataManager.SetStore(new BinaryFileDataStore());
-```
-
-## ⚠️ 注意事项
+## 注意事项
 
 ### 序列化要求
-- 所有数据模型必须标记 `[Serializable]` 并使用 `public` 字段或 `[SerializeField]` 标记私有字段，因为默认 `JsonFileDataStore` 基于 `JsonUtility`。
-- **不支持多态序列化**。如果数据模型中有接口/基类引用字段，`JsonUtility` 无法正确序列化。此时应实现自定义 `IDataStore`（如 Newtonsoft.Json 或二进制方案）。
-
-### Table 查询
-- `DataTable<T>` 的泛型查询方法（`Get<TKey>`, `TryGet<TKey>`, `Contains<TKey>`）要求在**首次调用时确定主键类型**，之后必须保持一致，否则会触发类型不匹配警告/异常。
-- 如果同一个 `T` 实现了多个主键接口（不推荐），仅以首次调用 `GetOrCreateTable<T>` 或 `Upsert` 时的行为为准。
+- 所有数据模型必须标记 `[Serializable]` 并使用 `public` 字段（或 `[SerializeField]` 标记私有字段），因为 `CreateSnapshot()` 内部使用 `JsonUtility.ToJson`。
+- **`OnSave()` 返回值**必须可被 `JsonUtility.ToJson` 正确序列化。推荐定义内部 `[Serializable]` struct 作为快照。
+- **不支持多态序列化**。如果数据模型中有接口/基类引用字段，SaveLoadModule 可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
 
 ### 存档兼容
-- 存档使用 `AssemblyQualifiedName` 存储类型信息。如果类型重命名或迁移程序集，旧存档将无法恢复。建议：
-  - 类型重命名时使用 `[FormerlySerializedAs]` 或自定义迁移逻辑。
-  - 通过 `SaveData.version` 字段实现版本校验。
+- 快照使用 `AssemblyQualifiedName` 存储类型信息。类型重命名或迁移程序集后旧快照将无法恢复。建议通过 `SaveData.version` 字段实现版本校验和迁移。
 
 ### 线程安全
 - 所有 `DataManager` API **必须在主线程**调用，内部未做线程同步处理。
+
+## 迁移指南（从 v1 Table 模型）
+
+| v1 API                                     | v2 API                              |
+| ------------------------------------------ | ----------------------------------- |
+| `IDataRow<TKey>`                           | 废弃，Block 内部自由管理键值        |
+| `DataManager.GetOrCreateTable<T>()`        | `DataManager.GetOrCreateBlock<T>()` |
+| `DataTable<T>.Get() / Upsert() / Remove()` | Block 内部自行定义方法              |
+| `table.Upsert(row)`                        | `block.Items.Add(item)` 等          |
+
+迁移步骤：
+1. 将原有的 `[Serializable] class X : IDataRow<TKey>` 重构为 `[Serializable] class XData : IDataBlock`
+2. 在 Block 内部定义 `OnSave / OnLoad / OnClear` 回调
+3. 将 `DataManager.GetOrCreateTable<X>()` 替换为 `DataManager.GetOrCreateBlock<XData>()`
 
 ## 目录结构
 
 ```
 XData/
-├── IDataRow.cs              # 数据行接口定义
-├── IDataManager.cs          # 服务接口
-├── DataManager.cs           # 静态门面
-├── DataManagerImpl.cs       # 内部实现
-├── DataTable.cs             # Table 包装器
-├── DataException.cs         # 异常类型
-├── SaveData.cs              # 存档快照数据结构
-├── GameDataNode.cs          # 节点树桥梁
-├── Store/
-│   ├── IDataStore.cs        # 存储接口
-│   ├── FileDataStore.cs     # 文件存储基类
-│   └── JsonFileDataStore.cs # JSON 存储默认实现
+├── IDataBlock.cs             # 数据块接口定义
+├── IDataManager.cs           # 服务接口
+├── DataManager.cs            # 静态门面
+├── DataManagerImpl.cs        # 内部实现
+├── DataException.cs          # 异常类型
+├── SaveData.cs               # 存档快照数据结构
 └── README.md
