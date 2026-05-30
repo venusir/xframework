@@ -320,6 +320,45 @@ FileManager.Initialize(new XboxFileProvider());
 
 ---
 
+## 多平台账户隔离
+
+`FileManager` 的默认实现在桌面/移动平台使用 `Application.persistentDataPath` 作为存储根目录，该路径按 **OS 登录用户** 隔离（如 `C:\Users\Lunta\...` vs `C:\Users\XiaoMing\...`）。
+
+如需按 **平台账户**（Steam、PSN、Xbox Live 等）进一步隔离，第三方可通过自定义 `IFileProvider` 在 `GetPhysicalPath` 中注入平台账户 ID 子目录，对上层调用完全透明：
+
+```csharp
+public class SteamFileProvider : DesktopFileProvider
+{
+    public override string GetPhysicalPath(FileDomain domain, string relativePath)
+    {
+        var defaultPath = base.GetPhysicalPath(domain, relativePath);
+
+        if (domain != FileDomain.SaveData)
+            return defaultPath;
+
+        // 在 SaveData 域下注入 Steam 账户子目录
+        var steamId = SteamUser.GetSteamID().ToString();
+        var root = base.GetPhysicalPath(domain, null);
+        var relWithSteam = $"{steamId}/{relativePath?.TrimStart('/') ?? ""}";
+        return Path.Combine(root, relWithSteam.TrimEnd('/'));
+    }
+}
+```
+
+初始化时替换默认 Provider：
+
+```csharp
+#if STEAMWORKS_ENABLED
+FileManager.Initialize(new SteamFileProvider());
+#else
+FileManager.Initialize();
+#endif
+```
+
+不同平台账户的文件将自动隔离到各自子目录，无需业务代码修改。
+
+---
+
 ## 文件清单
 
 | 文件                       | 说明                      |
