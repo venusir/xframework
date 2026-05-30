@@ -29,7 +29,7 @@ namespace XFramework.XSave
 
         #region Fields
 
-        private string _userId;
+        private string _playerId;
 
         #endregion
 
@@ -41,7 +41,7 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<List<SaveMeta>> GetSlotMetas(CancellationToken cancellationToken = default)
         {
-            var searchDir = _userId ?? "";
+            var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             var metas = new List<SaveMeta>();
 
@@ -66,7 +66,7 @@ namespace XFramework.XSave
 
                     metas.Add(new SaveMeta
                     {
-                        userId = _userId,
+                        playerId = _playerId,
                         slot = ParseSlotFromPath(path),
                         version = saveData.version,
                         timestamp = saveData.timestamp,
@@ -100,7 +100,7 @@ namespace XFramework.XSave
 
             return new SaveMeta
             {
-                userId = _userId,
+                playerId = _playerId,
                 slot = slot,
                 version = saveData.version,
                 timestamp = saveData.timestamp,
@@ -140,7 +140,7 @@ namespace XFramework.XSave
 
                 return new SaveMeta
                 {
-                    userId = _userId,
+                    playerId = _playerId,
                     slot = slot,
                     version = saveData.version,
                     timestamp = saveData.timestamp,
@@ -194,7 +194,7 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
-            var searchDir = _userId ?? "";
+            var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             if (files == null)
                 return;
@@ -227,7 +227,7 @@ namespace XFramework.XSave
         private string BuildSlotPath(int slot)
         {
             var fileName = $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
-            return _userId != null ? $"{_userId}/{fileName}" : fileName;
+            return _playerId != null ? $"{_playerId}/{fileName}" : fileName;
         }
 
         private static bool IsSlotFilePath(string path)
@@ -235,7 +235,7 @@ namespace XFramework.XSave
             if (string.IsNullOrEmpty(path))
                 return false;
 
-            // 取文件名部分（去掉可能的 userId 子目录前缀）
+            // 取文件名部分（去掉可能的 playerId 子目录前缀）
             var fileName = path;
             var slashIndex = path.LastIndexOf('/');
             if (slashIndex >= 0)
@@ -247,7 +247,7 @@ namespace XFramework.XSave
 
         private static int ParseSlotFromPath(string path)
         {
-            // 取文件名部分，格式: "slot_{index}.save"（可能包含 userId/ 前缀）
+            // 取文件名部分，格式: "slot_{index}.save"（可能包含 playerId/ 前缀）
             var fileName = path;
             var slashIndex = path.LastIndexOf('/');
             if (slashIndex >= 0)
@@ -270,31 +270,31 @@ namespace XFramework.XSave
         #region User Management
 
         /// <summary>
-        /// 设置当前操作用户 ID。传入 <c>null</c> 等同于清除用户上下文。
+        /// 设置当前操作玩家 ID。传入 <c>null</c> 等同于清除玩家上下文。
         /// </summary>
-        internal void SetUserId(string userId)
+        internal void SetPlayerId(string playerId)
         {
-            _userId = userId;
+            _playerId = playerId;
         }
 
         /// <summary>
-        /// 清除用户上下文。
+        /// 清除玩家上下文。
         /// </summary>
-        internal void ClearUserId()
+        internal void ClearPlayerId()
         {
-            _userId = null;
+            _playerId = null;
         }
 
         /// <summary>
-        /// 获取所有存在存档数据的用户 ID 列表。
+        /// 获取所有存在存档数据的玩家 ID 列表。
         /// </summary>
-        internal async UniTask<string[]> GetAllUserIdsAsync(CancellationToken cancellationToken = default)
+        internal async UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default)
         {
-            // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别用户
+            // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别玩家
             var rootFiles = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
-            var userIdSet = new HashSet<string>();
+            var playerIdSet = new HashSet<string>();
 
-            // 1. 收集根目录下以 userId 子目录形式存在的用户
+            // 1. 收集根目录下以 playerId 子目录形式存在的玩家
             if (rootFiles != null)
             {
                 for (int i = 0; i < rootFiles.Length; i++)
@@ -303,31 +303,31 @@ namespace XFramework.XSave
                     var slashIndex = path.IndexOf('/');
                     if (slashIndex > 0)
                     {
-                        var userId = path.Substring(0, slashIndex);
+                        var playerId = path.Substring(0, slashIndex);
                         if (IsSlotFilePath(path))
-                            userIdSet.Add(userId);
+                            playerIdSet.Add(playerId);
                     }
                 }
             }
 
-            // 2. 同时也检查根目录下直接存在的存档（无用户上下文的遗留存档）
-            // 这些没有 userId，但 GetAllUserIds 只返回有明确 userId 的用户
+            // 2. 同时也检查根目录下直接存在的存档（无玩家上下文的遗留存档）
+            // 这些没有 playerId，但 GetAllPlayerIds 只返回有明确 playerId 的玩家
 
-            var result = new string[userIdSet.Count];
-            userIdSet.CopyTo(result);
+            var result = new string[playerIdSet.Count];
+            playerIdSet.CopyTo(result);
             return result;
         }
 
         /// <summary>
-        /// 删除指定用户的所有存档数据（包括子目录）。
+        /// 删除指定玩家的所有存档数据（包括子目录）。
         /// </summary>
-        internal async UniTask DeleteUserAsync(string userId, CancellationToken cancellationToken = default)
+        internal async UniTask DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
         {
-            if (string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(playerId))
                 return;
 
-            // 删除该用户子目录下的所有 .save 文件
-            var files = await FileManager.GetFilesAsync(SaveDomain, userId, cancellationToken: cancellationToken);
+            // 删除该玩家子目录下的所有 .save 文件
+            var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
             if (files != null)
             {
                 for (int i = 0; i < files.Length; i++)
@@ -338,7 +338,7 @@ namespace XFramework.XSave
             }
 
             // 同时删除可能残留的 .tmp 文件
-            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, userId, "*.tmp", cancellationToken);
+            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
             if (tmpFiles != null)
             {
                 for (int i = 0; i < tmpFiles.Length; i++)
