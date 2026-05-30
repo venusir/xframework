@@ -50,13 +50,13 @@ namespace XFramework.XData
 
         /// <summary>
         /// 遍历所有已注册的 <see cref="IDataBlock"/>，调用 <see cref="IDataBlock.OnSave"/> 构建 <see cref="SaveData"/> 快照。
-        /// <para>返回值由 SaveLoadModule 负责写入到存储后端。</para>
+        /// <para>序列化委托给 <see cref="XSerialize.Serializer"/>，返回值由 SaveLoadModule 负责写入到存储后端。</para>
         /// </summary>
         SaveData CreateSnapshot();
 
         /// <summary>
         /// 将 <see cref="SaveData"/> 快照恢复到当前内存数据中。
-        /// <para>加载前会清空现有数据，逐一创建 <see cref="IDataBlock"/> 实例并调用 <see cref="IDataBlock.OnLoad"/>。</para>
+        /// <para>反序列化委托给 <see cref="XSerialize.Serializer"/>，加载前会清空现有数据。</para>
         /// </summary>
         void ApplySnapshot(SaveData data);
 

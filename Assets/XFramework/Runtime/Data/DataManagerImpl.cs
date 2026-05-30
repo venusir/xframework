@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XSerialize;
 
 namespace XFramework.XData
 {
     /// <summary>
     /// <see cref="IDataManager"/> 的内部实现，由 <see cref="GameDataNode"/> 实例化并注入到 <see cref="DataManager"/> 静态门面。
-    /// <para>数据按 <see cref="IDataBlock"/>（游戏模块）组织，所有需要持久化的数据都应实现 IDataBlock。</para>
+    /// <para>数据按 <see cref="IDataBlock"/>（游戏模块）组织，序列化委托给 <see cref="XSerialize.Serializer"/>。</para>
     /// </summary>
     public sealed class DataManagerImpl : IDataManager
     {
         #region Fields
 
         private readonly Dictionary<Type, IDataBlock> _blocks = new();
+        private readonly Dictionary<string, IDataBlock> _blockNameIndex = new();
 
         #endregion
 
@@ -27,6 +29,7 @@ namespace XFramework.XData
 
             var block = new T();
             _blocks[type] = block;
+            _blockNameIndex[block.BlockName] = block;
             return block;
         }
 
@@ -46,6 +49,7 @@ namespace XFramework.XData
         public void RegisterBlock<T>(T block) where T : class, IDataBlock
         {
             _blocks[typeof(T)] = block;
+            _blockNameIndex[block.BlockName] = block;
         }
 
         /// <inheritdoc/>
@@ -56,6 +60,7 @@ namespace XFramework.XData
             {
                 block.OnClear();
                 _blocks.Remove(type);
+                _blockNameIndex.Remove(block.BlockName);
                 return true;
             }
             return false;
@@ -84,7 +89,8 @@ namespace XFramework.XData
             var data = new SaveData
             {
                 version = "1.0",
-                timestamp = DateTime.UtcNow.ToString("o")
+                timestamp = DateTime.UtcNow.ToString("o"),
+                defaultFormat = "json"
             };
 
             foreach (var (type, block) in _blocks)
@@ -93,11 +99,12 @@ namespace XFramework.XData
                 if (saveObj == null)
                     continue;
 
-                var json = JsonUtility.ToJson(saveObj, prettyPrint: false);
+                var serializer = XSerialize.Serializer.Default;
+                var rawData = serializer.Serialize(saveObj, type);
                 data.blocks.Add(new BlockSnap
                 {
-                    blockType = type.AssemblyQualifiedName,
-                    json = json
+                    blockName = block.BlockName,
+                    data = Convert.ToBase64String(rawData),
                 });
             }
 
@@ -107,38 +114,46 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void ApplySnapshot(SaveData data)
         {
-            ClearAll();
-
             if (data.blocks == null || data.blocks.Count == 0)
                 return;
 
+            var defaultFormat = data.defaultFormat;
+            if (string.IsNullOrEmpty(defaultFormat))
+                defaultFormat = "json";
+
             foreach (var snap in data.blocks)
             {
-                var type = Type.GetType(snap.blockType);
-                if (type == null)
+                if (string.IsNullOrEmpty(snap.blockName))
                 {
-                    Debug.LogWarning($"[Data] Cannot resolve type '{snap.blockType}' during load, skipping.");
+                    Debug.LogWarning("[Data] BlockSnap 缺少 blockName，跳过。");
                     continue;
                 }
 
-                if (!typeof(IDataBlock).IsAssignableFrom(type))
+                if (!_blockNameIndex.TryGetValue(snap.blockName, out var block))
                 {
-                    Debug.LogWarning($"[Data] Type '{type.Name}' does not implement IDataBlock, skipping.");
+                    Debug.LogWarning($"[Data] 未注册的数据块: {snap.blockName}，跳过。");
+                    continue;
+                }
+
+                var format = string.IsNullOrEmpty(snap.format) ? defaultFormat : snap.format;
+                if (!XSerialize.Serializer.TryGet(format, out var serializer))
+                {
+                    Debug.LogWarning($"[Data] 不支持的序列化格式: {format}，跳过数据块 {snap.blockName}。");
                     continue;
                 }
 
                 try
                 {
-                    var block = (IDataBlock)Activator.CreateInstance(type);
-                    var saveObj = JsonUtility.FromJson(snap.json, type);
+                    var rawData = Convert.FromBase64String(snap.data);
+                    var saveObj = serializer.Deserialize(rawData, block.GetType());
                     block.OnLoad(saveObj);
-                    _blocks[type] = block;
                 }
                 catch (Exception ex)
                 {
-                    Debug.LogWarning($"[Data] Failed to restore IDataBlock '{type.Name}': {ex.Message}");
+                    Debug.LogWarning($"[Data] 恢复数据块 {snap.blockName} 失败: {ex.Message}");
                 }
             }
+
         }
 
         #endregion
@@ -150,9 +165,9 @@ namespace XFramework.XData
         {
             ForEachBlock(b => b.OnClear());
             _blocks.Clear();
+            _blockNameIndex.Clear();
         }
 
         #endregion
-
     }
 }
