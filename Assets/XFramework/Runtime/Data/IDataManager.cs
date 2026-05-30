@@ -5,7 +5,7 @@ namespace XFramework.XData
     /// <summary>
     /// 运行时数据管理器的内部接口，定义 Block 管理 / 数据快照能力。
     /// <para>外部业务代码通过 <see cref="DataManager"/> 静态门面访问。</para>
-    /// <para>存读档职责由 SaveLoadModule 负责，DataManager 仅提供 <see cref="SaveData"/> 序列化/反序列化接口。</para>
+    /// <para>存读档职责由 SaveLoadModule 负责，DataManager 仅提供 <see cref="DataSnapshot"/> 序列化/反序列化接口。</para>
     /// </summary>
     public interface IDataManager
     {
@@ -49,16 +49,16 @@ namespace XFramework.XData
         #region Snapshot
 
         /// <summary>
-        /// 遍历所有已注册的 <see cref="IDataBlock"/>，调用 <see cref="IDataBlock.OnSave"/> 构建 <see cref="SaveData"/> 快照。
+        /// 遍历所有已注册的 <see cref="IDataBlock"/>，调用 <see cref="IDataBlock.OnSave"/> 构建 <see cref="DataSnapshot"/> 快照。
         /// <para>序列化委托给 <see cref="XSerialize.Serializer"/>，返回值由 SaveLoadModule 负责写入到存储后端。</para>
         /// </summary>
-        SaveData CreateSnapshot();
+        DataSnapshot CreateSnapshot();
 
         /// <summary>
-        /// 将 <see cref="SaveData"/> 快照恢复到当前内存数据中。
+        /// 将 <see cref="DataSnapshot"/> 快照恢复到当前内存数据中。
         /// <para>反序列化委托给 <see cref="XSerialize.Serializer"/>，加载前会清空现有数据。</para>
         /// </summary>
-        void ApplySnapshot(SaveData data);
+        void ApplySnapshot(DataSnapshot data);
 
         #endregion
 

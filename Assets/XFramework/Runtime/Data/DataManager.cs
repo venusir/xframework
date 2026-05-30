@@ -88,14 +88,14 @@ namespace XFramework.XData
         #region Snapshot
 
         /// <inheritdoc cref="IDataManager.CreateSnapshot"/>
-        public static SaveData CreateSnapshot()
+        public static DataSnapshot CreateSnapshot()
         {
             EnsureInitialized();
             return _impl.CreateSnapshot();
         }
 
         /// <inheritdoc cref="IDataManager.ApplySnapshot"/>
-        public static void ApplySnapshot(SaveData data)
+        public static void ApplySnapshot(DataSnapshot data)
         {
             EnsureInitialized();
             _impl.ApplySnapshot(data);

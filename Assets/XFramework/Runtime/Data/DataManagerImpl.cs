@@ -84,9 +84,9 @@ namespace XFramework.XData
         #region Snapshot
 
         /// <inheritdoc/>
-        public SaveData CreateSnapshot()
+        public DataSnapshot CreateSnapshot()
         {
-            var data = new SaveData
+            var data = new DataSnapshot
             {
                 version = "1.0",
                 timestamp = DateTime.UtcNow.ToString("o"),
@@ -101,7 +101,7 @@ namespace XFramework.XData
 
                 var serializer = XSerialize.Serializer.Default;
                 var rawData = serializer.Serialize(saveObj, type);
-                data.blocks.Add(new BlockSnap
+                data.blocks.Add(new DataBlockSnapshot
                 {
                     blockName = block.BlockName,
                     data = Convert.ToBase64String(rawData),
@@ -112,7 +112,7 @@ namespace XFramework.XData
         }
 
         /// <inheritdoc/>
-        public void ApplySnapshot(SaveData data)
+        public void ApplySnapshot(DataSnapshot data)
         {
             if (data.blocks == null || data.blocks.Count == 0)
                 return;
@@ -125,7 +125,7 @@ namespace XFramework.XData
             {
                 if (string.IsNullOrEmpty(snap.blockName))
                 {
-                    Debug.LogWarning("[Data] BlockSnap 缺少 blockName，跳过。");
+                    Debug.LogWarning("[Data] DataBlockSnapshot 缺少 blockName，跳过。");
                     continue;
                 }
 

@@ -13,7 +13,7 @@ XSerialize/
 ```
 
 - `DataManager` 通过 `Serializer.Get(format)` 获取序列化器，不再硬编码 `JsonUtility`。
-- `SaveData` 顶层仍为 JsonUtility 兼容格式（`BlockSnap.data` 用 Base64 存储原始字节）。
+- `DataSnapshot` 顶层仍为 JsonUtility 兼容格式（`DataBlockSnapshot.data` 用 Base64 存储原始字节）。
 - 第三方可实现 `ISerializer` 并调用 `Serializer.Register()` 扩展自定义格式。
 
 ## 内置默认
@@ -64,4 +64,4 @@ public sealed class MessagePackSerializer : ISerializer
 Serializer.Register(new MessagePackSerializer());
 ```
 
-4. 设置 `SaveData.defaultFormat = "msgpack"` 或单个 `BlockSnap.format` 即可切换格式。
+4. 设置 `DataSnapshot.defaultFormat = "msgpack"` 或单个 `DataBlockSnapshot.format` 即可切换格式。

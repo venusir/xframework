@@ -4,13 +4,13 @@ using System.Collections.Generic;
 namespace XFramework.XData
 {
     /// <summary>
-    /// 存档数据结构（JSON 兼容，可直接由 Unity JsonUtility 序列化）。
-    /// <para>每个 <see cref="IDataBlock"/> 通过 <see cref="BlockSnap"/> 持久化。</para>
+    /// 数据快照结构（JSON 兼容，可直接由 Unity JsonUtility 序列化）。
+    /// <para>每个 <see cref="IDataBlock"/> 通过 <see cref="DataBlockSnapshot"/> 持久化。</para>
     /// <para>实际数据块的序列化/反序列化委托给 <see cref="XSerialize.Serializer"/>，
-    /// 通过 <see cref="BlockSnap.format"/> 指定序列化格式，默认使用 <see cref="SaveData.defaultFormat"/>。</para>
+    /// 通过 <see cref="DataBlockSnapshot.format"/> 指定序列化格式，默认使用 <see cref="DataSnapshot.defaultFormat"/>。</para>
     /// </summary>
     [Serializable]
-    public sealed class SaveData
+    public sealed class DataSnapshot
     {
         /// <summary>存档格式版本号，用于向前兼容。</summary>
         public string version;
@@ -20,19 +20,19 @@ namespace XFramework.XData
 
         /// <summary>
         /// 存档级默认序列化格式，对应 <see cref="XSerialize.ISerializer.Format"/>。
-        /// <para>当 <see cref="BlockSnap.format"/> 为空时使用此值，默认 "json"。</para>
+        /// <para>当 <see cref="DataBlockSnapshot.format"/> 为空时使用此值，默认 "json"。</para>
         /// </summary>
         public string defaultFormat;
 
         /// <summary>数据块快照列表。</summary>
-        public List<BlockSnap> blocks = new();
+        public List<DataBlockSnapshot> blocks = new();
     }
 
     /// <summary>
     /// 单个 <see cref="IDataBlock"/> 的序列化快照。
     /// </summary>
     [Serializable]
-    public sealed class BlockSnap
+    public sealed class DataBlockSnapshot
     {
         /// <summary>
         /// 数据块名称，对应 <see cref="IDataBlock.BlockName"/>。
@@ -49,7 +49,7 @@ namespace XFramework.XData
 
         /// <summary>
         /// 该数据块使用的序列化格式，对应 <see cref="XSerialize.ISerializer.Format"/>。
-        /// <para>为 null 或空时使用 <see cref="SaveData.defaultFormat"/>。</para>
+        /// <para>为 null 或空时使用 <see cref="DataSnapshot.defaultFormat"/>。</para>
         /// </summary>
         public string format;
     }
