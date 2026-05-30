@@ -6,6 +6,9 @@ namespace XFramework.XSave
     /// </summary>
     public sealed class SaveMeta
     {
+        /// <summary>所属用户 ID，未启用用户隔离时为 <c>null</c>。</summary>
+        public string userId;
+
         /// <summary>槽位编号。</summary>
         public int slot;
 

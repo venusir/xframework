@@ -27,6 +27,12 @@ namespace XFramework.XSave
 
         #endregion
 
+        #region Fields
+
+        private string _userId;
+
+        #endregion
+
         #region ISaveManager
 
         /// <inheritdoc/>
@@ -35,7 +41,8 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<List<SaveMeta>> GetSlotMetas(CancellationToken cancellationToken = default)
         {
-            var files = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
+            var searchDir = _userId ?? "";
+            var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             var metas = new List<SaveMeta>();
 
             if (files == null || files.Length == 0)
@@ -59,6 +66,7 @@ namespace XFramework.XSave
 
                     metas.Add(new SaveMeta
                     {
+                        userId = _userId,
                         slot = ParseSlotFromPath(path),
                         version = saveData.version,
                         timestamp = saveData.timestamp,
@@ -92,6 +100,7 @@ namespace XFramework.XSave
 
             return new SaveMeta
             {
+                userId = _userId,
                 slot = slot,
                 version = saveData.version,
                 timestamp = saveData.timestamp,
@@ -131,6 +140,7 @@ namespace XFramework.XSave
 
                 return new SaveMeta
                 {
+                    userId = _userId,
                     slot = slot,
                     version = saveData.version,
                     timestamp = saveData.timestamp,
@@ -184,7 +194,8 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
-            var files = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
+            var searchDir = _userId ?? "";
+            var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             if (files == null)
                 return;
 
@@ -192,6 +203,14 @@ namespace XFramework.XSave
             {
                 if (IsSlotFilePath(files[i]))
                     FileManager.Delete(SaveDomain, files[i]);
+            }
+
+            // 同时清理可能残留的 .tmp 文件
+            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
+            if (tmpFiles != null)
+            {
+                for (int i = 0; i < tmpFiles.Length; i++)
+                    FileManager.Delete(SaveDomain, tmpFiles[i]);
             }
         }
 
@@ -205,31 +224,126 @@ namespace XFramework.XSave
 
         #region Private Helpers
 
-        private static string BuildSlotPath(int slot)
+        private string BuildSlotPath(int slot)
         {
-            return $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
+            var fileName = $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
+            return _userId != null ? $"{_userId}/{fileName}" : fileName;
         }
 
         private static bool IsSlotFilePath(string path)
         {
-            return !string.IsNullOrEmpty(path)
-                && path.StartsWith(SlotFilePrefix, StringComparison.Ordinal)
-                && path.EndsWith(SlotFileSuffix, StringComparison.Ordinal);
+            if (string.IsNullOrEmpty(path))
+                return false;
+
+            // 取文件名部分（去掉可能的 userId 子目录前缀）
+            var fileName = path;
+            var slashIndex = path.LastIndexOf('/');
+            if (slashIndex >= 0)
+                fileName = path.Substring(slashIndex + 1);
+
+            return fileName.StartsWith(SlotFilePrefix, StringComparison.Ordinal)
+                && fileName.EndsWith(SlotFileSuffix, StringComparison.Ordinal);
         }
 
         private static int ParseSlotFromPath(string path)
         {
-            // 格式: "slot_{index}.save"
+            // 取文件名部分，格式: "slot_{index}.save"（可能包含 userId/ 前缀）
+            var fileName = path;
+            var slashIndex = path.LastIndexOf('/');
+            if (slashIndex >= 0)
+                fileName = path.Substring(slashIndex + 1);
+
             var start = SlotFilePrefix.Length;
-            var end = path.LastIndexOf(SlotFileSuffix, StringComparison.Ordinal);
+            var end = fileName.LastIndexOf(SlotFileSuffix, StringComparison.Ordinal);
             if (end < start)
                 return -1;
 
-            var numStr = path.Substring(start, end - start);
+            var numStr = fileName.Substring(start, end - start);
             if (int.TryParse(numStr, out var slotIndex))
                 return slotIndex;
 
             return -1;
+        }
+
+        #endregion
+
+        #region User Management
+
+        /// <summary>
+        /// 设置当前操作用户 ID。传入 <c>null</c> 等同于清除用户上下文。
+        /// </summary>
+        internal void SetUserId(string userId)
+        {
+            _userId = userId;
+        }
+
+        /// <summary>
+        /// 清除用户上下文。
+        /// </summary>
+        internal void ClearUserId()
+        {
+            _userId = null;
+        }
+
+        /// <summary>
+        /// 获取所有存在存档数据的用户 ID 列表。
+        /// </summary>
+        internal async UniTask<string[]> GetAllUserIdsAsync(CancellationToken cancellationToken = default)
+        {
+            // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别用户
+            var rootFiles = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
+            var userIdSet = new HashSet<string>();
+
+            // 1. 收集根目录下以 userId 子目录形式存在的用户
+            if (rootFiles != null)
+            {
+                for (int i = 0; i < rootFiles.Length; i++)
+                {
+                    var path = rootFiles[i];
+                    var slashIndex = path.IndexOf('/');
+                    if (slashIndex > 0)
+                    {
+                        var userId = path.Substring(0, slashIndex);
+                        if (IsSlotFilePath(path))
+                            userIdSet.Add(userId);
+                    }
+                }
+            }
+
+            // 2. 同时也检查根目录下直接存在的存档（无用户上下文的遗留存档）
+            // 这些没有 userId，但 GetAllUserIds 只返回有明确 userId 的用户
+
+            var result = new string[userIdSet.Count];
+            userIdSet.CopyTo(result);
+            return result;
+        }
+
+        /// <summary>
+        /// 删除指定用户的所有存档数据（包括子目录）。
+        /// </summary>
+        internal async UniTask DeleteUserAsync(string userId, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(userId))
+                return;
+
+            // 删除该用户子目录下的所有 .save 文件
+            var files = await FileManager.GetFilesAsync(SaveDomain, userId, cancellationToken: cancellationToken);
+            if (files != null)
+            {
+                for (int i = 0; i < files.Length; i++)
+                {
+                    if (IsSlotFilePath(files[i]))
+                        FileManager.Delete(SaveDomain, files[i]);
+                }
+            }
+
+            // 同时删除可能残留的 .tmp 文件
+            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, userId, "*.tmp", cancellationToken);
+            if (tmpFiles != null)
+            {
+                for (int i = 0; i < tmpFiles.Length; i++)
+                    FileManager.Delete(SaveDomain, tmpFiles[i]);
+            }
         }
 
         #endregion

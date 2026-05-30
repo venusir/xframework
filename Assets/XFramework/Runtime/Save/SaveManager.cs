@@ -33,6 +33,7 @@ namespace XFramework.XSave
         #region Fields
 
         private static ISaveManager _impl;
+        private static string _currentUserId;
 
         #endregion
 
@@ -50,6 +51,12 @@ namespace XFramework.XSave
                 return _impl.IsBusy;
             }
         }
+
+        /// <summary>
+        /// 当前操作的用户 ID。
+        /// <para>为 <c>null</c> 时不启用用户隔离，所有存档文件直接存放在 SaveData 根目录。</para>
+        /// </summary>
+        public static string CurrentUserId => _currentUserId;
 
         #endregion
 
@@ -72,6 +79,114 @@ namespace XFramework.XSave
         public static void Shutdown()
         {
             _impl = null;
+            _currentUserId = null;
+        }
+
+        #endregion
+
+        #region User Context
+
+        /// <summary>
+        /// 设置当前操作用户 ID。后续所有 Save/Load/Delete 操作均作用于此用户。
+        /// <para>当 <paramref name="userId"/> 为 <c>null</c> 或空字符串时，等同于调用 <see cref="ClearCurrentUser"/>。</para>
+        /// <para>如果当前有正在进行的保存/加载操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">当 <see cref="IsBusy"/> 为 <c>true</c> 时抛出。</exception>
+        public static void SetCurrentUser(string userId)
+        {
+            EnsureInitialized();
+
+            if (_impl.IsBusy)
+                throw new InvalidOperationException("[Save] 当前有保存/加载操作正在进行，不允许切换用户。");
+
+            if (string.IsNullOrEmpty(userId))
+            {
+                ClearCurrentUser();
+                return;
+            }
+
+            _currentUserId = userId;
+            if (_impl is SaveManagerImpl impl)
+                impl.SetUserId(userId);
+        }
+
+        /// <summary>
+        /// 清除用户上下文，退回到无用户隔离模式。
+        /// <para>如果当前有正在进行的保存/加载操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">当 <see cref="IsBusy"/> 为 <c>true</c> 时抛出。</exception>
+        public static void ClearCurrentUser()
+        {
+            EnsureInitialized();
+
+            if (_impl.IsBusy)
+                throw new InvalidOperationException("[Save] 当前有保存/加载操作正在进行，不允许清除用户上下文。");
+
+            _currentUserId = null;
+            if (_impl is SaveManagerImpl impl)
+                impl.ClearUserId();
+        }
+
+        /// <summary>
+        /// 获取所有存在存档数据的用户 ID 列表。
+        /// <para>不会切换当前用户上下文。</para>
+        /// </summary>
+        /// <returns>用户 ID 数组，无用户数据时返回空数组。</returns>
+        public static UniTask<string[]> GetAllUserIds(CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (_impl is SaveManagerImpl impl)
+                return impl.GetAllUserIdsAsync(cancellationToken);
+
+            return UniTask.FromResult(Array.Empty<string>());
+        }
+
+        /// <summary>
+        /// 获取指定用户的存档槽位列表。
+        /// <para>不会切换当前用户上下文。</para>
+        /// </summary>
+        /// <param name="userId">要查询的用户 ID。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>该用户的存档元数据列表。</returns>
+        public static async UniTask<List<SaveMeta>> GetUserSlotMetas(string userId, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (_impl is SaveManagerImpl impl)
+            {
+                var previousUserId = _currentUserId;
+                try
+                {
+                    // 临时切换用户上下文以获取指定用户的槽位列表
+                    impl.SetUserId(userId);
+                    var metas = await impl.GetSlotMetas(cancellationToken);
+                    // 修正 userId（impl 填充的是临时 userId，需要与传入参数一致）
+                    for (int i = 0; i < metas.Count; i++)
+                        metas[i].userId = userId;
+                    return metas;
+                }
+                finally
+                {
+                    impl.SetUserId(previousUserId);
+                }
+            }
+
+            return new List<SaveMeta>();
+        }
+
+        /// <summary>
+        /// 删除指定用户的所有存档数据。
+        /// <para>不会切换当前用户上下文。</para>
+        /// </summary>
+        /// <param name="userId">要删除的用户 ID。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        public static async UniTask DeleteUser(string userId, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (_impl is SaveManagerImpl impl)
+                await impl.DeleteUserAsync(userId, cancellationToken);
         }
 
         #endregion
