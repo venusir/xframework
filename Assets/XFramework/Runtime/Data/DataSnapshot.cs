@@ -8,11 +8,19 @@ namespace XFramework.XData
     /// <para>每个 <see cref="IDataBlock"/> 通过 <see cref="DataBlockSnapshot"/> 持久化。</para>
     /// <para>实际数据块的序列化/反序列化委托给 <see cref="XSerialize.Serializer"/>，
     /// 通过 <see cref="DataBlockSnapshot.format"/> 指定序列化格式，默认使用 <see cref="DataSnapshot.defaultFormat"/>。</para>
+    /// <para>第三方可继承此类以扩展存档元数据，
+    /// 并重写 <see cref="CreateMeta"/> 返回配对的 <see cref="XSave.SaveMeta"/> 子类。</para>
     /// </summary>
-    /// <para>第三方可继承此类以扩展存档元数据，配合 <see cref="XSave.SaveMeta.OnPopulate"/> 使用。</para>
     [Serializable]
     public class DataSnapshot
     {
+        /// <summary>
+        /// 创建 <see cref="DataSnapshot"/> 实例的工厂委托。
+        /// <para>第三方可替换此委托以返回自定义子类（如 <c>MySnapshot : DataSnapshot</c>），
+        /// 从而在 <see cref="DataManagerImpl"/> 及 <see cref="XSave.SaveManagerImpl"/> 中自动使用扩展字段。</para>
+        /// </summary>
+        public static Func<DataSnapshot> Factory = () => new DataSnapshot();
+
         /// <summary>存档格式版本号，用于向前兼容。</summary>
         public string version;
 
@@ -27,6 +35,23 @@ namespace XFramework.XData
 
         /// <summary>数据块快照列表。</summary>
         public List<DataBlockSnapshot> blocks = new();
+
+        /// <summary>
+        /// 创建与此快照配对的 <see cref="XSave.SaveMeta"/> 实例。
+        /// <para>默认实现填充 <see cref="version"/> 和 <see cref="timestamp"/>，
+        /// 第三方子类可重写此方法以构造自定义 <see cref="XSave.SaveMeta"/> 子类并填充扩展字段。</para>
+        /// <para>调用方（<see cref="XSave.SaveManagerImpl"/>）在拿到返回的 Meta 后会继续填充
+        /// playerId / slot / relativePath / fileSize 等运行时字段。</para>
+        /// </summary>
+        /// <returns>配对的存档元数据实例。</returns>
+        public virtual XSave.SaveMeta CreateMeta()
+        {
+            return new XSave.SaveMeta
+            {
+                version = this.version,
+                timestamp = this.timestamp
+            };
+        }
     }
 
     /// <summary>

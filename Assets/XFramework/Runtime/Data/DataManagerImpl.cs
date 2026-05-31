@@ -86,7 +86,7 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public DataSnapshot CreateSnapshot()
         {
-            var data = DataManager.SnapshotFactory();
+            var data = DataSnapshot.Factory();
             data.version = "1.0";
             data.timestamp = DateTime.UtcNow.ToString("o");
             data.defaultFormat = "json";

@@ -60,18 +60,15 @@ namespace XFramework.XSave
 
                 try
                 {
-                    var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
+                    var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
                     if (saveData == null)
                         continue;
 
-                    var meta = SaveMeta.Factory();
+                    var meta = saveData.CreateMeta();
                     meta.playerId = _playerId;
                     meta.slot = ParseSlotFromPath(path);
-                    meta.version = saveData.version;
-                    meta.timestamp = saveData.timestamp;
                     meta.relativePath = path;
                     meta.fileSize = bytes.Length;
-                    meta.OnPopulate(saveData);
                     metas.Add(meta);
                 }
                 catch (Exception ex)
@@ -94,18 +91,15 @@ namespace XFramework.XSave
             if (bytes == null || bytes.Length == 0)
                 return null;
 
-            var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
+            var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
             if (saveData == null)
                 return null;
 
-            var meta = SaveMeta.Factory();
+            var meta = saveData.CreateMeta();
             meta.playerId = _playerId;
             meta.slot = slot;
-            meta.version = saveData.version;
-            meta.timestamp = saveData.timestamp;
             meta.relativePath = path;
             meta.fileSize = bytes.Length;
-            meta.OnPopulate(saveData);
             return meta;
         }
 
@@ -138,14 +132,11 @@ namespace XFramework.XSave
                 var dstPhysical = FileManager.GetPhysicalPath(SaveDomain, slotPath);
                 System.IO.File.Move(srcPhysical, dstPhysical);
 
-                var meta = SaveMeta.Factory();
+                var meta = saveData.CreateMeta();
                 meta.playerId = _playerId;
                 meta.slot = slot;
-                meta.version = saveData.version;
-                meta.timestamp = saveData.timestamp;
                 meta.relativePath = slotPath;
                 meta.fileSize = bytes.Length;
-                meta.OnPopulate(saveData);
                 return meta;
             }
             finally
@@ -172,7 +163,7 @@ namespace XFramework.XSave
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
 
                 // 反序列化 bytes → DataSnapshot
-                var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
+                var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
 
                 // 应用快照到内存
                 DataManager.ApplySnapshot(saveData);
