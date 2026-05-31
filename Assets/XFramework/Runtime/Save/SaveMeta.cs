@@ -18,6 +18,13 @@ namespace XFramework.XSave
         /// </summary>
         public static Func<SaveMeta> Factory = () => new SaveMeta();
 
+        /// <summary>
+        /// 反序列化存档时使用的 <see cref="DataSnapshot"/> 目标类型。
+        /// <para>第三方可设置此字段为自定义子类类型（如 <c>typeof(MySnapshot)</c>），
+        /// 使 <see cref="SaveManagerImpl"/> 反序列化时自动还原扩展字段。</para>
+        /// </summary>
+        public static Type SnapshotType = typeof(DataSnapshot);
+
         /// <summary>所属玩家 ID，未启用玩家隔离时为 <c>null</c>。</summary>
         public string playerId;
 

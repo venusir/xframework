@@ -1,3 +1,5 @@
+using System;
+
 namespace XFramework.XData
 {
     /// <summary>
@@ -86,6 +88,13 @@ namespace XFramework.XData
         #endregion
 
         #region Snapshot
+
+        /// <summary>
+        /// 创建 <see cref="DataSnapshot"/> 实例的工厂委托。
+        /// <para>第三方可替换此委托以返回自定义子类（如 <c>MySnapshot : DataSnapshot</c>），
+        /// 从而在 <see cref="DataManagerImpl"/> 及 <see cref="XSave.SaveManagerImpl"/> 中自动使用扩展字段。</para>
+        /// </summary>
+        public static Func<DataSnapshot> SnapshotFactory = () => new DataSnapshot();
 
         /// <inheritdoc cref="IDataManager.CreateSnapshot"/>
         public static DataSnapshot CreateSnapshot()

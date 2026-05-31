@@ -60,7 +60,7 @@ namespace XFramework.XSave
 
                 try
                 {
-                    var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, typeof(DataSnapshot));
+                    var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
                     if (saveData == null)
                         continue;
 
@@ -94,7 +94,7 @@ namespace XFramework.XSave
             if (bytes == null || bytes.Length == 0)
                 return null;
 
-            var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, typeof(DataSnapshot));
+            var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
             if (saveData == null)
                 return null;
 
@@ -122,7 +122,7 @@ namespace XFramework.XSave
                 var saveData = DataManager.CreateSnapshot();
 
                 // 2. 序列化 DataSnapshot → bytes
-                var bytes = Serializer.Default.Serialize(saveData, typeof(DataSnapshot));
+                var bytes = Serializer.Default.Serialize(saveData, saveData.GetType());
 
                 // 3. 双缓冲写入：先写 .tmp，再删除正式文件，最后重命名 .tmp → 正式文件
                 //    避免写入中途崩溃导致存档损坏。
@@ -172,7 +172,7 @@ namespace XFramework.XSave
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
 
                 // 反序列化 bytes → DataSnapshot
-                var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, typeof(DataSnapshot));
+                var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, SaveMeta.SnapshotType);
 
                 // 应用快照到内存
                 DataManager.ApplySnapshot(saveData);
