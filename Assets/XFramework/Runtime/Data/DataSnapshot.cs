@@ -9,8 +9,9 @@ namespace XFramework.XData
     /// <para>实际数据块的序列化/反序列化委托给 <see cref="XSerialize.Serializer"/>，
     /// 通过 <see cref="DataBlockSnapshot.format"/> 指定序列化格式，默认使用 <see cref="DataSnapshot.defaultFormat"/>。</para>
     /// </summary>
+    /// <para>第三方可继承此类以扩展存档元数据，配合 <see cref="XSave.SaveMeta.OnPopulate"/> 使用。</para>
     [Serializable]
-    public sealed class DataSnapshot
+    public class DataSnapshot
     {
         /// <summary>存档格式版本号，用于向前兼容。</summary>
         public string version;

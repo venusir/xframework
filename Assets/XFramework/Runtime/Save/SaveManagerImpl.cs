@@ -64,15 +64,15 @@ namespace XFramework.XSave
                     if (saveData == null)
                         continue;
 
-                    metas.Add(new SaveMeta
-                    {
-                        playerId = _playerId,
-                        slot = ParseSlotFromPath(path),
-                        version = saveData.version,
-                        timestamp = saveData.timestamp,
-                        relativePath = path,
-                        fileSize = bytes.Length
-                    });
+                    var meta = SaveMeta.Factory();
+                    meta.playerId = _playerId;
+                    meta.slot = ParseSlotFromPath(path);
+                    meta.version = saveData.version;
+                    meta.timestamp = saveData.timestamp;
+                    meta.relativePath = path;
+                    meta.fileSize = bytes.Length;
+                    meta.OnPopulate(saveData);
+                    metas.Add(meta);
                 }
                 catch (Exception ex)
                 {
@@ -98,15 +98,15 @@ namespace XFramework.XSave
             if (saveData == null)
                 return null;
 
-            return new SaveMeta
-            {
-                playerId = _playerId,
-                slot = slot,
-                version = saveData.version,
-                timestamp = saveData.timestamp,
-                relativePath = path,
-                fileSize = bytes.Length
-            };
+            var meta = SaveMeta.Factory();
+            meta.playerId = _playerId;
+            meta.slot = slot;
+            meta.version = saveData.version;
+            meta.timestamp = saveData.timestamp;
+            meta.relativePath = path;
+            meta.fileSize = bytes.Length;
+            meta.OnPopulate(saveData);
+            return meta;
         }
 
         /// <inheritdoc/>
@@ -138,15 +138,15 @@ namespace XFramework.XSave
                 var dstPhysical = FileManager.GetPhysicalPath(SaveDomain, slotPath);
                 System.IO.File.Move(srcPhysical, dstPhysical);
 
-                return new SaveMeta
-                {
-                    playerId = _playerId,
-                    slot = slot,
-                    version = saveData.version,
-                    timestamp = saveData.timestamp,
-                    relativePath = slotPath,
-                    fileSize = bytes.Length
-                };
+                var meta = SaveMeta.Factory();
+                meta.playerId = _playerId;
+                meta.slot = slot;
+                meta.version = saveData.version;
+                meta.timestamp = saveData.timestamp;
+                meta.relativePath = slotPath;
+                meta.fileSize = bytes.Length;
+                meta.OnPopulate(saveData);
+                return meta;
             }
             finally
             {
