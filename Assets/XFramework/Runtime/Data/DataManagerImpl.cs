@@ -87,9 +87,11 @@ namespace XFramework.XData
         public DataSnapshot CreateSnapshot()
         {
             var data = DataSnapshot.Factory();
-            data.version = "1.0";
+            if (string.IsNullOrEmpty(data.version))
+                data.version = "1.0";
             data.timestamp = DateTime.UtcNow.ToString("o");
-            data.defaultFormat = "json";
+            if (string.IsNullOrEmpty(data.defaultFormat))
+                data.defaultFormat = "json";
 
             foreach (var (type, block) in _blocks)
             {
