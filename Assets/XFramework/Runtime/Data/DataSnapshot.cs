@@ -21,8 +21,8 @@ namespace XFramework.XData
         /// </summary>
         public static Func<DataSnapshot> Factory = () => new DataSnapshot();
 
-        /// <summary>存档格式版本号，用于向前兼容。</summary>
-        public string version;
+        /// <summary>存档格式版本号，用于向前兼容迁移。数值越大版本越新。</summary>
+        public int version;
 
         /// <summary>存档时间戳（ISO 8601）。</summary>
         public string timestamp;

@@ -14,8 +14,8 @@ namespace XFramework.XSave
         /// <summary>槽位编号。</summary>
         public int slot;
 
-        /// <summary>存档格式版本号。</summary>
-        public string version;
+        /// <summary>存档格式版本号，数值越大版本越新。</summary>
+        public int version;
 
         /// <summary>保存时间戳（ISO 8601）。</summary>
         public string timestamp;
