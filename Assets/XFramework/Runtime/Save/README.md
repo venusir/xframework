@@ -45,6 +45,36 @@ SaveManager.Initialize(() => new MySteamCloudSaveManager());
 
 ## 扩展点
 
+### 自定义存档元数据
+
+通过替换 `DataSnapshot.Factory` 并重写 `CreateMeta()`，可扩展 `SaveMeta` 和 `DataSnapshot` 配对字段：
+
+```csharp
+[Serializable]
+public class MySnapshot : DataSnapshot
+{
+    public byte[] thumbnailPng;
+
+    public override SaveMeta CreateMeta()
+    {
+        var meta = new MySaveMeta { thumbnailPng = this.thumbnailPng };
+        meta.version = version;
+        meta.timestamp = timestamp;
+        return meta;
+    }
+}
+
+public class MySaveMeta : SaveMeta
+{
+    public byte[] thumbnailPng;
+}
+
+// 初始化（一行，在首次调用 SaveManager 之前执行）
+DataSnapshot.Factory = () => new MySnapshot();
+```
+
+`Factory` 自动提供反序列化类型推导（`Factory().GetType()`）和 Meta 实例创建（`CreateMeta()`），无需额外配置。
+
 ### 自定义存储后端
 
 实现 `ISaveManager` 接口并注册：
@@ -69,6 +99,30 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - `XFramework.XSerialize` - 序列化
 - `XFramework.XFileManager` - 文件读写
 - `UniTask` - 异步操作
+
+## 存档兼容建议
+
+`DataSnapshot.version` 和 `SaveMeta.version` 字段（`int` 类型）预留用于版本标记，数值越大版本越新。
+
+序列化器本身已支持字段新增/删除的向前兼容（新字段取默认值，旧字段自动忽略）。当字段**语义变化**（改名、类型变更、默认值不适用）时，建议在 `IDataBlock.OnLoad` 中处理迁移：
+
+```csharp
+public class PlayerData : IDataBlock
+{
+    // 旧字段保留但标记弃用，方便旧存档读取后迁移
+    [Obsolete] public int gold;
+    public int currency;
+
+    public void OnLoad(object saveObj)
+    {
+        // 将旧存档的 gold 迁移到新字段 currency
+        if (gold > 0 && currency == 0)
+            currency = gold;
+    }
+}
+```
+
+避免在框架层面操作原始序列化数据（JSON/bytes），业务层在 `OnLoad` 中自行兼容是最可靠的方式。
 
 ## 目录结构
 
