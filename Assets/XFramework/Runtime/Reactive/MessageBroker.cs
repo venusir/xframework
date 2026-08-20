@@ -2,18 +2,19 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using R3;
 using UnityEngine;
+using XFramework.XReactive.Internal;
 
 namespace XFramework.XReactive
 {
     /// <summary>
-    /// 基于 R3 的消息代理实现。支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
+    /// 消息代理实现(自研响应式引擎,移除 R3 依赖)。支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>
     /// <remarks>
     /// GC 优化说明:
     /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历，无过滤器时零分配
     /// - 键值消息使用两层字典结构，值类型 Key 无 boxing
+    /// - buffered 通道在首次 Publish 时惰性创建 ReplaySubject(每类型一次),之后零额外分配
     /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
@@ -65,9 +66,8 @@ namespace XFramework.XReactive
             if (_subjects.TryGetValue(type, out var sub))
                 ((Subject<TMessage>)sub).OnNext(message);
 
-            // 推送给缓冲订阅者
-            if (_bufferedSubjects.TryGetValue(type, out var bufSub))
-                ((ReplaySubject<TMessage>)bufSub).OnNext(message);
+            // 推送给缓冲订阅者(GetOrAdd:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
+            GetOrAddBufferedSubject<TMessage>().OnNext(message);
         }
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
@@ -86,13 +86,8 @@ namespace XFramework.XReactive
                     subject.OnNext(message);
             }
 
-            // 推送给键值缓冲订阅者
-            if (_keyedBufferedSubjects.TryGetValue(type, out var innerBufObj))
-            {
-                var dict = (Dictionary<TKey, ReplaySubject<TMessage>>)innerBufObj;
-                if (dict.TryGetValue(key, out var subject))
-                    subject.OnNext(message);
-            }
+            // 推送给键值缓冲订阅者(GetOrAdd:同上,订阅前发布的消息可重放)
+            GetOrAddKeyedBufferedSubject<TKey, TMessage>(key).OnNext(message);
         }
 
         #endregion
@@ -112,10 +107,10 @@ namespace XFramework.XReactive
 
         public IReadonlySignal<TMessage> Subscribe<TMessage>(Predicate<TMessage> filter)
         {
-            // 带 filter 的订阅无法缓存，每个 filter 是不同的 Observable 链
+            // 带 filter 的订阅无法缓存，每个 filter 是不同的订阅配置
             // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配（仅 1 个委托，无闭包）
             var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject.Where(filter.Invoke));
+            return new ObservableSignal<TMessage>(subject, filter: filter.Invoke);
         }
 
         public IReadonlySignal<TMessage> Subscribe<TKey, TMessage>(TKey key)
@@ -142,32 +137,19 @@ namespace XFramework.XReactive
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
         {
             // 带 asyncHandler 的订阅无法缓存
-            // GC 说明: lambda 体包含 .Forget() + return m 的额外逻辑，无法用 asyncHandler.Invoke 替代，
-            // 存在 1 个闭包 + 1 个委托分配（初始化时一次性，非热路径）
+            // GC 说明: preHandler 槽仅 1 个闭包 + 1 个委托（初始化时一次性，非热路径）
+            // 原 R3 实现用 Select 链,现改为 Subject 的 preHandler 槽(在 onNext 之前执行,不参与异常隔离)
             var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(
-                subject.Select(m =>
-                {
-                    asyncHandler(m).Forget();
-                    return m;
-                })
-            );
+            return new ObservableSignal<TMessage>(subject, preHandler: m => asyncHandler(m).Forget());
         }
 
         public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
         {
             // 带 filter + asyncHandler 的订阅无法缓存
-            // GC 说明: filter.Invoke 消除了 filter 的闭包（1 委托），但 Select 的 lambda 仍有 1 闭包 + 1 委托
+            // GC 说明: filter.Invoke 消除了 filter 的闭包（1 委托），preHandler 仍 1 闭包 + 1 委托
             //（初始化时一次性，非热路径）
-            // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配
             var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(
-                subject.Where(filter.Invoke).Select(m =>
-                {
-                    asyncHandler(m).Forget();
-                    return m;
-                })
-            );
+            return new ObservableSignal<TMessage>(subject, preHandler: m => asyncHandler(m).Forget(), filter: filter.Invoke);
         }
 
         public IReadonlySignal<TMessage> SubscribeBuffered<TMessage>()
@@ -243,8 +225,8 @@ namespace XFramework.XReactive
 
             try
             {
-                ((Action<TMessage>)pipelineObj)(message);
-                return true;
+                // pipeline 返回 bool:过滤器链全部放行才为 true(修复:原 Action 形态无法感知拦截)
+                return ((Func<TMessage, bool>)pipelineObj)(message);
             }
             catch (Exception e)
             {
@@ -256,20 +238,30 @@ namespace XFramework.XReactive
         /// <summary>
         /// 构建过滤器管道（类似 ASP.NET Core Middleware）。
         /// 在注册过滤器时分配（一次性开销），Publish 时零分配。
+        /// <para>过滤器通过「不调用 next」拦截消息;passed 变量在每次调用时创建(lambda 内声明),
+        /// 避免重入 Publish(同类型)时嵌套调用覆写外层拦截状态。</para>
         /// </summary>
-        private static Action<TMessage> BuildFilterPipeline<TMessage>(List<object> filterObjects)
+        private static Func<TMessage, bool> BuildFilterPipeline<TMessage>(List<object> filterObjects)
         {
             var typedFilters = new IMessageFilter<TMessage>[filterObjects.Count];
             for (int i = 0; i < filterObjects.Count; i++)
                 typedFilters[i] = (IMessageFilter<TMessage>)filterObjects[i];
 
-            // 构建调用链：终端为 no-op
-            Action<TMessage> pipeline = msg => { };
+            // 构建调用链：终端放行
+            Func<TMessage, bool> pipeline = _ => true;
             for (int i = typedFilters.Length - 1; i >= 0; i--)
             {
                 var filter = typedFilters[i];
                 var next = pipeline;
-                pipeline = msg => filter.Invoke(msg, next);
+                pipeline = msg =>
+                {
+                    var passed = false;
+                    filter.Invoke(msg, m =>
+                    {
+                        if (next(m)) passed = true;
+                    });
+                    return passed;
+                };
             }
             return pipeline;
         }
@@ -337,7 +329,7 @@ namespace XFramework.XReactive
             var type = typeof(TMessage);
             if (!_bufferedSubjects.TryGetValue(type, out var sub))
             {
-                sub = new ReplaySubject<TMessage>(1);
+                sub = new ReplaySubject<TMessage>();
                 _bufferedSubjects[type] = sub;
             }
             return (ReplaySubject<TMessage>)sub;
@@ -350,7 +342,7 @@ namespace XFramework.XReactive
             {
                 var dict = new Dictionary<TKey, ReplaySubject<TMessage>>();
                 _keyedBufferedSubjects[type] = dict;
-                var newSubject = new ReplaySubject<TMessage>(1);
+                var newSubject = new ReplaySubject<TMessage>();
                 dict[key] = newSubject;
                 return newSubject;
             }
@@ -358,7 +350,7 @@ namespace XFramework.XReactive
             var innerDict = (Dictionary<TKey, ReplaySubject<TMessage>>)innerObj;
             if (!innerDict.TryGetValue(key, out var found))
             {
-                found = new ReplaySubject<TMessage>(1);
+                found = new ReplaySubject<TMessage>();
                 innerDict[key] = found;
             }
             return found;
@@ -386,26 +378,6 @@ namespace XFramework.XReactive
                         d.Dispose();
                 }
             }
-        }
-
-        #endregion
-
-        #region ObservableSignal Wrapper
-
-        /// <summary>
-        /// 将 R3 Observable 包装为 IReadonlySignal。
-        /// </summary>
-        private sealed class ObservableSignal<T> : IReadonlySignal<T>
-        {
-            private readonly Observable<T> _observable;
-
-            public ObservableSignal(Observable<T> observable)
-            {
-                _observable = observable;
-            }
-
-            public IDisposable Subscribe(Action<T> onNext)
-                => _observable.Subscribe(onNext);
         }
 
         #endregion

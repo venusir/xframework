@@ -201,7 +201,7 @@ rebindOp.OnPotentialMatch += (keyName) =>
 ### 9. 响应式订阅（可选）
 
 > 替代轮询 `Update()` 的声明式输入方式。所有 `ObserveXxx` 方法返回 `IDisposable`，传入 `this` 可自动随组件销毁取消订阅。
-> 公共 API 零依赖 R3 — 调用方不需要了解任何响应式库。
+> 公共 API 零外部响应式库依赖 — 内部由 `Tick()` 发布的帧脉冲驱动，调用方不需要了解任何响应式库。
 
 #### 按钮事件
 
@@ -234,7 +234,7 @@ public class PlayerController : MonoBehaviour
 ```csharp
 void Awake()
 {
-    // Vector2 轴（如移动摇杆），仅值变化时回调，内置 DistinctUntilChanged
+    // Vector2 轴（如移动摇杆），仅值变化时回调，相同值自动去重
     InputManager.ObserveVector2("Move", v => transform.Translate(v * speed * Time.deltaTime), this);
 
     // float 轴（如扳机键），值变化时回调
@@ -259,7 +259,7 @@ sub.Dispose();
 | 轮询模式                         | 响应式订阅                            |
 | -------------------------------- | ------------------------------------- |
 | `void Update()` 中每帧 `if` 判断 | `Awake` 中一行注册，回调自动触发      |
-| 需要手动管理状态（如上一帧值）   | 内置 `DistinctUntilChanged`，自动去重 |
+| 需要手动管理状态（如上一帧值）   | 相同值自动去重，首次必过              |
 | 需要记得在 `OnDestroy` 中清理    | 传入 `this` 自动绑定生命周期          |
 
 两种模式可混合使用，不影响现有代码。
@@ -454,6 +454,7 @@ public class RewiredProvider : IInputProvider
 
 | 版本  | 说明                                                                                                                                                                         |
 | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.4.0 | 响应式订阅内部实现更换为自研帧脉冲引擎（移除 R3 依赖）；公共 API 与语义不变（首次必过、相同值去重）                                                                           |
 | 2.3.0 | 新增响应式输入订阅 API：`ObservePressed`、`ObserveReleased`、`ObserveHeld`、`ObservePressDuration`、`ObserveVector2`、`ObserveFloat`、`ObserveVector2Raw`、`ObserveFloatRaw` |
 | 2.2.0 | 新增 `IRebindingOperation` 接口与 `StartRebinding` 交互式按键重绑定 API；`GetBindings` 过滤复合绑定并填充 `IsOverridden`；新增 `SystemRebindingOperation` 实现               |
 | 2.1.0 | 新增运行时绑定 API：`GetBindingDisplayString`、`GetBindings`、`SaveBindingOverrides`、`LoadBindingOverrides`、`ResetBindingOverrides`、`ResetAllBindingOverrides`            |

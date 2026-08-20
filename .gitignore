@@ -109,3 +109,4 @@ InitTestScene*.unity*
 # Test runner generated logs and results
 TestLog*.txt
 TestResults*.xml
+/TestResults/

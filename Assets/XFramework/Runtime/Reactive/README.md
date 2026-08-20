@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 响应式模块提供消息总线、响应式属性和信号系统。基于 **R3** 响应式编程库构建，通过静态外观 `MessageManager` 提供全局消息发布/订阅能力，通过 `ReactiveProperty<T>` 节点提供响应式属性绑定，通过 `ISignal` 接口提供轻量级事件通知。
+XFramework 响应式模块提供消息总线、响应式属性和信号系统。基于**自研轻量响应式引擎**（`XFramework.XReactive.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力，通过 `ReactiveProperty<T>` 节点提供响应式属性绑定，通过 `ISignal` 接口提供轻量级事件通知。
 
 **命名空间**: `XFramework.XReactive`
 
@@ -11,14 +11,19 @@ XFramework 响应式模块提供消息总线、响应式属性和信号系统。
 ```
 Runtime/Reactive/
 ├── IMessageBroker.cs             # 消息发布/订阅器接口
-├── MessageBroker.cs              # 消息代理内部实现（基于 R3）
+├── MessageBroker.cs              # 消息代理内部实现（基于自研 Subject）
 ├── MessageManager.cs             # 静态外观（全局入口） + 节点扩展方法
 ├── MessageFilter.cs              # 消息过滤器接口
 ├── MessageBootstrapNode.cs       # 启动节点（注册到 Bootstrap 管线）
 ├── IReactiveProperty.cs          # 响应式属性接口
 ├── ReactiveProperty.cs           # 响应式属性节点                           
 ├── ISignal.cs                    # 信号接口
-└── Signal.cs                     # 信号内部实现（基于 R3 Subject）
+├── Signal.cs                     # 信号内部实现（基于自研 Subject）
+└── Internal/                     # 自研响应式引擎（零外部依赖）
+    ├── Subject.cs                # Subject<T> + 订阅节点池
+    ├── ReplaySubject.cs          # 缓冲 1 条的 ReplaySubject<T>
+    ├── AnonymousDisposable.cs    # IDisposable.Create 替代品
+    └── Unit.cs                   # 无参数信号占位类型
 ```
 
 ## 快速使用
@@ -187,7 +192,7 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 
 ## 设计原则
 
-- **R3 驱动** — 基于 R3 响应式编程库，性能优异且内存安全
+- **自研引擎驱动** — 基于零依赖的轻量响应式引擎（锁 + 快照线程模型、订阅节点池），性能优异且内存安全
 - **生命周期绑定** — 节点的消息订阅自动绑定到节点生命周期，节点销毁时自动取消
 - **类型安全** — 消息通过泛型类型标识，编译期安全
 - **双模式访问** — 同时支持静态 API（非节点类）和节点扩展方法
@@ -196,5 +201,5 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 
 ## 依赖
 
-- `R3` — GitHub/OpenUPM 依赖，响应式编程库
+- 无外部响应式库依赖（自研引擎，行为语义与 R3 一致：订阅立即回调、相同值去重、异常隔离）
 - `XFramework.XNode` — 节点系统依赖

@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using XFramework.XLocalization;
 using XFramework.XReactive;
+using XFramework.XReactive.Internal;
 
 namespace XFramework.XUI.Data
 {
@@ -133,7 +134,7 @@ namespace XFramework.XUI.Data
             if (button == null || onClick == null) return null;
             var handler = new UnityEngine.Events.UnityAction(onClick);
             button.onClick.AddListener(handler);
-            return R3.Disposable.Create(() => button.onClick.RemoveListener(handler));
+            return AnonymousDisposable.Create(() => button.onClick.RemoveListener(handler));
         }
 
         #endregion

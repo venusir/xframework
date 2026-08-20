@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
-using R3;
 using UnityEngine;
 
 namespace XFramework.XReactive
@@ -264,7 +263,17 @@ namespace XFramework.XReactive
         {
             if (subscriber is MonoBehaviour mono)
             {
-                disposable.AddTo(mono.destroyCancellationToken);
+                // 内联实现 AddTo(destroyCancellationToken)(原 R3 扩展,移除 R3 依赖后自实现;
+                // 语义与 NodeExtensions.AddTo 一致:已取消则立即释放,否则注册到取消回调)
+                var token = mono.destroyCancellationToken;
+                if (!token.CanBeCanceled || token.IsCancellationRequested)
+                {
+                    disposable.Dispose();
+                }
+                else
+                {
+                    token.Register(s => ((IDisposable)s).Dispose(), disposable);
+                }
             }
         }
         #endregion

@@ -47,7 +47,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **Loader**       | `XFramework.XLoader`       | [README](../Runtime/Loader/README.md)       | 启动管线：Phase 分组调度、一键启动、进度广播                  |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
-| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式：消息总线、响应式属性、信号（基于 R3）                 |
+| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式：消息总线、响应式属性、信号（自研引擎）             |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
 | **File**         | `XFramework.XFile`         | [README](../Runtime/File/README.md)         | 跨平台文件系统：路径域抽象、自动选平台 Provider               |
 | **Input**        | `XFramework.XInput`        | [README](../Runtime/Input/README.md)        | 输入抽象层：纯字符串 API、多设备检测、零 GC                   |
@@ -66,7 +66,7 @@ Assets/XFramework/
 │   ├── Loader/                   # 启动加载管线
 │   ├── Asset/                    # 资源管理（基于 YooAsset）
 │   ├── Update/                   # 统一更新调度
-│   ├── Reactive/                 # 响应式（消息/R3）
+│   ├── Reactive/                 # 响应式（消息/自研引擎）
 │   ├── Localization/             # 本地化
 │   ├── File/                     # 跨平台文件系统
 │   ├── Input/                    # 输入抽象
@@ -238,40 +238,18 @@ GameLauncher.Start()
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------- |
 | **UniTask**           | Cysharp 出品的零 GC 高性能异步库                                                                                                                                              | UPM：添加 Git URL 到 `Packages/manifest.json` | 所有异步/await 操作基础：Asset 加载、UI 打开/关闭动画、启动管线、本地化切换等 |
 | **YooAsset**          | 资源管理系统（加载/打包/热更）                                                                                                                                                | UPM：添加 Git URL 到 `Packages/manifest.json` | Asset 模块底层：AssetBundle 加载、实例化、对象池、场景加载                    |
-| **NuGetForUnity**     | 在 Unity 中安装 NuGet 包的工具                                                                                                                                                | UPM：添加 Git URL 到 `Packages/manifest.json` | 用于安装 R3 及其传递依赖                                                      |
-| **R3** (v1.2.9)       | Cysharp 的下一代响应式编程库                                                                                                                                                  | NuGet：通过 NuGetForUnity 安装                | Reactive 模块底层：消息总线、ReactiveProperty、信号、缓冲/请求-响应消息       |
-| **R3 传递依赖** (4个) | `Microsoft.Bcl.AsyncInterfaces` / `Microsoft.Bcl.TimeProvider` / `System.ComponentModel.Annotations` / `System.Runtime.CompilerServices.Unsafe` / `System.Threading.Channels` | 随 R3 由 NuGetForUnity 自动安装               | R3 运行时依赖（IAsyncEnumerable、通道、注解等）                               |
 
 ### 安装流程
 
-> ⚠️ R3 通过 NuGetForUnity 安装，请在添加 XFramework **之前**按顺序操作，避免编译报错。
-
-**第一步：配置 UPM 依赖** — 在 `Packages/manifest.json` 的 `dependencies` 中添加：
+在 `Packages/manifest.json` 的 `dependencies` 中添加：
 
 ```json
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset",
-    "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=src/NuGetForUnity"
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset"
   }
 }
 ```
 
-**第二步：配置 NuGet 依赖** — 在 `Assets/packages.config` 中写入：
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<packages>
-  <package id="R3" version="1.2.9" manuallyInstalled="true" />
-  <package id="Microsoft.Bcl.AsyncInterfaces" version="6.0.0" />
-  <package id="Microsoft.Bcl.TimeProvider" version="8.0.0" />
-  <package id="System.ComponentModel.Annotations" version="5.0.0" />
-  <package id="System.Runtime.CompilerServices.Unsafe" version="6.0.0" />
-  <package id="System.Threading.Channels" version="8.0.0" />
-</packages>
-```
-
-**第三步：Restore** — 打开 Unity，菜单栏 `NuGet → Restore` 下载 R3。
-
-**第四步：添加 XFramework** — 此时所有依赖就绪，可通过 Git URL 添加 XFramework。
+配置完成后，再通过 Git URL 添加 XFramework。响应式模块（消息总线、ReactiveProperty、信号）为框架自研实现，零额外依赖。

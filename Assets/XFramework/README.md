@@ -148,64 +148,27 @@ UIManager.HideMask();
 
 XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这些依赖需要在**项目根目录的 `Packages/manifest.json`** 中声明，而非在 XFramework 的 `package.json` 中。
 
-| 包名                                                         | 版本/URL                                                                         | 说明         | 安装方式 |
-| ------------------------------------------------------------ | -------------------------------------------------------------------------------- | ------------ | -------- |
-| [UniTask](https://github.com/Cysharp/UniTask)                | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` | 异步操作库   | UPM      |
-| [YooAsset](https://github.com/tuyoogame/YooAsset)            | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset`                 | 资源管理系统 | UPM      |
-| [NuGetForUnity](https://github.com/GlitchEnzo/NuGetForUnity) | `https://github.com/GlitchEnzo/NuGetForUnity.git?path=src/NuGetForUnity`         | NuGet 包管理 | UPM      |
-| [R3](https://github.com/Cysharp/R3)                          | `1.2.9`（NuGet 包）                                                              | 响应式编程库 | NuGet    |
+| 包名                                              | 版本/URL                                                                         | 说明         | 安装方式 |
+| ------------------------------------------------- | -------------------------------------------------------------------------------- | ------------ | -------- |
+| [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` | 异步操作库   | UPM      |
+| [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset`                 | 资源管理系统 | UPM      |
 
 ### 安装依赖
 
 > **重要：** 由于 Unity 包管理器的限制，UPM 包的 `package.json` 中 `dependencies` 字段只支持语义化版本号，不支持 Git URL。因此 XFramework 不在自身 `package.json` 中声明第三方依赖，而是需要您在**项目根目录的 `Packages/manifest.json`** 中手动添加。
 
-**⚠️ 重要：请按以下顺序操作，避免编译报错导致死锁。**
-
-XFramework 的 asmdef 引用了 R3，如果先添加 XFramework 再装 R3，会因编译报错导致 Editor 脚本无法运行，从而无法通过菜单安装依赖。因此请**在添加 XFramework 之前**，先手动配置好所有依赖。
-
-#### 第一步：配置 UPM 依赖
-
-在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下三个包：
+在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下两个包：
 
 ```json
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset",
-    "com.github-glitchenzo.nugetforunity": "https://github.com/GlitchEnzo/NuGetForUnity.git?path=src/NuGetForUnity"
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset"
   }
 }
 ```
 
-#### 第二步：配置 NuGet 依赖（R3）
-
-R3 通过 NuGetForUnity 安装，需要在项目 `Assets/packages.config` 中声明。如果文件不存在则创建，写入以下内容：
-
-```xml
-<?xml version="1.0" encoding="utf-8"?>
-<packages>
-  <package id="R3" version="1.2.9" manuallyInstalled="true" />
-  <package id="Microsoft.Bcl.AsyncInterfaces" version="6.0.0" />
-  <package id="Microsoft.Bcl.TimeProvider" version="8.0.0" />
-  <package id="System.ComponentModel.Annotations" version="5.0.0" />
-  <package id="System.Runtime.CompilerServices.Unsafe" version="6.0.0" />
-  <package id="System.Threading.Channels" version="8.0.0" />
-</packages>
-```
-
-#### 第三步：打开 Unity 并 Restore NuGet 包
-
-打开 Unity Editor，等待 NuGetForUnity 自动检测到 `packages.config` 中的变更，然后点击菜单栏 `NuGet -> Restore` 下载 R3 及其依赖。
-
-#### 第四步：添加 XFramework
-
-完成以上步骤后，再通过 Git URL 或本地路径添加 XFramework。此时所有依赖已就绪，不会出现编译报错。
-
----
-
-**如果已经先添加了 XFramework 导致编译报错：**
-
-关闭 Unity Editor，手动编辑 `Packages/manifest.json` 和 `Assets/packages.config`（按上述第一、二步配置），然后重新打开 Unity。编译通过后，即可正常使用。
+配置完成后，再通过 Git URL 或本地路径添加 XFramework。响应式模块（消息总线、ReactiveProperty）为框架自研实现，无需额外依赖。
 
 ---
 

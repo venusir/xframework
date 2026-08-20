@@ -11,7 +11,7 @@
 | **强类型**     | 编译期类型安全，IDE 智能提示，告别 `GetFloat("key")` 的魔法字符串              |
 | **JSON 文件**  | 基于 Unity 内置 `JsonUtility`，可读可调试，天然支持版本迁移                    |
 | **不自动保存** | 调用方显式调用 `Save()`，避免频繁 I/O——适合「设置面板关闭时一次性保存」的场景  |
-| **响应式通知** | 通过 `Observe` / `ObserveField` + R3 的 `DistinctUntilChanged`，字段不变不刷新 |
+| **响应式通知** | 通过 `Observe` / `ObserveField`，相同字段值自动去重不刷新 |
 | **可替换后端** | `ISettingsStore` 接口允许替换为加密存储、PlayerPrefs 或远程云存档              |
 | **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等           |
 
@@ -88,7 +88,7 @@ SettingsManager.Observe<GameSettings>(s =>
     musicSlider.value = s.audio.musicVolume;
 });
 
-// 精确监听单个字段（DistinctUntilChanged 保证值不变不触发）
+// 精确监听单个字段（相同值自动去重，值不变不触发）
 SettingsManager.ObserveField<GameSettings, float>(
     s => s.audio.masterVolume,
     volume => audioMixer.SetFloat("MasterVolume", Mathf.Lerp(-80f, 0f, volume))
@@ -199,7 +199,7 @@ Runtime/Settings/
 ## 避免 GC
 
 - `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配
-- `ObserveField` 内部使用 R3 的 `DistinctUntilChanged()` 避免无效回调
+- `ObserveField` 内部使用闭包状态机 + `EqualityComparer<TField>` 去重，避免无效回调（订阅建立时一次性分配，非热路径）
 - 不自动保存，避免不必要的字符串分配与 I/O
 - 静态外观方法全为值类型或引用传递，无装箱
 
@@ -209,5 +209,5 @@ Runtime/Settings/
 | -------- | ------------------------ | --------------------------- | -------------------------- |
 | 模式     | 静态外观 + 接口 + 实现   | 静态外观 + 接口 + 实现      | ✅ 一致                     |
 | 初始化   | `Initialize(data)`       | `Initialize()`              | `Initialize<T>(path)`      |
-| R3 封装  | N/A                      | `ObserveXxx`                | `Observe` / `ObserveField` |
+| 响应式订阅 | N/A                      | `ObserveXxx`                | `Observe` / `ObserveField` |
 | 消息通知 | `LanguageChangedMessage` | `DeviceConnectedMessage` 等 | `SettingsChangedMessage`   |

@@ -5,7 +5,7 @@
 - 本项目是 Unity 游戏框架(内嵌 UPM 包 `com.venusy609.xframework`),以插件形式供其他游戏项目引入,不包含具体游戏内容
 - Unity 版本:6000.4.5f1(开发环境);package.json 最低要求 `6000.3`
 - API 兼容级别:.NET Standard 2.1;序列化模式:Force Text
-- Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、R3、TextMeshPro、Input System
+- Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、TextMeshPro、Input System
 
 ## 总体原则
 
@@ -31,7 +31,7 @@
 ## 编码规范
 
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
-- **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、R3、UnityEngine)→ XFramework 排序
+- **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
 - **可见性:** 默认 `internal`;测试通过 `InternalsVisibleTo("Venusy609.Xframework.Tests")` 访问内部实现
 
@@ -62,7 +62,7 @@
 
 - package.json 的 dependencies 刻意留空(UPM 不支持 Git URL 依赖);新依赖:
   - UPM 包 → `Packages/manifest.json`(Git URL)
-  - NuGet 包 → `Assets/packages.config` + NuGetForUnity(当前:R3 1.2.9 等 6 包)
+  - NuGet 包 → `Assets/packages.config` + NuGetForUnity(当前:无)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
 - 各模块 README 是文档的一部分,新增模块/功能需同步维护
 

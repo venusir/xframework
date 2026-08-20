@@ -1,11 +1,11 @@
 using System;
-using R3;
+using XFramework.XReactive.Internal;
 
 namespace XFramework.XReactive
 {
 
     /// <summary>
-    /// 基于 R3 Subject 的信号实现（无参数版）。
+    /// 基于自研 Subject 的信号实现（无参数版）。
     /// </summary>
     internal sealed class Signal : ISignal
     {
@@ -22,7 +22,7 @@ namespace XFramework.XReactive
     }
 
     /// <summary>
-    /// 基于 R3 Subject 的信号实现。
+    /// 基于自研 Subject 的信号实现。
     /// </summary>
     internal sealed class Signal<T> : ISignal<T>
     {

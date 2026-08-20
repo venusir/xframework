@@ -1,12 +1,13 @@
 using System;
-using R3;
+using System.Collections.Generic;
 using XFramework.XReactive;
+using XFramework.XReactive.Internal;
 
 namespace XFramework.XSettings
 {
     /// <summary>
     /// <see cref="ISettingsManager{T}"/> 的默认实现。
-    /// <para>内部使用 <see cref="Subject{T}"/>（R3）驱动响应式通知，
+    /// <para>内部使用自研 <see cref="Subject{T}"/>（移除 R3 依赖）驱动响应式通知，
     /// 并通过 <see cref="MessageManager"/> 发布 <see cref="SettingsChangedMessage"/>。</para>
     /// <para>不会自动保存——调用方需显式调用 <see cref="Save"/> 来持久化。</para>
     /// </summary>
@@ -107,10 +108,20 @@ namespace XFramework.XSettings
             if (callback == null)
                 throw new ArgumentNullException(nameof(callback));
 
-            return _changedSubject
-                .Select(selector)
-                .DistinctUntilChanged()
-                .Subscribe(callback);
+            // 原 R3 实现用 Select + DistinctUntilChanged 链,现内联闭包状态机:
+            // 首次必过(hasLast=false),之后相同值去重(EqualityComparer 默认比较器),与 R3 语义一致
+            // 闭包分配仅在订阅建立时一次性,非热路径
+            var hasLast = false;
+            var lastValue = default(TField);
+            return _changedSubject.Subscribe(settings =>
+            {
+                var fieldValue = selector(settings);
+                if (hasLast && EqualityComparer<TField>.Default.Equals(lastValue, fieldValue))
+                    return;
+                hasLast = true;
+                lastValue = fieldValue;
+                callback(fieldValue);
+            });
         }
 
         #endregion
