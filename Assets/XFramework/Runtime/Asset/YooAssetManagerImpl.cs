@@ -133,6 +133,47 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 卸载指定包中所有未使用的资源（引用计数为 0 且未被引用的 bundle）。
+        /// <para>包不存在时 LogError 并安全返回。</para>
+        /// </summary>
+        public async UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            var package = GetPackage(packageName);
+            if (package == null) return;
+
+            var operation = package.UnloadUnusedAssetsAsync();
+            await operation.WithCancellation(cancellationToken);
+        }
+
+        /// <summary>
+        /// 尝试立即卸载单个未使用的资源。该资源仍被引用（引用计数大于 0）时无效果。
+        /// </summary>
+        public void TryUnloadUnusedAsset(string location, string packageName = null)
+        {
+            var package = GetPackage(packageName);
+            if (package == null) return;
+            package.TryUnloadUnusedAsset(location);
+        }
+
+        /// <summary>
+        /// 检查资源定位路径在指定包中是否存在且合法。包不存在时返回 false。
+        /// </summary>
+        public bool CheckLocationValid(string location, string packageName = null)
+        {
+            var package = GetPackage(packageName);
+            return package != null && package.CheckLocationValid(location);
+        }
+
+        /// <summary>
+        /// 检查资源是否来自远端（加载前需先下载）。包不存在时返回 false。
+        /// </summary>
+        public bool IsNeedDownloadFromRemote(string location, string packageName = null)
+        {
+            var package = GetPackage(packageName);
+            return package != null && package.IsNeedDownloadFromRemote(location);
+        }
+
+        /// <summary>
         /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统。
         /// </summary>
         private static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)

@@ -116,7 +116,26 @@ var locations = new[]
 await AssetManager.PreloadAllAsync(locations);
 ```
 
-### 7. 释放与回收
+### 7. 卸载与查询
+
+```csharp
+// 卸载包中所有未使用资源（内存告警 / 关卡切换后回收）
+await AssetManager.UnloadUnusedAssetsAsync();
+
+// 尝试卸载单个未使用资源（仍被引用时无效果）
+AssetManager.TryUnloadUnusedAsset("characters/old_hero");
+
+// 查询资源定位路径是否合法（可被 LoadAsync 加载）
+bool valid = AssetManager.CheckLocationValid("characters/player");
+
+// 查询资源是否来自远端（Host 模式下预判断是否需要先下载）
+bool needDownload = AssetManager.IsNeedDownloadFromRemote("characters/player");
+```
+
+> **多包场景**：以上方法均支持 `packageName` 参数指定资源包，为 null 时作用于默认包。
+> 卸载只会回收引用计数为 0 的资源——`AssetHandle<T>` 未 Dispose 的资源保持存活。
+
+### 8. 释放与回收
 
 ```csharp
 // 回收实例（自动走对象池，满则销毁；回池实例保留资源引用，真正销毁时才释放）
@@ -126,7 +145,7 @@ AssetManager.DestroyInstance(component);
 
 > **注意**：用户直接调用 `Object.Destroy(instance)` 的实例**不会回池**（OnDestroy 阶段操作对象池在 Unity 语义下不可靠），但会经 `InstanceTracker.OnDestroy` 自动释放资源引用，不会泄漏。
 
-### 8. 对象池配置
+### 9. 对象池配置
 
 ```csharp
 // 设置指定预制体的对象池最大容量（默认 5）
@@ -179,7 +198,7 @@ public class MyNode : EntityNode
 
 ### 取消支持
 
-所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`。
+所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`。
 
 ## 设计原则
 

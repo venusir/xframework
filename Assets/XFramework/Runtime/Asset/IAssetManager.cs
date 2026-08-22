@@ -32,6 +32,33 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Unload & Query
+
+        /// <summary>
+        /// 卸载指定包中所有未使用的资源（引用计数为 0 且未被引用的 bundle）。
+        /// <para>正在被 <see cref="AssetHandle{T}"/> 或实例引用的资源不会卸载。典型场景：内存告警、关卡切换后回收。</para>
+        /// </summary>
+        UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 尝试立即卸载单个未使用的资源。该资源仍被引用（引用计数大于 0）时无效果。
+        /// </summary>
+        void TryUnloadUnusedAsset(string location, string packageName = null);
+
+        /// <summary>
+        /// 检查资源定位路径在指定包中是否存在且合法（即 <see cref="LoadAsync{T}(string, CancellationToken)"/> 可成功加载）。
+        /// <para>包不存在时返回 false。</para>
+        /// </summary>
+        bool CheckLocationValid(string location, string packageName = null);
+
+        /// <summary>
+        /// 检查资源是否来自远端（加载前需先下载）。Offline 模式恒为 false。
+        /// <para>包不存在时返回 false。</para>
+        /// </summary>
+        bool IsNeedDownloadFromRemote(string location, string packageName = null);
+
+        #endregion
+
         #region Load — UniTask
 
         /// <summary>

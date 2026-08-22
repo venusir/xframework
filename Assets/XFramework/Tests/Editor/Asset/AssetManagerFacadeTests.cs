@@ -127,6 +127,35 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void UnloadUnusedAssetsAsync_ForwardsToInstance()
+        {
+            AssetManager.UnloadUnusedAssetsAsync().GetAwaiter().GetResult();
+            Assert.AreEqual(1, _fake.UnloadUnusedAssetsCallCount);
+        }
+
+        [Test]
+        public void TryUnloadUnusedAsset_ForwardsToInstance()
+        {
+            AssetManager.TryUnloadUnusedAsset("characters/player");
+            Assert.AreEqual(1, _fake.TryUnloadUnusedAssetCallCount);
+            Assert.AreEqual("characters/player", _fake.LastTryUnloadLocation);
+        }
+
+        [Test]
+        public void CheckLocationValid_ForwardsToInstance()
+        {
+            Assert.IsTrue(AssetManager.CheckLocationValid("characters/player"));
+            Assert.AreEqual("characters/player", _fake.LastCheckLocation);
+        }
+
+        [Test]
+        public void IsNeedDownloadFromRemote_ForwardsToInstance()
+        {
+            Assert.IsFalse(AssetManager.IsNeedDownloadFromRemote("characters/player"));
+            Assert.AreEqual("characters/player", _fake.LastNeedDownloadLocation);
+        }
+
+        [Test]
         public void PreloadAllAsync_ForwardsToInstance()
         {
             AssetManager.PreloadAllAsync(new[] { "a", "b" }).GetAwaiter().GetResult();
@@ -145,6 +174,11 @@ namespace Venusy609.Xframework.Editor.Tests
             public int SceneLoadCallCount;
             public int PreloadCallCount;
             public int InitializePackageCallCount;
+            public int UnloadUnusedAssetsCallCount;
+            public int TryUnloadUnusedAssetCallCount;
+            public string LastTryUnloadLocation;
+            public string LastCheckLocation;
+            public string LastNeedDownloadLocation;
             public bool Disposed;
 
             public UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
@@ -154,6 +188,30 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 InitializePackageCallCount++;
                 return UniTask.CompletedTask;
+            }
+
+            public UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+            {
+                UnloadUnusedAssetsCallCount++;
+                return UniTask.CompletedTask;
+            }
+
+            public void TryUnloadUnusedAsset(string location, string packageName = null)
+            {
+                TryUnloadUnusedAssetCallCount++;
+                LastTryUnloadLocation = location;
+            }
+
+            public bool CheckLocationValid(string location, string packageName = null)
+            {
+                LastCheckLocation = location;
+                return true;
+            }
+
+            public bool IsNeedDownloadFromRemote(string location, string packageName = null)
+            {
+                LastNeedDownloadLocation = location;
+                return false;
             }
 
             public UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object

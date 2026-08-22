@@ -77,6 +77,38 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Public API — Unload & Query
+
+        /// <inheritdoc cref="IAssetManager.UnloadUnusedAssetsAsync(string, CancellationToken)"/>
+        public static UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.UnloadUnusedAssetsAsync(packageName, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.TryUnloadUnusedAsset(string, string)"/>
+        public static void TryUnloadUnusedAsset(string location, string packageName = null)
+        {
+            EnsureGlobalInitialized();
+            _instance.TryUnloadUnusedAsset(location, packageName);
+        }
+
+        /// <inheritdoc cref="IAssetManager.CheckLocationValid(string, string)"/>
+        public static bool CheckLocationValid(string location, string packageName = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CheckLocationValid(location, packageName);
+        }
+
+        /// <inheritdoc cref="IAssetManager.IsNeedDownloadFromRemote(string, string)"/>
+        public static bool IsNeedDownloadFromRemote(string location, string packageName = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.IsNeedDownloadFromRemote(location, packageName);
+        }
+
+        #endregion
+
         #region Public API — Load (UniTask)
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, CancellationToken)"/>

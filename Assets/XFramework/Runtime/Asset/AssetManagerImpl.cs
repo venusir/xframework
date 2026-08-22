@@ -60,6 +60,34 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Unload & Query
+
+        public async UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            await _managerImpl.UnloadUnusedAssetsAsync(packageName, cancellationToken);
+        }
+
+        public void TryUnloadUnusedAsset(string location, string packageName = null)
+        {
+            EnsureInitialized();
+            _managerImpl.TryUnloadUnusedAsset(location, packageName);
+        }
+
+        public bool CheckLocationValid(string location, string packageName = null)
+        {
+            EnsureInitialized();
+            return _managerImpl.CheckLocationValid(location, packageName);
+        }
+
+        public bool IsNeedDownloadFromRemote(string location, string packageName = null)
+        {
+            EnsureInitialized();
+            return _managerImpl.IsNeedDownloadFromRemote(location, packageName);
+        }
+
+        #endregion
+
         #region Load — UniTask
 
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
