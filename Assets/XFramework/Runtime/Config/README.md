@@ -361,7 +361,7 @@ private void OnConfigChanged(Type type)
 public enum ConfigFormat
 {
     Json = 0,             // JSON，通过 JsonUtility 反序列化
-    ScriptableObject = 1, // ScriptableObject，通过 Resources.Load 加载
+    ScriptableObject = 1, // ScriptableObject，通过 AssetManager（YooAsset）加载
     Csv = 2,              // CSV，第一行为表头，后续行为数据行
 }
 ```
