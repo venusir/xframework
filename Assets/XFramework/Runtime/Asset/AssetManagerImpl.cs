@@ -190,15 +190,38 @@ namespace XFramework.XAsset
             return await _managerImpl.LoadSceneAsync(location, additive, progress, cancellationToken);
         }
 
-        public async UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default)
+        public async UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            var tasks = new List<UniTask>();
+
+            // 先收集全部 location：避免重复枚举，且预加载过程中的总数/计数基于快照
+            var list = new List<string>();
             foreach (var location in locations)
             {
-                tasks.Add(_managerImpl.PreloadAsync(location, cancellationToken));
+                list.Add(location);
             }
+
+            int total = list.Count;
+            if (total == 0)
+            {
+                progress?.Invoke(1f);
+                return;
+            }
+
+            int completed = 0;
+            var tasks = new List<UniTask>(total);
+            foreach (var location in list)
+            {
+                tasks.Add(PreloadOneAsync(location, () =>
+                {
+                    completed++;
+                    progress?.Invoke((float)completed / total);
+                }, cancellationToken));
+            }
+
             await UniTask.WhenAll(tasks);
+            // 兜底补发最终值（最后一个完成回调可能因取消/失败未触发）
+            progress?.Invoke(1f);
         }
 
         #endregion
@@ -283,6 +306,21 @@ namespace XFramework.XAsset
         #endregion
 
         #region Internal Methods
+
+        /// <summary>
+        /// 预加载单个资源。无论成功失败都回调完成计数，保证整体进度可收敛到 1f。
+        /// </summary>
+        private async UniTask PreloadOneAsync(string location, Action onCompleted, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await _managerImpl.PreloadAsync(location, cancellationToken);
+            }
+            finally
+            {
+                onCompleted();
+            }
+        }
 
         /// <summary>
         /// 内部实例化逻辑。优先从对象池获取，否则加载资源并实例化。

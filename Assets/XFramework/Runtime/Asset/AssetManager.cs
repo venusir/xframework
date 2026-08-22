@@ -206,11 +206,11 @@ namespace XFramework.XAsset
             return _instance.LoadSceneAsync(location, additive, progress, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, CancellationToken)"/>
-        public static UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, Action{float}, CancellationToken)"/>
+        public static UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.PreloadAllAsync(locations, cancellationToken);
+            return _instance.PreloadAllAsync(locations, progress, cancellationToken);
         }
 
         #endregion

@@ -318,7 +318,7 @@ namespace Venusy609.Xframework.Editor.Tests
                 return UniTask.FromResult(default(Scene));
             }
 
-            public UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default)
+            public UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
             {
                 PreloadCallCount++;
                 return UniTask.CompletedTask;

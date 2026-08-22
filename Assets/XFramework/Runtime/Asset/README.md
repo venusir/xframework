@@ -114,7 +114,9 @@ var locations = new[]
     "effects/explosion",
     "ui/loading_screen"
 };
-await AssetManager.PreloadAllAsync(locations);
+
+// 带进度回调：按完成数量聚合 0~1，全部完成后补发 1f
+await AssetManager.PreloadAllAsync(locations, p => Debug.Log($"预加载进度: {p * 100}%"));
 ```
 
 ### 7. 热更链路（Host 模式）

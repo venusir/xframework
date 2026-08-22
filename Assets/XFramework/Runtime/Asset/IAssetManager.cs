@@ -147,8 +147,9 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 批量预加载资源到缓存（引用计数不增加）。
+        /// <para>progress 按完成数量聚合回调（0~1，全部完成后补发 1f）。locations 为空时立即补发 1f。</para>
         /// </summary>
-        UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default);
+        UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default);
 
         #endregion
 
