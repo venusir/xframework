@@ -29,6 +29,7 @@ namespace Venusy609.Xframework.Editor.Tests
         [TearDown]
         public void TearDown()
         {
+            AssetManager.ImplFactory = null;
             AssetManager.Destroy();
         }
 
@@ -66,6 +67,67 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.IsFalse(AssetManager.IsInitialized);
             Assert.IsTrue(_fake.Disposed, "Destroy 应 Dispose 底层实例");
             Assert.Throws<InvalidOperationException>(() => AssetManager.LoadAsync<GameObject>("dummy"));
+        }
+
+        [Test]
+        public void InitializeAsync_ConcurrentCalls_ShareSingleTask()
+        {
+            AssetManager.Destroy();
+            var factoryCalls = 0;
+            var tcs = new UniTaskCompletionSource();
+            var fake = new FakeAssetManager { InitTask = tcs.Task };
+            AssetManager.ImplFactory = () => { factoryCalls++; return fake; };
+
+            var t1 = AssetManager.InitializeAsync(new LoadProgress());
+            var t2 = AssetManager.InitializeAsync(new LoadProgress());
+
+            Assert.AreEqual(1, factoryCalls, "并发调用应共享同一初始化任务，只创建一次实例");
+
+            tcs.TrySetResult();
+            t1.GetAwaiter().GetResult();
+            t2.GetAwaiter().GetResult();
+            Assert.IsTrue(AssetManager.IsInitialized);
+            Assert.AreEqual(1, factoryCalls);
+        }
+
+        [Test]
+        public void InitializeAsync_Failed_AllowsRetry()
+        {
+            AssetManager.Destroy();
+            var factoryCalls = 0;
+            var tcs = new UniTaskCompletionSource();
+            var first = new FakeAssetManager { InitTask = tcs.Task };
+            AssetManager.ImplFactory = () => { factoryCalls++; return first; };
+
+            var t1 = AssetManager.InitializeAsync(new LoadProgress());
+            tcs.TrySetException(new InvalidOperationException("模拟初始化失败"));
+            Assert.Throws<InvalidOperationException>(() => t1.GetAwaiter().GetResult());
+            Assert.IsFalse(AssetManager.IsInitialized);
+
+            // 失败后缓存已清空可重试；第二次返回全新实例，不复用已失败的任务
+            first = new FakeAssetManager();
+            var t2 = AssetManager.InitializeAsync(new LoadProgress());
+            t2.GetAwaiter().GetResult();
+            Assert.AreEqual(2, factoryCalls);
+            Assert.IsTrue(AssetManager.IsInitialized);
+        }
+
+        [Test]
+        public void Destroy_DuringInit_DiscardsInflightResult()
+        {
+            AssetManager.Destroy();
+            var factoryCalls = 0;
+            var tcs = new UniTaskCompletionSource();
+            var fake = new FakeAssetManager { InitTask = tcs.Task };
+            AssetManager.ImplFactory = () => { factoryCalls++; return fake; };
+
+            var t1 = AssetManager.InitializeAsync(new LoadProgress());
+            AssetManager.Destroy(); // 在途初始化期间销毁
+
+            tcs.TrySetResult();
+            t1.GetAwaiter().GetResult();
+            Assert.IsFalse(AssetManager.IsInitialized, "销毁后的在途初始化结果应被丢弃，不得复活");
+            Assert.IsTrue(fake.Disposed, "被丢弃的实例应释放");
         }
 
         #endregion

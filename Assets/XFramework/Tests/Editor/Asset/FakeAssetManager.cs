@@ -39,8 +39,17 @@ namespace Venusy609.Xframework.Editor.Tests
         public int DestroyInstanceCallCount;
         public bool Disposed;
 
+        /// <summary>InitializeAsync 调用计数。</summary>
+        public int InitCallCount;
+
+        /// <summary>InitializeAsync 返回的任务。默认立即完成；测试可注入挂起任务（UniTaskCompletionSource）模拟并发。</summary>
+        public UniTask InitTask = UniTask.CompletedTask;
+
         public UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
-            => UniTask.CompletedTask;
+        {
+            InitCallCount++;
+            return InitTask;
+        }
 
         public UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
         {

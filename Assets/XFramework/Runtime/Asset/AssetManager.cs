@@ -20,6 +20,16 @@ namespace XFramework.XAsset
 
         private static IAssetManager _instance;
         private static bool _instanceInitialized;
+
+        /// <summary>进行中的初始化任务。并发调用共享同一任务，避免重复创建实例；完成后清空，允许失败重试与 Destroy 后重建。</summary>
+        private static UniTask _initializeTask;
+
+        /// <summary>初始化代际号。Destroy()/SetInstance() 时递增，使在途初始化结果作废，防止销毁后实例"复活"。</summary>
+        private static int _initGeneration;
+
+        /// <summary>测试钩子：实例工厂。默认创建 <see cref="AssetManagerImpl"/>；测试注入假实现以验证并发共享语义。</summary>
+        internal static Func<IAssetManager> ImplFactory;
+
         /// <summary>
         /// 全局资源管理器是否已初始化。
         /// </summary>
@@ -27,6 +37,7 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 初始化全局资源管理器（默认包）。
+        /// <para>并发调用共享同一进行中的初始化任务；共享任务的取消令牌取首个调用者，其余调用者的令牌不参与该任务。</para>
         /// </summary>
         /// <param name="progress">初始化进度回调。</param>
         /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
@@ -38,8 +49,54 @@ namespace XFramework.XAsset
                 return;
             }
 
-            var impl = new AssetManagerImpl();
-            await impl.InitializeAsync(progress, options, cancellationToken);
+            // 并发调用共享同一进行中的任务（UniTask 为值类型，await 时按值捕获，不受后续清空影响）
+            if (_initializeTask.Status == UniTaskStatus.Pending)
+            {
+                await _initializeTask;
+                return;
+            }
+
+            var task = InitializeAsyncCore(progress, options, cancellationToken);
+            _initializeTask = task;
+            try
+            {
+                await task;
+            }
+            finally
+            {
+                // 成功/失败/取消后均清空缓存，允许再次初始化（失败重试、Destroy 后重建）；
+                // 仅当缓存仍指向本次任务时清除，避免误清并发中新启动的任务
+                if (_initializeTask.Equals(task))
+                {
+                    _initializeTask = default;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 实际初始化流程：创建实例 → 初始化 → 校验代际号后置入全局。
+        /// </summary>
+        private static async UniTask InitializeAsyncCore(LoadProgress progress, AssetInitOptions options, CancellationToken cancellationToken)
+        {
+            int generation = _initGeneration;
+            var impl = ImplFactory?.Invoke() ?? new AssetManagerImpl();
+            try
+            {
+                await impl.InitializeAsync(progress, options, cancellationToken);
+            }
+            catch
+            {
+                // 初始化失败：释放半初始化状态，不让 _instance 占用，允许重试
+                impl.Dispose();
+                throw;
+            }
+
+            // Destroy()/SetInstance() 与初始化并发时，丢弃在途结果，防止销毁后实例"复活"
+            if (generation != _initGeneration)
+            {
+                impl.Dispose();
+                return;
+            }
 
             _instance = impl;
             _instanceInitialized = true;
@@ -60,6 +117,10 @@ namespace XFramework.XAsset
         {
             _instance = manager ?? throw new ArgumentNullException(nameof(manager));
             _instanceInitialized = true;
+
+            // 作废在途初始化：注入实例优先，在途任务结果不得覆盖
+            _initGeneration++;
+            _initializeTask = default;
         }
 
         /// <summary>
@@ -73,6 +134,10 @@ namespace XFramework.XAsset
                 _instance = null;
             }
             _instanceInitialized = false;
+
+            // 作废在途初始化任务：结果丢弃，可立即重新初始化
+            _initGeneration++;
+            _initializeTask = default;
         }
 
         #endregion

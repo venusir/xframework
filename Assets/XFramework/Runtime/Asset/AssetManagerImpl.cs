@@ -22,6 +22,9 @@ namespace XFramework.XAsset
         private YooAssetManagerImpl _managerImpl;
         private bool _initialized;
 
+        /// <summary>进行中的初始化任务（直接使用本类时的并发保护，模式同 AssetManager 门面）。</summary>
+        private UniTask _initializeTask;
+
         /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
         private readonly Dictionary<string, Stack<GameObject>> _pools = new Dictionary<string, Stack<GameObject>>();
 
@@ -46,6 +49,33 @@ namespace XFramework.XAsset
             if (_initialized) return;
             if (_disposed) throw new ObjectDisposedException(nameof(AssetManagerImpl));
 
+            // 并发调用共享同一进行中的初始化任务（模式同 AssetManager 门面）
+            if (_initializeTask.Status == UniTaskStatus.Pending)
+            {
+                await _initializeTask;
+                return;
+            }
+
+            var task = InitializeAsyncCore(progress, options, cancellationToken);
+            _initializeTask = task;
+            try
+            {
+                await task;
+            }
+            finally
+            {
+                if (_initializeTask.Equals(task))
+                {
+                    _initializeTask = default;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 实际初始化流程。失败时不重置 _managerImpl（YooAsset 包复用语义已保证重试安全）。
+        /// </summary>
+        private async UniTask InitializeAsyncCore(LoadProgress progress, AssetInitOptions options, CancellationToken cancellationToken)
+        {
             _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
             await _managerImpl.InitializePackageAsync(options ?? new AssetInitOptions(), progress, cancellationToken);
             _initialized = true;
