@@ -1,7 +1,6 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Reflection;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -39,6 +38,12 @@ namespace XFramework.XConfig
         private readonly Dictionary<Type, string> _assetPaths = new();
 
         /// <summary>
+        /// 进行中的加载任务共享句柄。key: 类型（Table 行类型或 Global 配置类型）, value: 首次启动的加载任务。
+        /// <para>仅存进行中任务，完成后在 finally 中移除；并发调用共享同一任务，失败后允许重试。</para>
+        /// </summary>
+        private readonly Dictionary<Type, InFlightLoad> _inFlightLoads = new();
+
+        /// <summary>
         /// Loader 实例缓存，按 <see cref="ConfigFormat"/> 索引。
         /// </summary>
         private static readonly Dictionary<ConfigFormat, IConfigLoader> Loaders = new()
@@ -74,30 +79,32 @@ namespace XFramework.XConfig
                 return GetOrCreateWrapper<T>(type, existingDict);
             }
 
+            // 并发调用共享同一进行中的任务；任务成功后 _tables 已写入，直接取缓存包装器
+            if (_inFlightLoads.TryGetValue(type, out var load))
+            {
+                await AwaitInFlight(load);
+                return GetOrCreateWrapper<T>(type, _tables[type]);
+            }
+
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException(
                     $"assetPath must be provided when preloading Table '{type.Name}' for the first time.");
 
-            var keyType = ConfigTypeHelper.GetKeyType(type);
+            var task = PreloadTableCoreAsync<T>(assetPath, format, null);
+            var inFlight = new InFlightLoad { Task = task };
+            _inFlightLoads[type] = inFlight;
             try
             {
-                var loader = Loaders[format];
-                var tableObj = await InvokeLoader<T>(loader, keyType, assetPath);
-                var table = (ConfigTable<T>)tableObj;
-                _tables[type] = table._dict;
-                _tableWrappers[type] = table;
-                _assetPaths[type] = assetPath;
-                InternalConfigChanged?.Invoke(type);
-                return table;
+                return await task;
             }
-            catch (ConfigException)
+            catch (Exception ex)
             {
+                inFlight.Exception = ex;
                 throw;
             }
-            catch (Exception ex) when (ex is not ConfigException)
+            finally
             {
-                throw new ConfigException(
-                    $"Failed to preload Table '{type.Name}': {ex.Message}", ex);
+                CompleteInFlight(type, inFlight);
             }
         }
 
@@ -108,11 +115,9 @@ namespace XFramework.XConfig
         public async UniTask PreloadGlobalAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json)
             where T : class, new()
         {
-            if (string.IsNullOrEmpty(assetPath))
-                throw new ConfigException(
-                    $"assetPath must be provided when preloading Global config '{typeof(T).Name}' for the first time.");
-
             var type = typeof(T);
+
+            // 已加载：检查 assetPath 变化 + 直接返回（与 Table 版对齐，已加载后省略路径不报错）
             if (_globals.ContainsKey(type))
             {
                 if (HasAssetPathChanged(type, assetPath))
@@ -120,18 +125,32 @@ namespace XFramework.XConfig
                 return;
             }
 
+            // 并发调用共享同一进行中的任务
+            if (_inFlightLoads.TryGetValue(type, out var load))
+            {
+                await AwaitInFlight(load);
+                return;
+            }
+
+            if (string.IsNullOrEmpty(assetPath))
+                throw new ConfigException(
+                    $"assetPath must be provided when preloading Global config '{type.Name}' for the first time.");
+
+            var task = PreloadGlobalCoreAsync<T>(assetPath, format, null);
+            var inFlight = new InFlightLoad { Task = task };
+            _inFlightLoads[type] = inFlight;
             try
             {
-                var loader = Loaders[format];
-                var config = await loader.LoadGlobalAsync<T>(assetPath);
-                _globals[type] = config;
-                _assetPaths[type] = assetPath;
-                InternalConfigChanged?.Invoke(type);
+                await task;
             }
-            catch (Exception ex) when (ex is not ConfigException)
+            catch (Exception ex)
             {
-                throw new ConfigException(
-                    $"Failed to preload Global config '{type.Name}': {ex.Message}", ex);
+                inFlight.Exception = ex;
+                throw;
+            }
+            finally
+            {
+                CompleteInFlight(type, inFlight);
             }
         }
 
@@ -152,14 +171,49 @@ namespace XFramework.XConfig
                 return GetOrCreateWrapper<T>(type, existingDict);
             }
 
+            // 并发调用共享同一进行中的任务；任务成功后 _tables 已写入，直接取缓存包装器
+            if (_inFlightLoads.TryGetValue(type, out var load))
+            {
+                await AwaitInFlight(load);
+                return GetOrCreateWrapper<T>(type, _tables[type]);
+            }
+
             if (loader == null)
                 throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException($"assetPath must be provided when preloading Table '{type.Name}'.");
 
+            var task = PreloadTableCoreAsync<T>(assetPath, default, loader);
+            var inFlight = new InFlightLoad { Task = task };
+            _inFlightLoads[type] = inFlight;
+            try
+            {
+                return await task;
+            }
+            catch (Exception ex)
+            {
+                inFlight.Exception = ex;
+                throw;
+            }
+            finally
+            {
+                CompleteInFlight(type, inFlight);
+            }
+        }
+
+        /// <summary>
+        /// Table 实际加载流程。两个 <see cref="PreloadTableAsync{T}(string, ConfigFormat)"/> 重载共用；
+        /// <paramref name="customLoader"/> 为 null 时按 <paramref name="format"/> 从内置 Loaders 解析。
+        /// </summary>
+        private async UniTask<ConfigTable<T>> PreloadTableCoreAsync<T>(
+            string assetPath, ConfigFormat format, IConfigLoader customLoader)
+            where T : IConfigRow, new()
+        {
+            var type = typeof(T);
             var keyType = ConfigTypeHelper.GetKeyType(type);
             try
             {
+                var loader = customLoader ?? Loaders[format];
                 var tableObj = await InvokeLoader<T>(loader, keyType, assetPath);
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
@@ -168,14 +222,13 @@ namespace XFramework.XConfig
                 InternalConfigChanged?.Invoke(type);
                 return table;
             }
-            catch (ConfigException)
-            {
-                throw;
-            }
             catch (Exception ex) when (ex is not ConfigException)
             {
-                throw new ConfigException(
-                    $"Failed to preload Table '{type.Name}' with custom loader: {ex.Message}", ex);
+                // 按重载区分历史文案，消息逐字保留
+                var prefix = customLoader == null
+                    ? $"Failed to preload Table '{type.Name}'"
+                    : $"Failed to preload Table '{type.Name}' with custom loader";
+                throw new ConfigException($"{prefix}: {ex.Message}", ex);
             }
         }
 
@@ -186,12 +239,9 @@ namespace XFramework.XConfig
         public async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader)
             where T : class, new()
         {
-            if (loader == null)
-                throw new ConfigException($"loader cannot be null when preloading Global config '{typeof(T).Name}'.");
-            if (string.IsNullOrEmpty(assetPath))
-                throw new ConfigException($"assetPath must be provided when preloading Global config '{typeof(T).Name}'.");
-
             var type = typeof(T);
+
+            // 已加载：检查 assetPath 变化 + 直接返回（与 Table 版对齐，已加载后省略路径不报错）
             if (_globals.ContainsKey(type))
             {
                 if (HasAssetPathChanged(type, assetPath))
@@ -199,8 +249,48 @@ namespace XFramework.XConfig
                 return;
             }
 
+            // 并发调用共享同一进行中的任务
+            if (_inFlightLoads.TryGetValue(type, out var load))
+            {
+                await AwaitInFlight(load);
+                return;
+            }
+
+            if (loader == null)
+                throw new ConfigException($"loader cannot be null when preloading Global config '{type.Name}'.");
+            if (string.IsNullOrEmpty(assetPath))
+                throw new ConfigException($"assetPath must be provided when preloading Global config '{type.Name}'.");
+
+            var task = PreloadGlobalCoreAsync<T>(assetPath, default, loader);
+            var inFlight = new InFlightLoad { Task = task };
+            _inFlightLoads[type] = inFlight;
             try
             {
+                await task;
+            }
+            catch (Exception ex)
+            {
+                inFlight.Exception = ex;
+                throw;
+            }
+            finally
+            {
+                CompleteInFlight(type, inFlight);
+            }
+        }
+
+        /// <summary>
+        /// Global 实际加载流程。两个 <see cref="PreloadGlobalAsync{T}(string, ConfigFormat)"/> 重载共用；
+        /// <paramref name="customLoader"/> 为 null 时按 <paramref name="format"/> 从内置 Loaders 解析。
+        /// </summary>
+        private async UniTask PreloadGlobalCoreAsync<T>(
+            string assetPath, ConfigFormat format, IConfigLoader customLoader)
+            where T : class, new()
+        {
+            var type = typeof(T);
+            try
+            {
+                var loader = customLoader ?? Loaders[format];
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
                 _assetPaths[type] = assetPath;
@@ -208,8 +298,11 @@ namespace XFramework.XConfig
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
-                throw new ConfigException(
-                    $"Failed to preload Global config '{type.Name}' with custom loader: {ex.Message}", ex);
+                // 按重载区分历史文案，消息逐字保留
+                var prefix = customLoader == null
+                    ? $"Failed to preload Global config '{type.Name}'"
+                    : $"Failed to preload Global config '{type.Name}' with custom loader";
+                throw new ConfigException($"{prefix}: {ex.Message}", ex);
             }
         }
 
@@ -246,9 +339,9 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 按清单条目调度到正确的泛型加载方法（仅首次未加载时触发加载）。
-        /// <para>已加载的条目自动跳过，零额外开销。</para>
-        /// <para>通过反射调用泛型版本，仅清单加载时用一次，非热路径。</para>
+        /// 按清单条目调度到正确的加载路径（仅首次未加载时触发加载）。
+        /// <para>已加载的条目自动跳过；并发调用共享同一进行中的任务。</para>
+        /// <para>通过委托缓存调用运行时 Type 版本，仅清单加载时用一次，非热路径。</para>
         /// </summary>
         private async UniTask LoadManifestEntry(ConfigManifestEntry entry)
         {
@@ -258,23 +351,28 @@ namespace XFramework.XConfig
                 if (_tables.ContainsKey(entry.RowType))
                     return;
 
-                var keyType = ConfigTypeHelper.GetKeyType(entry.RowType);
+                // 并发调用共享同一进行中的任务
+                if (_inFlightLoads.TryGetValue(entry.RowType, out var load))
+                {
+                    await AwaitInFlight(load);
+                    return;
+                }
+
+                var task = LoadManifestTableCoreAsync(entry);
+                var inFlight = new InFlightLoad { Task = task };
+                _inFlightLoads[entry.RowType] = inFlight;
                 try
                 {
-                    var loader = Loaders[entry.Format];
-                    var tableObj = await InvokeLoaderByType(loader, entry.RowType, keyType, entry.AssetPath);
-                    _tables[entry.RowType] = ((IDictionary)tableObj.GetType().GetProperty("_dict",
-                        BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)?.GetValue(tableObj))
-                        ?? throw new ConfigException($"Failed to get _dict from loaded Table '{entry.RowType.Name}'.");
-                    _tableWrappers[entry.RowType] = tableObj;
-                    _assetPaths[entry.RowType] = entry.AssetPath;
-                    InternalConfigChanged?.Invoke(entry.RowType);
+                    await task;
                 }
-                catch (ConfigException) { throw; }
-                catch (Exception ex) when (ex is not ConfigException)
+                catch (Exception ex)
                 {
-                    throw new ConfigException(
-                        $"Failed to preload Table '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
+                    inFlight.Exception = ex;
+                    throw;
+                }
+                finally
+                {
+                    CompleteInFlight(entry.RowType, inFlight);
                 }
             }
             else
@@ -283,32 +381,73 @@ namespace XFramework.XConfig
                 if (_globals.ContainsKey(entry.RowType))
                     return;
 
+                // 并发调用共享同一进行中的任务
+                if (_inFlightLoads.TryGetValue(entry.RowType, out var load))
+                {
+                    await AwaitInFlight(load);
+                    return;
+                }
+
+                var task = LoadManifestGlobalCoreAsync(entry);
+                var inFlight = new InFlightLoad { Task = task };
+                _inFlightLoads[entry.RowType] = inFlight;
                 try
                 {
-                    var method = typeof(IConfigLoader).GetMethod(nameof(IConfigLoader.LoadGlobalAsync),
-                        BindingFlags.Instance | BindingFlags.Public);
-                    var genericMethod = method.MakeGenericMethod(entry.RowType);
-                    var loader = Loaders[entry.Format];
-                    var taskObj = genericMethod.Invoke(loader, new object[] { entry.AssetPath });
-                    await (UniTask)typeof(UniTask)
-                        .GetMethod("Await", BindingFlags.Static | BindingFlags.Public)
-                        ?.Invoke(null, new[] { taskObj });
-                    // 完成后从 taskObj 提取 Result（AsTask 路径）
-                    var asTaskMethod = taskObj.GetType().GetMethod("AsTask");
-                    var task = (System.Threading.Tasks.Task)asTaskMethod.Invoke(taskObj, null);
                     await task;
-                    var resultProp = task.GetType().GetProperty("Result");
-                    var config = resultProp.GetValue(task);
-                    _globals[entry.RowType] = config;
-                    _assetPaths[entry.RowType] = entry.AssetPath;
-                    InternalConfigChanged?.Invoke(entry.RowType);
                 }
-                catch (ConfigException) { throw; }
-                catch (Exception ex) when (ex is not ConfigException)
+                catch (Exception ex)
                 {
-                    throw new ConfigException(
-                        $"Failed to preload Global '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
+                    inFlight.Exception = ex;
+                    throw;
                 }
+                finally
+                {
+                    CompleteInFlight(entry.RowType, inFlight);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 清单 Table 条目的实际加载流程（运行时 Type 路径，仅清单批量加载使用）。
+        /// </summary>
+        private async UniTask LoadManifestTableCoreAsync(ConfigManifestEntry entry)
+        {
+            var keyType = ConfigTypeHelper.GetKeyType(entry.RowType);
+            try
+            {
+                var loader = Loaders[entry.Format];
+                var tableObj = await InvokeLoaderByType(loader, entry.RowType, keyType, entry.AssetPath);
+                if (!(tableObj is IConfigTable configTable))
+                    throw new ConfigException($"Failed to get _dict from loaded Table '{entry.RowType.Name}'.");
+                _tables[entry.RowType] = configTable.Data;
+                _tableWrappers[entry.RowType] = tableObj;
+                _assetPaths[entry.RowType] = entry.AssetPath;
+                InternalConfigChanged?.Invoke(entry.RowType);
+            }
+            catch (Exception ex) when (ex is not ConfigException)
+            {
+                throw new ConfigException(
+                    $"Failed to preload Table '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
+            }
+        }
+
+        /// <summary>
+        /// 清单 Global 条目的实际加载流程（运行时 Type 路径，仅清单批量加载使用）。
+        /// </summary>
+        private async UniTask LoadManifestGlobalCoreAsync(ConfigManifestEntry entry)
+        {
+            try
+            {
+                var loader = Loaders[entry.Format];
+                var config = await ConfigLoadHelper.InvokeGlobalAsync(loader, entry.RowType, entry.AssetPath);
+                _globals[entry.RowType] = config;
+                _assetPaths[entry.RowType] = entry.AssetPath;
+                InternalConfigChanged?.Invoke(entry.RowType);
+            }
+            catch (Exception ex) when (ex is not ConfigException)
+            {
+                throw new ConfigException(
+                    $"Failed to preload Global '{entry.RowType.Name}' from manifest: {ex.Message}", ex);
             }
         }
 
@@ -499,6 +638,55 @@ namespace XFramework.XConfig
             var newTable = new ConfigTable<T>(dict);
             _tableWrappers[type] = newTable;
             return newTable;
+        }
+
+        /// <summary>
+        /// 进行中的加载任务共享句柄。UniTask 的 promise 只支持单个 continuation，
+        /// 多个等待者不能直接 await 同一进行中任务；由创建者 await 实际任务，
+        /// 加入者各自持有完成信号（Waiters），创建者完成时同步广播结果。
+        /// </summary>
+        private sealed class InFlightLoad
+        {
+            /// <summary>实际加载任务（仅创建者 await）。</summary>
+            public UniTask Task;
+
+            /// <summary>加载失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
+            public Exception Exception;
+
+            /// <summary>加入者的完成信号（创建者完成时广播 TrySetResult/TrySetException）。</summary>
+            public List<UniTaskCompletionSource> Waiters = new();
+        }
+
+        /// <summary>
+        /// 加入者等待广播。注册自己的完成信号而非直接 await 共享任务（UniTask promise 只支持单个 continuation）。
+        /// <para>单线程模型下，进入「进行中」分支时创建者任务必未完成，广播不会漏掉。</para>
+        /// </summary>
+        private static async UniTask AwaitInFlight(InFlightLoad load)
+        {
+            var tcs = new UniTaskCompletionSource();
+            load.Waiters.Add(tcs);
+            await tcs.Task;
+        }
+
+        /// <summary>
+        /// 创建者完成时广播结果给所有加入者并清理登记。
+        /// <para>仅当字典登记仍指向本次加载时清理，避免误清并发中新启动的任务（等价于原 RemoveInFlightIfMine 语义）。</para>
+        /// </summary>
+        private void CompleteInFlight(Type type, InFlightLoad load)
+        {
+            if (!_inFlightLoads.TryGetValue(type, out var current) || !ReferenceEquals(current, load))
+                return;
+            if (load.Exception != null)
+            {
+                for (int i = 0; i < load.Waiters.Count; i++)
+                    load.Waiters[i].TrySetException(load.Exception);
+            }
+            else
+            {
+                for (int i = 0; i < load.Waiters.Count; i++)
+                    load.Waiters[i].TrySetResult();
+            }
+            _inFlightLoads.Remove(type);
         }
 
         /// <summary>
