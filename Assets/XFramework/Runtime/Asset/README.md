@@ -276,6 +276,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | 方法 | 说明 |
 | --- | --- |
 | `LoadAsync<T>(string location, ct)` | 异步加载资源，返回 `AssetHandle<T>`，用 `using` 管理生命周期 |
+| `LoadAllAsync<T>(IReadOnlyList<string> locations, ct)` | 批量加载同类型资源，按序返回句柄数组（每项可单独 `using`）；单项失败为 default 句柄，不整体失败；取消时已加载句柄自动释放 |
 | `LoadAsync<T>(string location, int priority, ct)` | 带优先级加载（数值越大越先加载） |
 | `InstantiateAsync(string location, Transform parent = null, ct)` | 加载并实例化，自动走对象池，引用生命周期自动管理 |
 | `InstantiateAsync(string location, Vector3 pos, Quaternion rot, Transform parent = null, ct)` | 指定位置/旋转实例化 |
@@ -301,7 +302,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 
 | 方法 | 说明 |
 | --- | --- |
-| `PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, ct)` | 批量预热资源缓存，不增加引用计数；进度按完成数量聚合 0~1，完成补发 1f |
+| `PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, ct)` | 批量预热资源缓存，不增加引用计数；进度按完成数量聚合 0~1，完成补发 1f。需持有句柄的批量加载用 `LoadAllAsync`（见「异步加载」表） |
 
 ### 热更（Host 模式，均支持 `packageName = null` 默认包）
 
@@ -344,6 +345,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | 运行时按需加载 | `LoadAsync<T>` + `using` 句柄 | 主流路径，退出 using 自动释放引用 |
 | 预制体实例化 | `InstantiateAsync` | 自动对象池，实例销毁自动回收引用 |
 | 启动预热常用资源 | `PreloadAllAsync` | 只加热缓存，不占引用计数，进度可反馈 UI |
+| 批量加载持有句柄 | `LoadAllAsync<T>` | 按序返回句柄数组（逐项 using），单项失败为 default，取消自动释放已完成项 |
 | 静态初始化 / 启动画面 | `LoadSync` / `InstantiateSync` | 阻塞调用线程，注意远端未下载时的卡顿风险 |
 | 图集 / 多 Sprite | `LoadSubAssetsAsync` | 主资源 + 子资源整体加载 |
 | txt / json / 二进制 | `LoadRawFileAsync` | 不经过 Unity 资源管线 |
@@ -478,7 +480,8 @@ RequestPackageVersionAsync → 检查远端新版本号
 9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
 10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
 11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。
-12. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
+12. **`LoadAllAsync` 的句柄必须逐项释放**：返回的句柄数组每个元素占引用计数（与 `LoadAsync` 相同），需逐项 `using` 或 `Dispose`；单项失败为 `default` 句柄（`IsValid == false`，释放安全）。批量预热请用 `PreloadAllAsync`（不占引用计数）。
+13. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
 
 ## 与相关模块的关系
 
@@ -499,7 +502,7 @@ RequestPackageVersionAsync → 检查远端新版本号
 
 | 版本 | 说明 |
 | --- | --- |
-| 2026-08 | 并发初始化修复（共享任务 + 代际号）、低内存自动回收（AutoReclaimOnLowMemory） |
+| 2026-08 | 并发初始化修复（共享任务 + 代际号）、低内存自动回收（AutoReclaimOnLowMemory）、LoadAllAsync 批量持有句柄、未初始化消息统一为 [模块] 前缀中文文案 |
 | 2026-08 | 接口扩展：多包架构与初始化配置、卸载控制与存在性查询、热更链路（下载器句柄 + 一键下载）、预加载进度回调、同步加载 / 子资源 / RawFile |
 | 2026-08 | 池语义修正（方案 A）：回池保活——回池保留句柄、真正销毁才释放；补齐取消支持与池状态统计 |
 

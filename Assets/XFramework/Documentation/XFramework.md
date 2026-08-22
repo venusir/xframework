@@ -142,6 +142,7 @@ GameLauncher.Start()
 | 节点内实例化 | `await this.InstantiateAssetAsync(location, parent)`          |
 | 回收实例     | `AssetManager.DestroyInstance(go)`                            |
 | 预加载       | `await AssetManager.PreloadAllAsync(locations, p => ...)`     |
+| 批量加载     | `await AssetManager.LoadAllAsync<T>(locations)`               |
 | 加载场景     | `await AssetManager.LoadSceneAsync(location)`                 |
 | 设置池大小   | `AssetManager.SetPoolMaxSize(location, 10)`                   |
 

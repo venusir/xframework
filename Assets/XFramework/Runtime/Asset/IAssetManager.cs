@@ -151,6 +151,14 @@ namespace XFramework.XAsset
         /// </summary>
         UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default);
 
+        /// <summary>
+        /// 批量异步加载同类型资源，返回与 locations 按序对应的句柄数组（每个元素可单独 <c>using</c> 释放）。
+        /// <para>单项失败返回 <c>default(AssetHandle{T})</c>（与 <see cref="LoadAsync{T}(string, CancellationToken)"/> 一致，失败项为 null 句柄），不整体失败。</para>
+        /// <para>取消时抛 <see cref="OperationCanceledException"/>，已加载完成的句柄会被自动释放。</para>
+        /// <para>注意：本方法返回的句柄占用引用计数，必须释放；批量预热请用 <see cref="PreloadAllAsync"/>（不占引用计数）。</para>
+        /// </summary>
+        UniTask<AssetHandle<T>[]> LoadAllAsync<T>(IReadOnlyList<string> locations, CancellationToken cancellationToken = default) where T : UnityEngine.Object;
+
         #endregion
 
         #region Load — Sync

@@ -175,6 +175,16 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void LoadAllAsync_ForwardsToInstance()
+        {
+            var locations = new[] { "characters/hero", "characters/enemy", "effects/explosion" };
+            var handles = AssetManager.LoadAllAsync<GameObject>(locations).GetAwaiter().GetResult();
+            Assert.AreEqual(1, _fake.LoadAllCallCount);
+            Assert.AreEqual(locations.Length, handles.Length, "句柄数组应与 locations 按序对应");
+            CollectionAssert.AreEqual(locations, _fake.LastLoadAllLocations);
+        }
+
+        [Test]
         public void InstantiateAsync_ForwardsToInstance()
         {
             AssetManager.InstantiateAsync("characters/player").GetAwaiter().GetResult();

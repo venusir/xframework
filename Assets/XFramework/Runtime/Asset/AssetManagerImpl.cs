@@ -265,6 +265,37 @@ namespace XFramework.XAsset
             progress?.Invoke(1f);
         }
 
+        public async UniTask<AssetHandle<T>[]> LoadAllAsync<T>(IReadOnlyList<string> locations, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        {
+            EnsureInitialized();
+            if (locations == null) throw new ArgumentNullException(nameof(locations));
+
+            int count = locations.Count;
+            var handles = new AssetHandle<T>[count];
+
+            // 手写 for 并行发起全部加载，避免 LINQ 闭包；index 按值传入，无循环变量捕获
+            var tasks = new UniTask[count];
+            for (int i = 0; i < count; i++)
+            {
+                tasks[i] = LoadOneAsync(locations[i], i, handles, cancellationToken);
+            }
+
+            try
+            {
+                await UniTask.WhenAll(tasks);
+            }
+            catch
+            {
+                // 取消/异常时释放已完成项的句柄，防止部分加载成功导致引用泄漏
+                for (int i = 0; i < count; i++)
+                {
+                    if (handles[i].IsValid) handles[i].Dispose();
+                }
+                throw;
+            }
+            return handles;
+        }
+
         #endregion
 
         #region Load — Sync
@@ -455,6 +486,14 @@ namespace XFramework.XAsset
             instanceTracker.SetHandle(handle, location);
 
             return go;
+        }
+
+        /// <summary>
+        /// 单个加载，结果写入共享数组（按序对应）。失败返回 default 句柄，不抛（与 LoadAsync 一致）。
+        /// </summary>
+        private async UniTask LoadOneAsync<T>(string location, int index, AssetHandle<T>[] handles, CancellationToken cancellationToken) where T : UnityEngine.Object
+        {
+            handles[index] = await LoadAsync<T>(location, cancellationToken: cancellationToken);
         }
 
         /// <summary>

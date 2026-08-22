@@ -162,6 +162,18 @@ namespace Venusy609.Xframework.Editor.Tests
             return UniTask.CompletedTask;
         }
 
+        /// <summary>LoadAllAsync 调用计数与最近一次传入的 locations（按序快照）。</summary>
+        public int LoadAllCallCount;
+        public string[] LastLoadAllLocations;
+
+        public UniTask<AssetHandle<T>[]> LoadAllAsync<T>(IReadOnlyList<string> locations, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        {
+            LoadAllCallCount++;
+            LastLoadAllLocations = new string[locations.Count];
+            for (int i = 0; i < locations.Count; i++) LastLoadAllLocations[i] = locations[i];
+            return UniTask.FromResult(new AssetHandle<T>[locations.Count]);
+        }
+
         public AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object
         {
             LoadSyncCallCount++;

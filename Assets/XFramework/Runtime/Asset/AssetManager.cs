@@ -278,6 +278,13 @@ namespace XFramework.XAsset
             return _instance.PreloadAllAsync(locations, progress, cancellationToken);
         }
 
+        /// <inheritdoc cref="IAssetManager.LoadAllAsync{T}(IReadOnlyList{string}, CancellationToken)"/>
+        public static UniTask<AssetHandle<T>[]> LoadAllAsync<T>(IReadOnlyList<string> locations, CancellationToken cancellationToken = default) where T : UnityEngine.Object
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadAllAsync<T>(locations, cancellationToken);
+        }
+
         #endregion
 
         #region Public API — Load (Sync)
