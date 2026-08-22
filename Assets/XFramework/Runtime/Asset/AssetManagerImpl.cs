@@ -4,7 +4,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using YooAsset;
 using XFramework.XLoader;
 
 namespace XFramework.XAsset
@@ -21,7 +20,6 @@ namespace XFramework.XAsset
         #region Private Fields
 
         private YooAssetManagerImpl _managerImpl;
-        private ResourcePackage _package;
         private bool _initialized;
 
         /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
@@ -43,81 +41,21 @@ namespace XFramework.XAsset
 
         #region Initialize
 
-        public async UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default)
-        {
-            await InitializeInstanceAsync(progress, cancellationToken);
-        }
-
-        private async UniTask InitializeInstanceAsync(LoadProgress progress, CancellationToken cancellationToken = default)
+        public async UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
         {
             if (_initialized) return;
+            if (_disposed) throw new ObjectDisposedException(nameof(AssetManagerImpl));
 
-            _managerImpl = new YooAssetManagerImpl(DefaultPackageName);
-
-            ReportProgress(progress, 0f, "Initializing YooAsset...");
-
-            // 1. 初始化 YooAsset 全局环境
-            if (!YooAssets.Initialized)
-            {
-                YooAssets.Initialize();
-            }
-
-            ReportProgress(progress, 0.2f, "Getting resource package...");
-
-            // 2. 获取或创建资源包
-            _package = YooAssets.TryGetPackage(DefaultPackageName);
-            if (_package == null)
-            {
-                _package = YooAssets.CreatePackage(DefaultPackageName);
-            }
-
-            ReportProgress(progress, 0.4f, "Initializing resource package...");
-
-            // 3. 初始化资源包。当前使用离线模式（内嵌资源，无热更）；
-            //    后续接入热更新时切换为 HostPlayModeParameters 即可，其余初始化流程不变。
-            var initParameters = new OfflinePlayModeParameters();
-            var initOperation = _package.InitializeAsync(initParameters);
-            await initOperation.WithCancellation(cancellationToken);
-
-            if (initOperation.Status != EOperationStatus.Succeed)
-            {
-                throw new InvalidOperationException($"Package init failed: {initOperation.Error}");
-            }
-
-            ReportProgress(progress, 0.7f, "Requesting package version...");
-
-            // 4. 获取资源版本号
-            var versionOperation = _package.RequestPackageVersionAsync();
-            await versionOperation.WithCancellation(cancellationToken);
-
-            if (versionOperation.Status != EOperationStatus.Succeed)
-            {
-                throw new InvalidOperationException($"Version request failed: {versionOperation.Error}");
-            }
-
-            ReportProgress(progress, 0.8f, "Updating package manifest...");
-
-            // 5. 更新资源清单
-            var updateOperation = _package.UpdatePackageManifestAsync(versionOperation.PackageVersion);
-            await updateOperation.WithCancellation(cancellationToken);
-
-            if (updateOperation.Status != EOperationStatus.Succeed)
-            {
-                throw new InvalidOperationException($"Manifest update failed: {updateOperation.Error}");
-            }
-
-            ReportProgress(progress, 1f, "YooAsset initialized.");
-
+            _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
+            await _managerImpl.InitializePackageAsync(options ?? new AssetInitOptions(), progress, cancellationToken);
             _initialized = true;
         }
 
-        private static void ReportProgress(LoadProgress progress, float value, string description)
+        public async UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
         {
-            if (progress != null)
-            {
-                progress.SetOverallProgress(value);
-                progress.SetDescription(description);
-            }
+            EnsureInitialized();
+            _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
+            await _managerImpl.InitializePackageAsync(options, progress, cancellationToken);
         }
 
         #endregion

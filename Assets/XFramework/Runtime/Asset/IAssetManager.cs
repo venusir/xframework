@@ -18,10 +18,17 @@ namespace XFramework.XAsset
         #region Initialize
 
         /// <summary>
-        /// 初始化资源服务。
+        /// 初始化资源服务（默认包）。
         /// </summary>
         /// <param name="progress">初始化进度回调，<see cref="LoadProgress"/> 包含进度和描述信息。</param>
-        UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default);
+        /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
+        UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 初始化额外资源包（多包场景）。
+        /// <para>包已存在且初始化成功时跳过初始化，直接刷新版本与清单（包复用语义）。</para>
+        /// </summary>
+        UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default);
 
         #endregion
 

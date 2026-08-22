@@ -30,7 +30,7 @@ namespace XFramework.XNode
             }
 
             progress.SetDescription("Initializing Asset Manager...");
-            await AssetManager.InitializeAsync(progress, cancellationToken);
+            await AssetManager.InitializeAsync(progress, cancellationToken: cancellationToken);
 
             progress.SetProgress(1f);
             progress.SetState(LoadState.Completed);

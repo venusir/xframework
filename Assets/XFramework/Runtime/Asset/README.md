@@ -13,7 +13,9 @@ Runtime/Asset/
 ├── IAssetManager.cs               # 资源管理器公共接口
 ├── AssetManager.cs                # 静态外观（全局入口）
 ├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
-├── YooAssetManagerImpl.cs         # YooAsset 底层适配器
+├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理）
+├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式）
+├── IAssetRemoteServices.cs        # 远端资源地址服务接口
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
 ├── InstanceTracker.cs             # 实例引用追踪组件（内部）
 └── AssetExtensions.cs             # 节点扩展方法

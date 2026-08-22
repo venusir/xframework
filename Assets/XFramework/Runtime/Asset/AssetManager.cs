@@ -26,9 +26,11 @@ namespace XFramework.XAsset
         public static bool IsInitialized => _instanceInitialized && _instance != null;
 
         /// <summary>
-        /// 初始化全局资源管理器。
+        /// 初始化全局资源管理器（默认包）。
         /// </summary>
-        public static async UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default)
+        /// <param name="progress">初始化进度回调。</param>
+        /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
+        public static async UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
         {
             if (_instanceInitialized)
             {
@@ -37,10 +39,17 @@ namespace XFramework.XAsset
             }
 
             var impl = new AssetManagerImpl();
-            await impl.InitializeAsync(progress, cancellationToken);
+            await impl.InitializeAsync(progress, options, cancellationToken);
 
             _instance = impl;
             _instanceInitialized = true;
+        }
+
+        /// <inheritdoc cref="IAssetManager.InitializePackageAsync(AssetInitOptions, LoadProgress, CancellationToken)"/>
+        public static UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.InitializePackageAsync(options, progress, cancellationToken);
         }
 
         /// <summary>

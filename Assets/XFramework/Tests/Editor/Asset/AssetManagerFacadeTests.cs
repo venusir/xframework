@@ -98,6 +98,14 @@ namespace Venusy609.Xframework.Editor.Tests
         #region 方法委托转发
 
         [Test]
+        public void InitializePackageAsync_ForwardsToInstance()
+        {
+            var options = new AssetInitOptions { PackageName = "ExtraPackage" };
+            AssetManager.InitializePackageAsync(options, new LoadProgress()).GetAwaiter().GetResult();
+            Assert.AreEqual(1, _fake.InitializePackageCallCount);
+        }
+
+        [Test]
         public void LoadAsync_ForwardsToInstance()
         {
             AssetManager.LoadAsync<GameObject>("characters/player").GetAwaiter().GetResult();
@@ -136,10 +144,17 @@ namespace Venusy609.Xframework.Editor.Tests
             public int InstantiateCallCount;
             public int SceneLoadCallCount;
             public int PreloadCallCount;
+            public int InitializePackageCallCount;
             public bool Disposed;
 
-            public UniTask InitializeAsync(LoadProgress progress, CancellationToken cancellationToken = default)
+            public UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
                 => UniTask.CompletedTask;
+
+            public UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+            {
+                InitializePackageCallCount++;
+                return UniTask.CompletedTask;
+            }
 
             public UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object
             {
