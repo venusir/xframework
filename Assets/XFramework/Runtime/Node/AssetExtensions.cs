@@ -4,20 +4,26 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using XFramework.XNode;
+using XFramework.XAsset;
 
-namespace XFramework.XAsset
+namespace XFramework.XNode
 {
 
     /// <summary>
     /// <see cref="IBaseNode"/> 的资源加载扩展方法。允许节点树中的任意节点直接使用全局 <see cref="AssetManager"/> 加载资源。
+    /// <para>定义于 Node 模块，由节点树依赖并启动 Asset 静态服务（依赖方向：Node → Asset）。</para>
     /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(XFramework.XLoader.LoadProgress, AssetInitOptions, System.Threading.CancellationToken)"/> 初始化。</para>
     /// <para>使用示例：</para>
     /// <code>
-    /// // 在任意节点中直接调用
-    /// var prefab = await this.LoadAssetAsync<GameObject>("characters/player");
+    /// // 在任意节点中直接调用；句柄用 using 管理，离开块自动释放引用计数
+    /// using (var handle = await this.LoadAssetAsync&lt;GameObject&gt;("characters/player"))
+    /// {
+    ///     var prefab = handle.Asset;
+    ///     // ... 使用 prefab ...
+    /// }
+    ///
+    /// // 加载并实例化（实例生命周期由对象池与 InstanceTracker 管理）
     /// var go = await this.InstantiateAssetAsync("characters/player");
-    /// this.ReleaseAsset(prefab);
     /// this.DestroyAssetInstance(go);
     /// </code>
     /// </summary>
