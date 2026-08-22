@@ -19,6 +19,7 @@ Runtime/Node/
 ├── NodeFactory                    # 节点工厂 + 对象池
 ├── NodePool<T>                    # 泛型对象池（内部实现）
 ├── NodeExtensions                 # AddTo 生命周期绑定扩展
+├── AssetExtensions                # 节点资源加载扩展（委托 AssetManager 门面）
 ├── Bootstrap/                     # 启动引导节点
 │   ├── BootstrapNode              #   统一管理非节点树模块的启动
 │   ├── AssetBootstrapNode         #   异步初始化 AssetManager（实现 ILoadable）
@@ -409,6 +410,46 @@ public class MyBootstrapNode : BootstrapNode
 
 > 配合 Loader 模块的 `StartupExtensions.StartupAsync()` 可实现完整的异步启动管线。
 
+## 资源加载（AssetExtensions）
+
+节点树可以依赖并启动静态服务（见「Bootstrap 启动引导」）。`AssetExtensions` 为实现了 `IBaseNode` 的任意节点提供资源加载便捷糖，全部方法委托 `AssetManager` 静态门面（`XFramework.XAsset`）。
+
+**前置条件**：需先经 `AssetBootstrapNode` 完成 `AssetManager.InitializeAsync`（`BootstrapNode` 默认注册，见上节）。
+
+```csharp
+using Cysharp.Threading.Tasks;
+using XFramework.XNode;
+
+public class MyNode : EntityNode
+{
+    protected override void OnStart()
+    {
+        base.OnStart();
+
+        // OnStart 是同步生命周期回调：异步加载放入私有 async UniTask 方法，用 Forget() 启动
+        LoadResourcesAsync().Forget();
+    }
+
+    private async UniTask LoadResourcesAsync()
+    {
+        // 加载资源（句柄用 using 管理，离开块自动释放引用计数，不释放会泄漏）
+        using (var handle = await this.LoadAssetAsync<GameObject>("characters/player"))
+        {
+            var prefab = handle.Asset;
+            // ... 使用 prefab ...
+        }
+
+        // 加载并实例化（自动走对象池，实例销毁时经 InstanceTracker 自动释放引用）
+        var go = await this.InstantiateAssetAsync("characters/enemy");
+        this.DestroyAssetInstance(go);
+    }
+}
+```
+
+> `EntityNode` 是纯 C# 节点，没有 `transform` 成员；需要指定挂载父物体时，把外部 `Transform` 传给 `InstantiateAssetAsync` 的 `parent` 参数。
+> 加载过程可传入 `this.DestroyCancellationToken`，节点销毁时自动中止。
+> 完整 API 见 [Asset 模块 README](../Asset/README.md)。
+
 ## 设计原则
 
 - **纯 C#** — 不依赖 `MonoBehaviour`，可独立于 Unity 运行时测试
@@ -420,3 +461,4 @@ public class MyBootstrapNode : BootstrapNode
 ## 依赖
 
 - `UniTask`（`Cysharp.Threading.Tasks`，框架层已提供）
+- `XFramework.XAsset` — `AssetExtensions` 委托 `AssetManager` 静态门面（节点树依赖静态服务，方向单向）
