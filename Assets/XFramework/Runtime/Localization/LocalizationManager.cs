@@ -264,7 +264,7 @@ namespace XFramework.XLocalization
         {
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
-                    "LocalizationManager is not initialized. Call LocalizationManager.Initialize() first.");
+                    "[LocalizationManager] LocalizationManager 尚未初始化。请确认节点树中已挂载 LocalizationBootstrapNode，或调用 LocalizationManager.Initialize(lang, data) 完成初始化。");
         }
 
         #endregion

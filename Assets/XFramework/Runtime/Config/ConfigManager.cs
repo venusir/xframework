@@ -409,7 +409,7 @@ namespace XFramework.XConfig
         {
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
-                    "ConfigManager is not initialized. Call ConfigManager.Initialize() first.");
+                    "[ConfigManager] ConfigManager 尚未初始化。请先调用 ConfigManager.Initialize() 完成初始化。");
         }
 
         /// <summary>

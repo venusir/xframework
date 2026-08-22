@@ -550,7 +550,7 @@ namespace XFramework.XAsset
         private void EnsureInitialized()
         {
             if (!_initialized)
-                throw new InvalidOperationException("AssetManagerImpl is not initialized. Call InitializeAsync() first.");
+                throw new InvalidOperationException("[AssetManager] AssetManagerImpl 尚未初始化。请先调用 InitializeAsync() 完成初始化。");
         }
 
         /// <summary>

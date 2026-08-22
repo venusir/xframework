@@ -746,7 +746,7 @@ namespace XFramework.XUI
         {
             if (!IsInitialized || UIRoot == null)
                 throw new InvalidOperationException(
-                    "UIManager is not initialized. Call UIManager.Initialize(uiRoot) first.");
+                    "[UIManager] UIManager 尚未初始化。请先调用 UIManager.Initialize(uiRoot) 完成初始化。");
         }
 
         #endregion

@@ -120,7 +120,7 @@ namespace XFramework.XData
         {
             if (_impl == null)
                 throw new DataException(
-                    "DataManager not initialized. Ensure GameDataNode is present in scene.");
+                    "DataManager 尚未初始化。请确认场景中已挂载 GameDataNode（其 Awake 会自动注入），或手动调用 DataManager.Initialize(impl)。");
         }
 
         #endregion

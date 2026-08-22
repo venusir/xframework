@@ -246,8 +246,8 @@ namespace XFramework.XSettings
                 return (ISettingsManager<T>)manager;
 
             throw new InvalidOperationException(
-                $"SettingsManager 尚未初始化类型 '{type.Name}'。" +
-                $"请先调用 SettingsManager.Initialize<{type.Name}>()。");
+                $"[SettingsManager] SettingsManager 尚未初始化类型 '{type.Name}'。" +
+                $"请先调用 SettingsManager.Initialize<{type.Name}>() 完成初始化。");
         }
 
         /// <summary>
