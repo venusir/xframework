@@ -5,7 +5,7 @@ using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 using YooAsset;
 
-namespace XFramework
+namespace XFramework.XAsset
 {
     /// <summary>
     /// 基于 YooAsset 的资源服务底层实现。
@@ -37,9 +37,9 @@ namespace XFramework
         }
 
         /// <summary>
-        /// 异步加载资源。每次调用均从 YooAsset 获取新句柄，返回 <see cref="XAsset.AssetHandle{T}"/> 包装。
+        /// 异步加载资源。每次调用均从 YooAsset 获取新句柄，返回 <see cref="AssetHandle{T}"/> 包装。
         /// </summary>
-        public async UniTask<XAsset.AssetHandle<T>> LoadAsync<T>(string location, uint priority = 0, CancellationToken cancellationToken = default)
+        public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, uint priority = 0, CancellationToken cancellationToken = default)
             where T : UnityEngine.Object
         {
             var package = GetOrCreatePackage();
@@ -55,23 +55,24 @@ namespace XFramework
                 return default;
             }
 
-            return new XAsset.AssetHandle<T>(operation);
+            return new AssetHandle<T>(operation);
         }
 
         /// <summary>
         /// 预加载资源。加载后立即释放句柄，YooAsset 底层保留 bundle 缓存，后续加载秒回。
         /// </summary>
-        public async UniTask PreloadAsync(string location)
+        public async UniTask PreloadAsync(string location, CancellationToken cancellationToken = default)
         {
-            var handle = await LoadAsync<UnityEngine.Object>(location);
+            var handle = await LoadAsync<UnityEngine.Object>(location, cancellationToken: cancellationToken);
             if (handle.IsValid)
                 handle.Dispose();
         }
 
         /// <summary>
         /// 异步加载场景。
+        /// <para>失败时返回无效的 <c>default(Scene)</c>，调用方需用 <see cref="Scene.IsValid"/> 校验。</para>
         /// </summary>
-        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             var package = GetOrCreatePackage();
             if (package == null) return default;
@@ -82,13 +83,17 @@ namespace XFramework
             while (!operation.IsDone)
             {
                 progress?.Invoke(operation.Progress);
-                await UniTask.Yield(PlayerLoopTiming.Update);
+                // 取消时抛出 OperationCanceledException
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
             }
 
             progress?.Invoke(1f);
 
             if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load scene '{location}': {operation.LastError}");
                 return default;
+            }
 
             var scene = SceneManager.GetSceneByName(operation.SceneName);
             return scene;

@@ -2,7 +2,8 @@
     "name": "Venusy609.Xframework.Editor.Tests",
     "references": [
         "Venusy609.Xframework.Editor",
-        "Venusy609.Xframework"
+        "Venusy609.Xframework",
+        "UniTask"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

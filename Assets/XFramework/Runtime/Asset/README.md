@@ -97,6 +97,8 @@ var scene = await AssetManager.LoadSceneAsync("scenes/main", additive: true, p =
 {
     Debug.Log($"场景加载进度: {p * 100}%");
 });
+
+// 注意：加载失败时返回无效的 default(Scene)，调用方需用 scene.IsValid 校验
 ```
 
 ### 6. 批量预加载
@@ -115,10 +117,12 @@ await AssetManager.PreloadAllAsync(locations);
 ### 7. 释放与回收
 
 ```csharp
-// 回收实例（自动走对象池，满则销毁）
+// 回收实例（自动走对象池，满则销毁；回池实例保留资源引用，真正销毁时才释放）
 AssetManager.DestroyInstance(gameObject);
 AssetManager.DestroyInstance(component);
 ```
+
+> **注意**：用户直接调用 `Object.Destroy(instance)` 的实例**不会回池**（OnDestroy 阶段操作对象池在 Unity 语义下不可靠），但会经 `InstanceTracker.OnDestroy` 自动释放资源引用，不会泄漏。
 
 ### 8. 对象池配置
 
@@ -163,12 +167,17 @@ public class MyNode : EntityNode
 
 每次 `InstantiateAsync` 创建的实例上会自动挂载 `InstanceTracker` 组件。该组件持有 `AssetHandle<GameObject>`，确保实例存活期间底层资源引用计数 > 0。用户无需感知此组件：
 
-- 调用 `DestroyInstance` 时，先回池（`SetActive(false)`），再释放句柄
-- 用户直接调用 `Object.Destroy` 时，`OnDestroy` 自动释放句柄
+- 调用 `DestroyInstance` 时，优先回池（`SetActive(false)`）；**回池不释放句柄**（资源保活，实例可随时取出复用）
+- 实例真正销毁时（池满、`Dispose()` 清理、用户直接 `Object.Destroy`）才释放句柄；句柄释放幂等，多条销毁路径不会重复 Release
+- 用户直接调用 `Object.Destroy` 的实例不回池，`OnDestroy` 自动释放句柄
 
 ### 对象池
 
-默认每种预制体最多保留 5 个闲置实例，池满时销毁最旧的。可通过 `SetPoolMaxSize` 调整上限。
+默认每种预制体最多保留 5 个闲置实例，池满时新回池的实例直接销毁。可通过 `SetPoolMaxSize` 调整上限。
+
+### 取消支持
+
+所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`。
 
 ## 设计原则
 

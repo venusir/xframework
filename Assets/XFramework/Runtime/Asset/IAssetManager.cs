@@ -48,32 +48,33 @@ namespace XFramework.XAsset
         /// <summary>
         /// 加载资源并实例化，返回实例 GameObject（自动管理引用生命周期）。
         /// </summary>
-        UniTask<GameObject> InstantiateAsync(string location, Transform parent = null);
+        UniTask<GameObject> InstantiateAsync(string location, Transform parent = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 加载资源并实例化，带位置旋转，返回实例 GameObject。
         /// </summary>
-        UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null);
+        UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 加载资源并实例化，返回实例上 GetComponent{T}() 的结果。
         /// </summary>
-        UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component;
+        UniTask<T> InstantiateAsync<T>(string location, Transform parent = null, CancellationToken cancellationToken = default) where T : Component;
 
         /// <summary>
         /// 加载资源并实例化，带位置旋转，返回实例上 GetComponent{T}() 的结果。
         /// </summary>
-        UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component;
+        UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default) where T : Component;
 
         /// <summary>
         /// 异步加载场景。
+        /// <para>失败时返回无效的 <c>default(Scene)</c>，调用方需用 <see cref="Scene.IsValid"/> 校验。</para>
         /// </summary>
-        UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null);
+        UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 批量预加载资源到缓存（引用计数不增加）。
         /// </summary>
-        UniTask PreloadAllAsync(IEnumerable<string> locations);
+        UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -94,7 +95,7 @@ namespace XFramework.XAsset
         #region Lifecycle
 
         /// <summary>
-        /// 销毁/回收实例。实例回池时自动释放对应的资源引用。
+        /// 销毁/回收实例。回池时保留资源引用（保活），实例真正销毁时才释放。
         /// </summary>
         void DestroyInstance(GameObject instance);
 

@@ -12,7 +12,7 @@ namespace XFramework.XAsset
     /// <summary>
     /// 全局资源管理器外观。提供静态方法直接访问资源加载、实例化与生命周期管理。
     /// <para>内部持有 <see cref="IAssetManager"/> 实例（<see cref="AssetManagerImpl"/>），所有调用委托到该实例。</para>
-    /// <para>使用前需调用 <see cref="InitializeAsync(CancellationToken)"/> 初始化。</para>
+    /// <para>使用前需调用 <see cref="InitializeAsync(LoadProgress, CancellationToken)"/> 初始化。</para>
     /// </summary>
     public static class AssetManager
     {
@@ -84,46 +84,46 @@ namespace XFramework.XAsset
             return _instance.LoadAsync<T>(location, priority, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Transform)"/>
-        public static UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Transform, CancellationToken)"/>
+        public static UniTask<GameObject> InstantiateAsync(string location, Transform parent = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.InstantiateAsync(location, parent);
+            return _instance.InstantiateAsync(location, parent, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Vector3, Quaternion, Transform)"/>
-        public static UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Vector3, Quaternion, Transform, CancellationToken)"/>
+        public static UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.InstantiateAsync(location, position, rotation, parent);
+            return _instance.InstantiateAsync(location, position, rotation, parent, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Transform)"/>
-        public static UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Transform, CancellationToken)"/>
+        public static UniTask<T> InstantiateAsync<T>(string location, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
         {
             EnsureGlobalInitialized();
-            return _instance.InstantiateAsync<T>(location, parent);
+            return _instance.InstantiateAsync<T>(location, parent, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Vector3, Quaternion, Transform)"/>
-        public static UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Vector3, Quaternion, Transform, CancellationToken)"/>
+        public static UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
         {
             EnsureGlobalInitialized();
-            return _instance.InstantiateAsync<T>(location, position, rotation, parent);
+            return _instance.InstantiateAsync<T>(location, position, rotation, parent, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.LoadSceneAsync(string, bool, Action{float})"/>
-        public static UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+        /// <inheritdoc cref="IAssetManager.LoadSceneAsync(string, bool, Action{float}, CancellationToken)"/>
+        public static UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.LoadSceneAsync(location, additive, progress);
+            return _instance.LoadSceneAsync(location, additive, progress, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string})"/>
-        public static UniTask PreloadAllAsync(IEnumerable<string> locations)
+        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, CancellationToken)"/>
+        public static UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.PreloadAllAsync(locations);
+            return _instance.PreloadAllAsync(locations, cancellationToken);
         }
 
         #endregion

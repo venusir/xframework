@@ -30,6 +30,9 @@ namespace XFramework.XAsset
         /// <summary>location → 对象池最大容量。</summary>
         private readonly Dictionary<string, int> _poolMaxSizes = new Dictionary<string, int>();
 
+        /// <summary>默认 YooAsset 资源包名。多资源包场景需扩展为配置注入。</summary>
+        private const string DefaultPackageName = "DefaultPackage";
+
         /// <summary>默认每种预制体最多保留的闲置实例数。</summary>
         private const int DefaultPoolSize = 5;
 
@@ -49,7 +52,7 @@ namespace XFramework.XAsset
         {
             if (_initialized) return;
 
-            _managerImpl = new YooAssetManagerImpl();
+            _managerImpl = new YooAssetManagerImpl(DefaultPackageName);
 
             ReportProgress(progress, 0f, "Initializing YooAsset...");
 
@@ -62,15 +65,16 @@ namespace XFramework.XAsset
             ReportProgress(progress, 0.2f, "Getting resource package...");
 
             // 2. 获取或创建资源包
-            _package = YooAssets.TryGetPackage("DefaultPackage");
+            _package = YooAssets.TryGetPackage(DefaultPackageName);
             if (_package == null)
             {
-                _package = YooAssets.CreatePackage("DefaultPackage");
+                _package = YooAssets.CreatePackage(DefaultPackageName);
             }
 
             ReportProgress(progress, 0.4f, "Initializing resource package...");
 
-            // 3. 初始化资源包（使用离线模式参数）
+            // 3. 初始化资源包。当前使用离线模式（内嵌资源，无热更）；
+            //    后续接入热更新时切换为 HostPlayModeParameters 即可，其余初始化流程不变。
             var initParameters = new OfflinePlayModeParameters();
             var initOperation = _package.InitializeAsync(initParameters);
             await initOperation.WithCancellation(cancellationToken);
@@ -132,19 +136,19 @@ namespace XFramework.XAsset
             return await _managerImpl.LoadAsync<T>(location, (uint)Math.Max(0, priority), cancellationToken);
         }
 
-        public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null)
+        public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null, CancellationToken cancellationToken = default)
         {
-            return await InstantiateAsyncInternal(location, null, null, parent);
+            return await InstantiateAsyncInternal(location, null, null, parent, cancellationToken);
         }
 
-        public async UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+        public async UniTask<GameObject> InstantiateAsync(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default)
         {
-            return await InstantiateAsyncInternal(location, position, rotation, parent);
+            return await InstantiateAsyncInternal(location, position, rotation, parent, cancellationToken);
         }
 
-        public async UniTask<T> InstantiateAsync<T>(string location, Transform parent = null) where T : Component
+        public async UniTask<T> InstantiateAsync<T>(string location, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
         {
-            var go = await InstantiateAsyncInternal(location, null, null, parent);
+            var go = await InstantiateAsyncInternal(location, null, null, parent, cancellationToken);
             if (go == null) return null;
 
             var component = go.GetComponent<T>();
@@ -158,9 +162,9 @@ namespace XFramework.XAsset
             return component;
         }
 
-        public async UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
+        public async UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
         {
-            var go = await InstantiateAsyncInternal(location, position, rotation, parent);
+            var go = await InstantiateAsyncInternal(location, position, rotation, parent, cancellationToken);
             if (go == null) return null;
 
             var component = go.GetComponent<T>();
@@ -174,19 +178,19 @@ namespace XFramework.XAsset
             return component;
         }
 
-        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null)
+        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            return await _managerImpl.LoadSceneAsync(location, additive, progress);
+            return await _managerImpl.LoadSceneAsync(location, additive, progress, cancellationToken);
         }
 
-        public async UniTask PreloadAllAsync(IEnumerable<string> locations)
+        public async UniTask PreloadAllAsync(IEnumerable<string> locations, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             var tasks = new List<UniTask>();
             foreach (var location in locations)
             {
-                tasks.Add(_managerImpl.PreloadAsync(location));
+                tasks.Add(_managerImpl.PreloadAsync(location, cancellationToken));
             }
             await UniTask.WhenAll(tasks);
         }
@@ -203,9 +207,8 @@ namespace XFramework.XAsset
         public (int pooledCount, int activeCount, int maxPoolSize) GetPoolStatus(string location)
         {
             int pooled = _pools.TryGetValue(location, out var pool) ? pool.Count : 0;
-            // activeCount 由 InstanceTracker 管理，不再通过 _locationCounts 跟踪
-            // 此处返回 0 作为占位，完整统计需要额外的实例计数器
-            int active = 0;
+            // activeCount 由 InstanceTracker 按 SetActive(true) 状态实时统计
+            int active = InstanceTracker.GetActiveCount(location);
             int maxSize = _poolMaxSizes.TryGetValue(location, out var size) ? size : DefaultPoolSize;
             return (pooled, active, maxSize);
         }
@@ -221,14 +224,12 @@ namespace XFramework.XAsset
             var tracker = instance.GetComponent<InstanceTracker>();
             if (tracker != null)
             {
-                tracker.IsBeingReleased = true;
-                var location = tracker.Location;
+                // 回池成功：句柄保留（资源保活），实例可随时取出复用
+                if (TryReturnToPool(tracker.Location, instance)) return;
 
-                // 回池或销毁
-                ReturnToPoolOrDestroy(location, instance);
-
-                // 释放资源引用（AssetHandle.Dispose → YooAsset.AssetHandle.Release）
+                // 池满：销毁前释放资源引用（幂等，OnDestroy 不会重复释放）
                 tracker.DisposeHandle();
+                UnityEngine.Object.Destroy(instance);
             }
             else
             {
@@ -252,13 +253,16 @@ namespace XFramework.XAsset
             if (_disposed) return;
             _disposed = true;
 
-            // 清理所有池中的实例
+            // 清理所有池中的实例：先释放句柄再销毁（池满时实例尚未销毁过，句柄仍有效）
             foreach (var kvp in _pools)
             {
                 foreach (var go in kvp.Value)
                 {
                     if (go != null)
+                    {
+                        go.GetComponent<InstanceTracker>()?.DisposeHandle();
                         UnityEngine.Object.Destroy(go);
+                    }
                 }
             }
             _pools.Clear();
@@ -278,7 +282,7 @@ namespace XFramework.XAsset
         /// 内部实例化逻辑。优先从对象池获取，否则加载资源并实例化。
         /// <para>实例化后通过 <see cref="InstanceTracker"/> 自动管理资源引用生命周期。</para>
         /// </summary>
-        private async UniTask<GameObject> InstantiateAsyncInternal(string location, Vector3? position, Quaternion? rotation, Transform parent)
+        private async UniTask<GameObject> InstantiateAsyncInternal(string location, Vector3? position, Quaternion? rotation, Transform parent, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
@@ -295,17 +299,13 @@ namespace XFramework.XAsset
                     pooled.transform.localScale = Vector3.one;
                     pooled.SetActive(true);
 
-                    // 对象池取出的实例仍持有 AssetHandle，无需额外操作
-                    var tracker = pooled.GetComponent<InstanceTracker>();
-                    if (tracker != null)
-                        tracker.IsBeingReleased = false;
-
+                    // 回池实例的 AssetHandle 在回池时保留（方案 A：资源保活），取出即用，无需重新加载
                     return pooled;
                 }
             }
 
             // 2. 通过 LoadAsync 加载资源（引用计数 +1）
-            var handle = await LoadAsync<GameObject>(location);
+            var handle = await LoadAsync<GameObject>(location, cancellationToken: cancellationToken);
             var prefab = handle.Asset;
             if (prefab == null) return null;
 
@@ -328,9 +328,10 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
-        /// 将实例回池或销毁。池满时销毁最旧的实例。
+        /// 尝试将实例回池。池未满则回池并返回 true；池满返回 false，由调用方销毁实例。
+        /// <para>回池不释放实例的 AssetHandle（资源保活），销毁时才释放。</para>
         /// </summary>
-        private void ReturnToPoolOrDestroy(string location, GameObject instance)
+        private bool TryReturnToPool(string location, GameObject instance)
         {
             instance.SetActive(false);
             instance.transform.SetParent(null);
@@ -346,11 +347,10 @@ namespace XFramework.XAsset
             if (pool.Count < maxSize)
             {
                 pool.Push(instance);
+                return true;
             }
-            else
-            {
-                UnityEngine.Object.Destroy(instance);
-            }
+
+            return false;
         }
 
         private void EnsureInitialized()

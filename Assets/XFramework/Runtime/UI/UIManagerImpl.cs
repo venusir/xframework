@@ -14,7 +14,7 @@ namespace XFramework.XUI
     /// <summary>
     /// <see cref="IUIManager"/> 的默认实现。
     /// <para>维护活动面板字典、导航堆栈、层级排序计数器和资源缓存。</para>
-    /// <para>面板实例化使用 <see cref="AssetManager.InstantiateAsync(string, Transform)"/>，关闭时回池。</para>
+    /// <para>面板实例化使用 <see cref="AssetManager.InstantiateAsync(string, Transform, System.Threading.CancellationToken)"/>，关闭时回池。</para>
     /// </summary>
     internal sealed class UIManagerImpl : IUIManager
     {

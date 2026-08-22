@@ -11,7 +11,7 @@ namespace XFramework.XAsset
 
     /// <summary>
     /// <see cref="IBaseNode"/> 的资源加载扩展方法。允许节点树中的任意节点直接使用全局 <see cref="AssetManager"/> 加载资源。
-    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(System.Threading.CancellationToken)"/> 初始化。</para>
+    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(XFramework.XLoader.LoadProgress, System.Threading.CancellationToken)"/> 初始化。</para>
     /// <para>使用示例：</para>
     /// <code>
     /// // 在任意节点中直接调用
@@ -33,29 +33,29 @@ namespace XFramework.XAsset
         public static UniTask<AssetHandle<T>> LoadAssetAsync<T>(this IBaseNode self, string location, int priority, CancellationToken cancellationToken = default) where T : UnityEngine.Object
             => AssetManager.LoadAsync<T>(location, priority, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Transform)"/>
-        public static UniTask<GameObject> InstantiateAssetAsync(this IBaseNode self, string location, Transform parent = null)
-            => AssetManager.InstantiateAsync(location, parent);
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Transform, CancellationToken)"/>
+        public static UniTask<GameObject> InstantiateAssetAsync(this IBaseNode self, string location, Transform parent = null, CancellationToken cancellationToken = default)
+            => AssetManager.InstantiateAsync(location, parent, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Vector3, Quaternion, Transform)"/>
-        public static UniTask<GameObject> InstantiateAssetAsync(this IBaseNode self, string location, Vector3 position, Quaternion rotation, Transform parent = null)
-            => AssetManager.InstantiateAsync(location, position, rotation, parent);
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync(string, Vector3, Quaternion, Transform, CancellationToken)"/>
+        public static UniTask<GameObject> InstantiateAssetAsync(this IBaseNode self, string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default)
+            => AssetManager.InstantiateAsync(location, position, rotation, parent, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Transform)"/>
-        public static UniTask<T> InstantiateAssetAsync<T>(this IBaseNode self, string location, Transform parent = null) where T : Component
-            => AssetManager.InstantiateAsync<T>(location, parent);
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Transform, CancellationToken)"/>
+        public static UniTask<T> InstantiateAssetAsync<T>(this IBaseNode self, string location, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
+            => AssetManager.InstantiateAsync<T>(location, parent, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Vector3, Quaternion, Transform)"/>
-        public static UniTask<T> InstantiateAssetAsync<T>(this IBaseNode self, string location, Vector3 position, Quaternion rotation, Transform parent = null) where T : Component
-            => AssetManager.InstantiateAsync<T>(location, position, rotation, parent);
+        /// <inheritdoc cref="IAssetManager.InstantiateAsync{T}(string, Vector3, Quaternion, Transform, CancellationToken)"/>
+        public static UniTask<T> InstantiateAssetAsync<T>(this IBaseNode self, string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default) where T : Component
+            => AssetManager.InstantiateAsync<T>(location, position, rotation, parent, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.LoadSceneAsync(string, bool, Action{float})"/>
-        public static UniTask<Scene> LoadSceneAssetAsync(this IBaseNode self, string location, bool additive = false, Action<float> progress = null)
-            => AssetManager.LoadSceneAsync(location, additive, progress);
+        /// <inheritdoc cref="IAssetManager.LoadSceneAsync(string, bool, Action{float}, CancellationToken)"/>
+        public static UniTask<Scene> LoadSceneAssetAsync(this IBaseNode self, string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
+            => AssetManager.LoadSceneAsync(location, additive, progress, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string})"/>
-        public static UniTask PreloadAssetsAsync(this IBaseNode self, IEnumerable<string> locations)
-            => AssetManager.PreloadAllAsync(locations);
+        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, CancellationToken)"/>
+        public static UniTask PreloadAssetsAsync(this IBaseNode self, IEnumerable<string> locations, CancellationToken cancellationToken = default)
+            => AssetManager.PreloadAllAsync(locations, cancellationToken);
 
         #endregion
 
