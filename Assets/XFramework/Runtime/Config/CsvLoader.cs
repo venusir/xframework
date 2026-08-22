@@ -1,8 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
-using XFramework.XAsset;
 
 namespace XFramework.XConfig
 {
@@ -29,24 +28,20 @@ namespace XFramework.XConfig
                         $"CSV file '{assetPath}' must contain at least a header row and one data row.");
 
                 var headers = lines[0].Split(',');
-                var members = GetWriteableMembers(typeof(T));
-                if (members.Length != headers.Length)
-                    throw new ConfigException(
-                        $"CSV header count ({headers.Length}) does not match field/property count ({members.Length}) " +
-                        $"of type '{typeof(T).Name}'. Headers: [{string.Join(", ", headers)}]");
+                var members = MapColumns(headers, GetColumnMap(typeof(T)), typeof(T), assetPath);
 
                 var dict = new Dictionary<TKey, T>(lines.Length - 1);
                 for (int i = 1; i < lines.Length; i++)
                 {
                     var values = lines[i].Split(',');
-                    if (values.Length != members.Length)
+                    if (values.Length != headers.Length)
                         throw new ConfigException(
-                            $"Row {i} in CSV '{assetPath}' has {values.Length} columns, expected {members.Length}.");
+                            $"Row {i} in CSV '{assetPath}' has {values.Length} columns, expected {headers.Length}.");
 
                     var item = new T();
                     for (int j = 0; j < members.Length; j++)
                     {
-                        SetMemberValue(members[j], item, values[j]);
+                        SetMemberValue(members[j], item, values[j], assetPath, i + 1, headers[j]);
                     }
                     var key = item.Id;
                     if (dict.ContainsKey(key))
@@ -78,18 +73,19 @@ namespace XFramework.XConfig
                         $"CSV file '{assetPath}' is empty.");
 
                 var config = new T();
-                var members = GetWriteableMembers(typeof(T));
+                var headers = lines[0].Split(',');
+                var members = MapColumns(headers, GetColumnMap(typeof(T)), typeof(T), assetPath);
 
                 // Global：取最后一行数据（与 Table 不同，Global 只有一个实例）
                 var dataLine = lines[lines.Length - 1];
                 var values = dataLine.Split(',');
-                if (values.Length != members.Length)
+                if (values.Length != headers.Length)
                     throw new ConfigException(
-                        $"CSV row in '{assetPath}' has {values.Length} columns, expected {members.Length} (fields of '{typeof(T).Name}').");
+                        $"CSV row in '{assetPath}' has {values.Length} columns, expected {headers.Length} (header of '{typeof(T).Name}').");
 
                 for (int j = 0; j < members.Length; j++)
                 {
-                    SetMemberValue(members[j], config, values[j]);
+                    SetMemberValue(members[j], config, values[j], assetPath, lines.Length, headers[j]);
                 }
                 return config;
             }
@@ -108,75 +104,111 @@ namespace XFramework.XConfig
 
         #region Internal
 
-        private static async UniTask<string> LoadTextAsync(string assetPath)
+        /// <summary>
+        /// 经 <see cref="AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
+        private static UniTask<string> LoadTextAsync(string assetPath)
         {
-            if (string.IsNullOrEmpty(assetPath))
-                throw new ConfigException("Asset path cannot be null or empty.");
-
-            var handle = await AssetManager.LoadAsync<TextAsset>(assetPath);
-            if (handle.Asset == null)
-                throw new ConfigException(
-                    $"Failed to load asset '{assetPath}'. Ensure AssetManager is initialized and the asset exists in the YooAsset package.");
-            try
-            {
-                var text = handle.Asset.text;
-                if (string.IsNullOrEmpty(text))
-                    throw new ConfigException($"Loaded asset '{assetPath}' contains empty text content.");
-                return text;
-            }
-            finally
-            {
-                handle.Dispose();
-            }
+            return ConfigTextLoader.LoadTextAsync(assetPath);
         }
 
         /// <summary>
-        /// 获取类型 T 的公共可写成员（字段和属性），按声明顺序排列。
-        /// <para>仅基础类型可直接赋值，不递归处理子对象。</para>
+        /// 按列名索引类型 T 的公共可写成员（字段和属性），结果按类型缓存。
+        /// <para>C# 同一类型内字段与属性不可同名，名称索引无冲突；仅基础类型可直接赋值，不递归处理子对象。</para>
         /// </summary>
-        private static IWriteableMember[] GetWriteableMembers(Type type)
+        private static Dictionary<string, IWriteableMember> GetColumnMap(Type type)
         {
-            var list = new List<IWriteableMember>();
+            if (ColumnMapCache.TryGetValue(type, out var map))
+                return map;
 
-            // 获取公共可写属性（PlatformNotSupportedException-proof：逐个 TryGet）
-            foreach (var prop in type.GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            var dict = new Dictionary<string, IWriteableMember>();
+            // 获取公共可写属性（跳过索引器）；IConfigRow.Id 等隐式接口实现属性同样收录，header 含 Id 列时赋值
+            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
             {
-                // 跳过索引器
                 if (prop.GetIndexParameters().Length > 0) continue;
                 if (!prop.CanWrite) continue;
                 if (prop.SetMethod == null) continue;
-                // IConfigRow.Id 已经被属性处理器处理，但这里保留以维持列顺序
-                list.Add(new PropertyMember(prop));
+                dict[prop.Name] = new PropertyMember(prop);
             }
-
             // 获取公共字段
-            foreach (var field in type.GetFields(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            foreach (var field in type.GetFields(BindingFlags.Public | BindingFlags.Instance))
             {
-                list.Add(new FieldMember(field));
+                dict[field.Name] = new FieldMember(field);
             }
+            ColumnMapCache[type] = dict;
+            return dict;
+        }
 
-            return list.ToArray();
+        /// <summary>列名 → 可写成员映射缓存（每行类型仅反射一次）。</summary>
+        private static readonly Dictionary<Type, Dictionary<string, IWriteableMember>> ColumnMapCache = new();
+
+        /// <summary>
+        /// 将 header 列名映射为成员列表（按 header 顺序）。
+        /// <para>列名在类型中不存在或 header 重复时抛 <see cref="ConfigException"/>，明确暴露配置/类型不一致。</para>
+        /// </summary>
+        private static IWriteableMember[] MapColumns(
+            string[] headers, Dictionary<string, IWriteableMember> columnMap, Type rowType, string assetPath)
+        {
+            var members = new IWriteableMember[headers.Length];
+            var seen = new HashSet<string>();
+            for (int j = 0; j < headers.Length; j++)
+            {
+                var col = headers[j];
+                if (!seen.Add(col))
+                    throw new ConfigException(
+                        $"Duplicate column '{col}' in CSV '{assetPath}'.");
+                if (!columnMap.TryGetValue(col, out var member))
+                    throw new ConfigException(
+                        $"Column '{col}' in CSV '{assetPath}' does not exist on type '{rowType.Name}'. " +
+                        $"Available columns: [{string.Join(", ", columnMap.Keys)}].");
+                members[j] = member;
+            }
+            return members;
         }
 
         /// <summary>
         /// 将 CSV 单元格值设置到目标对象的指定成员上。
-        /// <para>尝试将单元格原始字符串基于成员数据类型转成对应的对象值。</para>
+        /// <para>空单元格赋类型默认值（CSV 空列常见）；非空解析失败抛 <see cref="ConfigException"/>，
+        /// 消息带路径/行号/列名/原始值，避免配置错误被静默吞掉。</para>
         /// </summary>
-        private static void SetMemberValue(IWriteableMember member, object target, string rawValue)
+        private static void SetMemberValue(IWriteableMember member, object target, string rawValue,
+            string assetPath, int row, string columnName)
         {
             var memberType = member.Type;
             object value;
 
-            if (memberType == typeof(int))
-                value = int.TryParse(rawValue, out var i) ? i : 0;
+            if (string.IsNullOrEmpty(rawValue))
+            {
+                // 空单元格：赋类型默认值
+                value = memberType.IsValueType ? Activator.CreateInstance(memberType) : null;
+            }
+            else if (memberType == typeof(int))
+            {
+                if (!int.TryParse(rawValue, out var i))
+                    throw ParseError(assetPath, row, columnName, rawValue, memberType);
+                value = i;
+            }
             else if (memberType == typeof(float))
-                value = float.TryParse(rawValue, out var f) ? f : 0f;
+            {
+                if (!float.TryParse(rawValue, out var f))
+                    throw ParseError(assetPath, row, columnName, rawValue, memberType);
+                value = f;
+            }
             else if (memberType == typeof(double))
-                value = double.TryParse(rawValue, out var d) ? d : 0.0;
+            {
+                if (!double.TryParse(rawValue, out var d))
+                    throw ParseError(assetPath, row, columnName, rawValue, memberType);
+                value = d;
+            }
             else if (memberType == typeof(bool))
-                value = bool.TryParse(rawValue, out var b) && b;
+            {
+                if (!bool.TryParse(rawValue, out var b))
+                    throw ParseError(assetPath, row, columnName, rawValue, memberType);
+                value = b;
+            }
             else if (memberType == typeof(string))
-                value = rawValue ?? string.Empty;
+            {
+                value = rawValue;
+            }
             else if (memberType.IsEnum)
             {
                 try
@@ -185,16 +217,26 @@ namespace XFramework.XConfig
                 }
                 catch
                 {
-                    value = 0;
+                    throw ParseError(assetPath, row, columnName, rawValue, memberType);
                 }
             }
             else
             {
-                // 不支持的类型，赋默认值
-                value = memberType.IsValueType ? Activator.CreateInstance(memberType) : null;
+                // 不支持的类型：明确报错而非静默赋默认值，暴露数据/类型定义问题
+                throw new ConfigException(
+                    $"CSV column '{columnName}' in '{assetPath}' row {row} targets unsupported member type '{memberType.Name}'.");
             }
 
             member.SetValue(target, value);
+        }
+
+        /// <summary>构造解析失败异常（带路径/行号/列名/原始值上下文）。</summary>
+        private static ConfigException ParseError(
+            string assetPath, int row, string columnName, string rawValue, Type memberType)
+        {
+            return new ConfigException(
+                $"CSV parse failed in '{assetPath}' row {row}, column '{columnName}': " +
+                $"cannot convert '{rawValue}' to {memberType.Name}.");
         }
 
         #endregion
