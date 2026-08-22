@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using XFramework.XAsset;
 
 namespace XFramework.XConfig
 {
@@ -71,26 +70,11 @@ namespace XFramework.XConfig
 
         #region Internal
 
-        private static async UniTask<string> LoadTextAsync(string assetPath)
+        /// <summary>
+        /// 经 <see cref="AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
+        private static UniTask<string> LoadTextAsync(string assetPath)
         {
-            if (string.IsNullOrEmpty(assetPath))
-                throw new ConfigException("Asset path cannot be null or empty.");
-
-            var handle = await AssetManager.LoadAsync<TextAsset>(assetPath);
-            if (handle.Asset == null)
-                throw new ConfigException(
-                    $"Failed to load asset '{assetPath}'. Ensure AssetManager is initialized and the asset exists in the YooAsset package.");
-            try
-            {
-                var text = handle.Asset.text;
-                if (string.IsNullOrEmpty(text))
-                    throw new ConfigException($"Loaded asset '{assetPath}' contains empty text content.");
-                return text;
-            }
-            finally
-            {
-                handle.Dispose();
-            }
+            return ConfigTextLoader.LoadTextAsync(assetPath);
         }
 
         #endregion
