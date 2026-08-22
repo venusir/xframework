@@ -16,6 +16,11 @@ namespace XFramework.XConfig
         private static readonly Dictionary<(Type, Type), Func<IConfigLoader, string, UniTask<object>>> Cache = new();
 
         /// <summary>
+        /// (globalType) → 强类型加载委托的缓存。
+        /// </summary>
+        private static readonly Dictionary<Type, Func<IConfigLoader, string, UniTask<object>>> GlobalCache = new();
+
+        /// <summary>
         /// 通过缓存的强类型委托调用 <c>loader.LoadTableAsync<T, TKey></c>，
         /// 返回装箱后的 <c>ConfigTable<T></c>。
         /// </summary>
@@ -37,6 +42,32 @@ namespace XFramework.XConfig
         private static Func<IConfigLoader, string, UniTask<object>> CreateDelegate(Type rowType, Type keyType)
         {
             var delegateType = typeof(LoadDelegate<,>).MakeGenericType(rowType, keyType);
+            var field = delegateType.GetField(
+                "Delegate", BindingFlags.Static | BindingFlags.NonPublic);
+            return (Func<IConfigLoader, string, UniTask<object>>)field.GetValue(null);
+        }
+
+        /// <summary>
+        /// 通过缓存的强类型委托调用 <c>loader.LoadGlobalAsync<T></c>，返回装箱后的配置实例。
+        /// </summary>
+        internal static async UniTask<object> InvokeGlobalAsync(
+            IConfigLoader loader, Type globalType, string assetPath)
+        {
+            if (!GlobalCache.TryGetValue(globalType, out var func))
+            {
+                func = CreateGlobalDelegate(globalType);
+                GlobalCache[globalType] = func;
+            }
+
+            return await func(loader, assetPath);
+        }
+
+        /// <summary>
+        /// 基于类型参数构造 <c>GlobalLoadDelegate<T>.Delegate</c>。
+        /// </summary>
+        private static Func<IConfigLoader, string, UniTask<object>> CreateGlobalDelegate(Type globalType)
+        {
+            var delegateType = typeof(GlobalLoadDelegate<>).MakeGenericType(globalType);
             var field = delegateType.GetField(
                 "Delegate", BindingFlags.Static | BindingFlags.NonPublic);
             return (Func<IConfigLoader, string, UniTask<object>>)field.GetValue(null);
@@ -64,6 +95,29 @@ namespace XFramework.XConfig
         private static async UniTask<object> WrapAsync(IConfigLoader loader, string assetPath)
         {
             return await loader.LoadTableAsync<T, TKey>(assetPath);
+        }
+    }
+
+    /// <summary>
+    /// Global 泛型静态委托持有类，与 <see cref="LoadDelegate{T, TKey}"/> 同构。
+    /// 利用 C# 编译器的原生 <c>await</c> 完成配置实例到装箱的转换，避免运行时通过 <c>AsTask</c> / <c>Result</c> 属性反射。
+    /// </summary>
+    /// <typeparam name="T">Global 配置类型。</typeparam>
+    internal static class GlobalLoadDelegate<T>
+        where T : class, new()
+    {
+        /// <summary>
+        /// 强类型加载委托。内部通过 <c>WrapAsync</c> 借助编译器的 <c>await</c> 装箱，零额外反射。
+        /// </summary>
+        internal static readonly Func<IConfigLoader, string, UniTask<object>> Delegate =
+            (loader, assetPath) => WrapAsync(loader, assetPath);
+
+        /// <summary>
+        /// 调用 <c>LoadGlobalAsync</c> 并利用编译器自动装箱配置实例 → <c>object</c>。
+        /// </summary>
+        private static async UniTask<object> WrapAsync(IConfigLoader loader, string assetPath)
+        {
+            return await loader.LoadGlobalAsync<T>(assetPath);
         }
     }
 }
