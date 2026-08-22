@@ -25,6 +25,12 @@ namespace XFramework.XAsset
         /// <summary>进行中的初始化任务（直接使用本类时的并发保护，模式同 AssetManager 门面）。</summary>
         private UniTask _initializeTask;
 
+        /// <summary>等待初始化的加入者信号（UniTask promise 只支持单个 continuation，加入者各自持有信号等待创建者广播）。</summary>
+        private readonly List<UniTaskCompletionSource> _initWaiters = new();
+
+        /// <summary>初始化失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
+        private Exception _initException;
+
         /// <summary>location → 对象池（已 deactive 的闲置实例）。</summary>
         private readonly Dictionary<string, Stack<GameObject>> _pools = new Dictionary<string, Stack<GameObject>>();
 
@@ -52,10 +58,11 @@ namespace XFramework.XAsset
             if (_initialized) return;
             if (_disposed) throw new ObjectDisposedException(nameof(AssetManagerImpl));
 
-            // 并发调用共享同一进行中的初始化任务（模式同 AssetManager 门面）
+            // 并发调用共享同一进行中的初始化任务；加入者不直接 await 共享任务
+            //（UniTask promise 只支持单个 continuation），注册自己的信号等待创建者广播
             if (_initializeTask.Status == UniTaskStatus.Pending)
             {
-                await _initializeTask;
+                await AwaitInitBroadcast();
                 return;
             }
 
@@ -65,13 +72,49 @@ namespace XFramework.XAsset
             {
                 await task;
             }
+            catch (Exception ex)
+            {
+                _initException = ex;
+                throw;
+            }
             finally
             {
+                BroadcastInitResult();
                 if (_initializeTask.Equals(task))
                 {
                     _initializeTask = default;
                 }
             }
+        }
+
+        /// <summary>
+        /// 加入者等待初始化完成广播。注册自己的完成信号而非直接 await 共享任务
+        /// （UniTask promise 只支持单个 continuation）。
+        /// </summary>
+        private async UniTask AwaitInitBroadcast()
+        {
+            var tcs = new UniTaskCompletionSource();
+            _initWaiters.Add(tcs);
+            await tcs.Task;
+        }
+
+        /// <summary>
+        /// 创建者完成时广播结果给所有加入者并清空信号（成功 TrySetResult，失败/取消 TrySetException）。
+        /// </summary>
+        private void BroadcastInitResult()
+        {
+            if (_initException != null)
+            {
+                for (int i = 0; i < _initWaiters.Count; i++)
+                    _initWaiters[i].TrySetException(_initException);
+            }
+            else
+            {
+                for (int i = 0; i < _initWaiters.Count; i++)
+                    _initWaiters[i].TrySetResult();
+            }
+            _initWaiters.Clear();
+            _initException = null;
         }
 
         /// <summary>

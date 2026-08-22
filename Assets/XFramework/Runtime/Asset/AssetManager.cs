@@ -24,6 +24,12 @@ namespace XFramework.XAsset
         /// <summary>进行中的初始化任务。并发调用共享同一任务，避免重复创建实例；完成后清空，允许失败重试与 Destroy 后重建。</summary>
         private static UniTask _initializeTask;
 
+        /// <summary>等待初始化的加入者信号（UniTask promise 只支持单个 continuation，加入者各自持有信号等待创建者广播）。</summary>
+        private static readonly List<UniTaskCompletionSource> _initWaiters = new();
+
+        /// <summary>初始化失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
+        private static Exception _initException;
+
         /// <summary>初始化代际号。Destroy()/SetInstance() 时递增，使在途初始化结果作废，防止销毁后实例"复活"。</summary>
         private static int _initGeneration;
 
@@ -49,10 +55,11 @@ namespace XFramework.XAsset
                 return;
             }
 
-            // 并发调用共享同一进行中的任务（UniTask 为值类型，await 时按值捕获，不受后续清空影响）
+            // 并发调用共享同一进行中的任务；加入者不直接 await 共享任务
+            //（UniTask promise 只支持单个 continuation），注册自己的信号等待创建者广播
             if (_initializeTask.Status == UniTaskStatus.Pending)
             {
-                await _initializeTask;
+                await AwaitInitBroadcast();
                 return;
             }
 
@@ -62,15 +69,51 @@ namespace XFramework.XAsset
             {
                 await task;
             }
+            catch (Exception ex)
+            {
+                _initException = ex;
+                throw;
+            }
             finally
             {
-                // 成功/失败/取消后均清空缓存，允许再次初始化（失败重试、Destroy 后重建）；
+                // 成功/失败/取消后均广播加入者并清空缓存，允许再次初始化（失败重试、Destroy 后重建）；
                 // 仅当缓存仍指向本次任务时清除，避免误清并发中新启动的任务
+                BroadcastInitResult();
                 if (_initializeTask.Equals(task))
                 {
                     _initializeTask = default;
                 }
             }
+        }
+
+        /// <summary>
+        /// 加入者等待初始化完成广播。注册自己的完成信号而非直接 await 共享任务
+        /// （UniTask promise 只支持单个 continuation）。
+        /// </summary>
+        private static async UniTask AwaitInitBroadcast()
+        {
+            var tcs = new UniTaskCompletionSource();
+            _initWaiters.Add(tcs);
+            await tcs.Task;
+        }
+
+        /// <summary>
+        /// 创建者完成时广播结果给所有加入者并清空信号（成功 TrySetResult，失败/取消 TrySetException）。
+        /// </summary>
+        private static void BroadcastInitResult()
+        {
+            if (_initException != null)
+            {
+                for (int i = 0; i < _initWaiters.Count; i++)
+                    _initWaiters[i].TrySetException(_initException);
+            }
+            else
+            {
+                for (int i = 0; i < _initWaiters.Count; i++)
+                    _initWaiters[i].TrySetResult();
+            }
+            _initWaiters.Clear();
+            _initException = null;
         }
 
         /// <summary>
