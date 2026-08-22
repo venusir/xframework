@@ -127,6 +127,29 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void RequestPackageVersionAsync_ForwardsToInstance()
+        {
+            var version = AssetManager.RequestPackageVersionAsync().GetAwaiter().GetResult();
+            Assert.AreEqual("1.0.0", version);
+            Assert.AreEqual(1, _fake.RequestPackageVersionCallCount);
+        }
+
+        [Test]
+        public void UpdatePackageManifestAsync_ForwardsToInstance()
+        {
+            AssetManager.UpdatePackageManifestAsync("1.0.1").GetAwaiter().GetResult();
+            Assert.AreEqual(1, _fake.UpdatePackageManifestCallCount);
+        }
+
+        [Test]
+        public void DownloadAssetsAsync_ForwardsToInstance()
+        {
+            var success = AssetManager.DownloadAssetsAsync(new[] { "hot" }).GetAwaiter().GetResult();
+            Assert.IsTrue(success);
+            Assert.AreEqual(1, _fake.DownloadAssetsCallCount);
+        }
+
+        [Test]
         public void UnloadUnusedAssetsAsync_ForwardsToInstance()
         {
             AssetManager.UnloadUnusedAssetsAsync().GetAwaiter().GetResult();
@@ -179,6 +202,12 @@ namespace Venusy609.Xframework.Editor.Tests
             public string LastTryUnloadLocation;
             public string LastCheckLocation;
             public string LastNeedDownloadLocation;
+            public int RequestPackageVersionCallCount;
+            public string LastRequestedPackageName;
+            public int UpdatePackageManifestCallCount;
+            public int PreDownloadContentCallCount;
+            public int CreateDownloaderCallCount;
+            public int DownloadAssetsCallCount;
             public bool Disposed;
 
             public UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
@@ -212,6 +241,39 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 LastNeedDownloadLocation = location;
                 return false;
+            }
+
+            public UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default)
+            {
+                RequestPackageVersionCallCount++;
+                LastRequestedPackageName = packageName;
+                return UniTask.FromResult("1.0.0");
+            }
+
+            public UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+            {
+                UpdatePackageManifestCallCount++;
+                return UniTask.CompletedTask;
+            }
+
+            public UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+            {
+                PreDownloadContentCallCount++;
+                return UniTask.CompletedTask;
+            }
+
+            public string GetPackageVersion(string packageName = null) => "1.0.0";
+
+            public AssetDownloaderHandle CreateDownloader(string[] tags = null, int downloadingMaxNumber = 8, int failedRetryCount = 3, string packageName = null)
+            {
+                CreateDownloaderCallCount++;
+                return null;
+            }
+
+            public UniTask<bool> DownloadAssetsAsync(string[] tags = null, Action<float> progress = null, string packageName = null, CancellationToken cancellationToken = default)
+            {
+                DownloadAssetsCallCount++;
+                return UniTask.FromResult(true);
             }
 
             public UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object

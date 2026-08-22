@@ -88,6 +88,46 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Hot Update
+
+        public async UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return await _managerImpl.RequestPackageVersionAsync(packageName, cancellationToken);
+        }
+
+        public async UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            await _managerImpl.UpdatePackageManifestAsync(packageVersion, packageName, cancellationToken);
+        }
+
+        public async UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            await _managerImpl.PreDownloadContentAsync(packageVersion, packageName, cancellationToken);
+        }
+
+        public string GetPackageVersion(string packageName = null)
+        {
+            EnsureInitialized();
+            return _managerImpl.GetPackageVersion(packageName);
+        }
+
+        public AssetDownloaderHandle CreateDownloader(string[] tags = null, int downloadingMaxNumber = 8, int failedRetryCount = 3, string packageName = null)
+        {
+            EnsureInitialized();
+            return _managerImpl.CreateDownloader(tags, downloadingMaxNumber, failedRetryCount, packageName);
+        }
+
+        public async UniTask<bool> DownloadAssetsAsync(string[] tags = null, Action<float> progress = null, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return await _managerImpl.DownloadAssetsAsync(tags, progress, packageName, cancellationToken);
+        }
+
+        #endregion
+
         #region Load — UniTask
 
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object

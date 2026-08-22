@@ -174,6 +174,100 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 请求指定包的最新资源版本号（Host 模式）。失败抛 InvalidOperationException。
+        /// </summary>
+        public async UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            var package = GetPackage(packageName);
+            if (package == null) return null;
+
+            var operation = package.RequestPackageVersionAsync();
+            await operation.WithCancellation(cancellationToken);
+
+            if (operation.Status != EOperationStatus.Succeed)
+                throw new InvalidOperationException($"[AssetManager] Version request failed: {operation.Error}");
+
+            return operation.PackageVersion;
+        }
+
+        /// <summary>
+        /// 将指定包的活动清单更新到指定版本（激活新版本资源）。失败抛 InvalidOperationException。
+        /// </summary>
+        public async UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(packageVersion))
+                throw new ArgumentException("[AssetManager] packageVersion is null or empty.", nameof(packageVersion));
+
+            var package = GetPackage(packageName);
+            if (package == null) return;
+
+            var operation = package.UpdatePackageManifestAsync(packageVersion);
+            await operation.WithCancellation(cancellationToken);
+
+            if (operation.Status != EOperationStatus.Succeed)
+                throw new InvalidOperationException($"[AssetManager] Manifest update failed: {operation.Error}");
+        }
+
+        /// <summary>
+        /// 预检指定版本的清单（不激活）。失败抛 InvalidOperationException。
+        /// </summary>
+        public async UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrEmpty(packageVersion))
+                throw new ArgumentException("[AssetManager] packageVersion is null or empty.", nameof(packageVersion));
+
+            var package = GetPackage(packageName);
+            if (package == null) return;
+
+            var operation = package.PreDownloadContentAsync(packageVersion);
+            await operation.WithCancellation(cancellationToken);
+
+            if (operation.Status != EOperationStatus.Succeed)
+                throw new InvalidOperationException($"[AssetManager] Pre-download check failed: {operation.Error}");
+        }
+
+        /// <summary>
+        /// 获取指定包当前激活的资源版本号。包不存在时返回 null。
+        /// </summary>
+        public string GetPackageVersion(string packageName = null)
+        {
+            var package = GetPackage(packageName);
+            return package?.GetPackageVersion();
+        }
+
+        /// <summary>
+        /// 创建资源下载器（基于当前激活清单）。tags 为 null/空时下载全部待更新资源。
+        /// </summary>
+        public AssetDownloaderHandle CreateDownloader(string[] tags = null, int downloadingMaxNumber = 8, int failedRetryCount = 3, string packageName = null)
+        {
+            var package = GetPackage(packageName);
+            if (package == null) return null;
+
+            var operation = tags == null || tags.Length == 0
+                ? package.CreateResourceDownloader(downloadingMaxNumber, failedRetryCount)
+                : package.CreateResourceDownloader(tags, downloadingMaxNumber, failedRetryCount);
+            return new AssetDownloaderHandle(operation);
+        }
+
+        /// <summary>
+        /// 一键下载：创建下载器、自动启动、聚合进度，返回是否全部成功。
+        /// </summary>
+        public async UniTask<bool> DownloadAssetsAsync(string[] tags = null, Action<float> progress = null, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            var handle = CreateDownloader(tags, packageName: packageName);
+            if (handle == null) return false;
+
+            handle.ProgressChanged += progress;
+            handle.Begin();
+
+            bool success = await handle.WaitAsync(cancellationToken);
+            // 下载器结束时可能不触发最终进度回调（如无待下载内容），补发一次最终值
+            progress?.Invoke(success ? 1f : handle.Progress);
+            handle.Dispose();
+            return success;
+        }
+
+        /// <summary>
         /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统。
         /// </summary>
         private static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)

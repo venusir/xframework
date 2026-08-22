@@ -109,6 +109,52 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Public API — Hot Update
+
+        /// <inheritdoc cref="IAssetManager.RequestPackageVersionAsync(string, CancellationToken)"/>
+        public static UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.RequestPackageVersionAsync(packageName, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.UpdatePackageManifestAsync(string, string, CancellationToken)"/>
+        public static UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.UpdatePackageManifestAsync(packageVersion, packageName, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.PreDownloadContentAsync(string, string, CancellationToken)"/>
+        public static UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.PreDownloadContentAsync(packageVersion, packageName, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.GetPackageVersion(string)"/>
+        public static string GetPackageVersion(string packageName = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetPackageVersion(packageName);
+        }
+
+        /// <inheritdoc cref="IAssetManager.CreateDownloader(string[], int, int, string)"/>
+        public static AssetDownloaderHandle CreateDownloader(string[] tags = null, int downloadingMaxNumber = 8, int failedRetryCount = 3, string packageName = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CreateDownloader(tags, downloadingMaxNumber, failedRetryCount, packageName);
+        }
+
+        /// <inheritdoc cref="IAssetManager.DownloadAssetsAsync(string[], Action{float}, string, CancellationToken)"/>
+        public static UniTask<bool> DownloadAssetsAsync(string[] tags = null, Action<float> progress = null, string packageName = null, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.DownloadAssetsAsync(tags, progress, packageName, cancellationToken);
+        }
+
+        #endregion
+
         #region Public API — Load (UniTask)
 
         /// <inheritdoc cref="IAssetManager.LoadAsync{T}(string, CancellationToken)"/>

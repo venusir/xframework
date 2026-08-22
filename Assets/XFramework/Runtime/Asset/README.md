@@ -17,6 +17,7 @@ Runtime/Asset/
 ├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式）
 ├── IAssetRemoteServices.cs        # 远端资源地址服务接口
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
+├── AssetDownloaderHandle.cs       # 下载器句柄（事件/控制/等待）
 ├── InstanceTracker.cs             # 实例引用追踪组件（内部）
 └── AssetExtensions.cs             # 节点扩展方法
 ```
@@ -116,7 +117,49 @@ var locations = new[]
 await AssetManager.PreloadAllAsync(locations);
 ```
 
-### 7. 卸载与查询
+### 7. 热更链路（Host 模式）
+
+Host 模式下资源分内置与远端两份，加载远端资源前需先下载。典型链路：
+
+```csharp
+// 1. 初始化时声明 Host 模式与远端服务
+var options = new AssetInitOptions
+{
+    PlayMode = AssetPlayMode.Host,
+    RemoteServices = new MyRemoteServices(), // 实现 IAssetRemoteServices
+};
+await AssetManager.InitializeAsync(progress, options);
+
+// 2. 请求最新版本号
+string version = await AssetManager.RequestPackageVersionAsync();
+
+// 3. 预检新版本清单（可选，不激活）
+await AssetManager.PreDownloadContentAsync(version);
+
+// 4a. 一键下载全部更新（带进度）
+bool success = await AssetManager.DownloadAssetsAsync(progress: p => Debug.Log($"{p * 100}%"));
+
+// 4b. 或使用下载器句柄精细控制（暂停/恢复/取消/事件）
+using (var downloader = AssetManager.CreateDownloader(new[] { "hot" }))
+{
+    downloader.ProgressChanged += p => Debug.Log($"{p * 100}%");
+    downloader.Completed += ok => Debug.Log($"下载完成: {ok}");
+    downloader.DownloadError += (file, err) => Debug.LogError($"下载失败 {file}: {err}");
+
+    downloader.Begin();
+    downloader.Pause();   // 暂停
+    downloader.Resume();  // 恢复
+    bool ok = await downloader.WaitAsync();
+}
+
+// 5. 激活新版本清单（之后 LoadAsync 加载新版本资源）
+await AssetManager.UpdatePackageManifestAsync(version);
+```
+
+> 版本号可随时通过 `AssetManager.GetPackageVersion()` 读取。
+> 下载器句柄的 `Dispose()` 仅解除事件订阅，不中止下载；需要中止时调用 `Cancel()`。
+
+### 8. 卸载与查询
 
 ```csharp
 // 卸载包中所有未使用资源（内存告警 / 关卡切换后回收）
@@ -135,7 +178,7 @@ bool needDownload = AssetManager.IsNeedDownloadFromRemote("characters/player");
 > **多包场景**：以上方法均支持 `packageName` 参数指定资源包，为 null 时作用于默认包。
 > 卸载只会回收引用计数为 0 的资源——`AssetHandle<T>` 未 Dispose 的资源保持存活。
 
-### 8. 释放与回收
+### 9. 释放与回收
 
 ```csharp
 // 回收实例（自动走对象池，满则销毁；回池实例保留资源引用，真正销毁时才释放）
@@ -145,7 +188,7 @@ AssetManager.DestroyInstance(component);
 
 > **注意**：用户直接调用 `Object.Destroy(instance)` 的实例**不会回池**（OnDestroy 阶段操作对象池在 Unity 语义下不可靠），但会经 `InstanceTracker.OnDestroy` 自动释放资源引用，不会泄漏。
 
-### 9. 对象池配置
+### 10. 对象池配置
 
 ```csharp
 // 设置指定预制体的对象池最大容量（默认 5）
@@ -198,7 +241,7 @@ public class MyNode : EntityNode
 
 ### 取消支持
 
-所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`。
+所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`、`RequestPackageVersionAsync`、`UpdatePackageManifestAsync`、`PreDownloadContentAsync`、`DownloadAssetsAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`（`DownloadAssetsAsync` 取消时自动中止下载）。
 
 ## 设计原则
 

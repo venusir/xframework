@@ -59,6 +59,46 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Hot Update
+
+        /// <summary>
+        /// 请求指定包的最新资源版本号（Host 模式，先于下载/更新调用）。
+        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// </summary>
+        UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 将指定包的活动清单更新到指定版本（激活该版本资源，之后 <see cref="LoadAsync{T}(string, CancellationToken)"/> 加载该版本）。
+        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// </summary>
+        UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 预检指定版本的清单（检查版本是否可用、统计待下载内容，不激活）。
+        /// <para>成功后调用 <see cref="CreateDownloader"/> 会基于该版本创建下载器。</para>
+        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// </summary>
+        UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 获取指定包当前激活的资源版本号。包不存在时返回 null。
+        /// </summary>
+        string GetPackageVersion(string packageName = null);
+
+        /// <summary>
+        /// 创建资源下载器（基于当前激活清单）。返回句柄后调用 <see cref="AssetDownloaderHandle.Begin"/> 启动下载。
+        /// <para>tags 为 null 或空数组时下载全部待更新资源；否则只下载命中标签的资源。</para>
+        /// </summary>
+        AssetDownloaderHandle CreateDownloader(string[] tags = null, int downloadingMaxNumber = 8, int failedRetryCount = 3, string packageName = null);
+
+        /// <summary>
+        /// 一键下载：创建下载器并自动启动，聚合进度回调，返回是否全部成功。
+        /// <para>失败返回 false（可重试），取消抛 <see cref="OperationCanceledException"/>。</para>
+        /// </summary>
+        UniTask<bool> DownloadAssetsAsync(string[] tags = null, Action<float> progress = null, string packageName = null, CancellationToken cancellationToken = default);
+
+        #endregion
+
         #region Load — UniTask
 
         /// <summary>
