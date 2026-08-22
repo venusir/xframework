@@ -11,7 +11,7 @@ namespace XFramework.XAsset
 
     /// <summary>
     /// <see cref="IBaseNode"/> 的资源加载扩展方法。允许节点树中的任意节点直接使用全局 <see cref="AssetManager"/> 加载资源。
-    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(XFramework.XLoader.LoadProgress, System.Threading.CancellationToken)"/> 初始化。</para>
+    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(XFramework.XLoader.LoadProgress, AssetInitOptions, System.Threading.CancellationToken)"/> 初始化。</para>
     /// <para>使用示例：</para>
     /// <code>
     /// // 在任意节点中直接调用
@@ -53,9 +53,9 @@ namespace XFramework.XAsset
         public static UniTask<Scene> LoadSceneAssetAsync(this IBaseNode self, string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
             => AssetManager.LoadSceneAsync(location, additive, progress, cancellationToken);
 
-        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, CancellationToken)"/>
+        /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, Action{float}, CancellationToken)"/>
         public static UniTask PreloadAssetsAsync(this IBaseNode self, IEnumerable<string> locations, CancellationToken cancellationToken = default)
-            => AssetManager.PreloadAllAsync(locations, cancellationToken);
+            => AssetManager.PreloadAllAsync(locations, cancellationToken: cancellationToken);
 
         #endregion
 

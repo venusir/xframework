@@ -127,21 +127,23 @@ GameLauncher.Start()
 | 获取子节点（不创建）   | `entity.GetNode<T>(false)`       |
 | 添加子节点             | `entity.AddNode<T>()`            |
 | 异步添加               | `await entity.AddNodeAsync<T>()` |
-| 移除子节点             | `entity.RemoveNode<T>()`         |
-| 沿父链查找服务         | `this.Get<IAssetManager>()`      |
-| 销毁（自动回池）       | `node.Destroy()`                 |
+| 移除子节点             | `entity.RemoveNode<T>()`                  |
+| 节点内加载资源         | `await this.LoadAssetAsync<T>(location)`  |
+| 销毁（自动回池）       | `node.Destroy()`                          |
 | 预热池                 | `NodeFactory.Prewarm<T>(10)`     |
 
 ### 资源操作
 
-| 操作       | 代码                                                    |
-| ---------- | ------------------------------------------------------- |
-| 加载资源   | `await AssetManager.LoadAsync<T>(location)`             |
-| 实例化     | `await AssetManager.InstantiateAsync(location, parent)` |
-| 回收实例   | `AssetManager.DestroyInstance(go)`                      |
-| 预加载     | `await AssetManager.PreloadAllAsync(locations)`         |
-| 加载场景   | `await AssetManager.LoadSceneAsync(location)`           |
-| 设置池大小 | `AssetManager.SetPoolMaxSize(location, 10)`             |
+| 操作         | 代码                                                          |
+| ------------ | ------------------------------------------------------------- |
+| 加载资源     | `await AssetManager.LoadAsync<T>(location)`                   |
+| 节点内加载   | `await this.LoadAssetAsync<T>(location)`                      |
+| 实例化       | `await AssetManager.InstantiateAsync(location, parent)`       |
+| 节点内实例化 | `await this.InstantiateAssetAsync(location, parent)`          |
+| 回收实例     | `AssetManager.DestroyInstance(go)`                            |
+| 预加载       | `await AssetManager.PreloadAllAsync(locations, p => ...)`     |
+| 加载场景     | `await AssetManager.LoadSceneAsync(location)`                 |
+| 设置池大小   | `AssetManager.SetPoolMaxSize(location, 10)`                   |
 
 ### 消息操作
 
