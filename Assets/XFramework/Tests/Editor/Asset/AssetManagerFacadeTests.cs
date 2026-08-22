@@ -78,14 +78,17 @@ namespace Venusy609.Xframework.Editor.Tests
             var fake = new FakeAssetManager { InitTask = tcs.Task };
             AssetManager.ImplFactory = () => { factoryCalls++; return fake; };
 
+            // 三个并发调用：第一个创建任务（创建者），后两个注册信号等待广播（加入者）
             var t1 = AssetManager.InitializeAsync(new LoadProgress());
             var t2 = AssetManager.InitializeAsync(new LoadProgress());
+            var t3 = AssetManager.InitializeAsync(new LoadProgress());
 
             Assert.AreEqual(1, factoryCalls, "并发调用应共享同一初始化任务，只创建一次实例");
 
             tcs.TrySetResult();
             t1.GetAwaiter().GetResult();
             t2.GetAwaiter().GetResult();
+            t3.GetAwaiter().GetResult();
             Assert.IsTrue(AssetManager.IsInitialized);
             Assert.AreEqual(1, factoryCalls);
         }
@@ -100,8 +103,11 @@ namespace Venusy609.Xframework.Editor.Tests
             AssetManager.ImplFactory = () => { factoryCalls++; return first; };
 
             var t1 = AssetManager.InitializeAsync(new LoadProgress());
+            var tJoin = AssetManager.InitializeAsync(new LoadProgress()); // join 者，与创建者共享同一失败
             tcs.TrySetException(new InvalidOperationException("模拟初始化失败"));
-            Assert.Throws<InvalidOperationException>(() => t1.GetAwaiter().GetResult());
+            var e1 = Assert.Throws<InvalidOperationException>(() => t1.GetAwaiter().GetResult());
+            var e2 = Assert.Throws<InvalidOperationException>(() => tJoin.GetAwaiter().GetResult());
+            Assert.AreSame(e1, e2, "创建者与加入者应收到同一异常实例");
             Assert.IsFalse(AssetManager.IsInitialized);
 
             // 失败后缓存已清空可重试；第二次返回全新实例，不复用已失败的任务
