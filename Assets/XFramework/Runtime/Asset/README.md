@@ -18,6 +18,8 @@ Runtime/Asset/
 ├── IAssetRemoteServices.cs        # 远端资源地址服务接口
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
 ├── AssetDownloaderHandle.cs       # 下载器句柄（事件/控制/等待）
+├── SubAssetsHandle.cs             # 子资源句柄（图集/多 Sprite）
+├── RawFileHandle.cs               # 原始文件句柄（txt/json/二进制）
 ├── InstanceTracker.cs             # 实例引用追踪组件（内部）
 └── AssetExtensions.cs             # 节点扩展方法
 ```
@@ -201,6 +203,44 @@ var (pooled, active, max) = AssetManager.GetPoolStatus("characters/bullet");
 Debug.Log($"池中: {pooled}, 上限: {max}");
 ```
 
+### 11. 同步加载
+
+`LoadSync<T>` / `InstantiateSync` 阻塞当前线程直至加载完成，仅建议在启动画面、静态初始化等不阻塞 UI 的场景使用：
+
+```csharp
+// 同步加载（返回 AssetHandle<T>，同样用 using 管理生命周期）
+using (var handle = AssetManager.LoadSync<TextAsset>("configs/game_settings"))
+{
+    var text = handle.Asset.text;
+}
+
+// 同步实例化（自动走对象池，与异步路径共用）
+var go = AssetManager.InstantiateSync("characters/player", parent: transform);
+```
+
+> **风险**：同步加载会卡住调用线程；若资源需从远端下载，可能长时间阻塞。运行时高频路径请使用异步 API。
+
+### 12. 子资源与 RawFile
+
+```csharp
+// 子资源：图集、多 Sprite 贴图等（加载整个主资源及其子资源）
+using (var handle = await AssetManager.LoadSubAssetsAsync("ui/icon_atlas"))
+{
+    var icons = handle.GetSubAssets<Sprite>();
+    var red = handle.GetSubAsset<Sprite>("icon_red");
+}
+
+// RawFile：txt/json/二进制等原始文件（不经过 Unity 资源管线）
+using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
+{
+    string text = handle.GetRawFileText();
+    byte[] data = handle.GetRawFileData();
+    string path = handle.GetRawFilePath();
+}
+```
+
+> 子资源与 RawFile 均提供 `LoadXxxSync` 同步版本（同上节风险说明）。
+
 ## 节点扩展方法
 
 通过 `AssetExtensions`，节点树中的任意节点（实现 `IBaseNode`）可直接调用便捷方法：
@@ -243,7 +283,7 @@ public class MyNode : EntityNode
 
 ### 取消支持
 
-所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`、`RequestPackageVersionAsync`、`UpdatePackageManifestAsync`、`PreDownloadContentAsync`、`DownloadAssetsAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`（`DownloadAssetsAsync` 取消时自动中止下载）。
+所有公开异步 API（`InitializeAsync`、`LoadAsync`、`InstantiateAsync`、`LoadSceneAsync`、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`、`RequestPackageVersionAsync`、`UpdatePackageManifestAsync`、`PreDownloadContentAsync`、`DownloadAssetsAsync`、`LoadSubAssetsAsync`、`LoadRawFileAsync`）均支持 `CancellationToken` 参数，取消时抛出 `OperationCanceledException`（`DownloadAssetsAsync` 取消时自动中止下载）。
 
 ## 设计原则
 

@@ -268,6 +268,101 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 同步加载资源（阻塞至完成）。失败时 LogError 并返回 default 句柄。
+        /// </summary>
+        public AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var operation = package.LoadAssetSync<T>(location);
+            if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
+                return default;
+            }
+            return new AssetHandle<T>(operation);
+        }
+
+        /// <summary>
+        /// 异步加载子资源集合（图集、多 Sprite 贴图等）。
+        /// </summary>
+        public async UniTask<SubAssetsHandle> LoadSubAssetsAsync(string location, CancellationToken cancellationToken = default)
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var operation = package.LoadSubAssetsAsync(location);
+            while (!operation.IsDone)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            }
+
+            if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                return default;
+            }
+            return new SubAssetsHandle(operation);
+        }
+
+        /// <summary>
+        /// 同步加载子资源集合（阻塞至完成）。失败时 LogError 并返回 default 句柄。
+        /// </summary>
+        public SubAssetsHandle LoadSubAssetsSync(string location)
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var operation = package.LoadSubAssetsSync(location);
+            if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                return default;
+            }
+            return new SubAssetsHandle(operation);
+        }
+
+        /// <summary>
+        /// 异步加载原始文件（txt/json/二进制，不经过 Unity 资源管线）。
+        /// </summary>
+        public async UniTask<RawFileHandle> LoadRawFileAsync(string location, CancellationToken cancellationToken = default)
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var operation = package.LoadRawFileAsync(location);
+            while (!operation.IsDone)
+            {
+                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            }
+
+            if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                return default;
+            }
+            return new RawFileHandle(operation);
+        }
+
+        /// <summary>
+        /// 同步加载原始文件（阻塞至完成）。失败时 LogError 并返回 default 句柄。
+        /// </summary>
+        public RawFileHandle LoadRawFileSync(string location)
+        {
+            var package = GetOrCreatePackage();
+            if (package == null) return default;
+
+            var operation = package.LoadRawFileSync(location);
+            if (operation.Status != EOperationStatus.Succeed)
+            {
+                Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                return default;
+            }
+            return new RawFileHandle(operation);
+        }
+
+        /// <summary>
         /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统。
         /// </summary>
         private static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)

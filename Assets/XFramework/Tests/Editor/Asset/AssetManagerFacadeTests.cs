@@ -150,6 +150,37 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void LoadSync_ForwardsToInstance()
+        {
+            var handle = AssetManager.LoadSync<GameObject>("characters/player");
+            Assert.IsFalse(handle.IsValid, "假实现返回 default 句柄");
+            Assert.AreEqual(1, _fake.LoadSyncCallCount);
+        }
+
+        [Test]
+        public void InstantiateSync_ForwardsToInstance()
+        {
+            AssetManager.InstantiateSync("characters/player");
+            Assert.AreEqual(1, _fake.InstantiateSyncCallCount);
+        }
+
+        [Test]
+        public void LoadSubAssetsAsync_ForwardsToInstance()
+        {
+            var handle = AssetManager.LoadSubAssetsAsync("ui/icon_atlas").GetAwaiter().GetResult();
+            Assert.AreEqual(0, handle.Count, "假实现返回 default 句柄");
+            Assert.AreEqual(1, _fake.LoadSubAssetsCallCount);
+        }
+
+        [Test]
+        public void LoadRawFileAsync_ForwardsToInstance()
+        {
+            var handle = AssetManager.LoadRawFileAsync("configs/server_list").GetAwaiter().GetResult();
+            Assert.AreEqual(string.Empty, handle.LastError, "假实现返回 default 句柄");
+            Assert.AreEqual(1, _fake.LoadRawFileCallCount);
+        }
+
+        [Test]
         public void UnloadUnusedAssetsAsync_ForwardsToInstance()
         {
             AssetManager.UnloadUnusedAssetsAsync().GetAwaiter().GetResult();
@@ -197,6 +228,10 @@ namespace Venusy609.Xframework.Editor.Tests
             public int SceneLoadCallCount;
             public int PreloadCallCount;
             public int InitializePackageCallCount;
+            public int LoadSyncCallCount;
+            public int InstantiateSyncCallCount;
+            public int LoadSubAssetsCallCount;
+            public int LoadRawFileCallCount;
             public int UnloadUnusedAssetsCallCount;
             public int TryUnloadUnusedAssetCallCount;
             public string LastTryUnloadLocation;
@@ -274,6 +309,48 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 DownloadAssetsCallCount++;
                 return UniTask.FromResult(true);
+            }
+
+            public AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object
+            {
+                LoadSyncCallCount++;
+                return default;
+            }
+
+            public GameObject InstantiateSync(string location, Transform parent = null)
+            {
+                InstantiateSyncCallCount++;
+                return null;
+            }
+
+            public GameObject InstantiateSync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+            {
+                InstantiateSyncCallCount++;
+                return null;
+            }
+
+            public UniTask<SubAssetsHandle> LoadSubAssetsAsync(string location, CancellationToken cancellationToken = default)
+            {
+                LoadSubAssetsCallCount++;
+                return UniTask.FromResult(default(SubAssetsHandle));
+            }
+
+            public SubAssetsHandle LoadSubAssetsSync(string location)
+            {
+                LoadSubAssetsCallCount++;
+                return default;
+            }
+
+            public UniTask<RawFileHandle> LoadRawFileAsync(string location, CancellationToken cancellationToken = default)
+            {
+                LoadRawFileCallCount++;
+                return UniTask.FromResult(default(RawFileHandle));
+            }
+
+            public RawFileHandle LoadRawFileSync(string location)
+            {
+                LoadRawFileCallCount++;
+                return default;
             }
 
             public UniTask<AssetHandle<T>> LoadAsync<T>(string location, CancellationToken cancellationToken = default) where T : UnityEngine.Object

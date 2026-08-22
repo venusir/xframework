@@ -226,6 +226,54 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Load — Sync
+
+        public AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object
+        {
+            EnsureInitialized();
+            return _managerImpl.LoadSync<T>(location);
+        }
+
+        public GameObject InstantiateSync(string location, Transform parent = null)
+        {
+            return InstantiateSyncInternal(location, null, null, parent);
+        }
+
+        public GameObject InstantiateSync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+        {
+            return InstantiateSyncInternal(location, position, rotation, parent);
+        }
+
+        #endregion
+
+        #region Load — Sub Assets / Raw File
+
+        public async UniTask<SubAssetsHandle> LoadSubAssetsAsync(string location, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return await _managerImpl.LoadSubAssetsAsync(location, cancellationToken);
+        }
+
+        public SubAssetsHandle LoadSubAssetsSync(string location)
+        {
+            EnsureInitialized();
+            return _managerImpl.LoadSubAssetsSync(location);
+        }
+
+        public async UniTask<RawFileHandle> LoadRawFileAsync(string location, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return await _managerImpl.LoadRawFileAsync(location, cancellationToken);
+        }
+
+        public RawFileHandle LoadRawFileSync(string location)
+        {
+            EnsureInitialized();
+            return _managerImpl.LoadRawFileSync(location);
+        }
+
+        #endregion
+
         #region Pool Config
 
         public void SetPoolMaxSize(string location, int maxSize)
@@ -306,6 +354,52 @@ namespace XFramework.XAsset
         #endregion
 
         #region Internal Methods
+
+        /// <summary>
+        /// 内部同步实例化逻辑。与异步路径共用对象池：优先取池，池空时同步加载并实例化。
+        /// </summary>
+        private GameObject InstantiateSyncInternal(string location, Vector3? position, Quaternion? rotation, Transform parent)
+        {
+            EnsureInitialized();
+
+            // 1. 优先从对象池获取
+            if (_pools.TryGetValue(location, out var pool) && pool.Count > 0)
+            {
+                var pooled = pool.Pop();
+                if (pooled != null)
+                {
+                    // 重置变换
+                    pooled.transform.SetParent(parent);
+                    pooled.transform.localPosition = position ?? Vector3.zero;
+                    pooled.transform.localRotation = rotation ?? Quaternion.identity;
+                    pooled.transform.localScale = Vector3.one;
+                    pooled.SetActive(true);
+                    return pooled;
+                }
+            }
+
+            // 2. 同步加载资源（阻塞至完成）
+            var handle = _managerImpl.LoadSync<GameObject>(location);
+            var prefab = handle.Asset;
+            if (prefab == null) return null;
+
+            // 3. 实例化
+            GameObject go;
+            if (position.HasValue && rotation.HasValue)
+            {
+                go = UnityEngine.Object.Instantiate(prefab, position.Value, rotation.Value, parent);
+            }
+            else
+            {
+                go = UnityEngine.Object.Instantiate(prefab, parent);
+            }
+
+            // 4. 挂载 InstanceTracker，持有 AssetHandle 以维持资源引用
+            var instanceTracker = go.AddComponent<InstanceTracker>();
+            instanceTracker.SetHandle(handle, location);
+
+            return go;
+        }
 
         /// <summary>
         /// 预加载单个资源。无论成功失败都回调完成计数，保证整体进度可收敛到 1f。

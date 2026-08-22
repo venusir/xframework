@@ -153,6 +153,56 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Load — Sync
+
+        /// <summary>
+        /// 同步加载资源，返回 <see cref="AssetHandle{T}"/> 句柄。会阻塞当前线程直至加载完成。
+        /// <para>仅建议在加载完成前不阻塞 UI 的场景（启动画面、静态初始化）使用；运行时优先 <see cref="LoadAsync{T}(string, CancellationToken)"/>。</para>
+        /// </summary>
+        AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object;
+
+        /// <summary>
+        /// 同步加载并实例化，返回实例 GameObject（自动走对象池，引用生命周期自动管理）。
+        /// </summary>
+        GameObject InstantiateSync(string location, Transform parent = null);
+
+        /// <summary>
+        /// 同步加载并实例化（指定位置与旋转）。
+        /// </summary>
+        GameObject InstantiateSync(string location, Vector3 position, Quaternion rotation, Transform parent = null);
+
+        #endregion
+
+        #region Load — Sub Assets
+
+        /// <summary>
+        /// 异步加载子资源集合（图集、多 Sprite 贴图等），返回 <see cref="SubAssetsHandle"/>。
+        /// <para>调用方应通过 <c>using</c> 块自动管理资源生命周期。</para>
+        /// </summary>
+        UniTask<SubAssetsHandle> LoadSubAssetsAsync(string location, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 同步加载子资源集合，返回 <see cref="SubAssetsHandle"/>。会阻塞当前线程。
+        /// </summary>
+        SubAssetsHandle LoadSubAssetsSync(string location);
+
+        #endregion
+
+        #region Load — Raw File
+
+        /// <summary>
+        /// 异步加载原始文件（txt/json/二进制，不经过 Unity 资源管线），返回 <see cref="RawFileHandle"/>。
+        /// <para>调用方应通过 <c>using</c> 块自动管理资源生命周期。</para>
+        /// </summary>
+        UniTask<RawFileHandle> LoadRawFileAsync(string location, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 同步加载原始文件，返回 <see cref="RawFileHandle"/>。会阻塞当前线程。
+        /// </summary>
+        RawFileHandle LoadRawFileSync(string location);
+
+        #endregion
+
         #region Pool Config
 
         /// <summary>

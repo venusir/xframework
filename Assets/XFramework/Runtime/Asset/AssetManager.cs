@@ -215,6 +215,66 @@ namespace XFramework.XAsset
 
         #endregion
 
+        #region Public API — Load (Sync)
+
+        /// <inheritdoc cref="IAssetManager.LoadSync{T}(string)"/>
+        public static AssetHandle<T> LoadSync<T>(string location) where T : UnityEngine.Object
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadSync<T>(location);
+        }
+
+        /// <inheritdoc cref="IAssetManager.InstantiateSync(string, Transform)"/>
+        public static GameObject InstantiateSync(string location, Transform parent = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.InstantiateSync(location, parent);
+        }
+
+        /// <inheritdoc cref="IAssetManager.InstantiateSync(string, Vector3, Quaternion, Transform)"/>
+        public static GameObject InstantiateSync(string location, Vector3 position, Quaternion rotation, Transform parent = null)
+        {
+            EnsureGlobalInitialized();
+            return _instance.InstantiateSync(location, position, rotation, parent);
+        }
+
+        #endregion
+
+        #region Public API — Sub Assets
+
+        /// <inheritdoc cref="IAssetManager.LoadSubAssetsAsync(string, CancellationToken)"/>
+        public static UniTask<SubAssetsHandle> LoadSubAssetsAsync(string location, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadSubAssetsAsync(location, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.LoadSubAssetsSync(string)"/>
+        public static SubAssetsHandle LoadSubAssetsSync(string location)
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadSubAssetsSync(location);
+        }
+
+        #endregion
+
+        #region Public API — Raw File
+
+        /// <inheritdoc cref="IAssetManager.LoadRawFileAsync(string, CancellationToken)"/>
+        public static UniTask<RawFileHandle> LoadRawFileAsync(string location, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadRawFileAsync(location, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IAssetManager.LoadRawFileSync(string)"/>
+        public static RawFileHandle LoadRawFileSync(string location)
+        {
+            EnsureGlobalInitialized();
+            return _instance.LoadRawFileSync(location);
+        }
+
+        #endregion
 
         #region Public API — Pool Config
 
