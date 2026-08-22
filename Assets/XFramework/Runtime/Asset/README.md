@@ -14,7 +14,7 @@ Runtime/Asset/
 ├── AssetManager.cs                # 静态外观（全局入口）
 ├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
 ├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理）
-├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式）
+├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收）
 ├── IAssetRemoteServices.cs        # 远端资源地址服务接口
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
 ├── AssetDownloaderHandle.cs       # 下载器句柄（事件/控制/等待）
@@ -55,6 +55,8 @@ await AssetManager.InitializeAsync(progress);
 // 方式三：注入自定义实现
 AssetManager.SetInstance(myAssetManager);
 ```
+
+> 初始化配置：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，自动释放对象池闲置实例并卸载未使用资源；需自管回收策略的项目可置为 false。
 
 ### 2. 加载资源
 
@@ -262,11 +264,12 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 
 | 方法 | 说明 |
 | --- | --- |
-| `InitializeAsync(LoadProgress progress, AssetInitOptions options = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略 |
+| `InitializeAsync(LoadProgress progress, AssetInitOptions options = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略；并发调用共享同一初始化任务 |
 | `InitializePackageAsync(AssetInitOptions options, LoadProgress progress, ct)` | 追加初始化额外资源包（多包场景），需先完成默认包初始化 |
 | `SetInstance(IAssetManager manager)` | 注入自定义实现（替换底层 / 单元测试） |
 | `Destroy()` | 销毁全局管理器，释放全部资源 |
 | `IsInitialized` | 是否已初始化 |
+| `AssetInitOptions.AutoReclaimOnLowMemory = true` | 初始化选项字段：低内存自动回收开关（监听 `Application.lowMemory`，默认开启） |
 
 ### 异步加载
 
@@ -474,6 +477,8 @@ RequestPackageVersionAsync → 检查远端新版本号
 8. **Offline 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
 9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
 10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
+11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。
+12. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
 
 ## 与相关模块的关系
 
@@ -494,6 +499,7 @@ RequestPackageVersionAsync → 检查远端新版本号
 
 | 版本 | 说明 |
 | --- | --- |
+| 2026-08 | 并发初始化修复（共享任务 + 代际号）、低内存自动回收（AutoReclaimOnLowMemory） |
 | 2026-08 | 接口扩展：多包架构与初始化配置、卸载控制与存在性查询、热更链路（下载器句柄 + 一键下载）、预加载进度回调、同步加载 / 子资源 / RawFile |
 | 2026-08 | 池语义修正（方案 A）：回池保活——回池保留句柄、真正销毁才释放；补齐取消支持与池状态统计 |
 

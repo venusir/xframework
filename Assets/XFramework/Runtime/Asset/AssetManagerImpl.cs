@@ -40,6 +40,9 @@ namespace XFramework.XAsset
         /// <summary>是否已释放。</summary>
         private bool _disposed;
 
+        /// <summary>是否已订阅低内存事件（由 options.AutoReclaimOnLowMemory 决定）。</summary>
+        private bool _autoReclaimOnLowMemory;
+
         #endregion
 
         #region Initialize
@@ -77,8 +80,16 @@ namespace XFramework.XAsset
         private async UniTask InitializeAsyncCore(LoadProgress progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
             _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
-            await _managerImpl.InitializePackageAsync(options ?? new AssetInitOptions(), progress, cancellationToken);
+            var initOptions = options ?? new AssetInitOptions();
+            await _managerImpl.InitializePackageAsync(initOptions, progress, cancellationToken);
             _initialized = true;
+
+            // 初始化成功后才订阅低内存事件（失败不订阅，避免回调中未初始化报错噪音）
+            _autoReclaimOnLowMemory = initOptions.AutoReclaimOnLowMemory;
+            if (_autoReclaimOnLowMemory)
+            {
+                Application.lowMemory += OnLowMemory;
+            }
         }
 
         public async UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
@@ -360,7 +371,28 @@ namespace XFramework.XAsset
             if (_disposed) return;
             _disposed = true;
 
-            // 清理所有池中的实例：先释放句柄再销毁（池满时实例尚未销毁过，句柄仍有效）
+            // 静态事件必须退订，防止实例被事件持有导致泄漏
+            if (_autoReclaimOnLowMemory)
+            {
+                Application.lowMemory -= OnLowMemory;
+                _autoReclaimOnLowMemory = false;
+            }
+
+            DestroyAllPooledInstances();
+
+            _managerImpl?.Destroy();
+            _managerImpl = null;
+
+            _poolMaxSizes.Clear();
+            _initialized = false;
+        }
+
+        /// <summary>
+        /// 清理所有池中的闲置实例：先释放句柄再销毁（池满时实例尚未销毁过，句柄仍有效）。
+        /// <para>Dispose 与低内存回收共用；清理后取池路径的判空保护（pooled != null）保证安全。</para>
+        /// </summary>
+        private void DestroyAllPooledInstances()
+        {
             foreach (var kvp in _pools)
             {
                 foreach (var go in kvp.Value)
@@ -373,12 +405,6 @@ namespace XFramework.XAsset
                 }
             }
             _pools.Clear();
-
-            _managerImpl?.Destroy();
-            _managerImpl = null;
-
-            _poolMaxSizes.Clear();
-            _initialized = false;
         }
 
         #endregion
@@ -525,6 +551,39 @@ namespace XFramework.XAsset
         {
             if (!_initialized)
                 throw new InvalidOperationException("AssetManagerImpl is not initialized. Call InitializeAsync() first.");
+        }
+
+        /// <summary>
+        /// 低内存回调。fire-and-forget：事件回调内不阻塞、不抛出。
+        /// </summary>
+        private void OnLowMemory()
+        {
+            if (_disposed || !_initialized) return;
+            ReclaimMemoryAsync().Forget();
+        }
+
+        /// <summary>
+        /// 内存回收主流程：清池 → 卸载未使用资源 → 请求 Unity 回收。
+        /// <para>池中闲置实例的资源引用是最大可回收内存：不清池则句柄引用计数大于 0，YooAsset 无法卸载任何内容。</para>
+        /// </summary>
+        private async UniTask ReclaimMemoryAsync()
+        {
+            try
+            {
+                DestroyAllPooledInstances();
+
+                if (_managerImpl != null)
+                {
+                    await _managerImpl.UnloadUnusedAssetsAllAsync();
+                }
+
+                await Resources.UnloadUnusedAssets().ToUniTask();
+            }
+            catch (Exception e)
+            {
+                // 回收失败不影响主流程，只记录
+                Debug.LogError($"[AssetManager] Low memory reclaim failed: {e.Message}");
+            }
         }
 
         #endregion

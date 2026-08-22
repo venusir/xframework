@@ -38,5 +38,12 @@ namespace XFramework.XAsset
         /// 远端地址服务。HostPlayMode 必填，Offline 忽略。
         /// </summary>
         public IAssetRemoteServices RemoteServices;
+
+        /// <summary>
+        /// 低内存自动回收。为 true 时监听 <see cref="Application.lowMemory"/>，自动释放对象池闲置实例
+        /// 并卸载所有包中未使用的资源（引用计数为 0）。默认 true。
+        /// <para>关闭场景：接入方自行管理回收策略（如对低内存事件敏感的机型、自管资源上限的项目）。</para>
+        /// </summary>
+        public bool AutoReclaimOnLowMemory = true;
     }
 }

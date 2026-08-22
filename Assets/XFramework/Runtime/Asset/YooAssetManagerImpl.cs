@@ -146,6 +146,23 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 卸载所有已注册包中未使用的资源（低内存回收用，等价于对每个包调用 <see cref="UnloadUnusedAssetsAsync"/>）。
+        /// <para>快照键名遍历，避免 await 间隙 GetOrCreatePackage 修改字典导致枚举异常。</para>
+        /// </summary>
+        public async UniTask UnloadUnusedAssetsAllAsync(CancellationToken cancellationToken = default)
+        {
+            var names = new List<string>(_packages.Keys);
+            foreach (var name in names)
+            {
+                if (_packages.TryGetValue(name, out var package))
+                {
+                    var operation = package.UnloadUnusedAssetsAsync();
+                    await operation.WithCancellation(cancellationToken);
+                }
+            }
+        }
+
+        /// <summary>
         /// 尝试立即卸载单个未使用的资源。该资源仍被引用（引用计数大于 0）时无效果。
         /// </summary>
         public void TryUnloadUnusedAsset(string location, string packageName = null)
