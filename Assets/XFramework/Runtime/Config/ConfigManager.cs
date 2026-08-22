@@ -10,7 +10,8 @@ namespace XFramework.XConfig
     /// 全局配置管理器外观。提供静态方法直接访问配置数据的注册、加载、查询和卸载。
     /// <para>内部持有 <see cref="IConfigManager"/> 实例（<see cref="ConfigManagerImpl"/>），所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 初始化（无参，仅创建内部实例）。</para>
-    /// <para>内置 <see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/> 加载器。
+    /// <para>内置 <see cref="ConfigFormat.Json"/>、<see cref="ConfigFormat.ScriptableObject"/>、
+    /// <see cref="ConfigFormat.Csv"/> 加载器。
     /// 第三方可自行实现 <see cref="IConfigLoader"/> 并调用 <see cref="RegisterTable{T}(ConfigTable{T})"/> /
     /// <see cref="RegisterGlobal{T}"/> 注入自定义格式的配置数据。</para>
     /// <para>Table 类型通过 <see cref="ConfigTable{T}"/> 包装器查询，主键类型由实参自动推断。
@@ -78,7 +79,7 @@ namespace XFramework.XConfig
         /// <summary>
         /// 注入自定义 <see cref="IConfigManager"/> 实例（可用于测试、依赖注入或完全替换内部实现）。
         /// <para>调用前若已有实例将被覆盖，请确保之前未 Initialize 或已 Destroy。</para>
-        /// <para>注入的实例生命周期由调用方管理，框架仅持有弱引用概念（单引用），不会主动销毁。</para>
+        /// <para>框架以强引用持有注入的实例，不会主动销毁；其生命周期由调用方管理。</para>
         /// </summary>
         /// <param name="instance">自定义实现实例，为 null 时报错。</param>
         public static void SetInstance(IConfigManager instance)
@@ -115,12 +116,11 @@ namespace XFramework.XConfig
         /// 预加载 Table 类型的配置。主键类型由 <typeparamref name="T"/> 通过反射自动提取。
         /// <para>首次调用时需传入 <paramref name="assetPath"/> 指定资源位置；已加载后重复调用可省略路径。</para>
         /// <para>返回 <see cref="ConfigTable{T}"/> 包装器，后续通过 .Get(key) / .TryGet(key, out) 直接按 Id 查询，完全无需关心 TKey。</para>
-        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
         /// <param name="assetPath">资源路径（YooAsset 地址），首次加载时必填。</param>
         /// <param name="format">配置格式，默认 <see cref="ConfigFormat.Json"/>。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <returns>Table 包装器实例。</returns>
         /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
         /// <example>
@@ -138,12 +138,11 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 预加载 Global 类型的配置。如果已加载则直接返回。
-        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
         /// <param name="assetPath">资源路径（YooAsset 地址），首次加载时必填。</param>
         /// <param name="format">配置格式，默认 <see cref="ConfigFormat.Json"/>。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <exception cref="ConfigException">assetPath 为空或加载失败时抛出。</exception>
         public static async UniTask PreloadGlobalAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json, CancellationToken cancellationToken = default)
             where T : class, new()
@@ -156,12 +155,11 @@ namespace XFramework.XConfig
         /// 使用自定义 Loader 预加载 Table 配置。
         /// <para>Loader 为临时策略对象，框架不持有引用，调用后可由 GC 回收。</para>
         /// <para>适用于 protobuf、MessagePack 等一文件一表的自定义格式。</para>
-        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow{TKey}"/> 并有无参构造函数。</typeparam>
         /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
         /// <param name="loader">自定义加载器实例。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <returns>Table 包装器实例。</returns>
         /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
         public static async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
@@ -178,7 +176,7 @@ namespace XFramework.XConfig
         /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
         /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
         /// <param name="loader">自定义加载器实例。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
         public static async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
             where T : class, new()
@@ -193,12 +191,11 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 按分组名批量预加载 <paramref name="manifest"/> 中匹配的配置。
-        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <param name="groupName">分组名，仅加载 <see cref="ConfigManifest.AddTable{T}"/> /
         /// <see cref="ConfigManifest.AddGlobal{T}"/> 时传入相同 group 的条目。</param>
         /// <param name="manifest">配置加载清单。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         public static async UniTask PreloadGroupAsync(string groupName, ConfigManifest manifest,
             CancellationToken cancellationToken = default)
         {
@@ -209,10 +206,9 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 预加载 <paramref name="manifest"/> 中的所有配置。
-        /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
         /// </summary>
         /// <param name="manifest">配置加载清单。</param>
-        /// <param name="cancellationToken">取消令牌（可选）。</param>
+        /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         public static async UniTask PreloadAllAsync(ConfigManifest manifest,
             CancellationToken cancellationToken = default)
         {

@@ -9,7 +9,7 @@ namespace XFramework.XConfig
         /// <summary>JSON 格式，通过 <c>JsonUtility</c> 反序列化。</summary>
         Json = 0,
 
-        /// <summary>ScriptableObject 格式，通过 <c>Resources.Load</c> 加载。</summary>
+        /// <summary>ScriptableObject 格式，通过 AssetManager（YooAsset）加载。</summary>
         ScriptableObject = 1,
 
         /// <summary>CSV 格式，第一行为表头，后续行为数据行。</summary>

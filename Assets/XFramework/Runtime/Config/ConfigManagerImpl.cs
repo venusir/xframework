@@ -594,10 +594,15 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 卸载指定类型的配置（Table 或 Global）。
+        /// <para>若该类型正在加载中（in-flight），加载完成仍会注册数据，此处给出 Warning 提示竞态。</para>
         /// </summary>
         public void Unload<T>()
         {
             var type = typeof(T);
+            if (_inFlightLoads.ContainsKey(type))
+                Debug.LogWarning(
+                    $"[Config] Unloading '{type.Name}' while a load is in progress; " +
+                    $"the in-flight load will still complete and register the data.");
             _tables.Remove(type);
             _globals.Remove(type);
             _tableWrappers.Remove(type);
