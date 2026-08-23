@@ -147,5 +147,103 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        #region Condition Query
+
+        [Test]
+        public void TryGet_ConditionHit_ReturnsTrueWithRow()
+        {
+            var table = MakeTable();
+            Assert.IsTrue(table.TryGet(r => r.Name == "Potion", out var row));
+            Assert.AreEqual("Potion", row.Name);
+        }
+
+        [Test]
+        public void TryGet_ConditionMiss_ReturnsFalseWithDefault()
+        {
+            var table = MakeTable();
+            Assert.IsFalse(table.TryGet(r => r.Quality > 100, out var row));
+            Assert.AreEqual(default(TestItemRow), row, "未找到时应输出 default 行");
+        }
+
+        [Test]
+        public void TryGet_ConditionNullPredicate_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() => table.TryGet(null, out _));
+        }
+
+        [Test]
+        public void GetRows_WithResult_AppendsMatchingRows()
+        {
+            var table = MakeTable();
+            var result = new List<TestItemRow>();
+            table.GetRows(r => r.Quality == 3, result);
+
+            Assert.AreEqual(2, result.Count);
+            CollectionAssert.AreEquivalent(
+                new[] { "Sword", "Potion" },
+                result.ConvertAll(r => r.Name));
+        }
+
+        [Test]
+        public void GetRows_WithResult_PreservesExistingItems()
+        {
+            var table = MakeTable();
+            var result = new List<TestItemRow> { table.Get(1) };
+            table.GetRows(r => r.Quality == 3, result);
+
+            Assert.AreEqual(3, result.Count, "追加语义：不应清空已有元素");
+            Assert.AreEqual("Sword", result[0].Name, "已有元素应保留在开头");
+        }
+
+        [Test]
+        public void GetRows_Convenience_ReturnsNewList()
+        {
+            var table = MakeTable();
+            var result = table.GetRows(r => r.Quality == 3);
+
+            Assert.AreEqual(2, result.Count);
+            CollectionAssert.AreEquivalent(
+                new[] { "Sword", "Potion" },
+                result.ConvertAll(r => r.Name));
+        }
+
+        [Test]
+        public void GetRows_NullPredicate_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() => table.GetRows(null, new List<TestItemRow>()));
+        }
+
+        [Test]
+        public void GetRows_NullResult_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() => table.GetRows(r => r.Quality == 3, null));
+        }
+
+        [Test]
+        public void Exists_Hit_ReturnsTrue()
+        {
+            var table = MakeTable();
+            Assert.IsTrue(table.Exists(r => r.Quality >= 3));
+        }
+
+        [Test]
+        public void Exists_Miss_ReturnsFalse()
+        {
+            var table = MakeTable();
+            Assert.IsFalse(table.Exists(r => r.Quality > 100));
+        }
+
+        [Test]
+        public void Exists_NullPredicate_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() => table.Exists(null));
+        }
+
+        #endregion
     }
 }

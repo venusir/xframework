@@ -104,6 +104,104 @@ namespace XFramework.XConfig
 
         #endregion
 
+        #region Condition Query
+
+        /// <summary>
+        /// 查找第一条满足条件的配置行。
+        /// <para>按全表顺序（与 <see cref="GetAll"/> 一致）扫描，找到返回 <c>true</c> 并输出该行；未找到返回 <c>false</c>，<paramref name="value"/> 为 <c>default</c>。</para>
+        /// <para>零分配。适合一次性/低频条件查询；高频固定条件查询请用 <see cref="BuildIndex{TIndex}"/>（O(1) 查询优于本方法的 O(n) 扫描）。</para>
+        /// <para>与 <see cref="TryGet{TKey}(TKey, out T)"/> 为同名重载：实参为 lambda/委托时自动匹配本方法，实参为主键值时匹配按键查询。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality &gt;= 3</c>。</param>
+        /// <param name="value">匹配的行；未找到时为 <c>default</c>。</param>
+        /// <returns>是否找到匹配的行。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/> 为 null 时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// var items = ConfigManager.GetTable&lt;ItemRow&gt;();
+        /// if (items.TryGet(r =&gt; r.Quality &gt;= 3, out var row))
+        /// {
+        ///     // 使用 row
+        /// }
+        /// </code>
+        /// </example>
+        public bool TryGet(Predicate<T> predicate, out T value)
+        {
+            if (predicate == null)
+                throw new ArgumentNullException(nameof(predicate));
+
+            for (int i = 0; i < _allValues.Length; i++)
+            {
+                if (predicate(_allValues[i]))
+                {
+                    value = _allValues[i];
+                    return true;
+                }
+            }
+            value = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 查找所有满足条件的配置行，追加填充到 <paramref name="result"/>。
+        /// <para>按全表顺序（与 <see cref="GetAll"/> 一致）扫描追加，<b>不先清空</b> <paramref name="result"/>——调用方负责传入已清空的列表或自行处理追加语义。</para>
+        /// <para>此方法允许调用方复用已有的 <see cref="List{T}"/> 实例以减少 GC 分配（零分配路径）。高频调用时请同时将谓词委托缓存为字段，避免闭包分配。</para>
+        /// <para>适合一次性/低频条件查询；高频固定条件查询请用 <see cref="BuildIndex{TIndex}"/>。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality == 3</c>。</param>
+        /// <param name="result">接收匹配行的列表，不能为 null。匹配行按全表顺序追加到末尾。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/> 或 <paramref name="result"/> 为 null 时抛出。</exception>
+        public void GetRows(Predicate<T> predicate, List<T> result)
+        {
+            if (predicate == null)
+                throw new ArgumentNullException(nameof(predicate));
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+
+            for (int i = 0; i < _allValues.Length; i++)
+            {
+                if (predicate(_allValues[i]))
+                    result.Add(_allValues[i]);
+            }
+        }
+
+        /// <summary>
+        /// 查找所有满足条件的配置行，返回新列表。
+        /// <para>内部创建新 <see cref="List{T}"/> 并填充匹配行；未匹配到任何行时返回空列表。</para>
+        /// <para>适合低频调用；高频路径请使用缓冲版 <see cref="GetRows(Predicate{T}, List{T})"/> 以复用列表。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality == 3</c>。</param>
+        /// <returns>包含所有匹配行的新列表，未找到时为空列表。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/> 为 null 时抛出。</exception>
+        public List<T> GetRows(Predicate<T> predicate)
+        {
+            var result = new List<T>();
+            GetRows(predicate, result);
+            return result;
+        }
+
+        /// <summary>
+        /// 判断是否存在满足条件的配置行。
+        /// <para>零分配。用于「只关心有无、不关心具体行」的场景，与 <see cref="Contains{TKey}(TKey)"/> 的键存在判断对应。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality &gt;= 3</c>。</param>
+        /// <returns>是否存在至少一行满足条件。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/> 为 null 时抛出。</exception>
+        public bool Exists(Predicate<T> predicate)
+        {
+            if (predicate == null)
+                throw new ArgumentNullException(nameof(predicate));
+
+            for (int i = 0; i < _allValues.Length; i++)
+            {
+                if (predicate(_allValues[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        #endregion
+
         #region Index
 
         /// <summary>
