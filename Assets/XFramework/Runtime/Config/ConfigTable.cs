@@ -8,25 +8,65 @@ namespace XFramework.XConfig
     /// <summary>
     /// Table 配置数据的只读包装器，通过 <see cref="IConfigManager.GetTable{T}"/> 获取。
     /// <para>TKey 隐藏在类型内部，通过 .Get(key) / .TryGet(key) 查询时由实参自动推断主键类型。</para>
+    /// <para>主键类型在构造时从 <see cref="IConfigRow{TKey}"/> 提取并缓存，查询时按实参类型与缓存比对，不匹配时报错（错误信息含真实键类型）。</para>
     /// <para>建议缓存此包装器以复用后续查询，避免每次查字典。</para>
     /// </summary>
     /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
     public sealed class ConfigTable<T> : IConfigTable where T : IConfigRow
     {
         internal readonly IDictionary _dict;
+        private readonly Type _keyType;
         private readonly T[] _allValues;
         private readonly Dictionary<string, object> _indices = new();
 
         /// <summary>
         /// 构造 <see cref="ConfigTable{T}"/>。
         /// <para>通常由框架内部创建，第三方注入数据时也可直接构造（如 Luban / protobuf 等自定义格式）。</para>
+        /// <para>构造时校验注入字典的键/值类型与行类型声明的 <see cref="IConfigRow{TKey}"/> 一致，不一致抛出 <see cref="ConfigException"/>（早失败）。</para>
         /// </summary>
         /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，存储为 <see cref="IDictionary"/>）。</param>
+        /// <exception cref="ConfigException">字典键/值类型与行类型声明不一致，或不是 <see cref="Dictionary{TKey, TValue}"/>（含派生类）时抛出。</exception>
         public ConfigTable(IDictionary dict)
         {
+            _keyType = ConfigTypeHelper.GetKeyType(typeof(T));
+            ValidateDictionary(dict);
             _dict = dict;
             _allValues = new T[_dict.Count];
             _dict.Values.CopyTo(_allValues, 0);
+        }
+
+        /// <summary>
+        /// 校验注入字典的键/值类型与行类型声明一致，不一致构造即抛（早失败）。
+        /// <para>沿基类链识别 <see cref="Dictionary{TKey, TValue}"/>（兼容派生类——查询期强转允许派生）；非 Dictionary 系的 IDictionary 同样拒绝，因为查询时强转必然失败。</para>
+        /// </summary>
+        private void ValidateDictionary(IDictionary dict)
+        {
+            var args = GetDictionaryArguments(dict.GetType());
+            if (args == null)
+            {
+                throw new ConfigException(
+                    $"Table '{typeof(T).Name}' expects a Dictionary<{_keyType.Name}, {typeof(T).Name}>, " +
+                    $"but the injected IDictionary is '{dict.GetType().Name}'. " +
+                    $"Load or register the table with a Dictionary<{_keyType.Name}, {typeof(T).Name}>.");
+            }
+            if (args[0] != _keyType || args[1] != typeof(T))
+            {
+                throw new ConfigException(
+                    $"Table '{typeof(T).Name}' dictionary type mismatch. " +
+                    $"Row type declares '{_keyType.Name}' keys, but the injected dictionary is " +
+                    $"'Dictionary<{args[0].Name}, {args[1].Name}>'.");
+            }
+        }
+
+        /// <summary>沿基类链查找泛型 <see cref="Dictionary{TKey, TValue}"/> 并返回其泛型参数；找不到返回 null。</summary>
+        private static Type[] GetDictionaryArguments(Type dictType)
+        {
+            for (var t = dictType; t != null && t != typeof(object); t = t.BaseType)
+            {
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                    return t.GetGenericArguments();
+            }
+            return null;
         }
 
         #region Query
@@ -43,15 +83,17 @@ namespace XFramework.XConfig
         /// </example>
         public T Get<TKey>(TKey key)
         {
-            if (_dict is Dictionary<TKey, T> d)
+            if (typeof(TKey) != _keyType)
             {
-                if (d.TryGetValue(key, out var value))
-                    return value;
                 throw new ConfigException(
-                    $"Id '{key}' not found in Table '{typeof(T).Name}'.");
+                    $"Table '{typeof(T).Name}' key type mismatch. " +
+                    $"Row type declares '{_keyType.Name}' keys, you passed '{typeof(TKey).Name}'.");
             }
+            var d = (Dictionary<TKey, T>)_dict; // 构造时已验证字典键/值类型,强转必然成功
+            if (d.TryGetValue(key, out var value))
+                return value;
             throw new ConfigException(
-                $"Table '{typeof(T).Name}' key type mismatch. Expected '{typeof(TKey).Name}'.");
+                $"Id '{key}' not found in Table '{typeof(T).Name}'.");
         }
 
         /// <summary>
@@ -60,19 +102,15 @@ namespace XFramework.XConfig
         /// </summary>
         public bool TryGet<TKey>(TKey key, out T value)
         {
-            if (_dict is Dictionary<TKey, T> d)
+            if (typeof(TKey) != _keyType)
             {
-                if (d.TryGetValue(key, out value))
-                    return true;
+                Debug.LogWarning(
+                    $"[Config] Table '{typeof(T).Name}' key type mismatch in TryGet. " +
+                    $"Row type declares '{_keyType.Name}' keys, you passed '{typeof(TKey).Name}'.");
                 value = default;
                 return false;
             }
-            Debug.LogWarning(
-                $"[Config] Table '{typeof(T).Name}' key type mismatch in TryGet. " +
-                $"Actual key type is unknown (stored as IDictionary). " +
-                $"You passed '{typeof(TKey).Name}', but the Table was loaded with a different key type.");
-            value = default;
-            return false;
+            return ((Dictionary<TKey, T>)_dict).TryGetValue(key, out value); // 强转必然成功,见构造函数
         }
 
         /// <summary>
@@ -80,13 +118,14 @@ namespace XFramework.XConfig
         /// </summary>
         public bool Contains<TKey>(TKey key)
         {
-            if (_dict is Dictionary<TKey, T> d)
-                return d.ContainsKey(key);
-            Debug.LogWarning(
-                $"[Config] Table '{typeof(T).Name}' key type mismatch in Contains. " +
-                $"Actual key type is unknown (stored as IDictionary). " +
-                $"You passed '{typeof(TKey).Name}', but the Table was loaded with a different key type.");
-            return false;
+            if (typeof(TKey) != _keyType)
+            {
+                Debug.LogWarning(
+                    $"[Config] Table '{typeof(T).Name}' key type mismatch in Contains. " +
+                    $"Row type declares '{_keyType.Name}' keys, you passed '{typeof(TKey).Name}'.");
+                return false;
+            }
+            return ((Dictionary<TKey, T>)_dict).ContainsKey(key); // 强转必然成功,见构造函数
         }
 
         /// <summary>
