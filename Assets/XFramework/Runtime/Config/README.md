@@ -329,7 +329,13 @@ private void OnConfigChanged(Type type)
 | `.Contains<TKey>(key)`                | 判断主键是否存在                                            |
 | `.GetAll()`                           | 获取所有行（零 GC，返回内部缓存数组，**不要修改**）         |
 | `.Count`                              | 行数                                                        |
+| `.TryGet(predicate, out value)`       | 按条件查首行，未找到返回 false（零 GC）                     |
+| `.GetRows(predicate, List<T> result)` | 按条件查多行，追加填充（零 GC）                             |
+| `.GetRows(predicate)`                 | 按条件查多行（便捷版，返回新列表）                          |
+| `.Exists(predicate)`                  | 是否存在满足条件的行（零 GC）                               |
 | `.BuildIndex<TIndex>(name, selector)` | 构建非主键索引                                              |
+
+> **条件查询定位**：`.TryGet(predicate)` / `.GetRows(predicate)` 是 O(n) 全表扫描，适合一次性/低频条件查询；高频固定条件查询请用 `.BuildIndex<TIndex>()`（构建一次、O(1) 查询）。
 
 ### Query — Global
 
@@ -484,6 +490,7 @@ ConfigManifest  (批量加载清单)
 
 | 版本 | 说明 |
 | --- | --- |
+| 2026-08 | `ConfigTable<T>` 新增谓词条件查询：`TryGet(predicate, out)` 单匹配、`GetRows(predicate[, List<T>])` 多匹配（缓冲版零 GC）、`Exists(predicate)` 存在性判断 |
 | 2026-08 | 取消语义澄清（取消仅中断调用方等待，底层加载仍会完成并注册）、CsvLoader 按列名匹配成员、文档对齐实现（示例修正为真实签名、移除未实现的「后处理钩子」描述） |
 | 2026-05 | 新增 CSV 格式、非主键索引（`ConfigIndexView`）、批量加载（`ConfigManifest` + `PreloadGroupAsync` / `PreloadAllAsync`）、自定义 `IConfigLoader` 注入、`ConfigTable<T>` 包装器（TKey 由实参自动推断）、`IConfigManager` 接口抽象、`Get` / `TryGet` 便捷查询 |
 
