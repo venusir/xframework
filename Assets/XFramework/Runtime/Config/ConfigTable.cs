@@ -92,6 +92,7 @@ namespace XFramework.XConfig
         /// <summary>
         /// 获取表中所有配置行（零 GC 分配，返回构造函数中预缓存的数组）。
         /// <para>返回的是内部数组引用，请勿修改元素（struct 类型修改不生效，class 类型应遵守只读约定）。</para>
+        /// <para>数组顺序为构造时字典枚举的快照顺序（无删除操作时通常等于插入序，但<b>不保证</b>与配置文件行序一致）；依赖严格顺序请按字段自行排序。</para>
         /// <para>完全不涉及 TKey，无需指定主键类型。</para>
         /// </summary>
         public T[] GetAll()
@@ -108,7 +109,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 查找第一条满足条件的配置行。
-        /// <para>按全表顺序（与 <see cref="GetAll"/> 一致）扫描，找到返回 <c>true</c> 并输出该行；未找到返回 <c>false</c>，<paramref name="value"/> 为 <c>default</c>。</para>
+        /// <para>按 <see cref="GetAll"/> 快照数组顺序扫描（字典快照序，非配置顺序），找到返回 <c>true</c> 并输出该行；未找到返回 <c>false</c>，<paramref name="value"/> 为 <c>default</c>。</para>
         /// <para>零分配。适合一次性/低频条件查询；高频固定条件查询请用 <see cref="BuildIndex{TIndex}"/>（O(1) 查询优于本方法的 O(n) 扫描）。</para>
         /// <para>与 <see cref="TryGet{TKey}(TKey, out T)"/> 为同名重载：实参为 lambda/委托时自动匹配本方法，实参为主键值时匹配按键查询。</para>
         /// </summary>
@@ -144,7 +145,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 查找所有满足条件的配置行，追加填充到 <paramref name="result"/>。
-        /// <para>按全表顺序（与 <see cref="GetAll"/> 一致）扫描追加，<b>不先清空</b> <paramref name="result"/>——调用方负责传入已清空的列表或自行处理追加语义。</para>
+        /// <para>按 <see cref="GetAll"/> 快照数组顺序扫描追加（字典快照序，非配置顺序），<b>不先清空</b> <paramref name="result"/>——调用方负责传入已清空的列表或自行处理追加语义。</para>
         /// <para>此方法允许调用方复用已有的 <see cref="List{T}"/> 实例以减少 GC 分配（零分配路径）。高频调用时请同时将谓词委托缓存为字段，避免闭包分配。</para>
         /// <para>适合一次性/低频条件查询；高频固定条件查询请用 <see cref="BuildIndex{TIndex}"/>。</para>
         /// </summary>
