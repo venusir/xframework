@@ -97,7 +97,7 @@ public class MyGameLauncher : GameLauncher
 | **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                                 |
 | **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
-| **配置管理**     | `ConfigManager` 支持 JSON / ScriptableObject / Luban 三种格式，一行代码加载与查询 |
+| **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
 
 ## UI 系统
 
@@ -174,7 +174,7 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 ## 配置管理
 
-`ConfigManager` 提供统一的配置加载与查询接口，支持 JSON / ScriptableObject / Luban 三种格式，一行代码加载与查询。
+`ConfigManager` 提供统一的配置加载与查询接口，内置 Json / CSV / ScriptableObject 三种格式，自定义格式通过实现 `IConfigLoader` 扩展，Luban 等外部反序列化结果经 `RegisterTable` / `RegisterGlobal` 注入，一行代码加载与查询。
 
-> 📖 详细文档请参阅 **[Runtime/Config/README.md](Runtime/Config/README.md)**，包含格式对比、自定义格式和 Luban 集成指南。
+> 📖 详细文档请参阅 **[Runtime/Config/README.md](Runtime/Config/README.md)**，包含格式对比、自定义 Loader 和 Luban 集成指南。
 
