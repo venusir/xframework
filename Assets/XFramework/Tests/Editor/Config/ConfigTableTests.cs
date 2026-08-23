@@ -220,7 +220,58 @@ namespace Venusy609.Xframework.Editor.Tests
         public void GetRows_NullResult_Throws()
         {
             var table = MakeTable();
-            Assert.Throws<ArgumentNullException>(() => table.GetRows(r => r.Quality == 3, null));
+            // 二参 null 字面量在 List<T> 与 Comparison<T> 重载间有二义性，需显式转型
+            Assert.Throws<ArgumentNullException>(() => table.GetRows(r => r.Quality == 3, (List<TestItemRow>)null));
+        }
+
+        [Test]
+        public void GetRows_WithComparison_SortsMatchingRows()
+        {
+            var table = MakeTable();
+            var result = new List<TestItemRow>();
+            table.GetRows(r => r.Quality >= 1, (a, b) => a.Name.CompareTo(b.Name), result);
+
+            Assert.AreEqual(3, result.Count);
+            CollectionAssert.AreEqual(
+                new[] { "Potion", "Shield", "Sword" },
+                result.ConvertAll(r => r.Name),
+                "按 Name 字母序排序（用唯一键避免不稳定排序的同位键 flaky）");
+        }
+
+        [Test]
+        public void GetRows_WithComparison_Convenience_ReturnsSortedList()
+        {
+            var table = MakeTable();
+            var result = table.GetRows(r => r.Quality >= 1, (a, b) => a.Name.CompareTo(b.Name));
+
+            Assert.AreEqual(3, result.Count);
+            CollectionAssert.AreEqual(
+                new[] { "Potion", "Shield", "Sword" },
+                result.ConvertAll(r => r.Name));
+        }
+
+        [Test]
+        public void GetRows_WithComparison_NullPredicate_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() =>
+                table.GetRows(null, (a, b) => a.Quality.CompareTo(b.Quality), new List<TestItemRow>()));
+        }
+
+        [Test]
+        public void GetRows_WithComparison_NullComparison_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() =>
+                table.GetRows(r => r.Quality == 3, (Comparison<TestItemRow>)null, new List<TestItemRow>()));
+        }
+
+        [Test]
+        public void GetRows_WithComparison_NullResult_Throws()
+        {
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() =>
+                table.GetRows(r => r.Quality == 3, (a, b) => a.Quality.CompareTo(b.Quality), null));
         }
 
         [Test]

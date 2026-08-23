@@ -181,6 +181,50 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
+        /// 查找所有满足条件的配置行并按 <paramref name="comparison"/> 排序，追加填充到 <paramref name="result"/>。
+        /// <para>先按 <see cref="GetAll"/> 快照顺序扫描追加，再对 <paramref name="result"/> <b>整个列表</b>原地排序（<see cref="Comparison{T}"/> 重载，零分配）。</para>
+        /// <para>与无排序版一致<b>不先清空</b> <paramref name="result"/>；排序将包含调用方预填的数据，需要纯净结果请传入空列表。</para>
+        /// <para>适合一次性/低频条件查询；高频固定条件查询请用 <see cref="BuildIndex{TIndex}"/>。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality &gt;= 3</c>。</param>
+        /// <param name="comparison">排序比较器，如 <c>(a, b) =&gt; a.Quality.CompareTo(b.Quality)</c>。</param>
+        /// <param name="result">接收匹配行的列表，不能为 null。匹配行追加到末尾后整体排序。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/>、<paramref name="comparison"/> 或 <paramref name="result"/> 为 null 时抛出。</exception>
+        public void GetRows(Predicate<T> predicate, Comparison<T> comparison, List<T> result)
+        {
+            if (predicate == null)
+                throw new ArgumentNullException(nameof(predicate));
+            if (comparison == null)
+                throw new ArgumentNullException(nameof(comparison));
+            if (result == null)
+                throw new ArgumentNullException(nameof(result));
+
+            for (int i = 0; i < _allValues.Length; i++)
+            {
+                if (predicate(_allValues[i]))
+                    result.Add(_allValues[i]);
+            }
+            result.Sort(comparison);
+        }
+
+        /// <summary>
+        /// 查找所有满足条件的配置行并按 <paramref name="comparison"/> 排序，返回新列表。
+        /// <para>内部创建新 <see cref="List{T}"/> 填充匹配行后排序；未匹配到任何行时返回空列表。</para>
+        /// <para>适合低频调用；高频路径请使用缓冲版 <see cref="GetRows(Predicate{T}, Comparison{T}, List{T})"/> 以复用列表。</para>
+        /// <para>注意：二参调用传 null 字面量会产生重载二义性（第二参可匹配 <see cref="List{T}"/> 或 <see cref="Comparison{T}"/>），请显式转型或传非 null。</para>
+        /// </summary>
+        /// <param name="predicate">筛选条件，如 <c>r =&gt; r.Quality &gt;= 3</c>。</param>
+        /// <param name="comparison">排序比较器，如 <c>(a, b) =&gt; a.Quality.CompareTo(b.Quality)</c>。</param>
+        /// <returns>包含所有匹配行并已排序的新列表，未找到时为空列表。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="predicate"/> 或 <paramref name="comparison"/> 为 null 时抛出。</exception>
+        public List<T> GetRows(Predicate<T> predicate, Comparison<T> comparison)
+        {
+            var result = new List<T>();
+            GetRows(predicate, comparison, result);
+            return result;
+        }
+
+        /// <summary>
         /// 判断是否存在满足条件的配置行。
         /// <para>零分配。用于「只关心有无、不关心具体行」的场景，与 <see cref="Contains{TKey}(TKey)"/> 的键存在判断对应。</para>
         /// </summary>
