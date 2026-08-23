@@ -396,7 +396,7 @@ public interface IConfigLoader
 
 - 无状态设计：建议实现为无字段的轻量对象，每次使用 `new` 传入即可
 - `assetPath` 由调用方定义语义（文件路径、AssetBundle 地址等），Loader 自行解析
-- `LoadTableAsync<T, TKey>` 返回 `ConfigTable<T>`（构造函数接收 `IDictionary`，如 `Dictionary<TKey, T>`），框架从中提取内部字典进行管理
+- `LoadTableAsync<T, TKey>` 返回 `ConfigTable<T>`（构造函数接收 `IDictionary`，如 `Dictionary<TKey, T>`），框架从中提取内部字典进行管理；构造时校验字典键/值类型与行类型 `IConfigRow<TKey>` 声明一致，不一致抛 `ConfigException`（早失败，错误信息含真实键类型）
 
 ---
 
@@ -494,6 +494,7 @@ ConfigManifest  (批量加载清单)
 
 | 版本 | 说明 |
 | --- | --- |
+| 2026-08 | `ConfigTable<T>` 构造期提取并缓存主键类型（经 `ConfigTypeHelper` 每表仅一次反射），查询键类型不匹配时错误信息报真实键类型；注入字典与行类型声明矛盾时构造即抛 `ConfigException`（早失败） |
 | 2026-08 | `ConfigTable<T>.GetRows` 新增 `Comparison<T>` 排序重载（缓冲版/便捷版，参照 GameFramework `GetDataRows(Predicate, Comparison)` 形态） |
 | 2026-08 | `ConfigTable<T>` 新增谓词条件查询：`TryGet(predicate, out)` 单匹配、`GetRows(predicate[, List<T>])` 多匹配（缓冲版零 GC）、`Exists(predicate)` 存在性判断 |
 | 2026-08 | 取消语义澄清（取消仅中断调用方等待，底层加载仍会完成并注册）、CsvLoader 按列名匹配成员、文档对齐实现（示例修正为真实签名、移除未实现的「后处理钩子」描述） |
