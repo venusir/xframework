@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -52,7 +53,28 @@ namespace Venusy609.Xframework.Editor.Tests
         public void Get_KeyTypeMismatch_ThrowsConfigException()
         {
             var table = MakeTable();
-            Assert.Throws<ConfigException>(() => table.Get("not-an-int"));
+            var ex = Assert.Throws<ConfigException>(() => table.Get("not-an-int"));
+            StringAssert.Contains("declares 'Int32' keys, you passed 'String'", ex.Message,
+                "错误信息应包含真实键类型,便于定位调用方传错的类型");
+        }
+
+        [Test]
+        public void Constructor_KeyTypeMismatch_Throws()
+        {
+            // 注入字典键类型与行类型 IConfigRow<int> 声明矛盾 → 构造即抛(早失败,不等查询期)
+            var ex = Assert.Throws<ConfigException>(
+                () => new ConfigTable<TestItemRow>(new Dictionary<string, TestItemRow>()));
+            StringAssert.Contains("declares 'Int32' keys", ex.Message,
+                "错误信息应说明行类型声明的真实键类型");
+        }
+
+        [Test]
+        public void Constructor_NonDictionary_Throws()
+        {
+            // 非 Dictionary 系的 IDictionary 查询时强转必然失败 → 构造即抛(早失败)
+            var ex = Assert.Throws<ConfigException>(
+                () => new ConfigTable<TestItemRow>(new Hashtable()));
+            StringAssert.Contains("expects a Dictionary", ex.Message);
         }
 
         [Test]
@@ -74,7 +96,8 @@ namespace Venusy609.Xframework.Editor.Tests
         public void TryGet_KeyTypeMismatch_ReturnsFalseWithWarning()
         {
             var table = MakeTable();
-            LogAssert.Expect(LogType.Warning, new Regex("key type mismatch"));
+            // 收紧断言:警告应包含真实键类型,替代旧的 Actual key type is unknown
+            LogAssert.Expect(LogType.Warning, new Regex("key type mismatch.*Int32"));
             Assert.IsFalse(table.TryGet("not-an-int", out _));
         }
 
