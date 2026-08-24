@@ -154,5 +154,26 @@ namespace XFramework.XData.Tests
             Assert.IsFalse(DataManager.IsDirty<WalletData>(), "恢复成功的目标块应清除脏标记");
             Assert.IsTrue(DataManager.IsDirty<QuestData>(), "其他块脏标记应保留");
         }
+
+        [Test]
+        public void ApplyBlockSnapshot_EmptyData_FailsWithWarning()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 10;
+            DataManager.MarkDirty<WalletData>();
+
+            // 空字节 → 反序列化结果为 null：不得把 null 传进 OnLoad，应失败并打警告
+            var snap = new DataBlockSnapshot
+            {
+                blockName = "Wallet",
+                data = Convert.ToBase64String(Array.Empty<byte>()),
+            };
+
+            LogAssert.Expect(LogType.Warning, new Regex("反序列化结果为空"));
+            Assert.IsFalse(DataManager.ApplyBlockSnapshot(snap), "空数据快照应恢复失败");
+
+            Assert.AreEqual(0, wallet.Gold, "恢复前已 OnClear 清空目标块");
+            Assert.IsTrue(DataManager.IsDirty<WalletData>(), "失败应保留脏标记(可能半恢复,保守标记)");
+        }
     }
 }

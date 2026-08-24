@@ -16,6 +16,7 @@ namespace XFramework.XData
         private readonly Dictionary<Type, IDataBlock> _blocks = new();
         private readonly Dictionary<string, IDataBlock> _blockNameIndex = new();
         private readonly HashSet<IDataBlock> _dirtyBlocks = new();
+        private readonly Dictionary<string, Type> _saveTypeCache = new(); // saveType → 类型（反射解析结果缓存）
 
         #endregion
 
@@ -203,9 +204,20 @@ namespace XFramework.XData
 
                 var rawData = Convert.FromBase64String(snap.data);
 
-                // 优先按快照记录的 OnSave 返回类型反序列化；
+                // 优先按快照记录的 OnSave 返回类型反序列化（反射解析结果缓存，满足「反射必须缓存」约定）；
                 // 旧存档无 saveType 或类型已无法解析（如类型重命名）时回退 Block 自身类型。
-                var targetType = string.IsNullOrEmpty(snap.saveType) ? null : Type.GetType(snap.saveType);
+                Type targetType = null;
+                if (!string.IsNullOrEmpty(snap.saveType))
+                {
+                    // 仅成功解析的结果入缓存：失败路径罕见（类型重命名等）且已有回退警告，无需缓存负结果
+                    if (!_saveTypeCache.TryGetValue(snap.saveType, out targetType))
+                    {
+                        targetType = Type.GetType(snap.saveType);
+                        if (targetType != null)
+                            _saveTypeCache[snap.saveType] = targetType;
+                    }
+                }
+
                 if (targetType == null || targetType == typeof(object))
                 {
                     Debug.LogWarning(
@@ -214,6 +226,14 @@ namespace XFramework.XData
                 }
 
                 var saveObj = serializer.Deserialize(rawData, targetType);
+
+                // 反序列化结果为空（空 data 条目或 JSON "null"）：不把 null 传进第三方 OnMigrate/OnLoad，
+                // 避免强转型实现抛出 NRE 被 catch 吞掉造成静默失败
+                if (saveObj == null)
+                {
+                    Debug.LogWarning($"[Data] 数据块 {snap.blockName} 反序列化结果为空，跳过。");
+                    return false;
+                }
 
                 // 版本迁移链：在反序列化之后、OnLoad 之前逐版本迁移。
                 // 快照 saveType 记录的是写档那一刻（旧版本）的类型，只有旧类型能正确反序列化旧字节；

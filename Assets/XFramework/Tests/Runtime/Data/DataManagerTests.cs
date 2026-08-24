@@ -190,5 +190,27 @@ namespace XFramework.XData.Tests
             Assert.IsFalse(DataManager.IsInitialized, "null 注入应清空实现");
             Assert.Throws<DataException>(() => DataManager.GetOrCreateBlock<BagData>(), "Shutdown 后访问应抛未初始化异常");
         }
+
+        [Test]
+        public void ApplySnapshot_RestoreTwice_SecondUsesCachedType()
+        {
+            // 同一快照恢复两次:第二次应命中 saveType 反射解析缓存,行为与首次一致。
+            // (无法直接观测缓存命中,此用例锁定缓存路径的恢复正确性。)
+            var bag = DataManager.GetOrCreateBlock<BagData>();
+            bag.Items.Add(new BagItem { id = 7, name = "剑", count = 1 });
+            bag.Gold = 5;
+
+            var snapshot = DataManager.CreateSnapshot();
+
+            DataManager.ApplySnapshot(snapshot); // 第一次:解析并缓存 saveType
+            Assert.AreEqual(5, bag.Gold, "首次恢复应成功");
+
+            bag.Gold = 99;
+            DataManager.ApplySnapshot(snapshot); // 第二次:命中缓存路径
+
+            Assert.AreEqual(5, bag.Gold, "缓存路径应正确恢复");
+            Assert.AreEqual(1, bag.Items.Count);
+            Assert.AreEqual(7, bag.Items[0].id);
+        }
     }
 }
