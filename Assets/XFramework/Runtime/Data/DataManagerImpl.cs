@@ -49,6 +49,13 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void RegisterBlock<T>(T block) where T : class, IDataBlock
         {
+            // 覆盖同名 Block 时先清理旧实例：OnClear 释放其资源/订阅，并移除脏标记，避免泄漏与假脏
+            if (_blocks.TryGetValue(typeof(T), out var old))
+            {
+                old.OnClear();
+                _dirtyBlocks.Remove(old);
+            }
+
             _blocks[typeof(T)] = block;
             _blockNameIndex[block.BlockName] = block;
         }
