@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using UnityEngine;
 
 namespace XFramework.XData
 {
@@ -32,9 +33,15 @@ namespace XFramework.XData
         /// <summary>
         /// 注入 IDataManager 实现（由 GameDataNode 自动调用）。
         /// <para>传入 null 等效于调用 <see cref="Shutdown"/>。</para>
+        /// <para>已注入非 null 实现时重复调用输出警告并忽略。</para>
         /// </summary>
         public static void Initialize(IDataManager impl)
         {
+            if (impl != null && _impl != null)
+            {
+                Debug.LogWarning("[Data] DataManager.Initialize 被重复调用，忽略重复注入。");
+                return;
+            }
             _impl = impl;
         }
 

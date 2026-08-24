@@ -166,5 +166,29 @@ namespace XFramework.XData.Tests
 
             Assert.AreEqual(0, bag.Gold, "空快照也应清空所有已注册 Block 的数据");
         }
+
+        [Test]
+        public void Initialize_Duplicate_WarnsAndKeepsFirst()
+        {
+            DataManager.Initialize(null); // 清空 SetUp 注入的实例
+            var first = new DataManagerImpl();
+            var bag = first.GetOrCreateBlock<BagData>();
+            DataManager.Initialize(first);
+
+            LogAssert.Expect(LogType.Warning, new Regex("重复调用"));
+            DataManager.Initialize(new DataManagerImpl()); // 重复注入:警告并忽略
+
+            Assert.AreSame(bag, DataManager.GetOrCreateBlock<BagData>(), "重复注入被忽略后应仍使用第一个实现");
+        }
+
+        [Test]
+        public void Initialize_Null_ShutsDown()
+        {
+            // SetUp 已注入;传入 null 应等效 Shutdown
+            DataManager.Initialize(null);
+
+            Assert.IsFalse(DataManager.IsInitialized, "null 注入应清空实现");
+            Assert.Throws<DataException>(() => DataManager.GetOrCreateBlock<BagData>(), "Shutdown 后访问应抛未初始化异常");
+        }
     }
 }
