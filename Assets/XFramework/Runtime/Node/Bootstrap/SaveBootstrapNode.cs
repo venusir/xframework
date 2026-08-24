@@ -1,29 +1,28 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using XFramework.XData;
 using XFramework.XLoader;
+using XFramework.XSave;
 
 namespace XFramework.XNode
 {
     /// <summary>
-    /// Data 模块的节点树桥梁。挂载在 <see cref="ServiceInitializerNode"/> 下，
-    /// 负责在加载阶段初始化 <see cref="XData.DataManager"/> 静态门面。
+    /// Save 模块的节点树桥梁。挂载在 <see cref="ServiceInitializerNode"/> 下，
+    /// 负责在加载阶段初始化 <see cref="XSave.SaveManager"/> 静态门面。
     /// </summary>
-    internal sealed class GameDataNode : LeafNode, ILoadable
+    internal sealed class SaveBootstrapNode : LeafNode, ILoadable
     {
         #region ILoadable
 
         /// <summary>
-        /// Phase = 3。晚于 Asset(0)、早于 Save(4)，确保依赖的模块已就绪。
+        /// Phase = 4。晚于 Data(3)，确保快照能力已就绪。
         /// </summary>
-        public int Phase => 3;
+        public int Phase => 4;
 
         public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
         {
-            progress.SetDescription("Initializing Data Manager...");
+            progress.SetDescription("Initializing Save Manager...");
 
-            var impl = new DataManagerImpl();
-            DataManager.Initialize(impl);
+            SaveManager.Initialize();
 
             progress.SetProgress(1f);
             progress.SetState(LoadState.Completed);
@@ -35,7 +34,7 @@ namespace XFramework.XNode
 
         protected override void OnDestroy()
         {
-            DataManager.Shutdown();
+            SaveManager.Shutdown();
             base.OnDestroy();
         }
 

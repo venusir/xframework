@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 
 namespace XFramework.XSave
 {
@@ -70,6 +71,11 @@ namespace XFramework.XSave
         /// <param name="factory">实现工厂委托。为 <c>null</c> 时使用默认实现。</param>
         public static void Initialize(SaveManagerFactory factory = null)
         {
+            if (_impl != null)
+            {
+                Debug.LogWarning("[Save] SaveManager.Initialize 被重复调用，忽略重复注入。");
+                return;
+            }
             _impl = factory != null ? factory() : new SaveManagerImpl();
         }
 

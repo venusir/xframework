@@ -1,5 +1,3 @@
-using XFramework.XData;
-
 namespace XFramework.XNode
 {
     /// <summary>
@@ -21,6 +19,7 @@ namespace XFramework.XNode
         {
             AddNode<AssetBootstrapNode>();
             AddNode<GameDataNode>();
+            AddNode<SaveBootstrapNode>();
         }
 
         #endregion
