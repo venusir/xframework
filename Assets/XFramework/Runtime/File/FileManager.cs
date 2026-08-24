@@ -67,6 +67,11 @@ namespace XFramework.XFileManager
         /// <exception cref="PlatformNotSupportedException">当前平台无内置实现且未提供自定义 Provider 时抛出。</exception>
         public static void Initialize(IFileProvider provider = null)
         {
+            // Destroy 后允许重新初始化：与错误文案「请重新调用 Initialize」对齐，
+            // 也是测试隔离（注入临时目录 Provider）的前提
+            if (_destroyed)
+                _destroyed = false;
+
             ThrowIfDestroyed();
 
             if (_initialized)
