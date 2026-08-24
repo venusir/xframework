@@ -4,7 +4,7 @@
 
 XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 SaveLoadModule 提供序列化/反序列化接口。
 
-> **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **SaveLoadModule**（独立模块，待实现）负责。DataManager 仅暴露 `CreateSnapshot()` 和 `ApplySnapshot(data)` 两个序列化接口。
+> **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **SaveLoadModule**（独立模块，待实现）负责。DataManager 暴露全量快照（`CreateSnapshot()` / `ApplySnapshot(data)`）、单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()` 等）接口。
 
 数据按 **GamePlay 模块** 组织——一个 `IDataBlock` 对应一个游戏子系统，内部自行管理数据结构，不再强制主键约束。
 
@@ -31,14 +31,14 @@ DataManager (静态门面)
     └── 转发到 DataManagerImpl
 
 SaveLoadModule (独立模块，待实现)
-    └── 持有 IDataStore，通过 DataManager.CreateSnapshot() / ApplySnapshot() 实现持久化
+    └── 持有 IDataStore，通过 DataManager 快照接口实现持久化（可结合脏标记/单块快照做增量保存）
 ```
 
 ### 设计原则
 
 - **节点树 + 静态服务混合**：`GameDataNode` 挂载在节点树上管理生命周期，初始化后注入 `DataManager` 静态门面供全局访问。
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
-- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。
+- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
 - **存读档分离**：文件读写、加密、云同步等持久化操作由 SaveLoadModule（独立模块）负责，不在 DataManager 职责范围内。
 
 ## 快速开始
@@ -236,8 +236,8 @@ DataManager.ApplyBlockSnapshot(snap);
 
 ## 序列化原理
 
-1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType` 存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
-2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化后调用 `OnLoad(saveData)`。
+1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType`、`version`（写入时取 `IDataBlock.DataVersion`）存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
+2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化；若快照 `version` 低于 Block 当前 `DataVersion` 则执行迁移链，最后调用 `OnLoad(saveData)`。单块恢复 `ApplyBlockSnapshot(snap)` 复用同一恢复管线。
 3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
 4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
 
@@ -274,7 +274,7 @@ DataManager.ApplyBlockSnapshot(snap);
 
 迁移步骤：
 1. 将原有的 `[Serializable] class X : IDataRow<TKey>` 重构为 `[Serializable] class XData : IDataBlock`
-2. 在 Block 内部定义 `OnSave / OnLoad / OnClear` 回调
+2. 在 Block 内部实现 `OnSave / OnLoad / OnClear` 回调，并补 `DataVersion`（未接入版本控制时返回 0）与 `OnMigrate`（恒等返回入参）
 3. 将 `DataManager.GetOrCreateTable<X>()` 替换为 `DataManager.GetOrCreateBlock<XData>()`
 
 ## 目录结构
