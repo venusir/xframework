@@ -67,6 +67,13 @@ namespace XFramework.XData
         public string blockName;
 
         /// <summary>
+        /// <see cref="IDataBlock.OnSave"/> 返回对象的类型全名（AssemblyQualifiedName），
+        /// 用于读档时按原类型反序列化。
+        /// <para>为空或无法解析时回退使用 <see cref="IDataBlock"/> 自身类型（旧存档兼容）。</para>
+        /// </summary>
+        public string saveType;
+
+        /// <summary>
         /// 序列化后的数据（Base64 编码的字节数组）。
         /// <para>由 <see cref="XSerialize.ISerializer.Serialize"/> 生成的原始字节经 Base64 编码后存入，
         /// 兼容 JsonUtility 外层容器。</para>

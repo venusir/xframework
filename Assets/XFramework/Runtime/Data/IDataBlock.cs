@@ -46,7 +46,7 @@ namespace XFramework.XData
         void OnLoad(object saveData);
 
         /// <summary>
-        /// 数据块被移除或 <see cref="IDataManager.ClearAll"/> 时调用，释放内部资源。
+        /// 数据块被移除、<see cref="IDataManager.ClearAll"/> 或 <see cref="IDataManager.ApplySnapshot"/> 恢复前调用，释放内部资源。
         /// </summary>
         void OnClear();
     }

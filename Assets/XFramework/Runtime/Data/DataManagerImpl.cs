@@ -93,17 +93,20 @@ namespace XFramework.XData
             if (string.IsNullOrEmpty(data.defaultFormat))
                 data.defaultFormat = "json";
 
-            foreach (var (type, block) in _blocks)
+            foreach (var pair in _blocks)
             {
+                var block = pair.Value;
                 var saveObj = block.OnSave();
                 if (saveObj == null)
                     continue;
 
                 var serializer = XSerialize.Serializer.Default;
-                var rawData = serializer.Serialize(saveObj, type);
+                var rawData = serializer.Serialize(saveObj, saveObj.GetType());
                 data.blocks.Add(new DataBlockSnapshot
                 {
                     blockName = block.BlockName,
+                    // 记录 OnSave 返回对象的真实类型，读档时按此类型反序列化后再传给 OnLoad
+                    saveType = saveObj.GetType().AssemblyQualifiedName,
                     data = Convert.ToBase64String(rawData),
                 });
             }
@@ -114,6 +117,11 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void ApplySnapshot(DataSnapshot data)
         {
+            // 恢复到快照状态：先清空所有已注册 Block 的数据（仅清数据、保留注册，
+            // 不能 ClearAll 否则名称索引被清空，后续无法匹配快照中的 block），
+            // 快照中未出现的 Block 保持清空。
+            ForEachBlock(b => b.OnClear());
+
             if (data.blocks == null || data.blocks.Count == 0)
                 return;
 
@@ -145,7 +153,18 @@ namespace XFramework.XData
                 try
                 {
                     var rawData = Convert.FromBase64String(snap.data);
-                    var saveObj = serializer.Deserialize(rawData, block.GetType());
+
+                    // 优先按快照记录的 OnSave 返回类型反序列化；
+                    // 旧存档无 saveType 或类型已无法解析（如类型重命名）时回退 Block 自身类型。
+                    var targetType = string.IsNullOrEmpty(snap.saveType) ? null : Type.GetType(snap.saveType);
+                    if (targetType == null || targetType == typeof(object))
+                    {
+                        Debug.LogWarning(
+                            $"[Data] 数据块 {snap.blockName} 的 saveType 无法解析（{snap.saveType ?? "空"}），回退使用 Block 类型。");
+                        targetType = block.GetType();
+                    }
+
+                    var saveObj = serializer.Deserialize(rawData, targetType);
                     block.OnLoad(saveObj);
                 }
                 catch (Exception ex)
