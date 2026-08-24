@@ -2,9 +2,9 @@
 
 ## 概述
 
-XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 SaveLoadModule 提供序列化/反序列化接口。
+XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 Save 模块提供序列化/反序列化接口。
 
-> **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **SaveLoadModule**（独立模块，待实现）负责。DataManager 暴露全量快照（`CreateSnapshot()` / `ApplySnapshot(data)`）、单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()` 等）接口。
+> **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **Save 模块（XFramework.XSave）**负责。DataManager 暴露全量快照（`CreateSnapshot()` / `ApplySnapshot(data)`）、单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()` 等）接口。
 
 数据按 **GamePlay 模块** 组织——一个 `IDataBlock` 对应一个游戏子系统，内部自行管理数据结构，不再强制主键约束。
 
@@ -17,7 +17,7 @@ XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏�
 | 数据来源 | CSV / ScriptableObject 等只读配置 | 运行时动态产生                             |
 | 可变性   | 只读                              | 可增删改                                   |
 | 存档     | 不参与                            | 可序列化存档                               |
-| 存储     | 内存表                            | 内存 Block（持久化由 SaveLoadModule 负责） |
+| 存储     | 内存表                            | 内存 Block（持久化由 Save 模块负责）       |
 | 数据模型 | `IConfigRow<TKey>` (按主键索引)   | `IDataBlock` (按模块组织)                  |
 
 ## 架构
@@ -30,8 +30,10 @@ GameDataNode (节点树启动)
 DataManager (静态门面)
     └── 转发到 DataManagerImpl
 
-SaveLoadModule (独立模块，待实现)
-    └── 持有 IDataStore，通过 DataManager 快照接口实现持久化（可结合脏标记/单块快照做增量保存）
+SaveBootstrapNode (节点树启动，Phase=4)
+    └── SaveManagerImpl (内部实现)
+            ├── FileManager (文件读写)
+            └── DataManager (快照导出/恢复)
 ```
 
 ### 设计原则
@@ -39,7 +41,7 @@ SaveLoadModule (独立模块，待实现)
 - **节点树 + 静态服务混合**：`GameDataNode` 挂载在节点树上管理生命周期，初始化后注入 `DataManager` 静态门面供全局访问。
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
 - **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
-- **存读档分离**：文件读写、加密、云同步等持久化操作由 SaveLoadModule（独立模块）负责，不在 DataManager 职责范围内。
+- **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。
 
 ## 快速开始
 
@@ -178,7 +180,7 @@ DataManager.RemoveBlock<QuestData>();
 ```csharp
 using XFramework.XData;
 
-// 导出当前所有 Block 的快照（供 SaveLoadModule 写入文件）
+// 导出当前所有 Block 的快照（供 Save 模块写入文件）
 var snapshot = DataManager.CreateSnapshot();
 
 // 从快照恢复（清空现有数据后加载）
@@ -187,7 +189,7 @@ DataManager.ApplySnapshot(snapshot);
 
 ### 四、脏标记（增量保存）
 
-数据修改后显式调用 `MarkDirty<T>()` 标记该 Block 需要保存，SaveLoadModule 可据此实现增量保存：
+数据修改后显式调用 `MarkDirty<T>()` 标记该 Block 需要保存，Save 模块可据此实现增量保存：
 
 ```csharp
 using XFramework.XData;
@@ -211,7 +213,7 @@ if (DataManager.HasDirtyBlocks)
 - `ApplySnapshot()` 恢复后自动清空全部脏标记（恢复即干净）。
 - `RemoveBlock<T>()` / `ClearAll()` 联动清理对应脏标记。
 
-> 增量保存的落点（按脏块逐个导出/写入）由 **SaveLoadModule**（独立模块，待实现）负责；本模块提供脏标记 + 单 Block 快照能力（见下文）。
+> 增量保存的落点（按脏块逐个导出/写入）由 **Save 模块（XFramework.XSave）**负责；本模块提供脏标记 + 单 Block 快照能力（见下文）。
 
 ### 五、单 Block 快照（增量保存）
 
@@ -223,7 +225,7 @@ using XFramework.XData;
 // 导出单个 Block 的快照（未注册或 OnSave 返回 null 时返回 null）
 var snap = DataManager.CreateBlockSnapshot<BagData>();
 if (snap != null)
-    // 写入文件（由 SaveLoadModule 负责）
+    // 写入文件（由 Save 模块负责）
 
 // 从单个快照恢复（不清空其他 Block；恢复前清空目标块）
 DataManager.ApplyBlockSnapshot(snap);
@@ -241,7 +243,7 @@ DataManager.ApplyBlockSnapshot(snap);
 3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
 4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
 
-> 文件 I/O 等持久化逻辑由 **SaveLoadModule**（独立模块，待实现）负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
+> 文件 I/O 等持久化逻辑由 **Save 模块（XFramework.XSave）**负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
 
 ## 注意事项
 
@@ -250,7 +252,7 @@ DataManager.ApplyBlockSnapshot(snap);
 - **`OnSave()` 返回值**必须可被默认序列化器正确序列化。推荐定义内部 `[Serializable]` struct 作为快照。
 - **Dictionary 原生支持**：默认序列化器可直接序列化 Dictionary（旧 JsonUtility 不支持），复杂结构无需再手转 `List<KeyValuePair>`。
 - **不建议直接存储 Unity 内置 struct**（如 Vector3）：Newtonsoft 会额外写出只读属性（magnitude 等）导致存档体积膨胀；如需请自行配置 JsonConverter。
-- **不支持多态序列化**。如果数据模型中有接口/基类引用字段，SaveLoadModule 可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
+- **不支持多态序列化**。如果数据模型中有接口/基类引用字段，Save 模块可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
 
 ### 存档兼容
 - 快照的 `saveType` 字段以 `AssemblyQualifiedName` 存储 `OnSave()` 返回对象的类型信息。类型重命名或迁移程序集后旧快照的 `saveType` 将无法解析，恢复时回退使用 Block 自身类型并输出警告（需 `OnSave()` 返回类型与 Block 类型一致方可正确恢复）。

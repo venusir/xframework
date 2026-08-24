@@ -9,7 +9,7 @@ namespace XFramework.XData
     /// 外部业务代码通过本类静态方法访问。</para>
     /// <para>使用前必须调用 <see cref="Initialize"/>（或由 GameDataNode 自动调用）。</para>
     /// <para>数据按 <see cref="IDataBlock"/>（GamePlay 模块）组织。</para>
-    /// <para>存读档职责由 SaveLoadModule 负责，本类仅暴露 <see cref="CreateSnapshot"/> / <see cref="ApplySnapshot"/> 序列化接口。</para>
+    /// <para>存读档职责由 Save 模块（XFramework.XSave）负责，本类仅暴露 <see cref="CreateSnapshot"/> / <see cref="ApplySnapshot"/> 序列化接口。</para>
     /// </summary>
     /// <example>
     /// <code>
@@ -18,7 +18,7 @@ namespace XFramework.XData
     /// var bag = DataManager.GetOrCreateBlock<BagData>();
     /// bag.Items.Add(new BagItem { id = 1001, count = 1 });
     /// bag.Gold += 100;
-    /// var snapshot = DataManager.CreateSnapshot(); // 供 SaveLoadModule 持久化
+    /// var snapshot = DataManager.CreateSnapshot(); // 供 Save 模块持久化
     /// </code>
     /// </example>
     public static class DataManager

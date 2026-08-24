@@ -42,6 +42,9 @@ GameLauncher (MonoBehaviour)
 | **LockManager**         | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
 | **MessageManager**      | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
 | **FileManager**         | 首次调用时懒加载（自动选平台 Provider）      | 零配置；也可显式 `Initialize()` 注入自定义 Provider |
+| **Serializer**          | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 注册内置序列化器（json / json-utility）             |
+| **DataManager**         | 由节点树 GameDataNode 初始化                 | 挂载 ServiceInitializerNode 后自动就绪             |
+| **SaveManager**         | 由节点树 SaveBootstrapNode 初始化            | 挂载 ServiceInitializerNode 后自动就绪             |
 | **UIManager**           | `UIManager.Initialize(canvasTransform)`      | 需传入 Canvas 根节点                                |
 | **UIHudManager**        | 随 UIManager 自动就绪                        | —                                                   |
 | **UITipManager**        | 随 UIManager 自动就绪                        | —                                                   |
