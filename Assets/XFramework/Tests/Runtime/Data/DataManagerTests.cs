@@ -43,7 +43,11 @@ namespace XFramework.XData.Tests
                 public int gold;
             }
 
+            public int DataVersion => 0;
+
             public object OnSave() => new SaveSnap { items = Items, gold = Gold };
+
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
 
             public void OnLoad(object data)
             {
@@ -70,7 +74,9 @@ namespace XFramework.XData.Tests
             public string BlockName => "Quest";
             public int Progress;
 
+            public int DataVersion => 0;
             public object OnSave() => null;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
             public void OnLoad(object data) { }
             public void OnClear() => Progress = 0;
         }

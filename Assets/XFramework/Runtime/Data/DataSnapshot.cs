@@ -67,6 +67,15 @@ namespace XFramework.XData
         public string blockName;
 
         /// <summary>
+        /// 数据块结构版本号，写入时等于 <see cref="IDataBlock.DataVersion"/>。
+        /// <para>读档时若此值低于 Block 当前 <see cref="IDataBlock.DataVersion"/>，
+        /// 会按版本差执行 <see cref="IDataBlock.OnMigrate"/> 迁移链后再调用 <see cref="IDataBlock.OnLoad"/>；
+        /// 高于当前版本（如代码回滚）则跳过该块并输出警告。</para>
+        /// <para>旧存档无此字段时为 0，自动进入迁移链。</para>
+        /// </summary>
+        public int version;
+
+        /// <summary>
         /// <see cref="IDataBlock.OnSave"/> 返回对象的类型全名（AssemblyQualifiedName），
         /// 用于读档时按原类型反序列化。
         /// <para>为空或无法解析时回退使用 <see cref="IDataBlock"/> 自身类型（旧存档兼容）。</para>

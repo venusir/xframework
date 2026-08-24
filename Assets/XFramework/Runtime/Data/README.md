@@ -62,6 +62,7 @@ public class BagItem
 public class BagData : IDataBlock
 {
     public string BlockName => "Bag";
+    public int DataVersion => 0; // 未引入版本控制时返回 0
 
     public List<BagItem> Items = new();
     public int Gold;
@@ -78,6 +79,8 @@ public class BagData : IDataBlock
     {
         return new SaveSnap { items = Items, gold = Gold };
     }
+
+    public object OnMigrate(object saveData, int fromVersion) => saveData; // 恒等迁移
 
     public void OnLoad(object data)
     {
@@ -101,6 +104,7 @@ public class BagData : IDataBlock
 public class QuestData : IDataBlock
 {
     public string BlockName => "Quest";
+    public int DataVersion => 0;
 
     public Dictionary<string, int> CompletedQuests = new(); // 任务ID -> 完成次数
     public string ActiveQuestId;
@@ -120,6 +124,8 @@ public class QuestData : IDataBlock
             activeQuestId = ActiveQuestId
         };
     }
+
+    public object OnMigrate(object saveData, int fromVersion) => saveData;
 
     public void OnLoad(object data)
     {
@@ -198,7 +204,12 @@ DataManager.ApplySnapshot(snapshot);
 - **不支持多态序列化**。如果数据模型中有接口/基类引用字段，SaveLoadModule 可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
 
 ### 存档兼容
-- 快照的 `saveType` 字段以 `AssemblyQualifiedName` 存储 `OnSave()` 返回对象的类型信息。类型重命名或迁移程序集后旧快照的 `saveType` 将无法解析，恢复时回退使用 Block 自身类型并输出警告（需 `OnSave()` 返回类型与 Block 类型一致方可正确恢复）。建议通过 `DataSnapshot.version` 字段实现版本校验和迁移。
+- 快照的 `saveType` 字段以 `AssemblyQualifiedName` 存储 `OnSave()` 返回对象的类型信息。类型重命名或迁移程序集后旧快照的 `saveType` 将无法解析，恢复时回退使用 Block 自身类型并输出警告（需 `OnSave()` 返回类型与 Block 类型一致方可正确恢复）。
+- **版本迁移**：`DataBlockSnapshot.version` 写入时为 `IDataBlock.DataVersion`。恢复时若快照版本低于当前 `DataVersion`，在反序列化之后、`OnLoad` 之前按版本差依次执行 `OnMigrate(saveData, fromVersion)`；旧存档无 version 字段时为 0，自动进入迁移链。快照版本高于当前代码版本（如代码回滚）时跳过该块并输出警告，防止旧代码被新结构数据污染。
+- **迁移契约**：`OnMigrate` 入参是快照中旧结构的反序列化实例，返回迁移到下一版本的实例（通常就地修改后返回同一实例）。每步迁移只推进一个版本，数据结构变更（新增/调整字段）时 `DataVersion` +1 并提供对应迁移逻辑。
+- **旧结构体必须保留**：迁移链入参依赖旧版本快照结构体（如 `SaveSnap`）仍存在于代码中，否则旧档无法反序列化。旧结构体的字段只能新增、不可删除或改名。
+- **迁移指南**：已存在、尚未接入版本控制的第三方 Block，补 `DataVersion => 0` + 恒等 `OnMigrate(object s, int v) => s` 即可保持原行为；后续结构变更时再 +1 并实现真实迁移。
+- **版本号分工**：`DataSnapshot.version` 保留为存档级格式版本，与块级 `DataBlockSnapshot.version` 相互独立，各自管理。
 
 ### 线程安全
 - 所有 `DataManager` API **必须在主线程**调用，内部未做线程同步处理。
