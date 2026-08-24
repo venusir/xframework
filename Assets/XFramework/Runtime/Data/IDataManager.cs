@@ -91,6 +91,25 @@ namespace XFramework.XData
 
         #endregion
 
+        #region BlockSnapshot
+
+        /// <summary>
+        /// 创建单个 <see cref="IDataBlock"/> 的快照（增量保存用，不清空脏标记）。
+        /// <para>未注册的 Block 输出警告并返回 <c>null</c>；
+        /// <see cref="IDataBlock.OnSave"/> 返回 null 时同样返回 <c>null</c>（不警告）。</para>
+        /// </summary>
+        DataBlockSnapshot CreateBlockSnapshot<T>() where T : class, IDataBlock;
+
+        /// <summary>
+        /// 从单个快照恢复指定数据块（不清空其他 Block）。
+        /// <para>未知 blockName 输出警告并返回 <c>false</c>（不创建实例）；
+        /// 恢复前清空目标块数据，恢复管线与 <see cref="ApplySnapshot"/> 一致（版本迁移、saveType 回退）。</para>
+        /// <para>恢复成功后清除该块的脏标记，失败保留。</para>
+        /// </summary>
+        bool ApplyBlockSnapshot(DataBlockSnapshot snap);
+
+        #endregion
+
         #region Clear
 
         /// <summary>

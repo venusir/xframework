@@ -97,28 +97,38 @@ namespace XFramework.XData
 
             foreach (var pair in _blocks)
             {
-                var block = pair.Value;
-                var saveObj = block.OnSave();
-                if (saveObj == null)
-                    continue;
-
-                var serializer = XSerialize.Serializer.Default;
-                var rawData = serializer.Serialize(saveObj, saveObj.GetType());
-                data.blocks.Add(new DataBlockSnapshot
-                {
-                    blockName = block.BlockName,
-                    // 记录 OnSave 返回对象的真实类型，读档时按此类型反序列化后再传给 OnLoad
-                    saveType = saveObj.GetType().AssemblyQualifiedName,
-                    // 记录写档时的数据版本，读档时据此执行迁移链
-                    version = block.DataVersion,
-                    data = Convert.ToBase64String(rawData),
-                });
+                var snap = BuildBlockSnapshot(pair.Value);
+                if (snap != null)
+                    data.blocks.Add(snap);
             }
 
             // 快照导出成功即视为已保存，清空全部脏标记；序列化异常会向上传播，此时脏标记保留
             _dirtyBlocks.Clear();
 
             return data;
+        }
+
+        /// <summary>
+        /// 构建单个 Block 的快照条目（全量导出与单块导出共用的序列化逻辑）。
+        /// <para>序列化异常向上传播，由调用方决定处理（全量导出异常时脏标记保留）。</para>
+        /// </summary>
+        private DataBlockSnapshot BuildBlockSnapshot(IDataBlock block)
+        {
+            var saveObj = block.OnSave();
+            if (saveObj == null)
+                return null;
+
+            var serializer = XSerialize.Serializer.Default;
+            var rawData = serializer.Serialize(saveObj, saveObj.GetType());
+            return new DataBlockSnapshot
+            {
+                blockName = block.BlockName,
+                // 记录 OnSave 返回对象的真实类型，读档时按此类型反序列化后再传给 OnLoad
+                saveType = saveObj.GetType().AssemblyQualifiedName,
+                // 记录写档时的数据版本，读档时据此执行迁移链
+                version = block.DataVersion,
+                data = Convert.ToBase64String(rawData),
+            };
         }
 
         /// <inheritdoc/>
@@ -244,6 +254,55 @@ namespace XFramework.XData
         {
             // 脏查询为低频操作（存档时），直接新建列表，避免复用列表被外部持有导致下次调用串数据
             return new List<IDataBlock>(_dirtyBlocks);
+        }
+
+        #endregion
+
+        #region BlockSnapshot
+
+        /// <inheritdoc/>
+        public DataBlockSnapshot CreateBlockSnapshot<T>() where T : class, IDataBlock
+        {
+            if (!_blocks.TryGetValue(typeof(T), out var block))
+            {
+                Debug.LogWarning($"[Data] 创建快照的数据块未注册: {typeof(T).Name}，返回 null。");
+                return null;
+            }
+
+            // 单块导出不清空脏标记：仅读取当前数据，不代表该块已保存
+            return BuildBlockSnapshot(block);
+        }
+
+        /// <inheritdoc/>
+        public bool ApplyBlockSnapshot(DataBlockSnapshot snap)
+        {
+            if (snap == null)
+            {
+                Debug.LogWarning("[Data] ApplyBlockSnapshot 收到 null 快照，忽略。");
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(snap.blockName))
+            {
+                Debug.LogWarning("[Data] DataBlockSnapshot 缺少 blockName，跳过。");
+                return false;
+            }
+
+            if (!_blockNameIndex.TryGetValue(snap.blockName, out var block))
+            {
+                Debug.LogWarning($"[Data] 未注册的数据块: {snap.blockName}，跳过。");
+                return false;
+            }
+
+            // 恢复单块：先清空目标块数据，再走共享恢复管线（不触碰其他 Block）
+            block.OnClear();
+            if (TryRestoreBlock(block, snap, XSerialize.Serializer.Default.Format))
+            {
+                // 恢复成功即视为已同步，清除该块脏标记；失败保留（数据可能半恢复，保守标记）
+                _dirtyBlocks.Remove(block);
+                return true;
+            }
+            return false;
         }
 
         #endregion

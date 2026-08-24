@@ -140,6 +140,24 @@ namespace XFramework.XData
 
         #endregion
 
+        #region BlockSnapshot
+
+        /// <inheritdoc cref="IDataManager.CreateBlockSnapshot{T}"/>
+        public static DataBlockSnapshot CreateBlockSnapshot<T>() where T : class, IDataBlock
+        {
+            EnsureInitialized();
+            return _impl.CreateBlockSnapshot<T>();
+        }
+
+        /// <inheritdoc cref="IDataManager.ApplyBlockSnapshot"/>
+        public static bool ApplyBlockSnapshot(DataBlockSnapshot snap)
+        {
+            EnsureInitialized();
+            return _impl.ApplyBlockSnapshot(snap);
+        }
+
+        #endregion
+
         #region Clear
 
         /// <inheritdoc cref="IDataManager.ClearAll"/>

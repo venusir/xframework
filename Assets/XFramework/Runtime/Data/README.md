@@ -211,7 +211,28 @@ if (DataManager.HasDirtyBlocks)
 - `ApplySnapshot()` 恢复后自动清空全部脏标记（恢复即干净）。
 - `RemoveBlock<T>()` / `ClearAll()` 联动清理对应脏标记。
 
-> 增量保存的落点（按脏块逐个序列化写入）由 **SaveLoadModule**（独立模块，待实现）负责，本模块仅提供脏标记能力。
+> 增量保存的落点（按脏块逐个导出/写入）由 **SaveLoadModule**（独立模块，待实现）负责；本模块提供脏标记 + 单 Block 快照能力（见下文）。
+
+### 五、单 Block 快照（增量保存）
+
+脏标记配合单块快照即可实现增量保存：对脏块逐个导出/恢复，不触碰其他块。
+
+```csharp
+using XFramework.XData;
+
+// 导出单个 Block 的快照（未注册或 OnSave 返回 null 时返回 null）
+var snap = DataManager.CreateBlockSnapshot<BagData>();
+if (snap != null)
+    // 写入文件（由 SaveLoadModule 负责）
+
+// 从单个快照恢复（不清空其他 Block；恢复前清空目标块）
+DataManager.ApplyBlockSnapshot(snap);
+```
+
+与全量快照的差异：
+
+- `CreateBlockSnapshot<T>()`：仅导出目标块，**不清空脏标记**（读取不代表已保存）；未注册输出警告并返回 `null`；`OnSave()` 返回 `null` 时返回 `null`（不警告）。
+- `ApplyBlockSnapshot(snap)`：按 `blockName` 索引已注册块（未知输出警告并返回 `false`，不创建实例）；恢复前清空目标块数据，**复用与 `ApplySnapshot` 相同的恢复管线**（版本迁移、saveType 回退、格式解析）；成功恢复后清除该块脏标记，失败保留。
 
 ## 序列化原理
 
