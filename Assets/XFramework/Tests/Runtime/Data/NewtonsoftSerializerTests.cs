@@ -31,6 +31,26 @@ namespace XFramework.XData.Tests
         }
 
         [Test]
+        public void AutoInit_DefaultAvailable()
+        {
+            // 运行时由 AutoInit（[RuntimeInitializeOnLoadMethod] / [InitializeOnLoadMethod]）
+            // 在加载时注册内置序列化器，无需显式 Initialize 即可用 Default。
+            // 此处锁定契约：模块已就绪且默认格式为 "json"。
+            Assert.IsTrue(Serializer.IsInitialized, "AutoInit 后模块应已就绪");
+            Assert.AreEqual("json", Serializer.Default.Format, "默认序列化器格式应为 json");
+        }
+
+        [Test]
+        public void Initialize_IsIdempotent()
+        {
+            var first = Serializer.Get("json");
+
+            Serializer.Initialize(); // 重复调用应被幂等保护忽略
+
+            Assert.AreSame(first, Serializer.Get("json"), "重复 Initialize 不应重新注册/覆盖实例");
+        }
+
+        [Test]
         public void RoundTrip_PlainData()
         {
             var data = new PlayerData { name = "勇者", level = 10 };

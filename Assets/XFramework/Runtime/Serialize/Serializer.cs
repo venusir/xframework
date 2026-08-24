@@ -34,6 +34,21 @@ namespace XFramework.XSerialize
         #region Initialization
 
         /// <summary>
+        /// 自动初始化入口：运行时/编辑器加载时注册内置序列化器，保证 DataManager/SaveManager
+        /// 依赖的 <see cref="Default"/> 开箱即用（零配置初始化，与 LockManager/MessageManager 惯例一致）。
+        /// <para>显式调用 <see cref="Initialize"/> 仍然安全（幂等保护）。</para>
+        /// </summary>
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#else
+        [RuntimeInitializeOnLoadMethod]
+#endif
+        private static void AutoInit()
+        {
+            Initialize();
+        }
+
+        /// <summary>
         /// 初始化序列化器模块，注册内置的 NewtonsoftSerializer（默认）与 JsonSerializer（遗留）。
         /// <para>由框架自动调用，也可手动调用以重新初始化。</para>
         /// </summary>
