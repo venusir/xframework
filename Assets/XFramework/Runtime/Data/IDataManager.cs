@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 
 namespace XFramework.XData
 {
     /// <summary>
-    /// 运行时数据管理器的内部接口，定义 Block 管理 / 数据快照能力。
+    /// 运行时数据管理器的内部接口，定义 Block 管理 / 数据快照 / 脏标记能力。
     /// <para>外部业务代码通过 <see cref="DataManager"/> 静态门面访问。</para>
     /// <para>存读档职责由 SaveLoadModule 负责，DataManager 仅提供 <see cref="DataSnapshot"/> 序列化/反序列化接口。</para>
     /// </summary>
@@ -59,6 +60,34 @@ namespace XFramework.XData
         /// <para>反序列化委托给 <see cref="XSerialize.Serializer"/>，加载前会清空现有数据。</para>
         /// </summary>
         void ApplySnapshot(DataSnapshot data);
+
+        #endregion
+
+        #region Dirty
+
+        /// <summary>
+        /// 标记指定类型的数据块为「已修改，需要保存」。
+        /// <para>数据修改后显式调用；SaveLoadModule 可结合 <see cref="GetDirtyBlocks"/> 实现增量保存。</para>
+        /// <para>未注册的 Block 输出警告并忽略。</para>
+        /// </summary>
+        void MarkDirty<T>() where T : class, IDataBlock;
+
+        /// <summary>
+        /// 判断指定类型的数据块是否被标记为已修改。
+        /// <para>未注册的 Block 返回 <c>false</c>。</para>
+        /// </summary>
+        bool IsDirty<T>() where T : class, IDataBlock;
+
+        /// <summary>
+        /// 是否存在被标记为已修改的数据块。
+        /// </summary>
+        bool HasDirtyBlocks { get; }
+
+        /// <summary>
+        /// 获取所有被标记为已修改的数据块。
+        /// <para>返回新建列表，调用方持有遍历；快照导出（<see cref="CreateSnapshot"/>）成功后脏标记被清空，先前获取的列表随之失效。</para>
+        /// </summary>
+        List<IDataBlock> GetDirtyBlocks();
 
         #endregion
 

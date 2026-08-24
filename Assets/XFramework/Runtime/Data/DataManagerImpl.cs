@@ -15,6 +15,7 @@ namespace XFramework.XData
 
         private readonly Dictionary<Type, IDataBlock> _blocks = new();
         private readonly Dictionary<string, IDataBlock> _blockNameIndex = new();
+        private readonly HashSet<IDataBlock> _dirtyBlocks = new();
 
         #endregion
 
@@ -61,6 +62,7 @@ namespace XFramework.XData
                 block.OnClear();
                 _blocks.Remove(type);
                 _blockNameIndex.Remove(block.BlockName);
+                _dirtyBlocks.Remove(block); // 联动清理脏标记
                 return true;
             }
             return false;
@@ -113,6 +115,9 @@ namespace XFramework.XData
                 });
             }
 
+            // 快照导出成功即视为已保存，清空全部脏标记；序列化异常会向上传播，此时脏标记保留
+            _dirtyBlocks.Clear();
+
             return data;
         }
 
@@ -123,6 +128,9 @@ namespace XFramework.XData
             // 不能 ClearAll 否则名称索引被清空，后续无法匹配快照中的 block），
             // 快照中未出现的 Block 保持清空。
             ForEachBlock(b => b.OnClear());
+
+            // 恢复即干净：无论快照是否为空，内存数据已重置/恢复，清空全部脏标记
+            _dirtyBlocks.Clear();
 
             if (data.blocks == null || data.blocks.Count == 0)
                 return;
@@ -208,6 +216,38 @@ namespace XFramework.XData
 
         #endregion
 
+        #region Dirty
+
+        /// <inheritdoc/>
+        public void MarkDirty<T>() where T : class, IDataBlock
+        {
+            if (!_blocks.TryGetValue(typeof(T), out var block))
+            {
+                Debug.LogWarning($"[Data] 标记脏的数据块未注册: {typeof(T).Name}，忽略。");
+                return;
+            }
+
+            _dirtyBlocks.Add(block);
+        }
+
+        /// <inheritdoc/>
+        public bool IsDirty<T>() where T : class, IDataBlock
+        {
+            return _blocks.TryGetValue(typeof(T), out var block) && _dirtyBlocks.Contains(block);
+        }
+
+        /// <inheritdoc/>
+        public bool HasDirtyBlocks => _dirtyBlocks.Count > 0;
+
+        /// <inheritdoc/>
+        public List<IDataBlock> GetDirtyBlocks()
+        {
+            // 脏查询为低频操作（存档时），直接新建列表，避免复用列表被外部持有导致下次调用串数据
+            return new List<IDataBlock>(_dirtyBlocks);
+        }
+
+        #endregion
+
         #region Clear
 
         /// <inheritdoc/>
@@ -216,6 +256,7 @@ namespace XFramework.XData
             ForEachBlock(b => b.OnClear());
             _blocks.Clear();
             _blockNameIndex.Clear();
+            _dirtyBlocks.Clear();
         }
 
         #endregion

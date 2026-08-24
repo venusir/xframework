@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace XFramework.XData
 {
     /// <summary>
@@ -99,6 +101,41 @@ namespace XFramework.XData
         {
             EnsureInitialized();
             _impl.ApplySnapshot(data);
+        }
+
+        #endregion
+
+        #region Dirty
+
+        /// <inheritdoc cref="IDataManager.MarkDirty{T}"/>
+        public static void MarkDirty<T>() where T : class, IDataBlock
+        {
+            EnsureInitialized();
+            _impl.MarkDirty<T>();
+        }
+
+        /// <inheritdoc cref="IDataManager.IsDirty{T}"/>
+        public static bool IsDirty<T>() where T : class, IDataBlock
+        {
+            EnsureInitialized();
+            return _impl.IsDirty<T>();
+        }
+
+        /// <inheritdoc cref="IDataManager.HasDirtyBlocks"/>
+        public static bool HasDirtyBlocks
+        {
+            get
+            {
+                EnsureInitialized();
+                return _impl.HasDirtyBlocks;
+            }
+        }
+
+        /// <inheritdoc cref="IDataManager.GetDirtyBlocks"/>
+        public static List<IDataBlock> GetDirtyBlocks()
+        {
+            EnsureInitialized();
+            return _impl.GetDirtyBlocks();
         }
 
         #endregion

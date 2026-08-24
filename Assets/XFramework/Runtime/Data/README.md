@@ -185,6 +185,34 @@ var snapshot = DataManager.CreateSnapshot();
 DataManager.ApplySnapshot(snapshot);
 ```
 
+### 四、脏标记（增量保存）
+
+数据修改后显式调用 `MarkDirty<T>()` 标记该 Block 需要保存，SaveLoadModule 可据此实现增量保存：
+
+```csharp
+using XFramework.XData;
+
+bag.Gold += 100;
+DataManager.MarkDirty<BagData>(); // 数据修改后显式标记
+
+// 是否存在需要保存的数据
+if (DataManager.HasDirtyBlocks)
+{
+    // 获取脏块列表（返回新建列表，调用方持有遍历）
+    foreach (var block in DataManager.GetDirtyBlocks())
+        Debug.Log($"需要保存: {block.BlockName}");
+}
+```
+
+脏标记生命周期（框架自动联动，业务代码无需手动清理）：
+
+- `MarkDirty<T>()`：标记后 `IsDirty<T>()` / `HasDirtyBlocks` / `GetDirtyBlocks()` 可查询；未注册的 Block 输出警告并忽略。
+- `CreateSnapshot()` 成功后自动清空全部脏标记（快照导出即视为已保存）；导出异常时脏标记保留。
+- `ApplySnapshot()` 恢复后自动清空全部脏标记（恢复即干净）。
+- `RemoveBlock<T>()` / `ClearAll()` 联动清理对应脏标记。
+
+> 增量保存的落点（按脏块逐个序列化写入）由 **SaveLoadModule**（独立模块，待实现）负责，本模块仅提供脏标记能力。
+
 ## 序列化原理
 
 1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType` 存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
