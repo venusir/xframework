@@ -152,18 +152,20 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 | ------------------------------------------------- | -------------------------------------------------------------------------------- | ------------ | -------- |
 | [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` | 异步操作库   | UPM      |
 | [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset`                 | 资源管理系统 | UPM      |
+| [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) | `com.unity.nuget.newtonsoft-json`（3.2.1）                           | JSON 序列化库 | UPM      |
 
 ### 安装依赖
 
 > **重要：** 由于 Unity 包管理器的限制，UPM 包的 `package.json` 中 `dependencies` 字段只支持语义化版本号，不支持 Git URL。因此 XFramework 不在自身 `package.json` 中声明第三方依赖，而是需要您在**项目根目录的 `Packages/manifest.json`** 中手动添加。
 
-在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下两个包：
+在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下三个包：
 
 ```json
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset"
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset",
+    "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }
 ```

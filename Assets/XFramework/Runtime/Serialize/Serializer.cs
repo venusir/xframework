@@ -8,7 +8,8 @@ namespace XFramework.XSerialize
     /// 序列化器静态门面，管理所有已注册的 <see cref="ISerializer"/>。
     /// </summary>
     /// <remarks>
-    /// <para>框架初始化时自动注册 <see cref="JsonSerializer"/> 作为默认实现（format = "json"）。</para>
+    /// <para>框架初始化时自动注册 <see cref="NewtonsoftSerializer"/> 作为默认实现（format = "json"），
+    /// 并注册 <see cref="JsonSerializer"/>（format = "json-utility"）以兼容读写旧 JsonUtility 格式存档。</para>
     /// <para>第三方可调用 <see cref="Register"/> 注册自定义序列化器，通过 format 标识查找。</para>
     /// </remarks>
     /// <example>
@@ -33,7 +34,7 @@ namespace XFramework.XSerialize
         #region Initialization
 
         /// <summary>
-        /// 初始化序列化器模块，注册内置的 JsonSerializer。
+        /// 初始化序列化器模块，注册内置的 NewtonsoftSerializer（默认）与 JsonSerializer（遗留）。
         /// <para>由框架自动调用，也可手动调用以重新初始化。</para>
         /// </summary>
         public static void Initialize()
@@ -41,7 +42,8 @@ namespace XFramework.XSerialize
             if (_initialized)
                 return;
 
-            Register(new JsonSerializer());
+            Register(new NewtonsoftSerializer()); // 默认 "json"
+            Register(new JsonSerializer());       // 遗留 "json-utility"，兼容旧 JsonUtility 格式存档
             _initialized = true;
         }
 

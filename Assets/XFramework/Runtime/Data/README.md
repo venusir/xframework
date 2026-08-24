@@ -181,7 +181,7 @@ DataManager.ApplySnapshot(snapshot);
 
 ## 序列化原理
 
-1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType` 存入 `DataBlockSnapshot`。
+1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType` 存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
 2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化后调用 `OnLoad(saveData)`。
 3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
 4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
@@ -191,8 +191,10 @@ DataManager.ApplySnapshot(snapshot);
 ## 注意事项
 
 ### 序列化要求
-- 所有数据模型必须标记 `[Serializable]` 并使用 `public` 字段（或 `[SerializeField]` 标记私有字段），因为默认序列化器（`JsonSerializer`，封装 `JsonUtility.ToJson`）依赖此约定；自定义序列化器（如 MessagePack）可放宽。
+- 快照结构体（含 Block 自身）必须使用 `public` 字段：默认序列化器 `NewtonsoftSerializer`（Newtonsoft.Json）不序列化私有字段，JsonUtility 的 `[SerializeField]` 私有字段约定不再适用；自定义序列化器（如 MessagePack）可放宽。
 - **`OnSave()` 返回值**必须可被默认序列化器正确序列化。推荐定义内部 `[Serializable]` struct 作为快照。
+- **Dictionary 原生支持**：默认序列化器可直接序列化 Dictionary（旧 JsonUtility 不支持），复杂结构无需再手转 `List<KeyValuePair>`。
+- **不建议直接存储 Unity 内置 struct**（如 Vector3）：Newtonsoft 会额外写出只读属性（magnitude 等）导致存档体积膨胀；如需请自行配置 JsonConverter。
 - **不支持多态序列化**。如果数据模型中有接口/基类引用字段，SaveLoadModule 可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
 
 ### 存档兼容

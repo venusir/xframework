@@ -1,6 +1,7 @@
 {
     "name": "Venusy609.Xframework",
     "references": [
+        "Newtonsoft.Json",
         "UniTask",
         "YooAsset",
         "Unity.TextMeshPro",
