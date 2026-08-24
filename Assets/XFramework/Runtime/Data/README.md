@@ -38,7 +38,7 @@ SaveLoadModule (独立模块，待实现)
 
 - **节点树 + 静态服务混合**：`GameDataNode` 挂载在节点树上管理生命周期，初始化后注入 `DataManager` 静态门面供全局访问。
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
-- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `SaveData`；`ApplySnapshot(data)` 恢复数据。
+- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。
 - **存读档分离**：文件读写、加密、云同步等持久化操作由 SaveLoadModule（独立模块）负责，不在 DataManager 职责范围内。
 
 ## 快速开始
@@ -181,21 +181,22 @@ DataManager.ApplySnapshot(snapshot);
 
 ## 序列化原理
 
-1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `JsonUtility.ToJson` 序列化后存入 `SaveData.blocks`。
-2. **恢复快照**：`ApplySnapshot(data)` 清空当前数据，遍历 `SaveData.blocks` 反序列化，通过 `AssemblyQualifiedName` 匹配类型，创建 `IDataBlock` 实例并调用 `OnLoad(saveData)`。
+1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType` 存入 `DataBlockSnapshot`。
+2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化后调用 `OnLoad(saveData)`。
 3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
+4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
 
 > 文件 I/O 等持久化逻辑由 **SaveLoadModule**（独立模块，待实现）负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
 
 ## 注意事项
 
 ### 序列化要求
-- 所有数据模型必须标记 `[Serializable]` 并使用 `public` 字段（或 `[SerializeField]` 标记私有字段），因为 `CreateSnapshot()` 内部使用 `JsonUtility.ToJson`。
-- **`OnSave()` 返回值**必须可被 `JsonUtility.ToJson` 正确序列化。推荐定义内部 `[Serializable]` struct 作为快照。
+- 所有数据模型必须标记 `[Serializable]` 并使用 `public` 字段（或 `[SerializeField]` 标记私有字段），因为默认序列化器（`JsonSerializer`，封装 `JsonUtility.ToJson`）依赖此约定；自定义序列化器（如 MessagePack）可放宽。
+- **`OnSave()` 返回值**必须可被默认序列化器正确序列化。推荐定义内部 `[Serializable]` struct 作为快照。
 - **不支持多态序列化**。如果数据模型中有接口/基类引用字段，SaveLoadModule 可自定义序列化方案，自行遍历 Block 替代 `CreateSnapshot()`。
 
 ### 存档兼容
-- 快照使用 `AssemblyQualifiedName` 存储类型信息。类型重命名或迁移程序集后旧快照将无法恢复。建议通过 `SaveData.version` 字段实现版本校验和迁移。
+- 快照的 `saveType` 字段以 `AssemblyQualifiedName` 存储 `OnSave()` 返回对象的类型信息。类型重命名或迁移程序集后旧快照的 `saveType` 将无法解析，恢复时回退使用 Block 自身类型并输出警告（需 `OnSave()` 返回类型与 Block 类型一致方可正确恢复）。建议通过 `DataSnapshot.version` 字段实现版本校验和迁移。
 
 ### 线程安全
 - 所有 `DataManager` API **必须在主线程**调用，内部未做线程同步处理。
@@ -223,5 +224,5 @@ XData/
 ├── DataManager.cs            # 静态门面
 ├── DataManagerImpl.cs        # 内部实现
 ├── DataException.cs          # 异常类型
-├── SaveData.cs               # 存档快照数据结构
+├── DataSnapshot.cs           # 存档快照数据结构
 └── README.md
