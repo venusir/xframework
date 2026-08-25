@@ -5,7 +5,7 @@ namespace XFramework.XData
 {
     /// <summary>
     /// 运行时数据模块的静态门面。
-    /// <para>由 <see cref="GameDataNode"/> 在 Awake 时创建 <see cref="DataManagerImpl"/> 并注入，
+    /// <para>由 <see cref="GameDataNode"/> 在加载管线 LoadAsync 阶段创建 <see cref="DataManagerImpl"/> 并注入，
     /// 外部业务代码通过本类静态方法访问。</para>
     /// <para>使用前必须调用 <see cref="Initialize"/>（或由 GameDataNode 自动调用）。</para>
     /// <para>数据按 <see cref="IDataBlock"/>（GamePlay 模块）组织。</para>
@@ -182,7 +182,7 @@ namespace XFramework.XData
         {
             if (_impl == null)
                 throw new DataException(
-                    "DataManager 尚未初始化。请确认场景中已挂载 GameDataNode（其 Awake 会自动注入），或手动调用 DataManager.Initialize(impl)。");
+                    "DataManager 尚未初始化。请确认节点树中已挂载 GameDataNode（其加载阶段会自动注入），或手动调用 DataManager.Initialize(impl)。");
         }
 
         #endregion
