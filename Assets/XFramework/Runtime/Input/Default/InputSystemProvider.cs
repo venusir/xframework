@@ -13,7 +13,7 @@ namespace XFramework.XInput.Default
     /// <para>支持手柄类型自动检测（Xbox / PS4 / PS5 / Switch Pro）。</para>
     /// <para>不包含任何游戏专属动作定义（如 Jump、Attack），第三方游戏需自行定义输入封装。</para>
     /// </summary>
-    public sealed class InputSystemProvider : IInputProvider
+    internal sealed class InputSystemProvider : IInputProvider
     {
         #region Private Fields
 
