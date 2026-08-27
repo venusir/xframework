@@ -1,5 +1,4 @@
 using System;
-using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -41,7 +40,12 @@ namespace XFramework.XFileManager
     {
         #region Private Fields
 
+        /// <summary>基础文件提供者（不含加解密层）。</summary>
+        private static IFileProvider _baseProvider;
+
+        /// <summary>当前生效的文件提供者：启用加解密时为 <see cref="CryptoFileProvider"/> 装饰器，否则等同 <see cref="_baseProvider"/>。</summary>
         private static IFileProvider _provider;
+
         private static ICryptoProvider _cryptoProvider;
         private static bool _destroyed;
         private static bool _initialized;
@@ -79,7 +83,7 @@ namespace XFramework.XFileManager
 
             if (provider != null)
             {
-                _provider = provider;
+                _baseProvider = provider;
             }
             else
             {
@@ -91,12 +95,12 @@ namespace XFramework.XFileManager
                     case RuntimePlatform.LinuxEditor:
                     case RuntimePlatform.OSXPlayer:
                     case RuntimePlatform.OSXEditor:
-                        _provider = new DesktopFileProvider();
+                        _baseProvider = new DesktopFileProvider();
                         break;
 
                     case RuntimePlatform.IPhonePlayer:
                     case RuntimePlatform.Android:
-                        _provider = new MobileFileProvider();
+                        _baseProvider = new MobileFileProvider();
                         break;
 
                     default:
@@ -106,6 +110,7 @@ namespace XFramework.XFileManager
                 }
             }
 
+            RebuildProvider();
             _initialized = true;
         }
 
@@ -116,6 +121,7 @@ namespace XFramework.XFileManager
         public static void Destroy()
         {
             _provider = null;
+            _baseProvider = null;
             _cryptoProvider = null;
             _initialized = false;
             _destroyed = true;
@@ -128,12 +134,14 @@ namespace XFramework.XFileManager
         /// <summary>
         /// 设置加解密提供者。设置后所有读写操作将自动进行加解密。
         /// <para>设置为 <c>null</c> 可禁用加解密。</para>
-        /// <para>注意：已在进行的读写操作使用入口时的快照，本设置影响下一次及后续操作。</para>
+        /// <para>注意：已在进行的读写操作使用入口时的快照，本设置影响下一次及后续操作。
+        /// 加解密以 <see cref="CryptoFileProvider"/> 装饰器包裹底层 Provider 实现，切换为原子操作。</para>
         /// </summary>
         /// <param name="cryptoProvider">加解密提供者。为 <c>null</c> 时禁用加解密。</param>
         public static void SetCryptoProvider(ICryptoProvider cryptoProvider)
         {
             _cryptoProvider = cryptoProvider;
+            RebuildProvider();
         }
 
         /// <summary>
@@ -160,13 +168,8 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
 
-            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成,SetCryptoProvider 影响下一次操作)
             var provider = _provider;
-            var crypto = _cryptoProvider;
-
-            if (crypto != null)
-                return ReadTextWithCryptoAsync(provider, crypto, domain, relativePath, cancellationToken);
-
             return provider.ReadAllTextAsync(domain, relativePath, cancellationToken);
         }
 
@@ -177,24 +180,13 @@ namespace XFramework.XFileManager
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="content">要写入的文本内容。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        public static async UniTask WriteAllTextAsync(FileDomain domain, string relativePath, string content, CancellationToken cancellationToken = default)
+        public static UniTask WriteAllTextAsync(FileDomain domain, string relativePath, string content, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
-            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
             var provider = _provider;
-            var crypto = _cryptoProvider;
-
-            if (crypto != null)
-            {
-                var bytes = Encoding.UTF8.GetBytes(content ?? string.Empty);
-                bytes = crypto.Encrypt(bytes);
-                await provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
-            }
-            else
-            {
-                await provider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
-            }
+            return provider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
         }
 
         #endregion
@@ -208,22 +200,13 @@ namespace XFramework.XFileManager
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>文件字节数组。文件不存在时返回 <c>null</c>。</returns>
-        public static async UniTask<byte[]> ReadAllBytesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        public static UniTask<byte[]> ReadAllBytesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
-            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
             var provider = _provider;
-            var crypto = _cryptoProvider;
-
-            var bytes = await provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
-
-            if (bytes != null && crypto != null)
-            {
-                bytes = crypto.Decrypt(bytes);
-            }
-
-            return bytes;
+            return provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
         }
 
         /// <summary>
@@ -233,21 +216,13 @@ namespace XFramework.XFileManager
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="data">要写入的字节数组。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        public static async UniTask WriteAllBytesAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
+        public static UniTask WriteAllBytesAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
-            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
             var provider = _provider;
-            var crypto = _cryptoProvider;
-
-            var bytes = data;
-            if (crypto != null)
-            {
-                bytes = crypto.Encrypt(bytes);
-            }
-
-            await provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
+            return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
         }
 
         #endregion
@@ -372,17 +347,15 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
-        /// 带加解密层的文本读取（内部实现）。
-        /// <para>provider 与 crypto 由调用方入口快照传入，保证与调用方使用同一实例。</para>
+        /// 依据当前加解密设置重建生效 Provider：
+        /// 启用加解密时以 <see cref="CryptoFileProvider"/> 装饰器包裹基础 Provider，否则直接使用基础 Provider。
         /// </summary>
-        private static async UniTask<string> ReadTextWithCryptoAsync(IFileProvider provider, ICryptoProvider crypto, FileDomain domain, string relativePath, CancellationToken cancellationToken)
+        private static void RebuildProvider()
         {
-            var bytes = await provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
-            if (bytes == null)
-                return null;
-
-            bytes = crypto.Decrypt(bytes);
-            return Encoding.UTF8.GetString(bytes);
+            if (_baseProvider != null && _cryptoProvider != null)
+                _provider = new CryptoFileProvider(_baseProvider, _cryptoProvider);
+            else
+                _provider = _baseProvider;
         }
 
         #endregion
