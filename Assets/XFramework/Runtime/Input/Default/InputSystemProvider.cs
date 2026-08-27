@@ -194,6 +194,7 @@ namespace XFramework.XInput.Default
 
                 targetMap.Enable();
                 _currentMapName = mapName;
+                InvalidateCaches();
 
                 Debug.Log($"[Input] Enabled action map: {mapName}");
             }
@@ -214,6 +215,8 @@ namespace XFramework.XInput.Default
                 if (!targetMap.enabled) return;
 
                 targetMap.Disable();
+                InvalidateCaches();
+
                 Debug.Log($"[Input] Disabled action map: {mapName}");
             }
         }
@@ -233,8 +236,20 @@ namespace XFramework.XInput.Default
             // 仅在确有 map 被禁用时记录,避免每帧重复调用产生无意义的日志与字符串分配
             if (anyDisabled)
             {
+                InvalidateCaches();
                 Debug.Log("[Input] All action maps disabled.");
             }
+        }
+
+        /// <summary>
+        /// 失效 Action 缓存与长按计时。
+        /// <para>切换/启停 ActionMap 后,同名 Action 可能属于不同 Map,缓存按 action 名 key 会串 Map;
+        /// 失效后下次访问按「先查已启用 Map」重新解析(见 <see cref="GetAction"/>)。</para>
+        /// </summary>
+        private void InvalidateCaches()
+        {
+            _actionCache.Clear();
+            _buttonPressStartTimes.Clear();
         }
 
         #endregion
