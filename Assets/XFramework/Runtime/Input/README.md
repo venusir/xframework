@@ -49,10 +49,9 @@ void Awake()
     // InputManager.Initialize(new MyCustomProvider());
 }
 
-void Update()
-{
-    InputManager.Tick();  // 每帧调用
-}
+// 注意:Initialize 成功后框架会自动注册帧驱动(经 UpdateManager),
+// 无需再手动调用 Tick();手动 Tick 仅用于测试或显式强制脉冲,
+// 与自动驱动并存时由自动驱动做同帧去重。
 
 void OnDestroy()
 {

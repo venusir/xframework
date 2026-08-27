@@ -5,6 +5,7 @@ using XFramework.XInput.Default;
 using XFramework.XInput.Messages;
 using XFramework.XReactive;
 using XFramework.XReactive.Internal;
+using XFramework.XUpdate;
 
 namespace XFramework.XInput
 {
@@ -24,6 +25,12 @@ namespace XFramework.XInput
 
         /// <summary>每帧脉冲信号,驱动 Observe* 系列轮询(替代原 R3 EveryUpdate 热流)。</summary>
         private static readonly Subject<Unit> _framePulse = new();
+
+        /// <summary>自动帧驱动刷新器(经 UpdateManager 注册,仅 Initialize 成功路径启用)。</summary>
+        private static InputTicker _ticker;
+
+        /// <summary>最近一次发布帧脉冲的帧号,供自动驱动同帧去重。</summary>
+        private static int _lastPulseFrame = -1;
 
         /// <summary>
         /// 全局输入管理器是否已初始化。
@@ -45,6 +52,7 @@ namespace XFramework.XInput
         /// 使用默认的 <see cref="InputSystemProvider"/> 初始化输入管理器。
         /// <para>基于 Unity Input System，零额外依赖。</para>
         /// <para>初始化失败(如 <c>InputSystem_Actions.inputactions</c> 缺失)时抛出 <see cref="InvalidOperationException"/>。</para>
+        /// <para>初始化成功后自动注册帧驱动(经 <see cref="XFramework.XUpdate.UpdateManager"/>),无需再手动调用 <see cref="Tick()"/>。</para>
         /// </summary>
         public static void Initialize()
         {
@@ -58,12 +66,14 @@ namespace XFramework.XInput
             provider.Initialize();
             _provider = provider;
             _initialized = true;
+            RegisterTicker();
         }
 
         /// <summary>
         /// 使用自定义 <see cref="IInputProvider"/> 初始化输入管理器。
         /// <para>适用于注入 Rewired 适配器或其他自定义实现。</para>
         /// <para>自定义 Provider 的 <see cref="IInputProvider.Initialize"/> 抛出的异常会直接传播给调用方。</para>
+        /// <para>初始化成功后自动注册帧驱动(经 <see cref="XFramework.XUpdate.UpdateManager"/>),无需再手动调用 <see cref="Tick()"/>。</para>
         /// </summary>
         /// <param name="customProvider">自定义输入提供者</param>
         public static void Initialize(IInputProvider customProvider)
@@ -77,6 +87,7 @@ namespace XFramework.XInput
             _provider = customProvider ?? throw new ArgumentNullException(nameof(customProvider));
             _provider.Initialize();
             _initialized = true;
+            RegisterTicker();
         }
 
         /// <summary>
@@ -94,7 +105,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 销毁全局输入管理器，释放所有资源。
+        /// 销毁全局输入管理器，释放所有资源并注销自动帧驱动。
         /// </summary>
         public static void Destroy()
         {
@@ -104,6 +115,61 @@ namespace XFramework.XInput
                 _provider = null;
             }
             _initialized = false;
+
+            UnregisterTicker();
+            _lastPulseFrame = -1;
+        }
+
+        #endregion
+
+        #region Frame Driving
+
+        /// <summary>
+        /// 驱动一帧输入刷新:Provider.Tick + 发布帧脉冲。
+        /// </summary>
+        private static void PulseFrame()
+        {
+            _provider?.Tick();
+            // 发布帧脉冲,驱动 Observe* 系列订阅(等价于原 R3 EveryUpdate 热流)
+            _framePulse.OnNext(default);
+            _lastPulseFrame = Time.frameCount;
+        }
+
+        /// <summary>
+        /// 注册自动帧驱动(仅 Initialize 成功路径调用;SetProvider 为测试注入路径,不自动注册,由测试手动 Tick)。
+        /// </summary>
+        private static void RegisterTicker()
+        {
+            if (_ticker != null) return;
+            _ticker = new InputTicker();
+            UpdateManager.Register(_ticker, depth: 0, UpdateLOD.Frame1);
+        }
+
+        private static void UnregisterTicker()
+        {
+            if (_ticker == null) return;
+            UpdateManager.Unregister(_ticker);
+            _ticker = null;
+        }
+
+        /// <summary>
+        /// 自动帧驱动刷新器(UpdateManager 静态服务档 depth 0)。
+        /// <para>同帧去重:本帧已由手动 <see cref="Tick()"/> 驱动过脉冲时跳过,保证手动/自动两种驱动并存时每帧至多一次脉冲。</para>
+        /// </summary>
+        private sealed class InputTicker : IUpdateable
+        {
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                if (_lastPulseFrame != Time.frameCount)
+                {
+                    PulseFrame();
+                }
+                return UpdateLOD.Frame1;
+            }
         }
 
         #endregion
@@ -111,13 +177,13 @@ namespace XFramework.XInput
         #region Public API — Tick
 
         /// <summary>
-        /// 每帧调用一次，刷新内部输入状态。应在 Unity 的 Update 或 FixedUpdate 中调用。
+        /// 显式驱动一帧输入刷新(手动强制脉冲/测试驱动)。
+        /// <para>Initialize 成功后框架已自动注册帧驱动,通常无需手动调用;
+        /// 手动调用先于本帧自动驱动时,自动驱动会做同帧去重。</para>
         /// </summary>
         public static void Tick()
         {
-            _provider?.Tick();
-            // 发布帧脉冲,驱动 Observe* 系列订阅(等价于原 R3 EveryUpdate 热流)
-            _framePulse.OnNext(default);
+            PulseFrame();
         }
 
         #endregion
