@@ -342,24 +342,26 @@ namespace XFramework.XInput.Default
             if (inputAction == null) return Array.Empty<InputBindingInfo>();
 
             var bindings = inputAction.bindings;
-            // 先收集符合条件的绑定索引（排除复合结构本身及其子项）
-            var validIndices = new List<int>(bindings.Count);
+            // 第一遍计数(排除复合结构本身及其子项),精确分配数组,避免中间 List 分配
+            var count = 0;
             for (int i = 0; i < bindings.Count; i++)
             {
                 var b = bindings[i];
                 if (b.isComposite || b.isPartOfComposite) continue;
-                validIndices.Add(i);
+                count++;
             }
 
-            var result = new InputBindingInfo[validIndices.Count];
-            for (int i = 0; i < validIndices.Count; i++)
+            var result = new InputBindingInfo[count];
+            var fill = 0;
+            for (int i = 0; i < bindings.Count; i++)
             {
-                var idx = validIndices[i];
-                var b = bindings[idx];
-                result[i] = new InputBindingInfo
+                var b = bindings[i];
+                if (b.isComposite || b.isPartOfComposite) continue;
+
+                result[fill++] = new InputBindingInfo
                 {
                     Id = b.id.ToString(),
-                    DisplayName = inputAction.GetBindingDisplayString(idx) ?? string.Empty,
+                    DisplayName = inputAction.GetBindingDisplayString(i) ?? string.Empty,
                     Group = b.groups,
                     IsComposite = false,
                     IsPartOfComposite = false,
