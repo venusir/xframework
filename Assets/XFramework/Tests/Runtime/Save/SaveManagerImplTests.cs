@@ -232,6 +232,25 @@ namespace XFramework.XSave.Tests
             Assert.AreEqual(10, wallet.Gold, "应恢复 Alice 玩家子目录下的独立存档");
         }
 
+        [Test]
+        public async Task SaveAsync_InvalidPlayerId_Throws()
+        {
+            // 路径穿越注入:playerId 含分隔符或 .. 时应拒绝,防止存档写到域根之外
+            SaveManager.SetCurrentPlayer("../../outside");
+
+            await AssertThrowsAsync<ArgumentException>(() => SaveManager.SaveAsync(1),
+                "含路径分隔符的 playerId 应抛出 ArgumentException");
+        }
+
+        [Test]
+        public async Task SaveAsync_PlayerIdSingleDotDot_Throws()
+        {
+            SaveManager.SetCurrentPlayer("..");
+
+            await AssertThrowsAsync<ArgumentException>(() => SaveManager.SaveAsync(1),
+                "playerId 为 .. 时应抛出 ArgumentException");
+        }
+
         /// <summary>
         /// 断言异步操作抛出指定类型异常。
         /// <para>UTF 文档建议避免 <see cref="Assert.ThrowsAsync{T}(Func{Task})"/>：它阻塞主线程等待任务，

@@ -141,7 +141,13 @@ namespace XFramework.XSave.Tests
             if (string.IsNullOrEmpty(relativePath))
                 return _rootPath;
 
-            return Path.Combine(_rootPath, FilePathUtility.NormalizeRelativePath(relativePath));
+            // 与 DesktopFileProvider 相同的路径沙箱校验（测试替身保持同语义）
+            if (!FilePathUtility.TryNormalizeRelativePath(relativePath, out var normalized))
+                throw new ArgumentException(
+                    $"[FileManager] 非法相对路径 '{relativePath}':不允许盘符、UNC 或 '..' 段穿越。",
+                    nameof(relativePath));
+
+            return Path.Combine(_rootPath, normalized);
         }
 
         #endregion

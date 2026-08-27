@@ -29,6 +29,49 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
+        /// 安全归一化相对路径：拒绝路径穿越与绝对路径形态。
+        /// <para>校验规则：任何 <c>..</c> 段（<c>../x</c>、<c>a/../b</c>、整体 <c>..</c>）、
+        /// 盘符前缀（<c>C:\x</c>）、UNC 前导（<c>\\server\share</c>）均为非法；
+        /// 空或 <c>null</c> 合法（表示域根目录）。</para>
+        /// </summary>
+        /// <param name="relativePath">原始相对路径。</param>
+        /// <param name="normalized">归一化结果（正斜杠分隔、无前导斜杠）；非法输入时为 <c>null</c>。</param>
+        /// <returns>路径合法返回 <c>true</c>，否则 <c>false</c>。</returns>
+        public static bool TryNormalizeRelativePath(string relativePath, out string normalized)
+        {
+            normalized = null;
+
+            if (string.IsNullOrEmpty(relativePath))
+                return true;
+
+            // 拒绝盘符前缀（C:\、C:/）
+            if (relativePath.Length >= 2 && char.IsLetter(relativePath[0]) && relativePath[1] == ':')
+                return false;
+
+            var norm = relativePath.Replace('\\', '/');
+
+            // 拒绝 UNC 前导（\\server\share）
+            if (norm.StartsWith("//", StringComparison.Ordinal))
+                return false;
+
+            // 拒绝任何 .. 段（../、a/../b、整体 ..）。零分配扫描：
+            // 仅当 .. 两侧为字符串边界或 '/' 时才算独立段，排除 a..txt 这类合法文件名
+            int idx = norm.IndexOf("..", StringComparison.Ordinal);
+            while (idx >= 0)
+            {
+                bool atStart = idx == 0 || norm[idx - 1] == '/';
+                bool atEnd = idx + 2 >= norm.Length || norm[idx + 2] == '/';
+                if (atStart && atEnd)
+                    return false;
+
+                idx = norm.IndexOf("..", idx + 1, StringComparison.Ordinal);
+            }
+
+            normalized = norm.TrimStart('/');
+            return true;
+        }
+
+        /// <summary>
         /// 从（相对）路径中提取文件名部分（去掉最后一级目录前缀）。
         /// <para>兼容 <c>/</c> 与 <c>\\</c> 两种分隔符；无分隔符时原样返回。</para>
         /// </summary>

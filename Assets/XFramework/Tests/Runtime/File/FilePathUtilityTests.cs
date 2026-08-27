@@ -88,5 +88,63 @@ namespace XFramework.XFileManager.Tests
 
             Assert.AreEqual("slot_1.save", FilePathUtility.ToRelativePath(root, absolute));
         }
+
+        [Test]
+        public void TryNormalizeRelativePath_ValidPath_ReturnsNormalized()
+        {
+            Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath(@"a\b\c.txt", out var normalized));
+            Assert.AreEqual("a/b/c.txt", normalized);
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_LeadingSlash_Stripped()
+        {
+            Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath("/a/b.txt", out var normalized));
+            Assert.AreEqual("a/b.txt", normalized);
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_Empty_ValidRoot()
+        {
+            Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath("", out var normalized));
+            Assert.IsNull(normalized, "空路径表示域根目录，归一化结果应为 null");
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_Null_ValidRoot()
+        {
+            Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath(null, out var normalized));
+            Assert.IsNull(normalized);
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_DotDot_Rejected()
+        {
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath("../a.txt", out _), "前导 .. 应拒绝");
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath("a/../../b.txt", out _), "中间 .. 应拒绝");
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath("..", out _), "整体 .. 应拒绝");
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath(@"..\..\outside.txt", out _), "反斜杠 .. 应拒绝");
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_DriveLetter_Rejected()
+        {
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath(@"C:\x.txt", out _), "反斜杠盘符应拒绝");
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath("C:/x.txt", out _), "正斜杠盘符应拒绝");
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_UncPrefix_Rejected()
+        {
+            Assert.IsFalse(FilePathUtility.TryNormalizeRelativePath(@"\\server\share\x.txt", out _), "UNC 前导应拒绝");
+        }
+
+        [Test]
+        public void TryNormalizeRelativePath_DotDotInsideFileName_Allowed()
+        {
+            // ".." 出现在文件名内部（非独立段）时合法，如版本号 "v1..2"
+            Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath("a..txt", out var normalized));
+            Assert.AreEqual("a..txt", normalized);
+        }
     }
 }

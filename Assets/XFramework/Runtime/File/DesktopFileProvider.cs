@@ -132,7 +132,14 @@ namespace XFramework.XFileManager
             if (string.IsNullOrEmpty(relativePath))
                 return root;
 
-            return Path.Combine(root, FilePathUtility.NormalizeRelativePath(relativePath));
+            // 路径沙箱收敛点：所有域的相对路径在此统一校验，拒绝 .. 穿越、盘符与 UNC，
+            // 防止第三方或业务层注入非法路径读写到域根之外（门面不接触物理路径，必须在此拦截）
+            if (!FilePathUtility.TryNormalizeRelativePath(relativePath, out var normalized))
+                throw new ArgumentException(
+                    $"[FileManager] 非法相对路径 '{relativePath}':不允许盘符、UNC 或 '..' 段穿越。",
+                    nameof(relativePath));
+
+            return Path.Combine(root, normalized);
         }
 
         #endregion

@@ -214,7 +214,16 @@ namespace XFramework.XSave
         private string BuildSlotPath(int slot)
         {
             var fileName = $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
-            return _playerId != null ? $"{_playerId}/{fileName}" : fileName;
+            if (_playerId == null)
+                return fileName;
+
+            // playerId 作为单段目录名：严格拒绝分隔符与 .. 穿越（路径沙箱第二道防线），
+            // 防止 SetCurrentPlayer("../../") 注入导致存档写到域根之外
+            if (_playerId.IndexOfAny(PathSeparators) >= 0 || _playerId == "..")
+                throw new ArgumentException(
+                    $"[Save] 非法 playerId '{_playerId}':不允许包含路径分隔符或 '..'。");
+
+            return $"{_playerId}/{fileName}";
         }
 
         private static bool IsSlotFilePath(string path)
