@@ -108,6 +108,9 @@ InputDeviceType deviceType = InputManager.LastActiveDeviceType;  // KeyboardMous
 // 当前手柄类型
 GamepadType gamepadType = InputManager.ActiveGamepadType;  // Xbox / PS4 / PS5 / SwitchPro / Generic / None
 
+// 设备连接/断开通知(消息带 DeviceName / DeviceId / IsGamepad 载荷)
+InputManager.Subscribe(msg => Debug.Log($"设备连接: {msg.DeviceName} 手柄:{msg.IsGamepad}"), this);
+
 ```
 
 ### 6. 手柄振动

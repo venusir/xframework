@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
+using UnityEngine.InputSystem.Layouts;
 using UnityEngine.InputSystem.LowLevel;
 using XFramework.XReactive;
 
@@ -38,6 +39,10 @@ namespace XFramework.XInput.Default
 
         // 长按计时：记录每个动作首次按下时间（按需增长，支持任意动作名）
         private readonly Dictionary<string, float> _buttonPressStartTimes = new Dictionary<string, float>(32);
+
+        // GamepadType 检测缓存:按设备 ID 记忆最近识别结果,避免每帧解析 capabilities JSON(有分配)
+        private int _detectedGamepadDeviceId;
+        private GamepadType _detectedGamepadType;
 
         #endregion
 
@@ -631,42 +636,36 @@ namespace XFramework.XInput.Default
             switch (change)
             {
                 case InputDeviceChange.Added:
-                    MessageManager.Publish(new Messages.DeviceConnectedMessage());
+                case InputDeviceChange.Reconnected:
+                    MessageManager.Publish(new Messages.DeviceConnectedMessage(device.displayName, device.deviceId, device is Gamepad));
                     break;
 
                 case InputDeviceChange.Removed:
-                    MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
-                    break;
-
-                case InputDeviceChange.Reconnected:
-                    MessageManager.Publish(new Messages.DeviceConnectedMessage());
-                    break;
-
                 case InputDeviceChange.Disconnected:
-                    MessageManager.Publish(new Messages.DeviceDisconnectedMessage());
+                    MessageManager.Publish(new Messages.DeviceDisconnectedMessage(device.displayName, device.deviceId, device is Gamepad));
                     break;
             }
         }
 
         private void DetectGamepadType()
         {
-            var currentType = _activeGamepadType;
+            GamepadType currentType;
 
             var gamepad = Gamepad.current;
             if (gamepad == null)
             {
                 currentType = GamepadType.None;
             }
+            else if (gamepad.deviceId != _detectedGamepadDeviceId)
+            {
+                // 设备变化才重新识别(matcher 解析 capabilities JSON 有分配,按设备缓存避免进每帧路径)
+                _detectedGamepadDeviceId = gamepad.deviceId;
+                _detectedGamepadType = DetectGamepadTypeFrom(gamepad.description);
+                currentType = _detectedGamepadType;
+            }
             else
             {
-                currentType = gamepad.displayName switch
-                {
-                    string name when name.Contains("DualShock 4") || (name.Contains("Wireless Controller") && name.Length < 20) => GamepadType.PlayStation4,
-                    string name when name.Contains("DualSense") => GamepadType.PlayStation5,
-                    string name when name.Contains("Switch") || name.Contains("Nintendo") => GamepadType.SwitchPro,
-                    string name when name.Contains("Xbox") || name.Contains("XInput") => GamepadType.Xbox,
-                    _ => GamepadType.Generic
-                };
+                currentType = _detectedGamepadType;
             }
 
             if (currentType != _activeGamepadType)
@@ -693,6 +692,41 @@ namespace XFramework.XInput.Default
                 _lastActiveDeviceType = InputDeviceType.Gamepad;
             else if (touchscreen != null && touchscreen.wasUpdatedThisFrame)
                 _lastActiveDeviceType = InputDeviceType.Touch;
+        }
+
+        // vendorId/productId 查表:官方 InputDeviceMatcher 匹配 capabilities JSON(支持十进制与 0x 十六进制)。
+        // MatchPercentage 语义:任一 pattern 不匹配即 0,全匹配才 > 0。
+        private static readonly InputDeviceMatcher s_GamepadTypeMatcherXbox =
+            new InputDeviceMatcher().WithCapability("vendorId", 0x045E); // Microsoft
+        private static readonly InputDeviceMatcher s_GamepadTypeMatcherPlayStation4 =
+            new InputDeviceMatcher().WithCapability("vendorId", 0x054C).WithCapability("productId", 0x05C4); // Sony DualShock 4
+        private static readonly InputDeviceMatcher s_GamepadTypeMatcherPlayStation5 =
+            new InputDeviceMatcher().WithCapability("vendorId", 0x054C).WithCapability("productId", 0x0CE6); // Sony DualSense
+        private static readonly InputDeviceMatcher s_GamepadTypeMatcherSwitchPro =
+            new InputDeviceMatcher().WithCapability("vendorId", 0x057E).WithCapability("productId", 0x2009); // Nintendo Switch Pro Controller
+
+        /// <summary>
+        /// 根据设备描述识别手柄类型(纯函数,便于单元测试)。
+        /// <para>优先按 vendorId/productId 查表,不受显示名本地化影响;
+        /// 查不到(部分蓝牙设备不上报 ID)回退 <see cref="InputDeviceDescription.product"/> 关键词匹配。
+        /// 移除原「displayName 长度小于 20」启发式——蓝牙 DualShock 4 与杂牌无线手柄同名,按长度区分不可靠。</para>
+        /// </summary>
+        internal static GamepadType DetectGamepadTypeFrom(InputDeviceDescription description)
+        {
+            // vendorId/productId 精确查表
+            if (s_GamepadTypeMatcherXbox.MatchPercentage(description) > 0f) return GamepadType.Xbox;
+            if (s_GamepadTypeMatcherPlayStation4.MatchPercentage(description) > 0f) return GamepadType.PlayStation4;
+            if (s_GamepadTypeMatcherPlayStation5.MatchPercentage(description) > 0f) return GamepadType.PlayStation5;
+            if (s_GamepadTypeMatcherSwitchPro.MatchPercentage(description) > 0f) return GamepadType.SwitchPro;
+
+            // 回退:产品名关键词匹配(displayName 由 product 派生且可能本地化,故匹配用 product)
+            var name = description.product ?? string.Empty;
+            if (name.Contains("DualSense", StringComparison.OrdinalIgnoreCase)) return GamepadType.PlayStation5;
+            if (name.Contains("DualShock", StringComparison.OrdinalIgnoreCase)) return GamepadType.PlayStation4;
+            if (name.Contains("Switch", StringComparison.OrdinalIgnoreCase) || name.Contains("Nintendo", StringComparison.OrdinalIgnoreCase)) return GamepadType.SwitchPro;
+            if (name.Contains("Xbox", StringComparison.OrdinalIgnoreCase) || name.Contains("XInput", StringComparison.OrdinalIgnoreCase)) return GamepadType.Xbox;
+
+            return GamepadType.Generic;
         }
 
         #endregion
