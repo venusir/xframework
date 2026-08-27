@@ -180,14 +180,17 @@ GameLauncher.Start()
 
 ### 输入操作
 
-| 操作             | 代码                                 |
-| ---------------- | ------------------------------------ |
-| 查询按键按下     | `InputManager.GetButtonDown("Jump")` |
-| 查询按键抬起     | `InputManager.GetButtonUp("Jump")`   |
-| 查询持续按住     | `InputManager.GetButton("Fire")`     |
-| 获取轴值         | `InputManager.GetAxis("Move")`       |
-| 获取当前设备类型 | `InputManager.CurrentDeviceType`     |
-| 获取手柄类型     | `InputManager.GamepadType`           |
+| 操作                   | 代码                                                            |
+| ---------------------- | --------------------------------------------------------------- |
+| 按下事件               | `InputManager.WasPressedThisFrame("Jump")`                      |
+| 抬起事件               | `InputManager.WasReleasedThisFrame("Jump")`                     |
+| 持续按住               | `InputManager.IsPressed("Fire")`                                |
+| 值输入(应用绑定处理器) | `InputManager.ReadFloat("MoveX")` / `ReadVector2("Move")`       |
+| 原始值(绕过绑定处理器) | `InputManager.ReadFloatRaw("LookX")` / `ReadVector2Raw("Look")` |
+| 长按时长               | `InputManager.GetButtonPressDuration("Jump")`                   |
+| 当前设备类型           | `InputManager.LastActiveDeviceType`                             |
+| 当前手柄类型           | `InputManager.ActiveGamepadType`                                |
+| 多玩家读取             | `InputManager.IsPressed("Fire", playerId: 1)`                   |
 
 ### 设置操作
 
