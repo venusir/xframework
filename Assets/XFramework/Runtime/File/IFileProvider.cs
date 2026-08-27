@@ -8,6 +8,14 @@ namespace XFramework.XFileManager
     /// <para>内置实现：<see cref="DesktopFileProvider"/>（Win/Linux/mac）、<see cref="MobileFileProvider"/>（iOS/Android）。</para>
     /// <para>第三方可通过实现此接口扩展 Console（Xbox/PS5/Switch）等平台支持。</para>
     /// </summary>
+    /// <remarks>
+    /// <para><b>统一读失败契约（所有实现必须遵守）：</b></para>
+    /// <list type="bullet">
+    /// <item>文件不存在 → 读方法返回 <c>null</c>（非异常）</item>
+    /// <item>IO 失败（权限、磁盘、网络错误等）→ 抛 <see cref="System.IO.IOException"/></item>
+    /// <item>参数非法（<c>null</c>、路径穿越等）→ 抛 <see cref="System.ArgumentNullException"/> / <see cref="System.ArgumentException"/></item>
+    /// </list>
+    /// </remarks>
     public interface IFileProvider
     {
         /// <summary>
@@ -36,7 +44,7 @@ namespace XFramework.XFileManager
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>。</returns>
+        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -45,7 +53,7 @@ namespace XFramework.XFileManager
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>。</returns>
+        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         UniTask<byte[]> ReadAllBytesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default);
 
         /// <summary>

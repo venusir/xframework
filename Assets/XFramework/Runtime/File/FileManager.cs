@@ -163,7 +163,7 @@ namespace XFramework.XFileManager
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>。</returns>
+        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
         public static UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -164,11 +165,13 @@ namespace XFramework.XFileManager
             // cancelImmediately: 取消时立即 Abort 请求（对齐原实现的手动 Abort 语义）
             await asyncOp.ToUniTask(cancellationToken: cancellationToken, cancelImmediately: true);
 
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogWarning($"MobileFileProvider: failed to read Streaming text '{relativePath}': {request.error}");
+            // 统一读失败契约:404(ProtocolError)视为文件不存在返回 null,
+            // 其余失败(网络错误、服务器错误等)抛 IOException,与 Desktop 平台语义对齐
+            if (request.result == UnityWebRequest.Result.ProtocolError && request.responseCode == 404)
                 return null;
-            }
+
+            if (request.result != UnityWebRequest.Result.Success)
+                throw new IOException($"MobileFileProvider: failed to read Streaming text '{relativePath}': {request.error}");
 
             return request.downloadHandler.text;
         }
@@ -187,11 +190,13 @@ namespace XFramework.XFileManager
             // cancelImmediately: 取消时立即 Abort 请求（对齐原实现的手动 Abort 语义）
             await asyncOp.ToUniTask(cancellationToken: cancellationToken, cancelImmediately: true);
 
-            if (request.result != UnityWebRequest.Result.Success)
-            {
-                Debug.LogWarning($"MobileFileProvider: failed to read Streaming bytes '{relativePath}': {request.error}");
+            // 统一读失败契约:404(ProtocolError)视为文件不存在返回 null,
+            // 其余失败(网络错误、服务器错误等)抛 IOException,与 Desktop 平台语义对齐
+            if (request.result == UnityWebRequest.Result.ProtocolError && request.responseCode == 404)
                 return null;
-            }
+
+            if (request.result != UnityWebRequest.Result.Success)
+                throw new IOException($"MobileFileProvider: failed to read Streaming bytes '{relativePath}': {request.error}");
 
             return request.downloadHandler.data;
         }
