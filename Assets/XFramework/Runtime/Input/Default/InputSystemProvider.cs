@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.LowLevel;
 using XFramework.XReactive;
 
@@ -25,8 +26,15 @@ namespace XFramework.XInput.Default
         // 通用动作字典缓存：按需懒加载 Action 引用，避免每帧全量字符串查找
         private readonly Dictionary<string, InputAction> _actionCache = new Dictionary<string, InputAction>(32);
 
-        // 振动到期时刻(Time.unscaledTime 绝对时间,0 表示无到期);由 Tick 帧驱动到期自动停止,不使用协程
-        private float _vibrationUntilTime;
+        // 多玩家:action 名 → 该 action 第一个 Gamepad 绑定的控件路径尾(如 "buttonSouth"、"leftStick");
+        // 空串表示无 Gamepad 绑定(纯键鼠动作),避免每帧重复遍历绑定解析
+        private readonly Dictionary<string, string> _playerBindingPaths = new Dictionary<string, string>(8);
+
+        // 振动到期时刻:玩家 ID → Time.unscaledTime 绝对时刻;由 Tick 帧驱动到期自动停止,不使用协程
+        private readonly Dictionary<uint, float> _vibrationUntilTimes = new Dictionary<uint, float>(4);
+
+        // 振动到期临时收集(复用,避免每帧分配)
+        private readonly List<uint> _expiredVibrationPlayers = new List<uint>(4);
 
         // 长按计时：记录每个动作首次按下时间（按需增长，支持任意动作名）
         private readonly Dictionary<string, float> _buttonPressStartTimes = new Dictionary<string, float>(32);
@@ -93,19 +101,35 @@ namespace XFramework.XInput.Default
         public bool WasPressedThisFrame(string action, uint playerId = 0)
         {
             var inputAction = GetAction(action);
-            return inputAction?.WasPressedThisFrame() ?? false;
+            if (inputAction == null) return false;
+
+            // 0 号玩家沿用 action 级读取(全设备);playerId > 0 直读玩家手柄控件,键鼠不服务非 0 号玩家
+            if (playerId == 0) return inputAction.WasPressedThisFrame();
+
+            var control = GetPlayerControl(inputAction, playerId);
+            return control != null && WasPressedOnControl(control);
         }
 
         public bool WasReleasedThisFrame(string action, uint playerId = 0)
         {
             var inputAction = GetAction(action);
-            return inputAction?.WasReleasedThisFrame() ?? false;
+            if (inputAction == null) return false;
+
+            if (playerId == 0) return inputAction.WasReleasedThisFrame();
+
+            var control = GetPlayerControl(inputAction, playerId);
+            return control != null && WasReleasedOnControl(control);
         }
 
         public bool IsPressed(string action, uint playerId = 0)
         {
             var inputAction = GetAction(action);
-            return inputAction?.IsPressed() ?? false;
+            if (inputAction == null) return false;
+
+            if (playerId == 0) return inputAction.IsPressed();
+
+            var control = GetPlayerControl(inputAction, playerId);
+            return control != null && IsPressedOnControl(control);
         }
 
         #endregion
@@ -115,27 +139,50 @@ namespace XFramework.XInput.Default
         public Vector2 ReadVector2(string action, uint playerId = 0)
         {
             var inputAction = GetAction(action);
-            return inputAction?.ReadValue<Vector2>() ?? Vector2.zero;
+            if (inputAction == null) return Vector2.zero;
+
+            // 0 号玩家沿用 action 级读取(应用绑定处理器);playerId > 0 读玩家手柄控件
+            if (playerId == 0) return inputAction.ReadValue<Vector2>();
+
+            var control = GetPlayerControl(inputAction, playerId);
+            return control is InputControl<Vector2> typedControl ? typedControl.ReadValue() : Vector2.zero;
         }
 
         public float ReadFloat(string action, uint playerId = 0)
         {
             var inputAction = GetAction(action);
-            return inputAction?.ReadValue<float>() ?? 0f;
+            if (inputAction == null) return 0f;
+
+            if (playerId == 0) return inputAction.ReadValue<float>();
+
+            var control = GetPlayerControl(inputAction, playerId);
+            return control is InputControl<float> typedControl ? typedControl.ReadValue() : 0f;
         }
 
         public float ReadFloatRaw(string action, uint playerId = 0)
         {
-            // 直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
+            // 0 号玩家直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
             var inputAction = GetAction(action);
-            return inputAction != null ? ReadRawValue<float>(inputAction.activeControl, 0f) : 0f;
+            if (inputAction == null) return 0f;
+
+            if (playerId == 0) return ReadRawValue<float>(inputAction.activeControl, 0f);
+
+            // playerId > 0:控件级读取本身即原始值(绑定处理器在 action 解析层生效),与平滑版返回相同
+            var control = GetPlayerControl(inputAction, playerId);
+            return control is InputControl<float> typedControl ? typedControl.ReadValue() : 0f;
         }
 
         public Vector2 ReadVector2Raw(string action, uint playerId = 0)
         {
-            // 直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
+            // 0 号玩家直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
             var inputAction = GetAction(action);
-            return inputAction != null ? ReadRawValue<Vector2>(inputAction.activeControl, Vector2.zero) : Vector2.zero;
+            if (inputAction == null) return Vector2.zero;
+
+            if (playerId == 0) return ReadRawValue<Vector2>(inputAction.activeControl, Vector2.zero);
+
+            // playerId > 0:控件级读取本身即原始值(绑定处理器在 action 解析层生效),与平滑版返回相同
+            var control = GetPlayerControl(inputAction, playerId);
+            return control is InputControl<Vector2> typedControl ? typedControl.ReadValue() : Vector2.zero;
         }
 
         /// <summary>
@@ -262,6 +309,7 @@ namespace XFramework.XInput.Default
         {
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
+            _playerBindingPaths.Clear();
         }
 
         #endregion
@@ -270,7 +318,7 @@ namespace XFramework.XInput.Default
 
         public void SetVibration(uint playerId, float leftMotor, float rightMotor, float duration)
         {
-            var gamepad = Gamepad.current;
+            var gamepad = GetGamepadForPlayer(playerId);
             if (gamepad == null) return;
 
             // 限制范围 [0, 1]
@@ -279,16 +327,23 @@ namespace XFramework.XInput.Default
 
             gamepad.SetMotorSpeeds(leftMotor, rightMotor);
 
-            // 指定了持续时间则记录到期时刻,由 Tick 帧驱动到期自动停止(duration=0 表示持续振动直到手动停止)
-            _vibrationUntilTime = duration > 0f ? Time.unscaledTime + duration : 0f;
+            // 指定了持续时间则记录该玩家到期时刻,由 Tick 帧驱动到期自动停止(duration=0 表示持续振动直到手动停止)
+            if (duration > 0f)
+            {
+                _vibrationUntilTimes[playerId] = Time.unscaledTime + duration;
+            }
+            else
+            {
+                _vibrationUntilTimes.Remove(playerId);
+            }
         }
 
         public void StopVibration(uint playerId)
         {
             // 无论当前是否有手柄,先清空到期标记,保证手动停止语义完整
-            _vibrationUntilTime = 0f;
+            _vibrationUntilTimes.Remove(playerId);
 
-            var gamepad = Gamepad.current;
+            var gamepad = GetGamepadForPlayer(playerId);
             if (gamepad == null) return;
 
             gamepad.SetMotorSpeeds(0f, 0f);
@@ -296,23 +351,39 @@ namespace XFramework.XInput.Default
 
         public void StopAllVibration()
         {
-            StopVibration(0);
+            // 停止所有已连接手柄的马达
+            _vibrationUntilTimes.Clear();
+            foreach (var gamepad in Gamepad.all)
+            {
+                gamepad.SetMotorSpeeds(0f, 0f);
+            }
         }
 
         /// <summary>
-        /// 帧驱动检查振动是否到期,到期则停止马达。
+        /// 帧驱动检查各玩家振动是否到期,到期则停止对应马达。
         /// <para>替代原协程方案(依赖外部注入协程宿主且违反禁用 IEnumerator 约定),零分配、零外部依赖。</para>
         /// </summary>
         private void CheckVibrationTimeout()
         {
-            if (_vibrationUntilTime <= 0f) return;
+            if (_vibrationUntilTimes.Count == 0) return;
 
-            if (Time.unscaledTime >= _vibrationUntilTime)
+            // 先收集到期玩家再逐个停止,避免遍历中修改字典
+            _expiredVibrationPlayers.Clear();
+            var now = Time.unscaledTime;
+            foreach (var kvp in _vibrationUntilTimes)
             {
-                // 即使当前手柄已断开也清空标记,避免残留到期状态在新设备上误触发
-                _vibrationUntilTime = 0f;
+                if (now >= kvp.Value)
+                {
+                    _expiredVibrationPlayers.Add(kvp.Key);
+                }
+            }
 
-                var gamepad = Gamepad.current;
+            foreach (var playerId in _expiredVibrationPlayers)
+            {
+                _vibrationUntilTimes.Remove(playerId);
+
+                // 即使该玩家手柄已断开也移除到期标记,避免残留状态在新设备上误触发
+                var gamepad = GetGamepadForPlayer(playerId);
                 if (gamepad != null)
                 {
                     gamepad.SetMotorSpeeds(0f, 0f);
@@ -546,6 +617,7 @@ namespace XFramework.XInput.Default
 
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
+            _playerBindingPaths.Clear();
 
             Debug.Log("[Input] Disposed.");
         }
@@ -663,6 +735,89 @@ namespace XFramework.XInput.Default
                 _actionCache[actionName] = fallback;
             }
             return fallback;
+        }
+
+        #endregion
+
+        #region Private — Multi-Player
+
+        /// <summary>
+        /// 按 playerId 取玩家手柄(最小档:按连接顺序分配)。
+        /// <para>0 号玩家沿用 <see cref="Gamepad.current"/> 语义(当前活跃手柄);
+        /// playerId > 0 按 <see cref="Gamepad.all"/> 连接顺序索引,越界或未连接返回 null。</para>
+        /// </summary>
+        private static Gamepad GetGamepadForPlayer(uint playerId)
+        {
+            if (playerId == 0) return Gamepad.current;
+
+            var all = Gamepad.all;
+            return playerId < (uint)all.Count ? all[(int)playerId] : null;
+        }
+
+        /// <summary>
+        /// 取指定玩家手柄上该 action 的驱动控件。
+        /// <para>playerId 为 0、玩家无手柄、或动作无 Gamepad 绑定时返回 null。
+        /// 键鼠绑定不参与 playerId &gt; 0 的读取(键鼠仅服务 0 号玩家)。</para>
+        /// </summary>
+        private InputControl GetPlayerControl(InputAction inputAction, uint playerId)
+        {
+            if (playerId == 0) return null;
+
+            var gamepad = GetGamepadForPlayer(playerId);
+            if (gamepad == null) return null;
+
+            var path = GetPlayerGamepadControlPath(inputAction);
+            if (path.Length == 0) return null;
+
+            // GetChildControl 按相对路径查控件,零分配;手柄断开后控件失效返回 null,重连自动恢复
+            return gamepad.GetChildControl(path);
+        }
+
+        /// <summary>
+        /// 控件级按下事件判断:读 <see cref="ButtonControl"/> 状态位(本帧按下)。
+        /// <para>非按钮控件(如摇杆)无按下事件,返回 false;Input System 1.19 未提供 InputControl 级 WasPressed 扩展。</para>
+        /// </summary>
+        private static bool WasPressedOnControl(InputControl control)
+            => control is ButtonControl button && button.wasPressedThisFrame;
+
+        /// <summary>
+        /// 控件级释放事件判断:读 <see cref="ButtonControl"/> 状态位(本帧释放)。
+        /// </summary>
+        private static bool WasReleasedOnControl(InputControl control)
+            => control is ButtonControl button && button.wasReleasedThisFrame;
+
+        /// <summary>
+        /// 控件级按住判断:复用官方 <c>IsPressed(InputControl)</c> 扩展(按钮取 pressPointOrDefault,非按钮取全局默认按压点)。
+        /// <para>与 action 级 <see cref="InputAction.IsPressed"/> 语义一致,但作用于指定玩家的控件。</para>
+        /// </summary>
+        private static bool IsPressedOnControl(InputControl control)
+            => control.IsPressed();
+
+        /// <summary>
+        /// 取 action 第一个 Gamepad 绑定的控件路径尾(如 "buttonSouth"、"leftStick"),结果缓存。
+        /// <para>复合绑定取子项路径(如摇杆复合的 leftStick 部件);纯键鼠动作缓存空串,避免每帧重复遍历。</para>
+        /// </summary>
+        private string GetPlayerGamepadControlPath(InputAction inputAction)
+        {
+            if (_playerBindingPaths.TryGetValue(inputAction.name, out var cached)) return cached;
+
+            var bindings = inputAction.bindings;
+            for (int i = 0; i < bindings.Count; i++)
+            {
+                var b = bindings[i];
+                if (b.isComposite) continue; // 复合根无路径,其子项才是具体设备绑定
+
+                var bindingPath = b.path;
+                if (!string.IsNullOrEmpty(bindingPath) && bindingPath.StartsWith("<Gamepad>/", StringComparison.Ordinal))
+                {
+                    var tail = bindingPath.Substring("<Gamepad>/".Length);
+                    _playerBindingPaths[inputAction.name] = tail;
+                    return tail;
+                }
+            }
+
+            _playerBindingPaths[inputAction.name] = string.Empty;
+            return string.Empty;
         }
 
         #endregion
