@@ -31,6 +31,7 @@ namespace XFramework.XInput.Tests
             public void Initialize() { }
             public void Tick() { }
 
+            public bool HasAction(string action) => true;
             public bool WasPressedThisFrame(string action, uint playerId = 0) => Pressed;
             public bool WasReleasedThisFrame(string action, uint playerId = 0) => Released;
             public bool IsPressed(string action, uint playerId = 0) => Held;

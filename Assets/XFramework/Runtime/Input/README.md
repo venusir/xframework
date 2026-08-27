@@ -83,6 +83,9 @@ Vector2 lookRaw = InputManager.ReadVector2Raw("Look");
 float pressDuration = InputManager.GetButtonPressDuration("Jump");
 ```
 
+> **动作名拼写校验**:Editor 下读取不存在的动作名会打 LogWarning(同一动作只警告一次,不刷屏);
+> 运行时可用 `InputManager.HasAction("Jump")` 主动校验封装里的动作名拼写。
+
 ### 4. ActionMap 切换
 
 ```csharp
@@ -447,6 +450,11 @@ public class RewiredProvider : IInputProvider
     public void Initialize()
     {
         // Rewired 初始化逻辑
+    }
+
+    public bool HasAction(string action)
+    {
+        return ReInput.mapping.ActionNameExists(action);
     }
 
     public bool WasPressedThisFrame(string action, uint playerId = 0)

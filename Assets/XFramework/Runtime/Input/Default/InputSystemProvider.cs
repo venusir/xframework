@@ -27,6 +27,11 @@ namespace XFramework.XInput.Default
         // 通用动作字典缓存：按需懒加载 Action 引用，避免每帧全量字符串查找
         private readonly Dictionary<string, InputAction> _actionCache = new Dictionary<string, InputAction>(32);
 
+        #if UNITY_EDITOR
+        // 已警告未命中的动作名(Editor 专用):GetAction 在每帧读取路径被调用,同一动作只警告一次防止刷屏
+        private readonly HashSet<string> _warnedActionNames = new HashSet<string>();
+        #endif
+
         // 多玩家:action 名 → 该 action 第一个 Gamepad 绑定的控件路径尾(如 "buttonSouth"、"leftStick");
         // 空串表示无 Gamepad 绑定(纯键鼠动作),避免每帧重复遍历绑定解析
         private readonly Dictionary<string, string> _playerBindingPaths = new Dictionary<string, string>(8);
@@ -794,7 +799,21 @@ namespace XFramework.XInput.Default
             {
                 _actionCache[actionName] = fallback;
             }
+            #if UNITY_EDITOR
+            else if (_warnedActionNames.Add(actionName))
+            {
+                Debug.LogWarning($"[Input] action '{actionName}' 不存在于任何 ActionMap,请检查动作名拼写或资产配置(可用 InputManager.HasAction 校验)。");
+            }
+            #endif
             return fallback;
+        }
+
+        /// <summary>
+        /// 指定动作名在当前输入资产中是否存在(任意 ActionMap)。
+        /// </summary>
+        public bool HasAction(string action)
+        {
+            return _actionAsset != null && _actionAsset.FindAction(action) != null;
         }
 
         #endregion

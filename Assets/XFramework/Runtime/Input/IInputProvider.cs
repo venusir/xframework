@@ -16,6 +16,13 @@ namespace XFramework.XInput
         /// </summary>
         void Initialize();
 
+        /// <summary>
+        /// 指定动作名在当前输入资产中是否存在(任意 ActionMap)。
+        /// <para>用于运行时校验动作名拼写;未初始化时返回 false。</para>
+        /// </summary>
+        /// <param name="action">动作名称,如 "Jump"</param>
+        bool HasAction(string action);
+
         #endregion
 
         #region 每帧更新

@@ -60,6 +60,27 @@ namespace XFramework.XInput.Tests
 
         #endregion
 
+        #region C15 动作名校验
+
+        [Test]
+        public void HasAction_ChecksAsset_UninitializedReturnsFalse()
+        {
+            // 未初始化:与查询类 API 一致,空引用安全返回 false
+            var uninitialized = new InputSystemProvider();
+            Assert.IsFalse(uninitialized.HasAction("Jump"), "未初始化时返回 false");
+
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            Assert.IsTrue(provider.HasAction("Jump"), "已初始化且动作存在时返回 true");
+            Assert.IsFalse(provider.HasAction("Nope"), "不存在的动作返回 false");
+
+            provider.Dispose();
+        }
+
+        #endregion
+
         #region C5 Action 缓存跨 Map 修复
 
         [Test]

@@ -49,6 +49,17 @@ namespace XFramework.XInput
         }
 
         /// <summary>
+        /// 指定动作名在当前输入资产中是否存在(任意 ActionMap)。
+        /// <para>用于校验游戏封装的动作名拼写;配合 Editor 下读取未命中动作时的 LogWarning 快速排错。
+        /// 未初始化时返回 false(与查询类 API 的空引用安全默认值一致)。</para>
+        /// </summary>
+        /// <param name="action">动作名称,如 "Jump"</param>
+        public static bool HasAction(string action)
+        {
+            return _provider?.HasAction(action) ?? false;
+        }
+
+        /// <summary>
         /// 使用默认的 <see cref="InputSystemProvider"/> 初始化输入管理器。
         /// <para>基于 Unity Input System，零额外依赖。</para>
         /// <para>初始化失败(如 <c>InputSystem_Actions.inputactions</c> 缺失)时抛出 <see cref="InvalidOperationException"/>。</para>
