@@ -62,7 +62,7 @@ namespace XFramework.XInput.Default
             // 默认启用 Player map
             SwitchActionMap("Player");
 
-            Debug.Log("[InputSystemProvider] Initialized successfully.");
+            Debug.Log("[Input] Initialized successfully.");
         }
 
         #endregion
@@ -189,14 +189,17 @@ namespace XFramework.XInput.Default
             var targetMap = _actionAsset.FindActionMap(mapName);
             if (targetMap != null)
             {
+                // 仅在状态实际变化时启用并记录,避免高频切换产生无意义的日志与字符串分配
+                if (targetMap.enabled) return;
+
                 targetMap.Enable();
                 _currentMapName = mapName;
 
-                Debug.Log($"[InputSystemProvider] Enabled action map: {mapName}");
+                Debug.Log($"[Input] Enabled action map: {mapName}");
             }
             else
             {
-                Debug.LogWarning($"[InputSystemProvider] ActionMap '{mapName}' not found.");
+                Debug.LogWarning($"[Input] ActionMap '{mapName}' not found.");
             }
         }
 
@@ -207,8 +210,11 @@ namespace XFramework.XInput.Default
             var targetMap = _actionAsset.FindActionMap(mapName);
             if (targetMap != null)
             {
+                // 仅在状态实际变化时禁用并记录,避免高频切换产生无意义的日志与字符串分配
+                if (!targetMap.enabled) return;
+
                 targetMap.Disable();
-                Debug.Log($"[InputSystemProvider] Disabled action map: {mapName}");
+                Debug.Log($"[Input] Disabled action map: {mapName}");
             }
         }
 
@@ -216,12 +222,19 @@ namespace XFramework.XInput.Default
         {
             if (_actionAsset == null) return;
 
+            var anyDisabled = false;
             foreach (var map in _actionAsset.actionMaps)
             {
+                if (!map.enabled) continue;
                 map.Disable();
+                anyDisabled = true;
             }
 
-            Debug.Log("[InputSystemProvider] All action maps disabled.");
+            // 仅在确有 map 被禁用时记录,避免每帧重复调用产生无意义的日志与字符串分配
+            if (anyDisabled)
+            {
+                Debug.Log("[Input] All action maps disabled.");
+            }
         }
 
         #endregion
@@ -410,14 +423,14 @@ namespace XFramework.XInput.Default
         {
             if (string.IsNullOrEmpty(action))
             {
-                Debug.LogError("[InputSystemProvider] StartRebinding failed: action is null or empty.");
+                Debug.LogError("[Input] StartRebinding failed: action is null or empty.");
                 return null;
             }
 
             var inputAction = GetAction(action);
             if (inputAction == null)
             {
-                Debug.LogError($"[InputSystemProvider] StartRebinding failed: action '{action}' not found.");
+                Debug.LogError($"[Input] StartRebinding failed: action '{action}' not found.");
                 return null;
             }
 
@@ -429,7 +442,7 @@ namespace XFramework.XInput.Default
                 bindingIndex = GetFirstBindableIndex(inputAction);
                 if (bindingIndex < 0)
                 {
-                    Debug.LogError($"[InputSystemProvider] StartRebinding failed: action '{action}' has no bindable binding.");
+                    Debug.LogError($"[Input] StartRebinding failed: action '{action}' has no bindable binding.");
                     return null;
                 }
             }
@@ -496,7 +509,7 @@ namespace XFramework.XInput.Default
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
 
-            Debug.Log("[InputSystemProvider] Disposed.");
+            Debug.Log("[Input] Disposed.");
         }
 
         #endregion

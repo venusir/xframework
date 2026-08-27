@@ -50,7 +50,7 @@ namespace XFramework.XInput
         {
             if (_initialized)
             {
-                UnityEngine.Debug.LogWarning("[InputManager] Initialize was called more than once. Ignoring duplicate.");
+                UnityEngine.Debug.LogWarning("[Input] Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -70,7 +70,7 @@ namespace XFramework.XInput
         {
             if (_initialized)
             {
-                UnityEngine.Debug.LogWarning("[InputManager] Initialize was called more than once. Ignoring duplicate.");
+                UnityEngine.Debug.LogWarning("[Input] Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
