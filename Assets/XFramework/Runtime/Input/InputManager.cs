@@ -34,7 +34,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 获取底层的 <see cref="IInputProvider"/> 实例。若需要设置协程宿主等扩展配置，可从此处获取。
+        /// 获取底层的 <see cref="IInputProvider"/> 实例。
         /// </summary>
         public static IInputProvider Provider
         {

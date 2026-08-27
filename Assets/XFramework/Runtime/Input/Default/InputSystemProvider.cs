@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -26,11 +25,8 @@ namespace XFramework.XInput.Default
         // 通用动作字典缓存：按需懒加载 Action 引用，避免每帧全量字符串查找
         private readonly Dictionary<string, InputAction> _actionCache = new Dictionary<string, InputAction>(32);
 
-        // 振动相关
-        private Coroutine _vibrationCoroutine;
-        private MonoBehaviour _coroutineRunner;
-        private float _vibrationLeftMotor;
-        private float _vibrationRightMotor;
+        // 振动到期时刻(Time.unscaledTime 绝对时间,0 表示无到期);由 Tick 帧驱动到期自动停止,不使用协程
+        private float _vibrationUntilTime;
 
         // 长按计时：记录每个动作首次按下时间（按需增长，支持任意动作名）
         private readonly Dictionary<string, float> _buttonPressStartTimes = new Dictionary<string, float>(32);
@@ -69,20 +65,15 @@ namespace XFramework.XInput.Default
             Debug.Log("[InputSystemProvider] Initialized successfully.");
         }
 
-        /// <summary>
-        /// 设置协程宿主，用于振动持续时间的协程调度。
-        /// </summary>
-        public void SetCoroutineRunner(MonoBehaviour runner)
-        {
-            _coroutineRunner = runner;
-        }
-
         #endregion
 
         #region Tick
 
         public void Tick()
         {
+            // 振动到期检查置于资产空检查之前:资产未加载时也要保证马达能停
+            CheckVibrationTimeout();
+
             if (_actionAsset == null) return;
 
             // 检测手柄类型变化
@@ -246,39 +237,21 @@ namespace XFramework.XInput.Default
             leftMotor = Mathf.Clamp01(leftMotor);
             rightMotor = Mathf.Clamp01(rightMotor);
 
-            _vibrationLeftMotor = leftMotor;
-            _vibrationRightMotor = rightMotor;
-
             gamepad.SetMotorSpeeds(leftMotor, rightMotor);
 
-            // 停止之前的振动协程
-            if (_vibrationCoroutine != null && _coroutineRunner != null)
-            {
-                _coroutineRunner.StopCoroutine(_vibrationCoroutine);
-                _vibrationCoroutine = null;
-            }
-
-            // 如果指定了持续时间，启动协程自动停止
-            if (duration > 0f && _coroutineRunner != null)
-            {
-                _vibrationCoroutine = _coroutineRunner.StartCoroutine(VibrationTimer(duration));
-            }
+            // 指定了持续时间则记录到期时刻,由 Tick 帧驱动到期自动停止(duration=0 表示持续振动直到手动停止)
+            _vibrationUntilTime = duration > 0f ? Time.unscaledTime + duration : 0f;
         }
 
         public void StopVibration(uint playerId)
         {
+            // 无论当前是否有手柄,先清空到期标记,保证手动停止语义完整
+            _vibrationUntilTime = 0f;
+
             var gamepad = Gamepad.current;
             if (gamepad == null) return;
 
             gamepad.SetMotorSpeeds(0f, 0f);
-            _vibrationLeftMotor = 0f;
-            _vibrationRightMotor = 0f;
-
-            if (_vibrationCoroutine != null && _coroutineRunner != null)
-            {
-                _coroutineRunner.StopCoroutine(_vibrationCoroutine);
-                _vibrationCoroutine = null;
-            }
         }
 
         public void StopAllVibration()
@@ -286,19 +259,25 @@ namespace XFramework.XInput.Default
             StopVibration(0);
         }
 
-        private IEnumerator VibrationTimer(float duration)
+        /// <summary>
+        /// 帧驱动检查振动是否到期,到期则停止马达。
+        /// <para>替代原协程方案(依赖外部注入协程宿主且违反禁用 IEnumerator 约定),零分配、零外部依赖。</para>
+        /// </summary>
+        private void CheckVibrationTimeout()
         {
-            yield return new WaitForSecondsRealtime(duration);
+            if (_vibrationUntilTime <= 0f) return;
 
-            var gamepad = Gamepad.current;
-            if (gamepad != null)
+            if (Time.unscaledTime >= _vibrationUntilTime)
             {
-                gamepad.SetMotorSpeeds(0f, 0f);
-            }
+                // 即使当前手柄已断开也清空标记,避免残留到期状态在新设备上误触发
+                _vibrationUntilTime = 0f;
 
-            _vibrationLeftMotor = 0f;
-            _vibrationRightMotor = 0f;
-            _vibrationCoroutine = null;
+                var gamepad = Gamepad.current;
+                if (gamepad != null)
+                {
+                    gamepad.SetMotorSpeeds(0f, 0f);
+                }
+            }
         }
 
         #endregion
