@@ -128,6 +128,7 @@ namespace XFramework.XFileManager
         /// <summary>
         /// 设置加解密提供者。设置后所有读写操作将自动进行加解密。
         /// <para>设置为 <c>null</c> 可禁用加解密。</para>
+        /// <para>注意：已在进行的读写操作使用入口时的快照，本设置影响下一次及后续操作。</para>
         /// </summary>
         /// <param name="cryptoProvider">加解密提供者。为 <c>null</c> 时禁用加解密。</param>
         public static void SetCryptoProvider(ICryptoProvider cryptoProvider)
@@ -159,10 +160,14 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
 
-            if (_cryptoProvider != null)
-                return ReadTextWithCryptoAsync(domain, relativePath, cancellationToken);
+            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            var provider = _provider;
+            var crypto = _cryptoProvider;
 
-            return _provider.ReadAllTextAsync(domain, relativePath, cancellationToken);
+            if (crypto != null)
+                return ReadTextWithCryptoAsync(provider, crypto, domain, relativePath, cancellationToken);
+
+            return provider.ReadAllTextAsync(domain, relativePath, cancellationToken);
         }
 
         /// <summary>
@@ -176,15 +181,19 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
 
-            if (_cryptoProvider != null)
+            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            var provider = _provider;
+            var crypto = _cryptoProvider;
+
+            if (crypto != null)
             {
                 var bytes = Encoding.UTF8.GetBytes(content ?? string.Empty);
-                bytes = _cryptoProvider.Encrypt(bytes);
-                await _provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
+                bytes = crypto.Encrypt(bytes);
+                await provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
             }
             else
             {
-                await _provider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
+                await provider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
             }
         }
 
@@ -203,11 +212,15 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
 
-            var bytes = await _provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
+            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            var provider = _provider;
+            var crypto = _cryptoProvider;
 
-            if (bytes != null && _cryptoProvider != null)
+            var bytes = await provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
+
+            if (bytes != null && crypto != null)
             {
-                bytes = _cryptoProvider.Decrypt(bytes);
+                bytes = crypto.Decrypt(bytes);
             }
 
             return bytes;
@@ -224,13 +237,17 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
 
+            // 入口快照:整个异步流程使用同一组 provider/crypto,避免并发切换导致的加解密错乱
+            var provider = _provider;
+            var crypto = _cryptoProvider;
+
             var bytes = data;
-            if (_cryptoProvider != null)
+            if (crypto != null)
             {
-                bytes = _cryptoProvider.Encrypt(bytes);
+                bytes = crypto.Encrypt(bytes);
             }
 
-            await _provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
+            await provider.WriteAllBytesAsync(domain, relativePath, bytes, cancellationToken);
         }
 
         #endregion
@@ -356,14 +373,15 @@ namespace XFramework.XFileManager
 
         /// <summary>
         /// 带加解密层的文本读取（内部实现）。
+        /// <para>provider 与 crypto 由调用方入口快照传入，保证与调用方使用同一实例。</para>
         /// </summary>
-        private static async UniTask<string> ReadTextWithCryptoAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken)
+        private static async UniTask<string> ReadTextWithCryptoAsync(IFileProvider provider, ICryptoProvider crypto, FileDomain domain, string relativePath, CancellationToken cancellationToken)
         {
-            var bytes = await _provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
+            var bytes = await provider.ReadAllBytesAsync(domain, relativePath, cancellationToken);
             if (bytes == null)
                 return null;
 
-            bytes = _cryptoProvider.Decrypt(bytes);
+            bytes = crypto.Decrypt(bytes);
             return Encoding.UTF8.GetString(bytes);
         }
 
