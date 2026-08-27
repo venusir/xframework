@@ -2,7 +2,9 @@
     "name": "Venusy609.Xframework.Tests",
     "references": [
         "Venusy609.Xframework",
-        "UniTask"
+        "UniTask",
+        "Unity.InputSystem",
+        "Unity.InputSystem.TestFramework"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

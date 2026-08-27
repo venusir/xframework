@@ -12,6 +12,7 @@ namespace XFramework.XInput.Default
         #region Private Fields
 
         private readonly InputActionRebindingExtensions.RebindingOperation _rebinding;
+        private readonly bool _restoreEnabled;
 
         #endregion
 
@@ -28,23 +29,29 @@ namespace XFramework.XInput.Default
         /// <summary>
         /// 创建一个 SystemRebindingOperation 实例。
         /// <para>传入一个已经 <c>.Start()</c> 的 RebindingOperation 和当前 Action 引用。</para>
+        /// <para>重绑定要求 action 处于禁用态,StartRebinding 会临时禁用;restoreEnabled 为 true 时,
+        /// 操作完成/取消后恢复 action 启用态,保证游戏重绑定 UI 场景下输入不中断。</para>
         /// </summary>
         /// <param name="rebinding">已启动的 Unity 重绑定操作</param>
         /// <param name="action">对应的 InputAction（用于在完成时构建 InputBindingInfo）</param>
         /// <param name="bindingIndex">要被覆盖的绑定索引</param>
         /// <param name="bindingId">要被覆盖的绑定唯一标识</param>
+        /// <param name="restoreEnabled">重绑定结束后是否恢复 action 的启用态</param>
         public SystemRebindingOperation(
             InputActionRebindingExtensions.RebindingOperation rebinding,
             InputAction action,
             int bindingIndex,
-            string bindingId)
+            string bindingId,
+            bool restoreEnabled)
         {
             _rebinding = rebinding ?? throw new ArgumentNullException(nameof(rebinding));
+            _restoreEnabled = restoreEnabled;
 
             // ---- 完成回调 ----
             _rebinding.OnComplete(op =>
             {
                 op.Dispose();
+                if (_restoreEnabled) action.Enable();
 
                 var newBindingInfo = new InputBindingInfo
                 {
@@ -63,6 +70,7 @@ namespace XFramework.XInput.Default
             _rebinding.OnCancel(op =>
             {
                 op.Dispose();
+                if (_restoreEnabled) action.Enable();
                 OnCancelled?.Invoke();
             });
 

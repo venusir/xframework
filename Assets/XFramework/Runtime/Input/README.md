@@ -273,7 +273,7 @@ sub.Dispose();
 
 所有读取与振动 API 均接受 `playerId` 参数（默认 0）。最小档语义：
 
-- **设备分配**：按手柄连接顺序分配——`playerId` 1 对应第一只手柄、2 对应第二只，依此类推；0 号玩家沿用「当前活跃手柄」语义
+- **设备分配**：0 号玩家沿用「当前活跃手柄」语义；`playerId` 1 起跳过 0 号玩家的手柄、按连接顺序分配其余手柄，保证各玩家设备互斥；手柄不足时读取返回默认值
 - **读取**：`playerId > 0` 时按钮/轴值直读对应玩家手柄的驱动控件（控件级读取，不应用绑定处理器，与 Raw 一致）；玩家无手柄或动作无 Gamepad 绑定时返回默认值
 - **键鼠**：仅服务 0 号玩家，`playerId > 0` 的读取不响应键鼠
 - **振动**：按玩家手柄独立设置马达，各玩家到期自动停止互不影响
@@ -467,6 +467,7 @@ public class RewiredProvider : IInputProvider
     "com.unity.inputsystem": "1.7.0"
   }
   ```
+- Unity Input System Test Framework（随 Input System 包自带，仅测试 asmdef 引用，无额外安装）
 - 可选：Rewired（如需自定义实现）
 
 ## 版本记录

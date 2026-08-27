@@ -58,15 +58,25 @@ namespace XFramework.XInput.Default
         public void Initialize()
         {
             // 加载 Input Action Asset(资源须位于 Assets/Resources/)
-            _actionAsset = Resources.Load<InputActionAsset>("InputSystem_Actions");
+            var asset = Resources.Load<InputActionAsset>("InputSystem_Actions");
 
-            if (_actionAsset == null)
+            if (asset == null)
             {
                 // 显式抛异常而非静默返回:加载失败后所有读取会静默返回默认值,掩盖配置错误
                 throw new InvalidOperationException(
                     "[Input] 加载 InputSystem_Actions.inputactions 失败:请将 InputSystem_Actions.inputactions 放入 Assets/Resources/ 目录后重试");
             }
 
+            Initialize(asset);
+        }
+
+        /// <summary>
+        /// 以指定资产初始化。
+        /// <para>测试经 InternalsVisibleTo 注入程序化资产;亦可作为资产自管加载(如经 YooAsset)时的替代入口。</para>
+        /// </summary>
+        internal void Initialize(InputActionAsset asset)
+        {
+            _actionAsset = asset ?? throw new ArgumentNullException(nameof(asset));
             _actionAsset.Enable();
 
             // 监听设备变更
@@ -561,16 +571,31 @@ namespace XFramework.XInput.Default
                 }
             }
 
-            var rebindOp = inputAction.PerformInteractiveRebinding(bindingIndex)
-                .WithControlsExcluding("<Mouse>/position")
-                .WithControlsExcluding("<Mouse>/delta")
-                .WithControlsExcluding("<Pointer>/position")
-                .WithControlsExcluding("<Pointer>/delta")
-                .WithControlsExcluding("<Gamepad>/leftStick")
-                .OnMatchWaitForAnother(0.1f)
-                .Start();
+            // 重绑定要求 action 处于禁用态(InputActionRebindingExtensions.WithAction 对启用态 action 直接抛异常);
+            // 游戏内重绑定 UI 打开时 action map 通常是启用的,这里临时禁用、操作结束后经 SystemRebindingOperation 恢复
+            var wasEnabled = inputAction.enabled;
+            if (wasEnabled) inputAction.Disable();
 
-            return new SystemRebindingOperation(rebindOp, inputAction, bindingIndex, bindingId ?? string.Empty);
+            InputActionRebindingExtensions.RebindingOperation rebindOp;
+            try
+            {
+                rebindOp = inputAction.PerformInteractiveRebinding(bindingIndex)
+                    .WithControlsExcluding("<Mouse>/position")
+                    .WithControlsExcluding("<Mouse>/delta")
+                    .WithControlsExcluding("<Pointer>/position")
+                    .WithControlsExcluding("<Pointer>/delta")
+                    .WithControlsExcluding("<Gamepad>/leftStick")
+                    .OnMatchWaitForAnother(0.1f)
+                    .Start();
+            }
+            catch
+            {
+                // 防御:创建失败(如已有重绑定在进行中)时恢复禁用前的状态,避免把游戏输入打坏
+                if (wasEnabled) inputAction.Enable();
+                throw;
+            }
+
+            return new SystemRebindingOperation(rebindOp, inputAction, bindingIndex, bindingId ?? string.Empty, wasEnabled);
         }
 
         /// <summary>
@@ -694,7 +719,8 @@ namespace XFramework.XInput.Default
                 _lastActiveDeviceType = InputDeviceType.Touch;
         }
 
-        // vendorId/productId 查表:官方 InputDeviceMatcher 匹配 capabilities JSON(支持十进制与 0x 十六进制)。
+        // vendorId/productId 查表:官方 InputDeviceMatcher 匹配 capabilities JSON。
+        // 注意:包内 JsonParser 不支持 0x 十六进制前缀(真实 HID 描述符经 JsonUtility 序列化为十进制,无碍)。
         // MatchPercentage 语义:任一 pattern 不匹配即 0,全匹配才 > 0。
         private static readonly InputDeviceMatcher s_GamepadTypeMatcherXbox =
             new InputDeviceMatcher().WithCapability("vendorId", 0x045E); // Microsoft
@@ -778,14 +804,24 @@ namespace XFramework.XInput.Default
         /// <summary>
         /// 按 playerId 取玩家手柄(最小档:按连接顺序分配)。
         /// <para>0 号玩家沿用 <see cref="Gamepad.current"/> 语义(当前活跃手柄);
-        /// playerId > 0 按 <see cref="Gamepad.all"/> 连接顺序索引,越界或未连接返回 null。</para>
+        /// playerId &gt; 0 跳过 0 号玩家的手柄后按 <see cref="Gamepad.all"/> 连接顺序分配,
+        /// 保证各玩家设备互斥(若直接按 all[playerId] 索引,current 恰好是第二只手柄时
+        /// 玩家 0 与玩家 1 会指向同一设备,且第一只手柄永远不可达)。越界或未连接返回 null。</para>
         /// </summary>
         private static Gamepad GetGamepadForPlayer(uint playerId)
         {
             if (playerId == 0) return Gamepad.current;
 
             var all = Gamepad.all;
-            return playerId < (uint)all.Count ? all[(int)playerId] : null;
+            var current = Gamepad.current;
+            uint skip = 0;
+            for (int i = 0; i < all.Count; i++)
+            {
+                if (all[i] == current) continue;
+                skip++;
+                if (skip == playerId) return all[i];
+            }
+            return null;
         }
 
         /// <summary>
