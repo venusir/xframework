@@ -73,11 +73,11 @@ if (InputManager.WasReleasedThisFrame("Interact"))
 if (InputManager.IsPressed("Sprint"))
     playerSpeed *= 1.5f;
 
-// 值输入（平滑后）
+// 值输入（已应用绑定处理器，如死区/灵敏度）
 Vector2 move = InputManager.ReadVector2("Move");
 float throttle = InputManager.ReadFloat("Throttle");
 
-// 原始值（不平滑，适合走相机等）
+// 原始值（未应用绑定处理器，直读设备输入，适合走相机等）
 Vector2 lookRaw = InputManager.ReadVector2Raw("Look");
 
 // 长按时长
@@ -240,7 +240,7 @@ void Awake()
     // float 轴（如扳机键），值变化时回调
     InputManager.ObserveFloat("Throttle", f => enginePower = f, this);
 
-    // 原始值（不平滑），适合相机等场景
+    // 原始值（未应用绑定处理器），适合相机等场景
     InputManager.ObserveVector2Raw("Look", delta => camera.Rotate(delta), this);
 }
 ```

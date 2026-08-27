@@ -126,15 +126,27 @@ namespace XFramework.XInput.Default
 
         public float ReadFloatRaw(string action, uint playerId = 0)
         {
-            // InputAction.ReadValue<float>() 在 Unity Input System 中已返回 raw value
+            // 直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
             var inputAction = GetAction(action);
-            return inputAction?.ReadValue<float>() ?? 0f;
+            return inputAction != null ? ReadRawValue<float>(inputAction.activeControl, 0f) : 0f;
         }
 
         public Vector2 ReadVector2Raw(string action, uint playerId = 0)
         {
+            // 直读当前驱动控件值,绕过绑定处理器(如死区/灵敏度),返回设备原始输入
             var inputAction = GetAction(action);
-            return inputAction?.ReadValue<Vector2>() ?? Vector2.zero;
+            return inputAction != null ? ReadRawValue<Vector2>(inputAction.activeControl, Vector2.zero) : Vector2.zero;
+        }
+
+        /// <summary>
+        /// 读取控件原始值。
+        /// <para><see cref="InputControl"/> 基类不暴露泛型 <c>ReadValue</c>,需按具体值类型转型;
+        /// 控件不存在或值类型不匹配时返回 fallback(零 GC,无异常)。</para>
+        /// </summary>
+        private static TValue ReadRawValue<TValue>(InputControl control, TValue fallback)
+            where TValue : struct
+        {
+            return control is InputControl<TValue> typedControl ? typedControl.ReadValue() : fallback;
         }
 
         #endregion

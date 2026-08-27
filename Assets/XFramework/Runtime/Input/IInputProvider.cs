@@ -56,28 +56,28 @@ namespace XFramework.XInput
         #region 值输入
 
         /// <summary>
-        /// 读取指定动作的 Vector2 值（如移动摇杆、鼠标增量），已应用 Input Behavior 的平滑处理。
+        /// 读取指定动作的 Vector2 值（如移动摇杆、鼠标增量），已应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称，如 "Move"、"Look"</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         UnityEngine.Vector2 ReadVector2(string action, uint playerId = 0);
 
         /// <summary>
-        /// 读取指定动作的 float 值（如扳机键），已应用 Input Behavior 的平滑处理。
+        /// 读取指定动作的 float 值（如扳机键），已应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称，如 "Throttle"</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         float ReadFloat(string action, uint playerId = 0);
 
         /// <summary>
-        /// 读取指定动作的 float 原始值，不应用平滑处理。
+        /// 读取指定动作的 float 原始值，未应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         float ReadFloatRaw(string action, uint playerId = 0);
 
         /// <summary>
-        /// 读取指定动作的 Vector2 原始值，不应用平滑处理。
+        /// 读取指定动作的 Vector2 原始值，未应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>

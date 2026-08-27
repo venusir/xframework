@@ -159,7 +159,7 @@ namespace XFramework.XInput
         #region Public API — Value Input
 
         /// <summary>
-        /// 读取指定动作的 Vector2 值（如移动摇杆、鼠标增量），已应用 Input Behavior 的平滑处理。
+        /// 读取指定动作的 Vector2 值（如移动摇杆、鼠标增量），已应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称，如 "Move"、"Look"</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
@@ -169,7 +169,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 读取指定动作的 float 值（如扳机键），已应用平滑处理。
+        /// 读取指定动作的 float 值（如扳机键），已应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称，如 "Throttle"</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
@@ -179,7 +179,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 读取指定动作的 float 原始值，不应用平滑处理。
+        /// 读取指定动作的 float 原始值，未应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
@@ -189,7 +189,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 读取指定动作的 Vector2 原始值，不应用平滑处理。
+        /// 读取指定动作的 Vector2 原始值，未应用绑定处理器（如死区/灵敏度）。
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
@@ -519,7 +519,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 订阅 Vector2 轴输入（如移动摇杆）。使用 <see cref="ReadVector2"/> 读取平滑值，
+        /// 订阅 Vector2 轴输入（如移动摇杆）。使用 <see cref="ReadVector2"/> 读取处理后的值，
         /// 仅当值变化时回调。
         /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
@@ -551,7 +551,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 订阅 float 轴输入。使用 <see cref="ReadFloat"/> 读取平滑值，仅当值变化时回调。
+        /// 订阅 float 轴输入。使用 <see cref="ReadFloat"/> 读取处理后的值，仅当值变化时回调。
         /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
@@ -582,7 +582,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 订阅 Vector2 原始轴输入（不平滑）。使用 <see cref="ReadVector2Raw"/>，仅当值变化时回调。
+        /// 订阅 Vector2 原始轴输入（未应用处理器）。使用 <see cref="ReadVector2Raw"/>，仅当值变化时回调。
         /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
@@ -613,7 +613,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 订阅 float 原始轴输入（不平滑）。使用 <see cref="ReadFloatRaw"/>，仅当值变化时回调。
+        /// 订阅 float 原始轴输入（未应用处理器）。使用 <see cref="ReadFloatRaw"/>，仅当值变化时回调。
         /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
