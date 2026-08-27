@@ -93,10 +93,10 @@ namespace XFramework.XFileManager
                     var files = Directory.GetFiles(fullPath, searchPattern);
                     string rootDir = GetPhysicalPath(domain, null);
 
-                    // 转换为相对路径
+                    // 转换为相对路径（统一正斜杠分隔）
                     for (int i = 0; i < files.Length; i++)
                     {
-                        files[i] = GetRelativePath(rootDir, files[i]);
+                        files[i] = FilePathUtility.ToRelativePath(rootDir, files[i]);
                     }
 
                     return files;
@@ -120,11 +120,7 @@ namespace XFramework.XFileManager
             if (string.IsNullOrEmpty(relativePath))
                 return root;
 
-            // 标准化路径分隔符
-            relativePath = relativePath.Replace('\\', '/');
-            relativePath = relativePath.TrimStart('/');
-
-            return Path.Combine(root, relativePath);
+            return Path.Combine(root, FilePathUtility.NormalizeRelativePath(relativePath));
         }
 
         #endregion
@@ -160,27 +156,6 @@ namespace XFramework.XFileManager
             var dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-        }
-
-        /// <summary>
-        /// 将绝对路径转换为相对于根目录的相对路径。
-        /// </summary>
-        private static string GetRelativePath(string rootDir, string absolutePath)
-        {
-            var rootUri = new Uri(EnsureTrailingSlash(rootDir));
-            var targetUri = new Uri(absolutePath);
-            var relativeUri = rootUri.MakeRelativeUri(targetUri);
-            return Uri.UnescapeDataString(relativeUri.ToString().Replace('/', Path.DirectorySeparatorChar));
-        }
-
-        /// <summary>
-        /// 确保目录路径以分隔符结尾。
-        /// </summary>
-        private static string EnsureTrailingSlash(string path)
-        {
-            if (!path.EndsWith(Path.DirectorySeparatorChar.ToString()))
-                return path + Path.DirectorySeparatorChar;
-            return path;
         }
 
         #endregion

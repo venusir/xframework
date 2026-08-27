@@ -109,7 +109,7 @@ namespace XFramework.XSave.Tests
 
                     var files = Directory.GetFiles(fullPath, searchPattern);
                     for (int i = 0; i < files.Length; i++)
-                        files[i] = GetRelativePath(_rootPath, files[i]);
+                        files[i] = FilePathUtility.ToRelativePath(_rootPath, files[i]);
 
                     return files;
                 },
@@ -131,9 +131,7 @@ namespace XFramework.XSave.Tests
             if (string.IsNullOrEmpty(relativePath))
                 return _rootPath;
 
-            // 标准化路径分隔符
-            relativePath = relativePath.Replace('\\', '/').TrimStart('/');
-            return Path.Combine(_rootPath, relativePath);
+            return Path.Combine(_rootPath, FilePathUtility.NormalizeRelativePath(relativePath));
         }
 
         #endregion
@@ -148,15 +146,6 @@ namespace XFramework.XSave.Tests
             var dir = Path.GetDirectoryName(filePath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
                 Directory.CreateDirectory(dir);
-        }
-
-        /// <summary>
-        /// 将绝对路径转换为相对根目录的路径，统一使用正斜杠
-        /// （与 SaveManagerImpl 内部 <c>path.LastIndexOf('/')</c> 解析约定一致）。
-        /// </summary>
-        private static string GetRelativePath(string rootDir, string absolutePath)
-        {
-            return absolutePath.Substring(rootDir.Length).TrimStart('\\', '/').Replace('\\', '/');
         }
 
         #endregion

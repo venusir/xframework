@@ -29,6 +29,10 @@ namespace XFramework.XSave
 
         #region Fields
 
+        // 防御性兜底:FileManager.GetFilesAsync 已保证返回正斜杠路径,
+        // 此处兼容反斜杠是为了防御第三方 Provider 违反契约的情况
+        private static readonly char[] PathSeparators = { '/', '\\' };
+
         private string _playerId;
 
         #endregion
@@ -227,10 +231,7 @@ namespace XFramework.XSave
                 return false;
 
             // 取文件名部分（去掉可能的 playerId 子目录前缀）
-            var fileName = path;
-            var slashIndex = path.LastIndexOf('/');
-            if (slashIndex >= 0)
-                fileName = path.Substring(slashIndex + 1);
+            var fileName = FilePathUtility.GetFileNameFromPath(path);
 
             return fileName.StartsWith(SlotFilePrefix, StringComparison.Ordinal)
                 && fileName.EndsWith(SlotFileSuffix, StringComparison.Ordinal);
@@ -239,10 +240,7 @@ namespace XFramework.XSave
         private static int ParseSlotFromPath(string path)
         {
             // 取文件名部分，格式: "slot_{index}.save"（可能包含 playerId/ 前缀）
-            var fileName = path;
-            var slashIndex = path.LastIndexOf('/');
-            if (slashIndex >= 0)
-                fileName = path.Substring(slashIndex + 1);
+            var fileName = FilePathUtility.GetFileNameFromPath(path);
 
             var start = SlotFilePrefix.Length;
             var end = fileName.LastIndexOf(SlotFileSuffix, StringComparison.Ordinal);
@@ -291,7 +289,7 @@ namespace XFramework.XSave
                 for (int i = 0; i < rootFiles.Length; i++)
                 {
                     var path = rootFiles[i];
-                    var slashIndex = path.IndexOf('/');
+                    var slashIndex = path.IndexOfAny(PathSeparators);
                     if (slashIndex > 0)
                     {
                         var playerId = path.Substring(0, slashIndex);

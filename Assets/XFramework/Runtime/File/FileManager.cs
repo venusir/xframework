@@ -271,7 +271,11 @@ namespace XFramework.XFileManager
         /// <param name="relativePath">相对于域根目录的目录路径。</param>
         /// <param name="searchPattern">搜索模式，默认为 <c>*</c>。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>匹配的文件相对路径数组。</returns>
+        /// <returns>
+        /// 匹配的文件相对路径数组。
+        /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与传入的相对路径同规范），
+        /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
+        /// </returns>
         public static UniTask<string[]> GetFilesAsync(FileDomain domain, string relativePath, string searchPattern = "*", CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
