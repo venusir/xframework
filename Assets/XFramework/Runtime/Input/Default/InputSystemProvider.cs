@@ -48,14 +48,14 @@ namespace XFramework.XInput.Default
 
         public void Initialize()
         {
-            // 加载 Input Action Asset
+            // 加载 Input Action Asset(资源须位于 Assets/Resources/)
             _actionAsset = Resources.Load<InputActionAsset>("InputSystem_Actions");
 
             if (_actionAsset == null)
             {
-                Debug.LogError("[InputSystemProvider] Failed to load InputSystem_Actions.inputactions. " +
-                               "Make sure it exists under Assets/Resources/");
-                return;
+                // 显式抛异常而非静默返回:加载失败后所有读取会静默返回默认值,掩盖配置错误
+                throw new InvalidOperationException(
+                    "[Input] 加载 InputSystem_Actions.inputactions 失败:请将 InputSystem_Actions.inputactions 放入 Assets/Resources/ 目录后重试");
             }
 
             _actionAsset.Enable();

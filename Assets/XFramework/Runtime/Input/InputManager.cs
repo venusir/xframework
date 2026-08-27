@@ -44,6 +44,7 @@ namespace XFramework.XInput
         /// <summary>
         /// 使用默认的 <see cref="InputSystemProvider"/> 初始化输入管理器。
         /// <para>基于 Unity Input System，零额外依赖。</para>
+        /// <para>初始化失败(如 <c>InputSystem_Actions.inputactions</c> 缺失)时抛出 <see cref="InvalidOperationException"/>。</para>
         /// </summary>
         public static void Initialize()
         {
@@ -62,6 +63,7 @@ namespace XFramework.XInput
         /// <summary>
         /// 使用自定义 <see cref="IInputProvider"/> 初始化输入管理器。
         /// <para>适用于注入 Rewired 适配器或其他自定义实现。</para>
+        /// <para>自定义 Provider 的 <see cref="IInputProvider.Initialize"/> 抛出的异常会直接传播给调用方。</para>
         /// </summary>
         /// <param name="customProvider">自定义输入提供者</param>
         public static void Initialize(IInputProvider customProvider)
