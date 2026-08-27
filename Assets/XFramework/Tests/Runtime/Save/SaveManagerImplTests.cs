@@ -92,12 +92,13 @@ namespace XFramework.XSave.Tests
             await SaveManager.SaveAsync(1);
 
             wallet.Gold = 20;
-            await SaveManager.SaveAsync(1); // 覆盖:双缓冲 tmp → 删除正式文件 → Move
+            await SaveManager.SaveAsync(1); // 覆盖:双缓冲 tmp → 删除正式 → Move
 
             wallet.Gold = 0;
             await SaveManager.LoadAsync(1);
 
             Assert.AreEqual(20, wallet.Gold, "第二次保存应覆盖第一次的数据");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save.tmp"), "覆盖保存后不应残留 tmp 文件");
         }
 
         [Test]
