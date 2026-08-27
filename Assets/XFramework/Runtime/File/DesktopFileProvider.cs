@@ -22,6 +22,16 @@ namespace XFramework.XFileManager
         }
 
         /// <inheritdoc />
+        public UniTask<bool> ExistsAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            var fullPath = GetPhysicalPath(domain, relativePath);
+            return UniTask.RunOnThreadPool(
+                () => File.Exists(fullPath),
+                configureAwait: false,
+                cancellationToken);
+        }
+
+        /// <inheritdoc />
         public async UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             var fullPath = GetPhysicalPath(domain, relativePath);

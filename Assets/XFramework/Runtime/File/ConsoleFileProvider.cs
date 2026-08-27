@@ -48,6 +48,15 @@ namespace XFramework.XFileManager
         #region IFileProvider — 基于 ReadAllBytes/WriteAllBytes 的默认实现
 
         /// <inheritdoc />
+        public virtual UniTask<bool> ExistsAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            return UniTask.RunOnThreadPool(
+                () => Exists(domain, relativePath),
+                configureAwait: false,
+                cancellationToken);
+        }
+
+        /// <inheritdoc />
         public virtual async UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             var bytes = await ReadAllBytesAsync(domain, relativePath, cancellationToken);

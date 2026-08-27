@@ -239,6 +239,8 @@ namespace XFramework.XFileManager
 
         /// <summary>
         /// 检查指定文件是否存在。
+        /// <para>注意:移动端 <see cref="FileDomain.Streaming"/> 域通过 UnityWebRequest 查询,
+        /// 同步调用会阻塞主线程,推荐改用 <see cref="ExistsAsync"/>。</para>
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
@@ -247,6 +249,20 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
             return _provider.Exists(domain, relativePath);
+        }
+
+        /// <summary>
+        /// 异步检查指定文件是否存在。
+        /// <para>移动端 <see cref="FileDomain.Streaming"/> 域的查询为非阻塞方式,不会卡住主线程。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>文件存在返回 <c>true</c>。</returns>
+        public static UniTask<bool> ExistsAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _provider.ExistsAsync(domain, relativePath, cancellationToken);
         }
 
         /// <summary>

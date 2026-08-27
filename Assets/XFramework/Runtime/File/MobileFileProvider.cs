@@ -34,6 +34,15 @@ namespace XFramework.XFileManager
         }
 
         /// <inheritdoc />
+        public async UniTask<bool> ExistsAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            if (domain == FileDomain.Streaming)
+                return await CheckStreamingExistsAsync(relativePath, cancellationToken);
+
+            return await _desktopProvider.ExistsAsync(domain, relativePath, cancellationToken);
+        }
+
+        /// <inheritdoc />
         public async UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             if (domain == FileDomain.Streaming)
@@ -99,6 +108,8 @@ namespace XFramework.XFileManager
 
         /// <summary>
         /// 检查 StreamingAssets 中的文件是否存在（通过 UnityWebRequest HEAD 请求）。
+        /// <para>同步自旋等待（仅在同步 <see cref="Exists"/> 中调用）：
+        /// isDone 由引擎原生侧推进，不依赖托管 PlayerLoop，故阻塞等待可完成。</para>
         /// </summary>
         private static bool CheckStreamingExists(string relativePath)
         {
@@ -108,6 +119,21 @@ namespace XFramework.XFileManager
 
             // 同步等待（仅在 Exists 中调用，频率低）
             while (!request.isDone) { }
+
+            return request.result == UnityWebRequest.Result.Success;
+        }
+
+        /// <summary>
+        /// 异步检查 StreamingAssets 中的文件是否存在（通过 UnityWebRequest HEAD 请求）。
+        /// </summary>
+        private static async UniTask<bool> CheckStreamingExistsAsync(string relativePath, CancellationToken cancellationToken)
+        {
+            var url = GetStreamingUrl(relativePath);
+            using var request = UnityWebRequest.Head(url);
+
+            var asyncOp = request.SendWebRequest();
+            // cancelImmediately: 取消时立即 Abort 请求（对齐原实现的手动 Abort 语义）
+            await asyncOp.ToUniTask(cancellationToken: cancellationToken, cancelImmediately: true);
 
             return request.result == UnityWebRequest.Result.Success;
         }
@@ -123,17 +149,8 @@ namespace XFramework.XFileManager
             request.downloadHandler = new DownloadHandlerBuffer();
 
             var asyncOp = request.SendWebRequest();
-
-            // 等待完成或取消
-            while (!asyncOp.isDone)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    request.Abort();
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                await UniTask.Yield(PlayerLoopTiming.Update);
-            }
+            // cancelImmediately: 取消时立即 Abort 请求（对齐原实现的手动 Abort 语义）
+            await asyncOp.ToUniTask(cancellationToken: cancellationToken, cancelImmediately: true);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
@@ -155,16 +172,8 @@ namespace XFramework.XFileManager
             request.downloadHandler = new DownloadHandlerBuffer();
 
             var asyncOp = request.SendWebRequest();
-
-            while (!asyncOp.isDone)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    request.Abort();
-                    cancellationToken.ThrowIfCancellationRequested();
-                }
-                await UniTask.Yield(PlayerLoopTiming.Update);
-            }
+            // cancelImmediately: 取消时立即 Abort 请求（对齐原实现的手动 Abort 语义）
+            await asyncOp.ToUniTask(cancellationToken: cancellationToken, cancelImmediately: true);
 
             if (request.result != UnityWebRequest.Result.Success)
             {
