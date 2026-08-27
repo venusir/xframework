@@ -392,7 +392,7 @@ namespace XFramework.XInput
         /// <param name="action">要重新绑定的动作名称</param>
         /// <param name="bindingId">
         /// 要覆盖的绑定唯一标识（对应 <see cref="GetBindings"/> 返回的 <see cref="InputBindingInfo.Id"/>）。
-        /// 传入 null 或空字符串表示新增一条绑定。
+        /// 传入 null 或空字符串表示回退到第一个可绑定索引（覆盖式）；传入的 id 不存在时返回 null 并记录错误日志。
         /// </param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可取消的绑定操作句柄，绑定完成后通过 <see cref="IRebindingOperation.OnCompleted"/> 事件通知</returns>

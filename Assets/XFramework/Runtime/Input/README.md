@@ -155,6 +155,9 @@ InputManager.ResetAllBindingOverrides();      // 重置所有
 
 > GetBindings 现在会自动过滤复合绑定（如 WASD 组合），只返回最终可绑定的普通绑定项。
 > 每个 InputBindingInfo 现在包含 `IsOverridden` 字段，UI 可据此显示"重置为默认"按钮。
+>
+> `StartRebinding` 的 `bindingId` 语义：传入 `null` 或空字符串时回退覆盖第一个可绑定索引；
+> 传入不存在的 id 会返回 `null` 并记录错误日志（不做静默回退，防止改错键位）。
 
 ```csharp
 // 获取某个动作的所有可绑定项（已过滤复合绑定）

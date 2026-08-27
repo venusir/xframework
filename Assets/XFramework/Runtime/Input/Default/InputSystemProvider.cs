@@ -461,11 +461,20 @@ namespace XFramework.XInput.Default
                 return null;
             }
 
-            // 根据 bindingId 查找对应的 binding index
-            var bindingIndex = FindBindingIndexById(inputAction, bindingId);
-            if (bindingIndex < 0)
+            // 定位要覆盖的绑定:bindingId 非空时精确匹配;为空时回退到第一个可绑定索引(覆盖式)
+            int bindingIndex;
+            if (!string.IsNullOrEmpty(bindingId))
             {
-                // 如果找不到，全新绑定（使用第一个有效的非复合绑定）
+                bindingIndex = FindBindingIndexById(inputAction, bindingId);
+                if (bindingIndex < 0)
+                {
+                    // 非法 bindingId 显式报错返回,不再静默回退覆盖第一个绑定(避免持久化数据与资产失配时改错键位)
+                    Debug.LogError($"[Input] StartRebinding failed: action '{action}' has no binding with id '{bindingId}'.");
+                    return null;
+                }
+            }
+            else
+            {
                 bindingIndex = GetFirstBindableIndex(inputAction);
                 if (bindingIndex < 0)
                 {
