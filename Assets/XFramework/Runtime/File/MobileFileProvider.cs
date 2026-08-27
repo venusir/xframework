@@ -12,8 +12,9 @@ namespace XFramework.XFileManager
     /// 因为 StreamingAssets 在 APK/IPA 内是压缩存储，无法用 <see cref="System.IO"/> 直接访问。</para>
     /// <para>其他域（<see cref="FileDomain.AppData"/>、<see cref="FileDomain.Cache"/>、<see cref="FileDomain.SaveData"/>）
     /// 仍使用 <see cref="System.IO"/>（这些路径在移动端沙盒内，IO 可用）。</para>
+    /// <para>实现 <see cref="IAtomicFileProvider"/>：原子写透传 <see cref="DesktopFileProvider"/>（Streaming 域只读）。</para>
     /// </summary>
-    public class MobileFileProvider : IFileProvider
+    public class MobileFileProvider : IFileProvider, IAtomicFileProvider
     {
         #region Private Fields
 
@@ -100,6 +101,17 @@ namespace XFramework.XFileManager
         public string GetPhysicalPath(FileDomain domain, string relativePath)
         {
             return _desktopProvider.GetPhysicalPath(domain, relativePath);
+        }
+
+        #endregion
+
+        #region IAtomicFileProvider
+
+        /// <inheritdoc />
+        public UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
+        {
+            // Streaming 域只读，原子写透传 DesktopProvider（与普通写入一致）
+            return _desktopProvider.WriteAllBytesAtomicAsync(domain, relativePath, data, cancellationToken);
         }
 
         #endregion

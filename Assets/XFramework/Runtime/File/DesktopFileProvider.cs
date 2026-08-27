@@ -9,8 +9,10 @@ namespace XFramework.XFileManager
     /// <summary>
     /// 桌面平台（Windows/Linux/macOS Standalone）文件提供者实现。
     /// <para>直接使用 <see cref="System.IO"/> API，性能最优。</para>
+    /// <para>实现 <see cref="IAtomicFileProvider"/>：原子写为「写 .tmp 临时文件 → 替换正式文件」，
+    /// 写入中途崩溃不会损坏已有文件。</para>
     /// </summary>
-    public class DesktopFileProvider : IFileProvider
+    public class DesktopFileProvider : IFileProvider, IAtomicFileProvider
     {
         #region IFileProvider
 
@@ -131,6 +133,33 @@ namespace XFramework.XFileManager
                 return root;
 
             return Path.Combine(root, FilePathUtility.NormalizeRelativePath(relativePath));
+        }
+
+        #endregion
+
+        #region IAtomicFileProvider
+
+        /// <inheritdoc />
+        public async UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
+        {
+            var tempPath = relativePath + ".tmp";
+            var srcPhysical = GetPhysicalPath(domain, tempPath);
+            var dstPhysical = GetPhysicalPath(domain, relativePath);
+
+            // 先写 .tmp 临时文件：写入失败时正式文件保持完整
+            await WriteAllBytesAsync(domain, tempPath, data, cancellationToken);
+
+            // 替换流程为同步 IO，移出主线程；Unity API 面无 File.Move(overwrite) 重载，
+            // 以「删正式 → Move」实现，语义与 Save 双缓冲一致
+            await UniTask.RunOnThreadPool(
+                () =>
+                {
+                    if (File.Exists(dstPhysical))
+                        File.Delete(dstPhysical);
+                    File.Move(srcPhysical, dstPhysical);
+                },
+                configureAwait: false,
+                cancellationToken);
         }
 
         #endregion

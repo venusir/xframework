@@ -122,27 +122,11 @@ namespace XFramework.XSave
                 // 2. 序列化 DataSnapshot → bytes
                 var bytes = Serializer.Default.Serialize(saveData, saveData.GetType());
 
-                // 3. 双缓冲写入：先写 .tmp，再替换正式文件
-                //    避免写入中途崩溃导致存档损坏。目标已存在时先删除再重命名
-                //    （Unity API 面无 Move(overwrite) 重载；真原子替换由 Provider 层原子写能力提供）。
+                // 3. 原子写入：Provider 层先写 .tmp 再替换正式文件（IAtomicFileProvider 契约），
+                //    写入中途崩溃不会损坏已有存档；Provider 不支持时门面自动降级普通写
                 var slotPath = BuildSlotPath(slot);
-                var tempPath = slotPath + ".tmp";
 
-                await FileManager.WriteAllBytesAsync(SaveDomain, tempPath, bytes, cancellationToken);
-
-                var srcPhysical = FileManager.GetPhysicalPath(SaveDomain, tempPath);
-                var dstPhysical = FileManager.GetPhysicalPath(SaveDomain, slotPath);
-
-                // 删除与重命名均为同步 IO，移出主线程执行
-                await UniTask.RunOnThreadPool(
-                    () =>
-                    {
-                        if (System.IO.File.Exists(dstPhysical))
-                            System.IO.File.Delete(dstPhysical);
-                        System.IO.File.Move(srcPhysical, dstPhysical);
-                    },
-                    configureAwait: false,
-                    cancellationToken);
+                await FileManager.WriteAllBytesAtomicAsync(SaveDomain, slotPath, bytes, cancellationToken);
 
                 var meta = saveData.CreateMeta();
                 meta.playerId = _playerId;

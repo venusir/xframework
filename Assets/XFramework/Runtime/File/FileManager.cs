@@ -225,6 +225,33 @@ namespace XFramework.XFileManager
             return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
         }
 
+        /// <summary>
+        /// 原子写入字节内容到文件：先写 <c>.tmp</c> 临时文件，写入成功后再替换正式文件，
+        /// 写入中途崩溃不会损坏已有文件。
+        /// <para>底层 Provider 未实现 <see cref="IAtomicFileProvider"/>（如 WebGL 自定义实现）时，
+        /// 降级为普通写入并告警。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="data">要写入的字节数组。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        public static UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
+            var provider = _provider;
+
+            // 能力探测:仅对支持原子写的 Provider 使用临时文件替换语义,
+            // 否则降级普通写(语义回退为「直接覆盖」,崩溃防护失效,告警提示)
+            if (provider is IAtomicFileProvider atomicProvider)
+                return atomicProvider.WriteAllBytesAtomicAsync(domain, relativePath, data, cancellationToken);
+
+            Debug.LogWarning(
+                $"[FileManager] 当前 Provider({provider?.GetType().Name}) 不支持原子写入,已降级为普通写入。");
+            return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
+        }
+
         #endregion
 
         #region File Operations — Exists / Delete

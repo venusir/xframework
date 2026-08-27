@@ -84,7 +84,9 @@ namespace XFramework.XFileManager.Tests
             FileManager.SetCryptoProvider(null);
 
             var read = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "crypto.bin");
-            Assert.AreEqual("plain", Encoding.UTF8.GetString(read), "禁用加密后应读到磁盘原文（密文无法还原时行为自证）");
+            // 写入时磁盘已落密文；禁用加密后读取直接返回磁盘原文（不再解密），
+            // 读到无法还原的垃圾密文正自证「加密读取已关闭」
+            Assert.AreNotEqual("plain", Encoding.UTF8.GetString(read), "禁用加密后应读到磁盘密文原文（不再解密）");
         }
 
         [Test]

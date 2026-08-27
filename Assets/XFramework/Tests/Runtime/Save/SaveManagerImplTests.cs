@@ -92,7 +92,7 @@ namespace XFramework.XSave.Tests
             await SaveManager.SaveAsync(1);
 
             wallet.Gold = 20;
-            await SaveManager.SaveAsync(1); // 覆盖:双缓冲 tmp → 删除正式 → Move
+            await SaveManager.SaveAsync(1); // 覆盖:Provider 层原子写(tmp → 替换正式文件)
 
             wallet.Gold = 0;
             await SaveManager.LoadAsync(1);

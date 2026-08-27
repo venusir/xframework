@@ -13,7 +13,7 @@ namespace XFramework.XSave.Tests
     /// <para>每次实例化创建独立目录（<c>Path.GetTempPath()/XFrameworkSaveTests/Guid</c>），
     /// 测试结束后经 <see cref="Cleanup"/> 递归删除。</para>
     /// </summary>
-    internal sealed class TempFileProvider : IFileProvider
+    internal sealed class TempFileProvider : IFileProvider, IAtomicFileProvider
     {
         private readonly string _rootPath;
 
@@ -142,6 +142,31 @@ namespace XFramework.XSave.Tests
                 return _rootPath;
 
             return Path.Combine(_rootPath, FilePathUtility.NormalizeRelativePath(relativePath));
+        }
+
+        #endregion
+
+        #region IAtomicFileProvider
+
+        /// <inheritdoc/>
+        public async UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
+        {
+            // 与 DesktopFileProvider 相同的语义:写 .tmp → 删正式 → Move
+            var tempPath = relativePath + ".tmp";
+            var srcPhysical = GetPhysicalPath(domain, tempPath);
+            var dstPhysical = GetPhysicalPath(domain, relativePath);
+
+            await WriteAllBytesAsync(domain, tempPath, data, cancellationToken);
+
+            await UniTask.RunOnThreadPool(
+                () =>
+                {
+                    if (File.Exists(dstPhysical))
+                        File.Delete(dstPhysical);
+                    File.Move(srcPhysical, dstPhysical);
+                },
+                configureAwait: false,
+                cancellationToken);
         }
 
         #endregion
