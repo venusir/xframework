@@ -79,7 +79,10 @@ namespace XFramework.XFileManager
             ThrowIfDestroyed();
 
             if (_initialized)
+            {
+                Debug.LogWarning("[FileManager] Initialize called more than once. Ignoring duplicate.");
                 return;
+            }
 
             if (provider != null)
             {
@@ -370,7 +373,7 @@ namespace XFramework.XFileManager
         {
             if (_destroyed)
                 throw new ObjectDisposedException(nameof(FileManager),
-                    "FileManager 已被销毁，请重新调用 Initialize。");
+                    "[FileManager] FileManager 已被销毁，请重新调用 Initialize。");
         }
 
         /// <summary>
