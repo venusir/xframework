@@ -21,7 +21,7 @@
 | ----------------- | ------------------------------------------- | -------------------------------------------------------------- |
 | **Godot**         | `user://` / `res://` 虚拟路径概念           | `FileDomain` 枚举：`AppData`、`Streaming`、`Cache`、`SaveData` |
 | **Unreal Engine** | `IPlatformFile` 接口抽象、`FPaths` 路径工具 | `IFileProvider` + `GetPhysicalPath()`                          |
-| **LÖVE2D**        | `love.filesystem` 极简 API 设计             | `FileManager` 静态外观——4 个核心方法                           |
+| **LÖVE2D**        | `love.filesystem` 极简 API 设计             | `FileManager` 静态外观——统一的文件操作 API                      |
 | **YooAsset**      | 不同平台读取方式策略封装                    | `DesktopFileProvider` vs `MobileFileProvider`                  |
 | **自定义增强**    | 可插拔加解密层、Console SaveData 独立域     | `ICryptoProvider` + `FileDomain.SaveData`                      |
 
@@ -67,6 +67,38 @@ if (FileManager.Exists(FileDomain.Streaming, "config/game_settings.csv"))
     var bytes = await FileManager.ReadAllBytesAsync(FileDomain.Streaming, "config/game_settings.csv");
 }
 ```
+
+---
+
+## 路径与异常契约
+
+### 相对路径一律正斜杠
+
+- **输入**：相对路径可使用 `/` 或 `\` 分隔，内部自动归一为正斜杠
+- **输出**：`GetFilesAsync` 返回的相对路径**一律正斜杠 `/` 分隔**，可直接回传本模块其他方法
+- **安全**：相对路径中的 `..` 段、盘符前缀（`C:\`）、UNC 前导（`\\server\share`）会在 `GetPhysicalPath` 路径沙箱处被拒绝并抛 `ArgumentException`，防止读写到域根之外
+
+### 读失败统一契约
+
+| 场景     | 行为                                                               |
+| -------- | ------------------------------------------------------------------ |
+| 文件不存在 | 读方法返回 `null`（非异常；移动端 Streaming 域 404 同样视为不存在） |
+| IO 失败  | 抛 `IOException`（权限、磁盘、网络错误等）                          |
+| 参数非法 | 抛 `ArgumentNullException` / `ArgumentException`                    |
+
+### 原子写入
+
+`WriteAllBytesAtomicAsync` 先写 `.tmp` 临时文件、写入成功后再替换正式文件，写入中途崩溃不会损坏已有文件：
+
+```csharp
+await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", bytes);
+```
+
+底层 Provider 未实现 `IAtomicFileProvider`（如 WebGL 自定义实现）时，自动降级为普通写入并告警——**只有实现该接口才能获得崩溃防护**。
+
+### Exists 阻塞说明
+
+移动端 `FileDomain.Streaming` 域经 UnityWebRequest 查询，同步 `Exists` 会阻塞主线程，请使用 `ExistsAsync`。
 
 ---
 
@@ -280,8 +312,8 @@ public class AesCryptoProvider : ICryptoProvider
 │              FileManager (静态外观)             │
 │  ReadAllTextAsync / WriteAllBytesAsync / ...  │
 ├──────────────────────────────────────────────┤
-│  ICryptoProvider (可选加解密层)                 │
-│  Encrypt() / Decrypt()                        │
+│  CryptoFileProvider (加解密装饰器,可选)          │
+│  IFileProvider + ICryptoProvider              │
 ├──────────────────────────────────────────────┤
 │  IFileProvider (平台抽象层)                     │
 │  ┌───────────────┬──────────────┬───────────┐ │
@@ -361,18 +393,21 @@ FileManager.Initialize();
 
 ## 文件清单
 
-| 文件                       | 说明                      |
-| -------------------------- | ------------------------- |
-| `FileDomain.cs`            | 路径域枚举定义            |
-| `IFileProvider.cs`         | 平台文件提供者接口        |
-| `ICryptoProvider.cs`       | 加解密提供者接口          |
-| `XorCryptoProvider.cs`     | 基于 XOR 的轻量加解密实现 |
-| `DesktopFileProvider.cs`   | 桌面平台文件提供者实现    |
-| `MobileFileProvider.cs`    | 移动平台文件提供者实现    |
-| `ConsoleFileProvider.cs`   | 控制台平台抽象基类        |
-| `FileManager.cs`           | 跨平台文件管理器静态外观  |
-| `FileManagerExtensions.cs` | 扩展方法（同步 API 等）   |
-| `README.md`                | 本文件                    |
+| 文件                       | 说明                          |
+| -------------------------- | ----------------------------- |
+| `FileDomain.cs`            | 路径域枚举定义                |
+| `FilePathUtility.cs`       | 路径工具（归一化 / 文件名提取 / 路径沙箱校验） |
+| `IFileProvider.cs`         | 平台文件提供者接口（含读失败契约） |
+| `IAtomicFileProvider.cs`   | 原子写入能力契约（可选）      |
+| `ICryptoProvider.cs`       | 加解密提供者接口              |
+| `XorCryptoProvider.cs`     | 基于 XOR 的轻量加解密实现     |
+| `CryptoFileProvider.cs`    | 加解密装饰器（内部）          |
+| `DesktopFileProvider.cs`   | 桌面平台文件提供者实现        |
+| `MobileFileProvider.cs`    | 移动平台文件提供者实现        |
+| `ConsoleFileProvider.cs`   | 控制台平台抽象基类            |
+| `FileManager.cs`           | 跨平台文件管理器静态外观      |
+| `FileManagerExtensions.cs` | 扩展方法（同步 API 等）       |
+| `README.md`                | 本文件                        |
 
 ---
 

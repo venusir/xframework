@@ -168,15 +168,15 @@ GameLauncher.Start()
 
 ### 文件操作
 
-| 操作           | 代码                                                                 |
-| -------------- | -------------------------------------------------------------------- |
-| 读取文本       | `FileManager.ReadAllText(FileDomain.SaveFile, "a.json")`             |
-| 写入文本       | `FileManager.WriteAllText(FileDomain.SaveFile, "a.json", data)`      |
-| 读取字节       | `FileManager.ReadAllBytes(FileDomain.StreamingAssets, "config.dat")` |
-| 写入字节       | `FileManager.WriteAllBytes(FileDomain.SaveFile, "save.dat", bytes)`  |
-| 文件是否存在   | `FileManager.Exists(FileDomain.SaveFile, "a.json")`                  |
-| 删除文件       | `FileManager.Delete(FileDomain.SaveFile, "a.json")`                  |
-| 注入自定义实现 | `FileManager.Initialize(new MyFileProvider())`                       |
+| 操作           | 代码                                                                       |
+| -------------- | -------------------------------------------------------------------------- |
+| 读取文本       | `await FileManager.ReadAllTextAsync(FileDomain.AppData, "a.json")`         |
+| 写入文本       | `await FileManager.WriteAllTextAsync(FileDomain.AppData, "a.json", data)`  |
+| 读取字节       | `await FileManager.ReadAllBytesAsync(FileDomain.Streaming, "config.dat")`  |
+| 写入字节       | `await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "save.dat", bytes)` |
+| 文件是否存在   | `FileManager.Exists(FileDomain.SaveData, "a.json")`                        |
+| 删除文件       | `FileManager.Delete(FileDomain.SaveData, "a.json")`                        |
+| 注入自定义实现 | `FileManager.Initialize(new MyProvider())` // MyProvider 需实现 IFileProvider |
 
 ### 输入操作
 

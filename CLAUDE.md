@@ -22,6 +22,7 @@
 - **静态服务(无状态):** 以「静态门面 + 接口 + 内部实现」提供。对外只暴露静态门面类和 `IXxxManager`/`IXxxProvider` 接口;实现类 `XxxManagerImpl`/`XxxProvider` 默认 `internal sealed`(仅当需要跨命名空间注入或模式匹配时才 public,如 SaveManagerImpl、DataManagerImpl)
   - 门面模板:`private static IXxxManager _impl` + `Initialize`(注入实现,便于测试)+ `Shutdown/Destroy` + `EnsureInitialized()`(未初始化抛 `InvalidOperationException`,消息带 `[模块]` 前缀和修复提示)
   - 注入形式按需差异化,不必齐备:`Initialize(实例)`(如 Data)、工厂 delegate(如 SaveManagerFactory)、无参 `Initialize` + `SetInstance`(如 Config/Asset/Localization)均符合模板
+  - 懒加载豁免:FileManager.EnsureInitialized 在未初始化时自动 Initialize(零配置有意设计),不抛异常;其余门面的 EnsureInitialized 仍按模板抛 InvalidOperationException
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
 - **节点树(有状态 GamePlay):** `XFramework.XNode` 命名空间。BaseNode → ParentNode → ContainerNode/EntityNode → RootNode,另有 LeafNode、DictionaryNode;承载需要生命周期或加载管线的服务
 - **依赖方向单向:** 节点树可以依赖并启动静态服务;静态服务绝不能引用节点树对象
