@@ -1,13 +1,14 @@
 using System;
 using Cysharp.Threading.Tasks;
-using XFramework.XNode;
+using XFramework.XLoader;
 
-namespace XFramework.XLoader
+namespace XFramework.XNode
 {
 
     /// <summary>
     /// 节点树启动扩展方法。
     /// <para>提供 <see cref="IParentNode"/> 的启动管线：装载 → 加载 → 启动 → 回收。</para>
+    /// <para>定义于 Node 模块，加载调度由 Loader 模块的 <see cref="XLoader.ILoader"/> 提供（依赖方向：Node → Loader）。</para>
     /// </summary>
     public static class StartupExtensions
     {
