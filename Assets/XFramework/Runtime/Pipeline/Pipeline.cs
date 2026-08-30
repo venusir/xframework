@@ -1,0 +1,384 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using UnityEngine;
+
+namespace XFramework.XPipeline
+{
+    /// <summary>
+    /// 管线门面。提供 <see cref="IPipeline"/> 实例的创建入口(实例即用即弃,非全局单例)。
+    /// </summary>
+    public static class Pipeline
+    {
+        /// <summary>创建管线实例。</summary>
+        public static IPipeline Create() => new PipelineImpl();
+    }
+
+    /// <summary>
+    /// 管线实现:阶段串行编排 + 进度加权聚合 + 失败/取消传播。
+    /// <para>与 Loader(任务级调度)的差异:阶段经 <see cref="PipelineStageContext"/> 主动写入(事件驱动),管线不轮询、不持有帧泵;
+    /// 阶段串行逐 await,天然保证 <see cref="RunAsync"/> 返回时无在途阶段任务。</para>
+    /// </summary>
+    internal sealed class PipelineImpl : IPipeline
+    {
+        #region IPipeline Properties
+
+        public bool IsRunning { get; private set; }
+
+        #endregion
+
+        #region IPipeline Events
+
+        public event Action<PipelineProgress> OnProgressUpdate;
+        public event Action OnCompleted;
+        public event Action<string> OnFailed;
+
+        #endregion
+
+        #region Private Fields
+
+        readonly List<IPipelineStage> _stages = new List<IPipelineStage>();
+
+        /// <summary>当前运行装配的阶段上下文(事件驱动聚合的读取源)。</summary>
+        PipelineStageContext[] _contexts;
+
+        /// <summary>上一帧广播快照:全局进度 + 描述 + 各阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
+        float _lastOverall = -1f;
+        string _lastDesc;
+        PipelineStageState[] _lastStates;
+
+        /// <summary>最近一次广播快照。</summary>
+        float _overall;
+        string _description;
+        string _currentStageName;
+        string _currentTaskName;
+        int _completedStageCount;
+        int _failedStageCount;
+
+        #endregion
+
+        #region IPipeline Methods
+
+        public void AddStage(IPipelineStage stage)
+        {
+            if (stage == null) return;
+
+            // 避免重复添加
+            for (int i = 0; i < _stages.Count; i++)
+            {
+                if (_stages[i] == stage)
+                    return;
+            }
+
+            _stages.Add(stage);
+        }
+
+        public async UniTask RunAsync(CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+            {
+                Debug.LogWarning("[Pipeline] RunAsync: already running, ignore this call.");
+                return;
+            }
+
+            if (_stages.Count == 0)
+            {
+                Debug.LogWarning("[Pipeline] RunAsync: no stages found.");
+                OnCompleted?.Invoke();
+                return;
+            }
+
+            IsRunning = true;
+
+            // 链接外部取消令牌:任一方取消,当前阶段收到已取消的 token
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+
+            // 装配阶段上下文(运行期一次分配)
+            _contexts = new PipelineStageContext[_stages.Count];
+            _lastStates = new PipelineStageState[_stages.Count];
+            for (int i = 0; i < _stages.Count; i++)
+            {
+                _contexts[i] = new PipelineStageContext
+                {
+                    Owner = this,
+                    Name = _stages[i].Name,
+                    Weight = _stages[i].Weight,
+                };
+            }
+
+            // 终局标志:失败/取消/完成三路互斥,取消与失败绝不落入完成块
+            bool failed = false;
+            bool cancelled = false;
+            string failDescription = null;
+
+            try
+            {
+                for (int i = 0; i < _stages.Count; i++)
+                {
+                    // 阶段边界取消检查:取消显式走取消终局,不落入完成块
+                    if (cts.Token.IsCancellationRequested)
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
+                    var ctx = _contexts[i];
+                    ctx.SetState(PipelineStageState.Executing);
+
+                    // 阶段经包装函数统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
+                    bool stageCancelled = await RunStage(_stages[i], ctx, cts.Token);
+
+                    if (stageCancelled)
+                    {
+                        cancelled = true;
+                        break;
+                    }
+
+                    if (ctx.State == PipelineStageState.Failed)
+                    {
+                        failed = true;
+                        failDescription = ctx.Description;
+                        break;
+                    }
+                }
+
+                // 终局:取消 / 失败 / 完成三路互斥(先重算快照广播,再触发事件)
+                if (cancelled)
+                {
+                    RecalculateSnapshot();
+                    Broadcast();
+                    OnFailed?.Invoke("Pipeline cancelled.");
+                    Debug.LogWarning("[Pipeline] Pipeline cancelled.");
+                }
+                else if (failed)
+                {
+                    RecalculateSnapshot();
+                    Broadcast();
+                    OnFailed?.Invoke($"Failed: {failDescription}");
+                    Debug.LogError($"[Pipeline] Pipeline failed: {failDescription}");
+                }
+                else
+                {
+                    // 完成:全局进度补满并广播(完成语义与各阶段权重无关)
+                    _overall = 1f;
+                    _description = "Completed";
+                    _currentStageName = null;
+                    _currentTaskName = null;
+                    _completedStageCount = _stages.Count;
+                    _failedStageCount = 0;
+                    Broadcast();
+                    OnCompleted?.Invoke();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 防御分支:理论上不可达(RunStage 已吞掉全部 OCE);语义统一为取消,绝不静默
+                OnFailed?.Invoke("Pipeline cancelled.");
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Pipeline] RunAsync failed: {ex.Message}\n{ex.StackTrace}");
+                OnFailed?.Invoke($"Exception: {ex.Message}");
+            }
+            finally
+            {
+                IsRunning = false;
+                _contexts = null;
+                _lastStates = null;
+                _lastOverall = -1f;
+                _lastDesc = null;
+            }
+        }
+
+        public void Destroy()
+        {
+            _stages.Clear();
+
+            OnProgressUpdate = null;
+            OnCompleted = null;
+            OnFailed = null;
+
+            IsRunning = false;
+            _contexts = null;
+            _lastStates = null;
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        /// <summary>
+        /// 包装执行单个阶段:统一状态机写入、异常与取消捕获,保证阶段必然收敛到终态。
+        /// <para>返回 true 表示阶段以取消结束(抛出 <see cref="OperationCanceledException"/>),由管线统一走取消路径。</para>
+        /// </summary>
+        private static async UniTask<bool> RunStage(IPipelineStage stage, PipelineStageContext ctx, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await stage.ExecuteAsync(ctx, cancellationToken);
+
+                // 契约兜底:正常返回但状态仍停留在 Pending/Executing → 视为完成
+                if (ctx.State == PipelineStageState.Pending || ctx.State == PipelineStageState.Executing)
+                {
+                    ctx.SetProgress(1f);
+                    ctx.SetState(PipelineStageState.Completed);
+                }
+                return false;
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消:保持当前状态,由管线统一走取消路径,不视为失败
+                return true;
+            }
+            catch (Exception ex)
+            {
+                ctx.SetState(PipelineStageState.Failed);
+                ctx.SetDescription(ex.Message);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 阶段写入触发的聚合入口(事件驱动,零闭包):加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
+        /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
+        /// </summary>
+        internal void OnStageContextChanged(PipelineStageContext changed)
+        {
+            if (!IsRunning) return;
+
+            float weightSum = 0f;
+            float weightedSum = 0f;
+            int completedCount = 0;
+            int failedCount = 0;
+            string currentDesc = null;
+            string currentStageName = null;
+            string currentTaskName = null;
+
+            for (int i = 0; i < _contexts.Length; i++)
+            {
+                var ctx = _contexts[i];
+
+                switch (ctx.State)
+                {
+                    case PipelineStageState.Completed:
+                        completedCount++;
+                        weightSum += ctx.Weight;
+                        weightedSum += ctx.Weight;
+                        break;
+                    case PipelineStageState.Failed:
+                        failedCount++;
+                        break;
+                    case PipelineStageState.Executing:
+                        weightSum += ctx.Weight;
+                        weightedSum += ctx.Weight * ctx.Progress;
+                        currentDesc = ctx.Description;
+                        currentStageName = ctx.Name;
+                        currentTaskName = ctx.CurrentTaskName;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            float overall = weightSum > 0f ? weightedSum / weightSum : 0f;
+
+            // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任一阶段状态变化(每帧路径零 LINQ)
+            bool dirty = Mathf.Abs(overall - _lastOverall) >= 0.01f;
+            if (!dirty && currentDesc != _lastDesc)
+                dirty = true;
+            if (!dirty)
+            {
+                for (int i = 0; i < _contexts.Length; i++)
+                {
+                    if (_contexts[i].State != _lastStates[i])
+                    {
+                        dirty = true;
+                        break;
+                    }
+                }
+            }
+
+            if (dirty)
+            {
+                _overall = overall;
+                _description = currentDesc;
+                _currentStageName = currentStageName;
+                _currentTaskName = currentTaskName;
+                _completedStageCount = completedCount;
+                _failedStageCount = failedCount;
+
+                _lastOverall = overall;
+                _lastDesc = currentDesc;
+                for (int i = 0; i < _contexts.Length; i++) _lastStates[i] = _contexts[i].State;
+
+                Broadcast();
+            }
+        }
+
+        /// <summary>无条件重算最新聚合快照(终局广播前调用,不受节流限制)。</summary>
+        private void RecalculateSnapshot()
+        {
+            if (_contexts == null) return;
+
+            float weightSum = 0f;
+            float weightedSum = 0f;
+            int completedCount = 0;
+            int failedCount = 0;
+            string currentDesc = null;
+            string currentStageName = null;
+            string currentTaskName = null;
+
+            for (int i = 0; i < _contexts.Length; i++)
+            {
+                var ctx = _contexts[i];
+
+                switch (ctx.State)
+                {
+                    case PipelineStageState.Completed:
+                        completedCount++;
+                        weightSum += ctx.Weight;
+                        weightedSum += ctx.Weight;
+                        break;
+                    case PipelineStageState.Failed:
+                        failedCount++;
+                        break;
+                    case PipelineStageState.Executing:
+                        weightSum += ctx.Weight;
+                        weightedSum += ctx.Weight * ctx.Progress;
+                        currentDesc = ctx.Description;
+                        currentStageName = ctx.Name;
+                        currentTaskName = ctx.CurrentTaskName;
+                        break;
+                    default:
+                        break;
+                }
+            }
+
+            _overall = weightSum > 0f ? weightedSum / weightSum : 0f;
+            _description = currentDesc;
+            _currentStageName = currentStageName;
+            _currentTaskName = currentTaskName;
+            _completedStageCount = completedCount;
+            _failedStageCount = failedCount;
+        }
+
+        /// <summary>构造进度快照并广播。</summary>
+        private void Broadcast()
+        {
+            var progress = new PipelineProgress
+            {
+                OverallProgress = _overall,
+                Description = _description ?? "Completed",
+                CurrentStageName = _currentStageName,
+                CurrentTaskName = _currentTaskName,
+                TotalStageCount = _stages.Count,
+                CompletedStageCount = _completedStageCount,
+                FailedStageCount = _failedStageCount,
+            };
+            OnProgressUpdate?.Invoke(progress);
+        }
+
+        #endregion
+    }
+}
