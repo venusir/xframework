@@ -20,7 +20,7 @@ namespace XFramework.XPipeline
     /// <para>与 Loader(任务级调度)的差异:阶段经 <see cref="PipelineStageContext"/> 主动写入(事件驱动),管线不轮询、不持有帧泵;
     /// 阶段串行逐 await,天然保证 <see cref="RunAsync"/> 返回时无在途阶段任务。</para>
     /// </summary>
-    internal sealed class PipelineImpl : IPipeline
+    internal sealed class PipelineImpl : IPipeline, IStageContextSink
     {
         #region IPipeline Properties
 
@@ -240,10 +240,11 @@ namespace XFramework.XPipeline
         }
 
         /// <summary>
-        /// 阶段写入触发的聚合入口(事件驱动,零闭包):加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
+        /// 阶段写入触发的聚合入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
+        /// 加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
         /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
         /// </summary>
-        internal void OnStageContextChanged(PipelineStageContext changed)
+        public void OnStageContextChanged(PipelineStageContext changed)
         {
             if (!IsRunning) return;
 

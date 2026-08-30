@@ -3,17 +3,27 @@ using UnityEngine;
 namespace XFramework.XPipeline
 {
     /// <summary>
+    /// 阶段上下文写入的接收方(内部)。阶段经 <see cref="PipelineStageContext"/> 写入(SetProgress/SetDescription/SetState)
+    /// 即同步回调,接收方负责聚合与广播。管线实现与并行阶段各自实现本接口,形成事件驱动的进度链。
+    /// </summary>
+    internal interface IStageContextSink
+    {
+        /// <summary>阶段上下文发生写入。context 为被写入的上下文实例。</summary>
+        void OnStageContextChanged(PipelineStageContext context);
+    }
+
+    /// <summary>
     /// 管线阶段执行上下文。由 <see cref="IPipeline"/> 装配时创建并注入阶段。
     /// <para>双层结构:阶段写面(<see cref="Progress"/>/<see cref="Description"/>/<see cref="State"/> + SetXxx)供阶段在
-    /// <see cref="IPipelineStage.ExecuteAsync"/> 内写入,写入即同步触发管线级聚合与广播;
+    /// <see cref="IPipelineStage.ExecuteAsync"/> 内写入,写入即同步触发接收方(管线或并行阶段)的聚合;
     /// 全局读面由管线填充,供 UI 读取当前运行状态。</para>
     /// </summary>
     public sealed class PipelineStageContext
     {
         #region Private Fields
 
-        /// <summary>归属管线实现。阶段写入时同步触发聚合与广播(零闭包引用)。</summary>
-        internal PipelineImpl Owner;
+        /// <summary>归属接收方(管线实现或并行阶段)。阶段写入时同步触发聚合(零闭包引用)。</summary>
+        internal IStageContextSink Owner;
 
         #endregion
 
@@ -26,13 +36,13 @@ namespace XFramework.XPipeline
         public float Weight { get; internal set; } = 1f;
 
         /// <summary>阶段进度,0~1。</summary>
-        public float Progress { get; private set; }
+        public float Progress { get; internal set; }
 
         /// <summary>阶段描述文字。</summary>
         public string Description { get; internal set; }
 
         /// <summary>阶段状态。</summary>
-        public PipelineStageState State { get; private set; } = PipelineStageState.Pending;
+        public PipelineStageState State { get; internal set; } = PipelineStageState.Pending;
 
         /// <summary>阶段内当前任务名称(由加载阶段等转发,可空)。</summary>
         public string CurrentTaskName { get; internal set; }
