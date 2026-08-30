@@ -49,13 +49,13 @@ namespace XFramework.XLoader
         {
             if (IsLoading)
             {
-                Debug.LogWarning("Loader.LoadAsync: already loading, ignore this call.");
+                Debug.LogWarning("[Loader] LoadAsync: already loading, ignore this call.");
                 return;
             }
 
             if (_entries.Count == 0)
             {
-                Debug.LogWarning("Loader.LoadAsync: no loadable tasks found.");
+                Debug.LogWarning("[Loader] LoadAsync: no loadable tasks found.");
                 OnLoadCompleted?.Invoke();
                 return;
             }
@@ -63,7 +63,16 @@ namespace XFramework.XLoader
             IsLoading = true;
 
             // 创建 CancellationTokenSource 用于失败时取消其他任务
-            var cts = new CancellationTokenSource();
+            using var cts = new CancellationTokenSource();
+
+            // 累积所有任务的包装任务,结束时等待沉降,保证 LoadAsync 返回后无在途任务
+            var wrappers = new List<UniTask>(_entries.Count);
+
+            // 终局标志:失败/取消/完成三路互斥,取消与失败绝不落入完成块
+            bool failed = false;
+            bool cancelled = false;
+            string failDescription = null;
+            string failTaskName = null;
 
             try
             {
@@ -79,28 +88,29 @@ namespace XFramework.XLoader
                 // 2. 逐 Phase 执行
                 foreach (var group in groups)
                 {
+                    // 组间取消检查:取消显式走取消终局,不落入完成块
                     if (cts.Token.IsCancellationRequested)
+                    {
+                        cancelled = true;
                         break;
+                    }
 
                     var tasks = group.ToList();
                     int taskCount = tasks.Count;
 
-                    // 为当前 Phase 的每个任务创建临时 Context
-                    var phaseContexts = tasks.Select(t => new LoadProgress
-                    {
-                        Name = t.GetType().Name,
-                    }).ToList();
-
-                    // 启动所有任务
-                    var loadTasks = new UniTask[taskCount];
+                    // 为当前 Phase 的每个任务创建临时 Context,任务经包装函数统一执行
+                    // (包装函数负责状态机写入与异常捕获,保证任务必然收敛到终态)
+                    var phaseContexts = new LoadProgress[taskCount];
                     for (int i = 0; i < taskCount; i++)
                     {
-                        var ctx = phaseContexts[i];
-                        ctx.SetState(LoadState.Loading);
-                        loadTasks[i] = tasks[i].LoadAsync(ctx, cts.Token);
+                        phaseContexts[i] = new LoadProgress
+                        {
+                            Name = tasks[i].GetType().Name,
+                        };
+                        wrappers.Add(RunTask(tasks[i], phaseContexts[i], cts.Token));
                     }
 
-                    // 轮询阶段：每帧检查进度，直到全部完成或失败
+                    // 轮询阶段:每帧检查进度,直到全部完成或失败
                     while (!cts.Token.IsCancellationRequested)
                     {
                         bool allDone = true;
@@ -127,6 +137,11 @@ namespace XFramework.XLoader
                                     totalProgress += 1f;
                                     currentDesc = ctx.Description;
                                     currentTaskName = ctx.Name;
+                                    if (failDescription == null)
+                                    {
+                                        failDescription = ctx.Description;
+                                        failTaskName = ctx.Name;
+                                    }
                                     break;
                                 case LoadState.Loading:
                                     allDone = false;
@@ -155,37 +170,75 @@ namespace XFramework.XLoader
 
                         if (anyFailed)
                         {
+                            failed = true;
                             cts.Cancel();
-                            OnLoadFailed?.Invoke($"Failed: {currentDesc}");
-                            return;
+                            break;
                         }
 
                         if (allDone)
                             break;
 
-                        await UniTask.Yield(PlayerLoopTiming.Update);
+                        await _framePump();
+                    }
+
+                    if (failed)
+                        break;
+
+                    if (cts.Token.IsCancellationRequested)
+                    {
+                        cancelled = true;
+                        break;
                     }
 
                     completedGroups++;
                 }
 
-                // 3. 完成
-                _context.OverallProgress = 1f;
-                _context.Description = "Completed";
-                _context.CurrentTaskName = null;
-                _context.TotalTaskCount = _entries.Count;
-                _context.CompletedCount = _entries.Count;
-                _context.FailedCount = 0;
-                OnProgressUpdate?.Invoke(_context);
-                OnLoadCompleted?.Invoke();
+                // 3. 终局:取消 / 失败 / 完成三路互斥(先广播快照,再触发事件)
+                if (cancelled)
+                {
+                    OnProgressUpdate?.Invoke(_context);
+                    OnLoadFailed?.Invoke("Load cancelled.");
+                    Debug.LogWarning("[Loader] Load cancelled.");
+                }
+                else if (failed)
+                {
+                    OnProgressUpdate?.Invoke(_context);
+                    OnLoadFailed?.Invoke($"Failed: {failDescription}");
+                    Debug.LogError($"[Loader] Load failed: {failTaskName}: {failDescription}");
+                }
+                else
+                {
+                    // 先等待全部任务沉降,保证 OnLoadCompleted 时无在途任务
+                    try { await UniTask.WhenAll(wrappers); }
+                    catch (OperationCanceledException) { }
+                    catch (Exception) { }
+
+                    _context.OverallProgress = 1f;
+                    _context.Description = "Completed";
+                    _context.CurrentTaskName = null;
+                    _context.TotalTaskCount = _entries.Count;
+                    _context.CompletedCount = _entries.Count;
+                    _context.FailedCount = 0;
+                    OnProgressUpdate?.Invoke(_context);
+                    OnLoadCompleted?.Invoke();
+                }
+
+                // 失败/取消收尾:等待全部在途任务沉降(RunTask 已吞掉全部异常,WhenAll 不会 fault)
+                if (failed || cancelled)
+                {
+                    try { await UniTask.WhenAll(wrappers); }
+                    catch (OperationCanceledException) { }
+                    catch (Exception) { }
+                }
             }
             catch (OperationCanceledException)
             {
-                // 取消操作是预期的，不做额外处理
+                // 防御分支:理论上不可达(RunTask 已吞掉全部 OCE);语义统一为取消,绝不静默
+                OnLoadFailed?.Invoke("Load cancelled.");
             }
             catch (Exception ex)
             {
-                Debug.LogError($"Loader.LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
+                Debug.LogError($"[Loader] LoadAsync failed: {ex.Message}\n{ex.StackTrace}");
                 OnLoadFailed?.Invoke($"Exception: {ex.Message}");
             }
             finally
@@ -207,10 +260,52 @@ namespace XFramework.XLoader
 
         #endregion
 
+        #region Private Methods
+
+        /// <summary>
+        /// 包装执行单个加载任务:统一状态机写入、异常与取消捕获,保证任务必然收敛到终态。
+        /// <para>正常返回但未写终态(如未调用 SetState 的实现)时自动补置为 <see cref="LoadState.Completed"/>,进度视为 1f;</para>
+        /// <para>抛出的异常置为 <see cref="LoadState.Failed"/> 并写入描述,经 <see cref="OnLoadFailed"/> 报告;</para>
+        /// <para>抛出 <see cref="OperationCanceledException"/> 视为取消,保持当前状态,由 Loader 统一走取消路径。</para>
+        /// </summary>
+        private static async UniTask RunTask(ILoadable loadable, LoadProgress ctx, CancellationToken cancellationToken)
+        {
+            ctx.SetState(LoadState.Loading);
+
+            try
+            {
+                await loadable.LoadAsync(ctx, cancellationToken);
+
+                // 契约兜底:正常返回但状态仍停留在 Pending/Loading → 视为完成
+                if (ctx.State == LoadState.Pending || ctx.State == LoadState.Loading)
+                {
+                    ctx.SetProgress(1f);
+                    ctx.SetState(LoadState.Completed);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 取消:保持当前状态,由 Loader 统一走取消路径,不视为失败
+            }
+            catch (Exception ex)
+            {
+                ctx.SetState(LoadState.Failed);
+                ctx.SetDescription(ex.Message);
+            }
+        }
+
+        #endregion
+
         #region Private Fields
 
         readonly List<ILoadable> _entries = new List<ILoadable>();
         readonly LoadProgress _context = new LoadProgress();
+
+        /// <summary>
+        /// 帧泵注入缝:每轮询一帧后等待一次。默认等待下一帧 Update;
+        /// 测试可替换为手动泵,在 EditMode(无 PlayerLoop 泵)环境中确定性驱动轮询。
+        /// </summary>
+        internal Func<UniTask> _framePump = () => UniTask.Yield(PlayerLoopTiming.Update, CancellationToken.None);
 
         #endregion
     }

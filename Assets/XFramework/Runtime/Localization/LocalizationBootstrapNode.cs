@@ -42,13 +42,20 @@ namespace XFramework.XLocalization
 
         public UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
         {
+            progress.SetState(LoadState.Loading);
+            progress.SetDescription("Initializing localization...");
+
             if (_initData == null)
             {
                 Debug.LogWarning("[LocalizationBootstrapNode] LoadAsync called but _initData is null. Skipping initialization.");
+                progress.SetProgress(1f);
+                progress.SetState(LoadState.Completed);
                 return UniTask.CompletedTask;
             }
 
             LocalizationManager.Initialize(_defaultLanguage, _initData);
+            progress.SetProgress(1f);
+            progress.SetState(LoadState.Completed);
             return UniTask.CompletedTask;
         }
 
