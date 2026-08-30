@@ -24,7 +24,8 @@ namespace XFramework.XPipeline
     }
 
     /// <summary>
-    /// 可加载接口。节点实现此接口后，可在启动管线的加载阶段被加载任务组阶段统一调度执行。
+    /// 可加载接口。节点实现此接口后，可在启动管线的加载阶段被加载应用阶段
+    /// (<see cref="LoadableStage"/> 单任务适配 + <see cref="ParallelStage"/> 并行阶段)统一调度执行。
     /// <para>通过 <see cref="LoadProgress"/> 参数报告进度、描述和状态。</para>
     /// </summary>
     public interface ILoadable
@@ -39,7 +40,7 @@ namespace XFramework.XPipeline
         /// <para>通过 <paramref name="cancellationToken"/> 可取消正在运行的任务。</para>
         /// <para>契约：正常返回时若状态仍为 <see cref="LoadState.Pending"/> 或 <see cref="LoadState.Loading"/>，
         /// Loader 将自动补置为 <see cref="LoadState.Completed"/>（进度视为 1f），不会阻塞调度。</para>
-        /// <para>契约：抛出的异常将被 Loader 捕获并置为 <see cref="LoadState.Failed"/>，经任务组阶段聚合报告；
+        /// <para>契约：抛出的异常将被 Loader 捕获并置为 <see cref="LoadState.Failed"/>，经并行阶段组内聚合报告；
         /// 抛出 <see cref="System.OperationCanceledException"/> 视为取消，不报告失败。</para>
         /// </summary>
         UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken);

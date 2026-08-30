@@ -5,11 +5,11 @@
 XFramework 管线模块提供**通用阶段编排**与**加载应用**两部分能力:
 
 - **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。它是对「启动管线」中编排能力的泛化——`StartupAsync` 的预置管线(装载→加载→启动)即由本模块装配而成。
-- **加载应用(Loadable 子系统)**:`ILoadable` 契约 + `LoadProgress` 进度数据结构 + `TaskGroupStage` 任务组阶段。节点实现 `ILoadable` 声明加载任务,以「任务组阶段」形态接入管线——**加载是管线的一种应用**(原 Loader 模块并入,`ILoader`/`Loader` 已删除)。两层物理化:通用编排位于根目录,加载应用位于 `Loading/` 子目录。
+- **加载应用(Loadable 子系统)**:`ILoadable` 契约 + `LoadProgress` 进度数据结构 + `LoadableStage` 单任务适配 + `ParallelStage` 并行阶段。节点实现 `ILoadable` 声明加载任务,经单任务适配后以「并行阶段」形态接入管线——**加载是管线的一种应用**(原 Loader 模块并入,`ILoader`/`Loader` 已删除)。两层物理化:通用编排位于根目录,加载应用位于 `Loading/` 子目录。
 
 **命名空间**: `XFramework.XPipeline`
 
-**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;加载任务同样以阶段形态接入,任务级调度归 `TaskGroupStage`,编排级归管线。
+**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;加载任务同样以阶段形态接入,任务级调度归 `LoadableStage` 单任务适配,并行编排归 `ParallelStage`,编排级归管线。
 
 ## 架构设计
 
@@ -20,10 +20,12 @@ Runtime/Pipeline/
 ├── Pipeline.cs                  # 通用编排:静态工厂 Pipeline.Create() + internal PipelineImpl 实现
 ├── PipelineStageContext.cs      # 通用编排:阶段执行上下文(阶段写面 + 全局读面)
 ├── PipelineProgress.cs          # 通用编排:全局进度快照(事件载荷)
+├── StageExecution.cs            # 通用编排:阶段执行共享包装(契约兜底/取消/异常捕获)
+├── ParallelStage.cs             # 通用编排:并行阶段(组内并行、事件驱动组内聚合,public)
 └── Loading/                     # 加载应用层(加载是管线的一种应用)
     ├── ILoadable.cs             # 可加载接口(含 LoadState 枚举)
     ├── LoadProgress.cs          # 加载进度数据结构(写后通知)
-    └── TaskGroupStage.cs        # 任务组阶段(internal,桥接通用管线)
+    └── LoadableStage.cs         # 单任务适配阶段(internal,ILoadable → 管线阶段)
 ```
 
 > 管线不依赖 Node,依赖方向单向:Node → Pipeline(加载应用同属本模块)。
@@ -63,7 +65,7 @@ public interface IPipelineStage
 
 #### ILoadable 契约
 
-节点实现 `ILoadable` 声明加载任务,由加载任务组阶段统一调度执行:
+节点实现 `ILoadable` 声明加载任务,由加载应用阶段(`LoadableStage` 单任务适配 + `ParallelStage` 并行阶段)统一调度执行:
 
 ```csharp
 public interface ILoadable
@@ -86,24 +88,25 @@ Phase 4: [SaveBootstrapNode]───────────────┤
 Phase 90: [LocalizationBootstrapNode]──────┘
 ```
 
-每个 Phase 装配一个 `TaskGroupStage`(组内并行、组间串行由管线编排,阶段权重 = 组内任务数);装配期同步收集全部 `ILoadable` 节点(运行前快照,树在装配后变更不收录)。
+每个 Phase 装配一个 `ParallelStage`(组内并行、组间串行由管线编排,阶段权重 = 组内任务数),组内子阶段为 `LoadableStage` 单任务适配;装配期同步收集全部 `ILoadable` 节点(运行前快照,树在装配后变更不收录)。
 
 #### LoadProgress
 
-任务级进度数据结构,由 `TaskGroupStage` 在装载时创建并注入:
+任务级进度数据结构,由 `LoadableStage` 在装载时创建并注入:
 
 - 节点写入: `SetWeight`(首行同步调用,默认 1f,下限 0.01 防除零)/ `SetProgress` / `SetDescription` / `SetState`(Pending → Loading → Completed / Failed)
 - **写后通知(门铃)**: 每次写入同步触发 `OnChanged`,调度者无需轮询即可感知任务进度变化(事件驱动,与管线一致)
 - **全局级字段**(`OverallProgress` / `CurrentTaskName` 等):由调度者聚合时填充,供 UI 读取当前加载状态的全部信息;独立使用场景(如 `AssetManager.InitializeAsync` 的进度参数)不注入回调,写入仅落字段,行为与无通知时代完全一致
 
-#### TaskGroupStage
+#### LoadableStage + ParallelStage
 
-内部任务组阶段(`internal sealed`,Name = `"Load-{Phase}"`,Weight = 组内任务数),一个 Phase 的并行任务组调度器:
+单任务适配阶段 `LoadableStage`(`internal sealed`,Name = 任务类型名,Weight = 1)把 `ILoadable` 桥接为管线阶段,由并行阶段 `ParallelStage`(public,Weight = Σ子阶段权重)组内并行执行:
 
-- **事件驱动聚合**: 任务写 `LoadProgress` 即同步聚合(加权 `Σ(w·p)/Σ(w)` + 阈值节流 ≥1% 或描述/状态变化),转发到阶段上下文;聚合广播在任务代码栈内,重入用 dirty 模式延迟再聚合,订阅者异常整体隔离(不冒泡进任务栈)
-- **失败即停**: 任意任务失败 → 立即取消兄弟任务,沉降(WhenAll)后置阶段 Failed;日志 `[Loader] Load failed: {任务名} ({耗时}s): {描述}`(任务级失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
-- **取消**: 组内任务收到已取消的 token,沉降后上抛 `OperationCanceledException` 使管线走取消路径
+- **镜像语义**: 任务写 `LoadProgress`(门铃)→ 全字段镜像到子上下文并单次显式通知——一次任务写入恰好触发 1 次组级聚合(加权 `Σ(w·p)/Σ(w)` + 阈值节流 ≥1% 或描述/状态变化);任务权重经镜像影响组内聚合,不泄漏到管线级
+- **取消**: 任务收到已取消的 token,沉降后显式上抛 `OperationCanceledException` 使管线走取消路径——防共享包装的契约兜底把已取消任务误补为 Completed
+- **失败即停**: 任意任务失败 → 立即取消兄弟任务,沉降(WhenAll)后置阶段 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组内失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
 - **诊断优先**: 失败时描述/任务名强制取失败任务的值,避免被兄弟任务描述覆盖
+- **并行能力通用化**: 第三方阶段同样可塞入 `ParallelStage` 并行执行(见「快速使用」)
 
 ## 快速使用
 
@@ -131,8 +134,11 @@ public sealed class InitStage : IPipelineStage
 // 2. 装配并运行
 var pipeline = Pipeline.Create();
 pipeline.AddStage(new InitStage());
-pipeline.AddStage(new LoadStage());          // 如加载应用的任务组阶段 TaskGroupStage
+pipeline.AddStage(new LoadStage());          // 如加载应用的并行阶段 ParallelStage
 pipeline.AddStage(new PostStage { Weight = 0f }); // 瞬时阶段,不占进度
+
+// 并行执行两个阶段(组内并行、组间串行由管线承担;阶段权重 = Σ子阶段权重)
+pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Parallel-Init"));
 
 pipeline.OnProgressUpdate += p => Debug.Log($"进度: {p.OverallProgress:P1} {p.Description}");
 pipeline.OnCompleted += () => Debug.Log("管线完成");

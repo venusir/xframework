@@ -7,7 +7,7 @@ XFramework 是一个为 Unity 设计的**组合式框架插件**。目标：**�
 - **组合优于继承** — EntityNode 按类型缓存子节点，类似 Unity 的 GetComponent/AddComponent
 - **对象池内置** — 所有节点通过 `NodeFactory` 创建，`Destroy()` 后自动回池
 - **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，自动调整更新频率
-- **通用管线 + 加载应用** — `Pipeline` 通用阶段编排（串行、加权进度、失败/取消传播）；加载（`ILoadable` 契约 + `TaskGroupStage` 任务组阶段）作为管线应用内嵌，`StartupAsync` 一键装配「装载 → 加载 → 启动」预置管线
+- **通用管线 + 加载应用** — `Pipeline` 通用阶段编排（串行、并行阶段、加权进度、失败/取消传播）；加载（`ILoadable` 契约 + `LoadableStage` 单任务适配 + `ParallelStage` 并行阶段）作为管线应用内嵌，`StartupAsync` 一键装配「装载 → 加载 → 启动」预置管线
 - **零配置初始化** — 纯静态服务（LockManager、MessageManager 等）通过 `[RuntimeInitializeOnLoadMethod]` 在游戏启动时自动就绪，无需手动初始化
 - **静态外观 + 接口 + 内部实现** — 非节点服务采用静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
 
@@ -96,7 +96,7 @@ public class MyGameLauncher : GameLauncher
 | **组件模式**     | `EntityNode.GetNode<T>()` / `AddNode<T>()` / `RemoveNode<T>()`                    |
 | **键值对模式**   | `DictionaryNode<TKey>` 按 Key 缓存子节点                                          |
 | **更新调度**     | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移                               |
-| **通用管线**     | `Pipeline` 阶段编排（串行/进度/失败取消）；`ILoadable` + `TaskGroupStage` 加载应用，`StartupAsync` 按 Phase 分组调度 |
+| **通用管线**     | `Pipeline` 阶段编排（串行/并行/进度/失败取消）；`ILoadable` + `ParallelStage` 加载应用，`StartupAsync` 按 Phase 分组调度 |
 | **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                                 |
 | **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |

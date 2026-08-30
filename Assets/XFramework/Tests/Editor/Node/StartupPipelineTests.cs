@@ -77,7 +77,7 @@ namespace Venusy609.Xframework.Editor.Tests
             var (root, loadable, start) = CreateTree();
             loadable.ThrowOnLoad = true;
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Loader\] Load failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             root.StartupAsync().GetAwaiter().GetResult();
 

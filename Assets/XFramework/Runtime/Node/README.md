@@ -412,14 +412,14 @@ public class MyServiceInitializerNode : ServiceInitializerNode
 
 ## 异步启动管线（StartupAsync）
 
-`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排与加载应用（`ILoadable` 契约 + `TaskGroupStage` 任务组阶段）均由 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，依赖方向单向 Node → Pipeline。
+`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排与加载应用（`ILoadable` 契约 + `LoadableStage` 单任务适配 + `ParallelStage` 并行阶段）均由 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，依赖方向单向 Node → Pipeline。
 
-`BuildStartupPipeline()` 装配预置管线：装配期同步收集全部 `ILoadable` 节点（运行前快照，树在装配后变更不收录），按 `Phase` 分组，每组一个任务组阶段（`StartupAsync` 内部即其快捷方式）：
+`BuildStartupPipeline()` 装配预置管线：装配期同步收集全部 `ILoadable` 节点（运行前快照，树在装配后变更不收录），按 `Phase` 分组，每组一个并行阶段（`StartupAsync` 内部即其快捷方式）：
 
 | 阶段 | 类 | 权重 | 职责 |
 | ---- | -- | ---- | ---- |
 | 1. 装载 | `NodeLoadableCollectStage` | 0 | 描述阶段（"Scanning nodes..."）；收集已在装配期完成 |
-| 2. 加载 | `TaskGroupStage`（每 Phase 一个） | 组内任务数 | 组内并行、组间由管线串行（按 `Phase` 升序）；任意任务失败即取消组内其余任务 |
+| 2. 加载 | `ParallelStage`（每 Phase 一个） | 组内任务数 | 组内并行、组间由管线串行（按 `Phase` 升序）；任意任务失败即取消组内其余任务 |
 | 3. 启动 | `NodeStartStage` | 0 | 递归调用所有节点的 `OnStart` |
 
 > 瞬时阶段（装载/启动）Weight 0 不占进度，全局进度恒等于加载进度（加载阶段权重 = 组内任务数，阶段数随 Phase 数变化）。加载失败即中断后续阶段（启动不执行）。
