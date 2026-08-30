@@ -412,12 +412,18 @@ public class MyServiceInitializerNode : ServiceInitializerNode
 
 ## 异步启动管线（StartupAsync）
 
-`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线，加载调度由 [Loader 模块](../Loader/README.md)（`XFramework.XLoader`）提供：
+`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排由通用管线 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，加载调度由 [Loader 模块](../Loader/README.md)（`XFramework.XLoader`）承担，依赖方向单向 Node → Loader → Pipeline。
 
-1. **装载** — 递归扫描节点树，收集所有实现 `ILoadable` 的节点
-2. **加载** — 按 `Phase` 分组调度：相同 Phase 并行、不同 Phase 串行；任意任务失败即取消其余任务并触发 `OnLoadFailed`
-3. **启动** — 递归调用所有节点的 `OnStart`
-4. **回收** — 销毁加载器，清理资源
+`BuildStartupPipeline()` 装配预置四阶段（`StartupAsync` 内部即其快捷方式）：
+
+| 阶段 | 类 | 权重 | 职责 |
+| ---- | -- | ---- | ---- |
+| 1. 装载 | `NodeLoadableCollectStage` | 0 | 递归扫描节点树，收集所有实现 `ILoadable` 的节点 |
+| 2. 加载 | `Loader`(IPipelineStage) | 1 | 按 `Phase` 分组调度：相同 Phase 并行、不同 Phase 串行；任意任务失败即取消其余任务 |
+| 3. 启动 | `NodeStartStage` | 0 | 递归调用所有节点的 `OnStart` |
+| 4. 回收 | `NodeDisposeStage` | 0 | 销毁加载器，清理资源 |
+
+> 阶段权重 (0,1,0,0)：全局进度恒等于加载阶段进度（瞬时阶段不占进度）。加载失败即中断后续阶段（启动/回收不执行）。
 
 ```csharp
 using XFramework.XLoader;
@@ -428,7 +434,14 @@ await root.StartupAsync();   // 一键启动（装载→加载→启动→回收
 // 带进度回调（用于加载界面）
 await root.StartupAsync(new Progress<LoadProgress>(p =>
     Debug.Log($"启动进度: {p.OverallProgress:P1} - {p.Description}")));
+
+// 管线进度重载（直接接收管线级快照，含阶段/任务名与计数）
+await root.StartupAsync(new Progress<PipelineProgress>(p =>
+    Debug.Log($"管线进度: {p.OverallProgress:P1} [{p.CurrentStageName}] {p.Description}")));
 ```
+
+> 注意：`StartupAsync` 双重载（`IProgress<LoadProgress>` / `IProgress<PipelineProgress>`）下传 `null` 字面量存在重载歧义，请无参调用或显式指定接口类型。
+> 自定义管线：`BuildStartupPipeline(root)` 返回已装配的管线，可继续 `AddStage` 追加自定义阶段（建议主进度阶段 `Weight = 1`、瞬时阶段 `Weight = 0`），调用方负责 `Destroy()`。
 
 > `EntityNode.AddNodeAsync<T>()` 内部即调用 `StartupAsync` 异步启动新挂入的子树。
 > 自定义加载任务：节点实现 `ILoadable`（声明 `Phase` 与 `LoadAsync`），详见 [Loader 模块 README](../Loader/README.md)。
