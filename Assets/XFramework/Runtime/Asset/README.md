@@ -45,8 +45,8 @@ Runtime/Asset/
 using XFramework.XAsset;
 using XFramework.XLoader;
 
-// 方式一：通过 Bootstrap 自动初始化（推荐）
-// BootstrapNode 内包含 AssetBootstrapNode，自动处理初始化
+// 方式一：通过节点树自动初始化（推荐）
+// ServiceInitializerNode 内包含 AssetBootstrapNode，自动处理初始化
 
 // 方式二：手动初始化
 var progress = new LoadProgress();

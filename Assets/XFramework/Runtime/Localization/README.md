@@ -225,13 +225,7 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 
 ### LocalizationBootstrapNode
 
-启动节点，在 Bootstrap 管线 **Phase 90** 执行。使用前需调用 `SetInitData` 注入默认语言和数据：
-
-```csharp
-var bootstrapNode = new LocalizationBootstrapNode();
-bootstrapNode.SetInitData("zh_Hans", defaultLanguageData);
-// 添加到启动队列
-```
+启动节点（`internal`，框架内部使用），在加载管线 **Phase 90** 执行。游戏侧无需直接操作它，在加载阶段前调用 `LocalizationManager.Initialize(lang, data)` 即可（见「快速使用」）。
 
 节点销毁时自动调用 `LocalizationManager.Destroy()` 清理缓存。
 

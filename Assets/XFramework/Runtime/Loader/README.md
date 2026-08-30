@@ -87,7 +87,7 @@ using XFramework.XNode;
 
 // 构建节点树
 var root = RootNode.Create();
-root.AddNode<BootstrapNode>();
+root.AddNode<ServiceInitializerNode>();
 root.AddNode<ConfigBootstrapNode>();
 root.AddNode<GameplayNode>();
 
@@ -160,14 +160,13 @@ public class LoadProgress
 
 为保持一致性，框架内置模块使用以下 Phase 值：
 
-| Phase | 模块         | 说明                     |
-| ----- | ------------ | ------------------------ |
-| 0     | Asset        | 资源管理器初始化（最早） |
-| 10    | Localization | 本地化数据加载           |
-| 20    | Config       | 游戏配置表加载           |
-| 30    | Message      | 消息总线初始化           |
-| 40    | Lock         | 锁服务初始化             |
-| 90+   | 用户自定义   | 建议业务模块从此范围开始 |
+| Phase | 模块         | 说明                         |
+| ----- | ------------ | ---------------------------- |
+| 0     | Asset        | 资源管理器初始化（最早）     |
+| 3     | Data         | 数据管理器初始化             |
+| 4     | Save         | 存档管理器初始化             |
+| 90    | Localization | 本地化数据加载               |
+| 90+   | 用户自定义   | 建议业务模块从此范围开始     |
 
 ## 设计原则
 

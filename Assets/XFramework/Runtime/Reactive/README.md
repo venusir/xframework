@@ -13,8 +13,7 @@ Runtime/Reactive/
 ├── IMessageBroker.cs             # 消息发布/订阅器接口
 ├── MessageBroker.cs              # 消息代理内部实现（基于自研 Subject）
 ├── MessageManager.cs             # 静态外观（全局入口） + 节点扩展方法
-├── MessageFilter.cs              # 消息过滤器接口
-├── MessageBootstrapNode.cs       # 启动节点（注册到 Bootstrap 管线）
+├── IMessageFilter.cs             # 消息过滤器接口
 ├── IReactiveProperty.cs          # 响应式属性接口
 ├── ReactiveProperty.cs           # 响应式属性节点                           
 ├── ISignal.cs                    # 信号接口

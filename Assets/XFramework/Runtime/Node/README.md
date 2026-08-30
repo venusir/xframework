@@ -21,10 +21,10 @@ Runtime/Node/
 ├── NodeExtensions                 # AddTo 生命周期绑定扩展
 ├── AssetExtensions                # 节点资源加载扩展（委托 AssetManager 门面）
 ├── Bootstrap/                     # 启动引导节点
-│   ├── BootstrapNode              #   统一管理非节点树模块的启动
+│   ├── ServiceInitializerNode     #   统一注册启动模块（可子类化自定义）
 │   ├── AssetBootstrapNode         #   异步初始化 AssetManager（实现 ILoadable）
-│   ├── LockBootstrapNode          #   LockManager 销毁清理
-│   └── MessageBootstrapNode       #   MessageManager 销毁清理
+│   ├── GameDataNode               #   初始化 DataManager（实现 ILoadable）
+│   └── SaveBootstrapNode          #   初始化 SaveManager（实现 ILoadable）
 └── Update/                        # 更新系统
     ├── IUpdateable                #   可更新接口
     ├── IUpdateNode                #   更新服务接口
@@ -394,16 +394,16 @@ updateNode.ProcessImmediate(myUpdatable, deltaTime, time);  // 立即执行一�
 ## Bootstrap 启动引导
 
 ```csharp
-// BootstrapNode 统一管理非节点树模块的启动和销毁
-// 默认注册 AssetBootstrapNode、LockBootstrapNode、MessageBootstrapNode
-// 可子类化并重写 OnRegisterModules 自定义
+// ServiceInitializerNode 在 OnAwake 中统一注册启动引导节点，随后进入加载管线
+// 默认注册：AssetBootstrapNode（资源）、GameDataNode（数据）、SaveBootstrapNode（存档）
+// 可子类化并重写 OnRegisterModules 追加自定义启动节点
 
-public class MyBootstrapNode : BootstrapNode
+public class MyServiceInitializerNode : ServiceInitializerNode
 {
     protected override void OnRegisterModules()
     {
-        base.OnRegisterModules();
-        AddNode<LocalizationBootstrapNode>();
+        base.OnRegisterModules(); // 保留默认启动节点
+        AddNode<MyConfigBootstrapNode>(); // 自定义启动节点（实现 ILoadable）
     }
 }
 ```
@@ -437,7 +437,7 @@ await root.StartupAsync(new Progress<LoadProgress>(p =>
 
 节点树可以依赖并启动静态服务（见「Bootstrap 启动引导」）。`AssetExtensions` 为实现了 `IBaseNode` 的任意节点提供资源加载便捷糖，全部方法委托 `AssetManager` 静态门面（`XFramework.XAsset`）。
 
-**前置条件**：需先经 `AssetBootstrapNode` 完成 `AssetManager.InitializeAsync`（`BootstrapNode` 默认注册，见上节）。
+**前置条件**：需先经 `AssetBootstrapNode` 完成 `AssetManager.InitializeAsync`（`ServiceInitializerNode` 默认注册，见上节）。
 
 ```csharp
 using Cysharp.Threading.Tasks;

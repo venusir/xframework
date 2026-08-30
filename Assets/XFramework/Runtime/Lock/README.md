@@ -15,8 +15,7 @@ Runtime/Lock/
 ├── LockManager.cs                # 静态外观（全局入口）
 ├── ILockable.cs                  # 可锁标记接口
 ├── LockableExtensions.cs         # 节点扩展方法
-├── LockHandle.cs                 # 锁句柄（读存储，支持 using）
-└── LockBootstrapNode.cs          # 启动节点（注册到 Bootstrap 管线）
+└── LockHandle.cs                 # 锁句柄（读存储，支持 using）
 ```
 
 ## 快速使用
