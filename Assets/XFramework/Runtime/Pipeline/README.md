@@ -5,7 +5,7 @@
 XFramework 管线模块提供**通用阶段编排**与**加载应用**两部分能力:
 
 - **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。它是对「启动管线」中编排能力的泛化——`StartupAsync` 的预置管线(装载→加载→启动)即由本模块装配而成。
-- **加载应用(Loadable 子系统)**:`ILoadable` 契约 + `LoadProgress` 进度数据结构 + `TaskGroupStage` 任务组阶段。节点实现 `ILoadable` 声明加载任务,以「任务组阶段」形态接入管线——**加载是管线的一种应用**(原 Loader 模块并入,`ILoader`/`Loader` 已删除)。
+- **加载应用(Loadable 子系统)**:`ILoadable` 契约 + `LoadProgress` 进度数据结构 + `TaskGroupStage` 任务组阶段。节点实现 `ILoadable` 声明加载任务,以「任务组阶段」形态接入管线——**加载是管线的一种应用**(原 Loader 模块并入,`ILoader`/`Loader` 已删除)。两层物理化:通用编排位于根目录,加载应用位于 `Loading/` 子目录。
 
 **命名空间**: `XFramework.XPipeline`
 
@@ -15,14 +15,15 @@ XFramework 管线模块提供**通用阶段编排**与**加载应用**两部分�
 
 ```
 Runtime/Pipeline/
-├── IPipelineStage.cs            # 阶段接口(含 PipelineStageState 枚举)
-├── IPipeline.cs                 # 管线接口(调度入口)
-├── Pipeline.cs                  # 静态工厂 Pipeline.Create() + internal PipelineImpl 实现
-├── PipelineStageContext.cs      # 阶段执行上下文(阶段写面 + 全局读面)
-├── PipelineProgress.cs          # 全局进度快照(事件载荷)
-├── ILoadable.cs                 # 加载应用:可加载接口(含 LoadState 枚举)
-├── LoadProgress.cs              # 加载应用:加载进度数据结构(写后通知)
-└── TaskGroupStage.cs            # 加载应用:任务组阶段(internal,一个 Phase 的并行任务组)
+├── IPipelineStage.cs            # 通用编排:阶段接口(含 PipelineStageState 枚举)
+├── IPipeline.cs                 # 通用编排:管线接口(调度入口)
+├── Pipeline.cs                  # 通用编排:静态工厂 Pipeline.Create() + internal PipelineImpl 实现
+├── PipelineStageContext.cs      # 通用编排:阶段执行上下文(阶段写面 + 全局读面)
+├── PipelineProgress.cs          # 通用编排:全局进度快照(事件载荷)
+└── Loading/                     # 加载应用层(加载是管线的一种应用)
+    ├── ILoadable.cs             # 可加载接口(含 LoadState 枚举)
+    ├── LoadProgress.cs          # 加载进度数据结构(写后通知)
+    └── TaskGroupStage.cs        # 任务组阶段(internal,桥接通用管线)
 ```
 
 > 管线不依赖 Node,依赖方向单向:Node → Pipeline(加载应用同属本模块)。
