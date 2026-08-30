@@ -45,7 +45,12 @@ namespace XFramework.XLoader
             _entries.Add(loadable);
         }
 
-        public async UniTask LoadAsync()
+        /// <summary>
+        /// 执行加载。按 <see cref="ILoadable.Phase"/> 分组调度所有已注册的加载任务。
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌:取消后当前组任务收到已取消的 token,尚未开始的后续组不再执行,
+        /// 触发 <see cref="OnLoadFailed"/>("Load cancelled."),不触发 <see cref="OnLoadCompleted"/>。</param>
+        public async UniTask LoadAsync(CancellationToken cancellationToken = default)
         {
             if (IsLoading)
             {
@@ -63,8 +68,8 @@ namespace XFramework.XLoader
             IsLoading = true;
             _startTime = Time.realtimeSinceStartup;
 
-            // 创建 CancellationTokenSource 用于失败时取消其他任务
-            using var cts = new CancellationTokenSource();
+            // 链接外部取消令牌与内部失败取消源:任一方取消,全链路收到已取消的 token
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             // 累积所有任务的包装任务,结束时等待沉降,保证 LoadAsync 返回后无在途任务
             var wrappers = new List<UniTask>(_entries.Count);

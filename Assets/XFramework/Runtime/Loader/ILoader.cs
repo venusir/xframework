@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace XFramework.XLoader
@@ -30,7 +31,9 @@ namespace XFramework.XLoader
         /// <summary>
         /// 执行加载。按 Phase 分组调度所有已注册的加载任务。
         /// </summary>
-        UniTask LoadAsync();
+        /// <param name="cancellationToken">取消令牌:取消后当前组任务收到已取消的 token,尚未开始的后续组不再执行,
+        /// 触发 <see cref="OnLoadFailed"/>("Load cancelled."),不触发 <see cref="OnLoadCompleted"/>。</param>
+        UniTask LoadAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 销毁加载器，清理内部状态和事件订阅。

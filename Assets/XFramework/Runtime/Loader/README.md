@@ -67,14 +67,16 @@ public class ConfigBootstrapNode : EntityNode, ILoadable
 
     public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
     {
+        // 权重与描述须在首次 await 前同步设置（Loader 组内按权重加权聚合进度）
+        progress.SetWeight(2f);
         progress.SetState(LoadState.Loading);
-        progress.Description = "加载配置表...";
+        progress.SetDescription("加载配置表...");
 
         // 执行加载逻辑
         await LoadConfigFilesAsync(cancellationToken);
 
         progress.SetState(LoadState.Completed);
-        progress.Description = "配置表加载完成";
+        progress.SetDescription("配置表加载完成");
     }
 }
 ```
@@ -132,7 +134,7 @@ loader.OnLoadFailed += error =>
     Debug.LogError($"加载失败: {error}");
 };
 
-// 执行加载
+// 执行加载（可传取消令牌：取消触发 OnLoadFailed("Load cancelled.")，不触发完成事件）
 await loader.LoadAsync();
 
 // 清理
@@ -144,10 +146,11 @@ loader.Destroy();
 ```csharp
 public class LoadProgress
 {
+    public float Weight;             // 任务权重（默认 1f；LoadAsync 首行经 SetWeight 设置）
     public LoadState State;          // 当前状态: Pending / Loading / Completed / Failed
-    public float OverallProgress;    // 总体进度 0~1
-    public float Progress;           // 当前任务进度 0~1
-    public string Description;       // 当前描述文本
+    public float OverallProgress;    // 总体进度 0~1（Loader 轮询填充）
+    public float Progress;           // 任务级进度 0~1（节点经 SetProgress 写入）
+    public string Description;       // 当前描述文本（节点经 SetDescription 写入）
     public string Name;              // 当前任务名称（取自 ILoadable 的类型名）
     public string CurrentTaskName;   // 当前正在执行的任务名称
     public int TotalTaskCount;       // 总任务数
@@ -155,6 +158,9 @@ public class LoadProgress
     public int FailedCount;          // 失败任务数
 }
 ```
+
+- **权重聚合**：总体进度按组内 `Weight` 加权聚合 `Σ(w·p)/Σ(w)`；组间等权均摊（跨组加权需预知后续组权重，串行调度下不可行）。全部默认权重 1f 时与算术平均一致。
+- **失败不计入进度**：任务失败后其权重移出分子与分母（失败瞬间总体进度略回退，属预期）。
 
 ## 内置 Phase 约定
 
@@ -172,9 +178,12 @@ public class LoadProgress
 
 - **声明式加载** — 节点实现 `ILoadable` 声明加载需求，无需关心调度逻辑
 - **Phase 分组调度** — 相同 Phase 并行，不同 Phase 串行，兼顾性能与依赖顺序
-- **失败即停** — 任意任务失败后取消所有同 Phase 及后续 Phase 的任务
+- **失败即停** — 任务抛异常 → Failed，经 `OnLoadFailed` 报告；失败后取消同组及后续组任务并等待全部任务沉降（无在途任务、无未观测异常）
+- **取消语义** — `LoadAsync(CancellationToken)` 取消时触发 `OnLoadFailed("Load cancelled.")`，**不触发** `OnLoadCompleted`；尚未开始的组不再执行
+- **契约兜底** — `LoadAsync` 正常返回但未写终态（未调用 `SetState`）时自动视为完成（进度 1f），不会造成轮询死循环
 - **一次性调度** — 每个 `ILoader` 实例仅执行一次加载，用完即销毁
-- **进度广播** — 每帧通过 `OnProgressUpdate` 推送加载进度，方便 UI 展示
+- **进度广播节流** — 总体进度变化 ≥1% 或任一任务状态/描述变化才通过 `OnProgressUpdate` 广播，避免每帧垃圾推送
+- **加权聚合** — 组内按 `Weight` 加权聚合，组间等权均摊；失败任务不计入进度
 
 ## 依赖
 
