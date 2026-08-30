@@ -412,24 +412,23 @@ public class MyServiceInitializerNode : ServiceInitializerNode
 
 ## 异步启动管线（StartupAsync）
 
-`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排由通用管线 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，加载调度由 [Loader 模块](../Loader/README.md)（`XFramework.XLoader`）承担，依赖方向单向 Node → Loader → Pipeline。
+`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排与加载应用（`ILoadable` 契约 + `TaskGroupStage` 任务组阶段）均由 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，依赖方向单向 Node → Pipeline。
 
-`BuildStartupPipeline()` 装配预置四阶段（`StartupAsync` 内部即其快捷方式）：
+`BuildStartupPipeline()` 装配预置管线：装配期同步收集全部 `ILoadable` 节点（运行前快照，树在装配后变更不收录），按 `Phase` 分组，每组一个任务组阶段（`StartupAsync` 内部即其快捷方式）：
 
 | 阶段 | 类 | 权重 | 职责 |
 | ---- | -- | ---- | ---- |
-| 1. 装载 | `NodeLoadableCollectStage` | 0 | 递归扫描节点树，收集所有实现 `ILoadable` 的节点 |
-| 2. 加载 | `Loader`(IPipelineStage) | 1 | 按 `Phase` 分组调度：相同 Phase 并行、不同 Phase 串行；任意任务失败即取消其余任务 |
+| 1. 装载 | `NodeLoadableCollectStage` | 0 | 描述阶段（"Scanning nodes..."）；收集已在装配期完成 |
+| 2. 加载 | `TaskGroupStage`（每 Phase 一个） | 组内任务数 | 组内并行、组间由管线串行（按 `Phase` 升序）；任意任务失败即取消组内其余任务 |
 | 3. 启动 | `NodeStartStage` | 0 | 递归调用所有节点的 `OnStart` |
-| 4. 回收 | `NodeDisposeStage` | 0 | 销毁加载器，清理资源 |
 
-> 阶段权重 (0,1,0,0)：全局进度恒等于加载阶段进度（瞬时阶段不占进度）。加载失败即中断后续阶段（启动/回收不执行）。
+> 瞬时阶段（装载/启动）Weight 0 不占进度，全局进度恒等于加载进度（加载阶段权重 = 组内任务数，阶段数随 Phase 数变化）。加载失败即中断后续阶段（启动不执行）。
 
 ```csharp
-using XFramework.XLoader;
+using XFramework.XPipeline;
 using XFramework.XNode;
 
-await root.StartupAsync();   // 一键启动（装载→加载→启动→回收）
+await root.StartupAsync();   // 一键启动（装载→加载→启动）
 
 // 带进度回调（用于加载界面）
 await root.StartupAsync(new Progress<LoadProgress>(p =>
@@ -444,7 +443,7 @@ await root.StartupAsync(new Progress<PipelineProgress>(p =>
 > 自定义管线：`BuildStartupPipeline(root)` 返回已装配的管线，可继续 `AddStage` 追加自定义阶段（建议主进度阶段 `Weight = 1`、瞬时阶段 `Weight = 0`），调用方负责 `Destroy()`。
 
 > `EntityNode.AddNodeAsync<T>()` 内部即调用 `StartupAsync` 异步启动新挂入的子树。
-> 自定义加载任务：节点实现 `ILoadable`（声明 `Phase` 与 `LoadAsync`），详见 [Loader 模块 README](../Loader/README.md)。
+> 自定义加载任务：节点实现 `ILoadable`（声明 `Phase` 与 `LoadAsync`），详见 [Pipeline 模块 README](../Pipeline/README.md)「加载应用」章节。
 
 ## 资源加载（AssetExtensions）
 

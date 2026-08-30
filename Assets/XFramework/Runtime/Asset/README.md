@@ -43,7 +43,7 @@ Runtime/Asset/
 
 ```csharp
 using XFramework.XAsset;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 // 方式一：通过节点树自动初始化（推荐）
 // ServiceInitializerNode 内包含 AssetBootstrapNode，自动处理初始化
@@ -485,7 +485,7 @@ RequestPackageVersionAsync → 检查远端新版本号
 
 ## 与相关模块的关系
 
-- **XFramework.XLoader**：`AssetBootstrapNode`（Phase 0）负责自动初始化，进度经 `LoadProgress` 上报（只读 `Progress` / `OverallProgress` / `State` / `Description`，成员详情见 Loader 模块 README）
+- **XFramework.XPipeline**（加载应用）：`AssetBootstrapNode`（Phase 0）负责自动初始化，进度经 `LoadProgress` 上报（只读 `Progress` / `OverallProgress` / `State` / `Description`，成员详情见 Pipeline 模块 README「加载应用」章节）
 - **XFramework.XNode**：`AssetExtensions` 定义于 Node 模块（`XFramework.XNode` 命名空间），内部委托本模块 `AssetManager` 门面——依赖方向 Node → Asset；节点代码可直接调用，非节点代码（MonoBehaviour、纯 C# 类）直接用门面
 - **XFramework.XPool**：本模块内置的**实例对象池**（按 location 键、容量上限）只服务 `InstantiateAsync`；`PoolManager` 是通用对象池（任意类型池化），职责不同，两者不混用
 
