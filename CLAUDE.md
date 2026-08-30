@@ -27,6 +27,7 @@
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
 - **节点树(有状态 GamePlay):** `XFramework.XNode` 命名空间。BaseNode → ParentNode → ContainerNode/EntityNode → RootNode,另有 LeafNode、DictionaryNode;承载需要生命周期或加载管线的服务
 - **依赖方向单向:** 节点树可以依赖并启动静态服务;静态服务绝不能引用节点树对象
+- **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。节点树可依赖并启动管线(依赖方向 Node → Loader → Pipeline;StartupAsync 装配预置四阶段,权重 (0,1,0,0) 保证全局进度恒等于加载进度)
 - **加载管线服务:** 需要异步加载的服务(如 Asset、Data、Localization)包装为 `internal sealed XxxBootstrapNode : LeafNode, ILoadable`(声明 Phase),由 ServiceInitializerNode 挂载;节点初始化静态门面,OnDestroy 反向 Shutdown
 - **节点类模板:** override `OnAwake/OnStart/OnDestroy` 且必须调 base;不用构造函数初始化,参数走 `OnInit(object)`;需要帧更新的节点实现 `IUpdateable` 并返回 `UpdateLOD`(UpdateNode 自动注册进 UpdateManager),不写 MonoBehaviour.Update;Disposable 订阅用 `AddToNode(this)` 绑定生命周期;节点一律经 `NodeFactory`/`AddNode<T>` 创建(自动回池)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md;示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 并新建对应 asmdef(`optionalUnityReferences: TestAssemblies`)
