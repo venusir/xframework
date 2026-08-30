@@ -96,7 +96,7 @@ public class MyGameLauncher : GameLauncher
 | **组件模式**     | `EntityNode.GetNode<T>()` / `AddNode<T>()` / `RemoveNode<T>()`                    |
 | **键值对模式**   | `DictionaryNode<TKey>` 按 Key 缓存子节点                                          |
 | **更新调度**     | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移                               |
-| **异步加载**     | `ILoadableProvider` + `LoadableBase` + `LoadingManager`                           |
+| **异步加载**     | `ILoadable` + `ILoader` + `Loader`，`StartupAsync` 按 Phase 分组调度               |
 | **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                                 |
 | **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |

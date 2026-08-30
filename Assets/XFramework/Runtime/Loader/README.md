@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 加载器模块提供节点树的启动加载管线。通过 `ILoadable` 接口标记需要加载的节点，由 `ILoader` 调度器按 Phase 分组调度执行。模块通过 `StartupExtensions` 提供一键启动方法，封装了「装载 → 加载 → 启动 → 回收」完整流程。
+XFramework 加载器模块提供节点树的启动加载调度。通过 `ILoadable` 接口标记需要加载的节点，由 `ILoader` 调度器按 Phase 分组调度执行。节点树的启动管线扩展（`StartupExtensions`，「装载 → 加载 → 启动 → 回收」完整流程）定义于 Node 模块，本模块仅负责调度。
 
 **命名空间**: `XFramework.XLoader`
 
@@ -15,9 +15,10 @@ Runtime/Loader/
 ├── ILoadable.cs                  # 可加载接口（节点实现此接口声明加载任务）
 ├── ILoader.cs                    # 加载器接口（调度入口）
 ├── Loader.cs                     # 加载器内部实现（internal，按 Phase 分组调度）
-├── LoadProgress.cs               # 加载进度数据结构
-└── StartupExtensions.cs          # 启动扩展方法（一键启动 + 节点树遍历）
+└── LoadProgress.cs               # 加载进度数据结构
 ```
+
+> 启动管线扩展 `StartupExtensions`（一键启动 + 节点树遍历）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader。
 
 ## 核心概念
 
@@ -100,17 +101,18 @@ await root.StartupAsync(new Progress<LoadProgress>(p =>
 }));
 ```
 
-### 3. 手动管理加载流程
+### 3. 手动管理加载流程（框架内部）
+
+`Loader` 实现类为 `internal`，启动节点（`AssetBootstrapNode` 等）同样为内部类型——手动流程供框架内部（Bootstrap 节点、测试）使用，外部游戏代码请走 `StartupAsync` 一键管线（见上节）。
 
 ```csharp
 using XFramework.XLoader;
 
-// 创建加载器
+// 创建加载器（内部可访问；外部如需手动调度，应自定义实现 ILoader）
 ILoader loader = new Loader();
 
 // 手动注册可加载节点（通常由 CollectLoadables 自动完成）
-loader.AddLoadable(new AssetBootstrapNode());
-loader.AddLoadable(new ConfigBootstrapNode());
+loader.AddLoadable(new MyLoadable()); // 示意：实现了 ILoadable 的节点
 
 // 监听进度
 loader.OnProgressUpdate += p =>
@@ -177,5 +179,6 @@ public class LoadProgress
 
 ## 依赖
 
-- `XFramework.XNode` — 节点系统（`IParentNode` 遍历、`BaseNode` 生命周期）
 - `UniTask`（框架层已提供）
+
+> 节点树启动管线扩展（`StartupExtensions`）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader。

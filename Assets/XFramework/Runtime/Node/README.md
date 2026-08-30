@@ -408,7 +408,30 @@ public class MyBootstrapNode : BootstrapNode
 }
 ```
 
-> 配合 Loader 模块的 `StartupExtensions.StartupAsync()` 可实现完整的异步启动管线。
+> 上述节点挂入树后，还需一次 `StartupAsync()` 触发启动管线（见下节）。
+
+## 异步启动管线（StartupAsync）
+
+`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线，加载调度由 [Loader 模块](../Loader/README.md)（`XFramework.XLoader`）提供：
+
+1. **装载** — 递归扫描节点树，收集所有实现 `ILoadable` 的节点
+2. **加载** — 按 `Phase` 分组调度：相同 Phase 并行、不同 Phase 串行；任意任务失败即取消其余任务并触发 `OnLoadFailed`
+3. **启动** — 递归调用所有节点的 `OnStart`
+4. **回收** — 销毁加载器，清理资源
+
+```csharp
+using XFramework.XLoader;
+using XFramework.XNode;
+
+await root.StartupAsync();   // 一键启动（装载→加载→启动→回收）
+
+// 带进度回调（用于加载界面）
+await root.StartupAsync(new Progress<LoadProgress>(p =>
+    Debug.Log($"启动进度: {p.OverallProgress:P1} - {p.Description}")));
+```
+
+> `EntityNode.AddNodeAsync<T>()` 内部即调用 `StartupAsync` 异步启动新挂入的子树。
+> 自定义加载任务：节点实现 `ILoadable`（声明 `Phase` 与 `LoadAsync`），详见 [Loader 模块 README](../Loader/README.md)。
 
 ## 资源加载（AssetExtensions）
 
