@@ -2,23 +2,25 @@
 
 ## 概述
 
-XFramework 加载器模块提供节点树的启动加载调度。通过 `ILoadable` 接口标记需要加载的节点，由 `ILoader` 调度器按 Phase 分组调度执行。节点树的启动管线扩展（`StartupExtensions`，「装载 → 加载 → 启动 → 回收」完整流程）定义于 Node 模块，本模块仅负责调度。
+XFramework 加载阶段模块（原「加载器」）提供节点树的启动加载调度。通过 `ILoadable` 接口标记需要加载的节点，由 `ILoader` 调度器按 Phase 分组调度执行。
+
+本模块聚焦「加载」本身的调度;**阶段编排(串行、进度聚合、失败/取消传播)已泛化为通用管线**——`Loader` 同时实现 `IPipelineStage`(Name="Load", Weight=1),作为预置启动管线的加载阶段接入。节点树的启动管线扩展（`StartupExtensions`，「装载 → 加载 → 启动 → 回收」完整流程）定义于 Node 模块。
 
 **命名空间**: `XFramework.XLoader`
 
-**核心理念**：节点声明「我需要加载什么」（实现 `ILoadable`），加载器负责「按什么顺序加载」（Phase 分组调度）。
+**核心理念**：节点声明「我需要加载什么」（实现 `ILoadable`），加载阶段负责「按什么顺序加载」（Phase 分组调度）。
 
 ## 架构设计
 
 ```
 Runtime/Loader/
 ├── ILoadable.cs                  # 可加载接口（节点实现此接口声明加载任务）
-├── ILoader.cs                    # 加载器接口（调度入口）
-├── Loader.cs                     # 加载器内部实现（internal，按 Phase 分组调度）
+├── ILoader.cs                    # 加载阶段接口（调度入口）
+├── Loader.cs                     # 加载阶段实现（internal，按 Phase 分组调度；同时实现 IPipelineStage）
 └── LoadProgress.cs               # 加载进度数据结构
 ```
 
-> 启动管线扩展 `StartupExtensions`（一键启动 + 节点树遍历）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader。
+> 启动管线扩展 `StartupExtensions`（一键启动 + 节点树遍历）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader → [Pipeline 模块](../Pipeline/README.md)。
 
 ## 核心概念
 
@@ -184,9 +186,10 @@ public class LoadProgress
 - **一次性调度** — 每个 `ILoader` 实例仅执行一次加载，用完即销毁
 - **进度广播节流** — 总体进度变化 ≥1% 或任一任务状态/描述变化才通过 `OnProgressUpdate` 广播，避免每帧垃圾推送
 - **加权聚合** — 组内按 `Weight` 加权聚合，组间等权均摊；失败任务不计入进度
+- **管线阶段形态** — 以 `IPipelineStage` 接入通用管线时，轮询广播同步转发到阶段上下文（管线级聚合），失败置阶段 Failed、成功置阶段 Completed、取消上抛使管线走取消路径；直接以 `ILoader` 形态使用行为不变
 
 ## 依赖
 
 - `UniTask`（框架层已提供）
 
-> 节点树启动管线扩展（`StartupExtensions`）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader。
+> 阶段编排（串行、进度聚合、失败/取消传播）由 [Pipeline 模块](../Pipeline/README.md) 承担；节点树启动管线扩展（`StartupExtensions`）定义于 [Node 模块](../Node/README.md)，依赖方向单向：Node → Loader → Pipeline。

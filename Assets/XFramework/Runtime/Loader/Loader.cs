@@ -4,17 +4,41 @@ using System.Linq;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XPipeline;
 
 namespace XFramework.XLoader
 {
 
     /// <summary>
-    /// 加载器。纯 C# 类，作为加载任务的调度器。
-    /// <para>通过 <see cref="ILoader"/> 接口对外暴露，外部不可直接访问此类。</para>
+    /// 加载阶段(原「加载器」)。纯 C# 类，作为加载任务的调度器。
+    /// <para>通过 <see cref="ILoader"/> 接口对外暴露;同时实现 <see cref="IPipelineStage"/>,
+    /// 以「Load」阶段形态接入通用管线(编排/进度聚合/失败传播交由管线承担,本类专注任务调度)。</para>
     /// <para>按 <see cref="ILoadable.Phase"/> 分组调度：相同 Phase 并行，不同 Phase 串行。</para>
     /// </summary>
-    class Loader : ILoader
+    class Loader : ILoader, IPipelineStage
     {
+        #region IPipelineStage(显式实现)
+
+        string IPipelineStage.Name => "Load";
+        float IPipelineStage.Weight => 1f;
+
+        /// <summary>
+        /// 以管线阶段形态执行加载:保存阶段上下文供内部广播转发,委托 <see cref="LoadAsync"/> 完成调度。
+        /// <para>取消传播:LoadAsync 内部取消后正常返回(等待沉降),此处检查取消并上抛,
+        /// 使管线按取消语义收敛(阶段保持当前状态,管线走取消路径)而非误入完成路径。</para>
+        /// </summary>
+        async UniTask IPipelineStage.ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+        {
+            _stageCtx = context;
+
+            await LoadAsync(cancellationToken);
+
+            if (cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(cancellationToken);
+        }
+
+        #endregion
+
         #region ILoader Properties
 
         public bool IsLoading { get; private set; }
@@ -199,6 +223,14 @@ namespace XFramework.XLoader
                             _context.CompletedCount = completedCount;
                             _context.FailedCount = failedCount;
 
+                            // 阶段形态:同步转发到管线阶段上下文,触发管线级聚合广播(零闭包)
+                            if (_stageCtx != null)
+                            {
+                                _stageCtx.SetProgress(overallProgress);
+                                _stageCtx.SetDescription(currentDesc ?? "Completed");
+                                _stageCtx.CurrentTaskName = currentTaskName;
+                            }
+
                             lastOverall = overallProgress;
                             lastDesc = currentDesc ?? "Completed";
                             for (int i = 0; i < taskCount; i++) lastStates[i] = phaseContexts[i].State;
@@ -243,6 +275,9 @@ namespace XFramework.XLoader
                     OnProgressUpdate?.Invoke(_context);
                     OnLoadFailed?.Invoke($"Failed: {failDescription}");
                     Debug.LogError($"[Loader] Load failed: {failTaskName} ({Time.realtimeSinceStartup - _startTime:F2}s): {failDescription}");
+
+                    // 阶段形态:置失败,管线据此走失败路径并中断后续阶段
+                    _stageCtx?.SetState(PipelineStageState.Failed);
                 }
                 else
                 {
@@ -258,6 +293,15 @@ namespace XFramework.XLoader
                     _context.CompletedCount = _entries.Count;
                     _context.FailedCount = 0;
                     OnProgressUpdate?.Invoke(_context);
+
+                    // 阶段形态:置完成,管线据此收敛到完成终局
+                    if (_stageCtx != null)
+                    {
+                        _stageCtx.SetProgress(1f);
+                        _stageCtx.SetDescription("Completed");
+                        _stageCtx.SetState(PipelineStageState.Completed);
+                    }
+
                     OnLoadCompleted?.Invoke();
                 }
 
@@ -347,6 +391,9 @@ namespace XFramework.XLoader
         /// 测试可替换为手动泵,在 EditMode(无 PlayerLoop 泵)环境中确定性驱动轮询。
         /// </summary>
         internal Func<UniTask> _framePump = () => UniTask.Yield(PlayerLoopTiming.Update, CancellationToken.None);
+
+        /// <summary>管线阶段上下文(以 <see cref="IPipelineStage"/> 形态运行时由管线注入),轮询广播的转发目标。</summary>
+        internal PipelineStageContext _stageCtx;
 
         #endregion
     }

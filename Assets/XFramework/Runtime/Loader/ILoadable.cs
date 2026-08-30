@@ -5,7 +5,8 @@ namespace XFramework.XLoader
 {
 
     /// <summary>
-    /// 加载状态。
+    /// 加载状态(任务级)。与管线阶段状态 <see cref="XFramework.XPipeline.PipelineStageState"/> 分层并存:
+    /// 任务级状态由 Loader 内部调度产生(组内并行任务),阶段级状态由管线编排产生(加载阶段整体)。
     /// </summary>
     public enum LoadState
     {
