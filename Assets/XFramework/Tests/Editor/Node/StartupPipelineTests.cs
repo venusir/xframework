@@ -13,7 +13,7 @@ using XFramework.XPipeline;
 namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
-    /// 预置启动管线集成测试:四阶段装配执行、进度映射、空树、失败即停。
+    /// 预置启动管线集成测试:三阶段装配执行(Collect + Load + Start)、进度映射、空树、失败即停。
     /// </summary>
     class StartupPipelineTests
     {
@@ -65,8 +65,8 @@ namespace Venusy609.Xframework.Editor.Tests
             var root = RootNode.Create();
             var start = root.AddNode<StartProbeNode>();
 
-            // 无 ILoadable 节点 → 加载阶段空列表,打警告并直接完成(不阻塞启动阶段)
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[Loader\] LoadAsync: no loadable tasks"));
+            // 无 ILoadable 节点 → 装配期收集为空,打警告并直接完成(不阻塞启动阶段)
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Loader\] no loadable tasks found"));
             root.StartupAsync().GetAwaiter().GetResult();
 
             Assert.IsTrue(start.Started, "空加载列表不应阻塞启动阶段");
@@ -126,7 +126,7 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.GreaterOrEqual(progress.Count, 2, "管线进度重载应持续广播");
             Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "完成终局应广播 1");
-            Assert.AreEqual(4, progress[progress.Count - 1].TotalStageCount, "预置管线应为四阶段");
+            Assert.AreEqual(3, progress[progress.Count - 1].TotalStageCount, "预置管线应为三阶段(Collect + Load + Start)");
         }
 
         #endregion
