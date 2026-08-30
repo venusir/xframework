@@ -61,6 +61,7 @@ namespace XFramework.XLoader
             }
 
             IsLoading = true;
+            _startTime = Time.realtimeSinceStartup;
 
             // 创建 CancellationTokenSource 用于失败时取消其他任务
             using var cts = new CancellationTokenSource();
@@ -110,6 +111,11 @@ namespace XFramework.XLoader
                         wrappers.Add(RunTask(tasks[i], phaseContexts[i], cts.Token));
                     }
 
+                    // 上一帧广播快照:各任务状态数组 + 总体进度 + 描述(阈值节流,首帧 lastOverall=-1 保证必广播)
+                    var lastStates = new LoadState[taskCount];
+                    float lastOverall = -1f;
+                    string lastDesc = null;
+
                     // 轮询阶段:每帧检查进度,直到全部完成或失败
                     while (!cts.Token.IsCancellationRequested)
                     {
@@ -117,7 +123,8 @@ namespace XFramework.XLoader
                         bool anyFailed = false;
                         string currentDesc = null;
                         string currentTaskName = null;
-                        float totalProgress = 0f;
+                        float weightSum = 0f;
+                        float weightedSum = 0f;
                         int completedCount = 0;
                         int failedCount = 0;
 
@@ -129,12 +136,13 @@ namespace XFramework.XLoader
                             {
                                 case LoadState.Completed:
                                     completedCount++;
-                                    totalProgress += 1f;
+                                    weightSum += ctx.Weight;
+                                    weightedSum += ctx.Weight;
                                     break;
                                 case LoadState.Failed:
                                     failedCount++;
                                     anyFailed = true;
-                                    totalProgress += 1f;
+                                    // 失败任务不计入进度(权重移出分子与分母,进度略回退,语义正确)
                                     currentDesc = ctx.Description;
                                     currentTaskName = ctx.Name;
                                     if (failDescription == null)
@@ -145,7 +153,8 @@ namespace XFramework.XLoader
                                     break;
                                 case LoadState.Loading:
                                     allDone = false;
-                                    totalProgress += ctx.Progress;
+                                    weightSum += ctx.Weight;
+                                    weightedSum += ctx.Weight * ctx.Progress;
                                     currentDesc = ctx.Description;
                                     currentTaskName = ctx.Name;
                                     break;
@@ -155,18 +164,42 @@ namespace XFramework.XLoader
                             }
                         }
 
-                        // 计算总体进度
-                        float phaseProgress = taskCount > 0 ? totalProgress / taskCount : 1f;
+                        // 组内加权聚合 Σ(w·p)/Σ(w);组间等权均摊(跨组加权需预知后续组权重,串行调度下不可行;
+                        // 全部权重为 1f 时与旧算术平均完全一致)
+                        float phaseProgress = weightSum > 0f ? weightedSum / weightSum : 0f;
                         float overallProgress = (completedGroups + phaseProgress) / totalGroups;
 
-                        // 填充共享 Context 并广播
-                        _context.OverallProgress = overallProgress;
-                        _context.Description = currentDesc ?? "Completed";
-                        _context.CurrentTaskName = currentTaskName;
-                        _context.TotalTaskCount = _entries.Count;
-                        _context.CompletedCount = completedCount;
-                        _context.FailedCount = failedCount;
-                        OnProgressUpdate?.Invoke(_context);
+                        // 阈值广播:总体进度变化 ≥1%、任一任务状态变化、描述变化三者其一才广播(每帧路径零 LINQ)
+                        bool dirty = Mathf.Abs(overallProgress - lastOverall) >= 0.01f;
+                        if (!dirty)
+                        {
+                            for (int i = 0; i < taskCount; i++)
+                            {
+                                if (phaseContexts[i].State != lastStates[i])
+                                {
+                                    dirty = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!dirty && currentDesc != lastDesc)
+                            dirty = true;
+
+                        if (dirty)
+                        {
+                            _context.OverallProgress = overallProgress;
+                            _context.Description = currentDesc ?? "Completed";
+                            _context.CurrentTaskName = currentTaskName;
+                            _context.TotalTaskCount = _entries.Count;
+                            _context.CompletedCount = completedCount;
+                            _context.FailedCount = failedCount;
+
+                            lastOverall = overallProgress;
+                            lastDesc = currentDesc ?? "Completed";
+                            for (int i = 0; i < taskCount; i++) lastStates[i] = phaseContexts[i].State;
+
+                            OnProgressUpdate?.Invoke(_context);
+                        }
 
                         if (anyFailed)
                         {
@@ -204,7 +237,7 @@ namespace XFramework.XLoader
                 {
                     OnProgressUpdate?.Invoke(_context);
                     OnLoadFailed?.Invoke($"Failed: {failDescription}");
-                    Debug.LogError($"[Loader] Load failed: {failTaskName}: {failDescription}");
+                    Debug.LogError($"[Loader] Load failed: {failTaskName} ({Time.realtimeSinceStartup - _startTime:F2}s): {failDescription}");
                 }
                 else
                 {
@@ -300,6 +333,9 @@ namespace XFramework.XLoader
 
         readonly List<ILoadable> _entries = new List<ILoadable>();
         readonly LoadProgress _context = new LoadProgress();
+
+        /// <summary>本次加载启动时刻(真实秒),用于失败日志的耗时统计。</summary>
+        float _startTime;
 
         /// <summary>
         /// 帧泵注入缝:每轮询一帧后等待一次。默认等待下一帧 Update;

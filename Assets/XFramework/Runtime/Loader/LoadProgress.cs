@@ -16,8 +16,19 @@ namespace XFramework.XLoader
         /// <summary>任务名称。由 Loader 在装载时设置。</summary>
         public string Name { get; internal set; }
 
-        /// <summary>加载权重。由 Loader 在装载时设置。</summary>
+        /// <summary>加载权重。默认 1f;节点在 <see cref="ILoadable.LoadAsync"/> 开头经 <see cref="SetWeight"/> 设置,
+        /// Loader 组内按权重加权聚合进度。</summary>
         public float Weight { get; internal set; } = 1f;
+
+        /// <summary>
+        /// 设置加载权重。必须在 <see cref="ILoadable.LoadAsync"/> 首行同步调用(首次 await 之前),
+        /// 保证第一帧轮询即可读到正确权重;loader 以组内加权聚合进度,默认 1f。
+        /// </summary>
+        /// <param name="value">权重值,下限 0.01(clamp,防除零)。</param>
+        public void SetWeight(float value)
+        {
+            Weight = Mathf.Max(0.01f, value);
+        }
 
         /// <summary>当前加载进度，取值范围 0.0 ~ 1.0。</summary>
         public float Progress { get; private set; }

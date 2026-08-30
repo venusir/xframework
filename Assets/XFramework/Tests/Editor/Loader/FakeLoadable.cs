@@ -26,6 +26,9 @@ namespace Venusy609.Xframework.Editor.Tests
         /// <summary>非空时挂起直到测试放行，用于模拟长任务与并行时序。</summary>
         public UniTaskCompletionSource Gate;
 
+        /// <summary>任务权重(首行同步写入 progress,契约要求首次 await 前设置)。</summary>
+        public float TaskWeight = 1f;
+
         /// <summary>挂起期间报告的进度值。</summary>
         public float ProgressValue;
 
@@ -46,6 +49,7 @@ namespace Venusy609.Xframework.Editor.Tests
             LoadCount++;
             LastToken = cancellationToken;
             ExecutionLog?.Add(Description);
+            progress.SetWeight(TaskWeight);
             progress.SetDescription(Description);
 
             if (WriteState)
