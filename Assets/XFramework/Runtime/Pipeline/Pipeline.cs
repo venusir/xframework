@@ -126,8 +126,8 @@ namespace XFramework.XPipeline
                     var ctx = _contexts[i];
                     ctx.SetState(PipelineStageState.Executing);
 
-                    // 阶段经包装函数统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
-                    bool stageCancelled = await RunStage(_stages[i], ctx, cts.Token);
+                    // 阶段经共享包装统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
+                    bool stageCancelled = await StageExecution.RunStageAsync(_stages[i], ctx, cts.Token);
 
                     if (stageCancelled)
                     {
@@ -207,37 +207,6 @@ namespace XFramework.XPipeline
         #endregion
 
         #region Private Methods
-
-        /// <summary>
-        /// 包装执行单个阶段:统一状态机写入、异常与取消捕获,保证阶段必然收敛到终态。
-        /// <para>返回 true 表示阶段以取消结束(抛出 <see cref="OperationCanceledException"/>),由管线统一走取消路径。</para>
-        /// </summary>
-        private static async UniTask<bool> RunStage(IPipelineStage stage, PipelineStageContext ctx, CancellationToken cancellationToken)
-        {
-            try
-            {
-                await stage.ExecuteAsync(ctx, cancellationToken);
-
-                // 契约兜底:正常返回但状态仍停留在 Pending/Executing → 视为完成
-                if (ctx.State == PipelineStageState.Pending || ctx.State == PipelineStageState.Executing)
-                {
-                    ctx.SetProgress(1f);
-                    ctx.SetState(PipelineStageState.Completed);
-                }
-                return false;
-            }
-            catch (OperationCanceledException)
-            {
-                // 取消:保持当前状态,由管线统一走取消路径,不视为失败
-                return true;
-            }
-            catch (Exception ex)
-            {
-                ctx.SetState(PipelineStageState.Failed);
-                ctx.SetDescription(ex.Message);
-                return false;
-            }
-        }
 
         /// <summary>
         /// 阶段写入触发的聚合入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
