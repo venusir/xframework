@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-namespace XFramework.XLoader
+namespace XFramework.XPipeline
 {
 
     /// <summary>

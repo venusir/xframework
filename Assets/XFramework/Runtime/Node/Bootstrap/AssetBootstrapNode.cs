@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XAsset;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 namespace XFramework.XNode
 {

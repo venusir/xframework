@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using XFramework.XLoader;
 using XFramework.XPipeline;
 
 namespace XFramework.XNode
@@ -12,7 +11,7 @@ namespace XFramework.XNode
     /// 节点树启动扩展方法。
     /// <para>提供 <see cref="IParentNode"/> 的启动管线:装载 → 加载 → 启动,由通用管线
     /// (<see cref="XFramework.XPipeline"/>)装配并运行——阶段编排/进度聚合/失败传播归管线,
-    /// 加载由 <see cref="TaskGroupStage"/> 任务组阶段承担(依赖方向:Node → Loader → Pipeline)。</para>
+    /// 加载由 <see cref="TaskGroupStage"/> 任务组阶段承担(依赖方向:Node → Pipeline)。</para>
     /// </summary>
     public static class StartupExtensions
     {

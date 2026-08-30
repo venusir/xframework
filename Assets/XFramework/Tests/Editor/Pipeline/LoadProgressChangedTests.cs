@@ -1,6 +1,6 @@
 using System;
 using NUnit.Framework;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 namespace Venusy609.Xframework.Editor.Tests
 {

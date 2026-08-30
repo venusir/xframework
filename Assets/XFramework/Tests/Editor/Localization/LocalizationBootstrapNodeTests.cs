@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 using XFramework.XLocalization;
 
 namespace Venusy609.Xframework.Editor.Tests

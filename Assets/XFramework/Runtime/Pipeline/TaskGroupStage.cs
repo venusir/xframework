@@ -3,9 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using XFramework.XPipeline;
 
-namespace XFramework.XLoader
+namespace XFramework.XPipeline
 {
 
     /// <summary>

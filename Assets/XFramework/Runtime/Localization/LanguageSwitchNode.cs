@@ -5,7 +5,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XNode;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 namespace XFramework.XLocalization
 {

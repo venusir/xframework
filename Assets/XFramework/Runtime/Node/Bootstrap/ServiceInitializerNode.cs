@@ -3,7 +3,7 @@ namespace XFramework.XNode
     /// <summary>
     /// 服务初始化节点。在启动阶段统一管理需要参与加载管线的模块（如 AssetManager 等）的生命周期。
     /// <para>LockManager、MessageManager 等纯静态服务已通过 [RuntimeInitializeOnLoadMethod] 自动管理生命周期，无需在此注册。</para>
-    /// <para><see cref="AssetBootstrapNode"/> 实现了 <see cref="XLoader.ILoadable"/>，
+    /// <para><see cref="AssetBootstrapNode"/> 实现了 <see cref="XPipeline.ILoadable"/>，
     /// 在加载管线中异步初始化 <see cref="XAsset.AssetManager"/>。</para>
     /// <para>可子类化并重写 <see cref="OnRegisterModules"/> 来自定义启动模块列表。</para>
     /// </summary>

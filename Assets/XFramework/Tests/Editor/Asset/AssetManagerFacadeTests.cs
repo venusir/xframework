@@ -6,7 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using XFramework.XAsset;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 namespace Venusy609.Xframework.Editor.Tests
 {

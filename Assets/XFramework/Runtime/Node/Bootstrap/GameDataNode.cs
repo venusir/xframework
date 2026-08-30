@@ -1,7 +1,7 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XData;
-using XFramework.XLoader;
+using XFramework.XPipeline;
 
 namespace XFramework.XNode
 {

@@ -6,7 +6,6 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XLoader;
 using XFramework.XNode;
 using XFramework.XPipeline;
 
