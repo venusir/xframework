@@ -141,6 +141,10 @@ namespace XFramework.XPipeline
                     }
 
                     var ctx = _contexts[i];
+
+                    // 顶层阶段计时:System.Diagnostics 全限定(避免与 UnityEngine.Debug 冲突)
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
+                    Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' start");
                     ctx.SetState(PipelineStageState.Executing);
 
                     // 阶段经共享包装统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
@@ -159,6 +163,7 @@ namespace XFramework.XPipeline
                         if (raceCancelled)
                         {
                             // 竞速期间外部取消:统一走取消终局
+                            Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
                             cancelled = true;
                             break;
                         }
@@ -170,6 +175,7 @@ namespace XFramework.XPipeline
                             cts.Cancel();
                             ctx.SetDescription($"Stage '{_stages[i].Name}' timed out after {timeoutSeconds}s");
                             ctx.SetState(PipelineStageState.Failed);
+                            Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' timed out in {sw.Elapsed.TotalMilliseconds:F0}ms");
                             failed = true;
                             failDescription = ctx.Description;
                             break;
@@ -186,16 +192,20 @@ namespace XFramework.XPipeline
 
                     if (stageCancelled)
                     {
+                        Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
                         cancelled = true;
                         break;
                     }
 
                     if (ctx.State == PipelineStageState.Failed)
                     {
+                        Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' failed in {sw.Elapsed.TotalMilliseconds:F0}ms");
                         failed = true;
                         failDescription = ctx.Description;
                         break;
                     }
+
+                    Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' completed in {sw.Elapsed.TotalMilliseconds:F0}ms");
                 }
 
                 // 终局:取消 / 失败 / 完成三路互斥(先重算快照广播,再触发事件)
