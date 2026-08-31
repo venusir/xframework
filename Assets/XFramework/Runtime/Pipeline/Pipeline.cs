@@ -208,15 +208,44 @@ namespace XFramework.XPipeline
 
         #region Private Methods
 
-        /// <summary>
-        /// 阶段写入触发的聚合入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
-        /// 加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
-        /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
-        /// </summary>
-        public void OnStageContextChanged(PipelineStageContext changed)
+        /// <summary>加权聚合快照(只读结构,零 GC):供事件驱动聚合与终局重算共用。</summary>
+        private readonly struct StageSnapshot
         {
-            if (!IsRunning) return;
+            /// <summary>全局加权进度 Σ(w·p)/Σ(w)。</summary>
+            public readonly float Overall;
 
+            /// <summary>当前执行阶段的描述。</summary>
+            public readonly string Description;
+
+            /// <summary>当前执行阶段的名称。</summary>
+            public readonly string CurrentStageName;
+
+            /// <summary>当前执行阶段的任务名。</summary>
+            public readonly string CurrentTaskName;
+
+            /// <summary>已完成阶段数。</summary>
+            public readonly int CompletedCount;
+
+            /// <summary>已失败阶段数。</summary>
+            public readonly int FailedCount;
+
+            public StageSnapshot(float overall, string description, string stageName, string taskName, int completed, int failed)
+            {
+                Overall = overall;
+                Description = description;
+                CurrentStageName = stageName;
+                CurrentTaskName = taskName;
+                CompletedCount = completed;
+                FailedCount = failed;
+            }
+        }
+
+        /// <summary>
+        /// 计算当前聚合快照:加权 Σ(w·p)/Σ(w),已完成阶段记 w、执行中记 w·p,
+        /// 失败阶段权重移出分子与分母、Weight=0 阶段不占进度(每帧路径零 LINQ)。
+        /// </summary>
+        private StageSnapshot AggregateContexts()
+        {
             float weightSum = 0f;
             float weightedSum = 0f;
             int completedCount = 0;
@@ -251,11 +280,26 @@ namespace XFramework.XPipeline
                 }
             }
 
-            float overall = weightSum > 0f ? weightedSum / weightSum : 0f;
+            return new StageSnapshot(
+                weightSum > 0f ? weightedSum / weightSum : 0f,
+                currentDesc, currentStageName, currentTaskName,
+                completedCount, failedCount);
+        }
+
+        /// <summary>
+        /// 阶段写入触发的聚合入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
+        /// 加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
+        /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
+        /// </summary>
+        public void OnStageContextChanged(PipelineStageContext changed)
+        {
+            if (!IsRunning) return;
+
+            StageSnapshot snap = AggregateContexts();
 
             // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任一阶段状态变化(每帧路径零 LINQ)
-            bool dirty = Mathf.Abs(overall - _lastOverall) >= 0.01f;
-            if (!dirty && currentDesc != _lastDesc)
+            bool dirty = Mathf.Abs(snap.Overall - _lastOverall) >= 0.01f;
+            if (!dirty && snap.Description != _lastDesc)
                 dirty = true;
             if (!dirty)
             {
@@ -271,15 +315,15 @@ namespace XFramework.XPipeline
 
             if (dirty)
             {
-                _overall = overall;
-                _description = currentDesc;
-                _currentStageName = currentStageName;
-                _currentTaskName = currentTaskName;
-                _completedStageCount = completedCount;
-                _failedStageCount = failedCount;
+                _overall = snap.Overall;
+                _description = snap.Description;
+                _currentStageName = snap.CurrentStageName;
+                _currentTaskName = snap.CurrentTaskName;
+                _completedStageCount = snap.CompletedCount;
+                _failedStageCount = snap.FailedCount;
 
-                _lastOverall = overall;
-                _lastDesc = currentDesc;
+                _lastOverall = snap.Overall;
+                _lastDesc = snap.Description;
                 for (int i = 0; i < _contexts.Length; i++) _lastStates[i] = _contexts[i].State;
 
                 Broadcast();
@@ -291,46 +335,14 @@ namespace XFramework.XPipeline
         {
             if (_contexts == null) return;
 
-            float weightSum = 0f;
-            float weightedSum = 0f;
-            int completedCount = 0;
-            int failedCount = 0;
-            string currentDesc = null;
-            string currentStageName = null;
-            string currentTaskName = null;
+            StageSnapshot snap = AggregateContexts();
 
-            for (int i = 0; i < _contexts.Length; i++)
-            {
-                var ctx = _contexts[i];
-
-                switch (ctx.State)
-                {
-                    case PipelineStageState.Completed:
-                        completedCount++;
-                        weightSum += ctx.Weight;
-                        weightedSum += ctx.Weight;
-                        break;
-                    case PipelineStageState.Failed:
-                        failedCount++;
-                        break;
-                    case PipelineStageState.Executing:
-                        weightSum += ctx.Weight;
-                        weightedSum += ctx.Weight * ctx.Progress;
-                        currentDesc = ctx.Description;
-                        currentStageName = ctx.Name;
-                        currentTaskName = ctx.CurrentTaskName;
-                        break;
-                    default:
-                        break;
-                }
-            }
-
-            _overall = weightSum > 0f ? weightedSum / weightSum : 0f;
-            _description = currentDesc;
-            _currentStageName = currentStageName;
-            _currentTaskName = currentTaskName;
-            _completedStageCount = completedCount;
-            _failedStageCount = failedCount;
+            _overall = snap.Overall;
+            _description = snap.Description;
+            _currentStageName = snap.CurrentStageName;
+            _currentTaskName = snap.CurrentTaskName;
+            _completedStageCount = snap.CompletedCount;
+            _failedStageCount = snap.FailedCount;
         }
 
         /// <summary>构造进度快照并广播。</summary>
