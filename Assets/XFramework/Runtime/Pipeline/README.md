@@ -9,7 +9,7 @@ XFramework 管线模块提供**通用阶段编排**与**加载应用**两部分�
 
 **命名空间**: `XFramework.XPipeline`
 
-**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;加载任务同样以阶段形态接入,任务级调度归 `LoadableStage` 单任务适配,并行编排归 `ParallelStage`,编排级归管线。
+**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;加载任务同样以阶段形态接入,任务级调度归 `LoadableStage` 单任务适配,并行编排归 `ParallelStage`,串行子段归 `SequenceStage`,编排级归管线。
 
 ## 架构设计
 
@@ -22,6 +22,8 @@ Runtime/Pipeline/
 ├── PipelineProgress.cs          # 通用编排:全局进度快照(事件载荷)
 ├── StageExecution.cs            # 通用编排:阶段执行共享包装(契约兜底/取消/异常捕获)
 ├── ParallelStage.cs             # 通用编排:并行阶段(组内并行、事件驱动组内聚合,public)
+├── SequenceStage.cs             # 通用编排:串行阶段(组内串行子段,public)
+├── StageAggregator.cs           # 通用编排:容器子阶段共享聚合器(门铃 + 加权聚合,internal)
 └── Loading/                     # 加载应用层(加载是管线的一种应用)
     ├── ILoadable.cs             # 可加载接口(含 LoadState 枚举)
     ├── LoadProgress.cs          # 加载进度数据结构(写后通知)
@@ -54,8 +56,16 @@ public interface IPipelineStage
 - **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
 - **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)
-- **阶段日志**: 顶层阶段开始/结束经 `Debug.Log` 记录耗时(`[Pipeline] Stage 'X' start` / `'X' completed|failed|cancelled|timed out in Nms`),便于诊断执行时间分布;并行组内子阶段不输出 start/end 日志(组级失败已有 `[Pipeline] Parallel stage failed: ...` 诊断日志兜底)
+- **阶段日志**: 顶层阶段开始/结束经 `Debug.Log` 记录耗时(`[Pipeline] Stage 'X' start` / `'X' completed|failed|cancelled|timed out in Nms`),便于诊断执行时间分布;容器(并行/串行)组内子阶段不输出 start/end 日志(组级失败已有 `[Pipeline] Parallel/Sequence stage failed: ...` 诊断日志兜底)
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
+
+### 容器组合
+
+管线顶层固定串行(隐式串行根容器,不提供顶层并行 API);组内并行经 `ParallelStage`、组内串行经 `SequenceStage` 表达,两容器可任意嵌套——任何阶段集合的串并行组合都是一棵「串行容器 / 并行容器」树:
+
+- **顶层并行** = 将并行段包为 `ParallelStage` 作为单阶段添加(见「快速使用」)
+- **组内串行子段** = `SequenceStage` 包一层,如 `ParallelStage(SequenceStage(A, B), C)` 表达「组内先 A 后 B、与 C 并行」
+- **子段切换进度回落属预期**: 未开始子阶段(Pending)不占进度,与管线「阶段切换回落」一致(等权子段完成瞬间 1.0 → 下一子段启动 0.5)
 
 ### 进度模型
 
@@ -109,6 +119,7 @@ Phase 90: [LocalizationBootstrapNode]──────┘
 - **失败即停**: 任意任务失败 → 立即取消兄弟任务,沉降(WhenAll)后置阶段 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组内失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
 - **诊断优先**: 失败时描述/任务名强制取失败任务的值,避免被兄弟任务描述覆盖
 - **并行能力通用化**: 第三方阶段同样可塞入 `ParallelStage` 并行执行(见「快速使用」)
+- **串行子段**: 同 Phase 内存在先后依赖时,可将任务组包一层 `SequenceStage`(组内依次执行)再放入并行组
 
 ## 快速使用
 
@@ -142,6 +153,13 @@ pipeline.AddStage(new InitStage(), 30f);     // 30 秒超时:超时置 Failed �
 
 // 并行执行两个阶段(组内并行、组间串行由管线承担;阶段权重 = Σ子阶段权重)
 pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Parallel-Init"));
+
+// 容器组合:并行组内先 Init 后 Load(串行子段),与 PostStage 并行——嵌套树表达任意串并行组合
+pipeline.AddStage(new ParallelStage(new IPipelineStage[]
+{
+    new SequenceStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Seq-Bootstrap"),
+    new PostStage { Weight = 0f },
+}, "Bootstrap"));
 
 pipeline.OnProgressUpdate += p => Debug.Log($"进度: {p.OverallProgress:P1} {p.Description}");
 pipeline.OnCompleted += () => Debug.Log("管线完成");
@@ -228,6 +246,7 @@ await root.StartupAsync(new Progress<LoadProgress>(p =>
 - **Phase 分组调度** — 相同 Phase 并行,不同 Phase 串行,兼顾性能与依赖顺序
 - **契约兜底** — `LoadAsync` 正常返回但未写终态时自动视为完成(进度 1f),不会阻塞调度
 - **加权聚合** — 组内按 `Weight` 加权聚合 `Σ(w·p)/Σ(w)`;失败任务不计入进度(进度略回退属预期)
+- **串并行嵌套组合** — 顶层固定串行,组内并行/串行经 `ParallelStage`/`SequenceStage` 容器嵌套表达任意调度拓扑
 
 ## 依赖
 
