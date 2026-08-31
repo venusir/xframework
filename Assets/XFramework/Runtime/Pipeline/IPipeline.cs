@@ -19,7 +19,13 @@ namespace XFramework.XPipeline
         /// <summary>全部阶段完成事件。</summary>
         event Action OnCompleted;
 
-        /// <summary>管线失败或取消事件。参数为原因描述。</summary>
+        /// <summary>
+        /// 管线取消事件。外部 token 取消、阶段自行抛 <see cref="System.OperationCanceledException"/>、
+        /// 并行组取消传播均触发;不携带原因(日志已记录)。触发后不触发 <see cref="OnCompleted"/> 与 <see cref="OnFailed"/>。
+        /// </summary>
+        event Action OnCancelled;
+
+        /// <summary>管线失败事件。参数为原因描述;取消不触发本事件(见 <see cref="OnCancelled"/>)。</summary>
         event Action<string> OnFailed;
 
         /// <summary>
@@ -31,7 +37,7 @@ namespace XFramework.XPipeline
         /// 运行管线。阶段按添加顺序串行执行。
         /// </summary>
         /// <param name="cancellationToken">取消令牌:取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,
-        /// 触发 <see cref="OnFailed"/>("Pipeline cancelled."),不触发 <see cref="OnCompleted"/>。</param>
+        /// 触发 <see cref="OnCancelled"/>,不触发 <see cref="OnCompleted"/> 与 <see cref="OnFailed"/>。</param>
         UniTask RunAsync(CancellationToken cancellationToken = default);
 
         /// <summary>

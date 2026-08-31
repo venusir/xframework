@@ -88,15 +88,18 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.AddStage(stage);
 
             string failedReason = null;
+            bool cancelled = false;
             bool completed = false;
             pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
             pipeline.OnCompleted += () => completed = true;
 
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
             pipeline.RunAsync(new CancellationToken(canceled: true)).GetAwaiter().GetResult();
 
             Assert.AreEqual(0, stage.ExecuteCount, "预取消:任何阶段都不应执行");
-            Assert.AreEqual("Pipeline cancelled.", failedReason);
+            Assert.IsTrue(cancelled, "预取消应触发取消事件");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
             Assert.IsFalse(completed, "取消不应触发完成事件");
         }
 
@@ -112,7 +115,9 @@ namespace Venusy609.Xframework.Editor.Tests
 
             var cts = new CancellationTokenSource();
             string failedReason = null;
+            bool cancelled = false;
             pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
 
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
             var task = pipeline.RunAsync(cts.Token);
@@ -122,7 +127,8 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(1, a.ExecuteCount, "当前阶段应已被调度");
             Assert.IsTrue(a.LastToken.IsCancellationRequested, "当前阶段应收到已取消的 token");
             Assert.AreEqual(0, b.ExecuteCount, "后续阶段不应执行");
-            Assert.AreEqual("Pipeline cancelled.", failedReason);
+            Assert.IsTrue(cancelled, "运行中取消应触发取消事件");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
         }
 
         [Test]
@@ -135,15 +141,18 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.AddStage(b);
 
             string failedReason = null;
+            bool cancelled = false;
             bool completed = false;
             pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
             pipeline.OnCompleted += () => completed = true;
 
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             Assert.AreEqual(0, b.ExecuteCount, "阶段主动取消后后续阶段不应执行");
-            Assert.AreEqual("Pipeline cancelled.", failedReason, "阶段抛 OCE 统一视为管线取消");
+            Assert.IsTrue(cancelled, "阶段抛 OCE 统一视为管线取消");
+            Assert.IsNull(failedReason, "取消不得触发失败事件(OnFailed 仅保留真实失败)");
             Assert.IsFalse(completed);
         }
 

@@ -32,6 +32,7 @@ namespace XFramework.XPipeline
 
         public event Action<PipelineProgress> OnProgressUpdate;
         public event Action OnCompleted;
+        public event Action OnCancelled;
         public event Action<string> OnFailed;
 
         #endregion
@@ -148,7 +149,7 @@ namespace XFramework.XPipeline
                 {
                     RecalculateSnapshot();
                     Broadcast();
-                    OnFailed?.Invoke("Pipeline cancelled.");
+                    OnCancelled?.Invoke();
                     Debug.LogWarning("[Pipeline] Pipeline cancelled.");
                 }
                 else if (failed)
@@ -174,7 +175,7 @@ namespace XFramework.XPipeline
             catch (OperationCanceledException)
             {
                 // 防御分支:理论上不可达(RunStage 已吞掉全部 OCE);语义统一为取消,绝不静默
-                OnFailed?.Invoke("Pipeline cancelled.");
+                OnCancelled?.Invoke();
             }
             catch (Exception ex)
             {
@@ -197,6 +198,7 @@ namespace XFramework.XPipeline
 
             OnProgressUpdate = null;
             OnCompleted = null;
+            OnCancelled = null;
             OnFailed = null;
 
             IsRunning = false;

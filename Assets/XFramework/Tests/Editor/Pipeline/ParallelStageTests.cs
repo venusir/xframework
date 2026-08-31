@@ -213,9 +213,11 @@ namespace Venusy609.Xframework.Editor.Tests
 
             var cts = new CancellationTokenSource();
             string failedReason = null;
+            bool cancelled = false;
             bool completed = false;
             var pipeline = Pipeline.Create();
             pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
             pipeline.OnCompleted += () => completed = true;
             pipeline.AddStage(stage);
 
@@ -225,8 +227,9 @@ namespace Venusy609.Xframework.Editor.Tests
             task.GetAwaiter().GetResult();
 
             Assert.AreEqual(1, fake.ExecuteCount, "子阶段应已启动");
+            Assert.IsTrue(cancelled, "取消沉降后应触发管线取消事件");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
             Assert.IsFalse(completed, "取消不应触发完成事件");
-            Assert.AreEqual("Pipeline cancelled.", failedReason, "取消应经管线取消路径报告");
         }
 
         [Test]
@@ -236,17 +239,20 @@ namespace Venusy609.Xframework.Editor.Tests
             var stage = new ParallelStage(new[] { fake });
 
             string failedReason = null;
+            bool cancelled = false;
             bool completed = false;
             var pipeline = Pipeline.Create();
             pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
             pipeline.OnCompleted += () => completed = true;
             pipeline.AddStage(stage);
 
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
+            Assert.IsTrue(cancelled, "子阶段自抛 OCE 应使组走取消路径并触发取消事件");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
             Assert.IsFalse(completed, "子阶段自抛 OCE 应使组走取消路径,不触发完成");
-            Assert.AreEqual("Pipeline cancelled.", failedReason, "取消应经管线取消路径报告");
         }
 
         #endregion

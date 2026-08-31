@@ -51,7 +51,7 @@ public interface IPipelineStage
 
 - **串行执行**: 阶段按添加顺序逐 await,前一阶段返回后才启动下一阶段;`RunAsync` 返回时无在途阶段任务
 - **失败即停**: 阶段抛异常 → 置 Failed 并经 `OnFailed` 报告,后续阶段不再执行
-- **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnFailed("Pipeline cancelled.")`,**不触发** `OnCompleted`;阶段自行抛 `OperationCanceledException` 同样视为取消
+- **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
 
@@ -142,6 +142,7 @@ pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new 
 
 pipeline.OnProgressUpdate += p => Debug.Log($"进度: {p.OverallProgress:P1} {p.Description}");
 pipeline.OnCompleted += () => Debug.Log("管线完成");
+pipeline.OnCancelled += () => Debug.LogWarning("管线取消");
 pipeline.OnFailed += reason => Debug.LogError($"管线失败: {reason}");
 
 await pipeline.RunAsync();
