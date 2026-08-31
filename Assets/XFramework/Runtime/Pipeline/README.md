@@ -53,6 +53,7 @@ public interface IPipelineStage
 - **失败即停**: 阶段抛异常 → 置 Failed 并经 `OnFailed` 报告,后续阶段不再执行
 - **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
+- **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
 
 ### 进度模型
@@ -136,6 +137,7 @@ var pipeline = Pipeline.Create();
 pipeline.AddStage(new InitStage());
 pipeline.AddStage(new LoadStage());          // 如加载应用的并行阶段 ParallelStage
 pipeline.AddStage(new PostStage { Weight = 0f }); // 瞬时阶段,不占进度
+pipeline.AddStage(new InitStage(), 30f);     // 30 秒超时:超时置 Failed 并停止后续阶段
 
 // 并行执行两个阶段(组内并行、组间串行由管线承担;阶段权重 = Σ子阶段权重)
 pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Parallel-Init"));

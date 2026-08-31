@@ -41,6 +41,16 @@ namespace XFramework.XPipeline
 
         readonly List<IPipelineStage> _stages = new List<IPipelineStage>();
 
+        /// <summary>与 <see cref="_stages"/> 同序的超时配置(秒,0/负值/NaN = 不启用)。</summary>
+        readonly List<float> _stageTimeouts = new List<float>();
+
+        /// <summary>
+        /// 超时计时任务工厂(测试缝,internal):生产路径为真实墙钟延时(<see cref="DelayType.Realtime"/>,不受 timeScale 影响);
+        /// EditMode 测试注入确定性计时器(阻塞式测试中真实延时由 PlayerLoop 泵送,永不触发)。
+        /// </summary>
+        internal Func<float, CancellationToken, UniTask> TimeoutTaskFactory =
+            (seconds, token) => UniTask.Delay(TimeSpan.FromSeconds(seconds), DelayType.Realtime, cancellationToken: token);
+
         /// <summary>当前运行装配的阶段上下文(事件驱动聚合的读取源)。</summary>
         PipelineStageContext[] _contexts;
 
@@ -63,9 +73,14 @@ namespace XFramework.XPipeline
 
         public void AddStage(IPipelineStage stage)
         {
+            AddStage(stage, 0f);
+        }
+
+        public void AddStage(IPipelineStage stage, float timeoutSeconds)
+        {
             if (stage == null) return;
 
-            // 避免重复添加
+            // 避免重复添加(超时在首次添加时一并固化,平行列表同序)
             for (int i = 0; i < _stages.Count; i++)
             {
                 if (_stages[i] == stage)
@@ -73,6 +88,7 @@ namespace XFramework.XPipeline
             }
 
             _stages.Add(stage);
+            _stageTimeouts.Add(timeoutSeconds);
         }
 
         public async UniTask RunAsync(CancellationToken cancellationToken = default)
@@ -128,7 +144,45 @@ namespace XFramework.XPipeline
                     ctx.SetState(PipelineStageState.Executing);
 
                     // 阶段经共享包装统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
-                    bool stageCancelled = await StageExecution.RunStageAsync(_stages[i], ctx, cts.Token);
+                    var stageTask = StageExecution.RunStageAsync(_stages[i], ctx, cts.Token);
+
+                    bool stageCancelled;
+                    float timeoutSeconds = _stageTimeouts[i];
+                    if (timeoutSeconds > 0f)
+                    {
+                        // 超时竞速:独立超时 CTS 与链内取消联动(外部取消经链接同步传播给计时任务);
+                        // WhenAny 内部观测全部任务,被放弃的在途任务无未观察异常
+                        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+                        var timeoutTask = TimeoutTaskFactory(timeoutSeconds, timeoutCts.Token);
+
+                        var (raceCancelled, race) = await UniTask.WhenAny<bool>(stageTask, timeoutTask).SuppressCancellationThrow();
+                        if (raceCancelled)
+                        {
+                            // 竞速期间外部取消:统一走取消终局
+                            cancelled = true;
+                            break;
+                        }
+
+                        if (!race.hasResultLeft)
+                        {
+                            // 超时获胜:中断在途阶段但不等待其沉降(挂死任务不得阻塞管线,断行后终局块与 finally
+                            // 之间无 await,被放弃任务无覆写终局广播的窗口)
+                            cts.Cancel();
+                            ctx.SetDescription($"Stage '{_stages[i].Name}' timed out after {timeoutSeconds}s");
+                            ctx.SetState(PipelineStageState.Failed);
+                            failed = true;
+                            failDescription = ctx.Description;
+                            break;
+                        }
+
+                        // 阶段先完成:终止悬挂的计时任务
+                        timeoutCts.Cancel();
+                        stageCancelled = race.result;
+                    }
+                    else
+                    {
+                        stageCancelled = await stageTask;
+                    }
 
                     if (stageCancelled)
                     {
@@ -195,6 +249,7 @@ namespace XFramework.XPipeline
         public void Destroy()
         {
             _stages.Clear();
+            _stageTimeouts.Clear();
 
             OnProgressUpdate = null;
             OnCompleted = null;

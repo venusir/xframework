@@ -34,6 +34,14 @@ namespace XFramework.XPipeline
         void AddStage(IPipelineStage stage);
 
         /// <summary>
+        /// 追加阶段并设置超时(秒,0/负值/NaN 表示不启用)。装配期调用;重复添加同一实例被忽略。
+        /// <para>超时语义:超时触发时取消当前阶段运行并置 <see cref="PipelineStageState.Failed"/>(描述含超时信息),
+        /// 经 <see cref="OnFailed"/> 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,
+        /// 其后续上下文写入被忽略)。</para>
+        /// </summary>
+        void AddStage(IPipelineStage stage, float timeoutSeconds);
+
+        /// <summary>
         /// 运行管线。阶段按添加顺序串行执行。
         /// </summary>
         /// <param name="cancellationToken">取消令牌:取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,
