@@ -7,12 +7,62 @@ using UnityEngine;
 namespace XFramework.XPipeline
 {
     /// <summary>
-    /// 管线门面。提供 <see cref="IPipeline"/> 实例的创建入口(实例即用即弃,非全局单例)。
+    /// 管线门面。提供 <see cref="IPipeline"/> 实例的创建入口(实例即用即弃,非全局单例),
+    /// 以及按相位分组装配的编排助手。
     /// </summary>
     public static class Pipeline
     {
         /// <summary>创建管线实例。</summary>
         public static IPipeline Create() => new PipelineImpl();
+
+        /// <summary>
+        /// 按相位分组装配阶段清单:输入按 <see cref="IPhaseStage.Phase"/> 升序分组,
+        /// 每组装配为一个 <see cref="ParallelStage"/>(组内并行、组内保持输入顺序,组间由管线串行)。
+        /// <para>装配结果可直接逐个 <see cref="IPipeline.AddStage(IPipelineStage)"/> 添加执行;
+        /// 同相位并行、相位升序串行的声明式编排即「每相位一个并行阶段」的约定装配
+        /// (如节点树 StartupAsync 预置管线按相位分组调度)。</para>
+        /// </summary>
+        /// <param name="stages">相位阶段列表。null 抛 <see cref="ArgumentNullException"/>;元素不得为 null;
+        /// 空列表返回空清单。</param>
+        /// <param name="nameFormat">相位组名格式(相位号作为格式化参数),默认 "Phase-{0}"。
+        /// null 抛 <see cref="ArgumentNullException"/>。</param>
+        /// <returns>按相位升序排列的 <see cref="ParallelStage"/> 清单,每组一个。</returns>
+        public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
+            IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}")
+        {
+            if (stages == null)
+                throw new ArgumentNullException(nameof(stages));
+            if (nameFormat == null)
+                throw new ArgumentNullException(nameof(nameFormat));
+
+            // 按相位分组(组内保持输入顺序,装配期一次遍历,零 LINQ)
+            var groups = new Dictionary<int, List<IPhaseStage>>();
+            for (int i = 0; i < stages.Count; i++)
+            {
+                var stage = stages[i];
+                if (stage == null)
+                    throw new ArgumentException("stages must not contain null.", nameof(stages));
+
+                if (!groups.TryGetValue(stage.Phase, out var list))
+                {
+                    list = new List<IPhaseStage>();
+                    groups.Add(stage.Phase, list);
+                }
+                list.Add(stage);
+            }
+
+            // 相位升序,每相位一个并行阶段
+            var phases = new List<int>(groups.Keys);
+            phases.Sort();
+
+            var result = new List<IPipelineStage>(groups.Count);
+            for (int i = 0; i < phases.Count; i++)
+            {
+                int phase = phases[i];
+                result.Add(new ParallelStage(groups[phase], string.Format(nameFormat, phase)));
+            }
+            return result;
+        }
     }
 
     /// <summary>
