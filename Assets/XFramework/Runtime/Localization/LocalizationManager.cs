@@ -124,7 +124,7 @@ namespace XFramework.XLocalization
         }
 
         /// <summary>
-        /// 异步切换到指定语言。通过 <see cref="LanguageSwitchNode"/> 加载目标语言数据。
+        /// 异步切换到指定语言。由内部 <see cref="LanguageAssetLoader"/> 加载目标语言数据。
         /// <para>内部自动使用 <see cref="LanguageAssetPath"/> 拼接资产地址，通过 <see cref="XAsset.AssetManager.LoadAsync{T}(string, CancellationToken)"/> 加载 JSON 文件。</para>
         /// <para>已在缓存中的语言会直接同步切换，无需异步加载。</para>
         /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
@@ -147,8 +147,7 @@ namespace XFramework.XLocalization
                 throw new InvalidOperationException(
                     "[LocalizationManager] LanguageAssetPath is not set. Configure it before calling SwitchLanguageAsync.");
 
-            var switchNode = new LanguageSwitchNode(lang, assetPath);
-            await switchNode.LoadAsync(null, cancellationToken);
+            await new LanguageAssetLoader(lang, assetPath).LoadAsync(cancellationToken);
         }
 
         /// <summary>

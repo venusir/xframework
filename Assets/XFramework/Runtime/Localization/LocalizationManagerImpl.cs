@@ -7,7 +7,7 @@ namespace XFramework.XLocalization
     /// <summary>
     /// <see cref="ILocalizationManager"/> 的默认实现。
     /// <para>内存中维护一个小缓存（最多 4 种语言），当前语言和回退语言始终保留，其余按 LRU 淘汰。</para>
-    /// <para>切换语言时优先从缓存命中，未命中时由 <see cref="LanguageSwitchNode"/> 通过 <see cref="LanguageAssetPath"/> 异步加载。</para>
+    /// <para>切换语言时优先从缓存命中，未命中时经 <see cref="LocalizationManager.SwitchLanguageAsync"/> 异步加载。</para>
     /// <para>切换语言时通过 <see cref="MessageManager.Publish"/> 发送 <see cref="LanguageChangedMessage"/>。</para>
     /// </summary>
     internal sealed class LocalizationManagerImpl : ILocalizationManager
@@ -104,7 +104,7 @@ namespace XFramework.XLocalization
 
             if (!_cache.ContainsKey(lang))
                 throw new InvalidOperationException(
-                    $"[LocalizationManager] Language '{lang}' is not cached. Use LanguageSwitchNode for async loading instead of SetLanguage().");
+                    $"[LocalizationManager] Language '{lang}' is not cached. Use SwitchLanguageAsync for async loading instead of SetLanguage().");
 
             _currentLanguage = lang;
             TouchLanguage(lang); // 标记为最近使用

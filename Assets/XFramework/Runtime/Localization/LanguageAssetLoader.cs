@@ -4,36 +4,40 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
-using XFramework.XNode;
-using XFramework.XPipeline;
 
 namespace XFramework.XLocalization
 {
     /// <summary>
-    /// 异步语言切换节点。利用节点树的 <see cref="ILoadable"/> 机制实现异步加载 + 可取消。
-    /// <para>通过 <see cref="AssetManager"/> 加载 <see cref="TextAsset"/>，解析 JSON 后注入缓存并切换。</para>
-    /// <para>可挂载到节点树由加载管线统一调度，支持 <see cref="LoadProgress"/> 进度报告。</para>
+    /// 语言数据异步加载器(模块内部,非节点)。由 <see cref="LocalizationManager.SwitchLanguageAsync"/>
+    /// 在缓存未命中时创建并执行:经 <see cref="AssetManager"/> 加载 JSON → 解析 → 注入缓存并切换。
+    /// <para>取消抛 <see cref="OperationCanceledException"/>;加载/解析失败抛异常(不静默)。</para>
     /// </summary>
-    internal sealed class LanguageSwitchNode : LeafNode, ILoadable
+    internal sealed class LanguageAssetLoader
     {
         #region Fields
 
         private readonly string _targetLanguage;
         private readonly string _assetPathTemplate;
 
+        /// <summary>
+        /// 文本加载函数(测试缝):默认经 <see cref="AssetManager"/> 加载 <see cref="TextAsset"/> 并读取文本;
+        /// EditMode 测试注入纯函数(带资源内容的句柄依赖 YooAsset 运行环境,测试中不可构造)。
+        /// </summary>
+        internal Func<string, CancellationToken, UniTask<string>> LoadTextFunc = LoadTextFromAssetAsync;
+
         #endregion
 
         #region Constructors
 
         /// <summary>
-        /// 创建语言切换节点。
+        /// 创建语言数据加载器。
         /// </summary>
-        /// <param name="targetLanguage">目标语言标识，如 <c>"ja"</c>, <c>"en"</c></param>
+        /// <param name="targetLanguage">目标语言标识,如 <c>"ja"</c>, <c>"en"</c>。</param>
         /// <param name="assetPathTemplate">
-        /// 资产路径模板，如 <c>"localization/lang_{0}"</c>，
-        /// 实际加载地址为 <c>string.Format(assetPathTemplate, targetLanguage)</c>
+        /// 资产路径模板,如 <c>"localization/lang_{0}"</c>,
+        /// 实际加载地址为 <c>string.Format(assetPathTemplate, targetLanguage)</c>。
         /// </param>
-        public LanguageSwitchNode(string targetLanguage, string assetPathTemplate)
+        public LanguageAssetLoader(string targetLanguage, string assetPathTemplate)
         {
             _targetLanguage = targetLanguage ?? throw new ArgumentNullException(nameof(targetLanguage));
             _assetPathTemplate = assetPathTemplate ?? throw new ArgumentNullException(nameof(assetPathTemplate));
@@ -41,59 +45,59 @@ namespace XFramework.XLocalization
 
         #endregion
 
-        #region ILoadable Implementation
+        #region Public API
 
-        public int Phase => 0;
-
-        public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
+        /// <summary>
+        /// 执行语言切换。目标语言已在缓存中则直接切换(跳过加载);否则经 <see cref="AssetManager"/>
+        /// 加载目标语言 JSON → 解析 → 注入缓存并同步切换。
+        /// <para>注:AssetManager 底层(YooAssetManagerImpl)已在加载失败时统一记录 Debug.LogError。</para>
+        /// </summary>
+        public async UniTask LoadAsync(CancellationToken cancellationToken)
         {
-            if (progress != null)
-            {
-                progress.SetState(LoadState.Loading);
-                progress.SetDescription($"Switching language to {_targetLanguage}...");
-                progress.SetProgress(0f);
-            }
-
-            // 已在缓存中则直接切换，跳过加载
+            // 已在缓存中则直接切换,跳过加载
             if (LocalizationManager.HasLanguage(_targetLanguage))
             {
                 LocalizationManager.SetLanguage(_targetLanguage);
-                if (progress != null)
-                {
-                    progress.SetProgress(1f);
-                    progress.SetState(LoadState.Completed);
-                }
                 return;
             }
 
-            // 通过 AssetManager 加载 JSON 文件
-            // 注：AssetManager 底层（YooAssetManagerImpl）已在加载失败时统一记录 Debug.LogError
+            // 通过 AssetManager 加载 JSON 文件(实际地址 = 模板拼接目标语言)
             var assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
+            var json = await LoadTextFunc(assetLocation, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
 
-            using var handle = await AssetManager.LoadAsync<TextAsset>(assetLocation, cancellationToken);
+            // 解析 JSON
+            var data = ParseJson(json);
+            if (data == null || data.Count == 0)
+            {
+                throw new InvalidOperationException(
+                    $"[LanguageAssetLoader] Parsed empty language data for '{_targetLanguage}'.");
+            }
+
+            // 注入缓存并同步切换
+            LocalizationManager.SetLanguageData(_targetLanguage, data);
+            LocalizationManager.SetLanguage(_targetLanguage);
+        }
+
+        #endregion
+
+        #region Loading
+
+        /// <summary>经 <see cref="AssetManager"/> 加载 <see cref="TextAsset"/> 并读取文本;资源为 null 抛
+        /// <see cref="InvalidOperationException"/>。</summary>
+        private static async UniTask<string> LoadTextFromAssetAsync(string location, CancellationToken cancellationToken)
+        {
+            using var handle = await AssetManager.LoadAsync<TextAsset>(location, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             var textAsset = handle.Asset;
             if (textAsset == null)
             {
                 throw new InvalidOperationException(
-                    $"[LanguageSwitchNode] AssetManager returned null for '{assetLocation}'.");
+                    $"[LanguageAssetLoader] AssetManager returned null for '{location}'.");
             }
 
-            // 解析 JSON
-            var data = ParseJson(textAsset.text);
-            if (data == null || data.Count == 0)
-            {
-                throw new InvalidOperationException(
-                    $"[LanguageSwitchNode] Parsed empty language data for '{_targetLanguage}'.");
-            }
-
-            // 注入缓存并同步切换
-            LocalizationManager.SetLanguageData(_targetLanguage, data);
-            LocalizationManager.SetLanguage(_targetLanguage);
-
-            progress?.SetProgress(1f);
-            progress?.SetState(LoadState.Completed);
+            return textAsset.text;
         }
 
         #endregion
