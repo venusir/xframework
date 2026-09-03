@@ -7,55 +7,57 @@ using XFramework.XPipeline;
 namespace XFramework.XNode
 {
     /// <summary>
-    /// <see cref="AssetManager"/> 的启动节点。将资源管理器的初始化封装为节点树中的一个加载任务。
-    /// <para>继承 <see cref="LeafNode"/>，实现 <see cref="ILoadable"/>，会被 <see cref="StartupExtensions"/>
-    /// 自动收集并在加载阶段按 Phase 顺序执行。</para>
+    /// <see cref="AssetManager"/> 的引导阶段节点。将资源管理器的初始化封装为启动管线中的相位阶段。
+    /// <para>继承 <see cref="LeafNode"/>，实现 <see cref="IPhaseStage"/>（Phase = 0、Name = 类型名、Weight = 1），
+    /// 会被 <see cref="StartupExtensions"/> 自动收集并按相位分组调度。</para>
     /// </summary>
-    internal sealed class AssetBootstrapNode : LeafNode, ILoadable
+    internal sealed class AssetBootstrapNode : LeafNode, IPhaseStage
     {
-        #region ILoadable
+        #region IPhaseStage
 
-        /// <summary>
-        /// Phase = 0。确保 Asset 模块最先被加载。
-        /// </summary>
+        /// <summary>Phase = 0。确保 Asset 模块最先被初始化（内置相位约定见 Pipeline 模块 README）。</summary>
         public int Phase => 0;
 
-        public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
+        public string Name => GetType().Name;
+
+        public float Weight => 1f;
+
+        /// <summary>
+        /// 执行 Asset 模块初始化。已初始化直接返回（契约兜底补完成）；否则写描述后 await
+        /// <see cref="AssetManager.InitializeAsync"/>，取消经 OCE 冒泡（禁止吞 OperationCanceledException）。
+        /// </summary>
+        public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
         {
             if (AssetManager.IsInitialized)
             {
-                progress.SetProgress(1f);
-                progress.SetState(LoadState.Completed);
+                context.SetState(PipelineStageState.Completed);
                 return;
             }
 
-            progress.SetDescription("Initializing Asset Manager...");
+            context.SetDescription("Initializing Asset Manager...");
+            await AssetManager.InitializeAsync(options: null, progress: new AssetInitProgressRelay(context), cancellationToken: cancellationToken);
 
-            // 临时中继(过渡):AssetManager 进度参数已解耦为 AssetInitReport,
-            // 此处把步骤描述转写回 LoadProgress,保持加载阶段描述流不变;引导节点阶段化(IPhaseStage)后删除。
-            await AssetManager.InitializeAsync(options: null, progress: new LoadProgressRelay(progress), cancellationToken: cancellationToken);
-
-            progress.SetProgress(1f);
-            progress.SetState(LoadState.Completed);
+            context.SetProgress(1f);
+            context.SetState(PipelineStageState.Completed);
         }
 
         /// <summary>
-        /// 临时进度中继(内部):AssetInitReport → LoadProgress 描述/整体进度转写,
-        /// 与旧 YooAsset 上报行为一致(SetDescription 触发门铃镜像进组聚合,Overall 仅落字段)。
+        /// 进度直写桥：<see cref="AssetInitReport"/> → 阶段上下文。每次 Report 同步写进度与描述，
+        /// 一次 Report 恰触发一次组级聚合（阶段写面由 <see cref="PipelineStageContext"/> 保证事件驱动）。
         /// </summary>
-        private sealed class LoadProgressRelay : IProgress<AssetInitReport>
+        private sealed class AssetInitProgressRelay : IProgress<AssetInitReport>
         {
-            readonly LoadProgress _progress;
+            readonly PipelineStageContext _context;
 
-            public LoadProgressRelay(LoadProgress progress)
+            public AssetInitProgressRelay(PipelineStageContext context)
             {
-                _progress = progress;
+                _context = context;
             }
 
             public void Report(AssetInitReport value)
             {
-                _progress.SetOverallProgress(value.Progress);
-                _progress.SetDescription(value.Description);
+                _context.SetProgress(value.Progress);
+                _context.SetDescription(value.Description);
             }
         }
 
@@ -70,6 +72,5 @@ namespace XFramework.XNode
         }
 
         #endregion
-
     }
 }

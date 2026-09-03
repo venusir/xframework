@@ -67,7 +67,7 @@ namespace XFramework.XPipeline
 
     /// <summary>
     /// 管线实现:阶段串行编排 + 进度加权聚合 + 失败/取消传播。
-    /// <para>与 Loader(任务级调度)的差异:阶段经 <see cref="PipelineStageContext"/> 主动写入(事件驱动),管线不轮询、不持有帧泵;
+    /// <para>阶段经 <see cref="PipelineStageContext"/> 主动写入(事件驱动),管线不轮询、不持有帧泵;
     /// 阶段串行逐 await,天然保证 <see cref="RunAsync"/> 返回时无在途阶段任务。</para>
     /// </summary>
     internal sealed class PipelineImpl : IPipeline, IStageContextSink

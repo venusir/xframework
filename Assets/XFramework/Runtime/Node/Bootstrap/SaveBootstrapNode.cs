@@ -7,25 +7,28 @@ namespace XFramework.XNode
 {
     /// <summary>
     /// Save 模块的节点树桥梁。挂载在 <see cref="ServiceInitializerNode"/> 下，
-    /// 负责在加载阶段初始化 <see cref="XSave.SaveManager"/> 静态门面。
+    /// 作为 <see cref="IPhaseStage"/> 在启动管线的相位分组中初始化 <see cref="XSave.SaveManager"/> 静态门面。
     /// </summary>
-    internal sealed class SaveBootstrapNode : LeafNode, ILoadable
+    internal sealed class SaveBootstrapNode : LeafNode, IPhaseStage
     {
-        #region ILoadable
+        #region IPhaseStage
 
-        /// <summary>
-        /// Phase = 4。晚于 Data(3)，确保快照能力已就绪。
-        /// </summary>
+        /// <summary>Phase = 4。晚于 Data(3)，确保快照能力已就绪。</summary>
         public int Phase => 4;
 
-        public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
+        public string Name => GetType().Name;
+
+        public float Weight => 1f;
+
+        public UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
         {
-            progress.SetDescription("Initializing Save Manager...");
+            context.SetDescription("Initializing Save Manager...");
 
             SaveManager.Initialize();
 
-            progress.SetProgress(1f);
-            progress.SetState(LoadState.Completed);
+            context.SetProgress(1f);
+            context.SetState(PipelineStageState.Completed);
+            return UniTask.CompletedTask;
         }
 
         #endregion

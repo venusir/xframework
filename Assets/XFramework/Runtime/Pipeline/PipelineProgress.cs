@@ -19,7 +19,7 @@ namespace XFramework.XPipeline
         /// <summary>当前阶段名称。</summary>
         public string CurrentStageName { get; internal set; }
 
-        /// <summary>阶段内当前任务名称(加载阶段转发,可空)。</summary>
+        /// <summary>阶段内当前任务名称(容器子阶段转发,可空)。</summary>
         public string CurrentTaskName { get; internal set; }
 
         /// <summary>总阶段数。</summary>

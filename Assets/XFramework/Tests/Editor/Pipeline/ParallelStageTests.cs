@@ -176,6 +176,28 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ChildSetsFailedState_WithoutException_FailsGroup()
+        {
+            // 子阶段主动置 Failed 终态但不抛异常(状态驱动失败,原 LoadableStage 语义迁移):组应判失败并中断兄弟
+            var bad = new FailByStateChildStage();
+            var sibling = new FakeStage { Name = "sibling", Gate = new UniTaskCompletionSource() };
+            var stage = new ParallelStage(new IPipelineStage[] { bad, sibling });
+
+            string failedReason = null;
+            var pipeline = Pipeline.Create();
+            pipeline.OnFailed += r => failedReason = r;
+            pipeline.AddStage(stage);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+            pipeline.RunAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Failed, stage._stageCtx.State, "子阶段主动置 Failed 不抛异常也应判组失败");
+            StringAssert.Contains("self-fail", failedReason, "管线失败原因应携带子阶段失败描述");
+            Assert.IsTrue(sibling.LastToken.IsCancellationRequested, "失败应取消中断兄弟子阶段");
+        }
+
+        [Test]
         public void FailedChild_DiagnosisWins()
         {
             var bad = new FakeStage { Name = "bad", ThrowOnExecute = true };
@@ -295,6 +317,23 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        /// <summary>
+        /// 主动写 Failed 终态但不抛异常的子阶段:验证状态驱动的组失败语义(无需异常即判失败)。
+        /// </summary>
+        private sealed class FailByStateChildStage : IPipelineStage
+        {
+            public string Name => "state-fail";
+
+            public float Weight => 1f;
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
+                context.SetDescription("self-fail");
+                context.SetState(PipelineStageState.Failed);
+                await UniTask.CompletedTask;
+            }
+        }
 
         /// <summary>
         /// 描述写入探针:先置 Executing(聚合仅读执行中/失败子阶段的描述,与管线契约一致)再写描述。

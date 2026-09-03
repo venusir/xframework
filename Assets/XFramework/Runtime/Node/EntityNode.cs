@@ -195,8 +195,8 @@ namespace XFramework.XNode
 
         /// <summary>
         /// 添加一个子节点，并立即执行异步启动。
-        /// <para>节点会先挂入树（此时可访问父节点上的服务），再执行异步加载管线，
-        /// 加载完成后自动触发 <see cref="BaseNode.Start"/>。</para>
+        /// <para>节点会先挂入树（此时可访问父节点上的服务），再执行异步启动管线，
+        /// 完成后自动触发 <see cref="BaseNode.Start"/>。</para>
         /// </summary>
         /// <typeparam name="T">子节点类型，必须有无参构造函数且实现 <see cref="IParentNode"/>。</typeparam>
         /// <returns>已添加并完成异步启动的子节点实例。</returns>
@@ -236,8 +236,8 @@ namespace XFramework.XNode
 
         /// <summary>
         /// 通过运行时类型添加一个子节点，并立即执行异步启动。
-        /// <para>节点会先挂入树（此时可访问父节点上的服务），再执行异步加载管线，
-        /// 加载完成后自动触发 <see cref="BaseNode.Start"/>。</para>
+        /// <para>节点会先挂入树（此时可访问父节点上的服务），再执行异步启动管线，
+        /// 完成后自动触发 <see cref="BaseNode.Start"/>。</para>
         /// </summary>
         /// <param name="type">子节点类型，必须是 <see cref="BaseNode"/> 的子类且实现 <see cref="IParentNode"/>。</param>
         /// <returns>已添加并完成异步启动的子节点实例。</returns>

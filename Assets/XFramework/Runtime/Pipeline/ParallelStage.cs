@@ -14,7 +14,7 @@ namespace XFramework.XPipeline
     /// 收敛后转发主上下文;失败任一子阶段 → 聚合器立即取消其余兄弟 → 沉降(WhenAll)后置 Failed;
     /// 取消 → 上抛 <see cref="OperationCanceledException"/> 走管线取消路径。</para>
     /// <para>阶段权重 = Σ子阶段声明权重(构造期固定);子阶段运行期对子上下文权重的改写仅影响组内聚合,
-    /// 不泄漏到管线级。加载应用以「每 Phase 一个并行阶段」形态接入,组间串行由管线承担。</para>
+    /// 不泄漏到管线级。相位分组编排以「每相位一个并行阶段」形态接入,组间串行由管线承担。</para>
     /// </summary>
     public sealed class ParallelStage : IPipelineStage
     {
@@ -22,7 +22,7 @@ namespace XFramework.XPipeline
 
         /// <summary>构造并行阶段。</summary>
         /// <param name="stages">子阶段列表。null 或空抛 <see cref="ArgumentException"/>。</param>
-        /// <param name="name">阶段名称(进度描述)。加载应用装配 "Load-{phase}",默认 "Parallel"。</param>
+        /// <param name="name">阶段名称(进度描述)。相位分组装配按 nameFormat 生成(如 "Phase-0"),默认 "Parallel"。</param>
         public ParallelStage(IReadOnlyList<IPipelineStage> stages, string name = "Parallel")
         {
             if (stages == null || stages.Count == 0)

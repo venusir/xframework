@@ -44,7 +44,7 @@ namespace XFramework.XPipeline
         /// <summary>阶段状态。</summary>
         public PipelineStageState State { get; internal set; } = PipelineStageState.Pending;
 
-        /// <summary>阶段内当前任务名称(由加载阶段等转发,可空)。</summary>
+        /// <summary>阶段内当前任务名称(容器子阶段转发用,可空)。</summary>
         public string CurrentTaskName { get; internal set; }
 
         /// <summary>设置阶段进度,自动 clamp 0~1,并触发管线聚合广播。</summary>

@@ -9,33 +9,34 @@ using XFramework.XLocalization;
 namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
-    /// LocalizationBootstrapNode 加载状态写入测试：补足 LoadProgress 契约后，被 Loader 调度时状态必须收敛到终态。
+    /// LocalizationBootstrapNode 相位阶段直连测试:不经管线,注入上下文执行 <see cref="IPipelineStage.ExecuteAsync"/>,
+    /// 断言状态收敛到终态(无 initData 跳过路径 / 有 initData 初始化路径)。
     /// </summary>
     class LocalizationBootstrapNodeTests
     {
         [Test]
-        public void LoadAsync_WithoutInitData_CompletesWithWarning()
+        public void ExecuteAsync_WithoutInitData_CompletesWithWarning()
         {
             var node = new LocalizationBootstrapNode();
-            var progress = new LoadProgress();
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[LocalizationBootstrapNode\] LoadAsync called but _initData is null"));
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[LocalizationBootstrapNode\] ExecuteAsync called but _initData is null"));
 
-            node.LoadAsync(progress, default).GetAwaiter().GetResult();
+            var ctx = new PipelineStageContext();
+            node.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
 
-            Assert.AreEqual(LoadState.Completed, progress.State, "无数据跳过路径也应写完成状态");
-            Assert.AreEqual(1f, progress.Progress, 0.001f);
+            Assert.AreEqual(PipelineStageState.Completed, ctx.State, "无数据跳过路径也应写完成终态");
+            Assert.AreEqual(1f, ctx.Progress, 0.001f);
         }
 
         [Test]
-        public void LoadAsync_WithInitData_Completes()
+        public void ExecuteAsync_WithInitData_Completes()
         {
             var node = new LocalizationBootstrapNode();
             node.SetInitData("zh_Hans", new Dictionary<string, string> { { "title", "你好" } });
-            var progress = new LoadProgress();
+            var ctx = new PipelineStageContext();
 
             try
             {
-                node.LoadAsync(progress, default).GetAwaiter().GetResult();
+                node.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
             }
             finally
             {
@@ -43,8 +44,8 @@ namespace Venusy609.Xframework.Editor.Tests
                 LocalizationManager.Destroy();
             }
 
-            Assert.AreEqual(LoadState.Completed, progress.State);
-            Assert.AreEqual(1f, progress.Progress, 0.001f);
+            Assert.AreEqual(PipelineStageState.Completed, ctx.State);
+            Assert.AreEqual(1f, ctx.Progress, 0.001f);
         }
     }
 }

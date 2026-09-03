@@ -7,26 +7,29 @@ namespace XFramework.XNode
 {
     /// <summary>
     /// Data 模块的节点树桥梁。挂载在 <see cref="ServiceInitializerNode"/> 下，
-    /// 负责在加载阶段初始化 <see cref="XData.DataManager"/> 静态门面。
+    /// 作为 <see cref="IPhaseStage"/> 在启动管线的相位分组中初始化 <see cref="XData.DataManager"/> 静态门面。
     /// </summary>
-    internal sealed class GameDataNode : LeafNode, ILoadable
+    internal sealed class GameDataNode : LeafNode, IPhaseStage
     {
-        #region ILoadable
+        #region IPhaseStage
 
-        /// <summary>
-        /// Phase = 3。晚于 Asset(0)、早于 Save(4)，确保依赖的模块已就绪。
-        /// </summary>
+        /// <summary>Phase = 3。晚于 Asset(0)、早于 Save(4)，确保依赖的模块已就绪。</summary>
         public int Phase => 3;
 
-        public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
+        public string Name => GetType().Name;
+
+        public float Weight => 1f;
+
+        public UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
         {
-            progress.SetDescription("Initializing Data Manager...");
+            context.SetDescription("Initializing Data Manager...");
 
             var impl = new DataManagerImpl();
             DataManager.Initialize(impl);
 
-            progress.SetProgress(1f);
-            progress.SetState(LoadState.Completed);
+            context.SetProgress(1f);
+            context.SetState(PipelineStageState.Completed);
+            return UniTask.CompletedTask;
         }
 
         #endregion

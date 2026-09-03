@@ -7,7 +7,7 @@ namespace XFramework.XNode
     /// <summary>
     /// 游戏启动器。作为 Unity 与节点树之间的生命周期桥接。
     /// <para><see cref="ServiceInitializerNode"/> 在 <see cref="OnAwake"/> 中自动添加启动子节点（AssetBootstrapNode），
-    /// 由 <see cref="StartupExtensions.StartupAsync"/> 统一加载调度。</para>
+    /// 由 <see cref="StartupExtensions.StartupAsync"/> 统一启动调度（相位分组执行）。</para>
     /// <para><see cref="UpdateNode"/> 作为节点树中的桥梁，自动将树中 <see cref="XUpdate.IUpdateable"/> 节点注册到
     /// <see cref="UpdateManager"/>（静态服务），统一管理节点树及静态服务的更新需求。</para>
     /// <para>每帧通过 <see cref="UpdateManager.Tick(float)"/> 驱动所有已注册的更新对象。</para>
