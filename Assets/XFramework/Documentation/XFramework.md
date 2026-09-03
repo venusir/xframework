@@ -10,7 +10,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | ---------------------- | ------------------------------- | ---------------------------------------------------------------------- |
 | **静态服务（无状态）** | 全局 Manager 入口，按需初始化   | File / Input / Settings / UI / Lock / Reactive / Localization / Update |
 | **节点树（有状态）**   | GamePlay 层级组织，生命周期管理 | Core（RootNode / EntityNode / DictionaryNode）/ Asset                   |
-| **管线（编排 + 加载应用）** | 阶段串行/并行编排、进度聚合、失败传播，工厂创建实例即用即弃；加载（ILoadable / LoadableStage + ParallelStage）作为管线应用内嵌 | Pipeline                                  |
+| **管线（通用编排）** | 阶段串行/并行编排、加权进度聚合、失败传播，工厂创建实例即用即弃；相位分组编排（IPhaseStage）声明同相位并行 / 相位升序串行 | Pipeline                                  |
 
 ### 解决问题
 
@@ -31,7 +31,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **组件模式**      | EntityNode 按类型缓存子节点（类 GetComponent）                    |
 | **对象池**        | 节点销毁后自动回池，减少 GC                                       |
 | **LOD 更新**      | 节点返回 UpdateLOD，自动调整更新频率                              |
-| **Phase 调度**    | 加载应用按 Phase 分组，同 Phase 并行、不同 Phase 串行             |
+| **Phase 分组调度**| 实现 `IPhaseStage` 声明相位号，同相位并行、不同相位串行（数值含义为使用方约定） |
 | **管线编排**      | 通用管线抽象：阶段串行执行、加权进度聚合（事件驱动）、失败/取消传播 |
 | **静态服务**      | 非节点模块通过静态 Manager 类提供全局入口                         |
 | **Provider 模式** | 接口定义契约 + 内部默认实现 + 扩展方法，外部可注入自定义实现      |
@@ -46,7 +46,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | 模块             | 命名空间                   | 文档                                        | 职责                                                          |
 | ---------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
 | **Core**         | `XFramework.XNode`         | [README](../Runtime/Core/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
-| **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用管线：阶段编排（串行/并行）、加权进度聚合、失败/取消传播；加载应用：ILoadable 契约 + LoadableStage 单任务适配 + ParallelStage 并行阶段 |
+| **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
 | **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式：消息总线、响应式属性、信号（自研引擎）             |
@@ -65,7 +65,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 Assets/XFramework/
 ├── Runtime/                      # 运行时代码
 │   ├── Core/                     # 节点树核心（BaseNode / EntityNode / 对象池）
-│   ├── Pipeline/                 # 通用管线（阶段编排/进度/失败取消）+ 加载应用（ILoadable / LoadableStage + ParallelStage）
+│   ├── Pipeline/                 # 通用编排（阶段编排/进度/失败取消）+ 相位分组编排（IPhaseStage）
 │   ├── Asset/                    # 资源管理（基于 YooAsset）
 │   ├── Update/                   # 统一更新调度
 │   ├── Reactive/                 # 响应式（消息/自研引擎）
@@ -108,9 +108,9 @@ BaseNode (抽象基类)
 ```
 GameLauncher.Start()
   ├── UpdateManager.Bind(root)      # 绑定更新调度
-  └── root.StartupAsync()           # 预置管线：装载 → 加载 → 启动
-        ├── 装载：装配期同步收集所有 ILoadable（CollectStage，Weight 0，运行前快照）
-        ├── 加载：每 Phase 一个并行阶段 ParallelStage（Weight = 任务数，组内并行/组间串行）
+  └── root.StartupAsync()           # 预置管线：收集 → 相位分组执行 → 启动
+        ├── 收集：装配期同步收集所有相位阶段 IPhaseStage（CollectStage，Weight 0，运行前快照）
+        ├── 相位分组：每相位一个并行阶段 ParallelStage（组内并行/相位升序串行）
         └── 启动：递归 OnStart（StartStage，Weight 0）
 ```
 

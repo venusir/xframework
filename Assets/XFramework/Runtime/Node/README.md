@@ -22,9 +22,9 @@ Runtime/Node/
 ├── AssetExtensions                # 节点资源加载扩展（委托 AssetManager 门面）
 ├── Bootstrap/                     # 启动引导节点
 │   ├── ServiceInitializerNode     #   统一注册启动模块（可子类化自定义）
-│   ├── AssetBootstrapNode         #   异步初始化 AssetManager（实现 ILoadable）
-│   ├── GameDataNode               #   初始化 DataManager（实现 ILoadable）
-│   └── SaveBootstrapNode          #   初始化 SaveManager（实现 ILoadable）
+│   ├── AssetBootstrapNode         #   初始化 AssetManager（IPhaseStage, Phase 0）
+│   ├── GameDataNode               #   初始化 DataManager（IPhaseStage, Phase 3）
+│   └── SaveBootstrapNode          #   初始化 SaveManager（IPhaseStage, Phase 4）
 └── Update/                        # 更新系统
     ├── IUpdateable                #   可更新接口
     ├── IUpdateNode                #   更新服务接口
@@ -394,7 +394,7 @@ updateNode.ProcessImmediate(myUpdatable, deltaTime, time);  // 立即执行一�
 ## Bootstrap 启动引导
 
 ```csharp
-// ServiceInitializerNode 在 OnAwake 中统一注册启动引导节点，随后进入加载管线
+// ServiceInitializerNode 在 OnAwake 中统一注册启动引导节点，随后执行启动管线
 // 默认注册：AssetBootstrapNode（资源）、GameDataNode（数据）、SaveBootstrapNode（存档）
 // 可子类化并重写 OnRegisterModules 追加自定义启动节点
 
@@ -403,7 +403,7 @@ public class MyServiceInitializerNode : ServiceInitializerNode
     protected override void OnRegisterModules()
     {
         base.OnRegisterModules(); // 保留默认启动节点
-        AddNode<MyConfigBootstrapNode>(); // 自定义启动节点（实现 ILoadable）
+        AddNode<MyConfigBootstrapNode>(); // 自定义启动节点（实现 IPhaseStage）
     }
 }
 ```
@@ -412,38 +412,33 @@ public class MyServiceInitializerNode : ServiceInitializerNode
 
 ## 异步启动管线（StartupAsync）
 
-`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排与加载应用（`ILoadable` 契约 + `LoadableStage` 单任务适配 + `ParallelStage` 并行阶段）均由 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**，依赖方向单向 Node → Pipeline。
+`StartupExtensions.StartupAsync()`（本模块）为 `IParentNode` 提供一键启动管线：**阶段编排与相位分组装配均由 [Pipeline 模块](../Pipeline/README.md)（`XFramework.XPipeline`）承担**（依赖方向单向 Node → Pipeline）。
 
-`BuildStartupPipeline()` 装配预置管线：装配期同步收集全部 `ILoadable` 节点（运行前快照，树在装配后变更不收录），按 `Phase` 分组，每组一个并行阶段（`StartupAsync` 内部即其快捷方式）：
+`BuildStartupPipeline()` 装配预置管线：装配期同步收集全部 `IPhaseStage` 节点（运行前快照，树在装配后变更不收录），经 `Pipeline.BuildPhaseGroups` 按相位分组、每组一个并行阶段（`StartupAsync` 内部即其快捷方式）：
 
 | 阶段 | 类 | 权重 | 职责 |
 | ---- | -- | ---- | ---- |
-| 1. 装载 | `NodeLoadableCollectStage` | 0 | 描述阶段（"Scanning nodes..."）；收集已在装配期完成 |
-| 2. 加载 | `ParallelStage`（每 Phase 一个） | 组内任务数 | 组内并行、组间由管线串行（按 `Phase` 升序）；任意任务失败即取消组内其余任务 |
+| 1. 收集 | `NodeCollectStage` | 0 | 描述阶段（"Scanning nodes..."）；收集已在装配期完成 |
+| 2. 相位分组 | `ParallelStage`（每相位一个） | 组内声明权重之和 | 组内并行、组间由管线串行（相位升序）；任意阶段失败即取消组内其余阶段 |
 | 3. 启动 | `NodeStartStage` | 0 | 递归调用所有节点的 `OnStart` |
 
-> 瞬时阶段（装载/启动）Weight 0 不占进度，全局进度恒等于加载进度（加载阶段权重 = 组内任务数，阶段数随 Phase 数变化）。加载失败即中断后续阶段（启动不执行）。
+> 瞬时阶段（收集/启动）Weight 0 不占进度，全局进度恒等于相位阶段进度（相位组权重 = 组内声明权重之和，阶段数随相位数变化）。相位阶段失败即中断后续阶段（启动不执行）。
 
 ```csharp
 using XFramework.XPipeline;
 using XFramework.XNode;
 
-await root.StartupAsync();   // 一键启动（装载→加载→启动）
+await root.StartupAsync();   // 一键启动（收集 → 相位分组执行 → 启动）
 
-// 带进度回调（用于加载界面）
-await root.StartupAsync(new Progress<LoadProgress>(p =>
-    Debug.Log($"启动进度: {p.OverallProgress:P1} - {p.Description}")));
-
-// 管线进度重载（直接接收管线级快照，含阶段/任务名与计数）
+// 带进度回调（用于加载界面，接收管线级快照）
 await root.StartupAsync(new Progress<PipelineProgress>(p =>
-    Debug.Log($"管线进度: {p.OverallProgress:P1} [{p.CurrentStageName}] {p.Description}")));
+    Debug.Log($"启动进度: {p.OverallProgress:P1} [{p.CurrentStageName}] {p.Description}")));
 ```
 
-> 注意：`StartupAsync` 双重载（`IProgress<LoadProgress>` / `IProgress<PipelineProgress>`）下传 `null` 字面量存在重载歧义，请无参调用或显式指定接口类型。
 > 自定义管线：`BuildStartupPipeline(root)` 返回已装配的管线，可继续 `AddStage` 追加自定义阶段（建议主进度阶段 `Weight = 1`、瞬时阶段 `Weight = 0`），调用方负责 `Destroy()`。
 
 > `EntityNode.AddNodeAsync<T>()` 内部即调用 `StartupAsync` 异步启动新挂入的子树。
-> 自定义加载任务：节点实现 `ILoadable`（声明 `Phase` 与 `LoadAsync`），详见 [Pipeline 模块 README](../Pipeline/README.md)「加载应用」章节。
+> 自定义相位阶段：节点实现 `IPhaseStage`（声明 `Phase`，执行面与普通阶段一致），详见 [Pipeline 模块 README](../Pipeline/README.md)「相位分组编排」章节。
 
 ## 资源加载（AssetExtensions）
 

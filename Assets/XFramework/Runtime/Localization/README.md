@@ -15,8 +15,8 @@ Runtime/Localization/
 ├── ILocalizationManager.cs        # 本地化管理器公共接口
 ├── LocalizationManager.cs         # 静态外观（全局入口）
 ├── LocalizationManagerImpl.cs     # 默认实现（LRU 缓存）
-├── LocalizationBootstrapNode.cs   # 启动节点（注册到 Bootstrap 管线）
-└── LanguageSwitchNode.cs          # 异步语言切换节点（内部）
+├── LocalizationBootstrapNode.cs   # 引导阶段节点（IPhaseStage，Phase 90）
+└── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
 ```
 
 ## 核心机制：LRU 缓存
@@ -219,24 +219,24 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 
 ### JSON 解析策略
 
-模块内使用自定义的轻量 JSON 解析器（`LanguageSwitchNode.ParseJson`），仅支持 `"string": "string"` 的简单格式，无需引入 Newtonsoft.Json 或其他第三方库。如果 JSON 含嵌套结构或数组，需替换为完整 JSON 库。
+模块内使用自定义的轻量 JSON 解析器（`LanguageAssetLoader.ParseJson`），仅支持 `"string": "string"` 的简单格式，无需引入 Newtonsoft.Json 或其他第三方库。如果 JSON 含嵌套结构或数组，需替换为完整 JSON 库。
 
 ## 节点系统集成
 
 ### LocalizationBootstrapNode
 
-启动节点（`internal`，框架内部使用），在加载管线 **Phase 90** 执行。游戏侧无需直接操作它，在加载阶段前调用 `LocalizationManager.Initialize(lang, data)` 即可（见「快速使用」）。
+引导阶段节点（`internal`，框架内部使用），实现 `IPhaseStage`，在启动管线相位分组 **Phase 90** 执行。游戏侧无需直接操作它，在执行前调用 `LocalizationManager.Initialize(lang, data)` 即可（见「快速使用」）。
 
 节点销毁时自动调用 `LocalizationManager.Destroy()` 清理缓存。
 
-### LanguageSwitchNode
+### LanguageAssetLoader
 
-内部节点（`LeafNode`, `ILoadable`），由 `LocalizationManager.SwitchLanguageAsync` 创建并执行：
+内部异步加载器（非节点），由 `LocalizationManager.SwitchLanguageAsync` 在缓存未命中时创建并执行：
 
-1. 检查缓存——已命中则直接同步切换
+1. 检查缓存——已命中则直接同步切换（`SwitchLanguageAsync` 调用前亦先查缓存）
 2. 缓存未命中——通过 `AssetManager.LoadAsync<TextAsset>` 加载 JSON 文件
 3. 解析 JSON → 注入缓存 → 同步切换
-4. 支持 `CancellationToken` 取消加载
+4. 支持 `CancellationToken` 取消（`OperationCanceledException` 传播，不静默）
 
 ## 设计原则
 
@@ -252,5 +252,5 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 
 - `XFramework.XNode` — 节点系统（`EntityNode`, `LeafNode`, `IBaseNode`）
 - `XFramework.XAsset` — 通过 `AssetManager` 加载语言 JSON 文件
-- `XFramework.XPipeline` — `ILoadable`, `LoadProgress` 接口（加载应用）
+- `XFramework.XPipeline` — `IPhaseStage` 相位阶段（LocalizationBootstrapNode，Phase 90）
 - `UniTask`（框架层已提供）

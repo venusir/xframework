@@ -2,35 +2,32 @@
 
 ## 概述
 
-XFramework 管线模块提供**通用阶段编排**与**加载应用**两部分能力:
+XFramework 管线模块提供**通用异步阶段编排**能力(附**相位分组编排**这一声明式装配形态):
 
-- **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。它是对「启动管线」中编排能力的泛化——`StartupAsync` 的预置管线(装载→加载→启动)即由本模块装配而成。
-- **加载应用(Loadable 子系统)**:`ILoadable` 契约 + `LoadProgress` 进度数据结构 + `LoadableStage` 单任务适配 + `ParallelStage` 并行阶段。节点实现 `ILoadable` 声明加载任务,经单任务适配后以「并行阶段」形态接入管线——**加载是管线的一种应用**(原 Loader 模块并入,`ILoader`/`Loader` 已删除)。两层物理化:通用编排位于根目录,加载应用位于 `Loading/` 子目录。
+- **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。实例即用即弃(非全局单例),第三方可独立使用,不依赖节点树。
+- **相位分组编排**:实现 `IPhaseStage` 声明相位号,同相位阶段并行执行、相位升序串行;经 `Pipeline.BuildPhaseGroups` 一键装配为「每相位一个并行阶段」。节点树 `StartupAsync` 的预置管线(收集 → 相位分组执行 → 启动)即由此装配而成;框架引导模块(Asset/Data/Save/Localization)均以相位阶段形态参与。
 
 **命名空间**: `XFramework.XPipeline`
 
-**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;加载任务同样以阶段形态接入,任务级调度归 `LoadableStage` 单任务适配,并行编排归 `ParallelStage`,串行子段归 `SequenceStage`,编排级归管线。
+**核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;并行归 `ParallelStage`、串行子段归 `SequenceStage`,编排级归管线,容器可任意嵌套表达任意串并行拓扑。
 
 ## 架构设计
 
 ```
 Runtime/Pipeline/
-├── IPipelineStage.cs            # 通用编排:阶段接口(含 PipelineStageState 枚举)
-├── IPipeline.cs                 # 通用编排:管线接口(调度入口)
-├── Pipeline.cs                  # 通用编排:静态工厂 Pipeline.Create() + internal PipelineImpl 实现
-├── PipelineStageContext.cs      # 通用编排:阶段执行上下文(阶段写面 + 全局读面)
-├── PipelineProgress.cs          # 通用编排:全局进度快照(事件载荷)
-├── StageExecution.cs            # 通用编排:阶段执行共享包装(契约兜底/取消/异常捕获)
-├── ParallelStage.cs             # 通用编排:并行阶段(组内并行、事件驱动组内聚合,public)
-├── SequenceStage.cs             # 通用编排:串行阶段(组内串行子段,public)
-├── StageAggregator.cs           # 通用编排:容器子阶段共享聚合器(门铃 + 加权聚合,internal)
-└── Loading/                     # 加载应用层(加载是管线的一种应用)
-    ├── ILoadable.cs             # 可加载接口(含 LoadState 枚举)
-    ├── LoadProgress.cs          # 加载进度数据结构(写后通知)
-    └── LoadableStage.cs         # 单任务适配阶段(internal,ILoadable → 管线阶段)
+├── IPipeline.cs                  # 管线接口(调度入口)
+├── IPipelineStage.cs             # 阶段接口(含 PipelineStageState 枚举)
+├── IPhaseStage.cs                # 相位阶段接口(IPipelineStage + Phase 声明)
+├── Pipeline.cs                   # 静态门面:创建实例 + 相位分组装配助手 BuildPhaseGroups
+├── PipelineStageContext.cs       # 阶段执行上下文(阶段写面 + 全局读面)
+├── PipelineProgress.cs           # 全局进度快照(事件载荷)
+├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获)
+├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
+├── SequenceStage.cs              # 串行阶段(组内串行子段,public)
+└── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)
 ```
 
-> 管线不依赖 Node,依赖方向单向:Node → Pipeline(加载应用同属本模块)。
+> 管线不依赖 Node,依赖方向单向:Node → Pipeline(StartupAsync 装配在 Node 侧,复用本模块的相位分组助手)。
 
 ## 核心概念
 
@@ -73,53 +70,43 @@ public interface IPipelineStage
 - **阈值节流**: 全局进度变化 ≥1% 或任一阶段状态/描述变化才广播;终局必广播
 - **阶段切换时进度回落属预期**(新阶段从 0 开始);装配 `Weight = 0` 的瞬时阶段可平滑过渡
 
-### 加载应用(Loadable)
+### 相位分组编排(IPhaseStage)
 
-#### ILoadable 契约
-
-节点实现 `ILoadable` 声明加载任务,由加载应用阶段(`LoadableStage` 单任务适配 + `ParallelStage` 并行阶段)统一调度执行:
+「同相位并行、相位升序串行」是启动/初始化类流程的常见需求,以**相位阶段 + 分组装配助手**提供声明式表达——执行面与普通阶段完全一致,不引入第二套契约:
 
 ```csharp
-public interface ILoadable
+public interface IPhaseStage : IPipelineStage
 {
-    int Phase { get; }
-    UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken);
+    int Phase { get; }   // 同值并行执行,不同值按值升序串行执行
 }
 ```
 
-- `Phase` 决定调度顺序;**相同 Phase 的任务并行执行,不同 Phase 按值从小到大串行执行**
-- 加载过程中通过 `progress` 更新进度/描述/状态;通过 `cancellationToken` 响应取消
-- 契约兜底:正常返回但未写终态时自动补置为 `Completed`(进度视为 1f);抛异常置为 `Failed` 并经聚合报告;抛 `OperationCanceledException` 视为取消
-
-#### Phase 分组调度
-
-```
-Phase 0: [AssetBootstrapNode]──────────────┐
-Phase 3: [GameDataNode]────────────────────┤  组间串行(等上一组完成)
-Phase 4: [SaveBootstrapNode]───────────────┤
-Phase 90: [LocalizationBootstrapNode]──────┘
+```csharp
+// 按相位分组装配:每组一个 ParallelStage(组内并行、组内保持输入顺序),返回按相位升序的清单
+public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
+    IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}");
 ```
 
-每个 Phase 装配一个 `ParallelStage`(组内并行、组间串行由管线编排,阶段权重 = 组内任务数),组内子阶段为 `LoadableStage` 单任务适配;装配期同步收集全部 `ILoadable` 节点(运行前快照,树在装配后变更不收录)。
+#### 相位分组调度示意
 
-#### LoadProgress
+```
+Phase 0:  [AssetBootstrapNode]────────────────┐
+Phase 3:  [GameDataNode]──────────────────────┤  组间串行(等上一相位完成)
+Phase 4:  [SaveBootstrapNode]─────────────────┤
+Phase 90: [LocalizationBootstrapNode]─────────┘
+```
 
-任务级进度数据结构,由 `LoadableStage` 在装载时创建并注入:
+装配结果直接逐个 `AddStage` 加入管线;组权重 = Σ 组内子阶段声明权重(引导节点统一声明 1f,故数值 = 组内节点数)。同相位内若存在先后依赖,可用 `SequenceStage` 包一层再放入该相位组。
 
-- 节点写入: `SetWeight`(首行同步调用,默认 1f,下限 0.01 防除零)/ `SetProgress` / `SetDescription` / `SetState`(Pending → Loading → Completed / Failed)
-- **写后通知(门铃)**: 每次写入同步触发 `OnChanged`,调度者无需轮询即可感知任务进度变化(事件驱动,与管线一致)
-- **全局级字段**(`OverallProgress` / `CurrentTaskName` 等):由调度者聚合时填充,供 UI 读取当前加载状态的全部信息;独立使用场景(如 `AssetManager.InitializeAsync` 的进度参数)不注入回调,写入仅落字段,行为与无通知时代完全一致
+> **内置相位约定**见文末表格;数值含义属模块间约定,由各使用方自行声明,引擎不解释。
 
-#### LoadableStage + ParallelStage
+### 并行/串行容器语义(组内细节)
 
-单任务适配阶段 `LoadableStage`(`internal sealed`,Name = 任务类型名,Weight = 1)把 `ILoadable` 桥接为管线阶段,由并行阶段 `ParallelStage`(public,Weight = Σ子阶段权重)组内并行执行:
-
-- **镜像语义**: 任务写 `LoadProgress`(门铃)→ 全字段镜像到子上下文并单次显式通知——一次任务写入恰好触发 1 次组级聚合(加权 `Σ(w·p)/Σ(w)` + 阈值节流 ≥1% 或描述/状态变化);任务权重经镜像影响组内聚合,不泄漏到管线级
-- **取消**: 任务收到已取消的 token,沉降后显式上抛 `OperationCanceledException` 使管线走取消路径——防共享包装的契约兜底把已取消任务误补为 Completed
-- **失败即停**: 任意任务失败 → 立即取消兄弟任务,沉降(WhenAll)后置阶段 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组内失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
-- **诊断优先**: 失败时描述/任务名强制取失败任务的值,避免被兄弟任务描述覆盖
-- **并行能力通用化**: 第三方阶段同样可塞入 `ParallelStage` 并行执行(见「快速使用」)
-- **串行子段**: 同 Phase 内存在先后依赖时,可将任务组包一层 `SequenceStage`(组内依次执行)再放入并行组
+- **并行组内事件驱动聚合**: 子阶段写入即触发组内加权聚合(门铃 + 阈值节流 ≥1% 或描述/状态变化),收敛后转发组主上下文——**一次子阶段写入恰好 1 次组级聚合**
+- **取消**: 子阶段收到已取消的 token;组沉降后若 token 已取消或任一子阶段以取消结束,组上抛 `OperationCanceledException` 走管线取消路径(契约兜底不会把已取消的组误补为 Completed)
+- **失败即停**: 组内任一子阶段失败(抛异常或主动 `SetState(Failed)`)→ 立即取消其余兄弟,沉降(WhenAll)后组置 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组级失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
+- **诊断优先**: 失败时描述/任务名强制取失败子阶段的值,避免被兄弟描述覆盖
+- **取消语义由阶段负责**: 需真正可中断的阶段必须把 `CancellationToken` 传入内层异步服务并禁止吞掉 `OperationCanceledException`;同步瞬时阶段无取消窗口属正常
 
 ## 快速使用
 
@@ -147,12 +134,9 @@ public sealed class InitStage : IPipelineStage
 // 2. 装配并运行
 var pipeline = Pipeline.Create();
 pipeline.AddStage(new InitStage());
-pipeline.AddStage(new LoadStage());          // 如加载应用的并行阶段 ParallelStage
+pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Parallel-Init")); // 组内并行
 pipeline.AddStage(new PostStage { Weight = 0f }); // 瞬时阶段,不占进度
 pipeline.AddStage(new InitStage(), 30f);     // 30 秒超时:超时置 Failed 并停止后续阶段
-
-// 并行执行两个阶段(组内并行、组间串行由管线承担;阶段权重 = Σ子阶段权重)
-pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new LoadStage() }, "Parallel-Init"));
 
 // 容器组合:并行组内先 Init 后 Load(串行子段),与 PostStage 并行——嵌套树表达任意串并行组合
 pipeline.AddStage(new ParallelStage(new IPipelineStage[]
@@ -172,7 +156,9 @@ pipeline.Destroy();
 
 > 节点树一键启动 `StartupAsync` 即内部装配并运行预置管线,详见 [Node 模块](../Node/README.md)。
 
-### 定义可加载节点
+### 定义相位阶段
+
+业务引导/初始化模块实现 `IPhaseStage`(Phase + 普通阶段四成员),挂树后自动被收集分组:
 
 ```csharp
 using XFramework.XPipeline;
@@ -180,26 +166,27 @@ using XFramework.XNode;
 using Cysharp.Threading.Tasks;
 using System.Threading;
 
-public class ConfigBootstrapNode : EntityNode, ILoadable
+public sealed class ConfigBootstrapNode : EntityNode, IPhaseStage
 {
-    // 加载阶段号(越小越先执行)
-    public int Phase => 10;
+    public int Phase => 10;              // 相位号(内置约定见文末;越小越先执行)
+    public string Name => GetType().Name;
+    public float Weight => 1f;           // 组内等权(组权重 = 组内节点数)
 
-    public async UniTask LoadAsync(LoadProgress progress, CancellationToken cancellationToken)
+    public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
     {
-        // 权重与描述须在首次 await 前同步设置(组内按权重加权聚合进度)
-        progress.SetWeight(2f);
-        progress.SetState(LoadState.Loading);
-        progress.SetDescription("加载配置表...");
+        context.SetDescription("加载配置表...");
+        context.SetState(PipelineStageState.Executing);
 
-        // 执行加载逻辑
+        // 执行加载逻辑(取消须向内部异步服务传播 token,禁止吞 OperationCanceledException)
         await LoadConfigFilesAsync(cancellationToken);
 
-        progress.SetState(LoadState.Completed);
-        progress.SetDescription("配置表加载完成");
+        context.SetProgress(1f);
+        context.SetState(PipelineStageState.Completed);
     }
 }
 ```
+
+> 阶段契约兜底保证:未写终态的正常返回自动视为完成;不写 `SetState(Executing)` 也不影响进度聚合(容器会预置执行中状态)。引导节点与节点树的装配模板详见 [Node 模块](../Node/README.md)。
 
 ### 一键启动节点树
 
@@ -213,11 +200,11 @@ root.AddNode<ServiceInitializerNode>();
 root.AddNode<ConfigBootstrapNode>();
 root.AddNode<GameplayNode>();
 
-// 一键启动(自动执行装载→加载→启动)
+// 一键启动(收集 → 按相位分组执行 → 启动)
 await root.StartupAsync();
 
-// 带进度回调
-await root.StartupAsync(new Progress<LoadProgress>(p =>
+// 带进度回调(接收管线级快照)
+await root.StartupAsync(new Progress<PipelineProgress>(p =>
 {
     Debug.Log($"启动进度: {p.OverallProgress * 100}% - {p.Description}");
 }));
@@ -238,14 +225,15 @@ await root.StartupAsync(new Progress<LoadProgress>(p =>
 ## 设计原则
 
 - **声明式阶段** — 阶段实现 `IPipelineStage` 声明执行内容,无需关心调度逻辑
-- **事件驱动进度** — 阶段/任务写入即聚合,管线不轮询、无每帧开销
+- **事件驱动进度** — 阶段写入即聚合,管线不轮询、无每帧开销
 - **失败/取消即停** — 异常→Failed、OCE→取消,后续阶段不再执行,终局三路互斥
 - **阈值节流广播** — 变化 ≥1% 或状态/描述变化才广播,避免垃圾推送
 - **实例即用即弃** — `Pipeline.Create()` 工厂创建,非全局单例
-- **声明式加载** — 节点实现 `ILoadable` 声明加载需求,无需关心调度逻辑
-- **Phase 分组调度** — 相同 Phase 并行,不同 Phase 串行,兼顾性能与依赖顺序
-- **契约兜底** — `LoadAsync` 正常返回但未写终态时自动视为完成(进度 1f),不会阻塞调度
-- **加权聚合** — 组内按 `Weight` 加权聚合 `Σ(w·p)/Σ(w)`;失败任务不计入进度(进度略回退属预期)
+- **单一执行契约** — 阶段是唯一执行单元,无第二套任务/状态机(状态/进度写面统一在 `PipelineStageContext`)
+- **声明式相位** — 节点实现 `IPhaseStage` 声明相位号,无需关心分组调度逻辑
+- **相位分组调度** — 相同相位并行、不同相位串行,兼顾性能与依赖顺序
+- **契约兜底** — 阶段正常返回但未写终态时自动视为完成(进度 1f),不会阻塞调度
+- **加权聚合** — 组内按 `Weight` 加权聚合 `Σ(w·p)/Σ(w)`;失败阶段不计入进度(进度略回退属预期)
 - **串并行嵌套组合** — 顶层固定串行,组内并行/串行经 `ParallelStage`/`SequenceStage` 容器嵌套表达任意调度拓扑
 
 ## 依赖

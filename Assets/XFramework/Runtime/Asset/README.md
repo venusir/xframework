@@ -43,14 +43,16 @@ Runtime/Asset/
 
 ```csharp
 using XFramework.XAsset;
-using XFramework.XPipeline;
 
 // 方式一：通过节点树自动初始化（推荐）
-// ServiceInitializerNode 内包含 AssetBootstrapNode，自动处理初始化
+// ServiceInitializerNode 内包含 AssetBootstrapNode（IPhaseStage，Phase 0），自动处理初始化
 
 // 方式二：手动初始化
-var progress = new LoadProgress();
-await AssetManager.InitializeAsync(progress);
+await AssetManager.InitializeAsync();
+
+// 带步骤进度（可选）：AssetInitReport 为模块自持的中性载荷（Progress + Description）
+await AssetManager.InitializeAsync(options: null,
+    progress: new Progress<AssetInitReport>(r => Debug.Log($"{r.Progress:P0} {r.Description}")));
 
 // 方式三：注入自定义实现
 AssetManager.SetInstance(myAssetManager);
@@ -264,8 +266,8 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 
 | 方法 | 说明 |
 | --- | --- |
-| `InitializeAsync(LoadProgress progress, AssetInitOptions options = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略；并发调用共享同一初始化任务 |
-| `InitializePackageAsync(AssetInitOptions options, LoadProgress progress, ct)` | 追加初始化额外资源包（多包场景），需先完成默认包初始化 |
+| `InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略；并发调用共享同一初始化任务 |
+| `InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, ct)` | 追加初始化额外资源包（多包场景），需先完成默认包初始化 |
 | `SetInstance(IAssetManager manager)` | 注入自定义实现（替换底层 / 单元测试） |
 | `Destroy()` | 销毁全局管理器，释放全部资源 |
 | `IsInitialized` | 是否已初始化 |
@@ -485,7 +487,7 @@ RequestPackageVersionAsync → 检查远端新版本号
 
 ## 与相关模块的关系
 
-- **XFramework.XPipeline**（加载应用）：`AssetBootstrapNode`（Phase 0）负责自动初始化，进度经 `LoadProgress` 上报（只读 `Progress` / `OverallProgress` / `State` / `Description`，成员详情见 Pipeline 模块 README「加载应用」章节）
+- **XFramework.XPipeline**（相位分组编排）：`AssetBootstrapNode`（`IPhaseStage`，Phase 0）负责自动初始化；初始化步骤进度经 `AssetInitReport`（本模块自持中性载荷）上报，由引导节点直写管线阶段上下文——本模块对 Pipeline 零类型依赖（单向：Node → Pipeline）
 - **XFramework.XNode**：`AssetExtensions` 定义于 Node 模块（`XFramework.XNode` 命名空间），内部委托本模块 `AssetManager` 门面——依赖方向 Node → Asset；节点代码可直接调用，非节点代码（MonoBehaviour、纯 C# 类）直接用门面
 - **XFramework.XPool**：本模块内置的**实例对象池**（按 location 键、容量上限）只服务 `InstantiateAsync`；`PoolManager` 是通用对象池（任意类型池化），职责不同，两者不混用
 

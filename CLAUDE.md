@@ -27,8 +27,8 @@
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
 - **节点树(有状态 GamePlay):** `XFramework.XNode` 命名空间。BaseNode → ParentNode → ContainerNode/EntityNode → RootNode,另有 LeafNode、DictionaryNode;承载需要生命周期或加载管线的服务
 - **依赖方向单向:** 节点树可以依赖并启动静态服务;静态服务绝不能引用节点树对象
-- **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。节点树可依赖并启动管线(依赖方向 Node → Pipeline;加载应用子系统(ILoadable 契约 + LoadableStage 单任务适配 + ParallelStage 并行阶段)同属本模块;StartupAsync 装配预置阶段:装载(Weight 0)+ 每 Phase 一个 ParallelStage(Weight = 任务数)+ 启动(Weight 0),全局进度恒等于加载进度)
-- **加载管线服务:** 需要异步加载的服务(如 Asset、Data、Localization)包装为 `internal sealed XxxBootstrapNode : LeafNode, ILoadable`(声明 Phase),由 ServiceInitializerNode 挂载;节点初始化静态门面,OnDestroy 反向 Shutdown
+- **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。节点树可依赖并启动管线(依赖方向 Node → Pipeline);StartupAsync 装配预置阶段:收集(Weight 0)+ 每相位一个 ParallelStage + 启动(Weight 0),全局进度恒等于相位阶段进度
+- **引导阶段服务:** 需要异步初始化的服务(如 Asset、Data、Localization)包装为 `internal sealed XxxBootstrapNode : LeafNode, IPhaseStage`(Phase = 模块约定值、Name = 类型名、Weight = 1),由 ServiceInitializerNode 挂载;ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);OnDestroy 反向 Shutdown
 - **节点类模板:** override `OnAwake/OnStart/OnDestroy` 且必须调 base;不用构造函数初始化,参数走 `OnInit(object)`;需要帧更新的节点实现 `IUpdateable` 并返回 `UpdateLOD`(UpdateNode 自动注册进 UpdateManager),不写 MonoBehaviour.Update;Disposable 订阅用 `AddToNode(this)` 绑定生命周期;节点一律经 `NodeFactory`/`AddNode<T>` 创建(自动回池)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md;示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 并新建对应 asmdef(`optionalUnityReferences: TestAssemblies`)
 
@@ -53,6 +53,7 @@
 - 公开异步 API 必须带 `CancellationToken cancellationToken = default` 参数
 - `async void` 仅限 Unity 生命周期入口(如 GameLauncher.Start);其余一律返回 UniTask/UniTask<T>
 - 订阅随生命周期自动取消:`IDestroyCancellationToken` + `AddTo`/`AddToNode`
+- 模块自持进度上报:进度载荷定义为模块内 `readonly struct`(如 `XAsset.AssetInitReport{Progress, Description}`),参数形态 `IProgress<T> progress = null`,置于 options 等配置参数之后、CancellationToken 之前(ct 仍收尾)
 
 ## 日志与异常
 
