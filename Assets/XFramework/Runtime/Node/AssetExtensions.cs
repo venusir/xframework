@@ -12,7 +12,7 @@ namespace XFramework.XNode
     /// <summary>
     /// <see cref="IBaseNode"/> 的资源加载扩展方法。允许节点树中的任意节点直接使用全局 <see cref="AssetManager"/> 加载资源。
     /// <para>定义于 Node 模块，由节点树依赖并启动 Asset 静态服务（依赖方向：Node → Asset）。</para>
-    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync(XFramework.XPipeline.LoadProgress, AssetInitOptions, System.Threading.CancellationToken)"/> 初始化。</para>
+    /// <para>所有方法委托到 <see cref="AssetManager"/> 的静态方法，需先调用 <see cref="AssetManager.InitializeAsync()"/> 初始化。</para>
     /// <para>使用示例：</para>
     /// <code>
     /// // 在任意节点中直接调用；句柄用 using 管理，离开块自动释放引用计数

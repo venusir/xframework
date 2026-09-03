@@ -6,13 +6,12 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using XFramework.XAsset;
-using XFramework.XPipeline;
 
 namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// AssetManager 静态门面测试。通过 <see cref="AssetManager.SetInstance"/> 注入假实现，不依赖 YooAsset 运行环境。
-    /// <para>覆盖：初始化状态、方法委托转发、幂等、未初始化保护。</para>
+    /// <para>覆盖：初始化状态、进度上报转发、方法委托转发、幂等、未初始化保护。</para>
     /// <para>AssetManagerImpl 的对象池/引用计数逻辑依赖 YooAsset 实际运行环境，属集成测试范畴，未在此覆盖。</para>
     /// </summary>
     class AssetManagerFacadeTests
@@ -52,7 +51,7 @@ namespace Venusy609.Xframework.Editor.Tests
         public void InitializeAsync_AfterSetInstance_IsIgnored()
         {
             // 已初始化时重复 InitializeAsync 应 LogWarning 忽略，不替换现有实例
-            AssetManager.InitializeAsync(new LoadProgress()).GetAwaiter().GetResult();
+            AssetManager.InitializeAsync().GetAwaiter().GetResult();
 
             Assert.IsTrue(AssetManager.IsInitialized);
             AssetManager.LoadAsync<GameObject>("dummy").GetAwaiter().GetResult();
@@ -79,9 +78,9 @@ namespace Venusy609.Xframework.Editor.Tests
             AssetManager.ImplFactory = () => { factoryCalls++; return fake; };
 
             // 三个并发调用：第一个创建任务（创建者），后两个注册信号等待广播（加入者）
-            var t1 = AssetManager.InitializeAsync(new LoadProgress());
-            var t2 = AssetManager.InitializeAsync(new LoadProgress());
-            var t3 = AssetManager.InitializeAsync(new LoadProgress());
+            var t1 = AssetManager.InitializeAsync();
+            var t2 = AssetManager.InitializeAsync();
+            var t3 = AssetManager.InitializeAsync();
 
             Assert.AreEqual(1, factoryCalls, "并发调用应共享同一初始化任务，只创建一次实例");
 
@@ -102,8 +101,8 @@ namespace Venusy609.Xframework.Editor.Tests
             var first = new FakeAssetManager { InitTask = tcs.Task };
             AssetManager.ImplFactory = () => { factoryCalls++; return first; };
 
-            var t1 = AssetManager.InitializeAsync(new LoadProgress());
-            var tJoin = AssetManager.InitializeAsync(new LoadProgress()); // join 者，与创建者共享同一失败
+            var t1 = AssetManager.InitializeAsync();
+            var tJoin = AssetManager.InitializeAsync(); // join 者，与创建者共享同一失败
             tcs.TrySetException(new InvalidOperationException("模拟初始化失败"));
             var e1 = Assert.Throws<InvalidOperationException>(() => t1.GetAwaiter().GetResult());
             var e2 = Assert.Throws<InvalidOperationException>(() => tJoin.GetAwaiter().GetResult());
@@ -112,7 +111,7 @@ namespace Venusy609.Xframework.Editor.Tests
 
             // 失败后缓存已清空可重试；第二次返回全新实例，不复用已失败的任务
             first = new FakeAssetManager();
-            var t2 = AssetManager.InitializeAsync(new LoadProgress());
+            var t2 = AssetManager.InitializeAsync();
             t2.GetAwaiter().GetResult();
             Assert.AreEqual(2, factoryCalls);
             Assert.IsTrue(AssetManager.IsInitialized);
@@ -127,13 +126,57 @@ namespace Venusy609.Xframework.Editor.Tests
             var fake = new FakeAssetManager { InitTask = tcs.Task };
             AssetManager.ImplFactory = () => { factoryCalls++; return fake; };
 
-            var t1 = AssetManager.InitializeAsync(new LoadProgress());
+            var t1 = AssetManager.InitializeAsync();
             AssetManager.Destroy(); // 在途初始化期间销毁
 
             tcs.TrySetResult();
             t1.GetAwaiter().GetResult();
             Assert.IsFalse(AssetManager.IsInitialized, "销毁后的在途初始化结果应被丢弃，不得复活");
             Assert.IsTrue(fake.Disposed, "被丢弃的实例应释放");
+        }
+
+        #endregion
+
+        #region 初始化进度上报转发
+
+        [Test]
+        public void InitializeAsync_ForwardsProgressSinkToInstance()
+        {
+            AssetManager.Destroy();
+            var fake = new FakeAssetManager();
+            AssetManager.ImplFactory = () => fake;
+            var sink = new RecordingInitProgress();
+
+            AssetManager.InitializeAsync(options: null, progress: sink).GetAwaiter().GetResult();
+
+            Assert.IsTrue(AssetManager.IsInitialized);
+            Assert.AreEqual(1, fake.InitCallCount);
+            Assert.AreSame(sink, fake.LastInitProgress, "进度上报接收方应原样转发到底层实例");
+        }
+
+        [Test]
+        public void InitializePackageAsync_ForwardsProgressSinkToInstance()
+        {
+            var options = new AssetInitOptions { PackageName = "ExtraPackage" };
+            var sink = new RecordingInitProgress();
+
+            AssetManager.InitializePackageAsync(options, sink).GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, _fake.InitializePackageCallCount);
+            Assert.AreSame(sink, _fake.LastInitProgress, "进度上报接收方应原样转发到底层实例");
+        }
+
+        [Test]
+        public void InitializeAsync_NullProgress_DoesNotThrow()
+        {
+            AssetManager.Destroy();
+            var fake = new FakeAssetManager();
+            AssetManager.ImplFactory = () => fake;
+
+            AssetManager.InitializeAsync().GetAwaiter().GetResult();
+
+            Assert.IsTrue(AssetManager.IsInitialized, "progress 为 null(默认)不应影响初始化");
+            Assert.IsNull(fake.LastInitProgress);
         }
 
         #endregion
@@ -169,7 +212,7 @@ namespace Venusy609.Xframework.Editor.Tests
         public void InitializePackageAsync_ForwardsToInstance()
         {
             var options = new AssetInitOptions { PackageName = "ExtraPackage" };
-            AssetManager.InitializePackageAsync(options, new LoadProgress()).GetAwaiter().GetResult();
+            AssetManager.InitializePackageAsync(options).GetAwaiter().GetResult();
             Assert.AreEqual(1, _fake.InitializePackageCallCount);
         }
 
@@ -295,5 +338,16 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        /// <summary>记录型进度接收方：记录每次 Report 载荷供断言。</summary>
+        private sealed class RecordingInitProgress : IProgress<AssetInitReport>
+        {
+            public readonly List<AssetInitReport> Reports = new List<AssetInitReport>();
+
+            public void Report(AssetInitReport value)
+            {
+                Reports.Add(value);
+            }
+        }
     }
 }

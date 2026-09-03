@@ -5,7 +5,6 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using XFramework.XAsset;
-using XFramework.XPipeline;
 
 namespace Venusy609.Xframework.Editor.Tests
 {
@@ -45,15 +44,20 @@ namespace Venusy609.Xframework.Editor.Tests
         /// <summary>InitializeAsync 返回的任务。默认立即完成；测试可注入挂起任务（UniTaskCompletionSource）模拟并发。</summary>
         public UniTask InitTask = UniTask.CompletedTask;
 
-        public UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
+        /// <summary>最近一次收到的初始化进度上报接收方(转发断言用)。</summary>
+        public IProgress<AssetInitReport> LastInitProgress;
+
+        public UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             InitCallCount++;
+            LastInitProgress = progress;
             return InitTask;
         }
 
-        public UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+        public UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             InitializePackageCallCount++;
+            LastInitProgress = progress;
             return UniTask.CompletedTask;
         }
 

@@ -4,7 +4,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using XFramework.XPipeline;
 
 namespace XFramework.XAsset
 {
@@ -12,7 +11,7 @@ namespace XFramework.XAsset
     /// <summary>
     /// 全局资源管理器外观。提供静态方法直接访问资源加载、实例化与生命周期管理。
     /// <para>内部持有 <see cref="IAssetManager"/> 实例（<see cref="AssetManagerImpl"/>），所有调用委托到该实例。</para>
-    /// <para>使用前需调用 <see cref="InitializeAsync(LoadProgress, CancellationToken)"/> 初始化。</para>
+    /// <para>使用前需调用 <see cref="InitializeAsync()"/> 初始化。</para>
     /// </summary>
     public static class AssetManager
     {
@@ -45,9 +44,10 @@ namespace XFramework.XAsset
         /// 初始化全局资源管理器（默认包）。
         /// <para>并发调用共享同一进行中的初始化任务；共享任务的取消令牌取首个调用者，其余调用者的令牌不参与该任务。</para>
         /// </summary>
-        /// <param name="progress">初始化进度回调。</param>
         /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
-        public static async UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
+        /// <param name="progress">初始化进度上报（可空），见 <see cref="AssetInitReport"/>。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        public static async UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             if (_instanceInitialized)
             {
@@ -119,13 +119,13 @@ namespace XFramework.XAsset
         /// <summary>
         /// 实际初始化流程：创建实例 → 初始化 → 校验代际号后置入全局。
         /// </summary>
-        private static async UniTask InitializeAsyncCore(LoadProgress progress, AssetInitOptions options, CancellationToken cancellationToken)
+        private static async UniTask InitializeAsyncCore(IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
             int generation = _initGeneration;
             var impl = ImplFactory?.Invoke() ?? new AssetManagerImpl();
             try
             {
-                await impl.InitializeAsync(progress, options, cancellationToken);
+                await impl.InitializeAsync(options, progress, cancellationToken);
             }
             catch
             {
@@ -145,8 +145,8 @@ namespace XFramework.XAsset
             _instanceInitialized = true;
         }
 
-        /// <inheritdoc cref="IAssetManager.InitializePackageAsync(AssetInitOptions, LoadProgress, CancellationToken)"/>
-        public static UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="IAssetManager.InitializePackageAsync(AssetInitOptions, IProgress{AssetInitReport}, CancellationToken)"/>
+        public static UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
             return _instance.InitializePackageAsync(options, progress, cancellationToken);
@@ -433,7 +433,7 @@ namespace XFramework.XAsset
         {
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
-                    "[AssetManager] AssetManager 尚未初始化。请先调用 AssetManager.InitializeAsync(progress, options) 完成初始化（或由节点树 AssetBootstrapNode 自动初始化）。");
+                    "[AssetManager] AssetManager 尚未初始化。请先调用 AssetManager.InitializeAsync() 完成初始化（或由节点树 AssetBootstrapNode 自动初始化）。");
         }
 
         #endregion

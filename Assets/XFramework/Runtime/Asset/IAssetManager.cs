@@ -4,7 +4,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using XFramework.XPipeline;
 
 namespace XFramework.XAsset
 {
@@ -20,15 +19,20 @@ namespace XFramework.XAsset
         /// <summary>
         /// 初始化资源服务（默认包）。
         /// </summary>
-        /// <param name="progress">初始化进度回调，<see cref="LoadProgress"/> 包含进度和描述信息。</param>
         /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
-        UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default);
+        /// <param name="progress">初始化进度上报（可空）。步骤推进时经 <see cref="IProgress{T}.Report"/> 推送
+        /// <see cref="AssetInitReport"/>（整体进度 0~1 + 步骤描述）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 初始化额外资源包（多包场景）。
         /// <para>包已存在且初始化成功时跳过初始化，直接刷新版本与清单（包复用语义）。</para>
         /// </summary>
-        UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default);
+        /// <param name="options">初始化配置。</param>
+        /// <param name="progress">初始化进度上报（可空），同 <see cref="InitializeAsync"/>。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default);
 
         #endregion
 

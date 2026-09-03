@@ -4,7 +4,6 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
-using XFramework.XPipeline;
 
 namespace XFramework.XAsset
 {
@@ -53,7 +52,7 @@ namespace XFramework.XAsset
 
         #region Initialize
 
-        public async UniTask InitializeAsync(LoadProgress progress, AssetInitOptions options = null, CancellationToken cancellationToken = default)
+        public async UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             if (_initialized) return;
             if (_disposed) throw new ObjectDisposedException(nameof(AssetManagerImpl));
@@ -120,7 +119,7 @@ namespace XFramework.XAsset
         /// <summary>
         /// 实际初始化流程。失败时不重置 _managerImpl（YooAsset 包复用语义已保证重试安全）。
         /// </summary>
-        private async UniTask InitializeAsyncCore(LoadProgress progress, AssetInitOptions options, CancellationToken cancellationToken)
+        private async UniTask InitializeAsyncCore(IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
             _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
             var initOptions = options ?? new AssetInitOptions();
@@ -135,7 +134,7 @@ namespace XFramework.XAsset
             }
         }
 
-        public async UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+        public async UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);

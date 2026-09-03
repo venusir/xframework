@@ -30,10 +30,33 @@ namespace XFramework.XNode
             }
 
             progress.SetDescription("Initializing Asset Manager...");
-            await AssetManager.InitializeAsync(progress, cancellationToken: cancellationToken);
+
+            // 临时中继(过渡):AssetManager 进度参数已解耦为 AssetInitReport,
+            // 此处把步骤描述转写回 LoadProgress,保持加载阶段描述流不变;引导节点阶段化(IPhaseStage)后删除。
+            await AssetManager.InitializeAsync(options: null, progress: new LoadProgressRelay(progress), cancellationToken: cancellationToken);
 
             progress.SetProgress(1f);
             progress.SetState(LoadState.Completed);
+        }
+
+        /// <summary>
+        /// 临时进度中继(内部):AssetInitReport → LoadProgress 描述/整体进度转写,
+        /// 与旧 YooAsset 上报行为一致(SetDescription 触发门铃镜像进组聚合,Overall 仅落字段)。
+        /// </summary>
+        private sealed class LoadProgressRelay : IProgress<AssetInitReport>
+        {
+            readonly LoadProgress _progress;
+
+            public LoadProgressRelay(LoadProgress progress)
+            {
+                _progress = progress;
+            }
+
+            public void Report(AssetInitReport value)
+            {
+                _progress.SetOverallProgress(value.Progress);
+                _progress.SetDescription(value.Description);
+            }
         }
 
         #endregion

@@ -5,7 +5,6 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 using YooAsset;
-using XFramework.XPipeline;
 
 namespace XFramework.XAsset
 {
@@ -73,7 +72,7 @@ namespace XFramework.XAsset
         /// <para>包复用语义：包已初始化成功时跳过 InitializeAsync，直接刷新版本与清单
         /// （支持 AssetManager.Destroy() 后重新初始化）；初始化失败时重新初始化。</para>
         /// </summary>
-        public async UniTask InitializePackageAsync(AssetInitOptions options, LoadProgress progress, CancellationToken cancellationToken = default)
+        public async UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
             if (options.PlayMode != AssetPlayMode.Offline && options.PlayMode != AssetPlayMode.Host)
@@ -396,12 +395,11 @@ namespace XFramework.XAsset
             return new OfflinePlayModeParameters();
         }
 
-        private static void ReportProgress(LoadProgress progress, float value, string description)
+        private static void ReportProgress(IProgress<AssetInitReport> progress, float value, string description)
         {
             if (progress != null)
             {
-                progress.SetOverallProgress(value);
-                progress.SetDescription(description);
+                progress.Report(new AssetInitReport(value, description));
             }
         }
 
