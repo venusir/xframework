@@ -27,7 +27,8 @@ namespace XFramework.XPool
 
         static StringBuilderPool()
         {
-            CollectionPoolManager.Register(_pool.Clear);
+            // 闭包捕获静态字段而非绑定当前实例，Configure 重建池后注册的 Clear 自动指向新池
+            CollectionPoolManager.Register(() => _pool.Clear());
         }
 
         /// <summary>
@@ -68,7 +69,8 @@ namespace XFramework.XPool
         public static int CountAll => _pool.CountAll;
 
         /// <summary>
-        /// 预配置池参数。仅在一次都未 <c>Get()</c> 时有效。
+        /// 预配置池参数。在无活跃租出实例时生效（首次 Get 前或全部归还后），
+        /// 有活跃实例时告警并忽略；重建会丢弃当前闲置实例。
         /// </summary>
         /// <param name="config">池配置</param>
         public static void Configure(PoolConfig config)
@@ -77,12 +79,11 @@ namespace XFramework.XPool
             if (oldCount > 0)
             {
                 UnityEngine.Debug.LogWarning(
-                    "[StringBuilderPool] 已有活跃实例，Configure 已忽略。请在首次 Get 前调用 Configure。");
+                    $"[StringBuilderPool] 已有 {oldCount} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。");
                 return;
             }
 
             _pool = new Pool<StringBuilder>(() => new StringBuilder(), config, onReturn: sb => sb.Clear());
-            CollectionPoolManager.Register(_pool.Clear);
         }
 
         /// <summary>

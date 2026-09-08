@@ -19,6 +19,12 @@ namespace XFramework.XPool
         private static readonly List<Action> _clearActions = new();
 
         /// <summary>
+        /// 已注册的 <c>Clear</c> 回调总数。
+        /// <para>仅供单元测试观察注册行为（internal），业务代码不应依赖。</para>
+        /// </summary>
+        internal static int RegisteredActionCount => _clearActions.Count;
+
+        /// <summary>
         /// 注册一个集合池的 <c>Clear</c> 回调。由各集合池的静态构造函数调用，不应手动使用。
         /// </summary>
         /// <param name="clearAction">池的 Clear 回调</param>

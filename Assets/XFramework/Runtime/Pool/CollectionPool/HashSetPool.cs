@@ -65,7 +65,8 @@ namespace XFramework.XPool
         public static int CountAll => _pool.CountAll;
 
         /// <summary>
-        /// 预配置池参数。仅在一次都未 <c>Get()</c> 时有效。
+        /// 预配置池参数。在无活跃租出实例时生效（首次 Get 前或全部归还后），
+        /// 有活跃实例时告警并忽略；重建会丢弃当前闲置实例。
         /// </summary>
         /// <param name="config">池配置</param>
         public static void Configure(PoolConfig config)
@@ -74,7 +75,7 @@ namespace XFramework.XPool
             if (oldCount > 0)
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[HashSetPool<{typeof(T).Name}>] 已有 {oldCount} 个活跃实例，Configure 已忽略。请在首次 Get 前调用 Configure。");
+                    $"[HashSetPool<{typeof(T).Name}>] 已有 {oldCount} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。");
                 return;
             }
 
