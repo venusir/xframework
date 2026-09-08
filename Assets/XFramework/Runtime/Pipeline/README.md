@@ -24,7 +24,8 @@ Runtime/Pipeline/
 ├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获)
 ├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
 ├── SequenceStage.cs              # 串行阶段(组内串行子段,public)
-└── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)
+├── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)
+└── ContextAggregation.cs         # 加权扫描共享助手(加权扫描/阈值节流/状态快照,internal)
 ```
 
 > 管线不依赖 Node,依赖方向单向:Node → Pipeline(StartupAsync 装配在 Node 侧,复用本模块的相位分组助手)。
@@ -55,6 +56,8 @@ public interface IPipelineStage
 - **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)
 - **阶段日志**: 顶层阶段开始/结束经 `Debug.Log` 记录耗时(`[Pipeline] Stage 'X' start` / `'X' completed|failed|cancelled|timed out in Nms`),便于诊断执行时间分布;容器(并行/串行)组内子阶段不输出 start/end 日志(组级失败已有 `[Pipeline] Parallel/Sequence stage failed: ...` 诊断日志兜底)
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
+- **运行期装配防护**: 运行中 `AddStage` 打 `[Pipeline] AddStage: already running` 警告并忽略(阶段列表运行期只读,运行中上下文已按启动时刻快照,入列会错位)
+- **写入线程契约**: 阶段经 `PipelineStageContext` 写入须与 `RunAsync` 调度同一上下文(Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 LogError 提示(Release 构建零开销)
 
 ### 容器组合
 
@@ -69,6 +72,7 @@ public interface IPipelineStage
 - **加权聚合**: 全局进度 = `Σ(w·p) / Σ(w)`——已完成阶段记 w、执行中记 w·p;失败阶段权重移出;`Weight = 0` 的阶段不占进度(如瞬时阶段)
 - **阈值节流**: 全局进度变化 ≥1% 或任一阶段状态/描述变化才广播;终局必广播
 - **阶段切换时进度回落属预期**(新阶段从 0 开始);装配 `Weight = 0` 的瞬时阶段可平滑过渡
+- **描述占位**: 运行中未写描述时广播/转发的 `Description` 为空串占位(无描述即无文案,不伪造终局文案);完成终局恒为 `"Completed"`;失败/取消终局可能为空串(诊断经 `OnFailed` 原因与失败阶段上下文)
 
 ### 相位分组编排(IPhaseStage)
 
@@ -102,7 +106,7 @@ Phase 90: [LocalizationBootstrapNode]─────────┘
 
 ### 并行/串行容器语义(组内细节)
 
-- **并行组内事件驱动聚合**: 子阶段写入即触发组内加权聚合(门铃 + 阈值节流 ≥1% 或描述/状态变化),收敛后转发组主上下文——**一次子阶段写入恰好 1 次组级聚合**
+- **并行组内事件驱动聚合**: 子阶段写入即触发组内加权聚合(门铃 + 阈值节流 ≥1% 或描述/状态变化),收敛后转发组主上下文(组内均未写描述时转发空串占位,不伪造终局文案)——**一次子阶段写入恰好 1 次组级聚合**
 - **取消**: 子阶段收到已取消的 token;组沉降后若 token 已取消或任一子阶段以取消结束,组上抛 `OperationCanceledException` 走管线取消路径(契约兜底不会把已取消的组误补为 Completed)
 - **失败即停**: 组内任一子阶段失败(抛异常或主动 `SetState(Failed)`)→ 立即取消其余兄弟,沉降(WhenAll)后组置 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组级失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
 - **诊断优先**: 失败时描述/任务名强制取失败子阶段的值,避免被兄弟描述覆盖

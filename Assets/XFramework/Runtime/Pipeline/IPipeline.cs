@@ -29,12 +29,13 @@ namespace XFramework.XPipeline
         event Action<string> OnFailed;
 
         /// <summary>
-        /// 追加阶段。装配期调用;重复添加同一实例被忽略。
+        /// 追加阶段。装配期调用;重复添加同一实例被忽略;运行中调用打 <c>[Pipeline]</c> 警告并忽略。
         /// </summary>
         void AddStage(IPipelineStage stage);
 
         /// <summary>
-        /// 追加阶段并设置超时(秒,0/负值/NaN 表示不启用)。装配期调用;重复添加同一实例被忽略。
+        /// 追加阶段并设置超时(秒,0/负值/NaN 表示不启用)。装配期调用;重复添加同一实例被忽略;
+        /// 运行中调用打 <c>[Pipeline]</c> 警告并忽略。
         /// <para>超时语义:超时触发时取消当前阶段运行并置 <see cref="PipelineStageState.Failed"/>(描述含超时信息),
         /// 经 <see cref="OnFailed"/> 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,
         /// 其后续上下文写入被忽略)。</para>

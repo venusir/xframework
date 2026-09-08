@@ -39,6 +39,9 @@ namespace XFramework.XPipeline
         /// <para>契约:抛出的异常将被管线置为 <see cref="PipelineStageState.Failed"/> 并写入描述,
         /// 经 <see cref="IPipeline.OnFailed"/> 报告,后续阶段不再执行。</para>
         /// <para>契约:抛出 <see cref="System.OperationCanceledException"/> 视为取消,不报告失败,后续阶段不再执行。</para>
+        /// <para>写入线程契约:经 <paramref name="context"/> 的写入(进度/描述/状态)须与调度同一上下文
+        /// (Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打
+        /// LogError 提示(见 <see cref="PipelineStageContext"/>)。</para>
         /// </summary>
         UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken);
     }

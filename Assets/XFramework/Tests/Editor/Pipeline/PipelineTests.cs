@@ -81,6 +81,30 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AddStageWhileRunning_IsIgnored()
+        {
+            // 运行中 _contexts 已按启动时刻快照,追加阶段会使阶段列表与上下文数组错位(越界/语义未定义);
+            // 守卫与 RunAsync 重入一致:打警告并忽略,被忽略的阶段不得在再次运行时执行
+            var first = new FakeStage { Name = "first", Gate = new UniTaskCompletionSource() };
+            var late = new FakeStage { Name = "late" };
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(first);
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] AddStage: already running"));
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] AddStage: already running"));
+            var task = pipeline.RunAsync();
+            pipeline.AddStage(late);     // 运行中追加 → 警告忽略
+            pipeline.AddStage(late, 1f); // 重载同守卫,同样忽略
+
+            Assert.AreEqual(0, late.ExecuteCount, "运行中添加的阶段不得被调度");
+            first.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            pipeline.RunAsync().GetAwaiter().GetResult(); // 再次运行:被忽略的阶段不得出现
+            Assert.AreEqual(0, late.ExecuteCount, "被忽略的阶段不得在再次运行时执行");
+        }
+
+        [Test]
         public void EmptyPipeline_FiresCompleted()
         {
             var pipeline = Pipeline.Create();
@@ -240,6 +264,32 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "完成终局广播必须为 1");
             Assert.AreEqual("Completed", progress[progress.Count - 1].Description, "完成终局描述必须为 Completed");
+        }
+
+        #endregion
+
+        #region 写入线程契约
+
+        [Test]
+        public void WorkerThreadWrite_LogsMainThreadError()
+        {
+            // 线程契约:阶段写入须与调度同一上下文(主线程);Editor 下越线程写入打 LogError
+            // (复用 UniTask PlayerLoopHelper.IsMainThread;Join 阻塞主线程 → 无并发写,
+            // 聚合在子线程内完成后才放行)
+            var stage = new GatedProgressStage();
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(stage);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[Pipeline\] PipelineStageContext must be written from the Unity main thread"));
+            var task = pipeline.RunAsync();
+
+            var thread = new Thread(() => stage.Ctx.SetProgress(0.5f));
+            thread.Start();
+            thread.Join();
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
         }
 
         #endregion

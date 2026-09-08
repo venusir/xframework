@@ -130,6 +130,14 @@ namespace XFramework.XPipeline
         {
             if (stage == null) return;
 
+            // 运行期装配防护:管线运行中追加阶段打警告并忽略(与 RunAsync 重入守卫同风格);
+            // 运行中 _contexts 已按启动时刻快照,入列会使阶段列表与上下文数组错位(越界/语义未定义)
+            if (IsRunning)
+            {
+                Debug.LogWarning("[Pipeline] AddStage: already running, ignore this call.");
+                return;
+            }
+
             // 避免重复添加(超时在首次添加时一并固化,平行列表同序)
             for (int i = 0; i < _stages.Count; i++)
             {
