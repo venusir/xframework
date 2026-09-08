@@ -126,7 +126,8 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             // 0.1% 步进应被节流:广播序列仅含首帧 0 与终局 1,不得出现 0.001~0.009 的中间值
-            // (首帧可能双发:进度 0 与描述 null→"Completed" 各一次,属管线事件驱动转发的既有行为)
+            // (首帧可能双发:进度 0 与描述 null→空串占位 各一次,属管线事件驱动转发的既有行为;
+            // 运行中空描述不再占位 "Completed",终局 "Completed" 由完成终局显式写入)
             Assert.GreaterOrEqual(progress.Count, 3, "至少应保留首帧与终局广播");
             Assert.AreEqual(0f, progress[0].OverallProgress, 0.001f, "首帧应为 0");
             Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "完成应收敛到 1");
@@ -204,8 +205,8 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             // 诊断优先:失败子阶段的描述与名称应曾广播。
-            // 注:管线失败终局广播的 Description 由 RecalculateSnapshot 生成(仅读执行中阶段描述),
-            // 终局可能显示 "Completed",故断言「曾广播」而非「终局广播」。
+            // 注:管线失败终局广播的 Description 由 RecalculateSnapshot 生成(仅读执行中阶段描述,
+            // 失败阶段不携带),终局可能为空串占位,故断言「曾广播」而非「终局广播」。
             bool foundBoom = false;
             bool foundBad = false;
             for (int i = 0; i < progress.Count; i++)

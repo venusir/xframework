@@ -147,11 +147,11 @@ namespace XFramework.XPipeline
                 if (dirty)
                 {
                     _target.SetProgress(overallProgress);
-                    _target.SetDescription(currentDesc ?? "Completed");
+                    _target.SetDescription(currentDesc ?? ContextAggregation.RunningDescriptionPlaceholder);
                     _target.CurrentTaskName = currentTaskName;
 
                     _lastOverall = overallProgress;
-                    _lastDesc = currentDesc ?? "Completed";
+                    _lastDesc = currentDesc ?? ContextAggregation.RunningDescriptionPlaceholder;
                     ContextAggregation.CopyStates(ChildContexts, _lastStates);
                 }
 

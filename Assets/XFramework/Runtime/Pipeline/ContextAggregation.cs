@@ -15,6 +15,13 @@ namespace XFramework.XPipeline
     {
         #region Public API
 
+        /// <summary>
+        /// 运行中未写描述时的广播/转发占位(空串:无描述即无文案,不与任何真实/终局文案撞车)。
+        /// <para>完成终局文案 "Completed" 由 <see cref="PipelineImpl"/> 终局块显式写出,不回落本占位;
+        /// 脏判定比较的是原始描述(可能 null),本占位只发生在广播/转发映射点,节流语义不受影响。</para>
+        /// </summary>
+        internal const string RunningDescriptionPlaceholder = "";
+
         /// <summary>扫描语义开关:两调用方逐分支差异的收敛点。</summary>
         internal enum ScanMode
         {

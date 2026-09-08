@@ -113,7 +113,8 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             // 0.1% 步进应被节流:广播序列仅含首帧 0 与终局 1,不得出现 0.001~0.009 的中间值
-            // (首帧可能双发:进度 0 与描述 null→"Completed" 各一次,属管线事件驱动转发的既有行为)
+            // (首帧可能双发:进度 0 与描述 null→空串占位 各一次,属管线事件驱动转发的既有行为;
+            // 运行中空描述不再占位 "Completed",终局 "Completed" 由完成终局显式写入)
             Assert.GreaterOrEqual(progress.Count, 3, "至少应保留首帧与终局广播");
             Assert.AreEqual(0f, progress[0].OverallProgress, 0.001f, "首帧应为 0");
             Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "完成应收敛到 1");
@@ -148,6 +149,37 @@ namespace Venusy609.Xframework.Editor.Tests
                 }
             }
             Assert.IsTrue(foundDesc, "子阶段描述写入应触发广播");
+        }
+
+        [Test]
+        public void GroupRunningNoDescription_ForwardsPlaceholderNotCompleted()
+        {
+            // 组内子阶段只报进度不写描述:聚合器转发不得把空描述占位为终局文案 "Completed"
+            // (转发处空描述回落空串占位;修复前转发 "Completed" 泄漏到运行中广播)
+            var child = new ProgressOnlyChildStage();
+            var stage = new ParallelStage(new IPipelineStage[] { child }, "Group");
+
+            var progress = new List<PipelineProgress>();
+            var pipeline = Pipeline.Create();
+            pipeline.OnProgressUpdate += p => progress.Add(p);
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+
+            Assert.AreEqual(0.5f, progress[progress.Count - 1].OverallProgress, 0.001f, "挂起中应广播子阶段进度 0.5");
+            for (int i = 0; i < progress.Count; i++)
+            {
+                Assert.AreNotEqual("Completed", progress[i].Description,
+                    "运行中(未完成)广播不得出现终局文案 Completed");
+                Assert.AreEqual(ContextAggregation.RunningDescriptionPlaceholder, progress[i].Description,
+                    "组内子阶段未写描述时转发的 Description 应为空串占位");
+            }
+
+            child.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "放行后应收敛到 1");
+            Assert.AreEqual("Completed", progress[progress.Count - 1].Description, "完成终局描述必须为 Completed");
         }
 
         #endregion
@@ -214,8 +246,8 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             // 诊断优先:失败子阶段的描述与名称应曾广播,不得被已完成兄弟覆盖。
-            // 注:管线失败终局广播的 Description 由 RecalculateSnapshot 生成(仅读执行中阶段描述),
-            // 终局可能显示 "Completed",故断言「曾广播」而非「终局广播」。
+            // 注:管线失败终局广播的 Description 由 RecalculateSnapshot 生成(仅读执行中阶段描述,
+            // 失败阶段不携带),终局可能为空串占位,故断言「曾广播」而非「终局广播」。
             bool foundBoom = false;
             bool foundBad = false;
             for (int i = 0; i < progress.Count; i++)
@@ -332,6 +364,24 @@ namespace Venusy609.Xframework.Editor.Tests
                 context.SetDescription("self-fail");
                 context.SetState(PipelineStageState.Failed);
                 await UniTask.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// 只报进度不写描述的挂起子阶段:锁定组内空描述转发占位语义(不得伪造终局文案 "Completed")。
+        /// </summary>
+        private sealed class ProgressOnlyChildStage : IPipelineStage
+        {
+            public string Name => "progress-only";
+
+            public float Weight => 1f;
+
+            public readonly UniTaskCompletionSource Gate = new UniTaskCompletionSource();
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
+                context.SetProgress(0.5f);
+                await Gate.Task.AttachExternalCancellation(cancellationToken);
             }
         }
 

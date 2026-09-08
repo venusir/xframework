@@ -371,13 +371,16 @@ namespace XFramework.XPipeline
             _failedStageCount = snap.FailedCount;
         }
 
-        /// <summary>构造进度快照并广播。</summary>
+        /// <summary>
+        /// 构造进度快照并广播。描述为空(null)时回落空串占位(<see cref="ContextAggregation.RunningDescriptionPlaceholder"/>,
+        /// 运行中未写描述的阶段不伪造终局文案);完成终局 "Completed" 由终局块显式写入字段,不经本映射。
+        /// </summary>
         private void Broadcast()
         {
             var progress = new PipelineProgress
             {
                 OverallProgress = _overall,
-                Description = _description ?? "Completed",
+                Description = _description ?? ContextAggregation.RunningDescriptionPlaceholder,
                 CurrentStageName = _currentStageName,
                 CurrentTaskName = _currentTaskName,
                 TotalStageCount = _stages.Count,

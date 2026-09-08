@@ -215,6 +215,33 @@ namespace Venusy609.Xframework.Editor.Tests
             task.GetAwaiter().GetResult();
         }
 
+        [Test]
+        public void RunningNoDescription_DoesNotBroadcastCompleted()
+        {
+            // 阶段只报进度不写描述:运行中(Executing、overall<1)广播不得出现终局文案 "Completed",
+            // Description 应为空串占位(修复前:阶段启动即广播,空描述被占位为 "Completed" 泄漏到运行中)
+            var stage = new ProgressOnlyGatedStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+
+            Assert.Greater(progress.Count, 0, "阶段启动应产生广播");
+            for (int i = 0; i < progress.Count; i++)
+            {
+                Assert.AreNotEqual("Completed", progress[i].Description,
+                    "运行中(未完成)广播不得出现终局文案 Completed");
+                Assert.AreEqual(ContextAggregation.RunningDescriptionPlaceholder, progress[i].Description,
+                    "未写描述阶段的 Description 应为空串占位");
+            }
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "完成终局广播必须为 1");
+            Assert.AreEqual("Completed", progress[progress.Count - 1].Description, "完成终局描述必须为 Completed");
+        }
+
         #endregion
 
         #region 测试辅助阶段
@@ -235,6 +262,24 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 Ctx = context;
                 context.SetDescription("gated");
+                context.SetProgress(0f);
+                await Gate.Task.AttachExternalCancellation(cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 只报进度不写描述的挂起阶段:锁定运行中空描述占位语义(不得泄漏终局文案 "Completed")。
+        /// </summary>
+        private sealed class ProgressOnlyGatedStage : IPipelineStage
+        {
+            public string Name => "progress-only";
+
+            public float Weight => 1f;
+
+            public readonly UniTaskCompletionSource Gate = new UniTaskCompletionSource();
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
                 context.SetProgress(0f);
                 await Gate.Task.AttachExternalCancellation(cancellationToken);
             }
