@@ -56,13 +56,14 @@ namespace XFramework.XPool
         /// <summary>
         /// 从池获取一个实例，使用自定义生成器（池空时调用）。
         /// <para>适用于无无参构造函数的类型，或需要自定义初始化逻辑的场景。</para>
+        /// <para>generator 仅在本类型的首次建池时生效；池已创建后传入的生成器会被忽略
+        /// （同一类型全局单池，后续 Get 仍使用建池时确定的生成器）。</para>
         /// </summary>
         /// <typeparam name="T">对象类型，需为引用类型</typeparam>
-        /// <param name="generator">池空时的实例生成器</param>
+        /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
         public static T Get<T>(Func<T> generator) where T : class
         {
-            var pool = GetOrCreatePool(generator, PoolConfig.Default);
-            return pool.Get();
+            return GetOrCreatePoolCore(generator, true).Get();
         }
 
         /// <summary>
@@ -78,15 +79,15 @@ namespace XFramework.XPool
 
         /// <summary>
         /// 以 using 方式获取实例（自定义生成器），并在 using 块结束时自动归还。
+        /// <para>generator 的生效语义同 <see cref="Get{T}(Func{T})"/>：仅首次建池时生效。</para>
         /// </summary>
         /// <typeparam name="T">对象类型，需为引用类型</typeparam>
-        /// <param name="generator">池空时的实例生成器</param>
+        /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
         /// <param name="item">从池中取出的实例</param>
         /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
         public static PooledObject<T> GetPooled<T>(Func<T> generator, out T item) where T : class
         {
-            var pool = GetOrCreatePool(generator, PoolConfig.Default);
-            return pool.GetPooled(out item);
+            return GetOrCreatePoolCore(generator, true).GetPooled(out item);
         }
 
         /// <summary>
@@ -111,25 +112,44 @@ namespace XFramework.XPool
         #region Public API — Configure
 
         /// <summary>
-        /// 预配置池参数。必须在首次 <c>Get<T>()</c> 前调用。
+        /// 预配置池参数，在该类型首次建池时一次性消费生效。
         /// <para>适用于只需自定义容量 / 预热数量，无需自定义生成器的场景。</para>
+        /// <para>若该类型的池已创建，则告警并忽略本次配置；重新配置请先调用
+        /// <see cref="RemovePool{T}"/>。重复 Configure（池未创建时）以最后一次为准。</para>
         /// </summary>
         /// <typeparam name="T">对象类型，需为引用类型且具有无参构造函数</typeparam>
         /// <param name="config">池配置</param>
         public static void Configure<T>(PoolConfig config) where T : class, new()
         {
+            if (_pools.ContainsKey(typeof(T)))
+            {
+                Debug.LogWarning(
+                    $"[PoolManager] 类型 {typeof(T).Name} 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<{typeof(T).Name}>()。");
+                return;
+            }
+
             _configs[typeof(T)] = config;
         }
 
         /// <summary>
-        /// 预配置池参数及自定义生成器。必须在首次 <c>Get<T>()</c> 前调用。
+        /// 预配置池参数及自定义生成器，在该类型首次建池时一次性消费生效。
         /// <para>适用于需要自定义构造逻辑（如注入依赖）的场景。</para>
+        /// <para>若该类型的池已创建，则告警并忽略本次配置；重新配置请先调用
+        /// <see cref="RemovePool{T}"/>。无参入口建池时使用本生成器；显式传入生成器的
+        /// <see cref="Get{T}(Func{T})"/> 以显式生成器优先（配置的容量 / 预热仍生效）。</para>
         /// </summary>
         /// <typeparam name="T">对象类型，需为引用类型</typeparam>
         /// <param name="config">池配置</param>
-        /// <param name="generator">池空时的实例生成器</param>
+        /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
         public static void Configure<T>(PoolConfig config, Func<T> generator) where T : class
         {
+            if (_pools.ContainsKey(typeof(T)))
+            {
+                Debug.LogWarning(
+                    $"[PoolManager] 类型 {typeof(T).Name} 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<{typeof(T).Name}>()。");
+                return;
+            }
+
             _configs[typeof(T)] = (config, generator);
         }
 
@@ -146,7 +166,8 @@ namespace XFramework.XPool
         }
 
         /// <summary>
-        /// 获取指定类型的池实例。若池不存在则自动以默认配置创建。
+        /// 获取指定类型的池实例。若池不存在则按已配置参数创建
+        /// （<see cref="Configure{T}(PoolConfig)"/> 的一次性配置，否则默认配置）。
         /// </summary>
         /// <typeparam name="T">对象类型，需为引用类型且具有无参构造函数</typeparam>
         public static IPool<T> GetPool<T>() where T : class, new()
@@ -154,7 +175,7 @@ namespace XFramework.XPool
             if (_pools.TryGetValue(typeof(T), out var poolObj))
                 return (IPool<T>)poolObj;
 
-            return CreateDefaultPool<T>();
+            return GetOrCreatePoolCore(() => new T(), false);
         }
 
         /// <summary>
@@ -190,17 +211,27 @@ namespace XFramework.XPool
 
         #region Internal
 
-        private static IPool<T> CreateDefaultPool<T>() where T : class, new()
+        /// <summary>
+        /// 建池统一入口：池已存在直接返回（同一类型全局单池）；否则消费 <c>_configs</c> 中
+        /// 该类型的一次性配置后创建。
+        /// <para>显式传入的生成器（<c>generatorIsExplicit</c>）优先于 Configure 的生成器，
+        /// 但配置中的容量 / 预热仍生效；裸 <c>PoolConfig</c> 条目不影响生成器。</para>
+        /// </summary>
+        private static IPool<T> GetOrCreatePoolCore<T>(Func<T> generator, bool generatorIsExplicit)
+            where T : class
         {
+            if (_pools.TryGetValue(typeof(T), out var poolObj))
+                return (IPool<T>)poolObj;
+
             PoolConfig config = PoolConfig.Default;
-            Func<T> generator = () => new T();
 
             if (_configs.TryGetValue(typeof(T), out var cfgObj))
             {
                 if (cfgObj is (PoolConfig cfg, Func<T> gen))
                 {
                     config = cfg;
-                    generator = gen;
+                    if (!generatorIsExplicit)
+                        generator = gen;
                 }
                 else if (cfgObj is PoolConfig cfgOnly)
                 {
@@ -208,16 +239,6 @@ namespace XFramework.XPool
                 }
                 _configs.Remove(typeof(T));
             }
-
-            var pool = new Pool<T>(generator, config);
-            _pools[typeof(T)] = pool;
-            return pool;
-        }
-
-        private static IPool<T> GetOrCreatePool<T>(Func<T> generator, PoolConfig config) where T : class
-        {
-            if (_pools.TryGetValue(typeof(T), out var poolObj))
-                return (IPool<T>)poolObj;
 
             var pool = new Pool<T>(generator, config);
             _pools[typeof(T)] = pool;

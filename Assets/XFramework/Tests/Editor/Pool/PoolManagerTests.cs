@@ -1,4 +1,6 @@
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XPool;
 
 namespace Venusy609.Xframework.Editor.Tests
@@ -68,6 +70,62 @@ namespace Venusy609.Xframework.Editor.Tests
             }
         }
 
+        /// <summary>Configure 预热生效用例专用类型。</summary>
+        private sealed class ConfigureItem
+        {
+            public ConfigureItem()
+            {
+            }
+        }
+
+        /// <summary>Configure 带生成器用例专用类型。</summary>
+        private sealed class ConfigureGenItem
+        {
+            public ConfigureGenItem()
+            {
+            }
+        }
+
+        /// <summary>Configure 一次性消费用例专用类型。</summary>
+        private sealed class ConsumedItem
+        {
+            public ConsumedItem()
+            {
+            }
+        }
+
+        /// <summary>显式生成器优先用例专用类型。</summary>
+        private sealed class ExplicitGenItem
+        {
+            public ExplicitGenItem()
+            {
+            }
+        }
+
+        /// <summary>GetPooled 消费配置用例专用类型。</summary>
+        private sealed class UsingGenItem
+        {
+            public UsingGenItem()
+            {
+            }
+        }
+
+        /// <summary>Configure 池已存在告警用例专用类型。</summary>
+        private sealed class ReconfigureItem
+        {
+            public ReconfigureItem()
+            {
+            }
+        }
+
+        /// <summary>类型单池（第二生成器忽略）用例专用类型。</summary>
+        private sealed class DualGenItem
+        {
+            public DualGenItem()
+            {
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -79,6 +137,13 @@ namespace Venusy609.Xframework.Editor.Tests
             PoolManager.RemovePool<RemovedItem>();
             PoolManager.RemovePool<ClearItem>();
             PoolManager.RemovePool<ClearReturnItem>();
+            PoolManager.RemovePool<ConfigureItem>();
+            PoolManager.RemovePool<ConfigureGenItem>();
+            PoolManager.RemovePool<ConsumedItem>();
+            PoolManager.RemovePool<ExplicitGenItem>();
+            PoolManager.RemovePool<UsingGenItem>();
+            PoolManager.RemovePool<ReconfigureItem>();
+            PoolManager.RemovePool<DualGenItem>();
         }
 
         [Test]
@@ -188,6 +253,122 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.That(PoolManager.GetPool<ClearReturnItem>().CountInactive, Is.EqualTo(1),
                 "ClearAll 后归还租出实例应重新入池");
             Assert.AreSame(item, PoolManager.Get<ClearReturnItem>());
+        }
+
+        [Test]
+        public void Configure_Prewarm_AppliedOnFirstPoolCreation()
+        {
+            PoolManager.Configure<ConfigureItem>(new PoolConfig { PrewarmSize = 3 });
+
+            var pool = PoolManager.GetPool<ConfigureItem>();
+
+            Assert.That(pool.CountInactive, Is.EqualTo(3), "配置的预热应在首次建池时生效");
+            Assert.That(pool.CountAll, Is.EqualTo(3));
+        }
+
+        [Test]
+        public void Configure_WithGenerator_ParameterlessGetUsesIt()
+        {
+            var configuredCalls = 0;
+            PoolManager.Configure<ConfigureGenItem>(new PoolConfig { MaxSize = 10 },
+                () => { configuredCalls++; return new ConfigureGenItem(); });
+
+            var item = PoolManager.Get<ConfigureGenItem>();
+
+            Assert.That(configuredCalls, Is.EqualTo(1), "无参入口建池应使用 Configure 的生成器");
+            PoolManager.Return(item);
+            Assert.AreSame(item, PoolManager.Get<ConfigureGenItem>());
+        }
+
+        [Test]
+        public void Configure_ConsumedOnce_AfterRemovePool_DefaultApplies()
+        {
+            PoolManager.Configure<ConsumedItem>(new PoolConfig { PrewarmSize = 2 });
+            var first = PoolManager.Get<ConsumedItem>(); // 消费配置：预热 2 并取出 1
+            PoolManager.RemovePool<ConsumedItem>();
+
+            var second = PoolManager.Get<ConsumedItem>();
+
+            Assert.That(PoolManager.GetPool<ConsumedItem>().CountAll, Is.EqualTo(1),
+                "配置一次性消费，池移除后重建不再生效");
+            Assert.AreNotSame(first, second);
+            PoolManager.Return(second);
+        }
+
+        [Test]
+        public void Configure_ThenExplicitGenerator_ConfigAppliesAndExplicitWins()
+        {
+            var configuredCalls = 0;
+            var explicitCalls = 0;
+            PoolManager.Configure<ExplicitGenItem>(new PoolConfig { PrewarmSize = 2 },
+                () => { configuredCalls++; return new ExplicitGenItem(); });
+
+            var item = PoolManager.Get<ExplicitGenItem>(() =>
+            {
+                explicitCalls++;
+                return new ExplicitGenItem();
+            });
+
+            Assert.That(explicitCalls, Is.EqualTo(2), "预热实例应产自显式生成器");
+            Assert.That(configuredCalls, Is.EqualTo(0), "显式生成器应优先于 Configure 的生成器");
+            Assert.NotNull(item);
+            PoolManager.Return(item);
+            Assert.AreSame(item, PoolManager.Get<ExplicitGenItem>());
+        }
+
+        [Test]
+        public void GetPooled_WithGenerator_ConsumesConfiguredEntry()
+        {
+            var configuredCalls = 0;
+            var explicitCalls = 0;
+            PoolManager.Configure<UsingGenItem>(new PoolConfig { PrewarmSize = 1 },
+                () => { configuredCalls++; return new UsingGenItem(); });
+
+            UsingGenItem item;
+            using (PoolManager.GetPooled<UsingGenItem>(() =>
+            {
+                explicitCalls++;
+                return new UsingGenItem();
+            }, out item))
+            {
+                Assert.That(explicitCalls, Is.EqualTo(1), "预热的实例应产自显式生成器");
+                Assert.That(configuredCalls, Is.EqualTo(0));
+            }
+
+            Assert.That(PoolManager.GetPool<UsingGenItem>().CountInactive, Is.EqualTo(1),
+                "using 结束应自动归还");
+            Assert.AreSame(item, PoolManager.Get<UsingGenItem>());
+        }
+
+        [Test]
+        public void Configure_PoolAlreadyExists_WarnsAndIgnores()
+        {
+            var item = PoolManager.Get<ReconfigureItem>(); // 池已创建
+
+            LogAssert.Expect(LogType.Warning,
+                "[PoolManager] 类型 ReconfigureItem 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<ReconfigureItem>()。");
+            PoolManager.Configure<ReconfigureItem>(new PoolConfig { PrewarmSize = 5 });
+
+            PoolManager.Return(item);
+            PoolManager.RemovePool<ReconfigureItem>();
+            var fresh = PoolManager.Get<ReconfigureItem>();
+            Assert.That(PoolManager.GetPool<ReconfigureItem>().CountAll, Is.EqualTo(1),
+                "告警后配置不应写入（重建池无预热）");
+            PoolManager.Return(fresh);
+        }
+
+        [Test]
+        public void Get_SecondGenerator_Ignored_TypeIsSinglePool()
+        {
+            var callsA = 0;
+            var callsB = 0;
+            var a = PoolManager.Get<DualGenItem>(() => { callsA++; return new DualGenItem(); });
+            var b = PoolManager.Get<DualGenItem>(() => { callsB++; return new DualGenItem(); });
+
+            Assert.That(callsA, Is.EqualTo(2), "池空时第二次 Get 应继续使用首个生成器");
+            Assert.That(callsB, Is.EqualTo(0), "池已存在时传入的生成器应被忽略");
+            Assert.AreNotSame(a, b);
+            PoolManager.Return(b);
         }
     }
 }
