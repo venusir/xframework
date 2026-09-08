@@ -9,6 +9,7 @@ namespace XFramework.XPool
     /// <para>线程不安全，应在主线程使用。</para>
     /// <para>GC 友好：内部使用 <see cref="Stack{T}"/> 存储闲置实例，预分配容量，无装箱。</para>
     /// <para>回调优先级：委托 > <see cref="IPoolable"/> 接口。同时存在时仅调用委托。</para>
+    /// <para><typeparamref name="T"/> 应为引用类型：实例复用依赖引用同一性（如 Editor 重复归还检测），值类型不保证正确语义。</para>
     /// </summary>
     /// <typeparam name="T">池中存储的对象类型</typeparam>
     /// <example>
@@ -144,12 +145,11 @@ namespace XFramework.XPool
         /// <summary>
         /// 清空池内所有闲置实例。
         /// <para>已取出的活跃实例不受影响，但 <see cref="Return"/> 时会重新入池。</para>
+        /// <para>Editor 下的活跃追踪集保留（已租出实例归还时仍能通过重复归还检测）；
+        /// 内部栈容量保留，以便后续归还复用时不再扩容。</para>
         /// </summary>
         public void Clear()
         {
-#if UNITY_EDITOR
-            _activeSet?.Clear();
-#endif
             _stack.Clear();
         }
     }
