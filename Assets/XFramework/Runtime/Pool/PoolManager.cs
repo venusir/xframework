@@ -31,10 +31,11 @@ namespace XFramework.XPool
 
         private static readonly Dictionary<Type, object> _pools = new();
         private static readonly Dictionary<Type, object> _configs = new();
-        private static bool _destroyed;
 
         static PoolManager()
         {
+            // 订阅仅此一次、永不退订：ClearAll 改为幂等清闲置后，退出与切场景多次调用均安全；
+            // 禁用域重载时静态状态跨会话存活，后续会话退出仍需要清理
             Application.quitting += ClearAll;
         }
 
@@ -97,7 +98,7 @@ namespace XFramework.XPool
         /// <param name="item">要归还的实例</param>
         public static void Return<T>(T item) where T : class
         {
-            if (_destroyed || item == null) return;
+            if (item == null) return;
             if (_pools.TryGetValue(typeof(T), out var poolObj) && poolObj is IPool<T> pool)
             {
                 pool.Return(item);
@@ -171,19 +172,18 @@ namespace XFramework.XPool
         }
 
         /// <summary>
-        /// 清空所有类型的所有池，释放闲置实例。
-        /// <para>应用退出时自动调用。</para>
+        /// 清空所有类型池的闲置实例（等价对每池调用 <see cref="Pool{T}.Clear"/>）。
+        /// <para>已取出的活跃实例不受影响，归还时重新入池；池注册与 <c>Configure</c> 配置保留，
+        /// 之后 <c>Get</c> / <c>Return</c> 照常工作。</para>
+        /// <para>幂等，可重复调用，切场景与退出均安全。应用退出时自动调用
+        /// （Editor 中退出播放模式同样触发）。</para>
         /// </summary>
         public static void ClearAll()
         {
-            _destroyed = true;
             foreach (var poolObj in _pools.Values)
             {
                 if (poolObj is IDisposable d) d.Dispose();
             }
-            _pools.Clear();
-            _configs.Clear();
-            Application.quitting -= ClearAll;
         }
 
         #endregion

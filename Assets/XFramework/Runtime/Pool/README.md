@@ -81,7 +81,7 @@ class BulletSystem
 | `PoolManager.HasPool<T>()`                      | 指定类型的池是否已创建             |
 | `PoolManager.GetPool<T>()`                      | 获取 IPool<T> 实例（用于高级操作） |
 | `PoolManager.RemovePool<T>()`                   | 移除并清空指定类型的池             |
-| `PoolManager.ClearAll()`                        | 清空所有池                         |
+| `PoolManager.ClearAll()`                        | 清空闲置实例（池注册与配置保留，可重复调用，切场景安全） |
 | `this.GetFromPool<T>()`                         | 扩展方法，从池获取                 |
 | `this.GetFromPool<T>(generator)`                | 扩展方法，从池获取（自定义生成器） |
 | `item.ReturnToPool()`                           | 扩展方法，归还实例                 |
@@ -362,6 +362,7 @@ void OnSceneUnloaded(Scene scene)
 {
     CollectionPoolManager.ClearAll();  // 清空所有被触碰过的集合池
     PoolManager.ClearAll();            // 清空业务对象池
+    // 二者都只清闲置实例：池注册与 Configure 保留，后续 Get / Return 照常工作
 }
 ```
 
@@ -374,5 +375,6 @@ void OnSceneUnloaded(Scene scene)
 
 | 版本  | 说明                                                                |
 | ----- | ------------------------------------------------------------------- |
+| 1.2.0 | 修复 ClearAll 改为清闲置语义（原实现会使 Return 永久失效）、Pool.Clear 保留 Editor 活跃追踪；新增 EditMode 单元测试 |
 | 1.1.0 | 新增 CollectionPool 集合池（List/HashSet/Dictionary/StringBuilder） |
 | 1.0.0 | 初始版本                                                            |

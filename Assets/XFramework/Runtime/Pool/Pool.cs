@@ -20,7 +20,7 @@ namespace XFramework.XPool
     /// pool.Return(item);
     /// </code>
     /// </example>
-    public sealed class Pool<T> : IPool<T>
+    public sealed class Pool<T> : IPool<T>, IDisposable
     {
         private readonly Stack<T> _stack;
         private readonly Func<T> _generator;
@@ -152,5 +152,12 @@ namespace XFramework.XPool
         {
             _stack.Clear();
         }
+
+        /// <summary>
+        /// 显式实现 <see cref="IDisposable"/>：等价 <see cref="Clear"/>，仅供统一清理路径
+        /// （如 <see cref="PoolManager.ClearAll"/>）按接口遍历调用。
+        /// <para>可重复调用，调用后池仍可继续使用，不应被理解为「销毁池」。</para>
+        /// </summary>
+        void IDisposable.Dispose() => Clear();
     }
 }

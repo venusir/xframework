@@ -30,7 +30,7 @@ namespace XFramework.XPool
 
         /// <summary>
         /// 归还实例到池。
-        /// <para>若池不存在或已销毁，静默忽略。</para>
+        /// <para>若池不存在，静默忽略。</para>
         /// </summary>
         /// <typeparam name="T">对象类型</typeparam>
         /// <param name="item">要归还的实例</param>
