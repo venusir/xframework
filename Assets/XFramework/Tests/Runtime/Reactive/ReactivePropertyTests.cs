@@ -5,8 +5,8 @@ using NUnit.Framework;
 namespace XFramework.XReactive.Tests
 {
     /// <summary>
-    /// 响应式属性测试(移除 R3 依赖计划 Phase 3)。
-    /// <para>契约来源:R3BehaviorProbeTests 实测的 R3 行为(订阅立即回调、相同值去重、Dispose 后抛 ODE)。</para>
+    /// 响应式属性测试。
+    /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后抛 ObjectDisposedException、ReadOnly 映射语义、接口链编程。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -99,6 +99,40 @@ namespace XFramework.XReactive.Tests
             rp.Dispose();
 
             Assert.DoesNotThrow(() => rp.Dispose(), "重复 Dispose 幂等");
+        }
+
+        #endregion
+
+        #region IReactiveProperty 接口链 — 面向接口编程
+
+        [Test]
+        public void Interface_SubscribeReadOnlyView_Works()
+        {
+            // 接口 Value 无 setter:作为只读视图暴露(写值仍经具体类型)
+            var rp = new ReactiveProperty<int>(5);
+            IReactiveProperty<int> view = rp;
+
+            var calls = new List<int>();
+            view.Subscribe(calls.Add);
+
+            CollectionAssert.AreEqual(new[] { 5 }, calls, "经接口订阅立即回调当前值");
+
+            rp.Value = 6;
+            Assert.AreEqual(6, view.Value, "经接口读值保持最新");
+            CollectionAssert.AreEqual(new[] { 5, 6 }, calls, "具体类型写值触发,接口订阅者收到通知");
+        }
+
+        [Test]
+        public void Interface_SameValue_NotNotified()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            IReactiveProperty<int> view = rp;
+            var calls = new List<int>();
+            view.Subscribe(calls.Add);
+
+            rp.Value = 1;
+
+            CollectionAssert.AreEqual(new[] { 1 }, calls, "相同值不通知(去重语义经接口一致)");
         }
 
         #endregion

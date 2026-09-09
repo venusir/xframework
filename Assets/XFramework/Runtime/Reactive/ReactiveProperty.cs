@@ -7,17 +7,17 @@ namespace XFramework.XReactive
     /// <summary>
     /// 响应式属性。包含一个可自动推送变化的响应式值。
     /// <para>适用于血量、分数、状态等需要被监听的属性。不依赖场景节点树，可在任意 C# 类中使用。</para>
-    /// <para>基于自研 Subject 实现(移除 R3 依赖计划 Phase 3)。</para>
+    /// <para>基于自研 Subject 实现。实现 <see cref="IReactiveProperty{T}"/> 接口,可面向接口编程。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
     /// </summary>
     /// <typeparam name="T">值的类型。</typeparam>
     /// <remarks>
-    /// 行为契约(实测 R3 后固化,与 R3.ReactiveProperty 一致):
+    /// 行为契约:
     /// - <see cref="Subscribe"/> 订阅时立即同步回调当前值
-    /// - 设置相同值不通知(自带 DistinctUntilChanged 语义)
+    /// - 设置相同值不通知(去重语义)
     /// - <see cref="Dispose"/> 后访问 <see cref="Value"/> 抛 <see cref="ObjectDisposedException"/>,再次 Subscribe 同样抛出
     /// </remarks>
-    public class ReactiveProperty<T> : IDisposable
+    public class ReactiveProperty<T> : IReactiveProperty<T>, IDisposable
     {
         #region Private Fields
 
@@ -62,7 +62,7 @@ namespace XFramework.XReactive
             set
             {
                 ThrowIfDisposed();
-                // 去重语义:相同值不通知(与 R3 行为一致,探针 1c 实测)
+                // 去重语义:相同值不通知
                 if (EqualityComparer<T>.Default.Equals(_value, value))
                     return;
                 _value = value;
@@ -88,7 +88,7 @@ namespace XFramework.XReactive
             if (onNext == null) throw new ArgumentNullException(nameof(onNext));
             ThrowIfDisposed();
 
-            // 先注册再立即回调(与 R3 一致):确保回调中的订阅操作不会丢失后续消息
+            // 先注册再立即回调:确保回调中的订阅操作不会丢失后续消息
             var handle = _subject.Subscribe(onNext);
             onNext(_value);
             return handle;
