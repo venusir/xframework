@@ -4,7 +4,7 @@
 
 Message 模块提供**全局消息总线**与支撑它的**事件流引擎**。基于**自研轻量事件引擎**（`XFramework.XMessage.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力。
 
-消息总线支持:类型化消息、带键值通道、缓冲订阅(新订阅者立即收到最近一条)、异步处理器订阅、订阅级过滤条件、全局过滤器管道、请求-响应模式。响应式属性(`ReactiveProperty<T>`,XReactive 模块)内部即基于本模块事件流引擎实现。
+消息总线支持:类型化消息、带键值通道、缓冲订阅(新订阅者立即收到最近一条)、异步处理器订阅、订阅级过滤条件、全局过滤器管道、请求-响应模式。
 
 **命名空间**: `XFramework.XMessage`;引擎 `XFramework.XMessage.Internal`
 
@@ -21,8 +21,6 @@ Runtime/Message/
     ├── BufferedEventStream.cs    # 缓冲 1 条的事件流(订阅即重放最近一条)
     └── ActionDisposable.cs       # 委托式 IDisposable(幂等)
 ```
-
-依赖方向:Message 零外部依赖;XReactive(响应式属性)与本框架其他模块依赖本模块。
 
 ## 快速使用
 
@@ -166,5 +164,4 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 
 ## 依赖
 
-- 无外部依赖(事件引擎自研;行为语义:订阅立即回调、相同值去重、异常隔离)
-- `XFramework.XReactive`(响应式属性)与本模块的依赖方向:Reactive → Message
+- 无外部依赖(事件流引擎自研,零第三方依赖)
