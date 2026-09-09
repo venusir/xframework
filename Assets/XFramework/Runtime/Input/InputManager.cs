@@ -23,7 +23,7 @@ namespace XFramework.XInput
         private static IInputProvider _provider;
         private static bool _initialized;
 
-        /// <summary>每帧脉冲信号,驱动 Observe* 系列轮询(替代原 R3 EveryUpdate 热流)。</summary>
+        /// <summary>每帧脉冲信号,驱动 Observe* 系列轮询。</summary>
         private static readonly Subject<Unit> _framePulse = new();
 
         /// <summary>自动帧驱动刷新器(经 UpdateManager 注册,仅 Initialize 成功路径启用)。</summary>
@@ -141,7 +141,7 @@ namespace XFramework.XInput
         private static void PulseFrame()
         {
             _provider?.Tick();
-            // 发布帧脉冲,驱动 Observe* 系列订阅(等价于原 R3 EveryUpdate 热流)
+            // 发布帧脉冲,驱动 Observe* 系列订阅
             _framePulse.OnNext(default);
             _lastPulseFrame = Time.frameCount;
         }
@@ -494,7 +494,7 @@ namespace XFramework.XInput
         public static IDisposable ObservePressed(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 订阅帧脉冲,每帧检测一次按下状态(等价于原 R3 EveryUpdate + Where 链)
+            // 订阅帧脉冲,每帧检测一次按下状态
             var sub = _framePulse.Subscribe(_ =>
             {
                 if (WasPressedThisFrame(action, playerId))
@@ -519,7 +519,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveReleased(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 订阅帧脉冲,每帧检测一次释放状态(等价于原 R3 EveryUpdate + Where 链)
+            // 订阅帧脉冲,每帧检测一次释放状态
             var sub = _framePulse.Subscribe(_ =>
             {
                 if (WasReleasedThisFrame(action, playerId))
@@ -544,7 +544,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveHeld(string action, Action<bool> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(bool);
             var sub = _framePulse.Subscribe(_ =>
@@ -576,7 +576,7 @@ namespace XFramework.XInput
         public static IDisposable ObservePressDuration(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(float);
             var sub = _framePulse.Subscribe(_ =>
@@ -608,7 +608,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveVector2(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(Vector2);
             var sub = _framePulse.Subscribe(_ =>
@@ -639,7 +639,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveFloat(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(float);
             var sub = _framePulse.Subscribe(_ =>
@@ -670,7 +670,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveVector2Raw(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(Vector2);
             var sub = _framePulse.Subscribe(_ =>
@@ -701,7 +701,7 @@ namespace XFramework.XInput
         public static IDisposable ObserveFloatRaw(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
-            // 内联 DistinctUntilChanged 闭包状态机:首次必过,之后相同值去重(与 R3 语义一致)
+            // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
             var lastValue = default(float);
             var sub = _framePulse.Subscribe(_ =>

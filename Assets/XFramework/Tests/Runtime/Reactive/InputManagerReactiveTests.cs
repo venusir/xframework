@@ -7,9 +7,9 @@ using XFramework.XInput;
 namespace XFramework.XInput.Tests
 {
     /// <summary>
-    /// InputManager Observe* 系列响应式订阅测试(移除 R3 依赖计划 Phase 5)。
+    /// InputManager Observe* 系列响应式订阅测试。
     /// <para>用假 IInputProvider + 手动 <see cref="InputManager.Tick"/> 驱动帧脉冲,
-    /// 锁定各 Observe 的触发、去重、首次必过与退订语义(与原 R3 EveryUpdate 链一致)。</para>
+    /// 锁定各 Observe 的触发、去重、首次必过与退订语义。</para>
     /// </summary>
     [TestFixture]
     public class InputManagerReactiveTests
@@ -89,7 +89,7 @@ namespace XFramework.XInput.Tests
             var calls = 0;
             var handle = InputManager.ObservePressed("Jump", () => calls++);
 
-            // 帧脉冲未发布前(等价于 R3 EveryUpdate 热流:订阅后等下帧),不回调
+            // 帧脉冲未发布前(订阅后等下帧),不回调
             Assert.AreEqual(0, calls);
             handle.Dispose();
         }
@@ -156,7 +156,7 @@ namespace XFramework.XInput.Tests
             var calls = new List<bool>();
             var handle = InputManager.ObserveHeld("Jump", calls.Add);
 
-            // 首次必过:即使当前未按住(false)也回调一次(与 R3 DistinctUntilChanged 语义一致)
+            // 首次必过:即使当前未按住(false)也回调一次
             provider.Held = false;
             InputManager.Tick();
 

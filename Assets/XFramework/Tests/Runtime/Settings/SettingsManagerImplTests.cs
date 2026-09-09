@@ -6,7 +6,7 @@ using XFramework.XSettings;
 namespace XFramework.XSettings.Tests
 {
     /// <summary>
-    /// SettingsManagerImpl 响应式通知测试(移除 R3 依赖计划 Phase 4)。
+    /// SettingsManagerImpl 响应式通知测试。
     /// <para>覆盖 Observe/ObserveField 语义:触发、首次必过、去重、字段隔离、退订。</para>
     /// </summary>
     [TestFixture]

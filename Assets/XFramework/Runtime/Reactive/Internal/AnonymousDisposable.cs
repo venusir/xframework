@@ -4,8 +4,7 @@ using System.Threading;
 namespace XFramework.XReactive.Internal
 {
     /// <summary>
-    /// 将任意 Action 包装为 IDisposable 的轻量实现。
-    /// <para>替代 R3.Disposable.Create 的自研实现(移除 R3 依赖计划 Phase 1),供 R3.Disposable.Create 的迁移使用。</para>
+    /// 将任意 Action 包装为 IDisposable 的轻量实现（委托工厂）。
     /// </summary>
     /// <remarks>
     /// 幂等:Dispose 只执行一次,重复调用被忽略(Interlocked.Exchange 置空后判断)。

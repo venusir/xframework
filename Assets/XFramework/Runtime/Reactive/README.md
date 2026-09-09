@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 响应式模块提供消息总线、响应式属性和信号系统。基于**自研轻量响应式引擎**（`XFramework.XReactive.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力，通过 `ReactiveProperty<T>` 节点提供响应式属性绑定，通过 `ISignal` 接口提供轻量级事件通知。
+XFramework 响应式模块提供消息总线与响应式属性。基于**自研轻量响应式引擎**（`XFramework.XReactive.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力，通过 `ReactiveProperty<T>` 提供响应式属性绑定（订阅立即回调、相同值去重）。
 
 **命名空间**: `XFramework.XReactive`
 
@@ -11,18 +11,17 @@ XFramework 响应式模块提供消息总线、响应式属性和信号系统。
 ```
 Runtime/Reactive/
 ├── IMessageBroker.cs             # 消息发布/订阅器接口
-├── MessageBroker.cs              # 消息代理内部实现（基于自研 Subject）
+├── MessageBroker.cs              # 消息代理内部实现（订阅直落自研 Subject）
 ├── MessageManager.cs             # 静态外观（全局入口） + 节点扩展方法
 ├── IMessageFilter.cs             # 消息过滤器接口
-├── IReactiveProperty.cs          # 响应式属性接口
-├── ReactiveProperty.cs           # 响应式属性节点                           
-├── ISignal.cs                    # 信号接口
-├── Signal.cs                     # 信号内部实现（基于自研 Subject）
+├── IReactiveProperty.cs          # 响应式属性接口（只读视图）
+├── ReactiveProperty.cs           # 响应式属性（可写值 + 自动通知）
+├── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
 └── Internal/                     # 自研响应式引擎（零外部依赖）
     ├── Subject.cs                # Subject<T> + 订阅节点池
     ├── ReplaySubject.cs          # 缓冲 1 条的 ReplaySubject<T>
-    ├── AnonymousDisposable.cs    # IDisposable.Create 替代品
-    └── Unit.cs                   # 无参数信号占位类型
+    ├── AnonymousDisposable.cs    # 委托式 IDisposable（幂等）
+    └── Unit.cs                   # 零开销占位类型（帧脉冲用）
 ```
 
 ## 快速使用
@@ -139,30 +138,6 @@ healthProp.Value = 50;   // 输出: 血量变化: 50
 subscription.Dispose();
 ```
 
-### 3. 信号系统（Signal）
-
-```csharp
-var signal = new Signal();
-
-// 订阅信号
-var subscription = signal.Subscribe(() =>
-{
-    Debug.Log("信号被触发！");
-});
-
-// 发布信号
-signal.Publish();  // 输出: 信号被触发！
-subscription.Dispose();
-
-// 带参数的信号
-var scoreSignal = new Signal<int>();
-scoreSignal.Subscribe(score =>
-{
-    Debug.Log($"收到分数: {score}");
-});
-scoreSignal.Publish(1000);
-```
-
 ## 节点扩展方法
 
 实现了 `IMessagePublisher` / `IMessageSubscriber` 的节点可以直接使用便捷的扩展方法：
@@ -200,5 +175,5 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 
 ## 依赖
 
-- 无外部响应式库依赖（自研引擎，行为语义与 R3 一致：订阅立即回调、相同值去重、异常隔离）
+- 无外部响应式库依赖（自研引擎；行为语义：订阅立即回调、相同值去重、异常隔离）
 - `XFramework.XNode` — 节点系统依赖
