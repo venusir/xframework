@@ -5,7 +5,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.Layouts;
 using UnityEngine.InputSystem.LowLevel;
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 namespace XFramework.XInput.Default
 {

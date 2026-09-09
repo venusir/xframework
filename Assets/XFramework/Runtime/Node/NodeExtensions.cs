@@ -1,6 +1,6 @@
 using System;
 using System.Threading;
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 namespace XFramework.XNode
 {

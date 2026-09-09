@@ -1,7 +1,7 @@
 using System;
 using System.Threading;
 
-namespace XFramework.XReactive.Internal
+namespace XFramework.XMessage.Internal
 {
     /// <summary>
     /// 将任意 Action 包装为 IDisposable 的轻量实现（委托工厂）。

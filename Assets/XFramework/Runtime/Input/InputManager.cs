@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using UnityEngine;
 using XFramework.XInput.Default;
 using XFramework.XInput.Messages;
-using XFramework.XReactive;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage;
+using XFramework.XMessage.Internal;
 using XFramework.XUpdate;
 
 namespace XFramework.XInput

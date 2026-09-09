@@ -1,7 +1,7 @@
 namespace XFramework.XInput.Messages
 {
     /// <summary>
-    /// 手柄类型变化消息。可通过 <c>XReactive.MessageManager.Subscribe<GamepadTypeChangedMessage>(handler)</c> 监听。
+    /// 手柄类型变化消息。可通过 <c>XMessage.MessageManager.Subscribe<GamepadTypeChangedMessage>(handler)</c> 监听。
     /// </summary>
     public struct GamepadTypeChangedMessage
     {

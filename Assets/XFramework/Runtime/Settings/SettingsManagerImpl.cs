@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
-using XFramework.XReactive;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XSettings
 {

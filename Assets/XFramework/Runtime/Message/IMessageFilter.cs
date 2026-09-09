@@ -1,6 +1,6 @@
 using System;
 
-namespace XFramework.XReactive
+namespace XFramework.XMessage
 {
 
     /// <summary>

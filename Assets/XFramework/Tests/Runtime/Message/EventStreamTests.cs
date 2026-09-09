@@ -4,9 +4,9 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage.Internal;
 
-namespace XFramework.XReactive.Tests
+namespace XFramework.XMessage.Tests
 {
     /// <summary>
     /// 自研响应式引擎测试。
@@ -172,8 +172,8 @@ namespace XFramework.XReactive.Tests
             stream.Subscribe(healthy.Add);
 
             // 日志消息含异常详情后缀,Expect 字符串重载为全串精确匹配,需用正则做包含匹配
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] EventStream handler threw exception")));
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
             Assert.DoesNotThrow(() => stream.OnNext(1));
             Assert.DoesNotThrow(() => stream.OnNext(2));
 

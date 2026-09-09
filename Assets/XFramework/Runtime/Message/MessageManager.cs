@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
-namespace XFramework.XReactive
+namespace XFramework.XMessage
 {
 
     /// <summary>

@@ -4,9 +4,9 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XReactive;
+using XFramework.XMessage;
 
-namespace XFramework.XReactive.Tests
+namespace XFramework.XMessage.Tests
 {
     /// <summary>
     /// Tests for <see cref="MessageManager"/> static API.
@@ -362,7 +362,7 @@ namespace XFramework.XReactive.Tests
             var healthySub = MessageManager.Subscribe<TestMessage>(_ => healthy++);
 
             // 日志消息含异常详情后缀,Expect 字符串重载为全串精确匹配,需用正则做包含匹配
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
             Assert.DoesNotThrow(() => MessageManager.Publish(new TestMessage { Value = 1 }));
 
             Assert.IsFalse(handlerCalled, "filter 抛异常时该订阅的 handler 不应执行");
@@ -387,7 +387,7 @@ namespace XFramework.XReactive.Tests
                 },
                 _ => handlerCalls++);
 
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
             MessageManager.Publish(new TestMessage { Value = 1 });
             Assert.AreEqual(1, filterCalls, "第一次发布进入 filter 后抛异常");
             Assert.AreEqual(0, handlerCalls, "filter 抛异常时本条不投递");
@@ -407,7 +407,7 @@ namespace XFramework.XReactive.Tests
             var handlerCalled = false;
             IDisposable disposable = null;
 
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
             Assert.DoesNotThrow(() =>
             {
                 disposable = MessageManager.SubscribeBuffered<TestMessage>(

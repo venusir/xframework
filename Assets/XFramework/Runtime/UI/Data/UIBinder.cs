@@ -4,7 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using XFramework.XLocalization;
 using XFramework.XReactive;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XUI.Data
 {

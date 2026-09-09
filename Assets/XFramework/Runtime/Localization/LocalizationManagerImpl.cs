@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 namespace XFramework.XLocalization
 {

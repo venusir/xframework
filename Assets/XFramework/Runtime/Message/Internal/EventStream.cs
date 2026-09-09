@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 
-namespace XFramework.XReactive.Internal
+namespace XFramework.XMessage.Internal
 {
     /// <summary>
     /// 轻量事件流:支持投递、订阅、完成、退订的响应式事件源。
@@ -143,7 +143,7 @@ namespace XFramework.XReactive.Internal
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Reactive] EventStream handler threw exception: {e}");
+                Debug.LogError($"[Message] EventStream handler threw exception: {e}");
             }
         }
 

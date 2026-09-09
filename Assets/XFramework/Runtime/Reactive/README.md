@@ -2,7 +2,11 @@
 
 ## 概述
 
-XFramework 响应式模块提供消息总线与响应式属性。基于**自研轻量响应式引擎**（`XFramework.XReactive.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力，通过 `ReactiveProperty<T>` 提供响应式属性绑定（订阅立即回调、相同值去重）。
+XFramework 响应式模块提供**响应式属性**。基于 XMessage 模块的事件流引擎(`XFramework.XMessage.Internal`)实现,不依赖节点树,可在任意 C# 类中使用。
+
+- `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)
+- `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)
+- 全局消息总线在 Message 模块(`XFramework.XMessage.MessageManager`),不在此模块
 
 **命名空间**: `XFramework.XReactive`
 
@@ -10,170 +14,49 @@ XFramework 响应式模块提供消息总线与响应式属性。基于**自研�
 
 ```
 Runtime/Reactive/
-├── IMessageBroker.cs             # 消息发布/订阅器接口
-├── MessageBroker.cs              # 消息代理内部实现（订阅直落自研 Subject）
-├── MessageManager.cs             # 静态外观（全局入口） + 节点扩展方法
-├── IMessageFilter.cs             # 消息过滤器接口
-├── IReactiveProperty.cs          # 响应式属性接口（只读视图）
-├── ReactiveProperty.cs           # 响应式属性（可写值 + 自动通知）
-├── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
-└── Internal/                     # 自研响应式引擎（零外部依赖）
-    ├── Subject.cs                # Subject<T> + 订阅节点池
-    ├── ReplaySubject.cs          # 缓冲 1 条的 ReplaySubject<T>
-    ├── AnonymousDisposable.cs    # 委托式 IDisposable（幂等）
-    └── Unit.cs                   # 零开销占位类型（帧脉冲用）
+├── IReactiveProperty.cs          # 响应式属性接口(Value 只读 + Subscribe,面向接口编程)
+├── ReactiveProperty.cs           # 响应式属性(可写值 + 自动通知 + 去重)
+└── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
 ```
+
+事件流引擎位于 Message 模块(`Runtime/Message/Internal/`,`XFramework.XMessage.Internal`)。
 
 ## 快速使用
 
-### 1. 消息总线（MessageManager）
-
-#### 发布消息
-
 ```csharp
 using XFramework.XReactive;
 
-// 定义消息类型
-public struct CoinChangedMessage { public int NewAmount; }
-public struct PlayerDiedMessage { public string PlayerName; }
-public struct GameStateChangedMessage { public GameState NewState; }
+// 创建响应式属性(实现 IReactiveProperty<int>,可面向接口编程)
+var healthProp = new ReactiveProperty<int>(100);
 
-// 发布消息
-MessageManager.Publish(new CoinChangedMessage { NewAmount = 100 });
-MessageManager.Publish(new PlayerDiedMessage { PlayerName = "Hero" });
-MessageManager.Publish(new GameStateChangedMessage { NewState = GameState.Playing });
-```
-
-#### 订阅消息
-
-```csharp
-// 普通订阅
-var subscription = MessageManager.Subscribe<CoinChangedMessage>(msg =>
-{
-    Debug.Log($"金币变化: {msg.NewAmount}");
-});
-
-// 带过滤条件的订阅
-MessageManager.Subscribe<CoinChangedMessage>(
-    filter: msg => msg.NewAmount > 50,
-    handler: msg => Debug.Log($"大额金币变化: {msg.NewAmount}")
-);
-
-// 带缓冲的订阅（新订阅者立即收到最近一次发布的消息）
-MessageManager.SubscribeBuffered<GameStateChangedMessage>(msg =>
-{
-    Debug.Log($"游戏状态: {msg.NewState}");
-});
-
-// 异步处理器订阅
-MessageManager.SubscribeAsync<PlayerDiedMessage>(async msg =>
-{
-    Debug.Log($"{msg.PlayerName} 死亡，开始复活倒计时...");
-    await UniTask.Delay(TimeSpan.FromSeconds(3));
-    Debug.Log($"{msg.PlayerName} 已复活");
-});
-
-// 取消订阅
-subscription.Dispose();
-```
-
-#### 带 Key 的消息
-
-```csharp
-// 按 Key 发布（相同 Key 的消息在同一通道传递）
-MessageManager.Publish("PlayerHealth", 75);
-MessageManager.Publish("EnemyHealth", 50);
-
-// 按 Key 订阅
-MessageManager.Subscribe<int>("PlayerHealth", health =>
-{
-    // 仅响应 PlayerHealth 通道的消息
-    hpBar.Value = health;
-});
-```
-
-#### 请求-响应模式
-
-```csharp
-// 定义请求/响应类型
-public class GetPlayerScoreRequest { public string PlayerId; }
-public class GetPlayerScoreResponse { public int Score; }
-
-// 注册处理器（全局唯一）
-MessageManager.Register<GetPlayerScoreRequest, GetPlayerScoreResponse>(async request =>
-{
-    // 异步获取分数
-    var score = await database.GetScoreAsync(request.PlayerId);
-    return new GetPlayerScoreResponse { Score = score };
-});
-
-// 发送请求
-var response = await MessageManager.RequestAsync<GetPlayerScoreRequest, GetPlayerScoreResponse>(
-    new GetPlayerScoreRequest { PlayerId = "player_1" }
-);
-Debug.Log($"玩家分数: {response.Score}");
-```
-
-### 2. 响应式属性（ReactiveProperty）
-
-```csharp
-using XFramework.XReactive;
-
-// ReactiveProperty 是节点，可挂载到节点树中
-var healthProp = new ReactiveProperty<int>();
-healthProp.Value = 100;
-
-// 订阅值变化
+// 订阅值变化(订阅时立即回调当前值)
 var subscription = healthProp.Subscribe(newValue =>
 {
     Debug.Log($"血量变化: {newValue}");
     // 更新血量条 UI
 });
 
-// 修改值（自动推送）
+// 修改值(自动推送;相同值不通知)
 healthProp.Value = 80;   // 输出: 血量变化: 80
 healthProp.Value = 50;   // 输出: 血量变化: 50
+
+// 只读派生:UI 展示层可持有只读视图,写值仅经源属性
+IReactiveProperty<int> view = healthProp;
+var levelLabel = healthProp.Select(lv => $"Lv.{lv}");
 
 // 取消订阅
 subscription.Dispose();
 ```
 
-## 节点扩展方法
-
-实现了 `IMessagePublisher` / `IMessageSubscriber` 的节点可以直接使用便捷的扩展方法：
-
-```csharp
-public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
-{
-    protected override void OnStart()
-    {
-        base.OnStart();
-
-        // 发布消息
-        this.Publish(new CoinChangedMessage { NewAmount = 200 });
-
-        // 订阅消息（自动绑定节点生命周期，节点销毁时自动取消订阅）
-        this.Subscribe<PlayerDiedMessage>(msg =>
-        {
-            Debug.Log($"{msg.PlayerName} 死了");
-        });
-
-        // 带 Key 的发布
-        this.Publish("Score", 500);
-    }
-}
-```
-
 ## 设计原则
 
-- **自研引擎驱动** — 基于零依赖的轻量响应式引擎（锁 + 快照线程模型、订阅节点池），性能优异且内存安全
-- **生命周期绑定** — 节点的消息订阅自动绑定到节点生命周期，节点销毁时自动取消
-- **类型安全** — 消息通过泛型类型标识，编译期安全
-- **双模式访问** — 同时支持静态 API（非节点类）和节点扩展方法
-- **请求-响应支持** — 提供异步请求-响应模式，适合服务定位场景
-- **全局过滤器** — 支持注册全局消息过滤器，统一拦截和处理
+- **事件流驱动** — 基于 Message 模块自研事件流引擎(锁 + 快照线程模型、订阅节点池)
+- **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
+- **相同值去重** — 设置相同值不通知
+- **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态
+- **异常隔离** — 订阅回调抛异常记 Error 日志后继续
 
 ## 依赖
 
-- 无外部响应式库依赖（自研引擎；行为语义：订阅立即回调、相同值去重、异常隔离）
-- `XFramework.XNode` — 节点系统依赖
+- `XFramework.XMessage` — 事件流引擎(单向依赖:Reactive → Message)
+- 全局消息总线亦在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`

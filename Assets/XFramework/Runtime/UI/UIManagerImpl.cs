@@ -4,7 +4,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XLocalization;
-using XFramework.XReactive;
+using XFramework.XMessage;
 using XFramework.XUI.Controller;
 using XFramework.XUI.Data;
 using XFramework.XUI.View;

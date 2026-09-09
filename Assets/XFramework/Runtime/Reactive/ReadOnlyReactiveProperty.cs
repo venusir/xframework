@@ -1,13 +1,13 @@
 using System;
 using System.Collections.Generic;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XReactive
 {
     /// <summary>
     /// 只读响应式属性。由 <see cref="ReactiveProperty{T}"/> 通过 <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 派生。
     /// <para>仅暴露 <see cref="Value"/>（只读）和 <see cref="Subscribe"/>，不可赋值。</para>
-    /// <para>基于自研事件流实现,内部订阅源属性做值映射。</para>
+    /// <para>基于 XMessage 事件流引擎实现,内部订阅源属性做值映射。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
     /// </summary>
     /// <typeparam name="T">值的类型。</typeparam>

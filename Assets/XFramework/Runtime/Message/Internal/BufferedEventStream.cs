@@ -1,6 +1,6 @@
 using System;
 
-namespace XFramework.XReactive.Internal
+namespace XFramework.XMessage.Internal
 {
     /// <summary>
     /// 带缓冲的事件流:新订阅者会立即同步收到最近一次投递的事件(重放先于实时)。

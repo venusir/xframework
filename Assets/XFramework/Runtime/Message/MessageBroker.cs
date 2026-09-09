@@ -3,9 +3,9 @@ using System.Collections;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using XFramework.XReactive.Internal;
+using XFramework.XMessage.Internal;
 
-namespace XFramework.XReactive
+namespace XFramework.XMessage
 {
     /// <summary>
     /// 消息代理实现:消息分发层,订阅直接落到自研事件流并返回 IDisposable(无中间订阅源)。
