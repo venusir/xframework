@@ -180,7 +180,7 @@ LocalizationManager.ClearPlaceholders();
 语言切换通过 `MessageManager` 发布订阅，无需直接引用 `LocalizationManager` 的事件：
 
 ```csharp
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 // 订阅语言变更消息
 var subscription = MessageManager.Subscribe<LanguageChangedMessage>(msg =>

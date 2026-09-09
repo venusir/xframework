@@ -173,7 +173,7 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 }
 ```
 
-配置完成后，再通过 Git URL 或本地路径添加 XFramework。响应式模块（消息总线、ReactiveProperty）为框架自研实现，无需额外依赖。
+配置完成后，再通过 Git URL 或本地路径添加 XFramework。消息总线（XMessage）与响应式属性（XReactive）均为框架自研实现，无需额外依赖。
 
 ---
 

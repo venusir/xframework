@@ -98,7 +98,7 @@ SettingsManager.ObserveField<GameSettings, float>(
 ### 5. 全局消息订阅
 
 ```csharp
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 {

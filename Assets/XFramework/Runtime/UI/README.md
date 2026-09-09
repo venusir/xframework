@@ -33,7 +33,7 @@ Runtime/UI/
     └── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
 ```
 
-> **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，不在 UI 模块目录下。
+> **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，全局消息总线位于 `Runtime/Message/`（`XFramework.XMessage`），均不在 UI 模块目录下。
 
 ## 四层架构
 
@@ -663,7 +663,7 @@ titleText.BindToLocalizedText("ui_main_title");
 
 ```csharp
 using XFramework.XUI.Data;
-using XFramework.XReactive;
+using XFramework.XMessage;
 
 // 面板打开事件
 var token1 = MessageManager.Subscribe<PanelOpenedMessage>(msg =>

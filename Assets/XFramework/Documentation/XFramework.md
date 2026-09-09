@@ -49,7 +49,8 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
-| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式：消息总线、响应式属性（自研引擎）             |
+| **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线、事件流引擎                                |
+| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Message 事件流）                  |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
 | **File**         | `XFramework.XFile`         | [README](../Runtime/File/README.md)         | 跨平台文件系统：路径域抽象、自动选平台 Provider               |
 | **Input**        | `XFramework.XInput`        | [README](../Runtime/Input/README.md)        | 输入抽象层：纯字符串 API、多设备检测、零 GC                   |
@@ -68,7 +69,8 @@ Assets/XFramework/
 │   ├── Pipeline/                 # 通用编排（阶段编排/进度/失败取消）+ 相位分组编排（IPhaseStage）
 │   ├── Asset/                    # 资源管理（基于 YooAsset）
 │   ├── Update/                   # 统一更新调度
-│   ├── Reactive/                 # 响应式（消息/自研引擎）
+│   ├── Message/                  # 消息总线 + 事件流引擎
+│   ├── Reactive/                 # 响应式属性（基于 Message 事件流）
 │   ├── Localization/             # 本地化
 │   ├── File/                     # 跨平台文件系统
 │   ├── Input/                    # 输入抽象
@@ -259,4 +261,4 @@ GameLauncher.Start()
 }
 ```
 
-配置完成后，再通过 Git URL 添加 XFramework。响应式模块（消息总线、响应式属性）为框架自研实现，零额外依赖。
+配置完成后，再通过 Git URL 添加 XFramework。消息总线（XMessage）与响应式属性（XReactive）均为框架自研实现，零额外依赖。
