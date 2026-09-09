@@ -7,7 +7,7 @@ namespace XFramework.XReactive
     /// <summary>
     /// 只读响应式属性。由 <see cref="ReactiveProperty{T}"/> 通过 <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 派生。
     /// <para>仅暴露 <see cref="Value"/>（只读）和 <see cref="Subscribe"/>，不可赋值。</para>
-    /// <para>基于自研 Subject 实现,内部订阅源属性做值映射。</para>
+    /// <para>基于自研事件流实现,内部订阅源属性做值映射。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
     /// </summary>
     /// <typeparam name="T">值的类型。</typeparam>
@@ -22,7 +22,7 @@ namespace XFramework.XReactive
     {
         #region Private Fields
 
-        private readonly Subject<T> _subject = new();
+        private readonly EventStream<T> _stream = new();
         private IDisposable _sourceSub;
         private T _value;
         private bool _disposed;
@@ -73,7 +73,7 @@ namespace XFramework.XReactive
             if (onNext == null) throw new ArgumentNullException(nameof(onNext));
             ThrowIfDisposed();
 
-            var handle = _subject.Subscribe(onNext);
+            var handle = _stream.Subscribe(onNext);
             onNext(_value);
             return handle;
         }
@@ -89,7 +89,7 @@ namespace XFramework.XReactive
                 return;
             _disposed = true;
             _sourceSub?.Dispose();
-            _subject.Dispose();
+            _stream.Dispose();
         }
 
         #endregion
@@ -104,7 +104,7 @@ namespace XFramework.XReactive
             if (EqualityComparer<T>.Default.Equals(_value, value))
                 return;
             _value = value;
-            _subject.OnNext(value);
+            _stream.OnNext(value);
         }
 
         private void ThrowIfDisposed()

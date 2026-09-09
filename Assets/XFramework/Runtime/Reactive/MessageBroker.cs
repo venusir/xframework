@@ -8,7 +8,7 @@ using XFramework.XReactive.Internal;
 namespace XFramework.XReactive
 {
     /// <summary>
-    /// 消息代理实现:消息分发层,订阅直接落到自研 Subject 并返回 IDisposable(无中间订阅源)。
+    /// 消息代理实现:消息分发层,订阅直接落到自研事件流并返回 IDisposable(无中间订阅源)。
     /// 支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>
     /// <remarks>
@@ -16,24 +16,24 @@ namespace XFramework.XReactive
     /// - 过滤/异步等订阅配置以一次性闭包表达,仅在订阅时分配一次(非热路径)
     /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历,无过滤器时零分配
     /// - 键值消息使用两层字典结构,值类型 Key 无 boxing
-    /// - buffered 通道在首次 Publish 时惰性创建 ReplaySubject(每类型一次),之后零额外分配
+    /// - buffered 通道在首次 Publish 时惰性创建 BufferedEventStream(每类型一次),之后零额外分配
     /// - 投递热路径(Publish/OnNext)除锁与池化快照外零分配
     /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
         #region Private Fields
 
-        /// <summary>按消息类型缓存的 Subject。</summary>
-        private readonly Dictionary<Type, object> _subjects = new();
+        /// <summary>按消息类型缓存的事件流。</summary>
+        private readonly Dictionary<Type, object> _streams = new();
 
-        /// <summary>按消息类型 -> (TKey -> Subject{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
-        private readonly Dictionary<Type, object> _keyedSubjects = new();
+        /// <summary>按消息类型 -> (TKey -> 事件流{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
+        private readonly Dictionary<Type, object> _keyedStreams = new();
 
-        /// <summary>按消息类型缓存的 ReplaySubject（缓冲 1 条）。</summary>
-        private readonly Dictionary<Type, object> _bufferedSubjects = new();
+        /// <summary>按消息类型缓存的 BufferedEventStream（缓冲 1 条）。</summary>
+        private readonly Dictionary<Type, object> _bufferedStreams = new();
 
-        /// <summary>按消息类型 -> (TKey -> ReplaySubject{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
-        private readonly Dictionary<Type, object> _keyedBufferedSubjects = new();
+        /// <summary>按消息类型 -> (TKey -> BufferedEventStream{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
+        private readonly Dictionary<Type, object> _keyedBufferedStreams = new();
 
         /// <summary>按消息类型存储的过滤器列表。</summary>
         private readonly Dictionary<Type, List<object>> _filtersByType = new();
@@ -54,11 +54,11 @@ namespace XFramework.XReactive
                 return;
 
             // 推送给普通订阅者
-            if (_subjects.TryGetValue(type, out var sub))
-                ((Subject<TMessage>)sub).OnNext(message);
+            if (_streams.TryGetValue(type, out var sub))
+                ((EventStream<TMessage>)sub).OnNext(message);
 
             // 推送给缓冲订阅者(GetOrAdd:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
-            GetOrAddBufferedSubject<TMessage>().OnNext(message);
+            GetOrAddBufferedStream<TMessage>().OnNext(message);
         }
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
@@ -70,43 +70,43 @@ namespace XFramework.XReactive
                 return;
 
             // 推送给键值订阅者（使用两层字典，值类型 TKey 无 boxing）
-            if (_keyedSubjects.TryGetValue(type, out var innerObj))
+            if (_keyedStreams.TryGetValue(type, out var innerObj))
             {
-                var dict = (Dictionary<TKey, Subject<TMessage>>)innerObj;
-                if (dict.TryGetValue(key, out var subject))
-                    subject.OnNext(message);
+                var dict = (Dictionary<TKey, EventStream<TMessage>>)innerObj;
+                if (dict.TryGetValue(key, out var stream))
+                    stream.OnNext(message);
             }
 
             // 推送给键值缓冲订阅者(GetOrAdd:同上,订阅前发布的消息可重放)
-            GetOrAddKeyedBufferedSubject<TKey, TMessage>(key).OnNext(message);
+            GetOrAddKeyedBufferedStream<TKey, TMessage>(key).OnNext(message);
         }
 
         #endregion
 
         #region Subscribe
 
-        /// <summary>订阅指定类型的消息,直接落 Subject 并返回退订句柄。</summary>
+        /// <summary>订阅指定类型的消息,直接落事件流并返回退订句柄。</summary>
         public IDisposable Subscribe<TMessage>(Action<TMessage> handler)
-            => GetOrAddSubject<TMessage>().Subscribe(handler);
+            => GetOrAddStream<TMessage>().Subscribe(handler);
 
         /// <summary>订阅指定类型的消息,附加订阅级过滤条件(返回 false 的消息不投递给该订阅)。</summary>
         /// <remarks>
-        /// 过滤与回调组合为订阅期一次性闭包:过滤条件抛异常时由 Subject 的异常隔离兜底
+        /// 过滤与回调组合为订阅期一次性闭包:过滤条件抛异常时由事件流的异常隔离兜底
         /// (记 Error 日志、本条不投递、订阅保留、其他订阅者不受影响)。
         /// </remarks>
         public IDisposable Subscribe<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddSubject<TMessage>().Subscribe(m =>
+            => GetOrAddStream<TMessage>().Subscribe(m =>
             {
                 if (filter.Invoke(m)) handler(m);
             });
 
         /// <summary>订阅指定键值的消息。</summary>
         public IDisposable Subscribe<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => GetOrAddKeyedSubject<TKey, TMessage>(key).Subscribe(handler);
+            => GetOrAddKeyedStream<TKey, TMessage>(key).Subscribe(handler);
 
         /// <summary>订阅指定键值的消息,附加订阅级过滤条件。</summary>
         public IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddKeyedSubject<TKey, TMessage>(key).Subscribe(m =>
+            => GetOrAddKeyedStream<TKey, TMessage>(key).Subscribe(m =>
             {
                 if (filter.Invoke(m)) handler(m);
             });
@@ -116,29 +116,29 @@ namespace XFramework.XReactive
         /// <para>异步处理器经 Forget() 烧录进订阅回调,后续异常由 UniTask 的 Forget 语义兜底。</para>
         /// </summary>
         public IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
-            => GetOrAddSubject<TMessage>().Subscribe(m => asyncHandler(m).Forget());
+            => GetOrAddStream<TMessage>().Subscribe(m => asyncHandler(m).Forget());
 
         /// <summary>异步订阅,附加订阅级过滤条件。</summary>
         public IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
-            => GetOrAddSubject<TMessage>().Subscribe(m =>
+            => GetOrAddStream<TMessage>().Subscribe(m =>
             {
                 if (filter.Invoke(m)) asyncHandler(m).Forget();
             });
 
         /// <summary>订阅带缓冲的消息:新订阅者立即同步收到最近一次发布的消息(若有),之后转为实时。</summary>
         public IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
-            => GetOrAddBufferedSubject<TMessage>().Subscribe(handler);
+            => GetOrAddBufferedStream<TMessage>().Subscribe(handler);
 
         /// <summary>订阅带缓冲的消息,附加订阅级过滤条件(重放与实时共用同一过滤)。</summary>
         public IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddBufferedSubject<TMessage>().Subscribe(m =>
+            => GetOrAddBufferedStream<TMessage>().Subscribe(m =>
             {
                 if (filter.Invoke(m)) handler(m);
             });
 
         /// <summary>订阅带缓冲的键值消息。新订阅者立即同步收到最近一次发布的消息(若有)。</summary>
         public IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => GetOrAddKeyedBufferedSubject<TKey, TMessage>(key).Subscribe(handler);
+            => GetOrAddKeyedBufferedStream<TKey, TMessage>(key).Subscribe(handler);
 
         #endregion
 
@@ -228,14 +228,14 @@ namespace XFramework.XReactive
 
         public void Clear()
         {
-            DisposeAll(_subjects);
-            DisposeAllKeyed(_keyedSubjects);
-            DisposeAll(_bufferedSubjects);
-            DisposeAllKeyed(_keyedBufferedSubjects);
-            _subjects.Clear();
-            _keyedSubjects.Clear();
-            _bufferedSubjects.Clear();
-            _keyedBufferedSubjects.Clear();
+            DisposeAll(_streams);
+            DisposeAllKeyed(_keyedStreams);
+            DisposeAll(_bufferedStreams);
+            DisposeAllKeyed(_keyedBufferedStreams);
+            _streams.Clear();
+            _keyedStreams.Clear();
+            _bufferedStreams.Clear();
+            _keyedBufferedStreams.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
         }
@@ -244,65 +244,65 @@ namespace XFramework.XReactive
 
         #region Private Helpers
 
-        private Subject<TMessage> GetOrAddSubject<TMessage>()
+        private EventStream<TMessage> GetOrAddStream<TMessage>()
         {
             var type = typeof(TMessage);
-            if (!_subjects.TryGetValue(type, out var sub))
+            if (!_streams.TryGetValue(type, out var sub))
             {
-                sub = new Subject<TMessage>();
-                _subjects[type] = sub;
+                sub = new EventStream<TMessage>();
+                _streams[type] = sub;
             }
-            return (Subject<TMessage>)sub;
+            return (EventStream<TMessage>)sub;
         }
 
-        private Subject<TMessage> GetOrAddKeyedSubject<TKey, TMessage>(TKey key)
+        private EventStream<TMessage> GetOrAddKeyedStream<TKey, TMessage>(TKey key)
         {
             var type = typeof(TMessage);
-            if (!_keyedSubjects.TryGetValue(type, out var innerObj))
+            if (!_keyedStreams.TryGetValue(type, out var innerObj))
             {
-                var dict = new Dictionary<TKey, Subject<TMessage>>();
-                _keyedSubjects[type] = dict;
-                var newSubject = new Subject<TMessage>();
-                dict[key] = newSubject;
-                return newSubject;
+                var dict = new Dictionary<TKey, EventStream<TMessage>>();
+                _keyedStreams[type] = dict;
+                var newStream = new EventStream<TMessage>();
+                dict[key] = newStream;
+                return newStream;
             }
 
-            var innerDict = (Dictionary<TKey, Subject<TMessage>>)innerObj;
+            var innerDict = (Dictionary<TKey, EventStream<TMessage>>)innerObj;
             if (!innerDict.TryGetValue(key, out var found))
             {
-                found = new Subject<TMessage>();
+                found = new EventStream<TMessage>();
                 innerDict[key] = found;
             }
             return found;
         }
 
-        private ReplaySubject<TMessage> GetOrAddBufferedSubject<TMessage>()
+        private BufferedEventStream<TMessage> GetOrAddBufferedStream<TMessage>()
         {
             var type = typeof(TMessage);
-            if (!_bufferedSubjects.TryGetValue(type, out var sub))
+            if (!_bufferedStreams.TryGetValue(type, out var sub))
             {
-                sub = new ReplaySubject<TMessage>();
-                _bufferedSubjects[type] = sub;
+                sub = new BufferedEventStream<TMessage>();
+                _bufferedStreams[type] = sub;
             }
-            return (ReplaySubject<TMessage>)sub;
+            return (BufferedEventStream<TMessage>)sub;
         }
 
-        private ReplaySubject<TMessage> GetOrAddKeyedBufferedSubject<TKey, TMessage>(TKey key)
+        private BufferedEventStream<TMessage> GetOrAddKeyedBufferedStream<TKey, TMessage>(TKey key)
         {
             var type = typeof(TMessage);
-            if (!_keyedBufferedSubjects.TryGetValue(type, out var innerObj))
+            if (!_keyedBufferedStreams.TryGetValue(type, out var innerObj))
             {
-                var dict = new Dictionary<TKey, ReplaySubject<TMessage>>();
-                _keyedBufferedSubjects[type] = dict;
-                var newSubject = new ReplaySubject<TMessage>();
-                dict[key] = newSubject;
-                return newSubject;
+                var dict = new Dictionary<TKey, BufferedEventStream<TMessage>>();
+                _keyedBufferedStreams[type] = dict;
+                var newStream = new BufferedEventStream<TMessage>();
+                dict[key] = newStream;
+                return newStream;
             }
 
-            var innerDict = (Dictionary<TKey, ReplaySubject<TMessage>>)innerObj;
+            var innerDict = (Dictionary<TKey, BufferedEventStream<TMessage>>)innerObj;
             if (!innerDict.TryGetValue(key, out var found))
             {
-                found = new ReplaySubject<TMessage>();
+                found = new BufferedEventStream<TMessage>();
                 innerDict[key] = found;
             }
             return found;

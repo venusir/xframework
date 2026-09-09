@@ -7,7 +7,7 @@ namespace XFramework.XReactive
     /// <summary>
     /// 响应式属性。包含一个可自动推送变化的响应式值。
     /// <para>适用于血量、分数、状态等需要被监听的属性。不依赖场景节点树，可在任意 C# 类中使用。</para>
-    /// <para>基于自研 Subject 实现。实现 <see cref="IReactiveProperty{T}"/> 接口,可面向接口编程。</para>
+    /// <para>基于自研事件流实现。实现 <see cref="IReactiveProperty{T}"/> 接口,可面向接口编程。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
     /// </summary>
     /// <typeparam name="T">值的类型。</typeparam>
@@ -21,7 +21,7 @@ namespace XFramework.XReactive
     {
         #region Private Fields
 
-        private readonly Subject<T> _subject = new();
+        private readonly EventStream<T> _stream = new();
         private T _value;
         private bool _disposed;
 
@@ -66,7 +66,7 @@ namespace XFramework.XReactive
                 if (EqualityComparer<T>.Default.Equals(_value, value))
                     return;
                 _value = value;
-                _subject.OnNext(value);
+                _stream.OnNext(value);
             }
         }
 
@@ -89,7 +89,7 @@ namespace XFramework.XReactive
             ThrowIfDisposed();
 
             // 先注册再立即回调:确保回调中的订阅操作不会丢失后续消息
-            var handle = _subject.Subscribe(onNext);
+            var handle = _stream.Subscribe(onNext);
             onNext(_value);
             return handle;
         }
@@ -99,7 +99,7 @@ namespace XFramework.XReactive
         #region IDisposable
 
         /// <summary>
-        /// 释放内部 Subject，取消所有订阅。
+        /// 释放内部事件流，取消所有订阅。
         /// <para>此后访问 <see cref="Value"/> 或再次 <see cref="Subscribe"/> 会抛出 <see cref="ObjectDisposedException"/>。</para>
         /// </summary>
         public void Dispose()
@@ -107,7 +107,7 @@ namespace XFramework.XReactive
             if (_disposed)
                 return;
             _disposed = true;
-            _subject.Dispose();
+            _stream.Dispose();
         }
 
         #endregion

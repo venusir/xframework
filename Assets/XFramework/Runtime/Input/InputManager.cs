@@ -24,7 +24,7 @@ namespace XFramework.XInput
         private static bool _initialized;
 
         /// <summary>每帧脉冲信号,驱动 Observe* 系列轮询。</summary>
-        private static readonly Subject<Unit> _framePulse = new();
+        private static readonly EventStream<int> _framePulse = new();
 
         /// <summary>自动帧驱动刷新器(经 UpdateManager 注册,仅 Initialize 成功路径启用)。</summary>
         private static InputTicker _ticker;
@@ -142,7 +142,7 @@ namespace XFramework.XInput
         {
             _provider?.Tick();
             // 发布帧脉冲,驱动 Observe* 系列订阅
-            _framePulse.OnNext(default);
+            _framePulse.OnNext(Time.frameCount);
             _lastPulseFrame = Time.frameCount;
         }
 

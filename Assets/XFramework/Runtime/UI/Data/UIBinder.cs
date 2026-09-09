@@ -134,7 +134,7 @@ namespace XFramework.XUI.Data
             if (button == null || onClick == null) return null;
             var handler = new UnityEngine.Events.UnityAction(onClick);
             button.onClick.AddListener(handler);
-            return AnonymousDisposable.Create(() => button.onClick.RemoveListener(handler));
+            return ActionDisposable.Create(() => button.onClick.RemoveListener(handler));
         }
 
         #endregion

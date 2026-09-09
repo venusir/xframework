@@ -9,17 +9,17 @@ namespace XFramework.XReactive.Internal
     /// <remarks>
     /// 幂等:Dispose 只执行一次,重复调用被忽略(Interlocked.Exchange 置空后判断)。
     /// </remarks>
-    internal sealed class AnonymousDisposable : IDisposable
+    internal sealed class ActionDisposable : IDisposable
     {
         private Action _dispose;
 
-        private AnonymousDisposable(Action dispose)
+        private ActionDisposable(Action dispose)
         {
             _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
         }
 
         /// <summary>创建包装指定 Action 的 IDisposable。</summary>
-        public static IDisposable Create(Action dispose) => new AnonymousDisposable(dispose);
+        public static IDisposable Create(Action dispose) => new ActionDisposable(dispose);
 
         /// <summary>执行一次释放动作,重复调用忽略。</summary>
         public void Dispose()

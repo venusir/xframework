@@ -6,7 +6,7 @@ using UnityEngine;
 namespace XFramework.XReactive.Internal
 {
     /// <summary>
-    /// 轻量 Subject:支持投递、订阅、完成、退订的响应式事件源。
+    /// 轻量事件流:支持投递、订阅、完成、退订的响应式事件源。
     /// <para>订阅即注册一个回调;投递时对所有存活订阅回调(后订阅先收到)。</para>
     /// </summary>
     /// <remarks>
@@ -18,7 +18,7 @@ namespace XFramework.XReactive.Internal
     /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 OnNext 调用方;
     /// 异常订阅者不被移除,同一轮遍历中后续订阅者照常收到消息。
     /// </remarks>
-    internal class Subject<T> : IDisposable
+    internal class EventStream<T> : IDisposable
     {
         #region Private Fields
 
@@ -32,10 +32,10 @@ namespace XFramework.XReactive.Internal
         #region Public API
 
         /// <summary>
-        /// 订阅消息。返回的句柄 Dispose 后不再收到投递。
-        /// <para>已 OnCompleted 的 Subject 返回空句柄(不再投递)。</para>
+        /// 订阅事件流。返回的句柄 Dispose 后不再收到投递。
+        /// <para>已 OnCompleted 的事件流返回空句柄(不再投递)。</para>
         /// </summary>
-        /// <param name="onNext">消息回调,不可为 null。</param>
+        /// <param name="onNext">事件回调,不可为 null。</param>
         /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
         public IDisposable Subscribe(Action<T> onNext)
         {
@@ -45,17 +45,17 @@ namespace XFramework.XReactive.Internal
             {
                 // completed 之后订阅:返回空句柄,不再投递
                 if (_completed)
-                    return AnonymousDisposable.Create(() => { });
+                    return ActionDisposable.Create(() => { });
 
                 var node = SubscriptionNodePool<T>.Rent();
                 node.Set(onNext);
                 node.Next = _head;
                 _head = node;
-                return new SubjectSubscription(this, node);
+                return new EventSubscription(this, node);
             }
         }
 
-        /// <summary>投递消息给所有存活订阅者。</summary>
+        /// <summary>投递事件给所有存活订阅者。</summary>
         public void OnNext(T value)
         {
             // 锁内快照:收集当前存活节点到池化 List,锁外逐个调用
@@ -133,7 +133,7 @@ namespace XFramework.XReactive.Internal
 
         /// <summary>
         /// 统一投递语义:订阅回调异常隔离(记 Error 日志后继续)。
-        /// <para>ReplaySubject 的重放路径复用此方法,保证重放与实时行为一致。</para>
+        /// <para>BufferedEventStream 的重放路径复用此方法,保证重放与实时行为一致。</para>
         /// </summary>
         internal static void Deliver(T value, Action<T> onNext)
         {
@@ -143,7 +143,7 @@ namespace XFramework.XReactive.Internal
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Reactive] Subject handler threw exception: {e}");
+                Debug.LogError($"[Reactive] EventStream handler threw exception: {e}");
             }
         }
 
@@ -184,20 +184,20 @@ namespace XFramework.XReactive.Internal
             }
         }
 
-        private sealed class SubjectSubscription : IDisposable
+        private sealed class EventSubscription : IDisposable
         {
-            private Subject<T> _subject;
+            private EventStream<T> _stream;
             private SubscriptionNode<T> _node;
 
-            public SubjectSubscription(Subject<T> subject, SubscriptionNode<T> node)
+            public EventSubscription(EventStream<T> stream, SubscriptionNode<T> node)
             {
-                _subject = subject;
+                _stream = stream;
                 _node = node;
             }
 
             public void Dispose()
             {
-                var s = Interlocked.Exchange(ref _subject, null);
+                var s = Interlocked.Exchange(ref _stream, null);
                 var n = Interlocked.Exchange(ref _node, null);
                 if (s != null && n != null)
                     s.Unsubscribe(n);
