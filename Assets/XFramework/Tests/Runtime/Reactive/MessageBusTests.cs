@@ -1,6 +1,9 @@
 using System;
+using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XReactive;
 
 namespace XFramework.XReactive.Tests
@@ -344,6 +347,119 @@ namespace XFramework.XReactive.Tests
                 new TestRequest()).GetAwaiter().GetResult();
             Assert.AreEqual(2, response.Result);
         }
+
+        #region 回归:过滤/异步异常隔离(订阅回调统一异常隔离语义)
+
+        [Test]
+        public void Subscribe_WithFilter_FilterThrows_OtherSubscribersStillReceive()
+        {
+            var handlerCalled = false;
+            var healthy = 0;
+
+            var throwing = MessageManager.Subscribe<TestMessage>(
+                msg => throw new InvalidOperationException("filter boom"),
+                msg => handlerCalled = true);
+            var healthySub = MessageManager.Subscribe<TestMessage>(_ => healthy++);
+
+            // 日志消息含异常详情后缀,Expect 字符串重载为全串精确匹配,需用正则做包含匹配
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] Subject handler threw exception")));
+            Assert.DoesNotThrow(() => MessageManager.Publish(new TestMessage { Value = 1 }));
+
+            Assert.IsFalse(handlerCalled, "filter 抛异常时该订阅的 handler 不应执行");
+            Assert.AreEqual(1, healthy, "健康订阅者照常收到消息");
+
+            throwing.Dispose();
+            healthySub.Dispose();
+        }
+
+        [Test]
+        public void Subscribe_WithFilter_FilterThrows_SubscriptionRetained()
+        {
+            var filterCalls = 0;
+            var handlerCalls = 0;
+
+            var disposable = MessageManager.Subscribe<TestMessage>(
+                msg =>
+                {
+                    filterCalls++;
+                    if (filterCalls == 1) throw new InvalidOperationException("filter boom");
+                    return msg.Value > 0;
+                },
+                _ => handlerCalls++);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] Subject handler threw exception")));
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(1, filterCalls, "第一次发布进入 filter 后抛异常");
+            Assert.AreEqual(0, handlerCalls, "filter 抛异常时本条不投递");
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(2, filterCalls, "异常后订阅保留,后续消息继续进入 filter");
+            Assert.AreEqual(1, handlerCalls, "第二次发布正常投递");
+
+            disposable.Dispose();
+        }
+
+        [Test]
+        public void SubscribeBuffered_WithFilter_FilterThrows_DuringReplay_DoesNotThrow()
+        {
+            MessageManager.Publish(new TestMessage { Value = 1 });
+
+            var handlerCalled = false;
+            IDisposable disposable = null;
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Reactive] Subject handler threw exception")));
+            Assert.DoesNotThrow(() =>
+            {
+                disposable = MessageManager.SubscribeBuffered<TestMessage>(
+                    msg => throw new InvalidOperationException("filter boom"),
+                    msg => handlerCalled = true);
+            });
+
+            Assert.IsFalse(handlerCalled, "重放撞上抛异常的 filter 时该订阅不投递");
+            disposable.Dispose();
+        }
+
+        [Test]
+        public void SubscribeAsync_InvokesHandler()
+        {
+            var received = 0;
+            var disposable = MessageManager.SubscribeAsync<TestMessage>(msg =>
+            {
+                received = msg.Value;
+                return UniTask.CompletedTask;
+            });
+
+            MessageManager.Publish(new TestMessage { Value = 42 });
+
+            Assert.AreEqual(42, received, "异步订阅收到消息");
+            disposable.Dispose();
+        }
+
+        [Test]
+        public void SubscribeAsync_WithFilter_OnlyMatching()
+        {
+            var callCount = 0;
+            var received = 0;
+            var disposable = MessageManager.SubscribeAsync<TestMessage>(
+                msg => msg.Value > 10,
+                msg =>
+                {
+                    callCount++;
+                    received = msg.Value;
+                    return UniTask.CompletedTask;
+                });
+
+            MessageManager.Publish(new TestMessage { Value = 5 });
+            Assert.AreEqual(0, callCount, "被过滤的消息不触发异步处理器");
+
+            MessageManager.Publish(new TestMessage { Value = 15 });
+            Assert.AreEqual(1, callCount);
+            Assert.AreEqual(15, received);
+
+            disposable.Dispose();
+        }
+
+        #endregion
 
         [Test]
         public void AddFilter_BlocksMatchingMessage()

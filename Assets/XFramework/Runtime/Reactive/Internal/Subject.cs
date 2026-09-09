@@ -7,8 +7,7 @@ namespace XFramework.XReactive.Internal
 {
     /// <summary>
     /// 轻量 Subject:支持投递、订阅、完成、退订的响应式事件源。
-    /// <para>替代 R3.Subject 的自研实现(移除 R3 依赖计划 Phase 1)。</para>
-    /// <para>订阅槽位:onNext(必填)、preHandler(在 onNext 之前执行,不参与异常隔离)、filter(过滤,返回 false 不投递)。</para>
+    /// <para>订阅即注册一个回调;投递时对所有存活订阅回调(后订阅先收到)。</para>
     /// </summary>
     /// <remarks>
     /// 线程模型:锁 + 快照。
@@ -16,8 +15,8 @@ namespace XFramework.XReactive.Internal
     /// - OnNext 在锁内收集存活节点快照,锁外逐个调用 handler,避免在持锁状态调用用户代码(防锁序反转)
     /// - 派发中退订:节点置 Disposed 标志,快照遍历时跳过(安全);已完成派发的节点由下一次 OnNext 的快照收集剔除
     /// - 重入 OnNext:递归快照,通过 _publishDepth 计数禁止派发中回池(防节点复用导致 ABA)
-    /// 异常语义(实测 R3 行为后固化):handler 异常被捕获并记 Error 日志,不传播给 OnNext 调用方,
-    /// 异常 handler 不被移除,同一轮遍历中后续订阅者照常收到消息。
+    /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 OnNext 调用方;
+    /// 异常订阅者不被移除,同一轮遍历中后续订阅者照常收到消息。
     /// </remarks>
     internal class Subject<T> : IDisposable
     {
@@ -37,21 +36,19 @@ namespace XFramework.XReactive.Internal
         /// <para>已 OnCompleted 的 Subject 返回空句柄(不再投递)。</para>
         /// </summary>
         /// <param name="onNext">消息回调,不可为 null。</param>
-        /// <param name="preHandler">在 onNext 之前执行的回调(如异步触发),可为 null。</param>
-        /// <param name="filter">过滤条件,返回 false 的消息不投递,可为 null。</param>
         /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
-        public IDisposable Subscribe(Action<T> onNext, Action<T> preHandler = null, Func<T, bool> filter = null)
+        public IDisposable Subscribe(Action<T> onNext)
         {
             if (onNext == null) throw new ArgumentNullException(nameof(onNext));
 
             lock (_sync)
             {
-                // completed 之后订阅:返回空句柄,不再投递(实测 R3 行为:completed 后新订阅者不投递)
+                // completed 之后订阅:返回空句柄,不再投递
                 if (_completed)
                     return AnonymousDisposable.Create(() => { });
 
                 var node = SubscriptionNodePool<T>.Rent();
-                node.Set(onNext, preHandler, filter);
+                node.Set(onNext);
                 node.Next = _head;
                 _head = node;
                 return new SubjectSubscription(this, node);
@@ -85,7 +82,7 @@ namespace XFramework.XReactive.Internal
                 }
             }
 
-            // 锁外逐个调用(快照顺序 = 链表顺序 = 后订阅先收到,与 R3 一致)
+            // 锁外逐个调用(快照顺序 = 链表顺序 = 后订阅先收到)
             Interlocked.Increment(ref _publishDepth);
             try
             {
@@ -94,7 +91,7 @@ namespace XFramework.XReactive.Internal
                     var node = snapshot[i];
                     // 派发中退订的节点跳过(IsDisposed 标志由快照外的退订线程置位)
                     if (!node.IsDisposed)
-                        Dispatch(node, value);
+                        Deliver(value, node.OnNext);
                 }
             }
             finally
@@ -134,29 +131,12 @@ namespace XFramework.XReactive.Internal
 
         #region Private
 
-        private static void Dispatch(SubscriptionNode<T> node, T value)
-            => Deliver(value, node.PreHandler, node.Filter, node.OnNext);
-
         /// <summary>
-        /// 统一投递语义:filter 拦截 → preHandler → onNext,各阶段异常隔离(记 Error 日志后继续)。
+        /// 统一投递语义:订阅回调异常隔离(记 Error 日志后继续)。
         /// <para>ReplaySubject 的重放路径复用此方法,保证重放与实时行为一致。</para>
         /// </summary>
-        internal static void Deliver(T value, Action<T> preHandler, Func<T, bool> filter, Action<T> onNext)
+        internal static void Deliver(T value, Action<T> onNext)
         {
-            // filter 拦截
-            if (filter != null && !filter(value))
-                return;
-
-            // preHandler 与 onNext 隔离执行:任一异常记日志后继续,不影响其他订阅者
-            try
-            {
-                preHandler?.Invoke(value);
-            }
-            catch (Exception e)
-            {
-                Debug.LogError($"[Reactive] Subject preHandler threw exception: {e}");
-            }
-
             try
             {
                 onNext(value);
@@ -234,16 +214,12 @@ namespace XFramework.XReactive.Internal
     internal sealed class SubscriptionNode<T>
     {
         public Action<T> OnNext;
-        public Action<T> PreHandler;
-        public Func<T, bool> Filter;
         public SubscriptionNode<T> Next;
         public bool IsDisposed;
 
-        public void Set(Action<T> onNext, Action<T> preHandler, Func<T, bool> filter)
+        public void Set(Action<T> onNext)
         {
             OnNext = onNext;
-            PreHandler = preHandler;
-            Filter = filter;
             Next = null;
             IsDisposed = false;
         }
@@ -265,8 +241,6 @@ namespace XFramework.XReactive.Internal
         public static void Return(SubscriptionNode<T> node)
         {
             node.OnNext = null;
-            node.PreHandler = null;
-            node.Filter = null;
             lock (_pool)
             {
                 _pool.Push(node);

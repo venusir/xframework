@@ -31,57 +31,39 @@ namespace XFramework.XReactive
 
         /// <summary>订阅指定类型的消息。</summary>
         public static IDisposable Subscribe<TMessage>(Action<TMessage> handler)
-            => _broker.Subscribe<TMessage>().Subscribe(handler);
+            => _broker.Subscribe(handler);
 
         /// <summary>订阅指定类型的消息，并附加过滤条件。</summary>
         public static IDisposable Subscribe<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-            => _broker.Subscribe(filter).Subscribe(handler);
+            => _broker.Subscribe(filter, handler);
 
         /// <summary>订阅指定键值的消息。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => _broker.Subscribe<TKey, TMessage>(key).Subscribe(handler);
+            => _broker.Subscribe(key, handler);
 
         /// <summary>订阅指定键值的消息，并附加过滤条件。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
-        {
-            var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(m =>
-            {
-                if (filter(m)) handler(m);
-            });
-            return disposable;
-        }
+            => _broker.Subscribe(key, filter, handler);
 
         /// <summary>异步订阅。消息到达时执行异步处理器。</summary>
         public static IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
-        {
-            var disposable = _broker.SubscribeAsync(asyncHandler).Subscribe(_ => { });
-            return disposable;
-        }
+            => _broker.SubscribeAsync(asyncHandler);
 
         /// <summary>异步订阅，并附加过滤条件。</summary>
         public static IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
-        {
-            var disposable = _broker.SubscribeAsync(filter, asyncHandler).Subscribe(_ => { });
-            return disposable;
-        }
+            => _broker.SubscribeAsync(filter, asyncHandler);
 
         /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
-            => _broker.SubscribeBuffered<TMessage>().Subscribe(handler);
+            => _broker.SubscribeBuffered(handler);
 
         /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => _broker.SubscribeBuffered<TKey, TMessage>(key).Subscribe(handler);
+            => _broker.SubscribeBuffered(key, handler);
 
         /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-        {
-            var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(m =>
-            {
-                if (filter(m)) handler(m);
-            });
-            return disposable;
-        }
+            => _broker.SubscribeBuffered(filter, handler);
 
         /// <summary>注册全局消息过滤器。</summary>
         public static void AddFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.AddFilter(filter);
@@ -161,7 +143,7 @@ namespace XFramework.XReactive
         /// <summary>订阅指定类型的消息。订阅会自动绑定到对象的生命周期，对象销毁时自动取消。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
-            var disposable = _broker.Subscribe<TMessage>().Subscribe(handler);
+            var disposable = _broker.Subscribe(handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -169,7 +151,7 @@ namespace XFramework.XReactive
         /// <summary>订阅指定类型的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
-            var disposable = _broker.Subscribe(filter).Subscribe(handler);
+            var disposable = _broker.Subscribe(filter, handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -177,7 +159,7 @@ namespace XFramework.XReactive
         /// <summary>订阅指定键值的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
-            var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(handler);
+            var disposable = _broker.Subscribe(key, handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -185,10 +167,7 @@ namespace XFramework.XReactive
         /// <summary>订阅指定键值的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
-            var disposable = _broker.Subscribe<TKey, TMessage>(key).Subscribe(m =>
-            {
-                if (filter(m)) handler(m);
-            });
+            var disposable = _broker.Subscribe(key, filter, handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -196,7 +175,7 @@ namespace XFramework.XReactive
         /// <summary>异步订阅。消息到达时执行异步处理器。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Func<TMessage, UniTask> asyncHandler)
         {
-            var disposable = _broker.SubscribeAsync(asyncHandler).Subscribe(_ => { });
+            var disposable = _broker.SubscribeAsync(asyncHandler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -204,7 +183,7 @@ namespace XFramework.XReactive
         /// <summary>异步订阅，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
         {
-            var disposable = _broker.SubscribeAsync(filter, asyncHandler).Subscribe(_ => { });
+            var disposable = _broker.SubscribeAsync(filter, asyncHandler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -212,7 +191,7 @@ namespace XFramework.XReactive
         /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
-            var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(handler);
+            var disposable = _broker.SubscribeBuffered(handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -220,7 +199,7 @@ namespace XFramework.XReactive
         /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
-            var disposable = _broker.SubscribeBuffered<TKey, TMessage>(key).Subscribe(handler);
+            var disposable = _broker.SubscribeBuffered(key, handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -228,10 +207,7 @@ namespace XFramework.XReactive
         /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
-            var disposable = _broker.SubscribeBuffered<TMessage>().Subscribe(m =>
-            {
-                if (filter(m)) handler(m);
-            });
+            var disposable = _broker.SubscribeBuffered(filter, handler);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
@@ -263,8 +239,8 @@ namespace XFramework.XReactive
         {
             if (subscriber is MonoBehaviour mono)
             {
-                // 内联实现 AddTo(destroyCancellationToken)(原 R3 扩展,移除 R3 依赖后自实现;
-                // 语义与 NodeExtensions.AddTo 一致:已取消则立即释放,否则注册到取消回调)
+                // 内联实现 AddTo(destroyCancellationToken):
+                // 语义与 NodeExtensions.AddTo 一致:已取消则立即释放,否则注册到取消回调
                 var token = mono.destroyCancellationToken;
                 if (!token.CanBeCanceled || token.IsCancellationRequested)
                 {

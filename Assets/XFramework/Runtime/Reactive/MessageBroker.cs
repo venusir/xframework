@@ -8,13 +8,16 @@ using XFramework.XReactive.Internal;
 namespace XFramework.XReactive
 {
     /// <summary>
-    /// 消息代理实现(自研响应式引擎,移除 R3 依赖)。支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
+    /// 消息代理实现:消息分发层,订阅直接落到自研 Subject 并返回 IDisposable(无中间订阅源)。
+    /// 支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>
     /// <remarks>
     /// GC 优化说明:
-    /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历，无过滤器时零分配
-    /// - 键值消息使用两层字典结构，值类型 Key 无 boxing
+    /// - 过滤/异步等订阅配置以一次性闭包表达,仅在订阅时分配一次(非热路径)
+    /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历,无过滤器时零分配
+    /// - 键值消息使用两层字典结构,值类型 Key 无 boxing
     /// - buffered 通道在首次 Publish 时惰性创建 ReplaySubject(每类型一次),之后零额外分配
+    /// - 投递热路径(Publish/OnNext)除锁与池化快照外零分配
     /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
@@ -38,21 +41,9 @@ namespace XFramework.XReactive
         /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
         private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
-        /// <summary>按消息类型缓存的 ObservableSignal（避免每次 Subscribe 都 new）。</summary>
-        private readonly Dictionary<Type, object> _signalCache = new();
-
-        /// <summary>按 (消息类型 -> TKey -> ObservableSignal) 缓存的键值信号。</summary>
-        private readonly Dictionary<Type, object> _keyedSignalCache = new();
-
-        /// <summary>按消息类型缓存的缓冲 ObservableSignal。</summary>
-        private readonly Dictionary<Type, object> _bufferedSignalCache = new();
-
-        /// <summary>按 (消息类型 -> TKey -> ObservableSignal) 缓存的键值缓冲信号。</summary>
-        private readonly Dictionary<Type, object> _keyedBufferedSignalCache = new();
-
         #endregion
 
-        #region IMessagePublisher
+        #region Publish
 
         public void Publish<TMessage>(TMessage message)
         {
@@ -92,97 +83,62 @@ namespace XFramework.XReactive
 
         #endregion
 
-        #region IMessageSubscriber
+        #region Subscribe
 
-        public IReadonlySignal<TMessage> Subscribe<TMessage>()
-        {
-            var type = typeof(TMessage);
-            if (!_signalCache.TryGetValue(type, out var cached))
+        /// <summary>订阅指定类型的消息,直接落 Subject 并返回退订句柄。</summary>
+        public IDisposable Subscribe<TMessage>(Action<TMessage> handler)
+            => GetOrAddSubject<TMessage>().Subscribe(handler);
+
+        /// <summary>订阅指定类型的消息,附加订阅级过滤条件(返回 false 的消息不投递给该订阅)。</summary>
+        /// <remarks>
+        /// 过滤与回调组合为订阅期一次性闭包:过滤条件抛异常时由 Subject 的异常隔离兜底
+        /// (记 Error 日志、本条不投递、订阅保留、其他订阅者不受影响)。
+        /// </remarks>
+        public IDisposable Subscribe<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
+            => GetOrAddSubject<TMessage>().Subscribe(m =>
             {
-                cached = new ObservableSignal<TMessage>(GetOrAddSubject<TMessage>());
-                _signalCache[type] = cached;
-            }
-            return (IReadonlySignal<TMessage>)cached;
-        }
+                if (filter.Invoke(m)) handler(m);
+            });
 
-        public IReadonlySignal<TMessage> Subscribe<TMessage>(Predicate<TMessage> filter)
-        {
-            // 带 filter 的订阅无法缓存，每个 filter 是不同的订阅配置
-            // 使用 filter.Invoke 替代 lambda 包装，消除闭包分配（仅 1 个委托，无闭包）
-            var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject, filter: filter.Invoke);
-        }
+        /// <summary>订阅指定键值的消息。</summary>
+        public IDisposable Subscribe<TKey, TMessage>(TKey key, Action<TMessage> handler)
+            => GetOrAddKeyedSubject<TKey, TMessage>(key).Subscribe(handler);
 
-        public IReadonlySignal<TMessage> Subscribe<TKey, TMessage>(TKey key)
-        {
-            var type = typeof(TMessage);
-            if (!_keyedSignalCache.TryGetValue(type, out var innerObj))
+        /// <summary>订阅指定键值的消息,附加订阅级过滤条件。</summary>
+        public IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+            => GetOrAddKeyedSubject<TKey, TMessage>(key).Subscribe(m =>
             {
-                var dict = new Dictionary<TKey, IReadonlySignal<TMessage>>();
-                _keyedSignalCache[type] = dict;
-                var signal = new ObservableSignal<TMessage>(GetOrAddKeyedSubject<TKey, TMessage>(key));
-                dict[key] = signal;
-                return signal;
-            }
+                if (filter.Invoke(m)) handler(m);
+            });
 
-            var innerDict = (Dictionary<TKey, IReadonlySignal<TMessage>>)innerObj;
-            if (!innerDict.TryGetValue(key, out var cached))
+        /// <summary>
+        /// 异步订阅:消息到达时触发异步处理器(fire-and-forget)。
+        /// <para>异步处理器经 Forget() 烧录进订阅回调,后续异常由 UniTask 的 Forget 语义兜底。</para>
+        /// </summary>
+        public IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
+            => GetOrAddSubject<TMessage>().Subscribe(m => asyncHandler(m).Forget());
+
+        /// <summary>异步订阅,附加订阅级过滤条件。</summary>
+        public IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
+            => GetOrAddSubject<TMessage>().Subscribe(m =>
             {
-                cached = new ObservableSignal<TMessage>(GetOrAddKeyedSubject<TKey, TMessage>(key));
-                innerDict[key] = cached;
-            }
-            return cached;
-        }
+                if (filter.Invoke(m)) asyncHandler(m).Forget();
+            });
 
-        public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
-        {
-            // 带 asyncHandler 的订阅无法缓存
-            // GC 说明: preHandler 槽仅 1 个闭包 + 1 个委托（初始化时一次性，非热路径）
-            // 原 R3 实现用 Select 链,现改为 Subject 的 preHandler 槽(在 onNext 之前执行,不参与异常隔离)
-            var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject, preHandler: m => asyncHandler(m).Forget());
-        }
+        /// <summary>订阅带缓冲的消息:新订阅者立即同步收到最近一次发布的消息(若有),之后转为实时。</summary>
+        public IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
+            => GetOrAddBufferedSubject<TMessage>().Subscribe(handler);
 
-        public IReadonlySignal<TMessage> SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
-        {
-            // 带 filter + asyncHandler 的订阅无法缓存
-            // GC 说明: filter.Invoke 消除了 filter 的闭包（1 委托），preHandler 仍 1 闭包 + 1 委托
-            //（初始化时一次性，非热路径）
-            var subject = GetOrAddSubject<TMessage>();
-            return new ObservableSignal<TMessage>(subject, preHandler: m => asyncHandler(m).Forget(), filter: filter.Invoke);
-        }
-
-        public IReadonlySignal<TMessage> SubscribeBuffered<TMessage>()
-        {
-            var type = typeof(TMessage);
-            if (!_bufferedSignalCache.TryGetValue(type, out var cached))
+        /// <summary>订阅带缓冲的消息,附加订阅级过滤条件(重放与实时共用同一过滤)。</summary>
+        public IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
+            => GetOrAddBufferedSubject<TMessage>().Subscribe(m =>
             {
-                cached = new ObservableSignal<TMessage>(GetOrAddBufferedSubject<TMessage>());
-                _bufferedSignalCache[type] = cached;
-            }
-            return (IReadonlySignal<TMessage>)cached;
-        }
+                if (filter.Invoke(m)) handler(m);
+            });
 
-        public IReadonlySignal<TMessage> SubscribeBuffered<TKey, TMessage>(TKey key)
-        {
-            var type = typeof(TMessage);
-            if (!_keyedBufferedSignalCache.TryGetValue(type, out var innerObj))
-            {
-                var dict = new Dictionary<TKey, IReadonlySignal<TMessage>>();
-                _keyedBufferedSignalCache[type] = dict;
-                var signal = new ObservableSignal<TMessage>(GetOrAddKeyedBufferedSubject<TKey, TMessage>(key));
-                dict[key] = signal;
-                return signal;
-            }
-
-            var innerDict = (Dictionary<TKey, IReadonlySignal<TMessage>>)innerObj;
-            if (!innerDict.TryGetValue(key, out var cached))
-            {
-                cached = new ObservableSignal<TMessage>(GetOrAddKeyedBufferedSubject<TKey, TMessage>(key));
-                innerDict[key] = cached;
-            }
-            return cached;
-        }
+        /// <summary>订阅带缓冲的键值消息。新订阅者立即同步收到最近一次发布的消息(若有)。</summary>
+        public IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
+            => GetOrAddKeyedBufferedSubject<TKey, TMessage>(key).Subscribe(handler);
 
         #endregion
 
@@ -225,7 +181,7 @@ namespace XFramework.XReactive
 
             try
             {
-                // pipeline 返回 bool:过滤器链全部放行才为 true(修复:原 Action 形态无法感知拦截)
+                // pipeline 返回 bool:过滤器链全部放行才为 true
                 return ((Func<TMessage, bool>)pipelineObj)(message);
             }
             catch (Exception e)
@@ -282,10 +238,6 @@ namespace XFramework.XReactive
             _keyedBufferedSubjects.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
-            _signalCache.Clear();
-            _keyedSignalCache.Clear();
-            _bufferedSignalCache.Clear();
-            _keyedBufferedSignalCache.Clear();
         }
 
         #endregion

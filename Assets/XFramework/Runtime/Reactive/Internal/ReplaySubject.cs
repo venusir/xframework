@@ -4,10 +4,9 @@ namespace XFramework.XReactive.Internal
 {
     /// <summary>
     /// 带缓冲的 Subject:新订阅者会立即同步收到最近一次投递的消息(重放先于实时)。
-    /// <para>替代 R3.ReplaySubject(1) 的自研实现(移除 R3 依赖计划 Phase 1)。</para>
     /// </summary>
     /// <remarks>
-    /// 语义(实测 R3 行为后固化):
+    /// 语义:
     /// - 订阅时同步重放最近一条;无消息时不重放,从实时消息开始
     /// - 每个订阅者各自收到重放
     /// - 重放先于实时消息(订阅后立即投递的新消息排在重放之后)
@@ -28,11 +27,12 @@ namespace XFramework.XReactive.Internal
 
         /// <summary>
         /// 订阅消息,并立即同步重放最近一次投递的消息(若有)。
-        /// <para>重放也经过 filter 与 preHandler 槽位,与实时消息路径一致。</para>
+        /// <para>重放与实时共用同一订阅回调:订阅侧过滤等逻辑由订阅闭包自身表达,两路径行为一致。</para>
         /// </summary>
-        public new IDisposable Subscribe(Action<T> onNext, Action<T> preHandler = null, Func<T, bool> filter = null)
+        /// <param name="onNext">消息回调,不可为 null。</param>
+        public new IDisposable Subscribe(Action<T> onNext)
         {
-            var handle = base.Subscribe(onNext, preHandler, filter);
+            var handle = base.Subscribe(onNext);
 
             // 锁内取缓存、锁外重放:避免持锁调用用户代码
             T replay;
@@ -45,8 +45,8 @@ namespace XFramework.XReactive.Internal
 
             if (hasReplay)
             {
-                // 重放路径复用 Subject 的统一投递语义(filter → preHandler → onNext,异常隔离)
-                Subject<T>.Deliver(replay, preHandler, filter, onNext);
+                // 重放路径复用 Subject 的统一投递语义(回调异常隔离),与实时行为一致
+                Subject<T>.Deliver(replay, onNext);
             }
 
             return handle;
