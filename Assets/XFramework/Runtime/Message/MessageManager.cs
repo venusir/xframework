@@ -51,13 +51,54 @@ namespace XFramework.XMessage
         public static IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
             => _broker.Subscribe(key, filter, handler);
 
-        /// <summary>异步订阅。消息到达时执行异步处理器。</summary>
-        public static IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
-            => _broker.SubscribeAsync(asyncHandler);
+        /// <summary>
+        /// 异步订阅。消息到达时执行异步处理器。
+        /// <para>处理器收到的令牌即订阅自身的令牌:退订会取消它,使在途 await 提前结束。</para>
+        /// <para><paramref name="cancellationToken"/> 与订阅生命周期绑定:<b>令牌取消即自动退订</b>,
+        /// 与 AddTo 约定一致;传入已取消的令牌则不会登记,返回空句柄。</para>
+        /// </summary>
+        /// <param name="asyncHandler">异步处理器,不可为 <c>null</c>。</param>
+        /// <param name="cancellationToken">绑定订阅生命周期的令牌,取消即自动退订;已取消时不登记。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="asyncHandler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeAsync<TMessage>(
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+            => _broker.SubscribeAsync(asyncHandler, cancellationToken);
 
         /// <summary>异步订阅，并附加过滤条件。</summary>
-        public static IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
-            => _broker.SubscribeAsync(filter, asyncHandler);
+        /// <param name="filter">订阅级过滤条件,不可为 <c>null</c>。</param>
+        /// <param name="asyncHandler">异步处理器,不可为 <c>null</c>。</param>
+        /// <param name="cancellationToken">绑定订阅生命周期的令牌,取消即自动退订。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="filter"/> 或 <paramref name="asyncHandler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeAsync<TMessage>(
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+            => _broker.SubscribeAsync(filter, asyncHandler, cancellationToken);
+
+        /// <summary>异步订阅指定键值的消息。</summary>
+        /// <param name="key">消息键,相同 Key 的消息在同一通道中传递。</param>
+        /// <param name="asyncHandler">异步处理器,不可为 <c>null</c>。</param>
+        /// <param name="cancellationToken">绑定订阅生命周期的令牌,取消即自动退订。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="asyncHandler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeAsync<TKey, TMessage>(
+            TKey key,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+            => _broker.SubscribeAsync(key, asyncHandler, cancellationToken);
+
+        /// <summary>异步订阅指定键值的消息，并附加过滤条件。</summary>
+        /// <param name="key">消息键,相同 Key 的消息在同一通道中传递。</param>
+        /// <param name="filter">订阅级过滤条件,不可为 <c>null</c>。</param>
+        /// <param name="asyncHandler">异步处理器,不可为 <c>null</c>。</param>
+        /// <param name="cancellationToken">绑定订阅生命周期的令牌,取消即自动退订。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="filter"/> 或 <paramref name="asyncHandler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeAsync<TKey, TMessage>(
+            TKey key,
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+            => _broker.SubscribeAsync(key, filter, asyncHandler, cancellationToken);
 
         /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
@@ -70,6 +111,10 @@ namespace XFramework.XMessage
         /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
             => _broker.SubscribeBuffered(filter, handler);
+
+        /// <summary>订阅带缓冲的键值消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。</summary>
+        public static IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+            => _broker.SubscribeBuffered(key, filter, handler);
 
         /// <summary>注册全局消息过滤器。</summary>
         /// <param name="filter">过滤器实例,不可为 <c>null</c>。</param>
@@ -262,18 +307,50 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>异步订阅。消息到达时执行异步处理器。订阅会自动绑定到对象的生命周期。</summary>
-        public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Func<TMessage, UniTask> asyncHandler)
+        /// <summary>异步订阅。消息到达时执行异步处理器。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        public static IDisposable SubscribeAsync<TMessage>(
+            this IMessageSubscriber subscriber,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
         {
-            var disposable = _broker.SubscribeAsync(asyncHandler);
+            var disposable = _broker.SubscribeAsync(asyncHandler, cancellationToken);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }
 
-        /// <summary>异步订阅，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
-        public static IDisposable SubscribeAsync<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
+        /// <summary>异步订阅，并附加过滤条件。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        public static IDisposable SubscribeAsync<TMessage>(
+            this IMessageSubscriber subscriber,
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
         {
-            var disposable = _broker.SubscribeAsync(filter, asyncHandler);
+            var disposable = _broker.SubscribeAsync(filter, asyncHandler, cancellationToken);
+            TryBindToDestroy(subscriber, disposable);
+            return disposable;
+        }
+
+        /// <summary>异步订阅指定键值的消息。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        public static IDisposable SubscribeAsync<TKey, TMessage>(
+            this IMessageSubscriber subscriber,
+            TKey key,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+        {
+            var disposable = _broker.SubscribeAsync(key, asyncHandler, cancellationToken);
+            TryBindToDestroy(subscriber, disposable);
+            return disposable;
+        }
+
+        /// <summary>异步订阅指定键值的消息，并附加过滤条件。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        public static IDisposable SubscribeAsync<TKey, TMessage>(
+            this IMessageSubscriber subscriber,
+            TKey key,
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+        {
+            var disposable = _broker.SubscribeAsync(key, filter, asyncHandler, cancellationToken);
             TryBindToDestroy(subscriber, disposable);
             return disposable;
         }

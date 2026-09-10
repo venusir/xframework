@@ -119,11 +119,17 @@ namespace XFramework.XMessage.Tests
         public void SubscribeAsync_NullArguments_Throw()
         {
             Assert.Throws<ArgumentNullException>(
-                () => MessageManager.SubscribeAsync<TestMessage>((Func<TestMessage, UniTask>)null));
+                () => MessageManager.SubscribeAsync<TestMessage>(
+                    (Func<TestMessage, CancellationToken, UniTask>)null));
             Assert.Throws<ArgumentNullException>(
-                () => MessageManager.SubscribeAsync<TestMessage>((Predicate<TestMessage>)null, _ => UniTask.CompletedTask));
+                () => MessageManager.SubscribeAsync<TestMessage>(
+                    (Predicate<TestMessage>)null, (_, ct) => UniTask.CompletedTask));
             Assert.Throws<ArgumentNullException>(
                 () => MessageManager.SubscribeAsync<TestMessage>(_ => true, null));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<string, TestMessage>("k", (Func<TestMessage, CancellationToken, UniTask>)null));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<string, TestMessage>("k", null, (_, ct) => UniTask.CompletedTask));
         }
 
         [Test]

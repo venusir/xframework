@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XMessage.Internal;
@@ -66,6 +67,9 @@ namespace XFramework.XMessage
 
             // 推送给缓冲订阅者(GetOrCreate:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
             channel.GetOrCreateBuffered().OnNext(message);
+
+            // 异步处理器排在同步投递之后,fire-and-forget 启动
+            DispatchAsyncFireAndForget(channel, message);
         }
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
@@ -83,6 +87,9 @@ namespace XFramework.XMessage
 
             // 推送给键值缓冲订阅者(GetOrCreate:同上,订阅前发布的消息可重放)
             channel.GetOrCreateBuffered().OnNext(message);
+
+            // 异步处理器排在同步投递之后,fire-and-forget 启动
+            DispatchAsyncFireAndForget(channel, message);
         }
 
         #endregion
@@ -132,25 +139,55 @@ namespace XFramework.XMessage
         }
 
         /// <summary>
-        /// 异步订阅:消息到达时触发异步处理器(fire-and-forget)。
-        /// <para>异步处理器经 Forget() 烧录进订阅回调,后续异常由 UniTask 的 Forget 语义兜底。</para>
+        /// 异步订阅:消息到达时触发异步处理器。
+        /// <para>处理器独立登记在通道的异步列表中,不占同步订阅链;同步 Publish 以 fire-and-forget 触发它,
+        /// PublishAsync 则逐个 await。</para>
         /// </summary>
-        public IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
+        public IDisposable SubscribeAsync<TMessage>(
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
         {
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
-            return GetOrCreateChannel<TMessage>().GetOrCreateSync()
-                .Subscribe(m => asyncHandler(m).Forget());
+            return AddAsyncSubscription(
+                GetOrCreateChannel<TMessage>(), null, asyncHandler, cancellationToken);
         }
 
         /// <summary>异步订阅,附加订阅级过滤条件。</summary>
-        public IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
+        public IDisposable SubscribeAsync<TMessage>(
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
-            return GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(m =>
-            {
-                if (filter.Invoke(m)) asyncHandler(m).Forget();
-            });
+            return AddAsyncSubscription(
+                GetOrCreateChannel<TMessage>(), filter, asyncHandler, cancellationToken);
+        }
+
+        /// <summary>异步订阅指定键值的消息。</summary>
+        public IDisposable SubscribeAsync<TKey, TMessage>(
+            TKey key,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+        {
+            if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+            return AddAsyncSubscription(
+                GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
+                null, asyncHandler, cancellationToken);
+        }
+
+        /// <summary>异步订阅指定键值的消息,附加订阅级过滤条件。</summary>
+        public IDisposable SubscribeAsync<TKey, TMessage>(
+            TKey key,
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+        {
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+            return AddAsyncSubscription(
+                GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
+                filter, asyncHandler, cancellationToken);
         }
 
         /// <summary>订阅带缓冲的消息:新订阅者立即同步收到最近一次发布的消息(若有),之后转为实时。</summary>
@@ -177,6 +214,19 @@ namespace XFramework.XMessage
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             return GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
                 .GetOrCreateBuffered().Subscribe(handler);
+        }
+
+        /// <summary>订阅带缓冲的键值消息,附加订阅级过滤条件(重放与实时共用同一过滤)。</summary>
+        public IDisposable SubscribeBuffered<TKey, TMessage>(
+            TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+        {
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+            return GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
+                .GetOrCreateBuffered().Subscribe(m =>
+                {
+                    if (filter.Invoke(m)) handler(m);
+                });
         }
 
         #endregion
@@ -400,6 +450,101 @@ namespace XFramework.XMessage
             _keyedChannels.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
+        }
+
+        #endregion
+
+        #region Async Dispatch
+
+        /// <summary>
+        /// 登记一条异步订阅;调用方令牌已取消时返回空句柄(不登记,与 AddTo 语义一致)。
+        /// </summary>
+        private static IDisposable AddAsyncSubscription<TMessage>(
+            MessageChannel<TMessage> channel,
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken)
+        {
+            if (cancellationToken.IsCancellationRequested)
+                return ActionDisposable.Create(() => { });
+
+            return channel.AddAsync(filter, asyncHandler, cancellationToken);
+        }
+
+        /// <summary>
+        /// 同步派发路径的异步处理器:启动后即放手(fire-and-forget)。
+        /// <para>处理器同步抛出的异常就地兜底;异步段的异常交给 UniTask 的 Forget 语义。</para>
+        /// </summary>
+        private static void DispatchAsyncFireAndForget<TMessage>(MessageChannel<TMessage> channel, TMessage message)
+        {
+            var handlers = channel.Async;
+            if (handlers == null || handlers.Count == 0)
+                return;
+
+            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            try
+            {
+                CollectAsyncTargets(handlers, message, targets);
+
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    var subscription = targets[i];
+
+                    // 与同步路径一致:快照收集后若已被退订(前一个处理器退掉了它)则跳过
+                    if (subscription.IsDisposed)
+                        continue;
+
+                    try
+                    {
+                        subscription.Handler(message, subscription.Token).Forget();
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[Message] Async handler threw exception: {e}");
+                    }
+                }
+            }
+            finally
+            {
+                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+            }
+        }
+
+        /// <summary>
+        /// 收集本轮应投递的异步订阅到池化快照(派发中退订不影响本轮)。
+        /// <para>过滤条件抛异常时记日志并跳过该订阅,与同步路径的订阅级过滤语义一致。</para>
+        /// </summary>
+        private static void CollectAsyncTargets<TMessage>(
+            List<AsyncSubscription<TMessage>> handlers,
+            TMessage message,
+            List<AsyncSubscription<TMessage>> targets)
+        {
+            for (int i = 0; i < handlers.Count; i++)
+            {
+                var subscription = handlers[i];
+                if (subscription.IsDisposed)
+                    continue;
+
+                var filter = subscription.Filter;
+                if (filter != null)
+                {
+                    bool passed;
+                    try
+                    {
+                        passed = filter.Invoke(message);
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[Message] Async subscription filter threw exception: {e}");
+                        continue;
+                    }
+
+                    if (!passed)
+                        continue;
+                }
+
+                targets.Add(subscription);
+            }
         }
 
         #endregion

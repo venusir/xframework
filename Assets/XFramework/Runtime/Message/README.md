@@ -62,17 +62,21 @@ MessageManager.SubscribeBuffered<GameStateChangedMessage>(msg =>
     Debug.Log($"游戏状态: {msg.NewState}");
 });
 
-// 异步处理器订阅
-MessageManager.SubscribeAsync<PlayerDiedMessage>(async msg =>
+// 异步处理器订阅:ct 是订阅自身的令牌,退订即取消在途 await
+MessageManager.SubscribeAsync<PlayerDiedMessage>(async (msg, ct) =>
 {
     Debug.Log($"{msg.PlayerName} 死亡,开始复活倒计时...");
-    await UniTask.Delay(TimeSpan.FromSeconds(3));
+    await UniTask.Delay(TimeSpan.FromSeconds(3), cancellationToken: ct);
     Debug.Log($"{msg.PlayerName} 已复活");
 });
 
 // 取消订阅
 subscription.Dispose();
 ```
+
+**异步订阅的令牌语义**：处理器收到的 `ct` 就是订阅自身的令牌，退订即取消它，故 `await` 会随退订提前结束；同时 `SubscribeAsync` 的 `cancellationToken` 参数**与订阅生命周期绑定——令牌取消即自动退订**（与 `AddTo` 一致），传入已取消的令牌则不会登记。
+
+异步处理器独立登记在通道的异步列表中，不占同步订阅链：同步 `Publish` 以 fire-and-forget 触发它，`PublishAsync` 则逐个 await（见下）。
 
 ### 带 Key 的消息
 

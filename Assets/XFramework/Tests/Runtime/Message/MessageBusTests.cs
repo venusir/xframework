@@ -423,7 +423,7 @@ namespace XFramework.XMessage.Tests
         public void SubscribeAsync_InvokesHandler()
         {
             var received = 0;
-            var disposable = MessageManager.SubscribeAsync<TestMessage>(msg =>
+            var disposable = MessageManager.SubscribeAsync<TestMessage>((msg, ct) =>
             {
                 received = msg.Value;
                 return UniTask.CompletedTask;
@@ -442,7 +442,7 @@ namespace XFramework.XMessage.Tests
             var received = 0;
             var disposable = MessageManager.SubscribeAsync<TestMessage>(
                 msg => msg.Value > 10,
-                msg =>
+                (msg, ct) =>
                 {
                     callCount++;
                     received = msg.Value;

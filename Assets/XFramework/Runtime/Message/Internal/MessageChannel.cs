@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 
 namespace XFramework.XMessage.Internal
 {
     /// <summary>
-    /// 一条消息通道:聚合同一 (消息类型[, Key]) 下的同步订阅流与缓冲订阅流。
-    /// <para>两条流均惰性创建——从未被订阅/发布的方向保持为 <c>null</c>,不产生空流分配。</para>
+    /// 一条消息通道:聚合同一 (消息类型[, Key]) 下的同步订阅流、缓冲订阅流与异步订阅登记。
+    /// <para>三者均惰性创建——从未被使用的方向保持为 <c>null</c>,不产生空分配。</para>
     /// </summary>
     /// <remarks>
     /// 引入本类型是为让「按 (类型, Key) 聚合」成为唯一的数据组织方式:
@@ -18,6 +20,7 @@ namespace XFramework.XMessage.Internal
         private readonly Action _onEmpty;
         private EventStream<TMessage> _sync;
         private BufferedEventStream<TMessage> _buffered;
+        private List<AsyncSubscription<TMessage>> _async;
 
         #endregion
 
@@ -25,7 +28,8 @@ namespace XFramework.XMessage.Internal
 
         /// <summary>创建通道。</summary>
         /// <param name="onEmpty">
-        /// 同步订阅数由 1 归零时的回调,由持有者用于回收空通道;<c>null</c> 表示不参与自动回收。
+        /// 「订阅清零」通知:同步订阅数由 1 归零、或异步登记表被清空时回调,
+        /// 由持有者据此判定并回收空通道;<c>null</c> 表示不参与自动回收。
         /// </param>
         internal MessageChannel(Action onEmpty) => _onEmpty = onEmpty;
 
@@ -57,16 +61,35 @@ namespace XFramework.XMessage.Internal
         internal BufferedEventStream<TMessage> GetOrCreateBuffered()
             => _buffered ??= new BufferedEventStream<TMessage>();
 
+        /// <summary>异步订阅登记表;从未有异步订阅时为 <c>null</c>。</summary>
+        internal List<AsyncSubscription<TMessage>> Async => _async;
+
+        /// <summary>创建异步订阅并登记。调用方负责已取消等前置判定。</summary>
+        internal AsyncSubscription<TMessage> AddAsync(
+            Predicate<TMessage> filter,
+            Func<TMessage, CancellationToken, UniTask> handler,
+            CancellationToken cancellationToken)
+        {
+            _async ??= new List<AsyncSubscription<TMessage>>();
+            var subscription = new AsyncSubscription<TMessage>(
+                _async, filter, handler, cancellationToken, _onEmpty);
+            _async.Add(subscription);
+            return subscription;
+        }
+
         #endregion
 
         #region IMessageChannel
 
         /// <summary>
-        /// 是否可整条回收:无同步订阅,且不持有缓冲流。
+        /// 是否可整条回收:无同步订阅、无异步订阅,且不持有缓冲流。
         /// <para>持有缓冲流即持有重放缓存,回收会破坏「订阅前发布可重放」语义,
         /// 故缓冲通道只能经 <see cref="EvictBuffered"/> 显式淘汰后才可能被回收。</para>
         /// </summary>
-        public bool IsReclaimable => (_sync == null || _sync.SubscriptionCount == 0) && _buffered == null;
+        public bool IsReclaimable =>
+            (_sync == null || _sync.SubscriptionCount == 0)
+            && (_async == null || _async.Count == 0)
+            && _buffered == null;
 
         /// <summary>
         /// 淘汰缓冲流(丢弃其重放缓存)。返回是否确有缓冲流被淘汰。
@@ -85,11 +108,20 @@ namespace XFramework.XMessage.Internal
             return true;
         }
 
-        /// <summary>释放本通道持有的全部事件流。幂等。</summary>
+        /// <summary>释放本通道持有的全部事件流与异步订阅。幂等。</summary>
         public void DisposeAll()
         {
             _sync?.Dispose();
             _buffered?.Dispose();
+
+            if (_async != null)
+            {
+                // 先与登记表断开再逐个释放:否则 Dispose 会边遍历边改表
+                for (int i = 0; i < _async.Count; i++)
+                    _async[i].DisposeDetached();
+                _async.Clear();
+            }
+
             _sync = null;
             _buffered = null;
         }
