@@ -17,6 +17,11 @@ namespace XFramework.XMessage.Internal
     /// - 重入 OnNext:递归快照,通过 _publishDepth 计数禁止派发中回池(防节点复用导致 ABA)
     /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 OnNext 调用方;
     /// 异常订阅者不被移除,同一轮遍历中后续订阅者照常收到消息。
+    /// <para>
+    /// 子类化约定:基类与派生类(BufferedEventStream)各持一把锁,两者永远顺序获取、绝不嵌套
+    /// (派生方法先完成自己的锁内工作并离开锁,再调用 base 实现)。后续维护者不得为「省一把锁」
+    /// 而让派生类复用基类的 _sync —— 那会使锁内调用用户代码与锁序反转同时复活。
+    /// </para>
     /// </remarks>
     internal class EventStream<T> : IDisposable
     {
@@ -24,8 +29,13 @@ namespace XFramework.XMessage.Internal
 
         private readonly object _sync = new object();
         private SubscriptionNode<T> _head;
-        private bool _completed;
         private int _publishDepth;
+
+        /// <summary>
+        /// 终止标志。写入恒在 _sync 锁内;标为 volatile 是因为派生类需要无锁读取
+        /// (见 <see cref="IsCompleted"/>),避免每次投递都多取一把锁。
+        /// </summary>
+        private volatile bool _completed;
 
         #endregion
 
@@ -37,7 +47,7 @@ namespace XFramework.XMessage.Internal
         /// </summary>
         /// <param name="onNext">事件回调,不可为 null。</param>
         /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
-        public IDisposable Subscribe(Action<T> onNext)
+        public virtual IDisposable Subscribe(Action<T> onNext)
         {
             if (onNext == null) throw new ArgumentNullException(nameof(onNext));
 
@@ -56,7 +66,7 @@ namespace XFramework.XMessage.Internal
         }
 
         /// <summary>投递事件给所有存活订阅者。</summary>
-        public void OnNext(T value)
+        public virtual void OnNext(T value)
         {
             // 锁内快照:收集当前存活节点到池化 List,锁外逐个调用
             // 不使用节点 Next 字段串快照(会破坏主链表结构),用独立 List
@@ -102,7 +112,7 @@ namespace XFramework.XMessage.Internal
         }
 
         /// <summary>标记完成:之后的 OnNext 被忽略,已订阅者不再收到投递。</summary>
-        public void OnCompleted()
+        public virtual void OnCompleted()
         {
             lock (_sync)
             {
@@ -111,7 +121,7 @@ namespace XFramework.XMessage.Internal
         }
 
         /// <summary>释放所有订阅并回收节点,之后 OnNext/Subscribe 均无效(completed 语义)。</summary>
-        public void Dispose()
+        public virtual void Dispose()
         {
             lock (_sync)
             {
@@ -126,6 +136,14 @@ namespace XFramework.XMessage.Internal
                 }
             }
         }
+
+        /// <summary>
+        /// 事件流是否已终止(<see cref="OnCompleted"/> 或 <see cref="Dispose"/> 之后为 <c>true</c>)。
+        /// <para>供派生类在写入自有状态前短路,避免留下永远不会被投递或重放的数据。</para>
+        /// <para>无锁读取:已终止的流不会再改变状态,读到 <c>false</c> 但随后被并发终止时,
+        /// 最多多写一次自有状态,无正确性影响(本引擎使用场景为主线程)。</para>
+        /// </summary>
+        protected bool IsCompleted => _completed;
 
         #endregion
 

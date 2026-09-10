@@ -249,6 +249,61 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(0, calls.Count, "completed 后新订阅者不重放、不投递");
         }
 
+        [Test]
+        public void BufferedEventStream_OnNextAfterCompleted_DoesNotReplayToNewSubscriber()
+        {
+            var stream = new BufferedEventStream<int>();
+            stream.OnCompleted();
+            stream.OnNext(5);
+
+            var calls = new List<int>();
+            stream.Subscribe(calls.Add);
+
+            Assert.AreEqual(0, calls.Count, "completed 之后的 OnNext 必须被彻底忽略,不得写回缓存供新订阅者重放");
+        }
+
+        [Test]
+        public void BufferedEventStream_DisposedViaIDisposable_NoReplayToNewSubscriber()
+        {
+            var stream = new BufferedEventStream<int>();
+            stream.OnNext(7);
+
+            // 经接口引用释放:必须走到派生类的 Dispose,否则缓存不被清空
+            ((IDisposable)stream).Dispose();
+
+            var calls = new List<int>();
+            stream.Subscribe(calls.Add);
+
+            Assert.AreEqual(0, calls.Count, "经 IDisposable 释放后,新订阅者不收到陈旧缓存的重放");
+        }
+
+        [Test]
+        public void BufferedEventStream_ThroughBaseReference_StillCaches()
+        {
+            // 经基类引用多态调用:虚分派必须落到派生实现,缓存与重放都不能失效
+            EventStream<int> stream = new BufferedEventStream<int>();
+            stream.OnNext(8);
+
+            var calls = new List<int>();
+            stream.Subscribe(calls.Add);
+
+            CollectionAssert.AreEqual(new[] { 8 }, calls, "经基类引用投递的事件同样写入缓存并可重放");
+        }
+
+        [Test]
+        public void BufferedEventStream_OnCompletedViaBaseReference_ClearsCache()
+        {
+            EventStream<int> stream = new BufferedEventStream<int>();
+            stream.OnNext(1);
+            stream.OnCompleted();
+
+            var calls = new List<int>();
+            stream.Subscribe(calls.Add);
+            stream.OnNext(2);
+
+            Assert.AreEqual(0, calls.Count, "经基类引用 OnCompleted 后缓存被清空,新订阅者不重放");
+        }
+
         #endregion
 
         #region ActionDisposable
