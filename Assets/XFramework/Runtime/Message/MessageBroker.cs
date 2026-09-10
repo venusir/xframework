@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -12,28 +11,27 @@ namespace XFramework.XMessage
     /// 支持普通消息、键值消息、异步消息、缓冲消息和消息过滤器。
     /// </summary>
     /// <remarks>
+    /// 通道结构:
+    /// - 按消息类型一张通道表(_channels);键值消息在其上再叠一层 Key(_keyedChannels -> Key -> 通道)
+    /// - 一条 MessageChannel 聚合该 (消息类型[, Key]) 下的同步流与缓冲流,
+    ///   使投递、清理、淘汰与统计共用同一条遍历路径
+    ///
     /// GC 优化说明:
     /// - 过滤/异步等订阅配置以一次性闭包表达,仅在订阅时分配一次(非热路径)
     /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历,无过滤器时零分配
     /// - 键值消息使用两层字典结构,值类型 Key 无 boxing
-    /// - buffered 通道在首次 Publish 时惰性创建 BufferedEventStream(每类型一次),之后零额外分配
+    /// - 同步流与缓冲流均惰性创建,发布过但无人订阅的类型不会产生空流
     /// - 投递热路径(Publish/OnNext)除锁与池化快照外零分配
     /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
         #region Private Fields
 
-        /// <summary>按消息类型缓存的事件流。</summary>
-        private readonly Dictionary<Type, object> _streams = new();
+        /// <summary>按消息类型缓存的通道(承载该类型的同步流与缓冲流)。</summary>
+        private readonly Dictionary<Type, IMessageChannel> _channels = new();
 
-        /// <summary>按消息类型 -> (TKey -> 事件流{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
-        private readonly Dictionary<Type, object> _keyedStreams = new();
-
-        /// <summary>按消息类型缓存的 BufferedEventStream（缓冲 1 条）。</summary>
-        private readonly Dictionary<Type, object> _bufferedStreams = new();
-
-        /// <summary>按消息类型 -> (TKey -> BufferedEventStream{TMessage}) 的两层字典，避免值类型 Key 的 boxing。</summary>
-        private readonly Dictionary<Type, object> _keyedBufferedStreams = new();
+        /// <summary>按消息类型缓存的键值通道存储(Type -> Key -> 通道)。</summary>
+        private readonly Dictionary<Type, IKeyedChannelStore> _keyedChannels = new();
 
         /// <summary>按消息类型存储的过滤器列表。</summary>
         private readonly Dictionary<Type, List<object>> _filtersByType = new();
@@ -53,12 +51,13 @@ namespace XFramework.XMessage
             if (!ApplyFilters(type, message))
                 return;
 
-            // 推送给普通订阅者
-            if (_streams.TryGetValue(type, out var sub))
-                ((EventStream<TMessage>)sub).OnNext(message);
+            var channel = GetOrCreateChannel<TMessage>();
 
-            // 推送给缓冲订阅者(GetOrAdd:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
-            GetOrAddBufferedStream<TMessage>().OnNext(message);
+            // 推送给普通订阅者(Sync 为 null 表示从未有人订阅,跳过)
+            channel.Sync?.OnNext(message);
+
+            // 推送给缓冲订阅者(GetOrCreate:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
+            channel.GetOrCreateBuffered().OnNext(message);
         }
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
@@ -69,16 +68,13 @@ namespace XFramework.XMessage
             if (!ApplyFilters(type, message))
                 return;
 
-            // 推送给键值订阅者（使用两层字典，值类型 TKey 无 boxing）
-            if (_keyedStreams.TryGetValue(type, out var innerObj))
-            {
-                var dict = (Dictionary<TKey, EventStream<TMessage>>)innerObj;
-                if (dict.TryGetValue(key, out var stream))
-                    stream.OnNext(message);
-            }
+            var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
-            // 推送给键值缓冲订阅者(GetOrAdd:同上,订阅前发布的消息可重放)
-            GetOrAddKeyedBufferedStream<TKey, TMessage>(key).OnNext(message);
+            // 推送给键值订阅者(Sync 为 null 表示该 Key 从未有人订阅,跳过)
+            channel.Sync?.OnNext(message);
+
+            // 推送给键值缓冲订阅者(GetOrCreate:同上,订阅前发布的消息可重放)
+            channel.GetOrCreateBuffered().OnNext(message);
         }
 
         #endregion
@@ -87,7 +83,7 @@ namespace XFramework.XMessage
 
         /// <summary>订阅指定类型的消息,直接落事件流并返回退订句柄。</summary>
         public IDisposable Subscribe<TMessage>(Action<TMessage> handler)
-            => GetOrAddStream<TMessage>().Subscribe(handler);
+            => GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(handler);
 
         /// <summary>订阅指定类型的消息,附加订阅级过滤条件(返回 false 的消息不投递给该订阅)。</summary>
         /// <remarks>
@@ -95,50 +91,53 @@ namespace XFramework.XMessage
         /// (记 Error 日志、本条不投递、订阅保留、其他订阅者不受影响)。
         /// </remarks>
         public IDisposable Subscribe<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddStream<TMessage>().Subscribe(m =>
+            => GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(m =>
             {
                 if (filter.Invoke(m)) handler(m);
             });
 
         /// <summary>订阅指定键值的消息。</summary>
         public IDisposable Subscribe<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => GetOrAddKeyedStream<TKey, TMessage>(key).Subscribe(handler);
+            => GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
+                .GetOrCreateSync().Subscribe(handler);
 
         /// <summary>订阅指定键值的消息,附加订阅级过滤条件。</summary>
         public IDisposable Subscribe<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddKeyedStream<TKey, TMessage>(key).Subscribe(m =>
-            {
-                if (filter.Invoke(m)) handler(m);
-            });
+            => GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
+                .GetOrCreateSync().Subscribe(m =>
+                {
+                    if (filter.Invoke(m)) handler(m);
+                });
 
         /// <summary>
         /// 异步订阅:消息到达时触发异步处理器(fire-and-forget)。
         /// <para>异步处理器经 Forget() 烧录进订阅回调,后续异常由 UniTask 的 Forget 语义兜底。</para>
         /// </summary>
         public IDisposable SubscribeAsync<TMessage>(Func<TMessage, UniTask> asyncHandler)
-            => GetOrAddStream<TMessage>().Subscribe(m => asyncHandler(m).Forget());
+            => GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(m => asyncHandler(m).Forget());
 
         /// <summary>异步订阅,附加订阅级过滤条件。</summary>
         public IDisposable SubscribeAsync<TMessage>(Predicate<TMessage> filter, Func<TMessage, UniTask> asyncHandler)
-            => GetOrAddStream<TMessage>().Subscribe(m =>
+            => GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(m =>
             {
                 if (filter.Invoke(m)) asyncHandler(m).Forget();
             });
 
         /// <summary>订阅带缓冲的消息:新订阅者立即同步收到最近一次发布的消息(若有),之后转为实时。</summary>
         public IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
-            => GetOrAddBufferedStream<TMessage>().Subscribe(handler);
+            => GetOrCreateChannel<TMessage>().GetOrCreateBuffered().Subscribe(handler);
 
         /// <summary>订阅带缓冲的消息,附加订阅级过滤条件(重放与实时共用同一过滤)。</summary>
         public IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
-            => GetOrAddBufferedStream<TMessage>().Subscribe(m =>
+            => GetOrCreateChannel<TMessage>().GetOrCreateBuffered().Subscribe(m =>
             {
                 if (filter.Invoke(m)) handler(m);
             });
 
         /// <summary>订阅带缓冲的键值消息。新订阅者立即同步收到最近一次发布的消息(若有)。</summary>
         public IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
-            => GetOrAddKeyedBufferedStream<TKey, TMessage>(key).Subscribe(handler);
+            => GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
+                .GetOrCreateBuffered().Subscribe(handler);
 
         #endregion
 
@@ -228,14 +227,13 @@ namespace XFramework.XMessage
 
         public void Clear()
         {
-            DisposeAll(_streams);
-            DisposeAllKeyed(_keyedStreams);
-            DisposeAll(_bufferedStreams);
-            DisposeAllKeyed(_keyedBufferedStreams);
-            _streams.Clear();
-            _keyedStreams.Clear();
-            _bufferedStreams.Clear();
-            _keyedBufferedStreams.Clear();
+            foreach (var pair in _channels)
+                pair.Value.DisposeAll();
+            foreach (var pair in _keyedChannels)
+                pair.Value.DisposeAll();
+
+            _channels.Clear();
+            _keyedChannels.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
         }
@@ -244,92 +242,26 @@ namespace XFramework.XMessage
 
         #region Private Helpers
 
-        private EventStream<TMessage> GetOrAddStream<TMessage>()
+        private MessageChannel<TMessage> GetOrCreateChannel<TMessage>()
         {
             var type = typeof(TMessage);
-            if (!_streams.TryGetValue(type, out var sub))
+            if (!_channels.TryGetValue(type, out var channel))
             {
-                sub = new EventStream<TMessage>();
-                _streams[type] = sub;
+                channel = new MessageChannel<TMessage>();
+                _channels[type] = channel;
             }
-            return (EventStream<TMessage>)sub;
+            return (MessageChannel<TMessage>)channel;
         }
 
-        private EventStream<TMessage> GetOrAddKeyedStream<TKey, TMessage>(TKey key)
+        private KeyedChannelStore<TKey, TMessage> GetOrCreateKeyedChannelStore<TKey, TMessage>()
         {
             var type = typeof(TMessage);
-            if (!_keyedStreams.TryGetValue(type, out var innerObj))
+            if (!_keyedChannels.TryGetValue(type, out var store))
             {
-                var dict = new Dictionary<TKey, EventStream<TMessage>>();
-                _keyedStreams[type] = dict;
-                var newStream = new EventStream<TMessage>();
-                dict[key] = newStream;
-                return newStream;
+                store = new KeyedChannelStore<TKey, TMessage>();
+                _keyedChannels[type] = store;
             }
-
-            var innerDict = (Dictionary<TKey, EventStream<TMessage>>)innerObj;
-            if (!innerDict.TryGetValue(key, out var found))
-            {
-                found = new EventStream<TMessage>();
-                innerDict[key] = found;
-            }
-            return found;
-        }
-
-        private BufferedEventStream<TMessage> GetOrAddBufferedStream<TMessage>()
-        {
-            var type = typeof(TMessage);
-            if (!_bufferedStreams.TryGetValue(type, out var sub))
-            {
-                sub = new BufferedEventStream<TMessage>();
-                _bufferedStreams[type] = sub;
-            }
-            return (BufferedEventStream<TMessage>)sub;
-        }
-
-        private BufferedEventStream<TMessage> GetOrAddKeyedBufferedStream<TKey, TMessage>(TKey key)
-        {
-            var type = typeof(TMessage);
-            if (!_keyedBufferedStreams.TryGetValue(type, out var innerObj))
-            {
-                var dict = new Dictionary<TKey, BufferedEventStream<TMessage>>();
-                _keyedBufferedStreams[type] = dict;
-                var newStream = new BufferedEventStream<TMessage>();
-                dict[key] = newStream;
-                return newStream;
-            }
-
-            var innerDict = (Dictionary<TKey, BufferedEventStream<TMessage>>)innerObj;
-            if (!innerDict.TryGetValue(key, out var found))
-            {
-                found = new BufferedEventStream<TMessage>();
-                innerDict[key] = found;
-            }
-            return found;
-        }
-
-        private static void DisposeAll(IEnumerable<KeyValuePair<Type, object>> dict)
-        {
-            foreach (var kv in dict)
-            {
-                if (kv.Value is IDisposable d)
-                    d.Dispose();
-            }
-        }
-
-        private static void DisposeAllKeyed(IEnumerable<KeyValuePair<Type, object>> dict)
-        {
-            foreach (var kv in dict)
-            {
-                if (kv.Value is not IDictionary inner)
-                    continue;
-
-                foreach (var value in inner.Values)
-                {
-                    if (value is IDisposable d)
-                        d.Dispose();
-                }
-            }
+            return (KeyedChannelStore<TKey, TMessage>)store;
         }
 
         #endregion
