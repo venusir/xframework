@@ -330,8 +330,17 @@ protected override void OnStart()
     // 订阅外部事件，节点销毁时自动取消
     externalEvent.Subscribe(OnEvent)
         .AddTo(this.DestroyCancellationToken);    // 或 .AddTo(this)
+
+    // 消息订阅：BaseNode 已实现 IMessagePublisher / IMessageSubscriber，
+    // 故 this.Subscribe / this.SubscribeAsync 直接可用，且自动绑定节点生命周期
+    this.Subscribe<PlayerDiedMessage>(msg => { /* ... */ });
+    this.SubscribeAsync<PlayerDiedMessage>(async (msg, ct) => { /* ... */ });
 }
 ```
+
+> `NodeExtensions.Subscribe(this BaseNode, ...)` 与 `MessageManager.Subscribe(this IMessageSubscriber, ...)` 签名同形。
+> 同时引入两个命名空间时不会二义：接收者到 `BaseNode` 的转换比到 `IMessageSubscriber` 更具体，节点版确定胜出
+> ——前提是 `BaseNode` 实现了 `IMessageSubscriber`，不可移除。
 
 ### 7. 对象池
 

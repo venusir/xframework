@@ -217,10 +217,10 @@ var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId)
 
 ## 节点扩展方法
 
-实现了 `IMessagePublisher` / `IMessageSubscriber` 的节点可以直接使用便捷的扩展方法:
+`BaseNode` 已实现 `IMessagePublisher` / `IMessageSubscriber`，因此**所有节点**直接可用便捷的扩展方法（无需再在派生类上重复声明接口）:
 
 ```csharp
-public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
+public class MyNode : EntityNode
 {
     protected override void OnStart()
     {
@@ -235,11 +235,21 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
             Debug.Log($"{msg.PlayerName} 死了");
         });
 
+        // 异步订阅(同样自动绑定)
+        this.SubscribeAsync<PlayerDiedMessage>(async (msg, ct) =>
+        {
+            await UniTask.Delay(TimeSpan.FromSeconds(1), cancellationToken: ct);
+        });
+
         // 带 Key 的发布
         this.Publish("Score", 500);
     }
 }
 ```
+
+消息类型**不限 struct/class**；不带 Key 的键值订阅可用 `MessageManager.Subscribe(key, handler).AddToNode(this)`。
+
+非节点类型实现 `IMessageSubscriber` 后也能用 `this.Subscribe()`，但**仅当它是 `MonoBehaviour` 时**才自动绑定销毁时机。
 
 ## 设计原则
 

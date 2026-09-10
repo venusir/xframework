@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading;
+using XFramework.XMessage;
 
 namespace XFramework.XNode
 {
@@ -20,8 +21,8 @@ namespace XFramework.XNode
     /// <summary>
     /// 提供销毁时的 CancellationToken，用于自动取消订阅和释放资源。
     /// <para>类似于 MonoBehaviour.destroyCancellationToken。</para>
-    /// <para>实现此接口后，通过 <see cref="MessageBus"/> 的扩展方法订阅消息时，
-    /// 订阅会自动绑定到对象的生命周期，对象销毁时自动取消订阅。</para>
+    /// <para>配合 <c>NodeExtensions</c> 的 AddTo / Subscribe / SubscribeAsync 扩展方法使用时，
+    /// 订阅与其它可释放资源会自动绑定到对象的生命周期，对象销毁时自动取消。</para>
     /// </summary>
     public interface IDestroyCancellationToken
     {
@@ -35,8 +36,16 @@ namespace XFramework.XNode
     /// 树节点系统的抽象基类。
     /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy/Start）等核心功能。</para>
     /// <para>实现 <see cref="IDisposable"/>，支持 <c>using</c> 语法和 <c>AddTo</c> 扩展。</para>
+    /// <para>
+    /// 实现 <see cref="IMessagePublisher"/> / <see cref="IMessageSubscriber"/>，使节点直接可用
+    /// <c>this.Publish()</c> / <c>this.Subscribe()</c>，且订阅自动绑定节点生命周期。
+    /// 这两个标记接口同时承担重载决议职责：<c>NodeExtensions.Subscribe(this BaseNode, ...)</c>
+    /// 与 <c>MessageManager.Subscribe(this IMessageSubscriber, ...)</c> 同形，
+    /// 正是靠「BaseNode → IMessageSubscriber 单向可转换」才唯一解析到前者，不可移除。
+    /// </para>
     /// </summary>
-    public abstract class BaseNode : IBaseNode, IDestroyCancellationToken, IDisposable
+    public abstract class BaseNode
+        : IBaseNode, IDestroyCancellationToken, IDisposable, IMessagePublisher, IMessageSubscriber
     {
         #region Private Properties
 

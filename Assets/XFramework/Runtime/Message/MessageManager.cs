@@ -362,7 +362,11 @@ namespace XFramework.XMessage
 
         #region Extension Methods (for IMessageSubscriber)
 
-        /// <summary>订阅指定类型的消息。订阅会自动绑定到对象的生命周期，对象销毁时自动取消。</summary>
+        /// <summary>
+        /// 订阅指定类型的消息。
+        /// <para>仅当订阅者是 <see cref="MonoBehaviour"/> 时，订阅才自动绑定其销毁时机；
+        /// 节点树的自动绑定由 <c>NodeExtensions.Subscribe</c> 单独承担(见其重载决议说明)。</para>
+        /// </summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(handler);
@@ -370,7 +374,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定类型的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅指定类型的消息，并附加过滤条件。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(filter, handler);
@@ -378,7 +382,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅指定键值的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, handler);
@@ -386,7 +390,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息，并附加过滤条件。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅指定键值的消息，并附加过滤条件。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, filter, handler);
@@ -442,7 +446,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(handler);
@@ -450,7 +454,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(key, handler);
@@ -458,7 +462,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅会自动绑定到对象的生命周期。</summary>
+        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(filter, handler);

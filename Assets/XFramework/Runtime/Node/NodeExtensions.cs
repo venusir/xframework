@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
 
 namespace XFramework.XNode
@@ -76,17 +77,68 @@ namespace XFramework.XNode
         #region Subscribe (auto-bind to node lifecycle)
 
         /// <summary>
-        /// 订阅指定类型的消息，订阅自动绑定到节点销毁时取消。
-        /// <para>要求调用者同时实现 <see cref="IMessageSubscriber"/> 和 <see cref="IDestroyCancellationToken"/>，
-        /// 订阅将在节点销毁时自动取消。</para>
+        /// 订阅指定类型的消息，订阅自动绑定到节点生命周期，节点销毁时统一释放。
+        /// <para>
+        /// 重载决议说明：本方法与 <c>MessageManager.Subscribe&lt;TMessage&gt;(this IMessageSubscriber, Action&lt;TMessage&gt;)</c>
+        /// 同形，同时引入两个命名空间时<b>不会</b>二义——接收者同时可转换为 <see cref="BaseNode"/> 与
+        /// <see cref="IMessageSubscriber"/>，而存在 <c>BaseNode → IMessageSubscriber</c> 的隐式转换、反之不存在，
+        /// 故 <see cref="BaseNode"/> 是「更好的转换目标」，本方法确定胜出。
+        /// </para>
+        /// <para>
+        /// 该保证的前提是 <see cref="BaseNode"/> 实现了 <see cref="IMessageSubscriber"/>——
+        /// 一旦移除，两个方向都不存在转换，重载决议会退化为编译错误 CS0121。
+        /// </para>
         /// </summary>
-        public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
-            where TMessage : class
+        /// <typeparam name="TMessage">消息类型，struct 与 class 均支持。</typeparam>
+        /// <param name="node">目标节点，不可为 <c>null</c>。</param>
+        /// <param name="handler">消息回调，不可为 <c>null</c>。</param>
+        /// <returns>退订句柄；节点已销毁时返回已释放的空句柄。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="node"/> 或 <paramref name="handler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable Subscribe<TMessage>(this BaseNode node, Action<TMessage> handler)
         {
-            var disposable = MessageManager.Subscribe<TMessage>(handler);
-            if (subscriber is IDestroyCancellationToken dt)
-                disposable.AddTo(dt.DestroyCancellationToken);
-            return disposable;
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe<TMessage>(handler).AddToNode(node);
+        }
+
+        /// <summary>
+        /// 订阅指定类型的消息，并附加过滤条件。订阅自动绑定到节点生命周期。
+        /// </summary>
+        /// <typeparam name="TMessage">消息类型，struct 与 class 均支持。</typeparam>
+        /// <param name="node">目标节点，不可为 <c>null</c>。</param>
+        /// <param name="filter">订阅级过滤条件，不可为 <c>null</c>。</param>
+        /// <param name="handler">消息回调，不可为 <c>null</c>。</param>
+        /// <returns>退订句柄；节点已销毁时返回已释放的空句柄。</returns>
+        /// <exception cref="ArgumentNullException">任一参数为 <c>null</c> 时抛出。</exception>
+        public static IDisposable Subscribe<TMessage>(
+            this BaseNode node, Predicate<TMessage> filter, Action<TMessage> handler)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (filter == null) throw new ArgumentNullException(nameof(filter));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe<TMessage>(filter, handler).AddToNode(node);
+        }
+
+        /// <summary>
+        /// 异步订阅指定类型的消息。订阅自动绑定到节点生命周期，节点销毁时统一释放并取消在途处理器。
+        /// </summary>
+        /// <typeparam name="TMessage">消息类型，struct 与 class 均支持。</typeparam>
+        /// <param name="node">目标节点，不可为 <c>null</c>。</param>
+        /// <param name="asyncHandler">异步处理器，不可为 <c>null</c>。</param>
+        /// <param name="cancellationToken">绑定订阅生命周期的令牌，取消即自动退订。</param>
+        /// <returns>退订句柄；节点已销毁时返回已释放的空句柄。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="node"/> 或 <paramref name="asyncHandler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeAsync<TMessage>(
+            this BaseNode node,
+            Func<TMessage, CancellationToken, UniTask> asyncHandler,
+            CancellationToken cancellationToken = default)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+
+            return MessageManager.SubscribeAsync(asyncHandler, cancellationToken).AddToNode(node);
         }
 
         #endregion
