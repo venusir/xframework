@@ -76,7 +76,33 @@ subscription.Dispose();
 
 **异步订阅的令牌语义**：处理器收到的 `ct` 就是订阅自身的令牌，退订即取消它，故 `await` 会随退订提前结束；同时 `SubscribeAsync` 的 `cancellationToken` 参数**与订阅生命周期绑定——令牌取消即自动退订**（与 `AddTo` 一致），传入已取消的令牌则不会登记。
 
-异步处理器独立登记在通道的异步列表中，不占同步订阅链：同步 `Publish` 以 fire-and-forget 触发它，`PublishAsync` 则逐个 await（见下）。
+异步处理器独立登记在通道的异步列表中，不占同步订阅链：同步 `Publish` 以 fire-and-forget 触发它，`PublishAsync` 则会等待。
+
+### 异步发布
+
+`PublishAsync` 先把消息同步投递给同步订阅者并写入缓冲通道，再启动异步处理器并等待其完成：
+
+```csharp
+// 并行(默认):全部处理器先启动,再统一等待
+await MessageManager.PublishAsync(new GameStateChangedMessage { NewState = GameState.Playing });
+
+// 顺序:逐个 await,适合响应方之间有顺序依赖
+await MessageManager.PublishAsync(msg, MessagePublishStrategy.Sequential);
+
+// 只控制本次等待的取消:不会中断已启动的处理器
+await MessageManager.PublishAsync(msg, MessagePublishStrategy.Parallel, cts.Token);
+
+// 键值异步发布:策略必须显式传入,不设默认值
+await MessageManager.PublishAsync("Score", msg, MessagePublishStrategy.Parallel);
+```
+
+> 键值重载之所以不给 `strategy` 默认值：否则两参调用 `PublishAsync(x, y)` 会同时匹配 `(TMessage, MessagePublishStrategy)` 与 `(TKey, TMessage)`，两个签名同构而无法裁决。
+
+顺序是硬保证：**全局过滤器 → 同步订阅者（与 `Publish` 同序）→ 缓冲通道写入 → 异步处理器**。
+
+> **注意**：同步 `Publish` 同样会触发异步处理器（fire-and-forget），所以同一调用点混用 `Publish` 与 `PublishAsync` 会让处理器被触发两次。
+
+> **线程**：本模块不做线程调度。从非主线程调用 `PublishAsync` 时，同步订阅者与处理器的同步前段会在该线程上执行，而 Unity API 多数非线程安全，需要自行切回主线程。
 
 ### 带 Key 的消息
 

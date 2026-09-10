@@ -94,6 +94,47 @@ namespace XFramework.XMessage
 
         #endregion
 
+        #region PublishAsync
+
+        /// <summary>
+        /// 异步发布:同步投递与缓冲写入先行完成,随后启动异步处理器并等待其全部完成。
+        /// </summary>
+        public UniTask PublishAsync<TMessage>(
+            TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
+        {
+            var type = typeof(TMessage);
+
+            if (!ApplyFilters(type, message))
+                return UniTask.CompletedTask;
+
+            var channel = GetOrCreateChannel<TMessage>();
+
+            // 同步段与 Publish 完全同序:同步订阅者 -> 缓冲通道写入 -> 异步处理器
+            channel.Sync?.OnNext(message);
+            channel.GetOrCreateBuffered().OnNext(message);
+
+            return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
+        }
+
+        /// <summary>异步发布指定键值的消息。</summary>
+        public UniTask PublishAsync<TKey, TMessage>(
+            TKey key, TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
+        {
+            var type = typeof(TMessage);
+
+            if (!ApplyFilters(type, message))
+                return UniTask.CompletedTask;
+
+            var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
+
+            channel.Sync?.OnNext(message);
+            channel.GetOrCreateBuffered().OnNext(message);
+
+            return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
+        }
+
+        #endregion
+
         #region Subscribe
 
         /// <summary>订阅指定类型的消息,直接落事件流并返回退订句柄。</summary>
@@ -507,6 +548,110 @@ namespace XFramework.XMessage
             finally
             {
                 ListPool<AsyncSubscription<TMessage>>.Return(targets);
+            }
+        }
+
+        /// <summary>
+        /// 启动并等待异步处理器,按 <paramref name="strategy"/> 决定并行或顺序。
+        /// <para>无异步订阅时返回已完成任务,调用方 await 不会产生额外等待。</para>
+        /// </summary>
+        private static UniTask DispatchAsyncAwaitable<TMessage>(
+            MessageChannel<TMessage> channel,
+            TMessage message,
+            MessagePublishStrategy strategy,
+            CancellationToken cancellationToken)
+        {
+            var handlers = channel.Async;
+            if (handlers == null || handlers.Count == 0)
+                return UniTask.CompletedTask;
+
+            return strategy == MessagePublishStrategy.Sequential
+                ? DispatchSequentialAsync(handlers, message, cancellationToken)
+                : DispatchParallelAsync(handlers, message, cancellationToken);
+        }
+
+        /// <summary>并行:全部处理器先启动,再统一等待。</summary>
+        private static UniTask DispatchParallelAsync<TMessage>(
+            List<AsyncSubscription<TMessage>> handlers, TMessage message, CancellationToken cancellationToken)
+        {
+            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            try
+            {
+                CollectAsyncTargets(handlers, message, targets);
+                if (targets.Count == 0)
+                    return UniTask.CompletedTask;
+
+                // 逐元素调用即逐个启动(异步方法同步执行到首个未完成的 await);
+                // 任务数组是唯一分配,且元素经 InvokeGuardedAsync 包裹后不会 fault
+                var tasks = new UniTask[targets.Count];
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    // 与同步路径一致:启动过程中前一个处理器可能退订了后面的订阅
+                    var subscription = targets[i];
+                    tasks[i] = subscription.IsDisposed
+                        ? UniTask.CompletedTask
+                        : InvokeGuardedAsync(subscription, message);
+                }
+
+                var whenAll = UniTask.WhenAll(tasks);
+                return cancellationToken.CanBeCanceled
+                    ? whenAll.AttachExternalCancellation(cancellationToken)
+                    : whenAll;
+            }
+            finally
+            {
+                // 池化列表只用于收集,不跨 await 持有
+                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+            }
+        }
+
+        /// <summary>
+        /// 顺序:按订阅先后逐个 await。
+        /// <para>池化快照会跨 await 持有——快照内容必须在每次 await 后仍然可用,
+        /// 故只能在方法结束时归还(未 await 就被丢弃的返回值会暂缓归还,影响有界)。</para>
+        /// </summary>
+        private static async UniTask DispatchSequentialAsync<TMessage>(
+            List<AsyncSubscription<TMessage>> handlers, TMessage message, CancellationToken cancellationToken)
+        {
+            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            try
+            {
+                CollectAsyncTargets(handlers, message, targets);
+
+                for (int i = 0; i < targets.Count; i++)
+                {
+                    var subscription = targets[i];
+                    if (subscription.IsDisposed)
+                        continue;
+
+                    await InvokeGuardedAsync(subscription, message);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+            finally
+            {
+                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+            }
+        }
+
+        /// <summary>
+        /// 调用单个异步处理器并吞掉异常:异常就地记日志,不打断其余处理器、不抛给发布方。
+        /// <para>仅当订阅自身已退订时,其 <see cref="OperationCanceledException"/> 静默丢弃。</para>
+        /// </summary>
+        private static async UniTask InvokeGuardedAsync<TMessage>(
+            AsyncSubscription<TMessage> subscription, TMessage message)
+        {
+            try
+            {
+                await subscription.Handler(message, subscription.Token);
+            }
+            catch (OperationCanceledException) when (subscription.Token.IsCancellationRequested)
+            {
+                // 订阅已退订(或外部令牌取消):在途处理器随之结束,属预期
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Message] Async handler threw exception: {e}");
             }
         }
 

@@ -8,10 +8,14 @@ namespace XFramework.XMessage
 {
 
     /// <summary>
-    /// 全局消息总线。提供静态 API 和节点扩展方法两种使用方式。
-    /// <para>静态 API：非节点类可通过 <see cref="MessageManager"/> 直接发布/订阅消息。</para>
-    /// <para>扩展方法：节点实现 <see cref="IMessagePublisher"/> / <see cref="IMessageSubscriber"/> 后，
-    /// 可通过 <c>this.Publish()</c> / <c>this.Subscribe()</c> 使用，订阅会自动绑定节点生命周期。</para>
+    /// 全局消息总线。提供静态 API 和标记接口扩展方法两种使用方式。
+    /// <para>同步：<see cref="Publish{TMessage}(TMessage)"/> / <see cref="Subscribe{TMessage}(Action{TMessage})"/>。</para>
+    /// <para>异步：<see cref="SubscribeAsync{TMessage}(Func{TMessage, CancellationToken, UniTask})"/>
+    /// 独立登记处理器，<see cref="PublishAsync{TMessage}(TMessage, MessagePublishStrategy, CancellationToken)"/>
+    /// 可等待其全部完成；同步 <see cref="Publish{TMessage}(TMessage)"/> 也以 fire-and-forget 触发它们。</para>
+    /// <para>请求-响应：<see cref="Register{TRequest, TResponse}"/> / <see cref="RequestAsync{TRequest, TResponse}"/>。</para>
+    /// <para>扩展方法：实现 <see cref="IMessagePublisher"/> / <see cref="IMessageSubscriber"/> 的类型
+    /// 可通过 <c>this.Publish()</c> / <c>this.Subscribe()</c> 使用（MonoBehaviour 订阅自动绑定其销毁时机）。</para>
     /// </summary>
     public static class MessageManager
     {
@@ -34,6 +38,43 @@ namespace XFramework.XMessage
 
         /// <summary>发布带键值的消息。相同 Key 的消息在同一通道中传递。</summary>
         public static void Publish<TKey, TMessage>(TKey key, TMessage message) => _broker.Publish(key, message);
+
+        /// <summary>
+        /// 异步发布:同步订阅者与缓冲通道先行投递,随后启动异步处理器并等待其全部完成。
+        /// <para>顺序硬保证:全局过滤器 → 同步订阅者(与 Publish 同序) → 缓冲通道写入 → 异步处理器。</para>
+        /// <para>同步 <see cref="Publish{TMessage}(TMessage)"/> 同样会触发异步处理器(fire-and-forget),
+        /// 故同一调用点若两种发布混用,处理器会被触发两次。</para>
+        /// <para>本方法不做线程调度:调用方若不在主线程,同步订阅者与处理器的同步前段会在该线程上执行,
+        /// 而 Unity API 多数非线程安全,需要自行切回主线程。</para>
+        /// </summary>
+        /// <param name="message">消息内容。</param>
+        /// <param name="strategy">异步处理器调度策略,默认并行;仅本次调用生效。</param>
+        /// <param name="cancellationToken">
+        /// 仅控制本次等待:取消会抛出 <see cref="OperationCanceledException"/>,
+        /// 但不会中断已启动的处理器,其余处理器继续执行。
+        /// </param>
+        public static UniTask PublishAsync<TMessage>(
+            TMessage message,
+            MessagePublishStrategy strategy = MessagePublishStrategy.Parallel,
+            CancellationToken cancellationToken = default)
+            => _broker.PublishAsync(message, strategy, cancellationToken);
+
+        /// <summary>
+        /// 异步发布带键值的消息。相同 Key 的消息在同一通道中传递。
+        /// <para><b>本重载要求显式传入 <paramref name="strategy"/></b>(不给默认值):
+        /// 否则两参调用 <c>PublishAsync(x, y)</c> 会同时匹配
+        /// <c>(TMessage, MessagePublishStrategy)</c> 与 <c>(TKey, TMessage)</c> 两个重载而产生二义。</para>
+        /// </summary>
+        /// <param name="key">消息键。</param>
+        /// <param name="message">消息内容。</param>
+        /// <param name="strategy">异步处理器调度策略;仅本次调用生效,必须显式指定。</param>
+        /// <param name="cancellationToken">仅控制本次等待,不中断已启动的处理器。</param>
+        public static UniTask PublishAsync<TKey, TMessage>(
+            TKey key,
+            TMessage message,
+            MessagePublishStrategy strategy,
+            CancellationToken cancellationToken = default)
+            => _broker.PublishAsync(key, message, strategy, cancellationToken);
 
         /// <summary>订阅指定类型的消息。</summary>
         public static IDisposable Subscribe<TMessage>(Action<TMessage> handler)
@@ -270,6 +311,26 @@ namespace XFramework.XMessage
         /// <summary>发布带键值的消息。相同 Key 的消息在同一通道中传递。</summary>
         public static void Publish<TKey, TMessage>(this IMessagePublisher publisher, TKey key, TMessage message)
             => _broker.Publish(key, message);
+
+        /// <summary>异步发布。同步投递先行,随后等待全部异步处理器完成。</summary>
+        public static UniTask PublishAsync<TMessage>(
+            this IMessagePublisher publisher,
+            TMessage message,
+            MessagePublishStrategy strategy = MessagePublishStrategy.Parallel,
+            CancellationToken cancellationToken = default)
+            => _broker.PublishAsync(message, strategy, cancellationToken);
+
+        /// <summary>
+        /// 异步发布带键值的消息。同步投递先行,随后等待全部异步处理器完成。
+        /// <para>与静态 API 同理,本重载要求显式传入 <paramref name="strategy"/> 以避免重载二义。</para>
+        /// </summary>
+        public static UniTask PublishAsync<TKey, TMessage>(
+            this IMessagePublisher publisher,
+            TKey key,
+            TMessage message,
+            MessagePublishStrategy strategy,
+            CancellationToken cancellationToken = default)
+            => _broker.PublishAsync(key, message, strategy, cancellationToken);
 
         #endregion
 
