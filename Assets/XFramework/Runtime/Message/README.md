@@ -96,20 +96,27 @@ MessageManager.Subscribe<string, int>("PlayerHealth", health =>
 public class GetPlayerScoreRequest { public string PlayerId; }
 public class GetPlayerScoreResponse { public int Score; }
 
-// 注册处理器(全局唯一)
-MessageManager.Register<GetPlayerScoreRequest, GetPlayerScoreResponse>(async request =>
+// 注册处理器(全局唯一;表的键只取请求类型,换响应类型仍是重复注册)
+MessageManager.Register<GetPlayerScoreRequest, GetPlayerScoreResponse>(async (request, ct) =>
 {
-    // 异步获取分数
-    var score = await database.GetScoreAsync(request.PlayerId);
+    // 异步获取分数:ct 即 RequestAsync 调用方传入的令牌,直接透传给下游
+    var score = await database.GetScoreAsync(request.PlayerId, ct);
     return new GetPlayerScoreResponse { Score = score };
 });
 
-// 发送请求
+// 发送请求(令牌原样转发给处理器;取消是否响应由处理器决定)
+var cts = new CancellationTokenSource();
 var response = await MessageManager.RequestAsync<GetPlayerScoreRequest, GetPlayerScoreResponse>(
-    new GetPlayerScoreRequest { PlayerId = "player_1" }
+    new GetPlayerScoreRequest { PlayerId = "player_1" },
+    cts.Token
 );
 Debug.Log($"玩家分数: {response.Score}");
+
+// 注销处理器:重复注册前需先注销
+MessageManager.Unregister<GetPlayerScoreRequest, GetPlayerScoreResponse>();
 ```
+
+> **迁移提示**:异步处理器形参由 `request =>` 变为 `(request, ct) =>`。旧写法会因 lambda 元数不符而**编译期报错**,不会静默错绑。
 
 ### 全局过滤器
 

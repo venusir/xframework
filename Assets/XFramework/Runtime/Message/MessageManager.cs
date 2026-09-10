@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 
@@ -17,7 +18,12 @@ namespace XFramework.XMessage
         #region Private Fields
 
         private static MessageBroker _broker = new MessageBroker();
+
+        /// <summary>请求处理器表。键仅为 <c>typeof(TRequest)</c>,与响应类型无关。</summary>
         private static readonly Dictionary<Type, object> _requestHandlers = new();
+
+        /// <summary>保护 <see cref="_requestHandlers"/> 的同步门:查找与增删在锁内,处理器调用在锁外。</summary>
+        private static readonly object _requestGate = new();
 
         #endregion
 
@@ -106,42 +112,88 @@ namespace XFramework.XMessage
         /// </summary>
         public static int TrimEmptyChannels() => _broker.TrimEmptyChannels();
 
-        /// <summary>注册请求处理器。一个请求类型只能注册一个处理器。</summary>
+        /// <summary>
+        /// 注册请求处理器。一个请求类型只能注册一个处理器。
+        /// </summary>
+        /// <typeparam name="TRequest">请求类型。处理器表的键只取此类型,与响应类型无关。</typeparam>
+        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <param name="handler">
+        /// 异步处理器。它收到的取消令牌即 <see cref="RequestAsync{TRequest, TResponse}"/> 调用方传入的令牌,
+        /// 便于把取消继续传递给下游异步操作。
+        /// </param>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c> 时抛出。</exception>
+        /// <exception cref="InvalidOperationException">同一请求类型重复注册时抛出。</exception>
+        public static void Register<TRequest, TResponse>(Func<TRequest, CancellationToken, UniTask<TResponse>> handler)
+        {
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            var type = typeof(TRequest);
+            lock (_requestGate)
+            {
+                if (_requestHandlers.ContainsKey(type))
+                    throw new InvalidOperationException(
+                        $"[Message] 请求类型 '{type.Name}' 已注册处理器,同一请求类型只能注册一个;" +
+                        $"如需替换请先调用 MessageManager.Unregister<{type.Name}, TResponse>()。");
+
+                _requestHandlers[type] = handler;
+            }
+        }
+
+        /// <summary>
+        /// 移除已注册的请求处理器。返回是否找到并移除。
+        /// <para>请求处理器表的键仅为请求类型,故 <typeparamref name="TResponse"/> 只用于与
+        /// <see cref="Register{TRequest, TResponse}"/> 的调用形态对称。</para>
+        /// </summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
         /// <typeparam name="TResponse">响应类型。</typeparam>
-        /// <param name="handler">异步处理器。</param>
-        /// <exception cref="InvalidOperationException">同一请求类型重复注册时抛出。</exception>
-        public static void Register<TRequest, TResponse>(Func<TRequest, UniTask<TResponse>> handler)
+        public static bool Unregister<TRequest, TResponse>()
         {
-            var type = typeof(TRequest);
-            if (_requestHandlers.ContainsKey(type))
-                throw new InvalidOperationException(
-                    $"A handler for request type '{type.Name}' is already registered.");
-            _requestHandlers[type] = handler;
+            lock (_requestGate)
+            {
+                return _requestHandlers.Remove(typeof(TRequest));
+            }
         }
 
         /// <summary>发送请求并等待响应。</summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
         /// <typeparam name="TResponse">响应类型。</typeparam>
         /// <param name="request">请求对象。</param>
+        /// <param name="cancellationToken">
+        /// 调用方令牌,原样转发给处理器(处理器据此把取消传递到下游异步操作);
+        /// 取消不额外中断本方法的等待,是否响应取消由处理器决定。
+        /// </param>
         /// <returns>响应对象。</returns>
         /// <exception cref="InvalidOperationException">未注册对应的处理器时抛出。</exception>
-        public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(TRequest request)
+        public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(
+            TRequest request, CancellationToken cancellationToken = default)
         {
-            if (_requestHandlers.TryGetValue(typeof(TRequest), out var handler))
+            Func<TRequest, CancellationToken, UniTask<TResponse>> handler;
+            lock (_requestGate)
             {
-                return ((Func<TRequest, UniTask<TResponse>>)handler)(request);
+                if (!_requestHandlers.TryGetValue(typeof(TRequest), out var stored))
+                    throw new InvalidOperationException(
+                        $"[Message] 未注册请求类型 '{typeof(TRequest).Name}' 的处理器;" +
+                        $"请先调用 MessageManager.Register<{typeof(TRequest).Name}, TResponse>()。");
+
+                handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)stored;
             }
-            throw new InvalidOperationException(
-                $"No handler registered for request type '{typeof(TRequest).Name}'.");
+
+            // 锁外调用:禁止持锁执行用户代码,也避免处理器中的 await 长期占用同步门
+            return handler(request, cancellationToken);
         }
 
         /// <summary>清理所有订阅、缓存和请求处理器。</summary>
         public static void Clear()
         {
             _broker.Clear();
+            // 换新实例并非冗余:上一句已把旧 broker 的订阅节点归还到静态池,
+            // 此处只是丢弃旧容器,勿当作死代码清理。
             _broker = new MessageBroker();
-            _requestHandlers.Clear();
+
+            lock (_requestGate)
+            {
+                _requestHandlers.Clear();
+            }
         }
 
         #endregion
@@ -265,7 +317,10 @@ namespace XFramework.XMessage
             if (broker == null) throw new ArgumentNullException(nameof(broker));
             _broker.Clear();
             _broker = broker;
-            _requestHandlers.Clear();
+            lock (_requestGate)
+            {
+                _requestHandlers.Clear();
+            }
         }
 
         /// <summary>

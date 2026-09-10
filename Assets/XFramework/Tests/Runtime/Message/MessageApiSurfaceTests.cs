@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -40,6 +41,21 @@ namespace XFramework.XMessage.Tests
         {
             public void Invoke(TestMessage message, Action<TestMessage> next)
                 => throw new InvalidOperationException("filter boom");
+        }
+
+        private sealed class TestRequest
+        {
+            public int Input { get; set; }
+        }
+
+        private sealed class TestResponse
+        {
+            public int Result { get; set; }
+        }
+
+        private sealed class AnotherResponse
+        {
+            public int Result { get; set; }
         }
 
         #endregion
@@ -174,6 +190,80 @@ namespace XFramework.XMessage.Tests
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Global filter threw exception")));
             Assert.DoesNotThrow(() => MessageManager.Publish(new TestMessage { Value = 2 }));
             Assert.AreEqual(0, received.Count);
+        }
+
+        #endregion
+
+        #region 请求-响应
+
+        [Test]
+        public void Register_NullHandler_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                MessageManager.Register<TestRequest, TestResponse>(null));
+        }
+
+        [Test]
+        public void Unregister_RemovesHandler_ThenRequestAsyncThrows()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse { Result = req.Input }));
+
+            Assert.IsTrue(MessageManager.Unregister<TestRequest, TestResponse>(),
+                "移除已注册的处理器应返回 true");
+            Assert.IsFalse(MessageManager.Unregister<TestRequest, TestResponse>(),
+                "重复移除应返回 false");
+
+            Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.RequestAsync<TestRequest, TestResponse>(new TestRequest()).GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void Register_SameRequestType_DifferentResponseType_StillThrows()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse()));
+
+            // 处理器表的键只取请求类型:换一个响应类型仍算重复注册
+            Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.Register<TestRequest, AnotherResponse>(
+                    (req, ct) => UniTask.FromResult(new AnotherResponse())));
+        }
+
+        [Test]
+        public void RequestAsync_ForwardsCancellationTokenToHandler()
+        {
+            var observedCancelled = false;
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
+            {
+                observedCancelled = ct.IsCancellationRequested;
+                return UniTask.FromResult(new TestResponse { Result = req.Input });
+            });
+
+            // 处理器同步完成,直接取值不会死锁(不涉及依赖 PlayerLoop 的异步等待)
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var response = MessageManager.RequestAsync<TestRequest, TestResponse>(
+                new TestRequest { Input = 7 }, cts.Token).GetAwaiter().GetResult();
+
+            Assert.AreEqual(7, response.Result);
+            Assert.IsTrue(observedCancelled, "处理器应收到调用方原样转发的取消令牌");
+        }
+
+        [Test]
+        public void RequestAsync_DefaultToken_ReachesHandlerAsNotCancelled()
+        {
+            var observedCancelled = true;
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
+            {
+                observedCancelled = ct.IsCancellationRequested;
+                return UniTask.FromResult(new TestResponse());
+            });
+
+            MessageManager.RequestAsync<TestRequest, TestResponse>(new TestRequest()).GetAwaiter().GetResult();
+
+            Assert.IsFalse(observedCancelled, "未传令牌时处理器应收到未取消的默认令牌");
         }
 
         #endregion

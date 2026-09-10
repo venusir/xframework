@@ -290,7 +290,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Clear_ResetsRequestHandlers()
         {
-            MessageManager.Register<TestRequest, TestResponse>(req =>
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                 UniTask.FromResult(new TestResponse { Result = req.Input * 2 }));
 
             MessageManager.Clear();
@@ -302,7 +302,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Register_RequestAsync_ReturnsResponse()
         {
-            MessageManager.Register<TestRequest, TestResponse>(req =>
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                 UniTask.FromResult(new TestResponse { Result = req.Input * 2 }));
 
             var response = MessageManager.RequestAsync<TestRequest, TestResponse>(
@@ -315,11 +315,11 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Register_DuplicateHandler_Throws()
         {
-            MessageManager.Register<TestRequest, TestResponse>(req =>
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                 UniTask.FromResult(new TestResponse()));
 
             Assert.Throws<InvalidOperationException>(() =>
-                MessageManager.Register<TestRequest, TestResponse>(req =>
+                MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                     UniTask.FromResult(new TestResponse())));
         }
 
@@ -333,14 +333,14 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Register_AfterClear_Works()
         {
-            MessageManager.Register<TestRequest, TestResponse>(req =>
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                 UniTask.FromResult(new TestResponse { Result = 1 }));
 
             MessageManager.Clear();
 
             // Should allow registering again after Clear
             Assert.DoesNotThrow(() =>
-                MessageManager.Register<TestRequest, TestResponse>(req =>
+                MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
                     UniTask.FromResult(new TestResponse { Result = 2 })));
 
             var response = MessageManager.RequestAsync<TestRequest, TestResponse>(
