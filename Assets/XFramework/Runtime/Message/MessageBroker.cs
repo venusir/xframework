@@ -223,8 +223,88 @@ namespace XFramework.XMessage
 
         #endregion
 
+        #region Eviction
+
+        /// <summary>淘汰指定消息类型的类型级缓冲通道(丢弃其重放缓存)。返回是否存在并已淘汰。</summary>
+        public bool EvictBufferedChannel<TMessage>()
+            => _channels.TryGetValue(typeof(TMessage), out var channel) && channel.EvictBuffered();
+
+        /// <summary>淘汰指定键值的缓冲通道(丢弃其重放缓存)。返回是否存在并已淘汰。</summary>
+        public bool EvictBufferedChannel<TKey, TMessage>(TKey key)
+            => _keyedChannels.TryGetValue(typeof(TMessage), out var storeObj)
+               && ((KeyedChannelStore<TKey, TMessage>)storeObj).TryGet(key, out var channel)
+               && channel.EvictBuffered();
+
+        /// <summary>淘汰指定消息类型的全部缓冲通道(类型级 + 所有 Key),返回淘汰数量。</summary>
+        public int EvictBufferedChannels<TMessage>()
+        {
+            var removed = 0;
+
+            if (_channels.TryGetValue(typeof(TMessage), out var channel) && channel.EvictBuffered())
+                removed++;
+
+            if (_keyedChannels.TryGetValue(typeof(TMessage), out var store))
+                removed += store.EvictBufferedAll();
+
+            return removed;
+        }
+
+        /// <summary>
+        /// 回收所有无可重放缓存且无订阅者的空通道,返回回收的通道数量。
+        /// <para>不触碰缓冲通道——持有重放缓存的通道不受本方法影响,只能经
+        /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰。</para>
+        /// </summary>
+        public int TrimEmptyChannels()
+        {
+            var removed = 0;
+            var emptyTypes = ListPool<Type>.Rent();
+            try
+            {
+                // 类型通道:先收集再删除,避免遍历中改字典
+                foreach (var pair in _channels)
+                {
+                    if (pair.Value.IsReclaimable)
+                        emptyTypes.Add(pair.Key);
+                }
+
+                for (int i = 0; i < emptyTypes.Count; i++)
+                {
+                    _channels.Remove(emptyTypes[i]);
+                    removed++;
+                }
+
+                // 键值通道:先回收各区空通道,再回收整体为空的存储
+                emptyTypes.Clear();
+                foreach (var pair in _keyedChannels)
+                {
+                    removed += pair.Value.TrimEmpty();
+                    if (pair.Value.Count == 0)
+                        emptyTypes.Add(pair.Key);
+                }
+
+                for (int i = 0; i < emptyTypes.Count; i++)
+                    _keyedChannels.Remove(emptyTypes[i]);
+            }
+            finally
+            {
+                ListPool<Type>.Return(emptyTypes);
+            }
+
+            return removed;
+        }
+
+        #endregion
+
         #region IMessageBroker
 
+        /// <summary>
+        /// 释放全部通道与过滤器。
+        /// <para>
+        /// 遍历中无需屏蔽回收回调:回收只由「订阅数归零」触发(<see cref="EventStream{T}.Unsubscribe"/>),
+        /// 而本方法走的是 Dispose 路径——事件流的 Dispose 刻意不回调 OnEmpty,
+        /// 故此处不会出现「回调改字典」与「遍历字典」并发。
+        /// </para>
+        /// </summary>
         public void Clear()
         {
             foreach (var pair in _channels)
@@ -247,7 +327,7 @@ namespace XFramework.XMessage
             var type = typeof(TMessage);
             if (!_channels.TryGetValue(type, out var channel))
             {
-                channel = new MessageChannel<TMessage>();
+                channel = new MessageChannel<TMessage>(() => ReclaimChannelIfEmpty(type));
                 _channels[type] = channel;
             }
             return (MessageChannel<TMessage>)channel;
@@ -258,10 +338,35 @@ namespace XFramework.XMessage
             var type = typeof(TMessage);
             if (!_keyedChannels.TryGetValue(type, out var store))
             {
-                store = new KeyedChannelStore<TKey, TMessage>();
+                store = new KeyedChannelStore<TKey, TMessage>(
+                    key => ReclaimKeyedChannelIfEmpty<TKey, TMessage>(type, key));
                 _keyedChannels[type] = store;
             }
             return (KeyedChannelStore<TKey, TMessage>)store;
+        }
+
+        /// <summary>
+        /// 类型通道订阅清零时的回收:通道已空则从类型表摘除。
+        /// <para>由事件流在锁外回调,此处只碰 broker 自有字典,不构成锁序反转。</para>
+        /// </summary>
+        private void ReclaimChannelIfEmpty(Type type)
+        {
+            if (_channels.TryGetValue(type, out var channel) && channel.IsReclaimable)
+                _channels.Remove(type);
+        }
+
+        /// <summary>键值通道订阅清零时的回收:该 Key 已空则摘除,存储整体为空则连存储一并摘除。</summary>
+        private void ReclaimKeyedChannelIfEmpty<TKey, TMessage>(Type type, TKey key)
+        {
+            if (!_keyedChannels.TryGetValue(type, out var storeObj))
+                return;
+
+            var store = (KeyedChannelStore<TKey, TMessage>)storeObj;
+            if (store.TryGet(key, out var channel) && channel.IsReclaimable)
+                store.Remove(key);
+
+            if (store.Count == 0)
+                _keyedChannels.Remove(type);
         }
 
         #endregion

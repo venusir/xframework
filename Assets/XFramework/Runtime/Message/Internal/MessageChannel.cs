@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace XFramework.XMessage.Internal
@@ -14,8 +15,19 @@ namespace XFramework.XMessage.Internal
     {
         #region Private Fields
 
+        private readonly Action _onEmpty;
         private EventStream<TMessage> _sync;
         private BufferedEventStream<TMessage> _buffered;
+
+        #endregion
+
+        #region Lifecycle
+
+        /// <summary>创建通道。</summary>
+        /// <param name="onEmpty">
+        /// 同步订阅数由 1 归零时的回调,由持有者用于回收空通道;<c>null</c> 表示不参与自动回收。
+        /// </param>
+        internal MessageChannel(Action onEmpty) => _onEmpty = onEmpty;
 
         #endregion
 
@@ -28,7 +40,15 @@ namespace XFramework.XMessage.Internal
         internal EventStream<TMessage> Sync => _sync;
 
         /// <summary>获取或创建同步订阅流。</summary>
-        internal EventStream<TMessage> GetOrCreateSync() => _sync ??= new EventStream<TMessage>();
+        internal EventStream<TMessage> GetOrCreateSync()
+        {
+            if (_sync == null)
+            {
+                _sync = new EventStream<TMessage>();
+                _sync.OnEmpty = _onEmpty;
+            }
+            return _sync;
+        }
 
         /// <summary>
         /// 获取或创建缓冲订阅流。首次投递或首次缓冲订阅时创建,
@@ -40,6 +60,30 @@ namespace XFramework.XMessage.Internal
         #endregion
 
         #region IMessageChannel
+
+        /// <summary>
+        /// 是否可整条回收:无同步订阅,且不持有缓冲流。
+        /// <para>持有缓冲流即持有重放缓存,回收会破坏「订阅前发布可重放」语义,
+        /// 故缓冲通道只能经 <see cref="EvictBuffered"/> 显式淘汰后才可能被回收。</para>
+        /// </summary>
+        public bool IsReclaimable => (_sync == null || _sync.SubscriptionCount == 0) && _buffered == null;
+
+        /// <summary>
+        /// 淘汰缓冲流(丢弃其重放缓存)。返回是否确有缓冲流被淘汰。
+        /// <para>
+        /// 释放后已发出的缓冲订阅句柄即失效;此后对这些句柄调用 Dispose 会被事件流安全忽略
+        /// (节点已不在链表中),不会重复回池。
+        /// </para>
+        /// </summary>
+        public bool EvictBuffered()
+        {
+            if (_buffered == null)
+                return false;
+
+            _buffered.Dispose();
+            _buffered = null;
+            return true;
+        }
 
         /// <summary>释放本通道持有的全部事件流。幂等。</summary>
         public void DisposeAll()
@@ -59,6 +103,12 @@ namespace XFramework.XMessage.Internal
     /// </summary>
     internal interface IMessageChannel
     {
+        /// <summary>是否可整条回收(无同步订阅且不持有缓冲流)。</summary>
+        bool IsReclaimable { get; }
+
+        /// <summary>淘汰缓冲流(丢弃重放缓存)。返回是否确有缓冲流被淘汰。</summary>
+        bool EvictBuffered();
+
         /// <summary>释放本通道持有的全部事件流。</summary>
         void DisposeAll();
     }
@@ -72,6 +122,18 @@ namespace XFramework.XMessage.Internal
         #region Private Fields
 
         private readonly Dictionary<TKey, MessageChannel<TMessage>> _channels = new();
+        private readonly Action<TKey> _onChannelEmpty;
+
+        #endregion
+
+        #region Lifecycle
+
+        /// <summary>创建键值通道存储。</summary>
+        /// <param name="onChannelEmpty">
+        /// 某个 Key 的通道同步订阅数归零时的回调(参数为该 Key),由 broker 用于回收;
+        /// <c>null</c> 表示不参与自动回收。
+        /// </param>
+        internal KeyedChannelStore(Action<TKey> onChannelEmpty) => _onChannelEmpty = onChannelEmpty;
 
         #endregion
 
@@ -82,15 +144,65 @@ namespace XFramework.XMessage.Internal
         {
             if (!_channels.TryGetValue(key, out var channel))
             {
-                channel = new MessageChannel<TMessage>();
+                var captured = key;
+                channel = new MessageChannel<TMessage>(() => _onChannelEmpty?.Invoke(captured));
                 _channels[key] = channel;
             }
             return channel;
         }
 
+        /// <summary>尝试获取指定 Key 的通道;不存在时返回 <c>false</c>,且不创建。</summary>
+        internal bool TryGet(TKey key, out MessageChannel<TMessage> channel)
+            => _channels.TryGetValue(key, out channel);
+
+        /// <summary>移除指定 Key 的通道条目。</summary>
+        internal void Remove(TKey key) => _channels.Remove(key);
+
         #endregion
 
         #region IKeyedChannelStore
+
+        /// <summary>当前 Key 的通道数量。</summary>
+        public int Count => _channels.Count;
+
+        /// <summary>回收本存储内全部可回收的空通道,返回回收数量。</summary>
+        public int TrimEmpty()
+        {
+            var removed = 0;
+            var keys = ListPool<TKey>.Rent();
+            try
+            {
+                // 先收集再删除:遍历中改字典会抛 InvalidOperationException
+                foreach (var pair in _channels)
+                {
+                    if (pair.Value.IsReclaimable)
+                        keys.Add(pair.Key);
+                }
+
+                for (int i = 0; i < keys.Count; i++)
+                {
+                    _channels.Remove(keys[i]);
+                    removed++;
+                }
+            }
+            finally
+            {
+                ListPool<TKey>.Return(keys);
+            }
+            return removed;
+        }
+
+        /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。</summary>
+        public int EvictBufferedAll()
+        {
+            var removed = 0;
+            foreach (var pair in _channels)
+            {
+                if (pair.Value.EvictBuffered())
+                    removed++;
+            }
+            return removed;
+        }
 
         /// <summary>释放并清空全部键值通道。</summary>
         public void DisposeAll()
@@ -108,6 +220,15 @@ namespace XFramework.XMessage.Internal
     /// </summary>
     internal interface IKeyedChannelStore
     {
+        /// <summary>当前 Key 的通道数量。</summary>
+        int Count { get; }
+
+        /// <summary>回收本存储内全部可回收的空通道,返回回收数量。</summary>
+        int TrimEmpty();
+
+        /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。</summary>
+        int EvictBufferedAll();
+
         /// <summary>释放并清空全部键值通道。</summary>
         void DisposeAll();
     }

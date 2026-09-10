@@ -30,6 +30,7 @@ namespace XFramework.XMessage.Internal
         private readonly object _sync = new object();
         private SubscriptionNode<T> _head;
         private int _publishDepth;
+        private int _subscriptionCount;
 
         /// <summary>
         /// 终止标志。写入恒在 _sync 锁内;标为 volatile 是因为派生类需要无锁读取
@@ -61,6 +62,7 @@ namespace XFramework.XMessage.Internal
                 node.Set(onNext);
                 node.Next = _head;
                 _head = node;
+                _subscriptionCount++;
                 return new EventSubscription(this, node);
             }
         }
@@ -120,7 +122,14 @@ namespace XFramework.XMessage.Internal
             }
         }
 
-        /// <summary>释放所有订阅并回收节点,之后 OnNext/Subscribe 均无效(completed 语义)。</summary>
+        /// <summary>
+        /// 释放所有订阅并回收节点,之后 OnNext/Subscribe 均无效(completed 语义)。
+        /// <para>
+        /// 不回调 <see cref="OnEmpty"/>:本方法是持有者主动终止流(清理/淘汰)的路径,
+        /// 持有者已在自行回收结构,回调只会在其遍历中改字典。
+        /// 已经发出的订阅句柄此后 Dispose 时,节点因不在链表中而被安全忽略。
+        /// </para>
+        /// </summary>
         public virtual void Dispose()
         {
             lock (_sync)
@@ -131,9 +140,11 @@ namespace XFramework.XMessage.Internal
                 while (node != null)
                 {
                     var next = node.Next;
+                    node.IsDisposed = true;
                     ReturnNode(node);
                     node = next;
                 }
+                _subscriptionCount = 0;
             }
         }
 
@@ -144,6 +155,22 @@ namespace XFramework.XMessage.Internal
         /// 最多多写一次自有状态,无正确性影响(本引擎使用场景为主线程)。</para>
         /// </summary>
         protected bool IsCompleted => _completed;
+
+        /// <summary>
+        /// 当前存活订阅数(订阅递增、退订/Dispose 递减),锁内维护。
+        /// <para>供持有者判定通道是否已空以便回收;本引擎使用场景为主线程,读取不加锁。</para>
+        /// </summary>
+        internal int SubscriptionCount => _subscriptionCount;
+
+        /// <summary>
+        /// 订阅数由 1 归零时的回调,在锁外调用;由持有者在创建流时一次性赋值,订阅/退订路径零额外分配。
+        /// <para>缓冲流不挂此回调:丢弃重放缓存会破坏「订阅前发布可重放」语义,缓冲通道只能经显式淘汰释放。</para>
+        /// <para>
+        /// 注意回调可能发生在派发途中(订阅者在自己的回调里退订自身)——此时本流的快照仍在遍历,
+        /// 回调只应摘除持有者的通道表条目,不得回头调用本流的方法。
+        /// </para>
+        /// </summary>
+        internal Action OnEmpty;
 
         #endregion
 
@@ -172,18 +199,35 @@ namespace XFramework.XMessage.Internal
                 SubscriptionNodePool<T>.Return(node);
         }
 
-        /// <summary>退订入口:从链表移除节点并回池(派发中则仅置标志,由快照遍历跳过)。</summary>
+        /// <summary>
+        /// 退订入口:从链表移除节点并回池(派发中则仅置标志,由快照遍历跳过)。
+        /// <para>
+        /// 节点不在本流链表中时直接返回——说明它已被 <see cref="Dispose"/> 回收,
+        /// 此刻该节点可能已回池并被其他订阅者租用。若继续置 <c>IsDisposed</c> 或回池,
+        /// 会让新订阅者静默失联(标志误置),或让同一节点被池重复发放(重复回池)。
+        /// </para>
+        /// <para>订阅数归零时在锁外回调 <see cref="OnEmpty"/>,避免持锁回调持有者而锁序反转。</para>
+        /// </summary>
         internal void Unsubscribe(SubscriptionNode<T> node)
         {
+            bool becameEmpty;
             lock (_sync)
             {
+                if (!Remove(node))
+                    return;
+
                 node.IsDisposed = true;
-                Remove(node);
+                _subscriptionCount--;
                 ReturnNode(node);
+                becameEmpty = _subscriptionCount == 0;
             }
+
+            if (becameEmpty)
+                OnEmpty?.Invoke();
         }
 
-        private void Remove(SubscriptionNode<T> target)
+        /// <summary>从链表摘除节点;节点不属于本流时返回 <c>false</c>(链表为空也返回 false)。</summary>
+        private bool Remove(SubscriptionNode<T> target)
         {
             var current = _head;
             SubscriptionNode<T> prev = null;
@@ -195,11 +239,12 @@ namespace XFramework.XMessage.Internal
                         _head = current.Next;
                     else
                         prev.Next = current.Next;
-                    return;
+                    return true;
                 }
                 prev = current;
                 current = current.Next;
             }
+            return false;
         }
 
         private sealed class EventSubscription : IDisposable

@@ -68,6 +68,34 @@ namespace XFramework.XMessage
         /// <summary>注册全局消息过滤器。</summary>
         public static void AddFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.AddFilter(filter);
 
+        /// <summary>
+        /// 淘汰指定消息类型的类型级缓冲通道,丢弃其重放缓存。
+        /// <para>用于按键/按实体高频发布后主动释放内存:缓冲通道会永久持有最后一条消息,
+        /// 不再需要重放时应显式淘汰。</para>
+        /// </summary>
+        /// <returns>是否存在该缓冲通道并已淘汰。</returns>
+        public static bool EvictBufferedChannel<TMessage>() => _broker.EvictBufferedChannel<TMessage>();
+
+        /// <summary>
+        /// 淘汰指定键值的缓冲通道,丢弃其重放缓存。
+        /// <para>键基数高的场景(如按实体 Id 发布)应在实体的生命周期结束时调用本方法,
+        /// 否则每个 Key 都会永久持有一条消息直至整表清理。</para>
+        /// </summary>
+        /// <returns>是否存在该缓冲通道并已淘汰。</returns>
+        public static bool EvictBufferedChannel<TKey, TMessage>(TKey key)
+            => _broker.EvictBufferedChannel<TKey, TMessage>(key);
+
+        /// <summary>淘汰指定消息类型的全部缓冲通道(类型级 + 所有 Key),返回淘汰数量。</summary>
+        public static int EvictBufferedChannels<TMessage>() => _broker.EvictBufferedChannels<TMessage>();
+
+        /// <summary>
+        /// 回收所有无订阅者且无可重放缓存的空通道,返回回收的通道数量。
+        /// <para>订阅清零的通道已由事件流自动回收,本方法是兜底手段,用于批量清理历史遗留的空条目。</para>
+        /// <para>持有重放缓存的缓冲通道不受影响——它们只能经 <see cref="EvictBufferedChannel{TMessage}()"/>
+        /// 系列显式淘汰。</para>
+        /// </summary>
+        public static int TrimEmptyChannels() => _broker.TrimEmptyChannels();
+
         /// <summary>注册请求处理器。一个请求类型只能注册一个处理器。</summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
         /// <typeparam name="TResponse">响应类型。</typeparam>

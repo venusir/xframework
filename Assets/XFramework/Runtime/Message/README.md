@@ -19,6 +19,7 @@ Runtime/Message/
 └── Internal/                     # 自研事件流引擎(零外部依赖,internal)
     ├── EventStream.cs            # 事件流(可投递/订阅/完成/退订)+ 订阅节点池
     ├── BufferedEventStream.cs    # 缓冲 1 条的事件流(订阅即重放最近一条)
+    ├── MessageChannel.cs         # 通道对象(聚合同步流与缓冲流)+ 键值通道存储
     └── ActionDisposable.cs       # 委托式 IDisposable(幂等)
 ```
 
@@ -126,6 +127,34 @@ public sealed class BlockNegativeFilter : IMessageFilter<TestMessage>
 MessageManager.AddFilter<TestMessage>(new BlockNegativeFilter());
 ```
 
+## 内存管理
+
+通道的回收遵循两条不同规则——这是「订阅前发布的消息可重放」这一语义的必然代价：
+
+| 通道 | 订阅清零时 | 回收方式 |
+|---|---|---|
+| 普通通道 | 链表空 | **自动回收**（事件流回调持有者摘除空通道） |
+| 缓冲通道 | 链表空但**仍持有重放缓存** | 只能经 `EvictBufferedChannel` 系列**显式淘汰** |
+
+带 Key 的高频发布（如按实体 Id 发布）会为每个 Key 保留一条消息，实体的生命周期结束时应当显式淘汰：
+
+```csharp
+// 按实体发布：每个 Key 各持有一条重放缓存
+MessageManager.Publish(entityId, new HealthChangedMessage { Value = 100 });
+
+// 实体销毁时淘汰其通道，否则该 Key 的重放缓存将一直保留
+MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);
+```
+
+```csharp
+MessageManager.EvictBufferedChannel<TestMessage>();                  // 淘汰类型级缓冲通道，返回是否存在并已淘汰
+MessageManager.EvictBufferedChannel<string, TestMessage>("Score");   // 淘汰指定 Key 的缓冲通道
+MessageManager.EvictBufferedChannels<TestMessage>();                 // 淘汰该类型全部缓冲通道（类型级 + 所有 Key），返回淘汰数量
+MessageManager.TrimEmptyChannels();                                  // 兜底：回收所有无订阅者且无重放缓存的空通道
+```
+
+淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
+
 ## 节点扩展方法
 
 实现了 `IMessagePublisher` / `IMessageSubscriber` 的节点可以直接使用便捷的扩展方法:
@@ -161,6 +190,7 @@ public class MyNode : EntityNode, IMessagePublisher, IMessageSubscriber
 - **请求-响应支持** — 提供异步请求-响应模式,适合服务定位场景
 - **全局过滤器** — 支持注册全局消息过滤器,统一拦截和处理
 - **异常隔离** — 订阅回调/过滤条件抛异常记 Error 日志后继续,不影响其他订阅者
+- **自动回收** — 订阅清零的通道由事件流回调自动摘除;缓冲通道因需保留重放缓存,提供显式淘汰 API 主动释放
 
 ## 依赖
 
