@@ -683,11 +683,13 @@ var token3 = MessageManager.Subscribe<AllPanelsClosedMessage>(_ =>
     Debug.Log("All panels closed.");
 });
 
-// 取消订阅（避免内存泄漏）
-// MessageManager.Unsubscribe(token1);
-// MessageManager.Unsubscribe(token2);
-// MessageManager.Unsubscribe(token3);
+// 取消订阅（避免内存泄漏）：订阅句柄本身即 IDisposable
+token1.Dispose();
+token2.Dispose();
+token3.Dispose();
 ```
+
+> 订阅句柄也可以用 `AddToNode(this)` / `AddTo(token)` 绑定生命周期，销毁时自动释放。
 
 ### 12. 依赖注入
 

@@ -101,6 +101,8 @@ public class MyGameLauncher : GameLauncher
 | **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
+| **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
+| **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
 
 ## UI 系统
 

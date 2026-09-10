@@ -153,24 +153,29 @@ MessageManager.Unregister<GetPlayerScoreRequest, GetPlayerScoreResponse>();
 注册 `IMessageFilter<TMessage>` 可统一拦截/处理某类型消息,过滤器通过「不调用 next」拦截消息(类似 ASP.NET Core Middleware 形态):
 
 ```csharp
-public sealed class BlockNegativeFilter : IMessageFilter<TestMessage>
+public sealed class BlockNegativeFilter : IMessageFilter<HealthChangedMessage>
 {
-    public void Invoke(TestMessage msg, Action<TestMessage> next)
+    public void Invoke(HealthChangedMessage msg, Action<HealthChangedMessage> next)
     {
         if (msg.Value >= 0) next(msg);
     }
 }
 
-MessageManager.AddFilter<TestMessage>(new BlockNegativeFilter());
+MessageManager.AddFilter<HealthChangedMessage>(new BlockNegativeFilter());
 
 // 移除过滤器（同一实例重复注册时移除首个匹配项）
-MessageManager.RemoveFilter<TestMessage>(filter);
+MessageManager.RemoveFilter<HealthChangedMessage>(filter);
 
 // 移除该类型的全部过滤器，返回移除数量
-var removedCount = MessageManager.ClearFilters<TestMessage>();
+var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 ```
 
 过滤器自身抛异常时由 broker 兜底：记 `[Message] Global filter threw exception` 的 Error 日志、**该条消息被拦截**、过滤器保留，不影响后续消息。
+
+两条容易踩的语义，都是刻意行为而非缺陷：
+
+- **过滤器拦截会一并阻止缓冲缓存写入**——被拦下的消息不会进入重放缓存，因此缓冲订阅重放的是「上一次通过过滤器的消息」。
+- **过滤器管道在没有任何订阅者时也会执行**——有副作用的过滤器（日志、埋点）会为无人消费的消息触发。之所以不改成「先查订阅者再过滤」，是因为那会破坏 `PublishAsync` 与缓冲语义的一致性。
 
 ## 内存管理
 
@@ -192,15 +197,15 @@ MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);
 ```
 
 ```csharp
-MessageManager.EvictBufferedChannel<TestMessage>();                  // 淘汰类型级缓冲通道，返回是否存在并已淘汰
-MessageManager.EvictBufferedChannel<string, TestMessage>("Score");   // 淘汰指定 Key 的缓冲通道
-MessageManager.EvictBufferedChannels<TestMessage>();                 // 淘汰该类型全部缓冲通道（类型级 + 所有 Key），返回淘汰数量
-MessageManager.TrimEmptyChannels();                                  // 兜底：回收所有无订阅者且无重放缓存的空通道
+MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 淘汰类型级缓冲通道，返回是否存在并已淘汰
+MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 淘汰指定 Key 的缓冲通道
+MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 淘汰该类型全部缓冲通道（类型级 + 所有 Key），返回淘汰数量
+MessageManager.TrimEmptyChannels();                                        // 兜底：回收所有无订阅者且无重放缓存的空通道
 ```
 
 淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
 
-### 运行统计
+## 运行统计
 
 订阅泄漏（订阅数只增不减）与缓冲内存驻留是事件总线最常见的事故，可用统计 API 定位：
 
@@ -250,6 +255,24 @@ public class MyNode : EntityNode
 消息类型**不限 struct/class**；不带 Key 的键值订阅可用 `MessageManager.Subscribe(key, handler).AddToNode(this)`。
 
 非节点类型实现 `IMessageSubscriber` 后也能用 `this.Subscribe()`，但**仅当它是 `MonoBehaviour` 时**才自动绑定销毁时机。
+
+## 适用场景与选型
+
+框架内并存多套通信机制，选错了会造成调用链难追踪或状态不同步。判据如下：
+
+| 你的需求 | 用什么 |
+|---|---|
+| 跨模块 / 跨层级的解耦广播（发布方不知道谁在听） | **本模块** `MessageManager`，类型即频道 |
+| 广播后要等所有响应方处理完 | `MessageManager.PublishAsync` |
+| 需要返回值 / 等一个结果 | `MessageManager.RequestAsync` |
+| 单个对象的属性变化，UI 需要跟随 | `ReactiveProperty<T>`（Reactive 模块） |
+| 需要「当前值」语义（后来者要立刻拿到状态） | `ReactiveProperty<T>`（订阅即回调当前值、相同值去重）；一次性快照可用 `SubscribeBuffered` |
+| 类内部或对象级的私有回调 | C# `event` |
+| 每帧高频、性能敏感的路径 | C# `event` 或直接调用（消息总线要付通道查找与锁的开销） |
+
+**何时不要用消息总线**：一对一、调用链本就清晰时，直接调用或接口注入更好——消息总线会切断调用链，调试时难回答「这条消息是谁发的、谁收的」；框架自身也保留了 `Pipeline`、`BaseNode` 生命周期、`AssetDownloaderHandle` 等处的 C# event 便属此类。
+
+> 框架内确实存在功能重叠：`SettingsChangedMessage`（走消息总线）与 `ConfigManager.ConfigChanged`（走 C# event）是同一类需求的两种实现。选型以「是否跨模块」为准，而非以「哪个更先进」为准。
 
 ## 设计原则
 

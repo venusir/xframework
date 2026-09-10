@@ -45,7 +45,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 
 | 模块             | 命名空间                   | 文档                                        | 职责                                                          |
 | ---------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
-| **Core**         | `XFramework.XNode`         | [README](../Runtime/Core/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
+| **Core**         | `XFramework.XNode`         | [README](../Runtime/Node/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
@@ -151,14 +151,17 @@ GameLauncher.Start()
 
 ### 消息操作
 
-| 操作        | 代码                                                 |
-| ----------- | ---------------------------------------------------- |
-| 发布        | `MessageManager.Publish(msg)`                        |
-| 订阅        | `MessageManager.Subscribe<T>(handler)`               |
-| 带 Key 发布 | `MessageManager.Publish(key, msg)`                   |
-| 异步订阅    | `MessageManager.SubscribeAsync<T>(handler)`          |
-| 缓冲订阅    | `MessageManager.SubscribeBuffered<T>(handler)`       |
-| 请求-响应   | `await MessageManager.RequestAsync<TReq, TRes>(req)` |
+| 操作          | 代码                                                                     |
+| ------------- | ------------------------------------------------------------------------ |
+| 发布          | `MessageManager.Publish(msg)`                                            |
+| 订阅          | `MessageManager.Subscribe<T>(handler)`                                   |
+| 带 Key 发布   | `MessageManager.Publish(key, msg)`                                       |
+| 异步订阅      | `MessageManager.SubscribeAsync<T>((msg, ct) => ...)`                     |
+| 异步发布      | `await MessageManager.PublishAsync(msg, MessagePublishStrategy.Parallel)` |
+| 缓冲订阅      | `MessageManager.SubscribeBuffered<T>(handler)`                           |
+| 请求-响应     | `await MessageManager.RequestAsync<TReq, TRes>(req, ct)`                  |
+| 淘汰缓冲通道  | `MessageManager.EvictBufferedChannel<T>()`                               |
+| 运行统计      | `MessageManager.GetStats()`                                              |
 
 ### 本地化操作
 

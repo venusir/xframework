@@ -175,21 +175,28 @@ bool exists = LocalizationManager.HasPlaceholder("PlayerName");
 LocalizationManager.ClearPlaceholders();
 ```
 
-### 8. 语言切换事件
+### 8. 语言切换通知
 
-语言切换通过 `MessageManager` 发布订阅，无需直接引用 `LocalizationManager` 的事件：
+语言切换通过 `MessageManager` 广播（`LocalizationManager` 本身不暴露 C# event），订阅方可经模块归口入口或消息总线直接订阅：
 
 ```csharp
 using XFramework.XMessage;
 
-// 订阅语言变更消息
-var subscription = MessageManager.Subscribe<LanguageChangedMessage>(msg =>
+// 方式一：模块归口入口(底层即 MessageManager.Subscribe)
+var subscription = LocalizationManager.Subscribe(msg =>
 {
     Debug.Log($"语言已切换为: {msg.Language}");
 });
 
-// 取消订阅
+// 方式二：直接订阅消息(与方式一等价,适合已有 using XFramework.XMessage 的代码)
+var direct = MessageManager.Subscribe<LanguageChangedMessage>(msg =>
+{
+    Debug.Log($"语言已切换为: {msg.Language}");
+});
+
+// 取消订阅：订阅句柄本身即 IDisposable
 subscription.Dispose();
+direct.Dispose();
 ```
 
 ### 9. 当前状态
