@@ -66,7 +66,17 @@ namespace XFramework.XMessage
             => _broker.SubscribeBuffered(filter, handler);
 
         /// <summary>注册全局消息过滤器。</summary>
+        /// <param name="filter">过滤器实例,不可为 <c>null</c>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="filter"/> 为 <c>null</c> 时抛出。</exception>
         public static void AddFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.AddFilter(filter);
+
+        /// <summary>移除已注册的全局过滤器(同一实例重复注册时移除首个匹配项)。返回是否找到并移除。</summary>
+        /// <param name="filter">要移除的过滤器实例,不可为 <c>null</c>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="filter"/> 为 <c>null</c> 时抛出。</exception>
+        public static bool RemoveFilter<TMessage>(IMessageFilter<TMessage> filter) => _broker.RemoveFilter(filter);
+
+        /// <summary>移除指定消息类型的全部全局过滤器,返回移除数量。</summary>
+        public static int ClearFilters<TMessage>() => _broker.ClearFilters<TMessage>();
 
         /// <summary>
         /// 淘汰指定消息类型的类型级缓冲通道,丢弃其重放缓存。

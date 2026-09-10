@@ -125,7 +125,15 @@ public sealed class BlockNegativeFilter : IMessageFilter<TestMessage>
 }
 
 MessageManager.AddFilter<TestMessage>(new BlockNegativeFilter());
+
+// 移除过滤器（同一实例重复注册时移除首个匹配项）
+MessageManager.RemoveFilter<TestMessage>(filter);
+
+// 移除该类型的全部过滤器，返回移除数量
+var removedCount = MessageManager.ClearFilters<TestMessage>();
 ```
+
+过滤器自身抛异常时由 broker 兜底：记 `[Message] Global filter threw exception` 的 Error 日志、**该条消息被拦截**、过滤器保留，不影响后续消息。
 
 ## 内存管理
 

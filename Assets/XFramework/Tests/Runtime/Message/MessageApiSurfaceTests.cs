@@ -1,0 +1,231 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using Cysharp.Threading.Tasks;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XMessage;
+
+namespace XFramework.XMessage.Tests
+{
+    /// <summary>
+    /// Tests for parameter guarding, filter management, and keyed-channel isolation.
+    /// <para>
+    /// 键值隔离一节锁定的是:同一消息类型可配多种 Key 类型,二者不得互相串道
+    /// (历史上的实现只以消息类型为键,会把后者的存储强转成前者的类型并抛 InvalidCastException)。
+    /// </para>
+    /// </summary>
+    [TestFixture]
+    public class MessageApiSurfaceTests
+    {
+        #region Test Doubles
+
+        private sealed class TestMessage
+        {
+            public int Value { get; set; }
+        }
+
+        /// <summary>拦截负值的全局过滤器。</summary>
+        private sealed class BlockNegativeFilter : IMessageFilter<TestMessage>
+        {
+            public void Invoke(TestMessage message, Action<TestMessage> next)
+            {
+                if (message.Value >= 0) next(message);
+            }
+        }
+
+        /// <summary>总是抛异常的全局过滤器,用于验证异常隔离与日志前缀。</summary>
+        private sealed class ThrowingFilter : IMessageFilter<TestMessage>
+        {
+            public void Invoke(TestMessage message, Action<TestMessage> next)
+                => throw new InvalidOperationException("filter boom");
+        }
+
+        #endregion
+
+        [SetUp]
+        public void SetUp()
+        {
+            MessageManager.Clear();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            MessageManager.Clear();
+        }
+
+        #region 参数判空
+
+        [Test]
+        public void Subscribe_NullHandler_Throws()
+        {
+            var ex = Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<TestMessage>((Action<TestMessage>)null));
+            Assert.AreEqual("handler", ex.ParamName, "参数名应指向 handler 而非底层事件流的 onNext");
+        }
+
+        [Test]
+        public void Subscribe_WithFilter_NullArguments_Throw()
+        {
+            // 首参必须显式转型:null 字面量在静态重载 (Predicate, Action) 与
+            // 扩展方法的静态调用形式 (IMessageSubscriber, Action) 之间无法裁决(CS0121)
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<TestMessage>((Predicate<TestMessage>)null, _ => { }));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<TestMessage>(_ => true, null));
+        }
+
+        [Test]
+        public void SubscribeKeyed_NullHandler_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<string, TestMessage>("k", (Action<TestMessage>)null));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<string, TestMessage>("k", null, _ => { }));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.Subscribe<string, TestMessage>("k", _ => true, null));
+        }
+
+        [Test]
+        public void SubscribeBuffered_NullArguments_Throw()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeBuffered<TestMessage>((Action<TestMessage>)null));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeBuffered<TestMessage>((Predicate<TestMessage>)null, _ => { }));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeBuffered<string, TestMessage>("k", (Action<TestMessage>)null));
+        }
+
+        [Test]
+        public void SubscribeAsync_NullArguments_Throw()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<TestMessage>((Func<TestMessage, UniTask>)null));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<TestMessage>((Predicate<TestMessage>)null, _ => UniTask.CompletedTask));
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<TestMessage>(_ => true, null));
+        }
+
+        [Test]
+        public void AddFilter_NullFilter_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => MessageManager.AddFilter<TestMessage>(null));
+            Assert.Throws<ArgumentNullException>(() => MessageManager.RemoveFilter<TestMessage>(null));
+        }
+
+        #endregion
+
+        #region 过滤器管理
+
+        [Test]
+        public void RemoveFilter_StopsBlocking_And_SecondCallReturnsFalse()
+        {
+            var filter = new BlockNegativeFilter();
+            MessageManager.AddFilter(filter);
+
+            var received = new List<int>();
+            MessageManager.Subscribe<TestMessage>(msg => received.Add(msg.Value));
+
+            MessageManager.Publish(new TestMessage { Value = -1 });
+            Assert.AreEqual(0, received.Count, "过滤器应拦截负值");
+
+            Assert.IsTrue(MessageManager.RemoveFilter<TestMessage>(filter), "移除已注册的过滤器应返回 true");
+
+            MessageManager.Publish(new TestMessage { Value = -1 });
+            CollectionAssert.AreEqual(new[] { -1 }, received, "移除后消息应放行");
+
+            Assert.IsFalse(MessageManager.RemoveFilter<TestMessage>(filter), "重复移除应返回 false");
+        }
+
+        [Test]
+        public void ClearFilters_RemovesAllOfType_ReturnsCount()
+        {
+            MessageManager.AddFilter<TestMessage>(new BlockNegativeFilter());
+            MessageManager.AddFilter<TestMessage>(new BlockNegativeFilter());
+
+            Assert.AreEqual(2, MessageManager.ClearFilters<TestMessage>(), "应移除同类型的全部过滤器");
+            Assert.AreEqual(0, MessageManager.ClearFilters<TestMessage>(), "已清空后再调用应返回 0");
+
+            var received = new List<int>();
+            MessageManager.Subscribe<TestMessage>(msg => received.Add(msg.Value));
+            MessageManager.Publish(new TestMessage { Value = -5 });
+
+            CollectionAssert.AreEqual(new[] { -5 }, received, "过滤器清空后负值应放行");
+        }
+
+        [Test]
+        public void GlobalFilter_Throws_LogsWithPrefix_AndMessageBlocked()
+        {
+            MessageManager.AddFilter<TestMessage>(new ThrowingFilter());
+
+            var received = new List<int>();
+            MessageManager.Subscribe<TestMessage>(msg => received.Add(msg.Value));
+
+            // 过滤器异常经 broker 的 try/catch 兜底,日志须带 [Message] 前缀(与订阅回调日志同形)
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Global filter threw exception")));
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(0, received.Count, "过滤器抛异常时该条消息被拦截");
+
+            // 过滤器不被移除,后续消息仍会进入过滤器
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Global filter threw exception")));
+            Assert.DoesNotThrow(() => MessageManager.Publish(new TestMessage { Value = 2 }));
+            Assert.AreEqual(0, received.Count);
+        }
+
+        #endregion
+
+        #region 键值通道的 Key 类型隔离
+
+        [Test]
+        public void DifferentKeyTypes_ForSameMessageType_DoNotCollide()
+        {
+            var byString = new List<int>();
+            var byInt = new List<int>();
+            MessageManager.Subscribe<string, TestMessage>("Score", msg => byString.Add(msg.Value));
+            MessageManager.Subscribe<int, TestMessage>(7, msg => byInt.Add(msg.Value));
+
+            Assert.DoesNotThrow(() =>
+            {
+                MessageManager.Publish("Score", new TestMessage { Value = 1 });
+                MessageManager.Publish(7, new TestMessage { Value = 2 });
+                MessageManager.Publish(8, new TestMessage { Value = 3 });
+            }, "同一消息类型配不同 Key 类型不得互相干扰");
+
+            CollectionAssert.AreEqual(new[] { 1 }, byString, "string Key 通道只收到自己的消息");
+            CollectionAssert.AreEqual(new[] { 2 }, byInt, "int Key 通道只收到匹配 Key 的消息");
+        }
+
+        [Test]
+        public void DifferentKeyTypes_Buffered_DoNotCollide()
+        {
+            MessageManager.Publish("Score", new TestMessage { Value = 10 });
+            MessageManager.Publish(7, new TestMessage { Value = 20 });
+
+            var fromString = new List<int>();
+            var fromInt = new List<int>();
+            MessageManager.SubscribeBuffered<string, TestMessage>("Score", msg => fromString.Add(msg.Value));
+            MessageManager.SubscribeBuffered<int, TestMessage>(7, msg => fromInt.Add(msg.Value));
+
+            CollectionAssert.AreEqual(new[] { 10 }, fromString, "string Key 重放自己的缓存");
+            CollectionAssert.AreEqual(new[] { 20 }, fromInt, "int Key 重放自己的缓存");
+        }
+
+        [Test]
+        public void EvictBufferedChannels_SpansAllKeyTypes()
+        {
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            MessageManager.Publish("Score", new TestMessage { Value = 2 });
+            MessageManager.Publish(7, new TestMessage { Value = 3 });
+
+            Assert.AreEqual(3, MessageManager.EvictBufferedChannels<TestMessage>(),
+                "类型级 + 两种 Key 类型的缓冲通道都应被淘汰");
+            Assert.AreEqual(0, MessageManager.EvictBufferedChannels<TestMessage>());
+        }
+
+        #endregion
+    }
+}
