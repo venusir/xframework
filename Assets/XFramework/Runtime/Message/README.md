@@ -200,6 +200,21 @@ MessageManager.TrimEmptyChannels();                                  // 兜底�
 
 淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
 
+### 运行统计
+
+订阅泄漏（订阅数只增不减）与缓冲内存驻留是事件总线最常见的事故，可用统计 API 定位：
+
+```csharp
+var stats = MessageManager.GetStats();
+Debug.Log(stats);   // MessageBusStats(类型 3, 通道 5, 同步订阅 12, ... 缓冲通道 4, 发布 187, ...)
+
+// 下钻到单个类型或单个 Key
+var byType = MessageManager.GetChannelStats<HealthChangedMessage>();
+var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId);
+```
+
+`BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它等于「各持有一条消息的通道数」。统计为 O(通道数) 遍历、零分配，属诊断接口，不适合每帧调用。
+
 ## 节点扩展方法
 
 实现了 `IMessagePublisher` / `IMessageSubscriber` 的节点可以直接使用便捷的扩展方法:

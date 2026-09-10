@@ -91,6 +91,24 @@ namespace XFramework.XMessage.Internal
             && (_async == null || _async.Count == 0)
             && _buffered == null;
 
+        /// <summary>累加本通道的计数到 <paramref name="acc"/>。</summary>
+        public void Accumulate(ref MessageStatsAccumulator acc)
+        {
+            acc.ChannelCount++;
+
+            if (_sync != null)
+                acc.SyncSubscriptionCount += _sync.SubscriptionCount;
+
+            if (_buffered != null)
+            {
+                acc.BufferedChannelCount++;
+                acc.SyncSubscriptionCount += _buffered.SubscriptionCount;
+            }
+
+            if (_async != null)
+                acc.AsyncSubscriptionCount += _async.Count;
+        }
+
         /// <summary>
         /// 淘汰缓冲流(丢弃其重放缓存)。返回是否确有缓冲流被淘汰。
         /// <para>
@@ -141,8 +159,29 @@ namespace XFramework.XMessage.Internal
         /// <summary>淘汰缓冲流(丢弃重放缓存)。返回是否确有缓冲流被淘汰。</summary>
         bool EvictBuffered();
 
+        /// <summary>累加本通道的计数到 <paramref name="acc"/>。</summary>
+        void Accumulate(ref MessageStatsAccumulator acc);
+
         /// <summary>释放本通道持有的全部事件流。</summary>
         void DisposeAll();
+    }
+
+    /// <summary>
+    /// 统计累加器。以 <c>ref</c> 传给各通道逐层累加,避免诊断路径产生装箱或中间分配。
+    /// </summary>
+    internal struct MessageStatsAccumulator
+    {
+        /// <summary>通道数。</summary>
+        public int ChannelCount;
+
+        /// <summary>同步订阅数(普通 + 缓冲)。</summary>
+        public int SyncSubscriptionCount;
+
+        /// <summary>异步订阅数。</summary>
+        public int AsyncSubscriptionCount;
+
+        /// <summary>持有重放缓存的通道数。</summary>
+        public int BufferedChannelCount;
     }
 
     /// <summary>
@@ -236,6 +275,13 @@ namespace XFramework.XMessage.Internal
             return removed;
         }
 
+        /// <summary>累加本存储内全部通道的计数到 <paramref name="acc"/>。</summary>
+        public void Accumulate(ref MessageStatsAccumulator acc)
+        {
+            foreach (var pair in _channels)
+                pair.Value.Accumulate(ref acc);
+        }
+
         /// <summary>释放并清空全部键值通道。</summary>
         public void DisposeAll()
         {
@@ -260,6 +306,9 @@ namespace XFramework.XMessage.Internal
 
         /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。</summary>
         int EvictBufferedAll();
+
+        /// <summary>累加本存储内全部通道的计数到 <paramref name="acc"/>。</summary>
+        void Accumulate(ref MessageStatsAccumulator acc);
 
         /// <summary>释放并清空全部键值通道。</summary>
         void DisposeAll();

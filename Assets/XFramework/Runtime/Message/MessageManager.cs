@@ -29,6 +29,9 @@ namespace XFramework.XMessage
         /// <summary>保护 <see cref="_requestHandlers"/> 的同步门:查找与增删在锁内,处理器调用在锁外。</summary>
         private static readonly object _requestGate = new();
 
+        /// <summary>自上次 <see cref="Clear"/> 以来成功派发的请求次数。</summary>
+        private static int _requestCount;
+
         #endregion
 
         #region Static API
@@ -199,6 +202,26 @@ namespace XFramework.XMessage
         public static int TrimEmptyChannels() => _broker.TrimEmptyChannels();
 
         /// <summary>
+        /// 获取总线的只读运行统计快照,用于诊断订阅泄漏与缓冲通道内存驻留。
+        /// <para>遍历全部通道,为 O(通道数) 且零分配;属诊断接口,不适合每帧调用。</para>
+        /// </summary>
+        public static MessageBusStats GetStats()
+        {
+            lock (_requestGate)
+            {
+                return _broker.GetStats(_requestHandlers.Count, Volatile.Read(ref _requestCount));
+            }
+        }
+
+        /// <summary>获取指定消息类型的通道统计;该类型无通道时返回全 0 快照。</summary>
+        public static MessageChannelStats GetChannelStats<TMessage>()
+            => _broker.GetChannelStats<TMessage>();
+
+        /// <summary>获取指定键值通道的统计;通道不存在时返回全 0 快照。</summary>
+        public static MessageChannelStats GetChannelStats<TKey, TMessage>(TKey key)
+            => _broker.GetChannelStats<TKey, TMessage>(key);
+
+        /// <summary>
         /// 注册请求处理器。一个请求类型只能注册一个处理器。
         /// </summary>
         /// <typeparam name="TRequest">请求类型。处理器表的键只取此类型,与响应类型无关。</typeparam>
@@ -264,6 +287,8 @@ namespace XFramework.XMessage
                 handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)stored;
             }
 
+            Interlocked.Increment(ref _requestCount);
+
             // 锁外调用:禁止持锁执行用户代码,也避免处理器中的 await 长期占用同步门
             return handler(request, cancellationToken);
         }
@@ -279,6 +304,7 @@ namespace XFramework.XMessage
             lock (_requestGate)
             {
                 _requestHandlers.Clear();
+                _requestCount = 0;
             }
         }
 
@@ -458,6 +484,7 @@ namespace XFramework.XMessage
             lock (_requestGate)
             {
                 _requestHandlers.Clear();
+                _requestCount = 0;
             }
         }
 

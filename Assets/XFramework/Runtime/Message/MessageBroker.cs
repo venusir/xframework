@@ -42,6 +42,9 @@ namespace XFramework.XMessage
         /// </summary>
         private readonly Dictionary<(Type MessageType, Type KeyType), IKeyedChannelStore> _keyedChannels = new();
 
+        /// <summary>发布调用次数(含键值发布与 PublishAsync,也含被全局过滤器拦截的)。</summary>
+        private int _publishCount;
+
         /// <summary>按消息类型存储的过滤器列表。</summary>
         private readonly Dictionary<Type, List<object>> _filtersByType = new();
 
@@ -54,6 +57,8 @@ namespace XFramework.XMessage
 
         public void Publish<TMessage>(TMessage message)
         {
+            Interlocked.Increment(ref _publishCount);
+
             var type = typeof(TMessage);
 
             // 执行过滤器管道（无过滤器时零分配）
@@ -74,6 +79,8 @@ namespace XFramework.XMessage
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
         {
+            Interlocked.Increment(ref _publishCount);
+
             var type = typeof(TMessage);
 
             // 执行过滤器管道
@@ -102,6 +109,8 @@ namespace XFramework.XMessage
         public UniTask PublishAsync<TMessage>(
             TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref _publishCount);
+
             var type = typeof(TMessage);
 
             if (!ApplyFilters(type, message))
@@ -120,6 +129,8 @@ namespace XFramework.XMessage
         public UniTask PublishAsync<TKey, TMessage>(
             TKey key, TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
         {
+            Interlocked.Increment(ref _publishCount);
+
             var type = typeof(TMessage);
 
             if (!ApplyFilters(type, message))
@@ -491,6 +502,81 @@ namespace XFramework.XMessage
             _keyedChannels.Clear();
             _filtersByType.Clear();
             _filterPipelines.Clear();
+            _publishCount = 0;
+        }
+
+        #endregion
+
+        #region Stats
+
+        /// <summary>
+        /// 组装只读统计快照。
+        /// <para>请求-响应状态由静态门面持有(见 <see cref="MessageManager"/>),故由调用方传入。</para>
+        /// </summary>
+        internal MessageBusStats GetStats(int requestHandlerCount, int requestCount)
+        {
+            var acc = new MessageStatsAccumulator();
+
+            foreach (var pair in _channels)
+                pair.Value.Accumulate(ref acc);
+
+            foreach (var pair in _keyedChannels)
+                pair.Value.Accumulate(ref acc);
+
+            var filterCount = 0;
+            foreach (var pair in _filtersByType)
+                filterCount += pair.Value.Count;
+
+            return new MessageBusStats(
+                messageTypeCount: _channels.Count + _keyedChannels.Count,
+                channelCount: acc.ChannelCount,
+                syncSubscriptionCount: acc.SyncSubscriptionCount,
+                asyncSubscriptionCount: acc.AsyncSubscriptionCount,
+                bufferedChannelCount: acc.BufferedChannelCount,
+                publishCount: Volatile.Read(ref _publishCount),
+                requestCount: requestCount,
+                requestHandlerCount: requestHandlerCount,
+                filterCount: filterCount);
+        }
+
+        /// <summary>获取指定消息类型的通道统计;不存在时返回全 0 快照。</summary>
+        internal MessageChannelStats GetChannelStats<TMessage>()
+        {
+            var type = typeof(TMessage);
+            var acc = new MessageStatsAccumulator();
+
+            if (_channels.TryGetValue(type, out var channel))
+                channel.Accumulate(ref acc);
+
+            // Key 类型不是本方法的类型参数,故按消息类型汇总键值通道数
+            var keyedChannelCount = 0;
+            foreach (var pair in _keyedChannels)
+            {
+                if (pair.Key.MessageType == type)
+                    keyedChannelCount += pair.Value.Count;
+            }
+
+            return new MessageChannelStats(
+                acc.SyncSubscriptionCount, acc.AsyncSubscriptionCount,
+                acc.BufferedChannelCount > 0, keyedChannelCount);
+        }
+
+        /// <summary>获取指定键值通道的统计;通道不存在时返回全 0 快照。</summary>
+        internal MessageChannelStats GetChannelStats<TKey, TMessage>(TKey key)
+        {
+            if (!_keyedChannels.TryGetValue((typeof(TMessage), typeof(TKey)), out var storeObj))
+                return default;
+
+            var store = (KeyedChannelStore<TKey, TMessage>)storeObj;
+            if (!store.TryGet(key, out var channel))
+                return default;
+
+            var acc = new MessageStatsAccumulator();
+            channel.Accumulate(ref acc);
+
+            return new MessageChannelStats(
+                acc.SyncSubscriptionCount, acc.AsyncSubscriptionCount,
+                acc.BufferedChannelCount > 0, 0);
         }
 
         #endregion
