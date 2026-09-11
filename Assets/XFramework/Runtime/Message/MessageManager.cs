@@ -203,9 +203,11 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 回收所有无订阅者且无可重放缓存的空通道,返回回收的通道数量。
-        /// <para>订阅清零的通道已由事件流自动回收,本方法是兜底手段,用于批量清理历史遗留的空条目。</para>
+        /// <para>订阅清零的通道已由事件流自动回收,淘汰缓冲通道时也已顺带回收因此变空的通道与存储,
+        /// 故本方法是兜底与诊断手段,用于批量清理历史遗留的空条目,常规路径下返回 0。</para>
         /// <para>持有重放缓存的缓冲通道不受影响——它们只能经 <see cref="EvictBufferedChannel{TMessage}()"/>
         /// 系列显式淘汰。</para>
+        /// <para><b>计数口径</b>:只计被回收的通道数;键值存储整体清空而被一并摘除时,该存储表项不计入。</para>
         /// </summary>
         public static int TrimEmptyChannels() => _broker.TrimEmptyChannels();
 

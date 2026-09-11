@@ -514,6 +514,9 @@ namespace XFramework.XMessage
         /// <para>不触碰缓冲通道——持有重放缓存的通道不受本方法影响,只能经
         /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰;而淘汰本身已顺带回收因此变空的通道,
         /// 故本方法属兜底与诊断手段,常规路径下返回 0。</para>
+        /// <para><b>计数口径</b>:只计被回收的通道数。某键值存储整体清空而被一并摘除时,
+        /// 该存储表项不计入返回值——结构清理一律不计入返回值,与
+        /// <see cref="EvictBufferedChannels{TMessage}()"/> 只计淘汰数的取向一致。</para>
         /// </summary>
         public int TrimEmptyChannels()
         {
