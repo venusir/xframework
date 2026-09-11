@@ -73,7 +73,14 @@ namespace XFramework.XMessage.Internal
             _async ??= new List<AsyncSubscription<TMessage>>();
             var subscription = new AsyncSubscription<TMessage>(
                 _async, filter, handler, cancellationToken, _onEmpty);
-            _async.Add(subscription);
+
+            // 构造期间外部令牌可能已被取消:Register 会同步内联触发退订,而此刻本项尚未入表,
+            // 退订的 owner.Remove 落空,因而不会回调 _onEmpty。
+            // 若仍把这条已退订的登记入表,登记表将永远非空 → IsReclaimable 恒为 false:
+            // 自动回收与 TrimEmptyChannels 共用该谓词,双双失效,只能等 Clear()。
+            if (!subscription.IsDisposed)
+                _async.Add(subscription);
+
             return subscription;
         }
 

@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XMessage;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XMessage.Tests
 {
@@ -142,6 +143,39 @@ namespace XFramework.XMessage.Tests
 
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(),
                 "只有异步订阅的通道在退订后也应被自动回收");
+        }
+
+        #endregion
+
+        #region 登记表不变量
+
+        /// <summary>
+        /// 令牌在构造期间被取消时,登记项不得入表。
+        /// <para>
+        /// 复现的是竞态窗口:守卫判定之后、<c>AsyncSubscription</c> 构造函数注册外部令牌之前被取消。
+        /// 此时 <c>Register</c> 同步内联触发退订,而该项尚未入表,<c>owner.Remove</c> 落空、不会回调空通知;
+        /// 若仍入表,登记表永远非空 → <c>IsReclaimable</c> 恒为 false,自动回收与
+        /// <c>TrimEmptyChannels</c> 共用该谓词而双双失效,只能等 <c>Clear()</c>。
+        /// </para>
+        /// <para>
+        /// 端到端竞态无法确定性复现,故直调内部 <c>AddAsync</c> 钉住这个结构不变量。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void AddAsync_TokenCancelledDuringConstruction_NotRegistered()
+        {
+            var channel = new MessageChannel<TestMessage>(null);
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var subscription = channel.AddAsync(
+                null, (msg, ct) => UniTask.CompletedTask, cts.Token);
+
+            Assert.IsTrue(subscription.IsDisposed, "已取消的令牌应让登记项立即失效");
+            Assert.AreEqual(0, channel.Async.Count, "已退订的登记项不得留在登记表中");
+            Assert.IsTrue(channel.IsReclaimable,
+                "登记表为空且无缓冲流,通道应仍可回收 —— 否则它将永远无法被回收");
         }
 
         #endregion
