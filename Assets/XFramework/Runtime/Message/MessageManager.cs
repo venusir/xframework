@@ -99,7 +99,7 @@ namespace XFramework.XMessage
         /// 异步订阅。消息到达时执行异步处理器。
         /// <para>处理器收到的令牌即订阅自身的令牌:退订会取消它,使在途 await 提前结束。</para>
         /// <para><paramref name="cancellationToken"/> 与订阅生命周期绑定:<b>令牌取消即自动退订</b>,
-        /// 与 AddTo 约定一致;传入已取消的令牌则不会登记,返回空句柄。</para>
+        /// 与 AddTo 约定一致;传入已取消的令牌则不会登记、也不会创建通道,返回空句柄。</para>
         /// </summary>
         /// <param name="asyncHandler">异步处理器,不可为 <c>null</c>。</param>
         /// <param name="cancellationToken">绑定订阅生命周期的令牌,取消即自动退订;已取消时不登记。</param>

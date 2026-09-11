@@ -51,6 +51,13 @@ namespace XFramework.XMessage
         /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
         private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
+        /// <summary>
+        /// 空订阅句柄:令牌已取消等「无需登记」路径共用。
+        /// <para>无资源可释放,共享实例安全;不得返回 <c>null</c>——调用方
+        /// (<c>MessageManager.TryBindToDestroy</c> 等)会直接调 Dispose,不做判空。</para>
+        /// </summary>
+        private static readonly IDisposable EmptySubscription = ActionDisposable.Create(static () => { });
+
         #endregion
 
         #region Publish
@@ -200,6 +207,13 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+
+            // 令牌守卫必须留在各重载内、且在建通道之前,不能只放在 AddAsyncSubscription 里:
+            // 实参会先于被调方法求值,若在 helper 内判令牌,GetOrCreateChannel<TMessage>() 已经建出了通道
+            // (键值版连整条 _keyedChannels 表项),却永远没有订阅者来触发回收,只剩 TrimEmptyChannels 兜底。
+            // 判空必须先于判令牌,否则 SubscribeAsync(null, 已取消令牌) 会吞掉 ArgumentNullException。
+            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+
             return AddAsyncSubscription(
                 GetOrCreateChannel<TMessage>(), null, asyncHandler, cancellationToken);
         }
@@ -212,6 +226,8 @@ namespace XFramework.XMessage
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+
             return AddAsyncSubscription(
                 GetOrCreateChannel<TMessage>(), filter, asyncHandler, cancellationToken);
         }
@@ -223,6 +239,8 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+
             return AddAsyncSubscription(
                 GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
                 null, asyncHandler, cancellationToken);
@@ -237,6 +255,8 @@ namespace XFramework.XMessage
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
+            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+
             return AddAsyncSubscription(
                 GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
                 filter, asyncHandler, cancellationToken);
@@ -584,7 +604,10 @@ namespace XFramework.XMessage
         #region Async Dispatch
 
         /// <summary>
-        /// 登记一条异步订阅;调用方令牌已取消时返回空句柄(不登记,与 AddTo 语义一致)。
+        /// 登记一条异步订阅;令牌已取消时返回空句柄(不登记,与 AddTo 语义一致)。
+        /// <para>本守卫是纵深防御:各 <c>SubscribeAsync</c> 重载已先行判过令牌(必须在建通道之前,
+        /// 因为实参会先于本方法求值)。此处再判一次只为兜住「重载判定之后、本方法执行之前被取消」
+        /// 的竞态——那种情况下通道已建出,留下的至少是可被 <c>TrimEmptyChannels</c> 回收的空壳。</para>
         /// </summary>
         private static IDisposable AddAsyncSubscription<TMessage>(
             MessageChannel<TMessage> channel,
@@ -593,7 +616,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
-                return ActionDisposable.Create(() => { });
+                return EmptySubscription;
 
             return channel.AddAsync(filter, asyncHandler, cancellationToken);
         }

@@ -68,9 +68,39 @@ namespace XFramework.XMessage.Tests
             var handle = MessageManager.SubscribeAsync<TestMessage>(
                 (msg, ct) => { called = true; return UniTask.CompletedTask; }, cts.Token);
 
+            // 结构断言必须在 Publish 之前:Publish 自身会建出通道(重放缓存语义),之后再断言就分不清是谁建的。
+            // 若令牌守卫被挪回 AddAsyncSubscription 内,实参 GetOrCreateChannel<TMessage>() 已建出空壳通道,
+            // 此处会看到 1,且下面那条 Trim 会返回 1。
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount,
+                "已取消的令牌不应创建通道");
+            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(),
+                "已取消的令牌不应留下待清理的空壳通道");
+
             MessageManager.Publish(new TestMessage { Value = 1 });
 
             Assert.IsFalse(called, "已取消的令牌不应登记订阅");
+            Assert.DoesNotThrow(() => handle.Dispose(), "返回的空句柄释放时不得抛异常");
+        }
+
+        [Test]
+        public void SubscribeAsync_Keyed_SubscribeTokenAlreadyCancelled_NotRegistered()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            var called = false;
+            var handle = MessageManager.SubscribeAsync<string, TestMessage>(
+                "k", (msg, ct) => { called = true; return UniTask.CompletedTask; }, cts.Token);
+
+            // 键值版更严格:连整条 _keyedChannels 存储表项都不该被建出来
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount,
+                "已取消的令牌不应创建键值通道");
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount,
+                "已取消的令牌不应创建键值通道存储表项");
+
+            MessageManager.Publish("k", new TestMessage { Value = 1 });
+
+            Assert.IsFalse(called, "已取消的令牌不应登记键值订阅");
             Assert.DoesNotThrow(() => handle.Dispose(), "返回的空句柄释放时不得抛异常");
         }
 

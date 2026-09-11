@@ -132,6 +132,26 @@ namespace XFramework.XMessage.Tests
                 () => MessageManager.SubscribeAsync<string, TestMessage>("k", null, (_, ct) => UniTask.CompletedTask));
         }
 
+        /// <summary>
+        /// 判空必须先于判令牌:若令牌守卫排在前面,传入已取消令牌时会把 null 处理器静默放行,
+        /// 破坏「null 参数一律抛 ArgumentNullException」的公开契约。
+        /// </summary>
+        [Test]
+        public void SubscribeAsync_NullHandlerWithCancelledToken_StillThrows()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<TestMessage>(
+                    (Func<TestMessage, CancellationToken, UniTask>)null, cts.Token),
+                "已取消令牌不得吞掉类型级订阅的 null 处理器异常");
+            Assert.Throws<ArgumentNullException>(
+                () => MessageManager.SubscribeAsync<string, TestMessage>(
+                    "k", (Func<TestMessage, CancellationToken, UniTask>)null, cts.Token),
+                "已取消令牌不得吞掉键值订阅的 null 处理器异常");
+        }
+
         [Test]
         public void AddFilter_NullFilter_Throws()
         {
