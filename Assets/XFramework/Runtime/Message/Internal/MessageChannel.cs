@@ -122,6 +122,12 @@ namespace XFramework.XMessage.Internal
         /// 释放后已发出的缓冲订阅句柄即失效;此后对这些句柄调用 Dispose 会被事件流安全忽略
         /// (节点已不在链表中),不会重复回池。
         /// </para>
+        /// <para>
+        /// 本方法刻意只丢缓存,不改动通道归属(不回调 <c>_onEmpty</c>):它会被
+        /// <see cref="KeyedChannelStore{TKey,TMessage}.EvictBufferedAllAndReclaimEmpty"/> 在自己的
+        /// 字典遍历中调用,此处若回调回收就是在遍历中改表,必然抛 InvalidOperationException。
+        /// 回收一律由持有者在遍历之外完成。
+        /// </para>
         /// </summary>
         public bool EvictBuffered()
         {
@@ -270,8 +276,20 @@ namespace XFramework.XMessage.Internal
             return removed;
         }
 
-        /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。</summary>
-        public int EvictBufferedAll()
+        /// <summary>
+        /// 淘汰本存储内全部缓冲通道,并顺带回收因此变空的通道;返回淘汰数量(不含回收数)。
+        /// <para>两步合成一个方法,是为了让调用方无从把顺序写反——先 trim 再 evict 恰好会留下
+        /// 本该消灭的空壳;同时「遍历中不改本字典」的两阶段纪律留在拥有该字典的类型里。</para>
+        /// </summary>
+        public int EvictBufferedAllAndReclaimEmpty()
+        {
+            var evicted = EvictBufferedAll();
+            TrimEmpty();
+            return evicted;
+        }
+
+        /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。不回收空通道。</summary>
+        private int EvictBufferedAll()
         {
             var removed = 0;
             foreach (var pair in _channels)
@@ -311,8 +329,8 @@ namespace XFramework.XMessage.Internal
         /// <summary>回收本存储内全部可回收的空通道,返回回收数量。</summary>
         int TrimEmpty();
 
-        /// <summary>淘汰本存储内全部缓冲通道(丢弃重放缓存),返回淘汰数量。</summary>
-        int EvictBufferedAll();
+        /// <summary>淘汰本存储内全部缓冲通道并回收因此变空的通道,返回淘汰数量(不含回收数)。</summary>
+        int EvictBufferedAllAndReclaimEmpty();
 
         /// <summary>累加本存储内全部通道的计数到 <paramref name="acc"/>。</summary>
         void Accumulate(ref MessageStatsAccumulator acc);

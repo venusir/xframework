@@ -148,7 +148,11 @@ namespace XFramework.XMessage
         public static IDisposable SubscribeBuffered<TMessage>(Action<TMessage> handler)
             => _broker.SubscribeBuffered(handler);
 
-        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。</summary>
+        /// <summary>
+        /// 订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。
+        /// <para><b>键的生命周期结束时必须淘汰</b>:调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>，
+        /// 否则该 Key 会把上一个同 Id 实体的旧值重放给新订阅者（详见模块 README「内存管理」）。</para>
+        /// </summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
             => _broker.SubscribeBuffered(key, handler);
 
@@ -156,7 +160,11 @@ namespace XFramework.XMessage
         public static IDisposable SubscribeBuffered<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
             => _broker.SubscribeBuffered(filter, handler);
 
-        /// <summary>订阅带缓冲的键值消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。</summary>
+        /// <summary>
+        /// 订阅带缓冲的键值消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。
+        /// <para><b>键的生命周期结束时必须淘汰</b>:调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>，
+        /// 否则该 Key 会把上一个同 Id 实体的旧值重放给新订阅者（详见模块 README「内存管理」）。</para>
+        /// </summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
             => _broker.SubscribeBuffered(key, filter, handler);
 
@@ -454,7 +462,11 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>
+        /// 订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。
+        /// <para><b>键的生命周期结束时必须淘汰</b>:调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>，
+        /// 否则该 Key 会把上一个同 Id 实体的旧值重放给新订阅者（详见模块 README「内存管理」）。</para>
+        /// </summary>
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(key, handler);

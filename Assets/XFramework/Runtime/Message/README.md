@@ -184,24 +184,36 @@ var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 | 通道 | 订阅清零时 | 回收方式 |
 |---|---|---|
 | 普通通道 | 链表空 | **自动回收**（事件流回调持有者摘除空通道） |
-| 缓冲通道 | 链表空但**仍持有重放缓存** | 只能经 `EvictBufferedChannel` 系列**显式淘汰** |
+| 缓冲通道 | 链表空但**仍持有重放缓存** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
 
-带 Key 的高频发布（如按实体 Id 发布）会为每个 Key 保留一条消息，实体的生命周期结束时应当显式淘汰：
+### 带 Key 的淘汰是语义要求，不只是省内存
+
+带 Key 的高频发布（如按实体 Id 发布）会为每个 Key 保留一条消息。**实体生命周期结束时必须淘汰**，否则后果不只是内存不回落：
 
 ```csharp
 // 按实体发布：每个 Key 各持有一条重放缓存
 MessageManager.Publish(entityId, new HealthChangedMessage { Value = 100 });
 
-// 实体销毁时淘汰其通道，否则该 Key 的重放缓存将一直保留
+// 实体销毁时淘汰其通道
 MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);
 ```
 
+漏掉这一步的失败是静默的：实体 42 死亡后其通道仍持有死亡那一刻的血量，若新生成的实体复用同一个 Id，新实体的血条订阅者会**立刻重放到上一个实体的死亡血量**——表现为满血的新实体血条一亮起来就是空的。这类 bug 不报错、不抛异常，只能靠淘汰纪律避免。
+
+类型级通道没有这个问题（每个消息类型至多一条缓存，且有界）；键值通道的缓存则必须与实体生命周期绑定，建议把淘汰调用写在实体销毁的同一处。
+
+### 淘汰 API
+
 ```csharp
-MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 淘汰类型级缓冲通道，返回是否存在并已淘汰
-MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 淘汰指定 Key 的缓冲通道
-MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 淘汰该类型全部缓冲通道（类型级 + 所有 Key），返回淘汰数量
-MessageManager.TrimEmptyChannels();                                        // 兜底：回收所有无订阅者且无重放缓存的空通道
+MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 类型级，O(1)；返回是否存在并已淘汰
+MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key，O(1)；返回是否存在并已淘汰
+MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
+MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无重放缓存的空通道，常规路径下返回 0
 ```
+
+- 类型级单数版的行为已完全包含在复数版中，保留它只是因为它是 O(1) 快路径（复数版需按消息类型扫全表）。
+- 淘汰的返回值只计**淘汰**的缓冲通道数，不含顺带回收的通道数与存储表项数。
+- 淘汰只丢重放缓存，不会回收仍有活订阅者的通道。
 
 淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
 

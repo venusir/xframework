@@ -340,6 +340,11 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(3, MessageManager.EvictBufferedChannels<TestMessage>(),
                 "类型级 + 两种 Key 类型的缓冲通道都应被淘汰");
             Assert.AreEqual(0, MessageManager.EvictBufferedChannels<TestMessage>());
+
+            // 两种 Key 类型的存储都应在最后一个键被淘汰后一并摘除(返回值只计淘汰数,不含回收数)
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount,
+                "两种 Key 类型的空存储都应被摘除");
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount);
         }
 
         #endregion

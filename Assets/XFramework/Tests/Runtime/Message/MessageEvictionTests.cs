@@ -9,7 +9,8 @@ namespace XFramework.XMessage.Tests
     /// Tests for buffered-channel eviction and empty-channel reclamation.
     /// <para>
     /// 语义边界:订阅清零的通道自动回收;持有重放缓存的缓冲通道<b>不</b>自动回收,
-    /// 只能经 EvictBufferedChannel 系列显式淘汰。
+    /// 只能经 EvictBufferedChannel 系列显式淘汰——淘汰本身会顺带回收因此变空的通道与存储,
+    /// 故 TrimEmptyChannels 退居兜底,常规路径下返回 0。
     /// </para>
     /// </summary>
     [TestFixture]
@@ -95,6 +96,45 @@ namespace XFramework.XMessage.Tests
 
             Assert.AreEqual(3, removed, "类型级 1 条 + 键值 2 条应全部淘汰");
             Assert.AreEqual(0, MessageManager.EvictBufferedChannels<TestMessage>(), "重复淘汰应返回 0");
+
+            // 返回值只计淘汰数,不含顺带回收数;条目本身则必须真的清空
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收全部空通道");
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount);
+            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
+        }
+
+        [Test]
+        public void EvictBufferedChannel_Keyed_LastKey_AlsoDropsStore()
+        {
+            MessageManager.Publish("only", new TestMessage { Value = 1 });
+
+            Assert.IsTrue(MessageManager.EvictBufferedChannel<string, TestMessage>("only"));
+
+            // 存储整体为空时必须连 _keyedChannels 表项一并摘除,
+            // 否则 GetStats().MessageTypeCount 会虚高(键值表按 (消息类型, Key 类型) 计数)
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount,
+                "最后一个键被淘汰后应连存储表项一并摘除");
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount);
+            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
+        }
+
+        [Test]
+        public void EvictBufferedChannel_WithLiveSubscriber_KeepsChannel()
+        {
+            var received = new List<int>();
+            MessageManager.Subscribe<TestMessage>(msg => received.Add(msg.Value));
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            CollectionAssert.AreEqual(new[] { 1 }, received, "前置:同步订阅者已收到消息");
+
+            Assert.IsTrue(MessageManager.EvictBufferedChannel<TestMessage>());
+
+            // 淘汰只丢重放缓存,不得回收仍有活订阅者的通道 ——
+            // 回收前的 IsReclaimable 复查是这里的正确性闸门,删掉它会静默掐死活订阅
+            Assert.AreEqual(1, MessageManager.GetStats().ChannelCount,
+                "仍有同步订阅者的通道不得被顺带回收");
+
+            MessageManager.Publish(new TestMessage { Value = 2 });
+            CollectionAssert.AreEqual(new[] { 1, 2 }, received, "淘汰不得影响同步投递");
         }
 
         #endregion
@@ -162,13 +202,17 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
-        public void TrimEmptyChannels_AfterEviction_ReclaimsChannel()
+        public void EvictBufferedChannel_AlsoReclaimsEmptiedChannel()
         {
             MessageManager.Publish(new TestMessage { Value = 7 });
-            MessageManager.EvictBufferedChannel<TestMessage>();
 
-            Assert.AreEqual(1, MessageManager.TrimEmptyChannels(), "淘汰缓冲后的空通道应可被回收");
-            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "回收后不应再有空通道");
+            Assert.IsTrue(MessageManager.EvictBufferedChannel<TestMessage>());
+
+            // 通道条目必须真的从表里消失,而不是留下一个「已可回收但仍在表中」的空壳。
+            // 不能用 GetChannelStats<T>() 断言:空壳通道的累加结果全 0,与「不存在」不可区分。
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收空通道");
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount);
+            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
         }
 
         #endregion

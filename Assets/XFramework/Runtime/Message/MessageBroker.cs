@@ -280,7 +280,11 @@ namespace XFramework.XMessage
             });
         }
 
-        /// <summary>订阅带缓冲的键值消息。新订阅者立即同步收到最近一次发布的消息(若有)。</summary>
+        /// <summary>
+        /// 订阅带缓冲的键值消息。新订阅者立即同步收到最近一次发布的消息(若有)。
+        /// <para>该 Key 的重放缓存与实体生命周期绑定:实体销毁时须
+        /// <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>,否则复用同一 Key 的新实体会重放到旧值。</para>
+        /// </summary>
         public IDisposable SubscribeBuffered<TKey, TMessage>(TKey key, Action<TMessage> handler)
         {
             if (handler == null) throw new ArgumentNullException(nameof(handler));
@@ -288,7 +292,11 @@ namespace XFramework.XMessage
                 .GetOrCreateBuffered().Subscribe(handler);
         }
 
-        /// <summary>订阅带缓冲的键值消息,附加订阅级过滤条件(重放与实时共用同一过滤)。</summary>
+        /// <summary>
+        /// 订阅带缓冲的键值消息,附加订阅级过滤条件(重放与实时共用同一过滤)。
+        /// <para>该 Key 的重放缓存与实体生命周期绑定:实体销毁时须
+        /// <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>,否则复用同一 Key 的新实体会重放到旧值。</para>
+        /// </summary>
         public IDisposable SubscribeBuffered<TKey, TMessage>(
             TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
@@ -426,29 +434,76 @@ namespace XFramework.XMessage
 
         #region Eviction
 
-        /// <summary>淘汰指定消息类型的类型级缓冲通道(丢弃其重放缓存)。返回是否存在并已淘汰。</summary>
+        /// <summary>
+        /// 淘汰指定消息类型的类型级缓冲通道(丢弃其重放缓存),并顺带回收因此变空的通道。
+        /// <para>返回是否存在该缓冲通道并已淘汰。</para>
+        /// </summary>
         public bool EvictBufferedChannel<TMessage>()
-            => _channels.TryGetValue(typeof(TMessage), out var channel) && channel.EvictBuffered();
+        {
+            if (!_channels.TryGetValue(typeof(TMessage), out var channel) || !channel.EvictBuffered())
+                return false;
 
-        /// <summary>淘汰指定键值的缓冲通道(丢弃其重放缓存)。返回是否存在并已淘汰。</summary>
+            // 只在淘汰确实发生后才回收:无条件回收会出现「返回 false 但状态已变」的诡异语义
+            ReclaimChannelIfEmpty(typeof(TMessage));
+            return true;
+        }
+
+        /// <summary>
+        /// 淘汰指定键值的缓冲通道(丢弃其重放缓存),并顺带回收因此变空的通道与存储。
+        /// <para>返回是否存在该缓冲通道并已淘汰。</para>
+        /// </summary>
         public bool EvictBufferedChannel<TKey, TMessage>(TKey key)
-            => _keyedChannels.TryGetValue((typeof(TMessage), typeof(TKey)), out var storeObj)
-               && ((KeyedChannelStore<TKey, TMessage>)storeObj).TryGet(key, out var channel)
-               && channel.EvictBuffered();
+        {
+            var storeKey = (MessageType: typeof(TMessage), KeyType: typeof(TKey));
+            if (!_keyedChannels.TryGetValue(storeKey, out var storeObj))
+                return false;
 
-        /// <summary>淘汰指定消息类型的全部缓冲通道(类型级 + 该消息类型下所有 Key 类型的所有 Key),返回淘汰数量。</summary>
+            var store = (KeyedChannelStore<TKey, TMessage>)storeObj;
+            if (!store.TryGet(key, out var channel) || !channel.EvictBuffered())
+                return false;
+
+            // TMessage 无法从参数推断(storeKey 只是两个 Type 值),故显式给出类型实参
+            ReclaimKeyedChannelIfEmpty<TKey, TMessage>(storeKey, key);
+            return true;
+        }
+
+        /// <summary>
+        /// 淘汰指定消息类型的全部缓冲通道(类型级 + 该消息类型下所有 Key 类型的所有 Key),
+        /// 并顺带回收因此变空的通道。
+        /// <para>返回淘汰的缓冲通道数量,不含顺带回收的通道数。</para>
+        /// </summary>
         public int EvictBufferedChannels<TMessage>()
         {
             var removed = 0;
 
             if (_channels.TryGetValue(typeof(TMessage), out var channel) && channel.EvictBuffered())
-                removed++;
-
-            // Key 类型不是本方法的类型参数,故按消息类型扫全表
-            foreach (var pair in _keyedChannels)
             {
-                if (pair.Key.MessageType == typeof(TMessage))
-                    removed += pair.Value.EvictBufferedAll();
+                removed++;
+                ReclaimChannelIfEmpty(typeof(TMessage));
+            }
+
+            // Key 类型不是本方法的类型参数,故按消息类型扫全表。
+            // 淘汰与回收只改各存储的内层字典;外层表项的摘除必须推迟到遍历结束之后,
+            // 否则就是在遍历中改 _keyedChannels。
+            var emptyStoreKeys = ListPool<(Type MessageType, Type KeyType)>.Rent();
+            try
+            {
+                foreach (var pair in _keyedChannels)
+                {
+                    if (pair.Key.MessageType != typeof(TMessage))
+                        continue;
+
+                    removed += pair.Value.EvictBufferedAllAndReclaimEmpty();
+                    if (pair.Value.Count == 0)
+                        emptyStoreKeys.Add(pair.Key);
+                }
+
+                for (int i = 0; i < emptyStoreKeys.Count; i++)
+                    _keyedChannels.Remove(emptyStoreKeys[i]);
+            }
+            finally
+            {
+                ListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
             }
 
             return removed;
@@ -457,7 +512,8 @@ namespace XFramework.XMessage
         /// <summary>
         /// 回收所有无可重放缓存且无订阅者的空通道,返回回收的通道数量。
         /// <para>不触碰缓冲通道——持有重放缓存的通道不受本方法影响,只能经
-        /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰。</para>
+        /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰;而淘汰本身已顺带回收因此变空的通道,
+        /// 故本方法属兜底与诊断手段,常规路径下返回 0。</para>
         /// </summary>
         public int TrimEmptyChannels()
         {
