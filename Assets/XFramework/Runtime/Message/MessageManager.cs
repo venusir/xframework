@@ -283,6 +283,22 @@ namespace XFramework.XMessage
             }
         }
 
+        /// <summary>
+        /// 查询指定请求类型是否已注册处理器。
+        /// <para>供调用方在发请求前探测响应方是否就绪——模块定位是跨模块解耦,请求方本就不该
+        /// 假定响应方已注册。用本方法判断比捕获 <c>RequestAsync</c> 抛出的异常更直接,也不会与
+        /// 处理器内部抛出的同类型异常混淆;若要在一次调用内完成「查 + 发」,改用 <c>TryRequestAsync</c>。</para>
+        /// </summary>
+        /// <typeparam name="TRequest">请求类型。</typeparam>
+        /// <returns>已注册处理器时为 <c>true</c>。</returns>
+        public static bool HasHandler<TRequest>()
+        {
+            lock (_requestGate)
+            {
+                return _requestHandlers.ContainsKey(typeof(TRequest));
+            }
+        }
+
         /// <summary>发送请求并等待响应。</summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
         /// <typeparam name="TResponse">响应类型。</typeparam>
@@ -298,16 +314,10 @@ namespace XFramework.XMessage
         public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(
             TRequest request, CancellationToken cancellationToken = default)
         {
-            Func<TRequest, CancellationToken, UniTask<TResponse>> handler;
-            lock (_requestGate)
-            {
-                if (!_requestHandlers.TryGetValue(typeof(TRequest), out var stored))
-                    throw new InvalidOperationException(
-                        $"[Message] 未注册请求类型 '{typeof(TRequest).Name}' 的处理器;" +
-                        $"请先调用 MessageManager.Register<{typeof(TRequest).Name}, TResponse>()。");
-
-                handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)stored;
-            }
+            if (!TryGetRequestHandler<TRequest, TResponse>(out var handler))
+                throw new InvalidOperationException(
+                    $"[Message] 未注册请求类型 '{typeof(TRequest).Name}' 的处理器;" +
+                    $"请先调用 MessageManager.Register<{typeof(TRequest).Name}, TResponse>()。");
 
             Interlocked.Increment(ref _requestCount);
 
@@ -319,6 +329,36 @@ namespace XFramework.XMessage
             return cancellationToken.CanBeCanceled
                 ? task.AttachExternalCancellation(cancellationToken)
                 : task;
+        }
+
+        /// <summary>
+        /// 发送请求并等待响应;未注册处理器时返回失败而不抛异常。
+        /// <para>适合「响应方可能尚未就绪」的调用点。<c>Success</c> 为 <c>false</c> 只表示未注册处理器;
+        /// 处理器自身抛出的异常照常向上传播,不会被折算成失败——需要区分二者时,失败后可用
+        /// <see cref="HasHandler{TRequest}"/> 复核。</para>
+        /// <para>取消语义与 <see cref="RequestAsync{TRequest, TResponse}"/> 一致:令牌既原样转发给处理器,
+        /// 也用于取消本次等待,取消时抛 <see cref="OperationCanceledException"/>。</para>
+        /// </summary>
+        /// <typeparam name="TRequest">请求类型。</typeparam>
+        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <param name="request">请求对象。</param>
+        /// <param name="cancellationToken">调用方令牌,原样转发给处理器,并用于取消本次等待。</param>
+        /// <returns>成功时为 <c>(true, 响应)</c>;未注册处理器时为 <c>(false, default)</c>。</returns>
+        /// <exception cref="OperationCanceledException">等待期间令牌被取消时抛出;已启动的处理器不受影响。</exception>
+        public static async UniTask<(bool Success, TResponse Response)> TryRequestAsync<TRequest, TResponse>(
+            TRequest request, CancellationToken cancellationToken = default)
+        {
+            if (!TryGetRequestHandler<TRequest, TResponse>(out var handler))
+                return (false, default);
+
+            // 计数只在此处:未注册那条路径直接返回,不计数(与 RequestAsync 抛出前不计数一致)
+            Interlocked.Increment(ref _requestCount);
+
+            var task = handler(request, cancellationToken);
+            if (cancellationToken.CanBeCanceled)
+                task = task.AttachExternalCancellation(cancellationToken);
+
+            return (true, await task);
         }
 
         /// <summary>清理所有订阅、缓存和请求处理器。</summary>
@@ -505,6 +545,27 @@ namespace XFramework.XMessage
         #endregion
 
         #region Internal
+
+        /// <summary>
+        /// 查找请求处理器。命中时在锁内取出并转型,<paramref name="handler"/> 供调用方在锁外执行。
+        /// <para><see cref="RequestAsync{TRequest, TResponse}"/> 与
+        /// <see cref="TryRequestAsync{TRequest, TResponse}"/> 共用本方法,故转型只此一处。</para>
+        /// </summary>
+        private static bool TryGetRequestHandler<TRequest, TResponse>(
+            out Func<TRequest, CancellationToken, UniTask<TResponse>> handler)
+        {
+            lock (_requestGate)
+            {
+                if (_requestHandlers.TryGetValue(typeof(TRequest), out var stored))
+                {
+                    handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)stored;
+                    return true;
+                }
+
+                handler = null;
+                return false;
+            }
+        }
 
         /// <summary>
         /// 设置全新的 <see cref="MessageBroker"/> 实例，同时清理旧 Broker 的所有订阅和请求处理器。

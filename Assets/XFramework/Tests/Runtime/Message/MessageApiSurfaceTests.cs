@@ -58,6 +58,11 @@ namespace XFramework.XMessage.Tests
             public int Result { get; set; }
         }
 
+        /// <summary>未注册处理器的请求类型,用于验证 HasHandler 的按类型隔离。</summary>
+        private sealed class AnotherRequest
+        {
+        }
+
         #endregion
 
         [SetUp]
@@ -319,6 +324,59 @@ namespace XFramework.XMessage.Tests
             MessageManager.RequestAsync<TestRequest, TestResponse>(new TestRequest()).GetAwaiter().GetResult();
 
             Assert.IsFalse(observedCancelled, "未传令牌时处理器应收到未取消的默认令牌");
+        }
+
+        [Test]
+        public void HasHandler_TracksRegisterAndUnregister()
+        {
+            Assert.IsFalse(MessageManager.HasHandler<TestRequest>(), "未注册时应为 false");
+
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
+                UniTask.FromResult(new TestResponse()));
+
+            Assert.IsTrue(MessageManager.HasHandler<TestRequest>(), "注册后应为 true");
+            Assert.IsFalse(MessageManager.HasHandler<AnotherRequest>(),
+                "查询其他请求类型不应受已注册处理器影响");
+
+            MessageManager.Unregister<TestRequest, TestResponse>();
+
+            Assert.IsFalse(MessageManager.HasHandler<TestRequest>(), "注销后应回落为 false");
+        }
+
+        [Test]
+        public void TryRequestAsync_WithoutHandler_ReturnsFailureWithoutThrowing()
+        {
+            var result = MessageManager.TryRequestAsync<TestRequest, TestResponse>(new TestRequest())
+                .GetAwaiter().GetResult();
+
+            Assert.IsFalse(result.Success, "未注册处理器时应返回失败而非抛异常");
+            Assert.IsNull(result.Response, "失败时响应应为 default");
+        }
+
+        [Test]
+        public void TryRequestAsync_WithHandler_ReturnsResponse()
+        {
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
+                UniTask.FromResult(new TestResponse { Result = req.Input }));
+
+            var result = MessageManager.TryRequestAsync<TestRequest, TestResponse>(
+                new TestRequest { Input = 9 }).GetAwaiter().GetResult();
+
+            Assert.IsTrue(result.Success);
+            Assert.AreEqual(9, result.Response.Result);
+        }
+
+        [Test]
+        public void TryRequestAsync_HandlerThrows_PropagatesInsteadOfReportingFailure()
+        {
+            // 「无处理器」与「处理器内部失败」必须可区分:后者照常上抛,不折算成 Success=false
+            MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
+                throw new InvalidOperationException("处理器内部失败"));
+
+            Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.TryRequestAsync<TestRequest, TestResponse>(new TestRequest())
+                    .GetAwaiter().GetResult(),
+                "处理器自身的异常不得被折算成失败");
         }
 
         #endregion

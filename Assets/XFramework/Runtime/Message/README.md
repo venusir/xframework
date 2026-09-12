@@ -146,6 +146,22 @@ Debug.Log($"玩家分数: {response.Score}");
 MessageManager.Unregister<GetPlayerScoreRequest, GetPlayerScoreResponse>();
 ```
 
+响应方可能尚未就绪——这是跨模块解耦下的常态,不该靠捕获异常来判断:
+
+```csharp
+// 发请求前探测
+if (MessageManager.HasHandler<GetPlayerScoreRequest>())
+{
+    // ... 走上面的 RequestAsync
+}
+
+// 或在一次调用内完成「查 + 发」:未注册处理器时返回 (false, default),不抛异常
+var (ok, response) = await MessageManager.TryRequestAsync<GetPlayerScoreRequest, GetPlayerScoreResponse>(
+    new GetPlayerScoreRequest { PlayerId = "player_1" });
+```
+
+> `TryRequestAsync` 返回的 `false` **只**表示「未注册处理器」;处理器自身抛出的异常照常向上传播,不会被折算成失败——需要区分二者时,失败后可用 `HasHandler<TRequest>()` 复核。
+
 > **令牌的两个作用**:`RequestAsync` 的令牌一方面**原样转发**给处理器(处理器据此把取消传递到下游),另一方面用于**取消本次等待**——取消会抛 `OperationCanceledException`,但不会中断已启动的处理器。取舍与 `PublishAsync` 一致:处理器是否响应取消由它自己决定,但调用方不会因为处理器忽略令牌而无法脱身。
 
 > **迁移提示**:异步处理器形参由 `request =>` 变为 `(request, ct) =>`。旧写法会因 lambda 元数不符而**编译期报错**,不会静默错绑。
@@ -283,7 +299,7 @@ public class MyNode : EntityNode
 |---|---|
 | 跨模块 / 跨层级的解耦广播（发布方不知道谁在听） | **本模块** `MessageManager`，类型即频道 |
 | 广播后要等所有响应方处理完 | `MessageManager.PublishAsync` |
-| 需要返回值 / 等一个结果 | `MessageManager.RequestAsync` |
+| 需要返回值 / 等一个结果 | `MessageManager.RequestAsync`；响应方可能未就绪时用 `TryRequestAsync` |
 | 单个对象的属性变化，UI 需要跟随 | `ReactiveProperty<T>`（Reactive 模块） |
 | 需要「当前值」语义（后来者要立刻拿到状态） | `ReactiveProperty<T>`（订阅即回调当前值、相同值去重）；一次性快照可用 `SubscribeBuffered` |
 | 类内部或对象级的私有回调 | C# `event` |

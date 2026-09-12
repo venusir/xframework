@@ -144,6 +144,17 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(0, MessageManager.GetStats().RequestCount, "未派发的请求不计入");
         }
 
+        [Test]
+        public void GetStats_TryRequestAsyncWithoutHandler_DoesNotCount()
+        {
+            var result = MessageManager.TryRequestAsync<TestRequest, TestResponse>(new TestRequest())
+                .GetAwaiter().GetResult();
+
+            Assert.IsFalse(result.Success, "前置:未注册处理器");
+            Assert.AreEqual(0, MessageManager.GetStats().RequestCount,
+                "TryRequestAsync 未派发时同样不计入,与 RequestAsync 抛出前不计数一致");
+        }
+
         #endregion
 
         #region 通道快照
