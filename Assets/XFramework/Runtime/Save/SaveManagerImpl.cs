@@ -16,6 +16,10 @@ namespace XFramework.XSave
     /// <para>存档文件位于 <see cref="FileDomain.SaveData"/> 下，文件名格式为 <c>slot_{slot}.save</c>。</para>
     /// <para>第三方可通过实现 <see cref="ISaveManager"/> 并注册到
     /// <see cref="SaveManager.Initialize(SaveManagerFactory)"/> 来替换此实现。</para>
+    /// <para><b>线程约定：</b>文件 IO 由 Provider 在线程池上执行，本类每个公开异步方法都会在返回前切回主线程，
+    /// 因此调用方在 <c>await</c> 之后可以安全地访问 Unity API 与 <see cref="DataManager"/>。
+    /// 代价是这些方法依赖 PlayerLoop 泵，<b>禁止在主线程用 <c>.GetAwaiter().GetResult()</c> 同步阻塞等待</b>，
+    /// 否则会死锁。</para>
     /// </summary>
     public sealed class SaveManagerImpl : ISaveManager
     {
@@ -47,6 +51,8 @@ namespace XFramework.XSave
         {
             var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             var metas = new List<SaveMeta>();
 
             if (files == null || files.Length == 0)
@@ -59,6 +65,8 @@ namespace XFramework.XSave
                     continue;
 
                 var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
                 if (bytes == null || bytes.Length == 0)
                     continue;
 
@@ -92,6 +100,8 @@ namespace XFramework.XSave
                 return null;
 
             var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             if (bytes == null || bytes.Length == 0)
                 return null;
 
@@ -127,6 +137,7 @@ namespace XFramework.XSave
                 var slotPath = BuildSlotPath(slot);
 
                 await FileManager.WriteAllBytesAtomicAsync(SaveDomain, slotPath, bytes, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
 
                 var meta = saveData.CreateMeta();
                 meta.playerId = _playerId;
@@ -155,6 +166,8 @@ namespace XFramework.XSave
             try
             {
                 var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, slotPath, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
                 if (bytes == null || bytes.Length == 0)
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
 
@@ -183,6 +196,8 @@ namespace XFramework.XSave
         {
             var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             if (files == null)
                 return;
 
@@ -194,6 +209,8 @@ namespace XFramework.XSave
 
             // 同时清理可能残留的 .tmp 文件
             var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             if (tmpFiles != null)
             {
                 for (int i = 0; i < tmpFiles.Length; i++)
@@ -210,6 +227,20 @@ namespace XFramework.XSave
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// 把续体切回主线程。
+        /// <para>Provider 的文件 IO 统一走 <c>UniTask.RunOnThreadPool(..., configureAwait: false, ct)</c>，
+        /// 该重载完成时<b>停留在子线程</b>——UniTask 中只有 <c>configureAwait</c> 为 <c>true</c> 的分支
+        /// 才会执行 <c>await UniTask.Yield()</c> 回主线程。</para>
+        /// <para>而 <see cref="DataManager"/>、第三方 <c>IDataBlock</c> 回调与 UnityEngine 日志都只能在主线程访问，
+        /// 故每处 IO <c>await</c> 之后、触碰这些对象之前必须显式切回。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        private static async UniTask ReturnToMainThread(CancellationToken cancellationToken)
+        {
+            await UniTask.SwitchToMainThread(cancellationToken);
+        }
 
         private string BuildSlotPath(int slot)
         {
@@ -282,6 +313,8 @@ namespace XFramework.XSave
         {
             // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别玩家
             var rootFiles = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             var playerIdSet = new HashSet<string>();
 
             // 1. 收集根目录下以 playerId 子目录形式存在的玩家
@@ -318,6 +351,8 @@ namespace XFramework.XSave
 
             // 删除该玩家子目录下的所有 .save 文件
             var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             if (files != null)
             {
                 for (int i = 0; i < files.Length; i++)
@@ -329,6 +364,8 @@ namespace XFramework.XSave
 
             // 同时删除可能残留的 .tmp 文件
             var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
             if (tmpFiles != null)
             {
                 for (int i = 0; i < tmpFiles.Length; i++)

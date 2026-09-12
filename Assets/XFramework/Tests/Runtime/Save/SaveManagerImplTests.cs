@@ -251,6 +251,86 @@ namespace XFramework.XSave.Tests
                 "playerId 为 .. 时应抛出 ArgumentException");
         }
 
+        #region 续体线程
+
+        /// <summary>
+        /// 线程探针 Block：记录 <see cref="IDataBlock.OnLoad"/> 被回调时的线程 ID。
+        /// <para><see cref="DataManager.ApplySnapshot"/> 会回调第三方 Block，而 Unity API 只能在主线程访问，
+        /// 因此这里观测到的线程 ID 就是 <see cref="SaveManagerImpl"/> 续体的执行线程。</para>
+        /// </summary>
+        [Serializable]
+        private sealed class ThreadProbeBlock : IDataBlock
+        {
+            public string BlockName => "ThreadProbe";
+
+            /// <summary>OnLoad 回调时的线程 ID，0 表示尚未回调。</summary>
+            public int OnLoadThreadId;
+
+            public int DataVersion => 0;
+            public object OnSave() => 0;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
+            public void OnLoad(object data) => OnLoadThreadId = Environment.CurrentManagedThreadId;
+            public void OnClear() { }
+        }
+
+        /// <summary>
+        /// 线程探针快照：记录 <see cref="DataSnapshot.CreateMeta"/> 被调用时的线程 ID。
+        /// <para>CreateMeta 是第三方扩展存档元数据的官方入口，且在 SaveAsync 的 IO <c>await</c> 之后执行，
+        /// 故可用来观测该处续体的线程。</para>
+        /// </summary>
+        [Serializable]
+        private sealed class ThreadProbeSnapshot : DataSnapshot
+        {
+            public static int CreateMetaThreadId;
+
+            public override SaveMeta CreateMeta()
+            {
+                CreateMetaThreadId = Environment.CurrentManagedThreadId;
+                return base.CreateMeta();
+            }
+        }
+
+        // 说明:断言的是「回调内的线程 ID == 调用线程 ID」，而不是在测试体内查 PlayerLoopHelper.IsMainThread——
+        // 测试方法自身是 async Task，其续体会被 Unity 的 SynchronizationContext 自动弹回主线程，
+        // 在测试体内断言无法发现 SaveManagerImpl 内部跑在子线程的问题。
+
+        [Test]
+        public async Task SaveAsync_CreateMetaRunsOnCallingThread()
+        {
+            // Provider 的 IO 用 RunOnThreadPool(configureAwait: false) 完成时停留在子线程，
+            // SaveManagerImpl 必须显式切回，否则第三方 CreateMeta 会在线程池线程上触碰 Unity API
+            var callingThreadId = Environment.CurrentManagedThreadId;
+            var originalFactory = DataSnapshot.Factory;
+            DataSnapshot.Factory = () => new ThreadProbeSnapshot();
+            try
+            {
+                await SaveManager.SaveAsync(1);
+            }
+            finally
+            {
+                DataSnapshot.Factory = originalFactory;
+            }
+
+            Assert.AreEqual(callingThreadId, ThreadProbeSnapshot.CreateMetaThreadId,
+                "DataSnapshot.CreateMeta 应在调用线程上执行，而不是线程池线程");
+        }
+
+        [Test]
+        public async Task LoadAsync_AppliesSnapshotOnCallingThread()
+        {
+            var probe = DataManager.GetOrCreateBlock<ThreadProbeBlock>();
+            await SaveManager.SaveAsync(1);
+
+            var callingThreadId = Environment.CurrentManagedThreadId;
+            probe.OnLoadThreadId = 0;
+            await SaveManager.LoadAsync(1);
+
+            Assert.AreEqual(callingThreadId, probe.OnLoadThreadId,
+                "IDataBlock.OnLoad 应在调用线程上回调，而不是线程池线程");
+        }
+
+        #endregion
+
         /// <summary>
         /// 断言异步操作抛出指定类型异常。
         /// <para>UTF 文档建议避免 <see cref="Assert.ThrowsAsync{T}(Func{Task})"/>：它阻塞主线程等待任务，
