@@ -96,7 +96,7 @@ namespace XFramework.XMessage.Tests
             // 键值版更严格:连整条 _keyedChannels 存储表项都不该被建出来
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount,
                 "已取消的令牌不应创建键值通道");
-            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount,
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount,
                 "已取消的令牌不应创建键值通道存储表项");
 
             MessageManager.Publish("k", new TestMessage { Value = 1 });

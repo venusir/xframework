@@ -102,7 +102,7 @@ namespace XFramework.XMessage.Tests
             MessageManager.Clear();
 
             var stats = MessageManager.GetStats();
-            Assert.AreEqual(0, stats.MessageTypeCount);
+            Assert.AreEqual(0, stats.ChannelStoreCount);
             Assert.AreEqual(0, stats.ChannelCount);
             Assert.AreEqual(0, stats.SyncSubscriptionCount);
             Assert.AreEqual(0, stats.AsyncSubscriptionCount);

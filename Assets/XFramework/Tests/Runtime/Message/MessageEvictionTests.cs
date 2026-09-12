@@ -99,7 +99,7 @@ namespace XFramework.XMessage.Tests
 
             // 返回值只计淘汰数,不含顺带回收数;条目本身则必须真的清空
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收全部空通道");
-            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount);
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount);
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
         }
 
@@ -115,7 +115,7 @@ namespace XFramework.XMessage.Tests
 
             // 条目本身必须真的清空(返回值只计淘汰数,不含顺带回收数)
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收全部空通道");
-            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount, "空的键值存储表项应一并摘除");
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount, "空的键值存储表项应一并摘除");
             Assert.AreEqual(0, MessageManager.EvictBufferedChannels("e1"), "重复淘汰应返回 0");
 
             var fromTest = new List<int>();
@@ -174,8 +174,8 @@ namespace XFramework.XMessage.Tests
             Assert.IsTrue(MessageManager.EvictBufferedChannel<string, TestMessage>("only"));
 
             // 存储整体为空时必须连 _keyedChannels 表项一并摘除,
-            // 否则 GetStats().MessageTypeCount 会虚高(键值表按 (消息类型, Key 类型) 计数)
-            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount,
+            // 否则 ChannelStoreCount(两张通道表的表项数之和)会残留一项——键值表按 (消息类型, Key 类型) 逐项计数
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount,
                 "最后一个键被淘汰后应连存储表项一并摘除");
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount);
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
@@ -274,7 +274,7 @@ namespace XFramework.XMessage.Tests
             // 通道条目必须真的从表里消失,而不是留下一个「已可回收但仍在表中」的空壳。
             // 不能用 GetChannelStats<T>() 断言:空壳通道的累加结果全 0,与「不存在」不可区分。
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收空通道");
-            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount);
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount);
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
         }
 

@@ -647,7 +647,7 @@ namespace XFramework.XMessage
                 filterCount += pair.Value.Count;
 
             return new MessageBusStats(
-                messageTypeCount: _channels.Count + _keyedChannels.Count,
+                channelStoreCount: _channels.Count + _keyedChannels.Count,
                 channelCount: acc.ChannelCount,
                 syncSubscriptionCount: acc.SyncSubscriptionCount,
                 asyncSubscriptionCount: acc.AsyncSubscriptionCount,

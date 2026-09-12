@@ -10,8 +10,12 @@ namespace XFramework.XMessage
     /// </summary>
     public readonly struct MessageBusStats
     {
-        /// <summary>存在通道的消息类型数(类型通道与键值通道表分别计数,同一类型两者都有则计两次)。</summary>
-        public int MessageTypeCount { get; }
+        /// <summary>
+        /// 通道存储表项数(类型通道表 + 键值通道表)。
+        /// <para><b>不等于「消息类型的个数」</b>——同一消息类型若既有类型通道又配了键值通道,
+        /// 或配了多种 Key 类型,各占一项而重复计数。本属性衡量的是两张表的表项规模。</para>
+        /// </summary>
+        public int ChannelStoreCount { get; }
 
         /// <summary>当前存活通道总数(类型通道 + 所有键值通道)。</summary>
         public int ChannelCount { get; }
@@ -39,7 +43,7 @@ namespace XFramework.XMessage
 
         /// <summary>创建统计快照。仅供模块内部构造。</summary>
         internal MessageBusStats(
-            int messageTypeCount,
+            int channelStoreCount,
             int channelCount,
             int syncSubscriptionCount,
             int asyncSubscriptionCount,
@@ -49,7 +53,7 @@ namespace XFramework.XMessage
             int requestHandlerCount,
             int filterCount)
         {
-            MessageTypeCount = messageTypeCount;
+            ChannelStoreCount = channelStoreCount;
             ChannelCount = channelCount;
             SyncSubscriptionCount = syncSubscriptionCount;
             AsyncSubscriptionCount = asyncSubscriptionCount;
@@ -62,7 +66,7 @@ namespace XFramework.XMessage
 
         /// <summary>返回便于日志阅读的紧凑描述。</summary>
         public override string ToString()
-            => $"MessageBusStats(类型 {MessageTypeCount}, 通道 {ChannelCount}, 同步订阅 {SyncSubscriptionCount}, " +
+            => $"MessageBusStats(通道表 {ChannelStoreCount}, 通道 {ChannelCount}, 同步订阅 {SyncSubscriptionCount}, " +
                $"异步订阅 {AsyncSubscriptionCount}, 缓冲通道 {BufferedChannelCount}, 发布 {PublishCount}, " +
                $"请求 {RequestCount}, 请求处理器 {RequestHandlerCount}, 过滤器 {FilterCount})";
     }

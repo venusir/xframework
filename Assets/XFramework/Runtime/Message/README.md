@@ -246,7 +246,7 @@ MessageManager.TrimEmptyChannels();                                        // �
 
 ```csharp
 var stats = MessageManager.GetStats();
-Debug.Log(stats);   // MessageBusStats(类型 3, 通道 5, 同步订阅 12, ... 缓冲通道 4, 发布 187, ...)
+Debug.Log(stats);   // MessageBusStats(通道表 3, 通道 5, 同步订阅 12, ... 缓冲通道 4, 发布 187, ...)
 
 // 下钻到单个类型或单个 Key
 var byType = MessageManager.GetChannelStats<HealthChangedMessage>();
@@ -254,6 +254,8 @@ var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId)
 ```
 
 `BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它等于「各持有一条消息的通道数」。统计为 O(通道数) 遍历、零分配，属诊断接口，不适合每帧调用。
+
+`ChannelStoreCount` 是两张通道表（类型通道表 + 键值通道表）的**表项数之和**，**不是消息类型的个数**——同一消息类型若既有类型通道又配了键值通道，或配了多种 Key 类型，都会各占一项。它衡量的是表的规模，用来确认「该消失的表项是否真的消失了」（例如实体的最后一个 Key 被淘汰后，键值存储表项应当一并摘除）。
 
 ## 节点扩展方法
 
