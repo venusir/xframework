@@ -159,7 +159,7 @@ namespace XFramework.XSave
                         continue;
                     }
 
-                    if (!TryDeserializeSnapshot(bytes, snapshotType, out var saveData, out var error))
+                    if (!TryDeserializeSnapshot(bytes, snapshotType, Serializer.Default, out var saveData, out var error))
                     {
                         Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
                         metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes.Length));
@@ -221,7 +221,7 @@ namespace XFramework.XSave
             // 与 GetSlotMetasAsync 同一错误处置：损坏即告警并返回带标记的元数据。
             // 返回带标记条目而非 null，是为了让两个元数据 API 结论一致——
             // null 严格表示「该槽位不存在」，而不是「存在但读不了」
-            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
+            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out var error))
             {
                 Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
                 return BuildCorruptedMeta(playerId, slot, path, bytes.Length);
@@ -248,8 +248,14 @@ namespace XFramework.XSave
                 // DataManager 只会在版本为 0 时兜底成 1，无法表达游戏自己的格式演进
                 saveData.version = CurrentVersion;
 
-                // 2. 序列化 DataSnapshot → bytes
-                var bytes = Serializer.Default.Serialize(saveData, saveData.GetType());
+                // 2. 序列化 DataSnapshot → bytes。下后台：载荷可能有数 MB，主线程序列化会掉帧。
+                //    序列化器实例在进后台前取好——Default 是可被第三方替换的可变静态字段。
+                //    configureAwait: true 表示完成后回到主线程（后续步骤要碰 Unity API 与共享状态）
+                var serializer = Serializer.Default;
+                var bytes = await UniTask.RunOnThreadPool(
+                    () => serializer.Serialize(saveData, saveData.GetType()),
+                    configureAwait: true,
+                    cancellationToken);
 
                 // 3. 原子写入：Provider 层先写 .tmp 再替换正式文件（IAtomicFileProvider 契约），
                 //    写入中途崩溃不会损坏已有存档；Provider 不支持时门面自动降级普通写
@@ -392,10 +398,19 @@ namespace XFramework.XSave
                 return LoadOutcome.Fail(SaveLoadStatus.Corrupt, "校验和不符，内容可能已损坏");
 
             // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
-            // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
-            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
-                return LoadOutcome.Fail(SaveLoadStatus.Corrupt, $"已损坏或不是有效存档：{error}");
+            // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据。
+            // 解析下后台：载荷可能有数 MB，主线程解析会掉帧（configureAwait: true 回来后再继续）
+            var serializer = Serializer.Default;
+            var snapshotType = DataSnapshot.Factory().GetType();
+            var parsed = await UniTask.RunOnThreadPool(
+                () => ParseSnapshot(bytes, snapshotType, serializer),
+                configureAwait: true,
+                cancellationToken);
 
+            if (!parsed.Success)
+                return LoadOutcome.Fail(SaveLoadStatus.Corrupt, $"已损坏或不是有效存档：{parsed.Error}");
+
+            var saveData = parsed.SaveData;
             return LoadOutcome.Ok(saveData, BuildMeta(saveData, playerId, slot, path, bytes.Length));
         }
 
@@ -668,10 +683,13 @@ namespace XFramework.XSave
         /// </summary>
         /// <param name="bytes">存档文件字节。</param>
         /// <param name="snapshotType">快照类型，取自 <c>DataSnapshot.Factory().GetType()</c>。</param>
+        /// <param name="serializer">序列化器实例。<b>以参数传入而非内部读 <see cref="Serializer.Default"/></b>：
+        /// 本方法可能在线程池上执行，而 <c>Default</c> 是可被第三方替换的可变静态字段，
+        /// 后台线程读取既可能拿到中途更换的实例，也让调用方无法固定「本次操作使用哪个序列化器」。</param>
         /// <param name="saveData">反序列化并校验通过的快照；失败时为 <c>null</c>。</param>
         /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>校验通过返回 <c>true</c>。</returns>
-        private static bool TryDeserializeSnapshot(byte[] bytes, Type snapshotType, out DataSnapshot saveData, out string error)
+        private static bool TryDeserializeSnapshot(byte[] bytes, Type snapshotType, ISerializer serializer, out DataSnapshot saveData, out string error)
         {
             saveData = null;
             error = null;
@@ -679,7 +697,7 @@ namespace XFramework.XSave
             DataSnapshot data;
             try
             {
-                data = (DataSnapshot)Serializer.Default.Deserialize(bytes, snapshotType);
+                data = (DataSnapshot)serializer.Deserialize(bytes, snapshotType);
             }
             catch (Exception ex)
             {
@@ -707,6 +725,48 @@ namespace XFramework.XSave
 
             saveData = data;
             return true;
+        }
+
+        /// <summary>
+        /// 在线程池上解析存档载荷。
+        /// <para>纯 CPU 且不触碰 Unity API，故可安全外移；但要注意<b>目标类型的字段初始化器与构造器
+        /// 会在后台线程上执行</b>——第三方 <see cref="IDataBlock"/> 的数据类型若在其中访问 UnityEngine
+        /// 对象，会因「只能在主线程调用」而抛异常。这是把反序列化下后台的固有代价。</para>
+        /// </summary>
+        /// <param name="bytes">存档文件字节。</param>
+        /// <param name="snapshotType">快照类型。</param>
+        /// <param name="serializer">序列化器实例（进后台前已取好）。</param>
+        /// <returns>解析结果载体。</returns>
+        private static SnapshotParseResult ParseSnapshot(byte[] bytes, Type snapshotType, ISerializer serializer)
+        {
+            if (TryDeserializeSnapshot(bytes, snapshotType, serializer, out var saveData, out var error))
+                return new SnapshotParseResult(saveData, null);
+
+            return new SnapshotParseResult(null, error);
+        }
+
+        /// <summary>
+        /// 后台解析结果载体（跨线程池边界传值，避免为了带出 <c>out</c> 参数而多一次堆分配）。
+        /// </summary>
+        private readonly struct SnapshotParseResult
+        {
+            /// <summary>解析成功的快照；失败时为 <c>null</c>。</summary>
+            public readonly DataSnapshot SaveData;
+
+            /// <summary>失败原因；成功时为 <c>null</c>。</summary>
+            public readonly string Error;
+
+            /// <summary>是否解析成功。</summary>
+            public bool Success => SaveData != null;
+
+            /// <summary>构造结果载体。</summary>
+            /// <param name="saveData">解析成功的快照。</param>
+            /// <param name="error">失败原因。</param>
+            public SnapshotParseResult(DataSnapshot saveData, string error)
+            {
+                SaveData = saveData;
+                Error = error;
+            }
         }
 
         /// <summary>
@@ -913,7 +973,7 @@ namespace XFramework.XSave
             }
 
             // 载荷不是有效存档时不为它背书（不重建侧车），避免把垃圾内容「洗白」成看起来正常的槽位
-            if (!TryDeserializeSnapshot(payloadBytes, DataSnapshot.Factory().GetType(), out var saveData, out _))
+            if (!TryDeserializeSnapshot(payloadBytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out _))
                 return;
 
             var meta = BuildMeta(saveData, playerId, slot, payloadPath, payloadBytes.Length);

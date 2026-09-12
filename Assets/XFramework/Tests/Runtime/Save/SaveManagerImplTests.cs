@@ -343,6 +343,64 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 序列化线程
+
+        /// <summary>
+        /// 包装真实序列化器并记录自己被调用的线程，用于验证序列化往返确实被移出了主线程。
+        /// <para>Format 与内层一致，因此 <c>Serializer.Register</c> 会顶替默认注册——
+        /// 而 <c>Serializer.Default</c> 按 "json" 查找，正好命中本替身。</para>
+        /// </summary>
+        private sealed class ThreadRecordingSerializer : ISerializer
+        {
+            public static int LastSerializeThreadId;
+            public static int LastDeserializeThreadId;
+
+            private readonly ISerializer _inner;
+
+            public ThreadRecordingSerializer(ISerializer inner) => _inner = inner;
+
+            public string Format => _inner.Format;
+
+            public byte[] Serialize(object obj, Type type)
+            {
+                LastSerializeThreadId = Environment.CurrentManagedThreadId;
+                return _inner.Serialize(obj, type);
+            }
+
+            public object Deserialize(byte[] data, Type type)
+            {
+                LastDeserializeThreadId = Environment.CurrentManagedThreadId;
+                return _inner.Deserialize(data, type);
+            }
+        }
+
+        [Test]
+        public async Task SaveAndLoad_RunSerializationOffMainThread()
+        {
+            // 断言序列化器自身跑在哪个线程，而不是在测试体里查线程——测试方法自身是 async Task，
+            // 其续体会被 Unity 的 SynchronizationContext 弹回主线程，在测试体里断言测不到真实情况。
+            // 「操作返回后回到主线程」由本文件既有的两条探针测试（CreateMeta / OnLoad）覆盖。
+            var mainThreadId = Environment.CurrentManagedThreadId;
+            var original = Serializer.Default;
+            Serializer.Register(new ThreadRecordingSerializer(original));
+            try
+            {
+                await SaveManager.SaveAsync(1);
+                await SaveManager.LoadAsync(1);
+
+                Assert.AreNotEqual(mainThreadId, ThreadRecordingSerializer.LastSerializeThreadId,
+                    "序列化应在线程池上执行，而不是阻塞主线程");
+                Assert.AreNotEqual(mainThreadId, ThreadRecordingSerializer.LastDeserializeThreadId,
+                    "反序列化应在线程池上执行");
+            }
+            finally
+            {
+                Serializer.Register(original);
+            }
+        }
+
+        #endregion
+
         #region 进度上报
 
         /// <summary>
