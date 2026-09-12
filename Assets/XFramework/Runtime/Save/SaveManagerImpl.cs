@@ -532,34 +532,57 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default)
         {
-            // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别玩家
-            var rootFiles = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
+            // 枚举域根下的直接子目录，逐个确认是否真有存档。
+            // 不能靠 GetFilesAsync 的返回路径来识别玩家：它是非递归的，根目录返回的路径
+            // 永远不含分隔符，靠切前缀判断的分支永不成立——这正是本接口长期恒返回空数组的原因
+            var directories = await FileManager.GetDirectoriesAsync(SaveDomain, "", cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
-            var playerIdSet = new HashSet<string>();
+            if (directories == null || directories.Length == 0)
+                return Array.Empty<string>();
 
-            // 1. 收集根目录下以 playerId 子目录形式存在的玩家
-            if (rootFiles != null)
+            // 目录列表不存在重复项，无需去重集合
+            var playerIds = new List<string>(directories.Length);
+            for (int i = 0; i < directories.Length; i++)
             {
-                for (int i = 0; i < rootFiles.Length; i++)
-                {
-                    var path = rootFiles[i];
-                    var slashIndex = path.IndexOfAny(PathSeparators);
-                    if (slashIndex > 0)
-                    {
-                        var playerId = path.Substring(0, slashIndex);
-                        if (IsSlotFilePath(path))
-                            playerIdSet.Add(playerId);
-                    }
-                }
+                // Provider 契约返回的是相对路径；防御性去掉可能的分隔符尾巴，
+                // 并跳过更深的路径（本层枚举只应得到直接子目录）
+                var playerId = directories[i].TrimEnd(PathSeparators);
+                if (string.IsNullOrEmpty(playerId) || playerId.IndexOfAny(PathSeparators) >= 0)
+                    continue;
+
+                // 只认真正含存档文件的目录：删除玩家后残留的空目录不应产生幽灵条目
+                if (await HasAnySlotFileAsync(playerId, cancellationToken))
+                    playerIds.Add(playerId);
             }
 
-            // 2. 同时也检查根目录下直接存在的存档（无玩家上下文的遗留存档）
-            // 这些没有 playerId，但 GetAllPlayerIds 只返回有明确 playerId 的玩家
+            // 排序：目录枚举顺序跨平台不确定
+            playerIds.Sort(StringComparer.Ordinal);
 
-            var result = new string[playerIdSet.Count];
-            playerIdSet.CopyTo(result);
-            return result;
+            return playerIds.ToArray();
+        }
+
+        /// <summary>
+        /// 判断指定玩家目录下是否至少存在一个可解析的槽位文件。
+        /// </summary>
+        /// <param name="playerId">玩家 ID。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>存在可解析的槽位文件返回 <c>true</c>。</returns>
+        private async UniTask<bool> HasAnySlotFileAsync(string playerId, CancellationToken cancellationToken)
+        {
+            var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
+            if (files == null)
+                return false;
+
+            for (int i = 0; i < files.Length; i++)
+            {
+                if (SavePathUtility.TryParseSlot(files[i], out _))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <inheritdoc/>

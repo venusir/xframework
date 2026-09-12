@@ -340,6 +340,69 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task GetAllPlayerIdsAsync_ReturnsPlayersWithSaves()
+        {
+            // 回归锁：旧实现靠 GetFilesAsync 的返回路径切前缀来识别玩家子目录，而该 API 是非递归的、
+            // 根目录返回的路径永远不含分隔符，那个分支永不成立——接口长期恒返回空数组
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+
+            SaveManager.SetCurrentPlayer("Bob");
+            wallet.Gold = 1;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 2;
+            await SaveManager.SaveAsync(1);
+
+            var playerIds = await SaveManager.GetAllPlayerIdsAsync();
+
+            CollectionAssert.AreEquivalent(new[] { "Alice", "Bob" }, playerIds, "应列出所有含存档的玩家");
+            Assert.AreEqual("Alice", SaveManager.CurrentPlayerId, "查询玩家列表不得改变当前玩家上下文");
+        }
+
+        [Test]
+        public async Task GetAllPlayerIdsAsync_ReturnsSorted()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            var ids = new[] { "Carol", "Alice", "Bob" };
+            for (int i = 0; i < ids.Length; i++)
+            {
+                SaveManager.SetCurrentPlayer(ids[i]);
+                wallet.Gold = i;
+                await SaveManager.SaveAsync(1);
+            }
+
+            var playerIds = await SaveManager.GetAllPlayerIdsAsync();
+
+            CollectionAssert.AreEqual(new[] { "Alice", "Bob", "Carol" }, playerIds,
+                "应按序返回，便于 UI 稳定展示");
+        }
+
+        [Test]
+        public async Task GetAllPlayerIdsAsync_EmptyPlayerDirectoryNotListed()
+        {
+            await SaveManager.SaveAsync(1);   // 根目录存档，不属于任何玩家
+
+            SaveManager.SetCurrentPlayer("Alice");
+            await SaveManager.SaveAsync(1);
+            await SaveManager.DeletePlayerAsync("Alice");
+
+            var playerIds = await SaveManager.GetAllPlayerIdsAsync();
+
+            // 删除玩家只删文件、不删目录，残留的空目录不应被当成玩家
+            Assert.AreEqual(0, playerIds.Length, "空玩家目录不应产生幽灵条目");
+        }
+
+        [Test]
+        public async Task GetAllPlayerIdsAsync_NoPlayers_ReturnsEmptyArray()
+        {
+            var playerIds = await SaveManager.GetAllPlayerIdsAsync();
+
+            Assert.IsNotNull(playerIds, "无玩家时应返回空数组而非 null");
+            Assert.AreEqual(0, playerIds.Length);
+        }
+
+        [Test]
         public async Task GetPlayerSlotMetasAsync_DoesNotDisturbCurrentPlayer()
         {
             var wallet = DataManager.GetOrCreateBlock<WalletData>();
