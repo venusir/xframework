@@ -93,10 +93,7 @@ namespace XFramework.XNode
             if (autoCreate && !type.IsInterface && typeof(BaseNode).IsAssignableFrom(type))
             {
                 // 通过 NodeFactory 创建节点
-                var component = NodeFactory.GetNode(type);
-                _typeCache[type] = component;
-                AddToInterfaceCache(component);
-                AddChild(component);
+                var component = AttachAndCache(NodeFactory.GetNode(type));
                 return (T)(IBaseNode)component;
             }
 
@@ -114,11 +111,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(typeof(T), out BaseNode node))
                 return (T)node;
 
-            T component = NodeFactory.GetNode<T>();
-            _typeCache[typeof(T)] = component;
-            AddToInterfaceCache(component);
-            AddChild(component);
-            return component;
+            return AttachAndCache(NodeFactory.GetNode<T>());
         }
 
         /// <summary>
@@ -133,11 +126,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(typeof(T), out BaseNode node))
                 return (T)node;
 
-            T component = NodeFactory.GetNode<T>(arg);
-            _typeCache[typeof(T)] = component;
-            AddToInterfaceCache(component);
-            AddChild(component);
-            return component;
+            return AttachAndCache(NodeFactory.GetNode<T>(arg));
         }
 
         /// <summary>
@@ -159,11 +148,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out BaseNode node))
                 return node;
 
-            node = NodeFactory.GetNode(type);
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node);
-            return node;
+            return AttachAndCache(NodeFactory.GetNode(type));
         }
 
         /// <summary>
@@ -186,11 +171,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out BaseNode node))
                 return node;
 
-            node = NodeFactory.GetNode(type, arg);
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node);
-            return node;
+            return AttachAndCache(NodeFactory.GetNode(type, arg));
         }
 
         /// <summary>
@@ -206,10 +187,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out var existing) && existing is T existingNode)
                 return existingNode;
 
-            T node = NodeFactory.GetNode<T>();
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node, deferStart: true);
+            T node = AttachAndCache(NodeFactory.GetNode<T>(), deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
         }
@@ -226,10 +204,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out var existing) && existing is T existingNode)
                 return existingNode;
 
-            T node = NodeFactory.GetNode<T>(arg);
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node, deferStart: true);
+            T node = AttachAndCache(NodeFactory.GetNode<T>(arg), deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
         }
@@ -257,10 +232,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out var existing))
                 return existing;
 
-            BaseNode node = NodeFactory.GetNode(type);
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node, deferStart: true);
+            BaseNode node = AttachAndCache(NodeFactory.GetNode(type), deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
         }
@@ -287,10 +259,7 @@ namespace XFramework.XNode
             if (_typeCache.TryGetValue(type, out var existing))
                 return existing;
 
-            BaseNode node = NodeFactory.GetNode(type, arg);
-            _typeCache[type] = node;
-            AddToInterfaceCache(node);
-            AddChild(node, deferStart: true);
+            BaseNode node = AttachAndCache(NodeFactory.GetNode(type, arg), deferStart: true);
             await ((IParentNode)node).StartupAsync();
             return node;
         }
@@ -426,6 +395,35 @@ namespace XFramework.XNode
         #endregion
 
         #region Private Methods
+
+        /// <summary>
+        /// 把节点挂到树上，<b>确认入树后</b>才写入类型与接口缓存。
+        /// <para><b>顺序为何重要：</b>所有 <c>AddNode*</c> 原先都是「先写缓存、后挂树」。
+        /// 一旦挂树被拒（<see cref="ParentNode.AddChild"/> 对已销毁节点会打 warning 并拒收），
+        /// 缓存里就留下一个<b>并不在树上</b>的节点：<see cref="GetNode{T}(bool)"/> 之后会把它当有效子节点返回，
+        /// 而它的 <c>Destroy()</c> 因不在父节点子列表中而不触发 <see cref="RemoveFromAllCaches"/>，
+        /// 形成「缓存里有个取得到却不在树上的野节点」的死结——这正是
+        /// <c>EntityNodeTests.ChildDestroy_ClearsFromParentCache</c> 失败的机制。</para>
+        /// <para>用 <c>Parent == this</c> 判断入树成功：<c>AddChild</c> 经 <c>SetParent</c> 建立父子关系，
+        /// 这样不必把它改成返回 <c>bool</c>，改动面更小。</para>
+        /// </summary>
+        /// <typeparam name="T">节点类型。</typeparam>
+        /// <param name="node">已从 <see cref="NodeFactory"/> 取得的节点。</param>
+        /// <param name="deferStart">是否延迟 Start（异步启动管线用）。</param>
+        /// <returns>传入的节点。</returns>
+        private T AttachAndCache<T>(T node, bool deferStart = false) where T : BaseNode
+        {
+            AddChild(node, deferStart);
+
+            if (ReferenceEquals(node.Parent, this))
+            {
+                // 与 AddToInterfaceCache 一致，统一按运行时类型作键
+                _typeCache[node.GetType()] = node;
+                AddToInterfaceCache(node);
+            }
+
+            return node;
+        }
 
         /// <summary>
         /// 将节点实现的接口注册到 <see cref="_interfaceCache"/>。

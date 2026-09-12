@@ -231,6 +231,24 @@ namespace XFramework.XNode
         }
 
         /// <summary>
+        /// 从缓存池取出时调用：把节点带出「已销毁」状态，使其可被重新挂到树上。
+        /// <para><b>为什么需要它：</b>池中节点（含 <see cref="NodePool{T}.Prewarm"/> 预创建的）终态恒为已销毁，
+        /// 而 <see cref="ParentNode.AddChild"/> 会拒收已销毁节点——两者原先互相矛盾，使
+        /// <c>NodeFactory.GetNode</c> 拿到的节点无法直接挂树，<c>EntityNode.AddNode</c> 因此静默返回一个
+        /// 既不在树上也未 Awake 的野节点。</para>
+        /// <para>出池的节点语义上是「可复用的空白」而非「已销毁的残骸」。真正的重新初始化仍由随后的
+        /// <see cref="Awake"/>（由 <c>AddChild</c> 触发）完成；本方法只解开那道守卫，
+        /// 因此单独 <c>Get()</c> 之后仍须 <c>Awake()</c> 才能使用。</para>
+        /// <para><b>派生类注意：</b>节点会被池复用，派生类若持有自身状态（计数器、标志等），
+        /// <b>必须在 <c>OnAwake</c> 里复位</b>——<see cref="AwakeInternal"/> 只复位框架自身的字段，
+        /// 派生类状态会跨复用累积。</para>
+        /// </summary>
+        internal void PrepareForReuse()
+        {
+            _destroyed = false;
+        }
+
+        /// <summary>
         /// 内部销毁方法。由 <see cref="Destroy"/> 调用。
         /// <para>分为三个阶段：</para>
         /// <para>Phase 1 — 标记销毁 + 取消令牌 + 清理 auto-disposables + 通知外部即将销毁。</para>

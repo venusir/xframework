@@ -362,6 +362,34 @@ NodeFactory.ClearPool<BulletNode>();
 NodeFactory.ClearAllPools();
 ```
 
+#### 两条必须遵守的契约
+
+**一、派生类必须在 `OnAwake` 里复位自身状态。** 节点销毁后自动回池，下次 `GetNode` 会复用**同一个实例**。
+`AwakeInternal` 只复位框架自身的字段（`_depth`/`_parent`/`_destroyed`/`_started`/`_enabled`/`_active`），
+**派生类的计数器、业务标志不会自动清零**——不复位就会跨复用累积：
+
+```csharp
+private sealed class BulletNode : BaseNode
+{
+    public int HitCount;          // 派生类状态
+
+    protected override void OnAwake()
+    {
+        base.OnAwake();
+        HitCount = 0;             // ← 必须：否则下一次复用时带着上一颗子弹的计数
+    }
+}
+```
+
+**二、`NodeFactory.GetNode` 出池的节点已可直接挂树**，但仍需 `Awake` 初始化——
+`ParentNode.AddChild` 会自动调用它，故 `AddNode<T>()` 路径无需手动 `Awake`。
+
+> 历史注：早先池中节点终态恒为「已销毁」，而 `AddChild` 会拒收已销毁节点，两者互相矛盾，
+> 使 `GetNode` 拿到的节点无法直接挂树——`EntityNode.AddNode` 因此会静默返回一个
+> 既不在树上也未 Awake 的野节点（只打一行 warning）。现由 `BaseNode.PrepareForReuse`
+> 在出池时解开该状态，并由 `EntityNode.AttachAndCache` 保证「**确认入树后**才写类型缓存」，
+> 避免缓存里留下取得到却不在树上的节点。
+
 ## 事件系统
 
 | 事件                  | 来源                  | 触发时机                            |

@@ -43,12 +43,18 @@ namespace XFramework.XNode
         /// <summary>
         /// 从池中获取一个节点。
         /// <para>如果池中有可用节点则复用，否则创建新节点。</para>
-        /// <para>获取的节点处于"已销毁"状态，需要调用 <see cref="BaseNode.Awake"/> 或通过 <see cref="ParentNode.AddChild"/> 重新初始化。</para>
+        /// <para>出池的节点已可<b>直接挂树</b>（<see cref="ParentNode.AddChild"/> 不会拒收它）；
+        /// 初始化仍由随后的 <see cref="BaseNode.Awake"/> 完成，而 <c>AddChild</c> 会自动调用它。</para>
         /// </summary>
         /// <returns>可用的节点实例。</returns>
         public T Get()
         {
             T node = _pool.Count > 0 ? _pool.Pop() : new T();
+
+            // 池中节点终态恒为已销毁（见 OnNodeReturned / Return / Prewarm），
+            // 先带出该状态，否则 AddChild 的守卫会拒收它——那正是「出池即可挂树」原先不成立的根因
+            node.PrepareForReuse();
+
             node.OnReturnToPool += OnNodeReturned;
             return node;
         }
