@@ -281,13 +281,19 @@ public class MyNode : EntityNode
             await UniTask.Delay(TimeSpan.FromSeconds(1), cancellationToken: ct);
         });
 
+        // 缓冲订阅(订阅即收到最近一条,同样自动绑定)
+        this.SubscribeBuffered<GameStateChangedMessage>(msg =>
+        {
+            Debug.Log($"当前状态: {msg.NewState}");
+        });
+
         // 带 Key 的发布
         this.Publish("Score", 500);
     }
 }
 ```
 
-消息类型**不限 struct/class**；不带 Key 的键值订阅可用 `MessageManager.Subscribe(key, handler).AddToNode(this)`。
+消息类型**不限 struct/class**。节点侧只镜像了**类型级**的 `Subscribe` / `SubscribeAsync` / `SubscribeBuffered`；带 Key 的订阅、以及带过滤条件的缓冲订阅，请用 `MessageManager.Subscribe(key, handler).AddToNode(this)` 这类组合写法——不直接补成节点重载，是因为 `(TKey, Action<TMessage>)` 会捕获本意为过滤器的委托实参，见 `NodeExtensions` 中的重载决议说明。
 
 非节点类型实现 `IMessageSubscriber` 后也能用 `this.Subscribe()`，但**仅当它是 `MonoBehaviour` 时**才自动绑定销毁时机。
 

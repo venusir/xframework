@@ -17,7 +17,7 @@ using XFramework.XNode;
 namespace XFramework.Tests
 {
     /// <summary>
-    /// Tests for node message subscription (NodeExtensions.Subscribe / SubscribeAsync).
+    /// Tests for node message subscription (NodeExtensions.Subscribe / SubscribeAsync / SubscribeBuffered).
     /// <para>
     /// 本文件同时承担<b>编译期回归守卫</b>：一旦
     /// <c>NodeExtensions.Subscribe(this BaseNode, ...)</c> 与
@@ -109,6 +109,46 @@ namespace XFramework.Tests
                 MessageManager.Publish(new StructMessage { Value = 15 });
 
                 CollectionAssert.AreEqual(new[] { 15 }, received, "订阅级过滤条件生效");
+            }
+            finally
+            {
+                node.Destroy();
+            }
+        }
+
+        [Test]
+        public void NodeSubscribeBuffered_ReplaysLastMessage_AndBindsLifecycle()
+        {
+            var node = CreateNode();
+
+            // 先发布、后订阅:缓冲订阅应立刻重放最近一条
+            MessageManager.Publish(new StructMessage { Value = 5 });
+
+            var received = new List<int>();
+            node.SubscribeBuffered<StructMessage>(m => received.Add(m.Value));
+
+            CollectionAssert.AreEqual(new[] { 5 }, received, "新订阅者应立即收到最近一次发布的消息");
+
+            MessageManager.Publish(new StructMessage { Value = 6 });
+            CollectionAssert.AreEqual(new[] { 5, 6 }, received, "重放之后继续接收实时消息");
+
+            // 销毁后不再收到消息 —— 这同时证明解析到的是节点版,而非 MessageManager 上不绑生命的同名扩展
+            node.Destroy();
+
+            MessageManager.Publish(new StructMessage { Value = 7 });
+            CollectionAssert.AreEqual(new[] { 5, 6 }, received, "节点销毁后缓冲订阅自动取消");
+        }
+
+        [Test]
+        public void NodeSubscribeBuffered_NullArguments_Throw()
+        {
+            var node = CreateNode();
+            try
+            {
+                Assert.Throws<ArgumentNullException>(
+                    () => NodeExtensions.SubscribeBuffered<StructMessage>((BaseNode)null, _ => { }));
+                Assert.Throws<ArgumentNullException>(
+                    () => node.SubscribeBuffered<StructMessage>((Action<StructMessage>)null));
             }
             finally
             {

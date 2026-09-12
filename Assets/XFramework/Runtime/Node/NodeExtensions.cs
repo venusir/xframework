@@ -141,6 +141,29 @@ namespace XFramework.XNode
             return MessageManager.SubscribeAsync(asyncHandler, cancellationToken).AddToNode(node);
         }
 
+        /// <summary>
+        /// 订阅带缓冲的消息，新订阅者会立即收到最近一次发布的消息；订阅自动绑定到节点生命周期。
+        /// <para>
+        /// <b>刻意只提供这一个缓冲重载：</b>带 Key 与带过滤条件的变体都<b>不加</b>——一旦
+        /// <c>(TKey, Action&lt;TMessage&gt;)</c> 与 <c>(Predicate&lt;TMessage&gt;, Action&lt;TMessage&gt;)</c>
+        /// 同时存在，<c>node.SubscribeBuffered(predicate, handler)</c> 这类调用就会退化为 CS0121，
+        /// 或被静默解析为「把谓词当 Key」。这两类订阅请改用
+        /// <c>MessageManager.SubscribeBuffered(...).AddToNode(this)</c>。
+        /// </para>
+        /// </summary>
+        /// <typeparam name="TMessage">消息类型，struct 与 class 均支持。</typeparam>
+        /// <param name="node">目标节点，不可为 <c>null</c>。</param>
+        /// <param name="handler">消息回调，不可为 <c>null</c>。</param>
+        /// <returns>退订句柄；节点已销毁时返回已释放的空句柄。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="node"/> 或 <paramref name="handler"/> 为 <c>null</c> 时抛出。</exception>
+        public static IDisposable SubscribeBuffered<TMessage>(this BaseNode node, Action<TMessage> handler)
+        {
+            if (node == null) throw new ArgumentNullException(nameof(node));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.SubscribeBuffered<TMessage>(handler).AddToNode(node);
+        }
+
         #endregion
     }
 }
