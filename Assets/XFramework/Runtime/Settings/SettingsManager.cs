@@ -237,6 +237,33 @@ namespace XFramework.XSettings
 
         #endregion
 
+        #region Dirty
+
+        /// <summary>
+        /// 内存中的设置自上次保存 / 加载 / 重置以来是否有改动。
+        /// <para>经字段句柄写入会自动置脏；直接改 POCO 字段后需自行调用 <see cref="MarkDirty{T}"/>。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static bool IsDirty<T>() where T : class, new()
+        {
+            return GetManager<T>().IsDirty;
+        }
+
+        /// <summary>
+        /// 手动标记为「有改动」。
+        /// <para>仅在<b>直接修改设置对象字段</b>后需要调用——句柄写入会自动置脏，直改字段框架无从感知。
+        /// 这也是启用自动保存后，框架感知改动的唯一来源。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static void MarkDirty<T>() where T : class, new()
+        {
+            GetManager<T>().MarkDirty();
+        }
+
+        #endregion
+
         #region Reactive
 
         /// <summary>

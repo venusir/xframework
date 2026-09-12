@@ -70,6 +70,27 @@ namespace XFramework.XSettings
 
         #endregion
 
+        #region Dirty
+
+        /// <summary>
+        /// 内存中的设置自上次保存 / 加载 / 重置以来是否有改动。
+        /// <para><b>语义边界：</b>它表示「内存改动是否已提交给存储后端」，而<b>不</b>保证已成功落盘
+        /// ——<see cref="ISettingsStore.Save{T}"/> 返回 <c>void</c>，实现可能只告警不抛（如
+        /// <see cref="JsonFileStore"/> 对 IO 失败的处理），框架无从得知。</para>
+        /// <para>经 <see cref="ISettingsManager{T}"/> 的 Save/Load/Reset 会清除；整体
+        /// <see cref="Apply"/> 与字段写入会置脏。</para>
+        /// </summary>
+        bool IsDirty { get; }
+
+        /// <summary>
+        /// 手动标记为「有改动」。
+        /// <para>仅在<b>直接修改设置对象字段</b>后需要调用——经字段句柄写入会自动置脏，
+        /// 直改字段则框架无从感知。这也是自动保存（若启用）唯一的感知来源。</para>
+        /// </summary>
+        void MarkDirty();
+
+        #endregion
+
         #region Reactive
 
         /// <summary>

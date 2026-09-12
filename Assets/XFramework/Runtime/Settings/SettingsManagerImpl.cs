@@ -25,6 +25,15 @@ namespace XFramework.XSettings
         private readonly EventStream<T> _changedStream = new();
         private bool _disposed;
 
+        /// <summary>
+        /// 变更计数。用计数而非布尔标志，是为了让「保存过程中又发生改动」不被吞掉：
+        /// Save 在开始时取快照、结束后把 _savedCount 设为快照值，期间的改动会让两者重新不等。
+        /// </summary>
+        private int _changeCount;
+
+        /// <summary><see cref="_changeCount"/> 中已提交给存储后端的那一档。</summary>
+        private int _savedCount;
+
         #endregion
 
         #region Constructors
@@ -71,7 +80,32 @@ namespace XFramework.XSettings
                 throw new ArgumentNullException(nameof(settings));
 
             _settings = settings;
+
+            // 整体替换后内存与持久层不再一致。无从判断新对象是否恰好等于磁盘内容,故一律置脏
+            _changeCount++;
+
             Notify();
+        }
+
+        #endregion
+
+        #region Dirty
+
+        /// <inheritdoc />
+        public bool IsDirty
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return _changeCount != _savedCount;
+            }
+        }
+
+        /// <inheritdoc />
+        public void MarkDirty()
+        {
+            ThrowIfDisposed();
+            _changeCount++;
         }
 
         #endregion
@@ -82,7 +116,12 @@ namespace XFramework.XSettings
         public void Save()
         {
             ThrowIfDisposed();
+
+            // 先取快照:写入期间若有新改动(如用户在保存过程中继续拖动滑条),计数会继续增长,
+            // 保存结束后两者不等、仍是脏的。用布尔标志就会把这次改动吞掉
+            var snapshot = _changeCount;
             SaveToStore(_store);
+            _savedCount = snapshot;
         }
 
         /// <inheritdoc />
@@ -91,6 +130,7 @@ namespace XFramework.XSettings
             ThrowIfDisposed();
 
             _settings = LoadCore();
+            _savedCount = _changeCount; // 内存此刻与持久层一致
             Notify();
         }
 
@@ -117,6 +157,9 @@ namespace XFramework.XSettings
 
             _settings = CreateDefault();
             _store.Delete();
+
+            // 持久层已清空、内存是默认值,重启后同样得到默认值,故不算脏
+            _savedCount = _changeCount;
             Notify();
         }
 
@@ -223,8 +266,9 @@ namespace XFramework.XSettings
         {
             // 序列化留在主线程:设置对象通常只有几百字节,线程池往返的调度成本高于序列化本身
             // (取舍与 SaveManagerImpl 处理侧车一致),且 JsonUtility 非线程安全。
-            // 快照 store:await 期间 Store setter 可能改动它
+            // 快照 store 与变更计数:await 期间 Store setter 可能改 store,用户也可能继续改动设置
             var store = _store;
+            var snapshot = _changeCount;
 
             if (IsVersioned)
                 await WriteAsync(store, BuildEnvelope(), cancellationToken);
@@ -234,6 +278,9 @@ namespace XFramework.XSettings
             // 与 SaveManagerImpl 的线程约定一致:公开异步方法在返回前切回主线程,
             // 使调用方 await 之后可以安全访问 Unity API
             await UniTask.SwitchToMainThread(cancellationToken);
+
+            // 提交成功的是快照那一刻的内容;期间若有新改动,_changeCount 已增长,仍是脏的
+            _savedCount = snapshot;
         }
 
         /// <summary>
@@ -257,6 +304,7 @@ namespace XFramework.XSettings
             // 替换与通知必须在主线程:Notify 会经 MessageManager 广播,订阅者通常随即访问 Unity API
             await UniTask.SwitchToMainThread(cancellationToken);
             _settings = loaded;
+            _savedCount = _changeCount; // 内存此刻与持久层一致
             Notify();
         }
 

@@ -111,6 +111,9 @@ namespace XFramework.XSettings
                     return;
 
                 _setter(settings, value);
+
+                // 先置脏再通知:订阅者在回调里查 IsDirty 时应看到一致的状态
+                SettingsManager.MarkDirty<T>();
                 _changedStream.OnNext(value);
             }
         }
