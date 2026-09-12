@@ -10,8 +10,11 @@ namespace XFramework.XFileManager
     /// <para>组合而非在门面内做 if 分支：加解密是包裹层，读写方法在字节边界统一加解密，
     /// 新增 Provider 方法无需在门面重复加密分支（参考 LocalPrefs CryptoFileAccessor 装饰器设计）。</para>
     /// <para>同时实现 <see cref="IAtomicFileProvider"/>：原子写同样经过加密层，加密后的密文整体原子替换。</para>
+    /// <para>同时实现 <see cref="IDirectoryProvider"/>：目录名不含数据，无需加解密，能力取决于被包裹的 Provider。
+    /// 装饰器必须显式实现可选能力接口，否则会把底层 Provider 的能力遮蔽掉——
+    /// 门面按 <c>is</c> 探测能力时看到的是装饰器本身。</para>
     /// </summary>
-    internal sealed class CryptoFileProvider : IFileProvider, IAtomicFileProvider
+    internal sealed class CryptoFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
         #region Private Fields
 
@@ -60,6 +63,17 @@ namespace XFramework.XFileManager
         public void CreateDirectory(FileDomain domain, string relativePath)
         {
             _inner.CreateDirectory(domain, relativePath);
+        }
+
+        /// <inheritdoc />
+        public UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            // 能力随被包裹的 Provider：底层不支持枚举时返回空数组（与 ConsoleFileProvider
+            // 对 GetFilesAsync 的既有处理一致，不抛异常）
+            if (_inner is IDirectoryProvider directoryProvider)
+                return directoryProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
+
+            return UniTask.FromResult(Array.Empty<string>());
         }
 
         /// <inheritdoc />

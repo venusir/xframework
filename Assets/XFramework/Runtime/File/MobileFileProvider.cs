@@ -14,8 +14,9 @@ namespace XFramework.XFileManager
     /// <para>其他域（<see cref="FileDomain.AppData"/>、<see cref="FileDomain.Cache"/>、<see cref="FileDomain.SaveData"/>）
     /// 仍使用 <see cref="System.IO"/>（这些路径在移动端沙盒内，IO 可用）。</para>
     /// <para>实现 <see cref="IAtomicFileProvider"/>：原子写透传 <see cref="DesktopFileProvider"/>（Streaming 域只读）。</para>
+    /// <para>实现 <see cref="IDirectoryProvider"/>：目录枚举透传 <see cref="DesktopFileProvider"/>（Streaming 域只读）。</para>
     /// </summary>
-    public class MobileFileProvider : IFileProvider, IAtomicFileProvider
+    public class MobileFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
         #region Private Fields
 
@@ -96,6 +97,16 @@ namespace XFramework.XFileManager
         public void CreateDirectory(FileDomain domain, string relativePath)
         {
             _desktopProvider.CreateDirectory(domain, relativePath);
+        }
+
+        /// <inheritdoc />
+        public UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            // 与 GetFilesAsync 一致：Streaming 域位于只读安装包内，无法用 System.IO 枚举
+            if (domain == FileDomain.Streaming)
+                return UniTask.FromResult(Array.Empty<string>());
+
+            return _desktopProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
         }
 
         /// <inheritdoc />

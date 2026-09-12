@@ -14,7 +14,7 @@ namespace XFramework.XSave.Tests
     /// <para>每次实例化创建独立目录（<c>Path.GetTempPath()/XFrameworkSaveTests/Guid</c>），
     /// 测试结束后经 <see cref="Cleanup"/> 递归删除。</para>
     /// </summary>
-    internal sealed class TempFileProvider : IFileProvider, IAtomicFileProvider
+    internal sealed class TempFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
         private readonly string _rootPath;
 
@@ -123,6 +123,27 @@ namespace XFramework.XSave.Tests
                         files[i] = FilePathUtility.ToRelativePath(_rootPath, files[i]);
 
                     return files;
+                },
+                configureAwait: false,
+                cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            var fullPath = GetPhysicalPath(domain, relativePath);
+
+            return await UniTask.RunOnThreadPool(
+                () =>
+                {
+                    if (!Directory.Exists(fullPath))
+                        return Array.Empty<string>();
+
+                    var dirs = Directory.GetDirectories(fullPath);
+                    for (int i = 0; i < dirs.Length; i++)
+                        dirs[i] = FilePathUtility.ToRelativePath(_rootPath, dirs[i]);
+
+                    return dirs;
                 },
                 configureAwait: false,
                 cancellationToken);

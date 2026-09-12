@@ -11,8 +11,9 @@ namespace XFramework.XFileManager
     /// <para>直接使用 <see cref="System.IO"/> API，性能最优。</para>
     /// <para>实现 <see cref="IAtomicFileProvider"/>：原子写为「写 .tmp 临时文件 → 一步替换正式文件并保留
     /// 一代 .bak 备份」，写入中途崩溃不会损坏已有文件，也不会出现「零副本」窗口。</para>
+    /// <para>同时实现 <see cref="IDirectoryProvider"/>，提供直接子目录枚举（非递归）。</para>
     /// </summary>
-    public class DesktopFileProvider : IFileProvider, IAtomicFileProvider
+    public class DesktopFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
         #region IFileProvider
 
@@ -123,6 +124,33 @@ namespace XFramework.XFileManager
             var fullPath = GetPhysicalPath(domain, relativePath);
             if (!Directory.Exists(fullPath))
                 Directory.CreateDirectory(fullPath);
+        }
+
+        /// <inheritdoc />
+        public async UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            var fullPath = GetPhysicalPath(domain, relativePath);
+
+            return await UniTask.RunOnThreadPool(
+                () =>
+                {
+                    if (!Directory.Exists(fullPath))
+                        return Array.Empty<string>();
+
+                    // 非递归:仅直接子目录,与 GetFilesAsync 的粒度一致
+                    var dirs = Directory.GetDirectories(fullPath);
+                    string rootDir = GetPhysicalPath(domain, null);
+
+                    // 转换为相对路径（统一正斜杠分隔，与 GetFilesAsync 同契约）
+                    for (int i = 0; i < dirs.Length; i++)
+                    {
+                        dirs[i] = FilePathUtility.ToRelativePath(rootDir, dirs[i]);
+                    }
+
+                    return dirs;
+                },
+                configureAwait: false,
+                cancellationToken);
         }
 
         /// <inheritdoc />

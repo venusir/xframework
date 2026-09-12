@@ -321,6 +321,35 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
+        /// 异步获取目录下的直接子目录（非递归）。
+        /// <para>底层 Provider 未实现 <see cref="IDirectoryProvider"/> 时输出警告并返回空数组
+        /// （与 <see cref="WriteAllBytesAtomicAsync"/> 的能力探测同构，不抛异常）。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的目录路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>
+        /// 子目录的相对路径数组；目录不存在或 Provider 不支持该能力时返回空数组。
+        /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与 <see cref="GetFilesAsync"/> 同规范），
+        /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
+        /// </returns>
+        public static UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            // 入口快照:整个异步流程使用同一 provider
+            var provider = _provider;
+
+            // 能力探测:目录枚举为可选能力,缺失时返回空数组(与原子写的能力探测同构)
+            if (provider is IDirectoryProvider directoryProvider)
+                return directoryProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
+
+            Debug.LogWarning(
+                $"[FileManager] 当前 Provider({provider?.GetType().Name}) 不支持目录枚举,返回空数组。");
+            return UniTask.FromResult(Array.Empty<string>());
+        }
+
+        /// <summary>
         /// 创建目录（包括所有父目录）。
         /// <para>如果目录已存在，不执行任何操作。</para>
         /// </summary>
