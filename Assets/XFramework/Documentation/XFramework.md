@@ -52,7 +52,11 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线、事件流引擎                                |
 | **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Message 事件流）                  |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
-| **File**         | `XFramework.XFile`         | [README](../Runtime/File/README.md)         | 跨平台文件系统：路径域抽象、自动选平台 Provider               |
+| **File**         | `XFramework.XFileManager`  | [README](../Runtime/File/README.md)         | 跨平台文件系统：路径域抽象、自动选平台 Provider、原子写与一代备份、按域加密 |
+| **Data**         | `XFramework.XData`         | [README](../Runtime/Data/README.md)         | 数据块管理：快照收集/应用、逐块版本迁移链、脏标记             |
+| **Serialize**    | `XFramework.XSerialize`    | [README](../Runtime/Serialize/README.md)    | 序列化注册表：按格式名取用（JSON 等），供 Data / Save 复用    |
+| **Save**         | `XFramework.XSave`         | [README](../Runtime/Save/README.md)         | 存档：原子写与备份恢复、元数据侧车、版本门禁、玩家隔离、槽位复制移动 |
+| **Pool**         | `XFramework.XPool`         | [README](../Runtime/Pool/README.md)         | 对象池与集合池（List/HashSet/Dictionary/StringBuilder）       |
 | **Input**        | `XFramework.XInput`        | [README](../Runtime/Input/README.md)        | 输入抽象层：纯字符串 API、多设备检测、零 GC                   |
 | **Settings**     | `XFramework.XSettings`     | [README](../Runtime/Settings/README.md)     | 强类型游戏设置：JSON 持久化、响应式通知、重置                 |
 | **UI**           | `XFramework.XUI`           | [README](../Runtime/UI/README.md)           | UI 面板管理 / MVVM 绑定 / 导航堆栈 / HUD / Tip                |
