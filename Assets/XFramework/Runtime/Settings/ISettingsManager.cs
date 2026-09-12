@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 
 namespace XFramework.XSettings
 {
@@ -49,6 +51,22 @@ namespace XFramework.XSettings
         /// 与首次初始化所得默认值一致。</para>
         /// </summary>
         void Reset();
+
+        /// <summary>
+        /// 异步保存当前设置到持久层，语义与 <see cref="Save"/> 相同。
+        /// <para>IO 在线程池或存储后端自身的异步实现上执行，并在返回前切回主线程，
+        /// 因此 <c>await</c> 之后可安全访问 Unity API。代价是依赖 PlayerLoop 泵，
+        /// <b>禁止在主线程用 <c>.GetAwaiter().GetResult()</c> 同步阻塞等待</b>，否则会死锁。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        UniTask SaveAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 异步从持久层重新加载，覆盖当前设置，并通知所有订阅者。语义与 <see cref="Load"/> 相同。
+        /// <para>线程约定同 <see cref="SaveAsync"/>。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        UniTask LoadAsync(CancellationToken cancellationToken = default);
 
         #endregion
 

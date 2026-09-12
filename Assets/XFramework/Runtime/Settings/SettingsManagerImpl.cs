@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
 using XFramework.XMessage.Internal;
 
@@ -85,11 +87,24 @@ namespace XFramework.XSettings
         {
             ThrowIfDisposed();
 
-            // 先问 Exists 而不是直接取 Load 的返回值:ISettingsStore.Load 的契约是
-            // 「无数据时返回 new T()」,这里无法区分「读到了持久化数据」与「根本没有数据」,
-            // 直接赋值会让 defaultFactory 在存档被删后形同虚设
-            _settings = _store.Exists() ? LoadFromStore() : CreateDefault();
+            _settings = LoadCore();
             Notify();
+        }
+
+        /// <inheritdoc />
+        public UniTask SaveAsync(CancellationToken cancellationToken = default)
+        {
+            // 释放检查放在同步段:若写进 async 方法体,异常会被状态机包进返回的 UniTask,
+            // 调用方拿不到同步失败(与 SavePathUtility 把校验做成同步纯函数是同一条理由)
+            ThrowIfDisposed();
+            return SaveAsyncCore(cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public UniTask LoadAsync(CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+            return LoadAsyncCore(cancellationToken);
         }
 
         /// <inheritdoc />
@@ -192,6 +207,63 @@ namespace XFramework.XSettings
         #region Internal
 
         /// <summary>
+        /// <see cref="SaveAsync"/> 的实现体（释放检查已在同步段完成）。
+        /// </summary>
+        private async UniTask SaveAsyncCore(CancellationToken cancellationToken)
+        {
+            // 序列化留在主线程:设置对象通常只有几百字节,线程池往返的调度成本高于序列化本身
+            // (取舍与 SaveManagerImpl 处理侧车一致),且 JsonUtility 非线程安全。
+            // 快照 store 与 settings:await 期间 Store setter / Apply 可能改动它们
+            var store = _store;
+            var settings = _settings;
+
+            if (store is IAsyncSettingsStore asyncStore)
+                await asyncStore.SaveAsync(settings, cancellationToken);
+            else
+                await UniTask.RunOnThreadPool(
+                    () => store.Save(settings), configureAwait: false, cancellationToken);
+
+            // 与 SaveManagerImpl 的线程约定一致:公开异步方法在返回前切回主线程,
+            // 使调用方 await 之后可以安全访问 Unity API
+            await UniTask.SwitchToMainThread(cancellationToken);
+        }
+
+        /// <summary>
+        /// <see cref="LoadAsync"/> 的实现体（释放检查已在同步段完成）。
+        /// </summary>
+        private async UniTask LoadAsyncCore(CancellationToken cancellationToken)
+        {
+            T loaded;
+            if (_store is IAsyncSettingsStore asyncStore)
+            {
+                loaded = await asyncStore.ExistsAsync(cancellationToken)
+                    ? await LoadFromStoreAsync(asyncStore, cancellationToken)
+                    : CreateDefault();
+            }
+            else
+            {
+                // 能力降级:store 只实现同步接口,把整段同步读挪到线程池,语义与同步 Load 完全一致
+                loaded = await UniTask.RunOnThreadPool(LoadCore, configureAwait: true, cancellationToken);
+            }
+
+            // 替换与通知必须在主线程:Notify 会经 MessageManager 广播,订阅者通常随即访问 Unity API
+            await UniTask.SwitchToMainThread(cancellationToken);
+            _settings = loaded;
+            Notify();
+        }
+
+        /// <summary>
+        /// 同步加载的核心逻辑（不含通知），供同步 <see cref="Load"/> 与异步降级路径共用。
+        /// </summary>
+        private T LoadCore()
+        {
+            // 先问 Exists 而不是直接取 Load 的返回值:ISettingsStore.Load 的契约是
+            // 「无数据时返回 new T()」,这里无法区分「读到了持久化数据」与「根本没有数据」,
+            // 直接赋值会让 defaultFactory 在存档被删后形同虚设
+            return _store.Exists() ? LoadFromStore() : CreateDefault();
+        }
+
+        /// <summary>
         /// 创建默认设置对象：优先用构造时注入的 <c>defaultFactory</c>，未注入则为 <c>new T()</c>。
         /// <para>构造、<see cref="Load"/>、<see cref="Reset"/> 三条路径共用此方法，保证默认值来源唯一。</para>
         /// </summary>
@@ -209,6 +281,21 @@ namespace XFramework.XSettings
         private T LoadFromStore()
         {
             var loaded = _store.Load<T>();
+            if (loaded != null)
+                return loaded;
+
+            UnityEngine.Debug.LogWarning(
+                $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +
+                "存储实现应在无数据时返回 new T()。");
+            return CreateDefault();
+        }
+
+        /// <summary>
+        /// 异步加载的核心逻辑，与同步版 <see cref="LoadFromStore"/> 对称，同样防御 store 返回 <c>null</c>。
+        /// </summary>
+        private async UniTask<T> LoadFromStoreAsync(IAsyncSettingsStore store, CancellationToken cancellationToken)
+        {
+            var loaded = await store.LoadAsync<T>(cancellationToken);
             if (loaded != null)
                 return loaded;
 

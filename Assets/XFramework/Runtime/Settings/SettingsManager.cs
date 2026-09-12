@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 
 namespace XFramework.XSettings
 {
@@ -169,6 +171,32 @@ namespace XFramework.XSettings
         public static void Reset<T>() where T : class, new()
         {
             GetManager<T>().Reset();
+        }
+
+        /// <summary>
+        /// 异步保存当前设置到持久层，语义与 <see cref="Save{T}"/> 相同。
+        /// <para>IO 在线程池或存储后端自身的异步实现上执行，并在返回前切回主线程，
+        /// 因此 <c>await</c> 之后可安全访问 Unity API。禁止在主线程用
+        /// <c>.GetAwaiter().GetResult()</c> 同步阻塞等待，否则会死锁。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static UniTask SaveAsync<T>(CancellationToken cancellationToken = default) where T : class, new()
+        {
+            return GetManager<T>().SaveAsync(cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步从持久层重新加载，覆盖当前设置，并通知所有订阅者。语义与 <see cref="Load{T}"/> 相同。
+        /// <para>线程约定同 <see cref="SaveAsync{T}"/>。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static UniTask LoadAsync<T>(CancellationToken cancellationToken = default) where T : class, new()
+        {
+            return GetManager<T>().LoadAsync(cancellationToken);
         }
 
         #endregion
