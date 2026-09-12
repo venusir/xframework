@@ -66,16 +66,29 @@ LockManager.RemoveLock(playerNode, LockType.Movement, "dialogue_open");
 public void CastSkill()
 {
     // 加锁（技能持续期间锁定移动）
+    // 注意：加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
+    // 因此不需要判断「是否获取成功」——没有获取失败的句柄
     using var handle = LockManager.AddLock(playerNode, LockType.Movement, "skill_casting");
-    
-    if (!handle.IsValid)
-        return;
-    
+
     // 播放技能动画...
     await PlaySkillAnimation();
-    
+
     // using 结束时自动释放锁
 }
+```
+
+**判断持锁状态**：`handle.IsHeld` 是**逐句柄精确**的实时查询（"我这一把还在不在"），
+与 `LockManager.IsLocked(subject, type)` 的**聚合**语义不同——后者在"还有别人持有同类型锁"时
+同样返回 true：
+
+```csharp
+var handle = LockManager.AddLock(node, LockType.Movement, "skill");
+lockManagerIsLocked = LockManager.IsLocked(node, LockType.Movement); // true（聚合）
+handleIsHeld        = handle.IsHeld;                                 // true（逐句柄）
+
+handle.Dispose();
+lockManagerIsLocked = LockManager.IsLocked(node, LockType.Movement); // 无其他持有者时为 false
+handleIsHeld        = handle.IsHeld;                                 // false（自己已释放）
 ```
 
 ### 4. 使用全局锁

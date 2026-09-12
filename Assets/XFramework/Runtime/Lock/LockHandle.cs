@@ -13,7 +13,7 @@ namespace XFramework.XLock
         readonly ILockable _lockSubject;
         readonly int _lockType;
         readonly object _lockObj;
-        readonly bool _active;
+        readonly bool _acquired;
 
         /// <summary>
         /// 创建一个锁句柄。
@@ -26,13 +26,20 @@ namespace XFramework.XLock
             _lockSubject = lockSubject;
             _lockType = lockType;
             _lockObj = lockObj;
-            _active = true;
+            _acquired = true;
         }
 
         /// <summary>
-        /// 锁句柄是否有效（即是否已成功获取锁）。
+        /// 本句柄当前是否<b>仍持有</b>锁。
+        /// <para><b>这是一次实时查询而非缓存字段</b>：本结构是不可变的值类型（<c>readonly struct</c> + readonly 字段，
+        /// 出于零 GC 与值语义的考虑），<see cref="Dispose"/> 无法改写自身状态，故答案只能向
+        /// <see cref="LockManager.IsLockedBy"/> 现取。</para>
+        /// <para><b>与 <see cref="LockManager.IsLocked"/> 不同</b>：后者是聚合语义（该主体该类型下还有任一持有者即为 true），
+        /// 本属性逐句柄精确——别的对象持锁不影响本句柄的答案。</para>
+        /// <para><b>不存在「获取失败」的判断</b>：本框架的加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
+        /// 任何经 <see cref="LockManager.AddLock"/> 得到的句柄都获取成功。本属性回答的是「我这把还在不在」。</para>
         /// </summary>
-        public bool IsValid => _active;
+        public bool IsHeld => _acquired && LockManager.IsLockedBy(_lockSubject, _lockType, _lockObj);
 
         /// <summary>
         /// 释放锁。
@@ -40,7 +47,9 @@ namespace XFramework.XLock
         /// </summary>
         public void Dispose()
         {
-            if (_active)
+            // _acquired 同时承担「默认句柄的 Dispose 必须安全」：default(LockHandle) 的 _lockObj 为 null，
+            // 直接调 RemoveLock 会抛 ArgumentNullException
+            if (_acquired)
             {
                 LockManager.RemoveLock(_lockSubject, _lockType, _lockObj);
             }

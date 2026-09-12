@@ -36,17 +36,17 @@ namespace XFramework.XLock.Tests
         }
 
         [Test]
-        public void Acquire_NewLock_ReturnsValidHandle()
+        public void Acquire_NewLock_ReturnsHeldHandle()
         {
             var handle = LockManager.AddLock(_subjectA, LockTypeMovement, _lockObj1);
-            Assert.IsTrue(handle.IsValid);
+            Assert.IsTrue(handle.IsHeld);
         }
 
         [Test]
         public void Acquire_NullLockSubject_UsesGlobal()
         {
             var handle = LockManager.AddLock(null, LockTypeMovement, _lockObj1);
-            Assert.IsTrue(handle.IsValid);
+            Assert.IsTrue(handle.IsHeld);
         }
 
         [Test]
@@ -419,13 +419,39 @@ namespace XFramework.XLock.Tests
         }
 
         [Test]
-        public void LockHandle_IsValid_ReturnsFalseAfterDispose()
+        public void LockHandle_IsHeld_ReturnsFalseAfterDispose()
         {
             var handle = LockManager.AddLock(_subjectA, LockTypeMovement, _lockObj1);
-            Assert.IsTrue(handle.IsValid);
+            Assert.IsTrue(handle.IsHeld, "持有期间为 true");
 
             handle.Dispose();
-            Assert.IsFalse(handle.IsValid);
+
+            Assert.IsFalse(handle.IsHeld, "Dispose 后不再持有");
+            Assert.IsFalse(LockManager.IsLocked(_subjectA, LockTypeMovement), "且锁确实被释放");
+        }
+
+        [Test]
+        public void IsHeld_OtherHolderPresent_StillReportsOwnHold()
+        {
+            // 这一例锁定 IsHeld 与 IsLocked 的语义差别：后者是聚合的，前者逐句柄精确。
+            // 原先的 IsValid 是恒真的缓存字段，两个问题都答不了
+            var first = LockManager.AddLock(_subjectA, LockTypeMovement, _lockObj1);
+            LockManager.AddLock(_subjectA, LockTypeMovement, _lockObj2); // 第二个持有者
+
+            first.Dispose();
+
+            Assert.IsFalse(first.IsHeld, "逐句柄精确：自己释放了就是 false");
+            Assert.IsTrue(LockManager.IsLocked(_subjectA, LockTypeMovement), "聚合语义仍为 true（还有别人持有）");
+        }
+
+        [Test]
+        public void DefaultHandle_IsNotHeld_AndDisposeIsSafe()
+        {
+            // default(LockHandle) 的 _lockObj 为 null，Dispose 必须跳过而非把它交给 RemoveLock（后者会抛）
+            var handle = default(LockHandle);
+
+            Assert.IsFalse(handle.IsHeld);
+            Assert.DoesNotThrow(() => handle.Dispose());
         }
 
         [Test]

@@ -284,6 +284,27 @@ namespace XFramework.XLock
         }
 
         /// <summary>
+        /// 指定锁对象是否仍持有该主体下该类型的锁。
+        /// <para>与 <see cref="IsLocked"/> 的区别：后者是<b>聚合</b>语义（该类型下只要还有任一持有者即为 true），
+        /// 本方法<b>逐句柄精确</b>——用于回答「我这一把还在不在」。<see cref="LockHandle.IsHeld"/> 基于它实现。</para>
+        /// <para><b>不检查全局锁</b>：全局锁是别人的持有关系，不构成本锁对象仍在持有。</para>
+        /// </summary>
+        /// <param name="lockSubject">锁主体。</param>
+        /// <param name="lockType">锁类型。</param>
+        /// <param name="lockObj">锁对象（即持有者标识）。</param>
+        public static bool IsLockedBy(ILockable lockSubject, int lockType, object lockObj)
+        {
+            if (lockObj == null)
+                return false;
+
+            ILockable subjectKey = lockSubject ?? Global;
+
+            return _locks.TryGetValue(subjectKey, out var typeDict)
+                && typeDict.TryGetValue(lockType, out var lockSet)
+                && lockSet.Contains(lockObj);
+        }
+
+        /// <summary>
         /// 获取指定 <see cref="ILockable"/> 下该类型锁的对象数量。
         /// <para>包含 <see cref="Global"/> 全局锁的数量。</para>
         /// </summary>
