@@ -15,6 +15,10 @@ namespace XFramework.XFileManager
         /// <summary>
         /// 原子写入字节内容到文件：先写 <c>.tmp</c> 临时文件，写入成功后再替换正式文件。
         /// <para>写入或替换失败时，原有正式文件保持完整。</para>
+        /// <para><b>备份契约：</b>替换时原正式文件的内容会保留为
+        /// <c>{relativePath}.bak</c>（后缀见 <see cref="FilePathUtility.BackupFileSuffix"/>），
+        /// 供上层做损坏回退与崩溃恢复；实现须保证<b>任意时刻正式文件与备份至少有一个完整存在</b>，
+        /// 进程在替换过程中被杀死不得出现「两份都不完整」的中间态。</para>
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>

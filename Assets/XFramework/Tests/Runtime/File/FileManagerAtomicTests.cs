@@ -13,7 +13,8 @@ namespace XFramework.XFileManager.Tests
 {
     /// <summary>
     /// <see cref="FileManager.WriteAllBytesAtomicAsync"/> 原子写契约测试。
-    /// <para>覆盖:原子写覆盖既有文件且无 .tmp 残留、底层 Provider 无原子能力时降级普通写并告警。</para>
+    /// <para>覆盖:原子写覆盖既有文件且无 .tmp 残留、一代 .bak 备份的生成与轮换、
+    /// 底层 Provider 无原子能力时降级普通写并告警。</para>
     /// </summary>
     [TestFixture]
     public class FileManagerAtomicTests
@@ -52,6 +53,47 @@ namespace XFramework.XFileManager.Tests
             var read = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "slot_1.save");
             Assert.AreEqual("new", Encoding.UTF8.GetString(read), "原子写应完整覆盖旧内容");
             Assert.IsFalse(FileManager.Exists(FileDomain.AppData, "slot_1.save.tmp"), "原子写完成后不应残留 .tmp 文件");
+        }
+
+        [Test]
+        public async Task WriteAllBytesAtomicAsync_KeepsOneGenerationBackup()
+        {
+            var backupPath = "slot_1.save" + FilePathUtility.BackupFileSuffix;
+            await FileManager.WriteAllBytesAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("old"));
+
+            await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("new"));
+
+            var current = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "slot_1.save");
+            var backup = await FileManager.ReadAllBytesAsync(FileDomain.AppData, backupPath);
+            Assert.AreEqual("new", Encoding.UTF8.GetString(current), "正式文件应为新内容");
+            Assert.IsNotNull(backup, "替换既有文件后应生成一代备份");
+            Assert.AreEqual("old", Encoding.UTF8.GetString(backup), "备份应保留替换前的旧内容");
+        }
+
+        [Test]
+        public async Task WriteAllBytesAtomicAsync_FirstWrite_CreatesNoBackup()
+        {
+            var backupPath = "slot_1.save" + FilePathUtility.BackupFileSuffix;
+
+            await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("v1"));
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.AppData, backupPath),
+                "首次写入没有旧版本可备份，不应产生备份文件");
+        }
+
+        [Test]
+        public async Task WriteAllBytesAtomicAsync_BackupKeepsOnlyPreviousGeneration()
+        {
+            var backupPath = "slot_1.save" + FilePathUtility.BackupFileSuffix;
+            await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("v1"));
+            await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("v2"));
+
+            await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("v3"));
+
+            var backup = await FileManager.ReadAllBytesAsync(FileDomain.AppData, backupPath);
+            Assert.IsNotNull(backup, "多次替换后应始终存在一代备份");
+            Assert.AreEqual("v2", Encoding.UTF8.GetString(backup),
+                "备份应只保留上一代，既不累积历史版本也不停留在初版");
         }
 
         [Test]

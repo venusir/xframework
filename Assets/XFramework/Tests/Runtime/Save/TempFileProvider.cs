@@ -8,8 +8,9 @@ namespace XFramework.XSave.Tests
 {
     /// <summary>
     /// 将全部 <see cref="FileDomain"/> 映射到唯一临时目录的 <see cref="IFileProvider"/> 测试替身。
-    /// <para>必须使用真实文件系统目录：<see cref="SaveManagerImpl"/> 的双缓冲写入依赖
-    /// <see cref="System.IO.File.Move"/> 物理路径操作，内存替身无法覆盖该路径。</para>
+    /// <para>必须使用真实文件系统目录：原子写入依赖 <see cref="FilePathUtility.ReplaceFileAtomically"/>
+    /// 的物理路径操作（<see cref="System.IO.File.Replace"/> / <see cref="System.IO.File.Move"/>），
+    /// 内存替身无法覆盖该路径。</para>
     /// <para>每次实例化创建独立目录（<c>Path.GetTempPath()/XFrameworkSaveTests/Guid</c>），
     /// 测试结束后经 <see cref="Cleanup"/> 递归删除。</para>
     /// </summary>
@@ -157,20 +158,17 @@ namespace XFramework.XSave.Tests
         /// <inheritdoc/>
         public async UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
         {
-            // 与 DesktopFileProvider 相同的语义:写 .tmp → 删正式 → Move
-            var tempPath = relativePath + ".tmp";
+            // 与 DesktopFileProvider 共用同一套替换原语，避免测试替身与真实实现行为漂移
+            var tempPath = relativePath + FilePathUtility.TempFileSuffix;
+            var backupPath = relativePath + FilePathUtility.BackupFileSuffix;
             var srcPhysical = GetPhysicalPath(domain, tempPath);
             var dstPhysical = GetPhysicalPath(domain, relativePath);
+            var bakPhysical = GetPhysicalPath(domain, backupPath);
 
             await WriteAllBytesAsync(domain, tempPath, data, cancellationToken);
 
             await UniTask.RunOnThreadPool(
-                () =>
-                {
-                    if (File.Exists(dstPhysical))
-                        File.Delete(dstPhysical);
-                    File.Move(srcPhysical, dstPhysical);
-                },
+                () => FilePathUtility.ReplaceFileAtomically(srcPhysical, dstPhysical, bakPhysical),
                 configureAwait: false,
                 cancellationToken);
         }

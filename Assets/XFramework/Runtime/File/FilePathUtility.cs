@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 
 namespace XFramework.XFileManager
 {
@@ -9,6 +10,17 @@ namespace XFramework.XFileManager
     /// </summary>
     public static class FilePathUtility
     {
+        /// <summary>
+        /// 原子替换的临时文件后缀（正式文件相对路径 + 此后缀）。
+        /// </summary>
+        public const string TempFileSuffix = ".tmp";
+
+        /// <summary>
+        /// 原子替换保留的一代备份后缀（正式文件相对路径 + 此后缀）。
+        /// <para>备份由 <see cref="ReplaceFileAtomically"/> 在每次替换时生成，供上层做损坏回退与崩溃恢复。</para>
+        /// </summary>
+        public const string BackupFileSuffix = ".bak";
+
         /// <summary>
         /// 路径分隔符（正斜杠与反斜杠），用于跨平台兼容的文件名提取。
         /// </summary>
@@ -98,6 +110,52 @@ namespace XFramework.XFileManager
         public static string ToRelativePath(string rootDir, string absolutePath)
         {
             return absolutePath.Substring(rootDir.Length).TrimStart('\\', '/').Replace('\\', '/');
+        }
+
+        /// <summary>
+        /// 原子替换文件：优先用 <see cref="File.Replace(string, string, string)"/> 一步完成
+        /// 「替换正式文件 + 保留一代备份」，平台不支持时降级为三步移动。
+        /// <para><b>不变式：</b>任意时刻磁盘上至少存在一份完整副本（正式文件或备份），
+        /// 因此进程在替换过程中被杀死不会丢数据。对比「先删正式文件再重命名」的写法——
+        /// 它在两步之间存在「零副本」窗口，一旦崩溃旧数据已删、新数据还在临时文件里，
+        /// 从上层看就是存档凭空消失。</para>
+        /// <para>降级路径同样维持该不变式：删除旧备份 → 正式文件移为备份 → 临时文件移为正式文件，
+        /// 每一步之后正式文件与备份至少有一个存在。</para>
+        /// </summary>
+        /// <param name="srcPath">源文件（临时文件）的物理绝对路径，必须已存在。</param>
+        /// <param name="dstPath">正式文件的物理绝对路径；不存在时直接重命名。</param>
+        /// <param name="backupPath">一代备份的物理绝对路径；已存在的备份会被覆盖。</param>
+        public static void ReplaceFileAtomically(string srcPath, string dstPath, string backupPath)
+        {
+            if (!File.Exists(dstPath))
+            {
+                // 首次写入：没有旧版本可备份，同目录内重命名即可
+                File.Move(srcPath, dstPath);
+                return;
+            }
+
+            try
+            {
+                File.Replace(srcPath, dstPath, backupPath);
+                return;
+            }
+            catch (PlatformNotSupportedException)
+            {
+                // 平台未实现 File.Replace（如部分 WebGL / 主机环境），走降级路径
+            }
+            catch (IOException)
+            {
+                // 部分文件系统对不支持的 Replace 抛 IOException 而不是 PlatformNotSupportedException。
+                // 若源文件已被消费，说明替换其实已经生效，此时不能把成功当失败而重复搬动文件
+                if (!File.Exists(srcPath))
+                    return;
+            }
+
+            if (File.Exists(backupPath))
+                File.Delete(backupPath);
+
+            File.Move(dstPath, backupPath);
+            File.Move(srcPath, dstPath);
         }
     }
 }
