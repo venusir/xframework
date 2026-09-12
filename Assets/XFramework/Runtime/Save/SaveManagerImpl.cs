@@ -47,7 +47,10 @@ namespace XFramework.XSave
         public bool IsBusy { get; private set; }
 
         /// <inheritdoc/>
-        public async UniTask<List<SaveMeta>> GetSlotMetas(CancellationToken cancellationToken = default)
+        public string CurrentPlayerId => _playerId;
+
+        /// <inheritdoc/>
+        public async UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
         {
             var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
@@ -93,7 +96,7 @@ namespace XFramework.XSave
         }
 
         /// <inheritdoc/>
-        public async UniTask<SaveMeta> GetSlotMeta(int slot, CancellationToken cancellationToken = default)
+        public async UniTask<SaveMeta> GetSlotMetaAsync(int slot, CancellationToken cancellationToken = default)
         {
             var path = BuildSlotPath(slot);
             if (!FileManager.Exists(SaveDomain, path))
@@ -184,30 +187,41 @@ namespace XFramework.XSave
         }
 
         /// <inheritdoc/>
-        public void DeleteSlot(int slot)
+        public async UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default)
         {
             var slotPath = BuildSlotPath(slot);
-            if (FileManager.Exists(SaveDomain, slotPath))
-                FileManager.Delete(SaveDomain, slotPath);
+
+            var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
+            if (!exists)
+                return false;
+
+            FileManager.Delete(SaveDomain, slotPath);
+            return true;
         }
 
         /// <inheritdoc/>
-        public async UniTask DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
+        public async UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
             var searchDir = _playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
             if (files == null)
-                return;
+                return 0;
 
+            var deleted = 0;
             for (int i = 0; i < files.Length; i++)
             {
                 if (IsSlotFilePath(files[i]))
+                {
                     FileManager.Delete(SaveDomain, files[i]);
+                    deleted++;
+                }
             }
 
-            // 同时清理可能残留的 .tmp 文件
+            // 同时清理可能残留的 .tmp 文件（不计入返回的槽位数量）
             var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
@@ -216,12 +230,17 @@ namespace XFramework.XSave
                 for (int i = 0; i < tmpFiles.Length; i++)
                     FileManager.Delete(SaveDomain, tmpFiles[i]);
             }
+
+            return deleted;
         }
 
         /// <inheritdoc/>
-        public bool SlotExists(int slot)
+        public async UniTask<bool> SlotExistsAsync(int slot, CancellationToken cancellationToken = default)
         {
-            return FileManager.Exists(SaveDomain, BuildSlotPath(slot));
+            var exists = await FileManager.ExistsAsync(SaveDomain, BuildSlotPath(slot), cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
+            return exists;
         }
 
         #endregion
@@ -288,28 +307,22 @@ namespace XFramework.XSave
 
         #endregion
 
-        #region User Management
+        #region Player Context
 
-        /// <summary>
-        /// 设置当前操作玩家 ID。传入 <c>null</c> 等同于清除玩家上下文。
-        /// </summary>
-        internal void SetPlayerId(string playerId)
+        /// <inheritdoc/>
+        public void SetCurrentPlayer(string playerId)
         {
             _playerId = playerId;
         }
 
-        /// <summary>
-        /// 清除玩家上下文。
-        /// </summary>
-        internal void ClearPlayerId()
+        /// <inheritdoc/>
+        public void ClearCurrentPlayer()
         {
             _playerId = null;
         }
 
-        /// <summary>
-        /// 获取所有存在存档数据的玩家 ID 列表。
-        /// </summary>
-        internal async UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default)
+        /// <inheritdoc/>
+        public async UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default)
         {
             // 通过扫描 SaveData 目录下直接包含 .save 文件的子目录来识别玩家
             var rootFiles = await FileManager.GetFilesAsync(SaveDomain, "", cancellationToken: cancellationToken);
@@ -341,28 +354,30 @@ namespace XFramework.XSave
             return result;
         }
 
-        /// <summary>
-        /// 删除指定玩家的所有存档数据（包括子目录）。
-        /// </summary>
-        internal async UniTask DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
+        /// <inheritdoc/>
+        public async UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(playerId))
-                return;
+                return 0;
 
             // 删除该玩家子目录下的所有 .save 文件
             var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
+            var deleted = 0;
             if (files != null)
             {
                 for (int i = 0; i < files.Length; i++)
                 {
                     if (IsSlotFilePath(files[i]))
+                    {
                         FileManager.Delete(SaveDomain, files[i]);
+                        deleted++;
+                    }
                 }
             }
 
-            // 同时删除可能残留的 .tmp 文件
+            // 同时删除可能残留的 .tmp 文件（不计入返回的槽位数量）
             var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
@@ -371,6 +386,8 @@ namespace XFramework.XSave
                 for (int i = 0; i < tmpFiles.Length; i++)
                     FileManager.Delete(SaveDomain, tmpFiles[i]);
             }
+
+            return deleted;
         }
 
         #endregion

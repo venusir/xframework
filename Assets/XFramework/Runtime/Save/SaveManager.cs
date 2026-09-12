@@ -11,6 +11,7 @@ namespace XFramework.XSave
     /// <para>第三方业务代码通过本类静态方法进行存档操作，
     /// 内部实现可替换（默认 <see cref="SaveManagerImpl"/>）。</para>
     /// <para>使用前必须调用 <see cref="Initialize"/> 注入实现。</para>
+    /// <para>所有涉及 IO 的成员一律异步并以 <c>Async</c> 后缀结尾，与 <see cref="ISaveManager"/> 逐字对应。</para>
     /// </summary>
     /// <example>
     /// <code>
@@ -24,7 +25,7 @@ namespace XFramework.XSave
     /// await SaveManager.LoadAsync(1);
     ///
     /// // 获取存档列表
-    /// var metas = await SaveManager.GetSlotMetas();
+    /// var metas = await SaveManager.GetSlotMetasAsync();
     /// foreach (var m in metas)
     ///     Debug.Log(m);
     /// </code>
@@ -34,7 +35,6 @@ namespace XFramework.XSave
         #region Fields
 
         private static ISaveManager _impl;
-        private static string _currentPlayerId;
 
         #endregion
 
@@ -43,7 +43,7 @@ namespace XFramework.XSave
         /// <summary>当前是否有已注入的实现。</summary>
         public static bool IsInitialized => _impl != null;
 
-        /// <summary>是否已在加载/保存操作中。</summary>
+        /// <summary>是否有写操作（保存/加载/删除）正在进行。</summary>
         public static bool IsBusy
         {
             get
@@ -54,10 +54,17 @@ namespace XFramework.XSave
         }
 
         /// <summary>
-        /// 当前操作的玩家 ID。
+        /// 当前操作玩家 ID。
         /// <para>为 <c>null</c> 时不启用玩家隔离，所有存档文件直接存放在 SaveData 根目录。</para>
         /// </summary>
-        public static string CurrentPlayerId => _currentPlayerId;
+        public static string CurrentPlayerId
+        {
+            get
+            {
+                EnsureInitialized();
+                return _impl.CurrentPlayerId;
+            }
+        }
 
         #endregion
 
@@ -85,7 +92,6 @@ namespace XFramework.XSave
         public static void Shutdown()
         {
             _impl = null;
-            _currentPlayerId = null;
         }
 
         #endregion
@@ -95,8 +101,9 @@ namespace XFramework.XSave
         /// <summary>
         /// 设置当前操作玩家 ID。后续所有 Save/Load/Delete 操作均作用于此玩家。
         /// <para>当 <paramref name="playerId"/> 为 <c>null</c> 或空字符串时，等同于调用 <see cref="ClearCurrentPlayer"/>。</para>
-        /// <para>如果当前有正在进行的保存/加载操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
+        /// <para>如果当前有正在进行的写操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
         /// </summary>
+        /// <param name="playerId">玩家 ID。</param>
         /// <exception cref="InvalidOperationException">当 <see cref="IsBusy"/> 为 <c>true</c> 时抛出。</exception>
         public static void SetCurrentPlayer(string playerId)
         {
@@ -111,14 +118,12 @@ namespace XFramework.XSave
                 return;
             }
 
-            _currentPlayerId = playerId;
-            if (_impl is SaveManagerImpl impl)
-                impl.SetPlayerId(playerId);
+            _impl.SetCurrentPlayer(playerId);
         }
 
         /// <summary>
         /// 清除玩家上下文，退回到无玩家隔离模式。
-        /// <para>如果当前有正在进行的保存/加载操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
+        /// <para>如果当前有正在进行的写操作（<see cref="IsBusy"/> 为 <c>true</c>），调用此方法将抛出异常。</para>
         /// </summary>
         /// <exception cref="InvalidOperationException">当 <see cref="IsBusy"/> 为 <c>true</c> 时抛出。</exception>
         public static void ClearCurrentPlayer()
@@ -128,24 +133,14 @@ namespace XFramework.XSave
             if (_impl.IsBusy)
                 throw new InvalidOperationException("[Save] 当前有保存/加载操作正在进行，不允许清除玩家上下文。");
 
-            _currentPlayerId = null;
-            if (_impl is SaveManagerImpl impl)
-                impl.ClearPlayerId();
+            _impl.ClearCurrentPlayer();
         }
 
-        /// <summary>
-        /// 获取所有存在存档数据的玩家 ID 列表。
-        /// <para>不会切换当前玩家上下文。</para>
-        /// </summary>
-        /// <returns>玩家 ID 数组，无玩家数据时返回空数组。</returns>
-        public static UniTask<string[]> GetAllPlayerIds(CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="ISaveManager.GetAllPlayerIdsAsync"/>
+        public static UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-
-            if (_impl is SaveManagerImpl impl)
-                return impl.GetAllPlayerIdsAsync(cancellationToken);
-
-            return UniTask.FromResult(Array.Empty<string>());
+            return _impl.GetAllPlayerIdsAsync(cancellationToken);
         }
 
         /// <summary>
@@ -155,62 +150,52 @@ namespace XFramework.XSave
         /// <param name="playerId">要查询的玩家 ID。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>该玩家的存档元数据列表。</returns>
-        public static async UniTask<List<SaveMeta>> GetPlayerSlotMetas(string playerId, CancellationToken cancellationToken = default)
+        public static async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
-            if (_impl is SaveManagerImpl impl)
+            if (!(_impl is SaveManagerImpl impl))
             {
-                var previousPlayerId = _currentPlayerId;
-                try
-                {
-                    // 临时切换玩家上下文以获取指定玩家的槽位列表
-                    impl.SetPlayerId(playerId);
-                    var metas = await impl.GetSlotMetas(cancellationToken);
-                    // 修正 playerId（impl 填充的是临时 playerId，需要与传入参数一致）
-                    for (int i = 0; i < metas.Count; i++)
-                        metas[i].playerId = playerId;
-                    return metas;
-                }
-                finally
-                {
-                    impl.SetPlayerId(previousPlayerId);
-                }
+                throw new NotSupportedException(
+                    "[Save] 当前注入的 ISaveManager 实现不支持按玩家查询槽位。请改用 GetSlotMetasAsync，或为该实现补上按玩家查询能力。");
             }
 
-            return new List<SaveMeta>();
+            var previousPlayerId = impl.CurrentPlayerId;
+            try
+            {
+                // 临时切换玩家上下文以获取指定玩家的槽位列表
+                impl.SetCurrentPlayer(playerId);
+                return await impl.GetSlotMetasAsync(cancellationToken);
+            }
+            finally
+            {
+                impl.SetCurrentPlayer(previousPlayerId);
+            }
         }
 
-        /// <summary>
-        /// 删除指定玩家的所有存档数据。
-        /// <para>不会切换当前玩家上下文。</para>
-        /// </summary>
-        /// <param name="playerId">要删除的玩家 ID。</param>
-        /// <param name="cancellationToken">取消令牌。</param>
-        public static async UniTask DeletePlayer(string playerId, CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="ISaveManager.DeletePlayerAsync"/>
+        public static UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-
-            if (_impl is SaveManagerImpl impl)
-                await impl.DeletePlayerAsync(playerId, cancellationToken);
+            return _impl.DeletePlayerAsync(playerId, cancellationToken);
         }
 
         #endregion
 
         #region Public API
 
-        /// <inheritdoc cref="ISaveManager.GetSlotMetas"/>
-        public static UniTask<List<SaveMeta>> GetSlotMetas(CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="ISaveManager.GetSlotMetasAsync"/>
+        public static UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            return _impl.GetSlotMetas(cancellationToken);
+            return _impl.GetSlotMetasAsync(cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.GetSlotMeta"/>
-        public static UniTask<SaveMeta> GetSlotMeta(int slot, CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="ISaveManager.GetSlotMetaAsync"/>
+        public static UniTask<SaveMeta> GetSlotMetaAsync(int slot, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            return _impl.GetSlotMeta(slot, cancellationToken);
+            return _impl.GetSlotMetaAsync(slot, cancellationToken);
         }
 
         /// <inheritdoc cref="ISaveManager.SaveAsync"/>
@@ -227,25 +212,25 @@ namespace XFramework.XSave
             return _impl.LoadAsync(slot, cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.DeleteSlot"/>
-        public static void DeleteSlot(int slot)
+        /// <inheritdoc cref="ISaveManager.DeleteSlotAsync"/>
+        public static UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            _impl.DeleteSlot(slot);
+            return _impl.DeleteSlotAsync(slot, cancellationToken);
         }
 
         /// <inheritdoc cref="ISaveManager.DeleteAllSlotsAsync"/>
-        public static UniTask DeleteAllSlots(CancellationToken cancellationToken = default)
+        public static UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             return _impl.DeleteAllSlotsAsync(cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.SlotExists"/>
-        public static bool SlotExists(int slot)
+        /// <inheritdoc cref="ISaveManager.SlotExistsAsync"/>
+        public static UniTask<bool> SlotExistsAsync(int slot, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            return _impl.SlotExists(slot);
+            return _impl.SlotExistsAsync(slot, cancellationToken);
         }
 
         #endregion

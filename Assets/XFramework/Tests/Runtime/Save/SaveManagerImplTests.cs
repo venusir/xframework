@@ -69,7 +69,7 @@ namespace XFramework.XSave.Tests
         {
             await SaveManager.SaveAsync(1);
 
-            Assert.IsTrue(SaveManager.SlotExists(1), "保存后槽位应存在");
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "保存后槽位应存在");
         }
 
         [Test]
@@ -150,9 +150,9 @@ namespace XFramework.XSave.Tests
         {
             await SaveManager.SaveAsync(1);
 
-            SaveManager.DeleteSlot(1);
+            await SaveManager.DeleteSlotAsync(1);
 
-            Assert.IsFalse(SaveManager.SlotExists(1), "删除后槽位不应存在");
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(1), "删除后槽位不应存在");
         }
 
         [Test]
@@ -163,10 +163,11 @@ namespace XFramework.XSave.Tests
             // 手动制造残留 .tmp 文件（模拟写入中途崩溃后遗留）
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_9.save.tmp", Encoding.UTF8.GetBytes("partial"));
 
-            await SaveManager.DeleteAllSlots();
+            var deleted = await SaveManager.DeleteAllSlotsAsync();
 
-            Assert.IsFalse(SaveManager.SlotExists(1));
-            Assert.IsFalse(SaveManager.SlotExists(2));
+            Assert.AreEqual(2, deleted, "返回值应为实际删除的槽位数量（不含 .tmp 残留）");
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(1));
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(2));
             Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_9.save.tmp"), "残留 tmp 文件应被清理");
         }
 
@@ -176,7 +177,7 @@ namespace XFramework.XSave.Tests
             await SaveManager.SaveAsync(1);
             await SaveManager.SaveAsync(3);
 
-            var metas = await SaveManager.GetSlotMetas();
+            var metas = await SaveManager.GetSlotMetasAsync();
 
             Assert.AreEqual(2, metas.Count);
             var slots = new HashSet<int>();
@@ -192,7 +193,7 @@ namespace XFramework.XSave.Tests
         [Test]
         public async Task GetSlotMeta_NotExist_ReturnsNull()
         {
-            var meta = await SaveManager.GetSlotMeta(1);
+            var meta = await SaveManager.GetSlotMetaAsync(1);
 
             Assert.IsNull(meta, "不存在的槽位应返回 null");
         }
@@ -205,7 +206,7 @@ namespace XFramework.XSave.Tests
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_2.save", Encoding.UTF8.GetBytes("corrupted"));
 
             LogAssert.Expect(LogType.Warning, new Regex("解析存档元数据失败"));
-            var metas = await SaveManager.GetSlotMetas();
+            var metas = await SaveManager.GetSlotMetasAsync();
 
             Assert.AreEqual(1, metas.Count, "损坏文件应被跳过且不打崩列表");
             Assert.AreEqual(1, metas[0].slot);
@@ -224,7 +225,7 @@ namespace XFramework.XSave.Tests
             SaveManager.ClearCurrentPlayer(); // 根目录:无玩家上下文,不应看到 Alice 的存档
             await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.LoadAsync(1),
                 "根目录不应存在 Alice 的存档");
-            Assert.IsFalse(SaveManager.SlotExists(1), "根目录槽位不应存在");
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(1), "根目录槽位不应存在");
 
             SaveManager.SetCurrentPlayer("Alice");
             await SaveManager.LoadAsync(1);

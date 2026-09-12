@@ -29,15 +29,17 @@ SaveManager.Initialize(() => new MySteamCloudSaveManager());
 
 ## 核心 API
 
-| 方法                    | 说明                       |
-| ----------------------- | -------------------------- |
-| `SaveAsync(int slot)`   | 保存当前游戏状态到指定槽位 |
-| `LoadAsync(int slot)`   | 从指定槽位加载存档         |
-| `GetSlotMetas()`        | 获取所有存档的元数据列表   |
-| `GetSlotMeta(int slot)` | 获取单个槽位元数据         |
-| `DeleteSlot(int slot)`  | 删除指定槽位               |
-| `DeleteAllSlots()`      | 删除所有槽位               |
-| `SlotExists(int slot)`  | 检查槽位是否存在           |
+| 方法                        | 说明                       |
+| --------------------------- | -------------------------- |
+| `SaveAsync(int slot)`       | 保存当前游戏状态到指定槽位 |
+| `LoadAsync(int slot)`       | 从指定槽位加载存档         |
+| `GetSlotMetasAsync()`       | 获取所有存档的元数据列表   |
+| `GetSlotMetaAsync(int slot)`| 获取单个槽位元数据         |
+| `DeleteSlotAsync(int slot)` | 删除指定槽位               |
+| `DeleteAllSlotsAsync()`     | 删除所有槽位               |
+| `SlotExistsAsync(int slot)` | 检查槽位是否存在           |
+
+> 所有涉及 IO 的成员一律异步并以 `Async` 后缀结尾，不提供同步版本（同步 IO 会阻塞主线程）。
 
 ## 存档文件位置
 

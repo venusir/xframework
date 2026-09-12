@@ -1,7 +1,7 @@
 namespace XFramework.XSave
 {
     /// <summary>
-    /// 存档元数据，用于 <see cref="ISaveManager.GetSlotMetas"/> 返回存档列表概览。
+    /// 存档元数据，用于 <see cref="ISaveManager.GetSlotMetasAsync"/> 返回存档列表概览。
     /// <para>包含版本号、时间戳、文件路径等基本信息，不包含完整数据块快照。</para>
     /// <para>第三方可继承此类以扩展元数据字段，
     /// 配合 <see cref="XData.DataSnapshot.CreateMeta"/> 在存档读/写时自动映射。</para>
