@@ -41,11 +41,6 @@ namespace XFramework.XSettings
         /// <summary>按类型缓存多个 ISettingsManager 实例。</summary>
         private static readonly Dictionary<Type, object> Managers = new();
 
-        /// <summary>
-        /// 销毁时释放所有管理器并清空缓存。
-        /// </summary>
-        private static bool _destroyed;
-
         #endregion
 
         #region Lifecycle
@@ -57,7 +52,7 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 初始化指定类型的设置管理器，使用指定 JSON 文件路径作为存储后端。
-        /// <para>仅首次调用有效；重复调用同一类型会忽略。</para>
+        /// <para>仅首次调用有效：重复调用同一类型会打 LogWarning 并返回已存在的实例。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="filePath">JSON 文件完整路径。</param>
@@ -73,7 +68,7 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 初始化指定类型的设置管理器，使用自定义 <see cref="ISettingsStore"/>。
-        /// <para>仅首次调用有效；重复调用同一类型会忽略。</para>
+        /// <para>仅首次调用有效：重复调用同一类型会打 LogWarning 并返回已存在的实例。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="store">自定义存储后端。例如 <see cref="JsonFileStore"/> 或加密存储等。</param>
@@ -84,11 +79,13 @@ namespace XFramework.XSettings
         public static ISettingsManager<T> Initialize<T>(ISettingsStore store, Func<T> defaultFactory = null)
             where T : class, new()
         {
-            ThrowIfDestroyed();
-
             var type = typeof(T);
             if (Managers.TryGetValue(type, out var existing))
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[SettingsManager] Initialize<{type.Name}> was called more than once. Ignoring duplicate.");
                 return (ISettingsManager<T>)existing;
+            }
 
             var manager = new SettingsManagerImpl<T>(store, defaultFactory);
             Managers[type] = manager;
@@ -98,6 +95,8 @@ namespace XFramework.XSettings
         /// <summary>
         /// 释放所有设置管理器并清空缓存。
         /// <para>通常在应用退出时调用。</para>
+        /// <para>销毁后可重新 <see cref="Initialize{T}(ISettingsStore, Func{T})"/>，与 Config / Localization 的门面一致。
+        /// 销毁到重新初始化之间访问任意类型会抛「尚未初始化」异常并附修复提示。</para>
         /// </summary>
         public static void Destroy()
         {
@@ -107,7 +106,6 @@ namespace XFramework.XSettings
             }
 
             Managers.Clear();
-            _destroyed = true;
         }
 
         #endregion
@@ -240,8 +238,6 @@ namespace XFramework.XSettings
         /// </summary>
         private static ISettingsManager<T> GetManager<T>() where T : class, new()
         {
-            ThrowIfDestroyed();
-
             var type = typeof(T);
             if (Managers.TryGetValue(type, out var manager))
                 return (ISettingsManager<T>)manager;
@@ -249,16 +245,6 @@ namespace XFramework.XSettings
             throw new InvalidOperationException(
                 $"[SettingsManager] SettingsManager 尚未初始化类型 '{type.Name}'。" +
                 $"请先调用 SettingsManager.Initialize<{type.Name}>() 完成初始化。");
-        }
-
-        /// <summary>
-        /// 在已销毁状态下调用任何方法均抛出异常。
-        /// </summary>
-        private static void ThrowIfDestroyed()
-        {
-            if (_destroyed)
-                throw new ObjectDisposedException(nameof(SettingsManager),
-                    "SettingsManager 已被销毁，请重新调用 Initialize。");
         }
 
         #endregion
