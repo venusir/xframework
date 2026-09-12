@@ -58,7 +58,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **Save**         | `XFramework.XSave`         | [README](../Runtime/Save/README.md)         | 存档：原子写与备份恢复、元数据侧车、版本门禁、玩家隔离、槽位复制移动 |
 | **Pool**         | `XFramework.XPool`         | [README](../Runtime/Pool/README.md)         | 对象池与集合池（List/HashSet/Dictionary/StringBuilder）       |
 | **Input**        | `XFramework.XInput`        | [README](../Runtime/Input/README.md)        | 输入抽象层：纯字符串 API、多设备检测、零 GC                   |
-| **Settings**     | `XFramework.XSettings`     | [README](../Runtime/Settings/README.md)     | 强类型游戏设置：JSON 持久化、响应式通知、重置                 |
+| **Settings**     | `XFramework.XSettings`     | [README](../Runtime/Settings/README.md)     | 强类型游戏设置：纯 POCO 持久化、字段句柄、版本迁移           |
 | **UI**           | `XFramework.XUI`           | [README](../Runtime/UI/README.md)           | UI 面板管理 / MVVM 绑定 / 导航堆栈 / HUD / Tip                |
 | **Lock**         | `XFramework.XLock`         | [README](../Runtime/Lock/README.md)         | 逻辑锁：多类型锁叠加、全局锁、using 自动释放                  |
 
@@ -204,14 +204,19 @@ GameLauncher.Start()
 
 ### 设置操作
 
-| 操作     | 代码                                                                 |
-| -------- | -------------------------------------------------------------------- |
-| 加载设置 | `await SettingsManager.LoadAsync<MySettings>()`                      |
-| 保存设置 | `await SettingsManager.SaveAsync<MySettings>()`                      |
-| 获取值   | `SettingsManager.Get<MySettings>().MasterVolume`                     |
-| 重置默认 | `SettingsManager.ResetToDefaults<MySettings>()`                      |
-| 订阅变更 | `SettingsManager.Get<MySettings>().MasterVolume.Subscribe(v => ...)` |
-| 应用设置 | `await SettingsManager.ApplyAsync<MySettings>()`                     |
+| 操作     | 代码                                                          |
+| -------- | ------------------------------------------------------------- |
+| 加载设置 | `await SettingsManager.LoadAsync<MySettings>()`               |
+| 保存设置 | `await SettingsManager.SaveAsync<MySettings>()`               |
+| 获取值   | `SettingsManager.Settings<MySettings>().MasterVolume`         |
+| 重置默认 | `SettingsManager.Reset<MySettings>()`                         |
+| 订阅字段 | `SettingsManager.Ref<MySettings, float>(s => s.MasterVolume)` |
+| 订阅替换 | `SettingsManager.Observe<MySettings>(s => ...)`               |
+| 应用设置 | `SettingsManager.Apply<MySettings>(settings)`                 |
+
+> `Ref` 创建**字段句柄**，须调用一次并缓存（如 `static readonly` 字段）。句柄可 `Subscribe`、
+> 可直接用 `BindToSlider` 等 UI 绑定扩展方法、写入即通知并置脏，且会自动跟随设置实例替换。
+> 详见 [Settings README](../Runtime/Settings/README.md)。
 
 ### UI 操作
 

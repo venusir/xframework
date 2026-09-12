@@ -49,6 +49,7 @@ GameLauncher (MonoBehaviour)
 | **UIHudManager**        | 随 UIManager 自动就绪                        | —                                                   |
 | **UITipManager**        | 随 UIManager 自动就绪                        | —                                                   |
 | **LocalizationManager** | `LocalizationManager.Initialize(lang, data)` | 需传入语言数据                                      |
+| **SettingsManager**     | `SettingsManager.Initialize<T>(path)`        | 设置类型由业务定义，每类独立初始化                  |
 
 > **关键设计决策：** 纯静态服务不依赖节点树生命周期。无需参数的服务通过 `[RuntimeInitializeOnLoadMethod]` 或懒加载自动就绪；需要参数的服务由调用方显式 `Initialize()`。不存在统一的中心化入口。节点树仅承载需要生命周期插件的服务（如 AssetManager）。
 
