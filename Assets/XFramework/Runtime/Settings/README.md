@@ -120,7 +120,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Apply<T>(T settings)`                                         | 替换整个设置并通知     |
 | `Save<T>()`                                                    | 保存到持久层           |
 | `Load<T>()`                                                    | 从持久层重新加载       |
-| `Reset<T>()`                                                   | 重置为默认值并删除文件 |
+| `Reset<T>()`                                                   | 重置为默认值（含 `defaultFactory`）并删除文件 |
 | `Observe<T>(Action<T>)`                                        | 订阅整个设置变更       |
 | `ObserveField<T, TField>(Func<T,TField>, Action<TField>)`      | 订阅单个字段变更       |
 | `GetStore<T>()` / `SetStore<T>(store)`                         | 获取/替换存储后端      |
@@ -162,6 +162,8 @@ SettingsManager.Initialize<GameSettings>(
     }
 );
 ```
+
+默认值工厂在三条路径上一致生效：首次初始化、`Load<T>()` 遇到无持久化数据、以及 `Reset<T>()`。因此玩家点「恢复默认」得到的是同一个设备自适应结果，而不是设置类的字段初始值。
 
 ### 自定义存储后端
 

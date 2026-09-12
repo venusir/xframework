@@ -18,6 +18,7 @@ namespace XFramework.XSettings
 
         private T _settings;
         private ISettingsStore _store;
+        private readonly Func<T> _defaultFactory;
         private readonly EventStream<T> _changedStream = new();
 
         #endregion
@@ -29,20 +30,16 @@ namespace XFramework.XSettings
         /// </summary>
         /// <param name="store">存储后端。</param>
         /// <param name="defaultFactory">
-        /// 可选的默认值工厂。如果持久层无数据，使用此工厂创建初始设置；
-        /// 如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
+        /// 可选的默认值工厂。持久层无数据时（初始化、<see cref="Load"/>、<see cref="Reset"/>）
+        /// 均用此工厂创建设置；如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
         public SettingsManagerImpl(ISettingsStore store, Func<T> defaultFactory = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
+            _defaultFactory = defaultFactory;
 
-            if (store.Exists())
-            {
-                _settings = store.Load<T>();
-            }
-            else
-            {
-                _settings = defaultFactory != null ? defaultFactory() : new T();
-            }
+            // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
+            // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
+            _settings = store.Exists() ? store.Load<T>() : CreateDefault();
         }
 
         #endregion
@@ -75,14 +72,17 @@ namespace XFramework.XSettings
         /// <inheritdoc />
         public void Load()
         {
-            _settings = _store.Load<T>();
+            // 先问 Exists 而不是直接取 Load 的返回值:ISettingsStore.Load 的契约是
+            // 「无数据时返回 new T()」,这里无法区分「读到了持久化数据」与「根本没有数据」,
+            // 直接赋值会让 defaultFactory 在存档被删后形同虚设
+            _settings = _store.Exists() ? _store.Load<T>() : CreateDefault();
             Notify();
         }
 
         /// <inheritdoc />
         public void Reset()
         {
-            _settings = new T();
+            _settings = CreateDefault();
             _store.Delete();
             Notify();
         }
@@ -148,6 +148,15 @@ namespace XFramework.XSettings
         #endregion
 
         #region Internal
+
+        /// <summary>
+        /// 创建默认设置对象：优先用构造时注入的 <c>defaultFactory</c>，未注入则为 <c>new T()</c>。
+        /// <para>构造、<see cref="Load"/>、<see cref="Reset"/> 三条路径共用此方法，保证默认值来源唯一。</para>
+        /// </summary>
+        private T CreateDefault()
+        {
+            return _defaultFactory != null ? _defaultFactory() : new T();
+        }
 
         /// <summary>
         /// 通知所有订阅者：设置已变更。

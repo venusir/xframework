@@ -62,7 +62,7 @@ namespace XFramework.XSettings
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="filePath">JSON 文件完整路径。</param>
         /// <param name="defaultFactory">
-        /// 可选的默认值工厂。如果持久层无数据，使用此工厂创建初始设置；
+        /// 可选的默认值工厂。持久层无数据时（初始化、重新加载、重置）均用此工厂创建设置；
         /// 如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
         /// <returns>初始化后的 <see cref="ISettingsManager{T}"/> 实例。</returns>
         public static ISettingsManager<T> Initialize<T>(string filePath, Func<T> defaultFactory = null)
@@ -78,7 +78,7 @@ namespace XFramework.XSettings
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="store">自定义存储后端。例如 <see cref="JsonFileStore"/> 或加密存储等。</param>
         /// <param name="defaultFactory">
-        /// 可选的默认值工厂。如果持久层无数据，使用此工厂创建初始设置；
+        /// 可选的默认值工厂。持久层无数据时（初始化、重新加载、重置）均用此工厂创建设置；
         /// 如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
         /// <returns>初始化后的 <see cref="ISettingsManager{T}"/> 实例。</returns>
         public static ISettingsManager<T> Initialize<T>(ISettingsStore store, Func<T> defaultFactory = null)
@@ -164,6 +164,7 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 重置为默认值并删除持久化文件。
+        /// <para>默认值来自 <see cref="Initialize{T}(string, Func{T})"/> 时注入的工厂，与首次初始化所得默认值一致。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>

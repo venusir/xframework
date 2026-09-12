@@ -37,12 +37,14 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 从持久层重新加载，覆盖当前设置，并通知所有订阅者。
-        /// <para>如果持久层无数据，则使用默认值 <c>new T()</c>。</para>
+        /// <para>如果持久层无数据，则使用构造时注入的 <c>defaultFactory</c>（未注入时为 <c>new T()</c>）。</para>
         /// </summary>
         void Load();
 
         /// <summary>
-        /// 重置为默认值（<c>new T()</c>）并删除持久化文件。
+        /// 重置为默认值并删除持久化文件。
+        /// <para>默认值来自构造时注入的 <c>defaultFactory</c>（未注入时为 <c>new T()</c>），
+        /// 与首次初始化所得默认值一致。</para>
         /// </summary>
         void Reset();
 
