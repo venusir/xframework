@@ -12,7 +12,7 @@ Message 模块提供**全局消息总线**与支撑它的**事件流引擎**。�
 
 ```
 Runtime/Message/
-├── IMessageBroker.cs             # IMessagePublisher/IMessageSubscriber/IMessageBroker
+├── IMessageBroker.cs             # IMessagePublisher/IMessageSubscriber(公开)+ IMessageBroker(internal)
 ├── MessageBroker.cs              # 消息代理内部实现(订阅直落事件流)
 ├── MessageManager.cs             # 静态外观(全局入口) + 节点扩展方法
 ├── IMessageFilter.cs             # 消息过滤器接口
