@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using XFramework.XFileManager;
 using XFramework.XSettings;
 
 namespace XFramework.XSettings.Tests
@@ -153,6 +154,84 @@ namespace XFramework.XSettings.Tests
 
         #endregion
 
+        #region 原子写入与一代备份
+
+        // 以下用例的取值刻意与 PersistedSettings 的字段初始值（Volume=1 / Name="default"）
+        // 区分开，否则「没从备份恢复」与「从备份恢复」会得到相同断言结果
+
+        [Test]
+        public void Save_LeavesNoTempFile()
+        {
+            var store = new JsonFileStore(_path);
+
+            store.Save(new PersistedSettings { Volume = 7, Name = "first" });
+
+            Assert.IsFalse(File.Exists(_path + FilePathUtility.TempFileSuffix),
+                "写入完成后不应残留 .tmp");
+        }
+
+        [Test]
+        public void Save_FirstWrite_CreatesNoBackup()
+        {
+            var store = new JsonFileStore(_path);
+
+            store.Save(new PersistedSettings { Volume = 7, Name = "first" });
+
+            Assert.IsFalse(File.Exists(_path + FilePathUtility.BackupFileSuffix),
+                "首次写入没有旧版本可备份");
+        }
+
+        [Test]
+        public void Save_SecondWrite_KeepsPreviousContentAsBackup()
+        {
+            var store = new JsonFileStore(_path);
+            store.Save(new PersistedSettings { Volume = 7, Name = "first" });
+
+            store.Save(new PersistedSettings { Volume = 2, Name = "second" });
+
+            var backupPath = _path + FilePathUtility.BackupFileSuffix;
+            Assert.IsTrue(File.Exists(backupPath), "第二次写入应保留一代备份");
+            StringAssert.Contains("first", File.ReadAllText(backupPath), "备份里是上一版数据");
+            Assert.AreEqual(2, store.Load<PersistedSettings>().Volume, "正式文件是最新数据");
+        }
+
+        [Test]
+        public void Load_CorruptMainFile_RecoversFromBackup()
+        {
+            var store = new JsonFileStore(_path);
+            store.Save(new PersistedSettings { Volume = 7, Name = "first" });
+            store.Save(new PersistedSettings { Volume = 2, Name = "second" }); // .bak 中留下 first
+
+            File.WriteAllText(_path, "[1, 2, 3]"); // 损坏正式文件
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"设置文件内容无法解析为 PersistedSettings"));
+            LogAssert.Expect(LogType.Warning, new Regex(@"主设置文件不可用，已从备份恢复"));
+            var loaded = store.Load<PersistedSettings>();
+
+            Assert.AreEqual(7, loaded.Volume, "从备份恢复出的是上一版数据，而非字段初始值");
+            Assert.AreEqual("first", loaded.Name);
+        }
+
+        [Test]
+        public void Load_MissingMainFile_DoesNotRecoverFromBackup()
+        {
+            // 锁定 Reset 语义：备份存在不等于「有持久化数据」。若缺失也回退备份，
+            // 玩家重置后旧设置会从 .bak 里复活
+            var store = new JsonFileStore(_path);
+            store.Save(new PersistedSettings { Volume = 7, Name = "first" });
+            store.Save(new PersistedSettings { Volume = 2, Name = "second" });
+            Assert.IsTrue(File.Exists(_path + FilePathUtility.BackupFileSuffix));
+
+            File.Delete(_path); // 只删正式文件，故意留着备份
+
+            var loaded = store.Load<PersistedSettings>();
+
+            Assert.AreEqual(1, loaded.Volume, "主文件缺失时应回到字段初始值，不得从备份恢复");
+            Assert.AreEqual("default", loaded.Name);
+        }
+
+        #endregion
+
         #region 存在性与删除
 
         [Test]
@@ -176,6 +255,21 @@ namespace XFramework.XSettings.Tests
             store.Delete();
 
             Assert.IsFalse(store.Exists());
+        }
+
+        [Test]
+        public void Delete_RemovesBackupToo()
+        {
+            var store = new JsonFileStore(_path);
+            store.Save(new PersistedSettings { Volume = 7 });
+            store.Save(new PersistedSettings { Volume = 2 });
+            var backupPath = _path + FilePathUtility.BackupFileSuffix;
+            Assert.IsTrue(File.Exists(backupPath));
+
+            store.Delete();
+
+            Assert.IsFalse(store.Exists());
+            Assert.IsFalse(File.Exists(backupPath), "重置不得留下可被后续 Load 恢复的备份");
         }
 
         [Test]
