@@ -313,9 +313,14 @@ namespace XFramework.XSave.Tests
         }
 
         /// <summary>
-        /// 探针 Block：按次数抛异常，用于验证「应用快照失败 → 回滚内存」这条路径。
-        /// <para>刻意做成「只抛一次」：若每次都抛，回滚自身的 <c>ApplySnapshot</c> 也会失败，
-        /// 就测不到「回滚成功」这一分支了。</para>
+        /// 探针 Block：在 <see cref="IDataBlock.OnClear"/> 中按次数抛异常，
+        /// 用于验证「应用快照失败 → 回滚内存」这条路径。
+        /// <para><b>为什么抛在 OnClear 而不是 OnLoad：</b><see cref="XData.DataManagerImpl"/> 的
+        /// <c>ApplySnapshot</c> 只在清空阶段无保护（<c>ForEachBlock(b =&gt; b.OnClear())</c>），
+        /// 恢复阶段走 <c>TryRestoreBlock</c>，其内部 try/catch 会把异常记成 warning 并吞掉——
+        /// 抛在 OnLoad 上根本到不了 <see cref="SaveManagerImpl"/>，也就测不到回滚。</para>
+        /// <para>「只抛一次」也是刻意的：若每次都抛，回滚自身的 <c>ApplySnapshot</c> 也会失败，
+        /// 就只测到「回滚失败」分支，而要验证的「回滚成功」反而没覆盖。</para>
         /// </summary>
         [Serializable]
         private sealed class ExplodingBlock : IDataBlock
@@ -326,17 +331,16 @@ namespace XFramework.XSave.Tests
             public int DataVersion => 0;
             public object OnSave() => 1;
             public object OnMigrate(object saveData, int fromVersion) => saveData;
+            public void OnLoad(object data) { }
 
-            public void OnLoad(object data)
+            public void OnClear()
             {
                 if (RemainingThrows > 0)
                 {
                     RemainingThrows--;
-                    throw new InvalidOperationException("模拟第三方 Block 加载失败");
+                    throw new InvalidOperationException("模拟第三方 Block 清空失败");
                 }
             }
-
-            public void OnClear() { }
         }
 
         #region 元数据侧车与校验和

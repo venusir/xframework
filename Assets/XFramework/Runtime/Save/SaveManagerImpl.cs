@@ -351,6 +351,14 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 把快照应用到内存，失败时尽力回滚到应用前的内存状态。
+        /// <para><b>本方法能捕获的范围是有限的，不要高估：</b>
+        /// <c>DataManager.ApplySnapshot</c> 只在<b>清空阶段</b>无保护
+        /// （<c>ForEachBlock(b =&gt; b.OnClear())</c>，异常会传播到这里）；
+        /// <b>恢复阶段</b>走 <c>TryRestoreBlock</c>，其内部 try/catch 会把数据块恢复失败
+        /// 记成 <c>[Data] 恢复数据块 X 失败</c> 的 warning 并吞掉。也就是说：
+        /// 某个 Block 恢复失败时 <c>ApplySnapshot</c> 正常返回，本方法会认为加载成功，
+        /// 而内存实际处于「部分块已恢复、其余为空」的状态——该缺陷位于 Data 模块，
+        /// Save 侧无法探测（<c>ApplySnapshot</c> 返回 void）。</para>
         /// <para><b>三个已知约束（保持此设计的代价，勿在未解决前依赖回滚的完整性）：</b></para>
         /// <list type="number">
         /// <item><description><see cref="DataManager.CreateSnapshot"/> 会清空全部脏标记。回滚能恢复<b>数据</b>
