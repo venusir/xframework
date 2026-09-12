@@ -49,6 +49,16 @@ namespace XFramework.XSettings
         /// <summary>按类型缓存多个 ISettingsManager 实例。</summary>
         private static readonly Dictionary<Type, object> Managers = new();
 
+        /// <summary>
+        /// 默认路径的占用表：路径 → 占用它的类型。
+        /// <para>默认路径取类型短名，不同命名空间下的同名类型会算出同一个路径；
+        /// 若放任不管，两份设置会互相覆盖且毫无提示。此表把那种情况变成明确的报错。</para>
+        /// <para><b>刻意不在 <see cref="Destroy"/> 里清空：</b>占用关系对应的是磁盘上的文件，
+        /// 而文件不会随 Destroy 消失。若清空，则「A 初始化 → Destroy → B 初始化」会让 B 悄悄
+        /// 接管 A 的路径，并在 A 的存档存在时把 A 的数据当作 B 解析——正是本表要防的那种事。</para>
+        /// </summary>
+        private static readonly Dictionary<string, Type> DefaultPathClaims = new();
+
         #endregion
 
         #region Lifecycle
@@ -73,6 +83,38 @@ namespace XFramework.XSettings
             string filePath, Func<T> defaultFactory = null, SettingsOptions options = null)
             where T : class, new()
         {
+            return Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
+        }
+
+        /// <summary>
+        /// 用<b>默认路径</b>初始化指定类型的设置，无需传路径。
+        /// <para>路径为 <c>{Application.persistentDataPath}/{类型短名}.json</c>，
+        /// 便于零配置起步（如原型、示例、编辑器工具）。</para>
+        /// <para><b>陷阱：</b>路径取类型短名，因此不同命名空间下的<b>同名类型</b>会算出同一路径。
+        /// 框架会拦下这种情况并抛异常（否则两份设置会互相覆盖且毫无提示），
+        /// 届时请改用显式路径的 <see cref="Initialize{T}(string, Func{T}, SettingsOptions)"/> 重载。</para>
+        /// <para>参数顺序与另外两个重载一致（工厂在前、选项在后）；
+        /// 只传选项时请用具名实参：<c>Initialize&lt;T&gt;(options: new SettingsOptions { AutoSave = true })</c>。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="defaultFactory">可选的默认值工厂。为 <c>null</c> 时使用 <c>new T()</c>。</param>
+        /// <param name="options">可选的选项。为 <c>null</c> 时使用默认值（不启用版本化与自动保存）。</param>
+        /// <returns>初始化后的 <see cref="ISettingsManager{T}"/> 实例。</returns>
+        /// <exception cref="InvalidOperationException">该默认路径已被另一个同名类型占用时抛出。</exception>
+        public static ISettingsManager<T> Initialize<T>(Func<T> defaultFactory = null, SettingsOptions options = null)
+            where T : class, new()
+        {
+            var type = typeof(T);
+            var filePath = BuildDefaultFilePath(type);
+
+            if (DefaultPathClaims.TryGetValue(filePath, out var owner) && owner != type)
+            {
+                throw new InvalidOperationException(
+                    $"[SettingsManager] 类型 '{type.FullName}' 与 '{owner.FullName}' 的默认路径相同" +
+                    $"（'{filePath}'）。默认路径取类型短名，同名类型需改用显式路径的 Initialize 重载。");
+            }
+
+            DefaultPathClaims[filePath] = type;
             return Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
         }
 
@@ -134,6 +176,36 @@ namespace XFramework.XSettings
         public static T Settings<T>() where T : class, new()
         {
             return GetManager<T>().Settings;
+        }
+
+        /// <summary>
+        /// 尝试获取指定类型的当前设置对象，<b>未初始化时不抛异常</b>。
+        /// <para>用于「可能已注册也可能没有」的探测场景（如可选功能、编辑器工具）——
+        /// 那些地方本就不该假定初始化顺序，用异常表达正常分支会把调用方逼进 try/catch。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="settings">当前设置对象；未注册时为 <c>null</c>。</param>
+        /// <returns>该类型已初始化返回 <c>true</c>。</returns>
+        public static bool TrySettings<T>(out T settings) where T : class, new()
+        {
+            if (TryGetManager<T>(out var manager))
+            {
+                settings = manager.Settings;
+                return true;
+            }
+
+            settings = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 指定类型是否已初始化。语义等价于 <see cref="TrySettings{T}"/> 的返回值，
+        /// 供只想问「有没有」而不需要取对象的场景使用。
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        public static bool IsRegistered<T>() where T : class, new()
+        {
+            return Managers.ContainsKey(typeof(T));
         }
 
         /// <summary>
@@ -318,14 +390,37 @@ namespace XFramework.XSettings
         #region Internal
 
         /// <summary>
-        /// 获取指定类型的 <see cref="ISettingsManager{T}"/> 实例。
+        /// 构造指定类型的默认设置文件路径：<c>{persistentDataPath}/{类型短名}.json</c>。
+        /// </summary>
+        private static string BuildDefaultFilePath(Type type)
+        {
+            return UnityEngine.Application.persistentDataPath + "/" + type.Name + ".json";
+        }
+
+        /// <summary>
+        /// 尝试获取指定类型的 <see cref="ISettingsManager{T}"/> 实例，未注册时返回 <c>false</c> 而不抛异常。
+        /// </summary>
+        private static bool TryGetManager<T>(out ISettingsManager<T> manager) where T : class, new()
+        {
+            if (Managers.TryGetValue(typeof(T), out var found))
+            {
+                manager = (ISettingsManager<T>)found;
+                return true;
+            }
+
+            manager = null;
+            return false;
+        }
+
+        /// <summary>
+        /// 获取指定类型的 <see cref="ISettingsManager{T}"/> 实例，未注册时抛异常并附修复提示。
         /// </summary>
         private static ISettingsManager<T> GetManager<T>() where T : class, new()
         {
-            var type = typeof(T);
-            if (Managers.TryGetValue(type, out var manager))
-                return (ISettingsManager<T>)manager;
+            if (TryGetManager<T>(out var manager))
+                return manager;
 
+            var type = typeof(T);
             throw new InvalidOperationException(
                 $"[SettingsManager] SettingsManager 尚未初始化类型 '{type.Name}'。" +
                 $"请先调用 SettingsManager.Initialize<{type.Name}>() 完成初始化。");

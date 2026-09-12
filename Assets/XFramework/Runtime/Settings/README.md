@@ -74,6 +74,11 @@ using UnityEngine;
 SettingsManager.Initialize<GameSettings>(Application.persistentDataPath + "/settings.json");
 ```
 
+零配置起步可用默认路径重载：`SettingsManager.Initialize<GameSettings>()` 落到
+`{persistentDataPath}/GameSettings.json`。**注意**默认路径取类型短名，不同命名空间下的同名类型
+会算出同一个文件——框架会拦下这种情况并抛 `InvalidOperationException`（而非静默共用），
+届时请改用显式路径重载。
+
 ### 4. 读写
 
 ```csharp
@@ -139,8 +144,10 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | ---- | ---- |
 | `Initialize<T>(string filePath, Func<T> defaultFactory?, SettingsOptions?)` | 用 JSON 文件路径初始化 |
 | `Initialize<T>(ISettingsStore store, Func<T> defaultFactory?, SettingsOptions?)` | 用自定义存储后端初始化 |
+| `Initialize<T>(Func<T> defaultFactory?, SettingsOptions?)` | 用**默认路径**初始化（零配置） |
 | `Destroy()` | 释放所有管理器；之后可重新 `Initialize` |
-| `Settings<T>()` | 获取当前设置对象引用 |
+| `Settings<T>()` | 获取当前设置对象引用；未初始化时抛异常 |
+| `TrySettings<T>(out T)` / `IsRegistered<T>()` | 探测入口，未初始化时不抛异常 |
 | `Ref<T, TField>(Expression<Func<T,TField>>)` | **创建字段句柄，调用一次并缓存** |
 | `Apply<T>(T settings)` | 替换整个设置对象并通知 |
 | `Save<T>()` / `SaveAsync<T>(ct)` | 保存到持久层 |
@@ -311,6 +318,9 @@ SettingsManager.Save<GameSettings>();
   这是保留的已知限制——要通知/置脏必须经句柄写入，直改后手动 `MarkDirty`
 - **`Ref` 必须调用一次并缓存**。它编译表达式，且每次调用都会新建句柄与事件流。
   IL2CPP 下 `Expression.Compile()` 走解释器（可运行但慢），故不可放入每帧路径
+- **默认路径取类型短名**：不同命名空间下的同名类型会算出同一路径。框架用占用表拦下并抛异常
+  （而非静默共用一份文件），该表**刻意不随 `Destroy` 清空**——占用关系对应的是磁盘文件，
+  文件不会随 Destroy 消失；若清空则「A 初始化 → Destroy → B 初始化」会让 B 悄悄接管 A 的路径
 - **容器内的字段不跟踪**：`List<ReactiveProperty<T>>` 之类不在句柄体系内；
   `SettingRef` 的路径也必须是对设置对象自身成员的连续访问（不支持方法调用、索引器、闭包捕获）
 - **句柄读写须在主线程**
