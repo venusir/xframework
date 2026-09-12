@@ -787,6 +787,8 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 写出元数据侧车（原子写）。
+        /// <para>侧车的序列化刻意留在主线程内联：它是几百字节的小对象，线程池往返的调度成本
+        /// 高于序列化本身。只有载荷（数 MB）的往返值得外移。</para>
         /// </summary>
         /// <param name="meta">已补齐运行时字段的元数据，其 <see cref="SaveMeta.relativePath"/> 指向载荷。</param>
         /// <param name="cancellationToken">取消令牌。</param>

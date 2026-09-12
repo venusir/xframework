@@ -349,6 +349,9 @@ namespace XFramework.XSave.Tests
         /// 包装真实序列化器并记录自己被调用的线程，用于验证序列化往返确实被移出了主线程。
         /// <para>Format 与内层一致，因此 <c>Serializer.Register</c> 会顶替默认注册——
         /// 而 <c>Serializer.Default</c> 按 "json" 查找，正好命中本替身。</para>
+        /// <para><b>只记录载荷（<see cref="DataSnapshot"/>）的往返</b>：元数据侧车同样经
+        /// <c>Serializer.Default</c>，但它刻意留在主线程（对象极小，线程池往返的调度成本高于收益）。
+        /// 若不按类型过滤，侧车那次调用会覆盖记录，断言便会指向错误的观测对象。</para>
         /// </summary>
         private sealed class ThreadRecordingSerializer : ISerializer
         {
@@ -363,13 +366,17 @@ namespace XFramework.XSave.Tests
 
             public byte[] Serialize(object obj, Type type)
             {
-                LastSerializeThreadId = Environment.CurrentManagedThreadId;
+                if (typeof(DataSnapshot).IsAssignableFrom(type))
+                    LastSerializeThreadId = Environment.CurrentManagedThreadId;
+
                 return _inner.Serialize(obj, type);
             }
 
             public object Deserialize(byte[] data, Type type)
             {
-                LastDeserializeThreadId = Environment.CurrentManagedThreadId;
+                if (typeof(DataSnapshot).IsAssignableFrom(type))
+                    LastDeserializeThreadId = Environment.CurrentManagedThreadId;
+
                 return _inner.Deserialize(data, type);
             }
         }
