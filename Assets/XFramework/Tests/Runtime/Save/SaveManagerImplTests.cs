@@ -201,6 +201,112 @@ namespace XFramework.XSave.Tests
             Assert.IsNull(await SaveManager.GetSlotMetaAsync(7), "不存在的槽位应返回 null");
         }
 
+        #region 元数据侧车与校验和
+
+        // 侧车文件名：载荷路径 + .meta
+        private const string SidecarPath = "slot_1.save.meta";
+
+        [Test]
+        public async Task SaveAsync_WritesSidecarWithChecksum()
+        {
+            var meta = await SaveManager.SaveAsync(1);
+
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, SidecarPath), "保存后应写出元数据侧车");
+            Assert.AreNotEqual(0UL, meta.checksum, "返回的元数据应带校验和");
+
+            // 侧车内容应能直接支撑列表展示：枚举读到的 version/timestamp 与保存时一致
+            var listed = await SaveManager.GetSlotMetaAsync(1);
+            Assert.AreEqual(meta.version, listed.version);
+            Assert.AreEqual(meta.timestamp, listed.timestamp);
+            Assert.AreEqual(meta.checksum, listed.checksum, "侧车应完整还原校验和");
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_UsesSidecar_WithoutReadingPayload()
+        {
+            await SaveManager.SaveAsync(1);
+
+            // 把载荷换成无法解析的内容，但保留侧车：若枚举仍读载荷就会退化成「损坏」，
+            // 读到侧车则元数据完好——以此证明枚举没有读取载荷
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("not a save"));
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+
+            Assert.AreEqual(1, metas.Count);
+            Assert.IsFalse(metas[0].isCorrupted, "枚举应走侧车，不应因载荷不可解析而判定损坏");
+            Assert.AreEqual(1, metas[0].slot);
+        }
+
+        [Test]
+        public async Task LoadAsync_TamperedPayloadWithValidJson_RejectedByChecksum()
+        {
+            // 校验和存在的唯一理由：JSON 仍合法、但字节已被悄悄改坏。
+            // 追加一个尾随空格既保持 JSON 合法，又改变字节——没有校验和的话会被静默接受
+            await SaveManager.SaveAsync(1);
+
+            var payload = await FileManager.ReadAllBytesAsync(FileDomain.SaveData, "slot_1.save");
+            var tampered = new byte[payload.Length + 1];
+            Array.Copy(payload, tampered, payload.Length);
+            tampered[payload.Length] = (byte)' ';
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save", tampered);
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.LoadAsync(1),
+                "载荷与侧车校验和不符时应拒绝加载");
+        }
+
+        [Test]
+        public async Task LoadAsync_MissingSidecar_SkipsChecksumAndLoads()
+        {
+            // 侧车只是加速层：缺失（旧版本写出的存档、或侧车被删）不应让存档不可读
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            FileManager.Delete(FileDomain.SaveData, SidecarPath);
+            FileManager.Delete(FileDomain.SaveData, SidecarPath + FilePathUtility.BackupFileSuffix);
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(1);
+
+            Assert.AreEqual(42, wallet.Gold, "侧车缺失时应回退到全量解析并正常加载");
+        }
+
+        [Test]
+        public async Task DeleteSlotAsync_RemovesSidecarAndBackup()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);   // 第二次覆盖产生一代 .bak
+
+            var backupPath = "slot_1.save" + FilePathUtility.BackupFileSuffix;
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, backupPath), "覆盖保存应产生备份");
+
+            await SaveManager.DeleteSlotAsync(1);
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save"), "载荷应被删除");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, SidecarPath), "侧车应一并删除");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, backupPath), "备份应一并删除");
+        }
+
+        [Test]
+        public async Task DeleteAllSlotsAsync_RemovesSidecarsAndBackups()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+
+            var deleted = await SaveManager.DeleteAllSlotsAsync();
+
+            Assert.AreEqual(2, deleted, "返回的应是合法槽位载荷数量，不含配套文件");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save"));
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_2.save"));
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, SidecarPath), "侧车应被清理");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_2.save.meta"), "侧车应被清理");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save" + FilePathUtility.BackupFileSuffix),
+                "备份应被清理");
+        }
+
+        #endregion
+
         [Test]
         public async Task DeleteSlot_RemovesFile()
         {

@@ -1,3 +1,5 @@
+using System;
+
 namespace XFramework.XSave
 {
     /// <summary>
@@ -5,7 +7,10 @@ namespace XFramework.XSave
     /// <para>包含版本号、时间戳、文件路径等基本信息，不包含完整数据块快照。</para>
     /// <para>第三方可继承此类以扩展元数据字段，
     /// 配合 <see cref="XData.DataSnapshot.CreateMeta"/> 在存档读/写时自动映射。</para>
+    /// <para>本类会被序列化为槽位文件的元数据侧车（<c>slot_N.save.meta</c>），
+    /// 故子类的公共字段同样需要可序列化。</para>
     /// </summary>
+    [Serializable]
     public class SaveMeta
     {
         /// <summary>所属玩家 ID，未启用玩家隔离时为 <c>null</c>。</summary>
@@ -35,6 +40,13 @@ namespace XFramework.XSave
         /// 界面既看不到也删不掉它。</para>
         /// </summary>
         public bool isCorrupted;
+
+        /// <summary>
+        /// 存档载荷的完整性校验和（FNV-1a 64 位，见 <see cref="SaveIntegrity"/>）。
+        /// <para>0 表示「未记录校验和」——此时加载不做校验（兼容手工构造或外部工具写出的侧车）。</para>
+        /// <para>只能发现损坏，<b>不提供防篡改</b>；防篡改需要加密。</para>
+        /// </summary>
+        public ulong checksum;
 
         public override string ToString()
         {

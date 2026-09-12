@@ -22,6 +22,12 @@ namespace XFramework.XSave
         internal const string SlotFileSuffix = ".save";
 
         /// <summary>
+        /// 元数据侧车文件后缀（接在完整槽位文件路径之后，如 <c>slot_3.save.meta</c>）。
+        /// <para>侧车只存元数据与校验和，用于免去枚举时对每个槽位做全量反序列化。</para>
+        /// </summary>
+        internal const string MetaFileSuffix = ".meta";
+
+        /// <summary>
         /// playerId 长度上限。
         /// <para>作为单段目录名，过长会把完整路径推向 MAX_PATH 上限。</para>
         /// </summary>
@@ -90,8 +96,8 @@ namespace XFramework.XSave
         /// 尝试从存档文件相对路径解析槽位号。
         /// <para><b>严格解析：</b>文件名须为 <c>slot_&lt;非负整数&gt;.save</c>（可带 <c>playerId/</c> 前缀）。
         /// <c>slot_abc.save</c>、<c>slot_.save</c>、<c>slot_-1.save</c> 一律解析失败。</para>
-        /// <para>与删除路径所用的宽松判断（只看前缀后缀）分工不同：删除要清掉所有 <c>slot_</c> 前缀残留，
-        /// 枚举则只列合法槽位。两者语义不同，刻意不做统一。</para>
+        /// <para>仅用于<b>枚举与计数</b>——删除路径按 <c>slot_*</c> 模式枚举，会把解析不出槽位号的
+        /// 残留和各类配套文件一并清掉，正是为了不让它们积累。</para>
         /// </summary>
         /// <param name="path">存档文件相对路径。</param>
         /// <param name="slot">解析出的槽位号；失败时为 <c>-1</c>。</param>

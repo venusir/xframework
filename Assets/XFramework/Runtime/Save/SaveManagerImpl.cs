@@ -27,6 +27,12 @@ namespace XFramework.XSave
 
         private const FileDomain SaveDomain = FileDomain.SaveData;
 
+        /// <summary>
+        /// 删除路径使用的文件搜索模式：一次覆盖槽位载荷（<c>slot_N.save</c>）与其全部配套文件
+        /// （<c>.meta</c> 侧车 / <c>.bak</c> 备份 / <c>.tmp</c> 残留）。
+        /// </summary>
+        private const string SlotFileSearchPattern = "slot_*";
+
         #endregion
 
         #region Fields
@@ -100,6 +106,17 @@ namespace XFramework.XSave
                 byte[] bytes = null;
                 try
                 {
+                    // 侧车优先：小文件，避免为了拿元数据而读入并反序列化整个载荷。
+                    // 侧车路径刻意不校验校验和——校验需要读载荷，那正是这里要避免的开销；
+                    // 校验发生在 LoadAsync（那时载荷字节已在手上，几乎免费）
+                    var sidecar = await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
+                    if (sidecar != null)
+                    {
+                        metas.Add(sidecar);
+                        continue;
+                    }
+
+                    // 无侧车则回退全量解析（旧版本写出的存档、或侧车被删）
                     // 读取也在 try 内：读失败与解析失败对调用方是同一种故障（该槽位不可用）
                     bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
                     await ReturnToMainThread(cancellationToken);
@@ -153,6 +170,11 @@ namespace XFramework.XSave
             if (!FileManager.Exists(SaveDomain, path))
                 return null;
 
+            // 与列表同一策略：侧车优先，缺失才回退全量解析
+            var sidecar = await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
+            if (sidecar != null)
+                return sidecar;
+
             var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
@@ -201,7 +223,14 @@ namespace XFramework.XSave
                 await FileManager.WriteAllBytesAtomicAsync(SaveDomain, slotPath, bytes, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
-                return BuildMeta(saveData, playerId, slot, slotPath, bytes.Length);
+                var meta = BuildMeta(saveData, playerId, slot, slotPath, bytes.Length);
+                meta.checksum = SaveIntegrity.Compute(bytes);
+
+                // 侧车后写：先保证载荷落盘——侧车缺失只让枚举退化为全量解析，
+                // 而侧车先于载荷存在会让校验和指向一份并不存在的内容
+                await WriteSidecarAsync(meta, cancellationToken);
+
+                return meta;
             }
             finally
             {
@@ -232,6 +261,14 @@ namespace XFramework.XSave
 
                 if (bytes.Length == 0)
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
+
+                // 校验和在此刻校验：载荷字节已在手上，计算几乎免费。
+                // checksum 为 0 表示侧车未记录（或没有侧车），此时跳过——
+                // 侧车只是加速层，不该因为它缺失就让存档不可读
+                var sidecar = await TryReadSidecarAsync(playerId, slot, slotPath, cancellationToken);
+                if (sidecar != null && sidecar.checksum != 0 && sidecar.checksum != SaveIntegrity.Compute(bytes))
+                    throw new InvalidOperationException(
+                        $"[Save] 存档槽位 {slot} 校验和不符，内容可能已损坏（侧车记录值与载荷实际内容不匹配）。");
 
                 // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
                 // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
@@ -264,7 +301,7 @@ namespace XFramework.XSave
                 if (!exists)
                     return false;
 
-                FileManager.Delete(SaveDomain, slotPath);
+                DeleteSlotFiles(slotPath);
                 return true;
             }
             finally
@@ -281,7 +318,8 @@ namespace XFramework.XSave
             EnterBusy();
             try
             {
-                var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
+                // 一次枚举覆盖槽位载荷与其全部配套文件（.meta / .bak / .tmp）
+                var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, SlotFileSearchPattern, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
                 if (files == null)
@@ -290,21 +328,11 @@ namespace XFramework.XSave
                 var deleted = 0;
                 for (int i = 0; i < files.Length; i++)
                 {
-                    if (IsSlotFilePath(files[i]))
-                    {
-                        FileManager.Delete(SaveDomain, files[i]);
+                    // 只把合法槽位载荷计入返回值；配套文件与解析不出槽位号的残留一并清理但不计数
+                    if (SavePathUtility.TryParseSlot(files[i], out _))
                         deleted++;
-                    }
-                }
 
-                // 同时清理可能残留的 .tmp 文件（不计入返回的槽位数量）
-                var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
-                await ReturnToMainThread(cancellationToken);
-
-                if (tmpFiles != null)
-                {
-                    for (int i = 0; i < tmpFiles.Length; i++)
-                        FileManager.Delete(SaveDomain, tmpFiles[i]);
+                    FileManager.Delete(SaveDomain, files[i]);
                 }
 
                 return deleted;
@@ -442,6 +470,72 @@ namespace XFramework.XSave
         }
 
         /// <summary>
+        /// 写出元数据侧车（原子写）。
+        /// </summary>
+        /// <param name="meta">已补齐运行时字段的元数据，其 <see cref="SaveMeta.relativePath"/> 指向载荷。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        private async UniTask WriteSidecarAsync(SaveMeta meta, CancellationToken cancellationToken)
+        {
+            var metaPath = meta.relativePath + SavePathUtility.MetaFileSuffix;
+            var metaBytes = Serializer.Default.Serialize(meta, meta.GetType());
+
+            await FileManager.WriteAllBytesAtomicAsync(SaveDomain, metaPath, metaBytes, cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+        }
+
+        /// <summary>
+        /// 尝试读取槽位文件的元数据侧车。
+        /// <para>失败一律返回 <c>null</c> 交由调用方回退到全量反序列化，而不是抛异常：
+        /// 侧车是可选加速层，它的缺失或损坏不该让存档变得不可读。</para>
+        /// </summary>
+        /// <param name="playerId">所属玩家。</param>
+        /// <param name="slot">槽位号（以文件名为准，覆盖侧车里的值）。</param>
+        /// <param name="savePath">载荷文件相对路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>侧车元数据；缺失、损坏或内容为空时返回 <c>null</c>。</returns>
+        private async UniTask<SaveMeta> TryReadSidecarAsync(string playerId, int slot, string savePath, CancellationToken cancellationToken)
+        {
+            var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, savePath + SavePathUtility.MetaFileSuffix, cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
+            if (bytes == null || bytes.Length == 0)
+                return null;
+
+            try
+            {
+                // 类型取自 Factory 生成的配对元数据，第三方扩展的 SaveMeta 子类字段才能还原
+                var prototype = DataSnapshot.Factory().CreateMeta();
+                var meta = (SaveMeta)Serializer.Default.Deserialize(bytes, prototype.GetType());
+                if (meta == null)
+                    return null;
+
+                // 槽位号与归属一律以文件名/参数为准：侧车可能陈旧（如被外部工具改过载荷），
+                // 文件名永远权威——这样即便侧车过期也绝不会把槽位列错
+                meta.slot = slot;
+                meta.playerId = playerId;
+                meta.relativePath = savePath;
+                return meta;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning($"[Save] 元数据侧车解析失败，回退全量解析: {savePath}, {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 删除槽位文件及其全部配套文件（侧车 / 备份 / 临时文件）。
+        /// </summary>
+        /// <param name="slotPath">槽位载荷的相对路径。</param>
+        private static void DeleteSlotFiles(string slotPath)
+        {
+            FileManager.Delete(SaveDomain, slotPath);
+            FileManager.Delete(SaveDomain, slotPath + SavePathUtility.MetaFileSuffix);
+            FileManager.Delete(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix);
+            FileManager.Delete(SaveDomain, slotPath + FilePathUtility.TempFileSuffix);
+        }
+
+        /// <summary>
         /// 为无法解析的存档构造带损坏标记的元数据。
         /// <para>经由 <c>Factory().CreateMeta()</c> 而非 <c>new SaveMeta()</c>：第三方扩展的
         /// <see cref="SaveMeta"/> 子类字段需要与配对快照一起构造，损坏文件没有可用快照，
@@ -482,26 +576,6 @@ namespace XFramework.XSave
             {
                 return x.slot.CompareTo(y.slot);
             }
-        }
-
-        /// <summary>
-        /// 判断路径是否为槽位文件——<b>宽松判断，只用于删除路径</b>。
-        /// <para>删除语义是「清掉所有 <c>slot_</c> 前缀残留」，因此 <c>slot_abc.save</c> 这类
-        /// 解析不出槽位号的文件也应被清理；而枚举只列合法槽位，用的是
-        /// <see cref="SavePathUtility.TryParseSlot"/>。两者语义不同，刻意不做统一。</para>
-        /// </summary>
-        /// <param name="path">文件相对路径。</param>
-        /// <returns>文件名以前缀开头、以后缀结尾返回 <c>true</c>。</returns>
-        private static bool IsSlotFilePath(string path)
-        {
-            if (string.IsNullOrEmpty(path))
-                return false;
-
-            // 取文件名部分（去掉可能的 playerId 子目录前缀）
-            var fileName = FilePathUtility.GetFileNameFromPath(path);
-
-            return fileName.StartsWith(SavePathUtility.SlotFilePrefix, StringComparison.Ordinal)
-                && fileName.EndsWith(SavePathUtility.SlotFileSuffix, StringComparison.Ordinal);
         }
 
         #endregion
@@ -598,8 +672,8 @@ namespace XFramework.XSave
             EnterBusy();
             try
             {
-                // 删除该玩家子目录下的所有 .save 文件
-                var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
+                // 一次枚举覆盖槽位载荷与其全部配套文件（.meta / .bak / .tmp）
+                var files = await FileManager.GetFilesAsync(SaveDomain, playerId, SlotFileSearchPattern, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
                 var deleted = 0;
@@ -607,22 +681,12 @@ namespace XFramework.XSave
                 {
                     for (int i = 0; i < files.Length; i++)
                     {
-                        if (IsSlotFilePath(files[i]))
-                        {
-                            FileManager.Delete(SaveDomain, files[i]);
+                        // 只把合法槽位载荷计入返回值；配套文件与解析不出槽位号的残留一并清理但不计数
+                        if (SavePathUtility.TryParseSlot(files[i], out _))
                             deleted++;
-                        }
+
+                        FileManager.Delete(SaveDomain, files[i]);
                     }
-                }
-
-                // 同时删除可能残留的 .tmp 文件（不计入返回的槽位数量）
-                var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
-                await ReturnToMainThread(cancellationToken);
-
-                if (tmpFiles != null)
-                {
-                    for (int i = 0; i < tmpFiles.Length; i++)
-                        FileManager.Delete(SaveDomain, tmpFiles[i]);
                 }
 
                 return deleted;
