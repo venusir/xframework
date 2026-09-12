@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -85,6 +86,16 @@ namespace XFramework.XSave
         UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// 获取指定玩家的槽位元数据列表，并上报逐槽位进度。
+        /// <para>逐文件读取+反序列化是本模块最重的多步操作，进度对存档界面最有意义。</para>
+        /// </summary>
+        /// <param name="playerId">要查询的玩家 ID。</param>
+        /// <param name="progress">进度接收方；为 <c>null</c> 时不上报。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>该玩家的存档元数据列表。</returns>
+        UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 删除指定玩家的所有存档数据。
         /// <para>不会改变当前玩家上下文。</para>
         /// </summary>
@@ -92,6 +103,15 @@ namespace XFramework.XSave
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>实际删除的槽位数量。</returns>
         UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 删除指定玩家的所有存档数据，并上报逐槽位进度。
+        /// </summary>
+        /// <param name="playerId">要删除的玩家 ID。</param>
+        /// <param name="progress">进度接收方；为 <c>null</c> 时不上报。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>实际删除的槽位数量。</returns>
+        UniTask<int> DeletePlayerAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -103,6 +123,14 @@ namespace XFramework.XSave
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>当前玩家上下文下的存档元数据；无存档时返回空列表。</returns>
         UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 获取当前玩家上下文下的槽位元数据列表，并上报逐槽位进度。
+        /// </summary>
+        /// <param name="progress">进度接收方；为 <c>null</c> 时不上报。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>当前玩家上下文下的存档元数据；无存档时返回空列表。</returns>
+        UniTask<List<SaveMeta>> GetSlotMetasAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 获取指定槽位的元数据。
@@ -156,6 +184,14 @@ namespace XFramework.XSave
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>实际删除的槽位数量。</returns>
         UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 删除当前玩家上下文下的所有槽位存档，并上报逐槽位进度。
+        /// </summary>
+        /// <param name="progress">进度接收方；为 <c>null</c> 时不上报。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>实际删除的槽位数量。</returns>
+        UniTask<int> DeleteAllSlotsAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 检查指定槽位是否存在存档。

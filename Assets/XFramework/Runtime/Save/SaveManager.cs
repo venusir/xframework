@@ -194,29 +194,50 @@ namespace XFramework.XSave
             return _impl.GetAllPlayerIdsAsync(cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.GetPlayerSlotMetasAsync"/>
+        /// <inheritdoc cref="ISaveManager.GetPlayerSlotMetasAsync(string, CancellationToken)"/>
         public static UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             return _impl.GetPlayerSlotMetasAsync(playerId, cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.DeletePlayerAsync"/>
+        /// <inheritdoc cref="ISaveManager.GetPlayerSlotMetasAsync(string, IProgress{SaveReport}, CancellationToken)"/>
+        public static UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.GetPlayerSlotMetasAsync(playerId, progress, cancellationToken);
+        }
+
+        /// <inheritdoc cref="ISaveManager.DeletePlayerAsync(string, CancellationToken)"/>
         public static UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             return _impl.DeletePlayerAsync(playerId, cancellationToken);
         }
 
+        /// <inheritdoc cref="ISaveManager.DeletePlayerAsync(string, IProgress{SaveReport}, CancellationToken)"/>
+        public static UniTask<int> DeletePlayerAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.DeletePlayerAsync(playerId, progress, cancellationToken);
+        }
+
         #endregion
 
         #region Public API
 
-        /// <inheritdoc cref="ISaveManager.GetSlotMetasAsync"/>
+        /// <inheritdoc cref="ISaveManager.GetSlotMetasAsync(CancellationToken)"/>
         public static UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             return _impl.GetSlotMetasAsync(cancellationToken);
+        }
+
+        /// <inheritdoc cref="ISaveManager.GetSlotMetasAsync(IProgress{SaveReport}, CancellationToken)"/>
+        public static UniTask<List<SaveMeta>> GetSlotMetasAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.GetSlotMetasAsync(progress, cancellationToken);
         }
 
         /// <inheritdoc cref="ISaveManager.GetSlotMetaAsync"/>
@@ -254,11 +275,18 @@ namespace XFramework.XSave
             return _impl.DeleteSlotAsync(slot, cancellationToken);
         }
 
-        /// <inheritdoc cref="ISaveManager.DeleteAllSlotsAsync"/>
+        /// <inheritdoc cref="ISaveManager.DeleteAllSlotsAsync(CancellationToken)"/>
         public static UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             return _impl.DeleteAllSlotsAsync(cancellationToken);
+        }
+
+        /// <inheritdoc cref="ISaveManager.DeleteAllSlotsAsync(IProgress{SaveReport}, CancellationToken)"/>
+        public static UniTask<int> DeleteAllSlotsAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.DeleteAllSlotsAsync(progress, cancellationToken);
         }
 
         /// <inheritdoc cref="ISaveManager.SlotExistsAsync"/>

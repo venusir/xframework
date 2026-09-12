@@ -343,6 +343,87 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 进度上报
+
+        /// <summary>
+        /// 记录全部进度报告的测试替身。
+        /// </summary>
+        private sealed class RecordingProgress : IProgress<SaveReport>
+        {
+            public readonly List<SaveReport> Reports = new List<SaveReport>();
+
+            public void Report(SaveReport value) => Reports.Add(value);
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_ReportsProgress()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+            var progress = new RecordingProgress();
+
+            var metas = await SaveManager.GetSlotMetasAsync(progress);
+
+            Assert.AreEqual(2, metas.Count, "带进度的重载应返回与不带进度时相同的结果");
+            Assert.IsTrue(progress.Reports.Count > 0, "应上报进度");
+
+            var last = progress.Reports[progress.Reports.Count - 1];
+            Assert.AreEqual(1f, last.Progress, 0.001f, "最后一次上报应为完成");
+            Assert.IsFalse(string.IsNullOrEmpty(last.Description), "应带步骤描述");
+
+            // 进度不得倒退：调用方据此画进度条，倒退会表现为进度条回跳
+            for (int i = 1; i < progress.Reports.Count; i++)
+                Assert.GreaterOrEqual(progress.Reports[i].Progress, progress.Reports[i - 1].Progress,
+                    $"第 {i} 次上报的进度不应低于前一次");
+        }
+
+        [Test]
+        public async Task GetPlayerSlotMetasAsync_ReportsProgress()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 1;
+            await SaveManager.SaveAsync(1);
+
+            var progress = new RecordingProgress();
+            var metas = await SaveManager.GetPlayerSlotMetasAsync("Alice", progress);
+
+            Assert.AreEqual(1, metas.Count);
+            Assert.IsTrue(progress.Reports.Count > 0, "按玩家查询也应上报进度");
+            Assert.AreEqual(1f, progress.Reports[progress.Reports.Count - 1].Progress, 0.001f);
+        }
+
+        [Test]
+        public async Task DeleteAllSlotsAsync_ReportsProgress()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+            var progress = new RecordingProgress();
+
+            var deleted = await SaveManager.DeleteAllSlotsAsync(progress);
+
+            Assert.AreEqual(2, deleted, "带进度的重载应返回与不带进度时相同的计数");
+            Assert.IsTrue(progress.Reports.Count > 0, "应上报进度");
+            Assert.AreEqual(1f, progress.Reports[progress.Reports.Count - 1].Progress, 0.001f);
+        }
+
+        [Test]
+        public async Task DeletePlayerAsync_ReportsProgress()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 1;
+            await SaveManager.SaveAsync(1);
+
+            var progress = new RecordingProgress();
+            var deleted = await SaveManager.DeletePlayerAsync("Alice", progress);
+
+            Assert.AreEqual(1, deleted);
+            Assert.IsTrue(progress.Reports.Count > 0, "按玩家删除也应上报进度");
+        }
+
+        #endregion
+
         #region 启动恢复扫描
 
         [Test]

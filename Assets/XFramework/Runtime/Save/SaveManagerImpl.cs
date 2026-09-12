@@ -83,11 +83,23 @@ namespace XFramework.XSave
         {
             // 只把玩家上下文当作默认值：实际查询由参数驱动，不读也不写共享状态，
             // 因此并发调用互不干扰，也不会在 await 处被其他操作观察到中间态
-            return GetPlayerSlotMetasAsync(_playerId, cancellationToken);
+            return GetPlayerSlotMetasAsync(_playerId, null, cancellationToken);
         }
 
         /// <inheritdoc/>
-        public async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
+        public UniTask<List<SaveMeta>> GetSlotMetasAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
+        {
+            return GetPlayerSlotMetasAsync(_playerId, progress, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
+        {
+            return GetPlayerSlotMetasAsync(playerId, null, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
         {
             // null/空表示「无玩家隔离的域根目录」，是契约允许的取值；
             // 只有非空值才需要校验（挡住路径穿越与跨平台非法字符）
@@ -101,7 +113,10 @@ namespace XFramework.XSave
             var metas = new List<SaveMeta>();
 
             if (files == null || files.Length == 0)
+            {
+                ReportProgress(progress, 1f, "没有存档");
                 return metas;
+            }
 
             // 快照类型在循环外取一次：Factory 是可变静态字段，不能缓存到字段/静态里
             // （第三方随时可替换），但也不必每个文件都构造一个快照实例
@@ -109,6 +124,8 @@ namespace XFramework.XSave
 
             for (int i = 0; i < files.Length; i++)
             {
+                ReportProgress(progress, (float)i / files.Length, $"读取存档 {i + 1}/{files.Length}");
+
                 var path = files[i];
 
                 // 严格解析：非 slot_<非负整数>.save 的文件直接不认，不产生 slot = -1 的脏元数据
@@ -167,6 +184,8 @@ namespace XFramework.XSave
 
             // 排序：文件系统返回顺序跨平台不确定，升序让 UI 与断言都有稳定预期
             metas.Sort(SlotAscendingComparer);
+
+            ReportProgress(progress, 1f, $"已读取 {metas.Count} 个存档");
             return metas;
         }
 
@@ -524,7 +543,13 @@ namespace XFramework.XSave
         }
 
         /// <inheritdoc/>
-        public async UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
+        public UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
+        {
+            return DeleteAllSlotsAsync(null, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async UniTask<int> DeleteAllSlotsAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
         {
             var searchDir = _playerId ?? "";
 
@@ -535,12 +560,17 @@ namespace XFramework.XSave
                 var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, SlotFileSearchPattern, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
-                if (files == null)
+                if (files == null || files.Length == 0)
+                {
+                    ReportProgress(progress, 1f, "没有可删除的存档");
                     return 0;
+                }
 
                 var deleted = 0;
                 for (int i = 0; i < files.Length; i++)
                 {
+                    ReportProgress(progress, (float)i / files.Length, $"删除存档 {i + 1}/{files.Length}");
+
                     // 只把合法槽位载荷计入返回值；配套文件与解析不出槽位号的残留一并清理但不计数
                     if (SavePathUtility.TryParseSlot(files[i], out _))
                         deleted++;
@@ -548,6 +578,7 @@ namespace XFramework.XSave
                     FileManager.Delete(SaveDomain, files[i]);
                 }
 
+                ReportProgress(progress, 1f, $"已删除 {deleted} 个存档");
                 return deleted;
             }
             finally
@@ -575,6 +606,18 @@ namespace XFramework.XSave
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// 上报进度。
+        /// </summary>
+        /// <param name="progress">进度接收方；为 <c>null</c> 时不做任何事。</param>
+        /// <param name="value">整体进度，0~1。</param>
+        /// <param name="description">当前步骤描述。</param>
+        private static void ReportProgress(IProgress<SaveReport> progress, float value, string description)
+        {
+            if (progress != null)
+                progress.Report(new SaveReport(value, description));
+        }
 
         /// <summary>
         /// 原子占用写操作名额。
@@ -1035,7 +1078,13 @@ namespace XFramework.XSave
         }
 
         /// <inheritdoc/>
-        public async UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
+        public UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
+        {
+            return DeletePlayerAsync(playerId, null, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async UniTask<int> DeletePlayerAsync(string playerId, IProgress<SaveReport> progress, CancellationToken cancellationToken = default)
         {
             // 空 playerId 原先是静默 no-op，调用方无法区分「删掉了 0 个」与「参数给错了」。
             // 要删除无玩家隔离的域根目录存档，应在无玩家上下文时调用 DeleteAllSlotsAsync
@@ -1052,10 +1101,12 @@ namespace XFramework.XSave
                 await ReturnToMainThread(cancellationToken);
 
                 var deleted = 0;
-                if (files != null)
+                if (files != null && files.Length > 0)
                 {
                     for (int i = 0; i < files.Length; i++)
                     {
+                        ReportProgress(progress, (float)i / files.Length, $"删除存档 {i + 1}/{files.Length}");
+
                         // 只把合法槽位载荷计入返回值；配套文件与解析不出槽位号的残留一并清理但不计数
                         if (SavePathUtility.TryParseSlot(files[i], out _))
                             deleted++;
@@ -1064,6 +1115,7 @@ namespace XFramework.XSave
                     }
                 }
 
+                ReportProgress(progress, 1f, $"已删除 {deleted} 个存档");
                 return deleted;
             }
             finally
