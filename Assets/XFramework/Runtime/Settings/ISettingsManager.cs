@@ -9,7 +9,8 @@ namespace XFramework.XSettings
     /// <para>管理一组设置对象（类型 T）的完整生命周期：加载、修改、保存、重置。</para>
     /// <para><b>两级订阅分工：</b>字段级变化经 <see cref="SettingRef{T,TField}"/> 订阅；
     /// 设置对象被整体替换（Apply / Load / Reset）经 <see cref="Observe"/> 订阅。</para>
-    /// <para>默认实现：<see cref="SettingsManagerImpl{T}"/>。</para>
+    /// <para>默认实现 <c>SettingsManagerImpl&lt;T&gt;</c> 为 internal，外部只能面向本接口编程
+    /// ——这符合框架惯例：实现类默认 internal sealed，公开面只留接口。</para>
     /// <para><b>释放语义：</b><see cref="IDisposable.Dispose"/> 可重复调用；释放后除 Dispose 外的
     /// 所有成员抛 <see cref="ObjectDisposedException"/>。</para>
     /// </summary>

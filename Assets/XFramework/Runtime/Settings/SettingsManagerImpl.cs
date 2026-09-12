@@ -14,7 +14,7 @@ namespace XFramework.XSettings
     /// <para>不会自动保存——调用方需显式调用 <see cref="Save"/> 来持久化。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
-    public class SettingsManagerImpl<T> : ISettingsManager<T> where T : class, new()
+    internal sealed class SettingsManagerImpl<T> : ISettingsManager<T> where T : class, new()
     {
         #region Private Fields
 
