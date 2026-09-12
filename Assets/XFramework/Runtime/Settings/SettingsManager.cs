@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 
@@ -140,6 +141,37 @@ namespace XFramework.XSettings
         public static void Apply<T>(T settings) where T : class, new()
         {
             GetManager<T>().Apply(settings);
+        }
+
+        #endregion
+
+        #region Field Ref
+
+        /// <summary>
+        /// 为设置对象中的一个字段创建响应式句柄，供 UI 绑定与「改值即通知」使用。
+        /// <para><b>本方法必须调用一次并缓存返回值</b>（典型做法是 <c>static readonly</c> 字段）：
+        /// 它需要解析并编译表达式，且每次调用都会新建句柄与事件流。</para>
+        /// <para>可在 <see cref="Initialize{T}(ISettingsStore, Func{T}, SettingsOptions)"/> 之前调用——
+        /// 解析表达式不需要设置实例，句柄在真正读写时才去找当前实例。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <typeparam name="TField">字段类型。</typeparam>
+        /// <param name="selector">字段选择器，如 <c>s =&gt; s.Audio.MasterVolume</c>。路径必须以字段结尾。</param>
+        /// <returns>与设置对象解耦的字段句柄，每次读写都作用于当前的设置实例。</returns>
+        /// <exception cref="ArgumentException">选择器不以字段结尾，或路径含不支持的结构时抛出。</exception>
+        /// <example>
+        /// <code>
+        /// private static readonly SettingRef&lt;GameSettings, float&gt; MasterVolume =
+        ///     SettingsManager.Ref&lt;GameSettings, float&gt;(s =&gt; s.Audio.MasterVolume);
+        ///
+        /// MasterVolume.Value = 0.5f;              // 回写 + 通知
+        /// MasterVolume.BindToSlider(masterSlider); // 复用 UI 模块的现成绑定
+        /// </code>
+        /// </example>
+        public static SettingRef<T, TField> Ref<T, TField>(Expression<Func<T, TField>> selector)
+            where T : class, new()
+        {
+            return SettingRef<T, TField>.Create(selector);
         }
 
         #endregion
