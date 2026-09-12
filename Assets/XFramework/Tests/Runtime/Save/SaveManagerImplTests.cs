@@ -336,6 +336,51 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task DeleteSlotAsync_WhileSaveInFlight_Throws()
+        {
+            // 存档替换期间被并发删除会破坏原子写语义：删槽位会在「已写 .tmp、尚未替换」的窗口里
+            // 把目标文件抽走。旧实现不设门禁，静默删掉，存档就此消失
+            await SaveManager.SaveAsync(1);
+
+            // 故意不 await：SaveAsync 会同步执行到第一个 IO await 处挂起，此时门禁已置位
+            var saveTask = SaveManager.SaveAsync(1);
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.DeleteSlotAsync(1),
+                "写操作在飞时应拒绝删除，而不是静默把目标文件抽走");
+
+            await saveTask;
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "被拒绝的删除不应影响存档");
+        }
+
+        [Test]
+        public async Task SaveAsync_WhileSaveInFlight_Throws()
+        {
+            var saveTask = SaveManager.SaveAsync(1);
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.SaveAsync(2),
+                "上一次写操作未完成时应拒绝新的写操作");
+
+            await saveTask;
+        }
+
+        [Test]
+        public async Task ReadOperations_WhileSaveInFlight_AreNotBlocked()
+        {
+            // 读操作刻意不进写门禁：替换是原子的，读只会看到「旧的完整文件」或「新的完整文件」，
+            // 永远不会读到半截；给读加门禁只会让存档 UI 在保存进行中莫名抛异常
+            var saveTask = SaveManager.SaveAsync(1);
+
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(1), "首次保存尚未完成时槽位还不存在");
+            Assert.IsNotNull(await SaveManager.GetSlotMetasAsync(), "读操作应正常返回而非抛异常");
+            await SaveManager.GetSlotMetaAsync(1);
+
+            await saveTask;
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "保存完成后槽位应存在");
+        }
+
+        [Test]
         public void SetCurrentPlayer_InvalidPlayerId_ThrowsWithoutPoisoningContext()
         {
             // 路径穿越注入：playerId 含分隔符或 .. 时应在设置时即被拒绝，防止存档写到域根之外。

@@ -42,12 +42,20 @@ namespace XFramework.XSave
         /// </summary>
         private string _playerId;
 
+        /// <summary>
+        /// 写操作占位标志：0 = 空闲，1 = 占用。
+        /// <para>用 <see cref="Interlocked"/> 而非普通 <c>bool</c>：本类每个 IO <c>await</c> 之后的续体
+        /// 可能落在池线程上，<c>if (IsBusy) throw; IsBusy = true;</c> 这类 check-then-act 存在竞态，
+        /// 且普通字段跨线程读取无可见性保证。</para>
+        /// </summary>
+        private int _busyFlag;
+
         #endregion
 
         #region ISaveManager
 
         /// <inheritdoc/>
-        public bool IsBusy { get; private set; }
+        public bool IsBusy => Volatile.Read(ref _busyFlag) != 0;
 
         /// <inheritdoc/>
         public string CurrentPlayerId => _playerId;
@@ -143,13 +151,10 @@ namespace XFramework.XSave
         {
             SavePathUtility.ValidateSlot(slot);
 
-            if (IsBusy)
-                throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
-
             // 入口捕获玩家上下文：await 之后不再读字段，避免与并发切换玩家产生竞态
             var playerId = _playerId;
 
-            IsBusy = true;
+            EnterBusy();
             try
             {
                 // 1. 收集数据快照
@@ -169,7 +174,7 @@ namespace XFramework.XSave
             }
             finally
             {
-                IsBusy = false;
+                ExitBusy();
             }
         }
 
@@ -178,15 +183,12 @@ namespace XFramework.XSave
         {
             SavePathUtility.ValidateSlot(slot);
 
-            if (IsBusy)
-                throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
-
             var playerId = _playerId;
             var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
             if (!FileManager.Exists(SaveDomain, slotPath))
                 throw new InvalidOperationException($"[Save] 存档槽位 {slot} 不存在，无法加载。");
 
-            IsBusy = true;
+            EnterBusy();
             try
             {
                 var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, slotPath, cancellationToken);
@@ -210,7 +212,7 @@ namespace XFramework.XSave
             }
             finally
             {
-                IsBusy = false;
+                ExitBusy();
             }
         }
 
@@ -222,47 +224,64 @@ namespace XFramework.XSave
             var playerId = _playerId;
             var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
 
-            var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
-            await ReturnToMainThread(cancellationToken);
+            EnterBusy();
+            try
+            {
+                var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
 
-            if (!exists)
-                return false;
+                if (!exists)
+                    return false;
 
-            FileManager.Delete(SaveDomain, slotPath);
-            return true;
+                FileManager.Delete(SaveDomain, slotPath);
+                return true;
+            }
+            finally
+            {
+                ExitBusy();
+            }
         }
 
         /// <inheritdoc/>
         public async UniTask<int> DeleteAllSlotsAsync(CancellationToken cancellationToken = default)
         {
             var searchDir = _playerId ?? "";
-            var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
-            await ReturnToMainThread(cancellationToken);
 
-            if (files == null)
-                return 0;
-
-            var deleted = 0;
-            for (int i = 0; i < files.Length; i++)
+            EnterBusy();
+            try
             {
-                if (IsSlotFilePath(files[i]))
+                var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                if (files == null)
+                    return 0;
+
+                var deleted = 0;
+                for (int i = 0; i < files.Length; i++)
                 {
-                    FileManager.Delete(SaveDomain, files[i]);
-                    deleted++;
+                    if (IsSlotFilePath(files[i]))
+                    {
+                        FileManager.Delete(SaveDomain, files[i]);
+                        deleted++;
+                    }
                 }
+
+                // 同时清理可能残留的 .tmp 文件（不计入返回的槽位数量）
+                var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                if (tmpFiles != null)
+                {
+                    for (int i = 0; i < tmpFiles.Length; i++)
+                        FileManager.Delete(SaveDomain, tmpFiles[i]);
+                }
+
+                return deleted;
             }
-
-            // 同时清理可能残留的 .tmp 文件（不计入返回的槽位数量）
-            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, searchDir, "*.tmp", cancellationToken);
-            await ReturnToMainThread(cancellationToken);
-
-            if (tmpFiles != null)
+            finally
             {
-                for (int i = 0; i < tmpFiles.Length; i++)
-                    FileManager.Delete(SaveDomain, tmpFiles[i]);
+                ExitBusy();
             }
-
-            return deleted;
         }
 
         /// <inheritdoc/>
@@ -284,6 +303,29 @@ namespace XFramework.XSave
         #endregion
 
         #region Private Helpers
+
+        /// <summary>
+        /// 原子占用写操作名额。
+        /// <para>写操作（保存/加载/删除）共用一道门禁：存档文件替换期间被并发删除会破坏原子写语义，
+        /// 而删槽位恰好会在「已写 <c>.tmp</c>、尚未替换」的窗口里把目标文件抽走，导致存档丢失。</para>
+        /// <para><b>读操作刻意不进保护</b>（GetSlotMetas / GetSlotMeta / SlotExists / GetAllPlayerIds）：
+        /// 替换是原子的，读只会看到「旧的完整文件」或「新的完整文件」，永远不会读到半截；
+        /// 给读加门禁只会让存档 UI 在保存进行中莫名抛异常。</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">已有写操作未完成时抛出。</exception>
+        private void EnterBusy()
+        {
+            if (Interlocked.CompareExchange(ref _busyFlag, 1, 0) != 0)
+                throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
+        }
+
+        /// <summary>
+        /// 释放写操作名额。
+        /// </summary>
+        private void ExitBusy()
+        {
+            Interlocked.Exchange(ref _busyFlag, 0);
+        }
 
         /// <summary>
         /// 把续体切回主线程。
@@ -469,34 +511,42 @@ namespace XFramework.XSave
 
             SavePathUtility.ValidatePlayerId(playerId);
 
-            // 删除该玩家子目录下的所有 .save 文件
-            var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
-            await ReturnToMainThread(cancellationToken);
-
-            var deleted = 0;
-            if (files != null)
+            EnterBusy();
+            try
             {
-                for (int i = 0; i < files.Length; i++)
+                // 删除该玩家子目录下的所有 .save 文件
+                var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                var deleted = 0;
+                if (files != null)
                 {
-                    if (IsSlotFilePath(files[i]))
+                    for (int i = 0; i < files.Length; i++)
                     {
-                        FileManager.Delete(SaveDomain, files[i]);
-                        deleted++;
+                        if (IsSlotFilePath(files[i]))
+                        {
+                            FileManager.Delete(SaveDomain, files[i]);
+                            deleted++;
+                        }
                     }
                 }
+
+                // 同时删除可能残留的 .tmp 文件（不计入返回的槽位数量）
+                var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                if (tmpFiles != null)
+                {
+                    for (int i = 0; i < tmpFiles.Length; i++)
+                        FileManager.Delete(SaveDomain, tmpFiles[i]);
+                }
+
+                return deleted;
             }
-
-            // 同时删除可能残留的 .tmp 文件（不计入返回的槽位数量）
-            var tmpFiles = await FileManager.GetFilesAsync(SaveDomain, playerId, "*.tmp", cancellationToken);
-            await ReturnToMainThread(cancellationToken);
-
-            if (tmpFiles != null)
+            finally
             {
-                for (int i = 0; i < tmpFiles.Length; i++)
-                    FileManager.Delete(SaveDomain, tmpFiles[i]);
+                ExitBusy();
             }
-
-            return deleted;
         }
 
         #endregion
