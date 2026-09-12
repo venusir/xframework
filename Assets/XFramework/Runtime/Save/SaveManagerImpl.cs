@@ -25,8 +25,6 @@ namespace XFramework.XSave
     {
         #region Constants
 
-        private const string SlotFilePrefix = "slot_";
-        private const string SlotFileSuffix = ".save";
         private const FileDomain SaveDomain = FileDomain.SaveData;
 
         #endregion
@@ -65,6 +63,11 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
         {
+            // null/空表示「无玩家隔离的域根目录」，是契约允许的取值；
+            // 只有非空值才需要校验（挡住路径穿越与跨平台非法字符）
+            if (!string.IsNullOrEmpty(playerId))
+                SavePathUtility.ValidatePlayerId(playerId);
+
             var searchDir = playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             await ReturnToMainThread(cancellationToken);
@@ -109,9 +112,11 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<SaveMeta> GetSlotMetaAsync(int slot, CancellationToken cancellationToken = default)
         {
+            SavePathUtility.ValidateSlot(slot);
+
             // 入口捕获玩家上下文：await 之后不再读字段，避免与并发切换玩家产生竞态
             var playerId = _playerId;
-            var path = BuildSlotPath(playerId, slot);
+            var path = SavePathUtility.BuildSlotPath(playerId, slot);
 
             if (!FileManager.Exists(SaveDomain, path))
                 return null;
@@ -136,6 +141,8 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<SaveMeta> SaveAsync(int slot, CancellationToken cancellationToken = default)
         {
+            SavePathUtility.ValidateSlot(slot);
+
             if (IsBusy)
                 throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
 
@@ -153,7 +160,7 @@ namespace XFramework.XSave
 
                 // 3. 原子写入：Provider 层先写 .tmp 再替换正式文件（IAtomicFileProvider 契约），
                 //    写入中途崩溃不会损坏已有存档；Provider 不支持时门面自动降级普通写
-                var slotPath = BuildSlotPath(playerId, slot);
+                var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
 
                 await FileManager.WriteAllBytesAtomicAsync(SaveDomain, slotPath, bytes, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
@@ -169,11 +176,13 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask LoadAsync(int slot, CancellationToken cancellationToken = default)
         {
+            SavePathUtility.ValidateSlot(slot);
+
             if (IsBusy)
                 throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
 
             var playerId = _playerId;
-            var slotPath = BuildSlotPath(playerId, slot);
+            var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
             if (!FileManager.Exists(SaveDomain, slotPath))
                 throw new InvalidOperationException($"[Save] 存档槽位 {slot} 不存在，无法加载。");
 
@@ -208,8 +217,10 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default)
         {
+            SavePathUtility.ValidateSlot(slot);
+
             var playerId = _playerId;
-            var slotPath = BuildSlotPath(playerId, slot);
+            var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
 
             var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
             await ReturnToMainThread(cancellationToken);
@@ -257,9 +268,14 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<bool> SlotExistsAsync(int slot, CancellationToken cancellationToken = default)
         {
+            // 谓词语义：非法槽位按「不存在」返回 false 而非抛异常——UI 轮询槽位时不该被迫到处包 try。
+            // 这是与其它入口刻意保留的不对称，已写入接口注释
+            if (slot < 0)
+                return false;
+
             var playerId = _playerId;
 
-            var exists = await FileManager.ExistsAsync(SaveDomain, BuildSlotPath(playerId, slot), cancellationToken);
+            var exists = await FileManager.ExistsAsync(SaveDomain, SavePathUtility.BuildSlotPath(playerId, slot), cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
             return exists;
@@ -356,27 +372,6 @@ namespace XFramework.XSave
             return meta;
         }
 
-        /// <summary>
-        /// 构造槽位文件的相对路径（纯函数，不读取当前玩家上下文）。
-        /// </summary>
-        /// <param name="playerId">玩家 ID。为 <c>null</c> 时直接落在域根目录。</param>
-        /// <param name="slot">槽位号。</param>
-        /// <returns>相对路径。</returns>
-        private static string BuildSlotPath(string playerId, int slot)
-        {
-            var fileName = $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
-            if (playerId == null)
-                return fileName;
-
-            // playerId 作为单段目录名：严格拒绝分隔符与 .. 穿越（路径沙箱第二道防线），
-            // 防止 SetCurrentPlayer("../../") 注入导致存档写到域根之外
-            if (playerId.IndexOfAny(PathSeparators) >= 0 || playerId == "..")
-                throw new ArgumentException(
-                    $"[Save] 非法 playerId '{playerId}':不允许包含路径分隔符或 '..'。");
-
-            return $"{playerId}/{fileName}";
-        }
-
         private static bool IsSlotFilePath(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -385,8 +380,8 @@ namespace XFramework.XSave
             // 取文件名部分（去掉可能的 playerId 子目录前缀）
             var fileName = FilePathUtility.GetFileNameFromPath(path);
 
-            return fileName.StartsWith(SlotFilePrefix, StringComparison.Ordinal)
-                && fileName.EndsWith(SlotFileSuffix, StringComparison.Ordinal);
+            return fileName.StartsWith(SavePathUtility.SlotFilePrefix, StringComparison.Ordinal)
+                && fileName.EndsWith(SavePathUtility.SlotFileSuffix, StringComparison.Ordinal);
         }
 
         private static int ParseSlotFromPath(string path)
@@ -394,8 +389,8 @@ namespace XFramework.XSave
             // 取文件名部分，格式: "slot_{index}.save"（可能包含 playerId/ 前缀）
             var fileName = FilePathUtility.GetFileNameFromPath(path);
 
-            var start = SlotFilePrefix.Length;
-            var end = fileName.LastIndexOf(SlotFileSuffix, StringComparison.Ordinal);
+            var start = SavePathUtility.SlotFilePrefix.Length;
+            var end = fileName.LastIndexOf(SavePathUtility.SlotFileSuffix, StringComparison.Ordinal);
             if (end < start)
                 return -1;
 
@@ -413,6 +408,15 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public void SetCurrentPlayer(string playerId)
         {
+            // 契约允许 null/空表示清除上下文；非空值先校验再落地——
+            // 校验失败时 _playerId 保持原值，不会留下「半切换」的玩家上下文
+            if (string.IsNullOrEmpty(playerId))
+            {
+                _playerId = null;
+                return;
+            }
+
+            SavePathUtility.ValidatePlayerId(playerId);
             _playerId = playerId;
         }
 
@@ -458,8 +462,12 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<int> DeletePlayerAsync(string playerId, CancellationToken cancellationToken = default)
         {
+            // 空 playerId 原先是静默 no-op，调用方无法区分「删掉了 0 个」与「参数给错了」。
+            // 要删除无玩家隔离的域根目录存档，应在无玩家上下文时调用 DeleteAllSlotsAsync
             if (string.IsNullOrEmpty(playerId))
-                return 0;
+                throw new ArgumentException("[Save] playerId 不能为空。", nameof(playerId));
+
+            SavePathUtility.ValidatePlayerId(playerId);
 
             // 删除该玩家子目录下的所有 .save 文件
             var files = await FileManager.GetFilesAsync(SaveDomain, playerId, cancellationToken: cancellationToken);

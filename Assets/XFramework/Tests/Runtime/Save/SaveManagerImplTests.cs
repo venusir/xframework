@@ -336,22 +336,74 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
-        public async Task SaveAsync_InvalidPlayerId_Throws()
+        public void SetCurrentPlayer_InvalidPlayerId_ThrowsWithoutPoisoningContext()
         {
-            // 路径穿越注入:playerId 含分隔符或 .. 时应拒绝,防止存档写到域根之外
-            SaveManager.SetCurrentPlayer("../../outside");
-
-            await AssertThrowsAsync<ArgumentException>(() => SaveManager.SaveAsync(1),
-                "含路径分隔符的 playerId 应抛出 ArgumentException");
+            // 路径穿越注入：playerId 含分隔符或 .. 时应在设置时即被拒绝，防止存档写到域根之外。
+            // 校验点前移后不再等到 SaveAsync 才失败——那时快照已生成、脏标记已清空
+            Assert.Throws<ArgumentException>(() => SaveManager.SetCurrentPlayer("../../outside"),
+                "含路径分隔符的 playerId 应在设置时即被拒绝");
+            Assert.IsNull(SaveManager.CurrentPlayerId, "被拒绝的 playerId 不得留下半切换的玩家上下文");
         }
 
         [Test]
-        public async Task SaveAsync_PlayerIdSingleDotDot_Throws()
+        public void SetCurrentPlayer_SingleDotDot_Throws()
         {
-            SaveManager.SetCurrentPlayer("..");
+            Assert.Throws<ArgumentException>(() => SaveManager.SetCurrentPlayer(".."),
+                "playerId 为 .. 时应被拒绝");
+            Assert.IsNull(SaveManager.CurrentPlayerId);
+        }
 
-            await AssertThrowsAsync<ArgumentException>(() => SaveManager.SaveAsync(1),
-                "playerId 为 .. 时应抛出 ArgumentException");
+        [Test]
+        public void SetCurrentPlayer_SingleDot_Throws()
+        {
+            // "." 能穿过 FileManager 的路径沙箱（它只拦 .. 段）：存档会落到域根从而绕开玩家隔离，
+            // 而 DeletePlayer(".") 会删掉域根下的全部存档
+            Assert.Throws<ArgumentException>(() => SaveManager.SetCurrentPlayer("."),
+                "playerId 为 . 时应被拒绝");
+            Assert.IsNull(SaveManager.CurrentPlayerId);
+        }
+
+        [Test]
+        public void SetCurrentPlayer_ColonInMiddle_Throws()
+        {
+            // "foo:bar" 的冒号不在索引 1，FileManager 的盘符前缀检查漏过它；
+            // 于是在 Windows 上写入抛 NotSupportedException、而 Exists 静默返回 false，
+            // 同一个 ID 上两个 API 给出矛盾结论
+            Assert.Throws<ArgumentException>(() => SaveManager.SetCurrentPlayer("foo:bar"),
+                "含文件系统非法字符的 playerId 应被拒绝");
+        }
+
+        [Test]
+        public void SetCurrentPlayer_RejectedId_KeepsPreviousPlayer()
+        {
+            SaveManager.SetCurrentPlayer("Alice");
+
+            Assert.Throws<ArgumentException>(() => SaveManager.SetCurrentPlayer("bad/id"));
+
+            Assert.AreEqual("Alice", SaveManager.CurrentPlayerId,
+                "被拒绝的 playerId 不应影响原有的玩家上下文");
+        }
+
+        [Test]
+        public async Task SaveAsync_NegativeSlot_Throws()
+        {
+            await AssertThrowsAsync<ArgumentOutOfRangeException>(() => SaveManager.SaveAsync(-1),
+                "负数槽位应被拒绝，而不是写出 slot_-1.save");
+        }
+
+        [Test]
+        public async Task SlotExistsAsync_NegativeSlot_ReturnsFalse()
+        {
+            // 谓词语义：非法槽位按不存在处理而不抛异常（与其它入口刻意保留的不对称）
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(-1), "非法槽位应按不存在处理");
+        }
+
+        [Test]
+        public async Task DeletePlayerAsync_EmptyPlayerId_Throws()
+        {
+            // 原先是静默 no-op，调用方无法区分「删掉了 0 个」与「参数给错了」
+            await AssertThrowsAsync<ArgumentException>(() => SaveManager.DeletePlayerAsync(string.Empty),
+                "空 playerId 应被拒绝而不是静默不删");
         }
 
         #region 续体线程
