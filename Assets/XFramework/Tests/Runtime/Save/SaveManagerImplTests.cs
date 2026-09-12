@@ -234,6 +234,63 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task GetPlayerSlotMetasAsync_DoesNotDisturbCurrentPlayer()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+
+            SaveManager.SetCurrentPlayer("Bob");
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 10;
+            await SaveManager.SaveAsync(1);
+
+            var bobMetas = await SaveManager.GetPlayerSlotMetasAsync("Bob");
+
+            Assert.AreEqual(1, bobMetas.Count, "应查到 Bob 的存档");
+            Assert.AreEqual("Bob", bobMetas[0].playerId, "元数据归属应为被查询的玩家");
+            Assert.AreEqual("Alice", SaveManager.CurrentPlayerId, "按玩家查询不得改变当前玩家上下文");
+
+            // 上下文未被污染：后续保存仍应落在当前玩家目录
+            wallet.Gold = 20;
+            await SaveManager.SaveAsync(2);
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, "Alice/slot_2.save"),
+                "查询他人存档后，当前玩家的保存仍应落在自己的目录");
+        }
+
+        [Test]
+        public async Task GetPlayerSlotMetasAsync_InterleavedWithSave_DoesNotMisroute()
+        {
+            // 回归锁：旧实现查询他人槽位时会把全局 playerId 临时改为目标玩家，并在 await 期间
+            // 保持该状态（且该路径不设 IsBusy）。此时并发发起的 SaveAsync 会读到被改写的
+            // playerId，把当前玩家的存档写进被查询者的目录——静默串档。
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+
+            SaveManager.SetCurrentPlayer("Bob");
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 10;
+            await SaveManager.SaveAsync(1);
+
+            // 故意不 await：查询会同步执行到第一个 IO await 处挂起，构造交错窗口
+            var queryTask = SaveManager.GetPlayerSlotMetasAsync("Bob");
+            var saveTask = SaveManager.SaveAsync(2);
+
+            var bobMetas = await queryTask;
+            await saveTask;
+
+            Assert.AreEqual(1, bobMetas.Count);
+            Assert.AreEqual("Bob", bobMetas[0].playerId);
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, "Alice/slot_2.save"),
+                "查询他人槽位期间发起的保存必须落在当前玩家（Alice）目录");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "Bob/slot_2.save"),
+                "被查询者（Bob）目录不应出现当前会话写入的存档");
+        }
+
+        [Test]
         public async Task SaveAsync_InvalidPlayerId_Throws()
         {
             // 路径穿越注入:playerId 含分隔符或 .. 时应拒绝,防止存档写到域根之外

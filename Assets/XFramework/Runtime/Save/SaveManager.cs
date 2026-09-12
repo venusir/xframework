@@ -143,34 +143,11 @@ namespace XFramework.XSave
             return _impl.GetAllPlayerIdsAsync(cancellationToken);
         }
 
-        /// <summary>
-        /// 获取指定玩家的存档槽位列表。
-        /// <para>不会切换当前玩家上下文。</para>
-        /// </summary>
-        /// <param name="playerId">要查询的玩家 ID。</param>
-        /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>该玩家的存档元数据列表。</returns>
-        public static async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
+        /// <inheritdoc cref="ISaveManager.GetPlayerSlotMetasAsync"/>
+        public static UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-
-            if (!(_impl is SaveManagerImpl impl))
-            {
-                throw new NotSupportedException(
-                    "[Save] 当前注入的 ISaveManager 实现不支持按玩家查询槽位。请改用 GetSlotMetasAsync，或为该实现补上按玩家查询能力。");
-            }
-
-            var previousPlayerId = impl.CurrentPlayerId;
-            try
-            {
-                // 临时切换玩家上下文以获取指定玩家的槽位列表
-                impl.SetCurrentPlayer(playerId);
-                return await impl.GetSlotMetasAsync(cancellationToken);
-            }
-            finally
-            {
-                impl.SetCurrentPlayer(previousPlayerId);
-            }
+            return _impl.GetPlayerSlotMetasAsync(playerId, cancellationToken);
         }
 
         /// <inheritdoc cref="ISaveManager.DeletePlayerAsync"/>

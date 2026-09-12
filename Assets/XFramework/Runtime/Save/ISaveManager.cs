@@ -55,6 +55,16 @@ namespace XFramework.XSave
         UniTask<string[]> GetAllPlayerIdsAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// 获取指定玩家的槽位元数据列表（按槽位号升序）。
+        /// <para>不会读取也不会修改当前玩家上下文：并发调用互不干扰，
+        /// 也不会在 <c>await</c> 处被其他操作观察到中间状态。</para>
+        /// </summary>
+        /// <param name="playerId">要查询的玩家 ID。为 <c>null</c> 或空时查询无玩家隔离的域根目录。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>该玩家的存档元数据列表；无存档时返回空列表。</returns>
+        UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 删除指定玩家的所有存档数据。
         /// <para>不会改变当前玩家上下文。</para>
         /// </summary>

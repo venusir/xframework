@@ -37,6 +37,11 @@ namespace XFramework.XSave
         // 此处兼容反斜杠是为了防御第三方 Provider 违反契约的情况
         private static readonly char[] PathSeparators = { '/', '\\' };
 
+        /// <summary>
+        /// 当前玩家上下文。仅由 <see cref="SetCurrentPlayer"/>/<see cref="ClearCurrentPlayer"/> 写入。
+        /// <para><b>不变式：</b>每个异步方法在入口处把本字段复制到局部变量，<c>await</c> 之后一律使用局部变量。
+        /// 直接读字段会与并发切换玩家上下文产生竞态——表现为存档写进错误的玩家目录、或元数据归属错误。</para>
+        /// </summary>
         private string _playerId;
 
         #endregion
@@ -50,9 +55,17 @@ namespace XFramework.XSave
         public string CurrentPlayerId => _playerId;
 
         /// <inheritdoc/>
-        public async UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
+        public UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
         {
-            var searchDir = _playerId ?? "";
+            // 只把玩家上下文当作默认值：实际查询由参数驱动，不读也不写共享状态，
+            // 因此并发调用互不干扰，也不会在 await 处被其他操作观察到中间态
+            return GetPlayerSlotMetasAsync(_playerId, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public async UniTask<List<SaveMeta>> GetPlayerSlotMetasAsync(string playerId, CancellationToken cancellationToken = default)
+        {
+            var searchDir = playerId ?? "";
             var files = await FileManager.GetFilesAsync(SaveDomain, searchDir, cancellationToken: cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
@@ -79,12 +92,7 @@ namespace XFramework.XSave
                     if (saveData == null)
                         continue;
 
-                    var meta = saveData.CreateMeta();
-                    meta.playerId = _playerId;
-                    meta.slot = ParseSlotFromPath(path);
-                    meta.relativePath = path;
-                    meta.fileSize = bytes.Length;
-                    metas.Add(meta);
+                    metas.Add(BuildMeta(saveData, playerId, ParseSlotFromPath(path), path, bytes.Length));
                 }
                 catch (Exception ex)
                 {
@@ -98,7 +106,10 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<SaveMeta> GetSlotMetaAsync(int slot, CancellationToken cancellationToken = default)
         {
-            var path = BuildSlotPath(slot);
+            // 入口捕获玩家上下文：await 之后不再读字段，避免与并发切换玩家产生竞态
+            var playerId = _playerId;
+            var path = BuildSlotPath(playerId, slot);
+
             if (!FileManager.Exists(SaveDomain, path))
                 return null;
 
@@ -112,12 +123,7 @@ namespace XFramework.XSave
             if (saveData == null)
                 return null;
 
-            var meta = saveData.CreateMeta();
-            meta.playerId = _playerId;
-            meta.slot = slot;
-            meta.relativePath = path;
-            meta.fileSize = bytes.Length;
-            return meta;
+            return BuildMeta(saveData, playerId, slot, path, bytes.Length);
         }
 
         /// <inheritdoc/>
@@ -125,6 +131,9 @@ namespace XFramework.XSave
         {
             if (IsBusy)
                 throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
+
+            // 入口捕获玩家上下文：await 之后不再读字段，避免与并发切换玩家产生竞态
+            var playerId = _playerId;
 
             IsBusy = true;
             try
@@ -137,17 +146,12 @@ namespace XFramework.XSave
 
                 // 3. 原子写入：Provider 层先写 .tmp 再替换正式文件（IAtomicFileProvider 契约），
                 //    写入中途崩溃不会损坏已有存档；Provider 不支持时门面自动降级普通写
-                var slotPath = BuildSlotPath(slot);
+                var slotPath = BuildSlotPath(playerId, slot);
 
                 await FileManager.WriteAllBytesAtomicAsync(SaveDomain, slotPath, bytes, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
-                var meta = saveData.CreateMeta();
-                meta.playerId = _playerId;
-                meta.slot = slot;
-                meta.relativePath = slotPath;
-                meta.fileSize = bytes.Length;
-                return meta;
+                return BuildMeta(saveData, playerId, slot, slotPath, bytes.Length);
             }
             finally
             {
@@ -161,7 +165,8 @@ namespace XFramework.XSave
             if (IsBusy)
                 throw new InvalidOperationException("[Save] 上一次保存/加载操作尚未完成。");
 
-            var slotPath = BuildSlotPath(slot);
+            var playerId = _playerId;
+            var slotPath = BuildSlotPath(playerId, slot);
             if (!FileManager.Exists(SaveDomain, slotPath))
                 throw new InvalidOperationException($"[Save] 存档槽位 {slot} 不存在，无法加载。");
 
@@ -189,7 +194,8 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default)
         {
-            var slotPath = BuildSlotPath(slot);
+            var playerId = _playerId;
+            var slotPath = BuildSlotPath(playerId, slot);
 
             var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
             await ReturnToMainThread(cancellationToken);
@@ -237,7 +243,9 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask<bool> SlotExistsAsync(int slot, CancellationToken cancellationToken = default)
         {
-            var exists = await FileManager.ExistsAsync(SaveDomain, BuildSlotPath(slot), cancellationToken);
+            var playerId = _playerId;
+
+            var exists = await FileManager.ExistsAsync(SaveDomain, BuildSlotPath(playerId, slot), cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
             return exists;
@@ -261,19 +269,46 @@ namespace XFramework.XSave
             await UniTask.SwitchToMainThread(cancellationToken);
         }
 
-        private string BuildSlotPath(int slot)
+        /// <summary>
+        /// 由快照构造槽位元数据并补齐运行时字段。
+        /// <para><paramref name="playerId"/> 以参数传入而非读取字段：本方法在 IO <c>await</c> 之后调用，
+        /// 读字段会与并发切换玩家上下文产生竞态（表现为元数据归属错误）。</para>
+        /// </summary>
+        /// <param name="saveData">已反序列化的快照。</param>
+        /// <param name="playerId">该存档所属玩家。</param>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="relativePath">存档文件相对路径。</param>
+        /// <param name="fileSize">文件字节数。</param>
+        /// <returns>补齐后的元数据。</returns>
+        private static SaveMeta BuildMeta(DataSnapshot saveData, string playerId, int slot, string relativePath, long fileSize)
+        {
+            var meta = saveData.CreateMeta();
+            meta.playerId = playerId;
+            meta.slot = slot;
+            meta.relativePath = relativePath;
+            meta.fileSize = fileSize;
+            return meta;
+        }
+
+        /// <summary>
+        /// 构造槽位文件的相对路径（纯函数，不读取当前玩家上下文）。
+        /// </summary>
+        /// <param name="playerId">玩家 ID。为 <c>null</c> 时直接落在域根目录。</param>
+        /// <param name="slot">槽位号。</param>
+        /// <returns>相对路径。</returns>
+        private static string BuildSlotPath(string playerId, int slot)
         {
             var fileName = $"{SlotFilePrefix}{slot}{SlotFileSuffix}";
-            if (_playerId == null)
+            if (playerId == null)
                 return fileName;
 
             // playerId 作为单段目录名：严格拒绝分隔符与 .. 穿越（路径沙箱第二道防线），
             // 防止 SetCurrentPlayer("../../") 注入导致存档写到域根之外
-            if (_playerId.IndexOfAny(PathSeparators) >= 0 || _playerId == "..")
+            if (playerId.IndexOfAny(PathSeparators) >= 0 || playerId == "..")
                 throw new ArgumentException(
-                    $"[Save] 非法 playerId '{_playerId}':不允许包含路径分隔符或 '..'。");
+                    $"[Save] 非法 playerId '{playerId}':不允许包含路径分隔符或 '..'。");
 
-            return $"{_playerId}/{fileName}";
+            return $"{playerId}/{fileName}";
         }
 
         private static bool IsSlotFilePath(string path)
