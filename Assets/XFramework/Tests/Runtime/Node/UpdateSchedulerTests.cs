@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -101,22 +102,27 @@ namespace XFramework.XUpdate.Tests
             var lateNode = new TestUpdateable();
             _scheduler.Register(_node, depth: 0);
 
-            // _node returns Frame32 (high LOD), which triggers pending operations
+            // _node 返回 Frame32：本次 Tick 里它会被迁到 Frame32 桶（也走 pending 路径）
             _node.ReturnLOD = UpdateLOD.Frame32;
 
-            // Register lateNode inside the _node's OnUpdate by using a custom wrapper
-            // Instead, we test by using a node that registers another node during Tick
+            // registrator 在自己的 OnUpdate 里注册 lateNode——此时调度器正在迭代，该注册应被缓冲
             var registrator = new RegistratorNode(_scheduler, lateNode, depth: 1);
             _scheduler.Register(registrator, depth: 0);
 
             _scheduler.Tick(time: 1.0f);
 
-            // After flush, lateNode should be registered
-            Assert.AreEqual(2, _scheduler.TotalCount);
+            // 缓冲的操作在 Tick 结束时统一生效：
+            // 桶 0 = [registrator, lateNode]（lateNode 用默认 Frame1 注册），桶 5 = [_node]
+            Assert.AreEqual(3, _scheduler.TotalCount, "Tick 期间发起的注册与 LOD 迁移都应在结束时生效");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Frame32), "_node 返回 Frame32 后应已迁入该桶");
+            Assert.AreEqual(1, registrator.OnUpdateCallCount);
+            Assert.AreEqual(0, lateNode.OnUpdateCallCount,
+                "被缓冲意味着本帧不派发——这正是「缓冲」而非「立即生效」的意义所在");
 
             _scheduler.Tick(time: 2.0f);
-            Assert.AreEqual(1, registrator.OnUpdateCallCount);
-            Assert.AreEqual(1, lateNode.OnUpdateCallCount);
+
+            Assert.AreEqual(2, registrator.OnUpdateCallCount, "桶 0 每帧全量派发");
+            Assert.AreEqual(1, lateNode.OnUpdateCallCount, "上一帧缓冲进来的节点本帧开始参与派发");
         }
 
         [Test]
@@ -245,9 +251,13 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Register(_node, depth: 0);
             _node.ThrowException = true;
 
-            // Expect the error log so it doesn't pollute test output
+            // LogAssert.Expect(LogType, string) 是**完全相等**匹配
+            // （见 LogMatch.cs 的 Message.Equals(log.Message)），而实现里 {e} 会附上异常栈，
+            // 故此处的字符串永远匹配不上、那条 Error 反而被判为 Unhandled。
+            // 必须用 Regex 做部分匹配——仓库既有惯例见 Message/EventStreamTests.cs
             LogAssert.Expect(LogType.Error,
-                "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering: System.Exception: Test exception");
+                new Regex(Regex.Escape(
+                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering: System.Exception: Test exception")));
             _scheduler.Tick(time: 1.0f);
 
             // Node should be removed after exception

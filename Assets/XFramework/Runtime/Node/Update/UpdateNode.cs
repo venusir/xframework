@@ -14,6 +14,11 @@ namespace XFramework.XUpdate
     {
         #region Lifecycle
 
+        /// <summary>
+        /// 订阅时所用的父节点。必须在 <see cref="OnStart"/> 缓存，不能依赖 <see cref="BaseNode.Parent"/>。
+        /// </summary>
+        private ParentNode _subscribedParent;
+
         protected override void OnStart()
         {
             base.OnStart();
@@ -21,23 +26,31 @@ namespace XFramework.XUpdate
             // 自动绑定到父节点（即 RootNode），订阅递归冒泡事件并注册现有 IUpdateable 节点
             if (Parent != null)
             {
-                Parent.OnDescendantAdded += OnDescendantAdded;
-                Parent.OnDescendantRemoved += OnDescendantRemoved;
-                Parent.OnDescendantStarted += OnDescendantStarted;
+                _subscribedParent = Parent;
+                _subscribedParent.OnDescendantAdded += OnDescendantAdded;
+                _subscribedParent.OnDescendantRemoved += OnDescendantRemoved;
+                _subscribedParent.OnDescendantStarted += OnDescendantStarted;
 
                 // 注册树中已有的 IUpdateable 节点
-                Parent.ForEach(child => TryRegister(child), recursive: true);
+                _subscribedParent.ForEach(child => TryRegister(child), recursive: true);
             }
         }
 
         protected override void OnDestroy()
         {
             // UpdateManager 由 GameLauncher 统一驱动，不在此处清理
-            if (Parent != null)
+
+            // 必须用 OnStart 时缓存的引用退订：BaseNode.Destroy 的 Phase 1 会先把 _parent 置空再调
+            // OnDestroy，此时 Parent 恒为 null。原先写的 `if (Parent != null) { 退订 }` 因此是
+            // **永不执行的死代码**——已销毁的 UpdateNode 会永久留在父节点的事件链上，
+            // 而父节点回池复用后，这些幽灵订阅者会把新树的节点重复注册进调度器，
+            // 表现为「同一个节点每帧被派发多次」（OnUpdate 被调用 N 次）。
+            if (_subscribedParent != null)
             {
-                Parent.OnDescendantAdded -= OnDescendantAdded;
-                Parent.OnDescendantRemoved -= OnDescendantRemoved;
-                Parent.OnDescendantStarted -= OnDescendantStarted;
+                _subscribedParent.OnDescendantAdded -= OnDescendantAdded;
+                _subscribedParent.OnDescendantRemoved -= OnDescendantRemoved;
+                _subscribedParent.OnDescendantStarted -= OnDescendantStarted;
+                _subscribedParent = null;
             }
             base.OnDestroy();
         }

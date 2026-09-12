@@ -8,8 +8,10 @@ using XFramework.XUpdate;
 namespace XFramework.XUpdate.Tests
 {
     /// <summary>
-    /// Integration tests for <see cref="UpdateNode"/> with a full node tree.
-    /// Uses <see cref="UnityTest"/> to run the node lifecycle (Start) properly.
+    /// <see cref="UpdateNode"/> 与真实节点树的集成测试。
+    /// <para><b>注意：</b>节点树是纯 C#，没有任何机制会自动启动它——<see cref="RootNode.Create"/>
+    /// 只做 Awake，<c>Start</c> 必须在 <see cref="SetUp"/> 里显式调用，
+    /// 否则 <see cref="UpdateNode.OnStart"/> 永不执行，子节点也就永远不会被注册进调度器。</para>
     /// </summary>
     public class UpdateNodeIntegrationTests
     {
@@ -20,6 +22,10 @@ namespace XFramework.XUpdate.Tests
         public void SetUp()
         {
             _root = RootNode.Create();
+
+            // 根节点先 Start 后，AddChild 会自动 Start 新加入的子节点（ParentNode.AddChild 的
+            // `if (Started && !deferStart)` 分支），与生产环境的用法一致
+            _root.Start();
         }
 
         [TearDown]
@@ -29,6 +35,10 @@ namespace XFramework.XUpdate.Tests
             {
                 _root.Dispose();
             }
+
+            // 调度器是静态的，用例间必须复位，否则上一个用例的注册会留到下一个用例继续被派发。
+            // UpdateManager.Clear 能安全地这么用，正是因为它已不再置单向闩锁
+            UpdateManager.Clear();
         }
 
         [UnityTest]
@@ -36,11 +46,11 @@ namespace XFramework.XUpdate.Tests
         {
             // Arrange: Add UpdateNode first
             _updateNode = _root.AddNode<UpdateNode>();
-            yield return null; // let Start() run
+            yield return null;
 
             // Add a child that implements IUpdateable
             var child = _root.AddNode<TestUpdateLeaf>();
-            yield return null; // let child Start() run
+            yield return null;
 
             // The child should be registered in the scheduler
             // Tick the scheduler and verify child.OnUpdate was called
@@ -55,11 +65,11 @@ namespace XFramework.XUpdate.Tests
         {
             // Arrange: Add UpdateNode
             _updateNode = _root.AddNode<UpdateNode>();
-            yield return null; // let Start() run
+            yield return null;
 
             // Add a child after UpdateNode is started
             var child = _root.AddNode<TestUpdateLeaf>();
-            yield return null; // let child Start() run
+            yield return null;
 
             // Child should be auto-registered
             _updateNode.Tick(time: Time.time);
@@ -98,10 +108,10 @@ namespace XFramework.XUpdate.Tests
         {
             // Arrange: Add child first, then UpdateNode
             var child = _root.AddNode<TestUpdateLeaf>();
-            yield return null; // child starts
+            yield return null;
 
             _updateNode = _root.AddNode<UpdateNode>();
-            yield return null; // UpdateNode starts and scans existing children
+            yield return null;
 
             // Child should be registered from OnStart scanning
             _updateNode.Tick(time: Time.time);
@@ -116,6 +126,15 @@ namespace XFramework.XUpdate.Tests
         private sealed class TestUpdateLeaf : LeafNode, IUpdateable
         {
             public int OnUpdateCallCount { get; private set; }
+
+            protected override void OnAwake()
+            {
+                base.OnAwake();
+
+                // 节点经池复用，派生类状态必须在 OnAwake 复位（见 Node README 的契约）——
+                // 否则计数跨用例累积，四个用例里后面几个会拿到前面留下的基数
+                OnUpdateCallCount = 0;
+            }
 
             public void OnEnable() { }
 
