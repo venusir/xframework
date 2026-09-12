@@ -288,11 +288,13 @@ namespace XFramework.XMessage
         /// <typeparam name="TResponse">响应类型。</typeparam>
         /// <param name="request">请求对象。</param>
         /// <param name="cancellationToken">
-        /// 调用方令牌,原样转发给处理器(处理器据此把取消传递到下游异步操作);
-        /// 取消不额外中断本方法的等待,是否响应取消由处理器决定。
+        /// 调用方令牌,一方面原样转发给处理器(处理器据此把取消传递到下游异步操作),
+        /// 另一方面仅控制本次等待:取消会抛出 <see cref="OperationCanceledException"/>,
+        /// 但不会中断已启动的处理器,是否响应取消仍由处理器决定——与 <c>PublishAsync</c> 同构。
         /// </param>
         /// <returns>响应对象。</returns>
         /// <exception cref="InvalidOperationException">未注册对应的处理器时抛出。</exception>
+        /// <exception cref="OperationCanceledException">等待期间令牌被取消时抛出;已启动的处理器不受影响。</exception>
         public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(
             TRequest request, CancellationToken cancellationToken = default)
         {
@@ -310,7 +312,13 @@ namespace XFramework.XMessage
             Interlocked.Increment(ref _requestCount);
 
             // 锁外调用:禁止持锁执行用户代码,也避免处理器中的 await 长期占用同步门
-            return handler(request, cancellationToken);
+            var task = handler(request, cancellationToken);
+
+            // 与 PublishAsync 同构:取消只中断本次等待,不中断已启动的处理器。
+            // 缺了这层附加取消,处理器若不响应令牌,调用方的等待将永不结束。
+            return cancellationToken.CanBeCanceled
+                ? task.AttachExternalCancellation(cancellationToken)
+                : task;
         }
 
         /// <summary>清理所有订阅、缓存和请求处理器。</summary>

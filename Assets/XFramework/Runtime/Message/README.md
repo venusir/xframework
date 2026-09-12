@@ -134,7 +134,7 @@ MessageManager.Register<GetPlayerScoreRequest, GetPlayerScoreResponse>(async (re
     return new GetPlayerScoreResponse { Score = score };
 });
 
-// 发送请求(令牌原样转发给处理器;取消是否响应由处理器决定)
+// 发送请求(令牌既原样透传给处理器,也用于取消本次等待)
 var cts = new CancellationTokenSource();
 var response = await MessageManager.RequestAsync<GetPlayerScoreRequest, GetPlayerScoreResponse>(
     new GetPlayerScoreRequest { PlayerId = "player_1" },
@@ -145,6 +145,8 @@ Debug.Log($"玩家分数: {response.Score}");
 // 注销处理器:重复注册前需先注销
 MessageManager.Unregister<GetPlayerScoreRequest, GetPlayerScoreResponse>();
 ```
+
+> **令牌的两个作用**:`RequestAsync` 的令牌一方面**原样转发**给处理器(处理器据此把取消传递到下游),另一方面用于**取消本次等待**——取消会抛 `OperationCanceledException`,但不会中断已启动的处理器。取舍与 `PublishAsync` 一致:处理器是否响应取消由它自己决定,但调用方不会因为处理器忽略令牌而无法脱身。
 
 > **迁移提示**:异步处理器形参由 `request =>` 变为 `(request, ct) =>`。旧写法会因 lambda 元数不符而**编译期报错**,不会静默错绑。
 

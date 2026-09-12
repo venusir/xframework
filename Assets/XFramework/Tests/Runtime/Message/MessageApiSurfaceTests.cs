@@ -259,22 +259,51 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void RequestAsync_ForwardsCancellationTokenToHandler()
         {
-            var observedCancelled = false;
+            // 转发用「令牌同一性」验证:处理器收到的必须就是调用方传入的那个令牌。
+            // 不能再用「已取消的令牌」验证——附加外部取消之后,那样的调用会直接抛 OCE
+            // (见 RequestAsync_CancelledWhileInFlight_ThrowsOperationCanceled),两者已不可兼得。
+            CancellationToken observed = default;
             MessageManager.Register<TestRequest, TestResponse>((req, ct) =>
             {
-                observedCancelled = ct.IsCancellationRequested;
+                observed = ct;
                 return UniTask.FromResult(new TestResponse { Result = req.Input });
             });
 
             // 处理器同步完成,直接取值不会死锁(不涉及依赖 PlayerLoop 的异步等待)
             using var cts = new CancellationTokenSource();
-            cts.Cancel();
 
             var response = MessageManager.RequestAsync<TestRequest, TestResponse>(
                 new TestRequest { Input = 7 }, cts.Token).GetAwaiter().GetResult();
 
             Assert.AreEqual(7, response.Result);
-            Assert.IsTrue(observedCancelled, "处理器应收到调用方原样转发的取消令牌");
+            Assert.AreEqual(cts.Token, observed, "处理器应收到调用方原样转发的同一个令牌");
+        }
+
+        [Test]
+        public void RequestAsync_CancelledWhileInFlight_ThrowsOperationCanceled()
+        {
+            // 最坏情况:处理器完全不响应令牌(在途等待一个永不完成的网关)。
+            // 调用方仍须能靠自己的令牌脱身——这正是附加外部取消存在的理由,缺了它本用例会永久挂起。
+            var gate = new UniTaskCompletionSource();
+            var handlerEntered = false;
+            MessageManager.Register<TestRequest, TestResponse>(async (req, ct) =>
+            {
+                handlerEntered = true;
+                await gate.Task;
+                return new TestResponse();
+            });
+
+            using var cts = new CancellationTokenSource();
+
+            // async 处理器同步执行到首个 await,故此行返回时处理器已在途
+            var task = MessageManager.RequestAsync<TestRequest, TestResponse>(
+                new TestRequest(), cts.Token);
+            Assert.IsTrue(handlerEntered, "前置:处理器已进入在途等待");
+
+            cts.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() => task.GetAwaiter().GetResult(),
+                "处理器不响应令牌时,调用方仍须能取消本次等待");
         }
 
         [Test]
