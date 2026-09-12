@@ -343,6 +343,70 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 加密接线
+
+        [Test]
+        public async Task Initialize_WithCryptoProvider_EncryptsSaveDataOnly()
+        {
+            SaveManager.Shutdown();
+            SaveManager.Initialize(null, new SaveOptions { CryptoProvider = new XorCryptoProvider("test-key") });
+
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            await FileManager.WriteAllBytesAsync(FileDomain.AppData, "plain.bin", Encoding.UTF8.GetBytes("plain"));
+
+            // 未加密的存档是 JSON，首字节必为 '{'；密文不会
+            var payloadRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.SaveData, "slot_1.save");
+            Assert.AreNotEqual((byte)'{', payloadRaw[0], "存档载荷应以密文形态落盘");
+
+            var appRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.AppData, "plain.bin");
+            Assert.AreEqual("plain", Encoding.UTF8.GetString(appRaw), "非存档域不应被连带加密");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(1);
+            Assert.AreEqual(42, wallet.Gold, "加密存档应能正常读回");
+        }
+
+        [Test]
+        public async Task CryptoEnabled_EnumerationAndLoadWork()
+        {
+            SaveManager.Shutdown();
+            SaveManager.Initialize(null, new SaveOptions { CryptoProvider = new XorCryptoProvider("test-key") });
+
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+            Assert.AreEqual(1, metas.Count, "加密存档的枚举应经侧车正常返回");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(1);
+            Assert.AreEqual(42, wallet.Gold);
+        }
+
+        [Test]
+        public async Task EnablingCryptoAfterSaves_MakesExistingSavesUnreadable()
+        {
+            // 锁定 SaveOptions.CryptoProvider 文档里的陷阱一：对称实现面对明文同样会「解密成功」
+            // 而不抛异常，只产出垃圾字节，最终表现为「存档已损坏」。
+            // 因此开启加密或更换密钥前必须先迁移存量存档，不能直接切换
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.Shutdown();
+            SaveManager.Initialize(null, new SaveOptions { CryptoProvider = new XorCryptoProvider("test-key") });
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status,
+                "加密前的明文存档在开启加密后应被判定为损坏");
+        }
+
+        #endregion
+
         #region 槽位复制与移动
 
         [Test]

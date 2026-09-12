@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XFileManager;
 
 namespace XFramework.XSave
 {
@@ -86,8 +87,16 @@ namespace XFramework.XSave
             }
             _impl = factory != null ? factory() : new SaveManagerImpl();
 
-            if (options != null)
-                _impl.SetCurrentVersion(options.CurrentVersion);
+            if (options == null)
+                return;
+
+            _impl.SetCurrentVersion(options.CurrentVersion);
+
+            // 加密接线放在初始化而非节点里：调用方直接 Initialize 时也应生效，
+            // 否则「传了 CryptoProvider 却被静默忽略」会很难查。
+            // 作用域限定 SaveData，避免连带加密 AppData / Cache（见 SaveOptions.CryptoProvider）
+            if (options.CryptoProvider != null)
+                FileManager.SetCryptoProvider(options.CryptoProvider, FileDomain.SaveData);
         }
 
         /// <summary>
