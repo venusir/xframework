@@ -35,8 +35,12 @@ namespace XFramework.XUpdate
         /// <summary>内部调度器单例，负责 LOD 分桶、时间切片等纯调度逻辑。</summary>
         private static UpdateScheduler _scheduler;
 
-        /// <summary>是否已销毁，防止退出后误用。</summary>
-        private static bool _destroyed;
+        /// <summary>
+        /// 应用是否已进入退出流程。
+        /// <para>与 <see cref="Clear"/> 的区别：退出是<b>终态</b>（进程即将结束，不再重建），
+        /// 手动清空只是重置注册、之后仍可正常使用。</para>
+        /// </summary>
+        private static bool _shutdown;
 
         #endregion
 
@@ -54,16 +58,17 @@ namespace XFramework.XUpdate
         static void AutoInit()
         {
             _scheduler = new UpdateScheduler();
-            _destroyed = false;
+            _shutdown = false;
             Application.quitting += OnQuitting;
         }
 
         /// <summary>
         /// 应用退出时清理内部状态。
+        /// <para>这是<b>不可逆</b>的终态：进程即将结束，此后不再重建调度器。</para>
         /// </summary>
         static void OnQuitting()
         {
-            _destroyed = true;
+            _shutdown = true;
             _scheduler?.Clear();
             _scheduler = null;
             Application.quitting -= OnQuitting;
@@ -74,20 +79,25 @@ namespace XFramework.XUpdate
         #region Public API — 生命周期
 
         /// <summary>
-        /// 是否已初始化。
+        /// 是否已初始化（即调度器可用且应用尚未进入退出流程）。
         /// </summary>
-        public static bool IsInitialized => _scheduler != null && !_destroyed;
+        public static bool IsInitialized => _scheduler != null && !_shutdown;
 
         /// <summary>
-        /// 手动销毁更新管理器（通常不需要调用，应用退出时会自动清理）。
-        /// <para>主要用于单元测试隔离。</para>
+        /// 清空全部注册，用于测试隔离或需要重置调度状态的场景。
+        /// <para><b>不是终态</b>：清空后仍可继续 <see cref="Register"/> 与 <see cref="Tick"/>。
+        /// 进程退出时的清理是另一条路径（<see cref="OnQuitting"/>），那才是不可逆的。</para>
+        /// <para><b>为什么改名（原 <c>Destroy</c>）：</b>原实现只清空注册却同时置一个单向闩锁并丢弃调度器，
+        /// 使本方法成为「调用一次即永久失效」——而它的文档写的恰恰是「主要用于单元测试隔离」。
+        /// 两者自相矛盾：任何 fixture 一旦用它做隔离，同一 play 会话内后续所有 <see cref="Register"/>
+        /// 都会静默 no-op（<see cref="Register"/> 开头的 <c>if (_shutdown || _scheduler == null) return;</c>）。
+        /// 现对齐 <see cref="XMessage.MessageManager.Clear"/> 与
+        /// <see cref="XNode.NodeFactory.ClearAllPools"/> 的既有命名与语义，
+        /// 并与「静态门面在 <c>Destroy</c> 后可重新初始化」的框架惯例一致。</para>
         /// </summary>
-        public static void Destroy()
+        public static void Clear()
         {
             _scheduler?.Clear();
-            _scheduler = null;
-            _destroyed = true;
-            Application.quitting -= OnQuitting;
         }
 
         #endregion
@@ -101,7 +111,7 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public static void Tick(float time)
         {
-            if (_destroyed || _scheduler == null) return;
+            if (_shutdown || _scheduler == null) return;
             _scheduler.Tick(time);
         }
 
@@ -118,7 +128,7 @@ namespace XFramework.XUpdate
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
         public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
         {
-            if (_destroyed || _scheduler == null || node == null) return;
+            if (_shutdown || _scheduler == null || node == null) return;
             _scheduler.Register(node, depth, initialLOD);
         }
 
@@ -128,7 +138,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要注销的对象。</param>
         public static void Unregister(IUpdateable node)
         {
-            if (_destroyed || _scheduler == null || node == null) return;
+            if (_shutdown || _scheduler == null || node == null) return;
             _scheduler.Unregister(node);
         }
 
@@ -143,7 +153,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要启用的对象。</param>
         public static void Enable(IUpdateable node)
         {
-            if (_destroyed || _scheduler == null || node == null) return;
+            if (_shutdown || _scheduler == null || node == null) return;
             _scheduler.Enable(node);
         }
 
@@ -154,7 +164,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要禁用的对象。</param>
         public static void Disable(IUpdateable node)
         {
-            if (_destroyed || _scheduler == null || node == null) return;
+            if (_shutdown || _scheduler == null || node == null) return;
             _scheduler.Disable(node);
         }
 
@@ -165,7 +175,7 @@ namespace XFramework.XUpdate
         /// <returns>如果对象未被禁用则返回 true。</returns>
         public static bool IsEnabled(IUpdateable node)
         {
-            if (_destroyed || _scheduler == null || node == null) return false;
+            if (_shutdown || _scheduler == null || node == null) return false;
             return _scheduler.IsEnabled(node);
         }
 
@@ -182,7 +192,7 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
         public static void ProcessImmediate(IUpdateable node, float deltaTime, float time)
         {
-            if (_destroyed || _scheduler == null || node == null) return;
+            if (_shutdown || _scheduler == null || node == null) return;
             _scheduler.ProcessImmediate(node, deltaTime, time);
         }
 
@@ -195,7 +205,7 @@ namespace XFramework.XUpdate
         /// </summary>
         public static int GetCount(UpdateLOD lod)
         {
-            if (_destroyed || _scheduler == null) return 0;
+            if (_shutdown || _scheduler == null) return 0;
             return _scheduler.GetCount(lod);
         }
 
@@ -206,7 +216,7 @@ namespace XFramework.XUpdate
         {
             get
             {
-                if (_destroyed || _scheduler == null) return 0;
+                if (_shutdown || _scheduler == null) return 0;
                 return _scheduler.TotalCount;
             }
         }
@@ -218,7 +228,7 @@ namespace XFramework.XUpdate
         {
             get
             {
-                if (_destroyed || _scheduler == null) return 0;
+                if (_shutdown || _scheduler == null) return 0;
                 return _scheduler.DisabledCount;
             }
         }
