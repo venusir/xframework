@@ -3,6 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
 using XFramework.XMessage.Internal;
+using XFramework.XUpdate;
 
 namespace XFramework.XSettings
 {
@@ -33,6 +34,9 @@ namespace XFramework.XSettings
         /// <summary><see cref="_changeCount"/> 中已提交给存储后端的那一档。</summary>
         private int _savedCount;
 
+        /// <summary>自动保存的帧驱动器。仅 <see cref="SettingsOptions.AutoSave"/> 开启时非空。</summary>
+        private SettingsAutoSaveTicker<T> _autoSaver;
+
         #endregion
 
         #region Constructors
@@ -54,6 +58,16 @@ namespace XFramework.XSettings
             // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
             // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
             _settings = store.Exists() ? LoadExisting() : CreateDefault();
+
+            // 自动保存是可选能力,关闭时不注册任何帧回调——默认路径零开销
+            if (_options.AutoSave)
+            {
+                _autoSaver = new SettingsAutoSaveTicker<T>(this, _options.AutoSaveDelay);
+                UpdateManager.Register(_autoSaver, depth: 0, UpdateLOD.Frame8);
+            }
+
+            if (_options.SaveOnQuit)
+                UnityEngine.Application.quitting += OnApplicationQuitting;
         }
 
         #endregion
@@ -229,6 +243,16 @@ namespace XFramework.XSettings
                 return;
 
             _disposed = true;
+
+            if (_autoSaver != null)
+            {
+                UpdateManager.Unregister(_autoSaver);
+                _autoSaver = null;
+            }
+
+            if (_options.SaveOnQuit)
+                UnityEngine.Application.quitting -= OnApplicationQuitting;
+
             _changedStream.OnCompleted();
             _changedStream.Dispose();
         }
@@ -433,6 +457,27 @@ namespace XFramework.XSettings
                 $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +
                 "存储实现应在无数据时返回 new T()。");
             return CreateDefault();
+        }
+
+        /// <summary>是否已释放。供自动保存驱动器在「注销」与「当帧已调度」的竞态窗口内安全退出。</summary>
+        internal bool IsDisposed => _disposed;
+
+        /// <summary>
+        /// 变更计数。驱动器靠它区分「刚刚改过」与「改动已久」——<see cref="IsDirty"/> 在整个
+        /// 去抖窗口内恒为真，区分不出这两者。
+        /// </summary>
+        internal int ChangeCount => _changeCount;
+
+        /// <summary>
+        /// 应用退出兜底：仅在确有未提交改动时写盘，因此显式保存过的场景不会产生额外 IO。
+        /// <para>编辑器不触发 <c>Application.quitting</c>，故无法在 Test Runner 中覆盖。</para>
+        /// </summary>
+        private void OnApplicationQuitting()
+        {
+            if (_disposed || !IsDirty)
+                return;
+
+            Save();
         }
 
         /// <summary>

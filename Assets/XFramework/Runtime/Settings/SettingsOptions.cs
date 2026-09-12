@@ -16,5 +16,29 @@ namespace XFramework.XSettings
         /// （解析出的信封载荷为空），会回退默认值。切换前后需自行处理存量数据。</para>
         /// </summary>
         public int CurrentVersion;
+
+        /// <summary>
+        /// 是否启用自动保存（去抖）。默认关闭——本模块的既有取舍是「调用方显式保存」，
+        /// 保持默认不写盘、行为可预期。
+        /// <para>开启后：<see cref="ISettingsManager{T}.IsDirty"/> 为真、且连续
+        /// <see cref="AutoSaveDelay"/> 秒没有新的改动时，自动调用一次 <c>Save</c>。</para>
+        /// <para>与 <see cref="SaveOnQuit"/> 建议成对开启，否则退出时最后一段改动仍会丢。</para>
+        /// </summary>
+        public bool AutoSave;
+
+        /// <summary>
+        /// 自动保存的去抖窗口（秒）。仅在 <see cref="AutoSave"/> 开启时有意义。
+        /// <para>窗口从<b>最后一次改动</b>起算，因此拖动滑条期间不会写盘，松手静默该时长后写一次。</para>
+        /// </summary>
+        public float AutoSaveDelay = 0.5f;
+
+        /// <summary>
+        /// 应用退出时若仍有未提交改动则写盘（兜底）。默认关闭。
+        /// <para><b>无法用 Test Runner 验证：</b>Unity 的 <c>Application.quitting</c> 在编辑器中不触发，
+        /// 该行为只能在构建产物里确认。</para>
+        /// <para><b>不覆盖的场景：</b>移动端切后台后被系统杀死——那需要 <c>OnApplicationPause</c>，
+        /// 框架无法在静态服务里收到该回调，须由业务自行在暂停时调用 <c>Save</c>。</para>
+        /// </summary>
+        public bool SaveOnQuit;
     }
 }
