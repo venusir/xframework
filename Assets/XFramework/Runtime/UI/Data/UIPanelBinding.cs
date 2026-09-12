@@ -86,7 +86,7 @@ namespace XFramework.XUI.Data
         /// <typeparam name="T">值的类型。</typeparam>
         /// <param name="source">ViewModel 中的 ReactiveProperty。</param>
         /// <param name="onValueChanged">值变化时的回调，用于更新 UI 组件。</param>
-        public void RegisterBinding<T>(ReactiveProperty<T> source, Action<T> onValueChanged)
+        public void RegisterBinding<T>(IReactiveProperty<T> source, Action<T> onValueChanged)
         {
             if (source == null || onValueChanged == null) return;
 
@@ -114,7 +114,7 @@ namespace XFramework.XUI.Data
         /// <typeparam name="T">值的类型。</typeparam>
         /// <param name="propertyName">ViewModel 属性的名称（不含前缀）。</param>
         /// <param name="source">ViewModel 中的 ReactiveProperty。</param>
-        public void BindByConvention<T>(string propertyName, ReactiveProperty<T> source)
+        public void BindByConvention<T>(string propertyName, IReactiveProperty<T> source)
         {
             if (source == null || string.IsNullOrEmpty(propertyName))
                 return;
@@ -131,15 +131,15 @@ namespace XFramework.XUI.Data
             var imgKey = $"img_{propertyName}";
             if (_componentCache.TryGetValue(imgKey, out comp) && comp is Image img)
             {
-                if (source is ReactiveProperty<Sprite> spriteProp)
+                if (source is IReactiveProperty<Sprite> spriteProp)
                 {
                     RegisterBinding(spriteProp, val => img.sprite = val);
                 }
-                else if (source is ReactiveProperty<Color> colorProp)
+                else if (source is IReactiveProperty<Color> colorProp)
                 {
                     RegisterBinding(colorProp, val => img.color = val);
                 }
-                else if (source is ReactiveProperty<float> fillProp)
+                else if (source is IReactiveProperty<float> fillProp)
                 {
                     RegisterBinding(fillProp, val => img.fillAmount = val);
                 }

@@ -20,8 +20,8 @@ namespace XFramework.XUI.Data
     {
         #region TMP_Text
 
-        /// <summary>将 ReactiveProperty 绑定到 TMP_Text 的 text 属性。支持 format 格式化。</summary>
-        public static IDisposable BindToText<T>(this ReactiveProperty<T> source, TMP_Text text, Func<T, string> format = null)
+        /// <summary>将响应式属性绑定到 TMP_Text 的 text 属性。支持 format 格式化。</summary>
+        public static IDisposable BindToText<T>(this IReactiveProperty<T> source, TMP_Text text, Func<T, string> format = null)
         {
             if (source == null || text == null) return null;
             return source.Subscribe(v => text.text = format?.Invoke(v) ?? v?.ToString() ?? string.Empty);
@@ -38,8 +38,8 @@ namespace XFramework.XUI.Data
 
         #region Slider
 
-        /// <summary>将 ReactiveProperty 绑定到 Slider 的 value 属性。</summary>
-        public static IDisposable BindToSlider(this ReactiveProperty<float> source, Slider slider)
+        /// <summary>将响应式属性绑定到 Slider 的 value 属性。</summary>
+        public static IDisposable BindToSlider(this IReactiveProperty<float> source, Slider slider)
         {
             if (source == null || slider == null) return null;
             return source.Subscribe(v => slider.value = v);
@@ -56,8 +56,8 @@ namespace XFramework.XUI.Data
 
         #region Image (fillAmount)
 
-        /// <summary>将 ReactiveProperty 绑定到 Image 的 fillAmount 属性。</summary>
-        public static IDisposable BindToFillAmount(this ReactiveProperty<float> source, Image image)
+        /// <summary>将响应式属性绑定到 Image 的 fillAmount 属性。</summary>
+        public static IDisposable BindToFillAmount(this IReactiveProperty<float> source, Image image)
         {
             if (source == null || image == null) return null;
             return source.Subscribe(v => image.fillAmount = v);
@@ -74,8 +74,8 @@ namespace XFramework.XUI.Data
 
         #region Image (sprite)
 
-        /// <summary>将 ReactiveProperty 绑定到 Image 的 sprite 属性。</summary>
-        public static IDisposable BindToSprite(this ReactiveProperty<Sprite> source, Image image)
+        /// <summary>将响应式属性绑定到 Image 的 sprite 属性。</summary>
+        public static IDisposable BindToSprite(this IReactiveProperty<Sprite> source, Image image)
         {
             if (source == null || image == null) return null;
             return source.Subscribe(v => image.sprite = v);
@@ -92,8 +92,8 @@ namespace XFramework.XUI.Data
 
         #region Toggle
 
-        /// <summary>将 ReactiveProperty 绑定到 Toggle 的 isOn 属性。</summary>
-        public static IDisposable BindToToggle(this ReactiveProperty<bool> source, Toggle toggle)
+        /// <summary>将响应式属性绑定到 Toggle 的 isOn 属性。</summary>
+        public static IDisposable BindToToggle(this IReactiveProperty<bool> source, Toggle toggle)
         {
             if (source == null || toggle == null) return null;
             return source.Subscribe(v => toggle.isOn = v);
@@ -110,8 +110,8 @@ namespace XFramework.XUI.Data
 
         #region GameObject (active)
 
-        /// <summary>将 ReactiveProperty 绑定到 GameObject 的 active 属性。</summary>
-        public static IDisposable BindToActive(this ReactiveProperty<bool> source, GameObject target)
+        /// <summary>将响应式属性绑定到 GameObject 的 active 属性。</summary>
+        public static IDisposable BindToActive(this IReactiveProperty<bool> source, GameObject target)
         {
             if (source == null || target == null) return null;
             return source.Subscribe(v => target.SetActive(v));
@@ -158,8 +158,8 @@ namespace XFramework.XUI.Data
 
         #region Generic (Custom Binding)
 
-        /// <summary>自定义绑定。将 ReactiveProperty 值通过自定义 setter 同步到目标。</summary>
-        public static IDisposable Bind<T>(this ReactiveProperty<T> source, Action<T> setter)
+        /// <summary>自定义绑定。将响应式属性的值通过自定义 setter 同步到目标。</summary>
+        public static IDisposable Bind<T>(this IReactiveProperty<T> source, Action<T> setter)
         {
             if (source == null || setter == null) return null;
             return source.Subscribe(setter);

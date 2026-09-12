@@ -40,7 +40,7 @@ namespace XFramework.XReactive
         /// <para>初始化时取源当前值作为初始值(不通知),之后订阅源做映射推送。</para>
         /// </summary>
         internal static ReadOnlyReactiveProperty<TResult> Create<TSource, TResult>(
-            ReactiveProperty<TSource> source, Func<TSource, TResult> selector)
+            IReactiveProperty<TSource> source, Func<TSource, TResult> selector)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (selector == null) throw new ArgumentNullException(nameof(selector));
@@ -135,7 +135,7 @@ namespace XFramework.XReactive
         /// <returns>新的只读响应式属性。</returns>
         /// <exception cref="ArgumentNullException">source 或 selector 为 null 时抛出。</exception>
         public static ReadOnlyReactiveProperty<TResult> Select<TSource, TResult>(
-            this ReactiveProperty<TSource> source,
+            this IReactiveProperty<TSource> source,
             Func<TSource, TResult> selector)
         {
             return ReadOnlyReactiveProperty<TResult>.Create(source, selector);

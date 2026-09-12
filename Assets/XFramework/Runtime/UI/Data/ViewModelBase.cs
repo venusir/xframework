@@ -78,7 +78,7 @@ namespace XFramework.XUI.Data
         /// <param name="selector">值映射函数。</param>
         /// <returns>一个 <see cref="ReadOnlyReactiveProperty{TResult}"/>，自动跟随源变化。</returns>
         protected ReadOnlyReactiveProperty<TResult> CreateReadOnlyProperty<TSource, TResult>(
-            ReactiveProperty<TSource> source,
+            IReactiveProperty<TSource> source,
             Func<TSource, TResult> selector)
         {
             var prop = source.Select(selector);

@@ -54,7 +54,7 @@ namespace XFramework.XUI.View
         /// 按命名约定绑定 ViewModel 的 ReactiveProperty 到 UI 组件。
         /// <para>约简化写法，内部转发到 <see cref="UIPanelBinding.BindByConvention{T}"/>。</para>
         /// </summary>
-        protected void BindByConvention<T>(string propertyName, ReactiveProperty<T> source)
+        protected void BindByConvention<T>(string propertyName, IReactiveProperty<T> source)
         {
             if (Binding == null)
             {
