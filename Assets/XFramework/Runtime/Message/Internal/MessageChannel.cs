@@ -300,6 +300,25 @@ namespace XFramework.XMessage.Internal
             return removed;
         }
 
+        /// <summary>
+        /// 淘汰指定 Key 的缓冲通道,并回收因此变空的该 Key 通道;返回是否淘汰发生。
+        /// <para>供 broker 按「Key」维度跨消息类型淘汰时经非泛型视图调用:调用方已按
+        /// <c>KeyType == typeof(TKey)</c> 过滤,故 <paramref name="key"/> 必可转换。</para>
+        /// <para><paramref name="key"/> 为 <c>object</c> 会让值类型 Key 装箱,但淘汰不在热路径上,
+        /// 换来的是无需按 TMessage 反射构造泛型存储类型。</para>
+        /// </summary>
+        public bool EvictBufferedByKey(object key)
+        {
+            var typedKey = (TKey)key;
+            if (!_channels.TryGetValue(typedKey, out var channel) || !channel.EvictBuffered())
+                return false;
+
+            // 与 ReclaimKeyedChannelIfEmpty 同一条闸门:淘汰只丢重放缓存,仍有活订阅者的通道不得回收
+            if (channel.IsReclaimable)
+                _channels.Remove(typedKey);
+            return true;
+        }
+
         /// <summary>累加本存储内全部通道的计数到 <paramref name="acc"/>。</summary>
         public void Accumulate(ref MessageStatsAccumulator acc)
         {
@@ -331,6 +350,12 @@ namespace XFramework.XMessage.Internal
 
         /// <summary>淘汰本存储内全部缓冲通道并回收因此变空的通道,返回淘汰数量(不含回收数)。</summary>
         int EvictBufferedAllAndReclaimEmpty();
+
+        /// <summary>
+        /// 淘汰指定 Key 的缓冲通道并回收因此变空的该 Key 通道,返回是否淘汰发生。
+        /// <para><paramref name="key"/> 的运行时类型必须是本存储的 Key 类型。</para>
+        /// </summary>
+        bool EvictBufferedByKey(object key);
 
         /// <summary>累加本存储内全部通道的计数到 <paramref name="acc"/>。</summary>
         void Accumulate(ref MessageStatsAccumulator acc);

@@ -104,6 +104,69 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
+        public void EvictBufferedChannels_ByKey_SpansAllMessageTypes()
+        {
+            // 同一实体往往参与多种带 Key 的消息类型;按消息类型淘汰要写 N 次,按 Key 一次覆盖
+            MessageManager.Publish("e1", new TestMessage { Value = 1 });
+            MessageManager.Publish("e1", new AnotherMessage { Value = 2 });
+
+            Assert.AreEqual(2, MessageManager.EvictBufferedChannels("e1"),
+                "同一 Key 下多个消息类型的缓冲通道都应淘汰");
+
+            // 条目本身必须真的清空(返回值只计淘汰数,不含顺带回收数)
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收全部空通道");
+            Assert.AreEqual(0, MessageManager.GetStats().MessageTypeCount, "空的键值存储表项应一并摘除");
+            Assert.AreEqual(0, MessageManager.EvictBufferedChannels("e1"), "重复淘汰应返回 0");
+
+            var fromTest = new List<int>();
+            var fromAnother = new List<int>();
+            MessageManager.SubscribeBuffered<string, TestMessage>("e1", msg => fromTest.Add(msg.Value));
+            MessageManager.SubscribeBuffered<string, AnotherMessage>("e1", msg => fromAnother.Add(msg.Value));
+
+            Assert.AreEqual(0, fromTest.Count, "被淘汰的消息类型不应重放");
+            Assert.AreEqual(0, fromAnother.Count, "被淘汰的消息类型不应重放");
+        }
+
+        [Test]
+        public void EvictBufferedChannels_ByKey_LeavesOtherKeysAndKeyTypesUntouched()
+        {
+            MessageManager.Publish("e1", new TestMessage { Value = 1 });
+            MessageManager.Publish("e2", new TestMessage { Value = 2 });
+            MessageManager.Publish(1, new TestMessage { Value = 3 });
+
+            Assert.AreEqual(1, MessageManager.EvictBufferedChannels("e1"), "只淘汰 Key 类型与 Key 值都匹配的通道");
+
+            var e1 = new List<int>();
+            var e2 = new List<int>();
+            var byIntKey = new List<int>();
+            MessageManager.SubscribeBuffered<string, TestMessage>("e1", msg => e1.Add(msg.Value));
+            MessageManager.SubscribeBuffered<string, TestMessage>("e2", msg => e2.Add(msg.Value));
+            MessageManager.SubscribeBuffered<int, TestMessage>(1, msg => byIntKey.Add(msg.Value));
+
+            Assert.AreEqual(0, e1.Count, "被淘汰的 Key 不应重放");
+            CollectionAssert.AreEqual(new[] { 2 }, e2, "同一消息类型下的其他 Key 不受影响");
+            CollectionAssert.AreEqual(new[] { 3 }, byIntKey, "其他 Key 类型不受影响");
+        }
+
+        [Test]
+        public void EvictBufferedChannels_ByKey_WithLiveSubscriber_KeepsChannel()
+        {
+            var received = new List<int>();
+            MessageManager.Subscribe<string, TestMessage>("e1", msg => received.Add(msg.Value));
+            MessageManager.Publish("e1", new TestMessage { Value = 1 });
+            CollectionAssert.AreEqual(new[] { 1 }, received, "前置:同步订阅者已收到消息");
+
+            Assert.AreEqual(1, MessageManager.EvictBufferedChannels("e1"));
+
+            // 与类型级版本共用同一条 IsReclaimable 闸门,删掉它会静默掐死活订阅
+            Assert.AreEqual(1, MessageManager.GetStats().ChannelCount,
+                "仍有同步订阅者的通道不得被顺带回收");
+
+            MessageManager.Publish("e1", new TestMessage { Value = 2 });
+            CollectionAssert.AreEqual(new[] { 1, 2 }, received, "淘汰不得影响同步投递");
+        }
+
+        [Test]
         public void EvictBufferedChannel_Keyed_LastKey_AlsoDropsStore()
         {
             MessageManager.Publish("only", new TestMessage { Value = 1 });

@@ -194,24 +194,28 @@ var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 // 按实体发布：每个 Key 各持有一条重放缓存
 MessageManager.Publish(entityId, new HealthChangedMessage { Value = 100 });
 
-// 实体销毁时淘汰其通道
-MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);
+// 实体销毁时淘汰该实体的全部通道（跨消息类型，一次调用）
+MessageManager.EvictBufferedChannels(entityId);
 ```
 
 漏掉这一步的失败是静默的：实体 42 死亡后其通道仍持有死亡那一刻的血量，若新生成的实体复用同一个 Id，新实体的血条订阅者会**立刻重放到上一个实体的死亡血量**——表现为满血的新实体血条一亮起来就是空的。这类 bug 不报错、不抛异常，只能靠淘汰纪律避免。
 
 类型级通道没有这个问题（每个消息类型至多一条缓存，且有界）；键值通道的缓存则必须与实体生命周期绑定，建议把淘汰调用写在实体销毁的同一处。
 
+**按 Key 淘汰优于按消息类型淘汰**：一个实体往往参与多种带 Key 的消息（血量、位置、状态……），按消息类型淘汰就得在实体销毁处写 N 次调用，且每新增一种消息都要回去补一处——漏掉的那一处正是上面那类静默 bug。`EvictBufferedChannels<TKey>(key)` 按「这个实体」而不是「这个消息类型」来清理，与实体的生命周期同形。
+
 ### 淘汰 API
 
 ```csharp
 MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 类型级，O(1)；返回是否存在并已淘汰
-MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key，O(1)；返回是否存在并已淘汰
-MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
+MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key 与该消息类型，O(1)；返回是否存在并已淘汰
+MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该消息类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
+MessageManager.EvictBufferedChannels(entityId);                            // 该 Key 跨全部消息类型（实体销毁处用这个）；返回淘汰数量
 MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无重放缓存的空通道，常规路径下返回 0
 ```
 
 - 类型级单数版的行为已完全包含在复数版中，保留它只是因为它是 O(1) 快路径（复数版需按消息类型扫全表）。
+- `EvictBufferedChannels<TKey>(key)` 按 Key 类型扫全表，与 `EvictBufferedChannel<TKey, TMessage>(key)` 的 O(1) 快路径不同——前者是实体销毁处的一次性调用，不在热路径上。
 - 淘汰的返回值只计**淘汰**的缓冲通道数，不含顺带回收的通道数与存储表项数。
 - `TrimEmptyChannels` 的返回值同样只计**通道**数：键值存储整体清空而被一并摘除时不计入——结构清理一律不计入返回值。
 - 淘汰只丢重放缓存，不会回收仍有活订阅者的通道。

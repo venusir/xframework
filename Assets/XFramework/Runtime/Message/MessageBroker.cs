@@ -510,6 +510,46 @@ namespace XFramework.XMessage
         }
 
         /// <summary>
+        /// 淘汰指定 Key 在<b>所有消息类型</b>下的缓冲通道,并顺带回收因此变空的通道与存储。
+        /// <para>用途是把淘汰纪律绑到实体的生命周期上:实体销毁处一次调用即覆盖它参与过的全部
+        /// 消息类型,无需按消息类型逐个淘汰——键基数高的场景下漏掉一个类型,就是一处静默的
+        /// 陈旧值重放(见模块 README「带 Key 的淘汰是语义要求」)。</para>
+        /// <para>返回淘汰的缓冲通道数量,不含顺带回收的通道数。</para>
+        /// </summary>
+        public int EvictBufferedChannels<TKey>(TKey key)
+        {
+            var removed = 0;
+
+            // 消息类型不是本方法的类型参数,故按 Key 类型扫全表。
+            // 淘汰只改各存储的内层字典;外层表项的摘除必须推迟到遍历结束之后,
+            // 否则就是在遍历中改 _keyedChannels。
+            var emptyStoreKeys = ListPool<(Type MessageType, Type KeyType)>.Rent();
+            try
+            {
+                foreach (var pair in _keyedChannels)
+                {
+                    if (pair.Key.KeyType != typeof(TKey))
+                        continue;
+
+                    if (pair.Value.EvictBufferedByKey(key))
+                        removed++;
+
+                    if (pair.Value.Count == 0)
+                        emptyStoreKeys.Add(pair.Key);
+                }
+
+                for (int i = 0; i < emptyStoreKeys.Count; i++)
+                    _keyedChannels.Remove(emptyStoreKeys[i]);
+            }
+            finally
+            {
+                ListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
+            }
+
+            return removed;
+        }
+
+        /// <summary>
         /// 回收所有无可重放缓存且无订阅者的空通道,返回回收的通道数量。
         /// <para>不触碰缓冲通道——持有重放缓存的通道不受本方法影响,只能经
         /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰;而淘汰本身已顺带回收因此变空的通道,

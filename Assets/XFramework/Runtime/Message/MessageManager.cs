@@ -202,6 +202,16 @@ namespace XFramework.XMessage
         public static int EvictBufferedChannels<TMessage>() => _broker.EvictBufferedChannels<TMessage>();
 
         /// <summary>
+        /// 淘汰指定 Key 在<b>所有消息类型</b>下的缓冲通道,丢弃其重放缓存。
+        /// <para>带 Key 的高频发布场景应把本方法写在实体的销毁处:一次调用覆盖该实体参与过的全部
+        /// 消息类型,比按消息类型逐个调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>
+        /// 更难遗漏——漏掉一个类型,复用同 Id 的新实体就会重放到上一个实体的旧值。</para>
+        /// <para>返回淘汰的缓冲通道数量,不含顺带回收的通道数。</para>
+        /// </summary>
+        /// <param name="key">消息键,相同 Key 的消息在同一通道中传递。</param>
+        public static int EvictBufferedChannels<TKey>(TKey key) => _broker.EvictBufferedChannels(key);
+
+        /// <summary>
         /// 回收所有无订阅者且无可重放缓存的空通道,返回回收的通道数量。
         /// <para>订阅清零的通道已由事件流自动回收,淘汰缓冲通道时也已顺带回收因此变空的通道与存储,
         /// 故本方法是兜底与诊断手段,用于批量清理历史遗留的空条目,常规路径下返回 0。</para>
