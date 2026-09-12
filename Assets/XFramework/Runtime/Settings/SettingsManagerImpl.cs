@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
@@ -175,32 +174,11 @@ namespace XFramework.XSettings
             if (callback == null)
                 throw new ArgumentNullException(nameof(callback));
 
-            return _changedStream.Subscribe(callback);
-        }
-
-        /// <inheritdoc />
-        public IDisposable ObserveField<TField>(Func<T, TField> selector, Action<TField> callback)
-        {
-            ThrowIfDisposed();
-
-            if (selector == null)
-                throw new ArgumentNullException(nameof(selector));
-            if (callback == null)
-                throw new ArgumentNullException(nameof(callback));
-
-            // 内联闭包状态机实现去重:首次必过(hasLast=false),之后相同值去重(EqualityComparer 默认比较器)
-            // 闭包分配仅在订阅建立时一次性,非热路径
-            var hasLast = false;
-            var lastValue = default(TField);
-            return _changedStream.Subscribe(settings =>
-            {
-                var fieldValue = selector(settings);
-                if (hasLast && EqualityComparer<TField>.Default.Equals(lastValue, fieldValue))
-                    return;
-                hasLast = true;
-                lastValue = fieldValue;
-                callback(fieldValue);
-            });
+            // 先注册再立即回调:与 ReactiveProperty / SettingRef 的顺序一致,
+            // 确保回调中建立的订阅不会丢失后续消息
+            var handle = _changedStream.Subscribe(callback);
+            callback(_settings);
+            return handle;
         }
 
         #endregion

@@ -7,7 +7,8 @@ namespace XFramework.XSettings
     /// <summary>
     /// 强类型设置管理器接口。
     /// <para>管理一组设置对象（类型 T）的完整生命周期：加载、修改、保存、重置。</para>
-    /// <para>通过 <see cref="Observe"/> 和 <see cref="ObserveField{TField}"/> 提供响应式订阅。</para>
+    /// <para><b>两级订阅分工：</b>字段级变化经 <see cref="SettingRef{T,TField}"/> 订阅；
+    /// 设置对象被整体替换（Apply / Load / Reset）经 <see cref="Observe"/> 订阅。</para>
     /// <para>默认实现：<see cref="SettingsManagerImpl{T}"/>。</para>
     /// <para><b>释放语义：</b><see cref="IDisposable.Dispose"/> 可重复调用；释放后除 Dispose 外的
     /// 所有成员抛 <see cref="ObjectDisposedException"/>。</para>
@@ -94,22 +95,17 @@ namespace XFramework.XSettings
         #region Reactive
 
         /// <summary>
-        /// 订阅整个设置对象变更。
-        /// <para>在 <see cref="Apply"/>、<see cref="Load"/>、<see cref="Reset"/> 时触发。</para>
+        /// 订阅设置对象<b>被整体替换</b>的变更。
+        /// <para>订阅时立即同步回调当前对象（与 <c>ReactiveProperty&lt;T&gt;</c>、<see cref="SettingRef{T,TField}"/>
+        /// 契约一致），之后在 <see cref="Apply"/>、<see cref="Load"/>、<see cref="Reset"/> 时回调。</para>
+        /// <para><b>字段级变化不经此订阅</b>——那是 <see cref="SettingRef{T,TField}"/> 的职责。
+        /// 本订阅解决的是「设置对象被换掉了」：订阅者需据此改读新的当前实例。
+        /// 原先的 <c>ObserveField</c> 已移除：它对引用类型字段用引用相等去重，
+        /// 子对象内容变化时会被静默吞掉，字段级订阅请改用句柄。</para>
         /// </summary>
-        /// <param name="callback">设置变更回调。</param>
+        /// <param name="callback">设置对象被替换时的回调，参数为新的当前对象。</param>
         /// <returns>取消订阅的 <see cref="IDisposable"/>。</returns>
         IDisposable Observe(Action<T> callback);
-
-        /// <summary>
-        /// 订阅设置对象中特定字段的变更。
-        /// <para>仅当该字段的值与上次通知不同时触发，避免不必要的刷新。</para>
-        /// </summary>
-        /// <typeparam name="TField">字段类型。</typeparam>
-        /// <param name="selector">字段选择器。例如 <c>s => s.audio.masterVolume</c>。</param>
-        /// <param name="callback">字段变更回调。</param>
-        /// <returns>取消订阅的 <see cref="IDisposable"/>。</returns>
-        IDisposable ObserveField<TField>(Func<T, TField> selector, Action<TField> callback);
 
         #endregion
 

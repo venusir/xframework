@@ -11,7 +11,7 @@
 | **强类型**     | 编译期类型安全，IDE 智能提示，告别 `GetFloat("key")` 的魔法字符串              |
 | **JSON 文件**  | 基于 Unity 内置 `JsonUtility`，可读可调试，天然支持版本迁移                    |
 | **不自动保存** | 调用方显式调用 `Save()`，避免频繁 I/O——适合「设置面板关闭时一次性保存」的场景  |
-| **响应式通知** | 通过 `Observe` / `ObserveField`，相同字段值自动去重不刷新 |
+| **字段级通知** | 通过 `SettingRef` 句柄订阅单个字段，相同值不通知；对象被整体替换用 `Observe`。 |
 | **可替换后端** | `ISettingsStore` 接口允许替换为加密存储、PlayerPrefs 或远程云存档              |
 | **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等           |
 
@@ -79,20 +79,36 @@ settings.audio.masterVolume = 0.5f;
 SettingsManager.Save<GameSettings>();
 ```
 
-### 4. UI 响应式绑定
+### 4. 字段级订阅与 UI 绑定
+
+字段级能力由**字段句柄**承担：句柄实现 `IReactiveProperty<T>`，因此 UI 模块现成的绑定扩展方法可直接使用。
 
 ```csharp
-// 监听整个设置对象
+// 句柄：调用一次并缓存（典型做法是 static readonly 字段）
+private static readonly SettingRef<GameSettings, float> MasterVolume =
+    SettingsManager.Ref<GameSettings, float>(s => s.audio.masterVolume);
+
+// UI 绑定：直接复用现成扩展方法（属性 → UI）
+MasterVolume.BindToSlider(masterSlider);
+
+// 订阅值变化（订阅时立即回调当前值，相同值不通知）
+MasterVolume.Subscribe(v => audioMixer.SetFloat("MasterVolume", Mathf.Lerp(-80f, 0f, v)));
+
+// 写入：回写 POCO + 通知订阅者 + 置脏
+MasterVolume.Value = 0.5f;
+```
+
+> **写入契约**：直接改 POCO 字段（`settings.audio.masterVolume = 0.5f`）**不会**通知、也不会置脏；
+> 要通知必须经句柄写入。直改字段后若需落盘，请调用 `SettingsManager.MarkDirty<GameSettings>()`。
+
+设置对象**被整体替换**（`Apply` / `Load` / `Reset`）是另一级事件，用 `Observe` 订阅：
+
+```csharp
 SettingsManager.Observe<GameSettings>(s =>
 {
-    musicSlider.value = s.audio.musicVolume;
+    // 参数是新的当前对象；句柄已自动跟随，这里通常只需刷新非绑定的显示项
+    RefreshSummary(s);
 });
-
-// 精确监听单个字段（相同值自动去重，值不变不触发）
-SettingsManager.ObserveField<GameSettings, float>(
-    s => s.audio.masterVolume,
-    volume => audioMixer.SetFloat("MasterVolume", Mathf.Lerp(-80f, 0f, volume))
-);
 ```
 
 ### 5. 全局消息订阅
@@ -122,7 +138,6 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Load<T>()`                                                    | 从持久层重新加载       |
 | `Reset<T>()`                                                   | 重置为默认值（含 `defaultFactory`）并删除文件 |
 | `Observe<T>(Action<T>)`                                        | 订阅整个设置变更       |
-| `ObserveField<T, TField>(Func<T,TField>, Action<TField>)`      | 订阅单个字段变更       |
 | `GetStore<T>()` / `SetStore<T>(store)`                         | 获取/替换存储后端      |
 
 ### ISettingsStore（存储后端接口）
@@ -201,7 +216,7 @@ Runtime/Settings/
 ## 避免 GC
 
 - `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配
-- `ObserveField` 内部使用闭包状态机 + `EqualityComparer<TField>` 去重，避免无效回调（订阅建立时一次性分配，非热路径）
+- `SettingRef` 的去重基准是 POCO 的实时值（不缓存）且零分配；句柄与事件流在创建时一次性分配，非热路径
 - 不自动保存，避免不必要的字符串分配与 I/O
 - 静态外观方法全为值类型或引用传递，无装箱
 
@@ -211,5 +226,5 @@ Runtime/Settings/
 | -------- | ------------------------ | --------------------------- | -------------------------- |
 | 模式     | 静态外观 + 接口 + 实现   | 静态外观 + 接口 + 实现      | ✅ 一致                     |
 | 初始化   | `Initialize(data)`       | `Initialize()`              | `Initialize<T>(path)`      |
-| 响应式订阅 | N/A                      | `ObserveXxx`                | `Observe` / `ObserveField` |
+| 响应式订阅 | N/A                      | `ObserveXxx`                | `SettingRef` / `Observe`   |
 | 消息通知 | `LanguageChangedMessage` | `DeviceConnectedMessage` 等 | `SettingsChangedMessage`   |

@@ -131,7 +131,6 @@ namespace XFramework.XSettings.Tests
 
             // 修复前这里返回一个永不回调的空句柄，订阅方毫无察觉
             Assert.Throws<ObjectDisposedException>(() => manager.Observe(_ => { }));
-            Assert.Throws<ObjectDisposedException>(() => manager.ObserveField(s => s.Volume, _ => { }));
         }
 
         #endregion

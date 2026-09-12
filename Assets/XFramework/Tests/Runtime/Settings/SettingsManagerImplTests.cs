@@ -6,8 +6,11 @@ using XFramework.XSettings;
 namespace XFramework.XSettings.Tests
 {
     /// <summary>
-    /// SettingsManagerImpl 响应式通知测试。
-    /// <para>覆盖 Observe/ObserveField 语义:触发、首次必过、去重、字段隔离、退订。</para>
+    /// <see cref="SettingsManagerImpl{T}.Observe"/> 通知语义测试。
+    /// <para>覆盖：订阅即回调当前对象、Apply 触发、退订、参数校验。</para>
+    /// <para>字段级订阅（原 <c>ObserveField</c>）已整体移除——它对引用类型字段用引用相等去重，
+    /// 子对象内容变化时会被静默吞掉。字段级能力改由 <see cref="SettingRef{T, TField}"/> 承担，
+    /// 用例见 <c>SettingRefTests</c>。</para>
     /// </summary>
     [TestFixture]
     public class SettingsManagerImplTests
@@ -37,26 +40,29 @@ namespace XFramework.XSettings.Tests
         #region Observe
 
         [Test]
+        public void Observe_Subscribe_ImmediatelyCallbacksCurrentObject()
+        {
+            var manager = CreateManager();
+            var calls = new List<int>();
+
+            var handle = manager.Observe(s => calls.Add(s.Volume));
+
+            CollectionAssert.AreEqual(new[] { 5 }, calls,
+                "订阅时立即回调当前值——与 ReactiveProperty / SettingRef 契约一致");
+            handle.Dispose();
+        }
+
+        [Test]
         public void Observe_Apply_TriggersCallback()
         {
             var manager = CreateManager();
             var calls = new List<int>();
             var handle = manager.Observe(s => calls.Add(s.Volume));
+            calls.Clear(); // 丢掉订阅时的立即回调，只观察 Apply 的效果
 
             manager.Apply(new TestSettings { Volume = 10 });
 
             CollectionAssert.AreEqual(new[] { 10 }, calls, "Apply 通知订阅者");
-            handle.Dispose();
-        }
-
-        [Test]
-        public void Observe_DoesNotCallbackOnSubscribe()
-        {
-            var manager = CreateManager();
-            var calls = 0;
-            var handle = manager.Observe(_ => calls++);
-
-            Assert.AreEqual(0, calls, "订阅时不立即回调(Observe 无缓冲语义)");
             handle.Dispose();
         }
 
@@ -68,9 +74,10 @@ namespace XFramework.XSettings.Tests
             var handle = manager.Observe(_ => calls++);
 
             handle.Dispose();
+            var afterDispose = calls;
             manager.Apply(new TestSettings { Volume = 10 });
 
-            Assert.AreEqual(0, calls, "退订后不再收到通知");
+            Assert.AreEqual(afterDispose, calls, "退订后不再收到通知");
         }
 
         [Test]
@@ -78,75 +85,6 @@ namespace XFramework.XSettings.Tests
         {
             var manager = CreateManager();
             Assert.Throws<ArgumentNullException>(() => manager.Observe(null));
-        }
-
-        #endregion
-
-        #region ObserveField
-
-        [Test]
-        public void ObserveField_FirstValue_AlwaysPasses()
-        {
-            var manager = CreateManager();
-            var calls = new List<int>();
-            var handle = manager.ObserveField(s => s.Volume, calls.Add);
-
-            // 首次 Apply(即使字段值恰好等于初始字段值)必过:观察者无"初始缓存"概念
-            manager.Apply(new TestSettings { Volume = 5 });
-
-            CollectionAssert.AreEqual(new[] { 5 }, calls, "首次值必过(无缓存时不去重)");
-            handle.Dispose();
-        }
-
-        [Test]
-        public void ObserveField_SameValue_Dedup()
-        {
-            var manager = CreateManager();
-            var calls = new List<int>();
-            var handle = manager.ObserveField(s => s.Volume, calls.Add);
-
-            manager.Apply(new TestSettings { Volume = 5 });
-            manager.Apply(new TestSettings { Volume = 5 });
-            manager.Apply(new TestSettings { Volume = 6 });
-
-            CollectionAssert.AreEqual(new[] { 5, 6 }, calls, "相同字段值去重,新值必过");
-            handle.Dispose();
-        }
-
-        [Test]
-        public void ObserveField_OtherFieldChanged_FirstNotifyStillFires()
-        {
-            var manager = CreateManager();
-            var volumeCalls = new List<int>();
-            var nameCalls = new List<string>();
-            var h1 = manager.ObserveField(s => s.Volume, volumeCalls.Add);
-            var h2 = manager.ObserveField(s => s.Name, nameCalls.Add);
-
-            // 只改 Volume:Volume 观察者收到新值
-            manager.Apply(new TestSettings { Volume = 99, Name = "init" });
-
-            CollectionAssert.AreEqual(new[] { 99 }, volumeCalls);
-
-            // Name 观察者也回调一次,但这不是「字段隔离失效」而是「首次必过」优先:
-            // 这是它第一次收到通知,去重尚未建立基线,故即使它选中的 Name 未变也会回调。
-            // 真正「只在本字段变化时回调」需要字段身份,由阶段三的 SettingRef 提供。
-            CollectionAssert.AreEqual(new[] { "init" }, nameCalls, "首次必过优先于字段隔离");
-
-            // 基线既已建立,再次 Apply(仍改 Volume、Name 未变)时 Name 观察者不再回调
-            manager.Apply(new TestSettings { Volume = 100, Name = "init" });
-
-            CollectionAssert.AreEqual(new[] { 99, 100 }, volumeCalls);
-            CollectionAssert.AreEqual(new[] { "init" }, nameCalls, "去重基线建立后,选中值未变则不再回调");
-
-            h1.Dispose();
-            h2.Dispose();
-        }
-
-        [Test]
-        public void ObserveField_NullSelector_Throws()
-        {
-            var manager = CreateManager();
-            Assert.Throws<ArgumentNullException>(() => manager.ObserveField<int>(null, _ => { }));
         }
 
         #endregion

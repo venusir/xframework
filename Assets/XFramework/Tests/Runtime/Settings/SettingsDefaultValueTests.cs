@@ -111,10 +111,11 @@ namespace XFramework.XSettings.Tests
             var manager = new SettingsManagerImpl<SampleSettings>(new FakeStore { HasData = false }, FactoryDefault);
             var notified = 0;
             var handle = manager.Observe(_ => notified++);
+            var before = notified; // Observe 订阅即回调一次，取基线而非写死次数
 
             manager.Load();
 
-            Assert.AreEqual(1, notified, "Load 后通知订阅者");
+            Assert.AreEqual(before + 1, notified, "Load 后通知订阅者");
             handle.Dispose();
         }
 

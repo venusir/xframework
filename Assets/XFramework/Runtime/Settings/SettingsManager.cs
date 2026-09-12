@@ -16,25 +16,30 @@ namespace XFramework.XSettings
     /// <para><b>使用流程：</b></para>
     /// <list type="number">
     /// <item>定义设置结构体（<see cref="SerializableAttribute"/>，<c>class, new()</c>）。</item>
-    /// <item>调用 <see cref="Initialize{T}(string, Func{T})"/> 初始化。</item>
-    /// <item>通过 <see cref="Settings{T}"/> 读写设置。</item>
-    /// <item>修改后显式调用 <see cref="Save{T}"/> 持久化。</item>
+    /// <item>为需要的字段声明 <see cref="SettingRef{T, TField}"/> 句柄。</item>
+    /// <item>调用 <see cref="Initialize{T}(string, Func{T}, SettingsOptions)"/> 初始化。</item>
+    /// <item>读直接读字段；写经句柄，或直改字段后调 <see cref="MarkDirty{T}"/>。</item>
+    /// <item>修改后显式调用 <see cref="Save{T}"/> / <see cref="SaveAsync{T}"/> 持久化。</item>
     /// </list>
     /// <para><b>示例：</b></para>
     /// <code>
+    /// // 字段句柄：调用一次并缓存
+    /// private static readonly SettingRef&lt;GameSettings, float&gt; MasterVolume =
+    ///     SettingsManager.Ref&lt;GameSettings, float&gt;(s =&gt; s.Audio.MasterVolume);
+    ///
     /// // 初始化
-    /// SettingsManager.Initialize<GameSettings>(Application.persistentDataPath + "/settings.json");
+    /// SettingsManager.Initialize&lt;GameSettings&gt;(Application.persistentDataPath + "/settings.json");
     ///
-    /// // 读取/修改
-    /// var settings = SettingsManager.Settings<GameSettings>();
-    /// settings.audio.masterVolume = 0.5f;
-    /// SettingsManager.Save<GameSettings>();
+    /// // 读：直接读字段
+    /// float v = SettingsManager.Settings&lt;GameSettings&gt;().Audio.MasterVolume;
     ///
-    /// // 响应式订阅
-    /// SettingsManager.ObserveField<GameSettings, float>(
-    ///     s => s.audio.masterVolume,
-    ///     v => audioMixer.SetFloat("Master", v)
-    /// );
+    /// // 写：经句柄，会通知订阅者并置脏
+    /// MasterVolume.Value = 0.5f;
+    ///
+    /// // 绑定 UI：句柄实现 IReactiveProperty&lt;T&gt;，现成的绑定扩展方法可直接用
+    /// MasterVolume.BindToSlider(masterSlider);
+    ///
+    /// SettingsManager.Save&lt;GameSettings&gt;();
     /// </code>
     /// </remarks>
     public static class SettingsManager
@@ -267,31 +272,19 @@ namespace XFramework.XSettings
         #region Reactive
 
         /// <summary>
-        /// 订阅整个设置对象变更。
+        /// 订阅设置对象<b>被整体替换</b>的变更。
+        /// <para>订阅时立即同步回调当前对象，之后在 <see cref="Apply{T}"/>、<see cref="Load{T}"/>、
+        /// <see cref="Reset{T}"/> 时回调。</para>
+        /// <para><b>字段级变化不经此订阅</b>——请用 <see cref="Ref{T, TField}"/> 取得句柄后订阅。
+        /// 本订阅用于「设置对象被换掉了」的场景：订阅者据此改读新的当前实例。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
-        /// <param name="callback">设置变更回调。</param>
+        /// <param name="callback">设置对象被替换时的回调，参数为新的当前对象。</param>
         /// <returns>取消订阅的 <see cref="IDisposable"/>。</returns>
         /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
         public static IDisposable Observe<T>(Action<T> callback) where T : class, new()
         {
             return GetManager<T>().Observe(callback);
-        }
-
-        /// <summary>
-        /// 订阅设置对象中特定字段的变更。
-        /// <para>仅当该字段的值与上次通知不同时触发。</para>
-        /// </summary>
-        /// <typeparam name="T">设置对象类型。</typeparam>
-        /// <typeparam name="TField">字段类型。</typeparam>
-        /// <param name="selector">字段选择器。</param>
-        /// <param name="callback">字段变更回调。</param>
-        /// <returns>取消订阅的 <see cref="IDisposable"/>。</returns>
-        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
-        public static IDisposable ObserveField<T, TField>(Func<T, TField> selector, Action<TField> callback)
-            where T : class, new()
-        {
-            return GetManager<T>().ObserveField(selector, callback);
         }
 
         #endregion
