@@ -374,10 +374,12 @@ namespace XFramework.XNode
 
         internal sealed override void DestroyInternal()
         {
+            // 只清空、不置 null：置 null 会让销毁后的 GetNode/AddNode 直接抛裸 NRE
+            // （EntityNodeTests.Destroy_ClearsTypeCache 曾因此恒红），而框架的取向是
+            // 未初始化访问给出可诊断的信号，不是 NRE。
+            // 保留空字典另有一个小收益：节点回池被复用时无需重新分配这两个字典。
             _typeCache.Clear();
-            _typeCache = null;
             _interfaceCache.Clear();
-            _interfaceCache = null;
 
             base.DestroyInternal();
         }

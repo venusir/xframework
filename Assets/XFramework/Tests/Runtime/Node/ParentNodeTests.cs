@@ -297,7 +297,11 @@ namespace XFramework.XNode.Tests
 
             var results = new List<BaseNode>();
             grandparent.GetNodes(results, recursive: true);
-            Assert.AreEqual(2, results.Count);
+
+            // 3 = grandparent 的直接子节点 parent，加上 parent 的 2 个叶子。
+            // GetNodes(recursive: true) 把直接子节点也计入（见 ParentNode.GetNodes），
+            // 原期望 2 是照抄下面 ForEach 那个只有 1 个叶子的用例所致
+            Assert.AreEqual(3, results.Count);
             grandparent.Destroy();
         }
 

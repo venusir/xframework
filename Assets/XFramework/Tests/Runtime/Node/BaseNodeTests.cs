@@ -22,6 +22,14 @@ namespace XFramework.XNode.Tests
 
             protected override void OnAwake()
             {
+                // 节点经池复用，派生类状态必须在此复位（AwakeInternal 只复位框架自身字段）。
+                // 本 fixture 的 CreateNode() 走 NodeFactory，拿到的可能是上一个用例用过的实例，
+                // 不复位则计数跨用例累积——Destroy 那两个用例曾因此恒红。
+                // 注意 InitArg 刻意不在此复位：OnInit 先于 OnAwake 调用，在这里清会抹掉刚传入的参数。
+                AwakeCallCount = 0;
+                StartCallCount = 0;
+                DestroyCallCount = 0;
+
                 AwakeCallCount++;
             }
 
@@ -42,6 +50,12 @@ namespace XFramework.XNode.Tests
         }
 
         private sealed class ServiceNode : BaseNode { }
+
+        /// <summary>暴露 <see cref="BaseNode.Get{T}"/>（protected）以便测试服务解析。</summary>
+        private sealed class ServiceConsumerNode : BaseNode
+        {
+            public T Resolve<T>() where T : IBaseNode => Get<T>();
+        }
 
         private sealed class ParentForService : ParentNode
         {
@@ -225,18 +239,17 @@ namespace XFramework.XNode.Tests
         [Test]
         public void Get_ServiceOnParent_ResolvesCorrectly()
         {
+            // 原用例加了 2 个子节点却断言 ChildCount == 1，且注释自承「通过手动方式验证深度和父子关系」
+            // ——它从未测过服务解析。这里写出真正的用例：BaseNode.Get<T>() 是 protected，
+            // 故用一个暴露它的测试节点来调。
             var root = RootNode.Create();
-            var service = new ServiceNode();
-            root.InvokeAddChild(service);
 
-            var leaf = new TestNode();
-            root.InvokeAddChild(leaf);
-            leaf.Start();
+            // 必须经 AddNode：InvokeAddChild 直接挂树、不写 root 的类型缓存，
+            // 而 Get<T> 正是沿父链查各 EntityNode 的类型缓存
+            var service = root.AddNode<ServiceNode>();
+            var leaf = root.AddNode<ServiceConsumerNode>();
 
-            // 手动注入 Get<T> 测试：leaf 沿父链查找 ServiceNode
-            // 由于 leaf 的父节点是 root，root 是 EntityNode，其缓存中有 ServiceNode
-            // 但叶节点需要调用 Get<ServiceNode>()，这里我们通过手动方式验证深度和父子关系
-            Assert.AreEqual(1, root.ChildCount);
+            Assert.AreSame(service, leaf.Resolve<ServiceNode>(), "叶节点应沿父链解析到父节点上的服务");
             root.Destroy();
         }
 
