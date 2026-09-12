@@ -26,9 +26,20 @@ namespace XFramework.XSave
         /// <summary>存档文件大小（字节）。</summary>
         public long fileSize;
 
+        /// <summary>
+        /// 该槽位的存档文件是否已损坏（文件存在但内容无法解析为有效存档）。
+        /// <para>为 <c>true</c> 时其余字段取自文件系统与文件名：<see cref="version"/> 为 0、
+        /// <see cref="timestamp"/> 为 <c>null</c>、<see cref="fileSize"/> 为文件实际大小。</para>
+        /// <para>把损坏槽位列出来而不是隐藏它，是为了让存档界面能展示并提供删除；
+        /// 隐藏会与 <see cref="ISaveManager.SlotExistsAsync"/> 返回 <c>true</c> 自相矛盾——
+        /// 界面既看不到也删不掉它。</para>
+        /// </summary>
+        public bool isCorrupted;
+
         public override string ToString()
         {
-            return $"[Slot:{slot}] v{version} @ {timestamp} ({fileSize} bytes)";
+            var state = isCorrupted ? " [损坏]" : string.Empty;
+            return $"[Slot:{slot}] v{version} @ {timestamp} ({fileSize} bytes){state}";
         }
     }
 }

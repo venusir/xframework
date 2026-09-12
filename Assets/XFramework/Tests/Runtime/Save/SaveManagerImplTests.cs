@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -178,16 +179,26 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
-        public async Task GetSlotMetaAsync_ValidJsonButNotSave_ReturnsNullWithWarning()
+        public async Task GetSlotMetaAsync_ValidJsonButNotSave_ReturnsCorruptedMeta()
         {
-            // 与 GetSlotMetasAsync 一致的错误处置：损坏即告警并返回 null，不让原始序列化异常穿透
+            // 与 GetSlotMetasAsync 结论一致：损坏即告警并返回带标记的条目，
+            // 而不是让原始序列化异常穿透、也不是返回 null（null 严格表示「槽位不存在」）
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
                 Encoding.UTF8.GetBytes("{\"foo\":1}"));
 
             LogAssert.Expect(LogType.Warning, new Regex("解析存档元数据失败"));
             var meta = await SaveManager.GetSlotMetaAsync(1);
 
-            Assert.IsNull(meta, "不是有效存档时应返回 null");
+            Assert.IsNotNull(meta, "损坏槽位仍应返回元数据，供界面展示与删除");
+            Assert.IsTrue(meta.isCorrupted, "应带损坏标记");
+            Assert.AreEqual(1, meta.slot);
+        }
+
+        [Test]
+        public async Task GetSlotMetaAsync_MissingSlot_ReturnsNull()
+        {
+            // null 严格表示「槽位不存在」——与「存在但损坏」区分开
+            Assert.IsNull(await SaveManager.GetSlotMetaAsync(7), "不存在的槽位应返回 null");
         }
 
         [Test]
@@ -244,7 +255,7 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
-        public async Task GetSlotMetas_CorruptedFile_SkipsWithWarning()
+        public async Task GetSlotMetasAsync_CorruptedFile_ListedWithFlag()
         {
             await SaveManager.SaveAsync(1);
             // 直接写入损坏文件（不走 SaveAsync）
@@ -253,8 +264,58 @@ namespace XFramework.XSave.Tests
             LogAssert.Expect(LogType.Warning, new Regex("解析存档元数据失败"));
             var metas = await SaveManager.GetSlotMetasAsync();
 
-            Assert.AreEqual(1, metas.Count, "损坏文件应被跳过且不打崩列表");
+            // 损坏槽位带标记留在列表里而非消失：消失会与 SlotExistsAsync 返回 true 自相矛盾，
+            // 界面既看不到也删不掉它
+            Assert.AreEqual(2, metas.Count, "损坏槽位应带标记留在列表里，而不是消失");
             Assert.AreEqual(1, metas[0].slot);
+            Assert.IsFalse(metas[0].isCorrupted, "正常存档不应带损坏标记");
+            Assert.AreEqual(2, metas[1].slot);
+            Assert.IsTrue(metas[1].isCorrupted, "损坏存档应带损坏标记");
+            Assert.AreEqual("slot_2.save", metas[1].relativePath, "损坏条目仍应带可定位的路径");
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_ReturnsSortedBySlot()
+        {
+            // 文件系统返回顺序跨平台不确定，升序让 UI 与断言都有稳定预期
+            await SaveManager.SaveAsync(3);
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+
+            Assert.AreEqual(3, metas.Count);
+            Assert.AreEqual(1, metas[0].slot);
+            Assert.AreEqual(2, metas[1].slot);
+            Assert.AreEqual(3, metas[2].slot);
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_MalformedFileName_Skipped()
+        {
+            await SaveManager.SaveAsync(1);
+            // slot_abc.save 从前后缀看像槽位文件，但解析不出槽位号——
+            // 旧实现会把它当成 slot = -1 塞进列表
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_abc.save", Encoding.UTF8.GetBytes("x"));
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+
+            Assert.AreEqual(1, metas.Count, "解析不出槽位号的文件不应进入列表");
+            Assert.AreEqual(1, metas[0].slot);
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_Cancelled_ThrowsInsteadOfPartialList()
+        {
+            // 取消不是「文件损坏」：裸 catch (Exception) 会把它吞掉，调用方拿到一份
+            // 「看起来正常」的部分列表——比抛异常危险得多
+            await SaveManager.SaveAsync(1);
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            await AssertThrowsAsync<OperationCanceledException>(
+                () => SaveManager.GetSlotMetasAsync(cts.Token),
+                "取消应向上传播，而不是返回部分列表");
         }
 
         [Test]

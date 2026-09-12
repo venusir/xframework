@@ -85,35 +85,59 @@ namespace XFramework.XSave
             if (files == null || files.Length == 0)
                 return metas;
 
+            // 快照类型在循环外取一次：Factory 是可变静态字段，不能缓存到字段/静态里
+            // （第三方随时可替换），但也不必每个文件都构造一个快照实例
+            var snapshotType = DataSnapshot.Factory().GetType();
+
             for (int i = 0; i < files.Length; i++)
             {
                 var path = files[i];
-                if (!IsSlotFilePath(path))
+
+                // 严格解析：非 slot_<非负整数>.save 的文件直接不认，不产生 slot = -1 的脏元数据
+                if (!SavePathUtility.TryParseSlot(path, out var slot))
                     continue;
 
-                var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
-                await ReturnToMainThread(cancellationToken);
-
-                if (bytes == null || bytes.Length == 0)
-                    continue;
-
+                byte[] bytes = null;
                 try
                 {
-                    if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+                    // 读取也在 try 内：读失败与解析失败对调用方是同一种故障（该槽位不可用）
+                    bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
+                    await ReturnToMainThread(cancellationToken);
+
+                    if (bytes == null)
+                        continue;   // 列举与读取之间文件消失，按不存在处理
+
+                    if (bytes.Length == 0)
                     {
-                        Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
+                        Debug.LogWarning($"[Save] 跳过空存档文件: {path}");
                         continue;
                     }
 
-                    metas.Add(BuildMeta(saveData, playerId, ParseSlotFromPath(path), path, bytes.Length));
+                    if (!TryDeserializeSnapshot(bytes, snapshotType, out var saveData, out var error))
+                    {
+                        Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
+                        metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes.Length));
+                        continue;
+                    }
+
+                    metas.Add(BuildMeta(saveData, playerId, slot, path, bytes.Length));
+                }
+                catch (OperationCanceledException)
+                {
+                    // 取消不是「文件损坏」，必须向上传播：被下面的裸 catch 吞掉会让调用方
+                    // 拿到一份「看起来正常」的部分列表
+                    throw;
                 }
                 catch (Exception ex)
                 {
                     // CreateMeta 是第三方扩展点，其异常不应打崩整份列表
                     Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {ex.Message}");
+                    metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes?.Length ?? 0));
                 }
             }
 
+            // 排序：文件系统返回顺序跨平台不确定，升序让 UI 与断言都有稳定预期
+            metas.Sort(SlotAscendingComparer);
             return metas;
         }
 
@@ -132,15 +156,22 @@ namespace XFramework.XSave
             var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
-            if (bytes == null || bytes.Length == 0)
+            if (bytes == null)
                 return null;
 
-            // 与 GetSlotMetasAsync 保持同一错误处置：损坏即告警并返回 null，
-            // 不让原始序列化异常穿透到调用方
-            if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+            if (bytes.Length == 0)
+            {
+                Debug.LogWarning($"[Save] 跳过空存档文件: {path}");
+                return null;
+            }
+
+            // 与 GetSlotMetasAsync 同一错误处置：损坏即告警并返回带标记的元数据。
+            // 返回带标记条目而非 null，是为了让两个元数据 API 结论一致——
+            // null 严格表示「该槽位不存在」，而不是「存在但读不了」
+            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
             {
                 Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
-                return null;
+                return BuildCorruptedMeta(playerId, slot, path, bytes.Length);
             }
 
             return BuildMeta(saveData, playerId, slot, path, bytes.Length);
@@ -204,7 +235,7 @@ namespace XFramework.XSave
 
                 // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
                 // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
-                if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+                if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 已损坏或不是有效存档：{error}");
 
                 // 应用快照到内存
@@ -352,10 +383,11 @@ namespace XFramework.XSave
         /// 框架产出的存档必然满足；不满足即说明内容不是本框架写出的存档。</para>
         /// </summary>
         /// <param name="bytes">存档文件字节。</param>
+        /// <param name="snapshotType">快照类型，取自 <c>DataSnapshot.Factory().GetType()</c>。</param>
         /// <param name="saveData">反序列化并校验通过的快照；失败时为 <c>null</c>。</param>
         /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>校验通过返回 <c>true</c>。</returns>
-        private static bool TryDeserializeSnapshot(byte[] bytes, out DataSnapshot saveData, out string error)
+        private static bool TryDeserializeSnapshot(byte[] bytes, Type snapshotType, out DataSnapshot saveData, out string error)
         {
             saveData = null;
             error = null;
@@ -363,7 +395,7 @@ namespace XFramework.XSave
             DataSnapshot data;
             try
             {
-                data = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
+                data = (DataSnapshot)Serializer.Default.Deserialize(bytes, snapshotType);
             }
             catch (Exception ex)
             {
@@ -406,7 +438,34 @@ namespace XFramework.XSave
         /// <returns>补齐后的元数据。</returns>
         private static SaveMeta BuildMeta(DataSnapshot saveData, string playerId, int slot, string relativePath, long fileSize)
         {
-            var meta = saveData.CreateMeta();
+            return FillMeta(saveData.CreateMeta(), playerId, slot, relativePath, fileSize);
+        }
+
+        /// <summary>
+        /// 为无法解析的存档构造带损坏标记的元数据。
+        /// <para>经由 <c>Factory().CreateMeta()</c> 而非 <c>new SaveMeta()</c>：第三方扩展的
+        /// <see cref="SaveMeta"/> 子类字段需要与配对快照一起构造，损坏文件没有可用快照，
+        /// 只能给一个未填充的实例（其扩展字段为默认值）。</para>
+        /// </summary>
+        /// <param name="playerId">所属玩家。</param>
+        /// <param name="slot">槽位号（取自文件名）。</param>
+        /// <param name="relativePath">存档文件相对路径。</param>
+        /// <param name="fileSize">文件字节数；读取失败时为 0。</param>
+        /// <returns>带 <see cref="SaveMeta.isCorrupted"/> 标记的元数据。</returns>
+        private static SaveMeta BuildCorruptedMeta(string playerId, int slot, string relativePath, long fileSize)
+        {
+            var meta = FillMeta(DataSnapshot.Factory().CreateMeta(), playerId, slot, relativePath, fileSize);
+            meta.isCorrupted = true;
+            return meta;
+        }
+
+        /// <summary>
+        /// 补齐元数据的运行时字段。
+        /// <para><paramref name="playerId"/> 以参数传入而非读取字段：本方法在 IO <c>await</c> 之后调用，
+        /// 读字段会与并发切换玩家上下文产生竞态（表现为元数据归属错误）。</para>
+        /// </summary>
+        private static SaveMeta FillMeta(SaveMeta meta, string playerId, int slot, string relativePath, long fileSize)
+        {
             meta.playerId = playerId;
             meta.slot = slot;
             meta.relativePath = relativePath;
@@ -414,6 +473,25 @@ namespace XFramework.XSave
             return meta;
         }
 
+        /// <summary>按槽位号升序比较。静态单例，避免每次排序都分配比较器。</summary>
+        private static readonly IComparer<SaveMeta> SlotAscendingComparer = new SlotAscending();
+
+        private sealed class SlotAscending : IComparer<SaveMeta>
+        {
+            public int Compare(SaveMeta x, SaveMeta y)
+            {
+                return x.slot.CompareTo(y.slot);
+            }
+        }
+
+        /// <summary>
+        /// 判断路径是否为槽位文件——<b>宽松判断，只用于删除路径</b>。
+        /// <para>删除语义是「清掉所有 <c>slot_</c> 前缀残留」，因此 <c>slot_abc.save</c> 这类
+        /// 解析不出槽位号的文件也应被清理；而枚举只列合法槽位，用的是
+        /// <see cref="SavePathUtility.TryParseSlot"/>。两者语义不同，刻意不做统一。</para>
+        /// </summary>
+        /// <param name="path">文件相对路径。</param>
+        /// <returns>文件名以前缀开头、以后缀结尾返回 <c>true</c>。</returns>
         private static bool IsSlotFilePath(string path)
         {
             if (string.IsNullOrEmpty(path))
@@ -424,23 +502,6 @@ namespace XFramework.XSave
 
             return fileName.StartsWith(SavePathUtility.SlotFilePrefix, StringComparison.Ordinal)
                 && fileName.EndsWith(SavePathUtility.SlotFileSuffix, StringComparison.Ordinal);
-        }
-
-        private static int ParseSlotFromPath(string path)
-        {
-            // 取文件名部分，格式: "slot_{index}.save"（可能包含 playerId/ 前缀）
-            var fileName = FilePathUtility.GetFileNameFromPath(path);
-
-            var start = SavePathUtility.SlotFilePrefix.Length;
-            var end = fileName.LastIndexOf(SavePathUtility.SlotFileSuffix, StringComparison.Ordinal);
-            if (end < start)
-                return -1;
-
-            var numStr = fileName.Substring(start, end - start);
-            if (int.TryParse(numStr, out var slotIndex))
-                return slotIndex;
-
-            return -1;
         }
 
         #endregion

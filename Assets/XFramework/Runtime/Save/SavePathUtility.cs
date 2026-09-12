@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using XFramework.XFileManager;
 
 namespace XFramework.XSave
 {
@@ -79,6 +80,47 @@ namespace XFramework.XSave
         {
             if (slot < 0)
                 throw new ArgumentOutOfRangeException(nameof(slot), slot, "[Save] 槽位号必须为非负整数。");
+        }
+
+        #endregion
+
+        #region Parsing
+
+        /// <summary>
+        /// 尝试从存档文件相对路径解析槽位号。
+        /// <para><b>严格解析：</b>文件名须为 <c>slot_&lt;非负整数&gt;.save</c>（可带 <c>playerId/</c> 前缀）。
+        /// <c>slot_abc.save</c>、<c>slot_.save</c>、<c>slot_-1.save</c> 一律解析失败。</para>
+        /// <para>与删除路径所用的宽松判断（只看前缀后缀）分工不同：删除要清掉所有 <c>slot_</c> 前缀残留，
+        /// 枚举则只列合法槽位。两者语义不同，刻意不做统一。</para>
+        /// </summary>
+        /// <param name="path">存档文件相对路径。</param>
+        /// <param name="slot">解析出的槽位号；失败时为 <c>-1</c>。</param>
+        /// <returns>解析成功返回 <c>true</c>。</returns>
+        internal static bool TryParseSlot(string path, out int slot)
+        {
+            slot = -1;
+
+            if (string.IsNullOrEmpty(path))
+                return false;
+
+            var fileName = XFileManager.FilePathUtility.GetFileNameFromPath(path);
+            if (!fileName.StartsWith(SlotFilePrefix, StringComparison.Ordinal)
+                || !fileName.EndsWith(SlotFileSuffix, StringComparison.Ordinal))
+                return false;
+
+            var start = SlotFilePrefix.Length;
+            var end = fileName.Length - SlotFileSuffix.Length;
+            if (end <= start)
+                return false;
+
+            // 文化无关 + 仅数字：NumberStyles.None 顺带拒绝正负号与空白，
+            // 使 "-1"、" 1"、"+1" 这类写法无法蒙混过关
+            var digits = fileName.Substring(start, end - start);
+            if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
+                return false;
+
+            slot = parsed;
+            return true;
         }
 
         #endregion
