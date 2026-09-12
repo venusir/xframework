@@ -10,6 +10,8 @@ namespace XFramework.XSettings
         /// <summary>
         /// 从持久层加载设置对象。
         /// <para>如果持久层不存在数据，应返回 <c>new T()</c>。</para>
+        /// <para>返回 <c>null</c> 会被管理器回退为默认值并打 LogWarning，但不应依赖这一兜底——
+        /// 它只是为了避免返回 null 把 NRE 推迟到调用方各处爆发。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。必须满足 <c>class, new()</c> 约束。</typeparam>
         /// <returns>加载的设置对象，如果无持久化数据则返回默认值。</returns>

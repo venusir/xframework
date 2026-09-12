@@ -1,4 +1,7 @@
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XSettings;
 
 namespace XFramework.XSettings.Tests
@@ -26,9 +29,12 @@ namespace XFramework.XSettings.Tests
             public bool HasData;
             public object Data;
 
+            /// <summary>模拟违约的第三方 store：<see cref="Load{T}"/> 返回 <c>null</c> 而非契约要求的 <c>new T()</c>。</summary>
+            public bool ReturnNull;
+
             public bool Exists() => HasData;
 
-            public T Load<T>() where T : class, new() => Data as T ?? new T();
+            public T Load<T>() where T : class, new() => ReturnNull ? null : Data as T ?? new T();
 
             public void Save<T>(T settings) where T : class, new() => Data = settings;
 
@@ -110,6 +116,39 @@ namespace XFramework.XSettings.Tests
 
             Assert.AreEqual(1, notified, "Load 后通知订阅者");
             handle.Dispose();
+        }
+
+        #endregion
+
+        #region Store 违约返回 null
+
+        [Test]
+        public void Constructor_StoreReturnsNull_FallsBackToDefault()
+        {
+            var store = new FakeStore { HasData = true, ReturnNull = true };
+
+            // Expect 必须在构造之前登记——告警正是在构造函数里发出的
+            LogAssert.Expect(LogType.Warning, new Regex(@"ISettingsStore\.Load<SampleSettings> 返回了 null"));
+            var manager = new SettingsManagerImpl<SampleSettings>(store, FactoryDefault);
+
+            Assert.AreEqual(5, manager.Settings.Volume, "违约返回 null 时回退到 defaultFactory");
+        }
+
+        [Test]
+        public void Load_StoreReturnsNull_FallsBackToDefault()
+        {
+            // 构造时 HasData=false 走工厂，不产生告警；随后才让 store 违约
+            var store = new FakeStore { HasData = false };
+            var manager = new SettingsManagerImpl<SampleSettings>(store, FactoryDefault);
+
+            store.HasData = true;
+            store.ReturnNull = true;
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"ISettingsStore\.Load<SampleSettings> 返回了 null"));
+            manager.Load();
+
+            Assert.IsNotNull(manager.Settings, "不得把 null 交给调用方——那会把 NRE 推迟到各处爆发");
+            Assert.AreEqual(5, manager.Settings.Volume, "回退到 defaultFactory");
         }
 
         #endregion

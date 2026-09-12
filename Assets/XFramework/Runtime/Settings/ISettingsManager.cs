@@ -7,6 +7,8 @@ namespace XFramework.XSettings
     /// <para>管理一组设置对象（类型 T）的完整生命周期：加载、修改、保存、重置。</para>
     /// <para>通过 <see cref="Observe"/> 和 <see cref="ObserveField{TField}"/> 提供响应式订阅。</para>
     /// <para>默认实现：<see cref="SettingsManagerImpl{T}"/>。</para>
+    /// <para><b>释放语义：</b><see cref="IDisposable.Dispose"/> 可重复调用；释放后除 Dispose 外的
+    /// 所有成员抛 <see cref="ObjectDisposedException"/>。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。必须满足 <c>class, new()</c> 约束，并标记 <see cref="SerializableAttribute"/>。</typeparam>
     public interface ISettingsManager<T> : IDisposable where T : class, new()
@@ -77,6 +79,9 @@ namespace XFramework.XSettings
         /// <summary>
         /// 获取或设置存储后端。
         /// <para>可在运行时替换（如从 JSON 文件切换为加密存储）。</para>
+        /// <para><b>替换只换后端、不迁移数据：</b>内存中的设置仍是旧后端加载的内容，
+        /// 下一次 <see cref="Save"/> 会把它们写入新后端。如需读取新后端已有数据，
+        /// 请在替换后调用 <see cref="Load"/>。实现会在替换时打 LogWarning 提醒。</para>
         /// </summary>
         ISettingsStore Store { get; set; }
 
