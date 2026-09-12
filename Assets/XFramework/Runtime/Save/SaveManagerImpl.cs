@@ -67,6 +67,18 @@ namespace XFramework.XSave
         public string CurrentPlayerId => _playerId;
 
         /// <inheritdoc/>
+        public int CurrentVersion { get; private set; } = 1;
+
+        /// <inheritdoc/>
+        public void SetCurrentVersion(int version)
+        {
+            if (version < 1)
+                throw new ArgumentOutOfRangeException(nameof(version), version, "[Save] 存档格式版本必须大于 0。");
+
+            CurrentVersion = version;
+        }
+
+        /// <inheritdoc/>
         public UniTask<List<SaveMeta>> GetSlotMetasAsync(CancellationToken cancellationToken = default)
         {
             // 只把玩家上下文当作默认值：实际查询由参数驱动，不读也不写共享状态，
@@ -213,6 +225,10 @@ namespace XFramework.XSave
                 // 1. 收集数据快照
                 var saveData = DataManager.CreateSnapshot();
 
+                // 戳上当前客户端支持的格式版本：加载侧据此拒绝「比本客户端更新」的存档。
+                // DataManager 只会在版本为 0 时兜底成 1，无法表达游戏自己的格式演进
+                saveData.version = CurrentVersion;
+
                 // 2. 序列化 DataSnapshot → bytes
                 var bytes = Serializer.Default.Serialize(saveData, saveData.GetType());
 
@@ -276,11 +292,24 @@ namespace XFramework.XSave
                 var outcome = await ReadAndValidateAsync(playerId, slot, slotPath, cancellationToken);
                 if (outcome.SaveData != null)
                 {
-                    if (TryApplySnapshot(outcome.SaveData, out var applyError))
-                        return new SaveLoadResult(SaveLoadStatus.Loaded, outcome.Meta);
+                    // 版本门禁：高于当前客户端支持的版本整份拒绝，且不退到备份——
+                    // 备份多半同样是新版本，而静默加载更旧的备份会无声丢掉玩家的新进度。
+                    // Data 模块内已有按块门禁，但它是「跳过该块」，结果是新版存档被半加载
+                    // （一半新数据、一半空着），比干净地拒绝危险得多
+                    if (outcome.SaveData.version > CurrentVersion)
+                        return new SaveLoadResult(SaveLoadStatus.VersionTooNew, null,
+                            $"存档版本({outcome.SaveData.version})高于当前客户端支持的版本({CurrentVersion})，请先升级客户端");
 
-                    return new SaveLoadResult(SaveLoadStatus.Corrupt, null,
-                        $"快照无法应用到内存：{applyError}");
+                    if (!TryApplySnapshot(outcome.SaveData, out _, out var applyError))
+                        return new SaveLoadResult(SaveLoadStatus.Corrupt, null, $"快照无法完整应用到内存：{applyError}");
+
+                    // 版本较低说明数据块的迁移链已在 ApplySnapshot 内跑过；迁移本身由 Data 模块负责，
+                    // 这里只如实回报，便于调用方提示「存档已升级」
+                    var loadedStatus = outcome.SaveData.version < CurrentVersion
+                        ? SaveLoadStatus.Migrated
+                        : SaveLoadStatus.Loaded;
+
+                    return new SaveLoadResult(loadedStatus, outcome.Meta);
                 }
 
                 // 2. 主文件不可用 → 退化到一代备份。
@@ -290,7 +319,9 @@ namespace XFramework.XSave
                 if (FileManager.Exists(SaveDomain, backupPath))
                 {
                     var backupOutcome = await ReadAndValidateAsync(playerId, slot, backupPath, cancellationToken);
-                    if (backupOutcome.SaveData != null && TryApplySnapshot(backupOutcome.SaveData, out _))
+                    if (backupOutcome.SaveData != null
+                        && backupOutcome.SaveData.version <= CurrentVersion
+                        && TryApplySnapshot(backupOutcome.SaveData, out _, out _))
                     {
                         Debug.LogWarning(
                             $"[Save] 存档槽位 {slot} 主文件不可用（{outcome.Message}），已从备份恢复。");
@@ -374,16 +405,16 @@ namespace XFramework.XSave
         /// <param name="saveData">要应用的快照。</param>
         /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>应用成功返回 <c>true</c>。</returns>
-        private static bool TryApplySnapshot(DataSnapshot saveData, out string error)
+        private static bool TryApplySnapshot(DataSnapshot saveData, out int failedBlocks, out string error)
         {
+            failedBlocks = 0;
             error = null;
 
             var rollback = DataManager.CreateSnapshot();
 
             try
             {
-                DataManager.ApplySnapshot(saveData);
-                return true;
+                failedBlocks = DataManager.ApplySnapshot(saveData);
             }
             catch (Exception ex)
             {
@@ -391,17 +422,40 @@ namespace XFramework.XSave
 
                 // 底层异常在此处记 LogError：结果结构体只带摘要文本，堆栈靠这里保留
                 Debug.LogError($"[Save] 应用存档失败，正在回滚内存数据: {ex}");
-
-                try
-                {
-                    DataManager.ApplySnapshot(rollback);
-                }
-                catch (Exception rollbackEx)
-                {
-                    Debug.LogError($"[Save] 回滚内存数据失败，内存状态可能不完整: {rollbackEx}");
-                }
-
+                RollbackTo(rollback);
                 return false;
+            }
+
+            // 部分块未恢复等价于内存里少了一半数据——同样回滚，不留下「半加载」状态。
+            // 这是 Data 侧把恢复失败上报上来之后才可能被发现的场景，此前只能靠控制台 warning 察觉
+            if (failedBlocks > 0)
+            {
+                error = $"有 {failedBlocks} 个数据块未能恢复";
+                Debug.LogError($"[Save] {error}，正在回滚内存数据。");
+                RollbackTo(rollback);
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// 尽力回滚到指定快照。
+        /// <para>回滚本身也可能不完整（同一批 <c>OnClear</c> 或块恢复失败），故为尽力而为：
+        /// 任何不完整都必须显式记 LogError 而不是静默——否则会留下「以为已回滚、实则是半清空」的内存态。</para>
+        /// </summary>
+        /// <param name="rollback">回滚目标快照。</param>
+        private static void RollbackTo(DataSnapshot rollback)
+        {
+            try
+            {
+                var failed = DataManager.ApplySnapshot(rollback);
+                if (failed > 0)
+                    Debug.LogError($"[Save] 回滚内存数据时有 {failed} 个数据块未能恢复，内存状态可能不完整。");
+            }
+            catch (Exception rollbackEx)
+            {
+                Debug.LogError($"[Save] 回滚内存数据失败，内存状态可能不完整: {rollbackEx}");
             }
         }
 

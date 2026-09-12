@@ -59,7 +59,15 @@ namespace XFramework.XData
         /// 将 <see cref="DataSnapshot"/> 快照恢复到当前内存数据中。
         /// <para>反序列化委托给 <see cref="XSerialize.Serializer"/>，加载前会清空现有数据。</para>
         /// </summary>
-        void ApplySnapshot(DataSnapshot data);
+        /// <param name="data">要应用的快照。</param>
+        /// <returns>
+        /// <b>未能恢复的数据块数量</b>；<c>0</c> 表示全部恢复成功。
+        /// <para>单个块失败（快照缺 blockName、块未注册、格式不支持、块版本高于当前代码、反序列化或
+        /// <see cref="IDataBlock.OnLoad"/> 抛异常）不会中断整体恢复，而是被跳过并计入此值——
+        /// 调用方必须据此判断本次加载是否<b>完整</b>：「部分块未恢复」等价于内存里少了一半数据，
+        /// 当作成功处理是危险的。</para>
+        /// </returns>
+        int ApplySnapshot(DataSnapshot data);
 
         #endregion
 

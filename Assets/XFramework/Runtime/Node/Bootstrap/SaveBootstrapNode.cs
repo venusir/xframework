@@ -11,6 +11,35 @@ namespace XFramework.XNode
     /// </summary>
     internal sealed class SaveBootstrapNode : LeafNode, IPhaseStage
     {
+        #region Private Fields
+
+        private SaveOptions _options;
+
+        #endregion
+
+        #region Lifecycle
+
+        /// <summary>
+        /// 接收初始化选项。
+        /// <para>节点树经 <c>AddNode&lt;SaveBootstrapNode&gt;(options)</c> 传入
+        /// <see cref="SaveOptions"/>；默认的 <c>ServiceInitializerNode</c> 不传参数，
+        /// 此时使用默认值（存档格式版本 1）。</para>
+        /// </summary>
+        /// <param name="arg"><see cref="SaveOptions"/> 实例，或 <c>null</c>。</param>
+        protected override void OnInit(object arg)
+        {
+            base.OnInit(arg);
+            _options = arg as SaveOptions;
+        }
+
+        protected override void OnDestroy()
+        {
+            SaveManager.Shutdown();
+            base.OnDestroy();
+        }
+
+        #endregion
+
         #region IPhaseStage
 
         /// <summary>Phase = 4。晚于 Data(3)，确保快照能力已就绪。</summary>
@@ -24,21 +53,11 @@ namespace XFramework.XNode
         {
             context.SetDescription("Initializing Save Manager...");
 
-            SaveManager.Initialize();
+            SaveManager.Initialize(null, _options);
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
             return UniTask.CompletedTask;
-        }
-
-        #endregion
-
-        #region Lifecycle
-
-        protected override void OnDestroy()
-        {
-            SaveManager.Shutdown();
-            base.OnDestroy();
         }
 
         #endregion

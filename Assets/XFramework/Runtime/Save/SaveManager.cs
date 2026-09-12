@@ -76,7 +76,8 @@ namespace XFramework.XSave
         /// <para>第三方可通过 <paramref name="factory"/> 传入自定义实现以接入其他存储后端。</para>
         /// </summary>
         /// <param name="factory">实现工厂委托。为 <c>null</c> 时使用默认实现。</param>
-        public static void Initialize(SaveManagerFactory factory = null)
+        /// <param name="options">初始化选项。为 <c>null</c> 时使用默认值（存档格式版本 1）。</param>
+        public static void Initialize(SaveManagerFactory factory = null, SaveOptions options = null)
         {
             if (_impl != null)
             {
@@ -84,6 +85,9 @@ namespace XFramework.XSave
                 return;
             }
             _impl = factory != null ? factory() : new SaveManagerImpl();
+
+            if (options != null)
+                _impl.SetCurrentVersion(options.CurrentVersion);
         }
 
         /// <summary>
@@ -92,6 +96,31 @@ namespace XFramework.XSave
         public static void Shutdown()
         {
             _impl = null;
+        }
+
+        #endregion
+
+        #region 存档格式版本
+
+        /// <inheritdoc cref="ISaveManager.CurrentVersion"/>
+        public static int CurrentVersion
+        {
+            get
+            {
+                EnsureInitialized();
+                return _impl.CurrentVersion;
+            }
+        }
+
+        /// <inheritdoc cref="ISaveManager.SetCurrentVersion"/>
+        public static void SetCurrentVersion(int version)
+        {
+            EnsureInitialized();
+
+            if (_impl.IsBusy)
+                throw new InvalidOperationException("[Save] 当前有写操作正在进行，不允许切换存档格式版本。");
+
+            _impl.SetCurrentVersion(version);
         }
 
         #endregion

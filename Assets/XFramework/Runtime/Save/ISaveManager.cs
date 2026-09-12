@@ -28,6 +28,26 @@ namespace XFramework.XSave
 
         #endregion
 
+        #region 存档格式版本
+
+        /// <summary>
+        /// 当前客户端支持的存档格式版本上限。
+        /// <para>保存时写入快照的 <see cref="XData.DataSnapshot.version"/>；
+        /// 加载时高于该值的存档整份拒绝（见 <see cref="SaveLoadStatus.VersionTooNew"/>），
+        /// 低于该值的正常加载并按逐块迁移链升级（见 <see cref="SaveLoadStatus.Migrated"/>）。</para>
+        /// </summary>
+        int CurrentVersion { get; }
+
+        /// <summary>
+        /// 设置当前客户端支持的存档格式版本上限。
+        /// <para>游戏每次发布新的存档格式时递增，用于阻止旧客户端「半加载」新格式存档。</para>
+        /// </summary>
+        /// <param name="version">版本号，必须大于 0。</param>
+        /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="version"/> 小于 1 时抛出。</exception>
+        void SetCurrentVersion(int version);
+
+        #endregion
+
         #region 玩家上下文
 
         /// <summary>

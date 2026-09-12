@@ -140,7 +140,7 @@ namespace XFramework.XData
         }
 
         /// <inheritdoc/>
-        public void ApplySnapshot(DataSnapshot data)
+        public int ApplySnapshot(DataSnapshot data)
         {
             // 恢复到快照状态：先清空所有已注册 Block 的数据（仅清数据、保留注册，
             // 不能 ClearAll 否则名称索引被清空，后续无法匹配快照中的 block），
@@ -151,28 +151,38 @@ namespace XFramework.XData
             _dirtyBlocks.Clear();
 
             if (data.blocks == null || data.blocks.Count == 0)
-                return;
+                return 0;
 
             var defaultFormat = data.defaultFormat;
             if (string.IsNullOrEmpty(defaultFormat))
                 defaultFormat = "json";
+
+            // 恢复失败不中断整体恢复（单个坏块不该让其余数据也读不出来），但必须计数上报：
+            // 调用方需要据此判断本次加载是否完整——「部分块没恢复」等价于内存里少了一半数据，
+            // 静默成功是危险的
+            var failedBlocks = 0;
 
             foreach (var snap in data.blocks)
             {
                 if (string.IsNullOrEmpty(snap.blockName))
                 {
                     Debug.LogWarning("[Data] DataBlockSnapshot 缺少 blockName，跳过。");
+                    failedBlocks++;
                     continue;
                 }
 
                 if (!_blockNameIndex.TryGetValue(snap.blockName, out var block))
                 {
                     Debug.LogWarning($"[Data] 未注册的数据块: {snap.blockName}，跳过。");
+                    failedBlocks++;
                     continue;
                 }
 
-                TryRestoreBlock(block, snap, defaultFormat);
+                if (!TryRestoreBlock(block, snap, defaultFormat))
+                    failedBlocks++;
             }
+
+            return failedBlocks;
         }
 
         /// <summary>

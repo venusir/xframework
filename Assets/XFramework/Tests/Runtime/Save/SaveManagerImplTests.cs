@@ -343,6 +343,141 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 存档格式版本门禁
+
+        [Test]
+        public void CurrentVersion_DefaultsToOne_AndIsSettable()
+        {
+            Assert.AreEqual(1, SaveManager.CurrentVersion, "默认存档格式版本应为 1");
+
+            SaveManager.SetCurrentVersion(4);
+
+            Assert.AreEqual(4, SaveManager.CurrentVersion);
+            Assert.Throws<ArgumentOutOfRangeException>(() => SaveManager.SetCurrentVersion(0),
+                "版本号必须大于 0");
+        }
+
+        [Test]
+        public void Initialize_WithOptions_AppliesCurrentVersion()
+        {
+            SaveManager.Shutdown();
+            SaveManager.Initialize(null, new SaveOptions { CurrentVersion = 7 });
+
+            Assert.AreEqual(7, SaveManager.CurrentVersion, "Initialize 应应用选项里的存档格式版本");
+        }
+
+        [Test]
+        public async Task SaveAsync_StampsCurrentVersion()
+        {
+            SaveManager.SetCurrentVersion(3);
+
+            var meta = await SaveManager.SaveAsync(1);
+
+            Assert.AreEqual(3, meta.version, "保存应把当前客户端的格式版本写进快照");
+        }
+
+        [Test]
+        public async Task TryLoadAsync_NewerVersion_RejectsWholeSnapshot()
+        {
+            // 代码回滚场景：存档由更新的客户端写出。旧客户端若「尽力加载」，
+            // Data 模块会按块跳过版本更高的块，结果是内存里一半是新数据、一半空着
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            SaveManager.SetCurrentVersion(5);
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.SetCurrentVersion(3);
+            wallet.Gold = 7;
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.VersionTooNew, result.Status, "更高版本的存档应整份拒绝");
+            Assert.IsFalse(result.IsSuccess);
+            Assert.IsNotNull(result.Message, "应说明需要先升级客户端");
+            Assert.AreEqual(7, wallet.Gold, "被拒绝的存档不得部分应用到内存");
+        }
+
+        [Test]
+        public async Task TryLoadAsync_OlderVersion_ReportsMigrated()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            SaveManager.SetCurrentVersion(3);
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+
+            SaveManager.SetCurrentVersion(5);
+            wallet.Gold = 0;
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Migrated, result.Status, "更旧版本的存档应迁移后加载");
+            Assert.IsTrue(result.IsSuccess, "迁移属于成功");
+            Assert.AreEqual(42, wallet.Gold);
+        }
+
+        #endregion
+
+        #region 加载不完整检测
+
+        [Test]
+        public async Task TryLoadAsync_BlockRestoreFails_ReportsCorruptAndRollsBack()
+        {
+            // 这条覆盖的是一个曾经完全静默的路径：Data 模块把数据块恢复失败记成 warning 后吞掉，
+            // ApplySnapshot 正常返回，于是 Save 侧会回报 Loaded——而内存里少了一整个块的数据
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            DataManager.GetOrCreateBlock<FailingLoadBlock>();
+            await SaveManager.SaveAsync(1);
+
+            wallet.Gold = 7;
+            FailingLoadBlock.RemainingFailures = 1;
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("恢复数据块 FailingLoad 失败"));
+                LogAssert.Expect(LogType.Error, new Regex("未能恢复，正在回滚内存数据"));
+
+                var result = await SaveManager.TryLoadAsync(1);
+
+                Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status,
+                    "有数据块未恢复时必须判定为加载不完整，而不是回报成功");
+                Assert.IsNotNull(result.Message);
+                Assert.AreEqual(7, wallet.Gold, "应回滚到加载前的内存状态，而不是留下半加载状态");
+            }
+            finally
+            {
+                FailingLoadBlock.RemainingFailures = 0;
+            }
+        }
+
+        /// <summary>
+        /// 探针 Block：<see cref="IDataBlock.OnLoad"/> 按次数抛异常，用于验证「块恢复失败 →
+        /// 判定加载不完整并回滚」这条路径。
+        /// <para>「只失败一次」是刻意的：回滚自身也会恢复同一个块，若每次都失败就只测到
+        /// 「回滚也不完整」分支，而要验证的「回滚成功」反而没覆盖。</para>
+        /// </summary>
+        [Serializable]
+        private sealed class FailingLoadBlock : IDataBlock
+        {
+            public static int RemainingFailures;
+
+            public string BlockName => "FailingLoad";
+            public int DataVersion => 0;
+            public object OnSave() => 1;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
+            public void OnClear() { }
+
+            public void OnLoad(object data)
+            {
+                if (RemainingFailures > 0)
+                {
+                    RemainingFailures--;
+                    throw new InvalidOperationException("模拟第三方 Block 加载失败");
+                }
+            }
+        }
+
+        #endregion
+
         #region 元数据侧车与校验和
 
         // 侧车文件名：载荷路径 + .meta

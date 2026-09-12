@@ -104,10 +104,10 @@ namespace XFramework.XData
         }
 
         /// <inheritdoc cref="IDataManager.ApplySnapshot"/>
-        public static void ApplySnapshot(DataSnapshot data)
+        public static int ApplySnapshot(DataSnapshot data)
         {
             EnsureInitialized();
-            _impl.ApplySnapshot(data);
+            return _impl.ApplySnapshot(data);
         }
 
         #endregion
