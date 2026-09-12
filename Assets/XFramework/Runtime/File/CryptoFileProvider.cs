@@ -9,6 +9,8 @@ namespace XFramework.XFileManager
     /// 加解密装饰器：在 <see cref="IFileProvider"/> 之上叠加 <see cref="ICryptoProvider"/> 加解密层。
     /// <para>组合而非在门面内做 if 分支：加解密是包裹层，读写方法在字节边界统一加解密，
     /// 新增 Provider 方法无需在门面重复加密分支（参考 LocalPrefs CryptoFileAccessor 装饰器设计）。</para>
+    /// <para>可限定作用域（<see cref="FileDomain"/>）：限定时只有目标域经加解密、其余域原样透传，
+    /// 避免「为存档开加密却顺带把 AppData / Cache 一起加密了」这类副作用。</para>
     /// <para>同时实现 <see cref="IAtomicFileProvider"/>：原子写同样经过加密层，加密后的密文整体原子替换。</para>
     /// <para>同时实现 <see cref="IDirectoryProvider"/>：目录名不含数据，无需加解密，能力取决于被包裹的 Provider。
     /// 装饰器必须显式实现可选能力接口，否则会把底层 Provider 的能力遮蔽掉——
@@ -20,15 +22,23 @@ namespace XFramework.XFileManager
 
         private readonly IFileProvider _inner;
         private readonly ICryptoProvider _crypto;
+        private readonly FileDomain? _targetDomain;
 
         #endregion
 
         #region Constructors
 
-        public CryptoFileProvider(IFileProvider inner, ICryptoProvider crypto)
+        /// <summary>
+        /// 构造加解密装饰器。
+        /// </summary>
+        /// <param name="inner">被包裹的底层 Provider。</param>
+        /// <param name="crypto">加解密实现。</param>
+        /// <param name="targetDomain">限定只对该域加解密；为 <c>null</c> 时对所有域生效。</param>
+        public CryptoFileProvider(IFileProvider inner, ICryptoProvider crypto, FileDomain? targetDomain = null)
         {
             _inner = inner ?? throw new ArgumentNullException(nameof(inner));
             _crypto = crypto ?? throw new ArgumentNullException(nameof(crypto));
+            _targetDomain = targetDomain;
         }
 
         #endregion
@@ -84,6 +94,21 @@ namespace XFramework.XFileManager
 
         #endregion
 
+        #region Private Methods
+
+        /// <summary>
+        /// 判断指定域是否需要加解密。
+        /// <para>未限定域时对所有域生效；限定时只有目标域走加解密，其余域原样透传。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <returns>需要加解密返回 <c>true</c>。</returns>
+        private bool ShouldCrypt(FileDomain domain)
+        {
+            return _targetDomain == null || _targetDomain.Value == domain;
+        }
+
+        #endregion
+
         #region IFileProvider — 读写经加解密层
 
         /// <inheritdoc />
@@ -93,7 +118,7 @@ namespace XFramework.XFileManager
             if (bytes == null)
                 return null;
 
-            return Encoding.UTF8.GetString(_crypto.Decrypt(bytes));
+            return Encoding.UTF8.GetString(ShouldCrypt(domain) ? _crypto.Decrypt(bytes) : bytes);
         }
 
         /// <inheritdoc />
@@ -103,7 +128,7 @@ namespace XFramework.XFileManager
             if (bytes == null)
                 return null;
 
-            return _crypto.Decrypt(bytes);
+            return ShouldCrypt(domain) ? _crypto.Decrypt(bytes) : bytes;
         }
 
         /// <inheritdoc />
@@ -117,7 +142,7 @@ namespace XFramework.XFileManager
         /// <inheritdoc />
         public UniTask WriteAllBytesAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
         {
-            return _inner.WriteAllBytesAsync(domain, relativePath, _crypto.Encrypt(data), cancellationToken);
+            return _inner.WriteAllBytesAsync(domain, relativePath, ShouldCrypt(domain) ? _crypto.Encrypt(data) : data, cancellationToken);
         }
 
         #endregion
@@ -130,7 +155,8 @@ namespace XFramework.XFileManager
             if (!(_inner is IAtomicFileProvider atomicInner))
                 throw new NotSupportedException("[FileManager] 底层 Provider 不支持原子写入。");
 
-            await atomicInner.WriteAllBytesAtomicAsync(domain, relativePath, _crypto.Encrypt(data), cancellationToken);
+            var payload = ShouldCrypt(domain) ? _crypto.Encrypt(data) : data;
+            await atomicInner.WriteAllBytesAtomicAsync(domain, relativePath, payload, cancellationToken);
         }
 
         #endregion

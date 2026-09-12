@@ -47,6 +47,10 @@ namespace XFramework.XFileManager
         private static IFileProvider _provider;
 
         private static ICryptoProvider _cryptoProvider;
+
+        /// <summary>加解密的作用域：<c>null</c> 表示对所有域生效，否则只对该域生效。</summary>
+        private static FileDomain? _cryptoDomain;
+
         private static bool _destroyed;
         private static bool _initialized;
 
@@ -126,6 +130,7 @@ namespace XFramework.XFileManager
             _provider = null;
             _baseProvider = null;
             _cryptoProvider = null;
+            _cryptoDomain = null;
             _initialized = false;
             _destroyed = true;
         }
@@ -135,15 +140,23 @@ namespace XFramework.XFileManager
         #region Crypto
 
         /// <summary>
-        /// 设置加解密提供者。设置后所有读写操作将自动进行加解密。
+        /// 设置加解密提供者。设置后读写操作将自动进行加解密。
         /// <para>设置为 <c>null</c> 可禁用加解密。</para>
+        /// <para><b>作用域：</b><paramref name="domain"/> 为 <c>null</c> 时对所有域生效；
+        /// 传入具体域则只对该域加解密，其余域原样读写。若只想保护存档，应传
+        /// <see cref="FileDomain.SaveData"/>，否则会连带加密 AppData / Cache。</para>
         /// <para>注意：已在进行的读写操作使用入口时的快照，本设置影响下一次及后续操作。
-        /// 加解密以 <see cref="CryptoFileProvider"/> 装饰器包裹底层 Provider 实现，切换为原子操作。</para>
+        /// 加解密以 <see cref="CryptoFileProvider"/> 装饰器包裹底层 Provider 实现，切换为原子操作。
+        /// 重复调用会<b>整体替换</b>上一次的配置（提供者与作用域一同替换），不叠加。</para>
+        /// <para><b>切换加密会立即使已写入的文件不可读</b>：旧文件是明文（或旧密钥密文），
+        /// 新配置下解密得到的是垃圾数据而非抛出异常，表现为「文件损坏」。变更前需自行迁移存量文件。</para>
         /// </summary>
         /// <param name="cryptoProvider">加解密提供者。为 <c>null</c> 时禁用加解密。</param>
-        public static void SetCryptoProvider(ICryptoProvider cryptoProvider)
+        /// <param name="domain">仅对该域加解密；为 <c>null</c> 时对所有域生效。</param>
+        public static void SetCryptoProvider(ICryptoProvider cryptoProvider, FileDomain? domain = null)
         {
             _cryptoProvider = cryptoProvider;
+            _cryptoDomain = cryptoProvider != null ? domain : null;
             RebuildProvider();
         }
 
@@ -412,7 +425,7 @@ namespace XFramework.XFileManager
         private static void RebuildProvider()
         {
             if (_baseProvider != null && _cryptoProvider != null)
-                _provider = new CryptoFileProvider(_baseProvider, _cryptoProvider);
+                _provider = new CryptoFileProvider(_baseProvider, _cryptoProvider, _cryptoDomain);
             else
                 _provider = _baseProvider;
         }

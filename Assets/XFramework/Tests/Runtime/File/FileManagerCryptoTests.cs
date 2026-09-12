@@ -8,7 +8,7 @@ namespace XFramework.XFileManager.Tests
 {
     /// <summary>
     /// <see cref="FileManager"/> 加解密层（<see cref="CryptoFileProvider"/> 装饰器）测试。
-    /// <para>覆盖:字节/文本加密往返、磁盘落盘为密文、禁用加密后的行为。</para>
+    /// <para>覆盖:字节/文本加密往返、磁盘落盘为密文、按域限定作用域、禁用加密后的行为。</para>
     /// </summary>
     [TestFixture]
     public class FileManagerCryptoTests
@@ -69,6 +69,75 @@ namespace XFramework.XFileManager.Tests
 
                 var read = await FileManager.ReadAllTextAsync(FileDomain.AppData, "crypto.txt");
                 Assert.AreEqual("你好 XFramework", read, "中文文本加密往返应无损");
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        [Test]
+        public async Task SetCryptoProvider_WithDomain_EncryptsOnlyTargetDomain()
+        {
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"), FileDomain.SaveData);
+            try
+            {
+                await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "save.bin", Encoding.UTF8.GetBytes("save-secret"));
+                await FileManager.WriteAllBytesAsync(FileDomain.AppData, "app.bin", Encoding.UTF8.GetBytes("app-plain"));
+
+                // 目标域：磁盘应为密文
+                var saveRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.SaveData, "save.bin");
+                Assert.AreNotEqual("save-secret", Encoding.UTF8.GetString(saveRaw), "限定的目标域落盘应为密文");
+
+                // 非目标域：磁盘应保持明文——这正是限定作用域要解决的问题
+                var appRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.AppData, "app.bin");
+                Assert.AreEqual("app-plain", Encoding.UTF8.GetString(appRaw), "非目标域不应被连带加密");
+
+                // 两个域经门面读回都应还原原始内容
+                var saveRead = await FileManager.ReadAllBytesAsync(FileDomain.SaveData, "save.bin");
+                var appRead = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "app.bin");
+                Assert.AreEqual("save-secret", Encoding.UTF8.GetString(saveRead), "目标域应正确解密");
+                Assert.AreEqual("app-plain", Encoding.UTF8.GetString(appRead), "非目标域应原样读回");
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        [Test]
+        public async Task SetCryptoProvider_WithoutDomain_EncryptsAllDomains()
+        {
+            // 单参重载的历史语义 = 全域加密，新增可选参数不得改变它
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"));
+            try
+            {
+                await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "save.bin", Encoding.UTF8.GetBytes("save-secret"));
+                await FileManager.WriteAllBytesAsync(FileDomain.AppData, "app.bin", Encoding.UTF8.GetBytes("app-secret"));
+
+                var saveRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.SaveData, "save.bin");
+                var appRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.AppData, "app.bin");
+                Assert.AreNotEqual("save-secret", Encoding.UTF8.GetString(saveRaw), "不限定域时应加密 SaveData");
+                Assert.AreNotEqual("app-secret", Encoding.UTF8.GetString(appRaw), "不限定域时应加密 AppData");
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        [Test]
+        public async Task SetCryptoProvider_CalledAgain_ReplacesScope()
+        {
+            // 重复调用整体替换上一次配置：先全域，再收窄到 SaveData 后 AppData 应不再加密
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"));
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"), FileDomain.SaveData);
+            try
+            {
+                await FileManager.WriteAllBytesAsync(FileDomain.AppData, "app.bin", Encoding.UTF8.GetBytes("app-plain"));
+
+                var appRaw = await _fileProvider.ReadAllBytesAsync(FileDomain.AppData, "app.bin");
+                Assert.AreEqual("app-plain", Encoding.UTF8.GetString(appRaw), "重复设置应替换而非叠加作用域");
             }
             finally
             {
