@@ -100,6 +100,28 @@ namespace XFramework.XSave
 
         #endregion
 
+        #region Internal
+
+        /// <summary>
+        /// 执行启动恢复扫描（内部使用，由 <c>SaveBootstrapNode</c> 在启动管线中调用）：
+        /// 用一代备份恢复丢失的载荷、清掉崩溃残留、补齐元数据侧车。
+        /// <para><b>不切回主线程</b>——全程只碰文件系统与线程安全的 <c>Debug.Log</c>，
+        /// 因此启动管线中同步阻塞等待它也不会死锁。</para>
+        /// <para>注入的自定义实现没有恢复契约，此时跳过（恢复属内部维护动作，不是接口义务）。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        internal static UniTask RecoverAsync(CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (_impl is SaveManagerImpl impl)
+                return impl.RecoverAsync(cancellationToken);
+
+            return UniTask.CompletedTask;
+        }
+
+        #endregion
+
         #region 存档格式版本
 
         /// <inheritdoc cref="ISaveManager.CurrentVersion"/>

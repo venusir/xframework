@@ -343,6 +343,119 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 启动恢复扫描
+
+        [Test]
+        public async Task RecoverAsync_RestoresPayloadFromBackup()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(1);   // 覆盖产生一代备份（内容为 Gold=42）
+
+            // 模拟替换流程崩溃后最坏的情况：载荷没了、备份还在
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+
+            LogAssert.Expect(LogType.Warning, new Regex("载荷缺失，已由一代备份恢复"));
+            await SaveManager.RecoverAsync();
+
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, "slot_1.save"), "恢复扫描应还原载荷");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(1);
+
+            Assert.AreEqual(42, wallet.Gold, "还原的应是备份里的内容");
+        }
+
+        [Test]
+        public async Task RecoverAsync_RemovesTempResidue()
+        {
+            await SaveManager.SaveAsync(1);
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save.tmp",
+                Encoding.UTF8.GetBytes("partial"));
+
+            await SaveManager.RecoverAsync();
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save.tmp"),
+                "原子写之后 .tmp 只可能是崩溃残留，应被清掉");
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, "slot_1.save"), "载荷不应受影响");
+        }
+
+        [Test]
+        public async Task RecoverAsync_RebuildsMissingSidecar()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            FileManager.Delete(FileDomain.SaveData, SidecarPath);
+
+            await SaveManager.RecoverAsync();
+
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, SidecarPath), "侧车缺失时应由载荷重建");
+
+            wallet.Gold = 0;
+            var result = await SaveManager.TryLoadAsync(1);
+            Assert.AreEqual(SaveLoadStatus.Loaded, result.Status, "重建侧车后应能正常加载");
+            Assert.AreEqual(42, wallet.Gold);
+        }
+
+        [Test]
+        public async Task RecoverAsync_KeepsSidecarWhenChecksumMismatches()
+        {
+            // 校验和不符是「载荷可能已损坏」的信号，重建侧车等于把它抹掉；应保留原侧车，
+            // 让加载侧按校验和不符走备份回退
+            await SaveManager.SaveAsync(1);
+
+            var payload = await FileManager.ReadAllBytesAsync(FileDomain.SaveData, "slot_1.save");
+            var tampered = new byte[payload.Length + 1];
+            Array.Copy(payload, tampered, payload.Length);
+            tampered[payload.Length] = (byte)' ';
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save", tampered);
+
+            LogAssert.Expect(LogType.Warning, new Regex("校验和与载荷不符"));
+            await SaveManager.RecoverAsync();
+
+            // 侧车被保留 → 加载侧仍能识别出校验和不符
+            var result = await SaveManager.TryLoadAsync(1);
+            Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status, "恢复扫描不应抹掉损坏信号");
+        }
+
+        [Test]
+        public async Task RecoverAsync_RemovesOrphanCompanions()
+        {
+            // 载荷与备份都不在，只剩配套文件：应收敛掉，而不是留下看起来像槽位的半截文件
+            FileManager.CreateDirectory(FileDomain.SaveData, "Alice");
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "Alice/slot_5.save.meta",
+                Encoding.UTF8.GetBytes("{}"));
+
+            await SaveManager.RecoverAsync();
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "Alice/slot_5.save.meta"),
+                "孤儿侧车应被清掉");
+        }
+
+        [Test]
+        public async Task RecoverAsync_ScansPlayerDirectories()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            SaveManager.SetCurrentPlayer("Alice");
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(1);
+
+            FileManager.Delete(FileDomain.SaveData, "Alice/slot_1.save");
+
+            LogAssert.Expect(LogType.Warning, new Regex("载荷缺失，已由一代备份恢复"));
+            await SaveManager.RecoverAsync();
+
+            Assert.IsTrue(FileManager.Exists(FileDomain.SaveData, "Alice/slot_1.save"),
+                "恢复扫描应遍历玩家子目录");
+        }
+
+        #endregion
+
         #region 存档格式版本门禁
 
         [Test]

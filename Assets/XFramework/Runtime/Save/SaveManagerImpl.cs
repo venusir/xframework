@@ -737,6 +737,168 @@ namespace XFramework.XSave
         }
 
         /// <summary>
+        /// 启动恢复扫描：修复崩溃残留，让存档目录回到一致状态。
+        /// <para>扫描域根与每个玩家子目录，逐槽位收敛——载荷缺失但备份在则用备份恢复；
+        /// 载荷在则清掉 <c>.tmp</c> 残留并补齐侧车；载荷与备份都不在则清掉孤儿配套文件。</para>
+        /// <para><b>线程约定（本类唯一的例外）：</b>全程只调用 <see cref="FileManager"/> 原语与
+        /// <c>Debug.Log</c>（Unity 保证后者线程安全），<b>不触碰 Unity API 与 <see cref="DataManager"/>，
+        /// 因此不切回主线程</b>。这样启动管线里即便有调用方同步阻塞等待它也不会死锁；
+        /// 调用方若要写 <c>PipelineStageContext</c> 这类要求主线程的对象，须自行切回。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        internal async UniTask RecoverAsync(CancellationToken cancellationToken = default)
+        {
+            // 域根：无玩家隔离的遗留存档
+            await RecoverDirectoryAsync(null, cancellationToken);
+
+            var directories = await FileManager.GetDirectoriesAsync(SaveDomain, "", cancellationToken);
+            if (directories == null)
+                return;
+
+            for (int i = 0; i < directories.Length; i++)
+            {
+                var playerId = directories[i].TrimEnd(PathSeparators);
+                if (string.IsNullOrEmpty(playerId) || playerId.IndexOfAny(PathSeparators) >= 0)
+                    continue;
+
+                await RecoverDirectoryAsync(playerId, cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 收敛单个目录下所有槽位的文件状态。
+        /// </summary>
+        /// <param name="playerId">玩家 ID；<c>null</c> 表示域根。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        private async UniTask RecoverDirectoryAsync(string playerId, CancellationToken cancellationToken)
+        {
+            var files = await FileManager.GetFilesAsync(SaveDomain, playerId ?? "", SlotFileSearchPattern, cancellationToken);
+            if (files == null || files.Length == 0)
+                return;
+
+            // 目录里可能只剩配套文件（载荷已丢，或崩溃在恢复途中），所以不能只看载荷文件：
+            // 逐个剥离配套后缀还原出载荷路径，去重后收敛
+            var processed = new HashSet<string>(StringComparer.Ordinal);
+            for (int i = 0; i < files.Length; i++)
+            {
+                // 载荷路径直接取自目录列表，不再拼接——目录名可能含各种字符，
+                // 走 BuildSlotPath 会因校验失败而中断整轮恢复
+                var payloadPath = StripCompanionSuffix(files[i]);
+                if (!SavePathUtility.TryParseSlot(payloadPath, out var slot))
+                    continue;   // 解析不出槽位号的垃圾文件留给删除路径处理
+
+                if (!processed.Add(payloadPath))
+                    continue;
+
+                await RecoverSlotAsync(playerId, slot, payloadPath, cancellationToken);
+            }
+        }
+
+        /// <summary>
+        /// 收敛单个槽位的文件状态。
+        /// </summary>
+        /// <param name="playerId">玩家 ID；<c>null</c> 表示域根。</param>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="payloadPath">载荷相对路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        private async UniTask RecoverSlotAsync(string playerId, int slot, string payloadPath, CancellationToken cancellationToken)
+        {
+            var backupPath = payloadPath + FilePathUtility.BackupFileSuffix;
+            var metaPath = payloadPath + SavePathUtility.MetaFileSuffix;
+            var tempPath = payloadPath + FilePathUtility.TempFileSuffix;
+
+            if (!FileManager.Exists(SaveDomain, payloadPath))
+            {
+                var backupBytes = await FileManager.ReadAllBytesAsync(SaveDomain, backupPath, cancellationToken);
+                if (backupBytes != null && backupBytes.Length > 0)
+                {
+                    // 用读+原子写而非重命名：FileManager 没有 Move，而这样写是幂等的——
+                    // 中途再次崩溃只会留下「载荷与备份并存」，下次恢复按载荷已存在处理
+                    await FileManager.WriteAllBytesAtomicAsync(SaveDomain, payloadPath, backupBytes, cancellationToken);
+                    Debug.LogWarning($"[Save] 槽位 {payloadPath} 的载荷缺失，已由一代备份恢复。");
+
+                    // 旧侧车描述的是丢失的那份载荷，留着会让校验和不符而被误判为损坏
+                    FileManager.Delete(SaveDomain, metaPath);
+                }
+
+                // 备份已被提升，或已被证明无用——两种情况都该清掉
+                FileManager.Delete(SaveDomain, backupPath);
+            }
+            else
+            {
+                // 载荷在：.tmp 只可能是崩溃残留（原子写之后它绝不该留存）
+                FileManager.Delete(SaveDomain, tempPath);
+            }
+
+            if (!FileManager.Exists(SaveDomain, payloadPath))
+            {
+                // 载荷与备份都没有：清掉孤儿配套文件，让该槽位彻底消失而不是留一堆半截文件
+                FileManager.Delete(SaveDomain, metaPath);
+                FileManager.Delete(SaveDomain, tempPath);
+                return;
+            }
+
+            await EnsureSidecarAsync(playerId, slot, payloadPath, cancellationToken);
+        }
+
+        /// <summary>
+        /// 确保槽位存在可用的元数据侧车（缺失或不可解析时由载荷重建）。
+        /// <para><b>校验和不符时刻意不重建：</b>那是「载荷可能已损坏」的信号，重建侧车等于把它抹掉；
+        /// 应当保留原侧车，让加载侧按校验和不符走备份回退。反过来，侧车不可解析则不是关于载荷的证据，
+        /// 可以放心重建。</para>
+        /// </summary>
+        /// <param name="playerId">玩家 ID；<c>null</c> 表示域根。</param>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="payloadPath">载荷相对路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        private async UniTask EnsureSidecarAsync(string playerId, int slot, string payloadPath, CancellationToken cancellationToken)
+        {
+            var payloadBytes = await FileManager.ReadAllBytesAsync(SaveDomain, payloadPath, cancellationToken);
+            if (payloadBytes == null || payloadBytes.Length == 0)
+                return;
+
+            var checksum = SaveIntegrity.Compute(payloadBytes);
+
+            var existing = await TryReadSidecarAsync(playerId, slot, payloadPath, cancellationToken);
+            if (existing != null)
+            {
+                if (existing.checksum != 0 && existing.checksum != checksum)
+                    Debug.LogWarning(
+                        $"[Save] 槽位 {payloadPath} 的侧车校验和与载荷不符，保留原侧车交由加载侧处理。");
+
+                return;
+            }
+
+            // 载荷不是有效存档时不为它背书（不重建侧车），避免把垃圾内容「洗白」成看起来正常的槽位
+            if (!TryDeserializeSnapshot(payloadBytes, DataSnapshot.Factory().GetType(), out var saveData, out _))
+                return;
+
+            var meta = BuildMeta(saveData, playerId, slot, payloadPath, payloadBytes.Length);
+            meta.checksum = checksum;
+            await WriteSidecarAsync(meta, cancellationToken);
+        }
+
+        /// <summary>
+        /// 剥离配套文件后缀，还原出载荷相对路径（可叠加，如 <c>slot_1.save.meta.bak</c>）。
+        /// </summary>
+        /// <param name="path">可能是载荷或任一配套文件的路径。</param>
+        /// <returns>载荷相对路径。</returns>
+        private static string StripCompanionSuffix(string path)
+        {
+            while (true)
+            {
+                if (path.EndsWith(SavePathUtility.MetaFileSuffix, StringComparison.Ordinal))
+                    path = path.Substring(0, path.Length - SavePathUtility.MetaFileSuffix.Length);
+                else if (path.EndsWith(FilePathUtility.BackupFileSuffix, StringComparison.Ordinal))
+                    path = path.Substring(0, path.Length - FilePathUtility.BackupFileSuffix.Length);
+                else if (path.EndsWith(FilePathUtility.TempFileSuffix, StringComparison.Ordinal))
+                    path = path.Substring(0, path.Length - FilePathUtility.TempFileSuffix.Length);
+                else
+                    return path;
+            }
+        }
+
+        /// <summary>
         /// 删除槽位文件及其全部配套文件（侧车 / 备份 / 临时文件）。
         /// </summary>
         /// <param name="slotPath">槽位载荷的相对路径。</param>

@@ -49,15 +49,21 @@ namespace XFramework.XNode
 
         public float Weight => 1f;
 
-        public UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+        public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
         {
             context.SetDescription("Initializing Save Manager...");
 
             SaveManager.Initialize(null, _options);
 
+            // 恢复扫描不切回主线程（见 SaveManager.RecoverAsync），因此这一步不会要求 PlayerLoop 泵
+            await SaveManager.RecoverAsync(cancellationToken);
+
+            // PipelineStageContext 有越线程写入检测（编辑器下会报 LogError），
+            // 恢复扫描结束后必须切回主线程再写
+            await UniTask.SwitchToMainThread(cancellationToken);
+
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
-            return UniTask.CompletedTask;
         }
 
         #endregion

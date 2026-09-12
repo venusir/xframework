@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XAsset;
@@ -81,13 +82,19 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void SaveBootstrapNode_CompletesSynchronously()
+        public async Task SaveBootstrapNode_CompletesAfterRecovery()
         {
             var node = new SaveBootstrapNode();
             var ctx = new PipelineStageContext();
             try
             {
-                node.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+                // 节点现在会 await 恢复扫描，因此必须 await 而不是阻塞主线程等待：
+                // 节点末尾要切回主线程写上下文（PipelineStageContext 有越线程写入检测），
+                // 阻塞等待会与其主线程恢复语义冲突而死锁。
+                // 注：本测试不注入 Provider，FileManager 会零配置自初始化为桌面实现，
+                // 因此恢复扫描作用在真实的 persistentDataPath 上——它对 slot_* 文件是幂等的，
+                // 框架工程目录下通常为空。需要隔离时应改注入临时目录 Provider。
+                await node.ExecuteAsync(ctx, default);
 
                 Assert.AreEqual(PipelineStageState.Completed, ctx.State);
                 Assert.AreEqual(1f, ctx.Progress, 0.001f);
