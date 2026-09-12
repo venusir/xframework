@@ -189,6 +189,13 @@ namespace XFramework.XSave
             return _impl.LoadAsync(slot, cancellationToken);
         }
 
+        /// <inheritdoc cref="ISaveManager.TryLoadAsync"/>
+        public static UniTask<SaveLoadResult> TryLoadAsync(int slot, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.TryLoadAsync(slot, cancellationToken);
+        }
+
         /// <inheritdoc cref="ISaveManager.DeleteSlotAsync"/>
         public static UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default)
         {

@@ -241,46 +241,197 @@ namespace XFramework.XSave
         /// <inheritdoc/>
         public async UniTask LoadAsync(int slot, CancellationToken cancellationToken = default)
         {
+            var result = await LoadCoreAsync(slot, cancellationToken);
+            if (result.IsSuccess)
+                return;
+
+            throw new InvalidOperationException(
+                $"[Save] 存档槽位 {slot} 加载失败（{result.Status}）：{result.Message}");
+        }
+
+        /// <inheritdoc/>
+        public UniTask<SaveLoadResult> TryLoadAsync(int slot, CancellationToken cancellationToken = default)
+        {
+            return LoadCoreAsync(slot, cancellationToken);
+        }
+
+        /// <summary>
+        /// 加载核心：返回结果而不抛业务性失败，由 <see cref="LoadAsync"/> 与 <see cref="TryLoadAsync"/>
+        /// 两个包装分别决定是抛还是回报。槽位号非法仍同步抛出（参数错误属编程错误，不是可预期的存档故障）。
+        /// </summary>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>加载结果。</returns>
+        private async UniTask<SaveLoadResult> LoadCoreAsync(int slot, CancellationToken cancellationToken)
+        {
             SavePathUtility.ValidateSlot(slot);
 
             var playerId = _playerId;
             var slotPath = SavePathUtility.BuildSlotPath(playerId, slot);
-            if (!FileManager.Exists(SaveDomain, slotPath))
-                throw new InvalidOperationException($"[Save] 存档槽位 {slot} 不存在，无法加载。");
 
             EnterBusy();
             try
             {
-                var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, slotPath, cancellationToken);
-                await ReturnToMainThread(cancellationToken);
+                // 1. 主文件
+                var outcome = await ReadAndValidateAsync(playerId, slot, slotPath, cancellationToken);
+                if (outcome.SaveData != null)
+                {
+                    if (TryApplySnapshot(outcome.SaveData, out var applyError))
+                        return new SaveLoadResult(SaveLoadStatus.Loaded, outcome.Meta);
 
-                // 读失败（null）与空文件是两种不同故障：前者多为解密失败或文件被并发删除，
-                // 后者说明文件确实存在但无内容——分开报错才好定位
-                if (bytes == null)
-                    throw new InvalidOperationException($"[Save] 存档槽位 {slot} 读取失败（文件不存在或解密失败）。");
+                    return new SaveLoadResult(SaveLoadStatus.Corrupt, null,
+                        $"快照无法应用到内存：{applyError}");
+                }
 
-                if (bytes.Length == 0)
-                    throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
+                // 2. 主文件不可用 → 退化到一代备份。
+                //    备份没有自己的侧车，因此不走校验和（TryReadSidecarAsync 自然读不到），
+                //    它本就是最后一道防线
+                var backupPath = slotPath + FilePathUtility.BackupFileSuffix;
+                if (FileManager.Exists(SaveDomain, backupPath))
+                {
+                    var backupOutcome = await ReadAndValidateAsync(playerId, slot, backupPath, cancellationToken);
+                    if (backupOutcome.SaveData != null && TryApplySnapshot(backupOutcome.SaveData, out _))
+                    {
+                        Debug.LogWarning(
+                            $"[Save] 存档槽位 {slot} 主文件不可用（{outcome.Message}），已从备份恢复。");
+                        return new SaveLoadResult(SaveLoadStatus.LoadedFromBackup, backupOutcome.Meta, outcome.Message);
+                    }
+                }
 
-                // 校验和在此刻校验：载荷字节已在手上，计算几乎免费。
-                // checksum 为 0 表示侧车未记录（或没有侧车），此时跳过——
-                // 侧车只是加速层，不该因为它缺失就让存档不可读
-                var sidecar = await TryReadSidecarAsync(playerId, slot, slotPath, cancellationToken);
-                if (sidecar != null && sidecar.checksum != 0 && sidecar.checksum != SaveIntegrity.Compute(bytes))
-                    throw new InvalidOperationException(
-                        $"[Save] 存档槽位 {slot} 校验和不符，内容可能已损坏（侧车记录值与载荷实际内容不匹配）。");
+                // 3. 主文件与备份都不可用
+                var status = outcome.Status == SaveLoadStatus.Missing
+                    ? SaveLoadStatus.Missing
+                    : SaveLoadStatus.Corrupt;
 
-                // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
-                // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
-                if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
-                    throw new InvalidOperationException($"[Save] 存档槽位 {slot} 已损坏或不是有效存档：{error}");
-
-                // 应用快照到内存
-                DataManager.ApplySnapshot(saveData);
+                return new SaveLoadResult(status, null, outcome.Message);
             }
             finally
             {
                 ExitBusy();
+            }
+        }
+
+        /// <summary>
+        /// 读取并校验一份存档载荷（主文件或备份）。
+        /// <para>成功时 <see cref="LoadOutcome.SaveData"/> 非 <c>null</c>；失败时 <see cref="LoadOutcome.Message"/>
+        /// 说明原因，供调用方决定回退还是回报。</para>
+        /// </summary>
+        /// <param name="playerId">所属玩家。</param>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="path">载荷相对路径（主文件或备份）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>读取校验结果。</returns>
+        private async UniTask<LoadOutcome> ReadAndValidateAsync(string playerId, int slot, string path, CancellationToken cancellationToken)
+        {
+            var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, path, cancellationToken);
+            await ReturnToMainThread(cancellationToken);
+
+            // 读失败（null）与空文件是两种不同故障：前者多为文件不存在或解密失败，
+            // 后者说明文件确实存在但无内容——分开报错才好定位
+            if (bytes == null)
+                return LoadOutcome.Fail(SaveLoadStatus.Missing, "读取失败（文件不存在或解密失败）");
+
+            if (bytes.Length == 0)
+                return LoadOutcome.Fail(SaveLoadStatus.Corrupt, "为空文件");
+
+            // 校验和在此刻校验：载荷字节已在手上，计算几乎免费。
+            // checksum 为 0 表示侧车未记录（或没有侧车），此时跳过——
+            // 侧车只是加速层，不该因它缺失就让存档不可读
+            var sidecar = await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
+            if (sidecar != null && sidecar.checksum != 0 && sidecar.checksum != SaveIntegrity.Compute(bytes))
+                return LoadOutcome.Fail(SaveLoadStatus.Corrupt, "校验和不符，内容可能已损坏");
+
+            // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
+            // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
+            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), out var saveData, out var error))
+                return LoadOutcome.Fail(SaveLoadStatus.Corrupt, $"已损坏或不是有效存档：{error}");
+
+            return LoadOutcome.Ok(saveData, BuildMeta(saveData, playerId, slot, path, bytes.Length));
+        }
+
+        /// <summary>
+        /// 把快照应用到内存，失败时尽力回滚到应用前的内存状态。
+        /// <para><b>三个已知约束（保持此设计的代价，勿在未解决前依赖回滚的完整性）：</b></para>
+        /// <list type="number">
+        /// <item><description><see cref="DataManager.CreateSnapshot"/> 会清空全部脏标记。回滚能恢复<b>数据</b>
+        /// 但恢复不了<b>脏标记集合</b>——将来若做增量保存，这会退化成「下次保存跳过本该保存的块」，
+        /// 即数据丢失。根除需给 Data 模块加 <c>CreateSnapshot(bool clearDirty)</c>（跨模块 API 变更）。</description></item>
+        /// <item><description>留存快照本身失败时，异常在动内存之前抛出，内存不受影响。</description></item>
+        /// <item><description>回滚本身也可能失败（同一批 <c>OnClear</c>），故为尽力而为：失败必须显式记 LogError
+        /// 而不是静默——那会留下「以为已回滚、实则为半清空」的内存态。</description></item>
+        /// </list>
+        /// <para><b>代价：</b>每次加载都会多付一次全量快照的序列化开销（<c>CreateSnapshot</c> 会遍历并
+        /// 序列化全部数据块）。这是为「部分应用后仍能恢复」付出的固定成本。</para>
+        /// </summary>
+        /// <param name="saveData">要应用的快照。</param>
+        /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>应用成功返回 <c>true</c>。</returns>
+        private static bool TryApplySnapshot(DataSnapshot saveData, out string error)
+        {
+            error = null;
+
+            var rollback = DataManager.CreateSnapshot();
+
+            try
+            {
+                DataManager.ApplySnapshot(saveData);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+
+                // 底层异常在此处记 LogError：结果结构体只带摘要文本，堆栈靠这里保留
+                Debug.LogError($"[Save] 应用存档失败，正在回滚内存数据: {ex}");
+
+                try
+                {
+                    DataManager.ApplySnapshot(rollback);
+                }
+                catch (Exception rollbackEx)
+                {
+                    Debug.LogError($"[Save] 回滚内存数据失败，内存状态可能不完整: {rollbackEx}");
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 单次读取校验的结果载体（仅类内使用）。
+        /// </summary>
+        private readonly struct LoadOutcome
+        {
+            /// <summary>校验通过的快照；失败时为 <c>null</c>。</summary>
+            public readonly DataSnapshot SaveData;
+
+            /// <summary>元数据；失败时为 <c>null</c>。</summary>
+            public readonly SaveMeta Meta;
+
+            /// <summary>状态；成功时为 <see cref="SaveLoadStatus.Loaded"/>。</summary>
+            public readonly SaveLoadStatus Status;
+
+            /// <summary>失败原因；成功时为 <c>null</c>。</summary>
+            public readonly string Message;
+
+            private LoadOutcome(DataSnapshot saveData, SaveMeta meta, SaveLoadStatus status, string message)
+            {
+                SaveData = saveData;
+                Meta = meta;
+                Status = status;
+                Message = message;
+            }
+
+            /// <summary>构造成功结果。</summary>
+            public static LoadOutcome Ok(DataSnapshot saveData, SaveMeta meta)
+            {
+                return new LoadOutcome(saveData, meta, SaveLoadStatus.Loaded, null);
+            }
+
+            /// <summary>构造失败结果。</summary>
+            public static LoadOutcome Fail(SaveLoadStatus status, string message)
+            {
+                return new LoadOutcome(null, null, status, message);
             }
         }
 

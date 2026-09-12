@@ -201,6 +201,144 @@ namespace XFramework.XSave.Tests
             Assert.IsNull(await SaveManager.GetSlotMetaAsync(7), "不存在的槽位应返回 null");
         }
 
+        [Test]
+        public async Task TryLoadAsync_HappyPath_ReturnsLoadedWithMeta()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 0;
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Loaded, result.Status);
+            Assert.IsTrue(result.IsSuccess);
+            Assert.IsNotNull(result.Meta, "成功时应带回元数据");
+            Assert.AreEqual(1, result.Meta.slot);
+            Assert.IsNull(result.Message, "成功时不应有诊断信息");
+            Assert.AreEqual(42, wallet.Gold);
+        }
+
+        [Test]
+        public async Task TryLoadAsync_MissingSlot_ReportsMissingWithoutThrowing()
+        {
+            // 预期内的失败以状态回报：调用方（存档界面）用 try 表达正常分支是别扭的
+            var result = await SaveManager.TryLoadAsync(7);
+
+            Assert.AreEqual(SaveLoadStatus.Missing, result.Status);
+            Assert.IsFalse(result.IsSuccess);
+            Assert.IsNull(result.Meta, "缺失时不应有元数据");
+            Assert.IsNotNull(result.Message, "失败时应带诊断信息");
+        }
+
+        [Test]
+        public async Task TryLoadAsync_CorruptedFile_ReportsCorruptWithoutThrowing()
+        {
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("not a save"));
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status);
+            Assert.IsFalse(result.IsSuccess);
+        }
+
+        [Test]
+        public async Task TryLoadAsync_CorruptedMain_FallsBackToBackup()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(1);   // 覆盖产生一代备份（内容为 Gold=42）
+
+            // 破坏主文件，保留完好的备份
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("corrupted"));
+
+            wallet.Gold = 0;
+            LogAssert.Expect(LogType.Warning, new Regex("已从备份恢复"));
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.LoadedFromBackup, result.Status, "主文件损坏时应从备份恢复");
+            Assert.IsTrue(result.IsSuccess, "从备份恢复属于成功");
+            Assert.AreEqual(42, wallet.Gold, "应恢复备份里的内容");
+            Assert.IsNotNull(result.Message, "应保留主文件不可用的原因");
+        }
+
+        [Test]
+        public async Task TryLoadAsync_BothUnusable_ReportsCorrupt()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);
+
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("corrupted"));
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData,
+                "slot_1.save" + FilePathUtility.BackupFileSuffix, Encoding.UTF8.GetBytes("corrupted too"));
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status);
+        }
+
+        [Test]
+        public async Task TryLoadAsync_ApplyFails_RollsBackMemory()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            DataManager.GetOrCreateBlock<ExplodingBlock>();
+            await SaveManager.SaveAsync(1);
+
+            // 加载前把内存改成另一个值：回滚成功的话应恢复到这个值，而不是被清成默认值
+            wallet.Gold = 7;
+            ExplodingBlock.RemainingThrows = 1;
+            try
+            {
+                // 应用失败会记 LogError（结果结构体只带摘要文本，堆栈靠这里保留）
+                LogAssert.Expect(LogType.Error, new Regex("应用存档失败，正在回滚内存数据"));
+
+                var result = await SaveManager.TryLoadAsync(1);
+
+                Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status, "快照无法应用时应回报为损坏");
+                Assert.AreEqual(7, wallet.Gold, "应用失败后必须回滚到加载前的内存状态，而不是留下半清空状态");
+            }
+            finally
+            {
+                ExplodingBlock.RemainingThrows = 0;
+            }
+        }
+
+        /// <summary>
+        /// 探针 Block：按次数抛异常，用于验证「应用快照失败 → 回滚内存」这条路径。
+        /// <para>刻意做成「只抛一次」：若每次都抛，回滚自身的 <c>ApplySnapshot</c> 也会失败，
+        /// 就测不到「回滚成功」这一分支了。</para>
+        /// </summary>
+        [Serializable]
+        private sealed class ExplodingBlock : IDataBlock
+        {
+            public static int RemainingThrows;
+
+            public string BlockName => "Exploding";
+            public int DataVersion => 0;
+            public object OnSave() => 1;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
+
+            public void OnLoad(object data)
+            {
+                if (RemainingThrows > 0)
+                {
+                    RemainingThrows--;
+                    throw new InvalidOperationException("模拟第三方 Block 加载失败");
+                }
+            }
+
+            public void OnClear() { }
+        }
+
         #region 元数据侧车与校验和
 
         // 侧车文件名：载荷路径 + .meta

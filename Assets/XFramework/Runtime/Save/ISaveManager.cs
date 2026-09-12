@@ -102,12 +102,24 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 从指定槽位加载存档并恢复到当前游戏数据。
-        /// <para>加载前会清空现有数据。</para>
+        /// <para>加载前会清空现有数据。主文件不可用时会尝试从一代备份（<c>.bak</c>）恢复。</para>
+        /// <para>需要区分「槽位不存在」「已损坏」「从备份恢复」时改用 <see cref="TryLoadAsync"/>。</para>
         /// </summary>
         /// <param name="slot">槽位号。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <exception cref="System.InvalidOperationException">槽位不存在、文件为空或内容不是有效存档时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">槽位不存在、文件损坏或无法应用时抛出。</exception>
         UniTask LoadAsync(int slot, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 尝试从指定槽位加载存档，以结果状态回报而不抛业务性失败。
+        /// <para>「槽位不存在」「文件损坏」属预期内失败，以状态回报；主文件不可用时会自动回退到
+        /// 一代备份并回报 <see cref="SaveLoadStatus.LoadedFromBackup"/>。</para>
+        /// <para>槽位号非法、有写操作进行中、未初始化仍抛异常——那些是编程错误而非存档故障。</para>
+        /// </summary>
+        /// <param name="slot">槽位号。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>加载结果；不会因存档本身的问题而失败为异常。</returns>
+        UniTask<SaveLoadResult> TryLoadAsync(int slot, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 删除指定槽位的存档。
