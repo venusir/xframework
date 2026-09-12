@@ -146,6 +146,51 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task LoadAsync_ValidJsonButNotSave_ThrowsWithoutClearingData()
+        {
+            // 回归锁：内容为合法 JSON 但不是存档时，反序列化出的 DataSnapshot 其 blocks 取到的是
+            // 字段初始化器给的空列表（不是 null）。旧实现照常 ApplySnapshot——先 OnClear 掉全部
+            // 数据块、再因列表为空直接 return，玩家的内存数据被零警告清空
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("{\"foo\":1}"));
+
+            await AssertThrowsAsync<Exception>(() => SaveManager.LoadAsync(1),
+                "合法 JSON 但不是存档的内容应被拒绝，而不是当作空快照应用");
+
+            Assert.AreEqual(42, wallet.Gold, "拒绝加载后内存数据必须保持原样，不能被清空");
+        }
+
+        [Test]
+        public async Task LoadAsync_JsonNull_ThrowsWithoutClearingData()
+        {
+            // 另一变体：字面量 null 反序列化结果本身即为 null，旧实现会先清空全部数据块再抛 NRE
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("null"));
+
+            await AssertThrowsAsync<Exception>(() => SaveManager.LoadAsync(1),
+                "反序列化结果为 null 时应被拒绝");
+
+            Assert.AreEqual(42, wallet.Gold, "拒绝加载后内存数据必须保持原样，不能被清空");
+        }
+
+        [Test]
+        public async Task GetSlotMetaAsync_ValidJsonButNotSave_ReturnsNullWithWarning()
+        {
+            // 与 GetSlotMetasAsync 一致的错误处置：损坏即告警并返回 null，不让原始序列化异常穿透
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
+                Encoding.UTF8.GetBytes("{\"foo\":1}"));
+
+            LogAssert.Expect(LogType.Warning, new Regex("解析存档元数据失败"));
+            var meta = await SaveManager.GetSlotMetaAsync(1);
+
+            Assert.IsNull(meta, "不是有效存档时应返回 null");
+        }
+
+        [Test]
         public async Task DeleteSlot_RemovesFile()
         {
             await SaveManager.SaveAsync(1);

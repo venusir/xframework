@@ -88,14 +88,17 @@ namespace XFramework.XSave
 
                 try
                 {
-                    var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
-                    if (saveData == null)
+                    if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+                    {
+                        Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
                         continue;
+                    }
 
                     metas.Add(BuildMeta(saveData, playerId, ParseSlotFromPath(path), path, bytes.Length));
                 }
                 catch (Exception ex)
                 {
+                    // CreateMeta 是第三方扩展点，其异常不应打崩整份列表
                     Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {ex.Message}");
                 }
             }
@@ -119,9 +122,13 @@ namespace XFramework.XSave
             if (bytes == null || bytes.Length == 0)
                 return null;
 
-            var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
-            if (saveData == null)
+            // 与 GetSlotMetasAsync 保持同一错误处置：损坏即告警并返回 null，
+            // 不让原始序列化异常穿透到调用方
+            if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+            {
+                Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
                 return null;
+            }
 
             return BuildMeta(saveData, playerId, slot, path, bytes.Length);
         }
@@ -176,11 +183,18 @@ namespace XFramework.XSave
                 var bytes = await FileManager.ReadAllBytesAsync(SaveDomain, slotPath, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
-                if (bytes == null || bytes.Length == 0)
+                // 读失败（null）与空文件是两种不同故障：前者多为解密失败或文件被并发删除，
+                // 后者说明文件确实存在但无内容——分开报错才好定位
+                if (bytes == null)
+                    throw new InvalidOperationException($"[Save] 存档槽位 {slot} 读取失败（文件不存在或解密失败）。");
+
+                if (bytes.Length == 0)
                     throw new InvalidOperationException($"[Save] 存档槽位 {slot} 为空文件。");
 
-                // 反序列化 bytes → DataSnapshot
-                var saveData = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
+                // 结构校验不通过即拒绝应用：绝不能让「合法 JSON 但不是存档」的内容走到 ApplySnapshot，
+                // 它会先清空全部数据块、再因数据块列表为空直接返回，等于静默清空玩家的内存数据
+                if (!TryDeserializeSnapshot(bytes, out var saveData, out var error))
+                    throw new InvalidOperationException($"[Save] 存档槽位 {slot} 已损坏或不是有效存档：{error}");
 
                 // 应用快照到内存
                 DataManager.ApplySnapshot(saveData);
@@ -267,6 +281,58 @@ namespace XFramework.XSave
         private static async UniTask ReturnToMainThread(CancellationToken cancellationToken)
         {
             await UniTask.SwitchToMainThread(cancellationToken);
+        }
+
+        /// <summary>
+        /// 反序列化存档字节并做最小结构校验：结果非 <c>null</c>、含数据块列表、版本号 <c>&gt;= 1</c>。
+        /// <para><b>为什么必须校验：</b>内容为合法 JSON 但不是存档的文件（如 <c>{"foo":1}</c>）也能
+        /// 反序列化出一个 <see cref="DataSnapshot"/>，而 <see cref="DataSnapshot.blocks"/> 有字段初始化器
+        /// <c>= new()</c>，于是得到的是<b>空列表而非 <c>null</c></b>。
+        /// <see cref="DataManager.ApplySnapshot"/> 会先 <c>OnClear</c> 掉全部数据块、再因列表为空直接返回，
+        /// 结果是零警告地清空内存中的全部游戏数据。校验失败即拒绝应用，由调用方决定跳过还是抛出。</para>
+        /// <para>版本号下界取 1 的依据：<see cref="DataManager.CreateSnapshot"/> 在版本为 0 时必然写成 1，
+        /// 框架产出的存档必然满足；不满足即说明内容不是本框架写出的存档。</para>
+        /// </summary>
+        /// <param name="bytes">存档文件字节。</param>
+        /// <param name="saveData">反序列化并校验通过的快照；失败时为 <c>null</c>。</param>
+        /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
+        /// <returns>校验通过返回 <c>true</c>。</returns>
+        private static bool TryDeserializeSnapshot(byte[] bytes, out DataSnapshot saveData, out string error)
+        {
+            saveData = null;
+            error = null;
+
+            DataSnapshot data;
+            try
+            {
+                data = (DataSnapshot)Serializer.Default.Deserialize(bytes, DataSnapshot.Factory().GetType());
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+
+            if (data == null)
+            {
+                error = "反序列化结果为空";
+                return false;
+            }
+
+            if (data.blocks == null)
+            {
+                error = "缺少数据块列表";
+                return false;
+            }
+
+            if (data.version < 1)
+            {
+                error = $"版本号非法({data.version})";
+                return false;
+            }
+
+            saveData = data;
+            return true;
         }
 
         /// <summary>
