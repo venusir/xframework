@@ -343,6 +343,117 @@ namespace XFramework.XSave.Tests
             }
         }
 
+        #region 槽位复制与移动
+
+        [Test]
+        public async Task CopySlotAsync_CopiesContentAndRebuildsSidecar()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+
+            var destMeta = await SaveManager.CopySlotAsync(1, 2);
+
+            Assert.AreEqual(2, destMeta.slot, "返回的应是目标槽位的元数据");
+            Assert.AreEqual("slot_2.save", destMeta.relativePath);
+
+            // 侧车必须按目标重建：照抄源侧车会让元数据把目标报成源槽位
+            var listed = await SaveManager.GetSlotMetaAsync(2);
+            Assert.AreEqual(2, listed.slot, "目标侧车里的槽位号应为目标槽位，而非源槽位");
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "复制不应影响源槽位");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(2);
+            Assert.AreEqual(42, wallet.Gold, "目标槽位应能读出源的内容");
+        }
+
+        [Test]
+        public async Task CopySlotAsync_TargetOccupiedWithoutOverwrite_Throws()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(2);
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.CopySlotAsync(1, 2),
+                "目标已存在且未允许覆盖时应拒绝");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(2);
+            Assert.AreEqual(99, wallet.Gold, "被拒绝的复制不得改动目标槽位");
+        }
+
+        [Test]
+        public async Task CopySlotAsync_Overwrite_ReplacesTarget()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 99;
+            await SaveManager.SaveAsync(2);
+
+            await SaveManager.CopySlotAsync(1, 2, overwrite: true);
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(2);
+            Assert.AreEqual(42, wallet.Gold, "允许覆盖时应替换目标内容");
+        }
+
+        [Test]
+        public async Task CopySlotAsync_MissingSource_Throws()
+        {
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.CopySlotAsync(1, 2),
+                "源槽位不存在时应拒绝");
+        }
+
+        [Test]
+        public async Task CopySlotAsync_SameSlot_Throws()
+        {
+            await SaveManager.SaveAsync(1);
+
+            await AssertThrowsAsync<ArgumentException>(() => SaveManager.CopySlotAsync(1, 1),
+                "源与目标相同时应拒绝");
+        }
+
+        [Test]
+        public async Task MoveSlotAsync_RemovesSourceEntirely()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);   // 再存一次，让源槽位带上 .bak
+
+            var destMeta = await SaveManager.MoveSlotAsync(1, 3);
+
+            Assert.AreEqual(3, destMeta.slot);
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save"), "移动后源载荷应消失");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save.meta"), "源侧车应一并清除");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save" + FilePathUtility.BackupFileSuffix),
+                "源备份应一并清除");
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(3);
+            Assert.AreEqual(42, wallet.Gold, "内容应完整迁移到目标槽位");
+        }
+
+        [Test]
+        public async Task TransferSlotAsync_IsGatedByBusy()
+        {
+            await SaveManager.SaveAsync(1);
+
+            // 故意不 await：SaveAsync 会同步执行到第一个 IO await 处挂起，此时门禁已置位
+            var saveTask = SaveManager.SaveAsync(2);
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.CopySlotAsync(1, 3),
+                "复制属于写操作，应受写门禁约束");
+
+            await saveTask;
+        }
+
+        #endregion
+
         #region 序列化线程
 
         /// <summary>

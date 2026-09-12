@@ -289,6 +289,20 @@ namespace XFramework.XSave
             return _impl.DeleteAllSlotsAsync(progress, cancellationToken);
         }
 
+        /// <inheritdoc cref="ISaveManager.CopySlotAsync"/>
+        public static UniTask<SaveMeta> CopySlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.CopySlotAsync(fromSlot, toSlot, overwrite, cancellationToken);
+        }
+
+        /// <inheritdoc cref="ISaveManager.MoveSlotAsync"/>
+        public static UniTask<SaveMeta> MoveSlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.MoveSlotAsync(fromSlot, toSlot, overwrite, cancellationToken);
+        }
+
         /// <inheritdoc cref="ISaveManager.SlotExistsAsync"/>
         public static UniTask<bool> SlotExistsAsync(int slot, CancellationToken cancellationToken = default)
         {

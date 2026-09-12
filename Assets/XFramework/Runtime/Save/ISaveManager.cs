@@ -194,6 +194,35 @@ namespace XFramework.XSave
         UniTask<int> DeleteAllSlotsAsync(IProgress<SaveReport> progress, CancellationToken cancellationToken = default);
 
         /// <summary>
+        /// 把一个槽位的存档复制到另一个槽位。
+        /// <para>基于 provider 的读写原语实现（读源载荷 → 原子写目标 → 重建目标侧车），
+        /// 因此所有存储后端与加密层都成立；代价是载荷要整个进内存一次。</para>
+        /// </summary>
+        /// <param name="fromSlot">源槽位号。</param>
+        /// <param name="toSlot">目标槽位号。</param>
+        /// <param name="overwrite">目标槽位已有存档时是否覆盖；为 <c>false</c> 时拒绝并抛出。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>目标槽位的元数据。</returns>
+        /// <exception cref="System.ArgumentException">源与目标槽位相同，或槽位号为负时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">源槽位不可用，或目标已存在且 <paramref name="overwrite"/> 为 <c>false</c> 时抛出。</exception>
+        UniTask<SaveMeta> CopySlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 把一个槽位的存档移动到另一个槽位（复制成功后删除源）。
+        /// <para><b>移动不是原子操作</b>：目标写入成功、删除源之前若进程被杀，会同时留下两份副本。
+        /// 这不会丢数据，但需要调用方知晓；要严格原子应改用文件系统的重命名（本框架不提供，
+        /// 因为 WebGL / Console 没有可用的物理路径）。</para>
+        /// </summary>
+        /// <param name="fromSlot">源槽位号。</param>
+        /// <param name="toSlot">目标槽位号。</param>
+        /// <param name="overwrite">目标槽位已有存档时是否覆盖；为 <c>false</c> 时拒绝并抛出。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>目标槽位的元数据。</returns>
+        /// <exception cref="System.ArgumentException">源与目标槽位相同，或槽位号为负时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">源槽位不可用，或目标已存在且 <paramref name="overwrite"/> 为 <c>false</c> 时抛出。</exception>
+        UniTask<SaveMeta> MoveSlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default);
+
+        /// <summary>
         /// 检查指定槽位是否存在存档。
         /// <para>谓词语义：槽位号非法或不存在都返回 <c>false</c>，不抛异常。</para>
         /// </summary>

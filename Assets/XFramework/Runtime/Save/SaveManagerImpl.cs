@@ -411,7 +411,7 @@ namespace XFramework.XSave
                 return LoadOutcome.Fail(SaveLoadStatus.Corrupt, $"已损坏或不是有效存档：{parsed.Error}");
 
             var saveData = parsed.SaveData;
-            return LoadOutcome.Ok(saveData, BuildMeta(saveData, playerId, slot, path, bytes.Length));
+            return LoadOutcome.Ok(saveData, BuildMeta(saveData, playerId, slot, path, bytes.Length), bytes);
         }
 
         /// <summary>
@@ -504,30 +504,34 @@ namespace XFramework.XSave
             /// <summary>元数据；失败时为 <c>null</c>。</summary>
             public readonly SaveMeta Meta;
 
+            /// <summary>载荷原始字节；失败时为 <c>null</c>。槽位复制直接复用它，省去二次读取。</summary>
+            public readonly byte[] Bytes;
+
             /// <summary>状态；成功时为 <see cref="SaveLoadStatus.Loaded"/>。</summary>
             public readonly SaveLoadStatus Status;
 
             /// <summary>失败原因；成功时为 <c>null</c>。</summary>
             public readonly string Message;
 
-            private LoadOutcome(DataSnapshot saveData, SaveMeta meta, SaveLoadStatus status, string message)
+            private LoadOutcome(DataSnapshot saveData, SaveMeta meta, byte[] bytes, SaveLoadStatus status, string message)
             {
                 SaveData = saveData;
                 Meta = meta;
+                Bytes = bytes;
                 Status = status;
                 Message = message;
             }
 
             /// <summary>构造成功结果。</summary>
-            public static LoadOutcome Ok(DataSnapshot saveData, SaveMeta meta)
+            public static LoadOutcome Ok(DataSnapshot saveData, SaveMeta meta, byte[] bytes)
             {
-                return new LoadOutcome(saveData, meta, SaveLoadStatus.Loaded, null);
+                return new LoadOutcome(saveData, meta, bytes, SaveLoadStatus.Loaded, null);
             }
 
             /// <summary>构造失败结果。</summary>
             public static LoadOutcome Fail(SaveLoadStatus status, string message)
             {
-                return new LoadOutcome(null, null, status, message);
+                return new LoadOutcome(null, null, null, status, message);
             }
         }
 
@@ -595,6 +599,74 @@ namespace XFramework.XSave
 
                 ReportProgress(progress, 1f, $"已删除 {deleted} 个存档");
                 return deleted;
+            }
+            finally
+            {
+                ExitBusy();
+            }
+        }
+
+        /// <inheritdoc/>
+        public UniTask<SaveMeta> CopySlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default)
+        {
+            return TransferSlotAsync(fromSlot, toSlot, overwrite, deleteSource: false, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public UniTask<SaveMeta> MoveSlotAsync(int fromSlot, int toSlot, bool overwrite = false, CancellationToken cancellationToken = default)
+        {
+            return TransferSlotAsync(fromSlot, toSlot, overwrite, deleteSource: true, cancellationToken);
+        }
+
+        /// <summary>
+        /// 槽位复制与移动的共同实现（二者只差最后是否删除源）。
+        /// </summary>
+        /// <param name="fromSlot">源槽位号。</param>
+        /// <param name="toSlot">目标槽位号。</param>
+        /// <param name="overwrite">目标已存在时是否覆盖。</param>
+        /// <param name="deleteSource">成功后是否删除源槽位（移动语义）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>目标槽位的元数据。</returns>
+        private async UniTask<SaveMeta> TransferSlotAsync(int fromSlot, int toSlot, bool overwrite, bool deleteSource, CancellationToken cancellationToken)
+        {
+            SavePathUtility.ValidateSlot(fromSlot);
+            SavePathUtility.ValidateSlot(toSlot);
+
+            if (fromSlot == toSlot)
+                throw new ArgumentException($"[Save] 源槽位与目标槽位相同({fromSlot})，无需复制。", nameof(toSlot));
+
+            var playerId = _playerId;
+            var fromPath = SavePathUtility.BuildSlotPath(playerId, fromSlot);
+            var toPath = SavePathUtility.BuildSlotPath(playerId, toSlot);
+
+            EnterBusy();
+            try
+            {
+                // 目标占用检查放在最前：明确拒绝好过写完再发现覆盖了不该覆盖的存档。
+                // overwrite 为 true 时不检查——写入本身就是原子替换，旧目标会留下 .bak
+                if (!overwrite && FileManager.Exists(SaveDomain, toPath))
+                    throw new InvalidOperationException(
+                        $"[Save] 目标槽位 {toSlot} 已存在存档，拒绝覆盖。如需覆盖请传 overwrite: true。");
+
+                // 复用加载路径的校验：源载荷会被读取、按侧车校验和核验、并解析（解析已在线程池上）
+                var source = await ReadAndValidateAsync(playerId, fromSlot, fromPath, cancellationToken);
+                if (source.SaveData == null)
+                    throw new InvalidOperationException($"[Save] 源槽位 {fromSlot} 不可用：{source.Message}");
+
+                await FileManager.WriteAllBytesAtomicAsync(SaveDomain, toPath, source.Bytes, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                // 目标侧车必须按目标槽位重建：源侧车里的 slot / relativePath 指向的是源，
+                // 直接照抄会让元数据把目标槽位报成源槽位
+                var destMeta = FillMeta(source.Meta, playerId, toSlot, toPath, source.Bytes.Length);
+                destMeta.checksum = SaveIntegrity.Compute(source.Bytes);
+                await WriteSidecarAsync(destMeta, cancellationToken);
+
+                // 删除放在最后：写目标成功之前绝不动源，这样移动失败时数据仍在源槽位
+                if (deleteSource)
+                    DeleteSlotFiles(fromPath);
+
+                return destMeta;
             }
             finally
             {
