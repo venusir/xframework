@@ -10,6 +10,11 @@ namespace XFramework.XSettings
     /// <c>SaveAsync</c>/<c>LoadAsync</c> 同样是非阻塞的。</para>
     /// <para><b>与同步成员的关系：</b>继承自 <see cref="ISettingsStore"/> 的同步成员仍需正确实现，
     /// 它们由 <see cref="SettingsManager"/> 的同步 API 使用。</para>
+    /// <para><b>陷阱：</b>管理器的<b>构造函数必然走同步路径</b>（构造无法 await），
+    /// <see cref="ISettingsStore.Exists"/> 为 true 时会调用同步的
+    /// <see cref="ISettingsStore.Load{T}"/>。因此同步成员不能是「昂贵且阻塞」的实现——
+    /// 若底层是网络或平台 SDK，同步 <c>Load</c> 必须在无数据时快速返回（例如只查本地缓存），
+    /// 真正的拉取留给异步 API，否则初始化会卡住主线程。</para>
     /// </summary>
     public interface IAsyncSettingsStore : ISettingsStore
     {

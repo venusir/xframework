@@ -151,6 +151,10 @@ namespace XFramework.XSettings.Tests
             var store = new AsyncStore { HasData = true, Data = new SampleSettings { Volume = 99 } };
             var manager = CreateManager(store);
 
+            // 构造函数必然走同步路径（它无法 await），有数据时会调用一次同步 Load。
+            // 这里清零，让断言只反映 LoadAsync 自身的行为
+            store.SyncMemberCalls = 0;
+
             await manager.LoadAsync();
 
             Assert.AreEqual(1, store.AsyncLoadCalls);
