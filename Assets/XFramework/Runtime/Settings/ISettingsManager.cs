@@ -104,5 +104,16 @@ namespace XFramework.XSettings
         ISettingsStore Store { get; set; }
 
         #endregion
+
+        #region Migration
+
+        /// <summary>
+        /// 格式迁移钩子。仅当 <see cref="SettingsOptions.CurrentVersion"/> 大于持久化数据的版本时被调用。
+        /// <para>为 <c>null</c>（默认）时，遇到需要迁移的数据会回退默认值并打 LogWarning——
+        /// 宁可回到默认值，也不要按旧结构解析出静默错位的设置。</para>
+        /// </summary>
+        ISettingsMigrator<T> Migrator { get; set; }
+
+        #endregion
     }
 }

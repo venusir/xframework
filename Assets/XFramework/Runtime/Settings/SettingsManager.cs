@@ -61,11 +61,13 @@ namespace XFramework.XSettings
         /// <param name="defaultFactory">
         /// 可选的默认值工厂。持久层无数据时（初始化、重新加载、重置）均用此工厂创建设置；
         /// 如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
+        /// <param name="options">可选的选项。为 <c>null</c> 时使用默认值（不启用版本化）。</param>
         /// <returns>初始化后的 <see cref="ISettingsManager{T}"/> 实例。</returns>
-        public static ISettingsManager<T> Initialize<T>(string filePath, Func<T> defaultFactory = null)
+        public static ISettingsManager<T> Initialize<T>(
+            string filePath, Func<T> defaultFactory = null, SettingsOptions options = null)
             where T : class, new()
         {
-            return Initialize<T>(new JsonFileStore(filePath), defaultFactory);
+            return Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
         }
 
         /// <summary>
@@ -77,8 +79,10 @@ namespace XFramework.XSettings
         /// <param name="defaultFactory">
         /// 可选的默认值工厂。持久层无数据时（初始化、重新加载、重置）均用此工厂创建设置；
         /// 如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
+        /// <param name="options">可选的选项。为 <c>null</c> 时使用默认值（不启用版本化）。</param>
         /// <returns>初始化后的 <see cref="ISettingsManager{T}"/> 实例。</returns>
-        public static ISettingsManager<T> Initialize<T>(ISettingsStore store, Func<T> defaultFactory = null)
+        public static ISettingsManager<T> Initialize<T>(
+            ISettingsStore store, Func<T> defaultFactory = null, SettingsOptions options = null)
             where T : class, new()
         {
             var type = typeof(T);
@@ -89,7 +93,7 @@ namespace XFramework.XSettings
                 return (ISettingsManager<T>)existing;
             }
 
-            var manager = new SettingsManagerImpl<T>(store, defaultFactory);
+            var manager = new SettingsManagerImpl<T>(store, defaultFactory, options);
             Managers[type] = manager;
             return manager;
         }

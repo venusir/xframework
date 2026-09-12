@@ -21,6 +21,7 @@ namespace XFramework.XSettings
         private T _settings;
         private ISettingsStore _store;
         private readonly Func<T> _defaultFactory;
+        private readonly SettingsOptions _options;
         private readonly EventStream<T> _changedStream = new();
         private bool _disposed;
 
@@ -35,14 +36,16 @@ namespace XFramework.XSettings
         /// <param name="defaultFactory">
         /// 可选的默认值工厂。持久层无数据时（初始化、<see cref="Load"/>、<see cref="Reset"/>）
         /// 均用此工厂创建设置；如果为 <c>null</c>，则使用 <c>new T()</c>。</param>
-        public SettingsManagerImpl(ISettingsStore store, Func<T> defaultFactory = null)
+        /// <param name="options">可选的选项。为 <c>null</c> 时使用默认值（不启用版本化）。</param>
+        public SettingsManagerImpl(ISettingsStore store, Func<T> defaultFactory = null, SettingsOptions options = null)
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _defaultFactory = defaultFactory;
+            _options = options ?? new SettingsOptions();
 
             // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
             // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
-            _settings = store.Exists() ? LoadFromStore() : CreateDefault();
+            _settings = store.Exists() ? LoadExisting() : CreateDefault();
         }
 
         #endregion
@@ -79,7 +82,7 @@ namespace XFramework.XSettings
         public void Save()
         {
             ThrowIfDisposed();
-            _store.Save(_settings);
+            SaveToStore(_store);
         }
 
         /// <inheritdoc />
@@ -159,6 +162,13 @@ namespace XFramework.XSettings
 
         #endregion
 
+        #region Migration
+
+        /// <inheritdoc />
+        public ISettingsMigrator<T> Migrator { get; set; }
+
+        #endregion
+
         #region Store
 
         /// <inheritdoc />
@@ -213,15 +223,13 @@ namespace XFramework.XSettings
         {
             // 序列化留在主线程:设置对象通常只有几百字节,线程池往返的调度成本高于序列化本身
             // (取舍与 SaveManagerImpl 处理侧车一致),且 JsonUtility 非线程安全。
-            // 快照 store 与 settings:await 期间 Store setter / Apply 可能改动它们
+            // 快照 store:await 期间 Store setter 可能改动它
             var store = _store;
-            var settings = _settings;
 
-            if (store is IAsyncSettingsStore asyncStore)
-                await asyncStore.SaveAsync(settings, cancellationToken);
+            if (IsVersioned)
+                await WriteAsync(store, BuildEnvelope(), cancellationToken);
             else
-                await UniTask.RunOnThreadPool(
-                    () => store.Save(settings), configureAwait: false, cancellationToken);
+                await WriteAsync(store, _settings, cancellationToken);
 
             // 与 SaveManagerImpl 的线程约定一致:公开异步方法在返回前切回主线程,
             // 使调用方 await 之后可以安全访问 Unity API
@@ -237,7 +245,7 @@ namespace XFramework.XSettings
             if (_store is IAsyncSettingsStore asyncStore)
             {
                 loaded = await asyncStore.ExistsAsync(cancellationToken)
-                    ? await LoadFromStoreAsync(asyncStore, cancellationToken)
+                    ? await ReadAsync(asyncStore, cancellationToken)
                     : CreateDefault();
             }
             else
@@ -260,7 +268,103 @@ namespace XFramework.XSettings
             // 先问 Exists 而不是直接取 Load 的返回值:ISettingsStore.Load 的契约是
             // 「无数据时返回 new T()」,这里无法区分「读到了持久化数据」与「根本没有数据」,
             // 直接赋值会让 defaultFactory 在存档被删后形同虚设
-            return _store.Exists() ? LoadFromStore() : CreateDefault();
+            return _store.Exists() ? LoadExisting() : CreateDefault();
+        }
+
+        /// <summary>持久层已有数据时的同步读取入口：按是否启用版本化分流。</summary>
+        private T LoadExisting()
+        {
+            return IsVersioned ? DecodeEnvelope(_store.Load<SettingsEnvelope<T>>()) : LoadFromStore();
+        }
+
+        /// <summary>是否启用版本化落盘（<see cref="SettingsOptions.CurrentVersion"/> 大于 0）。</summary>
+        private bool IsVersioned => _options.CurrentVersion > 0;
+
+        /// <summary>构造当前版本的落盘信封。</summary>
+        private SettingsEnvelope<T> BuildEnvelope()
+        {
+            return new SettingsEnvelope<T> { Version = _options.CurrentVersion, Data = _settings };
+        }
+
+        /// <summary>同步写入（供 <see cref="Save"/> 使用）。</summary>
+        private void SaveToStore(ISettingsStore store)
+        {
+            if (IsVersioned)
+                store.Save(BuildEnvelope());
+            else
+                store.Save(_settings);
+        }
+
+        /// <summary>
+        /// 异步写入非版本化载荷：store 实现 <see cref="IAsyncSettingsStore"/> 时用其异步成员，
+        /// 否则整段下线程池。与版本化重载分开是因为 <c>ISettingsStore.Save{T}</c> 是泛型的，
+        /// 调用点的类型参数必须在编译期确定。
+        /// </summary>
+        private static async UniTask WriteAsync(ISettingsStore store, T settings, CancellationToken cancellationToken)
+        {
+            if (store is IAsyncSettingsStore asyncStore)
+                await asyncStore.SaveAsync(settings, cancellationToken);
+            else
+                await UniTask.RunOnThreadPool(
+                    () => store.Save(settings), configureAwait: false, cancellationToken);
+        }
+
+        /// <summary>异步写入版本化信封，分流规则同非版本化重载。</summary>
+        private static async UniTask WriteAsync(ISettingsStore store, SettingsEnvelope<T> envelope, CancellationToken cancellationToken)
+        {
+            if (store is IAsyncSettingsStore asyncStore)
+                await asyncStore.SaveAsync(envelope, cancellationToken);
+            else
+                await UniTask.RunOnThreadPool(
+                    () => store.Save(envelope), configureAwait: false, cancellationToken);
+        }
+
+        /// <summary>异步读取入口：按是否启用版本化分流。</summary>
+        private async UniTask<T> ReadAsync(IAsyncSettingsStore store, CancellationToken cancellationToken)
+        {
+            return IsVersioned
+                ? DecodeEnvelope(await store.LoadAsync<SettingsEnvelope<T>>(cancellationToken))
+                : await LoadFromStoreAsync(store, cancellationToken);
+        }
+
+        /// <summary>
+        /// 解开版本信封：版本判定 + 迁移。信封或其载荷为空视为不可读。
+        /// <para>迁移在返回给调用方之前、订阅者被通知之前执行，故迁移过程中写值不会产生多余通知。</para>
+        /// </summary>
+        private T DecodeEnvelope(SettingsEnvelope<T> envelope)
+        {
+            if (envelope?.Data == null)
+            {
+                UnityEngine.Debug.LogWarning(
+                    "[SettingsManager] 设置数据缺少版本信封或载荷为空，已回退默认值。" +
+                    $"（当前 CurrentVersion={_options.CurrentVersion}，期望信封格式 {{Version, Data}}；" +
+                    "若此前按无版本格式落盘，启用版本化后旧文件将无法识别）");
+                return CreateDefault();
+            }
+
+            if (envelope.Version > _options.CurrentVersion)
+            {
+                // 高于本版本:整份拒绝。数据可能由更新版游戏写入,按旧结构解析会静默错位
+                UnityEngine.Debug.LogWarning(
+                    $"[SettingsManager] 设置格式版本 {envelope.Version} 高于本版本支持的 " +
+                    $"{_options.CurrentVersion}，已整份拒绝并回退默认值。");
+                return CreateDefault();
+            }
+
+            if (envelope.Version < _options.CurrentVersion)
+            {
+                if (Migrator == null)
+                {
+                    UnityEngine.Debug.LogWarning(
+                        $"[SettingsManager] 设置格式版本 {envelope.Version} 需要迁移到 {_options.CurrentVersion}，" +
+                        $"但未注册 ISettingsMigrator<{typeof(T).Name}>，已回退默认值。");
+                    return CreateDefault();
+                }
+
+                Migrator.Migrate(envelope.Version, _options.CurrentVersion, envelope.Data);
+            }
+
+            return envelope.Data;
         }
 
         /// <summary>
