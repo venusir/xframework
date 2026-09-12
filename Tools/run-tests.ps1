@@ -1,0 +1,177 @@
+<#
+.SYNOPSIS
+    以 Unity batchmode 定向运行单元测试。
+
+.DESCRIPTION
+    面向「改完一个模块，快速自测其 fixture」的场景，**不是**全量门禁工具。
+    全量 PlayMode 跑存在跨 fixture 静态状态泄漏噪音（PlayMode 下所有用例共享一个 player
+    实例，各模块静态门面 + RuntimeInitializeOnLoadMethod 相互污染），汇总会变成一片红，
+    因此本脚本以 -Filter 为一等公民。全量验证仍应在 Unity 编辑器 Test Runner 中人工进行。
+
+    默认使用仓库旁的测试运行壳（<仓库名>.TestRun），它通过 junction 共享本仓库的
+    Assets/Packages/ProjectSettings 而拥有独立 Library——这样跑测试**不需要关闭编辑器**
+    （两份额外 Library 不争锁），且 Unity 为新文件生成的 .meta 会直接落在真实仓库里。
+
+    壳不存在时回退到本仓库运行，此时必须先关闭编辑器，否则会争 Library 锁。
+
+.PARAMETER Filter
+    测试过滤器，如 XFramework.XSettings.Tests.SettingsDefaultValueTests 或类名的一部分。
+    留空则跑全量（会告警：全量结果受跨 fixture 噪音影响，不可作为门禁）。
+
+.PARAMETER Platform
+    PlayMode（默认，Tests/Runtime 下的用例都在这里）或 EditMode。
+
+.PARAMETER UnityPath
+    显式指定 Unity.exe。留空则按 ProjectSettings/ProjectVersion.txt 的版本自动探测。
+
+.PARAMETER UseRepo
+    强制在仓库本体运行而非测试壳（需先关闭编辑器）。
+
+.PARAMETER Setup
+    创建测试壳后退出。新机器上跑一次即可；已存在的联接会跳过，不会删除任何目录。
+
+.EXAMPLE
+    pwsh -File Tools/run-tests.ps1 -Setup                # 新机器上先建壳
+    pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests
+    pwsh -File Tools/run-tests.ps1                       # 全量（会告警）
+#>
+param(
+    [string]$Filter = "",
+    [ValidateSet("PlayMode", "EditMode")]
+    [string]$Platform = "PlayMode",
+    [string]$UnityPath = "",
+    [switch]$UseRepo,
+    [switch]$Setup
+)
+
+$ErrorActionPreference = "Stop"
+
+# ---------- 定位仓库与 Unity ----------
+
+$repoRoot = Split-Path -Parent $PSScriptRoot
+if (-not (Test-Path (Join-Path $repoRoot "ProjectSettings\ProjectVersion.txt"))) {
+    Write-Error "找不到仓库根（本脚本应位于 <仓库>/Tools/ 下）：$repoRoot"
+}
+
+# 版本号从 ProjectVersion.txt 读，避免硬编码（旧脚本硬编码路径，换机器即失效）
+$versionLine = Get-Content (Join-Path $repoRoot "ProjectSettings\ProjectVersion.txt") |
+    Where-Object { $_ -match '^m_EditorVersion:' } | Select-Object -First 1
+$version = ($versionLine -split ':', 2)[1].Trim()
+Write-Host "Unity 版本: $version"
+
+if (-not $UnityPath) {
+    $candidates = @(
+        "D:\Program Files\Unity\$version\Editor\Unity.exe",
+        "$env:ProgramFiles\Unity\Hub\Editor\$version\Editor\Unity.exe",
+        "$env:LOCALAPPDATA\Unity\Hub\Editor\$version\Editor\Unity.exe",
+        "C:\Program Files\Unity\Hub\Editor\$version\Editor\Unity.exe"
+    )
+    $UnityPath = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    if (-not $UnityPath) {
+        Write-Error "未找到 Unity $version 的编辑器。请用 -UnityPath 显式指定。`n已探测:`n$($candidates -join "`n")"
+    }
+}
+Write-Host "Unity 路径: $UnityPath"
+
+# ---------- 选择运行位置 ----------
+
+$shellPath = Join-Path (Split-Path -Parent $repoRoot) ((Split-Path -Leaf $repoRoot) + ".TestRun")
+
+if ($Setup) {
+    New-Item -ItemType Directory -Force -Path $shellPath | Out-Null
+    foreach ($d in @("Assets", "Packages", "ProjectSettings")) {
+        $link = Join-Path $shellPath $d
+        if (Test-Path $link) { Write-Host "已存在，跳过: $link"; continue }
+        New-Item -ItemType Junction -Path $link -Target (Join-Path $repoRoot $d) | Out-Null
+        Write-Host "已建立联接: $link -> $(Join-Path $repoRoot $d)"
+    }
+    New-Item -ItemType Directory -Force -Path (Join-Path $shellPath "TestResults") | Out-Null
+    Write-Host ""
+    Write-Host "测试壳已就绪: $shellPath" -ForegroundColor Green
+    Write-Host "首次运行会做一次完整导入（约 1 分钟），之后为增量。"
+    Write-Host "注意：Unity 会提示「Assets is a symbolic link」并关闭目录监控。这是我们有意接受的"
+    Write-Host "     ——官方警告针对的是「多项目共享同一资源、递归链接、跨 Unity 版本共享」，本方案三者皆无。"
+    exit 0
+}
+
+$useShell = (-not $UseRepo) -and (Test-Path (Join-Path $shellPath "Assets"))
+
+if ($useShell) {
+    $projectPath = $shellPath
+    Write-Host "运行位置: 测试壳 $projectPath（编辑器可保持开启）"
+} else {
+    $projectPath = $repoRoot
+    if (-not $UseRepo) {
+        Write-Warning "测试壳不存在（$shellPath），回退到仓库本体运行。"
+    }
+    Write-Warning "在仓库本体运行需要先关闭 Unity 编辑器，否则会争 Library 锁。"
+}
+
+# ---------- 组装参数 ----------
+
+$resultsDir = Join-Path $projectPath "TestResults"
+New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
+$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$resultsFile = Join-Path $resultsDir "run-$stamp.xml"
+$logFile = Join-Path $resultsDir "run-$stamp.log"
+
+# 注意：绝不能加 -quit。-quit 的语义是「其他命令行指令执行完即退出」，而 -runTests 是
+# 异步启动测试后立即返回，两者组合会让进程在测试跑完前退出——现象是 exit=0 但没有结果文件。
+# -runTests 自己会在测试结束后退出，无需 -quit。（历史脚本带了 -quit，是个隐藏缺陷）
+$unityArgs = @(
+    "-batchmode", "-nographics",
+    "-projectPath", $projectPath,
+    "-runTests", "-testPlatform", $Platform,
+    "-testResults", $resultsFile,
+    "-logFile", $logFile
+)
+
+if ($Filter) {
+    Write-Host "过滤器: $Filter"
+    $unityArgs += "-testFilter"
+    $unityArgs += $Filter
+} else {
+    Write-Warning "未指定 -Filter：将跑全量。PlayMode 全量结果受跨 fixture 静态状态泄漏影响，不可作为门禁。"
+}
+
+# ---------- 运行 ----------
+
+Write-Host "开始运行..." -ForegroundColor Cyan
+$sw = [Diagnostics.Stopwatch]::StartNew()
+$proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru -Wait
+$sw.Stop()
+Write-Host "退出码 $($proc.ExitCode)，耗时 $([math]::Round($sw.Elapsed.TotalSeconds,1))s"
+
+# ---------- 解析结果 ----------
+
+if (-not (Test-Path $resultsFile)) {
+    Write-Host "没有结果文件——测试未执行。常见原因：" -ForegroundColor Red
+    Write-Host "  1) 误加了 -quit（本脚本不加，若你手动跑请去掉）"
+    Write-Host "  2) 首次导入吃掉了整个进程（Library 冷启动），重跑一次即可"
+    Write-Host "  3) 项目编译失败，详见 $logFile"
+    if (Test-Path $logFile) {
+        Write-Host "`n--- 日志中的编译错误 ---" -ForegroundColor DarkGray
+        Select-String -Path $logFile -Pattern "error CS" | Select-Object -First 15 |
+            ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor DarkGray }
+    }
+    exit 2
+}
+
+[xml]$xml = Get-Content $resultsFile
+$run = $xml.'test-run'
+Write-Host ""
+Write-Host "================ 结果 ================" -ForegroundColor Cyan
+Write-Host "总计 $($run.total)  通过 $($run.passed)  失败 $($run.failed)  跳过 $($run.skipped)"
+
+if ([int]$run.failed -gt 0) {
+    Write-Host ""
+    Write-Host "失败用例：" -ForegroundColor Red
+    $xml.SelectNodes("//test-case[@result='Failed']") | ForEach-Object {
+        Write-Host "  X $($_.fullname)" -ForegroundColor Red
+        $msg = $_.SelectSingleNode("failure/message")
+        if ($msg) { Write-Host "      $($msg.InnerText.Trim())" -ForegroundColor DarkRed }
+    }
+}
+
+Write-Host "结果文件: $resultsFile"
+exit ([int]$run.failed -eq 0 ? 0 : 1)
