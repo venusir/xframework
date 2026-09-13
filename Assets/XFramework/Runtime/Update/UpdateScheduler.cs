@@ -46,6 +46,12 @@ namespace XFramework.XUpdate
 
             /// <summary>LOD 迁移。<b>条件操作</b>：仅当应用时节点仍在某个桶里才生效。</summary>
             Move,
+
+            /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateable.OnDisable"/>。</summary>
+            Disable,
+
+            /// <summary>从禁用表移回 LOD0，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
+            Enable,
         }
 
         /// <summary>
@@ -74,8 +80,16 @@ namespace XFramework.XUpdate
         /// </summary>
         private readonly List<PendingOp> _pendingOps = new List<PendingOp>(16);
 
-        /// <summary>当前是否正在迭代中。</summary>
+        /// <summary>
+        /// 当前是否正在迭代中。
+        /// <para><b>不变量：迭代期间没有任何代码能改动活表</b>——注册/注销/启用/禁用/清空
+        /// 全部走 <see cref="_pendingOps"/> 缓冲，因此遍历时的写回必然落在自己的槽位上。
+        /// 破坏这个不变量就会重现「写回覆盖他人条目」这类缺陷。</para>
+        /// </summary>
         private bool _isIterating;
+
+        /// <summary>迭代期间收到的清空请求，延迟到帧末统一执行。</summary>
+        private bool _clearRequested;
 
         /// <summary>内部帧计数器，用于计算当前时间片索引。</summary>
         private int _frameCount;
@@ -110,8 +124,28 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public void Tick(float time)
         {
-            _isIterating = true;
+            // 重入防御：本方法持有「迭代期活表不变」的前提，重入会摧毁它
+            // （旧实现里从 OnUpdate 里再调 Tick 会嵌套派发，并把闩锁提前置 false）
+            if (_isIterating) return;
 
+            _isIterating = true;
+            try
+            {
+                TickInternal(time);
+            }
+            finally
+            {
+                // 用户回调（OnDisable/OnEnable）抛异常时也要归位，
+                // 否则闩锁卡死、此后所有注册都只进缓冲
+                _isIterating = false;
+            }
+        }
+
+        /// <summary>
+        /// 一帧的实际派发逻辑。只在 <see cref="Tick"/> 的闩锁内调用。
+        /// </summary>
+        private void TickInternal(float time)
+        {
             // LOD=0: 每帧全量更新
             var lod0 = _lodEntries[0];
             for (int i = 0; i < lod0.Count; i++)
@@ -183,9 +217,16 @@ namespace XFramework.XUpdate
             }
 
             _frameCount++;
-            _isIterating = false;
 
+            // flush 时闩锁仍持有：回调里再发起的操作继续进缓冲、由本轮循环消化，
+            // 而不是直接改活表（那正是旧实现 Disable/Enable 错位的来源）
             FlushPending();
+
+            if (_clearRequested)
+            {
+                _clearRequested = false;
+                ClearImmediate();
+            }
         }
 
         /// <summary>
@@ -222,63 +263,66 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 启用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）；从迭代外调用则立即生效。
+        /// 另需注意：被重新启用的节点一律回到 <see cref="UpdateLOD.Frame1"/> 桶——
+        /// 桶号本身就是 LOD，条目移入禁用表时该信息即已丢失。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
         public void Enable(IUpdateable node)
         {
             if (node == null) return;
 
-            for (int i = _disabledEntries.Count - 1; i >= 0; i--)
-            {
-                if (_disabledEntries[i].Node == node)
-                {
-                    var entry = _disabledEntries[i];
-                    _disabledEntries.RemoveAt(i);
-
-                    entry.LastUpdateTime = Time.time;
-                    InsertSorted(_lodEntries[0], entry);
-
-                    node.OnEnable();
-                    return;
-                }
-            }
+            Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Enable, Time = Time.time });
         }
 
         /// <summary>
         /// 禁用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）：节点在本帧剩余时间里
+        /// 仍可能收到一次 <see cref="IUpdateable.OnUpdate"/>，但帧末起不再派发，
+        /// 且不会出现「OnDisable 之后又 OnUpdate」的倒序。需要帧内立即停止派发时，
+        /// 请在派发之外调用本方法。</para>
         /// </summary>
         /// <param name="node">要禁用的节点。</param>
         public void Disable(IUpdateable node)
         {
             if (node == null) return;
 
-            for (int lod = 0; lod < LODCount; lod++)
-            {
-                var entries = _lodEntries[lod];
-                for (int i = entries.Count - 1; i >= 0; i--)
-                {
-                    if (entries[i].Node == node)
-                    {
-                        var entry = entries[i];
-                        entries.RemoveAt(i);
-                        _disabledEntries.Add(entry);
-
-                        node.OnDisable();
-                        return;
-                    }
-                }
-            }
+            Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Disable });
         }
 
         /// <summary>
         /// 检查节点是否处于启用状态。
+        /// <para>派发期间状态尚未落表，故先回溯待处理操作、取最后一条决定启用态的操作——
+        /// 否则「OnUpdate 里 Disable(B) 后立刻查 B」会拿到过期答案，
+        /// 与迭代外调用（立即生效）的观感也不一致。</para>
         /// </summary>
         /// <param name="node">要检查的节点。</param>
-        /// <returns>如果节点未被禁用则返回 true。</returns>
+        /// <returns>如果节点未被禁用则返回 true；未注册过的节点同样返回 true。</returns>
         public bool IsEnabled(IUpdateable node)
         {
             if (node == null) return false;
+
+            for (int i = _pendingOps.Count - 1; i >= 0; i--)
+            {
+                if (_pendingOps[i].Node != node) continue;
+
+                switch (_pendingOps[i].Kind)
+                {
+                    case PendingOpKind.Disable:
+                        return false;
+
+                    case PendingOpKind.Enable:
+                    case PendingOpKind.Unregister:
+                        // Unregister 会连同禁用表一起清理，故与 Enable 同为「未禁用」
+                        return true;
+
+                    default:
+                        // Register / Move 不决定启用态：已在禁用表中的节点被 Register 后仍是禁用态，
+                        // 故继续向前找真正决定状态的那一条
+                        continue;
+                }
+            }
 
             for (int i = 0; i < _disabledEntries.Count; i++)
             {
@@ -347,19 +391,22 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 清空所有 LOD 列表、禁用列表和待处理操作缓冲。
+        /// <para><b>派发期间调用时推迟到帧末执行</b>：与注册/注销/启用/禁用同一套语义。
+        /// 就地清空会让正在遍历的循环拿着失效下标写回（旧实现在切片分支会直接抛
+        /// <c>ArgumentOutOfRangeException</c>）。</para>
         /// <para><b>不回调 <see cref="IUpdateable.OnDisable"/></b>：与 <see cref="Unregister"/>
         /// 一致（它同样不回调）。本方法的主要使用者是测试隔离，在隔离点触发用户回调
         /// 会让 fixture 的收尾去执行业务代码——那里往往引用了已拆掉的管理器。</para>
         /// </summary>
         public void Clear()
         {
-            for (int i = 0; i < LODCount; i++)
+            if (_isIterating)
             {
-                _lodEntries[i].Clear();
+                _clearRequested = true;
+                return;
             }
-            _pendingOps.Clear();
-            _disabledEntries.Clear();
-            _frameCount = 0;
+
+            ClearImmediate();
         }
 
         /// <summary>
@@ -421,6 +468,17 @@ namespace XFramework.XUpdate
             switch (op.Kind)
             {
                 case PendingOpKind.Register:
+                {
+                    // 已在禁用表中的节点：Register 只把它纳入管理（刷新深度）而不插桶——
+                    // 插了它就会在禁用状态下继续收到 OnUpdate，违反 IUpdateable 的契约
+                    if (TryFindInDisabled(op.Node, out int disabledIndex))
+                    {
+                        var disabledEntry = _disabledEntries[disabledIndex];
+                        disabledEntry.Depth = op.Depth;
+                        _disabledEntries[disabledIndex] = disabledEntry;
+                        break;
+                    }
+
                     InsertSorted(_lodEntries[op.Lod], new Entry
                     {
                         Node = op.Node,
@@ -428,6 +486,7 @@ namespace XFramework.XUpdate
                         LastUpdateTime = op.Time,
                     });
                     break;
+                }
 
                 case PendingOpKind.Unregister:
                     // 删净而不是「命中第一个即 return」：重复注册会留下多条条目，
@@ -437,13 +496,39 @@ namespace XFramework.XUpdate
                     break;
 
                 case PendingOpKind.Move:
+                {
                     // 条件操作：只有节点此刻仍在桶里才迁移。本帧内它若已被注销/被禁用，
                     // 这次迁移必须作废——否则就成了把它重新插回桶里（复活）
-                    if (TryTakeFromBuckets(op.Node, out Entry entry))
+                    if (TryTakeFromBuckets(op.Node, out Entry moved))
                     {
-                        InsertSorted(_lodEntries[op.Lod], entry);
+                        InsertSorted(_lodEntries[op.Lod], moved);
                     }
                     break;
+                }
+
+                case PendingOpKind.Disable:
+                {
+                    // 未落桶（还在缓冲里，或本就未注册）时静默无操作，
+                    // 也不回调 OnDisable——与「禁用一个不在管理中的节点」对齐
+                    if (TryTakeFromBuckets(op.Node, out Entry disabled))
+                    {
+                        _disabledEntries.Add(disabled);
+                        op.Node.OnDisable();
+                    }
+                    break;
+                }
+
+                case PendingOpKind.Enable:
+                {
+                    if (TryTakeFromDisabled(op.Node, out Entry enabled))
+                    {
+                        // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
+                        enabled.LastUpdateTime = op.Time;
+                        InsertSorted(_lodEntries[0], enabled);
+                        op.Node.OnEnable();
+                    }
+                    break;
+                }
             }
         }
 
@@ -544,6 +629,58 @@ namespace XFramework.XUpdate
                     return;
                 }
             }
+        }
+
+        /// <summary>
+        /// 查找节点在禁用表中的下标（不移除）。
+        /// </summary>
+        private bool TryFindInDisabled(IUpdateable node, out int index)
+        {
+            for (int i = 0; i < _disabledEntries.Count; i++)
+            {
+                if (_disabledEntries[i].Node == node)
+                {
+                    index = i;
+                    return true;
+                }
+            }
+
+            index = -1;
+            return false;
+        }
+
+        /// <summary>
+        /// 取出节点在禁用表中的条目（移除并返回）。
+        /// </summary>
+        /// <returns>节点处于禁用态时返回 true。</returns>
+        private bool TryTakeFromDisabled(IUpdateable node, out Entry entry)
+        {
+            for (int i = _disabledEntries.Count - 1; i >= 0; i--)
+            {
+                if (_disabledEntries[i].Node == node)
+                {
+                    entry = _disabledEntries[i];
+                    _disabledEntries.RemoveAt(i);
+                    return true;
+                }
+            }
+
+            entry = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 立即清空。只由 <see cref="Clear"/> 与帧末的延迟清空调用。
+        /// </summary>
+        private void ClearImmediate()
+        {
+            for (int i = 0; i < LODCount; i++)
+            {
+                _lodEntries[i].Clear();
+            }
+            _pendingOps.Clear();
+            _disabledEntries.Clear();
+            _frameCount = 0;
         }
 
         #endregion
