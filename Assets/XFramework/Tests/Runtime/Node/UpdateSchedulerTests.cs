@@ -599,6 +599,81 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void RegisterTwice_SameNode_KeepsSingleEntry()
+        {
+            // 重复注册视为「重新注册」：两条条目会让同一节点每帧被派发两次，
+            // 而且单值桶索引表达不了「分处两个桶」，注销时会漏删
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Frame1);
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Frame1);
+
+            Assert.AreEqual(1, _scheduler.TotalCount);
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(1, _node.OnUpdateCallCount, "每帧恰好派发一次");
+
+            _scheduler.Unregister(_node);
+            Assert.AreEqual(0, _scheduler.TotalCount, "注销后不应留下第二条条目");
+        }
+
+        [Test]
+        public void RegisterTwice_DifferentLOD_MovesToLatestBucket()
+        {
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Frame8);
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Frame2);
+
+            Assert.AreEqual(1, _scheduler.TotalCount);
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Frame8), "旧桶不应残留条目");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Frame2));
+        }
+
+        [Test]
+        public void BucketIndex_StaysConsistentUnderLodChurn()
+        {
+            // 桶索引只在 ApplyOp 一处维护：任何一条路径漏写，后续的迁移/禁用/注销就会找不到节点。
+            // 先制造持续的迁桶抖动，再逐一对全部节点做禁用/启用/注销——索引一旦与桶内容脱节，
+            // 这些操作就会「找不到人」，表现为计数不减（幽灵条目）或启用后回不来
+            const int nodeCount = 50;
+            var nodes = new CyclingLodNode[nodeCount];
+            for (int i = 0; i < nodeCount; i++)
+            {
+                nodes[i] = new CyclingLodNode(i);
+                _scheduler.Register(nodes[i], depth: i % 3, initialLOD: UpdateLOD.Frame1);
+            }
+
+            float time = 0f;
+            for (int frame = 0; frame < 40; frame++)
+            {
+                time += 0.1f;
+                _scheduler.Tick(time);
+            }
+
+            Assert.AreEqual(nodeCount, _scheduler.TotalCount, "迁桶抖动中不应丢失条目");
+
+            foreach (var node in nodes)
+            {
+                _scheduler.Disable(node);
+            }
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "全部禁用后桶应为空");
+            Assert.AreEqual(nodeCount, _scheduler.DisabledCount);
+
+            foreach (var node in nodes)
+            {
+                _scheduler.Enable(node);
+            }
+
+            Assert.AreEqual(nodeCount, _scheduler.TotalCount, "全部启用后应回到桶里");
+            Assert.AreEqual(0, _scheduler.DisabledCount);
+
+            foreach (var node in nodes)
+            {
+                _scheduler.Unregister(node);
+            }
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "注销后不应留下幽灵条目");
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
@@ -853,6 +928,35 @@ namespace XFramework.XUpdate.Tests
                     _scheduler.Unregister(_target);
                 }
                 return UpdateLOD.Frame1;
+            }
+        }
+
+        /// <summary>
+        /// 每次派发都换一个 LOD 的测试替身，用于制造持续的迁桶抖动。
+        /// </summary>
+        private sealed class CyclingLodNode : IUpdateable
+        {
+            private static readonly UpdateLOD[] Cycle =
+            {
+                UpdateLOD.Frame1, UpdateLOD.Frame2, UpdateLOD.Frame4, UpdateLOD.Frame8,
+            };
+
+            private readonly int _offset;
+            private int _calls;
+
+            public CyclingLodNode(int offset)
+            {
+                _offset = offset;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                _calls++;
+                return Cycle[(_offset + _calls) % Cycle.Length];
             }
         }
 

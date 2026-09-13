@@ -97,6 +97,14 @@ namespace XFramework.XUpdate
         /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原 LOD 桶。</summary>
         private readonly List<Entry> _disabledEntries = new List<Entry>();
 
+        /// <summary>
+        /// 节点 → 其条目所在桶。使迁移/禁用/注销不必逐个桶去找人。
+        /// <para>只在 <see cref="ApplyOp"/> 与 <see cref="ClearImmediate"/> 维护——这是唯一的写入点。
+        /// <b>前提是一个节点至多一条条目</b>，由 <see cref="ApplyOp"/> 的注册分支去重保证：
+        /// 单值索引表达不了「两条条目分处不同桶」，那种状态下注销的「删净」语义会漏删。</para>
+        /// </summary>
+        private readonly Dictionary<IUpdateable, int> _lodOf = new Dictionary<IUpdateable, int>();
+
         #endregion
 
         #region Constructor
@@ -483,19 +491,24 @@ namespace XFramework.XUpdate
                         break;
                     }
 
+                    // 去重：同一节点重复注册视为「重新注册」，先摘掉旧条目再插入。
+                    // 不去重会有两个后果——同一节点每帧被派发两次；单值桶索引表达不了
+                    // 「两条条目分处两个桶」，注销时的「删净」语义会漏删
+                    RemoveFromIndexedBucket(op.Node);
+
                     InsertSorted(_lodEntries[op.Lod], new Entry
                     {
                         Node = op.Node,
                         Depth = op.Depth,
                         LastUpdateTime = op.Time,
                     });
+                    _lodOf[op.Node] = op.Lod;
                     break;
                 }
 
                 case PendingOpKind.Unregister:
-                    // 删净而不是「命中第一个即 return」：重复注册会留下多条条目，
-                    // 只删一条会让已注销的节点继续被派发
-                    RemoveAllFromBuckets(op.Node);
+                    // 按索引删净（含索引记录）：条目至多一条，但索引一旦失效这里就是最后一道防线
+                    RemoveFromIndexedBucket(op.Node);
                     RemoveFromDisabled(op.Node);
                     break;
 
@@ -506,6 +519,7 @@ namespace XFramework.XUpdate
                     if (TryTakeFromBuckets(op.Node, out Entry moved))
                     {
                         InsertSorted(_lodEntries[op.Lod], moved);
+                        _lodOf[op.Node] = op.Lod;
                     }
                     break;
                 }
@@ -529,6 +543,7 @@ namespace XFramework.XUpdate
                         // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
                         enabled.LastUpdateTime = op.Time;
                         InsertSorted(_lodEntries[0], enabled);
+                        _lodOf[op.Node] = 0;
                         op.Node.OnEnable();
                     }
                     break;
@@ -583,16 +598,15 @@ namespace XFramework.XUpdate
         /// </summary>
         private bool TryFindEntry(IUpdateable node, out int lod, out int index, out Entry entry)
         {
-            for (int i = 0; i < LODCount; i++)
+            if (_lodOf.TryGetValue(node, out lod))
             {
-                var entries = _lodEntries[i];
-                for (int j = entries.Count - 1; j >= 0; j--)
+                var bucket = _lodEntries[lod];
+                for (int i = bucket.Count - 1; i >= 0; i--)
                 {
-                    if (entries[j].Node == node)
+                    if (bucket[i].Node == node)
                     {
-                        lod = i;
-                        index = j;
-                        entry = entries[j];
+                        index = i;
+                        entry = bucket[i];
                         return true;
                     }
                 }
@@ -605,12 +619,12 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 取出节点在桶中的条目（移除并返回）。
+        /// 取出节点在桶中的条目（移除并返回），并清掉它的桶索引。
         /// </summary>
         /// <returns>节点在桶中时返回 true；未落桶（已注销、已禁用或仍在缓冲中）返回 false。</returns>
         private bool TryTakeFromBuckets(IUpdateable node, out Entry entry)
         {
-            for (int lod = 0; lod < LODCount; lod++)
+            if (_lodOf.TryGetValue(node, out int lod))
             {
                 var entries = _lodEntries[lod];
                 for (int i = entries.Count - 1; i >= 0; i--)
@@ -619,9 +633,15 @@ namespace XFramework.XUpdate
                     {
                         entry = entries[i];
                         entries.RemoveAt(i);
+                        _lodOf.Remove(node);
                         return true;
                     }
                 }
+
+                // 索引与桶内容脱节——正常路径不可达（索引只在 ApplyOp 与 ClearImmediate 写），
+                // 但真出现时必须留痕，否则节点会静默变成「在桶里却谁也找不到」
+                Debug.LogWarning($"[UpdateScheduler] 桶索引失效：{node.GetType().Name} 记录在桶 {lod} 中却找不到条目");
+                _lodOf.Remove(node);
             }
 
             entry = default;
@@ -629,21 +649,25 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 从所有 LOD 列表中移除节点的<b>全部</b>条目（重复注册会留下多条）。
+        /// 移除节点在桶中的条目与桶索引记录。
         /// </summary>
-        private void RemoveAllFromBuckets(IUpdateable node)
+        private void RemoveFromIndexedBucket(IUpdateable node)
         {
-            for (int lod = 0; lod < LODCount; lod++)
+            if (!_lodOf.TryGetValue(node, out int lod))
             {
-                var entries = _lodEntries[lod];
-                for (int i = entries.Count - 1; i >= 0; i--)
+                return;
+            }
+
+            var entries = _lodEntries[lod];
+            for (int i = entries.Count - 1; i >= 0; i--)
+            {
+                if (entries[i].Node == node)
                 {
-                    if (entries[i].Node == node)
-                    {
-                        entries.RemoveAt(i);
-                    }
+                    entries.RemoveAt(i);
                 }
             }
+
+            _lodOf.Remove(node);
         }
 
         /// <summary>
@@ -710,6 +734,7 @@ namespace XFramework.XUpdate
             }
             _pendingOps.Clear();
             _disabledEntries.Clear();
+            _lodOf.Clear();
             _frameCount = 0;
         }
 
