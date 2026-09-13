@@ -826,6 +826,39 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void HalfTimeScale_SlowsLogicButKeepsThrottle()
+        {
+            // timeScale = 0.5：逻辑时间走得比墙钟慢一半。切片按「派发次数」计，因此降频强度不变
+            // （仍是每 8 次派发轮到一次），但每次拿到的 delta 随之减半——这正是「帧数语义」的体现
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame8 };
+            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Frame8);
+
+            // 逻辑轴每步 0.05、墙钟轴每步 0.1（同一个 timeScale = 0.5 的两侧）
+            float scaled = 0f;
+            float unscaled = 0f;
+            for (int i = 0; i < 8; i++)
+            {
+                scaled += 0.05f;
+                unscaled += 0.1f;
+                _scheduler.Tick(new UpdateClock(time: scaled, unscaledTime: unscaled));
+            }
+
+            Assert.AreEqual(1, node.OnUpdateCallCount,
+                "8 次派发里恰好轮到一次：节流强度与 timeScale 无关");
+
+            for (int i = 0; i < 8; i++)
+            {
+                scaled += 0.05f;
+                unscaled += 0.1f;
+                _scheduler.Tick(new UpdateClock(time: scaled, unscaledTime: unscaled));
+            }
+
+            Assert.AreEqual(2, node.OnUpdateCallCount);
+            Assert.AreEqual(8 * 0.05f, node.DeltaTimes[1], 1e-4f,
+                "delta 取自逻辑时间，已随 timeScale 减半（同等墙钟时长下逻辑只走了一半）");
+        }
+
+        [Test]
         public void NegativeDelta_IsClampedToZero()
         {
             // timeScale < 0（倒放）时 Time.time 会倒着走：负 delta 会让
