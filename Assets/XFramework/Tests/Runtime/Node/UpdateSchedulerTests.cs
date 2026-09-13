@@ -674,6 +674,67 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void UnscaledNode_UsesUnscaledClock()
+        {
+            // 墙钟轴的节点必须拿到 unscaled 的时间基：暂停时逻辑时间冻结而墙钟继续走，
+            // 用错轴就等于「暂停期间仍应运行」的逻辑在暂停期间停摆
+            var scaled = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+            var unscaled = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+
+            _scheduler.Register(scaled, depth: 0);
+            _scheduler.Register(unscaled, depth: 0, timeMode: UpdateTimeMode.Unscaled);
+
+            _scheduler.Tick(new UpdateClock(time: 1.0f, unscaledTime: 10.0f));
+            _scheduler.Tick(new UpdateClock(time: 1.1f, unscaledTime: 10.5f));
+
+            Assert.AreEqual(0.1f, scaled.DeltaTimes[1], 1e-4f, "逻辑轴用 Time");
+            Assert.AreEqual(1.1f, scaled.Times[1], 1e-4f);
+
+            Assert.AreEqual(0.5f, unscaled.DeltaTimes[1], 1e-4f, "墙钟轴用 UnscaledTime");
+            Assert.AreEqual(10.5f, unscaled.Times[1], 1e-4f);
+        }
+
+        [Test]
+        public void ScaledAndUnscaled_AggregateInQueries()
+        {
+            // 两条轴分开存桶，但对外查询应是合计——否则调用方统计注册量时会漏掉一条轴
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Frame4);
+            _scheduler.Register(new TestUpdateable(), depth: 0, initialLOD: UpdateLOD.Frame4,
+                timeMode: UpdateTimeMode.Unscaled);
+
+            Assert.AreEqual(2, _scheduler.TotalCount);
+            Assert.AreEqual(2, _scheduler.GetCount(UpdateLOD.Frame4), "查询应跨时间轴聚合");
+        }
+
+        [Test]
+        public void UnscaledSlicedNode_AccumulatesUnscaledDelta()
+        {
+            // 每条轴有独立的帧计数与切片相位：墙钟轴的周期由它自己推进，
+            // 逻辑时刻在本用例里全程不动
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame8 };
+            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Frame8,
+                timeMode: UpdateTimeMode.Unscaled);
+
+            float unscaled = 0f;
+            for (int frame = 0; frame < 8; frame++)
+            {
+                unscaled += 0.1f;
+                _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: unscaled));
+            }
+
+            Assert.AreEqual(1, node.OnUpdateCallCount, "8 帧内首次派发");
+
+            for (int frame = 0; frame < 8; frame++)
+            {
+                unscaled += 0.1f;
+                _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: unscaled));
+            }
+
+            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 帧派发第二次");
+            Assert.AreEqual(0.8f, node.DeltaTimes[1], 1e-4f, "累积量取自墙钟轴");
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);

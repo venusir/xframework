@@ -8,6 +8,9 @@ namespace XFramework.XUpdate
     /// 纯 Update 调度器，不依赖节点树。
     /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
+    /// <para>桶按<b>时间轴</b>再分一层：<see cref="UpdateTimeMode.Scaled"/> 与
+    /// <see cref="UpdateTimeMode.Unscaled"/> 各有独立的桶、帧计数与切片相位，
+    /// 因此暂停（逻辑时间冻结）只影响前者的派发节奏。</para>
     /// <para><b>内部实现</b>：由 <see cref="UpdateManager"/> 门面持有，不对外暴露——第三方
     /// 一律经门面注册与查询，这样内部结构（分桶方式、切片算法、索引）可以继续演进而不构成
     /// 破坏性变更。</para>
@@ -22,6 +25,9 @@ namespace XFramework.XUpdate
         /// <summary>LOD 等级总数。</summary>
         private const int LODCount = MaxLOD + 1;
 
+        /// <summary>时间轴数量。轴下标即 <see cref="UpdateTimeMode"/> 的取值。</summary>
+        private const int AxisCount = 2;
+
         #endregion
 
         #region Private Types
@@ -34,6 +40,13 @@ namespace XFramework.XUpdate
             public IUpdateable Node;
             public int Depth;
             public float LastUpdateTime;
+
+            /// <summary>
+            /// 所在时间轴。桶已经编码了轴，但这个字段在条目<b>离开桶</b>（进禁用表）后是
+            /// 唯一的归位依据——禁用表是一维的，<see cref="Enable"/> 得知道该回哪条轴。
+            /// 写入后不再改动，因此不构成「需要同步的第二份真相」。
+            /// </summary>
+            public byte Axis;
         }
 
         /// <summary>
@@ -41,10 +54,10 @@ namespace XFramework.XUpdate
         /// </summary>
         private enum PendingOpKind : byte
         {
-            /// <summary>插入到指定 LOD 桶。</summary>
+            /// <summary>插入到指定桶。</summary>
             Register,
 
-            /// <summary>从所有桶与禁用列表中移除。</summary>
+            /// <summary>从桶与禁用列表中移除。</summary>
             Unregister,
 
             /// <summary>LOD 迁移。<b>条件操作</b>：仅当应用时节点仍在某个桶里才生效。</summary>
@@ -53,20 +66,23 @@ namespace XFramework.XUpdate
             /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateable.OnDisable"/>。</summary>
             Disable,
 
-            /// <summary>从禁用表移回 LOD0，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
+            /// <summary>从禁用表移回 LOD0 桶，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
             Enable,
         }
 
         /// <summary>
         /// 待处理操作。
-        /// <para>只带节点引用而<b>不带下标</b>——下标在缓冲期间早已失效，
+        /// <para>只带节点引用与<b>扁平桶下标</b>，不带条目下标——条目下标在缓冲期间早已失效，
         /// 这正是「按缓存的 i 写回」会覆盖他人条目的根源。</para>
         /// </summary>
         private struct PendingOp
         {
             public IUpdateable Node;
             public PendingOpKind Kind;
-            public int Lod;
+
+            /// <summary>目标桶的扁平下标（<see cref="BucketOf"/>）。</summary>
+            public int Bucket;
+
             public int Depth;
             public float Time;
         }
@@ -75,8 +91,12 @@ namespace XFramework.XUpdate
 
         #region Private Fields
 
-        /// <summary>按 LOD 等级分桶的更新条目列表。索引 = LOD 等级。</summary>
-        private readonly List<Entry>[] _lodEntries;
+        /// <summary>
+        /// 扁平化的桶数组。下标 = <see cref="BucketOf"/>(轴, LOD)，即「轴 × LODCount + LOD」。
+        /// <para>两轴分开存储是为了让切片相位与帧计数各自独立：暂停时逻辑轴不推进，
+        /// 墙钟轴的节奏不受影响。</para>
+        /// </summary>
+        private readonly List<Entry>[] _buckets;
 
         /// <summary>
         /// 待处理操作缓冲。迭代期间按<b>入队顺序</b>暂存，帧末统一应用。
@@ -94,19 +114,19 @@ namespace XFramework.XUpdate
         /// <summary>迭代期间收到的清空请求，延迟到帧末统一执行。</summary>
         private bool _clearRequested;
 
-        /// <summary>内部帧计数器，用于计算当前时间片索引。</summary>
-        private int _frameCount;
+        /// <summary>各时间轴的帧计数器，用于计算该轴当前的时间片索引。</summary>
+        private readonly int[] _frameCount = new int[AxisCount];
 
-        /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原 LOD 桶。</summary>
+        /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原时间轴的 LOD0 桶。</summary>
         private readonly List<Entry> _disabledEntries = new List<Entry>();
 
         /// <summary>
-        /// 节点 → 其条目所在桶。使迁移/禁用/注销不必逐个桶去找人。
+        /// 节点 → 其条目所在桶的扁平下标。使迁移/禁用/注销不必逐个桶去找人。
         /// <para>只在 <see cref="ApplyOp"/> 与 <see cref="ClearImmediate"/> 维护——这是唯一的写入点。
         /// <b>前提是一个节点至多一条条目</b>，由 <see cref="ApplyOp"/> 的注册分支去重保证：
         /// 单值索引表达不了「两条条目分处不同桶」，那种状态下注销的「删净」语义会漏删。</para>
         /// </summary>
-        private readonly Dictionary<IUpdateable, int> _lodOf = new Dictionary<IUpdateable, int>();
+        private readonly Dictionary<IUpdateable, int> _bucketOf = new Dictionary<IUpdateable, int>();
 
         #endregion
 
@@ -117,10 +137,10 @@ namespace XFramework.XUpdate
         /// </summary>
         public UpdateScheduler()
         {
-            _lodEntries = new List<Entry>[LODCount];
-            for (int i = 0; i < LODCount; i++)
+            _buckets = new List<Entry>[AxisCount * LODCount];
+            for (int i = 0; i < _buckets.Length; i++)
             {
-                _lodEntries[i] = new List<Entry>();
+                _buckets[i] = new List<Entry>();
             }
         }
 
@@ -130,10 +150,20 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
-        /// <para>每帧调用一次，建议在 MonoBehaviour.Update 中调用。</para>
+        /// <para>本重载用<b>同一个时刻</b>驱动两条时间轴，供手动驱动与测试使用；
+        /// 生产路径请用 <see cref="Tick(UpdateClock)"/> 传入两个真实时间源。</para>
         /// </summary>
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public void Tick(float time)
+        {
+            Tick(new UpdateClock(time, time));
+        }
+
+        /// <summary>
+        /// 执行一帧更新，两条时间轴各用自己的时刻。
+        /// </summary>
+        /// <param name="clock">本帧的时间基。</param>
+        public void Tick(in UpdateClock clock)
         {
             // 重入防御：本方法持有「迭代期活表不变」的前提，重入会摧毁它
             // （旧实现里从 OnUpdate 里再调 Tick 会嵌套派发，并把闩锁提前置 false）
@@ -142,7 +172,7 @@ namespace XFramework.XUpdate
             _isIterating = true;
             try
             {
-                TickInternal(time);
+                TickInternal(clock);
             }
             finally
             {
@@ -153,82 +183,17 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 一帧的实际派发逻辑。只在 <see cref="Tick"/> 的闩锁内调用。
+        /// 一帧的实际派发逻辑。只在 <see cref="Tick(UpdateClock)"/> 的闩锁内调用。
         /// </summary>
-        private void TickInternal(float time)
+        private void TickInternal(in UpdateClock clock)
         {
-            // LOD=0: 每帧全量更新
-            var lod0 = _lodEntries[0];
-            for (int i = 0; i < lod0.Count; i++)
+            for (int axis = 0; axis < AxisCount; axis++)
             {
-                var entry = lod0[i];
-                float realDelta = time - entry.LastUpdateTime;
+                TickAxis(axis, clock.GetTime((UpdateTimeMode)axis));
 
-                int newLOD;
-                try
-                {
-                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
-                }
-                catch (System.Exception e)
-                {
-                    Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
-                    continue;
-                }
-
-                entry.LastUpdateTime = time;
-                lod0[i] = entry;
-
-                if (newLOD != 0)
-                {
-                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Move, Lod = newLOD });
-                }
+                // 本轴推进了一帧：切片相位只随自己的轴走，另一条轴冻结与否都不影响它
+                _frameCount[axis]++;
             }
-
-            // LOD=1~5: 时间切片更新
-            for (int lod = 1; lod < LODCount; lod++)
-            {
-                var entries = _lodEntries[lod];
-                int count = entries.Count;
-                if (count == 0) continue;
-
-                int sliceCount = 1 << lod;
-                int sliceIndex = _frameCount % sliceCount;
-
-                // 步长切片：本帧只处理下标 ≡ sliceIndex (mod sliceCount) 的条目，
-                // 因此 sliceCount 个切片恰好覆盖整桶，且每帧派发量只差 1（count < sliceCount
-                // 时余下的切片无事可做，那是「节点本来就少」而非分布不均）。
-                // 改前用的是区间切片（start = sliceIndex * ceil(count / sliceCount)）：
-                // count 不是 sliceCount 的整数倍时，尾部切片会因越界被夹空、前面的切片超载——
-                // 例如 17 个条目 8 个切片会派发成 3,3,3,3,3,2,0,0，后两帧白跑一遍循环
-                for (int i = sliceIndex; i < count; i += sliceCount)
-                {
-                    var entry = entries[i];
-                    float realDelta = time - entry.LastUpdateTime;
-
-                    int newLOD;
-                    try
-                    {
-                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, time), 0, MaxLOD);
-                    }
-                    catch (System.Exception e)
-                    {
-                        Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
-                        continue;
-                    }
-
-                    entry.LastUpdateTime = time;
-                    entries[i] = entry;
-
-                    if (newLOD != lod)
-                    {
-                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Move, Lod = newLOD });
-                    }
-                }
-            }
-
-            _frameCount++;
 
             // flush 时闩锁仍持有：回调里再发起的操作继续进缓冲、由本轮循环消化，
             // 而不是直接改活表（那正是旧实现 Disable/Enable 错位的来源）
@@ -242,12 +207,104 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 派发一条时间轴上的全部桶。
+        /// </summary>
+        /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
+        /// <param name="now">该轴本帧的时刻。</param>
+        private void TickAxis(int axis, float now)
+        {
+            // LOD=0: 每帧全量更新
+            var lod0 = _buckets[BucketOf(axis, 0)];
+            for (int i = 0; i < lod0.Count; i++)
+            {
+                var entry = lod0[i];
+                float realDelta = now - entry.LastUpdateTime;
+
+                int newLOD;
+                try
+                {
+                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, now), 0, MaxLOD);
+                }
+                catch (System.Exception e)
+                {
+                    Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
+                    continue;
+                }
+
+                entry.LastUpdateTime = now;
+                lod0[i] = entry;
+
+                if (newLOD != 0)
+                {
+                    Enqueue(new PendingOp
+                    {
+                        Node = entry.Node,
+                        Kind = PendingOpKind.Move,
+                        Bucket = BucketOf(axis, newLOD),
+                    });
+                }
+            }
+
+            // LOD=1~5: 时间切片更新
+            for (int lod = 1; lod < LODCount; lod++)
+            {
+                var entries = _buckets[BucketOf(axis, lod)];
+                int count = entries.Count;
+                if (count == 0) continue;
+
+                int sliceCount = 1 << lod;
+                int sliceIndex = _frameCount[axis] % sliceCount;
+
+                // 步长切片：本帧只处理下标 ≡ sliceIndex (mod sliceCount) 的条目，
+                // 因此 sliceCount 个切片恰好覆盖整桶，且每帧派发量只差 1（count < sliceCount
+                // 时余下的切片无事可做，那是「节点本来就少」而非分布不均）。
+                // 改前用的是区间切片（start = sliceIndex * ceil(count / sliceCount)）：
+                // count 不是 sliceCount 的整数倍时，尾部切片会因越界被夹空、前面的切片超载——
+                // 例如 17 个条目 8 个切片会派发成 3,3,3,3,3,2,0,0，后两帧白跑一遍循环
+                for (int i = sliceIndex; i < count; i += sliceCount)
+                {
+                    var entry = entries[i];
+                    float realDelta = now - entry.LastUpdateTime;
+
+                    int newLOD;
+                    try
+                    {
+                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, now), 0, MaxLOD);
+                    }
+                    catch (System.Exception e)
+                    {
+                        Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
+                        continue;
+                    }
+
+                    entry.LastUpdateTime = now;
+                    entries[i] = entry;
+
+                    if (newLOD != lod)
+                    {
+                        Enqueue(new PendingOp
+                        {
+                            Node = entry.Node,
+                            Kind = PendingOpKind.Move,
+                            Bucket = BucketOf(axis, newLOD),
+                        });
+                    }
+                }
+            }
+        }
+
+        /// <summary>
         /// 注册一个可更新节点。
+        /// <para>同一节点重复注册视为「重新注册」：旧条目会被摘掉，不会出现两条条目、每帧派发两次。</para>
         /// </summary>
         /// <param name="node">要注册的节点。</param>
         /// <param name="depth">节点在树中的深度，用于排序。</param>
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
-        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
+        /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
+        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+            UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
 
@@ -255,7 +312,7 @@ namespace XFramework.XUpdate
             {
                 Node = node,
                 Kind = PendingOpKind.Register,
-                Lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD),
+                Bucket = BucketOf((int)timeMode, Mathf.Clamp((int)initialLOD, 0, MaxLOD)),
                 Depth = depth,
                 Time = Time.time,
             });
@@ -276,8 +333,8 @@ namespace XFramework.XUpdate
         /// 启用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
         /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）；从迭代外调用则立即生效。
-        /// 另需注意：被重新启用的节点一律回到 <see cref="UpdateLOD.Frame1"/> 桶——
-        /// 桶号本身就是 LOD，条目移入禁用表时该信息即已丢失。</para>
+        /// 另需注意：被重新启用的节点一律回到<b>原时间轴</b>的 <see cref="UpdateLOD.Frame1"/> 桶——
+        /// 桶号本身就是 LOD，条目移入禁用表时该信息即已丢失（时间轴不会丢，它记在条目上）。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
         public void Enable(IUpdateable node)
@@ -347,7 +404,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 立即对指定节点执行一次更新并重新调整 LOD。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
-        /// <para><b>派发期间调用不会执行更新</b>：只把时间基准推到 <paramref name="time"/> 后返回
+        /// <para><b>派发期间调用不会执行更新</b>：只把时间基准推到该时刻后返回
         /// （在别人的 <c>OnUpdate</c> 里再次回调自己会形成嵌套派发）。该次调用也不产生 delta——
         /// 下一次正常派发的间隔从这一刻重新起算。</para>
         /// </summary>
@@ -356,18 +413,34 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
         public void ProcessImmediate(IUpdateable node, float deltaTime, float time)
         {
+            ProcessImmediate(node, deltaTime, new UpdateClock(time, time));
+        }
+
+        /// <summary>
+        /// 立即对指定节点执行一次更新并重新调整 LOD，时刻取自时钟中该节点所属的时间轴。
+        /// </summary>
+        /// <param name="node">要立即更新的节点。</param>
+        /// <param name="deltaTime">传入的时间差。</param>
+        /// <param name="clock">本帧的时间基。</param>
+        public void ProcessImmediate(IUpdateable node, float deltaTime, in UpdateClock clock)
+        {
             if (node == null) return;
 
             // 未落桶（还在缓冲里）或已禁用：与「节点不在管理中」一致，静默无操作
-            if (!TryFindEntry(node, out int lod, out int index, out Entry entry))
+            if (!TryFindEntry(node, out int bucket, out int index, out Entry entry))
             {
                 return;
             }
 
+            // 时刻按条目自己的时间轴取：墙钟轴上的节点在暂停期间也要拿到在走的那个时间
+            float now = clock.GetTime((UpdateTimeMode)entry.Axis);
+            int lod = LodOf(bucket);
+            int axis = AxisOf(bucket);
+
             if (_isIterating)
             {
-                entry.LastUpdateTime = time;
-                _lodEntries[lod][index] = entry;
+                entry.LastUpdateTime = now;
+                _buckets[bucket][index] = entry;
                 return;
             }
 
@@ -377,16 +450,21 @@ namespace XFramework.XUpdate
             _isIterating = true;
             try
             {
-                int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, time), 0, MaxLOD);
+                int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, now), 0, MaxLOD);
 
-                entry.LastUpdateTime = time;
+                entry.LastUpdateTime = now;
 
                 // 活表在回调期间未被改动（改动都进了缓冲），故下标仍然有效
-                _lodEntries[lod][index] = entry;
+                _buckets[bucket][index] = entry;
 
                 if (newLOD != lod)
                 {
-                    Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Move, Lod = newLOD });
+                    Enqueue(new PendingOp
+                    {
+                        Node = node,
+                        Kind = PendingOpKind.Move,
+                        Bucket = BucketOf(axis, newLOD),
+                    });
                 }
 
                 FlushPending();
@@ -405,7 +483,7 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 清空所有 LOD 列表、禁用列表和待处理操作缓冲。
+        /// 清空所有桶、禁用列表和待处理操作缓冲。
         /// <para><b>派发期间调用时推迟到帧末执行</b>：与注册/注销/启用/禁用同一套语义。
         /// 就地清空会让正在遍历的循环拿着失效下标写回（旧实现在切片分支会直接抛
         /// <c>ArgumentOutOfRangeException</c>）。</para>
@@ -425,25 +503,26 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量。
+        /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量（两条时间轴合计）。
         /// </summary>
         public int GetCount(UpdateLOD lod)
         {
             int index = (int)lod;
             if (index < 0 || index > MaxLOD) return 0;
-            return _lodEntries[index].Count;
+
+            return _buckets[BucketOf(0, index)].Count + _buckets[BucketOf(1, index)].Count;
         }
 
         /// <summary>
-        /// 获取所有 LOD 等级的节点总数（不含禁用节点）。
+        /// 获取所有 LOD 等级的节点总数（不含禁用节点，两条时间轴合计）。
         /// </summary>
         public int TotalCount
         {
             get
             {
                 int count = 0;
-                for (int i = 0; i < LODCount; i++)
-                    count += _lodEntries[i].Count;
+                for (int i = 0; i < _buckets.Length; i++)
+                    count += _buckets[i].Count;
                 return count;
             }
         }
@@ -499,13 +578,14 @@ namespace XFramework.XUpdate
                     // 「两条条目分处两个桶」，注销时的「删净」语义会漏删
                     RemoveFromIndexedBucket(op.Node);
 
-                    InsertSorted(_lodEntries[op.Lod], new Entry
+                    InsertSorted(_buckets[op.Bucket], new Entry
                     {
                         Node = op.Node,
                         Depth = op.Depth,
                         LastUpdateTime = op.Time,
+                        Axis = (byte)AxisOf(op.Bucket),
                     });
-                    _lodOf[op.Node] = op.Lod;
+                    _bucketOf[op.Node] = op.Bucket;
                     break;
                 }
 
@@ -521,8 +601,8 @@ namespace XFramework.XUpdate
                     // 这次迁移必须作废——否则就成了把它重新插回桶里（复活）
                     if (TryTakeFromBuckets(op.Node, out Entry moved))
                     {
-                        InsertSorted(_lodEntries[op.Lod], moved);
-                        _lodOf[op.Node] = op.Lod;
+                        InsertSorted(_buckets[op.Bucket], moved);
+                        _bucketOf[op.Node] = op.Bucket;
                     }
                     break;
                 }
@@ -545,8 +625,11 @@ namespace XFramework.XUpdate
                     {
                         // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
                         enabled.LastUpdateTime = op.Time;
-                        InsertSorted(_lodEntries[0], enabled);
-                        _lodOf[op.Node] = 0;
+
+                        // 回到原时间轴（桶号给的 LOD 已丢，轴还记在条目上）
+                        int bucket = BucketOf(enabled.Axis, 0);
+                        InsertSorted(_buckets[bucket], enabled);
+                        _bucketOf[op.Node] = bucket;
                         op.Node.OnEnable();
                     }
                     break;
@@ -577,10 +660,34 @@ namespace XFramework.XUpdate
 
         #endregion
 
-        #region Private Methods — 列表操作
+        #region Private Methods — 桶与索引
 
         /// <summary>
-        /// 按深度升序插入到指定 LOD 列表。
+        /// 把时间轴与 LOD 合成扁平桶下标。
+        /// </summary>
+        private static int BucketOf(int axis, int lod)
+        {
+            return axis * LODCount + lod;
+        }
+
+        /// <summary>
+        /// 取扁平桶下标所属的时间轴。
+        /// </summary>
+        private static int AxisOf(int bucket)
+        {
+            return bucket / LODCount;
+        }
+
+        /// <summary>
+        /// 取扁平桶下标对应的 LOD 等级。
+        /// </summary>
+        private static int LodOf(int bucket)
+        {
+            return bucket % LODCount;
+        }
+
+        /// <summary>
+        /// 按深度升序插入到指定桶。
         /// </summary>
         private static void InsertSorted(List<Entry> entries, Entry entry)
         {
@@ -599,23 +706,23 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 查找节点在桶中的位置（不移除）。
         /// </summary>
-        private bool TryFindEntry(IUpdateable node, out int lod, out int index, out Entry entry)
+        private bool TryFindEntry(IUpdateable node, out int bucket, out int index, out Entry entry)
         {
-            if (_lodOf.TryGetValue(node, out lod))
+            if (_bucketOf.TryGetValue(node, out bucket))
             {
-                var bucket = _lodEntries[lod];
-                for (int i = bucket.Count - 1; i >= 0; i--)
+                var entries = _buckets[bucket];
+                for (int i = entries.Count - 1; i >= 0; i--)
                 {
-                    if (bucket[i].Node == node)
+                    if (entries[i].Node == node)
                     {
                         index = i;
-                        entry = bucket[i];
+                        entry = entries[i];
                         return true;
                     }
                 }
             }
 
-            lod = -1;
+            bucket = -1;
             index = -1;
             entry = default;
             return false;
@@ -627,24 +734,24 @@ namespace XFramework.XUpdate
         /// <returns>节点在桶中时返回 true；未落桶（已注销、已禁用或仍在缓冲中）返回 false。</returns>
         private bool TryTakeFromBuckets(IUpdateable node, out Entry entry)
         {
-            if (_lodOf.TryGetValue(node, out int lod))
+            if (_bucketOf.TryGetValue(node, out int bucket))
             {
-                var entries = _lodEntries[lod];
+                var entries = _buckets[bucket];
                 for (int i = entries.Count - 1; i >= 0; i--)
                 {
                     if (entries[i].Node == node)
                     {
                         entry = entries[i];
                         entries.RemoveAt(i);
-                        _lodOf.Remove(node);
+                        _bucketOf.Remove(node);
                         return true;
                     }
                 }
 
                 // 索引与桶内容脱节——正常路径不可达（索引只在 ApplyOp 与 ClearImmediate 写），
                 // 但真出现时必须留痕，否则节点会静默变成「在桶里却谁也找不到」
-                Debug.LogWarning($"[UpdateScheduler] 桶索引失效：{node.GetType().Name} 记录在桶 {lod} 中却找不到条目");
-                _lodOf.Remove(node);
+                Debug.LogWarning($"[UpdateScheduler] 桶索引失效：{node.GetType().Name} 记录在桶 {bucket} 中却找不到条目");
+                _bucketOf.Remove(node);
             }
 
             entry = default;
@@ -656,12 +763,12 @@ namespace XFramework.XUpdate
         /// </summary>
         private void RemoveFromIndexedBucket(IUpdateable node)
         {
-            if (!_lodOf.TryGetValue(node, out int lod))
+            if (!_bucketOf.TryGetValue(node, out int bucket))
             {
                 return;
             }
 
-            var entries = _lodEntries[lod];
+            var entries = _buckets[bucket];
             for (int i = entries.Count - 1; i >= 0; i--)
             {
                 if (entries[i].Node == node)
@@ -670,7 +777,7 @@ namespace XFramework.XUpdate
                 }
             }
 
-            _lodOf.Remove(node);
+            _bucketOf.Remove(node);
         }
 
         /// <summary>
@@ -731,14 +838,17 @@ namespace XFramework.XUpdate
         /// </summary>
         private void ClearImmediate()
         {
-            for (int i = 0; i < LODCount; i++)
+            for (int i = 0; i < _buckets.Length; i++)
             {
-                _lodEntries[i].Clear();
+                _buckets[i].Clear();
             }
             _pendingOps.Clear();
             _disabledEntries.Clear();
-            _lodOf.Clear();
-            _frameCount = 0;
+            _bucketOf.Clear();
+            for (int axis = 0; axis < AxisCount; axis++)
+            {
+                _frameCount[axis] = 0;
+            }
         }
 
         #endregion
