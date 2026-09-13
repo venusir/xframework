@@ -245,6 +245,40 @@ namespace XFramework.XUpdate.Tests
 
         #endregion
 
+        #region 固定步长时机
+
+        [Test]
+        public void TickFixed_DispatchesFixedTimingOnly()
+        {
+            var node = new FixedNode();
+            UpdateManager.RegisterFixed(node, depth: 0);
+
+            // 变步长 Tick 不该碰固定步长的对象：「每 N 帧」在两个时机里是不同单位
+            UpdateManager.Tick(time: 1.0f);
+            Assert.AreEqual(0, node.FixedCallCount);
+            Assert.AreEqual(1, UpdateManager.TotalCount, "查询应跨时机聚合");
+
+            UpdateManager.TickFixed(fixedTime: 0.02f);
+            Assert.AreEqual(1, node.FixedCallCount);
+        }
+
+        private sealed class FixedNode : IFixedUpdateable
+        {
+            public int FixedCallCount;
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                FixedCallCount++;
+                return UpdateLOD.Frame1;
+            }
+        }
+
+        #endregion
+
         #region 注册与注销
 
         [Test]

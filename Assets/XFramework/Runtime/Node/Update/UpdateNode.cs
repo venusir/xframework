@@ -113,6 +113,12 @@ namespace XFramework.XUpdate
             {
                 UpdateManager.RegisterLate(lateUpdateable, node.Depth, timeMode: mode);
             }
+
+            if (node is IFixedUpdateable fixedUpdateable)
+            {
+                // 固定步长时机没有时间轴参数：Unity 的固定步长本就随 timeScale 停摆
+                UpdateManager.RegisterFixed(fixedUpdateable, node.Depth);
+            }
         }
 
         /// <summary>

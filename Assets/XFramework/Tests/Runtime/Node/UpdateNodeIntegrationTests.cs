@@ -212,6 +212,48 @@ namespace XFramework.XUpdate.Tests
             }
         }
 
+        [UnityTest]
+        public IEnumerator UpdateNode_AutoRegistersFixedUpdateableChildren()
+        {
+            _updateNode = _root.AddNode<UpdateNode>();
+            yield return null;
+
+            var fixedLeaf = _root.AddNode<FixedUpdateLeaf>();
+            yield return null;
+
+            UpdateManager.Tick(Time.time);
+            Assert.AreEqual(0, fixedLeaf.OnFixedUpdateCallCount, "变步长 Tick 不该驱动固定步长时机");
+
+            UpdateManager.TickFixed(Time.fixedTime);
+            Assert.AreEqual(1, fixedLeaf.OnFixedUpdateCallCount, "应被自动登记到固定步长时机");
+        }
+
+        /// <summary>
+        /// 只实现固定步长时机的测试叶节点。
+        /// </summary>
+        private sealed class FixedUpdateLeaf : LeafNode, IFixedUpdateable
+        {
+            public int OnFixedUpdateCallCount { get; private set; }
+
+            protected override void OnAwake()
+            {
+                base.OnAwake();
+
+                // 节点经池复用，计数必须在 OnAwake 复位
+                OnFixedUpdateCallCount = 0;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                OnFixedUpdateCallCount++;
+                return UpdateLOD.Frame1;
+            }
+        }
+
         /// <summary>
         /// 只实现延迟更新时机的测试叶节点。
         /// </summary>

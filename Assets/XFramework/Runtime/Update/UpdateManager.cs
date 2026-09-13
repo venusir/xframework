@@ -40,6 +40,9 @@ namespace XFramework.XUpdate
         /// <summary>LateUpdate 时机的承载子系统名。</summary>
         private const string LateUpdateDriverTargetSystemName = "ScriptRunBehaviourLateUpdate";
 
+        /// <summary>FixedUpdate 时机的承载子系统名。</summary>
+        private const string FixedUpdateDriverTargetSystemName = "ScriptRunBehaviourFixedUpdate";
+
         /// <summary>
         /// 各时机的调度器，下标即 <see cref="UpdateTiming"/>。null 表示当前不可用。
         /// <para>每时机一套独立实例（各自的桶、帧计数、切片相位、暂停状态），因为它们由 PlayerLoop
@@ -77,6 +80,7 @@ namespace XFramework.XUpdate
                 {
                     new UpdateScheduler(UpdateTiming.Update),
                     new UpdateScheduler(UpdateTiming.LateUpdate),
+                    new UpdateScheduler(UpdateTiming.FixedUpdate),
                 };
             }
 
@@ -122,9 +126,12 @@ namespace XFramework.XUpdate
         /// <summary>LateUpdate 时机的驱动委托实例。</summary>
         private static readonly PlayerLoopSystem.UpdateFunction LateUpdateDriverDelegate = DriveLateUpdate;
 
+        /// <summary>FixedUpdate 时机的驱动委托实例。</summary>
+        private static readonly PlayerLoopSystem.UpdateFunction FixedUpdateDriverDelegate = DriveFixedUpdate;
+
         /// <summary>
-        /// 自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的<b>两个</b>驱动系统
-        /// （Update 与 LateUpdate）。任一缺失即为 false——注入失败时不会有任何东西每帧派发。
+        /// 自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的<b>三个</b>驱动系统
+        /// （Update / LateUpdate / FixedUpdate）。任一缺失即为 false——注入失败时不会有任何东西派发。
         /// </summary>
         public static bool IsDrivingPlayerLoop
         {
@@ -132,7 +139,8 @@ namespace XFramework.XUpdate
             {
                 var loop = PlayerLoop.GetCurrentPlayerLoop();
                 return ContainsDriver(loop, UpdateDriverDelegate)
-                       && ContainsDriver(loop, LateUpdateDriverDelegate);
+                       && ContainsDriver(loop, LateUpdateDriverDelegate)
+                       && ContainsDriver(loop, FixedUpdateDriverDelegate);
             }
         }
 
@@ -166,6 +174,7 @@ namespace XFramework.XUpdate
             bool inserted = false;
             bool ok = EnsureDriverSystem(ref loop, UpdateDriverTargetSystemName, UpdateDriverDelegate, ref inserted);
             ok &= EnsureDriverSystem(ref loop, LateUpdateDriverTargetSystemName, LateUpdateDriverDelegate, ref inserted);
+            ok &= EnsureDriverSystem(ref loop, FixedUpdateDriverTargetSystemName, FixedUpdateDriverDelegate, ref inserted);
 
             if (inserted)
             {
@@ -229,11 +238,30 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 每个固定步驱动入口。<b>时间基准是 <see cref="Time.fixedTime"/> 而不是每帧变化的
+        /// <see cref="Time.time"/>：<see cref="UpdateLOD"/> 的「每 N 帧」在这里是「每 N 个固定步」。</b>
+        /// </summary>
+        private static void DriveFixedUpdate()
+        {
+            if (!AutoDriveEnabled) return;
+
+            _schedulers?[(int)UpdateTiming.FixedUpdate]?.Tick(BuildFixedClock());
+        }
+
+        /// <summary>
         /// 构造本帧时钟：两个时间源 + 逻辑时间是否冻结（<c>timeScale &lt;= 0</c>）。
         /// </summary>
         private static UpdateClock BuildClock()
         {
             return new UpdateClock(Time.time, Time.unscaledTime, Time.timeScale <= 0f);
+        }
+
+        /// <summary>
+        /// 构造固定步时钟：两条轴都用 <see cref="Time.fixedTime"/>（固定步没有「墙钟轴」的概念）。
+        /// </summary>
+        private static UpdateClock BuildFixedClock()
+        {
+            return new UpdateClock(Time.fixedTime, Time.fixedTime, Time.timeScale <= 0f);
         }
 
         /// <summary>
@@ -359,9 +387,21 @@ namespace XFramework.XUpdate
             if (_schedulers == null) return;
 
             // 只驱动变步长时机：固定步长时机由 FixedUpdate 阶段的驱动按 fixedTime 推进，
-            // 用变步长时钟驱动它会让「每 N 个固定步」的语义失真
+            // 用变步长时钟驱动它会让「每 N 个固定步」的语义失真（见 TickFixed）
             SchedulerOf(UpdateTiming.Update)?.Tick(clock);
             SchedulerOf(UpdateTiming.LateUpdate)?.Tick(clock);
+        }
+
+        /// <summary>
+        /// 手动推进一次固定步长时机。
+        /// <para>与 <see cref="Tick(UpdateClock)"/> 分开而不是合并：固定步长的时间基准是
+        /// <see cref="Time.fixedTime"/>，「每 N 帧」在这里是「每 N 个固定步」。</para>
+        /// <para>生产路径不需要调用本方法（驱动已注入 <c>FixedUpdate</c> 阶段）；供手动驱动与测试使用。</para>
+        /// </summary>
+        /// <param name="fixedTime">当前固定步时间（<see cref="Time.fixedTime"/>）。</param>
+        public static void TickFixed(float fixedTime)
+        {
+            SchedulerOf(UpdateTiming.FixedUpdate)?.Tick(fixedTime);
         }
 
         #endregion
@@ -454,6 +494,22 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
             SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, depth, initialLOD, timeMode);
+        }
+
+        /// <summary>
+        /// 注册一个 <see cref="UpdateTiming.FixedUpdate"/> 时机的可更新对象。
+        /// <para>与另外两个时机不同，这里<b>没有时间轴参数</b>：Unity 的固定步长本就随
+        /// <c>timeScale</c> 停摆，不存在「暂停期间仍运行的固定步」这种语义，
+        /// 因此不需要（也不该假装能）选轴。</para>
+        /// </summary>
+        /// <param name="node">要注册的对象。</param>
+        /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。
+        /// 注意此处的「每 N 帧」是每 N 个<b>固定步</b>（默认 0.02s 一步）。</param>
+        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
+        {
+            if (node == null) return;
+            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, depth, initialLOD);
         }
 
         /// <summary>

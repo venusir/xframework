@@ -841,6 +841,23 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void FixedTiming_DispatchesOnFixedUpdate()
+        {
+            // 固定步长时机走 OnFixedUpdate，且不该碰 OnUpdate——两套时机各调各的方法
+            var fixedScheduler = new UpdateScheduler(UpdateTiming.FixedUpdate);
+            var node = new FixedUpdateNode();
+            fixedScheduler.Register(node, depth: 0);
+
+            fixedScheduler.Tick(0.02f);
+            fixedScheduler.Tick(0.04f);
+
+            Assert.AreEqual(2, node.OnFixedUpdateCallCount);
+            Assert.AreEqual(0, node.OnUpdateCallCount);
+
+            fixedScheduler.Clear();
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
@@ -1094,6 +1111,31 @@ namespace XFramework.XUpdate.Tests
                     _hasUnregistered = true;
                     _scheduler.Unregister(_target);
                 }
+                return UpdateLOD.Frame1;
+            }
+        }
+
+        /// <summary>
+        /// 同时实现两个时机接口的测试替身，用于确认各自只回调自己那个方法。
+        /// </summary>
+        private sealed class FixedUpdateNode : IUpdateable, IFixedUpdateable
+        {
+            public int OnUpdateCallCount { get; private set; }
+            public int OnFixedUpdateCallCount { get; private set; }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                OnUpdateCallCount++;
+                return UpdateLOD.Frame1;
+            }
+
+            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                OnFixedUpdateCallCount++;
                 return UpdateLOD.Frame1;
             }
         }

@@ -66,6 +66,26 @@ namespace XFramework.XUpdate
     }
 
     /// <summary>
+    /// 固定步长更新接口。时机与 <c>MonoBehaviour.FixedUpdate</c> 一致：随 Unity 的固定步长走，
+    /// <c>timeScale = 0</c> 时随之停摆。
+    /// <para>适合与物理、确定性模拟相关的逻辑——它们需要固定的时间增量，而不是每帧变化的 delta。
+    /// 这里的时间基准是 <c>Time.fixedTime</c>，因此 <see cref="UpdateLOD"/> 的「每 N 帧」语义
+    /// 是「每 N 个<b>固定步</b>」（默认 0.02s 一步）。</para>
+    /// <para>没有时间轴参数：Unity 的固定步长本就随 <c>timeScale</c> 停摆，
+    /// 不存在「暂停期间仍运行」的固定步语义。</para>
+    /// </summary>
+    public interface IFixedUpdateable : IUpdateLifecycle
+    {
+        /// <summary>
+        /// 执行固定步长更新并返回下一次派发所采用的 <see cref="UpdateLOD"/> 等级。
+        /// </summary>
+        /// <param name="deltaTime">距上次派发的时间差（通常是若干个固定步的整数倍）。</param>
+        /// <param name="fixedTime">当前固定步时间（<see cref="UnityEngine.Time.fixedTime"/>）。</param>
+        /// <returns>下一次派发的更新频率等级。</returns>
+        UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime);
+    }
+
+    /// <summary>
     /// 可延迟更新接口。<see cref="UpdateTiming.LateUpdate"/> 时机的派发契约。
     /// <para>语义与 <see cref="IUpdateable"/> 相同，只是派发时机在 <c>MonoBehaviour.LateUpdate</c> 前后——
     /// 适合需要「本帧所有 Update 都已跑完」的逻辑，例如跟随移动的目标位置、相机跟随。</para>

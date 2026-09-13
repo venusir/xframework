@@ -1,6 +1,7 @@
 using System.Collections;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
@@ -88,6 +89,44 @@ namespace XFramework.XUpdate.Tests
             Assert.GreaterOrEqual(firstUpdate, 0, "Update 时机应被驱动");
             Assert.GreaterOrEqual(node.Sequence.Count, firstUpdate + 2, "LateUpdate 时机应被驱动");
             Assert.AreEqual("late", node.Sequence[firstUpdate + 1], "LateUpdate 时机必须排在 Update 之后");
+        }
+
+        [UnityTest]
+        public IEnumerator FixedTiming_IsDrivenByPlayerLoop()
+        {
+            var node = new FixedDrivenNode();
+            UpdateManager.RegisterFixed(node, depth: 0);
+
+            // 不手动 Tick：靠注入到 FixedUpdate 阶段的驱动。
+            // 必须等 WaitForFixedUpdate 而不是 yield return null——批处理下帧率极高，
+            // 若干帧可能还凑不满一个固定步（0.02s），那样会误判成「驱动没生效」
+            for (int i = 0; i < 10 && node.FixedCount == 0; i++)
+            {
+                yield return new WaitForFixedUpdate();
+            }
+
+            Assert.GreaterOrEqual(node.FixedCount, 1, "固定步长时机应被注入的驱动推进");
+
+            UpdateManager.Unregister(node);
+            yield break;
+        }
+
+        /// <summary>
+        /// 只实现固定步长时机的测试对象。
+        /// </summary>
+        private sealed class FixedDrivenNode : IFixedUpdateable
+        {
+            public int FixedCount { get; private set; }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                FixedCount++;
+                return UpdateLOD.Frame1;
+            }
         }
 
         /// <summary>

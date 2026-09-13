@@ -16,6 +16,9 @@ namespace XFramework.XUpdate
 
         /// <summary>LateUpdate 时机（<c>MonoBehaviour.LateUpdate</c> 之后）。</summary>
         LateUpdate = 1,
+
+        /// <summary>FixedUpdate 时机（Unity 固定步长，随 <c>timeScale</c> 停摆）。</summary>
+        FixedUpdate = 2,
     }
 
     /// <summary>
@@ -382,6 +385,11 @@ namespace XFramework.XUpdate
             if (_timing == UpdateTiming.LateUpdate)
             {
                 return (int)((ILateUpdateable)node).OnLateUpdate(deltaTime, now);
+            }
+
+            if (_timing == UpdateTiming.FixedUpdate)
+            {
+                return (int)((IFixedUpdateable)node).OnFixedUpdate(deltaTime, now);
             }
 
             return (int)((IUpdateable)node).OnUpdate(deltaTime, now);
