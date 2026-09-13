@@ -170,8 +170,11 @@ namespace XFramework.XUI
         #region Per-Frame Update
 
         /// <summary>
-        /// 每帧更新。应在 UIRootNode 或场景中驱动此方法，内部遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>。
+        /// 每帧更新。内部遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>。
         /// <para>借鉴 GameFramework UIFormLogic.OnUpdate 的设计，由管理器统一驱动而非每个面板独立 Update。</para>
+        /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, IUIController)"/> 会把
+        /// 每帧驱动注册进 <see cref="XUpdate.UpdateManager"/> 的统一调度——因此它受 LOD 降频与
+        /// <see cref="XUpdate.UpdateManager.Pause"/> 的统一约束，也不再要求场景里存在 <c>UIRootNode</c>。</para>
         /// </summary>
         void Update();
 

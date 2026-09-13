@@ -6,6 +6,8 @@ namespace XFramework.XUI.View
     /// UI 根节点。挂载在场景中的 Canvas（或包含多个 Canvas 的根 GameObject）上。
     /// <para>Awake 时自动初始化 <see cref="UIManager"/>，Destroy 时自动销毁。</para>
     /// <para>每个场景只需放置一个 UIRootNode。</para>
+    /// <para>面板的每帧更新由 <see cref="UIManager"/> 注册进 <c>UpdateManager</c> 统一调度，
+    /// 本类不再参与每帧驱动——它只负责生命周期与层级参数。</para>
     /// </summary>
     [RequireComponent(typeof(Canvas))]
     public class UIRootNode : MonoBehaviour
@@ -49,14 +51,6 @@ namespace XFramework.XUI.View
             if (!UIManager.IsInitialized)
             {
                 UIManager.Initialize(transform);
-            }
-        }
-
-        private void Update()
-        {
-            if (UIManager.IsInitialized)
-            {
-                UIManager.Update();
             }
         }
 

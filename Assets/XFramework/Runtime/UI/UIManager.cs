@@ -5,6 +5,7 @@ using XFramework.XMessage;
 using XFramework.XUI.Controller;
 using XFramework.XUI.Data;
 using XFramework.XUI.View;
+using XFramework.XUpdate;
 
 
 namespace XFramework.XUI
@@ -31,6 +32,13 @@ namespace XFramework.XUI
         /// HUD 提供者（默认使用 <see cref="UIHudManagerImpl"/>，可通过 <see cref="SetHudProvider"/> 替换）。
         /// </summary>
         private static IUiHudProvider _hudProvider;
+
+        /// <summary>
+        /// 注册到 <see cref="UpdateManager"/> 的每帧驱动器：把面板 / HUD 的每帧更新并入统一调度。
+        /// <para>原先靠场景里的 <see cref="UIRootNode.Update"/> 驱动，于是这条通路既不受 LOD 降频、
+        /// 也不受 <see cref="UpdateManager.Pause"/> 控制，面板与其它模块的暂停语义还是两套。</para>
+        /// </summary>
+        private static IUpdateable _frameDriver;
 
         /// <summary>
         /// 全局 UI 管理器是否已初始化。
@@ -64,6 +72,11 @@ namespace XFramework.XUI
             // 初始化默认 Tip / HUD Provider
             EnsureTipProvider();
             EnsureHudProvider();
+
+            // 每帧驱动并入统一调度：可在 Initialize 之后被 LOD 降频、被 Pause 统一暂停，
+            // 也不再要求场景里必须存在 UIRootNode
+            _frameDriver = new FrameDriver();
+            UpdateManager.Register(_frameDriver, depth: 0);
         }
 
         /// <summary>
@@ -81,6 +94,13 @@ namespace XFramework.XUI
         /// </summary>
         public static void Destroy()
         {
+            // 先摘驱动器再拆实例：否则驱动器可能在实例已释放后仍被派发一次
+            if (_frameDriver != null)
+            {
+                UpdateManager.Unregister(_frameDriver);
+                _frameDriver = null;
+            }
+
             if (_hudProvider != null)
             {
                 _hudProvider.DetachAll();
@@ -94,6 +114,22 @@ namespace XFramework.XUI
                 _instance = null;
             }
             _instanceInitialized = false;
+        }
+
+        /// <summary>
+        /// 每帧驱动器：把 <see cref="Update"/> 接到 <see cref="UpdateManager"/> 上。
+        /// </summary>
+        private sealed class FrameDriver : IUpdateable
+        {
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                Update();
+                return UpdateLOD.Frame1;
+            }
         }
 
         #endregion
@@ -319,7 +355,12 @@ namespace XFramework.XUI
 
         #region Public API — Update
 
-        /// <inheritdoc cref="IUIManager.Update"/>
+        /// <summary>
+        /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>，并驱动 HUD 层。
+        /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 已把它注册进
+        /// <see cref="UpdateManager"/> 的统一调度（可被 LOD 降频、可被 <see cref="UpdateManager.Pause"/>
+        /// 统一暂停）。保留公开是因为测试与自定义驱动方仍可能需要手动推进一步。</para>
+        /// </summary>
         public static void Update()
         {
             EnsureGlobalInitialized();
