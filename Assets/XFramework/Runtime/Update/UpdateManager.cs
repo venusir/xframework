@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.LowLevel;
 
 namespace XFramework.XUpdate
 {
@@ -6,7 +7,8 @@ namespace XFramework.XUpdate
     /// 全局更新管理器（静态服务）。
     /// <para>统一管理节点树及静态服务的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供 LOD 分桶与时间切片调度。</para>
     /// <para>自动生命周期：通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 初始化，<see cref="Application.quitting"/> 时自动清理。</para>
-    /// <para>每帧通过 <see cref="Tick(float)"/> 驱动，由 <see cref="GameLauncher"/> 在 <c>Update</c> 中调用。</para>
+    /// <para>每帧由注入到 PlayerLoop 的驱动自动推进（见 <see cref="IsDrivingPlayerLoop"/>），
+    /// 不依赖场景中存在任何 MonoBehaviour；<see cref="Tick(float)"/> 保留供手动驱动与测试使用。</para>
     /// <para>静态服务（非节点树对象）可直接调用 <see cref="Register(IUpdateable, int, UpdateLOD)"/> 注册自身。</para>
     /// </summary>
     /// <remarks>
@@ -31,6 +33,9 @@ namespace XFramework.XUpdate
     public static class UpdateManager
     {
         #region Private Fields
+
+        /// <summary>PlayerLoop 中承载 MonoBehaviour 回调的子系统名，驱动注入到它的子列表末尾。</summary>
+        private const string DriverTargetSystemName = "ScriptRunBehaviourUpdate";
 
         /// <summary>内部调度器单例，负责 LOD 分桶、时间切片等纯调度逻辑。null 表示当前不可用。</summary>
         private static UpdateScheduler _scheduler;
@@ -87,6 +92,131 @@ namespace XFramework.XUpdate
 
         #endregion
 
+        #region PlayerLoop 驱动
+
+        /// <summary>
+        /// 是否允许 PlayerLoop 自动驱动。默认开启。
+        /// <para><b>仅供测试关闭</b>：PlayMode 用例在 <c>yield</c> 期间会被自动驱动派发，
+        /// 精确计数断言会被打乱。经 <c>InternalsVisibleTo</c> 访问，与框架其它测试钩子
+        /// （<c>SetInstance</c> / <c>Initialize(实例)</c>）同惯例。</para>
+        /// </summary>
+        internal static bool AutoDriveEnabled { get; set; } = true;
+
+        /// <summary>
+        /// 驱动委托实例。只创建一次——<see cref="PlayerLoopSystem.updateDelegate"/> 每帧被调用，
+        /// 委托本身不能每帧新建。
+        /// </summary>
+        private static readonly PlayerLoopSystem.UpdateFunction DriverDelegate = DriveUpdate;
+
+        /// <summary>自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的驱动系统。</summary>
+        public static bool IsDrivingPlayerLoop => ContainsDriver(PlayerLoop.GetCurrentPlayerLoop());
+
+        /// <summary>
+        /// 把驱动系统注入 PlayerLoop（幂等）。
+        /// <para><b>只插入、不替换</b>：必须基于 <see cref="PlayerLoop.GetCurrentPlayerLoop"/>，
+        /// 不能用 <c>GetDefaultPlayerLoop</c>——框架依赖 UniTask，而它正是靠注入 PlayerLoop 工作的，
+        /// 用默认 loop 会连同其它插件的注入一起冲掉。</para>
+        /// <para>注入点是 <c>Update.ScriptRunBehaviourUpdate</c> 子系统列表的末尾，语义等价于
+        /// 「所有 MonoBehaviour.Update 之后」，与原先由 <see cref="GameLauncher"/> 在 Update 里
+        /// 驱动的时机一致。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
+        internal static void AutoInjectDriver()
+        {
+            TryInjectDriver();
+        }
+
+        /// <summary>
+        /// 注入驱动；已注入则跳过。
+        /// <para>判断依据是「当前 loop 里有没有我们的系统」而不是布尔标志：关闭域重载时静态字段
+        /// 跨播放会话存活，而 PlayerLoop 会在进入播放时重建——标志会失真，结构性检查不会。</para>
+        /// </summary>
+        /// <returns>注入是否已生效。</returns>
+        internal static bool TryInjectDriver()
+        {
+            if (!Application.isPlaying) return false;
+
+            var loop = PlayerLoop.GetCurrentPlayerLoop();
+            if (ContainsDriver(loop)) return true;
+
+            var injection = new PlayerLoopSystem
+            {
+                type = typeof(UpdateManager),
+                updateDelegate = DriverDelegate,
+            };
+
+            if (!TryAppendToDriverTarget(ref loop, injection))
+            {
+                // 注入失败必须留痕：此时没有任何东西会每帧调用 Tick，而门面本身是宽容语义、
+                // 不会报错——不打日志的话表现为「所有 IUpdateable 静止」
+                Debug.LogWarning(
+                    "[Update] 未在 PlayerLoop 中找到 ScriptRunBehaviourUpdate 子系统，自动驱动未生效；" +
+                    "请自行每帧调用 UpdateManager.Tick（例如在自己的 MonoBehaviour.Update 中）。");
+                return false;
+            }
+
+            PlayerLoop.SetPlayerLoop(loop);
+            return true;
+        }
+
+        /// <summary>
+        /// 每帧驱动入口。<b>零分配</b>：<see cref="UpdateClock"/> 是栈上结构体。
+        /// </summary>
+        private static void DriveUpdate()
+        {
+            if (!AutoDriveEnabled) return;
+
+            _scheduler?.Tick(new UpdateClock(Time.time, Time.unscaledTime, Time.timeScale <= 0f));
+        }
+
+        /// <summary>
+        /// 在 PlayerLoop 树中查找驱动目标子系统，并把注入追加到它的子系统列表末尾。
+        /// <para>按类型<b>名</b>查找而不是按 Type 引用：跨 Unity 版本更稳，也避免引用嵌套类型。</para>
+        /// </summary>
+        private static bool TryAppendToDriverTarget(ref PlayerLoopSystem system, PlayerLoopSystem injection)
+        {
+            if (system.type != null && system.type.Name == DriverTargetSystemName)
+            {
+                var subs = system.subSystemList;
+                var grown = new PlayerLoopSystem[(subs?.Length ?? 0) + 1];
+                if (subs != null)
+                {
+                    System.Array.Copy(subs, grown, subs.Length);
+                }
+                grown[grown.Length - 1] = injection;
+                system.subSystemList = grown;
+                return true;
+            }
+
+            if (system.subSystemList == null) return false;
+
+            for (int i = 0; i < system.subSystemList.Length; i++)
+            {
+                if (TryAppendToDriverTarget(ref system.subSystemList[i], injection)) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 当前 PlayerLoop 中是否已含本框架的驱动系统。
+        /// </summary>
+        private static bool ContainsDriver(in PlayerLoopSystem system)
+        {
+            if (system.updateDelegate == DriverDelegate) return true;
+
+            if (system.subSystemList == null) return false;
+
+            for (int i = 0; i < system.subSystemList.Length; i++)
+            {
+                if (ContainsDriver(system.subSystemList[i])) return true;
+            }
+
+            return false;
+        }
+
+        #endregion
+
         #region Public API — 生命周期
 
         /// <summary>
@@ -118,7 +248,8 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
-        /// <para>由 <see cref="GameLauncher.Update"/> 每帧调用一次。</para>
+        /// <para><b>生产路径不需要调用本方法</b>：驱动已注入 PlayerLoop。<see cref="IsDrivingPlayerLoop"/>
+        /// 为 false 时才需要自行每帧调用（注入生效时再手动调用会导致同一帧派发两次）。</para>
         /// <para>本重载用同一个时刻驱动两条时间轴（<see cref="UpdateTimeMode"/>）；
         /// 需要墙钟轴独立走得请用 <see cref="Tick(UpdateClock)"/>。</para>
         /// </summary>

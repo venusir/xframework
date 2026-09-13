@@ -10,7 +10,8 @@ namespace XFramework.XNode
     /// 由 <see cref="StartupExtensions.StartupAsync"/> 统一启动调度（相位分组执行）。</para>
     /// <para><see cref="UpdateNode"/> 作为节点树中的桥梁，自动将树中 <see cref="XUpdate.IUpdateable"/> 节点注册到
     /// <see cref="UpdateManager"/>（静态服务），统一管理节点树及静态服务的更新需求。</para>
-    /// <para>每帧通过 <see cref="UpdateManager.Tick(float)"/> 驱动所有已注册的更新对象。</para>
+    /// <para>每帧驱动由 <see cref="UpdateManager"/> 注入的 PlayerLoop 系统完成，本类不再参与——
+    /// 场景中即使没有 <see cref="GameLauncher"/>，注册到 <see cref="UpdateManager"/> 的对象仍会被派发。</para>
     /// </summary>
     public class GameLauncher : MonoBehaviour
     {
@@ -39,12 +40,6 @@ namespace XFramework.XNode
         {
             // 启动节点树：ServiceInitializerNode 会最先执行，依次初始化 AssetManager 等模块
             await _root.StartupAsync();
-        }
-
-        void Update()
-        {
-            // 统一通过 UpdateManager 驱动所有已注册的更新（包括节点树节点和静态服务）
-            UpdateManager.Tick(Time.time);
         }
 
         void OnDestroy()

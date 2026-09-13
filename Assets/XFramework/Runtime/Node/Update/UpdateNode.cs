@@ -60,11 +60,6 @@ namespace XFramework.XUpdate
         #region IUpdateNode Implementation
 
         /// <summary>
-        /// 执行一帧更新。委托给 <see cref="UpdateManager.Tick(float)"/>。
-        /// </summary>
-        public void Tick(float time) => UpdateManager.Tick(time);
-
-        /// <summary>
         /// 启用指定节点的 Update 调用。委托给 <see cref="UpdateManager.Enable(IUpdateable)"/>。
         /// </summary>
         public void Enable(IUpdateable node) => UpdateManager.Enable(node);

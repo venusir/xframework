@@ -21,6 +21,10 @@ namespace XFramework.XUpdate.Tests
         [SetUp]
         public void SetUp()
         {
+            // 关掉 PlayerLoop 自动驱动：本 fixture 是 [UnityTest]，yield 期间自动驱动会额外派发，
+            // 断言里的精确计数会被打乱。手动 Tick 的时机才是这些用例要验证的东西
+            UpdateManager.AutoDriveEnabled = false;
+
             _root = RootNode.Create();
 
             // 根节点先 Start 后，AddChild 会自动 Start 新加入的子节点（ParentNode.AddChild 的
@@ -39,6 +43,9 @@ namespace XFramework.XUpdate.Tests
             // 调度器是静态的，用例间必须复位，否则上一个用例的注册会留到下一个用例继续被派发。
             // UpdateManager.Clear 能安全地这么用，正是因为它已不再置单向闩锁
             UpdateManager.Clear();
+
+            // 静态开关同理必须还原（PlayMode 下所有 fixture 共享同一个 player）
+            UpdateManager.AutoDriveEnabled = true;
         }
 
         [UnityTest]
@@ -54,7 +61,7 @@ namespace XFramework.XUpdate.Tests
 
             // The child should be registered in the scheduler
             // Tick the scheduler and verify child.OnUpdate was called
-            _updateNode.Tick(time: Time.time);
+            UpdateManager.Tick(time: Time.time);
             Assert.AreEqual(1, child.OnUpdateCallCount);
 
             yield break;
@@ -72,7 +79,7 @@ namespace XFramework.XUpdate.Tests
             yield return null;
 
             // Child should be auto-registered
-            _updateNode.Tick(time: Time.time);
+            UpdateManager.Tick(time: Time.time);
             Assert.AreEqual(1, child.OnUpdateCallCount);
 
             yield break;
@@ -89,7 +96,7 @@ namespace XFramework.XUpdate.Tests
             yield return null;
 
             // First tick: child should be updated
-            _updateNode.Tick(time: Time.time);
+            UpdateManager.Tick(time: Time.time);
             Assert.AreEqual(1, child.OnUpdateCallCount);
 
             // Remove child
@@ -97,7 +104,7 @@ namespace XFramework.XUpdate.Tests
             yield return null;
 
             // Second tick: child should NOT be updated
-            _updateNode.Tick(time: Time.time + 1.0f);
+            UpdateManager.Tick(time: Time.time + 1.0f);
             Assert.AreEqual(1, child.OnUpdateCallCount);
 
             yield break;
@@ -114,7 +121,7 @@ namespace XFramework.XUpdate.Tests
             yield return null;
 
             // Child should be registered from OnStart scanning
-            _updateNode.Tick(time: Time.time);
+            UpdateManager.Tick(time: Time.time);
             Assert.AreEqual(1, child.OnUpdateCallCount);
 
             yield break;
@@ -130,13 +137,13 @@ namespace XFramework.XUpdate.Tests
             var unscaled = _root.AddNode<UnscaledUpdateLeaf>();
             yield return null;
 
-            _updateNode.Tick(time: Time.time);
+            UpdateManager.Tick(time: Time.time);
             Assert.AreEqual(1, scaled.OnUpdateCallCount);
             Assert.AreEqual(1, unscaled.OnUpdateCallCount);
 
             // 暂停逻辑轴：声明了墙钟轴的节点应继续被派发
             UpdateManager.Pause();
-            _updateNode.Tick(time: Time.time + 1f);
+            UpdateManager.Tick(time: Time.time + 1f);
 
             Assert.AreEqual(1, scaled.OnUpdateCallCount, "未声明时间轴的节点走逻辑轴，暂停即停");
             Assert.AreEqual(2, unscaled.OnUpdateCallCount, "声明墙钟轴的节点在暂停期间照常运行");
