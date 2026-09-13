@@ -169,6 +169,21 @@ namespace XFramework.XUpdate.Tests
             yield break;
         }
 
+        [UnityTest]
+        public IEnumerator UpdateNode_AutoRegistersLateUpdateableChildren()
+        {
+            _updateNode = _root.AddNode<UpdateNode>();
+            yield return null;
+
+            var late = _root.AddNode<LateUpdateLeaf>();
+            yield return null;
+
+            UpdateManager.Tick(Time.time);
+
+            Assert.AreEqual(1, late.OnLateUpdateCallCount, "只实现 ILateUpdateable 的节点应被自动登记到延迟时机");
+            Assert.AreEqual(1, UpdateManager.TotalCount, "只登记一次");
+        }
+
         /// <summary>
         /// 声明墙钟时间轴的测试叶节点：暂停期间仍应收到 OnUpdate。
         /// </summary>
@@ -193,6 +208,32 @@ namespace XFramework.XUpdate.Tests
             public UpdateLOD OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
+                return UpdateLOD.Frame1;
+            }
+        }
+
+        /// <summary>
+        /// 只实现延迟更新时机的测试叶节点。
+        /// </summary>
+        private sealed class LateUpdateLeaf : LeafNode, ILateUpdateable
+        {
+            public int OnLateUpdateCallCount { get; private set; }
+
+            protected override void OnAwake()
+            {
+                base.OnAwake();
+
+                // 节点经池复用，计数必须在 OnAwake 复位
+                OnLateUpdateCallCount = 0;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnLateUpdate(float deltaTime, float time)
+            {
+                OnLateUpdateCallCount++;
                 return UpdateLOD.Frame1;
             }
         }

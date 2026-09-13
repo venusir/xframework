@@ -65,6 +65,56 @@ namespace XFramework.XUpdate.Tests
             yield break;
         }
 
+        [UnityTest]
+        public IEnumerator LateUpdateTiming_RunsAfterUpdateTiming()
+        {
+            // LateUpdate 时机的意义就是「本帧所有 Update 都跑完了」（跟随移动目标、相机跟随）。
+            // 用同一对象在两个时机上的回调顺序钉住这条：注入点分别落在 PlayerLoop 的
+            // Update.ScriptRunBehaviourUpdate 与 PreLateUpdate.ScriptRunBehaviourLateUpdate
+            var node = new BothTimingsNode();
+            UpdateManager.Register(node, depth: 0);
+            UpdateManager.RegisterLate(node, depth: 0);
+
+            for (int i = 0; i < 5 && node.Sequence.Count < 4; i++)
+            {
+                yield return null;
+            }
+
+            UpdateManager.Unregister(node);
+
+            // 注册发生在测试续体里、可能晚于本帧的 Update 驱动，故不假设序列从 "update" 开头——
+            // 只要求「某个 update 之后紧跟的是 late」
+            int firstUpdate = node.Sequence.IndexOf("update");
+            Assert.GreaterOrEqual(firstUpdate, 0, "Update 时机应被驱动");
+            Assert.GreaterOrEqual(node.Sequence.Count, firstUpdate + 2, "LateUpdate 时机应被驱动");
+            Assert.AreEqual("late", node.Sequence[firstUpdate + 1], "LateUpdate 时机必须排在 Update 之后");
+        }
+
+        /// <summary>
+        /// 同时挂在两个时机上的测试对象，按调用顺序记录序列。
+        /// </summary>
+        private sealed class BothTimingsNode : IUpdateable, ILateUpdateable
+        {
+            public System.Collections.Generic.List<string> Sequence { get; } =
+                new System.Collections.Generic.List<string>(8);
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                Sequence.Add("update");
+                return UpdateLOD.Frame1;
+            }
+
+            public UpdateLOD OnLateUpdate(float deltaTime, float time)
+            {
+                Sequence.Add("late");
+                return UpdateLOD.Frame1;
+            }
+        }
+
         /// <summary>
         /// 供驱动测试使用的最小可更新对象。
         /// </summary>

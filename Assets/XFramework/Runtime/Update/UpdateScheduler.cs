@@ -5,6 +5,20 @@ namespace XFramework.XUpdate
 {
 
     /// <summary>
+    /// 派发时机。每个时机由一套独立的 <see cref="UpdateScheduler"/> 承载（各有自己的桶、
+    /// 帧计数与切片相位），因为它们由 PlayerLoop 的不同阶段驱动、节奏互不相干。
+    /// <para>取值即内部数组下标，不可改动。</para>
+    /// </summary>
+    internal enum UpdateTiming
+    {
+        /// <summary>Update 时机（<c>MonoBehaviour.Update</c> 之后）。</summary>
+        Update = 0,
+
+        /// <summary>LateUpdate 时机（<c>MonoBehaviour.LateUpdate</c> 之后）。</summary>
+        LateUpdate = 1,
+    }
+
+    /// <summary>
     /// 纯 Update 调度器，不依赖节点树。
     /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
@@ -37,7 +51,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private struct Entry
         {
-            public IUpdateable Node;
+            public IUpdateLifecycle Node;
             public int Depth;
             public float LastUpdateTime;
 
@@ -77,7 +91,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private struct PendingOp
         {
-            public IUpdateable Node;
+            public IUpdateLifecycle Node;
             public PendingOpKind Kind;
 
             /// <summary>目标桶的扁平下标（<see cref="BucketOf"/>）。</summary>
@@ -140,17 +154,25 @@ namespace XFramework.XUpdate
         /// <b>前提是一个节点至多一条条目</b>，由 <see cref="ApplyOp"/> 的注册分支去重保证：
         /// 单值索引表达不了「两条条目分处不同桶」，那种状态下注销的「删净」语义会漏删。</para>
         /// </summary>
-        private readonly Dictionary<IUpdateable, int> _bucketOf = new Dictionary<IUpdateable, int>();
+        private readonly Dictionary<IUpdateLifecycle, int> _bucketOf = new Dictionary<IUpdateLifecycle, int>();
 
         #endregion
 
         #region Constructor
 
         /// <summary>
+        /// 本调度器承载的派发时机，决定调用节点上的哪个方法。
+        /// </summary>
+        private readonly UpdateTiming _timing;
+
+        /// <summary>
         /// 创建更新调度器实例。
         /// </summary>
-        public UpdateScheduler()
+        /// <param name="timing">本实例承载的派发时机。</param>
+        public UpdateScheduler(UpdateTiming timing = UpdateTiming.Update)
         {
+            _timing = timing;
+
             _buckets = new List<Entry>[AxisCount * LODCount];
             for (int i = 0; i < _buckets.Length; i++)
             {
@@ -255,7 +277,7 @@ namespace XFramework.XUpdate
                 int newLOD;
                 try
                 {
-                    newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, now), 0, MaxLOD);
+                    newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, now), 0, MaxLOD);
                 }
                 catch (System.Exception e)
                 {
@@ -302,7 +324,7 @@ namespace XFramework.XUpdate
                     int newLOD;
                     try
                     {
-                        newLOD = Mathf.Clamp((int)entry.Node.OnUpdate(realDelta, now), 0, MaxLOD);
+                        newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, now), 0, MaxLOD);
                     }
                     catch (System.Exception e)
                     {
@@ -349,6 +371,23 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 按本调度器的时机调用节点上的派发方法。
+        /// <para>条目只持有 <see cref="IUpdateLifecycle"/>，时机方法在这里转型调用：时机按实例固定，
+        /// 分支可预测。注册入口按接口分开（<see cref="UpdateManager.Register(IUpdateable, int, UpdateLOD, UpdateTimeMode)"/>
+        /// 与 <see cref="UpdateManager.RegisterLate(ILateUpdateable, int, UpdateLOD, UpdateTimeMode)"/>）
+        /// 以保证「把对象注册进它没实现的时机」在编译期就被挡住。</para>
+        /// </summary>
+        private int TickNode(IUpdateLifecycle node, float deltaTime, float now)
+        {
+            if (_timing == UpdateTiming.LateUpdate)
+            {
+                return (int)((ILateUpdateable)node).OnLateUpdate(deltaTime, now);
+            }
+
+            return (int)((IUpdateable)node).OnUpdate(deltaTime, now);
+        }
+
+        /// <summary>
         /// 把时间间隔钳到非负。
         /// <para><c>timeScale &lt; 0</c>（倒放）时 <see cref="Time.time"/> 会倒着走，负 delta 会让
         /// 「位置 += 速度 × delta」反向积分；时刻基准照常前进，否则下一次派发会把这段倒放
@@ -367,7 +406,7 @@ namespace XFramework.XUpdate
         /// <param name="depth">节点在树中的深度，用于排序。</param>
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
-        public void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+        public void Register(IUpdateLifecycle node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
@@ -386,7 +425,7 @@ namespace XFramework.XUpdate
         /// 注销一个可更新节点。
         /// </summary>
         /// <param name="node">要注销的节点。</param>
-        public void Unregister(IUpdateable node)
+        public void Unregister(IUpdateLifecycle node)
         {
             if (node == null) return;
 
@@ -401,7 +440,7 @@ namespace XFramework.XUpdate
         /// 桶号本身就是 LOD，条目移入禁用表时该信息即已丢失（时间轴不会丢，它记在条目上）。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
-        public void Enable(IUpdateable node)
+        public void Enable(IUpdateLifecycle node)
         {
             if (node == null) return;
 
@@ -417,7 +456,7 @@ namespace XFramework.XUpdate
         /// 请在派发之外调用本方法。</para>
         /// </summary>
         /// <param name="node">要禁用的节点。</param>
-        public void Disable(IUpdateable node)
+        public void Disable(IUpdateLifecycle node)
         {
             if (node == null) return;
 
@@ -432,7 +471,7 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要检查的节点。</param>
         /// <returns>如果节点未被禁用则返回 true；未注册过的节点同样返回 true。</returns>
-        public bool IsEnabled(IUpdateable node)
+        public bool IsEnabled(IUpdateLifecycle node)
         {
             if (node == null) return false;
 
@@ -475,7 +514,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要立即更新的节点。</param>
         /// <param name="deltaTime">传入的时间差。</param>
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
-        public void ProcessImmediate(IUpdateable node, float deltaTime, float time)
+        public void ProcessImmediate(IUpdateLifecycle node, float deltaTime, float time)
         {
             ProcessImmediate(node, deltaTime, new UpdateClock(time, time));
         }
@@ -486,7 +525,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要立即更新的节点。</param>
         /// <param name="deltaTime">传入的时间差。</param>
         /// <param name="clock">本帧的时间基。</param>
-        public void ProcessImmediate(IUpdateable node, float deltaTime, in UpdateClock clock)
+        public void ProcessImmediate(IUpdateLifecycle node, float deltaTime, in UpdateClock clock)
         {
             if (node == null) return;
 
@@ -514,7 +553,7 @@ namespace XFramework.XUpdate
             _isIterating = true;
             try
             {
-                int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, now), 0, MaxLOD);
+                int newLOD = Mathf.Clamp(TickNode(node, deltaTime, now), 0, MaxLOD);
 
                 entry.LastUpdateTime = now;
 
@@ -796,7 +835,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 查找节点在桶中的位置（不移除）。
         /// </summary>
-        private bool TryFindEntry(IUpdateable node, out int bucket, out int index, out Entry entry)
+        private bool TryFindEntry(IUpdateLifecycle node, out int bucket, out int index, out Entry entry)
         {
             if (_bucketOf.TryGetValue(node, out bucket))
             {
@@ -822,7 +861,7 @@ namespace XFramework.XUpdate
         /// 取出节点在桶中的条目（移除并返回），并清掉它的桶索引。
         /// </summary>
         /// <returns>节点在桶中时返回 true；未落桶（已注销、已禁用或仍在缓冲中）返回 false。</returns>
-        private bool TryTakeFromBuckets(IUpdateable node, out Entry entry)
+        private bool TryTakeFromBuckets(IUpdateLifecycle node, out Entry entry)
         {
             if (_bucketOf.TryGetValue(node, out int bucket))
             {
@@ -851,7 +890,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 移除节点在桶中的条目与桶索引记录。
         /// </summary>
-        private void RemoveFromIndexedBucket(IUpdateable node)
+        private void RemoveFromIndexedBucket(IUpdateLifecycle node)
         {
             if (!_bucketOf.TryGetValue(node, out int bucket))
             {
@@ -873,7 +912,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 从禁用列表中移除指定节点。
         /// </summary>
-        private void RemoveFromDisabled(IUpdateable node)
+        private void RemoveFromDisabled(IUpdateLifecycle node)
         {
             for (int i = _disabledEntries.Count - 1; i >= 0; i--)
             {
@@ -888,7 +927,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 查找节点在禁用表中的下标（不移除）。
         /// </summary>
-        private bool TryFindInDisabled(IUpdateable node, out int index)
+        private bool TryFindInDisabled(IUpdateLifecycle node, out int index)
         {
             for (int i = 0; i < _disabledEntries.Count; i++)
             {
@@ -907,7 +946,7 @@ namespace XFramework.XUpdate
         /// 取出节点在禁用表中的条目（移除并返回）。
         /// </summary>
         /// <returns>节点处于禁用态时返回 true。</returns>
-        private bool TryTakeFromDisabled(IUpdateable node, out Entry entry)
+        private bool TryTakeFromDisabled(IUpdateLifecycle node, out Entry entry)
         {
             for (int i = _disabledEntries.Count - 1; i >= 0; i--)
             {

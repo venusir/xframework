@@ -34,11 +34,18 @@ namespace XFramework.XUpdate
     {
         #region Private Fields
 
-        /// <summary>PlayerLoop 中承载 MonoBehaviour 回调的子系统名，驱动注入到它的子列表末尾。</summary>
-        private const string DriverTargetSystemName = "ScriptRunBehaviourUpdate";
+        /// <summary>Update 时机在 PlayerLoop 中的承载子系统名，驱动注入到它的子列表末尾。</summary>
+        private const string UpdateDriverTargetSystemName = "ScriptRunBehaviourUpdate";
 
-        /// <summary>内部调度器单例，负责 LOD 分桶、时间切片等纯调度逻辑。null 表示当前不可用。</summary>
-        private static UpdateScheduler _scheduler;
+        /// <summary>LateUpdate 时机的承载子系统名。</summary>
+        private const string LateUpdateDriverTargetSystemName = "ScriptRunBehaviourLateUpdate";
+
+        /// <summary>
+        /// 各时机的调度器，下标即 <see cref="UpdateTiming"/>。null 表示当前不可用。
+        /// <para>每时机一套独立实例（各自的桶、帧计数、切片相位、暂停状态），因为它们由 PlayerLoop
+        /// 的不同阶段驱动、节奏互不相干——共用一个实例会让两种时机的切片相位互相干扰。</para>
+        /// </summary>
+        private static UpdateScheduler[] _schedulers;
 
         #endregion
 
@@ -64,9 +71,13 @@ namespace XFramework.XUpdate
             // 只在缺失时重建：第二次调用不能清掉已注册的对象——域重载模式下这一步紧跟在
             // InitializeOnLoadMethod 之后，无条件 new 会给已注册的静态服务（如 InputManager
             // 的帧驱动）换上一份空调度器，表现为「模块自己消失了」
-            if (_scheduler == null)
+            if (_schedulers == null)
             {
-                _scheduler = new UpdateScheduler();
+                _schedulers = new[]
+                {
+                    new UpdateScheduler(UpdateTiming.Update),
+                    new UpdateScheduler(UpdateTiming.LateUpdate),
+                };
             }
 
             // 幂等订阅：重复 += 会在自退订之后留下残余订阅；关闭域重载时 Application.quitting
@@ -85,8 +96,8 @@ namespace XFramework.XUpdate
         /// </summary>
         internal static void OnQuitting()
         {
-            _scheduler?.Clear();
-            _scheduler = null;
+            ClearAllSchedulers();
+            _schedulers = null;
             Application.quitting -= OnQuitting;
         }
 
@@ -106,10 +117,24 @@ namespace XFramework.XUpdate
         /// 驱动委托实例。只创建一次——<see cref="PlayerLoopSystem.updateDelegate"/> 每帧被调用，
         /// 委托本身不能每帧新建。
         /// </summary>
-        private static readonly PlayerLoopSystem.UpdateFunction DriverDelegate = DriveUpdate;
+        private static readonly PlayerLoopSystem.UpdateFunction UpdateDriverDelegate = DriveUpdate;
 
-        /// <summary>自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的驱动系统。</summary>
-        public static bool IsDrivingPlayerLoop => ContainsDriver(PlayerLoop.GetCurrentPlayerLoop());
+        /// <summary>LateUpdate 时机的驱动委托实例。</summary>
+        private static readonly PlayerLoopSystem.UpdateFunction LateUpdateDriverDelegate = DriveLateUpdate;
+
+        /// <summary>
+        /// 自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的<b>两个</b>驱动系统
+        /// （Update 与 LateUpdate）。任一缺失即为 false——注入失败时不会有任何东西每帧派发。
+        /// </summary>
+        public static bool IsDrivingPlayerLoop
+        {
+            get
+            {
+                var loop = PlayerLoop.GetCurrentPlayerLoop();
+                return ContainsDriver(loop, UpdateDriverDelegate)
+                       && ContainsDriver(loop, LateUpdateDriverDelegate);
+            }
+        }
 
         /// <summary>
         /// 把驱动系统注入 PlayerLoop（幂等）。
@@ -137,45 +162,88 @@ namespace XFramework.XUpdate
             if (!Application.isPlaying) return false;
 
             var loop = PlayerLoop.GetCurrentPlayerLoop();
-            if (ContainsDriver(loop)) return true;
 
-            var injection = new PlayerLoopSystem
+            bool inserted = false;
+            bool ok = EnsureDriverSystem(ref loop, UpdateDriverTargetSystemName, UpdateDriverDelegate, ref inserted);
+            ok &= EnsureDriverSystem(ref loop, LateUpdateDriverTargetSystemName, LateUpdateDriverDelegate, ref inserted);
+
+            if (inserted)
             {
-                type = typeof(UpdateManager),
-                updateDelegate = DriverDelegate,
-            };
+                PlayerLoop.SetPlayerLoop(loop);
+            }
 
-            if (!TryAppendToDriverTarget(ref loop, injection))
+            if (!ok)
             {
                 // 注入失败必须留痕：此时没有任何东西会每帧调用 Tick，而门面本身是宽容语义、
                 // 不会报错——不打日志的话表现为「所有 IUpdateable 静止」
                 Debug.LogWarning(
-                    "[Update] 未在 PlayerLoop 中找到 ScriptRunBehaviourUpdate 子系统，自动驱动未生效；" +
-                    "请自行每帧调用 UpdateManager.Tick（例如在自己的 MonoBehaviour.Update 中）。");
+                    "[Update] 未在 PlayerLoop 中找到驱动目标子系统（ScriptRunBehaviourUpdate / " +
+                    "ScriptRunBehaviourLateUpdate），自动驱动未生效；请自行每帧调用 UpdateManager.Tick。");
+            }
+
+            return ok;
+        }
+
+        /// <summary>
+        /// 确保某个时机的驱动系统已在 loop 中；缺失则插入。已被插入时通过
+        /// <paramref name="inserted"/> 回报（调用方据此决定是否写回 PlayerLoop）。
+        /// </summary>
+        private static bool EnsureDriverSystem(ref PlayerLoopSystem loop, string targetSystemName,
+            PlayerLoopSystem.UpdateFunction driver, ref bool inserted)
+        {
+            if (ContainsDriver(loop, driver)) return true;
+
+            var injection = new PlayerLoopSystem
+            {
+                type = typeof(UpdateManager),
+                updateDelegate = driver,
+            };
+
+            if (!TryAppendToDriverTarget(ref loop, targetSystemName, injection))
+            {
                 return false;
             }
 
-            PlayerLoop.SetPlayerLoop(loop);
+            inserted = true;
             return true;
         }
 
         /// <summary>
-        /// 每帧驱动入口。<b>零分配</b>：<see cref="UpdateClock"/> 是栈上结构体。
+        /// 每帧驱动入口（Update 时机）。<b>零分配</b>：<see cref="UpdateClock"/> 是栈上结构体。
         /// </summary>
         private static void DriveUpdate()
         {
             if (!AutoDriveEnabled) return;
 
-            _scheduler?.Tick(new UpdateClock(Time.time, Time.unscaledTime, Time.timeScale <= 0f));
+            _schedulers?[(int)UpdateTiming.Update]?.Tick(BuildClock());
         }
 
         /// <summary>
-        /// 在 PlayerLoop 树中查找驱动目标子系统，并把注入追加到它的子系统列表末尾。
+        /// 每帧驱动入口（LateUpdate 时机）。
+        /// </summary>
+        private static void DriveLateUpdate()
+        {
+            if (!AutoDriveEnabled) return;
+
+            _schedulers?[(int)UpdateTiming.LateUpdate]?.Tick(BuildClock());
+        }
+
+        /// <summary>
+        /// 构造本帧时钟：两个时间源 + 逻辑时间是否冻结（<c>timeScale &lt;= 0</c>）。
+        /// </summary>
+        private static UpdateClock BuildClock()
+        {
+            return new UpdateClock(Time.time, Time.unscaledTime, Time.timeScale <= 0f);
+        }
+
+        /// <summary>
+        /// 在 PlayerLoop 树中查找指定名字的子系统，并把注入追加到它的子系统列表末尾。
         /// <para>按类型<b>名</b>查找而不是按 Type 引用：跨 Unity 版本更稳，也避免引用嵌套类型。</para>
         /// </summary>
-        private static bool TryAppendToDriverTarget(ref PlayerLoopSystem system, PlayerLoopSystem injection)
+        private static bool TryAppendToDriverTarget(ref PlayerLoopSystem system, string targetSystemName,
+            PlayerLoopSystem injection)
         {
-            if (system.type != null && system.type.Name == DriverTargetSystemName)
+            if (system.type != null && system.type.Name == targetSystemName)
             {
                 var subs = system.subSystemList;
                 var grown = new PlayerLoopSystem[(subs?.Length ?? 0) + 1];
@@ -192,24 +260,24 @@ namespace XFramework.XUpdate
 
             for (int i = 0; i < system.subSystemList.Length; i++)
             {
-                if (TryAppendToDriverTarget(ref system.subSystemList[i], injection)) return true;
+                if (TryAppendToDriverTarget(ref system.subSystemList[i], targetSystemName, injection)) return true;
             }
 
             return false;
         }
 
         /// <summary>
-        /// 当前 PlayerLoop 中是否已含本框架的驱动系统。
+        /// 当前 PlayerLoop 中是否已含指定的驱动系统。
         /// </summary>
-        private static bool ContainsDriver(in PlayerLoopSystem system)
+        private static bool ContainsDriver(in PlayerLoopSystem system, PlayerLoopSystem.UpdateFunction driver)
         {
-            if (system.updateDelegate == DriverDelegate) return true;
+            if (system.updateDelegate == driver) return true;
 
             if (system.subSystemList == null) return false;
 
             for (int i = 0; i < system.subSystemList.Length; i++)
             {
-                if (ContainsDriver(system.subSystemList[i])) return true;
+                if (ContainsDriver(system.subSystemList[i], driver)) return true;
             }
 
             return false;
@@ -222,7 +290,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 是否已初始化（调度器可用）。
         /// </summary>
-        public static bool IsInitialized => _scheduler != null;
+        public static bool IsInitialized => _schedulers != null;
 
         /// <summary>
         /// 清空全部注册，用于测试隔离或需要重置调度状态的场景。
@@ -239,7 +307,28 @@ namespace XFramework.XUpdate
         /// </summary>
         public static void Clear()
         {
-            _scheduler?.Clear();
+            ClearAllSchedulers();
+        }
+
+        /// <summary>
+        /// 清空全部时机的调度器。
+        /// </summary>
+        private static void ClearAllSchedulers()
+        {
+            if (_schedulers == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Clear();
+            }
+        }
+
+        /// <summary>
+        /// 取指定时机的调度器；未初始化时返回 null。
+        /// </summary>
+        private static UpdateScheduler SchedulerOf(UpdateTiming timing)
+        {
+            return _schedulers?[(int)timing];
         }
 
         #endregion
@@ -247,7 +336,7 @@ namespace XFramework.XUpdate
         #region Public API — Tick
 
         /// <summary>
-        /// 执行一帧更新。按 <see cref="UpdateLOD"/> 时间切片算法分发更新。
+        /// 执行一帧更新（Update 与 LateUpdate 两个变步长时机）。按 <see cref="UpdateLOD"/> 时间切片算法分发。
         /// <para><b>生产路径不需要调用本方法</b>：驱动已注入 PlayerLoop。<see cref="IsDrivingPlayerLoop"/>
         /// 为 false 时才需要自行每帧调用（注入生效时再手动调用会导致同一帧派发两次）。</para>
         /// <para>本重载用同一个时刻驱动两条时间轴（<see cref="UpdateTimeMode"/>）；
@@ -256,20 +345,23 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public static void Tick(float time)
         {
-            if (_scheduler == null) return;
-            _scheduler.Tick(time);
+            Tick(new UpdateClock(time, time));
         }
 
         /// <summary>
-        /// 执行一帧更新，两条时间轴各用自己的时刻。
+        /// 执行一帧更新（Update 与 LateUpdate 两个变步长时机），两条时间轴各用自己的时刻。
         /// <para>驱动方构造时钟时填 <see cref="Time.time"/> 与 <see cref="Time.unscaledTime"/>，
         /// 调度器本身不去读 <see cref="Time"/>，因此可被单测精确驱动。</para>
         /// </summary>
         /// <param name="clock">本帧的时间基。</param>
         public static void Tick(in UpdateClock clock)
         {
-            if (_scheduler == null) return;
-            _scheduler.Tick(clock);
+            if (_schedulers == null) return;
+
+            // 只驱动变步长时机：固定步长时机由 FixedUpdate 阶段的驱动按 fixedTime 推进，
+            // 用变步长时钟驱动它会让「每 N 个固定步」的语义失真
+            SchedulerOf(UpdateTiming.Update)?.Tick(clock);
+            SchedulerOf(UpdateTiming.LateUpdate)?.Tick(clock);
         }
 
         #endregion
@@ -287,7 +379,12 @@ namespace XFramework.XUpdate
         /// </summary>
         public static void Pause()
         {
-            _scheduler?.Pause();
+            if (_schedulers == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Pause();
+            }
         }
 
         /// <summary>
@@ -295,20 +392,38 @@ namespace XFramework.XUpdate
         /// </summary>
         public static void Resume()
         {
-            _scheduler?.Resume();
+            if (_schedulers == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Resume();
+            }
         }
 
         /// <summary>
         /// 逻辑轴当前是否已暂停：本门面的 <see cref="Pause"/> 开关，或 <c>Time.timeScale &lt;= 0</c>。
         /// </summary>
-        public static bool IsPaused => (_scheduler?.IsPaused ?? false) || Time.timeScale <= 0f;
+        public static bool IsPaused
+        {
+            get
+            {
+                if (Time.timeScale <= 0f) return true;
+                if (_schedulers == null) return false;
+
+                for (int i = 0; i < _schedulers.Length; i++)
+                {
+                    if (_schedulers[i].IsPaused) return true;
+                }
+                return false;
+            }
+        }
 
         #endregion
 
         #region Public API — 注册与注销
 
         /// <summary>
-        /// 注册一个可更新对象。
+        /// 注册一个 <see cref="UpdateTiming.Update"/> 时机的可更新对象。
         /// <para>节点树节点由 <see cref="UpdateNode"/> 自动注册；静态服务可在初始化时手动调用此方法。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
@@ -320,18 +435,41 @@ namespace XFramework.XUpdate
         public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.Register(node, depth, initialLOD, timeMode);
+            if (node == null) return;
+            SchedulerOf(UpdateTiming.Update)?.Register(node, depth, initialLOD, timeMode);
         }
 
         /// <summary>
-        /// 注销一个可更新对象。
+        /// 注册一个 <see cref="UpdateTiming.LateUpdate"/> 时机的可更新对象。
+        /// <para>与 <see cref="Register(IUpdateable, int, UpdateLOD, UpdateTimeMode)"/> 分开而不是共用一个
+        /// <c>timing</c> 参数：那样参数类型只能退化成 <see cref="IUpdateLifecycle"/>，
+        /// 「把对象注册进它没实现的时机」要到派发时才炸。</para>
+        /// </summary>
+        /// <param name="node">要注册的对象。</param>
+        /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
+        /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
+        public static void RegisterLate(ILateUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+            UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
+        {
+            if (node == null) return;
+            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, depth, initialLOD, timeMode);
+        }
+
+        /// <summary>
+        /// 注销一个可更新对象（任一时机）。
         /// </summary>
         /// <param name="node">要注销的对象。</param>
-        public static void Unregister(IUpdateable node)
+        public static void Unregister(IUpdateLifecycle node)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.Unregister(node);
+            if (_schedulers == null || node == null) return;
+
+            // 逐个时机转发：只有持有它的那套会真正删除，其余是空操作。
+            // 门面不维护「节点属于哪个时机」的映射表——那是第二份真相，漏同步即幽灵条目
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Unregister(node);
+            }
         }
 
         #endregion
@@ -339,36 +477,51 @@ namespace XFramework.XUpdate
         #region Public API — 启用/禁用
 
         /// <summary>
-        /// 启用指定对象的 Update 调用。
-        /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// 启用指定对象的派发（任一时机）。
+        /// <para>会触发 <see cref="IUpdateLifecycle.OnEnable"/>。</para>
         /// </summary>
         /// <param name="node">要启用的对象。</param>
-        public static void Enable(IUpdateable node)
+        public static void Enable(IUpdateLifecycle node)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.Enable(node);
+            if (_schedulers == null || node == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Enable(node);
+            }
         }
 
         /// <summary>
-        /// 禁用指定对象的 Update 调用。
-        /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// 禁用指定对象的派发（任一时机）。
+        /// <para>会触发 <see cref="IUpdateLifecycle.OnDisable"/>。</para>
         /// </summary>
         /// <param name="node">要禁用的对象。</param>
-        public static void Disable(IUpdateable node)
+        public static void Disable(IUpdateLifecycle node)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.Disable(node);
+            if (_schedulers == null || node == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].Disable(node);
+            }
         }
 
         /// <summary>
-        /// 检查对象是否处于启用状态。
+        /// 检查对象是否处于启用状态（任一时机）。
         /// </summary>
         /// <param name="node">要检查的对象。</param>
         /// <returns>如果对象未被禁用则返回 true。</returns>
-        public static bool IsEnabled(IUpdateable node)
+        public static bool IsEnabled(IUpdateLifecycle node)
         {
-            if (_scheduler == null || node == null) return false;
-            return _scheduler.IsEnabled(node);
+            if (_schedulers == null || node == null) return false;
+
+            // 取与：只要有一套调度器认为它被禁用就是禁用。
+            // 未注册过的对象在每套里都返回 true，与「未注册返回 true」的既有语义一致
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                if (!_schedulers[i].IsEnabled(node)) return false;
+            }
+            return true;
         }
 
         #endregion
@@ -384,8 +537,7 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
         public static void ProcessImmediate(IUpdateable node, float deltaTime, float time)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.ProcessImmediate(node, deltaTime, time);
+            ProcessImmediate(node, deltaTime, new UpdateClock(time, time));
         }
 
         /// <summary>
@@ -396,8 +548,12 @@ namespace XFramework.XUpdate
         /// <param name="clock">本帧的时间基。</param>
         public static void ProcessImmediate(IUpdateable node, float deltaTime, in UpdateClock clock)
         {
-            if (_scheduler == null || node == null) return;
-            _scheduler.ProcessImmediate(node, deltaTime, clock);
+            if (_schedulers == null || node == null) return;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                _schedulers[i].ProcessImmediate(node, deltaTime, clock);
+            }
         }
 
         #endregion
@@ -405,35 +561,53 @@ namespace XFramework.XUpdate
         #region Public API — 查询
 
         /// <summary>
-        /// 获取指定 <see cref="UpdateLOD"/> 等级的对象数量。
+        /// 获取指定 <see cref="UpdateLOD"/> 等级的对象数量（含全部时机与时间轴）。
         /// </summary>
         public static int GetCount(UpdateLOD lod)
         {
-            if (_scheduler == null) return 0;
-            return _scheduler.GetCount(lod);
+            if (_schedulers == null) return 0;
+
+            int count = 0;
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                count += _schedulers[i].GetCount(lod);
+            }
+            return count;
         }
 
         /// <summary>
-        /// 获取所有 LOD 等级的对象总数（不含禁用对象）。
+        /// 获取所有 LOD 等级的对象总数（不含禁用对象，含全部时机与时间轴）。
         /// </summary>
         public static int TotalCount
         {
             get
             {
-                if (_scheduler == null) return 0;
-                return _scheduler.TotalCount;
+                if (_schedulers == null) return 0;
+
+                int count = 0;
+                for (int i = 0; i < _schedulers.Length; i++)
+                {
+                    count += _schedulers[i].TotalCount;
+                }
+                return count;
             }
         }
 
         /// <summary>
-        /// 获取禁用对象数量。
+        /// 获取禁用对象数量（含全部时机）。
         /// </summary>
         public static int DisabledCount
         {
             get
             {
-                if (_scheduler == null) return 0;
-                return _scheduler.DisabledCount;
+                if (_schedulers == null) return 0;
+
+                int count = 0;
+                for (int i = 0; i < _schedulers.Length; i++)
+                {
+                    count += _schedulers[i].DisabledCount;
+                }
+                return count;
             }
         }
 

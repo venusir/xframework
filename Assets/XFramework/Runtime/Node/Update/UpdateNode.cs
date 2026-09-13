@@ -90,19 +90,29 @@ namespace XFramework.XUpdate
         /// </summary>
         void TryRegister(BaseNode node)
         {
-            if (node is IUpdateable u && node.Started)
-                RegisterNode(u, node);
+            if (node.Started)
+                RegisterNode(node);
         }
 
         /// <summary>
-        /// 把节点登记进调度器，时间轴取节点自行声明的（未声明则为逻辑轴）。
-        /// <para>轴只在注册时读一次：之后由调度器记住，节点中途改声明不会自动迁移——
-        /// 需要迁移时先 <see cref="UpdateManager.Unregister"/> 再重新注册。</para>
+        /// 把节点登记进调度器：实现了哪个时机的接口就登记到哪个时机，两个都实现则两处都登记。
+        /// <para>时间轴取节点自行声明的（未声明则为逻辑轴）。轴只在注册时读一次：之后由调度器
+        /// 记住，节点中途改声明不会自动迁移——需要迁移时先 <see cref="UpdateManager.Unregister"/>
+        /// 再重新注册。</para>
         /// </summary>
-        static void RegisterNode(IUpdateable updateable, BaseNode node)
+        static void RegisterNode(BaseNode node)
         {
-            UpdateManager.Register(updateable, node.Depth,
-                timeMode: UpdateManagerExtensions.ResolveTimeMode(node));
+            UpdateTimeMode mode = UpdateManagerExtensions.ResolveTimeMode(node);
+
+            if (node is IUpdateable updateable)
+            {
+                UpdateManager.Register(updateable, node.Depth, timeMode: mode);
+            }
+
+            if (node is ILateUpdateable lateUpdateable)
+            {
+                UpdateManager.RegisterLate(lateUpdateable, node.Depth, timeMode: mode);
+            }
         }
 
         /// <summary>
@@ -111,26 +121,28 @@ namespace XFramework.XUpdate
         /// </summary>
         void OnDescendantAdded(BaseNode node)
         {
-            if (node is IUpdateable u && node.Started)
-                RegisterNode(u, node);
+            if (node.Started)
+                RegisterNode(node);
         }
 
         /// <summary>
-        /// 子孙节点 Start 完成时触发。注册 <see cref="IUpdateable"/> 节点到 <see cref="UpdateManager"/>。
+        /// 子孙节点 Start 完成时触发。注册 <see cref="IUpdateable"/> / <see cref="ILateUpdateable"/>
+        /// 节点到 <see cref="UpdateManager"/>。
         /// </summary>
         void OnDescendantStarted(BaseNode node)
         {
-            if (node is IUpdateable u)
-                RegisterNode(u, node);
+            RegisterNode(node);
         }
 
         /// <summary>
-        /// 子孙节点移除时触发。从 <see cref="UpdateManager"/> 注销 <see cref="IUpdateable"/> 节点。
+        /// 子孙节点移除时触发。从 <see cref="UpdateManager"/> 注销该节点。
+        /// <para>按 <see cref="IUpdateLifecycle"/> 注销即可覆盖全部时机：门面会把注销转发给各时机，
+        /// 只有持有它的那套会真正删除。</para>
         /// </summary>
         void OnDescendantRemoved(BaseNode node)
         {
-            if (node is IUpdateable u)
-                UpdateManager.Unregister(u);
+            if (node is IUpdateLifecycle lifecycle)
+                UpdateManager.Unregister(lifecycle);
         }
 
         #endregion
