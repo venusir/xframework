@@ -8,8 +8,11 @@ namespace XFramework.XUpdate
     /// 纯 Update 调度器，不依赖节点树。
     /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
     /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
+    /// <para><b>内部实现</b>：由 <see cref="UpdateManager"/> 门面持有，不对外暴露——第三方
+    /// 一律经门面注册与查询，这样内部结构（分桶方式、切片算法、索引）可以继续演进而不构成
+    /// 破坏性变更。</para>
     /// </summary>
-    public class UpdateScheduler
+    internal sealed class UpdateScheduler
     {
         #region Constants
 

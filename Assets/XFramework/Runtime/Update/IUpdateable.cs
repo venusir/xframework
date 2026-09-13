@@ -25,26 +25,27 @@ namespace XFramework.XUpdate
         /// <summary>每 32 帧更新一次</summary>
         Frame32 = 5,
 
-        /// <summary>最大 LOD 等级标记，用于 <see cref="UpdateScheduler"/> 内部推导数组大小。</summary>
+        /// <summary>最大 LOD 等级标记，用于调度器内部推导数组大小。</summary>
         Max = Frame32,
     }
 
     /// <summary>
-    /// 可更新接口。节点实现此接口后，通过 <see cref="UpdateScheduler"/> 自动管理更新。
-    /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一帧的 <see cref="UpdateLOD"/> 等级。</para>
-    /// <para>通过 <see cref="BaseNode.Enabled"/> 控制启用/禁用，禁用时不会收到 <see cref="OnUpdate"/> 调用。</para>
+    /// 可更新接口。节点实现此接口后，由 <see cref="UpdateManager"/> 统一调度。
+    /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一次派发所采用的 <see cref="UpdateLOD"/> 等级。</para>
+    /// <para>经 <see cref="UpdateManager.Disable(IUpdateable)"/> / <see cref="UpdateManager.Enable(IUpdateable)"/>
+    /// 控制启用与禁用，禁用期间不会收到 <see cref="OnUpdate"/> 调用。</para>
     /// </summary>
     public interface IUpdateable
     {
         /// <summary>
         /// 节点启用时调用。恢复 Update 前重置状态。
-        /// <para>由 <see cref="UpdateScheduler.Enable(IUpdateable)"/> 触发。</para>
+        /// <para>由 <see cref="UpdateManager.Enable(IUpdateable)"/> 触发。</para>
         /// </summary>
         void OnEnable();
 
         /// <summary>
         /// 节点禁用时调用。清理 Update 中的临时状态。
-        /// <para>由 <see cref="UpdateScheduler.Disable(IUpdateable)"/> 触发。</para>
+        /// <para>由 <see cref="UpdateManager.Disable(IUpdateable)"/> 触发。</para>
         /// </summary>
         void OnDisable();
 
