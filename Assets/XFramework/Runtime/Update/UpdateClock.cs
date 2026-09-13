@@ -31,14 +31,22 @@ namespace XFramework.XUpdate
         public readonly float UnscaledTime;
 
         /// <summary>
+        /// 逻辑时间是否已冻结（<c>timeScale &lt;= 0</c>）。
+        /// <para>冻结时逻辑轴不派发、切片相位不推进；墙钟轴照常运行。</para>
+        /// </summary>
+        public readonly bool IsPaused;
+
+        /// <summary>
         /// 构造时钟。
         /// </summary>
         /// <param name="time">逻辑时间。</param>
         /// <param name="unscaledTime">墙钟时间。</param>
-        public UpdateClock(float time, float unscaledTime)
+        /// <param name="isPaused">逻辑时间是否已冻结（<c>timeScale &lt;= 0</c>），默认未冻结。</param>
+        public UpdateClock(float time, float unscaledTime, bool isPaused = false)
         {
             Time = time;
             UnscaledTime = unscaledTime;
+            IsPaused = isPaused;
         }
 
         /// <summary>

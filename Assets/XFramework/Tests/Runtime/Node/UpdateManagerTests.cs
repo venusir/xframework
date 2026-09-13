@@ -199,6 +199,52 @@ namespace XFramework.XUpdate.Tests
 
         #endregion
 
+        #region 暂停
+
+        [Test]
+        public void Pause_FreezesDispatch_AndClearResetsIt()
+        {
+            var node = new TestUpdateable();
+            UpdateManager.Register(node, depth: 0);
+
+            UpdateManager.Tick(time: 1.0f);
+            Assert.AreEqual(1, node.UpdateCallCount);
+
+            UpdateManager.Pause();
+            Assert.IsTrue(UpdateManager.IsPaused);
+
+            UpdateManager.Tick(time: 2.0f);
+            Assert.AreEqual(1, node.UpdateCallCount, "暂停期间逻辑轴不派发");
+
+            // Clear 把调度器恢复到可用初态（含暂停开关）——fixture 隔离因此不必额外复位暂停，
+            // 否则某个用例的 Pause 会静默污染后续所有用例
+            UpdateManager.Clear();
+            Assert.IsFalse(UpdateManager.IsPaused, "Clear 应复位暂停开关");
+
+            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Tick(time: 3.0f);
+            Assert.AreEqual(2, node.UpdateCallCount, "复位后恢复派发");
+        }
+
+        [Test]
+        public void Resume_UnpausesButDoesNotCatchUp()
+        {
+            var node = new TestUpdateable();
+            UpdateManager.Register(node, depth: 0);
+
+            UpdateManager.Tick(time: 1.0f);
+            UpdateManager.Pause();
+            UpdateManager.Tick(time: 100f);
+
+            UpdateManager.Resume();
+            Assert.IsFalse(UpdateManager.IsPaused);
+
+            UpdateManager.Tick(time: 100.1f);
+            Assert.AreEqual(2, node.UpdateCallCount);
+        }
+
+        #endregion
+
         #region 注册与注销
 
         [Test]

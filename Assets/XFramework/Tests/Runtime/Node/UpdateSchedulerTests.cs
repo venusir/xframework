@@ -735,6 +735,112 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Pause_DoesNotAdvanceSlicePhase()
+        {
+            // 暂停期间若照常推进帧计数，恢复后切片相位已经漂移：长周期节点会白丢一轮——
+            // Frame32 在 60fps 下意味着半秒多的空窗
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame4 };
+            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Frame4);
+
+            float time = 0f;
+            _scheduler.Tick(time += 0.1f);
+            Assert.AreEqual(1, node.OnUpdateCallCount, "第 1 帧轮到这个切片");
+
+            for (int i = 0; i < 2; i++)
+            {
+                _scheduler.Tick(time += 0.1f);
+            }
+            Assert.AreEqual(1, node.OnUpdateCallCount, "Frame4 每 4 帧才轮到一次");
+
+            _scheduler.Pause();
+            for (int i = 0; i < 5; i++)
+            {
+                _scheduler.Tick(time += 0.1f);
+            }
+            Assert.AreEqual(1, node.OnUpdateCallCount, "暂停期间不派发");
+            _scheduler.Resume();
+
+            // 相位应从暂停前接续（计数器停在 3），而不是被 5 帧暂停推走
+            _scheduler.Tick(time += 0.1f);
+            Assert.AreEqual(1, node.OnUpdateCallCount, "暂停后第 1 帧仍未轮到");
+
+            _scheduler.Tick(time += 0.1f);
+            Assert.AreEqual(2, node.OnUpdateCallCount, "暂停后第 2 帧才是到期点");
+        }
+
+        [Test]
+        public void Resume_ReanchorsSoNoCatchUpDelta()
+        {
+            // 显式 Pause 不改动 Unity 时间：恢复时若不重锚，节点会拿到「整段暂停时长」的
+            // delta 并试图一次补完。本调度器刻意不追赶——恢复后第一帧 delta 为 0
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+            _scheduler.Register(node, depth: 0);
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(1, node.OnUpdateCallCount);
+
+            _scheduler.Pause();
+            for (int i = 1; i <= 10; i++)
+            {
+                _scheduler.Tick(time: 1.0f + i);
+            }
+            Assert.AreEqual(1, node.OnUpdateCallCount, "暂停期间不派发");
+
+            _scheduler.Resume();
+            _scheduler.Tick(time: 11.1f);
+
+            Assert.AreEqual(2, node.OnUpdateCallCount);
+            Assert.AreEqual(0f, node.DeltaTimes[1], 1e-4f,
+                "重锚后第一帧 delta 为 0，而不是整段暂停时长（10 秒）");
+
+            _scheduler.Tick(time: 11.2f);
+            Assert.AreEqual(0.1f, node.DeltaTimes[2], 1e-4f, "恢复后第二帧起回到正常间隔");
+        }
+
+        [Test]
+        public void TimeScaleZero_FreezesScaledAxisOnly()
+        {
+            // timeScale = 0 时 Time.time 冻结、Time.unscaledTime 照走：
+            // 逻辑轴停摆，墙钟轴（暂停菜单、UI 动画、振动到期）继续运行
+            var scaled = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+            var unscaled = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+            _scheduler.Register(scaled, depth: 0);
+            _scheduler.Register(unscaled, depth: 0, timeMode: UpdateTimeMode.Unscaled);
+
+            _scheduler.Tick(new UpdateClock(time: 1.0f, unscaledTime: 10.0f));
+            Assert.AreEqual(1, scaled.OnUpdateCallCount);
+            Assert.AreEqual(1, unscaled.OnUpdateCallCount);
+
+            for (int i = 1; i <= 5; i++)
+            {
+                _scheduler.Tick(new UpdateClock(time: 1.0f, unscaledTime: 10.0f + i, isPaused: true));
+            }
+
+            Assert.AreEqual(1, scaled.OnUpdateCallCount, "逻辑轴冻结");
+            Assert.AreEqual(6, unscaled.OnUpdateCallCount, "墙钟轴照常");
+
+            // 引擎时间冻结不需要重锚：Time.time 自己没走，恢复后 delta 就是一个正常帧
+            _scheduler.Tick(new UpdateClock(time: 1.1f, unscaledTime: 16.0f));
+            Assert.AreEqual(2, scaled.OnUpdateCallCount);
+            Assert.AreEqual(0.1f, scaled.DeltaTimes[1], 1e-4f, "无追赶");
+        }
+
+        [Test]
+        public void NegativeDelta_IsClampedToZero()
+        {
+            // timeScale < 0（倒放）时 Time.time 会倒着走：负 delta 会让
+            // 「位置 += 速度 × delta」反向积分
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame1 };
+            _scheduler.Register(node, depth: 0);
+
+            _scheduler.Tick(time: 5.0f);
+            _scheduler.Tick(time: 4.0f);
+
+            Assert.AreEqual(0f, node.DeltaTimes[1], 1e-4f, "负间隔钳制为 0");
+            Assert.AreEqual(4.0f, node.Times[1], 1e-4f, "时刻基准照常前进，否则倒放段会被重复计入");
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);

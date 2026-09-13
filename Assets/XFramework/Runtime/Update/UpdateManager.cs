@@ -143,6 +143,37 @@ namespace XFramework.XUpdate
 
         #endregion
 
+        #region Public API — 暂停
+
+        /// <summary>
+        /// 暂停<b>逻辑时间轴</b>的派发。
+        /// <para>与 <c>Time.timeScale = 0</c> 的区别：本方法不改动 Unity 时间，供「暂停但不希望
+        /// UI 动画、手柄振动等跟着慢下来」的场景使用；用 <c>timeScale = 0</c> 暂停同样会让逻辑轴
+        /// 冻结（驱动把它填进 <see cref="UpdateClock.IsPaused"/>）。两条路径都不影响
+        /// <see cref="UpdateTimeMode.Unscaled"/> 轴上的对象。</para>
+        /// <para><b>恢复时不追赶</b>：<see cref="Resume"/> 会把时间基准重锚，恢复后的第一帧
+        /// delta 为 0，而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在节点内自行累加。</para>
+        /// </summary>
+        public static void Pause()
+        {
+            _scheduler?.Pause();
+        }
+
+        /// <summary>
+        /// 恢复逻辑时间轴的派发（不追赶，见 <see cref="Pause"/>）。
+        /// </summary>
+        public static void Resume()
+        {
+            _scheduler?.Resume();
+        }
+
+        /// <summary>
+        /// 逻辑轴当前是否已暂停：本门面的 <see cref="Pause"/> 开关，或 <c>Time.timeScale &lt;= 0</c>。
+        /// </summary>
+        public static bool IsPaused => (_scheduler?.IsPaused ?? false) || Time.timeScale <= 0f;
+
+        #endregion
+
         #region Public API — 注册与注销
 
         /// <summary>

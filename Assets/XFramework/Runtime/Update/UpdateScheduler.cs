@@ -117,6 +117,20 @@ namespace XFramework.XUpdate
         /// <summary>各时间轴的帧计数器，用于计算该轴当前的时间片索引。</summary>
         private readonly int[] _frameCount = new int[AxisCount];
 
+        /// <summary>
+        /// 逻辑轴是否被显式暂停（<see cref="UpdateManager.Pause"/>）。
+        /// <para>与时钟里的 <see cref="UpdateClock.IsPaused"/>（<c>timeScale &lt;= 0</c>）互为补充：
+        /// 前者不改动 Unity 时间，供「暂停但不动 timeScale」的场景使用，恢复时需要重锚时间基准。</para>
+        /// </summary>
+        private bool _paused;
+
+        /// <summary>
+        /// 恢复后需要把逻辑轴的时间基准重锚一次。
+        /// <para>显式暂停期间逻辑时间仍在流逝，不重锚的话恢复当帧每个节点会拿到「整段暂停时长」
+        /// 的 delta 并试图一次补完——本调度器刻意不追赶。</para>
+        /// </summary>
+        private bool _reanchorScaledAxis;
+
         /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原时间轴的 LOD0 桶。</summary>
         private readonly List<Entry> _disabledEntries = new List<Entry>();
 
@@ -187,8 +201,26 @@ namespace XFramework.XUpdate
         /// </summary>
         private void TickInternal(in UpdateClock clock)
         {
+            // 逻辑轴冻结的两种来源：引擎时间被冻结（timeScale <= 0），或调用方显式 Pause
+            bool logicalFrozen = _paused || clock.IsPaused;
+
             for (int axis = 0; axis < AxisCount; axis++)
             {
+                bool isLogical = axis == (int)UpdateTimeMode.Scaled;
+
+                // 冻结时不派发、也不推进帧计数：切片相位留在暂停前的位置，恢复后与暂停前接续。
+                // 若照常推进，长周期节点会白丢一轮——Frame32 在 60fps 下意味着半秒多的空窗
+                if (isLogical && logicalFrozen)
+                {
+                    continue;
+                }
+
+                if (isLogical && _reanchorScaledAxis)
+                {
+                    _reanchorScaledAxis = false;
+                    ReanchorAxis(axis, clock.Time);
+                }
+
                 TickAxis(axis, clock.GetTime((UpdateTimeMode)axis));
 
                 // 本轴推进了一帧：切片相位只随自己的轴走，另一条轴冻结与否都不影响它
@@ -218,7 +250,7 @@ namespace XFramework.XUpdate
             for (int i = 0; i < lod0.Count; i++)
             {
                 var entry = lod0[i];
-                float realDelta = now - entry.LastUpdateTime;
+                float realDelta = ClampDelta(now - entry.LastUpdateTime);
 
                 int newLOD;
                 try
@@ -265,7 +297,7 @@ namespace XFramework.XUpdate
                 for (int i = sliceIndex; i < count; i += sliceCount)
                 {
                     var entry = entries[i];
-                    float realDelta = now - entry.LastUpdateTime;
+                    float realDelta = ClampDelta(now - entry.LastUpdateTime);
 
                     int newLOD;
                     try
@@ -293,6 +325,38 @@ namespace XFramework.XUpdate
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 把一条轴上所有条目的时间基准重锚到当前时刻。
+        /// <para>显式 <see cref="Pause"/> 不改动 Unity 时间，恢复时若不重锚，每个节点会拿到
+        /// 「整段暂停时长」的 delta 并试图一次补完——本调度器刻意不追赶，宁可让恢复后的
+        /// 第一帧 delta 为 0。禁用表中的条目不需要处理：它们被 <see cref="Enable"/> 放回桶里时
+        /// 会顺带重置时间基准。</para>
+        /// </summary>
+        private void ReanchorAxis(int axis, float now)
+        {
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var entries = _buckets[BucketOf(axis, lod)];
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    var entry = entries[i];
+                    entry.LastUpdateTime = now;
+                    entries[i] = entry;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 把时间间隔钳到非负。
+        /// <para><c>timeScale &lt; 0</c>（倒放）时 <see cref="Time.time"/> 会倒着走，负 delta 会让
+        /// 「位置 += 速度 × delta」反向积分；时刻基准照常前进，否则下一次派发会把这段倒放
+        /// 又算一遍。</para>
+        /// </summary>
+        private static float ClampDelta(float delta)
+        {
+            return delta < 0f ? 0f : delta;
         }
 
         /// <summary>
@@ -483,7 +547,9 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 清空所有桶、禁用列表和待处理操作缓冲。
+        /// 清空所有桶、禁用列表和待处理操作缓冲，并把调度器恢复到可用初态
+        /// （含暂停开关——测试隔离因此不必额外复位暂停，否则一个 fixture 的 <see cref="Pause"/>
+        /// 会静默污染后续所有用例）。
         /// <para><b>派发期间调用时推迟到帧末执行</b>：与注册/注销/启用/禁用同一套语义。
         /// 就地清空会让正在遍历的循环拿着失效下标写回（旧实现在切片分支会直接抛
         /// <c>ArgumentOutOfRangeException</c>）。</para>
@@ -501,6 +567,30 @@ namespace XFramework.XUpdate
 
             ClearImmediate();
         }
+
+        /// <summary>
+        /// 暂停逻辑轴的派发（由 <see cref="UpdateManager.Pause"/> 转发）。
+        /// <para>墙钟轴不受影响——暂停菜单、UI 动画这类逻辑本就该继续运行。</para>
+        /// </summary>
+        internal void Pause()
+        {
+            _paused = true;
+        }
+
+        /// <summary>
+        /// 恢复逻辑轴的派发，并请求一次时间基准重锚（不追赶）。
+        /// </summary>
+        internal void Resume()
+        {
+            _paused = false;
+            _reanchorScaledAxis = true;
+        }
+
+        /// <summary>
+        /// 逻辑轴是否被显式暂停（不含 <c>timeScale &lt;= 0</c> 这条路径，那个由驱动方经
+        /// <see cref="UpdateClock.IsPaused"/> 传入）。
+        /// </summary>
+        internal bool IsPaused => _paused;
 
         /// <summary>
         /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量（两条时间轴合计）。
@@ -845,6 +935,8 @@ namespace XFramework.XUpdate
             _pendingOps.Clear();
             _disabledEntries.Clear();
             _bucketOf.Clear();
+            _paused = false;
+            _reanchorScaledAxis = false;
             for (int axis = 0; axis < AxisCount; axis++)
             {
                 _frameCount[axis] = 0;
