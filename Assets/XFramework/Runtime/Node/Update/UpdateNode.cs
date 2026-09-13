@@ -96,7 +96,18 @@ namespace XFramework.XUpdate
         void TryRegister(BaseNode node)
         {
             if (node is IUpdateable u && node.Started)
-                UpdateManager.Register(u, node.Depth);
+                RegisterNode(u, node);
+        }
+
+        /// <summary>
+        /// 把节点登记进调度器，时间轴取节点自行声明的（未声明则为逻辑轴）。
+        /// <para>轴只在注册时读一次：之后由调度器记住，节点中途改声明不会自动迁移——
+        /// 需要迁移时先 <see cref="UpdateManager.Unregister"/> 再重新注册。</para>
+        /// </summary>
+        static void RegisterNode(IUpdateable updateable, BaseNode node)
+        {
+            UpdateManager.Register(updateable, node.Depth,
+                timeMode: UpdateManagerExtensions.ResolveTimeMode(node));
         }
 
         /// <summary>
@@ -106,7 +117,7 @@ namespace XFramework.XUpdate
         void OnDescendantAdded(BaseNode node)
         {
             if (node is IUpdateable u && node.Started)
-                UpdateManager.Register(u, node.Depth);
+                RegisterNode(u, node);
         }
 
         /// <summary>
@@ -115,7 +126,7 @@ namespace XFramework.XUpdate
         void OnDescendantStarted(BaseNode node)
         {
             if (node is IUpdateable u)
-                UpdateManager.Register(u, node.Depth);
+                RegisterNode(u, node);
         }
 
         /// <summary>

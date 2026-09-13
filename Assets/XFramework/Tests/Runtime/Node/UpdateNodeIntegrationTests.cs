@@ -120,6 +120,76 @@ namespace XFramework.XUpdate.Tests
             yield break;
         }
 
+        [UnityTest]
+        public IEnumerator UpdateNode_DeclaredUnscaledAxis_KeepsUpdatingWhilePaused()
+        {
+            _updateNode = _root.AddNode<UpdateNode>();
+            yield return null;
+
+            var scaled = _root.AddNode<TestUpdateLeaf>();
+            var unscaled = _root.AddNode<UnscaledUpdateLeaf>();
+            yield return null;
+
+            _updateNode.Tick(time: Time.time);
+            Assert.AreEqual(1, scaled.OnUpdateCallCount);
+            Assert.AreEqual(1, unscaled.OnUpdateCallCount);
+
+            // 暂停逻辑轴：声明了墙钟轴的节点应继续被派发
+            UpdateManager.Pause();
+            _updateNode.Tick(time: Time.time + 1f);
+
+            Assert.AreEqual(1, scaled.OnUpdateCallCount, "未声明时间轴的节点走逻辑轴，暂停即停");
+            Assert.AreEqual(2, unscaled.OnUpdateCallCount, "声明墙钟轴的节点在暂停期间照常运行");
+
+            UpdateManager.Resume();
+            yield break;
+        }
+
+        [UnityTest]
+        public IEnumerator RegisterUpdateExtension_HonoursDeclaredTimeMode()
+        {
+            // 手动注册（不走 UpdateNode）同样应尊重节点声明的时间轴
+            var leaf = _root.AddNode<UnscaledUpdateLeaf>();
+            yield return null;
+
+            leaf.RegisterUpdate();
+            UpdateManager.Pause();
+            UpdateManager.Tick(time: Time.time);
+
+            Assert.AreEqual(1, leaf.OnUpdateCallCount);
+
+            UpdateManager.Resume();
+            yield break;
+        }
+
+        /// <summary>
+        /// 声明墙钟时间轴的测试叶节点：暂停期间仍应收到 OnUpdate。
+        /// </summary>
+        private sealed class UnscaledUpdateLeaf : LeafNode, IUpdateable, IUpdateTimeMode
+        {
+            public int OnUpdateCallCount { get; private set; }
+
+            public UpdateTimeMode TimeMode => UpdateTimeMode.Unscaled;
+
+            protected override void OnAwake()
+            {
+                base.OnAwake();
+
+                // 与 TestUpdateLeaf 同理：节点经池复用，计数必须在 OnAwake 复位
+                OnUpdateCallCount = 0;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                OnUpdateCallCount++;
+                return UpdateLOD.Frame1;
+            }
+        }
+
         /// <summary>
         /// Test leaf node implementing IUpdateable for integration tests.
         /// </summary>
