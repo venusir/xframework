@@ -182,14 +182,15 @@ namespace XFramework.XUpdate
                 if (count == 0) continue;
 
                 int sliceCount = 1 << lod;
-                int sliceSize = (count + sliceCount - 1) / sliceCount;
                 int sliceIndex = _frameCount % sliceCount;
 
-                int start = sliceIndex * sliceSize;
-                int end = sliceIndex * sliceSize + sliceSize;
-                if (end > count) end = count;
-
-                for (int i = start; i < end; i++)
+                // 步长切片：本帧只处理下标 ≡ sliceIndex (mod sliceCount) 的条目，
+                // 因此 sliceCount 个切片恰好覆盖整桶，且每帧派发量只差 1（count < sliceCount
+                // 时余下的切片无事可做，那是「节点本来就少」而非分布不均）。
+                // 改前用的是区间切片（start = sliceIndex * ceil(count / sliceCount)）：
+                // count 不是 sliceCount 的整数倍时，尾部切片会因越界被夹空、前面的切片超载——
+                // 例如 17 个条目 8 个切片会派发成 3,3,3,3,3,2,0,0，后两帧白跑一遍循环
+                for (int i = sliceIndex; i < count; i += sliceCount)
                 {
                     var entry = entries[i];
                     float realDelta = time - entry.LastUpdateTime;

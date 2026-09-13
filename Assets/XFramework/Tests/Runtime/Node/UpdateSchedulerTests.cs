@@ -520,6 +520,85 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void SlicedBucket_SpreadsLoadEvenly_NoIdleFrames()
+        {
+            // 17 个条目、8 个切片：区间切片派发成 3,3,3,3,3,2,0,0（后两帧白跑一遍循环），
+            // 步长切片摊成 3,2,2,2,2,2,2,2——每帧都干活且每帧只差 1
+            const int nodeCount = 17;
+            var nodes = new TestUpdateable[nodeCount];
+            for (int i = 0; i < nodeCount; i++)
+            {
+                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Frame8 };
+                _scheduler.Register(nodes[i], depth: 0, initialLOD: UpdateLOD.Frame8);
+            }
+
+            var perFrame = new int[8];
+            int dispatched = 0;
+            float time = 0f;
+            for (int frame = 0; frame < perFrame.Length; frame++)
+            {
+                time += 0.1f;
+                _scheduler.Tick(time);
+
+                int total = 0;
+                for (int i = 0; i < nodeCount; i++)
+                {
+                    total += nodes[i].OnUpdateCallCount;
+                }
+
+                perFrame[frame] = total - dispatched;
+                dispatched = total;
+            }
+
+            Assert.AreEqual(nodeCount, dispatched, "8 帧内每个节点恰好被派发一次");
+            for (int i = 0; i < nodeCount; i++)
+            {
+                Assert.AreEqual(1, nodes[i].OnUpdateCallCount, $"节点 {i} 应恰好被派发一次");
+            }
+
+            for (int frame = 0; frame < perFrame.Length; frame++)
+            {
+                Assert.GreaterOrEqual(perFrame[frame], nodeCount / perFrame.Length,
+                    $"第 {frame} 帧派发量不应低于均值下界（区间切片下尾部切片为 0）");
+                Assert.LessOrEqual(perFrame[frame], (nodeCount + perFrame.Length - 1) / perFrame.Length,
+                    $"第 {frame} 帧派发量不应超过均值上界");
+            }
+        }
+
+        [Test]
+        public void SlicedNode_ReceivesAccumulatedDelta()
+        {
+            // 降频不导致时间失真：被跳过的帧应累积进下一次的 deltaTime——这是本调度器
+            // 相对「固定步长 + 累加器」方案的核心取舍，此前零覆盖
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Frame8 };
+            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Frame8);
+
+            float time = 0f;
+            for (int frame = 0; frame < 8; frame++)
+            {
+                time += 0.1f;
+                _scheduler.Tick(time);
+            }
+
+            Assert.AreEqual(1, node.OnUpdateCallCount, "8 帧内首次派发");
+
+            float secondDispatchTime = 0f;
+            for (int frame = 0; frame < 8; frame++)
+            {
+                time += 0.1f;
+                _scheduler.Tick(time);
+                if (secondDispatchTime == 0f && node.OnUpdateCallCount == 2)
+                {
+                    secondDispatchTime = time;
+                }
+            }
+
+            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 帧派发第二次");
+            Assert.AreEqual(0.8f, node.DeltaTimes[1], 1e-4f, "被跳过的 7 帧应累积进 delta");
+            Assert.AreEqual(secondDispatchTime, node.Times[1], 1e-4f, "time 参数应是本次派发的绝对时刻");
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
