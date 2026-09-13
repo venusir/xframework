@@ -37,6 +37,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Settings 脏标记与可选自动保存**：`IsDirty` / `MarkDirty`，以及 `AutoSave` / `AutoSaveDelay` / `SaveOnQuit`（默认全关，保持「调用方显式保存」的既有取舍）。脏标记用**变更计数而非布尔标志**：`Save` 开始时取快照、结束后把已提交档位设为快照值，这样「保存过程中用户继续拖动滑条」产生的改动不会被吞掉——布尔标志会在保存结束时无条件清除，把那次改动丢掉。自动保存是**去抖而非节流**：等待窗口从最后一次改动起算，拖动滑条期间一次都不写盘、松手静默后写一次；若做成节流，一次三秒的拖动会写六次。关闭时不注册任何帧回调，默认路径零开销
 - **Settings 原子写入与一代备份**：改用 `FilePathUtility.ReplaceFileAtomically`（与 Save/File 模块同一套替换原语）。原先 `File.WriteAllText` 直接覆盖正式文件，写到一半崩溃就留下截断 JSON，配合「解析失败即抛异常」的行为足以让玩家此后每次启动都崩
 - **UI 绑定接收者放宽到 `IReactiveProperty<T>`**：`UIBinder` 的 7 个绑定方法与 `UIPanelBinding` / `UIPanelBase` / `ViewModelBase.CreateReadOnlyProperty` / `ReadOnlyReactiveProperty.Select` 的接收者由具体类放宽到接口（对调用方源码兼容）。此前绑定 API 只吃具体类型，任何非框架实现都无法接入。必须是**替换**而非新增重载——两版并存时具体类更精确、永远胜出，接口版会沦为死代码
+- **Update 三个派发时机**：新增 `ILateUpdateable` / `IFixedUpdateable` 与 `UpdateManager.RegisterLate` / `RegisterFixed`，并把生命周期回调抽成三者共用的 `IUpdateLifecycle`（`IUpdateable` 继承它，既有实现零改动）。每时机一套独立调度器（各自的桶、帧计数、切片相位、暂停状态），因为共用一个实例会让两种时机的切片相位互相干扰。固定步长时机的时间基准是 `Time.fixedTime`——那里 `UpdateLOD` 的「每 N 帧」是每 N 个**固定步**，因此它没有时间轴参数（Unity 固定步本就随 `timeScale` 停摆）、也不能由变步长时钟驱动
+- **Update 双时间轴与暂停**：新增 `UpdateClock`（time + unscaledTime + isPaused）与 `UpdateTimeMode`（Scaled / Unscaled），桶按「时间轴 × LOD」二维组织。需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）终于有正规表达方式——此前生产代码里已经出现绕过（`InputSystemProvider` 自己读 `Time.unscaledTime`）。配套 `Pause` / `Resume` / `IsPaused`；节点树侧可经 `IUpdateTimeMode` 声明自己的轴
+- **Update PlayerLoop 自驱动**：驱动注入 `Update` / `PreLateUpdate` / `FixedUpdate` 三个阶段，不再要求场景里存在 `GameLauncher` 或任何 MonoBehaviour；`IsDrivingPlayerLoop` 可查询注入状态，注入失败打 `LogWarning`（门面是宽容语义、不会抛异常，不留痕的话故障表现只是「静止」）。注入基于 `GetCurrentPlayerLoop` 且只插入不替换，因此与 UniTask 等同样靠注入工作的库共存（有断言钉住）
 
 ### Changed
 
@@ -65,6 +68,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Settings 响应式契约重整（破坏性）**：移除 `ObserveField`，`Observe` 改为「订阅即回调当前对象」。`ObserveField` 用 `EqualityComparer<TField>.Default` 去重，对引用类型字段即为引用相等，`s => s.audio` 这类选择器在子对象内容变化时被静默吞掉且无文档；字段级能力改由 `SettingRef` 以**字段身份**路由，该缺陷随之消失，不必再修。两级分工至此明确：字段值变化归句柄、对象被整体替换归 `Observe`。此次变更还让 `[0.2.0]` 那条「订阅立即回调」的说明从与测试断言相反变为准确
 - **Settings 实现类可见性收紧**：`SettingsManagerImpl<T>` 由 `public` 降为 `internal sealed`，对齐门面模板「公开面只留接口」。公开面从未暴露过该具体类型——`Initialize` 返回的一直是 `ISettingsManager<T>`，故实际无可观察影响
 - **Settings 存储替换与释放语义收紧**：`Store` setter 明确为「只换后端、不迁移数据」并在替换时打 LogWarning（刻意不做隐式重新加载——那会静默丢掉内存中尚未 Save 的修改，是更难查的故障）；`Load` 防御 store 违约返回 `null`；`Save(null)` 由静默 return 改为抛 `ArgumentNullException`，与 `Apply(null)` 对齐；`Dispose` 后除自身外所有公开成员抛 `ObjectDisposedException`
+- **Update 派发期间的操作改为帧末生效**：`Disable` / `Enable` 原先在派发期就地改活表，而遍历是「读 `entries[i]` → 回调 → 写回 `entries[i]`」，回调里改动下标更小的元素后写回会覆盖顶替上来的节点整条条目（对方永久停更）；现与注册/注销统一走操作队列，按调用顺序在帧末应用。代价是派发期发起的 `OnDisable`/`OnEnable` 推迟到帧末——不破坏契约（不会出现「`OnDisable` 之后又 `OnUpdate`」），且迭代外调用仍立即生效
+- **Update `Unregister` 等门面形参放宽到 `IUpdateLifecycle`**：三个时机各有自己的接口，注销/启用/禁用/查询不再以 `IUpdateable` 为形参；门面把请求转发给各时机，只有持有该对象的那套会动作，因此不必维护「节点属于哪个时机」的映射表（那是第二份真相，漏同步即幽灵条目）
+- **Update 切片改为步长切片**：原实现按连续下标区间划分，`count` 不是 `sliceCount` 整数倍时尾部切片会被夹空、前面的切片超载（17 个条目 8 个切片派发成 3,3,3,3,3,2,0,0，最后两帧白跑一遍循环）；改为「本帧只处理下标 ≡ sliceIndex (mod sliceCount) 的条目」，每帧派发量只差 1
+- **Update 重复注册去重**：同一对象重复注册改为「重新注册」（先摘旧条目再按新 LOD/Depth 插入）。此前会产生两条条目、每帧被派发两次——树里挂了两个 `UpdateNode` 即触发，且单值桶索引表达不了「两条条目分处两个桶」，注销时的「删净」语义会漏删
+- **Update 可见性收敛（破坏性）**：`UpdateScheduler` 由 `public` 改为 `internal sealed`，对齐「实现类默认 internal sealed」的框架约定；第三方若直接 `new UpdateScheduler()` 会编译不过，但正因它的内部结构仍在演进，收口可避免依赖上内部细节
+- **UI 每帧通路并入统一调度**：面板 / HUD 的每帧更新原由场景里的 `UIRootNode.Update` 驱动，那条通路既不在 LOD 调度里、也不受 `Pause` 约束（暂停游戏时面板照跑），还要求场景里必须存在 `UIRootNode`。现由 `UIManager.Initialize` 注册进 `UpdateManager`；面板 `OnUpdate` 的时机随之从「场景 MonoBehaviour.Update」变为「注入的 Update 系统内」，并从此可被 LOD 降频与统一暂停
 
 ### Fixed
 
@@ -91,6 +100,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Settings 已释放后仍可写盘**：`Dispose` 只终止了通知流、未置释放标志，`Save` 照常写盘，`Observe` 返回一个永不回调的空句柄（`EventStream` 对已 `OnCompleted` 的流正是返回空订阅）而调用方毫无察觉。现补释放标志，除 `Dispose` 外所有公开成员释放后抛 `ObjectDisposedException`
 - **Settings 测试用例生来就错**：`ObserveField_FieldIsolation_IndependentCallbacks` 断言「只改 Volume 时 Name 观察者不回调」，与同一文件里的 `ObserveField_FirstValue_AlwaysPasses` 直接矛盾。该用例随「移除 R3 依赖」那次提交与该测试文件一同引入即错，并非后续回归——R3 原实现的 `Select().DistinctUntilChanged()` 同样放行首个值，故它在 R3 下也一样会失败
 - **文档修正（Settings）**：`Documentation/XFramework.md` 的「设置操作」表此前记录了一整套**代码中不存在**的 API（`Get<T>()` / `ResetToDefaults` / `ApplyAsync` 等），第三方照文档接入会踩空；现改为如实描述。Settings 模块 README 同步重写，补入两级订阅分工、写入契约与「已知限制」一节
+- **Update 已注销对象被 LOD 迁移复活**：待处理操作缓冲是「先全部注销再全部注册」两阶段，而 LOD 迁移被拆成一条 remove + 一条 add；同一帧内既迁移又被注销的对象在 remove 阶段删掉旧条目后，add 阶段又被插进新桶，此后永久继续被派发且不会再有人来清它。现改为单条有序队列、按入队先后逐条应用，迁移改为**条件操作**（应用时仍在桶里才生效）
+- **Update 派发期禁用/启用覆盖他人条目**：`entries[i] = entry` 的写回用的是回调前查到的下标，而 `Disable`/`Enable` 会就地增删元素——禁用排在自己前面的节点后，写回会覆盖顶替上来的节点（对方永久停更、自己此后每帧被派发两次）；禁用自己是桶内最后一个元素时直接抛 `ArgumentOutOfRangeException`。现统一入队后，派发期间没有任何代码能改活表
+- **Update `ProcessImmediate` 回调期改写活表**：同源缺陷的第三处——回调里注销该对象会让随后的写回落到已易主的槽位、并把已注销对象插回桶里。现复用迭代闩锁，回调期间的操作进缓冲、返回后统一应用
+- **Update 关闭域重载后整个模块静默死亡**：`AutoInit` 在编辑器分支只挂 `[InitializeOnLoadMethod]`，而关闭 Reload Domain 后进入播放不会重载程序集、该回调不再执行；退出播放时又置了不可逆的 `_shutdown` 并丢弃调度器。结果是第二次进入播放后 `IsInitialized` 恒为 false，十余处守卫全部静默 return 且 `Clear` 也救不回来。现无条件挂 `RuntimeInitializeOnLoadMethod(SubsystemRegistration)` 并让 `AutoInit` 幂等（只在缺失时重建、`Application.quitting` 幂等订阅），删掉那个恒真的 `_shutdown` 闩锁
+- **Update 暂停语义缺失**：此前 `timeScale = 0` 时切片相位照常推进、节点仍被派发但 delta 恒 0——暂停期间白跑派发，恢复后相位已漂移（`Frame32` 在 60fps 下意味着半秒多的空窗）。现逻辑轴冻结时既不派发也不推进帧计数；显式 `Pause()` 恢复时重锚时间基准，因此恢复后第一帧 delta 为 0 而不是「整段暂停时长」（刻意不追赶）；`timeScale < 0` 的负间隔钳制为 0
+- **Update `ProcessImmediate` 的既有语义写进文档**：派发期间调用它只重置时间基准、不执行更新（在别人的 `OnUpdate` 里再次回调自己会形成嵌套派发）。该行为本次未改，只是补上说明——此前文档没有提，容易误以为「任何时候都能立即执行」
+- **文档修正（Update）**：模块 README 重写（修正 `Frame30`→`Frame32`、失效的目录树、一段**无法编译**的 `static class : IUpdateable` 示例，补入三个时机/双时间轴/暂停/派发期语义/已知限制）；`Documentation/XFramework.md` 中不存在的 `UpdateManager.Bind(root)`、少一个形参的 `OnUpdate` 签名与启动流程示意一并订正
 
 ## [0.2.0] - 2026-08-20
 

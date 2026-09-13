@@ -48,7 +48,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 | **Core**         | `XFramework.XNode`         | [README](../Runtime/Node/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
-| **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：节点树 & 静态服务、LOD 时间切片                 |
+| **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：三个派发时机（Update/LateUpdate/FixedUpdate）、双时间轴（含暂停）、LOD 时间切片、PlayerLoop 自驱动 |
 | **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线、事件流引擎                                |
 | **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Message 事件流）                  |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
@@ -112,12 +112,19 @@ BaseNode (抽象基类)
 ## 启动流程
 
 ```
+GameLauncher.Awake()
+  ├── RootNode.Create()             # 建节点树
+  ├── AddNode<UpdateNode>()         # 桥接：把树中实现更新接口的节点登记进 UpdateManager
+  └── AddNode<ServiceInitializerNode>()
+
 GameLauncher.Start()
-  ├── UpdateManager.Bind(root)      # 绑定更新调度
   └── root.StartupAsync()           # 预置管线：收集 → 相位分组执行 → 启动
         ├── 收集：装配期同步收集所有相位阶段 IPhaseStage（CollectStage，Weight 0，运行前快照）
         ├── 相位分组：每相位一个并行阶段 ParallelStage（组内并行/相位升序串行）
         └── 启动：递归 OnStart（StartStage，Weight 0）
+
+每帧驱动（与 GameLauncher 无关）
+  └── UpdateManager 注入的 PlayerLoop 驱动系统 → 三个时机的调度器
 ```
 
 ---
@@ -232,12 +239,15 @@ GameLauncher.Start()
 
 ### 更新操作
 
-| 操作           | 代码                                               |
-| -------------- | -------------------------------------------------- |
-| 注册到更新调度 | `UpdateManager.Register(this)`                     |
-| 注销更新       | `UpdateManager.Unregister(this)`                   |
-| 节点树自动绑定 | `UpdateManager.Bind(rootNode)`                     |
-| 实现 LOD 降级  | `UpdateLOD IUpdateable.OnUpdate(float dt) { ... }` |
+| 操作           | 代码                                                          |
+| -------------- | ------------------------------------------------------------- |
+| 注册到更新调度 | `UpdateManager.Register(this, depth: 0)`                      |
+| 注销更新       | `UpdateManager.Unregister(this)`                              |
+| 节点树自动绑定 | 节点实现 `IUpdateable` 后由 `UpdateNode` 自动登记              |
+| 实现 LOD 降级  | `UpdateLOD IUpdateable.OnUpdate(float deltaTime, float time)` |
+| 延迟更新时机   | 实现 `ILateUpdateable.OnLateUpdate(deltaTime, time)`          |
+| 固定步长时机   | 实现 `IFixedUpdateable.OnFixedUpdate(deltaTime, fixedTime)`   |
+| 声明墙钟时间轴 | 实现 `IUpdateTimeMode.TimeMode => UpdateTimeMode.Unscaled`    |
 
 ### 锁操作
 
