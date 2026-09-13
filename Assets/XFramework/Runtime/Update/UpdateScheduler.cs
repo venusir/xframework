@@ -33,6 +33,35 @@ namespace XFramework.XUpdate
             public float LastUpdateTime;
         }
 
+        /// <summary>
+        /// 待处理操作的类型。
+        /// </summary>
+        private enum PendingOpKind : byte
+        {
+            /// <summary>插入到指定 LOD 桶。</summary>
+            Register,
+
+            /// <summary>从所有桶与禁用列表中移除。</summary>
+            Unregister,
+
+            /// <summary>LOD 迁移。<b>条件操作</b>：仅当应用时节点仍在某个桶里才生效。</summary>
+            Move,
+        }
+
+        /// <summary>
+        /// 待处理操作。
+        /// <para>只带节点引用而<b>不带下标</b>——下标在缓冲期间早已失效，
+        /// 这正是「按缓存的 i 写回」会覆盖他人条目的根源。</para>
+        /// </summary>
+        private struct PendingOp
+        {
+            public IUpdateable Node;
+            public PendingOpKind Kind;
+            public int Lod;
+            public int Depth;
+            public float Time;
+        }
+
         #endregion
 
         #region Private Fields
@@ -40,11 +69,10 @@ namespace XFramework.XUpdate
         /// <summary>按 LOD 等级分桶的更新条目列表。索引 = LOD 等级。</summary>
         private readonly List<Entry>[] _lodEntries;
 
-        /// <summary>待添加的条目缓冲（迭代期间暂存）。</summary>
-        private readonly List<Entry>[] _pendingAdd;
-
-        /// <summary>待移除的节点缓冲（迭代期间暂存）。</summary>
-        private readonly List<IUpdateable> _pendingRemove;
+        /// <summary>
+        /// 待处理操作缓冲。迭代期间按<b>入队顺序</b>暂存，帧末统一应用。
+        /// </summary>
+        private readonly List<PendingOp> _pendingOps = new List<PendingOp>(16);
 
         /// <summary>当前是否正在迭代中。</summary>
         private bool _isIterating;
@@ -65,13 +93,10 @@ namespace XFramework.XUpdate
         public UpdateScheduler()
         {
             _lodEntries = new List<Entry>[LODCount];
-            _pendingAdd = new List<Entry>[LODCount];
             for (int i = 0; i < LODCount; i++)
             {
                 _lodEntries[i] = new List<Entry>();
-                _pendingAdd[i] = new List<Entry>();
             }
-            _pendingRemove = new List<IUpdateable>();
         }
 
         #endregion
@@ -102,7 +127,7 @@ namespace XFramework.XUpdate
                 catch (System.Exception e)
                 {
                     Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                    _pendingRemove.Add(entry.Node);
+                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                     continue;
                 }
 
@@ -111,8 +136,7 @@ namespace XFramework.XUpdate
 
                 if (newLOD != 0)
                 {
-                    _pendingAdd[newLOD].Add(entry);
-                    _pendingRemove.Add(entry.Node);
+                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Move, Lod = newLOD });
                 }
             }
 
@@ -144,7 +168,7 @@ namespace XFramework.XUpdate
                     catch (System.Exception e)
                     {
                         Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
-                        _pendingRemove.Add(entry.Node);
+                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                         continue;
                     }
 
@@ -153,8 +177,7 @@ namespace XFramework.XUpdate
 
                     if (newLOD != lod)
                     {
-                        _pendingAdd[newLOD].Add(entry);
-                        _pendingRemove.Add(entry.Node);
+                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Move, Lod = newLOD });
                     }
                 }
             }
@@ -175,17 +198,14 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
 
-            int lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD);
-            var entry = new Entry { Node = node, Depth = depth, LastUpdateTime = Time.time };
-
-            if (_isIterating)
+            Enqueue(new PendingOp
             {
-                _pendingAdd[lod].Add(entry);
-            }
-            else
-            {
-                InsertSorted(_lodEntries[lod], entry);
-            }
+                Node = node,
+                Kind = PendingOpKind.Register,
+                Lod = Mathf.Clamp((int)initialLOD, 0, MaxLOD),
+                Depth = depth,
+                Time = Time.time,
+            });
         }
 
         /// <summary>
@@ -196,15 +216,7 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
 
-            if (_isIterating)
-            {
-                _pendingRemove.Add(node);
-            }
-            else
-            {
-                RemoveFromList(_lodEntries, node);
-                RemoveFromDisabled(node);
-            }
+            Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Unregister });
         }
 
         /// <summary>
@@ -334,16 +346,18 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 清空所有 LOD 列表、禁用列表和 pending 缓冲。
+        /// 清空所有 LOD 列表、禁用列表和待处理操作缓冲。
+        /// <para><b>不回调 <see cref="IUpdateable.OnDisable"/></b>：与 <see cref="Unregister"/>
+        /// 一致（它同样不回调）。本方法的主要使用者是测试隔离，在隔离点触发用户回调
+        /// 会让 fixture 的收尾去执行业务代码——那里往往引用了已拆掉的管理器。</para>
         /// </summary>
         public void Clear()
         {
             for (int i = 0; i < LODCount; i++)
             {
                 _lodEntries[i].Clear();
-                _pendingAdd[i].Clear();
             }
-            _pendingRemove.Clear();
+            _pendingOps.Clear();
             _disabledEntries.Clear();
             _frameCount = 0;
         }
@@ -379,7 +393,84 @@ namespace XFramework.XUpdate
 
         #endregion
 
-        #region Private Methods
+        #region Private Methods — 待处理操作
+
+        /// <summary>
+        /// 入队一条操作。
+        /// <para>迭代中只入缓冲、等待帧末统一应用；其余情况立即应用。
+        /// <b>两条路径共用 <see cref="ApplyOp"/></b>，避免出现「立即调用一套语义、
+        /// 缓冲调用另一套语义」的分叉。</para>
+        /// </summary>
+        private void Enqueue(in PendingOp op)
+        {
+            if (_isIterating)
+            {
+                _pendingOps.Add(op);
+                return;
+            }
+
+            ApplyOp(op);
+        }
+
+        /// <summary>
+        /// 应用一条操作。每条都以「上一条生效后的活表」为基准，
+        /// 因此同一帧内的 Register→Unregister→Register 序列必然得到「最后一条生效」的结果。
+        /// </summary>
+        private void ApplyOp(in PendingOp op)
+        {
+            switch (op.Kind)
+            {
+                case PendingOpKind.Register:
+                    InsertSorted(_lodEntries[op.Lod], new Entry
+                    {
+                        Node = op.Node,
+                        Depth = op.Depth,
+                        LastUpdateTime = op.Time,
+                    });
+                    break;
+
+                case PendingOpKind.Unregister:
+                    // 删净而不是「命中第一个即 return」：重复注册会留下多条条目，
+                    // 只删一条会让已注销的节点继续被派发
+                    RemoveAllFromBuckets(op.Node);
+                    RemoveFromDisabled(op.Node);
+                    break;
+
+                case PendingOpKind.Move:
+                    // 条件操作：只有节点此刻仍在桶里才迁移。本帧内它若已被注销/被禁用，
+                    // 这次迁移必须作废——否则就成了把它重新插回桶里（复活）
+                    if (TryTakeFromBuckets(op.Node, out Entry entry))
+                    {
+                        InsertSorted(_lodEntries[op.Lod], entry);
+                    }
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// 刷新待处理操作缓冲：<b>按入队先后逐条应用</b>。
+        /// <para>而不是「先全部注销再全部注册」——后者表达不出调用顺序：同一帧内
+        /// 「迁移 LOD 的同时被注销」的节点会在注册阶段被重新插回桶里（永久复活），
+        /// 而 Register→Unregister→Register 这类序列无论怎么调两阶段顺序都得不到正确结果。</para>
+        /// <para>索引先自增再应用：应用会触发用户回调，回调里可能继续入队、甚至调用
+        /// <see cref="Clear"/> 清空本缓冲，每轮重新读 <c>Count</c> 才能安全退出。</para>
+        /// </summary>
+        private void FlushPending()
+        {
+            int index = 0;
+            while (index < _pendingOps.Count)
+            {
+                var op = _pendingOps[index];
+                index++;
+                ApplyOp(op);
+            }
+
+            _pendingOps.Clear();
+        }
+
+        #endregion
+
+        #region Private Methods — 列表操作
 
         /// <summary>
         /// 按深度升序插入到指定 LOD 列表。
@@ -399,19 +490,42 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 从所有 LOD 列表中移除指定节点。
+        /// 取出节点在桶中的条目（移除并返回）。
         /// </summary>
-        private static void RemoveFromList(List<Entry>[] lodEntries, IUpdateable node)
+        /// <returns>节点在桶中时返回 true；未落桶（已注销、已禁用或仍在缓冲中）返回 false。</returns>
+        private bool TryTakeFromBuckets(IUpdateable node, out Entry entry)
         {
             for (int lod = 0; lod < LODCount; lod++)
             {
-                var entries = lodEntries[lod];
+                var entries = _lodEntries[lod];
+                for (int i = entries.Count - 1; i >= 0; i--)
+                {
+                    if (entries[i].Node == node)
+                    {
+                        entry = entries[i];
+                        entries.RemoveAt(i);
+                        return true;
+                    }
+                }
+            }
+
+            entry = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 从所有 LOD 列表中移除节点的<b>全部</b>条目（重复注册会留下多条）。
+        /// </summary>
+        private void RemoveAllFromBuckets(IUpdateable node)
+        {
+            for (int lod = 0; lod < LODCount; lod++)
+            {
+                var entries = _lodEntries[lod];
                 for (int i = entries.Count - 1; i >= 0; i--)
                 {
                     if (entries[i].Node == node)
                     {
                         entries.RemoveAt(i);
-                        return;
                     }
                 }
             }
@@ -429,28 +543,6 @@ namespace XFramework.XUpdate
                     _disabledEntries.RemoveAt(i);
                     return;
                 }
-            }
-        }
-
-        /// <summary>
-        /// 刷新 pending 缓冲，将迭代期间暂存的注册/注销操作应用到主列表。
-        /// </summary>
-        private void FlushPending()
-        {
-            for (int i = 0; i < _pendingRemove.Count; i++)
-            {
-                RemoveFromList(_lodEntries, _pendingRemove[i]);
-            }
-            _pendingRemove.Clear();
-
-            for (int lod = 0; lod < LODCount; lod++)
-            {
-                var pending = _pendingAdd[lod];
-                for (int i = 0; i < pending.Count; i++)
-                {
-                    InsertSorted(_lodEntries[lod], pending[i]);
-                }
-                pending.Clear();
             }
         }
 

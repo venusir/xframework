@@ -144,6 +144,90 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void UnregisterSelf_WhileMigrating_StaysUnregistered()
+        {
+            // 同一帧内既迁移 LOD 又注销自己。旧实现把两者各拆成一条 remove + 一条 add，
+            // flush 又是「先全部 remove 再全部 add」，于是注销完又被插进新桶——永久复活
+            var node = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Frame8 };
+            node.Script = (scheduler, self) => scheduler.Unregister(self);
+            _scheduler.Register(node, depth: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "注销后不应残留任何条目");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Frame8), "迁移必须作废，不能把节点插进新桶");
+
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, node.OnUpdateCallCount, "注销后不应再被派发");
+        }
+
+        [Test]
+        public void UnregisterByOther_AfterTargetDispatched_MoveIsDiscarded()
+        {
+            var target = new TestUpdateable { ReturnLOD = UpdateLOD.Frame8 };
+            var unregistrator = new ScriptedNode(_scheduler);
+            unregistrator.Script = (scheduler, self) => scheduler.Unregister(target);
+
+            // 同深度时按注册顺序派发：unregistrator 先跑，注销操作排在 target 的迁移操作之前
+            _scheduler.Register(unregistrator, depth: 0);
+            _scheduler.Register(target, depth: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, target.OnUpdateCallCount, "注销被缓冲，目标本帧仍应被派发一次");
+            Assert.AreEqual(1, _scheduler.TotalCount, "只剩 unregistrator");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Frame8), "迁移必须作废");
+
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, target.OnUpdateCallCount, "注销已生效，不再派发");
+        }
+
+        [Test]
+        public void UnregisterDisabledNode_EnableDoesNotResurrect()
+        {
+            // 锁定既有语义：注销要一并清掉禁用表。只清桶的话，此后一旦有人 Enable，
+            // 已注销的节点会被从禁用表里捞出来插回桶 0——又一条复活路径
+            // （旧实现已如此，本用例防止重构时把它改掉）
+            _scheduler.Register(_node, depth: 0);
+            _scheduler.Disable(_node);
+            _scheduler.Unregister(_node);
+
+            Assert.AreEqual(0, _scheduler.TotalCount);
+            Assert.AreEqual(0, _scheduler.DisabledCount, "注销应连同禁用表一起清理");
+
+            _scheduler.Enable(_node);
+            Assert.AreEqual(0, _scheduler.TotalCount, "Enable 不应把已注销的节点捞回桶里");
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(0, _node.OnUpdateCallCount);
+        }
+
+        [Test]
+        public void UnregisterThenRegister_SameTick_RegisteredExactlyOnce()
+        {
+            // 逐条应用才能表达「先注销再注册」：两阶段 flush 无论怎么调顺序都得不到恰好一条
+            var node = new ScriptedNode(_scheduler);
+            node.Script = (scheduler, self) =>
+            {
+                scheduler.Unregister(self);
+                scheduler.Register(self, depth: 0, initialLOD: UpdateLOD.Frame4);
+            };
+            _scheduler.Register(node, depth: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _scheduler.TotalCount, "先注销再注册应恰好剩一条");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Frame4), "重新注册应使用新的 LOD");
+
+            // Frame4 桶每 4 帧才轮到一次切片：两份条目会在四帧内各派发一次，一份只派发一次
+            _scheduler.Tick(time: 2.0f);
+            _scheduler.Tick(time: 3.0f);
+            _scheduler.Tick(time: 4.0f);
+            _scheduler.Tick(time: 5.0f);
+            Assert.AreEqual(2, node.OnUpdateCallCount, "四帧内恰好再派发一次");
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
@@ -398,6 +482,40 @@ namespace XFramework.XUpdate.Tests
                     _scheduler.Unregister(_target);
                 }
                 return UpdateLOD.Frame1;
+            }
+        }
+
+        /// <summary>
+        /// 派发中可执行一次剧本动作的测试替身，用于构造「回调里增删改调度状态」的各种组合。
+        /// <para><see cref="Script"/> 在<b>第一次</b> OnUpdate 时执行一次，参数为调度器与自身。</para>
+        /// </summary>
+        private sealed class ScriptedNode : IUpdateable
+        {
+            private readonly UpdateScheduler _scheduler;
+            private bool _hasRunScript;
+
+            public UpdateLOD NextLOD { get; set; } = UpdateLOD.Frame1;
+            public System.Action<UpdateScheduler, IUpdateable> Script { get; set; }
+            public int OnUpdateCallCount { get; private set; }
+
+            public ScriptedNode(UpdateScheduler scheduler)
+            {
+                _scheduler = scheduler;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                OnUpdateCallCount++;
+                if (!_hasRunScript)
+                {
+                    _hasRunScript = true;
+                    Script?.Invoke(_scheduler, this);
+                }
+                return NextLOD;
             }
         }
     }
