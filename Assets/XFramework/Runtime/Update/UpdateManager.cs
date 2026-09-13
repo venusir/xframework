@@ -32,43 +32,54 @@ namespace XFramework.XUpdate
     {
         #region Private Fields
 
-        /// <summary>内部调度器单例，负责 LOD 分桶、时间切片等纯调度逻辑。</summary>
+        /// <summary>内部调度器单例，负责 LOD 分桶、时间切片等纯调度逻辑。null 表示当前不可用。</summary>
         private static UpdateScheduler _scheduler;
-
-        /// <summary>
-        /// 应用是否已进入退出流程。
-        /// <para>与 <see cref="Clear"/> 的区别：退出是<b>终态</b>（进程即将结束，不再重建），
-        /// 手动清空只是重置注册、之后仍可正常使用。</para>
-        /// </summary>
-        private static bool _shutdown;
 
         #endregion
 
         #region Auto Lifecycle
 
         /// <summary>
-        /// 自动初始化更新管理器。
-        /// <para>通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 保证在任何 MonoBehaviour 之前完成初始化。</para>
+        /// 自动初始化更新管理器（幂等）。
+        /// <para><b>为什么两个特性都要挂：</b>编辑器里 <see cref="UnityEditor.InitializeOnLoadMethodAttribute"/>
+        /// 只在程序集加载（含重编译引发的域重载）时执行；而在 Project Settings → Editor →
+        /// Enter Play Mode Options 里关闭 Reload Domain 后，进入播放<b>不会</b>重新加载程序集，
+        /// 该回调不再执行。<see cref="RuntimeInitializeOnLoadMethodAttribute"/> 在编辑器进入播放时
+        /// 同样会执行，是关闭域重载时唯一能重置静态状态的时机（Unity 官方推荐的
+        /// <see cref="RuntimeInitializeLoadType.SubsystemRegistration"/>，早于首个场景加载）。</para>
+        /// <para><b>必须幂等：</b>开启域重载时进入播放会先后触发两者（域重载 → InitializeOnLoadMethod，
+        /// 进入播放 → RuntimeInitializeOnLoadMethod）；测试也会显式调用本方法复位门面。</para>
         /// </summary>
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]
-#else
-        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
 #endif
-        static void AutoInit()
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void AutoInit()
         {
-            _scheduler = new UpdateScheduler();
-            _shutdown = false;
+            // 只在缺失时重建：第二次调用不能清掉已注册的对象——域重载模式下这一步紧跟在
+            // InitializeOnLoadMethod 之后，无条件 new 会给已注册的静态服务（如 InputManager
+            // 的帧驱动）换上一份空调度器，表现为「模块自己消失了」
+            if (_scheduler == null)
+            {
+                _scheduler = new UpdateScheduler();
+            }
+
+            // 幂等订阅：重复 += 会在自退订之后留下残余订阅；关闭域重载时 Application.quitting
+            // 的订阅表跨播放会话存活，残余订阅会逐次累积
+            Application.quitting -= OnQuitting;
             Application.quitting += OnQuitting;
         }
 
         /// <summary>
-        /// 应用退出时清理内部状态。
-        /// <para>这是<b>不可逆</b>的终态：进程即将结束，此后不再重建调度器。</para>
+        /// 应用退出时清理内部状态：清空注册并释放调度器，下一次 <see cref="AutoInit"/> 会重建。
+        /// <para><b>不再有不可逆闩锁：</b>「退出后不复用」由调用时机结构性保证——<see cref="AutoInit"/>
+        /// 只在程序集加载与进入播放时触发，进程退出后不会被再调用；而编辑器关闭域重载时，
+        /// 下一次进入播放<b>必须</b>能重建，否则整个 Update 模块静默死亡（旧实现正是如此：
+        /// <c>_shutdown</c> 置位后 <see cref="Tick"/>/<see cref="Register"/> 等十余处守卫全部
+        /// 静默 return，连 <see cref="Clear"/> 都救不回来）。</para>
         /// </summary>
-        static void OnQuitting()
+        internal static void OnQuitting()
         {
-            _shutdown = true;
             _scheduler?.Clear();
             _scheduler = null;
             Application.quitting -= OnQuitting;
@@ -79,18 +90,19 @@ namespace XFramework.XUpdate
         #region Public API — 生命周期
 
         /// <summary>
-        /// 是否已初始化（即调度器可用且应用尚未进入退出流程）。
+        /// 是否已初始化（调度器可用）。
         /// </summary>
-        public static bool IsInitialized => _scheduler != null && !_shutdown;
+        public static bool IsInitialized => _scheduler != null;
 
         /// <summary>
         /// 清空全部注册，用于测试隔离或需要重置调度状态的场景。
         /// <para><b>不是终态</b>：清空后仍可继续 <see cref="Register"/> 与 <see cref="Tick"/>。
-        /// 进程退出时的清理是另一条路径（<see cref="OnQuitting"/>），那才是不可逆的。</para>
+        /// 进程退出时的清理是另一条路径（<see cref="OnQuitting"/>），它丢弃调度器、由下一次
+        /// <see cref="AutoInit"/> 重建。</para>
         /// <para><b>为什么改名（原 <c>Destroy</c>）：</b>原实现只清空注册却同时置一个单向闩锁并丢弃调度器，
         /// 使本方法成为「调用一次即永久失效」——而它的文档写的恰恰是「主要用于单元测试隔离」。
         /// 两者自相矛盾：任何 fixture 一旦用它做隔离，同一 play 会话内后续所有 <see cref="Register"/>
-        /// 都会静默 no-op（<see cref="Register"/> 开头的 <c>if (_shutdown || _scheduler == null) return;</c>）。
+        /// 都会静默 no-op（<see cref="Register"/> 开头的守卫直接 return）。
         /// 现对齐 <see cref="XMessage.MessageManager.Clear"/> 与
         /// <see cref="XNode.NodeFactory.ClearAllPools"/> 的既有命名与语义，
         /// 并与「静态门面在 <c>Destroy</c> 后可重新初始化」的框架惯例一致。</para>
@@ -111,7 +123,7 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public static void Tick(float time)
         {
-            if (_shutdown || _scheduler == null) return;
+            if (_scheduler == null) return;
             _scheduler.Tick(time);
         }
 
@@ -128,7 +140,7 @@ namespace XFramework.XUpdate
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
         public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
         {
-            if (_shutdown || _scheduler == null || node == null) return;
+            if (_scheduler == null || node == null) return;
             _scheduler.Register(node, depth, initialLOD);
         }
 
@@ -138,7 +150,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要注销的对象。</param>
         public static void Unregister(IUpdateable node)
         {
-            if (_shutdown || _scheduler == null || node == null) return;
+            if (_scheduler == null || node == null) return;
             _scheduler.Unregister(node);
         }
 
@@ -153,7 +165,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要启用的对象。</param>
         public static void Enable(IUpdateable node)
         {
-            if (_shutdown || _scheduler == null || node == null) return;
+            if (_scheduler == null || node == null) return;
             _scheduler.Enable(node);
         }
 
@@ -164,7 +176,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要禁用的对象。</param>
         public static void Disable(IUpdateable node)
         {
-            if (_shutdown || _scheduler == null || node == null) return;
+            if (_scheduler == null || node == null) return;
             _scheduler.Disable(node);
         }
 
@@ -175,7 +187,7 @@ namespace XFramework.XUpdate
         /// <returns>如果对象未被禁用则返回 true。</returns>
         public static bool IsEnabled(IUpdateable node)
         {
-            if (_shutdown || _scheduler == null || node == null) return false;
+            if (_scheduler == null || node == null) return false;
             return _scheduler.IsEnabled(node);
         }
 
@@ -192,7 +204,7 @@ namespace XFramework.XUpdate
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
         public static void ProcessImmediate(IUpdateable node, float deltaTime, float time)
         {
-            if (_shutdown || _scheduler == null || node == null) return;
+            if (_scheduler == null || node == null) return;
             _scheduler.ProcessImmediate(node, deltaTime, time);
         }
 
@@ -205,7 +217,7 @@ namespace XFramework.XUpdate
         /// </summary>
         public static int GetCount(UpdateLOD lod)
         {
-            if (_shutdown || _scheduler == null) return 0;
+            if (_scheduler == null) return 0;
             return _scheduler.GetCount(lod);
         }
 
@@ -216,7 +228,7 @@ namespace XFramework.XUpdate
         {
             get
             {
-                if (_shutdown || _scheduler == null) return 0;
+                if (_scheduler == null) return 0;
                 return _scheduler.TotalCount;
             }
         }
@@ -228,7 +240,7 @@ namespace XFramework.XUpdate
         {
             get
             {
-                if (_shutdown || _scheduler == null) return 0;
+                if (_scheduler == null) return 0;
                 return _scheduler.DisabledCount;
             }
         }
