@@ -335,6 +335,9 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 立即对指定节点执行一次更新并重新调整 LOD。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
+        /// <para><b>派发期间调用不会执行更新</b>：只把时间基准推到 <paramref name="time"/> 后返回
+        /// （在别人的 <c>OnUpdate</c> 里再次回调自己会形成嵌套派发）。该次调用也不产生 delta——
+        /// 下一次正常派发的间隔从这一刻重新起算。</para>
         /// </summary>
         /// <param name="node">要立即更新的节点。</param>
         /// <param name="deltaTime">传入的时间差。</param>
@@ -343,49 +346,49 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
 
-            if (_isIterating)
+            // 未落桶（还在缓冲里）或已禁用：与「节点不在管理中」一致，静默无操作
+            if (!TryFindEntry(node, out int lod, out int index, out Entry entry))
             {
-                for (int lod = 0; lod < LODCount; lod++)
-                {
-                    var entries = _lodEntries[lod];
-                    for (int i = entries.Count - 1; i >= 0; i--)
-                    {
-                        if (entries[i].Node == node)
-                        {
-                            var entry = entries[i];
-                            entry.LastUpdateTime = time;
-                            entries[i] = entry;
-                            return;
-                        }
-                    }
-                }
                 return;
             }
 
-            for (int lod = 0; lod < LODCount; lod++)
+            if (_isIterating)
             {
-                var entries = _lodEntries[lod];
-                for (int i = entries.Count - 1; i >= 0; i--)
+                entry.LastUpdateTime = time;
+                _lodEntries[lod][index] = entry;
+                return;
+            }
+
+            // 回调是用户代码，期间同样禁止直接改活表：否则回调里的注销/禁用会让随后的写回
+            // 落在已经易主的槽位上（覆盖他人条目，并把已注销的节点插回桶里）。
+            // 复用迭代闩锁，让这些操作进缓冲、回调返回后统一 flush。
+            _isIterating = true;
+            try
+            {
+                int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, time), 0, MaxLOD);
+
+                entry.LastUpdateTime = time;
+
+                // 活表在回调期间未被改动（改动都进了缓冲），故下标仍然有效
+                _lodEntries[lod][index] = entry;
+
+                if (newLOD != lod)
                 {
-                    if (entries[i].Node == node)
-                    {
-                        var entry = entries[i];
-                        int newLOD = Mathf.Clamp((int)node.OnUpdate(deltaTime, time), 0, MaxLOD);
-
-                        entry.LastUpdateTime = time;
-
-                        if (newLOD != lod)
-                        {
-                            entries.RemoveAt(i);
-                            InsertSorted(_lodEntries[newLOD], entry);
-                        }
-                        else
-                        {
-                            entries[i] = entry;
-                        }
-                        return;
-                    }
+                    Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Move, Lod = newLOD });
                 }
+
+                FlushPending();
+
+                if (_clearRequested)
+                {
+                    _clearRequested = false;
+                    ClearImmediate();
+                }
+            }
+            finally
+            {
+                // 回调抛异常时也要归位闩锁，异常照旧上抛（缓冲留给下一次 Tick 的 flush）
+                _isIterating = false;
             }
         }
 
@@ -572,6 +575,32 @@ namespace XFramework.XUpdate
                     hi = mid;
             }
             entries.Insert(lo, entry);
+        }
+
+        /// <summary>
+        /// 查找节点在桶中的位置（不移除）。
+        /// </summary>
+        private bool TryFindEntry(IUpdateable node, out int lod, out int index, out Entry entry)
+        {
+            for (int i = 0; i < LODCount; i++)
+            {
+                var entries = _lodEntries[i];
+                for (int j = entries.Count - 1; j >= 0; j--)
+                {
+                    if (entries[j].Node == node)
+                    {
+                        lod = i;
+                        index = j;
+                        entry = entries[j];
+                        return true;
+                    }
+                }
+            }
+
+            lod = -1;
+            index = -1;
+            entry = default;
+            return false;
         }
 
         /// <summary>

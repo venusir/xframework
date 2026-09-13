@@ -459,6 +459,67 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void ProcessImmediate_TargetUnregistersSelf_DoesNotCorruptOthers()
+        {
+            // ProcessImmediate 的写回用的是回调前查到的下标：回调里把节点注销后活表已变，
+            // 写回会把顶替上来的 b 整条覆盖（b 永久停更、a 复活后继续被派发）
+            var a = new ScriptedNode(_scheduler);
+            var b = new TestUpdateable();
+            a.Script = (scheduler, self) => scheduler.Unregister(self);
+
+            _scheduler.Register(a, depth: 0);
+            _scheduler.Register(b, depth: 0);
+
+            _scheduler.ProcessImmediate(a, deltaTime: 0.5f, time: 1.0f);
+
+            Assert.AreEqual(1, a.OnUpdateCallCount);
+            Assert.AreEqual(1, _scheduler.TotalCount, "只剩 b：a 已注销");
+
+            _scheduler.Tick(time: 2.0f);
+
+            Assert.AreEqual(1, b.OnUpdateCallCount, "b 必须还在——被覆盖则此后恒为 0");
+            Assert.AreEqual(1, a.OnUpdateCallCount, "a 已注销，不再派发");
+        }
+
+        [Test]
+        public void ProcessImmediate_TargetUnregistersSelfAndMigrates_MoveIsDiscarded()
+        {
+            // 旧实现按缓存的 index 先 RemoveAt 再插新桶：删掉的是顶替上来的 b，
+            // 而已被注销的 a 反被插进新桶
+            var a = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Frame8 };
+            var b = new TestUpdateable();
+            a.Script = (scheduler, self) => scheduler.Unregister(self);
+
+            _scheduler.Register(a, depth: 0);
+            _scheduler.Register(b, depth: 0);
+
+            _scheduler.ProcessImmediate(a, deltaTime: 0.5f, time: 1.0f);
+
+            Assert.AreEqual(1, _scheduler.TotalCount, "只剩 b");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Frame1), "b 仍在原桶");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Frame8), "迁移必须作废");
+
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, b.OnUpdateCallCount);
+        }
+
+        [Test]
+        public void ProcessImmediate_UnknownOrDisabledNode_DoesNothing()
+        {
+            // 未注册 / 已禁用的节点：与「不在管理中」一致，静默无操作且不回调
+            var node = new ScriptedNode(_scheduler);
+
+            _scheduler.ProcessImmediate(node, deltaTime: 0.5f, time: 1.0f);
+            Assert.AreEqual(0, node.OnUpdateCallCount);
+
+            _scheduler.Register(node, depth: 0);
+            _scheduler.Disable(node);
+
+            _scheduler.ProcessImmediate(node, deltaTime: 0.5f, time: 2.0f);
+            Assert.AreEqual(0, node.OnUpdateCallCount);
+        }
+
+        [Test]
         public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
