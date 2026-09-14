@@ -80,6 +80,14 @@ namespace XFramework.XUpdate
             public float LastUpdateTime;
 
             /// <summary>
+            /// 尚未经历过一次派发，故首次派发的 delta 记 0。
+            /// <para>注册与重新启用时一律置位，由首次派发清除。这样调度器不必去猜「现在几点」——
+            /// 驱动方给的时间轴未必是 Unity 的 <c>Time.time</c>（测试与确定性回放都自带时刻），
+            /// 而 <c>timeScale != 1</c> 时墙钟轴与逻辑时间还差着截距，猜错就是一次成片的假 delta。</para>
+            /// </summary>
+            public bool NeedsAnchor;
+
+            /// <summary>
             /// 所在时间轴。桶已经编码了轴，但这个字段在条目<b>离开桶</b>（进禁用表）后是
             /// 唯一的归位依据——禁用表是一维的，<see cref="Enable"/> 得知道该回哪条轴。
             /// 写入后不再改动，因此不构成「需要同步的第二份真相」。
@@ -122,7 +130,6 @@ namespace XFramework.XUpdate
             public int Bucket;
 
             public int Depth;
-            public float Time;
         }
 
         #endregion
@@ -167,7 +174,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 各时间轴的时间基准是否已锚定。未锚定时首帧只锚定、不累积。
-        /// <para>新实例的 <see cref="_lastFrameTime"/> 是 0 而 <c>Time.time</c> 早已不是 0，
+        /// <para>新实例的 <see cref="_lastFrameTime"/> 是 0 而驱动方给的时刻早已不是 0，
         /// 不锚定的话首次 Tick 的间隔会是「会话已运行时长」。</para>
         /// </summary>
         private readonly bool[] _timeBaseAnchored = new bool[AxisCount];
@@ -325,7 +332,7 @@ namespace XFramework.XUpdate
             for (int i = 0; i < lod0.Count; i++)
             {
                 var entry = lod0[i];
-                float realDelta = ClampDelta(now - entry.LastUpdateTime);
+                float realDelta = TakeDelta(ref entry, now);
 
                 int newLOD;
                 try
@@ -339,7 +346,6 @@ namespace XFramework.XUpdate
                     continue;
                 }
 
-                entry.LastUpdateTime = now;
                 lod0[i] = entry;
 
                 if (newLOD != 0)
@@ -383,7 +389,7 @@ namespace XFramework.XUpdate
                 for (int i = sliceIndex; i < count; i += sliceCount)
                 {
                     var entry = entries[i];
-                    float realDelta = ClampDelta(now - entry.LastUpdateTime);
+                    float realDelta = TakeDelta(ref entry, now);
 
                     int newLOD;
                     try
@@ -397,7 +403,6 @@ namespace XFramework.XUpdate
                         continue;
                     }
 
-                    entry.LastUpdateTime = now;
                     entries[i] = entry;
 
                     if (newLOD != lod)
@@ -527,6 +532,21 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 取条目距上次派发的真实间隔，并把它的时间基准推到本帧。
+        /// <para>首次派发（注册或重新启用之后）一律记 0：调度器不知道「注册那一刻」在各时间轴
+        /// 上是几点，去猜会在 <c>timeScale != 1</c> 的自定义驱动下算出成片的假间隔。</para>
+        /// </summary>
+        /// <param name="entry">条目副本，由调用方写回。</param>
+        /// <param name="now">该轴本帧的时刻。</param>
+        private static float TakeDelta(ref Entry entry, float now)
+        {
+            float delta = entry.NeedsAnchor ? 0f : ClampDelta(now - entry.LastUpdateTime);
+            entry.NeedsAnchor = false;
+            entry.LastUpdateTime = now;
+            return delta;
+        }
+
+        /// <summary>
         /// 注册一个可更新节点。
         /// <para>同一节点重复注册视为「重新注册」：旧条目会被摘掉，不会出现两条条目、每帧派发两次。</para>
         /// </summary>
@@ -545,7 +565,6 @@ namespace XFramework.XUpdate
                 Kind = PendingOpKind.Register,
                 Bucket = BucketOf((int)timeMode, Mathf.Clamp((int)initialLOD, 0, MaxLOD)),
                 Depth = depth,
-                Time = Time.time,
             });
         }
 
@@ -572,7 +591,7 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
 
-            Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Enable, Time = Time.time });
+            Enqueue(new PendingOp { Node = node, Kind = PendingOpKind.Enable });
         }
 
         /// <summary>
@@ -683,6 +702,7 @@ namespace XFramework.XUpdate
             {
                 int newLOD = Mathf.Clamp(TickNode(node, deltaTime, now), 0, MaxLOD);
 
+                entry.NeedsAnchor = false;
                 entry.LastUpdateTime = now;
 
                 // 活表在回调期间未被改动（改动都进了缓冲），故下标仍然有效
@@ -839,8 +859,8 @@ namespace XFramework.XUpdate
                     {
                         Node = op.Node,
                         Depth = op.Depth,
-                        LastUpdateTime = op.Time,
                         Axis = (byte)AxisOf(op.Bucket),
+                        NeedsAnchor = true,
                     });
                     _bucketOf[op.Node] = op.Bucket;
                     break;
@@ -881,7 +901,7 @@ namespace XFramework.XUpdate
                     if (TryTakeFromDisabled(op.Node, out Entry enabled))
                     {
                         // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
-                        enabled.LastUpdateTime = op.Time;
+                        enabled.NeedsAnchor = true;
 
                         // 回到原时间轴（桶号给的 LOD 已丢，轴还记在条目上）
                         int bucket = BucketOf(enabled.Axis, 0);

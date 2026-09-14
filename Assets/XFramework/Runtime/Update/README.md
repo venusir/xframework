@@ -151,6 +151,9 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
   `Tier5` 意味着半秒多的空窗
 - **恢复不追赶**：`Resume()` 会把时间基准重锚，恢复后第一帧的 `deltaTime` 为 0，
   而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在节点内自行累加
+- **注册与重新启用后的首次派发 `deltaTime` 为 0**：调度器无从知道「注册那一刻」在各时间轴上
+  是几点（驱动方给的时间轴未必是 Unity 的 `Time.time`——测试与确定性回放都自带时刻），
+  因此不去猜，首次派发只负责定锚。禁用期间累积的间隔同样不会被算进来
 - `Time.timeScale = 0` 与 `Pause()` 的区别：后者不改动 Unity 时间，供「暂停但不希望 UI 动画、
   手柄振动跟着慢下来」的场景使用
 

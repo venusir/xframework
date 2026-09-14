@@ -1064,6 +1064,47 @@ namespace XFramework.XUpdate.Tests
             }
         }
 
+        [Test]
+        public void FirstDispatchAfterRegister_HasZeroDelta()
+        {
+            // 注册时不该由调度器自己去猜「现在几点」：驱动方给的时间轴未必是 Unity 的 Time.time
+            // （测试与确定性回放都自带时刻），而 timeScale != 1 时墙钟轴与逻辑时间还差着截距。
+            // 猜错就是一次成片的假 delta——两个轴都用远大于真实 Time.time 的时刻来暴露它
+            var scaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var unscaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+
+            _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: 10000f));   // 首帧只锚定
+            _scheduler.Register(scaledNode, depth: 0);
+            _scheduler.Register(unscaledNode, depth: 1, timeMode: UpdateTimeMode.Unscaled);
+
+            _scheduler.Tick(new UpdateClock(time: 100.1f, unscaledTime: 10000.1f));
+
+            Assert.AreEqual(1, scaledNode.OnUpdateCallCount);
+            Assert.AreEqual(1, unscaledNode.OnUpdateCallCount);
+            Assert.AreEqual(0f, scaledNode.DeltaTimes[0], 1e-4f, "逻辑轴首次派发的 delta 应为 0");
+            Assert.AreEqual(0f, unscaledNode.DeltaTimes[0], 1e-4f, "墙钟轴首次派发的 delta 应为 0");
+        }
+
+        [Test]
+        public void FirstDispatchAfterEnable_HasZeroDelta()
+        {
+            // 与注册同理：禁用期间累积的间隔不该算进本次 delta，而调度器同样无从知道
+            // 「重新启用那一刻」的轴时刻。用被禁用掉的 49 秒来暴露猜测式的锚点
+            _scheduler.Register(_node, depth: 0);
+            _scheduler.Tick(new UpdateClock(time: 1f, unscaledTime: 1f));
+            Assert.AreEqual(1, _node.OnUpdateCallCount);
+
+            _scheduler.Disable(_node);
+            _scheduler.Tick(new UpdateClock(time: 50f, unscaledTime: 50f));
+            Assert.AreEqual(1, _node.OnUpdateCallCount, "禁用期间不派发");
+
+            _scheduler.Enable(_node);
+            _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: 100f));
+
+            Assert.AreEqual(2, _node.OnUpdateCallCount);
+            Assert.AreEqual(0f, _node.DeltaTimes[1], 1e-4f, "重新启用后首次派发的 delta 应为 0");
+        }
+
         /// <summary>
         /// 在 Tier5 桶里铺满 32 个节点（下标 0~31 各占一格），使「推进了几格」可以直接从
         /// 派发次数读出来——每格恰好派发一个节点。节点返回 Tier5，故不会迁桶。
