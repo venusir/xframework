@@ -135,11 +135,11 @@ namespace XFramework.XSettings.Tests
             var manager = CreateManager(new FakeStore());
             var ticker = new SettingsAutoSaveTicker<SampleSettings>(manager, 0.5f);
 
-            Assert.AreEqual(UpdateLOD.Frame8, ticker.OnUpdate(0.1f, 0f), "无待提交改动时返回粗粒度");
+            Assert.AreEqual(UpdateLOD.Tier3, ticker.OnUpdate(0.1f, 0f), "无待提交改动时返回粗粒度");
 
             manager.MarkDirty();
 
-            Assert.AreEqual(UpdateLOD.Frame1, ticker.OnUpdate(0.1f, 0f), "窗口内需细粒度才能守住 delay");
+            Assert.AreEqual(UpdateLOD.Tier0, ticker.OnUpdate(0.1f, 0f), "窗口内需细粒度才能守住 delay");
         }
 
         #endregion
@@ -180,9 +180,9 @@ namespace XFramework.XSettings.Tests
             manager.Dispose();
 
             // 注销与「当帧已调度」之间存在竞态窗口，驱动器必须能安全退出
-            UpdateLOD lod = UpdateLOD.Frame1;
+            UpdateLOD lod = UpdateLOD.Tier0;
             Assert.DoesNotThrow(() => lod = ticker.OnUpdate(0.1f, 0f));
-            Assert.AreEqual(UpdateLOD.Frame32, lod, "已释放时直接退到最粗粒度，不再触碰管理器");
+            Assert.AreEqual(UpdateLOD.Tier5, lod, "已释放时直接退到最粗粒度，不再触碰管理器");
         }
 
         #endregion

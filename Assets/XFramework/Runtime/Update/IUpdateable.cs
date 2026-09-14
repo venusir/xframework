@@ -2,31 +2,33 @@ namespace XFramework.XUpdate
 {
 
     /// <summary>
-    /// 更新 LOD 等级，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
-    /// <para>等级越高，更新间隔越大，帧消耗越低。</para>
+    /// 更新 LOD 档位，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
+    /// <para>档位越高，更新间隔越大，帧消耗越低。</para>
+    /// <para>档位名刻意只表达序数、不表达具体周期——周期属于模块约定（见 <c>Update/README.md</c>
+    /// 的分级表）。这样调整节拍基准时不必再次改名。</para>
     /// </summary>
     public enum UpdateLOD
     {
-        /// <summary>每帧更新（帧间隔 = 1 帧）</summary>
-        Frame1 = 0,
+        /// <summary>第 0 档：每帧更新（不切片）</summary>
+        Tier0 = 0,
 
-        /// <summary>每 2 帧更新一次</summary>
-        Frame2 = 1,
+        /// <summary>第 1 档：每 2 帧更新一次</summary>
+        Tier1 = 1,
 
-        /// <summary>每 4 帧更新一次</summary>
-        Frame4 = 2,
+        /// <summary>第 2 档：每 4 帧更新一次</summary>
+        Tier2 = 2,
 
-        /// <summary>每 8 帧更新一次</summary>
-        Frame8 = 3,
+        /// <summary>第 3 档：每 8 帧更新一次</summary>
+        Tier3 = 3,
 
-        /// <summary>每 16 帧更新一次</summary>
-        Frame16 = 4,
+        /// <summary>第 4 档：每 16 帧更新一次</summary>
+        Tier4 = 4,
 
-        /// <summary>每 32 帧更新一次</summary>
-        Frame32 = 5,
+        /// <summary>第 5 档：每 32 帧更新一次</summary>
+        Tier5 = 5,
 
-        /// <summary>最大 LOD 等级标记，用于调度器内部推导数组大小。</summary>
-        Max = Frame32,
+        /// <summary>最大档位标记，用于调度器内部推导数组大小。</summary>
+        Max = Tier5,
     }
 
     /// <summary>

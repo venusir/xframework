@@ -48,7 +48,7 @@ namespace XFramework.XSettings
         {
             // 释放后可能仍被调度一次(注销与当帧调度的竞态),此时直接退出
             if (_owner.IsDisposed)
-                return UpdateLOD.Frame32;
+                return UpdateLOD.Tier5;
 
             var current = _owner.ChangeCount;
             if (current != _lastSeenChange)
@@ -56,21 +56,21 @@ namespace XFramework.XSettings
                 // 有新改动:重置等待窗口。这一步是「去抖」而非「节流」的关键
                 _lastSeenChange = current;
                 _countdown = _delay;
-                return UpdateLOD.Frame1; // 窗口内需要较细的粒度才能守住 delay
+                return UpdateLOD.Tier0; // 窗口内需要较细的粒度才能守住 delay
             }
 
             if (!_owner.IsDirty)
             {
                 _countdown = _delay;
-                return UpdateLOD.Frame8; // 无待提交改动,几乎不必醒来
+                return UpdateLOD.Tier3; // 无待提交改动,几乎不必醒来
             }
 
             _countdown -= deltaTime;
             if (_countdown > 0f)
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
 
             _owner.Save();
-            return UpdateLOD.Frame8;
+            return UpdateLOD.Tier3;
         }
 
         #endregion

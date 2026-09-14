@@ -234,7 +234,7 @@ namespace XFramework.XUpdate
                 bool isLogical = axis == (int)UpdateTimeMode.Scaled;
 
                 // 冻结时不派发、也不推进帧计数：切片相位留在暂停前的位置，恢复后与暂停前接续。
-                // 若照常推进，长周期节点会白丢一轮——Frame32 在 60fps 下意味着半秒多的空窗
+                // 若照常推进，长周期节点会白丢一轮——Tier5 在 60fps 下意味着半秒多的空窗
                 if (isLogical && logicalFrozen)
                 {
                     continue;
@@ -412,9 +412,9 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的节点。</param>
         /// <param name="depth">节点在树中的深度，用于排序。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
-        public void Register(IUpdateLifecycle node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+        public void Register(IUpdateLifecycle node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
@@ -444,7 +444,7 @@ namespace XFramework.XUpdate
         /// 启用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
         /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）；从迭代外调用则立即生效。
-        /// 另需注意：被重新启用的节点一律回到<b>原时间轴</b>的 <see cref="UpdateLOD.Frame1"/> 桶——
+        /// 另需注意：被重新启用的节点一律回到<b>原时间轴</b>的 <see cref="UpdateLOD.Tier0"/> 桶——
         /// 桶号本身就是 LOD，条目移入禁用表时该信息即已丢失（时间轴不会丢，它记在条目上）。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>

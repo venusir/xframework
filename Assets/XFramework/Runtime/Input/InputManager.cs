@@ -153,7 +153,7 @@ namespace XFramework.XInput
         {
             if (_ticker != null) return;
             _ticker = new InputTicker();
-            UpdateManager.Register(_ticker, depth: 0, UpdateLOD.Frame1);
+            UpdateManager.Register(_ticker, depth: 0, UpdateLOD.Tier0);
         }
 
         private static void UnregisterTicker()
@@ -179,7 +179,7 @@ namespace XFramework.XInput
                 {
                     PulseFrame();
                 }
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
         }
 

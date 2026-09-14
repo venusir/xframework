@@ -45,7 +45,7 @@ public class MyNode : EntityNode, IUpdateable
     public UpdateLOD OnUpdate(float deltaTime, float time)
     {
         // 返回值决定「下一次派发」采用的 LOD 等级（不是当前这次）
-        return UpdateLOD.Frame1;
+        return UpdateLOD.Tier0;
     }
 }
 ```
@@ -58,14 +58,14 @@ public sealed class MyService : IUpdateable
     public MyService()
     {
         // 静态服务自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
-        UpdateManager.Register(this, depth: 0, initialLOD: UpdateLOD.Frame1);
+        UpdateManager.Register(this, depth: 0, initialLOD: UpdateLOD.Tier0);
     }
 
     public void OnEnable() { }
 
     public void OnDisable() { }
 
-    public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Frame1;
+    public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Tier0;
 }
 ```
 
@@ -104,14 +104,14 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
 | LOD | 更新频率 | 适用场景 |
 | --- | -------- | -------- |
-| `Frame1` (0) | 每帧 | 输入、移动 |
-| `Frame2` (1) | 每 2 帧 | AI 决策 |
-| `Frame4` (2) | 每 4 帧 | 动画状态机 |
-| `Frame8` (3) | 每 8 帧 | 视野检测 |
-| `Frame16` (4) | 每 16 帧 | UI 刷新 |
-| `Frame32` (5) | 每 32 帧 | 后台数据同步 |
+| `Tier0` (0) | 每帧 | 输入、移动 |
+| `Tier1` (1) | 每 2 帧 | AI 决策 |
+| `Tier2` (2) | 每 4 帧 | 动画状态机 |
+| `Tier3` (3) | 每 8 帧 | 视野检测 |
+| `Tier4` (4) | 每 16 帧 | UI 刷新 |
+| `Tier5` (5) | 每 32 帧 | 后台数据同步 |
 
-「每 N 帧」按**派发次数**计，不是固定时间间隔，因此节流强度随帧率漂移：`Frame8` 在 30fps
+「每 N 帧」按**派发次数**计，不是固定时间间隔，因此节流强度随帧率漂移：`Tier3` 在 30fps
 下约 266ms、在 144fps 下约 55ms。需要与帧率无关的节流时请自行按 `deltaTime` 累加。
 
 被跳过的帧**不会丢失时间**：`OnUpdate` 的 `deltaTime` 是「距上次派发的真实间隔」，
@@ -141,7 +141,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 | `FixedUpdate` 时机 | 随 Unity 固定步停摆 | 不支持（无此轴） |
 
 - **冻结时切片相位不推进**：恢复后节奏与暂停前接续。若照常推进，长周期节点会白丢一轮——
-  `Frame32` 在 60fps 下意味着半秒多的空窗
+  `Tier5` 在 60fps 下意味着半秒多的空窗
 - **恢复不追赶**：`Resume()` 会把时间基准重锚，恢复后第一帧的 `deltaTime` 为 0，
   而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在节点内自行累加
 - `Time.timeScale = 0` 与 `Pause()` 的区别：后者不改动 Unity 时间，供「暂停但不希望 UI 动画、
@@ -178,7 +178,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 - **LOD 是帧数而非时长**：节流强度随帧率变化（见上）
 - **不追赶**：暂停恢复后不补算暂停期间的逻辑
 - **`ProcessImmediate` 派发期间只重置时间基准**，不执行更新
-- **重新启用会回到 `Frame1` 桶**：桶号本身就是 LOD，条目移入禁用表时该信息已丢失
+- **重新启用会回到 `Tier0` 桶**：桶号本身就是 LOD，条目移入禁用表时该信息已丢失
 - **同时手动 `Tick` 且注入生效会派发两次**：注入生效时请只依赖自动驱动
 
 ## 依赖

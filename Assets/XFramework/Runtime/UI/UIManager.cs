@@ -128,7 +128,7 @@ namespace XFramework.XUI
             public UpdateLOD OnUpdate(float deltaTime, float time)
             {
                 Update();
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
         }
 

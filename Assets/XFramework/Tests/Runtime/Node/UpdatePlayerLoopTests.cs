@@ -125,7 +125,7 @@ namespace XFramework.XUpdate.Tests
             public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 FixedCount++;
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
         }
 
@@ -144,13 +144,13 @@ namespace XFramework.XUpdate.Tests
             public UpdateLOD OnUpdate(float deltaTime, float time)
             {
                 Sequence.Add("update");
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
 
             public UpdateLOD OnLateUpdate(float deltaTime, float time)
             {
                 Sequence.Add("late");
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
         }
 
@@ -168,7 +168,7 @@ namespace XFramework.XUpdate.Tests
             public UpdateLOD OnUpdate(float deltaTime, float time)
             {
                 UpdateCount++;
-                return UpdateLOD.Frame1;
+                return UpdateLOD.Tier0;
             }
         }
     }

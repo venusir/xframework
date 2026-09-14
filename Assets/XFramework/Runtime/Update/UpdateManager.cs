@@ -19,12 +19,12 @@ namespace XFramework.XUpdate
     /// {
     ///     public MyService()
     ///     {
-    ///         UpdateManager.Register(this, depth: 0, UpdateLOD.Frame1);
+    ///         UpdateManager.Register(this, depth: 0, UpdateLOD.Tier0);
     ///     }
     ///     
     ///     public void OnEnable() { }
     ///     public void OnDisable() { }
-    ///     public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Frame1;
+    ///     public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Tier0;
     /// }
     /// </code>
     /// <para><b>使用示例（节点树节点）：</b></para>
@@ -468,11 +468,11 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。
         /// 需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）请用
         /// <see cref="UpdateTimeMode.Unscaled"/>。</param>
-        public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+        public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
@@ -487,9 +487,9 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
-        public static void RegisterLate(ILateUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1,
+        public static void RegisterLate(ILateUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
@@ -504,9 +504,9 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
         /// 注意此处的「每 N 帧」是每 N 个<b>固定步</b>（默认 0.02s 一步）。</param>
-        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Frame1)
+        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0)
         {
             if (node == null) return;
             SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, depth, initialLOD);

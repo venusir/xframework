@@ -74,6 +74,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Update 重复注册去重**：同一对象重复注册改为「重新注册」（先摘旧条目再按新 LOD/Depth 插入）。此前会产生两条条目、每帧被派发两次——树里挂了两个 `UpdateNode` 即触发，且单值桶索引表达不了「两条条目分处两个桶」，注销时的「删净」语义会漏删
 - **Update 可见性收敛（破坏性）**：`UpdateScheduler` 由 `public` 改为 `internal sealed`，对齐「实现类默认 internal sealed」的框架约定；第三方若直接 `new UpdateScheduler()` 会编译不过，但正因它的内部结构仍在演进，收口可避免依赖上内部细节
 - **UI 每帧通路并入统一调度**：面板 / HUD 的每帧更新原由场景里的 `UIRootNode.Update` 驱动，那条通路既不在 LOD 调度里、也不受 `Pause` 约束（暂停游戏时面板照跑），还要求场景里必须存在 `UIRootNode`。现由 `UIManager.Initialize` 注册进 `UpdateManager`；面板 `OnUpdate` 的时机随之从「场景 MonoBehaviour.Update」变为「注入的 Update 系统内」，并从此可被 LOD 降频与统一暂停
+- **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
 
 ### Fixed
 

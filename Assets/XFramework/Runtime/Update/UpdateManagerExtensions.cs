@@ -23,8 +23,8 @@ namespace XFramework.XUpdate
         /// <para>时间轴取节点自行声明的（<see cref="IUpdateTimeMode"/>），未声明则为逻辑轴。</para>
         /// </summary>
         /// <param name="node">要注册的节点。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Frame1"/>。</param>
-        public static void RegisterUpdate(this BaseNode node, UpdateLOD initialLOD = UpdateLOD.Frame1)
+        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。</param>
+        public static void RegisterUpdate(this BaseNode node, UpdateLOD initialLOD = UpdateLOD.Tier0)
         {
             if (node is IUpdateable updateable)
             {

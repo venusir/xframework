@@ -63,7 +63,7 @@ namespace XFramework.XSettings
             if (_options.AutoSave)
             {
                 _autoSaver = new SettingsAutoSaveTicker<T>(this, _options.AutoSaveDelay);
-                UpdateManager.Register(_autoSaver, depth: 0, UpdateLOD.Frame8);
+                UpdateManager.Register(_autoSaver, depth: 0, UpdateLOD.Tier3);
             }
 
             if (_options.SaveOnQuit)
