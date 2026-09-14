@@ -1041,6 +1041,29 @@ namespace XFramework.XUpdate.Tests
                 "均值 30fps 下 60 帧应推进 120 格——上限不足会单边截断");
         }
 
+        [Test]
+        public void LongSession_StillAdvancesOneTickPerFrame()
+        {
+            // 会话跑到几十小时后，float 时刻的分辨率会逼近一格（Time.time 到 27 小时时 ULP
+            // 约 7.8ms）：逐帧增量随之在「不足一格」与「超过一格」之间跳，补格数退化成 0/2
+            // 交替。时钟改用 double 后，这个量级下仍应每帧恰好一格
+            var nodes = RegisterOnePerSlice();
+
+            const double sessionStart = 100000d;        // 约 27.8 小时
+            double time = sessionStart;
+            _scheduler.Tick(new UpdateClock(time, time));   // 首帧只锚定
+            int baseline = DispatchedCount(nodes);
+
+            for (int i = 0; i < 60; i++)
+            {
+                time += FrameSeconds;
+                _scheduler.Tick(new UpdateClock(time, time));
+
+                Assert.AreEqual(i + 1, DispatchedCount(nodes) - baseline,
+                    $"第 {i + 1} 帧应恰好推进一格");
+            }
+        }
+
         /// <summary>
         /// 在 Tier5 桶里铺满 32 个节点（下标 0~31 各占一格），使「推进了几格」可以直接从
         /// 派发次数读出来——每格恰好派发一个节点。节点返回 Tier5，故不会迁桶。

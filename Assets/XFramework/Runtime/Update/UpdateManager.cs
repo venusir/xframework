@@ -254,7 +254,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private static UpdateClock BuildClock()
         {
-            return new UpdateClock(Time.time, Time.unscaledTime, Time.timeScale <= 0f);
+            return new UpdateClock(Time.timeAsDouble, Time.unscaledTimeAsDouble, Time.timeScale <= 0f);
         }
 
         /// <summary>
@@ -262,7 +262,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private static UpdateClock BuildFixedClock()
         {
-            return new UpdateClock(Time.fixedTime, Time.fixedTime, Time.timeScale <= 0f);
+            return new UpdateClock(Time.fixedTimeAsDouble, Time.fixedTimeAsDouble, Time.timeScale <= 0f);
         }
 
         /// <summary>

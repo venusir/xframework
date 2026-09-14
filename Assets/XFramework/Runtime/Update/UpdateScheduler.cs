@@ -270,7 +270,10 @@ namespace XFramework.XUpdate
             for (int axis = 0; axis < AxisCount; axis++)
             {
                 bool isLogical = axis == (int)UpdateTimeMode.Scaled;
-                float now = clock.GetTime((UpdateTimeMode)axis);
+
+                // 补格判定用 double 时刻；派发路径保持 float（OnUpdate 的 delta 与 time 都是 float）
+                double nowD = clock.GetTime((UpdateTimeMode)axis);
+                float now = (float)nowD;
 
                 // 冻结时不派发、也不推进格数：切片相位留在暂停前的位置，恢复后与暂停前接续。
                 // 若照常推进，长周期节点会白丢一轮——Tier5 在 60fps 下意味着半秒多的空窗。
@@ -278,7 +281,7 @@ namespace XFramework.XUpdate
                 // 格一次补出来，等价于追赶——本调度器刻意不追赶
                 if (isLogical && logicalFrozen)
                 {
-                    _lastFrameTime[axis] = now;
+                    _lastFrameTime[axis] = nowD;
                     continue;
                 }
 
@@ -292,7 +295,7 @@ namespace XFramework.XUpdate
                 TickEveryFrameBucket(axis, now);
 
                 // 本轴本帧要推进 n 格：低帧率下 n 可能为 2，高帧率下可能为 0
-                for (int t = 0, n = AdvanceTicks(axis, now); t < n; t++)
+                for (int t = 0, n = AdvanceTicks(axis, nowD); t < n; t++)
                 {
                     TickSlicedBuckets(axis, now, _vTick[axis]);
                     _vTick[axis]++;
@@ -418,8 +421,9 @@ namespace XFramework.XUpdate
         /// 债务而不是累积到下一帧，因此卡顿不会滚雪球。</para>
         /// </summary>
         /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
-        /// <param name="now">该轴本帧的时刻。</param>
-        private int AdvanceTicks(int axis, float now)
+        /// <param name="now">该轴本帧的时刻。取 <c>double</c>：逐帧增量要与一格（约 16.7ms）比较，
+        /// 而长会话下 <c>float</c> 的分辨率会逼近一格。</param>
+        private int AdvanceTicks(int axis, double now)
         {
             // 固定步轴恒为 1 格：Time.fixedTime 每步恰好前进一个固定步长，本就没有需要修正的
             // 漂移；走墙钟累加器会把 50Hz 的固定步派成 60Hz 的 1/1/1/1/2 节奏，等于改掉固定步
@@ -660,7 +664,7 @@ namespace XFramework.XUpdate
             }
 
             // 时刻按条目自己的时间轴取：墙钟轴上的节点在暂停期间也要拿到在走的那个时间
-            float now = clock.GetTime((UpdateTimeMode)entry.Axis);
+            float now = (float)clock.GetTime((UpdateTimeMode)entry.Axis);
             int lod = LodOf(bucket);
             int axis = AxisOf(bucket);
 

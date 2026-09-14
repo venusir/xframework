@@ -21,14 +21,19 @@ namespace XFramework.XUpdate
     /// 一帧的时间基。由驱动方构造后交给 <see cref="UpdateManager.Tick(UpdateClock)"/>。
     /// <para>两个时间源由外部成对传入，而不是让调度器自己去读 <see cref="UnityEngine.Time"/>：
     /// 这样调度器保持纯函数、可被单测精确驱动，也不会在一帧内先后读到不一致的瞬时值。</para>
+    /// <para>时刻用 <c>double</c> 而非 <c>float</c>：调度器要靠<b>逐帧增量</b>判断该补几格，
+    /// 而 <c>float</c> 的分辨率在长会话里会逼近一格——<c>Time.time</c> 到 27 小时时 ULP 约
+    /// 7.8ms，不到一格的半个，逐帧增量便在「不足一格」与「超过一格」之间跳，补格数退化成
+    /// 0/2 交替。节点拿到的 <c>deltaTime</c> 仍是 <c>float</c>（接口如此），故此处的精度只
+    /// 服务于「补格判定」，不改变派发契约。</para>
     /// </summary>
     public readonly struct UpdateClock
     {
-        /// <summary>逻辑时间（<see cref="UnityEngine.Time.time"/>），受 timeScale 影响。</summary>
-        public readonly float Time;
+        /// <summary>逻辑时间（<see cref="UnityEngine.Time.timeAsDouble"/>），受 timeScale 影响。</summary>
+        public readonly double Time;
 
-        /// <summary>墙钟时间（<see cref="UnityEngine.Time.unscaledTime"/>），不受 timeScale 影响。</summary>
-        public readonly float UnscaledTime;
+        /// <summary>墙钟时间（<see cref="UnityEngine.Time.unscaledTimeAsDouble"/>），不受 timeScale 影响。</summary>
+        public readonly double UnscaledTime;
 
         /// <summary>
         /// 逻辑时间是否已冻结（<c>timeScale &lt;= 0</c>）。
@@ -42,7 +47,7 @@ namespace XFramework.XUpdate
         /// <param name="time">逻辑时间。</param>
         /// <param name="unscaledTime">墙钟时间。</param>
         /// <param name="isPaused">逻辑时间是否已冻结（<c>timeScale &lt;= 0</c>），默认未冻结。</param>
-        public UpdateClock(float time, float unscaledTime, bool isPaused = false)
+        public UpdateClock(double time, double unscaledTime, bool isPaused = false)
         {
             Time = time;
             UnscaledTime = unscaledTime;
@@ -53,7 +58,7 @@ namespace XFramework.XUpdate
         /// 取指定时间轴对应的时刻。
         /// </summary>
         /// <param name="mode">时间轴。</param>
-        public float GetTime(UpdateTimeMode mode)
+        public double GetTime(UpdateTimeMode mode)
         {
             return mode == UpdateTimeMode.Unscaled ? UnscaledTime : Time;
         }
