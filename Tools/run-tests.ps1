@@ -3,10 +3,11 @@
     以 Unity batchmode 定向运行单元测试。
 
 .DESCRIPTION
-    面向「改完一个模块，快速自测其 fixture」的场景，**不是**全量门禁工具。
-    全量 PlayMode 跑存在跨 fixture 静态状态泄漏噪音（PlayMode 下所有用例共享一个 player
-    实例，各模块静态门面 + RuntimeInitializeOnLoadMethod 相互污染），汇总会变成一片红，
-    因此本脚本以 -Filter 为一等公民。全量验证仍应在 Unity 编辑器 Test Runner 中人工进行。
+    两种用法：改完一个模块用 -Filter 定向跑（日常）；阶段收尾跑全量，**全量 0 失败即门禁**。
+    全量能当门禁的前提是各 fixture 都复位自己触碰的静态门面——PlayMode 下所有用例共享一个
+    player 实例，不复位即互相污染。历史上全量确实是一片红（那批跨 fixture 泄漏、错误期望值、
+    漏 `_root.Start()` 等缺陷已于 2026-09-13 前修净），此后稳定 0 失败；若哪天又变红，
+    先查是不是新 fixture 漏了复位，而不是把结果当作噪音丢掉。
 
     默认使用仓库旁的测试运行壳（<仓库名>.TestRun），它通过 junction 共享本仓库的
     Assets/Packages/ProjectSettings 而拥有独立 Library——这样跑测试**不需要关闭编辑器**
@@ -16,7 +17,7 @@
 
 .PARAMETER Filter
     测试过滤器，如 XFramework.XSettings.Tests.SettingsDefaultValueTests 或类名的一部分。
-    留空则跑全量（会告警：全量结果受跨 fixture 噪音影响，不可作为门禁）。
+    留空则跑全量，即门禁：应为 0 失败。
 
 .PARAMETER Platform
     PlayMode（默认，Tests/Runtime 下的用例都在这里）或 EditMode。
@@ -33,7 +34,7 @@
 .EXAMPLE
     pwsh -File Tools/run-tests.ps1 -Setup                # 新机器上先建壳
     pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests
-    pwsh -File Tools/run-tests.ps1                       # 全量（会告警）
+    pwsh -File Tools/run-tests.ps1                       # 全量（门禁：应为 0 失败）
 #>
 param(
     [string]$Filter = "",
@@ -131,7 +132,7 @@ if ($Filter) {
     $unityArgs += "-testFilter"
     $unityArgs += $Filter
 } else {
-    Write-Warning "未指定 -Filter：将跑全量。PlayMode 全量结果受跨 fixture 静态状态泄漏影响，不可作为门禁。"
+    Write-Host "未指定 -Filter：跑全量（门禁：应为 0 失败）" -ForegroundColor Cyan
 }
 
 # ---------- 运行 ----------
