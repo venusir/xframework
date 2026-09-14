@@ -6,7 +6,7 @@ namespace XFramework.XUpdate
 
     /// <summary>
     /// 派发时机。每个时机由一套独立的 <see cref="UpdateScheduler"/> 承载（各有自己的桶、
-    /// 帧计数与切片相位），因为它们由 PlayerLoop 的不同阶段驱动、节奏互不相干。
+    /// 切片节拍与相位），因为它们由 PlayerLoop 的不同阶段驱动、节奏互不相干。
     /// <para>取值即内部数组下标，不可改动。</para>
     /// </summary>
     internal enum UpdateTiming
@@ -23,10 +23,13 @@ namespace XFramework.XUpdate
 
     /// <summary>
     /// 纯 Update 调度器，不依赖节点树。
-    /// <para>按 <see cref="UpdateLOD"/> 等级分桶管理 <see cref="IUpdateable"/> 节点，
-    /// 通过时间切片算法将更新负载均匀分布到各帧，避免帧消耗集中。</para>
+    /// <para>按 <see cref="UpdateLOD"/> 档位分桶管理 <see cref="IUpdateable"/> 节点，
+    /// 通过时间切片算法把更新负载摊到各<b>节拍格</b>上，避免帧消耗集中。</para>
+    /// <para>节拍按<b>时间</b>推进而非按帧（<see cref="TickPeriod"/>，60Hz 基准），因此第 k 档的
+    /// 周期是 2^k × TickPeriod、与帧率无关。这也意味着高帧率下会出现「本帧不推进」的空帧——
+    /// 峰值负载不变，只是负载摊得更粗。</para>
     /// <para>桶按<b>时间轴</b>再分一层：<see cref="UpdateTimeMode.Scaled"/> 与
-    /// <see cref="UpdateTimeMode.Unscaled"/> 各有独立的桶、帧计数与切片相位，
+    /// <see cref="UpdateTimeMode.Unscaled"/> 各有独立的桶、节拍与切片相位，
     /// 因此暂停（逻辑时间冻结）只影响前者的派发节奏。</para>
     /// <para><b>内部实现</b>：由 <see cref="UpdateManager"/> 门面持有，不对外暴露——第三方
     /// 一律经门面注册与查询，这样内部结构（分桶方式、切片算法、索引）可以继续演进而不构成
@@ -44,6 +47,21 @@ namespace XFramework.XUpdate
 
         /// <summary>时间轴数量。轴下标即 <see cref="UpdateTimeMode"/> 的取值。</summary>
         private const int AxisCount = 2;
+
+        /// <summary>
+        /// 切片节拍的设计周期：60Hz。
+        /// <para>切片第 k 档的周期 = 2^k × 本常量，因此<b>与帧率无关</b>——Tier3 在 30fps 与
+        /// 144fps 下都约等于 133ms，而不再随帧率缩放（旧实现以帧为节拍，跨度可达 4.8 倍）。</para>
+        /// </summary>
+        internal const float TickPeriod = 1f / 60f;
+
+        /// <summary>
+        /// 一帧最多推进的格数。
+        /// <para>60fps 恒为 1 格、30fps 需要 2 格，取 2 即可覆盖到 30fps；更低的帧率不再追赶
+        /// （周期按 60/帧率拉长）。设上限是为了让单帧派发量有硬上限——卡顿时把攒下的格一次
+        /// 补满，会让最慢的那一帧雪上加霜。</para>
+        /// </summary>
+        private const int MaxTicksPerFrame = 2;
 
         #endregion
 
@@ -110,7 +128,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 扁平化的桶数组。下标 = <see cref="BucketOf"/>(轴, LOD)，即「轴 × LODCount + LOD」。
-        /// <para>两轴分开存储是为了让切片相位与帧计数各自独立：暂停时逻辑轴不推进，
+        /// <para>两轴分开存储是为了让切片相位与节拍各自独立：暂停时逻辑轴不推进，
         /// 墙钟轴的节奏不受影响。</para>
         /// </summary>
         private readonly List<Entry>[] _buckets;
@@ -131,8 +149,25 @@ namespace XFramework.XUpdate
         /// <summary>迭代期间收到的清空请求，延迟到帧末统一执行。</summary>
         private bool _clearRequested;
 
-        /// <summary>各时间轴的帧计数器，用于计算该轴当前的时间片索引。</summary>
-        private readonly int[] _frameCount = new int[AxisCount];
+        /// <summary>各时间轴累计推进的格数。切片相位由它对 2^k 取模得到。</summary>
+        private readonly int[] _vTick = new int[AxisCount];
+
+        /// <summary>
+        /// 各时间轴的时间累加器：不足一格的余量留在这里，它同时是切片相位的连续量。
+        /// <para>用 double 而非 float：它要与时刻相减，而余量的量级（毫秒）远小于时刻本身
+        /// （秒），float 相减会把它抹掉。</para>
+        /// </summary>
+        private readonly double[] _tickAccumulator = new double[AxisCount];
+
+        /// <summary>各时间轴上一帧的时刻，用于求本帧间隔。</summary>
+        private readonly double[] _lastFrameTime = new double[AxisCount];
+
+        /// <summary>
+        /// 各时间轴的时间基准是否已锚定。未锚定时首帧只锚定、不累积。
+        /// <para>新实例的 <see cref="_lastFrameTime"/> 是 0 而 <c>Time.time</c> 早已不是 0，
+        /// 不锚定的话首次 Tick 的间隔会是「会话已运行时长」。</para>
+        /// </summary>
+        private readonly bool[] _timeBaseAnchored = new bool[AxisCount];
 
         /// <summary>
         /// 逻辑轴是否被显式暂停（<see cref="UpdateManager.Pause"/>）。
@@ -232,24 +267,33 @@ namespace XFramework.XUpdate
             for (int axis = 0; axis < AxisCount; axis++)
             {
                 bool isLogical = axis == (int)UpdateTimeMode.Scaled;
+                float now = clock.GetTime((UpdateTimeMode)axis);
 
-                // 冻结时不派发、也不推进帧计数：切片相位留在暂停前的位置，恢复后与暂停前接续。
-                // 若照常推进，长周期节点会白丢一轮——Tier5 在 60fps 下意味着半秒多的空窗
+                // 冻结时不派发、也不推进格数：切片相位留在暂停前的位置，恢复后与暂停前接续。
+                // 若照常推进，长周期节点会白丢一轮——Tier5 在 60fps 下意味着半秒多的空窗。
+                // 但时间基准必须照常前推：不推的话恢复时累加器会吃掉「整段冻结时长」并把攒下的
+                // 格一次补出来，等价于追赶——本调度器刻意不追赶
                 if (isLogical && logicalFrozen)
                 {
+                    _lastFrameTime[axis] = now;
                     continue;
                 }
 
                 if (isLogical && _reanchorScaledAxis)
                 {
                     _reanchorScaledAxis = false;
-                    ReanchorAxis(axis, clock.Time);
+                    ReanchorAxis(axis, now);
                 }
 
-                TickAxis(axis, clock.GetTime((UpdateTimeMode)axis));
+                // 每帧档位放在补格循环之外：帧率高于节拍时本帧可能一格都不推进，但 Tier0 照发
+                TickEveryFrameBucket(axis, now);
 
-                // 本轴推进了一帧：切片相位只随自己的轴走，另一条轴冻结与否都不影响它
-                _frameCount[axis]++;
+                // 本轴本帧要推进 n 格：低帧率下 n 可能为 2，高帧率下可能为 0
+                for (int t = 0, n = AdvanceTicks(axis, now); t < n; t++)
+                {
+                    TickSlicedBuckets(axis, now, _vTick[axis]);
+                    _vTick[axis]++;
+                }
             }
 
             // flush 时闩锁仍持有：回调里再发起的操作继续进缓冲、由本轮循环消化，
@@ -264,11 +308,11 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 派发一条时间轴上的全部桶。
+        /// 派发每帧档（LOD=0）的桶。该档不切片，每帧全量。
         /// </summary>
         /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
         /// <param name="now">该轴本帧的时刻。</param>
-        private void TickAxis(int axis, float now)
+        private void TickEveryFrameBucket(int axis, float now)
         {
             // LOD=0: 每帧全量更新
             var lod0 = _buckets[BucketOf(axis, 0)];
@@ -302,7 +346,16 @@ namespace XFramework.XUpdate
                     });
                 }
             }
+        }
 
+        /// <summary>
+        /// 派发一条轴上全部切片桶（LOD≥1）中<b>站在本格</b>上的条目。
+        /// </summary>
+        /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
+        /// <param name="now">该轴本帧的时刻。</param>
+        /// <param name="tickIndex">本格的序号，相位由它对 2^k 取模得到。</param>
+        private void TickSlicedBuckets(int axis, float now, int tickIndex)
+        {
             // LOD=1~5: 时间切片更新
             for (int lod = 1; lod < LODCount; lod++)
             {
@@ -311,10 +364,12 @@ namespace XFramework.XUpdate
                 if (count == 0) continue;
 
                 int sliceCount = 1 << lod;
-                int sliceIndex = _frameCount[axis] % sliceCount;
+                // 取模改掩码：sliceCount 恒为 2 的幂，掩码既更快，也避免 tickIndex 溢出成负数后
+                // 取模得到负下标（2^31 格约合 413 天连续运行）
+                int sliceIndex = tickIndex & (sliceCount - 1);
 
-                // 步长切片：本帧只处理下标 ≡ sliceIndex (mod sliceCount) 的条目，
-                // 因此 sliceCount 个切片恰好覆盖整桶，且每帧派发量只差 1（count < sliceCount
+                // 步长切片：本格只处理下标 ≡ sliceIndex (mod sliceCount) 的条目，
+                // 因此 sliceCount 个切片恰好覆盖整桶，且每格派发量只差 1（count < sliceCount
                 // 时余下的切片无事可做，那是「节点本来就少」而非分布不均）。
                 // 改前用的是区间切片（start = sliceIndex * ceil(count / sliceCount)）：
                 // count 不是 sliceCount 的整数倍时，尾部切片会因越界被夹空、前面的切片超载——
@@ -350,6 +405,64 @@ namespace XFramework.XUpdate
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// 推进本轴的切片节拍，返回本帧应处理的格数。
+        /// <para>节拍按<b>时间</b>走（<see cref="TickPeriod"/>），故第 k 档的周期是
+        /// 2^k × TickPeriod，与帧率无关：帧率高于节拍时会出现「本帧不推进」的空帧（返回 0），
+        /// 低于节拍时每帧补多格（上限 <see cref="MaxTicksPerFrame"/>）。补不上就丢弃<b>整格</b>
+        /// 债务而不是累积到下一帧，因此卡顿不会滚雪球。</para>
+        /// </summary>
+        /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
+        /// <param name="now">该轴本帧的时刻。</param>
+        private int AdvanceTicks(int axis, float now)
+        {
+            // 固定步轴恒为 1 格：Time.fixedTime 每步恰好前进一个固定步长，本就没有需要修正的
+            // 漂移；走墙钟累加器会把 50Hz 的固定步派成 60Hz 的 1/1/1/1/2 节奏，等于改掉固定步
+            // 档位的语义（那里「第 k 档」应当是 k 个固定步）
+            if (_timing == UpdateTiming.FixedUpdate)
+            {
+                return 1;
+            }
+
+            // 首帧只锚定并恰好推进一格。不锚定的话首次 Tick 的间隔是「会话已运行时长」，
+            // 相位会直接跳过第 0 格
+            if (!_timeBaseAnchored[axis])
+            {
+                _timeBaseAnchored[axis] = true;
+                _lastFrameTime[axis] = now;
+                return 1;
+            }
+
+            double delta = now - _lastFrameTime[axis];
+            _lastFrameTime[axis] = now;
+
+            // timeScale < 0（倒放）时逻辑时刻会倒退。与 ClampDelta 同源：不钳的话累加器会倒退，
+            // 切片桶静默停摆（而旧的帧计数照常推进，故这是本改动引入的新风险面）
+            if (delta < 0d)
+            {
+                delta = 0d;
+            }
+
+            _tickAccumulator[axis] += delta;
+
+            int ticks = 0;
+            while (_tickAccumulator[axis] >= TickPeriod && ticks < MaxTicksPerFrame)
+            {
+                _tickAccumulator[axis] -= TickPeriod;
+                ticks++;
+            }
+
+            // 补不上时丢弃整格债务（不追赶、不雪崩），但保留不足一格的余量——余量就是切片相位。
+            // 不可在此夹到 TickPeriod * MaxTicksPerFrame：那会把已挣到的余量一并销毁，而 30fps
+            // 每帧恰好吃掉 2 格、累加器正压在边界上，会系统性丢格
+            if (_tickAccumulator[axis] >= TickPeriod)
+            {
+                _tickAccumulator[axis] %= TickPeriod;
+            }
+
+            return ticks;
         }
 
         /// <summary>
@@ -986,7 +1099,12 @@ namespace XFramework.XUpdate
             _reanchorScaledAxis = false;
             for (int axis = 0; axis < AxisCount; axis++)
             {
-                _frameCount[axis] = 0;
+                // 时间基准必须一并复位：不复位的话清空后首次 Tick 的间隔会算成「上一段会话的
+                // 时长」，而 PlayMode 下所有用例共享一个 player 实例，污染会传到下一个 fixture
+                _vTick[axis] = 0;
+                _tickAccumulator[axis] = 0d;
+                _lastFrameTime[axis] = 0d;
+                _timeBaseAnchored[axis] = false;
             }
         }
 

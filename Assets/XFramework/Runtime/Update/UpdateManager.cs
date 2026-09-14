@@ -45,7 +45,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 各时机的调度器，下标即 <see cref="UpdateTiming"/>。null 表示当前不可用。
-        /// <para>每时机一套独立实例（各自的桶、帧计数、切片相位、暂停状态），因为它们由 PlayerLoop
+        /// <para>每时机一套独立实例（各自的桶、切片节拍、相位、暂停状态），因为它们由 PlayerLoop
         /// 的不同阶段驱动、节奏互不相干——共用一个实例会让两种时机的切片相位互相干扰。</para>
         /// </summary>
         private static UpdateScheduler[] _schedulers;
@@ -239,7 +239,8 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 每个固定步驱动入口。<b>时间基准是 <see cref="Time.fixedTime"/> 而不是每帧变化的
-        /// <see cref="Time.time"/>：<see cref="UpdateLOD"/> 的「每 N 帧」在这里是「每 N 个固定步」。</b>
+        /// <see cref="Time.time"/>：<see cref="UpdateLOD"/> 的档位在这里是「每 2^k 个固定步」，
+        /// 该轴逐步推进一格、不参与变步长轴的 60Hz 节拍（固定步长本就等长，没有漂移可修）。</b>
         /// </summary>
         private static void DriveFixedUpdate()
         {
@@ -395,7 +396,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 手动推进一次固定步长时机。
         /// <para>与 <see cref="Tick(UpdateClock)"/> 分开而不是合并：固定步长的时间基准是
-        /// <see cref="Time.fixedTime"/>，「每 N 帧」在这里是「每 N 个固定步」。</para>
+        /// <see cref="Time.fixedTime"/>，<see cref="UpdateLOD"/> 的档位在这里是「每 2^k 个固定步」。</para>
         /// <para>生产路径不需要调用本方法（驱动已注入 <c>FixedUpdate</c> 阶段）；供手动驱动与测试使用。</para>
         /// </summary>
         /// <param name="fixedTime">当前固定步时间（<see cref="Time.fixedTime"/>）。</param>
@@ -505,7 +506,7 @@ namespace XFramework.XUpdate
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
-        /// 注意此处的「每 N 帧」是每 N 个<b>固定步</b>（默认 0.02s 一步）。</param>
+        /// 注意此处的档位是每 2^k 个<b>固定步</b>（默认 0.02s 一步），不是变步长轴的毫秒。</param>
         public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0)
         {
             if (node == null) return;

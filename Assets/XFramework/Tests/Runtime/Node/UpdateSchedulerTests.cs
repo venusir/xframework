@@ -45,6 +45,14 @@ namespace XFramework.XUpdate.Tests
     [TestFixture]
     public class UpdateSchedulerTests
     {
+        /// <summary>
+        /// 驱动步长：略大于 <see cref="UpdateScheduler.TickPeriod"/>，使每次 Tick 恰好推进一<b>格</b>，
+        /// 于是本夹具里「帧」与「格」一一对应——断言里的「每 N 帧」即「每 N 格」。
+        /// <para>不能精确取 <c>1f / 60f</c>：浮点累加会让个别帧落到「不足一格」而被吞掉、下一帧
+        /// 又补成两格，相位随之漂移。多出的 0.1% 在测试窗口（≤ 数十格）内攒不出第二格。</para>
+        /// </summary>
+        private const float FrameSeconds = 1.001f / 60f;
+
         private UpdateScheduler _scheduler;
         private TestUpdateable _node;
 
@@ -214,17 +222,18 @@ namespace XFramework.XUpdate.Tests
             };
             _scheduler.Register(node, depth: 0);
 
-            _scheduler.Tick(time: 1.0f);
+            float time = 0f;
+            _scheduler.Tick(time += FrameSeconds);
 
             Assert.AreEqual(1, _scheduler.TotalCount, "先注销再注册应恰好剩一条");
             Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier2), "重新注册应使用新的 LOD");
 
-            // Tier2 桶每 4 帧才轮到一次切片：两份条目会在四帧内各派发一次，一份只派发一次
-            _scheduler.Tick(time: 2.0f);
-            _scheduler.Tick(time: 3.0f);
-            _scheduler.Tick(time: 4.0f);
-            _scheduler.Tick(time: 5.0f);
-            Assert.AreEqual(2, node.OnUpdateCallCount, "四帧内恰好再派发一次");
+            // Tier2 桶每 4 格才轮到一次切片：两份条目会在四格内各派发一次，一份只派发一次
+            _scheduler.Tick(time += FrameSeconds);
+            _scheduler.Tick(time += FrameSeconds);
+            _scheduler.Tick(time += FrameSeconds);
+            _scheduler.Tick(time += FrameSeconds);
+            Assert.AreEqual(2, node.OnUpdateCallCount, "四格内恰好再派发一次");
         }
 
         [Test]
@@ -522,8 +531,8 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void SlicedBucket_SpreadsLoadEvenly_NoIdleFrames()
         {
-            // 17 个条目、8 个切片：区间切片派发成 3,3,3,3,3,2,0,0（后两帧白跑一遍循环），
-            // 步长切片摊成 3,2,2,2,2,2,2,2——每帧都干活且每帧只差 1
+            // 17 个条目、8 个切片：区间切片派发成 3,3,3,3,3,2,0,0（后两格白跑一遍循环），
+            // 步长切片摊成 3,2,2,2,2,2,2,2——每格都干活且每格只差 1
             const int nodeCount = 17;
             var nodes = new TestUpdateable[nodeCount];
             for (int i = 0; i < nodeCount; i++)
@@ -537,7 +546,7 @@ namespace XFramework.XUpdate.Tests
             float time = 0f;
             for (int frame = 0; frame < perFrame.Length; frame++)
             {
-                time += 0.1f;
+                time += FrameSeconds;
                 _scheduler.Tick(time);
 
                 int total = 0;
@@ -576,16 +585,16 @@ namespace XFramework.XUpdate.Tests
             float time = 0f;
             for (int frame = 0; frame < 8; frame++)
             {
-                time += 0.1f;
+                time += FrameSeconds;
                 _scheduler.Tick(time);
             }
 
-            Assert.AreEqual(1, node.OnUpdateCallCount, "8 帧内首次派发");
+            Assert.AreEqual(1, node.OnUpdateCallCount, "8 格内首次派发");
 
             float secondDispatchTime = 0f;
             for (int frame = 0; frame < 8; frame++)
             {
-                time += 0.1f;
+                time += FrameSeconds;
                 _scheduler.Tick(time);
                 if (secondDispatchTime == 0f && node.OnUpdateCallCount == 2)
                 {
@@ -593,8 +602,8 @@ namespace XFramework.XUpdate.Tests
                 }
             }
 
-            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 帧派发第二次");
-            Assert.AreEqual(0.8f, node.DeltaTimes[1], 1e-4f, "被跳过的 7 帧应累积进 delta");
+            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 格派发第二次");
+            Assert.AreEqual(8f * FrameSeconds, node.DeltaTimes[1], 1e-4f, "被跳过的 7 格应累积进 delta");
             Assert.AreEqual(secondDispatchTime, node.Times[1], 1e-4f, "time 参数应是本次派发的绝对时刻");
         }
 
@@ -709,7 +718,7 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void UnscaledSlicedNode_AccumulatesUnscaledDelta()
         {
-            // 每条轴有独立的帧计数与切片相位：墙钟轴的周期由它自己推进，
+            // 每条轴有独立的节拍与切片相位：墙钟轴的周期由它自己推进，
             // 逻辑时刻在本用例里全程不动
             var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
             _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3,
@@ -718,53 +727,53 @@ namespace XFramework.XUpdate.Tests
             float unscaled = 0f;
             for (int frame = 0; frame < 8; frame++)
             {
-                unscaled += 0.1f;
+                unscaled += FrameSeconds;
                 _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: unscaled));
             }
 
-            Assert.AreEqual(1, node.OnUpdateCallCount, "8 帧内首次派发");
+            Assert.AreEqual(1, node.OnUpdateCallCount, "8 格内首次派发");
 
             for (int frame = 0; frame < 8; frame++)
             {
-                unscaled += 0.1f;
+                unscaled += FrameSeconds;
                 _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: unscaled));
             }
 
-            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 帧派发第二次");
-            Assert.AreEqual(0.8f, node.DeltaTimes[1], 1e-4f, "累积量取自墙钟轴");
+            Assert.AreEqual(2, node.OnUpdateCallCount, "再过 8 格派发第二次");
+            Assert.AreEqual(8f * FrameSeconds, node.DeltaTimes[1], 1e-4f, "累积量取自墙钟轴");
         }
 
         [Test]
         public void Pause_DoesNotAdvanceSlicePhase()
         {
-            // 暂停期间若照常推进帧计数，恢复后切片相位已经漂移：长周期节点会白丢一轮——
+            // 暂停期间若照常推进节拍格，恢复后切片相位已经漂移：长周期节点会白丢一轮——
             // Tier5 在 60fps 下意味着半秒多的空窗
             var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier2 };
             _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier2);
 
             float time = 0f;
-            _scheduler.Tick(time += 0.1f);
+            _scheduler.Tick(time += FrameSeconds);
             Assert.AreEqual(1, node.OnUpdateCallCount, "第 1 帧轮到这个切片");
 
             for (int i = 0; i < 2; i++)
             {
-                _scheduler.Tick(time += 0.1f);
+                _scheduler.Tick(time += FrameSeconds);
             }
             Assert.AreEqual(1, node.OnUpdateCallCount, "Tier2 每 4 帧才轮到一次");
 
             _scheduler.Pause();
             for (int i = 0; i < 5; i++)
             {
-                _scheduler.Tick(time += 0.1f);
+                _scheduler.Tick(time += FrameSeconds);
             }
             Assert.AreEqual(1, node.OnUpdateCallCount, "暂停期间不派发");
             _scheduler.Resume();
 
-            // 相位应从暂停前接续（计数器停在 3），而不是被 5 帧暂停推走
-            _scheduler.Tick(time += 0.1f);
+            // 相位应从暂停前接续（累计格数停在 3），而不是被 5 帧暂停推走
+            _scheduler.Tick(time += FrameSeconds);
             Assert.AreEqual(1, node.OnUpdateCallCount, "暂停后第 1 帧仍未轮到");
 
-            _scheduler.Tick(time += 0.1f);
+            _scheduler.Tick(time += FrameSeconds);
             Assert.AreEqual(2, node.OnUpdateCallCount, "暂停后第 2 帧才是到期点");
         }
 
@@ -826,36 +835,38 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void HalfTimeScale_SlowsLogicButKeepsThrottle()
+        public void HalfTimeScale_TickFollowsEachAxisOwnTime()
         {
-            // timeScale = 0.5：逻辑时间走得比墙钟慢一半。切片按「派发次数」计，因此降频强度不变
-            // （仍是每 8 次派发轮到一次），但每次拿到的 delta 随之减半——这正是「帧数语义」的体现
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+            // 节拍按各轴<b>自己的时间</b>走，故 timeScale = 0.5 时逻辑轴的墙钟周期翻倍：
+            // 同样 32 帧里墙钟轴走了 32 格、逻辑轴只走了 16 格，于是同为 Tier3 的两个节点
+            // 分别轮到 4 次与 2 次。这是「时间语义」的直接体现——旧实现按帧计数，两边都是
+            // 「每 8 帧一次」，节流强度与 timeScale 无关
+            var scaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
+            var unscaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
+            _scheduler.Register(scaledNode, depth: 0, initialLOD: UpdateLOD.Tier3);
+            _scheduler.Register(unscaledNode, depth: 1, initialLOD: UpdateLOD.Tier3,
+                timeMode: UpdateTimeMode.Unscaled);
 
-            // 逻辑轴每步 0.05、墙钟轴每步 0.1（同一个 timeScale = 0.5 的两侧）
+            // 逻辑轴每帧走半格、墙钟轴每帧走一格（同一个 timeScale = 0.5 的两侧）
             float scaled = 0f;
             float unscaled = 0f;
-            for (int i = 0; i < 8; i++)
+            for (int i = 0; i < 32; i++)
             {
-                scaled += 0.05f;
-                unscaled += 0.1f;
+                scaled += FrameSeconds * 0.5f;
+                unscaled += FrameSeconds;
                 _scheduler.Tick(new UpdateClock(time: scaled, unscaledTime: unscaled));
             }
 
-            Assert.AreEqual(1, node.OnUpdateCallCount,
-                "8 次派发里恰好轮到一次：节流强度与 timeScale 无关");
+            Assert.AreEqual(2, scaledNode.OnUpdateCallCount,
+                "逻辑轴 32 帧只走 16 格，Tier3 轮到两次");
+            Assert.AreEqual(4, unscaledNode.OnUpdateCallCount,
+                "墙钟轴 32 帧走了 32 格，Tier3 轮到四次");
 
-            for (int i = 0; i < 8; i++)
-            {
-                scaled += 0.05f;
-                unscaled += 0.1f;
-                _scheduler.Tick(new UpdateClock(time: scaled, unscaledTime: unscaled));
-            }
-
-            Assert.AreEqual(2, node.OnUpdateCallCount);
-            Assert.AreEqual(8 * 0.05f, node.DeltaTimes[1], 1e-4f,
-                "delta 取自逻辑时间，已随 timeScale 减半（同等墙钟时长下逻辑只走了一半）");
+            // 两者的 DeltaTimes[1] 相同：各自都是 8 个「自己的」节拍，差别只在墙钟上花了几帧
+            Assert.AreEqual(8f * FrameSeconds, scaledNode.DeltaTimes[1], 1e-4f,
+                "delta 取自逻辑时间：8 个逻辑节拍");
+            Assert.AreEqual(8f * FrameSeconds, unscaledNode.DeltaTimes[1], 1e-4f,
+                "delta 取自墙钟时间：8 个墙钟节拍");
         }
 
         [Test]
