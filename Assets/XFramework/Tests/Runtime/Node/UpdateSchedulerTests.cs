@@ -870,6 +870,228 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void HighFrameRate_KeepsTickPeriodInsteadOfScalingWithFrames()
+        {
+            // 旧实现按帧计节拍：144fps 下 8 个切片 = 8 帧 = 55ms，比设计意图勤 2.4 倍。
+            // 新节拍按时间走，约 1 秒（60 格）里应当只轮到 8 次——与 60fps 下等长
+            _node.ReturnLOD = UpdateLOD.Tier3;
+            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier3);
+
+            float step = FrameSeconds * (60f / 144f);   // 约 1/144 秒一帧
+            float time = 0f;
+            for (int i = 0; i < 144; i++)
+            {
+                time += step;
+                _scheduler.Tick(time);
+            }
+
+            Assert.GreaterOrEqual(_node.OnUpdateCallCount, 7, "144fps 下 1 秒内应轮到 7~8 次");
+            Assert.LessOrEqual(_node.OnUpdateCallCount, 8, "144fps 下 1 秒内应轮到 7~8 次");
+
+            float averageInterval = (_node.Times[_node.OnUpdateCallCount - 1] - _node.Times[0])
+                / (_node.OnUpdateCallCount - 1);
+            Assert.AreEqual(8f * UpdateScheduler.TickPeriod, averageInterval, 0.004f,
+                "平均间隔应是 8 格（约 133ms），而不是 8 帧（约 55ms）");
+        }
+
+        [Test]
+        public void LowFrameRate_CatchesUpTwoTicksPerFrame()
+        {
+            // 30fps 一帧抵三格多的时长，节拍按时间走就必须每帧补两格，否则周期会被拉长一倍。
+            // 铺满 32 个切片格后，「总派发次数」即「总推进格数」
+            var nodes = RegisterOnePerSlice();
+
+            float step = FrameSeconds * 2f;             // 约 1/30 秒一帧
+            float time = 0f;
+            _scheduler.Tick(time += step);              // 首帧只锚定，基准线取在它之后
+            int baseline = DispatchedCount(nodes);
+
+            for (int i = 0; i < 60; i++)
+            {
+                _scheduler.Tick(time += step);
+            }
+
+            Assert.AreEqual(120, DispatchedCount(nodes) - baseline,
+                "60 帧应恰好推进 120 格（每帧 2 格）——夹紧规则若把余量一并销毁会系统性丢格");
+        }
+
+        [Test]
+        public void Hitch_DoesNotBankTicksForLaterFrames()
+        {
+            // 一帧卡了 1 秒：补格上限挡住一次补满，且攒下的整格债务被丢弃而不是摊到后续帧
+            var nodes = RegisterOnePerSlice();
+
+            float time = 0f;
+            _scheduler.Tick(time += FrameSeconds);      // 首帧只锚定
+            int baseline = DispatchedCount(nodes);
+
+            _scheduler.Tick(time += 1.0f);              // 卡顿帧
+            Assert.AreEqual(3, DispatchedCount(nodes) - baseline,
+                "卡顿帧补到上限即止，不一次补满（1 秒攒下 60 格，只放行 3 格）");
+
+            baseline = DispatchedCount(nodes);
+            for (int i = 0; i < 60; i++)
+            {
+                _scheduler.Tick(time += FrameSeconds);
+            }
+
+            // 60~61 而非 120：卡顿攒下的「整格」债务被丢弃，只保留不足一格的余量——余量本身是
+            // 合法的切片相位（丢掉它才是缺陷，30fps 下会系统性丢格），因此后续至多出现一次
+            // 「余量凑满一格」的双格帧。若这里超过 61，说明整格债务被摊到了后续帧（追赶）
+            int after = DispatchedCount(nodes) - baseline;
+            Assert.GreaterOrEqual(after, 60, "卡顿后的 60 帧不得少跑");
+            Assert.LessOrEqual(after, 61, "卡顿后的整格债务必须丢弃，否则就是雪崩");
+        }
+
+        [Test]
+        public void SameTier_SameDispatchCountAcrossFrameRates()
+        {
+            // 旧实现里同一档位在 60fps 与 144fps 下差 2.4 倍；新节拍下二者应当一致
+            int at60 = CountDispatchesInOneSecond(60);
+            int at144 = CountDispatchesInOneSecond(144);
+
+            Assert.AreEqual(at60, at144, "同一档位在 60fps 与 144fps 下 1 秒内的派发次数应相同");
+            Assert.GreaterOrEqual(at60, 7);
+            Assert.LessOrEqual(at60, 8);
+        }
+
+        [Test]
+        public void Pause_DoesNotBankTicksForResume()
+        {
+            // 显式暂停期间逻辑时间仍在流逝。若冻结分支不前推时间基准，恢复首帧会拿到
+            // 「整段暂停时长」并一路补到上限——等价于追赶，节点会突然连跑两格
+            var nodes = RegisterOnePerSlice();
+
+            float time = 0f;
+            _scheduler.Tick(time += FrameSeconds);      // 首帧只锚定
+            int baseline = DispatchedCount(nodes);
+
+            _scheduler.Pause();
+            for (int i = 0; i < 5; i++)
+            {
+                _scheduler.Tick(time += 1.0f);           // 暂停期间 5 秒照常流逝
+            }
+            Assert.AreEqual(0, DispatchedCount(nodes) - baseline, "暂停期间不派发");
+
+            _scheduler.Resume();
+            _scheduler.Tick(time += FrameSeconds);
+
+            Assert.AreEqual(1, DispatchedCount(nodes) - baseline,
+                "恢复首帧恰好推进一格，而不是把暂停期间攒下的格一次补出来");
+        }
+
+        [Test]
+        public void FirstTick_LandsOnSliceZero()
+        {
+            // 新实例的「上一帧时刻」是 0 而时刻早已不是 0：若不做首帧锚定，首次 Tick 会把
+            // 「会话已运行时长」算进间隔，相位直接跳过第 0 格——这里表现为两格同时被派发
+            var nodes = RegisterOnePerSlice();
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, nodes[0].OnUpdateCallCount, "第 0 格应是首个被派发的");
+            for (int i = 1; i < nodes.Length; i++)
+            {
+                Assert.AreEqual(0, nodes[i].OnUpdateCallCount, $"第 {i} 格不该在首帧被派发");
+            }
+        }
+
+        [Test]
+        public void FixedTiming_AdvancesExactlyOneTickPerStep()
+        {
+            // 固定步长本就等长（默认 0.02s），没有漂移可修；若共用墙钟累加器，50Hz 的固定步
+            // 会被派成 60Hz 的节奏（每 5 步出现一次 2 格），「每 2^k 个固定步」的语义随之改变
+            var fixedScheduler = new UpdateScheduler(UpdateTiming.FixedUpdate);
+            var node = new FixedUpdateNode { NextLOD = UpdateLOD.Tier3 };
+            fixedScheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+
+            float time = 0f;
+            for (int i = 0; i < 8; i++)
+            {
+                time += 0.02f;
+                fixedScheduler.Tick(time);
+            }
+
+            Assert.AreEqual(1, node.OnFixedUpdateCallCount,
+                "8 个固定步恰好一格：第 9 步才轮到第二次");
+
+            fixedScheduler.Clear();
+        }
+
+        [Test]
+        public void ThirtyFpsWithJitter_KeepsTickRate()
+        {
+            // 30fps 是支持的底线，而真实帧长总在均值附近抖动。补格上限若恰好压在 30fps
+            // （33.3ms）上，抖动会让个别帧「应补 3 格」而被截断，且截断只砍多、不补少，
+            // 于是系统性欠跑——上限取 3 把精确边界推到 50ms，才容得下抖动
+            var nodes = RegisterOnePerSlice();
+
+            float time = 0f;
+            _scheduler.Tick(time += FrameSeconds);
+            int baseline = DispatchedCount(nodes);
+
+            for (int i = 0; i < 60; i++)
+            {
+                // 帧长在 33.3ms 上下交替 ±5%（31.7ms / 35ms），均值仍是 30fps
+                time += FrameSeconds * (i % 2 == 0 ? 1.9f : 2.1f);
+                _scheduler.Tick(time);
+            }
+
+            Assert.AreEqual(120, DispatchedCount(nodes) - baseline,
+                "均值 30fps 下 60 帧应推进 120 格——上限不足会单边截断");
+        }
+
+        /// <summary>
+        /// 在 Tier5 桶里铺满 32 个节点（下标 0~31 各占一格），使「推进了几格」可以直接从
+        /// 派发次数读出来——每格恰好派发一个节点。节点返回 Tier5，故不会迁桶。
+        /// </summary>
+        private TestUpdateable[] RegisterOnePerSlice()
+        {
+            var nodes = new TestUpdateable[32];
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Tier5 };
+                _scheduler.Register(nodes[i], depth: 0, initialLOD: UpdateLOD.Tier5);
+            }
+            return nodes;
+        }
+
+        /// <summary>统计一组节点的派发次数合计。</summary>
+        private static int DispatchedCount(TestUpdateable[] nodes)
+        {
+            int total = 0;
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                total += nodes[i].OnUpdateCallCount;
+            }
+            return total;
+        }
+
+        /// <summary>
+        /// 用一个独立调度器把 Tier3 节点驱动约 1 秒，返回派发次数。
+        /// <para>调度器自身不持有静态状态，故这里的局部实例无需登记到 fixture 的清理里。</para>
+        /// </summary>
+        /// <param name="fps">驱动帧率。</param>
+        private static int CountDispatchesInOneSecond(int fps)
+        {
+            var scheduler = new UpdateScheduler();
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
+            scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+
+            float step = FrameSeconds * (60f / fps);
+            float time = 0f;
+            for (int i = 0; i < fps; i++)
+            {
+                time += step;
+                scheduler.Tick(time);
+            }
+
+            int count = node.OnUpdateCallCount;
+            scheduler.Clear();
+            return count;
+        }
+
+        [Test]
         public void NegativeDelta_IsClampedToZero()
         {
             // timeScale < 0（倒放）时 Time.time 会倒着走：负 delta 会让
@@ -1164,6 +1386,9 @@ namespace XFramework.XUpdate.Tests
         /// </summary>
         private sealed class FixedUpdateNode : IUpdateable, IFixedUpdateable
         {
+            /// <summary>下一次派发返回的档位。默认 Tier0，即留在每帧桶。</summary>
+            public UpdateLOD NextLOD { get; set; } = UpdateLOD.Tier0;
+
             public int OnUpdateCallCount { get; private set; }
             public int OnFixedUpdateCallCount { get; private set; }
 
@@ -1180,7 +1405,7 @@ namespace XFramework.XUpdate.Tests
             public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 OnFixedUpdateCallCount++;
-                return UpdateLOD.Tier0;
+                return NextLOD;
             }
         }
 
