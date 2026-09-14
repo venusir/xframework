@@ -1105,6 +1105,30 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(0f, _node.DeltaTimes[1], 1e-4f, "重新启用后首次派发的 delta 应为 0");
         }
 
+        [Test]
+        public void LongPeriodTiers_HaveDoublingPeriods()
+        {
+            // 长周期档位让「每秒一次」这类需求能直接表达：旧阶梯封顶在 32 格，而它在 30fps 下
+            // 是 1.07 秒、144fps 下只有 222ms，两头都不是作者想要的那个时长
+            var tier6 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier6 };
+            var tier7 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier7 };
+            _scheduler.Register(tier6, depth: 0, initialLOD: UpdateLOD.Tier6);
+            _scheduler.Register(tier7, depth: 1, initialLOD: UpdateLOD.Tier7);
+
+            float time = 0f;
+            for (int i = 0; i < 128; i++)
+            {
+                _scheduler.Tick(time += FrameSeconds);
+            }
+
+            // 128 格窗口内：Tier6（64 格）在第 0、64 格各一次，Tier7（128 格）只在第 0 格
+            Assert.AreEqual(2, tier6.OnUpdateCallCount, "Tier6 每 64 格轮到一次");
+            Assert.AreEqual(1, tier7.OnUpdateCallCount, "Tier7 每 128 格轮到一次");
+
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier6));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier7));
+        }
+
         /// <summary>
         /// 在 Tier5 桶里铺满 32 个节点（下标 0~31 各占一格），使「推进了几格」可以直接从
         /// 派发次数读出来——每格恰好派发一个节点。节点返回 Tier5，故不会迁桶。

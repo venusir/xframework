@@ -4,11 +4,12 @@ namespace XFramework.XUpdate
     /// <summary>
     /// 更新 LOD 档位，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
     /// <para>档位越高，更新间隔越大，帧消耗越低。第 k 档的周期是 2^k 个<b>节拍格</b>，而一格
-    /// 有多长取决于时机：变步长轴（Update / LateUpdate）按 60Hz 基准计，即约
-    /// 17 / 33 / 67 / 133 / 267 / 533ms；固定步轴每步一格，即 1 / 2 / 4 / 8 / 16 / 32 个固定步。</para>
-    /// <para>因此档位名刻意只表达序数、不表达具体周期——周期属于模块约定（见 <c>Update/README.md</c>
-    /// 的分级表），这样调整节拍基准时不必再次改名。变步长轴上帧率低于约 30fps 时补格被上限截住，
-    /// 周期会按 60/帧率拉长（宁可延长也不突发）。</para>
+    /// 有多长取决于时机：变步长轴（Update / LateUpdate）按 60Hz 基准计，Tier1~Tier7 依次约为
+    /// 33 / 67 / 133 / 267 / 533 / 1067 / 2133ms（Tier0 为每帧）；固定步轴每步一格，第 k 档即
+    /// 2^k 个固定步。完整分级表见 <c>Update/README.md</c>。</para>
+    /// <para>因此档位名刻意只表达序数、不表达具体周期——周期属于模块约定，这样调整节拍基准时
+    /// 不必再次改名。变步长轴上帧长超过 50ms（低于约 20fps）时补格被上限截住，周期会随帧率
+    /// 线性拉长（宁可延长也不突发）。</para>
     /// </summary>
     public enum UpdateLOD
     {
@@ -30,8 +31,14 @@ namespace XFramework.XUpdate
         /// <summary>第 5 档：约 533ms（固定步轴上为 32 个固定步）</summary>
         Tier5 = 5,
 
+        /// <summary>第 6 档：约 1067ms（固定步轴上为 64 个固定步）</summary>
+        Tier6 = 6,
+
+        /// <summary>第 7 档：约 2133ms（固定步轴上为 128 个固定步）</summary>
+        Tier7 = 7,
+
         /// <summary>最大档位标记，用于调度器内部推导数组大小。</summary>
-        Max = Tier5,
+        Max = Tier7,
     }
 
     /// <summary>

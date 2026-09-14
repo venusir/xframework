@@ -113,6 +113,8 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 | `Tier3` (3) | 约 133ms | 8 个固定步 | 视野检测 |
 | `Tier4` (4) | 约 267ms | 16 个固定步 | UI 刷新 |
 | `Tier5` (5) | 约 533ms | 32 个固定步 | 后台数据同步 |
+| `Tier6` (6) | 约 1067ms | 64 个固定步 | 每秒级轮询（自动保存、统计上报） |
+| `Tier7` (7) | 约 2133ms | 128 个固定步 | 数秒级低频任务 |
 
 **固定步轴是个例外**：`Time.fixedTime` 每步恰好前进一个固定步长，本就没有需要修正的漂移，
 故那里每个固定步推进一格——档位含义是「每 2^k 个**固定步**」（默认 0.02s 一步即
