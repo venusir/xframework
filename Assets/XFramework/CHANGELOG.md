@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Settings 脏标记与可选自动保存**：`IsDirty` / `MarkDirty`，以及 `AutoSave` / `AutoSaveDelay` / `SaveOnQuit`（默认全关，保持「调用方显式保存」的既有取舍）。脏标记用**变更计数而非布尔标志**：`Save` 开始时取快照、结束后把已提交档位设为快照值，这样「保存过程中用户继续拖动滑条」产生的改动不会被吞掉——布尔标志会在保存结束时无条件清除，把那次改动丢掉。自动保存是**去抖而非节流**：等待窗口从最后一次改动起算，拖动滑条期间一次都不写盘、松手静默后写一次；若做成节流，一次三秒的拖动会写六次。关闭时不注册任何帧回调，默认路径零开销
 - **Settings 原子写入与一代备份**：改用 `FilePathUtility.ReplaceFileAtomically`（与 Save/File 模块同一套替换原语）。原先 `File.WriteAllText` 直接覆盖正式文件，写到一半崩溃就留下截断 JSON，配合「解析失败即抛异常」的行为足以让玩家此后每次启动都崩
 - **UI 绑定接收者放宽到 `IReactiveProperty<T>`**：`UIBinder` 的 7 个绑定方法与 `UIPanelBinding` / `UIPanelBase` / `ViewModelBase.CreateReadOnlyProperty` / `ReadOnlyReactiveProperty.Select` 的接收者由具体类放宽到接口（对调用方源码兼容）。此前绑定 API 只吃具体类型，任何非框架实现都无法接入。必须是**替换**而非新增重载——两版并存时具体类更精确、永远胜出，接口版会沦为死代码
-- **Update 三个派发时机**：新增 `ILateUpdateable` / `IFixedUpdateable` 与 `UpdateManager.RegisterLate` / `RegisterFixed`，并把生命周期回调抽成三者共用的 `IUpdateLifecycle`（`IUpdateable` 继承它，既有实现零改动）。每时机一套独立调度器（各自的桶、帧计数、切片相位、暂停状态），因为共用一个实例会让两种时机的切片相位互相干扰。固定步长时机的时间基准是 `Time.fixedTime`——那里 `UpdateLOD` 的「每 N 帧」是每 N 个**固定步**，因此它没有时间轴参数（Unity 固定步本就随 `timeScale` 停摆）、也不能由变步长时钟驱动
+- **Update 三个派发时机**：新增 `ILateUpdateable` / `IFixedUpdateable` 与 `UpdateManager.RegisterLate` / `RegisterFixed`，并把生命周期回调抽成三者共用的 `IUpdateLifecycle`（`IUpdateable` 继承它，既有实现零改动）。每时机一套独立调度器（各自的桶、帧计数、切片相位、暂停状态），因为共用一个实例会让两种时机的切片相位互相干扰。固定步长时机的时间基准是 `Time.fixedTime`——那里的档位以**固定步**计（默认 0.02s 一步），因此它没有时间轴参数（Unity 固定步本就随 `timeScale` 停摆）、也不能由变步长时钟驱动
 - **Update 双时间轴与暂停**：新增 `UpdateClock`（time + unscaledTime + isPaused）与 `UpdateTimeMode`（Scaled / Unscaled），桶按「时间轴 × LOD」二维组织。需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）终于有正规表达方式——此前生产代码里已经出现绕过（`InputSystemProvider` 自己读 `Time.unscaledTime`）。配套 `Pause` / `Resume` / `IsPaused`；节点树侧可经 `IUpdateTimeMode` 声明自己的轴
 - **Update PlayerLoop 自驱动**：驱动注入 `Update` / `PreLateUpdate` / `FixedUpdate` 三个阶段，不再要求场景里存在 `GameLauncher` 或任何 MonoBehaviour；`IsDrivingPlayerLoop` 可查询注入状态，注入失败打 `LogWarning`（门面是宽容语义、不会抛异常，不留痕的话故障表现只是「静止」）。注入基于 `GetCurrentPlayerLoop` 且只插入不替换，因此与 UniTask 等同样靠注入工作的库共存（有断言钉住）
 
@@ -74,7 +74,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Update 重复注册去重**：同一对象重复注册改为「重新注册」（先摘旧条目再按新 LOD/Depth 插入）。此前会产生两条条目、每帧被派发两次——树里挂了两个 `UpdateNode` 即触发，且单值桶索引表达不了「两条条目分处两个桶」，注销时的「删净」语义会漏删
 - **Update 可见性收敛（破坏性）**：`UpdateScheduler` 由 `public` 改为 `internal sealed`，对齐「实现类默认 internal sealed」的框架约定；第三方若直接 `new UpdateScheduler()` 会编译不过，但正因它的内部结构仍在演进，收口可避免依赖上内部细节
 - **UI 每帧通路并入统一调度**：面板 / HUD 的每帧更新原由场景里的 `UIRootNode.Update` 驱动，那条通路既不在 LOD 调度里、也不受 `Pause` 约束（暂停游戏时面板照跑），还要求场景里必须存在 `UIRootNode`。现由 `UIManager.Initialize` 注册进 `UpdateManager`；面板 `OnUpdate` 的时机随之从「场景 MonoBehaviour.Update」变为「注入的 Update 系统内」，并从此可被 LOD 降频与统一暂停
-- **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
+- **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变（节拍基准的改动见下条）。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
+- **Update LOD 节拍由帧数改为时间（破坏性）**：切片节拍原先每帧推进一格，故第 k 档的周期是 2^k **帧**、随帧率缩放（`Tier3` 在 30fps 下 267ms、144fps 下 56ms，跨度 4.8 倍）。现按各轴自己的时间推进（一格 = 1/60 秒），周期与帧率无关。**固定步轴除外**：`Time.fixedTime` 每步恰好等长、本无漂移可修，那里保持每步一格，档位含义是「每 2^k 个固定步」。每帧最多补 3 格——上限决定「周期精确」能覆盖到多慢的帧（余量恒小于一格，故帧长不足 N 格时该补的格数不超过 N），取 3 即帧长 50ms（约 20fps）以内精确；补不上时丢弃**整格**债务而非累积到后续帧，卡顿不会滚雪球。切片算法本身、每帧派发量上限、`deltaTime` 语义均未变，高帧率下只是多出「本帧不推进」的空帧。副作用：`timeScale = 0.5` 时的节流强度不再与 `timeScale` 无关——逻辑轴按逻辑时间计拍，墙钟周期随之翻倍（这正是「逻辑时间轴」的应有之义，但推翻了旧文档的说法）
 
 ### Fixed
 

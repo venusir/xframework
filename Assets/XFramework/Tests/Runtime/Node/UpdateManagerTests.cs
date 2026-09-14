@@ -253,7 +253,8 @@ namespace XFramework.XUpdate.Tests
             var node = new FixedNode();
             UpdateManager.RegisterFixed(node, depth: 0);
 
-            // 变步长 Tick 不该碰固定步长的对象：「每 N 帧」在两个时机里是不同单位
+            // 变步长 Tick 不该碰固定步长的对象：同一个档位在两个时机里是不同的单位
+            // （变步长轴按时间格计、固定步轴按固定步计）
             UpdateManager.Tick(time: 1.0f);
             Assert.AreEqual(0, node.FixedCallCount);
             Assert.AreEqual(1, UpdateManager.TotalCount, "查询应跨时机聚合");
