@@ -13,7 +13,7 @@
 - **避免臆测:** 需求不明确或对 API 行为不确定时,先提问而不是猜测
 - **单一职责 / 组合优于继承:** 每个类只负责一个核心功能;优先组件组合(如 EntityNode 的 GetComponent 模式),避免深继承
 - **性能与 GC:** 框架代码供第三方游戏在运行时使用,必须控制 GC 分配(见「性能与 GC 约定」)
-- **测试:** 完成逻辑后编写单元测试并提供验证步骤。Claude 用 `Tools/run-tests.ps1` 自测:改完一个模块以 `-Filter <类名片段>` 定向跑,阶段收尾跑一次全量(当前 631 例全绿,可作门禁)。**每个 fixture 必须复位它触碰的静态门面**——PlayMode 下所有用例共享一个 player 实例,不复位即互相污染,全量的门禁价值会立刻失效
+- **测试:** 完成逻辑后编写单元测试并提供验证步骤。Claude 用 `Tools/run-tests.ps1` 自测:改完一个模块以 `-Filter <类名片段>` 定向跑,阶段收尾跑一次全量(当前 643 例全绿,可作门禁)。**每个 fixture 必须复位它触碰的静态门面**——PlayMode 下所有用例共享一个 player 实例,不复位即互相污染,全量的门禁价值会立刻失效
 
 ## 架构分层
 
@@ -30,6 +30,7 @@
 - **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。节点树可依赖并启动管线(依赖方向 Node → Pipeline);StartupAsync 装配预置阶段:收集(Weight 0)+ 每相位一个 ParallelStage + 启动(Weight 0),全局进度恒等于相位阶段进度
 - **引导阶段服务:** 需要异步初始化的服务(如 Asset、Data、Localization)包装为 `internal sealed XxxBootstrapNode : LeafNode, IPhaseStage`(Phase = 模块约定值、Name = 类型名、Weight = 1),由 ServiceInitializerNode 挂载;ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);OnDestroy 反向 Shutdown
 - **节点类模板:** override `OnAwake/OnStart/OnDestroy` 且必须调 base;不用构造函数初始化,参数走 `OnInit(object)`;需要帧更新的节点实现 `IUpdateable` 并返回 `UpdateLOD`(UpdateNode 自动注册进 UpdateManager),不写 MonoBehaviour.Update;Disposable 订阅用 `AddToNode(this)` 绑定生命周期;节点一律经 `NodeFactory`/`AddNode<T>` 创建(自动回池)
+- **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateLOD` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateLOD.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md;示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 并新建对应 asmdef(`optionalUnityReferences: TestAssemblies`)
 
 ## 编码规范
