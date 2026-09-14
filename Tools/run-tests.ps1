@@ -7,7 +7,8 @@
     全量能当门禁的前提是各 fixture 都复位自己触碰的静态门面——PlayMode 下所有用例共享一个
     player 实例，不复位即互相污染。历史上全量确实是一片红（那批跨 fixture 泄漏、错误期望值、
     漏 `_root.Start()` 等缺陷已于 2026-09-13 前修净），此后稳定 0 失败；若哪天又变红，
-    先查是不是新 fixture 漏了复位，而不是把结果当作噪音丢掉。
+    先查是不是新 fixture 漏了复位，而不是把结果当作噪音丢掉。全量跑还会与上次的用例总数
+    比较、骤降时告警（见 -ShrinkTolerance）——「0 失败」不足以说明测试集健康。
 
     默认使用仓库旁的测试运行壳（<仓库名>.TestRun），它通过 junction 共享本仓库的
     Assets/Packages/ProjectSettings 而拥有独立 Library——这样跑测试**不需要关闭编辑器**
@@ -21,6 +22,12 @@
 
 .PARAMETER Platform
     PlayMode（默认，Tests/Runtime 下的用例都在这里）或 EditMode。
+
+.PARAMETER ShrinkTolerance
+    全量跑时，用例总数比上次下降超过这个数量就告警（默认 5），用于发现「测试集静默缩水」
+    ——asmdef 坏了、fixture 没被编进来、或某个 `[TestFixture]` 被误删时，runner 照样报
+    「0 失败」，光看失败数发现不了。基线按 Platform 分开记在 TestResults/last-count-<Platform>.txt；
+    确实有意删掉一批用例时，删掉该文件即可重置基线（下次跑就是新基线）。
 
 .PARAMETER UnityPath
     显式指定 Unity.exe。留空则按 ProjectSettings/ProjectVersion.txt 的版本自动探测。
@@ -40,6 +47,7 @@ param(
     [string]$Filter = "",
     [ValidateSet("PlayMode", "EditMode")]
     [string]$Platform = "PlayMode",
+    [int]$ShrinkTolerance = 5,
     [string]$UnityPath = "",
     [switch]$UseRepo,
     [switch]$Setup
@@ -175,4 +183,26 @@ if ([int]$run.failed -gt 0) {
 }
 
 Write-Host "结果文件: $resultsFile"
+
+# ---------- 用例总数基线（防「测试集静默缩水」）----------
+
+# 「0 失败」不足以说明测试集健康：asmdef 坏了、fixture 没被编进来、或某个 [TestFixture] 被
+# 误删时，runner 报的同样是 0 失败，只是总数变小了。故记住上次的总数，骤降即告警。
+#
+# 三条守卫，缺一条就会天天误报：
+#   1) 只在全量跑时比较——-Filter 的 total 只是一个子集，拿去比全量基线必然「骤降」
+#   2) 总数 > 0 才写基线——编译失败会产出 total=0 的结果文件，写进基线会污染此后所有比较
+#   3) 按 Platform 分开记——EditMode 的用例数远小于 PlayMode
+$total = [int]$run.total
+if (-not $Filter -and $total -gt 0) {
+    $baselineFile = Join-Path $resultsDir "last-count-$Platform.txt"
+    $previous = 0
+    if ((Test-Path $baselineFile) -and
+        [int]::TryParse((Get-Content $baselineFile -Raw).Trim(), [ref]$previous) -and
+        ($previous - $total) -gt $ShrinkTolerance) {
+        Write-Warning "用例总数从 $previous 降到 $total（减少 $($previous - $total)）。若非有意删减，先查测试集是否没被完整编进来：asmdef、编译错误、误删的 [TestFixture]。确认无误后删掉 $baselineFile 即可重置基线。"
+    }
+    Set-Content -Path $baselineFile -Value $total -Encoding ascii
+}
+
 exit ([int]$run.failed -eq 0 ? 0 : 1)
