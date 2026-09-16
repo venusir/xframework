@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -36,6 +37,12 @@ namespace XFramework.XUI
         private Canvas _tipContainerCanvas;
         private Transform _uiRoot;
 
+        /// <summary>正在播放的 Tip。由 <see cref="Update"/> 逐帧推进，播完即回池。</summary>
+        private readonly List<UITipItem> _activeTips = new List<UITipItem>(8);
+
+        /// <summary>管理器已被拆除（销毁或更换 UIRoot）。在途实例化完成后据此立即回池。</summary>
+        private bool _detached;
+
         #endregion
 
         #region IUITipProvider
@@ -43,10 +50,15 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public void SetUIRoot(Transform uiRoot)
         {
+            // 先回收旧根上的在播 Tip，再重置容器引用
+            DetachAll();
+
             _uiRoot = uiRoot;
-            // 更换 UIRoot 时重置容器引用
             _tipContainer = null;
             _tipContainerCanvas = null;
+
+            // 新根：重新武装
+            _detached = false;
         }
 
         /// <inheritdoc/>
@@ -77,15 +89,59 @@ namespace XFramework.XUI
                 return;
             }
 
-            // 驱动播放，结束后无论如何都回池（早先 PlayAsync 抛异常会漏掉回池）
-            try
-            {
-                await tipItem.PlayAsync(text, finalConfig, cancellationToken);
-            }
-            finally
+            // 等待期间管理器可能已被拆除（Destroy / 换根）：立刻回池，不进入播放列表
+            if (_detached)
             {
                 XAsset.AssetManager.DestroyInstance(tipItem.gameObject);
+                return;
             }
+
+            // 只设置内容，播放交给 Update 逐帧推进
+            tipItem.Begin(text, finalConfig);
+            _activeTips.Add(tipItem);
+        }
+
+        /// <inheritdoc/>
+        public void Update(float deltaTime, float time)
+        {
+            if (_activeTips.Count == 0)
+                return;
+
+            // 倒序遍历：回收时从列表移除不会让后面的下标错位（与 HUD 管理器同一手法）
+            for (int i = _activeTips.Count - 1; i >= 0; i--)
+            {
+                var tip = _activeTips[i];
+
+                // 仍在播放就跳过；播完、或已被外部销毁的则回收
+                if (tip != null && !tip.Tick(deltaTime))
+                    continue;
+
+                _activeTips.RemoveAt(i);
+                Recycle(tip);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void DetachAll()
+        {
+            _detached = true;
+
+            for (int i = 0; i < _activeTips.Count; i++)
+                Recycle(_activeTips[i]);
+
+            _activeTips.Clear();
+        }
+
+        /// <summary>结束播放并回池。</summary>
+        private static void Recycle(UITipItem tip)
+        {
+            if (tip == null)
+                return;
+
+            tip.StopImmediate();
+
+            if (tip.gameObject != null)
+                XAsset.AssetManager.DestroyInstance(tip.gameObject);
         }
 
         #endregion

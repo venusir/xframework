@@ -141,6 +141,8 @@ namespace XFramework.XUI
                 _hudProvider.DetachAll();
                 _hudProvider = null;
             }
+            // Tip 同为回池而非销毁：不回收的话，销毁管理器后这些实例会留在场景里无人认领
+            _tipProvider?.DetachAll();
             _tipProvider = null;
 
             if (_instance != null)
@@ -600,8 +602,13 @@ namespace XFramework.XUI
         {
             EnsureGlobalInitialized();
             _instance.Update(deltaTime, time);
+
             if (_hudProvider != null)
                 _hudProvider.Update(deltaTime, time);
+
+            // Tip 与面板、HUD 共用这条通路，故同样受 LOD 与 Pause 约束
+            if (_tipProvider != null)
+                _tipProvider.Update(deltaTime, time);
         }
 
         #endregion
@@ -632,6 +639,10 @@ namespace XFramework.XUI
         /// <param name="provider">自定义 Tip 提供者，或 null 恢复默认。</param>
         public static void SetTipProvider(IUITipProvider provider)
         {
+            // 换 provider 前先回收旧的：否则它手上的在播 Tip 会留在场景里无人认领
+            if (_tipProvider != null && !ReferenceEquals(_tipProvider, provider))
+                _tipProvider.DetachAll();
+
             if (provider == null)
             {
                 var defaultProvider = new UITipManagerImpl();

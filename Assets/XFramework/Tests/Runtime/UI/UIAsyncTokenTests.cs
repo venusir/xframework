@@ -105,6 +105,10 @@ namespace XFramework.XUI.Tests
                 LastToken = cancellationToken;
                 return UniTask.CompletedTask;
             }
+
+            public void Update(float deltaTime, float time) { }
+
+            public void DetachAll() { }
         }
 
         /// <summary>记录调用参数的 HUD provider，不触碰资源系统。</summary>

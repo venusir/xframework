@@ -1,6 +1,3 @@
-using System;
-using System.Threading;
-using Cysharp.Threading.Tasks;
 using TMPro;
 using UnityEngine;
 
@@ -8,8 +5,11 @@ namespace XFramework.XUI
 {
     /// <summary>
     /// 通用 Tip 显示组件。挂载在预制体 PF_UITipText 上。
-    /// <para>由 <see cref="UITipManager"/> 统一管理生命周期，通过 <see cref="PlayAsync"/> 驱动显示和动画。</para>
-    /// <para>动画结束后 <see cref="UITipManager"/> 负责调用 <see cref="XAsset.AssetManager.DestroyInstance"/> 回池。</para>
+    /// <para>由 <see cref="UITipManagerImpl"/> 管理生命周期：<see cref="Begin"/> 设置内容，
+    /// 之后由管理器在每帧通路里调用 <see cref="Tick"/> 推进动画，播完由管理器回池。</para>
+    /// <para><b>不自行驱动帧</b>：早先本类跑一个 <c>UniTask.Yield</c> 自循环并读 <c>Time.deltaTime</c>，
+    /// 于是 Tip 既不受 <c>UpdateManager.Pause</c> 约束、也不进 LOD 调度——那是 UI 模块内最后一条
+    /// 绕过统一调度的帧通路。</para>
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
     public class UITipItem : MonoBehaviour
@@ -20,11 +20,19 @@ namespace XFramework.XUI
         private TMP_Text _tmpText;
         private RectTransform _rectTransform;
         private Camera _camera;
-        private CancellationTokenSource _cts;
+
+        private float _elapsed;
+        private float _duration;
+        private Vector3 _startScreenPos;
+        private Vector3 _endScreenPos;
+        private bool _playing;
 
         #endregion
 
         #region Properties
+
+        /// <summary>是否正在播放。</summary>
+        public bool IsPlaying => _playing;
 
         private CanvasGroup CanvasGroup
         {
@@ -32,6 +40,7 @@ namespace XFramework.XUI
             {
                 if (_canvasGroup == null)
                     _canvasGroup = GetComponent<CanvasGroup>();
+
                 return _canvasGroup;
             }
         }
@@ -42,6 +51,7 @@ namespace XFramework.XUI
             {
                 if (_tmpText == null)
                     _tmpText = GetComponentInChildren<TMP_Text>(true);
+
                 return _tmpText;
             }
         }
@@ -52,6 +62,7 @@ namespace XFramework.XUI
             {
                 if (_rectTransform == null)
                     _rectTransform = (RectTransform)transform;
+
                 return _rectTransform;
             }
         }
@@ -62,6 +73,7 @@ namespace XFramework.XUI
             {
                 if (_camera == null)
                     _camera = Camera.main;
+
                 return _camera;
             }
         }
@@ -71,13 +83,11 @@ namespace XFramework.XUI
         #region Public API
 
         /// <summary>
-        /// 异步播放 Tip 动画。
-        /// <para>设置文字内容和显示参数，在异步循环中驱动动画帧。完成后返回。</para>
+        /// 开始播放：设置文字与显示参数。之后需由管理器逐帧调用 <see cref="Tick"/>。
         /// </summary>
         /// <param name="text">显示文字。</param>
         /// <param name="config">显示配置。</param>
-        /// <param name="cancellationToken">外部取消令牌，用于在场景切换等场景提前终止。</param>
-        public async UniTask PlayAsync(string text, TipConfig config, CancellationToken cancellationToken = default)
+        public void Begin(string text, TipConfig config)
         {
             if (TmpText == null)
             {
@@ -85,97 +95,72 @@ namespace XFramework.XUI
                 return;
             }
 
-            // 取消之前的动画
-            StopImmediate();
+            _duration = Mathf.Max(0.01f, config.Duration);
+            _elapsed = 0f;
 
-            _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            var duration = Mathf.Max(0.01f, config.Duration);
-
-            // 设置文字
             TmpText.text = text;
             TmpText.color = config.Color;
 
-            // 设置字号（0 表示使用默认）
+            // 字号 0 表示沿用预制体默认值
             if (config.FontSize > 0f)
                 TmpText.fontSize = config.FontSize;
 
-            // 确定起始/结束位置
-            Vector3 startScreenPos;
-            if (config.WorldPos.HasValue)
-            {
-                if (Camera != null)
-                {
-                    startScreenPos = Camera.WorldToScreenPoint(config.WorldPos.Value);
-                }
-                else
-                {
-                    startScreenPos = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
-                }
-            }
-            else
-            {
-                startScreenPos = new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
-            }
+            _startScreenPos = ResolveStartPosition(config);
+            _endScreenPos = _startScreenPos + Vector3.up * config.FloatDistance;
 
-            var endScreenPos = startScreenPos + Vector3.up * config.FloatDistance;
-            RectTransform.position = startScreenPos;
-
+            RectTransform.position = _startScreenPos;
             CanvasGroup.alpha = 1f;
             CanvasGroup.blocksRaycasts = false;
             gameObject.SetActive(true);
 
-            try
-            {
-                var elapsed = 0f;
-                while (elapsed < duration)
-                {
-                    _cts.Token.ThrowIfCancellationRequested();
-
-                    elapsed += Time.deltaTime;
-                    var t = Mathf.Clamp01(elapsed / duration);
-
-                    // 插值位置
-                    RectTransform.position = Vector3.Lerp(startScreenPos, endScreenPos, t);
-
-                    // 渐隐（前半程保持不透明，后半程渐隐）
-                    var fadeT = Mathf.Clamp01((t - 0.5f) / 0.5f);
-                    CanvasGroup.alpha = 1f - fadeT;
-
-                    await UniTask.Yield(PlayerLoopTiming.Update, _cts.Token);
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                // 静默处理取消
-            }
-            finally
-            {
-                gameObject.SetActive(false);
-                _cts?.Dispose();
-                _cts = null;
-            }
+            _playing = true;
         }
 
         /// <summary>
-        /// 立即取消当前动画。
+        /// 推进一帧。
+        /// </summary>
+        /// <param name="deltaTime">距上次派发的间隔。由驱动方给出，<b>不是 <c>Time.deltaTime</c></b>
+        /// ——Tip 随面板一同受 LOD 与统一暂停调度，两者可能相差若干倍。</param>
+        /// <returns>播放完毕返回 true，此时管理器应回收本实例。</returns>
+        public bool Tick(float deltaTime)
+        {
+            if (!_playing)
+                return true;
+
+            _elapsed += deltaTime;
+
+            var t = Mathf.Clamp01(_elapsed / _duration);
+            RectTransform.position = Vector3.Lerp(_startScreenPos, _endScreenPos, t);
+
+            // 渐隐：前半程保持不透明，后半程渐隐
+            var fadeT = Mathf.Clamp01((t - 0.5f) / 0.5f);
+            CanvasGroup.alpha = 1f - fadeT;
+
+            return _elapsed >= _duration;
+        }
+
+        /// <summary>
+        /// 立即结束播放并隐藏。取消或回池前调用。
         /// </summary>
         public void StopImmediate()
         {
-            if (_cts != null)
-            {
-                _cts.Cancel();
-                _cts.Dispose();
-                _cts = null;
-            }
+            _playing = false;
+            gameObject.SetActive(false);
         }
 
         #endregion
 
-        #region Lifecycle
+        #region Private
 
-        private void OnDestroy()
+        /// <summary>
+        /// 解析起始屏幕位置：给了世界坐标就投影，否则屏幕居中。
+        /// </summary>
+        private Vector3 ResolveStartPosition(TipConfig config)
         {
-            StopImmediate();
+            if (config.WorldPos.HasValue && Camera != null)
+                return Camera.WorldToScreenPoint(config.WorldPos.Value);
+
+            return new Vector3(Screen.width * 0.5f, Screen.height * 0.5f, 0f);
         }
 
         #endregion
