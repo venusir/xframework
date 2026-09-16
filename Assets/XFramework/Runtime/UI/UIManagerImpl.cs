@@ -76,6 +76,12 @@ namespace XFramework.XUI
         private IUIController _controller;
 
         /// <summary>
+        /// 面板实例的来源。默认 <see cref="AssetPanelFactory"/>；测试可经
+        /// <see cref="UIManager.PanelFactoryFactory"/> 注入假实现。
+        /// </summary>
+        private IUIPanelFactory _factory;
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
@@ -100,7 +106,8 @@ namespace XFramework.XUI
         /// 初始化 UI 管理器，设置 UI 根节点。
         /// </summary>
         /// <param name="uiRoot">场景中 UIRootNode 的 Transform。</param>
-        internal void Initialize(Transform uiRoot)
+        /// <param name="factory">面板实例来源；传 null 使用默认的 <see cref="AssetPanelFactory"/>。</param>
+        internal void Initialize(Transform uiRoot, IUIPanelFactory factory = null)
         {
             if (uiRoot == null)
                 throw new ArgumentNullException(nameof(uiRoot));
@@ -110,6 +117,9 @@ namespace XFramework.XUI
 
             // 默认使用 UIDefaultController（所有操作直接放行）
             _controller = new UIDefaultController();
+
+            // 默认经 AssetManager 加载与回池
+            _factory = factory ?? new AssetPanelFactory();
 
             // 订阅语言变更消息，自动通知所有已打开面板刷新文本
             _languageChangedSubscription = MessageManager.Subscribe<LanguageChangedMessage>(OnLanguageChangedMessage);
@@ -138,10 +148,7 @@ namespace XFramework.XUI
             var panels = new List<UIPanelBase>(_activePanels.Values);
             foreach (var panel in panels)
             {
-                if (panel != null && panel.gameObject != null)
-                {
-                    AssetManager.DestroyInstance(panel.gameObject);
-                }
+                _factory.Release(panel);
             }
 
             _activePanels.Clear();
@@ -565,32 +572,14 @@ namespace XFramework.XUI
         #region Internal — Panel Instantiation
 
         /// <summary>
-        /// 实例化面板预制体。直接通过 AssetManager 加载/复用对象池实例。
+        /// 实例化面板预制体，挂到该层级的容器下。
         /// </summary>
-        private async UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer) where T : UIPanelBase
+        private UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer) where T : UIPanelBase
         {
-            var type = typeof(T);
-
             // 确定父节点（同一层级的 Container）
             var parent = GetOrCreateLayerContainer(layer);
 
-            // AssetManager.InstantiateAsync 内部已处理对象池逻辑：
-            // 池中有闲置实例 → 直接复用，池中无 → 加载资源并实例化
-            var go = await AssetManager.InstantiateAsync(assetPath, parent);
-            if (go == null)
-                return null;
-
-            go.name = type.Name;
-
-            var panel = go.GetComponent<T>();
-            if (panel == null)
-            {
-                Debug.LogError($"[UIManager] Prefab at '{assetPath}' lacks component {type.Name}. Destroying instance.");
-                AssetManager.DestroyInstance(go);
-                return null;
-            }
-
-            return panel;
+            return _factory.CreateAsync<T>(assetPath, parent);
         }
 
         /// <summary>
@@ -633,8 +622,7 @@ namespace XFramework.XUI
             // 如果同类型已存在，先移除旧的（回池而非 Destroy）
             if (_activePanels.TryGetValue(type, out var oldPanel) && oldPanel != null)
             {
-                if (oldPanel.gameObject != null)
-                    AssetManager.DestroyInstance(oldPanel.gameObject);
+                _factory.Release(oldPanel);
             }
 
             _activePanels[type] = panel;
@@ -666,8 +654,8 @@ namespace XFramework.XUI
             // 回池前通知面板，允许重置自定义状态
             panel.OnPoolRecycle();
 
-            // 回池（AssetManager 内部管理引用计数和池容量）
-            AssetManager.DestroyInstance(panel.gameObject);
+            // 回池（默认实现下由 AssetManager 管理引用计数和池容量）
+            _factory.Release(panel);
             MessageManager.Publish(new PanelClosedMessage(type));
 
             // ★ Controller 拦截点：关闭后回调

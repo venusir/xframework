@@ -34,6 +34,13 @@ namespace XFramework.XUI
         private static IUiHudProvider _hudProvider;
 
         /// <summary>
+        /// 测试钩子：面板实例来源工厂。默认创建 <see cref="AssetPanelFactory"/>；测试注入假实现，
+        /// 以在未初始化 YooAsset 的环境下打开真实面板。
+        /// <para>生产代码不应设置它。与 <c>AssetManager.ImplFactory</c> 同形。</para>
+        /// </summary>
+        internal static Func<IUIPanelFactory> PanelFactoryFactory;
+
+        /// <summary>
         /// 注册到 <see cref="UpdateManager"/> 的每帧驱动器：把面板 / HUD 的每帧更新并入统一调度。
         /// <para>原先靠场景里的 <see cref="UIRootNode.Update"/> 驱动，于是这条通路既不受 LOD 降频、
         /// 也不受 <see cref="UpdateManager.Pause"/> 控制，面板与其它模块的暂停语义还是两套。</para>
@@ -60,7 +67,7 @@ namespace XFramework.XUI
             }
 
             var impl = new UIManagerImpl();
-            impl.Initialize(uiRoot);
+            impl.Initialize(uiRoot, PanelFactoryFactory?.Invoke());
 
             // 如果传入了自定义控制器，立即设置
             if (controller != null)
@@ -114,6 +121,9 @@ namespace XFramework.XUI
                 _instance = null;
             }
             _instanceInitialized = false;
+
+            // 测试钩子随实例一起复位：否则一个 fixture 注入的假工厂会污染后续 fixture 的 Initialize
+            PanelFactoryFactory = null;
         }
 
         /// <summary>
