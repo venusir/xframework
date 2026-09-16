@@ -37,6 +37,12 @@ namespace XFramework.XUI.Tests
         /// <summary>当前池中的面板。</summary>
         public IReadOnlyList<UIPanelBase> Pool => _pool;
 
+        /// <summary>
+        /// 设置后 <see cref="CreateAsync{T}"/> 会先等这个信号，用于制造「在途打开」窗口以测试并发去重。
+        /// <para>置 null 关闭闸门。</para>
+        /// </summary>
+        public UniTaskCompletionSource<object> Gate { get; set; }
+
         #endregion
 
         #region Registration
@@ -71,17 +77,20 @@ namespace XFramework.XUI.Tests
         #region IUIPanelFactory
 
         /// <inheritdoc/>
-        public UniTask<T> CreateAsync<T>(string assetPath, Transform parent) where T : UIPanelBase
+        public async UniTask<T> CreateAsync<T>(string assetPath, Transform parent) where T : UIPanelBase
         {
             CreateCount++;
+
+            if (Gate != null)
+                await Gate.Task;
 
             if (!_creators.TryGetValue(typeof(T), out var creator))
             {
                 Debug.LogError($"[FakePanelFactory] 未注册的面板类型：{typeof(T).Name}");
-                return UniTask.FromResult<T>(null);
+                return null;
             }
 
-            return UniTask.FromResult(creator(parent) as T);
+            return creator(parent) as T;
         }
 
         /// <inheritdoc/>

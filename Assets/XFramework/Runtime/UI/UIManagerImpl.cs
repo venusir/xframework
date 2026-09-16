@@ -86,6 +86,16 @@ namespace XFramework.XUI
         private IUIPanelFactory _factory;
 
         /// <summary>
+        /// 在途打开记录。key: 面板类型。
+        /// <para>同类型并发打开（同帧重复点击、两个系统同时请求同一面板）只实例化一次，
+        /// 后来者加入同一次打开并共享结果。此前没有这层去重，第二次 <c>RegisterPanel</c>
+        /// 会把第一个实例直接回池，而它的 <c>IsOpen</c> 仍是 true、首个调用方拿到的是池中
+        /// 失活引用，<see cref="PanelOpenedMessage"/> 还会发两次。</para>
+        /// </summary>
+        private readonly Dictionary<Type, InFlightOpen> _opening
+            = new Dictionary<Type, InFlightOpen>(4);
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
@@ -155,6 +165,17 @@ namespace XFramework.XUI
                 _factory.Release(panel);
             }
 
+            // 在途打开的加入者不能悬着：以 null 结束，否则它们会永远等下去
+            foreach (var entry in _opening.Values)
+            {
+                if (entry.Joiners == null)
+                    continue;
+
+                for (int i = 0; i < entry.Joiners.Count; i++)
+                    entry.Joiners[i].TrySetResult(null);
+            }
+            _opening.Clear();
+
             _activePanels.Clear();
             _stack.Clear();
             _sortOrderCounters.Clear();
@@ -184,46 +205,88 @@ namespace XFramework.XUI
             var type = typeof(T);
 
             // 已打开的面板直接聚焦（不触发 Controller 拦截）
-            if (_activePanels.TryGetValue(type, out var existingPanel))
+            if (_activePanels.TryGetValue(type, out var existingPanel) && existingPanel != null)
             {
                 BringToFront(existingPanel);
                 return existingPanel as T;
             }
 
-            // ★ Controller 拦截点：打开前校验
-            var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData);
-            if (!canOpen)
+            // 正在打开：加入同一次打开，共享首个调用者的结果
+            if (_opening.TryGetValue(type, out var inFlight))
             {
-                Debug.LogWarning($"[UIManager] Panel open blocked by Controller: {type.Name}");
-                return null;
+#if UNITY_EDITOR
+                if (inFlight.AssetPath != assetPath)
+                {
+                    Debug.LogWarning(
+                        $"[UIManager] Panel '{type.Name}' is already being opened from '{inFlight.AssetPath}'; " +
+                        $"the request for '{assetPath}' will reuse that result.");
+                }
+#endif
+                return await JoinOpeningAsync<T>(inFlight);
             }
 
-            // 实例化面板（AssetManager 管理对象池）
-            var panel = await InstantiatePanelAsync<T>(assetPath, layer);
+            var entry = new InFlightOpen { AssetPath = assetPath };
+            _opening[type] = entry;
 
-            if (panel == null)
+            UIPanelBase pending = null;
+            UIPanelBase opened = null;
+            bool committed = false;
+
+            try
             {
-                Debug.LogError($"[UIManager] Failed to instantiate panel: {type.Name} at path: {assetPath}");
-                return null;
+                // ★ Controller 拦截点：打开前校验
+                var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData);
+                if (!canOpen)
+                {
+                    Debug.LogWarning($"[UIManager] Panel open blocked by Controller: {type.Name}");
+                    return null;
+                }
+
+                // 实例化面板
+                var panel = await InstantiatePanelAsync<T>(assetPath, layer);
+                if (panel == null)
+                {
+                    Debug.LogError($"[UIManager] Failed to instantiate panel: {type.Name} at path: {assetPath}");
+                    return null;
+                }
+
+                // 从这里起实例已存在，任何失败都必须把它还回池子
+                pending = panel;
+
+                panel.Layer = layer;
+                panel.AssetPath = assetPath;
+
+                // 设置 sorting order
+                var order = GetNextSortingOrder(layer);
+                panel.Canvas.overrideSorting = true;
+                panel.Canvas.sortingOrder = order;
+
+                // 注册并打开
+                RegisterPanel(type, panel);
+                await panel.DoOpenAsync(userData);
+
+                // 提交点：打开已完成，此后不再回滚（后续回调失败不应把已打开的面板拆掉）
+                committed = true;
+                opened = panel;
+
+                MessageManager.Publish(new PanelOpenedMessage(type));
+
+                // ★ Controller 拦截点：打开后回调
+                await _controller.OnAfterOpenAsync(type, panel, userData);
+
+                return panel;
             }
+            catch
+            {
+                if (!committed && pending != null)
+                    RollbackPanel(type, pending);
 
-            panel.Layer = layer;
-            panel.AssetPath = assetPath;
-
-            // 设置 sorting order
-            var order = GetNextSortingOrder(layer);
-            panel.Canvas.overrideSorting = true;
-            panel.Canvas.sortingOrder = order;
-
-            // 注册并打开
-            RegisterPanel(type, panel);
-            await panel.DoOpenAsync(userData);
-            MessageManager.Publish(new PanelOpenedMessage(type));
-
-            // ★ Controller 拦截点：打开后回调
-            await _controller.OnAfterOpenAsync(type, panel, userData);
-
-            return panel;
+                throw;
+            }
+            finally
+            {
+                SettleOpening(type, entry, opened);
+            }
         }
 
         public async UniTask CloseAsync<T>(bool immediate = false) where T : UIPanelBase
@@ -314,12 +377,24 @@ namespace XFramework.XUI
             where T : UIPanelBase
         {
             EnsureInitialized();
+            var type = typeof(T);
 
-            // 模糊当前栈顶面板
-            BlurTopPanel();
+            // 目标已打开：只聚焦，不先模糊栈顶——栈顶可能就是它自己，那样会把
+            // 它留在失焦态（IsPaused + Raycaster 关闭）且无人恢复
+            if (_activePanels.TryGetValue(type, out var existing) && existing != null)
+            {
+                BringToFront(existing);
+                return existing as T;
+            }
 
-            // 打开新面板：入栈由 OpenAsync 统一负责，这里不再单独维护
-            return await OpenAsync<T>(assetPath, layer, userData);
+            // 模糊当前栈顶面板；打开失败时要把它恢复回来
+            var blurred = BlurTopPanel();
+
+            var panel = await OpenAsync<T>(assetPath, layer, userData);
+            if (panel == null)
+                UnblurPanel(blurred);
+
+            return panel;
         }
 
         public async UniTask PopAsync(bool immediate = false)
@@ -630,6 +705,59 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Internal — In-flight Open
+
+        /// <summary>
+        /// 一次在途打开。仅被首个调用者持有；后来者把自己的完成源挂进 <see cref="Joiners"/>。
+        /// </summary>
+        private sealed class InFlightOpen
+        {
+            /// <summary>首个调用者请求的资源地址，仅用于诊断参数不一致的并发请求。</summary>
+            public string AssetPath;
+
+            /// <summary>
+            /// 并发加入者各自的完成源。懒分配——绝大多数打开没有加入者。
+            /// <para>加入者不能直接 await 打开者的 <c>UniTask</c>：UniTask 只支持单个
+            /// continuation，第二个等待者会覆盖第一个。</para>
+            /// </summary>
+            public List<UniTaskCompletionSource<UIPanelBase>> Joiners;
+        }
+
+        /// <summary>
+        /// 作为并发加入者等待一次在途打开完成。
+        /// </summary>
+        private async UniTask<T> JoinOpeningAsync<T>(InFlightOpen entry) where T : UIPanelBase
+        {
+            var tcs = new UniTaskCompletionSource<UIPanelBase>();
+
+            if (entry.Joiners == null)
+                entry.Joiners = new List<UniTaskCompletionSource<UIPanelBase>>(2);
+
+            entry.Joiners.Add(tcs);
+
+            var panel = await tcs.Task;
+            return panel as T;
+        }
+
+        /// <summary>
+        /// 结束一次在途打开：摘掉记录并把结果广播给全部加入者。
+        /// </summary>
+        /// <param name="opened">打开成功的面板；失败或未提交时为 null，加入者据此拿到 null。</param>
+        private void SettleOpening(Type type, InFlightOpen entry, UIPanelBase opened)
+        {
+            _opening.Remove(type);
+
+            if (entry.Joiners == null)
+                return;
+
+            for (int i = 0; i < entry.Joiners.Count; i++)
+                entry.Joiners[i].TrySetResult(opened);
+
+            entry.Joiners = null;
+        }
+
+        #endregion
+
         #region Internal — Panel Lifecycle
 
         /// <summary>
@@ -637,11 +765,14 @@ namespace XFramework.XUI
         /// </summary>
         private void RegisterPanel(Type type, UIPanelBase panel)
         {
-            // 如果同类型已存在，先移除旧的（回池而非 Destroy）
+            // 有了在途打开去重，这里撞上旧实例说明「同类型单实例」不变量已被破坏，属实现缺陷。
+            // 仍做兜底：把旧实例经正常回收路径处理，而不是静默产出一个 IsOpen 为 true 的池中失活引用。
             if (_activePanels.TryGetValue(type, out var oldPanel) && oldPanel != null)
             {
-                _stack.Remove(oldPanel);
-                _factory.Release(oldPanel);
+                Debug.LogError(
+                    $"[UIManager] Panel '{type.Name}' is already active while registering a new instance. " +
+                    "This breaks the one-instance-per-type invariant; the previous instance is being recycled.");
+                RollbackPanel(type, oldPanel);
             }
 
             _activePanels[type] = panel;
@@ -687,14 +818,39 @@ namespace XFramework.XUI
         /// <summary>
         /// 模糊栈顶面板（禁用交互）。
         /// </summary>
-        private void BlurTopPanel()
+        /// <returns>被模糊的面板；栈为空时返回 null。调用方在后续步骤失败时应把它交回 <see cref="UnblurPanel"/>。</returns>
+        private UIPanelBase BlurTopPanel()
         {
             PruneStack();
 
             if (_stack.Count == 0)
-                return;
+                return null;
 
-            _stack[_stack.Count - 1].OnBlur();
+            var top = _stack[_stack.Count - 1];
+            top.OnBlur();
+            return top;
+        }
+
+        /// <summary>
+        /// 撤销一次 <see cref="BlurTopPanel"/>：只恢复交互，不动显示栈——栈根本没变，
+        /// 回到焦点不等于回到栈顶。
+        /// </summary>
+        private void UnblurPanel(UIPanelBase panel)
+        {
+            if (panel != null && panel.IsOpen)
+                panel.OnFocus();
+        }
+
+        /// <summary>
+        /// 回滚一次失败的打开：从活动集合与显示栈中摘除，交还工厂。
+        /// <para>幂等——未注册过时前两步是空操作，<c>OnPoolRecycle</c> 对尚未打开的面板也安全。</para>
+        /// </summary>
+        private void RollbackPanel(Type type, UIPanelBase panel)
+        {
+            _activePanels.Remove(type);
+            _stack.Remove(panel);
+            panel.OnPoolRecycle();
+            _factory.Release(panel);
         }
 
         /// <summary>
