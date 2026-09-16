@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using XFramework.XUpdate;
 
 namespace XFramework.XUI.View
 {
@@ -27,6 +28,12 @@ namespace XFramework.XUI.View
 
         /// <summary>当前生命周期状态。</summary>
         private ViewState _state;
+
+        /// <summary>
+        /// 每帧更新档位。Inspector 可配，默认每帧。
+        /// </summary>
+        [SerializeField]
+        private UpdateLOD _updateLod = UpdateLOD.Tier0;
 
         /// <summary>
         /// 「打开中」的完成闸门。懒分配——只有真的有人在 OnOpen 期间发起关闭时才创建。
@@ -110,6 +117,19 @@ namespace XFramework.XUI.View
         /// 是否正在执行关闭。
         /// </summary>
         public bool IsClosing => _state == ViewState.Closing;
+
+        /// <summary>
+        /// 本视图的每帧更新档位。档位越高派发间隔越大（第 k 档 = 2^k 个节拍格，60Hz 基准下
+        /// Tier1~Tier7 约 33 / 67 / 133 / 267 / 533 / 1067 / 2133ms，Tier0 为每帧）。
+        /// <para>Inspector 可配；运行时改这个属性会在下一次派发时重排到新档位，无需重开面板。</para>
+        /// <para>用不到每帧的面板（倒计时、进度插值等）声明较低档位即可显著降耗。只要按传入的
+        /// <c>deltaTime</c> 积分，行为不随档位变化。</para>
+        /// </summary>
+        public UpdateLOD UpdateLod
+        {
+            get => _updateLod;
+            set => _updateLod = value;
+        }
 
         /// <summary>
         /// 视图的 Canvas 组件（懒加载）。

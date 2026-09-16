@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -49,6 +50,14 @@ namespace XFramework.XUI
         private static IUpdateable _frameDriver;
 
         /// <summary>
+        /// 非零档位的驱动器。key: 档位序号。
+        /// <para>懒注册：只有该档真的出现了面板才向 <see cref="UpdateManager"/> 注册，桶重新变空即注销。
+        /// 用不到的档位不占调度器条目，初始化后调度器里仍只有 <see cref="_frameDriver"/> 一个。</para>
+        /// </summary>
+        private static readonly Dictionary<int, IUpdateable> _lodDrivers
+            = new Dictionary<int, IUpdateable>(4);
+
+        /// <summary>
         /// 全局 UI 管理器是否已初始化。
         /// </summary>
         public static bool IsInitialized => _instanceInitialized && _instance != null;
@@ -68,6 +77,7 @@ namespace XFramework.XUI
             }
 
             var impl = new UIManagerImpl();
+            impl.LodDemandChanged = OnLodDemandChanged;
             impl.Initialize(uiRoot, PanelFactoryFactory?.Invoke());
 
             // 如果传入了自定义控制器，立即设置
@@ -109,6 +119,11 @@ namespace XFramework.XUI
                 _frameDriver = null;
             }
 
+            foreach (var driver in _lodDrivers.Values)
+                UpdateManager.Unregister(driver);
+
+            _lodDrivers.Clear();
+
             if (_hudProvider != null)
             {
                 _hudProvider.DetachAll();
@@ -129,6 +144,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 每帧驱动器：把 <see cref="Update"/> 接到 <see cref="UpdateManager"/> 上。
+        /// <para>同时承载 Tier0 面板与 HUD 层的驱动，故它常驻注册。</para>
         /// </summary>
         private sealed class FrameDriver : IUpdateable
         {
@@ -140,6 +156,64 @@ namespace XFramework.XUI
             {
                 Update(deltaTime, time);
                 return UpdateLOD.Tier0;
+            }
+        }
+
+        /// <summary>
+        /// 非零档位的驱动器：只驱动该档位桶里的面板，自身按该档位的周期被派发。
+        /// </summary>
+        private sealed class LodDriver : IUpdateable
+        {
+            private readonly UIManagerImpl _impl;
+            private readonly UpdateLOD _lod;
+
+            public LodDriver(UIManagerImpl impl, UpdateLOD lod)
+            {
+                _impl = impl;
+                _lod = lod;
+            }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateLOD OnUpdate(float deltaTime, float time)
+            {
+                _impl.DriveLod(_lod, deltaTime, time);
+
+                // 恒定返回自身档位：面板跑哪一档由各自的 UpdateLod 决定，
+                // 驱动器不该因系统繁忙自行漂移（那是面板的声明，不是调度器的推断）
+                return _lod;
+            }
+        }
+
+        /// <summary>
+        /// 档位需求变化：按需注册 / 注销该档的驱动器。Tier0 由 <see cref="FrameDriver"/> 承载，跳过。
+        /// </summary>
+        private static void OnLodDemandChanged(UpdateLOD lod)
+        {
+            if (lod == UpdateLOD.Tier0)
+                return;
+
+            // 注入自定义 IUIManager 时无法驱动分档，退回「只有每帧档」的旧行为
+            if (!(_instance is UIManagerImpl impl))
+                return;
+
+            int tier = (int)lod;
+
+            if (impl.HasPanelsAtLod(lod))
+            {
+                if (_lodDrivers.ContainsKey(tier))
+                    return;
+
+                var driver = new LodDriver(impl, lod);
+                _lodDrivers[tier] = driver;
+                UpdateManager.Register(driver, depth: 0, initialLOD: lod);
+            }
+            else if (_lodDrivers.TryGetValue(tier, out var existing))
+            {
+                UpdateManager.Unregister(existing);
+                _lodDrivers.Remove(tier);
             }
         }
 

@@ -7,6 +7,7 @@ using XFramework.XAsset;
 using XFramework.XLocalization;
 using XFramework.XMessage;
 using XFramework.XPool;
+using XFramework.XUpdate;
 using XFramework.XUI.Controller;
 using XFramework.XUI.Data;
 using XFramework.XUI.View;
@@ -97,9 +98,38 @@ namespace XFramework.XUI
             = new Dictionary<Type, InFlightOpen>(4);
 
         /// <summary>
+        /// 面板按各自 <see cref="UIViewBase.UpdateLod"/> 分桶。某一档的驱动器被派发时只驱动本桶，
+        /// 于是「用不到每帧的面板」可以声明较低档位降耗，而不必各自写节流。
+        /// </summary>
+        private readonly List<UIPanelBase>[] _buckets;
+
+        /// <summary>上一次已通知过的「该档是否有面板」，用于只在 0 ↔ 非空 跳变时通知门面。</summary>
+        private readonly bool[] _lodDemand;
+
+        /// <summary>
+        /// 档位需求变化回调，由门面注入。门面据此懒注册/注销该档的驱动器——
+        /// 用不到的档位不占调度器条目。
+        /// </summary>
+        internal Action<UpdateLOD> LodDemandChanged;
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
+
+        #endregion
+
+        #region Construction
+
+        public UIManagerImpl()
+        {
+            int tiers = (int)UpdateLOD.Max + 1;
+            _buckets = new List<UIPanelBase>[tiers];
+            _lodDemand = new bool[tiers];
+
+            for (int i = 0; i < tiers; i++)
+                _buckets[i] = new List<UIPanelBase>(4);
+        }
 
         #endregion
 
@@ -180,6 +210,12 @@ namespace XFramework.XUI
             _activePanels.Clear();
             _stack.Clear();
             _sortOrderCounters.Clear();
+
+            for (int i = 0; i < _buckets.Length; i++)
+            {
+                _buckets[i].Clear();
+                _lodDemand[i] = false;
+            }
 
             // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
             _assetCache.Clear();
@@ -663,29 +699,93 @@ namespace XFramework.XUI
         /// <inheritdoc cref="IUIManager.Update"/>
         public void Update(float deltaTime, float time)
         {
+            // 手动驱动等价于驱动每帧档
+            DriveLod(UpdateLOD.Tier0, deltaTime, time);
+        }
+
+        /// <summary>
+        /// 驱动指定档位的面板。由每档对应的驱动器调用（Tier0 由门面的 FrameDriver 走 <see cref="Update"/>）。
+        /// </summary>
+        /// <param name="lod">本驱动器负责的档位。</param>
+        /// <param name="deltaTime">距上次派发的间隔。</param>
+        /// <param name="time">当前时刻。</param>
+        internal void DriveLod(UpdateLOD lod, float deltaTime, float time)
+        {
             if (!IsInitialized)
                 return;
 
             PruneStack();
 
-            // 先快照再驱动：面板可能在 OnUpdate 里关掉自己或别的面板，而默认控制器下关闭路径
-            // 是同步走完的（含 _activePanels / _stack 的移除）——直接遍历 _stack 会撞上
-            // 「遍历中改集合」。ListPool 归还时自动 Clear，热身后零分配。
-            using (ListPool<UIPanelBase>.GetPooled(out var snapshot))
-            {
-                snapshot.AddRange(_stack);
+            int tier = Mathf.Clamp((int)lod, 0, _buckets.Length - 1);
 
-                for (int i = 0; i < snapshot.Count; i++)
-                {
-                    var panel = snapshot[i];
-                    if (panel != null && panel.IsOpen)
-                    {
-                        panel.OnUpdate(deltaTime, time);
-                    }
-                }
+            // 先在派发前重排：重排发生在遍历之外，于是面板在自己的 OnUpdate 里关掉自己
+            // 或别的面板都不会让遍历错位——无需快照，也就没有每帧分配。
+            // 代价是每次派发都 O(面板数)，但面板数通常 < 20，且不产生 GC。
+            RebuildBuckets();
+
+            var bucket = _buckets[tier];
+            for (int i = 0; i < bucket.Count; i++)
+            {
+                var panel = bucket[i];
+
+                // 失焦（IsPaused）的面板不派发：它被别的面板盖住了，看不见也没交互
+                if (panel == null || !panel.IsOpen || panel.IsPaused)
+                    continue;
+
+                panel.OnUpdate(deltaTime, time);
             }
 
             // 注意：HUD 的 Update 已由 UIManager.Update 在 facade 层处理
+        }
+
+        /// <summary>
+        /// 按各面板当前的 <see cref="UIViewBase.UpdateLod"/> 重建档位桶，并通知门面档位需求变化。
+        /// </summary>
+        private void RebuildBuckets()
+        {
+            for (int i = 0; i < _buckets.Length; i++)
+                _buckets[i].Clear();
+
+            for (int i = 0; i < _stack.Count; i++)
+            {
+                var panel = _stack[i];
+                if (panel == null)
+                    continue;
+
+                int tier = Mathf.Clamp((int)panel.UpdateLod, 0, _buckets.Length - 1);
+                _buckets[tier].Add(panel);
+            }
+
+            NotifyLodDemand();
+        }
+
+        /// <summary>
+        /// 在档位「空 ↔ 非空」跳变时通知门面，使其懒注册/注销对应驱动器。
+        /// 稳态下只做 8 次比较，不产生分配。
+        /// </summary>
+        private void NotifyLodDemand()
+        {
+            if (LodDemandChanged == null)
+                return;
+
+            for (int i = 0; i < _buckets.Length; i++)
+            {
+                bool active = _buckets[i].Count > 0;
+                if (_lodDemand[i] == active)
+                    continue;
+
+                _lodDemand[i] = active;
+                LodDemandChanged((UpdateLOD)i);
+            }
+        }
+
+        /// <summary>
+        /// 指定档位当前是否有面板。门面在收到档位需求变化后用它决定注册还是注销。
+        /// </summary>
+        internal bool HasPanelsAtLod(UpdateLOD lod)
+        {
+            int tier = Mathf.Clamp((int)lod, 0, _buckets.Length - 1);
+            return _buckets[tier].Count > 0;
         }
 
         #endregion
