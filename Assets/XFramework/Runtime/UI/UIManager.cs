@@ -291,6 +291,61 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Query
+
+        /// <inheritdoc cref="IUIManager.OpenCount"/>
+        public static int OpenCount
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.OpenCount;
+            }
+        }
+
+        /// <inheritdoc cref="IUIManager.IsAnyOpen"/>
+        public static bool IsAnyOpen
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.IsAnyOpen;
+            }
+        }
+
+        /// <inheritdoc cref="IUIManager.GetTopPanel"/>
+        public static UIPanelBase GetTopPanel()
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetTopPanel();
+        }
+
+        /// <inheritdoc cref="IUIManager.Panels"/>
+        public static IReadOnlyList<UIPanelBase> Panels
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.Panels;
+            }
+        }
+
+        /// <inheritdoc cref="IUIManager.CopyPanels"/>
+        public static int CopyPanels(List<UIPanelBase> buffer)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CopyPanels(buffer);
+        }
+
+        /// <inheritdoc cref="IUIManager.CopyPanelsInLayer"/>
+        public static int CopyPanelsInLayer(int layer, List<UIPanelBase> buffer)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CopyPanelsInLayer(layer, buffer);
+        }
+
+        #endregion
+
         #region Public API — Layer
 
         /// <summary>

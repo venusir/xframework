@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -120,6 +121,12 @@ namespace XFramework.XUI
         internal Action<UpdateLOD> LodDemandChanged;
 
         /// <summary>
+        /// <see cref="_stack"/> 的只读视图。构造一次即可反复读取，每次读取零分配；
+        /// 内容是活的——面板开合后随之变化。
+        /// </summary>
+        private readonly ReadOnlyCollection<UIPanelBase> _panelsView;
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
@@ -130,6 +137,8 @@ namespace XFramework.XUI
 
         public UIManagerImpl()
         {
+            _panelsView = new ReadOnlyCollection<UIPanelBase>(_stack);
+
             int tiers = (int)UpdateLOD.Max + 1;
             _buckets = new List<UIPanelBase>[tiers];
             _lodDemand = new bool[tiers];
@@ -149,6 +158,61 @@ namespace XFramework.XUI
         public bool IsMaskShowing => _maskInstance != null && _maskInstance.activeSelf;
 
         public bool CanGoBack => _stack.Count > 1;
+
+        // 查询属性刻意不调 EnsureInitialized：它们读的是始终有效的内存状态，
+        // 与 CanGoBack / IsMaskShowing 一致——未初始化时给出空结果而非抛异常。
+        public int OpenCount => _activePanels.Count;
+
+        public bool IsAnyOpen => _activePanels.Count > 0;
+
+        public IReadOnlyList<UIPanelBase> Panels => _panelsView;
+
+        #endregion
+
+        #region Query
+
+        public UIPanelBase GetTopPanel()
+        {
+            EnsureInitialized();
+            PruneStack();
+
+            return _stack.Count > 0 ? _stack[_stack.Count - 1] : null;
+        }
+
+        public int CopyPanels(List<UIPanelBase> buffer)
+        {
+            EnsureInitialized();
+
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            PruneStack();
+
+            buffer.Clear();
+            buffer.AddRange(_stack);   // List 走 ICollection 快速路径，不经枚举器，不分配
+            return buffer.Count;
+        }
+
+        public int CopyPanelsInLayer(int layer, List<UIPanelBase> buffer)
+        {
+            EnsureInitialized();
+
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            PruneStack();
+
+            buffer.Clear();
+
+            for (int i = 0; i < _stack.Count; i++)
+            {
+                var panel = _stack[i];
+                if (panel != null && panel.Layer == layer)
+                    buffer.Add(panel);
+            }
+
+            return buffer.Count;
+        }
 
         #endregion
 

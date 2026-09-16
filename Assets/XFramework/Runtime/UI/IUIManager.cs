@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -179,6 +180,48 @@ namespace XFramework.XUI
         /// 清空所有缓存的面板预制体资源。
         /// </summary>
         void ClearAssetCache();
+
+        #endregion
+
+        #region Query
+
+        /// <summary>
+        /// 当前已打开的面板数。
+        /// <para>未初始化时返回 0，不抛异常（便于在场景加载早期探测）。</para>
+        /// </summary>
+        int OpenCount { get; }
+
+        /// <summary>
+        /// 是否有任何面板打开。等价于 <c>OpenCount &gt; 0</c>，但不需要分配查询结果。
+        /// </summary>
+        bool IsAnyOpen { get; }
+
+        /// <summary>
+        /// 显示栈顶部的面板（即最靠前的那个）；无面板时为 null。
+        /// </summary>
+        UIPanelBase GetTopPanel();
+
+        /// <summary>
+        /// 已打开的面板，按显示次序（底 → 顶）。
+        /// <para>这是<strong>活视图</strong>：面板开合后内容随之变化，不要跨帧缓存它。读取本身不分配。</para>
+        /// </summary>
+        IReadOnlyList<UIPanelBase> Panels { get; }
+
+        /// <summary>
+        /// 把已打开的面板按显示次序写入调用方提供的缓冲区，返回写入数量。
+        /// <para>零分配的主入口：由调用方持有缓冲区即可完全避免每帧 GC。缓冲区会先被清空。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区，不能为 null。</param>
+        /// <returns>写入的面板数量。</returns>
+        int CopyPanels(List<UIPanelBase> buffer);
+
+        /// <summary>
+        /// 把指定层已打开的面板按显示次序写入缓冲区，返回写入数量。
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="buffer">接收结果的缓冲区，不能为 null。</param>
+        /// <returns>写入的面板数量。</returns>
+        int CopyPanelsInLayer(int layer, List<UIPanelBase> buffer);
 
         #endregion
 
