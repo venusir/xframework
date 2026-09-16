@@ -202,6 +202,51 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Tip & HUD Providers
+
+        /// <summary>
+        /// 显示一个临时提示文本（Tip）。
+        /// <para>播放由统一的每帧通路推进，故返回的 UniTask 在「已创建并开始播放」时完成，
+        /// 不等播放结束——那样 Tip 才能与面板一同受暂停与档位调度约束。</para>
+        /// </summary>
+        /// <param name="text">显示文字。</param>
+        /// <param name="config">显示配置。</param>
+        /// <param name="cancellationToken">取消令牌，覆盖实例化阶段。</param>
+        UniTask ShowTipAsync(string text, TipConfig config = default, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// 设置 Tip 提供者。传 null 恢复默认 <see cref="UITipManagerImpl"/>。
+        /// </summary>
+        /// <param name="provider">自定义提供者，或 null 恢复默认。</param>
+        void SetTipProvider(IUITipProvider provider);
+
+        /// <summary>
+        /// 为 3D 目标附加一个 HUD（名字、血条等）。
+        /// <para>HUD 每帧跟随目标的屏幕位置；目标丢失时自动回收。同一目标同时只绑定一个 HUD。</para>
+        /// </summary>
+        /// <typeparam name="T">HUD 类型。</typeparam>
+        /// <param name="target">要跟随的 3D 目标。</param>
+        /// <param name="assetPath">HUD 预制体的资源地址。</param>
+        /// <param name="offset">屏幕坐标偏移（像素）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>附加的 HUD 实例；失败时为 null。</returns>
+        UniTask<T> ShowHudAsync<T>(Transform target, string assetPath, Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem;
+
+        /// <summary>
+        /// 分离指定目标绑定的 HUD。
+        /// </summary>
+        /// <param name="target">3D 目标；为 null 时不执行任何操作。</param>
+        void HideHud(Transform target);
+
+        /// <summary>
+        /// 设置 HUD 提供者。传 null 恢复默认 <see cref="UIHudManagerImpl"/>。
+        /// </summary>
+        /// <param name="provider">自定义提供者，或 null 恢复默认。</param>
+        void SetHudProvider(IUiHudProvider provider);
+
+        #endregion
+
         #region Diagnostics
 
         /// <summary>

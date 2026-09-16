@@ -128,6 +128,16 @@ namespace XFramework.XUI
         private readonly ReadOnlyCollection<UIPanelBase> _panelsView;
 
         /// <summary>
+        /// Tip 提供者。默认 <see cref="UITipManagerImpl"/>，可由 <see cref="SetTipProvider"/> 替换。
+        /// <para>由本实现持有而非门面：它的每帧驱动、生命周期回收与 UIRoot 绑定都归口在这里，
+        /// 门面退化为纯转发。</para>
+        /// </summary>
+        private IUITipProvider _tipProvider;
+
+        /// <summary>HUD 提供者。默认 <see cref="UIHudManagerImpl"/>，可由 <see cref="SetHudProvider"/> 替换。</summary>
+        private IUiHudProvider _hudProvider;
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
@@ -167,6 +177,74 @@ namespace XFramework.XUI
         public bool IsAnyOpen => _activePanels.Count > 0;
 
         public IReadOnlyList<UIPanelBase> Panels => _panelsView;
+
+        #endregion
+
+        #region Tip & HUD Providers
+
+        /// <inheritdoc/>
+        public UniTask ShowTipAsync(string text, TipConfig config = default,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _tipProvider.ShowTipAsync(text, config, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public void SetTipProvider(IUITipProvider provider)
+        {
+            // 换 provider 前先回收旧的：否则它手上的在播 Tip 会留在场景里无人认领
+            if (_tipProvider != null && !ReferenceEquals(_tipProvider, provider))
+                _tipProvider.DetachAll();
+
+            if (provider == null)
+            {
+                var defaultProvider = new UITipManagerImpl();
+                if (UIRoot != null)
+                    defaultProvider.SetUIRoot(UIRoot);
+
+                _tipProvider = defaultProvider;
+            }
+            else
+            {
+                _tipProvider = provider;
+            }
+        }
+
+        /// <inheritdoc/>
+        public UniTask<T> ShowHudAsync<T>(Transform target, string assetPath, Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem
+        {
+            EnsureInitialized();
+            return _hudProvider.AttachAsync<T>(target, assetPath, offset, cancellationToken);
+        }
+
+        /// <inheritdoc/>
+        public void HideHud(Transform target)
+        {
+            _hudProvider?.Detach(target);
+        }
+
+        /// <inheritdoc/>
+        public void SetHudProvider(IUiHudProvider provider)
+        {
+            // 同上：换 provider 前先回收，避免旧 provider 的 HUD 成为孤儿
+            if (_hudProvider != null && !ReferenceEquals(_hudProvider, provider))
+                _hudProvider.DetachAll();
+
+            if (provider == null)
+            {
+                var defaultProvider = new UIHudManagerImpl();
+                if (UIRoot != null)
+                    defaultProvider.SetUIRoot(UIRoot);
+
+                _hudProvider = defaultProvider;
+            }
+            else
+            {
+                _hudProvider = provider;
+            }
+        }
 
         #endregion
 
@@ -299,6 +377,13 @@ namespace XFramework.XUI
             // 默认经 AssetManager 加载与回池
             _factory = factory ?? new AssetPanelFactory();
 
+            // 默认 provider：根节点此时已知，故无需像早先那样在门面里回头摸实例
+            _tipProvider = new UITipManagerImpl();
+            _tipProvider.SetUIRoot(uiRoot);
+
+            _hudProvider = new UIHudManagerImpl();
+            _hudProvider.SetUIRoot(uiRoot);
+
             // 订阅语言变更消息，自动通知所有已打开面板刷新文本
             _languageChangedSubscription = MessageManager.Subscribe<LanguageChangedMessage>(OnLanguageChangedMessage);
         }
@@ -351,6 +436,14 @@ namespace XFramework.XUI
 
             // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
             _assetCache.Clear();
+
+            // provider 随实例一同归口：Tip 与 HUD 都是回池而非销毁，
+            // 不回收的话它们会留在场景里无人认领
+            _tipProvider?.DetachAll();
+            _tipProvider = null;
+
+            _hudProvider?.DetachAll();
+            _hudProvider = null;
 
             // 销毁遮罩。它由 new GameObject 创建、从未经 AssetManager 托管，
             // 故直接销毁即可——早先走 AssetManager.DestroyInstance 会让 Dispose
@@ -1020,6 +1113,10 @@ namespace XFramework.XUI
         {
             // 手动驱动等价于驱动每帧档
             DriveLod(UpdateLOD.Tier0, deltaTime, time);
+
+            // HUD 与 Tip 共用同一条帧通路，故同样受 LOD 与 Pause 约束
+            _hudProvider?.Update(deltaTime, time);
+            _tipProvider?.Update(deltaTime, time);
         }
 
         /// <summary>

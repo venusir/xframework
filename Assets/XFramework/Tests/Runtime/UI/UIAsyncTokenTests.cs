@@ -70,7 +70,7 @@ namespace XFramework.XUI.Tests
             {
                 using var cts = new CancellationTokenSource();
 
-                await UIManager.ShowHud<StubHudItem>(target, "ui/hud/hp", new Vector2(0f, 80f), cts.Token);
+                await UIManager.ShowHudAsync<StubHudItem>(target, "ui/hud/hp", new Vector2(0f, 80f), cts.Token);
 
                 Assert.AreEqual(1, _hud.CallCount);
                 Assert.AreSame(target, _hud.LastTarget);
