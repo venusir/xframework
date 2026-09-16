@@ -57,16 +57,16 @@ namespace XFramework.XUI.Tests
         public async Task ConcurrentOpen_SameType_SharesInstanceAndPublishesOnce()
         {
             int openedCount = 0;
-            var subscription = UIManager.Subscribe((PanelOpenedMessage _) => openedCount++);
+            var subscription = UIManager.Events.Subscribe((PanelOpenedMessage _) => openedCount++);
 
             try
             {
                 // 闸住工厂，制造「在途打开」窗口
                 _factory.Gate = new UniTaskCompletionSource<object>();
 
-                var first = UIManager.OpenAsync<FakePanel>("ui/first").Preserve();
+                var first = UIManager.Panel.OpenAsync<FakePanel>("ui/first").Preserve();
                 await UniTask.Yield();
-                var second = UIManager.OpenAsync<FakePanel>("ui/first").Preserve();
+                var second = UIManager.Panel.OpenAsync<FakePanel>("ui/first").Preserve();
                 await UniTask.Yield();
 
                 Assert.AreEqual(1, _factory.CreateCount, "同类型并发打开只应实例化一次");
@@ -79,7 +79,7 @@ namespace XFramework.XUI.Tests
                 Assert.IsNotNull(p1, "首个调用者应拿到面板");
                 Assert.AreSame(p1, p2, "后来者应共享同一次打开的结果，而不是拿到池中失活引用");
                 Assert.AreEqual(1, openedCount, "PanelOpenedMessage 只应发一次");
-                Assert.IsFalse(UIManager.CanGoBack, "显示栈中不应出现重复条目");
+                Assert.IsFalse(UIManager.Stack.CanGoBack, "显示栈中不应出现重复条目");
             }
             finally
             {
@@ -93,9 +93,9 @@ namespace XFramework.XUI.Tests
         {
             _factory.Gate = new UniTaskCompletionSource<object>();
 
-            var a = UIManager.OpenAsync<FakePanel>("ui/a").Preserve();
+            var a = UIManager.Panel.OpenAsync<FakePanel>("ui/a").Preserve();
             await UniTask.Yield();
-            var b = UIManager.OpenAsync<FakePanelB>("ui/b").Preserve();
+            var b = UIManager.Panel.OpenAsync<FakePanelB>("ui/b").Preserve();
             await UniTask.Yield();
 
             _factory.Gate.TrySetResult(null);
@@ -103,8 +103,8 @@ namespace XFramework.XUI.Tests
             Assert.IsNotNull(await a);
             Assert.IsNotNull(await b);
             Assert.AreEqual(2, _factory.CreateCount, "去重按类型隔离，不同类型各开各的");
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>());
-            Assert.IsTrue(UIManager.IsOpen<FakePanelB>());
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>());
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanelB>());
         }
 
         #endregion
@@ -114,12 +114,12 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OpenAsync_BlockedByController_LeavesNothingRegistered()
         {
-            UIManager.SetController(new BlockingController { BlockOpen = true });
+            UIManager.Panel.SetController(new BlockingController { BlockOpen = true });
 
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/blocked");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/blocked");
 
             Assert.IsNull(panel, "被拦截时应返回 null");
-            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanel>());
             Assert.AreEqual(0, _factory.CreateCount, "拦截发生在实例化之前，不应产生任何实例");
         }
 
@@ -129,7 +129,7 @@ namespace XFramework.XUI.Tests
             bool threw = false;
             try
             {
-                await UIManager.OpenAsync<ThrowingPanel>("ui/boom");
+                await UIManager.Panel.OpenAsync<ThrowingPanel>("ui/boom");
             }
             catch (InvalidOperationException)
             {
@@ -137,15 +137,15 @@ namespace XFramework.XUI.Tests
             }
 
             Assert.IsTrue(threw, "OnOpen 的异常应向上传播，而不是被吞掉");
-            Assert.IsFalse(UIManager.IsOpen<ThrowingPanel>(), "失败的打开不应留下活动条目");
-            Assert.IsFalse(UIManager.CanGoBack, "失败的打开不应留在显示栈里");
+            Assert.IsFalse(UIManager.Panel.IsOpen<ThrowingPanel>(), "失败的打开不应留下活动条目");
+            Assert.IsFalse(UIManager.Stack.CanGoBack, "失败的打开不应留在显示栈里");
             Assert.AreEqual(1, _factory.ReleaseCount, "已实例化的面板应经工厂回收，不留孤儿");
         }
 
         [Test]
         public async Task PushAsync_BlockedByController_RestoresFocusOnPreviousTop()
         {
-            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             // 注意：首次打开走的是 OnOpenImpl 里直接设状态，并不经过 OnFocus()，
             // 故这里断言状态而非日志（首次打开与 Push/Pop 恢复焦点是两条路径，
@@ -153,12 +153,12 @@ namespace XFramework.XUI.Tests
             Assert.IsFalse(first.IsPaused, "刚打开的面板应处于可交互状态");
             Assert.IsTrue(first.Raycaster.enabled);
 
-            UIManager.SetController(new BlockingController { BlockOpen = true });
+            UIManager.Panel.SetController(new BlockingController { BlockOpen = true });
 
-            var pushed = await UIManager.PushAsync<FakePanelB>("ui/second");
+            var pushed = await UIManager.Stack.PushAsync<FakePanelB>("ui/second");
 
             Assert.IsNull(pushed, "被拦截时应返回 null");
-            Assert.IsFalse(UIManager.IsOpen<FakePanelB>());
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanelB>());
             Assert.IsTrue(first.Logged("OnBlur"), "Push 会先模糊栈顶");
             Assert.IsTrue(first.Logged("OnFocus"),
                 "打开失败后应把焦点还给栈顶——修复前它会永久停在失焦态");
@@ -179,7 +179,7 @@ namespace XFramework.XUI.Tests
             bool cancelled = false;
             try
             {
-                await UIManager.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token);
+                await UIManager.Panel.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -187,7 +187,7 @@ namespace XFramework.XUI.Tests
             }
 
             Assert.IsTrue(cancelled, "提交点之前的取消应上抛 OperationCanceledException");
-            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanel>());
             Assert.AreEqual(0, _factory.CreateCount, "取消发生在实例化之前，不应产生实例");
         }
 
@@ -197,7 +197,7 @@ namespace XFramework.XUI.Tests
             _factory.Gate = new UniTaskCompletionSource<object>();
 
             using var cts = new CancellationTokenSource();
-            var pending = UIManager.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token).Preserve();
+            var pending = UIManager.Panel.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token).Preserve();
             await UniTask.Yield();
 
             cts.Cancel();
@@ -213,20 +213,20 @@ namespace XFramework.XUI.Tests
             }
 
             Assert.IsTrue(cancelled, "在途取消应上抛");
-            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
-            Assert.IsFalse(UIManager.CanGoBack, "取消的打开不应留在显示栈里");
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanel>());
+            Assert.IsFalse(UIManager.Stack.CanGoBack, "取消的打开不应留在显示栈里");
             Assert.AreEqual(0, _factory.ReleaseCount, "实例尚未创建，无需回收，也不应留下孤儿");
         }
 
         [Test]
         public async Task PushAsync_CancelledWhileOpening_RestoresFocus()
         {
-            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             _factory.Gate = new UniTaskCompletionSource<object>();
 
             using var cts = new CancellationTokenSource();
-            var pending = UIManager.PushAsync<FakePanelB>("ui/second", cancellationToken: cts.Token).Preserve();
+            var pending = UIManager.Stack.PushAsync<FakePanelB>("ui/second", cancellationToken: cts.Token).Preserve();
             await UniTask.Yield();
 
             Assert.IsTrue(first.IsPaused, "Push 会先模糊栈顶");
@@ -251,7 +251,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseAsync_AlreadyCancelledToken_LeavesPanelOpen()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/first");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             using var cts = new CancellationTokenSource();
             cts.Cancel();
@@ -259,7 +259,7 @@ namespace XFramework.XUI.Tests
             bool cancelled = false;
             try
             {
-                await UIManager.CloseAsync<FakePanel>(cancellationToken: cts.Token);
+                await UIManager.Panel.CloseAsync<FakePanel>(cancellationToken: cts.Token);
             }
             catch (OperationCanceledException)
             {
@@ -267,23 +267,23 @@ namespace XFramework.XUI.Tests
             }
 
             Assert.IsTrue(cancelled, "提交点之前的取消应上抛");
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "面板应保持原状，不进入半关状态");
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "面板应保持原状，不进入半关状态");
             Assert.AreEqual(0, _factory.ReleaseCount);
         }
 
         [Test]
         public async Task CloseAsync_CancelledAtCommitPoint_StillCloses()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/first");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             using var cts = new CancellationTokenSource();
-            UIManager.SetController(new BlockingController { CancelOnBeforeClose = cts });
+            UIManager.Panel.SetController(new BlockingController { CancelOnBeforeClose = cts });
 
             // 控制器在放行的同时取消令牌：放行即提交，此后取消不再生效
-            await UIManager.CloseAsync<FakePanel>(cancellationToken: cts.Token);
+            await UIManager.Panel.CloseAsync<FakePanel>(cancellationToken: cts.Token);
 
-            Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "提交点之后的取消不应留下半关状态");
-            Assert.IsFalse(UIManager.CanGoBack);
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanel>(), "提交点之后的取消不应留下半关状态");
+            Assert.IsFalse(UIManager.Stack.CanGoBack);
             Assert.AreEqual(1, _factory.ReleaseCount, "面板应已回池");
         }
 
@@ -294,10 +294,10 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task PushAsync_TargetAlreadyOpen_DoesNotLeaveItBlurred()
         {
-            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
             Assert.IsFalse(first.IsPaused, "刚打开的面板不应处于暂停态");
 
-            var pushed = await UIManager.PushAsync<FakePanel>("ui/first");
+            var pushed = await UIManager.Stack.PushAsync<FakePanel>("ui/first");
 
             Assert.AreSame(first, pushed, "目标是已打开的面板时应复用它");
             Assert.IsFalse(first.IsPaused,

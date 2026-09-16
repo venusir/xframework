@@ -53,18 +53,18 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Push_PausesPreviousTop_ResumeOnPop()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             Assert.IsTrue(covered.IsFocused, "刚打开的面板在栈顶，应有焦点");
             Assert.IsFalse(covered.IsPaused);
 
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
 
             Assert.IsFalse(covered.IsFocused, "被覆盖后失焦");
             Assert.IsTrue(covered.IsPaused, "被覆盖后暂停每帧更新");
             Assert.IsTrue(covered.Logged("OnBlur"), "交互维度：OnBlur");
             Assert.IsTrue(covered.Logged("OnPause"), "更新维度：OnPause");
 
-            await UIManager.PopAsync();
+            await UIManager.Stack.PopAsync();
 
             Assert.IsTrue(covered.IsFocused, "回到栈顶后恢复焦点");
             Assert.IsFalse(covered.IsPaused, "恢复每帧更新");
@@ -76,7 +76,7 @@ namespace XFramework.XUI.Tests
         {
             // 回归：OnOpenImpl 原先直接设 IsPaused/Raycaster 字段，子类重写的 OnFocus
             // 在首次打开时不会被调用——「首次打开」与「Push/Pop 恢复焦点」是两条路径。
-            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
 
             Assert.IsTrue(panel.IsFocused);
             Assert.IsTrue(panel.Logged("OnFocus"), "首次打开也应走 OnFocus");
@@ -91,19 +91,19 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task PausedPanel_IsStillOpen()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
 
             Assert.IsTrue(covered.IsPaused);
             Assert.IsTrue(covered.IsOpen, "暂停的是每帧更新，不是面板本身");
-            Assert.IsTrue(UIManager.IsOpen<UpdateRecordingPanel>());
+            Assert.IsTrue(UIManager.Panel.IsOpen<UpdateRecordingPanel>());
         }
 
         [Test]
         public async Task PausedPanel_StillReceivesLanguageChanged()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
             Assert.AreEqual(0, covered.LanguageChangedCount, "前置条件：尚未收到语言切换");
 
             MessageManager.Publish(new XLocalization.LanguageChangedMessage("en"));
@@ -115,13 +115,13 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task PausedPanel_NotDrivenByUpdate()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             UpdateManager.Tick(0.016f);
 
             int before = covered.UpdateCount;
             Assert.Greater(before, 0, "前置条件：正在被驱动");
 
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
             for (int i = 0; i < 5; i++)
                 UpdateManager.Tick(0.016f * (i + 2));
 
@@ -135,11 +135,11 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Resume_RestoresInteractivity()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
             Assert.IsFalse(covered.Raycaster.enabled, "失焦后交互关闭");
 
-            await UIManager.PopAsync();
+            await UIManager.Stack.PopAsync();
 
             Assert.IsTrue(covered.Raycaster.enabled, "恢复焦点后交互打开");
         }

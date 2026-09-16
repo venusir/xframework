@@ -292,13 +292,13 @@ public class GameHudPanel : UIPanelBase
 
 ```csharp
 // 预加载——后续打开时不卡顿
-await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
+await UIManager.Panel.PreloadAsync<SettingsPanel>("ui/panels/settings");
 
 // 移除指定缓存
-UIManager.ForgetPreload<SettingsPanel>();
+UIManager.Panel.ForgetPreload<SettingsPanel>();
 
 // 清空所有缓存（切换场景时）
-UIManager.ClearPreloads();
+UIManager.Panel.ClearPreloads();
 ```
 
 ## 快速使用
@@ -382,7 +382,7 @@ public class MyGameController : IUIController
         if (!GameManager.Instance.IsLoggedIn)
         {
             // 自动弹出登录面板
-            await UIManager.PushAsync<LoginPanel>("Assets/UI/Login.prefab", 500);
+            await UIManager.Stack.PushAsync<LoginPanel>("Assets/UI/Login.prefab", 500);
             return false; // 中断链
         }
         return true;
@@ -396,7 +396,7 @@ public class MyGameController : IUIController
 
     private async UniTask<bool> ShowConfirmDialog(string message)
     {
-        var dialog = await UIManager.PushAsync<ConfirmDialog>(
+        var dialog = await UIManager.Stack.PushAsync<ConfirmDialog>(
             "Assets/UI/ConfirmDialog.prefab", 900);
         await dialog.WaitForResultAsync();
         return dialog.Result;
@@ -578,60 +578,60 @@ public class MainMenuPanel : UIPanelBase
 using XFramework.XUI;
 
 // 打开面板
-var mainMenu = await UIManager.OpenAsync<MainMenuPanel>(
+var mainMenu = await UIManager.Panel.OpenAsync<MainMenuPanel>(
     "ui/panels/mainmenu",    // YooAsset 预制体地址
     layerDefault,             // 层级（可选，默认 100）
     userData                  // 自定义数据（可选，默认 null）
 );
 
 // 关闭面板（通过类型）
-await UIManager.CloseAsync<MainMenuPanel>();
+await UIManager.Panel.CloseAsync<MainMenuPanel>();
 
 // 关闭面板（带关闭动画）
-await UIManager.CloseAsync<MainMenuPanel>(immediate: false);
+await UIManager.Panel.CloseAsync<MainMenuPanel>(immediate: false);
 
 // 关闭面板（立即销毁，跳过动画）
-await UIManager.CloseAsync<MainMenuPanel>(immediate: true);
+await UIManager.Panel.CloseAsync<MainMenuPanel>(immediate: true);
 
 // 面板关闭自身
 await this.CloseSelfAsync();
 
 // 查询面板状态
-bool isOpen = UIManager.IsOpen<MainMenuPanel>();
-var panel = UIManager.GetPanel<MainMenuPanel>(); // 未打开返回 null
+bool isOpen = UIManager.Panel.IsOpen<MainMenuPanel>();
+var panel = UIManager.Panel.GetPanel<MainMenuPanel>(); // 未打开返回 null
 ```
 
 ### 6. 显示栈与导航
 
 ```csharp
 // 主菜单：用 OpenAsync 打开——它同样入栈，后续可以 Pop 回退
-await UIManager.OpenAsync<MainMenuPanel>("ui/panels/mainmenu", layerDefault);
+await UIManager.Panel.OpenAsync<MainMenuPanel>("ui/panels/mainmenu", layerDefault);
 
 // 进入设置——主菜单失焦，设置面板获得焦点
-var settings = await UIManager.PushAsync<SettingsPanel>(
+var settings = await UIManager.Stack.PushAsync<SettingsPanel>(
     "ui/panels/settings",
     layerDefault
 );
 
 // 从设置进入音效子面板
-await UIManager.PushAsync<SoundPanel>("ui/panels/sound", layerDefault);
+await UIManager.Stack.PushAsync<SoundPanel>("ui/panels/sound", layerDefault);
 
 // 返回上一面板（关闭音效面板，恢复设置面板）
-await UIManager.GoBackAsync();
+await UIManager.Stack.GoBackAsync();
 
 // 或使用 PopAsync（等价于 GoBackAsync）
-await UIManager.PopAsync();
+await UIManager.Stack.PopAsync();
 
 // 直接从音效回到主菜单（中间的面板依次关闭）
-await UIManager.PopToAsync<MainMenuPanel>();
+await UIManager.Stack.PopToAsync<MainMenuPanel>();
 
 // 全部退到最底层（只留最早打开的那一个）
-await UIManager.PopToRootAsync();
+await UIManager.Stack.PopToRootAsync();
 
 // 检查是否可以返回——接返回键时用它判断
-if (UIManager.CanGoBack)
+if (UIManager.Stack.CanGoBack)
 {
-    await UIManager.GoBackAsync();
+    await UIManager.Stack.GoBackAsync();
 }
 ```
 
@@ -639,38 +639,38 @@ if (UIManager.CanGoBack)
 
 ```csharp
 // 显示遮罩（半透明，不支持点击关闭）
-UIManager.ShowMask(alpha: 0.5f);
+UIManager.Mask.Show(alpha: 0.5f);
 
 // 显示遮罩（支持点击关闭——自动 Pop 栈顶）
-UIManager.ShowMask(alpha: 0.3f, clickToClose: true);
+UIManager.Mask.Show(alpha: 0.3f, clickToClose: true);
 
 // 隐藏遮罩
-UIManager.HideMask();
+UIManager.Mask.Hide();
 
 // 查询遮罩状态
-bool showing = UIManager.IsMaskShowing;
+bool showing = UIManager.Mask.IsShowing;
 ```
 
 ### 8. 关闭指定层级
 
 ```csharp
 // 关闭 Default 层的所有面板
-await UIManager.CloseLayerAsync(layerDefault);
+await UIManager.Panel.CloseLayerAsync(layerDefault);
 
 // 关闭所有面板
-await UIManager.CloseAllAsync();
+await UIManager.Panel.CloseAllAsync();
 ```
 
 ### 9. 资源预加载
 
 ```csharp
 // 游戏启动后预加载所有常用面板，后续打开零延迟
-await UIManager.PreloadAsync<MainMenuPanel>("ui/panels/mainmenu");
-await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
-await UIManager.PreloadAsync<DialogPanel>("ui/panels/dialog");
+await UIManager.Panel.PreloadAsync<MainMenuPanel>("ui/panels/mainmenu");
+await UIManager.Panel.PreloadAsync<SettingsPanel>("ui/panels/settings");
+await UIManager.Panel.PreloadAsync<DialogPanel>("ui/panels/dialog");
 
 // 场景切换时清理不用的缓存
-UIManager.ClearPreloads();
+UIManager.Panel.ClearPreloads();
 ```
 
 ### 10. 语言切换联动
@@ -744,7 +744,7 @@ var mockManager = new MockUIManager();
 UIManager.SetInstance(mockManager);
 
 // 注入自定义 Controller（运行时替换拦截逻辑）
-UIManager.SetController(new MyCustomController());
+UIManager.Panel.SetController(new MyCustomController());
 ```
 
 ## 设计原则
@@ -841,7 +841,7 @@ var hud = await UIManager.ShowHud<MonsterHpBar>(
 hud.Bind(monster);
 
 // 3. 隐藏 HUD（目标死亡 / 离开视野时）
-UIManager.HideHud(monster.transform);
+UIManager.Hud.Detach(monster.transform);
 ```
 
 ### API 说明
@@ -849,7 +849,7 @@ UIManager.HideHud(monster.transform);
 | API                                               | 说明                                                      |
 | ------------------------------------------------- | --------------------------------------------------------- |
 | `UIManager.ShowHud<T>(target, assetPath, offset)` | 为目标附加 HUD，返回实例。同一目标重复调用自动替换旧 HUD  |
-| `UIManager.HideHud(target)`                       | 分离指定目标的 HUD，自动回池。target 为 null 时无操作     |
+| `UIManager.Hud.Detach(target)`                       | 分离指定目标的 HUD，自动回池。target 为 null 时无操作     |
 | `UIHudItem.FollowTarget`                          | 要跟随的 3D 目标 Transform。设为 null 会触发自动回收      |
 | `UIHudItem.ScreenOffset`                          | 屏幕坐标偏移（像素），常用于将 HUD 移到目标头顶上方       |
 | `UIHudItem.CanvasGroup`                           | 懒加载的 CanvasGroup 引用，用于控制整体透明度             |
@@ -861,7 +861,7 @@ UIManager.HideHud(monster.transform);
 
 - **目标被销毁**（`FollowTarget == null`）：下一帧 `OnUpdate` 检测到 → 触发 `OnTargetLost` 事件 → `UIHudManager` 自动 Detach + 回池
 - **目标移到镜头后方**（`screenPos.z <= 0`）：CanvasGroup.alpha 自动设为 0（隐藏但未回收）
-- **场景切换 / 全部关闭**：`UIManager.CloseAllAsync` 会触发 `UIHudManager.DetachAll()`，回收所有 HUD
+- **场景切换 / 全部关闭**：`UIManager.Panel.CloseAllAsync` 会触发 `UIHudManager.DetachAll()`，回收所有 HUD
 
 ### 预制体要求
 

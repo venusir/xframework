@@ -30,7 +30,7 @@ namespace XFramework.XUI.Tests
             UIManager.Initialize(_root.transform);
 
             _hud = new CountingHudProvider();
-            UIManager.SetHudProvider(_hud);
+            UIManager.Hud.SetProvider(_hud);
         }
 
         [TearDown]

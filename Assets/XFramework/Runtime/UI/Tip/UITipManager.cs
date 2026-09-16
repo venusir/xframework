@@ -12,7 +12,7 @@ namespace XFramework.XUI
     /// <para>负责 Tip 预制体的实例化、层级容器的管理、生命周期调度。</para>
     /// <para>Tip 实例通过 <see cref="XAsset.AssetManager"/> 获取和回池，不自行维护对象池。</para>
     /// <para>所有 Tip 挂载在 UIRoot 下独立的 Layer_Tip 容器中，排序值取 <see cref="UISorting.TipOrder"/>，在 HUD 之上。</para>
-    /// <para>第三方可通过 <see cref="UIManager.SetTipProvider"/> 替换此实现。</para>
+    /// <para>第三方可通过 <see cref="UIManager.Tip.SetProvider"/> 替换此实现。</para>
     /// </summary>
     internal sealed class UITipManagerImpl : IUITipProvider
     {

@@ -111,8 +111,8 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SameLayer_OrderFollowsOpenSequence()
         {
-            var a = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
-            var b = await UIManager.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
+            var a = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var b = await UIManager.Panel.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
 
             Assert.AreEqual(UISorting.PanelOrder(UILayers.Default, 1), a.Canvas.sortingOrder);
             Assert.AreEqual(UISorting.PanelOrder(UILayers.Default, 2), b.Canvas.sortingOrder,
@@ -123,9 +123,9 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task DifferentLayers_AreIndependentOfOpenSequence()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/top", UILayers.Top);
-            var lower = await UIManager.OpenAsync<FakePanelB>("ui/default", UILayers.Default);
-            var top = UIManager.GetPanel<FakePanel>();
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/top", UILayers.Top);
+            var lower = await UIManager.Panel.OpenAsync<FakePanelB>("ui/default", UILayers.Default);
+            var top = UIManager.Panel.GetPanel<FakePanel>();
 
             Assert.Greater(top.Canvas.sortingOrder, lower.Canvas.sortingOrder,
                 "层级优先于打开顺序：后打开的底层面板仍应排在高层之下");
@@ -134,11 +134,11 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseAndReopen_DoesNotDrift()
         {
-            var a = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
-            var b = await UIManager.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
+            var a = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var b = await UIManager.Panel.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
 
-            await UIManager.CloseAsync<FakePanelB>();
-            var c = await UIManager.OpenAsync<FakePanelC>("ui/c", UILayers.Default);
+            await UIManager.Panel.CloseAsync<FakePanelB>();
+            var c = await UIManager.Panel.OpenAsync<FakePanelC>("ui/c", UILayers.Default);
 
             Assert.AreEqual(UISorting.PanelOrder(UILayers.Default, 1), a.Canvas.sortingOrder,
                 "A 仍是层内第一个");
@@ -150,10 +150,10 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task BringToFront_RestacksAndReorders()
         {
-            var a = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
-            var b = await UIManager.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
+            var a = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var b = await UIManager.Panel.OpenAsync<FakePanelB>("ui/b", UILayers.Default);
 
-            UIManager.BringToFront(a);
+            UIManager.Panel.BringToFront(a);
 
             Assert.AreEqual(UISorting.PanelOrder(UILayers.Default, 2), a.Canvas.sortingOrder,
                 "被提到最前的面板应拿到层内最大序号");
@@ -170,7 +170,7 @@ namespace XFramework.XUI.Tests
             LogAssert.Expect(LogType.Warning,
                 new System.Text.RegularExpressions.Regex("exceeds the panel layer limit"));
 
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/high", UISorting.MaxPanelLayer + 10);
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/high", UISorting.MaxPanelLayer + 10);
 
             Assert.AreEqual(UISorting.MaxPanelLayer, panel.Layer, "超限层级应被钳制");
             Assert.Less(panel.Canvas.sortingOrder, UISorting.HudOrder,

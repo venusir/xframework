@@ -55,26 +55,26 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OpenThenPush_CanGoBackIsTrue()
         {
-            Assert.IsFalse(UIManager.CanGoBack, "未打开任何面板时不能退回");
+            Assert.IsFalse(UIManager.Stack.CanGoBack, "未打开任何面板时不能退回");
 
-            await UIManager.OpenAsync<FakePanel>("ui/first");
-            Assert.IsFalse(UIManager.CanGoBack, "只有栈底面板时不能退回");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
+            Assert.IsFalse(UIManager.Stack.CanGoBack, "只有栈底面板时不能退回");
 
-            await UIManager.PushAsync<FakePanelB>("ui/second");
-            Assert.IsTrue(UIManager.CanGoBack,
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/second");
+            Assert.IsTrue(UIManager.Stack.CanGoBack,
                 "Open 打开的面板也应在显示栈里，否则此处栈深恒为 1");
         }
 
         [Test]
         public async Task OpenThenPush_PopReturnsToOpenedPanel()
         {
-            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
-            await UIManager.PushAsync<FakePanelB>("ui/second");
+            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/second");
 
-            await UIManager.PopAsync();
+            await UIManager.Stack.PopAsync();
 
-            Assert.IsFalse(UIManager.IsOpen<FakePanelB>(), "Pop 应关掉 Push 进来的面板");
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "先 Open 的面板应保持打开");
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanelB>(), "Pop 应关掉 Push 进来的面板");
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "先 Open 的面板应保持打开");
             Assert.IsTrue(first.Logged("OnBlur"), "Push 时前一个面板应失焦");
             Assert.IsTrue(first.Logged("OnFocus"), "Pop 后前一个面板应恢复焦点");
         }
@@ -82,52 +82,52 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task PopAsync_OnStackBottom_IsNoOp()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/first");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
-            await UIManager.PopAsync();
+            await UIManager.Stack.PopAsync();
 
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(),
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(),
                 "栈底面板不参与弹出，栈深为 1 时 PopAsync 应为 no-op");
         }
 
         [Test]
         public async Task OpenAsync_SameTypeTwice_DoesNotDuplicateInStack()
         {
-            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
-            var second = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
+            var second = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             Assert.AreSame(first, second, "同类型面板应复用已打开的实例");
             Assert.AreEqual(1, _factory.CreateCount, "不应重复实例化");
-            Assert.IsFalse(UIManager.CanGoBack, "重复打开不应在栈中留下重复条目");
+            Assert.IsFalse(UIManager.Stack.CanGoBack, "重复打开不应在栈中留下重复条目");
         }
 
         [Test]
         public async Task PopToAsync_ClosesIntermediatePanels()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
-            await UIManager.PushAsync<FakePanelC>("ui/c");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelC>("ui/c");
 
-            await UIManager.PopToAsync<FakePanelB>();
+            await UIManager.Stack.PopToAsync<FakePanelB>();
 
-            Assert.IsTrue(UIManager.IsOpen<FakePanelB>(), "目标是新栈顶");
-            Assert.IsFalse(UIManager.IsOpen<FakePanelC>(), "目标之上的面板应被关掉");
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "目标之下的面板不应受影响");
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanelB>(), "目标是新栈顶");
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanelC>(), "目标之上的面板应被关掉");
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "目标之下的面板不应受影响");
         }
 
         [Test]
         public async Task PopToRootAsync_KeepsOnlyBottomPanel()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
-            await UIManager.PushAsync<FakePanelC>("ui/c");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelC>("ui/c");
 
-            await UIManager.PopToRootAsync();
+            await UIManager.Stack.PopToRootAsync();
 
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "只保留最早打开的那一个");
-            Assert.IsFalse(UIManager.IsOpen<FakePanelB>());
-            Assert.IsFalse(UIManager.IsOpen<FakePanelC>());
-            Assert.IsFalse(UIManager.CanGoBack);
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "只保留最早打开的那一个");
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanelB>());
+            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanelC>());
+            Assert.IsFalse(UIManager.Stack.CanGoBack);
         }
 
         #endregion
@@ -137,14 +137,14 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Update_OnUpdateClosesSelf_DoesNotThrow()
         {
-            var panel = await UIManager.OpenAsync<SelfClosingPanel>("ui/self");
+            var panel = await UIManager.Panel.OpenAsync<SelfClosingPanel>("ui/self");
 
             // 修复前：Update 内 foreach 遍历活动面板，面板自关时同步改集合
             // → InvalidOperationException（经 Forget 通路变成 LogException，测试判失败）
             UIManager.Update(0.016f, 0f);
 
             Assert.IsTrue(panel.WasUpdated, "OnUpdate 应被驱动过");
-            Assert.IsFalse(UIManager.IsOpen<SelfClosingPanel>(), "面板应在自己的 OnUpdate 里被关掉");
+            Assert.IsFalse(UIManager.Panel.IsOpen<SelfClosingPanel>(), "面板应在自己的 OnUpdate 里被关掉");
         }
 
         #endregion

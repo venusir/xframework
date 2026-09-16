@@ -229,12 +229,12 @@ GameLauncher.Start()
 
 | 操作         | 代码                                                                 |
 | ------------ | -------------------------------------------------------------------- |
-| 打开面板     | `await UIManager.OpenAsync<MainMenuPanel>("PF_MainMenu")`            |
-| 关闭面板     | `await UIManager.CloseAsync<MainMenuPanel>()`                        |
-| 压入导航堆栈 | `await UIManager.PushAsync<SettingsPanel>("PF_Settings")`            |
-| 弹出导航堆栈 | `await UIManager.PopAsync()`                                         |
-| 显示模态遮罩 | `UIManager.ShowMask(maskLayer: 500, alpha: 0.5f)`                    |
-| 隐藏模态遮罩 | `UIManager.HideMask()`                                               |
+| 打开面板     | `await UIManager.Panel.OpenAsync<MainMenuPanel>("PF_MainMenu")`            |
+| 关闭面板     | `await UIManager.Panel.CloseAsync<MainMenuPanel>()`                        |
+| 压入导航堆栈 | `await UIManager.Stack.PushAsync<SettingsPanel>("PF_Settings")`            |
+| 弹出导航堆栈 | `await UIManager.Stack.PopAsync()`                                         |
+| 显示模态遮罩 | `UIManager.Mask.Show(maskLayer: 500, alpha: 0.5f)`                    |
+| 隐藏模态遮罩 | `UIManager.Mask.Hide()`                                               |
 | 显示临时提示 | `UIManager.ShowTip(new TipConfig { Text = "+100", WorldPos = pos })` |
 
 ### 更新操作

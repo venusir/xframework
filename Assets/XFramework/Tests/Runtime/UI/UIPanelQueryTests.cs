@@ -53,35 +53,35 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Counts_TrackOpenAndClose()
         {
-            Assert.AreEqual(0, UIManager.OpenCount);
-            Assert.IsFalse(UIManager.IsAnyOpen);
-            Assert.IsNull(UIManager.GetTopPanel(), "无面板时栈顶为 null");
+            Assert.AreEqual(0, UIManager.Panel.OpenCount);
+            Assert.IsFalse(UIManager.Panel.IsAnyOpen);
+            Assert.IsNull(UIManager.Panel.GetTopPanel(), "无面板时栈顶为 null");
 
-            await UIManager.OpenAsync<FakePanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
 
-            Assert.AreEqual(2, UIManager.OpenCount);
-            Assert.IsTrue(UIManager.IsAnyOpen);
+            Assert.AreEqual(2, UIManager.Panel.OpenCount);
+            Assert.IsTrue(UIManager.Panel.IsAnyOpen);
 
-            await UIManager.CloseAsync<FakePanelB>();
-            Assert.AreEqual(1, UIManager.OpenCount);
+            await UIManager.Panel.CloseAsync<FakePanelB>();
+            Assert.AreEqual(1, UIManager.Panel.OpenCount);
 
-            await UIManager.CloseAsync<FakePanel>();
-            Assert.AreEqual(0, UIManager.OpenCount);
-            Assert.IsNull(UIManager.GetTopPanel());
+            await UIManager.Panel.CloseAsync<FakePanel>();
+            Assert.AreEqual(0, UIManager.Panel.OpenCount);
+            Assert.IsNull(UIManager.Panel.GetTopPanel());
         }
 
         [Test]
         public async Task GetTopPanel_FollowsDisplayStack()
         {
-            var a = await UIManager.OpenAsync<FakePanel>("ui/a");
-            Assert.AreSame(a, UIManager.GetTopPanel());
+            var a = await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            Assert.AreSame(a, UIManager.Panel.GetTopPanel());
 
-            var b = await UIManager.PushAsync<FakePanelB>("ui/b");
-            Assert.AreSame(b, UIManager.GetTopPanel(), "后打开的在最前");
+            var b = await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
+            Assert.AreSame(b, UIManager.Panel.GetTopPanel(), "后打开的在最前");
 
-            await UIManager.PopAsync();
-            Assert.AreSame(a, UIManager.GetTopPanel(), "弹出后回到前一个");
+            await UIManager.Stack.PopAsync();
+            Assert.AreSame(a, UIManager.Panel.GetTopPanel(), "弹出后回到前一个");
         }
 
         #endregion
@@ -91,12 +91,12 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CopyPanels_ReturnsDisplayOrderBottomToTop()
         {
-            var a = await UIManager.OpenAsync<FakePanel>("ui/a");
-            var b = await UIManager.PushAsync<FakePanelB>("ui/b");
-            var c = await UIManager.PushAsync<FakePanelC>("ui/c");
+            var a = await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            var b = await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
+            var c = await UIManager.Stack.PushAsync<FakePanelC>("ui/c");
 
             var buffer = new List<UIPanelBase>();
-            int count = UIManager.CopyPanels(buffer);
+            int count = UIManager.Panel.CopyPanels(buffer);
 
             Assert.AreEqual(3, count);
             Assert.AreSame(a, buffer[0], "底 → 顶");
@@ -108,9 +108,9 @@ namespace XFramework.XUI.Tests
         public async Task CopyPanels_ClearsBufferFirst()
         {
             var buffer = new List<UIPanelBase> { null, null, null, null, null };
-            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
 
-            int count = UIManager.CopyPanels(buffer);
+            int count = UIManager.Panel.CopyPanels(buffer);
 
             Assert.AreEqual(1, count);
             Assert.AreEqual(1, buffer.Count, "缓冲区应先被清空，而不是追加");
@@ -119,28 +119,28 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CopyPanelsInLayer_FiltersByLayer()
         {
-            var top = await UIManager.OpenAsync<FakePanel>("ui/top", UILayers.Top);
-            var mid = await UIManager.OpenAsync<FakePanelB>("ui/mid", UILayers.Default);
-            var bottom = await UIManager.OpenAsync<FakePanelC>("ui/bottom", UILayers.Background);
+            var top = await UIManager.Panel.OpenAsync<FakePanel>("ui/top", UILayers.Top);
+            var mid = await UIManager.Panel.OpenAsync<FakePanelB>("ui/mid", UILayers.Default);
+            var bottom = await UIManager.Panel.OpenAsync<FakePanelC>("ui/bottom", UILayers.Background);
 
             var buffer = new List<UIPanelBase>();
 
-            Assert.AreEqual(1, UIManager.CopyPanelsInLayer(UILayers.Default, buffer));
+            Assert.AreEqual(1, UIManager.Panel.CopyPanelsInLayer(UILayers.Default, buffer));
             Assert.AreSame(mid, buffer[0]);
 
-            Assert.AreEqual(1, UIManager.CopyPanelsInLayer(UILayers.Top, buffer));
+            Assert.AreEqual(1, UIManager.Panel.CopyPanelsInLayer(UILayers.Top, buffer));
             Assert.AreSame(top, buffer[0]);
 
-            Assert.AreEqual(1, UIManager.CopyPanelsInLayer(UILayers.Background, buffer));
+            Assert.AreEqual(1, UIManager.Panel.CopyPanelsInLayer(UILayers.Background, buffer));
             Assert.AreSame(bottom, buffer[0]);
 
-            Assert.AreEqual(0, UIManager.CopyPanelsInLayer(UILayers.Popup, buffer));
+            Assert.AreEqual(0, UIManager.Panel.CopyPanelsInLayer(UILayers.Popup, buffer));
         }
 
         [Test]
         public void CopyPanels_NullBuffer_Throws()
         {
-            Assert.Throws<System.ArgumentNullException>(() => UIManager.CopyPanels(null));
+            Assert.Throws<System.ArgumentNullException>(() => UIManager.Panel.CopyPanels(null));
         }
 
         #endregion
@@ -151,16 +151,16 @@ namespace XFramework.XUI.Tests
         public async Task CopyPanels_ReusesCallerBuffer_WithoutAllocating()
         {
             for (int i = 0; i < 3; i++)
-                await UIManager.OpenAsync<FakePanel>($"ui/p{i}");
+                await UIManager.Panel.OpenAsync<FakePanel>($"ui/p{i}");
 
             var buffer = new List<UIPanelBase>(8);
             for (int i = 0; i < 4; i++)
-                UIManager.CopyPanels(buffer);   // 预热：容量与内部状态就位
+                UIManager.Panel.CopyPanels(buffer);   // 预热：容量与内部状态就位
 
             long before = System.GC.GetAllocatedBytesForCurrentThread();
 
             for (int i = 0; i < 100; i++)
-                UIManager.CopyPanels(buffer);
+                UIManager.Panel.CopyPanels(buffer);
 
             long allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
 
@@ -171,16 +171,16 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Panels_IsLiveView_NotACopy()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
 
-            var view = UIManager.Panels;
+            var view = UIManager.Panel.Panels;
             Assert.AreEqual(1, view.Count);
 
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
 
             Assert.AreEqual(2, view.Count,
                 "Panels 是活视图，面板开合后随之变化——不要跨帧缓存它");
-            Assert.AreSame(UIManager.GetTopPanel(), view[1]);
+            Assert.AreSame(UIManager.Panel.GetTopPanel(), view[1]);
         }
 
         #endregion

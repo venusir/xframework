@@ -59,7 +59,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OpenTier2Panel_RegistersTier2Driver()
         {
-            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             panel.UpdateLod = UpdateLOD.Tier2;
 
             UpdateManager.Tick(0.016f);
@@ -72,12 +72,12 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseTier2Panel_UnregistersTier2Driver()
         {
-            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             panel.UpdateLod = UpdateLOD.Tier2;
             UpdateManager.Tick(0.016f);
             Assert.AreEqual(2, UpdateManager.TotalCount, "前置条件：该档驱动器已注册");
 
-            await UIManager.CloseAsync<UpdateRecordingPanel>();
+            await UIManager.Panel.CloseAsync<UpdateRecordingPanel>();
             UpdateManager.Tick(0.032f);
 
             Assert.AreEqual(0, UpdateManager.GetCount(UpdateLOD.Tier2), "该档没面板后应注销");
@@ -87,7 +87,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task RuntimeLodChange_BackToTier0_UnregistersSlicedDriver()
         {
-            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             panel.UpdateLod = UpdateLOD.Tier3;
             UpdateManager.Tick(0.016f);
             Assert.AreEqual(1, UpdateManager.GetCount(UpdateLOD.Tier3), "前置条件：Tier3 驱动器已注册");
@@ -106,7 +106,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Tier2Panel_DrivenLessOften_WithAccumulatedDelta()
         {
-            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             panel.UpdateLod = UpdateLOD.Tier2;
 
             const int steps = 20;
@@ -126,13 +126,13 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task BlurredPanel_NotDriven()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
             UpdateManager.Tick(0.016f);
 
             int before = covered.UpdateCount;
             Assert.Greater(before, 0, "前置条件：A 正在被驱动");
 
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
             Assert.IsTrue(covered.IsPaused, "Push 覆盖后 A 应失焦");
 
             for (int i = 0; i < 5; i++)
@@ -145,13 +145,13 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task PanelRegainsFocus_IsDrivenAgain()
         {
-            var covered = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
-            await UIManager.PushAsync<FakePanelB>("ui/b");
+            var covered = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
+            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
             UpdateManager.Tick(0.016f);
 
             int whileCovered = covered.UpdateCount;
 
-            await UIManager.PopAsync();
+            await UIManager.Stack.PopAsync();
             UpdateManager.Tick(0.032f);
 
             Assert.IsFalse(covered.IsPaused, "Pop 后 A 应恢复焦点");

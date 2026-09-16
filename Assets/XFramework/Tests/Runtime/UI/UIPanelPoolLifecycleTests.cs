@@ -54,7 +54,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseAsync_UnbindsViewModel()
         {
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             // 刻意绕过 panel.Binding 属性直接取组件——这同时覆盖 OnPoolRecycle 里的
             // 「GetComponent 兜底」分支（_binding 缓存仍为 null）
@@ -65,7 +65,7 @@ namespace XFramework.XUI.Tests
             Assert.IsTrue(viewModel.Bound, "绑定后应调用 OnBound");
             Assert.IsTrue(binding.IsBound);
 
-            await UIManager.CloseAsync<FakePanel>();
+            await UIManager.Panel.CloseAsync<FakePanel>();
 
             Assert.IsTrue(viewModel.Disposed,
                 "面板回池应解绑并释放 ViewModel——修复前挂在 OnDestroy 上，回池不销毁故永不触发");
@@ -75,15 +75,15 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseThenReopen_BindsFreshViewModel()
         {
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
             panel.gameObject.AddComponent<UIPanelBinding>();
 
             var first = new FakeViewModel();
             panel.Binding.Bind(first);
-            await UIManager.CloseAsync<FakePanel>();
+            await UIManager.Panel.CloseAsync<FakePanel>();
 
             // 重新打开：拿到的是同一个池化实例
-            var reopened = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var reopened = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
             Assert.AreSame(panel, reopened, "应复用池中的同一实例");
 
             var second = new FakeViewModel();
@@ -100,14 +100,14 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Track_DisposedOnPoolRecycle()
         {
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             var subscription = new CountingDisposable();
             var returned = panel.Track(subscription);
 
             Assert.AreSame(subscription, returned, "Track 应原样返回句柄，便于链式使用");
 
-            await UIManager.CloseAsync<FakePanel>();
+            await UIManager.Panel.CloseAsync<FakePanel>();
 
             Assert.IsTrue(subscription.Disposed, "登记的订阅应在回池时释放");
         }
@@ -115,25 +115,25 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Track_Null_IsIgnored()
         {
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             Assert.IsNull(panel.Track(null), "null 应原样返回且不登记");
 
-            await UIManager.CloseAsync<FakePanel>();
+            await UIManager.Panel.CloseAsync<FakePanel>();
         }
 
         [Test]
         public async Task Track_SurvivesCloseBlockedByController()
         {
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/first");
 
             var subscription = new CountingDisposable();
             panel.Track(subscription);
 
-            UIManager.SetController(new BlockingController { BlockClose = true });
-            await UIManager.CloseAsync<FakePanel>();
+            UIManager.Panel.SetController(new BlockingController { BlockClose = true });
+            await UIManager.Panel.CloseAsync<FakePanel>();
 
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "关闭被拦下，面板仍开着");
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "关闭被拦下，面板仍开着");
             Assert.IsFalse(subscription.Disposed,
                 "关闭被拦下时不该释放订阅——解绑挂在回池点而非关闭点，正是为此");
         }

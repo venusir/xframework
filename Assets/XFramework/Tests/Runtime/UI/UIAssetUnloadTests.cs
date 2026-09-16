@@ -53,33 +53,33 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Unload_EmptyPath_ReturnsFalse()
         {
-            Assert.IsFalse(await UIManager.UnloadPanelAssetAsync(null));
-            Assert.IsFalse(await UIManager.UnloadPanelAssetAsync(string.Empty));
+            Assert.IsFalse(await UIManager.Panel.UnloadPanelAssetAsync(null));
+            Assert.IsFalse(await UIManager.Panel.UnloadPanelAssetAsync(string.Empty));
         }
 
         [Test]
         public async Task Unload_WhilePanelOpen_IsRefused()
         {
             // 资源被回收后，仍在使用的那个面板会变成悬空引用——宁可拒绝
-            var panel = await UIManager.OpenAsync<FakePanel>("ui/a");
+            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
             Assert.AreEqual("ui/a", panel.AssetPath, "前置条件：面板记着自己的地址");
 
             LogAssert.Expect(LogType.Warning, new Regex("仍在使用"));
 
-            Assert.IsFalse(await UIManager.UnloadPanelAssetAsync("ui/a"));
-            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "面板不受影响");
+            Assert.IsFalse(await UIManager.Panel.UnloadPanelAssetAsync("ui/a"));
+            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "面板不受影响");
         }
 
         [Test]
         public async Task Unload_UnopenedPath_PassesAdmissionAndReachesAssetLayer()
         {
-            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
 
             // 打开的是 ui/a，故对 ui/b 的请求不该被「面板仍在使用」挡下，而应一路走到 Asset 层，
             // 在那里因为测试环境没有 YooAsset 而抛 InvalidOperationException。
             // 那个异常恰好证明准入判断没有误拦——这比断言一个 Bool 更有说服力。
             Assert.ThrowsAsync<InvalidOperationException>(
-                async () => await UIManager.UnloadPanelAssetAsync("ui/b"));
+                async () => await UIManager.Panel.UnloadPanelAssetAsync("ui/b"));
         }
     }
 }

@@ -99,7 +99,7 @@ public class MyGameLauncher : GameLauncher
 | **更新调度**     | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移                               |
 | **通用管线**     | `Pipeline` 阶段编排（串行/并行/进度/失败取消）；`IPhaseStage` 相位分组编排，`StartupAsync` 一键启动节点树 |
 | **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                                 |
-| **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
+| **UI 面板管理**  | `UIManager.Panel.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
@@ -126,18 +126,18 @@ if (uiRoot != null)
 
 ```csharp
 // 打开面板
-var panel = await UIManager.OpenAsync<MainMenuPanel>("PF_MainMenu", layer: 100);
+var panel = await UIManager.Panel.OpenAsync<MainMenuPanel>("PF_MainMenu", layer: 100);
 
 // 关闭面板
-await UIManager.CloseAsync<MainMenuPanel>();
+await UIManager.Panel.CloseAsync<MainMenuPanel>();
 
 // 栈式导航
-var settings = await UIManager.PushAsync<SettingsPanel>("PF_Settings", layer: 200);
-await UIManager.PopAsync();  // 返回上一个面板
+var settings = await UIManager.Stack.PushAsync<SettingsPanel>("PF_Settings", layer: 200);
+await UIManager.Stack.PopAsync();  // 返回上一个面板
 
 // 模态遮罩
-UIManager.ShowMask(maskLayer: 500, alpha: 0.5f);
-UIManager.HideMask();
+UIManager.Mask.Show(maskLayer: 500, alpha: 0.5f);
+UIManager.Mask.Hide();
 ```
 
 ### 临时提示（Tip / 扣血提示）

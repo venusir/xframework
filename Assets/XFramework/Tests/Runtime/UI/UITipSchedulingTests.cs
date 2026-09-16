@@ -37,7 +37,7 @@ namespace XFramework.XUI.Tests
             UIManager.Initialize(_root.transform);
 
             _tip = new RecordingTipProvider();
-            UIManager.SetTipProvider(_tip);
+            UIManager.Tip.SetProvider(_tip);
         }
 
         [TearDown]
@@ -105,7 +105,7 @@ namespace XFramework.XUI.Tests
 
             var replacement = new RecordingTipProvider();
 
-            UIManager.SetTipProvider(replacement);
+            UIManager.Tip.SetProvider(replacement);
 
             Assert.AreEqual(1, _tip.DetachAllCount, "换 provider 前应回收旧 provider 手上的 Tip");
 
