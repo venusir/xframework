@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XUI.View;
 
@@ -21,8 +22,10 @@ namespace XFramework.XUI.Controller
         /// <param name="assetPath">面板资源的 YooAsset 地址。</param>
         /// <param name="layer">面板层级。</param>
         /// <param name="userData">调用 OpenAsync 时传入的自定义数据。</param>
+        /// <param name="cancellationToken">调用方的取消令牌。异步校验应把它透传给自己的 await。</param>
         /// <returns>true 允许打开，false 拦截并取消打开。</returns>
-        UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData);
+        UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 面板打开后调用（面板已实例化、激活并完成 OnOpen）。
@@ -31,7 +34,9 @@ namespace XFramework.XUI.Controller
         /// <param name="panelType">面板类型。</param>
         /// <param name="panel">面板实例。</param>
         /// <param name="userData">调用 OpenAsync 时传入的自定义数据。</param>
-        UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData);
+        /// <param name="cancellationToken">调用方的取消令牌。此时面板已打开，取消不会再撤销它。</param>
+        UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData,
+            CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -44,15 +49,18 @@ namespace XFramework.XUI.Controller
         /// <param name="panelType">面板类型。</param>
         /// <param name="panel">面板实例。</param>
         /// <param name="immediate">是否跳过关闭动画。</param>
+        /// <param name="cancellationToken">调用方的取消令牌。返回 true 即视为提交，此后取消不再生效。</param>
         /// <returns>true 允许关闭，false 拦截并取消关闭。</returns>
-        UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate);
+        UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate,
+            CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 面板关闭后调用（面板已销毁）。
         /// <para>适合清理与该面板相关的全局状态。</para>
         /// </summary>
         /// <param name="panelType">面板类型。</param>
-        UniTask OnAfterCloseAsync(Type panelType);
+        /// <param name="cancellationToken">调用方的取消令牌。此时面板已回池，取消不会再撤销它。</param>
+        UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -61,7 +69,8 @@ namespace XFramework.XUI.Controller
         /// <summary>
         /// 所有面板关闭后调用（CloseAllAsync 之后）。
         /// </summary>
-        UniTask OnAllPanelsClosedAsync();
+        /// <param name="cancellationToken">调用方的取消令牌。</param>
+        UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default);
 
         #endregion
     }

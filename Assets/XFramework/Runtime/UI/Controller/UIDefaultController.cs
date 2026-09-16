@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
@@ -13,7 +14,8 @@ namespace XFramework.XUI.Controller
     {
         #region IUIController Implementation
 
-        public UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData)
+        public UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData,
+            CancellationToken cancellationToken = default)
         {
             // 默认放行，无任何校验
             Debug.Log(
@@ -21,14 +23,16 @@ namespace XFramework.XUI.Controller
             return UniTask.FromResult(true);
         }
 
-        public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData)
+        public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData,
+            CancellationToken cancellationToken = default)
         {
             // 默认不做额外操作
             Debug.Log($"[UIDefaultController] 面板已打开: {panelType?.Name}");
             return UniTask.CompletedTask;
         }
 
-        public UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate)
+        public UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate,
+            CancellationToken cancellationToken = default)
         {
             // 默认放行，无任何校验
             Debug.Log(
@@ -36,14 +40,14 @@ namespace XFramework.XUI.Controller
             return UniTask.FromResult(true);
         }
 
-        public UniTask OnAfterCloseAsync(Type panelType)
+        public UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default)
         {
             // 默认不做额外操作
             Debug.Log($"[UIDefaultController] 面板已关闭: {panelType?.Name}");
             return UniTask.CompletedTask;
         }
 
-        public UniTask OnAllPanelsClosedAsync()
+        public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
         {
             Debug.Log("[UIDefaultController] 所有面板已关闭");
             return UniTask.CompletedTask;

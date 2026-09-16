@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
@@ -38,20 +39,21 @@ namespace XFramework.XUI
         /// <param name="layer">面板层级，数值越大越靠前。建议使用常量管理，默认为 100。</param>
         /// <param name="userData">传递给面板 <see cref="UIPanelBase.OnOpen"/> 的自定义数据。</param>
         /// <returns>打开的面板实例，支持 await。</returns>
-        UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null)
-            where T : UIPanelBase;
+        UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default) where T : UIPanelBase;
 
         /// <summary>
         /// 关闭指定类型的 UI 面板。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
-        UniTask CloseAsync<T>(bool immediate = false) where T : UIPanelBase;
+        UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase;
 
         /// <summary>
         /// 关闭指定的面板实例。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
-        UniTask CloseAsync(UIPanelBase panel, bool immediate = false);
+        UniTask CloseAsync(UIPanelBase panel, bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 判断指定类型的面板是否已打开。
@@ -67,13 +69,13 @@ namespace XFramework.XUI
         /// 关闭指定层级的所有面板。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
-        UniTask CloseLayerAsync(int layer, bool immediate = false);
+        UniTask CloseLayerAsync(int layer, bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 关闭所有面板。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
-        UniTask CloseAllAsync(bool immediate = false);
+        UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         #endregion
 
@@ -85,8 +87,8 @@ namespace XFramework.XUI
         /// <see cref="PopAsync"/> 能退回到任何先打开的面板。「先 Open 开主界面、再 Push 开二级页」
         /// 是最常见的用法组合。</para>
         /// </summary>
-        UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null)
-            where T : UIPanelBase;
+        UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default) where T : UIPanelBase;
 
         /// <summary>
         /// 弹出显示栈顶部的面板，返回上一个面板（恢复焦点 OnFocus）。
@@ -94,25 +96,26 @@ namespace XFramework.XUI
         /// 关闭最后一个面板。</para>
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
-        UniTask PopAsync(bool immediate = false);
+        UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 依次弹出栈顶面板，直到指定类型的面板成为栈顶。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
-        UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase;
+        UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase;
 
         /// <summary>
         /// 依次弹出栈顶面板，只保留最早打开的那一个（栈底）。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
-        UniTask PopToRootAsync(bool immediate = false);
+        UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 返回上一个面板。等价于 <see cref="PopAsync"/>，语义化命名，供返回键处理调用。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
-        UniTask GoBackAsync(bool immediate = false);
+        UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 显示栈中是否还有可退回的上一个面板（即栈深 &gt; 1）。
@@ -149,7 +152,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 预加载面板资源到缓存，后续 <see cref="OpenAsync{T}"/> 或 <see cref="PushAsync{T}"/> 时直接从缓存实例化。
         /// </summary>
-        UniTask PreloadAsync<T>(string assetPath) where T : UIPanelBase;
+        UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
+            where T : UIPanelBase;
 
         /// <summary>
         /// 从缓存中移除指定面板的预制体资源，释放内存。

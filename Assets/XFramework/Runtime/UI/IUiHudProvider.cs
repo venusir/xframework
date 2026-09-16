@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
@@ -24,9 +25,10 @@ namespace XFramework.XUI
         /// <param name="target">要跟随的 3D 目标 Transform。</param>
         /// <param name="assetPath">HUD 预制体的 YooAsset 地址。</param>
         /// <param name="offset">屏幕坐标偏移（像素）。</param>
+        /// <param name="cancellationToken">取消令牌。取消时抛 <see cref="OperationCanceledException"/>。</param>
         /// <returns>附加的 HUD 实例。</returns>
-        UniTask<T> AttachAsync<T>(Transform target, string assetPath, Vector2? offset = null)
-            where T : UIHudItem;
+        UniTask<T> AttachAsync<T>(Transform target, string assetPath, Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem;
 
         /// <summary>
         /// 分离指定目标绑定的 HUD。

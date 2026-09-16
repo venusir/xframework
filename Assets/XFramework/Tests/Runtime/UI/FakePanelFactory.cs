@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
@@ -77,12 +78,13 @@ namespace XFramework.XUI.Tests
         #region IUIPanelFactory
 
         /// <inheritdoc/>
-        public async UniTask<T> CreateAsync<T>(string assetPath, Transform parent) where T : UIPanelBase
+        public async UniTask<T> CreateAsync<T>(string assetPath, Transform parent,
+            CancellationToken cancellationToken = default) where T : UIPanelBase
         {
             CreateCount++;
 
             if (Gate != null)
-                await Gate.Task;
+                await Gate.Task.AttachExternalCancellation(cancellationToken);
 
             if (!_creators.TryGetValue(typeof(T), out var creator))
             {

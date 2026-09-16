@@ -1,3 +1,5 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
 using XFramework.XAsset;
@@ -53,7 +55,8 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc/>
-        public async void ShowTip(string text, TipConfig config = default)
+        public async UniTask ShowTipAsync(string text, TipConfig config = default,
+            CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrEmpty(text))
                 return;
@@ -71,16 +74,23 @@ namespace XFramework.XUI
             }
 
             // 通过 AssetManager 泛型接口直接获取组件实例（首次加载资源，后续复用对象池）
-            var tipItem = await XAsset.AssetManager.InstantiateAsync<UITipItem>(TipAssetPath, _tipContainer);
+            var tipItem = await XAsset.AssetManager.InstantiateAsync<UITipItem>(
+                TipAssetPath, _tipContainer, cancellationToken);
             if (tipItem == null)
             {
                 Debug.LogError($"[UITipManager] Failed to instantiate Tip prefab at path: {TipAssetPath}");
                 return;
             }
 
-            // 驱动播放，结束后回池
-            await tipItem.PlayAsync(text, finalConfig);
-            XAsset.AssetManager.DestroyInstance(tipItem.gameObject);
+            // 驱动播放，结束后无论如何都回池（早先 PlayAsync 抛异常会漏掉回池）
+            try
+            {
+                await tipItem.PlayAsync(text, finalConfig, cancellationToken);
+            }
+            finally
+            {
+                XAsset.AssetManager.DestroyInstance(tipItem.gameObject);
+            }
         }
 
         #endregion

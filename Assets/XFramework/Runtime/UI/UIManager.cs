@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XMessage;
@@ -147,25 +148,28 @@ namespace XFramework.XUI
         #region Public API — Basic Panel Management
 
         /// <inheritdoc cref="IUIManager.OpenAsync{T}"/>
-        public static UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null)
+        public static UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default)
             where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.OpenAsync<T>(assetPath, layer, userData);
+            return _instance.OpenAsync<T>(assetPath, layer, userData, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.CloseAsync{T}"/>
-        public static UniTask CloseAsync<T>(bool immediate = false) where T : UIPanelBase
+        public static UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.CloseAsync<T>(immediate);
+            return _instance.CloseAsync<T>(immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.CloseAsync(UIPanelBase, bool)"/>
-        public static UniTask CloseAsync(UIPanelBase panel, bool immediate = false)
+        public static UniTask CloseAsync(UIPanelBase panel, bool immediate = false,
+            CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.CloseAsync(panel, immediate);
+            return _instance.CloseAsync(panel, immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.IsOpen{T}"/>
@@ -183,19 +187,20 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc cref="IUIManager.CloseLayerAsync"/>
-        public static UniTask CloseLayerAsync(int layer, bool immediate = false)
+        public static UniTask CloseLayerAsync(int layer, bool immediate = false,
+            CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.CloseLayerAsync(layer, immediate);
+            return _instance.CloseLayerAsync(layer, immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.CloseAllAsync"/>
-        public static UniTask CloseAllAsync(bool immediate = false)
+        public static UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
             if (_hudProvider != null)
                 _hudProvider.DetachAll();
-            return _instance.CloseAllAsync(immediate);
+            return _instance.CloseAllAsync(immediate, cancellationToken);
         }
 
         #endregion
@@ -203,39 +208,41 @@ namespace XFramework.XUI
         #region Public API — Stack Navigation
 
         /// <inheritdoc cref="IUIManager.PushAsync{T}"/>
-        public static UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null)
+        public static UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default)
             where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.PushAsync<T>(assetPath, layer, userData);
+            return _instance.PushAsync<T>(assetPath, layer, userData, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.PopAsync"/>
-        public static UniTask PopAsync(bool immediate = false)
+        public static UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.PopAsync(immediate);
+            return _instance.PopAsync(immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.PopToAsync{T}"/>
-        public static UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase
+        public static UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.PopToAsync<T>(immediate);
+            return _instance.PopToAsync<T>(immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.PopToRootAsync"/>
-        public static UniTask PopToRootAsync(bool immediate = false)
+        public static UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.PopToRootAsync(immediate);
+            return _instance.PopToRootAsync(immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.GoBackAsync"/>
-        public static UniTask GoBackAsync(bool immediate = false)
+        public static UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.GoBackAsync(immediate);
+            return _instance.GoBackAsync(immediate, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.CanGoBack"/>
@@ -281,10 +288,11 @@ namespace XFramework.XUI
         #region Public API — Preload & Cache
 
         /// <inheritdoc cref="IUIManager.PreloadAsync{T}"/>
-        public static UniTask PreloadAsync<T>(string assetPath) where T : UIPanelBase
+        public static UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.PreloadAsync<T>(assetPath);
+            return _instance.PreloadAsync<T>(assetPath, cancellationToken);
         }
 
         /// <inheritdoc cref="IUIManager.UnloadAsset{T}"/>
@@ -393,15 +401,18 @@ namespace XFramework.XUI
         /// <summary>
         /// 显示一个临时提示文本（Tip）。
         /// <para>通过 <see cref="TipConfig"/> 配置显示行为：世界坐标定位、颜色、持续时长、上飘距离、字号。</para>
-        /// <para>内部自动管理实例化和回池，无需手动关闭。可直接调用：<c>UIManager.ShowTip("-10", new TipConfig { WorldPos = enemyPos, Color = Color.red });</c></para>
+        /// <para>内部自动管理实例化和回池，无需手动关闭。可直接调用：<c>UIManager.ShowTipAsync("-10", new TipConfig { WorldPos = enemyPos, Color = Color.red }).Forget();</c></para>
         /// <para>可通过 <see cref="SetTipProvider"/> 注入自定义 Tip 实现。</para>
         /// </summary>
         /// <param name="text">显示文字。</param>
         /// <param name="config">显示配置。传 default 使用全部默认值（屏幕居中、白色、2秒、不飘动）。</param>
-        public static void ShowTip(string text, TipConfig config = default)
+        /// <param name="cancellationToken">取消令牌，用于提前终止播放。</param>
+        /// <returns>播放结束（或取消）后完成。不关心时用 <c>.Forget()</c>。</returns>
+        public static UniTask ShowTipAsync(string text, TipConfig config = default,
+            CancellationToken cancellationToken = default)
         {
             EnsureTipProvider();
-            _tipProvider.ShowTip(text, config);
+            return _tipProvider.ShowTipAsync(text, config, cancellationToken);
         }
 
         /// <summary>
@@ -439,12 +450,13 @@ namespace XFramework.XUI
         /// <param name="target">要跟随的 3D 目标 Transform。</param>
         /// <param name="assetPath">HUD 预制体的 YooAsset 地址。</param>
         /// <param name="offset">屏幕坐标偏移（像素）。例如 (0, 80) 将 HUD 移到目标头顶上方。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>附加的 HUD 实例。如果初始化未完成或加载失败则返回 null。</returns>
-        public static UniTask<T> ShowHud<T>(Transform target, string assetPath, Vector2? offset = null)
-            where T : UIHudItem
+        public static UniTask<T> ShowHud<T>(Transform target, string assetPath, Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem
         {
             EnsureHudProvider();
-            return _hudProvider.AttachAsync<T>(target, assetPath, offset);
+            return _hudProvider.AttachAsync<T>(target, assetPath, offset, cancellationToken);
         }
 
         /// <summary>

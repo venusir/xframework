@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
@@ -14,13 +15,14 @@ namespace XFramework.XUI
         #region IUIPanelFactory
 
         /// <inheritdoc/>
-        public async UniTask<T> CreateAsync<T>(string assetPath, Transform parent) where T : UIPanelBase
+        public async UniTask<T> CreateAsync<T>(string assetPath, Transform parent,
+            CancellationToken cancellationToken = default) where T : UIPanelBase
         {
             var type = typeof(T);
 
             // AssetManager.InstantiateAsync 内部已处理对象池逻辑：
             // 池中有闲置实例 → 直接复用，池中无 → 加载资源并实例化
-            var go = await AssetManager.InstantiateAsync(assetPath, parent);
+            var go = await AssetManager.InstantiateAsync(assetPath, parent, cancellationToken);
             if (go == null)
                 return null;
 

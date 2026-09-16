@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
@@ -81,7 +82,8 @@ namespace XFramework.XUI
         public async UniTask<T> AttachAsync<T>(
             Transform target,
             string assetPath,
-            Vector2? offset = null) where T : UIHudItem
+            Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem
         {
             if (target == null)
             {
@@ -104,7 +106,7 @@ namespace XFramework.XUI
             }
 
             // 实例化 HUD（AssetManager 内部管理对象池）
-            var go = await AssetManager.InstantiateAsync(assetPath, _hudContainer);
+            var go = await AssetManager.InstantiateAsync(assetPath, _hudContainer, cancellationToken);
             if (go == null)
             {
                 Debug.LogError($"[UIHudManager] Failed to instantiate HUD: {typeof(T).Name} at path: {assetPath}");

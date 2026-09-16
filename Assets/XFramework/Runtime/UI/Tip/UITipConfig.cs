@@ -3,7 +3,7 @@ using UnityEngine;
 namespace XFramework.XUI
 {
     /// <summary>
-    /// Tip 显示配置。通过 <see cref="UITipManager.ShowTip"/> 传入控制显示行为。
+    /// Tip 显示配置。通过 <see cref="UIManager.ShowTipAsync"/> 传入控制显示行为。
     /// <para>所有字段均有默认值，可仅设置需要覆盖的字段。</para>
     /// </summary>
     public struct TipConfig

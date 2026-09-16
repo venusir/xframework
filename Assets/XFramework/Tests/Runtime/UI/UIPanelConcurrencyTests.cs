@@ -1,4 +1,5 @@
 using System;
+using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -163,6 +164,127 @@ namespace XFramework.XUI.Tests
                 "打开失败后应把焦点还给栈顶——修复前它会永久停在失焦态");
             Assert.IsFalse(first.IsPaused, "不应停留在暂停态");
             Assert.IsTrue(first.Raycaster.enabled, "交互应恢复可用");
+        }
+
+        #endregion
+
+        #region 取消语义
+
+        [Test]
+        public async Task OpenAsync_AlreadyCancelledToken_ThrowsAndLeavesNothing()
+        {
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            bool cancelled = false;
+            try
+            {
+                await UIManager.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+
+            Assert.IsTrue(cancelled, "提交点之前的取消应上抛 OperationCanceledException");
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
+            Assert.AreEqual(0, _factory.CreateCount, "取消发生在实例化之前，不应产生实例");
+        }
+
+        [Test]
+        public async Task OpenAsync_CancelledWhileInstantiating_ThrowsAndLeavesNoOrphan()
+        {
+            _factory.Gate = new UniTaskCompletionSource<object>();
+
+            using var cts = new CancellationTokenSource();
+            var pending = UIManager.OpenAsync<FakePanel>("ui/c", cancellationToken: cts.Token).Preserve();
+            await UniTask.Yield();
+
+            cts.Cancel();
+
+            bool cancelled = false;
+            try
+            {
+                await pending;
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+
+            Assert.IsTrue(cancelled, "在途取消应上抛");
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
+            Assert.IsFalse(UIManager.CanGoBack, "取消的打开不应留在显示栈里");
+            Assert.AreEqual(0, _factory.ReleaseCount, "实例尚未创建，无需回收，也不应留下孤儿");
+        }
+
+        [Test]
+        public async Task PushAsync_CancelledWhileOpening_RestoresFocus()
+        {
+            var first = await UIManager.OpenAsync<FakePanel>("ui/first");
+
+            _factory.Gate = new UniTaskCompletionSource<object>();
+
+            using var cts = new CancellationTokenSource();
+            var pending = UIManager.PushAsync<FakePanelB>("ui/second", cancellationToken: cts.Token).Preserve();
+            await UniTask.Yield();
+
+            Assert.IsTrue(first.IsPaused, "Push 会先模糊栈顶");
+
+            cts.Cancel();
+
+            bool cancelled = false;
+            try
+            {
+                await pending;
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+
+            Assert.IsTrue(cancelled, "在途取消应上抛");
+            Assert.IsFalse(first.IsPaused, "取消后应把焦点还给栈顶，而不是让它停在失焦态");
+            Assert.IsTrue(first.Raycaster.enabled);
+        }
+
+        [Test]
+        public async Task CloseAsync_AlreadyCancelledToken_LeavesPanelOpen()
+        {
+            await UIManager.OpenAsync<FakePanel>("ui/first");
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            bool cancelled = false;
+            try
+            {
+                await UIManager.CloseAsync<FakePanel>(cancellationToken: cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+
+            Assert.IsTrue(cancelled, "提交点之前的取消应上抛");
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "面板应保持原状，不进入半关状态");
+            Assert.AreEqual(0, _factory.ReleaseCount);
+        }
+
+        [Test]
+        public async Task CloseAsync_CancelledAtCommitPoint_StillCloses()
+        {
+            await UIManager.OpenAsync<FakePanel>("ui/first");
+
+            using var cts = new CancellationTokenSource();
+            UIManager.SetController(new BlockingController { CancelOnBeforeClose = cts });
+
+            // 控制器在放行的同时取消令牌：放行即提交，此后取消不再生效
+            await UIManager.CloseAsync<FakePanel>(cancellationToken: cts.Token);
+
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "提交点之后的取消不应留下半关状态");
+            Assert.IsFalse(UIManager.CanGoBack);
+            Assert.AreEqual(1, _factory.ReleaseCount, "面板应已回池");
         }
 
         #endregion

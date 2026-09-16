@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
@@ -198,8 +199,8 @@ namespace XFramework.XUI
 
         #region Basic Panel Management
 
-        public async UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null)
-            where T : UIPanelBase
+        public async UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default) where T : UIPanelBase
         {
             EnsureInitialized();
             var type = typeof(T);
@@ -234,8 +235,12 @@ namespace XFramework.XUI
 
             try
             {
+                // 取消语义：此点之前（含 Controller 校验与实例化）取消会生效并以
+                // OperationCanceledException 上抛，实例由回滚路径还回池子。
+                cancellationToken.ThrowIfCancellationRequested();
+
                 // ★ Controller 拦截点：打开前校验
-                var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData);
+                var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData, cancellationToken);
                 if (!canOpen)
                 {
                     Debug.LogWarning($"[UIManager] Panel open blocked by Controller: {type.Name}");
@@ -243,7 +248,7 @@ namespace XFramework.XUI
                 }
 
                 // 实例化面板
-                var panel = await InstantiatePanelAsync<T>(assetPath, layer);
+                var panel = await InstantiatePanelAsync<T>(assetPath, layer, cancellationToken);
                 if (panel == null)
                 {
                     Debug.LogError($"[UIManager] Failed to instantiate panel: {type.Name} at path: {assetPath}");
@@ -261,7 +266,7 @@ namespace XFramework.XUI
                 panel.Canvas.overrideSorting = true;
                 panel.Canvas.sortingOrder = order;
 
-                // 注册并打开
+                // 注册并打开。此后取消不再生效：注册已发生，中途放弃会留下半开状态
                 RegisterPanel(type, panel);
                 await panel.DoOpenAsync(userData);
 
@@ -272,7 +277,7 @@ namespace XFramework.XUI
                 MessageManager.Publish(new PanelOpenedMessage(type));
 
                 // ★ Controller 拦截点：打开后回调
-                await _controller.OnAfterOpenAsync(type, panel, userData);
+                await _controller.OnAfterOpenAsync(type, panel, userData, cancellationToken);
 
                 return panel;
             }
@@ -289,18 +294,20 @@ namespace XFramework.XUI
             }
         }
 
-        public async UniTask CloseAsync<T>(bool immediate = false) where T : UIPanelBase
+        public async UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureInitialized();
             var type = typeof(T);
 
-            if (_activePanels.TryGetValue(type, out var panel))
+            if (_activePanels.TryGetValue(type, out var panel) && panel != null)
             {
-                await ClosePanelInternalAsync(panel, type, immediate);
+                await ClosePanelInternalAsync(panel, type, immediate, cancellationToken);
             }
         }
 
-        public async UniTask CloseAsync(UIPanelBase panel, bool immediate = false)
+        public async UniTask CloseAsync(UIPanelBase panel, bool immediate = false,
+            CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             if (panel == null)
@@ -309,7 +316,7 @@ namespace XFramework.XUI
             var type = panel.GetType();
             if (_activePanels.ContainsKey(type))
             {
-                await ClosePanelInternalAsync(panel, type, immediate);
+                await ClosePanelInternalAsync(panel, type, immediate, cancellationToken);
             }
         }
 
@@ -327,7 +334,8 @@ namespace XFramework.XUI
             return panel as T;
         }
 
-        public async UniTask CloseLayerAsync(int layer, bool immediate = false)
+        public async UniTask CloseLayerAsync(int layer, bool immediate = false,
+            CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
@@ -343,11 +351,12 @@ namespace XFramework.XUI
 
             foreach (var item in toClose)
             {
-                await ClosePanelInternalAsync(item.panel, item.type, immediate);
+                await ClosePanelInternalAsync(item.panel, item.type, immediate, cancellationToken);
             }
         }
 
-        public async UniTask CloseAllAsync(bool immediate = false)
+        public async UniTask CloseAllAsync(bool immediate = false,
+            CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
 
@@ -360,21 +369,21 @@ namespace XFramework.XUI
 
             foreach (var item in toClose)
             {
-                await ClosePanelInternalAsync(item.panel, item.type, immediate);
+                await ClosePanelInternalAsync(item.panel, item.type, immediate, cancellationToken);
             }
 
             MessageManager.Publish(new AllPanelsClosedMessage());
 
             // ★ Controller 拦截点：全部关闭后回调
-            await _controller.OnAllPanelsClosedAsync();
+            await _controller.OnAllPanelsClosedAsync(cancellationToken);
         }
 
         #endregion
 
         #region Stack Navigation
 
-        public async UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null)
-            where T : UIPanelBase
+        public async UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default) where T : UIPanelBase
         {
             EnsureInitialized();
             var type = typeof(T);
@@ -387,17 +396,28 @@ namespace XFramework.XUI
                 return existing as T;
             }
 
-            // 模糊当前栈顶面板；打开失败时要把它恢复回来
+            // 模糊当前栈顶面板；打开失败或取消时要把它恢复回来
             var blurred = BlurTopPanel();
 
-            var panel = await OpenAsync<T>(assetPath, layer, userData);
+            T panel;
+            try
+            {
+                panel = await OpenAsync<T>(assetPath, layer, userData, cancellationToken);
+            }
+            catch
+            {
+                // 取消与异常同样要回滚失焦，否则栈顶会永久停在不可交互状态
+                UnblurPanel(blurred);
+                throw;
+            }
+
             if (panel == null)
                 UnblurPanel(blurred);
 
             return panel;
         }
 
-        public async UniTask PopAsync(bool immediate = false)
+        public async UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             PruneStack();
@@ -407,13 +427,14 @@ namespace XFramework.XUI
                 return;
 
             var top = _stack[_stack.Count - 1];
-            if (await ClosePanelInternalAsync(top, top.GetType(), immediate))
+            if (await ClosePanelInternalAsync(top, top.GetType(), immediate, cancellationToken))
             {
                 FocusTopPanel();
             }
         }
 
-        public async UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase
+        public async UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureInitialized();
             PruneStack();
@@ -436,14 +457,14 @@ namespace XFramework.XUI
                     break;
 
                 var top = _stack[_stack.Count - 1];
-                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate))
+                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate, cancellationToken))
                     break;
             }
 
             FocusTopPanel();
         }
 
-        public async UniTask PopToRootAsync(bool immediate = false)
+        public async UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
             PruneStack();
@@ -457,16 +478,16 @@ namespace XFramework.XUI
                     break;
 
                 var top = _stack[_stack.Count - 1];
-                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate))
+                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate, cancellationToken))
                     break;
             }
 
             FocusTopPanel();
         }
 
-        public async UniTask GoBackAsync(bool immediate = false)
+        public async UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default)
         {
-            await PopAsync(immediate);
+            await PopAsync(immediate, cancellationToken);
         }
 
         #endregion
@@ -541,7 +562,8 @@ namespace XFramework.XUI
 
         #region Preload & Cache
 
-        public async UniTask PreloadAsync<T>(string assetPath) where T : UIPanelBase
+        public async UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
             EnsureInitialized();
             var type = typeof(T);
@@ -550,7 +572,7 @@ namespace XFramework.XUI
                 return;
 
             // 通过 AssetManager 预热对象池（加载资源但不实例化到场景中）
-            await AssetManager.PreloadAllAsync(new[] { assetPath });
+            await AssetManager.PreloadAllAsync(new[] { assetPath }, null, cancellationToken);
             _assetCache[type] = assetPath;
         }
 
@@ -667,12 +689,13 @@ namespace XFramework.XUI
         /// <summary>
         /// 实例化面板预制体，挂到该层级的容器下。
         /// </summary>
-        private UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer) where T : UIPanelBase
+        private UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer,
+            CancellationToken cancellationToken) where T : UIPanelBase
         {
             // 确定父节点（同一层级的 Container）
             var parent = GetOrCreateLayerContainer(layer);
 
-            return _factory.CreateAsync<T>(assetPath, parent);
+            return _factory.CreateAsync<T>(assetPath, parent, cancellationToken);
         }
 
         /// <summary>
@@ -783,13 +806,18 @@ namespace XFramework.XUI
         /// 关闭面板的内部实现。面板回池由 UIManagerImpl 控制。
         /// </summary>
         /// <returns>确实完成了关闭返回 true；面板为空或已被 Controller 拦下返回 false。</returns>
-        private async UniTask<bool> ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate)
+        private async UniTask<bool> ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate,
+            CancellationToken cancellationToken)
         {
             if (panel == null)
                 return false;
 
+            // 取消语义：OnBeforeCloseAsync 放行即视为提交，此后忽略取消、一路关到底——
+            // 「已从集合摘除但未回池」的半关状态比「取消失效」难排查得多。
+            cancellationToken.ThrowIfCancellationRequested();
+
             // ★ Controller 拦截点：关闭前校验
-            var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate);
+            var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate, cancellationToken);
             if (!canClose)
             {
                 Debug.LogWarning($"[UIManager] Panel close blocked by Controller: {type.Name}");
@@ -811,7 +839,7 @@ namespace XFramework.XUI
             MessageManager.Publish(new PanelClosedMessage(type));
 
             // ★ Controller 拦截点：关闭后回调
-            await _controller.OnAfterCloseAsync(type);
+            await _controller.OnAfterCloseAsync(type, cancellationToken);
             return true;
         }
 

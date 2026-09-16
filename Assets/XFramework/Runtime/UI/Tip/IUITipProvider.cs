@@ -1,3 +1,5 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace XFramework.XUI
@@ -15,11 +17,12 @@ namespace XFramework.XUI
         void SetUIRoot(Transform uiRoot);
 
         /// <summary>
-        /// 显示一个临时提示文本（Tip）。
-        /// <para>默认实现会自动管理实例化和回池。</para>
+        /// 显示一个临时提示文本（Tip），并在播放结束后回池。
+        /// <para>调用方若不关心播放完成，用 <c>.Forget()</c> 即可；需要提前终止时传取消令牌。</para>
         /// </summary>
         /// <param name="text">显示文字。</param>
         /// <param name="config">显示配置。</param>
-        void ShowTip(string text, TipConfig config = default);
+        /// <param name="cancellationToken">取消令牌，用于提前终止播放。</param>
+        UniTask ShowTipAsync(string text, TipConfig config = default, CancellationToken cancellationToken = default);
     }
 }

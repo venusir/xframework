@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
@@ -18,8 +19,10 @@ namespace XFramework.XUI
         /// <typeparam name="T">面板类型。</typeparam>
         /// <param name="assetPath">面板预制体的 YooAsset 地址。</param>
         /// <param name="parent">该层级对应的容器节点。</param>
+        /// <param name="cancellationToken">取消令牌。取消时抛 <see cref="System.OperationCanceledException"/>。</param>
         /// <returns>面板实例；加载失败或预制体缺少目标组件时返回 null（错误由实现方记录）。</returns>
-        UniTask<T> CreateAsync<T>(string assetPath, Transform parent) where T : UIPanelBase;
+        UniTask<T> CreateAsync<T>(string assetPath, Transform parent, CancellationToken cancellationToken = default)
+            where T : UIPanelBase;
 
         /// <summary>
         /// 回收面板实例（回对象池或销毁）。

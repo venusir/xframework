@@ -1,3 +1,4 @@
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -88,8 +89,8 @@ namespace XFramework.XUI.Tests
 
             public void SetUIRoot(Transform uiRoot) { }
 
-            public UniTask<T> AttachAsync<T>(Transform target, string assetPath, Vector2? offset = null)
-                where T : UIHudItem
+            public UniTask<T> AttachAsync<T>(Transform target, string assetPath, Vector2? offset = null,
+                CancellationToken cancellationToken = default) where T : UIHudItem
             {
                 return default;
             }
