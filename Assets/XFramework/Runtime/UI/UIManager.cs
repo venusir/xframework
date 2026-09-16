@@ -504,18 +504,18 @@ namespace XFramework.XUI
             return _instance.PreloadAsync<T>(assetPath, cancellationToken);
         }
 
-        /// <inheritdoc cref="IUIManager.UnloadAsset{T}"/>
-        public static void UnloadAsset<T>() where T : UIPanelBase
+        /// <inheritdoc cref="IUIManager.ForgetPreload{T}"/>
+        public static void ForgetPreload<T>() where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            _instance.UnloadAsset<T>();
+            _instance.ForgetPreload<T>();
         }
 
-        /// <inheritdoc cref="IUIManager.ClearAssetCache"/>
-        public static void ClearAssetCache()
+        /// <inheritdoc cref="IUIManager.ClearPreloads"/>
+        public static void ClearPreloads()
         {
             EnsureGlobalInitialized();
-            _instance.ClearAssetCache();
+            _instance.ClearPreloads();
         }
 
         #endregion

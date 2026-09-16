@@ -166,20 +166,27 @@ namespace XFramework.XUI
         #region Preload & Cache
 
         /// <summary>
-        /// 预加载面板资源到缓存，后续 <see cref="OpenAsync{T}"/> 或 <see cref="PushAsync{T}"/> 时直接从缓存实例化。
+        /// 预热指定面板的资源包，使后续首次打开不卡在加载上。
+        /// <para><b>实质</b>：经 <c>AssetManager.PreloadAllAsync</c> 把资源包读进内存缓存；
+        /// 面板的<b>实例</b>池由 AssetManager 按地址独立维护，与本方法无关。打开路径也不查本方法的记账，
+        /// 故重复预加载只是省了一次包加载。</para>
         /// </summary>
         UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
             where T : UIPanelBase;
 
         /// <summary>
-        /// 从缓存中移除指定面板的预制体资源，释放内存。
+        /// 忘掉指定面板的预加载记账，使其可被再次 <see cref="PreloadAsync{T}"/>。
+        /// <para><b>只清记账，不卸载资源</b>。要真正释放内存，请用
+        /// <c>AssetManager.UnloadUnusedAssetsAsync()</c>，并注意对象池里只要还留着闲置实例，
+        /// 该预制体的引用计数就不会归零。</para>
         /// </summary>
-        void UnloadAsset<T>() where T : UIPanelBase;
+        void ForgetPreload<T>() where T : UIPanelBase;
 
         /// <summary>
-        /// 清空所有缓存的面板预制体资源。
+        /// 清空全部预加载记账。
+        /// <para><b>只清记账，不卸载资源</b>——理由同 <see cref="ForgetPreload{T}"/>。</para>
         /// </summary>
-        void ClearAssetCache();
+        void ClearPreloads();
 
         #endregion
 

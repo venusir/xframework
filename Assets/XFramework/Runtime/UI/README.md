@@ -295,10 +295,10 @@ public class GameHudPanel : UIPanelBase
 await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
 
 // 移除指定缓存
-UIManager.UnloadAsset<SettingsPanel>();
+UIManager.ForgetPreload<SettingsPanel>();
 
 // 清空所有缓存（切换场景时）
-UIManager.ClearAssetCache();
+UIManager.ClearPreloads();
 ```
 
 ## 快速使用
@@ -670,7 +670,7 @@ await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
 await UIManager.PreloadAsync<DialogPanel>("ui/panels/dialog");
 
 // 场景切换时清理不用的缓存
-UIManager.ClearAssetCache();
+UIManager.ClearPreloads();
 ```
 
 ### 10. 语言切换联动
@@ -952,7 +952,7 @@ UIManager.ShowTip("暴击！999", new TipConfig
 - [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
 - [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
 - [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
-- [x] ✅ 资源管理 — PreloadAsync / UnloadAsset / ClearAssetCache
+- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
 - [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
 - [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
 - [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定

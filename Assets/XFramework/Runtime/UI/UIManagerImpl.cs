@@ -45,8 +45,9 @@ namespace XFramework.XUI
             = new Dictionary<int, bool>(4);
 
         /// <summary>
-        /// 预加载资源路径缓存。key: 类型, value: assetPath。
-        /// <para>标记哪些面板已被预加载到 AssetManager 的对象池中。</para>
+        /// 预加载记账。key: 类型, value: assetPath。
+        /// <para>只用于「这个类型预热过没有」的去重判断，<b>不参与打开路径</b>；
+        /// 面板实例池由 AssetManager 按地址独立维护。</para>
         /// </summary>
         private readonly Dictionary<Type, string> _assetCache
             = new Dictionary<Type, string>(8);
@@ -859,13 +860,14 @@ namespace XFramework.XUI
             _assetCache[type] = assetPath;
         }
 
-        public void UnloadAsset<T>() where T : UIPanelBase
+        /// <inheritdoc/>
+        public void ForgetPreload<T>() where T : UIPanelBase
         {
-            var type = typeof(T);
-            _assetCache.Remove(type);
+            _assetCache.Remove(typeof(T));
         }
 
-        public void ClearAssetCache()
+        /// <inheritdoc/>
+        public void ClearPreloads()
         {
             _assetCache.Clear();
         }
