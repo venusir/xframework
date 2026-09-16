@@ -10,7 +10,7 @@ namespace XFramework.XUI
     /// Tip 管理器默认实现。实现 <see cref="IUITipProvider"/> 接口。
     /// <para>负责 Tip 预制体的实例化、层级容器的管理、生命周期调度。</para>
     /// <para>Tip 实例通过 <see cref="XAsset.AssetManager"/> 获取和回池，不自行维护对象池。</para>
-    /// <para>所有 Tip 挂载在 UIRoot 下独立的 Layer_Tip 容器中，使用极高的 sorting order 确保在最顶层显示。</para>
+    /// <para>所有 Tip 挂载在 UIRoot 下独立的 Layer_Tip 容器中，排序值取 <see cref="UISorting.TipOrder"/>，在 HUD 之上。</para>
     /// <para>第三方可通过 <see cref="UIManager.SetTipProvider"/> 替换此实现。</para>
     /// </summary>
     internal sealed class UITipManagerImpl : IUITipProvider
@@ -22,11 +22,6 @@ namespace XFramework.XUI
         /// <para>第三方项目需要在 Resources 或 YooAsset 包中提供此预制体。</para>
         /// </summary>
         private const string TipAssetPath = "PF_UITipText";
-
-        /// <summary>
-        /// Tip 层级。数值极高，确保在所有面板之上。
-        /// </summary>
-        private const int TipLayer = 999;
 
         /// <summary>
         /// 层级容器名称。
@@ -132,7 +127,7 @@ namespace XFramework.XUI
             // 层级容器自带 Canvas，使用极高的 sorting order
             _tipContainerCanvas = go.AddComponent<Canvas>();
             _tipContainerCanvas.overrideSorting = true;
-            _tipContainerCanvas.sortingOrder = TipLayer * 1000;
+            _tipContainerCanvas.sortingOrder = UISorting.TipOrder;
             go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             _tipContainer = go.transform;

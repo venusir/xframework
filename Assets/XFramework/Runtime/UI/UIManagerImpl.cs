@@ -16,26 +16,11 @@ namespace XFramework.XUI
 {
     /// <summary>
     /// <see cref="IUIManager"/> 的默认实现。
-    /// <para>维护活动面板字典、面板显示栈、层级排序计数器和资源缓存。</para>
+    /// <para>维护活动面板字典、面板显示栈、每层交互开关与资源缓存；排序值由 <see cref="UISorting"/> 按栈位推导。</para>
     /// <para>面板实例的创建与回收委托给 <see cref="IUIPanelFactory"/>（默认 <see cref="AssetPanelFactory"/>）。</para>
     /// </summary>
     internal sealed class UIManagerImpl : IUIManager
     {
-        #region Constants
-
-        /// <summary>
-        /// 每个层级的排序间隔。每打开一个面板，sorting order 增加此值。
-        /// <para>例如层级 100 的面板从 100000 开始排序。</para>
-        /// </summary>
-        private const int SortOrderBase = 1000;
-
-        /// <summary>
-        /// 遮罩的默认层级（可外部配置）。
-        /// </summary>
-        private const int DefaultMaskLayer = 500;
-
-        #endregion
-
         #region Fields
 
         /// <summary>
@@ -53,10 +38,10 @@ namespace XFramework.XUI
         private readonly List<UIPanelBase> _stack = new List<UIPanelBase>(8);
 
         /// <summary>
-        /// 每个层级的当前最高 sorting order。key: layer。
+        /// 每层的交互开关期望值。层被整体禁用交互后，面板获得焦点时不应把 raycaster 重新打开。
         /// </summary>
-        private readonly Dictionary<int, int> _sortOrderCounters
-            = new Dictionary<int, int>(4);
+        private readonly Dictionary<int, bool> _layerInteractive
+            = new Dictionary<int, bool>(4);
 
         /// <summary>
         /// 预加载资源路径缓存。key: 类型, value: assetPath。
@@ -209,7 +194,6 @@ namespace XFramework.XUI
 
             _activePanels.Clear();
             _stack.Clear();
-            _sortOrderCounters.Clear();
 
             for (int i = 0; i < _buckets.Length; i++)
             {
@@ -240,6 +224,9 @@ namespace XFramework.XUI
         {
             EnsureInitialized();
             var type = typeof(T);
+
+            // 钳制层级：超过上限会撞进遮罩/HUD/Tip 的保留带
+            layer = UISorting.ClampPanelLayer(layer);
 
             // 已打开的面板直接聚焦（不触发 Controller 拦截）
             if (_activePanels.TryGetValue(type, out var existingPanel) && existingPanel != null)
@@ -297,12 +284,8 @@ namespace XFramework.XUI
                 panel.Layer = layer;
                 panel.AssetPath = assetPath;
 
-                // 设置 sorting order
-                var order = GetNextSortingOrder(layer);
-                panel.Canvas.overrideSorting = true;
-                panel.Canvas.sortingOrder = order;
-
-                // 注册并打开。此后取消不再生效：注册已发生，中途放弃会留下半开状态
+                // 注册（内含按栈位重排 sortingOrder）并打开。
+                // 此后取消不再生效：注册已发生，中途放弃会留下半开状态
                 RegisterPanel(type, panel);
                 await panel.DoOpenAsync(userData);
 
@@ -536,7 +519,7 @@ namespace XFramework.XUI
 
         #region Modal Mask
 
-        public void ShowMask(int maskLayer = DefaultMaskLayer, float alpha = 0.5f, bool clickToClose = false)
+        public void ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f, bool clickToClose = false)
         {
             EnsureInitialized();
 
@@ -558,7 +541,7 @@ namespace XFramework.XUI
                 // Canvas 用于设置排序层级
                 var maskCanvas = _maskInstance.AddComponent<Canvas>();
                 maskCanvas.overrideSorting = true;
-                maskCanvas.sortingOrder = maskLayer * SortOrderBase;
+                maskCanvas.sortingOrder = UISorting.MaskOrder(maskLayer);
 
                 // Image 用于渲染颜色
                 var maskImage = _maskInstance.AddComponent<UnityEngine.UI.Image>();
@@ -576,7 +559,7 @@ namespace XFramework.XUI
             // 更新排序
             var canvas = _maskInstance.GetComponent<Canvas>();
             if (canvas != null)
-                canvas.sortingOrder = maskLayer * SortOrderBase;
+                canvas.sortingOrder = UISorting.MaskOrder(maskLayer);
 
             // 更新透明度
             var img = _maskInstance.GetComponent<UnityEngine.UI.Image>();
@@ -666,12 +649,6 @@ namespace XFramework.XUI
 
         #region Sort Order
 
-        public int GetTopSortingOrder(int layer)
-        {
-            _sortOrderCounters.TryGetValue(layer, out var counter);
-            return counter * SortOrderBase + SortOrderBase;
-        }
-
         public void BringToFront(UIPanelBase panel)
         {
             if (panel == null || panel.Canvas == null)
@@ -684,12 +661,10 @@ namespace XFramework.XUI
                 return;
             }
 
-            var order = GetNextSortingOrder(panel.Layer);
-            panel.Canvas.sortingOrder = order;
-
-            // 移到显示栈尾（= 最前）
+            // 移到显示栈尾（= 最前），然后按栈位整体重排
             _stack.Remove(panel);
             _stack.Add(panel);
+            RestampSortingOrders();
         }
 
         #endregion
@@ -826,7 +801,7 @@ namespace XFramework.XUI
             // 层级容器自带 Canvas，实现层级间渲染隔离
             var canvas = go.AddComponent<Canvas>();
             canvas.overrideSorting = true;
-            canvas.sortingOrder = layer * SortOrderBase;
+            canvas.sortingOrder = UISorting.PanelOrder(layer, 0);
             go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             return go.transform;
@@ -906,6 +881,7 @@ namespace XFramework.XUI
 
             _activePanels[type] = panel;
             _stack.Add(panel);
+            RestampSortingOrders();
         }
 
         /// <summary>
@@ -1029,14 +1005,38 @@ namespace XFramework.XUI
         #region Internal — Sorting
 
         /// <summary>
-        /// 获取指定层级的下一个 sorting order 并递增计数器。
+        /// 按显示栈次序重排全部面板的 sortingOrder：层内序号 = 该面板之前同层面板的个数 + 1。
+        /// <para>序号因此恒等于栈内相对次序，与显示栈是同一份真相——不再需要递增计数器，
+        /// 也就没有计数器溢出到邻层区间的问题。</para>
+        /// <para>O(n²) 但 n 通常 &lt; 20，且不分配；相比维护每层的游标表，这个写法没有需要复位的状态。</para>
         /// </summary>
-        private int GetNextSortingOrder(int layer)
+        private void RestampSortingOrders()
         {
-            _sortOrderCounters.TryGetValue(layer, out var counter);
-            counter++;
-            _sortOrderCounters[layer] = counter;
-            return layer * SortOrderBase + counter;
+            for (int i = 0; i < _stack.Count; i++)
+            {
+                var panel = _stack[i];
+                if (panel == null || panel.Canvas == null)
+                    continue;
+
+                int indexInLayer = 1;
+                for (int j = 0; j < i; j++)
+                {
+                    var lower = _stack[j];
+                    if (lower != null && lower.Layer == panel.Layer)
+                        indexInLayer++;
+                }
+
+                if (indexInLayer > UISorting.MaxIndexInLayer)
+                {
+                    Debug.LogWarning(
+                        $"[UIManager] Layer {panel.Layer} has more than {UISorting.MaxIndexInLayer} open panels; " +
+                        "the extra ones are clamped to the top of the layer band and will share an order. " +
+                        "Use a higher layer or close some of them (see UISorting).");
+                }
+
+                panel.Canvas.overrideSorting = true;
+                panel.Canvas.sortingOrder = UISorting.PanelOrder(panel.Layer, indexInLayer);
+            }
         }
 
         #endregion

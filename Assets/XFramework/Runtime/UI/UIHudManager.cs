@@ -274,7 +274,7 @@ namespace XFramework.XUI
             // HUD 容器使用独立的 Canvas，放在 UI 最顶层
             _hudContainerCanvas = go.AddComponent<Canvas>();
             _hudContainerCanvas.overrideSorting = true;
-            _hudContainerCanvas.sortingOrder = 999000; // 极高值，确保 HUD 始终渲染在最上层
+            _hudContainerCanvas.sortingOrder = UISorting.HudOrder;
 
             go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 

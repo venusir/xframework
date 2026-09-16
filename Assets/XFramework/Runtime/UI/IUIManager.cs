@@ -170,12 +170,7 @@ namespace XFramework.XUI
         #region Sort Order
 
         /// <summary>
-        /// 获取指定层级的当前最高 sorting order。
-        /// </summary>
-        int GetTopSortingOrder(int layer);
-
-        /// <summary>
-        /// 将指定面板置于当前层级的最顶层。
+        /// 将指定面板置于当前层级的最顶层（移到显示栈尾并按栈位重排）。
         /// </summary>
         void BringToFront(UIPanelBase panel);
 

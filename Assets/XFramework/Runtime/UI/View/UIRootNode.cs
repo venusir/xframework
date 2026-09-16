@@ -15,24 +15,26 @@ namespace XFramework.XUI.View
         #region Fields
 
         /// <summary>
-        /// 层级常量。数值越大越靠前。可在 Inspector 中调整基值，或通过代码扩展新层级。
-        /// <para>默认: Background = 0, Default = 100, Popup = 200, Top = 300, Mask = 500</para>
+        /// 层级参考值（编辑器便利字段）。
+        /// <para><b>这些字段不被运行时读取</b>：UI 是静态服务，不依赖场景组件。真正的推荐值在
+        /// <see cref="UILayers"/> 里，这里只是把它们摆到 Inspector 上方便对照与复制。
+        /// 面板实际用哪个层级由调用方在 <c>OpenAsync(path, layer)</c> 时决定。</para>
         /// </summary>
-        [Header("Layer Constants")]
-        [Tooltip("背景层（如主界面背景、HUD）。")]
-        public int layerBackground = 0;
+        [Header("Layer Reference Values")]
+        [Tooltip("背景层（如主界面背景）。对应 UILayers.Background。")]
+        public int layerBackground = UILayers.Background;
 
-        [Tooltip("默认层（大部分面板使用）。")]
-        public int layerDefault = 100;
+        [Tooltip("默认层（大部分面板使用）。对应 UILayers.Default。")]
+        public int layerDefault = UILayers.Default;
 
-        [Tooltip("弹出层（弹窗、确认框）。")]
-        public int layerPopup = 200;
+        [Tooltip("弹出层（弹窗、确认框）。对应 UILayers.Popup。")]
+        public int layerPopup = UILayers.Popup;
 
-        [Tooltip("顶层（Toast、加载遮罩、系统提示）。")]
-        public int layerTop = 300;
+        [Tooltip("顶层（Toast、系统提示）。对应 UILayers.Top。")]
+        public int layerTop = UILayers.Top;
 
-        [Tooltip("模态遮罩层。")]
-        public int layerMask = 500;
+        [Tooltip("模态遮罩层。对应 UILayers.Mask，也是 ShowMask 的默认值。")]
+        public int layerMask = UILayers.Mask;
 
         #endregion
 

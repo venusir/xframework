@@ -387,13 +387,6 @@ namespace XFramework.XUI
 
         #region Public API — Sort Order
 
-        /// <inheritdoc cref="IUIManager.GetTopSortingOrder"/>
-        public static int GetTopSortingOrder(int layer)
-        {
-            EnsureGlobalInitialized();
-            return _instance.GetTopSortingOrder(layer);
-        }
-
         /// <inheritdoc cref="IUIManager.BringToFront"/>
         public static void BringToFront(UIPanelBase panel)
         {
