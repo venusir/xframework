@@ -104,6 +104,23 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 记录每次 <c>OnUpdate</c> 收到的实测参数，用于验证派发方给出的 <c>deltaTime</c>/<c>time</c>。
+    /// </summary>
+    public class UpdateRecordingPanel : FakePanel
+    {
+        public int UpdateCount { get; private set; }
+        public float LastDeltaTime { get; private set; }
+        public float LastTime { get; private set; }
+
+        protected internal override void OnUpdate(float deltaTime, float time)
+        {
+            UpdateCount++;
+            LastDeltaTime = deltaTime;
+            LastTime = time;
+        }
+    }
+
+    /// <summary>
     /// 在自己的 <see cref="UIViewBase.OnUpdate"/> 里关闭自己的面板。
     /// <para>这是「遍历中改集合」崩溃的触发场景：默认控制器下的关闭路径同步走完，
     /// 若驱动方直接遍历活动面板集合就会当场抛 InvalidOperationException。</para>
@@ -113,7 +130,7 @@ namespace XFramework.XUI.Tests
         /// <summary>OnUpdate 是否已被驱动过（避免重复触发）。</summary>
         public bool WasUpdated { get; private set; }
 
-        protected internal override void OnUpdate()
+        protected internal override void OnUpdate(float deltaTime, float time)
         {
             if (WasUpdated)
                 return;

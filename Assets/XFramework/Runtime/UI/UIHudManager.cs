@@ -166,7 +166,7 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc/>
-        public void Update()
+        public void Update(float deltaTime, float time)
         {
             if (_activeHudList.Count == 0)
                 return;
@@ -181,7 +181,7 @@ namespace XFramework.XUI
                     continue;
                 }
 
-                hud.OnUpdate();
+                hud.OnUpdate(deltaTime, time);
             }
         }
 

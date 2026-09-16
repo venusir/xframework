@@ -44,7 +44,9 @@ namespace XFramework.XUI
         /// <summary>
         /// 由 <see cref="UIManager.Update"/> 调用，驱动所有活跃 HUD 的每帧更新。
         /// </summary>
-        void Update();
+        /// <param name="deltaTime">距上次派发的时间差（不是 <c>Time.deltaTime</c>）。</param>
+        /// <param name="time">当前时刻。</param>
+        void Update(float deltaTime, float time);
 
         /// <summary>
         /// 是否有活跃的 HUD。

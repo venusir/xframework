@@ -238,7 +238,7 @@ namespace XFramework.XUI.Tests
         /// </summary>
         public class StubHud : UIHudItem
         {
-            public void DriveUpdate() => OnUpdate();
+            public void DriveUpdate(float deltaTime = 0.016f, float time = 0f) => OnUpdate(deltaTime, time);
 
             public void DrivePoolRecycle() => OnPoolRecycle();
         }

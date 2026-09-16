@@ -661,7 +661,7 @@ namespace XFramework.XUI
         #region Per-Frame Update
 
         /// <inheritdoc cref="IUIManager.Update"/>
-        public void Update()
+        public void Update(float deltaTime, float time)
         {
             if (!IsInitialized)
                 return;
@@ -680,7 +680,7 @@ namespace XFramework.XUI
                     var panel = snapshot[i];
                     if (panel != null && panel.IsOpen)
                     {
-                        panel.OnUpdate();
+                        panel.OnUpdate(deltaTime, time);
                     }
                 }
             }

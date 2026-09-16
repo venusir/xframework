@@ -141,7 +141,7 @@ namespace XFramework.XUI.Tests
 
             // 修复前：Update 内 foreach 遍历活动面板，面板自关时同步改集合
             // → InvalidOperationException（经 Forget 通路变成 LogException，测试判失败）
-            UIManager.Update();
+            UIManager.Update(0.016f, 0f);
 
             Assert.IsTrue(panel.WasUpdated, "OnUpdate 应被驱动过");
             Assert.IsFalse(UIManager.IsOpen<SelfClosingPanel>(), "面板应在自己的 OnUpdate 里被关掉");

@@ -138,7 +138,7 @@ namespace XFramework.XUI
 
             public UpdateLOD OnUpdate(float deltaTime, float time)
             {
-                Update();
+                Update(deltaTime, time);
                 return UpdateLOD.Tier0;
             }
         }
@@ -386,12 +386,12 @@ namespace XFramework.XUI
         /// <see cref="UpdateManager"/> 的统一调度（可被 LOD 降频、可被 <see cref="UpdateManager.Pause"/>
         /// 统一暂停）。保留公开是因为测试与自定义驱动方仍可能需要手动推进一步。</para>
         /// </summary>
-        public static void Update()
+        public static void Update(float deltaTime, float time)
         {
             EnsureGlobalInitialized();
-            _instance.Update();
+            _instance.Update(deltaTime, time);
             if (_hudProvider != null)
-                _hudProvider.Update();
+                _hudProvider.Update(deltaTime, time);
         }
 
         #endregion

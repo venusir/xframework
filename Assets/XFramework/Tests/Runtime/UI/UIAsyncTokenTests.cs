@@ -135,7 +135,7 @@ namespace XFramework.XUI.Tests
 
             public void DetachAll() { }
 
-            public void Update() { }
+            public void Update(float deltaTime, float time) { }
         }
 
         /// <summary>仅用于满足泛型约束的 HUD 类型。</summary>

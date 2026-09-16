@@ -161,10 +161,12 @@ namespace XFramework.XUI.View
 
         /// <summary>
         /// 每帧更新。由 <see cref="UIManager"/> 统一驱动，仅当 IsOpen 为 true 时调用。
+        /// <para><paramref name="deltaTime"/> 是距<strong>上次派发</strong>的间隔，不是 <c>Time.deltaTime</c>：
+        /// 面板可声明较低档位而被降频派发，此时两者相差整数倍。做积分必须用它，否则会慢若干倍。</para>
         /// <para>替代直接使用 MonoBehaviour.Update()，避免分散的 Update 开销。</para>
         /// <para>适用场景：HUD 位置跟随、倒计时、进度条插值等每帧逻辑。</para>
         /// </summary>
-        protected internal virtual void OnUpdate() { }
+        protected internal virtual void OnUpdate(float deltaTime, float time) { }
 
         /// <summary>
         /// 视图即将回池时由框架调用。子类可重写以重置自定义状态。

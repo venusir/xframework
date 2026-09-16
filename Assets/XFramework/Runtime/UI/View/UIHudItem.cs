@@ -109,7 +109,7 @@ namespace XFramework.XUI.View
         /// 每帧跟随目标。由 <see cref="UIManager"/> 集中驱动。
         /// <para>子类如需添加自定义每帧逻辑，应重写此方法并调用 base.OnUpdate()。</para>
         /// </summary>
-        protected internal override void OnUpdate()
+        protected internal override void OnUpdate(float deltaTime, float time)
         {
             if (FollowTarget == null)
             {

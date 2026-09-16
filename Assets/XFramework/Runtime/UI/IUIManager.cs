@@ -190,7 +190,9 @@ namespace XFramework.XUI
         /// 每帧驱动注册进 <see cref="XUpdate.UpdateManager"/> 的统一调度——因此它受 LOD 降频与
         /// <see cref="XUpdate.UpdateManager.Pause"/> 的统一约束，也不再要求场景里存在 <c>UIRootNode</c>。</para>
         /// </summary>
-        void Update();
+        /// <param name="deltaTime">距上次派发的时间差。</param>
+        /// <param name="time">当前时刻。</param>
+        void Update(float deltaTime, float time);
 
         #endregion
 

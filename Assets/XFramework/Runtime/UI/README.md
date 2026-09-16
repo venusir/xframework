@@ -213,25 +213,34 @@ Mask (500)       — 模态遮罩层
 ```csharp
 public class GameHudPanel : UIPanelBase
 {
-    protected override void OnUpdate()
+    // 注意修饰符：OnUpdate 是 protected internal，跨程序集覆写必须沿用同一修饰符，
+    // 写成 protected 会得到 CS0507「cannot change access modifiers」
+    protected internal override void OnUpdate(float deltaTime, float time)
     {
         // 仅在面板打开且未暂停时执行
-        UpdateHealthBar();
+        UpdateHealthBar(deltaTime);
         UpdateAmmoDisplay();
     }
 }
 ```
+
+> ⚠️ **`deltaTime` 不是 `Time.deltaTime`**
+>
+> 它是**距上次派发**的间隔。面板可以声明较低档位而被降频派发（见 `UpdateLod`），此时两者相差整数倍——
+> 继续用 `Time.deltaTime` 做积分会慢若干倍。任何累加/插值都必须用传入的 `deltaTime`。
+>
+> 好处是：只要按它积分，面板无论跑在哪个档位、甚至中途改档，行为都一致。
 
 > ⚠️ **OnUpdate 与 ReactiveProperty 的使用边界**
 >
 > **ReactiveProperty 是推模式（事件驱动），OnUpdate 是拉模式（帧驱动），两者职责互补，不应混用。**
 >
 > - **ReactiveProperty** — 数据变化时自动推送，绑定后无需手动更新 UI。适用于健康值、货币数量、开关状态等**事件驱动**的数据刷新。
-> - **OnUpdate** — 每帧执行，适用于倒计时、进度条插值、拖拽跟随、位置追踪等**帧驱动**的持续逻辑。
+> - **OnUpdate** — 按档位周期派发，适用于倒计时、进度条插值、拖拽跟随、位置追踪等**帧驱动**的持续逻辑。
 >
 > ❌ **反模式：在 OnUpdate 中轮询 ReactiveProperty 手动刷新 UI**
 > ```csharp
-> protected override void OnUpdate()
+> protected internal override void OnUpdate(float deltaTime, float time)
 > {
 >     // 错误：_vm.Health 已通过 UIBinder 绑定到 healthText，
 >     // 每帧再手动 Set 健康值是一种冗余更新
@@ -248,10 +257,11 @@ public class GameHudPanel : UIPanelBase
 >     _vm.Score.BindToText(scoreText, v => $"{v:N0}");
 > }
 >
-> protected override void OnUpdate()
+> protected internal override void OnUpdate(float deltaTime, float time)
 > {
->     // OnUpdate — 纯帧驱动逻辑，与 ReactiveProperty 无关
->     _countdownTimer -= Time.deltaTime;
+>     // OnUpdate — 纯帧驱动逻辑，与 ReactiveProperty 无关。
+>     // 用传入的 deltaTime，不用 Time.deltaTime
+>     _countdownTimer -= deltaTime;
 >     _countdownText.text = Mathf.CeilToInt(_countdownTimer).ToString();
 > }
 > ```
@@ -754,7 +764,7 @@ UIManager.ShowHud<T>(target, assetPath, offset)  →  静态外观
                     │
             UIManager.Update()                      →  集中驱动
                     │
-            hud.OnUpdate()                          →  世界坐标转屏幕坐标 + 跟随
+            hud.OnUpdate(deltaTime, time)           →  世界坐标转屏幕坐标 + 跟随
                     │
             FollowTarget == null?  →  自动触发 OnTargetLost → Detach + 回池
 ```
@@ -782,9 +792,10 @@ public class MonsterHpBar : UIHudItem
         await base.OnOpenImpl(userData);
     }
 
-    protected override void OnUpdate()
+    // 修饰符与签名同样必须与基类一致（protected internal + 两个时间参数）
+    protected internal override void OnUpdate(float deltaTime, float time)
     {
-        base.OnUpdate(); // 必须调用 base，执行位置跟随逻辑
+        base.OnUpdate(deltaTime, time); // 必须调用 base，执行位置跟随逻辑
 
         if (_monster == null)
             return;

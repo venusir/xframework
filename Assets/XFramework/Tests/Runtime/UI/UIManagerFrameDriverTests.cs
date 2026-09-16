@@ -99,7 +99,7 @@ namespace XFramework.XUI.Tests
 
             public void DetachAll() { }
 
-            public void Update() => UpdateCount++;
+            public void Update(float deltaTime, float time) => UpdateCount++;
         }
     }
 }
