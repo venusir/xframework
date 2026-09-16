@@ -69,7 +69,18 @@ namespace XFramework.XUI.View
         #region Properties
 
         /// <summary>
-        /// 面板是否处于暂停状态（被其他面板覆盖，失去焦点）。
+        /// 面板是否处于焦点（在显示栈顶部、可交互）。
+        /// <para>这是<strong>交互维度</strong>：失焦的面板仍会收到语言切换等生命周期回调。</para>
+        /// </summary>
+        public bool IsFocused { get; private set; }
+
+        /// <summary>
+        /// 面板是否被覆盖而暂停每帧更新。
+        /// <para>这是<strong>更新维度</strong>：暂停只影响 <see cref="UIViewBase.OnUpdate"/> 的派发，
+        /// 不影响 <c>IsOpen</c>、也不影响语言切换等回调。被 <see cref="XUpdate.UpdateManager"/>
+        /// 的 LOD 派发路径消费。</para>
+        /// <para>与 <see cref="IsFocused"/> 分开是因为二者并非总是同步：面板可能在失焦的同时
+        /// 仍需按低频更新（倒计时），也可能在获得焦点时被层级的整体禁交互挡住。</para>
         /// </summary>
         public bool IsPaused { get; private set; }
 
@@ -93,23 +104,42 @@ namespace XFramework.XUI.View
         protected abstract UniTask OnClose();
 
         /// <summary>
-        /// 面板获得焦点时调用（回到堆栈顶层时）。
-        /// <para>此时面板重新变为可交互状态。</para>
+        /// 面板获得焦点时调用（回到显示栈顶部时，含首次打开）。
+        /// <para>只管交互维度；更新维度的启停见 <see cref="OnResume"/> / <see cref="OnPause"/>。</para>
+        /// <para><b>注意</b>：若所在层级被 <c>UIManager.SetLayerInteractive(layer, false)</c> 整体禁用，
+        /// 管理器会在本回调之后把射线重新关掉——层的整体开关优先于单个面板。</para>
         /// </summary>
         protected internal virtual void OnFocus()
         {
-            IsPaused = false;
+            IsFocused = true;
             Raycaster.enabled = true;
         }
 
         /// <summary>
         /// 面板失去焦点时调用（被 Push 的新面板覆盖时）。
-        /// <para>此时面板交互被禁用。</para>
+        /// <para>只管交互维度；更新维度的启停见 <see cref="OnPause"/>。</para>
         /// </summary>
         protected internal virtual void OnBlur()
         {
-            IsPaused = true;
+            IsFocused = false;
             Raycaster.enabled = false;
+        }
+
+        /// <summary>
+        /// 面板被覆盖、暂停每帧更新时调用。
+        /// <para>只管更新维度：<c>IsOpen</c>、语言切换等都不受影响。</para>
+        /// </summary>
+        protected internal virtual void OnPause()
+        {
+            IsPaused = true;
+        }
+
+        /// <summary>
+        /// 面板重新成为栈顶、恢复每帧更新时调用。
+        /// </summary>
+        protected internal virtual void OnResume()
+        {
+            IsPaused = false;
         }
 
         /// <summary>
@@ -188,8 +218,14 @@ namespace XFramework.XUI.View
         {
             await PlayOpenAnimation();
             await OnOpen(userData);
+
+            // 新打开的面板就在栈顶：不妨暂停。这一维直接置位而不走 OnResume——
+            // 对一个从未暂停过的面板调「恢复」是语义错位，子类也会收到莫名其妙的回调。
             IsPaused = false;
-            Raycaster.enabled = true;
+
+            // 交互维度走 OnFocus，让「首次打开」与「Push/Pop 恢复焦点」是同一条路径。
+            // 早先这里直接设字段，子类重写的 OnFocus 在首次打开时不会被调用。
+            OnFocus();
         }
 
         /// <summary>

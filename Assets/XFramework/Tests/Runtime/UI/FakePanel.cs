@@ -47,6 +47,18 @@ namespace XFramework.XUI.Tests
             Log.Add("OnBlur");
             base.OnBlur();
         }
+
+        protected internal override void OnPause()
+        {
+            Log.Add("OnPause");
+            base.OnPause();
+        }
+
+        protected internal override void OnResume()
+        {
+            Log.Add("OnResume");
+            base.OnResume();
+        }
     }
 
     /// <summary>第二个测试面板类型。导航测试需要多个类型才能构成多层面板栈。</summary>
@@ -111,6 +123,14 @@ namespace XFramework.XUI.Tests
         public int UpdateCount { get; private set; }
         public float LastDeltaTime { get; private set; }
         public float LastTime { get; private set; }
+
+        /// <summary>语言切换回调次数。</summary>
+        public int LanguageChangedCount { get; private set; }
+
+        protected internal override void OnLanguageChanged(string lang)
+        {
+            LanguageChangedCount++;
+        }
 
         protected internal override void OnUpdate(float deltaTime, float time)
         {

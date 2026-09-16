@@ -1176,7 +1176,8 @@ namespace XFramework.XUI
                 return null;
 
             var top = _stack[_stack.Count - 1];
-            top.OnBlur();
+            top.OnBlur();    // 交互维度
+            top.OnPause();   // 更新维度
             return top;
         }
 
@@ -1188,7 +1189,8 @@ namespace XFramework.XUI
         {
             if (panel != null && panel.IsOpen)
             {
-                panel.OnFocus();
+                panel.OnFocus();    // 交互维度
+                panel.OnResume();   // 更新维度
                 ApplyLayerInteractivity(panel);
             }
         }
@@ -1217,7 +1219,8 @@ namespace XFramework.XUI
 
             var top = _stack[_stack.Count - 1];
             BringToFront(top);
-            top.OnFocus();
+            top.OnFocus();    // 交互维度
+            top.OnResume();   // 更新维度
 
             // OnFocus 会把 raycaster 打开；层被整体禁交互时要按层状态压回去
             ApplyLayerInteractivity(top);
