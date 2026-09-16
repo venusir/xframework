@@ -217,11 +217,18 @@ namespace XFramework.XUI
             return _instance.PopAsync(immediate);
         }
 
-        /// <inheritdoc cref="IUIManager.BackToAsync{T}"/>
-        public static UniTask BackToAsync<T>(bool immediate = false) where T : UIPanelBase
+        /// <inheritdoc cref="IUIManager.PopToAsync{T}"/>
+        public static UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase
         {
             EnsureGlobalInitialized();
-            return _instance.BackToAsync<T>(immediate);
+            return _instance.PopToAsync<T>(immediate);
+        }
+
+        /// <inheritdoc cref="IUIManager.PopToRootAsync"/>
+        public static UniTask PopToRootAsync(bool immediate = false)
+        {
+            EnsureGlobalInitialized();
+            return _instance.PopToRootAsync(immediate);
         }
 
         /// <inheritdoc cref="IUIManager.GoBackAsync"/>
@@ -231,13 +238,13 @@ namespace XFramework.XUI
             return _instance.GoBackAsync(immediate);
         }
 
-        /// <inheritdoc cref="IUIManager.HasPrevious"/>
-        public static bool HasPrevious
+        /// <inheritdoc cref="IUIManager.CanGoBack"/>
+        public static bool CanGoBack
         {
             get
             {
                 EnsureGlobalInitialized();
-                return _instance.HasPrevious;
+                return _instance.CanGoBack;
             }
         }
 

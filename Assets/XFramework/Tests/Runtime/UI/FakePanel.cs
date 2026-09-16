@@ -9,11 +9,18 @@ namespace XFramework.XUI.Tests
     /// </summary>
     public class FakePanel : UIPanelBase
     {
+        #region Lifecycle Log
+
         /// <summary>生命周期回调顺序（如 "OnOpen" / "OnBlur" / "OnClose"）。</summary>
         public readonly List<string> Log = new List<string>();
 
         /// <summary>最近一次 OnOpen 收到的 userData。</summary>
         public object LastUserData;
+
+        /// <summary>日志中是否出现过指定回调。</summary>
+        public bool Logged(string entry) => Log.Contains(entry);
+
+        #endregion
 
         protected override UniTask OnOpen(object userData)
         {
@@ -39,6 +46,36 @@ namespace XFramework.XUI.Tests
         {
             Log.Add("OnBlur");
             base.OnBlur();
+        }
+    }
+
+    /// <summary>第二个测试面板类型。导航测试需要多个类型才能构成多层面板栈。</summary>
+    public class FakePanelB : FakePanel
+    {
+    }
+
+    /// <summary>第三个测试面板类型。</summary>
+    public class FakePanelC : FakePanel
+    {
+    }
+
+    /// <summary>
+    /// 在自己的 <see cref="UIViewBase.OnUpdate"/> 里关闭自己的面板。
+    /// <para>这是「遍历中改集合」崩溃的触发场景：默认控制器下的关闭路径同步走完，
+    /// 若驱动方直接遍历活动面板集合就会当场抛 InvalidOperationException。</para>
+    /// </summary>
+    public class SelfClosingPanel : FakePanel
+    {
+        /// <summary>OnUpdate 是否已被驱动过（避免重复触发）。</summary>
+        public bool WasUpdated { get; private set; }
+
+        protected internal override void OnUpdate()
+        {
+            if (WasUpdated)
+                return;
+
+            WasUpdated = true;
+            CloseSelfAsync().Forget();
         }
     }
 }

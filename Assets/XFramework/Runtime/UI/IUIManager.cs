@@ -80,34 +80,44 @@ namespace XFramework.XUI
         #region Stack Navigation
 
         /// <summary>
-        /// 压入新面板到导航堆栈。当前面板失焦（OnBlur），新面板获得焦点（OnOpen）。
-        /// <para>调用 <see cref="PopAsync"/> 或 <see cref="GoBackAsync"/> 可返回上一个面板。</para>
+        /// 打开面板并压入显示栈。当前栈顶面板失焦（OnBlur），新面板获得焦点（OnOpen）。
+        /// <para>与 <see cref="OpenAsync{T}"/> 的区别只在语义：两者都会入栈，故
+        /// <see cref="PopAsync"/> 能退回到任何先打开的面板。「先 Open 开主界面、再 Push 开二级页」
+        /// 是最常见的用法组合。</para>
         /// </summary>
         UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null)
             where T : UIPanelBase;
 
         /// <summary>
-        /// 弹出导航堆栈顶部的面板，返回上一个面板（恢复焦点 OnFocus）。
+        /// 弹出显示栈顶部的面板，返回上一个面板（恢复焦点 OnFocus）。
+        /// <para>栈底面板不参与弹出——栈深为 1 时本方法不做任何事，用 <see cref="CloseAsync(UIPanelBase, bool)"/>
+        /// 关闭最后一个面板。</para>
         /// </summary>
-        /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
         UniTask PopAsync(bool immediate = false);
 
         /// <summary>
-        /// 返回指定类型的面板（往回查找，中间的面板会依次关闭）。
+        /// 依次弹出栈顶面板，直到指定类型的面板成为栈顶。
         /// </summary>
-        /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
-        UniTask BackToAsync<T>(bool immediate = false) where T : UIPanelBase;
+        /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase;
 
         /// <summary>
-        /// 返回上一个面板（Pop 的便捷方法）。
+        /// 依次弹出栈顶面板，只保留最早打开的那一个（栈底）。
         /// </summary>
-        /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        UniTask PopToRootAsync(bool immediate = false);
+
+        /// <summary>
+        /// 返回上一个面板。等价于 <see cref="PopAsync"/>，语义化命名，供返回键处理调用。
+        /// </summary>
+        /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
         UniTask GoBackAsync(bool immediate = false);
 
         /// <summary>
-        /// 导航堆栈中是否还有上一个面板。
+        /// 显示栈中是否还有可退回的上一个面板（即栈深 &gt; 1）。
         /// </summary>
-        bool HasPrevious { get; }
+        bool CanGoBack { get; }
 
         #endregion
 

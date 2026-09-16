@@ -5,6 +5,7 @@ using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XLocalization;
 using XFramework.XMessage;
+using XFramework.XPool;
 using XFramework.XUI.Controller;
 using XFramework.XUI.Data;
 using XFramework.XUI.View;
@@ -13,8 +14,8 @@ namespace XFramework.XUI
 {
     /// <summary>
     /// <see cref="IUIManager"/> 的默认实现。
-    /// <para>维护活动面板字典、导航堆栈、层级排序计数器和资源缓存。</para>
-    /// <para>面板实例化使用 <see cref="AssetManager.InstantiateAsync(string, Transform, System.Threading.CancellationToken)"/>，关闭时回池。</para>
+    /// <para>维护活动面板字典、面板显示栈、层级排序计数器和资源缓存。</para>
+    /// <para>面板实例的创建与回收委托给 <see cref="IUIPanelFactory"/>（默认 <see cref="AssetPanelFactory"/>）。</para>
     /// </summary>
     internal sealed class UIManagerImpl : IUIManager
     {
@@ -42,9 +43,12 @@ namespace XFramework.XUI
             = new Dictionary<Type, UIPanelBase>(8);
 
         /// <summary>
-        /// 导航堆栈。顶部为当前显示的面板类型。
+        /// 面板显示栈（底 → 顶，栈序即显示次序）。与 <see cref="_activePanels"/> 一一对应。
+        /// <para>所有打开路径都入栈，<see cref="OpenAsync{T}"/> 也不例外。早先只有 <see cref="PushAsync{T}"/>
+        /// 入栈，于是「Open 开主界面 + Push 开二级页」之后栈深恒为 1，PopAsync / CanGoBack /
+        /// 遮罩点击关闭会同时失效——那是最常见的用法组合。</para>
         /// </summary>
-        private readonly List<Type> _navStack = new List<Type>(8);
+        private readonly List<UIPanelBase> _stack = new List<UIPanelBase>(8);
 
         /// <summary>
         /// 每个层级的当前最高 sorting order。key: layer。
@@ -96,7 +100,7 @@ namespace XFramework.XUI
 
         public bool IsMaskShowing => _maskInstance != null && _maskInstance.activeSelf;
 
-        public bool HasPrevious => _navStack.Count > 1;
+        public bool CanGoBack => _stack.Count > 1;
 
         #endregion
 
@@ -152,7 +156,7 @@ namespace XFramework.XUI
             }
 
             _activePanels.Clear();
-            _navStack.Clear();
+            _stack.Clear();
             _sortOrderCounters.Clear();
 
             // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
@@ -310,76 +314,78 @@ namespace XFramework.XUI
             where T : UIPanelBase
         {
             EnsureInitialized();
-            var type = typeof(T);
-
-            // 如果面板已打开，先聚焦它
-            if (_activePanels.TryGetValue(type, out var existingPanel))
-            {
-                // 从堆栈中移除旧的然后再推入顶层
-                _navStack.Remove(type);
-                _navStack.Add(type);
-                BringToFront(existingPanel);
-                return existingPanel as T;
-            }
 
             // 模糊当前栈顶面板
             BlurTopPanel();
 
-            // 打开新面板
-            var panel = await OpenAsync<T>(assetPath, layer, userData);
-
-            if (panel != null)
-            {
-                _navStack.Add(type);
-            }
-
-            return panel;
+            // 打开新面板：入栈由 OpenAsync 统一负责，这里不再单独维护
+            return await OpenAsync<T>(assetPath, layer, userData);
         }
 
         public async UniTask PopAsync(bool immediate = false)
         {
             EnsureInitialized();
-            if (_navStack.Count <= 1)
+            PruneStack();
+
+            // 栈底面板不参与弹出：PopAsync 只退一层
+            if (_stack.Count <= 1)
                 return;
 
-            // 移除栈顶
-            var topType = _navStack[_navStack.Count - 1];
-            _navStack.RemoveAt(_navStack.Count - 1);
-
-            // 关闭栈顶面板
-            if (_activePanels.TryGetValue(topType, out var topPanel))
+            var top = _stack[_stack.Count - 1];
+            if (await ClosePanelInternalAsync(top, top.GetType(), immediate))
             {
-                await ClosePanelInternalAsync(topPanel, topType, immediate);
+                FocusTopPanel();
+            }
+        }
+
+        public async UniTask PopToAsync<T>(bool immediate = false) where T : UIPanelBase
+        {
+            EnsureInitialized();
+            PruneStack();
+
+            var target = GetPanel<T>();
+            if (target == null)
+            {
+                Debug.LogWarning($"[UIManager] PopToAsync: Panel '{typeof(T).Name}' is not open.");
+                return;
             }
 
-            // 恢复上一个面板焦点
+            // 逐个弹出栈顶，直到目标成为栈顶。每次成功关闭恰好移出一项，故必然收敛；
+            // 中途被 Controller 拦下则停止级联（栈未变，继续关会与拦截语义矛盾）。
+            while (true)
+            {
+                PruneStack();
+
+                var index = _stack.IndexOf(target);
+                if (index < 0 || index >= _stack.Count - 1)
+                    break;
+
+                var top = _stack[_stack.Count - 1];
+                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate))
+                    break;
+            }
+
             FocusTopPanel();
         }
 
-        public async UniTask BackToAsync<T>(bool immediate = false) where T : UIPanelBase
+        public async UniTask PopToRootAsync(bool immediate = false)
         {
             EnsureInitialized();
-            var targetType = typeof(T);
-            var targetIndex = _navStack.IndexOf(targetType);
+            PruneStack();
 
-            if (targetIndex < 0)
+            // 只保留最早打开的那一个（栈底）
+            while (true)
             {
-                Debug.LogWarning($"[UIManager] BackToAsync: Panel '{targetType.Name}' not found in navigation stack.");
-                return;
+                PruneStack();
+
+                if (_stack.Count <= 1)
+                    break;
+
+                var top = _stack[_stack.Count - 1];
+                if (!await ClosePanelInternalAsync(top, top.GetType(), immediate))
+                    break;
             }
 
-            // 从栈顶到目标之后的面板依次关闭
-            for (int i = _navStack.Count - 1; i > targetIndex; i--)
-            {
-                var type = _navStack[i];
-                if (_activePanels.TryGetValue(type, out var panel))
-                {
-                    await ClosePanelInternalAsync(panel, type, immediate);
-                }
-                _navStack.RemoveAt(i);
-            }
-
-            // 恢复目标面板焦点
             FocusTopPanel();
         }
 
@@ -450,7 +456,7 @@ namespace XFramework.XUI
 
         private void OnMaskClicked()
         {
-            if (_maskClickToClose && _navStack.Count > 1)
+            if (_maskClickToClose && CanGoBack)
             {
                 PopAsync().Forget();
             }
@@ -532,16 +538,19 @@ namespace XFramework.XUI
             if (panel == null || panel.Canvas == null)
                 return;
 
+            var type = panel.GetType();
+            if (!_activePanels.ContainsKey(type))
+            {
+                Debug.LogWarning($"[UIManager] BringToFront: Panel '{type.Name}' is not open.");
+                return;
+            }
+
             var order = GetNextSortingOrder(panel.Layer);
             panel.Canvas.sortingOrder = order;
 
-            // 如果是堆栈中的面板，Update nav stack order
-            var type = panel.GetType();
-            if (_navStack.Contains(type))
-            {
-                _navStack.Remove(type);
-                _navStack.Add(type);
-            }
+            // 移到显示栈尾（= 最前）
+            _stack.Remove(panel);
+            _stack.Add(panel);
         }
 
         #endregion
@@ -554,13 +563,22 @@ namespace XFramework.XUI
             if (!IsInitialized)
                 return;
 
-            // 遍历所有活动面板，仅驱动 IsOpen 的（OnBlur 的面板不执行 OnUpdate）
-            foreach (var kv in _activePanels)
+            PruneStack();
+
+            // 先快照再驱动：面板可能在 OnUpdate 里关掉自己或别的面板，而默认控制器下关闭路径
+            // 是同步走完的（含 _activePanels / _stack 的移除）——直接遍历 _stack 会撞上
+            // 「遍历中改集合」。ListPool 归还时自动 Clear，热身后零分配。
+            using (ListPool<UIPanelBase>.GetPooled(out var snapshot))
             {
-                var panel = kv.Value;
-                if (panel != null && panel.IsOpen)
+                snapshot.AddRange(_stack);
+
+                for (int i = 0; i < snapshot.Count; i++)
                 {
-                    panel.OnUpdate();
+                    var panel = snapshot[i];
+                    if (panel != null && panel.IsOpen)
+                    {
+                        panel.OnUpdate();
+                    }
                 }
             }
 
@@ -615,38 +633,41 @@ namespace XFramework.XUI
         #region Internal — Panel Lifecycle
 
         /// <summary>
-        /// 注册面板到活动字典。
+        /// 注册面板到活动字典，并入显示栈尾（新打开的面板显示在最前）。
         /// </summary>
         private void RegisterPanel(Type type, UIPanelBase panel)
         {
             // 如果同类型已存在，先移除旧的（回池而非 Destroy）
             if (_activePanels.TryGetValue(type, out var oldPanel) && oldPanel != null)
             {
+                _stack.Remove(oldPanel);
                 _factory.Release(oldPanel);
             }
 
             _activePanels[type] = panel;
+            _stack.Add(panel);
         }
 
         /// <summary>
         /// 关闭面板的内部实现。面板回池由 UIManagerImpl 控制。
         /// </summary>
-        private async UniTask ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate)
+        /// <returns>确实完成了关闭返回 true；面板为空或已被 Controller 拦下返回 false。</returns>
+        private async UniTask<bool> ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate)
         {
             if (panel == null)
-                return;
+                return false;
 
             // ★ Controller 拦截点：关闭前校验
             var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate);
             if (!canClose)
             {
                 Debug.LogWarning($"[UIManager] Panel close blocked by Controller: {type.Name}");
-                return;
+                return false;
             }
 
-            // 从字典和堆栈中移除
+            // 从字典和显示栈中移除
             _activePanels.Remove(type);
-            _navStack.Remove(type);
+            _stack.Remove(panel);
 
             // 执行关闭逻辑（动画 + OnClose，不再自行 Destroy）
             await panel.DoCloseAsync(immediate);
@@ -660,6 +681,7 @@ namespace XFramework.XUI
 
             // ★ Controller 拦截点：关闭后回调
             await _controller.OnAfterCloseAsync(type);
+            return true;
         }
 
         /// <summary>
@@ -667,14 +689,12 @@ namespace XFramework.XUI
         /// </summary>
         private void BlurTopPanel()
         {
-            if (_navStack.Count > 0)
-            {
-                var topType = _navStack[_navStack.Count - 1];
-                if (_activePanels.TryGetValue(topType, out var topPanel) && topPanel != null)
-                {
-                    topPanel.OnBlur();
-                }
-            }
+            PruneStack();
+
+            if (_stack.Count == 0)
+                return;
+
+            _stack[_stack.Count - 1].OnBlur();
         }
 
         /// <summary>
@@ -682,14 +702,28 @@ namespace XFramework.XUI
         /// </summary>
         private void FocusTopPanel()
         {
-            if (_navStack.Count > 0)
+            PruneStack();
+
+            if (_stack.Count == 0)
+                return;
+
+            var top = _stack[_stack.Count - 1];
+            BringToFront(top);
+            top.OnFocus();
+        }
+
+        /// <summary>
+        /// 清理栈中已被外部销毁（假空）的条目。
+        /// <para>栈持有面板实例的强引用；第三方绕过 CloseAsync 直接 Destroy 面板时会留下空洞，
+        /// 遍历前调一次，避免对已销毁对象派发回调。</para>
+        /// </summary>
+        private void PruneStack()
+        {
+            for (int i = _stack.Count - 1; i >= 0; i--)
             {
-                var topType = _navStack[_navStack.Count - 1];
-                if (_activePanels.TryGetValue(topType, out var topPanel) && topPanel != null)
-                {
-                    BringToFront(topPanel);
-                    topPanel.OnFocus();
-                }
+                // Unity 的 == 重载把已销毁对象判为 null
+                if (_stack[i] == null)
+                    _stack.RemoveAt(i);
             }
         }
 
@@ -717,11 +751,23 @@ namespace XFramework.XUI
         /// </summary>
         private void OnLanguageChangedMessage(LanguageChangedMessage msg)
         {
-            foreach (var kv in _activePanels)
+            if (!IsInitialized)
+                return;
+
+            PruneStack();
+
+            // 与 Update 同理先快照：面板可能在自己的语言回调里关闭面板
+            using (ListPool<UIPanelBase>.GetPooled(out var snapshot))
             {
-                if (kv.Value != null && kv.Value.IsOpen)
+                snapshot.AddRange(_stack);
+
+                for (int i = 0; i < snapshot.Count; i++)
                 {
-                    kv.Value.OnLanguageChanged(msg.Language);
+                    var panel = snapshot[i];
+                    if (panel != null && panel.IsOpen)
+                    {
+                        panel.OnLanguageChanged(msg.Language);
+                    }
                 }
             }
         }

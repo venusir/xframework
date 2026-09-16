@@ -14,7 +14,7 @@ XFramework UI 模块提供完整的 UI 面板管理功能。通过 `IUIManager` 
 Runtime/UI/
 ├── IUIManager.cs              # UI 管理器公共接口
 ├── UIManager.cs               # 静态外观（全局入口）
-├── UIManagerImpl.cs           # 默认实现（面板字典、导航堆栈、资源缓存）
+├── UIManagerImpl.cs           # 默认实现（面板字典、显示栈、资源缓存）
 ├── README.md                  # 使用说明
 ├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal static）
 ├── Controller/
@@ -147,7 +147,7 @@ sequenceDiagram
 | ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                            |
 | **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                         |
-| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、导航堆栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
+| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、显示栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
 | **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
 | **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
 | **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
@@ -177,14 +177,21 @@ Mask (500)       — 模态遮罩层
 
 每个层级内部的面板通过 `sortingOrder` 自动排序（`sortingOrder = layer × 1000 + 序号`），后打开的面板排序值更大。
 
-### 导航堆栈
+### 显示栈与导航
 
-支持 `PushAsync` / `PopAsync` / `BackToAsync` 导航模式：
+**所有打开路径都会入栈**（`OpenAsync` 与 `PushAsync` 都在内），栈序即显示次序。两者的区别只在语义读法上，不在行为上——所以「先 `OpenAsync` 开主界面、再 `PushAsync` 开二级页」之后依然可以 `PopAsync` 退回。
 
-- `PushAsync` — 压入新面板，当前面板失焦（OnBlur），新面板获得焦点（OnOpen）
-- `PopAsync` — 弹出栈顶面板并关闭，恢复上一个面板焦点（OnFocus）
-- `BackToAsync` — 回到指定类型面板，中间经过的面板依次关闭
-- `HasPrevious` — 导航堆栈中是否还有上一个面板
+- `PushAsync` — 打开新面板并入栈，当前栈顶失焦（OnBlur），新面板获得焦点（OnOpen）
+- `OpenAsync` — 同样入栈；已打开则聚焦（BringToFront）而不重复创建
+- `PopAsync` — 弹出栈顶面板并关闭，恢复新栈顶焦点（OnFocus）
+- `GoBackAsync` — 等价于 `PopAsync`，语义化命名，供返回键处理调用
+- `PopToAsync<T>` — 依次弹出栈顶，直到指定类型成为栈顶
+- `PopToRootAsync` — 依次弹出栈顶，只保留最早打开的那一个
+- `CanGoBack` — 显示栈中是否还有可退回的面板（栈深 > 1）
+
+**栈底面板不参与弹出**：栈深为 1 时 `PopAsync` 是 no-op，用 `CloseAsync` 关闭最后一个面板。
+
+**同类型单实例**：同一面板类型同时只允许一个实例，重复打开会聚焦已有实例而非新建。显示栈因此与活动面板一一对应。
 
 ### 模态遮罩
 
@@ -564,10 +571,13 @@ bool isOpen = UIManager.IsOpen<MainMenuPanel>();
 var panel = UIManager.GetPanel<MainMenuPanel>(); // 未打开返回 null
 ```
 
-### 6. 导航堆栈
+### 6. 显示栈与导航
 
 ```csharp
-// 从主菜单进入设置——主菜单失焦，设置面板获得焦点
+// 主菜单：用 OpenAsync 打开——它同样入栈，后续可以 Pop 回退
+await UIManager.OpenAsync<MainMenuPanel>("ui/panels/mainmenu", layerDefault);
+
+// 进入设置——主菜单失焦，设置面板获得焦点
 var settings = await UIManager.PushAsync<SettingsPanel>(
     "ui/panels/settings",
     layerDefault
@@ -583,10 +593,13 @@ await UIManager.GoBackAsync();
 await UIManager.PopAsync();
 
 // 直接从音效回到主菜单（中间的面板依次关闭）
-await UIManager.BackToAsync<MainMenuPanel>();
+await UIManager.PopToAsync<MainMenuPanel>();
 
-// 检查是否可以返回
-if (UIManager.HasPrevious)
+// 全部退到最底层（只留最早打开的那一个）
+await UIManager.PopToRootAsync();
+
+// 检查是否可以返回——接返回键时用它判断
+if (UIManager.CanGoBack)
 {
     await UIManager.GoBackAsync();
 }
@@ -710,7 +723,7 @@ UIManager.SetController(new MyCustomController());
 - **接口可替换** — 通过 `IUIManager` 接口，可替换底层实现
 - **静态外观** — `UIManager` 提供全局入口，任意位置可直接调用
 - **层级灵活** — `int` 类型表示层级，第三方项目可自由定义常量扩展
-- **导航堆栈** — 支持 Push/Pop/BackTo 导航，Blur/Focus 焦点管理
+- **显示栈导航** — 所有打开路径统一入栈，支持 Push/Pop/PopTo/PopToRoot，Blur/Focus 焦点管理
 - **资源缓存** — 预加载面板预制体到缓存，后续打开时零加载延迟
 - **动画支持** — `PlayOpenAnimation` / `PlayCloseAnimation` 可重写，支持 DOTween 等
 - **多语言联动** — `OnLanguageChanged` 与 `LocalizationManager` 无缝集成
@@ -906,7 +919,7 @@ UIManager.ShowTip("暴击！999", new TipConfig
 ## 已完成功能
 
 - [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
-- [x] ✅ 堆栈导航 — PushAsync / PopAsync / GoBackAsync / BackToAsync / HasPrevious
+- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
 - [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
 - [x] ✅ 资源管理 — PreloadAsync / UnloadAsset / ClearAssetCache
 - [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
