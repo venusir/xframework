@@ -182,6 +182,26 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Layer
+
+        /// <summary>
+        /// 显示 / 隐藏整个层级（该层级容器的所有面板一并生效）。
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="visible">是否显示。</param>
+        void SetLayerVisibility(int layer, bool visible);
+
+        /// <summary>
+        /// 启用 / 禁用整个层级的交互。
+        /// <para>层的整体开关优先于单个面板的焦点状态：禁用后，后续的焦点变化与重新打开都不会把
+        /// 面板的射线重新打开。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="interactive">是否允许交互。</param>
+        void SetLayerInteractive(int layer, bool interactive);
+
+        #endregion
+
         #region Sort Order
 
         /// <summary>

@@ -63,6 +63,18 @@ namespace XFramework.XUI
         public static bool IsInitialized => _instanceInitialized && _instance != null;
 
         /// <summary>
+        /// UI 根节点。未初始化时为 null（属性不抛异常，便于在场景加载早期探测）。
+        /// </summary>
+        public static Transform UIRoot => _instance?.UIRoot;
+
+        /// <summary>
+        /// 当前实例入口，供框架内部与测试使用。
+        /// <para>刻意不对外公开为 <c>public Instance</c>：本仓库所有静态服务门面都不暴露实例属性，
+        /// 且一旦暴露，<see cref="IUIManager"/> 成员的增加会自动成为公开 API，跳过评审。</para>
+        /// </summary>
+        internal static IUIManager Current => _instance;
+
+        /// <summary>
         /// 初始化全局 UI 管理器，将场景中的 UIRootNode 注册为 UI 根节点。
         /// <para>每个场景只需调用一次。</para>
         /// </summary>
@@ -275,6 +287,36 @@ namespace XFramework.XUI
             if (_hudProvider != null)
                 _hudProvider.DetachAll();
             return _instance.CloseAllAsync(immediate, cancellationToken);
+        }
+
+        #endregion
+
+        #region Public API — Layer
+
+        /// <summary>
+        /// 显示 / 隐藏整个层级。
+        /// <para>此前这两个方法只存在于内部实现上，<strong>连 <see cref="IUIManager"/> 都没有</strong>，
+        /// 而门面既无转发、也无实例属性——第三方虽能在文档里读到它们，实际完全不可达。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="visible">是否显示。</param>
+        public static void SetLayerVisibility(int layer, bool visible)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetLayerVisibility(layer, visible);
+        }
+
+        /// <summary>
+        /// 启用 / 禁用整个层级的交互。
+        /// <para>层的整体开关优先于单个面板的焦点状态：禁用后，后续的焦点变化与重新打开
+        /// 都不会把面板的射线重新打开。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="interactive">是否允许交互。</param>
+        public static void SetLayerInteractive(int layer, bool interactive)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetLayerInteractive(layer, interactive);
         }
 
         #endregion

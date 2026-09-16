@@ -326,6 +326,9 @@ namespace XFramework.XUI
                 if (!_activePanels.ContainsKey(type))
                     return panel;
 
+                // OnOpenImpl 会把 raycaster 打开；层被整体禁交互时要按层状态压回去
+                ApplyLayerInteractivity(panel);
+
                 MessageManager.Publish(new PanelOpenedMessage(type));
 
                 // ★ Controller 拦截点：打开后回调
@@ -748,6 +751,8 @@ namespace XFramework.XUI
 
         public void SetLayerVisibility(int layer, bool visible)
         {
+            EnsureInitialized();
+
             var container = GetLayerContainer(layer);
             if (container != null)
                 container.gameObject.SetActive(visible);
@@ -755,15 +760,45 @@ namespace XFramework.XUI
 
         public void SetLayerInteractive(int layer, bool interactive)
         {
+            EnsureInitialized();
+
+            // 记住期望值：层被整体禁用后，后续的焦点变化与打开都不该把它撤销
+            _layerInteractive[layer] = interactive;
+
             var container = GetLayerContainer(layer);
-            if (container != null)
+            if (container == null)
+                return;
+
+            // 池化重载填充，避免 GetComponentsInChildren 每次分配一个数组
+            using (ListPool<UnityEngine.UI.GraphicRaycaster>.GetPooled(out var raycasters))
             {
-                var childRaycasters = container.GetComponentsInChildren<UnityEngine.UI.GraphicRaycaster>();
-                foreach (var raycaster in childRaycasters)
-                {
-                    raycaster.enabled = interactive;
-                }
+                container.GetComponentsInChildren(raycasters);
+
+                for (int i = 0; i < raycasters.Count; i++)
+                    raycasters[i].enabled = interactive;
             }
+        }
+
+        /// <summary>
+        /// 层当前是否允许交互。未被显式禁用过的层一律允许。
+        /// </summary>
+        internal bool IsLayerInteractive(int layer)
+        {
+            return !_layerInteractive.TryGetValue(layer, out var interactive) || interactive;
+        }
+
+        /// <summary>
+        /// 按所在层的整体开关设置面板的射线开关。
+        /// <para>层的整体开关优先于单个面板自身的焦点状态：<see cref="UIPanelBase.OnFocus"/> 与
+        /// <c>OnOpenImpl</c> 都会把 raycaster 打开，若不在其后压回层状态，任何一次焦点变化或重新打开
+        /// 都会把 <see cref="SetLayerInteractive"/> 的禁用撤销掉。</para>
+        /// </summary>
+        private void ApplyLayerInteractivity(UIPanelBase panel)
+        {
+            if (panel == null || panel.Raycaster == null)
+                return;
+
+            panel.Raycaster.enabled = IsLayerInteractive(panel.Layer);
         }
 
         /// <summary>
@@ -1088,7 +1123,10 @@ namespace XFramework.XUI
         private void UnblurPanel(UIPanelBase panel)
         {
             if (panel != null && panel.IsOpen)
+            {
                 panel.OnFocus();
+                ApplyLayerInteractivity(panel);
+            }
         }
 
         /// <summary>
@@ -1116,6 +1154,9 @@ namespace XFramework.XUI
             var top = _stack[_stack.Count - 1];
             BringToFront(top);
             top.OnFocus();
+
+            // OnFocus 会把 raycaster 打开；层被整体禁交互时要按层状态压回去
+            ApplyLayerInteractivity(top);
         }
 
         /// <summary>
