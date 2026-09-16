@@ -186,6 +186,36 @@ namespace XFramework.XUI.Data
 
         #endregion
 
+        #region Two-Way Binding
+
+        /// <summary>
+        /// 滑块与可写响应式属性的双向绑定：拖动滑块写回属性，属性变化回填滑块。
+        /// <para>内部用重入标志阻断回灌——若不做这个守卫，写入触发的通知会反过来再写一次。</para>
+        /// </summary>
+        /// <param name="slider">目标滑块。</param>
+        /// <param name="target">可写的响应式属性（如 <c>ReactiveProperty&lt;float&gt;</c>、
+        /// <c>SettingRef&lt;T, float&gt;</c>）。</param>
+        /// <returns>释放后两个方向都断开。</returns>
+        public static IDisposable BindTwoWay(this Slider slider, IReactivePropertyWriter<float> target)
+        {
+            if (slider == null || target == null) return null;
+            return new SliderTwoWayBinding(slider, target);
+        }
+
+        /// <summary>
+        /// 开关与可写响应式属性的双向绑定：切换写回属性，属性变化回填开关。
+        /// </summary>
+        /// <param name="toggle">目标开关。</param>
+        /// <param name="target">可写的响应式属性。</param>
+        /// <returns>释放后两个方向都断开。</returns>
+        public static IDisposable BindTwoWay(this Toggle toggle, IReactivePropertyWriter<bool> target)
+        {
+            if (toggle == null || target == null) return null;
+            return new ToggleTwoWayBinding(toggle, target);
+        }
+
+        #endregion
+
         #region Generic (Custom Binding)
 
         /// <summary>自定义绑定。将响应式属性的值通过自定义 setter 同步到目标。</summary>
@@ -200,6 +230,179 @@ namespace XFramework.XUI.Data
         {
             if (source == null || setter == null) return null;
             return source.Subscribe(setter);
+        }
+
+        #endregion
+
+        #region Two-Way Binding — Implementations
+
+        /// <summary>
+        /// 双向绑定的共用骨架：持有重入标志，避免用闭包捕获（每处绑定少几次分配），
+        /// 也避免把「控件事件」与「属性通知」两条回调写成两份相似代码。
+        /// </summary>
+        private abstract class TwoWayBinding : IDisposable
+        {
+            /// <summary>正在同步中。为 true 时忽略来自另一侧的通知，阻断回灌。</summary>
+            private bool _syncing;
+
+            private bool _disposed;
+
+            /// <summary>
+            /// 尝试进入同步段。已在同步中或已释放时返回 false，调用方应直接返回。
+            /// <para>配对使用 <see cref="EndSync"/>，务必放在 finally 里。</para>
+            /// </summary>
+            protected bool BeginSync()
+            {
+                if (_syncing || _disposed)
+                    return false;
+
+                _syncing = true;
+                return true;
+            }
+
+            protected void EndSync()
+            {
+                _syncing = false;
+            }
+
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+
+                _disposed = true;
+                OnDispose();
+            }
+
+            /// <summary>断开两个方向。</summary>
+            protected abstract void OnDispose();
+        }
+
+        private sealed class SliderTwoWayBinding : TwoWayBinding
+        {
+            private readonly Slider _slider;
+            private readonly IReactivePropertyWriter<float> _target;
+            private readonly UnityEngine.Events.UnityAction<float> _onSliderChanged;
+            private readonly IDisposable _upstream;
+
+            public SliderTwoWayBinding(Slider slider, IReactivePropertyWriter<float> target)
+            {
+                _slider = slider;
+                _target = target;
+
+                // 方法组转委托：构造时分配一次，之后不再分配
+                _onSliderChanged = OnSliderChanged;
+                slider.onValueChanged.AddListener(_onSliderChanged);
+
+                // Subscribe 会立即回调当前值，方向是「属性 → 控件」
+                _upstream = target.Subscribe(OnTargetChanged);
+            }
+
+            private void OnSliderChanged(float value)
+            {
+                if (!BeginSync())
+                    return;
+
+                try
+                {
+                    // 写入失败（目标已释放等）时立即收手：此时读 Value 会抛——已释放的
+                    // ReactiveProperty 在 getter 上就拒绝访问
+                    if (!_target.TryWriteValue(value))
+                        return;
+
+                    // 目标可能规范化了写入值（取整、钳制到上下限）。不回填的话滑块会停在
+                    // 用户拖到的位置，与真实值不一致——带上下限的设置项上尤其明显。
+                    var actual = _target.Value;
+                    if (!Mathf.Approximately(actual, value))
+                        _slider.value = actual;
+                }
+                finally
+                {
+                    EndSync();
+                }
+            }
+
+            private void OnTargetChanged(float value)
+            {
+                if (!BeginSync())
+                    return;
+
+                try
+                {
+                    _slider.value = value;
+                }
+                finally
+                {
+                    EndSync();
+                }
+            }
+
+            protected override void OnDispose()
+            {
+                _slider.onValueChanged.RemoveListener(_onSliderChanged);
+                _upstream?.Dispose();
+            }
+        }
+
+        private sealed class ToggleTwoWayBinding : TwoWayBinding
+        {
+            private readonly Toggle _toggle;
+            private readonly IReactivePropertyWriter<bool> _target;
+            private readonly UnityEngine.Events.UnityAction<bool> _onToggleChanged;
+            private readonly IDisposable _upstream;
+
+            public ToggleTwoWayBinding(Toggle toggle, IReactivePropertyWriter<bool> target)
+            {
+                _toggle = toggle;
+                _target = target;
+
+                _onToggleChanged = OnToggleChanged;
+                toggle.onValueChanged.AddListener(_onToggleChanged);
+
+                _upstream = target.Subscribe(OnTargetChanged);
+            }
+
+            private void OnToggleChanged(bool value)
+            {
+                if (!BeginSync())
+                    return;
+
+                try
+                {
+                    // 同上：写入失败时不再读 Value
+                    if (!_target.TryWriteValue(value))
+                        return;
+
+                    var actual = _target.Value;
+                    if (actual != value)
+                        _toggle.isOn = actual;
+                }
+                finally
+                {
+                    EndSync();
+                }
+            }
+
+            private void OnTargetChanged(bool value)
+            {
+                if (!BeginSync())
+                    return;
+
+                try
+                {
+                    _toggle.isOn = value;
+                }
+                finally
+                {
+                    EndSync();
+                }
+            }
+
+            protected override void OnDispose()
+            {
+                _toggle.onValueChanged.RemoveListener(_onToggleChanged);
+                _upstream?.Dispose();
+            }
         }
 
         #endregion

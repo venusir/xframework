@@ -17,7 +17,7 @@ namespace XFramework.XReactive
     /// - 设置相同值不通知(去重语义)
     /// - <see cref="Dispose"/> 后访问 <see cref="Value"/> 抛 <see cref="ObjectDisposedException"/>,再次 Subscribe 同样抛出
     /// </remarks>
-    public class ReactiveProperty<T> : IReactiveProperty<T>, IDisposable
+    public class ReactiveProperty<T> : IReactiveProperty<T>, IReactivePropertyWriter<T>, IDisposable
     {
         #region Private Fields
 
@@ -92,6 +92,21 @@ namespace XFramework.XReactive
             var handle = _stream.Subscribe(onNext);
             onNext(_value);
             return handle;
+        }
+
+        /// <summary>
+        /// 尝试写入值；已释放时返回 false 而不抛异常。
+        /// <para>供双向绑定使用：绑定层不该因为目标失效而把异常抛进 UI 事件回调。</para>
+        /// </summary>
+        /// <param name="value">要写入的值。</param>
+        /// <returns>确实写入返回 true。</returns>
+        public bool TryWriteValue(T value)
+        {
+            if (_disposed)
+                return false;
+
+            Value = value;
+            return true;
         }
 
         #endregion

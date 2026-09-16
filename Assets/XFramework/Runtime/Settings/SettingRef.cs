@@ -25,7 +25,8 @@ namespace XFramework.XSettings
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
     /// <typeparam name="TField">字段类型。</typeparam>
-    public sealed class SettingRef<T, TField> : IReactiveProperty<TField> where T : class, new()
+    public sealed class SettingRef<T, TField> : IReactiveProperty<TField>, IReactivePropertyWriter<TField>
+        where T : class, new()
     {
         #region Private Fields
 
@@ -100,6 +101,17 @@ namespace XFramework.XSettings
         /// <para>写入会与设置对象中的<b>实时值</b>比较，相等则直接返回——去重基准不缓存，
         /// 因此不存在陈旧锚点。</para>
         /// </summary>
+        /// <summary>
+        /// 尝试写入值。设置句柄不持有释放语义（它通常活到进程结束），故永远返回 true。
+        /// </summary>
+        /// <param name="value">要写入的值。</param>
+        /// <returns>恒为 true。</returns>
+        public bool TryWriteValue(TField value)
+        {
+            Value = value;
+            return true;
+        }
+
         public TField Value
         {
             get => _getter(Current());

@@ -146,11 +146,55 @@ namespace XFramework.XUI.Data
                 return;
             }
 
+            // 滑块：sld_{propertyName}
+            var sliderKey = $"sld_{propertyName}";
+            if (_componentCache.TryGetValue(sliderKey, out comp) && comp is Slider slider
+                && source is IReactiveProperty<float> sliderProp)
+            {
+                RegisterBinding(sliderProp, val => slider.value = val);
+                return;
+            }
+
+            // 开关：tgl_{propertyName}
+            var toggleKey = $"tgl_{propertyName}";
+            if (_componentCache.TryGetValue(toggleKey, out comp) && comp is Toggle toggle
+                && source is IReactiveProperty<bool> toggleProp)
+            {
+                RegisterBinding(toggleProp, val => toggle.isOn = val);
+                return;
+            }
+
             // 未找到匹配组件（仅在编辑器中输出警告，避免 Release 版 GC）
 #if UNITY_EDITOR
             Debug.LogWarning(
-                $"[UIPanelBinding] 未找到 '{propertyName}' 对应的 UI 组件（需命名为 txt_{propertyName} 或 img_{propertyName}）: {gameObject.name}");
+                $"[UIPanelBinding] 未找到 '{propertyName}' 对应的 UI 组件" +
+                $"（txt_ / img_ / sld_ / tgl_ 前缀之一）: {gameObject.name}");
 #endif
+        }
+
+        /// <summary>
+        /// 按命名约定把按钮点击绑到回调：子节点名 <c>btn_{name}</c> → <c>Button.onClick</c>。
+        /// <para>按钮不是「值的来源」，故不走 <see cref="BindByConvention{T}"/> 那条按值分发的路径。</para>
+        /// </summary>
+        /// <param name="name">按钮名（不含 <c>btn_</c> 前缀）。</param>
+        /// <param name="onClick">点击回调。</param>
+        public void BindClick(string name, Action onClick)
+        {
+            if (string.IsNullOrEmpty(name) || onClick == null)
+                return;
+
+            var key = $"btn_{name}";
+            if (!_componentCache.TryGetValue(key, out var comp) || !(comp is Button button))
+            {
+#if UNITY_EDITOR
+                Debug.LogWarning(
+                    $"[UIPanelBinding] 未找到 'btn_{name}' 对应的 Button: {gameObject.name}");
+#endif
+                return;
+            }
+
+            // 与其它绑定一同归口，回池时统一释放
+            _bindings.Add(button.BindToClick(onClick));
         }
 
         #endregion
