@@ -36,6 +36,14 @@ namespace XFramework.XUI.View
         [Tooltip("模态遮罩层。对应 UILayers.Mask，也是 ShowMask 的默认值。")]
         public int layerMask = UILayers.Mask;
 
+        /// <summary>
+        /// 勾选后自动在本物体上挂一个 <see cref="UISafeArea"/>，使全部层级一并避让刘海与圆角。
+        /// <para>这是少数会被运行时读取的字段——层级容器都是 UIRoot 的子节点，挂在这里即全局生效。</para>
+        /// </summary>
+        [Header("Safe Area")]
+        [Tooltip("自动让 UI 避让刘海/圆角/手势条（在本物体上挂 UISafeArea）。")]
+        public bool applySafeArea;
+
         #endregion
 
         #region Lifecycle
@@ -47,6 +55,12 @@ namespace XFramework.XUI.View
             if (canvas != null)
             {
                 canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            }
+
+            // 层级容器都是本物体的子节点，故安全区挂在这里即对全部层级生效
+            if (applySafeArea && GetComponent<UISafeArea>() == null)
+            {
+                gameObject.AddComponent<UISafeArea>();
             }
 
             // 初始化 UIManager
