@@ -25,6 +25,8 @@
   - 懒加载豁免:FileManager.EnsureInitialized 在未初始化时自动 Initialize(零配置有意设计),不抛异常;其余门面的 EnsureInitialized 仍按模板抛 InvalidOperationException
   - 宽容语义豁免:InputManager 未初始化时全部查询空引用安全返回默认值(有意设计,对 UI 提示友好,测试锁定),不提供 EnsureInitialized 抛异常
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
+  - **门面分组:** 当静态门面成员超过约 20 个且可划分为若干内聚子系统时,用嵌套静态类分组(如 `UIManager.Panel` / `.Stack` / `.Mask` / `.Tip` / `.Hud` / `.Layer`),外层只保留 `Initialize`/`Shutdown`/`Destroy`/`EnsureInitialized` 与实例管理。分组类零状态零分配,一律转发到外层的 `_impl`。**要一次做全套**——半套会让两种风格并存,比不分组更难读
+  - **门面转发不变量:** `IXxxManager` 新增成员时**必须同步在门面加转发**,否则它在第三方眼里根本不存在。反射断言能锁住形状退化,锁不住「新加的成员忘了转发」——只能靠评审。(实例:`SetLayerVisibility` 曾长期方法完整、文档也有,却只在内部实现上,门面既无转发也无实例属性,第三方实际完全不可达)
 - **节点树(有状态 GamePlay):** `XFramework.XNode` 命名空间。BaseNode → ParentNode → ContainerNode/EntityNode → RootNode,另有 LeafNode、DictionaryNode;承载需要生命周期或加载管线的服务
 - **依赖方向单向:** 节点树可以依赖并启动静态服务;静态服务绝不能引用节点树对象
 - **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。节点树可依赖并启动管线(依赖方向 Node → Pipeline);StartupAsync 装配预置阶段:收集(Weight 0)+ 每相位一个 ParallelStage + 启动(Weight 0),全局进度恒等于相位阶段进度

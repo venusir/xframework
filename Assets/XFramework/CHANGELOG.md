@@ -42,7 +42,58 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Update PlayerLoop 自驱动**：驱动注入 `Update` / `PreLateUpdate` / `FixedUpdate` 三个阶段，不再要求场景里存在 `GameLauncher` 或任何 MonoBehaviour；`IsDrivingPlayerLoop` 可查询注入状态，注入失败打 `LogWarning`（门面是宽容语义、不会抛异常，不留痕的话故障表现只是「静止」）。注入基于 `GetCurrentPlayerLoop` 且只插入不替换，因此与 UniTask 等同样靠注入工作的库共存（有断言钉住）
 - **Update 补齐长周期档位**：`UpdateLOD` 增加 `Tier6`（约 1067ms / 64 个固定步）与 `Tier7`（约 2133ms / 128 个固定步）。原阶梯封顶在 `Tier5`，而它在 30fps 下是 1.07 秒、144fps 下只有 222ms——「每秒醒一次」这类需求此前无法表达，只能自己在节点里按 `deltaTime` 累加。档位是 2 的幂的等比梯子，桶数组尺寸随 `UpdateLOD.Max` 自动推导，故补齐只是加枚举成员
 
+- **UI 面板级 LOD 与失焦剔除**：`UIViewBase.UpdateLod`（Inspector 可配、运行时热改即重排）。用不到每帧的面板（倒计时、进度插值）声明较低档位即可降耗；被覆盖而失焦的面板完全不派发。按档位懒注册驱动器——Tier0 复用常驻的那个，其余档位桶由空转非空时才注册、重新变空即注销，故初始化后调度器里仍只有一个条目。`IsPaused` 此前是无人消费的死字段（`OnBlur` 置位、从无读者），至此才第一次生效
+- **UI 查询 API**：`OpenCount` / `IsAnyOpen` / `GetTopPanel` / `Panels`（活视图，读取零分配）/ `CopyPanels(buffer)` / `CopyPanelsInLayer`。此前查询只能逐类型试 `IsOpen<T>()`，「现在开着哪些面板」「哪个在最前面」无从回答，除非调用方自己维护一份账。`CopyPanels` 为零分配主入口，由调用方持有缓冲区
+- **UI 遮罩引用计数**：`ShowMask` 返回 `UIMaskHandle`（`readonly struct`，与 `LockHandle` 同惯例），配 `UIMaskStyle`。多系统各自需要遮罩时（弹窗 + 引导 + 网络等待），先结束的那个不再把别人的遮罩一起关掉。支持 `owner` 面板联动——面板关闭时自动释放它开的遮罩。`UIMaskStyle` 刻意不用哨兵值：层级 0 是合法层级，全透明遮罩（挡输入但不显示）也是合法需求
+- **UI 层级 API 可达**：`SetLayerVisibility` / `SetLayerInteractive` 此前只存在于内部实现上，**连 `IUIManager` 都没有**，而门面既无转发也无实例属性——第三方虽能在文档里读到它们，实际完全不可达。现补进接口并由门面转发，另暴露 `UIRoot`
+- **UI 诊断**：`UIStateSnapshot`（`readonly struct`，零分配）+ `DumpState()` + `Tools/XFramework/UI State` 窗口。用于回答「面板是不是漏关了」「遮罩为什么还亮着」「哪个打开卡在半路」这类只能翻运行时状态才能定位的问题。窗口数据现取自显示栈与在途表，不是另记一份账
+- **UI 生命周期钩子 `OnPause` / `OnResume`**：把 `OnBlur` 原先承担的两件事正交拆开——交互维度（`OnFocus`/`OnBlur` 管 `IsFocused` + Raycaster）与更新维度（`OnPause`/`OnResume` 管 `IsPaused`）。于是「失焦但仍要按低频更新」这类需求终于可表达，且被覆盖的面板仍会收到语言切换等回调（否则 Pop 回来会看到旧语言）
+- **UI 双向绑定**：新增能力接口 `IReactivePropertyWriter<T>`（继承 `IReactiveProperty<T>`，只读接口本身不变），`ReactiveProperty<T>` 与 `SettingRef<T,TField>` 各自实现，故任何第三方实现都能接入。`UIBinder.BindTwoWay` 支持 Slider / Toggle，内部以重入守卫阻断回灌，并在目标规范化写入值（取整、钳制）时回填控件。约定式绑定补上 `sld_` / `tgl_`（此前 `UIPanelBinding` 缓存了这两类组件却无人消费），`btn_` 走新增的 `BindClick`
+- **UI 安全区适配 `UISafeArea`**：把 RectTransform 收缩到 `Screen.safeArea`。推荐挂在 UIRoot 上——层级容器都是它的子节点，一处生效即全局生效
+- **UI 订阅归口 `UIViewBase.Track(IDisposable)`**：面板与 HUD 都是回池而非销毁，挂在 `OnDestroy` 上的释放永不触发。这是「订阅随视图生命周期释放」的唯一出口，`BindToLocalizedText` 已归口进来
+- **UI 面板资源真释放**：`UnloadPanelAssetAsync(assetPath)`，配套 Asset 侧新增能力接口 `IAssetPoolController`（`ClearPool` / `ClearAllPools`）。此前 `UnloadAsset` 声称「释放内存」而只清一个记账字典——查证后确认这不是实现偷懒而是能力缺口：`DestroyAllPooledInstances` 是 private，且回池时实例保留 `AssetHandle` 保活资源，于是池里只要有一个闲置实例，该预制体的引用计数就不会归零。能力接口与 `IAssetManager` 分开，故不破坏第三方自定义实现
+- **UI 门面按子系统分组**：`UIManager` 此前是约 40 个扁平静态成员，IntelliSense 里是一堵墙。现分为 `Panel` / `Stack` / `Mask` / `Tip` / `Hud` / `Layer` / `Diagnostic` / `Events` 八个嵌套静态类（零状态、零分配），外层只留生命周期与实例管理
+- **UI 排序空间单点定义 `UISorting` / `UILayers`**：所有 `sortingOrder` 取值一律由此推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip` 会把越界取值当场拦住
+
 ### Changed
+
+#### 破坏性变更迁移表（UI 模块）
+
+| 旧写法 | 新写法 |
+| --- | --- |
+| `UIManager.OpenAsync<T>(...)` | `UIManager.Panel.OpenAsync<T>(...)` |
+| `UIManager.CloseAsync<T>()` / `CloseAsync(panel)` | `UIManager.Panel.CloseAsync<T>()` / `CloseAsync(panel)` |
+| `UIManager.IsOpen<T>()` / `GetPanel<T>()` | `UIManager.Panel.IsOpen<T>()` / `GetPanel<T>()` |
+| `UIManager.PushAsync<T>()` / `PopAsync()` | `UIManager.Stack.PushAsync<T>()` / `PopAsync()` |
+| `UIManager.HasPrevious` | `UIManager.Stack.CanGoBack` |
+| `UIManager.BackToAsync<T>()` | `UIManager.Stack.PopToAsync<T>()`（另新增 `PopToRootAsync()`） |
+| `UIManager.ShowMask(...)` / `HideMask()` | `UIManager.Mask.Show(...)` / `Hide()` |
+| `UIManager.IsMaskShowing` | `UIManager.Mask.IsShowing` |
+| `UIManager.SetMaskClickToClose(b)` | `UIManager.Mask.SetClickToClose(b)` |
+| `UIManager.ShowTip(text, cfg)` | `await UIManager.Tip.ShowAsync(text, cfg)`（或 `.Forget()`） |
+| `UIManager.SetTipProvider(p)` | `UIManager.Tip.SetProvider(p)` |
+| `UIManager.ShowHud<T>(...)` | `UIManager.Hud.Attach<T>(...)` |
+| `UIManager.HideHud(t)` / `SetHudProvider(p)` | `UIManager.Hud.Detach(t)` / `SetProvider(p)` |
+| `UIManager.SetLayerVisibility(l, v)` | `UIManager.Layer.SetVisibility(l, v)` |
+| `UIManager.SetLayerInteractive(l, i)` | `UIManager.Layer.SetInteractive(l, i)` |
+| `UIManager.Subscribe(h, ctx)` | `UIManager.Events.Subscribe(h, ctx)` |
+| `UIManager.SetController(c)` | `UIManager.Panel.SetController(c)` |
+| `UIManager.UnloadAsset<T>()` | `UIManager.Panel.ForgetPreload<T>()` |
+| `UIManager.ClearAssetCache()` | `UIManager.Panel.ClearPreloads()` |
+| `UIManager.GetTopSortingOrder(layer)` | 已删除：它对外算错了（忽略了层偏移），且与 `GetNextSortingOrder` 口径分裂。排序值现由 `UISorting` 按栈位推导 |
+| `protected internal override void OnUpdate()` | `protected internal override void OnUpdate(float deltaTime, float time)` |
+| `UIManager.Initialize` / `Destroy` / `Update` / `IsInitialized` / `UIRoot` | 不变，仍在门面外层 |
+
+- **UI `OnUpdate` 携带 `deltaTime`/`time`（破坏性）**：面板可声明较低档位而被降频派发（Tier3 约 133ms 一次）。若面板继续用 `Time.deltaTime` 做积分，每 133ms 只前进一帧的量——**慢 8 倍**。故 `deltaTime` 必须由派发方给出，取值是「距上次派发」的间隔。这是 LOD 的正确性前提，不只是风格统一。门面无参 `Update()` 一并删除：它给不出正确的 `deltaTime`
+- **UI 导航栈统一入栈（破坏性）**：显示栈改存实例，`OpenAsync` 与 `PushAsync` 都入栈，`HasPrevious` → `CanGoBack`，`BackToAsync<T>` → `PopToAsync<T>`。此前只有 `PushAsync` 入栈，于是「Open 开主界面 + Push 开二级页」之后栈深恒为 1，`PopAsync`、`HasPrevious`、遮罩点击关闭会同时失效——而那恰是最常见的用法组合
+- **UI 排序空间重做（破坏性，且修一处长期潜伏的正确性缺陷）**：`Canvas.sortingOrder` 名义上是 `int`，运行时却只保留 **16 位有符号**范围，超出会被静默截断回绕（实测 `100001 → -31071`、`500000 → -24288`）。既有方案 `layer × 1000` 因此只要层号 ≥ 33 就全盘失效，而框架推荐的层恰好越界：层 200 实存 `+3393`、层 300 实存 `-27679`，于是 **Top 层实际渲染在 Popup 之下**、遮罩也不在预期位置。之所以从未暴露，是因为此前没有任何用例断言过 `sortingOrder`。现全部取值经 `UISorting` 推导并落在 int16 内，另加一条把每个保留带取值写进 Canvas 再读回的守卫用例
+- **UI `OnBlur` 不再置 `IsPaused`（破坏性）**：改由 `OnPause` / `OnResume` 承担。第三方若在重写的 `OnBlur` 里读 `IsPaused`，会看到旧值
+- **UI `ShowTipAsync` 的完成时机变化（破坏性）**：从「播放结束」变为「已创建并开始播放」。Tip 的播放改由统一帧通路推进，故无从等待播完；需要知道何时播完请按 `TipConfig.Duration` 自行计时
+- **UI `UIDefaultController` 默认静默（破坏性）**：它每次拦截都打日志，等于每开一个面板五条带字符串插值的日志。需要观察生命周期流程时用 `new UIDefaultController(verbose: true)`
+- **UI 异步 API 全面接入取消令牌（破坏性）**：`IUIManager` 全部异步成员、`IUIController` 五个回调、`IUiHudProvider.AttachAsync`、`IUITipProvider` 均新增 `CancellationToken`（一律收盘）。两条提交点语义已写进文档：打开以「实例化返回」为提交点、关闭以「`OnBeforeCloseAsync` 放行」为提交点，之后一律走完——「已从集合摘除但未回池」的半关状态比「取消失效」难排查得多
+- **UI `IUITipProvider` 与 `IUiHudProvider` 同形（破坏性）**：新增 `Update(deltaTime, time)` 与 `DetachAll()`
+- **UI provider 归属下沉（破坏性）**：`_tipProvider` / `_hudProvider` 由门面静态字段移入 `UIManagerImpl`，`IUIManager` 相应新增五个成员。门面由此退化为纯转发——此前它要自己管懒初始化、还要回头摸 `_instance.UIRoot` 才能给 provider 挂根节点
+- **UI `UnloadAsset` / `ClearAssetCache` 正名（破坏性）**：改为 `ForgetPreload` / `ClearPreloads`，并把真实作用写进文档——**只清记账，不卸载资源**。真释放见新增的 `UnloadPanelAssetAsync`
 
 - **Save 契约重整（破坏性）**：`ISaveManager` 全面收敛——异步成员统一 `Async` 后缀（此前同一文件里两种读法，`SaveAsync` 保留而 `GetSlotMetas`/`DeleteAllSlots` 丢弃）；玩家隔离 API（`SetCurrentPlayer` / `ClearCurrentPlayer` / `CurrentPlayerId` / `GetAllPlayerIdsAsync` / `DeletePlayerAsync`）由实现类内部成员提升到接口，消除门面里靠 `is` 降级访问、自定义实现静默空返回的问题；去掉同步成员（`DeleteSlot` / `SlotExists`）——同步 IO 在主线程执行，而 Console 等平台的 Provider 可能是数百毫秒的平台 SDK 调用
 - **Save 存档 IO 后切回主线程**：Provider 的 IO 用 `RunOnThreadPool(configureAwait: false)` 完成时停留在子线程，此前 `SaveManagerImpl` 中所有 IO `await` 之后的代码——含 `DataManager.ApplySnapshot` 与第三方 `IDataBlock` 回调——都在线程池上执行，既是「Unity API 只能在主线程调用」违规，也是与主线程读写共享状态的真实竞态。代价：这些方法依赖 PlayerLoop 泵，**禁止在主线程同步阻塞等待**（`.GetAwaiter().GetResult()` 会死锁）
@@ -110,6 +161,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Update 暂停语义缺失**：此前 `timeScale = 0` 时切片相位照常推进、节点仍被派发但 delta 恒 0——暂停期间白跑派发，恢复后相位已漂移（`Frame32` 在 60fps 下意味着半秒多的空窗）。现逻辑轴冻结时既不派发也不推进帧计数；显式 `Pause()` 恢复时重锚时间基准，因此恢复后第一帧 delta 为 0 而不是「整段暂停时长」（刻意不追赶）；`timeScale < 0` 的负间隔钳制为 0
 - **Update `ProcessImmediate` 的既有语义写进文档**：派发期间调用它只重置时间基准、不执行更新（在别人的 `OnUpdate` 里再次回调自己会形成嵌套派发）。该行为本次未改，只是补上说明——此前文档没有提，容易误以为「任何时候都能立即执行」
 - **文档修正（Update）**：模块 README 重写（修正 `Frame30`→`Frame32`、失效的目录树、一段**无法编译**的 `static class : IUpdateable` 示例，补入三个时机/双时间轴/暂停/派发期语义/已知限制）；`Documentation/XFramework.md` 中不存在的 `UpdateManager.Bind(root)`、少一个形参的 `OnUpdate` 签名与启动流程示意一并订正
+
+- **UI 遍历中改集合导致崩溃**：`UIManager.Update` 原先在 `foreach` 活动面板集合的过程中调用 `OnUpdate`，而面板自关时关闭路径是同步走完的（默认控制器的 `OnBeforeCloseAsync` 同步完成），于是当场抛 `InvalidOperationException`。现改为先取快照再派发
+- **UI 同类型并发打开会各自实例化**：第二次 `RegisterPanel` 会把第一个实例直接回池，而它的 `IsOpen` 仍是 true、首个调用方拿到的是池中失活引用，`PanelOpenedMessage` 还会发两次。新增在途打开表，后来者加入同一次打开并共享结果（加入者各持自己的 `UniTaskCompletionSource`——UniTask 只支持单个 continuation，共享同一个会被第二个等待者覆盖）
+- **UI `PushAsync` 的失焦不回滚**：打开失败或取消时栈顶会永久停在失焦态（`IsPaused` + Raycaster 关闭）。现补齐回滚，且只恢复交互、不动显示栈——栈根本没变，回到焦点不等于回到栈顶
+- **UI `CloseSelfAsync` 在 `OnOpen` 内静默失效**：`IsOpen` 原先在 `await OnOpenImpl()` **之后**才置位，而该方法的守卫是「未打开则忽略」。现引入显式状态机，打开期间 `IsOpen` 即为 true；关闭请求延迟到 `OnOpen` 返回后执行——在 `OnOpen` 的调用栈上重入 `OnClose` 与关闭动画，子类几乎必然写出「先初始化再被清理」的乱序
+- **UI 面板回池不解绑 ViewModel**：`UIPanelBinding.Unbind` 原先只在 `OnDestroy` 调用，而面板是回池不销毁，该回调永不触发——关闭后 ViewModel 与订阅会一直存活到下次打开同一面板，此后再不打开就永久驻留。改由 `OnPoolRecycle` 解绑（挂在回池点而非关闭点是刻意的：关闭可被 `OnBeforeCloseAsync` 拦下，那时面板仍然开着）
+- **UI HUD 回池漏调 `OnPoolRecycle`**：Canvas 排序值从此在回池时复位，不再留在实例上被复用时误盖别的面板
+- **UI Tip 是模块内最后一条自建帧通路**：`UITipItem.PlayAsync` 原先跑 `UniTask.Yield` 自循环并读 `Time.deltaTime`，于是 Tip 既不受 `UpdateManager.Pause` 约束、也不进 LOD 调度，且每条 Tip 一个循环实例。现改为由驱动器逐帧推进，与面板、HUD 共用同一条通路
+- **UI 遮罩的 `clickToClose` 事后设置无效**：原先该开关只在「创建遮罩」那条分支里被读过，已存在的遮罩上传 true 没有反应。现创建与事后切换共用同一段逻辑（开关用 `Button.enabled` 而非增删组件——`Object.Destroy` 要到帧末才生效，切换后同帧查询会看到残留组件）
+- **UI 遮罩走 `AssetManager.DestroyInstance` 销毁**：遮罩由 `new GameObject` 创建、从未经 AssetManager 托管，而 `DestroyInstance` 开头就 `EnsureGlobalInitialized`——于是只要走过 `ShowMask`，`UIManager.Destroy()` 就要求 AssetManager 存活，未初始化时直接抛异常。改为直接销毁
+- **UI Tip 与 HUD 的 `sortingOrder` 撞车**：两者原先同为 `999000`，覆盖顺序不确定。现分列 `30000` / `31000`
+- **UI `GetTopSortingOrder` 算错**：它忽略了层偏移（返回 `counter × 1000 + 1000`），与 `GetNextSortingOrder` 口径分裂。该 API 已随排序空间重做一并删除
+- **UI 层级「整体禁交互」会被焦点变化撤销**：`OnFocus` 与 `OnOpenImpl` 都会无条件把 raycaster 打开，它们并不知道层被整体禁用过。现由管理器在焦点回调之后、打开之后、以及 Push 取消回滚之后统一压回层状态
+- **UI `UIBinder.BindToLocalizedText` 的订阅无人释放**：面板回池不销毁，故每次打开都会多一条全局 Localization 订阅，且回池后仍会给失活的 TMP 写文本。现归口到 `UIViewBase.Track`
+- **UI `UIBinder` 跨模块引用 `XMessage.Internal`**：它只用了那里的 `ActionDisposable`（十行适配器），内联成本地私有类即可切断这条实现细节依赖
+
 
 ## [0.2.0] - 2026-08-20
 

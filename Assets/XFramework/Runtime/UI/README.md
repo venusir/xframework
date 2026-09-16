@@ -151,15 +151,38 @@ sequenceDiagram
 | **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
 | **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
 | **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
-| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。通过 Update() 驱动 UIManager 更新所有已打开面板的 OnUpdate，提供层级预设常量。                                 |
+| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager 与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。            |
 | **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
 | **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
 | **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
 | **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                              |
-| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建，提供 Initialize/Activate/Deactivate 生命周期。                                          |
+| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建与订阅归口，生命周期为 OnBound / OnUnbound / Dispose（无 InitializeAsync）。              |
 | **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                         |
 | **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
 | **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                                |
+
+## 门面分组
+
+`UIManager` 按子系统分为八个嵌套静态类（零状态、零分配，一律转发到内部实现）：
+
+| 分组 | 成员 |
+| --- | --- |
+| `UIManager.Panel` | `OpenAsync` / `CloseAsync` / `CloseLayerAsync` / `CloseAllAsync` / `IsOpen` / `GetPanel` / `GetTopPanel` / `OpenCount` / `IsAnyOpen` / `Panels` / `CopyPanels` / `CopyPanelsInLayer` / `BringToFront` / `PreloadAsync` / `ForgetPreload` / `ClearPreloads` / `UnloadPanelAssetAsync` / `SetController` |
+| `UIManager.Stack` | `PushAsync` / `PopAsync` / `PopToAsync` / `PopToRootAsync` / `GoBackAsync` / `CanGoBack` |
+| `UIManager.Mask` | `Show` / `Hide` / `SetClickToClose` / `IsShowing` |
+| `UIManager.Tip` | `ShowAsync` / `SetProvider` |
+| `UIManager.Hud` | `Attach` / `Detach` / `SetProvider` |
+| `UIManager.Layer` | `SetVisibility` / `SetInteractive` |
+| `UIManager.Diagnostic` | `GetState` / `DumpState` / `LodDriverCount` |
+| `UIManager.Events` | `Subscribe`（三种面板消息） |
+
+生命周期与实例管理留在**外层**：`Initialize` / `SetInstance` / `Destroy` / `Update` / `IsInitialized` / `UIRoot`——那是门面自身的职责，不属于任何子系统。
+
+### 扩展清单
+
+新增 `IUIManager` 成员时，**必须同步在门面加静态转发**，否则它在第三方眼里根本不存在——`SetLayerVisibility` 就曾经长期处于这种状态：方法完整、文档也有，但只在内部实现上，门面既无转发也无实例属性，第三方实际完全调不到。
+
+`UIFacadeGroupingTests` 用反射锁住了这一形状（分组类存在、扁平层不再有那些成员、生命周期成员留在外层），但它拦不住「新加的成员忘了转发」——那一条只能靠评审。
 
 ## 核心概念
 
@@ -223,7 +246,9 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 ### 面板驱动更新（OnUpdate）
 
-与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**所有已打开面板的 `OnUpdate` 方法。`UIRootNode` 在 `Update()` 中调用 `UIManager.Update()`，后者遍历活动面板列表，仅对 `IsOpen = true` 且未被暂停（未处于 OnBlur 状态）的面板执行 `OnUpdate`。
+与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize` 把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被 LOD 降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
+
+派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
 
 **优势：**
 - **性能可控** — 仅一个 `Update()` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
@@ -427,25 +452,22 @@ public class SettingsViewModel : ViewModelBase
     public ReactiveProperty<bool> SoundEnabled { get; private set; }
     public ReactiveProperty<string> PlayerName { get; private set; }
 
-    protected override void OnInitialize()
+    // ViewModelBase 的生命周期只有三个：OnBound / OnUnbound / Dispose。
+    // 它没有 InitializeAsync——属性在 OnBound 里创建即可，面板 new 出 VM 后
+    // 直接 BindViewModel 就会走到这里。
+    protected override void OnBound()
     {
         MusicVolume = CreateProperty(0.5f);
         SoundEnabled = CreateProperty(true);
         PlayerName = CreateProperty("Player");
 
-        // 监听属性变化
-        MusicVolume.Subscribe(v => Debug.Log($"音量变化: {v}"));
+        // 订阅交给 AddSubscription 归口：面板回池时由 Unbind 统一释放
+        AddSubscription(MusicVolume.Subscribe(v => Debug.Log($"音量变化: {v}")));
     }
 
-    protected override void OnActivate()
+    protected override void OnUnbound()
     {
-        // 面板打开时的逻辑（加载存档数据等）
-        LoadSettings();
-    }
-
-    protected override void OnDeactivate()
-    {
-        // 面板关闭时的逻辑（保存设置等）
+        // 面板关闭 / 回池时由 UIPanelBinding.Unbind 调用
         SaveSettings();
     }
 }
@@ -463,7 +485,7 @@ public class SettingsPanel : UIPanelBase
     protected override async UniTask OnOpen(object userData)
     {
         var vm = new SettingsViewModel();
-        await vm.InitializeAsync();
+        BindViewModel(vm);   // 内部会调用 vm.OnBound()，属性在那里创建
 
         // 方式一：手动绑定（推荐，按命名约定）
         Binding.BindByConvention("MusicVolume", vm.MusicVolume);
@@ -504,9 +526,9 @@ public class ShopPanel : UIPanelBase
 
     private ShopViewModel _vm = new ShopViewModel();
 
-    protected override async UniTask OnOpen(object userData)
+    protected override UniTask OnOpen(object userData)
     {
-        await _vm.InitializeAsync();
+        BindViewModel(_vm);
 
         // 使用 UIBinder 扩展方法 — 支持 format 格式化
         _vm.Currency.BindToText(currencyText, g => $"{g:N0}");
@@ -540,7 +562,6 @@ public class MainMenuPanel : UIPanelBase
 
         // 创建并绑定 ViewModel（可选）
         var vm = new MainMenuViewModel();
-        await vm.InitializeAsync();
         BindViewModel(vm);
     }
 
@@ -960,7 +981,8 @@ UIManager.ShowTip("暴击！999", new TipConfig
 - [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
 - [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
 - [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
-- [ ] 资源卸载回收 — 支持按 LRU 卸载非活动面板的预制体资源
+- [x] ✅ 面板资源真释放 — `UnloadPanelAssetAsync`（配套 Asset 侧 `IAssetPoolController`）。**没有**做按 LRU 自动卸载：那是策略，应由项目决定何时调用
+- [ ] 列表虚拟化 — 长列表的滚动复用（与 FairyGUI 的 `GList` 虚拟滚动同类能力）
 - [ ] 场景切换安全 — 自动检测跨场景引用并处理
 - [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
 - [ ] UI 引导层 — 新手引导的遮罩挖洞支持
