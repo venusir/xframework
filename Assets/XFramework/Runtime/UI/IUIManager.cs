@@ -188,6 +188,18 @@ namespace XFramework.XUI
         /// </summary>
         void ClearPreloads();
 
+        /// <summary>
+        /// 真正释放某个面板预制体占用的资源。
+        /// <para>与 <see cref="ForgetPreload{T}"/>（只清记账）互补：本方法先清掉该地址的闲置实例池，
+        /// 再触发被释放资源的回收，最后清掉指向该地址的预加载记账。</para>
+        /// <para><b>为什么必须先清池</b>：回池时实例会保留 <c>AssetHandle</c> 保活资源，池里只要还留着
+        /// 一个闲置实例，该预制体的引用计数就不会归零，回收也就带不走它。</para>
+        /// </summary>
+        /// <param name="assetPath">面板预制体的资源地址（与 OpenAsync 时传入的一致）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>确实执行了释放返回 true；该地址仍有面板打开时返回 false。</returns>
+        UniTask<bool> UnloadPanelAssetAsync(string assetPath, CancellationToken cancellationToken = default);
+
         #endregion
 
         #region Diagnostics

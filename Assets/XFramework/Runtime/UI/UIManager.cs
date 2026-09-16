@@ -518,6 +518,14 @@ namespace XFramework.XUI
             _instance.ClearPreloads();
         }
 
+        /// <inheritdoc cref="IUIManager.UnloadPanelAssetAsync"/>
+        public static UniTask<bool> UnloadPanelAssetAsync(string assetPath,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.UnloadPanelAssetAsync(assetPath, cancellationToken);
+        }
+
         #endregion
 
         #region Public API — Sort Order

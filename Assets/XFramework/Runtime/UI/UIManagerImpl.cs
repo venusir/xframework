@@ -872,6 +872,58 @@ namespace XFramework.XUI
             _assetCache.Clear();
         }
 
+        /// <inheritdoc/>
+        public async UniTask<bool> UnloadPanelAssetAsync(string assetPath,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            if (string.IsNullOrEmpty(assetPath))
+                return false;
+
+            // 还有面板在用这个地址时不能卸：清池会连带销毁它的闲置实例，
+            // 而正在使用的那个虽然不受影响，但资源被回收后它就成了悬空引用
+            for (int i = 0; i < _stack.Count; i++)
+            {
+                var panel = _stack[i];
+                if (panel != null && panel.AssetPath == assetPath)
+                {
+                    Debug.LogWarning(
+                        $"[UIManager] 面板 '{panel.GetType().Name}' 仍在使用 '{assetPath}'，未执行资源释放。");
+                    return false;
+                }
+            }
+
+            // 先清闲置实例池：不释放它们保留的句柄，引用计数就降不到 0
+            AssetManager.ClearPool(assetPath);
+
+            // 再回收已无引用的资源
+            await AssetManager.UnloadUnusedAssetsAsync(null, cancellationToken);
+
+            // 最后清掉指向该地址的预加载记账
+            RemovePreloadBookkeeping(assetPath);
+            return true;
+        }
+
+        /// <summary>移除指向指定地址的预加载记账。</summary>
+        private void RemovePreloadBookkeeping(string assetPath)
+        {
+            if (_assetCache.Count == 0)
+                return;
+
+            using (ListPool<Type>.GetPooled(out var stale))
+            {
+                foreach (var kv in _assetCache)
+                {
+                    if (kv.Value == assetPath)
+                        stale.Add(kv.Key);
+                }
+
+                for (int i = 0; i < stale.Count; i++)
+                    _assetCache.Remove(stale[i]);
+            }
+        }
+
         #endregion
 
         #region Layer Management

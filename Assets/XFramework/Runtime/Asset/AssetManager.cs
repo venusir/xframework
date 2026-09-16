@@ -35,6 +35,9 @@ namespace XFramework.XAsset
         /// <summary>测试钩子：实例工厂。默认创建 <see cref="AssetManagerImpl"/>；测试注入假实现以验证并发共享语义。</summary>
         internal static Func<IAssetManager> ImplFactory;
 
+        /// <summary>池清理能力缺失的告警是否已发出（只发一次，避免调用方在循环里刷屏）。</summary>
+        private static bool _poolCapabilityWarned;
+
         /// <summary>
         /// 全局资源管理器是否已初始化。
         /// </summary>
@@ -405,6 +408,55 @@ namespace XFramework.XAsset
         {
             EnsureGlobalInitialized();
             return _instance.GetPoolStatus(location);
+        }
+
+        #endregion
+
+        #region Public API — Pool Control
+
+        /// <summary>
+        /// 销毁指定地址的全部闲置池实例（不影响正在使用的实例）。
+        /// <para><b>真正释放资源前的必要一步</b>：回池时实例会保留 <c>AssetHandle</c> 以保活资源，
+        /// 于是池里只要还留着一个闲置实例，该预制体的引用计数就不会归零，
+        /// <see cref="UnloadUnusedAssetsAsync"/> 也就回收不掉它。</para>
+        /// <para>当前实现不支持该能力时返回 0 并告警一次。</para>
+        /// </summary>
+        /// <param name="location">资源地址。</param>
+        /// <returns>实际销毁的实例数；该地址没有池时返回 0。</returns>
+        public static int ClearPool(string location)
+        {
+            EnsureGlobalInitialized();
+            return ResolvePoolController()?.ClearPool(location) ?? 0;
+        }
+
+        /// <summary>
+        /// 销毁全部闲置池实例（不影响正在使用的实例）。
+        /// </summary>
+        /// <returns>实际销毁的实例总数。</returns>
+        public static int ClearAllPools()
+        {
+            EnsureGlobalInitialized();
+            return ResolvePoolController()?.ClearAllPools() ?? 0;
+        }
+
+        /// <summary>
+        /// 取当前实现的能力接口。不支持时告警一次——这是调用方的编程错误，
+        /// 但不该每次调用都刷屏。
+        /// </summary>
+        private static IAssetPoolController ResolvePoolController()
+        {
+            if (_instance is IAssetPoolController controller)
+                return controller;
+
+            if (!_poolCapabilityWarned)
+            {
+                _poolCapabilityWarned = true;
+                Debug.LogWarning(
+                    "[AssetManager] 当前 IAssetManager 实现不支持 IAssetPoolController，池清理调用被忽略。" +
+                    "若要使用该能力，请在自定义实现上实现 IAssetPoolController。");
+            }
+
+            return null;
         }
 
         #endregion

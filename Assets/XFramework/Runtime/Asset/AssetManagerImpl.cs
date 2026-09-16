@@ -14,7 +14,7 @@ namespace XFramework.XAsset
     /// Dispose 时直接调用 <see cref="YooAsset.AssetHandle.Release"/>。</para>
     /// <para>通常不直接使用，由 <see cref="AssetManager"/> 外观类持有并委派调用。</para>
     /// </summary>
-    internal class AssetManagerImpl : IAssetManager
+    internal class AssetManagerImpl : IAssetManager, IAssetPoolController
     {
         #region Private Fields
 
@@ -467,17 +467,62 @@ namespace XFramework.XAsset
         private void DestroyAllPooledInstances()
         {
             foreach (var kvp in _pools)
-            {
-                foreach (var go in kvp.Value)
-                {
-                    if (go != null)
-                    {
-                        go.GetComponent<InstanceTracker>()?.DisposeHandle();
-                        UnityEngine.Object.Destroy(go);
-                    }
-                }
-            }
+                DestroyPooledInstances(kvp.Value);
+
             _pools.Clear();
+        }
+
+        /// <summary>
+        /// 销毁一个池中的全部闲置实例，返回销毁数量。
+        /// </summary>
+        private static int DestroyPooledInstances(Stack<GameObject> pool)
+        {
+            int count = 0;
+
+            foreach (var go in pool)
+            {
+                if (go == null)
+                    continue;
+
+                // 先释放句柄：回池时句柄是刻意保留的（用于保活资源），销毁前必须释放，
+                // 否则该预制体的引用计数永远降不到 0，UnloadUnusedAssets 也就回收不掉
+                go.GetComponent<InstanceTracker>()?.DisposeHandle();
+                UnityEngine.Object.Destroy(go);
+                count++;
+            }
+
+            pool.Clear();
+            return count;
+        }
+
+        #endregion
+
+        #region IAssetPoolController
+
+        /// <inheritdoc/>
+        public int ClearPool(string location)
+        {
+            if (string.IsNullOrEmpty(location))
+                return 0;
+
+            if (!_pools.TryGetValue(location, out var pool))
+                return 0;
+
+            int cleared = DestroyPooledInstances(pool);
+            _pools.Remove(location);
+            return cleared;
+        }
+
+        /// <inheritdoc/>
+        public int ClearAllPools()
+        {
+            int cleared = 0;
+
+            foreach (var kvp in _pools)
+                cleared += DestroyPooledInstances(kvp.Value);
+
+            _pools.Clear();
+            return cleared;
         }
 
         #endregion
