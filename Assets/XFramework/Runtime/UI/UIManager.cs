@@ -291,6 +291,29 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Diagnostics
+
+        /// <inheritdoc cref="IUIManager.GetState"/>
+        public static UIStateSnapshot GetState()
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetState();
+        }
+
+        /// <inheritdoc cref="IUIManager.DumpState"/>
+        public static string DumpState()
+        {
+            EnsureGlobalInitialized();
+            return _instance.DumpState();
+        }
+
+        /// <summary>
+        /// 已注册的非零档位驱动器数量。用不到分档时恒为 0，便于确认惰性注册确实在生效。
+        /// </summary>
+        public static int LodDriverCount => _lodDrivers.Count;
+
+        #endregion
+
         #region Public API — Query
 
         /// <inheritdoc cref="IUIManager.OpenCount"/>

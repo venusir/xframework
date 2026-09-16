@@ -183,6 +183,22 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Diagnostics
+
+        /// <summary>
+        /// 取一次状态快照（零分配）。
+        /// <para>未初始化时返回全零——这是探测用的接口，不该因为尚未初始化就抛异常。</para>
+        /// </summary>
+        UIStateSnapshot GetState();
+
+        /// <summary>
+        /// 导出可直接阅读的状态快照，含每个面板的类型、层级、排序、档位与焦点/暂停状态。
+        /// <para>低频调试接口，<b>允许分配</b>；不要放进每帧路径。</para>
+        /// </summary>
+        string DumpState();
+
+        #endregion
+
         #region Query
 
         /// <summary>

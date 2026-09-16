@@ -169,6 +169,67 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Diagnostics
+
+        /// <inheritdoc/>
+        public UIStateSnapshot GetState()
+        {
+            return new UIStateSnapshot(
+                _activePanels.Count,
+                _opening.Count,
+                _maskEntries.Count,
+                IsMaskShowing,
+                CanGoBack);
+        }
+
+        /// <inheritdoc/>
+        public string DumpState()
+        {
+            // 低频调试接口，允许分配（与每帧路径的零分配要求无关）
+            var sb = new System.Text.StringBuilder(256);
+
+            sb.Append("[UIManager] ").Append(GetState()).Append('\n');
+            sb.Append("UIRoot: ").Append(UIRoot != null ? UIRoot.name : "(null)").Append('\n');
+
+            sb.Append("Panels (bottom -> top):\n");
+
+            if (_stack.Count == 0)
+            {
+                sb.Append("  (none)\n");
+            }
+            else
+            {
+                for (int i = 0; i < _stack.Count; i++)
+                {
+                    var panel = _stack[i];
+                    if (panel == null)
+                    {
+                        sb.Append("  [").Append(i).Append("] <destroyed>\n");
+                        continue;
+                    }
+
+                    sb.Append("  [").Append(i).Append("] ").Append(panel.GetType().Name)
+                      .Append(" layer=").Append(panel.Layer)
+                      .Append(" order=").Append(panel.Canvas != null ? panel.Canvas.sortingOrder : 0)
+                      .Append(" lod=").Append(panel.UpdateLod)
+                      .Append(panel.IsFocused ? " focused" : " blurred")
+                      .Append(panel.IsPaused ? " paused" : "")
+                      .Append('\n');
+                }
+            }
+
+            if (_opening.Count > 0)
+            {
+                sb.Append("In-flight opens:\n");
+                foreach (var kv in _opening)
+                    sb.Append("  ").Append(kv.Key.Name).Append('\n');
+            }
+
+            return sb.ToString();
+        }
+
+        #endregion
+
         #region Query
 
         public UIPanelBase GetTopPanel()
