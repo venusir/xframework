@@ -25,6 +25,14 @@ namespace XFramework.XUI.View
         /// </summary>
         private List<IDisposable> _tracked;
 
+        /// <summary>当前生命周期状态。</summary>
+        private ViewState _state;
+
+        /// <summary>
+        /// 「打开中」的完成闸门。懒分配——只有真的有人在 OnOpen 期间发起关闭时才创建。
+        /// </summary>
+        private UniTaskCompletionSource _openingGate;
+
         #endregion
 
         #region Public API — Lifetime-bound Subscriptions
@@ -86,9 +94,22 @@ namespace XFramework.XUI.View
         public string AssetPath { get; internal set; }
 
         /// <summary>
-        /// 视图是否已打开（处于激活状态）。
+        /// 视图是否已打开（含「正在打开」阶段）。
+        /// <para>打开期间即为 true：面板在自己 <c>OnOpen</c> 里调用 <c>CloseSelfAsync</c> 时必须能通过
+        /// 「未打开则忽略」的守卫，否则那个请求会静默失败。</para>
         /// </summary>
-        public bool IsOpen { get; private set; }
+        public bool IsOpen => _state == ViewState.Opening || _state == ViewState.Open;
+
+        /// <summary>
+        /// 是否正在执行打开（<c>OnOpen</c> 尚未返回）。
+        /// <para>此时发出的关闭请求会被延迟到打开完成之后执行。</para>
+        /// </summary>
+        public bool IsOpening => _state == ViewState.Opening;
+
+        /// <summary>
+        /// 是否正在执行关闭。
+        /// </summary>
+        public bool IsClosing => _state == ViewState.Closing;
 
         /// <summary>
         /// 视图的 Canvas 组件（懒加载）。
@@ -165,23 +186,96 @@ namespace XFramework.XUI.View
         #region Internal — Lifecycle Entry Points (Called by UIManager / UIHudManager)
 
         /// <summary>
-        /// 视图打开入口。激活 GameObject，调用 <see cref="OnOpenImpl"/>，标记 IsOpen。
+        /// 视图打开入口。激活 GameObject，进入 Opening 态，调用 <see cref="OnOpenImpl"/>，最后落为 Open。
         /// </summary>
         internal async UniTask DoOpenAsync(object userData)
         {
             gameObject.SetActive(true);
-            await OnOpenImpl(userData);
-            IsOpen = true;
+            _state = ViewState.Opening;
+
+            try
+            {
+                await OnOpenImpl(userData);
+            }
+            catch
+            {
+                // 打开失败：状态归位，实例的回滚由调用方负责
+                _state = ViewState.Closed;
+                ReleaseOpeningGate();
+                throw;
+            }
+
+            // OnOpen 期间可能已发出并执行了关闭，那时状态已不是 Opening，不要覆盖回去
+            if (_state == ViewState.Opening)
+                _state = ViewState.Open;
+
+            ReleaseOpeningGate();
         }
 
         /// <summary>
-        /// 视图关闭入口。标记 IsOpen=false，调用 <see cref="OnCloseImpl"/>，最后 SetActive(false)。
+        /// 视图关闭入口。进入 Closing 态，调用 <see cref="OnCloseImpl"/>，最后落为 Closed 并隐藏。
         /// </summary>
         internal async UniTask DoCloseAsync(bool immediate)
         {
-            IsOpen = false;
-            await OnCloseImpl(immediate);
-            gameObject.SetActive(false);
+            _state = ViewState.Closing;
+
+            try
+            {
+                await OnCloseImpl(immediate);
+            }
+            finally
+            {
+                // 即便 OnClose 抛异常也要落到终态：停在 Closing 会让 IsOpen 一直撒谎，
+                // 且物体保持激活
+                _state = ViewState.Closed;
+                gameObject.SetActive(false);
+            }
+        }
+
+        /// <summary>
+        /// 等待「正在打开」阶段结束。非 Opening 态立即完成，不分配。
+        /// <para>供关闭路径调用：在 <c>OnOpen</c> 的调用栈上重入 <c>OnClose</c> 与关闭动画，
+        /// 子类几乎必然写出「先初始化再被清理」的乱序。</para>
+        /// </summary>
+        internal UniTask WaitWhileOpeningAsync()
+        {
+            if (_state != ViewState.Opening)
+                return UniTask.CompletedTask;
+
+            if (_openingGate == null)
+                _openingGate = new UniTaskCompletionSource();
+
+            return _openingGate.Task;
+        }
+
+        /// <summary>
+        /// 打开阶段结束，放行等待者。完成后清空闸门以便下次打开重新懒分配。
+        /// </summary>
+        private void ReleaseOpeningGate()
+        {
+            var gate = _openingGate;
+            _openingGate = null;
+            gate?.TrySetResult();
+        }
+
+        #endregion
+
+        #region Internal — State
+
+        /// <summary>视图生命周期状态。</summary>
+        private enum ViewState : byte
+        {
+            /// <summary>未打开（含已回池）。</summary>
+            Closed,
+
+            /// <summary>正在执行打开，<c>OnOpen</c> 尚未返回。</summary>
+            Opening,
+
+            /// <summary>已打开。</summary>
+            Open,
+
+            /// <summary>正在执行关闭。</summary>
+            Closing,
         }
 
         #endregion

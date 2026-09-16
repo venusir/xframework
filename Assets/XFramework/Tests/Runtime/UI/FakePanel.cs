@@ -60,6 +60,39 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 在 <c>OnOpen</c> 里请求关闭自己的面板。
+    /// <para>用于验证「OnOpen 期间可关闭自身」：关闭请求应被延迟到 OnOpen 返回之后执行，
+    /// 且此时 <c>IsOpen</c> 必须已经为 true，否则请求会被守卫静默丢弃。</para>
+    /// </summary>
+    public class SelfClosingOnOpenPanel : FakePanel
+    {
+        protected override async UniTask OnOpen(object userData)
+        {
+            await base.OnOpen(userData);   // Log: "OnOpen"
+
+            CloseSelfAsync().Forget();
+            Log.Add("OnOpenReturned");     // 必须排在 "OnClose" 之前
+        }
+    }
+
+    /// <summary>
+    /// 在 <c>OnOpen</c> 里探测自身状态的面板，用于锁定「打开期间 IsOpen 即为 true」。
+    /// </summary>
+    public class StateProbePanel : FakePanel
+    {
+        public bool IsOpenDuringOnOpen { get; private set; }
+        public bool IsOpeningDuringOnOpen { get; private set; }
+
+        protected override async UniTask OnOpen(object userData)
+        {
+            await base.OnOpen(userData);
+
+            IsOpenDuringOnOpen = IsOpen;
+            IsOpeningDuringOnOpen = IsOpening;
+        }
+    }
+
+    /// <summary>
     /// 在 <c>OnOpen</c> 里抛异常的面板，用于验证打开失败时实例被回滚回收、不留孤儿。
     /// </summary>
     public class ThrowingPanel : FakePanel

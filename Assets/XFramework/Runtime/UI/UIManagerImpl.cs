@@ -274,6 +274,12 @@ namespace XFramework.XUI
                 committed = true;
                 opened = panel;
 
+                // 面板可能在自己的 OnOpen 里就把自己关了（此时它已回池）。那种情况下
+                // 「打开完成」并没有发生，故跳过下面两个表达该语义的回调，但仍把实例
+                // 返回给调用方——调用方应检查 IsOpen。
+                if (!_activePanels.ContainsKey(type))
+                    return panel;
+
                 MessageManager.Publish(new PanelOpenedMessage(type));
 
                 // ★ Controller 拦截点：打开后回调
@@ -812,8 +818,15 @@ namespace XFramework.XUI
             if (panel == null)
                 return false;
 
-            // 取消语义：OnBeforeCloseAsync 放行即视为提交，此后忽略取消、一路关到底——
-            // 「已从集合摘除但未回池」的半关状态比「取消失效」难排查得多。
+            cancellationToken.ThrowIfCancellationRequested();
+
+            // 面板在自己的 OnOpen 里请求关闭时，延迟到 OnOpen 返回之后再关：
+            // 在 OnOpen 的调用栈上重入 OnClose 与关闭动画，子类几乎必然写出
+            // 「先初始化再被清理」的乱序。
+            if (panel.IsOpening)
+                await panel.WaitWhileOpeningAsync();
+
+            // 等待期间令牌可能已被取消；此时尚未到达提交点，取消仍然有效
             cancellationToken.ThrowIfCancellationRequested();
 
             // ★ Controller 拦截点：关闭前校验
