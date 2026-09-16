@@ -5,7 +5,6 @@ using TMPro;
 using XFramework.XLocalization;
 using XFramework.XReactive;
 using XFramework.XUI.View;
-using XFramework.XMessage.Internal;
 
 namespace XFramework.XUI.Data
 {
@@ -402,6 +401,35 @@ namespace XFramework.XUI.Data
             {
                 _toggle.onValueChanged.RemoveListener(_onToggleChanged);
                 _upstream?.Dispose();
+            }
+        }
+
+        #endregion
+
+        #region Internal — Disposable Helper
+
+        /// <summary>
+        /// 把 Action 适配成 <see cref="IDisposable"/>。
+        /// <para>刻意在模块内自带一份，而不是引用 <c>XMessage.Internal</c> 里的同名工具：为一个
+        /// 十行的适配器把 UI 模块绑到 Message 的内部命名空间上不划算，且那属于跨模块的实现细节依赖。</para>
+        /// </summary>
+        private sealed class ActionDisposable : IDisposable
+        {
+            private readonly Action _onDispose;
+
+            private ActionDisposable(Action onDispose)
+            {
+                _onDispose = onDispose;
+            }
+
+            public static IDisposable Create(Action onDispose)
+            {
+                return onDispose == null ? null : new ActionDisposable(onDispose);
+            }
+
+            public void Dispose()
+            {
+                _onDispose?.Invoke();
             }
         }
 
