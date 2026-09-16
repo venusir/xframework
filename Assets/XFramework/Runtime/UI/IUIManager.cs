@@ -127,18 +127,33 @@ namespace XFramework.XUI
         #region Modal Mask
 
         /// <summary>
-        /// 显示模态遮罩，阻止下方 UI 交互。
-        /// <para>遮罩位于 <paramref name="maskLayer"/> 层级，默认为 500。</para>
+        /// 显示模态遮罩，阻止下方 UI 交互，并返回一个引用计数句柄。
+        /// <para>遮罩按引用计数：只有全部句柄都释放后才真正隐藏，多个系统各自需要遮罩时不再互相踩。</para>
+        /// </summary>
+        /// <param name="style">遮罩样式（层级、颜色、点击是否关闭）。</param>
+        /// <param name="owner">持有者面板（可选）。面板关闭时其持有会被自动释放。</param>
+        /// <returns>遮罩句柄。不关心时可直接丢弃，但那样就退化成「谁都能关」。</returns>
+        UIMaskHandle ShowMask(UIMaskStyle style, UIPanelBase owner = null);
+
+        /// <summary>
+        /// 显示模态遮罩（简写形式），并返回引用计数句柄。
         /// </summary>
         /// <param name="maskLayer">遮罩所在层级。</param>
         /// <param name="alpha">遮罩透明度 (0-1)。</param>
-        /// <param name="clickToClose">点击遮罩是否自动关闭堆栈顶层面板。</param>
-        void ShowMask(int maskLayer = 500, float alpha = 0.5f, bool clickToClose = false);
+        /// <param name="clickToClose">点击遮罩是否关闭显示栈顶部的面板。</param>
+        UIMaskHandle ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f, bool clickToClose = false);
 
         /// <summary>
-        /// 隐藏模态遮罩。
+        /// 隐藏模态遮罩：清掉全部持有引用并隐藏。
+        /// <para>不使用句柄的调用方走这条路；用了句柄的应当 Dispose 自己的那一份。</para>
         /// </summary>
         void HideMask();
+
+        /// <summary>
+        /// 设置点击遮罩是否关闭栈顶面板。对已存在的遮罩同样生效。
+        /// </summary>
+        /// <param name="clickToClose">是否开启。</param>
+        void SetMaskClickToClose(bool clickToClose);
 
         /// <summary>
         /// 遮罩是否正在显示。

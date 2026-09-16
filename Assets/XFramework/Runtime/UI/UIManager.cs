@@ -333,11 +333,26 @@ namespace XFramework.XUI
 
         #region Public API — Modal Mask
 
-        /// <inheritdoc cref="IUIManager.ShowMask"/>
-        public static void ShowMask(int maskLayer = 500, float alpha = 0.5f, bool clickToClose = false)
+        /// <inheritdoc cref="IUIManager.ShowMask(UIMaskStyle, UIPanelBase)"/>
+        public static UIMaskHandle ShowMask(UIMaskStyle style, UIPanelBase owner = null)
         {
             EnsureGlobalInitialized();
-            _instance.ShowMask(maskLayer, alpha, clickToClose);
+            return _instance.ShowMask(style, owner);
+        }
+
+        /// <inheritdoc cref="IUIManager.ShowMask(int, float, bool)"/>
+        public static UIMaskHandle ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f,
+            bool clickToClose = false)
+        {
+            EnsureGlobalInitialized();
+            return _instance.ShowMask(maskLayer, alpha, clickToClose);
+        }
+
+        /// <inheritdoc cref="IUIManager.SetMaskClickToClose"/>
+        public static void SetMaskClickToClose(bool clickToClose)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetMaskClickToClose(clickToClose);
         }
 
         /// <inheritdoc cref="IUIManager.HideMask"/>

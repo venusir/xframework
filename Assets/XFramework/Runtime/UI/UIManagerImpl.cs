@@ -51,14 +51,36 @@ namespace XFramework.XUI
             = new Dictionary<Type, string>(8);
 
         /// <summary>
-        /// 遮罩 GameObject 实例。
+        /// 遮罩 GameObject 实例（只创建一次，之后复用）。
         /// </summary>
         private GameObject _maskInstance;
+
+        /// <summary>点击关闭所用的 Button，仅在开启该功能时存在。</summary>
+        private UnityEngine.UI.Button _maskButton;
 
         /// <summary>
         /// 遮罩是否启用了点击关闭功能。
         /// </summary>
         private bool _maskClickToClose;
+
+        /// <summary>
+        /// 当前持有的遮罩引用。每个 <see cref="ShowMask(UIMaskStyle, UIPanelBase)"/> 对应一项，
+        /// 全部释放后才真正隐藏——多个系统各自需要遮罩时不再互相踩。
+        /// </summary>
+        private readonly List<MaskEntry> _maskEntries = new List<MaskEntry>(4);
+
+        /// <summary>句柄令牌发号器。单调递增，不在释放后回收——令牌复用会让已释放的旧句柄误伤新持有者。</summary>
+        private int _nextMaskToken = 1;
+
+        /// <summary>一次遮罩持有。</summary>
+        private struct MaskEntry
+        {
+            /// <summary>句柄令牌。</summary>
+            public int Token;
+
+            /// <summary>持有者面板（可为 null）。面板关闭时其持有会被自动释放。</summary>
+            public UIPanelBase Owner;
+        }
 
         /// <summary>
         /// UI 控制器。用于拦截面板打开/关闭流程。
@@ -204,10 +226,15 @@ namespace XFramework.XUI
             // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
             _assetCache.Clear();
 
-            // 隐藏遮罩
+            // 销毁遮罩。它由 new GameObject 创建、从未经 AssetManager 托管，
+            // 故直接销毁即可——早先走 AssetManager.DestroyInstance 会让 Dispose
+            // 依赖 AssetManager 存活（后者未初始化时直接抛异常）
+            _maskEntries.Clear();
+            _maskButton = null;
+
             if (_maskInstance != null)
             {
-                AssetManager.DestroyInstance(_maskInstance);
+                UnityEngine.Object.Destroy(_maskInstance);
                 _maskInstance = null;
             }
 
@@ -519,60 +546,163 @@ namespace XFramework.XUI
 
         #region Modal Mask
 
-        public void ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f, bool clickToClose = false)
+        public UIMaskHandle ShowMask(UIMaskStyle style, UIPanelBase owner = null)
         {
             EnsureInitialized();
 
-            if (_maskInstance != null)
-            {
-                _maskInstance.SetActive(true);
-            }
-            else
-            {
-                // 创建一个简单的全屏遮罩
-                _maskInstance = new GameObject("UIManager_Mask", typeof(RectTransform));
-                var rt = _maskInstance.GetComponent<RectTransform>();
-                rt.SetParent(UIRoot, false);
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.sizeDelta = Vector2.zero;
-                rt.anchoredPosition = Vector2.zero;
+            EnsureMaskInstance();
+            ApplyMaskStyle(style);
+            ApplyMaskClickToClose(style.ClickToClose);
 
-                // Canvas 用于设置排序层级
-                var maskCanvas = _maskInstance.AddComponent<Canvas>();
-                maskCanvas.overrideSorting = true;
-                maskCanvas.sortingOrder = UISorting.MaskOrder(maskLayer);
+            int token = _nextMaskToken++;
+            _maskEntries.Add(new MaskEntry { Token = token, Owner = owner });
 
-                // Image 用于渲染颜色
-                var maskImage = _maskInstance.AddComponent<UnityEngine.UI.Image>();
-                maskImage.color = new Color(0, 0, 0, alpha);
+            _maskInstance.SetActive(true);
+            return new UIMaskHandle(this, token);
+        }
 
-                // 如果需要点击关闭，添加 Button
-                if (clickToClose)
-                {
-                    var button = _maskInstance.AddComponent<UnityEngine.UI.Button>();
-                    button.onClick.AddListener(OnMaskClicked);
-                    _maskClickToClose = true;
-                }
-            }
-
-            // 更新排序
-            var canvas = _maskInstance.GetComponent<Canvas>();
-            if (canvas != null)
-                canvas.sortingOrder = UISorting.MaskOrder(maskLayer);
-
-            // 更新透明度
-            var img = _maskInstance.GetComponent<UnityEngine.UI.Image>();
-            if (img != null)
-                img.color = new Color(0, 0, 0, alpha);
+        public UIMaskHandle ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f, bool clickToClose = false)
+        {
+            return ShowMask(new UIMaskStyle(maskLayer, new Color(0f, 0f, 0f, alpha), clickToClose));
         }
 
         public void HideMask()
         {
+            // 不接受句柄的调用方走这条路：清掉全部引用并隐藏
+            _maskEntries.Clear();
+
             if (_maskInstance != null)
-            {
                 _maskInstance.SetActive(false);
+        }
+
+        public void SetMaskClickToClose(bool clickToClose)
+        {
+            EnsureInitialized();
+
+            // 样式属于每一次 ShowMask 调用，本方法只用于「正在显示时改」。
+            // 没有遮罩时无对象可改，出声而不是静默丢弃。
+            if (_maskInstance == null)
+            {
+                Debug.LogWarning(
+                    "[UIManager] SetMaskClickToClose: 遮罩尚未显示，本次调用无效。" +
+                    "请在 ShowMask 的 UIMaskStyle 里指定 ClickToClose。");
+                return;
             }
+
+            ApplyMaskClickToClose(clickToClose);
+        }
+
+        /// <summary>
+        /// 释放指定面板持有的全部遮罩引用。面板关闭时调用，于是「面板自己开的遮罩」
+        /// 不需要调用方记得配对关闭。
+        /// </summary>
+        private void ReleaseMasksOwnedBy(UIPanelBase panel)
+        {
+            for (int i = _maskEntries.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(_maskEntries[i].Owner, panel))
+                    _maskEntries.RemoveAt(i);
+            }
+
+            if (_maskEntries.Count == 0 && _maskInstance != null)
+                _maskInstance.SetActive(false);
+        }
+
+        /// <summary>句柄是否仍然有效。</summary>
+        internal bool IsMaskHandleAlive(int token)
+        {
+            for (int i = 0; i < _maskEntries.Count; i++)
+            {
+                if (_maskEntries[i].Token == token)
+                    return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>释放一个句柄。幂等——重复释放不影响其它持有者。</summary>
+        internal void ReleaseMask(int token)
+        {
+            for (int i = 0; i < _maskEntries.Count; i++)
+            {
+                if (_maskEntries[i].Token != token)
+                    continue;
+
+                _maskEntries.RemoveAt(i);
+                break;
+            }
+
+            if (_maskEntries.Count == 0 && _maskInstance != null)
+                _maskInstance.SetActive(false);
+        }
+
+        /// <summary>
+        /// 创建遮罩实例（只做一次，之后复用）。不在此处挂 Button——点击开关由
+        /// <see cref="ApplyMaskClickToClose"/> 单独管理，以便随时开关。
+        /// </summary>
+        private void EnsureMaskInstance()
+        {
+            if (_maskInstance != null)
+                return;
+
+            _maskInstance = new GameObject("UIManager_Mask", typeof(RectTransform));
+            var rt = _maskInstance.GetComponent<RectTransform>();
+            rt.SetParent(UIRoot, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+
+            var maskCanvas = _maskInstance.AddComponent<Canvas>();
+            maskCanvas.overrideSorting = true;
+
+            _maskInstance.AddComponent<UnityEngine.UI.Image>();
+        }
+
+        /// <summary>
+        /// 应用样式。每次 ShowMask 都重设排序与颜色——多个系统各按自己的样式打开时，
+        /// 以最后一次为准（遮罩是单实例，不按持有者分身份）。
+        /// </summary>
+        private void ApplyMaskStyle(UIMaskStyle style)
+        {
+            if (_maskInstance == null)
+                return;
+
+            var canvas = _maskInstance.GetComponent<Canvas>();
+            if (canvas != null)
+                canvas.sortingOrder = UISorting.MaskOrder(style.Layer);
+
+            var image = _maskInstance.GetComponent<UnityEngine.UI.Image>();
+            if (image != null)
+                image.color = style.Color;
+        }
+
+        /// <summary>
+        /// 应用点击关闭开关。创建路径与后续切换共用这一段，于是「事后改 clickToClose」也真的生效
+        /// ——早先这个开关只在创建遮罩的那条分支里被读过。
+        /// </summary>
+        /// <remarks>
+        /// 开关用 <c>Button.enabled</c> 而非增删组件：<c>Object.Destroy</c> 要到帧末才生效，
+        /// 切换后同帧查询仍会看到残留组件；而反复增删也不符合本框架「少折腾对象」的取向。
+        /// 被禁用的 <c>Selectable</c> 不再响应点击，但遮罩自身的 Image 照常挡射线，语义正确。
+        /// </remarks>
+        private void ApplyMaskClickToClose(bool clickToClose)
+        {
+            _maskClickToClose = clickToClose;
+
+            if (_maskInstance == null)
+                return;
+
+            if (_maskButton == null)
+            {
+                if (!clickToClose)
+                    return;
+
+                _maskButton = _maskInstance.AddComponent<UnityEngine.UI.Button>();
+                _maskButton.onClick.AddListener(OnMaskClicked);
+            }
+
+            _maskButton.enabled = clickToClose;
         }
 
         private void OnMaskClicked()
@@ -916,6 +1046,9 @@ namespace XFramework.XUI
             // 从字典和显示栈中移除
             _activePanels.Remove(type);
             _stack.Remove(panel);
+
+            // 面板自己打开的遮罩随它一起释放，无需调用方记得配对关闭
+            ReleaseMasksOwnedBy(panel);
 
             // 执行关闭逻辑（动画 + OnClose，不再自行 Destroy）
             await panel.DoCloseAsync(immediate);
