@@ -4,6 +4,7 @@ using UnityEngine.UI;
 using TMPro;
 using XFramework.XLocalization;
 using XFramework.XReactive;
+using XFramework.XUI.View;
 using XFramework.XMessage.Internal;
 
 namespace XFramework.XUI.Data
@@ -141,8 +142,24 @@ namespace XFramework.XUI.Data
 
         #region Localization
 
-        /// <summary>将 TMP_Text 绑定到本地化键值。语言切换时自动刷新文本。</summary>
+        /// <summary>
+        /// 将 TMP_Text 绑定到本地化键值。语言切换时自动刷新文本。
+        /// <para>订阅会登记到最近的 <see cref="UIViewBase"/> 祖先（面板 / HUD）上，随其回池自动释放。
+        /// 若该文本不在任何视图下，调用方需自行释放返回的句柄。</para>
+        /// </summary>
         public static IDisposable BindToLocalizedText(this TMP_Text text, string localizationKey)
+        {
+            return BindToLocalizedText(text, localizationKey, ResolveOwner(text));
+        }
+
+        /// <summary>
+        /// 将 TMP_Text 绑定到本地化键值，并把订阅登记到指定视图上。
+        /// <para>显式传 <paramref name="owner"/> 优先于自动查找，推荐在面板内直接传入 <c>this</c>。</para>
+        /// </summary>
+        /// <param name="text">目标文本组件。</param>
+        /// <param name="localizationKey">本地化键。</param>
+        /// <param name="owner">订阅宿主视图；传 null 则返回的句柄需调用方自行释放。</param>
+        public static IDisposable BindToLocalizedText(this TMP_Text text, string localizationKey, UIViewBase owner)
         {
             if (text == null || string.IsNullOrEmpty(localizationKey)) return null;
 
@@ -150,8 +167,21 @@ namespace XFramework.XUI.Data
             text.text = LocalizationManager.Get(localizationKey);
 
             // 订阅语言变更消息，自动刷新
-            return LocalizationManager.Subscribe(_ =>
+            var subscription = LocalizationManager.Subscribe(_ =>
                 text.text = LocalizationManager.Get(localizationKey));
+
+            // 归口到视图生命周期：面板是回池而非销毁，返回裸句柄等于把释放责任推给调用方，
+            // 而调用方通常遗忘它——每次打开都会多一条全局订阅
+            return owner != null ? owner.Track(subscription) : subscription;
+        }
+
+        /// <summary>
+        /// 沿父级查找最近的 <see cref="UIViewBase"/>，作为订阅宿主。
+        /// <para>含未激活节点：绑定时中间层可能尚未激活。</para>
+        /// </summary>
+        private static UIViewBase ResolveOwner(TMP_Text text)
+        {
+            return text != null ? text.GetComponentInParent<UIViewBase>(true) : null;
         }
 
         #endregion

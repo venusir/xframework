@@ -203,6 +203,10 @@ namespace XFramework.XUI
             // 关闭 HUD（不等待动画完成，Forget）
             hud.DoCloseAsync(immediate: true).Forget();
 
+            // 回池前复位：释放 Track 登记的订阅并清 Canvas 排序——HUD 同样是回池而非销毁，
+            // 漏掉这一步会让排序值一直留在实例上（复用时可能盖住不该盖的面板）
+            hud.OnPoolRecycle();
+
             // 回池
             if (hud.gameObject != null)
             {

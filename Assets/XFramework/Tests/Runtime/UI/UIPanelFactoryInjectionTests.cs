@@ -72,7 +72,7 @@ namespace XFramework.XUI.Tests
 
             Assert.AreEqual(1, _factory.ReleaseCount, "关闭应经工厂回池，而非直接销毁");
             Assert.IsFalse(UIManager.IsOpen<FakePanel>());
-            Assert.AreEqual(1, _factory.Pool.Count, "回池的面板应留在池中");
+            Assert.AreEqual(1, _factory.PooledCount, "回池的面板应留在池中");
         }
 
         [Test]

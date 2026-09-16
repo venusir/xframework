@@ -22,8 +22,12 @@ namespace XFramework.XUI.Tests
         /// <summary>本工厂造出的全部物体，供 fixture 收尾销毁（假工厂不回池销毁，故必须显式清）。</summary>
         private readonly List<GameObject> _created = new List<GameObject>();
 
-        /// <summary>回池的面板（对齐 AssetManager 语义：只失活，不销毁）。</summary>
-        private readonly List<UIPanelBase> _pool = new List<UIPanelBase>();
+        /// <summary>
+        /// 按资源地址索引的实例池，键与 <c>AssetManager</c> 一致（location）。
+        /// <para>取用侧必须真的复用：只记录释放而不查询，会让「回池不销毁」这个前提在测试里失效。</para>
+        /// </summary>
+        private readonly Dictionary<string, Stack<UIPanelBase>> _pool
+            = new Dictionary<string, Stack<UIPanelBase>>();
 
         #endregion
 
@@ -35,8 +39,17 @@ namespace XFramework.XUI.Tests
         /// <summary>回收次数。</summary>
         public int ReleaseCount { get; private set; }
 
-        /// <summary>当前池中的面板。</summary>
-        public IReadOnlyList<UIPanelBase> Pool => _pool;
+        /// <summary>当前池中闲置的面板总数。</summary>
+        public int PooledCount
+        {
+            get
+            {
+                int total = 0;
+                foreach (var stack in _pool.Values)
+                    total += stack.Count;
+                return total;
+            }
+        }
 
         /// <summary>
         /// 设置后 <see cref="CreateAsync{T}"/> 会先等这个信号，用于制造「在途打开」窗口以测试并发去重。
@@ -86,6 +99,22 @@ namespace XFramework.XUI.Tests
             if (Gate != null)
                 await Gate.Task.AttachExternalCancellation(cancellationToken);
 
+            // 取用侧复用：命中同地址的闲置实例则直接激活复用，不重新实例化
+            if (_pool.TryGetValue(assetPath, out var stack) && stack.Count > 0)
+            {
+                var pooled = stack.Pop();
+
+                if (pooled is T typed && pooled.gameObject != null)
+                {
+                    pooled.transform.SetParent(parent, false);
+                    pooled.gameObject.SetActive(true);
+                    return typed;
+                }
+
+                if (pooled != null && pooled.gameObject != null)
+                    stack.Push(pooled); // 类型不符：放回去，走新建
+            }
+
             if (!_creators.TryGetValue(typeof(T), out var creator))
             {
                 Debug.LogError($"[FakePanelFactory] 未注册的面板类型：{typeof(T).Name}");
@@ -106,7 +135,20 @@ namespace XFramework.XUI.Tests
             // 对齐 AssetManager 的回池语义：失活 + 脱离父节点，不销毁
             panel.gameObject.SetActive(false);
             panel.transform.SetParent(null, false);
-            _pool.Add(panel);
+
+            // 按地址入池，供下次同地址的 CreateAsync 复用。地址未标记（异常回滚的早期路径）
+            // 时不入池，留在 _created 里由 fixture 收尾销毁。
+            var location = panel.AssetPath;
+            if (string.IsNullOrEmpty(location))
+                return;
+
+            if (!_pool.TryGetValue(location, out var stack))
+            {
+                stack = new Stack<UIPanelBase>();
+                _pool[location] = stack;
+            }
+
+            stack.Push(panel);
         }
 
         #endregion

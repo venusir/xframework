@@ -142,6 +142,27 @@ namespace XFramework.XUI.View
 
         #endregion
 
+        #region UIViewBase Implementation — Pool Recycle
+
+        /// <summary>
+        /// 面板即将回池：释放随视图登记的订阅，并解绑 ViewModel。
+        /// <para>解绑必须挂在回池点而非关闭点——关闭是逻辑操作，可被
+        /// <see cref="Controller.IUIController.OnBeforeCloseAsync"/> 返回 false 拦下，
+        /// 此时面板仍然开着，解绑是误伤。</para>
+        /// </summary>
+        protected internal override void OnPoolRecycle()
+        {
+            base.OnPoolRecycle();
+
+            // 优先用已缓存的引用，兜底 GetComponent：调用方可能绕过 Binding 属性直接
+            // GetComponent<UIPanelBinding>().Bind(vm)，那时 _binding 仍是 null。
+            // 回池不是每帧路径，这一次 GetComponent 可以接受。
+            var binding = _binding != null ? _binding : GetComponent<UIPanelBinding>();
+            binding?.Unbind();
+        }
+
+        #endregion
+
         #region Convenience Methods
 
         /// <summary>

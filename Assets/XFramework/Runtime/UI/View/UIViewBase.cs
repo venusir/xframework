@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
@@ -18,6 +19,57 @@ namespace XFramework.XUI.View
 
         private Canvas _canvas;
         private GraphicRaycaster _raycaster;
+
+        /// <summary>
+        /// 随本视图回池自动释放的订阅。懒分配——多数视图不登记任何东西。
+        /// </summary>
+        private List<IDisposable> _tracked;
+
+        #endregion
+
+        #region Public API — Lifetime-bound Subscriptions
+
+        /// <summary>
+        /// 登记一个 <see cref="IDisposable"/>，它将在本视图回池时自动释放。
+        /// <para>这是「订阅随视图生命周期自动释放」的唯一出口。面板与 HUD 都是<strong>回池而非销毁</strong>，
+        /// 挂在 <c>OnDestroy</c> 上的释放永远不会触发——关闭后订阅会一直存活到下次打开同一面板，
+        /// 若此后再不打开就永久驻留。</para>
+        /// </summary>
+        /// <param name="disposable">要登记的订阅；为 null 时原样返回，不登记。</param>
+        /// <returns>传入的 <paramref name="disposable"/>，便于在赋值语句里链式使用。</returns>
+        /// <example>
+        /// <code>
+        /// // 在 OnOpen 里
+        /// Track(LocalizationManager.Subscribe(_ =&gt; Refresh()));
+        /// Track(UIBinder.BindToText(vm.Title, titleText));
+        /// </code>
+        /// </example>
+        public IDisposable Track(IDisposable disposable)
+        {
+            if (disposable == null)
+                return null;
+
+            if (_tracked == null)
+                _tracked = new List<IDisposable>(4);
+
+            _tracked.Add(disposable);
+            return disposable;
+        }
+
+        /// <summary>
+        /// 释放全部已登记的订阅。回池时由 <see cref="OnPoolRecycle"/> 调用。
+        /// </summary>
+        private void DisposeTracked()
+        {
+            if (_tracked == null)
+                return;
+
+            for (int i = 0; i < _tracked.Count; i++)
+                _tracked[i]?.Dispose();
+
+            // 保留 List 实例以便复用，只清元素
+            _tracked.Clear();
+        }
 
         #endregion
 
@@ -95,10 +147,12 @@ namespace XFramework.XUI.View
 
         /// <summary>
         /// 视图即将回池时由框架调用。子类可重写以重置自定义状态。
-        /// <para>基类实现重置 Canvas.sortingOrder 和 overrideSorting。</para>
+        /// <para>基类实现释放 <see cref="Track"/> 登记的订阅，并重置 Canvas.sortingOrder 与 overrideSorting。</para>
         /// </summary>
         protected internal virtual void OnPoolRecycle()
         {
+            DisposeTracked();
+
             if (Canvas != null)
             {
                 Canvas.sortingOrder = 0;
