@@ -14,8 +14,9 @@ Message 模块提供**全局消息总线**与支撑它的**事件流引擎**。�
 Runtime/Message/
 ├── IMessageBroker.cs             # IMessagePublisher/IMessageSubscriber(公开)+ IMessageBroker(internal)
 ├── MessageBroker.cs              # 消息代理内部实现(订阅直落事件流)
-├── MessageManager.cs             # 静态外观(全局入口) + 节点扩展方法
+├── MessageManager.cs             # 静态外观(全局入口) + 标记接口扩展方法
 ├── IMessageFilter.cs             # 消息过滤器接口
+├── IDestroyCancellationToken.cs  # 销毁令牌契约(订阅自动退订的绑定对象)
 └── Internal/                     # 自研事件流引擎(零外部依赖,internal)
     ├── EventStream.cs            # 事件流(可投递/订阅/完成/退订)+ 订阅节点池
     ├── BufferedEventStream.cs    # 缓冲 1 条的事件流(订阅即重放最近一条)
@@ -74,7 +75,7 @@ MessageManager.SubscribeAsync<PlayerDiedMessage>(async (msg, ct) =>
 subscription.Dispose();
 ```
 
-**异步订阅的令牌语义**：处理器收到的 `ct` 就是订阅自身的令牌，退订即取消它，故 `await` 会随退订提前结束；同时 `SubscribeAsync` 的 `cancellationToken` 参数**与订阅生命周期绑定——令牌取消即自动退订**（与 `AddTo` 一致），传入已取消的令牌则不会登记。
+**异步订阅的令牌语义**：处理器收到的 `ct` 就是订阅自身的令牌，退订即取消它，故 `await` 会随退订提前结束；同时 `SubscribeAsync` 的 `cancellationToken` 参数**与订阅生命周期绑定——令牌取消即自动退订**，传入已取消的令牌则不会登记。
 
 异步处理器独立登记在通道的异步列表中，不占同步订阅链：同步 `Publish` 以 fire-and-forget 触发它，`PublishAsync` 则会等待。
 
@@ -257,21 +258,31 @@ var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId)
 
 `ChannelStoreCount` 是两张通道表（类型通道表 + 键值通道表）的**表项数之和**，**不是消息类型的个数**——同一消息类型若既有类型通道又配了键值通道，或配了多种 Key 类型，都会各占一项。它衡量的是表的规模，用来确认「该消失的表项是否真的消失了」（例如实体的最后一个 Key 被淘汰后，键值存储表项应当一并摘除）。
 
-## 节点扩展方法
+## 标记接口扩展方法
 
-`BaseNode` 已实现 `IMessagePublisher` / `IMessageSubscriber`，因此**所有节点**直接可用便捷的扩展方法（无需再在派生类上重复声明接口）:
+实现 `IMessagePublisher` / `IMessageSubscriber` 的类型可直接用 `this.Publish()` / `this.Subscribe()` 等扩展方法，无需每次都写 `MessageManager.` 前缀:
 
 ```csharp
-public class MyNode : EntityNode
-{
-    protected override void OnStart()
-    {
-        base.OnStart();
+using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
+using XFramework.XMessage;
 
+public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancellationToken
+{
+    readonly CancellationTokenSource _cts = new CancellationTokenSource();
+
+    public CancellationToken DestroyCancellationToken => _cts.Token;
+
+    public void Start()
+    {
         // 发布消息
         this.Publish(new CoinChangedMessage { NewAmount = 200 });
 
-        // 订阅消息(自动绑定节点生命周期,节点销毁时自动取消订阅)
+        // 带 Key 的发布
+        this.Publish("Score", 500);
+
+        // 订阅消息(自动绑定销毁时机,对象销毁时自动取消订阅)
         this.Subscribe<PlayerDiedMessage>(msg =>
         {
             Debug.Log($"{msg.PlayerName} 死了");
@@ -289,15 +300,17 @@ public class MyNode : EntityNode
             Debug.Log($"当前状态: {msg.NewState}");
         });
 
-        // 带 Key 的发布
-        this.Publish("Score", 500);
+        // 带 Key 的订阅
+        this.Subscribe<string, int>("Score", score => Debug.Log($"分数: {score}"));
     }
+
+    public void Dispose() => _cts.Cancel();
 }
 ```
 
-消息类型**不限 struct/class**。节点侧只镜像了**类型级**的 `Subscribe` / `SubscribeAsync` / `SubscribeBuffered`；带 Key 的订阅、以及带过滤条件的缓冲订阅，请用 `MessageManager.Subscribe(key, handler).AddToNode(this)` 这类组合写法——不直接补成节点重载，是因为 `(TKey, Action<TMessage>)` 会捕获本意为过滤器的委托实参，见 `NodeExtensions` 中的重载决议说明。
+消息类型**不限 struct/class**。类型级与带 Key 的 `Subscribe` / `SubscribeAsync` / `SubscribeBuffered` 均有对应扩展重载（含过滤条件重载），无需退回静态 API 组合。
 
-非节点类型实现 `IMessageSubscriber` 后也能用 `this.Subscribe()`，但**仅当它是 `MonoBehaviour` 时**才自动绑定销毁时机。
+订阅自动绑定订阅者的销毁时机：`MonoBehaviour` 用其 `destroyCancellationToken`，普通 C# 对象实现 `IDestroyCancellationToken`（定义于本模块）即可；两者皆非时不会自动绑定，需自行持有返回的 `IDisposable`。
 
 ## 适用场景与选型
 
@@ -313,16 +326,16 @@ public class MyNode : EntityNode
 | 类内部或对象级的私有回调 | C# `event` |
 | 每帧高频、性能敏感的路径 | C# `event` 或直接调用（消息总线要付通道查找与锁的开销） |
 
-**何时不要用消息总线**：一对一、调用链本就清晰时，直接调用或接口注入更好——消息总线会切断调用链，调试时难回答「这条消息是谁发的、谁收的」；框架自身也保留了 `Pipeline`、`BaseNode` 生命周期、`AssetDownloaderHandle` 等处的 C# event 便属此类。
+**何时不要用消息总线**：一对一、调用链本就清晰时，直接调用或接口注入更好——消息总线会切断调用链，调试时难回答「这条消息是谁发的、谁收的」；框架自身也保留了 `Pipeline` 生命周期、`AssetDownloaderHandle` 等处的 C# event 便属此类。
 
 > 框架内确实存在功能重叠：`SettingsChangedMessage`（走消息总线）与 `ConfigManager.ConfigChanged`（走 C# event）是同一类需求的两种实现。选型以「是否跨模块」为准，而非以「哪个更先进」为准。
 
 ## 设计原则
 
 - **自研引擎驱动** — 基于零依赖的轻量事件引擎(锁 + 快照线程模型、订阅节点池),性能优异且内存安全
-- **生命周期绑定** — 节点的消息订阅自动绑定到节点生命周期,节点销毁时自动取消
+- **生命周期绑定** — 订阅可自动绑定到订阅者生命周期(MonoBehaviour 或 `IDestroyCancellationToken`),对象销毁时自动取消
 - **类型安全** — 消息通过泛型类型标识,编译期安全
-- **双模式访问** — 同时支持静态 API(非节点类)和节点扩展方法
+- **双模式访问** — 同时支持静态 API 与标记接口扩展方法
 - **请求-响应支持** — 提供异步请求-响应模式,适合服务定位场景
 - **全局过滤器** — 支持注册全局消息过滤器,统一拦截和处理
 - **异常隔离** — 订阅回调/过滤条件抛异常记 Error 日志后继续,不影响其他订阅者

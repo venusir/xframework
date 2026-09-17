@@ -44,8 +44,9 @@ Runtime/Asset/
 ```csharp
 using XFramework.XAsset;
 
-// 方式一：通过节点树自动初始化（推荐）
-// ServiceInitializerNode 内包含 AssetBootstrapNode（IPhaseStage，Phase 0），自动处理初始化
+// 方式一：交给 Bootstrap 引导管线（推荐）
+// Bootstrap.RegisterDefaults() 会登记 AssetBootstrapStage（Phase 0）自动处理初始化；
+// 也可单独登记：Bootstrap.Register(new AssetBootstrapStage());
 
 // 方式二：手动初始化
 await AssetManager.InitializeAsync();
@@ -334,10 +335,6 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | `GetPoolStatus(string location)` | 返回 `(pooledCount, activeCount, maxPoolSize)` 三元组（调试用） |
 | `DestroyInstance(GameObject instance)` / `DestroyInstance<T>(T component)` | 回池（池未满）或销毁实例，引用自动释放 |
 
-### 节点扩展（`AssetExtensions`，`XFramework.XNode`）
-
-定义于 Node 模块（命名空间 `XFramework.XNode`，文件 `Runtime/Node/AssetExtensions.cs`）。节点内便捷糖，全部委托门面：`LoadAssetAsync<T>`（2 重载）、`InstantiateAssetAsync`（4 重载）、`LoadSceneAssetAsync`、`PreloadAssetsAsync`、`SetAssetPoolMaxSize`、`GetAssetPoolStatus`、`DestroyAssetInstance`（2 重载）。仅限节点内使用（`this` 必须是 `IBaseNode`）；非节点代码直接用门面。
-
 ## 加载模式选择
 
 按场景选择 API 的决策清单：
@@ -355,44 +352,6 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | 内存告警 / 切关卡 | `UnloadUnusedAssetsAsync` | 只回收引用计数为 0 的资源 |
 | 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见快速使用 7） |
 | 预判断资源状态 | `CheckLocationValid` / `IsNeedDownloadFromRemote` | 纯查询，失败不抛异常 |
-
-## 节点扩展方法
-
-`AssetExtensions`（`XFramework.XNode`，定义于 Node 模块）为节点树中的任意节点（实现 `IBaseNode`）提供便捷方法，全部委托 `AssetManager` 门面：
-
-```csharp
-using Cysharp.Threading.Tasks;
-using XFramework.XNode;
-
-public class MyNode : EntityNode
-{
-    protected override void OnStart()
-    {
-        base.OnStart();
-
-        // OnStart 是同步生命周期回调：异步加载放入私有 async UniTask 方法，用 Forget() 启动
-        LoadResourcesAsync().Forget();
-    }
-
-    private async UniTask LoadResourcesAsync()
-    {
-        // 加载资源（句柄用 using 管理，离开块自动释放引用计数，不释放会泄漏）
-        using (var handle = await this.LoadAssetAsync<GameObject>("characters/player"))
-        {
-            var prefab = handle.Asset;
-            // ... 使用 prefab ...
-        }
-
-        // 加载并实例化（自动走对象池，实例销毁时经 InstanceTracker 自动释放引用）
-        var go = await this.InstantiateAssetAsync("characters/enemy");
-        this.DestroyAssetInstance(go);
-    }
-}
-```
-
-> **注意**：`OnStart` 是同步生命周期回调，不能写成 `async void`（节点不是 Unity 生命周期入口，异常无兜底）。异步操作放入私有 `async UniTask` 方法后用 `Forget()` 启动。
-> `EntityNode` 是纯 C# 节点，没有 `transform` 成员；需要指定挂载父物体时，把外部 `Transform` 传给 `InstantiateAssetAsync` 的 `parent` 参数。
-> 加载过程可传入 `this.DestroyCancellationToken`，节点销毁时自动中止。
 
 ## 内部机制
 
@@ -487,8 +446,7 @@ RequestPackageVersionAsync → 检查远端新版本号
 
 ## 与相关模块的关系
 
-- **XFramework.XPipeline**（相位分组编排）：`AssetBootstrapNode`（`IPhaseStage`，Phase 0）负责自动初始化；初始化步骤进度经 `AssetInitReport`（本模块自持中性载荷）上报，由引导节点直写管线阶段上下文——本模块对 Pipeline 零类型依赖（单向：Node → Pipeline）
-- **XFramework.XNode**：`AssetExtensions` 定义于 Node 模块（`XFramework.XNode` 命名空间），内部委托本模块 `AssetManager` 门面——依赖方向 Node → Asset；节点代码可直接调用，非节点代码（MonoBehaviour、纯 C# 类）直接用门面
+- **XFramework.XBootstrap / XFramework.XPipeline**（启动引导与相位分组编排）：`AssetBootstrapStage`（`IBootstrapStage`，Phase 0）负责自动初始化；初始化步骤进度经 `AssetInitReport`（本模块自持中性载荷）上报，由引导阶段经 `AssetInitProgressRelay` 直写管线阶段上下文
 - **XFramework.XPool**：本模块内置的**实例对象池**（按 location 键、容量上限）只服务 `InstantiateAsync`；`PoolManager` 是通用对象池（任意类型池化），职责不同，两者不混用
 
 ## 设计原则
@@ -517,5 +475,5 @@ RequestPackageVersionAsync → 检查远端新版本号
   https://github.com/tuyoogame/YooAsset.git
   ```
   在 Unity 中通过 Package Manager → "Add package from git URL..." 添加。
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — `AssetBootstrapStage`（Phase 0）实现引导阶段契约与相位分组编排
 - `UniTask`（框架层已提供）
-- `XFramework.XNode` — `AssetExtensions` 节点扩展定义于 Node 模块，委托本模块 `AssetManager` 门面（依赖方向：Node → Asset，见「与相关模块的关系」）

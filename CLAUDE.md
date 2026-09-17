@@ -6,18 +6,19 @@
 - Unity 版本:6000.4.5f1(开发环境);package.json 最低要求 `6000.3`
 - API 兼容级别:.NET Standard 2.1;序列化模式:Force Text
 - Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、TextMeshPro、Input System
+- **不预设 GamePlay 架构:** 框架只提供正交的基础设施与编排原语,不为使用方决定实体模型、生命周期树、时间模型或状态管理方式。任何「使用方必须按某种架构组织游戏逻辑」的设计都不属于本框架
 
 ## 总体原则
 
 - **原子化:** 每次只完成一个逻辑明确、可独立验证的任务,代码易于 review 和原子提交
 - **避免臆测:** 需求不明确或对 API 行为不确定时,先提问而不是猜测
-- **单一职责 / 组合优于继承:** 每个类只负责一个核心功能;优先组件组合(如 EntityNode 的 GetComponent 模式),避免深继承
+- **单一职责 / 组合优于继承:** 每个类只负责一个核心功能;优先组件组合,避免深继承
 - **性能与 GC:** 框架代码供第三方游戏在运行时使用,必须控制 GC 分配(见「性能与 GC 约定」)
 - **测试:** 完成逻辑后编写单元测试并提供验证步骤。Claude 用 `Tools/run-tests.ps1` 自测:改完一个模块以 `-Filter <类名片段>` 定向跑,阶段收尾跑一次全量。**门禁是「全量 0 失败」,不写固定例数**——例数随开发增长,写进规则必然定期过期(它的真相来源是 runner 的输出,抄进来就是第二份真相)。**每个 fixture 必须复位它触碰的静态门面**——PlayMode 下所有用例共享一个 player 实例,不复位即互相污染,全量的门禁价值会立刻失效
 
 ## 架构分层
 
-框架采用双路径架构,规划新模块时必须先确定归属:
+框架采用**单一路径 + 通用编排**:基础设施是彼此正交的静态服务,启动顺序由显式的引导登记表决定。规划新模块时必须先确定归属:
 
 - **静态服务(无状态):** 以「静态门面 + 接口 + 内部实现」提供。对外只暴露静态门面类和 `IXxxManager`/`IXxxProvider` 接口;实现类 `XxxManagerImpl`/`XxxProvider` 默认 `internal sealed`(仅当需要跨命名空间注入或模式匹配时才 public,如 SaveManagerImpl、DataManagerImpl)
   - 门面模板:`private static IXxxManager _impl` + `Initialize`(注入实现,便于测试)+ `Shutdown/Destroy` + `EnsureInitialized()`(未初始化抛 `InvalidOperationException`,消息带 `[模块]` 前缀和修复提示)
@@ -27,11 +28,8 @@
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
   - **门面分组:** 当静态门面成员超过约 20 个且可划分为若干内聚子系统时,用嵌套静态类分组(如 `UIManager.Panel` / `.Stack` / `.Mask` / `.Tip` / `.Hud` / `.Layer`),外层只保留 `Initialize`/`Shutdown`/`Destroy`/`EnsureInitialized` 与实例管理。分组类零状态零分配,一律转发到外层的 `_impl`。**要一次做全套**——半套会让两种风格并存,比不分组更难读
   - **门面转发不变量:** `IXxxManager` 新增成员时**必须同步在门面加转发**,否则它在第三方眼里根本不存在。反射断言能锁住形状退化,锁不住「新加的成员忘了转发」——只能靠评审。(实例:`SetLayerVisibility` 曾长期方法完整、文档也有,却只在内部实现上,门面既无转发也无实例属性,第三方实际完全不可达)
-- **节点树(有状态 GamePlay):** `XFramework.XNode` 命名空间。BaseNode → ParentNode → ContainerNode/EntityNode → RootNode,另有 LeafNode、DictionaryNode;承载需要生命周期或加载管线的服务
-- **依赖方向单向:** 节点树可以依赖并启动静态服务;静态服务绝不能引用节点树对象
-- **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。节点树可依赖并启动管线(依赖方向 Node → Pipeline);StartupAsync 装配预置阶段:收集(Weight 0)+ 每相位一个 ParallelStage + 启动(Weight 0),全局进度恒等于相位阶段进度
-- **引导阶段服务:** 需要异步初始化的服务(如 Asset、Data、Localization)包装为 `internal sealed XxxBootstrapNode : LeafNode, IPhaseStage`(Phase = 模块约定值、Name = 类型名、Weight = 1),由 ServiceInitializerNode 挂载;ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);OnDestroy 反向 Shutdown
-- **节点类模板:** override `OnAwake/OnStart/OnDestroy` 且必须调 base;不用构造函数初始化,参数走 `OnInit(object)`;需要帧更新的节点实现 `IUpdateable` 并返回 `UpdateLOD`(UpdateNode 自动注册进 UpdateManager),不写 MonoBehaviour.Update;Disposable 订阅用 `AddToNode(this)` 绑定生命周期;节点一律经 `NodeFactory`/`AddNode<T>` 创建(自动回池)
+- **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。管线对任何具体模块零依赖,可独立使用
+- **启动引导(Bootstrap):** 需要异步初始化的服务实现 `IBootstrapStage`(`IPhaseStage` + 同步 `Shutdown`;Phase = 模块约定值、Name = 类型名、Weight = 1),经 `Bootstrap.Register` **显式登记**(不反射发现),`Bootstrap.RunAsync` 用 `Pipeline.BuildPhaseGroups` 装配运行,`Bootstrap.Shutdown` 按登记顺序**逆序**清理。ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);失败与取消在 RunAsync 处**抛出**而非只留日志。阶段类归各模块自己的目录(如 `AssetBootstrapStage` 在 `Runtime/Asset/`),框架不在 Bootstrap 目录里装具体服务
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateLOD` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateLOD.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md;示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 并新建对应 asmdef(`optionalUnityReferences: TestAssemblies`)
 
@@ -44,18 +42,18 @@
 
 ## 性能与 GC 约定
 
-- **对象池:** 频繁创建销毁的对象必须走 PoolManager / CollectionPool(ListPool、HashSetPool、DictionaryPool、StringBuilderPool);节点销毁经 NodePool 自动回池
+- **对象池:** 频繁创建销毁的对象必须走 PoolManager / CollectionPool(ListPool、HashSetPool、DictionaryPool、StringBuilderPool)
 - **每帧路径:** 禁止 LINQ,手写 for 循环;避免闭包分配、装箱拆箱、字符串拼接
 - **零 GC 结构:** 可复用的轻量句柄设计为 readonly struct(如 LockHandle),存储原始数据而非委托
 - **组件引用缓存:** 避免在 Update 中调用 GetComponent、Camera.main、FindObjectOfType,应在 Awake 缓存
-- **反射:** 仅允许在运行时 Type 驱动的 API 边界和配置元数据提取处使用,必须缓存结果,禁止出现在每帧路径(参考 ConfigTypeHelper、NodeFactory)
+- **反射:** 仅允许在运行时 Type 驱动的 API 边界和配置元数据提取处使用,必须缓存结果,禁止出现在每帧路径(参考 ConfigTypeHelper)
 
 ## 异步约定
 
 - 异步统一 UniTask(`Cysharp.Threading.Tasks`),不使用 System.Threading.Tasks.Task,不使用 IEnumerator 协程
 - 公开异步 API 必须带 `CancellationToken cancellationToken = default` 参数
 - `async void` 仅限 Unity 生命周期入口(如 GameLauncher.Start);其余一律返回 UniTask/UniTask<T>
-- 订阅随生命周期自动取消:`IDestroyCancellationToken` + `AddTo`/`AddToNode`
+- 订阅随生命周期自动取消:`MonoBehaviour.destroyCancellationToken`,或实现 `XMessage.IDestroyCancellationToken`——`MessageManager` 的订阅扩展方法识别二者,令牌取消即自动退订(见 `TryBindToDestroy`)
 - 模块自持进度上报:进度载荷定义为模块内 `readonly struct`(如 `XAsset.AssetInitReport{Progress, Description}`),参数形态 `IProgress<T> progress = null`,置于 options 等配置参数之后、CancellationToken 之前(ct 仍收尾)
 
 ## 日志与异常
@@ -63,7 +61,7 @@
 - 日志统一 UnityEngine.Debug.Log/Warning/Error,消息带 `[模块]` 前缀(如 `[Save]`、`[ConfigManager]`)
 - 未初始化访问抛 InvalidOperationException,消息带 `[模块]` 前缀和修复提示
 - 重复 Initialize 打 LogWarning("... called more than once. Ignoring duplicate.") 后忽略
-- Update 循环异常隔离:节点 OnUpdate 抛异常时 LogError 并自动注销,不得打崩整个调度
+- Update 循环异常隔离:OnUpdate 抛异常时 LogError 并自动注销,不得打崩整个调度
 - 预期内的失败用 LogWarning 而非抛异常;参数防御用 ArgumentNullException/ArgumentException
 
 ## 依赖管理

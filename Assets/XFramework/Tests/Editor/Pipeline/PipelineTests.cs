@@ -145,7 +145,7 @@ namespace Venusy609.Xframework.Editor.Tests
         [Test]
         public void ZeroWeightStage_DoesNotAffectProgress()
         {
-            // 瞬时阶段(Weight 0)不占进度——StartupAsync 预置管线的基石
+            // 瞬时阶段(Weight 0)不占进度——Bootstrap 启动管线中「登记与启动」两步的基石
             var instant = new FakeStage { Name = "Instant", Weight = 0f };
             var main = new FakeStage { Name = "Main", Weight = 1f, ProgressValue = 0.5f, Gate = new UniTaskCompletionSource() };
             var (pipeline, progress) = CreateTrackedPipeline();

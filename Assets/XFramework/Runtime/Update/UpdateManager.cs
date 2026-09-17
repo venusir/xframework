@@ -489,7 +489,11 @@ namespace XFramework.XUpdate
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。</param>
-        /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
+        /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。
+        /// <para>需要「暂停期间仍运行」的对象（暂停菜单、UI 动画、手柄振动到期）传
+        /// <see cref="UpdateTimeMode.Unscaled"/>。</para>
+        /// <para>轴在<b>注册时读取一次</b>，之后由调度器记住；中途改变需要先注销再重新注册。
+        /// 框架<b>不</b>从对象自身嗅探该值——注册实参是唯一来源。</para></param>
         public static void RegisterLate(ILateUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {

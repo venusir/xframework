@@ -2,24 +2,24 @@
 
 ## 概述
 
-XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组合式框架，完全基于纯 C# 实现，不依赖 MonoBehaviour 继承。引入插件后即可直接编写 GamePlay 逻辑，无需额外的框架配置。
+XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启动引导**为骨架的 Unity 组合式框架，完全基于纯 C# 实现，不依赖 MonoBehaviour 继承。引入插件后即可直接编写 GamePlay 逻辑，无需额外的框架配置。
 
-### 架构双轨
+### 架构分层
 
 | 路径                   | 定位                            | 典型模块                                                               |
 | ---------------------- | ------------------------------- | ---------------------------------------------------------------------- |
 | **静态服务（无状态）** | 全局 Manager 入口，按需初始化   | File / Input / Settings / UI / Lock / Reactive / Localization / Update |
-| **节点树（有状态）**   | GamePlay 层级组织，生命周期管理 | Core（RootNode / EntityNode / DictionaryNode）/ Asset                   |
 | **管线（通用编排）** | 阶段串行/并行编排、加权进度聚合、失败传播，工厂创建实例即用即弃；相位分组编排（IPhaseStage）声明同相位并行 / 相位升序串行 | Pipeline                                  |
+| **引导（启动编排）** | 显式登记各模块的引导阶段，按相位装配运行启动管线，退出时反向清理 | Bootstrap                                 |
 
 ### 解决问题
 
 | 痛点               | XFramework 方案                                             |
 | ------------------ | ----------------------------------------------------------- |
-| MonoBehaviour 耦合 | 纯 C# 节点树 + 静态服务，可脱离 GameObject 运行             |
-| 生命周期混乱       | 树形有序生命周期：Awake → Start → Update → Destroy          |
-| 频繁 GC 分配       | 节点级对象池 + 静态服务零分配设计，自动回收复用             |
-| 更新调度粗放       | LOD 分级调度，统一管理节点树与静态服务的 Update             |
+| MonoBehaviour 耦合 | 纯 C# 静态服务，可脱离 GameObject 运行                      |
+| 生命周期混乱       | 引导阶段统一初始化与反向清理；纯静态服务按需初始化          |
+| 频繁 GC 分配       | 对象池 / 集合池 + 静态服务零分配设计，自动回收复用          |
+| 更新调度粗放       | LOD 分级调度，统一管理所有对象的 Update                     |
 | 资源管理分散       | 统一资源服务：加载 / 对象池 / 引用计数 / 延迟卸载           |
 | 跨模块耦合         | Provider 模式：接口 + 内部实现 + 扩展方法，可注入自定义实现 |
 
@@ -27,13 +27,12 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 
 | 概念              | 说明                                                              |
 | ----------------- | ----------------------------------------------------------------- |
-| **节点树**        | 层级化树形结构，每个节点有 Depth 属性                             |
-| **组件模式**      | EntityNode 按类型缓存子节点（类 GetComponent）                    |
-| **对象池**        | 节点销毁后自动回池，减少 GC                                       |
-| **LOD 更新**      | 节点返回 UpdateLOD，自动调整更新频率                              |
+| **对象池**        | 频繁创建销毁的对象经 `PoolManager` / 集合池复用，减少 GC          |
+| **LOD 更新**      | 对象返回 UpdateLOD，自动调整更新频率                              |
 | **Phase 分组调度**| 实现 `IPhaseStage` 声明相位号，同相位并行、不同相位串行（数值含义为使用方约定） |
 | **管线编排**      | 通用管线抽象：阶段串行执行、加权进度聚合（事件驱动）、失败/取消传播 |
-| **静态服务**      | 非节点模块通过静态 Manager 类提供全局入口                         |
+| **启动引导**      | 引导阶段经 `Bootstrap.Register` 显式登记，`RunAsync` 按相位装配运行 |
+| **静态服务**      | 各模块通过静态 Manager 类提供全局入口                             |
 | **Provider 模式** | 接口定义契约 + 内部默认实现 + 扩展方法，外部可注入自定义实现      |
 | **自动初始化**    | 纯静态服务通过 `[RuntimeInitializeOnLoadMethod]` 或懒加载自动就绪 |
 
@@ -45,7 +44,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 
 | 模块             | 命名空间                   | 文档                                        | 职责                                                          |
 | ---------------- | -------------------------- | ------------------------------------------- | ------------------------------------------------------------- |
-| **Core**         | `XFramework.XNode`         | [README](../Runtime/Node/README.md)         | 节点树核心：生命周期、EntityNode、DictionaryNode、对象池      |
+| **Bootstrap**    | `XFramework.XBootstrap`    | [README](../Runtime/Bootstrap/README.md)    | 启动引导：显式登记引导阶段、按相位装配运行启动管线、退出时反向清理 |
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：三个派发时机（Update/LateUpdate/FixedUpdate）、双时间轴（含暂停）、LOD 时间切片、PlayerLoop 自驱动 |
@@ -69,7 +68,7 @@ XFramework 是一个基于**静态服务 + 节点树**双轨架构的 Unity 组�
 ```
 Assets/XFramework/
 ├── Runtime/                      # 运行时代码
-│   ├── Core/                     # 节点树核心（BaseNode / EntityNode / 对象池）
+│   ├── Bootstrap/                # 启动引导（引导阶段登记表 + 运行入口 + 可选 GameLauncher）
 │   ├── Pipeline/                 # 通用编排（阶段编排/进度/失败取消）+ 相位分组编排（IPhaseStage）
 │   ├── Asset/                    # 资源管理（基于 YooAsset）
 │   ├── Update/                   # 统一更新调度
@@ -80,8 +79,7 @@ Assets/XFramework/
 │   ├── Input/                    # 输入抽象
 │   ├── Settings/                 # 游戏设置
 │   ├── UI/                       # UI 面板 / HUD / Tip
-│   ├── Lock/                     # 逻辑锁
-│   └── GameLauncher.cs           # Unity ↔ 节点树生命周期桥接
+│   └── Lock/                     # 逻辑锁
 ├── Documentation/
 │   └── XFramework.md             # 本文档
 ├── Tests/                        # 单元测试
@@ -93,67 +91,34 @@ Assets/XFramework/
 
 ---
 
-## 节点体系速览
-
-```
-BaseNode (抽象基类)
-  ├── LeafNode          ← 叶子节点，无子节点
-  └── ParentNode        ← 可包含子节点
-        ├── ContainerNode     ← 公开 Add/Remove
-        ├── EntityNode        ← 按类型缓存（组件模式）
-        │     └── RootNode    ← 节点树入口
-        └── DictionaryNode<TKey> ← 按键缓存
-```
-
-生命周期：`Awake → Start → (Update) → Destroy → 自动回池`
-
----
-
 ## 启动流程
 
 ```
-GameLauncher.Awake()
-  ├── RootNode.Create()             # 建节点树
-  ├── AddNode<UpdateNode>()         # 桥接：把树中实现更新接口的节点登记进 UpdateManager
-  └── AddNode<ServiceInitializerNode>()
+Bootstrap.RegisterDefaults()        # 登记框架内置的 Asset / Data / Save 三个阶段（Phase 0/3/4）
+Bootstrap.Register(new MyStage())   # 业务引导阶段自行登记（Phase 建议晚于框架内置相位）
 
-GameLauncher.Start()
-  └── root.StartupAsync()           # 预置管线：收集 → 相位分组执行 → 启动
-        ├── 收集：装配期同步收集所有相位阶段 IPhaseStage（CollectStage，Weight 0，运行前快照）
-        ├── 相位分组：每相位一个并行阶段 ParallelStage（组内并行/相位升序串行）
-        └── 启动：递归 OnStart（StartStage，Weight 0）
+Bootstrap.RunAsync()                # 按相位装配管线并运行
+      ├── 装配：每相位一个并行阶段 ParallelStage（组内并行 / 相位升序串行）
+      └── 运行：逐相位串行执行；失败与取消抛出（启动失败是致命的）
 
-每帧驱动（与 GameLauncher 无关）
+Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时调用
+
+每帧驱动（与引导流程无关）
   └── UpdateManager 注入的 PlayerLoop 驱动系统 → 三个时机的调度器
 ```
+
+`GameLauncher`（可选 MonoBehaviour，位于 `Runtime/Bootstrap/`）只是把上面三步接到 Unity 生命周期上：`Awake` 调 `RegisterDefaults`，`Start` 调 `RunAsync`，`OnDestroy` 调 `Shutdown`。不用它的话，在自己的启动流程里手动调这三个方法即可。
 
 ---
 
 ## 快速参考
-
-### 节点创建与操作
-
-| 操作                   | 代码                             |
-| ---------------------- | -------------------------------- |
-| 创建根节点             | `RootNode.Create()`              |
-| 从池获取               | `NodeFactory.GetNode<T>()`       |
-| 获取子节点（自动创建） | `entity.GetNode<T>()`            |
-| 获取子节点（不创建）   | `entity.GetNode<T>(false)`       |
-| 添加子节点             | `entity.AddNode<T>()`            |
-| 异步添加               | `await entity.AddNodeAsync<T>()` |
-| 移除子节点             | `entity.RemoveNode<T>()`                  |
-| 节点内加载资源         | `await this.LoadAssetAsync<T>(location)`  |
-| 销毁（自动回池）       | `node.Destroy()`                          |
-| 预热池                 | `NodeFactory.Prewarm<T>(10)`     |
 
 ### 资源操作
 
 | 操作         | 代码                                                          |
 | ------------ | ------------------------------------------------------------- |
 | 加载资源     | `await AssetManager.LoadAsync<T>(location)`                   |
-| 节点内加载   | `await this.LoadAssetAsync<T>(location)`                      |
 | 实例化       | `await AssetManager.InstantiateAsync(location, parent)`       |
-| 节点内实例化 | `await this.InstantiateAssetAsync(location, parent)`          |
 | 回收实例     | `AssetManager.DestroyInstance(go)`                            |
 | 预加载       | `await AssetManager.PreloadAllAsync(locations, p => ...)`     |
 | 批量加载     | `await AssetManager.LoadAllAsync<T>(locations)`               |
@@ -243,11 +208,10 @@ GameLauncher.Start()
 | -------------- | ------------------------------------------------------------- |
 | 注册到更新调度 | `UpdateManager.Register(this, depth: 0)`                      |
 | 注销更新       | `UpdateManager.Unregister(this)`                              |
-| 节点树自动绑定 | 节点实现 `IUpdateable` 后由 `UpdateNode` 自动登记              |
 | 实现 LOD 降级  | `UpdateLOD IUpdateable.OnUpdate(float deltaTime, float time)` |
 | 延迟更新时机   | 实现 `ILateUpdateable.OnLateUpdate(deltaTime, time)`          |
 | 固定步长时机   | 实现 `IFixedUpdateable.OnFixedUpdate(deltaTime, fixedTime)`   |
-| 声明墙钟时间轴 | 实现 `IUpdateTimeMode.TimeMode => UpdateTimeMode.Unscaled`    |
+| 声明墙钟时间轴 | 注册时传 `timeMode: UpdateTimeMode.Unscaled`                  |
 
 ### 锁操作
 

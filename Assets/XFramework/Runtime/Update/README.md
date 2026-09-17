@@ -2,7 +2,7 @@
 
 ## 概述
 
-Update 模块提供统一的更新调度服务，同时管理**节点树**与**静态服务**的更新需求。
+Update 模块提供统一的更新调度服务，管理任意对象（静态服务、MonoBehaviour、普通 C# 类）的更新需求。
 
 - **三个派发时机**：`Update` / `LateUpdate` / `FixedUpdate`，各自一套调度器
 - **两条时间轴**：逻辑时间（受 `timeScale`）与墙钟时间（不受影响）
@@ -16,28 +16,29 @@ Update 模块提供统一的更新调度服务，同时管理**节点树**与**�
 ```
 Runtime/Update/
 ├── IUpdateable.cs                # 契约：IUpdateLifecycle / IUpdateable / ILateUpdateable /
-│                                 #       IFixedUpdateable / IUpdateTimeMode / UpdateLOD
+│                                 #       IFixedUpdateable / UpdateLOD
 ├── UpdateClock.cs                # 时间基：UpdateClock（time + unscaledTime + isPaused）/ UpdateTimeMode
 ├── UpdateScheduler.cs            # 纯调度逻辑（LOD 分桶 + 时间切片 + 双时间轴），internal
-├── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）
-└── UpdateManagerExtensions.cs    # BaseNode 扩展方法 + 时间轴解析
-Runtime/Node/Update/
-├── IUpdateNode.cs                # 更新服务接口（启用/禁用/立即处理）
-└── UpdateNode.cs                 # 节点树桥梁（自动注册/注销 IUpdateable 节点）
+└── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）
 ```
 
 ## 快速使用
 
-### 1. 节点树节点（自动注册）
+### 1. 注册到更新调度
 
-实现时机接口的节点会被 `UpdateNode` 自动注册，**无需手动操作**：
+任何对象——静态服务、MonoBehaviour、普通 C# 类——实现时机接口后直接调 `UpdateManager.Register` 注册自身：
 
 ```csharp
-using XFramework.XNode;
 using XFramework.XUpdate;
 
-public class MyNode : EntityNode, IUpdateable
+public sealed class MyService : IUpdateable
 {
+    public MyService()
+    {
+        // 自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
+        UpdateManager.Register(this, depth: 0, initialLOD: UpdateLOD.Tier0);
+    }
+
     public void OnEnable() { }
 
     public void OnDisable() { }
@@ -50,26 +51,7 @@ public class MyNode : EntityNode, IUpdateable
 }
 ```
 
-### 2. 静态服务注册（非节点树对象）
-
-```csharp
-public sealed class MyService : IUpdateable
-{
-    public MyService()
-    {
-        // 静态服务自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
-        UpdateManager.Register(this, depth: 0, initialLOD: UpdateLOD.Tier0);
-    }
-
-    public void OnEnable() { }
-
-    public void OnDisable() { }
-
-    public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Tier0;
-}
-```
-
-### 3. 三个时机怎么选
+### 2. 三个时机怎么选
 
 | 时机 | 接口 | 时间基准 | 适用 |
 | ---- | ---- | -------- | ---- |
@@ -77,24 +59,19 @@ public sealed class MyService : IUpdateable
 | `LateUpdate` | `ILateUpdateable` | `Time.time` | 需要「本帧所有 Update 都已跑完」：跟随移动目标、相机跟随 |
 | `FixedUpdate` | `IFixedUpdateable` | `Time.fixedTime` | 物理、确定性模拟（要固定增量而非每帧变化的 delta） |
 
-同一对象可以实现多个接口，会被分别登记到对应时机。手动注册用 `UpdateManager.Register` /
-`RegisterLate` / `RegisterFixed`；注销、启用、禁用、查询不分时机（传任一节点即可）。
+同一对象可以实现多个接口，会被分别登记到对应时机。注册用 `UpdateManager.Register` /
+`RegisterLate` / `RegisterFixed`；注销、启用、禁用、查询不分时机（传任一对象即可）。
 
-### 4. 时间轴怎么选
+### 3. 时间轴怎么选
 
-需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）请声明墙钟轴：
+需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）请在注册时声明墙钟轴：
 
 ```csharp
-// 方式一：节点声明，UpdateNode 自动注册时读取
-public class PauseMenuNode : LeafNode, IUpdateable, IUpdateTimeMode
-{
-    public UpdateTimeMode TimeMode => UpdateTimeMode.Unscaled;
-    // ...
-}
-
-// 方式二：手动注册时直接指定
+// 注册时显式传 timeMode（默认 Scaled）
 UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 ```
+
+时间轴**以注册时传入的实参为准**——调度器不读取对象上的声明；中途要改变轴，须先注销再重新注册。
 
 固定步长时机没有时间轴参数：Unity 的固定步长本就随 `timeScale` 停摆。
 
@@ -121,7 +98,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 40/80/160/320/640ms），而不是上表那列毫秒数。
 
 被跳过的格**不会丢失时间**：`OnUpdate` 的 `deltaTime` 是「距上次派发的真实间隔」（可能跨
-若干格），所以降频不导致速度失真。节点应始终按 `deltaTime` 积分，而不是按调用次数计数。
+若干格），所以降频不导致速度失真。对象应始终按 `deltaTime` 积分，而不是按调用次数计数。
 
 帧率高于节拍时会出现「本帧不推进」的空帧（144fps 下这圈轮子约每 2.4 帧转一格）：负载摊得
 更粗，但**单帧峰值与按帧分散时相同**——一格该派发多少就派发多少，只是有些帧不做切片工作。
@@ -149,10 +126,10 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 | `Time.timeScale < 0` | 负间隔钳制为 0 | 照常 |
 | `FixedUpdate` 时机 | 随 Unity 固定步停摆 | 不支持（无此轴） |
 
-- **冻结时切片相位不推进**：恢复后节奏与暂停前接续。若照常推进，长周期节点会白丢一轮——
+- **冻结时切片相位不推进**：恢复后节奏与暂停前接续。若照常推进，长周期对象会白丢一轮——
   `Tier5` 意味着半秒多的空窗
 - **恢复不追赶**：`Resume()` 会把时间基准重锚，恢复后第一帧的 `deltaTime` 为 0，
-  而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在节点内自行累加
+  而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在对象内自行累加
 - **注册与重新启用后的首次派发 `deltaTime` 为 0**：调度器无从知道「注册那一刻」在各时间轴上
   是几点（驱动方给的时间轴未必是 Unity 的 `Time.time`——测试与确定性回放都自带时刻），
   因此不去猜，首次派发只负责定锚。禁用期间累积的间隔同样不会被算进来
@@ -179,9 +156,9 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
 ## 设计原则
 
-- **静态服务独立于节点树** — `UpdateManager` 不依赖节点树；只有 `UpdateManagerExtensions`
-  与 `UpdateNode`（位于 `Node/Update/`）承担桥接
-- **节点树自动注册** — 通过 `UpdateNode` 桥梁监听节点树事件，按节点实现的时机接口分别登记
+- **不依赖场景对象** — `UpdateManager` 自注入 PlayerLoop 驱动，不依赖任何 MonoBehaviour；
+  调用方直接调 `Register` / `RegisterLate` / `RegisterFixed` 登记自身
+- **显式注册** — 时机与时间轴都由注册时的实参与接口实现决定，调度器不做任何自动发现
 - **单一写入点** — 所有注册/注销/启用/禁用/迁移都经内部操作队列，帧末由唯一入口应用到桶
 - **避免 GC** — 每帧路径无 LINQ、无闭包、无装箱；`UpdateClock` 是栈上结构体
 
@@ -198,6 +175,5 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
 ## 依赖
 
-- `XFramework.XNode` — 仅 `UpdateNode`（节点树桥梁）与 `UpdateManagerExtensions` 需要；
-  `UpdateManager` 与调度器本身不依赖节点树
+- 无框架内模块依赖（`UpdateClock` 的时间由驱动方传入，`UpdateManager` 与调度器不读 `UnityEngine.Time`）
 - 无第三方依赖（PlayerLoop 注入使用 Unity 自带的 `UnityEngine.LowLevel`）

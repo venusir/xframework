@@ -4,8 +4,8 @@
 
 XFramework 管线模块提供**通用异步阶段编排**能力(附**相位分组编排**这一声明式装配形态):
 
-- **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。实例即用即弃(非全局单例),第三方可独立使用,不依赖节点树。
-- **相位分组编排**:实现 `IPhaseStage` 声明相位号,同相位阶段并行执行、相位升序串行;经 `Pipeline.BuildPhaseGroups` 一键装配为「每相位一个并行阶段」。节点树 `StartupAsync` 的预置管线(收集 → 相位分组执行 → 启动)即由此装配而成;框架引导模块(Asset/Data/Save/Localization)均以相位阶段形态参与。
+- **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。实例即用即弃(非全局单例),第三方可独立使用,无框架内模块依赖。
+- **相位分组编排**:实现 `IPhaseStage` 声明相位号,同相位阶段并行执行、相位升序串行;经 `Pipeline.BuildPhaseGroups` 一键装配为「每相位一个并行阶段」。启动引导模块 `Bootstrap.RunAsync` 的管线即由此装配而成;框架引导模块(Asset/Data/Save/Localization)均以相位阶段形态参与。
 
 **命名空间**: `XFramework.XPipeline`
 
@@ -28,7 +28,7 @@ Runtime/Pipeline/
 └── ContextAggregation.cs         # 加权扫描共享助手(加权扫描/阈值节流/状态快照,internal)
 ```
 
-> 管线不依赖 Node,依赖方向单向:Node → Pipeline(StartupAsync 装配在 Node 侧,复用本模块的相位分组助手)。
+> 管线不依赖上层模块,依赖方向单向:Bootstrap → Pipeline(装配在引导模块侧,复用本模块的相位分组助手)。
 
 ## 核心概念
 
@@ -94,13 +94,13 @@ public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
 #### 相位分组调度示意
 
 ```
-Phase 0:  [AssetBootstrapNode]────────────────┐
-Phase 3:  [GameDataNode]──────────────────────┤  组间串行(等上一相位完成)
-Phase 4:  [SaveBootstrapNode]─────────────────┤
-Phase 90: [LocalizationBootstrapNode]─────────┘
+Phase 0:  [AssetBootstrapStage]───────────────┐
+Phase 3:  [DataBootstrapStage]────────────────┤  组间串行(等上一相位完成)
+Phase 4:  [SaveBootstrapStage]────────────────┤
+Phase 90: [LocalizationBootstrapStage]────────┘
 ```
 
-装配结果直接逐个 `AddStage` 加入管线;组权重 = Σ 组内子阶段声明权重(引导节点统一声明 1f,故数值 = 组内节点数)。同相位内若存在先后依赖,可用 `SequenceStage` 包一层再放入该相位组。
+装配结果直接逐个 `AddStage` 加入管线;组权重 = Σ 组内子阶段声明权重(引导阶段统一声明 1f,故数值 = 组内阶段数)。同相位内若存在先后依赖,可用 `SequenceStage` 包一层再放入该相位组。
 
 > **内置相位约定**见文末表格;数值含义属模块间约定,由各使用方自行声明,引擎不解释。
 
@@ -158,23 +158,22 @@ await pipeline.RunAsync();
 pipeline.Destroy();
 ```
 
-> 节点树一键启动 `StartupAsync` 即内部装配并运行预置管线,详见 [Node 模块](../Node/README.md)。
+> 启动引导模块 `Bootstrap.RunAsync` 即内部装配并运行这套管线,详见 [Bootstrap 模块](../Bootstrap/README.md)。
 
 ### 定义相位阶段
 
-业务引导/初始化模块实现 `IPhaseStage`(Phase + 普通阶段四成员),挂树后自动被收集分组:
+业务引导/初始化模块实现 `IPhaseStage`(Phase + 普通阶段三成员),经 `Pipeline.BuildPhaseGroups` 分组装配:
 
 ```csharp
 using XFramework.XPipeline;
-using XFramework.XNode;
 using Cysharp.Threading.Tasks;
 using System.Threading;
 
-public sealed class ConfigBootstrapNode : EntityNode, IPhaseStage
+public sealed class ConfigBootstrapStage : IPhaseStage
 {
     public int Phase => 10;              // 相位号(内置约定见文末;越小越先执行)
     public string Name => GetType().Name;
-    public float Weight => 1f;           // 组内等权(组权重 = 组内节点数)
+    public float Weight => 1f;           // 组内等权(组权重 = 组内阶段数)
 
     public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
     {
@@ -190,25 +189,25 @@ public sealed class ConfigBootstrapNode : EntityNode, IPhaseStage
 }
 ```
 
-> 阶段契约兜底保证:未写终态的正常返回自动视为完成;不写 `SetState(Executing)` 也不影响进度聚合(容器会预置执行中状态)。引导节点与节点树的装配模板详见 [Node 模块](../Node/README.md)。
+> 阶段契约兜底保证:未写终态的正常返回自动视为完成;不写 `SetState(Executing)` 也不影响进度聚合(容器会预置执行中状态)。需要「初始化 + 反向清理」成对时实现 `IBootstrapStage`(`IPhaseStage` + `Shutdown`),装配模板详见 [Bootstrap 模块](../Bootstrap/README.md)。
 
-### 一键启动节点树
+### 一键启动引导流程
+
+把相位阶段登记进引导模块,`Bootstrap` 会按相位装配本模块的管线并运行:
 
 ```csharp
+using System;
+using XFramework.XBootstrap;
 using XFramework.XPipeline;
-using XFramework.XNode;
 
-// 构建节点树
-var root = RootNode.Create();
-root.AddNode<ServiceInitializerNode>();
-root.AddNode<ConfigBootstrapNode>();
-root.AddNode<GameplayNode>();
+Bootstrap.Register(new ConfigBootstrapStage());
+Bootstrap.RegisterDefaults();   // 可选:登记框架内置的 Asset / Data / Save 三个阶段
 
-// 一键启动(收集 → 按相位分组执行 → 启动)
-await root.StartupAsync();
+// 一键启动(按相位分组装配 → 运行)
+await Bootstrap.RunAsync();
 
 // 带进度回调(接收管线级快照)
-await root.StartupAsync(new Progress<PipelineProgress>(p =>
+await Bootstrap.RunAsync(new Progress<PipelineProgress>(p =>
 {
     Debug.Log($"启动进度: {p.OverallProgress * 100}% - {p.Description}");
 }));
@@ -234,7 +233,7 @@ await root.StartupAsync(new Progress<PipelineProgress>(p =>
 - **阈值节流广播** — 变化 ≥1% 或状态/描述变化才广播,避免垃圾推送
 - **实例即用即弃** — `Pipeline.Create()` 工厂创建,非全局单例
 - **单一执行契约** — 阶段是唯一执行单元,无第二套任务/状态机(状态/进度写面统一在 `PipelineStageContext`)
-- **声明式相位** — 节点实现 `IPhaseStage` 声明相位号,无需关心分组调度逻辑
+- **声明式相位** — 阶段实现 `IPhaseStage` 声明相位号,无需关心分组调度逻辑
 - **相位分组调度** — 相同相位并行、不同相位串行,兼顾性能与依赖顺序
 - **契约兜底** — 阶段正常返回但未写终态时自动视为完成(进度 1f),不会阻塞调度
 - **加权聚合** — 组内按 `Weight` 加权聚合 `Σ(w·p)/Σ(w)`;失败阶段不计入进度(进度略回退属预期)

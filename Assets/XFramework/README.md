@@ -1,57 +1,68 @@
 # XFramework
 
-XFramework 是一个为 Unity 设计的**组合式框架插件**。目标：**引入插件后即可直接编写 GamePlay 逻辑**，无需额外的框架配置。
+XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提供彼此正交的运行时服务，以及两套编排原语——通用异步管线与显式启动引导注册表。它**不预设 GamePlay 架构**：实体模型、生命周期组织与时间模型都由使用方自己决定。
 
 ## 设计哲学
 
-- **组合优于继承** — EntityNode 按类型缓存子节点，类似 Unity 的 GetComponent/AddComponent
-- **对象池内置** — 所有节点通过 `NodeFactory` 创建，`Destroy()` 后自动回池
-- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，自动调整更新频率
-- **通用编排 + 相位分组** — `Pipeline` 通用异步阶段编排（串行、并行、加权进度、失败/取消传播）；实现 `IPhaseStage` 声明相位号（同相位并行、相位升序串行），`Pipeline.BuildPhaseGroups` 一键装配，`StartupAsync` 以「收集 → 相位分组执行 → 启动」预置管线启动节点树
-- **零配置初始化** — 纯静态服务（LockManager、MessageManager 等）通过 `[RuntimeInitializeOnLoadMethod]` 在游戏启动时自动就绪，无需手动初始化
-- **静态外观 + 接口 + 内部实现** — 非节点服务采用静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
+- **单项职责的服务** — 每个模块只做一件事，彼此正交，可单独取用
+- **静态外观 + 接口 + 内部实现** — 静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
+- **零配置或显式初始化** — 无参服务（LockManager、MessageManager、UpdateManager 等）经 `[RuntimeInitializeOnLoadMethod]` 自就绪；需要配置的服务由调用方显式 `Initialize`，或实现 `IBootstrapStage` 交给启动引导
+- **通用编排 + 相位分组** — `Pipeline` 提供串行/并行阶段编排、加权进度、失败即停与取消传播；实现 `IPhaseStage` 声明相位号（同相位并行、相位升序串行），`Pipeline.BuildPhaseGroups` 一键装配
+- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，调度器自动调整其更新频率；LOD 按**时长**分档，与帧率无关
+- **不预设 GamePlay 架构** — 框架不决定实体模型、生命周期树与时间模型
 
 ## 核心架构
 
-XFramework 服务分为两条路径：
+框架分两层：**彼此正交的基础设施服务**，与**把它们按顺序装配起来的编排原语**。
 
-### 路径 A：节点树（有状态 / 可组合服务）
+### 基础设施服务
 
+| 服务                    | 初始化方式                                          | 说明                                                       |
+| ----------------------- | --------------------------------------------------- | ---------------------------------------------------------- |
+| **LockManager**         | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置                                                     |
+| **MessageManager**      | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置                                                     |
+| **UpdateManager**       | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置，含 PlayerLoop 自注入——场景里不需要任何 MonoBehaviour |
+| **Serializer**          | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 注册内置序列化器（json / json-utility）                    |
+| **FileManager**         | 首次调用时懒加载（自动选平台 Provider）             | 零配置；也可显式 `Initialize()` 注入自定义 Provider        |
+| **AssetManager**        | `AssetManager.InitializeAsync()`                    | 或实现 `AssetBootstrapStage` 交由启动引导                  |
+| **DataManager**         | `DataManager.Initialize(impl)`                      | 同上（`DataBootstrapStage`）                               |
+| **SaveManager**         | `SaveManager.Initialize(options)`                   | 同上（`SaveBootstrapStage`）                               |
+| **LocalizationManager** | `LocalizationManager.Initialize(lang, data)`        | 同上（`LocalizationBootstrapStage`）                       |
+| **UIManager**           | `UIManager.Initialize(canvasTransform)`             | 需传入 Canvas 根节点                                       |
+| **SettingsManager**     | `SettingsManager.Initialize<T>(path)`               | 设置类型由业务定义，每类独立初始化                         |
+
+> **关键设计决策：** 服务不依赖统一入口。无需参数的服务自动就绪；需要参数的服务由调用方显式初始化，或实现 `IBootstrapStage` 登记进启动引导。
+
+### 启动引导
+
+需要按顺序初始化的服务实现 `IBootstrapStage`，然后显式登记：
+
+```csharp
+Bootstrap.RegisterDefaults();                                          // Asset(0) → Data(3) → Save(4)
+Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myTable)); // Phase 90
+await Bootstrap.RunAsync(progress: myProgress);
+// ...
+Bootstrap.Shutdown();                                                  // 逆登记顺序清理
 ```
-GameLauncher (MonoBehaviour)
-    │
-    ├── RootNode ─── 节点树入口
-    │       │
-    │       ├── ServiceInitializerNode ─── 按需挂载的初始化节点（如 AssetBootstrapNode）
-    │       │
-    │       ├── EntityNode ─── 组件模式（按类型缓存子节点）
-    │       │       ├── LeafNode (行为/数据)
-    │       │       └── CompositeNode (公开 Add/Remove)
-    │       │
-    │       └── DictionaryNode<TKey> ─── 键值对模式
-    │
-    └── UpdateNode ─── 自动注册/注销 IUpdateable 节点 LOD 时间切片调度
+
+`RunAsync` 在失败与取消时**抛出**——启动失败是致命的，不该只留一条日志。整块是**可选**的：零配置项目与自建启动流程的项目都可以不用它。
+
+> 📖 详见 **[Runtime/Bootstrap/README.md](Runtime/Bootstrap/README.md)**
+
+### 通用管线
+
+与启动引导正交。任何「若干异步阶段按序/并行执行 + 加权进度 + 失败即停」的场合都可直接用：
+
+```csharp
+var pipeline = Pipeline.Create();
+pipeline.AddStage(new MyStage());
+await pipeline.RunAsync(cancellationToken);
+pipeline.Destroy();
 ```
 
-### 路径 B：静态外观（无状态 / 全局服务）
+实现 `IPhaseStage` 声明相位号，`Pipeline.BuildPhaseGroups` 即自动分组（同相位并行、相位升序串行）。
 
-各服务独立管理自身生命周期，无需统一的中心化入口：
-
-| 服务                    | 初始化方式                                   | 说明                                                |
-| ----------------------- | -------------------------------------------- | --------------------------------------------------- |
-| **LockManager**         | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
-| **MessageManager**      | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 零配置                                              |
-| **FileManager**         | 首次调用时懒加载（自动选平台 Provider）      | 零配置；也可显式 `Initialize()` 注入自定义 Provider |
-| **Serializer**          | `[RuntimeInitializeOnLoadMethod]` 自动就绪   | 注册内置序列化器（json / json-utility）             |
-| **DataManager**         | 由节点树 GameDataNode 初始化                 | 挂载 ServiceInitializerNode 后自动就绪             |
-| **SaveManager**         | 由节点树 SaveBootstrapNode 初始化            | 挂载 ServiceInitializerNode 后自动就绪             |
-| **UIManager**           | `UIManager.Initialize(canvasTransform)`      | 需传入 Canvas 根节点                                |
-| **UIHudManager**        | 随 UIManager 自动就绪                        | —                                                   |
-| **UITipManager**        | 随 UIManager 自动就绪                        | —                                                   |
-| **LocalizationManager** | `LocalizationManager.Initialize(lang, data)` | 需传入语言数据                                      |
-| **SettingsManager**     | `SettingsManager.Initialize<T>(path)`        | 设置类型由业务定义，每类独立初始化                  |
-
-> **关键设计决策：** 纯静态服务不依赖节点树生命周期。无需参数的服务通过 `[RuntimeInitializeOnLoadMethod]` 或懒加载自动就绪；需要参数的服务由调用方显式 `Initialize()`。不存在统一的中心化入口。节点树仅承载需要生命周期插件的服务（如 AssetManager）。
+> 📖 详见 **[Runtime/Pipeline/README.md](Runtime/Pipeline/README.md)**
 
 ## 快速开始
 
@@ -73,32 +84,22 @@ using (LockManager.AddLock(player, LockType.InputBlock, this))
 }
 ```
 
-### 方式二：完整节点树
+### 方式二：带启动引导
 
 ```csharp
-// 在场景中挂载 GameLauncher 组件
-
-public class MyGameLauncher : GameLauncher
-{
-    async void Start()
-    {
-        var player = _root.AddNode<PlayerNode>(100);
-        await _root.StartupAsync();
-    }
-}
+// 场景里挂一个 GameLauncher 即可；或在自己的启动流程里显式调用：
+Bootstrap.RegisterDefaults();
+await Bootstrap.RunAsync();
 ```
 
 ## 主要功能
 
 | 功能             | 说明                                                                              |
 | ---------------- | --------------------------------------------------------------------------------- |
-| **节点树**       | 层级化节点结构，支持深度排序、递归遍历                                            |
-| **对象池**       | `NodeFactory` + `NodePool<T>`，自动回池复用                                       |
-| **组件模式**     | `EntityNode.GetNode<T>()` / `AddNode<T>()` / `RemoveNode<T>()`                    |
-| **键值对模式**   | `DictionaryNode<TKey>` 按 Key 缓存子节点                                          |
-| **更新调度**     | `IUpdateable` + `UpdateLOD` 时间切片，自动 LOD 迁移                               |
-| **通用管线**     | `Pipeline` 阶段编排（串行/并行/进度/失败取消）；`IPhaseStage` 相位分组编排，`StartupAsync` 一键启动节点树 |
-| **生命周期**     | Init → Awake → Start → Destroy，与 Unity 语义一致                                 |
+| **更新调度**     | `UpdateManager` + `UpdateLOD` 时间切片，自动 LOD 迁移；LOD 按**时长**分档，与帧率无关 |
+| **通用管线**     | `Pipeline` 阶段编排（串行/并行/加权进度/失败即停/取消传播）；`IPhaseStage` 相位分组一键装配 |
+| **启动引导**     | `Bootstrap` 显式登记 + 相位装配 + 逆序清理；内置 Asset/Data/Save 三件，Localization 可选 |
+| **对象池**       | `PoolManager` + `CollectionPool`（List / HashSet / Dictionary / StringBuilder）    |
 | **UI 面板管理**  | `UIManager.Panel.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
@@ -113,7 +114,7 @@ XFramework 提供一套完整的 UI 管理方案，包括面板生命周期管�
 
 ```csharp
 // 在场景中挂载 UIRootNode，然后初始化
-var uiRoot = FindObjectOfType<UIRootNode>();
+var uiRoot = FindFirstObjectByType<UIRootNode>();
 if (uiRoot != null)
 {
     UIManager.Initialize(uiRoot.transform);

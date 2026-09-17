@@ -753,7 +753,7 @@ token2.Dispose();
 token3.Dispose();
 ```
 
-> 订阅句柄也可以用 `AddToNode(this)` / `AddTo(token)` 绑定生命周期，销毁时自动释放。
+> 静态 API 不自动绑定生命周期，句柄需在使用方销毁时 `Dispose`；若订阅方实现 `IMessageSubscriber`，改用 `this.Subscribe(...)` 即可自动绑定销毁时机（MonoBehaviour 或 `IDestroyCancellationToken`）。
 
 ### 12. 依赖注入
 

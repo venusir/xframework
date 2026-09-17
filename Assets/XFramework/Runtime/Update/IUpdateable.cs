@@ -115,18 +115,4 @@ namespace XFramework.XUpdate
         /// <returns>下一次派发的更新频率等级。</returns>
         UpdateLOD OnLateUpdate(float deltaTime, float time);
     }
-
-    /// <summary>
-    /// 可选契约：让对象声明自己跑在哪条时间轴上。
-    /// <para>不实现本接口的对象一律登记在 <see cref="UpdateTimeMode.Scaled"/> 轴上。
-    /// 需要「暂停期间仍运行」的对象（暂停菜单、UI 动画、手柄振动到期）请声明
-    /// <see cref="UpdateTimeMode.Unscaled"/>。</para>
-    /// <para>轴在<b>注册时读取一次</b>，之后由调度器记住；中途改变声明不会自动迁移，
-    /// 需要先注销再重新注册。</para>
-    /// </summary>
-    public interface IUpdateTimeMode
-    {
-        /// <summary>本对象所在的更新调度时间轴。</summary>
-        UpdateTimeMode TimeMode { get; }
-    }
 }

@@ -1,8 +1,8 @@
 {
 	"name": "com.venusy609.xframework",
 	"displayName": "XFramework",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"unity": "6000.3",
-	"description": "XFramework is a tree-based node system for Unity. It provides a hierarchical node structure with object pooling, component-style access (EntityNode), key-value access (DictionaryNode), and a unified factory API (NodeFactory) for node creation and recycling.",
+	"description": "XFramework 是 Unity 的模块化基础设施框架：资源加载、运行时数据、版本化存档、配置、本地化、输入、UI、消息总线、响应式属性、对象池与 LOD 分级更新调度，另含通用异步管线与显式启动引导注册表。不预设 GamePlay 架构。",
 	"dependencies": {}
 }

@@ -15,7 +15,7 @@ Runtime/Localization/
 ├── ILocalizationManager.cs        # 本地化管理器公共接口
 ├── LocalizationManager.cs         # 静态外观（全局入口）
 ├── LocalizationManagerImpl.cs     # 默认实现（LRU 缓存）
-├── LocalizationBootstrapNode.cs   # 引导阶段节点（IPhaseStage，Phase 90）
+├── LocalizationBootstrapStage.cs  # 引导阶段（IBootstrapStage，Phase 90）
 └── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
 ```
 
@@ -37,8 +37,10 @@ Runtime/Localization/
 using XFramework.XLocalization;
 using System.Collections.Generic;
 
-// 方式一：通过 Bootstrap 自动初始化（推荐）
-// LocalizationBootstrapNode 在 Phase 90 初始化
+// 方式一：通过 Bootstrap 引导阶段初始化（推荐）
+// 登记后由启动管线在 Phase 90 执行：
+// Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
+// 它不在 Bootstrap.RegisterDefaults() 的默认组合内——本地化需要语言数据，须显式登记
 
 // 方式二：手动初始化
 var defaultData = new Dictionary<string, string>
@@ -228,13 +230,19 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 
 模块内使用自定义的轻量 JSON 解析器（`LanguageAssetLoader.ParseJson`），仅支持 `"string": "string"` 的简单格式，无需引入 Newtonsoft.Json 或其他第三方库。如果 JSON 含嵌套结构或数组，需替换为完整 JSON 库。
 
-## 节点系统集成
+## 引导集成
 
-### LocalizationBootstrapNode
+### LocalizationBootstrapStage
 
-引导阶段节点（`internal`，框架内部使用），实现 `IPhaseStage`，在启动管线相位分组 **Phase 90** 执行。游戏侧无需直接操作它，在执行前调用 `LocalizationManager.Initialize(lang, data)` 即可（见「快速使用」）。
+引导阶段（`public sealed`），实现 `IBootstrapStage`（= Pipeline 的 `IPhaseStage` + `Shutdown`），在启动管线的相位分组 **Phase 90** 执行，晚于框架内置相位（0/3/4）：
 
-节点销毁时自动调用 `LocalizationManager.Destroy()` 清理缓存。
+```csharp
+Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
+```
+
+构造参数即 `LocalizationManager.Initialize(lang, data)` 的两个实参；**未提供语言数据时**它打一条警告并直接置「已完成」——本地化是可选模块，缺数据不该让整个启动失败。
+
+反向清理经其 `Shutdown` 调 `LocalizationManager.Destroy()` 清理缓存。
 
 ### LanguageAssetLoader
 
@@ -257,7 +265,7 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 
 ## 依赖
 
-- `XFramework.XNode` — 节点系统（`EntityNode`, `LeafNode`, `IBaseNode`）
 - `XFramework.XAsset` — 通过 `AssetManager` 加载语言 JSON 文件
-- `XFramework.XPipeline` — `IPhaseStage` 相位阶段（LocalizationBootstrapNode，Phase 90）
+- `XFramework.XBootstrap` — `IBootstrapStage` 引导阶段契约（LocalizationBootstrapStage，Phase 90）
+- `XFramework.XPipeline` — `IPhaseStage` 相位阶段契约与相位分组
 - `UniTask`（框架层已提供）

@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 锁模块提供节点级别的锁管理功能。通过 `ILockable` 接口，任意节点都可以成为锁主体，支持多类型锁的并发管理。锁模块通过静态外观 `LockManager` 提供全局锁服务，并支持 `using` 语法自动释放锁句柄。
+XFramework 锁模块提供对象级别的锁管理功能。通过 `ILockable` 接口，任意对象都可以成为锁主体，支持多类型锁的并发管理。锁模块通过静态外观 `LockManager` 提供全局锁服务，并支持 `using` 语法自动释放锁句柄。
 
 **命名空间**: `XFramework.XLock`
 
@@ -14,7 +14,7 @@ XFramework 锁模块提供节点级别的锁管理功能。通过 `ILockable` �
 Runtime/Lock/
 ├── LockManager.cs                # 静态外观（全局入口）
 ├── ILockable.cs                  # 可锁标记接口
-├── LockableExtensions.cs         # 节点扩展方法
+├── LockableExtensions.cs         # ILockable 扩展方法
 └── LockHandle.cs                 # 锁句柄（读存储，支持 using）
 ```
 
@@ -39,24 +39,24 @@ public static class LockType
 using XFramework.XLock;
 
 // 加锁
-LockManager.AddLock(playerNode, LockType.Movement, "skill_casting");
-LockManager.AddLock(playerNode, LockType.Skill, "cooldown");
-LockManager.AddLock(playerNode, LockType.Movement, "dialogue_open");
+LockManager.AddLock(player, LockType.Movement, "skill_casting");
+LockManager.AddLock(player, LockType.Skill, "cooldown");
+LockManager.AddLock(player, LockType.Movement, "dialogue_open");
 
 // 查询锁状态
-bool canMove = !LockManager.IsLocked(playerNode, LockType.Movement);
-bool canUseSkill = !LockManager.IsLocked(playerNode, LockType.Skill);
+bool canMove = !LockManager.IsLocked(player, LockType.Movement);
+bool canUseSkill = !LockManager.IsLocked(player, LockType.Skill);
 
 // 获取锁数量
-int lockCount = LockManager.GetLockCount(playerNode, LockType.Movement);
+int lockCount = LockManager.GetLockCount(player, LockType.Movement);
 
 // 获取所有锁对象列表（调试用）
-var lockObjects = LockManager.GetLockObjects(playerNode, LockType.Movement);
+var lockObjects = LockManager.GetLockObjects(player, LockType.Movement);
 
 // 释放锁
-LockManager.RemoveLock(playerNode, LockType.Movement, "skill_casting");
-LockManager.RemoveLock(playerNode, LockType.Skill, "cooldown");
-LockManager.RemoveLock(playerNode, LockType.Movement, "dialogue_open");
+LockManager.RemoveLock(player, LockType.Movement, "skill_casting");
+LockManager.RemoveLock(player, LockType.Skill, "cooldown");
+LockManager.RemoveLock(player, LockType.Movement, "dialogue_open");
 ```
 
 ### 3. 使用 LockHandle（推荐）
@@ -68,7 +68,7 @@ public void CastSkill()
     // 加锁（技能持续期间锁定移动）
     // 注意：加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
     // 因此不需要判断「是否获取成功」——没有获取失败的句柄
-    using var handle = LockManager.AddLock(playerNode, LockType.Movement, "skill_casting");
+    using var handle = LockManager.AddLock(player, LockType.Movement, "skill_casting");
 
     // 播放技能动画...
     await PlaySkillAnimation();
@@ -82,22 +82,22 @@ public void CastSkill()
 同样返回 true：
 
 ```csharp
-var handle = LockManager.AddLock(node, LockType.Movement, "skill");
-lockManagerIsLocked = LockManager.IsLocked(node, LockType.Movement); // true（聚合）
-handleIsHeld        = handle.IsHeld;                                 // true（逐句柄）
+var handle = LockManager.AddLock(player, LockType.Movement, "skill");
+lockManagerIsLocked = LockManager.IsLocked(player, LockType.Movement); // true（聚合）
+handleIsHeld        = handle.IsHeld;                                   // true（逐句柄）
 
 handle.Dispose();
-lockManagerIsLocked = LockManager.IsLocked(node, LockType.Movement); // 无其他持有者时为 false
-handleIsHeld        = handle.IsHeld;                                 // false（自己已释放）
+lockManagerIsLocked = LockManager.IsLocked(player, LockType.Movement); // 无其他持有者时为 false
+handleIsHeld        = handle.IsHeld;                                   // false（自己已释放）
 ```
 
 ### 4. 使用全局锁
 
 ```csharp
-// 全局锁不绑定到任何特定节点，适用于全游戏级别的锁定
+// 全局锁不绑定到任何特定主体，适用于全游戏级别的锁定
 LockManager.AddLock(LockManager.Global, LockType.UI, "loading_screen");
 
-// 检查全局锁（会影响到所有节点的同类型锁判断）
+// 检查全局锁（会影响到所有主体的同类型锁判断）
 bool isAnythingLocked = LockManager.IsLocked(LockManager.Global, LockType.UI);
 
 LockManager.RemoveLock(LockManager.Global, LockType.UI, "loading_screen");
@@ -109,28 +109,28 @@ LockManager.RemoveLock(LockManager.Global, LockType.UI, "loading_screen");
 using XFramework.XLock;
 
 // 订阅锁定事件
-LockManager.OnLocked(playerNode, lockType =>
+LockManager.OnLocked(player, lockType =>
 {
-    Debug.Log($"节点被锁定，类型: {lockType}");
+    Debug.Log($"主体被锁定，类型: {lockType}");
 });
 
 // 订阅解锁事件
-LockManager.OnUnlocked(playerNode, lockType =>
+LockManager.OnUnlocked(player, lockType =>
 {
-    Debug.Log($"节点被解锁，类型: {lockType}");
+    Debug.Log($"主体被解锁，类型: {lockType}");
 });
 
-// 通过 ILockable 节点扩展方法订阅
-playerNode.OnLocked(lockType => Debug.Log($"锁定: {lockType}"));
-playerNode.OnUnlocked(lockType => Debug.Log($"解锁: {lockType}"));
+// 通过 ILockable 扩展方法订阅
+player.OnLocked(lockType => Debug.Log($"锁定: {lockType}"));
+player.OnUnlocked(lockType => Debug.Log($"解锁: {lockType}"));
 ```
 
-## 节点扩展方法
+## ILockable 扩展方法
 
-实现了 `ILockable` 的节点可以直接使用便捷的扩展方法：
+实现了 `ILockable` 的类型可以直接使用便捷的扩展方法：
 
 ```csharp
-public class PlayerNode : EntityNode, ILockable
+public class Player : ILockable
 {
     public void TryMove()
     {
@@ -159,7 +159,7 @@ public class PlayerNode : EntityNode, ILockable
 
 ### 多锁叠加
 
-同一类型的锁支持叠加（多个来源各自加锁），**只有当该类型所有锁都被释放时，节点才恢复为解锁状态**。
+同一类型的锁支持叠加（多个来源各自加锁），**只有当该类型所有锁都被释放时，锁主体才恢复为解锁状态**。
 
 ```
 加锁顺序: Skill("cooldown") → Skill("mp_insufficient") → Skill("stun")
@@ -171,15 +171,15 @@ public class PlayerNode : EntityNode, ILockable
 
 ### 全局锁影响范围
 
-全局锁（`LockManager.Global`）对某个类型的锁定，会影响**所有节点**的该类型锁判断：
+全局锁（`LockManager.Global`）对某个类型的锁定，会影响**所有主体**的该类型锁判断：
 
 ```csharp
 // 全局锁定移动
 LockManager.AddLock(LockManager.Global, LockType.Movement, "server_pause");
 
-// 所有节点的移动锁都被判定为锁定
-LockManager.IsLocked(playerNode, LockType.Movement);   // → true
-LockManager.IsLocked(enemyNode, LockType.Movement);    // → true
+// 所有主体的移动锁都被判定为锁定
+LockManager.IsLocked(player, LockType.Movement);   // → true
+LockManager.IsLocked(enemy, LockType.Movement);    // → true
 
 // 全局解锁后恢复
 LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
@@ -190,9 +190,9 @@ LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
 - **组合式锁** — 多类型锁独立管理，互不干扰
 - **多来源叠加** — 同一类型锁可被多个来源持有，全部释放才解锁
 - **LockHandle 安全释放** — 通过 `readonly struct` + `IDisposable` 实现零 GC 的 `using` 安全释放
-- **全局锁** — 支持跨节点的全局锁，适合服务器暂停、全屏 Loading 等场景
+- **全局锁** — 支持跨主体的全局锁，适合服务器暂停、全屏 Loading 等场景
 - **事件驱动** — 锁状态变化可被订阅，解耦业务逻辑
 
 ## 依赖
 
-- `XFramework.XNode` — 节点系统依赖（`ILockable` 标记接口）
+- 无框架内模块依赖（`ILockable` 标记接口定义于本模块）

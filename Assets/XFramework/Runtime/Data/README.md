@@ -23,14 +23,14 @@ XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏�
 ## 架构
 
 ```
-GameDataNode (节点树启动)
+DataBootstrapStage (引导阶段，Phase=3)
     └── DataManagerImpl (内部实现)
             └── Blocks : Dictionary<Type, IDataBlock>   ← 按 GamePlay 模块组织
 
 DataManager (静态门面)
     └── 转发到 DataManagerImpl
 
-SaveBootstrapNode (节点树启动，Phase=4)
+SaveBootstrapStage (引导阶段，Phase=4)
     └── SaveManagerImpl (内部实现)
             ├── FileManager (文件读写)
             └── DataManager (快照导出/恢复)
@@ -38,7 +38,7 @@ SaveBootstrapNode (节点树启动，Phase=4)
 
 ### 设计原则
 
-- **节点树 + 静态服务混合**：`GameDataNode` 挂载在节点树上管理生命周期，初始化后注入 `DataManager` 静态门面供全局访问。
+- **引导阶段 + 静态服务**：`DataBootstrapStage`（`IBootstrapStage`，Phase 3）在启动管线里注入 `DataManager` 静态门面，此后全局可访问；反向清理经其 `Shutdown` 调 `DataManager.Shutdown()`。
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
 - **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
 - **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。

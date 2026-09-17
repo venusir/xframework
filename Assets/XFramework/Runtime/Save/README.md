@@ -37,8 +37,9 @@ SaveManager.Initialize(null, new SaveOptions
 });
 ```
 
-节点树挂载 `SaveBootstrapNode` 时也可传选项：`AddNode<SaveBootstrapNode>(saveOptions)`。
-`SaveBootstrapNode` 在初始化后会执行一轮**恢复扫描**（见下）。
+需要自定义选项时改用引导阶段登记：`Bootstrap.Register(new SaveBootstrapStage(saveOptions))`
+（登记顺序与默认组合的说明见 [Bootstrap 模块](../Bootstrap/README.md)）。
+`SaveBootstrapStage` 在初始化后会执行一轮**恢复扫描**（见下）。
 
 ## 核心 API
 
@@ -78,7 +79,7 @@ SaveManager.Initialize(null, new SaveOptions
 
 ### 启动恢复扫描
 
-`SaveBootstrapNode` 初始化后执行一轮扫描，把存档目录收敛到一致状态：
+`SaveBootstrapStage` 初始化后执行一轮扫描，把存档目录收敛到一致状态：
 
 - 载荷缺失但备份在 → 用备份还原载荷（替换流程崩溃后的最坏情况）
 - 载荷存在 → 清掉 `.tmp` 残留
