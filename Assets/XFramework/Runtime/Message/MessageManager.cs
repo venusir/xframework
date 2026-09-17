@@ -432,8 +432,8 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 订阅指定类型的消息。
-        /// <para>仅当订阅者是 <see cref="MonoBehaviour"/> 时，订阅才自动绑定其销毁时机；
-        /// 节点树的自动绑定由 <c>NodeExtensions.Subscribe</c> 单独承担(见其重载决议说明)。</para>
+        /// <para>订阅自动绑定订阅者的销毁时机：<see cref="MonoBehaviour"/> 用其 <c>destroyCancellationToken</c>，
+        /// 普通 C# 对象实现 <see cref="IDestroyCancellationToken"/> 即可；两者皆非时需自行持有返回的句柄。</para>
         /// </summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
@@ -442,7 +442,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定类型的消息，并附加过滤条件。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>订阅指定类型的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(filter, handler);
@@ -450,7 +450,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>订阅指定键值的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, handler);
@@ -458,7 +458,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅指定键值的消息，并附加过滤条件。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>订阅指定键值的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, filter, handler);
@@ -466,7 +466,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>异步订阅。消息到达时执行异步处理器。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        /// <summary>异步订阅。消息到达时执行异步处理器。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeAsync<TMessage>(
             this IMessageSubscriber subscriber,
             Func<TMessage, CancellationToken, UniTask> asyncHandler,
@@ -477,7 +477,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>异步订阅，并附加过滤条件。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        /// <summary>异步订阅，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeAsync<TMessage>(
             this IMessageSubscriber subscriber,
             Predicate<TMessage> filter,
@@ -489,7 +489,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>异步订阅指定键值的消息。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        /// <summary>异步订阅指定键值的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeAsync<TKey, TMessage>(
             this IMessageSubscriber subscriber,
             TKey key,
@@ -501,7 +501,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>异步订阅指定键值的消息，并附加过滤条件。MonoBehaviour 订阅会自动绑定到其销毁时机。</summary>
+        /// <summary>异步订阅指定键值的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeAsync<TKey, TMessage>(
             this IMessageSubscriber subscriber,
             TKey key,
@@ -514,7 +514,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(handler);
@@ -523,7 +523,7 @@ namespace XFramework.XMessage
         }
 
         /// <summary>
-        /// 订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。
+        /// 订阅带缓冲的键值消息。新订阅者会立即收到最近一次发布的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。
         /// <para><b>键的生命周期结束时必须淘汰</b>:调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>，
         /// 否则该 Key 会把上一个同 Id 实体的旧值重放给新订阅者（详见模块 README「内存管理」）。</para>
         /// </summary>
@@ -534,7 +534,7 @@ namespace XFramework.XMessage
             return disposable;
         }
 
-        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。仅 MonoBehaviour 自动绑定销毁时机(节点请改用 NodeExtensions.Subscribe)。</summary>
+        /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(filter, handler);
@@ -587,24 +587,35 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 将订阅绑定到订阅者的生命周期，对象销毁时自动取消。
-        /// <para>如果订阅者是 <see cref="MonoBehaviour"/>，使用其 <see cref="MonoBehaviour.destroyCancellationToken"/>。</para>
-        /// <para>其他生命周期类型（如节点树的 <c>IDestroyCancellationToken</c>）由 Core 层扩展方法负责桥接。</para>
+        /// <para>支持两类订阅者：<see cref="MonoBehaviour"/>（用其 <see cref="MonoBehaviour.destroyCancellationToken"/>），
+        /// 以及实现了 <see cref="IDestroyCancellationToken"/> 的普通 C# 对象（用其 <see cref="IDestroyCancellationToken.DestroyCancellationToken"/>）。</para>
+        /// <para>两者皆非时不做绑定——调用方需自行持有返回的 <see cref="IDisposable"/>，
+        /// 或改用 <c>SubscribeAsync(..., cancellationToken)</c> 由令牌控制。</para>
         /// </summary>
         private static void TryBindToDestroy(object subscriber, IDisposable disposable)
         {
+            CancellationToken token;
             if (subscriber is MonoBehaviour mono)
             {
-                // 内联实现 AddTo(destroyCancellationToken):
-                // 语义与 NodeExtensions.AddTo 一致:已取消则立即释放,否则注册到取消回调
-                var token = mono.destroyCancellationToken;
-                if (!token.CanBeCanceled || token.IsCancellationRequested)
-                {
-                    disposable.Dispose();
-                }
-                else
-                {
-                    token.Register(s => ((IDisposable)s).Dispose(), disposable);
-                }
+                token = mono.destroyCancellationToken;
+            }
+            else if (subscriber is IDestroyCancellationToken destroyable)
+            {
+                token = destroyable.DestroyCancellationToken;
+            }
+            else
+            {
+                return;
+            }
+
+            // 已取消则立即释放，否则注册到取消回调
+            if (!token.CanBeCanceled || token.IsCancellationRequested)
+            {
+                disposable.Dispose();
+            }
+            else
+            {
+                token.Register(s => ((IDisposable)s).Dispose(), disposable);
             }
         }
         #endregion

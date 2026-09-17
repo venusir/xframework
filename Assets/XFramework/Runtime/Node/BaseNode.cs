@@ -19,20 +19,6 @@ namespace XFramework.XNode
     }
 
     /// <summary>
-    /// 提供销毁时的 CancellationToken，用于自动取消订阅和释放资源。
-    /// <para>类似于 MonoBehaviour.destroyCancellationToken。</para>
-    /// <para>配合 <c>NodeExtensions</c> 的 AddTo / Subscribe / SubscribeAsync 扩展方法使用时，
-    /// 订阅与其它可释放资源会自动绑定到对象的生命周期，对象销毁时自动取消。</para>
-    /// </summary>
-    public interface IDestroyCancellationToken
-    {
-        /// <summary>
-        /// 对象销毁时的 CancellationToken。绑定到此 Token 的订阅会在对象销毁时自动取消。
-        /// </summary>
-        CancellationToken DestroyCancellationToken { get; }
-    }
-
-    /// <summary>
     /// 树节点系统的抽象基类。
     /// <para>提供深度管理、父子关系、生命周期（Awake/Destroy/Start）等核心功能。</para>
     /// <para>实现 <see cref="IDisposable"/>，支持 <c>using</c> 语法和 <c>AddTo</c> 扩展。</para>
