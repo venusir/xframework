@@ -102,7 +102,9 @@ namespace XFramework.XUpdate
         /// </summary>
         static void RegisterNode(BaseNode node)
         {
-            UpdateTimeMode mode = UpdateManagerExtensions.ResolveTimeMode(node);
+            // 时间轴取节点自行声明的（未声明则为逻辑轴）。
+            // 原先经 UpdateManagerExtensions.ResolveTimeMode 读取，该扩展随「Update 模块解绑节点」一并删除，故内联于此。
+            UpdateTimeMode mode = node is IUpdateTimeMode declared ? declared.TimeMode : UpdateTimeMode.Scaled;
 
             if (node is IUpdateable updateable)
             {

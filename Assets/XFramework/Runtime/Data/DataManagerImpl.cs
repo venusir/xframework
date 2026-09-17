@@ -6,7 +6,7 @@ using XFramework.XSerialize;
 namespace XFramework.XData
 {
     /// <summary>
-    /// <see cref="IDataManager"/> 的内部实现，由 <see cref="GameDataNode"/> 实例化并注入到 <see cref="DataManager"/> 静态门面。
+    /// <see cref="IDataManager"/> 的内部实现，由 <see cref="DataBootstrapStage"/> 实例化并注入到 <see cref="DataManager"/> 静态门面。
     /// <para>数据按 <see cref="IDataBlock"/>（游戏模块）组织，序列化委托给 <see cref="XSerialize.Serializer"/>。</para>
     /// </summary>
     public sealed class DataManagerImpl : IDataManager

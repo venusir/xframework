@@ -6,7 +6,7 @@ namespace XFramework.XReactive
 {
     /// <summary>
     /// 响应式属性。包含一个可自动推送变化的响应式值。
-    /// <para>适用于血量、分数、状态等需要被监听的属性。不依赖场景节点树，可在任意 C# 类中使用。</para>
+    /// <para>适用于血量、分数、状态等需要被监听的属性。不依赖任何场景对象，可在任意 C# 类中使用。</para>
     /// <para>基于 XMessage 事件流引擎实现。实现 <see cref="IReactiveProperty{T}"/> 接口,可面向接口编程。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
     /// </summary>

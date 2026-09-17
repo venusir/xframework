@@ -5,11 +5,11 @@ namespace XFramework.XUpdate
 {
     /// <summary>
     /// 全局更新管理器（静态服务）。
-    /// <para>统一管理节点树及静态服务的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供 LOD 分桶与时间切片调度。</para>
+    /// <para>统一管理所有注册到它的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供 LOD 分桶与时间切片调度。</para>
     /// <para>自动生命周期：通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 初始化，<see cref="Application.quitting"/> 时自动清理。</para>
     /// <para>每帧由注入到 PlayerLoop 的驱动自动推进（见 <see cref="IsDrivingPlayerLoop"/>），
     /// 不依赖场景中存在任何 MonoBehaviour；<see cref="Tick(float)"/> 保留供手动驱动与测试使用。</para>
-    /// <para>静态服务（非节点树对象）可直接调用 <see cref="Register(IUpdateable, int, UpdateLOD)"/> 注册自身。</para>
+    /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateLOD)"/> 注册自身。</para>
     /// </summary>
     /// <remarks>
     /// <para><b>使用示例（静态服务注册）：</b></para>
@@ -27,8 +27,8 @@ namespace XFramework.XUpdate
     ///     public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Tier0;
     /// }
     /// </code>
-    /// <para><b>使用示例（节点树节点）：</b></para>
-    /// <para>节点树节点实现 <see cref="IUpdateable"/> 后，由 <see cref="UpdateNode"/> 自动注册，无需手动调用本类。</para>
+    /// <para><b>生命周期：</b>本类是自管理的静态服务——<see cref="AutoInit"/> 与 PlayerLoop 驱动注入
+    /// 都经 <c>[RuntimeInitializeOnLoadMethod]</c> 自动完成，<b>不要求场景中存在任何 MonoBehaviour</b>。</para>
     /// </remarks>
     public static class UpdateManager
     {
@@ -331,7 +331,7 @@ namespace XFramework.XUpdate
         /// 两者自相矛盾：任何 fixture 一旦用它做隔离，同一 play 会话内后续所有 <see cref="Register"/>
         /// 都会静默 no-op（<see cref="Register"/> 开头的守卫直接 return）。
         /// 现对齐 <see cref="XMessage.MessageManager.Clear"/> 与
-        /// <see cref="XNode.NodeFactory.ClearAllPools"/> 的既有命名与语义，
+        /// 框架内其它静态门面 <c>Clear</c> 的既有命名与语义，
         /// 并与「静态门面在 <c>Destroy</c> 后可重新初始化」的框架惯例一致。</para>
         /// </summary>
         public static void Clear()
@@ -465,7 +465,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 注册一个 <see cref="UpdateTiming.Update"/> 时机的可更新对象。
-        /// <para>节点树节点由 <see cref="UpdateNode"/> 自动注册；静态服务可在初始化时手动调用此方法。</para>
+        /// <para>静态服务可在初始化时手动调用此方法；MonoBehaviour 与普通 C# 对象同样直接调用它。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>

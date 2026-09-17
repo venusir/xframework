@@ -20,7 +20,7 @@ namespace XFramework.XPipeline
         /// 每组装配为一个 <see cref="ParallelStage"/>(组内并行、组内保持输入顺序,组间由管线串行)。
         /// <para>装配结果可直接逐个 <see cref="IPipeline.AddStage(IPipelineStage)"/> 添加执行;
         /// 同相位并行、相位升序串行的声明式编排即「每相位一个并行阶段」的约定装配
-        /// (如节点树 StartupAsync 预置管线按相位分组调度)。</para>
+        /// (如 Bootstrap 的启动管线按相位分组调度)。</para>
         /// </summary>
         /// <param name="stages">相位阶段列表。null 抛 <see cref="ArgumentNullException"/>;元素不得为 null;
         /// 空列表返回空清单。</param>

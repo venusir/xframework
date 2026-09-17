@@ -9,7 +9,7 @@ namespace XFramework.XAsset
 {
 
     /// <summary>
-    /// 资源管理器公共接口。与节点树无关，可供任何对象（MonoBehaviour、纯 C# 类等）直接使用。
+    /// 资源管理器公共接口。不依赖任何场景对象，可供任何对象（MonoBehaviour、纯 C# 类等）直接使用。
     /// <para>通过 <see cref="AssetManager"/> 的静态方法直接调用，或注入 <see cref="IAssetManager"/> 实例使用。</para>
     /// </summary>
     public interface IAssetManager : IDisposable

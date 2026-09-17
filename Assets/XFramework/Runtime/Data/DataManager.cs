@@ -5,15 +5,15 @@ namespace XFramework.XData
 {
     /// <summary>
     /// 运行时数据模块的静态门面。
-    /// <para>由 <see cref="GameDataNode"/>（启动管线相位阶段,Phase 3）创建 <see cref="DataManagerImpl"/> 并注入,
+    /// <para>由 <see cref="DataBootstrapStage"/>（启动管线相位阶段，Phase 3）创建 <see cref="DataManagerImpl"/> 并注入，
     /// 外部业务代码通过本类静态方法访问。</para>
-    /// <para>使用前必须调用 <see cref="Initialize"/>（或由 GameDataNode 自动调用）。</para>
+    /// <para>使用前必须调用 <see cref="Initialize"/>（或由 <see cref="DataBootstrapStage"/> 调用）。</para>
     /// <para>数据按 <see cref="IDataBlock"/>（GamePlay 模块）组织。</para>
     /// <para>存读档职责由 Save 模块（XFramework.XSave）负责，本类仅暴露 <see cref="CreateSnapshot"/> / <see cref="ApplySnapshot"/> 序列化接口。</para>
     /// </summary>
     /// <example>
     /// <code>
-    /// // 在节点树中挂载 GameDataNode 即可自动完成初始化。
+    /// // 登记 DataBootstrapStage（Bootstrap.RegisterDefaults() 已包含）即可自动完成初始化。
     /// // 业务代码直接使用静态调用：
     /// var bag = DataManager.GetOrCreateBlock<BagData>();
     /// bag.Items.Add(new BagItem { id = 1001, count = 1 });
@@ -31,7 +31,7 @@ namespace XFramework.XData
         #region Lifecycle
 
         /// <summary>
-        /// 注入 IDataManager 实现（由 GameDataNode 自动调用）。
+        /// 注入 IDataManager 实现（由 <see cref="DataBootstrapStage"/> 调用）。
         /// <para>传入 null 等效于调用 <see cref="Shutdown"/>。</para>
         /// <para>已注入非 null 实现时重复调用输出警告并忽略。</para>
         /// </summary>
@@ -182,7 +182,7 @@ namespace XFramework.XData
         {
             if (_impl == null)
                 throw new DataException(
-                    "DataManager 尚未初始化。请确认节点树中已挂载 GameDataNode（其相位阶段会自动注入），或手动调用 DataManager.Initialize(impl)。");
+                    "DataManager 尚未初始化。请登记 DataBootstrapStage（Bootstrap.RegisterDefaults() 已包含），或手动调用 DataManager.Initialize(impl)。");
         }
 
         #endregion

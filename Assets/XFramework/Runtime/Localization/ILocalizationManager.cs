@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace XFramework.XLocalization
 {
     /// <summary>
-    /// 本地化管理器公共接口。与节点树无关，可供任何对象直接使用。
+    /// 本地化管理器公共接口。不依赖任何场景对象，可供任何对象直接使用。
     /// <para>通过 <see cref="LocalizationManager"/> 的静态方法直接调用，或注入 <see cref="ILocalizationManager"/> 实例使用。</para>
     /// <para>数据来源于 JSON 文件（如 Luban 生成的表），通过 <see cref="LocalizationManager.SwitchLanguageAsync"/> 按需异步加载。</para>
     /// <para>语言使用 <see cref="string"/> 标识，如 <c>"zh_Hans"</c>, <c>"en"</c>, <c>"ja"</c>，也可自定义任意标识。</para>

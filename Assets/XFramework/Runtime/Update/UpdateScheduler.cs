@@ -22,7 +22,7 @@ namespace XFramework.XUpdate
     }
 
     /// <summary>
-    /// 纯 Update 调度器，不依赖节点树。
+    /// 纯 Update 调度器，不依赖任何场景对象。
     /// <para>按 <see cref="UpdateLOD"/> 档位分桶管理 <see cref="IUpdateable"/> 节点，
     /// 通过时间切片算法把更新负载摊到各<b>节拍格</b>上，避免帧消耗集中。</para>
     /// <para>节拍按<b>时间</b>推进而非按帧（<see cref="TickPeriod"/>，60Hz 基准），因此第 k 档的

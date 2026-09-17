@@ -201,7 +201,7 @@ namespace XFramework.XLocalization
 
         /// <summary>
         /// 便捷初始化方法：设置默认语言及其数据，同时作为回退语言。
-        /// <para>由 <see cref="LocalizationBootstrapNode"/> 等内部代码调用。</para>
+        /// <para>由 <see cref="LocalizationBootstrapStage"/> 等内部代码调用。</para>
         /// </summary>
         internal void InitWithDefault(string defaultLanguage, Dictionary<string, string> data)
         {

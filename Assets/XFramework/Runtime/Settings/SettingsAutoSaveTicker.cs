@@ -4,7 +4,7 @@ namespace XFramework.XSettings
 {
     /// <summary>
     /// 自动保存的帧驱动器。仅在 <see cref="SettingsOptions.AutoSave"/> 开启时由管理器创建，
-    /// 并经 <see cref="UpdateManager.Register"/> 注册（静态服务直接注册，无需节点树）。
+    /// 并经 <see cref="UpdateManager.Register"/> 注册（静态服务直接注册）。
     /// </summary>
     /// <remarks>
     /// <para><b>去抖（debounce）而非节流：</b>等待窗口从<b>最后一次改动</b>起算，因此玩家拖动

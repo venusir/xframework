@@ -8,7 +8,7 @@ using XFramework.XUI.View;
 namespace XFramework.XUI
 {
     /// <summary>
-    /// UI 管理器公共接口。与节点树无关，可供任何对象直接使用。
+    /// UI 管理器公共接口。不依赖任何场景对象，可供任何对象直接使用。
     /// <para>通过 <see cref="UIManager"/> 的静态方法直接调用，或注入 <see cref="IUIManager"/> 实例使用。</para>
     /// <para>层级使用 <see cref="int"/> 类型，数值越大越靠前。第三方项目可自由定义常量扩展层级。</para>
     /// <para>所有面板预制体通过 YooAsset（<see cref="XAsset.AssetManager"/>）加载。</para>

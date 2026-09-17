@@ -5,7 +5,7 @@ namespace XFramework.XSave
     /// <summary>
     /// 存档模块初始化选项。
     /// <para>经 <see cref="SaveManager.Initialize(SaveManagerFactory, SaveOptions)"/> 传入，
-    /// 或由节点树在挂载 <c>SaveBootstrapNode</c> 时经 <c>AddNode&lt;SaveBootstrapNode&gt;(options)</c> 传入。</para>
+    /// 或构造 <see cref="SaveBootstrapStage"/> 时经其构造函数传入。</para>
     /// </summary>
     public sealed class SaveOptions
     {

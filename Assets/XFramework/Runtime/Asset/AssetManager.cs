@@ -485,7 +485,7 @@ namespace XFramework.XAsset
         {
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
-                    "[AssetManager] AssetManager 尚未初始化。请先调用 AssetManager.InitializeAsync() 完成初始化（或由节点树 AssetBootstrapNode 自动初始化）。");
+                    "[AssetManager] AssetManager 尚未初始化。请先调用 AssetManager.InitializeAsync() 完成初始化（或登记 AssetBootstrapStage 交由启动流程完成）。");
         }
 
         #endregion

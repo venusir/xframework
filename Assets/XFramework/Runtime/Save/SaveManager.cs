@@ -16,7 +16,7 @@ namespace XFramework.XSave
     /// </summary>
     /// <example>
     /// <code>
-    /// // 初始化（通常由节点树自动完成）
+    /// // 初始化（通常由启动流程经 SaveBootstrapStage 完成）
     /// SaveManager.Initialize();
     ///
     /// // 保存
@@ -112,7 +112,7 @@ namespace XFramework.XSave
         #region Internal
 
         /// <summary>
-        /// 执行启动恢复扫描（内部使用，由 <c>SaveBootstrapNode</c> 在启动管线中调用）：
+        /// 执行启动恢复扫描（内部使用，由 <see cref="SaveBootstrapStage"/> 在启动管线中调用）：
         /// 用一代备份恢复丢失的载荷、清掉崩溃残留、补齐元数据侧车。
         /// <para><b>不切回主线程</b>——全程只碰文件系统与线程安全的 <c>Debug.Log</c>，
         /// 因此启动管线中同步阻塞等待它也不会死锁。</para>
@@ -327,7 +327,7 @@ namespace XFramework.XSave
         {
             if (_impl == null)
                 throw new InvalidOperationException(
-                    "[Save] SaveManager 尚未初始化。请确认节点树中已挂载 SaveBootstrapNode，或手动调用 SaveManager.Initialize()。");
+                    "[Save] SaveManager 尚未初始化。请登记 SaveBootstrapStage（Bootstrap.RegisterDefaults() 已包含），或手动调用 SaveManager.Initialize()。");
         }
 
         #endregion

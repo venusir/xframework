@@ -153,23 +153,6 @@ namespace XFramework.XUpdate.Tests
         }
 
         [UnityTest]
-        public IEnumerator RegisterUpdateExtension_HonoursDeclaredTimeMode()
-        {
-            // 手动注册（不走 UpdateNode）同样应尊重节点声明的时间轴
-            var leaf = _root.AddNode<UnscaledUpdateLeaf>();
-            yield return null;
-
-            leaf.RegisterUpdate();
-            UpdateManager.Pause();
-            UpdateManager.Tick(time: Time.time);
-
-            Assert.AreEqual(1, leaf.OnUpdateCallCount);
-
-            UpdateManager.Resume();
-            yield break;
-        }
-
-        [UnityTest]
         public IEnumerator UpdateNode_AutoRegistersLateUpdateableChildren()
         {
             _updateNode = _root.AddNode<UpdateNode>();
