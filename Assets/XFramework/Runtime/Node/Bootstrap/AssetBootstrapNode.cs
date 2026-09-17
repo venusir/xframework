@@ -41,26 +41,6 @@ namespace XFramework.XNode
             context.SetState(PipelineStageState.Completed);
         }
 
-        /// <summary>
-        /// 进度直写桥：<see cref="AssetInitReport"/> → 阶段上下文。每次 Report 同步写进度与描述，
-        /// 一次 Report 恰触发一次组级聚合（阶段写面由 <see cref="PipelineStageContext"/> 保证事件驱动）。
-        /// </summary>
-        private sealed class AssetInitProgressRelay : IProgress<AssetInitReport>
-        {
-            readonly PipelineStageContext _context;
-
-            public AssetInitProgressRelay(PipelineStageContext context)
-            {
-                _context = context;
-            }
-
-            public void Report(AssetInitReport value)
-            {
-                _context.SetProgress(value.Progress);
-                _context.SetDescription(value.Description);
-            }
-        }
-
         #endregion
 
         #region Lifecycle
