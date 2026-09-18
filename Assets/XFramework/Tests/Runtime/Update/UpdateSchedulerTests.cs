@@ -575,6 +575,88 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void LoadProfile_PeakStaysWithinBoundOfMean()
+        {
+            // 「避免帧消耗集中」是本模块的目标，故把负载剖面钉住。实测（256 帧）：
+            //   混合 63 节点（30/15/8/4/3/2/1 铺在 Tier1~Tier7）：峰 24@第 0 帧、均值 20.13、峰均比 1.19
+            //   稀疏 7 节点（每档各 1 个）：峰 7@第 0 帧、均值 0.99、峰均比 7.06
+            // 簇的形状：24,23,22,20,20... 与 7,0,1,0,2,0,1,0,3,0...——切片相位由桶内下标决定，
+            // 而所有档位共用同一个 tickIndex，2 的幂互相整除，于是各档位的「下标 0」都在同一格命中。
+            //
+            // 已实测并否决的修法：给每档加相位偏移（(tickIndex + lod) & mask）只能把混合峰从 24
+            // 降到 22（+4 → +2 次派发）、稀疏峰从 7 降到 2，即最坏帧多跑约 2~5 次回调、每 2.13 秒
+            // 一次（几十 ns 量级）；而代价是「首帧落在切片 0」这条相位规律与若干钉相位的用例。
+            // 叠束的绝对量本就被桶数上界（轴 × 档位 ≤ 16）封住，不值得为它动相位
+            var mixProfile = CaptureLoadProfile(new[] { 30, 15, 8, 4, 3, 2, 1 }, 256);
+            var sparseProfile = CaptureLoadProfile(new[] { 1, 1, 1, 1, 1, 1, 1 }, 256);
+
+            Assert.LessOrEqual(Max(mixProfile), Mean(mixProfile) * 1.25,
+                $"混合分布的峰均比应留在 1.25 以内（实测峰 {Max(mixProfile)}、均值 {Mean(mixProfile):F2}）");
+            Assert.LessOrEqual(Max(sparseProfile), 8,
+                $"稀疏分布下同格命中的派发量不应超过稀疏桶的个数（实测峰 {Max(sparseProfile)}）");
+        }
+
+        /// <summary>
+        /// 按「每档节点数」表（下标 0 即 Tier1）铺一批节点，在独立调度器上逐帧驱动，
+        /// 返回每帧的派发总量。用独立实例是为了让两组测量不共用桶。
+        /// </summary>
+        private static int[] CaptureLoadProfile(int[] countPerTier, int frames)
+        {
+            var scheduler = new UpdateScheduler();
+            var nodes = new List<TestUpdateable>();
+
+            for (int lod = 1; lod <= countPerTier.Length; lod++)
+            {
+                for (int i = 0; i < countPerTier[lod - 1]; i++)
+                {
+                    var node = new TestUpdateable { ReturnLOD = (UpdateLOD)lod };
+                    nodes.Add(node);
+                    scheduler.Register(node, depth: 0, initialLOD: (UpdateLOD)lod);
+                }
+            }
+
+            var perFrame = new int[frames];
+            int dispatched = 0;
+            float time = 0f;
+            for (int frame = 0; frame < frames; frame++)
+            {
+                time += FrameSeconds;
+                scheduler.Tick(time);
+
+                int total = 0;
+                for (int i = 0; i < nodes.Count; i++)
+                {
+                    total += nodes[i].OnUpdateCallCount;
+                }
+
+                perFrame[frame] = total - dispatched;
+                dispatched = total;
+            }
+
+            return perFrame;
+        }
+
+        private static int Max(int[] values)
+        {
+            int max = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                if (values[i] > max) max = values[i];
+            }
+            return max;
+        }
+
+        private static double Mean(int[] values)
+        {
+            int sum = 0;
+            for (int i = 0; i < values.Length; i++)
+            {
+                sum += values[i];
+            }
+            return (double)sum / values.Length;
+        }
+
+        [Test]
         public void SlicedNode_ReceivesAccumulatedDelta()
         {
             // 降频不导致时间失真：被跳过的帧应累积进下一次的 deltaTime——这是本调度器
