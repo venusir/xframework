@@ -119,6 +119,29 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 累加出自定周期（框架自己的 `SettingsAutoSaveTicker` 就是这么做的）。必须立刻反应的事（受击、
 玩家指令）应走事件（`MessageManager`），而不是等下一次节拍。
 
+### 档位由谁决定
+
+档位有两条写入通道，分别对应两类需求：
+
+| 需求 | 通道 | 说明 |
+| --- | --- | --- |
+| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialLOD` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚 |
+| **运行时自适应** | `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate` 的返回值 | 状态变化时表达新档位，**决定下一次**派发（滞后一拍是设计如此） |
+
+框架自己两条都在用：`InputManager` 与 `UIManager` 的每帧驱动器恒返回 `Tier0`，而
+`SettingsAutoSaveTicker` 按状态在 `Tier3`（空闲）/ `Tier0`（热窗口）/ `Tier5`（已释放）之间切换。
+
+**外部策略目前没有入口**：「按可见性统一降档」「画质/性能档批量降档」这类由调度器之外的系统决定的
+档位，`UpdateManager` 没有对应 API（没有 `SetLOD`）。现有两条解法，各有代价：
+
+1. **节点自查全局状态，再用返回值表达**——等于把一条全局策略复制进 N 个节点，策略一改要改 N 处；
+2. **注销 + 以新档位重新注册**——代价是首次派发 `deltaTime = 0`（锚定规则），且最坏要等一个整周期
+   才轮到首次派发（`Tier7` 约 2.1 秒，见「已知限制」）。
+
+**档位属于设计决定、且对象数量大时，还有第三种范式**（UI 模块在用）：把档位声明在对象上
+（`UIViewBase.UpdateLod`，Inspector 可配、运行时可改），由上层管理器按档位分桶、每档注册一个
+驱动器承载整桶——调度器只看到「每档一个节点」，档位与对象解耦。
+
 ### 派发时机与驱动
 
 每帧由注入 PlayerLoop 的三个驱动系统推进（分别落在 `Update.ScriptRunBehaviourUpdate`、

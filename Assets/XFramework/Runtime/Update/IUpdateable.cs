@@ -74,7 +74,8 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="deltaTime">距上次更新的时间差。</param>
         /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），可用于绝对时间计算。</param>
-        /// <returns>下一帧的更新频率等级。</returns>
+        /// <returns>下一帧的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
+        /// <c>initialLOD</c> 声明（两者的分工见 <c>Update/README.md</c> 的「档位由谁决定」）。</returns>
         UpdateLOD OnUpdate(float deltaTime, float time);
     }
 
@@ -104,7 +105,8 @@ namespace XFramework.XUpdate
         /// 而不是「若干个固定步的整数倍」这种随派发漂移的量。注册/重新启用后的首次派发按
         /// 锚定规则记 0（见 <c>Update/README.md</c>）。</param>
         /// <param name="fixedTime">当前固定步时间（<see cref="UnityEngine.Time.fixedTime"/>）。</param>
-        /// <returns>下一次派发的更新频率等级。</returns>
+        /// <returns>下一次派发的更新频率等级（本轴上即仿真频率）——静态档位请在注册时用
+        /// <c>initialLOD</c> 声明。</returns>
         UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime);
     }
 
@@ -122,7 +124,8 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="deltaTime">距上次派发的时间差。</param>
         /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>）。</param>
-        /// <returns>下一次派发的更新频率等级。</returns>
+        /// <returns>下一次派发的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
+        /// <c>initialLOD</c> 声明。</returns>
         UpdateLOD OnLateUpdate(float deltaTime, float time);
     }
 }
