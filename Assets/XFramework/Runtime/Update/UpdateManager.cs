@@ -511,7 +511,9 @@ namespace XFramework.XUpdate
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
         /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
-        /// 注意此处的档位是每 2^k 个<b>固定步</b>（默认 0.02s 一步），不是变步长轴的毫秒。</param>
+        /// 注意此处的档位是每 2^k 个<b>固定步</b>（默认 0.02s 一步），不是变步长轴的毫秒；
+        /// 它改变的是本节点的<b>仿真频率</b>（<c>deltaTime</c> 恒为 <c>2^k × Time.fixedDeltaTime</c>），
+        /// 既不减少物理成本，也不适合直接驱动物理的对象。</param>
         public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0)
         {
             if (node == null) return;

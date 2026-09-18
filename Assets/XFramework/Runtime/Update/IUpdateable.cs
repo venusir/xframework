@@ -85,6 +85,12 @@ namespace XFramework.XUpdate
     /// 这里的时间基准是 <c>Time.fixedTime</c>，因此 <see cref="UpdateLOD"/> 的档位在此是
     /// 「每 2^k 个<b>固定步</b>」（默认 0.02s 一步）：固定步长本就等长，不存在需要修正的漂移，
     /// 故这一轴刻意不参与变步长轴的 60Hz 节拍。</para>
+    /// <para><b>本轴的档位是「仿真频率」而非「采样频率」——降档后 deltaTime 仍然恒定</b>：
+    /// Tier k 的节点每 2^k 步被派发一次，每次拿到的 <c>deltaTime</c> 恒为
+    /// <c>2^k × Time.fixedDeltaTime</c>（档位不变则增量不变），即该子系统的固定速率是物理速率的
+    /// 1/2^k。要的正是这件事时就用档位（经济结算 1Hz、AI 决策 12.5Hz）；但它<b>不减少物理成本</b>
+    /// ——Unity 的物理照旧每步跑——所以它不是帧预算旋钮，摊帧预算请用变步长轴。直接驱动物理的
+    /// 对象（写刚体速度/位置的控制环）也不宜降档：控制频率降到 1/2^k，却仍作用在每步积分的物理上。</para>
     /// <para>没有时间轴参数：Unity 的固定步长本就随 <c>timeScale</c> 停摆，
     /// 不存在「暂停期间仍运行」的固定步语义。</para>
     /// </summary>
@@ -93,7 +99,10 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 执行固定步长更新并返回下一次派发所采用的 <see cref="UpdateLOD"/> 等级。
         /// </summary>
-        /// <param name="deltaTime">距上次派发的时间差（通常是若干个固定步的整数倍）。</param>
+        /// <param name="deltaTime">距上次派发的时间差，恒为 <c>2^k × Time.fixedDeltaTime</c>
+        /// （k 即本节点当前的 <see cref="UpdateLOD"/> 等级）——档位不变则它是不变的固定增量，
+        /// 而不是「若干个固定步的整数倍」这种随派发漂移的量。注册/重新启用后的首次派发按
+        /// 锚定规则记 0（见 <c>Update/README.md</c>）。</param>
         /// <param name="fixedTime">当前固定步时间（<see cref="UnityEngine.Time.fixedTime"/>）。</param>
         /// <returns>下一次派发的更新频率等级。</returns>
         UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime);
