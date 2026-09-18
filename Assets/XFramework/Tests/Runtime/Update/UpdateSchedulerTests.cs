@@ -807,6 +807,25 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Resume_WithoutPause_KeepsNormalDelta()
+        {
+            // Resume 应当幂等：没暂停过就没有「整段暂停时长」需要抹掉。否则「重复调用 Resume」
+            // 这种无害写法会白丢一帧——重锚把每个条目的时间基准推到当前时刻，那次派发的 delta 成 0
+            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            _scheduler.Register(node, depth: 0);
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(1, node.OnUpdateCallCount);
+
+            _scheduler.Resume();            // 并未处于暂停态
+            _scheduler.Tick(time: 1.1f);
+
+            Assert.AreEqual(2, node.OnUpdateCallCount);
+            Assert.AreEqual(0.1f, node.DeltaTimes[1], 1e-4f,
+                "未暂停时 Resume 不该重锚——这一帧应是正常间隔，而不是 0");
+        }
+
+        [Test]
         public void TimeScaleZero_FreezesScaledAxisOnly()
         {
             // timeScale = 0 时 Time.time 冻结、Time.unscaledTime 照走：

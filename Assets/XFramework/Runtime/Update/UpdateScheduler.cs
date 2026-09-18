@@ -790,9 +790,16 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 恢复逻辑轴的派发，并请求一次时间基准重锚（不追赶）。
+        /// <para><b>未处于暂停态时什么也不做</b>：重锚会把每个条目的时间基准推到当前时刻，也就是
+        /// 让下一次派发的 delta 变成 0。没暂停过就没有任何暂停时长需要抹掉，此时重锚只是凭空丢
+        /// 一帧——重复调用本方法这种无害写法就会踩到。</para>
+        /// <para>被 <c>timeScale = 0</c> 冻结的那条路径（<see cref="UpdateClock.IsPaused"/>）本就
+        /// 不需要重锚：逻辑时刻在冻结期间没有前进，解除冻结后首帧的 delta 自然接近 0。</para>
         /// </summary>
         internal void Resume()
         {
+            if (!_paused) return;
+
             _paused = false;
             _reanchorScaledAxis = true;
         }
