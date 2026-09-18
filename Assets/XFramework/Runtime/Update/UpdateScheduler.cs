@@ -76,8 +76,19 @@ namespace XFramework.XUpdate
         private struct Entry
         {
             public IUpdateLifecycle Node;
+
+            /// <summary>
+            /// 上次派发时刻。<b>用 double 存</b>：节点拿到的 delta 是它与当前时刻之差，而会话跑长
+            /// 之后 float 的 ULP 会逼近一帧（27.8 小时时约 7.8ms）——两个大 float 相减会让 delta 在
+            /// 相邻量化台阶之间跳（实测 60 帧里 8 帧偏高 40%、其余偏低 6%）。存精确值、求差后再截到
+            /// float（派发契约不变），量化误差就从「两个绝对值各一次」降为「结果一次」。
+            /// <para><b>字段顺序是按对齐挑的</b>：double 需要 8 字节对齐，若排在 int 之后，在「按声明
+            /// 顺序排布」的布局下会多出 4 字节填充（结构体由 24 涨到 32）——引用之后紧跟 double 才是
+            /// 24。桶是 <c>List&lt;Entry&gt;</c>，每条多 8 字节是白付的。</para>
+            /// </summary>
+            public double LastUpdateTime;
+
             public int Depth;
-            public float LastUpdateTime;
 
             /// <summary>
             /// 尚未经历过一次派发，故首次派发的 delta 记 0。
@@ -278,9 +289,9 @@ namespace XFramework.XUpdate
             {
                 bool isLogical = axis == (int)UpdateTimeMode.Scaled;
 
-                // 补格判定用 double 时刻；派发路径保持 float（OnUpdate 的 delta 与 time 都是 float）
+                // 时刻全程用 double，直到派发边界才截到 float（OnUpdate 的 delta 与 time 都是 float）：
+                // 补格判定与节点 delta 都靠它与条目基准求差，精度损失只允许发生一次
                 double nowD = clock.GetTime((UpdateTimeMode)axis);
-                float now = (float)nowD;
 
                 // 冻结时不派发、也不推进格数：切片相位留在暂停前的位置，恢复后与暂停前接续。
                 // 若照常推进，长周期节点会白丢一轮——Tier5 在 60fps 下意味着半秒多的空窗。
@@ -295,16 +306,16 @@ namespace XFramework.XUpdate
                 if (isLogical && _reanchorScaledAxis)
                 {
                     _reanchorScaledAxis = false;
-                    ReanchorAxis(axis, now);
+                    ReanchorAxis(axis, nowD);
                 }
 
                 // 每帧档位放在补格循环之外：帧率高于节拍时本帧可能一格都不推进，但 Tier0 照发
-                TickEveryFrameBucket(axis, now);
+                TickEveryFrameBucket(axis, nowD);
 
                 // 本轴本帧要推进 n 格：低帧率下 n 可能为 2，高帧率下可能为 0
                 for (int t = 0, n = AdvanceTicks(axis, nowD); t < n; t++)
                 {
-                    TickSlicedBuckets(axis, now, _vTick[axis]);
+                    TickSlicedBuckets(axis, nowD, _vTick[axis]);
                     _vTick[axis]++;
                 }
             }
@@ -324,8 +335,8 @@ namespace XFramework.XUpdate
         /// 派发每帧档（LOD=0）的桶。该档不切片，每帧全量。
         /// </summary>
         /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
-        /// <param name="now">该轴本帧的时刻。</param>
-        private void TickEveryFrameBucket(int axis, float now)
+        /// <param name="now">该轴本帧的精确时刻（求 delta 用 <c>double</c>，派发时截到 <c>float</c>）。</param>
+        private void TickEveryFrameBucket(int axis, double now)
         {
             // LOD=0: 每帧全量更新
             var lod0 = _buckets[BucketOf(axis, 0)];
@@ -337,7 +348,7 @@ namespace XFramework.XUpdate
                 int newLOD;
                 try
                 {
-                    newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, now), 0, MaxLOD);
+                    newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, (float)now), 0, MaxLOD);
                 }
                 catch (System.Exception e)
                 {
@@ -364,9 +375,9 @@ namespace XFramework.XUpdate
         /// 派发一条轴上全部切片桶（LOD≥1）中<b>站在本格</b>上的条目。
         /// </summary>
         /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
-        /// <param name="now">该轴本帧的时刻。</param>
+        /// <param name="now">该轴本帧的精确时刻（求 delta 用 <c>double</c>，派发时截到 <c>float</c>）。</param>
         /// <param name="tickIndex">本格的序号，相位由它对 2^k 取模得到。</param>
-        private void TickSlicedBuckets(int axis, float now, int tickIndex)
+        private void TickSlicedBuckets(int axis, double now, int tickIndex)
         {
             // LOD=1~5: 时间切片更新
             for (int lod = 1; lod < LODCount; lod++)
@@ -394,7 +405,7 @@ namespace XFramework.XUpdate
                     int newLOD;
                     try
                     {
-                        newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, now), 0, MaxLOD);
+                        newLOD = Mathf.Clamp(TickNode(entry.Node, realDelta, (float)now), 0, MaxLOD);
                     }
                     catch (System.Exception e)
                     {
@@ -484,7 +495,7 @@ namespace XFramework.XUpdate
         /// 第一帧 delta 为 0。禁用表中的条目不需要处理：它们被 <see cref="Enable"/> 放回桶里时
         /// 会顺带重置时间基准。</para>
         /// </summary>
-        private void ReanchorAxis(int axis, float now)
+        private void ReanchorAxis(int axis, double now)
         {
             for (int lod = 0; lod < LODCount; lod++)
             {
@@ -526,19 +537,21 @@ namespace XFramework.XUpdate
         /// 「位置 += 速度 × delta」反向积分；时刻基准照常前进，否则下一次派发会把这段倒放
         /// 又算一遍。</para>
         /// </summary>
-        private static float ClampDelta(float delta)
+        private static float ClampDelta(double delta)
         {
-            return delta < 0f ? 0f : delta;
+            return delta < 0d ? 0f : (float)delta;
         }
 
         /// <summary>
         /// 取条目距上次派发的真实间隔，并把它的时间基准推到本帧。
         /// <para>首次派发（注册或重新启用之后）一律记 0：调度器不知道「注册那一刻」在各时间轴
         /// 上是几点，去猜会在 <c>timeScale != 1</c> 的自定义驱动下算出成片的假间隔。</para>
+        /// <para>求差在 <c>double</c> 域完成、只把结果截到 <c>float</c>：条目与当前时刻都是大数，
+        /// 先各自截断再相减会叠加两次量化误差（长会话下实测峰峰抖动 46.9%）。</para>
         /// </summary>
         /// <param name="entry">条目副本，由调用方写回。</param>
-        /// <param name="now">该轴本帧的时刻。</param>
-        private static float TakeDelta(ref Entry entry, float now)
+        /// <param name="now">该轴本帧的精确时刻。</param>
+        private static float TakeDelta(ref Entry entry, double now)
         {
             float delta = entry.NeedsAnchor ? 0f : ClampDelta(now - entry.LastUpdateTime);
             entry.NeedsAnchor = false;
@@ -683,7 +696,7 @@ namespace XFramework.XUpdate
             }
 
             // 时刻按条目自己的时间轴取：墙钟轴上的节点在暂停期间也要拿到在走的那个时间
-            float now = (float)clock.GetTime((UpdateTimeMode)entry.Axis);
+            double now = clock.GetTime((UpdateTimeMode)entry.Axis);
             int lod = LodOf(bucket);
             int axis = AxisOf(bucket);
 
@@ -700,7 +713,7 @@ namespace XFramework.XUpdate
             _isIterating = true;
             try
             {
-                int newLOD = Mathf.Clamp(TickNode(node, deltaTime, now), 0, MaxLOD);
+                int newLOD = Mathf.Clamp(TickNode(node, deltaTime, (float)now), 0, MaxLOD);
 
                 entry.NeedsAnchor = false;
                 entry.LastUpdateTime = now;

@@ -1065,6 +1065,34 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void LongSession_NodeDeltaHasNoFloatCancellation()
+        {
+            // 与上一条同源，但查的是另一条路径：补格判定已用 double，而逐节点 delta 至今是拿
+            // 「两个各带 ±ULP/2 量化误差的大 float」相减——会话越长，量化台阶越接近一帧，
+            // 差值就在相邻台阶之间跳。27.8 小时时 float 的 ULP ≈ 7.8ms，而帧步长只有 16.7ms
+            // （约 2.1 个 ULP），于是 delta 会在 2 个 ULP 与 3 个 ULP 之间交替
+            _scheduler.Register(_node, depth: 0);   // Tier0：每帧派发，delta 应恒为帧步长
+
+            const double sessionStart = 100000d;    // 约 27.8 小时
+            double time = sessionStart;
+            _scheduler.Tick(new UpdateClock(time, time));   // 首帧：锚定轴 + 节点首次派发（delta = 0）
+
+            for (int i = 0; i < 60; i++)
+            {
+                time += FrameSeconds;
+                _scheduler.Tick(new UpdateClock(time, time));
+            }
+
+            Assert.AreEqual(61, _node.DeltaTimes.Count, "首帧记 0，其后 60 帧各一次");
+
+            for (int i = 1; i < _node.DeltaTimes.Count; i++)
+            {
+                Assert.AreEqual(FrameSeconds, _node.DeltaTimes[i], 1e-5f,
+                    $"第 {i} 帧的 delta 应等于帧步长。实测序列: {string.Join(", ", _node.DeltaTimes)}");
+            }
+        }
+
+        [Test]
         public void FirstDispatchAfterRegister_HasZeroDelta()
         {
             // 注册时不该由调度器自己去猜「现在几点」：驱动方给的时间轴未必是 Unity 的 Time.time
