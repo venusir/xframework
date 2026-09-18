@@ -382,7 +382,7 @@ namespace XFramework.XUpdate
         /// <paramref name="now"/>，故要靠它避免在同一帧里重复访问同一档位。</param>
         private void TickSlicedBuckets(int axis, double now, int tickIndex, int tickOffset)
         {
-            // LOD=1~5: 时间切片更新
+            // LOD=1~MaxLOD: 时间切片更新
             for (int lod = 1; lod < LODCount; lod++)
             {
                 // 同帧内不重复访问同一档位：本帧推进 n 格时，第 lod 档只有 2^lod 个切片相位，
@@ -713,6 +713,8 @@ namespace XFramework.XUpdate
 
             if (_isIterating)
             {
+                // 只推时间基准、不派发。NeedsAnchor 保持原样：它若仍为 true（注册后还没派发过），
+                // 「首次派发 delta = 0」那条锚定规则要照常生效，不该被这次调用顶掉
                 entry.LastUpdateTime = now;
                 _buckets[bucket][index] = entry;
                 return;
@@ -811,14 +813,20 @@ namespace XFramework.XUpdate
         internal bool IsPaused => _paused;
 
         /// <summary>
-        /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量（两条时间轴合计）。
+        /// 获取指定 <see cref="UpdateLOD"/> 等级的节点数量（全部时间轴合计）。
         /// </summary>
         public int GetCount(UpdateLOD lod)
         {
             int index = (int)lod;
             if (index < 0 || index > MaxLOD) return 0;
 
-            return _buckets[BucketOf(0, index)].Count + _buckets[BucketOf(1, index)].Count;
+            // 按 AxisCount 迭代而不是写死 0/1——加轴时不会静默少计
+            int count = 0;
+            for (int axis = 0; axis < AxisCount; axis++)
+            {
+                count += _buckets[BucketOf(axis, index)].Count;
+            }
+            return count;
         }
 
         /// <summary>

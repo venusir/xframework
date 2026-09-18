@@ -187,7 +187,8 @@ namespace XFramework.XUpdate
                 // 不会报错——不打日志的话表现为「所有 IUpdateable 静止」
                 Debug.LogWarning(
                     "[Update] 未在 PlayerLoop 中找到驱动目标子系统（ScriptRunBehaviourUpdate / " +
-                    "ScriptRunBehaviourLateUpdate），自动驱动未生效；请自行每帧调用 UpdateManager.Tick。");
+                    "ScriptRunBehaviourLateUpdate / ScriptRunBehaviourFixedUpdate 三者缺一即报此条），" +
+                    "自动驱动未生效；请自行每帧调用 UpdateManager.Tick。");
             }
 
             return ok;

@@ -9,7 +9,8 @@ namespace XFramework.XUpdate
     /// 2^k 个固定步。完整分级表见 <c>Update/README.md</c>。</para>
     /// <para>因此档位名刻意只表达序数、不表达具体周期——周期属于模块约定，这样调整节拍基准时
     /// 不必再次改名。变步长轴上帧长超过 50ms（低于约 20fps）时补格被上限截住，周期会随帧率
-    /// 线性拉长（宁可延长也不突发）。</para>
+    /// 线性拉长（宁可延长也不突发）；帧长达到 2 格（约 30fps 及以下）时 <c>Tier1</c> 与
+    /// <c>Tier0</c> 同频——同一帧内不重复访问同一档位，详见 <c>Update/README.md</c>。</para>
     /// </summary>
     public enum UpdateLOD
     {
