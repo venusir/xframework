@@ -312,10 +312,11 @@ namespace XFramework.XUpdate
                 // 每帧档位放在补格循环之外：帧率高于节拍时本帧可能一格都不推进，但 Tier0 照发
                 TickEveryFrameBucket(axis, nowD);
 
-                // 本轴本帧要推进 n 格：低帧率下 n 可能为 2，高帧率下可能为 0
+                // 本轴本帧要推进 n 格：低帧率下 n 可能为 2，高帧率下可能为 0。
+                // t 一并传下去：同帧内的多格共用同一个时刻，切片档要靠它避免重复派发
                 for (int t = 0, n = AdvanceTicks(axis, nowD); t < n; t++)
                 {
-                    TickSlicedBuckets(axis, nowD, _vTick[axis]);
+                    TickSlicedBuckets(axis, nowD, _vTick[axis], t);
                     _vTick[axis]++;
                 }
             }
@@ -377,11 +378,21 @@ namespace XFramework.XUpdate
         /// <param name="axis">时间轴（即 <see cref="UpdateTimeMode"/> 的取值）。</param>
         /// <param name="now">该轴本帧的精确时刻（求 delta 用 <c>double</c>，派发时截到 <c>float</c>）。</param>
         /// <param name="tickIndex">本格的序号，相位由它对 2^k 取模得到。</param>
-        private void TickSlicedBuckets(int axis, double now, int tickIndex)
+        /// <param name="tickOffset">本格在<b>本帧内</b>的序号（0 起）。同一帧内的多格共用同一个
+        /// <paramref name="now"/>，故要靠它避免在同一帧里重复访问同一档位。</param>
+        private void TickSlicedBuckets(int axis, double now, int tickIndex, int tickOffset)
         {
             // LOD=1~5: 时间切片更新
             for (int lod = 1; lod < LODCount; lod++)
             {
+                // 同帧内不重复访问同一档位：本帧推进 n 格时，第 lod 档只有 2^lod 个切片相位，
+                // n > 2^lod 就必然有节点被轮到两次——而同一帧内的多格共用同一个 now，第二次的
+                // delta 是 0（它的 LastUpdateTime 刚被推成 now）。截到「帧内前 2^lod 格」即可消除：
+                // 帧内格序号连续，前 2^lod 个恰好把该档相位各覆盖一次，于是每个节点每帧至多派发
+                // 一次，且**每帧档（每帧一次）不会再被切片档反超**——帧长超过一格时后者本可在一帧
+                // 里轮到 1.5 次（20fps 下实测 Tier1 每秒 29.3 次 vs Tier0 的 20 次）
+                if (tickOffset >= (1 << lod)) continue;
+
                 var entries = _buckets[BucketOf(axis, lod)];
                 int count = entries.Count;
                 if (count == 0) continue;

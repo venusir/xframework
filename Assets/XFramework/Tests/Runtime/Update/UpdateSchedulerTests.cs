@@ -944,6 +944,68 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void LowFrameRate_Tier1DoesNotOutrunTier0()
+        {
+            // 每帧档在补格循环之外（每帧一次），切片档在循环之内（每格一次）——帧长超过一格后
+            // 每帧会补多格，档位次序就可能反转：20fps 下每帧恰好 3 格，Tier1（2 格一轮）于是
+            // 每帧被轮到约 1.5 次，比 Tier0 的每帧一次还频繁。梯子在最吃紧的设备上倒挂
+            var tier0 = new TestUpdateable();
+            var tier1 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier1 };
+            _scheduler.Register(tier0, depth: 0);
+            _scheduler.Register(tier1, depth: 1, initialLOD: UpdateLOD.Tier1);
+
+            const float slowFrameSeconds = 1f / 20f;    // 恰好 3 格
+            float time = 0f;
+            for (int i = 0; i < 60; i++)
+            {
+                _scheduler.Tick(time += slowFrameSeconds);
+            }
+
+            Assert.AreEqual(60, tier0.OnUpdateCallCount, "Tier0 每帧一次，60 帧即 60 次");
+            Assert.AreEqual(tier0.OnUpdateCallCount, tier1.OnUpdateCallCount,
+                $"Tier1 不得比 Tier0 更频繁（实测 Tier1={tier1.OnUpdateCallCount}、Tier0={tier0.OnUpdateCallCount}）");
+        }
+
+        [Test]
+        public void Hitch_Tier1IsNotDispatchedTwiceInOneFrame()
+        {
+            // 同一帧内的多格共用同一个时刻，所以一帧里被轮到两次的节点，第二次的 delta 必然是 0
+            // （now - LastUpdateTime，而 LastUpdateTime 刚被推成 now）。卡顿帧一次补 3 格，Tier1
+            // 的切片相位只有 2 个，必然有节点被轮两次
+            var nodes = new TestUpdateable[4];          // 下标 0~3，两种切片相位都覆盖
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Tier1 };
+                _scheduler.Register(nodes[i], depth: i, initialLOD: UpdateLOD.Tier1);
+            }
+
+            float time = 0f;
+            for (int i = 0; i < 4; i++)
+            {
+                _scheduler.Tick(time += FrameSeconds);  // 先正常走几帧，让相位离开起点
+            }
+
+            var before = new int[nodes.Length];
+            var beforeDeltaCount = new int[nodes.Length];
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                before[i] = nodes[i].OnUpdateCallCount;
+                beforeDeltaCount[i] = nodes[i].DeltaTimes.Count;
+            }
+
+            _scheduler.Tick(time += 1.0f);              // 卡顿帧：补到上限 3 格
+
+            for (int i = 0; i < nodes.Length; i++)
+            {
+                var recorded = nodes[i].DeltaTimes.GetRange(
+                    beforeDeltaCount[i], nodes[i].DeltaTimes.Count - beforeDeltaCount[i]);
+
+                Assert.AreEqual(before[i] + 1, nodes[i].OnUpdateCallCount,
+                    $"卡顿帧内同一节点只应被派发一次。本帧实测 delta 序列: {string.Join(", ", recorded)}");
+            }
+        }
+
+        [Test]
         public void SameTier_SameDispatchCountAcrossFrameRates()
         {
             // 旧实现里同一档位在 60fps 与 144fps 下差 2.4 倍；新节拍下二者应当一致
