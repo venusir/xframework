@@ -932,7 +932,7 @@ namespace XFramework.XUpdate
                     if (TryTakeFromBuckets(op.Node, out Entry disabled))
                     {
                         _disabledEntries.Add(disabled);
-                        op.Node.OnDisable();
+                        NotifyLifecycle(op.Node, enable: false);
                     }
                     break;
                 }
@@ -948,10 +948,44 @@ namespace XFramework.XUpdate
                         int bucket = BucketOf(enabled.Axis, 0);
                         InsertSorted(_buckets[bucket], enabled);
                         _bucketOf[op.Node] = bucket;
-                        op.Node.OnEnable();
+                        NotifyLifecycle(op.Node, enable: true);
                     }
                     break;
                 }
+            }
+        }
+
+        /// <summary>
+        /// 调用节点的启用/禁用回调，并把回调里的异常隔离在本次调用内。
+        /// <para><b>为什么必须隔离：</b>活表在回调之前就已改完，异常本身不会留下不一致的状态，
+        /// 但它会中断 <see cref="FlushPending"/> 的循环——排在后面的操作本帧全部失效，而下一帧是
+        /// 「先派发、后 flush」，于是已请求禁用/注销的条目会再多派发一次，当帧
+        /// <see cref="IsEnabled"/> 也仍报「未禁用」（与 README 的承诺相反）。这里对齐
+        /// <see cref="IUpdateable.OnUpdate"/> 的既有约定：记 LogError，但不打断调度。</para>
+        /// <para><b>与 OnUpdate 的区别：</b>那里抛异常要连带注销节点（它下一帧多半还会抛、且
+        /// 每帧都被调用），而生命周期回调只在状态迁移时触发，一次异常不会变成每帧刷屏，
+        /// 注销反而会把「回调写错了」放大成「对象凭空消失」。</para>
+        /// </summary>
+        /// <param name="node">回调所属节点。</param>
+        /// <param name="enable">true 走 <see cref="IUpdateLifecycle.OnEnable"/>，
+        /// false 走 <see cref="IUpdateLifecycle.OnDisable"/>。</param>
+        private static void NotifyLifecycle(IUpdateLifecycle node, bool enable)
+        {
+            try
+            {
+                if (enable)
+                {
+                    node.OnEnable();
+                }
+                else
+                {
+                    node.OnDisable();
+                }
+            }
+            catch (System.Exception e)
+            {
+                Debug.LogError(
+                    $"[UpdateScheduler] {node.GetType().Name}.On{(enable ? "Enable" : "Disable")} threw exception: {e}");
             }
         }
 

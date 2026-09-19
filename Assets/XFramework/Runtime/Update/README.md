@@ -229,6 +229,10 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 会让**每个时机各触发一次** `OnEnable` / `OnDisable`（启用态本就是每套调度器一份）；操作不会嵌进当前
 回调的栈里执行，而是等各调度器各自收尾时应用——派发中调 `Tick` 同样被挡下，不会嵌套派发另一时机。
 
+生命周期回调（`OnEnable` / `OnDisable`）抛异常只记 `LogError`，不打断本帧剩余操作的落地；这与
+`OnUpdate` 的「抛异常即注销该对象」不同——后者每帧都被调用（不注销就是每帧刷屏），而生命周期回调只在
+状态迁移时触发。
+
 `Clear()` 是例外之外的一点：它**不回调 `OnDisable`**（与 `Unregister` 一致），
 但会一并复位暂停开关。
 

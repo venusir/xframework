@@ -13,12 +13,32 @@ namespace XFramework.XUpdate.Tests
         public int OnDisableCallCount { get; set; }
         public int OnUpdateCallCount { get; set; }
         public UpdateTier ReturnTier { get; set; } = UpdateTier.Tier0;
+
+        /// <summary>让 <see cref="OnUpdate"/> 抛异常（用于锁定「OnUpdate 抛异常即注销」）。</summary>
         public bool ThrowException { get; set; }
+
+        /// <summary>让 <see cref="OnDisable"/> 抛异常（用于锁定「回调异常不打断本帧剩余操作」）。</summary>
+        public bool ThrowOnDisable { get; set; }
+
+        /// <summary>让 <see cref="OnEnable"/> 抛异常。</summary>
+        public bool ThrowOnEnable { get; set; }
+
         public List<float> DeltaTimes { get; } = new List<float>(4);
         public List<float> Times { get; } = new List<float>(4);
 
-        public void OnEnable() => OnEnableCallCount++;
-        public void OnDisable() => OnDisableCallCount++;
+        public void OnEnable()
+        {
+            OnEnableCallCount++;
+            if (ThrowOnEnable)
+                throw new System.Exception("Test exception");
+        }
+
+        public void OnDisable()
+        {
+            OnDisableCallCount++;
+            if (ThrowOnDisable)
+                throw new System.Exception("Test exception");
+        }
 
         public UpdateTier OnUpdate(float deltaTime, float time)
         {
@@ -37,6 +57,8 @@ namespace XFramework.XUpdate.Tests
             OnUpdateCallCount = 0;
             ReturnTier = UpdateTier.Tier0;
             ThrowException = false;
+            ThrowOnDisable = false;
+            ThrowOnEnable = false;
             DeltaTimes.Clear();
             Times.Clear();
         }
@@ -1521,6 +1543,74 @@ namespace XFramework.XUpdate.Tests
 
             // Node should be removed after exception
             Assert.AreEqual(0, _scheduler.TotalCount);
+        }
+
+        [Test]
+        public void DisableDuringTick_OnDisableThrows_RestOfFrameStillApplies()
+        {
+            // 生命周期回调抛异常曾直接穿出 FlushPending —— 循环中断且缓冲不清空，于是排在后面的
+            // 操作本帧全部失效；而下一帧是「先派发、后 flush」，已请求禁用的节点会再多派发一次，
+            // 当帧 IsEnabled 又仍报「未禁用」（与 README 的承诺相反）
+            var thrower = new TestUpdateable { ThrowOnDisable = true };
+            var victim = new TestUpdateable();
+            var caller = new ScriptedNode(_scheduler);
+            caller.Script = (scheduler, self) =>
+            {
+                scheduler.Disable(thrower);
+                scheduler.Disable(victim);
+            };
+
+            _scheduler.Register(caller, order: 0);
+            _scheduler.Register(thrower, order: 0);
+            _scheduler.Register(victim, order: 0);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] TestUpdateable.OnDisable threw exception: System.Exception: Test exception")));
+
+            Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f),
+                "用户回调的异常应被隔离——它不该从 Tick 里抛出去打断整个调度");
+
+            Assert.AreEqual(2, _scheduler.DisabledCount, "排在抛异常那条之后的操作同样要在本帧落地");
+            Assert.IsFalse(_scheduler.IsEnabled(thrower));
+            Assert.IsFalse(_scheduler.IsEnabled(victim), "IsEnabled 必须与帧末状态一致");
+
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, thrower.OnUpdateCallCount, "已禁用：只在第一帧被派发过一次");
+            Assert.AreEqual(1, victim.OnUpdateCallCount);
+        }
+
+        [Test]
+        public void EnableDuringTick_OnEnableThrows_RestOfFrameStillApplies()
+        {
+            // 与上一条对称，覆盖 Enable 那条回调路径
+            var thrower = new TestUpdateable { ThrowOnEnable = true };
+            var victim = new TestUpdateable();
+            _scheduler.Register(thrower, order: 0);
+            _scheduler.Register(victim, order: 0);
+            _scheduler.Disable(thrower);
+            _scheduler.Disable(victim);
+
+            var caller = new ScriptedNode(_scheduler);
+            caller.Script = (scheduler, self) =>
+            {
+                scheduler.Enable(thrower);
+                scheduler.Enable(victim);
+            };
+            _scheduler.Register(caller, order: 0);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] TestUpdateable.OnEnable threw exception: System.Exception: Test exception")));
+
+            Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f));
+
+            Assert.AreEqual(3, _scheduler.TotalCount, "两条启用都要落地，抛异常的那条也不例外（caller + 两个被启用者）");
+            Assert.AreEqual(0, _scheduler.DisabledCount);
+            Assert.IsTrue(_scheduler.IsEnabled(thrower), "启用已生效，异常只影响回调本身");
+            Assert.IsTrue(_scheduler.IsEnabled(victim));
+
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, thrower.OnUpdateCallCount, "启用后的下一帧开始参与派发");
+            Assert.AreEqual(1, victim.OnUpdateCallCount);
         }
 
         [Test]
