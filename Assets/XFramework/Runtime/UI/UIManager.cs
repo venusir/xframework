@@ -91,6 +91,23 @@ namespace XFramework.XUI
 
             // 每帧驱动并入统一调度：可在 Initialize 之后被档位降频、被 Pause 统一暂停，
             // 也不再要求场景里必须存在 UIRootNode
+            EnsureFrameDriverRegistered();
+        }
+
+        /// <summary>
+        /// 确保每帧驱动器已注册。生命周期两条入口（<see cref="Initialize"/> 与
+        /// <see cref="SetInstance"/>）共用，重复调用无副作用。
+        /// <para><b>为什么注入实例也必须有驱动器</b>：驱动器只调 <see cref="Update"/>，而
+        /// <see cref="Update"/> 转发给「当前实例」，与实现类型无关——所以它对注入的自定义
+        /// <see cref="IUIManager"/> 同样成立。此前只有 <see cref="Initialize"/> 注册驱动器，
+        /// 于是走 <see cref="SetInstance"/> 注入之后面板、HUD、Tip 全都没有人来驱动，
+        /// 而 <see cref="Update"/> 的文档还写着「不需要自行调用」。</para>
+        /// </summary>
+        private static void EnsureFrameDriverRegistered()
+        {
+            if (_frameDriver != null)
+                return;
+
             _frameDriver = new FrameDriver();
             UpdateManager.Register(_frameDriver, order: 0);
         }
@@ -103,6 +120,10 @@ namespace XFramework.XUI
         {
             _instance = manager ?? throw new ArgumentNullException(nameof(manager));
             _instanceInitialized = true;
+
+            // 注入的实例同样要有人来驱动。缺了这一步，注入之后面板/HUD/Tip 全都静止，
+            // 且驱动类是 private sealed、外部无从补注册——只能靠门面自己接上。
+            EnsureFrameDriverRegistered();
         }
 
         /// <summary>
@@ -186,7 +207,9 @@ namespace XFramework.XUI
             if (tier == UpdateTier.Tier0)
                 return;
 
-            // 注入自定义 IUIManager 时无法驱动分档，退回「只有每帧档」的旧行为
+            // 分档只有 UIManagerImpl 能驱动——档位需求由它读面板的 UpdateTier 上报。
+            // 注入自定义实现时退化为「只有每帧档」：每帧驱动器仍在（见 EnsureFrameDriverRegistered），
+            // 只是没有分档驱动器，这也正是本方法存在的意义。
             if (!(_instance is UIManagerImpl impl))
                 return;
 
@@ -544,9 +567,12 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>，并驱动 HUD 层。
-        /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 已把它注册进
-        /// <see cref="UpdateManager"/> 的统一调度（可被档位降频、可被 <see cref="UpdateManager.Pause"/>
-        /// 统一暂停）。保留公开是因为测试与自定义驱动方仍可能需要手动推进一步。</para>
+        /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 与
+        /// <see cref="SetInstance"/> 都会把它注册进 <see cref="UpdateManager"/> 的统一调度
+        /// （可被档位降频、可被 <see cref="UpdateManager.Pause"/> 统一暂停）。保留公开是因为测试与
+        /// 自定义驱动方仍可能需要手动推进。</para>
+        /// <para><b>手动调用会与驱动器叠加</b>：驱动器不会因为有人手动调用而让位，一次手动调用
+        /// 加一次派发就是每帧驱动两遍（面板拿到两倍步进）。除测试与自定义驱动方外不要调用它。</para>
         /// </summary>
         public static void Update(float deltaTime, float time)
         {

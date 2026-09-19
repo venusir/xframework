@@ -62,6 +62,68 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(0, UpdateManager.TotalCount, "销毁后不应留下悬挂回调");
         }
 
+        /// <summary>
+        /// 注入路径同样接上每帧驱动。
+        /// <para>此前只有 <see cref="UIManager.Initialize"/> 注册驱动器，<see cref="UIManager.SetInstance"/>
+        /// 不注册，而驱动类是 private sealed、外部无从补注册——于是注入自定义实例之后，面板、HUD、Tip
+        /// 全都没有人来驱动，<c>UIManager.Update</c> 的文档却写着「不需要自行调用」。</para>
+        /// </summary>
+        [Test]
+        public void SetInstance_RegistersFrameDriver_AndDrivesInjectedInstance()
+        {
+            UIManager.Destroy();   // 回到「什么都没注册」，本用例只走注入这条路径
+
+            var impl = new UIManagerImpl();
+            impl.Initialize(_root.transform, null);
+            impl.SetHudProvider(_hud);   // 观察点：UIManager.Update 会驱动它
+            UIManager.SetInstance(impl);
+
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0),
+                "注入实例后同样要有每帧驱动器，否则面板/HUD/Tip 全部静止");
+
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _hud.UpdateCount, "驱动器应把每帧派发转发给注入的实例");
+        }
+
+        /// <summary>
+        /// 换实例不该多出一个驱动器：驱动器调的是门面的 <c>Update</c>（每次都读当前实例），
+        /// 注册两个就会每帧驱动两遍。
+        /// </summary>
+        [Test]
+        public void InitializeThenSetInstance_KeepsSingleFrameDriver()
+        {
+            var impl = new UIManagerImpl();
+            impl.Initialize(_root.transform, null);
+            impl.SetHudProvider(_hud);
+
+            UIManager.SetInstance(impl);   // SetUp 已 Initialize 过，驱动器早就在了
+
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0),
+                "再次注册会让每帧被驱动两遍");
+
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _hud.UpdateCount, "驱动应转发给替换后的新实例");
+        }
+
+        /// <summary>
+        /// 注入路径退化为「只有每帧档」：分档需求由 <see cref="UIManagerImpl"/> 读面板档位后上报，
+        /// 而那条回调只在 <see cref="UIManager.Initialize"/> 里装配。
+        /// </summary>
+        [Test]
+        public void SetInstance_HasNoTierDrivers()
+        {
+            UIManager.Destroy();
+
+            var impl = new UIManagerImpl();
+            impl.Initialize(_root.transform, null);
+            UIManager.SetInstance(impl);
+
+            Assert.AreEqual(0, UIManager.TierDriverCount,
+                "注入路径没有分档回调，故不应出现分档驱动器");
+        }
+
         [Test]
         public void Update_IsDrivenByUpdateManager_AndStoppedByPause()
         {
