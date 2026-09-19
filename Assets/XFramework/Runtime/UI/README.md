@@ -15,8 +15,16 @@ Runtime/UI/
 ├── IUIManager.cs              # UI 管理器公共接口
 ├── UIManager.cs               # 静态外观（全局入口）
 ├── UIManagerImpl.cs           # 默认实现（面板字典、显示栈、资源缓存）
-├── README.md                  # 使用说明
+├── IUIPanelFactory.cs         # 面板实例来源接口（抽出来是为了测试不依赖 YooAsset）
+├── AssetPanelFactory.cs       # 默认实现：经 AssetManager 加载预制体并复用其对象池
+├── IUiHudProvider.cs          # HUD 提供者接口
 ├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal sealed）
+├── UILayers.cs                # 推荐层级常量（Background/Default/Popup/Top/Mask）
+├── UISorting.cs               # 排序空间单点定义（层级带、HUD/Tip/系统保留带、钳制）
+├── UIMaskStyle.cs             # 遮罩样式（层级/颜色/透明度/点击关闭）
+├── UIMaskHandle.cs            # 遮罩引用计数句柄（readonly struct）
+├── UIStateSnapshot.cs         # 状态快照（readonly struct，读取零分配）
+├── README.md                  # 使用说明
 ├── Controller/
 │   ├── IUIController.cs       # 调度控制接口（五阶段生命周期拦截）
 │   ├── UIDefaultController.cs # 默认控制器（全部放行）
@@ -25,12 +33,21 @@ Runtime/UI/
 │   ├── IViewModel.cs          # ViewModel 接口
 │   ├── ViewModelBase.cs       # ViewModel 抽象基类
 │   ├── UIPanelBinding.cs      # UI 绑定组件（挂载在 Panel Prefab 上，约定式绑定）
-│   └── UIBinder.cs            # UI 绑定工具（静态扩展方法，手动精确绑定）
+│   ├── UIBinder.cs            # UI 绑定工具（静态扩展方法，手动精确绑定）
+│   ├── PanelOpenedMessage.cs  # 面板打开消息（readonly struct）
+│   ├── PanelClosedMessage.cs  # 面板关闭消息（readonly struct）
+│   └── AllPanelsClosedMessage.cs  # 全部面板关闭消息（readonly struct）
+├── Tip/
+│   ├── IUITipProvider.cs      # Tip 提供者接口
+│   ├── UITipManager.cs        # Tip 管理器（实例化、容器、回池，internal sealed）
+│   ├── UITipItem.cs           # 挂在 Tip 预制体上的组件（每帧推进动画）
+│   └── UITipConfig.cs         # 显示配置（位置/颜色/时长/浮动距离/字号）
 └── View/
     ├── UIViewBase.cs          # UI 控件抽象基类（Canvas/层级/OnUpdate），UIPanelBase 与 UIHudItem 的公共父类
     ├── UIPanelBase.cs         # 面板基类（所有 UI 面板需继承）
     ├── UIHudItem.cs           # HUD 项基类（3D 世界坐标跟踪、目标丢失自动回收）
-    └── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
+    ├── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
+    └── UISafeArea.cs          # 安全区适配（推荐挂在 UIRoot 上）
 ```
 
 > **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，全局消息总线位于 `Runtime/Message/`（`XFramework.XMessage`），均不在 UI 模块目录下。
@@ -151,7 +168,7 @@ sequenceDiagram
 | **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
 | **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
 | **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
-| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager 与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。            |
+| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager（销毁只在自己是当前根时发生）与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。 |
 | **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
 | **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
 | **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
@@ -327,7 +344,9 @@ UIManager.ClearPreloads();
 2. 向 Canvas 添加 `UIRootNode` 组件（`Add Component → UIRootNode`）
 3. Canvas 的 `Render Mode` 自动设为 `Screen Space - Overlay`
 
-`UIRootNode` 的 `Awake` 中自动调用 `UIManager.Initialize(transform)`，`OnDestroy` 中自动清理所有资源。
+`UIRootNode` 的 `Awake` 中若尚未初始化则自动调用 `UIManager.Initialize(transform)`；`OnDestroy` 中**只有它自己正是当前根**时才清理——叠加场景下卸载别的节点，不该把另一个场景仍在用的管理器拆掉。
+
+管理器是全局单例，故整个运行期只应有一个生效的根：第二个场景里的 `UIRootNode` 会被忽略（它的面板依旧挂在第一个根下）。需要多根属于另一类需求，本模块不预设。
 
 也可以在代码中手动初始化并注入自定义 Controller：
 
@@ -342,17 +361,25 @@ UIManager.Initialize(uiRoot, new MyGameController());
 如果你不需要面板打开/关闭的拦截逻辑，可以跳过此步骤。默认 Controller 全部放行。
 
 ```csharp
+using System;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XUI;
 using XFramework.XUI.Controller;
+using XFramework.XUI.View;
 
 /// <summary>
 /// 业务自定义控制器：面板打开前校验登录状态、关闭时的二次确认等。
 /// </summary>
+/// <remarks>
+/// 五个方法都带 <c>CancellationToken cancellationToken = default</c>——接口上的默认参数值
+/// <b>不允许实现方省略参数</b>，漏掉会直接报 CS0535。
+/// </remarks>
 public class MyGameController : IUIController
 {
     public async UniTask<bool> OnBeforeOpenAsync(
-        Type panelType, string assetPath, int layer, object userData)
+        Type panelType, string assetPath, int layer, object userData,
+        CancellationToken cancellationToken = default)
     {
         // 使用 PreconditionChain 链式组合校验条件
         var chain = new PreconditionChain(panelType, assetPath, layer, userData)
@@ -362,11 +389,13 @@ public class MyGameController : IUIController
         return await chain.ExecuteAsync();
     }
 
-    public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData)
+    public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData,
+        CancellationToken cancellationToken = default)
         => UniTask.CompletedTask;
 
     public async UniTask<bool> OnBeforeCloseAsync(
-        Type panelType, UIPanelBase panel, bool immediate)
+        Type panelType, UIPanelBase panel, bool immediate,
+        CancellationToken cancellationToken = default)
     {
         // 关闭前的二次确认弹窗
         if (panelType == typeof(ShopPanel))
@@ -380,10 +409,10 @@ public class MyGameController : IUIController
         return true;
     }
 
-    public UniTask OnAfterCloseAsync(Type panelType)
+    public UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default)
         => UniTask.CompletedTask;
 
-    public UniTask OnAllPanelsClosedAsync()
+    public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
         => UniTask.CompletedTask;
 
     // --- 前提条件示例 ---
@@ -397,8 +426,9 @@ public class MyGameController : IUIController
 
         if (!GameManager.Instance.IsLoggedIn)
         {
-            // 自动弹出登录面板
-            await UIManager.PushAsync<LoginPanel>("Assets/UI/Login.prefab", 500);
+            // 自动弹出登录面板。层级用 UILayers 的常量而非裸数字——500 是遮罩层，
+            // 登录面板落在那里会被自己的遮罩盖住
+            await UIManager.PushAsync<LoginPanel>("Assets/UI/Login.prefab", UILayers.Popup);
             return false; // 中断链
         }
         return true;
@@ -412,10 +442,14 @@ public class MyGameController : IUIController
 
     private async UniTask<bool> ShowConfirmDialog(string message)
     {
-        var dialog = await UIManager.PushAsync<ConfirmDialog>(
-            "Assets/UI/ConfirmDialog.prefab", 900);
-        await dialog.WaitForResultAsync();
-        return dialog.Result;
+        // 框架没有内建的「等你回结果」通道：结果由面板自己经 userData 带回来。
+        // 弹窗面板在用户点确定/取消时调 result.TrySetResult(...)，这里等它。
+        var result = new UniTaskCompletionSource<bool>();
+
+        await UIManager.PushAsync<ConfirmDialog>(
+            "Assets/UI/ConfirmDialog.prefab", UILayers.Popup, result);
+
+        return await result.Task;
     }
 }
 ```
@@ -717,6 +751,16 @@ titleText.BindToLocalizedText("ui_main_title");
 
 面板生命周期事件通过 `MessageManager` 发布/订阅。消息体使用 `readonly struct`，零 GC 分配。
 
+模块另提供归口入口 `UIManager.Subscribe(...)`，三个重载分别对应面板打开 / 面板关闭 / 全部关闭，并额外接受一个**生命周期上下文**：传 `MonoBehaviour` 或实现 `IDestroyCancellationToken` 的普通 C# 对象（ViewModel / Model），对象销毁时自动退订；两者皆非时不绑定并打一条告警，此时需自行持有句柄释放。
+
+```csharp
+// 归口入口：订阅随面板/对象的生命周期自动取消
+UIManager.Subscribe((PanelOpenedMessage msg) => Debug.Log(msg.PanelType.Name), this);
+
+// 非 MonoBehaviour 的 ViewModel 同样可用（实现 IDestroyCancellationToken 即可）
+UIManager.Subscribe((PanelClosedMessage msg) => OnPanelClosed(msg), _viewModel);
+```
+
 ```csharp
 using XFramework.XUI.Data;
 using XFramework.XMessage;
@@ -760,6 +804,8 @@ UIManager.SetInstance(mockManager);
 UIManager.SetController(new MyCustomController());
 ```
 
+注入的实例同样接入每帧驱动（`UIManager.Update` 转发给它），**分档驱动器只对框架自带的实现生效**——档位需求由 `UIManagerImpl` 读面板声明后上报，注入实现退化为「只有每帧档」。
+
 ## 设计原则
 
 - **四层架构** — 外观层、控制层、数据层、面板层各司其职
@@ -802,7 +848,7 @@ UIManager.ShowHudAsync<T>(target, assetPath, offset)  →  静态外观
             FollowTarget == null?  →  自动触发 OnTargetLost → Detach + 回池
 ```
 
-- `UIHudManagerImpl` 是 `IUiHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 999000），确保 HUD 始终在所有面板之上
+- `UIHudManagerImpl` 是 `IUiHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 30000），确保 HUD 始终在所有面板之上
 - `UIHudItem` 继承自 `UIViewBase`，与面板共享 `OnUpdate` 集中驱动机制
 - 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHudAsync` 会自动替换旧 HUD
 
@@ -885,13 +931,13 @@ UIManager.HideHud(monster.transform);
 - **GraphicRaycaster**：由 `UIViewBase` 的 `[RequireComponent(typeof(GraphicRaycaster))]` 自动添加
 - **CanvasGroup**：由 `UIHudItem` 的 `[RequireComponent(typeof(CanvasGroup))]` 自动添加
 
-> 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManagerImpl` 统一控制（独立 Canvas，sortingOrder = 999000）。
+> 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManagerImpl` 统一控制（独立 Canvas，sortingOrder = 30000）。
 
 ### 设计要点
 
 - **一对一绑定** — 一个 3D 目标同时仅一个 HUD，重复 Attach 自动替换旧实例
 - **自动回收** — 目标丢失或为 null 时自动触发回收，无需手动释放
-- **独立 Canvas** — `Layer_HUD` 容器拥有独立 Canvas（sortingOrder = 999000），确保 HUD 渲染在最高层
+- **独立 Canvas** — `Layer_HUD` 容器拥有独立 Canvas（sortingOrder = 30000），确保 HUD 渲染在最高层
 - **集中驱动** — 与 UIPanel 共享 `UIViewBase.OnUpdate` 集中驱动，避免分散的 `MonoBehaviour.Update` 开销
 - **对象池** — 由 `AssetManager` 管理实例化与回池，避免频繁创建/销毁
 - **镜头感知** — 目标在镜头后方时自动隐藏（alpha=0），回到视野时自动恢复
