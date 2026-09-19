@@ -127,6 +127,48 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Register_ValueTypeNode_IsRejectedWithError()
+        {
+            // 值类型节点每次转成接口都是一次新的装箱：注册进去也注销不掉（按引用找不回那个箱），
+            // 条目会永远留在桶里每帧派发。与其留一条谁也管不着的幽灵条目，不如在注册处拒绝并留痕
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] ValueTypeNode 是值类型：IUpdateLifecycle 必须由引用类型实现")));
+
+            _scheduler.Register(new ValueTypeNode(), order: 0);
+
+            Assert.AreEqual(0, _scheduler.TotalCount);
+        }
+
+        [Test]
+        public void Register_EqualsOverridingNodes_AreDistinctEntries()
+        {
+            // 身份判定必须与桶内查找（接口引用比较）用同一把尺子。用默认比较器时，这两个「值相等」
+            // 的实例会互相顶掉索引：注销其中一个就把两人的索引一起清掉，另一个从此注销不掉、
+            // 留在桶里每帧继续被派发
+            var first = new EqualsByValueNode(1);
+            var second = new EqualsByValueNode(1);
+            Assert.IsTrue(first.Equals(second), "前提：两个实例值相等（这正是默认比较器会混淆的情形）");
+
+            _scheduler.Register(first, order: 0);
+            _scheduler.Register(second, order: 0);
+            Assert.AreEqual(2, _scheduler.TotalCount, "引用不同就是两个节点");
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(1, first.OnUpdateCallCount);
+            Assert.AreEqual(1, second.OnUpdateCallCount);
+
+            _scheduler.Unregister(first);
+            Assert.AreEqual(1, _scheduler.TotalCount, "只摘掉按引用指定的那一个");
+
+            _scheduler.Unregister(second);
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "两个都摘掉后不应残留幽灵条目");
+            _scheduler.Tick(time: 2.0f);
+            Assert.AreEqual(1, first.OnUpdateCallCount, "被注销的不再派发");
+            Assert.AreEqual(1, second.OnUpdateCallCount);
+        }
+
+        [Test]
         public void Register_DuringTick_BufferedAndApplied()
         {
             var lateNode = new TestUpdateable();
@@ -1953,6 +1995,56 @@ namespace XFramework.XUpdate.Tests
             {
                 _log.Add(_name);
                 return UpdateTier.Tier0;
+            }
+        }
+
+        /// <summary>
+        /// 值类型节点，用于锁定「注册处直接拒绝值类型并留痕」。
+        /// </summary>
+        private struct ValueTypeNode : IUpdateable
+        {
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateTier OnUpdate(float deltaTime, float time)
+            {
+                return UpdateTier.Tier0;
+            }
+        }
+
+        /// <summary>
+        /// 按 Id 值相等的引用类型节点，用于锁定「身份判定按引用而非 <c>Equals</c>」。
+        /// </summary>
+        private sealed class EqualsByValueNode : IUpdateable
+        {
+            private readonly int _id;
+
+            public EqualsByValueNode(int id)
+            {
+                _id = id;
+            }
+
+            public int OnUpdateCallCount { get; private set; }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateTier OnUpdate(float deltaTime, float time)
+            {
+                OnUpdateCallCount++;
+                return UpdateTier.Tier0;
+            }
+
+            public override bool Equals(object obj)
+            {
+                return obj is EqualsByValueNode other && other._id == _id;
+            }
+
+            public override int GetHashCode()
+            {
+                return _id;
             }
         }
     }

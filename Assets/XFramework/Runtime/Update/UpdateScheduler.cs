@@ -120,6 +120,32 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 以<b>引用同一</b>判定节点身份的相等比较器。
+        /// <para><b>为什么必须指定：</b>桶内查找用的是接口引用比较（<c>entries[i].Node == node</c>——
+        /// 接口上不存在用户定义运算符），而 <see cref="Dictionary{TKey,TValue}"/> 默认走
+        /// <see cref="object.Equals(object)"/> 的虚调用。两者对「是不是同一个节点」可能给出不同答案：
+        /// 值类型节点每次装箱都是新身份，重写了 <c>Equals</c> 的类则会被判成同一个。不一致的后果不是
+        /// 报错而是<b>静默的幽灵条目</b>——索引被摘掉、条目却留在桶里每帧继续被派发，此后再也
+        /// 注册/注销/禁用不掉。</para>
+        /// <para>节点身份以引用为准本就是模块的既有语义（<see cref="Entry.Node"/> 存的就是那个引用），
+        /// 这里只是让字典与桶用同一把尺子。</para>
+        /// </summary>
+        private sealed class NodeReferenceComparer : IEqualityComparer<IUpdateLifecycle>
+        {
+            public static readonly NodeReferenceComparer Instance = new NodeReferenceComparer();
+
+            public bool Equals(IUpdateLifecycle x, IUpdateLifecycle y)
+            {
+                return ReferenceEquals(x, y);
+            }
+
+            public int GetHashCode(IUpdateLifecycle obj)
+            {
+                return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+            }
+        }
+
+        /// <summary>
         /// 待处理操作的类型。
         /// </summary>
         private enum PendingOpKind : byte
@@ -232,8 +258,12 @@ namespace XFramework.XUpdate
         /// <para>只在 <see cref="ApplyOp"/> 与 <see cref="ClearImmediate"/> 维护——这是唯一的写入点。
         /// <b>前提是一个节点至多一条条目</b>，由 <see cref="ApplyOp"/> 的注册分支去重保证：
         /// 单值索引表达不了「两条条目分处不同桶」，那种状态下注销的「删净」语义会漏删。</para>
+        /// <para>身份判定用 <see cref="NodeReferenceComparer"/>（引用同一），与桶内查找的接口引用比较
+        /// 对齐——用默认比较器时，重写 <c>Equals</c> 的节点会被判成同一个，出现「索引被摘掉、
+        /// 条目留在桶里」的幽灵条目。</para>
         /// </summary>
-        private readonly Dictionary<IUpdateLifecycle, int> _bucketOf = new Dictionary<IUpdateLifecycle, int>();
+        private readonly Dictionary<IUpdateLifecycle, int> _bucketOf =
+            new Dictionary<IUpdateLifecycle, int>(NodeReferenceComparer.Instance);
 
         #endregion
 
@@ -601,6 +631,16 @@ namespace XFramework.XUpdate
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
+
+            // 值类型节点每次转成接口都是一次新的装箱，身份随之改变：注销时按引用找不回它，
+            // 条目会永远留在桶里继续被派发。这不是「暂不支持」而是「做不到」——管理的前提是身份稳定
+            if (node.GetType().IsValueType)
+            {
+                Debug.LogError(
+                    $"[UpdateScheduler] {node.GetType().Name} 是值类型：IUpdateLifecycle 必须由引用类型实现" +
+                    "（每次装箱都是新身份，注册后将无法注销）。本次注册已忽略。");
+                return;
+            }
 
             Enqueue(new PendingOp
             {

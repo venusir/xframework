@@ -51,6 +51,10 @@ public sealed class MyService : IUpdateable
 }
 ```
 
+**节点以引用为身份**：`IUpdateLifecycle` 必须由引用类型实现——值类型每次装箱都是新身份，注销时按引用
+找不回它，注册处会直接拒绝并记 `LogError`。重写 `Equals` / `GetHashCode` 不改变管理语义：两个「值相等」
+的实例就是两个节点。
+
 ### 2. 三个时机怎么选
 
 | 时机 | 接口 | 时间基准 | 适用 |
