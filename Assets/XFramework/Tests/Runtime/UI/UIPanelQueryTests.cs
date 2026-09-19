@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using XFramework.XPool;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
 
@@ -47,6 +48,44 @@ namespace XFramework.XUI.Tests
             UpdateManager.Clear();
             UpdateManager.Resume();
         }
+
+        #region 外部销毁后的剪枝
+
+        /// <summary>
+        /// 第三方绕过 <c>CloseAsync</c> 直接销毁面板后，两份账必须一起剪。
+        /// <para>显示栈（按次序、持强引用）与活动字典（按类型）是同一批面板的两份索引。此前只剪
+        /// <c>_stack</c>，于是 <c>IsOpen&lt;T&gt;()</c> / <c>OpenCount</c> / <c>IsAnyOpen</c> 继续报
+        /// 「还开着」，<c>GetPanel&lt;T&gt;()</c> 还会把伪 null 交给调用方；而同一次读取里
+        /// <c>Panels</c> 不剪、<c>CopyPanels</c> 剪，两条读路径对同一份状态给出不同答案。</para>
+        /// </summary>
+        [Test]
+        public async Task ExternalDestroy_PrunesBothAccounts()
+        {
+            var a = await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.PushAsync<FakePanelB>("ui/b");
+
+            // 绕过关闭路径，直接销毁——这正是空洞的来源
+            UnityEngine.Object.DestroyImmediate(a.gameObject);
+
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "已销毁的面板不该还报「开着」");
+            Assert.IsNull(UIManager.GetPanel<FakePanel>(), "取回的应当是 null，而不是伪 null 引用");
+            Assert.AreEqual(1, UIManager.OpenCount, "只剩另一个面板");
+            Assert.IsTrue(UIManager.IsAnyOpen);
+
+            var panels = UIManager.Panels;
+            Assert.AreEqual(UIManager.OpenCount, panels.Count,
+                "几条读路径必须给出同一个答案");
+            for (int i = 0; i < panels.Count; i++)
+                Assert.IsNotNull(panels[i], "活视图里不该留下空洞");
+
+            using (ListPool<UIPanelBase>.GetPooled(out var buffer))
+            {
+                Assert.AreEqual(panels.Count, UIManager.CopyPanels(buffer),
+                    "CopyPanels 与 Panels 不该出现两套口径");
+            }
+        }
+
+        #endregion
 
         #region 计数与栈顶
 

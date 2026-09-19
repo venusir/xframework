@@ -168,15 +168,45 @@ namespace XFramework.XUI
 
         public bool IsMaskShowing => _maskInstance != null && _maskInstance.activeSelf;
 
-        public bool CanGoBack => _stack.Count > 1;
+        public bool CanGoBack
+        {
+            get
+            {
+                PruneStack();
+                return _stack.Count > 1;
+            }
+        }
 
         // 查询属性刻意不调 EnsureInitialized：它们读的是始终有效的内存状态，
         // 与 CanGoBack / IsMaskShowing 一致——未初始化时给出空结果而非抛异常。
-        public int OpenCount => _activePanels.Count;
+        // 但一律先剪枝：外部直接 Destroy 面板留下的空洞不该让「还开着几个」虚高，
+        // 而剪枝在稳态下只做一轮比较、不分配。
+        public int OpenCount
+        {
+            get
+            {
+                PruneStack();
+                return _activePanels.Count;
+            }
+        }
 
-        public bool IsAnyOpen => _activePanels.Count > 0;
+        public bool IsAnyOpen
+        {
+            get
+            {
+                PruneStack();
+                return _activePanels.Count > 0;
+            }
+        }
 
-        public IReadOnlyList<UIPanelBase> Panels => _panelsView;
+        public IReadOnlyList<UIPanelBase> Panels
+        {
+            get
+            {
+                PruneStack();
+                return _panelsView;
+            }
+        }
 
         #endregion
 
@@ -253,6 +283,9 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public UIStateSnapshot GetState()
         {
+            // 诊断尤其不该报假数：外部销毁留下的空洞会让 OpenCount/CanGoBack 虚高
+            PruneStack();
+
             return new UIStateSnapshot(
                 _activePanels.Count,
                 _opening.Count,
@@ -597,12 +630,14 @@ namespace XFramework.XUI
         public bool IsOpen<T>() where T : UIPanelBase
         {
             EnsureInitialized();
+            PruneStack();
             return _activePanels.ContainsKey(typeof(T));
         }
 
         public T GetPanel<T>() where T : UIPanelBase
         {
             EnsureInitialized();
+            PruneStack();
             var type = typeof(T);
             _activePanels.TryGetValue(type, out var panel);
             return panel as T;
@@ -1365,7 +1400,6 @@ namespace XFramework.XUI
             if (!_activePanels.TryGetValue(type, out var registered) || !ReferenceEquals(registered, panel))
                 return false;
 
-            // 从字典和显示栈中移除
             _activePanels.Remove(type);
             _stack.Remove(panel);
 
@@ -1471,17 +1505,53 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 清理栈中已被外部销毁（假空）的条目。
-        /// <para>栈持有面板实例的强引用；第三方绕过 CloseAsync 直接 Destroy 面板时会留下空洞，
-        /// 遍历前调一次，避免对已销毁对象派发回调。</para>
+        /// 清理显示栈与活动字典中已被外部销毁（假空）的条目。
+        /// <para>两者是同一批面板的两份索引：栈持有强引用并按显示次序排列，字典按类型索引。
+        /// 第三方绕过 CloseAsync 直接 Destroy 面板时会同时留下空洞——只剪一份，另一份就会
+        /// 继续报「面板还开着」。遍历前调一次，既避免对已销毁对象派发回调，也保证
+        /// <c>IsOpen</c> / <c>OpenCount</c> / <c>Panels</c> 这几条读路径给出同一个答案。</para>
         /// </summary>
         private void PruneStack()
         {
+            bool pruned = false;
+
             for (int i = _stack.Count - 1; i >= 0; i--)
             {
                 // Unity 的 == 重载把已销毁对象判为 null
                 if (_stack[i] == null)
+                {
                     _stack.RemoveAt(i);
+                    pruned = true;
+                }
+            }
+
+            // 字典扫描只在真的剪到空洞时才做：本方法在每帧派发路径上（DriveTier 开头），
+            // 稳态下必须保持零分配、零哈希查找。
+            if (pruned)
+                PruneActivePanels();
+        }
+
+        /// <summary>
+        /// 移除活动字典里指向已销毁面板的条目。
+        /// <para>按<b>值</b>反查而不是拿 <c>panel.GetType()</c> 当键：字典的键是打开时传入的
+        /// <c>typeof(T)</c>，若调用方用基类开派生面板（<c>OpenAsync&lt;BasePanel&gt;</c>），
+        /// 两者并不相同——按实例类型反查会漏掉那些条目。</para>
+        /// </summary>
+        private void PruneActivePanels()
+        {
+            if (_activePanels.Count == 0)
+                return;
+
+            using (ListPool<Type>.GetPooled(out var stale))
+            {
+                foreach (var kv in _activePanels)
+                {
+                    if (kv.Value == null)
+                        stale.Add(kv.Key);
+                }
+
+                for (int i = 0; i < stale.Count; i++)
+                    _activePanels.Remove(stale[i]);
             }
         }
 
