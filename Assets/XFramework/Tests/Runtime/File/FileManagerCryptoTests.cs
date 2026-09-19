@@ -35,6 +35,10 @@ namespace XFramework.XFileManager.Tests
         public void TearDown()
         {
             FileManager.Destroy();
+
+            // 还原成「零配置可用」，而不是把销毁闩锁留给后续 fixture——懒加载豁免只对「未初始化」生效，
+            // 已销毁时 EnsureInitialized 直接抛，同进程混跑两个平台会让后面的 EditMode 用例吃到它
+            FileManager.Initialize();
         }
 
         [Test]

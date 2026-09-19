@@ -90,9 +90,13 @@ namespace Venusy609.Xframework.Editor.Tests
                 // 阶段会 await 恢复扫描，因此必须 await 而不是阻塞主线程等待：
                 // 阶段末尾要切回主线程写上下文（PipelineStageContext 有越线程写入检测），
                 // 阻塞等待会与其主线程恢复语义冲突而死锁。
-                // 注：本测试不注入 Provider，FileManager 会零配置自初始化为桌面实现，
-                // 因此恢复扫描作用在真实的 persistentDataPath 上——它对 slot_* 文件是幂等的，
-                // 框架工程目录下通常为空。需要隔离时应改注入临时目录 Provider。
+                //
+                // 刻意不注入 Provider：FileManager 零配置自初始化为桌面实现，于是这条用例是真实
+                // DesktopFileProvider 的唯一集成覆盖——而恢复扫描是「全程不切回主线程」的路径，
+                // 正是「域根不能在子线程解析」这类缺陷唯一会露头的地方（替身 Provider 在构造函数里
+                // 就把根路径定死、结构性绕开 Unity API，这一整类缺陷在它上面不可见）。历史上它确实
+                // 因此独自红了 7 次。代价是恢复扫描作用在真实的 persistentDataPath 上，对合规存档
+                // 它是幂等的（载荷在则只清 .tmp 残留并补齐侧车）。
                 await stage.ExecuteAsync(ctx, default);
 
                 Assert.AreEqual(PipelineStageState.Completed, ctx.State);
