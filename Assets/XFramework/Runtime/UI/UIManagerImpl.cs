@@ -552,6 +552,14 @@ namespace XFramework.XUI
                     return null;
                 }
 
+                // 等待期间管理器可能已被销毁：UIRoot 已置 null，再往下取层容器会当场 NRE。
+                // 每个 await 之后都要自查一遍——Dispose 不会取消这条在途打开的续体。
+                if (!IsInitialized)
+                {
+                    WarnOpenAbandoned(type);
+                    return null;
+                }
+
                 // 实例化面板
                 var panel = await InstantiatePanelAsync<T>(assetPath, layer, cancellationToken);
                 if (panel == null)
@@ -563,6 +571,16 @@ namespace XFramework.XUI
                 // 从这里起实例已存在，任何失败都必须把它还回池子
                 pending = panel;
 
+                // 等待期间管理器被销毁：不要把实例注册进一个已经拆掉的管理器——它会留在场景里，
+                // 而没有任何集合或调用方还记得它
+                if (!IsInitialized)
+                {
+                    RollbackPanel(type, panel);
+                    pending = null;
+                    WarnOpenAbandoned(type);
+                    return null;
+                }
+
                 panel.Layer = layer;
                 panel.AssetPath = assetPath;
 
@@ -570,6 +588,17 @@ namespace XFramework.XUI
                 // 此后取消不再生效：注册已发生，中途放弃会留下半开状态
                 RegisterPanel(type, panel);
                 await panel.DoOpenAsync(userData);
+
+                // 面板开起来了，但它属于一个已被拆掉的管理器。先按关闭路径把它收干净——
+                // 只回池不关闭的话，它会以「已打开」的活跃状态留在场景里持续渲染，谁也管不着。
+                if (!IsInitialized)
+                {
+                    await panel.DoCloseAsync(immediate: true);
+                    RollbackPanel(type, panel);
+                    pending = null;
+                    WarnOpenAbandoned(type);
+                    return null;
+                }
 
                 // 提交点：打开已完成，此后不再回滚（后续回调失败不应把已打开的面板拆掉）
                 committed = true;
@@ -1507,6 +1536,17 @@ namespace XFramework.XUI
             _activePanels.Remove(type);
             _stack.Remove(panel);
             RecyclePanel(panel);
+        }
+
+        /// <summary>
+        /// 打开途中管理器被销毁时的收尾留痕。
+        /// <para>返回 null 是既有的失败契约（加入者共享同一结果，<see cref="PushAsync{T}"/> 也据此回滚
+        /// 失焦），留痕是为了让「打开莫名其妙没发生」有迹可循——否则现场只剩「面板怎么没出来」。</para>
+        /// </summary>
+        private static void WarnOpenAbandoned(Type type)
+        {
+            Debug.LogWarning(
+                $"[UIManager] Panel open abandoned because the manager was disposed: {type.Name}");
         }
 
         /// <summary>

@@ -1,9 +1,11 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUI.Data;
 using XFramework.XUpdate;
 
@@ -50,6 +52,39 @@ namespace XFramework.XUI.Tests
             UpdateManager.Clear();
             UpdateManager.Resume();
         }
+
+        #region 打开途中管理器被销毁
+
+        /// <summary>
+        /// 管理器在打开途中被销毁时，实例必须还回池子，而不是被写进一个已经拆掉的实现。
+        /// <para><c>Dispose</c> 只把「加入者」以 null 了结，并不取消主打开方的续体——续体恢复后
+        /// 此前会照常 <c>RegisterPanel</c> 写回已清空的容器，把一个面板泄漏进已销毁的管理器：
+        /// 它不在任何集合里、也不在池里，却带着已激活的 GameObject 留在场景中持续渲染。</para>
+        /// </summary>
+        [Test]
+        public async Task Destroy_WhileOpening_DoesNotLeaveOrphanInstance()
+        {
+            LogAssert.Expect(LogType.Warning,
+                new Regex("open abandoned because the manager was disposed"));
+
+            // 闸住工厂，把打开停在「已开始、未实例化」这个窗口里
+            var gate = new UniTaskCompletionSource<object>();
+            _factory.Gate = gate;
+
+            var pending = UIManager.OpenAsync<FakePanel>("ui/slow").Preserve();
+            await UniTask.Yield();   // 让打开一路走到闸门前
+
+            UIManager.Destroy();
+
+            gate.TrySetResult(null); // 放行：续体将在管理器已销毁之后恢复
+            var panel = await pending;
+
+            Assert.IsNull(panel, "管理器已销毁，本次打开应以 null 结束，而不是把实例交出去");
+            Assert.AreEqual(1, _factory.ReleaseCount,
+                "已实例化的面板必须还回工厂——否则它既不在活动集合里也不在池里，谁也碰不到它");
+        }
+
+        #endregion
 
         #region 并发去重
 
