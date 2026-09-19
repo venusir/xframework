@@ -169,6 +169,21 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Register_OutOfRangeTimeMode_Throws()
+        {
+            // 轴越界只能来自强转，没有可饱和的语义：放进桶下标就是数组越界，故在注册处按参数防御拒绝。
+            // 与档位刻意不对称——档位越界是节点运行时返回的值，属框架控制之外的数据，应当钳而不抛
+            Assert.Throws<System.ArgumentOutOfRangeException>(
+                () => _scheduler.Register(_node, order: 0, timeMode: (UpdateTimeMode)2),
+                "越上界的轴");
+            Assert.Throws<System.ArgumentOutOfRangeException>(
+                () => _scheduler.Register(_node, order: 0, timeMode: (UpdateTimeMode)(-1)),
+                "越下界的轴");
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "被拒绝的注册不应留下任何条目");
+        }
+
+        [Test]
         public void Register_DuringTick_BufferedAndApplied()
         {
             var lateNode = new TestUpdateable();

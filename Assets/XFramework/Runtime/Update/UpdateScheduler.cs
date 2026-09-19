@@ -635,6 +635,16 @@ namespace XFramework.XUpdate
         {
             if (node == null) return;
 
+            // 轴越界只能来自强转（例如把配置里的轴号强转成枚举），没有可饱和的语义可说——直接进桶
+            // 下标就是数组越界，故按参数防御处理。这里的「不钳而抛」与档位刻意不对称：档位可能来自
+            // 节点运行时的返回值，属框架控制之外的数据，越界应当降级而不是把游戏打崩
+            if ((int)timeMode < 0 || (int)timeMode >= AxisCount)
+            {
+                throw new System.ArgumentOutOfRangeException(nameof(timeMode), timeMode,
+                    $"[UpdateScheduler] 时间轴越界：只能是 0~{AxisCount - 1}（UpdateTimeMode 的既有取值），" +
+                    "请检查是否把整数强转成了 UpdateTimeMode。");
+            }
+
             // 值类型节点每次转成接口都是一次新的装箱，身份随之改变：注销时按引用找不回它，
             // 条目会永远留在桶里继续被派发。这不是「暂不支持」而是「做不到」——管理的前提是身份稳定
             if (node.GetType().IsValueType)

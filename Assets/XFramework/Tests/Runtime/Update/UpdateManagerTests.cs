@@ -290,6 +290,15 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Register_OutOfRangeTimeMode_ThrowsThroughFacade()
+        {
+            // 门面转发不变量：调度器里的参数防御必须原样传到第三方眼前，否则非法轴会一路走到
+            // 桶下标、以 IndexOutOfRangeException 的形式在别处炸开
+            Assert.Throws<System.ArgumentOutOfRangeException>(
+                () => UpdateManager.Register(new TestUpdateable(), order: 0, timeMode: (UpdateTimeMode)5));
+        }
+
+        [Test]
         public void Unregister_RemovesFromCount()
         {
             var node = new TestUpdateable();
