@@ -56,6 +56,16 @@ namespace XFramework.XUI
         private readonly List<UIHudItem> _activeHudList
             = new List<UIHudItem>(16);
 
+        /// <summary>
+        /// 「清空」的世代号，每次 <see cref="DetachAll"/> 自增。在途的 <see cref="AttachAsync"/>
+        /// 完成后据此判断自己是不是上一世代的产物——是则立刻回池，不进入映射与驱动列表。
+        /// <para><b>为什么不是布尔标志</b>：<see cref="DetachAll"/> 有两个性质不同的调用方——
+        /// 「管理器要退役了」（<c>Dispose</c>、换根）与「只是把在播的清掉」（<c>CloseAllAsync</c>）。
+        /// 粘性布尔会把后者也当成退役，此后每次 Attach 都会实例化完立刻回收。世代号只回答
+        /// 「你有没有被哪一次清空落下」，与「管理器是否还在服役」解耦。（Tip 侧踩过同一个坑。）</para>
+        /// </summary>
+        private int _detachGeneration;
+
         #endregion
 
         #region Properties
@@ -105,6 +115,9 @@ namespace XFramework.XUI
                 DetachInternal(existing, target);
             }
 
+            // 记下进入时的世代：实例化与打开期间若发生过 DetachAll，回来的实例就属于上一世代
+            int generation = _detachGeneration;
+
             // 实例化 HUD（AssetManager 内部管理对象池）
             var go = await AssetManager.InstantiateAsync(assetPath, _hudContainer, cancellationToken);
             if (go == null)
@@ -127,8 +140,26 @@ namespace XFramework.XUI
             hud.ScreenOffset = offset ?? Vector2.zero;
             hud.OnTargetLost += OnHudTargetLost;
 
-            // 打开 HUD
-            await hud.DoOpenAsync(null);
+            try
+            {
+                // 打开 HUD
+                await hud.DoOpenAsync(null);
+            }
+            catch
+            {
+                // 打开失败时实例还没进任何映射（DetachAll 找不到它），必须自己收干净：解订阅、清目标、
+                // 回池。否则它就是一个常驻 Layer_HUD、还持着资源引用的孤儿。面板侧有回滚路径兜住，
+                // HUD 侧此前没有。
+                DiscardHud(hud);
+                throw;
+            }
+
+            // 等待期间发生过清空（Destroy / 换根 / CloseAllAsync）：立刻收干净，不进入映射与驱动列表
+            if (generation != _detachGeneration)
+            {
+                DiscardHud(hud);
+                return null;
+            }
 
             // 注册映射
             _hudMap[target] = hud;
@@ -152,6 +183,10 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public void DetachAll()
         {
+            // 推进世代：在途 Attach 回来后据此回池。这不是「管理器退役」的标记——退役与否由调用方
+            // 决定（Dispose 之后没人会再调 AttachAsync），故此处置位不影响后续正常使用。
+            _detachGeneration++;
+
             // 收集所有条目（避免遍历中修改字典）
             var entries = new List<(UIHudItem hud, Transform target)>();
             foreach (var kv in _hudMap)
@@ -190,7 +225,7 @@ namespace XFramework.XUI
         #region Private — Detach 内部实现
 
         /// <summary>
-        /// Detach 内部实现：取消事件订阅 → 关闭 HUD → 回池 → 从映射和列表中移除。
+        /// Detach 内部实现：取消事件订阅 → 摘账 → 关闭并回池。
         /// </summary>
         private void DetachInternal(UIHudItem hud, Transform target)
         {
@@ -200,24 +235,89 @@ namespace XFramework.XUI
             // 取消事件订阅
             hud.OnTargetLost -= OnHudTargetLost;
 
-            // 关闭 HUD（不等待动画完成，Forget）
-            hud.DoCloseAsync(immediate: true).Forget();
+            // 先摘账（同步完成），再异步关闭并回收。摘账按实例反查而不是按 target 删——target 可能
+            // 为 null（HUD 自己上报目标丢失时 FollowTarget 已被清），那条以旧 target 为键的条目会留在
+            // 映射里指向一个已回池的实例，下次 DetachAll 遍历到它就会二次回收。
+            RemoveMapEntry(hud);
+            _activeHudList.Remove(hud);
 
-            // 回池前复位：释放 Track 登记的订阅并清 Canvas 排序——HUD 同样是回池而非销毁，
-            // 漏掉这一步会让排序值一直留在实例上（复用时可能盖住不该盖的面板）
+            // 关闭与回收必须串行：Detach 是同步 API 不能 await，故把回收放进续体。
+            // 反过来（先回收再等续体）会让 DoCloseAsync 的收尾落在已经回池、甚至已被另一个目标复用的
+            // 实例上——把新持有者的 HUD 关掉并失活。
+            CloseAndRecycleAsync(hud).Forget();
+        }
+
+        /// <summary>
+        /// 按实例反查并移除映射条目。
+        /// <para>用 <see cref="ReferenceEquals"/> 比较：这里的相等语义是「同一个实例」，
+        /// 不该走 Unity 那套「已销毁即等于 null」的重载。</para>
+        /// </summary>
+        private void RemoveMapEntry(UIHudItem hud)
+        {
+            bool found = false;
+            Transform stale = null;
+
+            foreach (var kv in _hudMap)
+            {
+                if (ReferenceEquals(kv.Value, hud))
+                {
+                    stale = kv.Key;
+                    found = true;
+                    break;
+                }
+            }
+
+            if (found)
+                _hudMap.Remove(stale);
+        }
+
+        /// <summary>
+        /// 关闭 HUD 并回池。由 <see cref="DetachInternal"/> 的续体调用——Detach 是同步 API，
+        /// 而关闭可能带异步动画，两者必须串行。
+        /// </summary>
+        private static async UniTask CloseAndRecycleAsync(UIHudItem hud)
+        {
+            try
+            {
+                await hud.DoCloseAsync(immediate: true);
+            }
+            catch (Exception e)
+            {
+                // 关闭失败也必须往下走：实例已从映射与列表摘除，没有第二条路径能再碰到它
+                Debug.LogError($"[UIHudManager] HUD close failed, recycling anyway: {e}");
+            }
+
+            RecycleHud(hud);
+        }
+
+        /// <summary>
+        /// 把一个尚未进入映射的 HUD 收干净：解订阅、清目标、回池。打开失败与「等待期间被清空」共用。
+        /// </summary>
+        private void DiscardHud(UIHudItem hud)
+        {
+            if (hud == null)
+                return;
+
+            hud.OnTargetLost -= OnHudTargetLost;
+            hud.FollowTarget = null;
+            RecycleHud(hud);
+        }
+
+        /// <summary>
+        /// 回池：先复位（释放 Track 登记的订阅、清 Canvas 排序——HUD 同样是回池而非销毁，
+        /// 漏掉复位会让排序值留在实例上，复用时可能盖住不该盖的面板），再交还资源层。
+        /// </summary>
+        private static void RecycleHud(UIHudItem hud)
+        {
+            if (hud == null)
+                return;
+
             hud.OnPoolRecycle();
 
-            // 回池
             if (hud.gameObject != null)
             {
                 AssetManager.DestroyInstance(hud.gameObject);
             }
-
-            // 从映射和列表中移除
-            if (target != null)
-                _hudMap.Remove(target);
-
-            _activeHudList.Remove(hud);
         }
 
         #endregion
