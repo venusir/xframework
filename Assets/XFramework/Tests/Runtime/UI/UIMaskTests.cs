@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -129,6 +130,29 @@ namespace XFramework.XUI.Tests
             var image = mask.GetComponent<Image>();
             Assert.AreEqual(1f, image.color.r, 0.001f);
             Assert.AreEqual(0.25f, image.color.a, 0.001f);
+        }
+
+        /// <summary>
+        /// 越界的遮罩层级要被钳制，与面板打开路径同口径。
+        /// <para>此前只钳面板：遮罩把调用方给的层级直接送进 <c>MaskOrder</c>（= 层级 * 32 + 31），
+        /// 传 2000 会算出 64031——而 <c>Canvas.sortingOrder</c> 是 16 位的，静默回绕成负值后遮罩会跑到
+        /// 所有面板<b>后面</b>：既挡不住射线也看不见，且不报任何错。</para>
+        /// </summary>
+        [Test]
+        public void ShowMask_OutOfRangeLayer_IsClamped()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("exceeds the panel layer limit"));
+
+            UIManager.ShowMask(new UIMaskStyle(2000, Color.black));
+
+            var mask = _root.transform.Find("UIManager_Mask");
+            Assert.IsNotNull(mask, "遮罩应挂在 UIRoot 下");
+
+            int order = mask.GetComponent<Canvas>().sortingOrder;
+            Assert.AreEqual(UISorting.MaskOrder(UISorting.MaxPanelLayer), order,
+                "越界层级应被钳到面板可用上限，而不是算出会回绕的序号");
+            Assert.Greater(order, UISorting.PanelOrder(UISorting.MaxPanelLayer, 1),
+                "钳制后仍要盖住同层最上的面板——否则遮罩形同虚设");
         }
 
         [Test]

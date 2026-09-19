@@ -969,7 +969,12 @@ namespace XFramework.XUI
 
             var canvas = _maskInstance.GetComponent<Canvas>();
             if (canvas != null)
-                canvas.sortingOrder = UISorting.MaskOrder(style.Layer);
+            {
+                // 与面板打开路径同一条钳制。此前只钳面板，遮罩直接把调用方的层级送进
+                // MaskOrder（= layer * 32 + 31）：传个 2000 会算出越界序号，而 Canvas.sortingOrder
+                // 是 16 位——静默回绕成负值后，遮罩会跑到所有面板后面，既挡不住射线也看不见。
+                canvas.sortingOrder = UISorting.MaskOrder(UISorting.ClampPanelLayer(style.Layer));
+            }
 
             var image = _maskInstance.GetComponent<UnityEngine.UI.Image>();
             if (image != null)
