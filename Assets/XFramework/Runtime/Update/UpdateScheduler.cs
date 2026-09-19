@@ -155,19 +155,26 @@ namespace XFramework.XUpdate
         private readonly List<Entry>[] _buckets;
 
         /// <summary>
-        /// 待处理操作缓冲。迭代期间按<b>入队顺序</b>暂存，帧末统一应用。
+        /// 待处理操作缓冲。派发期间按<b>入队顺序</b>暂存，由本调度器收尾（<see cref="ApplyDeferred"/>）
+        /// 或下一次派发之前统一应用。
         /// </summary>
         private readonly List<PendingOp> _pendingOps = new List<PendingOp>(16);
 
         /// <summary>
-        /// 当前是否正在迭代中。
-        /// <para><b>不变量：迭代期间没有任何代码能改动活表</b>——注册/注销/启用/禁用/清空
-        /// 全部走 <see cref="_pendingOps"/> 缓冲，因此遍历时的写回必然落在自己的槽位上。
+        /// 当前是否有<b>任一套</b>调度器正在派发。
+        /// <para><b>不变量：派发期间没有任何代码能改动任何活表</b>——注册/注销/启用/禁用/清空
+        /// 全部走各实例自己的 <see cref="_pendingOps"/> 缓冲，因此遍历时的写回必然落在自己的槽位上。
         /// 破坏这个不变量就会重现「写回覆盖他人条目」这类缺陷。</para>
+        /// <para><b>为什么是 static（跨实例共享）：</b>门面的 Enable/Disable/Unregister/Tick/
+        /// ProcessImmediate 是<b>向三套调度器全部转发</b>的。闩锁若每实例一份，「当前这一套在迭代、
+        /// 另外两套不在」时，按名字找上门的操作会被另外两套<b>立即</b>应用——用户回调当场嵌进别人的
+        /// 回调栈里，同桶靠后的条目还会在本帧倒序收到「OnDisable 之后又 OnUpdate」（两者都是 README
+        /// 明确承诺不会发生、且被单调度器用例钉住的）。共享闩锁后，各调度器改在自己收尾
+        /// （<see cref="ApplyDeferred"/>）或下一次派发之前应用这些操作。</para>
         /// </summary>
-        private bool _isIterating;
+        private static bool _isIterating;
 
-        /// <summary>迭代期间收到的清空请求，延迟到帧末统一执行。</summary>
+        /// <summary>派发期间收到的清空请求，延迟到本调度器收尾（或下一次派发之前）执行。</summary>
         private bool _clearRequested;
 
         /// <summary>各时间轴累计推进的格数。切片相位由它对 2^k 取模得到。</summary>
@@ -282,6 +289,11 @@ namespace XFramework.XUpdate
         /// </summary>
         private void TickInternal(in UpdateClock clock)
         {
+            // 先消化「本调度器上一趟派发期间缓冲下来的操作」。那些请求可能来自另一时机的回调
+            // （另一套正在派发时，这里只入缓冲），它们的发起时刻早于本次派发——若留到本趟收尾才应用，
+            // 被禁用/注销的条目会在本次派发里多跑一轮
+            ApplyDeferred();
+
             // 逻辑轴冻结的两种来源：引擎时间被冻结（timeScale <= 0），或调用方显式 Pause
             bool logicalFrozen = _paused || clock.IsPaused;
 
@@ -321,15 +333,9 @@ namespace XFramework.XUpdate
                 }
             }
 
-            // flush 时闩锁仍持有：回调里再发起的操作继续进缓冲、由本轮循环消化，
+            // 收尾时闩锁仍持有：回调里再发起的操作继续进缓冲、由本轮循环消化，
             // 而不是直接改活表（那正是旧实现 Disable/Enable 错位的来源）
-            FlushPending();
-
-            if (_clearRequested)
-            {
-                _clearRequested = false;
-                ClearImmediate();
-            }
+            ApplyDeferred();
         }
 
         /// <summary>
@@ -606,7 +612,8 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 启用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
-        /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）；从迭代外调用则立即生效。
+        /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
+        /// 顺延到本调度器下一次派发之前）；从派发之外调用则立即生效。
         /// 另需注意：被重新启用的节点一律回到<b>原时间轴</b>的 <see cref="UpdateTier.Tier0"/> 桶——
         /// 桶号本身就是档位，条目移入禁用表时该信息即已丢失（时间轴不会丢，它记在条目上）。</para>
         /// </summary>
@@ -621,10 +628,10 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 禁用指定节点的 Update 调用。
         /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
-        /// <para><b>派发期间发起时推迟到帧末生效</b>（与注册/注销一致）：节点在本帧剩余时间里
-        /// 仍可能收到一次 <see cref="IUpdateable.OnUpdate"/>，但帧末起不再派发，
-        /// 且不会出现「OnDisable 之后又 OnUpdate」的倒序。需要帧内立即停止派发时，
-        /// 请在派发之外调用本方法。</para>
+        /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
+        /// 顺延到本调度器下一次派发之前）：节点在本趟剩余时间里仍可能收到一次
+        /// <see cref="IUpdateable.OnUpdate"/>，但收尾后不再派发，且不会出现
+        /// 「OnDisable 之后又 OnUpdate」的倒序。需要帧内立即停止派发时，请在派发之外调用本方法。</para>
         /// </summary>
         /// <param name="node">要禁用的节点。</param>
         public void Disable(IUpdateLifecycle node)
@@ -744,13 +751,7 @@ namespace XFramework.XUpdate
                     });
                 }
 
-                FlushPending();
-
-                if (_clearRequested)
-                {
-                    _clearRequested = false;
-                    ClearImmediate();
-                }
+                ApplyDeferred();
             }
             finally
             {
@@ -763,9 +764,10 @@ namespace XFramework.XUpdate
         /// 清空所有桶、禁用列表和待处理操作缓冲，并把调度器恢复到可用初态
         /// （含暂停开关——测试隔离因此不必额外复位暂停，否则一个 fixture 的 <see cref="Pause"/>
         /// 会静默污染后续所有用例）。
-        /// <para><b>派发期间调用时推迟到帧末执行</b>：与注册/注销/启用/禁用同一套语义。
+        /// <para><b>派发期间调用时推迟到本调度器收尾执行</b>：与注册/注销/启用/禁用同一套语义。
         /// 就地清空会让正在遍历的循环拿着失效下标写回（旧实现在切片分支会直接抛
-        /// <c>ArgumentOutOfRangeException</c>）。</para>
+        /// <c>ArgumentOutOfRangeException</c>）。调用发生在<b>另一时机</b>的派发期间时，
+        /// 顺延到本调度器下一次派发之前。</para>
         /// <para><b>不回调 <see cref="IUpdateable.OnDisable"/></b>：与 <see cref="Unregister"/>
         /// 一致（它同样不回调）。本方法的主要使用者是测试隔离，在隔离点触发用户回调
         /// 会让 fixture 的收尾去执行业务代码——那里往往引用了已拆掉的管理器。</para>
@@ -854,7 +856,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 入队一条操作。
-        /// <para>迭代中只入缓冲、等待帧末统一应用；其余情况立即应用。
+        /// <para>任一套调度器派发期间只入缓冲，由本调度器收尾时统一应用；其余情况立即应用。
         /// <b>两条路径共用 <see cref="ApplyOp"/></b>，避免出现「立即调用一套语义、
         /// 缓冲调用另一套语义」的分叉。</para>
         /// </summary>
@@ -972,6 +974,25 @@ namespace XFramework.XUpdate
             }
 
             _pendingOps.Clear();
+        }
+
+        /// <summary>
+        /// 应用本调度器缓冲下来的待处理操作与清空请求。
+        /// <para>三个调用点：<see cref="TickInternal"/> 的<b>开头</b>（消化上一趟缓冲下来的操作，
+        /// 使它们赶在本次派发之前生效）、<b>末尾</b>（本趟发起的操作在这里落地），以及
+        /// <see cref="ProcessImmediate"/> 的收尾。</para>
+        /// <para>就地清空（<see cref="ClearImmediate"/>）要求「没有正在进行的桶遍历」，三处调用点
+        /// 都满足：派发开始之前、一帧派发结束之后、单条立即派发之后。</para>
+        /// </summary>
+        private void ApplyDeferred()
+        {
+            FlushPending();
+
+            if (_clearRequested)
+            {
+                _clearRequested = false;
+                ClearImmediate();
+            }
         }
 
         #endregion

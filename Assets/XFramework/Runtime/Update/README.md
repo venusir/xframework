@@ -60,7 +60,8 @@ public sealed class MyService : IUpdateable
 | `FixedUpdate` | `IFixedUpdateable` | `Time.fixedTime` | 物理、确定性模拟（要固定增量而非每帧变化的 delta） |
 
 同一对象可以实现多个接口，会被分别登记到对应时机。注册用 `UpdateManager.Register` /
-`RegisterLate` / `RegisterFixed`；注销、启用、禁用、查询不分时机（传任一对象即可）。
+`RegisterLate` / `RegisterFixed`；注销、启用、禁用、查询不分时机（传任一对象即可）——跨时机对象在
+启用/禁用与生命周期回调次数上的注意点见「派发期间的注册 / 注销 / 启用 / 禁用」。
 
 ### 3. 时间轴怎么选
 
@@ -215,13 +216,18 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 ### 派发期间的注册 / 注销 / 启用 / 禁用
 
-派发期间（`OnUpdate` 等回调里）发起的这些操作**按调用顺序在帧末统一生效**，因此：
+派发期间（`OnUpdate` 等回调里）发起的这些操作**按调用顺序在所属调度器收尾时统一生效**
+（跨时机调用时，另外两套调度器可能已在本帧跑过，那就顺延到它们下一次派发之前）。因此：
 
 - 当前帧剩余时间里，被注销或禁用的对象仍可能再收到一次回调，但不会出现
   「`OnDisable` 之后又 `OnUpdate`」的倒序
 - 同一帧内的多次操作**以后者为准**：`Register → Unregister → Register` 得到「注册一次」
 - 无需担心遍历中被改动：派发期间没有任何代码会改活表
-- `IsEnabled` 会反映尚未落表的待处理操作，与帧末状态一致
+- `IsEnabled` 会反映尚未落表的待处理操作，与收尾后的状态一致
+
+**跨时机的对象**（同一对象注册在多个时机，见「三个时机怎么选」）另有两点：一次 `Enable` / `Disable`
+会让**每个时机各触发一次** `OnEnable` / `OnDisable`（启用态本就是每套调度器一份）；操作不会嵌进当前
+回调的栈里执行，而是等各调度器各自收尾时应用——派发中调 `Tick` 同样被挡下，不会嵌套派发另一时机。
 
 `Clear()` 是例外之外的一点：它**不回调 `OnDisable`**（与 `Unregister` 一致），
 但会一并复位暂停开关。
