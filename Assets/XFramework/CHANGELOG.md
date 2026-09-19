@@ -72,6 +72,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `UIManager.ClearAssetCache()` | `UIManager.ClearPreloads()` |
 | `UIManager.GetTopSortingOrder(layer)` | 已删除：它对外算错了（忽略了层偏移），且与 `GetNextSortingOrder` 口径分裂。排序值现由 `UISorting` 按栈位推导 |
 | `protected internal override void OnUpdate()` | `protected internal override void OnUpdate(float deltaTime, float time)` |
+| `CloseAllAsync` 之后世界空间 HUD 与在播 Tip 仍在 | 现在会一并回收。要保留请在关闭后自行重挂；遮罩不受影响，仍需显式 `HideMask()` |
 
 > 门面一律扁平：上表之外没有别的改名。`UIManager` 的每个成员都与 `IUIManager` 同名，两条路径（静态门面 / 注入实例）用的是同一套名字。
 
@@ -135,6 +136,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变（节拍基准的改动见下条）。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
 - **Update LOD 节拍由帧数改为时间（破坏性）**：切片节拍原先每帧推进一格，故第 k 档的周期是 2^k **帧**、随帧率缩放（`Tier3` 在 30fps 下 267ms、144fps 下 56ms，跨度 4.8 倍）。现按各轴自己的时间推进（一格 = 1/60 秒），周期与帧率无关。**固定步轴除外**：`Time.fixedTime` 每步恰好等长、本无漂移可修，那里保持每步一格，档位含义是「每 2^k 个固定步」。每帧最多补 3 格——上限决定「周期精确」能覆盖到多慢的帧（余量恒小于一格，故帧长不足 N 格时该补的格数不超过 N），取 3 即帧长 50ms（约 20fps）以内精确；补不上时丢弃**整格**债务而非累积到后续帧，卡顿不会滚雪球。切片算法本身、每帧派发量上限、`deltaTime` 语义均未变，高帧率下只是多出「本帧不推进」的空帧。副作用：`timeScale = 0.5` 时的节流强度不再与 `timeScale` 无关——逻辑轴按逻辑时间计拍，墙钟周期随之翻倍（这正是「逻辑时间轴」的应有之义，但推翻了旧文档的说法）
 
+- **UI `CloseAllAsync` 一并回收 HUD 与在播 Tip（行为变更）**：HUD 与 Tip 不是面板，但与面板共享同一个 UIRoot 与生命周期——「全部关闭」对调用方（切场景、回标题）而言就是「界面清空」，只关面板会让世界空间 HUD 与飘着的 Tip 继续留在场景里。实现里那句「已由门面处理」的注释与 README 的承诺都写着这个行为，此前并不存在。**遮罩刻意不在其列**：它是引用计数句柄，强制清掉会让别的系统手里的句柄凭空失效，要收需显式 `HideMask()`
+- **UI `SetLayerVisibility` 记住期望值（行为变更）**：层容器是「该层第一次开面板」时才创建的，原实现只对已存在的容器生效，于是「先隐藏、后开面板」会让隐藏被悄悄撤销。现补一份与 `SetLayerInteractive` 对称的记忆，并在容器创建时立即应用
+- **UI `UIManager.Subscribe` 的 `context` 放宽到任意生命周期对象（破坏性：签名）**：形参类型由 `MonoBehaviour` 改为 `object`，实现 `IDestroyCancellationToken` 的普通 C# 对象（ViewModel / Model）从此可用这个归口入口；两者皆非时不绑定并打一条告警。**源码兼容**（`MonoBehaviour` 实参照旧可传），但签名不同，二进制层面需重编。绑定逻辑一并改为复用 `MessageManager` 的同一份实现——此前三个重载各自手写了一遍，比底层弱三处：每次订阅分配一个闭包、令牌已取消时仍去注册、且只认 `MonoBehaviour`
+
 ### Removed
 
 - **删除节点系统（破坏性）**：整个 `XFramework.XNode` 模块——`BaseNode` / `ParentNode` / `EntityNode` / `ContainerNode` / `DictionaryNode` / `RootNode` / `LeafNode`、`NodeFactory` / `NodePool` / `NodeExtensions` / `NodeUtility`、`StartupExtensions` / `StartupStages` / `AssetExtensions`，以及 `Node/Bootstrap/` 下的四个引导节点。节点系统同时承担了四件事：框架的启动路径、一套 GamePlay 架构、一个服务定位器、更新调度的桥接；只有最后一项是基础框架层该管的，而它已由 Bootstrap 模块覆盖。本项目定位是基础框架层，不该预设 GamePlay 架构。连带影响：① `GameLauncher` 改由 `Bootstrap` 驱动并移入 `Runtime/Bootstrap/`（命名空间 `XFramework.XNode` → `XFramework.XBootstrap`），仍是**可选**入口，场景里没有它也照常运转；② `UpdateManagerExtensions`（`ResolveTimeMode` / `RegisterUpdate` / `UnregisterUpdate`，接收者均为 `BaseNode`）与 `LocalizationBootstrapNode` 一并移除，Update 模块从此与节点系统无关；③ `IUpdateTimeMode` 保留但不再有自动轴发现——注册时请显式传 `timeMode:`；④ `AssetExtensions` 的 12 个方法全部是 `AssetManager` 静态方法的纯转发（`self` 参数从未被使用，其中 `PreloadAssetsAsync` 还比门面版少了 `progress` 参数），直接调用 `AssetManager` 即可
@@ -189,6 +194,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **UI 层级「整体禁交互」会被焦点变化撤销**：`OnFocus` 与 `OnOpenImpl` 都会无条件把 raycaster 打开，它们并不知道层被整体禁用过。现由管理器在焦点回调之后、打开之后、以及 Push 取消回滚之后统一压回层状态
 - **UI `UIBinder.BindToLocalizedText` 的订阅无人释放**：面板回池不销毁，故每次打开都会多一条全局 Localization 订阅，且回池后仍会给失活的 TMP 写文本。现归口到 `UIViewBase.Track`
 - **UI `UIBinder` 跨模块引用 `XMessage.Internal`**：它只用了那里的 `ActionDisposable`（十行适配器），内联成本地私有类即可切断这条实现细节依赖
+- **UI 门面探测型查询在未初始化时抛异常**：`IUIManager` 的文档与 `UIManagerImpl` 的实现都明确写着 `GetState` / `OpenCount` / `IsAnyOpen` / `Panels` / `CanGoBack` / `IsMaskShowing` / `DumpState`「未初始化时返回空值，便于场景加载早期探测」，而静态门面给它们统一套了 `EnsureGlobalInitialized()`——两处散文与实测行为相反，`UIStateWindow` 为此不得不先判一句 `IsInitialized`。现一律返回空结果（`Panels` 给空视图而非 null）。操作类成员与 `IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` 仍照抛——后四个在实现里本就调 `EnsureInitialized()`
+- **UI 重新打开已打开的面板时只排序、不聚焦**：`OpenAsync` / `PushAsync` 的「已打开」分支只调 `BringToFront`，而它按契约只重排渲染次序。于是面板渲染在最上却 `IsPaused`（`DriveTier` 跳过它）且 raycaster 关着，而原栈顶仍 `IsFocused`——「看得见、摸不着、也不更新」，两个面板同时声称有焦点。触发序列很普通：Push 开二级页把主面板暂停，再 `OpenAsync` 主面板
+- **UI 批量关闭会把同一个面板关两次**：`CloseAllAsync` / `CloseLayerAsync` 先快照再逐个 await，而它们直连的 `ClosePanelInternalAsync` 没有「还在不在册」的检查——快照里的 A 在自己的 `OnClose` 里关掉同批的 B 之后，外层循环走到 B 时会再关一遍：`OnClose` 跑两次、消息发两次，而回池没有去重（AssetManager 直接 Push），同一个 GameObject 会被压进池里两次。守卫加在所有 await 之后：放在方法入口挡不住控制器 await 期间的重入
+- **UI 活动字典不随显示栈一起剪枝**：第三方绕过 `CloseAsync` 直接销毁面板后，`IsOpen<T>` / `OpenCount` / `IsAnyOpen` 继续报「还开着」，`GetPanel<T>` 还会把伪 null 交给调用方；而同一次读取里 `Panels` 不剪、`CopyPanels` 剪，两条读路径对同一份状态给出不同答案。剪枝现收敛进一处，字典扫描只在真剪到空洞时才做（稳态仍是零分配）
+- **UI 关闭失败时面板永不回池**：清理段写在 `await DoCloseAsync` 之后且没有 `finally`，而 `DoCloseAsync` 只保证落到 Closed 终态、异常照旧外抛。于是一旦 `OnClose` 抛异常，面板已从活动集合摘除却既不回池也不发消息——没有第二条路径能再碰到它，连同它持有的资源引用一起留在场景里。现抽出 `RecyclePanel` 作为回池的唯一出口，关闭路径与 `Dispose` 共用
+- **UI `Dispose` 跳过回池钩子**：原先直接 `_factory.Release`，于是面板 `Track` 的订阅不退、ViewModel 不解绑、Canvas 排序不复位——这些都活在池中实例上，会跟到它被重新取出使用
+- **UI 在途打开在管理器销毁后仍写回**：`Dispose` 只把加入者以 null 了结，并不取消主打开方的续体。续体恢复后仍会注册并打开，把面板泄漏进已销毁的管理器。现于每个 await 之后自查：① 防 `UIRoot` 已为 null 时取层容器的 NRE，② 不注册进已拆掉的管理器、也不为一个永远不会被看见的面板跑用户 `OnOpen`，③ 真开起来了的先按关闭路径收干净再回池
+- **UI Tip 在 `CloseAllAsync` 之后永久失效（本批次引入的回归）**：`DetachAll` 会把「管理器已拆除」的粘性标志置位，在途实例化完成后据此立刻回池；而 `CloseAllAsync` 收在播 Tip 时用的也是同一个 `DetachAll`，管理器却仍在服役，那个标志没有任何地方复位——于是关过一次全部之后，每次 `ShowTipAsync` 都实例化完立刻销毁且不报错。根因是两个性质不同的调用方（「管理器要退役了」与「只是把在播的清掉」）共用一个标志，现改为世代号。HUD 侧原拟照抄同一标志，一并改为世代号
+- **UI HUD 三条清理缺陷**：① 打开失败没有回滚（失败点在注册映射之前，`DetachAll` 也找不到它），实例成为常驻 `Layer_HUD`、持着资源引用的孤儿；② `DetachInternal` 先 `.Forget()` 再立刻回收，关闭的续体会跑在实例已回池、甚至已被另一个目标复用之后，把新持有者的 HUD 关掉；③ 摘账按 `target` 删，而 `target` 可能为 null（HUD 自己上报目标丢失时），残留的死条目会让下一次 `DetachAll` 二次回收
+- **UI 遮罩层级不钳制**：面板打开路径一直在钳制，遮罩却把调用方给的层级直接送进 `MaskOrder`（= 层级 × 32 + 31）——传 2000 算出 64031，而 `Canvas.sortingOrder` 是 16 位的，静默回绕成负值后遮罩跑到所有面板后面：既挡不住射线也看不见
+- **UI 恢复整层交互会点亮失焦面板的射线**：层开关的语义是「允许这一层交互」，不是「让这一层里每个面板都可交互」——被上层盖住的失焦面板会隔着弹窗吃点击。现按焦点把它们压回去
+- **UI `UIRootNode` 会拆掉别人在用的管理器**：`OnDestroy` 的判据是「全局是否已初始化」而非「是不是我」，于是叠加场景下卸载任意一个节点（包括那个从未生效、被静默忽略的第二个节点）都会把另一个场景仍在用的管理器一起拆掉。现改为引用同一判定。「第二个节点被忽略」这半保持现状——多根是另一类需求
+- **UI README 四处与代码不符**：HUD 容器排序值三处写作 `999000`（代码是 `UISorting.HudOrder = 30000`，且该值会触发同文档论证过的 16 位回绕）；自定义 Controller 示例的五个方法都漏了 `CancellationToken` 参数（照抄直接 CS0535，现已编过确认）；示例里的 `dialog.WaitForResultAsync()` / `dialog.Result` 全仓不存在；示例层级 900 越过 `MaxPanelLayer = 899`。结构树补上整块缺失的 `Tip/`
 
 
 ## [0.2.0] - 2026-08-20
