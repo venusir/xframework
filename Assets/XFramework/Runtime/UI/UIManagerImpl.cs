@@ -1416,19 +1416,48 @@ namespace XFramework.XUI
             // 面板自己打开的遮罩随它一起释放，无需调用方记得配对关闭
             ReleaseMasksOwnedBy(panel);
 
-            // 执行关闭逻辑（动画 + OnClose，不再自行 Destroy）
-            await panel.DoCloseAsync(immediate);
+            try
+            {
+                // 执行关闭逻辑（动画 + OnClose，不再自行 Destroy）
+                await panel.DoCloseAsync(immediate);
+            }
+            finally
+            {
+                // 无论 OnClose 是否抛异常都要回池并告知：面板此刻已从活动集合摘除，没有第二条
+                // 路径能再碰到它——漏掉回收，它就永远留在场景里，连它持有的资源引用都放不掉。
+                //
+                // 关闭失败仍然发 PanelClosedMessage：面板确实已经关闭（已摘账、已失活、已回池），
+                // 这条消息报的是「状态」而不是「这次调用成功」。调用方要判断成败，接住上抛的异常即可。
+                RecyclePanel(panel);
+                MessageManager.Publish(new PanelClosedMessage(type));
+            }
 
-            // 回池前通知面板，允许重置自定义状态
-            panel.OnPoolRecycle();
-
-            // 回池（默认实现下由 AssetManager 管理引用计数和池容量）
-            _factory.Release(panel);
-            MessageManager.Publish(new PanelClosedMessage(type));
-
-            // ★ Controller 拦截点：关闭后回调
+            // ★ Controller 拦截点：关闭后回调。关闭失败时不发——与打开侧「OnOpen 抛异常则不发
+            // OnAfterOpen」对称：OnAfter* 是「这一次流程走完了」的回调，不是状态的播报。
             await _controller.OnAfterCloseAsync(type, cancellationToken);
             return true;
+        }
+
+        /// <summary>
+        /// 面板回池的唯一出口：先通知面板重置（释放 <c>Track</c> 的订阅、解绑 ViewModel、
+        /// 复位 Canvas 排序），再交还工厂。
+        /// <para>关闭路径与 <see cref="Dispose"/> 共用——两条路径各写一遍的结果，就是其中一条
+        /// 漏掉重置，让订阅与绑定活到下次打开。</para>
+        /// </summary>
+        private void RecyclePanel(UIPanelBase panel)
+        {
+            if (panel == null)
+                return;
+
+            try
+            {
+                panel.OnPoolRecycle();
+            }
+            finally
+            {
+                // 重置本身失败也必须回池：此刻面板已不在任何集合里，没有第二条路径能再碰到它
+                _factory.Release(panel);
+            }
         }
 
         /// <summary>
@@ -1474,8 +1503,7 @@ namespace XFramework.XUI
         {
             _activePanels.Remove(type);
             _stack.Remove(panel);
-            panel.OnPoolRecycle();
-            _factory.Release(panel);
+            RecyclePanel(panel);
         }
 
         /// <summary>

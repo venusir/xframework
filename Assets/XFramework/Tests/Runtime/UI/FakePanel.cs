@@ -145,6 +145,20 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 在 <c>OnClose</c> 里抛异常的面板，用于验证关闭失败时实例仍被回池、不留孤儿。
+    /// <para>与 <see cref="ThrowingPanel"/> 相对：那个覆盖打开侧，由回滚路径兜住；关闭侧此前完全裸奔
+    /// ——<c>UIViewBase.DoCloseAsync</c> 只保证落到 Closed 终态，异常照旧外抛。</para>
+    /// </summary>
+    public class ThrowingOnClosePanel : FakePanel
+    {
+        protected override UniTask OnClose()
+        {
+            throw new System.InvalidOperationException(
+                "[ThrowingOnClosePanel] 故意在 OnClose 里抛异常");
+        }
+    }
+
+    /// <summary>
     /// 记录每次 <c>OnUpdate</c> 收到的实测参数，用于验证派发方给出的 <c>deltaTime</c>/<c>time</c>。
     /// </summary>
     public class UpdateRecordingPanel : FakePanel

@@ -31,6 +31,7 @@ namespace XFramework.XUI.Tests
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<FakePanelB>();
+            _factory.RegisterPanel<ThrowingOnClosePanel>();
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -48,6 +49,31 @@ namespace XFramework.XUI.Tests
             UpdateManager.Clear();
             UpdateManager.Resume();
         }
+
+        #region 关闭失败仍回池
+
+        /// <summary>
+        /// <c>OnClose</c> 抛异常时，实例仍必须回池。
+        /// <para>关闭路径此前把「回池 + 通知」写在 <c>await DoCloseAsync</c> 之后且没有 finally，
+        /// 而 <c>UIViewBase.DoCloseAsync</c> 只保证落到 Closed 终态、异常照旧外抛。于是异常一抛，
+        /// 面板已从活动集合摘除、却既不回池也不发消息——它不再被任何集合引用，没有任何第二条路径
+        /// 能再碰到它，连同它持有的资源引用一起永远留在场景里。</para>
+        /// </summary>
+        [Test]
+        public async Task CloseAsync_OnCloseThrows_StillReleasesToPool()
+        {
+            await UIManager.OpenAsync<ThrowingOnClosePanel>("ui/boom");
+
+            Assert.ThrowsAsync<System.InvalidOperationException>(
+                async () => await UIManager.CloseAsync<ThrowingOnClosePanel>());
+
+            Assert.IsFalse(UIManager.IsOpen<ThrowingOnClosePanel>(), "面板应已从活动集合摘除");
+            Assert.IsFalse(UIManager.IsAnyOpen);
+            Assert.AreEqual(1, _factory.ReleaseCount, "OnClose 抛异常也必须回池，否则实例永远留在场景里");
+            Assert.AreEqual(1, _factory.PooledCount, "回池后应能被下次打开复用");
+        }
+
+        #endregion
 
         #region ViewModel 解绑
 
