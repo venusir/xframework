@@ -591,8 +591,15 @@ namespace XFramework.XMessage
         /// 以及实现了 <see cref="IDestroyCancellationToken"/> 的普通 C# 对象（用其 <see cref="IDestroyCancellationToken.DestroyCancellationToken"/>）。</para>
         /// <para>两者皆非时不做绑定——调用方需自行持有返回的 <see cref="IDisposable"/>，
         /// 或改用 <c>SubscribeAsync(..., cancellationToken)</c> 由令牌控制。</para>
+        /// <para><b>程序集内共享</b>：本方法也是同程序集其它模块的订阅归口入口（如
+        /// <c>UIManager.Subscribe</c> 的三个重载）。做成 internal 而非 private，是为了让「订阅随生命周期
+        /// 自动取消」只有这一份实现——各模块各写一遍的结果就是各写错各的（闭包分配、漏判已取消令牌、
+        /// 只认 MonoBehaviour 而漏掉 <see cref="IDestroyCancellationToken"/>）。</para>
         /// </summary>
-        private static void TryBindToDestroy(object subscriber, IDisposable disposable)
+        /// <param name="subscriber">订阅者：<see cref="MonoBehaviour"/> 或实现 <see cref="IDestroyCancellationToken"/> 的对象。</param>
+        /// <param name="disposable">订阅句柄。</param>
+        /// <returns>确实做了绑定返回 true；订阅者两类都不是（未绑定）返回 false。</returns>
+        internal static bool TryBindToDestroy(object subscriber, IDisposable disposable)
         {
             CancellationToken token;
             if (subscriber is MonoBehaviour mono)
@@ -605,7 +612,7 @@ namespace XFramework.XMessage
             }
             else
             {
-                return;
+                return false;
             }
 
             // 已取消则立即释放，否则注册到取消回调
@@ -617,6 +624,8 @@ namespace XFramework.XMessage
             {
                 token.Register(s => ((IDisposable)s).Dispose(), disposable);
             }
+
+            return true;
         }
         #endregion
     }

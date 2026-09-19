@@ -538,14 +538,11 @@ namespace XFramework.XUI
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">面板打开时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<PanelOpenedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<PanelOpenedMessage> handler, object context = null)
         {
-            var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
-            return sub;
+            return BindToContext(MessageManager.Subscribe(handler), context, nameof(PanelOpenedMessage));
         }
 
         /// <summary>
@@ -553,14 +550,11 @@ namespace XFramework.XUI
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">面板关闭时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<PanelClosedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<PanelClosedMessage> handler, object context = null)
         {
-            var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
-            return sub;
+            return BindToContext(MessageManager.Subscribe(handler), context, nameof(PanelClosedMessage));
         }
 
         /// <summary>
@@ -568,14 +562,41 @@ namespace XFramework.XUI
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">全部面板关闭时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<AllPanelsClosedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<AllPanelsClosedMessage> handler, object context = null)
         {
-            var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
-            return sub;
+            return BindToContext(MessageManager.Subscribe(handler), context, nameof(AllPanelsClosedMessage));
+        }
+
+        /// <summary>
+        /// 把订阅句柄绑定到 <paramref name="context"/> 的销毁时机。
+        /// <para><b>绑定逻辑不在这里重写一遍</b>：直接复用 <see cref="MessageManager"/> 里那一份
+        /// （<see cref="XMessage.IDestroyCancellationToken"/> 与 <c>MonoBehaviour</c> 两个分支、已取消的令牌
+        /// 立即释放、注册用静态委托与状态参数而非闭包）。此前本文件三个重载各自手写了一遍，于是比
+        /// 底层弱了三处：每次订阅分配一个闭包；<paramref name="context"/> 限定 <c>MonoBehaviour</c>，
+        /// 非 MonoBehaviour 的 ViewModel / Model 用不了这个归口入口；令牌已取消时仍去注册。</para>
+        /// </summary>
+        /// <param name="subscription">订阅句柄。</param>
+        /// <param name="context">订阅者：<c>MonoBehaviour</c> 或实现 <see cref="XMessage.IDestroyCancellationToken"/>
+        /// 的普通 C# 对象；为 null 表示不绑定。</param>
+        /// <param name="messageName">消息类型名，仅用于告警文案。</param>
+        /// <returns>原样返回 <paramref name="subscription"/>。</returns>
+        private static IDisposable BindToContext(IDisposable subscription, object context, string messageName)
+        {
+            if (context == null)
+                return subscription;
+
+            if (MessageManager.TryBindToDestroy(context, subscription))
+                return subscription;
+
+            // 订是订上了，但没有任何人会在它销毁时退订。留痕而不是静默——静默的话故障表现只是
+            // 「对象已经没了，回调还在跑」，从现象追回这里要绕很远。
+            Debug.LogWarning(
+                $"[UIManager] Subscribe<{messageName}>: context of type '{context.GetType().Name}' is neither a " +
+                "MonoBehaviour nor an IDestroyCancellationToken, so the subscription will not be disposed " +
+                "automatically. Hold the returned handle and dispose it yourself.");
+            return subscription;
         }
 
         #endregion
