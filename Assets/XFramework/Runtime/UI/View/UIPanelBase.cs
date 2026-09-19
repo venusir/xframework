@@ -106,7 +106,7 @@ namespace XFramework.XUI.View
         /// <summary>
         /// 面板获得焦点时调用（回到显示栈顶部时，含首次打开）。
         /// <para>只管交互维度；更新维度的启停见 <see cref="OnResume"/> / <see cref="OnPause"/>。</para>
-        /// <para><b>注意</b>：若所在层级被 <c>UIManager.Layer.SetInteractive(layer, false)</c> 整体禁用，
+        /// <para><b>注意</b>：若所在层级被 <c>UIManager.SetLayerInteractive(layer, false)</c> 整体禁用，
         /// 管理器会在本回调之后把射线重新关掉——层的整体开关优先于单个面板。</para>
         /// </summary>
         protected internal virtual void OnFocus()
@@ -196,7 +196,7 @@ namespace XFramework.XUI.View
         #region Convenience Methods
 
         /// <summary>
-        /// 关闭自身面板。便捷方法，内部调用 <see cref="UIManager.Panel.CloseAsync(UIPanelBase, bool)"/>。
+        /// 关闭自身面板。便捷方法，内部调用 <see cref="UIManager.CloseAsync(UIPanelBase, bool)"/>。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
         public UniTask CloseSelfAsync(bool immediate = false)
@@ -204,7 +204,7 @@ namespace XFramework.XUI.View
             if (!IsOpen)
                 return UniTask.CompletedTask;
 
-            return UIManager.Panel.CloseAsync(this, immediate);
+            return UIManager.CloseAsync(this, immediate);
         }
 
         #endregion

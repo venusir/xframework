@@ -50,12 +50,12 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OpenAsync_UsesInjectedFactory_AndRegistersPanel()
         {
-            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/fake", layer: 100, userData: "hi");
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/fake", layer: 100, userData: "hi");
 
             Assert.IsNotNull(panel, "注入假工厂后应能打开面板");
             Assert.AreEqual(1, _factory.CreateCount, "面板实例应由注入的工厂创建");
-            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "打开后面板应处于活动状态");
-            Assert.AreSame(panel, UIManager.Panel.GetPanel<FakePanel>());
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "打开后面板应处于活动状态");
+            Assert.AreSame(panel, UIManager.GetPanel<FakePanel>());
 
             Assert.AreEqual("hi", panel.LastUserData, "userData 应透传到 OnOpen");
             Assert.AreEqual(100, panel.Layer);
@@ -67,18 +67,18 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseAsync_ReleasesThroughFactory()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/fake");
-            await UIManager.Panel.CloseAsync<FakePanel>();
+            await UIManager.OpenAsync<FakePanel>("ui/fake");
+            await UIManager.CloseAsync<FakePanel>();
 
             Assert.AreEqual(1, _factory.ReleaseCount, "关闭应经工厂回池，而非直接销毁");
-            Assert.IsFalse(UIManager.Panel.IsOpen<FakePanel>());
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>());
             Assert.AreEqual(1, _factory.PooledCount, "回池的面板应留在池中");
         }
 
         [Test]
         public async Task Destroy_ReleasesOpenPanelsThroughFactory()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/fake");
+            await UIManager.OpenAsync<FakePanel>("ui/fake");
 
             UIManager.Destroy();
 

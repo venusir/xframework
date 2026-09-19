@@ -49,26 +49,26 @@ namespace XFramework.XUI.Tests
         [Test]
         public void ForgetPreload_NothingTracked_IsNoOp()
         {
-            Assert.DoesNotThrow(() => UIManager.Panel.ForgetPreload<FakePanel>());
+            Assert.DoesNotThrow(() => UIManager.ForgetPreload<FakePanel>());
         }
 
         [Test]
         public void ClearPreloads_NothingTracked_IsNoOp()
         {
-            Assert.DoesNotThrow(() => UIManager.Panel.ClearPreloads());
+            Assert.DoesNotThrow(() => UIManager.ClearPreloads());
         }
 
         [Test]
         public async Task AccountingCalls_DoNotDisturbOpenPanels()
         {
-            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a");
 
-            UIManager.Panel.ForgetPreload<FakePanel>();
-            UIManager.Panel.ClearPreloads();
+            UIManager.ForgetPreload<FakePanel>();
+            UIManager.ClearPreloads();
 
-            Assert.IsTrue(UIManager.Panel.IsOpen<FakePanel>(), "记账与面板实例池是两回事，清记账不该动到打开的面板");
-            Assert.AreSame(panel, UIManager.Panel.GetPanel<FakePanel>());
-            Assert.AreEqual(1, UIManager.Panel.OpenCount);
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "记账与面板实例池是两回事，清记账不该动到打开的面板");
+            Assert.AreSame(panel, UIManager.GetPanel<FakePanel>());
+            Assert.AreEqual(1, UIManager.OpenCount);
         }
     }
 }

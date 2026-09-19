@@ -11,7 +11,7 @@ namespace XFramework.XUI
     /// </summary>
     /// <example>
     /// <code>
-    /// using (UIManager.Mask.Show(new UIMaskStyle(UILayers.Mask, Color.black, clickToClose: true)))
+    /// using (UIManager.ShowMask(new UIMaskStyle(UILayers.Mask, Color.black, clickToClose: true)))
     /// {
     ///     await DoSomethingAsync();
     /// }   // 离开作用域即释放

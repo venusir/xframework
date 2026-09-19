@@ -19,7 +19,7 @@ namespace XFramework.XUI
         /// <summary>顶层（Toast、加载提示、系统消息）。</summary>
         public const int Top = 300;
 
-        /// <summary>模态遮罩层。用 <c>UIManager.Mask.Show()</c> 的默认值。</summary>
+        /// <summary>模态遮罩层。用 <c>UIManager.ShowMask()</c> 的默认值。</summary>
         public const int Mask = 500;
     }
 }

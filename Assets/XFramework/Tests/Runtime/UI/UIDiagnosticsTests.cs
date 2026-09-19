@@ -52,7 +52,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public void GetState_ReflectsCounters()
         {
-            var empty = UIManager.Diagnostic.GetState();
+            var empty = UIManager.GetState();
             Assert.AreEqual(0, empty.OpenCount);
             Assert.AreEqual(0, empty.MaskRefCount);
             Assert.IsFalse(empty.IsMaskShowing);
@@ -62,24 +62,24 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task GetState_TracksPanelsAndMask()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
-            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
-            var mask = UIManager.Mask.Show();
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.PushAsync<FakePanelB>("ui/b");
+            var mask = UIManager.ShowMask();
 
-            var state = UIManager.Diagnostic.GetState();
+            var state = UIManager.GetState();
 
             Assert.AreEqual(2, state.OpenCount);
             Assert.AreEqual(1, state.MaskRefCount, "遮罩被持有一份");
             Assert.IsTrue(state.IsMaskShowing);
             Assert.IsTrue(state.CanGoBack);
 
-            var second = UIManager.Mask.Show();
-            Assert.AreEqual(2, UIManager.Diagnostic.GetState().MaskRefCount, "第二份持有应计入");
+            var second = UIManager.ShowMask();
+            Assert.AreEqual(2, UIManager.GetState().MaskRefCount, "第二份持有应计入");
 
             mask.Dispose();
             second.Dispose();
-            Assert.AreEqual(0, UIManager.Diagnostic.GetState().MaskRefCount);
-            Assert.IsFalse(UIManager.Diagnostic.GetState().IsMaskShowing, "引用归零后遮罩应隐藏");
+            Assert.AreEqual(0, UIManager.GetState().MaskRefCount);
+            Assert.IsFalse(UIManager.GetState().IsMaskShowing, "引用归零后遮罩应隐藏");
         }
 
         [Test]
@@ -87,29 +87,29 @@ namespace XFramework.XUI.Tests
         {
             _factory.Gate = new UniTaskCompletionSource<object>();
 
-            var pending = UIManager.Panel.OpenAsync<FakePanel>("ui/slow").Preserve();
+            var pending = UIManager.OpenAsync<FakePanel>("ui/slow").Preserve();
             await UniTask.Yield();
 
-            Assert.AreEqual(1, UIManager.Diagnostic.GetState().InFlightOpenCount,
+            Assert.AreEqual(1, UIManager.GetState().InFlightOpenCount,
                 "卡在半路的打开应能被看见——这正是它存在的意义");
 
             _factory.Gate.TrySetResult(null);
             await pending;
 
-            Assert.AreEqual(0, UIManager.Diagnostic.GetState().InFlightOpenCount, "完成后应清零");
+            Assert.AreEqual(0, UIManager.GetState().InFlightOpenCount, "完成后应清零");
         }
 
         [Test]
         public async Task GetState_DoesNotAllocate()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
+            await UIManager.OpenAsync<FakePanel>("ui/a");
 
             for (int i = 0; i < 4; i++)
-                UIManager.Diagnostic.GetState();   // 预热
+                UIManager.GetState();   // 预热
 
             long before = System.GC.GetAllocatedBytesForCurrentThread();
             for (int i = 0; i < 100; i++)
-                UIManager.Diagnostic.GetState();
+                UIManager.GetState();
             long allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
 
             Assert.AreEqual(0, allocated,
@@ -123,10 +123,10 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task DumpState_ContainsPerPanelDetails()
         {
-            var panel = await UIManager.Panel.OpenAsync<FakePanelB>("ui/a", UILayers.Popup);
+            var panel = await UIManager.OpenAsync<FakePanelB>("ui/a", UILayers.Popup);
             panel.UpdateTier = UpdateTier.Tier2;
 
-            string dump = UIManager.Diagnostic.DumpState();
+            string dump = UIManager.DumpState();
 
             StringAssert.Contains("FakePanelB", dump, "应列出面板类型");
             StringAssert.Contains($"layer={UILayers.Popup}", dump);
@@ -137,7 +137,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public void DumpState_EmptyState_IsReadable()
         {
-            string dump = UIManager.Diagnostic.DumpState();
+            string dump = UIManager.DumpState();
 
             StringAssert.Contains("open=0", dump);
             StringAssert.Contains("(none)", dump);
@@ -146,10 +146,10 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task DumpState_ShowsBlurredAndPaused()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/a");
-            await UIManager.Stack.PushAsync<FakePanelB>("ui/b");
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.PushAsync<FakePanelB>("ui/b");
 
-            string dump = UIManager.Diagnostic.DumpState();
+            string dump = UIManager.DumpState();
 
             StringAssert.Contains("blurred", dump, "被覆盖的面板应标出失焦");
             StringAssert.Contains("paused", dump);

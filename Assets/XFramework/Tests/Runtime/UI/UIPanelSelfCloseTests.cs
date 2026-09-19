@@ -52,7 +52,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task DuringOnOpen_IsOpenIsAlreadyTrue()
         {
-            var panel = await UIManager.Panel.OpenAsync<StateProbePanel>("ui/probe");
+            var panel = await UIManager.OpenAsync<StateProbePanel>("ui/probe");
 
             Assert.IsTrue(panel.IsOpenDuringOnOpen,
                 "打开期间 IsOpen 就应为 true，否则 CloseSelfAsync 的守卫会把请求丢掉");
@@ -61,7 +61,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task DuringOnOpen_IsOpeningIsTrue()
         {
-            var panel = await UIManager.Panel.OpenAsync<StateProbePanel>("ui/probe");
+            var panel = await UIManager.OpenAsync<StateProbePanel>("ui/probe");
 
             Assert.IsTrue(panel.IsOpeningDuringOnOpen, "打开期间 IsOpening 应为 true");
             Assert.IsFalse(panel.IsOpening, "打开完成后 IsOpening 应复位");
@@ -71,19 +71,19 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseSelfAsyncInsideOnOpen_ActuallyCloses()
         {
-            var panel = await UIManager.Panel.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
+            var panel = await UIManager.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
             await UniTask.Yield();
 
             Assert.IsNotNull(panel, "打开仍应返回实例（调用方需自行检查 IsOpen）");
-            Assert.IsFalse(UIManager.Panel.IsOpen<SelfClosingOnOpenPanel>(),
+            Assert.IsFalse(UIManager.IsOpen<SelfClosingOnOpenPanel>(),
                 "面板在自己的 OnOpen 里请求关闭，应当在 OnOpen 返回后真的关掉");
-            Assert.IsFalse(UIManager.Stack.CanGoBack, "不应留在显示栈里");
+            Assert.IsFalse(UIManager.CanGoBack, "不应留在显示栈里");
         }
 
         [Test]
         public async Task CloseSelfAsyncInsideOnOpen_OnCloseRunsAfterOnOpenReturns()
         {
-            var panel = await UIManager.Panel.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
+            var panel = await UIManager.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
             await UniTask.Yield();
 
             int returned = panel.Log.IndexOf("OnOpenReturned");
@@ -99,11 +99,11 @@ namespace XFramework.XUI.Tests
         public async Task CloseSelfAsyncInsideOnOpen_DoesNotPublishOpenedMessage()
         {
             int openedCount = 0;
-            var subscription = UIManager.Events.Subscribe((PanelOpenedMessage _) => openedCount++);
+            var subscription = UIManager.Subscribe((PanelOpenedMessage _) => openedCount++);
 
             try
             {
-                await UIManager.Panel.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
+                await UIManager.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
                 await UniTask.Yield();
 
                 Assert.AreEqual(0, openedCount,
@@ -119,11 +119,11 @@ namespace XFramework.XUI.Tests
         public async Task NormalOpen_StillPublishesOpenedMessage()
         {
             int openedCount = 0;
-            var subscription = UIManager.Events.Subscribe((PanelOpenedMessage _) => openedCount++);
+            var subscription = UIManager.Subscribe((PanelOpenedMessage _) => openedCount++);
 
             try
             {
-                await UIManager.Panel.OpenAsync<FakePanel>("ui/normal");
+                await UIManager.OpenAsync<FakePanel>("ui/normal");
 
                 Assert.AreEqual(1, openedCount, "正常打开仍应发一次「已打开」消息");
             }
@@ -136,15 +136,15 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task ReopenAfterSelfClose_Works()
         {
-            await UIManager.Panel.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
+            await UIManager.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
             await UniTask.Yield();
 
             // 实例已回池；再次打开应能正常走完（复用池中实例）
-            var again = await UIManager.Panel.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
+            var again = await UIManager.OpenAsync<SelfClosingOnOpenPanel>("ui/self");
             await UniTask.Yield();
 
             Assert.IsNotNull(again, "自关后面板应已回池，再次打开不应失败");
-            Assert.IsFalse(UIManager.Panel.IsOpen<SelfClosingOnOpenPanel>(), "它仍会再次自关");
+            Assert.IsFalse(UIManager.IsOpen<SelfClosingOnOpenPanel>(), "它仍会再次自关");
         }
     }
 }

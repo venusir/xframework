@@ -6,7 +6,7 @@ namespace XFramework.XUI
 {
     /// <summary>
     /// Tip 提供者接口。第三方可实现此接口来替换 Tip 的展现方式（如使用 TextMeshPro、自定义特效等）。
-    /// <para>默认实现为 <see cref="UITipManagerImpl"/>，通过 <see cref="UIManager.Tip.SetProvider"/> 注入。</para>
+    /// <para>默认实现为 <see cref="UITipManagerImpl"/>，通过 <see cref="UIManager.SetTipProvider"/> 注入。</para>
     /// </summary>
     public interface IUITipProvider
     {

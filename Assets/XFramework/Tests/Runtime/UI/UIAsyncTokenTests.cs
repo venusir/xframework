@@ -31,8 +31,8 @@ namespace XFramework.XUI.Tests
 
             _tip = new RecordingTipProvider();
             _hud = new RecordingHudProvider();
-            UIManager.Tip.SetProvider(_tip);
-            UIManager.Hud.SetProvider(_hud);
+            UIManager.SetTipProvider(_tip);
+            UIManager.SetHudProvider(_hud);
         }
 
         [TearDown]
@@ -53,7 +53,7 @@ namespace XFramework.XUI.Tests
             using var cts = new CancellationTokenSource();
             var config = new TipConfig { Duration = 1.5f };
 
-            await UIManager.Tip.ShowAsync("+10", config, cts.Token);
+            await UIManager.ShowTipAsync("+10", config, cts.Token);
 
             Assert.AreEqual(1, _tip.CallCount);
             Assert.AreEqual("+10", _tip.LastText);
@@ -70,7 +70,7 @@ namespace XFramework.XUI.Tests
             {
                 using var cts = new CancellationTokenSource();
 
-                await UIManager.Hud.Attach<StubHudItem>(target, "ui/hud/hp", new Vector2(0f, 80f), cts.Token);
+                await UIManager.ShowHudAsync<StubHudItem>(target, "ui/hud/hp", new Vector2(0f, 80f), cts.Token);
 
                 Assert.AreEqual(1, _hud.CallCount);
                 Assert.AreSame(target, _hud.LastTarget);

@@ -56,8 +56,8 @@ namespace XFramework.XUI.Tests
         {
             Assert.AreSame(_root.transform, UIManager.UIRoot, "UIRoot 应可直接读到");
 
-            UIManager.Layer.SetInteractive(UILayers.Default, true);
-            UIManager.Layer.SetVisibility(UILayers.Default, true);
+            UIManager.SetLayerInteractive(UILayers.Default, true);
+            UIManager.SetLayerVisibility(UILayers.Default, true);
         }
 
         [Test]
@@ -79,26 +79,26 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SetLayerInteractive_TogglesOpenPanelRaycaster()
         {
-            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
             Assert.IsTrue(panel.Raycaster.enabled, "前置条件：刚打开时可交互");
 
-            UIManager.Layer.SetInteractive(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
             Assert.IsFalse(panel.Raycaster.enabled, "整层禁用交互应关掉已打开面板的射线");
 
-            UIManager.Layer.SetInteractive(UILayers.Default, true);
+            UIManager.SetLayerInteractive(UILayers.Default, true);
             Assert.IsTrue(panel.Raycaster.enabled);
         }
 
         [Test]
         public async Task SetLayerInteractiveFalse_NotUndoneByFocusChange()
         {
-            var covered = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
-            await UIManager.Stack.PushAsync<FakePanelB>("ui/b", UILayers.Default);
+            var covered = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            await UIManager.PushAsync<FakePanelB>("ui/b", UILayers.Default);
 
-            UIManager.Layer.SetInteractive(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
 
             // Pop 会让第一个面板重新获得焦点，OnFocus 会无条件打开 raycaster
-            await UIManager.Stack.PopAsync();
+            await UIManager.PopAsync();
 
             Assert.IsTrue(covered.IsOpen);
             Assert.IsFalse(covered.Raycaster.enabled,
@@ -108,9 +108,9 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SetLayerInteractiveFalse_NotUndoneByOpen()
         {
-            UIManager.Layer.SetInteractive(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
 
-            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
 
             Assert.IsFalse(panel.Raycaster.enabled,
                 "在已禁用交互的层上新开面板，也不该绕过层的开关");
@@ -119,9 +119,9 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SetLayerInteractive_IsPerLayer()
         {
-            var panel = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
 
-            UIManager.Layer.SetInteractive(UILayers.Popup, false);
+            UIManager.SetLayerInteractive(UILayers.Popup, false);
 
             Assert.IsTrue(panel.Raycaster.enabled, "禁用的是别的层，本层不受影响");
         }
@@ -129,11 +129,11 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SetLayerInteractive_AppliesToPanelsOpenedLater()
         {
-            UIManager.Layer.SetInteractive(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
 
-            var first = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
-            await UIManager.Panel.CloseAsync<FakePanel>();
-            var second = await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var first = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            await UIManager.CloseAsync<FakePanel>();
+            var second = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
 
             Assert.IsFalse(first.Raycaster.enabled);
             Assert.AreSame(first, second, "复用池中实例");
@@ -148,14 +148,14 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task SetLayerVisibility_TogglesContainer()
         {
-            await UIManager.Panel.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
             var container = _root.transform.Find($"Layer_{UILayers.Default}");
             Assert.IsNotNull(container, "首次打开时应创建层级容器");
 
-            UIManager.Layer.SetVisibility(UILayers.Default, false);
+            UIManager.SetLayerVisibility(UILayers.Default, false);
             Assert.IsFalse(container.gameObject.activeSelf);
 
-            UIManager.Layer.SetVisibility(UILayers.Default, true);
+            UIManager.SetLayerVisibility(UILayers.Default, true);
             Assert.IsTrue(container.gameObject.activeSelf);
         }
 

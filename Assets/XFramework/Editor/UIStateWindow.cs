@@ -7,7 +7,7 @@ namespace XFramework.Editor
     /// <summary>
     /// UI 子系统状态窗口：实时显示活动面板、显示栈、遮罩持有数与在途打开。
     /// <para>排查「面板漏关了」「遮罩怎么还亮着」「哪个面板卡在打开中」这类只能靠翻运行时
-    /// 状态定位的问题。数据来自 <see cref="UIManager.Diagnostic.DumpState"/>，故与代码里读到的是同一份真相。</para>
+    /// 状态定位的问题。数据来自 <see cref="UIManager.DumpState"/>，故与代码里读到的是同一份真相。</para>
     /// <para>打开方式：菜单 <c>Tools/XFramework/UI State</c>。</para>
     /// </summary>
     public sealed class UIStateWindow : EditorWindow
@@ -85,7 +85,7 @@ namespace XFramework.Editor
                 return;
             }
 
-            _dump = UIManager.Diagnostic.DumpState();
+            _dump = UIManager.DumpState();
         }
 
         private void DrawHeader()
@@ -93,12 +93,12 @@ namespace XFramework.Editor
             EditorGUILayout.BeginHorizontal(EditorStyles.toolbar);
 
             EditorGUILayout.LabelField(
-                UIManager.IsInitialized ? UIManager.Diagnostic.GetState().ToString() : "not initialized",
+                UIManager.IsInitialized ? UIManager.GetState().ToString() : "not initialized",
                 EditorStyles.miniLabel);
 
             GUILayout.FlexibleSpace();
 
-            EditorGUILayout.LabelField($"Tier drivers: {UIManager.Diagnostic.TierDriverCount}", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField($"Tier drivers: {UIManager.TierDriverCount}", EditorStyles.miniLabel);
 
             if (GUILayout.Button("Copy", EditorStyles.toolbarButton, GUILayout.Width(48f)))
                 EditorGUIUtility.systemCopyBuffer = _dump;

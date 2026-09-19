@@ -49,7 +49,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OnUpdate_ReceivesTimeFromDriver()
         {
-            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/rec");
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/rec");
 
             UpdateManager.Tick(time: 1.0f);
 
@@ -60,7 +60,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task OnUpdate_ReceivesDeltaTimeBetweenDispatches()
         {
-            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/rec");
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/rec");
 
             UpdateManager.Tick(time: 1.0f);   // 首次派发：无基准，delta 记 0
             UpdateManager.Tick(time: 2.5f);
@@ -74,7 +74,7 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task Update_DirectCall_ForwardsParameters()
         {
-            var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/rec");
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/rec");
 
             // 测试与自定义驱动方仍可手动推进一步
             UIManager.Update(0.25f, 7.5f);

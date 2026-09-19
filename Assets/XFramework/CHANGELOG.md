@@ -54,7 +54,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **UI 安全区适配 `UISafeArea`**：把 RectTransform 收缩到 `Screen.safeArea`。推荐挂在 UIRoot 上——层级容器都是它的子节点，一处生效即全局生效
 - **UI 订阅归口 `UIViewBase.Track(IDisposable)`**：面板与 HUD 都是回池而非销毁，挂在 `OnDestroy` 上的释放永不触发。这是「订阅随视图生命周期释放」的唯一出口，`BindToLocalizedText` 已归口进来
 - **UI 面板资源真释放**：`UnloadPanelAssetAsync(assetPath)`，配套 Asset 侧新增能力接口 `IAssetPoolController`（`ClearPool` / `ClearAllPools`）。此前 `UnloadAsset` 声称「释放内存」而只清一个记账字典——查证后确认这不是实现偷懒而是能力缺口：`DestroyAllPooledInstances` 是 private，且回池时实例保留 `AssetHandle` 保活资源，于是池里只要有一个闲置实例，该预制体的引用计数就不会归零。能力接口与 `IAssetManager` 分开，故不破坏第三方自定义实现
-- **UI 门面按子系统分组**：`UIManager` 此前是约 40 个扁平静态成员，IntelliSense 里是一堵墙。现分为 `Panel` / `Stack` / `Mask` / `Tip` / `Hud` / `Layer` / `Diagnostic` / `Events` 八个嵌套静态类（零状态、零分配），外层只留生命周期与实例管理
 - **UI 排序空间单点定义 `UISorting` / `UILayers`**：所有 `sortingOrder` 取值一律由此推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip` 会把越界取值当场拦住
 
 ### Changed
@@ -65,28 +64,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 | 旧写法 | 新写法 |
 | --- | --- |
-| `UIManager.OpenAsync<T>(...)` | `UIManager.Panel.OpenAsync<T>(...)` |
-| `UIManager.CloseAsync<T>()` / `CloseAsync(panel)` | `UIManager.Panel.CloseAsync<T>()` / `CloseAsync(panel)` |
-| `UIManager.IsOpen<T>()` / `GetPanel<T>()` | `UIManager.Panel.IsOpen<T>()` / `GetPanel<T>()` |
-| `UIManager.PushAsync<T>()` / `PopAsync()` | `UIManager.Stack.PushAsync<T>()` / `PopAsync()` |
-| `UIManager.HasPrevious` | `UIManager.Stack.CanGoBack` |
-| `UIManager.BackToAsync<T>()` | `UIManager.Stack.PopToAsync<T>()`（另新增 `PopToRootAsync()`） |
-| `UIManager.ShowMask(...)` / `HideMask()` | `UIManager.Mask.Show(...)` / `Hide()` |
-| `UIManager.IsMaskShowing` | `UIManager.Mask.IsShowing` |
-| `UIManager.SetMaskClickToClose(b)` | `UIManager.Mask.SetClickToClose(b)` |
-| `UIManager.ShowTip(text, cfg)` | `await UIManager.Tip.ShowAsync(text, cfg)`（或 `.Forget()`） |
-| `UIManager.SetTipProvider(p)` | `UIManager.Tip.SetProvider(p)` |
-| `UIManager.ShowHud<T>(...)` | `UIManager.Hud.Attach<T>(...)` |
-| `UIManager.HideHud(t)` / `SetHudProvider(p)` | `UIManager.Hud.Detach(t)` / `SetProvider(p)` |
-| `UIManager.SetLayerVisibility(l, v)` | `UIManager.Layer.SetVisibility(l, v)` |
-| `UIManager.SetLayerInteractive(l, i)` | `UIManager.Layer.SetInteractive(l, i)` |
-| `UIManager.Subscribe(h, ctx)` | `UIManager.Events.Subscribe(h, ctx)` |
-| `UIManager.SetController(c)` | `UIManager.Panel.SetController(c)` |
-| `UIManager.UnloadAsset<T>()` | `UIManager.Panel.ForgetPreload<T>()` |
-| `UIManager.ClearAssetCache()` | `UIManager.Panel.ClearPreloads()` |
+| `UIManager.HasPrevious` | `UIManager.CanGoBack` |
+| `UIManager.BackToAsync<T>()` | `UIManager.PopToAsync<T>()`（另新增 `PopToRootAsync()`） |
+| `UIManager.ShowTip(text, cfg)` | `await UIManager.ShowTipAsync(text, cfg)`（或 `.Forget()`） |
+| `UIManager.ShowHud<T>(...)` | `UIManager.ShowHudAsync<T>(...)` |
+| `UIManager.UnloadAsset<T>()` | `UIManager.ForgetPreload<T>()` |
+| `UIManager.ClearAssetCache()` | `UIManager.ClearPreloads()` |
 | `UIManager.GetTopSortingOrder(layer)` | 已删除：它对外算错了（忽略了层偏移），且与 `GetNextSortingOrder` 口径分裂。排序值现由 `UISorting` 按栈位推导 |
 | `protected internal override void OnUpdate()` | `protected internal override void OnUpdate(float deltaTime, float time)` |
-| `UIManager.Initialize` / `Destroy` / `Update` / `IsInitialized` / `UIRoot` | 不变，仍在门面外层 |
+
+> 门面一律扁平：上表之外没有别的改名。`UIManager` 的每个成员都与 `IUIManager` 同名，两条路径（静态门面 / 注入实例）用的是同一套名字。
 
 - **Update 档位类型更名为 `UpdateTier`（破坏性）**：`UpdateLOD` 更名为 `UpdateTier`，公开参数 `initialLOD` 更名为 `initialTier`；枚举成员 `Tier0..Tier7` 与 `Max`、枚举值、行为均不变。旧名有三处问题：本仓 3 字母缩写在标识符中一律 PascalCase（`JsonUtility` / `CsvLoader` / `UIHudItem`），只有 LOD 全大写，且已与 UI 模块的 `UpdateLod` 分裂成只差大小写的两种拼法；LOD 在 Unity 语境里指网格/贴图细节层级，与本模块「档位不是精度，是采样间隔」的语义相冲。类型名自 0.2.0 起即公开（当时成员为 `Frame1..Frame16`），故属破坏性变更。UI 模块自己那套 `Lod` 拼写（`UIViewBase.UpdateLod` / `LodDriver` / `LodDemandChanged` 等）一并统一到 `Tier`——那批 API 与其他面板级 LOD 特性同为未发布内容，不构成破坏性变更
 

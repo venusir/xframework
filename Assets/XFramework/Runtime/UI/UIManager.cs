@@ -20,6 +20,7 @@ namespace XFramework.XUI
     /// </summary>
     public static class UIManager
     {
+        #region Static — Global Singleton
 
         private static IUIManager _instance;
         private static bool _instanceInitialized;
@@ -207,488 +208,364 @@ namespace XFramework.XUI
             }
         }
 
-        #region Panel
+        #endregion
 
-        /// <summary>
-        /// Panel subsystem entry points.
-        /// </summary>
-        public static class Panel
+        #region Public API — Basic Panel Management
+
+        /// <inheritdoc cref="IUIManager.OpenAsync{T}"/>
+        public static UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
+            EnsureGlobalInitialized();
+            return _instance.OpenAsync<T>(assetPath, layer, userData, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.OpenAsync{T}"/>
-                public static UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
-                    CancellationToken cancellationToken = default)
-                    where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.OpenAsync<T>(assetPath, layer, userData, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.CloseAsync{T}"/>
+        public static UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
+        {
+            EnsureGlobalInitialized();
+            return _instance.CloseAsync<T>(immediate, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.CloseAsync{T}"/>
-                public static UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
-                    where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CloseAsync<T>(immediate, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.CloseAsync(UIPanelBase, bool)"/>
+        public static UniTask CloseAsync(UIPanelBase panel, bool immediate = false,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CloseAsync(panel, immediate, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.CloseAsync(UIPanelBase, bool)"/>
-                public static UniTask CloseAsync(UIPanelBase panel, bool immediate = false,
-                    CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CloseAsync(panel, immediate, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.IsOpen{T}"/>
+        public static bool IsOpen<T>() where T : UIPanelBase
+        {
+            EnsureGlobalInitialized();
+            return _instance.IsOpen<T>();
+        }
 
-                /// <inheritdoc cref="IUIManager.IsOpen{T}"/>
-                public static bool IsOpen<T>() where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.IsOpen<T>();
-                }
+        /// <inheritdoc cref="IUIManager.GetPanel{T}"/>
+        public static T GetPanel<T>() where T : UIPanelBase
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetPanel<T>();
+        }
 
-                /// <inheritdoc cref="IUIManager.GetPanel{T}"/>
-                public static T GetPanel<T>() where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.GetPanel<T>();
-                }
+        /// <inheritdoc cref="IUIManager.CloseLayerAsync"/>
+        public static UniTask CloseLayerAsync(int layer, bool immediate = false,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CloseLayerAsync(layer, immediate, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.CloseLayerAsync"/>
-                public static UniTask CloseLayerAsync(int layer, bool immediate = false,
-                    CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CloseLayerAsync(layer, immediate, cancellationToken);
-                }
-
-                /// <inheritdoc cref="IUIManager.CloseAllAsync"/>
-                public static UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CloseAllAsync(immediate, cancellationToken);
-                }
-
-
-
-                /// <inheritdoc cref="IUIManager.OpenCount"/>
-                public static int OpenCount
-                {
-                    get
-                    {
-                        EnsureGlobalInitialized();
-                        return _instance.OpenCount;
-                    }
-                }
-
-                /// <inheritdoc cref="IUIManager.IsAnyOpen"/>
-                public static bool IsAnyOpen
-                {
-                    get
-                    {
-                        EnsureGlobalInitialized();
-                        return _instance.IsAnyOpen;
-                    }
-                }
-
-                /// <inheritdoc cref="IUIManager.GetTopPanel"/>
-                public static UIPanelBase GetTopPanel()
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.GetTopPanel();
-                }
-
-                /// <inheritdoc cref="IUIManager.Panels"/>
-                public static IReadOnlyList<UIPanelBase> Panels
-                {
-                    get
-                    {
-                        EnsureGlobalInitialized();
-                        return _instance.Panels;
-                    }
-                }
-
-                /// <inheritdoc cref="IUIManager.CopyPanels"/>
-                public static int CopyPanels(List<UIPanelBase> buffer)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CopyPanels(buffer);
-                }
-
-                /// <inheritdoc cref="IUIManager.CopyPanelsInLayer"/>
-                public static int CopyPanelsInLayer(int layer, List<UIPanelBase> buffer)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.CopyPanelsInLayer(layer, buffer);
-                }
-
-
-
-                /// <inheritdoc cref="IUIManager.PreloadAsync{T}"/>
-                public static UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
-                    where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.PreloadAsync<T>(assetPath, cancellationToken);
-                }
-
-                /// <inheritdoc cref="IUIManager.ForgetPreload{T}"/>
-                public static void ForgetPreload<T>() where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    _instance.ForgetPreload<T>();
-                }
-
-                /// <inheritdoc cref="IUIManager.ClearPreloads"/>
-                public static void ClearPreloads()
-                {
-                    EnsureGlobalInitialized();
-                    _instance.ClearPreloads();
-                }
-
-                /// <inheritdoc cref="IUIManager.UnloadPanelAssetAsync"/>
-                public static UniTask<bool> UnloadPanelAssetAsync(string assetPath,
-                    CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.UnloadPanelAssetAsync(assetPath, cancellationToken);
-                }
-
-
-
-                /// <inheritdoc cref="IUIManager.BringToFront"/>
-                public static void BringToFront(UIPanelBase panel)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.BringToFront(panel);
-                }
-
-
-
-                /// <summary>
-                /// 设置自定义 UI 控制器，用于拦截面板打开/关闭流程。
-                /// <para>需要在 <see cref="Initialize"/> 后调用。设置为 null 则恢复默认控制器（全部放行）。</para>
-                /// </summary>
-                /// <param name="controller">自定义控制器实例，或 null 以恢复默认。</param>
-                public static void SetController(IUIController controller)
-                {
-                    EnsureGlobalInitialized();
-                    if (_instance is UIManagerImpl impl)
-                        impl.SetController(controller);
-                    else
-                        Debug.LogWarning(
-                            "[UIManager] SetController: Current instance is not UIManagerImpl, controller not set.");
-                }
-
-
+        /// <inheritdoc cref="IUIManager.CloseAllAsync"/>
+        public static UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CloseAllAsync(immediate, cancellationToken);
         }
 
         #endregion
 
-        #region Stack
+        #region Public API — Diagnostics
+
+        /// <inheritdoc cref="IUIManager.GetState"/>
+        public static UIStateSnapshot GetState()
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetState();
+        }
+
+        /// <inheritdoc cref="IUIManager.DumpState"/>
+        public static string DumpState()
+        {
+            EnsureGlobalInitialized();
+            return _instance.DumpState();
+        }
 
         /// <summary>
-        /// Stack subsystem entry points.
+        /// 已注册的非零档位驱动器数量。用不到分档时恒为 0，便于确认惰性注册确实在生效。
         /// </summary>
-        public static class Stack
+        public static int TierDriverCount => _tierDrivers.Count;
+
+        #endregion
+
+        #region Public API — Query
+
+        /// <inheritdoc cref="IUIManager.OpenCount"/>
+        public static int OpenCount
         {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.OpenCount;
+            }
+        }
 
-                /// <inheritdoc cref="IUIManager.PushAsync{T}"/>
-                public static UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null,
-                    CancellationToken cancellationToken = default)
-                    where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.PushAsync<T>(assetPath, layer, userData, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.IsAnyOpen"/>
+        public static bool IsAnyOpen
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.IsAnyOpen;
+            }
+        }
 
-                /// <inheritdoc cref="IUIManager.PopAsync"/>
-                public static UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.PopAsync(immediate, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.GetTopPanel"/>
+        public static UIPanelBase GetTopPanel()
+        {
+            EnsureGlobalInitialized();
+            return _instance.GetTopPanel();
+        }
 
-                /// <inheritdoc cref="IUIManager.PopToAsync{T}"/>
-                public static UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
-                    where T : UIPanelBase
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.PopToAsync<T>(immediate, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.Panels"/>
+        public static IReadOnlyList<UIPanelBase> Panels
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.Panels;
+            }
+        }
 
-                /// <inheritdoc cref="IUIManager.PopToRootAsync"/>
-                public static UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.PopToRootAsync(immediate, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.CopyPanels"/>
+        public static int CopyPanels(List<UIPanelBase> buffer)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CopyPanels(buffer);
+        }
 
-                /// <inheritdoc cref="IUIManager.GoBackAsync"/>
-                public static UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.GoBackAsync(immediate, cancellationToken);
-                }
-
-                /// <inheritdoc cref="IUIManager.CanGoBack"/>
-                public static bool CanGoBack
-                {
-                    get
-                    {
-                        EnsureGlobalInitialized();
-                        return _instance.CanGoBack;
-                    }
-                }
-
-
+        /// <inheritdoc cref="IUIManager.CopyPanelsInLayer"/>
+        public static int CopyPanelsInLayer(int layer, List<UIPanelBase> buffer)
+        {
+            EnsureGlobalInitialized();
+            return _instance.CopyPanelsInLayer(layer, buffer);
         }
 
         #endregion
 
-        #region Mask
+        #region Public API — Layer
 
         /// <summary>
-        /// Mask subsystem entry points.
+        /// 显示 / 隐藏整个层级。
+        /// <para>此前这两个方法只存在于内部实现上，<strong>连 <see cref="IUIManager"/> 都没有</strong>，
+        /// 而门面既无转发、也无实例属性——第三方虽能在文档里读到它们，实际完全不可达。</para>
         /// </summary>
-        public static class Mask
+        /// <param name="layer">目标层级。</param>
+        /// <param name="visible">是否显示。</param>
+        public static void SetLayerVisibility(int layer, bool visible)
         {
+            EnsureGlobalInitialized();
+            _instance.SetLayerVisibility(layer, visible);
+        }
 
-                /// <inheritdoc cref="IUIManager.ShowMask(UIMaskStyle, UIPanelBase)"/>
-                public static UIMaskHandle Show(UIMaskStyle style, UIPanelBase owner = null)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.ShowMask(style, owner);
-                }
-
-                /// <inheritdoc cref="IUIManager.ShowMask(int, float, bool)"/>
-                public static UIMaskHandle Show(int maskLayer = UILayers.Mask, float alpha = 0.5f,
-                    bool clickToClose = false)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.ShowMask(maskLayer, alpha, clickToClose);
-                }
-
-                /// <inheritdoc cref="IUIManager.SetMaskClickToClose"/>
-                public static void SetClickToClose(bool clickToClose)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.SetMaskClickToClose(clickToClose);
-                }
-
-                /// <inheritdoc cref="IUIManager.HideMask"/>
-                public static void Hide()
-                {
-                    EnsureGlobalInitialized();
-                    _instance.HideMask();
-                }
-
-                /// <inheritdoc cref="IUIManager.IsMaskShowing"/>
-                public static bool IsShowing
-                {
-                    get
-                    {
-                        EnsureGlobalInitialized();
-                        return _instance.IsMaskShowing;
-                    }
-                }
-
-
+        /// <summary>
+        /// 启用 / 禁用整个层级的交互。
+        /// <para>层的整体开关优先于单个面板的焦点状态：禁用后，后续的焦点变化与重新打开
+        /// 都不会把面板的射线重新打开。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <param name="interactive">是否允许交互。</param>
+        public static void SetLayerInteractive(int layer, bool interactive)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetLayerInteractive(layer, interactive);
         }
 
         #endregion
 
-        #region Tip
+        #region Public API — Stack Navigation
 
-        /// <summary>
-        /// Tip subsystem entry points.
-        /// </summary>
-        public static class Tip
+        /// <inheritdoc cref="IUIManager.PushAsync{T}"/>
+        public static UniTask<T> PushAsync<T>(string assetPath, int layer = 100, object userData = null,
+            CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
+            EnsureGlobalInitialized();
+            return _instance.PushAsync<T>(assetPath, layer, userData, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.ShowTipAsync"/>
-                public static UniTask ShowAsync(string text, TipConfig config = default,
-                    CancellationToken cancellationToken = default)
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.ShowTipAsync(text, config, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.PopAsync"/>
+        public static UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.PopAsync(immediate, cancellationToken);
+        }
 
-                /// <inheritdoc cref="IUIManager.SetTipProvider"/>
-                public static void SetProvider(IUITipProvider provider)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.SetTipProvider(provider);
-                }
+        /// <inheritdoc cref="IUIManager.PopToAsync{T}"/>
+        public static UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
+        {
+            EnsureGlobalInitialized();
+            return _instance.PopToAsync<T>(immediate, cancellationToken);
+        }
 
+        /// <inheritdoc cref="IUIManager.PopToRootAsync"/>
+        public static UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.PopToRootAsync(immediate, cancellationToken);
+        }
 
+        /// <inheritdoc cref="IUIManager.GoBackAsync"/>
+        public static UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.GoBackAsync(immediate, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IUIManager.CanGoBack"/>
+        public static bool CanGoBack
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.CanGoBack;
+            }
         }
 
         #endregion
 
-        #region Hud
+        #region Public API — Modal Mask
 
-        /// <summary>
-        /// Hud subsystem entry points.
-        /// </summary>
-        public static class Hud
+        /// <inheritdoc cref="IUIManager.ShowMask(UIMaskStyle, UIPanelBase)"/>
+        public static UIMaskHandle ShowMask(UIMaskStyle style, UIPanelBase owner = null)
         {
+            EnsureGlobalInitialized();
+            return _instance.ShowMask(style, owner);
+        }
 
-                /// <inheritdoc cref="IUIManager.ShowHudAsync{T}"/>
-                public static UniTask<T> Attach<T>(Transform target, string assetPath, Vector2? offset = null,
-                    CancellationToken cancellationToken = default) where T : UIHudItem
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.ShowHudAsync<T>(target, assetPath, offset, cancellationToken);
-                }
+        /// <inheritdoc cref="IUIManager.ShowMask(int, float, bool)"/>
+        public static UIMaskHandle ShowMask(int maskLayer = UILayers.Mask, float alpha = 0.5f,
+            bool clickToClose = false)
+        {
+            EnsureGlobalInitialized();
+            return _instance.ShowMask(maskLayer, alpha, clickToClose);
+        }
 
-                /// <inheritdoc cref="IUIManager.HideHud"/>
-                public static void Detach(Transform target)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.HideHud(target);
-                }
+        /// <inheritdoc cref="IUIManager.SetMaskClickToClose"/>
+        public static void SetMaskClickToClose(bool clickToClose)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetMaskClickToClose(clickToClose);
+        }
 
-                /// <inheritdoc cref="IUIManager.SetHudProvider"/>
-                public static void SetProvider(IUiHudProvider provider)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.SetHudProvider(provider);
-                }
+        /// <inheritdoc cref="IUIManager.HideMask"/>
+        public static void HideMask()
+        {
+            EnsureGlobalInitialized();
+            _instance.HideMask();
+        }
 
-
+        /// <inheritdoc cref="IUIManager.IsMaskShowing"/>
+        public static bool IsMaskShowing
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance.IsMaskShowing;
+            }
         }
 
         #endregion
 
-        #region Layer
+        #region Public API — Preload & Cache
 
-        /// <summary>
-        /// Layer subsystem entry points.
-        /// </summary>
-        public static class Layer
+        /// <inheritdoc cref="IUIManager.PreloadAsync{T}"/>
+        public static UniTask PreloadAsync<T>(string assetPath, CancellationToken cancellationToken = default)
+            where T : UIPanelBase
         {
+            EnsureGlobalInitialized();
+            return _instance.PreloadAsync<T>(assetPath, cancellationToken);
+        }
 
-                /// <summary>
-                /// 显示 / 隐藏整个层级。
-                /// <para>此前这两个方法只存在于内部实现上，<strong>连 <see cref="IUIManager"/> 都没有</strong>，
-                /// 而门面既无转发、也无实例属性——第三方虽能在文档里读到它们，实际完全不可达。</para>
-                /// </summary>
-                /// <param name="layer">目标层级。</param>
-                /// <param name="visible">是否显示。</param>
-                public static void SetVisibility(int layer, bool visible)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.SetLayerVisibility(layer, visible);
-                }
+        /// <inheritdoc cref="IUIManager.ForgetPreload{T}"/>
+        public static void ForgetPreload<T>() where T : UIPanelBase
+        {
+            EnsureGlobalInitialized();
+            _instance.ForgetPreload<T>();
+        }
 
-                /// <summary>
-                /// 启用 / 禁用整个层级的交互。
-                /// <para>层的整体开关优先于单个面板的焦点状态：禁用后，后续的焦点变化与重新打开
-                /// 都不会把面板的射线重新打开。</para>
-                /// </summary>
-                /// <param name="layer">目标层级。</param>
-                /// <param name="interactive">是否允许交互。</param>
-                public static void SetInteractive(int layer, bool interactive)
-                {
-                    EnsureGlobalInitialized();
-                    _instance.SetLayerInteractive(layer, interactive);
-                }
+        /// <inheritdoc cref="IUIManager.ClearPreloads"/>
+        public static void ClearPreloads()
+        {
+            EnsureGlobalInitialized();
+            _instance.ClearPreloads();
+        }
 
-
+        /// <inheritdoc cref="IUIManager.UnloadPanelAssetAsync"/>
+        public static UniTask<bool> UnloadPanelAssetAsync(string assetPath,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.UnloadPanelAssetAsync(assetPath, cancellationToken);
         }
 
         #endregion
 
-        #region Diagnostic
+        #region Public API — Sort Order
 
-        /// <summary>
-        /// Diagnostic subsystem entry points.
-        /// </summary>
-        public static class Diagnostic
+        /// <inheritdoc cref="IUIManager.BringToFront"/>
+        public static void BringToFront(UIPanelBase panel)
         {
-
-                /// <inheritdoc cref="IUIManager.GetState"/>
-                public static UIStateSnapshot GetState()
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.GetState();
-                }
-
-                /// <inheritdoc cref="IUIManager.DumpState"/>
-                public static string DumpState()
-                {
-                    EnsureGlobalInitialized();
-                    return _instance.DumpState();
-                }
-
-                /// <summary>
-                /// 已注册的非零档位驱动器数量。用不到分档时恒为 0，便于确认惰性注册确实在生效。
-                /// </summary>
-                public static int TierDriverCount => _tierDrivers.Count;
-
-
+            EnsureGlobalInitialized();
+            _instance.BringToFront(panel);
         }
 
         #endregion
 
-        #region Events
+        #region Public API — Event Subscriptions
 
         /// <summary>
-        /// Events subsystem entry points.
+        /// 订阅面板打开事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
-        public static class Events
+        /// <param name="handler">面板打开时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<PanelOpenedMessage> handler, MonoBehaviour context = null)
         {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
 
-                /// <summary>
-                /// 订阅面板打开事件。
-                /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
-                /// </summary>
-                /// <param name="handler">面板打开时的回调</param>
-                /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
-                /// <returns>可手动取消订阅的句柄</returns>
-                public static IDisposable Subscribe(Action<PanelOpenedMessage> handler, MonoBehaviour context = null)
-                {
-                    var sub = MessageManager.Subscribe(handler);
-                    if (context != null)
-                        context.destroyCancellationToken.Register(() => sub.Dispose());
-                    return sub;
-                }
+        /// <summary>
+        /// 订阅面板关闭事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">面板关闭时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<PanelClosedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
+        }
 
-                /// <summary>
-                /// 订阅面板关闭事件。
-                /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
-                /// </summary>
-                /// <param name="handler">面板关闭时的回调</param>
-                /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
-                /// <returns>可手动取消订阅的句柄</returns>
-                public static IDisposable Subscribe(Action<PanelClosedMessage> handler, MonoBehaviour context = null)
-                {
-                    var sub = MessageManager.Subscribe(handler);
-                    if (context != null)
-                        context.destroyCancellationToken.Register(() => sub.Dispose());
-                    return sub;
-                }
-
-                /// <summary>
-                /// 订阅全部面板关闭事件。
-                /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
-                /// </summary>
-                /// <param name="handler">全部面板关闭时的回调</param>
-                /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
-                /// <returns>可手动取消订阅的句柄</returns>
-                public static IDisposable Subscribe(Action<AllPanelsClosedMessage> handler, MonoBehaviour context = null)
-                {
-                    var sub = MessageManager.Subscribe(handler);
-                    if (context != null)
-                        context.destroyCancellationToken.Register(() => sub.Dispose());
-                    return sub;
-                }
-
-
+        /// <summary>
+        /// 订阅全部面板关闭事件。
+        /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// </summary>
+        /// <param name="handler">全部面板关闭时的回调</param>
+        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <returns>可手动取消订阅的句柄</returns>
+        public static IDisposable Subscribe(Action<AllPanelsClosedMessage> handler, MonoBehaviour context = null)
+        {
+            var sub = MessageManager.Subscribe(handler);
+            if (context != null)
+                context.destroyCancellationToken.Register(() => sub.Dispose());
+            return sub;
         }
 
         #endregion
+
+        #region Public API — Update
 
         /// <summary>
         /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>，并驱动 HUD 层。
@@ -702,6 +579,74 @@ namespace XFramework.XUI
             _instance.Update(deltaTime, time);
         }
 
+        #endregion
+
+        #region Public API — Tip
+
+        /// <inheritdoc cref="IUIManager.ShowTipAsync"/>
+        public static UniTask ShowTipAsync(string text, TipConfig config = default,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureGlobalInitialized();
+            return _instance.ShowTipAsync(text, config, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IUIManager.SetTipProvider"/>
+        public static void SetTipProvider(IUITipProvider provider)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetTipProvider(provider);
+        }
+
+        #endregion
+
+        #region Public API — HUD（世界空间 HUD）
+
+        /// <inheritdoc cref="IUIManager.ShowHudAsync{T}"/>
+        public static UniTask<T> ShowHudAsync<T>(Transform target, string assetPath, Vector2? offset = null,
+            CancellationToken cancellationToken = default) where T : UIHudItem
+        {
+            EnsureGlobalInitialized();
+            return _instance.ShowHudAsync<T>(target, assetPath, offset, cancellationToken);
+        }
+
+        /// <inheritdoc cref="IUIManager.HideHud"/>
+        public static void HideHud(Transform target)
+        {
+            EnsureGlobalInitialized();
+            _instance.HideHud(target);
+        }
+
+        /// <inheritdoc cref="IUIManager.SetHudProvider"/>
+        public static void SetHudProvider(IUiHudProvider provider)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetHudProvider(provider);
+        }
+
+        #endregion
+
+        #region Public API — UI Controller
+
+        /// <summary>
+        /// 设置自定义 UI 控制器，用于拦截面板打开/关闭流程。
+        /// <para>需要在 <see cref="Initialize"/> 后调用。设置为 null 则恢复默认控制器（全部放行）。</para>
+        /// </summary>
+        /// <param name="controller">自定义控制器实例，或 null 以恢复默认。</param>
+        public static void SetController(IUIController controller)
+        {
+            EnsureGlobalInitialized();
+            if (_instance is UIManagerImpl impl)
+                impl.SetController(controller);
+            else
+                Debug.LogWarning(
+                    "[UIManager] SetController: Current instance is not UIManagerImpl, controller not set.");
+        }
+
+        #endregion
+
+        #region Internal
+
         private static void EnsureGlobalInitialized()
         {
             if (!_instanceInitialized || _instance == null)
@@ -709,5 +654,6 @@ namespace XFramework.XUI
                     "[UIManager] UIManager 尚未初始化。请先调用 UIManager.Initialize(uiRoot) 完成初始化。");
         }
 
+        #endregion
     }
 }

@@ -8,7 +8,7 @@ namespace XFramework.XUI
 {
     /// <summary>
     /// HUD 提供者接口。第三方可实现此接口来替换 HUD 的管理方式（如使用世界空间 Canvas、自定义对象池等）。
-    /// <para>默认实现为 <see cref="UIHudManagerImpl"/>，通过 <see cref="UIManager.Hud.SetProvider"/> 注入。</para>
+    /// <para>默认实现为 <see cref="UIHudManagerImpl"/>，通过 <see cref="UIManager.SetHudProvider"/> 注入。</para>
     /// </summary>
     public interface IUiHudProvider
     {
