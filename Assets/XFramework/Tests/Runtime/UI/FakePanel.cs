@@ -88,6 +88,35 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 在 <c>OnClose</c> 里顺手关掉另一个面板。
+    /// <para>用于验证批量关闭期间的「认领」守卫：批量关闭是先快照、再逐个 await，被它关掉的那一个
+    /// 若已不在活动集合里，外层循环就不该再关一次。</para>
+    /// </summary>
+    public class CloseOtherOnClosePanel : FakePanel
+    {
+        /// <summary>要顺手关掉的面板（由用例在打开后指认）。</summary>
+        public UIPanelBase Victim;
+
+        protected override async UniTask OnClose()
+        {
+            await base.OnClose();
+
+            // 取局部变量再判空：Victim 可能已被对方在自己的 OnClose 里清掉
+            var victim = Victim;
+            if (victim != null)
+                await victim.CloseSelfAsync();
+        }
+    }
+
+    /// <summary>
+    /// <see cref="CloseOtherOnClosePanel"/> 的第二个类型：活动集合按类型索引，互为牺牲者的两个面板
+    /// 必须类型不同才能同时存在。
+    /// </summary>
+    public class CloseOtherOnClosePanelB : CloseOtherOnClosePanel
+    {
+    }
+
+    /// <summary>
     /// 在 <c>OnOpen</c> 里探测自身状态的面板，用于锁定「打开期间 IsOpen 即为 true」。
     /// </summary>
     public class StateProbePanel : FakePanel

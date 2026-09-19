@@ -1354,6 +1354,17 @@ namespace XFramework.XUI
                 return false;
             }
 
+            // 认领：只有仍登记在册的那个实例才由本次调用负责关闭。
+            // 批量关闭（CloseAllAsync / CloseLayerAsync）是先对 _activePanels 快照、再逐个 await，
+            // 期间别的面板在自己的 OnClose 里、或 PanelClosedMessage 的同步订阅者，都可能在这次
+            // await 之前把本面板关掉——此时再关一遍就是：OnClose 跑两次、PanelClosedMessage 发两次，
+            // 而回池这条路没有去重（AssetManager 的回池是直接 Push，同一 GameObject 会被压进池里
+            // 两次，之后可能被两个调用方各取一次）。
+            //
+            // 位置必须在所有 await 之后：放在方法入口挡不住控制器 await 期间的重入，那才是真正的窗口。
+            if (!_activePanels.TryGetValue(type, out var registered) || !ReferenceEquals(registered, panel))
+                return false;
+
             // 从字典和显示栈中移除
             _activePanels.Remove(type);
             _stack.Remove(panel);

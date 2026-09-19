@@ -31,6 +31,8 @@ namespace XFramework.XUI.Tests
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<SelfClosingOnOpenPanel>();
             _factory.RegisterPanel<StateProbePanel>();
+            _factory.RegisterPanel<CloseOtherOnClosePanel>();
+            _factory.RegisterPanel<CloseOtherOnClosePanelB>();
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -47,6 +49,50 @@ namespace XFramework.XUI.Tests
 
             UpdateManager.Clear();
             UpdateManager.Resume();
+        }
+
+        /// <summary>
+        /// 批量关闭时，被同批面板顺手关掉的那一个不该被再关一次。
+        /// <para><c>CloseAllAsync</c> / <c>CloseLayerAsync</c> 都是「先对活动集合快照、再逐个 await」。
+        /// 若快照里的 A 在自己的 <c>OnClose</c> 里关掉了同批的 B，B 的那一次已经发生完了；外层循环
+        /// 随后走到 B 时它已不在活动集合里。此前这条直连 <c>ClosePanelInternalAsync</c> 的路径没有守卫
+        /// （公开的 <c>CloseAsync(panel)</c> 有，但它按类型判「在不在册」，且批量循环根本不走它），
+        /// 于是 B 被关第二遍：<c>OnClose</c> 跑两次、<c>PanelClosedMessage</c> 发两次，而回池没有去重
+        /// （AssetManager 回池是直接 Push），同一个 GameObject 会被压进池里两次，之后可能被两个调用方
+        /// 各取一次。</para>
+        /// <para>递归不会无限展开：<c>CloseSelfAsync</c> 自带「未打开则忽略」的守卫，而面板在
+        /// <c>DoCloseAsync</c> 一开始就进入 Closing 态，故 A、B 互相关不会来回弹。</para>
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_PanelsClosingEachOther_ReleasesEachExactlyOnce()
+        {
+            var a = await UIManager.OpenAsync<CloseOtherOnClosePanel>("ui/a");
+            var b = await UIManager.OpenAsync<CloseOtherOnClosePanelB>("ui/b");
+
+            // 互为牺牲者：无论批量关闭先轮到谁，另一个都会在它的 OnClose 里被顺手关掉，
+            // 于是外层快照里的那一项必然变成「已经关过的面板」——与字典枚举顺序无关
+            a.Victim = b;
+            b.Victim = a;
+
+            await UIManager.CloseAllAsync();
+
+            Assert.IsFalse(UIManager.IsAnyOpen);
+            Assert.AreEqual(1, CountOf(a, "OnClose"), "每个面板只应关一次");
+            Assert.AreEqual(1, CountOf(b, "OnClose"), "每个面板只应关一次");
+            Assert.AreEqual(2, _factory.ReleaseCount, "每个面板只应回池一次");
+            Assert.AreEqual(2, _factory.PooledCount, "池里应是两个不同实例，而不是同一个被压了两次");
+        }
+
+        /// <summary>数某个生命周期回调在日志里出现了几次（列表小，手写循环即可）。</summary>
+        private static int CountOf(FakePanel panel, string entry)
+        {
+            int count = 0;
+            for (int i = 0; i < panel.Log.Count; i++)
+            {
+                if (panel.Log[i] == entry)
+                    count++;
+            }
+            return count;
         }
 
         [Test]
