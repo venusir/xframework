@@ -580,6 +580,9 @@ namespace XFramework.XUI
         /// <summary>
         /// 订阅面板打开事件。
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// <para><b>句柄归订阅方</b>：订阅订在全局 <see cref="MessageManager"/> 上，与 UI 管理器各活各的，
+        /// 故 <see cref="Destroy"/> <b>不会</b>退订经本入口订下的订阅。传了 <paramref name="context"/>
+        /// 的随其销毁自动退订；没传的需自行持有句柄并 Dispose。</para>
         /// </summary>
         /// <param name="handler">面板打开时的回调</param>
         /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
@@ -592,6 +595,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 订阅面板关闭事件。
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// <para><b>句柄归订阅方</b>：<see cref="Destroy"/> 不退订经本入口订下的订阅，见
+        /// <see cref="Subscribe(Action{PanelOpenedMessage}, object)"/> 的说明。</para>
         /// </summary>
         /// <param name="handler">面板关闭时的回调</param>
         /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
@@ -604,6 +609,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 订阅全部面板关闭事件。
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// <para><b>句柄归订阅方</b>：<see cref="Destroy"/> 不退订经本入口订下的订阅，见
+        /// <see cref="Subscribe(Action{PanelOpenedMessage}, object)"/> 的说明。</para>
         /// </summary>
         /// <param name="handler">全部面板关闭时的回调</param>
         /// <param name="context">生命周期绑定的对象（可选），传入后销毁时自动退订，见 <see cref="BindToContext"/></param>
