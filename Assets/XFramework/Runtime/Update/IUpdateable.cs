@@ -2,7 +2,7 @@ namespace XFramework.XUpdate
 {
 
     /// <summary>
-    /// 更新档位，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
+    /// 更新档位，决定 <see cref="IUpdateable.OnUpdate(float, float)"/> 的调用频率。
     /// <para>档位越高，更新间隔越大，帧消耗越低。第 k 档的周期是 2^k 个<b>节拍格</b>，而一格
     /// 有多长取决于时机：变步长轴（Update / LateUpdate）按 60Hz 基准计，Tier1~Tier7 依次约为
     /// 33 / 67 / 133 / 267 / 533 / 1067 / 2133ms（Tier0 为每帧）；固定步轴每步一格，第 k 档即

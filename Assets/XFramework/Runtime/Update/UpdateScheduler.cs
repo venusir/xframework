@@ -503,7 +503,10 @@ namespace XFramework.XUpdate
         {
             // 固定步轴恒为 1 格：Time.fixedTime 每步恰好前进一个固定步长，本就没有需要修正的
             // 漂移；走墙钟累加器会把 50Hz 的固定步派成 60Hz 的 1/1/1/1/2 节奏，等于改掉固定步
-            // 档位的语义（那里「第 k 档」应当是 k 个固定步）
+            // 档位的语义（那里「第 k 档」应当是 k 个固定步）。
+            // 提前返回的副作用是三个时间基准字段（_lastFrameTime / _tickAccumulator /
+            // _timeBaseAnchored）在这条轴上不再被读写——有意为之的死状态，不是漏写：
+            // 该轴的相位由 _vTick 每步 +1 直接给出
             if (_timing == UpdateTiming.FixedUpdate)
             {
                 return 1;
@@ -1266,7 +1269,7 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 立即清空。只由 <see cref="Clear"/> 与帧末的延迟清空调用。
+        /// 立即清空。只由 <see cref="Clear"/> 与延迟清空路径（<see cref="ApplyDeferred"/>）调用。
         /// </summary>
         private void ClearImmediate()
         {

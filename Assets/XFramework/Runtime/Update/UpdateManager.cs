@@ -132,6 +132,10 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 自动驱动是否已生效：当前 PlayerLoop 中是否含本框架的<b>三个</b>驱动系统
         /// （Update / LateUpdate / FixedUpdate）。任一缺失即为 false——注入失败时不会有任何东西派发。
+        /// <para><b>诊断用，别放进每帧路径</b>：每次访问都要向引擎取回整棵 PlayerLoop 树并递归三趟，
+        /// 而属性名看起来像读一个 bool 字段。这里也刻意不做缓存——缓存会被「别的库用
+        /// <c>GetDefaultPlayerLoop</c> 覆盖掉注入」这类情况骗过，正是
+        /// <see cref="TryInjectDriver"/> 选择结构性检查而非布尔标志的理由。</para>
         /// </summary>
         public static bool IsDrivingPlayerLoop
         {

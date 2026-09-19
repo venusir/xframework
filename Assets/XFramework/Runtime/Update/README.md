@@ -115,8 +115,8 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 帧率高于节拍时会出现「本帧不推进」的空帧（144fps 下这圈轮子约每 2.4 帧转一格）：负载摊得
 更粗，但**单帧峰值与按帧分散时相同**——一格该派发多少就派发多少，只是有些帧不做切片工作。
 
-同一帧内**不会重复访问同一档位**：一帧补多格时，第 lod 档只走帧内的前 2^lod 格——该档本只有
-2^lod 个切片相位，前 2^lod 格恰好把它们各覆盖一次。这条保证了两件事：「每帧派发」的对象不会被
+同一帧内**不会重复访问同一档位**：一帧补多格时，第 k 档只走帧内的前 2^k 格——该档本只有
+2^k 个切片相位，前 2^k 格恰好把它们各覆盖一次。这条保证了两件事：「每帧派发」的对象不会被
 切片档反超（20fps 下每帧补 3 格，不截断的话 `Tier1` 会在一帧里轮到约 1.5 次、比 `Tier0` 还频繁），
 以及同一对象不会在一帧里收到两次回调（同帧的多格共用同一个时刻，第二次的 `deltaTime` 必为 0）。
 
@@ -190,7 +190,8 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 因此**不需要场景里存在 `GameLauncher` 或其它 MonoBehaviour**。
 
 - 注入基于 `PlayerLoop.GetCurrentPlayerLoop()` 且只插入不替换，因此与 UniTask 等同样靠注入
-  PlayerLoop 工作的库共存；`IsDrivingPlayerLoop` 可查询三个驱动是否都已生效
+  PlayerLoop 工作的库共存；`IsDrivingPlayerLoop` 可查询三个驱动是否都已生效（**诊断用**：每次查询
+  都要向引擎取回整棵 PlayerLoop 树并递归三趟，不要放进每帧路径）
 - 注入失败会打 `LogWarning`（门面本身是宽容语义、不会抛异常，不留痕的话表现只是「静止」）
 - 手动驱动用无参 `UpdateManager.Tick()`（两个变步长时机）与 `TickFixed()`——它们自行按 Unity 当前
   时间构造时钟，与自动驱动逐字一致（含 `timeScale = 0` 的冻结与双时间轴分割）；
@@ -256,7 +257,7 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 - **不依赖场景对象** — `UpdateManager` 自注入 PlayerLoop 驱动，不依赖任何 MonoBehaviour；
   调用方直接调 `Register` / `RegisterLate` / `RegisterFixed` 登记自身
 - **显式注册** — 时机与时间轴都由注册时的实参与接口实现决定，调度器不做任何自动发现
-- **单一写入点** — 所有注册/注销/启用/禁用/迁移都经内部操作队列，帧末由唯一入口应用到桶
+- **单一写入点** — 所有注册/注销/启用/禁用/迁移都经内部操作队列，派发结束后由唯一入口应用到桶
 - **避免 GC** — 每帧路径无 LINQ、无闭包、无装箱；`UpdateClock` 是栈上结构体
 - **不做并行** — 派发是主线程上的同步回调，没有等待点：`OnUpdate` 返回即本次派发结束，不存在
   「本帧两个节点同时在跑」。需要异步或分帧的工作请在节点内部自己做（UniTask），节点只负责被驱动。
