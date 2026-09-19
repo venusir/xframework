@@ -1622,6 +1622,90 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void LifecycleStream_AlternatesStartingWithEnable()
+        {
+            // 每套调度器上的生命周期回调严格交替、且以 OnEnable 起头。这是「节点按配对计数判断
+            // 自己是否已完全停用」这条朴素写法成立的前提——旧实现在注册时不宣告，节点收到的
+            // 第一条回调是没有配对的 OnDisable，计数会走到 -1
+            _scheduler.Register(_node, order: 0);
+            Assert.AreEqual(1, _node.OnEnableCallCount, "注册即宣告启用，而不是等第一次 Disable");
+            Assert.AreEqual(0, _node.OnDisableCallCount);
+
+            _scheduler.Disable(_node);
+            Assert.AreEqual(1, _node.OnEnableCallCount);
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+
+            _scheduler.Enable(_node);
+            Assert.AreEqual(2, _node.OnEnableCallCount);
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+
+            _scheduler.Disable(_node);
+            Assert.AreEqual(2, _node.OnEnableCallCount);
+            Assert.AreEqual(2, _node.OnDisableCallCount, "两次启用配两次停用");
+        }
+
+        [Test]
+        public void RegisterTwice_DoesNotAnnounceTwice()
+        {
+            // 重新注册（换档位/轴/排序号）时节点本来就在集合里，再宣告一次会吐出没有 OnDisable
+            // 配对的连续两次 OnEnable，把配对计数打乱
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Register(_node, order: 5, initialTier: UpdateTier.Tier3);
+
+            Assert.AreEqual(1, _node.OnEnableCallCount, "重新注册不重复宣告");
+            Assert.AreEqual(1, _scheduler.TotalCount, "仍然只有一条条目");
+        }
+
+        [Test]
+        public void RegisterWhileDisabled_DoesNotAnnounce()
+        {
+            // 禁用态下重新注册只刷新归位信息，节点仍是禁用态——宣告启用就是谎报
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Disable(_node);
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+
+            _scheduler.Register(_node, order: 0, initialTier: UpdateTier.Tier2);
+
+            Assert.AreEqual(1, _node.OnEnableCallCount, "仍是禁用态，不宣告启用");
+            Assert.AreEqual(1, _scheduler.DisabledCount);
+            Assert.IsFalse(_scheduler.IsEnabled(_node));
+        }
+
+        [Test]
+        public void Register_DuringDispatch_AnnouncementFollowsTheBuffer()
+        {
+            // 派发中注册 → 宣告随缓冲在收尾时发生。提前回调等于在别人的回调栈里跑用户代码，
+            // 那正是 Disable/Enable 一直避免的事
+            var late = new TestUpdateable();
+            bool announcedBeforeFrameEnd = false;
+            var caller = new ScriptedNode(_scheduler);
+            caller.Script = (scheduler, self) =>
+            {
+                scheduler.Register(late, order: 1);
+                announcedBeforeFrameEnd = late.OnEnableCallCount > 0;
+            };
+            _scheduler.Register(caller, order: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.IsFalse(announcedBeforeFrameEnd, "宣告不得早于帧末");
+            Assert.AreEqual(1, late.OnEnableCallCount, "收尾时补上");
+            Assert.AreEqual(0, late.OnUpdateCallCount, "被缓冲意味着本帧不派发");
+        }
+
+        [Test]
+        public void Disable_TwiceWithoutEnable_FiresOnce()
+        {
+            // 第二次 Disable 没有表迁移（节点已在禁用表里），因此不回调
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Disable(_node);
+            _scheduler.Disable(_node);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+            Assert.AreEqual(1, _node.OnEnableCallCount);
+        }
+
+        [Test]
         public void IsEnabled_ReturnsCorrectStatus()
         {
             _scheduler.Register(_node, order: 0);
