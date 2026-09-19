@@ -154,6 +154,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **File 域根在子线程解析，启动恢复扫描必崩**：`DesktopFileProvider` 的 `GetFilesAsync` / `GetDirectoriesAsync` 把 `GetPhysicalPath(domain, null)`（→ `Application.persistentDataPath`）放在了 `UniTask.RunOnThreadPool` 的委托**内部**，而 `RunOnThreadPool(configureAwait: false)` 会把池线程留给调用方续体——`SaveManagerImpl.RecoverAsync` 的线程契约偏偏是「全程不切回主线程」。于是**每次启动**的恢复扫描必然在池线程上读 Unity API 而抛 `UnityException`；即便从主线程调用，只要目标目录存在也照样抛（委托内那行不在提前返回的路径上）。现改为**域根在主线程解析一次并缓存**（`DesktopFileProvider.PrimeRoots`，由 `FileManager.Initialize` 与编辑器的 `InitializeOnLoadMethod` / 运行时的 `RuntimeInitializeOnLoadMethod` 各调一次），`GetPhysicalPath` 退化为纯字符串运算，两处 `rootDir` 取值一并提到委托外。`SaveManagerImpl.RecoverAsync` 的「不切回主线程」契约至此才真正成立，Save 侧一行未改
+- **为什么此前没被单测抓到（同批补上）**：8 个 File/Save fixture 全部注入 `TempFileProvider`——它在构造函数里就把根路径定死，**结构性绕开 Unity API**，于是「域根解析是否碰了 Unity API」这一整类缺陷在替身上不可见。唯一用真实 `DesktopFileProvider` 的 EditMode 用例因此独自红了 7 次（失败消息逐字相同），还被当成了环境噪音。新增 `DesktopFileProviderThreadTests`：主线程与池线程两条路径各锁一次，改前 0/4 通过、改后 4/4
+
 - **Save `LoadAsync` 静默清空内存数据**：内容为合法 JSON 但不是存档的文件（如 `{"foo":1}`）同样能反序列化出快照，其数据块列表取到的是字段初始化器给的空列表而非 `null`，`ApplySnapshot` 会先清空全部数据块、再因列表为空直接返回——玩家的内存数据被零警告清空；传字面量 `null` 则先清空全部数据块再抛 NRE。现引入结构校验（非 null + 含数据块列表 + 版本号 ≥ 1）后才允许应用
 - **Save `GetAllPlayerIds` 恒返回空数组**：原实现靠扫描非递归 `GetFilesAsync` 的返回路径、用分隔符切出玩家目录前缀，而根目录返回的路径永不含分隔符，该分支自诞生起从未成立，且无测试覆盖
 - **Save 按玩家查询会串档**：`GetPlayerSlotMetas` 在 `await` 期间把全局玩家上下文临时改成目标玩家，且该路径不设门禁——窗口内发起的保存会写进被查询者的目录，而 `SetCurrentPlayer` 的 busy 守卫对此无效（它读的正是未被置位的 `IsBusy`）。现改为玩家上下文只作默认值、实际路径由参数决定

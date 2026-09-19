@@ -15,6 +15,60 @@ namespace XFramework.XFileManager
     /// </summary>
     public class DesktopFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
+        #region Domain Roots
+
+        /// <summary>
+        /// 域根缓存。Unity 的路径属性（<see cref="Application.persistentDataPath"/> 等）只能在主线程读取，
+        /// 而本类的 IO 在线程池上执行、调用方续体也可能停留在池线程（<c>SaveManagerImpl.RecoverAsync</c>
+        /// 的线程契约就是「全程不切回主线程」）。故域根在<b>主线程解析一次后缓存</b>，此后
+        /// <see cref="GetPhysicalPath"/> 退化为纯字符串运算，可从任意线程调用。
+        /// </summary>
+        private static string _appDataRoot;
+        private static string _streamingRoot;
+        private static string _cacheRoot;
+
+        /// <summary>
+        /// 在主线程解析并缓存三个域根。幂等；由 <see cref="FileManager.Initialize"/> 与下面的加载钩子调用。
+        /// <para>解析结果为空时<b>不缓存</b>——钩子若早于 Unity 路径就绪，留待下一次（主线程的初始化）
+        /// 再解析，免得把空字符串固化成域根、让相对路径落到进程工作目录上。</para>
+        /// </summary>
+        internal static void PrimeRoots()
+        {
+            if (_appDataRoot != null)
+                return;
+
+            var appData = Application.persistentDataPath;
+            var streaming = Application.streamingAssetsPath;
+            var cache = Application.temporaryCachePath;
+            if (string.IsNullOrEmpty(appData) || string.IsNullOrEmpty(streaming) || string.IsNullOrEmpty(cache))
+                return;
+
+            _appDataRoot = appData;
+            _streamingRoot = streaming;
+            _cacheRoot = cache;
+        }
+
+        /// <summary>
+        /// 编辑器加载（含重编译引发的域重载）与进入播放时预热域根缓存。
+        /// <para><b>两个特性都要挂：</b>编辑器里 <c>InitializeOnLoadMethod</c> 只在程序集加载时执行，
+        /// 而在 Project Settings → Editor 里关闭 Reload Domain 后，进入播放不会重新加载程序集、该回调
+        /// 不再执行；<c>RuntimeInitializeOnLoadMethod</c> 在进入播放时同样会执行，是那种情况下唯一的
+        /// 时机（与 <c>UpdateManager.AutoInit</c> 同款理由）。</para>
+        /// <para><b>只预热、不初始化门面</b>——FileManager 的零配置懒初始化是有意设计（见模块 README）。
+        /// 预热的价值在于：进程内第一次文件调用即便来自子线程，域根也已在主线程取好。</para>
+        /// </summary>
+#if UNITY_EDITOR
+        [UnityEditor.InitializeOnLoadMethod]
+#else
+        [RuntimeInitializeOnLoadMethod]
+#endif
+        private static void PrimeRootsOnLoad()
+        {
+            PrimeRoots();
+        }
+
+        #endregion
+
         #region IFileProvider
 
         /// <inheritdoc />
@@ -96,6 +150,9 @@ namespace XFramework.XFileManager
         public async UniTask<string[]> GetFilesAsync(FileDomain domain, string relativePath, string searchPattern = "*", CancellationToken cancellationToken = default)
         {
             var fullPath = GetPhysicalPath(domain, relativePath);
+            // 相对路径转换要用域根，故一并提到委托外：委托跑在池线程上，而域根的解析碰 Unity API
+            // （缓存命中后是纯字符串运算，但取值这一步不该留在池线程里）
+            var rootDir = GetDomainRoot(domain);
 
             return await UniTask.RunOnThreadPool(
                 () =>
@@ -104,7 +161,6 @@ namespace XFramework.XFileManager
                         return Array.Empty<string>();
 
                     var files = Directory.GetFiles(fullPath, searchPattern);
-                    string rootDir = GetPhysicalPath(domain, null);
 
                     // 转换为相对路径（统一正斜杠分隔）
                     for (int i = 0; i < files.Length; i++)
@@ -130,6 +186,8 @@ namespace XFramework.XFileManager
         public async UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             var fullPath = GetPhysicalPath(domain, relativePath);
+            // 与 GetFilesAsync 同理：域根在委托外取好，别把 Unity API 留在池线程上
+            var rootDir = GetDomainRoot(domain);
 
             return await UniTask.RunOnThreadPool(
                 () =>
@@ -139,7 +197,6 @@ namespace XFramework.XFileManager
 
                     // 非递归:仅直接子目录,与 GetFilesAsync 的粒度一致
                     var dirs = Directory.GetDirectories(fullPath);
-                    string rootDir = GetPhysicalPath(domain, null);
 
                     // 转换为相对路径（统一正斜杠分隔，与 GetFilesAsync 同契约）
                     for (int i = 0; i < dirs.Length; i++)
@@ -200,21 +257,25 @@ namespace XFramework.XFileManager
         #region Private Methods
 
         /// <summary>
-        /// 获取域对应的物理根目录。
+        /// 获取域对应的物理根目录。优先读缓存（见 <see cref="PrimeRoots"/>），未预热时才在当前线程
+        /// 现取一次——因此<b>首次</b>调用须在主线程，而 <see cref="FileManager.Initialize"/> 已把这次
+        /// 解析安排在初始化时完成。
         /// </summary>
         private static string GetDomainRoot(FileDomain domain)
         {
+            if (_appDataRoot == null)
+                PrimeRoots();
+
             switch (domain)
             {
                 case FileDomain.AppData:
-                    return Application.persistentDataPath;
-                case FileDomain.Streaming:
-                    return Application.streamingAssetsPath;
-                case FileDomain.Cache:
-                    return Application.temporaryCachePath;
                 case FileDomain.SaveData:
                     // 桌面平台 SaveData 等同于 AppData
-                    return Application.persistentDataPath;
+                    return _appDataRoot ?? Application.persistentDataPath;
+                case FileDomain.Streaming:
+                    return _streamingRoot ?? Application.streamingAssetsPath;
+                case FileDomain.Cache:
+                    return _cacheRoot ?? Application.temporaryCachePath;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(domain), domain, null);
             }

@@ -94,6 +94,7 @@ SaveManager.Initialize(null, new SaveOptions
 - 本模块的公开异步 API **在返回前都会切回主线程**，因此调用方在 `await` 之后可以安全地访问 Unity API 与 `DataManager`。
 - 代价是这些方法依赖 PlayerLoop 泵，**禁止在主线程用 `.GetAwaiter().GetResult()` 同步阻塞等待**，否则会死锁。
 - 唯一例外是内部的 `SaveManager.RecoverAsync`：它全程只调用文件系统原语与线程安全的 `Debug.Log`，**刻意不切回主线程**，因此启动管线中同步阻塞等待它也不会死锁。调用方若要写 `PipelineStageContext` 这类要求主线程的对象，须自行切回。
+  - 这条成立的前提是文件原语**可从任意线程调用**（域根在主线程解析并缓存，见 `File/README.md` 的「线程契约」）——它曾经不成立：Provider 在池线程上解析域根会撞 Unity 的主线程限定，恢复扫描因此必崩。
 
 ## 加载结果与失败处理
 

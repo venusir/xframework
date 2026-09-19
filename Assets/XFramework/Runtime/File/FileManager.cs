@@ -70,6 +70,10 @@ namespace XFramework.XFileManager
         /// <item>iOS / Android → <see cref="MobileFileProvider"/></item>
         /// <item>其他平台（Console、WebGL 等）→ 抛出异常，需手动传入自定义 <see cref="IFileProvider"/></item>
         /// </list>
+        /// <para><b>首次初始化须在主线程</b>：平台判定读 <see cref="Application.platform"/>、域根解析读
+        /// <see cref="Application.persistentDataPath"/> 一类属性，二者都受 Unity 的主线程限定。零配置的
+        /// 懒初始化同样受此约束（它触发的就是本方法）。初始化一旦完成，之后的文件原语可从任意线程
+        /// 调用——域根已缓存，见 <see cref="DesktopFileProvider.PrimeRoots"/>。</para>
         /// </summary>
         /// <param name="provider">自定义文件提供者。为 <c>null</c> 时自动选择内置实现。</param>
         /// <exception cref="PlatformNotSupportedException">当前平台无内置实现且未提供自定义 Provider 时抛出。</exception>
@@ -87,6 +91,10 @@ namespace XFramework.XFileManager
                 Debug.LogWarning("[FileManager] Initialize called more than once. Ignoring duplicate.");
                 return;
             }
+
+            // 借着这次初始化（约定在主线程）把域根预热好：之后的 IO 在池线程上跑，
+            // SaveManagerImpl 的启动恢复扫描更是刻意不切回主线程，那里只有缓存可读
+            DesktopFileProvider.PrimeRoots();
 
             if (provider != null)
             {

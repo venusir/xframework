@@ -102,6 +102,20 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 ---
 
+## 线程契约
+
+- **域根在主线程解析一次后缓存**：`Application.persistentDataPath` 一类属性受 Unity 的主线程限定，故三个域根
+  （`AppData`/`SaveData`、`Streaming`、`Cache`）由 `DesktopFileProvider.PrimeRoots()` 在主线程取好并缓存——
+  预热点有两处：`FileManager.Initialize`（零配置懒初始化也走它），以及 `[InitializeOnLoadMethod]` /
+  `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**文件原语可从任意线程调用**。
+  `SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢全程不切回主线程。
+- **首次初始化须在主线程**：平台判定（`Application.platform`）与域根解析都发生在 `FileManager.Initialize` 里。
+  初始化完成后不再有主线程要求——这一点是本模块与其它门面的区别，也是「零配置懒初始化」的隐含前提。
+- **自建 Provider 的约束**：内置实现把 IO 放在 `UniTask.RunOnThreadPool` 上执行，`ConsoleFileProvider` 更把
+  抽象方法**直接放进委托**（`ExistsAsync` / `ReadAllBytesAsync` / `WriteAllBytesAsync`）。因此实现方
+  **不得在委托内触碰 Unity API**；需要平台路径这类主线程资源时，请在进入委托前取好——照 `DesktopFileProvider`
+  对域根的处理。
+
 ## 路径域说明 (`FileDomain`)
 
 `FileDomain` 是本模块最核心的概念，它通过四个枚举值屏蔽了不同平台、不同硬件的物理路径差异。**游戏业务代码只需关心"数据类型"，而无需关心"数据在哪个路径"。**
@@ -413,7 +427,8 @@ FileManager.Initialize();
 
 ## 设计决策与性能考量
 
-- **避免 Main Thread 卡顿：** 所有 IO 操作通过 `UniTask.RunOnThreadPool` 在子线程执行。
+- **避免 Main Thread 卡顿：** IO 操作通过 `UniTask.RunOnThreadPool` 在子线程执行；域根不在池线程解析
+  （见「线程契约」），故调用方无需关心自己身处哪个线程。
 - **无 GC 分配热路径：** 枚举传递 `FileDomain`（值类型），`ICryptoProvider` 默认不启用，不加载时无额外开销。
 - **Console 安全：** `ConsoleFileProvider` 为抽象类而非接口，便于未来在基类中添加通用实现而不破坏第三方子类。
 - **扩展性：** 第三方可通过 `IFileProvider` 接口完全替换文件系统后端（如自定义加密 VFS 或远程存储后端）。
