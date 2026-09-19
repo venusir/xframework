@@ -432,7 +432,7 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 销毁所有内容。面板实例回池由 AssetManager 管理。
+        /// 销毁所有内容。面板实例经与关闭路径同一条回池契约交还工厂。
         /// </summary>
         public void Dispose()
         {
@@ -440,12 +440,15 @@ namespace XFramework.XUI
             _languageChangedSubscription?.Dispose();
             _languageChangedSubscription = null;
 
-            // 同步关闭所有面板（回池而非 Destroy）
+            // 同步回收所有面板（回池而非 Destroy）。必须走 RecyclePanel 而不是直接 _factory.Release：
+            // 后者会跳过 OnPoolRecycle，于是面板 Track 的订阅不退、ViewModel 不解绑、Canvas 排序不复位，
+            // 而这些都活在池中实例上，会一直跟到它被重新取出使用——「面板已经没了，回调还在跑」。
+            //
+            // 刻意不像关闭路径那样 await DoCloseAsync：Dispose 是同步 API，fire-and-forget 的关闭续体
+            // 会跑在已拆掉的管理器之后。不播关闭动画是既有取舍，本次只补齐回池钩子。
             var panels = new List<UIPanelBase>(_activePanels.Values);
-            foreach (var panel in panels)
-            {
-                _factory.Release(panel);
-            }
+            for (int i = 0; i < panels.Count; i++)
+                RecyclePanel(panels[i]);
 
             // 在途打开的加入者不能悬着：以 null 结束，否则它们会永远等下去
             foreach (var entry in _opening.Values)

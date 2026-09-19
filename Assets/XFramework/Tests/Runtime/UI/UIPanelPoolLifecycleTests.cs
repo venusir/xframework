@@ -166,6 +166,46 @@ namespace XFramework.XUI.Tests
 
         #endregion
 
+        #region Dispose 与关闭共用回池契约
+
+        /// <summary>
+        /// <c>Destroy</c> 也必须走与关闭同一条回池契约。
+        /// <para><c>Dispose</c> 此前直接 <c>_factory.Release(panel)</c>，跳过 <c>OnPoolRecycle</c>：
+        /// 面板 <c>Track</c> 的订阅不退、ViewModel 不解绑、Canvas 排序不复位。这些东西都活在池中实例上，
+        /// 会一直跟到它被重新取出使用——「面板已经没了，回调还在跑」。</para>
+        /// </summary>
+        [Test]
+        public async Task Destroy_RecyclesPanelsThroughPoolHook()
+        {
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+
+            // 自己留着具体类型：Track 的返回类型是 IDisposable，拿不到 Disposed 标志
+            var subscription = new CountingDisposable();
+            panel.Track(subscription);
+
+            // 刻意绕过 panel.Binding 直接取组件，同时覆盖 OnPoolRecycle 里的 GetComponent 兜底分支
+            var binding = panel.gameObject.AddComponent<UIPanelBinding>();
+            var viewModel = new FakeViewModel();
+            binding.Bind(viewModel);
+
+            // 人为抬高排序值，验证回池确实把它复位了（否则复用时会带着上一次的值显示）
+            panel.Canvas.overrideSorting = true;
+            panel.Canvas.sortingOrder = 12345;
+
+            UIManager.Destroy();
+
+            Assert.IsTrue(subscription.Disposed, "Destroy 应经回池钩子释放 Track 的订阅");
+            Assert.IsTrue(viewModel.Disposed, "Destroy 应解绑并释放 ViewModel");
+            Assert.IsFalse(binding.IsBound);
+            Assert.AreEqual(0, panel.Canvas.sortingOrder, "回池应复位 Canvas 排序");
+            Assert.IsFalse(panel.Canvas.overrideSorting, "回池应复位 overrideSorting");
+
+            Assert.AreEqual(1, _factory.ReleaseCount, "面板仍要交还工厂");
+            Assert.AreEqual(1, _factory.PooledCount);
+        }
+
+        #endregion
+
         #region HUD 回池
 
         /// <remarks>
