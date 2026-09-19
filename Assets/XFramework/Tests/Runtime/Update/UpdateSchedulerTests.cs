@@ -1524,18 +1524,45 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void Depth_InsertSorted_MaintainsOrder()
+        public void Order_InsertSorted_MaintainsOrder()
         {
-            var node0 = new TestUpdateable();
-            var node3 = new TestUpdateable();
-            var node1 = new TestUpdateable();
+            var log = new List<string>(3);
 
-            _scheduler.Register(node3, order: 3);
-            _scheduler.Register(node0, order: 0);
-            _scheduler.Register(node1, order: 1);
+            _scheduler.Register(new OrderRecorder(log, "o3"), order: 3);
+            _scheduler.Register(new OrderRecorder(log, "o0"), order: 0);
+            _scheduler.Register(new OrderRecorder(log, "o1"), order: 1);
 
-            // 排序号应为 0, 1, 3
-            Assert.AreEqual(3, _scheduler.TotalCount);
+            _scheduler.Tick(time: 1.0f);
+
+            CollectionAssert.AreEqual(new[] { "o0", "o1", "o3" }, log,
+                "Tier0 桶每帧全量派发，次序即 order 升序");
+        }
+
+        [Test]
+        public void Order_SameValue_FollowsRegistrationOrder()
+        {
+            var log = new List<string>(3);
+
+            _scheduler.Register(new OrderRecorder(log, "a"), order: 0);
+            _scheduler.Register(new OrderRecorder(log, "b"), order: 0);
+            _scheduler.Register(new OrderRecorder(log, "c"), order: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            CollectionAssert.AreEqual(new[] { "a", "b", "c" }, log, "同 order 时按注册先后");
+        }
+
+        [Test]
+        public void Order_SmallerValueRegisteredLast_RunsFirst()
+        {
+            var log = new List<string>(2);
+
+            _scheduler.Register(new OrderRecorder(log, "o5"), order: 5);
+            _scheduler.Register(new OrderRecorder(log, "o0"), order: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            CollectionAssert.AreEqual(new[] { "o0", "o5" }, log, "order 优先于注册先后");
         }
 
         [Test]
@@ -1601,7 +1628,7 @@ namespace XFramework.XUpdate.Tests
         {
             private readonly UpdateScheduler _scheduler;
             private readonly IUpdateable _target;
-            private readonly int _depth;
+            private readonly int _order;
             private bool _hasRegistered;
 
             public int OnUpdateCallCount { get; private set; }
@@ -1610,7 +1637,7 @@ namespace XFramework.XUpdate.Tests
             {
                 _scheduler = scheduler;
                 _target = target;
-                _depth = order;
+                _order = order;
             }
 
             public void OnEnable() { }
@@ -1622,7 +1649,7 @@ namespace XFramework.XUpdate.Tests
                 if (!_hasRegistered)
                 {
                     _hasRegistered = true;
-                    _scheduler.Register(_target, _depth);
+                    _scheduler.Register(_target, _order);
                 }
                 return UpdateTier.Tier0;
             }
@@ -1750,6 +1777,32 @@ namespace XFramework.XUpdate.Tests
                     Script?.Invoke(_scheduler, this);
                 }
                 return NextTier;
+            }
+        }
+
+        /// <summary>
+        /// 把每次派发按顺序记进共享列表的替身，用于断言「谁先被派发」。
+        /// <para>既有的 <see cref="TestUpdateable"/> 只计数、不记录次序，而次序恰恰是
+        /// <c>order</c> 唯一可观察的效果。恒定返回 Tier0，故整桶每帧全量派发。</para>
+        /// </summary>
+        private sealed class OrderRecorder : IUpdateable
+        {
+            private readonly List<string> _log;
+            private readonly string _name;
+
+            public OrderRecorder(List<string> log, string name)
+            {
+                _log = log;
+                _name = name;
+            }
+
+            public void OnEnable() { }
+            public void OnDisable() { }
+
+            public UpdateTier OnUpdate(float deltaTime, float time)
+            {
+                _log.Add(_name);
+                return UpdateTier.Tier0;
             }
         }
     }
