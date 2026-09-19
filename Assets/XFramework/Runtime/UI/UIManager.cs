@@ -270,18 +270,23 @@ namespace XFramework.XUI
 
         #region Public API — Diagnostics
 
+        // 本区与「Query」「Stack Navigation 的 CanGoBack」「Modal Mask 的 IsMaskShowing」里的只读成员
+        // 一律不调 EnsureGlobalInitialized：它们回答的是「现在有没有面板/遮罩」这类探测问题，
+        // 本就该能在 Initialize 之前回答，IUIManager 的文档与 UIManagerImpl 的实现都以此为契约
+        // （「未初始化时返回 0，不抛异常，便于在场景加载早期探测」）。此前门面统一套了守卫，
+        // 于是 UIStateWindow 这类调用方必须先判 IsInitialized 才敢问一句「现在什么样」。
+        // 操作类成员（Open/Close/Push/ShowMask/…）仍然照抛——那才是「还没准备好就用」的真实错误。
+
         /// <inheritdoc cref="IUIManager.GetState"/>
         public static UIStateSnapshot GetState()
         {
-            EnsureGlobalInitialized();
-            return _instance.GetState();
+            return _instance != null ? _instance.GetState() : default;
         }
 
         /// <inheritdoc cref="IUIManager.DumpState"/>
         public static string DumpState()
         {
-            EnsureGlobalInitialized();
-            return _instance.DumpState();
+            return _instance != null ? _instance.DumpState() : "(UIManager 尚未初始化)";
         }
 
         /// <summary>
@@ -294,24 +299,10 @@ namespace XFramework.XUI
         #region Public API — Query
 
         /// <inheritdoc cref="IUIManager.OpenCount"/>
-        public static int OpenCount
-        {
-            get
-            {
-                EnsureGlobalInitialized();
-                return _instance.OpenCount;
-            }
-        }
+        public static int OpenCount => _instance != null ? _instance.OpenCount : 0;
 
         /// <inheritdoc cref="IUIManager.IsAnyOpen"/>
-        public static bool IsAnyOpen
-        {
-            get
-            {
-                EnsureGlobalInitialized();
-                return _instance.IsAnyOpen;
-            }
-        }
+        public static bool IsAnyOpen => _instance != null && _instance.IsAnyOpen;
 
         /// <inheritdoc cref="IUIManager.GetTopPanel"/>
         public static UIPanelBase GetTopPanel()
@@ -323,11 +314,9 @@ namespace XFramework.XUI
         /// <inheritdoc cref="IUIManager.Panels"/>
         public static IReadOnlyList<UIPanelBase> Panels
         {
-            get
-            {
-                EnsureGlobalInitialized();
-                return _instance.Panels;
-            }
+            // 空视图而非 null：探测型读接口不该逼调用方先判 IsInitialized 再判 null
+            // （Array.Empty 是缓存的单例，不产生分配）
+            get { return _instance != null ? _instance.Panels : Array.Empty<UIPanelBase>(); }
         }
 
         /// <inheritdoc cref="IUIManager.CopyPanels"/>
@@ -417,14 +406,7 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc cref="IUIManager.CanGoBack"/>
-        public static bool CanGoBack
-        {
-            get
-            {
-                EnsureGlobalInitialized();
-                return _instance.CanGoBack;
-            }
-        }
+        public static bool CanGoBack => _instance != null && _instance.CanGoBack;
 
         #endregion
 
@@ -460,14 +442,7 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc cref="IUIManager.IsMaskShowing"/>
-        public static bool IsMaskShowing
-        {
-            get
-            {
-                EnsureGlobalInitialized();
-                return _instance.IsMaskShowing;
-            }
-        }
+        public static bool IsMaskShowing => _instance != null && _instance.IsMaskShowing;
 
         #endregion
 
