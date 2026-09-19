@@ -33,7 +33,8 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 打开指定类型的 UI 面板。
-        /// <para>如果面板已打开则聚焦（BringToFront），不会重复创建。</para>
+        /// <para>如果面板已打开则把它重新置顶<b>并恢复焦点与更新</b>（原栈顶随之失焦），
+        /// 不会重复创建。只置顶不恢复焦点会让它渲染在最上却收不到输入、也不被每帧派发。</para>
         /// </summary>
         /// <typeparam name="T">面板类型，需继承 <see cref="UIPanelBase"/>。</typeparam>
         /// <param name="assetPath">面板预制体的 YooAsset 地址。</param>

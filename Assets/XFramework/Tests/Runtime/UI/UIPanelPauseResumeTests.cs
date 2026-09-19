@@ -71,6 +71,38 @@ namespace XFramework.XUI.Tests
             Assert.IsTrue(covered.Logged("OnResume"), "更新维度：OnResume");
         }
 
+        /// <summary>
+        /// 重新打开一个<b>已打开</b>的面板：置顶的同时必须恢复焦点与更新，并让原栈顶让位。
+        /// <para>此前这条路径只调 <c>BringToFront</c>，而它按契约只重排渲染次序。于是一路只置顶
+        /// 不聚焦：面板渲染在最上却 <c>IsPaused</c>（<c>DriveTier</c> 直接跳过它）且 raycaster
+        /// 关着，而二级页仍是 <c>IsFocused</c>、射线还开着——「看得见、摸不着、也不更新」，
+        /// 且两个面板同时声称有焦点。</para>
+        /// </summary>
+        [Test]
+        public async Task OpenAsync_TargetAlreadyOpen_RefocusesAndBlursPreviousTop()
+        {
+            var main = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            var pushed = await UIManager.PushAsync<FakePanelB>("ui/b");
+
+            Assert.IsTrue(main.IsPaused, "前置：Push 之后主面板已被覆盖并暂停");
+
+            var reopened = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+
+            Assert.AreSame(main, reopened, "已打开应复用同一实例，不重复创建");
+
+            Assert.IsTrue(main.IsFocused, "重新打开应恢复焦点（交互维度）");
+            Assert.IsFalse(main.IsPaused, "重新打开应恢复每帧更新（更新维度）");
+            Assert.IsTrue(main.Raycaster.enabled, "焦点恢复了，射线也要跟着打开");
+            Assert.AreSame(main, UIManager.GetTopPanel(), "它应当回到栈顶");
+
+            Assert.IsFalse(pushed.IsFocused, "原栈顶应随之失焦");
+            Assert.IsTrue(pushed.IsPaused, "原栈顶应随之暂停");
+            Assert.IsFalse(pushed.Raycaster.enabled, "原栈顶的射线应关掉");
+
+            Assert.Greater(main.Canvas.sortingOrder, pushed.Canvas.sortingOrder,
+                "渲染次序与焦点必须一致：看得见的那个才是能交互的那个");
+        }
+
         [Test]
         public async Task FirstOpen_FiresOnFocus_AndIsFocused()
         {

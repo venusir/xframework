@@ -477,7 +477,7 @@ namespace XFramework.XUI
             // 已打开的面板直接聚焦（不触发 Controller 拦截）
             if (_activePanels.TryGetValue(type, out var existingPanel) && existingPanel != null)
             {
-                BringToFront(existingPanel);
+                RefocusOpenPanel(existingPanel);
                 return existingPanel as T;
             }
 
@@ -662,11 +662,11 @@ namespace XFramework.XUI
             EnsureInitialized();
             var type = typeof(T);
 
-            // 目标已打开：只聚焦，不先模糊栈顶——栈顶可能就是它自己，那样会把
-            // 它留在失焦态（IsPaused + Raycaster 关闭）且无人恢复
+            // 目标已打开：置顶并恢复焦点。此处刻意不先 BlurTopPanel——栈顶可能就是它自己，
+            // 先模糊就得再恢复一次；让位的判断归 RefocusOpenPanel 统一处理。
             if (_activePanels.TryGetValue(type, out var existing) && existing != null)
             {
-                BringToFront(existing);
+                RefocusOpenPanel(existing);
                 return existing as T;
             }
 
@@ -681,12 +681,12 @@ namespace XFramework.XUI
             catch
             {
                 // 取消与异常同样要回滚失焦，否则栈顶会永久停在不可交互状态
-                UnblurPanel(blurred);
+                FocusPanel(blurred);
                 throw;
             }
 
             if (panel == null)
-                UnblurPanel(blurred);
+                FocusPanel(blurred);
 
             return panel;
         }
@@ -1379,7 +1379,7 @@ namespace XFramework.XUI
         /// <summary>
         /// 模糊栈顶面板（禁用交互）。
         /// </summary>
-        /// <returns>被模糊的面板；栈为空时返回 null。调用方在后续步骤失败时应把它交回 <see cref="UnblurPanel"/>。</returns>
+        /// <returns>被模糊的面板；栈为空时返回 null。调用方在后续步骤失败时应把它交回 <see cref="FocusPanel"/>。</returns>
         private UIPanelBase BlurTopPanel()
         {
             PruneStack();
@@ -1394,10 +1394,14 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 撤销一次 <see cref="BlurTopPanel"/>：只恢复交互，不动显示栈——栈根本没变，
-        /// 回到焦点不等于回到栈顶。
+        /// 聚焦一个面板：交互（<c>OnFocus</c>）与更新（<c>OnResume</c>）两个维度一并翻上来，
+        /// 并按层开关压回 raycaster。<b>不动显示栈</b>——聚焦不等于置顶，置顶由
+        /// <see cref="BringToFront"/> 负责，两者是分开的两件事。
+        /// <para>与 <see cref="BlurTopPanel"/> 是同一对信号的两个方向，故全类只有这一个
+        /// 「恢复焦点」出口：撤销一次模糊、把已打开的面板重新置顶、Pop 之后恢复栈顶，
+        /// 走的都是它。</para>
         /// </summary>
-        private void UnblurPanel(UIPanelBase panel)
+        private void FocusPanel(UIPanelBase panel)
         {
             if (panel != null && panel.IsOpen)
             {
@@ -1431,11 +1435,28 @@ namespace XFramework.XUI
 
             var top = _stack[_stack.Count - 1];
             BringToFront(top);
-            top.OnFocus();    // 交互维度
-            top.OnResume();   // 更新维度
+            FocusPanel(top);
+        }
 
-            // OnFocus 会把 raycaster 打开；层被整体禁交互时要按层状态压回去
-            ApplyLayerInteractivity(top);
+        /// <summary>
+        /// 把<b>已打开</b>的面板重新置顶并恢复聚焦——「已打开时再打开一次」的正确语义。
+        /// <para><b>为什么只调 <see cref="BringToFront"/> 不够</b>：它按契约只重排渲染次序。
+        /// 于是面板会渲染在最上，却停在失焦（raycaster 关着）且 <c>IsPaused</c>（<see cref="DriveTier"/>
+        /// 跳过它）的状态——看得见、摸不着、也不更新；而原栈顶还继续声称 <c>IsFocused</c>，
+        /// 两个面板同时有焦点。交互与更新这两个维度必须成对翻转，与 <see cref="BlurTopPanel"/> /
+        /// <see cref="FocusPanel"/> 是同一对信号。</para>
+        /// </summary>
+        private void RefocusOpenPanel(UIPanelBase panel)
+        {
+            PruneStack();
+
+            // 让原栈顶让位。BlurTopPanel 读的是当前栈顶，故必须在 BringToFront 之前调用；
+            // 栈顶就是它自己时跳过——那只会制造一次无意义的失焦再聚焦。
+            if (_stack.Count > 0 && !ReferenceEquals(_stack[_stack.Count - 1], panel))
+                BlurTopPanel();
+
+            BringToFront(panel);
+            FocusPanel(panel);
         }
 
         /// <summary>
