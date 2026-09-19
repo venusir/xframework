@@ -51,7 +51,7 @@ namespace XFramework.XUpdate.Tests
         public IEnumerator RegisteredNode_IsDrivenWithoutManualTick()
         {
             var node = new DrivenNode();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             Assert.AreEqual(0, node.UpdateCount, "注册本身不派发");
 
             // 不调用 UpdateManager.Tick：靠注入的 PlayerLoop 驱动
@@ -73,8 +73,8 @@ namespace XFramework.XUpdate.Tests
             // 用同一对象在两个时机上的回调顺序钉住这条：注入点分别落在 PlayerLoop 的
             // Update.ScriptRunBehaviourUpdate 与 PreLateUpdate.ScriptRunBehaviourLateUpdate
             var node = new BothTimingsNode();
-            UpdateManager.Register(node, depth: 0);
-            UpdateManager.RegisterLate(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
+            UpdateManager.RegisterLate(node, order: 0);
 
             for (int i = 0; i < 5 && node.Sequence.Count < 4; i++)
             {
@@ -95,7 +95,7 @@ namespace XFramework.XUpdate.Tests
         public IEnumerator FixedTiming_IsDrivenByPlayerLoop()
         {
             var node = new FixedDrivenNode();
-            UpdateManager.RegisterFixed(node, depth: 0);
+            UpdateManager.RegisterFixed(node, order: 0);
 
             // 不手动 Tick：靠注入到 FixedUpdate 阶段的驱动。
             // 必须等 WaitForFixedUpdate 而不是 yield return null——批处理下帧率极高，

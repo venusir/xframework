@@ -36,7 +36,7 @@ public sealed class MyService : IUpdateable
     public MyService()
     {
         // 自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
-        UpdateManager.Register(this, depth: 0, initialTier: UpdateTier.Tier0);
+        UpdateManager.Register(this, order: 0, initialTier: UpdateTier.Tier0);
     }
 
     public void OnEnable() { }
@@ -68,7 +68,7 @@ public sealed class MyService : IUpdateable
 
 ```csharp
 // 注册时显式传 timeMode（默认 Scaled）
-UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
+UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 ```
 
 时间轴**以注册时传入的实参为准**——调度器不读取对象上的声明；中途要改变轴，须先注销再重新注册。

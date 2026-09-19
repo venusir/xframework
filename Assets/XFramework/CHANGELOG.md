@@ -90,6 +90,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Update 档位类型更名为 `UpdateTier`（破坏性）**：`UpdateLOD` 更名为 `UpdateTier`，公开参数 `initialLOD` 更名为 `initialTier`；枚举成员 `Tier0..Tier7` 与 `Max`、枚举值、行为均不变。旧名有三处问题：本仓 3 字母缩写在标识符中一律 PascalCase（`JsonUtility` / `CsvLoader` / `UIHudItem`），只有 LOD 全大写，且已与 UI 模块的 `UpdateLod` 分裂成只差大小写的两种拼法；LOD 在 Unity 语境里指网格/贴图细节层级，与本模块「档位不是精度，是采样间隔」的语义相冲。类型名自 0.2.0 起即公开（当时成员为 `Frame1..Frame16`），故属破坏性变更。UI 模块自己那套 `Lod` 拼写（`UIViewBase.UpdateLod` / `LodDriver` / `LodDemandChanged` 等）一并统一到 `Tier`——那批 API 与其他面板级 LOD 特性同为未发布内容，不构成破坏性变更
 
+- **Update 顺序参数 `depth` 更名为 `order`（破坏性：仅参数名）**：语义与行为零变化（仍是桶内按序插入、同值按注册先后），改的是名字与文档。旧名说的是「节点在**树**中的深度」，而节点系统已在本批次移除；公开文档还写着「数值越小越先执行」，可桶内下标同时决定切片相位——切片档里它并不表达「本帧谁先跑」，只表达排在哪一相位。新名与重写的 doc 一并说清这双重作用
+
 #### 破坏性变更迁移表（Update 模块）
 
 | 旧写法 | 新写法 |
@@ -97,6 +99,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `UpdateLOD` | `UpdateTier` |
 | `Register(..., initialLOD: lod)`（`RegisterLate` / `RegisterFixed` 同） | `initialTier: tier` |
 | `UpdateLOD.Tier3` 等枚举成员 | 不变（成员名与枚举值都没动） |
+| `Register(node, depth: 0, ...)`（`RegisterLate` / `RegisterFixed` 同） | `Register(node, order: 0, ...)` |
 
 - **UI `OnUpdate` 携带 `deltaTime`/`time`（破坏性）**：面板可声明较低档位而被降频派发（Tier3 约 133ms 一次）。若面板继续用 `Time.deltaTime` 做积分，每 133ms 只前进一帧的量——**慢 8 倍**。故 `deltaTime` 必须由派发方给出，取值是「距上次派发」的间隔。这是 LOD 的正确性前提，不只是风格统一。门面无参 `Update()` 一并删除：它给不出正确的 `deltaTime`
 - **UI 导航栈统一入栈（破坏性）**：显示栈改存实例，`OpenAsync` 与 `PushAsync` 都入栈，`HasPrevious` → `CanGoBack`，`BackToAsync<T>` → `PopToAsync<T>`。此前只有 `PushAsync` 入栈，于是「Open 开主界面 + Push 开二级页」之后栈深恒为 1，`PopAsync`、`HasPrevious`、遮罩点击关闭会同时失效——而那恰是最常见的用法组合

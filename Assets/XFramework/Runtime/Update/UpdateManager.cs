@@ -19,7 +19,7 @@ namespace XFramework.XUpdate
     /// {
     ///     public MyService()
     ///     {
-    ///         UpdateManager.Register(this, depth: 0, UpdateTier.Tier0);
+    ///         UpdateManager.Register(this, order: 0, UpdateTier.Tier0);
     ///     }
     ///     
     ///     public void OnEnable() { }
@@ -469,7 +469,10 @@ namespace XFramework.XUpdate
         /// <para>静态服务可在初始化时手动调用此方法；MonoBehaviour 与普通 C# 对象同样直接调用它。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
-        /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
+        /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。
+        /// <para>它只表达<b>桶内次序</b>，而桶内下标同时决定切片相位——因此对切片档（Tier1 及以上）
+        /// 它不承诺「本帧谁先跑」：不同下标的条目分处不同相位，可能相隔若干帧才被派发。真正按它
+        /// 逐条排序派发的是 Tier0 桶（每帧全量）。静态服务建议传 0。</para></param>
         /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 这是<b>静态档位的声明点</b>——「这个对象就该以 133ms 跑」是设计决定，声明在注册处最清楚；
         /// 运行时变更由节点的返回值表达，或注销后重新注册（分工见 <c>Update/README.md</c>
@@ -477,11 +480,11 @@ namespace XFramework.XUpdate
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。
         /// 需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）请用
         /// <see cref="UpdateTimeMode.Unscaled"/>。</param>
-        public static void Register(IUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0,
+        public static void Register(IUpdateable node, int order, UpdateTier initialTier = UpdateTier.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.Update)?.Register(node, depth, initialTier, timeMode);
+            SchedulerOf(UpdateTiming.Update)?.Register(node, order, initialTier, timeMode);
         }
 
         /// <summary>
@@ -491,7 +494,10 @@ namespace XFramework.XUpdate
         /// 「把对象注册进它没实现的时机」要到派发时才炸。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
-        /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
+        /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。
+        /// <para>它只表达<b>桶内次序</b>，而桶内下标同时决定切片相位——因此对切片档（Tier1 及以上）
+        /// 它不承诺「本帧谁先跑」：不同下标的条目分处不同相位，可能相隔若干帧才被派发。真正按它
+        /// 逐条排序派发的是 Tier0 桶（每帧全量）。静态服务建议传 0。</para></param>
         /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 这是<b>静态档位的声明点</b>；运行时变更由节点的返回值表达，或注销后重新注册
         /// （见 <c>Update/README.md</c> 的「档位由谁决定」）。</param>
@@ -500,11 +506,11 @@ namespace XFramework.XUpdate
         /// <see cref="UpdateTimeMode.Unscaled"/>。</para>
         /// <para>轴在<b>注册时读取一次</b>，之后由调度器记住；中途改变需要先注销再重新注册。
         /// 框架<b>不</b>从对象自身嗅探该值——注册实参是唯一来源。</para></param>
-        public static void RegisterLate(ILateUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0,
+        public static void RegisterLate(ILateUpdateable node, int order, UpdateTier initialTier = UpdateTier.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, depth, initialTier, timeMode);
+            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, order, initialTier, timeMode);
         }
 
         /// <summary>
@@ -514,16 +520,19 @@ namespace XFramework.XUpdate
         /// 因此不需要（也不该假装能）选轴。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
-        /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
+        /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。
+        /// <para>它只表达<b>桶内次序</b>，而桶内下标同时决定切片相位——因此对切片档（Tier1 及以上）
+        /// 它不承诺「本帧谁先跑」：不同下标的条目分处不同相位，可能相隔若干帧才被派发。真正按它
+        /// 逐条排序派发的是 Tier0 桶（每帧全量）。静态服务建议传 0。</para></param>
         /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 注意此处的档位是每 2^k 个<b>固定步</b>（默认 0.02s 一步），不是变步长轴的毫秒；
         /// 它改变的是本节点的<b>仿真频率</b>（<c>deltaTime</c> 恒为 <c>2^k × Time.fixedDeltaTime</c>），
         /// 既不减少物理成本，也不适合直接驱动物理的对象。它同样是<b>静态档位的声明点</b>；
         /// 运行时变更由返回值或注销重注册表达。</param>
-        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0)
+        public static void RegisterFixed(IFixedUpdateable node, int order, UpdateTier initialTier = UpdateTier.Tier0)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, depth, initialTier);
+            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, order, initialTier);
         }
 
         /// <summary>

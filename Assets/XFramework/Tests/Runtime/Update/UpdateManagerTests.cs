@@ -61,7 +61,7 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void Clear_RemovesAllRegistrations()
         {
-            UpdateManager.Register(new TestUpdateable(), depth: 0);
+            UpdateManager.Register(new TestUpdateable(), order: 0);
             Assert.AreEqual(1, UpdateManager.TotalCount);
 
             UpdateManager.Clear();
@@ -77,7 +77,7 @@ namespace XFramework.XUpdate.Tests
             var node = new TestUpdateable();
 
             UpdateManager.Clear();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             Assert.AreEqual(1, UpdateManager.TotalCount, "清空后仍可继续注册");
         }
@@ -88,7 +88,7 @@ namespace XFramework.XUpdate.Tests
             var node = new TestUpdateable();
 
             UpdateManager.Clear();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             UpdateManager.Tick(time: 1.0f);
 
             Assert.AreEqual(1, node.UpdateCallCount, "清空后 Tick 仍能派发到已注册对象");
@@ -97,7 +97,7 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void Clear_CalledTwice_DoesNotThrow()
         {
-            UpdateManager.Register(new TestUpdateable(), depth: 0);
+            UpdateManager.Register(new TestUpdateable(), order: 0);
 
             Assert.DoesNotThrow(() =>
             {
@@ -140,7 +140,7 @@ namespace XFramework.XUpdate.Tests
             // 旧实现又在此处置了不可逆闩锁，于是第二次进入播放后 IsInitialized 恒为 false，
             // Tick/Register/Enable/Disable/ProcessImmediate 全部静默 no-op
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             UpdateManager.OnQuitting();
             Assert.IsFalse(UpdateManager.IsInitialized, "退出后调度器被释放");
@@ -148,7 +148,7 @@ namespace XFramework.XUpdate.Tests
             UpdateManager.AutoInit();
             Assert.IsTrue(UpdateManager.IsInitialized, "重建后必须可用");
 
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             UpdateManager.Tick(time: 1.0f);
             Assert.AreEqual(1, node.UpdateCallCount, "重建后的调度器能正常派发");
         }
@@ -160,7 +160,7 @@ namespace XFramework.XUpdate.Tests
             // 两次 AutoInit 之间可能夹着其它模块的注册（如 InputManager 的帧驱动）——
             // 无条件 new 会把它们所在的调度器整个换掉
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             UpdateManager.AutoInit();
 
@@ -178,7 +178,7 @@ namespace XFramework.XUpdate.Tests
 
             Assert.DoesNotThrow(() =>
             {
-                UpdateManager.Register(node, depth: 0);
+                UpdateManager.Register(node, order: 0);
                 UpdateManager.Tick(time: 1.0f);
                 UpdateManager.Unregister(node);
                 UpdateManager.Enable(node);
@@ -192,7 +192,7 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(0, node.UpdateCallCount);
 
             UpdateManager.AutoInit();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             UpdateManager.Tick(time: 2.0f);
             Assert.AreEqual(1, node.UpdateCallCount, "重建后恢复派发");
         }
@@ -205,7 +205,7 @@ namespace XFramework.XUpdate.Tests
         public void Pause_FreezesDispatch_AndClearResetsIt()
         {
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             UpdateManager.Tick(time: 1.0f);
             Assert.AreEqual(1, node.UpdateCallCount);
@@ -221,7 +221,7 @@ namespace XFramework.XUpdate.Tests
             UpdateManager.Clear();
             Assert.IsFalse(UpdateManager.IsPaused, "Clear 应复位暂停开关");
 
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             UpdateManager.Tick(time: 3.0f);
             Assert.AreEqual(2, node.UpdateCallCount, "复位后恢复派发");
         }
@@ -230,7 +230,7 @@ namespace XFramework.XUpdate.Tests
         public void Resume_UnpausesButDoesNotCatchUp()
         {
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             UpdateManager.Tick(time: 1.0f);
             UpdateManager.Pause();
@@ -251,7 +251,7 @@ namespace XFramework.XUpdate.Tests
         public void TickFixed_DispatchesFixedTimingOnly()
         {
             var node = new FixedNode();
-            UpdateManager.RegisterFixed(node, depth: 0);
+            UpdateManager.RegisterFixed(node, order: 0);
 
             // 变步长 Tick 不该碰固定步长的对象：同一个档位在两个时机里是不同的单位
             // （变步长轴按时间格计、固定步轴按固定步计）
@@ -285,7 +285,7 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void Register_NullNode_IsIgnored()
         {
-            Assert.DoesNotThrow(() => UpdateManager.Register(null, depth: 0));
+            Assert.DoesNotThrow(() => UpdateManager.Register(null, order: 0));
             Assert.AreEqual(0, UpdateManager.TotalCount);
         }
 
@@ -293,7 +293,7 @@ namespace XFramework.XUpdate.Tests
         public void Unregister_RemovesFromCount()
         {
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
             Assert.AreEqual(1, UpdateManager.TotalCount);
 
             UpdateManager.Unregister(node);
@@ -305,7 +305,7 @@ namespace XFramework.XUpdate.Tests
         public void Disable_ExcludesFromTotalCount_EnableRestores()
         {
             var node = new TestUpdateable();
-            UpdateManager.Register(node, depth: 0);
+            UpdateManager.Register(node, order: 0);
 
             UpdateManager.Disable(node);
             Assert.AreEqual(0, UpdateManager.TotalCount, "禁用对象不计入总数");

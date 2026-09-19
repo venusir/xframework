@@ -153,7 +153,7 @@ namespace XFramework.XInput
         {
             if (_ticker != null) return;
             _ticker = new InputTicker();
-            UpdateManager.Register(_ticker, depth: 0, UpdateTier.Tier0);
+            UpdateManager.Register(_ticker, order: 0, UpdateTier.Tier0);
         }
 
         private static void UnregisterTicker()
@@ -164,7 +164,7 @@ namespace XFramework.XInput
         }
 
         /// <summary>
-        /// 自动帧驱动刷新器(UpdateManager 静态服务档 depth 0)。
+        /// 自动帧驱动刷新器(UpdateManager 静态服务档 order 0)。
         /// <para>同帧去重:本帧已由手动 <see cref="Tick()"/> 驱动过脉冲时跳过,保证手动/自动两种驱动并存时每帧至多一次脉冲。</para>
         /// </summary>
         private sealed class InputTicker : IUpdateable

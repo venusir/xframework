@@ -71,7 +71,7 @@ namespace XFramework.XUpdate
         #region Private Types
 
         /// <summary>
-        /// 更新条目，记录节点引用、深度及上次更新时间。
+        /// 更新条目，记录节点引用、排序号及上次更新时间。
         /// </summary>
         private struct Entry
         {
@@ -88,7 +88,7 @@ namespace XFramework.XUpdate
             /// </summary>
             public double LastUpdateTime;
 
-            public int Depth;
+            public int Order;
 
             /// <summary>
             /// 尚未经历过一次派发，故首次派发的 delta 记 0。
@@ -140,7 +140,7 @@ namespace XFramework.XUpdate
             /// <summary>目标桶的扁平下标（<see cref="BucketOf"/>）。</summary>
             public int Bucket;
 
-            public int Depth;
+            public int Order;
         }
 
         #endregion
@@ -575,10 +575,10 @@ namespace XFramework.XUpdate
         /// <para>同一节点重复注册视为「重新注册」：旧条目会被摘掉，不会出现两条条目、每帧派发两次。</para>
         /// </summary>
         /// <param name="node">要注册的节点。</param>
-        /// <param name="depth">节点在树中的深度，用于排序。</param>
+        /// <param name="order">节点在桶内的排序号，越小越靠前；同值时按注册先后。</param>
         /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。</param>
-        public void Register(IUpdateLifecycle node, int depth, UpdateTier initialTier = UpdateTier.Tier0,
+        public void Register(IUpdateLifecycle node, int order, UpdateTier initialTier = UpdateTier.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
@@ -588,7 +588,7 @@ namespace XFramework.XUpdate
                 Node = node,
                 Kind = PendingOpKind.Register,
                 Bucket = BucketOf((int)timeMode, Mathf.Clamp((int)initialTier, 0, MaxTier)),
-                Depth = depth,
+                Order = order,
             });
         }
 
@@ -879,12 +879,12 @@ namespace XFramework.XUpdate
             {
                 case PendingOpKind.Register:
                 {
-                    // 已在禁用表中的节点：Register 只把它纳入管理（刷新深度）而不插桶——
+                    // 已在禁用表中的节点：Register 只把它纳入管理（刷新排序号）而不插桶——
                     // 插了它就会在禁用状态下继续收到 OnUpdate，违反 IUpdateable 的契约
                     if (TryFindInDisabled(op.Node, out int disabledIndex))
                     {
                         var disabledEntry = _disabledEntries[disabledIndex];
-                        disabledEntry.Depth = op.Depth;
+                        disabledEntry.Order = op.Order;
                         _disabledEntries[disabledIndex] = disabledEntry;
                         break;
                     }
@@ -897,7 +897,7 @@ namespace XFramework.XUpdate
                     InsertSorted(_buckets[op.Bucket], new Entry
                     {
                         Node = op.Node,
-                        Depth = op.Depth,
+                        Order = op.Order,
                         Axis = (byte)AxisOf(op.Bucket),
                         NeedsAnchor = true,
                     });
@@ -1003,7 +1003,7 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 按深度升序插入到指定桶。
+        /// 按排序号升序插入到指定桶。
         /// </summary>
         private static void InsertSorted(List<Entry> entries, Entry entry)
         {
@@ -1011,7 +1011,7 @@ namespace XFramework.XUpdate
             while (lo < hi)
             {
                 int mid = (lo + hi) >> 1;
-                if (entries[mid].Depth <= entry.Depth)
+                if (entries[mid].Order <= entry.Order)
                     lo = mid + 1;
                 else
                     hi = mid;

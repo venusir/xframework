@@ -91,7 +91,7 @@ namespace XFramework.XUI
             // 每帧驱动并入统一调度：可在 Initialize 之后被档位降频、被 Pause 统一暂停，
             // 也不再要求场景里必须存在 UIRootNode
             _frameDriver = new FrameDriver();
-            UpdateManager.Register(_frameDriver, depth: 0);
+            UpdateManager.Register(_frameDriver, order: 0);
         }
 
         /// <summary>
@@ -198,7 +198,7 @@ namespace XFramework.XUI
 
                 var driver = new TierDriver(impl, tier);
                 _tierDrivers[tierIndex] = driver;
-                UpdateManager.Register(driver, depth: 0, initialTier: tier);
+                UpdateManager.Register(driver, order: 0, initialTier: tier);
             }
             else if (_tierDrivers.TryGetValue(tierIndex, out var existing))
             {

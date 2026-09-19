@@ -206,7 +206,7 @@ Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时
 
 | 操作           | 代码                                                          |
 | -------------- | ------------------------------------------------------------- |
-| 注册到更新调度 | `UpdateManager.Register(this, depth: 0)`                      |
+| 注册到更新调度 | `UpdateManager.Register(this, order: 0)`                      |
 | 注销更新       | `UpdateManager.Unregister(this)`                              |
 | 实现档位降级   | `UpdateTier IUpdateable.OnUpdate(float deltaTime, float time)` |
 | 延迟更新时机   | 实现 `ILateUpdateable.OnLateUpdate(deltaTime, time)`          |
