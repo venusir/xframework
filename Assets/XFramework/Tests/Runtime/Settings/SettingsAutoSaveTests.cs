@@ -48,6 +48,28 @@ namespace XFramework.XSettings.Tests
 
         #endregion
 
+        #region Fixture
+
+        [SetUp]
+        public void SetUp()
+        {
+            // 本 fixture 会读写<b>全局</b> UpdateManager（构造 SettingsManagerImpl 时注册真实 ticker、
+            // 断言 TotalCount 增量），因此必须复位它触碰的静态门面——PlayMode 下所有用例共享一个
+            // player 实例，不复位的后果是「某用例中途抛异常留下悬挂注册」一路传给后面的 fixture，
+            // 而全量 0 失败正是靠各 fixture 各自复位撑起来的
+            UpdateManager.AutoInit();
+            UpdateManager.Clear();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            UpdateManager.AutoInit();
+            UpdateManager.Clear();
+        }
+
+        #endregion
+
         #region 去抖
 
         [Test]

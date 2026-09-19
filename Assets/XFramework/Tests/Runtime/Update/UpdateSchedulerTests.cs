@@ -593,6 +593,38 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void ProcessImmediate_DuringDispatch_OnlyPushesTimeBase()
+        {
+            // 派发期间调 ProcessImmediate 不执行更新——在别人的 OnUpdate 里再回调自己会形成嵌套派发；
+            // 它只把时间基准推到该时刻，于是下一次正常派发的间隔自那一刻起算。
+            // 目标放在 Tier1（单占桶、每格一转）：这样才能让「推进基准」与「下一次派发」之间
+            // 隔着一格，否则同一帧内的派发会立刻把基准覆盖掉，效果就观察不到了
+            // ReturnTier 必须跟着声明档位走：返回值是第二条档位通道，让它默认返回 Tier0 的话，
+            // 目标首派之后就被迁回 Tier0 桶，本用例的「目标在 Tier1 上隔格派发」前提就没了
+            var target = new TestUpdateable { ReturnTier = UpdateTier.Tier1 };
+            float time = 0f;
+            var caller = new ScriptedNode(_scheduler) { RunAtDispatchCount = 2 };
+            caller.Script = (scheduler, self) => scheduler.ProcessImmediate(target, deltaTime: 0.5f, time: time);
+
+            _scheduler.Register(caller, order: 0);
+            _scheduler.Register(target, order: 0, initialTier: UpdateTier.Tier1);
+
+            _scheduler.Tick(time += FrameSeconds);          // 格 0：目标首派（锚定，delta 0）
+            Assert.AreEqual(1, target.OnUpdateCallCount);
+
+            // 格 1：caller 第 2 次被派发 → 发 ProcessImmediate；目标不在本格切片上。
+            // 基准推到的时刻取「本格时刻」，于是下一格的间隔应恰为一格
+            _scheduler.Tick(time += FrameSeconds);
+
+            Assert.AreEqual(1, target.OnUpdateCallCount, "派发期间调用不得额外回调一次（那就是嵌套派发）");
+
+            _scheduler.Tick(time += FrameSeconds);          // 格 2：目标派发
+            Assert.AreEqual(2, target.OnUpdateCallCount);
+            Assert.AreEqual(FrameSeconds, target.DeltaTimes[1], 1e-6f,
+                "间隔应自 ProcessImmediate 推到的时刻起算；若读到两格，说明基准根本没推");
+        }
+
+        [Test]
         public void SlicedBucket_SpreadsLoadEvenly_NoIdleFrames()
         {
             // 17 个条目、8 个切片：区间切片派发成 3,3,3,3,3,2,0,0（后两格白跑一遍循环），
@@ -1629,6 +1661,65 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Clear_DoesNotInvokeLifecycleCallbacks()
+        {
+            // 与 Unregister 一致：Clear 的主要使用者是测试隔离，在隔离点触发用户回调会让 fixture
+            // 的收尾去执行业务代码——那里往往引用了已拆掉的管理器
+            var disabled = new TestUpdateable();
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Register(disabled, order: 1);
+            _scheduler.Disable(disabled);
+            Assert.AreEqual(1, disabled.OnDisableCallCount, "前提：Disable 本身是会回调的");
+
+            _scheduler.Clear();
+
+            Assert.AreEqual(0, _node.OnDisableCallCount, "桶里的条目不被回调");
+            Assert.AreEqual(1, disabled.OnDisableCallCount, "禁用表里的条目同样不被回调");
+            Assert.AreEqual(0, _node.OnEnableCallCount, "也不会反向回调 OnEnable");
+        }
+
+        [Test]
+        public void LateUpdateTiming_DispatchesOnLateUpdate()
+        {
+            // 时机由调度器实例固定，条目只持有 IUpdateLifecycle，派发时按实例转型调用。这条路径此前
+            // 只在 PlayerLoop 集成用例里被覆盖（那边验的是次序），这里把「同一对象在两个时机上各自
+            // 被转发到对应方法」钉在调度器级
+            var lateScheduler = new UpdateScheduler(UpdateTiming.LateUpdate);
+            var node = new BothTimingsCounter();
+            lateScheduler.Register(node, order: 0);
+
+            lateScheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, node.LateCount, "LateUpdate 时机应调用 OnLateUpdate");
+            Assert.AreEqual(0, node.UpdateCount, "不该走 OnUpdate");
+            Assert.AreEqual(0, node.FixedCount);
+
+            var updateScheduler = new UpdateScheduler(UpdateTiming.Update);
+            updateScheduler.Register(node, order: 0);
+            updateScheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, node.UpdateCount, "Update 时机应调用 OnUpdate");
+            Assert.AreEqual(1, node.LateCount, "不能串到另一个时机的方法上");
+        }
+
+        [Test]
+        public void OutOfRangeTier_IsClampedToBuckets()
+        {
+            // 档位由节点返回值给出，越界值必须被钳进 [Tier0, Max]——否则就是桶下标越界。
+            // 高档位落在最大档、负档位落在 Tier0，两条都不丢条目
+            var tooHigh = new TestUpdateable { ReturnTier = (UpdateTier)99 };
+            var tooLow = new TestUpdateable { ReturnTier = (UpdateTier)(-3) };
+            _scheduler.Register(tooHigh, order: 0);
+            _scheduler.Register(tooLow, order: 0);
+
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(2, _scheduler.TotalCount, "两条条目都还在");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Max), "越界的高档位钳到最大档");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier0), "负档位钳到 Tier0");
+        }
+
+        [Test]
         public void Tick_Exception_UnregistersNode()
         {
             _scheduler.Register(_node, order: 0);
@@ -1947,6 +2038,12 @@ namespace XFramework.XUpdate.Tests
 
             public UpdateTier NextTier { get; set; } = UpdateTier.Tier0;
             public System.Action<UpdateScheduler, IUpdateable> Script { get; set; }
+
+            /// <summary>
+            /// 在第几次被派发时执行脚本（默认 1，即首次派发）。要构造「脚本发生在第二次派发」这类
+            /// 时序时改它——只做首派的那一版表达不了「先让目标派发过一次，再对它动手」。
+            /// </summary>
+            public int RunAtDispatchCount { get; set; } = 1;
             public int OnUpdateCallCount { get; private set; }
             public int OnEnableCallCount { get; private set; }
             public int OnDisableCallCount { get; private set; }
@@ -1963,7 +2060,7 @@ namespace XFramework.XUpdate.Tests
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
-                if (!_hasRunScript)
+                if (!_hasRunScript && OnUpdateCallCount >= RunAtDispatchCount)
                 {
                     _hasRunScript = true;
                     Script?.Invoke(_scheduler, this);
@@ -1994,6 +2091,38 @@ namespace XFramework.XUpdate.Tests
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 _log.Add(_name);
+                return UpdateTier.Tier0;
+            }
+        }
+
+        /// <summary>
+        /// 三个时机都实现、各自计数的替身，用于锁定「调度器按自己的时机转发到对应方法」。
+        /// </summary>
+        private sealed class BothTimingsCounter : IUpdateable, ILateUpdateable, IFixedUpdateable
+        {
+            public int UpdateCount { get; private set; }
+            public int LateCount { get; private set; }
+            public int FixedCount { get; private set; }
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateTier OnUpdate(float deltaTime, float time)
+            {
+                UpdateCount++;
+                return UpdateTier.Tier0;
+            }
+
+            public UpdateTier OnLateUpdate(float deltaTime, float time)
+            {
+                LateCount++;
+                return UpdateTier.Tier0;
+            }
+
+            public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                FixedCount++;
                 return UpdateTier.Tier0;
             }
         }

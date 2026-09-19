@@ -1,5 +1,7 @@
+using System.Collections;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
 namespace XFramework.XUpdate.Tests
@@ -22,6 +24,9 @@ namespace XFramework.XUpdate.Tests
             public int UpdateCount { get; private set; }
             public float LastDelta { get; private set; }
 
+            /// <summary>最近一次派发拿到的时刻——用于区分「这条轴取的是哪个时间源」。</summary>
+            public float LastTime { get; private set; }
+
             public void OnEnable() { }
 
             public void OnDisable() { }
@@ -30,6 +35,7 @@ namespace XFramework.XUpdate.Tests
             {
                 UpdateCount++;
                 LastDelta = deltaTime;
+                LastTime = time;
                 return UpdateTier.Tier0;
             }
         }
@@ -117,6 +123,44 @@ namespace XFramework.XUpdate.Tests
             UpdateManager.Tick();
             Assert.AreEqual(0f, node.LastDelta, 1e-6f, "首帧只锚定，delta 记 0（与自动驱动一致）");
             Assert.AreEqual(1, node.UpdateCount);
+        }
+
+        [Test]
+        public void TickWithClock_DrivesBothAxesAndLateTiming()
+        {
+            // 门面的 Tick(UpdateClock) 此前没有被用例覆盖：两条轴各拿自己的时刻（这是它相对于
+            // Tick(time) 的全部意义），注册在 LateUpdate 的节点也由同一次 Tick 驱动
+            var scaled = new CountingUpdateable();
+            var unscaled = new CountingUpdateable();
+            var late = new CountingLateUpdateable();
+            UpdateManager.Register(scaled, order: 0);
+            UpdateManager.Register(unscaled, order: 0, timeMode: UpdateTimeMode.Unscaled);
+            UpdateManager.RegisterLate(late, order: 0);
+
+            UpdateManager.Tick(new UpdateClock(time: 3.0, unscaledTime: 7.0));
+
+            Assert.AreEqual(1, scaled.UpdateCount);
+            Assert.AreEqual(1, unscaled.UpdateCount);
+            Assert.AreEqual(1, late.LateCount, "LateUpdate 时机由同一次 Tick 驱动");
+            Assert.AreEqual(3f, scaled.LastTime, 1e-6f, "逻辑轴取 Time");
+            Assert.AreEqual(7f, unscaled.LastTime, 1e-6f, "墙钟轴取 UnscaledTime");
+        }
+
+        [UnityTest]
+        public IEnumerator AutoDriveDisabled_InjectionDoesNotDispatch()
+        {
+            // AutoDriveEnabled 是给测试用的开关（精确计数断言会被自动驱动打乱），它的守卫
+            // 此前没有用例：本 fixture 关掉它、不手动 Tick，靠 PlayerLoop 自动跑几帧，
+            // 派发次数必须一动不动
+            var node = new CountingUpdateable();
+            UpdateManager.Register(node, order: 0);
+
+            for (int i = 0; i < 3; i++)
+            {
+                yield return null;
+            }
+
+            Assert.AreEqual(0, node.UpdateCount, "AutoDriveEnabled = false 时注入的驱动不得派发");
         }
 
         #endregion
