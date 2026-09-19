@@ -78,7 +78,7 @@ namespace XFramework.XUI.View
         /// 面板是否被覆盖而暂停每帧更新。
         /// <para>这是<strong>更新维度</strong>：暂停只影响 <see cref="UIViewBase.OnUpdate"/> 的派发，
         /// 不影响 <c>IsOpen</c>、也不影响语言切换等回调。被 <see cref="XUpdate.UpdateManager"/>
-        /// 的 LOD 派发路径消费。</para>
+        /// 的档位派发路径消费。</para>
         /// <para>与 <see cref="IsFocused"/> 分开是因为二者并非总是同步：面板可能在失焦的同时
         /// 仍需按低频更新（倒计时），也可能在获得焦点时被层级的整体禁交互挡住。</para>
         /// </summary>

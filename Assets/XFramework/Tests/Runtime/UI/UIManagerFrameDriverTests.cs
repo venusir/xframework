@@ -9,7 +9,7 @@ namespace XFramework.XUI.Tests
 {
     /// <summary>
     /// UI 每帧通路的调度归属测试。
-    /// <para>面板 / HUD 的每帧更新原由场景里的 <c>UIRootNode.Update</c> 驱动：那条通路既不在 LOD
+    /// <para>面板 / HUD 的每帧更新原由场景里的 <c>UIRootNode.Update</c> 驱动：那条通路既不在档位
     /// 调度里、也不受 <see cref="UpdateManager.Pause"/> 约束，与其它模块的暂停语义是两套。
     /// 现改为注册进 <see cref="UpdateManager"/> 统一调度。</para>
     /// <para>观察点是 HUD 提供者（<see cref="UIManager.Update"/> 会驱动它）——避免依赖 AssetManager

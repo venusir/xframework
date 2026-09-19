@@ -98,7 +98,7 @@ namespace XFramework.Editor
 
             GUILayout.FlexibleSpace();
 
-            EditorGUILayout.LabelField($"LOD drivers: {UIManager.Diagnostic.LodDriverCount}", EditorStyles.miniLabel);
+            EditorGUILayout.LabelField($"Tier drivers: {UIManager.Diagnostic.TierDriverCount}", EditorStyles.miniLabel);
 
             if (GUILayout.Button("Copy", EditorStyles.toolbarButton, GUILayout.Width(48f)))
                 EditorGUIUtility.systemCopyBuffer = _dump;

@@ -124,13 +124,13 @@ namespace XFramework.XUI.Tests
         public async Task DumpState_ContainsPerPanelDetails()
         {
             var panel = await UIManager.Panel.OpenAsync<FakePanelB>("ui/a", UILayers.Popup);
-            panel.UpdateLod = UpdateTier.Tier2;
+            panel.UpdateTier = UpdateTier.Tier2;
 
             string dump = UIManager.Diagnostic.DumpState();
 
             StringAssert.Contains("FakePanelB", dump, "应列出面板类型");
             StringAssert.Contains($"layer={UILayers.Popup}", dump);
-            StringAssert.Contains("lod=Tier2", dump, "应列出档位——排查降频问题要用");
+            StringAssert.Contains("tier=Tier2", dump, "应列出档位——排查降频问题要用");
             StringAssert.Contains("focused", dump);
         }
 

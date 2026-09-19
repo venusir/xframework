@@ -173,7 +173,7 @@ sequenceDiagram
 | `UIManager.Tip` | `ShowAsync` / `SetProvider` |
 | `UIManager.Hud` | `Attach` / `Detach` / `SetProvider` |
 | `UIManager.Layer` | `SetVisibility` / `SetInteractive` |
-| `UIManager.Diagnostic` | `GetState` / `DumpState` / `LodDriverCount` |
+| `UIManager.Diagnostic` | `GetState` / `DumpState` / `TierDriverCount` |
 | `UIManager.Events` | `Subscribe`（三种面板消息） |
 
 生命周期与实例管理留在**外层**：`Initialize` / `SetInstance` / `Destroy` / `Update` / `IsInitialized` / `UIRoot`——那是门面自身的职责，不属于任何子系统。
@@ -246,7 +246,7 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 ### 面板驱动更新（OnUpdate）
 
-与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize` 把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被 LOD 降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
+与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize` 把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
 
 派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
 
@@ -271,7 +271,7 @@ public class GameHudPanel : UIPanelBase
 
 > ⚠️ **`deltaTime` 不是 `Time.deltaTime`**
 >
-> 它是**距上次派发**的间隔。面板可以声明较低档位而被降频派发（见 `UpdateLod`），此时两者相差整数倍——
+> 它是**距上次派发**的间隔。面板可以声明较低档位而被降频派发（见 `UpdateTier`），此时两者相差整数倍——
 > 继续用 `Time.deltaTime` 做积分会慢若干倍。任何累加/插值都必须用传入的 `deltaTime`。
 >
 > 好处是：只要按它积分，面板无论跑在哪个档位、甚至中途改档，行为都一致。

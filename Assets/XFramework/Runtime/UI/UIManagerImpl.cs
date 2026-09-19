@@ -107,19 +107,19 @@ namespace XFramework.XUI
             = new Dictionary<Type, InFlightOpen>(4);
 
         /// <summary>
-        /// 面板按各自 <see cref="UIViewBase.UpdateLod"/> 分桶。某一档的驱动器被派发时只驱动本桶，
+        /// 面板按各自 <see cref="UIViewBase.UpdateTier"/> 分桶。某一档的驱动器被派发时只驱动本桶，
         /// 于是「用不到每帧的面板」可以声明较低档位降耗，而不必各自写节流。
         /// </summary>
         private readonly List<UIPanelBase>[] _buckets;
 
         /// <summary>上一次已通知过的「该档是否有面板」，用于只在 0 ↔ 非空 跳变时通知门面。</summary>
-        private readonly bool[] _lodDemand;
+        private readonly bool[] _tierDemand;
 
         /// <summary>
         /// 档位需求变化回调，由门面注入。门面据此懒注册/注销该档的驱动器——
         /// 用不到的档位不占调度器条目。
         /// </summary>
-        internal Action<UpdateTier> LodDemandChanged;
+        internal Action<UpdateTier> TierDemandChanged;
 
         /// <summary>
         /// <see cref="_stack"/> 的只读视图。构造一次即可反复读取，每次读取零分配；
@@ -152,7 +152,7 @@ namespace XFramework.XUI
 
             int tiers = (int)UpdateTier.Max + 1;
             _buckets = new List<UIPanelBase>[tiers];
-            _lodDemand = new bool[tiers];
+            _tierDemand = new bool[tiers];
 
             for (int i = 0; i < tiers; i++)
                 _buckets[i] = new List<UIPanelBase>(4);
@@ -290,7 +290,7 @@ namespace XFramework.XUI
                     sb.Append("  [").Append(i).Append("] ").Append(panel.GetType().Name)
                       .Append(" layer=").Append(panel.Layer)
                       .Append(" order=").Append(panel.Canvas != null ? panel.Canvas.sortingOrder : 0)
-                      .Append(" lod=").Append(panel.UpdateLod)
+                      .Append(" tier=").Append(panel.UpdateTier)
                       .Append(panel.IsFocused ? " focused" : " blurred")
                       .Append(panel.IsPaused ? " paused" : "")
                       .Append('\n');
@@ -431,7 +431,7 @@ namespace XFramework.XUI
             for (int i = 0; i < _buckets.Length; i++)
             {
                 _buckets[i].Clear();
-                _lodDemand[i] = false;
+                _tierDemand[i] = false;
             }
 
             // 清理缓存（AssetManager 对象池由 AssetManager.Dispose 统一管理）
@@ -1112,9 +1112,9 @@ namespace XFramework.XUI
         public void Update(float deltaTime, float time)
         {
             // 手动驱动等价于驱动每帧档
-            DriveLod(UpdateTier.Tier0, deltaTime, time);
+            DriveTier(UpdateTier.Tier0, deltaTime, time);
 
-            // HUD 与 Tip 共用同一条帧通路，故同样受 LOD 与 Pause 约束
+            // HUD 与 Tip 共用同一条帧通路，故同样受档位与 Pause 约束
             _hudProvider?.Update(deltaTime, time);
             _tipProvider?.Update(deltaTime, time);
         }
@@ -1122,24 +1122,24 @@ namespace XFramework.XUI
         /// <summary>
         /// 驱动指定档位的面板。由每档对应的驱动器调用（Tier0 由门面的 FrameDriver 走 <see cref="Update"/>）。
         /// </summary>
-        /// <param name="lod">本驱动器负责的档位。</param>
+        /// <param name="tier">本驱动器负责的档位。</param>
         /// <param name="deltaTime">距上次派发的间隔。</param>
         /// <param name="time">当前时刻。</param>
-        internal void DriveLod(UpdateTier lod, float deltaTime, float time)
+        internal void DriveTier(UpdateTier tier, float deltaTime, float time)
         {
             if (!IsInitialized)
                 return;
 
             PruneStack();
 
-            int tier = Mathf.Clamp((int)lod, 0, _buckets.Length - 1);
+            int tierIndex = Mathf.Clamp((int)tier, 0, _buckets.Length - 1);
 
             // 先在派发前重排：重排发生在遍历之外，于是面板在自己的 OnUpdate 里关掉自己
             // 或别的面板都不会让遍历错位——无需快照，也就没有每帧分配。
             // 代价是每次派发都 O(面板数)，但面板数通常 < 20，且不产生 GC。
             RebuildBuckets();
 
-            var bucket = _buckets[tier];
+            var bucket = _buckets[tierIndex];
             for (int i = 0; i < bucket.Count; i++)
             {
                 var panel = bucket[i];
@@ -1155,7 +1155,7 @@ namespace XFramework.XUI
         }
 
         /// <summary>
-        /// 按各面板当前的 <see cref="UIViewBase.UpdateLod"/> 重建档位桶，并通知门面档位需求变化。
+        /// 按各面板当前的 <see cref="UIViewBase.UpdateTier"/> 重建档位桶，并通知门面档位需求变化。
         /// </summary>
         private void RebuildBuckets()
         {
@@ -1168,40 +1168,40 @@ namespace XFramework.XUI
                 if (panel == null)
                     continue;
 
-                int tier = Mathf.Clamp((int)panel.UpdateLod, 0, _buckets.Length - 1);
-                _buckets[tier].Add(panel);
+                int tierIndex = Mathf.Clamp((int)panel.UpdateTier, 0, _buckets.Length - 1);
+                _buckets[tierIndex].Add(panel);
             }
 
-            NotifyLodDemand();
+            NotifyTierDemand();
         }
 
         /// <summary>
         /// 在档位「空 ↔ 非空」跳变时通知门面，使其懒注册/注销对应驱动器。
         /// 稳态下只做 8 次比较，不产生分配。
         /// </summary>
-        private void NotifyLodDemand()
+        private void NotifyTierDemand()
         {
-            if (LodDemandChanged == null)
+            if (TierDemandChanged == null)
                 return;
 
             for (int i = 0; i < _buckets.Length; i++)
             {
                 bool active = _buckets[i].Count > 0;
-                if (_lodDemand[i] == active)
+                if (_tierDemand[i] == active)
                     continue;
 
-                _lodDemand[i] = active;
-                LodDemandChanged((UpdateTier)i);
+                _tierDemand[i] = active;
+                TierDemandChanged((UpdateTier)i);
             }
         }
 
         /// <summary>
         /// 指定档位当前是否有面板。门面在收到档位需求变化后用它决定注册还是注销。
         /// </summary>
-        internal bool HasPanelsAtLod(UpdateTier lod)
+        internal bool HasPanelsAtTier(UpdateTier tier)
         {
-            int tier = Mathf.Clamp((int)lod, 0, _buckets.Length - 1);
-            return _buckets[tier].Count > 0;
+            int tierIndex = Mathf.Clamp((int)tier, 0, _buckets.Length - 1);
+            return _buckets[tierIndex].Count > 0;
         }
 
         #endregion

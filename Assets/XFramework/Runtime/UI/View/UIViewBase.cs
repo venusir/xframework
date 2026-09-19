@@ -33,7 +33,7 @@ namespace XFramework.XUI.View
         /// 每帧更新档位。Inspector 可配，默认每帧。
         /// </summary>
         [SerializeField]
-        private UpdateTier _updateLod = UpdateTier.Tier0;
+        private UpdateTier _updateTier = UpdateTier.Tier0;
 
         /// <summary>
         /// 「打开中」的完成闸门。懒分配——只有真的有人在 OnOpen 期间发起关闭时才创建。
@@ -124,11 +124,13 @@ namespace XFramework.XUI.View
         /// <para>Inspector 可配；运行时改这个属性会在下一次派发时重排到新档位，无需重开面板。</para>
         /// <para>用不到每帧的面板（倒计时、进度插值等）声明较低档位即可显著降耗。只要按传入的
         /// <c>deltaTime</c> 积分，行为不随档位变化。</para>
+        /// <para>属性名与类型同名（<c>UpdateTier UpdateTier</c>）是刻意的：简写成 <c>Tier</c> 会与
+        /// 渲染侧的 LOD / 容器层级混淆，而它表达的就是这个枚举本身。</para>
         /// </summary>
-        public UpdateTier UpdateLod
+        public UpdateTier UpdateTier
         {
-            get => _updateLod;
-            set => _updateLod = value;
+            get => _updateTier;
+            set => _updateTier = value;
         }
 
         /// <summary>

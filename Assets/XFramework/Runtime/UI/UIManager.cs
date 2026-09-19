@@ -33,7 +33,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 注册到 <see cref="UpdateManager"/> 的每帧驱动器：把面板 / HUD 的每帧更新并入统一调度。
-        /// <para>原先靠场景里的 <see cref="UIRootNode.Update"/> 驱动，于是这条通路既不受 LOD 降频、
+        /// <para>原先靠场景里的 <see cref="UIRootNode.Update"/> 驱动，于是这条通路既不受档位降频、
         /// 也不受 <see cref="UpdateManager.Pause"/> 控制，面板与其它模块的暂停语义还是两套。</para>
         /// </summary>
         private static IUpdateable _frameDriver;
@@ -43,7 +43,7 @@ namespace XFramework.XUI
         /// <para>懒注册：只有该档真的出现了面板才向 <see cref="UpdateManager"/> 注册，桶重新变空即注销。
         /// 用不到的档位不占调度器条目，初始化后调度器里仍只有 <see cref="_frameDriver"/> 一个。</para>
         /// </summary>
-        private static readonly Dictionary<int, IUpdateable> _lodDrivers
+        private static readonly Dictionary<int, IUpdateable> _tierDrivers
             = new Dictionary<int, IUpdateable>(4);
 
         /// <summary>
@@ -78,7 +78,7 @@ namespace XFramework.XUI
             }
 
             var impl = new UIManagerImpl();
-            impl.LodDemandChanged = OnLodDemandChanged;
+            impl.TierDemandChanged = OnTierDemandChanged;
             impl.Initialize(uiRoot, PanelFactoryFactory?.Invoke());
 
             // 如果传入了自定义控制器，立即设置
@@ -88,7 +88,7 @@ namespace XFramework.XUI
             _instance = impl;
             _instanceInitialized = true;
 
-            // 每帧驱动并入统一调度：可在 Initialize 之后被 LOD 降频、被 Pause 统一暂停，
+            // 每帧驱动并入统一调度：可在 Initialize 之后被档位降频、被 Pause 统一暂停，
             // 也不再要求场景里必须存在 UIRootNode
             _frameDriver = new FrameDriver();
             UpdateManager.Register(_frameDriver, depth: 0);
@@ -116,10 +116,10 @@ namespace XFramework.XUI
                 _frameDriver = null;
             }
 
-            foreach (var driver in _lodDrivers.Values)
+            foreach (var driver in _tierDrivers.Values)
                 UpdateManager.Unregister(driver);
 
-            _lodDrivers.Clear();
+            _tierDrivers.Clear();
 
             if (_instance != null)
             {
@@ -152,15 +152,15 @@ namespace XFramework.XUI
         /// <summary>
         /// 非零档位的驱动器：只驱动该档位桶里的面板，自身按该档位的周期被派发。
         /// </summary>
-        private sealed class LodDriver : IUpdateable
+        private sealed class TierDriver : IUpdateable
         {
             private readonly UIManagerImpl _impl;
-            private readonly UpdateTier _lod;
+            private readonly UpdateTier _tier;
 
-            public LodDriver(UIManagerImpl impl, UpdateTier lod)
+            public TierDriver(UIManagerImpl impl, UpdateTier tier)
             {
                 _impl = impl;
-                _lod = lod;
+                _tier = tier;
             }
 
             public void OnEnable() { }
@@ -169,41 +169,41 @@ namespace XFramework.XUI
 
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
-                _impl.DriveLod(_lod, deltaTime, time);
+                _impl.DriveTier(_tier, deltaTime, time);
 
-                // 恒定返回自身档位：面板跑哪一档由各自的 UpdateLod 决定，
+                // 恒定返回自身档位：面板跑哪一档由各自的 UpdateTier 决定，
                 // 驱动器不该因系统繁忙自行漂移（那是面板的声明，不是调度器的推断）
-                return _lod;
+                return _tier;
             }
         }
 
         /// <summary>
         /// 档位需求变化：按需注册 / 注销该档的驱动器。Tier0 由 <see cref="FrameDriver"/> 承载，跳过。
         /// </summary>
-        private static void OnLodDemandChanged(UpdateTier lod)
+        private static void OnTierDemandChanged(UpdateTier tier)
         {
-            if (lod == UpdateTier.Tier0)
+            if (tier == UpdateTier.Tier0)
                 return;
 
             // 注入自定义 IUIManager 时无法驱动分档，退回「只有每帧档」的旧行为
             if (!(_instance is UIManagerImpl impl))
                 return;
 
-            int tier = (int)lod;
+            int tierIndex = (int)tier;
 
-            if (impl.HasPanelsAtLod(lod))
+            if (impl.HasPanelsAtTier(tier))
             {
-                if (_lodDrivers.ContainsKey(tier))
+                if (_tierDrivers.ContainsKey(tierIndex))
                     return;
 
-                var driver = new LodDriver(impl, lod);
-                _lodDrivers[tier] = driver;
-                UpdateManager.Register(driver, depth: 0, initialTier: lod);
+                var driver = new TierDriver(impl, tier);
+                _tierDrivers[tierIndex] = driver;
+                UpdateManager.Register(driver, depth: 0, initialTier: tier);
             }
-            else if (_lodDrivers.TryGetValue(tier, out var existing))
+            else if (_tierDrivers.TryGetValue(tierIndex, out var existing))
             {
                 UpdateManager.Unregister(existing);
-                _lodDrivers.Remove(tier);
+                _tierDrivers.Remove(tierIndex);
             }
         }
 
@@ -625,7 +625,7 @@ namespace XFramework.XUI
                 /// <summary>
                 /// 已注册的非零档位驱动器数量。用不到分档时恒为 0，便于确认惰性注册确实在生效。
                 /// </summary>
-                public static int LodDriverCount => _lodDrivers.Count;
+                public static int TierDriverCount => _tierDrivers.Count;
 
 
         }
@@ -693,7 +693,7 @@ namespace XFramework.XUI
         /// <summary>
         /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>，并驱动 HUD 层。
         /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 已把它注册进
-        /// <see cref="UpdateManager"/> 的统一调度（可被 LOD 降频、可被 <see cref="UpdateManager.Pause"/>
+        /// <see cref="UpdateManager"/> 的统一调度（可被档位降频、可被 <see cref="UpdateManager.Pause"/>
         /// 统一暂停）。保留公开是因为测试与自定义驱动方仍可能需要手动推进一步。</para>
         /// </summary>
         public static void Update(float deltaTime, float time)

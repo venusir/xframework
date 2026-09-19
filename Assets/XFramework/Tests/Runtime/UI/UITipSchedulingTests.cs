@@ -10,7 +10,7 @@ namespace XFramework.XUI.Tests
     /// <summary>
     /// Tip 的帧通路归属与生命周期归口测试。
     /// <para>回归：<c>UITipItem.PlayAsync</c> 原先跑一个 <c>UniTask.Yield</c> 自循环并读
-    /// <c>Time.deltaTime</c>——Tip 因此既不受 <c>UpdateManager.Pause</c> 约束、也不进 LOD 调度，
+    /// <c>Time.deltaTime</c>——Tip 因此既不受 <c>UpdateManager.Pause</c> 约束、也不进档位调度，
     /// 是 UI 模块内最后一条绕过统一调度的帧通路。现由 <c>UIManager.Update</c> 与面板、HUD 共用一条通路。</para>
     /// <para><b>未覆盖</b>：<c>UITipItem.Tick</c> 的动画数值——它要求预制体上存在 TMP_Text，
     /// 而本工程未导入 TMP Essentials。</para>

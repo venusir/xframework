@@ -6,14 +6,14 @@ using XFramework.XUpdate;
 namespace XFramework.XUI.Tests
 {
     /// <summary>
-    /// 面板级 LOD 与失焦剔除测试。
+    /// 面板级档位与失焦剔除测试。
     /// <para>面板可声明较低的更新档位（用不到每帧的倒计时、进度插值等），按 2^k 个节拍格的周期
     /// 被派发；被别的面板盖住而失焦的面板则完全不派发。</para>
     /// <para><c>IsPaused</c> 此前是个无人消费的死字段——<c>OnBlur</c> 置位、从无读者，
     /// 本组用例是它第一次真正生效。</para>
     /// </summary>
     [TestFixture]
-    public class UIPanelLodTests
+    public class UIPanelTierTests
     {
         private GameObject _root;
         private FakePanelFactory _factory;
@@ -24,7 +24,7 @@ namespace XFramework.XUI.Tests
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
-            _root = new GameObject("UIRoot_LodTest", typeof(RectTransform));
+            _root = new GameObject("UIRoot_TierTest", typeof(RectTransform));
 
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<UpdateRecordingPanel>();
@@ -60,7 +60,7 @@ namespace XFramework.XUI.Tests
         public async Task OpenTier2Panel_RegistersTier2Driver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateTier.Tier2;
+            panel.UpdateTier = UpdateTier.Tier2;
 
             UpdateManager.Tick(0.016f);
 
@@ -73,7 +73,7 @@ namespace XFramework.XUI.Tests
         public async Task CloseTier2Panel_UnregistersTier2Driver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateTier.Tier2;
+            panel.UpdateTier = UpdateTier.Tier2;
             UpdateManager.Tick(0.016f);
             Assert.AreEqual(2, UpdateManager.TotalCount, "前置条件：该档驱动器已注册");
 
@@ -85,14 +85,14 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
-        public async Task RuntimeLodChange_BackToTier0_UnregistersSlicedDriver()
+        public async Task RuntimeTierChange_BackToTier0_UnregistersSlicedDriver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateTier.Tier3;
+            panel.UpdateTier = UpdateTier.Tier3;
             UpdateManager.Tick(0.016f);
             Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier3), "前置条件：Tier3 驱动器已注册");
 
-            panel.UpdateLod = UpdateTier.Tier0;
+            panel.UpdateTier = UpdateTier.Tier0;
             UpdateManager.Tick(0.032f);
 
             Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier3), "改回每帧档后应注销");
@@ -107,7 +107,7 @@ namespace XFramework.XUI.Tests
         public async Task Tier2Panel_DrivenLessOften_WithAccumulatedDelta()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateTier.Tier2;
+            panel.UpdateTier = UpdateTier.Tier2;
 
             const int steps = 20;
             for (int i = 0; i <= steps; i++)

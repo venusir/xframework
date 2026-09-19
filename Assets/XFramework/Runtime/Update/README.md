@@ -139,7 +139,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
    才轮到首次派发（`Tier7` 约 2.1 秒，见「已知限制」）。
 
 **档位属于设计决定、且对象数量大时，还有第三种范式**（UI 模块在用）：把档位声明在对象上
-（`UIViewBase.UpdateLod`，Inspector 可配、运行时可改），由上层管理器按档位分桶、每档注册一个
+（`UIViewBase.UpdateTier`，Inspector 可配、运行时可改），由上层管理器按档位分桶、每档注册一个
 驱动器承载整桶——调度器只看到「每档一个节点」，档位与对象解耦。
 
 ### 派发时机与驱动

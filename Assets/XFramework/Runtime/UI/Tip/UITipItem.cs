@@ -8,7 +8,7 @@ namespace XFramework.XUI
     /// <para>由 <see cref="UITipManagerImpl"/> 管理生命周期：<see cref="Begin"/> 设置内容，
     /// 之后由管理器在每帧通路里调用 <see cref="Tick"/> 推进动画，播完由管理器回池。</para>
     /// <para><b>不自行驱动帧</b>：早先本类跑一个 <c>UniTask.Yield</c> 自循环并读 <c>Time.deltaTime</c>，
-    /// 于是 Tip 既不受 <c>UpdateManager.Pause</c> 约束、也不进 LOD 调度——那是 UI 模块内最后一条
+    /// 于是 Tip 既不受 <c>UpdateManager.Pause</c> 约束、也不进档位调度——那是 UI 模块内最后一条
     /// 绕过统一调度的帧通路。</para>
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
@@ -120,7 +120,7 @@ namespace XFramework.XUI
         /// 推进一帧。
         /// </summary>
         /// <param name="deltaTime">距上次派发的间隔。由驱动方给出，<b>不是 <c>Time.deltaTime</c></b>
-        /// ——Tip 随面板一同受 LOD 与统一暂停调度，两者可能相差若干倍。</param>
+        /// ——Tip 随面板一同受档位与统一暂停调度，两者可能相差若干倍。</param>
         /// <returns>播放完毕返回 true，此时管理器应回收本实例。</returns>
         public bool Tick(float deltaTime)
         {

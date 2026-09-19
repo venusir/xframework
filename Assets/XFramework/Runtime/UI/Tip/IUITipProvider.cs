@@ -29,7 +29,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 由 <see cref="UIManager.Update"/> 调用，驱动所有在播 Tip 的每帧推进。
-        /// <para>于是 Tip 与面板、HUD 共用同一条帧通路：可被 LOD 降频、被
+        /// <para>于是 Tip 与面板、HUD 共用同一条帧通路：可被档位降频、被
         /// <c>UpdateManager.Pause</c> 统一暂停。</para>
         /// </summary>
         /// <param name="deltaTime">距上次派发的间隔。</param>
