@@ -12,7 +12,7 @@ namespace XFramework.XUpdate.Tests
         public int OnEnableCallCount { get; set; }
         public int OnDisableCallCount { get; set; }
         public int OnUpdateCallCount { get; set; }
-        public UpdateLOD ReturnLOD { get; set; } = UpdateLOD.Tier0;
+        public UpdateTier ReturnTier { get; set; } = UpdateTier.Tier0;
         public bool ThrowException { get; set; }
         public List<float> DeltaTimes { get; } = new List<float>(4);
         public List<float> Times { get; } = new List<float>(4);
@@ -20,14 +20,14 @@ namespace XFramework.XUpdate.Tests
         public void OnEnable() => OnEnableCallCount++;
         public void OnDisable() => OnDisableCallCount++;
 
-        public UpdateLOD OnUpdate(float deltaTime, float time)
+        public UpdateTier OnUpdate(float deltaTime, float time)
         {
             OnUpdateCallCount++;
             DeltaTimes.Add(deltaTime);
             Times.Add(time);
             if (ThrowException)
                 throw new System.Exception("Test exception");
-            return ReturnLOD;
+            return ReturnTier;
         }
 
         public void Reset()
@@ -35,7 +35,7 @@ namespace XFramework.XUpdate.Tests
             OnEnableCallCount = 0;
             OnDisableCallCount = 0;
             OnUpdateCallCount = 0;
-            ReturnLOD = UpdateLOD.Tier0;
+            ReturnTier = UpdateTier.Tier0;
             ThrowException = false;
             DeltaTimes.Clear();
             Times.Clear();
@@ -111,7 +111,7 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Register(_node, depth: 0);
 
             // _node 返回 Tier5：本次 Tick 里它会被迁到 Tier5 桶（也走 pending 路径）
-            _node.ReturnLOD = UpdateLOD.Tier5;
+            _node.ReturnTier = UpdateTier.Tier5;
 
             // registrator 在自己的 OnUpdate 里注册 lateNode——此时调度器正在迭代，该注册应被缓冲
             var registrator = new RegistratorNode(_scheduler, lateNode, depth: 1);
@@ -121,8 +121,8 @@ namespace XFramework.XUpdate.Tests
 
             // 缓冲的操作在 Tick 结束时统一生效：
             // 桶 0 = [registrator, lateNode]（lateNode 用默认 Tier0 注册），桶 5 = [_node]
-            Assert.AreEqual(3, _scheduler.TotalCount, "Tick 期间发起的注册与 LOD 迁移都应在结束时生效");
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier5), "_node 返回 Tier5 后应已迁入该桶");
+            Assert.AreEqual(3, _scheduler.TotalCount, "Tick 期间发起的注册与档位迁移都应在结束时生效");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier5), "_node 返回 Tier5 后应已迁入该桶");
             Assert.AreEqual(1, registrator.OnUpdateCallCount);
             Assert.AreEqual(0, lateNode.OnUpdateCallCount,
                 "被缓冲意味着本帧不派发——这正是「缓冲」而非「立即生效」的意义所在");
@@ -154,16 +154,16 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void UnregisterSelf_WhileMigrating_StaysUnregistered()
         {
-            // 同一帧内既迁移 LOD 又注销自己。旧实现把两者各拆成一条 remove + 一条 add，
+            // 同一帧内既迁移档位又注销自己。旧实现把两者各拆成一条 remove + 一条 add，
             // flush 又是「先全部 remove 再全部 add」，于是注销完又被插进新桶——永久复活
-            var node = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Tier3 };
+            var node = new ScriptedNode(_scheduler) { NextTier = UpdateTier.Tier3 };
             node.Script = (scheduler, self) => scheduler.Unregister(self);
             _scheduler.Register(node, depth: 0);
 
             _scheduler.Tick(time: 1.0f);
 
             Assert.AreEqual(0, _scheduler.TotalCount, "注销后不应残留任何条目");
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3), "迁移必须作废，不能把节点插进新桶");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3), "迁移必须作废，不能把节点插进新桶");
 
             _scheduler.Tick(time: 2.0f);
             Assert.AreEqual(1, node.OnUpdateCallCount, "注销后不应再被派发");
@@ -172,7 +172,7 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void UnregisterByOther_AfterTargetDispatched_MoveIsDiscarded()
         {
-            var target = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
+            var target = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
             var unregistrator = new ScriptedNode(_scheduler);
             unregistrator.Script = (scheduler, self) => scheduler.Unregister(target);
 
@@ -184,7 +184,7 @@ namespace XFramework.XUpdate.Tests
 
             Assert.AreEqual(1, target.OnUpdateCallCount, "注销被缓冲，目标本帧仍应被派发一次");
             Assert.AreEqual(1, _scheduler.TotalCount, "只剩 unregistrator");
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3), "迁移必须作废");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3), "迁移必须作废");
 
             _scheduler.Tick(time: 2.0f);
             Assert.AreEqual(1, target.OnUpdateCallCount, "注销已生效，不再派发");
@@ -218,7 +218,7 @@ namespace XFramework.XUpdate.Tests
             node.Script = (scheduler, self) =>
             {
                 scheduler.Unregister(self);
-                scheduler.Register(self, depth: 0, initialLOD: UpdateLOD.Tier2);
+                scheduler.Register(self, depth: 0, initialTier: UpdateTier.Tier2);
             };
             _scheduler.Register(node, depth: 0);
 
@@ -226,7 +226,7 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Tick(time += FrameSeconds);
 
             Assert.AreEqual(1, _scheduler.TotalCount, "先注销再注册应恰好剩一条");
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier2), "重新注册应使用新的 LOD");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier2), "重新注册应使用新的档位");
 
             // Tier2 桶每 4 格才轮到一次切片：两份条目会在四格内各派发一次，一份只派发一次
             _scheduler.Tick(time += FrameSeconds);
@@ -239,8 +239,8 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void DisableSelf_WhileMigrating_StaysDisabled()
         {
-            // 同一帧内既迁移 LOD 又禁用自己：迁移是条件操作，节点已被移入禁用表后必须作废
-            var node = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Tier3 };
+            // 同一帧内既迁移档位又禁用自己：迁移是条件操作，节点已被移入禁用表后必须作废
+            var node = new ScriptedNode(_scheduler) { NextTier = UpdateTier.Tier3 };
             node.Script = (scheduler, self) => scheduler.Disable(self);
             _scheduler.Register(node, depth: 0);
 
@@ -250,7 +250,7 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(1, _scheduler.DisabledCount);
             Assert.IsFalse(_scheduler.IsEnabled(node));
             Assert.AreEqual(1, node.OnDisableCallCount);
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3),
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3),
                 "迁移必须作废，不能把禁用中的节点插进新桶");
 
             _scheduler.Tick(time: 2.0f);
@@ -394,7 +394,7 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Tick(time: 1.0f);
 
             Assert.AreEqual(1, _scheduler.TotalCount, "只剩 a：late 应在禁用表里而不是桶里");
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier0), "桶里只有 a 一个");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier0), "桶里只有 a 一个");
             Assert.AreEqual(1, _scheduler.DisabledCount);
             Assert.IsFalse(_scheduler.IsEnabled(late));
             Assert.AreEqual(1, late.OnDisableCallCount, "即使目标是当帧新注册的，OnDisable 也必须触发");
@@ -458,9 +458,9 @@ namespace XFramework.XUpdate.Tests
         public void ClearDuringTick_DoesNotThrow()
         {
             // 切片分支在进入本帧时缓存了 count/end：就地把表清空会让随后的写回越界
-            var node = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Tier1 };
+            var node = new ScriptedNode(_scheduler) { NextTier = UpdateTier.Tier1 };
             node.Script = (scheduler, self) => scheduler.Clear();
-            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier1);
+            _scheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier1);
 
             Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f));
             Assert.AreEqual(0, _scheduler.TotalCount, "清空在帧末生效");
@@ -495,7 +495,7 @@ namespace XFramework.XUpdate.Tests
         {
             // 旧实现按缓存的 index 先 RemoveAt 再插新桶：删掉的是顶替上来的 b，
             // 而已被注销的 a 反被插进新桶
-            var a = new ScriptedNode(_scheduler) { NextLOD = UpdateLOD.Tier3 };
+            var a = new ScriptedNode(_scheduler) { NextTier = UpdateTier.Tier3 };
             var b = new TestUpdateable();
             a.Script = (scheduler, self) => scheduler.Unregister(self);
 
@@ -505,8 +505,8 @@ namespace XFramework.XUpdate.Tests
             _scheduler.ProcessImmediate(a, deltaTime: 0.5f, time: 1.0f);
 
             Assert.AreEqual(1, _scheduler.TotalCount, "只剩 b");
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier0), "b 仍在原桶");
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3), "迁移必须作废");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier0), "b 仍在原桶");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3), "迁移必须作废");
 
             _scheduler.Tick(time: 2.0f);
             Assert.AreEqual(1, b.OnUpdateCallCount);
@@ -537,8 +537,8 @@ namespace XFramework.XUpdate.Tests
             var nodes = new TestUpdateable[nodeCount];
             for (int i = 0; i < nodeCount; i++)
             {
-                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-                _scheduler.Register(nodes[i], depth: 0, initialLOD: UpdateLOD.Tier3);
+                nodes[i] = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+                _scheduler.Register(nodes[i], depth: 0, initialTier: UpdateTier.Tier3);
             }
 
             var perFrame = new int[8];
@@ -583,7 +583,7 @@ namespace XFramework.XUpdate.Tests
             // 簇的形状：24,23,22,20,20... 与 7,0,1,0,2,0,1,0,3,0...——切片相位由桶内下标决定，
             // 而所有档位共用同一个 tickIndex，2 的幂互相整除，于是各档位的「下标 0」都在同一格命中。
             //
-            // 已实测并否决的修法：给每档加相位偏移（(tickIndex + lod) & mask）只能把混合峰从 24
+            // 已实测并否决的修法：给每档加相位偏移（(tickIndex + tier) & mask）只能把混合峰从 24
             // 降到 22（+4 → +2 次派发）、稀疏峰从 7 降到 2，即最坏帧多跑约 2~5 次回调、每 2.13 秒
             // 一次（几十 ns 量级）；而代价是「首帧落在切片 0」这条相位规律与若干钉相位的用例。
             // 叠束的绝对量本就被桶数上界（轴 × 档位 ≤ 16）封住，不值得为它动相位
@@ -605,13 +605,13 @@ namespace XFramework.XUpdate.Tests
             var scheduler = new UpdateScheduler();
             var nodes = new List<TestUpdateable>();
 
-            for (int lod = 1; lod <= countPerTier.Length; lod++)
+            for (int tier = 1; tier <= countPerTier.Length; tier++)
             {
-                for (int i = 0; i < countPerTier[lod - 1]; i++)
+                for (int i = 0; i < countPerTier[tier - 1]; i++)
                 {
-                    var node = new TestUpdateable { ReturnLOD = (UpdateLOD)lod };
+                    var node = new TestUpdateable { ReturnTier = (UpdateTier)tier };
                     nodes.Add(node);
-                    scheduler.Register(node, depth: 0, initialLOD: (UpdateLOD)lod);
+                    scheduler.Register(node, depth: 0, initialTier: (UpdateTier)tier);
                 }
             }
 
@@ -661,8 +661,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 降频不导致时间失真：被跳过的帧应累积进下一次的 deltaTime——这是本调度器
             // 相对「固定步长 + 累加器」方案的核心取舍，此前零覆盖
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+            _scheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier3);
 
             float time = 0f;
             for (int frame = 0; frame < 8; frame++)
@@ -694,8 +694,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 重复注册视为「重新注册」：两条条目会让同一节点每帧被派发两次，
             // 而且单值桶索引表达不了「分处两个桶」，注销时会漏删
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier0);
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier0);
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier0);
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier0);
 
             Assert.AreEqual(1, _scheduler.TotalCount);
 
@@ -707,28 +707,28 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void RegisterTwice_DifferentLOD_MovesToLatestBucket()
+        public void RegisterTwice_DifferentTier_MovesToLatestBucket()
         {
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier3);
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier1);
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier3);
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier1);
 
             Assert.AreEqual(1, _scheduler.TotalCount);
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3), "旧桶不应残留条目");
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier1));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3), "旧桶不应残留条目");
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier1));
         }
 
         [Test]
-        public void BucketIndex_StaysConsistentUnderLodChurn()
+        public void BucketIndex_StaysConsistentUnderTierChurn()
         {
             // 桶索引只在 ApplyOp 一处维护：任何一条路径漏写，后续的迁移/禁用/注销就会找不到节点。
             // 先制造持续的迁桶抖动，再逐一对全部节点做禁用/启用/注销——索引一旦与桶内容脱节，
             // 这些操作就会「找不到人」，表现为计数不减（幽灵条目）或启用后回不来
             const int nodeCount = 50;
-            var nodes = new CyclingLodNode[nodeCount];
+            var nodes = new CyclingTierNode[nodeCount];
             for (int i = 0; i < nodeCount; i++)
             {
-                nodes[i] = new CyclingLodNode(i);
-                _scheduler.Register(nodes[i], depth: i % 3, initialLOD: UpdateLOD.Tier0);
+                nodes[i] = new CyclingTierNode(i);
+                _scheduler.Register(nodes[i], depth: i % 3, initialTier: UpdateTier.Tier0);
             }
 
             float time = 0f;
@@ -769,8 +769,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 墙钟轴的节点必须拿到 unscaled 的时间基：暂停时逻辑时间冻结而墙钟继续走，
             // 用错轴就等于「暂停期间仍应运行」的逻辑在暂停期间停摆
-            var scaled = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
-            var unscaled = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var scaled = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
+            var unscaled = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
 
             _scheduler.Register(scaled, depth: 0);
             _scheduler.Register(unscaled, depth: 0, timeMode: UpdateTimeMode.Unscaled);
@@ -789,12 +789,12 @@ namespace XFramework.XUpdate.Tests
         public void ScaledAndUnscaled_AggregateInQueries()
         {
             // 两条轴分开存桶，但对外查询应是合计——否则调用方统计注册量时会漏掉一条轴
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier2);
-            _scheduler.Register(new TestUpdateable(), depth: 0, initialLOD: UpdateLOD.Tier2,
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier2);
+            _scheduler.Register(new TestUpdateable(), depth: 0, initialTier: UpdateTier.Tier2,
                 timeMode: UpdateTimeMode.Unscaled);
 
             Assert.AreEqual(2, _scheduler.TotalCount);
-            Assert.AreEqual(2, _scheduler.GetCount(UpdateLOD.Tier2), "查询应跨时间轴聚合");
+            Assert.AreEqual(2, _scheduler.GetCount(UpdateTier.Tier2), "查询应跨时间轴聚合");
         }
 
         [Test]
@@ -802,8 +802,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 每条轴有独立的节拍与切片相位：墙钟轴的周期由它自己推进，
             // 逻辑时刻在本用例里全程不动
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3,
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+            _scheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier3,
                 timeMode: UpdateTimeMode.Unscaled);
 
             float unscaled = 0f;
@@ -830,8 +830,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 暂停期间若照常推进节拍格，恢复后切片相位已经漂移：长周期节点会白丢一轮——
             // Tier5 在 60fps 下意味着半秒多的空窗
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier2 };
-            _scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier2);
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier2 };
+            _scheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier2);
 
             float time = 0f;
             _scheduler.Tick(time += FrameSeconds);
@@ -864,7 +864,7 @@ namespace XFramework.XUpdate.Tests
         {
             // 显式 Pause 不改动 Unity 时间：恢复时若不重锚，节点会拿到「整段暂停时长」的
             // delta 并试图一次补完。本调度器刻意不追赶——恢复后第一帧 delta 为 0
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
             _scheduler.Register(node, depth: 0);
 
             _scheduler.Tick(time: 1.0f);
@@ -893,7 +893,7 @@ namespace XFramework.XUpdate.Tests
         {
             // Resume 应当幂等：没暂停过就没有「整段暂停时长」需要抹掉。否则「重复调用 Resume」
             // 这种无害写法会白丢一帧——重锚把每个条目的时间基准推到当前时刻，那次派发的 delta 成 0
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
             _scheduler.Register(node, depth: 0);
 
             _scheduler.Tick(time: 1.0f);
@@ -912,8 +912,8 @@ namespace XFramework.XUpdate.Tests
         {
             // timeScale = 0 时 Time.time 冻结、Time.unscaledTime 照走：
             // 逻辑轴停摆，墙钟轴（暂停菜单、UI 动画、振动到期）继续运行
-            var scaled = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
-            var unscaled = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var scaled = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
+            var unscaled = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
             _scheduler.Register(scaled, depth: 0);
             _scheduler.Register(unscaled, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
@@ -942,10 +942,10 @@ namespace XFramework.XUpdate.Tests
             // 同样 32 帧里墙钟轴走了 32 格、逻辑轴只走了 16 格，于是同为 Tier3 的两个节点
             // 分别轮到 4 次与 2 次。这是「时间语义」的直接体现——旧实现按帧计数，两边都是
             // 「每 8 帧一次」，节流强度与 timeScale 无关
-            var scaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            var unscaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            _scheduler.Register(scaledNode, depth: 0, initialLOD: UpdateLOD.Tier3);
-            _scheduler.Register(unscaledNode, depth: 1, initialLOD: UpdateLOD.Tier3,
+            var scaledNode = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+            var unscaledNode = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+            _scheduler.Register(scaledNode, depth: 0, initialTier: UpdateTier.Tier3);
+            _scheduler.Register(unscaledNode, depth: 1, initialTier: UpdateTier.Tier3,
                 timeMode: UpdateTimeMode.Unscaled);
 
             // 逻辑轴每帧走半格、墙钟轴每帧走一格（同一个 timeScale = 0.5 的两侧）
@@ -975,8 +975,8 @@ namespace XFramework.XUpdate.Tests
         {
             // 旧实现按帧计节拍：144fps 下 8 个切片 = 8 帧 = 55ms，比设计意图勤 2.4 倍。
             // 新节拍按时间走，约 1 秒（60 格）里应当只轮到 8 次——与 60fps 下等长
-            _node.ReturnLOD = UpdateLOD.Tier3;
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier3);
+            _node.ReturnTier = UpdateTier.Tier3;
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier3);
 
             float step = FrameSeconds * (60f / 144f);   // 约 1/144 秒一帧
             float time = 0f;
@@ -1051,9 +1051,9 @@ namespace XFramework.XUpdate.Tests
             // 每帧会补多格，档位次序就可能反转：20fps 下每帧恰好 3 格，Tier1（2 格一轮）于是
             // 每帧被轮到约 1.5 次，比 Tier0 的每帧一次还频繁。梯子在最吃紧的设备上倒挂
             var tier0 = new TestUpdateable();
-            var tier1 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier1 };
+            var tier1 = new TestUpdateable { ReturnTier = UpdateTier.Tier1 };
             _scheduler.Register(tier0, depth: 0);
-            _scheduler.Register(tier1, depth: 1, initialLOD: UpdateLOD.Tier1);
+            _scheduler.Register(tier1, depth: 1, initialTier: UpdateTier.Tier1);
 
             const float slowFrameSeconds = 1f / 20f;    // 恰好 3 格
             float time = 0f;
@@ -1076,8 +1076,8 @@ namespace XFramework.XUpdate.Tests
             var nodes = new TestUpdateable[4];          // 下标 0~3，两种切片相位都覆盖
             for (int i = 0; i < nodes.Length; i++)
             {
-                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Tier1 };
-                _scheduler.Register(nodes[i], depth: i, initialLOD: UpdateLOD.Tier1);
+                nodes[i] = new TestUpdateable { ReturnTier = UpdateTier.Tier1 };
+                _scheduler.Register(nodes[i], depth: i, initialTier: UpdateTier.Tier1);
             }
 
             float time = 0f;
@@ -1165,8 +1165,8 @@ namespace XFramework.XUpdate.Tests
             // 固定步长本就等长（默认 0.02s），没有漂移可修；若共用墙钟累加器，50Hz 的固定步
             // 会被派成 60Hz 的节奏（每 5 步出现一次 2 格），「每 2^k 个固定步」的语义随之改变
             var fixedScheduler = new UpdateScheduler(UpdateTiming.FixedUpdate);
-            var node = new FixedUpdateNode { NextLOD = UpdateLOD.Tier3 };
-            fixedScheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+            var node = new FixedUpdateNode { NextTier = UpdateTier.Tier3 };
+            fixedScheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier3);
 
             float time = 0f;
             for (int i = 0; i < 8; i++)
@@ -1261,8 +1261,8 @@ namespace XFramework.XUpdate.Tests
             // 注册时不该由调度器自己去猜「现在几点」：驱动方给的时间轴未必是 Unity 的 Time.time
             // （测试与确定性回放都自带时刻），而 timeScale != 1 时墙钟轴与逻辑时间还差着截距。
             // 猜错就是一次成片的假 delta——两个轴都用远大于真实 Time.time 的时刻来暴露它
-            var scaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
-            var unscaledNode = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var scaledNode = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
+            var unscaledNode = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
 
             _scheduler.Tick(new UpdateClock(time: 100f, unscaledTime: 10000f));   // 首帧只锚定
             _scheduler.Register(scaledNode, depth: 0);
@@ -1301,10 +1301,10 @@ namespace XFramework.XUpdate.Tests
         {
             // 长周期档位让「每秒一次」这类需求能直接表达：旧阶梯封顶在 32 格，而它在 30fps 下
             // 是 1.07 秒、144fps 下只有 222ms，两头都不是作者想要的那个时长
-            var tier6 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier6 };
-            var tier7 = new TestUpdateable { ReturnLOD = UpdateLOD.Tier7 };
-            _scheduler.Register(tier6, depth: 0, initialLOD: UpdateLOD.Tier6);
-            _scheduler.Register(tier7, depth: 1, initialLOD: UpdateLOD.Tier7);
+            var tier6 = new TestUpdateable { ReturnTier = UpdateTier.Tier6 };
+            var tier7 = new TestUpdateable { ReturnTier = UpdateTier.Tier7 };
+            _scheduler.Register(tier6, depth: 0, initialTier: UpdateTier.Tier6);
+            _scheduler.Register(tier7, depth: 1, initialTier: UpdateTier.Tier7);
 
             float time = 0f;
             for (int i = 0; i < 128; i++)
@@ -1316,8 +1316,8 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(2, tier6.OnUpdateCallCount, "Tier6 每 64 格轮到一次");
             Assert.AreEqual(1, tier7.OnUpdateCallCount, "Tier7 每 128 格轮到一次");
 
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier6));
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier7));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier6));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier7));
         }
 
         /// <summary>
@@ -1329,8 +1329,8 @@ namespace XFramework.XUpdate.Tests
             var nodes = new TestUpdateable[32];
             for (int i = 0; i < nodes.Length; i++)
             {
-                nodes[i] = new TestUpdateable { ReturnLOD = UpdateLOD.Tier5 };
-                _scheduler.Register(nodes[i], depth: 0, initialLOD: UpdateLOD.Tier5);
+                nodes[i] = new TestUpdateable { ReturnTier = UpdateTier.Tier5 };
+                _scheduler.Register(nodes[i], depth: 0, initialTier: UpdateTier.Tier5);
             }
             return nodes;
         }
@@ -1354,8 +1354,8 @@ namespace XFramework.XUpdate.Tests
         private static int CountDispatchesInOneSecond(int fps)
         {
             var scheduler = new UpdateScheduler();
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier3 };
-            scheduler.Register(node, depth: 0, initialLOD: UpdateLOD.Tier3);
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier3 };
+            scheduler.Register(node, depth: 0, initialTier: UpdateTier.Tier3);
 
             float step = FrameSeconds * (60f / fps);
             float time = 0f;
@@ -1375,7 +1375,7 @@ namespace XFramework.XUpdate.Tests
         {
             // timeScale < 0（倒放）时 Time.time 会倒着走：负 delta 会让
             // 「位置 += 速度 × delta」反向积分
-            var node = new TestUpdateable { ReturnLOD = UpdateLOD.Tier0 };
+            var node = new TestUpdateable { ReturnTier = UpdateTier.Tier0 };
             _scheduler.Register(node, depth: 0);
 
             _scheduler.Tick(time: 5.0f);
@@ -1403,18 +1403,18 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void OnUpdate_ReturnsDifferentLOD_MovesBucket()
+        public void OnUpdate_ReturnsDifferentTier_MovesBucket()
         {
             _scheduler.Register(_node, depth: 0);
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier0));
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier3));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier0));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier3));
 
-            // Move to LOD Tier3
-            _node.ReturnLOD = UpdateLOD.Tier3;
+            // Move to Tier3
+            _node.ReturnTier = UpdateTier.Tier3;
             _scheduler.Tick(time: 1.0f);
 
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier0));
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier3));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier3));
         }
 
         [Test]
@@ -1469,18 +1469,18 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void ProcessImmediate_ExecutesAndAdjustsLOD()
+        public void ProcessImmediate_ExecutesAndAdjustsTier()
         {
             _scheduler.Register(_node, depth: 0);
-            _node.ReturnLOD = UpdateLOD.Tier4;
+            _node.ReturnTier = UpdateTier.Tier4;
 
             _scheduler.ProcessImmediate(_node, deltaTime: 0.5f, time: 10.0f);
 
             Assert.AreEqual(1, _node.OnUpdateCallCount);
             Assert.AreEqual(0.5f, _node.DeltaTimes[0], 1e-6f);
             Assert.AreEqual(10.0f, _node.Times[0], 1e-6f);
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier4));
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier0));
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier4));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0));
         }
 
         [Test]
@@ -1541,21 +1541,21 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void GetCount_ReturnsCorrectCount()
         {
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier0));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0));
 
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier0);
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier0));
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier0);
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier0));
 
-            _scheduler.Register(new TestUpdateable(), depth: 0, initialLOD: UpdateLOD.Tier3);
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier3));
+            _scheduler.Register(new TestUpdateable(), depth: 0, initialTier: UpdateTier.Tier3);
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier3));
         }
 
         [Test]
-        public void Register_WithInitialLOD_UsesCorrectBucket()
+        public void Register_WithInitialTier_UsesCorrectBucket()
         {
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier5);
-            Assert.AreEqual(1, _scheduler.GetCount(UpdateLOD.Tier5));
-            Assert.AreEqual(0, _scheduler.GetCount(UpdateLOD.Tier0));
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier5);
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier5));
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0));
         }
 
         [Test]
@@ -1583,13 +1583,13 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
-        public void TotalCount_ReturnsSumOfAllLODs()
+        public void TotalCount_ReturnsSumOfAllTiers()
         {
             Assert.AreEqual(0, _scheduler.TotalCount);
 
-            _scheduler.Register(_node, depth: 0, initialLOD: UpdateLOD.Tier0);
-            _scheduler.Register(new TestUpdateable(), depth: 0, initialLOD: UpdateLOD.Tier1);
-            _scheduler.Register(new TestUpdateable(), depth: 0, initialLOD: UpdateLOD.Tier3);
+            _scheduler.Register(_node, depth: 0, initialTier: UpdateTier.Tier0);
+            _scheduler.Register(new TestUpdateable(), depth: 0, initialTier: UpdateTier.Tier1);
+            _scheduler.Register(new TestUpdateable(), depth: 0, initialTier: UpdateTier.Tier3);
 
             Assert.AreEqual(3, _scheduler.TotalCount);
         }
@@ -1616,7 +1616,7 @@ namespace XFramework.XUpdate.Tests
             public void OnEnable() { }
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
                 if (!_hasRegistered)
@@ -1624,7 +1624,7 @@ namespace XFramework.XUpdate.Tests
                     _hasRegistered = true;
                     _scheduler.Register(_target, _depth);
                 }
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
@@ -1648,7 +1648,7 @@ namespace XFramework.XUpdate.Tests
             public void OnEnable() { }
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
                 if (!_hasUnregistered)
@@ -1656,7 +1656,7 @@ namespace XFramework.XUpdate.Tests
                     _hasUnregistered = true;
                     _scheduler.Unregister(_target);
                 }
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
@@ -1666,7 +1666,7 @@ namespace XFramework.XUpdate.Tests
         private sealed class FixedUpdateNode : IUpdateable, IFixedUpdateable
         {
             /// <summary>下一次派发返回的档位。默认 Tier0，即留在每帧桶。</summary>
-            public UpdateLOD NextLOD { get; set; } = UpdateLOD.Tier0;
+            public UpdateTier NextTier { get; set; } = UpdateTier.Tier0;
 
             public int OnUpdateCallCount { get; private set; }
             public int OnFixedUpdateCallCount { get; private set; }
@@ -1675,33 +1675,33 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
 
-            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 OnFixedUpdateCallCount++;
-                return NextLOD;
+                return NextTier;
             }
         }
 
         /// <summary>
-        /// 每次派发都换一个 LOD 的测试替身，用于制造持续的迁桶抖动。
+        /// 每次派发都换一个档位的测试替身，用于制造持续的迁桶抖动。
         /// </summary>
-        private sealed class CyclingLodNode : IUpdateable
+        private sealed class CyclingTierNode : IUpdateable
         {
-            private static readonly UpdateLOD[] Cycle =
+            private static readonly UpdateTier[] Cycle =
             {
-                UpdateLOD.Tier0, UpdateLOD.Tier1, UpdateLOD.Tier2, UpdateLOD.Tier3,
+                UpdateTier.Tier0, UpdateTier.Tier1, UpdateTier.Tier2, UpdateTier.Tier3,
             };
 
             private readonly int _offset;
             private int _calls;
 
-            public CyclingLodNode(int offset)
+            public CyclingTierNode(int offset)
             {
                 _offset = offset;
             }
@@ -1710,7 +1710,7 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 _calls++;
                 return Cycle[(_offset + _calls) % Cycle.Length];
@@ -1726,7 +1726,7 @@ namespace XFramework.XUpdate.Tests
             private readonly UpdateScheduler _scheduler;
             private bool _hasRunScript;
 
-            public UpdateLOD NextLOD { get; set; } = UpdateLOD.Tier0;
+            public UpdateTier NextTier { get; set; } = UpdateTier.Tier0;
             public System.Action<UpdateScheduler, IUpdateable> Script { get; set; }
             public int OnUpdateCallCount { get; private set; }
             public int OnEnableCallCount { get; private set; }
@@ -1741,7 +1741,7 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() => OnDisableCallCount++;
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 OnUpdateCallCount++;
                 if (!_hasRunScript)
@@ -1749,7 +1749,7 @@ namespace XFramework.XUpdate.Tests
                     _hasRunScript = true;
                     Script?.Invoke(_scheduler, this);
                 }
-                return NextLOD;
+                return NextTier;
             }
         }
     }

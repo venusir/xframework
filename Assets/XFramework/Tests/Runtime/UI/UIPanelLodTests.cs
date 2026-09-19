@@ -60,12 +60,12 @@ namespace XFramework.XUI.Tests
         public async Task OpenTier2Panel_RegistersTier2Driver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateLOD.Tier2;
+            panel.UpdateLod = UpdateTier.Tier2;
 
             UpdateManager.Tick(0.016f);
 
-            Assert.AreEqual(1, UpdateManager.GetCount(UpdateLOD.Tier0), "每帧驱动器常驻（还承载 HUD）");
-            Assert.AreEqual(1, UpdateManager.GetCount(UpdateLOD.Tier2), "出现该档面板后应注册对应驱动器");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), "每帧驱动器常驻（还承载 HUD）");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier2), "出现该档面板后应注册对应驱动器");
             Assert.AreEqual(2, UpdateManager.TotalCount);
         }
 
@@ -73,14 +73,14 @@ namespace XFramework.XUI.Tests
         public async Task CloseTier2Panel_UnregistersTier2Driver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateLOD.Tier2;
+            panel.UpdateLod = UpdateTier.Tier2;
             UpdateManager.Tick(0.016f);
             Assert.AreEqual(2, UpdateManager.TotalCount, "前置条件：该档驱动器已注册");
 
             await UIManager.Panel.CloseAsync<UpdateRecordingPanel>();
             UpdateManager.Tick(0.032f);
 
-            Assert.AreEqual(0, UpdateManager.GetCount(UpdateLOD.Tier2), "该档没面板后应注销");
+            Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier2), "该档没面板后应注销");
             Assert.AreEqual(1, UpdateManager.TotalCount, "不应留下悬挂驱动器");
         }
 
@@ -88,14 +88,14 @@ namespace XFramework.XUI.Tests
         public async Task RuntimeLodChange_BackToTier0_UnregistersSlicedDriver()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateLOD.Tier3;
+            panel.UpdateLod = UpdateTier.Tier3;
             UpdateManager.Tick(0.016f);
-            Assert.AreEqual(1, UpdateManager.GetCount(UpdateLOD.Tier3), "前置条件：Tier3 驱动器已注册");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier3), "前置条件：Tier3 驱动器已注册");
 
-            panel.UpdateLod = UpdateLOD.Tier0;
+            panel.UpdateLod = UpdateTier.Tier0;
             UpdateManager.Tick(0.032f);
 
-            Assert.AreEqual(0, UpdateManager.GetCount(UpdateLOD.Tier3), "改回每帧档后应注销");
+            Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier3), "改回每帧档后应注销");
             Assert.AreEqual(1, UpdateManager.TotalCount);
         }
 
@@ -107,7 +107,7 @@ namespace XFramework.XUI.Tests
         public async Task Tier2Panel_DrivenLessOften_WithAccumulatedDelta()
         {
             var panel = await UIManager.Panel.OpenAsync<UpdateRecordingPanel>("ui/a");
-            panel.UpdateLod = UpdateLOD.Tier2;
+            panel.UpdateLod = UpdateTier.Tier2;
 
             const int steps = 20;
             for (int i = 0; i <= steps; i++)

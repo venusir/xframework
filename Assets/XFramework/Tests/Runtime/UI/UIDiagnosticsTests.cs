@@ -124,7 +124,7 @@ namespace XFramework.XUI.Tests
         public async Task DumpState_ContainsPerPanelDetails()
         {
             var panel = await UIManager.Panel.OpenAsync<FakePanelB>("ui/a", UILayers.Popup);
-            panel.UpdateLod = UpdateLOD.Tier2;
+            panel.UpdateLod = UpdateTier.Tier2;
 
             string dump = UIManager.Diagnostic.DumpState();
 

@@ -6,7 +6,7 @@ Update 模块提供统一的更新调度服务，管理任意对象（静态服�
 
 - **三个派发时机**：`Update` / `LateUpdate` / `FixedUpdate`，各自一套调度器
 - **两条时间轴**：逻辑时间（受 `timeScale`）与墙钟时间（不受影响）
-- **LOD 时间切片**：按档位把更新负载摊到各节拍格上（一格 = 1/60 秒），避免帧消耗集中
+- **档位时间切片**：按档位把更新负载摊到各节拍格上（一格 = 1/60 秒），避免帧消耗集中
 - **自动驱动**：注入 PlayerLoop，不需要场景里存在任何 MonoBehaviour
 
 **命名空间**: `XFramework.XUpdate`
@@ -16,9 +16,9 @@ Update 模块提供统一的更新调度服务，管理任意对象（静态服�
 ```
 Runtime/Update/
 ├── IUpdateable.cs                # 契约：IUpdateLifecycle / IUpdateable / ILateUpdateable /
-│                                 #       IFixedUpdateable / UpdateLOD
+│                                 #       IFixedUpdateable / UpdateTier
 ├── UpdateClock.cs                # 时间基：UpdateClock（time + unscaledTime + isPaused）/ UpdateTimeMode
-├── UpdateScheduler.cs            # 纯调度逻辑（LOD 分桶 + 时间切片 + 双时间轴），internal
+├── UpdateScheduler.cs            # 纯调度逻辑（档位分桶 + 时间切片 + 双时间轴），internal
 └── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）
 ```
 
@@ -36,17 +36,17 @@ public sealed class MyService : IUpdateable
     public MyService()
     {
         // 自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
-        UpdateManager.Register(this, depth: 0, initialLOD: UpdateLOD.Tier0);
+        UpdateManager.Register(this, depth: 0, initialTier: UpdateTier.Tier0);
     }
 
     public void OnEnable() { }
 
     public void OnDisable() { }
 
-    public UpdateLOD OnUpdate(float deltaTime, float time)
+    public UpdateTier OnUpdate(float deltaTime, float time)
     {
-        // 返回值决定「下一次派发」采用的 LOD 等级（不是当前这次）
-        return UpdateLOD.Tier0;
+        // 返回值决定「下一次派发」采用的档位（不是当前这次）
+        return UpdateTier.Tier0;
     }
 }
 ```
@@ -77,7 +77,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
 ## 机制说明
 
-### LOD 分级调度
+### 档位分级调度
 
 节拍按**时间**走：一格 = 1/60 秒（60Hz 基准），第 k 档的周期即 2^k 格。因此周期与帧率
 无关——`Tier3` 在 30fps 与 144fps 下都是约 133ms，不再随帧率缩放。
@@ -125,14 +125,14 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
 
 | 需求 | 通道 | 说明 |
 | --- | --- | --- |
-| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialLOD` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚 |
+| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialTier` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚 |
 | **运行时自适应** | `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate` 的返回值 | 状态变化时表达新档位，**决定下一次**派发（滞后一拍是设计如此） |
 
 框架自己两条都在用：`InputManager` 与 `UIManager` 的每帧驱动器恒返回 `Tier0`，而
 `SettingsAutoSaveTicker` 按状态在 `Tier3`（空闲）/ `Tier0`（热窗口）/ `Tier5`（已释放）之间切换。
 
 **外部策略目前没有入口**：「按可见性统一降档」「画质/性能档批量降档」这类由调度器之外的系统决定的
-档位，`UpdateManager` 没有对应 API（没有 `SetLOD`）。现有两条解法，各有代价：
+档位，`UpdateManager` 没有对应 API（没有 `SetTier`）。现有两条解法，各有代价：
 
 1. **节点自查全局状态，再用返回值表达**——等于把一条全局策略复制进 N 个节点，策略一改要改 N 处；
 2. **注销 + 以新档位重新注册**——代价是首次派发 `deltaTime = 0`（锚定规则），且最坏要等一个整周期
@@ -215,7 +215,7 @@ UpdateManager.Register(ticker, depth: 0, timeMode: UpdateTimeMode.Unscaled);
   「应补 3 格」而被砍掉，而截断只砍多、不补少
 - **不追赶**：暂停恢复后不补算暂停期间的逻辑
 - **`ProcessImmediate` 派发期间只重置时间基准**，不执行更新
-- **重新启用会回到 `Tier0` 桶**：桶号本身就是 LOD，条目移入禁用表时该信息已丢失
+- **重新启用会回到 `Tier0` 桶**：桶号本身就是档位，条目移入禁用表时该信息已丢失
 - **同时手动 `Tick` 且注入生效会派发两次**：注入生效时请只依赖自动驱动
 
 ## 依赖

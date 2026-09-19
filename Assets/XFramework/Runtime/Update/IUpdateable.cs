@@ -2,7 +2,7 @@ namespace XFramework.XUpdate
 {
 
     /// <summary>
-    /// 更新 LOD 档位，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
+    /// 更新档位，决定 <see cref="IUpdateable.OnUpdate(float)"/> 的调用频率。
     /// <para>档位越高，更新间隔越大，帧消耗越低。第 k 档的周期是 2^k 个<b>节拍格</b>，而一格
     /// 有多长取决于时机：变步长轴（Update / LateUpdate）按 60Hz 基准计，Tier1~Tier7 依次约为
     /// 33 / 67 / 133 / 267 / 533 / 1067 / 2133ms（Tier0 为每帧）；固定步轴每步一格，第 k 档即
@@ -12,7 +12,7 @@ namespace XFramework.XUpdate
     /// 线性拉长（宁可延长也不突发）；帧长达到 2 格（约 30fps 及以下）时 <c>Tier1</c> 与
     /// <c>Tier0</c> 同频——同一帧内不重复访问同一档位，详见 <c>Update/README.md</c>。</para>
     /// </summary>
-    public enum UpdateLOD
+    public enum UpdateTier
     {
         /// <summary>第 0 档：每帧更新（不切片）</summary>
         Tier0 = 0,
@@ -62,7 +62,7 @@ namespace XFramework.XUpdate
 
     /// <summary>
     /// 可更新接口。<see cref="UpdateTiming.Update"/> 时机的派发契约，由 <see cref="UpdateManager"/> 统一调度。
-    /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一次派发所采用的 <see cref="UpdateLOD"/> 等级。</para>
+    /// <para><see cref="OnUpdate(float, float)"/> 的返回值决定下一次派发所采用的 <see cref="UpdateTier"/> 等级。</para>
     /// <para>经 <see cref="UpdateManager.Disable(IUpdateLifecycle)"/> / <see cref="UpdateManager.Enable(IUpdateLifecycle)"/>
     /// 控制启用与禁用，禁用期间不会收到 <see cref="OnUpdate"/> 调用。</para>
     /// </summary>
@@ -70,20 +70,20 @@ namespace XFramework.XUpdate
     {
 
         /// <summary>
-        /// 执行更新并返回下一帧的 <see cref="UpdateLOD"/> 等级。
+        /// 执行更新并返回下一帧的 <see cref="UpdateTier"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次更新的时间差。</param>
         /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），可用于绝对时间计算。</param>
         /// <returns>下一帧的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
-        /// <c>initialLOD</c> 声明（两者的分工见 <c>Update/README.md</c> 的「档位由谁决定」）。</returns>
-        UpdateLOD OnUpdate(float deltaTime, float time);
+        /// <c>initialTier</c> 声明（两者的分工见 <c>Update/README.md</c> 的「档位由谁决定」）。</returns>
+        UpdateTier OnUpdate(float deltaTime, float time);
     }
 
     /// <summary>
     /// 固定步长更新接口。时机与 <c>MonoBehaviour.FixedUpdate</c> 一致：随 Unity 的固定步长走，
     /// <c>timeScale = 0</c> 时随之停摆。
     /// <para>适合与物理、确定性模拟相关的逻辑——它们需要固定的时间增量，而不是每帧变化的 delta。
-    /// 这里的时间基准是 <c>Time.fixedTime</c>，因此 <see cref="UpdateLOD"/> 的档位在此是
+    /// 这里的时间基准是 <c>Time.fixedTime</c>，因此 <see cref="UpdateTier"/> 的档位在此是
     /// 「每 2^k 个<b>固定步</b>」（默认 0.02s 一步）：固定步长本就等长，不存在需要修正的漂移，
     /// 故这一轴刻意不参与变步长轴的 60Hz 节拍。</para>
     /// <para><b>本轴的档位是「仿真频率」而非「采样频率」——降档后 deltaTime 仍然恒定</b>：
@@ -98,16 +98,16 @@ namespace XFramework.XUpdate
     public interface IFixedUpdateable : IUpdateLifecycle
     {
         /// <summary>
-        /// 执行固定步长更新并返回下一次派发所采用的 <see cref="UpdateLOD"/> 等级。
+        /// 执行固定步长更新并返回下一次派发所采用的 <see cref="UpdateTier"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次派发的时间差，恒为 <c>2^k × Time.fixedDeltaTime</c>
-        /// （k 即本节点当前的 <see cref="UpdateLOD"/> 等级）——档位不变则它是不变的固定增量，
+        /// （k 即本节点当前的 <see cref="UpdateTier"/> 等级）——档位不变则它是不变的固定增量，
         /// 而不是「若干个固定步的整数倍」这种随派发漂移的量。注册/重新启用后的首次派发按
         /// 锚定规则记 0（见 <c>Update/README.md</c>）。</param>
         /// <param name="fixedTime">当前固定步时间（<see cref="UnityEngine.Time.fixedTime"/>）。</param>
         /// <returns>下一次派发的更新频率等级（本轴上即仿真频率）——静态档位请在注册时用
-        /// <c>initialLOD</c> 声明。</returns>
-        UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime);
+        /// <c>initialTier</c> 声明。</returns>
+        UpdateTier OnFixedUpdate(float deltaTime, float fixedTime);
     }
 
     /// <summary>
@@ -120,12 +120,12 @@ namespace XFramework.XUpdate
     public interface ILateUpdateable : IUpdateLifecycle
     {
         /// <summary>
-        /// 执行延迟更新并返回下一次派发所采用的 <see cref="UpdateLOD"/> 等级。
+        /// 执行延迟更新并返回下一次派发所采用的 <see cref="UpdateTier"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次派发的时间差。</param>
         /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>）。</param>
         /// <returns>下一次派发的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
-        /// <c>initialLOD</c> 声明。</returns>
-        UpdateLOD OnLateUpdate(float deltaTime, float time);
+        /// <c>initialTier</c> 声明。</returns>
+        UpdateTier OnLateUpdate(float deltaTime, float time);
     }
 }

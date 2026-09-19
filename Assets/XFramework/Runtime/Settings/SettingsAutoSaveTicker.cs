@@ -44,11 +44,11 @@ namespace XFramework.XSettings
         public void OnDisable() { }
 
         /// <inheritdoc />
-        public UpdateLOD OnUpdate(float deltaTime, float time)
+        public UpdateTier OnUpdate(float deltaTime, float time)
         {
             // 释放后可能仍被调度一次(注销与当帧调度的竞态),此时直接退出
             if (_owner.IsDisposed)
-                return UpdateLOD.Tier5;
+                return UpdateTier.Tier5;
 
             var current = _owner.ChangeCount;
             if (current != _lastSeenChange)
@@ -59,21 +59,21 @@ namespace XFramework.XSettings
                 // 窗口内要的是「粒度」而非「时长」：deadline 是 AutoSaveDelay（默认 0.5 秒），
                 // 靠逐帧累减 deltaTime 才守得住。长周期档位在这里帮不上忙——换粗只会让写盘
                 // 时间漂移；可省的只有下面的空闲档位，而它本就只值每秒几次字段读
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
 
             if (!_owner.IsDirty)
             {
                 _countdown = _delay;
-                return UpdateLOD.Tier3; // 无待提交改动:约 133ms 一次,已足够「几乎不醒来」
+                return UpdateTier.Tier3; // 无待提交改动:约 133ms 一次,已足够「几乎不醒来」
             }
 
             _countdown -= deltaTime;
             if (_countdown > 0f)
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
 
             _owner.Save();
-            return UpdateLOD.Tier3;
+            return UpdateTier.Tier3;
         }
 
         #endregion

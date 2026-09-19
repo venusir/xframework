@@ -51,7 +51,7 @@ namespace XFramework.XUI.Tests
         public void Initialize_RegistersSingleFrameDriver()
         {
             Assert.AreEqual(1, UpdateManager.TotalCount, "初始化后应注册一个每帧驱动器");
-            Assert.AreEqual(1, UpdateManager.GetCount(UpdateLOD.Tier0), "驱动器在每帧档");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), "驱动器在每帧档");
         }
 
         [Test]

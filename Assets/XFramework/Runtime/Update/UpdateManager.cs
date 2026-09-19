@@ -5,11 +5,11 @@ namespace XFramework.XUpdate
 {
     /// <summary>
     /// 全局更新管理器（静态服务）。
-    /// <para>统一管理所有注册到它的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供 LOD 分桶与时间切片调度。</para>
+    /// <para>统一管理所有注册到它的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供档位分桶与时间切片调度。</para>
     /// <para>自动生命周期：通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 初始化，<see cref="Application.quitting"/> 时自动清理。</para>
     /// <para>每帧由注入到 PlayerLoop 的驱动自动推进（见 <see cref="IsDrivingPlayerLoop"/>），
     /// 不依赖场景中存在任何 MonoBehaviour；<see cref="Tick(float)"/> 保留供手动驱动与测试使用。</para>
-    /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateLOD)"/> 注册自身。</para>
+    /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateTier)"/> 注册自身。</para>
     /// </summary>
     /// <remarks>
     /// <para><b>使用示例（静态服务注册）：</b></para>
@@ -19,12 +19,12 @@ namespace XFramework.XUpdate
     /// {
     ///     public MyService()
     ///     {
-    ///         UpdateManager.Register(this, depth: 0, UpdateLOD.Tier0);
+    ///         UpdateManager.Register(this, depth: 0, UpdateTier.Tier0);
     ///     }
     ///     
     ///     public void OnEnable() { }
     ///     public void OnDisable() { }
-    ///     public UpdateLOD OnUpdate(float deltaTime, float time) => UpdateLOD.Tier0;
+    ///     public UpdateTier OnUpdate(float deltaTime, float time) => UpdateTier.Tier0;
     /// }
     /// </code>
     /// <para><b>生命周期：</b>本类是自管理的静态服务——<see cref="AutoInit"/> 与 PlayerLoop 驱动注入
@@ -240,7 +240,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 每个固定步驱动入口。<b>时间基准是 <see cref="Time.fixedTime"/> 而不是每帧变化的
-        /// <see cref="Time.time"/>：<see cref="UpdateLOD"/> 的档位在这里是「每 2^k 个固定步」，
+        /// <see cref="Time.time"/>：<see cref="UpdateTier"/> 的档位在这里是「每 2^k 个固定步」，
         /// 该轴逐步推进一格、不参与变步长轴的 60Hz 节拍（固定步长本就等长，没有漂移可修）。</b>
         /// </summary>
         private static void DriveFixedUpdate()
@@ -366,7 +366,7 @@ namespace XFramework.XUpdate
         #region Public API — Tick
 
         /// <summary>
-        /// 执行一帧更新（Update 与 LateUpdate 两个变步长时机）。按 <see cref="UpdateLOD"/> 时间切片算法分发。
+        /// 执行一帧更新（Update 与 LateUpdate 两个变步长时机）。按 <see cref="UpdateTier"/> 时间切片算法分发。
         /// <para><b>生产路径不需要调用本方法</b>：驱动已注入 PlayerLoop。<see cref="IsDrivingPlayerLoop"/>
         /// 为 false 时才需要自行每帧调用（注入生效时再手动调用会导致同一帧派发两次）。</para>
         /// <para>本重载用同一个时刻驱动两条时间轴（<see cref="UpdateTimeMode"/>）；
@@ -397,7 +397,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 手动推进一次固定步长时机。
         /// <para>与 <see cref="Tick(UpdateClock)"/> 分开而不是合并：固定步长的时间基准是
-        /// <see cref="Time.fixedTime"/>，<see cref="UpdateLOD"/> 的档位在这里是「每 2^k 个固定步」。</para>
+        /// <see cref="Time.fixedTime"/>，<see cref="UpdateTier"/> 的档位在这里是「每 2^k 个固定步」。</para>
         /// <para>生产路径不需要调用本方法（驱动已注入 <c>FixedUpdate</c> 阶段）；供手动驱动与测试使用。</para>
         /// </summary>
         /// <param name="fixedTime">当前固定步时间（<see cref="Time.fixedTime"/>）。</param>
@@ -470,29 +470,29 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
+        /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 这是<b>静态档位的声明点</b>——「这个对象就该以 133ms 跑」是设计决定，声明在注册处最清楚；
         /// 运行时变更由节点的返回值表达，或注销后重新注册（分工见 <c>Update/README.md</c>
         /// 的「档位由谁决定」）。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。
         /// 需要「暂停期间仍运行」的逻辑（暂停菜单、UI 动画、手柄振动到期）请用
         /// <see cref="UpdateTimeMode.Unscaled"/>。</param>
-        public static void Register(IUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
+        public static void Register(IUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.Update)?.Register(node, depth, initialLOD, timeMode);
+            SchedulerOf(UpdateTiming.Update)?.Register(node, depth, initialTier, timeMode);
         }
 
         /// <summary>
         /// 注册一个 <see cref="UpdateTiming.LateUpdate"/> 时机的可更新对象。
-        /// <para>与 <see cref="Register(IUpdateable, int, UpdateLOD, UpdateTimeMode)"/> 分开而不是共用一个
+        /// <para>与 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/> 分开而不是共用一个
         /// <c>timing</c> 参数：那样参数类型只能退化成 <see cref="IUpdateLifecycle"/>，
         /// 「把对象注册进它没实现的时机」要到派发时才炸。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
+        /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 这是<b>静态档位的声明点</b>；运行时变更由节点的返回值表达，或注销后重新注册
         /// （见 <c>Update/README.md</c> 的「档位由谁决定」）。</param>
         /// <param name="timeMode">时间轴，默认为 <see cref="UpdateTimeMode.Scaled"/>。
@@ -500,11 +500,11 @@ namespace XFramework.XUpdate
         /// <see cref="UpdateTimeMode.Unscaled"/>。</para>
         /// <para>轴在<b>注册时读取一次</b>，之后由调度器记住；中途改变需要先注销再重新注册。
         /// 框架<b>不</b>从对象自身嗅探该值——注册实参是唯一来源。</para></param>
-        public static void RegisterLate(ILateUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0,
+        public static void RegisterLate(ILateUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0,
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, depth, initialLOD, timeMode);
+            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, depth, initialTier, timeMode);
         }
 
         /// <summary>
@@ -515,15 +515,15 @@ namespace XFramework.XUpdate
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="depth">排序深度，数值越小越先执行。静态服务建议传 0。</param>
-        /// <param name="initialLOD">初始 LOD 等级，默认为 <see cref="UpdateLOD.Tier0"/>。
+        /// <param name="initialTier">初始档位，默认为 <see cref="UpdateTier.Tier0"/>。
         /// 注意此处的档位是每 2^k 个<b>固定步</b>（默认 0.02s 一步），不是变步长轴的毫秒；
         /// 它改变的是本节点的<b>仿真频率</b>（<c>deltaTime</c> 恒为 <c>2^k × Time.fixedDeltaTime</c>），
         /// 既不减少物理成本，也不适合直接驱动物理的对象。它同样是<b>静态档位的声明点</b>；
         /// 运行时变更由返回值或注销重注册表达。</param>
-        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateLOD initialLOD = UpdateLOD.Tier0)
+        public static void RegisterFixed(IFixedUpdateable node, int depth, UpdateTier initialTier = UpdateTier.Tier0)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, depth, initialLOD);
+            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, depth, initialTier);
         }
 
         /// <summary>
@@ -599,7 +599,7 @@ namespace XFramework.XUpdate
         #region Public API — 立即处理
 
         /// <summary>
-        /// 立即对指定对象执行一次更新并重新调整 LOD。
+        /// 立即对指定对象执行一次更新并重新调整档位。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
         /// </summary>
         /// <param name="node">要立即更新的对象。</param>
@@ -611,7 +611,7 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 立即对指定对象执行一次更新并重新调整 LOD，时刻按对象所属的时间轴从时钟中取。
+        /// 立即对指定对象执行一次更新并重新调整档位，时刻按对象所属的时间轴从时钟中取。
         /// </summary>
         /// <param name="node">要立即更新的对象。</param>
         /// <param name="deltaTime">传入的时间差。</param>
@@ -631,22 +631,22 @@ namespace XFramework.XUpdate
         #region Public API — 查询
 
         /// <summary>
-        /// 获取指定 <see cref="UpdateLOD"/> 等级的对象数量（含全部时机与时间轴）。
+        /// 获取指定 <see cref="UpdateTier"/> 等级的对象数量（含全部时机与时间轴）。
         /// </summary>
-        public static int GetCount(UpdateLOD lod)
+        public static int GetCount(UpdateTier tier)
         {
             if (_schedulers == null) return 0;
 
             int count = 0;
             for (int i = 0; i < _schedulers.Length; i++)
             {
-                count += _schedulers[i].GetCount(lod);
+                count += _schedulers[i].GetCount(tier);
             }
             return count;
         }
 
         /// <summary>
-        /// 获取所有 LOD 等级的对象总数（不含禁用对象，含全部时机与时间轴）。
+        /// 获取所有档位的对象总数（不含禁用对象，含全部时机与时间轴）。
         /// </summary>
         public static int TotalCount
         {

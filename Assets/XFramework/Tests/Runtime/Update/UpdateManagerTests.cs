@@ -19,16 +19,16 @@ namespace XFramework.XUpdate.Tests
         private sealed class TestUpdateable : IUpdateable
         {
             public int UpdateCallCount;
-            public UpdateLOD NextLOD = UpdateLOD.Tier0;
+            public UpdateTier NextTier = UpdateTier.Tier0;
 
             public void OnEnable() { }
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 UpdateCallCount++;
-                return NextLOD;
+                return NextTier;
             }
         }
 
@@ -188,7 +188,7 @@ namespace XFramework.XUpdate.Tests
 
             Assert.IsFalse(UpdateManager.IsEnabled(node));
             Assert.AreEqual(0, UpdateManager.TotalCount);
-            Assert.AreEqual(0, UpdateManager.GetCount(UpdateLOD.Tier0));
+            Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier0));
             Assert.AreEqual(0, node.UpdateCallCount);
 
             UpdateManager.AutoInit();
@@ -271,10 +271,10 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 FixedCallCount++;
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 

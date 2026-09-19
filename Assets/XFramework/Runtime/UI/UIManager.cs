@@ -142,10 +142,10 @@ namespace XFramework.XUI
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 Update(deltaTime, time);
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
@@ -155,9 +155,9 @@ namespace XFramework.XUI
         private sealed class LodDriver : IUpdateable
         {
             private readonly UIManagerImpl _impl;
-            private readonly UpdateLOD _lod;
+            private readonly UpdateTier _lod;
 
-            public LodDriver(UIManagerImpl impl, UpdateLOD lod)
+            public LodDriver(UIManagerImpl impl, UpdateTier lod)
             {
                 _impl = impl;
                 _lod = lod;
@@ -167,7 +167,7 @@ namespace XFramework.XUI
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 _impl.DriveLod(_lod, deltaTime, time);
 
@@ -180,9 +180,9 @@ namespace XFramework.XUI
         /// <summary>
         /// 档位需求变化：按需注册 / 注销该档的驱动器。Tier0 由 <see cref="FrameDriver"/> 承载，跳过。
         /// </summary>
-        private static void OnLodDemandChanged(UpdateLOD lod)
+        private static void OnLodDemandChanged(UpdateTier lod)
         {
-            if (lod == UpdateLOD.Tier0)
+            if (lod == UpdateTier.Tier0)
                 return;
 
             // 注入自定义 IUIManager 时无法驱动分档，退回「只有每帧档」的旧行为
@@ -198,7 +198,7 @@ namespace XFramework.XUI
 
                 var driver = new LodDriver(impl, lod);
                 _lodDrivers[tier] = driver;
-                UpdateManager.Register(driver, depth: 0, initialLOD: lod);
+                UpdateManager.Register(driver, depth: 0, initialTier: lod);
             }
             else if (_lodDrivers.TryGetValue(tier, out var existing))
             {

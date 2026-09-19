@@ -7,7 +7,7 @@ namespace XFramework.XSettings.Tests
 {
     /// <summary>
     /// 自动保存（去抖）测试。直接驱动 <see cref="SettingsAutoSaveTicker{T}"/>，
-    /// 不经 <see cref="UpdateManager"/> 的 LOD 切片——那样每个用例都要推几十帧才能触发一次回调。
+    /// 不经 <see cref="UpdateManager"/> 的档位切片——那样每个用例都要推几十帧才能触发一次回调。
     /// </summary>
     /// <remarks>
     /// <b>关于步长：</b>用例刻意用「明确大于去抖窗口」的 delta 来推进（窗口 0.5s 时用 1.0s），
@@ -127,19 +127,19 @@ namespace XFramework.XSettings.Tests
 
         #endregion
 
-        #region LOD
+        #region 档位
 
         [Test]
-        public void AutoSave_LodReflectsWhetherWorkIsPending()
+        public void AutoSave_TierReflectsWhetherWorkIsPending()
         {
             var manager = CreateManager(new FakeStore());
             var ticker = new SettingsAutoSaveTicker<SampleSettings>(manager, 0.5f);
 
-            Assert.AreEqual(UpdateLOD.Tier3, ticker.OnUpdate(0.1f, 0f), "无待提交改动时返回粗粒度");
+            Assert.AreEqual(UpdateTier.Tier3, ticker.OnUpdate(0.1f, 0f), "无待提交改动时返回粗粒度");
 
             manager.MarkDirty();
 
-            Assert.AreEqual(UpdateLOD.Tier0, ticker.OnUpdate(0.1f, 0f), "窗口内需细粒度才能守住 delay");
+            Assert.AreEqual(UpdateTier.Tier0, ticker.OnUpdate(0.1f, 0f), "窗口内需细粒度才能守住 delay");
         }
 
         #endregion
@@ -180,9 +180,9 @@ namespace XFramework.XSettings.Tests
             manager.Dispose();
 
             // 注销与「当帧已调度」之间存在竞态窗口，驱动器必须能安全退出
-            UpdateLOD lod = UpdateLOD.Tier0;
-            Assert.DoesNotThrow(() => lod = ticker.OnUpdate(0.1f, 0f));
-            Assert.AreEqual(UpdateLOD.Tier5, lod, "已释放时直接退到最粗粒度，不再触碰管理器");
+            UpdateTier tier = UpdateTier.Tier0;
+            Assert.DoesNotThrow(() => tier = ticker.OnUpdate(0.1f, 0f));
+            Assert.AreEqual(UpdateTier.Tier5, tier, "已释放时直接退到最粗粒度，不再触碰管理器");
         }
 
         #endregion

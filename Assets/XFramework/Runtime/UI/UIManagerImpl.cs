@@ -119,7 +119,7 @@ namespace XFramework.XUI
         /// 档位需求变化回调，由门面注入。门面据此懒注册/注销该档的驱动器——
         /// 用不到的档位不占调度器条目。
         /// </summary>
-        internal Action<UpdateLOD> LodDemandChanged;
+        internal Action<UpdateTier> LodDemandChanged;
 
         /// <summary>
         /// <see cref="_stack"/> 的只读视图。构造一次即可反复读取，每次读取零分配；
@@ -150,7 +150,7 @@ namespace XFramework.XUI
         {
             _panelsView = new ReadOnlyCollection<UIPanelBase>(_stack);
 
-            int tiers = (int)UpdateLOD.Max + 1;
+            int tiers = (int)UpdateTier.Max + 1;
             _buckets = new List<UIPanelBase>[tiers];
             _lodDemand = new bool[tiers];
 
@@ -1112,7 +1112,7 @@ namespace XFramework.XUI
         public void Update(float deltaTime, float time)
         {
             // 手动驱动等价于驱动每帧档
-            DriveLod(UpdateLOD.Tier0, deltaTime, time);
+            DriveLod(UpdateTier.Tier0, deltaTime, time);
 
             // HUD 与 Tip 共用同一条帧通路，故同样受 LOD 与 Pause 约束
             _hudProvider?.Update(deltaTime, time);
@@ -1125,7 +1125,7 @@ namespace XFramework.XUI
         /// <param name="lod">本驱动器负责的档位。</param>
         /// <param name="deltaTime">距上次派发的间隔。</param>
         /// <param name="time">当前时刻。</param>
-        internal void DriveLod(UpdateLOD lod, float deltaTime, float time)
+        internal void DriveLod(UpdateTier lod, float deltaTime, float time)
         {
             if (!IsInitialized)
                 return;
@@ -1191,14 +1191,14 @@ namespace XFramework.XUI
                     continue;
 
                 _lodDemand[i] = active;
-                LodDemandChanged((UpdateLOD)i);
+                LodDemandChanged((UpdateTier)i);
             }
         }
 
         /// <summary>
         /// 指定档位当前是否有面板。门面在收到档位需求变化后用它决定注册还是注销。
         /// </summary>
-        internal bool HasPanelsAtLod(UpdateLOD lod)
+        internal bool HasPanelsAtLod(UpdateTier lod)
         {
             int tier = Mathf.Clamp((int)lod, 0, _buckets.Length - 1);
             return _buckets[tier].Count > 0;

@@ -122,10 +122,10 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnFixedUpdate(float deltaTime, float fixedTime)
+            public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 FixedCount++;
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
@@ -141,16 +141,16 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 Sequence.Add("update");
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
 
-            public UpdateLOD OnLateUpdate(float deltaTime, float time)
+            public UpdateTier OnLateUpdate(float deltaTime, float time)
             {
                 Sequence.Add("late");
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
@@ -165,10 +165,10 @@ namespace XFramework.XUpdate.Tests
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 UpdateCount++;
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
     }

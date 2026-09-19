@@ -33,7 +33,7 @@ namespace XFramework.XUI.View
         /// 每帧更新档位。Inspector 可配，默认每帧。
         /// </summary>
         [SerializeField]
-        private UpdateLOD _updateLod = UpdateLOD.Tier0;
+        private UpdateTier _updateLod = UpdateTier.Tier0;
 
         /// <summary>
         /// 「打开中」的完成闸门。懒分配——只有真的有人在 OnOpen 期间发起关闭时才创建。
@@ -125,7 +125,7 @@ namespace XFramework.XUI.View
         /// <para>用不到每帧的面板（倒计时、进度插值等）声明较低档位即可显著降耗。只要按传入的
         /// <c>deltaTime</c> 积分，行为不随档位变化。</para>
         /// </summary>
-        public UpdateLOD UpdateLod
+        public UpdateTier UpdateLod
         {
             get => _updateLod;
             set => _updateLod = value;

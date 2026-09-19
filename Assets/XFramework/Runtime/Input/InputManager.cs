@@ -153,7 +153,7 @@ namespace XFramework.XInput
         {
             if (_ticker != null) return;
             _ticker = new InputTicker();
-            UpdateManager.Register(_ticker, depth: 0, UpdateLOD.Tier0);
+            UpdateManager.Register(_ticker, depth: 0, UpdateTier.Tier0);
         }
 
         private static void UnregisterTicker()
@@ -173,13 +173,13 @@ namespace XFramework.XInput
 
             public void OnDisable() { }
 
-            public UpdateLOD OnUpdate(float deltaTime, float time)
+            public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 if (_lastPulseFrame != Time.frameCount)
                 {
                     PulseFrame();
                 }
-                return UpdateLOD.Tier0;
+                return UpdateTier.Tier0;
             }
         }
 
