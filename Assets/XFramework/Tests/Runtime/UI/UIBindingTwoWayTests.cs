@@ -173,6 +173,11 @@ namespace XFramework.XUI.Tests
             Assert.IsFalse(toggle.isOn);
         }
 
+        // 这条用例只在编辑器下存在：被测的告警本身是 #if UNITY_EDITOR 编译的
+        // （见 UIPanelBinding.BindByConvention，刻意避免 Release 版 GC），Player 构建里那段代码
+        // 根本不存在，LogAssert 永远等不到它——不圈起来的话，Test Runner 的「Run all in Player」
+        // 会稳定地在这一条上失败，而那不是缺陷、是断言写错了适用范围
+#if UNITY_EDITOR
         [Test]
         public void BindByConvention_UnknownProperty_WarnsInEditor()
         {
@@ -185,6 +190,7 @@ namespace XFramework.XUI.Tests
 
             binding.BindByConvention("Nothing", new ReactiveProperty<int>(0));
         }
+#endif
 
         #endregion
 
