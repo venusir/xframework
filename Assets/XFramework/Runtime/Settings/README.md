@@ -285,7 +285,7 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 松手静默 0.5 秒后写一次。若做成节流，一次三秒的拖动会写六次。
 
 关闭时（默认）不注册任何帧回调，零开销。开启后经 `UpdateManager` 注册一个帧驱动器，
-LOD 自适应：无待提交改动时用粗粒度，窗口内用细粒度。
+档位自适应：无待提交改动时用粗粒度，窗口内用细粒度。
 
 > **`SaveOnQuit` 的两处局限**：Unity 的 `Application.quitting` **在编辑器中不触发**，
 > 该行为只能在构建产物中确认；它也不覆盖移动端切后台后被系统杀死的场景

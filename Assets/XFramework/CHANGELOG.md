@@ -88,6 +88,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `protected internal override void OnUpdate()` | `protected internal override void OnUpdate(float deltaTime, float time)` |
 | `UIManager.Initialize` / `Destroy` / `Update` / `IsInitialized` / `UIRoot` | 不变，仍在门面外层 |
 
+- **Update 档位类型更名为 `UpdateTier`（破坏性）**：`UpdateLOD` 更名为 `UpdateTier`，公开参数 `initialLOD` 更名为 `initialTier`；枚举成员 `Tier0..Tier7` 与 `Max`、枚举值、行为均不变。旧名有三处问题：本仓 3 字母缩写在标识符中一律 PascalCase（`JsonUtility` / `CsvLoader` / `UIHudItem`），只有 LOD 全大写，且已与 UI 模块的 `UpdateLod` 分裂成只差大小写的两种拼法；LOD 在 Unity 语境里指网格/贴图细节层级，与本模块「档位不是精度，是采样间隔」的语义相冲。类型名自 0.2.0 起即公开（当时成员为 `Frame1..Frame16`），故属破坏性变更。UI 模块自己那套 `Lod` 拼写（`UIViewBase.UpdateLod` / `LodDriver` / `LodDemandChanged` 等）一并统一到 `Tier`——那批 API 与其他面板级 LOD 特性同为未发布内容，不构成破坏性变更
+
+#### 破坏性变更迁移表（Update 模块）
+
+| 旧写法 | 新写法 |
+| --- | --- |
+| `UpdateLOD` | `UpdateTier` |
+| `Register(..., initialLOD: lod)`（`RegisterLate` / `RegisterFixed` 同） | `initialTier: tier` |
+| `UpdateLOD.Tier3` 等枚举成员 | 不变（成员名与枚举值都没动） |
+
 - **UI `OnUpdate` 携带 `deltaTime`/`time`（破坏性）**：面板可声明较低档位而被降频派发（Tier3 约 133ms 一次）。若面板继续用 `Time.deltaTime` 做积分，每 133ms 只前进一帧的量——**慢 8 倍**。故 `deltaTime` 必须由派发方给出，取值是「距上次派发」的间隔。这是 LOD 的正确性前提，不只是风格统一。门面无参 `Update()` 一并删除：它给不出正确的 `deltaTime`
 - **UI 导航栈统一入栈（破坏性）**：显示栈改存实例，`OpenAsync` 与 `PushAsync` 都入栈，`HasPrevious` → `CanGoBack`，`BackToAsync<T>` → `PopToAsync<T>`。此前只有 `PushAsync` 入栈，于是「Open 开主界面 + Push 开二级页」之后栈深恒为 1，`PopAsync`、`HasPrevious`、遮罩点击关闭会同时失效——而那恰是最常见的用法组合
 - **UI 排序空间重做（破坏性，且修一处长期潜伏的正确性缺陷）**：`Canvas.sortingOrder` 名义上是 `int`，运行时却只保留 **16 位有符号**范围，超出会被静默截断回绕（实测 `100001 → -31071`、`500000 → -24288`）。既有方案 `layer × 1000` 因此只要层号 ≥ 33 就全盘失效，而框架推荐的层恰好越界：层 200 实存 `+3393`、层 300 实存 `-27679`，于是 **Top 层实际渲染在 Popup 之下**、遮罩也不在预期位置。之所以从未暴露，是因为此前没有任何用例断言过 `sortingOrder`。现全部取值经 `UISorting` 推导并落在 int16 内，另加一条把每个保留带取值写进 Canvas 再读回的守卫用例

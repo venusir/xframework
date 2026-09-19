@@ -8,7 +8,7 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 - **静态外观 + 接口 + 内部实现** — 静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
 - **零配置或显式初始化** — 无参服务（LockManager、MessageManager、UpdateManager 等）经 `[RuntimeInitializeOnLoadMethod]` 自就绪；需要配置的服务由调用方显式 `Initialize`，或实现 `IBootstrapStage` 交给启动引导
 - **通用编排 + 相位分组** — `Pipeline` 提供串行/并行阶段编排、加权进度、失败即停与取消传播；实现 `IPhaseStage` 声明相位号（同相位并行、相位升序串行），`Pipeline.BuildPhaseGroups` 一键装配
-- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateLOD` 等级，调度器自动调整其更新频率；LOD 按**时长**分档，与帧率无关
+- **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateTier` 等级，调度器自动调整其更新频率；档位按**时长**分档，与帧率无关
 - **不预设 GamePlay 架构** — 框架不决定实体模型、生命周期树与时间模型
 
 ## 核心架构
@@ -96,7 +96,7 @@ await Bootstrap.RunAsync();
 
 | 功能             | 说明                                                                              |
 | ---------------- | --------------------------------------------------------------------------------- |
-| **更新调度**     | `UpdateManager` + `UpdateLOD` 时间切片，自动 LOD 迁移；LOD 按**时长**分档，与帧率无关 |
+| **更新调度**     | `UpdateManager` + `UpdateTier` 时间切片，自动档位迁移；档位按**时长**分档，与帧率无关 |
 | **通用管线**     | `Pipeline` 阶段编排（串行/并行/加权进度/失败即停/取消传播）；`IPhaseStage` 相位分组一键装配 |
 | **启动引导**     | `Bootstrap` 显式登记 + 相位装配 + 逆序清理；内置 Asset/Data/Save 三件，Localization 可选 |
 | **对象池**       | `PoolManager` + `CollectionPool`（List / HashSet / Dictionary / StringBuilder）    |

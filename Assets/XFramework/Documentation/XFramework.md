@@ -19,7 +19,7 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 | MonoBehaviour 耦合 | 纯 C# 静态服务，可脱离 GameObject 运行                      |
 | 生命周期混乱       | 引导阶段统一初始化与反向清理；纯静态服务按需初始化          |
 | 频繁 GC 分配       | 对象池 / 集合池 + 静态服务零分配设计，自动回收复用          |
-| 更新调度粗放       | LOD 分级调度，统一管理所有对象的 Update                     |
+| 更新调度粗放       | 档位分级调度，统一管理所有对象的 Update                     |
 | 资源管理分散       | 统一资源服务：加载 / 对象池 / 引用计数 / 延迟卸载           |
 | 跨模块耦合         | Provider 模式：接口 + 内部实现 + 扩展方法，可注入自定义实现 |
 
@@ -28,7 +28,7 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 | 概念              | 说明                                                              |
 | ----------------- | ----------------------------------------------------------------- |
 | **对象池**        | 频繁创建销毁的对象经 `PoolManager` / 集合池复用，减少 GC          |
-| **LOD 更新**      | 对象返回 UpdateLOD，自动调整更新频率                              |
+| **档位更新**      | 对象返回 UpdateTier，自动调整更新频率                             |
 | **Phase 分组调度**| 实现 `IPhaseStage` 声明相位号，同相位并行、不同相位串行（数值含义为使用方约定） |
 | **管线编排**      | 通用管线抽象：阶段串行执行、加权进度聚合（事件驱动）、失败/取消传播 |
 | **启动引导**      | 引导阶段经 `Bootstrap.Register` 显式登记，`RunAsync` 按相位装配运行 |
@@ -47,7 +47,7 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 | **Bootstrap**    | `XFramework.XBootstrap`    | [README](../Runtime/Bootstrap/README.md)    | 启动引导：显式登记引导阶段、按相位装配运行启动管线、退出时反向清理 |
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
-| **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：三个派发时机（Update/LateUpdate/FixedUpdate）、双时间轴（含暂停）、LOD 时间切片、PlayerLoop 自驱动 |
+| **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：三个派发时机（Update/LateUpdate/FixedUpdate）、双时间轴（含暂停）、档位时间切片、PlayerLoop 自驱动 |
 | **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线、事件流引擎                                |
 | **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Message 事件流）                  |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
@@ -208,7 +208,7 @@ Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时
 | -------------- | ------------------------------------------------------------- |
 | 注册到更新调度 | `UpdateManager.Register(this, depth: 0)`                      |
 | 注销更新       | `UpdateManager.Unregister(this)`                              |
-| 实现 LOD 降级  | `UpdateLOD IUpdateable.OnUpdate(float deltaTime, float time)` |
+| 实现档位降级   | `UpdateTier IUpdateable.OnUpdate(float deltaTime, float time)` |
 | 延迟更新时机   | 实现 `ILateUpdateable.OnLateUpdate(deltaTime, time)`          |
 | 固定步长时机   | 实现 `IFixedUpdateable.OnFixedUpdate(deltaTime, fixedTime)`   |
 | 声明墙钟时间轴 | 注册时传 `timeMode: UpdateTimeMode.Unscaled`                  |
