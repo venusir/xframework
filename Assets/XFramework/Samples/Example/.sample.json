@@ -1,5 +1,5 @@
 {
-	"displayName": "Reactive Property Example",
-	"description": "展示 XFramework Reactive 模块的响应式属性用法。通过 ReactiveProperty<T> 节点实现属性值变化的自动推送与订阅，适用于血量、分数、状态等需要被监听的属性。",
+	"displayName": "XFramework 模块示例",
+	"description": "XFramework 各模块的用法演示：Reactive（响应式属性）、Message（消息总线、请求-响应、缓冲重放）、UI（面板开合与显示栈、遮罩引用计数、层级开关、Tip 与 HUD）。",
 	"createSeparatePackage": false
 }
