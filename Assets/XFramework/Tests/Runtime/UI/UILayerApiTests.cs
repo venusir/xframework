@@ -159,6 +159,48 @@ namespace XFramework.XUI.Tests
             Assert.IsTrue(container.gameObject.activeSelf);
         }
 
+        /// <summary>
+        /// 层容器还没建出来时隐藏该层，隐藏必须留到容器建好之后才生效。
+        /// <para>层容器是「该层第一次开面板」时才创建的。此前 <c>SetLayerVisibility</c> 只对已存在的
+        /// 容器生效、也不记期望值，于是「先隐藏、后开面板」的序列会让隐藏被悄悄撤销——层又显示出来了。</para>
+        /// </summary>
+        [Test]
+        public async Task SetLayerVisibility_BeforeContainerExists_AppliesWhenCreated()
+        {
+            UIManager.SetLayerVisibility(UILayers.Popup, false);
+            Assert.IsNull(_root.transform.Find($"Layer_{UILayers.Popup}"),
+                "前置：该层还没有容器");
+
+            await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Popup);
+
+            var container = _root.transform.Find($"Layer_{UILayers.Popup}");
+            Assert.IsNotNull(container, "首次打开时应创建层级容器");
+            Assert.IsFalse(container.gameObject.activeSelf,
+                "先隐藏、后开面板：隐藏不该被新建容器撤销");
+        }
+
+        /// <summary>
+        /// 恢复整层交互时，不该把被覆盖（失焦）面板的射线一并点亮。
+        /// <para>层开关的语义是「允许这一层交互」，不是「让这一层里每个面板都可交互」——后者会让失焦
+        /// 面板隔着上层弹窗吃点击，等于一次跨过焦点的越权。</para>
+        /// </summary>
+        [Test]
+        public async Task SetLayerInteractive_Restore_KeepsCoveredPanelNonInteractive()
+        {
+            var covered = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+            var top = await UIManager.PushAsync<FakePanelB>("ui/b", UILayers.Default);
+
+            Assert.IsTrue(top.IsFocused, "前置：后开的是栈顶，有焦点");
+            Assert.IsFalse(covered.IsFocused, "前置：先开的已被覆盖，失焦");
+
+            UIManager.SetLayerInteractive(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, true);
+
+            Assert.IsTrue(top.Raycaster.enabled, "有焦点的面板应随层恢复交互");
+            Assert.IsFalse(covered.Raycaster.enabled,
+                "失焦面板不该被层开关顺手点亮——它正被上层盖着");
+        }
+
         #endregion
     }
 }

@@ -45,6 +45,13 @@ namespace XFramework.XUI
             = new Dictionary<int, bool>(4);
 
         /// <summary>
+        /// 每层的显隐期望值。与 <see cref="_layerInteractive"/> 对称——层容器是该层第一次开面板时
+        /// 才创建的，没有这份记忆的话，「先隐藏、后开面板」会让隐藏被悄悄撤销。
+        /// </summary>
+        private readonly Dictionary<int, bool> _layerVisible
+            = new Dictionary<int, bool>(4);
+
+        /// <summary>
         /// 预加载记账。key: 类型, value: assetPath。
         /// <para>只用于「这个类型预热过没有」的去重判断，<b>不参与打开路径</b>；
         /// 面板实例池由 AssetManager 按地址独立维护。</para>
@@ -1107,6 +1114,10 @@ namespace XFramework.XUI
         {
             EnsureInitialized();
 
+            // 与 SetLayerInteractive 对称：记住期望值。层容器是「该层第一次开面板」时才建的，
+            // 此前这里只对已存在的容器生效——先隐藏、后开面板的那个序列，隐藏会被悄悄撤销。
+            _layerVisible[layer] = visible;
+
             var container = GetLayerContainer(layer);
             if (container != null)
                 container.gameObject.SetActive(visible);
@@ -1131,6 +1142,33 @@ namespace XFramework.XUI
                 for (int i = 0; i < raycasters.Count; i++)
                     raycasters[i].enabled = interactive;
             }
+
+            // 批量打开会把失焦面板的射线一并点亮，而那些面板正被上层盖着，本不该再吃点击。
+            // 层开关的语义是「允许这一层交互」，不是「让这一层里每个面板都可交互」——
+            // 后者会让恢复层交互变成一次跨过焦点的越权。
+            if (interactive)
+                DisableRaycastersOfBlurredPanels(layer);
+        }
+
+        /// <summary>
+        /// 关掉指定层里**失焦**面板的射线。
+        /// <para>焦点是面板级的真相：被覆盖的面板在 <c>OnBlur</c> 里已把射线关掉，层开关恢复时
+        /// 不该替它们打开。</para>
+        /// </summary>
+        private void DisableRaycastersOfBlurredPanels(int layer)
+        {
+            // CopyPanelsInLayer 已剪枝且零分配（缓冲区由池提供）
+            using (ListPool<UIPanelBase>.GetPooled(out var panels))
+            {
+                CopyPanelsInLayer(layer, panels);
+
+                for (int i = 0; i < panels.Count; i++)
+                {
+                    var panel = panels[i];
+                    if (!panel.IsFocused && panel.Raycaster != null)
+                        panel.Raycaster.enabled = false;
+                }
+            }
         }
 
         /// <summary>
@@ -1139,6 +1177,14 @@ namespace XFramework.XUI
         internal bool IsLayerInteractive(int layer)
         {
             return !_layerInteractive.TryGetValue(layer, out var interactive) || interactive;
+        }
+
+        /// <summary>
+        /// 层当前是否可见。未被显式隐藏过的层一律可见。
+        /// </summary>
+        internal bool IsLayerVisible(int layer)
+        {
+            return !_layerVisible.TryGetValue(layer, out var visible) || visible;
         }
 
         /// <summary>
@@ -1326,6 +1372,10 @@ namespace XFramework.XUI
             canvas.overrideSorting = true;
             canvas.sortingOrder = UISorting.PanelOrder(layer, 0);
             go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+            // 容器可能是「先被隐藏、之后才建出来」的：建好就立刻落到期望的显隐状态上
+            if (!IsLayerVisible(layer))
+                go.SetActive(false);
 
             return go.transform;
         }
