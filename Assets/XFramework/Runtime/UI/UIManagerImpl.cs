@@ -535,7 +535,7 @@ namespace XFramework.XUI
                         $"the request for '{assetPath}' will reuse that result.");
                 }
 #endif
-                return await JoinOpeningAsync<T>(inFlight);
+                return await JoinOpeningAsync<T>(inFlight, cancellationToken);
             }
 
             var entry = new InFlightOpen { AssetPath = assetPath };
@@ -1403,7 +1403,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 作为并发加入者等待一次在途打开完成。
         /// </summary>
-        private async UniTask<T> JoinOpeningAsync<T>(InFlightOpen entry) where T : UIPanelBase
+        private async UniTask<T> JoinOpeningAsync<T>(InFlightOpen entry, CancellationToken cancellationToken)
+            where T : UIPanelBase
         {
             var tcs = new UniTaskCompletionSource<UIPanelBase>();
 
@@ -1412,8 +1413,19 @@ namespace XFramework.XUI
 
             entry.Joiners.Add(tcs);
 
-            var panel = await tcs.Task;
-            return panel as T;
+            try
+            {
+                // 加入者带的是自己的令牌：主打开方挂住时不该把它一起拖住。此前这里根本不接令牌，
+                // 「接受令牌却不兑现」——带着已取消的令牌来加入，照样会一直等下去。
+                // 令牌未启用取消时 AttachExternalCancellation 原样返回，无额外开销。
+                var panel = await tcs.Task.AttachExternalCancellation(cancellationToken);
+                return panel as T;
+            }
+            finally
+            {
+                // 取消或异常退出时摘掉自己的完成源：主打开方若永不结束，死条目会一直挂在记录上
+                entry.Joiners?.Remove(tcs);
+            }
         }
 
         /// <summary>

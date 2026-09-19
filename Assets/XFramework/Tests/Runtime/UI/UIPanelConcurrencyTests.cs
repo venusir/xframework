@@ -53,6 +53,51 @@ namespace XFramework.XUI.Tests
             UpdateManager.Resume();
         }
 
+        #region 加入者的令牌
+
+        /// <summary>
+        /// 加入同一次打开的调用方，其令牌必须兑现。
+        /// <para><c>JoinOpeningAsync</c> 此前根本不接令牌，而 <c>OpenAsync</c> 的公开签名收下了它
+        /// ——「接受令牌却不兑现」是契约破口：带着已取消的令牌去加入，照样会一直等下去。取消只该
+        /// 结束本次等待，不牵连主打开方。</para>
+        /// </summary>
+        [Test]
+        public async Task Joiner_CancelledWhileWaiting_StopsWithoutAffectingPrimary()
+        {
+            var gate = new UniTaskCompletionSource<object>();
+            _factory.Gate = gate;
+
+            var primary = UIManager.OpenAsync<FakePanel>("ui/slow").Preserve();
+            await UniTask.Yield();   // 让主打开走到闸门前
+
+            using var cts = new CancellationTokenSource();
+            var joiner = UIManager.OpenAsync<FakePanel>("ui/slow", cancellationToken: cts.Token)
+                .Preserve();
+            await UniTask.Yield();
+
+            cts.Cancel();
+
+            bool joinedCancelled = false;
+            try
+            {
+                await joiner;
+            }
+            catch (OperationCanceledException)
+            {
+                joinedCancelled = true;
+            }
+
+            Assert.IsTrue(joinedCancelled, "加入者应能凭自己的令牌结束等待");
+
+            // 放闸：取消不该牵连主打开方
+            gate.TrySetResult(null);
+
+            Assert.IsNotNull(await primary, "加入者的取消不该影响主打开方");
+            Assert.AreEqual(1, _factory.CreateCount, "两者共享同一次打开，只实例化一次");
+        }
+
+        #endregion
+
         #region 打开途中管理器被销毁
 
         /// <summary>
