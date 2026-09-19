@@ -99,11 +99,24 @@ namespace XFramework.XUpdate
             public bool NeedsAnchor;
 
             /// <summary>
-            /// 所在时间轴。桶已经编码了轴，但这个字段在条目<b>离开桶</b>（进禁用表）后是
-            /// 唯一的归位依据——禁用表是一维的，<see cref="Enable"/> 得知道该回哪条轴。
-            /// 写入后不再改动，因此不构成「需要同步的第二份真相」。
+            /// 所在时间轴（<see cref="UpdateTimeMode"/> 取值）。
+            /// <para>桶已经编码了轴与档位，但条目<b>离开桶</b>（进禁用表）后，这两个字段就是唯一的
+            /// 归位依据——禁用表是一维的，<see cref="Enable"/> 得知道该回哪条轴的哪个档位桶。</para>
+            /// <para>写入点只有 <see cref="ApplyOp"/>：注册分支写明轴与档位，迁移分支只同步档位
+            /// （迁移发生在同一条轴上，轴不会变），故不构成「需要同步的第二份真相」；唯一的风险是
+            /// 漏写，写入点因此在这一段里点名（与 <see cref="Tier"/> 同一套）。</para>
             /// </summary>
             public byte Axis;
+
+            /// <summary>
+            /// 所在档位（<see cref="UpdateTier"/> 取值），与 <see cref="Axis"/> 同一套归位依据。
+            /// <para>它让「禁用 → 启用」回到注册时声明的档位，而不是一律回
+            /// <see cref="UpdateTier.Tier0"/>——档位是设计决定（声明在注册处），一次启停不该把它清掉；
+            /// 而回 Tier0 意味着一个 Tier5 的后台同步会在启用后先每帧跑一轮。</para>
+            /// <para><b>零内存代价</b>：结构体内容 23 字节，仍落在 double / 引用要求的 8 字节对齐内，
+            /// 尾部那 1 字节本就是填充（字段顺序见 <see cref="LastUpdateTime"/>）。</para>
+            /// </summary>
+            public byte Tier;
         }
 
         /// <summary>
@@ -123,7 +136,7 @@ namespace XFramework.XUpdate
             /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateable.OnDisable"/>。</summary>
             Disable,
 
-            /// <summary>从禁用表移回 Tier0 桶，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
+            /// <summary>从禁用表移回原时间轴的声明档位桶，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
             Enable,
         }
 
@@ -211,7 +224,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private bool _reanchorScaledAxis;
 
-        /// <summary>禁用的节点列表。禁用时移入此列表，启用时移回原时间轴的 Tier0 桶。</summary>
+        /// <summary>禁用的节点列表。禁用时移入此列表，启用时按条目上的轴与档位归位。</summary>
         private readonly List<Entry> _disabledEntries = new List<Entry>();
 
         /// <summary>
@@ -614,8 +627,8 @@ namespace XFramework.XUpdate
         /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
         /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
         /// 顺延到本调度器下一次派发之前）；从派发之外调用则立即生效。
-        /// 另需注意：被重新启用的节点一律回到<b>原时间轴</b>的 <see cref="UpdateTier.Tier0"/> 桶——
-        /// 桶号本身就是档位，条目移入禁用表时该信息即已丢失（时间轴不会丢，它记在条目上）。</para>
+        /// 另需注意：被重新启用的节点回到<b>注册时声明的</b>时间轴与档位（两者都记在条目上）。
+        /// 档位较粗时，首次派发最坏要等满一个整周期；首次派发的 delta 仍按锚定规则记 0。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
         public void Enable(IUpdateLifecycle node)
@@ -881,12 +894,16 @@ namespace XFramework.XUpdate
             {
                 case PendingOpKind.Register:
                 {
-                    // 已在禁用表中的节点：Register 只把它纳入管理（刷新排序号）而不插桶——
-                    // 插了它就会在禁用状态下继续收到 OnUpdate，违反 IUpdateable 的契约
+                    // 已在禁用表中的节点：Register 只把它纳入管理（刷新排序号与归位信息）而不插桶——
+                    // 插了它就会在禁用状态下继续收到 OnUpdate，违反 IUpdateable 的契约。
+                    // 轴与档位一并刷新：注册实参是这两者的唯一来源，只更排序号会让「先禁用、再按新轴
+                    // 重新注册」静默无效——而「先注销再重新注册」正是文档给出的改轴手段
                     if (TryFindInDisabled(op.Node, out int disabledIndex))
                     {
                         var disabledEntry = _disabledEntries[disabledIndex];
                         disabledEntry.Order = op.Order;
+                        disabledEntry.Axis = (byte)AxisOf(op.Bucket);
+                        disabledEntry.Tier = (byte)TierOf(op.Bucket);
                         _disabledEntries[disabledIndex] = disabledEntry;
                         break;
                     }
@@ -901,6 +918,7 @@ namespace XFramework.XUpdate
                         Node = op.Node,
                         Order = op.Order,
                         Axis = (byte)AxisOf(op.Bucket),
+                        Tier = (byte)TierOf(op.Bucket),
                         NeedsAnchor = true,
                     });
                     _bucketOf[op.Node] = op.Bucket;
@@ -919,6 +937,9 @@ namespace XFramework.XUpdate
                     // 这次迁移必须作废——否则就成了把它重新插回桶里（复活）
                     if (TryTakeFromBuckets(op.Node, out Entry moved))
                     {
+                        // 档位随迁移同步：它是「禁用后归位」的依据，漏写会让一次启停把节点
+                        // 拉回迁移前的旧档位
+                        moved.Tier = (byte)TierOf(op.Bucket);
                         InsertSorted(_buckets[op.Bucket], moved);
                         _bucketOf[op.Node] = op.Bucket;
                     }
@@ -944,8 +965,8 @@ namespace XFramework.XUpdate
                         // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
                         enabled.NeedsAnchor = true;
 
-                        // 回到原时间轴（桶号给的档位已丢，轴还记在条目上）
-                        int bucket = BucketOf(enabled.Axis, 0);
+                        // 回到原时间轴与声明档位（两者都记在条目上，见 Entry.Axis / Entry.Tier）
+                        int bucket = BucketOf(enabled.Axis, enabled.Tier);
                         InsertSorted(_buckets[bucket], enabled);
                         _bucketOf[op.Node] = bucket;
                         NotifyLifecycle(op.Node, enable: true);

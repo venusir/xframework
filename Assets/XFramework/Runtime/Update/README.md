@@ -73,6 +73,7 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 ```
 
 时间轴**以注册时传入的实参为准**——调度器不读取对象上的声明；中途要改变轴，须先注销再重新注册。
+禁用中的对象重新注册同样有效：轴与档位会一并刷新到新实参上，`Enable` 时按新值归位。
 
 固定步长时机没有时间轴参数：Unity 的固定步长本就随 `timeScale` 停摆。
 
@@ -126,7 +127,7 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 | 需求 | 通道 | 说明 |
 | --- | --- | --- |
-| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialTier` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚 |
+| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialTier` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚。`Disable` 之后再 `Enable` 会回到这个档位（启停不清档位） |
 | **运行时自适应** | `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate` 的返回值 | 状态变化时表达新档位，**决定下一次**派发（滞后一拍是设计如此） |
 
 框架自己两条都在用：`InputManager` 与 `UIManager` 的每帧驱动器恒返回 `Tier0`，而
@@ -269,7 +270,8 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   「应补 3 格」而被砍掉，而截断只砍多、不补少
 - **不追赶**：暂停恢复后不补算暂停期间的逻辑
 - **`ProcessImmediate` 派发期间只重置时间基准**，不执行更新
-- **重新启用会回到 `Tier0` 桶**：桶号本身就是档位，条目移入禁用表时该信息已丢失
+- **被禁用的对象精度不会变高也不会变低**：`Enable` 让它回到注册时声明的档位（见「档位由谁决定」），
+  但档位较粗时首次派发最坏要等满一个整周期
 - **同时手动 `Tick` 且注入生效会派发两次**：注入生效时请只依赖自动驱动
 
 ## 依赖

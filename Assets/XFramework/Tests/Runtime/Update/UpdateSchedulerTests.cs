@@ -1472,6 +1472,66 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Enable_ReturnsToDeclaredTier()
+        {
+            // 档位是注册时声明的设计决定，一次启停不该把它清掉。旧实现让条目回 Tier0 桶，
+            // 于是 Tier5 的后台同步在启用后会先每帧跑一轮——而桶号即档位，进禁用表时它就丢了
+            _scheduler.Register(_node, order: 0, initialTier: UpdateTier.Tier3);
+            // 返回值是第二条档位通道：节点自己也该返回声明的档位，否则首次派发后它就被拉回 Tier0，
+            // 本用例就测不到「档位是否被记住」了
+            _node.ReturnTier = UpdateTier.Tier3;
+            _scheduler.Disable(_node);
+            _scheduler.Enable(_node);
+
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier3), "启用后应回到声明的档位");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0), "而不是一律回 Tier0");
+
+            // Tier3 每 8 格一轮：8 格内恰好派发一次（档位真的在管节拍，不只是记了个数）
+            float time = 0f;
+            for (int i = 0; i < 8; i++)
+            {
+                _scheduler.Tick(time += FrameSeconds);
+            }
+            Assert.AreEqual(1, _node.OnUpdateCallCount, "Tier3 的节拍是 8 格一次");
+            Assert.AreEqual(0f, _node.DeltaTimes[0], 1e-6f, "首次派发仍按锚定规则记 0");
+        }
+
+        [Test]
+        public void Enable_AfterTierMigration_ReturnsToLatestTier()
+        {
+            // 档位字段必须随迁移同步，否则一次启停会把节点拉回迁移前的旧档位——
+            // 比「回到 Tier0」更隐蔽：档位看起来还是被记住的，只是记的是过期的那份
+            _scheduler.Register(_node, order: 0);
+            _node.ReturnTier = UpdateTier.Tier2;
+
+            _scheduler.Tick(time: 1.0f);
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier2), "返回值把节点迁到了 Tier2");
+
+            _scheduler.Disable(_node);
+            _scheduler.Enable(_node);
+
+            Assert.AreEqual(1, _scheduler.GetCount(UpdateTier.Tier2), "应回到迁移后的档位，而不是注册时的 Tier0");
+            Assert.AreEqual(0, _scheduler.GetCount(UpdateTier.Tier0));
+        }
+
+        [Test]
+        public void RegisterWhileDisabled_UpdatesTimeMode()
+        {
+            // 文档给出的改轴手段是「先注销再重新注册」；对禁用中的对象，重新注册若只刷新排序号，
+            // 这条就静默无效——节点仍留在旧轴上，而按时间轴选择的语义（暂停期间是否运行）就错了
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Disable(_node);
+
+            _scheduler.Register(_node, order: 0, timeMode: UpdateTimeMode.Unscaled);
+            _scheduler.Enable(_node);
+
+            _scheduler.Tick(new UpdateClock(time: 1.0, unscaledTime: 100.0));
+
+            Assert.AreEqual(1, _node.OnUpdateCallCount);
+            Assert.AreEqual(100f, _node.Times[0], 1e-6f, "应按新轴取时刻（墙钟轴），而不是旧轴");
+        }
+
+        [Test]
         public void IsEnabled_ReturnsCorrectStatus()
         {
             _scheduler.Register(_node, order: 0);
