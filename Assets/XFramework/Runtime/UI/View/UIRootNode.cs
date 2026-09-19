@@ -4,8 +4,10 @@ namespace XFramework.XUI.View
 {
     /// <summary>
     /// UI 根节点。挂载在场景中的 Canvas（或包含多个 Canvas 的根 GameObject）上。
-    /// <para>Awake 时自动初始化 <see cref="UIManager"/>，Destroy 时自动销毁。</para>
-    /// <para>每个场景只需放置一个 UIRootNode。</para>
+    /// <para>Awake 时若尚未初始化则自动初始化 <see cref="UIManager"/>；销毁时<b>只有自己正是当前根</b>
+    /// 才会拆掉它——叠加场景里卸载别的节点不该影响正在使用的那个。</para>
+    /// <para>管理器是全局单例，故整个运行期只应有一个生效的根：第二个场景里的节点会被忽略，
+    /// 它的面板依旧挂在第一个根下。</para>
     /// <para>面板的每帧更新由 <see cref="UIManager"/> 注册进 <c>UpdateManager</c> 统一调度，
     /// 本类不再参与每帧驱动——它只负责生命周期与层级参数。</para>
     /// </summary>
@@ -72,8 +74,13 @@ namespace XFramework.XUI.View
 
         private void OnDestroy()
         {
-            // 销毁 UIManager
-            if (UIManager.IsInitialized)
+            // 只在自己是当前根时拆掉管理器。判据是「是不是我」，不是「全局是否已初始化」——
+            // 后者会让叠加场景里任意一个节点被卸载时，把另一个场景仍在用的管理器一起拆掉，
+            // 此后所有门面调用都抛「尚未初始化」。
+            //
+            // 未覆盖的一半：第二个场景的节点仍会被静默忽略（它的 Awake 走 !IsInitialized 的
+            // 假分支），面板依旧挂在第一个场景的根下。单根是既有设计，多根是另一个量级的问题。
+            if (ReferenceEquals(UIManager.UIRoot, transform))
             {
                 UIManager.Destroy();
             }
