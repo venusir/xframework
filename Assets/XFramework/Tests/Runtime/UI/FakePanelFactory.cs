@@ -57,6 +57,12 @@ namespace XFramework.XUI.Tests
         /// </summary>
         public UniTaskCompletionSource<object> Gate { get; set; }
 
+        /// <summary>
+        /// 设为 true 时 <see cref="Release"/> 抛异常，用于验证「回池途中失败」的收尾路径
+        /// （例如 <c>UIManager.Destroy</c> 在 Dispose 抛异常后仍须完成状态复位）。
+        /// </summary>
+        public bool ThrowOnRelease { get; set; }
+
         #endregion
 
         #region Registration
@@ -128,6 +134,9 @@ namespace XFramework.XUI.Tests
         public void Release(UIPanelBase panel)
         {
             ReleaseCount++;
+
+            if (ThrowOnRelease)
+                throw new InvalidOperationException("[FakePanelFactory] Release 失败（测试注入）");
 
             if (panel == null || panel.gameObject == null)
                 return;

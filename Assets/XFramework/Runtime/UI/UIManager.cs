@@ -78,9 +78,15 @@ namespace XFramework.XUI
                 return;
             }
 
+            // 测试钩子消费即清：它是一次性的注入点，留着只会让「设置过钩子但没走 Destroy」的
+            // 那一轮把假工厂留给下一个调用方的 Initialize（PlayMode 下所有用例共享一个 player
+            // 实例，这种跨 fixture 泄漏一旦发生就是静默的）
+            var panelFactoryFactory = PanelFactoryFactory;
+            PanelFactoryFactory = null;
+
             var impl = new UIManagerImpl();
             impl.TierDemandChanged = OnTierDemandChanged;
-            impl.Initialize(uiRoot, PanelFactoryFactory?.Invoke());
+            impl.Initialize(uiRoot, panelFactoryFactory?.Invoke());
 
             // 如果传入了自定义控制器，立即设置
             if (controller != null)
@@ -143,15 +149,26 @@ namespace XFramework.XUI
 
             _tierDrivers.Clear();
 
-            if (_instance != null)
+            try
             {
-                _instance.Dispose();
-                _instance = null;
+                _instance?.Dispose();
             }
-            _instanceInitialized = false;
+            finally
+            {
+                // 状态复位必须在 finally 里：Dispose 抛异常时若跳过这两行，门面会停在
+                // 「IsInitialized 仍为 true、驱动器却已全部摘掉」的半死状态——此后没人再驱动它，
+                // 而 IsInitialized 会一直声称没事。
+                //
+                // 刻意不把 _instance 提前摘掉再 Dispose：Dispose 会走到用户代码
+                // （面板的 OnPoolRecycle、provider 的 DetachAll），那期间若有人调门面方法，
+                // 提前摘掉会让它从「按半拆状态执行」变成「抛尚未初始化」——那是换一种坏法，
+                // 不是修好。
+                _instance = null;
+                _instanceInitialized = false;
 
-            // 测试钩子随实例一起复位：否则一个 fixture 注入的假工厂会污染后续 fixture 的 Initialize
-            PanelFactoryFactory = null;
+                // 测试钩子随实例一起复位：否则一个 fixture 注入的假工厂会污染后续 fixture 的 Initialize
+                PanelFactoryFactory = null;
+            }
         }
 
         /// <summary>
