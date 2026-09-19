@@ -40,8 +40,16 @@ namespace XFramework.XUI
         /// <summary>正在播放的 Tip。由 <see cref="Update"/> 逐帧推进，播完即回池。</summary>
         private readonly List<UITipItem> _activeTips = new List<UITipItem>(8);
 
-        /// <summary>管理器已被拆除（销毁或更换 UIRoot）。在途实例化完成后据此立即回池。</summary>
-        private bool _detached;
+        /// <summary>
+        /// 「清空」的世代号，每次 <see cref="DetachAll"/> 自增。在途实例化完成后据此判断自己是不是
+        /// 上一世代的产物——是则立刻回池，不进入播放列表。
+        /// <para><b>为什么不是布尔标志</b>：<see cref="DetachAll"/> 有两个性质不同的调用方——
+        /// 「管理器要退役了」（<c>Dispose</c>、换根）与「只是把在播的清掉」（<c>CloseAllAsync</c>）。
+        /// 粘性布尔会把后者也当成退役：<c>CloseAllAsync</c> 之后每次 <c>ShowTipAsync</c> 都会
+        /// 实例化完立刻销毁，Tip 从此再也不显示，而且不报任何错。世代号只回答「你有没有被
+        /// 哪一次清空落下」，与「管理器是否还在服役」解耦。</para>
+        /// </summary>
+        private int _detachGeneration;
 
         #endregion
 
@@ -57,8 +65,7 @@ namespace XFramework.XUI
             _tipContainer = null;
             _tipContainerCanvas = null;
 
-            // 新根：重新武装
-            _detached = false;
+            // 不需要额外「重新武装」：DetachAll 已经把世代推进，旧世代在途的实例会自行回池
         }
 
         /// <inheritdoc/>
@@ -80,6 +87,9 @@ namespace XFramework.XUI
                 return;
             }
 
+            // 记下进入时的世代：实例化期间若发生过 DetachAll，回来的实例就属于上一世代
+            int generation = _detachGeneration;
+
             // 通过 AssetManager 泛型接口直接获取组件实例（首次加载资源，后续复用对象池）
             var tipItem = await XAsset.AssetManager.InstantiateAsync<UITipItem>(
                 TipAssetPath, _tipContainer, cancellationToken);
@@ -89,8 +99,8 @@ namespace XFramework.XUI
                 return;
             }
 
-            // 等待期间管理器可能已被拆除（Destroy / 换根）：立刻回池，不进入播放列表
-            if (_detached)
+            // 等待期间发生过清空（Destroy / 换根 / CloseAllAsync）：立刻回池，不进入播放列表
+            if (generation != _detachGeneration)
             {
                 XAsset.AssetManager.DestroyInstance(tipItem.gameObject);
                 return;
@@ -124,7 +134,9 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public void DetachAll()
         {
-            _detached = true;
+            // 推进世代：在途实例化回来后据此回池。这不是「管理器退役」的标记——退役与否由调用方
+            // 决定（Dispose 之后没人会再调 ShowTipAsync），故此处置位不影响后续正常使用。
+            _detachGeneration++;
 
             for (int i = 0; i < _activeTips.Count; i++)
                 Recycle(_activeTips[i]);
