@@ -100,7 +100,7 @@ await Bootstrap.RunAsync();
 | **通用管线**     | `Pipeline` 阶段编排（串行/并行/加权进度/失败即停/取消传播）；`IPhaseStage` 相位分组一键装配 |
 | **启动引导**     | `Bootstrap` 显式登记 + 相位装配 + 逆序清理；内置 Asset/Data/Save 三件，Localization 可选 |
 | **对象池**       | `PoolManager` + `CollectionPool`（List / HashSet / Dictionary / StringBuilder）    |
-| **UI 面板管理**  | `UIManager.Panel.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
+| **UI 面板管理**  | `UIManager.OpenAsync<T>()` 异步打开/关闭面板，支持栈式导航、模态遮罩              |
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
@@ -127,23 +127,23 @@ if (uiRoot != null)
 
 ```csharp
 // 打开面板
-var panel = await UIManager.Panel.OpenAsync<MainMenuPanel>("PF_MainMenu", layer: 100);
+var panel = await UIManager.OpenAsync<MainMenuPanel>("PF_MainMenu", layer: 100);
 
 // 关闭面板
-await UIManager.Panel.CloseAsync<MainMenuPanel>();
+await UIManager.CloseAsync<MainMenuPanel>();
 
 // 栈式导航
-var settings = await UIManager.Stack.PushAsync<SettingsPanel>("PF_Settings", layer: 200);
-await UIManager.Stack.PopAsync();  // 返回上一个面板
+var settings = await UIManager.PushAsync<SettingsPanel>("PF_Settings", layer: 200);
+await UIManager.PopAsync();  // 返回上一个面板
 
 // 模态遮罩
-UIManager.Mask.Show(maskLayer: 500, alpha: 0.5f);
-UIManager.Mask.Hide();
+UIManager.ShowMask(maskLayer: 500, alpha: 0.5f);
+UIManager.HideMask();
 ```
 
 ### 临时提示（Tip / 扣血提示）
 
-用于显示无需交互的浮动提示文字，如扣血数字、暴击提示、获得物品等。通过 `UIManager.ShowTip()` 一行代码即可使用。
+用于显示无需交互的浮动提示文字，如扣血数字、暴击提示、获得物品等。通过 `UIManager.ShowTipAsync()` 一行代码即可使用。
 
 > 📖 详细文档请参阅 **[Runtime/UI/README.md - Tip 临时提示](Runtime/UI/README.md#tip-临时提示扣血提示--浮动文字)**，包含 `TipConfig` 参数说明、预制体要求和架构详解。
 

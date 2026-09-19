@@ -16,7 +16,7 @@ Runtime/UI/
 ├── UIManager.cs               # 静态外观（全局入口）
 ├── UIManagerImpl.cs           # 默认实现（面板字典、显示栈、资源缓存）
 ├── README.md                  # 使用说明
-├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal static）
+├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal sealed）
 ├── Controller/
 │   ├── IUIController.cs       # 调度控制接口（五阶段生命周期拦截）
 │   ├── UIDefaultController.cs # 默认控制器（全部放行）
@@ -161,28 +161,19 @@ sequenceDiagram
 | **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
 | **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                                |
 
-## 门面分组
+## 门面形态
 
-`UIManager` 按子系统分为八个嵌套静态类（零状态、零分配，一律转发到内部实现）：
+`UIManager` 是**扁平**的静态门面：每个成员都与 `IUIManager` 的对应成员**同名**，转发体一律是 `EnsureGlobalInitialized()` + `_instance.X(...)` 两行。没有嵌套分组类。
 
-| 分组 | 成员 |
-| --- | --- |
-| `UIManager.Panel` | `OpenAsync` / `CloseAsync` / `CloseLayerAsync` / `CloseAllAsync` / `IsOpen` / `GetPanel` / `GetTopPanel` / `OpenCount` / `IsAnyOpen` / `Panels` / `CopyPanels` / `CopyPanelsInLayer` / `BringToFront` / `PreloadAsync` / `ForgetPreload` / `ClearPreloads` / `UnloadPanelAssetAsync` / `SetController` |
-| `UIManager.Stack` | `PushAsync` / `PopAsync` / `PopToAsync` / `PopToRootAsync` / `GoBackAsync` / `CanGoBack` |
-| `UIManager.Mask` | `Show` / `Hide` / `SetClickToClose` / `IsShowing` |
-| `UIManager.Tip` | `ShowAsync` / `SetProvider` |
-| `UIManager.Hud` | `Attach` / `Detach` / `SetProvider` |
-| `UIManager.Layer` | `SetVisibility` / `SetInteractive` |
-| `UIManager.Diagnostic` | `GetState` / `DumpState` / `TierDriverCount` |
-| `UIManager.Events` | `Subscribe`（三种面板消息） |
+扁平层也容纳接口之外的三类成员：生命周期与实例管理（`Initialize` / `SetInstance` / `Destroy`），接口成员之外的 `SetController` / `TierDriverCount`，以及三种面板消息的 `Subscribe` 重载。
 
-生命周期与实例管理留在**外层**：`Initialize` / `SetInstance` / `Destroy` / `Update` / `IsInitialized` / `UIRoot`——那是门面自身的职责，不属于任何子系统。
+> **为什么不用嵌套静态类分组**：分组会让转发时必然改名（`ShowHudAsync` → `Hud.Attach`、`ShowMask` → `Mask.Show`），「门面名 == 接口名」这条唯一的人工核对手段随之失效；而它换来的只有 IntelliSense 分组——本模块之外，`MessageManager`（48 个成员）、`InputManager`（43 个）、`AssetManager`（37 个）都保持扁平，靠 `#region` 分区。`UIManager` 曾短暂分组过（`467c64d`），未发布即撤销。
 
 ### 扩展清单
 
 新增 `IUIManager` 成员时，**必须同步在门面加静态转发**，否则它在第三方眼里根本不存在——`SetLayerVisibility` 就曾经长期处于这种状态：方法完整、文档也有，但只在内部实现上，门面既无转发也无实例属性，第三方实际完全调不到。
 
-`UIFacadeGroupingTests` 用反射锁住了这一形状（分组类存在、扁平层不再有那些成员、生命周期成员留在外层），但它拦不住「新加的成员忘了转发」——那一条只能靠评审。
+`UIFacadeCompletenessTests` 把这条锁住了：接口每个声明成员，在门面上必须存在**同名**的 public static 成员。判据只查名字、不查签名——签名由编译器兜底（转发体是经 `IUIManager` 的调用，签名不符根本编译不过），所以测试不需要任何映射表，也就不会成为第二份真相。它拦不住的是「转发接错线」（`SetLayerVisibility` 转发到了 `SetLayerInteractive`）与「假转发」（空实现、抛异常），那两条只能靠行为测试。
 
 ## 核心概念
 
@@ -317,13 +308,13 @@ public class GameHudPanel : UIPanelBase
 
 ```csharp
 // 预加载——后续打开时不卡顿
-await UIManager.Panel.PreloadAsync<SettingsPanel>("ui/panels/settings");
+await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
 
 // 移除指定缓存
-UIManager.Panel.ForgetPreload<SettingsPanel>();
+UIManager.ForgetPreload<SettingsPanel>();
 
 // 清空所有缓存（切换场景时）
-UIManager.Panel.ClearPreloads();
+UIManager.ClearPreloads();
 ```
 
 ## 快速使用
@@ -407,7 +398,7 @@ public class MyGameController : IUIController
         if (!GameManager.Instance.IsLoggedIn)
         {
             // 自动弹出登录面板
-            await UIManager.Stack.PushAsync<LoginPanel>("Assets/UI/Login.prefab", 500);
+            await UIManager.PushAsync<LoginPanel>("Assets/UI/Login.prefab", 500);
             return false; // 中断链
         }
         return true;
@@ -421,7 +412,7 @@ public class MyGameController : IUIController
 
     private async UniTask<bool> ShowConfirmDialog(string message)
     {
-        var dialog = await UIManager.Stack.PushAsync<ConfirmDialog>(
+        var dialog = await UIManager.PushAsync<ConfirmDialog>(
             "Assets/UI/ConfirmDialog.prefab", 900);
         await dialog.WaitForResultAsync();
         return dialog.Result;
@@ -599,60 +590,60 @@ public class MainMenuPanel : UIPanelBase
 using XFramework.XUI;
 
 // 打开面板
-var mainMenu = await UIManager.Panel.OpenAsync<MainMenuPanel>(
+var mainMenu = await UIManager.OpenAsync<MainMenuPanel>(
     "ui/panels/mainmenu",    // YooAsset 预制体地址
     layerDefault,             // 层级（可选，默认 100）
     userData                  // 自定义数据（可选，默认 null）
 );
 
 // 关闭面板（通过类型）
-await UIManager.Panel.CloseAsync<MainMenuPanel>();
+await UIManager.CloseAsync<MainMenuPanel>();
 
 // 关闭面板（带关闭动画）
-await UIManager.Panel.CloseAsync<MainMenuPanel>(immediate: false);
+await UIManager.CloseAsync<MainMenuPanel>(immediate: false);
 
 // 关闭面板（立即销毁，跳过动画）
-await UIManager.Panel.CloseAsync<MainMenuPanel>(immediate: true);
+await UIManager.CloseAsync<MainMenuPanel>(immediate: true);
 
 // 面板关闭自身
 await this.CloseSelfAsync();
 
 // 查询面板状态
-bool isOpen = UIManager.Panel.IsOpen<MainMenuPanel>();
-var panel = UIManager.Panel.GetPanel<MainMenuPanel>(); // 未打开返回 null
+bool isOpen = UIManager.IsOpen<MainMenuPanel>();
+var panel = UIManager.GetPanel<MainMenuPanel>(); // 未打开返回 null
 ```
 
 ### 6. 显示栈与导航
 
 ```csharp
 // 主菜单：用 OpenAsync 打开——它同样入栈，后续可以 Pop 回退
-await UIManager.Panel.OpenAsync<MainMenuPanel>("ui/panels/mainmenu", layerDefault);
+await UIManager.OpenAsync<MainMenuPanel>("ui/panels/mainmenu", layerDefault);
 
 // 进入设置——主菜单失焦，设置面板获得焦点
-var settings = await UIManager.Stack.PushAsync<SettingsPanel>(
+var settings = await UIManager.PushAsync<SettingsPanel>(
     "ui/panels/settings",
     layerDefault
 );
 
 // 从设置进入音效子面板
-await UIManager.Stack.PushAsync<SoundPanel>("ui/panels/sound", layerDefault);
+await UIManager.PushAsync<SoundPanel>("ui/panels/sound", layerDefault);
 
 // 返回上一面板（关闭音效面板，恢复设置面板）
-await UIManager.Stack.GoBackAsync();
+await UIManager.GoBackAsync();
 
 // 或使用 PopAsync（等价于 GoBackAsync）
-await UIManager.Stack.PopAsync();
+await UIManager.PopAsync();
 
 // 直接从音效回到主菜单（中间的面板依次关闭）
-await UIManager.Stack.PopToAsync<MainMenuPanel>();
+await UIManager.PopToAsync<MainMenuPanel>();
 
 // 全部退到最底层（只留最早打开的那一个）
-await UIManager.Stack.PopToRootAsync();
+await UIManager.PopToRootAsync();
 
 // 检查是否可以返回——接返回键时用它判断
-if (UIManager.Stack.CanGoBack)
+if (UIManager.CanGoBack)
 {
-    await UIManager.Stack.GoBackAsync();
+    await UIManager.GoBackAsync();
 }
 ```
 
@@ -660,38 +651,38 @@ if (UIManager.Stack.CanGoBack)
 
 ```csharp
 // 显示遮罩（半透明，不支持点击关闭）
-UIManager.Mask.Show(alpha: 0.5f);
+UIManager.ShowMask(alpha: 0.5f);
 
 // 显示遮罩（支持点击关闭——自动 Pop 栈顶）
-UIManager.Mask.Show(alpha: 0.3f, clickToClose: true);
+UIManager.ShowMask(alpha: 0.3f, clickToClose: true);
 
 // 隐藏遮罩
-UIManager.Mask.Hide();
+UIManager.HideMask();
 
 // 查询遮罩状态
-bool showing = UIManager.Mask.IsShowing;
+bool showing = UIManager.IsMaskShowing;
 ```
 
 ### 8. 关闭指定层级
 
 ```csharp
 // 关闭 Default 层的所有面板
-await UIManager.Panel.CloseLayerAsync(layerDefault);
+await UIManager.CloseLayerAsync(layerDefault);
 
 // 关闭所有面板
-await UIManager.Panel.CloseAllAsync();
+await UIManager.CloseAllAsync();
 ```
 
 ### 9. 资源预加载
 
 ```csharp
 // 游戏启动后预加载所有常用面板，后续打开零延迟
-await UIManager.Panel.PreloadAsync<MainMenuPanel>("ui/panels/mainmenu");
-await UIManager.Panel.PreloadAsync<SettingsPanel>("ui/panels/settings");
-await UIManager.Panel.PreloadAsync<DialogPanel>("ui/panels/dialog");
+await UIManager.PreloadAsync<MainMenuPanel>("ui/panels/mainmenu");
+await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
+await UIManager.PreloadAsync<DialogPanel>("ui/panels/dialog");
 
 // 场景切换时清理不用的缓存
-UIManager.Panel.ClearPreloads();
+UIManager.ClearPreloads();
 ```
 
 ### 10. 语言切换联动
@@ -765,7 +756,7 @@ var mockManager = new MockUIManager();
 UIManager.SetInstance(mockManager);
 
 // 注入自定义 Controller（运行时替换拦截逻辑）
-UIManager.Panel.SetController(new MyCustomController());
+UIManager.SetController(new MyCustomController());
 ```
 
 ## 设计原则
@@ -786,7 +777,7 @@ UIManager.Panel.SetController(new MyCustomController());
 
 ## HUD 世界空间 UI（NPC / 怪物头顶名字、血条、标记）
 
-`UIHudManager` + `UIHudItem` 提供持久化的世界空间 HUD，适用于需要持续跟随 3D 目标的 UI，如 NPC/怪物头顶名字、血条、状态图标、距离指示器等。HUD 与面板共享 `UIViewBase` 的 OnUpdate 集中驱动，内部通过 `AssetManager` 管理对象池。
+`UIHudManagerImpl` + `UIHudItem` 提供持久化的世界空间 HUD，适用于需要持续跟随 3D 目标的 UI，如 NPC/怪物头顶名字、血条、状态图标、距离指示器等。HUD 与面板共享 `UIViewBase` 的 OnUpdate 集中驱动，内部通过 `AssetManager` 管理对象池。
 
 **命名空间**: `XFramework.XUI` / `XFramework.XUI.View`
 
@@ -795,9 +786,9 @@ UIManager.Panel.SetController(new MyCustomController());
 ### 架构
 
 ```
-UIManager.ShowHud<T>(target, assetPath, offset)  →  静态外观
+UIManager.ShowHudAsync<T>(target, assetPath, offset)  →  静态外观
     │
-    └── UIHudManager.AttachAsync<T>()              →  内部管理器（去重、映射、容器）
+    └── UIHudManagerImpl.AttachAsync<T>()              →  内部管理器（去重、映射、容器）
             │
             ├── AssetManager.InstantiateAsync()     →  从对象池获取实例
             ├── hud.DoOpenAsync()                   →  打开 HUD（初始化 Camera 等）
@@ -810,9 +801,9 @@ UIManager.ShowHud<T>(target, assetPath, offset)  →  静态外观
             FollowTarget == null?  →  自动触发 OnTargetLost → Detach + 回池
 ```
 
-- `UIHudManager` 为 `internal static` 类，在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 999000），确保 HUD 始终在所有面板之上
+- `UIHudManagerImpl` 是 `IUiHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 999000），确保 HUD 始终在所有面板之上
 - `UIHudItem` 继承自 `UIViewBase`，与面板共享 `OnUpdate` 集中驱动机制
-- 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHud` 会自动替换旧 HUD
+- 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHudAsync` 会自动替换旧 HUD
 
 ### 快速使用
 
@@ -854,7 +845,7 @@ public class MonsterHpBar : UIHudItem
 }
 
 // 2. 显示 HUD
-var hud = await UIManager.ShowHud<MonsterHpBar>(
+var hud = await UIManager.ShowHudAsync<MonsterHpBar>(
     monster.transform,               // 跟随的 3D 目标
     "ui/hud/monster_hpbar",          // 预制体地址
     new Vector2(0, 80)               // 屏幕偏移（头顶上方 80 像素）
@@ -862,15 +853,15 @@ var hud = await UIManager.ShowHud<MonsterHpBar>(
 hud.Bind(monster);
 
 // 3. 隐藏 HUD（目标死亡 / 离开视野时）
-UIManager.Hud.Detach(monster.transform);
+UIManager.HideHud(monster.transform);
 ```
 
 ### API 说明
 
 | API                                               | 说明                                                      |
 | ------------------------------------------------- | --------------------------------------------------------- |
-| `UIManager.ShowHud<T>(target, assetPath, offset)` | 为目标附加 HUD，返回实例。同一目标重复调用自动替换旧 HUD  |
-| `UIManager.Hud.Detach(target)`                       | 分离指定目标的 HUD，自动回池。target 为 null 时无操作     |
+| `UIManager.ShowHudAsync<T>(target, assetPath, offset)` | 为目标附加 HUD，返回实例。同一目标重复调用自动替换旧 HUD  |
+| `UIManager.HideHud(target)`                       | 分离指定目标的 HUD，自动回池。target 为 null 时无操作     |
 | `UIHudItem.FollowTarget`                          | 要跟随的 3D 目标 Transform。设为 null 会触发自动回收      |
 | `UIHudItem.ScreenOffset`                          | 屏幕坐标偏移（像素），常用于将 HUD 移到目标头顶上方       |
 | `UIHudItem.CanvasGroup`                           | 懒加载的 CanvasGroup 引用，用于控制整体透明度             |
@@ -880,9 +871,9 @@ UIManager.Hud.Detach(monster.transform);
 
 目标丢失时 HUD 会自动回收，无需手动管理：
 
-- **目标被销毁**（`FollowTarget == null`）：下一帧 `OnUpdate` 检测到 → 触发 `OnTargetLost` 事件 → `UIHudManager` 自动 Detach + 回池
+- **目标被销毁**（`FollowTarget == null`）：下一帧 `OnUpdate` 检测到 → 触发 `OnTargetLost` 事件 → `UIHudManagerImpl` 自动 Detach + 回池
 - **目标移到镜头后方**（`screenPos.z <= 0`）：CanvasGroup.alpha 自动设为 0（隐藏但未回收）
-- **场景切换 / 全部关闭**：`UIManager.Panel.CloseAllAsync` 会触发 `UIHudManager.DetachAll()`，回收所有 HUD
+- **场景切换 / 全部关闭**：`UIManager.CloseAllAsync` 会触发 `UIHudManagerImpl.DetachAll()`，回收所有 HUD
 
 ### 预制体要求
 
@@ -893,7 +884,7 @@ UIManager.Hud.Detach(monster.transform);
 - **GraphicRaycaster**：由 `UIViewBase` 的 `[RequireComponent(typeof(GraphicRaycaster))]` 自动添加
 - **CanvasGroup**：由 `UIHudItem` 的 `[RequireComponent(typeof(CanvasGroup))]` 自动添加
 
-> 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManager` 统一控制（独立 Canvas，sortingOrder = 999000）。
+> 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManagerImpl` 统一控制（独立 Canvas，sortingOrder = 999000）。
 
 ### 设计要点
 
@@ -906,33 +897,33 @@ UIManager.Hud.Detach(monster.transform);
 
 ## Tip 临时提示（扣血提示 / 浮动文字）
 
-`UITipManager` + `UITipItem` 提供无需交互的临时浮动提示，如扣血数字、暴击提示、获得物品等。内部通过 `AssetManager` 泛型接口实例化预制体并复用对象池，动画完成后自动回收。
+`UITipManagerImpl` + `UITipItem` 提供无需交互的临时浮动提示，如扣血数字、暴击提示、获得物品等。内部通过 `AssetManager` 泛型接口实例化预制体并复用对象池，动画完成后自动回收。
 
 **命名空间**: `XFramework.XUI`
 
 ### 架构
 
 ```
-UIManager.ShowTip(text, config)  →  静态外观
+UIManager.ShowTipAsync(text, config)  →  静态外观
     │
-    └── UITipManager.ShowTip()    →  内部管理器（实例化、容器、回池）
+    └── UITipManagerImpl.ShowTipAsync()    →  内部管理器（实例化、容器、回池）
             │
             ├── AssetManager.InstantiateAsync<UITipItem>()  →  获取组件实例（含对象池）
             ├── tipItem.PlayAsync()                         →  异步播放动画
             └── AssetManager.DestroyInstance()              →  回池
 ```
 
-- `UITipManager` 为 `internal static` 类，在 UIRoot 下自动创建 `Layer_Tip` 独立子 Canvas（sorting order 极高），确保 Tip 始终在所有面板之上
+- `UITipManagerImpl` 是 `IUITipProvider` 的默认实现（可用 `UIManager.SetTipProvider` 替换），在 UIRoot 下自动创建 `Layer_Tip` 独立子 Canvas（排序值取 `UISorting.TipOrder`），确保 Tip 始终在所有面板之上
 - `UITipItem` 基于 UniTask 的异步循环驱动帧动画，支持 `CancellationToken` 取消
 
 ### 快速使用
 
 ```csharp
 // 最简单的版本 — 屏幕居中白色文字，2 秒后消失
-UIManager.ShowTip("-10");
+UIManager.ShowTipAsync("-10");
 
 // 扣血提示 — 红色、上飘、跟随敌人世界坐标
-UIManager.ShowTip("-50", new TipConfig 
+UIManager.ShowTipAsync("-50", new TipConfig 
 { 
     WorldPos = enemy.transform.position, 
     Color = Color.red, 
@@ -940,7 +931,7 @@ UIManager.ShowTip("-50", new TipConfig
 });
 
 // 暴击提示 — 黄色大字
-UIManager.ShowTip("暴击！999", new TipConfig 
+UIManager.ShowTipAsync("暴击！999", new TipConfig 
 { 
     Color = Color.yellow, 
     FontSize = 36f, 
