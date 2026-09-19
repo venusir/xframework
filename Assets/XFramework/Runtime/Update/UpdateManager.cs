@@ -494,6 +494,9 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 注册一个 <see cref="UpdateTiming.Update"/> 时机的可更新对象。
         /// <para>静态服务可在初始化时手动调用此方法；MonoBehaviour 与普通 C# 对象同样直接调用它。</para>
+        /// <para><b>会宣告一次 <see cref="IUpdateLifecycle.OnEnable"/></b>——新进入派发集合时（重新注册一个
+        /// 已在派发的对象、或注册一个处于禁用态的对象都不宣告）。因此<b>不要在构造函数里调用本方法</b>：
+        /// 宣告是同步的，<c>OnEnable</c> 会在对象构造尚未完成、字段还没赋值时被回调。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。
@@ -519,6 +522,8 @@ namespace XFramework.XUpdate
         /// <para>与 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/> 分开而不是共用一个
         /// <c>timing</c> 参数：那样参数类型只能退化成 <see cref="IUpdateLifecycle"/>，
         /// 「把对象注册进它没实现的时机」要到派发时才炸。</para>
+        /// <para>会宣告一次 <see cref="IUpdateLifecycle.OnEnable"/>（新进入该时机的派发集合时），
+        /// 理由与注意事项同 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/>。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。
@@ -545,6 +550,8 @@ namespace XFramework.XUpdate
         /// <para>与另外两个时机不同，这里<b>没有时间轴参数</b>：Unity 的固定步长本就随
         /// <c>timeScale</c> 停摆，不存在「暂停期间仍运行的固定步」这种语义，
         /// 因此不需要（也不该假装能）选轴。</para>
+        /// <para>会宣告一次 <see cref="IUpdateLifecycle.OnEnable"/>（新进入该时机的派发集合时），
+        /// 理由与注意事项同 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/>。</para>
         /// </summary>
         /// <param name="node">要注册的对象。</param>
         /// <param name="order">桶内排序号，越小越靠前；同值时按注册先后。

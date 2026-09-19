@@ -150,7 +150,7 @@ namespace XFramework.XUpdate
         /// </summary>
         private enum PendingOpKind : byte
         {
-            /// <summary>插入到指定桶。</summary>
+            /// <summary>插入到指定桶，并宣告一次启用（已在集合里或处于禁用态时不宣告）。</summary>
             Register,
 
             /// <summary>从桶与禁用列表中移除。</summary>
@@ -625,6 +625,10 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 注册一个可更新节点。
         /// <para>同一节点重复注册视为「重新注册」：旧条目会被摘掉，不会出现两条条目、每帧派发两次。</para>
+        /// <para><b>会宣告一次 <see cref="IUpdateLifecycle.OnEnable"/>，但只在新进入派发集合时</b>：
+        /// 「重新注册一个已在派发的节点」与「注册一个处于禁用态的节点」都不宣告——前者会吐出没有
+        /// <see cref="IUpdateLifecycle.OnDisable"/> 配对的连续两次启用，后者是谎报。与
+        /// <see cref="Enable"/> 合起来，每套调度器上的生命周期回调严格成对、以 OnEnable 起头。</para>
         /// </summary>
         /// <param name="node">要注册的节点。</param>
         /// <param name="order">节点在桶内的排序号，越小越靠前；同值时按注册先后。</param>
@@ -958,12 +962,16 @@ namespace XFramework.XUpdate
                         disabledEntry.Axis = (byte)AxisOf(op.Bucket);
                         disabledEntry.Tier = (byte)TierOf(op.Bucket);
                         _disabledEntries[disabledIndex] = disabledEntry;
+                        // 不宣告 OnEnable：它仍是禁用态，宣告就是谎报（等 Enable 把它挪回桶里才算入集合）
                         break;
                     }
 
                     // 去重：同一节点重复注册视为「重新注册」，先摘掉旧条目再插入。
                     // 不去重会有两个后果——同一节点每帧被派发两次；单值桶索引表达不了
-                    // 「两条条目分处两个桶」，注销时的「删净」语义会漏删
+                    // 「两条条目分处两个桶」，注销时的「删净」语义会漏删。
+                    // 「摘之前已在桶里」= 重新注册（换档位/轴/排序号）：它本来就在集合里，
+                    // 不能重复宣告启用，否则会吐出没有 OnDisable 配对的连续两次 OnEnable
+                    bool wasActive = _bucketOf.ContainsKey(op.Node);
                     RemoveFromIndexedBucket(op.Node);
 
                     InsertSorted(_buckets[op.Bucket], new Entry
@@ -975,6 +983,13 @@ namespace XFramework.XUpdate
                         NeedsAnchor = true,
                     });
                     _bucketOf[op.Node] = op.Bucket;
+
+                    // 进入派发集合即宣告，走与 Disable/Enable 同一条路径：先改表、再回调、异常隔离。
+                    // 与 Enable 分支合起来给出每套调度器上的不变量——生命周期回调严格成对、以 OnEnable 起头
+                    if (!wasActive)
+                    {
+                        NotifyLifecycle(op.Node, enable: true);
+                    }
                     break;
                 }
 

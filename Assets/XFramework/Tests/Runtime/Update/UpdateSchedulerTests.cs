@@ -413,7 +413,7 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(1, a.OnUpdateCallCount);
             Assert.AreEqual(1, c.OnUpdateCallCount);
             Assert.AreEqual(0, b.OnUpdateCallCount, "帧末才插回桶里，本帧不派发");
-            Assert.AreEqual(1, b.OnEnableCallCount);
+            Assert.AreEqual(2, b.OnEnableCallCount, "注册时宣告一次，帧末重新启用再宣告一次");
             Assert.IsTrue(_scheduler.IsEnabled(b));
 
             _scheduler.Tick(time: 2.0f);
@@ -1532,13 +1532,14 @@ namespace XFramework.XUpdate.Tests
         public void Enable_TriggersOnEnable_ResumesUpdate()
         {
             _scheduler.Register(_node, order: 0);
+            Assert.AreEqual(1, _node.OnEnableCallCount, "注册即宣告一次启用（进入派发集合）");
 
             _scheduler.Disable(_node);
             Assert.AreEqual(1, _node.OnDisableCallCount);
             Assert.IsFalse(_scheduler.IsEnabled(_node));
 
             _scheduler.Enable(_node);
-            Assert.AreEqual(1, _node.OnEnableCallCount);
+            Assert.AreEqual(2, _node.OnEnableCallCount, "重新进入派发集合，再宣告一次");
             Assert.IsTrue(_scheduler.IsEnabled(_node));
 
             // After enable, node should receive updates
@@ -1686,11 +1687,15 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Disable(disabled);
             Assert.AreEqual(1, disabled.OnDisableCallCount, "前提：Disable 本身是会回调的");
 
+            // 基线在 Clear 之前取：注册本身会宣告一次 OnEnable，不能用 0 当基线
+            int enableBefore = _node.OnEnableCallCount;
+            int disableBefore = _node.OnDisableCallCount;
+
             _scheduler.Clear();
 
-            Assert.AreEqual(0, _node.OnDisableCallCount, "桶里的条目不被回调");
+            Assert.AreEqual(disableBefore, _node.OnDisableCallCount, "桶里的条目不被回调");
             Assert.AreEqual(1, disabled.OnDisableCallCount, "禁用表里的条目同样不被回调");
-            Assert.AreEqual(0, _node.OnEnableCallCount, "也不会反向回调 OnEnable");
+            Assert.AreEqual(enableBefore, _node.OnEnableCallCount, "也不会反向回调 OnEnable");
         }
 
         [Test]
@@ -1790,11 +1795,14 @@ namespace XFramework.XUpdate.Tests
         [Test]
         public void EnableDuringTick_OnEnableThrows_RestOfFrameStillApplies()
         {
-            // 与上一条对称，覆盖 Enable 那条回调路径
-            var thrower = new TestUpdateable { ThrowOnEnable = true };
+            // 与上一条对称，覆盖 Enable 那条回调路径。
+            // 先注册再打开 ThrowOnEnable：注册也会宣告一次 OnEnable，若此时就会抛，抛点会落在
+            // LogAssert.Expect 之前（那不是本用例要覆盖的那条路径）
+            var thrower = new TestUpdateable();
             var victim = new TestUpdateable();
             _scheduler.Register(thrower, order: 0);
             _scheduler.Register(victim, order: 0);
+            thrower.ThrowOnEnable = true;
             _scheduler.Disable(thrower);
             _scheduler.Disable(victim);
 

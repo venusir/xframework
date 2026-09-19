@@ -33,7 +33,9 @@ using XFramework.XUpdate;
 
 public sealed class MyService : IUpdateable
 {
-    public MyService()
+    // 构造完成之后再注册：注册会**同步**宣告一次 OnEnable，在构造函数里注册会让它在
+    // 构造未完成、字段还没赋值时被回调（见「生命周期回调」）
+    public void Initialize()
     {
         // 自身就是实例，注册时传 this（不能用 static class：接口方法需要实例实现）
         UpdateManager.Register(this, order: 0, initialTier: UpdateTier.Tier0);
@@ -168,6 +170,23 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 `CHANGELOG.md` 的「删除节点系统」，其中「一套 GamePlay 架构」「一个服务定位器」都被判定为不该由
 基础框架管）。组的语义属于使用方的架构决定，框架只提供够用的原语：`Register` + 档位 + `order`。
 
+### 生命周期回调（`OnEnable` / `OnDisable`）
+
+这一对**不是对象生命周期事件**，而是「进入 / 离开派发集合」的边沿通知，且**每套调度器各算一份**：
+注册与 `Enable` 让对象进入集合，`Disable` 让它离开。`Unregister` 与 `Clear` 是「停止管理」，
+不宣告（见下）。
+
+- 每套调度器上两者**严格交替、且以 `OnEnable` 起头**——对象一注册就会先收到一次启用通知，
+  不会出现「没有配对的 `OnDisable`」
+- **跨时机对象的调用次数 = 它注册的时机数**：一次 `Disable` 会收到 N 次 `OnDisable`（每套一次）。
+  这是「启用态本就是每套一份」的直接后果，不是缺陷；要判断「是否已完全停用」的节点按此时机数记账即可
+  （计数归零即完全停用）
+- **`Unregister` / `Clear` 不宣告 `OnDisable`**：配对因此在「停止管理」处断裂，对象的销毁由调用方
+  自己负责（框架内的消费者都是「先摘驱动器再拆实例」）
+
+写法：一次性订阅与初始化放在**注册之前**的代码里——注册会同步宣告 `OnEnable`，在构造函数里注册会让它
+在构造未完成、字段还没赋值时被回调；把这一对回调当作**每时机的暂停 / 恢复**，清理写成幂等的。
+
 ### 派发次序
 
 一帧内的派发次序是确定的：
@@ -240,9 +259,9 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 - 无需担心遍历中被改动：派发期间没有任何代码会改活表
 - `IsEnabled` 会反映尚未落表的待处理操作，与收尾后的状态一致
 
-**跨时机的对象**（同一对象注册在多个时机，见「三个时机怎么选」）另有两点：一次 `Enable` / `Disable`
-会让**每个时机各触发一次** `OnEnable` / `OnDisable`（启用态本就是每套调度器一份）；操作不会嵌进当前
-回调的栈里执行，而是等各调度器各自收尾时应用——派发中调 `Tick` 同样被挡下，不会嵌套派发另一时机。
+**跨时机的对象**（同一对象注册在多个时机，见「三个时机怎么选」）注意两点：操作不会嵌进当前回调的栈里
+执行，而是等各调度器各自收尾时应用——派发中调 `Tick` 同样被挡下，不会嵌套派发另一时机；生命周期回调
+则**每时机各触发一次**，语义见「生命周期回调」一节。
 
 生命周期回调（`OnEnable` / `OnDisable`）抛异常只记 `LogError`，不打断本帧剩余操作的落地；这与
 `OnUpdate` 的「抛异常即注销该对象」不同——后者每帧都被调用（不注销就是每帧刷屏），而生命周期回调只在

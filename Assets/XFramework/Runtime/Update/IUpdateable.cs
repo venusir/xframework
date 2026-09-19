@@ -44,18 +44,34 @@ namespace XFramework.XUpdate
 
     /// <summary>
     /// 所有时机共用的生命周期契约。
-    /// <para>启用/禁用由 <see cref="UpdateManager.Enable(IUpdateLifecycle)"/> 与
-    /// <see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 触发，禁用期间不会收到该时机的派发回调。</para>
+    /// <para><b>这不是对象生命周期事件，而是「进入 / 离开派发集合」的边沿通知</b>，且
+    /// <b>每套调度器各算一份</b>：注册与 <see cref="UpdateManager.Enable(IUpdateLifecycle)"/> 让对象进入
+    /// 集合，<see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 让它离开（禁用期间不会收到该时机的派发回调）。因此：</para>
+    /// <list type="bullet">
+    /// <item>每套调度器上两者<b>严格交替、且以 <see cref="OnEnable"/> 起头</b>——对象一注册就会先收到一次
+    /// 启用通知，不会出现「没有配对的 <see cref="OnDisable"/>」</item>
+    /// <item>同时注册在多个时机上的对象，调用次数等于它注册的<b>时机数</b>：一次
+    /// <see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 会收到 N 次 <see cref="OnDisable"/>。
+    /// 想知道「是否已完全停用」的节点请按此时机数记账（计数归零即完全停用）</item>
+    /// <item><see cref="UpdateManager.Unregister(IUpdateLifecycle)"/> 与 <c>UpdateManager.Clear()</c>
+    /// <b>不宣告</b> <see cref="OnDisable"/>——那是「停止管理」而不是「暂停」，对象自己的销毁由调用方负责</item>
+    /// </list>
+    /// <para><b>写法建议</b>：一次性订阅与初始化放在注册之前的代码里（<see cref="OnEnable"/> 由注册同步宣告，
+    /// 在构造函数里注册会让它在构造未完成、字段尚未赋值时被回调）；把这一对回调当成<b>每时机的暂停 / 恢复</b>，
+    /// 清理写成幂等的。</para>
     /// </summary>
     public interface IUpdateLifecycle
     {
         /// <summary>
-        /// 对象被启用时调用。恢复派发前重置状态。
+        /// 对象进入派发集合时调用：注册新入，或被 <see cref="UpdateManager.Enable(IUpdateLifecycle)"/> 重新启用。
+        /// <para>每套调度器各一次，且总是排在对应的 <see cref="OnDisable"/> 之前。</para>
         /// </summary>
         void OnEnable();
 
         /// <summary>
-        /// 对象被禁用时调用。清理派发中的临时状态。
+        /// 对象离开派发集合时调用（<see cref="UpdateManager.Disable(IUpdateLifecycle)"/>）。
+        /// <para>每套调度器各一次；<see cref="UpdateManager.Unregister(IUpdateLifecycle)"/> 与
+        /// <c>Clear()</c> 不触发本回调。</para>
         /// </summary>
         void OnDisable();
     }
