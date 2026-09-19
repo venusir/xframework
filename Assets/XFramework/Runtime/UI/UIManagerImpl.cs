@@ -669,7 +669,17 @@ namespace XFramework.XUI
         {
             EnsureInitialized();
 
-            // 收集所有面板（注意：HUD 的 DetachAll 已由 UIManager.CloseAllAsync 在 facade 层处理）
+            // HUD 与在播 Tip 不是面板，但与面板共享 UIRoot 与生命周期：「全部关闭」理当把它们一并收掉。
+            // 只关面板的话，世界空间 HUD 与飘着的 Tip 会继续留在场景里，而调用方（切场景、回标题）
+            // 要的恰恰是一个干净的界面。README 一直这么承诺，此前实现里并没有这回事——
+            // 注释还写着「已由门面处理」，而门面只转发一行。
+            //
+            // 遮罩不在其列：它是引用计数句柄（谁持有谁释放），在这里强制清掉会让别的系统手里的
+            // 句柄凭空失效。要连遮罩一起收，请显式调 HideMask()。
+            _hudProvider?.DetachAll();
+            _tipProvider?.DetachAll();
+
+            // 收集所有面板（避免遍历中修改字典）
             var toClose = new List<(UIPanelBase panel, Type type)>();
             foreach (var kv in _activePanels)
             {

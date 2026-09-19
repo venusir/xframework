@@ -74,7 +74,11 @@ namespace XFramework.XUI
         UniTask CloseLayerAsync(int layer, bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 关闭所有面板。
+        /// 关闭所有面板，并一并回收世界空间 HUD 与在播 Tip（它们共享同一个 UIRoot 与生命周期，
+        /// 「全部关闭」对调用方而言就是「界面清空」）。
+        /// <para><b>不碰遮罩</b>：遮罩是引用计数句柄，谁持有谁释放——在这里强制清掉会让别的系统
+        /// 手里的句柄凭空失效。要连遮罩一起收，显式调用 <see cref="HideMask"/>。</para>
+        /// <para>面板自身持有的遮罩会随面板一起释放，无需配对调用。</para>
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
         UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default);

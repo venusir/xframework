@@ -84,12 +84,45 @@ namespace XFramework.XUI.Tests
             }
         }
 
+        /// <summary>
+        /// 全部关闭应一并回收 HUD 与在播 Tip。
+        /// <para>它们不是面板，但与面板共享同一个 UIRoot 与生命周期。此前实现里没有这一步，而
+        /// README 与实现内注释都写着「已经做了」——注释说交给门面处理，门面只转发一行。</para>
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_DetachesHudAndTips()
+        {
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(1, _hud.DetachAllCount, "全部关闭应回收世界空间 HUD");
+            Assert.AreEqual(1, _tip.DetachAllCount, "全部关闭应回收在播 Tip");
+        }
+
+        /// <summary>
+        /// 但遮罩不在其列：它是引用计数句柄，在这里强制清掉会让别的系统手里的句柄凭空失效。
+        /// <para>钉住这条是必要的——「全部关闭」很容易被顺手改成「什么都清」，而那会破坏句柄契约。</para>
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_LeavesMaskAlone()
+        {
+            var mask = UIManager.ShowMask();
+            Assert.IsTrue(UIManager.IsMaskShowing);
+
+            await UIManager.CloseAllAsync();
+
+            Assert.IsTrue(UIManager.IsMaskShowing,
+                "要收遮罩得显式 HideMask()，而不是让「全部关闭」替持有者释放");
+
+            mask.Dispose();
+        }
+
         #region Test Doubles
 
         /// <summary>记录调用参数的 Tip provider，不触碰资源系统。</summary>
         private sealed class RecordingTipProvider : IUITipProvider
         {
             public int CallCount { get; private set; }
+            public int DetachAllCount { get; private set; }
             public string LastText { get; private set; }
             public TipConfig LastConfig { get; private set; }
             public CancellationToken LastToken { get; private set; }
@@ -108,13 +141,14 @@ namespace XFramework.XUI.Tests
 
             public void Update(float deltaTime, float time) { }
 
-            public void DetachAll() { }
+            public void DetachAll() => DetachAllCount++;
         }
 
         /// <summary>记录调用参数的 HUD provider，不触碰资源系统。</summary>
         private sealed class RecordingHudProvider : IUiHudProvider
         {
             public int CallCount { get; private set; }
+            public int DetachAllCount { get; private set; }
             public Transform LastTarget { get; private set; }
             public string LastAssetPath { get; private set; }
             public Vector2? LastOffset { get; private set; }
@@ -137,7 +171,7 @@ namespace XFramework.XUI.Tests
 
             public void Detach(Transform target) { }
 
-            public void DetachAll() { }
+            public void DetachAll() => DetachAllCount++;
 
             public void Update(float deltaTime, float time) { }
         }

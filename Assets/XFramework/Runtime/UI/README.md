@@ -669,8 +669,9 @@ bool showing = UIManager.IsMaskShowing;
 // 关闭 Default 层的所有面板
 await UIManager.CloseLayerAsync(layerDefault);
 
-// 关闭所有面板
+// 关闭所有面板，并一并回收世界空间 HUD 与在播 Tip
 await UIManager.CloseAllAsync();
+// 注意：遮罩不在其列——它是引用计数句柄，要一起收需显式 HideMask()
 ```
 
 ### 9. 资源预加载
@@ -914,6 +915,7 @@ UIManager.ShowTipAsync(text, config)  →  静态外观
 ```
 
 - `UITipManagerImpl` 是 `IUITipProvider` 的默认实现（可用 `UIManager.SetTipProvider` 替换），在 UIRoot 下自动创建 `Layer_Tip` 独立子 Canvas（排序值取 `UISorting.TipOrder`），确保 Tip 始终在所有面板之上
+- `UIManager.CloseAllAsync` 会一并回收在播 Tip（与 HUD 同理：它们不是面板，但共享同一个 UIRoot 与生命周期。遮罩不在其列——它是引用计数句柄，需显式 `HideMask()`）
 - `UITipItem` 基于 UniTask 的异步循环驱动帧动画，支持 `CancellationToken` 取消
 
 ### 快速使用
