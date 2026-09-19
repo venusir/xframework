@@ -26,6 +26,13 @@ namespace XFramework.XUI
         private static bool _instanceInitialized;
 
         /// <summary>
+        /// 当前实例是否由门面自己创建（<see cref="Initialize"/>）而非经 <see cref="SetInstance"/> 注入。
+        /// <para>决定换实例时要不要替调用方拆掉旧的：门面自己造的那个不拆就没人拆（它的语言订阅与
+        /// 面板都还活着）；注入进来的不归门面所有，替调用方拆掉它属于越权。</para>
+        /// </summary>
+        private static bool _ownsInstance;
+
+        /// <summary>
         /// 测试钩子：面板实例来源工厂。默认创建 <see cref="AssetPanelFactory"/>；测试注入假实现，
         /// 以在未初始化 YooAsset 的环境下打开真实面板。
         /// <para>生产代码不应设置它。与 <c>AssetManager.ImplFactory</c> 同形。</para>
@@ -94,6 +101,7 @@ namespace XFramework.XUI
 
             _instance = impl;
             _instanceInitialized = true;
+            _ownsInstance = true;
 
             // 每帧驱动并入统一调度：可在 Initialize 之后被档位降频、被 Pause 统一暂停，
             // 也不再要求场景里必须存在 UIRootNode
@@ -121,15 +129,60 @@ namespace XFramework.XUI
         /// <summary>
         /// 设置外部已创建的实例作为全局管理器。
         /// <para>适用于依赖注入或单元测试场景。</para>
+        /// <para><b>替换时会先收掉旧实例</b>：注销它的分档驱动器，并在旧实例<b>是本门面创建</b>的情况下
+        /// 销毁它。注入进来的实例不归门面所有，不会被销毁——但它的分档驱动器同样会被注销（那是门面的
+        /// 记账，不是实例的东西）。</para>
         /// </summary>
+        /// <exception cref="ArgumentNullException"><paramref name="manager"/> 为 null 时抛出。</exception>
         public static void SetInstance(IUIManager manager)
         {
-            _instance = manager ?? throw new ArgumentNullException(nameof(manager));
+            if (manager == null)
+                throw new ArgumentNullException(nameof(manager));
+
+            // 换实例前先把旧的收干净：分档驱动器直接持有旧实例的引用，会继续按周期驱动它的面板
+            // ——那些面板谁也看不见，却照跑；而门面自己创建的那个实例还挂着语言订阅，不拆就没人拆。
+            ReleaseCurrentInstance(disposeInstance: _ownsInstance);
+
+            _instance = manager;
             _instanceInitialized = true;
+            _ownsInstance = false;
 
             // 注入的实例同样要有人来驱动。缺了这一步，注入之后面板/HUD/Tip 全都静止，
             // 且驱动类是 private sealed、外部无从补注册——只能靠门面自己接上。
             EnsureFrameDriverRegistered();
+        }
+
+        /// <summary>
+        /// 拆掉当前实例：先注销它的分档驱动器，再按需销毁实例本身。
+        /// <para><b>为什么必须先摘分档驱动器</b>：它们由档位需求变化驱动注册与注销，且各自直接持有
+        /// <c>UIManagerImpl</c> 引用。换了实例或销毁之后没人再上报需求，它们就永远留在调度器里，
+        /// 每个周期驱动一次那个已经没人认领的管理器。</para>
+        /// </summary>
+        /// <param name="disposeInstance">是否销毁实例本身。销毁路径一律销毁；换实例时只销毁门面自己
+        /// 创建的那个。</param>
+        private static void ReleaseCurrentInstance(bool disposeInstance)
+        {
+            foreach (var driver in _tierDrivers.Values)
+                UpdateManager.Unregister(driver);
+
+            _tierDrivers.Clear();
+
+            var instance = _instance;
+
+            try
+            {
+                if (disposeInstance && instance != null)
+                    instance.Dispose();
+            }
+            finally
+            {
+                // 放在 finally 里：Dispose 抛异常时也不能让门面继续指着一个正在被拆的实例。
+                //
+                // 「先 Dispose 再置 null」这个顺序是有意的：Dispose 会走到用户代码边（面板的
+                // OnPoolRecycle、provider 的 DetachAll），那期间若有人调门面方法，应当按半拆状态
+                // 执行，而不是突然抛「尚未初始化」——那是换一种坏法，不是修好。
+                _instance = null;
+            }
         }
 
         /// <summary>
@@ -144,27 +197,18 @@ namespace XFramework.XUI
                 _frameDriver = null;
             }
 
-            foreach (var driver in _tierDrivers.Values)
-                UpdateManager.Unregister(driver);
-
-            _tierDrivers.Clear();
-
             try
             {
-                _instance?.Dispose();
+                // 销毁路径一律销毁实例（与兄弟门面一致）：门面是它唯一的持有者，调用方拿不回它
+                ReleaseCurrentInstance(disposeInstance: true);
             }
             finally
             {
-                // 状态复位必须在 finally 里：Dispose 抛异常时若跳过这两行，门面会停在
+                // 状态复位必须在 finally 里：Dispose 抛异常时若跳过这几行，门面会停在
                 // 「IsInitialized 仍为 true、驱动器却已全部摘掉」的半死状态——此后没人再驱动它，
                 // 而 IsInitialized 会一直声称没事。
-                //
-                // 刻意不把 _instance 提前摘掉再 Dispose：Dispose 会走到用户代码
-                // （面板的 OnPoolRecycle、provider 的 DetachAll），那期间若有人调门面方法，
-                // 提前摘掉会让它从「按半拆状态执行」变成「抛尚未初始化」——那是换一种坏法，
-                // 不是修好。
-                _instance = null;
                 _instanceInitialized = false;
+                _ownsInstance = false;
 
                 // 测试钩子随实例一起复位：否则一个 fixture 注入的假工厂会污染后续 fixture 的 Initialize
                 PanelFactoryFactory = null;

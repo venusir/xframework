@@ -84,6 +84,31 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(1, UpdateManager.TotalCount, "不应留下悬挂驱动器");
         }
 
+        /// <summary>
+        /// 换实例时要把旧实例收干净：它的分档驱动器必须注销，门面自己创建的那个还要被销毁。
+        /// <para>分档驱动器各自直接持有旧 <c>UIManagerImpl</c> 引用，而注册/注销只由档位需求变化驱动
+        /// ——换实例后没人再上报需求，它们会永远留在调度器里，每个周期驱动一次那个已经没人认领的
+        /// 管理器（它的面板谁也看不见，却照跑）。旧实例的语言订阅同样没人退。</para>
+        /// </summary>
+        [Test]
+        public async Task SetInstance_ReleasesPreviousInstanceAndItsTierDrivers()
+        {
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            panel.UpdateTier = UpdateTier.Tier2;
+            UpdateManager.Tick(0.016f);
+
+            Assert.AreEqual(1, UIManager.TierDriverCount, "前置：该档驱动器已注册");
+            Assert.AreEqual(0, _factory.ReleaseCount, "前置：面板还开着");
+
+            UIManager.SetInstance(new UIManagerImpl());
+
+            Assert.AreEqual(0, UIManager.TierDriverCount, "旧实例的分档驱动器应被注销");
+            Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier2),
+                "调度器里不该留下仍指向旧实例的驱动器");
+            Assert.AreEqual(1, _factory.ReleaseCount,
+                "门面自己创建的旧实例应被销毁——它开着的面板要经工厂回池");
+        }
+
         [Test]
         public async Task RuntimeTierChange_BackToTier0_UnregistersSlicedDriver()
         {
