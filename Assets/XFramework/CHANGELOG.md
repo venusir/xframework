@@ -101,6 +101,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `UpdateLOD.Tier3` 等枚举成员 | 不变（成员名与枚举值都没动） |
 | `Register(node, depth: 0, ...)`（`RegisterLate` / `RegisterFixed` 同） | `Register(node, order: 0, ...)` |
 
+- **Update 补写派发次序契约与边界声明（纯文档）**：README 新增「派发次序」与「分组怎么做」两节，写明一帧内的确定性次序（时间轴 → 档位 → 桶内 `order` → 时机），并给出反向声明——这些次序只保证**可复现**、不保证**可依赖**（跨档位的节点本就不在同一帧派发，需要「A 之后才做 B」请走事件）；「设计原则」补一条**不做并行**（派发是主线程同步回调、没有等待点，异步/分帧由节点自理，通用并行编排归 Pipeline）。分组则明确不提供 API，只列三种做法与代价——组一旦进入框架就要回答生命周期与嵌套，那是被删掉的节点系统。此前这些边界只散落在代码与讨论里，第三方读者只能靠猜
+
 - **UI `OnUpdate` 携带 `deltaTime`/`time`（破坏性）**：面板可声明较低档位而被降频派发（Tier3 约 133ms 一次）。若面板继续用 `Time.deltaTime` 做积分，每 133ms 只前进一帧的量——**慢 8 倍**。故 `deltaTime` 必须由派发方给出，取值是「距上次派发」的间隔。这是 LOD 的正确性前提，不只是风格统一。门面无参 `Update()` 一并删除：它给不出正确的 `deltaTime`
 - **UI 导航栈统一入栈（破坏性）**：显示栈改存实例，`OpenAsync` 与 `PushAsync` 都入栈，`HasPrevious` → `CanGoBack`，`BackToAsync<T>` → `PopToAsync<T>`。此前只有 `PushAsync` 入栈，于是「Open 开主界面 + Push 开二级页」之后栈深恒为 1，`PopAsync`、`HasPrevious`、遮罩点击关闭会同时失效——而那恰是最常见的用法组合
 - **UI 排序空间重做（破坏性，且修一处长期潜伏的正确性缺陷）**：`Canvas.sortingOrder` 名义上是 `int`，运行时却只保留 **16 位有符号**范围，超出会被静默截断回绕（实测 `100001 → -31071`、`500000 → -24288`）。既有方案 `layer × 1000` 因此只要层号 ≥ 33 就全盘失效，而框架推荐的层恰好越界：层 200 实存 `+3393`、层 300 实存 `-27679`，于是 **Top 层实际渲染在 Popup 之下**、遮罩也不在预期位置。之所以从未暴露，是因为此前没有任何用例断言过 `sortingOrder`。现全部取值经 `UISorting` 推导并落在 int16 内，另加一条把每个保留带取值写进 Canvas 再读回的守卫用例
