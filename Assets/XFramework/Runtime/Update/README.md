@@ -187,8 +187,13 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 - 注入基于 `PlayerLoop.GetCurrentPlayerLoop()` 且只插入不替换，因此与 UniTask 等同样靠注入
   PlayerLoop 工作的库共存；`IsDrivingPlayerLoop` 可查询三个驱动是否都已生效
 - 注入失败会打 `LogWarning`（门面本身是宽容语义、不会抛异常，不留痕的话表现只是「静止」）
-- 手动驱动用 `UpdateManager.Tick(time)`（两个变步长时机）与 `TickFixed(fixedTime)`；
+- 手动驱动用无参 `UpdateManager.Tick()`（两个变步长时机）与 `TickFixed()`——它们自行按 Unity 当前
+  时间构造时钟，与自动驱动逐字一致（含 `timeScale = 0` 的冻结与双时间轴分割）；
   **注入生效时不要再手动调用**，否则同一帧会派发两次
+- 带时刻的重载（`Tick(time)` / `TickFixed(fixedTime)` / `ProcessImmediate(node, dt, time)`）只有
+  **一条时间源**：两条轴同值、`IsPaused` 恒为 false，是给测试与确定性回放自带时刻用的。
+  墙钟轴节点、或 `timeScale <= 0` 的场景请改用 `UpdateClock` 重载 / 无参重载——
+  `ProcessImmediate(node, dt, Time.time)` 在 `timeScale = 0` 时会把墙钟轴节点锚在一个冻住的时刻上
 
 ### 时间轴与暂停
 
