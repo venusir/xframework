@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XSettings;
 using XFramework.XUI.Data;
 
@@ -8,8 +11,17 @@ namespace XFramework.XSettings.Tests
 {
     /// <summary>
     /// <see cref="SettingRef{T, TField}"/> 字段句柄测试。
-    /// <para>覆盖：表达式校验、写穿到 POCO、去重、订阅即回调、<b>实例替换后自动跟随</b>、
+    /// <para>覆盖：表达式校验、写穿到 POCO、去重、订阅即回调、<b>实例替换后自动跟随与重放</b>、
     /// 直改字段不通知、以及句柄可直接接入 UI 绑定。</para>
+    /// <remarks>
+    /// <b>两条纪律（重放注册表是进程级的，跨用例共享）：</b>
+    /// <list type="number">
+    /// <item>各用例专用的设置类型保持私有嵌套，避免与他处共用同一张句柄表；</item>
+    /// <item>不得留下未释放的活订阅——句柄本身无生命周期，但订阅句柄必须 <c>using</c> 掉，
+    /// 否则后续用例触发 <c>Load</c>/<c>Reset</c>/<c>Apply</c> 时会回调进来，
+    /// 而那里冒出的 LogError 会让不相干的用例失败（runner 对意外 Error 即判失败）。</item>
+    /// </list>
+    /// </remarks>
     /// </summary>
     [TestFixture]
     public class SettingRefTests
@@ -37,6 +49,16 @@ namespace XFramework.XSettings.Tests
 
             /// <summary>方法——用于验证不支持方法调用的拒绝路径。</summary>
             public float GetVolume() => Audio.MasterVolume;
+        }
+
+        /// <summary>
+        /// 专供「重放取值抛异常」一例使用。<b>刻意与 <see cref="GameSettings"/> 分开</b>：
+        /// 重放会遍历该类型下的全部句柄并逐个打日志，共用类型会让告警条数随其它用例增减而漂移。
+        /// </summary>
+        [Serializable]
+        private sealed class NullableNestedSettings
+        {
+            public AudioSettings Audio = new();
         }
 
         private sealed class MemoryStore : ISettingsStore
@@ -162,7 +184,7 @@ namespace XFramework.XSettings.Tests
 
         #endregion
 
-        #region 实例替换后自动跟随
+        #region 实例替换后自动跟随与重放
 
         [Test]
         public void Ref_AfterLoad_FollowsReplacedInstance()
@@ -199,6 +221,106 @@ namespace XFramework.XSettings.Tests
         }
 
         [Test]
+        public void Ref_AfterReset_NotifiesSubscribersWithFactoryDefault()
+        {
+            var store = new MemoryStore
+            {
+                Data = new GameSettings { Audio = new AudioSettings { MasterVolume = 0.8f } },
+                HasData = true,
+            };
+            SettingsManager.Initialize<GameSettings>(store,
+                () => new GameSettings { Audio = new AudioSettings { MasterVolume = 0.3f } });
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            var received = new List<float>();
+            using var handle = volume.Subscribe(received.Add);
+            received.Clear();
+
+            SettingsManager.Reset<GameSettings>();
+
+            CollectionAssert.AreEqual(new[] { 0.3f }, received,
+                "玩家点「恢复默认」后绑定到句柄的 UI 必须跟着回到默认值");
+        }
+
+        [Test]
+        public void Ref_AfterLoad_NotifiesSubscribers()
+        {
+            var store = Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            var received = new List<float>();
+            using var handle = volume.Subscribe(received.Add);
+            received.Clear();
+
+            store.Data = new GameSettings { Audio = new AudioSettings { MasterVolume = 0.8f } };
+            store.HasData = true;
+            SettingsManager.Load<GameSettings>();
+
+            CollectionAssert.AreEqual(new[] { 0.8f }, received, "Load 换实例后订阅者收到新值");
+        }
+
+        [Test]
+        public void Ref_AfterApply_NotifiesSubscribers()
+        {
+            Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            var received = new List<float>();
+            using var handle = volume.Subscribe(received.Add);
+            received.Clear();
+
+            SettingsManager.Apply(new GameSettings { Audio = new AudioSettings { MasterVolume = 0.6f } });
+
+            CollectionAssert.AreEqual(new[] { 0.6f }, received, "Apply 换实例后订阅者收到新值");
+        }
+
+        [Test]
+        public void Ref_Replay_ValueUnchanged_StillNotifies()
+        {
+            Init(); // 无持久化数据，Load 走 defaultFactory，值仍是 1f
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            var received = new List<float>();
+            using var handle = volume.Subscribe(received.Add);
+            received.Clear();
+
+            SettingsManager.Load<GameSettings>();
+
+            CollectionAssert.AreEqual(new[] { 1f }, received,
+                "实例替换是无条件重放：数值未变也推一次。这是刻意的——可比较的只有「上一实例的值」，" +
+                "而需要知道的是「订阅者上次收到什么」，二者在「直改 POCO 不通知」的缺口上分叉，" +
+                "比较会漏掉陈旧的订阅者。勿改成去重");
+        }
+
+        [Test]
+        public void Ref_Replay_PrecedesObserveNotification()
+        {
+            Init();
+            var order = new List<string>();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            using var refHandle = volume.Subscribe(_ => order.Add("handle"));
+            using var observeHandle = SettingsManager.Observe<GameSettings>(_ => order.Add("observe"));
+            order.Clear();
+
+            SettingsManager.Reset<GameSettings>();
+
+            CollectionAssert.AreEqual(new[] { "handle", "observe" }, order,
+                "字段句柄先收敛到新实例，再抛实例替换事件——上层消费者运行时字段视图已就位");
+        }
+
+        [Test]
+        public void Ref_Replay_GetterThrows_DoesNotBreakApply()
+        {
+            SettingsManager.Initialize<NullableNestedSettings>(new MemoryStore(),
+                () => new NullableNestedSettings());
+            SettingsManager.Ref<NullableNestedSettings, float>(s => s.Audio.MasterVolume);
+
+            // 中间段为 null：重放取值会抛。一个坏句柄不该让整次 Apply 失败
+            LogAssert.Expect(LogType.Error, new Regex("字段句柄重放失败"));
+
+            SettingsManager.Apply(new NullableNestedSettings { Audio = null });
+
+            Assert.IsNull(SettingsManager.Settings<NullableNestedSettings>().Audio,
+                "逐句柄隔离之后，实例替换照常完成");
+        }
+
+        [Test]
         public void Ref_SurvivesDestroyAndReinitialize()
         {
             Init();
@@ -208,6 +330,15 @@ namespace XFramework.XSettings.Tests
             SettingsManager.Initialize<GameSettings>(new MemoryStore(), () => new GameSettings());
 
             Assert.AreEqual(1f, volume.Value, 1e-5f, "句柄是常驻对象，不随管理器销毁而失效");
+
+            var received = new List<float>();
+            using var handle = volume.Subscribe(received.Add);
+            received.Clear();
+
+            SettingsManager.Reset<GameSettings>();
+
+            CollectionAssert.AreEqual(new[] { 1f }, received,
+                "重放注册表同样刻意不随 Destroy 清空：重建管理器后重放依然生效");
         }
 
         #endregion

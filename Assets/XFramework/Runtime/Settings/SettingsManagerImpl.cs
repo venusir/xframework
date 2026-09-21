@@ -493,10 +493,19 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 通知所有订阅者：设置已变更。
+        /// <para><b>顺序：</b>字段句柄先收敛到新实例，再抛「实例被替换」事件，最后对外广播。
+        /// 重放放最前，使更高层的消费者（<see cref="Observe"/> 的回调、消息订阅者）运行时
+        /// 看到的字段视图已经就位。</para>
+        /// <para>本方法只被 <see cref="Apply"/>、<see cref="Load"/>、<see cref="LoadAsyncCore"/>、
+        /// <see cref="Reset"/> 调用，四者都是「换掉实例」，故重放对它们是普遍成立的语义。</para>
         /// </summary>
         private void Notify()
         {
-            _changedStream.OnNext(_settings);
+            // 本地捕获：重放回调里若有人再调 Apply/Load/Reset，本次通知仍针对触发它的那个实例
+            var current = _settings;
+
+            SettingRefRegistry<T>.Replay(current);
+            _changedStream.OnNext(current);
             MessageManager.Publish(new SettingsChangedMessage(typeof(T)));
         }
 

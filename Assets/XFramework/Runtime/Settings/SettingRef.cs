@@ -14,7 +14,12 @@ namespace XFramework.XSettings
     /// 设置类可随时搬走，而 UI 绑定仍能复用 <c>BindToSlider</c> 等现成扩展方法
     /// （本类实现 <see cref="IReactiveProperty{T}"/>）。</para>
     /// <para><b>自动跟随实例替换：</b>每次读写都经 <see cref="SettingsManager.Settings{T}"/> 取<b>当前</b>
-    /// 设置实例，因此 <c>Load</c>/<c>Reset</c>/<c>Apply</c> 换掉实例后无需重新绑定。</para>
+    /// 设置实例，因此 <c>Load</c>/<c>Reset</c>/<c>Apply</c> 换掉实例后无需重新绑定。
+    /// 同时订阅者会收到一次<b>无条件重放</b>（即使数值未变），使 UI 立即反映新实例——
+    /// 玩家点「恢复默认」而滑条停留在旧值的缺口即由此补上。</para>
+    /// <para><b>因此回调语义是「当前值是这个」，而非「用户刚改了它」：</b>实例替换会重放一次，
+    /// 非幂等的响应（如「画质变更 → 重建渲染管线」）会被多做一次。需要精确区分「用户改的」
+    /// 与「实例换的」时，用 <see cref="SettingsManager.Observe{T}"/> 订阅后者。</para>
     /// <para><b>常驻、无生命周期：</b>刻意不实现 <see cref="IDisposable"/>——它通常声明为静态字段并活到进程结束，
     /// 若带释放语义，「面板关闭时 Dispose 掉 ViewModel」这类正常操作会连带废掉句柄。
     /// 取消订阅请释放 <see cref="Subscribe"/> 返回的句柄。</para>
@@ -25,7 +30,8 @@ namespace XFramework.XSettings
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
     /// <typeparam name="TField">字段类型。</typeparam>
-    public sealed class SettingRef<T, TField> : IReactiveProperty<TField>, IReactivePropertyWriter<TField>
+    public sealed class SettingRef<T, TField> : IReactiveProperty<TField>, IReactivePropertyWriter<TField>,
+        IReplayableSettingRef<T>
         where T : class, new()
     {
         #region Private Fields
@@ -86,10 +92,17 @@ namespace XFramework.XSettings
                 Expression.Assign(target, valueParam),
                 Expression.Empty());
 
-            return new SettingRef<T, TField>(
+            var handle = new SettingRef<T, TField>(
                 selector.Compile(),
                 Expression.Lambda<Action<T, TField>>(assignBody, sourceParam, valueParam).Compile(),
                 path);
+
+            // 创建即入表，实例被整体替换时由注册表重放当前值。
+            // 登记点选在 Create 而非 SettingsManager.Ref：本类构造函数私有，Create 是唯一工厂，
+            // 放这里可保证将来新增创建路径也不会漏登记
+            SettingRefRegistry<T>.Register(handle);
+
+            return handle;
         }
 
         #endregion
@@ -150,6 +163,24 @@ namespace XFramework.XSettings
             var handle = _changedStream.Subscribe(onNext);
             onNext(Value);
             return handle;
+        }
+
+        #endregion
+
+        #region IReplayableSettingRef
+
+        /// <summary>
+        /// 实例替换后的重放。由 <see cref="SettingRefRegistry{T}"/> 在
+        /// <c>Load</c> / <c>Reset</c> / <c>Apply</c> 之后调用。
+        /// <para><b>必须直接推流，不能走 <see cref="Value"/> 的 setter：</b>setter 会与 POCO 的
+        /// 实时值去重，而替换之后实时值正是要重放的值，走 setter 会退化成静默空操作。</para>
+        /// <para><b>也不得置脏：</b>上述三个入口都已把已提交档位与变更计数对齐，
+        /// 重放再置脏会凭空造出脏状态，让自动保存去写一份与磁盘完全相同的文件。</para>
+        /// </summary>
+        /// <param name="settings">刚就位的设置实例。</param>
+        void IReplayableSettingRef<T>.Replay(T settings)
+        {
+            _changedStream.OnNext(_getter(settings));
         }
 
         #endregion

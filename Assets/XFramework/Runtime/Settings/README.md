@@ -17,7 +17,7 @@
 | -------------- | ------------------------------------------------------------------------ |
 | **强类型**     | 编译期类型安全，IDE 智能提示，告别 `GetFloat("key")` 的魔法字符串        |
 | **纯 POCO**    | 设置类不依赖框架类型；JSON 可读可调试，字段名即业务名下划线之外无额外包装 |
-| **字段级通知** | 经 `SettingRef` 句柄订阅单个字段，相同值不通知；句柄自动跟随实例替换      |
+| **字段级通知** | 经 `SettingRef` 句柄订阅单个字段，赋值相同值不通知；实例被替换时重放一次 |
 | **可替换后端** | `ISettingsStore` 允许替换为加密存储、PlayerPrefs 或远程云存档            |
 | **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等      |
 | **显式为主**   | 默认不自动保存、不写盘，行为可预期；需要时按需开启去抖自动保存            |
@@ -98,7 +98,12 @@ SettingsManager.Save<GameSettings>();
 
 ### 5. 字段订阅与 UI 绑定
 
-句柄实现 `IReactiveProperty<T>`，订阅时立即回调当前值，相同值不通知。
+句柄实现 `IReactiveProperty<T>`，订阅时立即回调当前值；经句柄**赋值**时，值确实改变才通知。
+
+> **回调有两种来源，语义不同**：① 用户经句柄写入且值改变；② `Apply` / `Load` / `Reset` 换掉
+> 实例（**无条件重放**，见下节）。故回调应理解为「当前值是这个」，而不是「用户刚改了它」。
+> 非幂等的响应（如「画质变更 → 重建渲染管线」）会在实例替换时被多做一次；需要精确区分时，
+> 用 `SettingsManager.Observe<T>` 订阅「实例被替换」这一事件本身。
 
 ```csharp
 // UI 绑定：直接复用 UI 模块现成的扩展方法（属性 → UI）
@@ -113,8 +118,11 @@ Settings.MasterVolume.Select(v => $"{v:P0}").BindToText(volumeLabel);
 
 ### 6. 订阅「设置对象被整体替换」
 
-`Apply` / `Load` / `Reset` 会换掉整个设置实例。句柄会自动跟随新实例，无需重新绑定；
-但若你有缓存了实例引用的代码，需要在这里改读。
+`Apply` / `Load` / `Reset` 会换掉整个设置实例。句柄会自动跟随新实例**并把它推给订阅者**，
+所以 UI 无需重新绑定、也不会停留在旧值——玩家点「恢复默认」时滑条会自己回到默认位置。
+
+本订阅用于另一类需求：**你需要拿到新实例本身**（例如有代码缓存了实例引用，或要按新实例
+重算一整块派生状态）：
 
 ```csharp
 SettingsManager.Observe<GameSettings>(s =>
@@ -123,6 +131,9 @@ SettingsManager.Observe<GameSettings>(s =>
     RefreshSummary(s);
 });
 ```
+
+> 两种通知的先后顺序是固定的：**先重放字段句柄，再回调 `Observe`**。因此 `Observe` 的回调
+> 运行时，字段视图已经指向新实例。
 
 ### 7. 全局消息订阅
 
@@ -166,6 +177,9 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 
 - 实现 `IReactiveProperty<TField>`，可直接用于 UI 绑定扩展方法
 - **每次读写都解析当前设置实例**，因此 `Load` / `Reset` / `Apply` 换实例后句柄自动跟随，无需重新绑定
+- **实例替换时无条件重放**：换实例即向订阅者推一次当前值，即使数值恰好未变。
+  这是刻意取舍——可比较的只有「上一实例的值」，而需要知道的是「订阅者上次收到什么」，
+  二者在「直改 POCO 不通知」这个缺口上分叉，比较会漏掉陈旧的订阅者而让它永久停留在旧值
 - **刻意不实现 `IDisposable`**：它通常声明为静态字段并活到进程结束，若带释放语义，
   「面板关闭时 Dispose 掉 ViewModel」这类正常操作会连带废掉它。取消订阅请释放 `Subscribe` 的返回值
 - 读写须在主线程
@@ -321,6 +335,12 @@ SettingsManager.Save<GameSettings>();
 - **默认路径取类型短名**：不同命名空间下的同名类型会算出同一路径。框架用占用表拦下并抛异常
   （而非静默共用一份文件），该表**刻意不随 `Destroy` 清空**——占用关系对应的是磁盘文件，
   文件不会随 Destroy 消失；若清空则「A 初始化 → Destroy → B 初始化」会让 B 悄悄接管 A 的路径
+- **实例替换会重放**：`Apply` / `Load` / `Reset` 之后每个已创建的句柄都会向订阅者推一次当前值，
+  即使数值未变。代价是非幂等的响应会被多做一次（见「字段订阅与 UI 绑定」一节的说明）；
+  换来的是 UI 不会停留在旧值。这一行为刻意不做去重，理由见上
+- **句柄随 `Ref` 调用一次性创建并长期留在重放注册表里**，注册表不随 `Destroy` 清空
+  （与默认路径占用表同理：关联关系比 `Destroy` 活得久）。因此 `Ref` 务必调用一次并缓存，
+  不要放进循环或每帧路径——那既重复编译表达式，也会让注册表无谓增长
 - **容器内的字段不跟踪**：`List<ReactiveProperty<T>>` 之类不在句柄体系内；
   `SettingRef` 的路径也必须是对设置对象自身成员的连续访问（不支持方法调用、索引器、闭包捕获）
 - **句柄读写须在主线程**
@@ -341,6 +361,7 @@ Runtime/Settings/
 ├── SettingsManagerImpl.cs         # 默认实现（internal sealed）
 ├── SettingsManager.cs             # 全局静态外观
 ├── SettingRef.cs                  # 字段句柄
+├── SettingRefRegistry.cs          # 句柄重放注册表（internal，实例替换时通知订阅者）
 ├── SettingsOptions.cs             # 选项
 ├── SettingsEnvelope.cs            # 版本信封（internal）
 ├── ISettingsMigrator.cs           # 迁移钩子
@@ -354,6 +375,7 @@ Runtime/Settings/
 
 - `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配
 - `SettingRef` 的值读写零分配；去重基准是 POCO 的实时值（不缓存，故无陈旧锚点）
+- 实例被替换时的重放按句柄数线性遍历，`Apply` / `Load` / `Reset` 都是低频调用，不在热路径
 - 句柄与内部事件流在 `Ref` 调用时一次性分配（故须调用一次并缓存），不在热路径
 - 关闭自动保存时不注册任何帧回调
 
