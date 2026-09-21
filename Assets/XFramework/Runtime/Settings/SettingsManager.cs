@@ -151,15 +151,34 @@ namespace XFramework.XSettings
         /// <para>通常在应用退出时调用。</para>
         /// <para>销毁后可重新 <see cref="Initialize{T}(ISettingsStore, Func{T})"/>，与 Config / Localization 的门面一致。
         /// 销毁到重新初始化之间访问任意类型会抛「尚未初始化」异常并附修复提示。</para>
+        /// <para><b>逐个隔离释放异常：</b>某个管理器的 <see cref="IDisposable.Dispose"/> 抛出时只记错误日志并
+        /// 继续释放其余实例——否则一个失败会让剩下全部泄漏。状态复位另放在 <c>finally</c> 里，任何单个失败
+        /// 都拦不住它。</para>
         /// </summary>
         public static void Destroy()
         {
-            foreach (var manager in Managers.Values)
+            try
             {
-                ((IDisposable)manager).Dispose();
+                foreach (var manager in Managers.Values)
+                {
+                    try
+                    {
+                        ((IDisposable)manager).Dispose();
+                    }
+                    catch (Exception e)
+                    {
+                        UnityEngine.Debug.LogError(
+                            $"[SettingsManager] 释放 {manager.GetType().Name} 时抛出异常，已跳过并继续释放其余实例：{e}");
+                    }
+                }
             }
-
-            Managers.Clear();
+            finally
+            {
+                // 复位必须在 finally 里：这几行一旦被跳过，门面就停在「IsInitialized 仍为 true、
+                // 实例却已释放」的半死状态——此后每次访问都抛 ObjectDisposedException，
+                // 而调用方以为它还初始化着（与 UIManager.Destroy 同一取舍）
+                Managers.Clear();
+            }
         }
 
         #endregion
