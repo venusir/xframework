@@ -180,14 +180,18 @@ Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时
 | -------- | ------------------------------------------------------------- |
 | 加载设置 | `await SettingsManager.LoadAsync<MySettings>()`               |
 | 保存设置 | `await SettingsManager.SaveAsync<MySettings>()`               |
+| 全部落盘 | `SettingsManager.SaveAllDirty()`                              |
 | 获取值   | `SettingsManager.Settings<MySettings>().MasterVolume`         |
 | 重置默认 | `SettingsManager.Reset<MySettings>()`                         |
 | 订阅字段 | `SettingsManager.Ref<MySettings, float>(s => s.MasterVolume)` |
 | 订阅替换 | `SettingsManager.Observe<MySettings>(s => ...)`               |
 | 应用设置 | `SettingsManager.Apply<MySettings>(settings)`                 |
+| 注册迁移 | `SettingsManager.SetMigrator<MySettings>(migrator)`           |
+| 注册校验 | `SettingsManager.SetValidator<MySettings>(validator)`         |
 
 > `Ref` 创建**字段句柄**，须调用一次并缓存（如 `static readonly` 字段）。句柄可 `Subscribe`、
-> 可直接用 `BindToSlider` 等 UI 绑定扩展方法、写入即通知并置脏，且会自动跟随设置实例替换。
+> 可直接用 `BindToSlider` 等 UI 绑定扩展方法、写入即通知并置脏，且实例被整体替换时会向订阅者
+> 重放一次当前值（故「恢复默认」后 UI 会自己回到默认位置）。
 > 详见 [Settings README](../Runtime/Settings/README.md)。
 
 ### UI 操作

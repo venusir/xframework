@@ -247,7 +247,7 @@ namespace XFramework.XSettings.Tests
             var manager = CreateManager(new SyncOnlyStore { HasData = true, Data = new SampleSettings { Volume = 9 } });
             var notified = 0;
             using var handle = manager.Observe(_ => notified++);
-            var before = notified; // Observe 当前不立即回调；若改为立即回调，这里自然跟着变
+            var before = notified; // Observe 订阅时已立即回调过当前对象，这里先记基线再观察 LoadAsync 的那一次
 
             await manager.LoadAsync();
 

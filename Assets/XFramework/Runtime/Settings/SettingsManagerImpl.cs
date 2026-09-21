@@ -278,8 +278,12 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 释放管理器并终止通知流。
-        /// <para>可重复调用。释放后除本方法外的所有公开成员抛 <see cref="ObjectDisposedException"/>，
-        /// 避免「已释放却仍在写盘」或「订阅返回一个永不回调的空句柄」这类静默失效。</para>
+        /// <para>可重复调用。释放<b>之后</b>的所有公开成员抛 <see cref="ObjectDisposedException"/>，
+        /// 避免「已释放却仍在写盘」这类静默失效。</para>
+        /// <para><b>释放之前发出的订阅句柄会静默失效</b>：通知流被终止（<c>OnCompleted</c> 只置标志、
+        /// 不清订阅），那些句柄此后不再收到任何回调，而这一点与「值没变」在调用方看来毫无区别。
+        /// 故随门面销毁时，调用方必须自行释放自己的订阅——释放后再调 <c>Observe</c> 会抛异常，
+        /// 但已经拿在手里的句柄不会。</para>
         /// </summary>
         public void Dispose()
         {
@@ -327,7 +331,9 @@ namespace XFramework.XSettings
         private async UniTask SaveAsyncCore(CancellationToken cancellationToken)
         {
             // 序列化留在主线程:设置对象通常只有几百字节,线程池往返的调度成本高于序列化本身
-            // (取舍与 SaveManagerImpl 处理侧车一致),且 JsonUtility 非线程安全。
+            // (取舍与 SaveManagerImpl 处理侧车一致)。注意这并不等于「线程池上不能序列化」——
+            // store 只实现同步接口时,下面的降级路径会把整个 Save(含 ToJson)挪到线程池,
+            // 而 Unity 文档明确 FromJson 可在后台线程调用(只要不同时改同一个对象)。
             // 快照 store 与变更计数:await 期间 Store setter 可能改 store,用户也可能继续改动设置
             var store = _store;
             var snapshot = _changeCount;

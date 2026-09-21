@@ -11,8 +11,9 @@ namespace XFramework.XSettings
     /// 设置对象被整体替换（Apply / Load / Reset）经 <see cref="Observe"/> 订阅。</para>
     /// <para>默认实现 <c>SettingsManagerImpl&lt;T&gt;</c> 为 internal，外部只能面向本接口编程
     /// ——这符合框架惯例：实现类默认 internal sealed，公开面只留接口。</para>
-    /// <para><b>释放语义：</b><see cref="IDisposable.Dispose"/> 可重复调用；释放后除 Dispose 外的
-    /// 所有成员抛 <see cref="ObjectDisposedException"/>。</para>
+    /// <para><b>释放语义：</b><see cref="IDisposable.Dispose"/> 可重复调用；释放<b>之后</b>的所有成员抛
+    /// <see cref="ObjectDisposedException"/>。但释放<b>之前</b>已发出的订阅句柄会静默失效
+    /// （通知流被终止，句柄不再回调，且与「值没变」无法区分）——随门面销毁时调用方须自行释放订阅。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。必须满足 <c>class, new()</c> 约束，并标记 <see cref="SerializableAttribute"/>。</typeparam>
     public interface ISettingsManager<T> : IDisposable where T : class, new()
