@@ -2,6 +2,11 @@ namespace XFramework.XSettings
 {
     /// <summary>
     /// 设置管理器选项。形态对齐 <c>SaveOptions</c>：<c>sealed class</c> + 在 XML 注释里写明陷阱。
+    /// <para><b>本对象的字段在 <c>Initialize</c> 时一次性读取，之后修改不再生效。</b>
+    /// 保持可变是为了对象初始化器语法好用，但管理器只取值并快照、不保留引用——因此初始化后
+    /// 再改这些字段不会有任何效果（不是「部分生效」那种难以察觉的状态）。理由是其中两项的
+    /// 共享后果严重：<see cref="SaveOnQuit"/> 中途翻转会让释放逻辑按与订阅时不同的判据决定是否
+    /// 退订，<see cref="CurrentVersion"/> 中途改会让上下半场写出的落盘格式不同。</para>
     /// </summary>
     public sealed class SettingsOptions
     {

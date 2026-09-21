@@ -347,6 +347,25 @@ namespace XFramework.XSettings.Tests
         }
 
         [Test]
+        public void AutoSave_EnabledAfterInitialize_DoesNotRegisterTicker()
+        {
+            Assume.That(UpdateManager.IsInitialized, Is.True, "UpdateManager 未初始化时本用例无意义");
+
+            var options = new SettingsOptions(); // AutoSave 默认关闭
+            var before = UpdateManager.TotalCount;
+            var manager = CreateManager(new FakeStore(), options);
+
+            // 选项在构造时快照，管理器不保留 SettingsOptions 引用。
+            // 这条同时是「实时读取」那种写法的回归守卫——那样的实现会在这里补注册
+            options.AutoSave = true;
+
+            Assert.AreEqual(before, UpdateManager.TotalCount,
+                "事后开启 AutoSave 不会补注册帧驱动器：选项只在 Initialize 时生效");
+
+            manager.Dispose();
+        }
+
+        [Test]
         public void AutoSave_TickAfterDispose_DoesNotThrow()
         {
             var manager = CreateManager(new FakeStore());

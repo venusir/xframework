@@ -21,9 +21,21 @@ namespace XFramework.XSettings
         private T _settings;
         private ISettingsStore _store;
         private readonly Func<T> _defaultFactory;
-        private readonly SettingsOptions _options;
         private readonly EventStream<T> _changedStream = new();
         private bool _disposed;
+
+        /// <summary>
+        /// 持久化格式版本的快照。见构造函数里「选项一次性读取」的说明。
+        /// </summary>
+        private readonly int _currentVersion;
+
+        /// <summary>
+        /// 退出兜底开关的快照。
+        /// <para>必须快照而非每次读 <see cref="SettingsOptions"/>：<see cref="Dispose"/> 要按与
+        /// 构造时<b>相同</b>的判据决定是否退订，实时读取会让「中途把该开关翻成 false」的调用方
+        /// 得到一个永不退订的 <c>Application.quitting</c> 订阅，管理器遂被永久 root。</para>
+        /// </summary>
+        private readonly bool _saveOnQuit;
 
         /// <summary>
         /// 变更计数。用计数而非布尔标志，是为了让「保存过程中又发生改动」不被吞掉：
@@ -53,20 +65,28 @@ namespace XFramework.XSettings
         {
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _defaultFactory = defaultFactory;
-            _options = options ?? new SettingsOptions();
+
+            // 选项在此一次性读取，不保留 SettingsOptions 引用。它是可变 POCO（为对象初始化器语法），
+            // 而门面只拿到它的引用、随时可能被调用方改写；若各处按需实时读取，行为会随改写而变：
+            // SaveOnQuit 中途由 true 翻成 false 会让 Dispose 漏退订（见 _saveOnQuit 的注释）、
+            // CurrentVersion 中途改会让上下半场写出的落盘格式不同。快照之后这些都不可能发生，
+            // 而且没有 _options 字段可供将来误用——缺陷是被结构消除的，不只是被修掉
+            var opts = options ?? new SettingsOptions();
+            _currentVersion = opts.CurrentVersion;
+            _saveOnQuit = opts.SaveOnQuit;
 
             // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
             // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
             _settings = store.Exists() ? LoadExisting() : CreateDefault();
 
             // 自动保存是可选能力,关闭时不注册任何帧回调——默认路径零开销
-            if (_options.AutoSave)
+            if (opts.AutoSave)
             {
-                _autoSaver = new SettingsAutoSaveTicker<T>(this, _options.AutoSaveDelay);
+                _autoSaver = new SettingsAutoSaveTicker<T>(this, opts.AutoSaveDelay);
                 UpdateManager.Register(_autoSaver, order: 0, UpdateTier.Tier3);
             }
 
-            if (_options.SaveOnQuit)
+            if (_saveOnQuit)
                 UnityEngine.Application.quitting += OnApplicationQuitting;
         }
 
@@ -250,7 +270,7 @@ namespace XFramework.XSettings
                 _autoSaver = null;
             }
 
-            if (_options.SaveOnQuit)
+            if (_saveOnQuit)
                 UnityEngine.Application.quitting -= OnApplicationQuitting;
 
             _changedStream.OnCompleted();
@@ -327,13 +347,13 @@ namespace XFramework.XSettings
             return IsVersioned ? DecodeEnvelope(_store.Load<SettingsEnvelope<T>>()) : LoadFromStore();
         }
 
-        /// <summary>是否启用版本化落盘（<see cref="SettingsOptions.CurrentVersion"/> 大于 0）。</summary>
-        private bool IsVersioned => _options.CurrentVersion > 0;
+        /// <summary>是否启用版本化落盘（构造时快照的 <see cref="SettingsOptions.CurrentVersion"/> 大于 0）。</summary>
+        private bool IsVersioned => _currentVersion > 0;
 
         /// <summary>构造当前版本的落盘信封。</summary>
         private SettingsEnvelope<T> BuildEnvelope()
         {
-            return new SettingsEnvelope<T> { Version = _options.CurrentVersion, Data = _settings };
+            return new SettingsEnvelope<T> { Version = _currentVersion, Data = _settings };
         }
 
         /// <summary>同步写入（供 <see cref="Save"/> 使用）。</summary>
@@ -387,31 +407,31 @@ namespace XFramework.XSettings
             {
                 UnityEngine.Debug.LogWarning(
                     "[SettingsManager] 设置数据缺少版本信封或载荷为空，已回退默认值。" +
-                    $"（当前 CurrentVersion={_options.CurrentVersion}，期望信封格式 {{Version, Data}}；" +
+                    $"（当前 CurrentVersion={_currentVersion}，期望信封格式 {{Version, Data}}；" +
                     "若此前按无版本格式落盘，启用版本化后旧文件将无法识别）");
                 return CreateDefault();
             }
 
-            if (envelope.Version > _options.CurrentVersion)
+            if (envelope.Version > _currentVersion)
             {
                 // 高于本版本:整份拒绝。数据可能由更新版游戏写入,按旧结构解析会静默错位
                 UnityEngine.Debug.LogWarning(
                     $"[SettingsManager] 设置格式版本 {envelope.Version} 高于本版本支持的 " +
-                    $"{_options.CurrentVersion}，已整份拒绝并回退默认值。");
+                    $"{_currentVersion}，已整份拒绝并回退默认值。");
                 return CreateDefault();
             }
 
-            if (envelope.Version < _options.CurrentVersion)
+            if (envelope.Version < _currentVersion)
             {
                 if (Migrator == null)
                 {
                     UnityEngine.Debug.LogWarning(
-                        $"[SettingsManager] 设置格式版本 {envelope.Version} 需要迁移到 {_options.CurrentVersion}，" +
+                        $"[SettingsManager] 设置格式版本 {envelope.Version} 需要迁移到 {_currentVersion}，" +
                         $"但未注册 ISettingsMigrator<{typeof(T).Name}>，已回退默认值。");
                     return CreateDefault();
                 }
 
-                Migrator.Migrate(envelope.Version, _options.CurrentVersion, envelope.Data);
+                Migrator.Migrate(envelope.Version, _currentVersion, envelope.Data);
             }
 
             return envelope.Data;

@@ -76,6 +76,30 @@ namespace XFramework.XSettings.Tests
 
         #endregion
 
+        #region 选项快照
+
+        [Test]
+        public void Options_CurrentVersionChangedAfterInitialize_HasNoEffect()
+        {
+            var store = new FakeStore();
+            var options = new SettingsOptions { CurrentVersion = 1 };
+            var manager = CreateManager(store, options);
+
+            manager.Save();
+            Assert.AreEqual(1, ((SettingsEnvelope<SampleSettings>)store.Data).Version, "前提：按版本 1 落盘");
+
+            // 初始化后改选项不应有任何效果。此前 IsVersioned 每次读写都实时读 SettingsOptions，
+            // 于是中途改 CurrentVersion 会让上下半场写出的落盘格式不同——旧版本客户端读下半场
+            // 写出的文件时会整份拒绝，用户的设置看起来凭空重置
+            options.CurrentVersion = 2;
+            manager.Save();
+
+            Assert.AreEqual(1, ((SettingsEnvelope<SampleSettings>)store.Data).Version,
+                "选项在 Initialize 时快照，之后修改不生效");
+        }
+
+        #endregion
+
         #region 落盘格式
 
         [Test]

@@ -222,6 +222,12 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `AutoSaveDelay` | `0.5` | 自动保存的去抖窗口（秒） |
 | `SaveOnQuit` | `false` | 应用退出时若有未提交改动则写盘（兜底） |
 
+> **选项在 `Initialize` 时读取一次，之后修改不再生效。** `SettingsOptions` 保持可变只是为了
+> 对象初始化器语法好用，但管理器只取值并快照、**不保留引用**。初始化后再改这些字段不会有任何
+> 效果——不是「部分生效」那种难查的状态。之所以要这么严：`SaveOnQuit` 中途翻转会让释放逻辑
+> 按与订阅时不同的判据决定是否退订（订阅就此永远留在 `Application.quitting` 上），
+> `CurrentVersion` 中途改会让上下半场写出的落盘格式不同。
+
 ### ISettingsMigrator\<T\>
 
 ```csharp
