@@ -194,7 +194,20 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `bool Exists()` | 是否有已保存数据 |
 | `void Delete()` | 删除持久化数据 |
 
-内置实现：`JsonFileStore(string filePath)`
+内置实现：
+
+| 实现 | 说明 |
+| ---- | ---- |
+| `JsonFileStore(string filePath)` | JSON 文件，原子写 + 一代备份 |
+| `EncryptedSettingsStore(inner, cryptoProvider)` | 加解密装饰器，可叠在任意后端之上 |
+
+> **为什么 `JsonFileStore` 直接用 `System.IO`、不经 `FileManager`？** 因为 `ISettingsStore` 是全同步的，
+> 而管理器的**构造函数必然同步加载**（构造无法 await）；`FileManager` 的门面只提供异步内容读写，
+> 同步包装在 `FileManagerExtensions` 里，其文档把适用范围限定为「编辑器工具、小型配置文件」。
+> 接上 `FileManager` 能换来 `FileDomain` 与平台 `IFileProvider`，但会**丢掉一代备份**——
+> `FileManager` 没有重命名/复制原语，而 `FilePathUtility.ReplaceFileAtomically` 是绝对路径原语。
+> 权衡下来：设置是几百字节的本地 JSON，备份能力比域管理更值钱。需要平台存档时请自行实现
+> `ISettingsStore`；只是要加密则用上面的装饰器，不必自己写。
 
 落盘布局：正式文件 `settings.json`、写入中的临时文件 `.tmp`、一代备份 `.bak`。
 写入走 `FilePathUtility.ReplaceFileAtomically`，保证任意时刻正式文件与备份至少有一个完整存在。
@@ -328,12 +341,33 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 
 ### 自定义存储后端
 
-```csharp
-// 加密存储示例（示意，需自行实现加密逻辑）
-public class EncryptedFileStore : ISettingsStore { /* ... */ }
+需要平台存档（主机 SDK）、云存档或特殊格式时，实现 `ISettingsStore` 即可：
 
-SettingsManager.Initialize<GameSettings>(new EncryptedFileStore(path, encryptionKey));
+```csharp
+public class PlatformSaveStore : ISettingsStore { /* ... */ }
+
+SettingsManager.Initialize<GameSettings>(new PlatformSaveStore(...));
 ```
+
+**只是要加密则不必自己写**，用现成的装饰器：
+
+```csharp
+SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
+    new JsonFileStore(Application.persistentDataPath + "/settings.json"),
+    new XorCryptoProvider("my-secret-key")));
+```
+
+装出来的落盘形状是 `{"Data":"<Base64 密文>"}`——多一层外壳是因为 `ISettingsStore` 只有泛型的
+`Load/Save`、没有字节通道，而 Base64 是任意字节序列能无损放进 JSON 字符串的编码。
+
+> **装饰器可叠加，且不损失内层能力**：它只在「交给内层之前」与「从内层取出之后」各做一次变换，
+> 原子写、一代备份、失败降级全部照旧。
+>
+> **换密钥等于换加密方案**：旧文件无法还原，读取时按「解密失败」回退默认值并告警。要迁移请在
+> 换密钥之前把数据读出并重新保存。
+>
+> **用途是防篡改而非保密**：密钥随游戏分发，加密强度上限取决于注入的 `ICryptoProvider`
+> （内置 `XorCryptoProvider` 只防普通用户手改）。真正敏感的数据不要放在设置里。
 
 ### 运行时切换存储后端
 
@@ -384,6 +418,7 @@ Runtime/Settings/
 ├── ISettingsStore.cs              # 存储后端接口
 ├── IAsyncSettingsStore.cs         # 可选：异步存储能力
 ├── JsonFileStore.cs               # 默认 JSON 文件存储（原子写 + 一代备份）
+├── EncryptedSettingsStore.cs      # 加解密装饰器（可叠在任意后端上）
 ├── ISettingsManager.cs            # 管理器接口
 ├── SettingsManagerImpl.cs         # 默认实现（internal sealed）
 ├── SettingsManager.cs             # 全局静态外观
