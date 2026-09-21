@@ -35,6 +35,32 @@ namespace XFramework.XSettings.Tests
             public void Delete() { }
         }
 
+        /// <summary>
+        /// 可在 <see cref="Exists"/> 里执行一次性副作用的假存储。
+        /// 用于制造「读取过程中后端被换掉」——真实场景少见，但门面不设防，
+        /// 而代价不对称：不快照就会读到另一个后端的数据且毫无提示。
+        /// </summary>
+        private sealed class HookedStore : ISettingsStore
+        {
+            public object Payload;
+            public Action OnExists;
+
+            public bool Exists()
+            {
+                var hook = OnExists;
+                OnExists = null; // 一次性：避免后续调用重复触发
+                hook?.Invoke();
+
+                return Payload != null;
+            }
+
+            public T Load<T>() where T : class, new() => Payload as T ?? new T();
+
+            public void Save<T>(T settings) where T : class, new() => Payload = settings;
+
+            public void Delete() => Payload = null;
+        }
+
         private static SettingsManagerImpl<SampleSettings> CreateManager(ISettingsStore store)
             => new SettingsManagerImpl<SampleSettings>(store, () => new SampleSettings { Volume = 5 });
 
@@ -76,6 +102,23 @@ namespace XFramework.XSettings.Tests
             var manager = CreateManager(new FakeStore());
 
             Assert.Throws<ArgumentNullException>(() => manager.Store = null);
+        }
+
+        [Test]
+        public void Load_StoreSwappedDuringRead_UsesTheStoreCapturedAtEntry()
+        {
+            var original = new HookedStore { Payload = new SampleSettings { Volume = 111 } };
+            var manager = CreateManager(original);
+            var replacement = new HookedStore { Payload = new SampleSettings { Volume = 222 } };
+
+            // 在「先问有没有数据」这一步把后端换掉。不加干预的话，接下来的 Load 会去读新后端
+            original.OnExists = () => manager.Store = replacement;
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"Store 已替换为 HookedStore"));
+            manager.Load();
+
+            Assert.AreEqual(111, manager.Settings.Volume,
+                "一次加载只用开头捕获的后端：Exists 与 Load 不能落在两个不同的后端上");
         }
 
         #endregion

@@ -36,7 +36,17 @@ namespace XFramework.XSettings.Tests
             public bool HasData;
             public int SyncSaveCalls;
 
-            public bool Exists() => HasData;
+            /// <summary>可在 <see cref="Exists"/> 里执行的一次性副作用（用于「读取中换后端」）。</summary>
+            public Action OnExists;
+
+            public bool Exists()
+            {
+                var hook = OnExists;
+                OnExists = null; // 一次性：避免后续调用重复触发
+                hook?.Invoke();
+
+                return HasData;
+            }
 
             public T Load<T>() where T : class, new() => Data as T ?? new T();
 
@@ -209,6 +219,26 @@ namespace XFramework.XSettings.Tests
             await manager.LoadAsync();
 
             Assert.AreEqual(5, manager.Settings.Volume, "降级路径同样走 defaultFactory");
+        }
+
+        [Test]
+        public async Task LoadAsync_SyncOnlyStoreSwappedMidLoad_UsesCapturedStore()
+        {
+            var original = new SyncOnlyStore { HasData = true, Data = new SampleSettings { Volume = 111 } };
+            var manager = CreateManager(original);
+            var replacement = new SyncOnlyStore { HasData = true, Data = new SampleSettings { Volume = 222 } };
+
+            // 降级路径把整段同步读挪到线程池，期间换后端正是「能力探测与真正读取分家」
+            // 最容易发生的位置——探测看到的是一个后端，读却落到另一个上
+            original.OnExists = () => manager.Store = replacement;
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"Store 已替换为 SyncOnlyStore"));
+            await manager.LoadAsync();
+
+            Assert.AreEqual(111, manager.Settings.Volume,
+                "一次加载只用开头捕获的后端，与同步 Load 的语义一致");
+
+            manager.Dispose();
         }
 
         [Test]

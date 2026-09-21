@@ -77,7 +77,7 @@ namespace XFramework.XSettings
 
             // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
             // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
-            _settings = store.Exists() ? LoadExisting() : CreateDefault();
+            _settings = store.Exists() ? LoadExisting(store) : CreateDefault();
 
             // 自动保存是可选能力,关闭时不注册任何帧回调——默认路径零开销
             if (opts.AutoSave)
@@ -162,7 +162,12 @@ namespace XFramework.XSettings
         {
             ThrowIfDisposed();
 
-            _settings = LoadCore();
+            // 快照 store:读取过程会多次询问后端(Exists 与 Load),而 Store setter 可能在任何
+            // 一次调用里被换掉(第三方 store 的 Exists 里改 Store 这种写法很怪,但门面不设防),
+            // 不快照会让「有没有数据」与「读哪份数据」落在两个不同的后端上
+            var store = _store;
+
+            _settings = LoadCore(store);
             _savedCount = _changeCount; // 内存此刻与持久层一致
             Notify();
         }
@@ -310,8 +315,12 @@ namespace XFramework.XSettings
         /// </summary>
         private async UniTask LoadAsyncCore(CancellationToken cancellationToken)
         {
+            // 快照 store:await 期间 Store setter 可能把它换掉。不快照的话「能力探测」与
+            // 「真正读取」会落在两个不同的后端上——取舍与 SaveAsyncCore 一致
+            var store = _store;
+
             T loaded;
-            if (_store is IAsyncSettingsStore asyncStore)
+            if (store is IAsyncSettingsStore asyncStore)
             {
                 loaded = await asyncStore.ExistsAsync(cancellationToken)
                     ? await ReadAsync(asyncStore, cancellationToken)
@@ -319,8 +328,9 @@ namespace XFramework.XSettings
             }
             else
             {
-                // 能力降级:store 只实现同步接口,把整段同步读挪到线程池,语义与同步 Load 完全一致
-                loaded = await UniTask.RunOnThreadPool(LoadCore, configureAwait: true, cancellationToken);
+                // 能力降级:store 只实现同步接口,把整段同步读挪到线程池,语义与同步 Load 完全一致。
+                // 闭包在这里只为把快照带进线程池,属低频加载路径,不在每帧路径上
+                loaded = await UniTask.RunOnThreadPool(() => LoadCore(store), configureAwait: true, cancellationToken);
             }
 
             // 替换与通知必须在主线程:Notify 会经 MessageManager 广播,订阅者通常随即访问 Unity API
@@ -333,18 +343,19 @@ namespace XFramework.XSettings
         /// <summary>
         /// 同步加载的核心逻辑（不含通知），供同步 <see cref="Load"/> 与异步降级路径共用。
         /// </summary>
-        private T LoadCore()
+        /// <param name="store">本次读取使用的存储后端（由调用方快照传入，见 <see cref="Load"/>）。</param>
+        private T LoadCore(ISettingsStore store)
         {
             // 先问 Exists 而不是直接取 Load 的返回值:ISettingsStore.Load 的契约是
             // 「无数据时返回 new T()」,这里无法区分「读到了持久化数据」与「根本没有数据」,
             // 直接赋值会让 defaultFactory 在存档被删后形同虚设
-            return _store.Exists() ? LoadExisting() : CreateDefault();
+            return store.Exists() ? LoadExisting(store) : CreateDefault();
         }
 
         /// <summary>持久层已有数据时的同步读取入口：按是否启用版本化分流。</summary>
-        private T LoadExisting()
+        private T LoadExisting(ISettingsStore store)
         {
-            return IsVersioned ? DecodeEnvelope(_store.Load<SettingsEnvelope<T>>()) : LoadFromStore();
+            return IsVersioned ? DecodeEnvelope(store.Load<SettingsEnvelope<T>>()) : LoadFromStore(store);
         }
 
         /// <summary>是否启用版本化落盘（构造时快照的 <see cref="SettingsOptions.CurrentVersion"/> 大于 0）。</summary>
@@ -452,9 +463,9 @@ namespace XFramework.XSettings
         /// 但契约不被编译器强制。返回 <c>null</c> 会让 <see cref="Settings"/> 变 <c>null</c>，
         /// 并把 NRE 推迟到调用方各处爆发，故此处回退默认值并告警。</para>
         /// </summary>
-        private T LoadFromStore()
+        private T LoadFromStore(ISettingsStore store)
         {
-            var loaded = _store.Load<T>();
+            var loaded = store.Load<T>();
             if (loaded != null)
                 return loaded;
 
