@@ -52,6 +52,7 @@ namespace XFramework.XSettings.Tests
         {
             ["Store"] = new[] { "GetStore", "SetStore" },
             ["Migrator"] = new[] { "GetMigrator", "SetMigrator" },
+            ["Validator"] = new[] { "GetValidator", "SetValidator" },
         };
 
         /// <summary>

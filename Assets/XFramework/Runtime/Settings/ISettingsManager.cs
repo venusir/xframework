@@ -133,5 +133,20 @@ namespace XFramework.XSettings
         ISettingsMigrator<T> Migrator { get; set; }
 
         #endregion
+
+        #region Validation
+
+        /// <summary>
+        /// 载荷校验钩子。在 <c>Load</c> / <c>LoadAsync</c> / <c>Reset</c> / <c>Apply</c> 上被调用，
+        /// 且位于迁移之后、订阅者被通知之前。
+        /// <para><b>不覆盖构造期那次加载</b>（钩子只能在拿到实例后注册，与 <see cref="Migrator"/> 同）；
+        /// 注册后补一次 <c>Load</c> 即可让它也作用于启动时读到的那份数据。</para>
+        /// <para>为 <c>null</c>（默认）时零行为。</para>
+        /// <para><b>不覆盖字段写入：</b>经 <see cref="SettingRef{T,TField}"/> 写入的值不经过它——
+        /// 那是进程内的显式赋值，可信且每帧可能发生。</para>
+        /// </summary>
+        ISettingsValidator<T> Validator { get; set; }
+
+        #endregion
     }
 }

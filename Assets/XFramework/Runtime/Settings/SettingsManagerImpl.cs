@@ -112,7 +112,7 @@ namespace XFramework.XSettings
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
-            _settings = settings;
+            _settings = RunValidator(settings);
 
             // 整体替换后内存与持久层不再一致。无从判断新对象是否恰好等于磁盘内容,故一律置脏
             _changeCount++;
@@ -226,6 +226,13 @@ namespace XFramework.XSettings
 
         /// <inheritdoc />
         public ISettingsMigrator<T> Migrator { get; set; }
+
+        #endregion
+
+        #region Validation
+
+        /// <inheritdoc />
+        public ISettingsValidator<T> Validator { get; set; }
 
         #endregion
 
@@ -445,7 +452,9 @@ namespace XFramework.XSettings
                 Migrator.Migrate(envelope.Version, _currentVersion, envelope.Data);
             }
 
-            return envelope.Data;
+            // 迁移的产出同样要过校验：迁移实现里写错字段、或按新结构补齐时忘了钳制，
+            // 都是本钩子要兜的场景
+            return RunValidator(envelope.Data);
         }
 
         /// <summary>
@@ -454,7 +463,20 @@ namespace XFramework.XSettings
         /// </summary>
         private T CreateDefault()
         {
-            return _defaultFactory != null ? _defaultFactory() : new T();
+            return RunValidator(_defaultFactory != null ? _defaultFactory() : new T());
+        }
+
+        /// <summary>
+        /// 产出设置实例的唯一出口：注入校验器时就地校正。
+        /// <para>所有路径都经这里——构造、<see cref="Load"/>、<see cref="LoadAsync"/>、
+        /// <see cref="Reset"/>、<see cref="Apply"/>，以及版本化路径上迁移之后的产出。
+        /// 于是「当前设置对象一定通过了校验」这条不变式只依赖这一处，
+        /// 新增产出路径时只需记得走 <see cref="CreateDefault"/> 或本方法。</para>
+        /// </summary>
+        private T RunValidator(T settings)
+        {
+            Validator?.Validate(settings);
+            return settings;
         }
 
         /// <summary>
@@ -467,7 +489,7 @@ namespace XFramework.XSettings
         {
             var loaded = store.Load<T>();
             if (loaded != null)
-                return loaded;
+                return RunValidator(loaded);
 
             UnityEngine.Debug.LogWarning(
                 $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +
@@ -482,7 +504,7 @@ namespace XFramework.XSettings
         {
             var loaded = await store.LoadAsync<T>(cancellationToken);
             if (loaded != null)
-                return loaded;
+                return RunValidator(loaded);
 
             UnityEngine.Debug.LogWarning(
                 $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +

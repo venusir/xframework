@@ -168,6 +168,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Observe<T>(Action<T>)` | 订阅**对象被整体替换**（订阅时立即回调） |
 | `GetStore<T>()` / `SetStore<T>(store)` | 获取 / 替换存储后端 |
 | `GetMigrator<T>()` / `SetMigrator<T>(migrator)` | 获取 / 注册格式迁移钩子 |
+| `GetValidator<T>()` / `SetValidator<T>(validator)` | 获取 / 注册载荷校验钩子 |
 
 ### SettingRef\<T, TField\>（字段句柄）
 
@@ -267,6 +268,36 @@ SettingsManager.SetMigrator<GameSettings>(new GameSettingsMigrator());
 
 它是可写属性而非构造参数，避免「先 Initialize 还是先注册迁移器」的顺序问题；
 `SetMigrator` 可在任意时刻调用，包括 `Load` 之前。
+
+### ISettingsValidator\<T\>
+
+把不可信的数据校正回合法范围。持久层里的值不能当可信：玩家手改过 JSON、磁盘位翻转、
+迁移实现写错了字段、`JsonUtility` 给新增字段填了类型默认值（新加的 `int range = 3`
+在旧存档上会变成 `0`）。
+
+```csharp
+public class GameSettingsValidator : ISettingsValidator<GameSettings>
+{
+    public void Validate(GameSettings settings)
+    {
+        settings.audio.masterVolume = Mathf.Clamp01(settings.audio.masterVolume);
+        settings.qualityLevel = Mathf.Clamp(settings.qualityLevel, 0, QualitySettings.names.Length - 1);
+    }
+}
+
+SettingsManager.SetValidator<GameSettings>(new GameSettingsValidator());
+SettingsManager.Load<GameSettings>();   // 让校验器也作用于启动时读到的那份数据，见下
+```
+
+在 `Load` / `LoadAsync` / `Reset` / `Apply` 上被调用，位于**迁移之后**、订阅者被通知之前。
+
+> **两处刻意的边界**
+>
+> - **构造期那次加载不在覆盖内**：钩子只能在拿到实例之后注册，而管理器构造时就已经读过一次盘。
+>   注册后补一次 `Load` 即可（上例就是这么写的），这是推荐的启动顺序。
+> - **经句柄的字段写入不在覆盖内**：那是进程内的显式赋值，可信且每帧可能发生。
+>
+> 两处都与 `ISettingsMigrator<T>` 的处境相同，理由也相同——它同样是「注册只能发生在构造之后」。
 
 ### SettingsChangedMessage
 
@@ -427,6 +458,7 @@ Runtime/Settings/
 ├── SettingsOptions.cs             # 选项
 ├── SettingsEnvelope.cs            # 版本信封（internal）
 ├── ISettingsMigrator.cs           # 迁移钩子
+├── ISettingsValidator.cs          # 载荷校验钩子
 ├── SettingsAutoSaveTicker.cs      # 自动保存帧驱动器（internal）
 ├── Messages/
 │   └── SettingsChangedMessage.cs  # 变更消息

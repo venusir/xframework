@@ -435,6 +435,36 @@ namespace XFramework.XSettings
 
         #endregion
 
+        #region Validation
+
+        /// <summary>
+        /// 获取指定类型的载荷校验钩子。
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <returns>当前注册的校验器；未注册时为 <c>null</c>。</returns>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static ISettingsValidator<T> GetValidator<T>() where T : class, new()
+        {
+            return GetManager<T>().Validator;
+        }
+
+        /// <summary>
+        /// 注册指定类型的载荷校验钩子，用于把不可信的数据（手改过的 JSON、迁移写错的字段、
+        /// <c>JsonUtility</c> 给新增字段填的类型默认值）校正回合法范围。
+        /// <para>在 <c>Load</c> / <c>LoadAsync</c> / <c>Reset</c> / <c>Apply</c> 上被调用，且位于迁移之后、
+        /// 订阅者被通知之前。<b>不覆盖构造期那次加载</b>（钩子只能在拿到实例后注册）——
+        /// 注册后补一次 <c>Load</c> 即可让它也作用于启动时读到的那份数据。与 <see cref="SetMigrator{T}"/> 对称。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="validator">校验器；<c>null</c> 表示清除已注册的校验器。</param>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static void SetValidator<T>(ISettingsValidator<T> validator) where T : class, new()
+        {
+            GetManager<T>().Validator = validator;
+        }
+
+        #endregion
+
         #region Internal
 
         /// <summary>
