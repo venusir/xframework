@@ -470,14 +470,26 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 应用退出兜底：仅在确有未提交改动时写盘，因此显式保存过的场景不会产生额外 IO。
-        /// <para>编辑器不触发 <c>Application.quitting</c>，故无法在 Test Runner 中覆盖。</para>
+        /// <para><b>异常吞住：</b>异常若从这里冒出去，就落进 Unity 的退出流程，那是最没人能接的地方
+        /// ——游戏正在关闭，调用方无从补救。</para>
+        /// <para><b>可测性：</b>改 <c>internal</c> 使测试可直接调用。文档此前写「无法用 Test Runner
+        /// 覆盖」，那话只对 <c>Application.quitting</c> <b>事件</b>成立（编辑器不触发），
+        /// 本处理函数本身与事件无关。</para>
         /// </summary>
-        private void OnApplicationQuitting()
+        internal void OnApplicationQuitting()
         {
             if (_disposed || !IsDirty)
                 return;
 
-            Save();
+            try
+            {
+                Save();
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogWarning(
+                    $"[SettingsManager] 退出兜底保存失败，内存改动未落盘：{e.GetType().Name}: {e.Message}");
+            }
         }
 
         /// <summary>

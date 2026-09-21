@@ -1,3 +1,5 @@
+using System;
+using UnityEngine;
 using XFramework.XUpdate;
 
 namespace XFramework.XSettings
@@ -12,6 +14,10 @@ namespace XFramework.XSettings
     /// 若做成节流，一次三秒的拖动会写六次。</para>
     /// <para>判定「是否有新改动」用的是管理器的变更计数而非 <c>IsDirty</c>：后者在整个去抖窗口内
     /// 恒为真，区分不出「刚改过」与「改动已久」。</para>
+    /// <para><b>写失败不得冒泡：</b>存储后端抛异常（配额、签名、平台 SDK 失败等）时，异常若从
+    /// <see cref="OnUpdate"/> 冒出，<c>UpdateScheduler</c> 会把它当作坏节点<b>永久注销</b>——
+    /// 于是一个可由环境恢复的失败会变成「本次会话再也不自动保存」，且没有重新注册的路径。
+    /// 故此处吞住、按去抖窗口重试、每个失败周期只告警一次。</para>
     /// </remarks>
     internal sealed class SettingsAutoSaveTicker<T> : IUpdateable where T : class, new()
     {
@@ -21,6 +27,9 @@ namespace XFramework.XSettings
         private readonly float _delay;
         private int _lastSeenChange;
         private float _countdown;
+
+        /// <summary>当前失败周期是否已告警。成功一次即复位，使下一个失败周期重新告警。</summary>
+        private bool _saveFailureLogged;
 
         #endregion
 
@@ -72,8 +81,33 @@ namespace XFramework.XSettings
             if (_countdown > 0f)
                 return UpdateTier.Tier0;
 
-            _owner.Save();
-            return UpdateTier.Tier3;
+            try
+            {
+                _owner.Save();
+                _saveFailureLogged = false;
+                return UpdateTier.Tier3;
+            }
+            catch (Exception e)
+            {
+                // 释放竞态窗口：此时不该再重试，也不该留日志（与顶部守卫同因）
+                if (_owner.IsDisposed)
+                    return UpdateTier.Tier5;
+
+                // 每个失败周期只告警一次：持续失败的 store 若每次重试都打印，
+                // 就是每秒两次的日志洪水，那本身就是新的缺陷
+                if (!_saveFailureLogged)
+                {
+                    Debug.LogWarning(
+                        $"[SettingsManager] 自动保存失败，将在下一个去抖窗口（{_delay:0.##} 秒）后重试，" +
+                        $"后续失败不再重复打印：{e.GetType().Name}: {e.Message}");
+                    _saveFailureLogged = true;
+                }
+
+                // 重新起算窗口：不重算就是每帧重试，持续失败的 store 会以约 7.5 次/秒空转。
+                // 改动不会丢——Save 只在写入正常返回后才推进已提交档位，故 IsDirty 自动保持为真
+                _countdown = _delay;
+                return UpdateTier.Tier0;
+            }
         }
 
         #endregion

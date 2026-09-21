@@ -1,5 +1,8 @@
 using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XSettings;
 using XFramework.XUpdate;
 
@@ -45,6 +48,33 @@ namespace XFramework.XSettings.Tests
 
         private static SettingsManagerImpl<SampleSettings> CreateManager(ISettingsStore store, SettingsOptions options = null)
             => new SettingsManagerImpl<SampleSettings>(store, () => new SampleSettings { Volume = 5 }, options);
+
+        /// <summary>
+        /// 可切换抛异常的存储后端。云存档、平台 SDK 这类后端抛异常是正常失败模式而非 bug，
+        /// 用于验证自动保存不会因一次失败而永久停摆。
+        /// </summary>
+        private sealed class ThrowingStore : ISettingsStore
+        {
+            public int SaveCalls;
+            public bool ThrowOnSave;
+            public object Data;
+
+            public bool Exists() => Data != null;
+
+            public T Load<T>() where T : class, new() => Data as T ?? new T();
+
+            public void Save<T>(T settings) where T : class, new()
+            {
+                SaveCalls++;
+
+                if (ThrowOnSave)
+                    throw new InvalidOperationException("模拟存储后端失败（配额/签名/平台 SDK）");
+
+                Data = settings;
+            }
+
+            public void Delete() => Data = null;
+        }
 
         #endregion
 
@@ -145,6 +175,128 @@ namespace XFramework.XSettings.Tests
             ticker.OnUpdate(1.0f, 0f);
 
             Assert.AreEqual(2, store.SaveCalls, "保存之后的新改动同样会触发下一轮");
+        }
+
+        #endregion
+
+        #region 写失败
+
+        [Test]
+        public void AutoSave_StoreThrows_DoesNotThrowAndStaysDirty()
+        {
+            var store = new ThrowingStore { ThrowOnSave = true };
+            var manager = CreateManager(store);
+            var ticker = new SettingsAutoSaveTicker<SampleSettings>(manager, 0.5f);
+
+            manager.MarkDirty();
+            ticker.OnUpdate(1.0f, 0f); // 首次 tick 检测到改动：只重置窗口，不计时
+
+            LogAssert.Expect(LogType.Warning, new Regex("自动保存失败"));
+
+            // 异常若冒到 UpdateScheduler，该节点会被当作坏节点永久注销（catch → Unregister），
+            // 于是「store 抛了异常」这个可由环境恢复的失败会变成「本次会话再也不自动保存」
+            UpdateTier tier = UpdateTier.Tier5;
+            Assert.DoesNotThrow(() => tier = ticker.OnUpdate(1.0f, 0f), "驱动器必须吞住 store 的异常");
+
+            Assert.AreEqual(UpdateTier.Tier0, tier, "失败后重新起算窗口，故维持细粒度");
+            Assert.AreEqual(1, store.SaveCalls);
+            Assert.IsTrue(manager.IsDirty, "写失败后改动不能被当作已提交");
+        }
+
+        [Test]
+        public void AutoSave_StoreThrows_RetriesOnNextWindow()
+        {
+            var store = new ThrowingStore { ThrowOnSave = true };
+            var manager = CreateManager(store);
+            var ticker = new SettingsAutoSaveTicker<SampleSettings>(manager, 0.5f);
+
+            manager.MarkDirty();
+            ticker.OnUpdate(1.0f, 0f);
+
+            LogAssert.Expect(LogType.Warning, new Regex("自动保存失败"));
+            ticker.OnUpdate(1.0f, 0f);
+            Assert.AreEqual(1, store.SaveCalls);
+
+            // 失败后窗口被重新起算：紧接着的一帧不该重试，否则持续失败的 store
+            // （比如云端无网）会以约 7.5 次/秒的频率空转
+            ticker.OnUpdate(0.1f, 0f);
+            Assert.AreEqual(1, store.SaveCalls, "失败后重新起算窗口，不逐帧空转");
+
+            store.ThrowOnSave = false;
+            ticker.OnUpdate(1.0f, 0f);
+
+            Assert.AreEqual(2, store.SaveCalls, "下一个去抖窗口重试");
+            Assert.IsFalse(manager.IsDirty, "重试成功后转为干净");
+        }
+
+        [Test]
+        public void AutoSave_StoreThrows_LogsOncePerFailureEpisode()
+        {
+            var store = new ThrowingStore { ThrowOnSave = true };
+            var manager = CreateManager(store);
+            var ticker = new SettingsAutoSaveTicker<SampleSettings>(manager, 0.5f);
+
+            // LogAssert 数不出「只打了一次」——它只保证期待的消息出现过，多余的 Warning 不会让
+            // 用例失败。故直接挂 logMessageReceived 计数。持续失败的 store 若每次重试都打印，
+            // 就是每秒两次的日志洪水，这条节流是刻意的取舍而非疏漏
+            var warnings = 0;
+            Application.LogCallback counter = (condition, _, type) =>
+            {
+                if (type == LogType.Warning && condition.Contains("自动保存失败"))
+                    warnings++;
+            };
+            Application.logMessageReceived += counter;
+            try
+            {
+                manager.MarkDirty();
+                ticker.OnUpdate(1.0f, 0f); // 首次 tick 只重置窗口
+
+                ticker.OnUpdate(1.0f, 0f);
+                Assert.AreEqual(1, warnings, "首次失败要告警");
+
+                ticker.OnUpdate(1.0f, 0f);
+                Assert.AreEqual(1, warnings, "同一失败周期内不重复打印");
+                Assert.AreEqual(2, store.SaveCalls, "静默不等于放弃重试");
+
+                // 成功一次即复位，下一个失败周期重新告警
+                store.ThrowOnSave = false;
+                ticker.OnUpdate(1.0f, 0f);
+                Assert.IsFalse(manager.IsDirty);
+
+                store.ThrowOnSave = true;
+                manager.MarkDirty();
+                ticker.OnUpdate(1.0f, 0f); // 新改动，重置窗口
+                ticker.OnUpdate(1.0f, 0f);
+                Assert.AreEqual(2, warnings, "成功之后的新失败周期要重新告警");
+            }
+            finally
+            {
+                Application.logMessageReceived -= counter;
+            }
+        }
+
+        [Test]
+        public void QuitFallback_StoreThrows_DoesNotPropagate()
+        {
+            var store = new ThrowingStore { ThrowOnSave = true };
+            var manager = CreateManager(store, new SettingsOptions { SaveOnQuit = true });
+            manager.MarkDirty();
+
+            LogAssert.Expect(LogType.Warning, new Regex("退出兜底保存失败"));
+
+            try
+            {
+                // Application.quitting 在编辑器中不触发，但处理函数本身与事件无关，可直接调用。
+                // 异常若从这里冒出去就落进 Unity 的退出流程——那是游戏正在关闭、无人能补救的位置
+                Assert.DoesNotThrow(() => manager.OnApplicationQuitting(), "异常不该窜进退出流程");
+                Assert.AreEqual(1, store.SaveCalls);
+            }
+            finally
+            {
+                // SaveOnQuit 使构造函数订阅了 Application.quitting，而 PlayMode 下所有用例
+                // 共享一个 player 实例：不释放就会把订阅留给后面的 fixture
+                manager.Dispose();
+            }
         }
 
         #endregion
