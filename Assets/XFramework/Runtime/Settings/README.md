@@ -165,6 +165,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Load<T>()` / `LoadAsync<T>(ct)` | 从持久层重新加载 |
 | `Reset<T>()` | 重置为默认值（走 `defaultFactory`）并删除文件 |
 | `IsDirty<T>()` / `MarkDirty<T>()` | 查询 / 手动标记「有未提交改动」 |
+| `SaveAllDirty()` | 把所有脏了的类型一次写盘（显式时机用；不看 `SaveOnPause`） |
 | `Observe<T>(Action<T>)` | 订阅**对象被整体替换**（订阅时立即回调） |
 | `GetStore<T>()` / `SetStore<T>(store)` | 获取 / 替换存储后端 |
 | `GetMigrator<T>()` / `SetMigrator<T>(migrator)` | 获取 / 注册格式迁移钩子 |
@@ -240,6 +241,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `AutoSave` | `false` | 是否启用去抖自动保存 |
 | `AutoSaveDelay` | `0.5` | 自动保存的去抖窗口（秒） |
 | `SaveOnQuit` | `false` | 应用退出时若有未提交改动则写盘（兜底） |
+| `SaveOnPause` | `false` | 应用切到后台时若有未提交改动则写盘（兜底） |
 
 > **选项在 `Initialize` 时读取一次，之后修改不再生效。** `SettingsOptions` 保持可变只是为了
 > 对象初始化器语法好用，但管理器只取值并快照、**不保留引用**。初始化后再改这些字段不会有任何
@@ -367,8 +369,31 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 只告警不抛的后端（如 `JsonFileStore`）不在此列，框架无从察觉，详见「已知限制」。
 
 > **`SaveOnQuit` 的两处局限**：Unity 的 `Application.quitting` **在编辑器中不触发**，
-> 该行为只能在构建产物中确认；它也不覆盖移动端切后台后被系统杀死的场景
-> （那需要 `OnApplicationPause`，静态服务收不到该回调，须业务自行在暂停时 `Save`）。
+> 该行为只能在构建产物中确认；它也不覆盖移动端切后台后被系统杀死的场景——那种情况下
+> `OnApplicationQuit` 根本不会触发，于是「退出时兜底」在这些设备上等于不存在。
+> 后者请用 `SaveOnPause`（下节）。
+
+### 切后台兜底
+
+```csharp
+SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
+{
+    AutoSave = true,
+    SaveOnQuit = true,
+    SaveOnPause = true,   // 移动端必备：被系统杀掉时 OnApplicationQuit 不会触发
+});
+```
+
+开启后框架自持一个隐藏的常驻宿主接收 `OnApplicationPause`——仅本选项开启时创建，
+全部释放后销毁，关闭则零开销。它刻意**不**挂到 `GameLauncher` 上：后者自己的文档写明
+「是可选件、不是框架的必需入口……场景里没有它也照常运转」，把落盘挂在一个可缺席的组件上
+会让本选项的承诺落空。
+
+> **只覆盖「进入后台」**：恢复前台不写盘，那里没有新的丢失风险。
+>
+> **不想用内置宿主？** 在你自己的 `OnApplicationPause` 里调 `SettingsManager.SaveAllDirty()` 即可——
+> 它把所有脏了的类型一次写盘，不看任何开关（那是调用方的显式指令，语义同逐个 `Save`）。
+> 它同样是「菜单关闭 / 场景切换 / 进入过场前先把一切存下来」的入口。
 
 ### 自定义存储后端
 
@@ -460,6 +485,7 @@ Runtime/Settings/
 ├── ISettingsMigrator.cs           # 迁移钩子
 ├── ISettingsValidator.cs          # 载荷校验钩子
 ├── SettingsAutoSaveTicker.cs      # 自动保存帧驱动器（internal）
+├── SettingsPauseNotifier.cs       # 切后台兜底的宿主（internal MonoBehaviour）
 ├── Messages/
 │   └── SettingsChangedMessage.cs  # 变更消息
 └── README.md

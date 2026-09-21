@@ -42,8 +42,20 @@ namespace XFramework.XSettings
         /// <para><b>无法用 Test Runner 验证：</b>Unity 的 <c>Application.quitting</c> 在编辑器中不触发，
         /// 该行为只能在构建产物里确认。</para>
         /// <para><b>不覆盖的场景：</b>移动端切后台后被系统杀死——那需要 <c>OnApplicationPause</c>，
-        /// 框架无法在静态服务里收到该回调，须由业务自行在暂停时调用 <c>Save</c>。</para>
+        /// 而它是 MonoBehaviour 消息，静态服务收不到。要覆盖请开 <see cref="SaveOnPause"/>。</para>
         /// </summary>
         public bool SaveOnQuit;
+
+        /// <summary>
+        /// 应用切到后台时若仍有未提交改动则写盘（兜底）。默认关闭。
+        /// <para><b>补的是 <see cref="SaveOnQuit"/> 最大的那个洞：</b>移动端被切到后台后，系统可能在
+        /// 任何时刻直接杀掉进程——此时 <c>OnApplicationQuit</c> 根本不会触发，于是「退出时兜底」
+        /// 在这些设备上等于不存在。三方资料里这是移动端最主要的设置丢失路径。</para>
+        /// <para>开启后框架会自持一个隐藏的常驻宿主接收 <c>OnApplicationPause</c>（仅本选项开启时创建，
+        /// 全部释放后销毁，关闭则零开销）。它刻意不挂到 <c>GameLauncher</c> 上——后者自己的文档写明
+        /// 「是可选件、不是框架的必需入口」，把落盘挂在一个可缺席的组件上会让本选项的承诺落空。</para>
+        /// <para><b>仅覆盖「进入后台」：</b>恢复前台时不写盘，因为那没有新的丢失风险。</para>
+        /// </summary>
+        public bool SaveOnPause;
     }
 }

@@ -285,6 +285,19 @@ namespace XFramework.XSettings
         }
 
         /// <summary>
+        /// 把所有类型中<b>确有未提交改动</b>的设置写盘；干净的类型不产生任何 IO。
+        /// <para><b>显式时机用它</b>：菜单关闭、场景切换、进入过场动画之前。也是「不想用内置的切后台
+        /// 宿主」时的替代入口——业务在自己的 <c>OnApplicationPause</c> 里调一次即可。</para>
+        /// <para><b>不看 <see cref="SettingsOptions.SaveOnPause"/>：</b>那是「自动兜底是否覆盖本类型」
+        /// 的开关，而本方法是调用方的显式指令，语义同逐个调用 <see cref="Save{T}"/>。</para>
+        /// <para>未初始化任何类型时是零操作（不抛异常）——它是兜底路径，不该在退出流程里制造失败。</para>
+        /// </summary>
+        public static void SaveAllDirty()
+        {
+            FlushDirty(pauseOptInOnly: false);
+        }
+
+        /// <summary>
         /// 从持久层重新加载，覆盖当前设置，并通知所有订阅者。
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
@@ -468,6 +481,32 @@ namespace XFramework.XSettings
         #region Internal
 
         /// <summary>
+        /// 切后台兜底：只写开启了 <see cref="SettingsOptions.SaveOnPause"/> 的类型。
+        /// <para>由 <see cref="SettingsPauseNotifier"/> 收到 <c>OnApplicationPause(true)</c> 时调用，
+        /// 故必须尊重各个类型的显式开关——这与 <see cref="SaveAllDirty"/> 的显式语义不同。</para>
+        /// </summary>
+        internal static void FlushDirtyForPause()
+        {
+            FlushDirty(pauseOptInOnly: true);
+        }
+
+        /// <summary>
+        /// 遍历全部已注册类型，把确有未提交改动的写盘。
+        /// <para>走 <see cref="ISettingsDirtyFlush"/> 这条非泛型缝是因为管理器的表是
+        /// <c>Dictionary&lt;Type, object&gt;</c>，而 <see cref="ISettingsManager{T}"/> 泛型不变，
+        /// 没有它就遍历不了所有类型。</para>
+        /// </summary>
+        /// <param name="pauseOptInOnly">true 时跳过未开启 <see cref="SettingsOptions.SaveOnPause"/> 的类型。</param>
+        private static void FlushDirty(bool pauseOptInOnly)
+        {
+            foreach (var manager in Managers.Values)
+            {
+                if (manager is ISettingsDirtyFlush flush && (!pauseOptInOnly || flush.FlushOnPause))
+                    flush.SaveIfDirty();
+            }
+        }
+
+        /// <summary>
         /// 构造指定类型的默认设置文件路径：<c>{persistentDataPath}/{类型短名}.json</c>。
         /// </summary>
         private static string BuildDefaultFilePath(Type type)
@@ -505,5 +544,26 @@ namespace XFramework.XSettings
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// 「按需落盘」的非泛型视图，供门面遍历全部已注册类型使用。
+    /// <para><see cref="SettingsManager"/> 的管理器表是 <c>Dictionary&lt;Type, object&gt;</c>，
+    /// 而 <see cref="ISettingsManager{T}"/> 是泛型不变的——没有这条缝就无法对「所有类型」做批量操作。
+    /// 与 <c>IDisposable</c> 在 <c>Destroy</c> 里扮演的角色相同。</para>
+    /// <para>由 <see cref="SettingsManagerImpl{T}"/> 显式实现，不出现在任何公开面上。</para>
+    /// </summary>
+    internal interface ISettingsDirtyFlush
+    {
+        /// <summary>
+        /// 是否在切后台时兜底落盘（构造时快照的 <see cref="SettingsOptions.SaveOnPause"/>）。
+        /// </summary>
+        bool FlushOnPause { get; }
+
+        /// <summary>
+        /// 确有未提交改动时写盘。干净、已释放、或写失败时都是安静的零操作——
+        /// 它是兜底路径，不该在退出或切后台流程里制造失败。
+        /// </summary>
+        void SaveIfDirty();
     }
 }

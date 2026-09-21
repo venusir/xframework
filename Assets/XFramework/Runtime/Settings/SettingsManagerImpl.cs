@@ -14,7 +14,7 @@ namespace XFramework.XSettings
     /// <para>不会自动保存——调用方需显式调用 <see cref="Save"/> 来持久化。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
-    internal sealed class SettingsManagerImpl<T> : ISettingsManager<T> where T : class, new()
+    internal sealed class SettingsManagerImpl<T> : ISettingsManager<T>, ISettingsDirtyFlush where T : class, new()
     {
         #region Private Fields
 
@@ -36,6 +36,13 @@ namespace XFramework.XSettings
         /// 得到一个永不退订的 <c>Application.quitting</c> 订阅，管理器遂被永久 root。</para>
         /// </summary>
         private readonly bool _saveOnQuit;
+
+        /// <summary>
+        /// 切后台兜底的快照。必须与 <see cref="_saveOnQuit"/> 同样处理：<see cref="Dispose"/> 要按与
+        /// 构造时<b>相同</b>的判据决定是否归还宿主，实时读取会让宿主计数失衡（要么泄漏一个常驻
+        /// GameObject，要么被提前销毁）。
+        /// </summary>
+        private readonly bool _saveOnPause;
 
         /// <summary>
         /// 变更计数。用计数而非布尔标志，是为了让「保存过程中又发生改动」不被吞掉：
@@ -74,6 +81,7 @@ namespace XFramework.XSettings
             var opts = options ?? new SettingsOptions();
             _currentVersion = opts.CurrentVersion;
             _saveOnQuit = opts.SaveOnQuit;
+            _saveOnPause = opts.SaveOnPause;
 
             // 默认值的来源必须唯一:构造、Load、Reset 三条路径都走 CreateDefault,
             // 否则玩家点「恢复默认」会拿到与首次启动不同的默认值
@@ -88,6 +96,10 @@ namespace XFramework.XSettings
 
             if (_saveOnQuit)
                 UnityEngine.Application.quitting += OnApplicationQuitting;
+
+            // 切后台只能由 MonoBehaviour 接收，故申请一个共享宿主；关闭时零开销（同自动保存的取舍）
+            if (_saveOnPause)
+                SettingsPauseNotifier.Acquire();
         }
 
         #endregion
@@ -285,8 +297,24 @@ namespace XFramework.XSettings
             if (_saveOnQuit)
                 UnityEngine.Application.quitting -= OnApplicationQuitting;
 
+            if (_saveOnPause)
+                SettingsPauseNotifier.Release();
+
             _changedStream.OnCompleted();
             _changedStream.Dispose();
+        }
+
+        #endregion
+
+        #region ISettingsDirtyFlush
+
+        /// <inheritdoc />
+        bool ISettingsDirtyFlush.FlushOnPause => _saveOnPause;
+
+        /// <inheritdoc />
+        void ISettingsDirtyFlush.SaveIfDirty()
+        {
+            FlushDirtyQuietly("切后台兜底");
         }
 
         #endregion
@@ -531,6 +559,18 @@ namespace XFramework.XSettings
         /// </summary>
         internal void OnApplicationQuitting()
         {
+            FlushDirtyQuietly("退出兜底");
+        }
+
+        /// <summary>
+        /// 框架自动触发的兜底落盘（退出、切后台）共用的实现。
+        /// <para>三件事都是刻意的：干净时不写（零 IO）、已释放时不写（不复活已拆掉的通知流）、
+        /// 写失败只告警不外抛（调用点分别是 Unity 的退出流程与切后台流程，两处都无人能接异常）。
+        /// 与自动保存驱动器不同的是这里不重试——兜底是「最后一次机会」，没有下一次。</para>
+        /// </summary>
+        /// <param name="trigger">出现在告警文案里的时机名，如「退出兜底」。</param>
+        private void FlushDirtyQuietly(string trigger)
+        {
             if (_disposed || !IsDirty)
                 return;
 
@@ -541,7 +581,7 @@ namespace XFramework.XSettings
             catch (Exception e)
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[SettingsManager] 退出兜底保存失败，内存改动未落盘：{e.GetType().Name}: {e.Message}");
+                    $"[SettingsManager] {trigger}保存失败，内存改动未落盘：{e.GetType().Name}: {e.Message}");
             }
         }
 
