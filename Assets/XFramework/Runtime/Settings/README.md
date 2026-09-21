@@ -198,6 +198,10 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 落盘布局：正式文件 `settings.json`、写入中的临时文件 `.tmp`、一代备份 `.bak`。
 写入走 `FilePathUtility.ReplaceFileAtomically`，保证任意时刻正式文件与备份至少有一个完整存在。
 
+**线程**：`JsonFileStore` 的成员可被任意线程调用——同一实例上的读写由内部锁串行化
+（同步 `Save` 与在飞的 `SaveAsync` 会同时出现）。**残余限制**：两个 `JsonFileStore` 实例
+指向同一路径不在覆盖范围内；覆盖它需要一张进程级的路径表，代价与收益不成比例。
+
 **失败语义**：读取或解析失败一律 LogWarning 并回退默认值，不向调用方抛异常——设置文件损坏
 不应让游戏启动失败。主文件存在但损坏时会尝试 `.bak` 回退；**主文件不存在时不会**，
 否则 `Reset`（删文件）之后的下一次 `Load` 会把刚重置掉的旧数据从备份里复活。

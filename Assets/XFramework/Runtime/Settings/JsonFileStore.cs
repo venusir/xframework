@@ -16,12 +16,28 @@ namespace XFramework.XSettings
     /// <para><b>失败语义：</b>读取或解析失败一律 LogWarning 并回退，不向调用方抛异常。
     /// 配置文件损坏不应让游戏启动失败——若向上抛，玩家此后每次启动都会崩且无法自救
     /// （设置文件由游戏自己写，玩家通常也不知道该删哪个文件）。</para>
+    /// <para><b>线程：</b>本类的成员可被任意线程调用——同一实例上的全部读写由内部锁串行化。
+    /// <b>残余限制：</b>两个 <see cref="JsonFileStore"/> 实例指向同一路径不在覆盖范围内，
+    /// 覆盖它需要一张进程级的路径表，代价与收益不成比例。</para>
     /// </summary>
     public class JsonFileStore : ISettingsStore
     {
         #region Private Fields
 
         private readonly string _filePath;
+
+        /// <summary>
+        /// 串行化本实例上的全部文件操作。
+        /// <para><b>为什么需要：</b>同步 <see cref="Save{T}"/>（主线程，自动保存可触发）与在飞的
+        /// <see cref="IAsyncSettingsStore.SaveAsync{T}"/>（同步后端会走线程池）会争同一个 <c>.tmp</c>。
+        /// 更隐蔽的是 <see cref="FilePathUtility.ReplaceFileAtomically"/> 的三步降级路径里存在
+        /// 「正式文件短暂不存在」的窗口（旧文件被挪成 <c>.bak</c> 之后、新文件就位之前），
+        /// 此时并发的读取会把「缺失」当作「无数据」，<b>无告警地</b>返回默认值——静默的错答案，
+        /// 不只是少一条日志。</para>
+        /// <para>.NET 的锁可重入，本类又没有公开成员互相调用、<c>ReplaceFileAtomically</c> 是纯
+        /// <c>System.IO</c> 无回调，故无死锁风险。</para>
+        /// </summary>
+        private readonly object _ioLock = new();
 
         #endregion
 
@@ -49,29 +65,33 @@ namespace XFramework.XSettings
         /// <inheritdoc />
         public bool Exists()
         {
-            return File.Exists(_filePath);
+            lock (_ioLock)
+                return File.Exists(_filePath);
         }
 
         /// <inheritdoc />
         public T Load<T>() where T : class, new()
         {
-            // 主文件不存在 = 无持久化数据,交给上层用 defaultFactory。
-            // 这里必须与「存在但损坏」分开:若缺失也回退备份,Reset(删文件)之后的下一次 Load
-            // 会把玩家刚重置掉的旧数据从 .bak 里恢复回来
-            if (!File.Exists(_filePath))
-                return new T();
-
-            if (TryLoadFrom(_filePath, out T loaded))
-                return loaded;
-
-            var backupPath = _filePath + FilePathUtility.BackupFileSuffix;
-            if (TryLoadFrom(backupPath, out loaded))
+            lock (_ioLock)
             {
-                Debug.LogWarning($"[SettingsManager] 主设置文件不可用，已从备份恢复：'{backupPath}'");
-                return loaded;
-            }
+                // 主文件不存在 = 无持久化数据,交给上层用 defaultFactory。
+                // 这里必须与「存在但损坏」分开:若缺失也回退备份,Reset(删文件)之后的下一次 Load
+                // 会把玩家刚重置掉的旧数据从 .bak 里恢复回来
+                if (!File.Exists(_filePath))
+                    return new T();
 
-            return new T();
+                if (TryLoadFrom(_filePath, out T loaded))
+                    return loaded;
+
+                var backupPath = _filePath + FilePathUtility.BackupFileSuffix;
+                if (TryLoadFrom(backupPath, out loaded))
+                {
+                    Debug.LogWarning($"[SettingsManager] 主设置文件不可用，已从备份恢复：'{backupPath}'");
+                    return loaded;
+                }
+
+                return new T();
+            }
         }
 
         /// <inheritdoc />
@@ -79,33 +99,37 @@ namespace XFramework.XSettings
         public void Save<T>(T settings) where T : class, new()
         {
             // 原先静默 return:与 Apply(null) 抛异常不一致,且会让「保存没生效」变得极难排查。
-            // 注意这里抛的是参数错误(调用方的 bug),与下面 IO 失败只告警是两回事
+            // 注意这里抛的是参数错误(调用方的 bug),与下面 IO 失败只告警是两回事。
+            // 参数检查放在锁外:它不碰文件系统
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
-            var dir = Path.GetDirectoryName(_filePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonUtility.ToJson(settings, true);
-
-            // 原子写:先落 .tmp,再整份替换正式文件,旧内容留作 .bak。
-            // 直接 WriteAllText 覆盖正式文件的话,写到一半崩溃就留下截断的 JSON
-            var tempPath = _filePath + FilePathUtility.TempFileSuffix;
-            var backupPath = _filePath + FilePathUtility.BackupFileSuffix;
-
-            try
+            lock (_ioLock)
             {
-                File.WriteAllText(tempPath, json);
-                FilePathUtility.ReplaceFileAtomically(tempPath, _filePath, backupPath);
-            }
-            catch (Exception ex)
-            {
-                // IO 失败(磁盘满/权限/占用)只告警不抛:存档失败不该让游戏崩掉。
-                // 参数错误与 IO 失败的区别正在于此——前者是调用方的 bug,后者是环境问题
-                TryDelete(tempPath);
-                Debug.LogWarning(
-                    $"[SettingsManager] 写入设置文件失败：'{_filePath}'（{ex.GetType().Name}: {ex.Message}）");
+                var dir = Path.GetDirectoryName(_filePath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+
+                var json = JsonUtility.ToJson(settings, true);
+
+                // 原子写:先落 .tmp,再整份替换正式文件,旧内容留作 .bak。
+                // 直接 WriteAllText 覆盖正式文件的话,写到一半崩溃就留下截断的 JSON
+                var tempPath = _filePath + FilePathUtility.TempFileSuffix;
+                var backupPath = _filePath + FilePathUtility.BackupFileSuffix;
+
+                try
+                {
+                    File.WriteAllText(tempPath, json);
+                    FilePathUtility.ReplaceFileAtomically(tempPath, _filePath, backupPath);
+                }
+                catch (Exception ex)
+                {
+                    // IO 失败(磁盘满/权限/占用)只告警不抛:存档失败不该让游戏崩掉。
+                    // 参数错误与 IO 失败的区别正在于此——前者是调用方的 bug,后者是环境问题
+                    TryDelete(tempPath);
+                    Debug.LogWarning(
+                        $"[SettingsManager] 写入设置文件失败：'{_filePath}'（{ex.GetType().Name}: {ex.Message}）");
+                }
             }
         }
 
@@ -113,9 +137,12 @@ namespace XFramework.XSettings
         /// <remarks>同时清除 <c>.tmp</c> 与 <c>.bak</c>，使「重置」不留任何可被后续 Load 恢复的残留。</remarks>
         public void Delete()
         {
-            TryDelete(_filePath);
-            TryDelete(_filePath + FilePathUtility.TempFileSuffix);
-            TryDelete(_filePath + FilePathUtility.BackupFileSuffix);
+            lock (_ioLock)
+            {
+                TryDelete(_filePath);
+                TryDelete(_filePath + FilePathUtility.TempFileSuffix);
+                TryDelete(_filePath + FilePathUtility.BackupFileSuffix);
+            }
         }
 
         #endregion
