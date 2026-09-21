@@ -37,6 +37,31 @@ namespace XFramework.XSettings.Tests
             public void Delete() { }
         }
 
+        /// <summary>可在构造之后播种数据的假存储（版本化用例需要「构造时无数据」）。</summary>
+        private sealed class SeededStore : ISettingsStore
+        {
+            public object Payload;
+
+            public bool Exists() => Payload != null;
+
+            public T Load<T>() where T : class, new() => Payload as T ?? new T();
+
+            public void Save<T>(T settings) where T : class, new() => Payload = settings;
+
+            public void Delete() => Payload = null;
+        }
+
+        private sealed class VolumeMigrator : ISettingsMigrator<SettingsA>
+        {
+            public int Calls;
+
+            public void Migrate(int fromVersion, int toVersion, SettingsA settings)
+            {
+                Calls++;
+                settings.Volume += 1000;
+            }
+        }
+
         #endregion
 
         #region Lifecycle
@@ -109,6 +134,32 @@ namespace XFramework.XSettings.Tests
             Assert.IsNotNull(manager);
             Assert.IsTrue(SettingsManager.IsInitialized);
             Assert.AreEqual(7, SettingsManager.Settings<SettingsA>().Volume, "重新初始化后完全可用");
+        }
+
+        #endregion
+
+        #region 迁移器转发
+
+        [Test]
+        public void SetMigrator_WiresThroughToManager()
+        {
+            // 构造时 store 无数据：否则构造期就会执行迁移，而迁移器此时还没经门面挂上，
+            // 用例会被构造期那条「未注册 ISettingsMigrator」告警污染（同 SettingsVersioningTests 的纪律）
+            var store = new SeededStore();
+            SettingsManager.Initialize<SettingsA>(store, null, new SettingsOptions { CurrentVersion = 2 });
+
+            var migrator = new VolumeMigrator();
+            SettingsManager.SetMigrator<SettingsA>(migrator);
+
+            Assert.AreSame(migrator, SettingsManager.GetMigrator<SettingsA>(), "取回的是经门面挂上的同一个实例");
+
+            store.Payload = new SettingsEnvelope<SettingsA> { Version = 1, Data = new SettingsA { Volume = 7 } };
+            SettingsManager.Load<SettingsA>();
+
+            // 这一条补的正是完备性测试声明自己拦不住的缺口：转发接错线或写成空实现，
+            // 同名断言照样通过，只有真的走一遍才看得出来
+            Assert.AreEqual(1, migrator.Calls, "经门面挂上的迁移器确实被调用");
+            Assert.AreEqual(1007, SettingsManager.Settings<SettingsA>().Volume, "迁移结果被采纳");
         }
 
         #endregion

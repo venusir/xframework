@@ -406,6 +406,35 @@ namespace XFramework.XSettings
 
         #endregion
 
+        #region Migration
+
+        /// <summary>
+        /// 获取指定类型的格式迁移钩子。
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <returns>当前注册的迁移器；未注册时为 <c>null</c>。</returns>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static ISettingsMigrator<T> GetMigrator<T>() where T : class, new()
+        {
+            return GetManager<T>().Migrator;
+        }
+
+        /// <summary>
+        /// 注册指定类型的格式迁移钩子。
+        /// <para>与 <see cref="SetStore{T}"/> 对称，使初始化发生在别处时（引导阶段、另一个程序集）
+        /// 仍能挂上迁移器，不必保留 <see cref="Initialize{T}(ISettingsStore, Func{T}, SettingsOptions)"/>
+        /// 的返回值。可在任意时刻替换，包括 <see cref="Load{T}"/> 之前。</para>
+        /// </summary>
+        /// <typeparam name="T">设置对象类型。</typeparam>
+        /// <param name="migrator">迁移器；<c>null</c> 表示清除已注册的迁移器。</param>
+        /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>
+        public static void SetMigrator<T>(ISettingsMigrator<T> migrator) where T : class, new()
+        {
+            GetManager<T>().Migrator = migrator;
+        }
+
+        #endregion
+
         #region Internal
 
         /// <summary>

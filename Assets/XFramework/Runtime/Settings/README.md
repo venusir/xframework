@@ -167,6 +167,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `IsDirty<T>()` / `MarkDirty<T>()` | 查询 / 手动标记「有未提交改动」 |
 | `Observe<T>(Action<T>)` | 订阅**对象被整体替换**（订阅时立即回调） |
 | `GetStore<T>()` / `SetStore<T>(store)` | 获取 / 替换存储后端 |
+| `GetMigrator<T>()` / `SetMigrator<T>(migrator)` | 获取 / 注册格式迁移钩子 |
 
 ### SettingRef\<T, TField\>（字段句柄）
 
@@ -243,12 +244,16 @@ public class GameSettingsMigrator : ISettingsMigrator<GameSettings>
     }
 }
 
-SettingsManager.Initialize<GameSettings>(store,
-    options: new SettingsOptions { CurrentVersion = 2 }).Migrator = new GameSettingsMigrator();
+SettingsManager.Initialize<GameSettings>(store, options: new SettingsOptions { CurrentVersion = 2 });
+SettingsManager.SetMigrator<GameSettings>(new GameSettingsMigrator());
 ```
 
-注册方式：`Initialize` 返回的 `ISettingsManager<T>` 上设置 `Migrator` 属性。
-它是可写属性而非构造参数，避免「先 Initialize 还是先注册迁移器」的顺序问题。
+注册方式有两条：经门面 `SettingsManager.SetMigrator<T>(migrator)`，或在 `Initialize` 返回的
+`ISettingsManager<T>` 上设置 `Migrator` 属性。二者等价，门面那条是在**初始化发生在别处**时
+（引导阶段、另一个程序集）唯一够得着的入口——不必一路传递 `Initialize` 的返回值。
+
+它是可写属性而非构造参数，避免「先 Initialize 还是先注册迁移器」的顺序问题；
+`SetMigrator` 可在任意时刻调用，包括 `Load` 之前。
 
 ### SettingsChangedMessage
 
