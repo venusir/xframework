@@ -39,10 +39,14 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 应用退出时若仍有未提交改动则写盘（兜底）。默认关闭。
-        /// <para><b>无法用 Test Runner 验证：</b>Unity 的 <c>Application.quitting</c> 在编辑器中不触发，
-        /// 该行为只能在构建产物里确认。</para>
-        /// <para><b>不覆盖的场景：</b>移动端切后台后被系统杀死——那需要 <c>OnApplicationPause</c>，
-        /// 而它是 MonoBehaviour 消息，静态服务收不到。要覆盖请开 <see cref="SaveOnPause"/>。</para>
+        /// <para>挂在 <c>Application.wantsToQuit</c> 而非 <c>quitting</c>：前者在退出流程中<b>更早</b>触发，
+        /// 写盘更可能在被拆掉之前跑完。处理函数恒返回 <c>true</c>——保存失败也绝不取消退出。</para>
+        /// <para><b>无法用 Test Runner 验证：</b><c>wantsToQuit</c> 在编辑器播放模式下不触发
+        /// （返回值也被忽略），该行为只能在构建产物里确认；它在 iOS / Android 上同样不保证触发。
+        /// 故它的定位是「构建产物里的最后一道兜底」，不能当作可靠机制——
+        /// 真正可靠的是 <see cref="AutoSave"/> 与 <see cref="SaveOnPause"/>。</para>
+        /// <para><b>不覆盖的场景：</b>移动端切后台后被系统杀死——那种情况下 <c>OnApplicationQuit</c>
+        /// 根本不会触发。要覆盖请开 <see cref="SaveOnPause"/>。</para>
         /// </summary>
         public bool SaveOnQuit;
 

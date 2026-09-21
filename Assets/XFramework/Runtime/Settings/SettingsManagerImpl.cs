@@ -33,7 +33,7 @@ namespace XFramework.XSettings
         /// 退出兜底开关的快照。
         /// <para>必须快照而非每次读 <see cref="SettingsOptions"/>：<see cref="Dispose"/> 要按与
         /// 构造时<b>相同</b>的判据决定是否退订，实时读取会让「中途把该开关翻成 false」的调用方
-        /// 得到一个永不退订的 <c>Application.quitting</c> 订阅，管理器遂被永久 root。</para>
+        /// 得到一个永不退订的 <c>Application.wantsToQuit</c> 订阅，管理器遂被永久 root。</para>
         /// </summary>
         private readonly bool _saveOnQuit;
 
@@ -95,7 +95,7 @@ namespace XFramework.XSettings
             }
 
             if (_saveOnQuit)
-                UnityEngine.Application.quitting += OnApplicationQuitting;
+                UnityEngine.Application.wantsToQuit += OnWantsToQuit;
 
             // 切后台只能由 MonoBehaviour 接收，故申请一个共享宿主；关闭时零开销（同自动保存的取舍）
             if (_saveOnPause)
@@ -295,7 +295,7 @@ namespace XFramework.XSettings
             }
 
             if (_saveOnQuit)
-                UnityEngine.Application.quitting -= OnApplicationQuitting;
+                UnityEngine.Application.wantsToQuit -= OnWantsToQuit;
 
             if (_saveOnPause)
                 SettingsPauseNotifier.Release();
@@ -551,15 +551,19 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 应用退出兜底：仅在确有未提交改动时写盘，因此显式保存过的场景不会产生额外 IO。
-        /// <para><b>异常吞住：</b>异常若从这里冒出去，就落进 Unity 的退出流程，那是最没人能接的地方
-        /// ——游戏正在关闭，调用方无从补救。</para>
+        /// <para><b>为什么挂在 <c>wantsToQuit</c> 而不是 <c>quitting</c>：</b>前者在退出流程中
+        /// <b>更早</b>触发，写盘更可能在被拆掉之前跑完；后者只是「正在退出」的通知。</para>
+        /// <para><b>恒返回 <c>true</c>：</b>返回 <c>false</c> 会<b>取消退出</b>。保存失败绝不能翻译成
+        /// false——让玩家关不掉游戏比丢一次设置严重得多，故异常吞住后仍然返回 true。</para>
         /// <para><b>可测性：</b>改 <c>internal</c> 使测试可直接调用。文档此前写「无法用 Test Runner
-        /// 覆盖」，那话只对 <c>Application.quitting</c> <b>事件</b>成立（编辑器不触发），
+        /// 覆盖」，那话只对 <c>wantsToQuit</c> <b>事件</b>成立（编辑器播放模式下不触发、返回值也被忽略），
         /// 本处理函数本身与事件无关。</para>
         /// </summary>
-        internal void OnApplicationQuitting()
+        /// <returns>恒为 <c>true</c>（不取消退出）。</returns>
+        internal bool OnWantsToQuit()
         {
             FlushDirtyQuietly("退出兜底");
+            return true;
         }
 
         /// <summary>

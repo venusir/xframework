@@ -246,7 +246,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 > **选项在 `Initialize` 时读取一次，之后修改不再生效。** `SettingsOptions` 保持可变只是为了
 > 对象初始化器语法好用，但管理器只取值并快照、**不保留引用**。初始化后再改这些字段不会有任何
 > 效果——不是「部分生效」那种难查的状态。之所以要这么严：`SaveOnQuit` 中途翻转会让释放逻辑
-> 按与订阅时不同的判据决定是否退订（订阅就此永远留在 `Application.quitting` 上），
+> 按与订阅时不同的判据决定是否退订（订阅就此永远留在 `Application.wantsToQuit` 上），
 > `CurrentVersion` 中途改会让上下半场写出的落盘格式不同。
 
 ### ISettingsMigrator\<T\>
@@ -368,10 +368,15 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 节点是「LogError + 永久注销」，放任异常冒泡等于让一次可恢复的写失败变成本次会话再也不自动保存。
 只告警不抛的后端（如 `JsonFileStore`）不在此列，框架无从察觉，详见「已知限制」。
 
-> **`SaveOnQuit` 的两处局限**：Unity 的 `Application.quitting` **在编辑器中不触发**，
-> 该行为只能在构建产物中确认；它也不覆盖移动端切后台后被系统杀死的场景——那种情况下
-> `OnApplicationQuit` 根本不会触发，于是「退出时兜底」在这些设备上等于不存在。
-> 后者请用 `SaveOnPause`（下节）。
+> **`SaveOnQuit` 的两处局限**：它挂在 `Application.wantsToQuit`（比 `quitting` 更早触发，
+> 写盘更可能在被拆掉之前跑完），但该事件**在编辑器播放模式下不触发**（返回值也被忽略），
+> 且在 iOS / Android 上同样不保证触发——故只能在构建产物里确认，定位是「最后一道兜底」
+> 而非可靠机制；真正可靠的是 `AutoSave` 与 `SaveOnPause`。它也不覆盖移动端切后台后被系统
+> 杀死的场景——那里 `OnApplicationQuit` 根本不会触发，于是「退出时兜底」在这些设备上等于
+> 不存在，请用 `SaveOnPause`（下节）。
+>
+> **保存失败绝不会取消退出**：处理函数恒返回 `true`。把异常翻译成 `false` 会让玩家关不掉游戏，
+> 那是比丢一次设置严重得多的事故，故有用例专门钉住这一条。
 
 ### 切后台兜底
 

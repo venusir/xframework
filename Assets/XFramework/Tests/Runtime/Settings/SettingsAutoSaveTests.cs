@@ -275,8 +275,49 @@ namespace XFramework.XSettings.Tests
             }
         }
 
+        #endregion
+
+        #region 退出兜底
+
         [Test]
-        public void QuitFallback_StoreThrows_DoesNotPropagate()
+        public void QuitFallback_WithChanges_SavesAndKeepsQuitting()
+        {
+            var store = new FakeStore();
+            var manager = CreateManager(store, new SettingsOptions { SaveOnQuit = true });
+            manager.MarkDirty();
+
+            try
+            {
+                Assert.IsTrue(manager.OnWantsToQuit(), "返回值恒为 true：设置管理器不该取消退出");
+                Assert.AreEqual(1, store.SaveCalls, "退出时把未提交改动落盘");
+                Assert.IsFalse(manager.IsDirty);
+            }
+            finally
+            {
+                manager.Dispose();
+            }
+        }
+
+        [Test]
+        public void QuitFallback_NothingDirty_DoesNotWrite()
+        {
+            var store = new FakeStore();
+            var manager = CreateManager(store, new SettingsOptions { SaveOnQuit = true });
+
+            try
+            {
+                manager.OnWantsToQuit();
+
+                Assert.AreEqual(0, store.SaveCalls, "显式保存过的场景不产生额外 IO——兜底只在确有改动时写");
+            }
+            finally
+            {
+                manager.Dispose();
+            }
+        }
+
+        [Test]
+        public void QuitFallback_StoreThrows_DoesNotPropagateAndKeepsQuitting()
         {
             var store = new ThrowingStore { ThrowOnSave = true };
             var manager = CreateManager(store, new SettingsOptions { SaveOnQuit = true });
@@ -286,14 +327,18 @@ namespace XFramework.XSettings.Tests
 
             try
             {
-                // Application.quitting 在编辑器中不触发，但处理函数本身与事件无关，可直接调用。
-                // 异常若从这里冒出去就落进 Unity 的退出流程——那是游戏正在关闭、无人能补救的位置
-                Assert.DoesNotThrow(() => manager.OnApplicationQuitting(), "异常不该窜进退出流程");
+                // wantsToQuit 在编辑器播放模式下不触发（返回值也被忽略），但处理函数本身与事件无关
+                var shouldQuit = false;
+                Assert.DoesNotThrow(() => shouldQuit = manager.OnWantsToQuit(), "异常不该窜进退出流程");
+
+                // 这条是整个机制里最要紧的一条：若有人把「保存失败」翻译成返回 false，
+                // 玩家会关不掉游戏——那比丢一次设置严重得多
+                Assert.IsTrue(shouldQuit, "保存失败绝不取消退出");
                 Assert.AreEqual(1, store.SaveCalls);
             }
             finally
             {
-                // SaveOnQuit 使构造函数订阅了 Application.quitting，而 PlayMode 下所有用例
+                // SaveOnQuit 使构造函数订阅了 Application.wantsToQuit，而 PlayMode 下所有用例
                 // 共享一个 player 实例：不释放就会把订阅留给后面的 fixture
                 manager.Dispose();
             }
