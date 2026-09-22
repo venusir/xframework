@@ -344,6 +344,23 @@ namespace XFramework.XFileManager
             return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
         }
 
+        /// <summary>
+        /// 同步原子写入字节内容到文件：先写 <c>.tmp</c> 临时文件，写入成功后再替换正式文件，
+        /// 写入中途崩溃不会损坏已有文件。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="WriteAllBytesAtomicAsync"/>，勿在每帧路径调用。</para>
+        /// <para>降级语义与异步版一致：底层 Provider 未实现 <see cref="IAtomicFileProvider"/>
+        /// （如 WebGL 自定义实现）时降级为普通写入并告警——<b>只有实现该接口才能获得崩溃防护</b>。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="data">要写入的字节数组。</param>
+        public static void WriteAllBytesAtomic(FileDomain domain, string relativePath, byte[] data)
+        {
+            EnsureInitialized();
+            WriteAllBytesAtomicAsync(domain, relativePath, data).AsTask().GetAwaiter().GetResult();
+        }
+
         #endregion
 
         #region File Operations — Exists / Delete
@@ -428,6 +445,26 @@ namespace XFramework.XFileManager
         {
             EnsureInitialized();
             return _provider.GetFilesAsync(domain, relativePath, searchPattern, cancellationToken);
+        }
+
+        /// <summary>
+        /// 同步获取目录下的直接子目录（非递归）。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="GetDirectoriesAsync"/>，勿在每帧路径调用。</para>
+        /// <para>降级语义与异步版一致：底层 Provider 未实现 <see cref="IDirectoryProvider"/> 时
+        /// 输出警告并返回空数组（不抛异常）。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的目录路径。</param>
+        /// <returns>
+        /// 子目录的相对路径数组；目录不存在或 Provider 不支持该能力时返回空数组。
+        /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与 <see cref="GetFiles"/> 同规范），
+        /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
+        /// </returns>
+        public static string[] GetDirectories(FileDomain domain, string relativePath)
+        {
+            EnsureInitialized();
+            return GetDirectoriesAsync(domain, relativePath).AsTask().GetAwaiter().GetResult();
         }
 
         /// <summary>

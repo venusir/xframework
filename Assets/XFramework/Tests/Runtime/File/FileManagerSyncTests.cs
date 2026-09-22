@@ -1,4 +1,5 @@
 using System;
+using System.Text;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -217,6 +218,58 @@ namespace XFramework.XFileManager.Tests
             {
                 FileManager.Destroy();
             }
+        }
+
+        #endregion
+
+        #region 同步面补齐：原子写与子目录枚举
+
+        [Test]
+        public async Task WriteAllBytesAtomic_Sync_KeepsOneGenerationBackup()
+        {
+            var backupPath = "slot_1.save" + FilePathUtility.BackupFileSuffix;
+            await FileManager.WriteAllBytesAsync(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("old"));
+
+            FileManager.WriteAllBytesAtomic(FileDomain.AppData, "slot_1.save", Encoding.UTF8.GetBytes("new"));
+
+            var current = FileManager.ReadAllBytes(FileDomain.AppData, "slot_1.save");
+            var backup = FileManager.ReadAllBytes(FileDomain.AppData, backupPath);
+            Assert.AreEqual("new", Encoding.UTF8.GetString(current), "同步原子写应完整覆盖旧内容");
+            Assert.IsNotNull(backup, "替换既有文件后应生成一代备份");
+            Assert.AreEqual("old", Encoding.UTF8.GetString(backup), "备份应保留替换前的旧内容");
+        }
+
+        [Test]
+        public void WriteAllBytesAtomic_Sync_LeavesNoTmpResidue()
+        {
+            FileManager.WriteAllBytesAtomic(FileDomain.AppData, "slot_2.save", Encoding.UTF8.GetBytes("v1"));
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.AppData, "slot_2.save" + FilePathUtility.TempFileSuffix),
+                "同步原子写完成后不应残留 .tmp 文件");
+            Assert.IsTrue(FileManager.Exists(FileDomain.AppData, "slot_2.save"),
+                "首个版本应已落到正式文件");
+        }
+
+        [Test]
+        public void GetDirectories_Sync_ReturnsPathsRelativeToDomainRoot()
+        {
+            FileManager.CreateDirectory(FileDomain.AppData, "parent/child");
+
+            var atRoot = FileManager.GetDirectories(FileDomain.AppData, null);
+            var underParent = FileManager.GetDirectories(FileDomain.AppData, "parent");
+
+            CollectionAssert.AreEquivalent(new[] { "parent" }, atRoot, "域根下应能枚举出 parent");
+            CollectionAssert.AreEquivalent(new[] { "parent/child" }, underParent,
+                "返回路径相对域根而非被查询目录——与 GetFiles 同规范，可直接回传本模块其他方法");
+        }
+
+        [Test]
+        public void GetDirectories_MissingDirectory_ReturnsEmpty()
+        {
+            var dirs = FileManager.GetDirectories(FileDomain.AppData, "no_such_dir");
+
+            Assert.IsNotNull(dirs, "目录不存在时返回空数组而非 null");
+            Assert.IsEmpty(dirs, "目录不存在时返回空数组");
         }
 
         #endregion
