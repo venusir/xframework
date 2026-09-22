@@ -1,7 +1,10 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XSave.Tests;
 
 namespace XFramework.XFileManager.Tests
@@ -172,5 +175,57 @@ namespace XFramework.XFileManager.Tests
             var read = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "crypto.bin");
             Assert.AreNotEqual("with-a", Encoding.UTF8.GetString(read), "密钥不匹配时读出的应是被错误解密的垃圾数据（快照语义自证）");
         }
+
+        #region 装饰器不得改变能力语义
+
+        [Test]
+        public async Task WriteAllBytesAtomicAsync_CryptoWithNonAtomicProvider_DegradesWithWarning()
+        {
+            // 修复前这里抛 NotSupportedException：同一个能力缺失，仅因是否启用加密就表现不同。
+            // 现统一为「告警 + 降级为普通写」——判定权在门面（探测基础 Provider），装饰器不重复告警
+            FileManager.Destroy();
+            FileManager.Initialize(new NonAtomicFileProvider(_fileProvider));
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"));
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("不支持原子写入"));
+                await FileManager.WriteAllBytesAtomicAsync(FileDomain.AppData, "crypto.bin", Encoding.UTF8.GetBytes("secret"));
+
+                var read = await FileManager.ReadAllBytesAsync(FileDomain.AppData, "crypto.bin");
+                Assert.AreEqual("secret", Encoding.UTF8.GetString(read), "降级为普通写后仍应能经门面读回明文");
+
+                // 降级的是原子性，不是加密：磁盘上仍应是密文（绕过门面直读底层 Provider）
+                var raw = await _fileProvider.ReadAllBytesAsync(FileDomain.AppData, "crypto.bin");
+                Assert.AreNotEqual("secret", Encoding.UTF8.GetString(raw), "降级路径仍应经过加密层");
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        [Test]
+        public async Task GetDirectoriesAsync_CryptoWithoutDirectoryProvider_DegradesWithWarning()
+        {
+            // 修复前门面的告警被装饰器吞掉，表现为「静默返回空数组」——只剩症状、没有线索
+            FileManager.Destroy();
+            FileManager.Initialize(new NonAtomicFileProvider(_fileProvider));
+            FileManager.SetCryptoProvider(new XorCryptoProvider("test-key"));
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("不支持目录枚举"));
+
+                var dirs = await FileManager.GetDirectoriesAsync(FileDomain.AppData, null);
+
+                Assert.IsNotNull(dirs, "能力缺失时返回空数组而非 null");
+                Assert.IsEmpty(dirs, "能力缺失时返回空数组");
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        #endregion
     }
 }

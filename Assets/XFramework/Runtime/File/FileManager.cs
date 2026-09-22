@@ -334,13 +334,16 @@ namespace XFramework.XFileManager
             // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
             var provider = _provider;
 
-            // 能力探测:仅对支持原子写的 Provider 使用临时文件替换语义,
-            // 否则降级普通写(语义回退为「直接覆盖」,崩溃防护失效,告警提示)
-            if (provider is IAtomicFileProvider atomicProvider)
+            // 能力探测查基础 Provider:启用加解密时生效 Provider 是 CryptoFileProvider 装饰器,
+            // 而装饰器按契约恒实现可选能力接口——对它探测必然「通过」,判定会被整个推给装饰器。
+            // 查基础 Provider 让决定权收归此处,装饰器侧的同类检查退为兜底(见其类文档的能力不变量)。
+            // 第二个条件是调用点的类型收窄,不是第二重判定
+            if (_baseProvider is IAtomicFileProvider && provider is IAtomicFileProvider atomicProvider)
                 return atomicProvider.WriteAllBytesAtomicAsync(domain, relativePath, data, cancellationToken);
 
+            // 降级普通写(语义回退为「直接覆盖」,崩溃防护失效,告警提示)
             Debug.LogWarning(
-                $"[FileManager] 当前 Provider({provider?.GetType().Name}) 不支持原子写入,已降级为普通写入。");
+                $"[FileManager] 当前 Provider({_baseProvider?.GetType().Name}) 不支持原子写入,已降级为普通写入。");
             return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
         }
 
@@ -487,12 +490,12 @@ namespace XFramework.XFileManager
             // 入口快照:整个异步流程使用同一 provider
             var provider = _provider;
 
-            // 能力探测:目录枚举为可选能力,缺失时返回空数组(与原子写的能力探测同构)
-            if (provider is IDirectoryProvider directoryProvider)
+            // 能力探测查基础 Provider(理由同 WriteAllBytesAtomicAsync:装饰器恒实现该接口)
+            if (_baseProvider is IDirectoryProvider && provider is IDirectoryProvider directoryProvider)
                 return directoryProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
 
             Debug.LogWarning(
-                $"[FileManager] 当前 Provider({provider?.GetType().Name}) 不支持目录枚举,返回空数组。");
+                $"[FileManager] 当前 Provider({_baseProvider?.GetType().Name}) 不支持目录枚举,返回空数组。");
             return UniTask.FromResult(Array.Empty<string>());
         }
 

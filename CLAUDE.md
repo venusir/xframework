@@ -28,6 +28,7 @@
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)用 `[RuntimeInitializeOnLoadMethod]` 自动初始化,遵循 `#if UNITY_EDITOR` 分支写 `[InitializeOnLoadMethod]` 的现有惯例
   - **门面保持扁平:** 静态门面一律扁平,成员多也不分组——`MessageManager`(48)/`InputManager`(43)/`UIManager`(41)/`AssetManager`(37) 都靠 `#region` 分区。嵌套静态类分组会把「门面名 == 接口名」这条唯一的人工核对手段换掉(转发时必然改名),换来的只是 IntelliSense 分组,而本仓没有任何其它门面认为那值得付这个价(`UIManager` 曾短暂分组,未发布即撤销)
   - **门面转发不变量:** `IXxxManager` 新增成员时**必须同步在门面加转发**,否则它在第三方眼里根本不存在。(实例:`SetLayerVisibility` 曾长期方法完整、文档也有,却只在内部实现上,门面既无转发也无实例属性,第三方实际完全不可达)。**这条不能只靠评审**,扁平门面下十几行就能锁住:接口每个声明成员在门面上存在**同名**的 public static 成员即可。签名不必测——转发体是经 `IXxxManager` 的调用,签名不符编译不过,编译器已经兜住了。见 `UIFacadeCompletenessTests`
+- **可选能力接口与装饰器:** 以「可选能力接口 + 门面 `is` 探测」扩展 Provider 能力(`IAtomicFileProvider`、`IDirectoryProvider`;Settings 侧的 `IAsyncSettingsStore` 同构),不给主接口加成员,第三方实现零影响。两条不变量:(1) 装饰器**必须实现**底层的可选能力接口,否则会把底层的能力遮蔽掉——门面探测到的是装饰器本身;(2) **判定权归门面**:门面探测的必须是 `_baseProvider` 而非生效 Provider,因为装饰器恒实现可选能力接口、对它探测必然「通过」,判定会被整个推给装饰器——于是「是否启用加密」这种无关变量就能改变调用方观察到的行为。实例:`CryptoFileProvider` 曾对「底层不支持原子写」**抛** `NotSupportedException`,而门面未加密时对同一情况是**告警 + 降级为普通写**;`GetDirectoriesAsync` 则曾表现为门面告警降级、装饰器静默降级,连那条告警都被吞掉。装饰器侧的同类检查只作兜底:**不重复告警、不改变语义**
 - **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。管线对任何具体模块零依赖,可独立使用
 - **启动引导(Bootstrap):** 需要异步初始化的服务实现 `IBootstrapStage`(`IPhaseStage` + 同步 `Shutdown`;Phase = 模块约定值、Name = 类型名、Weight = 1),经 `Bootstrap.Register` **显式登记**(不反射发现),`Bootstrap.RunAsync` 用 `Pipeline.BuildPhaseGroups` 装配运行,`Bootstrap.Shutdown` 按登记顺序**逆序**清理。ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);失败与取消在 RunAsync 处**抛出**而非只留日志。阶段类归各模块自己的目录(如 `AssetBootstrapStage` 在 `Runtime/Asset/`),框架不在 Bootstrap 目录里装具体服务
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateTier` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateTier.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
@@ -36,7 +37,7 @@
 ## 编码规范
 
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
-- **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序
+- **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
 - **可见性:** 默认 `internal`;测试通过 `InternalsVisibleTo("Venusy609.Xframework.Tests")` 访问内部实现
 

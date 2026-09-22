@@ -12,9 +12,13 @@ namespace XFramework.XFileManager
     /// <para>可限定作用域（<see cref="FileDomain"/>）：限定时只有目标域经加解密、其余域原样透传，
     /// 避免「为存档开加密却顺带把 AppData / Cache 一起加密了」这类副作用。</para>
     /// <para>同时实现 <see cref="IAtomicFileProvider"/>：原子写同样经过加密层，加密后的密文整体原子替换。</para>
-    /// <para>同时实现 <see cref="IDirectoryProvider"/>：目录名不含数据，无需加解密，能力取决于被包裹的 Provider。
-    /// 装饰器必须显式实现可选能力接口，否则会把底层 Provider 的能力遮蔽掉——
-    /// 门面按 <c>is</c> 探测能力时看到的是装饰器本身。</para>
+    /// <para>同时实现 <see cref="IDirectoryProvider"/>：目录名不含数据，无需加解密，能力取决于被包裹的 Provider。</para>
+    /// <para><b>能力不变量（装饰器必须遵守）：</b>装饰器必须显式实现底层的可选能力接口，否则会把底层的能力
+    /// 遮蔽掉——门面按 <c>is</c> 探测时看到的是装饰器本身。更易漏的是<b>失败语义</b>：装饰器不得让调用方
+    /// 观察到与被装饰者不同的行为（降级 / 告警 / 抛出三者构成的可见结果须一致）。本类的做法是「判定权归门面」——
+    /// <see cref="FileManager"/> 探测的是基础 Provider（它不随是否启用加密而变），能力缺失时由门面告警并降级；
+    /// 本类里的同类检查只是兜底，<b>不重复告警、也不改变语义</b>（降级为普通写而非抛出），因此启用加解密
+    /// 对调用方完全透明。</para>
     /// </summary>
     internal sealed class CryptoFileProvider : IFileProvider, IAtomicFileProvider, IDirectoryProvider
     {
@@ -78,8 +82,7 @@ namespace XFramework.XFileManager
         /// <inheritdoc />
         public UniTask<string[]> GetDirectoriesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
-            // 能力随被包裹的 Provider：底层不支持枚举时返回空数组（与 ConsoleFileProvider
-            // 对 GetFilesAsync 的既有处理一致，不抛异常）
+            // 能力随被包裹的 Provider;缺失时同样返回空数组——由门面负责告警(理由见类文档的能力不变量)
             if (_inner is IDirectoryProvider directoryProvider)
                 return directoryProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
 
@@ -152,11 +155,18 @@ namespace XFramework.XFileManager
         /// <inheritdoc />
         public async UniTask WriteAllBytesAtomicAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default)
         {
-            if (!(_inner is IAtomicFileProvider atomicInner))
-                throw new NotSupportedException("[FileManager] 底层 Provider 不支持原子写入。");
-
             var payload = ShouldCrypt(domain) ? _crypto.Encrypt(data) : data;
-            await atomicInner.WriteAllBytesAtomicAsync(domain, relativePath, payload, cancellationToken);
+
+            // 兜底:门面已按基础 Provider 探测过能力、并在缺失时告警,走到这里底层必然支持。
+            // 此处不重复告警(否则启用加密会多出一条),也不改变语义——降级为普通写而非抛出,
+            // 使「启用装饰器」对调用方完全透明。详见类文档的能力不变量
+            if (_inner is IAtomicFileProvider atomicInner)
+            {
+                await atomicInner.WriteAllBytesAtomicAsync(domain, relativePath, payload, cancellationToken);
+                return;
+            }
+
+            await _inner.WriteAllBytesAsync(domain, relativePath, payload, cancellationToken);
         }
 
         #endregion

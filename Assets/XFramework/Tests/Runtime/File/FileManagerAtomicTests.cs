@@ -1,7 +1,6 @@
 using System;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -119,45 +118,6 @@ namespace XFramework.XFileManager.Tests
             {
                 FileManager.Destroy();
             }
-        }
-
-        /// <summary>
-        /// 仅实现 <see cref="IFileProvider"/> 的哑 Provider：用于验证门面原子写的降级路径。
-        /// </summary>
-        private sealed class NonAtomicFileProvider : IFileProvider
-        {
-            private readonly IFileProvider _inner;
-
-            public NonAtomicFileProvider(IFileProvider inner)
-            {
-                _inner = inner;
-            }
-
-            public bool Exists(FileDomain domain, string relativePath) => _inner.Exists(domain, relativePath);
-
-            public UniTask<bool> ExistsAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default) =>
-                _inner.ExistsAsync(domain, relativePath, cancellationToken);
-
-            public UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default) =>
-                _inner.ReadAllTextAsync(domain, relativePath, cancellationToken);
-
-            public UniTask<byte[]> ReadAllBytesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default) =>
-                _inner.ReadAllBytesAsync(domain, relativePath, cancellationToken);
-
-            public UniTask WriteAllTextAsync(FileDomain domain, string relativePath, string content, CancellationToken cancellationToken = default) =>
-                _inner.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
-
-            public UniTask WriteAllBytesAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default) =>
-                _inner.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
-
-            public void Delete(FileDomain domain, string relativePath) => _inner.Delete(domain, relativePath);
-
-            public UniTask<string[]> GetFilesAsync(FileDomain domain, string relativePath, string searchPattern = "*", CancellationToken cancellationToken = default) =>
-                _inner.GetFilesAsync(domain, relativePath, searchPattern, cancellationToken);
-
-            public void CreateDirectory(FileDomain domain, string relativePath) => _inner.CreateDirectory(domain, relativePath);
-
-            public string GetPhysicalPath(FileDomain domain, string relativePath) => _inner.GetPhysicalPath(domain, relativePath);
         }
     }
 }
