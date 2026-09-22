@@ -4,7 +4,10 @@ using Cysharp.Threading.Tasks;
 namespace XFramework.XFileManager
 {
     /// <summary>
-    /// <see cref="FileManager"/> 的扩展方法，提供同步便捷 API 和工具方法。
+    /// <see cref="FileManager"/> 的同步便捷 API 与工具方法。
+    /// <para><b>同步方法已收敛到门面本体</b>（<see cref="FileManager.ReadAllText"/> /
+    /// <see cref="FileManager.WriteAllBytes"/> 等），此处保留同名成员只为兼容既有调用方——
+    /// 二者行为完全一致，新代码请直接用门面上的那一份。</para>
     /// <para>同步方法内部调用异步实现然后阻塞等待，仅适合编辑器工具、小型配置文件等场景。</para>
     /// <para>运行时强烈建议使用异步版本以避免主线程卡顿。</para>
     /// </summary>
@@ -13,26 +16,19 @@ namespace XFramework.XFileManager
         #region Synchronous Text
 
         /// <summary>
-        /// 同步读取文件全部文本内容。
-        /// <para>内部调用 <see cref="FileManager.ReadAllTextAsync"/> 并阻塞等待。</para>
+        /// 同步读取文件全部文本内容（直接委托给 <see cref="FileManager.ReadAllText"/>）。
         /// </summary>
         public static string ReadAllText(FileDomain domain, string relativePath)
         {
-            return FileManager.ReadAllTextAsync(domain, relativePath)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            return FileManager.ReadAllText(domain, relativePath);
         }
 
         /// <summary>
-        /// 同步写入文本内容到文件。
+        /// 同步写入文本内容到文件（直接委托给 <see cref="FileManager.WriteAllText"/>）。
         /// </summary>
         public static void WriteAllText(FileDomain domain, string relativePath, string content)
         {
-            FileManager.WriteAllTextAsync(domain, relativePath, content)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            FileManager.WriteAllText(domain, relativePath, content);
         }
 
         #endregion
@@ -40,25 +36,19 @@ namespace XFramework.XFileManager
         #region Synchronous Bytes
 
         /// <summary>
-        /// 同步读取文件全部字节内容。
+        /// 同步读取文件全部字节内容（直接委托给 <see cref="FileManager.ReadAllBytes"/>）。
         /// </summary>
         public static byte[] ReadAllBytes(FileDomain domain, string relativePath)
         {
-            return FileManager.ReadAllBytesAsync(domain, relativePath)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            return FileManager.ReadAllBytes(domain, relativePath);
         }
 
         /// <summary>
-        /// 同步写入字节内容到文件。
+        /// 同步写入字节内容到文件（直接委托给 <see cref="FileManager.WriteAllBytes"/>）。
         /// </summary>
         public static void WriteAllBytes(FileDomain domain, string relativePath, byte[] data)
         {
-            FileManager.WriteAllBytesAsync(domain, relativePath, data)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            FileManager.WriteAllBytes(domain, relativePath, data);
         }
 
         #endregion
@@ -82,14 +72,11 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
-        /// 同步获取目录下所有文件路径。
+        /// 同步获取目录下所有文件路径（直接委托给 <see cref="FileManager.GetFiles"/>）。
         /// </summary>
         public static string[] GetFiles(FileDomain domain, string relativePath, string searchPattern = "*")
         {
-            return FileManager.GetFilesAsync(domain, relativePath, searchPattern)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
+            return FileManager.GetFiles(domain, relativePath, searchPattern);
         }
 
         /// <summary>

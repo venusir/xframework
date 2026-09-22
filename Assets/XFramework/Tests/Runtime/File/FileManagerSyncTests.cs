@@ -174,5 +174,51 @@ namespace XFramework.XFileManager.Tests
         }
 
         #endregion
+
+        #region FileManagerExtensions 入口与门面一致
+
+        [Test]
+        public void FileManagerExtensions_AndFacade_AreInterchangeable()
+        {
+            // 门面写 → 旧入口读
+            FileManager.WriteAllText(FileDomain.AppData, "cfg/a.json", "A");
+            Assert.AreEqual("A", FileManagerExtensions.ReadAllText(FileDomain.AppData, "cfg/a.json"),
+                "旧入口读到的内容应与门面写入的一致");
+
+            // 旧入口写 → 门面读
+            FileManagerExtensions.WriteAllText(FileDomain.AppData, "cfg/b.json", "B");
+            Assert.AreEqual("B", FileManager.ReadAllText(FileDomain.AppData, "cfg/b.json"),
+                "门面读到的内容应与旧入口写入的一致");
+        }
+
+        [Test]
+        public async Task FileManagerExtensions_GetFiles_MatchesFacade()
+        {
+            await FileManager.WriteAllTextAsync(FileDomain.AppData, "sub/c.txt", "c");
+
+            var viaExtensions = FileManagerExtensions.GetFiles(FileDomain.AppData, "sub");
+
+            CollectionAssert.AreEquivalent(new[] { "sub/c.txt" }, viaExtensions,
+                "旧入口的枚举结果应与门面一致（同为相对域根、正斜杠分隔）");
+        }
+
+        [Test]
+        public void FileManagerExtensions_ReadAllText_MobileStreamingDomain_ThrowsInsteadOfHanging()
+        {
+            FileManager.Destroy();
+            FileManager.Initialize(new MobileFileProvider());
+            try
+            {
+                Assert.Throws<NotSupportedException>(
+                    () => FileManagerExtensions.ReadAllText(FileDomain.Streaming, "cfg/game.json"),
+                    "旧入口同样应拒绝而非死锁——它改走门面后一并继承了这道守卫");
+            }
+            finally
+            {
+                FileManager.Destroy();
+            }
+        }
+
+        #endregion
     }
 }
