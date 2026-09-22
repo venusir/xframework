@@ -446,6 +446,7 @@ FileManager.Initialize();
 | `FilePathUtility.cs`       | 路径工具（归一化 / 文件名提取 / 路径沙箱校验） |
 | `IFileProvider.cs`         | 平台文件提供者接口（含读失败契约） |
 | `IAtomicFileProvider.cs`   | 原子写入能力契约（可选）      |
+| `IDirectoryProvider.cs`    | 子目录枚举能力契约（可选）    |
 | `ICryptoProvider.cs`       | 加解密提供者接口              |
 | `XorCryptoProvider.cs`     | 基于 XOR 的轻量加解密实现     |
 | `CryptoFileProvider.cs`    | 加解密装饰器（内部）          |
