@@ -1,0 +1,178 @@
+using System;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
+using NUnit.Framework;
+using XFramework.XSave.Tests;
+
+namespace XFramework.XFileManager.Tests
+{
+    /// <summary>
+    /// <see cref="FileManager"/> 同步内容 API 契约测试。
+    /// <para>覆盖：同步入口与异步入口的双向互通、文件不存在时的返回契约、目录枚举的正斜杠规范，
+    /// 以及「移动端 Streaming 域同步读」的拒绝判定与门面级抛出。</para>
+    /// </summary>
+    [TestFixture]
+    public class FileManagerSyncTests
+    {
+        private TempFileProvider _fileProvider;
+
+        [OneTimeTearDown]
+        public void OneTimeTearDown()
+        {
+            _fileProvider?.Cleanup();
+        }
+
+        [SetUp]
+        public void SetUp()
+        {
+            _fileProvider?.Cleanup();
+            _fileProvider = new TempFileProvider();
+
+            FileManager.Destroy();
+            FileManager.Initialize(_fileProvider);
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            FileManager.Destroy();
+
+            // 还原成「零配置可用」，而不是把销毁闩锁留给后续 fixture——懒加载豁免只对「未初始化」生效，
+            // 已销毁时 EnsureInitialized 直接抛，同进程混跑会让后面的用例吃到它（同 FileManagerAtomicTests）
+            FileManager.Initialize();
+        }
+
+        #region 同步与异步入口互通
+
+        [Test]
+        public async Task WriteAllText_Sync_IsVisibleToAsyncEntry()
+        {
+            FileManager.WriteAllText(FileDomain.AppData, "cfg/game.json", "{\"v\":1}");
+
+            var read = await FileManager.ReadAllTextAsync(FileDomain.AppData, "cfg/game.json");
+
+            Assert.AreEqual("{\"v\":1}", read, "同步写入的内容应能被异步入口原样读到");
+        }
+
+        [Test]
+        public async Task ReadAllText_Sync_SeesContentWrittenByAsync()
+        {
+            await FileManager.WriteAllTextAsync(FileDomain.AppData, "cfg/game.json", "{\"v\":2}");
+
+            var read = FileManager.ReadAllText(FileDomain.AppData, "cfg/game.json");
+
+            Assert.AreEqual("{\"v\":2}", read, "同步读应看到异步写入的内容");
+        }
+
+        [Test]
+        public async Task ReadAllBytes_Sync_SeesBytesWrittenByAsync()
+        {
+            // 载荷含非 UTF-8 字节：若同步读误走文本通道，这些字节会被替换字符损坏
+            var payload = new byte[] { 0x00, 0xFF, 0x10, 0x80 };
+            await FileManager.WriteAllBytesAsync(FileDomain.AppData, "blob.bin", payload);
+
+            var read = FileManager.ReadAllBytes(FileDomain.AppData, "blob.bin");
+
+            CollectionAssert.AreEqual(payload, read, "同步读应逐字节还原异步写入的字节");
+        }
+
+        [Test]
+        public void ReadAllText_MissingFile_ReturnsNull()
+        {
+            Assert.IsNull(FileManager.ReadAllText(FileDomain.AppData, "nope.json"),
+                "文件不存在应返回 null 而非抛异常（与异步版契约一致）");
+        }
+
+        [Test]
+        public void ReadAllBytes_MissingFile_ReturnsNull()
+        {
+            Assert.IsNull(FileManager.ReadAllBytes(FileDomain.AppData, "nope.bin"),
+                "文件不存在应返回 null 而非抛异常（与异步版契约一致）");
+        }
+
+        [Test]
+        public async Task GetFiles_Sync_ReturnsForwardSlashRelativePaths()
+        {
+            await FileManager.WriteAllTextAsync(FileDomain.AppData, "sub/a.txt", "a");
+            await FileManager.WriteAllTextAsync(FileDomain.AppData, "sub/b.txt", "b");
+
+            var files = FileManager.GetFiles(FileDomain.AppData, "sub");
+
+            CollectionAssert.AreEquivalent(new[] { "sub/a.txt", "sub/b.txt" }, files,
+                "同步枚举应返回相对域根、正斜杠分隔的路径，可直接回传本模块其他方法");
+        }
+
+        [Test]
+        public void GetFiles_MissingDirectory_ReturnsEmpty()
+        {
+            var files = FileManager.GetFiles(FileDomain.AppData, "no_such_dir");
+
+            Assert.IsNotNull(files, "目录不存在时返回空数组而非 null");
+            Assert.IsEmpty(files, "目录不存在时返回空数组");
+        }
+
+        #endregion
+
+        #region 移动端 Streaming 域：同步读拒绝
+
+        [Test]
+        public void IsSyncStreamingReadUnsupported_MobileProviderStreamingDomain_IsTrue()
+        {
+            Assert.IsTrue(
+                FileManager.IsSyncStreamingReadUnsupported(new MobileFileProvider(), FileDomain.Streaming),
+                "移动端 Streaming 域经 UnityWebRequest 读取，其续体依赖 PlayerLoop，同步阻塞会死锁");
+        }
+
+        [Test]
+        public void IsSyncStreamingReadUnsupported_MobileProviderOtherDomain_IsFalse()
+        {
+            Assert.IsFalse(
+                FileManager.IsSyncStreamingReadUnsupported(new MobileFileProvider(), FileDomain.AppData),
+                "移动端非 Streaming 域走 System.IO 线程池，同步读可用");
+        }
+
+        [Test]
+        public void IsSyncStreamingReadUnsupported_DesktopProviderStreamingDomain_IsFalse()
+        {
+            Assert.IsFalse(
+                FileManager.IsSyncStreamingReadUnsupported(_fileProvider, FileDomain.Streaming),
+                "桌面 Provider 的 Streaming 读走线程池，同步读可用——不可与移动端类推");
+        }
+
+        [Test]
+        public void ReadAllText_MobileStreamingDomain_ThrowsInsteadOfHanging()
+        {
+            FileManager.Destroy();
+            FileManager.Initialize(new MobileFileProvider());
+            try
+            {
+                Assert.Throws<NotSupportedException>(
+                    () => FileManager.ReadAllText(FileDomain.Streaming, "cfg/game.json"),
+                    "移动端 Streaming 的同步读应拒绝，而不是阻塞到死锁");
+            }
+            finally
+            {
+                FileManager.Destroy();
+            }
+        }
+
+        [Test]
+        public void ReadAllBytes_MobileStreamingDomain_ThrowsInsteadOfHanging()
+        {
+            FileManager.Destroy();
+            FileManager.Initialize(new MobileFileProvider());
+            try
+            {
+                Assert.Throws<NotSupportedException>(
+                    () => FileManager.ReadAllBytes(FileDomain.Streaming, "blob.bin"),
+                    "移动端 Streaming 的同步读应拒绝，而不是阻塞到死锁");
+            }
+            finally
+            {
+                FileManager.Destroy();
+            }
+        }
+
+        #endregion
+    }
+}

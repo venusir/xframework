@@ -182,6 +182,26 @@ namespace XFramework.XFileManager
         #region File Operations — Text
 
         /// <summary>
+        /// 同步读取文件全部文本内容。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="ReadAllTextAsync"/>，勿在每帧路径调用。</para>
+        /// <para><b>移动端 <see cref="FileDomain.Streaming"/> 域会抛异常而非挂起</b>：该域经 UnityWebRequest
+        /// 读取，其续体依赖 PlayerLoop 推进，阻塞等待将永久死锁。本方法在该组合下抛
+        /// <see cref="NotSupportedException"/>，请改用 <see cref="ReadAllTextAsync"/>。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
+        /// <exception cref="NotSupportedException">移动端 <see cref="FileDomain.Streaming"/> 域上调用时抛出。</exception>
+        public static string ReadAllText(FileDomain domain, string relativePath)
+        {
+            // 顺序不可换：守卫要读 _baseProvider，而它只在初始化时才被赋值
+            EnsureInitialized();
+            ThrowIfSyncStreamingReadUnsupported(domain);
+            return ReadAllTextAsync(domain, relativePath).AsTask().GetAwaiter().GetResult();
+        }
+
+        /// <summary>
         /// 异步读取文件全部文本内容。
         /// </summary>
         /// <param name="domain">路径域。</param>
@@ -213,9 +233,43 @@ namespace XFramework.XFileManager
             return provider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
         }
 
+        /// <summary>
+        /// 同步写入文本内容到文件。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="WriteAllTextAsync"/>，勿在每帧路径调用。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="content">要写入的文本内容。</param>
+        public static void WriteAllText(FileDomain domain, string relativePath, string content)
+        {
+            EnsureInitialized();
+            WriteAllTextAsync(domain, relativePath, content).AsTask().GetAwaiter().GetResult();
+        }
+
         #endregion
 
         #region File Operations — Bytes
+
+        /// <summary>
+        /// 同步读取文件全部字节内容。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="ReadAllBytesAsync"/>，勿在每帧路径调用。</para>
+        /// <para><b>移动端 <see cref="FileDomain.Streaming"/> 域会抛异常而非挂起</b>：该域经 UnityWebRequest
+        /// 读取，其续体依赖 PlayerLoop 推进，阻塞等待将永久死锁。本方法在该组合下抛
+        /// <see cref="NotSupportedException"/>，请改用 <see cref="ReadAllBytesAsync"/>。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
+        /// <exception cref="NotSupportedException">移动端 <see cref="FileDomain.Streaming"/> 域上调用时抛出。</exception>
+        public static byte[] ReadAllBytes(FileDomain domain, string relativePath)
+        {
+            // 顺序不可换：守卫要读 _baseProvider，而它只在初始化时才被赋值
+            EnsureInitialized();
+            ThrowIfSyncStreamingReadUnsupported(domain);
+            return ReadAllBytesAsync(domain, relativePath).AsTask().GetAwaiter().GetResult();
+        }
 
         /// <summary>
         /// 异步读取文件全部字节内容。
@@ -247,6 +301,20 @@ namespace XFramework.XFileManager
             // 入口快照:整个异步流程使用同一 provider(加解密已在装饰器内完成)
             var provider = _provider;
             return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
+        }
+
+        /// <summary>
+        /// 同步写入字节内容到文件。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="WriteAllBytesAsync"/>，勿在每帧路径调用。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="data">要写入的字节数组。</param>
+        public static void WriteAllBytes(FileDomain domain, string relativePath, byte[] data)
+        {
+            EnsureInitialized();
+            WriteAllBytesAsync(domain, relativePath, data).AsTask().GetAwaiter().GetResult();
         }
 
         /// <summary>
@@ -322,6 +390,27 @@ namespace XFramework.XFileManager
         #endregion
 
         #region Directory Operations
+
+        /// <summary>
+        /// 同步获取目录下所有文件路径。
+        /// <para><b>阻塞当前线程</b>等待异步实现完成，仅适合编辑器工具、小型配置文件、启动期加载
+        /// 等场景。运行时请优先使用 <see cref="GetFilesAsync"/>，勿在每帧路径调用。</para>
+        /// <para>移动端 <see cref="FileDomain.Streaming"/> 域不支持枚举，恒返回空数组（与异步版一致，
+        /// 不会挂起）。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的目录路径。</param>
+        /// <param name="searchPattern">搜索模式，默认为 <c>*</c>。</param>
+        /// <returns>
+        /// 匹配的文件相对路径数组。
+        /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与传入的相对路径同规范），
+        /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
+        /// </returns>
+        public static string[] GetFiles(FileDomain domain, string relativePath, string searchPattern = "*")
+        {
+            EnsureInitialized();
+            return GetFilesAsync(domain, relativePath, searchPattern).AsTask().GetAwaiter().GetResult();
+        }
 
         /// <summary>
         /// 异步获取目录下所有文件路径。
@@ -424,6 +513,38 @@ namespace XFramework.XFileManager
             if (_destroyed)
                 throw new ObjectDisposedException(nameof(FileManager),
                     "[FileManager] FileManager 已被销毁，请重新调用 Initialize。");
+        }
+
+        /// <summary>
+        /// 同步内容读取在「移动端 Streaming 域」上不可用时抛出。
+        /// <para>拒绝而不是阻塞：该组合下阻塞等待不会返回，抛异常至少是响亮的失败。</para>
+        /// </summary>
+        private static void ThrowIfSyncStreamingReadUnsupported(FileDomain domain)
+        {
+            if (!IsSyncStreamingReadUnsupported(_baseProvider, domain))
+                return;
+
+            throw new NotSupportedException(
+                "[FileManager] 同步读取移动端 Streaming 域不可用：该域经 UnityWebRequest 读取，" +
+                "其续体依赖 PlayerLoop 推进，阻塞等待会永久死锁（无异常、无日志）。" +
+                "请改用 ReadAllTextAsync / ReadAllBytesAsync。");
+        }
+
+        /// <summary>
+        /// 判定同步内容读取是否不受支持：仅「移动端 Provider + Streaming 域」。
+        /// <para><b>为什么不能同步：</b><see cref="MobileFileProvider"/> 的 Streaming 读走
+        /// UnityWebRequest，且其 <c>await ToUniTask()</c> 的续体要在 PlayerLoop 上推进——阻塞主线程
+        /// 等它就是等一个永远不会推进的循环。对照同一 Provider 的 <c>Exists</c>：那里用忙等
+        /// （<c>isDone</c> 由引擎原生侧推进，不依赖托管 PlayerLoop）故可安全阻塞，两者不可类推。</para>
+        /// <para><b>为什么查 <c>baseProvider</c>：</b>启用加解密时生效的 <c>_provider</c> 是
+        /// <see cref="CryptoFileProvider"/> 装饰器，对其做类型探测会漏判。</para>
+        /// <para>刻意做成纯谓词：判定不碰状态、不依赖平台宏，可直接单测。</para>
+        /// </summary>
+        /// <param name="baseProvider">未包加解密层的基础提供者。</param>
+        /// <param name="domain">本次访问的路径域。</param>
+        internal static bool IsSyncStreamingReadUnsupported(IFileProvider baseProvider, FileDomain domain)
+        {
+            return baseProvider is MobileFileProvider && domain == FileDomain.Streaming;
         }
 
         /// <summary>
