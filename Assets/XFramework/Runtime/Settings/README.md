@@ -203,12 +203,27 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `JsonFileStore(string filePath)` | JSON 文件，原子写 + 一代备份 |
 | `EncryptedSettingsStore(inner, cryptoProvider)` | 加解密装饰器，可叠在任意后端之上 |
 
-> **为什么 `JsonFileStore` 直接用 `System.IO`、不经 `FileManager`？** 因为 `ISettingsStore` 是全同步的，
-> 而管理器的**构造函数必然同步加载**（构造无法 await）；`FileManager` 的门面只提供异步内容读写，
-> 同步包装在 `FileManagerExtensions` 里，其文档把适用范围限定为「编辑器工具、小型配置文件」。
-> 接上 `FileManager` 能换来 `FileDomain` 与平台 `IFileProvider`，但会**丢掉一代备份**——
-> `FileManager` 没有重命名/复制原语，而 `FilePathUtility.ReplaceFileAtomically` 是绝对路径原语。
-> 权衡下来：设置是几百字节的本地 JSON，备份能力比域管理更值钱。需要平台存档时请自行实现
+> **为什么 `JsonFileStore` 直接用 `System.IO`、不经 `FileManager`？** 三条理由，按硬度排：
+>
+> 1. **门面路径把崩溃防护从不变式降级为能力探测。** `JsonFileStore` 的原子写与一代备份是
+>    无条件自持的；而 `FileManager.WriteAllBytesAtomic` 在 Provider 未实现 `IAtomicFileProvider`
+>    （Console、WebGL 自定义实现）时**降级为普通写并告警**——崩溃防护与备份在那些平台上静默
+>    失效。设置属于「写了就不能丢」的数据，不适合建在会降级的能力探测上。
+> 2. **全局 `SetCryptoProvider` 会静默破坏设置文件。** 不传 domain 时它对**所有域**生效
+>    （`File/README.md` 的示例正是这么写的）。设置一旦走门面，任何无关代码一次全局加密就把
+>    设置文件变成密文；此后 `SetCryptoProvider(null)`（文档标注为「禁用加密」）会让设置读成
+>    垃圾 → 解析失败 → 回退默认值，玩家表现为**设置静默丢失**。本模块的加密走显式、作用域
+>    自持的 `EncryptedSettingsStore` 装饰器，对此免疫。
+> 3. **公开 API 形状。** `JsonFileStore(string filePath)` 收绝对路径，允许把设置放在任意位置；
+>    门面是 `FileDomain + 相对路径`，且带沙箱（拒盘符 / UNC / `..` 段）。
+>
+> 顺带订正两句曾经写在这里的错话：门面**并非**没有同步内容读写（含 `WriteAllBytesAtomic`
+> 在内的同步方法就在门面上，`FileManagerExtensions` 已退为兼容面），也**并非**拿不到一代备份
+> （那是 `IAtomicFileProvider` 契约的一部分）——备份能力的真实限制是「异步形态 + 能力探测」，
+> 也就是上面第 1 条。所以「`ISettingsStore` 是全同步的、构造必然同步加载」不构成不复用的
+> 理由；上面三条才是。
+>
+> 权衡下来：设置是几百字节的本地 JSON，上述三条比域管理更值钱。需要平台存档时请自行实现
 > `ISettingsStore`；只是要加密则用上面的装饰器，不必自己写。
 
 落盘布局：正式文件 `settings.json`、写入中的临时文件 `.tmp`、一代备份 `.bak`。

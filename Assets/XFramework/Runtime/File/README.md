@@ -96,9 +96,42 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 底层 Provider 未实现 `IAtomicFileProvider`（如 WebGL 自定义实现）时，自动降级为普通写入并告警——**只有实现该接口才能获得崩溃防护**。
 
-### Exists 阻塞说明
+同步版本 `WriteAllBytesAtomic` 语义完全相同（含降级路径），代价是阻塞当前线程，见「同步 API」。
 
-移动端 `FileDomain.Streaming` 域经 UnityWebRequest 查询，同步 `Exists` 会阻塞主线程，请使用 `ExistsAsync`。
+---
+
+## 同步 API
+
+门面提供与异步版一一对应的同步内容读写：
+
+| 同步 | 异步 | 说明 |
+| ---- | ---- | ---- |
+| `ReadAllText` / `ReadAllBytes` | `ReadAllTextAsync` / `ReadAllBytesAsync` | 读失败契约完全相同（不存在返回 `null`，IO 失败抛 `IOException`） |
+| `WriteAllText` / `WriteAllBytes` | `WriteAllTextAsync` / `WriteAllBytesAsync` | |
+| `WriteAllBytesAtomic` | `WriteAllBytesAtomicAsync` | 原子写 + 一代备份，含「Provider 无原子能力时降级并告警」 |
+| `GetFiles` / `GetDirectories` | `GetFilesAsync` / `GetDirectoriesAsync` | 返回路径相对**域根**、正斜杠分隔 |
+
+加上本就同步的 `Exists` / `Delete` / `CreateDirectory` / `GetPhysicalPath`，同步面即完整。
+
+**适用范围**：同步方法内部调用异步实现然后**阻塞当前线程**等待完成，只适合编辑器工具、小型配置文件、启动期加载。运行时请优先使用异步版本，**勿在每帧路径调用**。
+
+> **旧入口**：`FileManagerExtensions` 上仍有同名方法（该文件已随 0.2.0 发布），现为一行委托，与门面行为完全一致。新代码直接用门面即可。
+
+### 移动端 Streaming 域：同步读被拒绝，而不是挂起
+
+这是唯一一处同步调用不可用的组合，且它不是「慢」而是**死锁**：
+
+| 调用 | 移动端 `Streaming` 域上的行为 |
+| ---- | ----------------------------- |
+| 同步 `Exists` | **阻塞但能完成**（内部忙等 `request.isDone`，该标志由引擎原生侧推进，不依赖托管 PlayerLoop）——慢，故仍推荐 `ExistsAsync` |
+| 同步 `ReadAllText` / `ReadAllBytes` | **抛 `NotSupportedException`** |
+| 同步 `WriteAllText` / `WriteAllBytes` / `WriteAllBytesAtomic` | **不会死锁**（写透传桌面实现，走线程池）。但 `Streaming` 是只读域，写入本身就不该发生，实际会在文件系统层面失败 |
+
+内容读被拒绝的原因：该域经 `UnityWebRequest` 读取，其 `await ToUniTask()` 的**续体要在 PlayerLoop 上推进**——阻塞主线程等它就是等一个永远不会推进的循环，无异常、无日志，表现为游戏卡死。拒绝比挂起好排查，请改用 `ReadAllTextAsync` / `ReadAllBytesAsync`。
+
+**不要照 `Exists` 类推**：那里用的是忙等，不依赖托管 PlayerLoop，故可安全阻塞。两者机制不同，结论也不同。
+
+> **自建 Provider 注意**：判定只覆盖内置的 `MobileFileProvider`。第三方 Provider 若其异步读同样依赖主线程 PlayerLoop 推进，同步调用一样会死锁，框架无法代为识别。
 
 ---
 
@@ -420,7 +453,7 @@ FileManager.Initialize();
 | `MobileFileProvider.cs`    | 移动平台文件提供者实现        |
 | `ConsoleFileProvider.cs`   | 控制台平台抽象基类            |
 | `FileManager.cs`           | 跨平台文件管理器静态外观      |
-| `FileManagerExtensions.cs` | 扩展方法（同步 API 等）       |
+| `FileManagerExtensions.cs` | 兼容面：同名同步方法的一行委托（同步 API 已收敛到门面） |
 | `README.md`                | 本文件                        |
 
 ---
