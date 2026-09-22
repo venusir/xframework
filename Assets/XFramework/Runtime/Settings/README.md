@@ -248,6 +248,93 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 > 会调用同步 `Load<T>()`。因此同步成员不能是「昂贵且阻塞」的实现——底层若是网络或平台 SDK，
 > 同步 `Load` 必须在无数据时快速返回，真正的拉取留给异步 API，否则初始化会卡住主线程。
 
+### 需要平台存档（云同步 / 账号绑定 / Console）时
+
+框架**不内置**平台存档后端——各平台 SDK 受 NDA 保护，且同步/异步契约差异很大。正路是自己实现
+`IAsyncSettingsStore`，照这三条写：
+
+1. **实现 `IAsyncSettingsStore` 而不是纯 `ISettingsStore`**。后者会让管理器走能力降级路径、把整段
+   同步读挪到线程池——平台 SDK 的读通常不能那样跑。
+2. **同步侧只读本地镜像**（就是 `JsonFileStore` 落在 `AppData` 的那份），真正的平台拉取留给异步侧。
+   这正是上面「实现者注意」要求的形态：构造函数不会阻塞等平台 SDK。
+3. **异步侧用 `FileDomain.SaveData`**——桌面/移动上它等同 `AppData`，Console 上由第三方
+   `ConsoleFileProvider` 映射到 XGameSave / sceSaveData / nn::fs（见 File 模块 README 的「接入 Console 平台」）。
+
+```csharp
+// 示意代码：本框架不提供此类，需要时照此自行实现
+public sealed class PlatformSaveSettingsStore : IAsyncSettingsStore
+{
+    private const string RemotePath = "settings.json";
+
+    private readonly JsonFileStore _mirror; // AppData 里的本地镜像，服务同步侧
+
+    public PlatformSaveSettingsStore(string mirrorFilePath) => _mirror = new JsonFileStore(mirrorFilePath);
+
+    // —— 同步侧：只碰镜像，绝不阻塞等平台 ——
+    public bool Exists() => _mirror.Exists();
+    public T Load<T>() where T : class, new() => _mirror.Load<T>();
+    public void Save<T>(T settings) where T : class, new() => _mirror.Save(settings);
+
+    public void Delete()
+    {
+        _mirror.Delete();
+        FileManager.Delete(FileDomain.SaveData, RemotePath);
+    }
+
+    // —— 异步侧：平台为准，镜像兜底 ——
+
+    // 两个来源都算「有数据」：管理器见 false 会直接走 defaultFactory，连 LoadAsync 都不会调
+    public async UniTask<bool> ExistsAsync(CancellationToken cancellationToken = default)
+        => _mirror.Exists() || await FileManager.ExistsAsync(FileDomain.SaveData, RemotePath, cancellationToken);
+
+    public async UniTask<T> LoadAsync<T>(CancellationToken cancellationToken = default) where T : class, new()
+    {
+        var bytes = await FileManager.ReadAllBytesAsync(FileDomain.SaveData, RemotePath, cancellationToken);
+
+        // JsonUtility 是 Unity 原生 API，解析前切回主线程（与 SettingsManagerImpl 的取舍一致）
+        await UniTask.SwitchToMainThread(cancellationToken);
+
+        if (bytes == null || bytes.Length == 0)
+            return _mirror.Load<T>(); // 平台无数据——新设备首次启动即此列
+
+        var loaded = JsonUtility.FromJson<T>(Encoding.UTF8.GetString(bytes));
+        _mirror.Save(loaded); // 回填镜像，供下次同步构造使用
+        return loaded ?? new T();
+    }
+
+    public async UniTask SaveAsync<T>(T settings, CancellationToken cancellationToken = default) where T : class, new()
+    {
+        // 先序列化再 await：把 Unity API 留在调用线程（同上）
+        var bytes = Encoding.UTF8.GetBytes(JsonUtility.ToJson(settings));
+
+        // 平台优先。平台写失败会抛出、镜像保持旧值、脏标记未清，故下次自动保存会重试；
+        // 反过来先写镜像的话，失败后平台仍是旧值，下次 LoadAsync 会把旧值读回来盖掉新改动
+        await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, RemotePath, bytes, cancellationToken);
+        _mirror.Save(settings);
+    }
+}
+```
+
+接线：
+
+```csharp
+SettingsManager.Initialize<GameSettings>(
+    new PlatformSaveSettingsStore(Application.persistentDataPath + "/GameSettings.json"));
+```
+
+**四点必须知道的行为**（骨架不替你解决，取决于你怎么用它）：
+
+- **同步 `Save` 只写镜像**——游戏若全程只用同步 API，数据永远到不了平台。要平台存档就必须走 `SaveAsync`。
+- **`Exists()` 与 `ExistsAsync()` 会不一致**：前者只查镜像，后者连平台一起查。「新设备 + 云端已有数据」
+  时构造函数拿到的是默认值，得由调用方在一次 `LoadAsync` 之后才切到平台数据。这是「同步侧只读镜像」
+  的固有代价，也正是它换来「构造函数不阻塞」的原因。
+- **平台侧在 Console 上不是原子写**：`ConsoleFileProvider` 未实现 `IAtomicFileProvider`，
+  `WriteAllBytesAtomicAsync` 会**降级为普通写并告警**，崩溃防护失效。要保住它需自行实现该接口。
+- **可与 `EncryptedSettingsStore` 叠加**：装饰器只管编解码，不关心内层是镜像还是平台，叠上去即两者都是密文。
+
+> 上面这段代码已逐个核对签名、并整体编译通过；但**本框架不含此类、也没有配套测试**——它是写法
+> 示意，不是可直接投产的组件。
+
 ### SettingsOptions
 
 | 字段 | 默认 | 说明 |
