@@ -44,6 +44,10 @@ namespace XFramework.XReactive
         /// <summary>
         /// 从源属性派生只读属性(静态泛型工厂:TSource 无法在类级泛型表达,故用方法级泛型)。
         /// <para>初始化时取源当前值作为初始值(不通知),之后订阅源做映射推送。</para>
+        /// <para><b><paramref name="selector"/> 在此处被调用两次</b>:上一段取初值一次,源订阅的立即回调
+        /// 再一次(同一输入,结果被 <see cref="Set"/> 去重丢弃)。这是「先算初值」与「订阅即回调当前值」
+        /// 两条语义叠加的必然结果,故 selector 须为纯函数——详见
+        /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的说明。</para>
         /// </summary>
         internal static ReadOnlyReactiveProperty<TResult> Create<TSource, TResult>(
             IReactiveProperty<TSource> source, Func<TSource, TResult> selector)
@@ -146,13 +150,19 @@ namespace XFramework.XReactive
         /// 将响应式属性映射为只读派生属性，值随源自动变化。
         /// <para>例: <c>level.Select(lv => $"Lv.{lv}")</c></para>
         /// <para>返回值是 <see cref="ReadOnlyReactiveProperty{T}"/>，只能 Subscribe 不能赋值，符合派生值的语义。</para>
+        /// <para><b>selector 必须是纯函数：</b>构造时它会被调用<b>两次</b>——一次取初值，一次来自源订阅的
+        /// 立即回调（结果与初值相同、被去重丢弃）。纯映射只是白算一遍；带副作用或非确定性的 selector
+        /// （计数器、随机数、缓存填充）会跑两遍，且只有第二次的结果留在 <see cref="Value"/> 上。</para>
         /// </summary>
         /// <typeparam name="TSource">源值类型。</typeparam>
         /// <typeparam name="TResult">结果值类型。</typeparam>
         /// <param name="source">源响应式属性。</param>
-        /// <param name="selector">值映射函数。</param>
-        /// <returns>新的只读响应式属性。</returns>
+        /// <param name="selector">值映射函数，必须是纯函数（构造时会被调用两次）。</param>
+        /// <returns>新的只读响应式属性。它是 <see cref="IDisposable"/>，需交给生命周期所有者释放。</returns>
         /// <exception cref="ArgumentNullException">source 或 selector 为 null 时抛出。</exception>
+        /// <exception cref="ObjectDisposedException"><paramref name="source"/> 已释放时抛出——
+        /// 注意取值本身是宽容的（读已释放的源仍返回最后的值），但订阅不是。</exception>
+        /// <exception cref="Exception">selector 在构造期抛出的异常原样上抛。</exception>
         public static ReadOnlyReactiveProperty<TResult> Select<TSource, TResult>(
             this IReactiveProperty<TSource> source,
             Func<TSource, TResult> selector)

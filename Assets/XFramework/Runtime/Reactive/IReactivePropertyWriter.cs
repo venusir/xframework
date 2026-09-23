@@ -12,13 +12,16 @@ namespace XFramework.XReactive
     {
         /// <summary>
         /// 尝试写入值，并回传写入后目标实际持有的值。
-        /// <para>约定：目标已失效（如已释放）时返回 <c>false</c>，此时 <paramref name="actual"/> 为
-        /// <c>default</c>，且<b>不抛异常</b>——绑定层不该因为目标失效而把异常抛进 UI 事件回调。</para>
-        /// <para>成功时 <paramref name="actual"/> 是目标规范化（取整、钳制到上下限）后的值，
-        /// 调用方应当读它，<b>不要</b>再去访问 <see cref="IReactiveProperty{T}.Value"/>：
-        /// 写入会同步派发通知，某个订阅者可能在派发中释放目标，此后再读 <c>Value</c> 就会抛——
-        /// 正是本接口要挡掉的那类异常。把「写入后的值」随写入一并回传，这条约束就由接口本身
-        /// 保证，而不必依赖 <c>Value</c> 对「已释放」采取何种策略。</para>
+        /// <para>约定：目标已失效时返回 <c>false</c>，此时 <paramref name="actual"/> 为 <c>default</c>，
+        /// 且<b>不抛异常</b>——绑定层不该因为目标失效而把异常抛进 UI 事件回调。「已失效」的判断归实现
+        /// 自己：<c>ReactiveProperty&lt;T&gt;</c> 看是否已释放，<c>SettingRef</c> 看设置类型是否仍注册。</para>
+        /// <para>成功时 <paramref name="actual"/> 是写入后目标实际持有的值，调用方应当读它，
+        /// <b>不要</b>再去访问 <see cref="IReactiveProperty{T}.Value"/>：写入会同步派发通知，某个订阅者
+        /// 在派发中释放目标也照常发生，而 <paramref name="actual"/> 由实现直接给出——读它就不必依赖
+        /// <c>Value</c> 对「已失效」采取何种策略（那是各实现自己的事，接口并未统一）。</para>
+        /// <para><b>两处别误读：</b>① 返回 <c>true</c> <b>不</b>表示值变了——写入与当前值相同时会被去重、
+        /// 订阅者收不到通知，但仍返回 <c>true</c>；② <paramref name="actual"/> <b>不</b>保证经过规范化，
+        /// 随框架发布的两个实现都不取整也不钳制，它恒等于 <paramref name="value"/>。</para>
         /// </summary>
         /// <param name="value">要写入的值。</param>
         /// <param name="actual">写入后目标实际持有的值；返回 false 时为 default。</param>
