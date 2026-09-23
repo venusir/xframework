@@ -110,21 +110,23 @@ namespace XFramework.XSettings
         #region Value
 
         /// <summary>
+        /// 尝试写入值。设置句柄不持有释放语义（它通常活到进程结束），故永远返回 true。
+        /// </summary>
+        /// <param name="value">要写入的值。</param>
+        /// <param name="actual">写入后句柄解析到的实时值。</param>
+        /// <returns>恒为 true。</returns>
+        public bool TryWriteValue(TField value, out TField actual)
+        {
+            Value = value;
+            actual = Value;
+            return true;
+        }
+
+        /// <summary>
         /// 读取当前值；写入时回写设置对象并通知所有订阅者。
         /// <para>写入会与设置对象中的<b>实时值</b>比较，相等则直接返回——去重基准不缓存，
         /// 因此不存在陈旧锚点。</para>
         /// </summary>
-        /// <summary>
-        /// 尝试写入值。设置句柄不持有释放语义（它通常活到进程结束），故永远返回 true。
-        /// </summary>
-        /// <param name="value">要写入的值。</param>
-        /// <returns>恒为 true。</returns>
-        public bool TryWriteValue(TField value)
-        {
-            Value = value;
-            return true;
-        }
-
         public TField Value
         {
             get => _getter(Current());

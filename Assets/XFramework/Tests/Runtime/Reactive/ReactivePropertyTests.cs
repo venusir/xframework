@@ -7,7 +7,7 @@ namespace XFramework.XReactive.Tests
     /// <summary>
     /// 响应式属性测试。
     /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后抛 ObjectDisposedException、ReadOnly 映射语义、接口链编程、
-    /// 订阅立即回调抛异常时订阅必须被清理(不泄漏)。</para>
+    /// 订阅立即回调抛异常时订阅必须被清理(不泄漏)、TryWriteValue 的失效判定与 actual 回传。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -165,6 +165,54 @@ namespace XFramework.XReactive.Tests
             rp.Dispose();
 
             Assert.DoesNotThrow(() => rp.Dispose(), "重复 Dispose 幂等");
+        }
+
+        #endregion
+
+        #region TryWriteValue — 写入契约
+
+        [Test]
+        public void TryWriteValue_LiveTarget_WritesAndReturnsActual()
+        {
+            var rp = new ReactiveProperty<int>(1);
+
+            Assert.IsTrue(rp.TryWriteValue(2, out var actual), "存活目标写入应成功");
+            Assert.AreEqual(2, actual, "回传写入后目标持有的值");
+            Assert.AreEqual(2, rp.Value);
+        }
+
+        [Test]
+        public void TryWriteValue_DisposedTarget_ReturnsFalseWithoutThrowing()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            rp.Dispose();
+
+            bool written = true;
+            Assert.DoesNotThrow(() => written = rp.TryWriteValue(2, out _));
+            Assert.IsFalse(written, "目标已失效时返回 false 而不是抛异常");
+        }
+
+        [Test]
+        public void TryWriteValue_TargetDisposedDuringDispatch_ReturnsTrueAndActual()
+        {
+            var rp = new ReactiveProperty<int>(0);
+
+            // 跳过订阅时的立即回调，只在真正的变化通知里释放
+            int calls = 0;
+            rp.Subscribe(_ =>
+            {
+                if (++calls > 1)
+                    rp.Dispose();
+            });
+
+            bool written = false;
+            int actual = -1;
+
+            Assert.DoesNotThrow(() => written = rp.TryWriteValue(5, out actual),
+                "写入派发中目标被释放，不该把异常抛进调用方");
+
+            Assert.IsTrue(written, "本次写入确实已经发生，应返回 true");
+            Assert.AreEqual(5, actual, "回传的是本次写入的值，调用方无需再读 Value");
         }
 
         #endregion

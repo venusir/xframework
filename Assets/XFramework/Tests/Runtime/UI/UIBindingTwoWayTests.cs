@@ -115,6 +115,27 @@ namespace XFramework.XUI.Tests
                 "目标失效时 TryWriteValue 应返回 false，而不是把异常抛进 UI 事件回调");
         }
 
+        [Test]
+        public void Slider_TargetDisposedDuringWriteDispatch_DoesNotThrow()
+        {
+            var slider = MakeSlider();
+            var target = new ReactiveProperty<float>(0f);
+            UIBinder.BindTwoWay(slider, target);
+
+            // 跳过订阅时的立即回调，只在真正的变化通知里释放——模拟「状态变成 X 就关面板」。
+            // 此时 TryWriteValue 会返回 true（写入确实已发生），若绑定层写入后再去读
+            // target.Value，就会在派发途中撞上已释放的 getter 并把异常抛进 UI 事件回调。
+            int calls = 0;
+            target.Subscribe(_ =>
+            {
+                if (++calls > 1)
+                    target.Dispose();
+            });
+
+            Assert.DoesNotThrow(() => slider.value = 0.5f,
+                "写入派发中目标被释放时，回填用的 actual 来自写入调用本身，不该再去读 Value");
+        }
+
         #endregion
 
         #region 双向：开关
@@ -249,10 +270,11 @@ namespace XFramework.XUI.Tests
 
             public IDisposable Subscribe(Action<float> onNext) => _inner.Subscribe(onNext);
 
-            public bool TryWriteValue(float value)
+            public bool TryWriteValue(float value, out float actual)
             {
                 WriteCount++;
                 _inner.Value = Mathf.Ceil(value * 10f) / 10f;
+                actual = _inner.Value;
                 return true;
             }
         }

@@ -6,6 +6,7 @@ XFramework 响应式模块提供**响应式属性**。基于 XMessage 模块的�
 
 - `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)
 - `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)。同样实现 `IReactiveProperty<T>`(只读接口本无 setter,故不因此获得写入能力),可直接交给收该接口的绑定 API,也可继续 `Select` 做链式映射
+- `IReactivePropertyWriter<T>`:「确实需要写入」时按需索取的能力接口(继承 `IReactiveProperty<T>`,只加 `TryWriteValue`)。双向绑定 API 收它而非具体类,故任何第三方实现都能接入——只读接口本身不因此多出 setter
 - 全局消息总线在 Message 模块(`XFramework.XMessage.MessageManager`),不在此模块
 
 **命名空间**: `XFramework.XReactive`
@@ -15,6 +16,7 @@ XFramework 响应式模块提供**响应式属性**。基于 XMessage 模块的�
 ```
 Runtime/Reactive/
 ├── IReactiveProperty.cs          # 响应式属性接口(Value 只读 + Subscribe,面向接口编程)
+├── IReactivePropertyWriter.cs    # 可写能力接口(继承前者 + TryWriteValue),双向绑定按需索取
 ├── ReactiveProperty.cs           # 响应式属性(可写值 + 自动通知 + 去重)
 └── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
 ```
@@ -47,6 +49,21 @@ var levelLabel = healthProp.Select(lv => $"Lv.{lv}");
 // 取消订阅
 subscription.Dispose();
 ```
+
+## 双向绑定
+
+`IReactivePropertyWriter<T>` 是「确实需要写入」时按需索取的能力接口——`ReactiveProperty<T>` 与 Settings 的 `SettingRef<T,TField>` 各自实现，第三方实现同样可接入 `UIBinder.BindTwoWay`。只读接口 `IReactiveProperty<T>` 本身不因此多出 setter。
+
+```csharp
+if (!writer.TryWriteValue(value, out var actual))
+    return;   // 目标已失效:返回 false 而不抛异常,绑定层不该把异常抛进 UI 事件回调
+
+// actual 是写入后目标实际持有的值(目标可能规范化:取整、钳制到上下限)。
+// 用它,不要再读 writer.Value——写入会同步派发通知,某个订阅者可能在派发中释放
+// 目标,那之后再读 Value 就会抛,正是本接口要挡掉的那类异常。
+```
+
+`false` 严格表示**未写入**（目标已失效），此时 `actual` 为 `default`；成功则返回 `true` 并给出写入后的值。
 
 ## 设计原则
 

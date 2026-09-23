@@ -255,14 +255,11 @@ namespace XFramework.XUI.Data
 
                 try
                 {
-                    // 写入失败（目标已释放等）时立即收手：此时读 Value 会抛——已释放的
-                    // ReactiveProperty 在 getter 上就拒绝访问
-                    if (!_target.TryWriteValue(value))
+                    // 目标可能规范化了写入值（取整、钳制到上下限），actual 就是规范化后的结果。
+                    // 不回填的话滑块会停在用户拖到的位置，与真实值不一致——带上下限的设置项上尤其明显。
+                    if (!_target.TryWriteValue(value, out var actual))
                         return;
 
-                    // 目标可能规范化了写入值（取整、钳制到上下限）。不回填的话滑块会停在
-                    // 用户拖到的位置，与真实值不一致——带上下限的设置项上尤其明显。
-                    var actual = _target.Value;
                     if (!Mathf.Approximately(actual, value))
                         _slider.value = actual;
                 }
@@ -319,11 +316,9 @@ namespace XFramework.XUI.Data
 
                 try
                 {
-                    // 同上：写入失败时不再读 Value
-                    if (!_target.TryWriteValue(value))
+                    if (!_target.TryWriteValue(value, out var actual))
                         return;
 
-                    var actual = _target.Value;
                     if (actual != value)
                         _toggle.isOn = actual;
                 }

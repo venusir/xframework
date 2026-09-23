@@ -113,13 +113,21 @@ namespace XFramework.XReactive
         /// <para>供双向绑定使用：绑定层不该因为目标失效而把异常抛进 UI 事件回调。</para>
         /// </summary>
         /// <param name="value">要写入的值。</param>
-        /// <returns>确实写入返回 true。</returns>
-        public bool TryWriteValue(T value)
+        /// <param name="actual">写入后本属性持有的值；返回 false 时为 default。</param>
+        /// <returns>确实写入了返回 true。</returns>
+        public bool TryWriteValue(T value, out T actual)
         {
             if (_disposed)
+            {
+                actual = default;
                 return false;
+            }
 
             Value = value;
+            // 回传字段而非走 getter:这次赋值已经发生,字段必然是最新值。不读 getter 是为了
+            // 不依赖它对「已释放」采取何种策略——写入会同步派发,订阅者可能在派发中释放本
+            // 属性,而本次写入确实已经完成、值也已经赋好,故仍然返回 true。
+            actual = _value;
             return true;
         }
 

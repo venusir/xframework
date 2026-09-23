@@ -65,6 +65,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **`IReactivePropertyWriter<T>.TryWriteValue` 回传写入后的实际值（破坏性）**：签名由 `bool TryWriteValue(T value)` 改为 `bool TryWriteValue(T value, out T actual)`。原签名只在目标已失效时返回 `false`、成功时一律 `true`（即便值被去重、压根没写），于是调用方要拿「规范化后的值」只能在写入成功后再读一次 `Value`——而那次读取可能落在写入的同步派发途中、目标已被某个订阅者释放之后。`UIBinder` 的 Slider / Toggle 双向绑定正是这么写的，异常会经 `Slider.onValueChanged` 被抛进 UI 事件回调，恰是引入该接口要挡掉的那类异常。现把「写入后的值」随写入一并回传：`ReactiveProperty` 从**已赋值的字段**取出而非走 getter，`SettingRef` 回传句柄解析到的实时值。这条约束至此由接口本身保证，不再依赖 `Value` 对「已释放」采取何种策略（后续即便调整该策略也不会让调用方重新踩上）。三个实现（`ReactiveProperty<T>` / `SettingRef<T,TField>` / 测试替身 `RoundingWriter`）与两个调用点同步更新
+- **顺带修好 `SettingRef.Value` 丢失的文档注释**：`TryWriteValue` 被插入时插在了 `Value` 的 `<summary>` 与 `Value` 之间，于是那段「读取当前值；写入会与实时值比较，去重基准不缓存」的说明挂到了 `TryWriteValue` 头上，而 `Value`——一个公开成员——完全没有文档。现把注释归还给 `Value`
+- **补 4 条测试（`TryWriteValue` 此前零覆盖）**：3 条在 `ReactivePropertyTests`（存活写入与 actual 回传、已释放返回 false 不抛、写入派发中目标被释放仍返回 true 且不抛），1 条在 `UIBindingTwoWayTests` 走完整的滑条双向绑定路径。UI 侧那条已用「临时恢复旧的二次读取」验证过改前必红，失败栈为 `ReactiveProperty.get_Value → SliderTwoWayBinding.OnSliderChanged → UnityEvent`
+
 - **`ReadOnlyReactiveProperty<T>` 实现 `IReactiveProperty<T>`，UIBinder 删掉 7 个重复重载**：`Select` 派生值此前只实现 `IDisposable`，落在接口契约之外——于是既不能交给收 `IReactiveProperty<T>` 的绑定 API，也不能作为 `Select` 的源继续映射（`rp.Select(a).Select(b)` 编译不过）。最直接的代价是 `UIBinder` 里长回了 7 对**方法体完全相同**的重载（`BindToText` / `BindToSlider` / `BindToFillAmount` / `BindToSprite` / `BindToToggle` / `BindToActive` / `Bind`），每对里具体类型那版就是为绕过这个缺口而存在。这正是本文件早先那条裁定的残留：「必须是**替换**而非新增重载——两版并存时具体类更精确、永远胜出，接口版会沦为死代码」。现补齐接口实现并删除那 7 个重载（对调用方源码兼容，重载决议改走接口版），另补 4 条测试：2 条锁定「派生值可作为接口使用 + 可链式」，2 条在 `UIBindingInterfaceTests` 里用真实的派生值（而非测试替身）走一遍已被删除的重载原本覆盖的路径
 
 - **销毁令牌迁入 Message 并真正接上订阅绑定（破坏性）**：`IDestroyCancellationToken` 从 `XNode.BaseNode` 迁到 `XMessage`，`MessageManager.TryBindToDestroy` 增加对它的识别分支。此前 `MessageManager` 的文档承诺「其他生命周期类型由 Core 层扩展方法负责桥接」，而**那段代码从未存在**——`TryBindToDestroy` 实际只有 `is MonoBehaviour` 一个分支，非 MonoBehaviour 对象的同步订阅根本没有自动退订途径，只能自己持有返回的 `IDisposable`。迁移后实现该接口即可自动退订
