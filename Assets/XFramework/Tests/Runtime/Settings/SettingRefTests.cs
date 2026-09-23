@@ -12,7 +12,7 @@ namespace XFramework.XSettings.Tests
     /// <summary>
     /// <see cref="SettingRef{T, TField}"/> 字段句柄测试。
     /// <para>覆盖：表达式校验、写穿到 POCO、去重、订阅即回调、<b>实例替换后自动跟随与重放</b>、
-    /// 直改字段不通知、以及句柄可直接接入 UI 绑定。</para>
+    /// 直改字段不通知、订阅立即回调抛异常时订阅必须被清理、以及句柄可直接接入 UI 绑定。</para>
     /// <remarks>
     /// <b>两条纪律（重放注册表是进程级的，跨用例共享）：</b>
     /// <list type="number">
@@ -154,6 +154,29 @@ namespace XFramework.XSettings.Tests
             volume.Value = 1f; // 与当前值相同
 
             Assert.AreEqual(1, count, "相同值不通知");
+        }
+
+        [Test]
+        public void Ref_Subscribe_ImmediateCallbackThrows_SubscriptionIsReleased()
+        {
+            Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            var invocations = 0;
+
+            Action<float> handler = _ =>
+            {
+                invocations++;
+                if (invocations == 1)
+                    throw new InvalidOperationException("首次回调抛异常");
+            };
+
+            Assert.Throws<InvalidOperationException>(() => volume.Subscribe(handler),
+                "立即回调抛异常应原样上抛");
+
+            volume.Value = 0.5f;
+
+            Assert.AreEqual(1, invocations,
+                "回调抛异常后订阅必须已被清理;若泄漏,写值会再次触发该处理器");
         }
 
         [Test]

@@ -179,6 +179,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Subscribe(Action<TField>)` | 订阅值变化，订阅时立即回调当前值 |
 
 - 实现 `IReactiveProperty<TField>`，可直接用于 UI 绑定扩展方法
+- 订阅时的立即回调属于**注册期**同步代码，它抛出的异常原样上抛（订阅已自动清理，不会泄漏）；之后投递中的异常记 Error 日志后继续
 - **每次读写都解析当前设置实例**，因此 `Load` / `Reset` / `Apply` 换实例后句柄自动跟随，无需重新绑定
 - **实例替换时无条件重放**：换实例即向订阅者推一次当前值，即使数值恰好未变。
   这是刻意取舍——可比较的只有「上一实例的值」，而需要知道的是「订阅者上次收到什么」，

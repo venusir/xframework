@@ -163,6 +163,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **Settings 字段句柄 `SettingRef` 的订阅立即回调抛异常同样永久泄漏**：与 Reactive 侧同源——`Subscribe` 先经事件流注册、再直接调用 `onNext(Value)` 补那次立即回调，回调抛异常时句柄交不出去，订阅从此无法退订。句柄**刻意不实现 `IDisposable`**（它通常活到进程结束），泄漏后连「释放句柄」这条兜底路径都不存在，订阅会一直留在事件流链表上。现与 `ReactiveProperty` / `ReadOnlyReactiveProperty` 采用同一处置：注册后包一层 try/catch，catch 里先退订再原样上抛。补 1 条测试（断言方式同 Reactive 侧：处理器首次调用抛异常后，再写值不得再次触发它）
+
 - **Reactive 订阅立即回调抛异常会永久泄漏订阅**：`ReactiveProperty<T>.Subscribe` 与 `ReadOnlyReactiveProperty<T>.Subscribe` 都是「先经引擎注册、再直接调用 `onNext(_value)` 补那次立即回调」。立即回调绕开了引擎的异常隔离路径（`EventStream.Deliver` 的 catch + LogError），于是同一个委托有两种异常行为——首次投递传播、后续投递吞掉；而更实际的后果是句柄：回调抛异常时 `Subscribe` 永远不会返回，那个已经注册成功的订阅从此**没有任何办法退订**。节点回收只有「退订」与「属性 Dispose」两条路，前者需要句柄、后者需要属性被释放，故在该属性活着的整个期间，这个订阅既无法退订也不会被回收，回调持有的闭包与目标对象被链表一直钉住——不是逻辑瑕疵而是内存泄漏。现改为在注册后包一层 try/catch：catch 里**先退订、再原样上抛**——异常照旧能被调用方看见（注册期失败不该被静默，调用点本就是绑定初始化），而句柄即便交不出去也不留残留。README 的「异常隔离」条目同步说明两条路径的分工。该缺陷此前无测试覆盖，已补 3 条（`ReactiveProperty` 侧两条 + `ReadOnlyReactiveProperty` 侧一条），断言方式为「处理器首次调用抛异常后，再写值不得再次触发它」
 
 - **File 可选能力缺失的处置在加密前后不一致**：同一个能力缺失（底层 Provider 未实现 `IAtomicFileProvider`），未启用加密时是「告警 + 降级为普通写」，启用加密后却是**抛** `NotSupportedException`；`GetDirectoriesAsync` 更隐蔽——未加密时门面告警降级，启用加密后**静默**返回空数组，连那条告警都被吞掉。根因是门面探测的是**生效** Provider，而加解密装饰器恒实现可选能力接口，探测必然「通过」，判定被整个推给装饰器、由它自行重写。现改为门面探测**基础** Provider（它不随是否启用加密而变），判定权收归一处；装饰器侧的同类检查退为兜底，不重复告警、也不改变语义（降级为普通写而非抛出），故启用加解密对调用方完全透明。两处此前**均无测试覆盖**——这正是不一致得以存活的原因，已补

@@ -152,6 +152,8 @@ namespace XFramework.XSettings
         /// <summary>
         /// 订阅值变化。订阅时立即同步回调当前值（与 <c>ReactiveProperty&lt;T&gt;</c> 契约一致），
         /// 之后每次经 <see cref="Value"/> 写入且值确实改变时回调。
+        /// <para>立即回调是注册期同步执行的代码，它抛出的异常原样上抛（订阅已自动清理，不会泄漏）；
+        /// 之后投递中的异常记 Error 日志后继续。两条路径语义不同是有意的。</para>
         /// </summary>
         /// <param name="onNext">值变化时的回调。</param>
         /// <returns>取消订阅的句柄。</returns>
@@ -163,7 +165,17 @@ namespace XFramework.XSettings
 
             // 先注册再立即回调:与 ReactiveProperty 相同顺序,确保回调中的订阅不会丢失后续消息
             var handle = _changedStream.Subscribe(onNext);
-            onNext(Value);
+            try
+            {
+                onNext(Value);
+            }
+            catch
+            {
+                // 同 ReactiveProperty.Subscribe:注册期异常原样上抛,但必须先退订,
+                // 否则句柄交不出去、该订阅永久泄漏(句柄无生命周期,泄漏的订阅无人能退)。
+                handle.Dispose();
+                throw;
+            }
             return handle;
         }
 
