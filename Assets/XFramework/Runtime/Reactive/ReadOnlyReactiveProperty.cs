@@ -17,8 +17,14 @@ namespace XFramework.XReactive
     /// - 源值变化沿映射链传播,映射结果与当前值相同不通知(去重语义)
     /// - <see cref="Value"/> getter 不做 disposed 检查(宽容读取);
     ///   <see cref="Subscribe"/> 在已释放时抛 <see cref="ObjectDisposedException"/>
+    /// <para>
+    /// 实现 <see cref="IReactiveProperty{T}"/>:既可直接交给收该接口的绑定 API,也可作为
+    /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的源继续映射
+    /// (派生值仍是可被订阅的只读值,链式成立)。这正是它「只读视图」定位的体现——
+    /// 接口本身无 setter,不会因此获得写入能力。
+    /// </para>
     /// </remarks>
-    public class ReadOnlyReactiveProperty<T> : IDisposable
+    public class ReadOnlyReactiveProperty<T> : IReactiveProperty<T>, IDisposable
     {
         #region Private Fields
 

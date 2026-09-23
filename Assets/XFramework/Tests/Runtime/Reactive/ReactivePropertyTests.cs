@@ -274,6 +274,33 @@ namespace XFramework.XReactive.Tests
             Assert.Throws<ArgumentNullException>(() => ReactivePropertyExtensions.Select<int, int>(null, x => x));
         }
 
+        [Test]
+        public void ReadOnly_IsAssignableToIReactiveProperty()
+        {
+            var rp = new ReactiveProperty<int>(10);
+            IReactiveProperty<int> view = rp.Select(x => x * 2);
+            var calls = new List<int>();
+
+            view.Subscribe(calls.Add);
+            rp.Value = 5;
+
+            CollectionAssert.AreEqual(new[] { 20, 10 }, calls,
+                "派生值必须可作为 IReactiveProperty<T> 使用——绑定 API 的接收者正是该接口");
+        }
+
+        [Test]
+        public void ReadOnly_SelectChaining_Works()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            var chained = rp.Select(x => x * 2).Select(x => $"v{x}");
+            var calls = new List<string>();
+
+            chained.Subscribe(calls.Add);
+            rp.Value = 3;
+
+            CollectionAssert.AreEqual(new[] { "v2", "v6" }, calls, "派生值可继续 Select 做链式映射");
+        }
+
         #endregion
     }
 }

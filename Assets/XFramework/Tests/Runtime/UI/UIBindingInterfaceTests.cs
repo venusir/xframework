@@ -13,8 +13,13 @@ namespace XFramework.XUI.Tests
     /// 后的行为测试。
     /// </summary>
     /// <remarks>
-    /// 每一例都用 <see cref="FakeProperty{T}"/>——一个<b>非框架</b>的接口实现。这正是本组改动的意义：
+    /// 多数用例用 <see cref="FakeProperty{T}"/>——一个<b>非框架</b>的接口实现。这正是本组改动的意义：
     /// 接收者是具体类型时，这类实参连编译都过不去。若将来有人把接收者改回具体类型，本文件会先编译失败。
+    /// <para>
+    /// 另有一组用 <see cref="ReadOnlyReactiveProperty{T}"/>（框架自己的派生值）反向锁定同一件事：
+    /// 它此前<b>不</b>实现 <see cref="IReactiveProperty{T}"/>，于是 UIBinder 为它单独留了 7 个
+    /// 具体类型重载；补齐接口实现、删掉那些重载后，这些调用必须能经接口重载正常解析。
+    /// </para>
     /// </remarks>
     [TestFixture]
     public class UIBindingInterfaceTests
@@ -129,6 +134,47 @@ namespace XFramework.XUI.Tests
 
                 source.Push(0.75f);
                 Assert.AreEqual(0.75f, slider.value, 1e-5f);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(target);
+            }
+        }
+
+        #endregion
+
+        #region 派生值经接口重载绑定
+
+        [Test]
+        public void Bind_ReadOnlyDerivedProperty_ReceivesValuesThroughInterface()
+        {
+            var source = new ReactiveProperty<int>(1);
+            using var derived = source.Select(x => x * 2);
+            var received = new List<int>();
+
+            using var handle = derived.Bind(received.Add);
+
+            CollectionAssert.AreEqual(new[] { 2 }, received, "订阅即回调当前映射值");
+
+            source.Value = 5;
+            CollectionAssert.AreEqual(new[] { 2, 10 }, received, "源变化沿映射链传到达绑定");
+        }
+
+        [Test]
+        public void BindToActive_ReadOnlyDerivedProperty_BindsThroughInterface()
+        {
+            var target = new GameObject("bind-active-readonly");
+            try
+            {
+                var source = new ReactiveProperty<bool>(false);
+                using var derived = source.Select(v => !v);
+
+                using var handle = derived.BindToActive(target);
+
+                Assert.IsTrue(target.activeSelf, "派生值经接口重载订阅即回调当前值 true");
+
+                source.Value = true;
+                Assert.IsFalse(target.activeSelf, "源变化沿映射链传播到控件");
             }
             finally
             {

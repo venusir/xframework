@@ -5,7 +5,7 @@
 XFramework 响应式模块提供**响应式属性**。基于 XMessage 模块的事件流引擎(`XFramework.XMessage.Internal`)实现,可在任意 C# 类中使用。
 
 - `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)
-- `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)
+- `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)。同样实现 `IReactiveProperty<T>`(只读接口本无 setter,故不因此获得写入能力),可直接交给收该接口的绑定 API,也可继续 `Select` 做链式映射
 - 全局消息总线在 Message 模块(`XFramework.XMessage.MessageManager`),不在此模块
 
 **命名空间**: `XFramework.XReactive`
@@ -53,7 +53,7 @@ subscription.Dispose();
 - **事件流驱动** — 基于 Message 模块自研事件流引擎(锁 + 快照线程模型、订阅节点池)
 - **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
 - **相同值去重** — 设置相同值不通知
-- **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态
+- **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
 - **异常隔离** — **投递**路径的订阅回调抛异常记 Error 日志后继续;订阅时的立即回调属于注册期、同步执行,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)。两条路径语义不同是有意的:绑定初始化失败应当被看见,而运行期的单个订阅者出错不该拖垮其余订阅者
 
 ## 依赖
