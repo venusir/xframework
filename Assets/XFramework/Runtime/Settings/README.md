@@ -188,8 +188,10 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | ---- | ---- |
 | `Value { get; set; }` | 读穿透当前设置实例；写入回写 POCO、通知订阅者并置脏 |
 | `Subscribe(Action<TField>)` | 订阅值变化，订阅时立即回调当前值 |
+| `TryWriteValue(TField, out TField)` | 尝试写入并回传写入后的值；设置类型不可用（未 `Initialize` 或已 `Destroy`）时返回 `false` 且不抛异常 |
 
 - 实现 `IReactiveProperty<TField>`，可直接用于 UI 绑定扩展方法
+- 也实现 `IReactivePropertyWriter<TField>`，故可直接交给 `UIBinder.BindTwoWay` 做双向绑定——写值经 `TryWriteValue`，目标失效时不抛异常
 - 订阅时的立即回调属于**注册期**同步代码，它抛出的异常原样上抛（订阅已自动清理，不会泄漏）；之后投递中的异常记 Error 日志后继续
 - **每次读写都解析当前设置实例**，因此 `Load` / `Reset` / `Apply` 换实例后句柄自动跟随，无需重新绑定
 - **实例替换时无条件重放**：换实例即向订阅者推一次当前值，即使数值恰好未变。

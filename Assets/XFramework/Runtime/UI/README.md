@@ -460,7 +460,7 @@ public class MyGameController : IUIController
 
 | 风格                   | 类                                     | 适合场景                                                            |
 | ---------------------- | -------------------------------------- | ------------------------------------------------------------------- |
-| **约定式**（零代码）   | `UIPanelBinding`（MonoBehaviour 组件） | 标准面板，子节点按 `txt_xxx` / `img_xxx` / `btn_xxx` 命名，自动匹配 |
+| **约定式**（零代码）   | `UIPanelBinding`（MonoBehaviour 组件） | 标准面板，子节点按 `txt_xxx` / `img_xxx` / `sld_xxx` / `tgl_xxx` / `btn_xxx` 命名，按属性名匹配 |
 | **精确式**（手动控制） | `UIBinder`（静态扩展方法）             | 需要 format 格式化、按钮点击绑定、非标准组件、大世界 UI             |
 
 两者互补，可在同一个面板中混用。
@@ -503,38 +503,40 @@ public class SettingsViewModel : ViewModelBase
 ```csharp
 public class SettingsPanel : UIPanelBase
 {
-    public Slider musicSlider;
-    public Toggle soundToggle;
-    public TMP_InputField nameInput;
-
     protected override async UniTask OnOpen(object userData)
     {
         var vm = new SettingsViewModel();
-        BindViewModel(vm);   // 内部会调用 vm.OnBound()，属性在那里创建
+        BindViewModel(vm);   // 前置：内部调用 vm.OnBound()（属性在那里创建）并缓存子节点组件
 
-        // 方式一：手动绑定（推荐，按命名约定）
-        Binding.BindByConvention("MusicVolume", vm.MusicVolume);
-        Binding.BindByConvention("SoundEnabled", vm.SoundEnabled);
-        Binding.BindByConvention("PlayerName", vm.PlayerName);
-
-        // 方式二：完整绑定 ViewModel（等价写法）
-        // BindViewModel(vm);
+        // 再按名字逐个绑定。约定式绑定既不遍历 ViewModel、也不吃 Inspector 拖的引用——
+        // 它按「前缀 + 属性名」在子节点里找（见 3.4），所以每个属性都要显式调一次。
+        Binding.BindByConvention("MusicVolume", vm.MusicVolume);     // 子节点须名为 sld_MusicVolume
+        Binding.BindByConvention("SoundEnabled", vm.SoundEnabled);   // 须名为 tgl_SoundEnabled
+        Binding.BindByConvention("PlayerName", vm.PlayerName);       // 须名为 txt_PlayerName
     }
 }
 ```
 
+> `BindViewModel` **不绑定任何属性**——它只调用 `vm.OnBound()` 并缓存子节点组件，是上面那三行的**前置条件**，不是它们的替代写法。框架没有「遍历 ViewModel 属性自动全绑」这回事。
+
 **3.4 命名约定（BindByConvention）**
 
-| ReactiveProperty 名称 | 自动绑定到的 UI 子节点名                             |
-| --------------------- | ---------------------------------------------------- |
-| `MusicVolume`         | `MusicVolume` → Slider.value                         |
-| `SoundEnabled`        | `SoundEnabled` → Toggle.isOn                         |
-| `PlayerName`          | `PlayerName` → InputField.text / TMP_InputField.text |
-| `TitleText`           | `TitleText` → Text.text / TMP_Text.text              |
-| `Count`               | `Count` → Slider.value (int)                         |
-| `IsSelected`          | `IsSelected` → Toggle.isOn                           |
+约定式绑定**不是自动的**：要为每个属性显式调一次 `Binding.BindByConvention("属性名", vm.属性)`。它拿「**前缀 + 属性名**」去子节点缓存里找（按名、不区分大小写、**最多 5 层深度**），前缀决定绑到哪类组件：
 
-> 约定规则：面板下子 GameObject 名与 ReactiveProperty 名相同，自动根据 UI 组件类型选择对应属性进行绑定。
+| 子节点名            | 组件                                   | 绑到的成员    | 对属性值类型的要求                    |
+| ------------------- | -------------------------------------- | ------------- | ------------------------------------- |
+| `txt_{属性名}`      | `Text`（UGUI 旧版文本，**非 `TMP_Text`**） | `text`        | 任意类型（直接 `ToString()`）         |
+| `img_{属性名}`      | `Image`                                | `sprite`      | `IReactiveProperty<Sprite>`           |
+| 同上                | `Image`                                | `color`       | `IReactiveProperty<Color>`            |
+| 同上                | `Image`                                | `fillAmount`  | `IReactiveProperty<float>`            |
+| `sld_{属性名}`      | `Slider`                               | `value`       | `IReactiveProperty<float>`            |
+| `tgl_{属性名}`      | `Toggle`                               | `isOn`        | `IReactiveProperty<bool>`             |
+
+- **查找顺序即优先级**：`txt_` → `img_` → `sld_` → `tgl_`，命中即返回。同一属性名若存在多种前缀的节点，靠前的那种生效。
+- **类型不匹配等于没绑**：`sld_` 只认 `float`、`tgl_` 只认 `bool`——给 `sld_` 配 `IReactiveProperty<int>` 绑不上（`int` 与 `float` 之间没有隐式接口转换）。此时只在**编辑器**里打一条「未找到」告警，Release 下完全静默。
+- **按钮走另一条路**：`btn_{名字}` → `Button.onClick`，经 `Binding.BindClick("名字", 回调)` 绑定。按钮不是「值的来源」，故不在上表。
+- **组件在绑定前必须就位**：缓存是 `BindViewModel` / `Binding.Bind` 时一次性建立的，运行时新加的子节点不在缓存里，需重新 `CacheComponents`。
+- **不覆盖 `TMP_Text` / `TMP_InputField`**：想要 TMP、输入框或格式化，用 3.5 的精确式绑定（`BindToText` 收 `TMP_Text`）。
 
 **3.5 精确式绑定（UIBinder）**
 
