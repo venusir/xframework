@@ -8,7 +8,7 @@ namespace XFramework.XReactive.Tests
     /// 响应式属性测试。
     /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后写/订阅抛 ObjectDisposedException 而读取宽容、
     /// ReadOnly 映射语义、接口链编程、订阅立即回调抛异常时订阅必须被清理(不泄漏)、
-    /// TryWriteValue 的失效判定与 actual 回传。</para>
+    /// TryWriteValue 的失效判定与 actual 回传、派发顺序 LIFO 与重入写入留下的陈旧值。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -349,6 +349,52 @@ namespace XFramework.XReactive.Tests
             rp.Value = 3;
 
             CollectionAssert.AreEqual(new[] { "v2", "v6" }, calls, "派生值可继续 Select 做链式映射");
+        }
+
+        #endregion
+
+        #region 派发顺序与重入（README「派发顺序与重入」节记录的就是这里）
+
+        [Test]
+        public void Dispatch_OrderIsLifo_LaterSubscriberReceivesFirst()
+        {
+            var rp = new ReactiveProperty<int>(0);
+            var order = new List<string>();
+
+            rp.Subscribe(_ => order.Add("A"));
+            rp.Subscribe(_ => order.Add("B"));
+
+            order.Clear();   // 丢掉订阅时的立即回调
+            rp.Value = 1;
+
+            CollectionAssert.AreEqual(new[] { "B", "A" }, order,
+                "派发顺序是 LIFO:后订阅者先收到。靠订阅次序决定先后是错的");
+        }
+
+        [Test]
+        public void ReentrantWrite_LaterSubscriberEndsOnStaleValue()
+        {
+            var rp = new ReactiveProperty<int>(0);
+            var aSeen = new List<int>();
+            bool written = false;
+
+            // A 先订阅(快照里靠后),B 后订阅(快照里靠前,故先收到)
+            rp.Subscribe(v => aSeen.Add(v));
+            rp.Subscribe(v =>
+            {
+                if (v == 1 && !written)
+                {
+                    written = true;
+                    rp.Value = 2;   // 回调内写入:嵌套派发先跑完
+                }
+            });
+
+            rp.Value = 1;
+
+            CollectionAssert.AreEqual(new[] { 0, 2, 1 }, aSeen,
+                "A 先经嵌套派发收到 2,又被外层循环投回 1,最终停在 Value 已不再是的值上,且不会再有通知纠正它。" +
+                "这正是 README 劝退「回调内写入」的原因;若哪天改掉了重入语义,请同步改 README");
+            Assert.AreEqual(2, rp.Value, "而 Value 实际是 2——A 观察到的是陈旧值");
         }
 
         #endregion

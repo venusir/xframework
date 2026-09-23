@@ -103,7 +103,7 @@ await MessageManager.PublishAsync("Score", msg, MessagePublishStrategy.Parallel)
 
 > **注意**：同步 `Publish` 同样会触发异步处理器（fire-and-forget），所以同一调用点混用 `Publish` 与 `PublishAsync` 会让处理器被触发两次。
 
-> **线程**：本模块不做线程调度。从非主线程调用 `PublishAsync` 时，同步订阅者与处理器的同步前段会在该线程上执行，而 Unity API 多数非线程安全，需要自行切回主线程。
+> **线程**：本模块不做线程调度，且**引擎自身按「主线程使用」设计**。内部的锁与快照只用于保证订阅链表与终止标志在并发退订下不被写坏，**不构成「可以多线程发布/订阅」的许可**——派发循环里 `SubscriptionNode.IsDisposed` 是无锁读取的，且快照收集与 `_publishDepth` 自增之间存在窗口，并发退订可能让节点在该窗口内被回池复用。从非主线程调用 `PublishAsync` 时，同步订阅者与处理器的同步前段会在该线程上执行，而 Unity API 多数非线程安全，需要自行切回主线程。
 
 ### 带 Key 的消息
 

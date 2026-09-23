@@ -98,7 +98,9 @@ namespace XFramework.XUI.Data
             });
             _bindings.Add(disposable);
 
-            // 立即同步当前值
+            // 立即同步当前值。这一行不是上面立即回调的重复——那条被 isActiveAndEnabled 挡住了，
+            // 面板未激活时绑定的控件会一次都不同步。两行都在：激活时同步两次（幂等写入，无害），
+            // 未激活时由这一行兜底。删掉它，未激活面板的绑定会静默失效。
             onValueChanged(source.Value);
         }
 
