@@ -6,8 +6,9 @@ namespace XFramework.XReactive.Tests
 {
     /// <summary>
     /// 响应式属性测试。
-    /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后抛 ObjectDisposedException、ReadOnly 映射语义、接口链编程、
-    /// 订阅立即回调抛异常时订阅必须被清理(不泄漏)、TryWriteValue 的失效判定与 actual 回传。</para>
+    /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后写/订阅抛 ObjectDisposedException 而读取宽容、
+    /// ReadOnly 映射语义、接口链编程、订阅立即回调抛异常时订阅必须被清理(不泄漏)、
+    /// TryWriteValue 的失效判定与 actual 回传。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -132,12 +133,13 @@ namespace XFramework.XReactive.Tests
         #region ReactiveProperty — Dispose 语义
 
         [Test]
-        public void Dispose_ThenAccessValue_Throws()
+        public void Dispose_ThenAccessValue_ReturnsLastValue()
         {
             var rp = new ReactiveProperty<int>(1);
+            rp.Value = 7;
             rp.Dispose();
 
-            Assert.Throws<ObjectDisposedException>(() => _ = rp.Value, "Dispose 后访问 Value 抛 ObjectDisposedException");
+            Assert.AreEqual(7, rp.Value, "Dispose 后读取 Value 仍返回最后持有的值(宽容读取),不抛异常");
         }
 
         [Test]

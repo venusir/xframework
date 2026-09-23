@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **`ReactiveProperty<T>.Value` 的 getter 改为宽容读取（破坏性）**：已释放后读 `Value` 此前抛 `ObjectDisposedException`，而同一模块的 `ReadOnlyReactiveProperty<T>.Value` 刻意不查、返回最后的值——`Value` 这个最常用的成员对「已释放」有两种态度。抛异常的那一侧代价已经外溢：`UIBinder` 的双向绑定必须靠 `TryWriteValue` 的 `false` 提前收手、否则回读 `Value` 就会把异常抛进 UI 事件回调，测试里还要专门写一条「目标失效时不抛」来钉住这层防御。现统一为**读宽容、写严格**：读是只读操作、不改变任何状态，让它抛只会把「先 Dispose 再读一次收尾值」这类正常写法变成地雷；写入与订阅是编程错误，照旧抛。这与框架其它门面对「未就绪/已失效」的惯例一致（`InputManager` 未初始化时查询返回默认值）。迁移影响：依赖「getter 抛异常」来判断失效的第三方代码需改判 `TryWriteValue` 的返回值或自行记录生命周期；异常消息同步由「请勿再访问 Value 或订阅」改为「请勿再写 Value 或订阅」
+
 - **`IReactivePropertyWriter<T>.TryWriteValue` 回传写入后的实际值（破坏性）**：签名由 `bool TryWriteValue(T value)` 改为 `bool TryWriteValue(T value, out T actual)`。原签名只在目标已失效时返回 `false`、成功时一律 `true`（即便值被去重、压根没写），于是调用方要拿「规范化后的值」只能在写入成功后再读一次 `Value`——而那次读取可能落在写入的同步派发途中、目标已被某个订阅者释放之后。`UIBinder` 的 Slider / Toggle 双向绑定正是这么写的，异常会经 `Slider.onValueChanged` 被抛进 UI 事件回调，恰是引入该接口要挡掉的那类异常。现把「写入后的值」随写入一并回传：`ReactiveProperty` 从**已赋值的字段**取出而非走 getter，`SettingRef` 回传句柄解析到的实时值。这条约束至此由接口本身保证，不再依赖 `Value` 对「已释放」采取何种策略（后续即便调整该策略也不会让调用方重新踩上）。三个实现（`ReactiveProperty<T>` / `SettingRef<T,TField>` / 测试替身 `RoundingWriter`）与两个调用点同步更新
 - **顺带修好 `SettingRef.Value` 丢失的文档注释**：`TryWriteValue` 被插入时插在了 `Value` 的 `<summary>` 与 `Value` 之间，于是那段「读取当前值；写入会与实时值比较，去重基准不缓存」的说明挂到了 `TryWriteValue` 头上，而 `Value`——一个公开成员——完全没有文档。现把注释归还给 `Value`
 - **补 4 条测试（`TryWriteValue` 此前零覆盖）**：3 条在 `ReactivePropertyTests`（存活写入与 actual 回传、已释放返回 false 不抛、写入派发中目标被释放仍返回 true 且不抛），1 条在 `UIBindingTwoWayTests` 走完整的滑条双向绑定路径。UI 侧那条已用「临时恢复旧的二次读取」验证过改前必红，失败栈为 `ReactiveProperty.get_Value → SliderTwoWayBinding.OnSliderChanged → UnityEvent`

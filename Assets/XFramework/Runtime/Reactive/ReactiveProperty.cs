@@ -15,7 +15,9 @@ namespace XFramework.XReactive
     /// 行为契约:
     /// - <see cref="Subscribe"/> 订阅时立即同步回调当前值
     /// - 设置相同值不通知(去重语义)
-    /// - <see cref="Dispose"/> 后访问 <see cref="Value"/> 抛 <see cref="ObjectDisposedException"/>,再次 Subscribe 同样抛出
+    /// - <see cref="Dispose"/> 后<b>读取</b> <see cref="Value"/> 仍返回最后持有的值(宽容读取,与
+    ///   <see cref="ReadOnlyReactiveProperty{T}"/> 一致);<b>写入</b> <see cref="Value"/> 与再次
+    ///   <see cref="Subscribe"/> 抛 <see cref="ObjectDisposedException"/>
     /// </remarks>
     public class ReactiveProperty<T> : IReactiveProperty<T>, IReactivePropertyWriter<T>, IDisposable
     {
@@ -50,13 +52,19 @@ namespace XFramework.XReactive
 
         #region Public Properties
 
-        /// <summary>获取或设置值。设置时自动通知所有订阅者(相同值不通知)。</summary>
-        /// <exception cref="ObjectDisposedException">属性已释放时抛出。</exception>
+        /// <summary>
+        /// 获取或设置值。设置时自动通知所有订阅者(相同值不通知)。
+        /// <para>getter 宽容读取:已释放时仍返回最后持有的值、不抛异常。读一个失效对象的当前值
+        /// 不改变任何状态,让它抛异常只会把「先 Dispose 再读一次收尾值」这类正常写法变成地雷;
+        /// 这也使本属性与 <see cref="ReadOnlyReactiveProperty{T}"/> 的 <see cref="Value"/> 语义一致。
+        /// setter 则相反——向已释放的属性写入是编程错误,照常抛异常。</para>
+        /// </summary>
+        /// <exception cref="ObjectDisposedException">属性已释放时<b>写入</b>抛出;读取不抛。</exception>
         public T Value
         {
             get
             {
-                ThrowIfDisposed();
+                // 宽容读取:不查 _disposed(理由见属性文档)
                 return _value;
             }
             set
@@ -137,7 +145,8 @@ namespace XFramework.XReactive
 
         /// <summary>
         /// 释放内部事件流，取消所有订阅。
-        /// <para>此后访问 <see cref="Value"/> 或再次 <see cref="Subscribe"/> 会抛出 <see cref="ObjectDisposedException"/>。</para>
+        /// <para>此后<b>写入</b> <see cref="Value"/> 或再次 <see cref="Subscribe"/> 会抛出
+        /// <see cref="ObjectDisposedException"/>；<b>读取</b> <see cref="Value"/> 仍返回最后持有的值(宽容读取)。</para>
         /// </summary>
         public void Dispose()
         {
@@ -155,7 +164,7 @@ namespace XFramework.XReactive
         {
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
-                    $"[Reactive] ReactiveProperty<{typeof(T).Name}> 已释放,请勿再访问 Value 或订阅。");
+                    $"[Reactive] ReactiveProperty<{typeof(T).Name}> 已释放,请勿再写 Value 或订阅。");
         }
 
         #endregion
