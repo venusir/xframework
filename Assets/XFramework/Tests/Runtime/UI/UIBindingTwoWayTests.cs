@@ -136,6 +136,28 @@ namespace XFramework.XUI.Tests
                 "写入派发中目标被释放时，回填用的 actual 来自写入调用本身，不该再去读 Value");
         }
 
+        [Test]
+        public void Slider_BindToInvalidTarget_LeavesNoListener()
+        {
+            var slider = MakeSlider();
+            var dead = new CountingWriter<float>();
+            dead.Kill();
+
+            Assert.Throws<ObjectDisposedException>(() => UIBinder.BindTwoWay(slider, dead),
+                "绑定到已失效的目标应抛出");
+
+            // 构造失败时若监听已经挂在滑条上，绑定对象却拿不到，RemoveListener 就永不执行。
+            // 面板是回池的，于是此后每次拖动都会打到那个失效目标——下面用计数把它抓出来。
+            var live = new CountingWriter<float>();
+            UIBinder.BindTwoWay(slider, live);
+
+            slider.value = 0.5f;
+
+            Assert.AreEqual(1, live.TryWriteCalls, "存活目标应收到一次写入");
+            Assert.AreEqual(0, dead.TryWriteCalls,
+                "失效目标不得再被触碰：残留监听会在每次拖动时打到它");
+        }
+
         #endregion
 
         #region 双向：开关
@@ -152,6 +174,25 @@ namespace XFramework.XUI.Tests
 
             target.Value = false;
             Assert.IsFalse(toggle.isOn, "属性变化应回填开关");
+        }
+
+        [Test]
+        public void Toggle_BindToInvalidTarget_LeavesNoListener()
+        {
+            var toggle = MakeToggle();
+            var dead = new CountingWriter<bool>();
+            dead.Kill();
+
+            Assert.Throws<ObjectDisposedException>(() => UIBinder.BindTwoWay(toggle, dead),
+                "绑定到已失效的目标应抛出");
+
+            var live = new CountingWriter<bool>();
+            UIBinder.BindTwoWay(toggle, live);
+
+            toggle.isOn = true;
+
+            Assert.AreEqual(1, live.TryWriteCalls, "存活目标应收到一次写入");
+            Assert.AreEqual(0, dead.TryWriteCalls, "失效目标不得再被触碰：残留监听会在每次切换时打到它");
         }
 
         #endregion
@@ -276,6 +317,31 @@ namespace XFramework.XUI.Tests
                 _inner.Value = Mathf.Ceil(value * 10f) / 10f;
                 actual = _inner.Value;
                 return true;
+            }
+        }
+
+        /// <summary>
+        /// 可计数、可失效的写入目标。用于观察「双向绑定构造失败后是否留下监听」——
+        /// 残留的监听会在控件变化时打到失效目标上，<see cref="TryWriteCalls"/> 把这次触碰记下来。
+        /// </summary>
+        private sealed class CountingWriter<T> : IReactivePropertyWriter<T>
+        {
+            private readonly ReactiveProperty<T> _inner = new ReactiveProperty<T>();
+
+            public int TryWriteCalls { get; private set; }
+
+            public T Value => _inner.Value;
+
+            /// <summary>令目标失效：此后 Subscribe 抛 ObjectDisposedException，TryWriteValue 返回 false。</summary>
+            public void Kill() => _inner.Dispose();
+
+            public IDisposable Subscribe(Action<T> onNext) => _inner.Subscribe(onNext);
+
+            public bool TryWriteValue(T value, out T actual)
+            {
+                // 先计数再判失效：残留监听打过来的那次也要被记下，否则观察不到泄漏
+                TryWriteCalls++;
+                return _inner.TryWriteValue(value, out actual);
             }
         }
 

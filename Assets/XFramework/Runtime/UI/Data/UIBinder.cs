@@ -242,10 +242,25 @@ namespace XFramework.XUI.Data
 
                 // 方法组转委托：构造时分配一次，之后不再分配
                 _onSliderChanged = OnSliderChanged;
-                slider.onValueChanged.AddListener(_onSliderChanged);
 
-                // Subscribe 会立即回调当前值，方向是「属性 → 控件」
+                // 先订阅再挂监听：Subscribe 会抛（目标已释放、或设置句柄背后的类型已注销），
+                // 而它抛出时构造函数随之失败、绑定对象永远拿不到，RemoveListener 也就永不执行。
+                // 若此时监听已经挂上，它会一直留在滑条上：面板是回池的，此后每次拖动都会打到
+                // 上一个 ViewModel 的属性上。故顺序不能颠倒。
+                // Subscribe 会立即回调当前值，方向是「属性 → 控件」；此刻尚未挂监听，
+                // 这次初始同步不会反过来触发一次写回。
                 _upstream = target.Subscribe(OnTargetChanged);
+
+                try
+                {
+                    slider.onValueChanged.AddListener(_onSliderChanged);
+                }
+                catch
+                {
+                    // 挂监听失败（滑条已销毁等）时回滚已建立的订阅，否则同样无人释放
+                    _upstream?.Dispose();
+                    throw;
+                }
             }
 
             private void OnSliderChanged(float value)
@@ -304,9 +319,20 @@ namespace XFramework.XUI.Data
                 _target = target;
 
                 _onToggleChanged = OnToggleChanged;
-                toggle.onValueChanged.AddListener(_onToggleChanged);
 
+                // 同 SliderTwoWayBinding：先订阅后挂监听，否则 Subscribe 抛出时会留下
+                // 一个永远无人摘除的监听
                 _upstream = target.Subscribe(OnTargetChanged);
+
+                try
+                {
+                    toggle.onValueChanged.AddListener(_onToggleChanged);
+                }
+                catch
+                {
+                    _upstream?.Dispose();
+                    throw;
+                }
             }
 
             private void OnToggleChanged(bool value)
