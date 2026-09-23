@@ -17,6 +17,9 @@ namespace XFramework.XReactive
     /// - 源值变化沿映射链传播,映射结果与当前值相同不通知(去重语义)
     /// - <see cref="Value"/> getter 不做 disposed 检查(宽容读取);
     ///   <see cref="Subscribe"/> 在已释放时抛 <see cref="ObjectDisposedException"/>
+    /// <para><b>生命周期：</b>本类型是 <see cref="IDisposable"/>,且由 <c>Select</c> 创建时就订阅了源——
+    /// 谁创建谁释放,丢弃返回值会让它被源永久引用。详见
+    /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/>。</para>
     /// <para>
     /// 实现 <see cref="IReactiveProperty{T}"/>:既可直接交给收该接口的绑定 API,也可作为
     /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的源继续映射
@@ -150,6 +153,11 @@ namespace XFramework.XReactive
         /// 将响应式属性映射为只读派生属性，值随源自动变化。
         /// <para>例: <c>level.Select(lv => $"Lv.{lv}")</c></para>
         /// <para>返回值是 <see cref="ReadOnlyReactiveProperty{T}"/>，只能 Subscribe 不能赋值，符合派生值的语义。</para>
+        /// <para><b>返回值必须有人持有并释放：</b>它在构造时就订阅了源,所以源的事件流引用着它——
+        /// 就地丢弃返回值等于让它永久订阅下去,此后每次源变化都会再跑一遍 selector。注意
+        /// <c>BindToXxx</c> 返回的是<b>绑定方</b>的句柄,释放它<b>不能</b>释放派生值。
+        /// 归口的现成去处：<c>ViewModelBase.CreateReadOnlyProperty</c>（创建 + 登记,随 ViewModel 释放）
+        /// 或 <c>UIViewBase.Track(handle)</c>。</para>
         /// <para><b>selector 必须是纯函数：</b>构造时它会被调用<b>两次</b>——一次取初值，一次来自源订阅的
         /// 立即回调（结果与初值相同、被去重丢弃）。纯映射只是白算一遍；带副作用或非确定性的 selector
         /// （计数器、随机数、缓存填充）会跑两遍，且只有第二次的结果留在 <see cref="Value"/> 上。</para>

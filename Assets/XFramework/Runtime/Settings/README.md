@@ -111,9 +111,20 @@ Settings.MasterVolume.BindToSlider(masterSlider);
 
 // 或手动订阅
 Settings.MasterVolume.Subscribe(v => audioMixer.SetFloat("Master", Mathf.Lerp(-80f, 0f, v)));
+```
 
-// 派生只读视图
-Settings.MasterVolume.Select(v => $"{v:P0}").BindToText(volumeLabel);
+**派生只读视图要自己持有并释放**：`Select` 在构造时就会订阅源，而句柄活到进程结束、**刻意不实现 `IDisposable`**，所以把返回值就地丢弃等于让这个派生值**永久订阅下去**——此后每次设置变更（含 `Load`/`Reset`/`Apply` 的无条件重放）它都会再跑一遍 format。别写成 `Settings.MasterVolume.Select(...).BindToText(label);`：
+
+```csharp
+// 持有派生值，在视图/面板关闭时释放它（BindToText 返回的是绑定方的句柄，释放它并不能释放派生值）
+private IDisposable _volumeLabelProp;
+
+_volumeLabelProp = Settings.MasterVolume.Select(v => $"{v:P0}");
+_volumeLabelProp.BindToText(volumeLabel);
+// 关闭时：_volumeLabelProp?.Dispose(); _volumeLabelProp = null;
+
+// 在 ViewModel 里更省事：CreateReadOnlyProperty = 创建 + 归口，随 VM 一起释放
+// HpRatio = CreateReadOnlyProperty(Settings.MasterVolume, v => $"{v:P0}");
 ```
 
 ### 6. 订阅「设置对象被整体替换」

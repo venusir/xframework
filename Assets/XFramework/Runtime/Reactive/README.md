@@ -26,29 +26,44 @@ Runtime/Reactive/
 ## 快速使用
 
 ```csharp
+using UnityEngine;
 using XFramework.XReactive;
 
 // 创建响应式属性(实现 IReactiveProperty<int>,可面向接口编程)
 var healthProp = new ReactiveProperty<int>(100);
 
-// 订阅值变化(订阅时立即回调当前值)
+// 订阅值变化。注意:订阅本身就会立即同步回调一次当前值
 var subscription = healthProp.Subscribe(newValue =>
 {
     Debug.Log($"血量变化: {newValue}");
     // 更新血量条 UI
 });
+// 上面这行订阅先打印了一次「血量变化: 100」——立即回调发生在订阅那一刻,不是值变了
 
 // 修改值(自动推送;相同值不通知)
 healthProp.Value = 80;   // 输出: 血量变化: 80
 healthProp.Value = 50;   // 输出: 血量变化: 50
 
-// 只读派生:UI 展示层可持有只读视图,写值仅经源属性
-IReactiveProperty<int> view = healthProp;
-var levelLabel = healthProp.Select(lv => $"Lv.{lv}");
+// 只读视图:只暴露读接口,写值仍只经源属性。这不是派生,就是同一个属性换个角度看
+IReactiveProperty<int> readOnlyView = healthProp;
 
-// 取消订阅
+// 映射派生:由血量算出血条比例。返回值同样是可订阅的只读值,还能继续 Select 链式映射
+var healthRatio = healthProp.Select(hp => hp / 100f);
+var ratioSub = healthRatio.Subscribe(r => Debug.Log($"血条: {r:P0}"));
+// 输出: 血条: 50%(订阅时立即回调当前映射值)
+
+// 收尾:订阅句柄与派生值都要释放
+ratioSub.Dispose();
+healthRatio.Dispose();   // ← Select 创建的派生值,谁创建谁释放
 subscription.Dispose();
+healthProp.Dispose();
 ```
+
+> **派生值必须有人释放,否则会永久泄漏。** `Select` 在**构造时**就订阅了源,所以源的事件流一直引用着这个派生值:把返回值就地丢弃,它就会活到源消失为止,并且此后每次源变化都还会再跑一遍 selector。
+>
+> 尤其注意 `BindToXxx` 返回的是**绑定方**的句柄——释放它**不能**释放派生值。所以 `src.Select(f).BindToText(label)` 这种写法即使把绑定句柄收好了,派生值照样泄漏。
+>
+> 别在业务代码里手工记账,交给已就位的归口：UI 面板里用 `ViewModelBase.CreateReadOnlyProperty`（创建 + 登记,随 ViewModel 一起释放），或把句柄交给 `UIViewBase.Track`。Reactive 模块本身不管生命周期,这是使用方的责任。
 
 ## 双向绑定
 

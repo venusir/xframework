@@ -541,6 +541,7 @@ public class SettingsPanel : UIPanelBase
 适用于需要格式化、按钮点击、非标准组件或大世界 UI 等场景：
 
 ```csharp
+using XFramework.XReactive;
 using XFramework.XUI.Data;
 
 public class ShopPanel : UIPanelBase
@@ -553,20 +554,39 @@ public class ShopPanel : UIPanelBase
 
     protected override UniTask OnOpen(object userData)
     {
-        BindViewModel(_vm);
+        BindViewModel(_vm);   // 内部会调用 _vm.OnBound()，属性在那里创建
 
-        // 使用 UIBinder 扩展方法 — 支持 format 格式化
-        _vm.Currency.BindToText(currencyText, g => $"{g:N0}");
-
-        // 使用 ReadOnlyReactiveProperty（通过 Select 链式创建）
-        _vm.Hp.Select(h => h / 100f).BindToFillAmount(hpBar);
-
-        // 按钮点击绑定
-        btnBuy.BindToClick(_vm.OnClickBuy);
-
-        // 自定义绑定
-        _vm.Level.Bind(lv => SetLevelBadge(lv));
+        // 绑定方法返回的 IDisposable 一律交给 Track 归口：面板是回池而非销毁，
+        // 挂在 OnDestroy 上的释放永不触发，Track 才是「随视图生命周期释放」的出口。
+        Track(_vm.Currency.BindToText(currencyText, g => $"{g:N0}"));
+        Track(_vm.HpRatio.BindToFillAmount(hpBar));       // 派生值在 VM 里建，见下
+        Track(btnBuy.BindToClick(_vm.OnClickBuy));
+        Track(_vm.Level.Bind(lv => SetLevelBadge(lv)));
     }
+}
+
+public class ShopViewModel : ViewModelBase
+{
+    public ReactiveProperty<int> Currency { get; private set; }
+    public ReactiveProperty<int> Hp { get; private set; }
+    public IReactiveProperty<float> HpRatio { get; private set; }
+    public ReactiveProperty<int> Level { get; private set; }
+
+    // 属性在 OnBound 里创建，不要在构造函数里建：Unbind 会 Dispose 掉 VM，
+    // 构造函数建的属性活不过第二次 Bind
+    public override void OnBound()
+    {
+        Currency = CreateProperty(0);
+        Hp = CreateProperty(100);
+        Level = CreateProperty(1);
+
+        // 派生值必须有人持有并释放：Select 在构造时就会订阅源，把返回值就地丢弃
+        // 等于让这个派生值永久订阅下去（每次源变化都还会跑一遍 selector）。
+        // CreateReadOnlyProperty 是「创建 + 归口」的合并形式，随 VM 一起释放。
+        HpRatio = CreateReadOnlyProperty(Hp, h => h / 100f);
+    }
+
+    public void OnClickBuy() { /* ... */ }
 }
 ```
 

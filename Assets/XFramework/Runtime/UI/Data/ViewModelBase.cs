@@ -6,7 +6,9 @@ namespace XFramework.XUI.Data
 {
     /// <summary>
     /// ViewModel 基类。管理所有 <see cref="ReactiveProperty{T}"/> 的生命周期。
-    /// <para>使用方式：在派生类的构造函数中通过 <see cref="CreateProperty{T}"/> 创建属性。</para>
+    /// <para>使用方式：在派生类重写的 <see cref="OnBound"/> 中通过 <see cref="CreateProperty{T}"/> 创建属性。
+    /// <b>不要</b>在构造函数里建——解绑时 <c>UIPanelBinding</c> 会 <see cref="Dispose"/> 掉 ViewModel，
+    /// 构造函数建的属性活不过第二次 Bind，再次绑定后写入会抛 <see cref="ObjectDisposedException"/>。</para>
     /// <para>面板关闭时统一调用 <see cref="Dispose"/> 释放所有 ReactiveProperty 和订阅。</para>
     /// <para>预分配容量列表，避免扩容产生 GC。</para>
     /// </summary>
