@@ -110,13 +110,26 @@ namespace XFramework.XSettings
         #region Value
 
         /// <summary>
-        /// 尝试写入值。设置句柄不持有释放语义（它通常活到进程结束），故永远返回 true。
+        /// 尝试写入值，并回传写入后句柄解析到的实时值。
+        /// <para>设置句柄不持有释放语义（它通常活到进程结束），但<b>背后的设置类型可能已不可用</b>——
+        /// 尚未 <c>Initialize</c>，或已被 <see cref="SettingsManager.Destroy"/> 注销，而句柄的寿命长于
+        /// 管理器是既有设计。此时按 <see cref="IReactivePropertyWriter{T}"/> 的约定返回 <c>false</c>
+        /// 且 <paramref name="actual"/> 为 <c>default</c>，<b>不抛异常</b>：双向绑定会在 UI 事件回调里
+        /// 调用本方法，异常会穿过 <c>Slider.onValueChanged</c> 抛进 UnityEvent，正是该接口要挡掉的那类异常。</para>
+        /// <para>注意与 <see cref="Value"/> 的分工：读写在类型不可用时照旧抛并附修复提示（那是编程错误、
+        /// 应当被看见），只有本方法承担「不抛」的契约。</para>
         /// </summary>
         /// <param name="value">要写入的值。</param>
-        /// <param name="actual">写入后句柄解析到的实时值。</param>
-        /// <returns>恒为 true。</returns>
+        /// <param name="actual">写入后句柄解析到的实时值；无法写入时为 default。</param>
+        /// <returns>确实写入了返回 true；设置类型不可用时返回 false。</returns>
         public bool TryWriteValue(TField value, out TField actual)
         {
+            if (!SettingsManager.IsRegistered<T>())
+            {
+                actual = default;
+                return false;
+            }
+
             Value = value;
             actual = Value;
             return true;

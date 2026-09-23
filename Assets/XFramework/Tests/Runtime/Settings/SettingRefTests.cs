@@ -12,7 +12,8 @@ namespace XFramework.XSettings.Tests
     /// <summary>
     /// <see cref="SettingRef{T, TField}"/> 字段句柄测试。
     /// <para>覆盖：表达式校验、写穿到 POCO、去重、订阅即回调、<b>实例替换后自动跟随与重放</b>、
-    /// 直改字段不通知、订阅立即回调抛异常时订阅必须被清理、以及句柄可直接接入 UI 绑定。</para>
+    /// 直改字段不通知、订阅立即回调抛异常时订阅必须被清理、TryWriteValue 在类型不可用时返回 false 且不抛、
+    /// 以及句柄可直接接入 UI 绑定。</para>
     /// <remarks>
     /// <b>两条纪律（重放注册表是进程级的，跨用例共享）：</b>
     /// <list type="number">
@@ -203,6 +204,50 @@ namespace XFramework.XSettings.Tests
 
             Assert.AreEqual(1, count,
                 "直改 POCO 不通知——这是保留的已知限制，要通知必须经句柄写入");
+        }
+
+        #endregion
+
+        #region TryWriteValue
+
+        [Test]
+        public void Ref_TryWriteValue_AvailableType_WritesAndReturnsActual()
+        {
+            Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+
+            Assert.IsTrue(volume.TryWriteValue(0.5f, out var actual), "类型可用时写入成功");
+            Assert.AreEqual(0.5f, actual, 1e-5f, "回传写入后句柄解析到的实时值");
+            Assert.AreEqual(0.5f, SettingsManager.Settings<GameSettings>().Audio.MasterVolume, 1e-5f,
+                "写入要落回 POCO 字段");
+        }
+
+        [Test]
+        public void Ref_TryWriteValue_UnregisteredType_ReturnsFalseWithoutThrowing()
+        {
+            Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            SettingsManager.Destroy(); // 句柄寿命长于管理器是既有设计
+
+            bool ok = true;
+            float actual = -1f;
+
+            Assert.DoesNotThrow(() => ok = volume.TryWriteValue(0.25f, out actual),
+                "设置类型不可用时不得抛异常——双向绑定会在 UI 事件回调里调用它，" +
+                "异常会穿过 Slider.onValueChanged 抛进 UnityEvent");
+            Assert.IsFalse(ok, "不可用时返回 false");
+            Assert.AreEqual(0f, actual, 1e-5f, "不可用时 actual 为 default");
+        }
+
+        [Test]
+        public void Ref_TryWriteValue_BeforeInitialize_ReturnsFalseWithoutThrowing()
+        {
+            SettingsManager.Destroy();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+
+            bool ok = true;
+            Assert.DoesNotThrow(() => ok = volume.TryWriteValue(0.25f, out _));
+            Assert.IsFalse(ok, "尚未 Initialize 时同样按约定返回 false");
         }
 
         #endregion
