@@ -65,6 +65,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **Reactive README 标注引擎依赖为「已知待解决」**：本模块直接 `using XFramework.XMessage.Internal` 取 `EventStream<T>`，此前 README 把这条依赖写成「单向依赖：Reactive → Message」就算了事，读起来像是受支持的公开契约。现如实标注：这不违规（没有任何成文规则禁止跨模块引用该命名空间），但「没有规则」正是问题——全框架共用一个 asmdef，`internal` 不构成编译边界，既无编译器约束也无成文约定。同类引用合计 5 个跨模块文件（Reactive×2 / Input×1 / Settings×2），消费面只有 `Subscribe` / `OnNext` / `OnCompleted` / `Dispose` 四个成员；统一方案尚未确定。这条待办此前只活在一个提交信息里（「全仓库的模式……其余仍待统一方案」），每次回看都要重新考古一遍，故落到 README
+
 - **订正 Reactive 模块三处不实的契约陈述（仅文档与注释，无行为变更）**：① `out actual` 的理由写错了——原话说「写入派发中订阅者可能释放目标，那之后再读 `Value` 就会抛」，但本模块的读取是宽容的（`ReactiveProperty` 已释放后仍返回最后的值、`ReadOnlyReactiveProperty` 从来不抛），那句话在写下的下一版就失效了；现改为真实理由：`actual` 由实现直接给出，读它不必依赖 `Value` 对「已失效」采取何种策略。② 删掉 `actual` 会「规范化（取整、钳制到上下限）」的说法——随框架发布的两个实现都不规范化，`actual` **恒等于**传入的 `value`，唯一会规范化的是 UI 测试里的替身；`UIBinder` 那两处回填分支对发布实现永不触发，这点也一并写明。③「读宽容、写严格」与「相同值去重」此前被写成模块普遍原则、并称三个实现都满足，而 Settings 的 `SettingRef` **两条都不满足**（实例替换无条件重放、设置类型注销后读取抛 `InvalidOperationException`）。现新增「接口承诺到哪为止」一节，用表格逐条区分「接口保证」与「具体实现的特性」；接口自身的 XML doc 也从「契约：订阅即回调 + 相同值不通知」收紧为「**契约只有一条**：订阅时立即同步回调当前值」
 - **Reactive 补上其余三处文档（仅文档与注释）**：① `Select` 此前只声明 `ArgumentNullException`，实际还会在源已释放时从 `source.Subscribe` 抛 `ObjectDisposedException`（同一函数上一行的取值却是宽容的——读得到、订不到），以及把 selector 自己抛的异常原样上抛；另写明 selector **在构造时会被调用两次**（取初值一次 + 源订阅的立即回调一次），非纯函数会跑两遍且只有第二次的结果留在 `Value` 上。② README 补主线程契约：它把「锁 + 快照线程模型」列为卖点，而引擎 README 明说按主线程设计，`SettingRef` 有「读写须在主线程」而本模块一字未提；跨线程写入会让去重判断与派发载荷分叉。③「派发顺序与重入」一节的两条建议改为可执行：顺序需求不能「靠比较收到值」解决（那建立不了订阅者之间的顺序，框架也没有排序手段），推迟写入也不能「经 `UpdateManager` 注册」了事（它只有 `Register/RegisterLate/RegisterFixed`，要 `IUpdateable` 并自行注销，没有一次性下一帧入口）
 

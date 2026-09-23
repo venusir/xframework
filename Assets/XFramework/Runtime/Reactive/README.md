@@ -101,5 +101,9 @@ if (!writer.TryWriteValue(value, out var actual))
 
 ## 依赖
 
-- `XFramework.XMessage` — 事件流引擎(单向依赖:Reactive → Message)
+- `XFramework.XMessage` 的**事件流引擎**——单向依赖:Reactive → Message。用的是内部命名空间 `XFramework.XMessage.Internal` 里的 `EventStream<T>`,而非公开 API
 - 全局消息总线亦在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`
+
+> **已知的待解决依赖**：本模块直接 `using XFramework.XMessage.Internal` 取 `EventStream<T>`。这**不算违规**——没有任何成文规则禁止跨模块引用它（`CLAUDE.md` 与 Message README 都没有规定谁可以使用该命名空间），而恰恰是「没有规则」才是问题：全框架共用一个 asmdef，`internal` 并不构成编译边界，于是「Reactive 依赖 Message 的实现细节」这件事既没有编译器约束、也没有成文约定可依。
+>
+> 同类引用还有 Input（1 处）与 Settings（2 处），合计 **5 个跨模块文件**，用到的成员只有 `Subscribe` / `OnNext` / `OnCompleted` / `Dispose` 四个——消费面很窄，但落点确实是内部命名空间。统一方案（把引擎下沉为独立共享模块 / 提升为 Message 公开 API / 各消费方自带实现）**尚未确定**，故此处如实标注：`EventStream<T>` 目前**不是**稳定公开契约，不要据现状假定它可用。
