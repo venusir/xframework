@@ -9,7 +9,7 @@ namespace XFramework.XReactive.Tests
     /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后写/订阅抛 ObjectDisposedException 而读取宽容、
     /// ReadOnly 映射语义、接口链编程、订阅立即回调抛异常时订阅必须被清理(不泄漏)、
     /// TryWriteValue 的失效判定与 actual 回传、派发顺序 LIFO 与重入写入留下的陈旧值、
-    /// 以及诊断面(SubscriptionCount / ToString)。</para>
+    /// 构造/空参/只读类型的 Dispose 矩阵与两条接口不变量、以及诊断面(SubscriptionCount / ToString)。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -191,8 +191,10 @@ namespace XFramework.XReactive.Tests
             rp.Dispose();
 
             bool written = true;
-            Assert.DoesNotThrow(() => written = rp.TryWriteValue(2, out _));
+            int actual = -1;
+            Assert.DoesNotThrow(() => written = rp.TryWriteValue(2, out actual));
             Assert.IsFalse(written, "目标已失效时返回 false 而不是抛异常");
+            Assert.AreEqual(0, actual, "失败时 actual 为 default——接口文档明确承诺这一点");
         }
 
         [Test]
@@ -396,6 +398,84 @@ namespace XFramework.XReactive.Tests
                 "A 先经嵌套派发收到 2,又被外层循环投回 1,最终停在 Value 已不再是的值上,且不会再有通知纠正它。" +
                 "这正是 README 劝退「回调内写入」的原因;若哪天改掉了重入语义,请同步改 README");
             Assert.AreEqual(2, rp.Value, "而 Value 实际是 2——A 观察到的是陈旧值");
+        }
+
+        #endregion
+
+        #region 契约补口（构造 / 空参 / 只读类型的 Dispose 矩阵 / 接口不变量）
+
+        [Test]
+        public void Subscribe_NullOnNext_Throws()
+        {
+            var rp = new ReactiveProperty<int>(1);
+
+            Assert.Throws<ArgumentNullException>(() => rp.Subscribe(null));
+        }
+
+        [Test]
+        public void ParameterlessConstructor_UsesTypeDefault()
+        {
+            Assert.AreEqual(0, new ReactiveProperty<int>().Value, "值类型取 default");
+            Assert.IsNull(new ReactiveProperty<string>().Value, "引用类型取 null");
+        }
+
+        [Test]
+        public void Select_NullSelector_Throws()
+        {
+            var rp = new ReactiveProperty<int>(1);
+
+            Assert.Throws<ArgumentNullException>(() =>
+                ReactivePropertyExtensions.Select<int, int>(rp, null));
+        }
+
+        [Test]
+        public void Select_DisposedSource_Throws()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            rp.Dispose();
+
+            // 取值是宽容的(读得到),但订阅不是——所以派生会抛。这条此前既无测试也无文档
+            Assert.Throws<ObjectDisposedException>(() => rp.Select(x => x * 2),
+                "源已释放时派生要抛:读得到不代表订得到");
+        }
+
+        [Test]
+        public void ReadOnly_Dispose_ThenSubscribe_Throws()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            var readOnly = rp.Select(x => x * 2);
+            readOnly.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => readOnly.Subscribe(_ => { }),
+                "派生值已释放后再订阅抛 ObjectDisposedException");
+        }
+
+        [Test]
+        public void ReadOnly_Dispose_Twice_DoesNotThrow()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            var readOnly = rp.Select(x => x * 2);
+            readOnly.Dispose();
+
+            Assert.DoesNotThrow(() => readOnly.Dispose(), "重复 Dispose 幂等（与可写类型对称）");
+        }
+
+        [Test]
+        public void Interface_ValueHasNoSetter()
+        {
+            var value = typeof(IReactiveProperty<int>).GetProperty(nameof(IReactiveProperty<int>.Value));
+
+            Assert.IsNotNull(value);
+            Assert.IsFalse(value.CanWrite,
+                "只读接口不得暴露 setter——写值只能经具体类型或 IReactivePropertyWriter<T>");
+        }
+
+        [Test]
+        public void ReadOnly_DoesNotImplementWriterCapability()
+        {
+            Assert.IsFalse(
+                typeof(IReactivePropertyWriter<int>).IsAssignableFrom(typeof(ReadOnlyReactiveProperty<int>)),
+                "派生值不得获得写入能力——「只读视图」的定位靠这一点保证");
         }
 
         #endregion
