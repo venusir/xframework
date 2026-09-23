@@ -8,7 +8,8 @@ namespace XFramework.XReactive.Tests
     /// 响应式属性测试。
     /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后写/订阅抛 ObjectDisposedException 而读取宽容、
     /// ReadOnly 映射语义、接口链编程、订阅立即回调抛异常时订阅必须被清理(不泄漏)、
-    /// TryWriteValue 的失效判定与 actual 回传、派发顺序 LIFO 与重入写入留下的陈旧值。</para>
+    /// TryWriteValue 的失效判定与 actual 回传、派发顺序 LIFO 与重入写入留下的陈旧值、
+    /// 以及诊断面(SubscriptionCount / ToString)。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -395,6 +396,73 @@ namespace XFramework.XReactive.Tests
                 "A 先经嵌套派发收到 2,又被外层循环投回 1,最终停在 Value 已不再是的值上,且不会再有通知纠正它。" +
                 "这正是 README 劝退「回调内写入」的原因;若哪天改掉了重入语义,请同步改 README");
             Assert.AreEqual(2, rp.Value, "而 Value 实际是 2——A 观察到的是陈旧值");
+        }
+
+        #endregion
+
+        #region 诊断面
+
+        [Test]
+        public void SubscriptionCount_TracksLiveSubscriptions()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            Assert.AreEqual(0, rp.SubscriptionCount, "初始无订阅");
+
+            var a = rp.Subscribe(_ => { });
+            rp.Subscribe(_ => { });
+            Assert.AreEqual(2, rp.SubscriptionCount, "两次订阅");
+
+            a.Dispose();
+            Assert.AreEqual(1, rp.SubscriptionCount, "退订后递减");
+
+            rp.Dispose();
+            Assert.AreEqual(0, rp.SubscriptionCount, "Dispose 后清零");
+        }
+
+        [Test]
+        public void SubscriptionCount_ImmediateCallbackThrows_DoesNotLeak()
+        {
+            var rp = new ReactiveProperty<int>(1);
+
+            Assert.Throws<InvalidOperationException>(() =>
+                rp.Subscribe(_ => throw new InvalidOperationException("首次回调抛异常")));
+
+            Assert.AreEqual(0, rp.SubscriptionCount,
+                "立即回调抛异常后订阅必须已清理——订阅数是最直接的观察方式");
+        }
+
+        [Test]
+        public void SubscriptionCount_ExposesDerivedValueLeak()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            Assert.AreEqual(0, rp.SubscriptionCount);
+
+            // 就地丢弃 Select 的返回值——README 明确劝退的写法
+            rp.Select(x => x * 2);
+
+            Assert.AreEqual(1, rp.SubscriptionCount,
+                "派生值在构造时就订阅源,丢弃返回值即留下一个不会退订的订阅;这条把文档的告诫变成可观察的事实");
+        }
+
+        [Test]
+        public void ToString_ShowsTypeAndValue()
+        {
+            var rp = new ReactiveProperty<int>(50);
+            StringAssert.Contains("Int32", rp.ToString(), "展示类型");
+            StringAssert.Contains("50", rp.ToString(), "展示当前值");
+
+            var readOnly = rp.Select(x => $"v{x}");
+            StringAssert.Contains("String", readOnly.ToString());
+            StringAssert.Contains("v50", readOnly.ToString(), "展示当前映射值");
+        }
+
+        [Test]
+        public void ToString_AfterDispose_ShowsLastValueWithoutThrowing()
+        {
+            var rp = new ReactiveProperty<int>(7);
+            rp.Dispose();
+
+            StringAssert.Contains("7", rp.ToString(), "宽容读取:已释放后仍展示最后持有的值");
         }
 
         #endregion

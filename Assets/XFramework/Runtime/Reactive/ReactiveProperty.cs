@@ -78,6 +78,16 @@ namespace XFramework.XReactive
             }
         }
 
+        /// <summary>
+        /// 当前存活订阅数。
+        /// <para><b>诊断用</b>——订阅泄漏在运行时是无声的，本属性是唯一的观察手段：源长期存活时
+        /// （单例上的属性、Settings 句柄）这个数只增不减，即说明有订阅没人释放。典型来源是
+        /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的返回值被就地丢弃
+        /// （它在构造时就订阅了源，见该方法的说明）。</para>
+        /// <para>仅供排查，<b>不要</b>拿它做逻辑分支：它是实现的当前状态，不是契约。</para>
+        /// </summary>
+        public int SubscriptionCount => _stream.SubscriptionCount;
+
         #endregion
 
         #region Subscribe
@@ -165,6 +175,22 @@ namespace XFramework.XReactive
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
                     $"[Reactive] ReactiveProperty<{typeof(T).Name}> 已释放,请勿再写 Value 或订阅。");
+        }
+
+        #endregion
+
+        #region Object
+
+        /// <summary>
+        /// 诊断展示：类型与当前值（如 <c>ReactiveProperty&lt;Int32&gt;(50)</c>）。
+        /// <para>排查时一眼看出「这个属性是什么、现在是多少」；订阅泄漏请另看
+        /// <see cref="SubscriptionCount"/>。格式与 Settings 的
+        /// <c>SettingRef.ToString()</c> 同形。</para>
+        /// <para>宽容读取：已释放后仍展示最后持有的值，不抛异常。</para>
+        /// </summary>
+        public override string ToString()
+        {
+            return $"{nameof(ReactiveProperty<T>)}<{typeof(T).Name}>({_value})";
         }
 
         #endregion

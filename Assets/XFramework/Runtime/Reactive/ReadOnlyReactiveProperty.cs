@@ -74,6 +74,15 @@ namespace XFramework.XReactive
         /// <summary>获取当前值。</summary>
         public T Value => _value;
 
+        /// <summary>
+        /// 当前存活订阅数。
+        /// <para><b>诊断用</b>——订阅泄漏在运行时是无声的，本属性是唯一的观察手段。想看
+        /// <b>源</b>上有没有多余的订阅（例如某个派生值被就地丢弃）请查源的
+        /// <c>ReactiveProperty&lt;T&gt;.SubscriptionCount</c>；本属性数的是挂在自己身上的订阅者。</para>
+        /// <para>仅供排查，<b>不要</b>拿它做逻辑分支：它是实现的当前状态，不是契约。</para>
+        /// </summary>
+        public int SubscriptionCount => _stream.SubscriptionCount;
+
         #endregion
 
         #region Subscribe
@@ -138,6 +147,20 @@ namespace XFramework.XReactive
             if (_disposed)
                 throw new ObjectDisposedException(GetType().Name,
                     $"[Reactive] ReadOnlyReactiveProperty<{typeof(T).Name}> 已释放,请勿再订阅。");
+        }
+
+        #endregion
+
+        #region Object
+
+        /// <summary>
+        /// 诊断展示：类型与当前映射值（如 <c>ReadOnlyReactiveProperty&lt;String&gt;(Lv.50)</c>）。
+        /// <para>格式与 <c>ReactiveProperty&lt;T&gt;.ToString()</c> 同形。宽容读取：已释放后仍展示
+        /// 最后持有的值，不抛异常。</para>
+        /// </summary>
+        public override string ToString()
+        {
+            return $"{nameof(ReadOnlyReactiveProperty<T>)}<{typeof(T).Name}>({_value})";
         }
 
         #endregion

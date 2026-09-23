@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Reactive 补诊断面 `SubscriptionCount` 与 `ToString()`**：本模块此前**零内省**——订阅泄漏在运行时无声无息，却没有任何手段能发现它。`ReactiveProperty<T>` 与 `ReadOnlyReactiveProperty<T>` 各加一个只读的 `SubscriptionCount`（引擎的 `EventStream.SubscriptionCount` 就在同一程序集里，一行透出），以及诊断用的 `ToString()`（`ReactiveProperty<Int32>(50)` 形态，与 Settings 的 `SettingRef.ToString()` 同形——那个 `ToString` 存在的理由就是让注册表能记下是哪个句柄失败）。两者都标注「仅供排查，不要拿来做逻辑分支」。与既有工具同族：Message 的 `MessageBusStats` / `GetStats()`（其自述用途正是「诊断订阅泄漏」）、UI 的 `UIStateSnapshot` / `DumpState()`。补 4 条测试，其中一条把上一版 README 才开始告诫的「`Select` 返回值被就地丢弃即永久订阅」**变成可观察的事实**——断言丢弃派生值后源的订阅数确实为 1；另一条用订阅数替代原先的调用计数来验证「立即回调抛异常后订阅已清理」，比原来的写法直接得多
+
 - **启动引导模块 `XBootstrap`**：`IBootstrapStage`（= Pipeline 的 `IPhaseStage` + 同步 `Shutdown`）与 `Bootstrap` 静态门面（`Register` 显式登记 / `RunAsync` 相位装配运行 / `Shutdown` 逆序清理）。框架内置的引导阶段归位到各自模块——`AssetBootstrapStage` 落 `Runtime/Asset/`，Data / Save / Localization 同理，框架不再在自己的目录里装着别人的服务。两点相对旧启动路径的实质改进：`RunAsync` 首次提供 `CancellationToken`（旧 `StartupAsync` 不可取消），且失败与取消会**抛出**而非只留日志（旧实现只订阅 `OnProgressUpdate`、从不订阅 `OnFailed` / `OnCancelled`，阶段失败时调用方无从感知）。登记按**实例**去重而非按类型——登记表是「初始化步骤列表」，参数化的阶段用同一类型登记多次是合法的；`RegisterDefaults()` 例外，它按类型跳过已存在的内置阶段，故可重复调用
 
 - **File 原子替换与一代备份**：改用 `File.Replace` 一步完成「替换正式文件 + 保留一代 `.bak`」，平台不支持时降级为三步移动。原实现以「删正式文件 → Move」实现替换，两步之间进程被杀即为「旧档已删、新档还在 `.tmp`」——从上层看是存档凭空消失且无从恢复。两条路径都维持「任意时刻至少一份完整副本」的不变式
