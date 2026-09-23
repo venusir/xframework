@@ -6,7 +6,8 @@ namespace XFramework.XReactive.Tests
 {
     /// <summary>
     /// 响应式属性测试。
-    /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后抛 ObjectDisposedException、ReadOnly 映射语义、接口链编程。</para>
+    /// <para>契约:订阅立即回调当前值、相同值去重、Dispose 后抛 ObjectDisposedException、ReadOnly 映射语义、接口链编程、
+    /// 订阅立即回调抛异常时订阅必须被清理(不泄漏)。</para>
     /// </summary>
     [TestFixture]
     public class ReactivePropertyTests
@@ -59,6 +60,71 @@ namespace XFramework.XReactive.Tests
             rp.Value = 2;
 
             CollectionAssert.AreEqual(new[] { 1 }, calls, "退订后不再收到通知");
+        }
+
+        #endregion
+
+        #region 订阅立即回调异常 — 订阅必须被清理
+
+        [Test]
+        public void Subscribe_ImmediateCallbackThrows_SubscriptionIsReleased()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            int invocations = 0;
+
+            Action<int> handler = _ =>
+            {
+                invocations++;
+                if (invocations == 1)
+                    throw new InvalidOperationException("首次回调抛异常");
+            };
+
+            Assert.Throws<InvalidOperationException>(() => rp.Subscribe(handler),
+                "立即回调抛异常应原样上抛");
+
+            rp.Value = 2;
+
+            Assert.AreEqual(1, invocations,
+                "回调抛异常后订阅必须已被清理;若泄漏,写值会再次触发该处理器");
+        }
+
+        [Test]
+        public void Subscribe_ImmediateCallbackThrows_ThenRetry_Succeeds()
+        {
+            var rp = new ReactiveProperty<int>(1);
+
+            Assert.Throws<InvalidOperationException>(() =>
+                rp.Subscribe(_ => throw new InvalidOperationException("首次回调抛异常")));
+
+            var calls = new List<int>();
+            using var handle = rp.Subscribe(calls.Add);
+
+            rp.Value = 2;
+
+            CollectionAssert.AreEqual(new[] { 1, 2 }, calls, "泄漏清理后重新订阅应完全正常");
+        }
+
+        [Test]
+        public void ReadOnly_Subscribe_ImmediateCallbackThrows_SubscriptionIsReleased()
+        {
+            var rp = new ReactiveProperty<int>(1);
+            var readOnly = rp.Select(x => x * 2);
+            int invocations = 0;
+
+            Action<int> handler = _ =>
+            {
+                invocations++;
+                if (invocations == 1)
+                    throw new InvalidOperationException("首次回调抛异常");
+            };
+
+            Assert.Throws<InvalidOperationException>(() => readOnly.Subscribe(handler),
+                "立即回调抛异常应原样上抛");
+
+            rp.Value = 5;
+
+            Assert.AreEqual(1, invocations,
+                "回调抛异常后订阅必须已被清理;若泄漏,源变化会再次触发该处理器");
         }
 
         #endregion

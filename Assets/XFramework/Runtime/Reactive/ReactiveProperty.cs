@@ -78,6 +78,8 @@ namespace XFramework.XReactive
         /// 订阅值变化。订阅时立即回调当前值,之后每次值改变时回调 <paramref name="onNext"/>。
         /// <para>返回的 <see cref="IDisposable"/> 可用于手动取消订阅。
         /// 调用 <see cref="Dispose"/> 时也会自动取消所有订阅。</para>
+        /// <para>立即回调是注册期同步执行的代码,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)；
+        /// 之后投递中的异常按引擎约定记 Error 日志后继续。两条路径语义不同是有意的。</para>
         /// </summary>
         /// <param name="onNext">值变化时的回调。</param>
         /// <returns>订阅句柄，可用于取消订阅。</returns>
@@ -90,7 +92,19 @@ namespace XFramework.XReactive
 
             // 先注册再立即回调:确保回调中的订阅操作不会丢失后续消息
             var handle = _stream.Subscribe(onNext);
-            onNext(_value);
+            try
+            {
+                onNext(_value);
+            }
+            catch
+            {
+                // 立即回调是注册期同步执行的代码,异常原样上抛(投递路径的异常隔离不适用于注册期:
+                // 绑定初始化失败不该被静默)。但此刻句柄永远不会交给调用方——不在这里退订即永久泄漏:
+                // 节点只经退订或本属性 Dispose 回收,属性活着期间该订阅既无法退订也不会被回收,
+                // 回调与其闭包/目标对象被链表一直钉住。
+                handle.Dispose();
+                throw;
+            }
             return handle;
         }
 
