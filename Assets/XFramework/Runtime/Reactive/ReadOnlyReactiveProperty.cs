@@ -38,7 +38,7 @@ namespace XFramework.XReactive
 
         #endregion
 
-        #region Constructor (internal — only created via ReactivePropertyExtensions.Select)
+        #region Constructors
 
         private ReadOnlyReactiveProperty()
         {
