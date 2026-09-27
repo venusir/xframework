@@ -1326,6 +1326,25 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task IsBusy_TrueDuringWrite_FalseDuringRead()
+        {
+            // IsBusy 此前零直接覆盖（审计的「公开成员 → 有无直接用例」映射里唯一的真实缺口）。
+            // 它承载的契约是：写操作（保存/加载/删除）共用门禁，读操作刻意不进（见 SaveManagerImpl.EnterBusy）。
+            // 本用例锁定该行为——它是**锁定现状**，不是修复某条坏行为。
+            Assert.IsFalse(SaveManager.IsBusy, "空闲时 IsBusy 应为 false");
+
+            var saveTask = SaveManager.SaveAsync(1);
+            Assert.IsTrue(SaveManager.IsBusy, "写操作在途时 IsBusy 应为 true");
+
+            // 在途写期间发读操作：既不抛（不进保护），也不得释放写操作的门禁
+            await SaveManager.GetSlotMetasAsync();
+            Assert.IsTrue(SaveManager.IsBusy, "读操作不得释放写操作的门禁");
+
+            await saveTask;
+            Assert.IsFalse(SaveManager.IsBusy, "写操作完成后应回到 false");
+        }
+
+        [Test]
         public void SetCurrentPlayer_InvalidPlayerId_ThrowsWithoutPoisoningContext()
         {
             // 路径穿越注入：playerId 含分隔符或 .. 时应在设置时即被拒绝，防止存档写到域根之外。
