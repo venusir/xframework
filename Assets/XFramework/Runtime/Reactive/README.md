@@ -97,6 +97,12 @@ if (!writer.TryWriteValue(value, out var actual))
 
 `SettingRef` 那两条不是缺陷，而是它自己的取舍（重放是为了「换实例后 UI 自动跟随」；读抛是为了附上修复提示）。关键是**接口本身没有承诺它们**，所以消费者不能靠接口吃掉这些差异。
 
+### 本模块没有的（按 Rx 直觉找来的人请注意）
+
+- **集合型响应式**（R3 的 `ReactiveCollection` 等价物）：**没有**。列表/背包的增量通知由使用方自行组织（UI 侧的「列表虚拟化」也仍是未做项，见 UI README 的 `[ ]` 列表）。
+- **命令**（R3 的 `ReactiveCommand` / `CanExecute`）：**没有**。UI 侧走 `UIBinder.BindClick` 直接绑点击，按钮可用性由使用方自己置 `interactable`。
+- **Inspector / 序列化集成**（`BindableReactiveProperty` 那类）：**没有**——本仓在 UI 模块做约定式绑定（`txt_` / `sld_` / `tgl_` 前缀），不走 Inspector 配置。
+
 ## 派发顺序与重入
 
 两条语义由底层事件流决定,都容易踩:
@@ -122,6 +128,8 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 两个成员都**只用于排查**,不要拿它们做逻辑分支:它们是实现的当前状态,不是契约。
 
 同类工具:Message 模块的 `MessageManager.GetStats()`、UI 模块的 `UIManager.DumpState()`。
+
+> **没有自动跟踪器**:本仓只有上面这种**拉取式**诊断,没有 R3 `ObservableTracker` 那样的「列出未释放订阅**及其创建调用栈**」的编辑器工具——排查靠这两条信号 + 人工核对。订阅泄漏是本仓历史上反复出现的一类(UI / Reactive / Settings 的 README 都专设排查节);若这类事故再出现,值得单独立项补一个(与 `UIStateWindow` 同级的编辑器窗口)。
 
 ## 设计原则
 

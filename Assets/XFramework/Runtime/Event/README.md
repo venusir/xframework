@@ -47,6 +47,39 @@ Event 模块提供**事件流引擎**:一个对象即一条流,持有者往流�
 
 **不构成理由的(如实记下):** 零分配 / 池化节点是**未来余量**(今天没有每帧订阅 / 退订的场景);「把流当值传递」今天也没有 API 这么做;`OnCompleted ≠ Dispose` 用标志位也能实现(`event` 加五行),本模块只是把它标准化。**封装反而是 `event` 更好**——只有声明者能投递,而本模块的 `OnNext` 在接口上是公开的,靠「谁持有」约束。
 
+## 与 Rx（R3 / UniRx）的取舍
+
+与 Rx 系实现相比，本模块刻意**只做「流本身」，不做算子面**。这不是形态差异，而是分工不同：R3（UniRx 的继任者）是响应式**编程库**，算子面就是它的产品；本模块是**框架底座**，Message / Reactive / Input / Settings 共用这一层流。
+
+**四处取向相同**（本模块与 R3 同向，与 UniRx 相反）：
+
+| | UniRx（上一代） | R3（现行） | 本模块 |
+|---|---|---|---|
+| 回调抛异常 | `OnError` **终止订阅** | `OnErrorResume`：错误与终止解耦 | 捕获 + 记日志，**订阅保留、其余订阅者照收** |
+| 时间 / 帧 | `Scheduler` | `TimeProvider` + `FrameProvider`（可替换） | `UpdateClock` 由驱动方传入（不读 `UnityEngine.Time`） |
+| 订阅即生命周期 | 句柄 + `AddTo` | `Observer<T>` 本身即订阅 + ObservableTracker | 句柄 + `IDestroyCancellationToken`；批量释放用 `DisposableBag` |
+| 状态类型 | `ReactiveProperty<T>` | `ReactiveProperty`（去重的 BehaviorSubject） | 同名同构 |
+
+**为什么不做算子面**：本仓自己有过这个决定——`[0.2.0]` 整节「**移除 R3 依赖（重大变更）**」，当时写明「公共 API 不变（订阅立即回调、相同值去重、异常隔离）」：**保留语义、去掉依赖**。补算子面等于把删掉的那层装回来；而且算子链会把「谁在何时被谁通知」变成不可追的声明式图。需要过滤/映射时用订阅级谓词、`ReactiveProperty.Select`，或在回调里手写。
+
+**本模块没有的（R3 有）**：算子（含异步算子 `SubscribeAwait` + `AwaitOperation`）、重放全部历史的 `ReplaySubject`（本模块只有重放最近 1 条）、帧流（`EveryUpdate`——本仓交给 Update 模块的调度；见本文「性能」节：每帧高频不必用流）。
+
+## 把第三方事件接进流
+
+第三方库的 `event` / `UnityEvent` 不需要适配层——订阅时 `+=`、句柄释放时 `-=` 即可：
+
+```csharp
+var stream = EventStream.Create<Vector2>();
+void Handler(Vector2 v) => stream.OnNext(v);
+
+thirdParty.OnDrag += Handler;   // 接进来
+stream.Subscribe(v => ...);     // 消费方照常订阅这条流
+
+// 退订：thirdParty.OnDrag -= Handler;
+```
+
+若要让「第三方事件」与某个生命周期一起结束，把这对称作包进 `IDisposable` 再 `AddTo(bag)` 即可。**本模块不为此提供 API**——一个 `-=` 就够，包一层只会多一层间接。
+
 ## 快速使用
 
 ```csharp

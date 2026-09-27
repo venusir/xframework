@@ -110,6 +110,15 @@ await MessageManager.PublishAsync("Score", msg, MessagePublishStrategy.Parallel)
 
 > **线程**：本模块不做线程调度，**发布与订阅入口必须在主线程调用**（Editor 下越线程调用会在入口记一条 `[Message]` 前缀的 Error，每个 broker 只报首错；Release 不编译该断言）。底层事件流引擎的线程模型（锁与快照只为让订阅链表在并发退订下不被写坏、**不构成多线程许可**、快照收集与派发深度之间存在窗口）见 [Event README 的「线程」节](../Event/README.md#线程)——**断言覆盖不到的三处**：① 退订路径——令牌可能在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 重载在令牌已取消时的早退路径（不触碰共享状态，故不判）；③ 处理器内部的线程行为。需要从后台线程发消息时，请先切回主线程再调用。
 
+> **从后台线程发消息**:不要直接调 `Publish` / `PublishAsync`(入口有主线程断言)。标准配方是先切回主线程:
+>
+> ```csharp
+> await UniTask.SwitchToMainThread(cancellationToken);
+> MessageManager.Publish(msg);
+> ```
+>
+> **本模块刻意不提供跨线程投递 API**——那会鼓励它明确不支持的用法(见上一条的线程契约)。
+
 ### 带 Key 的消息
 
 ```csharp
