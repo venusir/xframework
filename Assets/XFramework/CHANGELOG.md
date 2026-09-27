@@ -282,6 +282,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Settings 退出兜底改用 `Application.wantsToQuit`**：它在退出流程中比 `quitting` 更早触发，写盘更可能在被拆掉之前完成。两个事件在编辑器播放模式下都不触发、在 iOS / Android 上也都不保证触发，故文档写明它是「构建产物里的最后一道兜底」而非可靠机制——真正可靠的是 `AutoSave` 与 `SaveOnPause`。改动同时带来一条必须钉住的契约：`wantsToQuit` 是 `Func<bool>`，返回 `false` 会**取消退出**；处理函数恒返回 `true`，把「保存失败」翻译成 false 会让玩家关不掉游戏，那比丢一次设置严重得多
 - **Settings 注释与文档四处订正**：① `SettingsAsyncTests` 里「Observe 当前不立即回调」的注释与实现相反（实现就是立即回调，另外三个 fixture 明确断言这一点，该用例靠相对断言侥幸通过）；② `ISettingsManager<T>.Dispose` 宣称释放检查能避免「订阅返回一个永不回调的空句柄」，而释放**之前**已发出的句柄恰恰会变成这种句柄（`EventStream.OnCompleted` 只置标志、不清订阅），措辞收窄为两半都说清；③ `SaveAsyncCore` 的「`JsonUtility` 非线程安全」不成立——Unity 文档明确 `FromJson` 可在后台线程调用，而它自己的降级路径本来就在线程池上序列化；④ 新增两条已知限制：`T : class, new()` 约束正是让字段初始化器生效的前提（缺无参构造时 `FromJson` 会让所有字段落到类型默认值、初始化器一律不执行），以及迁移器与校验器在「同步后端 + `LoadAsync`」组合下会跑在非主线程
 
+- **同步 `Publish` 的异步处理器异常日志与等待路径不一致**：`PublishAsync` 的等待路径把处理器异常统一收在 `InvokeGuardedAsync`（记 `[Message]` 前缀的 Error、当次即报、订阅已退订时随之结束的 `OperationCanceledException` 静默丢弃），而同步 `Publish` 触发的 fire-and-forget 路径只用一个 `try/catch` 兜住**同步段**，异步段（`await` 之后）的异常交给裸 `.Forget()`——它落到 `UniTaskScheduler`，记成无模块前缀的 `LogType.Exception` 并延后到调度器 tick 才报（`LogType.Exception` 还会让 Unity 测试框架判该用例失败）。同一个处理器，经 `Publish` 触发与经 `PublishAsync` 触发会得到两种日志。现改为两条路径共用 `InvokeGuardedAsync`：异常隔离语义不再因路径分叉，且该守卫**永不 fault**——并行/顺序两条等待路径早已依赖的性质，至此补齐到第三条路径。补 3 条用例（异步段抛出、返回已 fault 的 `UniTask`、令牌未取消时抛 `OperationCanceledException` 的负向守卫），前两条已实测改前必红，失败消息即缺陷本身：`Unhandled log message: '[Exception] InvalidOperationException: ...'`
+
 
 ## [0.2.0] - 2026-08-20
 

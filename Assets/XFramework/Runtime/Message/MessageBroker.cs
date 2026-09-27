@@ -715,7 +715,10 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 同步派发路径的异步处理器:启动后即放手(fire-and-forget)。
-        /// <para>处理器同步抛出的异常就地兜底;异步段的异常交给 UniTask 的 Forget 语义。</para>
+        /// <para>同步段与异步段的异常一律经 <see cref="InvokeGuardedAsync{TMessage}"/> 就地兜底并记
+        /// <c>[Message]</c> 前缀的 Error——与 <c>PublishAsync</c> 的等待路径同形,且任务永不 fault。
+        /// <b>不得改回裸 <c>.Forget()</c></b>:那样异步段的异常会落到 UniTaskScheduler,记成无模块前缀的
+        /// <c>LogType.Exception</c>(Unity 测试框架据此判失败),并延后到调度器 tick 才报。</para>
         /// </summary>
         private static void DispatchAsyncFireAndForget<TMessage>(MessageChannel<TMessage> channel, TMessage message)
         {
@@ -736,14 +739,8 @@ namespace XFramework.XMessage
                     if (subscription.IsDisposed)
                         continue;
 
-                    try
-                    {
-                        subscription.Handler(message, subscription.Token).Forget();
-                    }
-                    catch (Exception e)
-                    {
-                        Debug.LogError($"[Message] Async handler threw exception: {e}");
-                    }
+                    // 与并行/顺序两条等待路径共用同一守卫,异常隔离语义不因路径而分叉
+                    InvokeGuardedAsync(subscription, message).Forget();
                 }
             }
             finally

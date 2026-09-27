@@ -79,6 +79,8 @@ subscription.Dispose();
 
 异步处理器独立登记在通道的异步列表中，不占同步订阅链：同步 `Publish` 以 fire-and-forget 触发它，`PublishAsync` 则会等待。
 
+**两条路径的异常隔离同形**：处理器同步抛出与异步段（`await` 之后）抛出，都记 `[Message] Async handler threw exception` 的 Error 日志——不打断其余处理器，也不抛给发布方；订阅已退订时随之结束的 `OperationCanceledException` 静默丢弃。订阅级过滤条件抛异常则记 `[Message] Async subscription filter threw exception`，该订阅本条不投递。
+
 ### 异步发布
 
 `PublishAsync` 先把消息同步投递给同步订阅者并写入缓冲通道，再启动异步处理器并等待其完成：

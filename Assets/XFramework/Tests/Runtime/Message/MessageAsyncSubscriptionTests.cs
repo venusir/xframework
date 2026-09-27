@@ -217,6 +217,52 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
+        public void SubscribeAsync_HandlerThrowsAfterAwait_LoggedWithMessagePrefix()
+        {
+            // 异步段的异常(先让出、后抛出)必须与同步段同形:记 [Message] 前缀的 Error,
+            // 而不是落到 UniTaskScheduler 的 UnobservedTaskException。
+            // 用 UniTaskCompletionSource 同步驱动续体,不依赖 PlayerLoop(见文件头说明):
+            // 日志会在 TrySetResult 的调用栈内就地落地。
+            var gate = new UniTaskCompletionSource();
+            var reachedThrowSite = false;
+
+            MessageManager.SubscribeAsync<TestMessage>(async (msg, ct) =>
+            {
+                await gate.Task;
+                reachedThrowSite = true;
+                throw new InvalidOperationException("async segment boom");
+            });
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.IsFalse(reachedThrowSite, "前置:处理器应停在异步段,尚未抛异常");
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Async handler threw exception")));
+            gate.TrySetResult();
+            Assert.IsTrue(reachedThrowSite, "前置:异步段已执行到抛异常处");
+        }
+
+        [Test]
+        public void Publish_Sync_HandlerReturnsFaultedUniTask_LoggedAsMessage()
+        {
+            MessageManager.SubscribeAsync<TestMessage>((msg, ct) =>
+                UniTask.FromException(new InvalidOperationException("faulted task")));
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Async handler threw exception")));
+            Assert.DoesNotThrow(() => MessageManager.Publish(new TestMessage { Value = 1 }));
+        }
+
+        [Test]
+        public void Publish_Sync_HandlerThrowsOperationCanceled_SubscriptionNotCancelled_StillLogs()
+        {
+            // 负向守卫:只有「订阅令牌已取消」才允许静默吞掉 OCE(见 InvokeGuardedAsync 的 when 过滤),
+            // 令牌未取消时照记——防后人顺手放宽该过滤条件,把真实异常一并静音
+            MessageManager.SubscribeAsync<TestMessage>((msg, ct) => throw new OperationCanceledException());
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] Async handler threw exception")));
+            MessageManager.Publish(new TestMessage { Value = 1 });
+        }
+
+        [Test]
         public void SubscribeAsync_FilterThrows_OnlyThatHandlerSkipped()
         {
             var called = false;
