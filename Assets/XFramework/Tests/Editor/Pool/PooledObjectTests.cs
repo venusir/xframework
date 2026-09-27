@@ -1,14 +1,11 @@
 using NUnit.Framework;
-using UnityEngine;
-using UnityEngine.TestTools;
 using XFramework.XPool;
 
 namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// <see cref="PooledObject{T}"/> using 包装器测试。
-    /// <para>覆盖：default 构造的 Dispose 空操作、using 块结束自动归还、手动 Dispose 两次在两种
-    /// CollectionCheck 下的行为差异。</para>
+    /// <para>覆盖：default 构造的 Dispose 空操作、using 块结束自动归还、重复 Dispose 幂等。</para>
     /// </summary>
     class PooledObjectTests
     {
@@ -16,10 +13,6 @@ namespace Venusy609.Xframework.Editor.Tests
         private sealed class WrapItem
         {
         }
-
-        /// <summary>与 Pool.cs 错误消息全文一致（全角标点）。</summary>
-        private static string ForeignReturnError() =>
-            "[Pool<WrapItem>] Return() 传入的对象并非从本池租出，或已被重复归还。已忽略此操作。";
 
         [Test]
         public void DefaultConstructed_Dispose_IsSafeNoOp()
@@ -45,30 +38,18 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void DisposeTwice_CollectionCheckOn_SecondRejected()
+        public void DisposeTwice_SecondIsSilentNoOp()
         {
+            // 加幂等位之前，第二次 Dispose 会一路走到 Return：CollectionCheck 开启时
+            // 报一条「重复归还」错误并被拒绝入池
             var pool = new Pool<WrapItem>(() => new WrapItem(), PoolConfig.Default);
 
-            var handle = pool.GetPooled(out _);
-            handle.Dispose();
-
-            LogAssert.Expect(LogType.Error, ForeignReturnError());
-            handle.Dispose(); // 第二次 Dispose = 重复归还
-
-            Assert.That(pool.CountInactive, Is.EqualTo(1), "重复归还应被拒绝，闲置数不变");
-        }
-
-        [Test]
-        public void DisposeTwice_CollectionCheckOff_AcceptsBoth()
-        {
-            // 显式关闭检测：构造默认值已统一为 PoolConfig.Default（Editor 下默认开启）
-            var pool = new Pool<WrapItem>(() => new WrapItem(), new PoolConfig { CollectionCheck = false });
-
-            var handle = pool.GetPooled(out _);
+            var handle = pool.GetPooled(out var item);
             handle.Dispose();
             handle.Dispose();
 
-            Assert.That(pool.CountInactive, Is.EqualTo(2), "无检测时两次归还都入池");
+            Assert.That(pool.CountInactive, Is.EqualTo(1), "重复归还不应把同一实例入池两次");
+            Assert.AreSame(item, pool.Get(), "实例应原样留在池中");
         }
     }
 }
