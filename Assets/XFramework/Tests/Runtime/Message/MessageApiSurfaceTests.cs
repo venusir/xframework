@@ -262,6 +262,66 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
+        public void RequestAsync_ResponseTypeMismatch_ThrowsInvalidOperationWithFixHint()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse { Result = req.Input }));
+
+            // 键只取请求类型,故「响应类型对不上」只能在取出时校验:否则强转抛裸 InvalidCastException
+            // ——UniTask<T> 是结构体泛型,委托型变救不了,报错里既无模块前缀也无「该怎么改」的线索
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.RequestAsync<TestRequest, AnotherResponse>(
+                    new TestRequest()).GetAwaiter().GetResult());
+
+            StringAssert.Contains("[Message]", ex.Message);
+            StringAssert.Contains(nameof(AnotherResponse), ex.Message, "报错应指出本次请求要求的响应类型");
+            StringAssert.Contains(nameof(TestResponse), ex.Message, "报错应指出已注册的响应类型");
+        }
+
+        [Test]
+        public void TryRequestAsync_ResponseTypeMismatch_ThrowsInsteadOfReturningFailure()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse()));
+
+            // 返回 false 的契约是「响应方尚未就绪」这一运行时常态;类型不匹配是编程错误,两条出口必须分开
+            Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.TryRequestAsync<TestRequest, AnotherResponse>(
+                    new TestRequest()).GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void Unregister_ResponseTypeMismatch_LogsWarningAndKeepsHandler()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse { Result = req.Input }));
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("[Message]")));
+            Assert.IsFalse(MessageManager.Unregister<TestRequest, AnotherResponse>(),
+                "响应类型不匹配不得移除处理器");
+
+            Assert.IsTrue(MessageManager.HasHandler<TestRequest>(), "处理器应仍在册");
+            var response = MessageManager.RequestAsync<TestRequest, TestResponse>(
+                new TestRequest { Input = 3 }).GetAwaiter().GetResult();
+            Assert.AreEqual(3, response.Result, "未被误删的处理器照常工作");
+        }
+
+        [Test]
+        public void RequestAsync_AfterUnregister_ReportsNotRegisteredRatherThanMismatch()
+        {
+            MessageManager.Register<TestRequest, TestResponse>(
+                (req, ct) => UniTask.FromResult(new TestResponse()));
+            Assert.IsTrue(MessageManager.Unregister<TestRequest, TestResponse>());
+
+            // 判定顺序:先查表(未注册),后校验类型。注销之后即便响应类型也不匹配,报的必须是「未注册」
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                MessageManager.RequestAsync<TestRequest, AnotherResponse>(
+                    new TestRequest()).GetAwaiter().GetResult());
+
+            StringAssert.Contains("未注册", ex.Message, "未注册应优先于类型不匹配");
+        }
+
+        [Test]
         public void RequestAsync_ForwardsCancellationTokenToHandler()
         {
             // 转发用「令牌同一性」验证:处理器收到的必须就是调用方传入的那个令牌。

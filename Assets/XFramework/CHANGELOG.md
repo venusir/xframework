@@ -286,6 +286,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **无值的缓冲通道永远不可回收，`TrimEmptyChannels` 的兜底也摘不掉它**：`SubscribeBuffered` 在该类型**从未发布过**时同样会建出缓冲流（`GetOrCreateBuffered`），而通道的回收闸门只判「有没有缓冲流」。于是订阅退掉之后，这个通道既等不到自动回收（缓冲流刻意不挂 `OnEmpty`，它没有清零事件），也过不了 `TrimEmptyChannels`（共用同一闸门），只能靠用户知道类型名去调 `EvictBufferedChannel`；同一闸门还让 `GetChannelStats<T>().HasBufferedValue` 报出一个并不存在的重放缓存。现把闸门改为「无存活订阅者，且无值得保留的重放缓存」——缓冲流须同时满足「无缓冲订阅者」与「无缓存值」才不许回收；前半条不可省：只判无缓存值会把「订阅先于发布」的活订阅者连通道一起静默摘掉（已用一条守卫用例钉住）。**已知边界**：纯缓冲空壳没有清零事件，自动回收仍不覆盖它们，只由 `TrimEmptyChannels` 摘除，README「内存管理」已写明这一点。统计口径本次**刻意不改**（仍按「建有缓冲订阅流」计数，改它要动两条既有断言），只订正 `HasBufferedValue` / `BufferedChannelCount` 与 `MessageChannel.IsReclaimable` 的文档措辞。补 5 条用例（类型级回收、键值级回收与存储摘除、谓词三态直测、活订阅者守卫、回收后重订阅恰好投递一条），均已实测改前必红
 
+- **请求与响应的类型不匹配会抛裸 `InvalidCastException`，`Unregister` 还会误删处理器**：处理器表的键只取请求类型，取出后向「调用方要求的响应类型」强转——注册时写的是 `Register<Req, A>`，之后用 `RequestAsync<Req, B>` 发请求就是一次非法强转。`UniTask<T>` 是结构体泛型，委托型变救不了，任何不匹配必然抛裸 `InvalidCastException`（已用独立复现程序确认：换成引用类型的泛型参数时这种强转本可放行），报错里既没有模块前缀、也没有修复线索；而 `Unregister<TRequest, TResponse>` 的 `TResponse` 更是个纯装饰——`Unregister<Req, 别的响应类型>()` 照样把处理器删掉，其后所有正常请求都会变成「未注册」。现把表项改为携带「注册时声明的响应类型」（单份数据源，不开并行表，值类型直接内联进字典桶、不产生装箱），取出时校验：不匹配抛带 `[Message]` 前缀与修复写法的 `InvalidOperationException`；`Unregister` 则不删除、记 Warning 并返回 `false`。判定顺序固定为「先查表、后校验类型」——未注册是运行时常态（响应方可能尚未就绪），类型不匹配是编程错误，两条报错必须能区分，已用一条守卫用例钉住。同批修掉两处报错文案缺陷：`Register` 与 `RequestAsync` 的提示里 `TResponse` 是**字面量**（原样写着 `TResponse` 这五个字母），照抄提示得到的代码根本编译不过——而校验一旦存在，那条提示指向的调用还会被它自己拒绝，不修就是自相矛盾。补 4 条用例（两条抛异常、一条 `Unregister` 不误删、一条判定顺序守卫），前三条已实测改前必红（失败栈即 `TryGetRequestHandler` 的强转）
+
 
 ## [0.2.0] - 2026-08-20
 

@@ -23,8 +23,8 @@ namespace XFramework.XMessage
 
         private static MessageBroker _broker = new MessageBroker();
 
-        /// <summary>请求处理器表。键仅为 <c>typeof(TRequest)</c>,与响应类型无关。</summary>
-        private static readonly Dictionary<Type, object> _requestHandlers = new();
+        /// <summary>请求处理器表。键仅为 <c>typeof(TRequest)</c>,与响应类型无关(故一个请求类型只能注册一个处理器)。</summary>
+        private static readonly Dictionary<Type, RequestHandlerEntry> _requestHandlers = new();
 
         /// <summary>保护 <see cref="_requestHandlers"/> 的同步门:查找与增删在锁内,处理器调用在锁外。</summary>
         private static readonly object _requestGate = new();
@@ -247,7 +247,11 @@ namespace XFramework.XMessage
         /// 注册请求处理器。一个请求类型只能注册一个处理器。
         /// </summary>
         /// <typeparam name="TRequest">请求类型。处理器表的键只取此类型,与响应类型无关。</typeparam>
-        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <typeparam name="TResponse">
+        /// 响应类型。<b>它参与后续调用的类型校验</b>:注册之后,只有按同一响应类型发起的
+        /// <see cref="RequestAsync{TRequest, TResponse}"/> / <see cref="TryRequestAsync{TRequest, TResponse}"/>
+        /// 才找得到这个处理器。
+        /// </typeparam>
         /// <param name="handler">
         /// 异步处理器。它收到的取消令牌即 <see cref="RequestAsync{TRequest, TResponse}"/> 调用方传入的令牌,
         /// 便于把取消继续传递给下游异步操作。
@@ -264,25 +268,40 @@ namespace XFramework.XMessage
                 if (_requestHandlers.ContainsKey(type))
                     throw new InvalidOperationException(
                         $"[Message] 请求类型 '{type.Name}' 已注册处理器,同一请求类型只能注册一个;" +
-                        $"如需替换请先调用 MessageManager.Unregister<{type.Name}, TResponse>()。");
+                        $"如需替换请先调用 MessageManager.Unregister<{type.Name}, {typeof(TResponse).Name}>()。");
 
-                _requestHandlers[type] = handler;
+                _requestHandlers[type] = new RequestHandlerEntry(handler, typeof(TResponse));
             }
         }
 
         /// <summary>
         /// 移除已注册的请求处理器。返回是否找到并移除。
-        /// <para>请求处理器表的键仅为请求类型,故 <typeparamref name="TResponse"/> 只用于与
-        /// <see cref="Register{TRequest, TResponse}"/> 的调用形态对称。</para>
+        /// <para><typeparamref name="TResponse"/> 必须与注册时声明的响应类型一致——表键只取请求类型,
+        /// 不校验就会让 <c>Unregister&lt;Req, 另一个响应类型&gt;()</c> 静默移除掉一个别的类型的处理器。
+        /// 不一致时不移除,记 Warning 并返回 <c>false</c>。</para>
         /// </summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
-        /// <typeparam name="TResponse">响应类型。</typeparam>
+        /// <typeparam name="TResponse">响应类型,须与 <see cref="Register{TRequest, TResponse}"/> 时一致。</typeparam>
         public static bool Unregister<TRequest, TResponse>()
         {
+            Type registeredResponseType;
             lock (_requestGate)
             {
-                return _requestHandlers.Remove(typeof(TRequest));
+                if (!_requestHandlers.TryGetValue(typeof(TRequest), out var entry))
+                    return false;
+
+                if (entry.ResponseType == typeof(TResponse))
+                    return _requestHandlers.Remove(typeof(TRequest));
+
+                registeredResponseType = entry.ResponseType;
             }
+
+            // 告警放锁外:与「只在锁内碰表」的既有约定一致
+            Debug.LogWarning(
+                $"[Message] 请求类型 '{typeof(TRequest).Name}' 注册的响应类型是 " +
+                $"'{registeredResponseType.Name}',不是 '{typeof(TResponse).Name}',本次 Unregister 未生效;" +
+                $"请改用 MessageManager.Unregister<{typeof(TRequest).Name}, {registeredResponseType.Name}>()。");
+            return false;
         }
 
         /// <summary>
@@ -290,6 +309,8 @@ namespace XFramework.XMessage
         /// <para>供调用方在发请求前探测响应方是否就绪——模块定位是跨模块解耦,请求方本就不该
         /// 假定响应方已注册。用本方法判断比捕获 <c>RequestAsync</c> 抛出的异常更直接,也不会与
         /// 处理器内部抛出的同类型异常混淆;若要在一次调用内完成「查 + 发」,改用 <c>TryRequestAsync</c>。</para>
+        /// <para><b>它只回答「这个请求类型有没有处理器」</b>:注册的响应类型与调用方要求的不一致时仍返回
+        /// <c>true</c>(那种情况由 <see cref="RequestAsync{TRequest, TResponse}"/> 抛出可读的异常)。</para>
         /// </summary>
         /// <typeparam name="TRequest">请求类型。</typeparam>
         /// <returns>已注册处理器时为 <c>true</c>。</returns>
@@ -311,7 +332,8 @@ namespace XFramework.XMessage
         /// 但不会中断已启动的处理器,是否响应取消仍由处理器决定——与 <c>PublishAsync</c> 同构。
         /// </param>
         /// <returns>响应对象。</returns>
-        /// <exception cref="InvalidOperationException">未注册对应的处理器时抛出。</exception>
+        /// <exception cref="InvalidOperationException">未注册对应的处理器,或已注册的响应类型与
+        /// <typeparamref name="TResponse"/> 不一致时抛出;两种原因的报错文案不同,可据此区分。</exception>
         /// <exception cref="OperationCanceledException">等待期间令牌被取消时抛出;已启动的处理器不受影响。</exception>
         public static UniTask<TResponse> RequestAsync<TRequest, TResponse>(
             TRequest request, CancellationToken cancellationToken = default)
@@ -319,7 +341,7 @@ namespace XFramework.XMessage
             if (!TryGetRequestHandler<TRequest, TResponse>(out var handler))
                 throw new InvalidOperationException(
                     $"[Message] 未注册请求类型 '{typeof(TRequest).Name}' 的处理器;" +
-                    $"请先调用 MessageManager.Register<{typeof(TRequest).Name}, TResponse>()。");
+                    $"请先调用 MessageManager.Register<{typeof(TRequest).Name}, {typeof(TResponse).Name}>()。");
 
             Interlocked.Increment(ref _requestCount);
 
@@ -346,6 +368,8 @@ namespace XFramework.XMessage
         /// <param name="request">请求对象。</param>
         /// <param name="cancellationToken">调用方令牌,原样转发给处理器,并用于取消本次等待。</param>
         /// <returns>成功时为 <c>(true, 响应)</c>;未注册处理器时为 <c>(false, default)</c>。</returns>
+        /// <exception cref="InvalidOperationException">已注册的响应类型与 <typeparamref name="TResponse"/>
+        /// 不一致时抛出——那是编程错误,不是「响应方未就绪」,故不折算成 <c>false</c>。</exception>
         /// <exception cref="OperationCanceledException">等待期间令牌被取消时抛出;已启动的处理器不受影响。</exception>
         public static async UniTask<(bool Success, TResponse Response)> TryRequestAsync<TRequest, TResponse>(
             TRequest request, CancellationToken cancellationToken = default)
@@ -549,23 +573,60 @@ namespace XFramework.XMessage
         #region Internal
 
         /// <summary>
-        /// 查找请求处理器。命中时在锁内取出并转型,<paramref name="handler"/> 供调用方在锁外执行。
-        /// <para><see cref="RequestAsync{TRequest, TResponse}"/> 与
-        /// <see cref="TryRequestAsync{TRequest, TResponse}"/> 共用本方法,故转型只此一处。</para>
+        /// 请求处理器表项:处理器本身 + 它注册时声明的响应类型。
+        /// <para>响应类型不是冗余:表的键只有请求类型,「本次请求要求的响应类型」与「已注册处理器声明的
+        /// 响应类型」是否一致只能靠这一份来校验。缺了它,取出后的强转在类型不匹配时抛裸
+        /// <see cref="InvalidCastException"/>——<c>UniTask&lt;T&gt;</c> 是结构体泛型,委托型变救不了,
+        /// 而报错里既没有模块前缀,也没有「该怎么改」的线索。</para>
+        /// <para>用结构体而非另开一张并行表:单份数据源不给自己留「两张表谁先更新」这个缺陷面,
+        /// 且值类型直接内联进字典的桶数组,不产生装箱。</para>
         /// </summary>
+        private readonly struct RequestHandlerEntry
+        {
+            /// <summary>处理器。</summary>
+            public readonly Delegate Handler;
+
+            /// <summary>注册时声明的响应类型。</summary>
+            public readonly Type ResponseType;
+
+            /// <summary>创建表项。</summary>
+            public RequestHandlerEntry(Delegate handler, Type responseType)
+            {
+                Handler = handler;
+                ResponseType = responseType;
+            }
+        }
+
+        /// <summary>
+        /// 查找请求处理器。命中时在锁内取出并校验响应类型,<paramref name="handler"/> 供调用方在锁外执行。
+        /// <para><see cref="RequestAsync{TRequest, TResponse}"/> 与
+        /// <see cref="TryRequestAsync{TRequest, TResponse}"/> 共用本方法,故校验只此一处。</para>
+        /// <para><b>判定顺序不可颠倒</b>:先查表(未注册)、后校验类型。未注册是运行时常态(响应方可能
+        /// 尚未就绪),类型不匹配是编程错误,两条报错必须能区分开。</para>
+        /// </summary>
+        /// <exception cref="InvalidOperationException">处理器已注册,但注册的响应类型与
+        /// <typeparamref name="TResponse"/> 不一致时抛出。</exception>
         private static bool TryGetRequestHandler<TRequest, TResponse>(
             out Func<TRequest, CancellationToken, UniTask<TResponse>> handler)
         {
             lock (_requestGate)
             {
-                if (_requestHandlers.TryGetValue(typeof(TRequest), out var stored))
+                if (!_requestHandlers.TryGetValue(typeof(TRequest), out var entry))
                 {
-                    handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)stored;
-                    return true;
+                    handler = null;
+                    return false;
                 }
 
-                handler = null;
-                return false;
+                if (entry.ResponseType != typeof(TResponse))
+                    throw new InvalidOperationException(
+                        $"[Message] 请求类型 '{typeof(TRequest).Name}' 注册的响应类型是 " +
+                        $"'{entry.ResponseType.Name}',本次请求要求 '{typeof(TResponse).Name}';" +
+                        $"同一请求类型只能注册一个处理器,请先用 " +
+                        $"MessageManager.Unregister<{typeof(TRequest).Name}, {entry.ResponseType.Name}>() 注销," +
+                        $"再调用 Register<{typeof(TRequest).Name}, {typeof(TResponse).Name}>()。");
+
+                handler = (Func<TRequest, CancellationToken, UniTask<TResponse>>)entry.Handler;
+                return true;
             }
         }
 

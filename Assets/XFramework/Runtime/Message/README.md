@@ -165,6 +165,8 @@ var (ok, response) = await MessageManager.TryRequestAsync<GetPlayerScoreRequest,
 
 > `TryRequestAsync` 返回的 `false` **只**表示「未注册处理器」;处理器自身抛出的异常照常向上传播,不会被折算成失败——需要区分二者时,失败后可用 `HasHandler<TRequest>()` 复核。
 
+> **注册与请求的响应类型必须一致**:处理器表的键只取请求类型,响应类型由注册时记下、并在取出处理器时校验。用不一致的响应类型发请求会抛 `InvalidOperationException`(报错里写明**已注册的是哪个**、**本次要求的是哪个**、该怎么改),而不是裸 `InvalidCastException`;`TryRequestAsync` 同样抛——类型不匹配是编程错误,不是「响应方未就绪」,故不折算成 `false`。`Unregister` 也校验:`Unregister<Req, 不一致的响应类型>()` 不会误删处理器,记 Warning 并返回 `false`。注意 `HasHandler<TRequest>()` 只回答「这个请求类型有没有处理器」,响应类型是否匹配不在它的答案里。
+
 > **令牌的两个作用**:`RequestAsync` 的令牌一方面**原样转发**给处理器(处理器据此把取消传递到下游),另一方面用于**取消本次等待**——取消会抛 `OperationCanceledException`,但不会中断已启动的处理器。取舍与 `PublishAsync` 一致:处理器是否响应取消由它自己决定,但调用方不会因为处理器忽略令牌而无法脱身。
 
 > **迁移提示**:异步处理器形参由 `request =>` 变为 `(request, ct) =>`。旧写法会因 lambda 元数不符而**编译期报错**,不会静默错绑。
