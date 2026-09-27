@@ -159,6 +159,31 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(0, calls.Count, "completed 后新订阅者不收到投递");
         }
 
+        [Test]
+        public void EmptyHandle_FromCompletedStream_IsSharedInstanceAndDisposable()
+        {
+            var stream = new EventStream<int>();
+            stream.OnCompleted();
+
+            // 空句柄在全仓只有一处来源:引擎与本模块 broker 共用同一实例。
+            // 每次 new 一个 ActionDisposable 也「能用」,但来源就变成两份,且共享实例上
+            // 「不得改为池化」这条不变量(见 ActionDisposable.Empty)会失去测试锁定。
+            var first = stream.Subscribe(_ => { });
+            var second = stream.Subscribe(_ => { });
+
+            Assert.AreSame(first, second, "completed 流返回的空句柄应是共享单例,而非每次新建");
+            Assert.DoesNotThrow(() =>
+            {
+                first.Dispose();
+                second.Dispose();
+            }, "共享句柄重复释放是 no-op");
+
+            var calls = new List<int>();
+            stream.Subscribe(calls.Add);
+            stream.OnNext(1);
+            Assert.AreEqual(0, calls.Count, "共享空句柄不改变「completed 后不投递」的语义");
+        }
+
         #endregion
 
         #region 异常语义(隔离 + 日志,不传播)

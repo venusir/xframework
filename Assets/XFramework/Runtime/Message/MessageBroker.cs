@@ -51,13 +51,6 @@ namespace XFramework.XMessage
         /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
         private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
-        /// <summary>
-        /// 空订阅句柄:令牌已取消等「无需登记」路径共用。
-        /// <para>无资源可释放,共享实例安全;不得返回 <c>null</c>——调用方
-        /// (<c>MessageManager.TryBindToDestroy</c> 等)会直接调 Dispose,不做判空。</para>
-        /// </summary>
-        private static readonly IDisposable EmptySubscription = ActionDisposable.Create(static () => { });
-
         #endregion
 
         #region Publish
@@ -212,7 +205,7 @@ namespace XFramework.XMessage
             // 实参会先于被调方法求值,若在 helper 内判令牌,GetOrCreateChannel<TMessage>() 已经建出了通道
             // (键值版连整条 _keyedChannels 表项),却永远没有订阅者来触发回收,只剩 TrimEmptyChannels 兜底。
             // 判空必须先于判令牌,否则 SubscribeAsync(null, 已取消令牌) 会吞掉 ArgumentNullException。
-            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+            if (cancellationToken.IsCancellationRequested) return ActionDisposable.Empty;
 
             return AddAsyncSubscription(
                 GetOrCreateChannel<TMessage>(), null, asyncHandler, cancellationToken);
@@ -226,7 +219,7 @@ namespace XFramework.XMessage
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
-            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+            if (cancellationToken.IsCancellationRequested) return ActionDisposable.Empty;
 
             return AddAsyncSubscription(
                 GetOrCreateChannel<TMessage>(), filter, asyncHandler, cancellationToken);
@@ -239,7 +232,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
-            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+            if (cancellationToken.IsCancellationRequested) return ActionDisposable.Empty;
 
             return AddAsyncSubscription(
                 GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
@@ -255,7 +248,7 @@ namespace XFramework.XMessage
         {
             if (filter == null) throw new ArgumentNullException(nameof(filter));
             if (asyncHandler == null) throw new ArgumentNullException(nameof(asyncHandler));
-            if (cancellationToken.IsCancellationRequested) return EmptySubscription;
+            if (cancellationToken.IsCancellationRequested) return ActionDisposable.Empty;
 
             return AddAsyncSubscription(
                 GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key),
@@ -715,7 +708,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
-                return EmptySubscription;
+                return ActionDisposable.Empty;
 
             return channel.AddAsync(filter, asyncHandler, cancellationToken);
         }

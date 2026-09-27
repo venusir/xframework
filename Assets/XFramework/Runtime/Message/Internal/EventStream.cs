@@ -54,9 +54,9 @@ namespace XFramework.XMessage.Internal
 
             lock (_sync)
             {
-                // completed 之后订阅:返回空句柄,不再投递
+                // completed 之后订阅:返回共享的空句柄(不再投递;空句柄只有一处来源,见 ActionDisposable.Empty)
                 if (_completed)
-                    return ActionDisposable.Create(() => { });
+                    return ActionDisposable.Empty;
 
                 var node = SubscriptionNodePool<T>.Rent();
                 node.Set(onNext);
