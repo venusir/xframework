@@ -418,6 +418,8 @@ namespace Venusy609.Xframework.Editor.Tests
         {
             Assert.Throws<ArgumentException>(() => new ParallelStage(null), "null 子阶段列表应抛参数异常");
             Assert.Throws<ArgumentException>(() => new ParallelStage(new IPipelineStage[0]), "空子阶段列表应抛参数异常");
+            Assert.Throws<ArgumentNullException>(() => new ParallelStage(new[] { new FakeStage() }, null),
+                "null 名称应抛参数异常(与 BuildPhaseGroups 对 nameFormat 的防御一致)");
         }
 
         #endregion

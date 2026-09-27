@@ -25,11 +25,14 @@ namespace XFramework.XPipeline
 
         /// <summary>构造串行阶段。</summary>
         /// <param name="stages">子阶段列表。null 或空抛 <see cref="ArgumentException"/>。</param>
-        /// <param name="name">阶段名称(进度描述)。默认 "Sequence"。</param>
+        /// <param name="name">阶段名称(进度描述)。默认 "Sequence";null 抛 <see cref="ArgumentNullException"/>
+        /// (与 <see cref="Pipeline.BuildPhaseGroups"/> 对 nameFormat 的防御一致)。</param>
         public SequenceStage(IReadOnlyList<IPipelineStage> stages, string name = "Sequence")
         {
             if (stages == null || stages.Count == 0)
                 throw new ArgumentException("stages must not be null or empty.", nameof(stages));
+            if (name == null)
+                throw new ArgumentNullException(nameof(name));
 
             _children = new List<IPipelineStage>(stages);
             _name = name;
