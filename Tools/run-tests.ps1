@@ -22,10 +22,18 @@
     壳不存在时回退到本仓库运行，此时必须先关闭编辑器，否则会争 Library 锁。
 
 .PARAMETER Filter
-    测试过滤器，如 XFramework.XSettings.Tests.SettingsDefaultValueTests 或类名的一部分。
+    测试过滤器，**正则**（Unity -testFilter 的语义，不是子串匹配），如
+    XFramework.XSettings.Tests.SettingsDefaultValueTests 或类名的一部分；点号记得转义，
+    否则 `.` 会被当成「任意字符」而捞到别的 fixture。
     留空则跑全量，即门禁：应为 0 失败。
     注意过滤器只在自己的平台内匹配：给过滤器的同时未显式指定 -Platform 时只跑 PlayMode
     （保持日常定向跑的耗时与手感）；要跑 EditMode 侧的过滤器请显式 -Platform EditMode。
+
+.PARAMETER Fixture
+    按 fixture（测试类）名精确匹配，如 `PoolTests`。内部生成 `\.PoolTests\.`——用**转义的
+    点**锚定类名边界，因此只命中 `Namespace.PoolTests.Method` 这一形态。想当然的写法都会误捞
+    （`PoolTests`、`PoolTests.`、`.PoolTests.` 实测都会连 `CollectionPoolTests` 一起捞）。
+    与 -Filter 互斥；其余行为（未显式指定平台时只跑 PlayMode、0 命中告警）与 -Filter 相同。
 
 .PARAMETER Platform
     All（默认）、PlayMode（Tests/Runtime 下的用例都在这里）或 EditMode。
@@ -49,11 +57,12 @@
 .EXAMPLE
     pwsh -File Tools/run-tests.ps1 -Setup                # 新机器上先建壳
     pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests          # 定向跑（PlayMode）
-    pwsh -File Tools/run-tests.ps1 -Filter PoolTests -Platform EditMode
+    pwsh -File Tools/run-tests.ps1 -Fixture PoolTests -Platform EditMode
     pwsh -File Tools/run-tests.ps1                       # 全量双平台（门禁：应为 0 失败）
 #>
 param(
     [string]$Filter = "",
+    [string]$Fixture = "",
     [ValidateSet("PlayMode", "EditMode", "All")]
     [string]$Platform = "All",
     [int]$ShrinkTolerance = 5,
@@ -63,6 +72,21 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# -Fixture 是 -Filter 的语法糖：把类名包成 **转义的点** 锚定的正则。
+#
+# 前提：Unity 的 -testFilter 是**正则**，不是子串匹配（实测）。于是类名边界必须用 `\.` 锚定，
+# 而 `.` 本身是「任意字符」。两种想当然的写法都实测会误捞：
+#   `PoolTests`   → 命中 CollectionPoolTests（名字后缀共享）
+#   `PoolTests.`  → 同上（尾点解决不了后缀共享）
+#   `.PoolTests.` → 同上（未转义的点匹配任意字符）
+# 只有 `\.PoolTests\.` 精确命中 Namespace.PoolTests.Method 这一形态（实测 26 vs 40）。
+if ($Fixture) {
+    if ($Filter) {
+        Write-Error "-Filter 与 -Fixture 互斥：前者是任意正则片段，后者按 fixture 精确匹配，请只给一个。"
+    }
+    $Filter = "\.$($Fixture -replace '\.', '\.')\."
+}
 
 # ---------- 定位仓库与 Unity ----------
 

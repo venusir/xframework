@@ -69,7 +69,8 @@
 
 | 参数 | 说明 |
 |---|---|
-| `-Filter <片段>` | 类名或片段，模糊匹配；留空 = 全量（门禁） |
+| `-Filter <片段>` | **正则**匹配（Unity `-testFilter` 的语义，不是子串）；留空 = 全量（门禁）。点号不转义即「任意字符」，`PoolTests` 会连 `CollectionPoolTests` 一起捞 |
+| `-Fixture <类名>` | 按 fixture 精确匹配（内部生成 `\.<类名>\.`）；与 `-Filter` 互斥 |
 | `-Platform` | `All`（默认）/ `PlayMode` / `EditMode`；带 `-Filter` 且未显式指定时只跑 `PlayMode` |
 | `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」） |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
