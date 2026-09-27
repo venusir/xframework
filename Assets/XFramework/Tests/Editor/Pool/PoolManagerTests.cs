@@ -126,6 +126,14 @@ namespace Venusy609.Xframework.Editor.Tests
             }
         }
 
+        /// <summary>Configure 带丢弃回调用例专用类型。</summary>
+        private sealed class DestroyerItem
+        {
+            public DestroyerItem()
+            {
+            }
+        }
+
         [TearDown]
         public void TearDown()
         {
@@ -144,6 +152,7 @@ namespace Venusy609.Xframework.Editor.Tests
             PoolManager.RemovePool<UsingGenItem>();
             PoolManager.RemovePool<ReconfigureItem>();
             PoolManager.RemovePool<DualGenItem>();
+            PoolManager.RemovePool<DestroyerItem>();
         }
 
         [Test]
@@ -278,6 +287,23 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.That(configuredCalls, Is.EqualTo(1), "无参入口建池应使用 Configure 的生成器");
             PoolManager.Return(item);
             Assert.AreSame(item, PoolManager.Get<ConfigureGenItem>());
+        }
+
+        [Test]
+        public void Configure_WithDestroyer_ReachesPoolOnOverflow()
+        {
+            var destroyed = 0;
+            PoolManager.Configure<DestroyerItem>(
+                new PoolConfig { MaxSize = 1 },
+                () => new DestroyerItem(),
+                _ => destroyed++);
+
+            var a = PoolManager.Get<DestroyerItem>();
+            var b = PoolManager.Get<DestroyerItem>();
+            PoolManager.Return(a);
+            PoolManager.Return(b); // 超容，放不下
+
+            Assert.That(destroyed, Is.EqualTo(1), "配置的丢弃回调应透传到池");
         }
 
         [Test]

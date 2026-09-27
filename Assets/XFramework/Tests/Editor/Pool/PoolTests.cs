@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -10,7 +11,8 @@ namespace Venusy609.Xframework.Editor.Tests
     /// <see cref="Pool{T}"/> 泛型对象池核心测试。
     /// <para>覆盖：生成与复用、预热与容量、计数语义（CountAll 只增不减 / CountActive 随取还增减）、
     /// Clear 语义（回归：活跃实例 Clear 后仍可归还复用）、
-    /// CollectionCheck 重复归还检测、回调优先级（委托 > IPoolable）、GetPooled 手动归还。</para>
+    /// CollectionCheck 重复归还检测、回调优先级（委托 > IPoolable / IPoolDiscardable）、
+    /// 池满丢弃回调、GetPooled 手动归还。</para>
     /// <para>全部直接实例化 <see cref="Pool{T}"/>，不经静态门面，无跨测试静态状态。</para>
     /// </summary>
     class PoolTests
@@ -28,6 +30,14 @@ namespace Venusy609.Xframework.Editor.Tests
 
             void IPoolable.OnRent() => RentCount++;
             void IPoolable.OnReturn() => ReturnCount++;
+        }
+
+        /// <summary>实现 <see cref="IPoolDiscardable"/> 的计数类型。</summary>
+        private sealed class DiscardableItem : IPoolDiscardable
+        {
+            public int DiscardCount;
+
+            void IPoolDiscardable.OnDiscard() => DiscardCount++;
         }
 
         /// <summary>重写相等语义的类型：不同实例可能逻辑相等（<see cref="Id"/> 相同）。</summary>
@@ -316,6 +326,72 @@ namespace Venusy609.Xframework.Editor.Tests
             pool.Return(item);
             Assert.That(item.ReturnCount, Is.EqualTo(1));
             Assert.That(pool.CountInactive, Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Destroy_OnOverflow_InvokesDelegate()
+        {
+            var destroyed = new List<TestItem>();
+            var pool = new Pool<TestItem>(
+                () => new TestItem(),
+                new PoolConfig { MaxSize = 1 },
+                onDestroy: destroyed.Add);
+
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a); // 入池
+            pool.Return(b); // 超容，放不下
+
+            Assert.That(pool.CountInactive, Is.EqualTo(1));
+            Assert.That(destroyed.Count, Is.EqualTo(1), "超容丢弃应触发丢弃回调");
+            Assert.AreSame(b, destroyed[0], "被丢弃的应是放不下的那个");
+        }
+
+        [Test]
+        public void Destroy_WithinCapacity_IsNotInvoked()
+        {
+            var destroyed = 0;
+            var pool = new Pool<TestItem>(
+                () => new TestItem(),
+                new PoolConfig { MaxSize = 4 },
+                onDestroy: _ => destroyed++);
+
+            var item = pool.Get();
+            pool.Return(item);
+
+            Assert.That(destroyed, Is.EqualTo(0), "正常入池的实例不应触发丢弃回调");
+        }
+
+        [Test]
+        public void Discard_Interface_InvokedOnOverflowOnly()
+        {
+            var pool = new Pool<DiscardableItem>(() => new DiscardableItem(), new PoolConfig { MaxSize = 1 });
+
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a);
+            pool.Return(b);
+
+            Assert.That(a.DiscardCount, Is.EqualTo(0), "入池的实例不应触发 OnDiscard");
+            Assert.That(b.DiscardCount, Is.EqualTo(1), "被丢弃的实例应触发 OnDiscard");
+        }
+
+        [Test]
+        public void Discard_DelegateTakesPrecedenceOverInterface()
+        {
+            var delegateCalls = 0;
+            var pool = new Pool<DiscardableItem>(
+                () => new DiscardableItem(),
+                new PoolConfig { MaxSize = 1 },
+                onDestroy: _ => delegateCalls++);
+
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a);
+            pool.Return(b);
+
+            Assert.That(delegateCalls, Is.EqualTo(1), "委托应触发");
+            Assert.That(b.DiscardCount, Is.EqualTo(0), "存在委托时接口 OnDiscard 不应触发");
         }
 
         [Test]

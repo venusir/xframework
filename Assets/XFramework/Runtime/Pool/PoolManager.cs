@@ -121,14 +121,7 @@ namespace XFramework.XPool
         /// <param name="config">池配置</param>
         public static void Configure<T>(PoolConfig config) where T : class, new()
         {
-            if (_pools.ContainsKey(typeof(T)))
-            {
-                Debug.LogWarning(
-                    $"[PoolManager] 类型 {typeof(T).Name} 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<{typeof(T).Name}>()。");
-                return;
-            }
-
-            _configs[typeof(T)] = config;
+            Register<T>(config, null, null);
         }
 
         /// <summary>
@@ -143,6 +136,32 @@ namespace XFramework.XPool
         /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
         public static void Configure<T>(PoolConfig config, Func<T> generator) where T : class
         {
+            Register<T>(config, generator, null);
+        }
+
+        /// <summary>
+        /// 预配置池参数、自定义生成器与丢弃回调，在该类型首次建池时一次性消费生效。
+        /// <para>丢弃回调即 <see cref="Pool{T}"/> 的 <c>onDestroy</c>：实例因池满被丢弃时触发，
+        /// 用于释放需要确定性回收的资源。类型实现 <see cref="IPoolDiscardable"/> 可达到同样效果，
+        /// 本重载则无需改动类型（委托优先于接口）。</para>
+        /// <para>其余语义同 <see cref="Configure{T}(PoolConfig, Func{T})"/>：池已创建则告警并忽略；
+        /// 无参入口建池时使用本生成器，显式传入的生成器优先（配置的容量 / 预热仍生效）。</para>
+        /// </summary>
+        /// <typeparam name="T">对象类型，需为引用类型</typeparam>
+        /// <param name="config">池配置</param>
+        /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
+        /// <param name="destroyer">实例因池满被丢弃时的回调（首次建池时生效）</param>
+        public static void Configure<T>(PoolConfig config, Func<T> generator, Action<T> destroyer) where T : class
+        {
+            Register<T>(config, generator, destroyer);
+        }
+
+        /// <summary>
+        /// <see cref="Configure{T}(PoolConfig)"/> 各重载的统一落点：池已存在则告警并忽略，
+        /// 否则登记为该类型的一次性配置（首次建池时消费，见 <see cref="GetOrCreatePoolCore{T}"/>）。
+        /// </summary>
+        private static void Register<T>(PoolConfig config, Func<T> generator, Action<T> destroyer) where T : class
+        {
             if (_pools.ContainsKey(typeof(T)))
             {
                 Debug.LogWarning(
@@ -150,7 +169,12 @@ namespace XFramework.XPool
                 return;
             }
 
-            _configs[typeof(T)] = (config, generator);
+            _configs[typeof(T)] = new PoolConfigEntry<T>
+            {
+                Config = config,
+                Generator = generator,
+                Destroyer = destroyer
+            };
         }
 
         #endregion
@@ -217,7 +241,7 @@ namespace XFramework.XPool
         /// 建池统一入口：池已存在直接返回（同一类型全局单池）；否则消费 <c>_configs</c> 中
         /// 该类型的一次性配置后创建。
         /// <para>显式传入的生成器（<c>generatorIsExplicit</c>）优先于 Configure 的生成器，
-        /// 但配置中的容量 / 预热仍生效；裸 <c>PoolConfig</c> 条目不影响生成器。</para>
+        /// 但配置中的容量 / 预热仍生效；配置里的丢弃回调没有显式入口，一律生效。</para>
         /// </summary>
         private static IPool<T> GetOrCreatePoolCore<T>(Func<T> generator, bool generatorIsExplicit)
             where T : class
@@ -226,25 +250,35 @@ namespace XFramework.XPool
                 return (IPool<T>)poolObj;
 
             PoolConfig config = PoolConfig.Default;
+            Action<T> destroyer = null;
 
             if (_configs.TryGetValue(typeof(T), out var cfgObj))
             {
-                if (cfgObj is (PoolConfig cfg, Func<T> gen))
+                if (cfgObj is PoolConfigEntry<T> entry)
                 {
-                    config = cfg;
-                    if (!generatorIsExplicit)
-                        generator = gen;
-                }
-                else if (cfgObj is PoolConfig cfgOnly)
-                {
-                    config = cfgOnly;
+                    config = entry.Config;
+                    destroyer = entry.Destroyer;
+                    if (!generatorIsExplicit && entry.Generator != null)
+                        generator = entry.Generator;
                 }
                 _configs.Remove(typeof(T));
             }
 
-            var pool = new Pool<T>(generator, config);
+            var pool = new Pool<T>(generator, config, onDestroy: destroyer);
             _pools[typeof(T)] = pool;
             return pool;
+        }
+
+        /// <summary>
+        /// 某类型待消费的一次性配置。
+        /// <para>归一化成一个条目而不是用 <c>ValueTuple</c> 的形状做模式匹配：每多一个可选配置维度
+        /// 就要多一种元组形状，读起来是「猜哪几个字段被填了」，而且 <c>PoolConfig</c> 会因此被装箱。</para>
+        /// </summary>
+        private sealed class PoolConfigEntry<T> where T : class
+        {
+            public PoolConfig Config;
+            public Func<T> Generator;
+            public Action<T> Destroyer;
         }
 
         #endregion

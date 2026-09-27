@@ -27,6 +27,7 @@ namespace XFramework.XPool
         private readonly Func<T> _generator;
         private readonly Action<T> _onRent;
         private readonly Action<T> _onReturn;
+        private readonly Action<T> _onDestroy;
         private readonly int _maxSize;
         private int _totalCreated;
         private int _activeCount;
@@ -52,11 +53,14 @@ namespace XFramework.XPool
         /// （无预热、不限容量、Editor 下启用重复归还检测）</param>
         /// <param name="onRent">取出时的委托回调（可选，优先于 <see cref="IPoolable.OnRent"/>）</param>
         /// <param name="onReturn">归还时的委托回调（可选，优先于 <see cref="IPoolable.OnReturn"/>）</param>
+        /// <param name="onDestroy">实例因池满被丢弃时的委托回调（可选，优先于 <see cref="IPoolDiscardable.OnDiscard"/>）。
+        /// 归还回调仍会先触发——它负责「清理状态」，丢弃回调负责「释放资源」</param>
         public Pool(
             Func<T> generator,
             PoolConfig? config = null,
             Action<T> onRent = null,
-            Action<T> onReturn = null)
+            Action<T> onReturn = null,
+            Action<T> onDestroy = null)
         {
             _generator = generator ?? throw new ArgumentNullException(nameof(generator));
 
@@ -67,6 +71,7 @@ namespace XFramework.XPool
             _maxSize = cfg.MaxSize > 0 ? cfg.MaxSize : int.MaxValue;
             _onRent = onRent;
             _onReturn = onReturn;
+            _onDestroy = onDestroy;
 
             // 预热数量与栈容量一并钳到上限：上限是「池里最多留多少」，预热是「要提前造多少」，
             // 前者没理由被后者压过——否则一建池闲置数就超限，多造的实例还会白占栈容量
@@ -162,7 +167,14 @@ namespace XFramework.XPool
             {
                 _stack.Push(item);
             }
-            // else: 超出容量，丢弃，由 GC 回收
+            else
+            {
+                // 超出容量：实例不会再有被复用的机会，交给丢弃回调释放资源（委托优先，其次接口）
+                if (_onDestroy != null)
+                    _onDestroy(item);
+                else if (item is IPoolDiscardable discardable)
+                    discardable.OnDiscard();
+            }
         }
 
         /// <summary>
