@@ -1,11 +1,11 @@
 <#
 .SYNOPSIS
-    统计 XFramework 包内 XML 文档注释的编译告警（CS1570 格式错误 / CS1574 cref 无法解析）。
+    XFramework 包内自检：XML 文档注释的编译告警（CS1570 / CS1574）+ 资源 .meta 完整性。
 
 .DESCRIPTION
-    Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本不检查文档注释**：
-    `<see cref="..."/>` 解析不了也不报错。本脚本显式开启文档生成、强制全量重编一次，
-    把这条从未走过的检查通道照亮。
+    **一、文档注释告警。** Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本
+    不检查文档注释**：`<see cref="..."/>` 解析不了也不报错。本脚本显式开启文档生成、强制全量
+    重编一次，把这条从未走过的检查通道照亮。
 
     为什么要看这两类告警：
     - **CS1570（XML 格式错误）**：一块注释的 XML 解析失败后，**编译器丢弃整条注释**——该成员的
@@ -31,7 +31,13 @@
     **遮蔽关系：** CS1570 会掩盖同一块注释里的 CS1574——块解析失败后，块内 cref 一律不再被检查。
     所以「没有 CS1574」推不出「链接都有效」，先清 CS1570 再看 CS1574 的真实数量。
 
-    **本脚本是诊断工具，不是门禁**：只报告数量，不设通过/失败。离零还远时设成门禁只会被无视。
+    **二、包完整性（`.meta`）。** 本包以 UPM 形式供第三方引入，资源缺 `.meta` 会让对方导入时
+    生成**不同的 GUID**——若该文件被 prefab/scene 引用就是断链。逐个检查几乎零成本，故与文档告警
+    一并报告、一并在 `-Enforce` 下判失败。
+    注意 Unity 自身不给「点开头的文件/目录」与「`~` 结尾」的条目生成 meta（如
+    `Samples/Example/.sample.json`），这两类一律跳过，否则会永远误报。
+
+    **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（两类检查都须为 0）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -89,6 +95,24 @@ if ($missing.Count -gt 0) {
     $missing | Select-Object -First 10 | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }
     if ($missing.Count -gt 10) { Write-Host "    …共 $($missing.Count) 个" -ForegroundColor Yellow }
     Write-Host "  处置：让 Unity 重新生成 csproj（切回编辑器触发一次重编），或临时手插一行 <Compile Include>。" -ForegroundColor Yellow
+}
+
+# ---------- 再查「包内资源有没有漏 .meta」 ----------
+#
+# 本包以 UPM 形式供第三方引入，缺 .meta 会让对方导入时生成**不同的 GUID**——若该文件被
+# prefab/scene 引用就是断链。检查几乎零成本，故与文档告警一并报告、一并在 -Enforce 下判失败。
+#
+# Unity 自身不给「点开头的文件/目录」与「~ 结尾」的条目生成 meta（如 Samples/Example/.sample.json），
+# 这两类一律跳过，否则会永远误报。
+
+$pkgRoot = Join-Path $repoRoot "Assets\XFramework"
+$metaMissing = @()
+foreach ($item in (Get-ChildItem $pkgRoot -Recurse -Force -ErrorAction SilentlyContinue)) {
+    $name = $item.Name
+    if ($name -like '*.meta' -or $name.StartsWith('.') -or $name.EndsWith('~')) { continue }
+    if (-not (Test-Path ("$($item.FullName).meta"))) {
+        $metaMissing += ($item.FullName.Substring($repoRoot.Length + 1) -replace '\\', '/')
+    }
 }
 
 # ---------- 开文档生成、强制全量重编 ----------
@@ -177,6 +201,13 @@ if ($Module) {
     }
     Write-Host ""
     Write-Host ("  包内合计: {0} 条" -f $warnings.Count) -ForegroundColor Cyan
+    if ($metaMissing.Count -eq 0) {
+        Write-Host "  包完整性: 全部条目都有 .meta" -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  包完整性: 缺 .meta 的条目 {0} 个" -f $metaMissing.Count) -ForegroundColor Yellow
+        $metaMissing | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+        if ($metaMissing.Count -gt 10) { Write-Host "      …共 $($metaMissing.Count) 个" -ForegroundColor Yellow }
+    }
     Write-Host "  提示：先清 CS1570（它是遮蔽源），再看 CS1574 的真实数量。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
 
@@ -192,6 +223,7 @@ if (-not $Enforce) {
 
 $problems = @()
 if ($warnings.Count -gt 0) { $problems += "包内 XML 文档告警 $($warnings.Count) 条（须为 0）" }
+if ($metaMissing.Count -gt 0) { $problems += "包内有 $($metaMissing.Count) 个条目缺 .meta（第三方导入会拿到不同 GUID）" }
 if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
 
 if ($problems.Count -gt 0) {
