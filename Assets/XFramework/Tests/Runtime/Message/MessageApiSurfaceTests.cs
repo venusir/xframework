@@ -63,6 +63,14 @@ namespace XFramework.XMessage.Tests
         {
         }
 
+        /// <summary>扩展方法面的订阅者替身,用于在字段实例上调用 <c>this.SubscribeXxx(...)</c> 形态。</summary>
+        private sealed class PlainSubscriber : IMessageSubscriber
+        {
+            public int ReceivedCount { get; private set; }
+
+            public void Handle(TestMessage message) => ReceivedCount++;
+        }
+
         #endregion
 
         [SetUp]
@@ -118,6 +126,38 @@ namespace XFramework.XMessage.Tests
                 () => MessageManager.SubscribeBuffered<TestMessage>((Predicate<TestMessage>)null, _ => { }));
             Assert.Throws<ArgumentNullException>(
                 () => MessageManager.SubscribeBuffered<string, TestMessage>("k", (Action<TestMessage>)null));
+        }
+
+        [Test]
+        public void SubscribeBufferedExtensions_NullArguments_Throw()
+        {
+            // 扩展面(接收者是 IMessageSubscriber)同样要判空,且参数名不得在转发时调换:
+            // 底层对 (key, filter, handler) 的判定顺序是 filter 先于 handler
+            var subscriber = new PlainSubscriber();
+
+            var ex = Assert.Throws<ArgumentNullException>(() =>
+                subscriber.SubscribeBuffered<string, TestMessage>("k", null, _ => { }));
+            Assert.AreEqual("filter", ex.ParamName, "过滤条件为 null 应指向 filter");
+
+            Assert.Throws<ArgumentNullException>(() =>
+                subscriber.SubscribeBuffered<string, TestMessage>("k", _ => true, (Action<TestMessage>)null));
+        }
+
+        [Test]
+        public void SubscribeBufferedExtensions_TwoArgFilterCall_ResolvesToTypeLevelOverload()
+        {
+            // 锁定重载决议结论:两参调用 (filter, handler) 必须落到「类型级带过滤」版,
+            // 而不是被 (TKey, Action<TMessage>) 捕获成「把谓词当 Key」。
+            // 该结论此前用独立复现程序编译验证过(16 个重载形状 + 14 个调用形状,含这条);
+            // 复现程序不入库,故用本用例把结论钉在仓库里——解析一旦漂移,这里立刻红。
+            var subscriber = new PlainSubscriber();
+            subscriber.SubscribeBuffered<TestMessage>(msg => msg.Value > 10, subscriber.Handle);
+
+            MessageManager.Publish(new TestMessage { Value = 15 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "类型级消息应通过过滤并送达");
+
+            MessageManager.Publish("k", new TestMessage { Value = 25 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "键值消息不应送达:说明它落的是类型级重载,不是键值版");
         }
 
         [Test]

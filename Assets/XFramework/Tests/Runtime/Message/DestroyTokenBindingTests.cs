@@ -130,6 +130,41 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(2, subscriber.ReceivedCount);
         }
 
+        [Test]
+        public void SubscribeBuffered_KeyedWithFilter_DestroyTokenOwner_UnsubscribesOnCancel()
+        {
+            var subscriber = new TokenOwningSubscriber();
+
+            // 先发一条通过过滤的，用于验证「订阅即重放最近一条」在带过滤的键值重载上同样生效
+            MessageManager.Publish("Score", new TestMessage { Value = 15 });
+
+            subscriber.SubscribeBuffered<string, TestMessage>("Score", msg => msg.Value > 10, subscriber.Handle);
+            Assert.AreEqual(1, subscriber.ReceivedCount, "缓冲订阅应立即重放最近一条通过过滤的消息");
+
+            subscriber.Destroy();
+            MessageManager.Publish("Score", new TestMessage { Value = 25 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "令牌取消后应自动退订");
+        }
+
+        [Test]
+        public void SubscribeBuffered_KeyedWithFilter_FilterAppliesToReplayAndLive()
+        {
+            // 与静态版 SubscribeBuffered_WithKeyAndFilter_ReplayAndLiveBothFiltered 同一组断言，
+            // 改经扩展面复跑：证明它转发到的是「带过滤」的那个重载，而不是相邻同形的无过滤重载
+            MessageManager.Publish("Score", new TestMessage { Value = 5 });
+            MessageManager.Publish("Score", new TestMessage { Value = 15 });
+
+            var subscriber = new TokenOwningSubscriber();
+            subscriber.SubscribeBuffered<string, TestMessage>("Score", msg => msg.Value > 10, subscriber.Handle);
+
+            Assert.AreEqual(1, subscriber.ReceivedCount, "重放同样走过滤:5 被拦、15 通过");
+
+            MessageManager.Publish("Score", new TestMessage { Value = 25 });
+            MessageManager.Publish("Score", new TestMessage { Value = 1 });
+
+            Assert.AreEqual(2, subscriber.ReceivedCount, "实时同样走过滤:25 通过、1 被拦");
+        }
+
         private sealed class PlainSubscriber : IMessageSubscriber
         {
             public int ReceivedCount { get; private set; }

@@ -578,6 +578,20 @@ namespace XFramework.XMessage
             return disposable;
         }
 
+        /// <summary>
+        /// 订阅带缓冲的键值消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息（重放与实时共用同一过滤）。
+        /// <para>订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</para>
+        /// <para><b>键的生命周期结束时必须淘汰</b>:调用 <see cref="EvictBufferedChannel{TKey, TMessage}(TKey)"/>，
+        /// 否则该 Key 会把上一个同 Id 实体的旧值重放给新订阅者（详见模块 README「内存管理」）。</para>
+        /// </summary>
+        public static IDisposable SubscribeBuffered<TKey, TMessage>(
+            this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
+        {
+            var disposable = _broker.SubscribeBuffered(key, filter, handler);
+            TryBindToDestroy(subscriber, disposable);
+            return disposable;
+        }
+
         #endregion
 
         #region Internal
