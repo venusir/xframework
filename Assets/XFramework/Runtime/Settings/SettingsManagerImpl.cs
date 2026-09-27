@@ -2,14 +2,14 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
-using XFramework.XMessage.Internal;
+using XFramework.XEvent;
 using XFramework.XUpdate;
 
 namespace XFramework.XSettings
 {
     /// <summary>
     /// <see cref="ISettingsManager{T}"/> 的默认实现。
-    /// <para>内部使用自研 <see cref="EventStream{T}"/> 驱动响应式通知，
+    /// <para>内部使用自研 <see cref="XFramework.XEvent.IEventStream{T}"/> 驱动响应式通知，
     /// 并通过 <see cref="MessageManager"/> 发布 <see cref="SettingsChangedMessage"/>。</para>
     /// <para>不会自动保存——调用方需显式调用 <see cref="Save"/> 来持久化。</para>
     /// </summary>
@@ -21,7 +21,7 @@ namespace XFramework.XSettings
         private T _settings;
         private ISettingsStore _store;
         private readonly Func<T> _defaultFactory;
-        private readonly EventStream<T> _changedStream = new();
+        private readonly IEventStream<T> _changedStream = EventStream.Create<T>();
         private bool _disposed;
 
         /// <summary>

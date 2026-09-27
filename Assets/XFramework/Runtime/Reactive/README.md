@@ -2,7 +2,7 @@
 
 ## 概述
 
-XFramework 响应式模块提供**响应式属性**。基于 XMessage 模块的事件流引擎(`XFramework.XMessage.Internal`)实现,可在任意 C# 类中使用。
+XFramework 响应式模块提供**响应式属性**。基于 `XFramework.XEvent` 模块的事件流引擎实现,可在任意 C# 类中使用。
 
 - `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)
 - `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)。同样实现 `IReactiveProperty<T>`(只读接口本无 setter,故不因此获得写入能力),可直接交给收该接口的绑定 API,也可继续 `Select` 做链式映射
@@ -21,7 +21,7 @@ Runtime/Reactive/
 └── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
 ```
 
-事件流引擎位于 Message 模块(`Runtime/Message/Internal/`,`XFramework.XMessage.Internal`)。
+事件流引擎位于 Event 模块(`Runtime/Event/`,`XFramework.XEvent`)——本模块经它的**公开面**使用(`IEventStream<T>` / `EventStream.Create`),不触碰其内部实现。
 
 ## 快速使用
 
@@ -125,19 +125,19 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 
 ## 设计原则
 
-- **事件流驱动** — 基于 Message 模块自研事件流引擎(锁 + 快照线程模型、订阅节点池)
+- **事件流驱动** — 基于 `XFramework.XEvent` 自研事件流引擎(锁 + 快照线程模型、订阅节点池)
 - **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
 - **相同值去重** — 设置相同值不通知。**这是本模块两个类型的行为,不是接口保证**(见「接口承诺到哪为止」)
 - **读宽容、写严格** — 已释放后读取 `Value` 仍返回最后持有的值（与 `ReadOnlyReactiveProperty<T>` 一致）；写入 `Value` 与订阅则抛 `ObjectDisposedException`。读是只读操作、不改变任何状态,让它抛只会把「先 Dispose 再读一次收尾值」变成必须 try/catch 的地雷;写是编程错误,应当被立刻发现。**同样只是本模块类型的行为**——`SettingRef.Value` 在设置类型注销后照抛
-- **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Message 模块 README 的线程说明)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
+- **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
 - **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
 - **异常隔离** — **投递**路径的订阅回调抛异常记 Error 日志后继续;订阅时的立即回调属于注册期、同步执行,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)。两条路径语义不同是有意的:绑定初始化失败应当被看见,而运行期的单个订阅者出错不该拖垮其余订阅者
 
 ## 依赖
 
-- `XFramework.XMessage` 的**事件流引擎**——单向依赖:Reactive → Message。用的是内部命名空间 `XFramework.XMessage.Internal` 里的 `EventStream<T>`,而非公开 API
-- 全局消息总线亦在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`
+- `XFramework.XEvent` 的**事件流引擎**——单向依赖:Reactive → Event。用的是它的**公开面**(`IEventStream<T>` / `EventStream.Create` / `SubscriptionCount`),不再触碰任何模块的 `Internal` 命名空间
+- 全局消息总线在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`;本模块**不**依赖它
 
-> **已知的待解决依赖**：本模块直接 `using XFramework.XMessage.Internal` 取 `EventStream<T>`。这**不算违规**——没有任何成文规则禁止跨模块引用它（`CLAUDE.md` 与 Message README 都没有规定谁可以使用该命名空间），而恰恰是「没有规则」才是问题：全框架共用一个 asmdef，`internal` 并不构成编译边界，于是「Reactive 依赖 Message 的实现细节」这件事既没有编译器约束、也没有成文约定可依。
->
-> 同类引用还有 Input（1 处）与 Settings（2 处），合计 **5 个跨模块文件**，用到的成员只有 `Subscribe` / `OnNext` / `OnCompleted` / `Dispose` 四个——消费面很窄，但落点确实是内部命名空间。统一方案（把引擎下沉为独立共享模块 / 提升为 Message 公开 API / 各消费方自带实现）**尚未确定**，故此处如实标注：`EventStream<T>` 目前**不是**稳定公开契约，不要据现状假定它可用。
+> **这条依赖曾经的形态(留档)**：引擎原先物理上住在 `XMessage.Internal` 里,本模块直接 `using` 它取 `EventStream<T>`——合计 5 个跨模块文件引用同一处内部命名空间,而全框架共用一个 asmdef、`internal` 不构成编译边界,既没有编译器约束、也没有成文约定可依。2026-09-27 把引擎下沉为**独立模块** `XFramework.XEvent`(公开接口 + 静态工厂 + internal 实现,照 Pipeline 先例),这条依赖随之变成**公开、单向、可自查**——`Tests/Editor/Architecture/ModuleBoundaryTests` 会拦住任何模块对别的模块 `Internal` 的新引用。引擎的语义契约(派发顺序 LIFO、重入、异常隔离、completed 与 Dispose 的差别等)现由 [Event README](../Event/README.md) 承载,本节不再复述。
+
+> **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`OnCompleted` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「派发顺序与重入」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。

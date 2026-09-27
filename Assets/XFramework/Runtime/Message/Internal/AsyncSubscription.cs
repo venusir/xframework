@@ -8,7 +8,7 @@ namespace XFramework.XMessage.Internal
     /// <summary>
     /// 一条异步订阅登记项,同时作为返回给调用方的退订句柄。
     /// <para>
-    /// 异步处理器不落在 EventStream 的订阅链表中,而是单独登记在通道的异步列表里——
+    /// 异步处理器不落在事件流(IEventStream)的订阅链表中,而是单独登记在通道的异步列表里——
     /// 这样同步派发与「等待全部异步处理器完成」才能各走各的路径。
     /// </para>
     /// </summary>

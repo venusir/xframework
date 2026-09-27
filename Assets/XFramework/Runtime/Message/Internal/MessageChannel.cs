@@ -2,12 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using XFramework.XEvent;
 
 namespace XFramework.XMessage.Internal
 {
     /// <summary>
     /// 一条消息通道:聚合同一 (消息类型[, Key]) 下的同步订阅流、缓冲订阅流与异步订阅登记。
     /// <para>三者均惰性创建——从未被使用的方向保持为 <c>null</c>,不产生空分配。</para>
+    /// <para>两条流来自 <see cref="XFramework.XEvent"/> 模块(事件流引擎),本类只负责把它们的生命周期
+    /// 接到总线的通道表上:同步流接上「订阅清零」通知用于自动回收,缓冲流只能经显式淘汰释放。</para>
     /// </summary>
     /// <remarks>
     /// 引入本类型是为让「按 (类型, Key) 聚合」成为唯一的数据组织方式:
@@ -18,8 +21,8 @@ namespace XFramework.XMessage.Internal
         #region Private Fields
 
         private readonly Action _onEmpty;
-        private EventStream<TMessage> _sync;
-        private BufferedEventStream<TMessage> _buffered;
+        private IEventStream<TMessage> _sync;
+        private IBufferedEventStream<TMessage> _buffered;
         private List<AsyncSubscription<TMessage>> _async;
 
         #endregion
@@ -41,25 +44,17 @@ namespace XFramework.XMessage.Internal
         /// 同步订阅流;从未被订阅时为 <c>null</c>。
         /// <para>投递路径用此只读视图判空,避免为「发布过但无人订阅」的类型创建空流。</para>
         /// </summary>
-        internal EventStream<TMessage> Sync => _sync;
+        internal IEventStream<TMessage> Sync => _sync;
 
-        /// <summary>获取或创建同步订阅流。</summary>
-        internal EventStream<TMessage> GetOrCreateSync()
-        {
-            if (_sync == null)
-            {
-                _sync = new EventStream<TMessage>();
-                _sync.OnEmpty = _onEmpty;
-            }
-            return _sync;
-        }
+        /// <summary>获取或创建同步订阅流(引擎的「订阅清零通知」在此接上持有者的回收回调)。</summary>
+        internal IEventStream<TMessage> GetOrCreateSync() => _sync ??= EventStream.Create<TMessage>(_onEmpty);
 
         /// <summary>
         /// 获取或创建缓冲订阅流。首次投递或首次缓冲订阅时创建,
         /// 以保证「订阅前发布的消息可重放」这一语义。
         /// </summary>
-        internal BufferedEventStream<TMessage> GetOrCreateBuffered()
-            => _buffered ??= new BufferedEventStream<TMessage>();
+        internal IBufferedEventStream<TMessage> GetOrCreateBuffered()
+            => _buffered ??= EventStream.CreateBuffered<TMessage>();
 
         /// <summary>异步订阅登记表;从未有异步订阅时为 <c>null</c>。</summary>
         internal List<AsyncSubscription<TMessage>> Async => _async;
@@ -93,12 +88,14 @@ namespace XFramework.XMessage.Internal
         /// <para>三个条件的含义:同步流无订阅、异步登记表为空、缓冲流(若有)既无订阅者也无缓存值。
         /// 第三项<b>必须同时判「无缓冲订阅者」</b>——只判无缓存值会把「订阅先于发布」的活订阅者
         /// 连通道一起静默摘掉,此后发布再也到不了它。</para>
-        /// <para><b>回收时不 Dispose 任何流是安全的</b>,不是遗漏:订阅数为 0 即链表为空(节点已全部
-        /// 退订回池,句柄再 Dispose 会因不在链表中而安全忽略),无缓存值即无可重放数据。这与
+        /// <para><b>回收时不 Dispose 任何流是安全的</b>,不是遗漏:订阅数为 0 即链表为空——这条依赖引擎的一条
+        /// 不变量「退订即摘链、释放即清链」(<c>IEventStream.SubscriptionCount</c> 为 0 时链表必为空),
+        /// 故此时已发出的句柄再 Dispose 会因不在链表中而被安全忽略;无缓存值即无可重放数据。这与
         /// <c>_sync</c> 空壳被同样丢弃是同一取舍——本谓词只是把 <c>_buffered</c> 的待遇拉齐。</para>
         /// <para><b>已知边界</b>:自动回收只在「同步订阅清零」或「异步登记表清空」时被触发(缓冲流刻意
-        /// 不挂 <see cref="EventStream{T}.OnEmpty"/>,见该字段文档),所以「只有缓冲订阅、从未发布、
-        /// 也从未有过同步/异步订阅」的通道没有被自动回收的时机,只能靠 <c>TrimEmptyChannels</c> 摘除。</para>
+        /// 不挂订阅清零通知,见 <see cref="XFramework.XEvent.EventStream.CreateBuffered{T}"/> 的说明),
+        /// 所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道没有被自动回收的时机,
+        /// 只能靠 <c>TrimEmptyChannels</c> 摘除。</para>
         /// </summary>
         public bool IsReclaimable =>
             (_sync == null || _sync.SubscriptionCount == 0)

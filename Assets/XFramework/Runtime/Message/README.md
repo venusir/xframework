@@ -2,11 +2,11 @@
 
 ## 概述
 
-Message 模块提供**全局消息总线**与支撑它的**事件流引擎**。基于**自研轻量事件引擎**（`XFramework.XMessage.Internal`，零外部依赖），通过静态外观 `MessageManager` 提供全局消息发布/订阅能力。
+Message 模块提供**全局消息总线**。总线按消息类型 / Key 持有并治理一批**事件流**——事件流引擎本身在 `XFramework.XEvent` 模块（`Runtime/Event/`），本模块依赖它的公开面（`IEventStream<T>` / `EventStream.Create`），不触碰其内部实现。通过静态外观 `MessageManager` 提供全局消息发布/订阅能力。
 
 消息总线支持:类型化消息、带键值通道、缓冲订阅(新订阅者立即收到最近一条)、异步处理器订阅、订阅级过滤条件、全局过滤器管道、请求-响应模式。
 
-**命名空间**: `XFramework.XMessage`;引擎 `XFramework.XMessage.Internal`
+**命名空间**: `XFramework.XMessage`;事件流引擎见 `XFramework.XEvent`
 
 ## 架构设计
 
@@ -17,12 +17,15 @@ Runtime/Message/
 ├── MessageManager.cs             # 静态外观(全局入口) + 标记接口扩展方法
 ├── IMessageFilter.cs             # 消息过滤器接口
 ├── IDestroyCancellationToken.cs  # 销毁令牌契约(订阅自动退订的绑定对象)
-└── Internal/                     # 自研事件流引擎(零外部依赖,internal)
-    ├── EventStream.cs            # 事件流(可投递/订阅/完成/退订)+ 订阅节点池
-    ├── BufferedEventStream.cs    # 缓冲 1 条的事件流(订阅即重放最近一条)
+└── Internal/                     # 总线内部实现(internal)
     ├── MessageChannel.cs         # 通道对象(聚合同步流与缓冲流)+ 键值通道存储
+    ├── AsyncSubscription.cs      # 异步订阅登记项(退订句柄 + 令牌生命周期)
+    ├── DispatchListPool.cs       # 派发快照 List 池(与 XEvent 的同名池是两份,不合并)
+    ├── MainThreadGuard.cs        # 发布/订阅入口的主线程断言(仅 Editor)
     └── ActionDisposable.cs       # 委托式 IDisposable(幂等)
 ```
+
+> 事件流本身(`EventStream` / `BufferedEventStream`)已迁至 `XFramework.XEvent` 模块——见 [Event README](../Event/README.md)。本模块的 `MessageChannel` 通过它的公开面持有两条流。
 
 ## 快速使用
 
@@ -105,7 +108,7 @@ await MessageManager.PublishAsync("Score", msg, MessagePublishStrategy.Parallel)
 
 > **注意**：同步 `Publish` 同样会触发异步处理器（fire-and-forget），所以同一调用点混用 `Publish` 与 `PublishAsync` 会让处理器被触发两次。
 
-> **线程**：本模块不做线程调度，且**引擎自身按「主线程使用」设计**——**发布与订阅入口必须在主线程调用**（Editor 下越线程调用会在入口记一条 `[Message]` 前缀的 Error，每个 broker 只报首错；Release 不编译该断言）。内部的锁与快照只用于保证订阅链表与终止标志在并发退订下不被写坏，**不构成「可以多线程发布/订阅」的许可**——派发循环里 `SubscriptionNode.IsDisposed` 是无锁读取的，且快照收集与 `_publishDepth` 自增之间存在窗口，并发退订可能让节点在该窗口内被回池复用。**断言覆盖不到的三处**：① 退订路径——令牌可能在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 重载在令牌已取消时的早退路径（不触碰共享状态，故不判）；③ 处理器内部的线程行为。需要从后台线程发消息时，请先切回主线程再调用。
+> **线程**：本模块不做线程调度，**发布与订阅入口必须在主线程调用**（Editor 下越线程调用会在入口记一条 `[Message]` 前缀的 Error，每个 broker 只报首错；Release 不编译该断言）。底层事件流引擎的线程模型（锁与快照只为让订阅链表在并发退订下不被写坏、**不构成多线程许可**、快照收集与派发深度之间存在窗口）见 [Event README 的「线程」节](../Event/README.md#线程)——**断言覆盖不到的三处**：① 退订路径——令牌可能在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 重载在令牌已取消时的早退路径（不触碰共享状态，故不判）；③ 处理器内部的线程行为。需要从后台线程发消息时，请先切回主线程再调用。
 
 ### 带 Key 的消息
 
@@ -210,7 +213,7 @@ var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 | 缓冲通道（持有重放缓存） | 链表空但**仍持有缓存值** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
 | 空缓冲通道（订阅过缓冲、该类型从未发布） | 链表空且**无缓存值** | 属可回收之列：`TrimEmptyChannels` 会摘除它（连同键值存储表项）；若同一通道另有订阅清零事件，自动回收同样会摘除 |
 
-> **自动回收不覆盖纯缓冲空壳**：缓冲流刻意不挂 `OnEmpty`，且「有没有缓存值」只有持有者知道，所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道不会被自动回收，只能靠 `TrimEmptyChannels` 摘除。这是已知边界，不是漏实现。
+> **自动回收不覆盖纯缓冲空壳**：缓冲流刻意不提供「空流通知」（见 `XEvent.EventStream.CreateBuffered` 的说明），且「有没有缓存值」只有持有者知道，所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道不会被自动回收，只能靠 `TrimEmptyChannels` 摘除。这是已知边界，不是漏实现。
 
 ### 带 Key 的淘汰是语义要求，不只是省内存
 
@@ -347,7 +350,7 @@ public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancel
 
 ## 设计原则
 
-- **自研引擎驱动** — 基于零依赖的轻量事件引擎(锁 + 快照线程模型、订阅节点池),性能优异且内存安全
+- **引擎来自下层模块** — 事件流由 `XFramework.XEvent` 提供(锁 + 快照线程模型、订阅节点池);本模块只负责「类型 / Key → 通道」的映射与治理,不自己造流
 - **生命周期绑定** — 订阅可自动绑定到订阅者生命周期(MonoBehaviour 或 `IDestroyCancellationToken`),对象销毁时自动取消
 - **类型安全** — 消息通过泛型类型标识,编译期安全
 - **双模式访问** — 同时支持静态 API 与标记接口扩展方法
@@ -358,4 +361,5 @@ public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancel
 
 ## 依赖
 
-- 无外部依赖(事件流引擎自研,零第三方依赖)
+- 框架内:`XFramework.XEvent`(事件流引擎;本模块是它的使用方,依赖方向单向 Message → Event)
+- 无第三方依赖

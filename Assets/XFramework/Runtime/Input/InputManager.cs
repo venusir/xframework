@@ -4,7 +4,7 @@ using UnityEngine;
 using XFramework.XInput.Default;
 using XFramework.XInput.Messages;
 using XFramework.XMessage;
-using XFramework.XMessage.Internal;
+using XFramework.XEvent;
 using XFramework.XUpdate;
 
 namespace XFramework.XInput
@@ -24,7 +24,7 @@ namespace XFramework.XInput
         private static bool _initialized;
 
         /// <summary>每帧脉冲信号,驱动 Observe* 系列轮询。</summary>
-        private static readonly EventStream<int> _framePulse = new();
+        private static readonly IEventStream<int> _framePulse = EventStream.Create<int>();
 
         /// <summary>自动帧驱动刷新器(经 UpdateManager 注册,仅 Initialize 成功路径启用)。</summary>
         private static InputTicker _ticker;

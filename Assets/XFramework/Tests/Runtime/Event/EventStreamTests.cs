@@ -4,13 +4,14 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XMessage.Internal;
+using XFramework.XEvent;
 
-namespace XFramework.XMessage.Tests
+namespace XFramework.XEvent.Tests
 {
     /// <summary>
-    /// 自研响应式引擎测试。
-    /// <para>覆盖契约:基本投递与退订、派发中退订与重入、completed 语义、异常隔离、节点池复用、BufferedEventStream 重放。</para>
+    /// 事件流引擎测试。
+    /// <para>覆盖契约:基本投递与退订、派发中退订与重入、completed 语义、异常隔离、节点池复用、
+    /// 缓冲重放全套,以及公开面新增的三条(onEmpty、订阅数、缓存值)。</para>
     /// </summary>
     [TestFixture]
     public class EventStreamTests
@@ -20,7 +21,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Subscribe_ReceivesOnNext()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
@@ -33,7 +34,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Unsubscribe_StopsDelivery()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var calls = new List<int>();
             var handle = stream.Subscribe(calls.Add);
 
@@ -47,14 +48,14 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Subscribe_NullOnNext_Throws()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             Assert.Throws<ArgumentNullException>(() => stream.Subscribe(null));
         }
 
         [Test]
         public void OnNext_NoSubscribers_DoesNotThrow()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             Assert.DoesNotThrow(() => stream.OnNext(1));
         }
 
@@ -65,7 +66,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void DisposeOwnHandle_DuringDispatch_DoesNotBreak()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var calls = new List<int>();
             IDisposable handle = null;
             handle = stream.Subscribe(x =>
@@ -85,7 +86,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void DisposeAnother_DuringDispatch_OtherSubscribersStillReceive()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var other = new List<int>();
             IDisposable handle = null;
             handle = stream.Subscribe(_ => handle.Dispose());
@@ -98,7 +99,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void ReentrantOnNext_DoesNotBreak()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(x =>
             {
@@ -113,7 +114,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void SubscribeUnsubscribe_ManyCycles_NodePoolReused()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
 
             // 大量订阅/退订周期:验证节点池复用不泄漏、不崩溃
             for (int i = 0; i < 1000; i++)
@@ -135,7 +136,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void OnCompleted_IgnoresSubsequentOnNext()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
@@ -149,7 +150,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Subscribe_AfterCompleted_NotDelivered()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             stream.OnCompleted();
 
             var calls = new List<int>();
@@ -162,12 +163,12 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void EmptyHandle_FromCompletedStream_IsSharedInstanceAndDisposable()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             stream.OnCompleted();
 
-            // 空句柄在全仓只有一处来源:引擎与本模块 broker 共用同一实例。
-            // 每次 new 一个 ActionDisposable 也「能用」,但来源就变成两份,且共享实例上
-            // 「不得改为池化」这条不变量(见 ActionDisposable.Empty)会失去测试锁定。
+            // 空句柄在本模块内只有一处来源(引擎与缓冲流共用同一实例)。
+            // 每次 new 一个也「能用」,但共享实例上「不得改为池化」这条不变量
+            // (见 ActionDisposable.Empty)会失去测试锁定。
             var first = stream.Subscribe(_ => { });
             var second = stream.Subscribe(_ => { });
 
@@ -186,19 +187,71 @@ namespace XFramework.XMessage.Tests
 
         #endregion
 
+        #region onEmpty / 订阅数(公开面契约)
+
+        [Test]
+        public void Create_OnEmpty_InvokedWhenLastSubscriberLeaves()
+        {
+            var emptyCount = 0;
+            var stream = EventStream.Create<int>(() => emptyCount++);
+
+            var first = stream.Subscribe(_ => { });
+            var second = stream.Subscribe(_ => { });
+
+            first.Dispose();
+            Assert.AreEqual(0, emptyCount, "仍有订阅者时不得回调");
+
+            second.Dispose();
+            Assert.AreEqual(1, emptyCount, "订阅数由 1 归零时回调一次");
+        }
+
+        [Test]
+        public void Dispose_DoesNotInvokeOnEmpty()
+        {
+            var emptyCount = 0;
+            var stream = EventStream.Create<int>(() => emptyCount++);
+            stream.Subscribe(_ => { });
+
+            stream.Dispose();
+
+            Assert.AreEqual(0, emptyCount, "持有者主动终止流时不回调——它已在自行回收结构");
+        }
+
+        [Test]
+        public void SubscriptionCount_TracksAliveSubscriptions()
+        {
+            var stream = EventStream.Create<int>();
+            Assert.AreEqual(0, stream.SubscriptionCount);
+
+            var a = stream.Subscribe(_ => { });
+            stream.Subscribe(_ => { });
+            Assert.AreEqual(2, stream.SubscriptionCount, "订阅递增");
+
+            a.Dispose();
+            Assert.AreEqual(1, stream.SubscriptionCount, "退订递减");
+
+            a.Dispose();
+            Assert.AreEqual(1, stream.SubscriptionCount, "重复退订幂等,不再递减");
+
+            stream.Dispose();
+            Assert.AreEqual(0, stream.SubscriptionCount, "释放清零");
+        }
+
+        #endregion
+
         #region 异常语义(隔离 + 日志,不传播)
 
         [Test]
         public void HandlerThrows_Isolated_OtherSubscribersStillReceive()
         {
-            var stream = new EventStream<int>();
+            var stream = EventStream.Create<int>();
             var healthy = new List<int>();
             stream.Subscribe(_ => throw new InvalidOperationException("boom"));
             stream.Subscribe(healthy.Add);
 
             // 日志消息含异常详情后缀,Expect 字符串重载为全串精确匹配,需用正则做包含匹配
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
-            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Message] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Event] EventStream handler threw exception")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Event] EventStream handler threw exception")));
             Assert.DoesNotThrow(() => stream.OnNext(1));
             Assert.DoesNotThrow(() => stream.OnNext(2));
 
@@ -212,7 +265,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_ReplaysLatest_Synchronously()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnNext(7);
 
             var calls = new List<int>();
@@ -224,7 +277,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_MultipleSubscribers_EachGetsReplay()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnNext(7);
 
             var c1 = new List<int>();
@@ -239,7 +292,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_ReplayBeforeNewMessages()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnNext(1);
 
             var calls = new List<int>();
@@ -252,7 +305,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_NoMessages_StartsFromLive()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
             stream.OnNext(3);
@@ -261,9 +314,22 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
+        public void BufferedEventStream_HasCachedValue_TracksCacheState()
+        {
+            var stream = EventStream.CreateBuffered<int>();
+            Assert.IsFalse(stream.HasCachedValue, "从未投递过时没有可重放的值");
+
+            stream.OnNext(1);
+            Assert.IsTrue(stream.HasCachedValue);
+
+            ((IDisposable)stream).Dispose();
+            Assert.IsFalse(stream.HasCachedValue, "释放后缓存被清空");
+        }
+
+        [Test]
         public void BufferedEventStream_Completed_NoReplay()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnNext(1);
             stream.OnCompleted();
 
@@ -277,7 +343,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_OnNextAfterCompleted_DoesNotReplayToNewSubscriber()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnCompleted();
             stream.OnNext(5);
 
@@ -290,7 +356,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void BufferedEventStream_DisposedViaIDisposable_NoReplayToNewSubscriber()
         {
-            var stream = new BufferedEventStream<int>();
+            var stream = EventStream.CreateBuffered<int>();
             stream.OnNext(7);
 
             // 经接口引用释放:必须走到派生类的 Dispose,否则缓存不被清空
@@ -303,22 +369,24 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
-        public void BufferedEventStream_ThroughBaseReference_StillCaches()
+        public void BufferedEventStream_ThroughInterfaceReference_StillCaches()
         {
-            // 经基类引用多态调用:虚分派必须落到派生实现,缓存与重放都不能失效
-            EventStream<int> stream = new BufferedEventStream<int>();
+            // 经接口引用多态调用:实现必须隐式实现 IEventStream<T>(而非显式实现),
+            // 否则经接口引用的 OnNext 会落到基类实现,缓存永远不写、重放静默失效——
+            // 本用例是这条陷阱的唯一锁,不要把它退化成直接调具体类型。
+            IEventStream<int> stream = EventStream.CreateBuffered<int>();
             stream.OnNext(8);
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
-            CollectionAssert.AreEqual(new[] { 8 }, calls, "经基类引用投递的事件同样写入缓存并可重放");
+            CollectionAssert.AreEqual(new[] { 8 }, calls, "经接口引用投递的事件同样写入缓存并可重放");
         }
 
         [Test]
-        public void BufferedEventStream_OnCompletedViaBaseReference_ClearsCache()
+        public void BufferedEventStream_OnCompletedViaInterfaceReference_ClearsCache()
         {
-            EventStream<int> stream = new BufferedEventStream<int>();
+            IEventStream<int> stream = EventStream.CreateBuffered<int>();
             stream.OnNext(1);
             stream.OnCompleted();
 
@@ -326,7 +394,7 @@ namespace XFramework.XMessage.Tests
             stream.Subscribe(calls.Add);
             stream.OnNext(2);
 
-            Assert.AreEqual(0, calls.Count, "经基类引用 OnCompleted 后缓存被清空,新订阅者不重放");
+            Assert.AreEqual(0, calls.Count, "经接口引用 OnCompleted 后缓存被清空,新订阅者不重放");
         }
 
         #endregion
@@ -337,7 +405,7 @@ namespace XFramework.XMessage.Tests
         public void ActionDisposable_DisposeOnce_IgnoresRepeat()
         {
             var count = 0;
-            var disposable = ActionDisposable.Create(() => count++);
+            var disposable = XFramework.XEvent.Internal.ActionDisposable.Create(() => count++);
 
             disposable.Dispose();
             disposable.Dispose();

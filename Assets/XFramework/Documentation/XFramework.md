@@ -8,6 +8,7 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 
 | 路径                   | 定位                            | 典型模块                                                               |
 | ---------------------- | ------------------------------- | ---------------------------------------------------------------------- |
+| **基础库（引擎）**     | 被其它模块依赖的底层机制，零框架内依赖 | Event（事件流引擎）                                                    |
 | **静态服务（无状态）** | 全局 Manager 入口，按需初始化   | File / Input / Settings / UI / Lock / Reactive / Localization / Update |
 | **管线（通用编排）** | 阶段串行/并行编排、加权进度聚合、失败传播，工厂创建实例即用即弃；相位分组编排（IPhaseStage）声明同相位并行 / 相位升序串行 | Pipeline                                  |
 | **引导（启动编排）** | 显式登记各模块的引导阶段，按相位装配运行启动管线，退出时反向清理 | Bootstrap                                 |
@@ -48,8 +49,9 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 | **Pipeline**     | `XFramework.XPipeline`     | [README](../Runtime/Pipeline/README.md)     | 通用编排：阶段编排（串行/并行/容器嵌套）、加权进度聚合、失败/取消传播；相位分组编排（IPhaseStage） |
 | **Asset**        | `XFramework.XAsset`        | [README](../Runtime/Asset/README.md)        | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） |
 | **Update**       | `XFramework.XUpdate`       | [README](../Runtime/Update/README.md)       | 统一更新调度：三个派发时机（Update/LateUpdate/FixedUpdate）、双时间轴（含暂停）、档位时间切片、PlayerLoop 自驱动 |
-| **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线、事件流引擎                                |
-| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Message 事件流）                  |
+| **Event**        | `XFramework.XEvent`        | [README](../Runtime/Event/README.md)        | 事件流引擎：订阅句柄、异常隔离、重放缓存、空流通知（Message / Reactive 的共同底层） |
+| **Message**      | `XFramework.XMessage`      | [README](../Runtime/Message/README.md)       | 消息总线：按消息类型 / Key 治理通道、过滤器管道、异步订阅、请求-响应 |
+| **Reactive**     | `XFramework.XReactive`     | [README](../Runtime/Reactive/README.md)     | 响应式属性（基于 Event 事件流）                    |
 | **Localization** | `XFramework.XLocalization` | [README](../Runtime/Localization/README.md) | 本地化：多语言文本、语言切换、UI 自动绑定                     |
 | **File**         | `XFramework.XFileManager`  | [README](../Runtime/File/README.md)         | 跨平台文件系统：路径域抽象、自动选平台 Provider、原子写与一代备份、按域加密 |
 | **Data**         | `XFramework.XData`         | [README](../Runtime/Data/README.md)         | 数据块管理：快照收集/应用、逐块版本迁移链、脏标记             |
@@ -72,8 +74,9 @@ Assets/XFramework/
 │   ├── Pipeline/                 # 通用编排（阶段编排/进度/失败取消）+ 相位分组编排（IPhaseStage）
 │   ├── Asset/                    # 资源管理（基于 YooAsset）
 │   ├── Update/                   # 统一更新调度
-│   ├── Message/                  # 消息总线 + 事件流引擎
-│   ├── Reactive/                 # 响应式属性（基于 Message 事件流）
+│   ├── Event/                    # 事件流引擎（Message / Reactive 的共同底层）
+│   ├── Message/                  # 消息总线
+│   ├── Reactive/                 # 响应式属性（基于 Event 事件流）
 │   ├── Localization/             # 本地化
 │   ├── File/                     # 跨平台文件系统
 │   ├── Input/                    # 输入抽象

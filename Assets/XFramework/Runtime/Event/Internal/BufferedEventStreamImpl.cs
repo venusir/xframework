@@ -1,6 +1,6 @@
 using System;
 
-namespace XFramework.XMessage.Internal
+namespace XFramework.XEvent.Internal
 {
     /// <summary>
     /// 带缓冲的事件流:新订阅者会立即同步收到最近一次投递的事件(重放先于实时)。
@@ -10,14 +10,14 @@ namespace XFramework.XMessage.Internal
     /// - 订阅时同步重放最近一条;无事件时不重放,从实时事件开始
     /// - 每个订阅者各自收到重放
     /// - 重放先于实时事件(订阅后立即投递的新事件排在重放之后)
-    /// 线程模型:与 EventStream 相同(锁 + 快照);重放的读取在锁内取缓存、锁外调用。
+    /// 线程模型:与基类相同(锁 + 快照);重放的读取在锁内取缓存、锁外调用。
     /// <para>
     /// 本类持有自己的 _sync,与基类的锁<b>永不嵌套</b>:每个重写方法都先完成自身的锁内工作并离开锁,
-    /// 再调用 base 实现。派生类无需也不得复用基类的锁。
+    /// 再调用 base 实现。后续维护者不得为「省一把锁」而复用基类的 _sync。
     /// </para>
     /// 注意:重放与订阅之间若发生并发 OnNext,顺序不保证(本项目使用场景为主线程,可接受)。
     /// </remarks>
-    internal sealed class BufferedEventStream<T> : EventStream<T>
+    internal sealed class BufferedEventStreamImpl<T> : EventStreamImpl<T>, IBufferedEventStream<T>
     {
         #region Private Fields
 
@@ -27,21 +27,21 @@ namespace XFramework.XMessage.Internal
 
         #endregion
 
-        #region Internal
+        #region Lifecycle
 
         /// <summary>
-        /// 是否持有可重放的值。供持有者判定「这条缓冲流是否构成保留通道的理由」。
-        /// <para>无锁读取:与 <see cref="EventStream{T}.SubscriptionCount"/> 同一口径(本引擎使用场景为
-        /// 主线程);读到 <c>false</c> 而随后被并发写入时,最多多回收一次「尚无值」的空壳,无正确性影响
-        /// ——与该流 <c>IsCompleted</c> 的无锁读取同源取舍。</para>
-        /// <para><b>不变量</b>:不得用它代替「有没有缓冲流」的判断。缓冲流存在但无值(订阅过缓冲、
-        /// 该类型却从未发布)是常见状态,此时通道没有任何需要保留的东西。</para>
+        /// 创建带缓冲的事件流。
+        /// <para>基类的「订阅清零通知」传 <c>null</c>:缓冲流的回收取决于「有没有缓存值」,
+        /// 引擎无法在丢缓存之前参与判别,故它只能由持有者显式淘汰
+        /// (见 <see cref="EventStream.CreateBuffered{T}"/>)。</para>
         /// </summary>
-        internal bool HasCachedValue => _hasLast;
+        internal BufferedEventStreamImpl() : base(null)
+        {
+        }
 
         #endregion
 
-        #region Public API
+        #region IEventStream
 
         /// <summary>
         /// 订阅事件流,并立即同步重放最近一次投递的事件(若有)。
@@ -63,8 +63,8 @@ namespace XFramework.XMessage.Internal
 
             if (hasReplay)
             {
-                // 重放路径复用 EventStream 的统一投递语义(回调异常隔离),与实时行为一致
-                EventStream<T>.Deliver(replay, onNext);
+                // 重放路径复用基类的统一投递语义(回调异常隔离),与实时行为一致
+                Deliver(replay, onNext);
             }
 
             return handle;
@@ -110,6 +110,9 @@ namespace XFramework.XMessage.Internal
             }
             base.Dispose();
         }
+
+        /// <inheritdoc/>
+        public bool HasCachedValue => _hasLast;
 
         #endregion
     }

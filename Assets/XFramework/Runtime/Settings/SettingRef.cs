@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
-using XFramework.XMessage.Internal;
+using XFramework.XEvent;
 using XFramework.XReactive;
 
 namespace XFramework.XSettings
@@ -39,7 +39,7 @@ namespace XFramework.XSettings
         private readonly Func<T, TField> _getter;
         private readonly Action<T, TField> _setter;
         private readonly string _path;
-        private readonly EventStream<TField> _changedStream = new();
+        private readonly IEventStream<TField> _changedStream = EventStream.Create<TField>();
 
         #endregion
 

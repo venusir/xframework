@@ -560,7 +560,7 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 回收所有无订阅者且无可重放缓存的空通道,返回回收的通道数量。
-        /// <para>持有重放缓存(<c>BufferedEventStream.HasCachedValue</c>)的缓冲通道不受本方法影响,只能经
+        /// <para>持有重放缓存(<c>IBufferedEventStream.HasCachedValue</c>)的缓冲通道不受本方法影响,只能经
         /// <see cref="EvictBufferedChannel{TMessage}()"/> 系列显式淘汰;而淘汰本身已顺带回收因此变空的通道,
         /// 故本方法属兜底与诊断手段,常规路径下返回 0。</para>
         /// <para><b>例外,也正是本方法不可删的理由</b>:「订阅过缓冲、但该类型从未发布」的空缓冲通道
@@ -617,8 +617,8 @@ namespace XFramework.XMessage
         /// <summary>
         /// 释放全部通道与过滤器。
         /// <para>
-        /// 遍历中无需屏蔽回收回调:回收只由「订阅数归零」触发(<see cref="EventStream{T}.Unsubscribe"/>),
-        /// 而本方法走的是 Dispose 路径——事件流的 Dispose 刻意不回调 OnEmpty,
+        /// 遍历中无需屏蔽回收回调:回收只由「订阅数归零」触发(引擎在退订入口于锁外回调持有者),
+        /// 而本方法走的是 Dispose 路径——事件流的 Dispose 刻意不回调该通知,
         /// 故此处不会出现「回调改字典」与「遍历字典」并发。
         /// </para>
         /// </summary>

@@ -3,10 +3,10 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 
-namespace XFramework.XMessage.Internal
+namespace XFramework.XEvent.Internal
 {
     /// <summary>
-    /// 轻量事件流:支持投递、订阅、完成、退订的响应式事件源。
+    /// <see cref="IEventStream{T}"/> 的默认实现:锁 + 快照的事件流。
     /// <para>订阅即注册一个回调;投递时对所有存活订阅回调(后订阅先收到)。</para>
     /// </summary>
     /// <remarks>
@@ -18,16 +18,22 @@ namespace XFramework.XMessage.Internal
     /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 OnNext 调用方;
     /// 异常订阅者不被移除,同一轮遍历中后续订阅者照常收到消息。
     /// <para>
-    /// 子类化约定:基类与派生类(BufferedEventStream)各持一把锁,两者永远顺序获取、绝不嵌套
+    /// 子类化约定:基类与派生类(BufferedEventStreamImpl)各持一把锁,两者永远顺序获取、绝不嵌套
     /// (派生方法先完成自己的锁内工作并离开锁,再调用 base 实现)。后续维护者不得为「省一把锁」
     /// 而让派生类复用基类的 _sync —— 那会使锁内调用用户代码与锁序反转同时复活。
     /// </para>
+    /// <para>
+    /// <b>接口必须隐式实现</b>(不是 <c>void IEventStream&lt;T&gt;.OnNext</c> 那种显式实现):
+    /// 派生类 override 的是本类的方法,经 <see cref="IEventStream{T}"/> 引用的调用必须一并落到派生实现上,
+    /// 否则缓冲流永远不写缓存、重放静默失效。用例 <c>BufferedEventStream_ThroughInterfaceReference_StillCaches</c> 锁这条。
+    /// </para>
     /// </remarks>
-    internal class EventStream<T> : IDisposable
+    internal class EventStreamImpl<T> : IEventStream<T>
     {
         #region Private Fields
 
         private readonly object _sync = new object();
+        private readonly Action _onEmpty;
         private SubscriptionNode<T> _head;
         private int _publishDepth;
         private int _subscriptionCount;
@@ -40,21 +46,27 @@ namespace XFramework.XMessage.Internal
 
         #endregion
 
-        #region Public API
+        #region Lifecycle
 
-        /// <summary>
-        /// 订阅事件流。返回的句柄 Dispose 后不再收到投递。
-        /// <para>已 OnCompleted 的事件流返回空句柄(不再投递)。</para>
-        /// </summary>
-        /// <param name="onNext">事件回调,不可为 null。</param>
-        /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
+        /// <summary>创建事件流。</summary>
+        /// <param name="onEmpty">
+        /// 「订阅清零」通知(见 <see cref="EventStream.Create{T}"/>);<c>null</c> 表示不参与上层回收。
+        /// 构造期一次性接线,订阅 / 退订路径零额外分配。
+        /// </param>
+        internal EventStreamImpl(Action onEmpty) => _onEmpty = onEmpty;
+
+        #endregion
+
+        #region IEventStream
+
+        /// <inheritdoc/>
         public virtual IDisposable Subscribe(Action<T> onNext)
         {
             if (onNext == null) throw new ArgumentNullException(nameof(onNext));
 
             lock (_sync)
             {
-                // completed 之后订阅:返回共享的空句柄(不再投递;空句柄只有一处来源,见 ActionDisposable.Empty)
+                // completed 之后订阅:返回共享空句柄(不再投递;空句柄只有一处来源,见 ActionDisposable.Empty)
                 if (_completed)
                     return ActionDisposable.Empty;
 
@@ -67,7 +79,7 @@ namespace XFramework.XMessage.Internal
             }
         }
 
-        /// <summary>投递事件给所有存活订阅者。</summary>
+        /// <inheritdoc/>
         public virtual void OnNext(T value)
         {
             // 锁内快照:收集当前存活节点到池化 List,锁外逐个调用
@@ -114,7 +126,7 @@ namespace XFramework.XMessage.Internal
             }
         }
 
-        /// <summary>标记完成:之后的 OnNext 被忽略,已订阅者不再收到投递。</summary>
+        /// <inheritdoc/>
         public virtual void OnCompleted()
         {
             lock (_sync)
@@ -123,14 +135,7 @@ namespace XFramework.XMessage.Internal
             }
         }
 
-        /// <summary>
-        /// 释放所有订阅并回收节点,之后 OnNext/Subscribe 均无效(completed 语义)。
-        /// <para>
-        /// 不回调 <see cref="OnEmpty"/>:本方法是持有者主动终止流(清理/淘汰)的路径,
-        /// 持有者已在自行回收结构,回调只会在其遍历中改字典。
-        /// 已经发出的订阅句柄此后 Dispose 时,节点因不在链表中而被安全忽略。
-        /// </para>
-        /// </summary>
+        /// <inheritdoc/>
         public virtual void Dispose()
         {
             lock (_sync)
@@ -147,7 +152,17 @@ namespace XFramework.XMessage.Internal
                 }
                 _subscriptionCount = 0;
             }
+
+            // 刻意不回调 _onEmpty:本方法是持有者主动终止流(清理 / 淘汰)的路径,持有者已在自行回收结构,
+            // 回调只会在其遍历中改字典。已经发出的订阅句柄此后 Dispose 时,节点因不在链表中而被安全忽略。
         }
+
+        /// <inheritdoc/>
+        public int SubscriptionCount => _subscriptionCount;
+
+        #endregion
+
+        #region Protected
 
         /// <summary>
         /// 事件流是否已终止(<see cref="OnCompleted"/> 或 <see cref="Dispose"/> 之后为 <c>true</c>)。
@@ -157,31 +172,13 @@ namespace XFramework.XMessage.Internal
         /// </summary>
         protected bool IsCompleted => _completed;
 
-        /// <summary>
-        /// 当前存活订阅数(订阅递增、退订/Dispose 递减),锁内维护。
-        /// <para>供持有者判定通道是否已空以便回收;本引擎使用场景为主线程,读取不加锁。</para>
-        /// </summary>
-        internal int SubscriptionCount => _subscriptionCount;
-
-        /// <summary>
-        /// 订阅数由 1 归零时的回调,在锁外调用;由持有者在创建流时一次性赋值,订阅/退订路径零额外分配。
-        /// <para>缓冲流不挂此回调,故「缓冲订阅清零」不产生自动回收时机。持有者的判据是「无存活订阅者
-        /// 且无可重放缓存」(<c>MessageChannel.IsReclaimable</c>),而本类无法在丢缓存之前参与该判别,
-        /// 故无缓存值的空缓冲通道只能靠显式 <c>TrimEmptyChannels</c> 摘除。</para>
-        /// <para>
-        /// 注意回调可能发生在派发途中(订阅者在自己的回调里退订自身)——此时本流的快照仍在遍历,
-        /// 回调只应摘除持有者的通道表条目,不得回头调用本流的方法。
-        /// </para>
-        /// </summary>
-        internal Action OnEmpty;
-
         #endregion
 
         #region Private
 
         /// <summary>
         /// 统一投递语义:订阅回调异常隔离(记 Error 日志后继续)。
-        /// <para>BufferedEventStream 的重放路径复用此方法,保证重放与实时行为一致。</para>
+        /// <para>派生类(缓冲流)的重放路径复用此方法,保证重放与实时行为一致。</para>
         /// </summary>
         internal static void Deliver(T value, Action<T> onNext)
         {
@@ -191,7 +188,7 @@ namespace XFramework.XMessage.Internal
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Message] EventStream handler threw exception: {e}");
+                Debug.LogError($"[Event] EventStream handler threw exception: {e}");
             }
         }
 
@@ -209,9 +206,10 @@ namespace XFramework.XMessage.Internal
         /// 此刻该节点可能已回池并被其他订阅者租用。若继续置 <c>IsDisposed</c> 或回池,
         /// 会让新订阅者静默失联(标志误置),或让同一节点被池重复发放(重复回池)。
         /// </para>
-        /// <para>订阅数归零时在锁外回调 <see cref="OnEmpty"/>,避免持锁回调持有者而锁序反转。</para>
+        /// <para>订阅数归零时在锁外回调 <c>_onEmpty</c>,避免持锁回调持有者而锁序反转。</para>
+        /// <para>本方法是 private:唯一调用者是嵌套的 <see cref="EventSubscription"/>(嵌套类型可访问外层私有成员)。</para>
         /// </summary>
-        internal void Unsubscribe(SubscriptionNode<T> node)
+        private void Unsubscribe(SubscriptionNode<T> node)
         {
             bool becameEmpty;
             lock (_sync)
@@ -226,7 +224,7 @@ namespace XFramework.XMessage.Internal
             }
 
             if (becameEmpty)
-                OnEmpty?.Invoke();
+                _onEmpty?.Invoke();
         }
 
         /// <summary>从链表摘除节点;节点不属于本流时返回 <c>false</c>(链表为空也返回 false)。</summary>
@@ -252,10 +250,10 @@ namespace XFramework.XMessage.Internal
 
         private sealed class EventSubscription : IDisposable
         {
-            private EventStream<T> _stream;
+            private EventStreamImpl<T> _stream;
             private SubscriptionNode<T> _node;
 
-            public EventSubscription(EventStream<T> stream, SubscriptionNode<T> node)
+            public EventSubscription(EventStreamImpl<T> stream, SubscriptionNode<T> node)
             {
                 _stream = stream;
                 _node = node;
@@ -310,39 +308,6 @@ namespace XFramework.XMessage.Internal
             lock (_pool)
             {
                 _pool.Push(node);
-            }
-        }
-    }
-
-    /// <summary>派发快照缓冲的 List 静态对象池(避免每轮 OnNext 分配)。</summary>
-    /// <remarks>
-    /// <para><b>与 <c>XPool.ListPool&lt;T&gt;</c> 刻意并存，不要合并：</b>那个池明文「线程不安全，
-    /// 应在主线程使用」，本池两侧加锁——但<b>锁不是跨线程许可</b>：锁与快照只为让引擎的订阅链表
-    /// 在并发退订下不被写坏，从未给出可用的跨线程发布/订阅路径（线程契约见模块 README「线程」段，
-    /// 发布/订阅入口在 Editor 下另有主线程断言）。
-    /// 本池存在的真正理由是它服务每帧每订阅的派发路径，不能走 PoolManager 的字典查找。</para>
-    /// <para>名字必须区分开：<c>using XFramework.XPool;</c> 与本命名空间一旦同时可见，同名的
-    /// <c>ListPool&lt;T&gt;</c> 会让引用变成 CS0104 二义——判的是<b>类型名</b>，与成员名无关，
-    /// 所以方法名不同（<c>Rent</c> vs <c>Get</c>）防不住。</para>
-    /// </remarks>
-    internal static class DispatchListPool<T>
-    {
-        private static readonly Stack<List<T>> _pool = new();
-
-        public static List<T> Rent()
-        {
-            lock (_pool)
-            {
-                return _pool.Count > 0 ? _pool.Pop() : new List<T>();
-            }
-        }
-
-        public static void Return(List<T> list)
-        {
-            list.Clear();
-            lock (_pool)
-            {
-                _pool.Push(list);
             }
         }
     }
