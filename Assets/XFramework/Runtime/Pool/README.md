@@ -27,7 +27,6 @@ Runtime/Pool/
 ├── IPool.cs                       # 池操作接口（用于 DI / 测试）
 ├── Pool.cs                        # 泛型池实现（核心）
 ├── PoolManager.cs                 # 全局静态管理器
-├── PoolManagerExtensions.cs       # 扩展方法（this.GetFromPool<T>()）
 └── README.md
 ```
 
@@ -82,9 +81,6 @@ class BulletSystem
 | `PoolManager.GetPool<T>()`                      | 获取 IPool<T> 实例（用于高级操作） |
 | `PoolManager.RemovePool<T>()`                   | 移除并清空指定类型的池             |
 | `PoolManager.ClearAll()`                        | 清空闲置实例（池注册与配置保留，可重复调用，切场景安全） |
-| `this.GetFromPool<T>()`                         | 扩展方法，从池获取                 |
-| `this.GetFromPool<T>(generator)`                | 扩展方法，从池获取（自定义生成器） |
-| `item.ReturnToPool()`                           | 扩展方法，归还实例                 |
 
 ## 配置
 
@@ -226,23 +222,7 @@ void SendDamageEvent(int damage)
 }
 ```
 
-### 示例 4：扩展方法语法
-
-```csharp
-class MyComponent : MonoBehaviour
-{
-    void DoSomething()
-    {
-        // 通过扩展方法获取，无需显式引用 PoolManager 类名
-        var data = this.GetFromPool<MyData>();
-        data.Value = 10;
-        // ...
-        data.ReturnToPool();
-    }
-}
-```
-
-### 示例 4.5：using 语法自动归还（零 GC）
+### 示例 4：using 语法自动归还（零 GC）
 
 ```csharp
 using XFramework.XPool;
