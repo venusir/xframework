@@ -30,6 +30,15 @@ namespace Venusy609.Xframework.Editor.Tests
             void IPoolable.OnReturn() => ReturnCount++;
         }
 
+        /// <summary>重写相等语义的类型：不同实例可能逻辑相等（<see cref="Id"/> 相同）。</summary>
+        private sealed class EqualsItem
+        {
+            public int Id;
+
+            public override bool Equals(object obj) => obj is EqualsItem other && other.Id == Id;
+            public override int GetHashCode() => Id;
+        }
+
         /// <summary>与 Pool.cs 错误消息全文一致（全角标点）。</summary>
         private static string ForeignReturnError<T>() =>
             $"[Pool<{typeof(T).Name}>] Return() 传入的对象并非从本池租出，或已被重复归还。已忽略此操作。";
@@ -225,6 +234,21 @@ namespace Venusy609.Xframework.Editor.Tests
             pool.Return(item); // 无检测时重复归还放行
 
             Assert.That(pool.CountInactive, Is.EqualTo(2));
+        }
+
+        [Test]
+        public void CollectionCheck_TypeOverridingEquals_JudgesByReferenceNotValue()
+        {
+            // 两个实例的 Id 都是 0，逻辑相等而引用不同。活跃追踪集若按值比较，
+            // 第二次归还的 Remove 会落空，被误报成「重复归还」并拒绝入池
+            var pool = new Pool<EqualsItem>(() => new EqualsItem(), PoolConfig.Default);
+
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a);
+            pool.Return(b);
+
+            Assert.That(pool.CountInactive, Is.EqualTo(2), "两个不同实例都应能归还入池");
         }
 
         [Test]

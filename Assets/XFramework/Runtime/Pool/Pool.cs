@@ -71,7 +71,7 @@ namespace XFramework.XPool
 
 #if UNITY_EDITOR
             if (cfg.CollectionCheck)
-                _activeSet = new HashSet<T>();
+                _activeSet = new HashSet<T>(InstanceReferenceComparer.Instance);
 #endif
 
             // 预热
@@ -178,5 +178,33 @@ namespace XFramework.XPool
         /// <para>可重复调用，调用后池仍可继续使用，不应被理解为「销毁池」。</para>
         /// </summary>
         void IDisposable.Dispose() => Clear();
+
+#if UNITY_EDITOR
+        /// <summary>
+        /// 以<b>引用同一</b>判定实例身份的相等比较器。
+        /// <para><b>为什么必须指定：</b>活跃追踪集要回答的是「是不是同一个实例」，而
+        /// <see cref="HashSet{T}"/> 默认走 <see cref="EqualityComparer{T}.Default"/>——重写了
+        /// <c>Equals</c>/<c>GetHashCode</c> 的池化类型（POCO、记录式数据类）会被判成同一个。
+        /// 后果不是报错而是<b>合法归还被误拒</b>：两个逻辑相等但引用不同的实例先后归还时，第二次
+        /// <c>Remove</c> 落空，于是记一条「重复归还」错误日志并把实例丢给 GC。</para>
+        /// <para>按引用判定不会削弱对真正重复归还的检出——同一实例的第二次 <c>Remove</c> 同样落空；
+        /// 它只是让这把尺子与「池化复用依赖引用同一性」的语义对齐。
+        /// （.NET 5 的 <c>ReferenceEqualityComparer</c> 在本项目的 API 级别 .NET Standard 2.1 下不可用。）</para>
+        /// </summary>
+        private sealed class InstanceReferenceComparer : IEqualityComparer<T>
+        {
+            public static readonly InstanceReferenceComparer Instance = new InstanceReferenceComparer();
+
+            public bool Equals(T x, T y)
+            {
+                return ReferenceEquals(x, y);
+            }
+
+            public int GetHashCode(T obj)
+            {
+                return System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
+            }
+        }
+#endif
     }
 }
