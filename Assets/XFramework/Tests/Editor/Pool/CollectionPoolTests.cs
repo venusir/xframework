@@ -10,8 +10,8 @@ namespace Venusy609.Xframework.Editor.Tests
     /// 集合池（<see cref="ListPool{T}"/> / <see cref="HashSetPool{T}"/> /
     /// <see cref="DictionaryPool{TKey, TValue}"/> / <see cref="StringBuilderPool"/>）与
     /// <see cref="CollectionPoolManager"/> 测试。
-    /// <para>覆盖：Return 自动 Clear、using 形式、Configure 守卫与重建（回归：Clear 后仍可重配）、
-    /// 重复 Configure 不重复注册
+    /// <para>覆盖：Return 自动 Clear、using 形式、Configure 守卫与重建（四个池齐备；回归：Clear 后仍可重配）、
+    /// 重复 Configure 不重复注册、闭合泛型只注册一次
     /// （回归）、ClearAll 清闲置且保留池注册。</para>
     /// <para>隔离：闭合泛型池按类型独立，每个用例使用独占元素类型；StringBuilderPool 为
     /// 非泛型单例，断言只取相对基准；静态构造器每类型只执行一次，故注册数断言一律取差值。</para>
@@ -30,6 +30,21 @@ namespace Venusy609.Xframework.Editor.Tests
 
         /// <summary>Clear 后重配守卫（回归）用例专用元素类型。</summary>
         private sealed class ClearedList
+        {
+        }
+
+        /// <summary>Configure 守卫（HashSetPool）用例专用元素类型。</summary>
+        private sealed class GuardHash
+        {
+        }
+
+        /// <summary>Configure 守卫（DictionaryPool）用例专用键类型。</summary>
+        private sealed class GuardDictKey
+        {
+        }
+
+        /// <summary>闭合泛型注册计数用例专用元素类型。</summary>
+        private sealed class RegistrationProbe
         {
         }
 
@@ -143,6 +158,19 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void HashSetPool_Configure_WithActiveInstance_WarnsAndKeepsOldPool()
+        {
+            var active = HashSetPool<GuardHash>.Get(); // 活跃 1 个
+
+            LogAssert.Expect(LogType.Warning, ActiveConfigureWarning("HashSetPool<GuardHash>", 1));
+            HashSetPool<GuardHash>.Configure(new PoolConfig { PrewarmSize = 5 });
+
+            HashSetPool<GuardHash>.Return(active);
+            Assert.AreSame(active, HashSetPool<GuardHash>.Get(), "守卫拒绝后旧池应原样保留");
+            HashSetPool<GuardHash>.Return(active);
+        }
+
+        [Test]
         public void DictionaryPool_Roundtrip_AutoClearAndReuse()
         {
             var dict = DictionaryPool<RoundtripDictKey, int>.Get();
@@ -155,6 +183,20 @@ namespace Venusy609.Xframework.Editor.Tests
             var again = DictionaryPool<RoundtripDictKey, int>.Get();
             Assert.AreSame(dict, again);
             DictionaryPool<RoundtripDictKey, int>.Return(again);
+        }
+
+        [Test]
+        public void DictionaryPool_Configure_WithActiveInstance_WarnsAndKeepsOldPool()
+        {
+            var active = DictionaryPool<GuardDictKey, int>.Get(); // 活跃 1 个
+
+            // 键值类型名走 typeof(...).Name，故是 Int32 而非 int
+            LogAssert.Expect(LogType.Warning, ActiveConfigureWarning("DictionaryPool<GuardDictKey, Int32>", 1));
+            DictionaryPool<GuardDictKey, int>.Configure(new PoolConfig { PrewarmSize = 5 });
+
+            DictionaryPool<GuardDictKey, int>.Return(active);
+            Assert.AreSame(active, DictionaryPool<GuardDictKey, int>.Get(), "守卫拒绝后旧池应原样保留");
+            DictionaryPool<GuardDictKey, int>.Return(active);
         }
 
         [Test]
@@ -196,6 +238,21 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.That(CollectionPoolManager.RegisteredActionCount, Is.EqualTo(before),
                 "Configure 不应重复注册 Clear 回调");
+        }
+
+        [Test]
+        public void RegisteredActionCount_GrowsOncePerClosedGenericType()
+        {
+            // 静态构造只在首次触碰某个闭合泛型时执行一次，重复 Get/Return 不应重复注册
+            var before = CollectionPoolManager.RegisteredActionCount;
+
+            var first = ListPool<RegistrationProbe>.Get();
+            ListPool<RegistrationProbe>.Return(first);
+            var second = ListPool<RegistrationProbe>.Get();
+            ListPool<RegistrationProbe>.Return(second);
+
+            Assert.That(CollectionPoolManager.RegisteredActionCount, Is.EqualTo(before + 1),
+                "每个闭合泛型类型只注册一次 Clear 回调");
         }
 
         [Test]

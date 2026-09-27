@@ -5,7 +5,8 @@ namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// <see cref="PooledObject{T}"/> using 包装器测试。
-    /// <para>覆盖：default 构造的 Dispose 空操作、using 块结束自动归还、重复 Dispose 幂等。</para>
+    /// <para>覆盖：default 构造的 Dispose 空操作、using 块结束自动归还、重复 Dispose 幂等、
+    /// <see cref="PooledObject{T}.Value"/> 取回租出实例。</para>
     /// </summary>
     class PooledObjectTests
     {
@@ -35,6 +36,17 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.That(pool.CountInactive, Is.EqualTo(1), "using 块结束应自动归还");
             Assert.AreSame(item, pool.Get());
+        }
+
+        [Test]
+        public void Value_ReturnsRentedInstance()
+        {
+            var pool = new Pool<WrapItem>(() => new WrapItem());
+
+            var handle = pool.GetPooled(out var item);
+
+            Assert.AreSame(item, handle.Value, "Value 应就是取出的那个实例");
+            handle.Dispose();
         }
 
         [Test]

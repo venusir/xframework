@@ -10,7 +10,7 @@ namespace Venusy609.Xframework.Editor.Tests
     /// <summary>
     /// <see cref="Pool{T}"/> 泛型对象池核心测试。
     /// <para>覆盖：生成与复用、预热与容量、计数语义（CountAll 只增不减 / CountActive 随取还增减）、
-    /// Clear 语义（回归：活跃实例 Clear 后仍可归还复用）、
+    /// Clear / Dispose 语义（回归：活跃实例 Clear 后仍可归还复用）、
     /// CollectionCheck 重复归还检测、回调优先级（委托 > IPoolable / IPoolDiscardable）、
     /// 池满丢弃回调、GetPooled 手动归还。</para>
     /// <para>全部直接实例化 <see cref="Pool{T}"/>，不经静态门面，无跨测试静态状态。</para>
@@ -216,6 +216,24 @@ namespace Venusy609.Xframework.Editor.Tests
             pool.Return(a);
             Assert.That(pool.CountInactive, Is.EqualTo(1));
             Assert.AreSame(a, pool.Get());
+        }
+
+        [Test]
+        public void Dispose_ViaIDisposable_ClearsIdleOnly()
+        {
+            // 显式接口实现，PoolManager.ClearAll 走的正是这条路径
+            var pool = new Pool<TestItem>(() => new TestItem(), PoolConfig.Default);
+
+            var active = pool.Get();
+            var idle = pool.Get();
+            pool.Return(idle);
+
+            ((IDisposable)pool).Dispose();
+
+            Assert.That(pool.CountInactive, Is.EqualTo(0), "Dispose 等价 Clear：只清闲置");
+            pool.Return(active);
+            Assert.That(pool.CountInactive, Is.EqualTo(1), "活跃实例归还时重新入池，池仍可用");
+            Assert.AreSame(active, pool.Get());
         }
 
         [Test]
