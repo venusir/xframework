@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XMessage;
@@ -213,6 +214,140 @@ namespace XFramework.XMessage.Tests
             var stats = MessageManager.GetChannelStats<TestMessage>();
 
             Assert.AreEqual(3, stats.KeyedChannelCount, "两种 Key 类型下的键值通道合计 3 条");
+        }
+
+        #endregion
+
+        #region 按类型下钻
+
+        /// <summary>
+        /// 按消息类型取行。行序未定义(受内部字典遍历序影响),故一律按类型查、不按下标取。
+        /// </summary>
+        private static MessageTypeStats RowOf(List<MessageTypeStats> rows, Type messageType)
+        {
+            for (int i = 0; i < rows.Count; i++)
+            {
+                if (rows[i].MessageType == messageType)
+                    return rows[i];
+            }
+
+            Assert.Fail($"缓冲区里没有消息类型 {messageType.Name} 的统计行");
+            return default;
+        }
+
+        [Test]
+        public void CopyTypeStats_EmptyBus_ReturnsZeroAndClearsBuffer()
+        {
+            var buffer = new List<MessageTypeStats> { default };
+
+            var count = MessageManager.CopyTypeStats(buffer);
+
+            Assert.AreEqual(0, count, "空总线应写 0 行");
+            Assert.AreEqual(0, buffer.Count, "进入时应先清空缓冲区(而非覆盖到一半)");
+        }
+
+        [Test]
+        public void CopyTypeStats_MergesTypeLevelAndKeyedIntoOneRow()
+        {
+            MessageManager.Subscribe<TestMessage>(_ => { });
+            MessageManager.SubscribeAsync<TestMessage>((msg, ct) => UniTask.CompletedTask);
+            MessageManager.Publish(new TestMessage { Value = 0 });        // 类型级通道 + 缓冲流
+            MessageManager.Publish("a", new TestMessage { Value = 1 });   // 键值通道 a
+            MessageManager.Publish("b", new TestMessage { Value = 2 });   // 键值通道 b
+            MessageManager.Publish(1, new TestMessage { Value = 3 });     // 另一种 Key 类型
+            MessageManager.Publish(new AnotherMessage { Value = 4 });     // 另一个消息类型
+
+            var buffer = new List<MessageTypeStats>();
+
+            Assert.AreEqual(2, MessageManager.CopyTypeStats(buffer), "两个消息类型各一行");
+
+            var row = RowOf(buffer, typeof(TestMessage));
+            Assert.AreEqual(4, row.ChannelCount, "类型级 1 条 + 键值 3 条");
+            Assert.AreEqual(3, row.KeyedChannelCount, "两种 Key 类型下的键值通道合计");
+            Assert.AreEqual(1, row.SyncSubscriptionCount);
+            Assert.AreEqual(1, row.AsyncSubscriptionCount);
+            Assert.AreEqual(4, row.BufferedChannelCount, "四条通道都建过缓冲流");
+
+            var other = RowOf(buffer, typeof(AnotherMessage));
+            Assert.AreEqual(1, other.ChannelCount, "另一个消息类型只有 1 条类型级通道");
+            Assert.AreEqual(0, other.KeyedChannelCount);
+        }
+
+        [Test]
+        public void CopyTypeStats_KeyedOnlyType_StillGetsARow()
+        {
+            // 只有键值通道、没有类型级通道的类型:归并时新起一行(第 2 步的建行分支)
+            MessageManager.Publish("a", new TestMessage { Value = 1 });
+            MessageManager.Publish(1, new TestMessage { Value = 2 });
+
+            var buffer = new List<MessageTypeStats>();
+
+            Assert.AreEqual(1, MessageManager.CopyTypeStats(buffer));
+            Assert.AreEqual(2, buffer[0].ChannelCount, "只有键值通道时,通道数即键值通道数");
+            Assert.AreEqual(2, buffer[0].KeyedChannelCount);
+            Assert.AreEqual(0, buffer[0].SyncSubscriptionCount);
+        }
+
+        [Test]
+        public void CopyTypeStats_RowsSumToBusStats()
+        {
+            // 不变量:两套统计互为校验。任一侧口径被改(例如又去动「缓冲通道是否必须持有重放缓存」),这里先红
+            MessageManager.Subscribe<TestMessage>(_ => { });
+            MessageManager.SubscribeBuffered<AnotherMessage>(_ => { });
+            MessageManager.SubscribeAsync<TestMessage>((msg, ct) => UniTask.CompletedTask);
+            MessageManager.Publish("a", new TestMessage { Value = 1 });
+            MessageManager.Publish(7, new TestMessage { Value = 2 });
+            MessageManager.Publish(new AnotherMessage { Value = 3 });
+
+            var buffer = new List<MessageTypeStats>();
+            MessageManager.CopyTypeStats(buffer);
+            var bus = MessageManager.GetStats();
+
+            var channels = 0;
+            var sync = 0;
+            var async = 0;
+            var buffered = 0;
+            for (int i = 0; i < buffer.Count; i++)
+            {
+                channels += buffer[i].ChannelCount;
+                sync += buffer[i].SyncSubscriptionCount;
+                async += buffer[i].AsyncSubscriptionCount;
+                buffered += buffer[i].BufferedChannelCount;
+            }
+
+            Assert.AreEqual(bus.ChannelCount, channels, "各行通道数之和应等于总线通道数");
+            Assert.AreEqual(bus.SyncSubscriptionCount, sync, "各行同步订阅数之和应等于总线同步订阅数");
+            Assert.AreEqual(bus.AsyncSubscriptionCount, async, "各行异步订阅数之和应等于总线异步订阅数");
+            Assert.AreEqual(bus.BufferedChannelCount, buffered, "各行缓冲通道数之和应等于总线缓冲通道数");
+        }
+
+        [Test]
+        public void CopyTypeStats_NullBuffer_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => MessageManager.CopyTypeStats(null));
+        }
+
+        [Test]
+        public void CopyTypeStats_ReusesCallerBuffer_WithoutAllocating()
+        {
+            MessageManager.Subscribe<TestMessage>(_ => { });
+            MessageManager.Publish("a", new TestMessage { Value = 1 });
+            MessageManager.Publish(1, new TestMessage { Value = 2 });
+            MessageManager.Publish(new AnotherMessage { Value = 3 });
+
+            var buffer = new List<MessageTypeStats>(8);
+            for (int i = 0; i < 4; i++)
+                MessageManager.CopyTypeStats(buffer);   // 预热:容量与内部状态就位
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+
+            for (int i = 0; i < 100; i++)
+                MessageManager.CopyTypeStats(buffer);
+
+            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+            Assert.AreEqual(0, allocated,
+                "由调用方持有缓冲区,反复调用不应产生 GC——这是「零分配主入口」的全部意义");
         }
 
         #endregion

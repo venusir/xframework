@@ -90,8 +90,8 @@ namespace XFramework.XSettings.Tests
         /// <summary>
         /// 门面必须保持扁平。
         /// <para>分组会把「门面名 == 接口名」这条唯一的人工核对手段换掉（转发时必然改名），
-        /// 而它换来的 IntelliSense 分组在本仓其它门面（<c>MessageManager</c> 48 个成员、
-        /// <c>InputManager</c> 43 个）上都没被采用。<c>UIManager</c> 曾短暂分组过，未发布即撤销。</para>
+        /// 而它换来的 IntelliSense 分组在本仓其它门面（<c>MessageManager</c>、<c>InputManager</c> 这些成员更多的）
+        /// 上都没被采用。<c>UIManager</c> 曾短暂分组过，未发布即撤销。</para>
         /// <para>在 Settings 这边比 UI 更值：<c>Settings&lt;T&gt;()</c> 正是有人会想归到
         /// 「数据访问」静态类里去的成员。</para>
         /// </summary>

@@ -259,9 +259,17 @@ Debug.Log(stats);   // MessageBusStats(通道表 3, 通道 5, 同步订阅 12, .
 // 下钻到单个类型或单个 Key
 var byType = MessageManager.GetChannelStats<HealthChangedMessage>();
 var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId);
+
+// 全部类型排名：一行一个消息类型，缓冲区由调用方持有（零分配）
+var rows = new List<MessageTypeStats>();
+MessageManager.CopyTypeStats(rows);
+rows.Sort((a, b) => b.ChannelCount.CompareTo(a.ChannelCount));   // 行序未定义，排名自己排
+Debug.Log(rows[0]);   // MessageTypeStats(EnemyHealthChanged, 通道 50000, ... 键值通道 49999)
 ```
 
-`BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它数的是**建有缓冲订阅流的通道数**，**不等于「各持有一条消息的通道数」**：订阅过缓冲但从未发布过的通道也计入，它们没有值可重放，且可被 `TrimEmptyChannels` 回收。统计为 O(通道数) 遍历、零分配，属诊断接口，不适合每帧调用。
+**三个统计入口各管一段**：`GetStats()` 给总线总数（只回答「有没有泄漏」）；`CopyTypeStats(buffer)` 一行一个消息类型（回答「**是哪个类型**在泄漏」，行序未定义、要排名请自行排序，缓冲区由调用方持有故零分配，会先被清空）；`GetChannelStats<TMessage>()` / `GetChannelStats<TKey, TMessage>(key)` 下钻到**单个通道**。注意口径差别：`GetChannelStats<TMessage>()` 的四个计数**只算类型级通道**，而 `CopyTypeStats` 的一行是**类型级 + 该类型下全部键值通道的合计**——两者共用同一份「按类型扫表」实现，`KeyedChannelCount` 字段应当永远相等。
+
+`BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它数的是**建有缓冲订阅流的通道数**，**不等于「各持有一条消息的通道数」**：订阅过缓冲但从未发布过的通道也计入，它们没有值可重放，且可被 `TrimEmptyChannels` 回收。`GetStats()` 为 O(通道数) 遍历、零分配；`CopyTypeStats` 最坏为 O(键值存储数 × 消息类型数)——都是诊断接口，不适合每帧调用。
 
 `ChannelStoreCount` 是两张通道表（类型通道表 + 键值通道表）的**表项数之和**，**不是消息类型的个数**——同一消息类型若既有类型通道又配了键值通道，或配了多种 Key 类型，都会各占一项。它衡量的是表的规模，用来确认「该消失的表项是否真的消失了」（例如实体的最后一个 Key 被淘汰后，键值存储表项应当一并摘除）。
 

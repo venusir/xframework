@@ -670,7 +670,12 @@ namespace XFramework.XMessage
                 filterCount: filterCount);
         }
 
-        /// <summary>获取指定消息类型的通道统计;不存在时返回全 0 快照。</summary>
+        /// <summary>
+        /// 获取指定消息类型<b>类型级通道</b>的统计;不存在时返回全 0 快照。
+        /// <para>四个计数只算该类型的类型级通道;要「类型级 + 全部键值通道」的合计视图,用
+        /// <see cref="CopyTypeStats"/> 里同名消息类型的那一行(<c>MessageTypeStats</c>)。这是两个口径,
+        /// 不是同一份数据——<c>KeyedChannelCount</c> 是唯一两者都有的字段,且共用同一份扫表实现。</para>
+        /// </summary>
         internal MessageChannelStats GetChannelStats<TMessage>()
         {
             var type = typeof(TMessage);
@@ -680,16 +685,9 @@ namespace XFramework.XMessage
                 channel.Accumulate(ref acc);
 
             // Key 类型不是本方法的类型参数,故按消息类型汇总键值通道数
-            var keyedChannelCount = 0;
-            foreach (var pair in _keyedChannels)
-            {
-                if (pair.Key.MessageType == type)
-                    keyedChannelCount += pair.Value.Count;
-            }
-
             return new MessageChannelStats(
                 acc.SyncSubscriptionCount, acc.AsyncSubscriptionCount,
-                acc.BufferedChannelCount > 0, keyedChannelCount);
+                acc.BufferedChannelCount > 0, CountKeyedChannels(type));
         }
 
         /// <summary>获取指定键值通道的统计;通道不存在时返回全 0 快照。</summary>
@@ -708,6 +706,96 @@ namespace XFramework.XMessage
             return new MessageChannelStats(
                 acc.SyncSubscriptionCount, acc.AsyncSubscriptionCount,
                 acc.BufferedChannelCount > 0, 0);
+        }
+
+        /// <summary>
+        /// 把每个消息类型一行地写入调用方缓冲区,返回写入行数;进入时先清空缓冲区。
+        /// <para><b>聚合口径</b>:一行的计数是该消息类型下「类型级通道 + 全部键值通道」的合计
+        /// (与 <see cref="GetChannelStats{TMessage}"/> 只算类型级通道不同),故行的 <c>ChannelCount</c>
+        /// 等于(该类型有类型级通道则 1)加 <c>KeyedChannelCount</c>。</para>
+        /// <para><b>零分配</b>:结果落在调用方缓冲区,本方法自身不分配,逐行构造也不装箱(结构体)。
+        /// 归并查重与键值计数都用线性扫描而非字典——字典要么每次调用分配(与「由调用方持有缓冲区」
+        /// 的承诺冲突),要么得引入池依赖;而消息类型数是个位数,本方法又属诊断接口(不进每帧路径),
+        /// 线性扫描是这里正确的取舍。故最坏复杂度是 O(键值存储数 × 消息类型数),<b>不是</b> O(通道数)。</para>
+        /// <para><b>行序未定义</b>(受内部字典遍历序影响):要排名请调用方自行排序——它持有缓冲区。</para>
+        /// </summary>
+        internal int CopyTypeStats(List<MessageTypeStats> buffer)
+        {
+            buffer.Clear();
+
+            // 1) 类型级通道:每种消息类型落一行;键值通道数在此一次算好(含该类型下全部 Key 类型)
+            foreach (var pair in _channels)
+            {
+                var acc = new MessageStatsAccumulator();
+                pair.Value.Accumulate(ref acc);
+
+                buffer.Add(new MessageTypeStats(
+                    pair.Key,
+                    acc.ChannelCount,
+                    acc.SyncSubscriptionCount,
+                    acc.AsyncSubscriptionCount,
+                    acc.BufferedChannelCount,
+                    CountKeyedChannels(pair.Key)));
+            }
+
+            // 2) 键值通道:归并到同消息类型的行(该类型只在键值侧存在时新起一行)。
+            // 键值通道数已在第 1 步或建行时填好,本步只累加通道数与订阅数,不得重复计 KeyedChannelCount
+            foreach (var pair in _keyedChannels)
+            {
+                var messageType = pair.Key.MessageType;
+                var acc = new MessageStatsAccumulator();
+                pair.Value.Accumulate(ref acc);
+
+                var index = IndexOfMessageType(buffer, messageType);
+                if (index < 0)
+                {
+                    buffer.Add(new MessageTypeStats(
+                        messageType,
+                        acc.ChannelCount,
+                        acc.SyncSubscriptionCount,
+                        acc.AsyncSubscriptionCount,
+                        acc.BufferedChannelCount,
+                        CountKeyedChannels(messageType)));
+                    continue;
+                }
+
+                var row = buffer[index];
+                buffer[index] = new MessageTypeStats(
+                    messageType,
+                    row.ChannelCount + acc.ChannelCount,
+                    row.SyncSubscriptionCount + acc.SyncSubscriptionCount,
+                    row.AsyncSubscriptionCount + acc.AsyncSubscriptionCount,
+                    row.BufferedChannelCount + acc.BufferedChannelCount,
+                    row.KeyedChannelCount);
+            }
+
+            return buffer.Count;
+        }
+
+        /// <summary>某消息类型下的键值通道数(全部 Key 类型、全部 Key 合计)。</summary>
+        private int CountKeyedChannels(Type messageType)
+        {
+            var count = 0;
+            foreach (var pair in _keyedChannels)
+            {
+                if (pair.Key.MessageType == messageType)
+                    count += pair.Value.Count;
+            }
+
+            return count;
+        }
+
+        /// <summary>在缓冲区中按消息类型查行;不存在返回 -1。</summary>
+        /// <remarks>线性扫描的理由见 <see cref="CopyTypeStats"/>。</remarks>
+        private static int IndexOfMessageType(List<MessageTypeStats> buffer, Type messageType)
+        {
+            for (int i = 0; i < buffer.Count; i++)
+            {
+                if (buffer[i].MessageType == messageType)
+                    return i;
+            }
+
+            return -1;
         }
 
         #endregion

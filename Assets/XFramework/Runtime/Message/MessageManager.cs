@@ -236,6 +236,7 @@ namespace XFramework.XMessage
         /// <summary>
         /// 获取总线的只读运行统计快照,用于诊断订阅泄漏与缓冲通道内存驻留。
         /// <para>遍历全部通道,为 O(通道数) 且零分配;属诊断接口,不适合每帧调用。</para>
+        /// <para>它只给总数:要回答「<b>是哪个消息类型</b>在泄漏」用 <see cref="CopyTypeStats"/>。</para>
         /// </summary>
         public static MessageBusStats GetStats()
         {
@@ -245,13 +246,34 @@ namespace XFramework.XMessage
             }
         }
 
-        /// <summary>获取指定消息类型的通道统计;该类型无通道时返回全 0 快照。</summary>
+        /// <summary>
+        /// 获取指定消息类型<b>类型级通道</b>的统计;该类型无通道时返回全 0 快照。
+        /// <para>四个计数只算类型级通道;要「类型级 + 全部键值通道」的合计,用 <see cref="CopyTypeStats"/>
+        /// 里同名消息类型的那一行。</para>
+        /// </summary>
         public static MessageChannelStats GetChannelStats<TMessage>()
             => _broker.GetChannelStats<TMessage>();
 
         /// <summary>获取指定键值通道的统计;通道不存在时返回全 0 快照。</summary>
         public static MessageChannelStats GetChannelStats<TKey, TMessage>(TKey key)
             => _broker.GetChannelStats<TKey, TMessage>(key);
+
+        /// <summary>
+        /// 把每个消息类型的统计行写入调用方提供的缓冲区,返回写入行数。
+        /// <para><b>零分配的主入口</b>:由调用方持有缓冲区即可反复调用而不产生 GC;缓冲区会先被清空。</para>
+        /// <para>每行是该消息类型下<b>类型级通道与全部键值通道的合计</b>——排查订阅泄漏时用它回答
+        /// 「是哪个类型在泄漏」(<see cref="GetStats"/> 只给总数,<see cref="GetChannelStats{TMessage}"/> 要先知道
+        /// 类型)。行序未定义,要排名请自行排序:调用方持有缓冲区,排序不必经过本方法。最坏复杂度为
+        /// O(键值存储数 × 消息类型数),属诊断接口,不适合每帧调用。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区,不能为 <c>null</c>。</param>
+        /// <returns>写入的行数;总线为空时为 0。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 <c>null</c> 时抛出。</exception>
+        public static int CopyTypeStats(List<MessageTypeStats> buffer)
+        {
+            if (buffer == null) throw new ArgumentNullException(nameof(buffer));
+            return _broker.CopyTypeStats(buffer);
+        }
 
         /// <summary>
         /// 注册请求处理器。一个请求类型只能注册一个处理器。

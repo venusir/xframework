@@ -15,6 +15,8 @@ namespace XFramework.XMessage
         /// 通道存储表项数(类型通道表 + 键值通道表)。
         /// <para><b>不等于「消息类型的个数」</b>——同一消息类型若既有类型通道又配了键值通道,
         /// 或配了多种 Key 类型,各占一项而重复计数。本属性衡量的是两张表的表项规模。</para>
+        /// <para>要按消息类型看规模,用 <see cref="MessageManager.CopyTypeStats"/>:它一行一个消息类型,
+        /// 行数才是「消息类型的个数」。</para>
         /// </summary>
         public int ChannelStoreCount { get; }
 

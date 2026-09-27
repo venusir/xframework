@@ -200,7 +200,12 @@ namespace XFramework.XMessage.Internal
         /// <summary>异步订阅数。</summary>
         public int AsyncSubscriptionCount;
 
-        /// <summary>持有重放缓存的通道数。</summary>
+        /// <summary>
+        /// 建有缓冲订阅流的通道数。
+        /// <para><b>不等于「持有重放缓存」</b>:订阅过缓冲、但该类型从未发布过的通道同样计入——它没有
+        /// 值可重放,且可被 <c>TrimEmptyChannels</c> 回收。与 <see cref="MessageBusStats.BufferedChannelCount"/>
+        /// 同一口径,别按字面读成「各持有一条消息的通道数」。</para>
+        /// </summary>
         public int BufferedChannelCount;
     }
 
@@ -253,7 +258,7 @@ namespace XFramework.XMessage.Internal
 
         #region IKeyedChannelStore
 
-        /// <summary>当前 Key 的通道数量。</summary>
+        /// <summary>本存储内<b>全部 Key</b> 的通道数(不是一个 Key、也不是 Key 的个数——空壳 Key 也计入)。</summary>
         public int Count => _channels.Count;
 
         /// <summary>回收本存储内全部可回收的空通道,返回回收数量。</summary>

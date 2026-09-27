@@ -22,6 +22,8 @@ namespace XFramework.XMessage
         /// <summary>
         /// 该消息类型下的键值通道数。
         /// <para>仅在按消息类型查询时有意义;按具体 Key 查询与通道不存在时均为 0。</para>
+        /// <para>与 <c>MessageTypeStats.KeyedChannelCount</c> 是同一份「按消息类型扫表」结果的两种视图
+        /// (共用 <c>MessageBroker.CountKeyedChannels</c>),不是各自算的——两者应当永远相等。</para>
         /// </summary>
         public int KeyedChannelCount { get; }
 
