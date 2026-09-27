@@ -70,7 +70,7 @@ namespace XFramework.XPipeline
     /// <para>阶段经 <see cref="PipelineStageContext"/> 主动写入(事件驱动),管线不轮询、不持有帧泵;
     /// 阶段串行逐 await,天然保证 <see cref="RunAsync"/> 返回时无在途阶段任务。</para>
     /// </summary>
-    internal sealed class PipelineImpl : IPipeline, IStageContextSink
+    internal sealed class PipelineImpl : IPipeline, IStageContextSink, IContextBellSink
     {
         #region IPipeline Properties
 
@@ -103,6 +103,9 @@ namespace XFramework.XPipeline
 
         /// <summary>当前运行装配的阶段上下文(事件驱动聚合的读取源)。</summary>
         PipelineStageContext[] _contexts;
+
+        /// <summary>写入门铃:重入折叠 + 迟写防护(与容器聚合器共用同一实现)。</summary>
+        readonly ContextBell _bell = new ContextBell();
 
         /// <summary>
         /// 聚合扫描次数(测试缝,internal、按实例累计)。阶段每写一次即一次扫描,顶层节流只决定
@@ -172,6 +175,7 @@ namespace XFramework.XPipeline
             }
 
             IsRunning = true;
+            _bell.Reset();
 
             // 链接外部取消令牌:任一方取消,当前阶段收到已取消的 token
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
@@ -274,6 +278,9 @@ namespace XFramework.XPipeline
                 }
 
                 // 终局:取消 / 失败 / 完成三路互斥(先重算快照广播,再触发事件)
+                // 关闸:终局广播与终局事件期间的重入写不再聚合——否则订阅者在事件里回写会再广播一次,
+                // 于是「OnCancelled/OnCompleted 之后仍收到进度广播」
+                _bell.Settle();
                 if (cancelled)
                 {
                     RecalculateSnapshot();
@@ -293,6 +300,8 @@ namespace XFramework.XPipeline
                     // 完成:全局进度补满并广播(完成语义与各阶段权重无关)
                     _overall = 1f;
                     _description = "Completed";
+                    // 让节流快照与刚广播的内容一致:终局后闸已关、不再有聚合,此行不留暗坑
+                    _lastDesc = _description;
                     _currentStageName = null;
                     _currentTaskName = null;
                     _completedStageCount = _stages.Count;
@@ -341,15 +350,24 @@ namespace XFramework.XPipeline
         #region Private Methods
 
         /// <summary>
-        /// 阶段写入触发的聚合入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
-        /// 经共享扫描(<see cref="ContextAggregation.Scan"/>,顶层模式)加权聚合 Σ(w·p)/Σ(w),
-        /// 阈值节流后广播。
-        /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
+        /// 阶段写入触发的门铃入口(<see cref="IStageContextSink"/> 实现,事件驱动,零闭包):
+        /// 重入折叠与迟写防护交给共享门铃,折叠后的聚合见 <see cref="IContextBellSink.AggregateOnce"/>。
         /// </summary>
         public void OnStageContextChanged(PipelineStageContext changed)
         {
-            if (!IsRunning) return;
+            // 运行结束/销毁后的写入即死信(终局窗口那一半由门铃的关闸负责)
+            if (!IsRunning || _contexts == null) return;
 
+            _bell.Ring(this);
+        }
+
+        /// <summary>
+        /// 一次顶层加权聚合(<see cref="IContextBellSink"/> 实现):经共享扫描
+        /// (<see cref="ContextAggregation.Scan"/>,顶层模式)加权聚合 Σ(w·p)/Σ(w),阈值节流后广播。
+        /// <para>已完成阶段记 w,执行中记 w·p;失败阶段权重移出分子与分母;Weight=0 阶段不占进度。</para>
+        /// </summary>
+        void IContextBellSink.AggregateOnce()
+        {
             AggregationCount++;
             var snap = ContextAggregation.Scan(_contexts, ContextAggregation.ScanMode.TopLevel);
 

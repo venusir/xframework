@@ -13,10 +13,11 @@ namespace XFramework.XPipeline
     /// 失败时对注入的链接取消源调 <see cref="CancellationTokenSource.Cancel"/> 中断在途兄弟
     /// (仅并行容器;串行容器注入 null)。</para>
     /// <para>每次执行前经 <see cref="Reset"/> 注入转发目标并复位状态;容器沉降后经
-    /// <see cref="ReleaseLinkedCts"/> 释放取消源引用;执行结束经 <see cref="Settle"/> 置沉降标志
-    /// (迟写防护)。</para>
+    /// <see cref="ReleaseLinkedCts"/> 释放取消源引用;执行结束经 <see cref="Settle"/> 关闸
+    /// (迟写防护)。重入折叠与迟写防护由共享门铃 <see cref="ContextBell"/> 承担——两个接收方
+    /// 共用同一实现,不再各持一份。</para>
     /// </summary>
-    internal sealed class StageAggregator : IStageContextSink
+    internal sealed class StageAggregator : IStageContextSink, IContextBellSink
     {
         #region Public API
 
@@ -48,11 +49,9 @@ namespace XFramework.XPipeline
         {
             _target = target;
             _linkedCts = linkedCts;
-            _settled = false;
+            _bell.Reset();
             _lastOverall = -1f;
             _lastDesc = null;
-            _aggregating = false;
-            _dirty = false;
             AnyFailed = false;
             FailDescription = null;
             FailTaskName = null;
@@ -67,10 +66,10 @@ namespace XFramework.XPipeline
             _linkedCts = null;
         }
 
-        /// <summary>执行结束调用:置沉降标志(迟写防护),释放链接取消源引用。</summary>
+        /// <summary>执行结束调用:关闸(迟写防护),释放链接取消源引用。</summary>
         internal void Settle()
         {
-            _settled = true;
+            _bell.Settle();
             _linkedCts = null;
         }
 
@@ -79,35 +78,23 @@ namespace XFramework.XPipeline
         #region IStageContextSink (显式实现)
 
         /// <summary>
-        /// 子上下文写入通知入口(门铃)。聚合广播发生在子阶段写入栈内,广播中子阶段再次写入会递归,
-        /// 用 <see cref="_aggregating"/> + <see cref="_dirty"/> 延迟重聚合;聚合整体 try/catch,
-        /// 订阅者(UI)异常不得冒泡进子阶段栈把无辜子阶段打成 Failed。
+        /// 子上下文写入通知入口(门铃)。聚合广播发生在子阶段写入栈内,重入折叠与迟写防护由共享
+        /// 门铃承担(见 <see cref="ContextBell"/>);聚合整体 try/catch,订阅者(UI)异常不得冒泡进
+        /// 子阶段栈把无辜子阶段打成 Failed。
         /// </summary>
         void IStageContextSink.OnStageContextChanged(PipelineStageContext changed)
         {
-            if (_settled) return; // 迟写防护:沉降后子阶段再写 → 忽略
+            _bell.Ring(this);
+        }
 
-            if (_aggregating)
-            {
-                _dirty = true;
-                return;
-            }
+        #endregion
 
-            _aggregating = true;
-            try
-            {
-                Aggregate();
-            }
-            finally
-            {
-                _aggregating = false;
-            }
+        #region IContextBellSink (显式实现)
 
-            if (_dirty)
-            {
-                _dirty = false;
-                Aggregate();
-            }
+        /// <summary>一次组内聚合(<see cref="ContextBell"/> 折叠后的回调)。</summary>
+        void IContextBellSink.AggregateOnce()
+        {
+            Aggregate();
         }
 
         #endregion
@@ -180,17 +167,13 @@ namespace XFramework.XPipeline
         /// <summary>链接取消源(失败时中断在途兄弟;串行容器为 null),由 Reset 注入、Release/Settle 释放。</summary>
         CancellationTokenSource _linkedCts;
 
-        /// <summary>已沉降标志(迟写防护:沉降后子阶段再写经门铃直接忽略)。</summary>
-        bool _settled;
+        /// <summary>写入门铃:重入折叠 + 迟写防护(与管线实现共用同一实现)。</summary>
+        readonly ContextBell _bell = new ContextBell();
 
         /// <summary>上一帧广播快照:组进度 + 描述 + 各子阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
         float _lastOverall = -1f;
         string _lastDesc;
         readonly PipelineStageState[] _lastStates;
-
-        /// <summary>聚合重入保护:聚合广播中子阶段再次写入时置 dirty,外层收尾再聚合。</summary>
-        bool _aggregating;
-        bool _dirty;
 
         #endregion
     }

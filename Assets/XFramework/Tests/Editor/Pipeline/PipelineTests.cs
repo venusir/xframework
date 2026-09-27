@@ -250,6 +250,62 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ReentrantWriteFromSubscriber_IsBoundedNotRecursed()
+        {
+            // 订阅者在广播里回写上下文(如 UI 反向驱动进度)会递归:写入 → 聚合 → 广播 → 订阅者 →
+            // 写入 …。折叠后每次外部写入最多再补一次聚合,回写被限在个位数;不折叠则订户愿写多少层
+            // 就递归多少层(这里给它 30 次机会,深度即 30 层栈)
+            var stage = new GatedProgressStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+
+            int writeBacks = 0;
+            pipeline.OnProgressUpdate += _ =>
+            {
+                if (writeBacks >= 30) return;
+                writeBacks++;
+                stage.Ctx.SetDescription("w" + writeBacks);
+            };
+
+            stage.Ctx.SetDescription("trigger");
+
+            Assert.LessOrEqual(writeBacks, 5, "重入写应被折叠为有限次,不得逐层递归");
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void TerminalEvent_ThenWriteBack_DoesNotBroadcast()
+        {
+            // 终局块(取消终局)先重算快照广播、再触发事件,此刻 IsRunning 仍为 true —— 订阅者在事件
+            // 里回写会重入整条聚合链并再广播一次,于是「OnCancelled 之后仍收到进度广播」。
+            // 注:完成终局上回写不会脏(完成阶段不产出描述,且定 Completed 那次写入已把快照描述置空),
+            // 故此处走取消终局——那是回写确实被判脏的路径。
+            var stage = new GatedProgressStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var cts = new CancellationTokenSource();
+            int countAtTerminal = -1;
+            pipeline.OnCancelled += () =>
+            {
+                countAtTerminal = progress.Count;
+                stage.Ctx.SetDescription("after-terminal");
+            };
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            var task = pipeline.RunAsync(cts.Token);
+            cts.Cancel();
+            task.GetAwaiter().GetResult();
+
+            Assert.Greater(countAtTerminal, 0, "取消终局应已广播过");
+            Assert.AreEqual(countAtTerminal, progress.Count, "终局事件之后不得再有进度广播");
+        }
+
+        [Test]
         public void DescriptionChange_ForcesBroadcast()
         {
             var stage = new GatedProgressStage();

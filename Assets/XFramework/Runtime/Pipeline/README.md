@@ -25,6 +25,7 @@ Runtime/Pipeline/
 ├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
 ├── SequenceStage.cs              # 串行阶段(组内串行子段,public)
 ├── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)
+├── ContextBell.cs                # 上下文写入门铃(重入折叠/迟写防护,internal,管线与容器共用)
 └── ContextAggregation.cs         # 加权扫描共享助手(加权扫描/阈值节流/状态快照,internal)
 ```
 
@@ -59,6 +60,7 @@ public interface IPipelineStage
 - **运行期装配防护**: 运行中 `AddStage` 打 `[Pipeline] AddStage: already running` 警告并忽略(阶段列表运行期只读,运行中上下文已按启动时刻快照,入列会错位)
 - **写入线程契约**: 阶段经 `PipelineStageContext` 写入须与 `RunAsync` 调度同一上下文(Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 LogError 提示(Release 构建零开销)
 - **订阅者异常隔离**: 四个事件的订阅者抛出的异常记 `[Pipeline] {事件名} subscriber threw:` 后继续,不改变阶段状态与终局——订阅方(如 UI)的 bug 不会把无辜阶段打成 Failed,不会把完成/取消改报成失败,也不会让 `RunAsync` 抛出
+- **重入折叠与终局关闸**: 订阅者在广播里回写上下文(如 UI 反向驱动)不会递归——一次外部写入最多补一次聚合,**递归深度恒为 2**;终局广播与终局事件期间关闸,写入不再触发聚合,故**终局事件之后不会再收到进度广播**。折叠刻意不写成 while 排空:订阅者若在每次广播都回写,while 会死循环而不管它会栈溢出,宁可少广播一次
 
 ### 容器组合
 
