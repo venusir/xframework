@@ -217,7 +217,8 @@ namespace Venusy609.Xframework.Editor.Tests
         [Test]
         public void CollectionCheck_Disabled_DuplicateReturnAllowed()
         {
-            var pool = new Pool<TestItem>(() => new TestItem()); // 默认配置 CollectionCheck = false
+            // 显式关闭检测：构造默认值已统一为 PoolConfig.Default（Editor 下默认开启）
+            var pool = new Pool<TestItem>(() => new TestItem(), new PoolConfig { CollectionCheck = false });
 
             var item = pool.Get();
             pool.Return(item);

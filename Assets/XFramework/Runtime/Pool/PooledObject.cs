@@ -19,7 +19,7 @@ namespace XFramework.XPool
     /// } // 自动 PoolManager.Return(bullet)
     /// </code>
     /// </example>
-    public struct PooledObject<T> : IDisposable
+    public struct PooledObject<T> : IDisposable where T : class
     {
         private readonly IPool<T> _pool;
 

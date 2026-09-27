@@ -61,7 +61,8 @@ namespace Venusy609.Xframework.Editor.Tests
         [Test]
         public void DisposeTwice_CollectionCheckOff_AcceptsBoth()
         {
-            var pool = new Pool<WrapItem>(() => new WrapItem()); // 默认配置 CollectionCheck = false
+            // 显式关闭检测：构造默认值已统一为 PoolConfig.Default（Editor 下默认开启）
+            var pool = new Pool<WrapItem>(() => new WrapItem(), new PoolConfig { CollectionCheck = false });
 
             var handle = pool.GetPooled(out _);
             handle.Dispose();

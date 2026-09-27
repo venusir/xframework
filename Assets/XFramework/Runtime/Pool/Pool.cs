@@ -9,7 +9,8 @@ namespace XFramework.XPool
     /// <para>线程不安全，应在主线程使用。</para>
     /// <para>GC 友好：内部使用 <see cref="Stack{T}"/> 存储闲置实例，预分配容量，无装箱。</para>
     /// <para>回调优先级：委托 > <see cref="IPoolable"/> 接口。同时存在时仅调用委托。</para>
-    /// <para><typeparamref name="T"/> 应为引用类型：实例复用依赖引用同一性（如 Editor 重复归还检测），值类型不保证正确语义。</para>
+    /// <para><typeparamref name="T"/> 限定为引用类型（<c>where T : class</c>）：实例复用依赖引用同一性，
+    /// 值类型会被复制，池化没有意义。</para>
     /// </summary>
     /// <typeparam name="T">池中存储的对象类型</typeparam>
     /// <example>
@@ -20,7 +21,7 @@ namespace XFramework.XPool
     /// pool.Return(item);
     /// </code>
     /// </example>
-    public sealed class Pool<T> : IPool<T>, IDisposable
+    public sealed class Pool<T> : IPool<T>, IDisposable where T : class
     {
         private readonly Stack<T> _stack;
         private readonly Func<T> _generator;
@@ -47,28 +48,34 @@ namespace XFramework.XPool
         /// 创建泛型对象池。
         /// </summary>
         /// <param name="generator">无参构造器，池空时调用</param>
-        /// <param name="config">池配置</param>
+        /// <param name="config">池配置，留空则用 <see cref="PoolConfig.Default"/>
+        /// （无预热、不限容量、Editor 下启用重复归还检测）</param>
         /// <param name="onRent">取出时的委托回调（可选，优先于 <see cref="IPoolable.OnRent"/>）</param>
         /// <param name="onReturn">归还时的委托回调（可选，优先于 <see cref="IPoolable.OnReturn"/>）</param>
         public Pool(
             Func<T> generator,
-            PoolConfig config = default,
+            PoolConfig? config = null,
             Action<T> onRent = null,
             Action<T> onReturn = null)
         {
             _generator = generator ?? throw new ArgumentNullException(nameof(generator));
-            _maxSize = config.MaxSize > 0 ? config.MaxSize : int.MaxValue;
+
+            // 用 PoolConfig.Default 而非 default(PoolConfig)：后者 CollectionCheck 为 false，
+            // 会让「直接 new」与「经 PoolManager」两条路径的调试安全性不同
+            var cfg = config ?? PoolConfig.Default;
+
+            _maxSize = cfg.MaxSize > 0 ? cfg.MaxSize : int.MaxValue;
             _onRent = onRent;
             _onReturn = onReturn;
-            _stack = new Stack<T>(config.PrewarmSize > 0 ? config.PrewarmSize : 8);
+            _stack = new Stack<T>(cfg.PrewarmSize > 0 ? cfg.PrewarmSize : 8);
 
 #if UNITY_EDITOR
-            if (config.CollectionCheck)
+            if (cfg.CollectionCheck)
                 _activeSet = new HashSet<T>();
 #endif
 
             // 预热
-            for (int i = 0; i < config.PrewarmSize; i++)
+            for (int i = 0; i < cfg.PrewarmSize; i++)
             {
                 var item = _generator();
                 _totalCreated++;

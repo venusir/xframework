@@ -160,7 +160,8 @@ namespace XFramework.XPool
         /// <summary>
         /// 指定类型的池是否已创建。
         /// </summary>
-        public static bool HasPool<T>()
+        /// <typeparam name="T">对象类型，需为引用类型</typeparam>
+        public static bool HasPool<T>() where T : class
         {
             return _pools.ContainsKey(typeof(T));
         }
@@ -182,7 +183,8 @@ namespace XFramework.XPool
         /// 移除并清空指定类型的池。
         /// <para>已取出的活跃实例不受影响，但归还时池已不存在，会被静默忽略。</para>
         /// </summary>
-        public static void RemovePool<T>()
+        /// <typeparam name="T">对象类型，需为引用类型</typeparam>
+        public static void RemovePool<T>() where T : class
         {
             var type = typeof(T);
             if (_pools.TryGetValue(type, out var poolObj) && poolObj is IPool<T> pool)
