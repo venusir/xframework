@@ -11,7 +11,12 @@ namespace XFramework.XMessage
         /// <summary>该通道的异步订阅数。</summary>
         public int AsyncSubscriptionCount { get; }
 
-        /// <summary>该通道是否持有可重放缓存。</summary>
+        /// <summary>
+        /// 该通道是否建有缓冲订阅流。
+        /// <para><b>不等于「有可重放的值」:</b>订阅过缓冲、但该类型从未发布过的通道同样为 <c>true</c>,
+        /// 此时新订阅者不会收到任何重放,该通道也属可回收之列(见 <c>MessageManager.TrimEmptyChannels</c>)。
+        /// </para>
+        /// </summary>
         public bool HasBufferedValue { get; }
 
         /// <summary>
@@ -36,6 +41,6 @@ namespace XFramework.XMessage
         /// <summary>返回便于日志阅读的紧凑描述。</summary>
         public override string ToString()
             => $"MessageChannelStats(同步订阅 {SyncSubscriptionCount}, 异步订阅 {AsyncSubscriptionCount}, " +
-               $"有重放缓存 {HasBufferedValue}, 键值通道 {KeyedChannelCount})";
+               $"有缓冲流 {HasBufferedValue}, 键值通道 {KeyedChannelCount})";
     }
 }

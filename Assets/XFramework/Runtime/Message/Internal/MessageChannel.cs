@@ -89,14 +89,21 @@ namespace XFramework.XMessage.Internal
         #region IMessageChannel
 
         /// <summary>
-        /// 是否可整条回收:无同步订阅、无异步订阅,且不持有缓冲流。
-        /// <para>持有缓冲流即持有重放缓存,回收会破坏「订阅前发布可重放」语义,
-        /// 故缓冲通道只能经 <see cref="EvictBuffered"/> 显式淘汰后才可能被回收。</para>
+        /// 是否可整条回收:无存活订阅者,且无值得保留的重放缓存。
+        /// <para>三个条件的含义:同步流无订阅、异步登记表为空、缓冲流(若有)既无订阅者也无缓存值。
+        /// 第三项<b>必须同时判「无缓冲订阅者」</b>——只判无缓存值会把「订阅先于发布」的活订阅者
+        /// 连通道一起静默摘掉,此后发布再也到不了它。</para>
+        /// <para><b>回收时不 Dispose 任何流是安全的</b>,不是遗漏:订阅数为 0 即链表为空(节点已全部
+        /// 退订回池,句柄再 Dispose 会因不在链表中而安全忽略),无缓存值即无可重放数据。这与
+        /// <c>_sync</c> 空壳被同样丢弃是同一取舍——本谓词只是把 <c>_buffered</c> 的待遇拉齐。</para>
+        /// <para><b>已知边界</b>:自动回收只在「同步订阅清零」或「异步登记表清空」时被触发(缓冲流刻意
+        /// 不挂 <see cref="EventStream{T}.OnEmpty"/>,见该字段文档),所以「只有缓冲订阅、从未发布、
+        /// 也从未有过同步/异步订阅」的通道没有被自动回收的时机,只能靠 <c>TrimEmptyChannels</c> 摘除。</para>
         /// </summary>
         public bool IsReclaimable =>
             (_sync == null || _sync.SubscriptionCount == 0)
             && (_async == null || _async.Count == 0)
-            && _buffered == null;
+            && (_buffered == null || (_buffered.SubscriptionCount == 0 && !_buffered.HasCachedValue));
 
         /// <summary>累加本通道的计数到 <paramref name="acc"/>。</summary>
         public void Accumulate(ref MessageStatsAccumulator acc)
@@ -166,7 +173,7 @@ namespace XFramework.XMessage.Internal
     /// </summary>
     internal interface IMessageChannel
     {
-        /// <summary>是否可整条回收(无同步订阅且不持有缓冲流)。</summary>
+        /// <summary>是否可整条回收(无存活订阅者,且无值得保留的重放缓存)。</summary>
         bool IsReclaimable { get; }
 
         /// <summary>淘汰缓冲流(丢弃重放缓存)。返回是否确有缓冲流被淘汰。</summary>

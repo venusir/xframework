@@ -2,15 +2,17 @@ using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using XFramework.XMessage;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XMessage.Tests
 {
     /// <summary>
     /// Tests for buffered-channel eviction and empty-channel reclamation.
     /// <para>
-    /// 语义边界:订阅清零的通道自动回收;持有重放缓存的缓冲通道<b>不</b>自动回收,
-    /// 只能经 EvictBufferedChannel 系列显式淘汰——淘汰本身会顺带回收因此变空的通道与存储,
-    /// 故 TrimEmptyChannels 退居兜底,常规路径下返回 0。
+    /// 语义边界:订阅清零的通道自动回收;<b>持有重放缓存</b>的缓冲通道不自动回收,只能经
+    /// EvictBufferedChannel 系列显式淘汰——淘汰本身会顺带回收因此变空的通道与存储。
+    /// 而「订阅过缓冲但从未发布」的空缓冲通道(无缓存值、无订阅者)不构成保留理由,属可回收之列,
+    /// 由 TrimEmptyChannels 摘除:这类通道没有清零事件(缓冲流不挂 OnEmpty),自动回收不覆盖它们。
     /// </para>
     /// </summary>
     [TestFixture]
@@ -276,6 +278,74 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "淘汰应顺带回收空通道");
             Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount);
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "已无可回收残留");
+        }
+
+        [Test]
+        public void TrimEmptyChannels_ReclaimsChannelWithUnpublishedBufferedSubscription()
+        {
+            // 订阅过缓冲、但该类型从未发布:通道里只有一个无值的空缓冲流。
+            // 它不构成「订阅前发布可重放」的任何保障,却是此前 TrimEmptyChannels 摘不掉的一类空壳
+            var handle = MessageManager.SubscribeBuffered<TestMessage>(_ => { });
+            handle.Dispose();
+
+            Assert.AreEqual(1, MessageManager.TrimEmptyChannels(),
+                "订阅过缓冲但从未发布的空通道应可回收");
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount, "回收后表中不应残留通道");
+            Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "重复回收应返回 0");
+        }
+
+        [Test]
+        public void TrimEmptyChannels_Keyed_ReclaimsStoreAfterUnpublishedBufferedSubscription()
+        {
+            var handle = MessageManager.SubscribeBuffered<string, TestMessage>("k", _ => { });
+            handle.Dispose();
+
+            Assert.AreEqual(1, MessageManager.TrimEmptyChannels(), "键值侧的空缓冲通道同样可回收");
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelCount);
+            Assert.AreEqual(0, MessageManager.GetStats().ChannelStoreCount, "存储表项应一并摘除");
+        }
+
+        [Test]
+        public void IsReclaimable_EmptyBufferedStreamIsReclaimable_CachedValueIsNot()
+        {
+            var channel = new MessageChannel<TestMessage>(null);
+            channel.GetOrCreateBuffered();
+
+            Assert.IsTrue(channel.IsReclaimable, "无缓存值的空缓冲流不构成保留理由");
+
+            channel.GetOrCreateBuffered().OnNext(new TestMessage { Value = 1 });
+            Assert.IsFalse(channel.IsReclaimable, "持有重放缓存的通道不得被回收");
+
+            Assert.IsTrue(channel.EvictBuffered());
+            Assert.IsTrue(channel.IsReclaimable, "淘汰后回到可回收");
+        }
+
+        [Test]
+        public void IsReclaimable_BufferedSubscriberWithoutValue_KeepsChannel()
+        {
+            // 闸门守卫:判据必须同时要求「无缓冲订阅者」。只判「无缓存值」会让订阅先于发布的活订阅者
+            // 被静默摘掉——通道消失后,后续发布再也到不了它
+            var channel = new MessageChannel<TestMessage>(null);
+            var handle = channel.GetOrCreateBuffered().Subscribe(_ => { });
+
+            Assert.IsFalse(channel.IsReclaimable, "有活缓冲订阅者的通道不得被回收");
+
+            handle.Dispose();
+            Assert.IsTrue(channel.IsReclaimable, "订阅清零且无缓存值时才可回收");
+        }
+
+        [Test]
+        public void TrimEmptyChannels_ThenResubscribe_DeliversExactlyOnce()
+        {
+            var first = MessageManager.SubscribeBuffered<TestMessage>(_ => { });
+            first.Dispose();
+            Assert.AreEqual(1, MessageManager.TrimEmptyChannels());
+
+            var received = new List<int>();
+            MessageManager.SubscribeBuffered<TestMessage>(msg => received.Add(msg.Value));
+            MessageManager.Publish(new TestMessage { Value = 5 });
+
+            CollectionAssert.AreEqual(new[] { 5 }, received, "回收后重建的通道恰好投递一条,不重放陈旧值");
         }
 
         #endregion

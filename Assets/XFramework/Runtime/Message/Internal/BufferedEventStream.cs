@@ -27,6 +27,20 @@ namespace XFramework.XMessage.Internal
 
         #endregion
 
+        #region Internal
+
+        /// <summary>
+        /// 是否持有可重放的值。供持有者判定「这条缓冲流是否构成保留通道的理由」。
+        /// <para>无锁读取:与 <see cref="EventStream{T}.SubscriptionCount"/> 同一口径(本引擎使用场景为
+        /// 主线程);读到 <c>false</c> 而随后被并发写入时,最多多回收一次「尚无值」的空壳,无正确性影响
+        /// ——与该流 <c>IsCompleted</c> 的无锁读取同源取舍。</para>
+        /// <para><b>不变量</b>:不得用它代替「有没有缓冲流」的判断。缓冲流存在但无值(订阅过缓冲、
+        /// 该类型却从未发布)是常见状态,此时通道没有任何需要保留的东西。</para>
+        /// </summary>
+        internal bool HasCachedValue => _hasLast;
+
+        #endregion
+
         #region Public API
 
         /// <summary>

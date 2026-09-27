@@ -4,7 +4,8 @@ namespace XFramework.XMessage
     /// 消息总线的只读统计快照。
     /// <para>
     /// 用于诊断两类常见问题:订阅泄漏(订阅数只增不减)与缓冲通道内存驻留
-    /// (<see cref="BufferedChannelCount"/> 对应每个 Key 各持有一条消息的通道数)。
+    /// (<see cref="BufferedChannelCount"/> 对应建有缓冲订阅流的通道数——含订阅过但从未发布、
+    /// 因而不持有任何消息的空缓冲通道)。
     /// </para>
     /// <para>获取一次需遍历全部通道,属诊断接口,不适合每帧调用。</para>
     /// </summary>
@@ -26,7 +27,12 @@ namespace XFramework.XMessage
         /// <summary>当前异步订阅总数。</summary>
         public int AsyncSubscriptionCount { get; }
 
-        /// <summary>当前持有重放缓存的通道数(排查缓冲内存驻留的主要指标)。</summary>
+        /// <summary>
+        /// 当前建有缓冲订阅流的通道数。
+        /// <para><b>不等于「持有重放缓存」:</b>订阅过缓冲、但该类型从未发布过的通道同样计入——它没有
+        /// 可重放的值,且可被 <see cref="MessageManager.TrimEmptyChannels"/> 回收。排查缓冲内存驻留时
+        /// 看它是否归零,别读成「每个 Key 各持有一条消息」。</para>
+        /// </summary>
         public int BufferedChannelCount { get; }
 
         /// <summary>自上次 Clear/SetInstance 以来的发布次数(含键值发布与 PublishAsync)。</summary>

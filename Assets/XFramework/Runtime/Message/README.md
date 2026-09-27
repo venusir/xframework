@@ -200,12 +200,15 @@ var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 
 ## 内存管理
 
-通道的回收遵循两条不同规则——这是「订阅前发布的消息可重放」这一语义的必然代价：
+通道的回收按「**是否持有可重放缓存**」分两类——这是「订阅前发布的消息可重放」这一语义的必然代价：
 
-| 通道 | 订阅清零时 | 回收方式 |
+| 通道 | 状态 | 回收方式 |
 |---|---|---|
 | 普通通道 | 链表空 | **自动回收**（事件流回调持有者摘除空通道） |
-| 缓冲通道 | 链表空但**仍持有重放缓存** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
+| 缓冲通道（持有重放缓存） | 链表空但**仍持有缓存值** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
+| 空缓冲通道（订阅过缓冲、该类型从未发布） | 链表空且**无缓存值** | 属可回收之列：`TrimEmptyChannels` 会摘除它（连同键值存储表项）；若同一通道另有订阅清零事件，自动回收同样会摘除 |
+
+> **自动回收不覆盖纯缓冲空壳**：缓冲流刻意不挂 `OnEmpty`，且「有没有缓存值」只有持有者知道，所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道不会被自动回收，只能靠 `TrimEmptyChannels` 摘除。这是已知边界，不是漏实现。
 
 ### 带 Key 的淘汰是语义要求，不只是省内存
 
@@ -232,7 +235,7 @@ MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // �
 MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key 与该消息类型，O(1)；返回是否存在并已淘汰
 MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该消息类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
 MessageManager.EvictBufferedChannels(entityId);                            // 该 Key 跨全部消息类型（实体销毁处用这个）；返回淘汰数量
-MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无重放缓存的空通道，常规路径下返回 0
+MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无可重放缓存的空通道（含订阅过缓冲但从未发布的空壳），常规路径下返回 0
 ```
 
 - 类型级单数版的行为已完全包含在复数版中，保留它只是因为它是 O(1) 快路径（复数版需按消息类型扫全表）。
@@ -256,7 +259,7 @@ var byType = MessageManager.GetChannelStats<HealthChangedMessage>();
 var byKey  = MessageManager.GetChannelStats<int, HealthChangedMessage>(entityId);
 ```
 
-`BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它等于「各持有一条消息的通道数」。统计为 O(通道数) 遍历、零分配，属诊断接口，不适合每帧调用。
+`BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它数的是**建有缓冲订阅流的通道数**，**不等于「各持有一条消息的通道数」**：订阅过缓冲但从未发布过的通道也计入，它们没有值可重放，且可被 `TrimEmptyChannels` 回收。统计为 O(通道数) 遍历、零分配，属诊断接口，不适合每帧调用。
 
 `ChannelStoreCount` 是两张通道表（类型通道表 + 键值通道表）的**表项数之和**，**不是消息类型的个数**——同一消息类型若既有类型通道又配了键值通道，或配了多种 Key 类型，都会各占一项。它衡量的是表的规模，用来确认「该消失的表项是否真的消失了」（例如实体的最后一个 Key 被淘汰后，键值存储表项应当一并摘除）。
 
