@@ -127,6 +127,32 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void GroupWithoutDescriptions_DoesNotRescanPerChildWrite()
+        {
+            // 子阶段不写描述时组内节流曾经形同虚设:比较用原始描述(null),快照却存归一化描述(""),
+            // 于是 null != "" 恒真 → 每次子写入都转发;而一次转发在顶层驱动两次聚合扫描(SetProgress
+            // 与 SetDescription 各一次,后者写的是同一个空串、同样要扫)。顶层节流把这些广播全吞了,
+            // 「多扫了多少次」在公开面上完全看不见,只能读 AggregationCount
+            var child = new SilentGatedChildStage();
+            var stage = new ParallelStage(new IPipelineStage[] { child });
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+            var impl = (PipelineImpl)pipeline;
+
+            child.Ctx.SetProgress(0.001f); // 首帧快照为 -1,这一次必然转发,先排除在计量之外
+            int scansBefore = impl.AggregationCount;
+            for (int i = 2; i <= 10; i++) child.Ctx.SetProgress(0.001f * i);
+
+            Assert.AreEqual(scansBefore, impl.AggregationCount,
+                "亚 1% 子步进不得再驱动顶层重扫(组内节流应把它们吞掉)");
+
+            child.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+        }
+
+        [Test]
         public void DescriptionChange_ForcesBroadcast()
         {
             var fake = new DescChildStage();
@@ -399,6 +425,27 @@ namespace Venusy609.Xframework.Editor.Tests
                 context.SetDescription("self-fail");
                 context.SetState(PipelineStageState.Failed);
                 await UniTask.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// 挂起且自己不写任何东西的子阶段,暴露子上下文供测试直接驱动:锁定组内节流口径
+        /// (子阶段不写描述时,亚 1% 步进不得逐次转发去驱动顶层重扫)。
+        /// </summary>
+        private sealed class SilentGatedChildStage : IPipelineStage
+        {
+            public string Name => "silent-gated";
+
+            public float Weight => 1f;
+
+            public readonly UniTaskCompletionSource Gate = new UniTaskCompletionSource();
+
+            public PipelineStageContext Ctx;
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
+                Ctx = context;
+                await Gate.Task.AttachExternalCancellation(cancellationToken);
             }
         }
 

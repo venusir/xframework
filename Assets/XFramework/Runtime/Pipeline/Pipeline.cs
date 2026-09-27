@@ -104,6 +104,13 @@ namespace XFramework.XPipeline
         /// <summary>当前运行装配的阶段上下文(事件驱动聚合的读取源)。</summary>
         PipelineStageContext[] _contexts;
 
+        /// <summary>
+        /// 聚合扫描次数(测试缝,internal、按实例累计)。阶段每写一次即一次扫描,顶层节流只决定
+        /// 要不要广播、不减少扫描本身——于是「组内节流失效带来多少次顶层重扫」在公开面(广播序列)
+        /// 上完全不可观测:广播被顶层节流吞掉了,只能由本计数读出。
+        /// </summary>
+        internal int AggregationCount { get; private set; }
+
         /// <summary>上一帧广播快照:全局进度 + 描述 + 各阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
         float _lastOverall = -1f;
         string _lastDesc;
@@ -343,6 +350,7 @@ namespace XFramework.XPipeline
         {
             if (!IsRunning) return;
 
+            AggregationCount++;
             var snap = ContextAggregation.Scan(_contexts, ContextAggregation.ScanMode.TopLevel);
 
             // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任一阶段状态变化(共享扫描,每帧路径零 LINQ)

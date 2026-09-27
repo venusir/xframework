@@ -153,7 +153,10 @@ namespace XFramework.XPipeline
                     _target.CurrentTaskName = currentTaskName;
 
                     _lastOverall = overallProgress;
-                    _lastDesc = currentDesc ?? ContextAggregation.RunningDescriptionPlaceholder;
+                    // 节流快照存**原始**描述,占位只发生在转发映射点(与管线一致)。存归一化值会让
+                    // 「子阶段不写描述」的组里 null != "" 恒真——每次子写入都转发,组内节流形同虚设,
+                    // 顶层为此白扫一遍(广播被顶层节流吞掉,所以只表现为浪费,看不出来)
+                    _lastDesc = currentDesc;
                     ContextAggregation.CopyStates(ChildContexts, _lastStates);
                 }
 
