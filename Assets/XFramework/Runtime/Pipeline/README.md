@@ -78,6 +78,8 @@ public interface IPipelineStage
 - **阶段切换时进度回落属预期**(新阶段从 0 开始);装配 `Weight = 0` 的瞬时阶段可平滑过渡
 - **描述占位**: 运行中未写描述时广播/转发的 `Description` 为空串占位(无描述即无文案,不伪造终局文案);完成终局恒为 `"Completed"`;失败/取消终局可能为空串(诊断经 `OnFailed` 原因与失败阶段上下文)
 
+> **为什么广播载荷是类,而不是框架惯例里的 readonly struct?** `Broadcast` 每次广播新分配一个 `PipelineProgress`,看似违背「进度载荷用 readonly struct」的惯例(`AssetInitReport` / `SaveReport`)——那两者是模块在热点路径上**自建自用**的上报结构,而 `PipelineProgress` 是**交出去**的事件载荷:订阅者可以留存它(`Bootstrap` 就直接转交给调用方的 `IProgress<PipelineProgress>`),池化需要一个并不存在的归还协议;改成 struct 则经接口传递要装箱,还会改掉 `Report` 的就地覆盖语义与 `Bootstrap.RunAsync` 的公开签名。分配量本身也受阈值节流约束(≥1% 或描述/任务名/状态变化才广播),不在每帧路径上。此条写给下一次复审,免得再被当成漏网的 GC 问题。
+
 ### 相位分组编排(IPhaseStage)
 
 「同相位并行、相位升序串行」是启动/初始化类流程的常见需求,以**相位阶段 + 分组装配助手**提供声明式表达——执行面与普通阶段完全一致,不引入第二套契约:
