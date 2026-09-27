@@ -71,6 +71,11 @@ namespace XFramework.XMessage.Tests
             public void Handle(TestMessage message) => ReceivedCount++;
         }
 
+        /// <summary>扩展方法面的发布者替身(审计发现:<c>IMessagePublisher</c> 侧此前无任何用例)。</summary>
+        private sealed class PlainPublisher : IMessagePublisher
+        {
+        }
+
         #endregion
 
         [SetUp]
@@ -158,6 +163,23 @@ namespace XFramework.XMessage.Tests
 
             MessageManager.Publish("k", new TestMessage { Value = 25 });
             Assert.AreEqual(1, subscriber.ReceivedCount, "键值消息不应送达:说明它落的是类型级重载,不是键值版");
+        }
+
+        [Test]
+        public void PublisherExtensions_PublishAndPublishAsync_ReachTheSameBus()
+        {
+            // IMessagePublisher 侧的 4 个扩展方法此前零用例(审计的「公开成员 → 有无直接用例」映射发现的
+            // 两处缺口之一;对照:IMessageSubscriber 侧有 DestroyTokenBindingTests 7 条)。本用例锁定现状。
+            var publisher = new PlainPublisher();
+            var received = new List<int>();
+            MessageManager.Subscribe<TestMessage>(m => received.Add(m.Value));
+
+            publisher.Publish(new TestMessage { Value = 1 });
+            publisher.Publish("k", new TestMessage { Value = 2 });   // 键值发布:类型级订阅不收
+            publisher.PublishAsync(new TestMessage { Value = 3 }).GetAwaiter().GetResult();
+
+            CollectionAssert.AreEqual(new[] { 1, 3 }, received,
+                "publisher 扩展方法应落到同一总线(键值发布不串到类型级通道)");
         }
 
         [Test]

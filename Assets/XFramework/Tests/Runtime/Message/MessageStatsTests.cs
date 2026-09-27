@@ -350,6 +350,26 @@ namespace XFramework.XMessage.Tests
                 "由调用方持有缓冲区,反复调用不应产生 GC——这是「零分配主入口」的全部意义");
         }
 
+        [Test]
+        public void Stats_ToString_AreCompactAndReadable()
+        {
+            // 三个统计结构的 ToString() 此前零断言(审计的「公开成员 → 有无直接用例」映射发现的另一处缺口)。
+            // 只断言关键词与数字出现在其中,不逐字锁格式——格式属实现细节,断言太死会变成第二份真相。
+            MessageManager.Subscribe<TestMessage>(_ => { });
+            MessageManager.Publish(new TestMessage { Value = 1 });
+
+            var bus = MessageManager.GetStats().ToString();
+            StringAssert.Contains("通道", bus);
+            StringAssert.Contains("发布 1", bus, "发布次数应出现在总线快照里");
+
+            var channel = MessageManager.GetChannelStats<TestMessage>().ToString();
+            StringAssert.Contains("同步订阅 1", channel, "该类型级通道有 1 个同步订阅");
+
+            var rows = new List<MessageTypeStats>();
+            MessageManager.CopyTypeStats(rows);
+            StringAssert.Contains(nameof(TestMessage), rows[0].ToString(), "按类型下钻的行应带上消息类型名");
+        }
+
         #endregion
     }
 }
