@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using XFramework.XEvent.Internal;
 using XFramework.XMessage;
 
 namespace XFramework.XMessage.Tests
@@ -89,6 +90,27 @@ namespace XFramework.XMessage.Tests
         {
             MessageManager.Clear();
         }
+
+        #region 订阅跟踪器
+
+        [Test]
+        public void SubscriptionTracker_CountsStreamAndAsyncRegistrations()
+        {
+            // 提交「订阅跟踪器」的异步侧接线此前只有「加/减对称」的写法、没有断言验证——本用例补上这一半。
+            var mark = SubscriptionTracker.LiveCount;
+
+            var sync = MessageManager.Subscribe<TestMessage>(_ => { });
+            var async = MessageManager.SubscribeAsync<TestMessage>((msg, ct) => UniTask.CompletedTask);
+            Assert.AreEqual(mark + 2, SubscriptionTracker.LiveCount, "同步订阅与异步登记各计一条");
+
+            sync.Dispose();
+            Assert.AreEqual(mark + 1, SubscriptionTracker.LiveCount, "同步退订递减");
+
+            async.Dispose();
+            Assert.AreEqual(mark, SubscriptionTracker.LiveCount, "异步退订递减——异步侧接线由此验证");
+        }
+
+        #endregion
 
         #region 参数判空
 
