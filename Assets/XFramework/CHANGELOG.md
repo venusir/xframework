@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **XPool 补 `CountActive`（`IPool<T>` / `Pool<T>`）**：`CountAll` 是「自建池以来生成过多少」，只增不减——归还、清空、超容丢弃都不减。于是「还有多少实例在外面」根本无从读出，而集合池的 `Configure` 守卫只能拿 `CountAll - CountInactive` 冒充活跃数（见下方 Fixed）。新增的 `CountActive` 随取还增减，超容丢弃的实例同样离开活跃态（不再有人持有它）；递减钳在 0，避免 `CollectionCheck` 关闭时重复归还把它减成负数。文档同时写明：`CountAll - CountInactive` **不等于** `CountActive`，被丢弃的实例仍计入 `CountAll` 却既非活跃也非闲置
+
+- **XPool 池满丢弃回调**：闲置达到 `MaxSize` 后归还的实例原先被直接解引用、无人知晓，持有非托管资源或需要确定性释放的对象只能等 GC——这是本模块相对 Unity 官方 `ObjectPool`（有 `actionOnDestroy`）与微软 `ObjectPool`（`Return` 可返回 false 拒绝回收）唯一的功能缺口。`Pool<T>` 构造新增 `onDestroy` 委托，另立 `IPoolDiscardable` 可选能力接口（不给已发布的 `IPoolable` 加成员——那是设计给第三方数据类实现的，加方法即源码破坏），`PoolManager.Configure<T>` 增加三参重载把丢弃回调透传到池。语义要点：归还回调仍**先于**容量判断触发，被丢弃的实例先收 `OnReturn`（清理状态）再收 `OnDiscard`（释放资源）；`Clear()` / `ClearAll()` **不触发**丢弃回调——`ClearAll` 会在应用退出时自动调用，退出期跑用户回调容易碰到已销毁的 Unity 对象
+
 - **Reactive 契约测试补口（8 处「文档已承诺但无人验证」的缺口）**：`Subscribe(null)` 抛 `ArgumentNullException`、无参构造取类型默认值、`Select(null, selector)` 抛 `ArgumentNullException`、**`Select` 在源已释放时抛 `ObjectDisposedException`**（上一版才写进文档的行为，此前既无测试也无文档）、派生值的「`Dispose` 后再订阅抛异常」与「重复 `Dispose` 幂等」（可写类型两条都有、只读类型一条都没有），以及 `TryWriteValue` 失败时 `actual` 为 `default`——原用例用 `out _` 把这个明确承诺丢掉了，现改为捕获后断言。另补两条用反射钉住的**接口不变量**：`IReactiveProperty<T>.Value` **无 setter**、`ReadOnlyReactiveProperty<T>` **不**实现 `IReactivePropertyWriter<T>`。后两条与 `UIFacadeCompletenessTests` 同类——把「只读接口不暴露写」「派生值不获得写能力」这两条设计承诺变成改坏即红的断言，而不只是注释里的说法
 
 - **Reactive 补诊断面 `SubscriptionCount` 与 `ToString()`**：本模块此前**零内省**——订阅泄漏在运行时无声无息，却没有任何手段能发现它。`ReactiveProperty<T>` 与 `ReadOnlyReactiveProperty<T>` 各加一个只读的 `SubscriptionCount`（引擎的 `EventStream.SubscriptionCount` 就在同一程序集里，一行透出），以及诊断用的 `ToString()`（`ReactiveProperty<Int32>(50)` 形态，与 Settings 的 `SettingRef.ToString()` 同形——那个 `ToString` 存在的理由就是让注册表能记下是哪个句柄失败）。两者都标注「仅供排查，不要拿来做逻辑分支」。与既有工具同族：Message 的 `MessageBusStats` / `GetStats()`（其自述用途正是「诊断订阅泄漏」）、UI 的 `UIStateSnapshot` / `DumpState()`。补 5 条测试，其中一条把上一版 README 才开始告诫的「`Select` 返回值被就地丢弃即永久订阅」**变成可观察的事实**——断言丢弃派生值后源的订阅数确实为 1；另一条用订阅数替代原先的调用计数来验证「立即回调抛异常后订阅已清理」，比原来的写法直接得多
@@ -68,6 +72,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **UI 排序空间单点定义 `UISorting` / `UILayers`**：所有 `sortingOrder` 取值一律由此推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip` 会把越界取值当场拦住
 
 ### Changed
+
+- **XPool 池泛型收紧为引用类型约束（破坏性）**：`IPool<T>` / `Pool<T>` / `PooledObject<T>` 加 `where T : class`。此前值类型能实例化 `Pool<int>` 并通过编译，但实例复用依赖引用同一性——Editor 活跃追踪集的重复归还检测、`CountActive` 的取还配对都会失真，而 XML 文档里只是一句「应为引用类型」的建议。Unity `UnityEngine.Pool`、GameFramework、Microsoft.Extensions.ObjectPool 全部带此约束。连带两处：`PoolManager.RemovePool<T>` 必须同步加约束（否则 `is IPool<T>` 触发 CS0452），`HasPool<T>` 一并对齐；`Pool<T>` 构造的 `config` 默认值由 `default(PoolConfig)` 改为 `PoolConfig.Default`——前者 `CollectionCheck` 为 false，会让「直接 new」与「经 PoolManager 建池」两条路径在 Editor 下的调试安全性不同
 
 - **UI README 的约定式绑定章节此前描述的是一套不存在的机制（订正）**：那张表声称「面板下子 GameObject 名与 ReactiveProperty 名相同，自动根据组件类型选择属性绑定」，于是每一行都少了前缀，还列了 `InputField` / `TMP_InputField` / `TMP_Text` / `Slider(int)` 这些**代码里根本不支持**的组合。实际 `BindByConvention` 是：① 要为每个属性显式调一次，**不遍历 ViewModel**；② 拿「**前缀 + 属性名**」去子节点缓存里找，前缀决定组件（`txt_`→`Text`、`img_`→`Image`、`sld_`→`Slider`、`tgl_`→`Toggle`），且 `txt_`→`img_`→`sld_`→`tgl_` **顺序即优先级**；③ 组件类型必须与属性值类型匹配（`sld_` 只认 `float`、`tgl_` 只认 `bool`，`int` 配 `sld_` 绑不上），不匹配时**只在编辑器**打告警、Release 下静默；④ `btn_` 走另一条路（`BindClick`）；⑤ 缓存**最多 5 层深度**且只在 `Bind` 时建一次。照原表命名节点会静默绑不上——这正是它值得记一笔的原因。另订正同一节「`BindViewModel` 是等价写法」的错误：它**不绑定任何属性**，只调 `OnBound()` + 缓存组件，是那几行的前置条件
 - **Settings README 的 `SettingRef` API 表漏了 `TryWriteValue`（订正）**：句柄实现了 `IReactivePropertyWriter<TField>`，故可直接交给 `UIBinder.BindTwoWay` 做双向绑定——而这条兼容性此前只能从 Reactive 模块的 README 或源码里读到，Settings 自己的表里查不到。现补上该行，并把「也实现 `IReactivePropertyWriter<TField>`」列为显式一条
@@ -175,9 +181,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Removed
 
+- **XPool 删除 `PoolManagerExtensions`（破坏性）**：三个扩展方法挂在 `object` 上（`this.GetFromPool<T>()` / `this.ReturnToPool()`），全仓零引用、零测试，却让使用方工程里**每个变量**在 IDE 补全中都多出这两个条目。`GetFromPool` 的语义完全被 `PoolManager.Get` 覆盖，`ReturnToPool<T>(this T item)` 还带着与 `Return` 同源的静态类型定键问题。README 的文件树、API 速查表与示例同步删除
+
 - **删除节点系统（破坏性）**：整个 `XFramework.XNode` 模块——`BaseNode` / `ParentNode` / `EntityNode` / `ContainerNode` / `DictionaryNode` / `RootNode` / `LeafNode`、`NodeFactory` / `NodePool` / `NodeExtensions` / `NodeUtility`、`StartupExtensions` / `StartupStages` / `AssetExtensions`，以及 `Node/Bootstrap/` 下的四个引导节点。节点系统同时承担了四件事：框架的启动路径、一套 GamePlay 架构、一个服务定位器、更新调度的桥接；只有最后一项是基础框架层该管的，而它已由 Bootstrap 模块覆盖。本项目定位是基础框架层，不该预设 GamePlay 架构。连带影响：① `GameLauncher` 改由 `Bootstrap` 驱动并移入 `Runtime/Bootstrap/`（命名空间 `XFramework.XNode` → `XFramework.XBootstrap`），仍是**可选**入口，场景里没有它也照常运转；② `UpdateManagerExtensions`（`ResolveTimeMode` / `RegisterUpdate` / `UnregisterUpdate`，接收者均为 `BaseNode`）与 `LocalizationBootstrapNode` 一并移除，Update 模块从此与节点系统无关；③ `IUpdateTimeMode` 保留但不再有自动轴发现——注册时请显式传 `timeMode:`；④ `AssetExtensions` 的 12 个方法全部是 `AssetManager` 静态方法的纯转发（`self` 参数从未被使用，其中 `PreloadAssetsAsync` 还比门面版少了 `progress` 参数），直接调用 `AssetManager` 即可
 
 ### Fixed
+
+- **XPool 集合池 `Configure` 守卫用差值冒充活跃数，`ClearAll` 后永久拒绝重配**：守卫判的是 `CountAll - CountInactive`，而 `CountAll` 只增不减、`Clear` 只清闲置栈——任何一次 `Clear()` 或 `CollectionPoolManager.ClearAll()`（README 推荐切场景调用，框架在 `Application.quitting` 也调）之后，守卫都会看到「N 个活跃实例」并**永久**拒绝重配；集合池没有 `RemovePool` 这类逃生口，`PoolManager` 侧至少还教了那条路。四个集合池（List / HashSet / Dictionary / StringBuilder）一并改用真正的 `CountActive`，各加注释说明为何不能用差值口径。补一条回归用例，已实测改回旧算法时它确实会红
+
+- **XPool `Return` 按编译期类型定键，基类 / 接口引用归还时静默丢件**：池按 `Type` 定键，而 `Return<T>` 用的是编译期类型——`Base b = Get<Derived>(); Return(b);` 查不到池，实例被静默丢弃，与「未注册类型静默忽略」的宽容语义混在一起无从察觉（GameFramework 的 `Release(IReference)` 改用 `reference.GetType()` 定键正是为了规避这一点）。改为 `typeof(T)` 未命中时按 `item.GetType()` 回落一次，经内部 `IUntypedPool` 逃生口调用（泛型池不变型：`Pool<Runtime> is IPool<T>` 当且仅当类型相等，所以必须有非泛型入口）。回落**只在编译期类型无池时发生**，两边都有池时行为与修复前完全一致——不会把实例改投进另一个池；两条用例分别钉住这两半
+
+- **XPool 重复归还检测按值比较，合法归还被误拒**：Editor 活跃追踪集用 `HashSet<T>` 的默认相等比较器，而模块文档承诺的是「复用依赖引用同一性」。池化类型重写 `Equals` / `GetHashCode`（POCO、记录式数据类）时，两个逻辑相等而引用不同的实例会被判成同一个：第二次归还的 `Remove` 落空，于是记一条「重复归还」错误日志并把实例丢给 GC。改用 `ReferenceEquals` + `RuntimeHelpers.GetHashCode` 的比较器（照 Update 模块 `NodeReferenceComparer` 的同型先例，整块包在 `UNITY_EDITOR` 内），对真正重复归还的检出能力不变。补回归用例，已实测摘掉比较器时它确实会红
+
+- **XPool `PooledObject<T>` 重复 `Dispose` 会把同一实例重复入池**：包装器是值类型，每被赋值或传参就复制一份、各份都指向同一个实例，而 `Dispose` 直连 `Return`——第二次归还会把同一实例重复入栈（Release 下没有重复归还检测兜底），此后可能被两次 `Get` 同时拿到。加 `_disposed` 标志后重复 `Dispose` 早返回，只保护**同一个存储位置**：复制出去的副本仍会归还两次，这一点写进了 XML doc。代价如实记录：`PooledObject<T>` 因此不能改 `readonly struct`
+
+- **XPool 预热绕过 `MaxSize`**：预热循环无条件 push，`new PoolConfig { PrewarmSize = 10, MaxSize = 3 }` 会得到 `CountInactive = 10` 的池——一建池闲置数就超限，多造的实例没有去处，还会白占一份等大的栈容量。预热数量统一钳到上限，该值同时用作 `Stack<T>` 的初始容量；契约写进 `PoolConfig.PrewarmSize` 的文档
+
+- **XPool 模块 XML 文档缺陷遮蔽了一批死链**：八处文档注释里 `<c>Get<T>()</c>`、`Configure<Enemy>(...)` 的尖括号未转义，被编译器当作 XML 标签（CS1570）而**丢弃整块注释**——生成出的 XML 文档残缺，且块内 `cref` 一律不被检查，死链因此长期隐形。修掉转义后暴露出跨命名空间且无 using 的 `<see cref="AssetManager"/>`、以及 `IPool` 与四个集合池里因文件无 `using System` 而未解析的 `<see cref="IDisposable"/>`，均改为全限定名。验证方式：以 `-p:DocumentationFile` 重编，模块内 CS1570 / CS1574 清零。顺带发现：本项目 csproj 未设 `DocumentationFile`，文档注释从不被验证，全项目现有 80 条唯一 CS1574——超出本模块范围，另议
 
 - **UI 双向绑定在目标已失效时泄漏 UnityEvent 监听**：`SliderTwoWayBinding` / `ToggleTwoWayBinding` 的构造函数先 `onValueChanged.AddListener`、后 `target.Subscribe(...)`。而 `Subscribe` 会抛（目标已释放 → `ObjectDisposedException`；设置句柄背后的类型已注销 → 上一版还走 `InvalidOperationException`），它抛出时构造函数随之失败、**绑定对象永远拿不到**，于是 `OnDispose` 里的 `RemoveListener` 永不执行。面板是回池的，残留监听会一直留在控件上，此后每次拖动/切换都打到**上一个 ViewModel 的属性**上。现改为先订阅后挂监听（`Subscribe` 抛出时监听尚未挂上，自然不残留），并为「挂监听本身失败」补了回滚——滑条已销毁时 `AddListener` 同样会抛，此时回滚刚建立的订阅。补 2 条测试（滑条/开关各一），用一个可失效的计数目标把「残留监听是否还在打这个目标」变成可断言的事实；已实测改前必红（`Expected: 0 But was: 1`）
 

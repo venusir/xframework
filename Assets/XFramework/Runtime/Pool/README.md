@@ -7,8 +7,10 @@ XPool 是一个**零 GC 分配**的泛型对象池系统，用于复用频繁创
 - **纯 C# 对象**：仅管理引用类型（class），不涉及 GameObject、MonoBehaviour 或资源引用。
 - **零配置开箱即用**：首次 `Get<T>()` 时自动创建池，无需初始化。
 - **惰性预热**：支持 `Configure<T>(config)` 预创建实例，减少运行时分配。
-- **委托回调**：`OnRent` / `OnReturn` 回调，也可通过 `IPoolable` 接口实现。
+- **委托回调**：`OnRent` / `OnReturn` / `OnDestroy` 回调，也可通过 `IPoolable` / `IPoolDiscardable` 接口实现。
+- **池满丢弃回调**：闲置达到 `MaxSize` 后归还的实例会被丢弃，此时触发 `onDestroy` / `IPoolDiscardable.OnDiscard()`，用于确定性释放资源。
 - **Editor 调试**：检测重复归还、租借不匹配等错误，Release 构建零开销。
+- **线程不安全**：与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
 - **与 AssetManager 解耦**：AssetManager 内部继续管理 GameObject/Prefab 池，PoolManager 只管纯 C# 对象。
 
 ## 文件结构
@@ -22,6 +24,7 @@ Runtime/Pool/
 │   ├── StringBuilderPool.cs       # StringBuilder 池，Return 自动 Clear()
 │   └── CollectionPoolManager.cs   # 集合池统一管理器，一键 ClearAll()
 ├── IPoolable.cs                   # 生命周期回调接口（OnRent / OnReturn）
+├── IPoolDiscardable.cs            # 可选能力接口：实例被池丢弃时释放资源（OnDiscard）
 ├── PoolConfig.cs                  # 配置结构体（值类型，零装箱）
 ├── PooledObject.cs                # using 包装器（struct，零 GC）
 ├── IPool.cs                       # 池操作接口（用于 DI / 测试）
@@ -77,6 +80,7 @@ class BulletSystem
 | `PoolManager.Return(item)`                      | 归还实例到池                       |
 | `PoolManager.Configure<T>(config)`              | 预配置池（预热数量、最大容量）     |
 | `PoolManager.Configure<T>(config, generator)`   | 预配置池 + 自定义生成器            |
+| `PoolManager.Configure<T>(config, generator, destroyer)` | 预配置池 + 生成器 + 池满丢弃回调 |
 | `PoolManager.HasPool<T>()`                      | 指定类型的池是否已创建             |
 | `PoolManager.GetPool<T>()`                      | 获取 IPool<T> 实例（用于高级操作） |
 | `PoolManager.RemovePool<T>()`                   | 移除并清空指定类型的池             |
@@ -98,6 +102,10 @@ PoolManager.Configure<EnemyData>(new PoolConfig
     MaxSize = 100        // 池中最多保留 100 个闲置实例
 });
 ```
+
+`PrewarmSize` 会钳到 `MaxSize`：预热是「提前造多少」，上限是「最多留多少」，配出 `PrewarmSize > MaxSize` 时以 `MaxSize` 为准。
+
+不配置时 `MaxSize` 为 **无上限**——闲置实例只增不减，直到 `Clear()` / `ClearAll()`。长期运行且池化类型较多时，建议显式设一个上限。
 
 ### 自定义生成器（无无参构造函数的类型）
 
@@ -127,7 +135,24 @@ var pool = new Pool<MyData>(
 委托回调 > IPoolable 接口
 ```
 
-即：如果传入了 `onRent` 委托，则不会调用 `IPoolable.OnRent()`。
+即：如果传入了 `onRent` 委托，则不会调用 `IPoolable.OnRent()`。丢弃回调同理：传入了 `onDestroy` 委托就不会调用 `IPoolDiscardable.OnDiscard()`。
+
+## 计数与丢弃语义
+
+| 属性（`IPool<T>`） | 含义                                                                             |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `CountInactive`    | 池内当前闲置实例数（可立即复用）                                                 |
+| `CountActive`      | 已取出、尚未归还的实例数                                                         |
+| `CountAll`         | 自建池以来生成过的总实例数——**只增不减**，归还、清空与被丢弃都不会让它减小       |
+
+因此 `CountAll - CountInactive` **不等于** `CountActive`：被丢弃的实例仍计入 `CountAll`，却既非活跃也非闲置。要判断「还有多少实例在外面」请用 `CountActive`。
+
+闲置实例达到 `MaxSize` 后，归还的实例不再入池而是交给 GC，此时触发丢弃回调。两点需要注意：
+
+- 归还回调（`onReturn` / `IPoolable.OnReturn()`）**先于**容量判断触发，所以被丢弃的实例会先收到归还回调（清理状态）、再收到丢弃回调（释放资源）。
+- `Clear()` / `ClearAll()` **不触发**丢弃回调——它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用，此时跑用户回调容易碰到已销毁的 Unity 对象。
+
+`PooledObject<T>` 的 `Dispose()` 幂等（重复 `using` 或手动调用不会重复归还），但只对同一个存储位置成立：`var h2 = h; h.Dispose(); h2.Dispose();` 这类复制出去的副本仍会归还两次。
 
 ## 与 AssetManager 的关系
 
@@ -287,9 +312,11 @@ XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`*
 | `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`             |
 | `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）                  |
 | `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转           |
-| `CollectionPoolManager.ClearAll()`        | 一键清空所有合集池的闲置实例                     |
+| `CollectionPoolManager.ClearAll()`        | 一键清空所有集合池的闲置实例                     |
 
 > **注意：** 泛型集合池按闭合泛型类型独立建池。例如 `ListPool<int>` 和 `ListPool<Vector3>` 是两个独立的池，仅在首次 `Get()` 时创建。
+>
+> **两套注册表：** `CollectionPoolManager.ClearAll()` 只清集合池，`PoolManager.ClearAll()` 只清业务对象池——切场景时两者都要调（见示例 7）。
 
 ### 使用示例 5：集合池
 
@@ -352,13 +379,14 @@ void OnSceneUnloaded(Scene scene)
 
 ## 依赖
 
-- Unity 2022.3 LTS 或更新版本
+- Unity 6000.3 或更新版本（与 package.json 的 `unity` 字段一致）
 - 无第三方依赖
 
 ## 版本记录
 
 | 版本  | 说明                                                                |
 | ----- | ------------------------------------------------------------------- |
+| 1.3.0 | 补 `CountActive`；新增池满丢弃回调（`onDestroy` / `IPoolDiscardable`）；归还按运行时类型回落；预热与栈容量钳到 `MaxSize`；集合池 Configure 守卫改用真实活跃计数；重复归还检测改用引用相等比较器；`PooledObject.Dispose` 幂等。**破坏性**：`IPool<T>` / `Pool<T>` / `PooledObject<T>` 加 `where T : class` 约束、删除 `PoolManagerExtensions` |
 | 1.2.0 | 修复 ClearAll 改为清闲置语义（原实现会使 Return 永久失效）、Pool.Clear 保留 Editor 活跃追踪；新增 EditMode 单元测试 |
 | 1.1.0 | 新增 CollectionPool 集合池（List/HashSet/Dictionary/StringBuilder） |
 | 1.0.0 | 初始版本                                                            |
