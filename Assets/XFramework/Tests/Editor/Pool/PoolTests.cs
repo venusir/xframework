@@ -151,6 +151,17 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void Prewarm_ExceedsMaxSize_IsClampedToMaxSize()
+        {
+            var pool = new Pool<TestItem>(
+                () => new TestItem(),
+                new PoolConfig { PrewarmSize = 10, MaxSize = 3 });
+
+            Assert.That(pool.CountInactive, Is.EqualTo(3), "预热不应突破 MaxSize");
+            Assert.That(pool.CountAll, Is.EqualTo(3), "多出来的实例没有去处，根本不应当创建");
+        }
+
+        [Test]
         public void MaxSize_ExceededIdle_IsDiscarded()
         {
             var pool = new Pool<TestItem>(() => new TestItem(), new PoolConfig { MaxSize = 2 });

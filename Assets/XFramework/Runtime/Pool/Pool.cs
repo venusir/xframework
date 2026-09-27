@@ -67,7 +67,11 @@ namespace XFramework.XPool
             _maxSize = cfg.MaxSize > 0 ? cfg.MaxSize : int.MaxValue;
             _onRent = onRent;
             _onReturn = onReturn;
-            _stack = new Stack<T>(cfg.PrewarmSize > 0 ? cfg.PrewarmSize : 8);
+
+            // 预热数量与栈容量一并钳到上限：上限是「池里最多留多少」，预热是「要提前造多少」，
+            // 前者没理由被后者压过——否则一建池闲置数就超限，多造的实例还会白占栈容量
+            int prewarm = Math.Clamp(cfg.PrewarmSize, 0, _maxSize);
+            _stack = new Stack<T>(prewarm > 0 ? prewarm : 8);
 
 #if UNITY_EDITOR
             if (cfg.CollectionCheck)
@@ -75,7 +79,7 @@ namespace XFramework.XPool
 #endif
 
             // 预热
-            for (int i = 0; i < cfg.PrewarmSize; i++)
+            for (int i = 0; i < prewarm; i++)
             {
                 var item = _generator();
                 _totalCreated++;

@@ -7,6 +7,8 @@ namespace XFramework.XPool
     {
         /// <summary>
         /// 预热数量。初始化时预先创建的实例数。默认 0。
+        /// <para>会钳到 <see cref="MaxSize"/>：预热是「提前造多少」，上限是「最多留多少」，
+        /// 配出 <c>PrewarmSize &gt; MaxSize</c> 时以 <see cref="MaxSize"/> 为准。</para>
         /// </summary>
         public int PrewarmSize;
 
