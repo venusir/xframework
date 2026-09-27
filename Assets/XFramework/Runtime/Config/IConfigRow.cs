@@ -24,7 +24,7 @@ namespace XFramework.XConfig
     /// <code>
     /// // 双键示例
     /// [Serializable]
-    /// public struct SkillEffectRow : IConfigRow<(int skillId, int level)>
+    /// public struct SkillEffectRow : IConfigRow&lt;(int skillId, int level)&gt;
     /// {
     ///     public int  SkillId;
     ///     public int  Level;

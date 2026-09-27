@@ -26,7 +26,7 @@ namespace XFramework.XConfig
         private readonly Dictionary<Type, object> _globals = new();
 
         /// <summary>
-        /// 已缓存的 Table 包装器。key: 配置行类型, value: <c>ConfigTable<T></c> 实例（存储为 object）。
+        /// 已缓存的 Table 包装器。key: 配置行类型, value: <c>ConfigTable&lt;T&gt;</c> 实例（存储为 object）。
         /// <para>与 <see cref="_tables"/> 生命周期同步，避免每次查询时重复分配包装器。</para>
         /// </summary>
         private readonly Dictionary<Type, object> _tableWrappers = new();
@@ -65,7 +65,7 @@ namespace XFramework.XConfig
         /// <summary>
         /// 预加载 Table 类型的配置。主键类型由 <typeparamref name="T"/> 通过反射自动提取。
         /// </summary>
-        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         public async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json)
             where T : IConfigRow, new()
         {
@@ -157,7 +157,7 @@ namespace XFramework.XConfig
         /// <summary>
         /// 使用自定义 Loader 预加载 Table 配置。
         /// </summary>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         public async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
             where T : IConfigRow, new()
         {
@@ -482,7 +482,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
-        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口），
+        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable&lt;T&gt;</c> 实现了此接口），
         /// 通过 <see cref="IConfigTable.Data"/> 直接获取内部字典，零反射开销。</para>
         /// </summary>
         public void RegisterTable(Type rowType, IConfigTable table)
@@ -624,7 +624,7 @@ namespace XFramework.XConfig
         #region Internal
 
         /// <summary>
-        /// 通过缓存的强类型委托调用 IConfigLoader.LoadTableAsync<T, TKey>，返回装箱的 ConfigTable。
+        /// 通过缓存的强类型委托调用 IConfigLoader.LoadTableAsync&lt;T, TKey&gt;，返回装箱的 ConfigTable。
         /// <para>每对 (rowType, keyType) 仅首次通过反射构造委托，后续走缓存零反射开销。</para>
         /// </summary>
         private static UniTask<object> InvokeLoader<T>(
@@ -634,7 +634,7 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 获取或创建 Table 包装器。优先返回缓存的 <c>ConfigTable<T></c>，避免重复分配。
+        /// 获取或创建 Table 包装器。优先返回缓存的 <c>ConfigTable&lt;T&gt;</c>，避免重复分配。
         /// </summary>
         private ConfigTable<T> GetOrCreateWrapper<T>(Type type, IDictionary dict) where T : IConfigRow
         {

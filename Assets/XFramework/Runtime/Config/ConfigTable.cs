@@ -77,7 +77,7 @@ namespace XFramework.XConfig
         /// </summary>
         /// <example>
         /// <code>
-        /// var items = ConfigManager.GetTable<ItemRow>();
+        /// var items = ConfigManager.GetTable&lt;ItemRow&gt;();
         /// var row = items.Get(1001); // TKey 自动推断为 int
         /// </code>
         /// </example>
@@ -299,9 +299,9 @@ namespace XFramework.XConfig
         /// <returns><see cref="ConfigIndexView{T, TIndex}"/> 只读视图。</returns>
         /// <example>
         /// <code>
-        /// var items = ConfigManager.GetTable<ItemRow>();
+        /// var items = ConfigManager.GetTable&lt;ItemRow&gt;();
         /// var byQuality = items.BuildIndex("Quality", r => r.Quality);
-        /// var epics = byQuality.Get(ItemQuality.Epic); // List<ItemRow>
+        /// var epics = byQuality.Get(ItemQuality.Epic); // List&lt;ItemRow&gt;
         /// </code>
         /// </example>
         public ConfigIndexView<T, TIndex> BuildIndex<TIndex>(string indexName, Func<T, TIndex> keySelector)

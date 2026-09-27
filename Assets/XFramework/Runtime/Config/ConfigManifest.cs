@@ -11,9 +11,9 @@ namespace XFramework.XConfig
     /// <example>
     /// <code>
     /// var manifest = new ConfigManifest();
-    /// manifest.AddTable<ItemRow>("config/items", "Core");
-    /// manifest.AddTable<SkillRow>("config/skills", "Combat");
-    /// manifest.AddGlobal<GameConfig>("config/game", "Core");
+    /// manifest.AddTable&lt;ItemRow&gt;("config/items", "Core");
+    /// manifest.AddTable&lt;SkillRow&gt;("config/skills", "Combat");
+    /// manifest.AddGlobal&lt;GameConfig&gt;("config/game", "Core");
     /// 
     /// // 按分组加载
     /// await ConfigManager.PreloadGroupAsync("Core", manifest);

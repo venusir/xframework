@@ -105,7 +105,7 @@ namespace XFramework.XConfig
         #region Internal
 
         /// <summary>
-        /// 经 <see cref="AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
+        /// 经 <see cref="XFramework.XAsset.AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
         private static UniTask<string> LoadTextAsync(string assetPath)
         {
             return ConfigTextLoader.LoadTextAsync(assetPath);

@@ -7,7 +7,7 @@ namespace XFramework.XConfig
 {
     /// <summary>
     /// JSON 格式配置加载器。
-    /// <para>通过 <see cref="AssetManager"/> 加载 TextAsset，使用 <see cref="JsonUtility"/> 反序列化。</para>
+    /// <para>通过 <see cref="XFramework.XAsset.AssetManager"/> 加载 TextAsset，使用 <see cref="JsonUtility"/> 反序列化。</para>
     /// <para>同时支持 Table（JSON 数组）和 Global（单个 JSON 对象）。</para>
     /// </summary>
     internal sealed class JsonLoader : IConfigLoader
@@ -71,7 +71,7 @@ namespace XFramework.XConfig
         #region Internal
 
         /// <summary>
-        /// 经 <see cref="AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
+        /// 经 <see cref="XFramework.XAsset.AssetManager"/> 加载 TextAsset 并返回文本内容(共享助手 <see cref="ConfigTextLoader"/>)。</summary>
         private static UniTask<string> LoadTextAsync(string assetPath)
         {
             return ConfigTextLoader.LoadTextAsync(assetPath);

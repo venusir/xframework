@@ -20,7 +20,7 @@ namespace XFramework.XConfig
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="format">配置格式，默认 JSON。</param>
         /// <returns>可缓存的 <see cref="ConfigTable{T}"/> 只读包装器，通过 .Get(key) / .TryGet(key) 查询。</returns>
-        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, ConfigFormat format = ConfigFormat.Json)
             where T : IConfigRow, new();
 
@@ -44,7 +44,7 @@ namespace XFramework.XConfig
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="loader">自定义配置加载器。</param>
         /// <returns>可缓存的 <see cref="ConfigTable{T}"/> 只读包装器。</returns>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
             where T : IConfigRow, new();
 
@@ -74,7 +74,7 @@ namespace XFramework.XConfig
         /// <example>
         /// <code>
         /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
-        /// var table = new ConfigTable<ItemRow>(dict);
+        /// var table = new ConfigTable&lt;ItemRow&gt;(dict);
         /// ConfigManager.RegisterTable(table);
         /// </code>
         /// </example>
@@ -82,11 +82,11 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
-        /// <para>传入装箱的 <c>ConfigTable<T></c> 实例，框架通过反射提取内部字典。</para>
+        /// <para>传入装箱的 <c>ConfigTable&lt;T&gt;</c> 实例，框架通过反射提取内部字典。</para>
         /// <para>第三方反射调用示例（推荐使用泛型版，避免手动构造 ConfigTable）：</para>
         /// </summary>
         /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>
-        /// <param name="table"><see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口）。</param>
+        /// <param name="table"><see cref="IConfigTable"/> 实例（<c>ConfigTable&lt;T&gt;</c> 实现了此接口）。</param>
         /// <exception cref="ConfigException">rowType 或 table 为 null 时抛出。</exception>
         void RegisterTable(Type rowType, IConfigTable table);
 

@@ -23,16 +23,16 @@ namespace XFramework.XConfig
     /// <code>
     /// // 1. 定义 Row（struct，零 GC）
     /// [Serializable]
-    /// public struct ItemRow : IConfigRow<int>
+    /// public struct ItemRow : IConfigRow&lt;int&gt;
     /// {
     ///     public int Id { get; set; }
     ///     public string Name;
     ///     public int Price;
     /// }
     /// 
-    /// // 2. 初始化 & 预加载
+    /// // 2. 初始化 &amp; 预加载
     /// ConfigManager.Initialize();
-    /// var items = await ConfigManager.PreloadTableAsync<ItemRow>("config/items");
+    /// var items = await ConfigManager.PreloadTableAsync&lt;ItemRow&gt;("config/items");
     /// 
     /// // 3. 查询（TKey 由实参自动推断）
     /// var row = items.Get(1001);
@@ -122,10 +122,10 @@ namespace XFramework.XConfig
         /// <param name="format">配置格式，默认 <see cref="ConfigFormat.Json"/>。</param>
         /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <returns>Table 包装器实例。</returns>
-        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">assetPath 为空、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         /// <example>
         /// <code>
-        /// var items = await ConfigManager.PreloadTableAsync<ItemRow>("config/items");
+        /// var items = await ConfigManager.PreloadTableAsync&lt;ItemRow&gt;("config/items");
         /// var row = items.Get(1001); // TKey 自动推断为 int
         /// </code>
         /// </example>
@@ -161,7 +161,7 @@ namespace XFramework.XConfig
         /// <param name="loader">自定义加载器实例。</param>
         /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <returns>Table 包装器实例。</returns>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow<> 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
         public static async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
             where T : IConfigRow, new()
         {
@@ -234,9 +234,9 @@ namespace XFramework.XConfig
         /// // Luban 示例：反序列化后构造 ConfigTable 注册
         /// var tables = new GameTables(byteBuf);
         /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
-        /// var table = new ConfigTable<ItemRow>(dict);
+        /// var table = new ConfigTable&lt;ItemRow&gt;(dict);
         /// ConfigManager.RegisterTable(table);
-        /// // 之后可通过 ConfigManager.GetTable<ItemRow>().Get(id) 查询
+        /// // 之后可通过 ConfigManager.GetTable&lt;ItemRow&gt;().Get(id) 查询
         /// </code>
         /// </example>
         public static void RegisterTable<T>(ConfigTable<T> table) where T : IConfigRow
@@ -247,7 +247,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
-        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable<T></c> 实现了此接口）。</para>
+        /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable&lt;T&gt;</c> 实现了此接口）。</para>
         /// </summary>
         /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>
         /// <param name="table"><see cref="IConfigTable"/> 实例。</param>
@@ -281,7 +281,7 @@ namespace XFramework.XConfig
         /// <exception cref="ConfigException">Table 未加载时抛出。</exception>
         /// <example>
         /// <code>
-        /// var items = ConfigManager.GetTable<ItemRow>();
+        /// var items = ConfigManager.GetTable&lt;ItemRow&gt;();
         /// var row = items.Get(1001);        // TKey 自动推断为 int
         /// items.TryGet(1002, out var row2);
         /// var all = items.GetAll();          // 完全不涉及 TKey
@@ -317,7 +317,7 @@ namespace XFramework.XConfig
         /// <exception cref="ConfigException">Table 未加载或键不存在时抛出。</exception>
         /// <example>
         /// <code>
-        /// var row = ConfigManager.Get<ItemRow, int>(1001);
+        /// var row = ConfigManager.Get&lt;ItemRow, int&gt;(1001);
         /// </code>
         /// </example>
         public static T Get<T, TKey>(TKey key) where T : IConfigRow
@@ -337,7 +337,7 @@ namespace XFramework.XConfig
         /// <returns>成功获取时返回 <c>true</c>。</returns>
         /// <example>
         /// <code>
-        /// ConfigManager.TryGet<ItemRow, int>(1002, out var row);
+        /// ConfigManager.TryGet&lt;ItemRow, int&gt;(1002, out var row);
         /// </code>
         /// </example>
         public static bool TryGet<T, TKey>(TKey key, out T value) where T : IConfigRow

@@ -21,8 +21,8 @@ namespace XFramework.XConfig
         private static readonly Dictionary<Type, Func<IConfigLoader, string, UniTask<object>>> GlobalCache = new();
 
         /// <summary>
-        /// 通过缓存的强类型委托调用 <c>loader.LoadTableAsync<T, TKey></c>，
-        /// 返回装箱后的 <c>ConfigTable<T></c>。
+        /// 通过缓存的强类型委托调用 <c>loader.LoadTableAsync&lt;T, TKey&gt;</c>，
+        /// 返回装箱后的 <c>ConfigTable&lt;T&gt;</c>。
         /// </summary>
         internal static async UniTask<object> InvokeAsync(
             IConfigLoader loader, Type rowType, Type keyType, string assetPath)
@@ -37,7 +37,7 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 基于类型参数构造 <c>LoadDelegate<T, TKey>.Delegate</c>。
+        /// 基于类型参数构造 <c>LoadDelegate&lt;T, TKey&gt;.Delegate</c>。
         /// </summary>
         private static Func<IConfigLoader, string, UniTask<object>> CreateDelegate(Type rowType, Type keyType)
         {
@@ -48,7 +48,7 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 通过缓存的强类型委托调用 <c>loader.LoadGlobalAsync<T></c>，返回装箱后的配置实例。
+        /// 通过缓存的强类型委托调用 <c>loader.LoadGlobalAsync&lt;T&gt;</c>，返回装箱后的配置实例。
         /// </summary>
         internal static async UniTask<object> InvokeGlobalAsync(
             IConfigLoader loader, Type globalType, string assetPath)
@@ -63,7 +63,7 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 基于类型参数构造 <c>GlobalLoadDelegate<T>.Delegate</c>。
+        /// 基于类型参数构造 <c>GlobalLoadDelegate&lt;T&gt;.Delegate</c>。
         /// </summary>
         private static Func<IConfigLoader, string, UniTask<object>> CreateGlobalDelegate(Type globalType)
         {
@@ -90,7 +90,7 @@ namespace XFramework.XConfig
             (loader, assetPath) => WrapAsync(loader, assetPath);
 
         /// <summary>
-        /// 调用 <c>LoadTableAsync</c> 并利用编译器自动装箱 <c>ConfigTable<T></c> → <c>object</c>。
+        /// 调用 <c>LoadTableAsync</c> 并利用编译器自动装箱 <c>ConfigTable&lt;T&gt;</c> → <c>object</c>。
         /// </summary>
         private static async UniTask<object> WrapAsync(IConfigLoader loader, string assetPath)
         {
