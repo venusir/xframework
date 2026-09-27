@@ -180,7 +180,7 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnFailed += r => failedReason = r;
             pipeline.AddStage(stage);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Sequence stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Sequence stage failed: bad \(\d+\.\d+s\): boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
@@ -200,7 +200,7 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnProgressUpdate += p => progress.Add(p);
             pipeline.AddStage(stage);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Sequence stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Sequence stage failed: bad \(\d+\.\d+s\): boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 

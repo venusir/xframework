@@ -223,7 +223,7 @@ namespace Venusy609.Xframework.Editor.Tests
             bad.ThrowOnExecute = true;
             Bootstrap.Register(bad);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): bad boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
 
             var exception = Assert.Throws<InvalidOperationException>(
@@ -243,7 +243,7 @@ namespace Venusy609.Xframework.Editor.Tests
             Bootstrap.Register(bad);
             Bootstrap.Register(later);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): bad boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
 
             Assert.Throws<InvalidOperationException>(() => Bootstrap.RunAsync().GetAwaiter().GetResult());

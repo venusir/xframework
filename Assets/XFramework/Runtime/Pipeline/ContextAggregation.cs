@@ -93,6 +93,7 @@ namespace XFramework.XPipeline
             float weightedSum = 0f;
             int completedCount = 0;
             int failedCount = 0;
+            bool failCaptured = false;
             string currentDesc = null;
             string currentStageName = null;
             string currentTaskName = null;
@@ -112,15 +113,18 @@ namespace XFramework.XPipeline
                         break;
                     case PipelineStageState.Failed:
                         failedCount++;
-                        // 失败诊断只按组模式捕获:首失败捕获(数组序)在描述/状态写入序已定后不可变
+                        // 失败诊断只按组模式捕获:首失败闩锁用显式标志,不能用「描述是否为 null」代替——
+                        // 无描述的首次失败会把闩锁重新打开,让后来的兄弟顶掉首失败诊断(日志里的任务名
+                        // 会变成兄弟的名字,与「首失败不可变」的承诺相反)
                         if (mode == ScanMode.Group)
                         {
-                            if (failDescription == null)
+                            if (!failCaptured)
                             {
+                                failCaptured = true;
                                 failDescription = ctx.Description;
                                 failTaskName = ctx.CurrentTaskName ?? ctx.Name;
                             }
-                            // 失败阶段也产出当前描述/任务名(诊断优先由调用方后缀用首失败覆盖完成)
+                            // 失败阶段也产出当前描述/任务名(诊断优先由调用方后缀用首失败成对覆盖完成)
                             currentDesc = ctx.Description;
                             currentTaskName = ctx.CurrentTaskName ?? ctx.Name;
                         }

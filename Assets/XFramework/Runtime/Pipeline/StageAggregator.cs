@@ -34,10 +34,10 @@ namespace XFramework.XPipeline
         /// <summary>本次执行是否有子阶段失败(首失败后保持,诊断一致性)。</summary>
         internal bool AnyFailed { get; private set; }
 
-        /// <summary>首失败子阶段的描述。</summary>
+        /// <summary>首失败子阶段(数组序)的描述。首失败未写描述时为 null——与 <see cref="FailTaskName"/> 同源,不得分开取。</summary>
         internal string FailDescription { get; private set; }
 
-        /// <summary>首失败子阶段的任务名。</summary>
+        /// <summary>首失败子阶段(数组序)的任务名,取不到任务名时回退子阶段名,故非 null。</summary>
         internal string FailTaskName { get; private set; }
 
         /// <summary>
@@ -126,16 +126,18 @@ namespace XFramework.XPipeline
                 // 完成记全权、执行中记 w·p、失败权重移出(进度略回退,语义正确)
                 var scan = ContextAggregation.Scan(ChildContexts, ContextAggregation.ScanMode.Group);
 
-                // 差异后缀:失败判定与诊断优先(描述/任务名强制取首失败子阶段,避免被兄弟描述覆盖)
+                // 差异后缀:失败判定与诊断优先(描述/任务名成对取首失败子阶段,避免被兄弟描述覆盖)
                 string currentDesc = scan.Description;
                 string currentTaskName = scan.TaskName;
                 if (scan.FailedCount > 0)
                 {
                     AnyFailed = true;
-                    if (scan.FailDescription != null)
-                        currentDesc = scan.FailDescription;
-                    if (scan.FailTaskName != null)
-                        currentTaskName = scan.FailTaskName;
+                    // 诊断载荷成对赋值:逐字段判空会让「首失败未写描述」时描述取自兄弟、任务名取自
+                    // 首失败,于是日志与转发各说各话(更早的版本干脆两个属性都没赋值,日志恒空)
+                    FailDescription = scan.FailDescription;
+                    FailTaskName = scan.FailTaskName;
+                    currentDesc = scan.FailDescription;
+                    currentTaskName = scan.FailTaskName;
                 }
 
                 float overallProgress = scan.Overall;

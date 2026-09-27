@@ -198,7 +198,7 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnFailed += r => failedReason = r;
             pipeline.AddStage(stage);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
@@ -220,13 +220,32 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnFailed += r => failedReason = r;
             pipeline.AddStage(stage);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: state-fail \(\d+\.\d+s\): self-fail"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             Assert.AreEqual(PipelineStageState.Failed, stage._stageCtx.State, "子阶段主动置 Failed 不抛异常也应判组失败");
             StringAssert.Contains("self-fail", failedReason, "管线失败原因应携带子阶段失败描述");
             Assert.IsTrue(sibling.LastToken.IsCancellationRequested, "失败应取消中断兄弟子阶段");
+        }
+
+        [Test]
+        public void FirstFailureWithoutDescription_WinsDiagnosis()
+        {
+            // 首失败闩锁曾按「描述是否为 null」判定,而无描述的首次失败不会把闩锁关上——后来的兄弟
+            // 于是顶掉首失败诊断,组失败日志报出的是兄弟的名字。断言任务名为 A 即可钉住两半:
+            // 只修「属性无人赋值」时日志无名字,只修闩锁时日志报 state-fail。(A 没有描述,故
+            // 载荷尾部的描述本就该为空,这里只断言判别性最强的任务名。)
+            var first = new SilentFailChildStage();
+            var second = new FailByStateChildStage();
+            var stage = new ParallelStage(new IPipelineStage[] { first, second });
+
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(stage);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: A \(\d+\.\d+s\):"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+            pipeline.RunAsync().GetAwaiter().GetResult();
         }
 
         [Test]
@@ -241,7 +260,7 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnProgressUpdate += p => progress.Add(p);
             pipeline.AddStage(stage);
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): boom"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
@@ -349,6 +368,22 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        /// <summary>
+        /// 只写 Failed 状态、不写描述的子阶段:验证首失败闩锁不依赖「描述非空」。
+        /// </summary>
+        private sealed class SilentFailChildStage : IPipelineStage
+        {
+            public string Name => "A";
+
+            public float Weight => 1f;
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
+                context.SetState(PipelineStageState.Failed);
+                await UniTask.CompletedTask;
+            }
+        }
 
         /// <summary>
         /// 主动写 Failed 终态但不抛异常的子阶段:验证状态驱动的组失败语义(无需异常即判失败)。
