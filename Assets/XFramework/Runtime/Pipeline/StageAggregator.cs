@@ -52,6 +52,7 @@ namespace XFramework.XPipeline
             _bell.Reset();
             _lastOverall = -1f;
             _lastDesc = null;
+            _lastTaskName = null;
             AnyFailed = false;
             FailDescription = null;
             FailTaskName = null;
@@ -129,21 +130,25 @@ namespace XFramework.XPipeline
 
                 float overallProgress = scan.Overall;
 
-                // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任一子阶段状态变化(共享扫描,每帧路径零 LINQ)
-                bool dirty = ContextAggregation.IsDirty(overallProgress, currentDesc,
-                    _lastOverall, _lastDesc, ChildContexts, _lastStates);
+                // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任务名变化 || 任一子阶段状态变化(共享扫描,每帧路径零 LINQ)
+                bool dirty = ContextAggregation.IsDirty(overallProgress, currentDesc, currentTaskName,
+                    _lastOverall, _lastDesc, _lastTaskName, ChildContexts, _lastStates);
 
                 if (dirty)
                 {
+                    // 任务名走直写(不经 SetCurrentTaskName,避免为此再进一次门铃),但**必须写在两次
+                    // 通知写入之前**:管线只在被通知时才重扫,写在后面则本次转发带过去的值要等到
+                    // 下一次写入才被看见——只改任务名时就是「永远看不见」
+                    _target.CurrentTaskName = currentTaskName;
                     _target.SetProgress(overallProgress);
                     _target.SetDescription(currentDesc ?? ContextAggregation.RunningDescriptionPlaceholder);
-                    _target.CurrentTaskName = currentTaskName;
 
                     _lastOverall = overallProgress;
                     // 节流快照存**原始**描述,占位只发生在转发映射点(与管线一致)。存归一化值会让
                     // 「子阶段不写描述」的组里 null != "" 恒真——每次子写入都转发,组内节流形同虚设,
                     // 顶层为此白扫一遍(广播被顶层节流吞掉,所以只表现为浪费,看不出来)
                     _lastDesc = currentDesc;
+                    _lastTaskName = currentTaskName;
                     ContextAggregation.CopyStates(ChildContexts, _lastStates);
                 }
 
@@ -170,9 +175,10 @@ namespace XFramework.XPipeline
         /// <summary>写入门铃:重入折叠 + 迟写防护(与管线实现共用同一实现)。</summary>
         readonly ContextBell _bell = new ContextBell();
 
-        /// <summary>上一帧广播快照:组进度 + 描述 + 各子阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
+        /// <summary>上一帧广播快照:组进度 + 描述 + 任务名 + 各子阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
         float _lastOverall = -1f;
         string _lastDesc;
+        string _lastTaskName;
         readonly PipelineStageState[] _lastStates;
 
         #endregion

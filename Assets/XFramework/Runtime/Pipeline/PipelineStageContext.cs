@@ -14,9 +14,10 @@ namespace XFramework.XPipeline
 
     /// <summary>
     /// 管线阶段执行上下文。由 <see cref="IPipeline"/> 装配时创建并注入阶段。
-    /// <para>双层结构:阶段写面(<see cref="Progress"/>/<see cref="Description"/>/<see cref="State"/> + SetXxx)供阶段在
-    /// <see cref="IPipelineStage.ExecuteAsync"/> 内写入,写入即同步触发接收方(管线或并行阶段)的聚合;
-    /// 全局读面由管线填充,供 UI 读取当前运行状态。</para>
+    /// <para>只承载<b>阶段写面</b>(<see cref="Progress"/>/<see cref="Description"/>/<see cref="State"/> + SetXxx):
+    /// 供阶段在 <see cref="IPipelineStage.ExecuteAsync"/> 内写入,写入即同步触发接收方(管线或容器)的聚合。
+    /// 读取面不在本类——运行中经 <see cref="IPipeline.OnProgressUpdate"/> 推送 <see cref="PipelineProgress"/>,
+    /// 终局经 <see cref="IPipeline.Status"/>/<see cref="IPipeline.FailureReason"/> 拉取。</para>
     /// <para>线程契约:写入须与 <see cref="IPipeline.RunAsync"/> 调度同一上下文(Unity 主线程)——写入同步触发
     /// 聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 <see cref="Debug.LogError"/> 提示
     /// (开发期断言,Release 构建零开销)。基础设施内部直写字段(容器子上下文预置、聚合器转发
@@ -36,7 +37,7 @@ namespace XFramework.XPipeline
 
         #endregion
 
-        #region 阶段级(阶段写入)
+        #region 阶段写入
 
         /// <summary>阶段名称。由管线装配时设置。</summary>
         public string Name { get; internal set; }
@@ -53,8 +54,19 @@ namespace XFramework.XPipeline
         /// <summary>阶段状态。</summary>
         public PipelineStageState State { get; internal set; } = PipelineStageState.Pending;
 
-        /// <summary>阶段内当前任务名称(容器子阶段转发用,可空)。</summary>
+        /// <summary>阶段内当前任务名称(容器子阶段转发用,可空)。经 <see cref="SetCurrentTaskName"/> 写入。</summary>
         public string CurrentTaskName { get; internal set; }
+
+        /// <summary>
+        /// 设置阶段内当前任务名,并触发管线聚合广播(经统一通知咽喉,含主线程断言)。
+        /// <para>任务名变化本身即脏(阈值节流的三项之一),故只改任务名也会广播——UI 据此显示
+        /// 「当前在跑哪个子任务」;null 表示未知,容器转发时回落子阶段名。</para>
+        /// </summary>
+        public void SetCurrentTaskName(string value)
+        {
+            CurrentTaskName = value;
+            NotifyChanged();
+        }
 
         /// <summary>设置阶段进度,自动 clamp 0~1(NaN 归一为 0),并触发管线聚合广播(经统一通知咽喉,含主线程断言)。</summary>
         public void SetProgress(float value)
@@ -105,25 +117,6 @@ namespace XFramework.XPipeline
 #endif
             Owner?.OnStageContextChanged(this);
         }
-
-        #endregion
-
-        #region 全局级(管线填充,只读)
-
-        /// <summary>全局进度,0~1。</summary>
-        public float OverallProgress { get; internal set; }
-
-        /// <summary>当前阶段名称。</summary>
-        public string CurrentStageName { get; internal set; }
-
-        /// <summary>总阶段数。</summary>
-        public int TotalStageCount { get; internal set; }
-
-        /// <summary>已完成阶段数。</summary>
-        public int CompletedStageCount { get; internal set; }
-
-        /// <summary>失败阶段数。</summary>
-        public int FailedStageCount { get; internal set; }
 
         #endregion
     }

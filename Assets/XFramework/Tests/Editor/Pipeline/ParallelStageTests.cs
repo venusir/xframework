@@ -178,6 +178,33 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void SetCurrentTaskName_PropagatesThroughGroupToProgress()
+        {
+            // 组内子阶段上报的任务名:先经聚合器转发到组主上下文,再经管线广播出去——两层的
+            // 脏判定都要认任务名,少任何一层,UI 的「当前子任务」都看不到(转发被组节流吞掉)
+            var child = new SilentGatedChildStage();
+            var stage = new ParallelStage(new IPipelineStage[] { child });
+
+            var progress = new List<PipelineProgress>();
+            var pipeline = Pipeline.Create();
+            pipeline.OnProgressUpdate += p => progress.Add(p);
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+            child.Ctx.SetCurrentTaskName("downloading");
+
+            bool found = false;
+            for (int i = 0; i < progress.Count; i++)
+            {
+                if (progress[i].CurrentTaskName == "downloading") found = true;
+            }
+            Assert.IsTrue(found, "子阶段上报的任务名应经组转发后出现在广播里");
+
+            child.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+        }
+
+        [Test]
         public void GroupRunningNoDescription_ForwardsPlaceholderNotCompleted()
         {
             // 组内子阶段只报进度不写描述:聚合器转发不得把空描述占位为终局文案 "Completed"

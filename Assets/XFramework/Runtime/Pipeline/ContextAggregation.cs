@@ -152,24 +152,30 @@ namespace XFramework.XPipeline
         }
 
         /// <summary>
-        /// 阈值节流脏判定:总体进度变化 ≥1% || 描述变化 || 任一上下文状态变化(每帧路径零 LINQ)。
+        /// 阈值节流脏判定:总体进度变化 ≥1% || 描述变化 || 任务名变化 || 任一上下文状态变化(每帧路径零 LINQ)。
+        /// <para>任务名进脏判定是「只改任务名也要广播」的前提(UI 的「当前子任务」);容器侧同样适用,
+        /// 代价是组内多个子阶段交替上报时切换本身即脏——那正是「当前在跑谁」发生了变化。</para>
         /// <para>description 由调用方按各自口径传入(管线:原始扫描描述;聚合器:诊断优先覆盖后的描述),
         /// 与既有节流语义一致——占位归一化(如 <c>?? "Completed"</c>)发生在广播/转发映射点而非脏判定,
         /// 此处不做归一化(归一化不对称是既有行为,不得在此修正)。</para>
         /// </summary>
         /// <param name="overall">本次扫描加权进度。</param>
         /// <param name="description">本次扫描描述(调用方口径)。</param>
+        /// <param name="taskName">本次扫描任务名(调用方口径)。</param>
         /// <param name="lastOverall">上次广播加权进度。</param>
         /// <param name="lastDescription">上次广播描述(调用方口径)。</param>
+        /// <param name="lastTaskName">上次广播任务名(调用方口径)。</param>
         /// <param name="contexts">上下文数组。</param>
         /// <param name="lastStates">上次广播后快照的状态数组(与 <paramref name="contexts"/> 同序同长)。</param>
         /// <returns>是否脏(需广播/转发)。</returns>
-        internal static bool IsDirty(float overall, string description,
-            float lastOverall, string lastDescription,
+        internal static bool IsDirty(float overall, string description, string taskName,
+            float lastOverall, string lastDescription, string lastTaskName,
             PipelineStageContext[] contexts, PipelineStageState[] lastStates)
         {
             bool dirty = Mathf.Abs(overall - lastOverall) >= 0.01f;
             if (!dirty && description != lastDescription)
+                dirty = true;
+            if (!dirty && taskName != lastTaskName)
                 dirty = true;
             if (!dirty)
             {

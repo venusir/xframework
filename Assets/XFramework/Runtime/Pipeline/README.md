@@ -19,7 +19,7 @@ Runtime/Pipeline/
 ├── IPipelineStage.cs             # 阶段接口(含 PipelineStageState 枚举)
 ├── IPhaseStage.cs                # 相位阶段接口(IPipelineStage + Phase 声明)
 ├── Pipeline.cs                   # 静态门面:创建实例 + 相位分组装配助手 BuildPhaseGroups
-├── PipelineStageContext.cs       # 阶段执行上下文(阶段写面 + 全局读面)
+├── PipelineStageContext.cs       # 阶段执行上下文(阶段写面;读取面在 PipelineProgress / IPipeline.Status)
 ├── PipelineProgress.cs           # 全局进度快照(事件载荷)
 ├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获)
 ├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
@@ -46,7 +46,7 @@ public interface IPipelineStage
 }
 ```
 
-阶段经 `PipelineStageContext` 主动写入进度/状态/描述——**写入点同步触发管线级聚合与广播(事件驱动,非轮询)**。
+阶段经 `PipelineStageContext` 主动写入进度/状态/描述/任务名——**写入点同步触发管线级聚合与广播(事件驱动,非轮询)**。任务名用 `SetCurrentTaskName` 上报(如「正在下载 xxx」),它单独变化也会广播,UI 据此显示比阶段名更细的当前子任务。
 
 ### 执行模型
 
@@ -74,7 +74,7 @@ public interface IPipelineStage
 ### 进度模型
 
 - **加权聚合**: 全局进度 = `Σ(w·p) / Σ(w)`——已完成阶段记 w、执行中记 w·p;失败阶段权重移出;`Weight = 0` 的阶段不占进度(如瞬时阶段)。阶段进度经 `SetProgress` 写入时自动 clamp 0~1,**NaN 归一为 0**;`Weight` 须为有限非负数——非有限值一旦进入加权和,全局进度会变 NaN 或静默钉死,且脏判定的差值比较对 NaN 恒为 false,会把阈值节流一并废掉
-- **阈值节流**: 全局进度变化 ≥1% 或任一阶段状态/描述变化才广播;终局必广播
+- **阈值节流**: 全局进度变化 ≥1%,或任一阶段的**描述 / 任务名** / 状态变化才广播;终局必广播
 - **阶段切换时进度回落属预期**(新阶段从 0 开始);装配 `Weight = 0` 的瞬时阶段可平滑过渡
 - **描述占位**: 运行中未写描述时广播/转发的 `Description` 为空串占位(无描述即无文案,不伪造终局文案);完成终局恒为 `"Completed"`;失败/取消终局可能为空串(诊断经 `OnFailed` 原因与失败阶段上下文)
 
@@ -110,7 +110,7 @@ Phase 90: [LocalizationBootstrapStage]────────┘
 
 ### 并行/串行容器语义(组内细节)
 
-- **并行组内事件驱动聚合**: 子阶段写入即触发组内加权聚合(门铃 + 阈值节流 ≥1% 或描述/状态变化),收敛后转发组主上下文(组内均未写描述时转发空串占位,不伪造终局文案)——**一次子阶段写入恰好 1 次组级聚合**
+- **并行组内事件驱动聚合**: 子阶段写入即触发组内加权聚合(门铃 + 阈值节流 ≥1% 或描述/任务名/状态变化),收敛后转发组主上下文(组内均未写描述时转发空串占位,不伪造终局文案)——**一次子阶段写入恰好 1 次组级聚合**。任务名由组内「最近一次写入的子阶段」产出(未上报则回落该子阶段名),故组内**子阶段交替上报时切换本身即脏**——那正是「当前在跑谁」变了
 - **取消**: 子阶段收到已取消的 token;组沉降后若 token 已取消或任一子阶段以取消结束,组上抛 `OperationCanceledException` 走管线取消路径(契约兜底不会把已取消的组误补为 Completed)
 - **失败即停**: 组内任一子阶段失败(抛异常或主动 `SetState(Failed)`)→ 立即取消其余兄弟,沉降(WhenAll)后组置 Failed;日志 `[Pipeline] Parallel stage failed: {任务名} ({耗时}s): {描述}`(组级失败标识,与 `[Pipeline] Pipeline failed` 编排级失败区分)
 - **诊断优先**: 失败时描述/任务名成对取组内**首个失败**的子阶段值,避免被兄弟描述覆盖(首失败未写描述时描述为空,但任务名仍是它——两者同源,不各取一处)

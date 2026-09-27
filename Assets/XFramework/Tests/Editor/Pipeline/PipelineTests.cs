@@ -325,6 +325,27 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void TaskNameOnlyChange_ForcesBroadcast()
+        {
+            // 任务名是阈值节流的三项之一:只改任务名(进度/描述/状态都不动)同样必须广播,
+            // 否则 UI 的「当前子任务」会永远停在第一次广播时的值
+            var stage = new GatedProgressStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+            int countBefore = progress.Count;
+
+            stage.Ctx.SetCurrentTaskName("sub");
+
+            Assert.AreEqual(countBefore + 1, progress.Count, "任务名变化必须强制广播");
+            Assert.AreEqual("sub", progress[progress.Count - 1].CurrentTaskName);
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+        }
+
+        [Test]
         public void StateChange_ForcesBroadcast()
         {
             var stage = new GatedProgressStage();

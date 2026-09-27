@@ -121,9 +121,10 @@ namespace XFramework.XPipeline
         /// </summary>
         internal int AggregationCount { get; private set; }
 
-        /// <summary>上一帧广播快照:全局进度 + 描述 + 各阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
+        /// <summary>上一帧广播快照:全局进度 + 描述 + 任务名 + 各阶段状态(阈值节流,首帧 -1 保证必广播)。</summary>
         float _lastOverall = -1f;
         string _lastDesc;
+        string _lastTaskName;
         PipelineStageState[] _lastStates;
 
         /// <summary>最近一次广播快照。</summary>
@@ -349,6 +350,7 @@ namespace XFramework.XPipeline
                 _lastStates = null;
                 _lastOverall = -1f;
                 _lastDesc = null;
+                _lastTaskName = null;
             }
         }
 
@@ -394,9 +396,9 @@ namespace XFramework.XPipeline
             AggregationCount++;
             var snap = ContextAggregation.Scan(_contexts, ContextAggregation.ScanMode.TopLevel);
 
-            // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任一阶段状态变化(共享扫描,每帧路径零 LINQ)
-            if (ContextAggregation.IsDirty(snap.Overall, snap.Description,
-                _lastOverall, _lastDesc, _contexts, _lastStates))
+            // 阈值节流:总体进度变化 ≥1% || 描述变化 || 任务名变化 || 任一阶段状态变化(共享扫描,每帧路径零 LINQ)
+            if (ContextAggregation.IsDirty(snap.Overall, snap.Description, snap.TaskName,
+                _lastOverall, _lastDesc, _lastTaskName, _contexts, _lastStates))
             {
                 _overall = snap.Overall;
                 _description = snap.Description;
@@ -407,6 +409,7 @@ namespace XFramework.XPipeline
 
                 _lastOverall = snap.Overall;
                 _lastDesc = snap.Description;
+                _lastTaskName = snap.TaskName;
                 ContextAggregation.CopyStates(_contexts, _lastStates);
 
                 Broadcast();
