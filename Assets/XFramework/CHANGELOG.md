@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **UI 面板资源真释放**：`UnloadPanelAssetAsync(assetPath)`，配套 Asset 侧新增能力接口 `IAssetPoolController`（`ClearPool` / `ClearAllPools`）。此前 `UnloadAsset` 声称「释放内存」而只清一个记账字典——查证后确认这不是实现偷懒而是能力缺口：`DestroyAllPooledInstances` 是 private，且回池时实例保留 `AssetHandle` 保活资源，于是池里只要有一个闲置实例，该预制体的引用计数就不会归零。能力接口与 `IAssetManager` 分开，故不破坏第三方自定义实现
 - **UI 排序空间单点定义 `UISorting` / `UILayers`**：所有 `sortingOrder` 取值一律由此推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip` 会把越界取值当场拦住
 
+- **发布/订阅入口的主线程断言（Editor）**：`Publish` / `PublishAsync`（含键值重载）与全部 12 个订阅重载的入口在 Editor 下检查是否位于 Unity 主线程，越线程调用记一条 `[Message]` 前缀的 Error——每个 broker 只报首错（`Clear()` 换新实例后重新具备提示能力），Release 构建不编译该断言、零开销。此前这条契约只写在 README 里，而 `PublishAsync` 的旧文案还暗示「不在主线程调用也行，只要自行切回主线程」：文档说一套、成员文档暗示另一套，入口处却没有任何机制。**覆盖边界（三处刻意不判，均已写进文档）**：① 退订路径——令牌可在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 在令牌已取消时的早退路径——它不触碰任何共享状态；③ 处理器内部的线程行为。断言实现为 `internal static MainThreadGuard`，`ref` 闩锁由 broker 实例持有，故测试可用局部变量直接驱动、零全局状态。配套 5 条 EditMode 用例（守卫本体 2 条 + 接线 3 条），其中「主线程调用不得记日志」那条是**负向控制**——缺了它，一个恒打日志的守卫也能让越线程用例通过
+
 ### Changed
 
 - **XPool 池泛型收紧为引用类型约束（破坏性）**：`IPool<T>` / `Pool<T>` / `PooledObject<T>` 加 `where T : class`。此前值类型能实例化 `Pool<int>` 并通过编译，但实例复用依赖引用同一性——Editor 活跃追踪集的重复归还检测、`CountActive` 的取还配对都会失真，而 XML 文档里只是一句「应为引用类型」的建议。Unity `UnityEngine.Pool`、GameFramework、Microsoft.Extensions.ObjectPool 全部带此约束。连带两处：`PoolManager.RemovePool<T>` 必须同步加约束（否则 `is IPool<T>` 触发 CS0452），`HasPool<T>` 一并对齐；`Pool<T>` 构造的 `config` 默认值由 `default(PoolConfig)` 改为 `PoolConfig.Default`——前者 `CollectionCheck` 为 false，会让「直接 new」与「经 PoolManager 建池」两条路径在 Editor 下的调试安全性不同

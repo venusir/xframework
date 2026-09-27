@@ -51,12 +51,22 @@ namespace XFramework.XMessage
         /// <summary>预构建的过滤器 pipeline 缓存（在 AddFilter 时失效重建）。</summary>
         private readonly Dictionary<Type, Delegate> _filterPipelines = new();
 
+#if UNITY_EDITOR
+        /// <summary>
+        /// 发布/订阅入口的越线程首错闩锁(仅 Editor)。按 broker 实例持有:<see cref="MessageManager.Clear"/>
+        /// 换新实例即复位,故测试之间不会互相污染,而长期运行中违规只报一次以免刷屏。
+        /// </summary>
+        private bool _mainThreadViolationLogged;
+#endif
+
         #endregion
 
         #region Publish
 
         public void Publish<TMessage>(TMessage message)
         {
+            AssertMainThread(nameof(Publish));
+
             Interlocked.Increment(ref _publishCount);
 
             var type = typeof(TMessage);
@@ -79,6 +89,8 @@ namespace XFramework.XMessage
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
         {
+            AssertMainThread(nameof(Publish));
+
             Interlocked.Increment(ref _publishCount);
 
             var type = typeof(TMessage);
@@ -109,6 +121,8 @@ namespace XFramework.XMessage
         public UniTask PublishAsync<TMessage>(
             TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
         {
+            AssertMainThread(nameof(PublishAsync));
+
             Interlocked.Increment(ref _publishCount);
 
             var type = typeof(TMessage);
@@ -129,6 +143,8 @@ namespace XFramework.XMessage
         public UniTask PublishAsync<TKey, TMessage>(
             TKey key, TMessage message, MessagePublishStrategy strategy, CancellationToken cancellationToken)
         {
+            AssertMainThread(nameof(PublishAsync));
+
             Interlocked.Increment(ref _publishCount);
 
             var type = typeof(TMessage);
@@ -897,8 +913,24 @@ namespace XFramework.XMessage
 
         #region Private Helpers
 
+        /// <summary>
+        /// 发布/订阅入口的主线程断言(仅 Editor 生效,Release 零开销;实现见 <see cref="MainThreadGuard"/>)。
+        /// <para>做成一行调用点,是为了让「哪些入口有断言」一眼可数;分散写条件编译会淹没在派发逻辑里。
+        /// 调用点共 6 处:4 个发布方法各自开头(须在 <see cref="ApplyFilters{TMessage}"/> 之前——它会写
+        /// 过滤器管道缓存),以及两个 <c>GetOrCreate*</c> 助手(覆盖全部 12 个订阅重载)。</para>
+        /// </summary>
+        /// <param name="api">被调用的入口名或入口组名,用于拼装报错文案。</param>
+        private void AssertMainThread(string api)
+        {
+#if UNITY_EDITOR
+            MainThreadGuard.AssertEntry(ref _mainThreadViolationLogged, api);
+#endif
+        }
+
         private MessageChannel<TMessage> GetOrCreateChannel<TMessage>()
         {
+            AssertMainThread("订阅入口(Subscribe/SubscribeAsync/SubscribeBuffered)");
+
             var type = typeof(TMessage);
             if (!_channels.TryGetValue(type, out var channel))
             {
@@ -910,6 +942,8 @@ namespace XFramework.XMessage
 
         private KeyedChannelStore<TKey, TMessage> GetOrCreateKeyedChannelStore<TKey, TMessage>()
         {
+            AssertMainThread("订阅入口(Subscribe/SubscribeAsync/SubscribeBuffered)");
+
             var storeKey = (MessageType: typeof(TMessage), KeyType: typeof(TKey));
             if (!_keyedChannels.TryGetValue(storeKey, out var store))
             {
