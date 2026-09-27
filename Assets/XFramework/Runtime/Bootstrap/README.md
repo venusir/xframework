@@ -96,7 +96,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 >
 > 反过来（先 `RegisterDefaults()` 再 `Register` 同类型的自定义实例）**两者都会被登记**：同一个门面被初始化两次，第二次会被门面自身的幂等守卫挡下并打警告，而**你的 options 被静默忽略**。这是「按实例去重」这一语义的必然结果，框架无从区分「另一个同类型阶段」与「同一个阶段的替换品」。
 
-**为什么 `RunAsync` 在失败/取消时抛异常？** `PipelineImpl.RunAsync` 在这两种情况下都「正常返回」，单看返回值分不出成功与失败。启动失败是致命的，静默吞掉会让故障表现成「服务莫名其妙没就绪」。所以本模块订阅 `OnFailed`/`OnCancelled` 并在事后抛出。
+**为什么 `RunAsync` 在失败/取消时抛异常？** `PipelineImpl.RunAsync` 在这两种情况下都「正常返回」，单看返回值分不出成功与失败。启动失败是致命的，静默吞掉会让故障表现成「服务莫名其妙没就绪」。所以本模块在 `RunAsync` 返回后读管线的终局拉取面（`IPipeline.Status` / `FailureReason`）并据此抛出——早期版本是订阅 `OnFailed`/`OnCancelled` 再用两个局部变量记账，管线补上拉取面后那套记账已删除。
 
 **为什么 `Shutdown` 是同步的？** 框架内置四个模块的清理入口都是同步 `void`，且调用点通常是 `OnDestroy`（没有 await 机会）。将来若某个模块确实需要异步清理，再为它单独扩展接口。
 

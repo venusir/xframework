@@ -74,7 +74,11 @@ namespace XFramework.XPipeline
     {
         #region IPipeline Properties
 
-        public bool IsRunning { get; private set; }
+        public bool IsRunning => _status == PipelineStatus.Running;
+
+        public PipelineStatus Status => _status;
+
+        public string FailureReason { get; private set; }
 
         #endregion
 
@@ -106,6 +110,9 @@ namespace XFramework.XPipeline
 
         /// <summary>写入门铃:重入折叠 + 迟写防护(与容器聚合器共用同一实现)。</summary>
         readonly ContextBell _bell = new ContextBell();
+
+        /// <summary>终局状态单一真值(<see cref="IsRunning"/> 由它派生);运行结束后保持终局值,不回落。</summary>
+        PipelineStatus _status;
 
         /// <summary>
         /// 聚合扫描次数(测试缝,internal、按实例累计)。阶段每写一次即一次扫描,顶层节流只决定
@@ -170,11 +177,13 @@ namespace XFramework.XPipeline
             if (_stages.Count == 0)
             {
                 Debug.LogWarning("[Pipeline] RunAsync: no stages found.");
+                _status = PipelineStatus.Completed; // 与紧随其后的 OnCompleted 保持一致
                 DispatchSafely(OnCompleted, nameof(OnCompleted));
                 return;
             }
 
-            IsRunning = true;
+            _status = PipelineStatus.Running;
+            FailureReason = null; // 重跑时不得残留上一次的失败原因
             _bell.Reset();
 
             // 链接外部取消令牌:任一方取消,当前阶段收到已取消的 token
@@ -277,6 +286,12 @@ namespace XFramework.XPipeline
                     Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' completed in {sw.Elapsed.TotalMilliseconds:F0}ms");
                 }
 
+                // 循环收尾:阶段沉降后 token 已取消且未失败 → 取消
+                // (阶段可以对取消无感并正常返回,那样最后一个阶段会直接落进完成终局,取消就此丢失;
+                // 与容器侧的沉降后检查对齐——三层终局判据一致)
+                if (!failed && !cancelled && cts.Token.IsCancellationRequested)
+                    cancelled = true;
+
                 // 终局:取消 / 失败 / 完成三路互斥(先重算快照广播,再触发事件)
                 // 关闸:终局广播与终局事件期间的重入写不再聚合——否则订阅者在事件里回写会再广播一次,
                 // 于是「OnCancelled/OnCompleted 之后仍收到进度广播」
@@ -285,6 +300,7 @@ namespace XFramework.XPipeline
                 {
                     RecalculateSnapshot();
                     Broadcast();
+                    _status = PipelineStatus.Cancelled;
                     DispatchSafely(OnCancelled, nameof(OnCancelled));
                     Debug.LogWarning("[Pipeline] Pipeline cancelled.");
                 }
@@ -292,7 +308,9 @@ namespace XFramework.XPipeline
                 {
                     RecalculateSnapshot();
                     Broadcast();
-                    DispatchSafely(OnFailed, $"Failed: {failDescription}", nameof(OnFailed));
+                    _status = PipelineStatus.Failed;
+                    FailureReason = $"Failed: {failDescription}";
+                    DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
                     Debug.LogError($"[Pipeline] Pipeline failed: {failDescription}");
                 }
                 else
@@ -306,6 +324,7 @@ namespace XFramework.XPipeline
                     _currentTaskName = null;
                     _completedStageCount = _stages.Count;
                     _failedStageCount = 0;
+                    _status = PipelineStatus.Completed;
                     Broadcast();
                     DispatchSafely(OnCompleted, nameof(OnCompleted));
                 }
@@ -313,16 +332,19 @@ namespace XFramework.XPipeline
             catch (OperationCanceledException)
             {
                 // 防御分支:理论上不可达(RunStage 已吞掉全部 OCE);语义统一为取消,绝不静默
+                _status = PipelineStatus.Cancelled;
                 DispatchSafely(OnCancelled, nameof(OnCancelled));
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[Pipeline] RunAsync failed: {ex.Message}\n{ex.StackTrace}");
-                DispatchSafely(OnFailed, $"Exception: {ex.Message}", nameof(OnFailed));
+                _status = PipelineStatus.Failed;
+                FailureReason = $"Exception: {ex.Message}";
+                DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
             }
             finally
             {
-                IsRunning = false;
+                // 终局状态保持:不在此处回落 Idle,否则 RunAsync 返回后就读不到本次结果了
                 _contexts = null;
                 _lastStates = null;
                 _lastOverall = -1f;
@@ -340,7 +362,8 @@ namespace XFramework.XPipeline
             OnCancelled = null;
             OnFailed = null;
 
-            IsRunning = false;
+            _status = PipelineStatus.Idle;
+            FailureReason = null;
             _contexts = null;
             _lastStates = null;
         }

@@ -132,6 +132,34 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void Cancellation_StageIgnoringCancel_StillCancels()
+        {
+            // 取消语义由阶段负责:不观察 token 的阶段会「正常返回」。若管线只在循环顶部检查 token,
+            // 最后一个阶段这样收场就落进完成终局——调用方明明取消了,却收到 OnCompleted
+            var stage = new CancelBlindStage();
+            var (pipeline, _) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var cts = new CancellationTokenSource();
+            string failedReason = null;
+            bool cancelled = false;
+            bool completed = false;
+            pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
+            pipeline.OnCompleted += () => completed = true;
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            var task = pipeline.RunAsync(cts.Token);
+            cts.Cancel();
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.IsTrue(cancelled, "阶段沉降后 token 已取消 → 应走取消终局");
+            Assert.IsFalse(completed, "取消不得落入完成终局");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
+        }
+
+        [Test]
         public void StageThrowsOCE_NotExternalCancel_IsCancellation()
         {
             var a = new FakeStage { ThrowCanceled = true };
@@ -157,5 +185,24 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        /// <summary>
+        /// 对取消无感的挂起阶段:等测试放行后正常返回,刻意不观察 token——用于锁定「阶段沉降后
+        /// token 仍已取消,则终局是取消而非完成」。
+        /// </summary>
+        private sealed class CancelBlindStage : IPipelineStage
+        {
+            public string Name => "cancel-blind";
+
+            public float Weight => 1f;
+
+            public readonly UniTaskCompletionSource Gate = new UniTaskCompletionSource();
+
+            public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+            {
+                context.SetDescription("cancel-blind");
+                await Gate.Task; // 刻意不挂 AttachExternalCancellation:对取消无感
+            }
+        }
     }
 }

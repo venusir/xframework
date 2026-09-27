@@ -103,6 +103,11 @@ namespace XFramework.XPipeline
                 }
             }
 
+            // 循环收尾:最后一个子阶段可能对取消无感并正常返回——不在此处补检查,取消就会被
+            // 「完成终局」吞掉(与 ParallelStage 沉降后的检查对齐,三层终局判据一致)
+            if (!_aggregator.AnyFailed && cancellationToken.IsCancellationRequested)
+                throw new OperationCanceledException(cancellationToken);
+
             // 成功:正常返回,由管线契约兜底补置 Completed
 
             // 迟写防护:执行结束后子阶段 fire-and-forget 写入直接忽略

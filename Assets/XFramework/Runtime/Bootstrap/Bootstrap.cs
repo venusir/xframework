@@ -132,21 +132,24 @@ namespace XFramework.XBootstrap
 
             IPipeline pipeline = BuildPipeline();
 
-            // 终局状态必须自己记：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
-            // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）
-            string failureReason = null;
-            bool cancelled = false;
-
-            pipeline.OnFailed += reason => failureReason = reason;
-            pipeline.OnCancelled += () => cancelled = true;
             if (progress != null)
             {
                 pipeline.OnProgressUpdate += value => progress.Report(value);
             }
 
+            // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
+            // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
+            // 旧实现为此订阅 OnFailed/OnCancelled 再用两个局部变量记账，现由管线自己落位。
+            PipelineStatus status = PipelineStatus.Idle;
+            string failureReason = null;
+
             try
             {
                 await pipeline.RunAsync(cancellationToken);
+
+                // 必须在 finally 的 Destroy 之前读：销毁会把状态回落 Idle
+                status = pipeline.Status;
+                failureReason = pipeline.FailureReason;
             }
             finally
             {
@@ -158,7 +161,7 @@ namespace XFramework.XBootstrap
                 throw new InvalidOperationException($"[Bootstrap] 启动失败：{failureReason}");
             }
 
-            if (cancelled)
+            if (status == PipelineStatus.Cancelled)
             {
                 throw new OperationCanceledException(cancellationToken);
             }

@@ -52,7 +52,7 @@ public interface IPipelineStage
 
 - **串行执行**: 阶段按添加顺序逐 await,前一阶段返回后才启动下一阶段;`RunAsync` 返回时无在途阶段任务
 - **失败即停**: 阶段抛异常 → 置 Failed 并经 `OnFailed` 报告,后续阶段不再执行
-- **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消
+- **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消。阶段可以对取消无感并正常返回,但**阶段沉降后 token 已取消即判取消**——否则最后一个阶段那样收场会直接落进完成终局,取消被静默吞掉(容器与顶层同一判据)
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
 - **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)
 - **阶段日志**: 顶层阶段开始/结束经 `Debug.Log` 记录耗时(`[Pipeline] Stage 'X' start` / `'X' completed|failed|cancelled|timed out in Nms`),便于诊断执行时间分布;容器(并行/串行)组内子阶段不输出 start/end 日志(组级失败已有 `[Pipeline] Parallel/Sequence stage failed: ...` 诊断日志兜底)
@@ -61,6 +61,7 @@ public interface IPipelineStage
 - **写入线程契约**: 阶段经 `PipelineStageContext` 写入须与 `RunAsync` 调度同一上下文(Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 LogError 提示(Release 构建零开销)
 - **订阅者异常隔离**: 四个事件的订阅者抛出的异常记 `[Pipeline] {事件名} subscriber threw:` 后继续,不改变阶段状态与终局——订阅方(如 UI)的 bug 不会把无辜阶段打成 Failed,不会把完成/取消改报成失败,也不会让 `RunAsync` 抛出
 - **重入折叠与终局关闸**: 订阅者在广播里回写上下文(如 UI 反向驱动)不会递归——一次外部写入最多补一次聚合,**递归深度恒为 2**;终局广播与终局事件期间关闸,写入不再触发聚合,故**终局事件之后不会再收到进度广播**。折叠刻意不写成 while 排空:订阅者若在每次广播都回写,while 会死循环而不管它会栈溢出,宁可少广播一次
+- **终局从拉取面读**: `RunAsync` 在失败/取消时也「正常返回」,分不出结果——`IPipeline.Status`(`Idle`/`Running`/`Completed`/`Failed`/`Cancelled`)与 `FailureReason` 在运行结束后**保持终局值**(仅 `Destroy` 回落 `Idle`),且**落位先于终局事件**(订阅者在回调里即可读到)。`Bootstrap.RunAsync` 即据此把失败/取消转成异常
 
 ### 容器组合
 
@@ -158,6 +159,11 @@ pipeline.OnCancelled += () => Debug.LogWarning("管线取消");
 pipeline.OnFailed += reason => Debug.LogError($"管线失败: {reason}");
 
 await pipeline.RunAsync();
+
+// 终局读拉取面(失败/取消时 RunAsync 也正常返回,返回值分不出结果)
+if (pipeline.Status != PipelineStatus.Completed)
+    Debug.LogError($"管线未完成: {pipeline.Status} {pipeline.FailureReason}");
+
 pipeline.Destroy();
 ```
 

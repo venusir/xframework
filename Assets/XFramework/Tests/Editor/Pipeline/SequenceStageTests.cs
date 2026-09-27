@@ -302,6 +302,36 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.IsFalse(completed, "取消不应触发完成事件");
         }
 
+        [Test]
+        public void Cancellation_DuringLastChild_StillCancels()
+        {
+            // 上一条覆盖「后面还有子阶段」——循环顶部的边界检查兜住了;本条是**最后一个**子阶段:
+            // 不响应取消且正常返回后循环即结束,原先没有任何终局检查,于是同一批子阶段包进
+            // ParallelStage 报取消、直接放进 SequenceStage 却报完成(三层里只有并行容器是严的)
+            var a = new CancelBlindChildStage { Gate = new UniTaskCompletionSource() };
+            var stage = new SequenceStage(new IPipelineStage[] { a });
+
+            var cts = new CancellationTokenSource();
+            string failedReason = null;
+            bool cancelled = false;
+            bool completed = false;
+            var pipeline = Pipeline.Create();
+            pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCancelled += () => cancelled = true;
+            pipeline.OnCompleted += () => completed = true;
+            pipeline.AddStage(stage);
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            var task = pipeline.RunAsync(cts.Token);
+            cts.Cancel();
+            a.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.IsTrue(cancelled, "最后一个子阶段沉降后 token 已取消 → 组应走取消路径");
+            Assert.IsNull(failedReason, "取消不得触发失败事件");
+            Assert.IsFalse(completed, "取消不应触发完成事件");
+        }
+
         #endregion
 
         #region 契约兜底
