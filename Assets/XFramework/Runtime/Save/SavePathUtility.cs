@@ -61,8 +61,10 @@ namespace XFramework.XSave
                 throw new ArgumentException(
                     $"[Save] playerId 过长（{playerId.Length} 字符 > 上限 {MaxPlayerIdLength}）。", nameof(playerId));
 
-            // "." 与 ".." 必须显式拒绝：二者都能穿过 FileManager 的路径沙箱（它只拦 .. 段），
-            // "." 会让存档落到域根从而绕开玩家隔离，而 DeletePlayer(".") 会删掉域根下的全部存档
+            // "." 与 ".." 都必须显式拒绝：FileManager 的沙箱只拦 ".." 段（见 FilePathUtility），
+            // 能穿过它的是 "."——那样存档会落到域根、绕开玩家隔离，而 DeletePlayer(".") 会删掉
+            // 域根下的全部存档。这里对 ".." 再拦一次是纵深防御：沙箱行为属 File 的内部实现，
+            // 不该是 Save 侧安全的唯一依赖。
             if (playerId == "." || playerId == "..")
                 throw new ArgumentException($"[Save] 非法 playerId '{playerId}'：不能为 '.' 或 '..'。", nameof(playerId));
 

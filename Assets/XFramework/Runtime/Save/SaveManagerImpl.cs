@@ -64,6 +64,9 @@ namespace XFramework.XSave
         public bool IsBusy => Volatile.Read(ref _busyFlag) != 0;
 
         /// <inheritdoc/>
+        /// <remarks>无锁直读:<c>_playerId</c> 只在主线程写入,本属性也只在主线程被有意义地读取
+        /// (模块内部一律在入口捕获到局部变量);<c>_busyFlag</c> 之所以用 <c>Volatile.Read</c>,
+        /// 是因为它会被任意线程探测。</remarks>
         public string CurrentPlayerId => _playerId;
 
         /// <inheritdoc/>
@@ -341,12 +344,23 @@ namespace XFramework.XSave
                 //    备份没有自己的侧车，因此不走校验和（TryReadSidecarAsync 自然读不到），
                 //    它本就是最后一道防线
                 var backupPath = slotPath + FilePathUtility.BackupFileSuffix;
+                string backupMessage = null;
                 if (FileManager.Exists(SaveDomain, backupPath))
                 {
                     var backupOutcome = await ReadAndValidateAsync(playerId, slot, backupPath, cancellationToken);
-                    if (backupOutcome.SaveData != null
-                        && backupOutcome.SaveData.version <= CurrentVersion
-                        && TryApplySnapshot(backupOutcome.SaveData, out _, out _))
+                    if (backupOutcome.SaveData == null)
+                    {
+                        backupMessage = backupOutcome.Message;
+                    }
+                    else if (backupOutcome.SaveData.version > CurrentVersion)
+                    {
+                        backupMessage = $"备份版本({backupOutcome.SaveData.version})高于当前客户端支持的版本({CurrentVersion})";
+                    }
+                    else if (!TryApplySnapshot(backupOutcome.SaveData, out _, out var backupApplyError))
+                    {
+                        backupMessage = $"备份无法应用到内存：{backupApplyError}";
+                    }
+                    else
                     {
                         Debug.LogWarning(
                             $"[Save] 存档槽位 {slot} 主文件不可用（{outcome.Message}），已从备份恢复。");
@@ -354,12 +368,18 @@ namespace XFramework.XSave
                     }
                 }
 
-                // 3. 主文件与备份都不可用
+                // 3. 主文件与备份都不可用。备份的失败原因一并带上——否则调用方分不清
+                //    「没有备份」与「备份也坏了」，而两者的处置不同：前者只能重开，后者说明两份文件
+                //    都值得留证据（玩家可能想找回）
                 var status = outcome.Status == SaveLoadStatus.Missing
                     ? SaveLoadStatus.Missing
                     : SaveLoadStatus.Corrupt;
 
-                return new SaveLoadResult(status, null, outcome.Message);
+                var message = backupMessage == null
+                    ? outcome.Message
+                    : $"{outcome.Message}；一代备份亦不可用（{backupMessage}）";
+
+                return new SaveLoadResult(status, null, message);
             }
             finally
             {
@@ -420,10 +440,9 @@ namespace XFramework.XSave
         /// <c>DataManager.ApplySnapshot</c> 只在<b>清空阶段</b>无保护
         /// （<c>ForEachBlock(b =&gt; b.OnClear())</c>，异常会传播到这里）；
         /// <b>恢复阶段</b>走 <c>TryRestoreBlock</c>，其内部 try/catch 会把数据块恢复失败
-        /// 记成 <c>[Data] 恢复数据块 X 失败</c> 的 warning 并吞掉。也就是说：
-        /// 某个 Block 恢复失败时 <c>ApplySnapshot</c> 正常返回，本方法会认为加载成功，
-        /// 而内存实际处于「部分块已恢复、其余为空」的状态——该缺陷位于 Data 模块，
-        /// Save 侧无法探测（<c>ApplySnapshot</c> 返回 void）。</para>
+        /// 记成 <c>[Data] 恢复数据块 X 失败</c> 的 warning 并吞掉——但<b>吞掉的是异常，不是计数</b>：
+        /// <c>ApplySnapshot</c> 返回未能恢复的块数，本方法据此判定失败并回滚（见下方 <c>failedBlocks</c> 分支），
+        /// 所以只要 Data 侧如实返回计数，这里就不会留下「半加载」状态。</para>
         /// <para><b>三个已知约束（保持此设计的代价，勿在未解决前依赖回滚的完整性）：</b></para>
         /// <list type="number">
         /// <item><description><see cref="DataManager.CreateSnapshot"/> 会清空全部脏标记。回滚能恢复<b>数据</b>

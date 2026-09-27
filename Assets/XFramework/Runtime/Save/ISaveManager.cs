@@ -11,6 +11,9 @@ namespace XFramework.XSave
     /// 通过 <see cref="XSerialize.Serializer"/> 序列化，
     /// 通过 <see cref="XFileManager.FileManager"/> 写入到 <see cref="XFileManager.FileDomain.SaveData"/>。</para>
     /// <para>第三方可实现此接口接入自定义存储后端（如 Steam Cloud、PS5 SaveData API）。</para>
+    /// <para><b>禁止在主线程用 <c>.GetAwaiter().GetResult()</c> 同步阻塞等待这些成员</b>：它们依赖
+    /// PlayerLoop 泵把续体送回来，主线程阻塞等待即死锁（唯一例外是内部的 <c>RecoverAsync</c>，
+    /// 它全程不切回主线程）。实现方若要替换默认实现，需自行保证同样的线程语义：返回前切回主线程。</para>
     /// <para><b>命名约定：</b>所有涉及 IO 的成员一律异步并以 <c>Async</c> 后缀结尾，不提供同步版本——
     /// 同步 IO 会阻塞主线程，而 Console 等平台的 Provider 可能是数百毫秒的平台 SDK 调用。</para>
     /// </summary>
@@ -24,6 +27,9 @@ namespace XFramework.XSave
         /// <summary>
         /// 当前操作玩家 ID。
         /// <para>为 <c>null</c> 时不启用玩家隔离，存档直接位于 <see cref="XFileManager.FileDomain.SaveData"/> 根目录。</para>
+        /// <para><b>读的是即时值</b>：它由 <see cref="SetCurrentPlayer"/>/<see cref="ClearCurrentPlayer"/> 写入，
+        /// 模块内部的异步 API 一律在入口把它捕获到局部变量、不依赖它跨 <c>await</c> 稳定。故<b>不要</b>读本属性
+        /// 之后再发起异步操作来「指定玩家」——中间可能被切换；需要指定玩家时用带 <c>playerId</c> 参数的重载。</para>
         /// </summary>
         string CurrentPlayerId { get; }
 

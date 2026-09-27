@@ -5,6 +5,10 @@
 XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 Save 模块提供序列化/反序列化接口。
 
 > **职责分离**：DataManager 不再直接执行文件 I/O。存读档（文件读写、存储后端管理、加密、云同步等）由 **Save 模块（XFramework.XSave）**负责。DataManager 暴露全量快照（`CreateSnapshot()` / `ApplySnapshot(data)`）、单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()` 等）接口。
+>
+> **反向引用（本模块依赖 Save 的唯一一处）**：`DataSnapshot.CreateMeta()` 返回 `XSave.SaveMeta`——那是给第三方派生子类、
+> 填充自定义元数据字段的扩展点（见 Save README「自定义存档元数据」）。故两模块之间是**双向**类型引用：
+> `SaveMeta` 的现有字段属对外契约，增删或改语义会波及本模块的 `CreateMeta()` 与其所有子类。
 
 数据按 **GamePlay 模块** 组织——一个 `IDataBlock` 对应一个游戏子系统，内部自行管理数据结构，不再强制主键约束。
 

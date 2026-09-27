@@ -186,7 +186,14 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - `XFramework.XData` - 数据块管理
 - `XFramework.XSerialize` - 序列化
 - `XFramework.XFileManager` - 文件读写
+- `XFramework.XBootstrap` / `XFramework.XPipeline` - 引导阶段（仅 `SaveBootstrapStage.cs` 使用；不登记引导阶段的项目不需要它们）
 - `UniTask` - 异步操作
+- `UnityEngine` - 日志（`Debug.Log*`）
+
+> **反向依赖：Data → Save（刻意，且是真实约束）**：`XData.DataSnapshot.CreateMeta()` 返回 `XSave.SaveMeta`
+> ——那是给第三方派生子类、填充自定义元数据字段的扩展点（见本文「自定义存档元数据」）。因此两模块之间
+> 是**双向**类型引用，而不是单向。**`SaveMeta` 的现有字段属对外契约**：增删或改语义会波及 Data 侧的
+> `CreateMeta()` 与其所有子类，不能当作 Save 的内部结构随意调整。
 
 ## 存档兼容建议
 
@@ -232,5 +239,6 @@ Runtime/Save/
 ├── SaveLoadResult.cs      # 加载状态与结果
 ├── SavePathUtility.cs     # 路径构造、槽位解析与标识校验
 ├── SaveIntegrity.cs       # 载荷校验和（FNV-1a 64）
+├── SaveBootstrapStage.cs  # 引导阶段：初始化门面 + 跑一次启动恢复扫描
 └── README.md
 ```
