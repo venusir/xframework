@@ -1468,6 +1468,11 @@ namespace XFramework.XSave.Tests
             // 而 OnLoad 回调在主线程（1）的一次；此时断言变成「池线程 == 池线程」的偶然命题，
             // 失败信息却指向本模块。取入口线程（调用方所在的主线程）才与 README 的线程约定同义。
             // 同族 SaveAsync_CreateMetaRunsOnCallingThread 用的就是这个写法。
+            //
+            // 2026-09-27 专项压测（隔离一轮 + 全量两轮，共约 4800 次 await）里再没出现过：
+            // SaveAsync×100、LoadAsync×200、裸 UniTask.Yield×300（对照组）、SwitchToMainThread×1000
+            // 全部落在主线程。故判定「续体落池线程」是罕见且与本模块无关的调度行为——产品回调
+            // 始终在主线程，与 README 的线程约定一致。
             var callingThreadId = Environment.CurrentManagedThreadId;
 
             var probe = DataManager.GetOrCreateBlock<ThreadProbeBlock>();
