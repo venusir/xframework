@@ -160,7 +160,7 @@ namespace XFramework.XPipeline
             if (_stages.Count == 0)
             {
                 Debug.LogWarning("[Pipeline] RunAsync: no stages found.");
-                OnCompleted?.Invoke();
+                DispatchSafely(OnCompleted, nameof(OnCompleted));
                 return;
             }
 
@@ -271,14 +271,14 @@ namespace XFramework.XPipeline
                 {
                     RecalculateSnapshot();
                     Broadcast();
-                    OnCancelled?.Invoke();
+                    DispatchSafely(OnCancelled, nameof(OnCancelled));
                     Debug.LogWarning("[Pipeline] Pipeline cancelled.");
                 }
                 else if (failed)
                 {
                     RecalculateSnapshot();
                     Broadcast();
-                    OnFailed?.Invoke($"Failed: {failDescription}");
+                    DispatchSafely(OnFailed, $"Failed: {failDescription}", nameof(OnFailed));
                     Debug.LogError($"[Pipeline] Pipeline failed: {failDescription}");
                 }
                 else
@@ -291,18 +291,18 @@ namespace XFramework.XPipeline
                     _completedStageCount = _stages.Count;
                     _failedStageCount = 0;
                     Broadcast();
-                    OnCompleted?.Invoke();
+                    DispatchSafely(OnCompleted, nameof(OnCompleted));
                 }
             }
             catch (OperationCanceledException)
             {
                 // 防御分支:理论上不可达(RunStage 已吞掉全部 OCE);语义统一为取消,绝不静默
-                OnCancelled?.Invoke();
+                DispatchSafely(OnCancelled, nameof(OnCancelled));
             }
             catch (Exception ex)
             {
                 Debug.LogError($"[Pipeline] RunAsync failed: {ex.Message}\n{ex.StackTrace}");
-                OnFailed?.Invoke($"Exception: {ex.Message}");
+                DispatchSafely(OnFailed, $"Exception: {ex.Message}", nameof(OnFailed));
             }
             finally
             {
@@ -395,7 +395,47 @@ namespace XFramework.XPipeline
                 CompletedStageCount = _completedStageCount,
                 FailedStageCount = _failedStageCount,
             };
-            OnProgressUpdate?.Invoke(progress);
+            DispatchSafely(OnProgressUpdate, progress, nameof(OnProgressUpdate));
+        }
+
+        /// <summary>
+        /// 事件投递统一入口:订阅者异常隔离(记 Error 日志后继续),不让订阅者的 bug 冒泡进阶段栈。
+        /// <para>为什么必须隔离:事件在阶段写入栈内同步触发——进度订阅者抛出的异常会顺着
+        /// <c>Broadcast → PipelineStageContext.NotifyChanged → 阶段 ExecuteAsync</c> 冒到
+        /// <see cref="StageExecution"/> 的捕获里,把无辜阶段置 Failed;终局事件抛异常更会把成功报成失败
+        /// (冒到外层 catch 触发 <see cref="OnFailed"/>)。容器聚合器早有同款防护(见 <see cref="StageAggregator"/>),
+        /// 这里是管线侧本该同构的另一半。</para>
+        /// <para>粒度取舍:整条多播一次 try/catch,不用 <c>GetInvocationList</c> 逐个隔离——后者每次派发
+        /// 分配一个委托数组,而进度广播在节流路径上;代价是抛异常的订阅者会饿死同一次派发中排在它后面的
+        /// 订阅者(下一次派发照常,且日志已记下)。终局三事件每轮只触发一次,不额外优化。</para>
+        /// </summary>
+        private static void DispatchSafely<T>(Action<T> handlers, T arg, string eventName)
+        {
+            if (handlers == null) return;
+
+            try
+            {
+                handlers.Invoke(arg);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Pipeline] {eventName} subscriber threw: {ex}");
+            }
+        }
+
+        /// <summary>无参事件重载,语义同有参版本(仅载荷不同)。</summary>
+        private static void DispatchSafely(Action handlers, string eventName)
+        {
+            if (handlers == null) return;
+
+            try
+            {
+                handlers.Invoke();
+            }
+            catch (Exception ex)
+            {
+                Debug.LogError($"[Pipeline] {eventName} subscriber threw: {ex}");
+            }
         }
 
         #endregion

@@ -58,6 +58,7 @@ public interface IPipelineStage
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
 - **运行期装配防护**: 运行中 `AddStage` 打 `[Pipeline] AddStage: already running` 警告并忽略(阶段列表运行期只读,运行中上下文已按启动时刻快照,入列会错位)
 - **写入线程契约**: 阶段经 `PipelineStageContext` 写入须与 `RunAsync` 调度同一上下文(Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 LogError 提示(Release 构建零开销)
+- **订阅者异常隔离**: 四个事件的订阅者抛出的异常记 `[Pipeline] {事件名} subscriber threw:` 后继续,不改变阶段状态与终局——订阅方(如 UI)的 bug 不会把无辜阶段打成 Failed,不会把完成/取消改报成失败,也不会让 `RunAsync` 抛出
 
 ### 容器组合
 

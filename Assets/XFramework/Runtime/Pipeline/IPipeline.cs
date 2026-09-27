@@ -7,6 +7,8 @@ namespace XFramework.XPipeline
     /// <summary>
     /// 管线接口。通用阶段编排器:阶段按添加顺序串行执行,进度加权聚合广播,失败/取消传播。
     /// <para>通过 <see cref="Pipeline.Create"/> 创建实例,装配阶段后调用 <see cref="RunAsync"/> 执行;实例即用即弃。</para>
+    /// <para>订阅者异常隔离:本接口四个事件的订阅者抛出的异常一律记 <c>[Pipeline]</c> LogError 后继续,
+    /// 不影响阶段状态与终局——订阅方(如 UI)的 bug 不得把管线里的阶段打成失败,也不得把完成/取消改报成失败。</para>
     /// </summary>
     public interface IPipeline
     {
