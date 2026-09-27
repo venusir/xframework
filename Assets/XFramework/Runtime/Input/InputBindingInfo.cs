@@ -17,7 +17,7 @@ namespace XFramework.XInput
         public string DisplayName;
 
         /// <summary>
-        /// 设备分组，如 "Keyboard&Mouse"、"Gamepad"、"Touch"。
+        /// 设备分组，如 "Keyboard&amp;Mouse"、"Gamepad"、"Touch"。
         /// </summary>
         public string Group;
 

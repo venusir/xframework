@@ -11,7 +11,7 @@ namespace XFramework.XAsset
     /// <summary>
     /// 资源管理器具体实现。实现 <see cref="IAssetManager"/>，提供资源加载、实例化与生命周期管理。
     /// <para>内部使用 YooAsset。生命周期由 <see cref="AssetHandle{T}"/> 管理，
-    /// Dispose 时直接调用 <see cref="YooAsset.AssetHandle.Release"/>。</para>
+    /// Dispose 时直接调用 <see cref="YooAsset.HandleBase.Release"/>。</para>
     /// <para>通常不直接使用，由 <see cref="AssetManager"/> 外观类持有并委派调用。</para>
     /// </summary>
     internal class AssetManagerImpl : IAssetManager, IAssetPoolController

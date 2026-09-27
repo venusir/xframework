@@ -12,9 +12,21 @@
       文档条目会从生成的 XML 中整条消失（实测：`ConfigManager` 的 33 条 CS1570 使其类型条目
       完全不存在，而同模块另 22 个类型条目正常）。典型成因是泛型尖括号未转义：`<c>Get<T>()</c>`
       里的 `<T>` 被当成 XML 标签。
-    - **CS1574（cref 无法解析）**：链接指向不存在的东西，IDE 里不能跳转。常见成因是缺 using、
-      语法错（cref 里不能带 `()`）、或成员已改名而文档没跟上（这一类要先判断是不是内容问题，
-      不要机械替换）。
+    - **CS1574（cref 无法解析）**：链接指向不存在的东西，IDE 里不能跳转。实测下来绝大多数属下面四类，
+      按此顺序排查：
+      ① 「带类型限定的 cref **只找该类型自己声明的成员，不找继承来的**」——这是最容易踩的一条：
+         `YooAsset.AssetHandle.Release` 匹配不上（Release 声明在基类 `HandleBase`），
+         `RectTransform.position` 属 `Transform.position`，`IUpdateable.OnDisable` 属 `IUpdateLifecycle`，
+         `UIPanelBase.OnUpdate` 属 `UIViewBase`，`IPhaseStage.ExecuteAsync` 属 `IPipelineStage`。
+         改法：把限定名换成**声明它的那个类型**。
+      ② 参数列表不完整：`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名——
+         带默认值的参数也必须写全。（同理 `Register(IUpdateable, int, UpdateTier)` 少了第四个参数。）
+      ③ cref 里不能带 `()`：`InitializeAsync()` 非法，写 `InitializeAsync`。
+      ④ 本文件缺 using，导致 cref 的**参数类型**解析不了（如 `CancellationToken`、`IUIController`）——
+         把该类型写成全名即可，不必为此给文件加 using。
+      另有一类是文档指向**根本不存在的东西**（已改名或已删除的成员/类型），例如 `UIHudManager` 这个类
+      在仓内并不存在、`ILockable.Acquire` 的真身是 `LockableExtensions.AddLock`。这属于**内容问题**，
+      要先确认真实 API 再改，不要机械替换。
 
     **遮蔽关系：** CS1570 会掩盖同一块注释里的 CS1574——块解析失败后，块内 cref 一律不再被检查。
     所以「没有 CS1574」推不出「链接都有效」，先清 CS1570 再看 CS1574 的真实数量。

@@ -236,7 +236,7 @@ namespace XFramework.XSave
 
     /// <summary>
     /// <see cref="ISaveManager"/> 创建工厂委托。
-    /// <para>在 <see cref="SaveManager.Initialize(SaveManagerFactory)"/> 中注册，
+    /// <para>在 <see cref="SaveManager.Initialize(SaveManagerFactory, SaveOptions)"/> 中注册，
     /// 第三方可传入自定义实现替代默认的 <see cref="SaveManagerImpl"/>。</para>
     /// </summary>
     public delegate ISaveManager SaveManagerFactory();

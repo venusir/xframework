@@ -5,13 +5,13 @@ namespace XFramework.XAsset
 {
     /// <summary>
     /// 资源句柄。直接委托给 YooAsset 的 <see cref="YooAsset.AssetHandle"/>，在 <see cref="Dispose"/> 时调用
-    /// <see cref="YooAsset.AssetHandle.Release"/> 释放底层资源。
+    /// <see cref="YooAsset.HandleBase.Release"/> 释放底层资源。
     /// <para>只读结构体，按需访问，零额外缓存。通过 <c>using</c> 语句保证资源正确释放。</para>
     /// </summary>
     /// <typeparam name="T">Unity 资源类型</typeparam>
     /// <example>
     /// <code>
-    /// using (var handle = await AssetManager.LoadAsync<TextAsset>(location, ct))
+    /// using (var handle = await AssetManager.LoadAsync&lt;TextAsset&gt;(location, ct))
     /// {
     ///     var text = handle.Asset.text;
     /// } // 自动 Release
@@ -76,7 +76,7 @@ namespace XFramework.XAsset
         #region Lifecycle
 
         /// <summary>
-        /// 释放资源引用。直接调用 <see cref="YooAsset.AssetHandle.Release"/>。
+        /// 释放资源引用。直接调用 <see cref="YooAsset.HandleBase.Release"/>。
         /// <para>建议通过 <c>using</c> 块自动调用。</para>
         /// </summary>
         public void Dispose()

@@ -159,10 +159,10 @@ namespace XFramework.XUpdate
             /// <summary>档位迁移。<b>条件操作</b>：仅当应用时节点仍在某个桶里才生效。</summary>
             Move,
 
-            /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateable.OnDisable"/>。</summary>
+            /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateLifecycle.OnDisable"/>。</summary>
             Disable,
 
-            /// <summary>从禁用表移回原时间轴的声明档位桶，并回调 <see cref="IUpdateable.OnEnable"/>。</summary>
+            /// <summary>从禁用表移回原时间轴的声明档位桶，并回调 <see cref="IUpdateLifecycle.OnEnable"/>。</summary>
             Enable,
         }
 
@@ -296,7 +296,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 执行一帧更新。按 <see cref="UpdateTier"/> 时间切片算法分发更新。
         /// <para>本重载用<b>同一个时刻</b>驱动两条时间轴，供手动驱动与测试使用；
-        /// 生产路径请用 <see cref="Tick(UpdateClock)"/> 传入两个真实时间源。</para>
+        /// 生产路径请用 <see cref="Tick(in UpdateClock)"/> 传入两个真实时间源。</para>
         /// </summary>
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public void Tick(float time)
@@ -328,7 +328,7 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 一帧的实际派发逻辑。只在 <see cref="Tick(UpdateClock)"/> 的闩锁内调用。
+        /// 一帧的实际派发逻辑。只在 <see cref="Tick(in UpdateClock)"/> 的闩锁内调用。
         /// </summary>
         private void TickInternal(in UpdateClock clock)
         {
@@ -681,7 +681,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 启用指定节点的 Update 调用。
-        /// <para>会触发 <see cref="IUpdateable.OnEnable"/>。</para>
+        /// <para>会触发 <see cref="IUpdateLifecycle.OnEnable"/>。</para>
         /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
         /// 顺延到本调度器下一次派发之前）；从派发之外调用则立即生效。
         /// 另需注意：被重新启用的节点回到<b>注册时声明的</b>时间轴与档位（两者都记在条目上）。
@@ -697,7 +697,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 禁用指定节点的 Update 调用。
-        /// <para>会触发 <see cref="IUpdateable.OnDisable"/>。</para>
+        /// <para>会触发 <see cref="IUpdateLifecycle.OnDisable"/>。</para>
         /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
         /// 顺延到本调度器下一次派发之前）：节点在本趟剩余时间里仍可能收到一次
         /// <see cref="IUpdateable.OnUpdate"/>，但收尾后不再派发，且不会出现
@@ -838,7 +838,7 @@ namespace XFramework.XUpdate
         /// 就地清空会让正在遍历的循环拿着失效下标写回（旧实现在切片分支会直接抛
         /// <c>ArgumentOutOfRangeException</c>）。调用发生在<b>另一时机</b>的派发期间时，
         /// 顺延到本调度器下一次派发之前。</para>
-        /// <para><b>不回调 <see cref="IUpdateable.OnDisable"/></b>：与 <see cref="Unregister"/>
+        /// <para><b>不回调 <see cref="IUpdateLifecycle.OnDisable"/></b>：与 <see cref="Unregister"/>
         /// 一致（它同样不回调）。本方法的主要使用者是测试隔离，在隔离点触发用户回调
         /// 会让 fixture 的收尾去执行业务代码——那里往往引用了已拆掉的管理器。</para>
         /// </summary>

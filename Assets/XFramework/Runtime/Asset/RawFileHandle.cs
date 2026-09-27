@@ -5,7 +5,7 @@ namespace XFramework.XAsset
 {
     /// <summary>
     /// 原始文件句柄。包装 YooAsset <see cref="YooAsset.RawFileHandle"/>，在 <see cref="Dispose"/> 时调用
-    /// <see cref="YooAsset.RawFileHandle.Release"/> 释放底层资源。
+    /// <see cref="YooAsset.HandleBase.Release"/> 释放底层资源。
     /// <para>用于加载 RawFile 类型的原始文件（txt、json、二进制等，不经过 Unity 资源管线）。
     /// 只读结构体，通过 <c>using</c> 语句保证资源正确释放。</para>
     /// </summary>
@@ -80,7 +80,7 @@ namespace XFramework.XAsset
         #region Lifecycle
 
         /// <summary>
-        /// 释放资源引用。直接调用 <see cref="YooAsset.RawFileHandle.Release"/>。
+        /// 释放资源引用。直接调用 <see cref="YooAsset.HandleBase.Release"/>。
         /// <para>建议通过 <c>using</c> 块自动调用。</para>
         /// </summary>
         public void Dispose()

@@ -13,7 +13,7 @@ namespace XFramework.XLocalization
     /// <para>使用前需调用 <see cref="Initialize"/> 注入至少一个语言的数据。</para>
     /// <para>内存中维护小缓存（最多 4 种语言），当前语言和回退语言始终保留，其余按 LRU 淘汰。切换语言时优先从缓存命中，未命中时通过 <see cref="LanguageAssetPath"/> 异步加载对应语言的 JSON 文件。</para>
     /// <para>语言切换通知通过 <see cref="XMessage.MessageManager.Publish{TMessage}"/> 发送 <see cref="LanguageChangedMessage"/>，
-    /// 可通过 <c>MessageManager.Subscribe<LanguageChangedMessage>(handler)</c> 监听。</para>
+    /// 可通过 <c>MessageManager.Subscribe&lt;LanguageChangedMessage&gt;(handler)</c> 监听。</para>
     /// </summary>
     public static class LocalizationManager
     {

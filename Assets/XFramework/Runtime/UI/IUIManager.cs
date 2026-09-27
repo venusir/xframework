@@ -98,7 +98,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 弹出显示栈顶部的面板，返回上一个面板（恢复焦点 OnFocus）。
-        /// <para>栈底面板不参与弹出——栈深为 1 时本方法不做任何事，用 <see cref="CloseAsync(UIPanelBase, bool)"/>
+        /// <para>栈底面板不参与弹出——栈深为 1 时本方法不做任何事，用 <see cref="CloseAsync(UIPanelBase, bool, CancellationToken)"/>
         /// 关闭最后一个面板。</para>
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
@@ -342,9 +342,9 @@ namespace XFramework.XUI
         #region Per-Frame Update
 
         /// <summary>
-        /// 每帧更新。内部遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>。
+        /// 每帧更新。内部遍历所有 IsOpen 的面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>。
         /// <para>借鉴 GameFramework UIFormLogic.OnUpdate 的设计，由管理器统一驱动而非每个面板独立 Update。</para>
-        /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, IUIController)"/> 会把
+        /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, XFramework.XUI.Controller.IUIController)"/> 会把
         /// 每帧驱动注册进 <see cref="XUpdate.UpdateManager"/> 的统一调度——因此它受档位降频与
         /// <see cref="XUpdate.UpdateManager.Pause"/> 的统一约束，也不再要求场景里存在 <c>UIRootNode</c>。</para>
         /// </summary>

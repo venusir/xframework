@@ -249,7 +249,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 按实例反查并移除映射条目。
-        /// <para>用 <see cref="ReferenceEquals"/> 比较：这里的相等语义是「同一个实例」，
+        /// <para>用 <see cref="object.ReferenceEquals"/> 比较：这里的相等语义是「同一个实例」，
         /// 不该走 Unity 那套「已销毁即等于 null」的重载。</para>
         /// </summary>
         private void RemoveMapEntry(UIHudItem hud)

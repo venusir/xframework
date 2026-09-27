@@ -15,7 +15,7 @@ namespace XFramework.XSave
     /// <see cref="DataManager"/> 作为数据快照来源。</para>
     /// <para>存档文件位于 <see cref="FileDomain.SaveData"/> 下，文件名格式为 <c>slot_{slot}.save</c>。</para>
     /// <para>第三方可通过实现 <see cref="ISaveManager"/> 并注册到
-    /// <see cref="SaveManager.Initialize(SaveManagerFactory)"/> 来替换此实现。</para>
+    /// <see cref="SaveManager.Initialize(SaveManagerFactory, SaveOptions)"/> 来替换此实现。</para>
     /// <para><b>线程约定：</b>文件 IO 由 Provider 在线程池上执行，本类每个公开异步方法都会在返回前切回主线程，
     /// 因此调用方在 <c>await</c> 之后可以安全地访问 Unity API 与 <see cref="DataManager"/>。
     /// 代价是这些方法依赖 PlayerLoop 泵，<b>禁止在主线程用 <c>.GetAwaiter().GetResult()</c> 同步阻塞等待</b>，

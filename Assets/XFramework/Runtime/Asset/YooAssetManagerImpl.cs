@@ -13,7 +13,7 @@ namespace XFramework.XAsset
     /// <para>内部类，不对外暴露。外部通过 <see cref="IAssetManager"/> 接口或 <see cref="AssetManager"/> 访问。</para>
     /// <para>职责：资源加载、场景加载、预加载、多包管理与热更链路。</para>
     /// <para>生命周期由外部 <see cref="AssetHandle{T}"/> 管理，每次 LoadAsync 返回独立句柄，
-    /// 用户 Dispose 句柄时直接调用 <see cref="YooAsset.AssetHandle.Release"/>。</para>
+    /// 用户 Dispose 句柄时直接调用 <see cref="YooAsset.HandleBase.Release"/>。</para>
     /// </summary>
     class YooAssetManagerImpl
     {

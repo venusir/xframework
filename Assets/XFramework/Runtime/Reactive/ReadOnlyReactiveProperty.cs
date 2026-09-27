@@ -183,7 +183,7 @@ namespace XFramework.XReactive
         /// 或 <c>UIViewBase.Track(handle)</c>。</para>
         /// <para><b>selector 必须是纯函数：</b>构造时它会被调用<b>两次</b>——一次取初值，一次来自源订阅的
         /// 立即回调（结果与初值相同、被去重丢弃）。纯映射只是白算一遍；带副作用或非确定性的 selector
-        /// （计数器、随机数、缓存填充）会跑两遍，且只有第二次的结果留在 <see cref="Value"/> 上。</para>
+        /// （计数器、随机数、缓存填充）会跑两遍，且只有第二次的结果留在 <see cref="ReadOnlyReactiveProperty{TResult}.Value"/> 上。</para>
         /// </summary>
         /// <typeparam name="TSource">源值类型。</typeparam>
         /// <typeparam name="TResult">结果值类型。</typeparam>

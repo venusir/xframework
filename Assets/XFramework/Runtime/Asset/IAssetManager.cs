@@ -110,7 +110,7 @@ namespace XFramework.XAsset
         /// </summary>
         /// <example>
         /// <code>
-        /// using (var handle = await LoadAsync<TextAsset>(location, ct))
+        /// using (var handle = await LoadAsync&lt;TextAsset&gt;(location, ct))
         /// {
         ///     var text = handle.Asset.text;
         /// }

@@ -8,7 +8,7 @@ namespace XFramework.XAsset
     /// 实例追踪器。自动挂载到 <see cref="AssetManagerImpl"/> 实例化的 GameObject 上。
     /// <para>持有 <see cref="AssetHandle{GameObject}"/>，实例存活期间维持资源引用计数 > 0。
     /// 回池时句柄保留（资源保活），真正销毁时才释放。</para>
-    /// <para>当用户直接调用 <see cref="Object.Destroy(GameObject)"/> 时，通过 OnDestroy 自动释放资源引用。
+    /// <para>当用户直接调用 <see cref="UnityEngine.Object.Destroy(UnityEngine.Object)"/> 时，通过 OnDestroy 自动释放资源引用。
     /// 注意：直接 Destroy 的实例不会回池——OnDestroy 阶段操作对象池在 Unity 语义下不可靠，属有意设计。</para>
     /// <para>内部类，用户无感知。</para>
     /// </summary>

@@ -6,7 +6,7 @@ namespace XFramework.XAsset
 {
     /// <summary>
     /// 子资源句柄。包装 YooAsset <see cref="YooAsset.SubAssetsHandle"/>，在 <see cref="Dispose"/> 时调用
-    /// <see cref="YooAsset.SubAssetsHandle.Release"/> 释放底层资源。
+    /// <see cref="YooAsset.HandleBase.Release"/> 释放底层资源。
     /// <para>用于加载图集（SpriteAtlas）、多 Sprite 贴图等含多个子资源的资源。
     /// 只读结构体，通过 <c>using</c> 语句保证资源正确释放。</para>
     /// </summary>
@@ -89,7 +89,7 @@ namespace XFramework.XAsset
         #region Lifecycle
 
         /// <summary>
-        /// 释放资源引用。直接调用 <see cref="YooAsset.SubAssetsHandle.Release"/>。
+        /// 释放资源引用。直接调用 <see cref="YooAsset.HandleBase.Release"/>。
         /// <para>建议通过 <c>using</c> 块自动调用。</para>
         /// </summary>
         public void Dispose()

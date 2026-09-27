@@ -10,7 +10,7 @@ namespace XFramework.XMessage
     /// <summary>
     /// 全局消息总线。提供静态 API 和标记接口扩展方法两种使用方式。
     /// <para>同步：<see cref="Publish{TMessage}(TMessage)"/> / <see cref="Subscribe{TMessage}(Action{TMessage})"/>。</para>
-    /// <para>异步：<see cref="SubscribeAsync{TMessage}(Func{TMessage, CancellationToken, UniTask})"/>
+    /// <para>异步：<see cref="SubscribeAsync{TMessage}(Func{TMessage, CancellationToken, UniTask}, CancellationToken)"/>
     /// 独立登记处理器，<see cref="PublishAsync{TMessage}(TMessage, MessagePublishStrategy, CancellationToken)"/>
     /// 可等待其全部完成；同步 <see cref="Publish{TMessage}(TMessage)"/> 也以 fire-and-forget 触发它们。</para>
     /// <para>请求-响应：<see cref="Register{TRequest, TResponse}"/> / <see cref="RequestAsync{TRequest, TResponse}"/>。</para>

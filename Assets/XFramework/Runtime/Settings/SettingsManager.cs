@@ -149,7 +149,7 @@ namespace XFramework.XSettings
         /// <summary>
         /// 释放所有设置管理器并清空缓存。
         /// <para>通常在应用退出时调用。</para>
-        /// <para>销毁后可重新 <see cref="Initialize{T}(ISettingsStore, Func{T})"/>，与 Config / Localization 的门面一致。
+        /// <para>销毁后可重新 <see cref="Initialize{T}(ISettingsStore, Func{T}, SettingsOptions)"/>，与 Config / Localization 的门面一致。
         /// 销毁到重新初始化之间访问任意类型会抛「尚未初始化」异常并附修复提示。</para>
         /// <para><b>逐个隔离释放异常：</b>某个管理器的 <see cref="IDisposable.Dispose"/> 抛出时只记错误日志并
         /// 继续释放其余实例——否则一个失败会让剩下全部泄漏。状态复位另放在 <c>finally</c> 里，任何单个失败
@@ -309,7 +309,7 @@ namespace XFramework.XSettings
 
         /// <summary>
         /// 重置为默认值并删除持久化文件。
-        /// <para>默认值来自 <see cref="Initialize{T}(string, Func{T})"/> 时注入的工厂，与首次初始化所得默认值一致。</para>
+        /// <para>默认值来自 <see cref="Initialize{T}(string, Func{T}, SettingsOptions)"/> 时注入的工厂，与首次初始化所得默认值一致。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <exception cref="InvalidOperationException">未初始化该类型时抛出。</exception>

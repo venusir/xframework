@@ -11,7 +11,7 @@ namespace XFramework.XAsset
     /// <summary>
     /// 全局资源管理器外观。提供静态方法直接访问资源加载、实例化与生命周期管理。
     /// <para>内部持有 <see cref="IAssetManager"/> 实例（<see cref="AssetManagerImpl"/>），所有调用委托到该实例。</para>
-    /// <para>使用前需调用 <see cref="InitializeAsync()"/> 初始化。</para>
+    /// <para>使用前需调用 <see cref="InitializeAsync"/> 初始化。</para>
     /// </summary>
     public static class AssetManager
     {

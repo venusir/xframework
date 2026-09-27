@@ -6,8 +6,8 @@ namespace XFramework.XUI.View
 {
     /// <summary>
     /// HUD 元素基类。继承自 <see cref="UIViewBase"/>，用于 NPC/怪物头顶名字、血条等世界空间 HUD。
-    /// <para>每帧自动跟随 <see cref="FollowTarget"/>，将世界坐标转为屏幕坐标并更新 <see cref="RectTransform.position"/>。</para>
-    /// <para>当 <see cref="FollowTarget"/> 为 null 时，触发 <see cref="OnTargetLost"/> 事件，由 <see cref="UIHudManager"/> 自动回收。</para>
+    /// <para>每帧自动跟随 <see cref="FollowTarget"/>，将世界坐标转为屏幕坐标并更新 <see cref="Transform.position"/>。</para>
+    /// <para>当 <see cref="FollowTarget"/> 为 null 时，触发 <see cref="OnTargetLost"/> 事件，由 <see cref="XFramework.XUI.UIHudManagerImpl"/> 自动回收。</para>
     /// <para>预制体由第三方自由设计，只需挂载继承 <see cref="UIHudItem"/> 的脚本即可。</para>
     /// </summary>
     [RequireComponent(typeof(CanvasGroup))]
@@ -64,7 +64,7 @@ namespace XFramework.XUI.View
         #region Events
 
         /// <summary>
-        /// 跟随目标丢失时触发。<see cref="UIHudManager"/> 订阅此事件实现自动回收。
+        /// 跟随目标丢失时触发。<see cref="XFramework.XUI.UIHudManagerImpl"/> 订阅此事件实现自动回收。
         /// </summary>
         internal event Action<UIHudItem> OnTargetLost;
 

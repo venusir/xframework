@@ -41,7 +41,7 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 注册到 <see cref="UpdateManager"/> 的每帧驱动器：把面板 / HUD 的每帧更新并入统一调度。
-        /// <para>原先靠场景里的 <see cref="UIRootNode.Update"/> 驱动，于是这条通路既不受档位降频、
+        /// <para>原先靠场景里的 <c>UIRootNode.Update</c> 驱动（该入口已随统一调度移除），于是这条通路既不受档位降频、
         /// 也不受 <see cref="UpdateManager.Pause"/> 控制，面板与其它模块的暂停语义还是两套。</para>
         /// </summary>
         private static IUpdateable _frameDriver;
@@ -313,7 +313,7 @@ namespace XFramework.XUI
             return _instance.CloseAsync<T>(immediate, cancellationToken);
         }
 
-        /// <inheritdoc cref="IUIManager.CloseAsync(UIPanelBase, bool)"/>
+        /// <inheritdoc cref="IUIManager.CloseAsync(UIPanelBase, bool, CancellationToken)"/>
         public static UniTask CloseAsync(UIPanelBase panel, bool immediate = false,
             CancellationToken cancellationToken = default)
         {
@@ -655,7 +655,7 @@ namespace XFramework.XUI
         #region Public API — Update
 
         /// <summary>
-        /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIPanelBase.OnUpdate"/>，并驱动 HUD 层。
+        /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>，并驱动 HUD 层。
         /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 与
         /// <see cref="SetInstance"/> 都会把它注册进 <see cref="UpdateManager"/> 的统一调度
         /// （可被档位降频、可被 <see cref="UpdateManager.Pause"/> 统一暂停）。保留公开是因为测试与

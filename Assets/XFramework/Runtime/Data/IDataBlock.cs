@@ -13,11 +13,11 @@ namespace XFramework.XData
     /// public class BagData : IDataBlock
     /// {
     ///     public string BlockName => nameof(BagData);
-    ///     public List<BagItem> Items = new();
+    ///     public List&lt;BagItem&gt; Items = new();
     ///     public int Gold;
     ///
     ///     [Serializable]
-    ///     private struct SaveSnap { public List<BagItem> items; public int gold; }
+    ///     private struct SaveSnap { public List&lt;BagItem&gt; items; public int gold; }
     ///
     ///     public object OnSave() => new SaveSnap { items = Items, gold = Gold };
     ///     public void OnLoad(object data) { if (data is SaveSnap s) { Items = s.items; Gold = s.gold; } }

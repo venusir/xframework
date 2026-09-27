@@ -191,7 +191,7 @@ namespace XFramework.XFileManager
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
-        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
+        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         /// <exception cref="NotSupportedException">移动端 <see cref="FileDomain.Streaming"/> 域上调用时抛出。</exception>
         public static string ReadAllText(FileDomain domain, string relativePath)
         {
@@ -207,7 +207,7 @@ namespace XFramework.XFileManager
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
+        /// <returns>文件文本内容。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         public static UniTask<string> ReadAllTextAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
@@ -261,7 +261,7 @@ namespace XFramework.XFileManager
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
-        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="IOException"/>。</returns>
+        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         /// <exception cref="NotSupportedException">移动端 <see cref="FileDomain.Streaming"/> 域上调用时抛出。</exception>
         public static byte[] ReadAllBytes(FileDomain domain, string relativePath)
         {

@@ -9,7 +9,7 @@ namespace XFramework.XUpdate
     /// <para>自动生命周期：通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 初始化，<see cref="Application.quitting"/> 时自动清理。</para>
     /// <para>每帧由注入到 PlayerLoop 的驱动自动推进（见 <see cref="IsDrivingPlayerLoop"/>），
     /// 不依赖场景中存在任何 MonoBehaviour；<see cref="Tick(float)"/> 保留供手动驱动与测试使用。</para>
-    /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateTier)"/> 注册自身。</para>
+    /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/> 注册自身。</para>
     /// </summary>
     /// <remarks>
     /// <para><b>使用示例（静态服务注册）：</b></para>
@@ -154,7 +154,7 @@ namespace XFramework.XUpdate
         /// 不能用 <c>GetDefaultPlayerLoop</c>——框架依赖 UniTask，而它正是靠注入 PlayerLoop 工作的，
         /// 用默认 loop 会连同其它插件的注入一起冲掉。</para>
         /// <para>注入点是 <c>Update.ScriptRunBehaviourUpdate</c> 子系统列表的末尾，语义等价于
-        /// 「所有 MonoBehaviour.Update 之后」，与原先由 <see cref="GameLauncher"/> 在 Update 里
+        /// 「所有 MonoBehaviour.Update 之后」，与原先由 <see cref="XFramework.XBootstrap.GameLauncher"/> 在 Update 里
         /// 驱动的时机一致。</para>
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterAssembliesLoaded)]
@@ -387,7 +387,7 @@ namespace XFramework.XUpdate
         /// 执行一帧更新（Update 与 LateUpdate 两个变步长时机）。按 <see cref="UpdateTier"/> 时间切片算法分发。
         /// <para><b>只有一条时间源</b>：两条时间轴同值、<c>IsPaused</c> 恒为 false，因此它<b>表达不出</b>
         /// 「<c>timeScale &lt;= 0</c> 冻结逻辑轴」这件事——那是给测试与确定性回放自带时刻用的。
-        /// 手动驱动请用无参 <see cref="Tick()"/>，需要两轴各自走时请用 <see cref="Tick(UpdateClock)"/>。</para>
+        /// 手动驱动请用无参 <see cref="Tick()"/>，需要两轴各自走时请用 <see cref="Tick(in UpdateClock)"/>。</para>
         /// </summary>
         /// <param name="time">当前时间（<see cref="Time.time"/>），由外部传入避免重复获取。</param>
         public static void Tick(float time)
@@ -413,7 +413,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 用 Unity 的当前固定步时间手动推进一次固定步长时机（与自动驱动一致）。
-        /// <para>与 <see cref="Tick(UpdateClock)"/> 分开而不是合并：固定步长的时间基准是
+        /// <para>与 <see cref="Tick(in UpdateClock)"/> 分开而不是合并：固定步长的时间基准是
         /// <see cref="Time.fixedTime"/>，<see cref="UpdateTier"/> 的档位在这里是「每 2^k 个固定步」。</para>
         /// <para>生产路径不需要调用本方法（驱动已注入 <c>FixedUpdate</c> 阶段）。</para>
         /// </summary>
@@ -644,7 +644,7 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 立即对指定对象执行一次更新并重新调整档位。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
-        /// <para><b>墙钟轴节点请用 <see cref="ProcessImmediate(IUpdateable, float, UpdateClock)"/></b>：
+        /// <para><b>墙钟轴节点请用 <see cref="ProcessImmediate(IUpdateable, float, in UpdateClock)"/></b>：
         /// 本重载只有一条时间源，会把同一个值写进该节点所在轴的「上次派发时刻」。节点在
         /// <see cref="UpdateTimeMode.Unscaled"/> 轴上而 <c>timeScale = 0</c> 时（暂停菜单正是这条轴的
         /// 招牌场景），传入的 <see cref="Time.time"/> 是冻住的，于是解除暂停后的首个 delta 会接近

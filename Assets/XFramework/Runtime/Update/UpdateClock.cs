@@ -18,7 +18,7 @@ namespace XFramework.XUpdate
     }
 
     /// <summary>
-    /// 一帧的时间基。由驱动方构造后交给 <see cref="UpdateManager.Tick(UpdateClock)"/>。
+    /// 一帧的时间基。由驱动方构造后交给 <see cref="UpdateManager.Tick(in UpdateClock)"/>。
     /// <para>两个时间源由外部成对传入，而不是让调度器自己去读 <see cref="UnityEngine.Time"/>：
     /// 这样调度器保持纯函数、可被单测精确驱动，也不会在一帧内先后读到不一致的瞬时值。</para>
     /// <para>时刻用 <c>double</c> 而非 <c>float</c>：调度器要靠<b>逐帧增量</b>判断该补几格，

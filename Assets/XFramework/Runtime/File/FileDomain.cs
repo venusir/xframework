@@ -30,8 +30,8 @@ namespace XFramework.XFileManager
         /// <item>Windows：<c>C:\Users\xxx\AppData\LocalLow\CompanyName\ProductName</c></item>
         /// <item>macOS：<c>~/Library/Application Support/CompanyName/ProductName</c></item>
         /// <item>Linux：<c>~/.config/unity3d/CompanyName/ProductName</c></item>
-        /// <item>iOS：<c>/var/mobile/Containers/Data/Application/<UUID>/Documents</c></item>
-        /// <item>Android：<c>/data/data/<bundle-id>/files</c></item>
+        /// <item>iOS：<c>/var/mobile/Containers/Data/Application/&lt;UUID&gt;/Documents</c></item>
+        /// <item>Android：<c>/data/data/&lt;bundle-id&gt;/files</c></item>
         /// <item>Xbox/PS5/Switch：本地应用数据目录（非存档专用）</item>
         /// </list>
         /// <para><b>应放什么：</b>机器级配置、着色器缓存、崩溃日志、运行时生成的索引文件、无需云同步的本地数据。</para>

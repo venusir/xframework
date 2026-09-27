@@ -6,7 +6,7 @@ namespace XFramework.XBootstrap
     /// <summary>
     /// 启动引导阶段：一个模块把自己的初始化与反向清理都交给框架启动流程时实现此接口。
     /// <para>它在 <see cref="IPhaseStage"/> 的相位契约之上只补一件事——<b>清理</b>：
-    /// <see cref="IPhaseStage.ExecuteAsync"/> 负责初始化，<see cref="Shutdown"/> 负责反向清理。
+    /// <see cref="IPipelineStage.ExecuteAsync"/> 负责初始化，<see cref="Shutdown"/> 负责反向清理。
     /// 执行、相位分组、并行、进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本接口不再引入第二套执行契约。</para>
     /// <para>登记经 <see cref="Bootstrap.Register"/>；<see cref="Bootstrap.RunAsync"/> 按相位分组装配并运行管线；
     /// <see cref="Bootstrap.Shutdown"/> 按<b>登记顺序的逆序</b>调用各阶段的 <see cref="Shutdown"/>。</para>

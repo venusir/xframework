@@ -196,7 +196,7 @@ namespace XFramework.XUI.View
         #region Convenience Methods
 
         /// <summary>
-        /// 关闭自身面板。便捷方法，内部调用 <see cref="UIManager.CloseAsync(UIPanelBase, bool)"/>。
+        /// 关闭自身面板。便捷方法，内部调用 <see cref="UIManager.CloseAsync(UIPanelBase, bool, System.Threading.CancellationToken)"/>。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
         public UniTask CloseSelfAsync(bool immediate = false)

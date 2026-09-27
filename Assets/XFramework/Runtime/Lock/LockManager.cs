@@ -60,7 +60,7 @@ namespace XFramework.XLock
 
         #region Private Fields
 
-        /// <summary>lockSubject → lockType → HashSet<lock>。</summary>
+        /// <summary>lockSubject → lockType → HashSet&lt;lock&gt;。</summary>
         private static Dictionary<ILockable, Dictionary<int, HashSet<object>>> _locks
             = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
 
