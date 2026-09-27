@@ -4,7 +4,9 @@ namespace XFramework.XPipeline
 {
     /// <summary>
     /// 管线全局进度快照。<see cref="IPipeline.OnProgressUpdate"/> 的事件载荷。
-    /// <para>实现 <see cref="IProgress{PipelineProgress}"/>,可直接作为进度回调传递给下游 API。</para>
+    /// <para>实现 <see cref="IProgress{PipelineProgress}"/>,可直接作为进度回调传递给下游 API;
+    /// 也可当「快照持有者」用:<c>var holder = new PipelineProgress(); await Bootstrap.RunAsync(holder);</c>
+    /// 之后读它即是最近一次快照——<c>Report</c> 全量覆盖七个字段。</para>
     /// </summary>
     public class PipelineProgress : IProgress<PipelineProgress>
     {
@@ -39,12 +41,15 @@ namespace XFramework.XPipeline
         {
             if (value == null) return;
 
+            // 全量覆盖七个字段,不做「非空才抄」的挑拣:本实现的用途是把自身当作可持续读的
+            // 快照持有者(见类型文档),挑字段会让持有者看到半份快照,且描述只能改不能清
             OverallProgress = value.OverallProgress;
-
-            if (!string.IsNullOrEmpty(value.Description))
-            {
-                Description = value.Description;
-            }
+            Description = value.Description;
+            CurrentStageName = value.CurrentStageName;
+            CurrentTaskName = value.CurrentTaskName;
+            TotalStageCount = value.TotalStageCount;
+            CompletedStageCount = value.CompletedStageCount;
+            FailedStageCount = value.FailedStageCount;
         }
 
         #endregion

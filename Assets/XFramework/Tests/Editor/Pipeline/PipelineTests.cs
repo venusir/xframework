@@ -413,6 +413,37 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual("Completed", progress[progress.Count - 1].Description, "完成终局描述必须为 Completed");
         }
 
+        [Test]
+        public void ProgressReport_CopiesWholeSnapshot_AndAllowsClearing()
+        {
+            // Report 的用途是「把自己当作可持续读的快照持有者」(交给 RunAsync 的 progress 参数,
+            // 回调之后直接读),挑字段会让持有者看到半份快照;描述也不能只能改、不能清
+            var source = new PipelineProgress
+            {
+                OverallProgress = 0.5f,
+                Description = "loading",
+                CurrentStageName = "A",
+                CurrentTaskName = "sub",
+                TotalStageCount = 3,
+                CompletedStageCount = 1,
+                FailedStageCount = 0,
+            };
+            var holder = new PipelineProgress();
+
+            ((IProgress<PipelineProgress>)holder).Report(source);
+
+            Assert.AreEqual(0.5f, holder.OverallProgress, 0.001f);
+            Assert.AreEqual("loading", holder.Description);
+            Assert.AreEqual("A", holder.CurrentStageName, "阶段名应一并覆盖");
+            Assert.AreEqual("sub", holder.CurrentTaskName, "任务名应一并覆盖");
+            Assert.AreEqual(3, holder.TotalStageCount, "总数应一并覆盖");
+            Assert.AreEqual(1, holder.CompletedStageCount, "已完成数应一并覆盖");
+
+            source.Description = null;
+            ((IProgress<PipelineProgress>)holder).Report(source);
+            Assert.IsNull(holder.Description, "全量覆盖:来源清空描述后持有者也应清空");
+        }
+
         #endregion
 
         #region 写入线程契约
