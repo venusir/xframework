@@ -32,8 +32,17 @@ namespace XFramework.XPool
 
         /// <summary>
         /// 池自创建以来生成过的总实例数（含活跃和闲置）。
+        /// <para>只增不减：归还、清空与被丢弃的实例都不会让它减小。</para>
         /// </summary>
         int CountAll { get; }
+
+        /// <summary>
+        /// 当前活跃（已取出、尚未归还）的实例数。
+        /// <para>归还时减回，因此可用于判断「还有多少实例在外面」；超容被丢弃的实例同样离开活跃态。</para>
+        /// <para>注意，<see cref="CountAll"/> 减去 <see cref="CountInactive"/> <b>不等于</b>本值——被丢弃的实例仍计入
+        /// <see cref="CountAll"/>，却既非活跃也非闲置。</para>
+        /// </summary>
+        int CountActive { get; }
 
         /// <summary>
         /// 清空池内所有闲置实例。

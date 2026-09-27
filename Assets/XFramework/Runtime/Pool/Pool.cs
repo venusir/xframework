@@ -28,6 +28,7 @@ namespace XFramework.XPool
         private readonly Action<T> _onReturn;
         private readonly int _maxSize;
         private int _totalCreated;
+        private int _activeCount;
 
 #if UNITY_EDITOR
         private readonly HashSet<T> _activeSet;
@@ -38,6 +39,9 @@ namespace XFramework.XPool
 
         /// <inheritdoc />
         public int CountAll => _totalCreated;
+
+        /// <inheritdoc />
+        public int CountActive => _activeCount;
 
         /// <summary>
         /// 创建泛型对象池。
@@ -100,6 +104,9 @@ namespace XFramework.XPool
                 _totalCreated++;
             }
 
+            // 每次取出都进入活跃态：从栈弹出与新建皆是
+            _activeCount++;
+
 #if UNITY_EDITOR
             _activeSet?.Add(item);
 #endif
@@ -134,6 +141,11 @@ namespace XFramework.XPool
                 _onReturn(item);
             else if (item is IPoolable poolable)
                 poolable.OnReturn();
+
+            // 归还即离开活跃态：无论接下来是入栈复用还是超容丢弃，都不再有人持有它。
+            // 钳在 0 是因为 CollectionCheck 关闭时的重复归还会走到这里两次，不该把计数减成负数。
+            if (_activeCount > 0)
+                _activeCount--;
 
             if (_stack.Count < _maxSize)
             {

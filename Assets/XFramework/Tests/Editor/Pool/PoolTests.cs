@@ -8,7 +8,8 @@ namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// <see cref="Pool{T}"/> 泛型对象池核心测试。
-    /// <para>覆盖：生成与复用、预热与容量、Clear 语义（回归：活跃实例 Clear 后仍可归还复用）、
+    /// <para>覆盖：生成与复用、预热与容量、计数语义（CountAll 只增不减 / CountActive 随取还增减）、
+    /// Clear 语义（回归：活跃实例 Clear 后仍可归还复用）、
     /// CollectionCheck 重复归还检测、回调优先级（委托 > IPoolable）、GetPooled 手动归还。</para>
     /// <para>全部直接实例化 <see cref="Pool{T}"/>，不经静态门面，无跨测试静态状态。</para>
     /// </summary>
@@ -51,6 +52,52 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.That(created, Is.EqualTo(1), "池空时应调用生成器");
             Assert.That(pool.CountAll, Is.EqualTo(1));
             Assert.That(pool.CountInactive, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void CountActive_TracksRentAndReturn()
+        {
+            var pool = new Pool<TestItem>(() => new TestItem());
+
+            var a = pool.Get();
+            var b = pool.Get();
+            Assert.That(pool.CountActive, Is.EqualTo(2), "取出即进入活跃态，弹出与新建都算");
+
+            pool.Return(a);
+            Assert.That(pool.CountActive, Is.EqualTo(1));
+            Assert.That(pool.CountAll, Is.EqualTo(2), "CountAll 只统计生成过的实例，归还也不减");
+
+            pool.Return(b);
+            Assert.That(pool.CountActive, Is.EqualTo(0), "全部归还后不应再有活跃实例");
+        }
+
+        [Test]
+        public void CountActive_ReturnAfterClear_StillDecrements()
+        {
+            // Clear 只丢闲置实例，在外面那份仍是活跃的，归还时必须正确回到 0
+            var pool = new Pool<TestItem>(() => new TestItem(), PoolConfig.Default);
+
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a);
+            pool.Clear();
+
+            Assert.That(pool.CountActive, Is.EqualTo(1), "Clear 不该动活跃计数");
+            pool.Return(b);
+            Assert.That(pool.CountActive, Is.EqualTo(0));
+        }
+
+        [Test]
+        public void CountActive_DuplicateReturnWithoutCollectionCheck_IsClampedAtZero()
+        {
+            var pool = new Pool<TestItem>(() => new TestItem(), new PoolConfig { CollectionCheck = false });
+
+            var item = pool.Get();
+            pool.Return(item);
+            pool.Return(item); // 无检测时重复归还放行
+
+            Assert.That(pool.CountInactive, Is.EqualTo(2), "无检测时两次归还都入池");
+            Assert.That(pool.CountActive, Is.EqualTo(0), "活跃计数应钳在 0，不得变负");
         }
 
         [Test]
@@ -105,7 +152,9 @@ namespace Venusy609.Xframework.Editor.Tests
                 pool.Return(items[i]);
 
             Assert.That(pool.CountInactive, Is.EqualTo(2), "超出 MaxSize 的闲置实例应被丢弃");
-            Assert.That(pool.CountAll, Is.EqualTo(4));
+            Assert.That(pool.CountAll, Is.EqualTo(4), "丢弃不减 CountAll");
+            Assert.That(pool.CountActive, Is.EqualTo(0),
+                "被丢弃的实例同样离开活跃态（旧口径 CountAll - CountInactive 会误报 2 个活跃）");
         }
 
         [Test]
