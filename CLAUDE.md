@@ -15,6 +15,7 @@
 - **单一职责 / 组合优于继承:** 每个类只负责一个核心功能;优先组件组合,避免深继承
 - **性能与 GC:** 框架代码供第三方游戏在运行时使用,必须控制 GC 分配(见「性能与 GC 约定」)
 - **测试:** 完成逻辑后编写单元测试并提供验证步骤。Claude 用 `Tools/run-tests.ps1` 自测:改完一个模块以 `-Filter <类名片段>` 定向跑,阶段收尾跑一次全量。**门禁是「全量 0 失败」,不写固定例数**——例数随开发增长,写进规则必然定期过期(它的真相来源是 runner 的输出,抄进来就是第二份真相)。**每个 fixture 必须复位它触碰的静态门面**——PlayMode 下所有用例共享一个 player 实例,不复位即互相污染,全量的门禁价值会立刻失效
+- **文档门禁:** 阶段收尾除全量测试外,再跑 `Tools/check-docs.ps1 -Enforce`(包内 XML 文档告警须为 0,且所有源文件都已参与编译)。它是独立的一条通道:csproj 未设 `DocumentationFile`,**默认编译根本不检查文档注释**,不开这一枪则写坏文档不会有任何反馈
 
 ## 架构分层
 
@@ -39,6 +40,9 @@
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
+  - **XML 必须能解析:** 泛型尖括号与 `&` 一律转义(`&lt;T&gt;`、`&amp;`),`<code>` 块内也一样。未转义会触发 CS1570 使**整条注释被编译器丢弃**——该成员的文档条目从生成的 XML 中整条消失,且块内 `cref` 一律不再被检查(死链因此隐形:它表现为「**没有**告警」而不是「有告警」)
+  - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 里**不能带 `()`**;④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
+  - 文档指向**根本不存在的东西**(已改名/已删的成员或类型)是内容问题,先确认真实 API 再改,不要机械替换。两类告警都用 `Tools/check-docs.ps1` 查(默认诊断,`-Enforce` 才是门禁)
 - **可见性:** 默认 `internal`;测试通过 `InternalsVisibleTo("Venusy609.Xframework.Tests")` 访问内部实现
 
 ## 性能与 GC 约定

@@ -40,13 +40,20 @@
     要检查的生成项目，默认包自身的两个程序集（Runtime 与 Editor），与 Tests 无关——用例的
     文档注释不随包发布，不在本脚本关注范围。PackageCache 下第三方包的告警一律剔除。
 
+.PARAMETER Enforce
+    门禁模式：包内告警数必须为 0，否则退出码 1。供阶段收尾时与全量测试一并跑。
+    注意本模式下「有源文件未参与编译」同样判为失败——那种情况下检查结果是残缺的
+    （对未编译的文件无从告警），它会给出一个假的「0 条」，比真有告警更危险。
+
 .EXAMPLE
-    pwsh -File Tools/check-docs.ps1                    # 全包概览，按模块汇总
+    pwsh -File Tools/check-docs.ps1                    # 全包概览，按模块汇总（诊断）
     pwsh -File Tools/check-docs.ps1 -Module Config    # Config 模块逐条列出
+    pwsh -File Tools/check-docs.ps1 -Enforce           # 门禁：0 条才通过
 #>
 param(
     [string]$Module = "",
-    [string[]]$Project = @("Venusy609.Xframework.csproj", "Venusy609.Xframework.Editor.csproj")
+    [string[]]$Project = @("Venusy609.Xframework.csproj", "Venusy609.Xframework.Editor.csproj"),
+    [switch]$Enforce
 )
 
 $ErrorActionPreference = "Stop"
@@ -174,5 +181,27 @@ if ($Module) {
 }
 
 Write-Host ""
-Write-Host "说明：本脚本只报告数量，不判定通过/失败；包外（Library/PackageCache）的告警已剔除。" -ForegroundColor DarkGray
+Write-Host "说明：包外（Library/PackageCache）的告警已剔除。" -ForegroundColor DarkGray
+
+if (-not $Enforce) {
+    Write-Host "本脚本默认只报告数量、不判定通过/失败；要当门禁用请加 -Enforce（包内告警须为 0）。" -ForegroundColor DarkGray
+    exit 0
+}
+
+# ---------- 门禁模式 ----------
+
+$problems = @()
+if ($warnings.Count -gt 0) { $problems += "包内 XML 文档告警 $($warnings.Count) 条（须为 0）" }
+if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
+
+if ($problems.Count -gt 0) {
+    Write-Host ""
+    Write-Host "文档门禁：不通过" -ForegroundColor Red
+    $problems | ForEach-Object { Write-Host "  · $_" -ForegroundColor Red }
+    Write-Host "  逐条查看：pwsh -File Tools/check-docs.ps1 -Module <模块名>" -ForegroundColor DarkGray
+    exit 1
+}
+
+Write-Host ""
+Write-Host "文档门禁：通过（包内 0 条，且所有源文件都参与了编译）" -ForegroundColor Green
 exit 0
