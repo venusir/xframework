@@ -101,7 +101,8 @@ namespace XFramework.XMessage.Internal
                 for (int i = 0; i < snapshot.Count; i++)
                 {
                     var node = snapshot[i];
-                    // 派发中退订的节点跳过(IsDisposed 标志由快照外的退订线程置位)
+                    // 派发中退订的节点跳过(IsDisposed 标志由快照外执行退订的一方置位:
+                    // 可能是本线程的重入退订,也可能是被容忍的并发退订线程)
                     if (!node.IsDisposed)
                         Deliver(value, node.OnNext);
                 }
@@ -314,8 +315,9 @@ namespace XFramework.XMessage.Internal
     /// <summary>派发快照缓冲的 List 静态对象池(避免每轮 OnNext 分配)。</summary>
     /// <remarks>
     /// <para><b>与 <c>XPool.ListPool&lt;T&gt;</c> 刻意并存，不要合并：</b>那个池明文「线程不安全，
-    /// 应在主线程使用」，而本池两侧加锁——消息总线允许跨线程发布/订阅；且本池服务的是每帧每订阅的
-    /// 派发路径，不能走 PoolManager 的字典查找。</para>
+    /// 应在主线程使用」，本池两侧加锁——但<b>锁不是跨线程许可</b>：锁与快照只为让引擎的订阅链表
+    /// 在并发退订下不被写坏，从未给出可用的跨线程发布/订阅路径（线程契约见模块 README「线程」段）。
+    /// 本池存在的真正理由是它服务每帧每订阅的派发路径，不能走 PoolManager 的字典查找。</para>
     /// <para>名字必须区分开：<c>using XFramework.XPool;</c> 与本命名空间一旦同时可见，同名的
     /// <c>ListPool&lt;T&gt;</c> 会让引用变成 CS0104 二义——判的是<b>类型名</b>，与成员名无关，
     /// 所以方法名不同（<c>Rent</c> vs <c>Get</c>）防不住。</para>
