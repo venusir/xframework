@@ -11,9 +11,9 @@ namespace XFramework.XPool
     /// <typeparam name="TValue">字典值类型</typeparam>
     /// <example>
     /// <code>
-    /// var dict = DictionaryPool<string, int>.Get();
+    /// var dict = DictionaryPool&lt;string, int&gt;.Get();
     /// dict["score"] = 100;
-    /// DictionaryPool<string, int>.Return(dict);  // 自动 Clear()
+    /// DictionaryPool&lt;string, int&gt;.Return(dict);  // 自动 Clear()
     /// </code>
     /// </example>
     public static class DictionaryPool<TKey, TValue>
@@ -40,7 +40,7 @@ namespace XFramework.XPool
         /// 以 using 方式获取 <see cref="Dictionary{TKey, TValue}"/>，并在 using 块结束时自动归还（自动 Clear()）。
         /// </summary>
         /// <param name="dict">从池中取出的字典实例</param>
-        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        /// <returns>实现 <see cref="System.IDisposable"/> 的包装器，用于 using 语句</returns>
         public static PooledObject<Dictionary<TKey, TValue>> GetPooled(out Dictionary<TKey, TValue> dict)
         {
             return _pool.GetPooled(out dict);

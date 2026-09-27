@@ -10,9 +10,9 @@ namespace XFramework.XPool
     /// <typeparam name="T">集合元素类型</typeparam>
     /// <example>
     /// <code>
-    /// var set = HashSetPool<int>.Get();
+    /// var set = HashSetPool&lt;int&gt;.Get();
     /// set.Add(42);
-    /// HashSetPool<int>.Return(set);  // 自动 Clear()
+    /// HashSetPool&lt;int&gt;.Return(set);  // 自动 Clear()
     /// </code>
     /// </example>
     public static class HashSetPool<T>
@@ -39,7 +39,7 @@ namespace XFramework.XPool
         /// 以 using 方式获取 <see cref="HashSet{T}"/>，并在 using 块结束时自动归还（自动 Clear()）。
         /// </summary>
         /// <param name="set">从池中取出的 HashSet 实例</param>
-        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        /// <returns>实现 <see cref="System.IDisposable"/> 的包装器，用于 using 语句</returns>
         public static PooledObject<HashSet<T>> GetPooled(out HashSet<T> set)
         {
             return _pool.GetPooled(out set);

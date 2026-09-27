@@ -6,22 +6,22 @@ namespace XFramework.XPool
 {
     /// <summary>
     /// 全局对象池管理器。
-    /// <para>惰性自动创建：第一次 <c>Get<T>()</c> 时自动创建默认池，零配置开箱即用。</para>
-    /// <para>可选预配置：通过 <c>Configure<T>(config)</c> 在首次使用前自定义容量、预热、生成器。</para>
-    /// <para>与 <see cref="AssetManager"/> 的对象池解耦：本管理器仅管理纯 C# 对象，不涉及 GameObject 和资源引用。</para>
+    /// <para>惰性自动创建：第一次 <c>Get&lt;T&gt;()</c> 时自动创建默认池，零配置开箱即用。</para>
+    /// <para>可选预配置：通过 <c>Configure&lt;T&gt;(config)</c> 在首次使用前自定义容量、预热、生成器。</para>
+    /// <para>与 <see cref="XFramework.XAsset.AssetManager"/> 的对象池解耦：本管理器仅管理纯 C# 对象，不涉及 GameObject 和资源引用。</para>
     /// </summary>
     /// <remarks>
     /// <b>快速开始：</b>
     /// <code>
     /// // 零配置 — 自动 new T()
-    /// var data = PoolManager.Get<MyData>();
+    /// var data = PoolManager.Get&lt;MyData&gt;();
     /// PoolManager.Return(data);
     ///
     /// // 预热 + 容量限制
-    /// PoolManager.Configure<BulletData>(new PoolConfig { PrewarmSize = 20, MaxSize = 100 });
+    /// PoolManager.Configure&lt;BulletData&gt;(new PoolConfig { PrewarmSize = 20, MaxSize = 100 });
     ///
     /// // 自定义生成器
-    /// PoolManager.Configure<Enemy>(new PoolConfig { MaxSize = 50 },
+    /// PoolManager.Configure&lt;Enemy&gt;(new PoolConfig { MaxSize = 50 },
     ///     generator: () => new Enemy(levelConfig));
     /// </code>
     /// </remarks>

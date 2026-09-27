@@ -15,7 +15,7 @@ namespace XFramework.XPool
     /// </remarks>
     /// <example>
     /// <code>
-    /// using (PoolManager.GetPooled<BulletData>(out var bullet))
+    /// using (PoolManager.GetPooled&lt;BulletData&gt;(out var bullet))
     /// {
     ///     bullet.Position = transform.position;
     /// } // 自动 PoolManager.Return(bullet)

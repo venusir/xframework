@@ -10,9 +10,9 @@ namespace XFramework.XPool
     /// <typeparam name="T">列表元素类型</typeparam>
     /// <example>
     /// <code>
-    /// var list = ListPool<Vector3>.Get();
+    /// var list = ListPool&lt;Vector3&gt;.Get();
     /// list.Add(Vector3.zero);
-    /// ListPool<Vector3>.Return(list);  // 自动 Clear()
+    /// ListPool&lt;Vector3&gt;.Return(list);  // 自动 Clear()
     /// </code>
     /// </example>
     public static class ListPool<T>
@@ -39,7 +39,7 @@ namespace XFramework.XPool
         /// 以 using 方式获取 <see cref="List{T}"/>，并在 using 块结束时自动归还（自动 Clear()）。
         /// </summary>
         /// <param name="list">从池中取出的列表实例</param>
-        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        /// <returns>实现 <see cref="System.IDisposable"/> 的包装器，用于 using 语句</returns>
         public static PooledObject<List<T>> GetPooled(out List<T> list)
         {
             return _pool.GetPooled(out list);

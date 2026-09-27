@@ -31,7 +31,7 @@ namespace XFramework.XPool
     /// <example>
     /// <code>
     /// // 直接构造
-    /// var pool = new Pool<MyData>(() => new MyData(), new PoolConfig { PrewarmSize = 10 });
+    /// var pool = new Pool&lt;MyData&gt;(() => new MyData(), new PoolConfig { PrewarmSize = 10 });
     /// var item = pool.Get();
     /// pool.Return(item);
     /// </code>

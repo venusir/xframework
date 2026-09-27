@@ -17,7 +17,7 @@ namespace XFramework.XPool
         /// <para>返回的 <see cref="PooledObject{T}"/> 是值类型（struct），零 GC。</para>
         /// </summary>
         /// <param name="item">从池中取出的实例</param>
-        /// <returns>实现 <see cref="IDisposable"/> 的包装器，用于 using 语句</returns>
+        /// <returns>实现 <see cref="System.IDisposable"/> 的包装器，用于 using 语句</returns>
         PooledObject<T> GetPooled(out T item);
 
         /// <summary>

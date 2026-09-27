@@ -12,7 +12,7 @@ namespace XFramework.XPool
     /// <remarks>
     /// <b>工作原理：</b>
     /// <para>每个集合池在静态构造函数中调用 <c>CollectionPoolManager.Register(clearAction)</c>。</para>
-    /// <para>泛型池（如 <c>ListPool<EnemyData></c>）只在首次使用时才触发静态构造并注册，未被触碰的类型不会被清空。</para>
+    /// <para>泛型池（如 <c>ListPool&lt;EnemyData&gt;</c>）只在首次使用时才触发静态构造并注册，未被触碰的类型不会被清空。</para>
     /// </remarks>
     public static class CollectionPoolManager
     {
