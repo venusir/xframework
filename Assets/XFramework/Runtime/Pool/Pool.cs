@@ -5,6 +5,21 @@ using UnityEngine;
 namespace XFramework.XPool
 {
     /// <summary>
+    /// 非泛型归还入口。
+    /// <para>只服务 <see cref="PoolManager.Return{T}"/>：池按类型定键，编译期类型查不到时得改用实例的运行时类型
+    /// 再试一次，而那一刻手里只有一个 <c>object</c>。由 <see cref="Pool{T}"/> 显式实现，不对外暴露。</para>
+    /// </summary>
+    internal interface IUntypedPool
+    {
+        /// <summary>
+        /// 把实例归还到本池；实例类型与本池不符时静默忽略。
+        /// <para>调用方是按 <c>GetType()</c> 找过来的，正常情况下不会不符——这道判断只是让入口自洽。</para>
+        /// </summary>
+        /// <param name="item">要归还的实例</param>
+        void ReturnUntyped(object item);
+    }
+
+    /// <summary>
     /// 泛型对象池。
     /// <para>线程不安全，应在主线程使用。</para>
     /// <para>GC 友好：内部使用 <see cref="Stack{T}"/> 存储闲置实例，预分配容量，无装箱。</para>
@@ -21,7 +36,7 @@ namespace XFramework.XPool
     /// pool.Return(item);
     /// </code>
     /// </example>
-    public sealed class Pool<T> : IPool<T>, IDisposable where T : class
+    public sealed class Pool<T> : IPool<T>, IDisposable, IUntypedPool where T : class
     {
         private readonly Stack<T> _stack;
         private readonly Func<T> _generator;
@@ -194,6 +209,13 @@ namespace XFramework.XPool
         /// <para>可重复调用，调用后池仍可继续使用，不应被理解为「销毁池」。</para>
         /// </summary>
         void IDisposable.Dispose() => Clear();
+
+        /// <inheritdoc />
+        void IUntypedPool.ReturnUntyped(object item)
+        {
+            if (item is T typed)
+                Return(typed);
+        }
 
 #if UNITY_EDITOR
         /// <summary>

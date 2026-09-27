@@ -134,6 +134,23 @@ namespace Venusy609.Xframework.Editor.Tests
             }
         }
 
+        /// <summary>归还定键回落用例的基类（不能 sealed，供派生）。</summary>
+        private class BaseItem
+        {
+            public BaseItem()
+            {
+            }
+        }
+
+        /// <summary>归还定键回落用例的派生类，与基类各自独立建池。</summary>
+        private sealed class DerivedItem : BaseItem
+        {
+        }
+
+        /// <summary>与 Pool.cs 错误消息全文一致（全角标点）。</summary>
+        private static string ForeignReturnError<T>() =>
+            $"[Pool<{typeof(T).Name}>] Return() 传入的对象并非从本池租出，或已被重复归还。已忽略此操作。";
+
         [TearDown]
         public void TearDown()
         {
@@ -153,6 +170,8 @@ namespace Venusy609.Xframework.Editor.Tests
             PoolManager.RemovePool<ReconfigureItem>();
             PoolManager.RemovePool<DualGenItem>();
             PoolManager.RemovePool<DestroyerItem>();
+            PoolManager.RemovePool<BaseItem>();
+            PoolManager.RemovePool<DerivedItem>();
         }
 
         [Test]
@@ -212,6 +231,39 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.DoesNotThrow(() => PoolManager.Return(item));
             Assert.That(PoolManager.HasPool<UnregisteredItem>(), Is.False,
                 "归还未注册类型不应建池");
+        }
+
+        [Test]
+        public void Return_BaseTypedReference_FallsBackToRuntimeTypePool()
+        {
+            var derived = PoolManager.Get<DerivedItem>();
+            BaseItem asBase = derived; // 编译期类型只剩基类
+
+            PoolManager.Return(asBase); // typeof(BaseItem) 没有池 → 按运行时类型回落
+
+            Assert.That(PoolManager.GetPool<DerivedItem>().CountInactive, Is.EqualTo(1),
+                "实例应被送回它自己的池，而不是静默丢弃");
+            Assert.AreSame(derived, PoolManager.Get<DerivedItem>());
+        }
+
+        [Test]
+        public void Return_BaseTypedReference_WhenBasePoolExists_IsStillRejectedLoudly()
+        {
+            // 两边都有池时不做回落：否则从 Pool<BaseItem> 租出的实例会被改投进 Pool<DerivedItem>，
+            // 「报错拒绝」的响失败会变成静默丢件
+            var fromBase = PoolManager.Get<BaseItem>();
+            var fromDerived = PoolManager.Get<DerivedItem>();
+
+            LogAssert.Expect(LogType.Error, ForeignReturnError<BaseItem>());
+            PoolManager.Return<BaseItem>(fromDerived); // 实例其实来自 Pool<DerivedItem>
+
+            Assert.That(PoolManager.GetPool<BaseItem>().CountInactive, Is.EqualTo(0),
+                "应被拒绝，而不是误入基类池");
+            Assert.That(PoolManager.GetPool<DerivedItem>().CountInactive, Is.EqualTo(0),
+                "也不应被回落改投");
+
+            PoolManager.Return(fromBase);
+            PoolManager.Return(fromDerived);
         }
 
         [Test]

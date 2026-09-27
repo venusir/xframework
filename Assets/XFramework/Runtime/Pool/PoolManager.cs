@@ -92,7 +92,11 @@ namespace XFramework.XPool
 
         /// <summary>
         /// 归还实例到池。
-        /// <para>若类型从未注册（从未调用 <c>Get<T>()</c>），则静默忽略。</para>
+        /// <para>先按 <typeparamref name="T"/> 查池；查不到再按 <c>item.GetType()</c> 的运行时类型回落一次，
+        /// 以免把实例经基类 / 接口引用归还时静默丢失（典型：<c>Base b = Get&lt;Derived&gt;(); Return(b);</c>）。
+        /// 两处都没命中才静默忽略。</para>
+        /// <para>回落只在编译期类型没有对应池时发生——两边都有池时仍按 <typeparamref name="T"/> 走，
+        /// 不会把实例改投进另一个池。</para>
         /// <para>归还后可安全将引用置 null，池会保留实例供后续复用。</para>
         /// </summary>
         /// <typeparam name="T">对象类型</typeparam>
@@ -100,11 +104,19 @@ namespace XFramework.XPool
         public static void Return<T>(T item) where T : class
         {
             if (item == null) return;
+
             if (_pools.TryGetValue(typeof(T), out var poolObj) && poolObj is IPool<T> pool)
             {
                 pool.Return(item);
+                return;
             }
-            // 未注册类型：静默忽略（可能从未调用 Get<T>）
+
+            // 按编译期类型查不到池：改用运行时类型再试一次（池按类型定键，只认编译期类型就会把实例丢掉）
+            if (_pools.TryGetValue(item.GetType(), out var runtimePoolObj) && runtimePoolObj is IUntypedPool untypedPool)
+            {
+                untypedPool.ReturnUntyped(item);
+            }
+            // 仍未命中：静默忽略（可能从未调用 Get<T>）
         }
 
         #endregion
