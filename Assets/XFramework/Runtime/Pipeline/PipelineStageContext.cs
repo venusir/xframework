@@ -56,10 +56,13 @@ namespace XFramework.XPipeline
         /// <summary>阶段内当前任务名称(容器子阶段转发用,可空)。</summary>
         public string CurrentTaskName { get; internal set; }
 
-        /// <summary>设置阶段进度,自动 clamp 0~1,并触发管线聚合广播(经统一通知咽喉,含主线程断言)。</summary>
+        /// <summary>设置阶段进度,自动 clamp 0~1(NaN 归一为 0),并触发管线聚合广播(经统一通知咽喉,含主线程断言)。</summary>
         public void SetProgress(float value)
         {
-            Progress = Mathf.Clamp01(value);
+            // NaN 必须显式拦下:Mathf.Clamp01 的两支比较对 NaN 均为 false,会原样放行(实测);
+            // NaN 进了加权和会让全局进度变 NaN,而脏判定的 Abs(NaN - x) >= 0.01f 恒为 false——
+            // ≥1% 节流从那一刻起对进度写入永久失效,直到运行结束。归一为 0 与「权值和为 0 时回落 0」同义
+            Progress = float.IsNaN(value) ? 0f : Mathf.Clamp01(value);
             NotifyChanged();
         }
 

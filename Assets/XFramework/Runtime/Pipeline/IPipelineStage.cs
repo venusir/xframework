@@ -29,7 +29,8 @@ namespace XFramework.XPipeline
         /// <summary>阶段名称。用于进度描述与日志。</summary>
         string Name { get; }
 
-        /// <summary>阶段权重,参与全局进度加权聚合。默认 1f;设为 0 表示该阶段不占进度(如瞬时阶段)。</summary>
+        /// <summary>阶段权重,参与全局进度加权聚合。默认 1f;设为 0 表示该阶段不占进度(如瞬时阶段)。
+        /// <para>须为有限非负数:NaN 会让权值和判定失真(全局进度静默钉在 0),负值会把权值和拉向 0。</para></summary>
         float Weight { get; }
 
         /// <summary>

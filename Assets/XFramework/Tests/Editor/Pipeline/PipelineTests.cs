@@ -202,6 +202,54 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void NaNProgress_IsSanitizedAtWriteBoundary()
+        {
+            // Clamp01 的两支比较对 NaN 均为 false,会把 NaN 原样放行;NaN 一旦进了加权和,全局进度变
+            // NaN,而脏判定的 Abs(NaN - x) >= 0.01f 恒为 false —— ≥1% 节流从那一刻起对进度写入永久失效
+            var stage = new GatedProgressStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+
+            stage.Ctx.SetProgress(float.NaN);
+
+            Assert.AreEqual(0f, stage.Ctx.Progress, 0.001f, "写入边界应把 NaN 归一为 0");
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void NaNProgress_DoesNotKillThrottle()
+        {
+            // 写 NaN 本身不脏(快照赋值只发生在脏分支里),必须再写一次描述让脏判定成立,NaN 才落进
+            // 快照——这一步正是污染进入广播的入口;此后 ≥1% 的步进若不再广播,即节流已被永久废掉
+            var stage = new GatedProgressStage();
+            var (pipeline, progress) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+
+            stage.Ctx.SetProgress(float.NaN);
+            stage.Ctx.SetDescription("poisoned");
+
+            int countBefore = progress.Count;
+            for (int i = 1; i <= 10; i++) stage.Ctx.SetProgress(0.05f * i);
+
+            for (int i = 0; i < progress.Count; i++)
+            {
+                Assert.IsFalse(float.IsNaN(progress[i].OverallProgress), "NaN 不得进入广播快照");
+            }
+            Assert.GreaterOrEqual(progress.Count - countBefore, 5, "后续 ≥1% 步进应照常广播");
+
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.AreEqual(1f, progress[progress.Count - 1].OverallProgress, 0.001f, "终局广播必须为 1");
+        }
+
+        [Test]
         public void DescriptionChange_ForcesBroadcast()
         {
             var stage = new GatedProgressStage();
