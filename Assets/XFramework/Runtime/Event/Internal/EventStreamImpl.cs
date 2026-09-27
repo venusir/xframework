@@ -75,6 +75,7 @@ namespace XFramework.XEvent.Internal
                 node.Next = _head;
                 _head = node;
                 _subscriptionCount++;
+                SubscriptionTracker.OnSubscribe();
                 return new EventSubscription(this, node);
             }
         }
@@ -150,6 +151,8 @@ namespace XFramework.XEvent.Internal
                     ReturnNode(node);
                     node = next;
                 }
+                // holder terminated: drop remaining at once
+                SubscriptionTracker.OnUnsubscribe(_subscriptionCount);
                 _subscriptionCount = 0;
             }
 
@@ -219,6 +222,7 @@ namespace XFramework.XEvent.Internal
 
                 node.IsDisposed = true;
                 _subscriptionCount--;
+                SubscriptionTracker.OnUnsubscribe();
                 ReturnNode(node);
                 becameEmpty = _subscriptionCount == 0;
             }

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XEvent;
+using XFramework.XEvent.Internal;
 
 namespace XFramework.XMessage.Internal
 {
@@ -74,7 +75,10 @@ namespace XFramework.XMessage.Internal
             // 若仍把这条已退订的登记入表,登记表将永远非空 → IsReclaimable 恒为 false:
             // 自动回收与 TrimEmptyChannels 共用该谓词,双双失效,只能等 Clear()。
             if (!subscription.IsDisposed)
+            {
                 _async.Add(subscription);
+                SubscriptionTracker.OnSubscribe();
+            }
 
             return subscription;
         }

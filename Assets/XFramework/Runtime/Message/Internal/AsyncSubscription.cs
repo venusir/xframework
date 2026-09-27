@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using XFramework.XEvent.Internal;
 
 namespace XFramework.XMessage.Internal
 {
@@ -100,6 +101,10 @@ namespace XFramework.XMessage.Internal
             var removed = owner.Remove(this);
             var ownerBecameEmpty = removed && owner.Count == 0;
 
+            // only when actually removed (entries never added were never counted)
+            if (removed)
+                SubscriptionTracker.OnUnsubscribe();
+
             ReleaseExternalRegistration();
             ReleaseCts();
 
@@ -114,6 +119,7 @@ namespace XFramework.XMessage.Internal
         internal void DisposeDetached()
         {
             _owner = null;
+            SubscriptionTracker.OnUnsubscribe();   // cleanup path: these were counted
             ReleaseExternalRegistration();
             ReleaseCts();
         }
