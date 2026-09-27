@@ -75,11 +75,13 @@ namespace XFramework.XPool
         /// <param name="config">池配置</param>
         public static void Configure(PoolConfig config)
         {
-            var oldCount = _pool.CountAll - _pool.CountInactive;
-            if (oldCount > 0)
+            // 用 CountActive 而非 CountAll - CountInactive：后者会给「超容被丢弃」「被 Clear 清掉」的实例
+            // 也记上一笔，且 ClearAll 之后 CountAll 不减而 CountInactive 归零，守卫会从此永久拒绝重配
+            var activeCount = _pool.CountActive;
+            if (activeCount > 0)
             {
                 UnityEngine.Debug.LogWarning(
-                    $"[StringBuilderPool] 已有 {oldCount} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。");
+                    $"[StringBuilderPool] 已有 {activeCount} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。");
                 return;
             }
 

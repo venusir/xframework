@@ -10,7 +10,8 @@ namespace Venusy609.Xframework.Editor.Tests
     /// 集合池（<see cref="ListPool{T}"/> / <see cref="HashSetPool{T}"/> /
     /// <see cref="DictionaryPool{TKey, TValue}"/> / <see cref="StringBuilderPool"/>）与
     /// <see cref="CollectionPoolManager"/> 测试。
-    /// <para>覆盖：Return 自动 Clear、using 形式、Configure 守卫与重建、重复 Configure 不重复注册
+    /// <para>覆盖：Return 自动 Clear、using 形式、Configure 守卫与重建（回归：Clear 后仍可重配）、
+    /// 重复 Configure 不重复注册
     /// （回归）、ClearAll 清闲置且保留池注册。</para>
     /// <para>隔离：闭合泛型池按类型独立，每个用例使用独占元素类型；StringBuilderPool 为
     /// 非泛型单例，断言只取相对基准；静态构造器每类型只执行一次，故注册数断言一律取差值。</para>
@@ -24,6 +25,11 @@ namespace Venusy609.Xframework.Editor.Tests
 
         /// <summary>Configure 重建用例专用元素类型。</summary>
         private sealed class RebuildList
+        {
+        }
+
+        /// <summary>Clear 后重配守卫（回归）用例专用元素类型。</summary>
+        private sealed class ClearedList
         {
         }
 
@@ -104,6 +110,21 @@ namespace Venusy609.Xframework.Editor.Tests
             var fresh = ListPool<RebuildList>.Get();
             Assert.AreNotSame(oldItem, fresh, "重建应丢弃旧池的闲置实例");
             ListPool<RebuildList>.Return(fresh);
+        }
+
+        [Test]
+        public void ListPool_Configure_AfterClear_StillApplies()
+        {
+            // 回归：守卫曾用 CountAll - CountInactive 当活跃数，而 Clear 只清闲置、CountAll 不减，
+            // 于是「清空过」的池会被判成仍有活跃实例并永久拒绝重配——集合池没有 RemovePool 这类逃生口
+            var item = ListPool<ClearedList>.Get();
+            ListPool<ClearedList>.Return(item); // 活跃 0、闲置 1
+            ListPool<ClearedList>.Clear();
+
+            ListPool<ClearedList>.Configure(new PoolConfig { PrewarmSize = 2 });
+
+            Assert.That(ListPool<ClearedList>.GetPool().CountInactive, Is.EqualTo(2),
+                "Clear 之后没有活跃实例，Configure 应正常生效");
         }
 
         [Test]
