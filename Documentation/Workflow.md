@@ -1,0 +1,108 @@
+# XFramework 工作流
+
+> 本文是**开发者向**的流程手册：提交节奏、门禁命令、验证纪律，以及这套流程**没覆盖到**的地方。
+> 规则本身（命名、风格、注释、异步、日志、依赖等）在仓库根的 `CLAUDE.md`，本文不重复，只写流程。
+> 快照日期：2026-09-27。
+
+## 一、节奏：一轮一个提交单元
+
+```
+计划 → 圈定范围 → 逐提交实现 → 验证 → 停下等授权 → 提交 → 下一个
+```
+
+- **计划**阶段就定死**原子提交边界**与每个提交的验证命令；候选方案要排序并给理由，「不该做」也写成结论
+- **实现**一次只做一个提交：改完 → 验证 → **停下**请人确认
+- **授权**：计划批准**不等于**提交授权；「提交并继续」只覆盖当前这一个提交，外加下一个单元的实现——不是持续授权
+- **提交信息**：中文（类名 / 成员名等代码关键字除外），末尾带 `Co-Authored-By`
+- **不自动提交、不自动推送**，由人决定
+
+## 二、验证：三条通道
+
+| 通道 | 命令 | 通过标准 |
+|---|---|---|
+| 编译 | `dotnet build <csproj> --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` | 0 error |
+| 测试 | `pwsh -File Tools/run-tests.ps1 [-Filter <片段>] [-Platform PlayMode\|EditMode\|All]` | 全量双平台 **0 失败** |
+| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | 包内 XML 文档告警 0，且**所有源文件都参与编译** |
+
+### 两个易踩点
+
+- **`Tests/Editor/` 下的用例必须显式 `-Platform EditMode`**：`run-tests.ps1` 的默认平台是 `All`（双平台都跑），但一旦用 `-Filter` 且未显式指定平台，它只跑 `PlayMode`——此时 EditMode 侧的用例会给出「0 用例」的假绿。
+- **文档检查必须全量重编**：增量构建不重发警告，会得到假的「0 条」。因此它比测试慢（约 90 秒/工程，两工程约 180 秒）。两条门禁**刻意没合并**——合并会给门禁再加这段耗时。
+
+### 门禁的定义
+
+- 测试门禁 = **全量 0 失败**，**不写固定例数**（真相来源是 runner 的输出，抄进文档就是第二份真相）
+- 阶段收尾跑两条：`pwsh -File Tools/run-tests.ps1` + `pwsh -File Tools/check-docs.ps1 -Enforce`
+
+## 三、两条验证纪律
+
+### 1. 改前必红
+
+新增回归测试时，**先证明它在修复前会失败**——否则无法区分「测试有效」与「测试恒真」。
+实测出处（2026-09-27，XPool 一役）：
+
+- 引用相等比较器：摘掉比较器后同用例即红（`Expected: 2, But was: 1`）
+- 集合池 `Configure` 守卫：把守卫改回旧算法后同用例即红
+- **门禁退出码本身**：临时注入一个必失败用例，验证「第二个平台失败时汇总退出码非 0」
+
+### 2. 区分实测与推理
+
+报告里标明哪些是**实测**、哪些是**推理**；**未能复现或未能解释的残留要摆到台面上**，不要用「大概无关」搪塞。
+
+实测例：XSave 的 `LoadAsync_AppliesSnapshotOnCallingThread` 曾偶发失败（`Expected: 9, But was: 1`）。查明**产品回调在主线程**（符合契约），落在线程池的是用例自己的续体，修法是把基准线程挪到 `await` 之前；但「续体为何落在线程池」**在 7 次全量 / 23+ 个样本中未能复现**，因此如实写进用例注释与提交信息，而不是宣称「就是个坏测试」。
+
+## 四、约定（索引）
+
+规则不止本文，为避免两处真相，这里只给入口：
+
+| 主题 | 位置 |
+|---|---|
+| 命名 / 风格 / 注释 / 可见性 | `CLAUDE.md` → 编码规范 |
+| 性能与 GC、异步、日志与异常 | `CLAUDE.md` → 对应小节 |
+| 分层与扩展方式（静态服务、可选能力接口、管线、Bootstrap） | `CLAUDE.md` → 架构分层 |
+| 各模块用法 | `Assets/XFramework/Runtime/<模块>/README.md` |
+| 变更历史 | `Assets/XFramework/CHANGELOG.md` |
+
+## 五、工具与运行环境
+
+### `Tools/run-tests.ps1`
+
+| 参数 | 说明 |
+|---|---|
+| `-Filter <片段>` | 类名或片段，模糊匹配；留空 = 全量（门禁） |
+| `-Platform` | `All`（默认）/ `PlayMode` / `EditMode`；带 `-Filter` 且未显式指定时只跑 `PlayMode` |
+| `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」） |
+| `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
+| `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
+
+### `Tools/check-docs.ps1`
+
+| 参数 | 说明 |
+|---|---|
+| （无） | 按模块汇总包内 CS1570（XML 格式错误）/ CS1574（cref 无法解析） |
+| `-Module <名字>` | 逐条列出某模块的告警（文件:行号 + 文案） |
+| `-Project <csproj…>` | 默认检查包自身的两个程序集（Runtime 与 Editor） |
+| `-Enforce` | 门禁模式：包内须 0 条，且「有源文件未参与编译」同样判失败 |
+
+### 测试壳
+
+`<仓库名>.TestRun` 通过 junction 共享本仓库的 `Assets/Packages/ProjectSettings`，但拥有独立 `Library`。
+因此**跑测试不必关闭编辑器**，且 Unity 为新文件生成的 `.meta` 会直接落回真实仓库。
+新机器上先跑一次 `pwsh -File Tools/run-tests.ps1 -Setup`。
+
+## 六、这套流程没覆盖到的地方
+
+知道边界比以为没有边界安全：
+
+- **编译覆盖不可靠**：`dotnet build` 只编 csproj 里 `&lt;Compile Include&gt;` 列出的文件，而 csproj 由 Unity 生成、**重生成时机不可预测**（2026-09-27 实测：`Assets/XFramework/Editor/` 下的 3 个文件先是被报「不在任何 csproj 里」，随后又自动出现在声明中）。唯一保障是 `check-docs.ps1 -Enforce` 的「未参与编译即失败」——但它只管文档线；编译线仍需每次先 `grep` 确认文件在列表里。
+- **没有 CI**：三条门禁全靠人工在阶段收尾时跑。
+- **偶发用例会打红门禁**：脚本有「用例总数骤降」告警，但没有「疑似偶发」的识别。遇到与本次改动无关的失败，先单独重跑该用例（`-Filter <用例名>`）判断，再决定是修用例还是查产品。
+- **门禁耗时**：测试约 82 秒（双平台），文档约 90~180 秒。
+
+## 附：一个完整回合
+
+1. `dotnet build Venusy609.Xframework.Editor.Tests.csproj --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` → 0 error
+2. `pwsh -File Tools/run-tests.ps1 -Platform EditMode -Filter <模块>` → 0 失败
+3. **停下**，报告改动与验证证据，请人确认
+4. 得到授权后 `git commit`（中文信息 + `Co-Authored-By`）→ 进入下一个提交单元
+5. 阶段收尾：`pwsh -File Tools/run-tests.ps1` + `pwsh -File Tools/check-docs.ps1 -Enforce`
