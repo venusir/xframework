@@ -485,7 +485,7 @@ namespace XFramework.XMessage
             // Key 类型不是本方法的类型参数,故按消息类型扫全表。
             // 淘汰与回收只改各存储的内层字典;外层表项的摘除必须推迟到遍历结束之后,
             // 否则就是在遍历中改 _keyedChannels。
-            var emptyStoreKeys = ListPool<(Type MessageType, Type KeyType)>.Rent();
+            var emptyStoreKeys = DispatchListPool<(Type MessageType, Type KeyType)>.Rent();
             try
             {
                 foreach (var pair in _keyedChannels)
@@ -503,7 +503,7 @@ namespace XFramework.XMessage
             }
             finally
             {
-                ListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
+                DispatchListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
             }
 
             return removed;
@@ -523,7 +523,7 @@ namespace XFramework.XMessage
             // 消息类型不是本方法的类型参数,故按 Key 类型扫全表。
             // 淘汰只改各存储的内层字典;外层表项的摘除必须推迟到遍历结束之后,
             // 否则就是在遍历中改 _keyedChannels。
-            var emptyStoreKeys = ListPool<(Type MessageType, Type KeyType)>.Rent();
+            var emptyStoreKeys = DispatchListPool<(Type MessageType, Type KeyType)>.Rent();
             try
             {
                 foreach (var pair in _keyedChannels)
@@ -543,7 +543,7 @@ namespace XFramework.XMessage
             }
             finally
             {
-                ListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
+                DispatchListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
             }
 
             return removed;
@@ -561,8 +561,8 @@ namespace XFramework.XMessage
         public int TrimEmptyChannels()
         {
             var removed = 0;
-            var emptyTypes = ListPool<Type>.Rent();
-            var emptyStoreKeys = ListPool<(Type MessageType, Type KeyType)>.Rent();
+            var emptyTypes = DispatchListPool<Type>.Rent();
+            var emptyStoreKeys = DispatchListPool<(Type MessageType, Type KeyType)>.Rent();
             try
             {
                 // 类型通道:先收集再删除,避免遍历中改字典
@@ -591,8 +591,8 @@ namespace XFramework.XMessage
             }
             finally
             {
-                ListPool<Type>.Return(emptyTypes);
-                ListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
+                DispatchListPool<Type>.Return(emptyTypes);
+                DispatchListPool<(Type MessageType, Type KeyType)>.Return(emptyStoreKeys);
             }
 
             return removed;
@@ -730,7 +730,7 @@ namespace XFramework.XMessage
             if (handlers == null || handlers.Count == 0)
                 return;
 
-            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            var targets = DispatchListPool<AsyncSubscription<TMessage>>.Rent();
             try
             {
                 CollectAsyncTargets(handlers, message, targets);
@@ -755,7 +755,7 @@ namespace XFramework.XMessage
             }
             finally
             {
-                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+                DispatchListPool<AsyncSubscription<TMessage>>.Return(targets);
             }
         }
 
@@ -782,7 +782,7 @@ namespace XFramework.XMessage
         private static UniTask DispatchParallelAsync<TMessage>(
             List<AsyncSubscription<TMessage>> handlers, TMessage message, CancellationToken cancellationToken)
         {
-            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            var targets = DispatchListPool<AsyncSubscription<TMessage>>.Rent();
             try
             {
                 CollectAsyncTargets(handlers, message, targets);
@@ -809,7 +809,7 @@ namespace XFramework.XMessage
             finally
             {
                 // 池化列表只用于收集,不跨 await 持有
-                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+                DispatchListPool<AsyncSubscription<TMessage>>.Return(targets);
             }
         }
 
@@ -821,7 +821,7 @@ namespace XFramework.XMessage
         private static async UniTask DispatchSequentialAsync<TMessage>(
             List<AsyncSubscription<TMessage>> handlers, TMessage message, CancellationToken cancellationToken)
         {
-            var targets = ListPool<AsyncSubscription<TMessage>>.Rent();
+            var targets = DispatchListPool<AsyncSubscription<TMessage>>.Rent();
             try
             {
                 CollectAsyncTargets(handlers, message, targets);
@@ -838,7 +838,7 @@ namespace XFramework.XMessage
             }
             finally
             {
-                ListPool<AsyncSubscription<TMessage>>.Return(targets);
+                DispatchListPool<AsyncSubscription<TMessage>>.Return(targets);
             }
         }
 

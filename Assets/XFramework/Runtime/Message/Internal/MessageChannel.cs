@@ -253,7 +253,7 @@ namespace XFramework.XMessage.Internal
         public int TrimEmpty()
         {
             var removed = 0;
-            var keys = ListPool<TKey>.Rent();
+            var keys = DispatchListPool<TKey>.Rent();
             try
             {
                 // 先收集再删除:遍历中改字典会抛 InvalidOperationException
@@ -271,7 +271,7 @@ namespace XFramework.XMessage.Internal
             }
             finally
             {
-                ListPool<TKey>.Return(keys);
+                DispatchListPool<TKey>.Return(keys);
             }
             return removed;
         }
