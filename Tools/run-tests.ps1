@@ -10,6 +10,11 @@
     先查是不是新 fixture 漏了复位，而不是把结果当作噪音丢掉。全量跑还会与上次的用例总数
     比较、骤降时告警（见 -ShrinkTolerance）——「0 失败」不足以说明测试集健康。
 
+    **门禁默认覆盖两个平台**：runner 一次只能跑一个平台，而用例分居 Tests/Runtime（PlayMode）
+    与 Tests/Editor（EditMode，含 Pool / Config / Pipeline / Localization / Asset / Bootstrap
+    各模块）。只跑一个平台时「全量 0 失败」覆盖不到另一半，因此 -Platform 默认为 All，
+    顺序跑两个平台、任一有失败即非 0 退出。代价是门禁耗时约为单平台的两倍。
+
     默认使用仓库旁的测试运行壳（<仓库名>.TestRun），它通过 junction 共享本仓库的
     Assets/Packages/ProjectSettings 而拥有独立 Library——这样跑测试**不需要关闭编辑器**
     （两份额外 Library 不争锁），且 Unity 为新文件生成的 .meta 会直接落在真实仓库里。
@@ -19,9 +24,12 @@
 .PARAMETER Filter
     测试过滤器，如 XFramework.XSettings.Tests.SettingsDefaultValueTests 或类名的一部分。
     留空则跑全量，即门禁：应为 0 失败。
+    注意过滤器只在自己的平台内匹配：给过滤器的同时未显式指定 -Platform 时只跑 PlayMode
+    （保持日常定向跑的耗时与手感）；要跑 EditMode 侧的过滤器请显式 -Platform EditMode。
 
 .PARAMETER Platform
-    PlayMode（默认，Tests/Runtime 下的用例都在这里）或 EditMode。
+    All（默认）、PlayMode（Tests/Runtime 下的用例都在这里）或 EditMode。
+    All 顺序跑两个平台并汇总退出码。
 
 .PARAMETER ShrinkTolerance
     全量跑时，用例总数比上次下降超过这个数量就告警（默认 5），用于发现「测试集静默缩水」
@@ -40,13 +48,14 @@
 
 .EXAMPLE
     pwsh -File Tools/run-tests.ps1 -Setup                # 新机器上先建壳
-    pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests
-    pwsh -File Tools/run-tests.ps1                       # 全量（门禁：应为 0 失败）
+    pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests          # 定向跑（PlayMode）
+    pwsh -File Tools/run-tests.ps1 -Filter PoolTests -Platform EditMode
+    pwsh -File Tools/run-tests.ps1                       # 全量双平台（门禁：应为 0 失败）
 #>
 param(
     [string]$Filter = "",
-    [ValidateSet("PlayMode", "EditMode")]
-    [string]$Platform = "PlayMode",
+    [ValidateSet("PlayMode", "EditMode", "All")]
+    [string]$Platform = "All",
     [int]$ShrinkTolerance = 5,
     [string]$UnityPath = "",
     [switch]$UseRepo,
@@ -116,93 +125,131 @@ if ($useShell) {
     Write-Warning "在仓库本体运行需要先关闭 Unity 编辑器，否则会争 Library 锁。"
 }
 
-# ---------- 组装参数 ----------
-
 $resultsDir = Join-Path $projectPath "TestResults"
 New-Item -ItemType Directory -Force -Path $resultsDir | Out-Null
-$stamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$resultsFile = Join-Path $resultsDir "run-$stamp.xml"
-$logFile = Join-Path $resultsDir "run-$stamp.log"
 
+# ---------- 决定跑哪些平台 ----------
+#
+# 门禁（无过滤器）默认双平台：runner 一次只跑一个平台，而用例分居 Tests/Runtime 与 Tests/Editor，
+# 只跑一个平台时「全量 0 失败」覆盖不到另一半——Tests/Editor 下有六个模块的用例。
+#
+# 但定向跑保持历史手感：给了过滤器又未显式指定平台时只跑 PlayMode，否则 EditMode 那半会用
+# 同一个过滤器再跑一遍、多花一倍时间。（过滤器命中 0 个用例时 runner 照样产出结果文件、
+# 报「总计 0」，不会失败——所以这里的选择不影响正确性，只影响耗时。）
+
+$platformExplicit = $PSBoundParameters.ContainsKey("Platform")
+
+$platforms = if ($Platform -ne "All") {
+    @($Platform)
+} elseif ($Filter -and -not $platformExplicit) {
+    @("PlayMode")
+} else {
+    @("PlayMode", "EditMode")
+}
+
+# ---------- 逐个平台运行 ----------
+#
 # 注意：绝不能加 -quit。-quit 的语义是「其他命令行指令执行完即退出」，而 -runTests 是
 # 异步启动测试后立即返回，两者组合会让进程在测试跑完前退出——现象是 exit=0 但没有结果文件。
 # -runTests 自己会在测试结束后退出，无需 -quit。（历史脚本带了 -quit，是个隐藏缺陷）
-$unityArgs = @(
-    "-batchmode", "-nographics",
-    "-projectPath", $projectPath,
-    "-runTests", "-testPlatform", $Platform,
-    "-testResults", $resultsFile,
-    "-logFile", $logFile
-)
 
-if ($Filter) {
-    Write-Host "过滤器: $Filter"
-    $unityArgs += "-testFilter"
-    $unityArgs += $Filter
-} else {
-    Write-Host "未指定 -Filter：跑全量（门禁：应为 0 失败）" -ForegroundColor Cyan
-}
+$anyFailure = $false
+$totalSw = [Diagnostics.Stopwatch]::StartNew()
 
-# ---------- 运行 ----------
-
-Write-Host "开始运行..." -ForegroundColor Cyan
-$sw = [Diagnostics.Stopwatch]::StartNew()
-$proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru -Wait
-$sw.Stop()
-Write-Host "退出码 $($proc.ExitCode)，耗时 $([math]::Round($sw.Elapsed.TotalSeconds,1))s"
-
-# ---------- 解析结果 ----------
-
-if (-not (Test-Path $resultsFile)) {
-    Write-Host "没有结果文件——测试未执行。常见原因：" -ForegroundColor Red
-    Write-Host "  1) 误加了 -quit（本脚本不加，若你手动跑请去掉）"
-    Write-Host "  2) 首次导入吃掉了整个进程（Library 冷启动），重跑一次即可"
-    Write-Host "  3) 项目编译失败，详见 $logFile"
-    if (Test-Path $logFile) {
-        Write-Host "`n--- 日志中的编译错误 ---" -ForegroundColor DarkGray
-        Select-String -Path $logFile -Pattern "error CS" | Select-Object -First 15 |
-            ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor DarkGray }
-    }
-    exit 2
-}
-
-[xml]$xml = Get-Content $resultsFile
-$run = $xml.'test-run'
-Write-Host ""
-Write-Host "================ 结果 ================" -ForegroundColor Cyan
-Write-Host "总计 $($run.total)  通过 $($run.passed)  失败 $($run.failed)  跳过 $($run.skipped)"
-
-if ([int]$run.failed -gt 0) {
+foreach ($currentPlatform in $platforms) {
     Write-Host ""
-    Write-Host "失败用例：" -ForegroundColor Red
-    $xml.SelectNodes("//test-case[@result='Failed']") | ForEach-Object {
-        Write-Host "  X $($_.fullname)" -ForegroundColor Red
-        $msg = $_.SelectSingleNode("failure/message")
-        if ($msg) { Write-Host "      $($msg.InnerText.Trim())" -ForegroundColor DarkRed }
+    Write-Host "=================== $currentPlatform ===================" -ForegroundColor Cyan
+
+    $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+    $resultsFile = Join-Path $resultsDir "run-$stamp-$currentPlatform.xml"
+    $logFile = Join-Path $resultsDir "run-$stamp-$currentPlatform.log"
+
+    $unityArgs = @(
+        "-batchmode", "-nographics",
+        "-projectPath", $projectPath,
+        "-runTests", "-testPlatform", $currentPlatform,
+        "-testResults", $resultsFile,
+        "-logFile", $logFile
+    )
+
+    if ($Filter) {
+        Write-Host "过滤器: $Filter"
+        $unityArgs += "-testFilter"
+        $unityArgs += $Filter
+    } else {
+        Write-Host "未指定 -Filter：跑全量（门禁：应为 0 失败）" -ForegroundColor Cyan
+    }
+
+    Write-Host "开始运行..." -ForegroundColor Cyan
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    $proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru -Wait
+    $sw.Stop()
+    Write-Host "退出码 $($proc.ExitCode)，耗时 $([math]::Round($sw.Elapsed.TotalSeconds,1))s"
+
+    # ---------- 解析结果 ----------
+
+    if (-not (Test-Path $resultsFile)) {
+        Write-Host "没有结果文件——测试未执行。常见原因：" -ForegroundColor Red
+        Write-Host "  1) 误加了 -quit（本脚本不加，若你手动跑请去掉）"
+        Write-Host "  2) 首次导入吃掉了整个进程（Library 冷启动），重跑一次即可"
+        Write-Host "  3) 项目编译失败，详见 $logFile"
+        if (Test-Path $logFile) {
+            Write-Host "`n--- 日志中的编译错误 ---" -ForegroundColor DarkGray
+            Select-String -Path $logFile -Pattern "error CS" | Select-Object -First 15 |
+                ForEach-Object { Write-Host "  $($_.Line)" -ForegroundColor DarkGray }
+        }
+        exit 2
+    }
+
+    [xml]$xml = Get-Content $resultsFile
+    $run = $xml.'test-run'
+    Write-Host ""
+    Write-Host "================ 结果 ================" -ForegroundColor Cyan
+    Write-Host "总计 $($run.total)  通过 $($run.passed)  失败 $($run.failed)  跳过 $($run.skipped)"
+
+    if ([int]$run.failed -gt 0) {
+        Write-Host ""
+        Write-Host "失败用例：" -ForegroundColor Red
+        $xml.SelectNodes("//test-case[@result='Failed']") | ForEach-Object {
+            Write-Host "  X $($_.fullname)" -ForegroundColor Red
+            $msg = $_.SelectSingleNode("failure/message")
+            if ($msg) { Write-Host "      $($msg.InnerText.Trim())" -ForegroundColor DarkRed }
+        }
+        $anyFailure = $true
+    }
+
+    if ($Filter -and [int]$run.total -eq 0) {
+        Write-Warning "过滤器 '$Filter' 在 $currentPlatform 下命中 0 个用例。过滤器只在自己的平台内匹配：EditMode 侧的用例需显式 -Platform EditMode。"
+    }
+
+    Write-Host "结果文件: $resultsFile"
+
+    # ---------- 用例总数基线（防「测试集静默缩水」）----------
+    #
+    # 「0 失败」不足以说明测试集健康：asmdef 坏了、fixture 没被编进来、或某个 [TestFixture] 被
+    # 误删时，runner 报的同样是 0 失败，只是总数变小了。故记住上次的总数，骤降即告警。
+    #
+    # 三条守卫，缺一条就会天天误报：
+    #   1) 只在全量跑时比较——-Filter 的 total 只是一个子集，拿去比全量基线必然「骤降」
+    #   2) 总数 > 0 才写基线——编译失败会产出 total=0 的结果文件，写进基线会污染此后所有比较
+    #   3) 按 Platform 分开记——EditMode 的用例数远小于 PlayMode
+    $total = [int]$run.total
+    if (-not $Filter -and $total -gt 0) {
+        $baselineFile = Join-Path $resultsDir "last-count-$currentPlatform.txt"
+        $previous = 0
+        if ((Test-Path $baselineFile) -and
+            [int]::TryParse((Get-Content $baselineFile -Raw).Trim(), [ref]$previous) -and
+            ($previous - $total) -gt $ShrinkTolerance) {
+            Write-Warning "用例总数从 $previous 降到 $total（减少 $($previous - $total)）。若非有意删减，先查测试集是否没被完整编进来：asmdef、编译错误、误删的 [TestFixture]。确认无误后删掉 $baselineFile 即可重置基线。"
+        }
+        Set-Content -Path $baselineFile -Value $total -Encoding ascii
     }
 }
 
-Write-Host "结果文件: $resultsFile"
-
-# ---------- 用例总数基线（防「测试集静默缩水」）----------
-
-# 「0 失败」不足以说明测试集健康：asmdef 坏了、fixture 没被编进来、或某个 [TestFixture] 被
-# 误删时，runner 报的同样是 0 失败，只是总数变小了。故记住上次的总数，骤降即告警。
-#
-# 三条守卫，缺一条就会天天误报：
-#   1) 只在全量跑时比较——-Filter 的 total 只是一个子集，拿去比全量基线必然「骤降」
-#   2) 总数 > 0 才写基线——编译失败会产出 total=0 的结果文件，写进基线会污染此后所有比较
-#   3) 按 Platform 分开记——EditMode 的用例数远小于 PlayMode
-$total = [int]$run.total
-if (-not $Filter -and $total -gt 0) {
-    $baselineFile = Join-Path $resultsDir "last-count-$Platform.txt"
-    $previous = 0
-    if ((Test-Path $baselineFile) -and
-        [int]::TryParse((Get-Content $baselineFile -Raw).Trim(), [ref]$previous) -and
-        ($previous - $total) -gt $ShrinkTolerance) {
-        Write-Warning "用例总数从 $previous 降到 $total（减少 $($previous - $total)）。若非有意删减，先查测试集是否没被完整编进来：asmdef、编译错误、误删的 [TestFixture]。确认无误后删掉 $baselineFile 即可重置基线。"
-    }
-    Set-Content -Path $baselineFile -Value $total -Encoding ascii
+$totalSw.Stop()
+if ($platforms.Count -gt 1) {
+    Write-Host ""
+    Write-Host "合计耗时 $([math]::Round($totalSw.Elapsed.TotalSeconds,1))s（$($platforms -join ' + ')）"
 }
 
-exit ([int]$run.failed -eq 0 ? 0 : 1)
+exit ($anyFailure ? 1 : 0)
