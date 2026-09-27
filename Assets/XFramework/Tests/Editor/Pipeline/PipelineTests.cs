@@ -105,6 +105,28 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void DestroyDuringRun_DoesNotFailTheRun()
+        {
+            // Destroy 会清空阶段列表,而在途循环在每个 await 之后仍会重读 _stages[i]——索引越界被外层
+            // catch 变成一条假的「[Pipeline] RunAsync failed」(未 Expect 的 Error 日志即判本用例失败)。
+            // 运行期改用局部别名后,在途运行与 Destroy 解耦,照常收敛
+            var stage = new GatedProgressStage();
+            var (pipeline, _) = CreateTrackedPipeline();
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+            Assert.AreEqual(PipelineStatus.Running, pipeline.Status, "应处于运行中");
+
+            pipeline.Destroy();
+            stage.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Completed, stage.Ctx.State, "已启动的阶段应被契约兜底补置完成");
+            Assert.AreEqual(PipelineStatus.Completed, pipeline.Status,
+                "在途运行应照常收敛,不得被销毁打断成失败");
+        }
+
+        [Test]
         public void EmptyPipeline_FiresCompleted()
         {
             var pipeline = Pipeline.Create();

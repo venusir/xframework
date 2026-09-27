@@ -93,10 +93,11 @@ namespace XFramework.XPipeline
 
         #region Private Fields
 
-        readonly List<IPipelineStage> _stages = new List<IPipelineStage>();
+        /// <summary>阶段清单。非 readonly:<see cref="Destroy"/> 刻意<b>替换</b>而非清空(在途循环持有旧引用)。</summary>
+        List<IPipelineStage> _stages = new List<IPipelineStage>();
 
         /// <summary>与 <see cref="_stages"/> 同序的超时配置(秒,0/负值/NaN = 不启用)。</summary>
-        readonly List<float> _stageTimeouts = new List<float>();
+        List<float> _stageTimeouts = new List<float>();
 
         /// <summary>
         /// 超时计时任务工厂(测试缝,internal):生产路径为真实墙钟延时(<see cref="DelayType.Realtime"/>,不受 timeScale 影响);
@@ -187,19 +188,31 @@ namespace XFramework.XPipeline
             FailureReason = null; // 重跑时不得残留上一次的失败原因
             _bell.Reset();
 
+            // 运行期局部别名:Destroy 会替换阶段清单、清空上下文数组,而在途循环在每个 await 之后
+            // 仍会重读这些字段——不脱钩的话「运行中销毁」会被外层 catch 变成一条假的 RunAsync failed
+            var stages = _stages;
+            var timeouts = _stageTimeouts;
+            int stageCount = stages.Count;
+
+            // 每轮从干净快照开始(不只在 finally 复位:Destroy 中途调用时,上一轮的 finally 会晚于本轮赋值)
+            _lastOverall = -1f;
+            _lastDesc = null;
+            _lastTaskName = null;
+
             // 链接外部取消令牌:任一方取消,当前阶段收到已取消的 token
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
 
             // 装配阶段上下文(运行期一次分配)
-            _contexts = new PipelineStageContext[_stages.Count];
-            _lastStates = new PipelineStageState[_stages.Count];
-            for (int i = 0; i < _stages.Count; i++)
+            var contexts = new PipelineStageContext[stageCount];
+            _contexts = contexts;
+            _lastStates = new PipelineStageState[stageCount];
+            for (int i = 0; i < stageCount; i++)
             {
-                _contexts[i] = new PipelineStageContext
+                contexts[i] = new PipelineStageContext
                 {
                     Owner = this,
-                    Name = _stages[i].Name,
-                    Weight = _stages[i].Weight,
+                    Name = stages[i].Name,
+                    Weight = stages[i].Weight,
                 };
             }
 
@@ -210,7 +223,7 @@ namespace XFramework.XPipeline
 
             try
             {
-                for (int i = 0; i < _stages.Count; i++)
+                for (int i = 0; i < stageCount; i++)
                 {
                     // 阶段边界取消检查:取消显式走取消终局,不落入完成块
                     if (cts.Token.IsCancellationRequested)
@@ -219,18 +232,19 @@ namespace XFramework.XPipeline
                         break;
                     }
 
-                    var ctx = _contexts[i];
+                    var stage = stages[i];
+                    var ctx = contexts[i];
 
                     // 顶层阶段计时:System.Diagnostics 全限定(避免与 UnityEngine.Debug 冲突)
                     var sw = System.Diagnostics.Stopwatch.StartNew();
-                    Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' start");
+                    Debug.Log($"[Pipeline] Stage '{stage.Name}' start");
                     ctx.SetState(PipelineStageState.Executing);
 
                     // 阶段经共享包装统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
-                    var stageTask = StageExecution.RunStageAsync(_stages[i], ctx, cts.Token);
+                    var stageTask = StageExecution.RunStageAsync(stage, ctx, cts.Token);
 
                     bool stageCancelled;
-                    float timeoutSeconds = _stageTimeouts[i];
+                    float timeoutSeconds = timeouts[i];
                     if (timeoutSeconds > 0f)
                     {
                         // 超时竞速:独立超时 CTS 与链内取消联动(外部取消经链接同步传播给计时任务);
@@ -242,7 +256,7 @@ namespace XFramework.XPipeline
                         if (raceCancelled)
                         {
                             // 竞速期间外部取消:统一走取消终局
-                            Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                            Debug.Log($"[Pipeline] Stage '{stage.Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
                             cancelled = true;
                             break;
                         }
@@ -252,9 +266,9 @@ namespace XFramework.XPipeline
                             // 超时获胜:中断在途阶段但不等待其沉降(挂死任务不得阻塞管线,断行后终局块与 finally
                             // 之间无 await,被放弃任务无覆写终局广播的窗口)
                             cts.Cancel();
-                            ctx.SetDescription($"Stage '{_stages[i].Name}' timed out after {timeoutSeconds}s");
+                            ctx.SetDescription($"Stage '{stage.Name}' timed out after {timeoutSeconds}s");
                             ctx.SetState(PipelineStageState.Failed);
-                            Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' timed out in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                            Debug.Log($"[Pipeline] Stage '{stage.Name}' timed out in {sw.Elapsed.TotalMilliseconds:F0}ms");
                             failed = true;
                             failDescription = ctx.Description;
                             break;
@@ -271,20 +285,20 @@ namespace XFramework.XPipeline
 
                     if (stageCancelled)
                     {
-                        Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                        Debug.Log($"[Pipeline] Stage '{stage.Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
                         cancelled = true;
                         break;
                     }
 
                     if (ctx.State == PipelineStageState.Failed)
                     {
-                        Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' failed in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                        Debug.Log($"[Pipeline] Stage '{stage.Name}' failed in {sw.Elapsed.TotalMilliseconds:F0}ms");
                         failed = true;
                         failDescription = ctx.Description;
                         break;
                     }
 
-                    Debug.Log($"[Pipeline] Stage '{_stages[i].Name}' completed in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                    Debug.Log($"[Pipeline] Stage '{stage.Name}' completed in {sw.Elapsed.TotalMilliseconds:F0}ms");
                 }
 
                 // 循环收尾:阶段沉降后 token 已取消且未失败 → 取消
@@ -356,8 +370,9 @@ namespace XFramework.XPipeline
 
         public void Destroy()
         {
-            _stages.Clear();
-            _stageTimeouts.Clear();
+            // 替换而非 Clear:在途运行持有旧列表引用,Clear 会让它的索引越界(见 RunAsync 的局部别名)
+            _stages = new List<IPipelineStage>();
+            _stageTimeouts = new List<float>();
 
             OnProgressUpdate = null;
             OnCompleted = null;
