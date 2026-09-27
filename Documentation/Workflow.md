@@ -13,8 +13,7 @@
 - **计划**阶段就定死**原子提交边界**与每个提交的验证命令；候选方案要排序并给理由，「不该做」也写成结论
 - **实现**一次只做一个提交：改完 → 验证 → **停下**请人确认
 - **授权**：计划批准**不等于**提交授权；「提交并继续」只覆盖当前这一个提交，外加下一个单元的实现——不是持续授权
-- **提交信息**：中文（类名 / 成员名等代码关键字除外），末尾带 `Co-Authored-By`
-- **不自动提交、不自动推送**，由人决定
+- **不自动提交、不自动推送**，由人决定（提交信息格式的规定在 `CLAUDE.md`，本文不重复）
 
 ## 二、验证：三条通道
 
@@ -105,5 +104,5 @@
 1. `dotnet build Venusy609.Xframework.Editor.Tests.csproj --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` → 0 error
 2. `pwsh -File Tools/run-tests.ps1 -Platform EditMode -Filter <模块>` → 0 失败
 3. **停下**，报告改动与验证证据，请人确认
-4. 得到授权后 `git commit`（中文信息 + `Co-Authored-By`）→ 进入下一个提交单元
+4. 得到授权后 `git commit`（信息格式见 `CLAUDE.md`）→ 进入下一个提交单元
 5. 阶段收尾：`pwsh -File Tools/run-tests.ps1` + `pwsh -File Tools/check-docs.ps1 -Enforce`
