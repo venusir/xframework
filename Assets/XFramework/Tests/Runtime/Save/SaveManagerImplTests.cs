@@ -1463,10 +1463,16 @@ namespace XFramework.XSave.Tests
         [Test]
         public async Task LoadAsync_AppliesSnapshotOnCallingThread()
         {
+            // 基准线程必须在任何 await 之前取。测试方法自身的续体线程不由本模块决定——
+            // UniTask 的 awaiter 在哪里恢复是调度行为，实测出现过 await 之后落在池线程（9）
+            // 而 OnLoad 回调在主线程（1）的一次；此时断言变成「池线程 == 池线程」的偶然命题，
+            // 失败信息却指向本模块。取入口线程（调用方所在的主线程）才与 README 的线程约定同义。
+            // 同族 SaveAsync_CreateMetaRunsOnCallingThread 用的就是这个写法。
+            var callingThreadId = Environment.CurrentManagedThreadId;
+
             var probe = DataManager.GetOrCreateBlock<ThreadProbeBlock>();
             await SaveManager.SaveAsync(1);
 
-            var callingThreadId = Environment.CurrentManagedThreadId;
             probe.OnLoadThreadId = 0;
             await SaveManager.LoadAsync(1);
 
