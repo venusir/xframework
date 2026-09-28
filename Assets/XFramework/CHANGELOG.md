@@ -8,6 +8,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Lock 诊断面 `LockStateSnapshot` / `GetSnapshot()` / `DumpState()` / `CopyLockedTypes()`**：Lock 此前是仓内唯一没有诊断面的成熟模块，而「玩家一直不能动」正是这类系统最经典的事故——旧手段 `GetLockObjects(subject, type)` 要求你先知道主体与类型，拿到的还是持有者对象本身。现在：`GetSnapshot()` 零分配（字段选的是可行动的判据——`UnboundSubjectCount` 数的是「有锁但没有销毁绑定」、即永远不会自动释放的那批，`UnboundSubscribedSubjectCount` 数孤儿订阅）；`DumpState()` 输出人读文本，`Global` 排最前并标 `global`，持有者一律以类型名呈现（**不调 `ToString()`**：那是用户代码）；`CopyLockedTypes(subject, List<int>)` 照 `CopyTypeStats` 的「调用方持缓冲、零分配」惯例，聚合视角含全局锁，一个 API 同时覆盖「被什么锁着」与「是否被任何类型锁着」（后者此前**无从表达**——类型域是开放的 `int`）。诊断面命名刻意避开 `LockSnapshot*` 前缀（已被派发缓冲池占用）
+
+### Fixed
+
+- **Lock 聚合订阅的订阅期缺陷（两处）**：① **异常泄漏**——`OnLockStateChanged` 的「订阅即播报」原先裸调用户回调：handler 抛异常时异常逃出，而两条内部订阅已经挂上、句柄却没返回给调用方，于是表里永久残留该主体键与委托、**主体被强引用住**（后续边沿却由 `DispatchSafely` 隔离——同一段用户代码，行为取决于时机）。现改为照 `ReactiveProperty` 的完整语义：**先拆掉刚挂上的订阅再上抛**，异常要被看见但不泄漏。② **双告警**——聚合订阅落在已销毁主体上时会经两条内部订阅各撞一次短路，告警两次并返回静默死订阅；现改为入口判一次、只记一条告警、返回空句柄，与 `OnLocked`/`OnUnlocked` 的既有短路同形
+
+### Documentation
+
+- **Lock README 新增「典型场景」七族**：角色控制封锁（多来源同时发生，bool 会互相覆盖）／全局与系统级／UI 交互门与防重入／替代互相打架的 bool／状态镜像／事故排查／生命周期收口。三处要点：**全局锁没有所有者**（挂在哨兵上，永不自动释放、不随场景切换清理——「玩家一直不能动」最常见的成因，那个 `using` 不是可选的）；**「等解锁」的正确配方**（必须先查一次 `IsLocked`，否则无锁定时订阅收不到任何回调、会永久挂起且无症状指向）；表现层与 `ReactiveProperty` 的合用桥
+- **Lock README 新增「与相邻能力的边界」**（体例照 Event README）：锁 vs `ReactiveProperty`（开放集合 vs 闭合求和）、锁 vs `UIMaskHandle`（触及 vs 逻辑；两者**键语义相反**：遮罩是单调令牌计数、锁是值相等幂等）、锁 vs `PreconditionChain`（持续被挡 vs 单次校验），以及三个相邻电平开关（`Time.timeScale` / `UpdateManager.Pause` / `InputManager.DisableActionMap`——单写者、不叠加，Lock 的存在就是为了替换这一类但不接管它们）；并如实写明**执行侧仍可能被别处直接改而绕过**
+- **Lock README 另补**：token 推荐改为**类型化 token**（名字会出现在诊断输出里，且消掉字面量撞名）+「幂等 / 嵌套计数」两种模式的小表；`已知限制` 补五条（全局锁无所有者、聚合事件是电平不重播、全局锁边沿 O(全部订阅主体)、异常日志的事件名不区分聚合订阅、容器未池化的理由）；`已评估未采纳` 补四条（`lockObj` 计数语义属**破坏性变更**、`HasAnyLock` 的形状本身语义歧义、`RegisterLockTypeName` 顺序反了、等待原语与 UI README 同型裁定）
+- **根 README**：「主要功能」表补 Lock 一行；快速开始的 `LockType.InputBlock` 全仓不存在（没有 `class LockType`）——改为写明锁的三要素（主体 / 类型 / 持有者身份）并单独给出类型定义
+
 - **Lock 主体销毁自动释放与批量清理**：新增 `LockManager.AutoReleaseOnDestroy`（默认 `true`）与 `RemoveAllLocks` / `RemoveAllSubscriptions`（含 `LockableExtensions` 同形扩展）。此前 `_locks` 与两张订阅表都以主体作**强引用键**且没有任何按主体的清理原语——实体死亡/切场景/回池时若没走完释放路径，锁会永久留存（主体再也解不开）**且该对象被强引用住无法回收**（实测两次 GC 后 `WeakReference` 仍存活）。现在：主体是 `MonoBehaviour`（`destroyCancellationToken`）或实现 `IDestroyCancellationToken` 时，销毁自动释放它的全部锁并丢弃全部订阅；两者皆非时不绑定也不告警，由调用方显式收口。四处取舍：① **绑主体的令牌**而非订阅者的（泄漏的是字典的键，键就是主体）；② **每主体注册一次**、主体空闲时注销——逐句柄注册会把回调节点永不回收地堆在长寿命主体的令牌上；③ 销毁时**先丢订阅、再放锁**（濒死对象自己的回调不再跑用户代码，别人的订阅者照常收到）；④ 主体已销毁时 `AddLock`/订阅**短路**并记 `[Lock]` 告警，而不是「先加上再被立即触发的回调清掉」——后者会派发一对「加了又解」的幻影事件
 - **Lock 聚合状态事件 `OnLockStateChanged(subject, Action<int,bool>)`**：只在 `IsLocked(subject, lockType)` 的**聚合**值真的翻转时回调，订阅时立即同步播报一次当前已锁定的类型。此前只有每个 (主体,类型) 集合的**边沿**事件（`OnLocked`/`OnUnlocked`），而查询面是含全局锁的聚合——全局锁释放时，仍被自己的锁挡住的主体照样收到 `OnUnlocked`，订阅者照事件维护「现在能不能动」这类镜像会显示错状态
 
