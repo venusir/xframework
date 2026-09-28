@@ -285,3 +285,57 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
 - `XMessage.IDestroyCancellationToken`（公开接口，用于「非 MonoBehaviour 主体」的销毁绑定）
 - `MessageManager.TryBindToDestroy` 未复用：它绑的是**订阅者**的令牌而本模块要绑**主体**的，且它丢弃
   `CancellationTokenRegistration`——逐次注册会在长寿命主体的令牌上堆积永不回收的回调节点
+
+## 已知限制
+
+- **主线程专用**：四个容器都不加锁、也没有线程断言（与 `XEvent` 的流、`DisposableBag` 同一约定）。
+  销毁令牌的回调跑在**取消者线程**上——跨线程取消 `IDestroyCancellationToken` 会并发改写容器
+  （`MonoBehaviour.destroyCancellationToken` 由 Unity 在主线程取消，不受影响）。
+- **跨对象订阅不在自动释放的覆盖范围内**：自动释放绑的是**主体**的令牌。A 订阅 B 的锁事件、A 先死时
+  不会自动退订——需持有句柄或用 `DisposableBag` 收口。
+- **既非 `MonoBehaviour` 也非 `IDestroyCancellationToken` 的主体不会被自动释放**（也不告警）：由调用方
+  用 `RemoveAllLocks` / `RemoveAllSubscriptions` 显式收口。
+- **同一条多播里的订阅者会被排在前面抛异常的那个饿死**：主体分支与两个总线事件是整条多播一次
+  try/catch（只有全局派发分支是逐订阅者隔离）。取舍同 `Pipeline.DispatchSafely`——`GetInvocationList`
+  逐个隔离要给每次派发分配一个委托数组。
+- **`lockObj` 按值相等判定**（键相等 = 同一把锁）、**`lockType` 是全框架共享的 `int` 命名空间**：
+  见「键的语义」。
+- **池化订阅句柄的 ABA**：`ActionDisposable` 归还池后被重新租出时，原持有者的第二次 `Dispose()` 会
+  静默退掉**新**订阅。常见形态（同一句柄调两次）由 `_targetDict == null` 挡住，只有「旧句柄跨越一次
+  归还」才会命中。
+- **`ILockable` 必须由引用类型实现**：struct 每次装箱都是新身份，键永不相等。
+
+## 设计取舍
+
+- **订阅表用多播委托 + 快照派发**，不改成「每订阅一个节点」（XEvent 的链表形态）：快照已经解决重入，
+  节点化则要给每次订阅分配对象、给句柄引入按节点定位的问题，收益不成立。快照用**池**而不是复用单字段
+  ——回调里再加一把全局锁会重入派发，单字段会被内层清空。
+- **主体键按引用同一、`lockObj` 保持值相等**：主体是「锁谁」，身份就是那个对象；`lockObj` 是「谁锁的」，
+  是调用方选定的名字。两条规则不同是有意的（见「键的语义」）。
+- **自动释放没有复用 `MessageManager.TryBindToDestroy`**：它绑订阅者的令牌（本模块要绑主体），且丢弃
+  registration。本模块自持「每主体一次、主体空闲时注销」的绑定。
+- **不告警**：主体两类都不是时不记 warning（`UIManager.BindToContext` 在同类情况下会告警）。理由：
+  `Global` 是合法主体、加锁边沿可能高频，逐次告警是噪音。
+- **`Dispose()` 不改名**：它的语义是「重置并继续可用」，名字沿用已久且被 `Application.quitting` 与
+  各 fixture 调用；误导的是它原先所在的 `#region Reset`（已改名）。
+- **两份 `ActionDisposable` 不合并**（本模块与 `XMessage.Internal`）：仓内既定取舍是「不为十行适配器
+  建立跨模块实现依赖」，且本模块这份是池化的、形状本就不同。
+
+## 审计记录
+
+2026-09-27 按 `Documentation/ModuleAudit.md` 审计一轮（本轮修了什么见 `CHANGELOG` 的 `[Unreleased]`）；
+本节只留**下一轮需要知道的**。
+
+**已评估未采纳**：
+- `lockObj` 改引用相等 —— 会推翻既有幂等语义（同一来源重复加锁幂等）。改为文档化 + 推荐专用 token。
+- `OnGlobalLocked` / `OnGlobalUnlocked` 改名（如 `OnAnyLocked`）—— 非破坏优先，改为把文档写成与实现一致。
+- 订阅者异常**逐条**隔离（`GetInvocationList`）—— 每次派发要分配一个委托数组，取舍与 `Pipeline` 一致，
+  已记入「已知限制」。
+- 主线程断言（`MainThreadGuard` 式）—— 本轮只写文档，不动行为。
+- `SubscriptionTracker` 那句「全仓订阅只有两处登记点」（Lock 是第三处、且不受跟踪）—— 属 Event 侧文档，
+  经裁定本轮不动。
+
+**未决**：
+- **跨对象订阅的自动退订**：形态是 `OnLocked(subject, handler, IDestroyCancellationToken owner)` 重载
+  （arity 不同，无重载二义风险），本轮未做。
+- **`ActionDisposable` 池化的 ABA**：可改成「Rent 返回带代号的包装」消除，代价是每次订阅多一次分配。

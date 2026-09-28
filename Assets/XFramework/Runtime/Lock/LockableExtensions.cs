@@ -10,7 +10,7 @@ namespace XFramework.XLock
     /// </summary>
     public static class LockableExtensions
     {
-        #region Acquire
+        #region AddLock
 
         /// <summary>
         /// 通过全局锁服务请求一个锁，<c>this</c> 自动作为 lockSubject。
@@ -21,7 +21,7 @@ namespace XFramework.XLock
 
         #endregion
 
-        #region Release
+        #region RemoveLock
 
         /// <summary>
         /// 通过全局锁服务释放一个锁，<c>this</c> 自动作为 lockSubject。

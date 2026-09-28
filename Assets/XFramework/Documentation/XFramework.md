@@ -229,6 +229,9 @@ Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时
 | 查询           | `LockManager.IsLocked(subject, lockType)`            |
 | using 自动释放 | `using var h = LockManager.AddLock(...);`            |
 | 全局锁         | `LockManager.AddLock(LockManager.Global, type, obj)` |
+| 聚合状态订阅   | `subject.OnLockStateChanged((type, locked) => …)`    |
+| 批量清理       | `subject.RemoveAllLocks()` / `subject.RemoveAllSubscriptions()` |
+| 销毁自动释放   | `LockManager.AutoReleaseOnDestroy`（默认 true，主体需是 MonoBehaviour 或实现 `IDestroyCancellationToken`） |
 
 ---
 

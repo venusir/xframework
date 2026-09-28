@@ -488,7 +488,7 @@ namespace XFramework.XLock
 
         #endregion
 
-        #region Acquire
+        #region AddLock
 
         /// <summary>
         /// 请求一个针对特定 <see cref="ILockable"/> 的锁。
@@ -547,7 +547,7 @@ namespace XFramework.XLock
 
         #endregion
 
-        #region Release
+        #region RemoveLock
 
         /// <summary>
         /// 释放一个针对特定 <see cref="ILockable"/> 的锁。
