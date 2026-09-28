@@ -178,6 +178,41 @@ public class Player : ILockable
 }
 ```
 
+## 诊断
+
+排查「玩家一直不能动」「谁的锁忘了放」这类问题时，三个入口：
+
+```csharp
+// ① 数字：现在有多少锁、挂在多少主体上、其中多少永远不会自动释放
+var s = LockManager.GetSnapshot();      // 零分配，O(主体数 × 类型数)
+Debug.Log(s);                           // LockStateSnapshot(主体 3, 锁 5, 未绑定 1, 订阅主体 2, 未绑定订阅 1)
+
+// ② 文本：逐主体列出类型与持有者，Global 排最前并标 global
+Debug.Log(LockManager.DumpState());     // 低频接口，允许分配
+
+// ③ 程序化读取：某主体当前被哪些 lockType 锁着（聚合视角，含全局锁）
+var types = new List<int>();
+int n = player.CopyLockedTypes(types);  // 零分配：调用方持缓冲、先清空、返回条数、行序未定义
+bool blockedByAnything = n > 0;
+```
+
+**口径**——`GetSnapshot` 的字段都是「可行动的判据」，不是凑数的计数：
+
+| 字段 | 它回答的问题 |
+|---|---|
+| `LockedSubjectCount` / `LockCount` | 规模 |
+| **`UnboundSubjectCount`** | **有锁但没有销毁绑定**——这批永远不会自动释放，只能靠调用方显式 `RemoveAllLocks` 收口（`AutoReleaseOnDestroy` 为 `false` 时它必然等于主体总数） |
+| `SubscribedSubjectCount` | 两张订阅表的键之并集 |
+| **`UnboundSubscribedSubjectCount`** | 有订阅但没有销毁绑定 = 孤儿订阅，静态表永久残留 |
+
+两条使用须知：
+
+- **持有者名一律是类型名**（`GetType().Name`）：`DumpState` **不**调用持有者的 `ToString()`——那是用户代码，
+  可能在诊断路径上二次抛。所以 token 要用「键的语义」里的**类型化 token**，dump 里才会出现有意义的列
+  （用 `new object()` 的话这一列全是 `Object`）。
+- **这一组不是业务分支的依据**（与 `IEventStream.SubscriptionCount` 同属「拉取面」）：它反映的是实现此刻
+  的状态；玩法判断请查 `IsLocked`。
+
 ## 机制说明
 
 ### 多锁叠加

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
 using UnityEngine;
 using XFramework.XMessage;
@@ -769,6 +770,168 @@ namespace XFramework.XLock
             }
 
             return result;
+        }
+
+        #endregion
+
+        #region Diagnostics
+
+        /// <summary>
+        /// 取一份当前状态快照（诊断用，零分配）。
+        /// <para>成本 O(主体数 × 类型数)，不是每帧接口；**不**作为业务分支的依据。要人读的多行文本用
+        /// <see cref="DumpState"/>，要程序化读某主体的锁定类型用 <see cref="CopyLockedTypes"/>。</para>
+        /// </summary>
+        public static LockStateSnapshot GetSnapshot()
+        {
+            int lockCount = 0;
+            int unboundSubjects = 0;
+
+            foreach (var kvp in _locks)
+            {
+                if (!_destroyBindings.ContainsKey(kvp.Key))
+                    unboundSubjects++;
+
+                foreach (var typeKvp in kvp.Value)
+                    lockCount += typeKvp.Value.Count;
+            }
+
+            int subscribedSubjects = 0;
+            int unboundSubscribed = 0;
+
+            foreach (var key in _onLockedSubjects.Keys)
+            {
+                subscribedSubjects++;
+                if (!_destroyBindings.ContainsKey(key))
+                    unboundSubscribed++;
+            }
+
+            foreach (var key in _onUnlockedSubjects.Keys)
+            {
+                if (_onLockedSubjects.ContainsKey(key))
+                    continue;   // 两张表的键取并集
+
+                subscribedSubjects++;
+                if (!_destroyBindings.ContainsKey(key))
+                    unboundSubscribed++;
+            }
+
+            return new LockStateSnapshot(_locks.Count, lockCount, unboundSubjects,
+                subscribedSubjects, unboundSubscribed);
+        }
+
+        /// <summary>
+        /// 人读的状态文本（诊断用；低频接口，允许分配）。
+        /// <para>逐主体列出它的类型与持有者；<see cref="Global"/> 排在最前并标 <c>global</c>——全局锁**没有
+        /// 所有者**、不会自动释放，是「玩家一直不能动」最常见的成因。持有者一律以**类型名**呈现
+        /// （<c>GetType().Name</c>，**不调用其 <c>ToString()</c>**：那是用户代码，可能在诊断路径上二次抛）。</para>
+        /// <para>不适合每帧调用；程序化消费请用 <see cref="GetSnapshot"/> / <see cref="CopyLockedTypes"/>。</para>
+        /// </summary>
+        public static string DumpState()
+        {
+            var sb = new StringBuilder();
+            sb.Append("[Lock] ").Append(GetSnapshot()).Append('\n');
+
+            if (_locks.Count == 0)
+            {
+                sb.Append("  (无锁)");
+                return sb.ToString();
+            }
+
+            AppendSubjectDump(sb, Global, "global");
+
+            foreach (var kvp in _locks)
+            {
+                if (ReferenceEquals(kvp.Key, Global))
+                    continue;
+
+                AppendSubjectDump(sb, kvp.Key, null);
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>把一个主体的锁定明细写进诊断文本。</summary>
+        private static void AppendSubjectDump(StringBuilder sb, ILockable subject, string tag)
+        {
+            if (!_locks.TryGetValue(subject, out var typeDict))
+                return;
+
+            sb.Append("  ").Append(NameOf(subject));
+
+            if (tag != null)
+                sb.Append(" [").Append(tag).Append(']');
+
+            if (!_destroyBindings.ContainsKey(subject))
+                sb.Append(" [未绑定销毁]");
+
+            sb.Append('\n');
+
+            foreach (var typeKvp in typeDict)
+            {
+                if (typeKvp.Value.Count == 0)
+                    continue;
+
+                sb.Append("    type ").Append(typeKvp.Key).Append(" × ").Append(typeKvp.Value.Count).Append(" → ");
+
+                bool first = true;
+                foreach (var holder in typeKvp.Value)
+                {
+                    if (!first)
+                        sb.Append(", ");
+
+                    first = false;
+                    sb.Append(holder == null ? "null" : holder.GetType().Name);
+                }
+
+                sb.Append('\n');
+            }
+        }
+
+        /// <summary>
+        /// 把该主体当前被锁定的 lockType 拷进调用方提供的缓冲（零分配，惯例同
+        /// <c>MessageManager.CopyTypeStats</c>）。
+        /// <para><b>聚合视角</b>：含 <see cref="Global"/> 层的锁——与 <see cref="IsLocked"/> 一致，故
+        /// 「该主体是否被任何类型锁着」即<c>返回值 &gt; 0</c>（类型域是开放的 <c>int</c>，未锁定的类型无从枚举）。</para>
+        /// <para><paramref name="buffer"/> 会先被清空；返回写入条数；**行序未定义**；同一类型若同时被主体与
+        /// 全局锁住只出现一次。成本最坏 O(该主体类型数 + 全局类型数)。</para>
+        /// </summary>
+        /// <param name="subject">锁主体；null 表示全局（与其余入口一致）。</param>
+        /// <param name="buffer">调用方提供的缓冲，不为 null。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null 时抛出。</exception>
+        public static int CopyLockedTypes(ILockable subject, List<int> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+
+            ILockable subjectKey = subject ?? Global;
+            int written = 0;
+
+            if (_locks.TryGetValue(subjectKey, out var typeDict))
+                written += CopyLockedTypesFrom(typeDict, buffer);
+
+            if (subjectKey != Global && _locks.TryGetValue(Global, out var globalDict))
+                written += CopyLockedTypesFrom(globalDict, buffer);
+
+            return written;
+        }
+
+        /// <summary>把一个类型字典里非空的类型追加进缓冲（跳过已存在的，保证不重复）。</summary>
+        private static int CopyLockedTypesFrom(Dictionary<int, HashSet<object>> typeDict, List<int> buffer)
+        {
+            int written = 0;
+
+            foreach (var kvp in typeDict)
+            {
+                if (kvp.Value.Count == 0 || buffer.Contains(kvp.Key))
+                    continue;
+
+                buffer.Add(kvp.Key);
+                written++;
+            }
+
+            return written;
         }
 
         #endregion

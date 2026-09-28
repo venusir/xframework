@@ -63,6 +63,12 @@ namespace XFramework.XLock
         public static IReadOnlyList<object> GetLockObjects(this ILockable self, int lockType)
             => LockManager.GetLockObjects(self, lockType);
 
+        /// <summary>
+        /// 把 <c>this</c> 当前被锁定的 lockType 拷进调用方提供的缓冲（零分配；聚合视角，含全局锁）。
+        /// </summary>
+        public static int CopyLockedTypes(this ILockable self, List<int> buffer)
+            => LockManager.CopyLockedTypes(self, buffer);
+
         #endregion
 
         #region Subject Event Subscription
