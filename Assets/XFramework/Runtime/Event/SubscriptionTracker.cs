@@ -1,4 +1,4 @@
-namespace XFramework.XEvent.Internal
+namespace XFramework.XEvent
 {
     /// <summary>
     /// 订阅跟踪器(仅 Editor):统计**当前存活的订阅数**(事件流 + 消息模块的异步登记合计),
@@ -10,7 +10,12 @@ namespace XFramework.XEvent.Internal
     /// </code>
     /// </summary>
     /// <remarks>
-    /// <para><b>为什么它能这么便宜</b>:全仓订阅只有两处登记点——<see cref="EventStreamImpl{T}"/>(流)与
+    /// <para><b>为什么不在 <c>.Internal</c> 里</b>:本类型是**有意为之的跨模块共享设施**——它自己的
+    /// 「两处登记点」约束就要求消息模块也调它。放进 <c>XFramework.XEvent.Internal</c> 会让消息侧只能
+    /// <c>using XFramework.XEvent.Internal;</c> 才够得着,而 <c>ModuleBoundaryTests</c> 判它为「跨模块引用
+    /// 他人 Internal」——那条规则防的是**实现细节外漏**,共享设施放进去是分类错误。可见性仍是
+    /// <c>internal</c>(仅程序集内可见,Release 下整段不编译),故此处移动的是**命名空间**而非公开面。</para>
+    /// <para><b>为什么它能这么便宜</b>:全仓订阅只有两处登记点——<see cref="XFramework.XEvent.Internal.EventStreamImpl{T}"/>(流)与
     /// <c>XFramework.XMessage.Internal.MessageChannel</c>(异步登记)。Rx 系实现的每个 Observer 各自登记,
     /// 做不到只挂两处。</para>
     /// <para><b>四条硬约束(全是反面教训,改它之前先读)</b></para>

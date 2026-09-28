@@ -1,6 +1,5 @@
 using NUnit.Framework;
 using XFramework.XEvent;
-using XFramework.XEvent.Internal;
 
 namespace XFramework.XEvent.Tests
 {

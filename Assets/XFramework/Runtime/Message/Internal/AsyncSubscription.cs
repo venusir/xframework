@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using XFramework.XEvent.Internal;
+using XFramework.XEvent;
 
 namespace XFramework.XMessage.Internal
 {

@@ -6,7 +6,7 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XEvent.Internal;
+using XFramework.XEvent;
 using XFramework.XMessage;
 
 namespace XFramework.XMessage.Tests
