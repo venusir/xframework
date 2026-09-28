@@ -177,6 +177,35 @@ namespace XFramework.XLock.Tests
             Assert.DoesNotThrow(() => sub.Dispose());
         }
 
+        /// <summary>聚合订阅落在已销毁主体上：只需**一条**告警，且返回的句柄可安全释放。</summary>
+        [Test]
+        public void AlreadyDestroyed_StateSubscription_WarnsExactlyOnce()
+        {
+            _subject.Destroy();
+
+            int warnings = 0;
+            Application.LogCallback counter = (condition, _, type) =>
+            {
+                if (type == LogType.Warning && condition.Contains("[Lock] subscription ignored"))
+                    warnings++;
+            };
+
+            Application.logMessageReceived += counter;
+            IDisposable sub;
+            try
+            {
+                sub = LockManager.OnLockStateChanged(_subject, (_, _) => { });
+            }
+            finally
+            {
+                Application.logMessageReceived -= counter;
+            }
+
+            // 改前：它经两条内部订阅各撞一次短路，于是告警两次
+            Assert.AreEqual(1, warnings, "聚合订阅只需一条告警");
+            Assert.DoesNotThrow(() => sub.Dispose());
+        }
+
         #endregion
 
         #region 显式批量

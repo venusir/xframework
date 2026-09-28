@@ -117,6 +117,21 @@ namespace XFramework.XLock.Tests
         }
 
         [Test]
+        public void InitialPlaybackThrows_LeavesNoResidue()
+        {
+            var subject = new Subject();
+            LockManager.AddLock(subject, TypeA, new object());
+
+            Assert.Throws<InvalidOperationException>(() =>
+                LockManager.OnLockStateChanged(subject, (_, _) => throw new InvalidOperationException("boom")));
+
+            // 故意**不**调用 RemoveAllSubscriptions——要看的正是刚挂上的两条内部订阅有没有自己拆掉
+            LockManager.RemoveAllLocks(subject);
+
+            AssertAllEmpty("订阅期播报抛异常后不得残留订阅（否则句柄未返回,表项永久留下并强引用主体）");
+        }
+
+        [Test]
         public void AfterFacadeDispose_ResetToDefaults()
         {
             var subject = new TokenSubject();

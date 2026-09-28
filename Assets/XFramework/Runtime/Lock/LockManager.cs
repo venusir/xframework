@@ -429,12 +429,25 @@ namespace XFramework.XLock
             }
 
             /// <summary>挂上两条原始订阅，再播报一次当前状态（顺序不能反：先播报会漏掉这中间的边沿）。</summary>
+            /// <remarks>
+            /// 初始播报会跑用户回调。它抛异常时**先拆掉刚挂上的两条订阅再上抛**——否则调用方拿不到句柄，
+            /// 两条订阅会永久留在表里（并强引用住主体）；语义与 <c>ReactiveProperty</c> 的「订阅时立即
+            /// 回调」一致：异常要被看见，但订阅不得泄漏。
+            /// </remarks>
             internal void Start()
             {
                 _onLocked = LockManager.OnLocked(_subject, OnEdge);
                 _onUnlocked = LockManager.OnUnlocked(_subject, OnEdge);
 
-                LockManager.NotifyCurrentLockedTypes(_subject, OnEdge);
+                try
+                {
+                    LockManager.NotifyCurrentLockedTypes(_subject, OnEdge);
+                }
+                catch
+                {
+                    Dispose();
+                    throw;
+                }
             }
 
             private void OnEdge(int lockType)
@@ -471,17 +484,31 @@ namespace XFramework.XLock
         /// <para><b>订阅即回调</b>：订阅时立即同步播报该主体当前处于锁定状态的每个 lockType（值为 true）。
         /// 未锁定的类型不会被回调——lockType 是开放的 <c>int</c> 域，无从枚举「所有为假的类型」，
         /// 订阅者把「没收到」当作 false 即可。</para>
+        /// <para><b>电平而非增量</b>：回调里抛异常会被隔离（记 <c>[Lock]</c> 日志），但**该类型的值不会
+        /// 重播**——镜像错位时请主动查一次 <see cref="IsLocked"/> 恢复。</para>
         /// <para>回调参数为 (lockType, isLocked)。返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 退订。</para>
         /// </summary>
         /// <param name="subject">锁主体；null 表示全局（与 <see cref="OnLocked"/> 一致）。</param>
         /// <param name="handler">回调，不可为 null。</param>
+        /// <returns>订阅句柄；主体已销毁时返回一个空句柄（订阅被忽略，并记一条 <c>[Lock]</c> 告警）。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 null 时抛出。</exception>
+        /// <exception cref="Exception">订阅时的立即播报里，<paramref name="handler"/> 抛出的异常会原样上抛
+        /// ——但刚挂上的订阅已拆除，不会泄漏。</exception>
         public static IDisposable OnLockStateChanged(ILockable subject, Action<int, bool> handler)
         {
             if (handler == null)
                 throw new ArgumentNullException(nameof(handler), "handler cannot be null.");
 
-            var subscription = new LockStateSubscription(subject ?? Global, handler);
+            ILockable subjectKey = subject ?? Global;
+
+            if (IsSubjectDestroyed(subjectKey))
+            {
+                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
+                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                return EmptyDisposable.Instance;
+            }
+
+            var subscription = new LockStateSubscription(subjectKey, handler);
             subscription.Start();
             return subscription;
         }

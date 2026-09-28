@@ -186,5 +186,27 @@ namespace XFramework.XLock.Tests
         }
 
         #endregion
+
+        #region 订阅期契约
+
+        /// <summary>
+        /// 订阅时立即播报会跑用户回调——它抛异常时不得把刚挂上的订阅留在表里。
+        /// <para>改前：异常逃出 <c>OnLockStateChanged</c>，而两条内部订阅已经挂上、句柄却没返回给调用方
+        /// ——表里永久残留该主体键与委托，主体被强引用住（非 MonoBehaviour 主体即永久泄漏）。</para>
+        /// </summary>
+        [Test]
+        public void ThrowingHandlerDuringInitialPlayback_ThrowsButLeavesNoSubscription()
+        {
+            LockManager.AddLock(_subjectA, TypeA, new object());   // 让订阅时的播报有内容可播
+
+            Assert.Throws<InvalidOperationException>(() =>
+                LockManager.OnLockStateChanged(_subjectA, (_, _) => throw new InvalidOperationException("boom")));
+
+            // 若订阅残留，它会在下面这次解锁边沿上被派发并再次抛出，DispatchSafely 会记一条
+            // [Lock] Error —— 未预期的 Error 会让本用例失败。故这里等价于「没有残留订阅」。
+            Assert.DoesNotThrow(() => LockManager.RemoveAllLocks(_subjectA));
+        }
+
+        #endregion
     }
 }
