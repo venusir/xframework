@@ -16,7 +16,7 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 全局锁哨兵。实现 <see cref="ILockable"/>，作为全局锁的 lockSubject 使用。
-        /// <para>例如：<c>LockManager.Acquire(LockManager.Global, lockType, lockObj)</c></para>
+        /// <para>例如：<c>LockManager.AddLock(LockManager.Global, lockType, lockObj)</c></para>
         /// </summary>
         private sealed class GlobalSentinel : ILockable { }
 

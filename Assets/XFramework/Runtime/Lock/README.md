@@ -63,7 +63,7 @@ LockManager.RemoveLock(player, LockType.Movement, "dialogue_open");
 
 ```csharp
 // 通过 using 自动管理锁生命周期
-public void CastSkill()
+public async UniTask CastSkill()
 {
     // 加锁（技能持续期间锁定移动）
     // 注意：加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
