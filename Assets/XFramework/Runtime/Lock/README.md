@@ -521,8 +521,10 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
   （arity 不同，无重载二义风险），本轮未做。
 - **`ActionDisposable` 池化的 ABA**：可改成「Rent 返回带代号的包装」消除，代价是每次订阅多一次分配。
   仓内另有更彻底的答案可参考：UI 遮罩用**单调令牌 + 条目表**（`UIManagerImpl`），令牌不回收即无 ABA。
-- **`AutoInit` 形态落后于 Update / File**：本模块仍是 `#if UNITY_EDITOR [InitializeOnLoadMethod] #else
-  [RuntimeInitializeOnLoadMethod]` + 裸 `Application.quitting += Dispose`；Update 与 File 已改成「两特性都挂
-  + `SubsystemRegistration` + 幂等订阅 + 自退订」，并有反射回归测试。**关闭域重载**（Enter Play Mode Options）
-  时，会话未走到 `Application.quitting`（编辑器崩溃 / 被强杀）会留下静态残留。属 **Message / Serializer /
-  Lock 三模块同形问题**，经裁定单独立项、不塞进本模块这一轮。
+- **`AutoInit` 形态落后于 Update**：本模块仍是 `#if UNITY_EDITOR [InitializeOnLoadMethod] #else
+  [RuntimeInitializeOnLoadMethod]` + 裸 `Application.quitting += Dispose`（不幂等）。**关闭域重载**
+  （Enter Play Mode Options）时，`#else` 分支根本没编进编辑器程序集 → 进入播放不再执行本回调；而这条
+  `quitting` 订阅在关闭域重载时**跨播放会话存活**——重复 `+=` 会逐次累积（正常退出播放仍会触发清理，
+  故**危害不在"锁残留"**，而在订阅累积与会话未走到 quitting 时的静态残留）。
+  同形的还有 `MessageManager` / `Serializer` / `DesktopFileProvider`——**File 也在名单里**（它的注释
+  写了「两个特性都要挂」而代码是旧的，属文档与实现相反），经裁定单独立项统一。
