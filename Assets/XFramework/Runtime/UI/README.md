@@ -1048,6 +1048,16 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 - [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
 - [ ] UI 引导层 — 新手引导的遮罩挖洞支持
 
+## 已知限制
+
+- **关闭域重载（Enter Play Mode Options）时，UI 的会话复位依赖 `UIRootNode` 的成对生命周期**：
+  `UIRootNode.Awake` 里「未初始化才 `Initialize`」与 `OnDestroy` 里「我是当前根才 `Destroy`」构成闭环，
+  正常场景卸载即可自洽；**但绕过 `UIRootNode` 手动调 `UIManager.Initialize` 的项目**在第二个播放会话里
+  会继续挂在上一轮的实例上（`Initialize` 是「已初始化则忽略」，使用方无法自救）。同类根因与验证手段见
+  `Runtime/Input/README.md` 的已知限制。
+- 多根场景未覆盖：第二个场景的 `UIRootNode` 会被静默忽略（面板仍挂在第一个场景的根下）——单根是既有
+  设计，见 `View/UIRootNode.cs` 的注释。
+
 ## 依赖
 
 - `XFramework.XAsset` — 通过 `AssetManager.InstantiateAsync` 加载面板预制体

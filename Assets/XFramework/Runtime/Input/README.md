@@ -466,6 +466,19 @@ public class RewiredProvider : IInputProvider
 }
 ```
 
+## 已知限制
+
+- **关闭域重载时，第二个播放会话里帧脉冲会静默失效**（Project Settings → Editor → Enter Play Mode Options
+  → 取消 Reload Domain）：退出播放时 `UpdateManager.OnQuitting` 会释放并置空调度器，而第二次进入播放时
+  `Initialize()` 因 `_initialized` 仍为真而**告警后 return**，`RegisterTicker()` 不再执行——`_ticker`
+  仍在、provider 仍在，但**没有任何调度器持有它**，于是 `Observe*` 的帧脉冲永不发布，唯一线索是一条
+  「called more than once」警告。根因跨模块（调度器释放与门面 `_initialized` 的会话级复位是两件事），
+  本轮只归档不修。**验证手段**：改 `ProjectSettings/EditorSettings.asset` 关闭 Reload Domain，连跑两遍
+  PlayMode 全量（Update 那次域重载事故的实证手段）。注意本仓当前两个 reload 都还开着，故本仓内**休眠**。
+- 同族问题（同一根因：门面 `_initialized` 没有会话级复位，`Initialize()` 重复调用是「告警 + 忽略」而非
+  「重新初始化」，**使用方无法自救**）也在 `AssetManager` / `ConfigManager` / `LocalizationManager` /
+  `FileManager` 上成立，见本轮 `CHANGELOG`。
+
 ## 依赖
 
 - Unity 2022.3 LTS 或更新版本
