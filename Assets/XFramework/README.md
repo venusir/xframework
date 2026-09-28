@@ -84,6 +84,18 @@ using (LockManager.AddLock(player, LockType.InputBlock, this))
 }
 ```
 
+> 锁的用法要点：`player` 需实现 `ILockable`（**主体** = 锁谁）；`LockType` 是使用方自建的常量类
+> （**类型** = 哪一类事，全框架共享命名空间，跨模块要先约定不撞号）；`this` 是**持有者身份**（谁锁的）。
+> 三者构成一把锁，多来源叠加时各自只解自己那把——详见 [Runtime/Lock/README.md](Runtime/Lock/README.md)。
+
+```csharp
+// 锁类型由使用方定义（完整写法与理由见 Lock 模块 README §1）
+public static class LockType
+{
+    public const int InputBlock = 1;
+}
+```
+
 ### 方式二：带启动引导
 
 ```csharp
@@ -104,6 +116,7 @@ await Bootstrap.RunAsync();
 | **Tip 临时提示** | 扣血提示、浮动文字等临时 UI，支持世界坐标定位、渐隐动画、对象池复用               |
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
+| **逻辑锁**       | `LockManager` 多来源叠加的门禁（主体 × 类型 × 持有者）：全局锁、聚合状态事件 `OnLockStateChanged`、销毁自动释放、`DumpState` 排查 |
 | **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
 
 ## UI 系统
