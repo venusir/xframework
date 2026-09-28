@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using UnityEngine;
 using XFramework.XMessage;
@@ -70,19 +71,19 @@ namespace XFramework.XLock
 
         /// <summary>lockSubject → lockType → HashSet&lt;lock&gt;。</summary>
         private static Dictionary<ILockable, Dictionary<int, HashSet<object>>> _locks
-            = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
+            = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>(LockSubjectReferenceComparer.Instance);
 
         /// <summary>每个 subject 的锁定事件订阅。</summary>
         private static Dictionary<ILockable, Action<int>> _onLockedSubjects
-            = new Dictionary<ILockable, Action<int>>();
+            = new Dictionary<ILockable, Action<int>>(LockSubjectReferenceComparer.Instance);
 
         /// <summary>每个 subject 的解锁事件订阅。</summary>
         private static Dictionary<ILockable, Action<int>> _onUnlockedSubjects
-            = new Dictionary<ILockable, Action<int>>();
+            = new Dictionary<ILockable, Action<int>>(LockSubjectReferenceComparer.Instance);
 
         /// <summary>subject → 销毁令牌注册（每主体一次；主体空闲或门面重置时注销）。</summary>
         private static Dictionary<ILockable, CancellationTokenRegistration> _destroyBindings
-            = new Dictionary<ILockable, CancellationTokenRegistration>();
+            = new Dictionary<ILockable, CancellationTokenRegistration>(LockSubjectReferenceComparer.Instance);
 
         #endregion
 
@@ -759,10 +760,10 @@ namespace XFramework.XLock
             foreach (var registration in _destroyBindings.Values)
                 registration.Dispose();
 
-            _destroyBindings = new Dictionary<ILockable, CancellationTokenRegistration>();
-            _locks = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
-            _onLockedSubjects = new Dictionary<ILockable, Action<int>>();
-            _onUnlockedSubjects = new Dictionary<ILockable, Action<int>>();
+            _destroyBindings = new Dictionary<ILockable, CancellationTokenRegistration>(LockSubjectReferenceComparer.Instance);
+            _locks = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>(LockSubjectReferenceComparer.Instance);
+            _onLockedSubjects = new Dictionary<ILockable, Action<int>>(LockSubjectReferenceComparer.Instance);
+            _onUnlockedSubjects = new Dictionary<ILockable, Action<int>>(LockSubjectReferenceComparer.Instance);
             OnGlobalLocked = null;
             OnGlobalUnlocked = null;
             AutoReleaseOnDestroy = true;
@@ -850,6 +851,30 @@ namespace XFramework.XLock
         public void Dispose()
         {
         }
+    }
+
+    /// <summary>
+    /// 主体键的**引用同一**比较器：四个容器（锁、两张订阅表、销毁绑定）共用。
+    /// <para><b>为什么需要它</b>：游戏实体按 Id 重写 <c>Equals</c> 很常见。用默认比较器时，两个
+    /// **不同**实体只要值相等就是同一个键——给 A 加锁连 B 一起锁、A 的订阅被 B 的锁惊动、
+    /// <c>RemoveAllLocks(A)</c> 把 B 的锁一并清掉，全是静默的。</para>
+    /// <para>仓内先例：<c>XPool.Pool&lt;T&gt;.InstanceReferenceComparer</c> 与
+    /// <c>UpdateScheduler.NodeReferenceComparer</c>（后者注释明写「身份判定用引用同一」）；
+    /// .NET Standard 2.1 下没有现成的 <c>ReferenceEqualityComparer</c>，故自持一份。</para>
+    /// <para><b>代价</b>：<see cref="ILockable"/> 若由 struct 实现，每次装箱都是新身份、键永不相等
+    /// ——因此接口文档写明必须由引用类型实现。</para>
+    /// </summary>
+    internal sealed class LockSubjectReferenceComparer : IEqualityComparer<ILockable>
+    {
+        internal static readonly LockSubjectReferenceComparer Instance = new LockSubjectReferenceComparer();
+
+        private LockSubjectReferenceComparer()
+        {
+        }
+
+        public bool Equals(ILockable x, ILockable y) => ReferenceEquals(x, y);
+
+        public int GetHashCode(ILockable obj) => RuntimeHelpers.GetHashCode(obj);
     }
 
     /// <summary>
