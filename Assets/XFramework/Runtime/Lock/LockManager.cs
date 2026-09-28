@@ -46,13 +46,15 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 全局锁定事件：当某锁被添加时触发。
-        /// <para>参数为 (lockSubject, lockType, lock)。</para>
+        /// <para>参数为 (lockSubject, lockType, lock)，其中 <c>lockSubject</c> 已归一化——调用方传 null 时
+        /// 这里收到的是 <see cref="Global"/>，不会出现「同一件事两种表现」。</para>
         /// </summary>
         public static event Action<ILockable, int, object> OnGlobalLocked;
 
         /// <summary>
         /// 全局解锁事件：当某锁被移除时触发。
-        /// <para>参数为 (lockSubject, lockType, lock)。</para>
+        /// <para>参数为 (lockSubject, lockType, lock)，其中 <c>lockSubject</c> 已归一化（同
+        /// <see cref="OnGlobalLocked"/>）。</para>
         /// </summary>
         public static event Action<ILockable, int, object> OnGlobalUnlocked;
 
@@ -78,34 +80,54 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 订阅指定 <see cref="ILockable"/> 的锁定事件。
-        /// <para>全局锁（<see cref="Global"/>）的锁定也会触发此回调。</para>
+        /// <para><paramref name="subject"/> 为 null 等价于 <see cref="Global"/>——与 <see cref="AddLock"/>、
+        /// <see cref="IsLocked"/> 等入口的约定一致。</para>
+        /// <para>全局锁的锁定会触发所有主体订阅者；反过来，以 <see cref="Global"/> 订阅只收到全局锁的
+        /// 加锁事件，不接收任何主体自己加的锁。</para>
         /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
         /// </summary>
+        /// <param name="subject">锁主体；null 表示全局。</param>
+        /// <param name="handler">回调，参数为 lockType。不可为 null——空回调会留下一条没有任何通知的
+        /// 幽灵订阅，并让「该主体是否还有订阅」这类判定永远为真。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 null 时抛出。</exception>
         public static IDisposable OnLocked(ILockable subject, Action<int> handler)
         {
-            if (!_onLockedSubjects.ContainsKey(subject))
-            {
-                _onLockedSubjects[subject] = null;
-            }
-            _onLockedSubjects[subject] += handler;
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler), "handler cannot be null.");
 
-            return ActionDisposable.Rent(subject, handler, _onLockedSubjects);
+            ILockable subjectKey = subject ?? Global;
+
+            if (!_onLockedSubjects.ContainsKey(subjectKey))
+            {
+                _onLockedSubjects[subjectKey] = null;
+            }
+            _onLockedSubjects[subjectKey] += handler;
+
+            return ActionDisposable.Rent(subjectKey, handler, _onLockedSubjects);
         }
 
         /// <summary>
         /// 订阅指定 <see cref="ILockable"/> 的解锁事件。
-        /// <para>全局锁（<see cref="Global"/>）的解锁也会触发此回调。</para>
-        /// <para>返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 可取消订阅。</para>
+        /// <para>主体约定与全局锁影响范围同 <see cref="OnLocked"/>；返回 <see cref="IDisposable"/>，
+        /// 调用 <c>Dispose()</c> 可取消订阅。</para>
         /// </summary>
+        /// <param name="subject">锁主体；null 表示全局。</param>
+        /// <param name="handler">回调，参数为 lockType，不可为 null。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 null 时抛出。</exception>
         public static IDisposable OnUnlocked(ILockable subject, Action<int> handler)
         {
-            if (!_onUnlockedSubjects.ContainsKey(subject))
-            {
-                _onUnlockedSubjects[subject] = null;
-            }
-            _onUnlockedSubjects[subject] += handler;
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler), "handler cannot be null.");
 
-            return ActionDisposable.Rent(subject, handler, _onUnlockedSubjects);
+            ILockable subjectKey = subject ?? Global;
+
+            if (!_onUnlockedSubjects.ContainsKey(subjectKey))
+            {
+                _onUnlockedSubjects[subjectKey] = null;
+            }
+            _onUnlockedSubjects[subjectKey] += handler;
+
+            return ActionDisposable.Rent(subjectKey, handler, _onUnlockedSubjects);
         }
 
         /// <summary>
@@ -121,8 +143,8 @@ namespace XFramework.XLock
             => DispatchSubscribers(_onUnlockedSubjects, lockSubject ?? Global, lockType, nameof(OnUnlocked));
 
         /// <summary>
-        /// 通知某个订阅表里的订阅者：全局锁通知所有订阅者（跳过以 <see cref="Global"/> 为键的条目），
-        /// 普通锁只通知该 subject 的订阅者。
+        /// 通知某个订阅表里的订阅者：**全局锁**通知所有订阅者（含以 <see cref="Global"/> 订阅者——
+        /// 以它订阅即「只关心全局锁」），**普通锁**只通知该 subject 的订阅者。
         /// <para><b>派发基于快照</b>：全局分支先把订阅者取进快照再遍历，故回调里的增删订阅打不崩本轮
         /// 派发——从下一轮起生效（主体分支取到的是多播委托的本地副本，本来就是同一语义）。</para>
         /// <para><b>异常隔离</b>：全局分支逐订阅者隔离，排在抛异常者之后的订阅者仍会收到通知；
@@ -139,7 +161,7 @@ namespace XFramework.XLock
                     // 快照阶段没有任何用户代码进入，此处枚举是安全的
                     foreach (var kvp in table)
                     {
-                        if (kvp.Key == Global || kvp.Value == null)
+                        if (kvp.Value == null)
                             continue;
 
                         snapshot.Add(kvp);
@@ -248,7 +270,7 @@ namespace XFramework.XLock
 
             if (wasEmpty && lockSet.Count == 1)
             {
-                DispatchSafely(OnGlobalLocked, lockSubject, lockType, lockObj, nameof(OnGlobalLocked));
+                DispatchSafely(OnGlobalLocked, subjectKey, lockType, lockObj, nameof(OnGlobalLocked));
                 NotifyOnLocked(lockSubject, lockType, lockObj);
             }
 
@@ -288,7 +310,7 @@ namespace XFramework.XLock
 
             if (wasNonEmpty && lockSet.Count == 0)
             {
-                DispatchSafely(OnGlobalUnlocked, lockSubject, lockType, lockObj, nameof(OnGlobalUnlocked));
+                DispatchSafely(OnGlobalUnlocked, subjectKey, lockType, lockObj, nameof(OnGlobalUnlocked));
                 NotifyOnUnlocked(lockSubject, lockType, lockObj);
 
                 typeDict.Remove(lockType);
