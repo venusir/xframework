@@ -71,6 +71,13 @@ namespace XFramework.XLock
         public static IDisposable OnUnlocked(this ILockable self, Action<int> handler)
             => LockManager.OnUnlocked(self, handler);
 
+        /// <summary>
+        /// 订阅 <c>this</c> 的**聚合锁定状态**变化（只在 <see cref="LockManager.IsLocked"/> 真的翻转时回调）。
+        /// <para>订阅时立即播报一次当前已锁定的类型；返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 退订。</para>
+        /// </summary>
+        public static IDisposable OnLockStateChanged(this ILockable self, Action<int, bool> handler)
+            => LockManager.OnLockStateChanged(self, handler);
+
         #endregion
     }
 }

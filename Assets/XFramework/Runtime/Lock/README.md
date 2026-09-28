@@ -125,6 +125,24 @@ player.OnLocked(lockType => Debug.Log($"锁定: {lockType}"));
 player.OnUnlocked(lockType => Debug.Log($"解锁: {lockType}"));
 ```
 
+**聚合锁定状态**：上面两个事件是「每个 (主体,类型) 集合的**边沿**」，与 `IsLocked` 的聚合语义并不
+一致——全局锁释放时，仍被自己的锁挡住的主体照样会收到 `OnUnlocked`。要维护「现在能不能动」这类状态
+镜像，用聚合事件（只在 `IsLocked(subject, lockType)` 真的翻转时回调，订阅时立即播报一次当前已锁定的
+类型）：
+
+```csharp
+// 订阅时立即同步回调一次(当前锁定则为 true)，之后只在聚合值翻转时回调
+using var sub = player.OnLockStateChanged((lockType, isLocked) =>
+{
+    if (lockType == LockType.Movement)
+        moveButton.interactable = !isLocked;
+});
+```
+
+> **两个 `OnGlobal*` 事件的名字**：其中的 "Global" 指**框架级事件总线**，不是「只有全局锁才触发」
+> ——它对每一把首次锁 / 最后一次解锁都触发（主体锁也算）。只关心全局锁请写
+> `LockManager.OnLocked(LockManager.Global, handler)`（以 `Global` 订阅 = 只收到全局锁的加/解锁）。
+
 ## ILockable 扩展方法
 
 实现了 `ILockable` 的类型可以直接使用便捷的扩展方法：

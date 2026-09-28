@@ -45,16 +45,20 @@ namespace XFramework.XLock
         #region Events
 
         /// <summary>
-        /// 全局锁定事件：当某锁被添加时触发。
+        /// 框架级锁定事件：**任意主体**的某类型锁从「无」变「有」时触发一次。
+        /// <para><b>名字里的 Global 指「框架级事件总线」，不是「只有全局锁才触发」</b>——它对每一把首次锁
+        /// 都触发（主体锁也算）。想要「只关心全局锁」请用 <see cref="OnLocked"/> 并以 <see cref="Global"/>
+        /// 订阅；想要「关心某个主体的聚合锁定状态是否翻转」请用 <see cref="OnLockStateChanged"/>。</para>
+        /// <para>同一 (主体,类型) 上叠加的多把锁只触发一次——「还有别人持锁」不算新事件。</para>
         /// <para>参数为 (lockSubject, lockType, lock)，其中 <c>lockSubject</c> 已归一化——调用方传 null 时
-        /// 这里收到的是 <see cref="Global"/>，不会出现「同一件事两种表现」。</para>
+        /// 这里收到的是 <see cref="Global"/>。</para>
         /// </summary>
         public static event Action<ILockable, int, object> OnGlobalLocked;
 
         /// <summary>
-        /// 全局解锁事件：当某锁被移除时触发。
-        /// <para>参数为 (lockSubject, lockType, lock)，其中 <c>lockSubject</c> 已归一化（同
-        /// <see cref="OnGlobalLocked"/>）。</para>
+        /// 框架级解锁事件：**任意主体**的某类型锁从「有」变「无」时触发一次。
+        /// <para>命名与影响范围同 <see cref="OnGlobalLocked"/>（对每一把最后一次解锁都触发，不限全局锁）。</para>
+        /// <para>参数为 (lockSubject, lockType, lock)，其中 <c>lockSubject</c> 已归一化。</para>
         /// </summary>
         public static event Action<ILockable, int, object> OnGlobalUnlocked;
 
@@ -235,6 +239,133 @@ namespace XFramework.XLock
                 return nameof(Global);
 
             return subject.GetType().Name;
+        }
+
+        /// <summary>
+        /// 把主体当前已锁定的类型逐个交给回调——<see cref="OnLockStateChanged"/> 播报初始状态用。
+        /// </summary>
+        /// <remarks>
+        /// 先收集再回调：回调里会跑用户代码（可以加锁/解锁），直接在 <c>_locks</c> 上边遍历边回调，
+        /// 枚举器会被它改坏。只有确实存在已锁定类型时才分配（订阅期的一次小分配）。
+        /// </remarks>
+        private static void NotifyCurrentLockedTypes(ILockable subjectKey, Action<int> onLocked)
+        {
+            List<int> types = null;
+
+            if (_locks.TryGetValue(subjectKey, out var typeDict))
+            {
+                foreach (var kvp in typeDict)
+                {
+                    if (kvp.Value.Count == 0)
+                        continue;
+
+                    if (types == null)
+                        types = new List<int>(4);
+
+                    types.Add(kvp.Key);
+                }
+            }
+
+            if (subjectKey != Global && _locks.TryGetValue(Global, out var globalDict))
+            {
+                foreach (var kvp in globalDict)
+                {
+                    if (kvp.Value.Count == 0)
+                        continue;
+
+                    if (types == null)
+                        types = new List<int>(4);
+
+                    types.Add(kvp.Key);
+                }
+            }
+
+            if (types == null)
+                return;
+
+            for (int i = 0; i < types.Count; i++)
+                onLocked(types[i]);
+        }
+
+        /// <summary>
+        /// 聚合状态订阅的实现：把两条原始边沿事件（<see cref="OnLocked"/>/<see cref="OnUnlocked"/>）合成
+        /// 「聚合值真的翻转」这一条语义。
+        /// <para>每个 lockType 缓存上次播报的值：同一 (主体,类型) 的聚合值对所有订阅者都一样，但缓存放在
+        /// 订阅项上最省事——各自比较即可，不必新增共享表，也就不引入淘汰问题。类型被锁过才会进表，
+        /// 随订阅释放一起丢弃。</para>
+        /// </summary>
+        private sealed class LockStateSubscription : IDisposable
+        {
+            private readonly ILockable _subject;
+            private readonly Action<int, bool> _handler;
+            private readonly Dictionary<int, bool> _lastValues = new Dictionary<int, bool>();
+
+            private IDisposable _onLocked;
+            private IDisposable _onUnlocked;
+            private bool _disposed;
+
+            internal LockStateSubscription(ILockable subject, Action<int, bool> handler)
+            {
+                _subject = subject;
+                _handler = handler;
+            }
+
+            /// <summary>挂上两条原始订阅，再播报一次当前状态（顺序不能反：先播报会漏掉这中间的边沿）。</summary>
+            internal void Start()
+            {
+                _onLocked = LockManager.OnLocked(_subject, OnEdge);
+                _onUnlocked = LockManager.OnUnlocked(_subject, OnEdge);
+
+                LockManager.NotifyCurrentLockedTypes(_subject, OnEdge);
+            }
+
+            private void OnEdge(int lockType)
+            {
+                bool now = LockManager.IsLocked(_subject, lockType);
+                if (_lastValues.TryGetValue(lockType, out var last) && last == now)
+                    return;
+
+                _lastValues[lockType] = now;
+                _handler(lockType, now);
+            }
+
+            /// <summary>退订两条原始订阅。幂等：重复调用不再产生效果。</summary>
+            public void Dispose()
+            {
+                if (_disposed)
+                    return;
+
+                _disposed = true;
+                _onLocked?.Dispose();
+                _onUnlocked?.Dispose();
+                _onLocked = null;
+                _onUnlocked = null;
+                _lastValues.Clear();
+            }
+        }
+
+        /// <summary>
+        /// 订阅主体的**聚合锁定状态**变化：只在 <see cref="IsLocked"/> 的返回值真的翻转时回调。
+        /// <para><b>与 <see cref="OnLocked"/>/<see cref="OnUnlocked"/> 的分工</b>：那两个是每个 (主体,类型)
+        /// 集合的**边沿**，会与聚合不一致——全局锁释放时，仍被自己的锁挡住的主体照样收到
+        /// <c>OnUnlocked</c>。订阅者照边沿维护「现在能不能动」这类镜像会显示错状态；本事件以聚合为准，
+        /// 订阅者不必自己再查一次 <see cref="IsLocked"/>。</para>
+        /// <para><b>订阅即回调</b>：订阅时立即同步播报该主体当前处于锁定状态的每个 lockType（值为 true）。
+        /// 未锁定的类型不会被回调——lockType 是开放的 <c>int</c> 域，无从枚举「所有为假的类型」，
+        /// 订阅者把「没收到」当作 false 即可。</para>
+        /// <para>回调参数为 (lockType, isLocked)。返回 <see cref="IDisposable"/>，调用 <c>Dispose()</c> 退订。</para>
+        /// </summary>
+        /// <param name="subject">锁主体；null 表示全局（与 <see cref="OnLocked"/> 一致）。</param>
+        /// <param name="handler">回调，不可为 null。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 null 时抛出。</exception>
+        public static IDisposable OnLockStateChanged(ILockable subject, Action<int, bool> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler), "handler cannot be null.");
+
+            var subscription = new LockStateSubscription(subject ?? Global, handler);
+            subscription.Start();
+            return subscription;
         }
 
         #endregion
