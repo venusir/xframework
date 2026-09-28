@@ -33,6 +33,10 @@ public static class LockType
 }
 ```
 
+> **`lockType` 是全框架共享的 `int` 命名空间**：两个模块各自定义 `Movement = 1`，那就是同一把锁——
+> 编译期毫无提示，运行期互相影响（A 的锁会让 B 的查询也返回 true）。跨模块使用（尤其第三方插件）
+> 请先约定分段或集中登记，别让两个模块都从 1 开始各数一遍。
+
 ### 2. 使用静态 API
 
 ```csharp
@@ -188,7 +192,38 @@ public class Player : ILockable
 释放 Skill("stun") → IsLocked(Skill): false  ← 全部释放后才解锁
 ```
 
-### 全局锁影响范围
+### 键的语义：`lockObj` 是持有者身份
+
+`lockObj` 不是「附带说明」，它**就是持有者身份**——存在 `HashSet<object>` 里、按**值相等**判定，
+于是**键相等 = 同一把锁**：
+
+```csharp
+LockManager.AddLock(player, LockType.Movement, "dialogue");   // 对话系统
+LockManager.AddLock(player, LockType.Movement, "dialogue");   // 另一个系统恰好用了同一个字面量
+
+LockManager.GetLockCount(player, LockType.Movement);          // → 1，不是 2
+
+// 其中一方释放时——
+LockManager.RemoveLock(player, LockType.Movement, "dialogue");
+LockManager.IsLocked(player, LockType.Movement);              // → false：另一方的锁也被一并解掉
+```
+
+值语义本身是有意的（同一来源重复加锁即幂等）；危险的是**两个互不相关的来源取了同一个名字**
+（字符串字面量会被驻留，必然相等）。**推荐每个加锁点用一枚专用 token**：
+
+```csharp
+private static readonly object SkillCastingToken = new object();
+
+using (LockManager.AddLock(player, LockType.Movement, SkillCastingToken))
+{
+    // ...
+}
+```
+
+主体（`ILockable`）那一侧规则相反：按**引用同一**判定，不看 `Equals` 重写（见 `ILockable` 的文档）——
+主体是「锁谁」，身份就该是那个对象本身；`lockObj` 是「谁锁的」，是一个调用方选定的名字。
+
+## 全局锁影响范围
 
 全局锁（`LockManager.Global`）对某个类型的锁定，会影响**所有主体**的该类型锁判断：
 
