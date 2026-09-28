@@ -54,15 +54,19 @@ namespace XFramework.XFileManager
         /// 而在 Project Settings → Editor 里关闭 Reload Domain 后，进入播放不会重新加载程序集、该回调
         /// 不再执行；<c>RuntimeInitializeOnLoadMethod</c> 在进入播放时同样会执行，是那种情况下唯一的
         /// 时机（与 <c>UpdateManager.AutoInit</c> 同款理由）。</para>
+        /// <para><b>档位取 <see cref="RuntimeInitializeLoadType.BeforeSceneLoad"/></b>（场景已加载、Awake 未调用）：
+        /// 本方法的价值就在「早于首次使用」，而默认的 <c>AfterSceneLoad</c> 晚于首个场景的 Awake，构建里
+        /// 等于没预热。已实测该时机 <c>persistentDataPath</c> / <c>streamingAssetsPath</c> /
+        /// <c>temporaryCachePath</c> 三者均非空（Windows 编辑器；其它平台未逐一实测，失败也是静默的——
+        /// 空串时本方法直接返回、不缓存，随后由 <c>GetDomainRoot</c> 的懒加载兜底）。</para>
         /// <para><b>只预热、不初始化门面</b>——FileManager 的零配置懒初始化是有意设计（见模块 README）。
         /// 预热的价值在于：进程内第一次文件调用即便来自子线程，域根也已在主线程取好。</para>
         /// </summary>
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]
-#else
-        [RuntimeInitializeOnLoadMethod]
 #endif
-        private static void PrimeRootsOnLoad()
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+        internal static void PrimeRootsOnLoad()
         {
             PrimeRoots();
         }

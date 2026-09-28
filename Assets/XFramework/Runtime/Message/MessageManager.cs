@@ -439,16 +439,22 @@ namespace XFramework.XMessage
         #region Auto Lifecycle
 
         /// <summary>
-        /// 自动在游戏退出时清理消息总线，无需外部调用。
-        /// <para>在 Editor 中 Domain Reload 或停止播放时也会触发清理。</para>
+        /// 自动初始化：补挂「退出时清理消息总线」的订阅，无需外部调用（幂等）。
+        /// <para><b>两个特性都要挂：</b>编辑器里 <see cref="UnityEditor.InitializeOnLoadMethodAttribute"/>
+        /// 只在程序集加载（含重编译引发的域重载）时执行；关闭 Reload Domain（Enter Play Mode Options）后
+        /// 进入播放不会重新加载程序集，该回调不再执行——此时只能靠
+        /// <see cref="RuntimeInitializeOnLoadMethodAttribute"/>。</para>
+        /// <para><b>订阅必须幂等：</b>开启域重载时两者会先后触发；关闭域重载时 <c>Application.quitting</c>
+        /// 的订阅表跨播放会话存活，重复 <c>+=</c> 会逐次累积。这里先 <c>-=</c> 再 <c>+=</c> 保证恰好一条
+        /// ——**因此 <see cref="Clear"/> 不自退订**（那行的正确性依赖这里的 <c>-=</c> 先执行）。</para>
         /// </summary>
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]
-#else
-        [RuntimeInitializeOnLoadMethod]
 #endif
-        static void AutoInit()
+        [RuntimeInitializeOnLoadMethod]
+        internal static void AutoInit()
         {
+            Application.quitting -= Clear;
             Application.quitting += Clear;
         }
 

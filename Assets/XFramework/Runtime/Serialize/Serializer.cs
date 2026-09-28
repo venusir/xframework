@@ -36,14 +36,16 @@ namespace XFramework.XSerialize
         /// <summary>
         /// 自动初始化入口：运行时/编辑器加载时注册内置序列化器，保证 DataManager/SaveManager
         /// 依赖的 <see cref="Default"/> 开箱即用（零配置初始化，与 LockManager/MessageManager 惯例一致）。
-        /// <para>显式调用 <see cref="Initialize"/> 仍然安全（幂等保护）。</para>
+        /// <para><b>两个特性都要挂：</b>编辑器里 <see cref="UnityEditor.InitializeOnLoadMethodAttribute"/> 只在
+        /// 程序集加载（含域重载）时执行；关闭 Reload Domain（Enter Play Mode Options）后进入播放不重新加载
+        /// 程序集，那时只能靠 <see cref="RuntimeInitializeOnLoadMethodAttribute"/>。</para>
+        /// <para>重复执行安全：<see cref="Initialize"/> 自带幂等守卫；显式调用它同样安全。</para>
         /// </summary>
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]
-#else
-        [RuntimeInitializeOnLoadMethod]
 #endif
-        private static void AutoInit()
+        [RuntimeInitializeOnLoadMethod]
+        internal static void AutoInit()
         {
             Initialize();
         }
