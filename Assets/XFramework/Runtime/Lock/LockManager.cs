@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
+using XFramework.XMessage;
 
 namespace XFramework.XLock
 {
@@ -78,6 +80,103 @@ namespace XFramework.XLock
         private static Dictionary<ILockable, Action<int>> _onUnlockedSubjects
             = new Dictionary<ILockable, Action<int>>();
 
+        /// <summary>subject → 销毁令牌注册（每主体一次；主体空闲或门面重置时注销）。</summary>
+        private static Dictionary<ILockable, CancellationTokenRegistration> _destroyBindings
+            = new Dictionary<ILockable, CancellationTokenRegistration>();
+
+        #endregion
+
+        #region Destroy Binding
+
+        /// <summary>
+        /// 主体销毁时是否自动释放它的锁与订阅（默认 <c>true</c>）。
+        /// <para>绑定的是**主体的**销毁令牌：<see cref="MonoBehaviour"/>（用其 <c>destroyCancellationToken</c>）
+        /// 或实现了 <see cref="IDestroyCancellationToken"/> 的普通对象。两者皆非时不绑定、也不告警——
+        /// 那种主体由调用方用 <see cref="RemoveAllLocks"/>/<see cref="RemoveAllSubscriptions"/> 显式收口。</para>
+        /// <para>绑定的时机是「主体首次进入任一容器」；关掉它只是不再新建绑定（已存在的不解除）。</para>
+        /// <para><see cref="Dispose"/> 会把它复位为 <c>true</c>。</para>
+        /// </summary>
+        public static bool AutoReleaseOnDestroy { get; set; } = true;
+
+        /// <summary>主体若提供销毁令牌，确保已登记「销毁时清理」。每主体只登记一次。</summary>
+        private static void EnsureDestroyBinding(ILockable subjectKey)
+        {
+            if (!AutoReleaseOnDestroy || _destroyBindings.ContainsKey(subjectKey))
+                return;
+
+            if (!TryGetDestroyToken(subjectKey, out var token) ||
+                !token.CanBeCanceled || token.IsCancellationRequested)
+                return;
+
+            // 静态 lambda + state 参数：不产生闭包分配；subjectKey 是接口引用，作为 state 传入不装箱
+            _destroyBindings[subjectKey] = token.Register(static state => ReleaseSubject((ILockable)state), subjectKey);
+        }
+
+        /// <summary>取主体的销毁令牌：<see cref="MonoBehaviour"/> 与 <see cref="IDestroyCancellationToken"/> 两条路径。</summary>
+        private static bool TryGetDestroyToken(ILockable subject, out CancellationToken token)
+        {
+            if (subject is MonoBehaviour mono)
+            {
+                // 只在此刻读一次——调用点都在主体必然存活的路径上（首次入容器 / 入口短路检查）
+                token = mono.destroyCancellationToken;
+                return true;
+            }
+
+            if (subject is IDestroyCancellationToken destroyable)
+            {
+                token = destroyable.DestroyCancellationToken;
+                return true;
+            }
+
+            token = default;
+            return false;
+        }
+
+        /// <summary>
+        /// 主体是否已销毁（销毁令牌已取消）。用于入口短路：不短路的话，锁会先加上、再被「注册即触发」的
+        /// 回调清掉——中间那一对「加了又解」的幻影事件，订阅者无从与真实事件区分。
+        /// </summary>
+        private static bool IsSubjectDestroyed(ILockable subjectKey)
+        {
+            if (!AutoReleaseOnDestroy)
+                return false;
+
+            return TryGetDestroyToken(subjectKey, out var token) && token.IsCancellationRequested;
+        }
+
+        /// <summary>
+        /// 主体销毁时的清理：先丢订阅、再放锁，最后摘掉绑定表项。
+        /// <para>顺序有意如此：濒死对象自己的回调不该在销毁过程中再跑一遍用户代码，而**别人**的订阅者
+        /// （含两个总线事件）照常收到解锁——批量清理与逐把手动释放走同一条通知语义。</para>
+        /// <para>此处不 <c>Dispose</c> registration：令牌正在触发中（回调方持有它），这时 Dispose 会等
+        /// 自己。令牌已取消，registration 本就作废，摘掉表项即可。</para>
+        /// </summary>
+        private static void ReleaseSubject(ILockable subject)
+        {
+            _destroyBindings.Remove(subject);
+            RemoveAllSubscriptions(subject);
+            RemoveAllLocks(subject);
+        }
+
+        /// <summary>主体已空闲（无锁、无订阅）时注销它的销毁绑定，免得回调节点挂在长寿命令牌上。</summary>
+        /// <remarks>
+        /// 做成 <c>internal</c> 而非 <c>private</c>：同文件的顶层辅助类 <see cref="ActionDisposable"/> 在
+        /// 退订清掉最后一个订阅后要能叫它（同 <c>MessageManager.TryBindToDestroy</c> 的「程序集内共享」取舍）。
+        /// </remarks>
+        internal static void TryUnbindDestroyBinding(ILockable subjectKey)
+        {
+            if (!_destroyBindings.TryGetValue(subjectKey, out var registration))
+                return;
+
+            if (_locks.ContainsKey(subjectKey) ||
+                _onLockedSubjects.ContainsKey(subjectKey) ||
+                _onUnlockedSubjects.ContainsKey(subjectKey))
+                return;
+
+            _destroyBindings.Remove(subjectKey);
+            registration.Dispose();
+        }
+
         #endregion
 
         #region Subject Event Subscription
@@ -101,11 +200,20 @@ namespace XFramework.XLock
 
             ILockable subjectKey = subject ?? Global;
 
+            if (IsSubjectDestroyed(subjectKey))
+            {
+                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
+                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                return EmptyDisposable.Instance;
+            }
+
             if (!_onLockedSubjects.ContainsKey(subjectKey))
             {
                 _onLockedSubjects[subjectKey] = null;
             }
             _onLockedSubjects[subjectKey] += handler;
+
+            EnsureDestroyBinding(subjectKey);
 
             return ActionDisposable.Rent(subjectKey, handler, _onLockedSubjects);
         }
@@ -125,11 +233,20 @@ namespace XFramework.XLock
 
             ILockable subjectKey = subject ?? Global;
 
+            if (IsSubjectDestroyed(subjectKey))
+            {
+                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
+                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                return EmptyDisposable.Instance;
+            }
+
             if (!_onUnlockedSubjects.ContainsKey(subjectKey))
             {
                 _onUnlockedSubjects[subjectKey] = null;
             }
             _onUnlockedSubjects[subjectKey] += handler;
+
+            EnsureDestroyBinding(subjectKey);
 
             return ActionDisposable.Rent(subjectKey, handler, _onUnlockedSubjects);
         }
@@ -376,6 +493,9 @@ namespace XFramework.XLock
         /// 请求一个针对特定 <see cref="ILockable"/> 的锁。
         /// <para>返回 <see cref="LockHandle"/>，可通过 <c>using</c> 自动释放。</para>
         /// <para>全局锁请使用 <see cref="Global"/> 作为 lockSubject。</para>
+        /// <para><b>唯一的失败形态</b>：主体已销毁（<see cref="AutoReleaseOnDestroy"/> 生效且其销毁令牌
+        /// 已取消）时本调用被忽略——返回的句柄不持有锁（<see cref="LockHandle.IsHeld"/> 为 <c>false</c>）
+        /// 并记一条 <c>[Lock]</c> 告警。除此之外加锁不会失败（同一主体同类型是持有者集合，可叠加）。</para>
         /// </summary>
         public static LockHandle AddLock(ILockable lockSubject, int lockType, object lockObj)
         {
@@ -383,6 +503,13 @@ namespace XFramework.XLock
                 throw new ArgumentNullException(nameof(lockObj), "lock cannot be null.");
 
             ILockable subjectKey = lockSubject ?? Global;
+
+            if (IsSubjectDestroyed(subjectKey))
+            {
+                Debug.LogWarning($"[Lock] AddLock ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
+                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                return default;
+            }
 
             if (!_locks.TryGetValue(subjectKey, out var typeDict))
             {
@@ -404,6 +531,8 @@ namespace XFramework.XLock
                 DispatchSafely(OnGlobalLocked, subjectKey, lockType, lockObj, nameof(OnGlobalLocked));
                 NotifyOnLocked(lockSubject, lockType, lockObj);
             }
+
+            EnsureDestroyBinding(subjectKey);
 
             return new LockHandle(lockSubject, lockType, lockObj);
         }
@@ -448,6 +577,7 @@ namespace XFramework.XLock
                 if (typeDict.Count == 0)
                 {
                     _locks.Remove(subjectKey);
+                    TryUnbindDestroyBinding(subjectKey);
                 }
             }
         }
@@ -457,6 +587,55 @@ namespace XFramework.XLock
         /// </summary>
         public static void RemoveLock(int lockType, object lockObj)
             => RemoveLock(Global, lockType, lockObj);
+
+        /// <summary>
+        /// 释放该主体的**全部**锁（所有类型），返回释放的锁数量。
+        /// <para>与逐把 <see cref="RemoveLock"/> 的差别只在载荷：整批摘除后每类型只派发一次解锁边沿，
+        /// 事件里的 <c>lockObj</c> 为 <c>null</c>（一次清掉多把，没有单一的代表对象）。</para>
+        /// <para><b>先整块摘下再派发</b>：摘除阶段不跑用户代码；派发遍历的是已摘下的副本，故回调里再加锁
+        /// 不会打坏本轮清理（那些落进新的条目，与本轮无关）。</para>
+        /// <para>主体传 <see cref="Global"/> 时清空全局锁——合法用法。</para>
+        /// </summary>
+        public static int RemoveAllLocks(ILockable subject)
+        {
+            ILockable subjectKey = subject ?? Global;
+
+            if (!_locks.TryGetValue(subjectKey, out var typeDict))
+                return 0;
+
+            _locks.Remove(subjectKey);
+
+            int removed = 0;
+            foreach (var kvp in typeDict)
+            {
+                if (kvp.Value.Count == 0)
+                    continue;
+
+                removed += kvp.Value.Count;
+
+                DispatchSafely(OnGlobalUnlocked, subjectKey, kvp.Key, null, nameof(OnGlobalUnlocked));
+                DispatchSubscribers(_onUnlockedSubjects, subjectKey, kvp.Key, nameof(OnUnlocked));
+            }
+
+            TryUnbindDestroyBinding(subjectKey);
+            return removed;
+        }
+
+        /// <summary>
+        /// 丢弃该主体的全部订阅（加锁/解锁/聚合状态三张表都覆盖）。
+        /// <para>不返回数量：多播委托的条数要物化调用列表（一次分配），而调用方关心的是「不再有回调」。</para>
+        /// <para>调用方手上的旧句柄随后 <c>Dispose</c> 是安全的——表里已无该键，退订退化为空操作。</para>
+        /// <para>不影响该主体的锁：锁与订阅分开清理，正是为了让「只清订阅」这件事可表达。</para>
+        /// </summary>
+        public static void RemoveAllSubscriptions(ILockable subject)
+        {
+            ILockable subjectKey = subject ?? Global;
+
+            _onLockedSubjects.Remove(subjectKey);
+            _onUnlockedSubjects.Remove(subjectKey);
+
+            TryUnbindDestroyBinding(subjectKey);
+        }
 
         #endregion
 
@@ -571,15 +750,22 @@ namespace XFramework.XLock
         /// <summary>
         /// 重置所有锁状态，清空锁数据和事件订阅。
         /// <para>多次调用是安全的，每次都会重新分配内部集合，彻底切断旧引用。</para>
+        /// <para>销毁绑定一并注销（否则上一轮的令牌回调会在下一轮改容器——跟踪器那类「自己成为泄漏源」
+        /// 的同型问题），<see cref="AutoReleaseOnDestroy"/> 复位为 <c>true</c>。</para>
         /// <para>主要用于单元测试隔离，生产环境中通常不需要调用此方法。</para>
         /// </summary>
         public static void Dispose()
         {
+            foreach (var registration in _destroyBindings.Values)
+                registration.Dispose();
+
+            _destroyBindings = new Dictionary<ILockable, CancellationTokenRegistration>();
             _locks = new Dictionary<ILockable, Dictionary<int, HashSet<object>>>();
             _onLockedSubjects = new Dictionary<ILockable, Action<int>>();
             _onUnlockedSubjects = new Dictionary<ILockable, Action<int>>();
             OnGlobalLocked = null;
             OnGlobalUnlocked = null;
+            AutoReleaseOnDestroy = true;
         }
 
         #endregion
@@ -625,11 +811,17 @@ namespace XFramework.XLock
         {
             if (_targetDict == null) return;
 
-            // 执行取消订阅逻辑（原本由 lambda 完成）
-            _targetDict[_subject] -= _handler;
-            if (_targetDict[_subject] == null)
+            // 键可能已被批量清理或主体销毁摘掉——不能用索引器（键缺失会抛 KeyNotFoundException），
+            // 而调用方手里这个句柄是合法的，退订退化成空操作才对
+            if (_targetDict.TryGetValue(_subject, out var current))
             {
-                _targetDict.Remove(_subject);
+                var next = current - _handler;
+                if (next == null)
+                    _targetDict.Remove(_subject);
+                else
+                    _targetDict[_subject] = next;
+
+                LockManager.TryUnbindDestroyBinding(_subject);
             }
 
             // 清空引用，归还至池中
@@ -637,6 +829,26 @@ namespace XFramework.XLock
             _handler = null;
             _targetDict = null;
             _pool.Push(this);
+        }
+    }
+
+    /// <summary>
+    /// 空句柄：订阅被短路（主体已销毁）时返回的共享实例。
+    /// <para><b>不得池化</b>：共享实例一旦被归还进池再发放，后来的持有者会以为自己拿到了可用的句柄
+    /// （同 <c>XMessage.Internal.ActionDisposable.Empty</c> 的三条不变量；那份在别的模块的 Internal 里，
+    /// 按仓内「不为十行适配器建立跨模块实现依赖」的既定取舍，本模块自持一份）。</para>
+    /// </summary>
+    internal sealed class EmptyDisposable : IDisposable
+    {
+        /// <summary>共享实例：释放动作是空操作，且 <see cref="Dispose"/> 幂等。</summary>
+        internal static readonly IDisposable Instance = new EmptyDisposable();
+
+        private EmptyDisposable()
+        {
+        }
+
+        public void Dispose()
+        {
         }
     }
 

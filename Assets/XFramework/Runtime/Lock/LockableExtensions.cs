@@ -29,6 +29,18 @@ namespace XFramework.XLock
         public static void RemoveLock(this ILockable self, int lockType, object lockObj)
             => LockManager.RemoveLock(self, lockType, lockObj);
 
+        /// <summary>
+        /// 释放 <c>this</c> 的**全部**锁（所有类型），返回释放的锁数量。
+        /// </summary>
+        public static int RemoveAllLocks(this ILockable self)
+            => LockManager.RemoveAllLocks(self);
+
+        /// <summary>
+        /// 丢弃 <c>this</c> 的全部订阅（保留它的锁）。
+        /// </summary>
+        public static void RemoveAllSubscriptions(this ILockable self)
+            => LockManager.RemoveAllSubscriptions(self);
+
         #endregion
 
         #region Query

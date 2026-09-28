@@ -68,6 +68,7 @@ public async UniTask CastSkill()
     // 加锁（技能持续期间锁定移动）
     // 注意：加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
     // 因此不需要判断「是否获取成功」——没有获取失败的句柄
+    // 唯一的例外是主体已销毁：那时句柄不持有锁（IsHeld 为 false），见「生命周期与清理」
     using var handle = LockManager.AddLock(player, LockType.Movement, "skill_casting");
 
     // 播放技能动画...
@@ -203,6 +204,38 @@ LockManager.IsLocked(enemy, LockType.Movement);    // → true
 LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
 ```
 
+## 生命周期与清理
+
+锁与订阅都挂在 `LockManager` 的静态表上，键是**主体本身**。主体在持有锁/订阅的状态下死亡（实体销毁、
+切场景、回池），若没人释放，那一项会永久留存——主体自己再也解不开，而且因为表里是**强引用键**，
+该对象也无法被 GC 回收。两条收口路径：
+
+**① 自动（推荐）**：主体是 `MonoBehaviour`（用 `destroyCancellationToken`），或实现了
+`XMessage.IDestroyCancellationToken` 的普通对象时，销毁会自动释放它的全部锁并丢弃它的全部订阅：
+
+```csharp
+public sealed class Player : MonoBehaviour, ILockable { }
+
+LockManager.AddLock(player, LockType.Movement, SkillToken);   // 挂上后，player 销毁时自动释放
+LockManager.AutoReleaseOnDestroy = false;                     // 或整项目关掉这套（默认 true）
+```
+
+销毁时的顺序是**先丢订阅、再放锁**：濒死对象自己的回调不会再跑一遍用户代码，而**别人**的订阅者
+（含两个总线事件）照常收到解锁——批量清理与逐把手动释放走同一条通知语义。
+
+**② 显式**：既非 `MonoBehaviour` 也非 `IDestroyCancellationToken` 的主体不会被自动释放（不告警，
+由调用方负责），或在需要提前收口时手动调用：
+
+```csharp
+int released = player.RemoveAllLocks();        // 释放该主体的全部锁，返回释放数量
+player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
+```
+
+> **加锁的唯一失败形态**：主体已销毁（令牌已取消）时 `AddLock` 会被忽略——返回的句柄
+> `IsHeld` 为 `false` 并记一条 `[Lock]` 告警。之所以不「先加上再让回调清掉」，是因为那样会派发
+> 一对「加了又解」的幻影事件，订阅者无从与真实事件区分。关掉 `AutoReleaseOnDestroy` 即恢复
+> 「一律加上」的行为。
+
 ## 设计原则
 
 - **组合式锁** — 多类型锁独立管理，互不干扰
@@ -210,7 +243,10 @@ LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
 - **LockHandle 安全释放** — 通过 `readonly struct` + `IDisposable` 实现零 GC 的 `using` 安全释放
 - **全局锁** — 支持跨主体的全局锁，适合服务器暂停、全屏 Loading 等场景
 - **事件驱动** — 锁状态变化可被订阅，解耦业务逻辑
+- **生命周期收口** — 主体销毁时自动释放（`AutoReleaseOnDestroy`），或经 `RemoveAllLocks` 显式收口
 
 ## 依赖
 
-- 无框架内模块依赖（`ILockable` 标记接口定义于本模块）
+- `XMessage.IDestroyCancellationToken`（公开接口，用于「非 MonoBehaviour 主体」的销毁绑定）
+- `MessageManager.TryBindToDestroy` 未复用：它绑的是**订阅者**的令牌而本模块要绑**主体**的，且它丢弃
+  `CancellationTokenRegistration`——逐次注册会在长寿命主体的令牌上堆积永不回收的回调节点
