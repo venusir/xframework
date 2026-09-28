@@ -109,61 +109,110 @@ namespace XFramework.XLock
         }
 
         /// <summary>
-        /// 通知指定 subject 的锁定事件订阅者。
-        /// <para>如果是全局锁，通知所有非 Global 的订阅者。</para>
+        /// 通知指定 subject 的锁定事件订阅者。派发语义见 <see cref="DispatchSubscribers"/>。
         /// </summary>
         private static void NotifyOnLocked(ILockable lockSubject, int lockType, object lockObj)
-        {
-            ILockable subjectKey = lockSubject ?? Global;
+            => DispatchSubscribers(_onLockedSubjects, lockSubject ?? Global, lockType, nameof(OnLocked));
 
+        /// <summary>
+        /// 通知指定 subject 的解锁事件订阅者。派发语义见 <see cref="DispatchSubscribers"/>。
+        /// </summary>
+        private static void NotifyOnUnlocked(ILockable lockSubject, int lockType, object lockObj)
+            => DispatchSubscribers(_onUnlockedSubjects, lockSubject ?? Global, lockType, nameof(OnUnlocked));
+
+        /// <summary>
+        /// 通知某个订阅表里的订阅者：全局锁通知所有订阅者（跳过以 <see cref="Global"/> 为键的条目），
+        /// 普通锁只通知该 subject 的订阅者。
+        /// <para><b>派发基于快照</b>：全局分支先把订阅者取进快照再遍历，故回调里的增删订阅打不崩本轮
+        /// 派发——从下一轮起生效（主体分支取到的是多播委托的本地副本，本来就是同一语义）。</para>
+        /// <para><b>异常隔离</b>：全局分支逐订阅者隔离，排在抛异常者之后的订阅者仍会收到通知；
+        /// 主体分支是整条多播一次隔离（见 <see cref="DispatchSafely(Action{int}, int, string, ILockable)"/>）。</para>
+        /// </summary>
+        private static void DispatchSubscribers(Dictionary<ILockable, Action<int>> table, ILockable subjectKey,
+            int lockType, string eventName)
+        {
             if (subjectKey == Global)
             {
-                // 全局锁：通知所有订阅者
-                foreach (var kvp in _onLockedSubjects)
+                var snapshot = LockSnapshotPool.Rent();
+                try
                 {
-                    if (kvp.Key != Global)
+                    // 快照阶段没有任何用户代码进入，此处枚举是安全的
+                    foreach (var kvp in table)
                     {
-                        kvp.Value?.Invoke(lockType);
+                        if (kvp.Key == Global || kvp.Value == null)
+                            continue;
+
+                        snapshot.Add(kvp);
                     }
+
+                    for (int i = 0; i < snapshot.Count; i++)
+                        DispatchSafely(snapshot[i].Value, lockType, eventName, snapshot[i].Key);
+                }
+                finally
+                {
+                    LockSnapshotPool.Return(snapshot);
                 }
             }
-            else
+            else if (table.TryGetValue(subjectKey, out var handler))
             {
-                // 普通锁：只通知该 subject 的订阅者
-                if (_onLockedSubjects.TryGetValue(subjectKey, out var handler))
-                {
-                    handler?.Invoke(lockType);
-                }
+                DispatchSafely(handler, lockType, eventName, subjectKey);
             }
         }
 
         /// <summary>
-        /// 通知指定 subject 的解锁事件订阅者。
-        /// <para>如果是全局锁，通知所有非 Global 的订阅者。</para>
+        /// 派发一个订阅者，并隔离其异常——订阅者的 bug 不得冒到加锁/解锁路径上。
+        /// <para><b>为什么必须隔离</b>：<see cref="AddLock"/> 先入表再派发，异常若逃出去，调用方就拿不到
+        /// 那个句柄，而锁已经留在表里——成了没人能释放的永久锁（实测 <see cref="GetLockCount"/> 残留 1）。</para>
+        /// <para><b>粒度</b>：本重载包的是**一整条多播委托**，故抛异常者会饿死同一条多播里排在它后面的
+        /// 订阅者（下一次派发照常，且日志已记下）。不用 <c>GetInvocationList</c> 逐个隔离——那要给每次
+        /// 派发分配一个委托数组，与 Pipeline 的同名方法取舍一致。</para>
         /// </summary>
-        private static void NotifyOnUnlocked(ILockable lockSubject, int lockType, object lockObj)
+        private static void DispatchSafely(Action<int> handler, int lockType, string eventName, ILockable subject)
         {
-            ILockable subjectKey = lockSubject ?? Global;
+            if (handler == null)
+                return;
 
-            if (subjectKey == Global)
+            try
             {
-                // 全局锁：通知所有订阅者
-                foreach (var kvp in _onUnlockedSubjects)
-                {
-                    if (kvp.Key != Global)
-                    {
-                        kvp.Value?.Invoke(lockType);
-                    }
-                }
+                handler.Invoke(lockType);
             }
-            else
+            catch (Exception e)
             {
-                // 普通锁：只通知该 subject 的订阅者
-                if (_onUnlockedSubjects.TryGetValue(subjectKey, out var handler))
-                {
-                    handler?.Invoke(lockType);
-                }
+                Debug.LogError($"[Lock] {eventName} subscriber threw (subject: {NameOf(subject)}): {e}");
             }
+        }
+
+        /// <summary>两个公开事件的重载：载荷不同，隔离语义同上游版本。</summary>
+        private static void DispatchSafely(Action<ILockable, int, object> handler, ILockable subject, int lockType,
+            object lockObj, string eventName)
+        {
+            if (handler == null)
+                return;
+
+            try
+            {
+                handler.Invoke(subject, lockType, lockObj);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Lock] {eventName} subscriber threw (subject: {NameOf(subject)}): {e}");
+            }
+        }
+
+        /// <summary>
+        /// 诊断用的主体名。
+        /// <para><b>不用 <c>ToString()</c></b>：那是用户代码，可能在 catch 里二次抛；<c>GetType().Name</c>
+        /// 是纯托管调用。全局哨兵要特判，否则日志里出现的是私有嵌套类型名。</para>
+        /// </summary>
+        private static string NameOf(ILockable subject)
+        {
+            if (subject == null)
+                return "null";
+
+            if (ReferenceEquals(subject, Global))
+                return nameof(Global);
+
+            return subject.GetType().Name;
         }
 
         #endregion
@@ -199,7 +248,7 @@ namespace XFramework.XLock
 
             if (wasEmpty && lockSet.Count == 1)
             {
-                OnGlobalLocked?.Invoke(lockSubject, lockType, lockObj);
+                DispatchSafely(OnGlobalLocked, lockSubject, lockType, lockObj, nameof(OnGlobalLocked));
                 NotifyOnLocked(lockSubject, lockType, lockObj);
             }
 
@@ -239,7 +288,7 @@ namespace XFramework.XLock
 
             if (wasNonEmpty && lockSet.Count == 0)
             {
-                OnGlobalUnlocked?.Invoke(lockSubject, lockType, lockObj);
+                DispatchSafely(OnGlobalUnlocked, lockSubject, lockType, lockObj, nameof(OnGlobalUnlocked));
                 NotifyOnUnlocked(lockSubject, lockType, lockObj);
 
                 typeDict.Remove(lockType);
@@ -435,6 +484,40 @@ namespace XFramework.XLock
             _handler = null;
             _targetDict = null;
             _pool.Push(this);
+        }
+    }
+
+    /// <summary>
+    /// 派发快照的取用点（模块内自持，不引其它模块的池）。
+    /// <para><b>为什么必须是池而不是复用单一字段</b>：订阅者在回调里再加一把全局锁会**重入**派发，
+    /// 单一字段会被内层清空，外层正在遍历的缓冲随之报废。池在任意嵌套深度都正确。</para>
+    /// <para>元素是 <c>KeyValuePair</c> 结构体，装进 <c>List</c> 不装箱；归还前按容量决定是否留用——
+    /// 订阅者极多时的一次超大派发不该把那份数组永久驻留在静态根上。</para>
+    /// </summary>
+    internal static class LockSnapshotPool
+    {
+        /// <summary>留用上限：超过此容量的快照在归还时直接丢弃。</summary>
+        private const int MaxRetainedCapacity = 256;
+
+        private static readonly Stack<List<KeyValuePair<ILockable, Action<int>>>> _pool =
+            new Stack<List<KeyValuePair<ILockable, Action<int>>>>(4);
+
+        /// <summary>取一个空快照（内部可能带已归还的容量）。</summary>
+        internal static List<KeyValuePair<ILockable, Action<int>>> Rent()
+            => _pool.Count > 0 ? _pool.Pop() : new List<KeyValuePair<ILockable, Action<int>>>(8);
+
+        /// <summary>归还快照：清空内容，容量过大则丢弃（见 <see cref="MaxRetainedCapacity"/>）。</summary>
+        internal static void Return(List<KeyValuePair<ILockable, Action<int>>> snapshot)
+        {
+            if (snapshot == null)
+                return;
+
+            snapshot.Clear();
+
+            if (snapshot.Capacity > MaxRetainedCapacity)
+                return;
+
+            _pool.Push(snapshot);
         }
     }
 }
