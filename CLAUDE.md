@@ -23,7 +23,7 @@
 
 - **静态服务(无状态):** 以「静态门面 + 接口 + 内部实现」提供。对外只暴露静态门面类和 `IXxxManager`/`IXxxProvider` 接口;实现类 `XxxManagerImpl`/`XxxProvider` 默认 `internal sealed`(仅当需要跨命名空间注入或模式匹配时才 public,如 SaveManagerImpl、DataManagerImpl)
   - 门面模板:`private static IXxxManager _impl` + `Initialize`(注入实现,便于测试)+ `Shutdown/Destroy` + `EnsureInitialized()`(未初始化抛 `InvalidOperationException`,消息带 `[模块]` 前缀和修复提示)
-  - 注入形式按需差异化,不必齐备:`Initialize(实例)`(如 Data)、工厂 delegate(如 SaveManagerFactory)、无参 `Initialize` + `SetInstance`(如 Config/Asset/Localization)均符合模板
+  - 注入形式按需差异化,不必齐备:`Initialize(实例)`(如 Data)、工厂 delegate(如 SaveManagerFactory)、无参 `Initialize` + `SetInstance`(如 Config/Input)均符合模板;`Initialize` 也可以带参数(如 Localization 的 `Initialize(defaultLanguage, data)`、Save 的全可选参 `Initialize(factory, options)`)
   - 懒加载豁免:FileManager.EnsureInitialized 在未初始化时自动 Initialize(零配置有意设计),不抛异常;其余门面的 EnsureInitialized 仍按模板抛 InvalidOperationException
   - 宽容语义豁免:InputManager 未初始化时全部查询空引用安全返回默认值(有意设计,对 UI 提示友好,测试锁定),不提供 EnsureInitialized 抛异常
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)的自初始化:**两个特性都要挂**——`#if UNITY_EDITOR [UnityEditor.InitializeOnLoadMethod] #endif` **加**无条件的 `[RuntimeInitializeOnLoadMethod]`。只挂编辑器分支时,**关闭域重载**(Enter Play Mode Options → 取消 Reload Domain)后进入播放不会重新加载程序集,该回调不再执行(Editor 分支的 `#if/#else` 写法即是此坑,已全面清除)。load type **按需要选,不为统一而统一**:要早于首个场景 Awake 用 `BeforeSceneLoad`(如 File 的域根预热——它的价值就在「早于首次使用」),要注入 PlayerLoop 用 `AfterAssembliesLoaded`,只做订阅/注册的用默认档即可。订阅 `Application.quitting` 必须**幂等**(`-=` 后 `+=`):关闭域重载时该订阅跨播放会话存活,重复 `+=` 会逐次累积。族级守卫见 `Tests/Runtime/Architecture/AutoInitTests`(新成员**必须去那里登记**,未登记即红)

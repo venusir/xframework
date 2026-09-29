@@ -144,12 +144,13 @@ Bootstrap.Shutdown()                # 按登记顺序的逆序清理，退出时
 
 ### 本地化操作
 
-| 操作     | 代码                                                  |
-| -------- | ----------------------------------------------------- |
-| 获取文本 | `LocalizationManager.GetText(key)`                    |
-| 切换语言 | `await LocalizationManager.SetLanguageAsync("en-US")` |
-| 当前语言 | `LocalizationManager.CurrentLanguage`                 |
-| 检查 Key | `LocalizationManager.HasKey(key)`                     |
+| 操作     | 代码                                                     |
+| -------- | -------------------------------------------------------- |
+| 获取文本 | `LocalizationManager.Get(key)`                           |
+| 格式化   | `LocalizationManager.GetFormat(key, arg0)`               |
+| 切换语言 | `await LocalizationManager.SwitchLanguageAsync("en-US")` |
+| 当前语言 | `LocalizationManager.CurrentLanguage`                    |
+| 检查 Key | `LocalizationManager.ContainsKey(key)`                   |
 
 ### 文件操作
 

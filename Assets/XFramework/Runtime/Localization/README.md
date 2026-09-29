@@ -16,6 +16,7 @@ Runtime/Localization/
 ├── LocalizationManager.cs         # 静态外观（全局入口）
 ├── LocalizationManagerImpl.cs     # 默认实现（LRU 缓存）
 ├── LocalizationBootstrapStage.cs  # 引导阶段（IBootstrapStage，Phase 90）
+├── LanguageChangedMessage.cs      # 语言切换消息（readonly struct，无装箱）
 └── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
 ```
 
@@ -26,6 +27,8 @@ Runtime/Localization/
 - 每次 `SetLanguageData` 或 `SetLanguage` 都会将目标语言标记为"最近使用"
 - 调用 `SwitchLanguageAsync` 加载新语言时，如果缓存已满 4 种，淘汰最早加载的非当前/非回退语言
 - 缓存命中时语言切换为同步（零 GC），未命中时通过 YooAsset 异步加载 JSON
+
+**「4 种」里真正可淘汰的只有 2 个**：当前语言与回退语言各占一个钉住位（默认初始化时两者是同一个值，那就只占 1 个）。所以「4」不是「能同时留住 4 种语言」，而是「2 个钉住位 + 2 个 LRU 位」。用 8 种语言来回切的场景会在 LRU 位上颠簸——每次切回被淘汰的语言都要重新走一遍资源加载与解析。
 
 ## 快速使用
 
@@ -235,11 +238,19 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 }
 ```
 
-文件放置路径需匹配 `LanguageAssetPath`（默认为 `Resources` 目录下的 `localization/lang_ja.json` 等）。
+文件放置路径需匹配 `LanguageAssetPath`——那是 **YooAsset 地址模板**（默认 `"localization/lang_{0}"`，拼出
+`"localization/lang_ja"`），不是 `Resources` 路径：加载走的是 `AssetManager.LoadAsync<TextAsset>`，
+所以文件要按 YooAsset 的可寻址规则（收集器 / 分组）配进去，光放进 `Resources` 目录不会生效。
 
 ### JSON 解析策略
 
 模块内使用自定义的轻量 JSON 解析器（`LanguageAssetLoader.ParseJson`），仅支持 `"string": "string"` 的简单格式，无需引入 Newtonsoft.Json 或其他第三方库。如果 JSON 含嵌套结构或数组，需替换为完整 JSON 库。
+
+解析器的两条边界要知道，它们都**从静默改为硬失败**（2026-09-29 审计修）：
+
+- **转义序列会解码**：`\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对）。这条不是可选项——`System.Text.Json` 默认就把非 ASCII 转义成 `\uXXXX`，Python 的 `json.dumps` 默认 `ensure_ascii=True`，不解码就是整张表把 `中文` 原样显示给玩家。
+- **格式错误抛 `InvalidOperationException`（带字符位置）**，不再返回「已经读到的半张表」。旧实现在格式错误处直接跳出循环：`{"a":1}` 会产出非空字典 `{"a":""}`（一种「所有值都是空串」的语言，还绕过了「解析为空」的兜底），`{"a":"1","b"}` 会静默丢掉 `b`，`{"a":"1"} oops` 照常成功。
+  宽容的例外只有两个、且都不影响数据完整性：**尾随逗号**与 **UTF-8 BOM**。
 
 ## 引导集成
 
@@ -253,7 +264,9 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 构造参数即 `LocalizationManager.Initialize(lang, data)` 的两个实参；**未提供语言数据时**它打一条警告并直接置「已完成」——本地化是可选模块，缺数据不该让整个启动失败。
 
-反向清理经其 `Shutdown` 调 `LocalizationManager.Destroy()` 清理缓存。
+反向清理经其 `Shutdown`：**只销毁本阶段自己初始化的那份**。空转路径（无数据）什么都没建，`Shutdown` 便什么都不做；
+使用方先手动 `Initialize` / `SetInstance`、再登记本阶段时，`Initialize` 会告警并忽略，本阶段同样不算「初始化过」。
+重复调用是空操作（`IBootstrapStage` 要求幂等）。
 
 ### LanguageAssetLoader
 
@@ -277,6 +290,48 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 ## 依赖
 
 - `XFramework.XAsset` — 通过 `AssetManager` 加载语言 JSON 文件
+- `XFramework.XMessage` — `LanguageChangedMessage` 经 `MessageManager` 广播（发布的替代品是它，模块不暴露 C# event）
 - `XFramework.XBootstrap` — `IBootstrapStage` 引导阶段契约（LocalizationBootstrapStage，Phase 90）
 - `XFramework.XPipeline` — `IPhaseStage` 相位阶段契约与相位分组
 - `UniTask`（框架层已提供）
+
+## 已知限制
+
+知道边界比以为没有边界安全。以下都是刻意的取舍、跨模块的能力缺口或行为变更，**不是待修的缺陷**：
+
+- **语言切换必须在主线程调用。** `SetLanguage` 会经 `MessageManager.Publish` 广播 `LanguageChangedMessage`，而消息总线的发布入口有主线程契约（Editor 下越线程调用会记一条 `[Message]` 前缀的 Error）。本模块自身不做任何线程同步：`Get` 从任意线程读是安全的，**但改状态（`SetLanguage` / `SetLanguageData` / `SetPlaceholder`）不是**。这条此前在文档里一字未提。
+- **并发切换语言是「后完成者胜」，不是「后请求者胜」。** `SwitchLanguageAsync` 没有在途去重、没有代次作废：快速连点 EN → JA → KO 时，若 JA 的资源加载最慢，最终生效的是 JA。要严格按最后一次选择收口，调用方得自己串行化（前一次 `await` 完再发下一次，或取消上一次的令牌）。
+- **`SetLanguageData` 覆盖「当前语言」的数据时不会发通知。** 查询面立刻变了（`Get` 返回新文本），事件面没有变化（`LanguageChangedMessage` 只在 `SetLanguage` 真的换了语言时发）——已订阅刷新的 UI 会继续显示旧文本。运行时热更语言表要自己再触发一次刷新。
+- **注入的 `Dictionary` 按引用持有，不拷贝。** `Initialize` / `SetLanguageData` / `LocalizationBootstrapStage` 的构造参数都是如此——注入即视为移交所有权，事后改这个字典会直接改到已加载的语言表。
+- **`GetFormat` 会吞掉非法花括号。** 非复合格式项的花括号（未注册的 `{Name}`、游离的 `}`）按字面显示，不再抛 `FormatException`；依赖那个异常做表校验的用法会静默。合法的格式项照旧，索引越界（如表里写 `{1}` 而只传了 1 个实参）仍由 `string.Format` 报错。
+- **`Get` 在占位符路径上有分配。** 未注册任何占位符时走零分配快路径（原样返回缓存里的字符串实例）；一旦注册了占位符且文本含 `{`，每次 `Get` 会分配一个 `StringBuilder` 与结果串。
+- **`MaxCachedLanguages = 4` 是自定值**，无对标物（Unity Localization 不做 LRU，它靠 Addressables 的引用计数与 `Release`）。且「4」里真正可淘汰的只有 2 个，见「核心机制」一节。
+- **`LanguageAssetLoader` 是内部类型**，没有公开的加载扩展点：要换数据源（比如从远端拉表）只能替换整个 `ILocalizationManager` 实现，或改 `LanguageAssetPath` 让它指向别的资源。
+
+## 设计取舍
+
+- **自研 JSON 解析器，不引 Newtonsoft.Json / System.Text.Json。** 「零外部依赖」是模块自述的取舍，代价是只支持 `"string": "string"` 的扁平对象。**但代价不包括「不解码转义」**——转义不解码与格式错误的静默降级是缺陷，已修（见「JSON 解析策略」）。
+- **缺键返回键本身，不抛也不记日志。** 与 .NET `ResourceManager` 一致（缺资源返回资源名），也是行业默认。好处是缺表时 UI 显示的是可搜索的 key 而不是空白；代价是「表漏了一条」在运行期没有信号——要检测就用 `ContainsKey`，或在导出侧校验。
+- **不给 `ILocalizationManager` 加 `IsInitialized`。** 接口加成员对第三方实现是**源码破坏**（先例：`IPoolable` 不为新能力加成员），而门面的 `IsInitialized` 已经够用。代价是门面那个属性的语义是「**已经装了实例**」，不是「实例已装好数据」——`SetInstance` 传一个未初始化的实现进去，它照样返回 `true`（此时取值按「找不到」处理，返回键本身）。
+- **`SetInstance` 不 Dispose 被替换掉的旧实例。** 本 impl 的 `Dispose` 不做任何非托管释放（只清集合、置空引用），旧实例被替换后交给 GC 回收等价；硬做反而会给「临时换实现」的场景埋雷。
+- **不做并发切换的代次作废。** 要引入状态与一个作废窗口，而「后完成者胜」在多数使用方那里已被 UI 交互天然串行化。先记为已知限制（见「未决」）。
+- **占位符替换没走 `StringBuilderPool`。** 分配只发生在「注册了占位符且文本含 `{`」时，而典型热路径 `GetFormat` 本来就要走 `string.Format`（必然分配）；频度未实测，而全仓目前**零使用先例**，引它会新增 Localization → XPool 的跨模块依赖。先记为已知限制。
+- **判定线：宽容于「数据完整」的畸形，严格于「静默丢数据」的畸形。** 具体到 JSON 解析器：尾随逗号与 BOM 容忍；缺逗号不宽容（`{"a":"1" "b":"2"}` 在旧实现里被静默跳过、数据无损，但它是非法 JSON，会在 `jq` / 编辑器 / 转换工具那边炸——那正是最该暴露它的地方）。入参防御同理：**问句对空值答 `false`**（`HasLanguage` / `ContainsKey`），**动作对空值抛 `ArgumentNullException`**（`Get` / `GetFormat` / `SetLanguage`）。
+
+## 审计记录
+
+2026-09-29 按 `Documentation/ModuleAudit.md` 审计一轮（判据 A–F 全类扫过；本轮修了什么见 `CHANGELOG` 的 `[Unreleased]`）。本节只留**下一轮需要知道的**。
+
+**已评估未采纳**：
+- 占位符路径改走 `StringBuilderPool` —— 见「设计取舍」；先记已知限制，等有实测需求再动。
+- 给 `ILocalizationManager` 加 `IsInitialized` —— 对第三方实现是源码破坏。
+- `SetInstance` 时 Dispose 旧实例 —— 无非托管释放，GC 等价。
+- 换 JSON 库 —— 与「零外部依赖」的自述取舍冲突，改为修自研解析器。
+- `InputManager` 的 11 处同形手写订阅绑定 —— 与本次修的 `LocalizationManager.Subscribe` 同一缺陷类（闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册），但**不属本轮范围**，留给下一轮 Input 审计。
+- 本轮**未发现新的缺陷类**，`ModuleAudit.md` 第三节无需新增。
+
+**未决**：
+- 并发切换的「后完成者胜」是否要引入代次作废。
+- `SetLanguageData` 覆盖当前语言数据时是否该补一条事件面。
+- **MonoBehaviour 分支的订阅绑定没有直接用例**：实测 EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`，该分支只能在 PlayMode 覆盖，而本模块的测试全在 `Tests/Editor/Localization/`，本轮未新增 PlayMode fixture。该分支由 `MessageManager.TryBindToDestroy` 承担，全仓目前都没有直接用例。
+- **`IDestroyCancellationToken` 的实现范例有坑**（属 Message 模块，本轮只记录）：`Runtime/Message/IDestroyCancellationToken.cs` 的 XML 示例写的是 `public CancellationToken DestroyCancellationToken => _cts.Token;` 配 `Dispose()` 里 `_cts.Dispose()`——照抄会在对象销毁后抛 `ObjectDisposedException`，因为 `CancellationTokenSource.Token` 在源释放后不可读（实测撞上）。正解是构造时把令牌取出来缓存。
