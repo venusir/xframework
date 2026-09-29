@@ -47,11 +47,15 @@ namespace XFramework.XLocalization
 
         /// <summary>
         /// 判断指定语言是否已在缓存中。返回 <c>true</c> 时 <see cref="SetLanguage"/> 可安全调用。
+        /// <para>语言标识为 <c>null</c> 或空串时返回 <c>false</c>——问句对空值答「不能」正是这条承诺的
+        /// 如实回答（<see cref="SetLanguage"/> 对空值会抛）。</para>
         /// </summary>
         bool HasLanguage(string lang);
 
         /// <summary>
         /// 获取指定键的本地化文本。找不到时返回回退语言的值，回退也找不到时返回键本身。
+        /// <para>键为 <c>null</c> 或空串时抛 <see cref="ArgumentNullException"/>——动作对空值没有
+        /// 合理语义，早抛早发现。</para>
         /// </summary>
         string Get(string key);
 
@@ -64,11 +68,14 @@ namespace XFramework.XLocalization
         /// 而 <c>{0}</c> / <c>{0,-5}</c> / <c>{0:N2}</c> 与已转义的 <c>{{</c> / <c>}}</c> 照常工作。</para>
         /// <para>即：需要位置参数就写 <c>{0}</c>，不要把「本该由参数填的值」写成 <c>{Name}</c>——
         /// 后者只会原样显示，不会被参数替换。</para>
+        /// <para>键为 <c>null</c> 或空串时抛 <see cref="ArgumentNullException"/>。</para>
         /// </summary>
         string GetFormat(string key, params object[] args);
 
         /// <summary>
         /// 判断指定键在当前语言或回退语言中是否存在。
+        /// <para>键为 <c>null</c> 或空串时返回 <c>false</c>（问句对空值答「不能」，与
+        /// <see cref="HasLanguage"/> 一致）。</para>
         /// </summary>
         bool ContainsKey(string key);
 

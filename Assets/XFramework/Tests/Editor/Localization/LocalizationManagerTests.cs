@@ -177,5 +177,108 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        #region LRU 缓存
+
+        private static Dictionary<string, string> Table() =>
+            new Dictionary<string, string> { { "seed", "seed" } };
+
+        [Test]
+        public void Cache_EvictsOldestNonPinnedLanguageBeyondLimit()
+        {
+            // SetUp 已 Initialize("en")：en 同时是当前语言与回退语言（两个钉住位是同一个值）
+            LocalizationManager.SetLanguageData("ja", Table());
+            LocalizationManager.SetLanguageData("ko", Table());
+            LocalizationManager.SetLanguageData("fr", Table());
+            // 此刻缓存 = en, ja, ko, fr，正好在上限
+
+            LocalizationManager.SetLanguageData("de", Table()); // 第 5 个 → 淘汰最旧的 ja
+
+            Assert.IsFalse(LocalizationManager.HasLanguage("ja"), "最旧的非钉住语言应被淘汰");
+            Assert.IsTrue(LocalizationManager.HasLanguage("en"), "当前 / 回退语言永不被淘汰");
+            Assert.IsTrue(LocalizationManager.HasLanguage("ko"));
+            Assert.IsTrue(LocalizationManager.HasLanguage("fr"));
+            Assert.IsTrue(LocalizationManager.HasLanguage("de"));
+        }
+
+        [Test]
+        public void Cache_CurrentAndFallbackAreBothPinnedWhenDistinct()
+        {
+            LocalizationManager.SetLanguageData("ja", Table());
+            LocalizationManager.SetLanguage("ja");       // 当前 = ja
+            LocalizationManager.FallbackLanguage = "en"; // 回退 = en（与当前不同，占掉两个钉住位）
+
+            LocalizationManager.SetLanguageData("ko", Table());
+            LocalizationManager.SetLanguageData("fr", Table());
+            LocalizationManager.SetLanguageData("de", Table());
+
+            Assert.IsTrue(LocalizationManager.HasLanguage("ja"), "当前语言永不被淘汰");
+            Assert.IsTrue(LocalizationManager.HasLanguage("en"), "回退语言永不被淘汰");
+            Assert.IsFalse(LocalizationManager.HasLanguage("ko"), "两个钉住位之外只有 2 个 LRU 位，最旧的先走");
+        }
+
+        [Test]
+        public void Cache_ReInjectingSameLanguageRefreshesRecency()
+        {
+            // README：「每次 SetLanguageData 或 SetLanguage 都会将目标语言标记为最近使用」
+            LocalizationManager.SetLanguageData("ja", Table());
+            LocalizationManager.SetLanguageData("ko", Table());
+            LocalizationManager.SetLanguageData("ja", Table()); // 重新注入 → ja 变成最近使用
+
+            LocalizationManager.SetLanguageData("fr", Table());
+            LocalizationManager.SetLanguageData("de", Table()); // 第 5 个 → 淘汰最旧的非钉住项
+
+            Assert.IsTrue(LocalizationManager.HasLanguage("ja"), "重新注入应刷新它的最近使用位置");
+            Assert.IsFalse(LocalizationManager.HasLanguage("ko"), "被挤到最旧的是 ko，不是刚注入过的 ja");
+        }
+
+        #endregion
+
+        #region 生命周期与参数防御
+
+        [Test]
+        public void Dispose_ResetsLanguageState()
+        {
+            var impl = new LocalizationManagerImpl();
+            impl.InitWithDefault("en", Table());
+            impl.SetLanguageData("ja", Table());
+
+            impl.Dispose();
+
+            Assert.IsNull(impl.CurrentLanguage, "Dispose 应复位当前语言（与它已经清掉的 LanguageAssetPath 对称）");
+            Assert.IsNull(impl.FallbackLanguage);
+            Assert.IsNull(impl.LanguageAssetPath);
+            Assert.IsFalse(impl.HasLanguage("en"), "缓存应被清空");
+        }
+
+        [Test]
+        public void UninitializedImplementation_GetDegradesToKey()
+        {
+            // 门面的 IsInitialized 只看「有没有实例」，注入一个未初始化的实现后它仍为 true
+            LocalizationManager.SetInstance(new LocalizationManagerImpl());
+
+            Assert.AreEqual("any_key", LocalizationManager.Get("any_key"),
+                "不该抛裸 ArgumentNullException(key)——那是 Dictionary 在查 null 键，模块既没前缀也没修复提示");
+            Assert.IsFalse(LocalizationManager.ContainsKey("any_key"));
+        }
+
+        [Test]
+        public void Queries_AnswerFalseForEmptyKeyOrLanguage()
+        {
+            Assert.IsFalse(LocalizationManager.HasLanguage(null));
+            Assert.IsFalse(LocalizationManager.HasLanguage(string.Empty));
+            Assert.IsFalse(LocalizationManager.ContainsKey(null));
+            Assert.IsFalse(LocalizationManager.ContainsKey(string.Empty));
+        }
+
+        [Test]
+        public void Actions_ThrowArgumentNullExceptionForEmptyKey()
+        {
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.Get(null));
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.Get(string.Empty));
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.GetFormat(null));
+        }
+
+        #endregion
     }
 }

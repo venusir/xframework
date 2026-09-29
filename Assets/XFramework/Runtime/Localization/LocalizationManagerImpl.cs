@@ -47,20 +47,12 @@ namespace XFramework.XLocalization
 
         #region Properties
 
-        public bool IsInitialized { get; private set; }
-
         public string CurrentLanguage => _currentLanguage;
 
         public string FallbackLanguage
         {
             get => _fallbackLanguage;
-            set
-            {
-                if (_fallbackLanguage == value)
-                    return;
-
-                _fallbackLanguage = value;
-            }
+            set => _fallbackLanguage = value;
         }
 
         /// <summary>
@@ -91,8 +83,6 @@ namespace XFramework.XLocalization
                 _loadOrder.Add(lang);
                 EvictIfNeeded();
             }
-
-            IsInitialized = true;
         }
 
         public void SetLanguage(string lang)
@@ -117,30 +107,18 @@ namespace XFramework.XLocalization
         /// <returns><c>true</c> 表示该语言数据已在缓存中，调用 <see cref="SetLanguage"/> 不会抛异常。</returns>
         public bool HasLanguage(string lang)
         {
+            // 问句对空值答「不能」而不是抛：本方法的文档承诺是「返回 true 时 SetLanguage 可安全调用」，
+            // 而 SetLanguage(null) 会抛——答 false 正是对这条承诺的如实回答
+            if (string.IsNullOrEmpty(lang))
+                return false;
+
             return _cache.ContainsKey(lang);
         }
 
         public string Get(string key)
         {
-            string raw;
-
-            // 先从当前语言查找
-            if (_cache.TryGetValue(_currentLanguage, out var currentDict)
-                && currentDict.TryGetValue(key, out raw))
-            {
-                return ReplacePlaceholders(raw);
-            }
-
-            // 回退语言查找（仅当回退与当前不同）
-            if (_currentLanguage != _fallbackLanguage
-                && _cache.TryGetValue(_fallbackLanguage, out var fallbackDict)
-                && fallbackDict.TryGetValue(key, out raw))
-            {
-                return ReplacePlaceholders(raw);
-            }
-
-            // 找不到返回键本身，但也做占位符替换
-            return ReplacePlaceholders(key);
+            // 查找逻辑只有 GetRaw 一份，占位符替换是这条路径唯一的差别
+            return ReplacePlaceholders(GetRaw(key));
         }
 
         public string GetFormat(string key, params object[] args)
@@ -151,6 +129,9 @@ namespace XFramework.XLocalization
 
         public bool ContainsKey(string key)
         {
+            if (string.IsNullOrEmpty(key) || string.IsNullOrEmpty(_currentLanguage))
+                return false;
+
             if (_cache.TryGetValue(_currentLanguage, out var currentDict) && currentDict.ContainsKey(key))
                 return true;
 
@@ -182,6 +163,7 @@ namespace XFramework.XLocalization
         {
             while (_cache.Count > MaxCachedLanguages)
             {
+                var evicted = false;
                 for (int i = 0; i < _loadOrder.Count; i++)
                 {
                     var lang = _loadOrder[i];
@@ -189,9 +171,17 @@ namespace XFramework.XLocalization
                     {
                         _cache.Remove(lang);
                         _loadOrder.RemoveAt(i);
+                        evicted = true;
                         break;
                     }
                 }
+
+                // 找不到候选就退出，而不是继续空转。当前 + 回退至多两个不同值，Count > MaxCachedLanguages
+                // 时正常必有候选，所以这一支今天不可达——但「必有候选」依赖 _loadOrder ⊆ _cache 这条
+                // 只靠调用点自律的隐式不变式，一旦脱节，旧写法就是一个**主线程死循环**。
+                // 宁可暂时超限，也不要把数据问题升级成挂死。
+                if (!evicted)
+                    return;
             }
         }
 
@@ -214,9 +204,7 @@ namespace XFramework.XLocalization
             _fallbackLanguage = defaultLanguage;
 
             _cache[defaultLanguage] = data;
-            _loadOrder.Add(defaultLanguage);
-
-            IsInitialized = true;
+            TouchLanguage(defaultLanguage); // 已存在则移到尾部，不重复入列（_loadOrder 与 _cache 必须同步）
         }
 
         #endregion
@@ -264,6 +252,15 @@ namespace XFramework.XLocalization
         /// </summary>
         private string GetRaw(string key)
         {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+
+            // 没有当前语言 = 尚未初始化，或已被 Dispose 复位。此时缓存必然是空的，直接按「找不到」处理——
+            // 否则下面会去查 null 键，抛出的是不带模块前缀的裸 ArgumentNullException(key)
+            // （经 SetInstance 注入一个未初始化的实现即可触发）
+            if (string.IsNullOrEmpty(_currentLanguage))
+                return key;
+
             if (_cache.TryGetValue(_currentLanguage, out var currentDict)
                 && currentDict.TryGetValue(key, out var value))
                 return value;
@@ -458,13 +455,19 @@ namespace XFramework.XLocalization
 
         #region IDisposable
 
+        /// <summary>
+        /// 复位到「未初始化」。各字段要一起复位：<see cref="LanguageAssetPath"/> 与缓存都清了，
+        /// 却留着语言标识的话，持有本实例的调用方（<c>SetInstance</c> 复用、测试直连）会读到一个
+        /// 「已销毁但当前语言还在」的半状态。
+        /// </summary>
         public void Dispose()
         {
             _cache.Clear();
             _loadOrder.Clear();
             _placeholders?.Clear();
             _placeholders = null;
-            IsInitialized = false;
+            _currentLanguage = null;
+            _fallbackLanguage = null;
             LanguageAssetPath = null;
         }
 
