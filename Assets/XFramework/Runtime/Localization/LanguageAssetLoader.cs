@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -105,14 +106,19 @@ namespace XFramework.XLocalization
         #region JSON Parsing
 
         /// <summary>
-        /// 将 JSON 文本解析为键值对字典。
-        /// <para>使用 <see cref="JsonUtility"/> 的轻量封装，
-        /// 期望 JSON 格式为 <c>{"key": "value", ...}</c> 的扁平键值对对象。</para>
+        /// 将 JSON 文本解析为键值对字典。期望格式为 <c>{"key": "value", ...}</c> 的扁平对象；
+        /// 仅支持字符串键与字符串值，不支持嵌套结构与数组。
+        /// <para><b>转义序列会解码</b>：<c>\" \\ \/ \b \f \n \r \t \uXXXX</c>（含代理对）。
+        /// 这不是可选项——导出工具常把非 ASCII 转义成 <c>\uXXXX</c>（System.Text.Json 默认如此），
+        /// 不解码就是把 <c>中文</c> 原样显示给玩家。</para>
+        /// <para><b>宽容与严格的判定线</b>：只对 JSON 规范之外的两种常见手写痕迹保持宽容——
+        /// <b>尾随逗号</b>与 <b>UTF-8 BOM</b>（两者都不影响数据完整性）；其余格式错误一律抛
+        /// <see cref="InvalidOperationException"/>（带位置）。旧实现在这些位置是 <c>break</c> 掉循环、
+        /// 返回已经读到的半张表——调用方拿到非空字典，静默装上一次「所有值都是空串」的语言。</para>
         /// </summary>
         /// <remarks>
-        /// 注意：Unity 的 <see cref="JsonUtility"/> 要求顶层根对象匹配一个可序列化的类。
-        /// 由于多语言数据是动态 key，改用最小化分配的手动解析——仅支持 <c>"string": "string"</c> 的简单格式。
-        /// 如需完整 JSON 支持，可替换为 <c>Newtonsoft.Json</c> 或 <c>System.Text.Json</c>。
+        /// 为什么不用 <see cref="JsonUtility"/>：它要求顶层根对象匹配一个可序列化的类，而语言表的键是动态的。
+        /// 为什么不用 Newtonsoft.Json / System.Text.Json：本模块自述「零外部依赖」是有意的取舍，见 README「设计取舍」。
         /// </remarks>
         private static Dictionary<string, string> ParseJson(string json)
         {
@@ -120,68 +126,181 @@ namespace XFramework.XLocalization
             if (string.IsNullOrWhiteSpace(json))
                 return result;
 
-            // 简单状态机解析，避免 JsonUtility 无法处理动态 key 的问题
             var span = json.AsSpan();
             var i = 0;
-            // 跳过开头的 '{' 和空白
-            SkipWhitespace(span, ref i);
-            if (i < span.Length && span[i] == '{')
-                i++;
 
-            while (i < span.Length)
+            SkipWhitespace(span, ref i);
+            if (i >= span.Length)
+                return result;
+            if (span[i] != '{')
+                throw Malformed(json, i, "顶层应为 JSON 对象（'{'）");
+            i++;
+
+            while (true)
             {
                 SkipWhitespace(span, ref i);
-                if (i >= span.Length || span[i] == '}')
+                if (i >= span.Length)
+                    throw Malformed(json, i, "对象未闭合（缺 '}'）");
+                if (span[i] == '}')
+                {
+                    // 空对象，或 {"a":"1",} 这样的尾随逗号——都不丢数据，宽容
+                    i++;
                     break;
+                }
 
-                // 读取 key（string）
-                var key = ReadJsonString(span, ref i);
+                var key = ReadJsonString(span, ref i, json);
                 SkipWhitespace(span, ref i);
                 if (i >= span.Length || span[i] != ':')
-                    break;
-                i++; // skip ':'
-                SkipWhitespace(span, ref i);
+                    throw Malformed(json, i, "键之后缺 ':'");
+                i++; // 跳过 ':'
 
-                // 读取 value（string）
-                var value = ReadJsonString(span, ref i);
-
+                var value = ReadJsonString(span, ref i, json);
                 result[key] = value;
 
                 SkipWhitespace(span, ref i);
-                if (i < span.Length && span[i] == ',')
+                if (i >= span.Length)
+                    throw Malformed(json, i, "对象未闭合（缺 '}'）");
+                if (span[i] == ',')
+                {
                     i++;
+                    continue;
+                }
+                if (span[i] == '}')
+                {
+                    i++;
+                    break;
+                }
+
+                throw Malformed(json, i, "条目之后缺 ',' 或 '}'");
             }
+
+            // 闭合之后只允许空白：把「多贴了一段」这种会让人误以为整份都读进去了的情况也变成硬失败
+            SkipWhitespace(span, ref i);
+            if (i < span.Length)
+                throw Malformed(json, i, "对象闭合之后有多余内容");
 
             return result;
         }
 
+        /// <summary>
+        /// 跳过 JSON 空白。U+FEFF（UTF-8 BOM 解码后的字符）按空白处理——带 BOM 是 Windows 侧工具的常见默认。
+        /// <para>Unity 的 <c>TextAsset.text</c> 是否已剥离 BOM 未经实测，这里是解析器自身的兜底。</para>
+        /// </summary>
         private static void SkipWhitespace(ReadOnlySpan<char> span, ref int i)
         {
-            while (i < span.Length && (span[i] == ' ' || span[i] == '\t' || span[i] == '\n' || span[i] == '\r'))
+            while (i < span.Length && IsJsonWhitespace(span[i]))
                 i++;
         }
 
-        private static string ReadJsonString(ReadOnlySpan<char> span, ref int i)
+        private static bool IsJsonWhitespace(char c)
+        {
+            return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '﻿';
+        }
+
+        /// <summary>
+        /// 读取一个 JSON 字符串（含引号）。无转义时走零拷贝切片快路径；含转义时解码
+        /// <c>\" \\ \/ \b \f \n \r \t \uXXXX</c>。
+        /// </summary>
+        private static string ReadJsonString(ReadOnlySpan<char> span, ref int i, string json)
         {
             SkipWhitespace(span, ref i);
             if (i >= span.Length || span[i] != '"')
-                return string.Empty;
+                throw Malformed(json, i, "此处应为双引号包裹的字符串");
 
-            i++; // skip opening '"'
+            i++; // 跳过开引号
             var start = i;
-            while (i < span.Length && span[i] != '"')
+
+            // 快路径：绝大多数条目没有转义，直接切到闭引号
+            while (i < span.Length && span[i] != '"' && span[i] != '\\')
+                i++;
+
+            if (i < span.Length && span[i] == '"')
             {
-                // 处理转义字符
-                if (span[i] == '\\' && i + 1 < span.Length)
-                    i += 2;
-                else
-                    i++;
+                var plain = span.Slice(start, i - start).ToString();
+                i++; // 跳过闭引号
+                return plain;
             }
 
-            var result = span.Slice(start, i - start).ToString();
-            if (i < span.Length && span[i] == '"')
-                i++; // skip closing '"'
-            return result;
+            return ReadEscapedJsonString(span, ref i, start, json);
+        }
+
+        /// <summary>读取含转义序列的 JSON 字符串（<paramref name="i"/> 停在首个 <c>'\'</c> 上）。</summary>
+        private static string ReadEscapedJsonString(ReadOnlySpan<char> span, ref int i, int start, string json)
+        {
+            var sb = new StringBuilder(i - start + 16);
+            sb.Append(span.Slice(start, i - start));
+
+            while (i < span.Length)
+            {
+                var c = span[i];
+
+                if (c == '"')
+                {
+                    i++; // 跳过闭引号
+                    return sb.ToString();
+                }
+
+                if (c != '\\')
+                {
+                    sb.Append(c);
+                    i++;
+                    continue;
+                }
+
+                i++; // 跳过 '\'
+                if (i >= span.Length)
+                    break;
+
+                var escapePosition = i;
+                var escape = span[i++];
+                switch (escape)
+                {
+                    case '"': sb.Append('"'); break;
+                    case '\\': sb.Append('\\'); break;
+                    case '/': sb.Append('/'); break;
+                    case 'b': sb.Append('\b'); break;
+                    case 'f': sb.Append('\f'); break;
+                    case 'n': sb.Append('\n'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'u':
+                        if (i + 4 > span.Length)
+                            throw Malformed(json, escapePosition, "\\u 转义需要 4 位十六进制");
+                        // 代理对由两次 \uXXXX 各追加一个 char 自然拼成
+                        sb.Append((char)ParseHex4(span.Slice(i, 4), json, i));
+                        i += 4;
+                        break;
+                    default:
+                        throw Malformed(json, escapePosition, $"无法识别的转义序列 '\\{escape}'");
+                }
+            }
+
+            throw Malformed(json, i, "字符串未闭合（缺 '\"'）");
+        }
+
+        /// <summary>解析 <c>\uXXXX</c> 的 4 位十六进制。</summary>
+        private static int ParseHex4(ReadOnlySpan<char> hex, string json, int position)
+        {
+            var value = 0;
+            for (var k = 0; k < 4; k++)
+            {
+                var c = hex[k];
+                int digit;
+                if (c >= '0' && c <= '9') digit = c - '0';
+                else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+                else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+                else throw Malformed(json, position + k, "\\u 转义需要 4 位十六进制");
+
+                value = (value << 4) | digit;
+            }
+
+            return value;
+        }
+
+        private static InvalidOperationException Malformed(string json, int position, string reason)
+        {
+            return new InvalidOperationException(
+                $"[LanguageAssetLoader] Malformed language JSON at position {position}: {reason}.");
         }
 
         #endregion

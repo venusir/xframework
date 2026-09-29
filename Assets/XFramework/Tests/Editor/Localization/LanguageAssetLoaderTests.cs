@@ -73,7 +73,9 @@ namespace Venusy609.Xframework.Editor.Tests
         public void EmptyJson_ThrowsAndKeepsCurrentLanguage()
         {
             var loader = new LanguageAssetLoader("ja", Template);
-            loader.LoadTextFunc = (location, ct) => UniTask.FromResult("not a json");
+            // 合法的空对象——「解析成功但一条数据都没有」这条路径。格式错误的输入另见
+            // LanguageAssetLoaderJsonTests（自本 fixture 起，畸形 JSON 一律抛，不再静默降级）
+            loader.LoadTextFunc = (location, ct) => UniTask.FromResult("{}");
 
             InvalidOperationException caught = null;
             try
