@@ -144,7 +144,7 @@ LocalizationManager.SetPlaceholder("GuildName", "传奇公会");
 
 // 本地化文本（JSON 文件中）
 // "ui_welcome": "欢迎回来，{PlayerName}！"
-// "ui_guild_info": "{GuildName} - 等级 {GuildLevel}"
+// "ui_guild_info": "{GuildName} - 等级 {0}"
 
 // Get 时自动替换
 string welcome = LocalizationManager.Get("ui_welcome");
@@ -160,6 +160,17 @@ string info = LocalizationManager.GetFormat("ui_guild_info", "5");
 - 替换在 `string.Format` 之前执行，两者可安全混用
 - 未注册的占位符保持原样输出
 - 未设置任何占位符时无 GC 开销（快速路径跳过）
+
+**两类花括号语法（重要）**：`GetFormat` 里「命名占位符」与「位置参数」共用花括号，必须分清：
+
+| 写法 | 含义 | `GetFormat` 里的行为 |
+|---|---|---|
+| `{PlayerName}` | 全局占位符 | 已注册 → 替换；未注册 → **原样显示**，不会被参数填 |
+| `{0}` / `{0,-5}` / `{0:N2}` | `string.Format` 位置参数 | 照常格式化 |
+| `{{` / `}}` | 字面花括号 | 显示为 `{` / `}` |
+
+即：**要由 `GetFormat` 的实参填的值，必须写成 `{0}` 这种位置形式**。写成 `{GuildLevel}` 只会原样显示
+（实现会把非格式项的花括号转义为字面量——否则 `string.Format` 会直接抛 `FormatException`）。
 
 **管理占位符：**
 

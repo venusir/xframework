@@ -58,6 +58,12 @@ namespace XFramework.XLocalization
         /// <summary>
         /// 获取指定键的本地化文本，并用参数格式化。
         /// <para>内部使用 <c>string.Format</c>，参数装箱开销不可避免，如需极致性能请缓存格式化结果。</para>
+        /// <para><b>与全局占位符共用花括号语法</b>：先替换 <c>{Name}</c> 形式的全局占位符，再执行
+        /// <c>string.Format</c>。两类语法会互相干扰，故实现会把<b>不是合法复合格式项</b>的花括号
+        /// 转义为字面量：<c>{Name}</c>（未注册或已替换完的残留）、游离的 <c>}</c> 都按字面显示，
+        /// 而 <c>{0}</c> / <c>{0,-5}</c> / <c>{0:N2}</c> 与已转义的 <c>{{</c> / <c>}}</c> 照常工作。</para>
+        /// <para>即：需要位置参数就写 <c>{0}</c>，不要把「本该由参数填的值」写成 <c>{Name}</c>——
+        /// 后者只会原样显示，不会被参数替换。</para>
         /// </summary>
         string GetFormat(string key, params object[] args);
 

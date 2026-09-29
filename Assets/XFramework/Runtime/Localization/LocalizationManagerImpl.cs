@@ -146,7 +146,7 @@ namespace XFramework.XLocalization
         public string GetFormat(string key, params object[] args)
         {
             var raw = ReplacePlaceholders(GetRaw(key));
-            return string.Format(raw, args);
+            return string.Format(NormalizeBracesForFormat(raw), args);
         }
 
         public bool ContainsKey(string key)
@@ -338,6 +338,120 @@ namespace XFramework.XLocalization
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 把「不是合法复合格式项」的花括号转义为字面量，供 <see cref="GetFormat"/> 交给
+        /// <c>string.Format</c> 之前调用。
+        /// <para><b>为什么需要它</b>：<see cref="ReplacePlaceholders"/> 对未注册的 <c>{Name}</c> 承诺
+        /// 「保持原样输出」，而 <c>string.Format</c> 会把 <c>{Name}</c> 当格式项解析——两条承诺合起来
+        /// 就是一个 <c>FormatException</c>。于是「命名占位符」与「位置参数」这两套<b>共用花括号语法</b>
+        /// 的能力根本不能共存，README 里那个 <c>GetFormat("ui_guild_info", "5")</c> 的示例就是反例。</para>
+        /// <para><b>规则</b>：放行合法复合格式项（<c>{0}</c> / <c>{0,-5}</c> / <c>{0:N2}</c>）与已转义的
+        /// <c>{{</c> / <c>}}</c>，其余花括号一律转义。由这条规则可得：**当前能正常格式化的文本输出逐字不变**，
+        /// 只把原先会抛 <c>FormatException</c> 的文本改为原样显示。</para>
+        /// </summary>
+        private static string NormalizeBracesForFormat(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return text;
+
+            var span = text.AsSpan();
+            if (span.IndexOfAny('{', '}') < 0)
+                return text; // 无花括号：原样返回同一个实例，不分配
+
+            var sb = new System.Text.StringBuilder(text.Length + 16);
+            var i = 0;
+            while (i < span.Length)
+            {
+                var c = span[i];
+
+                if (c == '{')
+                {
+                    if (i + 1 < span.Length && span[i + 1] == '{')
+                    {
+                        sb.Append("{{"); // 已是转义，原样放行
+                        i += 2;
+                        continue;
+                    }
+
+                    if (TryReadCompositeFormatItem(span, i, out var end))
+                    {
+                        sb.Append(span.Slice(i, end - i));
+                        i = end;
+                        continue;
+                    }
+
+                    sb.Append("{{"); // 非格式项（含未注册的 {Name}）→ 输出为字面量 '{'
+                    i++;
+                    continue;
+                }
+
+                if (c == '}')
+                {
+                    if (i + 1 < span.Length && span[i + 1] == '}')
+                    {
+                        sb.Append("}}");
+                        i += 2;
+                        continue;
+                    }
+
+                    sb.Append("}}"); // 游离 '}' 在 string.Format 里是硬错误，表文本里却可能真实存在
+                    i++;
+                    continue;
+                }
+
+                sb.Append(c);
+                i++;
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// 从 <paramref name="start"/>（指向 <c>'{'</c>）起尝试读一个合法的复合格式项
+        /// <c>{index[,alignment][:formatString]}</c>；成功时 <paramref name="end"/> 指向其后的下标。
+        /// <para>这里只做<b>语法</b>判定（能否安全交给 <c>string.Format</c>），不校验 index 是否落在
+        /// <c>args</c> 范围内——那是调用方的实参错误，应当由 <c>string.Format</c> 照常报出来。</para>
+        /// </summary>
+        private static bool TryReadCompositeFormatItem(ReadOnlySpan<char> span, int start, out int end)
+        {
+            end = start;
+            var i = start + 1; // 跳过 '{'
+
+            // index：至少一位数字
+            var digitStart = i;
+            while (i < span.Length && span[i] >= '0' && span[i] <= '9')
+                i++;
+            if (i == digitStart)
+                return false;
+
+            // 可选的对齐：',' 后跟可选符号与至少一位数字
+            if (i < span.Length && span[i] == ',')
+            {
+                i++;
+                if (i < span.Length && (span[i] == '-' || span[i] == '+'))
+                    i++;
+                digitStart = i;
+                while (i < span.Length && span[i] >= '0' && span[i] <= '9')
+                    i++;
+                if (i == digitStart)
+                    return false;
+            }
+
+            // 可选的格式说明：':' 之后到第一个 '}' 为止
+            if (i < span.Length && span[i] == ':')
+            {
+                i++;
+                while (i < span.Length && span[i] != '}')
+                    i++;
+            }
+
+            if (i >= span.Length || span[i] != '}')
+                return false;
+
+            end = i + 1;
+            return true;
         }
 
         #endregion
