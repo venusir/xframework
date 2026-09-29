@@ -243,15 +243,32 @@ namespace XFramework.XLocalization
         /// <summary>
         /// 订阅语言切换事件。
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
+        /// <para><b>绑定逻辑不在这里重写一遍</b>：直接复用 <see cref="MessageManager.TryBindToDestroy"/>
+        /// 里那一份——<see cref="IDestroyCancellationToken"/> 与 <c>MonoBehaviour</c> 两个分支、已取消的
+        /// 令牌立即释放、注册用静态委托与状态参数而非闭包。本文件此前手写过一遍，于是比底层弱了三处：
+        /// 每次订阅分配一个闭包；<paramref name="context"/> 限定 <c>MonoBehaviour</c>，非 MonoBehaviour 的
+        /// Model / ViewModel 用不了这个归口入口且<b>不会报错</b>；令牌已取消时仍去注册。
+        /// （同形取舍见 <see cref="XUI.UIManager"/> 的归口。）</para>
         /// </summary>
         /// <param name="handler">语言切换时的回调，参数为新语言标识（如 "zh_Hans"）</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<c>MonoBehaviour</c> 或实现
+        /// <see cref="IDestroyCancellationToken"/> 的普通 C# 对象；传入后其销毁时自动退订</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<LanguageChangedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<LanguageChangedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            if (context == null)
+                return sub;
+
+            if (MessageManager.TryBindToDestroy(context, sub))
+                return sub;
+
+            // 订是订上了，但没有任何人会在它销毁时退订。留痕而不是静默——静默的话故障表现只是
+            // 「对象已经没了，回调还在跑」，从现象追回这里要绕很远。
+            Debug.LogWarning(
+                "[LocalizationManager] Subscribe<LanguageChangedMessage>: context of type '" + context.GetType().Name +
+                "' is neither a MonoBehaviour nor an IDestroyCancellationToken, so the subscription will not be " +
+                "disposed automatically. Hold the returned handle and dispose it yourself.");
             return sub;
         }
 
