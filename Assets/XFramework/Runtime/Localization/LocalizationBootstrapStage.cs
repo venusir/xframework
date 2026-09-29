@@ -25,6 +25,13 @@ namespace XFramework.XLocalization
         private readonly string _defaultLanguage;
         private readonly Dictionary<string, string> _initData;
 
+        /// <summary>
+        /// 本阶段是否**确实**完成了初始化。<see cref="Shutdown"/> 据此决定要不要销毁——
+        /// 「本阶段初始化的服务才由本阶段清理」，空转阶段不该把使用方自己
+        /// <c>Initialize</c> / <c>SetInstance</c> 的管理器一起销毁掉。
+        /// </summary>
+        private bool _initializedByThisStage;
+
         #endregion
 
         #region Construction
@@ -68,16 +75,29 @@ namespace XFramework.XLocalization
                 return UniTask.CompletedTask;
             }
 
+            // 先看有没有已经被初始化（使用方手动 Initialize / SetInstance，或上一次运行留下的实例）——
+            // 那种情况下 Initialize 会告警并忽略，本阶段就不算「初始化过」，Shutdown 时也不该去销毁它
+            var alreadyInitialized = LocalizationManager.IsInitialized;
             LocalizationManager.Initialize(_defaultLanguage, _initData);
+            _initializedByThisStage = !alreadyInitialized;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
             return UniTask.CompletedTask;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// 反向清理。<b>只销毁本阶段自己初始化的那份</b>——无数据跳过路径（见
+        /// <see cref="ExecuteAsync"/>）什么都没建，照旧实现会在这里把使用方手动
+        /// <c>Initialize</c> / <c>SetInstance</c> 的管理器一并销毁。
+        /// <para>幂等：重复调用是空操作（<see cref="IBootstrapStage"/> 的要求）。</para>
+        /// </summary>
         public void Shutdown()
         {
+            if (!_initializedByThisStage)
+                return;
+
+            _initializedByThisStage = false;
             LocalizationManager.Destroy();
         }
 
