@@ -280,5 +280,154 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         #endregion
+
+        #region 键值占位符（按语言解析）
+
+        [Test]
+        public void PlaceholderFromKey_FollowsLanguageSwitch()
+        {
+            // 本用例是这条特性的存在理由：注册一次，切语言后自动跟着变。
+            // 「注册时求值」那种错实现只会挂在这一条上。
+            LocalizationManager.SetLanguageData("en", new Dictionary<string, string>
+            {
+                { "ui_guild_info", "Guild: {Guild}" },
+                { "guild_legendary", "Legendary Guild" },
+            });
+            LocalizationManager.SetLanguageData("ja", new Dictionary<string, string>
+            {
+                { "ui_guild_info", "公会：{Guild}" },
+                { "guild_legendary", "传奇公会" },
+            });
+            LocalizationManager.SetLanguage("ja");
+            LocalizationManager.SetPlaceholderFromKey("Guild", "guild_legendary");
+
+            Assert.AreEqual("公会：传奇公会", LocalizationManager.Get("ui_guild_info"), "当前语言是 ja");
+
+            LocalizationManager.SetLanguage("en");
+
+            Assert.AreEqual("Guild: Legendary Guild", LocalizationManager.Get("ui_guild_info"),
+                "注册一次、跟随语言——这正是它相对 SetPlaceholder 的意义");
+        }
+
+        [Test]
+        public void PlaceholderFromKey_UsesFallbackLanguage()
+        {
+            // 表项只在回退语言（en）里有
+            LocalizationManager.SetLanguageData("en", new Dictionary<string, string>
+            {
+                { "ui_x", "[{OnlyEn}]" },
+                { "only_en", "fallback text" },
+            });
+            LocalizationManager.SetLanguageData("ja", new Dictionary<string, string> { { "ui_x", "[{OnlyEn}]" } });
+            LocalizationManager.SetLanguage("ja");
+            LocalizationManager.SetPlaceholderFromKey("OnlyEn", "only_en");
+
+            Assert.AreEqual("[fallback text]", LocalizationManager.Get("ui_x"), "走的是与 Get 同一条回退链");
+        }
+
+        [Test]
+        public void PlaceholderFromKey_MissingTableKey_RendersTheKey()
+        {
+            UseTable(("ui_x", "值：{Gone}"));
+            LocalizationManager.SetPlaceholderFromKey("Gone", "no_such_entry");
+
+            Assert.AreEqual("值：no_such_entry", LocalizationManager.Get("ui_x"),
+                "解析规则与 Get 同一条：表里没有就返回键本身，便于发现漏配");
+        }
+
+        [Test]
+        public void PlaceholderFromKey_ValueIsNotRescanned()
+        {
+            UseTable(("ui_x", "{Outer}"), ("inner_ref", "内层：{Inner}"));
+            LocalizationManager.SetPlaceholder("Inner", "会被替换");
+            LocalizationManager.SetPlaceholderFromKey("Outer", "inner_ref");
+
+            Assert.AreEqual("内层：{Inner}", LocalizationManager.Get("ui_x"),
+                "单趟扫描、不递归：替换进去的值不再扫，值里再含 {Inner} 只按字面输出");
+        }
+
+        [Test]
+        public void PlaceholderFromKey_CombinesWithPositionalArgs()
+        {
+            UseTable(("ui_info", "{Guild} - 等级 {0}"), ("guild_legendary", "传奇公会"));
+            LocalizationManager.SetPlaceholderFromKey("Guild", "guild_legendary");
+
+            Assert.AreEqual("传奇公会 - 等级 5", LocalizationManager.GetFormat("ui_info", "5"),
+                "命名占位符与位置参数照常共存");
+        }
+
+        [Test]
+        public void SetPlaceholderFromKey_OverridesLiteralOfSameName()
+        {
+            UseTable(("ui_x", "{Name}"), ("en_name", "来自表的英文名"));
+            LocalizationManager.SetPlaceholder("Name", "字面量");
+            LocalizationManager.SetPlaceholderFromKey("Name", "en_name");
+
+            Assert.AreEqual("来自表的英文名", LocalizationManager.Get("ui_x"), "后注册的覆盖前者");
+        }
+
+        [Test]
+        public void SetPlaceholder_OverridesKeyBindingOfSameName()
+        {
+            UseTable(("ui_x", "{Name}"), ("en_name", "来自表的英文名"));
+            LocalizationManager.SetPlaceholderFromKey("Name", "en_name");
+            LocalizationManager.SetPlaceholder("Name", "字面量");
+
+            Assert.AreEqual("字面量", LocalizationManager.Get("ui_x"), "反方向同样：一个名字只有一种含义");
+        }
+
+        [Test]
+        public void RemovePlaceholder_RemovesKeyBindingToo()
+        {
+            UseTable(("ui_x", "{Name}"));
+            LocalizationManager.SetPlaceholderFromKey("Name", "en_name");
+
+            LocalizationManager.RemovePlaceholder("Name");
+
+            Assert.AreEqual("{Name}", LocalizationManager.Get("ui_x"));
+        }
+
+        [Test]
+        public void ClearPlaceholders_ClearsKeyBindingsToo()
+        {
+            UseTable(("ui_x", "{A}{B}"));
+            LocalizationManager.SetPlaceholder("A", "字面");
+            LocalizationManager.SetPlaceholderFromKey("B", "en_name");
+
+            LocalizationManager.ClearPlaceholders();
+
+            Assert.AreEqual("{A}{B}", LocalizationManager.Get("ui_x"));
+        }
+
+        [Test]
+        public void HasPlaceholder_SeesKeyBindings()
+        {
+            LocalizationManager.SetPlaceholderFromKey("Name", "en_name");
+
+            Assert.IsTrue(LocalizationManager.HasPlaceholder("Name"));
+        }
+
+        [Test]
+        public void SetPlaceholderFromKey_EmptyArguments_Throw()
+        {
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.SetPlaceholderFromKey(null, "k"));
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.SetPlaceholderFromKey(string.Empty, "k"));
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.SetPlaceholderFromKey("n", null));
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.SetPlaceholderFromKey("n", string.Empty));
+        }
+
+        [Test]
+        public void Get_AfterRemovingKeyBinding_ZeroTouchFastPath()
+        {
+            // 文本**必须含花括号**：否则这条会靠「无 '{' 早退」蒙混过去，验不到「两张表都空才走快路径」
+            UseTable(("ui_x", "含 {Name} 的文本"));
+            LocalizationManager.SetPlaceholderFromKey("Name", "en_name");
+            LocalizationManager.RemovePlaceholder("Name");
+
+            Assert.AreSame(LocalizationManager.Get("ui_x"), LocalizationManager.Get("ui_x"),
+                "两类都摘干净后应回到零分配快路径（原样返回缓存里那个实例）");
+        }
+
+        #endregion
     }
 }

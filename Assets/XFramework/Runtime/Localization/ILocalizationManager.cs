@@ -86,21 +86,46 @@ namespace XFramework.XLocalization
         /// <para>示例：<c>SetPlaceholder("PlayerName", "张三")</c> 后，
         /// <c>Get("ui_welcome")</c> 中 <c>{PlayerName}</c> 将被替换为 <c>"张三"</c>。</para>
         /// <para>占位符替换在 <see cref="GetFormat"/> 的 <c>string.Format</c> 之前执行。</para>
+        /// <para><b>只用于语言无关的值</b>（玩家名、自建公会名、数量）——它是一张<b>全局表</b>，
+        /// 与当前是哪门语言无关：<b>值不随语言切换刷新</b>，注册后没人会去更新它。值本身需要翻译时
+        /// （称号 / 段位 / 日期）改用 <see cref="SetPlaceholderFromKey"/>（注册一次、跟随语言），
+        /// 或一次性嵌句时用 <c>Get(innerKey)</c> 取值再交给 <see cref="GetFormat"/>。
+        /// 用错的症状是「切换语言后模板换了、嵌进去的值没换」，无异常也无日志。</para>
+        /// <para>同一个名字只有一种含义：与 <see cref="SetPlaceholderFromKey"/> 注册的键值绑定<b>互斥</b>，
+        /// 后注册的覆盖前者。</para>
         /// </summary>
         void SetPlaceholder(string key, string value);
 
         /// <summary>
-        /// 移除指定全局占位符。
+        /// 设置一个<b>指向语言表项</b>的全局占位符：替换发生的当下按<b>当前语言</b>（含回退链）解析
+        /// <paramref name="localizationKey"/> 的值。
+        /// <para><b>注册一次、跟随语言</b>——这正是它相对 <see cref="SetPlaceholder"/> 的意义：后者存的是
+        /// 字面量，值来自语言表时会在切换语言后静默陈旧。示例：
+        /// <c>SetPlaceholderFromKey("Guild", "guild_legendary")</c> 之后，
+        /// <c>Get("ui_guild_info")</c> 里的 <c>{Guild}</c> 显示的是<b>当前语言</b>的
+        /// <c>guild_legendary</c>。</para>
+        /// <para><b>解析规则与 <see cref="Get"/> 同一条</b>：先当前语言、再回退语言；两边都没有时
+        /// <b>返回那条表项的键本身</b>（与「缺键返回键本身」一致，便于发现漏配）。</para>
+        /// <para><b>不递归</b>：解析出来的值里若再含 <c>{Other}</c>，不会被二次扫描，按字面输出。</para>
+        /// <para>同一个名字只有一种含义：与 <see cref="SetPlaceholder"/> 注册的字面量<b>互斥</b>，
+        /// 后注册的覆盖前者。</para>
+        /// </summary>
+        /// <param name="key">占位符名称（文本里写 <c>{key}</c>）</param>
+        /// <param name="localizationKey">指向的语言表键；键为 <c>null</c> 或空串时抛 <see cref="ArgumentNullException"/></param>
+        void SetPlaceholderFromKey(string key, string localizationKey);
+
+        /// <summary>
+        /// 移除指定全局占位符。<see cref="SetPlaceholder"/> 与 <see cref="SetPlaceholderFromKey"/> 两种都摘。
         /// </summary>
         void RemovePlaceholder(string key);
 
         /// <summary>
-        /// 清空所有全局占位符。
+        /// 清空所有全局占位符（两种都清）。
         /// </summary>
         void ClearPlaceholders();
 
         /// <summary>
-        /// 判断指定全局占位符是否存在。
+        /// 判断指定全局占位符是否存在（两种都算）。
         /// </summary>
         bool HasPlaceholder(string key);
 

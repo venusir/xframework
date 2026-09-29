@@ -215,6 +215,13 @@ namespace XFramework.XLocalization
             _instance.SetPlaceholder(key, value);
         }
 
+        /// <inheritdoc cref="ILocalizationManager.SetPlaceholderFromKey"/>
+        public static void SetPlaceholderFromKey(string key, string localizationKey)
+        {
+            EnsureGlobalInitialized();
+            _instance.SetPlaceholderFromKey(key, localizationKey);
+        }
+
         /// <inheritdoc cref="ILocalizationManager.RemovePlaceholder"/>
         public static void RemovePlaceholder(string key)
         {

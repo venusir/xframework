@@ -36,9 +36,17 @@ namespace XFramework.XLocalization
         private readonly List<string> _loadOrder = new List<string>(MaxCachedLanguages);
 
         /// <summary>
-        /// 全局占位符表。key: 占位符名称, value: 替换值。
+        /// 全局占位符表（字面量）。key: 占位符名称, value: 替换值。
+        /// <para>与 <see cref="_placeholderKeys"/> <b>互斥</b>：一个占位符名只有一种含义，后注册的覆盖前者。</para>
         /// </summary>
         private Dictionary<string, string> _placeholders;
+
+        /// <summary>
+        /// 全局占位符表（指向语言表项）。key: 占位符名称, value: 语言表键。
+        /// <para>替换发生的当下经 <see cref="GetRaw"/> 解析，因此天然跟随语言切换——这是它相对
+        /// <see cref="_placeholders"/> 的全部意义。</para>
+        /// </summary>
+        private Dictionary<string, string> _placeholderKeys;
 
         private string _currentLanguage;
         private string _fallbackLanguage;
@@ -220,6 +228,21 @@ namespace XFramework.XLocalization
                 _placeholders = new Dictionary<string, string>();
 
             _placeholders[key] = value;
+            _placeholderKeys?.Remove(key); // 一个名字只有一种含义
+        }
+
+        public void SetPlaceholderFromKey(string key, string localizationKey)
+        {
+            if (string.IsNullOrEmpty(key))
+                throw new ArgumentNullException(nameof(key));
+            if (string.IsNullOrEmpty(localizationKey))
+                throw new ArgumentNullException(nameof(localizationKey));
+
+            if (_placeholderKeys == null)
+                _placeholderKeys = new Dictionary<string, string>();
+
+            _placeholderKeys[key] = localizationKey;
+            _placeholders?.Remove(key); // 一个名字只有一种含义
         }
 
         public void RemovePlaceholder(string key)
@@ -228,11 +251,13 @@ namespace XFramework.XLocalization
                 return;
 
             _placeholders?.Remove(key);
+            _placeholderKeys?.Remove(key);
         }
 
         public void ClearPlaceholders()
         {
             _placeholders?.Clear();
+            _placeholderKeys?.Clear();
         }
 
         public bool HasPlaceholder(string key)
@@ -240,7 +265,8 @@ namespace XFramework.XLocalization
             if (string.IsNullOrEmpty(key))
                 return false;
 
-            return _placeholders != null && _placeholders.ContainsKey(key);
+            return (_placeholders != null && _placeholders.ContainsKey(key))
+                || (_placeholderKeys != null && _placeholderKeys.ContainsKey(key));
         }
 
         #endregion
@@ -276,11 +302,17 @@ namespace XFramework.XLocalization
         /// <summary>
         /// 将文本中的 <c>{Key}</c> 占位符替换为对应值。
         /// <para>使用一次扫描 + StringBuilder 实现，避免多次 string.Replace 的 GC 分配。</para>
-        /// <para>未找到对应值的占位符保持原样。</para>
+        /// <para>两类占位符：字面量（<see cref="_placeholders"/>）与指向语言表项的
+        /// （<see cref="_placeholderKeys"/>，替换发生的当下经 <see cref="GetRaw"/> 解析，故跟随语言切换）。
+        /// 先查字面量，再查表项；都没有则保持原样。</para>
+        /// <para><b>单趟、不递归</b>：替换进去的值不会被二次扫描，值里再含 <c>{Other}</c> 只按字面输出。</para>
         /// </summary>
         private string ReplacePlaceholders(string text)
         {
-            if (_placeholders == null || _placeholders.Count == 0)
+            // 两张表都空才走快路径——注册了键值绑定却不扫描，是这条早退最容易出的错
+            var noLiterals = _placeholders == null || _placeholders.Count == 0;
+            var noKeyBindings = _placeholderKeys == null || _placeholderKeys.Count == 0;
+            if (noLiterals && noKeyBindings)
                 return text;
 
             if (string.IsNullOrEmpty(text))
@@ -319,9 +351,14 @@ namespace XFramework.XLocalization
                 }
 
                 var placeholderKey = span.Slice(scanPos, closeIdx).ToString();
-                if (_placeholders.TryGetValue(placeholderKey, out var replacement))
+                if (_placeholders != null && _placeholders.TryGetValue(placeholderKey, out var replacement))
                 {
                     sb.Append(replacement);
+                }
+                else if (_placeholderKeys != null && _placeholderKeys.TryGetValue(placeholderKey, out var localizationKey))
+                {
+                    // 在替换的当下解析，所以语言切了它也跟着变；GetRaw 的缺键行为（返回键本身）就是这里的规则
+                    sb.Append(GetRaw(localizationKey));
                 }
                 else
                 {
@@ -466,6 +503,8 @@ namespace XFramework.XLocalization
             _loadOrder.Clear();
             _placeholders?.Clear();
             _placeholders = null;
+            _placeholderKeys?.Clear();
+            _placeholderKeys = null;
             _currentLanguage = null;
             _fallbackLanguage = null;
             LanguageAssetPath = null;
