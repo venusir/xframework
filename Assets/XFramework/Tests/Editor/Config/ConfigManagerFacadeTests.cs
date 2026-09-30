@@ -183,5 +183,111 @@ namespace Venusy609.Xframework.Editor.Tests
                 ConfigManager.ConfigChanged -= thrower;
             }
         }
+
+        #region 零覆盖补齐（2026-09-30 审计）
+
+        // 本区全部是**新增守卫，不是回归**：下列成员此前零覆盖，而当前行为已经正确——
+        // 它们买的是「以后改坏即红」。如实记在这里，免得下一轮审计把它们当成修好的缺陷。
+
+        [Test]
+        public void RegisterAndQuery_AllPublicMembers_WorkThroughFacade()
+        {
+            // 一次性覆盖八个此前零调用的成员：RegisterTable<T> / RegisterGlobal<T> / IsLoaded<T> /
+            // TryGetTable / Get<T,TKey> / TryGet<T,TKey> / GetGlobal<T> / TryGetGlobal<T> / Unload<T>
+            InstallImpl();
+
+            ConfigManager.RegisterTable(MakeTable());
+            ConfigManager.RegisterGlobal(new TestGlobalConfig { Value = 9 });
+
+            Assert.IsTrue(ConfigManager.IsLoaded<TestItemRow>());
+            Assert.IsTrue(ConfigManager.TryGetTable<TestItemRow>(out var table));
+            Assert.AreEqual(1, table.Count);
+            Assert.AreEqual(1, ConfigManager.Get<TestItemRow, int>(1).Id);
+            Assert.IsTrue(ConfigManager.TryGet<TestItemRow, int>(1, out var row));
+            Assert.AreEqual(1, row.Id);
+            Assert.AreEqual(9, ConfigManager.GetGlobal<TestGlobalConfig>().Value);
+            Assert.IsTrue(ConfigManager.TryGetGlobal<TestGlobalConfig>(out var global));
+            Assert.AreEqual(9, global.Value);
+
+            ConfigManager.Unload<TestItemRow>();
+            Assert.IsFalse(ConfigManager.IsLoaded<TestItemRow>(), "Unload 后应不再报告已加载");
+        }
+
+        [Test]
+        public void RegisterTable_NonGeneric_RegistersByRowType()
+        {
+            InstallImpl();
+            IConfigTable table = MakeTable();
+
+            ConfigManager.RegisterTable(typeof(TestItemRow), table);
+
+            Assert.IsTrue(ConfigManager.IsLoaded<TestItemRow>());
+            Assert.IsTrue(ConfigManager.TryGetTable<TestItemRow>(out var wrapped));
+            Assert.AreEqual(1, wrapped.Count);
+        }
+
+        [Test]
+        public void SetInstance_Null_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => ConfigManager.SetInstance(null));
+        }
+
+        [Test]
+        public void PreloadTable_UnknownFormat_WrappedAsConfigException()
+        {
+            // format→内置 Loader 的分派此前从未执行过。用未注册的枚举值走这条分派：
+            // 装载器表里没有它 → KeyNotFoundException → 被包装成 ConfigException。
+            // 这条路径**不需要 AssetManager**（查表发生在调用装载器之前）
+            InstallImpl();
+
+            var ex = Assert.Throws<ConfigException>(() =>
+                ConfigManager.PreloadTableAsync<TestItemRow>("config/items", (ConfigFormat)99)
+                    .GetAwaiter().GetResult());
+
+            StringAssert.Contains("Failed to preload Table", ex.Message);
+        }
+
+        [Test]
+        public void ConfigManifest_RecordsAddedEntries()
+        {
+            // ConfigManifest 此前**整个类型零覆盖**
+            var manifest = new ConfigManifest();
+            manifest.AddTable<TestItemRow>("config/items", group: "battle", format: ConfigFormat.Csv);
+            manifest.AddGlobal<TestGlobalConfig>("config/global", group: "battle");
+
+            Assert.AreEqual(2, manifest.Entries.Count);
+            Assert.AreEqual(typeof(TestItemRow), manifest.Entries[0].RowType);
+            Assert.AreEqual("config/items", manifest.Entries[0].AssetPath);
+            Assert.AreEqual("battle", manifest.Entries[0].Group);
+            Assert.IsTrue(manifest.Entries[0].IsTable);
+            Assert.AreEqual(ConfigFormat.Csv, manifest.Entries[0].Format);
+            Assert.IsFalse(manifest.Entries[1].IsTable);
+            // AddGlobal **没有** format 参数、内部固定写 Json —— 钉住现状（审计 F10 已归档）
+            Assert.AreEqual(ConfigFormat.Json, manifest.Entries[1].Format);
+        }
+
+        [Test]
+        public void PreloadGroupAndAll_DegenerateInputs_BehaveAsDocumented()
+        {
+            InstallImpl();
+            var manifest = new ConfigManifest();
+            manifest.AddTable<TestItemRow>("config/items", group: "battle");
+
+            // 分组名不匹配 → 没有条目命中 → 不碰装载器（这条路径同样不需要 AssetManager）
+            Assert.DoesNotThrow(() =>
+                ConfigManager.PreloadGroupAsync("nonexistent", manifest).GetAwaiter().GetResult());
+
+            // 空清单 → 循环不执行
+            Assert.DoesNotThrow(() =>
+                ConfigManager.PreloadAllAsync(new ConfigManifest()).GetAwaiter().GetResult());
+
+            // 参数防御
+            Assert.Throws<ArgumentNullException>(() =>
+                ConfigManager.PreloadGroupAsync("battle", null).GetAwaiter().GetResult());
+            Assert.Throws<ArgumentException>(() =>
+                ConfigManager.PreloadGroupAsync(null, manifest).GetAwaiter().GetResult());
+        }
+
+        #endregion
     }
 }
