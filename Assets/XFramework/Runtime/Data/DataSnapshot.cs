@@ -92,6 +92,8 @@ namespace XFramework.XData
         /// <summary>
         /// 该数据块使用的序列化格式，对应 <see cref="XSerialize.ISerializer.Format"/>。
         /// <para>为 null 或空时使用 <see cref="DataSnapshot.defaultFormat"/>。</para>
+        /// <para><b>写入端目前恒为 null</b>：导出时只填 <see cref="DataSnapshot.defaultFormat"/>，本字段保留
+        /// 是为了兼容将来「按块指定格式」。所以读取端的回退是常规路径而非边缘路径。</para>
         /// </summary>
         public string format;
     }
