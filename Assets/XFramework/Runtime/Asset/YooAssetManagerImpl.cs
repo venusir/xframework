@@ -140,6 +140,8 @@ namespace XFramework.XAsset
             var package = GetPackage(packageName);
             if (package == null) return;
 
+            // 这里刻意没有状态检查：实测 YooAsset 的 UnloadUnusedAssetsOperation **没有失败路径**
+            // （只置 Status = Succeed，从不设 Error）。加一个恒真的检查只会让人以为「失败会被报告」。
             var operation = package.UnloadUnusedAssetsAsync();
             await operation.WithCancellation(cancellationToken);
         }
@@ -155,6 +157,7 @@ namespace XFramework.XAsset
             {
                 if (_packages.TryGetValue(name, out var package))
                 {
+                    // 无状态检查的理由同 UnloadUnusedAssetsAsync：该操作在 YooAsset 侧没有失败路径
                     var operation = package.UnloadUnusedAssetsAsync();
                     await operation.WithCancellation(cancellationToken);
                 }
@@ -243,12 +246,18 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
-        /// 获取指定包当前激活的资源版本号。包不存在时返回 null。
+        /// 获取指定包当前激活的资源版本号。包不存在**或尚未初始化成功**时返回 null。
+        /// <para>未初始化的判定不能省：YooAsset 的 <c>ResourcePackage.GetPackageVersion()</c> 会先做
+        /// 初始化检查并<b>抛异常</b>，而本方法的对外契约是「包不存在时返回 null」——
+        /// 包存在但没初始化成功（如初始化失败后残留）会从这条缝里漏出去，把 YooAsset 的异常抛给调用方。</para>
         /// </summary>
         public string GetPackageVersion(string packageName = null)
         {
             var package = GetPackage(packageName);
-            return package?.GetPackageVersion();
+            if (package == null || package.InitializeStatus != EOperationStatus.Succeed)
+                return null;
+
+            return package.GetPackageVersion();
         }
 
         /// <summary>
@@ -473,13 +482,15 @@ namespace XFramework.XAsset
                 await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
             }
 
-            progress?.Invoke(1f);
-
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load scene '{location}': {operation.LastError}");
                 return default;
             }
+
+            // 1f 只在成功路径补发：进度面与结果面必须一致——失败时先报 100% 再返回无效 Scene
+            // 会让调用方的进度条停在满格，而它拿到的场景根本不存在
+            progress?.Invoke(1f);
 
             var scene = SceneManager.GetSceneByName(operation.SceneName);
             return scene;
