@@ -81,6 +81,18 @@ namespace XFramework.XData.Tests
             public void OnClear() => Progress = 0;
         }
 
+        /// <summary>OnClear 抛异常的块——用于钉住「逐个隔离 + finally 复位」。</summary>
+        [Serializable]
+        private sealed class ExplodingClearData : IDataBlock
+        {
+            public string BlockName => "ExplodingClear";
+            public int DataVersion => 0;
+            public object OnSave() => 0;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
+            public void OnLoad(object data) { }
+            public void OnClear() => throw new InvalidOperationException("OnClear boom");
+        }
+
         [SetUp]
         public void SetUp()
         {
@@ -225,6 +237,60 @@ namespace XFramework.XData.Tests
 
             Assert.AreEqual(42, bag.Gold, "参数校验失败不得清空任何块的数据");
             Assert.AreSame(bag, DataManager.GetOrCreateBlock<BagData>(), "注册也不应受影响");
+        }
+
+        [Test]
+        public void ClearAll_OneBlockThrows_StillClearsOthersAndRegistry()
+        {
+            // 原先是一句裸的 ForEachBlock(b => b.OnClear())：任一 OnClear 抛异常就当场中断，
+            // 剩余块没清、三个容器一行都不执行——留下「部分块已清、注册表却完整」的半状态。
+            // 与 SettingsManager.Destroy 是同一形状，那里已裁决为「逐个隔离 + finally 复位」
+            var bag = DataManager.GetOrCreateBlock<BagData>();
+            bag.Gold = 42;
+            DataManager.RegisterBlock(new ExplodingClearData());
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Data\] 清空数据块 ExplodingClearData 时抛出异常"));
+
+            Assert.DoesNotThrow(() => DataManager.ClearAll(), "单个块的 OnClear 抛异常不得外泄");
+
+            Assert.AreEqual(0, bag.Gold, "其余块仍应被清空");
+            Assert.IsFalse(DataManager.HasBlock<BagData>(), "注册表应被复位——这正是 finally 的作用");
+            Assert.IsFalse(DataManager.HasBlock<ExplodingClearData>());
+        }
+
+        [Test]
+        public void ForEachBlock_RemovingDuringIteration_DoesNotThrow()
+        {
+            // 走独立的实现实例而不是门面：本提交只改遍历的健壮性，
+            // 门面级的转发由下一批（补 ForEachBlock + 门面完备性守卫）负责
+            var impl = new DataManagerImpl();
+            impl.GetOrCreateBlock<BagData>();
+            impl.GetOrCreateBlock<QuestData>();
+
+            // 回调里注销另一个块：快照化之前，这会打坏活字典的枚举器
+            Assert.DoesNotThrow(() => impl.ForEachBlock(block =>
+            {
+                if (block is QuestData)
+                    impl.RemoveBlock<QuestData>();
+            }));
+
+            Assert.IsTrue(impl.HasBlock<BagData>());
+            Assert.IsFalse(impl.HasBlock<QuestData>(), "回调里的注销应照常生效");
+        }
+
+        [Test]
+        public void ApplyBlockSnapshot_OnClearThrows_ReturnsFalseInsteadOfThrowing()
+        {
+            // 清空与取序列化器原先落在 try 之外：异常外泄、块已被清空、还不计入任何计数，
+            // 与一墙之隔的 TryRestoreBlock（全捕获）形成两种态度
+            DataManager.RegisterBlock(new ExplodingClearData());
+            var snapshot = new DataBlockSnapshot { blockName = "ExplodingClear", version = 0, data = "AAAA" };
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Data\] 恢复数据块 ExplodingClear 时抛出异常"));
+
+            var result = true;
+            Assert.DoesNotThrow(() => result = DataManager.ApplyBlockSnapshot(snapshot));
+            Assert.IsFalse(result, "清空阶段抛异常应按既有语义返回 false，而不是外泄");
         }
     }
 }

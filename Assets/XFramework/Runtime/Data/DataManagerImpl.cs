@@ -93,8 +93,14 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void ForEachBlock(Action<IDataBlock> action)
         {
-            foreach (var block in _blocks.Values)
-                action(block);
+            if (action == null) throw new ArgumentNullException(nameof(action));
+
+            // 先取快照再遍历：回调里增删块（第三方 OnClear 回收资源、甚至回头调 DataManager）
+            // 会让活字典的枚举器失效并抛 InvalidOperationException。低频路径，一次分配可接受——
+            // 与仓内「派发前先取快照」的取舍同向（DispatchListPool、Lock 的订阅快照）
+            var snapshot = new List<IDataBlock>(_blocks.Values);
+            for (int i = 0; i < snapshot.Count; i++)
+                action(snapshot[i]);
         }
 
         /// <summary>
@@ -365,14 +371,25 @@ namespace XFramework.XData
                 return false;
             }
 
-            // 恢复单块：先清空目标块数据，再走共享恢复管线（不触碰其他 Block）
-            block.OnClear();
-            if (TryRestoreBlock(block, snap, XSerialize.Serializer.Default.Format))
+            // 恢复单块：先清空目标块数据，再走共享恢复管线（不触碰其他 Block）。
+            // 清空与取默认序列化器都纳入受保护范围：两者都会抛（第三方 OnClear、序列化器未注册），
+            // 而原先它们落在 try 之外——异常外泄时块已被清空、还不计入任何计数，
+            // 与一墙之隔的 TryRestoreBlock（全捕获）形成两种态度
+            try
             {
-                // 恢复成功即视为已同步，清除该块脏标记；失败保留（数据可能半恢复，保守标记）
-                _dirtyBlocks.Remove(block);
-                return true;
+                block.OnClear();
+                if (TryRestoreBlock(block, snap, XSerialize.Serializer.Default.Format))
+                {
+                    // 恢复成功即视为已同步，清除该块脏标记；失败保留（数据可能半恢复，保守标记）
+                    _dirtyBlocks.Remove(block);
+                    return true;
+                }
             }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Data] 恢复数据块 {snap.blockName} 时抛出异常：{e}");
+            }
+
             return false;
         }
 
@@ -383,10 +400,29 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void ClearAll()
         {
-            ForEachBlock(b => b.OnClear());
-            _blocks.Clear();
-            _blockNameIndex.Clear();
-            _dirtyBlocks.Clear();
+            // 逐个隔离：某个块的 OnClear 抛异常不该让其余块的资源留着不释放。
+            // 状态复位另放在 finally 里，任何单个失败都拦不住它——否则会停在
+            // 「部分块已清、注册表却还完整」的半状态上（与 SettingsManager.Destroy 同一取舍）
+            try
+            {
+                ForEachBlock(b =>
+                {
+                    try
+                    {
+                        b.OnClear();
+                    }
+                    catch (Exception e)
+                    {
+                        Debug.LogError($"[Data] 清空数据块 {b.GetType().Name} 时抛出异常，已跳过并继续清空其余块：{e}");
+                    }
+                });
+            }
+            finally
+            {
+                _blocks.Clear();
+                _blockNameIndex.Clear();
+                _dirtyBlocks.Clear();
+            }
         }
 
         #endregion
