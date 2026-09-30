@@ -33,7 +33,7 @@
 - **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。管线对任何具体模块零依赖,可独立使用
 - **启动引导(Bootstrap):** 需要异步初始化的服务实现 `IBootstrapStage`(`IPhaseStage` + 同步 `Shutdown`;Phase = 模块约定值、Name = 类型名、Weight = 1),经 `Bootstrap.Register` **显式登记**(不反射发现),`Bootstrap.RunAsync` 用 `Pipeline.BuildPhaseGroups` 装配运行,`Bootstrap.Shutdown` 按登记顺序**逆序**清理。ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);失败与取消在 RunAsync 处**抛出**而非只留日志。阶段类归各模块自己的目录(如 `AssetBootstrapStage` 在 `Runtime/Asset/`),框架不在 Bootstrap 目录里装具体服务
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateTier` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateTier.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
-- **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md;示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
+- **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md(使用方向;维护向记录按需写入 `Documentation/Modules/<模块>.md`,见「文档分层」);示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
 - **模块边界:** 生产代码不得引用其它模块的 `Internal` 命名空间——Runtime 全树共用一个 asmdef,`internal` 不构成编译边界,这条只能靠约定与自查(见 `Tests/Editor/Architecture/ModuleBoundaryTests`)。跨模块共享的基础设施必须抽为独立模块并给公开面(先例:`XFramework.XEvent` ← Message/Reactive/Input/Settings;`XFramework.XPipeline` ← Bootstrap);测试与 Editor 工具经 `InternalsVisibleTo` 不受此限
 
 ## 编码规范
@@ -76,7 +76,21 @@
   - UPM 包 → `Packages/manifest.json`(Git URL)
   - NuGet 包 → `Assets/packages.config` + NuGetForUnity(当前:无)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
-- 各模块 README 是文档的一部分,新增模块/功能需同步维护
+
+## 文档分层
+
+文档按**收件人**分层,一处只写一份真相:
+
+| 文档 | 收件人 | 写什么 |
+|---|---|---|
+| `Assets/XFramework/README.md` | 引入包的第三方 | 包级入口:设计哲学、快速开始、依赖安装 |
+| `Runtime/<模块>/README.md` | 引入包的第三方 | 模块用法:快速开始、API 参考、行为契约、线程与性能代价、`已知限制`、`设计取舍` |
+| `Documentation/Modules/<模块>.md` | 维护者 + 下一轮审计者 | 维护向记录:文件结构、模块版本记录、沿革与已否决形状、迁移指南、审计记忆 |
+| `Assets/XFramework/CHANGELOG.md` | 双方 | 变更流水:改了什么、为什么、根因与实测证据 |
+
+- **README 的判据:** 把这段删掉,使用方会不会写错代码或误判行为?会 → 留在 README。`已知限制` / `接口承诺` / `线程契约` 即使语感像开发记录,**不得**搬走
+- **技术文档的判据:** 答的是「下一轮我要不要重新论证这件事」,而不是「我该怎么用」。**按需创建**,没有内容就不建文件
+- **包内不指向包外:** 包内 README 不引用 `Documentation/` 下的维护向文档——第三方装了包却打不开它
 
 ## 沟通与工作流
 
@@ -87,4 +101,4 @@
 - **提交拆分:** 计划阶段即确定原子提交边界(计划中列出提交拆分),实现按提交逐个完成、验证后再提交,避免「先全量实现、提交前再拆分」——混合文件需反复编辑还原,易出错;拆分依据是逻辑边界与可独立编译,同源小改动(如统一消息文案)可合并为一个提交;实现时以提交为执行单元:完成当前提交的全部改动并验证后即停,经提交后再实现下一提交,不得提前实现后续提交内容
 - **规则存档:** 讨论中若产生可固化为长期约定的规则/决策(如 API 行为、架构约定),主动向用户提示拟写入的文本,经用户确认后方可添加到 CLAUDE.md 对应小节;未确认不擅自修改
 - **工作流手册:** 提交节奏、三条门禁的具体命令与验证纪律见 `Documentation/Workflow.md`;本文件只写规则,流程细节不在两处重复
-- **模块审计:** 对模块做「找潜在问题 + 第三方对照 + 改进建议」这类审计时,判据清单、探针命令与报告格式见 `Documentation/ModuleAudit.md`;结论与**已否决项**写进该模块 README(优先并入 `已知限制` / `设计取舍`,无归属时才新增 `审计记录` 一节)
+- **模块审计:** 对模块做「找潜在问题 + 第三方对照 + 改进建议」这类审计时,判据清单、探针命令与报告格式见 `Documentation/ModuleAudit.md`;结论按性质分流(落点表见该手册 §五):使用方需要知道的边界 → 模块 README `已知限制`;影响使用方怎么用的「为什么是 A 而不是 B」 → 模块 README `设计取舍`;接口承诺 → 模块 README `接口承诺到哪为止`;已评估未采纳与未决项 → `Documentation/Modules/<模块>.md`
