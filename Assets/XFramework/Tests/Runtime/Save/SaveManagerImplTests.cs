@@ -1344,6 +1344,81 @@ namespace XFramework.XSave.Tests
             Assert.IsFalse(SaveManager.IsBusy, "写操作完成后应回到 false");
         }
 
+        #region 零覆盖补齐（2026-09-30 第二轮审计）
+
+        // 本区全部是**新增守卫，不是回归**：下列成员/分支在审计前从未被任何用例触及，而当前行为
+        // 已经正确——它们买的是「以后改坏即红」。如实记在这里，免得下一轮审计把它们当成修好的缺陷。
+
+        [Test]
+        public void Initialize_WithFactory_InjectsImplementation()
+        {
+            // 工厂是公开扩展点，但仓内所有调用点都传 `()`——这条路径此前零覆盖
+            SaveManager.Shutdown();
+            SaveManager.Initialize(() => new SaveManagerImpl());
+
+            Assert.IsTrue(SaveManager.IsInitialized, "经工厂注入后门面应可用");
+            Assert.DoesNotThrow(() => _ = SaveManager.IsBusy, "注入的实现应真的在位");
+        }
+
+        [Test]
+        public void Initialize_Duplicate_WarnsAndKeepsFirstImplementation()
+        {
+            // 重复注入的分支（告警 + 吞掉）此前零覆盖。用「先设玩家上下文、再重复注入」来观测
+            // 实现有没有被换掉——上下文存在实现实例里，换了就丢
+            SaveManager.SetCurrentPlayer("alice");
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Save\] SaveManager\.Initialize 被重复调用"));
+
+            SaveManager.Initialize(() => new SaveManagerImpl());
+
+            Assert.AreEqual("alice", SaveManager.CurrentPlayerId, "重复注入不得替换掉已有的实现");
+        }
+
+        [Test]
+        public void Shutdown_ThenAnyApi_Throws()
+        {
+            // Shutdown 此前只作为 fixture 清理被调用，行为零断言
+            SaveManager.Shutdown();
+
+            Assert.IsFalse(SaveManager.IsInitialized, "IsInitialized 只反映「有没有注入实现」");
+            Assert.Throws<InvalidOperationException>(() => _ = SaveManager.IsBusy);
+            Assert.Throws<InvalidOperationException>(() => SaveManager.SetCurrentPlayer("alice"));
+            Assert.Throws<InvalidOperationException>(() => SaveManager.SetCurrentVersion(2));
+        }
+
+        [Test]
+        public async Task BusyGuards_ThrowWhileWriteInFlight()
+        {
+            // 三道忙碌守卫**只在门面层**（接口与实现都没有）——此前零覆盖。
+            // 手法与 IsBusy 那条相同：不 await 保存任务，让门面停在「写操作在途」
+            var saveTask = SaveManager.SaveAsync(1);
+            Assert.IsTrue(SaveManager.IsBusy, "前置：写操作在途");
+
+            Assert.Throws<InvalidOperationException>(() => SaveManager.SetCurrentVersion(2),
+                "写操作在途时不允许切换存档格式版本");
+            Assert.Throws<InvalidOperationException>(() => SaveManager.SetCurrentPlayer("alice"),
+                "写操作在途时不允许切换玩家");
+            Assert.Throws<InvalidOperationException>(() => SaveManager.ClearCurrentPlayer(),
+                "写操作在途时不允许清除玩家上下文");
+
+            await saveTask;
+        }
+
+        [Test]
+        public void CurrentPlayerId_ReflectsSetAndClear()
+        {
+            // getter 此前零直接断言（只有写入侧的用例）
+            Assert.IsTrue(string.IsNullOrEmpty(SaveManager.CurrentPlayerId), "默认不启用玩家隔离");
+
+            SaveManager.SetCurrentPlayer("alice");
+            Assert.AreEqual("alice", SaveManager.CurrentPlayerId);
+
+            SaveManager.ClearCurrentPlayer();
+            Assert.IsTrue(string.IsNullOrEmpty(SaveManager.CurrentPlayerId), "清除后应退回无隔离模式");
+        }
+
+        #endregion
+
         [Test]
         public void SetCurrentPlayer_InvalidPlayerId_ThrowsWithoutPoisoningContext()
         {
