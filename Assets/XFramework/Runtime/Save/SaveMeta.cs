@@ -38,6 +38,9 @@ namespace XFramework.XSave
         /// <para>把损坏槽位列出来而不是隐藏它，是为了让存档界面能展示并提供删除；
         /// 隐藏会与 <see cref="ISaveManager.SlotExistsAsync"/> 返回 <c>true</c> 自相矛盾——
         /// 界面既看不到也删不掉它。</para>
+        /// <para><b>它不是「能不能加载成功」的判据</b>：这里是**枚举面**的粗判（侧车缺失/不可解析、
+        /// 或载荷读不出来），而加载面的 <see cref="SaveLoadStatus.Corrupt"/> 还会因校验和不符、
+        /// 或数据块未全部恢复而失败——「枚举时看起来正常」不等于「能加载成功」。</para>
         /// </summary>
         public bool isCorrupted;
 

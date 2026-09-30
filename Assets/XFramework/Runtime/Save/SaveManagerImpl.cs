@@ -936,9 +936,11 @@ namespace XFramework.XSave
         /// 启动恢复扫描：修复崩溃残留，让存档目录回到一致状态。
         /// <para>扫描域根与每个玩家子目录，逐槽位收敛——载荷缺失但备份在则用备份恢复；
         /// 载荷在则清掉 <c>.tmp</c> 残留并补齐侧车；载荷与备份都不在则清掉孤儿配套文件。</para>
-        /// <para><b>线程约定（本类唯一的例外）：</b>全程只调用 <see cref="FileManager"/> 原语与
-        /// <c>Debug.Log</c>（Unity 保证后者线程安全），<b>不触碰 Unity API 与 <see cref="DataManager"/>，
-        /// 因此不切回主线程</b>。这样启动管线里即便有调用方同步阻塞等待它也不会死锁；
+        /// <para><b>线程约定：</b>扫描主体只调用 <see cref="FileManager"/> 原语与 <c>Debug.Log</c>
+        /// （Unity 保证后者线程安全），不触碰 Unity API 与 <see cref="DataManager"/>。</para>
+        /// <para><b>但它会切回主线程一次</b>：需要重建侧车时走 <c>EnsureSidecarAsync</c> →
+        /// <c>WriteSidecarAsync</c>，后者末尾有 <c>ReturnToMainThread</c>；此后整段恢复留在主线程。
+        /// 所以「同步阻塞等待它不会死锁」**并不成立**——<b>不要</b>在主线程同步阻塞等待它。
         /// 调用方若要写 <c>PipelineStageContext</c> 这类要求主线程的对象，须自行切回。</para>
         /// </summary>
         /// <param name="cancellationToken">取消令牌。</param>

@@ -93,8 +93,8 @@ SaveManager.Initialize(null, new SaveOptions
 - 文件 IO 由 Provider 在**线程池**上执行；载荷的序列化与反序列化同样在池线程上完成。
 - 本模块的公开异步 API **在返回前都会切回主线程**，因此调用方在 `await` 之后可以安全地访问 Unity API 与 `DataManager`。
 - 代价是这些方法依赖 PlayerLoop 泵，**禁止在主线程用 `.GetAwaiter().GetResult()` 同步阻塞等待**，否则会死锁。
-- 唯一例外是内部的 `SaveManager.RecoverAsync`：它全程只调用文件系统原语与线程安全的 `Debug.Log`，**刻意不切回主线程**，因此启动管线中同步阻塞等待它也不会死锁。调用方若要写 `PipelineStageContext` 这类要求主线程的对象，须自行切回。
-  - 这条成立的前提是文件原语**可从任意线程调用**（域根在主线程解析并缓存，见 `File/README.md` 的「线程契约」）。
+- **内部 `SaveManager.RecoverAsync` 不是「全程不切回主线程」**：它自身不做切线程，但**只要恢复过程中需要重建侧车，它就会切回主线程一次**（`EnsureSidecarAsync` → `WriteSidecarAsync` 末尾的 `ReturnToMainThread`），此后整段恢复都留在主线程。所以「启动管线里同步阻塞等待它也不会死锁」**只在无需重建侧车的路径上成立**——**不要**在主线程同步阻塞等待它（`SaveBootstrapStage` 是 `await` 它的）。
+  - 它仍然与其它成员不同的一点：恢复扫描里碰文件系统的那些调用**必须在池线程上也能跑**（那半程确实不碰 Unity API）。这正是 `File` 模块把域根改到主线程预热（`PrimeRoots`）的理由——见 `File/README.md` 的「线程契约」。
 
 ## 加载结果与失败处理
 
