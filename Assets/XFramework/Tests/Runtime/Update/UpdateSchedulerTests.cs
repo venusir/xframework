@@ -1843,6 +1843,23 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Tick_Exception_InSlicedBucket_UnregistersNode()
+        {
+            // 每帧桶与切片桶是两段各自独立的 catch（UpdateScheduler.cs:399-408 与 :466-475）——
+            // 上面那条 Tier0 的绿不能推断切片档也绿，这条补上另一半。
+            // 单条目 → 桶内下标 0 → 相位 0，故第一次 Tick 就会轮到它
+            _scheduler.Register(_node, order: 0, initialTier: UpdateTier.Tier1);
+            _node.ThrowException = true;
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape(
+                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering: System.Exception: Test exception")));
+            _scheduler.Tick(time: FrameSeconds);
+
+            Assert.AreEqual(0, _scheduler.TotalCount, "切片档抛异常同样应注销该节点");
+        }
+
+        [Test]
         public void DisableDuringTick_OnDisableThrows_RestOfFrameStillApplies()
         {
             // 生命周期回调抛异常曾直接穿出 FlushPending —— 循环中断且缓冲不清空，于是排在后面的

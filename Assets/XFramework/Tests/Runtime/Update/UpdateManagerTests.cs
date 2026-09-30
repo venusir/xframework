@@ -326,5 +326,97 @@ namespace XFramework.XUpdate.Tests
         }
 
         #endregion
+
+        #region 零覆盖补齐（2026-09-30 审计）
+
+        // 本区全部是**新增守卫，不是回归**：下列成员/分支在审计前从未被任何用例触及，而当前行为
+        // 已经正确——它们买的是「以后改坏即红」。如实记在这里，免得下一轮审计把它们当成修好的缺陷。
+        [Test]
+        public void DisabledCount_AggregatesAcrossTimings()
+        {
+            var updateNode = new TestUpdateable();
+            var fixedNode = new FixedNode();
+            UpdateManager.Register(updateNode, order: 0);
+            UpdateManager.RegisterFixed(fixedNode, order: 0);
+
+            UpdateManager.Disable(updateNode);
+            UpdateManager.Disable(fixedNode);
+
+            // 门面按三套调度器求和：这两条注册在**不同时机**，故合计是 2 而非 1
+            // （此前 `UpdateManager.DisabledCount` 全仓零调用）
+            Assert.AreEqual(2, UpdateManager.DisabledCount, "禁用计数应跨三套时机聚合");
+        }
+
+        [Test]
+        public void TickFixed_NoArg_DispatchesFixedTiming()
+        {
+            // 无参重载此前全仓零调用——生产走 DriveFixedUpdate → Tick(BuildFixedClock())，
+            // 测试走 TickFixed(float)。它是 README 指定的手动驱动入口之一，需要钉住
+            var node = new FixedNode();
+            UpdateManager.RegisterFixed(node, order: 0);
+
+            UpdateManager.TickFixed();
+
+            Assert.AreEqual(1, node.FixedCallCount, "无参 TickFixed 应驱动固定步时机");
+        }
+
+        [Test]
+        public void ProcessImmediate_DispatchesRegisteredNode()
+        {
+            // 此前唯一的调用点在一个 DoesNotThrow 里——从未被验证过**真的派发**
+            var node = new TestUpdateable();
+            UpdateManager.Register(node, order: 0);
+
+            UpdateManager.ProcessImmediate(node, deltaTime: 0.5f, time: 1.0f);
+
+            Assert.AreEqual(1, node.UpdateCallCount, "ProcessImmediate 应立刻派发一次");
+        }
+
+        [Test]
+        public void ProcessImmediate_WithClock_DispatchesRegisteredNode()
+        {
+            var node = new TestUpdateable();
+            UpdateManager.Register(node, order: 0);
+
+            UpdateManager.ProcessImmediate(node, deltaTime: 0.5f, clock: new UpdateClock(1.0, 2.0));
+
+            Assert.AreEqual(1, node.UpdateCallCount, "带时钟的重载同样应立刻派发一次");
+        }
+
+        [Test]
+        public void IsPaused_TrueWhenTimeScaleZero()
+        {
+            // 门面 IsPaused 有两个来源：显式 Pause 开关，与 Time.timeScale <= 0。
+            // 既有三条用例全在默认 timeScale 下，这条分支从未被触及
+            var original = Time.timeScale;
+            try
+            {
+                Time.timeScale = 0f;
+                Assert.IsTrue(UpdateManager.IsPaused, "timeScale <= 0 时门面应报暂停");
+            }
+            finally
+            {
+                // PlayMode 下所有 fixture 共享同一个 player：timeScale 不复位会一路污染下去
+                Time.timeScale = original;
+            }
+        }
+
+        [Test]
+        public void Pause_FreezesFixedTiming()
+        {
+            // `RegisterFixed` 不传轴（取默认 Scaled），故 Pause 会连固定步时机一起冻结——
+            // 这条此前既没写进文档、也没有用例（审计已把前者补上）
+            var node = new FixedNode();
+            UpdateManager.RegisterFixed(node, order: 0);
+
+            UpdateManager.TickFixed();
+            Assert.AreEqual(1, node.FixedCallCount);
+
+            UpdateManager.Pause();
+            UpdateManager.TickFixed();
+            Assert.AreEqual(1, node.FixedCallCount, "Pause 应同时冻结固定步时机的派发");
+        }
+
+        #endregion
     }
 }
