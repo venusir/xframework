@@ -72,8 +72,8 @@ using (handle)
 ```csharp
 using (var handle = await AssetManager.LoadAsync<TextAsset>(location))
 {
-    T asset = handle.Asset;     // 资源本体，加载失败时为 null
-    string loc = handle.Location; // 资源定位路径
+    TextAsset asset = handle.Asset;  // 资源本体，加载失败时为 null
+    string loc = handle.Location;  // 资源定位路径
     bool valid = handle.IsValid;  // 句柄是否有效
     bool done = handle.IsDone;    // 加载是否已完成
     float prog = handle.Progress; // 加载进度 0~1
@@ -129,13 +129,14 @@ await AssetManager.PreloadAllAsync(locations, p => Debug.Log($"预加载进度: 
 Host 模式下资源分内置与远端两份，加载远端资源前需先下载。典型链路：
 
 ```csharp
-// 1. 初始化时声明 Host 模式与远端服务
+// 1. 初始化时声明 Host 模式与远端服务（注意形参顺序：options 在前、progress 在后）
 var options = new AssetInitOptions
 {
     PlayMode = AssetPlayMode.Host,
     RemoteServices = new MyRemoteServices(), // 实现 IAssetRemoteServices
 };
-await AssetManager.InitializeAsync(progress, options);
+await AssetManager.InitializeAsync(options,
+    progress: new Progress<AssetInitReport>(r => Debug.Log($"{r.Progress:P0} {r.Description}")));
 
 // 2. 请求最新版本号
 string version = await AssetManager.RequestPackageVersionAsync();
@@ -427,6 +428,37 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 `YooAssetsDriver.Update` 驱动；所有 `await` 的续体经 UniTask 的 PlayerLoop 推进——两者都在主线程。
 
 需要从后台线程加载资源时，请先 `await UniTask.SwitchToMainThread(cancellationToken)` 再进入本模块。
+
+## 已知限制
+
+1. **并发初始化只有首个调用者的参数生效**：`InitializeAsync` 被并发调用时共享同一次初始化，
+   `options`、`progress` 与取消令牌**一律取首个调用者**，其余调用者的这三项被忽略且不告警
+   （取消令牌与参数的这一约定写在 XML 文档里；若各调用方需要不同的包配置，请自行串行化）。
+2. **`Destroy()` / `SetInstance()` 会作废在途初始化**：在途初始化的创建者与加入者都会收到
+   `InvalidOperationException`（消息含修复提示）。这是刻意的——`await` 正常返回必须等价于「已初始化」。
+3. **额外包并发初始化不受保护**：`InitializePackageAsync` 建议在默认包初始化完成后**顺序**调用，
+   并发初始化多个额外包没有任何保护。
+4. **句柄重复 `Dispose` 是安全的**（YooAsset 对已释放句柄提前返回），代价是它会打一条
+   **不带 `[AssetManager]` 前缀**的 YooLogger 警告——日志里出现那条约等于「有人重复释放了句柄」。
+5. **`WaitAsync` 在 `Begin()` 之前会抛异常**：YooAsset 的下载器在启动前既不完成也不失败，
+   本方法没有超时，拒绝比永久挂起好排查。
+6. **`UnloadUnusedAssetsAsync` 不报告失败**（YooAsset 的卸载操作没有失败路径）；
+   它只回收引用计数为 0 的资源，未 `Dispose` 的句柄与存活实例引用的资源不受影响。
+
+## 接口承诺到哪为止
+
+1. **加载失败不抛异常**：`LoadAsync` / `LoadSubAssetsAsync` / `LoadRawFileAsync` 失败返回 `default` 句柄
+   （`IsValid == false`、`Asset == null`，原因在 `LastError`）；`InstantiateAsync` 失败返回 `null`；
+   `LoadSceneAsync` 失败返回无效 `default(Scene)`（用 `IsValid` 校验）。这是本模块的刻意约定
+   ——对照 Addressables 的「失败抛异常」，选它是因为 Unity 加载失败多为可预期的（地址写错、资源未下载）。
+   **例外**：初始化与热更链路（`RequestPackageVersionAsync` / `UpdatePackageManifestAsync` /
+   `PreDownloadContentAsync`）失败**抛异常**；`DownloadAssetsAsync` 失败返回 `false`、取消抛 `OperationCanceledException`。
+2. **句柄的生命周期就是 YooAsset 的引用计数**：`Dispose` 即 `Release`，`using` 之外没有别的魔法；
+   池化的实例在回池时**保留**句柄（资源保活），真正销毁时才释放。
+3. **`Destroy()` 不卸载 YooAsset 侧的包与已加载资源**：它释放托管实例与包引用表，YooAsset 的
+   包注册与 bundle 缓存**保持存活**——这正是「`Destroy()` 后可重新初始化复用」的前提。
+   要真正回收内存请用 `UnloadUnusedAssetsAsync`（配合 `ClearPool` 清掉闲置实例）。
+4. **`PreloadAllAsync` 不占引用计数**，只把内容拉进缓存；需要持有请用 `LoadAllAsync`（其句柄必须逐项释放）。
 
 ## 注意事项与常见误区
 

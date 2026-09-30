@@ -18,6 +18,9 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 初始化资源服务（默认包）。
+        /// <para><b>并发契约</b>：并发调用共享同一次初始化，<c>options</c>、<c>progress</c> 与取消令牌
+        /// 取首个调用者，其余调用者的这三项不参与该任务。初始化在完成前被销毁/替换时抛
+        /// <see cref="System.InvalidOperationException"/>——正常返回必然等价于「已初始化」。</para>
         /// </summary>
         /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
         /// <param name="progress">初始化进度上报（可空）。步骤推进时经 <see cref="IProgress{T}.Report"/> 推送

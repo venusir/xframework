@@ -49,7 +49,10 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 初始化全局资源管理器（默认包）。
-        /// <para>并发调用共享同一进行中的初始化任务；共享任务的取消令牌取首个调用者，其余调用者的令牌不参与该任务。</para>
+        /// <para>并发调用共享同一进行中的初始化任务；<b>options、progress 与取消令牌一律取首个调用者</b>，
+        /// 其余调用者的这三项不参与该任务（不告警）。</para>
+        /// <para>初始化在完成前被 <see cref="Destroy"/> / <see cref="SetInstance"/> 作废时，
+        /// 创建者与加入者都抛 <see cref="InvalidOperationException"/>——<c>await</c> 正常返回必然等价于「已初始化」。</para>
         /// </summary>
         /// <param name="options">初始化配置。为 null 时使用默认配置（默认包 + 离线模式）。</param>
         /// <param name="progress">初始化进度上报（可空），见 <see cref="AssetInitReport"/>。</param>
@@ -196,7 +199,9 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 设置外部已创建的实例作为全局管理器。
-        /// <para>适用于依赖注入或单元测试场景。</para>
+        /// <para>适用于依赖注入或单元测试场景。在途初始化会一并作废（见 <see cref="InitializeAsync"/>）。</para>
+        /// <para><b>不释放原实例</b>：与 <see cref="Destroy"/> 不同，本方法只替换引用——重复调用会静默丢弃
+        /// 前一个实例，需要释放请先自行处置。</para>
         /// </summary>
         public static void SetInstance(IAssetManager manager)
         {
@@ -211,7 +216,10 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
-        /// 销毁全局资源管理器，释放所有资源。
+        /// 销毁全局资源管理器：释放托管实例（含池中闲置实例）与包引用表。
+        /// <para><b>不卸载 YooAsset 侧的包与已加载资源</b>——它们刻意保持存活，这正是「<c>Destroy()</c> 后可重新
+        /// 初始化复用」的前提。要真正回收内存请用 <see cref="UnloadUnusedAssetsAsync"/>（配合
+        /// <see cref="ClearPool"/> 清掉闲置实例）。</para>
         /// </summary>
         public static void Destroy()
         {
@@ -474,6 +482,7 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 销毁全部闲置池实例（不影响正在使用的实例）。
+        /// <para>当前实现不支持该能力时返回 0 并告警一次（同 <see cref="ClearPool"/>）。</para>
         /// </summary>
         /// <returns>实际销毁的实例总数。</returns>
         public static int ClearAllPools()

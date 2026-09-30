@@ -9,8 +9,9 @@ namespace XFramework.XUI.Tests
 {
     /// <summary>
     /// 可注入面板实例来源的冒烟测试。
-    /// <para>此前 Runtime 测试无法打开真实面板——<c>AssetManager.ImplFactory</c> 只对 Editor 测试开放，
-    /// 而面板实例化写死走 <c>AssetManager.InstantiateAsync</c>。抽出 <see cref="IUIPanelFactory"/> 后，
+    /// <para>此前 Runtime 测试无法打开真实面板——面板实例化写死走 <c>AssetManager.InstantiateAsync</c>，
+    /// 而测试进程里 AssetManager 从未初始化（门面的 <c>ImplFactory</c> 注入点对两个测试程序集**都**可见，
+    /// 但要让真实实例化路径跑起来仍需 YooAsset 环境）。抽出 <see cref="IUIPanelFactory"/> 后，
     /// 每个行为变更都能在无 YooAsset 的环境下立刻带上测试。</para>
     /// </summary>
     [TestFixture]
