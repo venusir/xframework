@@ -20,6 +20,19 @@ namespace XFramework.XConfig
         async UniTask<ConfigTable<T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
             var text = await LoadTextAsync(assetPath);
+            return ParseTable<T, TKey>(text, assetPath);
+        }
+
+        /// <summary>
+        /// 把 CSV 文本解析成 <see cref="ConfigTable{T}"/>。
+        /// <para><b>为什么把解析单独抽出来：</b>它与资源加载解耦之后可以直接单测——装载器此前**整体
+        /// 不可测**（测试进程里 <c>AssetManager</c> 从未初始化，任何真实 Loader 路径都会在
+        /// <c>ConfigTextLoader</c> 抛错），而那正是一条静默缺陷能长期存活的原因。
+        /// 先例：<c>FileManager.IsSyncStreamingReadUnsupported</c>（「刻意做成纯谓词……可直接单测」）。</para>
+        /// </summary>
+        internal static ConfigTable<T> ParseTable<T, TKey>(string text, string assetPath)
+            where T : IConfigRow<TKey>, new()
+        {
             try
             {
                 var lines = text.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
@@ -38,11 +51,16 @@ namespace XFramework.XConfig
                         throw new ConfigException(
                             $"Row {i} in CSV '{assetPath}' has {values.Length} columns, expected {headers.Length}.");
 
-                    var item = new T();
+                    // 装箱一次、写回、再取回：T 可能是**值类型行**（README 的「struct vs class 行类型」表
+                    // 明确推荐 struct）。若把局部变量直接传给 SetMemberValue 的 object 形参，反射只会写进
+                    // 那份装箱副本，局部恒为 default(T)——单行会**静默**产出一条全默认值的行，多行则撞下面的
+                    // Duplicate Id，而错误信息指向「重复 Id」而不是「struct 不被支持」。
+                    var box = (object)new T();
                     for (int j = 0; j < members.Length; j++)
                     {
-                        SetMemberValue(members[j], item, values[j], assetPath, i + 1, headers[j]);
+                        SetMemberValue(members[j], box, values[j], assetPath, i + 1, headers[j]);
                     }
+                    var item = (T)box;
                     var key = item.Id;
                     if (dict.ContainsKey(key))
                         throw new ConfigException(
