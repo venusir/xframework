@@ -58,6 +58,29 @@ namespace XFramework.XConfig
         /// </summary>
         internal event Action<Type> InternalConfigChanged;
 
+        /// <summary>
+        /// 派发变更事件，**订阅者异常一律隔离**。
+        /// <para>与本仓既有取舍一致：<c>EventStream</c> 捕获订阅者异常并记 Error；Update 的
+        /// <c>NotifyLifecycle</c> 同样「只记 LogError、不打断」。</para>
+        /// <para><b>为什么必须有它：</b>原先 8 个派发点里有 4 个（加载路径的）落在 <c>try</c> 之内——订阅者抛异常
+        /// 会被包成 <c>ConfigException</c> 抛给调用方，**而那三个字典已经写完了**。于是调用方看到「加载失败」，
+        /// 数据却已经注册（<c>_assetPaths</c> 也写了，重试还会命中「已加载」直接返回缓存）——报错与服务实态相反。</para>
+        /// <para>整条多播一次 try/catch，不逐个隔离：逐个要用 <c>GetInvocationList</c>，每次派发分配一个委托数组。
+        /// 取舍同 <c>Pipeline.DispatchSafely</c> 与 Lock 的派发——代价是同一多播里排在抛异常者之后的订阅者会被饿死，
+        /// 已记入 README 的「已知限制」。</para>
+        /// </summary>
+        private void RaiseConfigChanged(Type type)
+        {
+            try
+            {
+                InternalConfigChanged?.Invoke(type);
+            }
+            catch (Exception e)
+            {
+                Debug.LogError($"[Config] ConfigChanged 的订阅者抛出异常，已隔离：{e}");
+            }
+        }
+
         #endregion
 
         #region Preload
@@ -219,7 +242,7 @@ namespace XFramework.XConfig
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
                 _assetPaths[type] = assetPath;
-                InternalConfigChanged?.Invoke(type);
+                RaiseConfigChanged(type);
                 return table;
             }
             catch (Exception ex) when (ex is not ConfigException)
@@ -294,7 +317,7 @@ namespace XFramework.XConfig
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
                 _globals[type] = config;
                 _assetPaths[type] = assetPath;
-                InternalConfigChanged?.Invoke(type);
+                RaiseConfigChanged(type);
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -422,7 +445,7 @@ namespace XFramework.XConfig
                 _tables[entry.RowType] = configTable.Data;
                 _tableWrappers[entry.RowType] = tableObj;
                 _assetPaths[entry.RowType] = entry.AssetPath;
-                InternalConfigChanged?.Invoke(entry.RowType);
+                RaiseConfigChanged(entry.RowType);
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -442,7 +465,7 @@ namespace XFramework.XConfig
                 var config = await ConfigLoadHelper.InvokeGlobalAsync(loader, entry.RowType, entry.AssetPath);
                 _globals[entry.RowType] = config;
                 _assetPaths[entry.RowType] = entry.AssetPath;
-                InternalConfigChanged?.Invoke(entry.RowType);
+                RaiseConfigChanged(entry.RowType);
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -477,7 +500,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             _tables[type] = table._dict;
             _tableWrappers[type] = table;
-            InternalConfigChanged?.Invoke(type);
+            RaiseConfigChanged(type);
         }
 
         /// <summary>
@@ -494,7 +517,7 @@ namespace XFramework.XConfig
                     $"Cannot register null table for Table '{rowType.Name}'.");
             _tables[rowType] = table.Data;
             _tableWrappers[rowType] = table;
-            InternalConfigChanged?.Invoke(rowType);
+            RaiseConfigChanged(rowType);
         }
 
         /// <summary>
@@ -506,7 +529,7 @@ namespace XFramework.XConfig
                 throw new ConfigException(
                     $"Cannot register null config for Global '{typeof(T).Name}'.");
             _globals[typeof(T)] = config;
-            InternalConfigChanged?.Invoke(typeof(T));
+            RaiseConfigChanged(typeof(T));
         }
 
         #endregion
@@ -607,7 +630,7 @@ namespace XFramework.XConfig
             _globals.Remove(type);
             _tableWrappers.Remove(type);
             _assetPaths.Remove(type);
-            InternalConfigChanged?.Invoke(type);
+            RaiseConfigChanged(type);
         }
 
         /// <summary>

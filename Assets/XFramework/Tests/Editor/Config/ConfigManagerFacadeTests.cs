@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -122,6 +123,65 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.DoesNotThrow(() =>
                 ConfigManager.PreloadTableAsync<TestItemRow>("").GetAwaiter().GetResult());
+        }
+
+        /// <summary>Global 配置类型——用于触发 <see cref="ConfigManager.ConfigChanged"/>。</summary>
+        private sealed class TestGlobalConfig
+        {
+            public int Value;
+        }
+
+        [Test]
+        public void SetInstance_SameImplTwice_ConfigChangedFiresOnce()
+        {
+            // **这条钉住的是既有正确行为，不是修好的缺陷。**
+            // 审计时曾怀疑「同一个实例连调两次 SetInstance 会留下两份订阅、事件派发两次」——
+            // 复现把它**证伪**了：SetInstance 里 `if (_instance is ConfigManagerImpl oldImpl)
+            // UnsubscribeImplEvents(oldImpl)` 对**同一个实例**同样成立，于是先退订再订阅，净一份。
+            // 保留本用例是因为这条不变量此前没人钉过，而它依赖的是「退订旧实例」那两行的存在
+            var impl = InstallImpl();
+            ConfigManager.SetInstance(impl);
+
+            var count = 0;
+            Action<Type> handler = _ => count++;
+            ConfigManager.ConfigChanged += handler;
+            try
+            {
+                ConfigManager.RegisterGlobal(new TestGlobalConfig());
+
+                Assert.AreEqual(1, count, "同一个实例重复 SetInstance 不得让事件派发两次");
+            }
+            finally
+            {
+                ConfigManager.ConfigChanged -= handler;
+            }
+        }
+
+        [Test]
+        public void Preload_SubscriberThrows_DataStillRegisteredAndNoExceptionEscapes()
+        {
+            // 订阅者异常此前落在加载路径的 try **之内** → 被包成 ConfigException 抛给调用方，
+            // 而 `_tables` / `_tableWrappers` / `_assetPaths` 三个字典已经写完。
+            // 调用方看到「加载失败」，数据其实已注册（重试还会命中「已加载」直接返回缓存）——报错与服务实态相反
+            InstallImpl();
+
+            Action<Type> thrower = _ => throw new InvalidOperationException("subscriber boom");
+            ConfigManager.ConfigChanged += thrower;
+            try
+            {
+                LogAssert.Expect(LogType.Error, new Regex(@"\[Config\] ConfigChanged 的订阅者抛出异常"));
+
+                var table = ConfigManager.PreloadTableAsync<TestItemRow>("config/items", _installedFake)
+                    .GetAwaiter().GetResult();
+
+                Assert.IsNotNull(table, "订阅者抛异常不得让加载失败");
+                Assert.IsTrue(ConfigManager.IsLoaded<TestItemRow>(), "数据应已注册");
+                Assert.IsTrue(ConfigManager.TryGetTable<TestItemRow>(out _), "查询面应能看到它");
+            }
+            finally
+            {
+                ConfigManager.ConfigChanged -= thrower;
+            }
         }
     }
 }
