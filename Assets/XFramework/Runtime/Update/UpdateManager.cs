@@ -136,6 +136,9 @@ namespace XFramework.XUpdate
         /// 而属性名看起来像读一个 bool 字段。这里也刻意不做缓存——缓存会被「别的库用
         /// <c>GetDefaultPlayerLoop</c> 覆盖掉注入」这类情况骗过，正是
         /// <see cref="TryInjectDriver"/> 选择结构性检查而非布尔标志的理由。</para>
+        /// <para><b>它只回答「注入状态」，不回答「有没有东西在派发」</b>：本属性不读调度器，因此
+        /// <see cref="OnQuitting"/> 把调度器置空之后仍可能返回 <c>true</c>——那一刻驱动委托还在树里，
+        /// 但 <c>DriveUpdate</c> 已是空操作。要判断「能不能派发」请看 <see cref="IsInitialized"/>。</para>
         /// </summary>
         public static bool IsDrivingPlayerLoop
         {

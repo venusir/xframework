@@ -130,20 +130,23 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 | 需求 | 通道 | 说明 |
 | --- | --- | --- |
-| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialTier` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚。`Disable` 之后再 `Enable` 会回到这个档位（启停不清档位） |
+| **静态档位**（设计决定） | `Register` / `RegisterLate` / `RegisterFixed` 的 `initialTier` | 推荐默认用它——「这个系统就该以 133ms 跑」是设计决定，声明在注册处最清楚。`Disable` 之后再 `Enable` 会回到**它离开时的档位**（启停不清档位；若期间经 `OnUpdate` 返回值迁移过，回来的是迁移后的档位，不是这里的 `initialTier`） |
 | **运行时自适应** | `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate` 的返回值 | 状态变化时表达新档位，**决定下一次**派发（滞后一拍是设计如此） |
 
 框架自己两条都在用：`InputManager` 与 `UIManager` 的每帧驱动器恒返回 `Tier0`，而
 `SettingsAutoSaveTicker` 按状态在 `Tier3`（空闲）/ `Tier0`（热窗口）/ `Tier5`（已释放）之间切换。
 
 **外部策略目前没有入口**：「按可见性统一降档」「画质/性能档批量降档」这类由调度器之外的系统决定的
-档位，`UpdateManager` 没有对应 API（没有 `SetTier`）。现有两条解法，各有代价：
+档位，`UpdateManager` 没有对应 API（没有 `SetTier`）。现有三条解法，各有代价：
 
 1. **节点自查全局状态，再用返回值表达**——等于把一条全局策略复制进 N 个节点，策略一改要改 N 处；
 2. **注销 + 以新档位重新注册**——代价是首次派发 `deltaTime = 0`（锚定规则），且最坏要等一个整周期
    才轮到首次派发（`Tier7` 约 2.1 秒，见「已知限制」）。
+3. **原地重新注册（不必先注销）**——同一条 `Register` 用新的 `initialTier` 再调一次即可：它把节点搬到新桶、
+   **不宣告 `OnEnable`**（因为并未离开派发集合），同样置锚（下一次 `deltaTime = 0`）。比上一条省一次注销，
+   代价与它相同。
 
-**档位属于设计决定、且对象数量大时，还有第三种范式**（UI 模块在用）：把档位声明在对象上
+**档位属于设计决定、且对象数量大时，还有另一种范式**（UI 模块在用）：把档位声明在对象上
 （`UIViewBase.UpdateTier`，Inspector 可配、运行时可改），由上层管理器按档位分桶、每档注册一个
 驱动器承载整桶——调度器只看到「每档一个节点」，档位与对象解耦。
 
@@ -225,6 +228,7 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 | `UpdateManager.Pause()` | **冻结** + 恢复时重锚（见下） | 照常 |
 | `Time.timeScale = 0.5` | 派发；delta 减半，且**节拍按逻辑时间走**，故墙钟周期翻倍 | 照常 |
 | `Time.timeScale < 0` | 负间隔钳制为 0 | 照常 |
+| `UpdateManager.Pause()` 下的 `FixedUpdate` 时机 | **同样冻结**——该时机的节点也挂在逻辑轴上（`RegisterFixed` 不传轴，取默认 `Scaled`），故一次 `Pause` 会三套调度器一起停 | 不适用 |
 | `FixedUpdate` 时机 | 随 Unity 固定步停摆 | 不支持（无此轴） |
 
 - **冻结时切片相位不推进**：恢复后节奏与暂停前接续。若照常推进，长周期对象会白丢一轮——
@@ -267,6 +271,11 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 `ProcessImmediate` 用于「逻辑变化后需要立刻响应，不等下一次时间切片」。注意它在**派发期间
 调用不会执行更新**，只重置时间基准（在别人的 `OnUpdate` 里再次回调自己会形成嵌套派发）。
 
+**它与 `Tick` 抛异常时的处置相反，这是有意的**：经 `Tick` 派发时 `OnUpdate` 抛异常会被记 `LogError`
+并**注销该节点**（见「派发期间的注册 / 注销 / 启用 / 禁用」）；而 `ProcessImmediate` 是**显式调用**，
+异常直接上抛给调用方、**不注销**该节点。理由与本仓对 `Settings.Save<T>()` 的裁决同向——显式调用
+应当看到失败（配额、签名、平台 SDK 这类错误该被调用方处理），隐式的每帧回调则不该把调度器带崩。
+
 ## 设计原则
 
 - **不依赖场景对象** — `UpdateManager` 自注入 PlayerLoop 驱动，不依赖任何 MonoBehaviour；
@@ -290,11 +299,21 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   「应补 3 格」而被砍掉，而截断只砍多、不补少
 - **不追赶**：暂停恢复后不补算暂停期间的逻辑
 - **`ProcessImmediate` 派发期间只重置时间基准**，不执行更新
-- **被禁用的对象精度不会变高也不会变低**：`Enable` 让它回到注册时声明的档位（见「档位由谁决定」），
+- **被禁用的对象精度不会变高也不会变低**：`Enable` 让它回到**离开时的档位**——**不是**注册时声明的
+  `initialTier`（若期间经 `OnUpdate` 返回值迁移过，回来的是迁移后的档位；见「档位由谁决定」），
   但档位较粗时首次派发最坏要等满一个整周期
 - **同时手动 `Tick` 且注入生效会派发两次**：注入生效时请只依赖自动驱动
+- **所有 API 必须在主线程调用，而且模块内没有任何守卫**：注册 / 注销 / 启停 / 暂停 / 驱动全部直接改写
+  桶与索引，既没有断言也没有同步原语。从池线程调 `Register` 之类的入口不会报错，而是**静默地与主线程的
+  派发竞争**——表现可能是难以复现的错乱，也可能是遍历中被改动的异常。框架自己的四个消费方全在主线程，
+  第三方若打算跨线程使用，请自行切回主线程
+- **同桶内其它节点的增删会改变本节点的派发相位**：切片档的相位就是桶内下标对 `2^k` 取模，而增删会让
+  其后条目的下标整体平移。于是**别人注销一个条目，你可能因此早一格或晚将近一整个周期被轮到**。
+  这是「每格只访问本切片条目」这条性质的代价（彻底修要每格扫全桶），已评估并接受；
+  介意首次派发延迟时请用 `ProcessImmediate` 或留在细档位
 
 ## 依赖
 
-- 无框架内模块依赖（`UpdateClock` 的时间由驱动方传入，`UpdateManager` 与调度器不读 `UnityEngine.Time`）
+- 无框架内模块依赖（`UpdateClock` 的时间由**驱动方**传入：`UpdateManager` 读 `UnityEngine.Time` 构造时钟，
+  而**调度器本身不读** `UnityEngine.Time`——这是它「纯函数、可精确驱动」的前提，单测与确定性回放都依赖这一点）
 - 无第三方依赖（PlayerLoop 注入使用 Unity 自带的 `UnityEngine.LowLevel`）
