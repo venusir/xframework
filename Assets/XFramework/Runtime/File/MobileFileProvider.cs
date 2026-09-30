@@ -217,7 +217,10 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
-        /// 构建 StreamingAssets 完整 URL。Android 上自动添加 <c>jar:file://</c> 前缀。
+        /// 构建 StreamingAssets 完整 URL。
+        /// <para><b>本方法不添加任何前缀</b>：Android 上那个 <c>jar:file://</c> 前缀来自
+        /// <see cref="Application.streamingAssetsPath"/> 属性本身，这里只做「补前导 <c>/</c> 再拼接」。
+        /// 别照着「要在 Android 上加前缀」的说法去改——那会拼出双前缀的坏 URL。</para>
         /// </summary>
         private static string GetStreamingUrl(string relativePath)
         {

@@ -84,6 +84,9 @@ namespace XFramework.XFileManager
             if (_destroyed)
                 _destroyed = false;
 
+            // 单线程语义下这里**不可达**——上一行刚把标志清掉。留着是因为有一条极窄的并发窗口：
+            // 另一个线程恰在「清标志」与「检查」之间调了 Destroy，此时响一声比默默继续好。
+            // 不为它加锁：本模块的初始化契约本就是「首次须在主线程」，为此引入同步原语不划算
             ThrowIfDestroyed();
 
             if (_initialized)
@@ -277,7 +280,7 @@ namespace XFramework.XFileManager
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>。</returns>
+        /// <returns>文件字节数组。文件不存在时返回 <c>null</c>；IO 失败抛 <see cref="System.IO.IOException"/>。</returns>
         public static UniTask<byte[]> ReadAllBytesAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
@@ -427,7 +430,7 @@ namespace XFramework.XFileManager
         /// <param name="relativePath">相对于域根目录的目录路径。</param>
         /// <param name="searchPattern">搜索模式，默认为 <c>*</c>。</param>
         /// <returns>
-        /// 匹配的文件相对路径数组。
+        /// 匹配的文件相对路径数组；目录不存在时返回空数组。
         /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与传入的相对路径同规范），
         /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
         /// </returns>
@@ -445,7 +448,7 @@ namespace XFramework.XFileManager
         /// <param name="searchPattern">搜索模式，默认为 <c>*</c>。</param>
         /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>
-        /// 匹配的文件相对路径数组。
+        /// 匹配的文件相对路径数组；目录不存在时返回空数组。
         /// <para><b>契约：</b>返回的相对路径一律使用正斜杠 <c>/</c> 分隔（与传入的相对路径同规范），
         /// 可直接用于 <see cref="FileManager"/> 的其他方法。</para>
         /// </returns>

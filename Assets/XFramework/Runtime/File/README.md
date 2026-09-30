@@ -117,19 +117,22 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 > **旧入口**：`FileManagerExtensions` 上仍有同名方法（该文件已随 0.2.0 发布），现为一行委托，与门面行为完全一致。新代码直接用门面即可。
 
-### 移动端 Streaming 域：同步读被拒绝，而不是挂起
+### 移动端 Streaming 域：同步访问被拒绝，而不是挂起
 
-这是唯一一处同步调用不可用的组合，且它不是「慢」而是**死锁**：
+这是**唯一一组**同步调用不可用的组合（移动端 Provider + `Streaming` 域）。两种失败都不是「慢」——
+一个必然死锁，另一个的安全性从未被验证过：
 
 | 调用 | 移动端 `Streaming` 域上的行为 |
 | ---- | ----------------------------- |
-| 同步 `Exists` | **阻塞但能完成**（内部忙等 `request.isDone`，该标志由引擎原生侧推进，不依赖托管 PlayerLoop）——慢，故仍推荐 `ExistsAsync` |
+| 同步 `Exists` | **抛 `NotSupportedException`**（其内部实现是主线程忙等，安全性依赖一条**本仓无法证实**的引擎断言——不赌它，详见下段） |
 | 同步 `ReadAllText` / `ReadAllBytes` | **抛 `NotSupportedException`** |
 | 同步 `WriteAllText` / `WriteAllBytes` / `WriteAllBytesAtomic` | **不会死锁**（写透传桌面实现，走线程池）。但 `Streaming` 是只读域，写入本身就不该发生，实际会在文件系统层面失败 |
 
 内容读被拒绝的原因：该域经 `UnityWebRequest` 读取，其 `await ToUniTask()` 的**续体要在 PlayerLoop 上推进**——阻塞主线程等它就是等一个永远不会推进的循环，无异常、无日志，表现为游戏卡死。拒绝比挂起好排查，请改用 `ReadAllTextAsync` / `ReadAllBytesAsync`。
 
-**不要照 `Exists` 类推**：那里用的是忙等，不依赖托管 PlayerLoop，故可安全阻塞。两者机制不同，结论也不同。
+**同步 `Exists` 为什么也一并拒绝**：它用的是主线程自旋等待（`while (!request.isDone) { }`），安全性依赖「`isDone` 由引擎原生侧推进、不依赖托管 PlayerLoop」这条**引擎行为断言**——本仓**无法证实**它（没有移动设备路径可测）。断言为真则只是主线程空转到请求完成；为假就是与内容读同形的永久挂死，无异常、无日志。与其赌它，不如一并拒绝并指向 `ExistsAsync`。
+
+（桌面环境下实测那条自旋确实会完成——但那句话只在桌面成立过。证据边界见「已知限制」。）
 
 > **自建 Provider 注意**：判定只覆盖内置的 `MobileFileProvider`。第三方 Provider 若其异步读同样依赖主线程 PlayerLoop 推进，同步调用一样会死锁，框架无法代为识别。
 
@@ -458,3 +461,41 @@ FileManager.Initialize();
 - **无 GC 分配热路径：** 枚举传递 `FileDomain`（值类型），`ICryptoProvider` 默认不启用，不加载时无额外开销。
 - **Console 安全：** `ConsoleFileProvider` 为抽象类而非接口，便于未来在基类中添加通用实现而不破坏第三方子类。
 - **扩展性：** 第三方可通过 `IFileProvider` 接口完全替换文件系统后端（如自定义加密 VFS 或远程存储后端）。
+
+---
+
+## 已知限制
+
+知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
+
+- **移动端 `Streaming` 域的同步内容读与同步 `Exists` 都不可用**：两者都抛 `NotSupportedException`，请改用
+  `ExistsAsync` / `ReadAllTextAsync` / `ReadAllBytesAsync`。前者是机制上的必死锁（续体依赖 PlayerLoop），
+  后者是**安全性未经验证的忙等**——理由见上节。
+- **同步 API 一律阻塞调用线程**，只适合编辑器工具、小型配置文件、启动期加载；**勿在每帧路径调用**。
+  它们的免死锁前提是「每个 Provider 的异步实现都用 `RunOnThreadPool(configureAwait: false)`」——
+  内置实现全部满足（11 处无一例外），第三方实现不一定。
+- **自建 Provider 的死锁盲区**：同步不可用性的判定只识别内置的 `MobileFileProvider`。第三方 Provider 若返回
+  PlayerLoop 依赖型的 UniTask（如 WebGL 后端），同步调用一样会死锁，框架无法代为识别。
+- **不实现可选能力接口的后果**见「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
+  `IDirectoryProvider` 是 **Save 模块正在依赖**的（存档的崩溃防护、玩家目录发现），不是可选项。
+- **切换加密立即使已写入的文件不可读**：旧文件是明文（或旧密钥密文），新配置下解密得到的是垃圾数据而**不是
+  抛异常**，表现为「文件损坏」。变更前需自行迁移存量文件。
+- **加解密作用域默认覆盖所有域**：`SetCryptoProvider` 不传 `domain` 会连带加密 `AppData` / `Cache`；
+  只想保护存档应显式传 `FileDomain.SaveData`。
+
+## 设计取舍
+
+- **域根在主线程预热一次后缓存，不让池线程解析**：`Application.persistentDataPath` 一类属性受 Unity 的主线程
+  限定，池线程读它会抛 `UnityException`。此前域根是在 `RunOnThreadPool` 的**委托内部**解析的，于是每次启动的
+  恢复扫描必崩——而 `SaveManagerImpl.RecoverAsync` 的契约恰恰是「全程不切回主线程」。现由 `PrimeRoots` 在主线程
+  取好，`GetPhysicalPath` 退化为纯字符串运算，「文件原语可从任意线程调用」这条承诺至此才真正成立。
+- **可选能力探测查基础 Provider，不查生效 Provider**：启用加解密时生效的是 `CryptoFileProvider` 装饰器，而装饰器
+  按契约恒实现 `IAtomicFileProvider` / `IDirectoryProvider`——对它探测必然「通过」，判定会被整个推给装饰器。
+  同一件事曾因此有**两种答案**（未加密时告警降级、加密后抛异常或静默返回空数组）。查 `_baseProvider` 把判定权
+  收归一处，装饰器侧的同类检查退为兜底、不重复告警也不改变语义。
+- **同步面是异步面的一层包装，不是第二套实现**：所有同步方法都是
+  `XxxAsync(...).AsTask().GetAwaiter().GetResult()`，没有重复的 IO 代码。代价是阻塞调用线程（见「已知限制」），
+  换来的是「编辑器工具 / 启动期」不必写异步。
+- **`ConsoleFileProvider` 做成抽象类而非接口**：便于未来在基类里添加通用实现而不破坏第三方子类。
+- **`FileManagerExtensions` 保留为一行委托，不删除**：该文件已随 0.2.0 发布过，删掉是源码破坏；保留同名成员、
+  内部转调门面，既有调用方零改动。

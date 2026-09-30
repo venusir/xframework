@@ -23,3 +23,36 @@
 | `FileManager.cs`           | 跨平台文件管理器静态外观      |
 | `FileManagerExtensions.cs` | 兼容面：同名同步方法的一行委托（同步 API 已收敛到门面） |
 | `README.md`                | 本文件                        |
+
+## 已评估未采纳与未决
+
+（2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，**零高危**。已修项见 `CHANGELOG`。）
+
+**已评估未采纳**（逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层）：
+
+- **不给 `ConsoleFileProvider` 写测试派生类**：它锁的是「本仓没有的使用方式」（全仓零派生）。真正该锁的
+  「不实现可选能力接口时门面如何降级」已由 `NonAtomicFileProvider` / `NonEnumerableFileProvider` 两个替身覆盖。
+- **不给「首次初始化须在主线程」加强制断言**：失败已经响亮（池线程读 `Application.*` 抛 `UnityException`），
+  断言只是把同一条错误提前。`MessageManager` 的 `MainThreadGuard` 是「静默出错」才需要的。
+- **不动 `Destroy()` 对 Provider 的处置**：`IFileProvider` **不是** `IDisposable`（10 个成员里没有），
+  `Destroy` 不调 Dispose 不漏资源。
+- **不给同步 API 做「自动切回主线程」**：那会改变 `.AsTask().GetAwaiter().GetResult()` 的阻塞语义，
+  而同步面的存在意义就是「调用方自己承担阻塞」。
+
+**未决**：
+
+- **File 缺异步删除原语**：Save 的 `DeleteSlotAsync` / `MoveSlotAsync` 因此被迫在主线程做同步 IO
+  （已记在 Save README 的「已知限制」）。属跨模块 API 变更，该单独走一轮计划——本轮只指认归属，不重复立项。
+- **`MobileFileProvider.CheckStreamingExists` 的忙等仍未在真机验证**：门面（`FileManager.Exists`）已拒绝
+  「移动端 + Streaming」这个组合，但 Provider 是公开类型、可以直接使用，那条 `while (!request.isDone) { }`
+  仍在。**未决的是「要不要给 Provider 层也加兜底」**（改成有界等待？），本轮只如实标注风险。
+  **桌面环境的实测数据**：审计时的红基线跑完只用了 16.1 秒，即那条自旋在桌面 + `file://` 下**会完成**——
+  已知证据只到这里，移动端（Android `jar:file://` / iOS）无路径可验。
+- **两处如实登记的覆盖空白**（不是「以后补」，是**测不了**）：
+  1. `ConsoleFileProvider` 的 12 个公开方法（5 abstract + 7 virtual）零覆盖——仓内无派生类。
+  2. `MobileFileProvider` 的 Streaming 私有路径（`CheckStreamingExists` / `ReadStreamingText` /
+     `ReadStreamingBytes` / `GetStreamingUrl`）零覆盖——仓内无移动设备路径，任何替身都会结构性绕开真实链路。
+     这正是 `CHANGELOG` 记过的教训：8 个 fixture 全注入 `TempFileProvider`，于是「域根解析是否碰了 Unity API」
+     这一整类缺陷在替身上不可见。
+- **`FileRootsTimingTests` 的命名空间与同目录其余 fixture 不一致**（`XFramework.XFile.Tests` vs
+  `XFramework.XFileManager.Tests`）：纯命名问题，等下次动那批测试时顺手统一。
