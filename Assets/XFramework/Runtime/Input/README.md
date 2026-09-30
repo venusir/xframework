@@ -458,6 +458,21 @@ public class RewiredProvider : IInputProvider
 - 同族问题（同一根因：门面 `_initialized` 没有会话级复位，`Initialize()` 重复调用是「告警 + 忽略」而非
   「重新初始化」，**使用方无法自救**）也在 `AssetManager` / `ConfigManager` / `LocalizationManager` /
   `FileManager` 上成立，见本轮 `CHANGELOG`。
+- **`Destroy()` 不退订本模块的订阅**：`Observe*` / `Subscribe` 订的是模块级的帧脉冲流与消息总线，
+  `Destroy()` 只释放 Provider、注销帧驱动、复位帧号——**句柄归订阅方**。传了 `context` 的订阅由它的销毁
+  令牌收口（见下节）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的
+  `UIManager.Subscribe`。
+
+## 线程契约
+
+- **`InputManager` 的所有调用都在主线程**：查询、状态变更（`Initialize` / `SetProvider` / `Destroy` /
+  `SwitchActionMap` / 振动）以及 `Tick()` 的驱动。底层 Unity Input System 本身要求主线程；本模块不做
+  线程同步，也没有跨线程断言——**越线程调用没有守卫会拦你**。
+- **`Observe*` 的回调在主线程**：它们由帧脉冲驱动，而帧脉冲只由 `Tick()`（进而由 `UpdateManager`
+  在主线程驱动）发布。
+- **`destroyCancellationToken` 的回调跑在取消者的线程上**：传了 `context` 的订阅，若在非主线程销毁该
+  对象，退订会在线程池线程上改写订阅表。`MonoBehaviour` 由 Unity 在主线程销毁，不受影响；自定义
+  `IDestroyCancellationToken` 实现要自己保证在主线程取消。
 
 ## 依赖
 
@@ -470,4 +485,6 @@ public class RewiredProvider : IInputProvider
   ```
 - Unity Input System Test Framework（随 Input System 包自带，仅测试 asmdef 引用，无额外安装）
 - 可选：Rewired（如需自定义实现）
+- 框架内依赖：`XMessage`（设备连接 / 断开与手柄类型变化经消息总线发布）、`XEvent`（`Observe*` 的帧脉冲流）、
+  `XUpdate`（`Initialize` 成功后自动注册帧驱动）
 
