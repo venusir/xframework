@@ -341,6 +341,10 @@ namespace XFramework.XInput.Tests
             Assert.Throws<ArgumentNullException>(() => InputManager.ObserveHeld("Jump", null));
             Assert.Throws<ArgumentNullException>(() => InputManager.ObserveVector2("Move", null));
             Assert.Throws<ArgumentNullException>(() => InputManager.ObserveFloatRaw("Throttle", null));
+            // 补齐另外三个:此前 8 个 Observe* 只断言了 5 个的 null 守卫
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObservePressDuration("Jump", null));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveFloat("Throttle", null));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveVector2Raw("Look", null));
         }
 
         [Test]
