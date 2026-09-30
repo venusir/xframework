@@ -28,7 +28,18 @@ namespace XFramework.XInput.Tests
             public Vector2 Vector2Value;
             public Vector2 Vector2RawValue;
 
-            public void Initialize() { }
+            /// <summary>是否被 Dispose 过(用于断言「参数校验失败不得先释放当前 provider」)。</summary>
+            public bool Disposed;
+
+            /// <summary>置真则 <see cref="Initialize"/> 抛异常(用于断言初始化失败不留中间态)。</summary>
+            public bool ThrowOnInitialize;
+
+            public void Initialize()
+            {
+                if (ThrowOnInitialize)
+                    throw new InvalidOperationException("provider init failed");
+            }
+
             public void Tick() { }
 
             public bool HasAction(string action) => true;
@@ -43,7 +54,7 @@ namespace XFramework.XInput.Tests
 
             public GamepadType ActiveGamepadType => GamepadType.None;
             public InputDeviceType LastActiveDeviceType => InputDeviceType.None;
-            public void Dispose() { }
+            public void Dispose() { Disposed = true; }
 
             public void SetVibration(uint playerId, float leftMotor, float rightMotor, float duration) => throw new NotSupportedException();
             public void StopVibration(uint playerId) => throw new NotSupportedException();
@@ -310,6 +321,46 @@ namespace XFramework.XInput.Tests
 
             CollectionAssert.AreEqual(new[] { false }, calls, "无 Provider 时首次回调 false,不抛异常");
             handle.Dispose();
+        }
+
+        #endregion
+
+        #region 门面状态机与空值语义
+
+        [Test]
+        public void GetBindings_NotInitialized_ReturnsEmptyList()
+        {
+            // 未 SetProvider:provider 为 null。查询类 API 一律给空引用安全的默认值,列表类给空列表
+            // (CLAUDE.md 的「宽容语义豁免」把这条记为有意设计,此处把它锁住)
+            var bindings = InputManager.GetBindings("Jump");
+
+            Assert.IsNotNull(bindings, "未初始化时不得返回 null:查询类 API 的约定是空引用安全");
+            Assert.AreEqual(0, bindings.Count, "且应为空列表,调用方可直接 foreach");
+        }
+
+        [Test]
+        public void SetProvider_Null_Throws_AndKeepsCurrentProvider()
+        {
+            var provider = CreateProvider();
+
+            Assert.Throws<ArgumentNullException>(() => InputManager.SetProvider(null));
+
+            Assert.IsFalse(provider.Disposed, "参数校验失败不得先把当前 provider 释放掉");
+            Assert.IsTrue(InputManager.IsInitialized, "管理器应仍处于可用态");
+            provider.Pressed = true;
+            Assert.IsTrue(InputManager.WasPressedThisFrame("Jump"), "原 provider 应仍在位,查询照常转发");
+        }
+
+        [Test]
+        public void Initialize_CustomProviderThrows_LeavesUninitialized_AndDoesNotRoute()
+        {
+            var bad = new FakeProvider { ThrowOnInitialize = true, Pressed = true };
+
+            Assert.Throws<InvalidOperationException>(() => InputManager.Initialize(bad));
+
+            Assert.IsFalse(InputManager.IsInitialized, "provider 初始化失败后管理器应仍是未初始化态");
+            Assert.IsFalse(InputManager.WasPressedThisFrame("Jump"),
+                "未初始化态下查询必须走默认值,不得转发到半初始化的 provider(它的 Pressed 是 true)");
         }
 
         #endregion

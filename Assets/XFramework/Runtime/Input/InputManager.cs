@@ -83,7 +83,8 @@ namespace XFramework.XInput
         /// <summary>
         /// 使用自定义 <see cref="IInputProvider"/> 初始化输入管理器。
         /// <para>适用于注入 Rewired 适配器或其他自定义实现。</para>
-        /// <para>自定义 Provider 的 <see cref="IInputProvider.Initialize"/> 抛出的异常会直接传播给调用方。</para>
+        /// <para>自定义 Provider 的 <see cref="IInputProvider.Initialize"/> 抛出的异常会直接传播给调用方,
+        /// 且**不产生任何状态变更**——管理器仍处于未初始化态,可换一个 Provider 重试。</para>
         /// <para>初始化成功后自动注册帧驱动(经 <see cref="XFramework.XUpdate.UpdateManager"/>),无需再手动调用 <see cref="Tick()"/>。</para>
         /// </summary>
         /// <param name="customProvider">自定义输入提供者</param>
@@ -95,8 +96,12 @@ namespace XFramework.XInput
                 return;
             }
 
-            _provider = customProvider ?? throw new ArgumentNullException(nameof(customProvider));
-            _provider.Initialize();
+            if (customProvider == null) throw new ArgumentNullException(nameof(customProvider));
+
+            // 先在局部变量上初始化、成功后才写字段(与无参重载同形):provider.Initialize 抛异常时零状态变更,
+            // 否则会留下「IsInitialized 为 false、查询却已转发到半初始化实例」的中间态
+            customProvider.Initialize();
+            _provider = customProvider;
             _initialized = true;
             RegisterTicker();
         }
@@ -107,11 +112,14 @@ namespace XFramework.XInput
         /// </summary>
         public static void SetProvider(IInputProvider provider)
         {
+            // 先校验后副作用:传 null 时不得先释放掉当前的 provider(否则管理器会留着指向已释放实例)
+            if (provider == null) throw new ArgumentNullException(nameof(provider));
+
             if (_provider != null)
             {
                 _provider.Dispose();
             }
-            _provider = provider ?? throw new ArgumentNullException(nameof(provider));
+            _provider = provider;
             _initialized = true;
         }
 
@@ -410,12 +418,14 @@ namespace XFramework.XInput
         /// <summary>
         /// 获取指定动作的所有绑定信息列表。
         /// <para>用于按键设置 UI 展示当前设备下的所有绑定。</para>
+        /// <para>未初始化时返回**空列表**(与查询类 API 的空引用安全默认值一致,可直接 foreach)。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         public static System.Collections.Generic.IReadOnlyList<InputBindingInfo> GetBindings(string action, uint playerId = 0)
         {
-            return _provider?.GetBindings(action, playerId);
+            return _provider?.GetBindings(action, playerId)
+                ?? Array.Empty<InputBindingInfo>();
         }
 
         #endregion
