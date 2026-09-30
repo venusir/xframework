@@ -293,5 +293,35 @@ namespace XFramework.XFileManager.Tests
         }
 
         #endregion
+
+        #region 生命周期往返
+
+        /// <summary>
+        /// 销毁 → 抛异常 → 重新初始化恢复，这条往返此前**零断言**（`IsInitialized` 更是全仓零引用），
+        /// 而它是错误文案「请重新调用 Initialize」所承诺的东西——文案教人做的事，照着做必须真的能成。
+        /// <para><b>今天是绿的，属新增守卫而非回归</b>：`ThrowIfDestroyed` 与恢复路径都已存在，
+        /// 本用例只是第一次把它们钉住。</para>
+        /// </summary>
+        [Test]
+        public void Destroy_ThenAnyCall_ThrowsObjectDisposed_AndInitializeRecovers()
+        {
+            FileManager.WriteAllText(FileDomain.AppData, "lifecycle/probe.txt", "keep");
+            Assert.IsTrue(FileManager.IsInitialized, "前置：已初始化");
+
+            FileManager.Destroy();
+
+            Assert.IsFalse(FileManager.IsInitialized, "销毁后 IsInitialized 应为 false");
+            Assert.Throws<ObjectDisposedException>(
+                () => FileManager.Exists(FileDomain.AppData, "lifecycle/probe.txt"),
+                "销毁后任何公开调用都应抛 ObjectDisposedException，而不是静默失败或悄悄自动重建");
+
+            FileManager.Initialize(_fileProvider);
+
+            Assert.IsTrue(FileManager.IsInitialized, "Initialize 是文档指明的恢复入口");
+            Assert.AreEqual("keep", FileManager.ReadAllText(FileDomain.AppData, "lifecycle/probe.txt"),
+                "恢复后文件操作照常，且原有数据仍在");
+        }
+
+        #endregion
     }
 }
