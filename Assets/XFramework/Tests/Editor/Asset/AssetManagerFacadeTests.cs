@@ -1,10 +1,13 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.TestTools;
 using XFramework.XAsset;
 
 namespace Venusy609.Xframework.Editor.Tests
@@ -30,6 +33,10 @@ namespace Venusy609.Xframework.Editor.Tests
         {
             AssetManager.ImplFactory = null;
             AssetManager.Destroy();
+
+            // 复位门面的「能力缺失只告警一次」私有静态闩锁：本 fixture 是唯一触碰它的地方，
+            // 不复位则下一条碰它的用例等不到那条告警（LogAssert.Expect 会判红）
+            ResetPoolCapabilityWarning();
         }
 
         #region 初始化状态
@@ -417,6 +424,235 @@ namespace Venusy609.Xframework.Editor.Tests
         {
             AssetManager.PreloadAllAsync(new[] { "a", "b" }).GetAwaiter().GetResult();
             Assert.AreEqual(1, _fake.PreloadCallCount);
+        }
+
+        [Test]
+        public void PreDownloadContentAsync_ForwardsToInstance()
+        {
+            AssetManager.PreDownloadContentAsync("1.0.1").GetAwaiter().GetResult();
+            Assert.AreEqual(1, _fake.PreDownloadContentCallCount);
+            Assert.AreEqual("1.0.1", _fake.LastPreDownloadVersion);
+        }
+
+        [Test]
+        public void GetPackageVersion_ForwardsToInstance()
+        {
+            Assert.AreEqual("1.0.0", AssetManager.GetPackageVersion());
+        }
+
+        [Test]
+        public void CreateDownloader_ForwardsToInstance()
+        {
+            var handle = AssetManager.CreateDownloader(new[] { "hot" });
+
+            Assert.IsNull(handle, "假实现返回 null");
+            Assert.AreEqual(1, _fake.CreateDownloaderCallCount);
+        }
+
+        [Test]
+        public void SetPoolMaxSize_ForwardsToInstance()
+        {
+            AssetManager.SetPoolMaxSize("characters/bullet", 50);
+
+            Assert.AreEqual(1, _fake.SetPoolMaxSizeCallCount);
+            Assert.AreEqual("characters/bullet", _fake.LastSetPoolMaxSizeLocation);
+            Assert.AreEqual(50, _fake.LastSetPoolMaxSizeValue);
+        }
+
+        [Test]
+        public void LoadAsync_WithPriority_ForwardsPriorityToInstance()
+        {
+            AssetManager.LoadAsync<GameObject>("characters/player", 7).GetAwaiter().GetResult();
+
+            Assert.AreEqual(7, _fake.LastLoadPriority);
+        }
+
+        [Test]
+        public void InstantiateAsync_WithTransform_ForwardsArgumentsToInstance()
+        {
+            var position = new Vector3(1f, 2f, 3f);
+            var rotation = Quaternion.Euler(0f, 90f, 0f);
+            var parent = new GameObject("parent");
+            try
+            {
+                AssetManager.InstantiateAsync("characters/player", position, rotation, parent.transform).GetAwaiter().GetResult();
+
+                Assert.AreEqual(1, _fake.InstantiateCallCount);
+                Assert.AreEqual(position, _fake.LastInstantiatePosition);
+                Assert.AreEqual(rotation, _fake.LastInstantiateRotation);
+                Assert.AreSame(parent.transform, _fake.LastInstantiateParent);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
+        }
+
+        [Test]
+        public void InstantiateSync_WithTransform_ForwardsArgumentsToInstance()
+        {
+            var position = new Vector3(4f, 5f, 6f);
+            var rotation = Quaternion.Euler(90f, 0f, 0f);
+            var parent = new GameObject("parent");
+            try
+            {
+                AssetManager.InstantiateSync("characters/player", position, rotation, parent.transform);
+
+                Assert.AreEqual(1, _fake.InstantiateSyncCallCount);
+                Assert.AreEqual(position, _fake.LastInstantiatePosition);
+                Assert.AreEqual(rotation, _fake.LastInstantiateRotation);
+                Assert.AreSame(parent.transform, _fake.LastInstantiateParent);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parent);
+            }
+        }
+
+        [Test]
+        public void LoadSubAssetsSync_ForwardsToInstance()
+        {
+            var handle = AssetManager.LoadSubAssetsSync("ui/icon_atlas");
+
+            Assert.AreEqual(0, handle.Count, "假实现返回 default 句柄");
+            Assert.AreEqual(1, _fake.LoadSubAssetsCallCount);
+        }
+
+        [Test]
+        public void LoadRawFileSync_ForwardsToInstance()
+        {
+            var handle = AssetManager.LoadRawFileSync("configs/server_list");
+
+            Assert.AreEqual(string.Empty, handle.LastError, "假实现返回 default 句柄");
+            Assert.AreEqual(1, _fake.LoadRawFileCallCount);
+        }
+
+        [Test]
+        public void DestroyInstance_GameObjectOverload_ForwardsToInstance()
+        {
+            var go = new GameObject("doomed");
+            try
+            {
+                AssetManager.DestroyInstance(go);
+
+                Assert.AreEqual(1, _fake.DestroyInstanceCallCount);
+                Assert.AreSame(go, _fake.LastDestroyedInstance, "应走 GameObject 重载");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DestroyInstance_ComponentOverload_ForwardsToInstance()
+        {
+            var go = new GameObject("doomed");
+            try
+            {
+                AssetManager.DestroyInstance(go.transform);
+
+                Assert.AreEqual(1, _fake.DestroyInstanceCallCount);
+                Assert.AreSame(go.transform, _fake.LastDestroyedComponent, "应走 Component 重载");
+                Assert.IsNull(_fake.LastDestroyedInstance, "不应误入 GameObject 重载");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        #endregion
+
+        #region 池清理能力探测
+
+        [Test]
+        public void ClearPool_WhenCapabilitySupported_ForwardsAndReturnsCount()
+        {
+            var capable = new PoolCapableAssetManager { ClearPoolResult = 3 };
+            AssetManager.SetInstance(capable);
+
+            int cleared = AssetManager.ClearPool("characters/bullet");
+
+            Assert.AreEqual(3, cleared, "应原样返回能力实现的销毁数");
+            Assert.AreEqual(1, capable.ClearPoolCallCount);
+            Assert.AreEqual("characters/bullet", capable.LastClearPoolLocation);
+        }
+
+        [Test]
+        public void ClearAllPools_WhenCapabilitySupported_ForwardsAndReturnsCount()
+        {
+            var capable = new PoolCapableAssetManager { ClearAllPoolsResult = 5 };
+            AssetManager.SetInstance(capable);
+
+            Assert.AreEqual(5, AssetManager.ClearAllPools());
+            Assert.AreEqual(1, capable.ClearAllPoolsCallCount);
+        }
+
+        [Test]
+        public void ClearPool_WhenCapabilityMissing_ReturnsZeroBothCalls()
+        {
+            ResetPoolCapabilityWarning();
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[AssetManager\] 当前 IAssetManager 实现不支持 IAssetPoolController"));
+
+            Assert.AreEqual(0, AssetManager.ClearPool("characters/bullet"), "能力缺失时返回 0（SetUp 注入的替身不实现该接口）");
+            Assert.AreEqual(0, AssetManager.ClearAllPools(), "第二次调用同样返回 0");
+        }
+
+        #endregion
+
+        #region 实例注入语义
+
+        [Test]
+        public void SetInstance_Twice_ReplacesInstance()
+        {
+            var second = new FakeAssetManager();
+
+            AssetManager.SetInstance(second);
+
+            Assert.IsTrue(AssetManager.IsInitialized);
+            AssetManager.LoadAsync<GameObject>("dummy").GetAwaiter().GetResult();
+            Assert.AreEqual(1, second.LoadCallCount, "调用应转发到后注入的实例");
+            Assert.AreEqual(0, _fake.LoadCallCount, "旧实例不再被调用");
+        }
+
+        [Test]
+        public void SetInstance_DuringInflightInit_InvalidatesIt()
+        {
+            AssetManager.Destroy();
+            var tcs = new UniTaskCompletionSource();
+            var inflight = new FakeAssetManager { InitTask = tcs.Task };
+            AssetManager.ImplFactory = () => inflight;
+            var tInit = AssetManager.InitializeAsync();
+
+            var injected = new FakeAssetManager();
+            AssetManager.SetInstance(injected); // 注入实例优先：在途结果不得覆盖
+
+            tcs.TrySetResult();
+            Assert.Throws<InvalidOperationException>(() => tInit.GetAwaiter().GetResult(),
+                "被作废的在途初始化应抛异常");
+            Assert.IsTrue(inflight.Disposed, "被作废的实例应释放");
+
+            AssetManager.LoadAsync<GameObject>("dummy").GetAwaiter().GetResult();
+            Assert.AreEqual(1, injected.LoadCallCount, "全局应仍是注入的实例");
+            Assert.AreEqual(0, inflight.LoadCallCount, "在途实例不得接管转发");
+        }
+
+        #endregion
+
+        #region Reflection
+
+        /// <summary>
+        /// 复位门面「池清理能力缺失只告警一次」的私有静态闩锁。
+        /// <para>它是刻意的进程级闩锁（正是「只告警一次」承诺的实现，不提供公开复位），
+        /// 而 EditMode 下用例共享一个域——本 fixture 触碰了它，就有责任把它放回去。
+        /// 体例照 <c>LockInternalStateTests.Container</c>（含「改名请同步本 fixture」的防御消息）。</para>
+        /// </summary>
+        private static void ResetPoolCapabilityWarning()
+        {
+            var field = typeof(AssetManager).GetField("_poolCapabilityWarned", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(field, "找不到字段 _poolCapabilityWarned——它被改名了吗？改名请同步本 fixture");
+            field.SetValue(null, false);
         }
 
         #endregion
