@@ -295,6 +295,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
             return new AssetHandle<T>(operation);
@@ -317,6 +318,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
             return new SubAssetsHandle(operation);
@@ -334,6 +336,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
             return new SubAssetsHandle(operation);
@@ -356,6 +359,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
             return new RawFileHandle(operation);
@@ -373,6 +377,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
             return new RawFileHandle(operation);
@@ -404,6 +409,19 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 释放加载失败路径上的句柄。对外仍返回 <c>default</c> 句柄（契约不变），但底层包装句柄必须先释放。
+        /// <para><b>为什么必须释放</b>：YooAsset 在<b>创建</b>句柄时就已 <c>RefCount++</c> 并登记
+        /// （<c>ProviderOperation.CreateHandle</c>），而 <c>CanDestroyProvider()</c> 要求 <c>RefCount &lt;= 0</c>。
+        /// 失败的句柄若直接丢掉，该 provider 及其 bundle 引用将<b>永久驻留</b>——此后
+        /// <c>UnloadUnusedAssetsAsync</c> 再也回收不掉它。</para>
+        /// <para>对已释放/已销毁的句柄安全：<c>HandleBase.Release()</c> 对无效句柄提前返回。</para>
+        /// </summary>
+        private static void ReleaseFailedHandle(HandleBase handle)
+        {
+            handle?.Release();
+        }
+
+        /// <summary>
         /// 异步加载资源。每次调用均从 YooAsset 获取新句柄，返回 <see cref="AssetHandle{T}"/> 包装。
         /// </summary>
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, uint priority = 0, CancellationToken cancellationToken = default)
@@ -419,6 +437,7 @@ namespace XFramework.XAsset
             if (operation.Status != EOperationStatus.Succeed)
             {
                 Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
+                ReleaseFailedHandle(operation);
                 return default;
             }
 

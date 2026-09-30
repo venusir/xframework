@@ -555,7 +555,11 @@ namespace XFramework.XAsset
             // 2. 同步加载资源（阻塞至完成）
             var handle = _managerImpl.LoadSync<GameObject>(location);
             var prefab = handle.Asset;
-            if (prefab == null) return null;
+            if (prefab == null)
+            {
+                ReleaseMismatchedHandle(handle, location);
+                return null;
+            }
 
             // 3. 实例化
             GameObject go;
@@ -627,7 +631,11 @@ namespace XFramework.XAsset
             // 2. 通过 LoadAsync 加载资源（引用计数 +1）
             var handle = await LoadAsync<GameObject>(location, cancellationToken: cancellationToken);
             var prefab = handle.Asset;
-            if (prefab == null) return null;
+            if (prefab == null)
+            {
+                ReleaseMismatchedHandle(handle, location);
+                return null;
+            }
 
             // 3. 实例化
             GameObject go;
@@ -671,6 +679,24 @@ namespace XFramework.XAsset
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// 处理「加载成功但类型不匹配」的句柄：<c>GetAssetObject&lt;T&gt;</c> 是 <c>as</c> 转换，
+        /// 地址指向的不是 GameObject 时它返回 null，而句柄本身**有效且已占用引用计数**。
+        /// <para>直接返回 null 而不释放，该 provider 与其 bundle 会永久驻留（同
+        /// <c>YooAssetManagerImpl.ReleaseFailedHandle</c> 的说明）。这里同时补一条告警——
+        /// 这条路径此前**全程无日志**，调用方只看到一个 null，无从判断是「地址不存在」还是「类型不对」。</para>
+        /// <para>加载失败（default 句柄）时无事可做：失败句柄已由底层释放。</para>
+        /// </summary>
+        private static void ReleaseMismatchedHandle(AssetHandle<GameObject> handle, string location)
+        {
+            if (!handle.IsValid)
+                return;
+
+            Debug.LogWarning($"[AssetManager] Instantiate 的目标 '{location}' 不是 GameObject（加载成功但资源类型不匹配）。" +
+                             "已释放句柄以免引用泄漏，本次返回 null。");
+            handle.Dispose();
         }
 
         private void EnsureInitialized()
