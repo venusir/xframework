@@ -45,7 +45,14 @@ namespace XFramework.XInput.Tests
                     throw new InvalidOperationException("provider init failed");
             }
 
-            public void Tick() { }
+            /// <summary>置真则 <see cref="Tick"/> 抛异常(用于断言 provider 异常不会打死帧驱动)。</summary>
+            public bool ThrowOnTick;
+
+            public void Tick()
+            {
+                if (ThrowOnTick)
+                    throw new InvalidOperationException("provider tick failed");
+            }
 
             public bool HasAction(string action) => true;
             public bool WasPressedThisFrame(string action, uint playerId = 0) => Pressed;
@@ -436,6 +443,27 @@ namespace XFramework.XInput.Tests
             // 锁住它是为了让「订上了但没人会在销毁时退订」这种情形永远留痕,而不是静默。
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Input\] context of type 'Object' is neither"));
             var handle = InputManager.ObservePressed("Jump", () => { }, new object());
+
+            handle.Dispose();
+        }
+
+        #endregion
+
+        #region 帧驱动的异常隔离
+
+        [Test]
+        public void Tick_ProviderThrows_StillPublishesFramePulse()
+        {
+            var provider = CreateProvider();
+            var calls = 0;
+            var handle = InputManager.ObservePressed("Jump", () => calls++);
+            provider.Pressed = true;
+            provider.ThrowOnTick = true;
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Input\] Provider\.Tick threw exception"));
+
+            Assert.DoesNotThrow(() => InputManager.Tick(), "provider 的异常不得从 Tick 逃逸");
+            Assert.AreEqual(1, calls, "帧脉冲必须照常发布——否则全部 Observe* 会静默哑掉");
 
             handle.Dispose();
         }

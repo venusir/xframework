@@ -148,7 +148,19 @@ namespace XFramework.XInput
         /// </summary>
         private static void PulseFrame()
         {
-            _provider?.Tick();
+            // provider 的异常不得打死帧驱动:自动驱动一旦把它抛出去,UpdateScheduler 会按契约注销本节点
+            // (那是「OnUpdate 抛异常即注销」的既定行为),而 _ticker 字段仍非空、RegisterTicker 从此拦掉
+            // 重建——全部 Observe* 静默哑掉,唯一线索是一条 [UpdateScheduler] 前缀的日志。
+            // 隔离放在这里而非 ticker 内,是因为自动驱动与公开 Tick() 两条路径都要受保护。
+            try
+            {
+                _provider?.Tick();
+            }
+            catch (Exception e)
+            {
+                UnityEngine.Debug.LogError($"[Input] Provider.Tick threw exception, frame pulse continues: {e}");
+            }
+
             // 发布帧脉冲,驱动 Observe* 系列订阅
             _framePulse.OnNext(Time.frameCount);
             _lastPulseFrame = Time.frameCount;
