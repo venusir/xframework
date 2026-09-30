@@ -18,3 +18,19 @@ XData/
 ├── DataSnapshot.cs           # 存档快照数据结构
 └── README.md
 ```
+
+## 迁移指南
+
+v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，这批 API 也没进 `CHANGELOG` 的破坏性变更，本表是唯一的升级线索。
+
+| v1 API                                     | v2 API                              |
+| ------------------------------------------ | ----------------------------------- |
+| `IDataRow<TKey>`                           | 废弃，Block 内部自由管理键值        |
+| `DataManager.GetOrCreateTable<T>()`        | `DataManager.GetOrCreateBlock<T>()` |
+| `DataTable<T>.Get() / Upsert() / Remove()` | Block 内部自行定义方法              |
+| `table.Upsert(row)`                        | `block.Items.Add(item)` 等          |
+
+迁移步骤：
+1. 将原有的 `[Serializable] class X : IDataRow<TKey>` 重构为 `[Serializable] class XData : IDataBlock`
+2. 在 Block 内部实现 `OnSave / OnLoad / OnClear` 回调，并补 `DataVersion`（未接入版本控制时返回 0）与 `OnMigrate`（恒等返回入参）
+3. 将 `DataManager.GetOrCreateTable<X>()` 替换为 `DataManager.GetOrCreateBlock<XData>()`

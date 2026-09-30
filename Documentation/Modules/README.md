@@ -15,6 +15,7 @@
 | 模块版本记录 | 模块独立成包时代的本地版本号——与包 `CHANGELOG.md` 的语义化版本**不是同一套** | Pool / Input / Config |
 | 沿革与已否决形状 | 「旧实现…」「原先…」：当时形态 → 现状，带日期与提交号 | Reactive / Update |
 | 迁移指南 | 破坏性 API 变更的升级路径 | Data（v1 Table → v2 Block） |
+| 已完成功能与未做（roadmap） | 建了什么、还差什么 | UI |
 | 已评估未采纳与未决 | 逐轮追加，**不覆盖**。下一轮审计只需读本节 | Lock / Localization |
 | 审计轮次 | 过程性记录：扫了哪些判据、实测 vs 推理、本轮产出 | Lock / Localization |
 

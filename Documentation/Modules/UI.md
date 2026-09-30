@@ -50,3 +50,28 @@ Runtime/UI/
 ## 沿革与已否决形状
 
 - **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。
+
+## 已完成功能与未做（roadmap）
+
+### 已完成
+
+- [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
+- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
+- [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
+- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
+- [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
+- [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
+- [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
+- [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
+- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
+- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
+- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
+
+### 未做
+
+- [ ] 列表虚拟化 — 长列表的滚动复用（与 FairyGUI 的 `GList` 虚拟滚动同类能力）
+- [ ] 场景切换安全 — 自动检测跨场景引用并处理
+- [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
+- [ ] UI 引导层 — 新手引导的遮罩挖洞支持
+
+> 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。

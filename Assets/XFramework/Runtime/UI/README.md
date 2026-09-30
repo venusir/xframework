@@ -999,25 +999,6 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 
 预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
 
-## 已完成功能
-
-- [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
-- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
-- [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
-- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
-- [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
-- [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
-- [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
-- [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
-- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
-- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
-- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
-- [x] ✅ 面板资源真释放 — `UnloadPanelAssetAsync`（配套 Asset 侧 `IAssetPoolController`）。**没有**做按 LRU 自动卸载：那是策略，应由项目决定何时调用
-- [ ] 列表虚拟化 — 长列表的滚动复用（与 FairyGUI 的 `GList` 虚拟滚动同类能力）
-- [ ] 场景切换安全 — 自动检测跨场景引用并处理
-- [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
-- [ ] UI 引导层 — 新手引导的遮罩挖洞支持
-
 ## 已知限制
 
 - **关闭域重载（Enter Play Mode Options）时，UI 的会话复位依赖 `UIRootNode` 的成对生命周期**：
@@ -1027,6 +1008,8 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
   `Runtime/Input/README.md` 的已知限制。
 - 多根场景未覆盖：第二个场景的 `UIRootNode` 会被静默忽略（面板仍挂在第一个场景的根下）——单根是既有
   设计，见 `View/UIRootNode.cs` 的注释。
+- **面板资源不会自动卸载**：需显式调 `UnloadPanelAssetAsync`（配套 Asset 侧的 `IAssetPoolController`）。
+  **没有**做按 LRU 自动卸载——那是策略，应由项目决定何时调用。
 
 ## 依赖
 

@@ -12,8 +12,6 @@ XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏�
 
 数据按 **GamePlay 模块** 组织——一个 `IDataBlock` 对应一个游戏子系统，内部自行管理数据结构，不再强制主键约束。
 
-> **从 Table 模型迁移**：v2 版本已将 `DataTable<T>` + `IDataRow` 体系替换为 `IDataBlock`。如果你还在使用旧版 `GetOrCreateTable<T>()` 等 API，请按[迁移指南](#迁移指南)更新代码。
-
 ### 与 Config 模块的区别
 
 | 特性     | Config (XConfig)                  | Data (XData)                               |
@@ -269,16 +267,3 @@ DataManager.ApplyBlockSnapshot(snap);
 ### 线程安全
 - 所有 `DataManager` API **必须在主线程**调用，内部未做线程同步处理。
 
-## 迁移指南（从 v1 Table 模型）
-
-| v1 API                                     | v2 API                              |
-| ------------------------------------------ | ----------------------------------- |
-| `IDataRow<TKey>`                           | 废弃，Block 内部自由管理键值        |
-| `DataManager.GetOrCreateTable<T>()`        | `DataManager.GetOrCreateBlock<T>()` |
-| `DataTable<T>.Get() / Upsert() / Remove()` | Block 内部自行定义方法              |
-| `table.Upsert(row)`                        | `block.Items.Add(item)` 等          |
-
-迁移步骤：
-1. 将原有的 `[Serializable] class X : IDataRow<TKey>` 重构为 `[Serializable] class XData : IDataBlock`
-2. 在 Block 内部实现 `OnSave / OnLoad / OnClear` 回调，并补 `DataVersion`（未接入版本控制时返回 0）与 `OnMigrate`（恒等返回入参）
-3. 将 `DataManager.GetOrCreateTable<X>()` 替换为 `DataManager.GetOrCreateBlock<XData>()`
