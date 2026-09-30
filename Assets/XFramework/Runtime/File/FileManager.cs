@@ -370,15 +370,20 @@ namespace XFramework.XFileManager
 
         /// <summary>
         /// 检查指定文件是否存在。
-        /// <para>注意:移动端 <see cref="FileDomain.Streaming"/> 域通过 UnityWebRequest 查询,
-        /// 同步调用会阻塞主线程,推荐改用 <see cref="ExistsAsync"/>。</para>
+        /// <para><b>移动端 <see cref="FileDomain.Streaming"/> 域会抛异常而非忙等</b>：该域的同步查询是
+        /// 主线程自旋等待，其安全性依赖一条本仓无法证实的引擎断言（见
+        /// <c>MobileFileProvider.CheckStreamingExists</c> 的注释）。本方法在该组合下抛
+        /// <see cref="NotSupportedException"/>，请改用 <see cref="ExistsAsync"/>。</para>
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>
         /// <returns>文件存在返回 <c>true</c>。</returns>
+        /// <exception cref="NotSupportedException">移动端 <see cref="FileDomain.Streaming"/> 域上调用时抛出。</exception>
         public static bool Exists(FileDomain domain, string relativePath)
         {
+            // 顺序不可换：守卫要读 _baseProvider，而它只在初始化时才被赋值
             EnsureInitialized();
+            ThrowIfSyncStreamingExistsUnsupported(domain);
             return _provider.Exists(domain, relativePath);
         }
 
@@ -561,7 +566,7 @@ namespace XFramework.XFileManager
         /// </summary>
         private static void ThrowIfSyncStreamingReadUnsupported(FileDomain domain)
         {
-            if (!IsSyncStreamingReadUnsupported(_baseProvider, domain))
+            if (!IsSyncStreamingUnsupported(_baseProvider, domain))
                 return;
 
             throw new NotSupportedException(
@@ -571,18 +576,40 @@ namespace XFramework.XFileManager
         }
 
         /// <summary>
-        /// 判定同步内容读取是否不受支持：仅「移动端 Provider + Streaming 域」。
-        /// <para><b>为什么不能同步：</b><see cref="MobileFileProvider"/> 的 Streaming 读走
+        /// 同步存在性查询在「移动端 Streaming 域」上不可用时抛出。
+        /// <para>与内容读同一判据、不同的理由：这里的同步实现是主线程**自旋等待**
+        /// （<c>while (!request.isDone) { }</c>），其安全性依赖「isDone 由引擎原生侧推进」这条
+        /// **本仓无法证实**的断言——为真则主线程空转，为假则永久挂死（无异常、无日志）。
+        /// 拒绝比挂起好排查，请改用 <see cref="ExistsAsync"/>。</para>
+        /// </summary>
+        private static void ThrowIfSyncStreamingExistsUnsupported(FileDomain domain)
+        {
+            if (!IsSyncStreamingUnsupported(_baseProvider, domain))
+                return;
+
+            throw new NotSupportedException(
+                "[FileManager] 同步查询移动端 Streaming 域不可用：该域的同步实现是主线程自旋等待，" +
+                "其完成依赖一条未经真机验证的引擎行为断言，为假即永久挂死（无异常、无日志）。" +
+                "请改用 ExistsAsync。");
+        }
+
+        /// <summary>
+        /// 判定「同步访问移动端 Streaming 域」是否不受支持：内容读与存在性查询同一判据。
+        /// <para><b>内容读为什么不能同步：</b><see cref="MobileFileProvider"/> 的 Streaming 读走
         /// UnityWebRequest，且其 <c>await ToUniTask()</c> 的续体要在 PlayerLoop 上推进——阻塞主线程
-        /// 等它就是等一个永远不会推进的循环。对照同一 Provider 的 <c>Exists</c>：那里用忙等
-        /// （<c>isDone</c> 由引擎原生侧推进，不依赖托管 PlayerLoop）故可安全阻塞，两者不可类推。</para>
+        /// 等它就是等一个永远不会推进的循环。</para>
+        /// <para><b>存在性查询为什么也不放开：</b>它用的是主线程自旋等待，安全性依赖「<c>isDone</c>
+        /// 由引擎原生侧推进」这条**本仓无法证实**的断言（无移动设备路径可测）。断言为真只是空转，
+        /// 为假就是与内容读同形的永久挂死——与其赌它，不如一并拒绝并指向异步版。</para>
         /// <para><b>为什么查 <c>baseProvider</c>：</b>启用加解密时生效的 <c>_provider</c> 是
         /// <see cref="CryptoFileProvider"/> 装饰器，对其做类型探测会漏判。</para>
         /// <para>刻意做成纯谓词：判定不碰状态、不依赖平台宏，可直接单测。</para>
+        /// <para><b>它盖不住谁：</b>第三方自定义 Provider（尤其返回 PlayerLoop 依赖型 UniTask 的实现，
+        /// 如 WebGL 后端）不在判定范围内——那种情况下同步包装仍可能死锁。见 README 的「已知限制」。</para>
         /// </summary>
         /// <param name="baseProvider">未包加解密层的基础提供者。</param>
         /// <param name="domain">本次访问的路径域。</param>
-        internal static bool IsSyncStreamingReadUnsupported(IFileProvider baseProvider, FileDomain domain)
+        internal static bool IsSyncStreamingUnsupported(IFileProvider baseProvider, FileDomain domain)
         {
             return baseProvider is MobileFileProvider && domain == FileDomain.Streaming;
         }

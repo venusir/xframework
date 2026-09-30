@@ -132,8 +132,12 @@ namespace XFramework.XFileManager
 
         /// <summary>
         /// 检查 StreamingAssets 中的文件是否存在（通过 UnityWebRequest HEAD 请求）。
-        /// <para>同步自旋等待（仅在同步 <see cref="Exists"/> 中调用）：
-        /// isDone 由引擎原生侧推进，不依赖托管 PlayerLoop，故阻塞等待可完成。</para>
+        /// <para><b>同步自旋等待，且它的安全性未经验证</b>：下面的空转假定「<c>isDone</c> 由引擎原生侧
+        /// 推进、不依赖托管 PlayerLoop」——这条是**引擎行为断言，本仓无法证实**（没有移动设备路径可测）。
+        /// 断言为真则只是主线程空转到请求完成；为假就是永久挂死，无异常、无日志。</para>
+        /// <para>正因如此，<see cref="FileManager.Exists"/> 已经**拒绝**了「移动端 + Streaming」这个组合
+        /// （见 <c>FileManager.IsSyncStreamingUnsupported</c>）。本方法仍保留，是因为 Provider 是公开类型、
+        /// 可以直接使用；直接用它的人应当知道上面那条风险。</para>
         /// </summary>
         private static bool CheckStreamingExists(string relativePath)
         {
@@ -141,7 +145,7 @@ namespace XFramework.XFileManager
             using var request = UnityWebRequest.Head(url);
             request.SendWebRequest();
 
-            // 同步等待（仅在 Exists 中调用，频率低）
+            // 同步等待（仅在同步 Exists 路径上调用）。注意：这不是「安全地阻塞」，见上面的类注释
             while (!request.isDone) { }
 
             return request.result == UnityWebRequest.Result.Success;

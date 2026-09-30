@@ -117,27 +117,28 @@ namespace XFramework.XFileManager.Tests
         #region 移动端 Streaming 域：同步读拒绝
 
         [Test]
-        public void IsSyncStreamingReadUnsupported_MobileProviderStreamingDomain_IsTrue()
+        public void IsSyncStreamingUnsupported_MobileProviderStreamingDomain_IsTrue()
         {
             Assert.IsTrue(
-                FileManager.IsSyncStreamingReadUnsupported(new MobileFileProvider(), FileDomain.Streaming),
-                "移动端 Streaming 域经 UnityWebRequest 读取，其续体依赖 PlayerLoop，同步阻塞会死锁");
+                FileManager.IsSyncStreamingUnsupported(new MobileFileProvider(), FileDomain.Streaming),
+                "移动端 Streaming 域：内容读的续体依赖 PlayerLoop（同步等必死锁），" +
+                "查询是主线程无界自旋（安全性未经验证）——两者一并拒绝");
         }
 
         [Test]
-        public void IsSyncStreamingReadUnsupported_MobileProviderOtherDomain_IsFalse()
+        public void IsSyncStreamingUnsupported_MobileProviderOtherDomain_IsFalse()
         {
             Assert.IsFalse(
-                FileManager.IsSyncStreamingReadUnsupported(new MobileFileProvider(), FileDomain.AppData),
-                "移动端非 Streaming 域走 System.IO 线程池，同步读可用");
+                FileManager.IsSyncStreamingUnsupported(new MobileFileProvider(), FileDomain.AppData),
+                "移动端非 Streaming 域走 System.IO 线程池，同步访问可用");
         }
 
         [Test]
-        public void IsSyncStreamingReadUnsupported_DesktopProviderStreamingDomain_IsFalse()
+        public void IsSyncStreamingUnsupported_DesktopProviderStreamingDomain_IsFalse()
         {
             Assert.IsFalse(
-                FileManager.IsSyncStreamingReadUnsupported(_fileProvider, FileDomain.Streaming),
-                "桌面 Provider 的 Streaming 读走线程池，同步读可用——不可与移动端类推");
+                FileManager.IsSyncStreamingUnsupported(_fileProvider, FileDomain.Streaming),
+                "桌面 Provider 的 Streaming 走 System.IO 线程池，同步访问可用——不可与移动端类推");
         }
 
         [Test]
@@ -167,6 +168,25 @@ namespace XFramework.XFileManager.Tests
                 Assert.Throws<NotSupportedException>(
                     () => FileManager.ReadAllBytes(FileDomain.Streaming, "blob.bin"),
                     "移动端 Streaming 的同步读应拒绝，而不是阻塞到死锁");
+            }
+            finally
+            {
+                FileManager.Destroy();
+            }
+        }
+
+        [Test]
+        public void Exists_MobileStreamingDomain_ThrowsInsteadOfSpinningForever()
+        {
+            FileManager.Destroy();
+            FileManager.Initialize(new MobileFileProvider());
+            try
+            {
+                // 拒绝的理由与内容读不同：这里的同步实现是 while (!request.isDone) {} 的无界自旋，
+                // 其完成依赖一条本仓无法证实的引擎断言——为假就是永久挂死（无异常、无日志）
+                Assert.Throws<NotSupportedException>(
+                    () => FileManager.Exists(FileDomain.Streaming, "cfg/game.json"),
+                    "移动端 Streaming 的同步查询应拒绝，而不是无界自旋");
             }
             finally
             {
