@@ -18,6 +18,9 @@ namespace XFramework.XAsset
         private readonly DownloaderOperation _operation;
         private bool _disposed;
 
+        /// <summary>是否已 <see cref="Begin"/>。用于把「未启动就等待」这条静默挂起挡在入口（见 <see cref="WaitAsync"/>）。</summary>
+        private bool _begun;
+
         internal AssetDownloaderHandle(DownloaderOperation operation)
         {
             _operation = operation ?? throw new ArgumentNullException(nameof(operation));
@@ -51,8 +54,10 @@ namespace XFramework.XAsset
         /// <summary>下载状态。</summary>
         public EOperationStatus Status => _operation.Status;
 
-        /// <summary>失败信息。未失败时为空字符串。</summary>
-        public string Error => _operation.Error;
+        /// <summary>失败信息。未失败时为空字符串。
+        /// <para>归一化是必要的：YooAsset 的 <c>Error</c> 在成功路径从不赋值，原样透出的是 <c>null</c>
+        /// 而非空串（其余两个句柄的 <c>LastError</c> 同样做了归一）。</para></summary>
+        public string Error => _operation.Error ?? string.Empty;
 
         #endregion
 
@@ -61,7 +66,9 @@ namespace XFramework.XAsset
         /// <summary>进度变化事件（0~1，仅在进度发生变化时触发）。</summary>
         public event Action<float> ProgressChanged;
 
-        /// <summary>下载结束事件。成功时 succeed 为 true。</summary>
+        /// <summary>下载结束事件。成功时 succeed 为 true。
+        /// <para>注意：主动 <see cref="Cancel"/> <b>不会</b>触发本事件——YooAsset 的取消路径只置状态、不回调结束。
+        /// 以本事件驱动流程的调用方需自行处理取消。</para></summary>
         public event Action<bool> Completed;
 
         /// <summary>下载失败事件。fileName 为失败的文件，errorInfo 为底层错误信息。</summary>
@@ -71,8 +78,12 @@ namespace XFramework.XAsset
 
         #region Control
 
-        /// <summary>开始下载。</summary>
-        public void Begin() => _operation.BeginDownload();
+        /// <summary>开始下载。重复调用由 YooAsset 侧忽略。</summary>
+        public void Begin()
+        {
+            _operation.BeginDownload();
+            _begun = true;
+        }
 
         /// <summary>暂停下载（正在传输的文件完成后暂停创建新下载任务）。</summary>
         public void Pause() => _operation.PauseDownload();
@@ -90,9 +101,17 @@ namespace XFramework.XAsset
         /// <summary>
         /// 等待下载结束，返回是否全部成功。
         /// <para>取消时自动 <see cref="Cancel"/> 中止下载并抛出 <see cref="OperationCanceledException"/>。</para>
+        /// <para><b>未 <see cref="Begin"/> 时拒绝</b>而不是静默挂起：YooAsset 的下载器在启动前既不完成也不失败，
+        /// 而本方法没有任何超时——忘了 <c>Begin()</c> 的调用方会永久卡在 await 上、无异常无日志。
+        /// 拒绝比挂起好排查（同 File 模块对同步等待的态度）。已经结束（如先 <see cref="Cancel"/>）的不拒绝，
+        /// 照常返回状态。</para>
         /// </summary>
         public async UniTask<bool> WaitAsync(CancellationToken cancellationToken = default)
         {
+            if (!_begun && !_operation.IsDone)
+                throw new InvalidOperationException(
+                    "[AssetManager] AssetDownloaderHandle.WaitAsync 在 Begin() 之前不会完成：请先调用 Begin() 启动下载。");
+
             try
             {
                 while (!_operation.IsDone)

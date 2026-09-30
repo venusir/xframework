@@ -283,13 +283,21 @@ namespace XFramework.XAsset
             if (handle == null) return false;
 
             handle.ProgressChanged += progress;
-            handle.Begin();
+            try
+            {
+                handle.Begin();
 
-            bool success = await handle.WaitAsync(cancellationToken);
-            // 下载器结束时可能不触发最终进度回调（如无待下载内容），补发一次最终值
-            progress?.Invoke(success ? 1f : handle.Progress);
-            handle.Dispose();
-            return success;
+                bool success = await handle.WaitAsync(cancellationToken);
+                // 下载器结束时可能不触发最终进度回调（如无待下载内容），补发一次最终值
+                progress?.Invoke(success ? 1f : handle.Progress);
+                return success;
+            }
+            finally
+            {
+                // 退订必须在 finally：取消时 WaitAsync 抛出，原先写在 await 之后的 Dispose 会被整条跳过，
+                // 订阅与回调永久留在下载器上
+                handle.Dispose();
+            }
         }
 
         /// <summary>
