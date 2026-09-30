@@ -97,7 +97,10 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
-        /// 销毁全局配置管理器，释放所有已加载的配置数据。
+        /// 丢弃门面持有的 <see cref="IConfigManager"/> 实例。
+        /// <para><b>它不清空任何已加载的数据</b>：实现上的五个字典原样留在实例里，数据只是随实例失去可达性
+        /// （GC 回收）。也**不取消在途加载**——在途任务完成后写入的是一个门面已不再持有的实例，
+        /// 且事件已解绑，<c>ConfigChanged</c> 不再转发。</para>
         /// <para>销毁后需重新 <see cref="Initialize"/> 或 <see cref="SetInstance"/> 才能使用，通常仅在应用退出或场景完全重置时调用。</para>
         /// </summary>
         public static void Destroy()

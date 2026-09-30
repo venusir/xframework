@@ -261,6 +261,11 @@ private void OnConfigChanged(Type type)
 ```
 
 > 事件参数为配置行类型或 Global 配置类型，可通过 `typeof(T)` 判断具体变更。
+>
+> **注入自定义实现时本事件不触发，而且触发不了**：`ConfigChanged` 是门面上的**静态字段式事件**，C# 只允许
+> **声明它的类型**触发它——第三方 `IConfigManager` 实现没有任何办法让它响（原文档写的「注入的自定义实现
+> 需要自行派发」在 C# 里做不到）。门面只在实现是框架自带的 `ConfigManagerImpl` 时才接上它。需要变更通知的
+> 自定义实现请自建事件源。
 
 ---
 
@@ -282,7 +287,7 @@ private void OnConfigChanged(Type type)
 | ----------------------------- | ----------------------------- |
 | `Initialize()`                | 初始化默认实现                |
 | `SetInstance(IConfigManager)` | 注入自定义实现（用于测试/DI） |
-| `Destroy()`                   | 销毁并释放所有数据            |
+| `Destroy()`                   | 丢弃门面持有的实例（**不**取消在途加载） |
 | `IsInitialized`               | 是否已初始化（静态属性）      |
 
 ### Preload（方式一 / 方式二）
@@ -489,3 +494,38 @@ ConfigManifest  (批量加载清单)
 - **IConfigLoader**：策略接口，每种配置格式对应一个实现
 - **ConfigTable\<T\>**：只读包装器，封装字典查询，支持索引构建
 - **ConfigManifest**：声明式清单，描述配置的加载路径和分组
+
+## 线程契约
+
+- **所有 `ConfigManager` API 必须在主线程调用**，模块内未做任何线程同步：门面的 `_instance` /
+  `_instanceInitialized` 与 `ConfigManagerImpl` 的五个字典都是裸字段；`Loaders` / `ConfigLoadHelper` /
+  `ConfigTypeHelper` / `CsvLoader` 的缓存都是**无锁静态字典**。`ConfigManagerImpl` 里那句「单线程模型下，
+  进入『进行中』分支时创建者任务必未完成，广播不会漏掉」是**假设**，不是断言。
+- **加载的 `await` 之后落在主线程**：`AssetManager.LoadAsync` 走 UniTask 的 `IEnumerator` 路径
+  （`PlayerLoopTiming.Update`），反序列化段随之也在主线程。这条**依赖底层 awaitable 的调度行为**——
+  模块内没有任何代码保证它；换成在后台线程 pump 的 awaitable，写字典与派发事件就会落在非主线程。
+
+## 已知限制
+
+知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
+
+- **重复注册会静默覆盖**：`RegisterTable` / `RegisterGlobal` 对同一类型再注册直接替换，且**已发出去的
+  旧 `ConfigTable<T>` 引用与新 `GetTable<T>()` 不是同一实例**（包装器缓存被丢弃）。
+- **`Unload<T>()` 在途时可能不生效**：在途加载完成后仍会注册数据（上节已写明）；更隐蔽的一半是——
+  在途未完成时再次 `Preload`，会**加入那个旧任务把它「复活」**。
+- **`Destroy()` 不取消在途加载**：丢的只是门面持有的引用，在途任务完成后写入的是一个**门面已不再持有**
+  的实例（事件也已解绑，`ConfigChanged` 不再转发）。
+- **`ConfigChanged` 的触发面**：加载成功、注册、卸载触发；**重复 Preload 的早退分支、加入在途任务、
+  清单里「已加载则跳过」都不触发**；而 `Unload<T>()` 对**从未加载**的类型也会触发一次。
+- **订阅者异常被隔离，但会饿死后面的订阅者**：一次派发是**整条多播**一个 `try/catch`（取舍同
+  `Pipeline.DispatchSafely` 与 Lock 的派发——逐个隔离每次派发要分配一个委托数组）；同一多播里排在抛异常者
+  **之后**的订阅者不会被调用。
+- **CSV 的方言边界**：不支持引号与转义（`Split(',')`）——含逗号的字段会被**静默切错列**；空单元格赋类型
+  默认值；Global 路径**只取最后一行**，前面的行静默忽略。
+- **`BuildIndex` 只按 `indexName` 缓存**：同名换 `TIndex` 会抛 `InvalidCastException`（不是
+  `ConfigException`）、换 selector 会**静默返回旧索引**。
+- **`GetAll()` 返回内部数组引用**（零 GC 的代价），请勿修改元素；`IConfigTable.Data` 以非泛型
+  `IDictionary` 暴露内部字典——那是「零反射注入路径」的代价。
+- **空表与键类型不匹配的处置不对称**：`JsonLoader` 允许空数组（注册一张空表），
+  `ScriptableObjectLoader` 会抛；`ConfigTable` 的键类型不匹配在 `Get` 上抛、在 `TryGet` / `Contains`
+  上只告警并返回 `false`。
