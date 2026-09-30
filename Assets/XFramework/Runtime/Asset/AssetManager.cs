@@ -39,6 +39,9 @@ namespace XFramework.XAsset
         /// <summary>池清理能力缺失的告警是否已发出（只发一次，避免调用方在循环里刷屏）。</summary>
         private static bool _poolCapabilityWarned;
 
+        /// <summary>越线程访问是否已报首错（只报一次，避免每帧刷屏）。</summary>
+        private static bool _mainThreadViolationLogged;
+
         /// <summary>
         /// 全局资源管理器是否已初始化。
         /// </summary>
@@ -53,6 +56,8 @@ namespace XFramework.XAsset
         /// <param name="cancellationToken">取消令牌。</param>
         public static async UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
+            AssertMainThread(nameof(InitializeAsync));
+
             if (_instanceInitialized)
             {
                 Debug.LogWarning("[AssetManager] InitializeAsync was called more than once. Ignoring duplicate.");
@@ -195,6 +200,8 @@ namespace XFramework.XAsset
         /// </summary>
         public static void SetInstance(IAssetManager manager)
         {
+            AssertMainThread(nameof(SetInstance));
+
             _instance = manager ?? throw new ArgumentNullException(nameof(manager));
             _instanceInitialized = true;
 
@@ -208,6 +215,8 @@ namespace XFramework.XAsset
         /// </summary>
         public static void Destroy()
         {
+            AssertMainThread(nameof(Destroy));
+
             if (_instance != null)
             {
                 _instance.Dispose();
@@ -532,6 +541,33 @@ namespace XFramework.XAsset
                 Generation = generation;
                 Completion = completion;
             }
+        }
+
+        /// <summary>
+        /// 门面入口的主线程契约断言（仅 Editor 编译；Release 下整段是空操作，调用方不必再各自包一层条件编译）。
+        /// <para><b>为什么需要</b>：门面的初始化协调是一段无锁的「检查-再赋值」序列（创建者选举、等待者登记、
+        /// 代际号递增），没有任何一处能容忍两个线程同时进入——并发发起会造出两个实例（前者不被 Dispose），
+        /// 后台线程调用则可能在任意时刻撕裂协议状态。而全仓此前没有任何一句声明这条契约。</para>
+        /// <para><b>覆盖边界（有意）：</b>只管门面入口。底层 <see cref="IAssetManager"/> 实现与
+        /// <see cref="InstanceTracker"/> 的静态计数同样按主线程设计，但不在这里断言。</para>
+        /// <para><b>只报首错</b>：越线程调用通常每帧重复发生，记一处即可防洪泛。主线程检测复用 UniTask 的
+        /// <see cref="Cysharp.Threading.Tasks.PlayerLoopHelper.IsMainThread"/>（与 Message 的 <c>MainThreadGuard</c>、
+        /// Pipeline 的阶段写入断言同源）；这里**内联本地副本**而非引用 <c>XMessage.Internal.MainThreadGuard</c>
+        /// ——生产代码不得跨模块引用 Internal 命名空间（先例：UI 内联十行适配器）。</para>
+        /// </summary>
+        /// <param name="api">被调用的入口名，用于拼装报错文案。</param>
+        private static void AssertMainThread(string api)
+        {
+#if UNITY_EDITOR
+            if (_mainThreadViolationLogged || Cysharp.Threading.Tasks.PlayerLoopHelper.IsMainThread)
+                return;
+
+            _mainThreadViolationLogged = true;
+            Debug.LogError(
+                $"[AssetManager] {api} 必须在 Unity 主线程调用：门面的初始化协调是无锁的检查-再赋值序列，" +
+                "跨线程进入会并发改写实例、等待者表与代际号。从非主线程访问请先切回主线程；" +
+                "线程契约见模块 README「线程契约」段。本提示每个会话只报一次。");
+#endif
         }
 
         private static void EnsureGlobalInitialized()

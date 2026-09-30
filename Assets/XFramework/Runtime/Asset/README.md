@@ -413,6 +413,21 @@ RequestPackageVersionAsync → 检查远端新版本号
 - 加载族路径无每帧闭包分配（`PreloadAllAsync` 的进度聚合闭包仅在启动期一次性调用）
 - **同步 API 的代价**：`LoadSync`/`InstantiateSync` 阻塞调用线程；远端未下载时可能长时间卡住，运行时高频路径禁用
 
+## 线程契约
+
+**本模块按主线程使用设计。** `AssetManager` 门面的全部成员（含 `InitializeAsync` / `SetInstance` / `Destroy` /
+`IsInitialized`）、底层 `IAssetManager` 实现与 `InstanceTracker` 的活跃计数都必须在 Unity 主线程访问。
+
+**为什么不能跨线程**：门面的初始化协调是一段**无锁的「检查-再赋值」序列**（创建者选举、等待者登记、代际号递增），
+没有任何一处能容忍两个线程同时进入——并发发起会造出两个实例（前一个不被释放），后台线程调用则可能在任意时刻
+撕裂协议状态。Editor 下三个入口有断言（越线程记一条 `[AssetManager]` 前缀的 Error，每个会话只报一次）；
+Release 下断言整段不编译，**没有任何运行期保护**，请按契约使用。
+
+**回调落在主线程**：下载器事件（`ProgressChanged` / `Completed` / `DownloadError`）由 YooAsset 的
+`YooAssetsDriver.Update` 驱动；所有 `await` 的续体经 UniTask 的 PlayerLoop 推进——两者都在主线程。
+
+需要从后台线程加载资源时，请先 `await UniTask.SwitchToMainThread(cancellationToken)` 再进入本模块。
+
 ## 注意事项与常见误区
 
 1. **句柄不释放 = 资源泄漏（最常见的坑）**：`LoadAsync` 返回的句柄必须用 `using` 管理或显式 `Dispose`，否则引用计数不为 0，`UnloadUnusedAssetsAsync` 永远回收不掉，内存持续增长。
