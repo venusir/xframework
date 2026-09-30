@@ -415,8 +415,11 @@ namespace XFramework.XAsset
             var tracker = instance.GetComponent<InstanceTracker>();
             if (tracker != null)
             {
+                // 已回池：忽略重复调用。同一实例在池中出现两份，两次取出会拿到同一个 GameObject
+                if (tracker.IsPooled) return;
+
                 // 回池成功：句柄保留（资源保活），实例可随时取出复用
-                if (TryReturnToPool(tracker.Location, instance)) return;
+                if (TryReturnToPool(tracker, instance)) return;
 
                 // 池满：销毁前释放资源引用（幂等，OnDestroy 不会重复释放）
                 tracker.DisposeHandle();
@@ -658,27 +661,32 @@ namespace XFramework.XAsset
         /// <summary>
         /// 尝试将实例回池。池未满则回池并返回 true；池满返回 false，由调用方销毁实例。
         /// <para>回池不释放实例的 AssetHandle（资源保活），销毁时才释放。</para>
+        /// <para><b>先判容量、后动实例</b>：池满时调用方紧接着就会销毁它，没必要先失活脱父；
+        /// 也避免为一次失败的入池留下一个空池条目（容量判断需要池存在时才创建）。</para>
         /// </summary>
-        private bool TryReturnToPool(string location, GameObject instance)
+        private bool TryReturnToPool(InstanceTracker tracker, GameObject instance)
         {
-            instance.SetActive(false);
-            instance.transform.SetParent(null);
+            string location = tracker.Location;
+            int maxSize = _poolMaxSizes.TryGetValue(location, out var configuredSize) ? configuredSize : DefaultPoolSize;
 
-            if (!_pools.TryGetValue(location, out var pool))
+            if (_pools.TryGetValue(location, out var pool))
+            {
+                if (pool.Count >= maxSize)
+                    return false;
+            }
+            else
             {
                 pool = new Stack<GameObject>();
                 _pools[location] = pool;
             }
 
-            int maxSize = _poolMaxSizes.TryGetValue(location, out var configuredSize) ? configuredSize : DefaultPoolSize;
+            instance.SetActive(false);
+            instance.transform.SetParent(null);
+            pool.Push(instance);
 
-            if (pool.Count < maxSize)
-            {
-                pool.Push(instance);
-                return true;
-            }
-
-            return false;
+            // 标记在池：取出时由 InstanceTracker.OnEnable 清除。重复 DestroyInstance 据此直接忽略
+            tracker.MarkPooled();
+            return true;
         }
 
         /// <summary>

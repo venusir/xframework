@@ -23,6 +23,10 @@ namespace XFramework.XAsset
         /// <summary>句柄是否已释放。防止多条销毁路径（池满销毁、Dispose 清理、用户直接 Destroy）重复 Release。</summary>
         private bool _handleReleased;
 
+        /// <summary>是否已在对象池中（回池点置位、取出点清除）。
+        /// <para>没有它，同一实例被 <c>DestroyInstance</c> 调两次就会在池里出现两份，两次取出拿到同一个 GameObject。</para></summary>
+        private bool _pooled;
+
         /// <summary>location → 当前活跃（SetActive(true)）实例数，供 <see cref="IAssetManager.GetPoolStatus"/> 统计。</summary>
         private static readonly Dictionary<string, int> _activeCounts = new Dictionary<string, int>();
 
@@ -58,6 +62,20 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 是否已在对象池中（回池点置位、取出点清除）。
+        /// </summary>
+        internal bool IsPooled => _pooled;
+
+        /// <summary>
+        /// 标记为已回池。由 <see cref="AssetManagerImpl.TryReturnToPool"/> 在入池成功后调用；
+        /// 取出（<c>SetActive(true)</c>）时经 <see cref="OnEnable"/> 自动清除。
+        /// </summary>
+        internal void MarkPooled()
+        {
+            _pooled = true;
+        }
+
+        /// <summary>
         /// 获取指定地址的活跃实例数（调试统计用）。
         /// </summary>
         internal static int GetActiveCount(string location)
@@ -67,6 +85,10 @@ namespace XFramework.XAsset
 
         private void OnEnable()
         {
+            // 取出复用（SetActive(true)）与首次创建都会走到这里，两者都意味着「不在池中」。
+            // 放在 Location 判空之前：首次创建的 OnEnable 早于 SetHandle，同样要清标志。
+            _pooled = false;
+
             if (string.IsNullOrEmpty(Location)) return; // 创建瞬间 SetHandle 之前的 OnEnable，跳过
             IncrementCount(Location);
         }
