@@ -1005,7 +1005,7 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
   `UIRootNode.Awake` 里「未初始化才 `Initialize`」与 `OnDestroy` 里「我是当前根才 `Destroy`」构成闭环，
   正常场景卸载即可自洽；**但绕过 `UIRootNode` 手动调 `UIManager.Initialize` 的项目**在第二个播放会话里
   会继续挂在上一轮的实例上（`Initialize` 是「已初始化则忽略」，使用方无法自救）。同类根因与验证手段见
-  `Runtime/Input/README.md` 的已知限制。
+  `../Input/README.md` 的已知限制。
 - 多根场景未覆盖：第二个场景的 `UIRootNode` 会被静默忽略（面板仍挂在第一个场景的根下）——单根是既有
   设计，见 `View/UIRootNode.cs` 的注释。
 - **面板资源不会自动卸载**：需显式调 `UnloadPanelAssetAsync`（配套 Asset 侧的 `IAssetPoolController`）。

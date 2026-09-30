@@ -63,6 +63,8 @@ XFramework 是一个以**静态服务**为核心、以 **Pipeline 编排 + 启�
 | **UI**           | `XFramework.XUI`           | [README](../Runtime/UI/README.md)           | UI 面板管理 / MVVM 绑定 / 导航堆栈 / HUD / Tip                |
 | **Lock**         | `XFramework.XLock`         | [README](../Runtime/Lock/README.md)         | 逻辑锁：多类型锁叠加、全局锁、using 自动释放                  |
 
+> **维护方文档不在包内**：文件结构、模块版本记录、沿革叙述、审计结论（已评估未采纳与未决）在仓库根的 `Documentation/Modules/<模块>.md`，**不随本 UPM 包发布**——第三方在包内看不到它，包内也不引用它。
+
 ---
 
 ## 目录结构
