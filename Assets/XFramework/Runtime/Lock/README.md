@@ -95,16 +95,6 @@ using var sub = player.OnLockStateChanged((type, locked) =>
 
 实体回池 / 销毁时自动释放（`AutoReleaseOnDestroy`），或显式 `RemoveAllLocks()`，见「生命周期与清理」。
 
-## 架构设计
-
-```
-Runtime/Lock/
-├── LockManager.cs                # 静态外观（全局入口）
-├── ILockable.cs                  # 可锁标记接口
-├── LockableExtensions.cs         # ILockable 扩展方法
-└── LockHandle.cs                 # 锁句柄（读存储，支持 using）
-```
-
 ## 快速使用
 
 ### 1. 锁类型定义

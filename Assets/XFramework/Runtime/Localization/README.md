@@ -8,18 +8,6 @@ XFramework 本地化模块提供多语言文本管理功能。通过 `ILocalizat
 
 **语言标识**: 使用 `string` 类型（如 `"zh_Hans"`, `"en"`, `"ja"`），可自定义任意标识。
 
-## 架构设计
-
-```
-Runtime/Localization/
-├── ILocalizationManager.cs        # 本地化管理器公共接口
-├── LocalizationManager.cs         # 静态外观（全局入口）
-├── LocalizationManagerImpl.cs     # 默认实现（LRU 缓存）
-├── LocalizationBootstrapStage.cs  # 引导阶段（IBootstrapStage，Phase 90）
-├── LanguageChangedMessage.cs      # 语言切换消息（readonly struct，无装箱）
-└── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
-```
-
 ## 核心机制：LRU 缓存
 
 `LocalizationManagerImpl` 内存中最多缓存 **4 种语言**的数据。当前语言和回退语言始终保留，不被淘汰；其余按 LRU（最近最少使用）淘汰。

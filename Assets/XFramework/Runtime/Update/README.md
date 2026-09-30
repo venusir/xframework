@@ -13,14 +13,7 @@ Update 模块提供统一的更新调度服务，管理任意对象（静态服�
 
 ## 架构设计
 
-```
-Runtime/Update/
-├── IUpdateable.cs                # 契约：IUpdateLifecycle / IUpdateable / ILateUpdateable /
-│                                 #       IFixedUpdateable / UpdateTier
-├── UpdateClock.cs                # 时间基：UpdateClock（time + unscaledTime + isPaused）/ UpdateTimeMode
-├── UpdateScheduler.cs            # 纯调度逻辑（档位分桶 + 时间切片 + 双时间轴），internal
-└── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）
-```
+对外面是 `IUpdateable.cs`（`IUpdateLifecycle` / `IUpdateable` / `ILateUpdateable` / `IFixedUpdateable` / `UpdateTier`）、`UpdateClock.cs`（`UpdateClock` / `UpdateTimeMode`）与静态门面 `UpdateManager.cs`；`UpdateScheduler.cs` 是纯调度逻辑，`internal`。
 
 ## 快速使用
 

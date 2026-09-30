@@ -451,27 +451,6 @@ FileManager.Initialize();
 
 ---
 
-## 文件清单
-
-| 文件                       | 说明                          |
-| -------------------------- | ----------------------------- |
-| `FileDomain.cs`            | 路径域枚举定义                |
-| `FilePathUtility.cs`       | 路径工具（归一化 / 文件名提取 / 路径沙箱校验） |
-| `IFileProvider.cs`         | 平台文件提供者接口（含读失败契约） |
-| `IAtomicFileProvider.cs`   | 原子写入能力契约（可选）      |
-| `IDirectoryProvider.cs`    | 子目录枚举能力契约（可选）    |
-| `ICryptoProvider.cs`       | 加解密提供者接口              |
-| `XorCryptoProvider.cs`     | 基于 XOR 的轻量加解密实现     |
-| `CryptoFileProvider.cs`    | 加解密装饰器（内部）          |
-| `DesktopFileProvider.cs`   | 桌面平台文件提供者实现        |
-| `MobileFileProvider.cs`    | 移动平台文件提供者实现        |
-| `ConsoleFileProvider.cs`   | 控制台平台抽象基类            |
-| `FileManager.cs`           | 跨平台文件管理器静态外观      |
-| `FileManagerExtensions.cs` | 兼容面：同名同步方法的一行委托（同步 API 已收敛到门面） |
-| `README.md`                | 本文件                        |
-
----
-
 ## 设计决策与性能考量
 
 - **避免 Main Thread 卡顿：** IO 操作通过 `UniTask.RunOnThreadPool` 在子线程执行；域根不在池线程解析

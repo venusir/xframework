@@ -595,30 +595,6 @@ SettingsManager.Save<GameSettings>();
   整段同步读被挪到线程池，两个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——
   需要碰就只走同步 `Load`
 
-## 文件结构
-
-```
-Runtime/Settings/
-├── ISettingsStore.cs              # 存储后端接口
-├── IAsyncSettingsStore.cs         # 可选：异步存储能力
-├── JsonFileStore.cs               # 默认 JSON 文件存储（原子写 + 一代备份）
-├── EncryptedSettingsStore.cs      # 加解密装饰器（可叠在任意后端上）
-├── ISettingsManager.cs            # 管理器接口
-├── SettingsManagerImpl.cs         # 默认实现（internal sealed）
-├── SettingsManager.cs             # 全局静态外观
-├── SettingRef.cs                  # 字段句柄
-├── SettingRefRegistry.cs          # 句柄重放注册表（internal，实例替换时通知订阅者）
-├── SettingsOptions.cs             # 选项
-├── SettingsEnvelope.cs            # 版本信封（internal）
-├── ISettingsMigrator.cs           # 迁移钩子
-├── ISettingsValidator.cs          # 载荷校验钩子
-├── SettingsAutoSaveTicker.cs      # 自动保存帧驱动器（internal）
-├── SettingsPauseNotifier.cs       # 切后台兜底的宿主（internal MonoBehaviour）
-├── Messages/
-│   └── SettingsChangedMessage.cs  # 变更消息
-└── README.md
-```
-
 ## 避免 GC
 
 - `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配

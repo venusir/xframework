@@ -9,26 +9,6 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 - **自动设备检测**：支持键盘/鼠标、手柄、触摸的自动识别，以及手柄类型（Xbox/PS4/PS5/Switch）检测。
 - **热路径零 GC**：每帧读取路径（按钮/轴值/时长）基于字符串缓存字典，无装箱、无堆分配；`GetBindings`/重绑定等低频设置 UI 路径允许少量分配。
 
-## 文件结构
-
-```
-Runtime/Input/
-├── IInputProvider.cs                 # 输入提供者接口（核心抽象）
-├── IRebindingOperation.cs            # 交互式按键重绑定操作句柄接口
-├── InputManager.cs                   # 全局静态外观（静态类，直接调用）
-├── InputBindingInfo.cs               # 绑定信息结构体（UI 按键提示用）
-├── InputDeviceType.cs                # 输入设备类型枚举
-├── GamepadType.cs                    # 手柄类型枚举
-├── Messages/                         # 消息定义
-│   ├── DeviceConnectedMessage.cs
-│   ├── DeviceDisconnectedMessage.cs
-│   └── GamepadTypeChangedMessage.cs
-├── Default/
-│   ├── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
-│   └── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
-└── README.md
-```
-
 ## 快速开始
 
 ### 1. 输入动作资源

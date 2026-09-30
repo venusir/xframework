@@ -10,20 +10,12 @@ Message 模块提供**全局消息总线**。总线按消息类型 / Key 持有�
 
 ## 架构设计
 
-```
-Runtime/Message/
-├── IMessageBroker.cs             # IMessagePublisher/IMessageSubscriber(公开)+ IMessageBroker(internal)
-├── MessageBroker.cs              # 消息代理内部实现(订阅直落事件流)
-├── MessageManager.cs             # 静态外观(全局入口) + 标记接口扩展方法
-├── IMessageFilter.cs             # 消息过滤器接口
-├── IDestroyCancellationToken.cs  # 销毁令牌契约(订阅自动退订的绑定对象)
-└── Internal/                     # 总线内部实现(internal)
-    ├── MessageChannel.cs         # 通道对象(聚合同步流与缓冲流)+ 键值通道存储
-    ├── AsyncSubscription.cs      # 异步订阅登记项(退订句柄 + 令牌生命周期)
-    ├── DispatchListPool.cs       # 派发快照 List 池(与 XEvent 的同名池是两份,不合并)
-    ├── MainThreadGuard.cs        # 发布/订阅入口的主线程断言(仅 Editor)
-    └── ActionDisposable.cs       # 委托式 IDisposable(幂等)
-```
+本模块的公开面与内部面：
+
+| 面 | 类型 |
+|---|---|
+| **公开** | `IMessagePublisher` / `IMessageSubscriber`(同在 `IMessageBroker.cs`)、`MessageManager`(静态门面)、`IMessageFilter`、`IDestroyCancellationToken` |
+| **internal** | `IMessageBroker`、`MessageBroker`、`MessageChannel`、`AsyncSubscription`、`DispatchListPool`、`MainThreadGuard`、`ActionDisposable` |
 
 > 事件流本身(`EventStream` / `BufferedEventStream`)已迁至 `XFramework.XEvent` 模块——见 [Event README](../Event/README.md)。本模块的 `MessageChannel` 通过它的公开面持有两条流。
 

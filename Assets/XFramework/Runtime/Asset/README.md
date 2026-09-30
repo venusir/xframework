@@ -8,21 +8,6 @@ XFramework 资源管理模块提供异步资源加载、实例化、场景切换
 
 ## 架构设计
 
-```
-Runtime/Asset/
-├── IAssetManager.cs               # 资源管理器公共接口
-├── AssetManager.cs                # 静态外观（全局入口）
-├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
-├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理）
-├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收）
-├── IAssetRemoteServices.cs        # 远端资源地址服务接口
-├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
-├── AssetDownloaderHandle.cs       # 下载器句柄（事件/控制/等待）
-├── SubAssetsHandle.cs             # 子资源句柄（图集/多 Sprite）
-├── RawFileHandle.cs               # 原始文件句柄（txt/json/二进制）
-└── InstanceTracker.cs             # 实例引用追踪组件（内部）
-```
-
 ### 分层调用链
 
 ```

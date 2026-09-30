@@ -282,15 +282,3 @@ DataManager.ApplyBlockSnapshot(snap);
 1. 将原有的 `[Serializable] class X : IDataRow<TKey>` 重构为 `[Serializable] class XData : IDataBlock`
 2. 在 Block 内部实现 `OnSave / OnLoad / OnClear` 回调，并补 `DataVersion`（未接入版本控制时返回 0）与 `OnMigrate`（恒等返回入参）
 3. 将 `DataManager.GetOrCreateTable<X>()` 替换为 `DataManager.GetOrCreateBlock<XData>()`
-
-## 目录结构
-
-```
-XData/
-├── IDataBlock.cs             # 数据块接口定义
-├── IDataManager.cs           # 服务接口
-├── DataManager.cs            # 静态门面
-├── DataManagerImpl.cs        # 内部实现
-├── DataException.cs          # 异常类型
-├── DataSnapshot.cs           # 存档快照数据结构
-└── README.md

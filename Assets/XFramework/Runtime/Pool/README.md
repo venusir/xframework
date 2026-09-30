@@ -13,26 +13,6 @@ XPool 是一个**零 GC 分配**的泛型对象池系统，用于复用频繁创
 - **线程不安全**：与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
 - **与 AssetManager 解耦**：AssetManager 内部继续管理 GameObject/Prefab 池，PoolManager 只管纯 C# 对象。
 
-## 文件结构
-
-```
-Runtime/Pool/
-├── CollectionPool/
-│   ├── ListPool.cs                # List<T> 池，Return 自动 Clear()
-│   ├── HashSetPool.cs             # HashSet<T> 池，Return 自动 Clear()
-│   ├── DictionaryPool.cs          # Dictionary<K,V> 池，Return 自动 Clear()
-│   ├── StringBuilderPool.cs       # StringBuilder 池，Return 自动 Clear()
-│   └── CollectionPoolManager.cs   # 集合池统一管理器，一键 ClearAll()
-├── IPoolable.cs                   # 生命周期回调接口（OnRent / OnReturn）
-├── IPoolDiscardable.cs            # 可选能力接口：实例被池丢弃时释放资源（OnDiscard）
-├── PoolConfig.cs                  # 配置结构体（值类型，零装箱）
-├── PooledObject.cs                # using 包装器（struct，零 GC）
-├── IPool.cs                       # 池操作接口（用于 DI / 测试）
-├── Pool.cs                        # 泛型池实现（核心）
-├── PoolManager.cs                 # 全局静态管理器
-└── README.md
-```
-
 ## 快速开始
 
 ```csharp

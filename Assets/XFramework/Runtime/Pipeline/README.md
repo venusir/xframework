@@ -13,21 +13,12 @@ XFramework 管线模块提供**通用异步阶段编排**能力(附**相位分�
 
 ## 架构设计
 
-```
-Runtime/Pipeline/
-├── IPipeline.cs                  # 管线接口(调度入口)
-├── IPipelineStage.cs             # 阶段接口(含 PipelineStageState 枚举)
-├── IPhaseStage.cs                # 相位阶段接口(IPipelineStage + Phase 声明)
-├── Pipeline.cs                   # 静态门面:创建实例 + 相位分组装配助手 BuildPhaseGroups
-├── PipelineStageContext.cs       # 阶段执行上下文(阶段写面;读取面在 PipelineProgress / IPipeline.Status)
-├── PipelineProgress.cs           # 全局进度快照(事件载荷)
-├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获)
-├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
-├── SequenceStage.cs              # 串行阶段(组内串行子段,public)
-├── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)
-├── ContextBell.cs                # 上下文写入门铃(重入折叠/迟写防护,internal,管线与容器共用)
-└── ContextAggregation.cs         # 加权扫描共享助手(加权扫描/阈值节流/状态快照,internal)
-```
+本模块的公开面与内部面：
+
+| 面 | 类型 |
+|---|---|
+| **公开** | `IPipeline`、`IPipelineStage`(含 `PipelineStageState`)、`IPhaseStage`、`Pipeline`(静态门面)、`PipelineStageContext`、`PipelineProgress`、`StageExecution`、`ParallelStage`、`SequenceStage` |
+| **internal** | `StageAggregator`、`ContextBell`、`ContextAggregation` |
 
 > 管线不依赖上层模块,依赖方向单向:Bootstrap → Pipeline(装配在引导模块侧,复用本模块的相位分组助手)。
 

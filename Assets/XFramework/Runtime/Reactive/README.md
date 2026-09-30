@@ -11,16 +11,6 @@ XFramework 响应式模块提供**响应式属性**。基于 `XFramework.XEvent`
 
 **命名空间**: `XFramework.XReactive`
 
-## 架构设计
-
-```
-Runtime/Reactive/
-├── IReactiveProperty.cs          # 响应式属性接口(Value 只读 + Subscribe,面向接口编程)
-├── IReactivePropertyWriter.cs    # 可写能力接口(继承前者 + TryWriteValue),双向绑定按需索取
-├── ReactiveProperty.cs           # 响应式属性(可写值 + 自动通知 + 去重)
-└── ReadOnlyReactiveProperty.cs   # 只读派生属性 + Select 映射扩展
-```
-
 事件流引擎位于 Event 模块(`Runtime/Event/`,`XFramework.XEvent`)——本模块经它的**公开面**使用(`IEventStream<T>` / `EventStream.Create`),不触碰其内部实现。
 
 ## 快速使用

@@ -4,14 +4,6 @@
 
 ## 架构
 
-```
-XSerialize/
-├── ISerializer.cs          # 序列化器接口（同步，字节数组输出）
-├── Serializer.cs           # 静态门面，管理已注册的序列化器（字典索引）
-├── JsonSerializer.cs       # 内置默认实现（封装 Unity JsonUtility）
-└── README.md               # 本文件
-```
-
 - `DataManager` 通过 `Serializer.Get(format)` 获取序列化器，不再硬编码 `JsonUtility`。
 - `DataSnapshot` 顶层仍为 JsonUtility 兼容格式（`DataBlockSnapshot.data` 用 Base64 存储原始字节）。
 - 第三方可实现 `ISerializer` 并调用 `Serializer.Register()` 扩展自定义格式。
