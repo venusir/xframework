@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -90,6 +91,13 @@ namespace XFramework.XData
         {
             EnsureInitialized();
             return _impl.HasBlock<T>();
+        }
+
+        /// <inheritdoc cref="IDataManager.ForEachBlock"/>
+        public static void ForEachBlock(Action<IDataBlock> action)
+        {
+            EnsureInitialized();
+            _impl.ForEachBlock(action);
         }
 
         #endregion

@@ -279,6 +279,22 @@ namespace XFramework.XData.Tests
         }
 
         [Test]
+        public void ForEachBlock_ThroughFacade_VisitsAllRegisteredBlocks()
+        {
+            // 门面转发：接口声明了 `ForEachBlock`、实现也有，但门面**此前没有**同名转发——
+            // 第三方经 DataManager 根本调不到（仓内也零调用、零测试）。本批补上并在此钉住
+            var bag = DataManager.GetOrCreateBlock<BagData>();
+            var quest = DataManager.GetOrCreateBlock<QuestData>();
+
+            var visited = new List<IDataBlock>();
+            DataManager.ForEachBlock(visited.Add);
+
+            Assert.AreEqual(2, visited.Count, "门面转发应遍历到全部已注册块");
+            Assert.Contains(bag, visited);
+            Assert.Contains(quest, visited);
+        }
+
+        [Test]
         public void ApplyBlockSnapshot_OnClearThrows_ReturnsFalseInsteadOfThrowing()
         {
             // 清空与取序列化器原先落在 try 之外：异常外泄、块已被清空、还不计入任何计数，
