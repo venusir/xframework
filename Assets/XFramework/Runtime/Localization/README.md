@@ -293,7 +293,7 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 解析器的两条边界要知道，它们都**从静默改为硬失败**（2026-09-29 审计修）：
 
 - **转义序列会解码**：`\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对）。这条不是可选项——`System.Text.Json` 默认就把非 ASCII 转义成 `\uXXXX`，Python 的 `json.dumps` 默认 `ensure_ascii=True`，不解码就是整张表把 `中文` 原样显示给玩家。
-- **格式错误抛 `InvalidOperationException`（带字符位置）**，不再返回「已经读到的半张表」。旧实现在格式错误处直接跳出循环：`{"a":1}` 会产出非空字典 `{"a":""}`（一种「所有值都是空串」的语言，还绕过了「解析为空」的兜底），`{"a":"1","b"}` 会静默丢掉 `b`，`{"a":"1"} oops` 照常成功。
+- **格式错误抛 `InvalidOperationException`（带字符位置）**，不再返回「已经读到的半张表」。
   宽容的例外只有两个、且都不影响数据完整性：**尾随逗号**与 **UTF-8 BOM**。
 
 ## 引导集成

@@ -21,3 +21,7 @@ Runtime/Save/
 ├── SaveBootstrapStage.cs  # 引导阶段：初始化门面 + 跑一次启动恢复扫描
 └── README.md
 ```
+
+## 沿革与已否决形状
+
+- **「文件原语可从任意线程调用」这条前提曾经不成立**：Provider 在池线程上解析域根会撞 Unity 的主线程限定，恢复扫描因此必崩；修复后域根改在主线程解析并缓存（见 `File/README.md` 的「线程契约」）。

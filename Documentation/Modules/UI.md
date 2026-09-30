@@ -46,3 +46,7 @@ Runtime/UI/
     ├── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
     └── UISafeArea.cs          # 安全区适配（推荐挂在 UIRoot 上）
 ```
+
+## 沿革与已否决形状
+
+- **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。

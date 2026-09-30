@@ -75,7 +75,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 | 90 | Localization | 本地化数据加载（不在默认登记组合内） |
 | 90+ | 用户自定义 | 建议业务模块从此区间开始 |
 
-1 与 2 曾是 Lock / Message 的相位，二者已改为 `[RuntimeInitializeOnLoadMethod]` 自管理生命周期而被移出，**这两个值现为空闲**。
+**1 与 2 这两个值现为空闲**。
 
 **同相位 = 并行**，彼此不可有依赖；有依赖就必须分属不同相位。
 
@@ -84,7 +84,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 本模块**不含任何编排逻辑**。相位分组、同相位并行、加权进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本模块只做两件事：
 
 - 用 `Pipeline.BuildPhaseGroups` 把登记表装配成「每相位一个 `ParallelStage`」
-- 补上 Pipeline 没有的那一半——**反向清理**（旧实现里这一步散落在各引导节点的 `OnDestroy` 中）
+- 补上 Pipeline 没有的那一半——**反向清理**
 
 ## 设计取舍
 

@@ -476,6 +476,6 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
 - **不告警**：主体两类都不是时不记 warning（`UIManager.BindToContext` 在同类情况下会告警）。理由：
   `Global` 是合法主体、加锁边沿可能高频，逐次告警是噪音。
 - **`Dispose()` 不改名**：它的语义是「重置并继续可用」，名字沿用已久且被 `Application.quitting` 与
-  各 fixture 调用；误导的是它原先所在的 `#region Reset`（已改名）。
+  各 fixture 调用。
 - **两份 `ActionDisposable` 不合并**（本模块与 `XMessage.Internal`）：仓内既定取舍是「不为十行适配器
   建立跨模块实现依赖」，且本模块这份是池化的、形状本就不同。

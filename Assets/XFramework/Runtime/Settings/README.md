@@ -231,12 +231,6 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 > 3. **公开 API 形状。** `JsonFileStore(string filePath)` 收绝对路径，允许把设置放在任意位置；
 >    门面是 `FileDomain + 相对路径`，且带沙箱（拒盘符 / UNC / `..` 段）。
 >
-> 顺带订正两句曾经写在这里的错话：门面**并非**没有同步内容读写（含 `WriteAllBytesAtomic`
-> 在内的同步方法就在门面上，`FileManagerExtensions` 已退为兼容面），也**并非**拿不到一代备份
-> （那是 `IAtomicFileProvider` 契约的一部分）——备份能力的真实限制是「异步形态 + 能力探测」，
-> 也就是上面第 1 条。所以「`ISettingsStore` 是全同步的、构造必然同步加载」不构成不复用的
-> 理由；上面三条才是。
->
 > 权衡下来：设置是几百字节的本地 JSON，上述三条比域管理更值钱。需要平台存档时请自行实现
 > `ISettingsStore`；只是要加密则用上面的装饰器，不必自己写。
 

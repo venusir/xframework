@@ -119,7 +119,7 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 
 同类工具:Message 模块的 `MessageManager.GetStats()`、UI 模块的 `UIManager.DumpState()`。
 
-> **没有自动跟踪器**:本仓只有上面这种**拉取式**诊断,没有 R3 `ObservableTracker` 那样的「列出未释放订阅**及其创建调用栈**」的编辑器工具——排查靠这两条信号 + 人工核对。订阅泄漏是本仓历史上反复出现的一类(UI / Reactive / Settings 的 README 都专设排查节);若这类事故再出现,值得单独立项补一个(与 `UIStateWindow` 同级的编辑器窗口)。
+> **没有自动跟踪器**:本仓只有上面这种**拉取式**诊断,没有 R3 `ObservableTracker` 那样的「列出未释放订阅**及其创建调用栈**」的编辑器工具——排查靠这两条信号 + 人工核对。
 
 ## 设计原则
 
@@ -135,7 +135,5 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 
 - `XFramework.XEvent` 的**事件流引擎**——单向依赖:Reactive → Event。用的是它的**公开面**(`IEventStream<T>` / `EventStream.Create` / `SubscriptionCount`),不再触碰任何模块的 `Internal` 命名空间
 - 全局消息总线在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`;本模块**不**依赖它
-
-> **这条依赖曾经的形态(留档)**：引擎原先物理上住在 `XMessage.Internal` 里,本模块直接 `using` 它取 `EventStream<T>`——合计 5 个跨模块文件引用同一处内部命名空间,而全框架共用一个 asmdef、`internal` 不构成编译边界,既没有编译器约束、也没有成文约定可依。2026-09-27 把引擎下沉为**独立模块** `XFramework.XEvent`(公开接口 + 静态工厂 + internal 实现,照 Pipeline 先例),这条依赖随之变成**公开、单向、可自查**——`Tests/Editor/Architecture/ModuleBoundaryTests` 会拦住任何模块对别的模块 `Internal` 的新引用。引擎的语义契约(派发顺序 LIFO、重入、异常隔离、completed 与 Dispose 的差别等)现由 [Event README](../Event/README.md) 承载,本节不再复述。
 
 > **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`OnCompleted` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「派发顺序与重入」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。

@@ -24,14 +24,14 @@
 
 | | | |
 |---|---|---|
-| [Asset](Asset.md) | [Config](Config.md) | [Data](Data.md) |
-| [File](File.md) | [Input](Input.md) | [Localization](Localization.md) |
-| [Lock](Lock.md) | [Message](Message.md) | [Pipeline](Pipeline.md) |
-| [Pool](Pool.md) | [Reactive](Reactive.md) | [Save](Save.md) |
-| [Serialize](Serialize.md) | [Settings](Settings.md) | [UI](UI.md) |
-| [Update](Update.md) | | |
+| [Asset](Asset.md) | [Bootstrap](Bootstrap.md) | [Config](Config.md) |
+| [Data](Data.md) | [File](File.md) | [Input](Input.md) |
+| [Localization](Localization.md) | [Lock](Lock.md) | [Message](Message.md) |
+| [Pipeline](Pipeline.md) | [Pool](Pool.md) | [Reactive](Reactive.md) |
+| [Save](Save.md) | [Serialize](Serialize.md) | [Settings](Settings.md) |
+| [UI](UI.md) | [Update](Update.md) | |
 
-`Bootstrap` 的文档随后续搬迁建立；`Event` 无维护向内容，按需创建故暂无。
+`Event` 无维护向内容，按需创建故暂无。
 
 ## 模板
 
