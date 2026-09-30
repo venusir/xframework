@@ -31,7 +31,7 @@ namespace XFramework.XData
 
             var block = new T();
             _blocks[type] = block;
-            _blockNameIndex[block.BlockName] = block;
+            IndexBlockByName(block);
             return block;
         }
 
@@ -50,15 +50,23 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public void RegisterBlock<T>(T block) where T : class, IDataBlock
         {
+            // 参数防御放在最前：原先 null 会先被写进 _blocks、再在取 BlockName 时抛 NRE，
+            // 于是容器里留下一个 null 条目——此后 TryGetBlock 返回 true 而值为 null、遍历时炸
+            if (block == null) throw new ArgumentNullException(nameof(block));
+
             // 覆盖同名 Block 时先清理旧实例：OnClear 释放其资源/订阅，并移除脏标记，避免泄漏与假脏
             if (_blocks.TryGetValue(typeof(T), out var old))
             {
                 old.OnClear();
                 _dirtyBlocks.Remove(old);
+
+                // 旧实例的名称索引一并摘掉：它已不在 _blocks 里，索引留着会让按名恢复命中一个幽灵对象
+                // （新旧名字不同时尤其隐蔽——那个旧名字会一直指向它）
+                _blockNameIndex.Remove(old.BlockName);
             }
 
             _blocks[typeof(T)] = block;
-            _blockNameIndex[block.BlockName] = block;
+            IndexBlockByName(block);
         }
 
         /// <inheritdoc/>
@@ -87,6 +95,28 @@ namespace XFramework.XData
         {
             foreach (var block in _blocks.Values)
                 action(block);
+        }
+
+        /// <summary>
+        /// 把块登进名称索引，并在**另一个实例**已占用同名时留痕。
+        /// <para><b>为什么必须留痕：</b>快照恢复是按 <see cref="DataBlockSnapshot.blockName"/> 反查块的，
+        /// 而索引一个名字只能指向一个实例。两个**不同类型**的块返回同一个名字时，先注册的那个
+        /// <b>永远恢复不回来</b>——它会停在 <see cref="IDataBlock.OnClear"/> 之后的默认值上，全程没有
+        /// 编译期提示、也没有运行期信号，是静默丢数据。</para>
+        /// <para>刻意**只报错不阻止**：改名是使用方的事，且迁移期偶尔需要临时共用名字——
+        /// 与仓内「回退都留痕」的惯例一致。</para>
+        /// </summary>
+        private void IndexBlockByName(IDataBlock block)
+        {
+            if (_blockNameIndex.TryGetValue(block.BlockName, out var occupant) && occupant != block)
+            {
+                Debug.LogError(
+                    $"[Data] 数据块名称冲突：\"{block.BlockName}\" 已被 {occupant.GetType().Name} 占用，" +
+                    $"新登入的 {block.GetType().Name} 覆盖了索引项。快照恢复按 blockName 反查，" +
+                    $"因此 {occupant.GetType().Name} 的数据将无法恢复——请让两者的 BlockName 不同。");
+            }
+
+            _blockNameIndex[block.BlockName] = block;
         }
 
         #endregion
@@ -142,6 +172,10 @@ namespace XFramework.XData
         /// <inheritdoc/>
         public int ApplySnapshot(DataSnapshot data)
         {
+            // 参数防御必须在清空**之前**：原先的顺序是先清空全部块、再在解引用 data.blocks 处抛 NRE，
+            // 于是「传了个 null」的代价是内存数据全被清掉之后才报错
+            if (data == null) throw new ArgumentNullException(nameof(data));
+
             // 恢复到快照状态：先清空所有已注册 Block 的数据（仅清数据、保留注册，
             // 不能 ClearAll 否则名称索引被清空，后续无法匹配快照中的 block），
             // 快照中未出现的 Block 保持清空。

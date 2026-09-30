@@ -212,5 +212,19 @@ namespace XFramework.XData.Tests
             Assert.AreEqual(1, bag.Items.Count);
             Assert.AreEqual(7, bag.Items[0].id);
         }
+
+        [Test]
+        public void ApplySnapshot_Null_Throws_AndKeepsBlockData()
+        {
+            // 原先的顺序是先清空全部块、再在解引用 data.blocks 处抛 NRE——
+            // 于是「传了个 null」的代价是**内存数据全被清掉**之后才报错
+            var bag = DataManager.GetOrCreateBlock<BagData>();
+            bag.Gold = 42;
+
+            Assert.Throws<ArgumentNullException>(() => DataManager.ApplySnapshot(null));
+
+            Assert.AreEqual(42, bag.Gold, "参数校验失败不得清空任何块的数据");
+            Assert.AreSame(bag, DataManager.GetOrCreateBlock<BagData>(), "注册也不应受影响");
+        }
     }
 }
