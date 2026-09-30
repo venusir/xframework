@@ -1,8 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XInput;
+using XFramework.XInput.Messages;
+using XFramework.XMessage;
 
 namespace XFramework.XInput.Tests
 {
@@ -70,6 +75,28 @@ namespace XFramework.XInput.Tests
             public void ResetBindingOverrides(string action) => throw new NotSupportedException();
             public void ResetAllBindingOverrides() => throw new NotSupportedException();
             public IRebindingOperation StartRebinding(string action, string bindingId, uint playerId = 0) => throw new NotSupportedException();
+        }
+
+        /// <summary>
+        /// 实现 <see cref="IDestroyCancellationToken"/> 的**普通 C# 对象**(非 MonoBehaviour),
+        /// 用于验证「订阅随生命周期自动取消」对两类上下文都成立。
+        /// <para>令牌在构造时取出缓存——<c>CancellationTokenSource.Token</c> 在源被 Dispose 之后不可读,
+        /// 直接暴露 <c>_cts.Token</c> 会让自己销毁后反而读不出销毁令牌。</para>
+        /// </summary>
+        private sealed class FakeDestroyable : IDestroyCancellationToken
+        {
+            private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+            private readonly CancellationToken _token;
+
+            public FakeDestroyable() => _token = _cts.Token;
+
+            public CancellationToken DestroyCancellationToken => _token;
+
+            public void Destroy()
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+            }
         }
 
         private static FakeProvider CreateProvider()
@@ -361,6 +388,56 @@ namespace XFramework.XInput.Tests
             Assert.IsFalse(InputManager.IsInitialized, "provider 初始化失败后管理器应仍是未初始化态");
             Assert.IsFalse(InputManager.WasPressedThisFrame("Jump"),
                 "未初始化态下查询必须走默认值,不得转发到半初始化的 provider(它的 Pressed 是 true)");
+        }
+
+        #endregion
+
+        #region 订阅生命周期绑定
+
+        [Test]
+        public void ObservePressed_IDestroyCancellationTokenContext_AutoUnsubscribes()
+        {
+            // 改前必红是**编译级**的:旧的 context 形参是 MonoBehaviour,传下面这个普通对象直接 CS1503
+            var provider = CreateProvider();
+            var context = new FakeDestroyable();
+            var calls = 0;
+            InputManager.ObservePressed("Jump", () => calls++, context);
+
+            provider.Pressed = true;
+            InputManager.Tick();
+            Assert.AreEqual(1, calls, "订阅后按下应回调");
+
+            context.Destroy();
+            InputManager.Tick();
+            Assert.AreEqual(1, calls, "销毁令牌取消后应已自动退订,不再回调");
+        }
+
+        [Test]
+        public void Subscribe_IDestroyCancellationTokenContext_AutoUnsubscribes()
+        {
+            var context = new FakeDestroyable();
+            var calls = 0;
+            InputManager.Subscribe((DeviceConnectedMessage _) => calls++, context);
+
+            MessageManager.Publish(new DeviceConnectedMessage("pad", 1, true));
+            Assert.AreEqual(1, calls, "订阅后应收到消息");
+
+            context.Destroy();
+            MessageManager.Publish(new DeviceConnectedMessage("pad", 1, true));
+            Assert.AreEqual(1, calls, "销毁令牌取消后应已自动退订,不再回调");
+        }
+
+        [Test]
+        public void Observe_NonBindableContext_WarnsInsteadOfSilentlyNotBinding()
+        {
+            CreateProvider();
+
+            // 这是**新增行为**,不是回归——改前传非 MonoBehaviour 编译都过不了,谈不上有告警。
+            // 锁住它是为了让「订上了但没人会在销毁时退订」这种情形永远留痕,而不是静默。
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Input\] context of type 'Object' is neither"));
+            var handle = InputManager.ObservePressed("Jump", () => { }, new object());
+
+            handle.Dispose();
         }
 
         #endregion

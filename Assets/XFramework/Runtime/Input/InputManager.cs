@@ -193,6 +193,27 @@ namespace XFramework.XInput
 
         #endregion
 
+        #region Subscription Binding
+
+        /// <summary>
+        /// 把订阅绑到 <paramref name="context"/> 的销毁时机上——与 UI / Localization 同一个归口实现
+        /// （<see cref="MessageManager.TryBindToDestroy"/>），不在这里重写一遍。
+        /// <para>既非 <see cref="MonoBehaviour"/> 也非 <see cref="IDestroyCancellationToken"/> 时**留痕而非静默**：
+        /// 订是订上了，但没有谁会在它销毁时退订——静默的话，故障表现只是「对象已经没了，回调还在跑」。</para>
+        /// </summary>
+        private static void BindToContext(IDisposable subscription, object context)
+        {
+            if (context == null) return;
+            if (MessageManager.TryBindToDestroy(context, subscription)) return;
+
+            UnityEngine.Debug.LogWarning(
+                $"[Input] context of type '{context.GetType().Name}' is neither a MonoBehaviour nor an " +
+                "IDestroyCancellationToken, so the subscription will not be disposed automatically. " +
+                "Hold the returned handle and dispose it yourself.");
+        }
+
+        #endregion
+
         #region Public API — Tick
 
         /// <summary>
@@ -494,14 +515,14 @@ namespace XFramework.XInput
 
         /// <summary>
         /// 订阅按钮按下事件。每帧检测 <see cref="WasPressedThisFrame"/>，触发时回调一次。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">按下时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObservePressed(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObservePressed(string action, Action callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 订阅帧脉冲,每帧检测一次按下状态
@@ -511,22 +532,21 @@ namespace XFramework.XInput
                     callback();
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
 
         /// <summary>
         /// 订阅按钮释放事件。每帧检测 <see cref="WasReleasedThisFrame"/>，触发时回调一次。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">释放时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveReleased(string action, Action callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveReleased(string action, Action callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 订阅帧脉冲,每帧检测一次释放状态
@@ -536,22 +556,21 @@ namespace XFramework.XInput
                     callback();
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
 
         /// <summary>
         /// 订阅按钮按住状态。每帧读取 <see cref="IsPressed"/> 的值，仅当状态发生变化时回调。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">状态变化时回调，参数为当前是否按住</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveHeld(string action, Action<bool> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveHeld(string action, Action<bool> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -567,8 +586,7 @@ namespace XFramework.XInput
                 callback(pressed);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
@@ -576,14 +594,14 @@ namespace XFramework.XInput
         /// <summary>
         /// 订阅按钮持续按下时长（秒）。每帧回调当前按住时长。
         /// <para>相同值不重复回调，仅值变化时触发。</para>
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">每帧回调当前按住时长（秒）</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObservePressDuration(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObservePressDuration(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -599,8 +617,7 @@ namespace XFramework.XInput
                 callback(duration);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
@@ -608,14 +625,14 @@ namespace XFramework.XInput
         /// <summary>
         /// 订阅 Vector2 轴输入（如移动摇杆）。使用 <see cref="ReadVector2"/> 读取处理后的值，
         /// 仅当值变化时回调。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称，如 "Move"</param>
         /// <param name="callback">值变化时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveVector2(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveVector2(string action, Action<Vector2> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -631,22 +648,21 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
 
         /// <summary>
         /// 订阅 float 轴输入。使用 <see cref="ReadFloat"/> 读取处理后的值，仅当值变化时回调。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">值变化时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveFloat(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveFloat(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -662,22 +678,21 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
 
         /// <summary>
         /// 订阅 Vector2 原始轴输入（未应用处理器）。使用 <see cref="ReadVector2Raw"/>，仅当值变化时回调。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">值变化时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveVector2Raw(string action, Action<Vector2> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveVector2Raw(string action, Action<Vector2> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -693,22 +708,21 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
 
         /// <summary>
         /// 订阅 float 原始轴输入（未应用处理器）。使用 <see cref="ReadFloatRaw"/>，仅当值变化时回调。
-        /// <para>传入 <paramref name="context"/> 可自动随组件销毁取消订阅，无需手动 Dispose。</para>
+        /// <para>传入 <paramref name="context"/> 可自动随其销毁取消订阅，无需手动 Dispose。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="callback">值变化时回调</param>
-        /// <param name="context">生命周期绑定的组件（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <param name="playerId">玩家 ID，默认 0</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable ObserveFloatRaw(string action, Action<float> callback, MonoBehaviour context = null, uint playerId = 0)
+        public static IDisposable ObserveFloatRaw(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
@@ -724,8 +738,7 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
 
             return sub;
         }
@@ -739,13 +752,12 @@ namespace XFramework.XInput
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">设备连接时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<DeviceConnectedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<DeviceConnectedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
             return sub;
         }
 
@@ -754,13 +766,12 @@ namespace XFramework.XInput
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">设备断开时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<DeviceDisconnectedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<DeviceDisconnectedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
             return sub;
         }
 
@@ -769,13 +780,12 @@ namespace XFramework.XInput
         /// <para>底层复用 <see cref="MessageManager"/>，提供模块归口入口。</para>
         /// </summary>
         /// <param name="handler">手柄类型变化时的回调</param>
-        /// <param name="context">生命周期绑定的 MonoBehaviour（可选），传入后可自动取消订阅</param>
+        /// <param name="context">生命周期绑定的对象（可选）：<see cref="MonoBehaviour"/> 经其 <c>destroyCancellationToken</c> 自动退订，实现 <see cref="IDestroyCancellationToken"/> 的普通对象同样有效</param>
         /// <returns>可手动取消订阅的句柄</returns>
-        public static IDisposable Subscribe(Action<GamepadTypeChangedMessage> handler, MonoBehaviour context = null)
+        public static IDisposable Subscribe(Action<GamepadTypeChangedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            if (context != null)
-                context.destroyCancellationToken.Register(() => sub.Dispose());
+            BindToContext(sub, context);
             return sub;
         }
 
