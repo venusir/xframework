@@ -24,3 +24,14 @@ Runtime/Pool/
 ├── PoolManager.cs                 # 全局静态管理器
 └── README.md
 ```
+
+## 模块版本记录
+
+本表是**模块独立成包时代的本地版本号**（1.0.0–1.3.0），与包 `CHANGELOG.md` 的语义化版本（`0.1.0` / `0.2.0`）**不是同一套**，不要互相映射。1.3.0 与 1.2.0 的部分内容在 CHANGELOG 里有对应条目、1.1.0 / 1.0.0 没有；保留本表是为了不丢失本模块的时间线。
+
+| 版本  | 说明                                                                |
+| ----- | ------------------------------------------------------------------- |
+| 1.3.0 | 补 `CountActive`；新增池满丢弃回调（`onDestroy` / `IPoolDiscardable`）；归还按运行时类型回落；预热与栈容量钳到 `MaxSize`；集合池 Configure 守卫改用真实活跃计数；重复归还检测改用引用相等比较器；`PooledObject.Dispose` 幂等。**破坏性**：`IPool<T>` / `Pool<T>` / `PooledObject<T>` 加 `where T : class` 约束、删除 `PoolManagerExtensions` |
+| 1.2.0 | 修复 ClearAll 改为清闲置语义（原实现会使 Return 永久失效）、Pool.Clear 保留 Editor 活跃追踪；新增 EditMode 单元测试 |
+| 1.1.0 | 新增 CollectionPool 集合池（List/HashSet/Dictionary/StringBuilder） |
+| 1.0.0 | 初始版本                                                            |
