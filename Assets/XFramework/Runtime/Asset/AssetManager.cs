@@ -23,14 +23,15 @@ namespace XFramework.XAsset
         /// <summary>进行中的初始化任务。并发调用共享同一任务，避免重复创建实例；完成后清空，允许失败重试与 Destroy 后重建。</summary>
         private static UniTask _initializeTask;
 
-        /// <summary>等待初始化的加入者信号（UniTask promise 只支持单个 continuation，加入者各自持有信号等待创建者广播）。</summary>
-        private static readonly List<UniTaskCompletionSource> _initWaiters = new();
+        /// <summary>等待初始化的加入者登记表。<b>按代际分区</b>——作废后旧代际的创建者不得放行新代际的加入者（见 <see cref="BroadcastInitResult"/>）。</summary>
+        private static readonly List<InitWaiter> _initWaiters = new();
 
-        /// <summary>初始化失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
-        private static Exception _initException;
-
-        /// <summary>初始化代际号。Destroy()/SetInstance() 时递增，使在途初始化结果作废，防止销毁后实例"复活"。</summary>
+        /// <summary>初始化代际号。Destroy()/SetInstance() 时递增，使在途初始化结果作废（创建者抛异常、同代际加入者一并了结），防止销毁后实例"复活"。</summary>
         private static int _initGeneration;
+
+        /// <summary>作废在途初始化时给创建者与加入者的统一消息（带修复提示）。</summary>
+        private const string InitInvalidatedMessage =
+            "[AssetManager] 初始化在完成前被 Destroy()/SetInstance() 作废，结果已丢弃。请重新调用 InitializeAsync() 完成初始化。";
 
         /// <summary>测试钩子：实例工厂。默认创建 <see cref="AssetManagerImpl"/>；测试注入假实现以验证并发共享语义。</summary>
         internal static Func<IAssetManager> ImplFactory;
@@ -66,22 +67,25 @@ namespace XFramework.XAsset
                 return;
             }
 
-            var task = InitializeAsyncCore(progress, options, cancellationToken);
+            // 代际号在创建者选举处捕获一次：此后 Destroy()/SetInstance() 递增它即作废本次初始化
+            int generation = _initGeneration;
+            var task = InitializeAsyncCore(generation, progress, options, cancellationToken);
             _initializeTask = task;
+            Exception error = null;
             try
             {
                 await task;
             }
             catch (Exception ex)
             {
-                _initException = ex;
+                error = ex;
                 throw;
             }
             finally
             {
-                // 成功/失败/取消后均广播加入者并清空缓存，允许再次初始化（失败重试、Destroy 后重建）；
+                // 成功/失败/取消后均广播**本代际**的加入者并清空缓存，允许再次初始化（失败重试、Destroy 后重建）；
                 // 仅当缓存仍指向本次任务时清除，避免误清并发中新启动的任务
-                BroadcastInitResult();
+                BroadcastInitResult(generation, error);
                 if (_initializeTask.Equals(task))
                 {
                     _initializeTask = default;
@@ -91,40 +95,70 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 加入者等待初始化完成广播。注册自己的完成信号而非直接 await 共享任务
-        /// （UniTask promise 只支持单个 continuation）。
+        /// （UniTask promise 只支持单个 continuation）；代际号按**登记时刻**记录，
+        /// 此后 Destroy()/SetInstance() 作废的是同一批登记项。
         /// </summary>
         private static async UniTask AwaitInitBroadcast()
         {
             var tcs = new UniTaskCompletionSource();
-            _initWaiters.Add(tcs);
+            _initWaiters.Add(new InitWaiter(_initGeneration, tcs));
             await tcs.Task;
         }
 
         /// <summary>
-        /// 创建者完成时广播结果给所有加入者并清空信号（成功 TrySetResult，失败/取消 TrySetException）。
+        /// 广播结果给指定代际的加入者并移除这些登记项（成功 TrySetResult，失败/取消 TrySetException 同一异常实例）。
+        /// <para><b>只放行同代际</b>：作废后仍可能有两个创建者并存（旧代际的收尾在新代际启动之后完成），
+        /// 若不过滤，旧创建者会把新代际的加入者提前放行——它们醒来时 <see cref="IsInitialized"/> 仍为 false，
+        /// 或者收到与本代际无关的异常。</para>
         /// </summary>
-        private static void BroadcastInitResult()
+        private static void BroadcastInitResult(int generation, Exception error)
         {
-            if (_initException != null)
+            for (int i = 0; i < _initWaiters.Count; i++)
             {
-                for (int i = 0; i < _initWaiters.Count; i++)
-                    _initWaiters[i].TrySetException(_initException);
+                var waiter = _initWaiters[i];
+                if (waiter.Generation != generation)
+                    continue;
+
+                if (error != null)
+                    waiter.Completion.TrySetException(error);
+                else
+                    waiter.Completion.TrySetResult();
             }
-            else
+
+            for (int i = _initWaiters.Count - 1; i >= 0; i--)
             {
-                for (int i = 0; i < _initWaiters.Count; i++)
-                    _initWaiters[i].TrySetResult();
+                if (_initWaiters[i].Generation == generation)
+                    _initWaiters.RemoveAt(i);
             }
-            _initWaiters.Clear();
-            _initException = null;
+        }
+
+        /// <summary>
+        /// 作废当前代际的在途初始化：递增代际号使创建者结果失效，并以同一个异常了结该代际的加入者
+        /// （创建者在代际校验处抛同类异常，两条路径的调用方看到同一种结果）。
+        /// <para>无等待者时不构造异常——Destroy() 的常态就是没有在途初始化。</para>
+        /// </summary>
+        private static void InvalidateInflightInit()
+        {
+            int generation = _initGeneration;
+            _initGeneration++;
+
+            for (int i = 0; i < _initWaiters.Count; i++)
+            {
+                if (_initWaiters[i].Generation == generation)
+                {
+                    BroadcastInitResult(generation, new InvalidOperationException(InitInvalidatedMessage));
+                    return;
+                }
+            }
         }
 
         /// <summary>
         /// 实际初始化流程：创建实例 → 初始化 → 校验代际号后置入全局。
+        /// <para>代际不匹配（被 Destroy()/SetInstance() 作废）时抛出异常而非静默返回：
+        /// 「await 正常返回」必须等价于「已初始化」。</para>
         /// </summary>
-        private static async UniTask InitializeAsyncCore(IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
+        private static async UniTask InitializeAsyncCore(int generation, IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
-            int generation = _initGeneration;
             var impl = ImplFactory?.Invoke() ?? new AssetManagerImpl();
             try
             {
@@ -137,11 +171,11 @@ namespace XFramework.XAsset
                 throw;
             }
 
-            // Destroy()/SetInstance() 与初始化并发时，丢弃在途结果，防止销毁后实例"复活"
+            // Destroy()/SetInstance() 与初始化并发时，丢弃在途结果并告知调用方，防止销毁后实例"复活"
             if (generation != _initGeneration)
             {
                 impl.Dispose();
-                return;
+                throw new InvalidOperationException(InitInvalidatedMessage);
             }
 
             _instance = impl;
@@ -164,8 +198,8 @@ namespace XFramework.XAsset
             _instance = manager ?? throw new ArgumentNullException(nameof(manager));
             _instanceInitialized = true;
 
-            // 作废在途初始化：注入实例优先，在途任务结果不得覆盖
-            _initGeneration++;
+            // 作废在途初始化：注入实例优先，在途任务结果（及它的加入者）不得覆盖
+            InvalidateInflightInit();
             _initializeTask = default;
         }
 
@@ -181,8 +215,8 @@ namespace XFramework.XAsset
             }
             _instanceInitialized = false;
 
-            // 作废在途初始化任务：结果丢弃，可立即重新初始化
-            _initGeneration++;
+            // 作废在途初始化任务：结果丢弃、加入者一并了结，可立即重新初始化
+            InvalidateInflightInit();
             _initializeTask = default;
         }
 
@@ -480,6 +514,25 @@ namespace XFramework.XAsset
         #endregion
 
         #region Internal
+
+        /// <summary>
+        /// 加入者登记项：登记时的代际号 + 自己的完成信号。
+        /// <para>代际号是「作废」语义的载体——只有同代际的广播才能放行本项。</para>
+        /// </summary>
+        private readonly struct InitWaiter
+        {
+            /// <summary>登记时的初始化代际号。</summary>
+            public readonly int Generation;
+
+            /// <summary>加入者的完成信号（UniTask promise 只支持单个 continuation，故每个加入者各持一个）。</summary>
+            public readonly UniTaskCompletionSource Completion;
+
+            public InitWaiter(int generation, UniTaskCompletionSource completion)
+            {
+                Generation = generation;
+                Completion = completion;
+            }
+        }
 
         private static void EnsureGlobalInitialized()
         {

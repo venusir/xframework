@@ -130,9 +130,91 @@ namespace Venusy609.Xframework.Editor.Tests
             AssetManager.Destroy(); // 在途初始化期间销毁
 
             tcs.TrySetResult();
-            t1.GetAwaiter().GetResult();
+            Assert.Throws<InvalidOperationException>(() => t1.GetAwaiter().GetResult(),
+                "被作废的初始化必须抛异常——await 正常返回等价于「已初始化」，不能靠调用方自查");
             Assert.IsFalse(AssetManager.IsInitialized, "销毁后的在途初始化结果应被丢弃，不得复活");
             Assert.IsTrue(fake.Disposed, "被丢弃的实例应释放");
+        }
+
+        [Test]
+        public void Destroy_DuringInit_FaultsJoinerAndCreatorAlike()
+        {
+            AssetManager.Destroy();
+            var tcs = new UniTaskCompletionSource();
+            AssetManager.ImplFactory = () => new FakeAssetManager { InitTask = tcs.Task };
+
+            var tCreator = AssetManager.InitializeAsync();
+            var tJoiner = AssetManager.InitializeAsync();
+
+            AssetManager.Destroy(); // 作废：两条路径的调用方都应立刻看到，而不是等旧创建者收尾
+
+            Assert.Throws<InvalidOperationException>(() => tJoiner.GetAwaiter().GetResult());
+            Assert.AreEqual(UniTaskStatus.Pending, tCreator.Status, "创建者的作废判定是惰性的：等底层实例初始化返回后才抛出");
+            tcs.TrySetResult();
+            Assert.Throws<InvalidOperationException>(() => tCreator.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void Destroy_ThenReinitialize_StaleCompletion_DoesNotReleaseNewJoiners()
+        {
+            AssetManager.Destroy();
+
+            // 第一代：创建者 A 挂起、加入者 B 登记
+            var staleTcs = new UniTaskCompletionSource();
+            var stale = new FakeAssetManager { InitTask = staleTcs.Task };
+            AssetManager.ImplFactory = () => stale;
+            var tA = AssetManager.InitializeAsync();
+            var tB = AssetManager.InitializeAsync();
+
+            // 作废第一代后重新初始化：第二代创建者 C 挂起、加入者 E 登记
+            AssetManager.Destroy();
+            var freshTcs = new UniTaskCompletionSource();
+            var fresh = new FakeAssetManager { InitTask = freshTcs.Task };
+            AssetManager.ImplFactory = () => fresh;
+            var tC = AssetManager.InitializeAsync();
+            var tE = AssetManager.InitializeAsync();
+
+            // 旧代际收尾：不得放行新代际的加入者（改前：E 被提前放行，醒来时 IsInitialized 仍为 false）
+            staleTcs.TrySetResult();
+            Assert.Throws<InvalidOperationException>(() => tB.GetAwaiter().GetResult(), "旧代际的加入者应被作废");
+            Assert.Throws<InvalidOperationException>(() => tA.GetAwaiter().GetResult(), "旧代际的创建者应被作废");
+            Assert.AreEqual(UniTaskStatus.Pending, tE.Status, "旧代际完成不得提前放行新代际的加入者");
+            Assert.IsTrue(stale.Disposed, "被作废的实例应释放");
+
+            // 新代际完成后才放行
+            freshTcs.TrySetResult();
+            tC.GetAwaiter().GetResult();
+            tE.GetAwaiter().GetResult();
+            Assert.IsTrue(AssetManager.IsInitialized);
+        }
+
+        [Test]
+        public void Destroy_ThenReinitialize_StaleFailure_DoesNotFaultNewJoiners()
+        {
+            AssetManager.Destroy();
+
+            var staleTcs = new UniTaskCompletionSource();
+            var stale = new FakeAssetManager { InitTask = staleTcs.Task };
+            AssetManager.ImplFactory = () => stale;
+            var tA = AssetManager.InitializeAsync();
+
+            AssetManager.Destroy();
+
+            var freshTcs = new UniTaskCompletionSource();
+            var fresh = new FakeAssetManager { InitTask = freshTcs.Task };
+            AssetManager.ImplFactory = () => fresh;
+            var tC = AssetManager.InitializeAsync();
+            var tE = AssetManager.InitializeAsync();
+
+            // 旧代际以失败收场：异常不得广播给新代际的加入者（改前：E 收到旧代际的异常）
+            staleTcs.TrySetException(new InvalidOperationException("旧代际失败"));
+            Assert.Throws<InvalidOperationException>(() => tA.GetAwaiter().GetResult());
+            Assert.AreEqual(UniTaskStatus.Pending, tE.Status, "旧代际的失败不得污染新代际的加入者");
+
+            freshTcs.TrySetResult();
+            tC.GetAwaiter().GetResult();
+            tE.GetAwaiter().GetResult();
+            Assert.IsTrue(AssetManager.IsInitialized, "新代际应正常完成");
         }
 
         #endregion
