@@ -1012,7 +1012,11 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 
 ### 预制体要求
 
-第三方项目需在资源包中提供名为 `PF_UITipText` 的预制体，需挂载以下组件：
+第三方项目需在资源包中提供 Tip 预制体，**默认地址为 `PF_UITipText`**——名字/地址不同时用
+`UIManager.TipAssetPath = "你的地址"` 改（须在 `Initialize` 之后设；改后下次显示生效；
+注入了自定义 `IUITipProvider` 时该属性无效果，地址由你的实现决定）。
+
+预制体需挂载以下组件：
 
 - **TextMeshPro - Text (UI)** — 文字渲染，名称不限，`UITipItem` 会通过 `GetComponentInChildren` 自动查找
 - **CanvasGroup** — 透明度控制（`UITipItem` 通过 `[RequireComponent(typeof(CanvasGroup))]` 自动添加）

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
@@ -87,6 +88,26 @@ namespace XFramework.XUI.Tests
             {
                 LogAssert.ignoreFailingMessages = false;
             }
+        }
+
+        /// <summary>
+        /// <c>UIManager.TipAssetPath</c> 真的改变了「下次显示走哪个地址」。
+        /// <para>断言看日志里的**请求地址**：这里故意用未注册的地址（SetUp 只注册了默认那个），
+        /// 于是「错误日志里出现新地址」就证明了请求确实换了地址——若属性没生效，
+        /// 日志里会是默认地址（那条路径已注册、不会报错）。</para>
+        /// </summary>
+        [Test]
+        public async Task TipAssetPath_Changed_TakesEffectOnNextShow()
+        {
+            const string customPath = "ui/tips/custom_toast";
+            UIManager.TipAssetPath = customPath;
+            Assert.AreEqual(customPath, UIManager.TipAssetPath, "属性应可读回刚设的值");
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[UITipManager\] Failed to instantiate Tip prefab at path: " +
+                          Regex.Escape(customPath)));
+
+            await UIManager.ShowTipAsync("hello");
         }
     }
 }

@@ -782,6 +782,31 @@ namespace XFramework.XUI
                     "SetController: Current instance is not UIManagerImpl, controller not set.");
         }
 
+        /// <summary>
+        /// Tip 预制体的 YooAsset 地址。默认 <c>"PF_UITipText"</c>（见模块 README 的 Tip 一节）。
+        /// <para><b>改后下次显示 Tip 时生效</b>（已在播的实例不受影响）。须在 <see cref="Initialize"/> 之后设置
+        /// ——与 <see cref="SetController"/> 同一条限制。</para>
+        /// <para><b>只对内置的实现生效</b>：注入了自定义 <c>IUITipProvider</c>（<see cref="SetTipProvider"/>）时，
+        /// 地址由你自己的实现决定，本属性无效果。</para>
+        /// </summary>
+        public static string TipAssetPath
+        {
+            get
+            {
+                EnsureGlobalInitialized();
+                return _instance is UIManagerImpl impl ? impl.TipAssetPath : null;
+            }
+            set
+            {
+                EnsureGlobalInitialized();
+                if (_instance is UIManagerImpl impl)
+                    impl.TipAssetPath = value;
+                else
+                    LogManager.Warning(LogCategories.UIManager,
+                        "TipAssetPath: Current instance is not UIManagerImpl, path not set.");
+            }
+        }
+
         #endregion
 
         #region Internal

@@ -19,11 +19,15 @@ namespace XFramework.XUI
     {
         #region Constants
 
+        /// <summary>Tip 预制体地址的默认值（唯一的那份字面量：本类的属性默认值与 <c>UIManagerImpl</c> 的字段都取它）。</summary>
+        internal const string DefaultTipAssetPath = "PF_UITipText";
+
         /// <summary>
         /// Tip 预制体的 YooAsset 地址。
-        /// <para>第三方项目需要在 Resources 或 YooAsset 包中提供此预制体。</para>
+        /// <para>第三方项目需在资源包中提供此预制体；地址不同时用 <c>UIManager.TipAssetPath</c> 改
+        /// （本属性是实例字段而非常量，每次 <c>ShowTipAsync</c> 读取 → 改后下次显示生效）。</para>
         /// </summary>
-        private const string TipAssetPath = "PF_UITipText";
+        internal string TipAssetPath { get; set; } = DefaultTipAssetPath;
 
         /// <summary>
         /// 层级容器名称。

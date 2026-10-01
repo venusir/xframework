@@ -153,6 +153,12 @@ namespace XFramework.XUI
         /// </summary>
         private bool _tipProviderFaultLogged;
 
+        /// <summary>
+        /// Tip 预制体地址的当前值。**唯一真相在本类**：默认 provider 可能在设置之后才创建（初始化时），
+        /// 也可能被重建（<c>SetTipProvider(null)</c>），故每次创建后都套用当前值。
+        /// </summary>
+        private string _tipAssetPath = UITipManagerImpl.DefaultTipAssetPath;
+
         /// <summary>HUD provider 的同款阻尼标记，见 <see cref="_tipProviderFaultLogged"/>。</summary>
         private bool _hudProviderFaultLogged;
 
@@ -252,6 +258,8 @@ namespace XFramework.XUI
                 if (UIRoot != null)
                     defaultProvider.SetUIRoot(UIRoot);
 
+                // 重建出来的默认 provider 要继承当前地址设置，否则「换回默认 provider」会把地址悄悄复位
+                defaultProvider.TipAssetPath = _tipAssetPath;
                 _tipProvider = defaultProvider;
             }
             else
@@ -261,6 +269,23 @@ namespace XFramework.XUI
 
             // 阻尼标记随 provider 一起换：新实现值得一条新的线索，旧实现的异常不再重复记
             _tipProviderFaultLogged = false;
+        }
+
+        /// <summary>
+        /// Tip 预制体地址（**只对内置 provider 生效**：注入自定义 <c>IUITipProvider</c> 时值只是被存着——
+        /// 地址由那个实现自己决定）。
+        /// <para>值存在本类（唯一真相），设值时同步推给当前的内置 provider；两处创建默认 provider 的地方
+        /// （初始化、<c>SetTipProvider(null)</c> 重建）在创建后套用它。</para>
+        /// </summary>
+        internal string TipAssetPath
+        {
+            get => _tipAssetPath;
+            set
+            {
+                _tipAssetPath = value;
+                if (_tipProvider is UITipManagerImpl defaultProvider)
+                    defaultProvider.TipAssetPath = value;
+            }
         }
 
         /// <inheritdoc/>
@@ -436,8 +461,10 @@ namespace XFramework.XUI
             _factory = factory ?? new AssetPanelFactory();
 
             // 默认 provider：根节点此时已知，故无需像早先那样在门面里回头摸实例
-            _tipProvider = new UITipManagerImpl();
-            _tipProvider.SetUIRoot(uiRoot);
+            var tipProvider = new UITipManagerImpl();
+            tipProvider.SetUIRoot(uiRoot);
+            tipProvider.TipAssetPath = _tipAssetPath; // 套用当前地址（与 SetTipProvider(null) 的重建路径同款）
+            _tipProvider = tipProvider;
 
             _hudProvider = new UIHudManagerImpl();
             _hudProvider.SetUIRoot(uiRoot);
