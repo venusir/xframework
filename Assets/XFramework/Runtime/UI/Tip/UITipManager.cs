@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XUI.View;
 using XFramework.XAsset;
+using XFramework.XLog;
 
 namespace XFramework.XUI
 {
@@ -83,7 +84,8 @@ namespace XFramework.XUI
 
             if (_tipContainer == null)
             {
-                Debug.LogError("[UITipManager] Tip container is null. Ensure UIManager is initialized and UIRoot exists.");
+                LogManager.Error(LogCategories.UITipManager,
+                    "Tip container is null. Ensure UIManager is initialized and UIRoot exists.");
                 return;
             }
 
@@ -95,7 +97,8 @@ namespace XFramework.XUI
                 TipAssetPath, _tipContainer, cancellationToken);
             if (tipItem == null)
             {
-                Debug.LogError($"[UITipManager] Failed to instantiate Tip prefab at path: {TipAssetPath}");
+                LogManager.Error(LogCategories.UITipManager,
+                    "Failed to instantiate Tip prefab at path: {0}", TipAssetPath);
                 return;
             }
 
@@ -170,7 +173,7 @@ namespace XFramework.XUI
 
             if (_uiRoot == null)
             {
-                Debug.LogWarning("[UITipManager] UIRoot is not set. Call SetUIRoot first.");
+                LogManager.Warning(LogCategories.UITipManager, "UIRoot is not set. Call SetUIRoot first.");
                 return;
             }
 

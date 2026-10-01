@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XUI.Controller;
 using XFramework.XUI.Data;
@@ -81,7 +82,7 @@ namespace XFramework.XUI
         {
             if (_instanceInitialized)
             {
-                Debug.LogWarning("[UIManager] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.UIManager, "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -248,9 +249,9 @@ namespace XFramework.XUI
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError(
-                        "[UIManager] Frame driver: UIManager.Update threw; the driver stays registered " +
-                        $"(UI keeps being driven on the next frame): {e}");
+                    LogManager.Error(LogCategories.UIManager,
+                        "Frame driver: UIManager.Update threw; the driver stays registered " +
+                        "(UI keeps being driven on the next frame): {0}", e);
                 }
 
                 // 成败都返回 Tier0：返回值决定调度器把本节点放进哪个桶，一旦因异常漂移就会被改档
@@ -287,9 +288,9 @@ namespace XFramework.XUI
                 }
                 catch (Exception e)
                 {
-                    Debug.LogError(
-                        "[UIManager] Tier driver: DriveTier threw; the driver stays registered " +
-                        $"(panels keep being driven on the next period): {e}");
+                    LogManager.Error(LogCategories.UIManager,
+                        "Tier driver: DriveTier threw; the driver stays registered " +
+                        "(panels keep being driven on the next period): {0}", e);
                 }
 
                 // 恒定返回自身档位：面板跑哪一档由各自的 UpdateTier 决定，
@@ -686,10 +687,10 @@ namespace XFramework.XUI
 
             // 订是订上了，但没有任何人会在它销毁时退订。留痕而不是静默——静默的话故障表现只是
             // 「对象已经没了，回调还在跑」，从现象追回这里要绕很远。
-            Debug.LogWarning(
-                $"[UIManager] Subscribe<{messageName}>: context of type '{context.GetType().Name}' is neither a " +
-                "MonoBehaviour nor an IDestroyCancellationToken, so the subscription will not be disposed " +
-                "automatically. Hold the returned handle and dispose it yourself.");
+            LogManager.Warning(LogCategories.UIManager,
+                "Subscribe<{0}>: context of type '{1}' is neither a MonoBehaviour nor an IDestroyCancellationToken, " +
+                "so the subscription will not be disposed automatically. Hold the returned handle and dispose it yourself.",
+                messageName, context.GetType().Name);
             return subscription;
         }
 
@@ -777,8 +778,8 @@ namespace XFramework.XUI
             if (_instance is UIManagerImpl impl)
                 impl.SetController(controller);
             else
-                Debug.LogWarning(
-                    "[UIManager] SetController: Current instance is not UIManagerImpl, controller not set.");
+                LogManager.Warning(LogCategories.UIManager,
+                    "SetController: Current instance is not UIManagerImpl, controller not set.");
         }
 
         #endregion

@@ -6,6 +6,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XLocalization;
+using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XPool;
 using XFramework.XUpdate;
@@ -547,9 +548,9 @@ namespace XFramework.XUI
 #if UNITY_EDITOR
                 if (inFlight.AssetPath != assetPath)
                 {
-                    Debug.LogWarning(
-                        $"[UIManager] Panel '{type.Name}' is already being opened from '{inFlight.AssetPath}'; " +
-                        $"the request for '{assetPath}' will reuse that result.");
+                    LogManager.Warning(LogCategories.UIManager,
+                        "Panel '{0}' is already being opened from '{1}'; the request for '{2}' will reuse that result.",
+                        type.Name, inFlight.AssetPath, assetPath);
                 }
 #endif
                 return await JoinOpeningAsync<T>(inFlight, cancellationToken);
@@ -572,7 +573,7 @@ namespace XFramework.XUI
                 var canOpen = await _controller.OnBeforeOpenAsync(type, assetPath, layer, userData, cancellationToken);
                 if (!canOpen)
                 {
-                    Debug.LogWarning($"[UIManager] Panel open blocked by Controller: {type.Name}");
+                    LogManager.Warning(LogCategories.UIManager, "Panel open blocked by Controller: {0}", type.Name);
                     return null;
                 }
 
@@ -588,7 +589,8 @@ namespace XFramework.XUI
                 var panel = await InstantiatePanelAsync<T>(assetPath, layer, cancellationToken);
                 if (panel == null)
                 {
-                    Debug.LogError($"[UIManager] Failed to instantiate panel: {type.Name} at path: {assetPath}");
+                    LogManager.Error(LogCategories.UIManager,
+                        "Failed to instantiate panel: {0} at path: {1}", type.Name, assetPath);
                     return null;
                 }
 
@@ -817,7 +819,7 @@ namespace XFramework.XUI
             var target = GetPanel<T>();
             if (target == null)
             {
-                Debug.LogWarning($"[UIManager] PopToAsync: Panel '{typeof(T).Name}' is not open.");
+                LogManager.Warning(LogCategories.UIManager, "PopToAsync: Panel '{0}' is not open.", typeof(T).Name);
                 return;
             }
 
@@ -906,8 +908,8 @@ namespace XFramework.XUI
             // 没有遮罩时无对象可改，出声而不是静默丢弃。
             if (_maskInstance == null)
             {
-                Debug.LogWarning(
-                    "[UIManager] SetMaskClickToClose: 遮罩尚未显示，本次调用无效。" +
+                LogManager.Warning(LogCategories.UIManager,
+                    "SetMaskClickToClose: 遮罩尚未显示，本次调用无效。" +
                     "请在 ShowMask 的 UIMaskStyle 里指定 ClickToClose。");
                 return;
             }
@@ -1087,8 +1089,8 @@ namespace XFramework.XUI
                 var panel = _stack[i];
                 if (panel != null && panel.AssetPath == assetPath)
                 {
-                    Debug.LogWarning(
-                        $"[UIManager] 面板 '{panel.GetType().Name}' 仍在使用 '{assetPath}'，未执行资源释放。");
+                    LogManager.Warning(LogCategories.UIManager,
+                        "面板 '{0}' 仍在使用 '{1}'，未执行资源释放。", panel.GetType().Name, assetPath);
                     return false;
                 }
             }
@@ -1239,7 +1241,7 @@ namespace XFramework.XUI
             var type = panel.GetType();
             if (!_activePanels.ContainsKey(type))
             {
-                Debug.LogWarning($"[UIManager] BringToFront: Panel '{type.Name}' is not open.");
+                LogManager.Warning(LogCategories.UIManager, "BringToFront: Panel '{0}' is not open.", type.Name);
                 return;
             }
 
@@ -1285,10 +1287,10 @@ namespace XFramework.XUI
                     return;
 
                 _hudProviderFaultLogged = true;
-                Debug.LogError(
-                    $"[UIManager] HUD provider '{_hudProvider.GetType().Name}'.Update threw; the frame path " +
-                    "continues and further exceptions from this provider are not logged until it is " +
-                    $"replaced: {e}");
+                LogManager.Error(LogCategories.UIManager,
+                    "HUD provider '{0}'.Update threw; the frame path continues and further exceptions from " +
+                    "this provider are not logged until it is replaced: {1}",
+                    _hudProvider.GetType().Name, e);
             }
         }
 
@@ -1310,10 +1312,10 @@ namespace XFramework.XUI
                     return;
 
                 _tipProviderFaultLogged = true;
-                Debug.LogError(
-                    $"[UIManager] Tip provider '{_tipProvider.GetType().Name}'.Update threw; the frame path " +
-                    "continues and further exceptions from this provider are not logged until it is " +
-                    $"replaced: {e}");
+                LogManager.Error(LogCategories.UIManager,
+                    "Tip provider '{0}'.Update threw; the frame path continues and further exceptions from " +
+                    "this provider are not logged until it is replaced: {1}",
+                    _tipProvider.GetType().Name, e);
             }
         }
 
@@ -1362,10 +1364,10 @@ namespace XFramework.XUI
                     // 停更而非继续驱动：OnUpdate 的典型异常（空引用等）是持续态，继续驱动等于每帧
                     // 刷一条带栈日志；标记随回池复位（见 RecyclePanel），不会把池化实例变成僵尸。
                     panel.UpdateFaulted = true;
-                    Debug.LogError(
-                        $"[UIManager] Panel '{panel.GetType().Name}'.OnUpdate threw exception; " +
-                        "this panel will not be driven again until it is reopened " +
-                        $"(other panels are unaffected): {e}");
+                    LogManager.Error(LogCategories.UIManager,
+                        "Panel '{0}'.OnUpdate threw exception; this panel will not be driven again until it is " +
+                        "reopened (other panels are unaffected): {1}",
+                        panel.GetType().Name, e);
                 }
             }
 
@@ -1548,9 +1550,10 @@ namespace XFramework.XUI
             // 仍做兜底：把旧实例经正常回收路径处理，而不是静默产出一个 IsOpen 为 true 的池中失活引用。
             if (_activePanels.TryGetValue(type, out var oldPanel) && oldPanel != null)
             {
-                Debug.LogError(
-                    $"[UIManager] Panel '{type.Name}' is already active while registering a new instance. " +
-                    "This breaks the one-instance-per-type invariant; the previous instance is being recycled.");
+                LogManager.Error(LogCategories.UIManager,
+                    "Panel '{0}' is already active while registering a new instance. " +
+                    "This breaks the one-instance-per-type invariant; the previous instance is being recycled.",
+                    type.Name);
                 RollbackPanel(type, oldPanel);
             }
 
@@ -1584,7 +1587,7 @@ namespace XFramework.XUI
             var canClose = await _controller.OnBeforeCloseAsync(type, panel, immediate, cancellationToken);
             if (!canClose)
             {
-                Debug.LogWarning($"[UIManager] Panel close blocked by Controller: {type.Name}");
+                LogManager.Warning(LogCategories.UIManager, "Panel close blocked by Controller: {0}", type.Name);
                 return false;
             }
 
@@ -1707,8 +1710,8 @@ namespace XFramework.XUI
         /// </summary>
         private static void WarnOpenAbandoned(Type type)
         {
-            Debug.LogWarning(
-                $"[UIManager] Panel open abandoned because the manager was disposed: {type.Name}");
+            LogManager.Warning(LogCategories.UIManager,
+                "Panel open abandoned because the manager was disposed: {0}", type.Name);
         }
 
         /// <summary>
@@ -1826,10 +1829,10 @@ namespace XFramework.XUI
 
                 if (indexInLayer > UISorting.MaxIndexInLayer)
                 {
-                    Debug.LogWarning(
-                        $"[UIManager] Layer {panel.Layer} has more than {UISorting.MaxIndexInLayer} open panels; " +
-                        "the extra ones are clamped to the top of the layer band and will share an order. " +
-                        "Use a higher layer or close some of them (see UISorting).");
+                    LogManager.Warning(LogCategories.UIManager,
+                        "Layer {0} has more than {1} open panels; the extra ones are clamped to the top of the " +
+                        "layer band and will share an order. Use a higher layer or close some of them (see UISorting).",
+                        panel.Layer, UISorting.MaxIndexInLayer);
                 }
 
                 panel.Canvas.overrideSorting = true;

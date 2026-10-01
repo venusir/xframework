@@ -1,6 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XReactive;
 using XFramework.XUI.Data;
 
@@ -44,7 +45,8 @@ namespace XFramework.XUI.View
         {
             if (Binding == null)
             {
-                Debug.LogWarning($"[UIPanelBase] Cannot bind ViewModel: UIPanelBinding component not found on '{gameObject.name}'.");
+                LogManager.Warning(LogCategories.UIPanelBase,
+                    "Cannot bind ViewModel: UIPanelBinding component not found on '{0}'.", gameObject.name);
                 return;
             }
             Binding.Bind(viewModel);
@@ -58,7 +60,8 @@ namespace XFramework.XUI.View
         {
             if (Binding == null)
             {
-                Debug.LogWarning($"[UIPanelBase] Cannot bind by convention: UIPanelBinding component not found on '{gameObject.name}'.");
+                LogManager.Warning(LogCategories.UIPanelBase,
+                    "Cannot bind by convention: UIPanelBinding component not found on '{0}'.", gameObject.name);
                 return;
             }
             Binding.BindByConvention(propertyName, source);

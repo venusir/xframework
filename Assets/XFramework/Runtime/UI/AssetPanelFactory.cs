@@ -2,6 +2,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XLog;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI
@@ -31,8 +32,8 @@ namespace XFramework.XUI
             var panel = go.GetComponent<T>();
             if (panel == null)
             {
-                Debug.LogError(
-                    $"[UIManager] Prefab at '{assetPath}' lacks component {type.Name}. Destroying instance.");
+                LogManager.Error(LogCategories.UIManager,
+                    "Prefab at '{0}' lacks component {1}. Destroying instance.", assetPath, type.Name);
                 AssetManager.DestroyInstance(go);
                 return null;
             }

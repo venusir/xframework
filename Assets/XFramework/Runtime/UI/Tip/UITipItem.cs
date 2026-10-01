@@ -1,5 +1,6 @@
 using TMPro;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XUI
 {
@@ -91,7 +92,7 @@ namespace XFramework.XUI
         {
             if (TmpText == null)
             {
-                Debug.LogError("[UITipItem] TMP_Text component not found on prefab.");
+                LogManager.Error(LogCategories.UITipItem, "TMP_Text component not found on prefab.");
                 return;
             }
 

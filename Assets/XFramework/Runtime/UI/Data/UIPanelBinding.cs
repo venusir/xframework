@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using XFramework.XLog;
 using XFramework.XReactive;
 
 namespace XFramework.XUI.Data
@@ -168,9 +169,9 @@ namespace XFramework.XUI.Data
 
             // 未找到匹配组件（仅在编辑器中输出警告，避免 Release 版 GC）
 #if UNITY_EDITOR
-            Debug.LogWarning(
-                $"[UIPanelBinding] 未找到 '{propertyName}' 对应的 UI 组件" +
-                $"（txt_ / img_ / sld_ / tgl_ 前缀之一）: {gameObject.name}");
+            LogManager.Warning(LogCategories.UIPanelBinding,
+                "未找到 '{0}' 对应的 UI 组件（txt_ / img_ / sld_ / tgl_ 前缀之一）: {1}",
+                propertyName, gameObject.name);
 #endif
         }
 
@@ -189,8 +190,8 @@ namespace XFramework.XUI.Data
             if (!_componentCache.TryGetValue(key, out var comp) || !(comp is Button button))
             {
 #if UNITY_EDITOR
-                Debug.LogWarning(
-                    $"[UIPanelBinding] 未找到 'btn_{name}' 对应的 Button: {gameObject.name}");
+                LogManager.Warning(LogCategories.UIPanelBinding,
+                    "未找到 'btn_{0}' 对应的 Button: {1}", name, gameObject.name);
 #endif
                 return;
             }

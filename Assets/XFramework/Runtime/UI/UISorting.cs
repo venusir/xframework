@@ -1,3 +1,5 @@
+using XFramework.XLog;
+
 namespace XFramework.XUI
 {
     /// <summary>
@@ -94,16 +96,16 @@ namespace XFramework.XUI
         {
             if (layer < 0)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[UIManager] Layer {layer} is below 0; clamped to 0.");
+                LogManager.Warning(LogCategories.UIManager, "Layer {0} is below 0; clamped to 0.", layer);
                 return 0;
             }
 
             if (layer > MaxPanelLayer)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[UIManager] Layer {layer} exceeds the panel layer limit {MaxPanelLayer}; clamped. " +
-                    $"Above that are the HUD/Tip/system reserved bands (see UISorting).");
+                LogManager.Warning(LogCategories.UIManager,
+                    "Layer {0} exceeds the panel layer limit {1}; clamped. " +
+                    "Above that are the HUD/Tip/system reserved bands (see UISorting).",
+                    layer, MaxPanelLayer);
                 return MaxPanelLayer;
             }
 

@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XLog;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI
@@ -97,13 +98,13 @@ namespace XFramework.XUI
         {
             if (target == null)
             {
-                Debug.LogError("[UIHudManager] AttachAsync: target is null.");
+                LogManager.Error(LogCategories.UIHudManager, "AttachAsync: target is null.");
                 return null;
             }
 
             if (string.IsNullOrEmpty(assetPath))
             {
-                Debug.LogError("[UIHudManager] AttachAsync: assetPath is null or empty.");
+                LogManager.Error(LogCategories.UIHudManager, "AttachAsync: assetPath is null or empty.");
                 return null;
             }
 
@@ -122,14 +123,16 @@ namespace XFramework.XUI
             var go = await AssetManager.InstantiateAsync(assetPath, _hudContainer, cancellationToken);
             if (go == null)
             {
-                Debug.LogError($"[UIHudManager] Failed to instantiate HUD: {typeof(T).Name} at path: {assetPath}");
+                LogManager.Error(LogCategories.UIHudManager,
+                    "Failed to instantiate HUD: {0} at path: {1}", typeof(T).Name, assetPath);
                 return null;
             }
 
             var hud = go.GetComponent<T>();
             if (hud == null)
             {
-                Debug.LogError($"[UIHudManager] HUD prefab at '{assetPath}' lacks component '{typeof(T).Name}'. Destroying instance.");
+                LogManager.Error(LogCategories.UIHudManager,
+                    "HUD prefab at '{0}' lacks component '{1}'. Destroying instance.", assetPath, typeof(T).Name);
                 AssetManager.DestroyInstance(go);
                 return null;
             }
@@ -284,7 +287,7 @@ namespace XFramework.XUI
             catch (Exception e)
             {
                 // 关闭失败也必须往下走：实例已从映射与列表摘除，没有第二条路径能再碰到它
-                Debug.LogError($"[UIHudManager] HUD close failed, recycling anyway: {e}");
+                LogManager.Error(LogCategories.UIHudManager, "HUD close failed, recycling anyway: {0}", e);
             }
 
             RecycleHud(hud);
@@ -350,7 +353,7 @@ namespace XFramework.XUI
 
             if (_uiRoot == null)
             {
-                Debug.LogError("[UIHudManager] EnsureContainer: uiRoot is null. HUD cannot be created.");
+                LogManager.Error(LogCategories.UIHudManager, "EnsureContainer: uiRoot is null. HUD cannot be created.");
                 return;
             }
 

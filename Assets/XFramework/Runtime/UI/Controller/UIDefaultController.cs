@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI.Controller
@@ -40,8 +41,8 @@ namespace XFramework.XUI.Controller
         {
             if (_verbose)
             {
-                Debug.Log(
-                    $"[UIDefaultController] 允许打开面板: {panelType?.Name}, 资源路径: {assetPath}, 层级: {layer}");
+                LogManager.Info(LogCategories.UIDefaultController,
+                    "允许打开面板: {0}, 资源路径: {1}, 层级: {2}", panelType?.Name, assetPath, layer);
             }
 
             return UniTask.FromResult(true);
@@ -51,7 +52,7 @@ namespace XFramework.XUI.Controller
             CancellationToken cancellationToken = default)
         {
             if (_verbose)
-                Debug.Log($"[UIDefaultController] 面板已打开: {panelType?.Name}");
+                LogManager.Info(LogCategories.UIDefaultController, "面板已打开: {0}", panelType?.Name);
 
             return UniTask.CompletedTask;
         }
@@ -61,8 +62,8 @@ namespace XFramework.XUI.Controller
         {
             if (_verbose)
             {
-                Debug.Log(
-                    $"[UIDefaultController] 允许关闭面板: {panelType?.Name}, immediate: {immediate}");
+                LogManager.Info(LogCategories.UIDefaultController,
+                    "允许关闭面板: {0}, immediate: {1}", panelType?.Name, immediate);
             }
 
             return UniTask.FromResult(true);
@@ -71,7 +72,7 @@ namespace XFramework.XUI.Controller
         public UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default)
         {
             if (_verbose)
-                Debug.Log($"[UIDefaultController] 面板已关闭: {panelType?.Name}");
+                LogManager.Info(LogCategories.UIDefaultController, "面板已关闭: {0}", panelType?.Name);
 
             return UniTask.CompletedTask;
         }
@@ -79,7 +80,7 @@ namespace XFramework.XUI.Controller
         public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
         {
             if (_verbose)
-                Debug.Log("[UIDefaultController] 所有面板已关闭");
+                LogManager.Info(LogCategories.UIDefaultController, "所有面板已关闭");
 
             return UniTask.CompletedTask;
         }
