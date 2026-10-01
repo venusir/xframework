@@ -189,13 +189,15 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 **排序空间**由 `UISorting` 单点定义，**不要在别处硬编码 `sortingOrder`**：
 
-| 带 | 取值 | 说明 |
-| --- | --- | --- |
-| 面板层 | `layer × 32 + 层内序号` | 层上限 `MaxPanelLayer = 899`、每层最多 31 个面板，超出会告警并钳制 |
-| 遮罩 | `maskLayer × 32 + 31` | 取该层末位：挡住该层及以下、被更高层盖住 |
-| HUD | `30000` | 高于全部面板层 |
-| Tip | `31000` | 高于 HUD |
-| 预留 | `32000` | 新手引导挖洞层、全局加载遮罩 |
+| 带 | 取值 | 常量 | 说明 |
+| --- | --- | --- | --- |
+| 面板层 | `layer × LayerStride + 层内序号` | `LayerStride = 32` · `MaxIndexInLayer = 31` · `MaxPanelLayer = 899` | 层上限 899、每层最多 31 个面板，超出会告警并钳制 |
+| 遮罩 | `maskLayer × LayerStride + MaskIndex` | `MaskIndex = 31` | 取该层末位：挡住该层及以下、被更高层盖住 |
+| HUD | `30000` | `HudOrder` | 高于全部面板层 |
+| Tip | `31000` | `TipOrder` | 高于 HUD |
+| 预留 | `32000` | `SystemOrder` | 新手引导挖洞层、全局加载遮罩 |
+
+**写代码时用常量名，别抄数字**（`UISorting.MaxSortingOrder = 32767` / `MinSortingOrder = -32768` 是整套取值必须落进的边界）。
 
 > ⚠️ **为什么取值必须这么紧：`Canvas.sortingOrder` 是 16 位有符号量。**
 >
@@ -232,6 +234,18 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 - 支持设置透明度（alpha 0-1）
 - 支持点击关闭（clickToClose）—— 点击遮罩自动 Pop 栈顶面板
 - 遮罩位于独立层级（默认 Mask 层），不影响面板排序
+
+样式由 `UIMaskStyle` 结构体描述（`ShowMask(maskLayer, alpha, clickToClose)` 的具名参数只是它的便捷写法）：
+
+| 字段 | 说明 |
+| --- | --- |
+| `Layer` | 遮罩所在层级。**`0` 是合法层级**（`UILayers.Background`），所以本结构体刻意不用「0 = 未指定」这类哨兵 |
+| `Color` | 遮罩颜色（含透明度）。**`a = 0` 仍然挡输入**——「挡住但不显示」是合法需求 |
+| `ClickToClose` | 点击遮罩是否关闭显示栈顶面板 |
+
+需要一份默认样式时显式写 `UIMaskStyle.Default`。
+
+> 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
 
 ### 面板驱动更新（OnUpdate）
 
@@ -328,6 +342,8 @@ UIManager.ClearPreloads();
 1. 右键 → `GameObject` → `UI` → `Canvas` 创建 Canvas
 2. 向 Canvas 添加 `UIRootNode` 组件（`Add Component → UIRootNode`）
 3. Canvas 的 `Render Mode` 自动设为 `Screen Space - Overlay`
+
+**安全区**：`UIRootNode` 上的 `applySafeArea` 勾选后，`Awake` 会给本物体补一个 `UISafeArea`（已挂则不重复），让全部层级容器一起避让刘海/圆角/手势条。**它是「仅 `Awake` 读一次」的 Inspector 配置**——运行时改这个字段不会生效（安全区组件已经挂上或没挂上）。
 
 `UIRootNode` 的 `Awake` 中若尚未初始化则自动调用 `UIManager.Initialize(transform)`；`OnDestroy` 中**只有它自己正是当前根**时才清理——叠加场景下卸载别的节点，不该把另一个场景仍在用的管理器拆掉。
 
