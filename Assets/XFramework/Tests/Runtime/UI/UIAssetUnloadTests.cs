@@ -25,6 +25,8 @@ namespace XFramework.XUI.Tests
         [SetUp]
         public void SetUp()
         {
+            // 归零：不依赖上一个 fixture 的 TearDown（SetUp 中途失败时它不会执行）
+            UIManager.Destroy();
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
