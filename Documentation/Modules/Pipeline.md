@@ -5,6 +5,16 @@
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 > 变更流水记在 `CHANGELOG.md` 与 git 提交里；本文件只留**下一轮需要知道的**。
 
+## 异常承载（2026-10-01）
+
+阶段抛出的异常对象沿 `StageExecution` → `PipelineStageContext.FailureException`（internal）→
+`ContextAggregation.ScanResult.FailException`（与描述/任务名在**同一首失败闩锁**里成对捕获）→
+`StageAggregator` → 容器拷进自己的 `_stageCtx` → 管线终局日志（`LogManager.Exception`）这条链走到
+JSONL 的 `exc` 字段。三条设计约束值得记住：**只在编排级终局行挂**（容器那行与它同源，两处都挂会让
+同一个堆栈出现两遍）；**没有异常的失败路径保持原样**（超时、阶段主动 `SetState(Failed)`；
+`Exception(cat, null, msg)` 是「什么都不做」，不能用它兜）；**赋值顺序是「异常 → 描述 → 状态」**
+（`SetState` 同步触发聚合，聚合要读到这两样）。
+
 ## 文件结构
 
 ```

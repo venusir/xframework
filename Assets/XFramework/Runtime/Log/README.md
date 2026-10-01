@@ -152,6 +152,8 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 - 分类名与迁移前的 `[标签]` 是**逐字对应**的，所以同一模块内历史遗留的多个标签各是一个分类（`Config` 与 `ConfigManager`、`AssetManager` 与 `YooAssetManager` 都是两个）——按模块统一静音时要逐个设，或先改调用点。
 - 外部日志的 `[标签]` 若从未注册过，会被 `LogCategory.Get` 顺带注册成一个分类（幂等）——捕获带标签的第三方日志有这一处副作用。
 - 用 .NET 的 `File.ReadAllText` / `File.ReadAllLines` 读运行中的日志文件会撞共享冲突（它们声明的是 `FileShare.Read`），需显式传 `FileShare.ReadWrite`。
+- `exc` **只在调用点手上有异常对象时**才有值：只拿到消息文本的降级路径（平台降级、取消这类本就没有异常的静默分支）不会有它。这不等于丢信息——那些路径本来就没有异常。
+- `src:"unity"` 的捕获条目 `exc` **恒空**（Unity 的回调只给文本与堆栈）：异常文本在 `msg`（condition 原文）与 `stack` 里，用 `lvl` 与 `src` 组合筛选即可。
 
 ## 设计取舍
 

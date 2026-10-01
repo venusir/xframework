@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   日志通路**：`Runtime` 下除控制台输出端自己那三行外，已无任何 `Debug.Log*` 调用。
 
 - **`XLog` 异常入口支持指定级别**：新增 `LogManager.Exception(level, category, exception, message = null)`——此前只有固定 `Error` 的那个重载，于是「跳过一条损坏的存档」「设置密文解不开、回退默认值」这类**可恢复失败**要么被迫记成 `Error`，要么退化成 `ex.Message` 文本。两者都把异常对象送进 JSONL 的 `exc` 字段；正文约定「不重复异常文本」（类型与消息由渲染层补）。**被否决的两个形态**：把实参从 `ex.Message` 换成 `ex`（零 API 增长，但 `exc` 仍为空、堆栈混进 `msg`——正是要消掉的混法）；让 `Log(...)` 家族也收异常（+16 个公开成员，只为错误路径的模板一致性，不成比例）。顺带把门面完备性守卫从「只查同名」升级为「同名 + 同元数」——`Exception` 成为重载后，门面只转发其中一个重载时旧守卫查不出。
+  **同批把框架里 47 处「异常没进结构化字段」的站点全部补齐**（`exc` 此前在生产代码里从未被写过一次）：17 处只传 `ex.Message` 的（含 Save 元数据解析的三个入口）、30 处「异常对象已作为格式实参传入、`ToString()` 混在 `msg` 里」的、以及 2 条把异常转成状态/文本后**丢弃对象**的主线——Pipeline 的用户阶段异常经 `PipelineStageContext.FailureException`（internal）一路带到编排级终局日志，**容器内子阶段抛出的同样传到底**；Save 的 `TryDeserializeSnapshot` 加 `out Exception`，反序列化失败与结构校验失败由此走两条路（后者本就没有异常，保留原文案）。两处站点的控制台 Error/Warning 行因此变长（正文后追加 `"\n" + 异常详情`），**既有 `LogAssert` 只改了 10 条**，全在两处：`UpdateSchedulerTests` 5 条（三处 `unregistering:` 的正则含异常文本、两条 `OnEnable/OnDisable threw exception:` 尾部带冒号）与 `PipelineSubscriberIsolationTests` 5 条（`subscriber threw:` 的尾部冒号）——它们都依赖 `": "` 这个已不存在的分隔符。其余全是不锚定、只匹配消息头的正则（实测穷举确认），一条未动。至此 `exc` 成为稳定 schema：`jq 'select(.exc)'` 可靠取出「类型 + 异常链 + 抛出点堆栈」，`msg` 恢复成「人读的一句话」；`stack` 与它的分工（日志调用点栈 vs 异常栈）已写进模块 README。
 
 ### Fixed
 
