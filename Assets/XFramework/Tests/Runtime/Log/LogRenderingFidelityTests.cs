@@ -141,6 +141,39 @@ namespace XFramework.XLog.Tests
             LogAssert.NoUnexpectedReceived();
         }
 
+        /// <summary>级别可指定的重载：`Warning` 走 `Debug.LogWarning`，渲染约定与 Error 档完全一致。</summary>
+        [Test]
+        public void Exception_WithWarningLevel_MapsToLogWarning()
+        {
+            var exception = new InvalidOperationException("元数据损坏");
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(@"\[Save\] 解析存档元数据失败: slot/1\.sav\nSystem\.InvalidOperationException: 元数据损坏"));
+
+            LogManager.Exception(LogLevel.Warning, LogCategories.Save, exception, "解析存档元数据失败: slot/1.sav");
+        }
+
+        /// <summary>档位过滤对异常入口同样生效——关档时连正文都不该出现。</summary>
+        [Test]
+        public void Exception_WithOffLevel_ProducesNothing()
+        {
+            LogManager.SetCategoryLevel(LogCategories.Save, LogLevel.Off);
+
+            LogManager.Exception(LogLevel.Warning, LogCategories.Save,
+                new InvalidOperationException("被静默的分类"), "不该出现");
+
+            LogAssert.NoUnexpectedReceived();
+        }
+
+        /// <summary>null 异常什么都不做——两个重载同语义（调用点只有消息文本时用得上）。</summary>
+        [Test]
+        public void Exception_WithLevel_NullException_ProducesNothing()
+        {
+            LogManager.Exception(LogLevel.Warning, LogCategories.Save, null, "不该出现");
+
+            LogAssert.NoUnexpectedReceived();
+        }
+
         #endregion
     }
 }

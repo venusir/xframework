@@ -49,7 +49,8 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 
 ## API 参考
 
-- **写日志**：`Verbose / Debug / Info / Warning / Error / Fatal`，每档 4 个重载（现成字符串、模板 + 1/2/3 参）；通用入口 `Log(level, category, …)`；异常专用 `Exception(category, exception, message = null)`（级别固定 `Error`，正文默认取 `Exception.Message`）。
+- **写日志**：`Verbose / Debug / Info / Warning / Error / Fatal`，每档 4 个重载（现成字符串、模板 + 1/2/3 参）；通用入口 `Log(level, category, …)`。
+- **异常**：`Exception(category, exception, message = null)`（级别固定 `Error`）与 `Exception(level, category, exception, message = null)`（级别可指定——「跳过一条损坏的存档」这种可恢复失败用 `Warning`）。两者都把异常对象送进 JSONL 的 `exc` 字段；`exception` 为 null 时什么都不做；**正文不要重复异常文本**（类型、消息与堆栈由渲染层补）。
 - **档位**：`MinimumLevel`、`SetCategoryLevel`、`ResetCategoryLevel`、`IsEnabled`。
 - **分类**：内置见 `LogCategories`（31 个，与迁移前的 `[前缀]` 一一对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
 - **输出端**：`AddSink(ILogSink)` / `RemoveSink` / `Flush` / `DroppedSinkCount`。
@@ -101,6 +102,8 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 
 转义：`"` `\` `\n` `\r` `\t` 与全部 `<0x20` 控制符；**中文原样保留**（文件是 UTF-8，转义成 `\uXXXX` 只会让人读不懂、AI 读更慢）。
 
+> **`exc` 与 `stack` 不是一回事，别混读**：`exc` 是**异常自己**的 `ToString()`（类型、异常链、抛出点堆栈），只在调用点手上有异常对象时才有值；`stack` 是**日志调用点**的托管堆栈（门面 → sink → 业务），Error 及以上默认抓。想知道「异常从哪儿抛的」看 `exc`；想知道「谁记的这条日志」看 `stack`。
+
 ## 用 AI 分析日志
 
 ```bash
@@ -115,6 +118,10 @@ jq -r 'select(.t=="log") | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn | head
 
 # 崩溃现场：取错误的堆栈
 jq -r 'select(.lvl=="error" or .lvl=="fatal") | .stack // empty' xlog-*.jsonl
+
+# 结构化异常：每条异常的首行（类型 + 消息），以及哪些分类在产出异常
+jq -r 'select(.exc) | "\(.cat): \(.exc | split("\n")[0])"' xlog-*.jsonl
+jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 ```
 
 三条纪律：

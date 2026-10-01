@@ -78,11 +78,23 @@ namespace XFramework.XLog
         /// <param name="arg3">参数 3。</param>
         void Log<T1, T2, T3>(LogLevel level, LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3);
 
-        /// <summary>写一条异常日志（级别固定 <see cref="LogLevel.Error"/>）。</summary>
+        /// <summary>写一条异常日志（级别固定 <see cref="LogLevel.Error"/>；等价于带 <see cref="LogLevel.Error"/> 的重载）。</summary>
         /// <param name="category">分类。</param>
         /// <param name="exception">异常；为 null 时什么都不做。</param>
         /// <param name="message">正文；为 null 时用 <c>Exception.Message</c>。</param>
         void Exception(LogCategory category, Exception exception, string message = null);
+
+        /// <summary>
+        /// 写一条带异常对象的日志（级别可指定）。异常进 JSONL 的 <c>exc</c> 字段（完整 <c>ToString()</c>：
+        /// 类型、异常链、抛出点堆栈）；控制台按既有约定在正文后追加 <c>"\n" + exception.ToString()</c>。
+        /// <para><b>正文不要重复异常文本</b>：写「解析存档元数据失败: &lt;path&gt;」即可，异常的类型与消息
+        /// 会由渲染层补上。</para>
+        /// </summary>
+        /// <param name="level">级别。</param>
+        /// <param name="category">分类。</param>
+        /// <param name="exception">异常；为 null 时什么都不做。</param>
+        /// <param name="message">正文；为 null 时用 <c>Exception.Message</c>。</param>
+        void Exception(LogLevel level, LogCategory category, Exception exception, string message = null);
 
         #endregion
 

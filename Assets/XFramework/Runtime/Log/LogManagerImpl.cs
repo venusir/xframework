@@ -198,11 +198,17 @@ namespace XFramework.XLog
         /// <inheritdoc/>
         public void Exception(LogCategory category, Exception exception, string message = null)
         {
-            if (exception == null || !IsEnabled(LogLevel.Error, category))
+            Exception(LogLevel.Error, category, exception, message);
+        }
+
+        /// <inheritdoc/>
+        public void Exception(LogLevel level, LogCategory category, Exception exception, string message = null)
+        {
+            if (exception == null || !IsEnabled(level, category))
                 return;
 
             string body = string.IsNullOrEmpty(message) ? exception.Message : message;
-            Emit(LogLevel.Error, category, body ?? string.Empty, exception);
+            Emit(level, category, body ?? string.Empty, exception);
         }
 
         #endregion

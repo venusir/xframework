@@ -8,12 +8,14 @@ namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// 门面完备性测试：<see cref="ILogManager"/> 的每个声明成员，都必须能在 <see cref="LogManager"/>
-    /// 上找到**同名**的 public static 转发。
+    /// 上找到**同名 + 同元数**的 public static 转发。
     /// <para><b>为什么必须有这一条</b>：转发不变量——「接口新增成员必须同步在门面加转发，否则它在
     /// 第三方眼里根本不存在」。本模块的接口有 30+ 成员（6 档 × 4 元数 + 通用入口 + 输出端），
     /// 靠评审记住「新加一个重载要在两处写」不现实，十几行反射就能锁死。</para>
-    /// <para><b>为什么只查名字，不查签名</b>：签名由编译器兜底——转发体是经 <see cref="ILogManager"/>
-    /// 的调用，签名不符根本编译不过；唯一会漏的是「压根没写转发」，名字正是它的判据。</para>
+    /// <para><b>为什么只查名字与元数，不查类型</b>：类型由编译器兜底——转发体是经 <see cref="ILogManager"/>
+    /// 的调用，签名不符根本编译不过。**但名字不够**：`Exception` 这类有重载的成员，门面上只转发其中
+    /// 一个重载时「同名」照样成立（本测试因此从只查名字升级到名字 + 元数，与
+    /// <c>UIFacadeCompletenessTests</c> 的形态保持同源）。</para>
     /// <para><b>没有 SetUp/TearDown 是有意的</b>：本 fixture 是纯反射，不 Configure、不 Shutdown、
     /// 不写任何静态字段，故没有需要复位的东西。</para>
     /// </summary>
@@ -24,7 +26,8 @@ namespace Venusy609.Xframework.Editor.Tests
 
         private const BindingFlags PublicStatic = BindingFlags.Public | BindingFlags.Static;
 
-        private static readonly HashSet<string> FacadeNames = BuildFacadeNames();
+        /// <summary>门面 public static 成员的签名集合（方法 = 名字 + 元数；属性 = 名字）。</summary>
+        private static readonly HashSet<string> FacadeSignatures = BuildFacadeSignatures();
 
         #endregion
 
@@ -34,15 +37,16 @@ namespace Venusy609.Xframework.Editor.Tests
         public void Facade_ForwardsEveryInterfaceMember()
         {
             var missing = new List<string>();
-            foreach (string name in InterfaceMemberNames())
+            foreach (string signature in InterfaceSignatures())
             {
-                if (!FacadeNames.Contains(name))
-                    missing.Add(name);
+                if (!FacadeSignatures.Contains(signature))
+                    missing.Add(signature);
             }
 
             Assert.IsEmpty(missing,
-                "以下 ILogManager 成员在 LogManager 上找不到同名转发。新增接口成员时必须同步在门面加静态转发，" +
-                "否则它在第三方眼里根本不存在：\n  " + string.Join("\n  ", missing));
+                "以下 ILogManager 成员（方法记为「名字/元数」）在 LogManager 上找不到对应转发。" +
+                "新增接口成员时必须同步在门面加静态转发，否则它在第三方眼里根本不存在：\n  " +
+                string.Join("\n  ", missing));
         }
 
         /// <summary>门面必须保持扁平：分组会让「门面名 == 接口名」这条唯一的人工核对手段失效。</summary>
@@ -74,7 +78,7 @@ namespace Venusy609.Xframework.Editor.Tests
 
         #region Reflection
 
-        private static IEnumerable<string> InterfaceMemberNames()
+        private static IEnumerable<string> InterfaceSignatures()
         {
             foreach (PropertyInfo property in typeof(ILogManager).GetProperties())
                 yield return property.Name;
@@ -83,24 +87,30 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 // 属性访问器是 SpecialName，不过滤会被当成 get_Xxx 方法重复计入
                 if (!method.IsSpecialName)
-                    yield return method.Name;
+                    yield return Signature(method);
             }
         }
 
-        private static HashSet<string> BuildFacadeNames()
+        private static HashSet<string> BuildFacadeSignatures()
         {
-            var names = new HashSet<string>(StringComparer.Ordinal);
+            var signatures = new HashSet<string>(StringComparer.Ordinal);
 
             foreach (PropertyInfo property in typeof(LogManager).GetProperties(PublicStatic))
-                names.Add(property.Name);
+                signatures.Add(property.Name);
 
             foreach (MethodInfo method in typeof(LogManager).GetMethods(PublicStatic))
             {
                 if (!method.IsSpecialName)
-                    names.Add(method.Name);
+                    signatures.Add(Signature(method));
             }
 
-            return names;
+            return signatures;
+        }
+
+        /// <summary>方法签名 = 名字 + 元数（带默认值的参数也计入，与 cref 的写法规则一致）。</summary>
+        private static string Signature(MethodInfo method)
+        {
+            return method.Name + "/" + method.GetParameters().Length;
         }
 
         #endregion

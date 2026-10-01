@@ -223,6 +223,16 @@ namespace XFramework.XLog
         /// <param name="message">正文；为 null 时用 <c>Exception.Message</c>。</param>
         public static void Exception(LogCategory category, Exception exception, string message = null) => Impl.Exception(category, exception, message);
 
+        /// <summary>
+        /// 写一条带异常对象的日志（级别可指定）。异常进 JSONL 的 <c>exc</c> 字段；控制台在正文后追加异常详情。
+        /// <para><b>正文不要重复异常文本</b>：异常类型与消息由渲染层补上。</para>
+        /// </summary>
+        /// <param name="level">级别。</param>
+        /// <param name="category">分类。</param>
+        /// <param name="exception">异常；为 null 时什么都不做。</param>
+        /// <param name="message">正文；为 null 时用 <c>Exception.Message</c>。</param>
+        public static void Exception(LogLevel level, LogCategory category, Exception exception, string message = null) => Impl.Exception(level, category, exception, message);
+
         #endregion
 
         #region Log Entry — 分级

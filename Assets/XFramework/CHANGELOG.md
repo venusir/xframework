@@ -39,6 +39,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Serialize` 两个模块无需回填（它们那两处方括号文本是异常消息，不是日志）。至此框架内**只有一条
   日志通路**：`Runtime` 下除控制台输出端自己那三行外，已无任何 `Debug.Log*` 调用。
 
+- **`XLog` 异常入口支持指定级别**：新增 `LogManager.Exception(level, category, exception, message = null)`——此前只有固定 `Error` 的那个重载，于是「跳过一条损坏的存档」「设置密文解不开、回退默认值」这类**可恢复失败**要么被迫记成 `Error`，要么退化成 `ex.Message` 文本。两者都把异常对象送进 JSONL 的 `exc` 字段；正文约定「不重复异常文本」（类型与消息由渲染层补）。**被否决的两个形态**：把实参从 `ex.Message` 换成 `ex`（零 API 增长，但 `exc` 仍为空、堆栈混进 `msg`——正是要消掉的混法）；让 `Log(...)` 家族也收异常（+16 个公开成员，只为错误路径的模板一致性，不成比例）。顺带把门面完备性守卫从「只查同名」升级为「同名 + 同元数」——`Exception` 成为重载后，门面只转发其中一个重载时旧守卫查不出。
+
 ### Fixed
 
 - **UI 帧通路无异常隔离：任一 `OnUpdate` 抛异常即让整条每帧通路永久死亡**（UI 门面定向审计 P0）：`UIManagerImpl.DriveTier` 的派发循环直接调 `panel.OnUpdate`，异常逃逸到 `UpdateScheduler` 后按节点契约被「记 LogError + 注销该节点」——而门面记账是单向的（`_frameDriver` 非空即早退），驱动器再也回不来：面板 / HUD / Tip 全部静止，唯一线索是一条以内部类名结尾的 `[UpdateScheduler]` 日志（仓内先例：`InputManager.PulseFrame` 早有同款守卫）。现分三层隔离，各管一段：**逐面板**（`DriveTier` 循环内，记 `[UIManager] Panel '…'.OnUpdate threw …` 后**停更该面板**、其余面板照常——标记落在 `UIPanelBase.UpdateFaulted`，复位在 `RecyclePanel` 的 `finally` 而非可被覆写的 `OnPoolRecycle`：框架状态复位不能依赖用户代码）；**整层兜底**（门面 `FrameDriver` / `TierDriver` 的 catch，catch 后仍返回**原档位**——返回值漂移会被调度器改档；它覆盖注入实现的 `Update` 与将来新增而未加守卫的调用）；**provider 调用点**（HUD / Tip 各自隔离、首条日志后阻尼、换 provider 复位——provider 没有「停更」机制，停掉它等于停掉全部 HUD）。**改前必红实测**：stash 掉实现改动后新 fixture 4 条全红，失败消息即缺陷本身（`[UpdateScheduler] FrameDriver.OnUpdate threw exception, unregistering`，栈里 `DriveTier` → `FrameDriver.OnUpdate` → `TickEveryFrameBucket`，分档那条走 `TickSlicedBuckets`）；后两层各自单独 stash 复验，红点都精确落在本层新增的断言上。修复后 UI 全量 PlayMode 198/198

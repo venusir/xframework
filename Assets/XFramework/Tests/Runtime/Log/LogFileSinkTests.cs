@@ -182,6 +182,22 @@ namespace XFramework.XLog.Tests
             Assert.IsNotEmpty(entry.exc, "异常条目要把异常文本带进文件（AI 侧分析崩溃现场的关键）");
         }
 
+        /// <summary>级别可指定的重载：级别原样进 `lvl`，异常对象照旧进 `exc`。</summary>
+        [Test]
+        public void ExceptionEntry_WithWarningLevel_CarriesLevelAndExc()
+        {
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex(@"\[Save\] 解析存档元数据失败"));
+
+            LogManager.Exception(LogLevel.Warning, LogCategories.Save,
+                new InvalidOperationException("元数据损坏"), "解析存档元数据失败: slot/1.sav");
+            LogManager.Flush();
+
+            LogLineDto entry = Parse(Lines(Files()[0])[1]);
+
+            Assert.AreEqual("warning", entry.lvl, "级别不能被入口吞掉");
+            StringAssert.Contains("System.InvalidOperationException", entry.exc);
+        }
+
         #endregion
 
         #region Flush 策略
