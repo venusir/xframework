@@ -38,7 +38,10 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                // 先写描述再置状态:状态写入触发聚合时描述已是异常消息(事件驱动取最新值)
+                // 先写异常与描述、再置状态:状态写入会同步触发聚合,聚合要读到这两样(事件驱动取最新值)。
+                // 异常对象也留下——它要随失败播报链一路走到管线的终局日志(JSONL 的 exc 字段),
+                // 否则用户阶段代码的堆栈就只剩下 ex.Message 一句话
+                ctx.FailureException = ex;
                 ctx.SetDescription(ex.Message);
                 ctx.SetState(PipelineStageState.Failed);
                 return false;

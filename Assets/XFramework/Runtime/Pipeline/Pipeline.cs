@@ -221,6 +221,7 @@ namespace XFramework.XPipeline
             bool failed = false;
             bool cancelled = false;
             string failDescription = null;
+            Exception failException = null;
 
             try
             {
@@ -300,6 +301,7 @@ namespace XFramework.XPipeline
                             stage.Name, sw.Elapsed.TotalMilliseconds);
                         failed = true;
                         failDescription = ctx.Description;
+                        failException = ctx.FailureException;
                         break;
                     }
 
@@ -332,7 +334,17 @@ namespace XFramework.XPipeline
                     _status = PipelineStatus.Failed;
                     FailureReason = $"Failed: {failDescription}";
                     DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
-                    LogManager.Error(LogCategories.Pipeline, "Pipeline failed: {0}", failDescription);
+                    // 有异常对象（阶段抛出，含容器内子阶段）就把堆栈带进 JSONL 的 exc 字段；
+                    // 超时与「阶段主动置失败」没有异常，走原来的纯文本形态
+                    if (failException != null)
+                    {
+                        LogManager.Exception(LogCategories.Pipeline, failException,
+                            string.Format("Pipeline failed: {0}", failDescription));
+                    }
+                    else
+                    {
+                        LogManager.Error(LogCategories.Pipeline, "Pipeline failed: {0}", failDescription);
+                    }
                 }
                 else
                 {
@@ -358,7 +370,7 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                LogManager.Error(LogCategories.Pipeline, "RunAsync failed: {0}\n{1}", ex.Message, ex.StackTrace);
+                LogManager.Exception(LogCategories.Pipeline, ex, "RunAsync failed");
                 _status = PipelineStatus.Failed;
                 FailureReason = $"Exception: {ex.Message}";
                 DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
@@ -492,7 +504,8 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                LogManager.Error(LogCategories.Pipeline, "{0} subscriber threw: {1}", eventName, ex);
+                LogManager.Exception(LogCategories.Pipeline, ex,
+                    string.Format("{0} subscriber threw", eventName));
             }
         }
 
@@ -507,7 +520,8 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                LogManager.Error(LogCategories.Pipeline, "{0} subscriber threw: {1}", eventName, ex);
+                LogManager.Exception(LogCategories.Pipeline, ex,
+                    string.Format("{0} subscriber threw", eventName));
             }
         }
 

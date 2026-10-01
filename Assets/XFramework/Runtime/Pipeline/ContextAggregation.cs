@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace XFramework.XPipeline
@@ -63,8 +64,12 @@ namespace XFramework.XPipeline
             /// <summary>首失败子阶段的任务名。</summary>
             public readonly string FailTaskName;
 
+            /// <summary>首失败子阶段抛出的异常对象(没抛异常时为 <c>null</c>);与另两个诊断载荷在同一闩锁里捕获。</summary>
+            public readonly Exception FailException;
+
             public ScanResult(float overall, string description, string stageName, string taskName,
-                int completedCount, int failedCount, string failDescription, string failTaskName)
+                int completedCount, int failedCount, string failDescription, string failTaskName,
+                Exception failException)
             {
                 Overall = overall;
                 Description = description;
@@ -74,6 +79,7 @@ namespace XFramework.XPipeline
                 FailedCount = failedCount;
                 FailDescription = failDescription;
                 FailTaskName = failTaskName;
+                FailException = failException;
             }
         }
 
@@ -99,6 +105,7 @@ namespace XFramework.XPipeline
             string currentTaskName = null;
             string failDescription = null;
             string failTaskName = null;
+            Exception failException = null;
 
             for (int i = 0; i < contexts.Length; i++)
             {
@@ -123,6 +130,7 @@ namespace XFramework.XPipeline
                                 failCaptured = true;
                                 failDescription = ctx.Description;
                                 failTaskName = ctx.CurrentTaskName ?? ctx.Name;
+                                failException = ctx.FailureException;
                             }
                             // 失败阶段也产出当前描述/任务名(诊断优先由调用方后缀用首失败成对覆盖完成)
                             currentDesc = ctx.Description;
@@ -148,7 +156,7 @@ namespace XFramework.XPipeline
             return new ScanResult(
                 weightSum > 0f ? weightedSum / weightSum : 0f,
                 currentDesc, currentStageName, currentTaskName,
-                completedCount, failedCount, failDescription, failTaskName);
+                completedCount, failedCount, failDescription, failTaskName, failException);
         }
 
         /// <summary>

@@ -108,6 +108,9 @@ namespace XFramework.XPipeline
             {
                 LogManager.Error(LogCategories.Pipeline, "Parallel stage failed: {0} ({1:F2}s): {2}",
                     _aggregator.FailTaskName, Time.realtimeSinceStartup - _startTime, _aggregator.FailDescription);
+                // 异常对象拷进容器自己的上下文再置失败：管线终局日志据此把用户子阶段的堆栈
+                // 带进 JSONL 的 exc 字段（上面那一行的文案保持纯文本）
+                _stageCtx.FailureException = _aggregator.FailException;
                 _stageCtx.SetState(PipelineStageState.Failed);
             }
             else if (cancellationToken.IsCancellationRequested || anyChildCancelled)

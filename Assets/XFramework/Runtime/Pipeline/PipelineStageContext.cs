@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using XFramework.XLog;
 
@@ -57,6 +58,14 @@ namespace XFramework.XPipeline
 
         /// <summary>阶段内当前任务名称(容器子阶段转发用,可空)。经 <see cref="SetCurrentTaskName"/> 写入。</summary>
         public string CurrentTaskName { get; internal set; }
+
+        /// <summary>
+        /// 本阶段失败时抛出的异常对象；没有异常（超时、主动置失败等）时为 <c>null</c>。
+        /// <para><b>为什么是 internal</b>：它是框架内部把「阶段抛了什么」从 <see cref="StageExecution"/>
+        /// 一路带到管线终局日志（JSONL 的 <c>exc</c> 字段）的承载，不是给使用方读的公开契约；
+        /// <see cref="Description"/> 才是使用方可见的失败描述。</para>
+        /// </summary>
+        internal Exception FailureException { get; set; }
 
         /// <summary>
         /// 设置阶段内当前任务名,并触发管线聚合广播(经统一通知咽喉,含主线程断言)。

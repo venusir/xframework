@@ -42,7 +42,7 @@ public interface IPipelineStage
 ### 执行模型
 
 - **串行执行**: 阶段按添加顺序逐 await,前一阶段返回后才启动下一阶段;`RunAsync` 返回时无在途阶段任务
-- **失败即停**: 阶段抛异常 → 置 Failed 并经 `OnFailed` 报告,后续阶段不再执行
+- **失败即停**: 阶段抛异常 → 置 Failed 并经 `OnFailed` 报告,后续阶段不再执行。**编排级失败日志 `Pipeline failed: …` 会带上抛出异常的完整对象**(JSONL 的 `exc` 字段,含类型与抛出点堆栈;容器内子阶段抛出的同样传到底),容器级的 `Parallel/Sequence stage failed` 行保持纯文本——两处都挂会让同一个堆栈出现两遍
 - **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消。阶段可以对取消无感并正常返回,但**阶段沉降后 token 已取消即判取消**——否则最后一个阶段那样收场会直接落进完成终局,取消被静默吞掉(容器与顶层同一判据)
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
 - **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)

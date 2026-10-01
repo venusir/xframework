@@ -41,7 +41,7 @@ namespace Venusy609.Xframework.Editor.Tests
             pipeline.OnFailed += _ => failedCount++;
             pipeline.OnCompleted += () => completed = true;
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnProgressUpdate subscriber threw:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnProgressUpdate subscriber threw"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             Assert.Greater(progressCount, 1, "首次抛出后后续广播应照常送达(是隔离,不是中断)");
@@ -69,7 +69,7 @@ namespace Venusy609.Xframework.Editor.Tests
             };
             pipeline.OnFailed += _ => failedCount++;
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCompleted subscriber threw:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCompleted subscriber threw"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             Assert.IsTrue(completed, "事件本身应已触发");
@@ -91,7 +91,7 @@ namespace Venusy609.Xframework.Editor.Tests
             };
             pipeline.OnFailed += _ => failedCount++;
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCancelled subscriber threw:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCancelled subscriber threw"));
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
             pipeline.RunAsync(new CancellationToken(canceled: true)).GetAwaiter().GetResult();
 
@@ -113,7 +113,7 @@ namespace Venusy609.Xframework.Editor.Tests
             };
 
             LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] RunAsync: no stages found"));
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCompleted subscriber threw:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnCompleted subscriber threw"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 
             Assert.IsTrue(completed, "事件本身应已触发");
@@ -132,7 +132,7 @@ namespace Venusy609.Xframework.Editor.Tests
                 throw new InvalidOperationException("failed boom");
             };
 
-            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnFailed subscriber threw:"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] OnFailed subscriber threw"));
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
             pipeline.RunAsync().GetAwaiter().GetResult();
 

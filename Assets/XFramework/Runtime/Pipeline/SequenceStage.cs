@@ -103,6 +103,9 @@ namespace XFramework.XPipeline
                     // 组失败:停止后续子阶段(诊断信息由聚合器从失败子阶段捕获)
                     LogManager.Error(LogCategories.Pipeline, "Sequence stage failed: {0} ({1:F2}s): {2}",
                         _aggregator.FailTaskName, Time.realtimeSinceStartup - _startTime, _aggregator.FailDescription);
+                    // 异常对象拷进容器自己的上下文再置失败：管线终局日志据此把用户子阶段的堆栈
+                    // 带进 JSONL 的 exc 字段（容器这一行的文案保持纯文本）
+                    _stageCtx.FailureException = _aggregator.FailException;
                     _stageCtx.SetState(PipelineStageState.Failed);
                     break;
                 }

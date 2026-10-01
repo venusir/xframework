@@ -42,6 +42,9 @@ namespace XFramework.XPipeline
         /// <summary>首失败子阶段(数组序)的任务名,取不到任务名时回退子阶段名,故非 null。</summary>
         internal string FailTaskName { get; private set; }
 
+        /// <summary>首失败子阶段抛出的异常对象(没抛异常时为 null);与前两个诊断载荷在同一闩锁里捕获。</summary>
+        internal Exception FailException { get; private set; }
+
         /// <summary>
         /// 每次执行开始调用:注入转发目标(容器主上下文)与链接取消源(失败时中断在途兄弟;
         /// 串行容器传 null),复位全部聚合状态。
@@ -57,6 +60,7 @@ namespace XFramework.XPipeline
             AnyFailed = false;
             FailDescription = null;
             FailTaskName = null;
+            FailException = null;
         }
 
         /// <summary>
@@ -125,6 +129,7 @@ namespace XFramework.XPipeline
                     // 首失败,于是日志与转发各说各话(更早的版本干脆两个属性都没赋值,日志恒空)
                     FailDescription = scan.FailDescription;
                     FailTaskName = scan.FailTaskName;
+                    FailException = scan.FailException;
                     currentDesc = scan.FailDescription;
                     currentTaskName = scan.FailTaskName;
                 }
@@ -159,7 +164,7 @@ namespace XFramework.XPipeline
             catch (Exception ex)
             {
                 // 防御:聚合/广播链上的异常(如订阅者)隔离在此,不冒泡进子阶段栈
-                LogManager.Error(LogCategories.Pipeline, "progress aggregation failed: {0}", ex.Message);
+                LogManager.Exception(LogCategories.Pipeline, ex, "progress aggregation failed");
             }
         }
 

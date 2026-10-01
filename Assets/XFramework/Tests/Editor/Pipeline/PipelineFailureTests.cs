@@ -54,6 +54,41 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(1, progress[progress.Count - 1].FailedStageCount, "失败终局快照应记录失败阶段数");
         }
 
+        /// <summary>
+        /// 阶段抛出的异常对象要随失败日志落盘：控制台在正文后追加完整的异常详情，同一份内容进 JSONL 的
+        /// `exc` 字段（含类型与抛出点堆栈）。此前只留 `ex.Message` 一句话——用户阶段代码的堆栈就此消失，
+        /// 而这正是「我的 stage 为什么失败」最需要的东西。
+        /// </summary>
+        [Test]
+        public void StageFailure_LogsTheThrownExceptionWithItsStack()
+        {
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(new FakeStage { Name = "B", ThrowOnExecute = true });
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[Pipeline\] Pipeline failed: boom\nSystem\.InvalidOperationException: boom"));
+
+            pipeline.RunAsync().GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 容器（串行/并行）内子阶段抛出的异常同样要传到底：容器的失败播报保持纯文本，异常对象拷进
+        /// 容器自己的上下文，由管线终局那一行带出去——两处都挂会让同一个堆栈出现两遍。
+        /// </summary>
+        [Test]
+        public void ContainerStageFailure_PropagatesChildExceptionToPipelineLog()
+        {
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(new SequenceStage(
+                new[] { new FakeStage { Name = "inner", ThrowOnExecute = true } }, "Seq"));
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Sequence stage failed:"));
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[Pipeline\] Pipeline failed: .*\nSystem\.InvalidOperationException: boom"));
+
+            pipeline.RunAsync().GetAwaiter().GetResult();
+        }
+
         [Test]
         public void StageFailure_TerminalSnapshot()
         {
