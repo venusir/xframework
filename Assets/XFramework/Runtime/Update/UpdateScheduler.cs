@@ -406,7 +406,7 @@ namespace XFramework.XUpdate
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                    Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.{TimingMethodName} threw exception, unregistering: {e}");
                     Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                     continue;
                 }
@@ -473,7 +473,7 @@ namespace XFramework.XUpdate
                     }
                     catch (System.Exception e)
                     {
-                        Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.OnUpdate threw exception, unregistering: {e}");
+                        Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.{TimingMethodName} threw exception, unregistering: {e}");
                         Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                         continue;
                     }
@@ -596,6 +596,22 @@ namespace XFramework.XUpdate
             }
 
             return (int)((IUpdateable)node).OnUpdate(deltaTime, now);
+        }
+
+        /// <summary>
+        /// 本调度器时机的派发方法名，只用于异常日志。
+        /// <para>必须点名<b>实际</b>被调用的方法：三条时机共用这一份调度器代码，而 LateUpdate /
+        /// FixedUpdate 时机上的异常若一律写成 <c>OnUpdate</c>，日志会把人引向节点上那个根本没跑过的
+        /// 回调。分级与 <see cref="TickNode"/> 保持一致。</para>
+        /// </summary>
+        private string TimingMethodName
+        {
+            get
+            {
+                if (_timing == UpdateTiming.LateUpdate) return "OnLateUpdate";
+                if (_timing == UpdateTiming.FixedUpdate) return "OnFixedUpdate";
+                return "OnUpdate";
+            }
         }
 
         /// <summary>

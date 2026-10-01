@@ -1860,6 +1860,25 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Tick_Exception_LogsTheTimingsCallbackName()
+        {
+            // 异常日志此前固定写 `.OnUpdate threw exception`：三条时机共用这一份调度器代码，
+            // 于是 LateUpdate / FixedUpdate 时机上的异常会被报成一个根本没跑过的回调，
+            // 把人引向节点上错误的位置。本用例把「按实际时机报名字」钉住
+            var scheduler = new UpdateScheduler(UpdateTiming.LateUpdate);
+            scheduler.Register(new ThrowingLateUpdateNode(), order: 0);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape(
+                    "[UpdateScheduler] ThrowingLateUpdateNode.OnLateUpdate threw exception, unregistering: System.Exception: Test exception")));
+            scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(0, scheduler.TotalCount, "日志点名的方法与实际被调用的方法必须一致");
+
+            scheduler.Clear();
+        }
+
+        [Test]
         public void DisableDuringTick_OnDisableThrows_RestOfFrameStillApplies()
         {
             // 生命周期回调抛异常曾直接穿出 FlushPending —— 循环中断且缓冲不清空，于是排在后面的
@@ -2091,6 +2110,21 @@ namespace XFramework.XUpdate.Tests
                     _scheduler.Unregister(_target);
                 }
                 return UpdateTier.Tier0;
+            }
+        }
+
+        /// <summary>
+        /// 每次派发都抛异常的 LateUpdate 时机替身，用于锁定异常日志点名的是<b>本时机</b>的方法。
+        /// </summary>
+        private sealed class ThrowingLateUpdateNode : ILateUpdateable
+        {
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateTier OnLateUpdate(float deltaTime, float time)
+            {
+                throw new System.Exception("Test exception");
             }
         }
 
