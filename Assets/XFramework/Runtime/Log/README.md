@@ -163,6 +163,7 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 - **为什么 `LogManager` 永不抛**：日志是错误路径的最后一张面孔——让「模块没初始化」把它升级成二次故障，代价比一致性大得多。因此门面懒初始化、sink 违约只摘除、模板解析失败退回原文、IO 失败静默停用。
 - **为什么模板参数止步 3 个**：`string.Format` 的 3 参重载不分配 `object[]`，第 4 个起掉进 `params` 重载——3 是「最大且仍零数组」的元数，不是随手定的。
 - **为什么文件 sink 不开后台写线程**：后台队列会把最后几条留在内存里，而崩溃后要读的正是那几条。
+- **为什么是 JSONL 而不是单个 JSON**：**日志的价值在崩溃现场，格式必须匹配「随时可能被打断」这个前提**——JSONL 每行自足，已 flush 的行永远可解析，最后一行哪怕写了一半也只坏那一行；单个 JSON 数组被打断就是 `]` 缺失、**整份语法无效**。推论三条：追加写零跨行状态（`Write(line)` 即可，不必维护 `[`/`]`/逗号与「是不是第一条」）；可流式消费（`tail -f` 边跑边看、`grep`/`head` 直接筛、逐行 parse 不必把整片读进内存）；每行自带 `session`/`seq`/`lvl`/`cat`，过滤后不丢上下文。**「一行一条」是硬保证**：写路径转义全部换行与控制符，`MessageWithLineBreaks_StaysOnOnePhysicalLine` 钉着它。
 - **为什么不引第三方日志库（ZLogger / Serilog）**：ZLogger 的核心卖点是 `InterpolatedStringHandler`，需要 C# 10（本包 `LangVersion 9.0`）；且它们都不解决本包真正的问题（分类前缀约定 + 与 Unity Console / `LogAssert` 的逐字兼容）。
 
 ## 依赖
