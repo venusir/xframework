@@ -110,7 +110,9 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 确保每帧驱动器已注册。生命周期两条入口（<see cref="Initialize"/> 与
-        /// <see cref="SetInstance"/>）共用，重复调用无副作用。
+        /// <see cref="SetInstance"/>）共用，每次都真的向调度器注册一遍——重复注册是安全的
+        /// （同节点「先摘再插」），而「信任自身记账」会让 <c>UpdateManager.Clear()</c> 之后的 UI 永久失联
+        /// （见方法体内注释）。
         /// <para><b>为什么注入实例也必须有驱动器</b>：驱动器只调 <see cref="Update"/>，而
         /// <see cref="Update"/> 转发给「当前实例」，与实现类型无关——所以它对注入的自定义
         /// <see cref="IUIManager"/> 同样成立。此前只有 <see cref="Initialize"/> 注册驱动器，
@@ -119,10 +121,17 @@ namespace XFramework.XUI
         /// </summary>
         private static void EnsureFrameDriverRegistered()
         {
-            if (_frameDriver != null)
-                return;
+            if (_frameDriver == null)
+                _frameDriver = new FrameDriver();
 
-            _frameDriver = new FrameDriver();
+            // 刻意不因「我已经记着它」而早退：门面记的是「我创建过它」，不代表调度器里还有它。
+            // UpdateManager.Clear() 是公开 API 且明说「清空后仍可继续 Register / Tick」，它会摘掉本门面的
+            // 驱动器而门面毫无感知——若在这里早退，UI 此后永远不会再注册，且没有任何日志：驱动器已不在
+            // 调度器里，连「被派发」的机会都没有，症状只是面板 / HUD / Tip 全部静止。
+            //
+            // 重复 Register 是安全的：调度器对同节点是「先摘再插」，且不重复宣告 OnEnable。
+            // 代价只落在生命周期入口（Initialize / SetInstance，极低频）：同 order 的节点间会重排一次
+            // （驱动器因此移到同级 order 0 节点的末尾）——这是可接受的，因为这里不做的话代价是永久失联。
             UpdateManager.Register(_frameDriver, order: 0);
         }
 

@@ -124,6 +124,33 @@ namespace XFramework.XUI.Tests
                 "注入路径没有分档回调，故不应出现分档驱动器");
         }
 
+        /// <summary>
+        /// 调度器被清空后，门面的记账不得让它永远失联。
+        /// <para><see cref="UpdateManager.Clear"/> 是公开 API 且明说「清空后仍可继续 Register / Tick」
+        /// ——它会摘掉本门面的驱动器，而门面毫无感知。此前 <c>EnsureFrameDriverRegistered</c> 以
+        /// 「字段非空」早退，于是 Clear 之后再 Initialize / SetInstance 都不会重新注册：面板、HUD、Tip
+        /// 全部静止且没有任何日志（驱动器已不在调度器里，连被派发的机会都没有）。</para>
+        /// </summary>
+        [Test]
+        public void UpdateManagerCleared_NextLifecycleEntryReregistersFrameDriver()
+        {
+            // 模拟外部清空（测试隔离、自定义重置流程都会这么做）
+            UpdateManager.Clear();
+            Assert.AreEqual(0, UpdateManager.GetCount(UpdateTier.Tier0), "前置：调度器里已空");
+
+            var impl = new UIManagerImpl();
+            impl.Initialize(_root.transform, null);
+            impl.SetHudProvider(_hud);
+            UIManager.SetInstance(impl);
+
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0),
+                "记账不是实况：Clear 之后的下一个生命周期入口必须重新注册，否则 UI 永久失联");
+
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _hud.UpdateCount, "重新注册的驱动器真的在派发");
+        }
+
         [Test]
         public void Update_IsDrivenByUpdateManager_AndStoppedByPause()
         {
