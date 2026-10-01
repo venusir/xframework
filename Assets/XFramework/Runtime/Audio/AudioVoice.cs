@@ -21,6 +21,13 @@ namespace XFramework.XAudio
 
         /// <summary>正在播放。</summary>
         Playing,
+
+        /// <summary>
+        /// 被 <c>Pause()</c> 暂停。
+        /// <para><b>本状态的存在理由就是回收判据</b>：实测确认 <c>Pause()</c> 之后 <c>isPlaying</c> 会变成
+        /// <c>false</c>，只看它会把暂停中的播放当场回收掉。有了这个状态，回收逻辑才有一处可信的依据。</para>
+        /// </summary>
+        Paused,
     }
 
     /// <summary>

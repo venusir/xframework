@@ -83,7 +83,12 @@ namespace XFramework.XAudio
         /// 默认参数：2D、原音量、原速、不循环、走 <see cref="AudioChannels.Default"/> 通道。
         /// <para>与 <c>default(AudioPlayOptions)</c> 在归一化后等价——本属性只是让意图更显式。</para>
         /// </summary>
-        public static AudioPlayOptions Default => new AudioPlayOptions();
+        /// <remarks>
+        /// <b>必须显式传参，不能写成 <c>new AudioPlayOptions()</c></b>：C# 对结构体的 <c>new S()</c> 一律
+        /// 产生「全部字段为零」的默认值，<b>不会调用任何构造函数</b>——即便存在一个全部参数都可选的构造函数。
+        /// 写成无参形式会得到一个 <c>VolumeScale == 0</c> 的假默认值，与本属性的文档承诺相反。
+        /// </remarks>
+        public static AudioPlayOptions Default => new AudioPlayOptions(null, 1f, false, 1f, 0f, default);
 
         #endregion
     }

@@ -77,8 +77,9 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 暂停所有播放。
-        /// <para>暂停不释放播放源，也不停止音频资源的保活；<see cref="Resume"/> 可原样恢复。
-        /// 暂停中的播放<b>不会</b>被自动回收。</para>
+        /// <para><b>这是管理器级闸门，不是「把此刻在播的那些冻住」</b>：暂停期间新起的播放也会立即进入暂停，
+        /// <see cref="Resume"/> 时一并恢复。否则「暂停期间新起的声音照放、恢复后却归它管」自相矛盾。</para>
+        /// <para>暂停不释放播放源，也不停止音频资源的保活；暂停中的播放<b>不会</b>被自动回收。</para>
         /// <para>本框架不碰 <c>AudioListener.pause</c>——那是项目的全局开关；项目用它暂停时，框架的播放会
         /// 被连带暂停（这是期望行为）。</para>
         /// </summary>
@@ -152,7 +153,7 @@ namespace XFramework.XAudio
         /// <summary>
         /// 查询某次播放当前是否在播。
         /// <para><b>探测型成员</b>：对 <c>default(AudioHandle)</c>、过期句柄或未知句柄返回 <c>false</c>，不抛。
-        /// 加载中的播放不算「在播」。</para>
+        /// 加载中的播放不算「在播」；<b>暂停中的算</b>——它不是被停掉，只是暂时不出声。</para>
         /// </summary>
         /// <param name="handle">播放句柄。</param>
         bool IsPlaying(AudioHandle handle);

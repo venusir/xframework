@@ -224,6 +224,12 @@ namespace XFramework.XAudio
 
                         break;
 
+                    case AudioVoiceState.Paused:
+                        // 暂停中的播放绝不被回收：Pause() 之后 isPlaying 就是 false，只看它会把暂停中的
+                        // 播放当场回收掉（这正是本状态存在的理由）
+                        active++;
+                        break;
+
                     case AudioVoiceState.Playing:
                         // 循环的播放永不被自动回收——必须显式 Stop
                         if (voice.Loop || voice.Source.isPlaying)

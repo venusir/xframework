@@ -53,6 +53,7 @@ namespace XFramework.XAudio
 
         private float _masterVolume = 1f;
         private bool _masterMuted;
+        private bool _paused;
 
         private bool _tickerRegistered;
         private bool _disposed;
@@ -242,8 +243,19 @@ namespace XFramework.XAudio
             ConfigureSource(voice.Source, clipLease.Clip, options);
             ApplyVoiceVolume(voice);
             voice.Source.Play();
-            voice.State = AudioVoiceState.Starting;
             voice.StartingTicks = 0;
+
+            // 管理器处于暂停态时，新起的播放也立即进入暂停——Pause 是管理器级闸门，
+            // 不是「把此刻在播的那些冻住」。否则「暂停期间新起的声音照放、Resume 后不受管」自相矛盾。
+            if (_paused)
+            {
+                voice.Source.Pause();
+                voice.State = AudioVoiceState.Paused;
+            }
+            else
+            {
+                voice.State = AudioVoiceState.Starting;
+            }
 
             return new AudioHandle(index, generation);
         }
@@ -330,15 +342,54 @@ namespace XFramework.XAudio
 
         /// <inheritdoc/>
         public void Pause()
-            => throw new NotImplementedException("[Audio] Pause 尚未实现（C4 提交补全）。");
+        {
+            EnsureNotDisposed();
+
+            if (_paused)
+                return;
+
+            _paused = true;
+
+            for (int i = 0; i < _pool.SlotCount; i++)
+            {
+                var voice = _pool.GetSlot(i);
+
+                if (voice.State != AudioVoiceState.Starting && voice.State != AudioVoiceState.Playing)
+                    continue;   // 空闲与加载中的槽位不动：前者没什么可暂停，后者会在起播时就进入暂停
+
+                voice.Source.Pause();
+                voice.State = AudioVoiceState.Paused;
+            }
+        }
 
         /// <inheritdoc/>
         public void Resume()
-            => throw new NotImplementedException("[Audio] Resume 尚未实现（C4 提交补全）。");
+        {
+            EnsureNotDisposed();
+
+            if (!_paused)
+                return;
+
+            _paused = false;
+
+            for (int i = 0; i < _pool.SlotCount; i++)
+            {
+                var voice = _pool.GetSlot(i);
+
+                if (voice.State != AudioVoiceState.Paused)
+                    continue;
+
+                voice.Source.UnPause();
+
+                // 回到 Starting 而不是直接 Playing：由 ticker 下一拍确认 isPlaying 真的回来了，
+                // 与起播路径同形。若某个平台上 UnPause 不生效，超时兜底仍然管用。
+                voice.State = AudioVoiceState.Starting;
+                voice.StartingTicks = 0;
+            }
+        }
 
         /// <inheritdoc/>
-        public bool IsPaused
-            => throw new NotImplementedException("[Audio] IsPaused 尚未实现（C4 提交补全）。");
+        public bool IsPaused => _paused;
 
         #endregion
 
@@ -439,8 +490,11 @@ namespace XFramework.XAudio
 
             var state = _pool.GetSlot(handle.Id).State;
 
-            // 加载中的播放不算「在播」——这与 PlayAsync 的「句柄返回时必定已加载成功」互为表里
-            return state == AudioVoiceState.Starting || state == AudioVoiceState.Playing;
+            // 加载中的播放不算「在播」——这与 PlayAsync 的「句柄返回时必定已加载成功」互为表里。
+            // 暂停中的算：它不是被停掉，只是暂时不出声；Stop 与音量变更对它照常有效。
+            return state == AudioVoiceState.Starting
+                || state == AudioVoiceState.Playing
+                || state == AudioVoiceState.Paused;
         }
 
         /// <inheritdoc/>
