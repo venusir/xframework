@@ -87,6 +87,12 @@ PoolManager.Configure<EnemyData>(new PoolConfig
 
 不配置时 `MaxSize` 为 **无上限**——闲置实例只增不减，直到 `Clear()` / `ClearAll()`。长期运行且池化类型较多时，建议显式设一个上限。
 
+### 第三个字段：`CollectionCheck`
+
+`PoolConfig` 还有一个字段，默认 `true`：
+
+- **`CollectionCheck`** — 重复归还检测（同一实例被 `Return` 多次）。**仅 Editor 下生效，Release 构建自动关闭、零开销**；默认配置（`PoolConfig.Default`）把它设为 `true`。除非你要在 Editor 里刻意压测最坏路径，否则不用动它——它抓的是「用方把同一个对象还了两次」这类缺陷，代价只在编辑器的开发期。
+
 ### 自定义生成器（无无参构造函数的类型）
 
 ```csharp
