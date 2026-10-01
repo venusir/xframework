@@ -20,6 +20,7 @@ namespace XFramework.XLog.Tests
                 EnableConsoleSink = true,
                 CaptureStackTrace = false,
                 StackTraceMinLevel = LogLevel.Error,
+                EnableFileSink = false, // 用例不往用户目录写文件；文件 sink 的用例自行开
             });
         }
 

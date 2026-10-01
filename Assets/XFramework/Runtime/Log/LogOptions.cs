@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using UnityEngine;
 
 namespace XFramework.XLog
@@ -23,6 +25,13 @@ namespace XFramework.XLog
             EnableConsoleSink = true;
             CaptureStackTrace = development;
             StackTraceMinLevel = LogLevel.Error;
+
+            EnableFileSink = development;
+            FileDirectory = ResolveDefaultDirectory();
+            MaxFileBytes = 32 * 1024 * 1024;
+            MaxRetainedFiles = 10;
+            ImmediateFlushMinLevel = LogLevel.Warning;
+            FlushEveryEntries = 64;
         }
 
         /// <summary>
@@ -42,5 +51,48 @@ namespace XFramework.XLog
 
         /// <summary>抓栈的最低级别。默认 <see cref="LogLevel.Error"/>——Warning 及以下默认不抓。</summary>
         public LogLevel StackTraceMinLevel { get; set; }
+
+        /// <summary>
+        /// 是否写 JSONL 文件。默认：Editor / Development <c>true</c>，Release <c>false</c>——不为不用的功能
+        /// 在发布版里付 IO 代价。开启后每条日志一行、每会话一个文件（见模块 README 的 schema 表）。
+        /// </summary>
+        public bool EnableFileSink { get; set; }
+
+        /// <summary>
+        /// JSONL 落盘目录。默认 <c>{persistentDataPath}/XLog</c>；取不到时回退 <c>{临时目录}/XLog</c>。
+        /// </summary>
+        public string FileDirectory { get; set; }
+
+        /// <summary>单个分片文件的上限字节数，超过则切分 <c>-p2</c>。默认 32 MiB。</summary>
+        public long MaxFileBytes { get; set; }
+
+        /// <summary>目录内保留的最新文件数（含所有分片），超出的按时间删除。默认 10。</summary>
+        public int MaxRetainedFiles { get; set; }
+
+        /// <summary>达到该级别即立即 flush（崩溃后 AI 要能读到现场）。默认 <see cref="LogLevel.Warning"/>。</summary>
+        public LogLevel ImmediateFlushMinLevel { get; set; }
+
+        /// <summary>低于立即 flush 门槛的条目按条数批量 flush。默认 64 条。</summary>
+        public int FlushEveryEntries { get; set; }
+
+        /// <summary>
+        /// 解析默认落盘目录。<b>绝不抛</b>：<c>persistentDataPath</c> 取不到（早期启动阶段或平台差异）时
+        /// 回退到临时目录——「日志写不出去」不该升级成「日志模块初始化失败」。
+        /// </summary>
+        private static string ResolveDefaultDirectory()
+        {
+            try
+            {
+                string root = Application.persistentDataPath;
+                if (!string.IsNullOrEmpty(root))
+                    return Path.Combine(root, "XLog");
+            }
+            catch (Exception)
+            {
+                // 落到下面的临时目录
+            }
+
+            return Path.Combine(Path.GetTempPath(), "XLog");
+        }
     }
 }

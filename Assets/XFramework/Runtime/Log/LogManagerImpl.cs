@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
 using UnityEngine;
@@ -43,9 +44,14 @@ namespace XFramework.XLog
             _minimumLevel = (int)options.MinimumLevel;
             _captureStackTrace = options.CaptureStackTrace;
             _stackTraceMinLevel = options.StackTraceMinLevel;
-            _sinks = options.EnableConsoleSink
-                ? new ILogSink[] { new ConsoleLogSink() }
-                : Array.Empty<ILogSink>();
+
+            var sinks = new List<ILogSink>(2);
+            if (options.EnableConsoleSink)
+                sinks.Add(new ConsoleLogSink());
+            if (options.EnableFileSink)
+                sinks.Add(new LogFileSink(options));
+
+            _sinks = sinks.Count == 0 ? Array.Empty<ILogSink>() : sinks.ToArray();
         }
 
         #endregion

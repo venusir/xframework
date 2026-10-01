@@ -433,6 +433,7 @@ namespace XFramework.XLog
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void AutoInit()
         {
+            LogSession.Reset(); // 新会话：新的 session id 与计时起点（关闭域重载时静态字段跨播放会话存活）
             LogManagerImpl.MarkMainThread();
 
             ILogManager previous;
