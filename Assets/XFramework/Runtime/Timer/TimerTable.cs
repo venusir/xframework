@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XTimer
@@ -431,7 +432,7 @@ namespace XFramework.XTimer
             catch (Exception e)
             {
                 failed = true;
-                Debug.LogError($"[Timer] 定时器回调抛出异常，已停止该定时器：{e}");
+                LogManager.Error(LogCategories.Timer, "定时器回调抛出异常，已停止该定时器：{0}", e);
             }
 
             if (!repeating)
@@ -531,9 +532,10 @@ namespace XFramework.XTimer
                 return;
 
             _leakWarned = true;
-            Debug.LogWarning(
-                $"[Timer] 单个表上正在计时的定时器已达 {LeakWarnThreshold} 个（轴 {(UpdateTimeMode)_axis}，" +
-                $"已分配 {_allocatedCount} 个槽位）。若非有意为之，请检查是否有忘记 Dispose 的定时器；本条不再重复打印。");
+            LogManager.Warning(LogCategories.Timer,
+                "单个表上正在计时的定时器已达 {0} 个（轴 {1}，已分配 {2} 个槽位）。" +
+                "若非有意为之，请检查是否有忘记 Dispose 的定时器；本条不再重复打印。",
+                LeakWarnThreshold, (UpdateTimeMode)_axis, _allocatedCount);
         }
 
         #endregion

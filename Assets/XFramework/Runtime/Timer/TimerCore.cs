@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XTimer
@@ -116,7 +117,7 @@ namespace XFramework.XTimer
 
             if (cancellationToken.IsCancellationRequested)
             {
-                Debug.LogWarning("[Timer] 取消令牌在创建前已被取消，本次创建被忽略并返回默认句柄。");
+                LogManager.Warning(LogCategories.Timer, "取消令牌在创建前已被取消，本次创建被忽略并返回默认句柄。");
                 return default;
             }
 
@@ -148,7 +149,7 @@ namespace XFramework.XTimer
 
             if (cancellationToken.IsCancellationRequested)
             {
-                Debug.LogWarning("[Timer] 取消令牌在创建前已被取消，本次创建被忽略并返回默认句柄。");
+                LogManager.Warning(LogCategories.Timer, "取消令牌在创建前已被取消，本次创建被忽略并返回默认句柄。");
                 return default;
             }
 

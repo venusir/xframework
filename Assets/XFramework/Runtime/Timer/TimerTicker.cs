@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XTimer
@@ -151,7 +152,7 @@ namespace XFramework.XTimer
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Timer] 定时器扫尾出现未预期异常，本拍已跳过：{e}");
+                LogManager.Error(LogCategories.Timer, "定时器扫尾出现未预期异常，本拍已跳过：{0}", e);
             }
 
             return _tier;
