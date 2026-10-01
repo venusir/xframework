@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using XFramework.XLog;
 
 namespace XFramework.XSettings
 {
@@ -77,8 +78,8 @@ namespace XFramework.XSettings
                 }
                 catch (Exception e)
                 {
-                    UnityEngine.Debug.LogError(
-                        $"[SettingsManager] 字段句柄重放失败（{refs[i]}）：{e.GetType().Name}: {e.Message}");
+                    LogManager.Error(LogCategories.SettingsManager,
+                        "字段句柄重放失败（{0}）：{1}: {2}", refs[i], e.GetType().Name, e.Message);
                 }
             }
         }

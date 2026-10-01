@@ -2,6 +2,7 @@ using System;
 using System.Text;
 using UnityEngine;
 using XFramework.XFileManager;
+using XFramework.XLog;
 
 namespace XFramework.XSettings
 {
@@ -102,16 +103,16 @@ namespace XFramework.XSettings
             }
             catch (FormatException ex)
             {
-                Debug.LogWarning(
-                    $"[SettingsManager] 设置密文不是合法的 Base64，已回退默认值：{ex.Message}");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "设置密文不是合法的 Base64，已回退默认值：{0}", ex.Message);
                 return new T();
             }
 
             if (plain == null)
             {
                 // ICryptoProvider 的契约:解密失败返回 null。最常见的原因是密钥换了
-                Debug.LogWarning(
-                    "[SettingsManager] 设置密文解密失败（ICryptoProvider.Decrypt 返回 null），已回退默认值。" +
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "设置密文解密失败（ICryptoProvider.Decrypt 返回 null），已回退默认值。" +
                     "最常见的原因是密钥已更换——换密钥等于换加密方案，旧文件无法还原。");
                 return new T();
             }
@@ -136,8 +137,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                Debug.LogWarning(
-                    $"[SettingsManager] 解密后的设置内容无法解析为 {typeof(T).Name}，已回退默认值：{ex.Message}");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "解密后的设置内容无法解析为 {0}，已回退默认值：{1}", typeof(T).Name, ex.Message);
                 return null;
             }
         }

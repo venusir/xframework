@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using UnityEngine;
 using XFramework.XFileManager;
+using XFramework.XLog;
 
 namespace XFramework.XSettings
 {
@@ -86,7 +87,8 @@ namespace XFramework.XSettings
                 var backupPath = _filePath + FilePathUtility.BackupFileSuffix;
                 if (TryLoadFrom(backupPath, out loaded))
                 {
-                    Debug.LogWarning($"[SettingsManager] 主设置文件不可用，已从备份恢复：'{backupPath}'");
+                    LogManager.Warning(LogCategories.SettingsManager,
+                        "主设置文件不可用，已从备份恢复：'{0}'", backupPath);
                     return loaded;
                 }
 
@@ -127,8 +129,8 @@ namespace XFramework.XSettings
                     // IO 失败(磁盘满/权限/占用)只告警不抛:存档失败不该让游戏崩掉。
                     // 参数错误与 IO 失败的区别正在于此——前者是调用方的 bug,后者是环境问题
                     TryDelete(tempPath);
-                    Debug.LogWarning(
-                        $"[SettingsManager] 写入设置文件失败：'{_filePath}'（{ex.GetType().Name}: {ex.Message}）");
+                    LogManager.Warning(LogCategories.SettingsManager,
+                        "写入设置文件失败：'{0}'（{1}: {2}）", _filePath, ex.GetType().Name, ex.Message);
                 }
             }
         }
@@ -169,8 +171,8 @@ namespace XFramework.XSettings
             catch (Exception ex)
             {
                 // 读失败(占用/权限/IO)与内容损坏同等对待:玩家至多丢设置,不该开不了游戏
-                Debug.LogWarning(
-                    $"[SettingsManager] 读取设置文件失败：'{path}'（{ex.GetType().Name}: {ex.Message}）");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "读取设置文件失败：'{0}'（{1}: {2}）", path, ex.GetType().Name, ex.Message);
                 return false;
             }
 
@@ -184,8 +186,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                Debug.LogWarning(
-                    $"[SettingsManager] 设置文件内容无法解析为 {typeof(T).Name}：'{path}'（{ex.Message}）");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "设置文件内容无法解析为 {0}：'{1}'（{2}）", typeof(T).Name, path, ex.Message);
                 return false;
             }
         }
@@ -203,7 +205,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[SettingsManager] 删除文件失败：'{path}'（{ex.GetType().Name}: {ex.Message}）");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "删除文件失败：'{0}'（{1}: {2}）", path, ex.GetType().Name, ex.Message);
             }
         }
 

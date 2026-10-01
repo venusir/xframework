@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using XFramework.XLog;
 
 namespace XFramework.XSettings
 {
@@ -136,8 +137,8 @@ namespace XFramework.XSettings
             var type = typeof(T);
             if (Managers.TryGetValue(type, out var existing))
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[SettingsManager] Initialize<{type.Name}> was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "Initialize<{0}> was called more than once. Ignoring duplicate.", type.Name);
                 return (ISettingsManager<T>)existing;
             }
 
@@ -167,8 +168,8 @@ namespace XFramework.XSettings
                     }
                     catch (Exception e)
                     {
-                        UnityEngine.Debug.LogError(
-                            $"[SettingsManager] 释放 {manager.GetType().Name} 时抛出异常，已跳过并继续释放其余实例：{e}");
+                        LogManager.Error(LogCategories.SettingsManager,
+                            "释放 {0} 时抛出异常，已跳过并继续释放其余实例：{1}", manager.GetType().Name, e);
                     }
                 }
             }

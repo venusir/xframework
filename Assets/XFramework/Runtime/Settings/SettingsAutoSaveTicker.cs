@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XSettings
@@ -97,9 +98,10 @@ namespace XFramework.XSettings
                 // 就是每秒两次的日志洪水，那本身就是新的缺陷
                 if (!_saveFailureLogged)
                 {
-                    Debug.LogWarning(
-                        $"[SettingsManager] 自动保存失败，将在下一个去抖窗口（{_delay:0.##} 秒）后重试，" +
-                        $"后续失败不再重复打印：{e.GetType().Name}: {e.Message}");
+                    LogManager.Warning(LogCategories.SettingsManager,
+                        "自动保存失败，将在下一个去抖窗口（{0:0.##} 秒）后重试，" +
+                        "后续失败不再重复打印：{1}: {2}",
+                        _delay, e.GetType().Name, e.Message);
                     _saveFailureLogged = true;
                 }
 

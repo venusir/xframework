@@ -3,6 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XMessage;
 using XFramework.XEvent;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XSettings
@@ -266,9 +267,10 @@ namespace XFramework.XSettings
                 // 只换后端、不迁移数据:内存里的设置仍是旧后端加载的内容,下一次 Save 会把
                 // 它们写进新后端。刻意保留这个简单语义——隐式重新加载会静默丢掉内存中
                 // 尚未 Save 的修改,那是更难查的故障,故只告警、由调用方决定后续动作
-                UnityEngine.Debug.LogWarning(
-                    $"[SettingsManager] Store 已替换为 {value.GetType().Name}，但内存中的设置未重新加载；" +
-                    "下一次 Save 会把当前内存数据写入新后端。如需读取新后端已有数据，请在替换后调用 Load。");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "Store 已替换为 {0}，但内存中的设置未重新加载；" +
+                    "下一次 Save 会把当前内存数据写入新后端。如需读取新后端已有数据，请在替换后调用 Load。",
+                    value.GetType().Name);
             }
         }
 
@@ -457,19 +459,20 @@ namespace XFramework.XSettings
         {
             if (envelope?.Data == null)
             {
-                UnityEngine.Debug.LogWarning(
-                    "[SettingsManager] 设置数据缺少版本信封或载荷为空，已回退默认值。" +
-                    $"（当前 CurrentVersion={_currentVersion}，期望信封格式 {{Version, Data}}；" +
-                    "若此前按无版本格式落盘，启用版本化后旧文件将无法识别）");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "设置数据缺少版本信封或载荷为空，已回退默认值。" +
+                    "（当前 CurrentVersion={0}，期望信封格式 {{Version, Data}}；" +
+                    "若此前按无版本格式落盘，启用版本化后旧文件将无法识别）",
+                    _currentVersion);
                 return CreateDefault();
             }
 
             if (envelope.Version > _currentVersion)
             {
                 // 高于本版本:整份拒绝。数据可能由更新版游戏写入,按旧结构解析会静默错位
-                UnityEngine.Debug.LogWarning(
-                    $"[SettingsManager] 设置格式版本 {envelope.Version} 高于本版本支持的 " +
-                    $"{_currentVersion}，已整份拒绝并回退默认值。");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "设置格式版本 {0} 高于本版本支持的 {1}，已整份拒绝并回退默认值。",
+                    envelope.Version, _currentVersion);
                 return CreateDefault();
             }
 
@@ -477,9 +480,9 @@ namespace XFramework.XSettings
             {
                 if (Migrator == null)
                 {
-                    UnityEngine.Debug.LogWarning(
-                        $"[SettingsManager] 设置格式版本 {envelope.Version} 需要迁移到 {_currentVersion}，" +
-                        $"但未注册 ISettingsMigrator<{typeof(T).Name}>，已回退默认值。");
+                    LogManager.Warning(LogCategories.SettingsManager,
+                        "设置格式版本 {0} 需要迁移到 {1}，但未注册 ISettingsMigrator<{2}>，已回退默认值。",
+                        envelope.Version, _currentVersion, typeof(T).Name);
                     return CreateDefault();
                 }
 
@@ -525,9 +528,9 @@ namespace XFramework.XSettings
             if (loaded != null)
                 return RunValidator(loaded);
 
-            UnityEngine.Debug.LogWarning(
-                $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +
-                "存储实现应在无数据时返回 new T()。");
+            LogManager.Warning(LogCategories.SettingsManager,
+                "ISettingsStore.Load<{0}> 返回了 null，已回退到默认值。" +
+                "存储实现应在无数据时返回 new T()。", typeof(T).Name);
             return CreateDefault();
         }
 
@@ -540,9 +543,9 @@ namespace XFramework.XSettings
             if (loaded != null)
                 return RunValidator(loaded);
 
-            UnityEngine.Debug.LogWarning(
-                $"[SettingsManager] ISettingsStore.Load<{typeof(T).Name}> 返回了 null，已回退到默认值。" +
-                "存储实现应在无数据时返回 new T()。");
+            LogManager.Warning(LogCategories.SettingsManager,
+                "ISettingsStore.Load<{0}> 返回了 null，已回退到默认值。" +
+                "存储实现应在无数据时返回 new T()。", typeof(T).Name);
             return CreateDefault();
         }
 
@@ -590,8 +593,8 @@ namespace XFramework.XSettings
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[SettingsManager] {trigger}保存失败，内存改动未落盘：{e.GetType().Name}: {e.Message}");
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "{0}保存失败，内存改动未落盘：{1}: {2}", trigger, e.GetType().Name, e.Message);
             }
         }
 
