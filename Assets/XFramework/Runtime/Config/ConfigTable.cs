@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XConfig
 {
@@ -104,9 +105,10 @@ namespace XFramework.XConfig
         {
             if (typeof(TKey) != _keyType)
             {
-                Debug.LogWarning(
-                    $"[Config] Table '{typeof(T).Name}' key type mismatch in TryGet. " +
-                    $"Row type declares '{_keyType.Name}' keys, you passed '{typeof(TKey).Name}'.");
+                LogManager.Warning(LogCategories.Config,
+                    "Table '{0}' key type mismatch in TryGet. " +
+                    "Row type declares '{1}' keys, you passed '{2}'.",
+                    typeof(T).Name, _keyType.Name, typeof(TKey).Name);
                 value = default;
                 return false;
             }
@@ -120,9 +122,10 @@ namespace XFramework.XConfig
         {
             if (typeof(TKey) != _keyType)
             {
-                Debug.LogWarning(
-                    $"[Config] Table '{typeof(T).Name}' key type mismatch in Contains. " +
-                    $"Row type declares '{_keyType.Name}' keys, you passed '{typeof(TKey).Name}'.");
+                LogManager.Warning(LogCategories.Config,
+                    "Table '{0}' key type mismatch in Contains. " +
+                    "Row type declares '{1}' keys, you passed '{2}'.",
+                    typeof(T).Name, _keyType.Name, typeof(TKey).Name);
                 return false;
             }
             return ((Dictionary<TKey, T>)_dict).ContainsKey(key); // 强转必然成功,见构造函数

@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XConfig
 {
@@ -77,7 +78,7 @@ namespace XFramework.XConfig
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Config] ConfigChanged 的订阅者抛出异常，已隔离：{e}");
+                LogManager.Error(LogCategories.Config, "ConfigChanged 的订阅者抛出异常，已隔离：{0}", e);
             }
         }
 
@@ -623,9 +624,10 @@ namespace XFramework.XConfig
         {
             var type = typeof(T);
             if (_inFlightLoads.ContainsKey(type))
-                Debug.LogWarning(
-                    $"[Config] Unloading '{type.Name}' while a load is in progress; " +
-                    $"the in-flight load will still complete and register the data.");
+                LogManager.Warning(LogCategories.Config,
+                    "Unloading '{0}' while a load is in progress; " +
+                    "the in-flight load will still complete and register the data.",
+                    type.Name);
             _tables.Remove(type);
             _globals.Remove(type);
             _tableWrappers.Remove(type);
@@ -737,10 +739,10 @@ namespace XFramework.XConfig
         /// </summary>
         private static void LogAssetPathChanged(string typeName, string oldPath, string newPath)
         {
-            Debug.LogWarning(
-                $"[Config] '{typeName}' is already loaded from '{oldPath}', " +
-                $"ignoring new assetPath '{newPath}'. " +
-                $"To load from a different path, call Unload<{typeName}>() first.");
+            LogManager.Warning(LogCategories.Config,
+                "'{0}' is already loaded from '{1}', ignoring new assetPath '{2}'. " +
+                "To load from a different path, call Unload<{0}>() first.",
+                typeName, oldPath, newPath);
         }
 
         #endregion

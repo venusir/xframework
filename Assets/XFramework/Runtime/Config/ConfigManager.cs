@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XConfig
 {
@@ -66,7 +67,7 @@ namespace XFramework.XConfig
         {
             if (_instanceInitialized)
             {
-                Debug.LogWarning("[ConfigManager] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.ConfigManager, "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
