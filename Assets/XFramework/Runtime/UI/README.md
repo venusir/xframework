@@ -1039,6 +1039,56 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 - **UI 没有任何线程契约的运行时断言**：面板 / HUD / Tip 的创建、开合与驱动都必须在主线程调用（Unity 对象
   本身的约束），模块不做检测也不做切线程——跨线程调用是未定义行为。
 
+## 设计取舍
+
+以下三件事**框架刻意不内建**——不是没来得及做，而是它们要么是叶子组件、要么会替项目决定生命周期策略。
+每条给出理由与「你可以怎么做」。
+
+### 列表虚拟化由项目自建
+
+框架**没有**列表 / 滚动控件：`UIBinder` 与约定式绑定都是「**一属性 → 一控件**」，没有集合绑定；对象池的池化
+对象是**面板 / HUD / Tip 实例**，不是列表条目。长列表（背包、排行榜、聊天）请自建，三块料都在：
+
+- 条目预制体 —— `AssetManager.InstantiateAsync<T>()` 自带对象池，回池用 `AssetManager.DestroyInstance()`；
+- 条目内的控件 —— 照常用 `UIBinder.BindToText` / `BindToClick` 等（绑定的是**控件**，与是不是列表无关）；
+- 滚动与窗口化 —— UGUI 的 `ScrollRect` + 你自己的可见窗口计算。
+
+**为什么不内建**：列表是**叶子组件**，它不与面板生命周期、统一调度、排序空间、遮罩中的任何一项耦合
+（对照：Tip / HUD / 遮罩都是跨切面基础设施，所以它们内建）。而各项目的条目类型、分页、选中、多列布局
+差异极大，框架做一套只会两头不讨好。
+
+### 切场景：两种正解，框架不做自动检测
+
+`UIRootNode` **不带** `DontDestroyOnLoad`，也不做任何跨场景引用检测。切场景有两条正解：
+
+- **UIRoot 常驻**：把 UI 根放进常驻场景（或自行给它 `DontDestroyOnLoad`），面板跨场景存活。离开前用
+  `CloseAllAsync()` 收口（它一并回收 HUD 与在播 Tip；**不含遮罩**——遮罩是引用计数句柄，见该方法的文档）。
+- **每场景一根**：`UIRootNode` 的成对生命周期自动接管——旧场景卸载时它 `Destroy()` 整个管理器（面板 / HUD /
+  Tip 全部回池），新场景的节点再 `Initialize()`。注意管理器是全局单例，**同时只允许一个生效的根**（后到的
+  被静默忽略，见「已知限制」）。
+
+**为什么不做「自动检测跨场景引用」**：它只能靠反射扫用户对象图，与本框架「反射仅用于 Type 驱动的 API 边界
+与配置元数据提取」的约定冲突；而「自动处理」（替调用方清引用、关面板）等于替项目决定生命周期策略——
+那是架构，不是基础设施。跨场景的引用该由面板自己在 `OnClose` / `OnPoolRecycle` 里解开。
+
+### 特效层用保留排序带自建
+
+框架**没有**内建 UI 特效层（粒子、叠加特效），但排序空间已经给它留好了位置：`UISorting.SystemOrder = 32000`
+（高于 HUD 的 30000 与 Tip 的 31000，注释里就写着「新手引导挖洞层、全局加载遮罩」）。自建做法与仓内的
+`Layer_HUD` / `Layer_Tip` 同形：
+
+```csharp
+var canvasGo = new GameObject("Layer_Effect", typeof(RectTransform));
+canvasGo.transform.SetParent(UIManager.UIRoot, false);        // UIRoot 是公开属性
+var canvas = canvasGo.AddComponent<Canvas>();
+canvas.overrideSorting = true;                                 // 子 Canvas 必须开，否则排序不生效
+canvas.sortingOrder = UISorting.SystemOrder;                   // 用保留带，不要另取数字
+// 要挡住下方输入再加 GraphicRaycaster；粒子系统挂在 canvasGo 下即可
+```
+
+**为什么不内建**：特效 Canvas 的结构取决于项目用哪种相机（Screen Space Overlay / Camera / RenderTexture）、
+是否需要挡输入、要不要与 3D 场景共深度——框架替它定一套，项目多半还得拆掉重做。
+
 ## 依赖
 
 - `XFramework.XAsset` — 通过 `AssetManager.InstantiateAsync` 加载面板预制体

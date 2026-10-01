@@ -51,6 +51,38 @@ Runtime/UI/
 
 - **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。
 
+## 已完成功能与未做（roadmap）
+
+> 本清单由模块 README 搬入（`e613867`，2026-09-30 文档分层第五批）：README 只留使用方要知道的边界
+> （「面板资源不会自动卸载」→ 其 `## 已知限制`），「建了什么 / 还差什么」属维护向。四项未做于
+> 2026-10-01 逐项复核——三项判不纳入框架（转入下方「已评估未采纳与未决」），一项拆分后保留。
+
+### 已完成
+
+- [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
+- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
+- [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
+- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
+- [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
+- [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
+- [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
+- [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
+- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
+- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
+- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
+
+### 未做
+
+- [ ] **遮罩挖洞（引导 / 聚焦用）** —— 给 `UIMaskStyle` 加区域语义（如 `Rect? Cutout` + 要不要射线
+  穿透），把 `EnsureMaskInstance` 的「单张满屏 `Image`」改成可留洞的构成（多图拼接，或自绘
+  `Graphic` 重写 `OnPopulateMesh`；**不用 shader**——仓内零 shader / 材质资产，UPM 包引入 shader 会
+  加重资产面），复用现有的引用计数句柄与 `UISorting.SystemOrder = 32000` 预留带（它的注释本来就写着
+  「新手引导挖洞层」）。
+  **只做原语，不做引导编排**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构，按 `CLAUDE.md`
+  「不预设 GamePlay 架构」不属于本框架（2026-10-01 复核时从原「UI 引导层」拆出，编排那半转「不做」）。
+
+> 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。
+
 ## 已评估未采纳与未决
 
 （2026-10-01 **第一轮**，定向审计 `UIManager.cs`（静态门面）及其生命周期相邻面——`IUIManager` 契约、
@@ -98,27 +130,20 @@ Runtime/UI/
 `Subscribe((PanelOpenedMessage m) => { })` 正常编译——该结论由临时探针文件在本仓真实程序集上编译得出
 （带负向控制：同一文件里的带类型调用无告警），**不是纸面推理**。故三条重载的并存不构成 D2 缺陷。
 
-## 已完成功能与未做（roadmap）
+（2026-10-01 **同日追加：四项「未做」复核**。起因是用户找不到 README 里那几项待做（它们随 `e613867`
+搬进了本文件）——借机逐项判定「仍缺能力 / 已有原语可表达 / 不该由本框架做」，三项据此转「不纳入」，
+一项拆分后留在上面 roadmap 的 `### 未做`。使用方要知道的做法与边界写进 README 新增的 `## 设计取舍`。）
 
-### 已完成
-
-- [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
-- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
-- [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
-- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
-- [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
-- [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
-- [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
-- [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
-- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
-- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
-- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
-
-### 未做
-
-- [ ] 列表虚拟化 — 长列表的滚动复用（与 FairyGUI 的 `GList` 虚拟滚动同类能力）
-- [ ] 场景切换安全 — 自动检测跨场景引用并处理
-- [ ] UI 特效层 — 粒子特效、UI 上叠特效支持
-- [ ] UI 引导层 — 新手引导的遮罩挖洞支持
-
-> 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。
+- **不内建列表虚拟化**：`UIBinder` / `UIPanelBinding` 都是「一属性 → 一控件」，无任何集合 / 索引绑定；
+  对象池的池化对象是面板 / HUD / Tip 实例而非列表条目（`AssetPanelFactory.cs:23-47`），仓内零滚动 / 列表代码。
+  判据：列表是**叶子组件**，与面板生命周期、统一调度、排序空间、遮罩没有一处耦合（对照 Tip / HUD / 遮罩
+  都是跨切面基础设施，故内建），而各项目的条目类型 / 分页 / 选中 / 布局差异极大。替代路径见 README
+  `## 设计取舍 → 列表虚拟化由项目自建`。
+- **不做「跨场景引用的自动检测」**：原「场景切换安全」项只有这一句描述，且方向与本仓约定冲突——检测只能
+  靠反射扫用户对象图（本仓反射仅用于 Type 驱动的 API 边界与配置元数据提取），「自动处理」更是替项目决定
+  生命周期策略（架构，不是基础设施）。切场景的两条正解（UIRoot 常驻 + `CloseAllAsync()` 收口 / 每场景一根
+  走 `UIRootNode` 成对生命周期）写进 README `## 设计取舍`；「多根不预设」是既有裁定（`UIRootNode.cs:80-82`）。
+- **不内建 UI 特效层**：`UIManager.UIRoot` 与 `UISorting.SystemOrder` 都是公开 API，`Layer_HUD` / `Layer_Tip`
+  建容器的写法就在仓内（`UIHudManager.cs:365-379`、`Tip/UITipManager.cs:187-199`）——自建特效 Canvas 是十几行
+  的事（配方在 README `## 设计取舍`）。内建必须替项目决定相机类型 / `RenderTexture` / 是否挡输入的结构，
+  拆掉的概率大于用上的概率。
