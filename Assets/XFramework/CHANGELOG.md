@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **`InputManager.Initialize(InputSystemOptions)`：自己加载输入资产的入口**。无参 `Initialize()` 走 `Resources.Load("InputSystem_Actions")`——零配置起步，却也是唯一路径；资源钉在 `Resources/` 意味着它总被打进包、且不受 YooAsset 之类资源系统管理。新增的 `XFramework.XInput.Default.InputSystemOptions { InputActionAsset Asset }` 把**加载**那一步交还给使用方（YooAsset / Addressables / 自己的加载器皆可），接线与无参路径完全相同（同一个默认提供者、同样注册帧驱动）。**Unity 输入类型只出现在 `XInput.Default`**——门面与 `IInputProvider` 保持插件中立（Rewired 那类用户看到的公开面不受影响）。顺带把三个 `Initialize` 重载共用的尾巴提成私有 `AdoptProvider`，新重载与既有两条同形（先建好、成功后才接管）
+- **`UIManager.TipAssetPath`：Tip 预制体地址可改**。`PF_UITipText` 此前是 `private const`——改不了，只能整体替换 `IUITipProvider`（那意味着把 223 行池化 / 世代守卫 / 逐帧回收逻辑抄一遍）。现在照 `LocalizationManager.LanguageAssetPath` 的先例给可写属性：**改后下次显示生效**；值存在 `UIManagerImpl`（唯一真相），设值时同步推给内置 provider，两处创建默认 provider 的地方（初始化、`SetTipProvider(null)` 重建）在创建后套用它。**不进 `IUIManager`**，照 `SetController` 的「只对内置实现生效」——注入自定义 provider 时地址由那个实现决定，接口不为它加成员（否则测试里的 Fake 会编译失败，且属对第三方的破坏性变更）
+
+### Fixed
+
+- **`AssetInitOptions.PackageName` 是静默陷阱：初始化与加载用的是两个包名**。它只决定「初始化哪个包」（经 `InitializePackageAsync`），而加载族（`LoadAsync` / `InstantiateAsync` / `PreloadAllAsync` / `LoadSceneAsync`）统一解析到硬编码的 `DefaultPackage`——于是 `InitializeAsync(new AssetInitOptions { PackageName = "MyPack" })` 的真实结果是**初始化了 MyPack、却从一个刚被新建、从未初始化的空 DefaultPackage 上加载**：初始化看着成功、之后每次加载失败（DEBUG 下 YooAsset 的 `DebugCheckInitialize` 直接抛）。现由 `InitializeAsyncCore` 经 `ResolveDefaultPackageName` 决定主包名（非空即采用）；`InitializePackageAsync`（额外包）保持不动。解析提成 `internal static` 纯函数并**补上此前零覆盖的测试**（`AssetPackageNameTests` 三态：null / 空白 / 非空）——它决定的正是「初始化与加载是否同一个包」。另清掉 `YooAssetManagerImpl` 构造参数上那份从未生效的 `"DefaultPackage"` 默认值（两处调用点都显式传参，留着只是第二份字面量）。**这是行为修复、无新增 API**：那条路本来就走不通
+
 - **新增 `XAudio` 音频模块**（`Documentation/Roadmap.md` §2.1 立项的第一个模块）：静态门面 `AudioManager` + `IAudioManager` 接口 + internal 实现，自持隐藏宿主并池化 `AudioSource`；字符串通道 + 三档音量相乘 + 代际安全的 `readonly struct` 句柄 + 播完自动回收 + 管理器级暂停。**公开面不含任何 Unity 内置音频类型**——资源一律以 location 字符串标识，故 `IAudioManager` 可被 Wwise / FMOD 等中间件整体替换（同 `InputManager` 换 Rewired 的形态）。三条与直觉相左的决定及理由：
   **① 没有 `Play(AudioClip)` 重载。** 保留它会同时毁掉后端中立性（Wwise 的事件、FMOD 的 `EventInstance` 都没有 `AudioClip`）与「资源生命周期只有一套语义」——原设计里「调用方在播放期间释放自己持有的资源句柄 → 声音静默中断」这个只能靠文档挡的坑随之消失。代价是回不到 Inspector 直引的用法（已写进模块 README 的已知限制）。
   **② `AudioHandle` 的字段公开、构造函数可由第三方调用。** 照抄 `LockHandle` 的 `internal` 构造会把「整体替换引擎」这条路彻底堵死——实现方既造不出句柄，也读不回自己编码进去的值。框架级的唯一契约是 `default(AudioHandle)` 必须被任何实现视为无效。

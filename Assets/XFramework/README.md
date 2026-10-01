@@ -131,9 +131,9 @@ await Bootstrap.RunAsync();
 
 | 名字 / 值 | 性质与能否更改 | 详情 |
 |---|---|---|
-| `InputSystem_Actions`（须放 `Assets/Resources/`） | **改不了，只能整体替换**：实现自己的 `IInputProvider` 并 `InputManager.Initialize(provider)` | [Input](Runtime/Input/README.md) |
-| `PF_UITipText`（Tip 预制体的 YooAsset 地址） | **改不了，只能整体替换**：实现自己的 `IUITipProvider` 并 `SetTipProvider` | [UI](Runtime/UI/README.md) |
-| `DefaultPackage`（默认资源包名） | 默认包名是内部常量、**改不了**；额外包可任意追加（各自带 `PackageName`） | [Asset](Runtime/Asset/README.md) |
+| `InputSystem_Actions`（默认从 `Assets/Resources/` 加载） | **可改**：自己加载资产（YooAsset / Addressables / 任意方式）后走 `InputManager.Initialize(new InputSystemOptions { Asset = ... })`——`Resources` 只是零配置默认；换输入插件则实现 `IInputProvider` | [Input](Runtime/Input/README.md) |
+| `PF_UITipText`（Tip 预制体的 YooAsset 地址） | **可改**：`UIManager.TipAssetPath`（内置实现的实例属性，改后下次显示生效；注入自定义 `IUITipProvider` 时由它自己决定） | [UI](Runtime/UI/README.md) |
+| `DefaultPackage`（默认主包名） | **可改**：`InitializeAsync` 的 `AssetInitOptions.PackageName`（须与 YooAsset 构建侧的包名一致）；额外包走 `InitializePackageAsync`，**它不改主包** | [Asset](Runtime/Asset/README.md) |
 | 业务资源地址（面板 / HUD / 音频 / 配置表 / 语言表） | **由你决定**：一律以 YooAsset `location` 字符串传入，框架不发明路径约定 | [Asset](Runtime/Asset/README.md) · [Audio](Runtime/Audio/README.md) · [UI](Runtime/UI/README.md) |
 | `localization/lang_{0}`（语言表地址模板） | **可改**：`LocalizationManager.LanguageAssetPath`（公开属性，初始化后仍可改） | [Localization](Runtime/Localization/README.md) |
 | `{persistentDataPath}/XLog/xlog-*.jsonl`（日志落点与命名） | **可改**：`LogOptions.FileDirectory` 等；Release 默认不写文件 | [Log](Runtime/Log/README.md) |
