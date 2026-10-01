@@ -1,4 +1,5 @@
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPipeline
 {
@@ -19,7 +20,7 @@ namespace XFramework.XPipeline
     /// 读取面不在本类——运行中经 <see cref="IPipeline.OnProgressUpdate"/> 推送 <see cref="PipelineProgress"/>,
     /// 终局经 <see cref="IPipeline.Status"/>/<see cref="IPipeline.FailureReason"/> 拉取。</para>
     /// <para>线程契约:写入须与 <see cref="IPipeline.RunAsync"/> 调度同一上下文(Unity 主线程)——写入同步触发
-    /// 聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 <see cref="Debug.LogError"/> 提示
+    /// 聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 <c>LogManager.Error</c>提示
     /// (开发期断言,Release 构建零开销)。基础设施内部直写字段(容器子上下文预置、聚合器转发
     /// <see cref="CurrentTaskName"/>)不经本写面,不在断言范围——本就只发生在主线程。</para>
     /// </summary>
@@ -111,7 +112,8 @@ namespace XFramework.XPipeline
             if (!_threadViolationLogged && !Cysharp.Threading.Tasks.PlayerLoopHelper.IsMainThread)
             {
                 _threadViolationLogged = true;
-                Debug.LogError("[Pipeline] PipelineStageContext must be written from the Unity main thread; " +
+                LogManager.Error(LogCategories.Pipeline,
+                    "PipelineStageContext must be written from the Unity main thread; " +
                     "aggregation is not thread-safe. 阶段写入需与 RunAsync 调度同一上下文(见 IPipelineStage 契约)。");
             }
 #endif

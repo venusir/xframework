@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPipeline
 {
@@ -100,7 +101,8 @@ namespace XFramework.XPipeline
                 if (childCtx.State == PipelineStageState.Failed)
                 {
                     // 组失败:停止后续子阶段(诊断信息由聚合器从失败子阶段捕获)
-                    Debug.LogError($"[Pipeline] Sequence stage failed: {_aggregator.FailTaskName} ({Time.realtimeSinceStartup - _startTime:F2}s): {_aggregator.FailDescription}");
+                    LogManager.Error(LogCategories.Pipeline, "Sequence stage failed: {0} ({1:F2}s): {2}",
+                        _aggregator.FailTaskName, Time.realtimeSinceStartup - _startTime, _aggregator.FailDescription);
                     _stageCtx.SetState(PipelineStageState.Failed);
                     break;
                 }

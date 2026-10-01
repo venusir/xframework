@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPipeline
 {
@@ -153,7 +154,7 @@ namespace XFramework.XPipeline
             // 运行中 _contexts 已按启动时刻快照,入列会使阶段列表与上下文数组错位(越界/语义未定义)
             if (IsRunning)
             {
-                Debug.LogWarning("[Pipeline] AddStage: already running, ignore this call.");
+                LogManager.Warning(LogCategories.Pipeline, "AddStage: already running, ignore this call.");
                 return;
             }
 
@@ -172,13 +173,13 @@ namespace XFramework.XPipeline
         {
             if (IsRunning)
             {
-                Debug.LogWarning("[Pipeline] RunAsync: already running, ignore this call.");
+                LogManager.Warning(LogCategories.Pipeline, "RunAsync: already running, ignore this call.");
                 return;
             }
 
             if (_stages.Count == 0)
             {
-                Debug.LogWarning("[Pipeline] RunAsync: no stages found.");
+                LogManager.Warning(LogCategories.Pipeline, "RunAsync: no stages found.");
                 _status = PipelineStatus.Completed; // 与紧随其后的 OnCompleted 保持一致
                 DispatchSafely(OnCompleted, nameof(OnCompleted));
                 return;
@@ -237,7 +238,7 @@ namespace XFramework.XPipeline
 
                     // 顶层阶段计时:System.Diagnostics 全限定(避免与 UnityEngine.Debug 冲突)
                     var sw = System.Diagnostics.Stopwatch.StartNew();
-                    Debug.Log($"[Pipeline] Stage '{stage.Name}' start");
+                    LogManager.Info(LogCategories.Pipeline, "Stage '{0}' start", stage.Name);
                     ctx.SetState(PipelineStageState.Executing);
 
                     // 阶段经共享包装统一执行(异常/取消捕获 + 契约兜底),返回是否以取消结束
@@ -256,7 +257,8 @@ namespace XFramework.XPipeline
                         if (raceCancelled)
                         {
                             // 竞速期间外部取消:统一走取消终局
-                            Debug.Log($"[Pipeline] Stage '{stage.Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                            LogManager.Info(LogCategories.Pipeline, "Stage '{0}' cancelled in {1:F0}ms",
+                                stage.Name, sw.Elapsed.TotalMilliseconds);
                             cancelled = true;
                             break;
                         }
@@ -268,7 +270,8 @@ namespace XFramework.XPipeline
                             cts.Cancel();
                             ctx.SetDescription($"Stage '{stage.Name}' timed out after {timeoutSeconds}s");
                             ctx.SetState(PipelineStageState.Failed);
-                            Debug.Log($"[Pipeline] Stage '{stage.Name}' timed out in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                            LogManager.Info(LogCategories.Pipeline, "Stage '{0}' timed out in {1:F0}ms",
+                                stage.Name, sw.Elapsed.TotalMilliseconds);
                             failed = true;
                             failDescription = ctx.Description;
                             break;
@@ -285,20 +288,23 @@ namespace XFramework.XPipeline
 
                     if (stageCancelled)
                     {
-                        Debug.Log($"[Pipeline] Stage '{stage.Name}' cancelled in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                        LogManager.Info(LogCategories.Pipeline, "Stage '{0}' cancelled in {1:F0}ms",
+                            stage.Name, sw.Elapsed.TotalMilliseconds);
                         cancelled = true;
                         break;
                     }
 
                     if (ctx.State == PipelineStageState.Failed)
                     {
-                        Debug.Log($"[Pipeline] Stage '{stage.Name}' failed in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                        LogManager.Info(LogCategories.Pipeline, "Stage '{0}' failed in {1:F0}ms",
+                            stage.Name, sw.Elapsed.TotalMilliseconds);
                         failed = true;
                         failDescription = ctx.Description;
                         break;
                     }
 
-                    Debug.Log($"[Pipeline] Stage '{stage.Name}' completed in {sw.Elapsed.TotalMilliseconds:F0}ms");
+                    LogManager.Info(LogCategories.Pipeline, "Stage '{0}' completed in {1:F0}ms",
+                        stage.Name, sw.Elapsed.TotalMilliseconds);
                 }
 
                 // 循环收尾:阶段沉降后 token 已取消且未失败 → 取消
@@ -317,7 +323,7 @@ namespace XFramework.XPipeline
                     Broadcast();
                     _status = PipelineStatus.Cancelled;
                     DispatchSafely(OnCancelled, nameof(OnCancelled));
-                    Debug.LogWarning("[Pipeline] Pipeline cancelled.");
+                    LogManager.Warning(LogCategories.Pipeline, "Pipeline cancelled.");
                 }
                 else if (failed)
                 {
@@ -326,7 +332,7 @@ namespace XFramework.XPipeline
                     _status = PipelineStatus.Failed;
                     FailureReason = $"Failed: {failDescription}";
                     DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
-                    Debug.LogError($"[Pipeline] Pipeline failed: {failDescription}");
+                    LogManager.Error(LogCategories.Pipeline, "Pipeline failed: {0}", failDescription);
                 }
                 else
                 {
@@ -352,7 +358,7 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[Pipeline] RunAsync failed: {ex.Message}\n{ex.StackTrace}");
+                LogManager.Error(LogCategories.Pipeline, "RunAsync failed: {0}\n{1}", ex.Message, ex.StackTrace);
                 _status = PipelineStatus.Failed;
                 FailureReason = $"Exception: {ex.Message}";
                 DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
@@ -486,7 +492,7 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[Pipeline] {eventName} subscriber threw: {ex}");
+                LogManager.Error(LogCategories.Pipeline, "{0} subscriber threw: {1}", eventName, ex);
             }
         }
 
@@ -501,7 +507,7 @@ namespace XFramework.XPipeline
             }
             catch (Exception ex)
             {
-                Debug.LogError($"[Pipeline] {eventName} subscriber threw: {ex}");
+                LogManager.Error(LogCategories.Pipeline, "{0} subscriber threw: {1}", eventName, ex);
             }
         }
 

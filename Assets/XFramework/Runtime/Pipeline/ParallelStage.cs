@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPipeline
 {
@@ -105,7 +106,8 @@ namespace XFramework.XPipeline
 
             if (_aggregator.AnyFailed)
             {
-                Debug.LogError($"[Pipeline] Parallel stage failed: {_aggregator.FailTaskName} ({Time.realtimeSinceStartup - _startTime:F2}s): {_aggregator.FailDescription}");
+                LogManager.Error(LogCategories.Pipeline, "Parallel stage failed: {0} ({1:F2}s): {2}",
+                    _aggregator.FailTaskName, Time.realtimeSinceStartup - _startTime, _aggregator.FailDescription);
                 _stageCtx.SetState(PipelineStageState.Failed);
             }
             else if (cancellationToken.IsCancellationRequested || anyChildCancelled)

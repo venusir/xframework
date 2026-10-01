@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPipeline
 {
@@ -158,7 +159,7 @@ namespace XFramework.XPipeline
             catch (Exception ex)
             {
                 // 防御:聚合/广播链上的异常(如订阅者)隔离在此,不冒泡进子阶段栈
-                Debug.LogError($"[Pipeline] progress aggregation failed: {ex.Message}");
+                LogManager.Error(LogCategories.Pipeline, "progress aggregation failed: {0}", ex.Message);
             }
         }
 
