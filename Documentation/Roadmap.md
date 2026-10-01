@@ -14,26 +14,19 @@
 
 ## 二、待立项（已确认要做）
 
-> 节的排列即建议的开工顺序。三者的依赖彼此独立——Audio → Settings / Pool / Asset，Timer → Update，Logger → 无——所以顺序自由；选这个排法另有理由，见 2.2 末尾。
+> 节的排列即建议的开工顺序。Audio 已于 2026-10-01 建成（见 2.1）；余下 Logger 与 Timer 仍待立项。
 
-### 2.1 Audio —— 建议第一个做
+### 2.1 Audio —— ✅ 已建成（2026-10-01）
 
-**为什么该建**
+> **本条已搬迁**。维护向记录在 `Documentation/Modules/Audio.md`，使用方文档在
+> `Assets/XFramework/Runtime/Audio/README.md`——本文只留指针，不再复述。
 
-- 全仓 `AudioSource` / `AudioClip` / `AudioMixer` **零命中**。不是「做得不够好」，是完全没有。
-- 每个游戏都必需，且是纯正交服务：播放、分类、音量、并发——不决定任何 GamePlay 形状。
-- 与四个已有模块天然咬合：`Settings`（音量设置项）、`Pool`（音源实例复用）、`Asset`（clip 加载与 location 字符串）、`Localization`（配音随语言切换）。
-
-**立项时必须先定死的四条边界**
-
-| # | 边界 | 倾向与理由 |
-|---|---|---|
-| ① | 分类（BGM / SE / Voice）由框架给死，还是允许项目声明自定义通道？ | **倾向允许自定义**：锁死枚举就等于「使用方必须按某种架构」，撞包级 README 的「不预设 GamePlay 架构」 |
-| ② | 音量绑 `AudioMixer` 还是 `AudioSource.volume`？ | **倾向不绑 Mixer**：Mixer 是项目的资产组织方式（总线布局、快照、效果链都由项目决定），框架绑上去就把项目的资产结构变成了框架的契约 |
-| ③ | clip 从哪来？ | **倾向两者都要**：`Asset` 的 location 字符串（便捷、生命周期自动管）与直接传 `AudioClip`（显式、项目自管） |
-| ④ | 播放句柄的形状 | **倾向 `readonly struct`**（先例 `LockHandle`）：零 GC、无分配、可空判断明确 |
-
-**须在立项时一并回答**：并发上限与优先级抢占要不要框架管？管，就要定义「抢谁」；不管，就交给项目限流。
+立项时表格里的四条边界，三条照原样落地（分类允许自定义 → 纯字符串 + 推荐常量；音量不绑 Mixer；
+播放句柄 `readonly struct`）；**第三条被推翻了**：「clip 来源两者都要」在评审后端到端重估——保留
+`Play(AudioClip)` 重载会同时毁掉 `IAudioManager` 的后端中立性（Wwise 的事件、FMOD 的
+`EventInstance` 都没有 `AudioClip`）与「资源生命周期只有一套语义」，最终改为**只走 location**。
+这一轮还多裁定了一条本文原先没列的边界：**句柄必须能被第三方实现构造**——照抄 `LockHandle` 的
+`internal` 构造会把「整体替换引擎」这条路彻底堵死。全部理由与代价见模块文档的「已评估未采纳与未决」。
 
 ### 2.2 Logger
 

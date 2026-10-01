@@ -6,6 +6,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+- **新增 `XAudio` 音频模块**（`Documentation/Roadmap.md` §2.1 立项的第一个模块）：静态门面 `AudioManager` + `IAudioManager` 接口 + internal 实现，自持隐藏宿主并池化 `AudioSource`；字符串通道 + 三档音量相乘 + 代际安全的 `readonly struct` 句柄 + 播完自动回收 + 管理器级暂停。**公开面不含任何 Unity 内置音频类型**——资源一律以 location 字符串标识，故 `IAudioManager` 可被 Wwise / FMOD 等中间件整体替换（同 `InputManager` 换 Rewired 的形态）。三条与直觉相左的决定及理由：
+  **① 没有 `Play(AudioClip)` 重载。** 保留它会同时毁掉后端中立性（Wwise 的事件、FMOD 的 `EventInstance` 都没有 `AudioClip`）与「资源生命周期只有一套语义」——原设计里「调用方在播放期间释放自己持有的资源句柄 → 声音静默中断」这个只能靠文档挡的坑随之消失。代价是回不到 Inspector 直引的用法（已写进模块 README 的已知限制）。
+  **② `AudioHandle` 的字段公开、构造函数可由第三方调用。** 照抄 `LockHandle` 的 `internal` 构造会把「整体替换引擎」这条路彻底堵死——实现方既造不出句柄，也读不回自己编码进去的值。框架级的唯一契约是 `default(AudioHandle)` 必须被任何实现视为无效。
+  **③ 回收判据是框架自己的状态机，不是 `AudioSource.isPlaying`。** 前置探针实测确认 `Pause()` 之后 `isPlaying` 就是 `false`，只看它会把暂停中的播放当场回收——`AudioVoiceState.Paused` 因此存在。
+  **实测记录**（batchmode、无音频设备；这几条此前都只是记忆而非事实）：音频子系统照常推进（0.2s 内 `time` 走到 `0.192`，播完后 `isPlaying=False` 且 `time` 归零），因此回收用例走**真实播放驱动**而不必造内部 seam；`AudioSource.volume` 的 setter 被引擎钳到 `[0,1]`（`2.5 → 1.0`、`-1 → 0.0`）——框架仍自行钳制，不把公开承诺押在引擎行为上。
+  **被新用例抓出的一个真 bug**：`AudioPlayOptions.Default` 原写作 `=> new AudioPlayOptions()`，而 **C# 对结构体的 `new S()` 一律产生「字段全为零」的默认值、不会调用任何构造函数**（即便存在一个全部参数都可选的构造函数）。于是 `Default` 返回的是 `VolumeScale == 0` 的零值，与它自己的文档承诺相反——播放路径不受影响（省略实参走的是 `default(AudioPlayOptions)`，由实现侧归一化兜住），但凡是直接用 `Default` 的调用方都会拿到一个静音的声音。
+
 ### Fixed
 
 - **UI 帧通路无异常隔离：任一 `OnUpdate` 抛异常即让整条每帧通路永久死亡**（UI 门面定向审计 P0）：`UIManagerImpl.DriveTier` 的派发循环直接调 `panel.OnUpdate`，异常逃逸到 `UpdateScheduler` 后按节点契约被「记 LogError + 注销该节点」——而门面记账是单向的（`_frameDriver` 非空即早退），驱动器再也回不来：面板 / HUD / Tip 全部静止，唯一线索是一条以内部类名结尾的 `[UpdateScheduler]` 日志（仓内先例：`InputManager.PulseFrame` 早有同款守卫）。现分三层隔离，各管一段：**逐面板**（`DriveTier` 循环内，记 `[UIManager] Panel '…'.OnUpdate threw …` 后**停更该面板**、其余面板照常——标记落在 `UIPanelBase.UpdateFaulted`，复位在 `RecyclePanel` 的 `finally` 而非可被覆写的 `OnPoolRecycle`：框架状态复位不能依赖用户代码）；**整层兜底**（门面 `FrameDriver` / `TierDriver` 的 catch，catch 后仍返回**原档位**——返回值漂移会被调度器改档；它覆盖注入实现的 `Update` 与将来新增而未加守卫的调用）；**provider 调用点**（HUD / Tip 各自隔离、首条日志后阻尼、换 provider 复位——provider 没有「停更」机制，停掉它等于停掉全部 HUD）。**改前必红实测**：stash 掉实现改动后新 fixture 4 条全红，失败消息即缺陷本身（`[UpdateScheduler] FrameDriver.OnUpdate threw exception, unregistering`，栈里 `DriveTier` → `FrameDriver.OnUpdate` → `TickEveryFrameBucket`，分档那条走 `TickSlicedBuckets`）；后两层各自单独 stash 复验，红点都精确落在本层新增的断言上。修复后 UI 全量 PlayMode 198/198

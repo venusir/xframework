@@ -30,6 +30,7 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 | **LocalizationManager** | `LocalizationManager.Initialize(lang, data)`        | 同上（`LocalizationBootstrapStage`）                       |
 | **UIManager**           | `UIManager.Initialize(canvasTransform)`             | 需传入 Canvas 根节点                                       |
 | **SettingsManager**     | `SettingsManager.Initialize<T>(path)`               | 设置类型由业务定义，每类独立初始化                         |
+| **AudioManager**        | `AudioManager.Initialize()`                         | 零配置；播放源惰性创建，从不播放就不建任何对象             |
 
 > **关键设计决策：** 服务不依赖统一入口。无需参数的服务自动就绪；需要参数的服务由调用方显式初始化，或实现 `IBootstrapStage` 登记进启动引导。
 
@@ -118,6 +119,7 @@ await Bootstrap.RunAsync();
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
 | **逻辑锁**       | `LockManager` 多来源叠加的门禁（主体 × 类型 × 持有者）：全局锁、聚合状态事件 `OnLockStateChanged`、销毁自动释放、`DumpState` 排查 |
 | **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
+| **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，可整体替换实现以接 Wwise / FMOD |
 
 ## UI 系统
 

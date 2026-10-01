@@ -3,7 +3,7 @@ namespace XFramework.XAudio
     /// <summary>
     /// 推荐通道名常量。
     /// <para><b>这些是建议值，不是约束</b>：通道是开放的字符串域，项目可以自由使用任意名字
-    /// （<see cref="RegisterChannel"/> 可预先声明音量与静音，未声明的通道首次使用时按默认值惰性建状态）。
+    /// （<see cref="AudioManager.RegisterChannel"/> 可预先声明音量与静音，未声明的通道首次使用时按默认值惰性建状态）。
     /// 与 <c>XUI.UILayers</c> 给推荐层级、<c>XInput</c> 不定义动作名同一取舍——框架锁死枚举就等于
     /// 「使用方必须按某种架构组织音频」。</para>
     /// <para>命名的比较语义是<b>序数（Ordinal）</b>，即区分大小写；<c>"BGM"</c> 与 <c>"bgm"</c> 是两个通道。</para>
