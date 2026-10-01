@@ -110,9 +110,13 @@ namespace XFramework.XUpdate
 
             /// <summary>
             /// 所在档位（<see cref="UpdateTier"/> 取值），与 <see cref="Axis"/> 同一套归位依据。
-            /// <para>它让「禁用 → 启用」回到注册时声明的档位，而不是一律回
-            /// <see cref="UpdateTier.Tier0"/>——档位是设计决定（声明在注册处），一次启停不该把它清掉；
+            /// <para>它让「禁用 → 启用」回到节点<b>离开派发集合时的档位</b>，而不是一律回
+            /// <see cref="UpdateTier.Tier0"/>——档位是设计决定，一次启停不该把它清掉；
             /// 而回 Tier0 意味着一个 Tier5 的后台同步会在启用后先每帧跑一轮。</para>
+            /// <para><b>回来的是「离开时」的档位，不是 <c>initialTier</c></b>：若期间经派发回调的
+            /// 返回值迁移过（<see cref="IUpdateable.OnUpdate(float, float)"/> 等三条通道），迁移结果
+            /// 已经写在本字段上，<see cref="Enable"/> 按它归位——与 <c>Update/README.md</c> 的
+            /// 「档位由谁决定」一致。</para>
             /// <para><b>零内存代价</b>：结构体内容 23 字节，仍落在 double / 引用要求的 8 字节对齐内，
             /// 尾部那 1 字节本就是填充（字段顺序见 <see cref="LastUpdateTime"/>）。</para>
             /// </summary>
@@ -684,7 +688,9 @@ namespace XFramework.XUpdate
         /// <para>会触发 <see cref="IUpdateLifecycle.OnEnable"/>。</para>
         /// <para><b>派发期间发起时推迟到本调度器收尾时生效</b>（与注册/注销一致；跨时机调用则
         /// 顺延到本调度器下一次派发之前）；从派发之外调用则立即生效。
-        /// 另需注意：被重新启用的节点回到<b>注册时声明的</b>时间轴与档位（两者都记在条目上）。
+        /// 另需注意：被重新启用的节点回到它<b>离开时</b>的时间轴与档位（两者都记在条目上）——
+        /// 档位<b>不是</b>注册时声明的 <c>initialTier</c>：期间经派发返回值迁移过，回来的就是
+        /// 迁移后的档位（见 <c>Entry.Tier</c>）。
         /// 档位较粗时，首次派发最坏要等满一个整周期；首次派发的 delta 仍按锚定规则记 0。</para>
         /// </summary>
         /// <param name="node">要启用的节点。</param>
@@ -1033,7 +1039,8 @@ namespace XFramework.XUpdate
                         // 重置时间基准：禁用期间累积的间隔不应算作本次 delta
                         enabled.NeedsAnchor = true;
 
-                        // 回到原时间轴与声明档位（两者都记在条目上，见 Entry.Axis / Entry.Tier）
+                        // 回到离开时的时间轴与档位（两者都记在条目上，见 Entry.Axis / Entry.Tier；
+                        // 档位若经派发返回值迁移过，条目上存的就是迁移后的值，不是注册时的 initialTier）
                         int bucket = BucketOf(enabled.Axis, enabled.Tier);
                         InsertSorted(_buckets[bucket], enabled);
                         _bucketOf[op.Node] = bucket;
