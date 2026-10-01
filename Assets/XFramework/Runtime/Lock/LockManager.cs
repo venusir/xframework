@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage;
 
 namespace XFramework.XLock
@@ -212,8 +213,10 @@ namespace XFramework.XLock
 
             if (IsSubjectDestroyed(subjectKey))
             {
-                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
-                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                LogManager.Warning(LogCategories.Lock,
+                    "subscription ignored: subject '{0}' has already been destroyed " +
+                    "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.",
+                    NameOf(subjectKey));
                 return EmptyDisposable.Instance;
             }
 
@@ -245,8 +248,10 @@ namespace XFramework.XLock
 
             if (IsSubjectDestroyed(subjectKey))
             {
-                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
-                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                LogManager.Warning(LogCategories.Lock,
+                    "subscription ignored: subject '{0}' has already been destroyed " +
+                    "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.",
+                    NameOf(subjectKey));
                 return EmptyDisposable.Instance;
             }
 
@@ -331,7 +336,8 @@ namespace XFramework.XLock
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Lock] {eventName} subscriber threw (subject: {NameOf(subject)}): {e}");
+                LogManager.Error(LogCategories.Lock,
+                    "{0} subscriber threw (subject: {1}): {2}", eventName, NameOf(subject), e);
             }
         }
 
@@ -348,7 +354,8 @@ namespace XFramework.XLock
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Lock] {eventName} subscriber threw (subject: {NameOf(subject)}): {e}");
+                LogManager.Error(LogCategories.Lock,
+                    "{0} subscriber threw (subject: {1}): {2}", eventName, NameOf(subject), e);
             }
         }
 
@@ -512,8 +519,10 @@ namespace XFramework.XLock
 
             if (IsSubjectDestroyed(subjectKey))
             {
-                Debug.LogWarning($"[Lock] subscription ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
-                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                LogManager.Warning(LogCategories.Lock,
+                    "subscription ignored: subject '{0}' has already been destroyed " +
+                    "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.",
+                    NameOf(subjectKey));
                 return EmptyDisposable.Instance;
             }
 
@@ -543,8 +552,10 @@ namespace XFramework.XLock
 
             if (IsSubjectDestroyed(subjectKey))
             {
-                Debug.LogWarning($"[Lock] AddLock ignored: subject '{NameOf(subjectKey)}' has already been destroyed " +
-                                 "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.");
+                LogManager.Warning(LogCategories.Lock,
+                    "AddLock ignored: subject '{0}' has already been destroyed " +
+                    "(its destroy token is cancelled). Set LockManager.AutoReleaseOnDestroy to false to opt out.",
+                    NameOf(subjectKey));
                 return default;
             }
 
