@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XAudio
 {
@@ -55,7 +56,7 @@ namespace XFramework.XAudio
         {
             if (_instanceInitialized)
             {
-                Debug.LogWarning("[Audio] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.Audio, "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 

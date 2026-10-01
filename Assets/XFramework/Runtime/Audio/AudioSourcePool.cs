@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XAudio
 {
@@ -213,8 +214,10 @@ namespace XFramework.XAudio
                         }
                         else if (++voice.StartingTicks > StartingTimeoutTicks)
                         {
-                            Debug.LogWarning($"[Audio] 播放源起播超时（'{voice.Location}'），槽位被强制回收。" +
-                                             "这通常意味着该平台的 AudioSource 在 Play() 后不会报告 isPlaying。");
+                            LogManager.Warning(LogCategories.Audio,
+                                "播放源起播超时（'{0}'），槽位被强制回收。" +
+                                "这通常意味着该平台的 AudioSource 在 Play() 后不会报告 isPlaying。",
+                                voice.Location);
                             Release(i);
                         }
                         else
@@ -300,8 +303,10 @@ namespace XFramework.XAudio
                 return;
 
             _exhaustionWarned = true;
-            Debug.LogWarning($"[Audio] 播放源已耗尽（MaxVoices={_maxVoices}），本次播放被丢弃。" +
-                             "调大 AudioInitOptions.MaxVoices，或缩短同时播放的音效数量。");
+            LogManager.Warning(LogCategories.Audio,
+                "播放源已耗尽（MaxVoices={0}），本次播放被丢弃。" +
+                "调大 AudioInitOptions.MaxVoices，或缩短同时播放的音效数量。",
+                _maxVoices);
         }
 
         /// <summary>
@@ -323,7 +328,7 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Audio] 释放音频资源租约时发生异常（'{voice.Location}'）：{e}");
+                LogManager.Error(LogCategories.Audio, "释放音频资源租约时发生异常（'{0}'）：{1}", voice.Location, e);
             }
 
             voice.ClipLease = default;

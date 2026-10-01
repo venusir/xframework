@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XAudio
@@ -212,7 +213,7 @@ namespace XFramework.XAudio
             catch (Exception e)
             {
                 // 加载缝的契约是「失败返回 default 而不抛」，真抛了说明是未预期异常
-                Debug.LogError($"[Audio] 加载音频资源 '{location}' 时发生未预期异常：{e}");
+                LogManager.Error(LogCategories.Audio, "加载音频资源 '{0}' 时发生未预期异常：{1}", location, e);
                 InvalidateReservation(index, generation);
                 return default;
             }
@@ -232,7 +233,8 @@ namespace XFramework.XAudio
             {
                 SafeDisposeLease(clipLease, location);
                 _pool.Release(index);
-                Debug.LogWarning($"[Audio] 播放失败，clip 加载未成功：'{location}'（底层错误见上一条 YooAsset 日志）。");
+                LogManager.Warning(LogCategories.Audio,
+                    "播放失败，clip 加载未成功：'{0}'（底层错误见上一条 YooAsset 日志）。", location);
                 return default;
             }
 
@@ -281,7 +283,7 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Audio] 播放 '{location}' 时发生未预期异常：{e}");
+                LogManager.Error(LogCategories.Audio, "播放 '{0}' 时发生未预期异常：{1}", location, e);
             }
         }
 
@@ -638,7 +640,7 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Audio] 释放音频资源租约时发生异常（'{location}'）：{e}");
+                LogManager.Error(LogCategories.Audio, "释放音频资源租约时发生异常（'{0}'）：{1}", location, e);
             }
         }
 
