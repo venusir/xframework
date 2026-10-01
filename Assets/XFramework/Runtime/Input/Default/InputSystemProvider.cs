@@ -5,6 +5,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.InputSystem.Controls;
 using UnityEngine.InputSystem.Layouts;
 using UnityEngine.InputSystem.LowLevel;
+using XFramework.XLog;
 using XFramework.XMessage;
 
 namespace XFramework.XInput.Default
@@ -92,7 +93,7 @@ namespace XFramework.XInput.Default
             // 监听设备变更
             InputSystem.onDeviceChange += OnInputDeviceChange;
 
-            Debug.Log("[Input] Initialized successfully.");
+            LogManager.Info(LogCategories.Input, "Initialized successfully.");
         }
 
         #endregion
@@ -277,11 +278,11 @@ namespace XFramework.XInput.Default
                 _currentMapName = mapName;
                 InvalidateCaches();
 
-                Debug.Log($"[Input] Enabled action map: {mapName}");
+                LogManager.Info(LogCategories.Input, "Enabled action map: {0}", mapName);
             }
             else
             {
-                Debug.LogWarning($"[Input] ActionMap '{mapName}' not found.");
+                LogManager.Warning(LogCategories.Input, "ActionMap '{0}' not found.", mapName);
             }
         }
 
@@ -298,7 +299,7 @@ namespace XFramework.XInput.Default
                 targetMap.Disable();
                 InvalidateCaches();
 
-                Debug.Log($"[Input] Disabled action map: {mapName}");
+                LogManager.Info(LogCategories.Input, "Disabled action map: {0}", mapName);
             }
         }
 
@@ -318,7 +319,7 @@ namespace XFramework.XInput.Default
             if (anyDisabled)
             {
                 InvalidateCaches();
-                Debug.Log("[Input] All action maps disabled.");
+                LogManager.Info(LogCategories.Input, "All action maps disabled.");
             }
         }
 
@@ -545,14 +546,14 @@ namespace XFramework.XInput.Default
         {
             if (string.IsNullOrEmpty(action))
             {
-                Debug.LogError("[Input] StartRebinding failed: action is null or empty.");
+                LogManager.Error(LogCategories.Input, "StartRebinding failed: action is null or empty.");
                 return null;
             }
 
             var inputAction = GetAction(action);
             if (inputAction == null)
             {
-                Debug.LogError($"[Input] StartRebinding failed: action '{action}' not found.");
+                LogManager.Error(LogCategories.Input, "StartRebinding failed: action '{0}' not found.", action);
                 return null;
             }
 
@@ -564,7 +565,8 @@ namespace XFramework.XInput.Default
                 if (bindingIndex < 0)
                 {
                     // 非法 bindingId 显式报错返回,不再静默回退覆盖第一个绑定(避免持久化数据与资产失配时改错键位)
-                    Debug.LogError($"[Input] StartRebinding failed: action '{action}' has no binding with id '{bindingId}'.");
+                    LogManager.Error(LogCategories.Input,
+                        "StartRebinding failed: action '{0}' has no binding with id '{1}'.", action, bindingId);
                     return null;
                 }
             }
@@ -573,7 +575,8 @@ namespace XFramework.XInput.Default
                 bindingIndex = GetFirstBindableIndex(inputAction);
                 if (bindingIndex < 0)
                 {
-                    Debug.LogError($"[Input] StartRebinding failed: action '{action}' has no bindable binding.");
+                    LogManager.Error(LogCategories.Input,
+                        "StartRebinding failed: action '{0}' has no bindable binding.", action);
                     return null;
                 }
             }
@@ -656,7 +659,7 @@ namespace XFramework.XInput.Default
             _buttonPressStartTimes.Clear();
             _playerBindingPaths.Clear();
 
-            Debug.Log("[Input] Disposed.");
+            LogManager.Info(LogCategories.Input, "Disposed.");
         }
 
         #endregion
@@ -804,7 +807,9 @@ namespace XFramework.XInput.Default
             #if UNITY_EDITOR
             else if (_warnedActionNames.Add(actionName))
             {
-                Debug.LogWarning($"[Input] action '{actionName}' 不存在于任何 ActionMap,请检查动作名拼写或资产配置(可用 InputManager.HasAction 校验)。");
+                LogManager.Warning(LogCategories.Input,
+                    "action '{0}' 不存在于任何 ActionMap,请检查动作名拼写或资产配置(可用 InputManager.HasAction 校验)。",
+                    actionName);
             }
             #endif
             return fallback;

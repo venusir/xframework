@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using XFramework.XInput.Default;
 using XFramework.XInput.Messages;
+using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XEvent;
 using XFramework.XUpdate;
@@ -69,7 +70,7 @@ namespace XFramework.XInput
         {
             if (_initialized)
             {
-                UnityEngine.Debug.LogWarning("[Input] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.Input, "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -92,7 +93,7 @@ namespace XFramework.XInput
         {
             if (_initialized)
             {
-                UnityEngine.Debug.LogWarning("[Input] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.Input, "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -158,7 +159,7 @@ namespace XFramework.XInput
             }
             catch (Exception e)
             {
-                UnityEngine.Debug.LogError($"[Input] Provider.Tick threw exception, frame pulse continues: {e}");
+                LogManager.Error(LogCategories.Input, "Provider.Tick threw exception, frame pulse continues: {0}", e);
             }
 
             // 发布帧脉冲,驱动 Observe* 系列订阅
@@ -218,10 +219,11 @@ namespace XFramework.XInput
             if (context == null) return;
             if (MessageManager.TryBindToDestroy(context, subscription)) return;
 
-            UnityEngine.Debug.LogWarning(
-                $"[Input] context of type '{context.GetType().Name}' is neither a MonoBehaviour nor an " +
-                "IDestroyCancellationToken, so the subscription will not be disposed automatically. " +
-                "Hold the returned handle and dispose it yourself.");
+            LogManager.Warning(LogCategories.Input,
+                "context of type '{0}' is neither a MonoBehaviour nor an IDestroyCancellationToken, " +
+                "so the subscription will not be disposed automatically. " +
+                "Hold the returned handle and dispose it yourself.",
+                context.GetType().Name);
         }
 
         #endregion
