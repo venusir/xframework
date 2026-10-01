@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XUpdate
 {
@@ -406,7 +407,9 @@ namespace XFramework.XUpdate
                 }
                 catch (System.Exception e)
                 {
-                    Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.{TimingMethodName} threw exception, unregistering: {e}");
+                    LogManager.Error(LogCategories.UpdateScheduler,
+                        "{0}.{1} threw exception, unregistering: {2}",
+                        entry.Node.GetType().Name, TimingMethodName, e);
                     Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                     continue;
                 }
@@ -473,7 +476,9 @@ namespace XFramework.XUpdate
                     }
                     catch (System.Exception e)
                     {
-                        Debug.LogError($"[UpdateScheduler] {entry.Node.GetType().Name}.{TimingMethodName} threw exception, unregistering: {e}");
+                        LogManager.Error(LogCategories.UpdateScheduler,
+                        "{0}.{1} threw exception, unregistering: {2}",
+                        entry.Node.GetType().Name, TimingMethodName, e);
                         Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                         continue;
                     }
@@ -673,9 +678,10 @@ namespace XFramework.XUpdate
             // 条目会永远留在桶里继续被派发。这不是「暂不支持」而是「做不到」——管理的前提是身份稳定
             if (node.GetType().IsValueType)
             {
-                Debug.LogError(
-                    $"[UpdateScheduler] {node.GetType().Name} 是值类型：IUpdateLifecycle 必须由引用类型实现" +
-                    "（每次装箱都是新身份，注册后将无法注销）。本次注册已忽略。");
+                LogManager.Error(LogCategories.UpdateScheduler,
+                    "{0} 是值类型：IUpdateLifecycle 必须由引用类型实现" +
+                    "（每次装箱都是新身份，注册后将无法注销）。本次注册已忽略。",
+                    node.GetType().Name);
                 return;
             }
 
@@ -1128,8 +1134,8 @@ namespace XFramework.XUpdate
             }
             catch (System.Exception e)
             {
-                Debug.LogError(
-                    $"[UpdateScheduler] {node.GetType().Name}.On{(enable ? "Enable" : "Disable")} threw exception: {e}");
+                LogManager.Error(LogCategories.UpdateScheduler,
+                    "{0}.On{1} threw exception: {2}", node.GetType().Name, enable ? "Enable" : "Disable", e);
             }
         }
 
@@ -1265,7 +1271,8 @@ namespace XFramework.XUpdate
 
                 // 索引与桶内容脱节——正常路径不可达（索引只在 ApplyOp 与 ClearImmediate 写），
                 // 但真出现时必须留痕，否则节点会静默变成「在桶里却谁也找不到」
-                Debug.LogWarning($"[UpdateScheduler] 桶索引失效：{node.GetType().Name} 记录在桶 {bucket} 中却找不到条目");
+                LogManager.Warning(LogCategories.UpdateScheduler,
+                    "桶索引失效：{0} 记录在桶 {1} 中却找不到条目", node.GetType().Name, bucket);
                 _bucketOf.Remove(node);
             }
 
