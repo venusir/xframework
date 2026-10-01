@@ -2,6 +2,7 @@ using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAudio;
+using XFramework.XLog;
 
 namespace XFramework.Example
 {
@@ -56,7 +57,8 @@ namespace XFramework.Example
             }
 
             if (_bgm.IsDefault)
-                Debug.LogWarning($"[Example] BGM 未能起播：'{_bgmLocation}'——确认该地址已注册进 YooAsset。");
+                LogManager.Warning(SampleLogCategories.Example,
+                    "BGM 未能起播：'{0}'——确认该地址已注册进 YooAsset。", _bgmLocation);
         }
 
         private void OnDestroy()

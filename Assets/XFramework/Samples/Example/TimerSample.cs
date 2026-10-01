@@ -1,4 +1,5 @@
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XTimer;
 using XFramework.XUpdate;
 
@@ -48,7 +49,8 @@ namespace XFramework.Example
 
             // 4. 时间轴：暂停菜单、界面动画这类「暂停期间仍要走完」的倒计时用 Unscaled；
             //    其余一律用默认的 Scaled，跟着 timeScale 走
-            _unscaled = TimerManager.After(3f, () => Debug.Log("[Example] 这条不受 timeScale 影响"),
+            _unscaled = TimerManager.After(3f,
+                () => LogManager.Info(SampleLogCategories.Example, "这条不受 timeScale 影响"),
                 UpdateTimeMode.Unscaled);
         }
 
@@ -65,7 +67,7 @@ namespace XFramework.Example
 
         private void OnWarmupDone()
         {
-            Debug.Log("[Example] 预热结束");
+            LogManager.Info(SampleLogCategories.Example, "预热结束");
         }
 
         #endregion
@@ -81,7 +83,7 @@ namespace XFramework.Example
 
             _ready = false;
             _cooldown.Restart(); // 重置回满：下一次触发在 _skillCooldown 秒之后
-            Debug.Log("[Example] 技能释放");
+            LogManager.Info(SampleLogCategories.Example, "技能释放");
             return true;
         }
 

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XUI;
 using XFramework.XUI.Data;
@@ -42,7 +43,7 @@ namespace XFramework.Example
 
             // 订阅归口：传 this（MonoBehaviour），本组件销毁时自动退订
             UIManager.Subscribe((PanelOpenedMessage msg) =>
-                Debug.Log($"[UISample] opened: {msg.PanelType.Name}"), this);
+                LogManager.Info(SampleLogCategories.UISample, "opened: {0}", msg.PanelType.Name), this);
 
             OpenMainAsync().Forget();
         }

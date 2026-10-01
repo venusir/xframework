@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage;
 
 namespace XFramework.Example
@@ -83,26 +84,26 @@ namespace XFramework.Example
         {
             // 1. 类型化订阅:发布方与订阅方互不知晓,适合跨模块解耦
             _subscriptions.Add(MessageManager.Subscribe<CoinChangedMessage>(msg =>
-                Debug.Log($"[Coin] 金币变为 {msg.NewAmount}")));
+                LogManager.Info(SampleLogCategories.Coin, "金币变为 {0}", msg.NewAmount)));
 
             // 2. 订阅级过滤:只关心大额变化,不过滤则回调内自己判断
             _subscriptions.Add(MessageManager.Subscribe<CoinChangedMessage>(
                 filter: msg => msg.NewAmount > 100,
-                handler: msg => Debug.Log($"[Coin] 大额变化: {msg.NewAmount}")));
+                handler: msg => LogManager.Info(SampleLogCategories.Coin, "大额变化: {0}", msg.NewAmount)));
 
             // 3. 带 Key 的通道:同一消息类型按 Key 分流
             _subscriptions.Add(MessageManager.Subscribe<string, int>("Score",
-                score => Debug.Log($"[Keyed] 分数变为 {score}")));
+                score => LogManager.Info(SampleLogCategories.Keyed, "分数变为 {0}", score)));
 
             // 4. 缓冲订阅:订阅时立即收到最近一次发布的值(若发布过),适合「状态」类消息
             _subscriptions.Add(MessageManager.SubscribeBuffered<GameStateChangedMessage>(
-                msg => Debug.Log($"[Buffered] 当前状态: {msg.NewState}")));
+                msg => LogManager.Info(SampleLogCategories.Buffered, "当前状态: {0}", msg.NewState)));
 
             // 5. 异步订阅:ct 即订阅自身的令牌,退订会取消在途 await
             _subscriptions.Add(MessageManager.SubscribeAsync<GameStateChangedMessage>(async (msg, ct) =>
             {
                 await UniTask.Delay(TimeSpan.FromMilliseconds(200), cancellationToken: ct);
-                Debug.Log($"[Async] 状态切换完成: {msg.NewState}");
+                LogManager.Info(SampleLogCategories.Async, "状态切换完成: {0}", msg.NewState);
             }));
         }
 
@@ -141,7 +142,7 @@ namespace XFramework.Example
             // 请求-响应:需要返回值时使用
             var response = await MessageManager.RequestAsync<GetScoreRequest, GetScoreResponse>(
                 new GetScoreRequest { PlayerId = "player_1" }, cancellationToken);
-            Debug.Log($"[Request] 玩家分数: {response.Score}");
+            LogManager.Info(SampleLogCategories.Request, "玩家分数: {0}", response.Score);
 
             LogStats();
         }
@@ -154,11 +155,11 @@ namespace XFramework.Example
         {
             // 诊断订阅泄漏与缓冲内存驻留:发布次数、订阅数、持有重放缓存的通道数
             var stats = MessageManager.GetStats();
-            Debug.Log($"[Stats] {stats}");
+            LogManager.Info(SampleLogCategories.Stats, "{0}", stats);
 
             // 高频 Key 场景应在实体生命周期结束时淘汰其缓冲通道,否则每个 Key 会永久持有一条消息
             var evicted = MessageManager.EvictBufferedChannel<string, int>("Score");
-            Debug.Log($"[Stats] 淘汰 Score 通道: {evicted}");
+            LogManager.Info(SampleLogCategories.Stats, "淘汰 Score 通道: {0}", evicted);
         }
 
         #endregion

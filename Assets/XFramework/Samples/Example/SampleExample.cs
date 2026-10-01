@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XReactive;
 
 namespace XFramework.Example
@@ -32,13 +33,13 @@ namespace XFramework.Example
             // 1. 订阅值变化
             _subscriptions.Add(_healthProp.Subscribe(value =>
             {
-                Debug.Log($"[Health] 当前血量: {value}");
+                LogManager.Info(SampleLogCategories.Health, "当前血量: {0}", value);
                 UpdateHealthBar(value);
             }));
 
             _subscriptions.Add(_scoreProp.Subscribe(value =>
             {
-                Debug.Log($"[Score] 当前分数: {value}");
+                LogManager.Info(SampleLogCategories.Score, "当前分数: {0}", value);
                 UpdateScoreUI(value);
             }));
 
@@ -77,13 +78,13 @@ namespace XFramework.Example
         private void UpdateHealthBar(int health)
         {
             // 实际项目中更新 UI 血条
-            Debug.Log($"[UI] 血条更新至: {health}");
+            LogManager.Info(SampleLogCategories.UI, "血条更新至: {0}", health);
         }
 
         private void UpdateScoreUI(float score)
         {
             // 实际项目中更新 UI 分数
-            Debug.Log($"[UI] 分数更新至: {score}");
+            LogManager.Info(SampleLogCategories.UI, "分数更新至: {0}", score);
         }
 
         #endregion
