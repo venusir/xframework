@@ -102,6 +102,14 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **为什么未登记任何阶段不抛异常？** 零配置使用静态服务的项目本就不需要引导流程，此时 `RunAsync` 打一条警告后直接返回。这与门面模板里 `EnsureInitialized` 抛 `InvalidOperationException` 的取向不同，是有意为之。
 
+**为什么引导流程不暂停 Update（也不提供「就绪」门控）？** 每帧派发由 Update 模块自注入 PlayerLoop 独立驱动，与引导流程无关——`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常进行。这不构成缺口：依赖已初始化服务的回调，正确接法是 `await RunAsync()` 完成之后再注册，或直接写在自家引导阶段里。框架不自动暂停——那等于替使用方决定「加载期算不算可派发的时间」，而且失败/中断路径会让整个应用背上「忘了恢复即静默冻结」的风险。确需加载期安静时自行接管（只冻逻辑轴，`Unscaled` 节点照常）：
+
+```csharp
+UpdateManager.Pause();
+try { await Bootstrap.RunAsync(); }
+finally { UpdateManager.Resume(); }
+```
+
 ## 依赖
 
 - **XFramework.XPipeline** —— 阶段契约与相位分组装配
