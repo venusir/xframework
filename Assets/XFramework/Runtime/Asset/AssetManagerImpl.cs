@@ -746,7 +746,7 @@ namespace XFramework.XAsset
             catch (Exception e)
             {
                 // 回收失败不影响主流程，只记录
-                LogManager.Error(LogCategories.AssetManager, "Low memory reclaim failed: {0}", e.Message);
+                LogManager.Exception(LogCategories.AssetManager, e, "Low memory reclaim failed");
             }
         }
 

@@ -299,7 +299,8 @@ namespace XFramework.XData
             }
             catch (Exception ex)
             {
-                LogManager.Warning(LogCategories.Data, "恢复数据块 {0} 失败: {1}", snap.blockName, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.Data, ex,
+                    string.Format("恢复数据块 {0} 失败", snap.blockName));
                 return false;
             }
         }
@@ -390,7 +391,8 @@ namespace XFramework.XData
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Data, "恢复数据块 {0} 时抛出异常：{1}", snap.blockName, e);
+                LogManager.Exception(LogCategories.Data, e,
+                    string.Format("恢复数据块 {0} 时抛出异常", snap.blockName));
             }
 
             return false;
@@ -416,8 +418,8 @@ namespace XFramework.XData
                     }
                     catch (Exception e)
                     {
-                        LogManager.Error(LogCategories.Data,
-                            "清空数据块 {0} 时抛出异常，已跳过并继续清空其余块：{1}", b.GetType().Name, e);
+                        LogManager.Exception(LogCategories.Data, e,
+                            string.Format("清空数据块 {0} 时抛出异常，已跳过并继续清空其余块", b.GetType().Name));
                     }
                 });
             }
