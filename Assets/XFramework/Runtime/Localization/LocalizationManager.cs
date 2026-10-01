@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage;
 
 namespace XFramework.XLocalization
@@ -37,7 +38,8 @@ namespace XFramework.XLocalization
         {
             if (_instanceInitialized)
             {
-                UnityEngine.Debug.LogWarning("[LocalizationManager] Initialize was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.LocalizationManager,
+                    "Initialize was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -272,10 +274,11 @@ namespace XFramework.XLocalization
 
             // 订是订上了，但没有任何人会在它销毁时退订。留痕而不是静默——静默的话故障表现只是
             // 「对象已经没了，回调还在跑」，从现象追回这里要绕很远。
-            Debug.LogWarning(
-                "[LocalizationManager] Subscribe<LanguageChangedMessage>: context of type '" + context.GetType().Name +
-                "' is neither a MonoBehaviour nor an IDestroyCancellationToken, so the subscription will not be " +
-                "disposed automatically. Hold the returned handle and dispose it yourself.");
+            LogManager.Warning(LogCategories.LocalizationManager,
+                "Subscribe<LanguageChangedMessage>: context of type '{0}' is neither a MonoBehaviour nor an " +
+                "IDestroyCancellationToken, so the subscription will not be disposed automatically. " +
+                "Hold the returned handle and dispose it yourself.",
+                context.GetType().Name);
             return sub;
         }
 

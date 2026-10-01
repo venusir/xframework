@@ -3,6 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XBootstrap;
+using XFramework.XLog;
 using XFramework.XPipeline;
 
 namespace XFramework.XLocalization
@@ -69,7 +70,8 @@ namespace XFramework.XLocalization
 
             if (_initData == null)
             {
-                Debug.LogWarning("[LocalizationBootstrapStage] ExecuteAsync called but _initData is null. Skipping initialization.");
+                LogManager.Warning(LogCategories.LocalizationBootstrapStage,
+                    "ExecuteAsync called but _initData is null. Skipping initialization.");
                 context.SetProgress(1f);
                 context.SetState(PipelineStageState.Completed);
                 return UniTask.CompletedTask;
