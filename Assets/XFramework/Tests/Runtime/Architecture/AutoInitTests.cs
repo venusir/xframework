@@ -8,6 +8,7 @@ using XFramework.XFileManager;
 using XFramework.XLock;
 using XFramework.XMessage;
 using XFramework.XSerialize;
+using XFramework.XTimer;
 using XFramework.XUpdate;
 
 namespace XFramework.Architecture.Tests
@@ -47,6 +48,7 @@ namespace XFramework.Architecture.Tests
             (typeof(MessageManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(Serializer), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(AudioManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
+            (typeof(TimerManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
         };
 
