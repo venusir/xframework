@@ -2,7 +2,7 @@ using System.Collections.Generic;
 
 namespace XFramework.XEvent.Internal
 {
-    /// <summary>派发快照缓冲的 List 静态对象池(避免每轮 OnNext 分配)。</summary>
+    /// <summary>派发快照缓冲的 List 静态对象池(避免每轮 Emit 分配)。</summary>
     /// <remarks>
     /// <para><b>与 <c>XPool.ListPool&lt;T&gt;</c> 刻意并存,不要合并:</b>那个池明文「线程不安全,
     /// 应在主线程使用」,本池两侧加锁——但<b>锁不是跨线程许可</b>:锁与快照只为让引擎的订阅链表

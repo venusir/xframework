@@ -23,7 +23,7 @@ namespace XFramework.XMessage
     /// - 过滤/异步等订阅配置以一次性闭包表达,仅在订阅时分配一次(非热路径)
     /// - ApplyFilters 使用预构建的 pipeline 缓存 + 无 LINQ 遍历,无过滤器时零分配
     /// - 同步流与缓冲流均惰性创建,发布过但无人订阅的类型不会产生空流
-    /// - 投递热路径(Publish/OnNext)除锁与池化快照外零分配
+    /// - 投递热路径(Publish/Emit)除锁与池化快照外零分配
     /// </remarks>
     internal sealed class MessageBroker : IMessageBroker
     {
@@ -78,10 +78,10 @@ namespace XFramework.XMessage
             var channel = GetOrCreateChannel<TMessage>();
 
             // 推送给普通订阅者(Sync 为 null 表示从未有人订阅,跳过)
-            channel.Sync?.OnNext(message);
+            channel.Sync?.Emit(message);
 
             // 推送给缓冲订阅者(GetOrCreate:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
-            channel.GetOrCreateBuffered().OnNext(message);
+            channel.GetOrCreateBuffered().Emit(message);
 
             // 异步处理器排在同步投递之后,fire-and-forget 启动
             DispatchAsyncFireAndForget(channel, message);
@@ -102,10 +102,10 @@ namespace XFramework.XMessage
             var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
             // 推送给键值订阅者(Sync 为 null 表示该 Key 从未有人订阅,跳过)
-            channel.Sync?.OnNext(message);
+            channel.Sync?.Emit(message);
 
             // 推送给键值缓冲订阅者(GetOrCreate:同上,订阅前发布的消息可重放)
-            channel.GetOrCreateBuffered().OnNext(message);
+            channel.GetOrCreateBuffered().Emit(message);
 
             // 异步处理器排在同步投递之后,fire-and-forget 启动
             DispatchAsyncFireAndForget(channel, message);
@@ -133,8 +133,8 @@ namespace XFramework.XMessage
             var channel = GetOrCreateChannel<TMessage>();
 
             // 同步段与 Publish 完全同序:同步订阅者 -> 缓冲通道写入 -> 异步处理器
-            channel.Sync?.OnNext(message);
-            channel.GetOrCreateBuffered().OnNext(message);
+            channel.Sync?.Emit(message);
+            channel.GetOrCreateBuffered().Emit(message);
 
             return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
         }
@@ -154,8 +154,8 @@ namespace XFramework.XMessage
 
             var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
-            channel.Sync?.OnNext(message);
-            channel.GetOrCreateBuffered().OnNext(message);
+            channel.Sync?.Emit(message);
+            channel.GetOrCreateBuffered().Emit(message);
 
             return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
         }

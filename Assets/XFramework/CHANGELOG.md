@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **事件流成员去 Rx 命名（破坏性）**：`IEventStream<T>.OnNext` → `Emit`、`OnCompleted` → `Complete`，订阅参数 `Subscribe(Action<T> onNext)` → `Subscribe(Action<T> handler)`（波及 `IEventStream<T>` / `IBufferedEventStream<T>` / `IReactiveProperty<T>` / `ReactiveProperty<T>` / `ReadOnlyReactiveProperty<T>` / `SettingRef`）。**对第三方的影响面**：XEvent 的公开面是 0.2.0 之后新增的、尚未进入任何版本段，改的是**从未发布过**的名字；唯一触及已发布面的是 `ReactiveProperty<T>.Subscribe` 的**参数名**（源兼容，仅具名实参调用受影响，仓内为零）。**为什么改**：`OnNext` / `OnCompleted` 是 Rx（`IObserver<T>`）术语，与本仓公开面语汇不一致——`On` 前缀在 Update / Pool / UI / Data 等十余处都是「框架回调使用方」的方向（`OnUpdate` / `OnRent` / `OnBound`），而这两个成员是持有者**推入**面；`OnCompleted` 还与 Pipeline 的同名**事件**（`IPipeline.OnCompleted`，`+=` 订阅）同名不同形。`Emit` / `Complete` 与 `Subscribe` / `Dispose` 组成全直白成员面，且不与 Message 的 `Publish` 争词。**为什么现在**：公开面从未发布是唯一窗口，越过后即成为对第三方的破坏性变更；`725422c`（去 Rx 命名）当时的「成员方法名保守保留」是为收窄改动面的权宜（该子句只留在提交信息里，CHANGELOG 那条被丢了），本次补齐。**已评估与否决的替代名**：`Publish`（与总线同词不同契约，会糊掉「流 vs 总线」二分）、`Subject`（带回整套 Rx 契约期望）、`Send`（MediatR 语感为「一对一请求」）、`Invoke`（与 Unity `MonoBehaviour.Invoke` 的按名延迟调用撞名，且描述机制而非动作）、`Broadcast`（本仓文档里「广播」正是总线的词，另撞 `MonoBehaviour.BroadcastMessage`）。内部一并清理：`SubscriptionNode<T>.OnNext` 字段 → `Handler`；`Deliver` 参数 → `handler`。**纯改名，行为零变更**（异常日志前缀仍为 `[Event]`）；Pipeline 的 `OnCompleted` 事件与 Input 的 `IRebindingOperation.OnCompleted` 是各自的事件，不在本次范围内。
+
 ### Fixed
 
 - **Update 固定步时机的 `ProcessImmediate` 把节点锚到逻辑时刻**：`UpdateClock` 只有 Scaled / Unscaled 两条轴，而固定步条目恒挂在轴 0 上（`RegisterFixed` 不传时间轴），于是 `ProcessImmediate` 取到的「该节点所属时刻」实为**变步长逻辑时刻**——下一次真正固定步派发算出的 delta 就是 `fixedTime − 逻辑时刻` 这个跨轴相减的产物，既不是该轴承诺的 `2^k × Time.fixedDeltaTime`，也不是锚定规则给的 0。现落到固定步时机时**只重新定锚、不写时刻**（派发外与派发中两条路径统一）：下一次固定步派发 delta 记 0，与注册/启用后首次派发同一套语义。可达面有限——门面 `ProcessImmediate` 的形参是 `IUpdateable`，纯 `IFixedUpdateable` 够不到，生产影响 ≤1 帧、自带时刻的回放时钟下更大。**改前必红实测**：两条新用例在修复前分别红成 `Expected: 0.0f But was: 7.02000046f`（10.02 − 3.0，即跨轴相减的产物）与 `Expected: 1 But was: 2`（用例自身的计数写错，同批修正）；修复后 `XFramework.XUpdate.Tests` 133/133 通过

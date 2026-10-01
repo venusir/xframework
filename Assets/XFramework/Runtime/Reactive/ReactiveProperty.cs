@@ -74,7 +74,7 @@ namespace XFramework.XReactive
                 if (EqualityComparer<T>.Default.Equals(_value, value))
                     return;
                 _value = value;
-                _stream.OnNext(value);
+                _stream.Emit(value);
             }
         }
 
@@ -93,26 +93,26 @@ namespace XFramework.XReactive
         #region Subscribe
 
         /// <summary>
-        /// 订阅值变化。订阅时立即回调当前值,之后每次值改变时回调 <paramref name="onNext"/>。
+        /// 订阅值变化。订阅时立即回调当前值,之后每次值改变时回调 <paramref name="handler"/>。
         /// <para>返回的 <see cref="IDisposable"/> 可用于手动取消订阅。
         /// 调用 <see cref="Dispose"/> 时也会自动取消所有订阅。</para>
         /// <para>立即回调是注册期同步执行的代码,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)；
         /// 之后投递中的异常按引擎约定记 Error 日志后继续。两条路径语义不同是有意的。</para>
         /// </summary>
-        /// <param name="onNext">值变化时的回调。</param>
+        /// <param name="handler">值变化时的回调。</param>
         /// <returns>订阅句柄，可用于取消订阅。</returns>
-        /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
+        /// <exception cref="ArgumentNullException">handler 为 null 时抛出。</exception>
         /// <exception cref="ObjectDisposedException">属性已释放时抛出。</exception>
-        public IDisposable Subscribe(Action<T> onNext)
+        public IDisposable Subscribe(Action<T> handler)
         {
-            if (onNext == null) throw new ArgumentNullException(nameof(onNext));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
             ThrowIfDisposed();
 
             // 先注册再立即回调:确保回调中的订阅操作不会丢失后续消息
-            var handle = _stream.Subscribe(onNext);
+            var handle = _stream.Subscribe(handler);
             try
             {
-                onNext(_value);
+                handler(_value);
             }
             catch
             {

@@ -119,7 +119,7 @@ namespace XFramework.XMessage.Tests
         {
             var ex = Assert.Throws<ArgumentNullException>(
                 () => MessageManager.Subscribe<TestMessage>((Action<TestMessage>)null));
-            Assert.AreEqual("handler", ex.ParamName, "参数名应指向 handler 而非底层事件流的 onNext");
+            Assert.AreEqual("handler", ex.ParamName, "公开面的参数名应为 handler(不随底层实现改名而变)");
         }
 
         [Test]

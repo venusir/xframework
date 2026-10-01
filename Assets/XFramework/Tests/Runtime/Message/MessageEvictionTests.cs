@@ -313,7 +313,7 @@ namespace XFramework.XMessage.Tests
 
             Assert.IsTrue(channel.IsReclaimable, "无缓存值的空缓冲流不构成保留理由");
 
-            channel.GetOrCreateBuffered().OnNext(new TestMessage { Value = 1 });
+            channel.GetOrCreateBuffered().Emit(new TestMessage { Value = 1 });
             Assert.IsFalse(channel.IsReclaimable, "持有重放缓存的通道不得被回收");
 
             Assert.IsTrue(channel.EvictBuffered());

@@ -136,4 +136,4 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 - `XFramework.XEvent` 的**事件流引擎**——单向依赖:Reactive → Event。用的是它的**公开面**(`IEventStream<T>` / `EventStream.Create` / `SubscriptionCount`),不再触碰任何模块的 `Internal` 命名空间
 - 全局消息总线在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`;本模块**不**依赖它
 
-> **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`OnCompleted` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「派发顺序与重入」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。
+> **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`Complete` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「派发顺序与重入」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。

@@ -18,13 +18,13 @@ namespace XFramework.XEvent
     {
         /// <summary>
         /// 订阅。返回的句柄 Dispose 后不再收到投递(幂等)。
-        /// <para>已 <see cref="OnCompleted"/> 的流返回共享的空句柄——不登记、也不投递。</para>
+        /// <para>已 <see cref="Complete"/> 的流返回共享的空句柄——不登记、也不投递。</para>
         /// <para><b>退订在同一轮派发内立即生效</b>:派发途中退订自身或他人,该订阅者本轮起就不再被调用。
         /// 这一点与 C# <c>event</c> 不同——后者的调用表是派发时的快照,已退订的回调本轮仍会被调一次。</para>
         /// </summary>
-        /// <param name="onNext">事件回调,不可为 <c>null</c>。</param>
-        /// <exception cref="ArgumentNullException"><paramref name="onNext"/> 为 <c>null</c> 时抛出。</exception>
-        IDisposable Subscribe(Action<T> onNext);
+        /// <param name="handler">事件回调,不可为 <c>null</c>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c> 时抛出。</exception>
+        IDisposable Subscribe(Action<T> handler);
 
         /// <summary>
         /// 投递事件给所有存活订阅者。
@@ -33,16 +33,16 @@ namespace XFramework.XEvent
         /// <para>回调内重入本方法会递归派发(嵌套那一轮先跑完);回调内退订自身或他人由快照与标志安全处理。</para>
         /// </summary>
         /// <param name="value">事件载荷。</param>
-        void OnNext(T value);
+        void Emit(T value);
 
         /// <summary>
-        /// 标记完成:之后的 <see cref="OnNext"/> 被忽略,已订阅者不再收到投递。
+        /// 标记完成:之后的 <see cref="Emit"/> 被忽略,已订阅者不再收到投递。
         /// <para><b>与 <see cref="IDisposable.Dispose"/> 的差别是刻意行为,两条都被消费方依赖:</b>
-        /// <c>OnCompleted</c> 只置终止标志、<b>不清订阅</b>——此前已发出的句柄从此静默失效(调用方无法把
+        /// <c>Complete</c> 只置终止标志、<b>不清订阅</b>——此前已发出的句柄从此静默失效(调用方无法把
         /// 「不再收到」与「值没变」区分开),此后 <see cref="Subscribe"/> 一律返回空句柄;而 <c>Dispose</c>
         /// 会清空订阅链表并回收节点。</para>
         /// </summary>
-        void OnCompleted();
+        void Complete();
 
         /// <summary>
         /// 当前存活订阅数(订阅递增,退订与释放递减)。

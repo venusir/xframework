@@ -154,7 +154,7 @@ namespace XFramework.XSettings
 
                 // 先置脏再通知:订阅者在回调里查 IsDirty 时应看到一致的状态
                 SettingsManager.MarkDirty<T>();
-                _changedStream.OnNext(value);
+                _changedStream.Emit(value);
             }
         }
 
@@ -168,19 +168,19 @@ namespace XFramework.XSettings
         /// <para>立即回调是注册期同步执行的代码，它抛出的异常原样上抛（订阅已自动清理，不会泄漏）；
         /// 之后投递中的异常记 Error 日志后继续。两条路径语义不同是有意的。</para>
         /// </summary>
-        /// <param name="onNext">值变化时的回调。</param>
+        /// <param name="handler">值变化时的回调。</param>
         /// <returns>取消订阅的句柄。</returns>
-        /// <exception cref="ArgumentNullException"><paramref name="onNext"/> 为 <c>null</c> 时抛出。</exception>
-        public IDisposable Subscribe(Action<TField> onNext)
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c> 时抛出。</exception>
+        public IDisposable Subscribe(Action<TField> handler)
         {
-            if (onNext == null)
-                throw new ArgumentNullException(nameof(onNext));
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
 
             // 先注册再立即回调:与 ReactiveProperty 相同顺序,确保回调中的订阅不会丢失后续消息
-            var handle = _changedStream.Subscribe(onNext);
+            var handle = _changedStream.Subscribe(handler);
             try
             {
-                onNext(Value);
+                handler(Value);
             }
             catch
             {
@@ -207,7 +207,7 @@ namespace XFramework.XSettings
         /// <param name="settings">刚就位的设置实例。</param>
         void IReplayableSettingRef<T>.Replay(T settings)
         {
-            _changedStream.OnNext(_getter(settings));
+            _changedStream.Emit(_getter(settings));
         }
 
         #endregion

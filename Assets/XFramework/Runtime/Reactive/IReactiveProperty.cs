@@ -20,8 +20,8 @@ namespace XFramework.XReactive
         T Value { get; }
 
         /// <summary>订阅值变化。<b>订阅时立即同步回调一次当前值</b>,这是本接口唯一的契约。</summary>
-        /// <param name="onNext">值变化时的回调，不可为 null。</param>
+        /// <param name="handler">值变化时的回调，不可为 null。</param>
         /// <returns>取消订阅的句柄；释放它即不再收到投递。</returns>
-        IDisposable Subscribe(Action<T> onNext);
+        IDisposable Subscribe(Action<T> handler);
     }
 }

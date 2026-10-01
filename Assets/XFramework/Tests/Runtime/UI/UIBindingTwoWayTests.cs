@@ -309,7 +309,7 @@ namespace XFramework.XUI.Tests
 
             public float Value => _inner.Value;
 
-            public IDisposable Subscribe(Action<float> onNext) => _inner.Subscribe(onNext);
+            public IDisposable Subscribe(Action<float> handler) => _inner.Subscribe(handler);
 
             public bool TryWriteValue(float value, out float actual)
             {
@@ -335,7 +335,7 @@ namespace XFramework.XUI.Tests
             /// <summary>令目标失效：此后 Subscribe 抛 ObjectDisposedException，TryWriteValue 返回 false。</summary>
             public void Kill() => _inner.Dispose();
 
-            public IDisposable Subscribe(Action<T> onNext) => _inner.Subscribe(onNext);
+            public IDisposable Subscribe(Action<T> handler) => _inner.Subscribe(handler);
 
             public bool TryWriteValue(T value, out T actual)
             {

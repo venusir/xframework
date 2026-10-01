@@ -280,7 +280,7 @@ namespace XFramework.XSettings
         /// 释放管理器并终止通知流。
         /// <para>可重复调用。释放<b>之后</b>的所有公开成员抛 <see cref="ObjectDisposedException"/>，
         /// 避免「已释放却仍在写盘」这类静默失效。</para>
-        /// <para><b>释放之前发出的订阅句柄会静默失效</b>：通知流被终止（<c>OnCompleted</c> 只置标志、
+        /// <para><b>释放之前发出的订阅句柄会静默失效</b>：通知流被终止（<c>Complete</c> 只置标志、
         /// 不清订阅），那些句柄此后不再收到任何回调，而这一点与「值没变」在调用方看来毫无区别。
         /// 故随门面销毁时，调用方必须自行释放自己的订阅——释放后再调 <c>Observe</c> 会抛异常，
         /// 但已经拿在手里的句柄不会。</para>
@@ -304,7 +304,7 @@ namespace XFramework.XSettings
             if (_saveOnPause)
                 SettingsPauseNotifier.Release();
 
-            _changedStream.OnCompleted();
+            _changedStream.Complete();
             _changedStream.Dispose();
         }
 
@@ -620,7 +620,7 @@ namespace XFramework.XSettings
             var current = _settings;
 
             SettingRefRegistry<T>.Replay(current);
-            _changedStream.OnNext(current);
+            _changedStream.Emit(current);
             MessageManager.Publish(new SettingsChangedMessage(typeof(T)));
         }
 

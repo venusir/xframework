@@ -19,14 +19,14 @@ namespace XFramework.XEvent.Tests
         #region 基本投递与退订
 
         [Test]
-        public void Subscribe_ReceivesOnNext()
+        public void Subscribe_ReceivesEmit()
         {
             var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
-            stream.OnNext(1);
-            stream.OnNext(2);
+            stream.Emit(1);
+            stream.Emit(2);
 
             CollectionAssert.AreEqual(new[] { 1, 2 }, calls);
         }
@@ -38,25 +38,25 @@ namespace XFramework.XEvent.Tests
             var calls = new List<int>();
             var handle = stream.Subscribe(calls.Add);
 
-            stream.OnNext(1);
+            stream.Emit(1);
             handle.Dispose();
-            stream.OnNext(2);
+            stream.Emit(2);
 
             CollectionAssert.AreEqual(new[] { 1 }, calls, "退订后不再收到投递");
         }
 
         [Test]
-        public void Subscribe_NullOnNext_Throws()
+        public void Subscribe_NullHandler_Throws()
         {
             var stream = EventStream.Create<int>();
             Assert.Throws<ArgumentNullException>(() => stream.Subscribe(null));
         }
 
         [Test]
-        public void OnNext_NoSubscribers_DoesNotThrow()
+        public void Emit_NoSubscribers_DoesNotThrow()
         {
             var stream = EventStream.Create<int>();
-            Assert.DoesNotThrow(() => stream.OnNext(1));
+            Assert.DoesNotThrow(() => stream.Emit(1));
         }
 
         #endregion
@@ -77,8 +77,8 @@ namespace XFramework.XEvent.Tests
 
             Assert.DoesNotThrow(() =>
             {
-                stream.OnNext(1);
-                stream.OnNext(2);
+                stream.Emit(1);
+                stream.Emit(2);
             });
             CollectionAssert.AreEqual(new[] { 1 }, calls, "派发中自退订后,后续消息不再投递");
         }
@@ -92,23 +92,23 @@ namespace XFramework.XEvent.Tests
             handle = stream.Subscribe(_ => handle.Dispose());
             stream.Subscribe(other.Add);
 
-            Assert.DoesNotThrow(() => stream.OnNext(1));
+            Assert.DoesNotThrow(() => stream.Emit(1));
             CollectionAssert.AreEqual(new[] { 1 }, other, "一个订阅者退订不影响同轮投递中的其他订阅者");
         }
 
         [Test]
-        public void ReentrantOnNext_DoesNotBreak()
+        public void ReentrantEmit_DoesNotBreak()
         {
             var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(x =>
             {
                 calls.Add(x);
-                if (x == 1) stream.OnNext(2);
+                if (x == 1) stream.Emit(2);
             });
 
-            Assert.DoesNotThrow(() => stream.OnNext(1));
-            CollectionAssert.AreEqual(new[] { 1, 2 }, calls, "重入 OnNext 递归投递");
+            Assert.DoesNotThrow(() => stream.Emit(1));
+            CollectionAssert.AreEqual(new[] { 1, 2 }, calls, "重入 Emit 递归投递");
         }
 
         [Test]
@@ -125,7 +125,7 @@ namespace XFramework.XEvent.Tests
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(42);
+            stream.Emit(42);
             CollectionAssert.AreEqual(new[] { 42 }, calls, "池复用后投递正常");
         }
 
@@ -134,28 +134,28 @@ namespace XFramework.XEvent.Tests
         #region completed 语义
 
         [Test]
-        public void OnCompleted_IgnoresSubsequentOnNext()
+        public void Complete_IgnoresSubsequentEmit()
         {
             var stream = EventStream.Create<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
-            stream.OnNext(1);
-            stream.OnCompleted();
-            stream.OnNext(2);
+            stream.Emit(1);
+            stream.Complete();
+            stream.Emit(2);
 
-            CollectionAssert.AreEqual(new[] { 1 }, calls, "OnCompleted 后 OnNext 被忽略");
+            CollectionAssert.AreEqual(new[] { 1 }, calls, "Complete 后 Emit 被忽略");
         }
 
         [Test]
         public void Subscribe_AfterCompleted_NotDelivered()
         {
             var stream = EventStream.Create<int>();
-            stream.OnCompleted();
+            stream.Complete();
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(1);
+            stream.Emit(1);
 
             Assert.AreEqual(0, calls.Count, "completed 后新订阅者不收到投递");
         }
@@ -164,7 +164,7 @@ namespace XFramework.XEvent.Tests
         public void EmptyHandle_FromCompletedStream_IsSharedInstanceAndDisposable()
         {
             var stream = EventStream.Create<int>();
-            stream.OnCompleted();
+            stream.Complete();
 
             // 空句柄在本模块内只有一处来源(引擎与缓冲流共用同一实例)。
             // 每次 new 一个也「能用」,但共享实例上「不得改为池化」这条不变量
@@ -181,7 +181,7 @@ namespace XFramework.XEvent.Tests
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(1);
+            stream.Emit(1);
             Assert.AreEqual(0, calls.Count, "共享空句柄不改变「completed 后不投递」的语义");
         }
 
@@ -252,8 +252,8 @@ namespace XFramework.XEvent.Tests
             // 日志消息含异常详情后缀,Expect 字符串重载为全串精确匹配,需用正则做包含匹配
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Event] EventStream handler threw exception")));
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("[Event] EventStream handler threw exception")));
-            Assert.DoesNotThrow(() => stream.OnNext(1));
-            Assert.DoesNotThrow(() => stream.OnNext(2));
+            Assert.DoesNotThrow(() => stream.Emit(1));
+            Assert.DoesNotThrow(() => stream.Emit(2));
 
             CollectionAssert.AreEqual(new[] { 1, 2 }, healthy, "异常订阅者不移除,其他订阅者每条消息都收到");
         }
@@ -266,7 +266,7 @@ namespace XFramework.XEvent.Tests
         public void BufferedEventStream_ReplaysLatest_Synchronously()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(7);
+            stream.Emit(7);
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
@@ -278,7 +278,7 @@ namespace XFramework.XEvent.Tests
         public void BufferedEventStream_MultipleSubscribers_EachGetsReplay()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(7);
+            stream.Emit(7);
 
             var c1 = new List<int>();
             var c2 = new List<int>();
@@ -293,11 +293,11 @@ namespace XFramework.XEvent.Tests
         public void BufferedEventStream_ReplayBeforeNewMessages()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(1);
+            stream.Emit(1);
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(2);
+            stream.Emit(2);
 
             CollectionAssert.AreEqual(new[] { 1, 2 }, calls, "先重放最近一条,再投递新消息");
         }
@@ -308,7 +308,7 @@ namespace XFramework.XEvent.Tests
             var stream = EventStream.CreateBuffered<int>();
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(3);
+            stream.Emit(3);
 
             CollectionAssert.AreEqual(new[] { 3 }, calls, "无缓存消息时从实时消息开始");
         }
@@ -319,7 +319,7 @@ namespace XFramework.XEvent.Tests
             var stream = EventStream.CreateBuffered<int>();
             Assert.IsFalse(stream.HasCachedValue, "从未投递过时没有可重放的值");
 
-            stream.OnNext(1);
+            stream.Emit(1);
             Assert.IsTrue(stream.HasCachedValue);
 
             ((IDisposable)stream).Dispose();
@@ -330,34 +330,34 @@ namespace XFramework.XEvent.Tests
         public void BufferedEventStream_Completed_NoReplay()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(1);
-            stream.OnCompleted();
+            stream.Emit(1);
+            stream.Complete();
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(2);
+            stream.Emit(2);
 
             Assert.AreEqual(0, calls.Count, "completed 后新订阅者不重放、不投递");
         }
 
         [Test]
-        public void BufferedEventStream_OnNextAfterCompleted_DoesNotReplayToNewSubscriber()
+        public void BufferedEventStream_EmitAfterCompleted_DoesNotReplayToNewSubscriber()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnCompleted();
-            stream.OnNext(5);
+            stream.Complete();
+            stream.Emit(5);
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
 
-            Assert.AreEqual(0, calls.Count, "completed 之后的 OnNext 必须被彻底忽略,不得写回缓存供新订阅者重放");
+            Assert.AreEqual(0, calls.Count, "completed 之后的 Emit 必须被彻底忽略,不得写回缓存供新订阅者重放");
         }
 
         [Test]
         public void BufferedEventStream_DisposedViaIDisposable_NoReplayToNewSubscriber()
         {
             var stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(7);
+            stream.Emit(7);
 
             // 经接口引用释放:必须走到派生类的 Dispose,否则缓存不被清空
             ((IDisposable)stream).Dispose();
@@ -372,10 +372,10 @@ namespace XFramework.XEvent.Tests
         public void BufferedEventStream_ThroughInterfaceReference_StillCaches()
         {
             // 经接口引用多态调用:实现必须隐式实现 IEventStream<T>(而非显式实现),
-            // 否则经接口引用的 OnNext 会落到基类实现,缓存永远不写、重放静默失效——
+            // 否则经接口引用的 Emit 会落到基类实现,缓存永远不写、重放静默失效——
             // 本用例是这条陷阱的唯一锁,不要把它退化成直接调具体类型。
             IEventStream<int> stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(8);
+            stream.Emit(8);
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
@@ -384,17 +384,17 @@ namespace XFramework.XEvent.Tests
         }
 
         [Test]
-        public void BufferedEventStream_OnCompletedViaInterfaceReference_ClearsCache()
+        public void BufferedEventStream_CompleteViaInterfaceReference_ClearsCache()
         {
             IEventStream<int> stream = EventStream.CreateBuffered<int>();
-            stream.OnNext(1);
-            stream.OnCompleted();
+            stream.Emit(1);
+            stream.Complete();
 
             var calls = new List<int>();
             stream.Subscribe(calls.Add);
-            stream.OnNext(2);
+            stream.Emit(2);
 
-            Assert.AreEqual(0, calls.Count, "经接口引用 OnCompleted 后缓存被清空,新订阅者不重放");
+            Assert.AreEqual(0, calls.Count, "经接口引用 Complete 后缓存被清空,新订阅者不重放");
         }
 
         #endregion

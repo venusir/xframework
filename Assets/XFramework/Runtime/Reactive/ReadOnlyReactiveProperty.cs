@@ -88,20 +88,20 @@ namespace XFramework.XReactive
         #region Subscribe
 
         /// <summary>订阅值变化。订阅时立即回调当前值。</summary>
-        /// <param name="onNext">值变化时的回调。</param>
+        /// <param name="handler">值变化时的回调。</param>
         /// <returns>订阅句柄，可用于取消订阅。</returns>
-        /// <exception cref="ArgumentNullException">onNext 为 null 时抛出。</exception>
+        /// <exception cref="ArgumentNullException">handler 为 null 时抛出。</exception>
         /// <exception cref="ObjectDisposedException">属性已释放时抛出。</exception>
         /// <remarks>立即回调抛出的异常原样上抛(订阅已自动清理,不会泄漏)；之后投递中的异常记 Error 日志后继续。</remarks>
-        public IDisposable Subscribe(Action<T> onNext)
+        public IDisposable Subscribe(Action<T> handler)
         {
-            if (onNext == null) throw new ArgumentNullException(nameof(onNext));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
             ThrowIfDisposed();
 
-            var handle = _stream.Subscribe(onNext);
+            var handle = _stream.Subscribe(handler);
             try
             {
-                onNext(_value);
+                handler(_value);
             }
             catch
             {
@@ -139,7 +139,7 @@ namespace XFramework.XReactive
             if (EqualityComparer<T>.Default.Equals(_value, value))
                 return;
             _value = value;
-            _stream.OnNext(value);
+            _stream.Emit(value);
         }
 
         private void ThrowIfDisposed()

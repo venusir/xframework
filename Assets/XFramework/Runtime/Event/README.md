@@ -45,7 +45,7 @@ Event 模块提供**事件流引擎**:一个对象即一条流,持有者往流�
 | 3 | **订阅数可读** | 同上,`event` 要么每次读都分配,要么自维护计数(于是所有增删都得绕开 `+=`/`-=`) |
 | 4 | **退订在同一轮派发内立即生效** | `event` 的调用表是派发时的快照,已退订的回调本轮仍会被调一次。本框架的 UI 侧反复修过「回池后仍被回调」这类 bug |
 
-**不构成理由的(如实记下):** 零分配 / 池化节点是**未来余量**(今天没有每帧订阅 / 退订的场景);「把流当值传递」今天也没有 API 这么做;`OnCompleted ≠ Dispose` 用标志位也能实现(`event` 加五行),本模块只是把它标准化。**封装反而是 `event` 更好**——只有声明者能投递,而本模块的 `OnNext` 在接口上是公开的,靠「谁持有」约束。
+**不构成理由的(如实记下):** 零分配 / 池化节点是**未来余量**(今天没有每帧订阅 / 退订的场景);「把流当值传递」今天也没有 API 这么做;`Complete ≠ Dispose` 用标志位也能实现(`event` 加五行),本模块只是把它标准化。**封装反而是 `event` 更好**——只有声明者能投递,而本模块的 `Emit` 在接口上是公开的,靠「谁持有」约束。
 
 ## 与 Rx（R3 / UniRx）的取舍
 
@@ -62,6 +62,8 @@ Event 模块提供**事件流引擎**:一个对象即一条流,持有者往流�
 
 **为什么不做算子面**：本仓自己有过这个决定——`[0.2.0]` 整节「**移除 R3 依赖（重大变更）**」，当时写明「公共 API 不变（订阅立即回调、相同值去重、异常隔离）」：**保留语义、去掉依赖**。补算子面等于把删掉的那层装回来；而且算子链会把「谁在何时被谁通知」变成不可追的声明式图。需要过滤/映射时用订阅级谓词、`ReactiveProperty.Select`，或在回调里手写。
 
+**成员名同样刻意避开 Rx 术语**：本模块用 `Emit` / `Complete`，而非 `OnNext` / `OnCompleted`。即便熟悉 Rx，也不要按 `IObserver<T>` 的语义去理解这两个成员——真实行为以本文「语义契约」表为准（`Complete` 尤其与 Rx 的 `OnCompleted` 不同：迟到的订阅者不会立刻收到完成通知，而是拿到一个静默失效的空句柄）。
+
 **本模块没有的（R3 有）**：算子（含异步算子 `SubscribeAwait` + `AwaitOperation`）、重放全部历史的 `ReplaySubject`（本模块只有重放最近 1 条）、帧流（`EveryUpdate`——本仓交给 Update 模块的调度；见本文「性能」节：每帧高频不必用流）。
 
 ## 把第三方事件接进流
@@ -70,7 +72,7 @@ Event 模块提供**事件流引擎**:一个对象即一条流,持有者往流�
 
 ```csharp
 var stream = EventStream.Create<Vector2>();
-void Handler(Vector2 v) => stream.OnNext(v);
+void Handler(Vector2 v) => stream.Emit(v);
 
 thirdParty.OnDrag += Handler;   // 接进来
 stream.Subscribe(v => ...);     // 消费方照常订阅这条流
@@ -88,17 +90,17 @@ using XFramework.XEvent;
 // 一条流:订阅拿句柄,持有者投递
 var stream = EventStream.Create<int>();
 var handle = stream.Subscribe(value => Debug.Log(value));
-stream.OnNext(1);
+stream.Emit(1);
 handle.Dispose();          // 退订;同一轮派发内立即生效
 
 // 订阅数(诊断)与完成语义
 Debug.Log(stream.SubscriptionCount);
-stream.OnCompleted();      // 只置终止标志、不清订阅:既有句柄静默失效,此后 Subscribe 一律返回空句柄
+stream.Complete();         // 只置终止标志、不清订阅:既有句柄静默失效,此后 Subscribe 一律返回空句柄
 stream.Dispose();          // 清空订阅链表并回收节点
 
 // 带缓冲的流:新订阅者立即收到最近一条(重放先于实时)
 var buffered = EventStream.CreateBuffered<int>();
-buffered.OnNext(7);
+buffered.Emit(7);
 buffered.Subscribe(v => Debug.Log($"重放 {v}"));   // 立即打印 7
 Debug.Log(buffered.HasCachedValue);                // true
 
@@ -114,9 +116,9 @@ var owned = EventStream.Create<int>(onEmpty: () => Debug.Log("没人听了"));
 |---|---|
 | 1 | **派发顺序 LIFO**:后订阅的先收到(订阅节点插在链表头部)。框架**没有**控制订阅者相对顺序的手段,别围绕先后次序设计 |
 | 2 | **派发中退订**:节点置标志、快照遍历时跳过——退订在同一轮内立即生效;已发出的句柄再次 Dispose 是 no-op |
-| 3 | **重入 `OnNext` 允许**:递归快照,嵌套那一轮先跑完。回调内写入自身业务状态要意识到这一点 |
+| 3 | **重入 `Emit` 允许**:递归快照,嵌套那一轮先跑完。回调内写入自身业务状态要意识到这一点 |
 | 4 | **异常隔离**:订阅回调异常被捕获、记 `[Event]` 前缀的 Error、不传播给投递方;异常订阅者不被移除,同轮其余订阅者照常收到 |
-| 5 | **`OnCompleted`**:只置终止标志、**不清订阅**——既有句柄从此静默失效(调用方无法把「不再收到」与「值没变」区分开),此后 `Subscribe` 返回共享空句柄 |
+| 5 | **`Complete`**:只置终止标志、**不清订阅**——既有句柄从此静默失效(调用方无法把「不再收到」与「值没变」区分开),此后 `Subscribe` 返回共享空句柄 |
 | 6 | **`Dispose`**:清空订阅链表、回收节点;**刻意不回调 `onEmpty`**(持有者已在自行回收结构,回调只会在其遍历中改表);已发出的句柄此后 Dispose 被安全忽略 |
 | 7 | **节点池**:订阅节点按 `T` 泛型静态池复用;**派发中退订的节点放弃回池**(防复用后旧快照误写,即 ABA);节点不属于该流时退订直接返回(防标志误置 / 重复回池) |
 | 8 | **派发快照池**:每轮派发从静态池借一个 `List`,不用 PoolManager(每帧路径不能付字典查找);锁不是跨线程许可,见下节 |

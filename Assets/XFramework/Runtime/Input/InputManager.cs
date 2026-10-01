@@ -162,7 +162,7 @@ namespace XFramework.XInput
             }
 
             // 发布帧脉冲,驱动 Observe* 系列订阅
-            _framePulse.OnNext(Time.frameCount);
+            _framePulse.Emit(Time.frameCount);
             _lastPulseFrame = Time.frameCount;
         }
 

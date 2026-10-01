@@ -52,7 +52,7 @@ namespace XFramework.XEvent.Tests
         public void CompletedStreamEmptyHandle_IsNotCounted()
         {
             var stream = EventStream.Create<int>();
-            stream.OnCompleted();
+            stream.Complete();
 
             var handle = stream.Subscribe(_ => { });
             Assert.AreEqual(0, SubscriptionTracker.LiveCount, "completed 流返回空句柄,不登记故不计数");

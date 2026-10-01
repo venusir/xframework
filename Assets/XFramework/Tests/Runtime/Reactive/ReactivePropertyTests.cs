@@ -313,7 +313,7 @@ namespace XFramework.XReactive.Tests
         }
 
         [Test]
-        public void ReadOnly_Subscribe_NullOnNext_Throws()
+        public void ReadOnly_Subscribe_NullHandler_Throws()
         {
             var rp = new ReactiveProperty<int>(1);
             var readOnly = rp.Select(x => x * 2);
@@ -405,7 +405,7 @@ namespace XFramework.XReactive.Tests
         #region 契约补口（构造 / 空参 / 只读类型的 Dispose 矩阵 / 接口不变量）
 
         [Test]
-        public void Subscribe_NullOnNext_Throws()
+        public void Subscribe_NullHandler_Throws()
         {
             var rp = new ReactiveProperty<int>(1);
 

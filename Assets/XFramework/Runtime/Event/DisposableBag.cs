@@ -100,7 +100,7 @@ namespace XFramework.XEvent
     {
         /// <summary>
         /// 把句柄登记进容器,并返回该句柄本身,便于链式书写:
-        /// <c>var sub = stream.Subscribe(OnNext).AddTo(_bag);</c>
+        /// <c>var sub = stream.Subscribe(Handler).AddTo(_bag);</c>
         /// </summary>
         /// <typeparam name="T">句柄的实际类型(返回它以便链式调用,不装箱)。</typeparam>
         /// <param name="disposable">要登记的句柄,不可为 <c>null</c>。</param>

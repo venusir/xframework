@@ -38,14 +38,14 @@ namespace XFramework.XUI.Tests
 
             public T Value { get; private set; }
 
-            public IDisposable Subscribe(Action<T> onNext)
+            public IDisposable Subscribe(Action<T> handler)
             {
-                if (onNext == null)
-                    throw new ArgumentNullException(nameof(onNext));
+                if (handler == null)
+                    throw new ArgumentNullException(nameof(handler));
 
-                _handlers.Add(onNext);
-                onNext(Value); // 与 ReactiveProperty 契约一致：订阅时立即同步回调当前值
-                return new Subscription(this, onNext);
+                _handlers.Add(handler);
+                handler(Value); // 与 ReactiveProperty 契约一致：订阅时立即同步回调当前值
+                return new Subscription(this, handler);
             }
 
             /// <summary>模拟值变化并推送。</summary>

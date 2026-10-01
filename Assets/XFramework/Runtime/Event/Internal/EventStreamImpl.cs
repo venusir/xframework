@@ -12,10 +12,10 @@ namespace XFramework.XEvent.Internal
     /// <remarks>
     /// 线程模型:锁 + 快照。
     /// - 链表结构(SubscriptionNode)与 completed 状态由 _sync 锁保护
-    /// - OnNext 在锁内收集存活节点快照,锁外逐个调用 handler,避免在持锁状态调用用户代码(防锁序反转)
-    /// - 派发中退订:节点置 Disposed 标志,快照遍历时跳过(安全);已完成派发的节点由下一次 OnNext 的快照收集剔除
-    /// - 重入 OnNext:递归快照,通过 _publishDepth 计数禁止派发中回池(防节点复用导致 ABA)
-    /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 OnNext 调用方;
+    /// - Emit 在锁内收集存活节点快照,锁外逐个调用 handler,避免在持锁状态调用用户代码(防锁序反转)
+    /// - 派发中退订:节点置 Disposed 标志,快照遍历时跳过(安全);已完成派发的节点由下一次 Emit 的快照收集剔除
+    /// - 重入 Emit:递归快照,通过 _publishDepth 计数禁止派发中回池(防节点复用导致 ABA)
+    /// 异常语义:订阅回调异常被捕获并记 Error 日志,不传播给 Emit 调用方;
     /// 异常订阅者不被移除,同一轮遍历中后续订阅者照常收到消息。
     /// <para>
     /// 子类化约定:基类与派生类(BufferedEventStreamImpl)各持一把锁,两者永远顺序获取、绝不嵌套
@@ -23,7 +23,7 @@ namespace XFramework.XEvent.Internal
     /// 而让派生类复用基类的 _sync —— 那会使锁内调用用户代码与锁序反转同时复活。
     /// </para>
     /// <para>
-    /// <b>接口必须隐式实现</b>(不是 <c>void IEventStream&lt;T&gt;.OnNext</c> 那种显式实现):
+    /// <b>接口必须隐式实现</b>(不是 <c>void IEventStream&lt;T&gt;.Emit</c> 那种显式实现):
     /// 派生类 override 的是本类的方法,经 <see cref="IEventStream{T}"/> 引用的调用必须一并落到派生实现上,
     /// 否则缓冲流永远不写缓存、重放静默失效。用例 <c>BufferedEventStream_ThroughInterfaceReference_StillCaches</c> 锁这条。
     /// </para>
@@ -60,9 +60,9 @@ namespace XFramework.XEvent.Internal
         #region IEventStream
 
         /// <inheritdoc/>
-        public virtual IDisposable Subscribe(Action<T> onNext)
+        public virtual IDisposable Subscribe(Action<T> handler)
         {
-            if (onNext == null) throw new ArgumentNullException(nameof(onNext));
+            if (handler == null) throw new ArgumentNullException(nameof(handler));
 
             lock (_sync)
             {
@@ -71,7 +71,7 @@ namespace XFramework.XEvent.Internal
                     return ActionDisposable.Empty;
 
                 var node = SubscriptionNodePool<T>.Rent();
-                node.Set(onNext);
+                node.Set(handler);
                 node.Next = _head;
                 _head = node;
                 _subscriptionCount++;
@@ -81,7 +81,7 @@ namespace XFramework.XEvent.Internal
         }
 
         /// <inheritdoc/>
-        public virtual void OnNext(T value)
+        public virtual void Emit(T value)
         {
             // 锁内快照:收集当前存活节点到池化 List,锁外逐个调用
             // 不使用节点 Next 字段串快照(会破坏主链表结构),用独立 List
@@ -117,7 +117,7 @@ namespace XFramework.XEvent.Internal
                     // 派发中退订的节点跳过(IsDisposed 标志由快照外执行退订的一方置位:
                     // 可能是本线程的重入退订,也可能是被容忍的并发退订线程)
                     if (!node.IsDisposed)
-                        Deliver(value, node.OnNext);
+                        Deliver(value, node.Handler);
                 }
             }
             finally
@@ -128,7 +128,7 @@ namespace XFramework.XEvent.Internal
         }
 
         /// <inheritdoc/>
-        public virtual void OnCompleted()
+        public virtual void Complete()
         {
             lock (_sync)
             {
@@ -168,7 +168,7 @@ namespace XFramework.XEvent.Internal
         #region Protected
 
         /// <summary>
-        /// 事件流是否已终止(<see cref="OnCompleted"/> 或 <see cref="Dispose"/> 之后为 <c>true</c>)。
+        /// 事件流是否已终止(<see cref="Complete"/> 或 <see cref="Dispose"/> 之后为 <c>true</c>)。
         /// <para>供派生类在写入自有状态前短路,避免留下永远不会被投递或重放的数据。</para>
         /// <para>无锁读取:已终止的流不会再改变状态,读到 <c>false</c> 但随后被并发终止时,
         /// 最多多写一次自有状态,无正确性影响(本引擎使用场景为主线程)。</para>
@@ -183,11 +183,11 @@ namespace XFramework.XEvent.Internal
         /// 统一投递语义:订阅回调异常隔离(记 Error 日志后继续)。
         /// <para>派生类(缓冲流)的重放路径复用此方法,保证重放与实时行为一致。</para>
         /// </summary>
-        internal static void Deliver(T value, Action<T> onNext)
+        internal static void Deliver(T value, Action<T> handler)
         {
             try
             {
-                onNext(value);
+                handler(value);
             }
             catch (Exception e)
             {
@@ -197,7 +197,7 @@ namespace XFramework.XEvent.Internal
 
         private void ReturnNode(SubscriptionNode<T> node)
         {
-            // 派发中(有重入 OnNext 快照仍引用该节点)不回池,防复用后旧快照误写
+            // 派发中(有重入 Emit 快照仍引用该节点)不回池,防复用后旧快照误写
             if (Interlocked.CompareExchange(ref _publishDepth, 0, 0) == 0)
                 SubscriptionNodePool<T>.Return(node);
         }
@@ -281,13 +281,13 @@ namespace XFramework.XEvent.Internal
     /// </summary>
     internal sealed class SubscriptionNode<T>
     {
-        public Action<T> OnNext;
+        public Action<T> Handler;
         public SubscriptionNode<T> Next;
         public bool IsDisposed;
 
-        public void Set(Action<T> onNext)
+        public void Set(Action<T> handler)
         {
-            OnNext = onNext;
+            Handler = handler;
             Next = null;
             IsDisposed = false;
         }
@@ -308,7 +308,7 @@ namespace XFramework.XEvent.Internal
 
         public static void Return(SubscriptionNode<T> node)
         {
-            node.OnNext = null;
+            node.Handler = null;
             lock (_pool)
             {
                 _pool.Push(node);
