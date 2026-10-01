@@ -26,13 +26,11 @@
 | | | |
 |---|---|---|
 | [Asset](Asset.md) | [Bootstrap](Bootstrap.md) | [Config](Config.md) |
-| [Data](Data.md) | [File](File.md) | [Input](Input.md) |
-| [Localization](Localization.md) | [Lock](Lock.md) | [Message](Message.md) |
-| [Pipeline](Pipeline.md) | [Pool](Pool.md) | [Reactive](Reactive.md) |
-| [Save](Save.md) | [Serialize](Serialize.md) | [Settings](Settings.md) |
-| [UI](UI.md) | [Update](Update.md) | |
-
-`Event` 无维护向内容，按需创建故暂无。
+| [Data](Data.md) | [Event](Event.md) | [File](File.md) |
+| [Input](Input.md) | [Localization](Localization.md) | [Lock](Lock.md) |
+| [Message](Message.md) | [Pipeline](Pipeline.md) | [Pool](Pool.md) |
+| [Reactive](Reactive.md) | [Save](Save.md) | [Serialize](Serialize.md) |
+| [Settings](Settings.md) | [UI](UI.md) | [Update](Update.md) |
 
 ## 模板
 
