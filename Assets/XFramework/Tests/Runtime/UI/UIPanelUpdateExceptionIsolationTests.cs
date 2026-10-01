@@ -17,9 +17,9 @@ namespace XFramework.XUI.Tests
     /// <para><b>停更而不是继续驱动</b>：<c>OnUpdate</c> 的典型异常是持续态（空引用等），继续驱动等于每帧
     /// 刷一条带栈日志。停更标记随回池复位（<c>UIManagerImpl.RecyclePanel</c>），
     /// 池化实例重新打开后照常被驱动。</para>
-    /// <para><b>「只记一条日志」怎么锁</b>：本 fixture 每条用例只注册<b>一次</b>
-    /// <c>LogAssert.Expect</c>；坏面板若每帧继续抛，第二次就是「未预期日志」，
-    /// 会被测试框架直接判红——不需要额外断言日志条数。</para>
+    /// <para><b>「停更后不再产生第二条日志」怎么锁</b>：语义由断言锁住——停更意味着 <c>UpdateCount</c>
+    /// 停在 1，真被继续驱动的话计数必然增长。日志侧再加一层：每条用例只注册<b>一次</b>
+    /// <c>LogAssert.Expect</c>，多出来的错误日志会被测试框架判为未预期日志（用例其余断言通过时即现形）。</para>
     /// </summary>
     [TestFixture]
     public class UIPanelUpdateExceptionIsolationTests
@@ -140,6 +140,41 @@ namespace XFramework.XUI.Tests
             Assert.Greater(good.UpdateCount, 0, "同档其余面板照常被驱动");
             Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier2), "分档驱动器同样不得被注销");
             Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), "每帧驱动器常驻，不受牵连");
+        }
+
+        #endregion
+
+        #region 门面驱动器兜底
+
+        /// <summary>
+        /// 注入实现的 <c>Update</c> 抛异常时，驱动器同样不得被调度器摘掉。
+        /// <para>这条走的是门面驱动器那一层兜底：逐面板隔离在 <c>DriveTier</c> 里，管不到注入的
+        /// 第三方实现（它可能根本没经过 <c>DriveTier</c>）。异常一旦逃逸，后果与坏面板完全一样——
+        /// 驱动器被注销且永不重注册。</para>
+        /// </summary>
+        [Test]
+        public void InjectedManagerThrows_DriverStaysRegisteredAndKeepsDriving()
+        {
+            // 回到「什么都没注册」，本用例只走注入这条路径
+            UIManager.Destroy();
+
+            var fake = new FakeUIManager { ThrowOnUpdate = true };
+            UIManager.SetInstance(fake);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[UIManager\] Frame driver: UIManager\.Update threw"));
+
+            UpdateManager.Tick(0.016f);
+
+            Assert.AreEqual(1, fake.UpdateCount, "前置：注入的实现确实被每帧驱动器转发驱动");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0),
+                "注入实现的异常也不得把驱动器从调度器里摘掉");
+
+            // 后续帧照常驱动：异常只吃掉抛出的那一帧，通路没有死
+            fake.ThrowOnUpdate = false;
+            UpdateManager.Tick(0.032f);
+
+            Assert.AreEqual(2, fake.UpdateCount, "驱动器仍在册，下一帧继续转发");
         }
 
         #endregion

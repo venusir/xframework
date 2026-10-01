@@ -227,7 +227,25 @@ namespace XFramework.XUI
 
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
-                Update(deltaTime, time);
+                // 兜底：本方法一旦把异常抛给 UpdateScheduler，调度器会按契约注销本节点
+                // （记 LogError 后 Enqueue(Unregister)），而门面记账是单向的（_frameDriver 非空即
+                // 早退）——驱动器再也回不来，UI 的整条每帧通路就此永久死亡。
+                // 逐面板的隔离在 UIManagerImpl.DriveTier；这层保的是「任何异常都不得逃逸」这条
+                // 不变量，覆盖它管不到的三类代码：注入实现的 Update、provider 的 Update、
+                // 以及将来在 Update 路径上新加而未加守卫的调用。
+                try
+                {
+                    Update(deltaTime, time);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(
+                        "[UIManager] Frame driver: UIManager.Update threw; the driver stays registered " +
+                        $"(UI keeps being driven on the next frame): {e}");
+                }
+
+                // 成败都返回 Tier0：返回值决定调度器把本节点放进哪个桶，一旦因异常漂移就会被改档
+                // ——那是比「一帧没更新」更隐蔽的坏法
                 return UpdateTier.Tier0;
             }
         }
@@ -252,7 +270,18 @@ namespace XFramework.XUI
 
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
-                _impl.DriveTier(_tier, deltaTime, time);
+                // 同 FrameDriver 的兜底：这一层的异常同样不得逃逸到调度器——分档驱动器被注销后
+                // 一样回不来（门面只在档位需求跳变时才碰它），而它承载的是整档面板的更新。
+                try
+                {
+                    _impl.DriveTier(_tier, deltaTime, time);
+                }
+                catch (Exception e)
+                {
+                    Debug.LogError(
+                        "[UIManager] Tier driver: DriveTier threw; the driver stays registered " +
+                        $"(panels keep being driven on the next period): {e}");
+                }
 
                 // 恒定返回自身档位：面板跑哪一档由各自的 UpdateTier 决定，
                 // 驱动器不该因系统繁忙自行漂移（那是面板的声明，不是调度器的推断）
