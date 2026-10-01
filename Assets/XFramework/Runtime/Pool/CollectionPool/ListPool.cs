@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using XFramework.XLog;
+using XFramework.XPool.Internal;
 
 namespace XFramework.XPool
 {
@@ -76,8 +78,9 @@ namespace XFramework.XPool
             var activeCount = _pool.CountActive;
             if (activeCount > 0)
             {
-                UnityEngine.Debug.LogWarning(
-                    $"[ListPool<{typeof(T).Name}>] 已有 {activeCount} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。");
+                LogManager.Warning(ListPoolLogCategory<T>.Value,
+                    "已有 {0} 个活跃实例，Configure 已忽略。仅在无活跃实例时生效（首次 Get 前或全部归还后）。",
+                    activeCount);
                 return;
             }
 

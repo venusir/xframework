@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XPool
 {
@@ -176,8 +177,9 @@ namespace XFramework.XPool
         {
             if (_pools.ContainsKey(typeof(T)))
             {
-                Debug.LogWarning(
-                    $"[PoolManager] 类型 {typeof(T).Name} 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<{typeof(T).Name}>()。");
+                LogManager.Warning(LogCategories.PoolManager,
+                    "类型 {0} 的池已创建，Configure 已忽略。如需重新配置，请先调用 RemovePool<{0}>()。",
+                    typeof(T).Name);
                 return;
             }
 

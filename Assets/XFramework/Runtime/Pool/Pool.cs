@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
+using XFramework.XPool.Internal;
 
 namespace XFramework.XPool
 {
@@ -161,8 +163,8 @@ namespace XFramework.XPool
 #if UNITY_EDITOR
             if (_activeSet != null && !_activeSet.Remove(item))
             {
-                Debug.LogError(
-                    $"[Pool<{typeof(T).Name}>] Return() 传入的对象并非从本池租出，或已被重复归还。已忽略此操作。");
+                LogManager.Error(PoolLogCategory<T>.Value,
+                    "Return() 传入的对象并非从本池租出，或已被重复归还。已忽略此操作。");
                 return;
             }
 #endif
