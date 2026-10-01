@@ -42,8 +42,10 @@
 
 **与立项时的差异**：分类名最后定为「与迁移前的 `[标签]` **逐字**对应」，因此同一模块内历史遗留的多个
 标签各是一个分类（`Config` 与 `ConfigManager`、`AssetManager` 与 `YooAssetManager`）——换来的是迁移期间
-控制台文本零变化、30+ 处 `LogAssert` 零改动。机械提取全部调用点还纠正了三处靠人肉记的账
-（多出 `LanguageAssetLoader` / `Reactive` / `XSerialize` 三个标签）。
+控制台文本零变化、30+ 处 `LogAssert` 零改动。机械提取全部调用点还纠正了两类误收：
+`[AudioManager]` / `[Slot:…]` 不是日志前缀（分别是 GameObject 名与 `SaveMeta.ToString()`），
+`[XSerialize]` / `[Reactive]` / `[LanguageAssetLoader]` 则是**异常消息**前缀而非日志标签
+——分类表因此定为 31 个，Reactive 与 Serialize 两个模块根本没有日志可回填。
 
 ### 2.3 Timer —— ✅ 已建成（2026-10-01）
 

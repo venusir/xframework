@@ -11,6 +11,9 @@ namespace XFramework.XLog
     /// 给模块 X 加分类只需在这里追加一行。</para>
     /// <para><b>不含</b>两类名字：Pool 的泛型标签（<c>Pool&lt;T&gt;</c> 等，由模块内的泛型静态缓存注册，
     /// 见 <c>Pool</c> 模块）与使用方自己的分类（Samples 与第三方各自注册）。</para>
+    /// <para><b>也不含「只出现在异常消息里的方括号前缀」</b>：<c>[XSerialize]</c>、<c>[Reactive]</c>、
+    /// <c>[LanguageAssetLoader]</c> 这类文本是 <c>throw new …($"[模块] …")</c> 的异常消息前缀，
+    /// 不是日志标签——异常消息按 `CLAUDE.md` 的约定继续自带前缀，不归本表管。</para>
     /// </summary>
     public static class LogCategories
     {
@@ -76,9 +79,6 @@ namespace XFramework.XLog
         /// <summary>本地化引导阶段。</summary>
         public static readonly LogCategory LocalizationBootstrapStage = LogCategory.Get("LocalizationBootstrapStage");
 
-        /// <summary>语言资源加载器。</summary>
-        public static readonly LogCategory LanguageAssetLoader = LogCategory.Get("LanguageAssetLoader");
-
         #endregion
 
         #region Lock / Message / Pipeline / Pool / Reactive / Serialize
@@ -97,12 +97,6 @@ namespace XFramework.XLog
 
         /// <summary>StringBuilder 池。</summary>
         public static readonly LogCategory StringBuilderPool = LogCategory.Get("StringBuilderPool");
-
-        /// <summary>响应式属性。</summary>
-        public static readonly LogCategory Reactive = LogCategory.Get("Reactive");
-
-        /// <summary>序列化模块。</summary>
-        public static readonly LogCategory XSerialize = LogCategory.Get("XSerialize");
 
         #endregion
 

@@ -51,7 +51,7 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 
 - **写日志**：`Verbose / Debug / Info / Warning / Error / Fatal`，每档 4 个重载（现成字符串、模板 + 1/2/3 参）；通用入口 `Log(level, category, …)`；异常专用 `Exception(category, exception, message = null)`（级别固定 `Error`，正文默认取 `Exception.Message`）。
 - **档位**：`MinimumLevel`、`SetCategoryLevel`、`ResetCategoryLevel`、`IsEnabled`。
-- **分类**：内置见 `LogCategories`（33 个，与迁移前的 `[前缀]` 一一对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
+- **分类**：内置见 `LogCategories`（31 个，与迁移前的 `[前缀]` 一一对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
 - **输出端**：`AddSink(ILogSink)` / `RemoveSink` / `Flush` / `DroppedSinkCount`。
 - **生命周期**：`Initialize(impl)`（注入自定义后端）、`Configure(options)`、`Shutdown()`、`Flush()`。
 
