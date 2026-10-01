@@ -271,6 +271,8 @@ rows.Sort((a, b) => b.ChannelCount.CompareTo(a.ChannelCount));   // 行序未定
 Debug.Log(rows[0]);   // MessageTypeStats(EnemyHealthChanged, 通道 50000, ... 键值通道 49999)
 ```
 
+> **统计没有开关，也不需要开**：这几个接口始终可用、零分配（`GetStats` 为 O(通道数)），代价只在调用时——它们是诊断接口，别放进每帧路径。
+
 **三个统计入口各管一段**：`GetStats()` 给总线总数（只回答「有没有泄漏」）；`CopyTypeStats(buffer)` 一行一个消息类型（回答「**是哪个类型**在泄漏」，行序未定义、要排名请自行排序，缓冲区由调用方持有故零分配，会先被清空）；`GetChannelStats<TMessage>()` / `GetChannelStats<TKey, TMessage>(key)` 下钻到**单个通道**。注意口径差别：`GetChannelStats<TMessage>()` 的四个计数**只算类型级通道**，而 `CopyTypeStats` 的一行是**类型级 + 该类型下全部键值通道的合计**——两者共用同一份「按类型扫表」实现，`KeyedChannelCount` 字段应当永远相等。
 
 `BufferedChannelCount` 是排查缓冲内存驻留的主要指标——它数的是**建有缓冲订阅流的通道数**，**不等于「各持有一条消息的通道数」**：订阅过缓冲但从未发布过的通道也计入，它们没有值可重放，且可被 `TrimEmptyChannels` 回收。`GetStats()` 为 O(通道数) 遍历、零分配；`CopyTypeStats` 最坏为 O(键值存储数 × 消息类型数)——都是诊断接口，不适合每帧调用。

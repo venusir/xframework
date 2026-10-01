@@ -154,7 +154,7 @@ AudioManager.Initialize(new AudioInitOptions
 | `AudioHandle` | 播放句柄。`readonly struct`、零 GC、可自由复制。`IsDefault` / `Stop()` / `Dispose()` |
 | `AudioPlayOptions` | 播放参数：`Channel` / `VolumeScale` / `Loop` / `Pitch` / `SpatialBlend` / `Position` |
 | `AudioChannels` | 推荐通道常量：`Default`("default") / `Bgm`("bgm") / `Se`("se") / `Voice`("voice") / `Ui`("ui") |
-| `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume` / `Muted` |
+| `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume`（默认 `1`，线性值、由 `SetChannelVolume` 钳到 `[0,1]`）/ `Muted`（默认 `false`）。**调用时读取一次并快照**，之后改这个实例不影响已注册的通道；**通道也可以不声明**——未声明的通道首次使用时按同样的默认值惰性建状态 |
 | `AudioInitOptions` | 初始化选项：`MaxVoices` / `MasterVolume` / `MasterMuted` / `PrewarmVoices` |
 
 ### 参数归一化

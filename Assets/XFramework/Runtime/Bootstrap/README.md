@@ -30,6 +30,15 @@ await Bootstrap.RunAsync();
 Bootstrap.Shutdown();   // 按登记顺序的逆序，逐个调 stage.Shutdown()
 ```
 
+登记表本身可以随时查看与清空（`Stages` **是实时视图而非快照**，后续登记会反映出来——只读用途，勿缓存后假定其不变）：
+
+```csharp
+foreach (var stage in Bootstrap.Stages)      // 按登记顺序
+    Debug.Log($"{stage.Name} (Phase {stage.Phase})");
+
+Bootstrap.Clear();                            // 清空登记表（不影响已运行的管线）
+```
+
 ## 定义一个阶段
 
 实现 `IBootstrapStage`——它就是 Pipeline 的 `IPhaseStage` 加一个 `Shutdown`：
