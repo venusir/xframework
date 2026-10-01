@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XMessage
 {
@@ -329,10 +330,10 @@ namespace XFramework.XMessage
             }
 
             // 告警放锁外:与「只在锁内碰表」的既有约定一致
-            Debug.LogWarning(
-                $"[Message] 请求类型 '{typeof(TRequest).Name}' 注册的响应类型是 " +
-                $"'{registeredResponseType.Name}',不是 '{typeof(TResponse).Name}',本次 Unregister 未生效;" +
-                $"请改用 MessageManager.Unregister<{typeof(TRequest).Name}, {registeredResponseType.Name}>()。");
+            LogManager.Warning(LogCategories.Message,
+                "请求类型 '{0}' 注册的响应类型是 '{1}',不是 '{2}',本次 Unregister 未生效;" +
+                "请改用 MessageManager.Unregister<{0}, {1}>()。",
+                typeof(TRequest).Name, registeredResponseType.Name, typeof(TResponse).Name);
             return false;
         }
 

@@ -1,4 +1,5 @@
 using System;
+using XFramework.XLog;
 
 namespace XFramework.XMessage.Internal
 {
@@ -35,10 +36,10 @@ namespace XFramework.XMessage.Internal
                 return;
 
             logged = true;
-            UnityEngine.Debug.LogError(
-                $"[Message] {api} 必须在 Unity 主线程调用:通道表、过滤器缓存与缓冲流都按主线程使用设计," +
+            LogManager.Error(LogCategories.Message,
+                "{0} 必须在 Unity 主线程调用:通道表、过滤器缓存与缓冲流都按主线程使用设计," +
                 "跨线程调用会并发改写这些结构。从非主线程发消息请先切回主线程;" +
-                "线程契约见模块 README「线程」段。本提示每个 broker 生命周期只报一次。");
+                "线程契约见模块 README「线程」段。本提示每个 broker 生命周期只报一次。", api);
 #endif
         }
     }

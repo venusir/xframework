@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XMessage.Internal;
 
 namespace XFramework.XMessage
@@ -403,7 +404,7 @@ namespace XFramework.XMessage
             catch (Exception e)
             {
                 // 与订阅回调的异常日志同形:统一 [Message] 前缀,便于按模块检索
-                Debug.LogError($"[Message] Global filter threw exception: {e}");
+                LogManager.Error(LogCategories.Message, "Global filter threw exception: {0}", e);
                 return false;
             }
         }
@@ -956,7 +957,7 @@ namespace XFramework.XMessage
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Message] Async handler threw exception: {e}");
+                LogManager.Error(LogCategories.Message, "Async handler threw exception: {0}", e);
             }
         }
 
@@ -985,7 +986,7 @@ namespace XFramework.XMessage
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"[Message] Async subscription filter threw exception: {e}");
+                        LogManager.Error(LogCategories.Message, "Async subscription filter threw exception: {0}", e);
                         continue;
                     }
 
