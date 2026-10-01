@@ -1158,7 +1158,7 @@ namespace XFramework.XUpdate
         /// 应用本调度器缓冲下来的待处理操作与清空请求。
         /// <para>三个调用点：<see cref="TickInternal"/> 的<b>开头</b>（消化上一趟缓冲下来的操作，
         /// 使它们赶在本次派发之前生效）、<b>末尾</b>（本趟发起的操作在这里落地），以及
-        /// <see cref="ProcessImmediate"/> 的收尾。</para>
+        /// <see cref="ProcessImmediate(IUpdateLifecycle, float, in UpdateClock)"/> 的收尾。</para>
         /// <para>就地清空（<see cref="ClearImmediate"/>）要求「没有正在进行的桶遍历」，三处调用点
         /// 都满足：派发开始之前、一帧派发结束之后、单条立即派发之后。</para>
         /// </summary>

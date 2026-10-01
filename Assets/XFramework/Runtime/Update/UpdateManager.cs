@@ -97,7 +97,7 @@ namespace XFramework.XUpdate
         /// <para><b>不再有不可逆闩锁：</b>「退出后不复用」由调用时机结构性保证——<see cref="AutoInit"/>
         /// 只在程序集加载与进入播放时触发，进程退出后不会被再调用；而编辑器关闭域重载时，
         /// 下一次进入播放<b>必须</b>能重建，否则整个 Update 模块静默死亡（旧实现正是如此：
-        /// <c>_shutdown</c> 置位后 <see cref="Tick"/>/<see cref="Register"/> 等十余处守卫全部
+        /// <c>_shutdown</c> 置位后 <see cref="Tick()"/>/<see cref="Register"/> 等十余处守卫全部
         /// 静默 return，连 <see cref="Clear"/> 都救不回来）。</para>
         /// </summary>
         internal static void OnQuitting()
@@ -333,7 +333,7 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 清空全部注册，用于测试隔离或需要重置调度状态的场景。
-        /// <para><b>不是终态</b>：清空后仍可继续 <see cref="Register"/> 与 <see cref="Tick"/>。
+        /// <para><b>不是终态</b>：清空后仍可继续 <see cref="Register"/> 与 <see cref="Tick()"/>。
         /// 进程退出时的清理是另一条路径（<see cref="OnQuitting"/>），它丢弃调度器、由下一次
         /// <see cref="AutoInit"/> 重建。</para>
         /// <para><b>为什么改名（原 <c>Destroy</c>）：</b>原实现只清空注册却同时置一个单向闩锁并丢弃调度器，
