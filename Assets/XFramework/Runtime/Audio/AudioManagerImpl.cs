@@ -213,7 +213,8 @@ namespace XFramework.XAudio
             catch (Exception e)
             {
                 // 加载缝的契约是「失败返回 default 而不抛」，真抛了说明是未预期异常
-                LogManager.Error(LogCategories.Audio, "加载音频资源 '{0}' 时发生未预期异常：{1}", location, e);
+                LogManager.Exception(LogCategories.Audio, e,
+                    string.Format("加载音频资源 '{0}' 时发生未预期异常", location));
                 InvalidateReservation(index, generation);
                 return default;
             }
@@ -283,7 +284,8 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Audio, "播放 '{0}' 时发生未预期异常：{1}", location, e);
+                LogManager.Exception(LogCategories.Audio, e,
+                    string.Format("播放 '{0}' 时发生未预期异常", location));
             }
         }
 
@@ -640,7 +642,8 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Audio, "释放音频资源租约时发生异常（'{0}'）：{1}", location, e);
+                LogManager.Exception(LogCategories.Audio, e,
+                    string.Format("释放音频资源租约时发生异常（'{0}'）", location));
             }
         }
 

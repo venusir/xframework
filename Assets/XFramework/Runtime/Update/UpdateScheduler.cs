@@ -407,9 +407,8 @@ namespace XFramework.XUpdate
                 }
                 catch (System.Exception e)
                 {
-                    LogManager.Error(LogCategories.UpdateScheduler,
-                        "{0}.{1} threw exception, unregistering: {2}",
-                        entry.Node.GetType().Name, TimingMethodName, e);
+                    LogManager.Exception(LogCategories.UpdateScheduler, e, string.Format(
+                        "{0}.{1} threw exception, unregistering", entry.Node.GetType().Name, TimingMethodName));
                     Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                     continue;
                 }
@@ -476,9 +475,8 @@ namespace XFramework.XUpdate
                     }
                     catch (System.Exception e)
                     {
-                        LogManager.Error(LogCategories.UpdateScheduler,
-                        "{0}.{1} threw exception, unregistering: {2}",
-                        entry.Node.GetType().Name, TimingMethodName, e);
+                        LogManager.Exception(LogCategories.UpdateScheduler, e, string.Format(
+                            "{0}.{1} threw exception, unregistering", entry.Node.GetType().Name, TimingMethodName));
                         Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
                         continue;
                     }
@@ -1134,8 +1132,8 @@ namespace XFramework.XUpdate
             }
             catch (System.Exception e)
             {
-                LogManager.Error(LogCategories.UpdateScheduler,
-                    "{0}.On{1} threw exception: {2}", node.GetType().Name, enable ? "Enable" : "Disable", e);
+                LogManager.Exception(LogCategories.UpdateScheduler, e, string.Format(
+                    "{0}.On{1} threw exception", node.GetType().Name, enable ? "Enable" : "Disable"));
             }
         }
 

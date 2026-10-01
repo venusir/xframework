@@ -1287,10 +1287,9 @@ namespace XFramework.XUI
                     return;
 
                 _hudProviderFaultLogged = true;
-                LogManager.Error(LogCategories.UIManager,
+                LogManager.Exception(LogCategories.UIManager, e, string.Format(
                     "HUD provider '{0}'.Update threw; the frame path continues and further exceptions from " +
-                    "this provider are not logged until it is replaced: {1}",
-                    _hudProvider.GetType().Name, e);
+                    "this provider are not logged until it is replaced", _hudProvider.GetType().Name));
             }
         }
 
@@ -1312,10 +1311,9 @@ namespace XFramework.XUI
                     return;
 
                 _tipProviderFaultLogged = true;
-                LogManager.Error(LogCategories.UIManager,
+                LogManager.Exception(LogCategories.UIManager, e, string.Format(
                     "Tip provider '{0}'.Update threw; the frame path continues and further exceptions from " +
-                    "this provider are not logged until it is replaced: {1}",
-                    _tipProvider.GetType().Name, e);
+                    "this provider are not logged until it is replaced", _tipProvider.GetType().Name));
             }
         }
 
@@ -1364,10 +1362,9 @@ namespace XFramework.XUI
                     // 停更而非继续驱动：OnUpdate 的典型异常（空引用等）是持续态，继续驱动等于每帧
                     // 刷一条带栈日志；标记随回池复位（见 RecyclePanel），不会把池化实例变成僵尸。
                     panel.UpdateFaulted = true;
-                    LogManager.Error(LogCategories.UIManager,
+                    LogManager.Exception(LogCategories.UIManager, e, string.Format(
                         "Panel '{0}'.OnUpdate threw exception; this panel will not be driven again until it is " +
-                        "reopened (other panels are unaffected): {1}",
-                        panel.GetType().Name, e);
+                        "reopened (other panels are unaffected)", panel.GetType().Name));
                 }
             }
 

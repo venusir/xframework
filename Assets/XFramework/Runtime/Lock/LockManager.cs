@@ -336,8 +336,8 @@ namespace XFramework.XLock
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Lock,
-                    "{0} subscriber threw (subject: {1}): {2}", eventName, NameOf(subject), e);
+                LogManager.Exception(LogCategories.Lock, e,
+                    string.Format("{0} subscriber threw (subject: {1})", eventName, NameOf(subject)));
             }
         }
 
@@ -354,8 +354,8 @@ namespace XFramework.XLock
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Lock,
-                    "{0} subscriber threw (subject: {1}): {2}", eventName, NameOf(subject), e);
+                LogManager.Exception(LogCategories.Lock, e,
+                    string.Format("{0} subscriber threw (subject: {1})", eventName, NameOf(subject)));
             }
         }
 

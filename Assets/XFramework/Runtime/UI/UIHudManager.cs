@@ -287,7 +287,7 @@ namespace XFramework.XUI
             catch (Exception e)
             {
                 // 关闭失败也必须往下走：实例已从映射与列表摘除，没有第二条路径能再碰到它
-                LogManager.Error(LogCategories.UIHudManager, "HUD close failed, recycling anyway: {0}", e);
+                LogManager.Exception(LogCategories.UIHudManager, e, "HUD close failed, recycling anyway");
             }
 
             RecycleHud(hud);

@@ -1829,13 +1829,14 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Register(_node, order: 0);
             _node.ThrowException = true;
 
-            // LogAssert.Expect(LogType, string) 是**完全相等**匹配
-            // （见 LogMatch.cs 的 Message.Equals(log.Message)），而实现里 {e} 会附上异常栈，
-            // 故此处的字符串永远匹配不上、那条 Error 反而被判为 Unhandled。
-            // 必须用 Regex 做部分匹配——仓库既有惯例见 Message/EventStreamTests.cs
+            // LogAssert.Expect(LogType, string) 是**完全相等**匹配（见 LogMatch.cs 的
+            // Message.Equals(log.Message)），而异常走 XLog 的 exc 通道时控制台会在正文后追加
+            // "\n" + exception.ToString()（含类型与栈），故此处的字符串永远匹配不上、那条 Error
+            // 反而被判为 Unhandled。必须用 Regex 做部分匹配——仓库既有惯例见
+            // Message/EventStreamTests.cs；匹配到分隔符之前即可（异常详情在下一行）
             LogAssert.Expect(LogType.Error,
                 new Regex(Regex.Escape(
-                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering: System.Exception: Test exception")));
+                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering")));
             _scheduler.Tick(time: 1.0f);
 
             // Node should be removed after exception
@@ -1853,7 +1854,7 @@ namespace XFramework.XUpdate.Tests
 
             LogAssert.Expect(LogType.Error,
                 new Regex(Regex.Escape(
-                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering: System.Exception: Test exception")));
+                    "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering")));
             _scheduler.Tick(time: FrameSeconds);
 
             Assert.AreEqual(0, _scheduler.TotalCount, "切片档抛异常同样应注销该节点");
@@ -1870,7 +1871,7 @@ namespace XFramework.XUpdate.Tests
 
             LogAssert.Expect(LogType.Error,
                 new Regex(Regex.Escape(
-                    "[UpdateScheduler] ThrowingLateUpdateNode.OnLateUpdate threw exception, unregistering: System.Exception: Test exception")));
+                    "[UpdateScheduler] ThrowingLateUpdateNode.OnLateUpdate threw exception, unregistering")));
             scheduler.Tick(time: 1.0f);
 
             Assert.AreEqual(0, scheduler.TotalCount, "日志点名的方法与实际被调用的方法必须一致");
@@ -1945,7 +1946,7 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Register(victim, order: 0);
 
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
-                "[UpdateScheduler] TestUpdateable.OnDisable threw exception: System.Exception: Test exception")));
+                "[UpdateScheduler] TestUpdateable.OnDisable threw exception")));
 
             Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f),
                 "用户回调的异常应被隔离——它不该从 Tick 里抛出去打断整个调度");
@@ -1982,7 +1983,7 @@ namespace XFramework.XUpdate.Tests
             _scheduler.Register(caller, order: 0);
 
             LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
-                "[UpdateScheduler] TestUpdateable.OnEnable threw exception: System.Exception: Test exception")));
+                "[UpdateScheduler] TestUpdateable.OnEnable threw exception")));
 
             Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f));
 

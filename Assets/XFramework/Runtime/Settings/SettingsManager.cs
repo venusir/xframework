@@ -168,8 +168,8 @@ namespace XFramework.XSettings
                     }
                     catch (Exception e)
                     {
-                        LogManager.Error(LogCategories.SettingsManager,
-                            "释放 {0} 时抛出异常，已跳过并继续释放其余实例：{1}", manager.GetType().Name, e);
+                        LogManager.Exception(LogCategories.SettingsManager, e,
+                            string.Format("释放 {0} 时抛出异常，已跳过并继续释放其余实例", manager.GetType().Name));
                     }
                 }
             }

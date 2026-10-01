@@ -249,9 +249,9 @@ namespace XFramework.XUI
                 }
                 catch (Exception e)
                 {
-                    LogManager.Error(LogCategories.UIManager,
+                    LogManager.Exception(LogCategories.UIManager, e,
                         "Frame driver: UIManager.Update threw; the driver stays registered " +
-                        "(UI keeps being driven on the next frame): {0}", e);
+                        "(UI keeps being driven on the next frame)");
                 }
 
                 // 成败都返回 Tier0：返回值决定调度器把本节点放进哪个桶，一旦因异常漂移就会被改档
@@ -288,9 +288,9 @@ namespace XFramework.XUI
                 }
                 catch (Exception e)
                 {
-                    LogManager.Error(LogCategories.UIManager,
+                    LogManager.Exception(LogCategories.UIManager, e,
                         "Tier driver: DriveTier threw; the driver stays registered " +
-                        "(panels keep being driven on the next period): {0}", e);
+                        "(panels keep being driven on the next period)");
                 }
 
                 // 恒定返回自身档位：面板跑哪一档由各自的 UpdateTier 决定，

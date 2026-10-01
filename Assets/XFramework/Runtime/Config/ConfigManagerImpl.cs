@@ -78,7 +78,7 @@ namespace XFramework.XConfig
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Config, "ConfigChanged 的订阅者抛出异常，已隔离：{0}", e);
+                LogManager.Exception(LogCategories.Config, e, "ConfigChanged 的订阅者抛出异常，已隔离");
             }
         }
 

@@ -159,7 +159,7 @@ namespace XFramework.XInput
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Input, "Provider.Tick threw exception, frame pulse continues: {0}", e);
+                LogManager.Exception(LogCategories.Input, e, "Provider.Tick threw exception, frame pulse continues");
             }
 
             // 发布帧脉冲,驱动 Observe* 系列订阅

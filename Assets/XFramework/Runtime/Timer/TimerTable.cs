@@ -432,7 +432,7 @@ namespace XFramework.XTimer
             catch (Exception e)
             {
                 failed = true;
-                LogManager.Error(LogCategories.Timer, "定时器回调抛出异常，已停止该定时器：{0}", e);
+                LogManager.Exception(LogCategories.Timer, e, "定时器回调抛出异常，已停止该定时器");
             }
 
             if (!repeating)

@@ -328,7 +328,8 @@ namespace XFramework.XAudio
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Audio, "释放音频资源租约时发生异常（'{0}'）：{1}", voice.Location, e);
+                LogManager.Exception(LogCategories.Audio, e,
+                    string.Format("释放音频资源租约时发生异常（'{0}'）", voice.Location));
             }
 
             voice.ClipLease = default;

@@ -152,7 +152,7 @@ namespace XFramework.XTimer
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Timer, "定时器扫尾出现未预期异常，本拍已跳过：{0}", e);
+                LogManager.Exception(LogCategories.Timer, e, "定时器扫尾出现未预期异常，本拍已跳过");
             }
 
             return _tier;

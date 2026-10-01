@@ -404,7 +404,7 @@ namespace XFramework.XMessage
             catch (Exception e)
             {
                 // 与订阅回调的异常日志同形:统一 [Message] 前缀,便于按模块检索
-                LogManager.Error(LogCategories.Message, "Global filter threw exception: {0}", e);
+                LogManager.Exception(LogCategories.Message, e, "Global filter threw exception");
                 return false;
             }
         }
@@ -957,7 +957,7 @@ namespace XFramework.XMessage
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Message, "Async handler threw exception: {0}", e);
+                LogManager.Exception(LogCategories.Message, e, "Async handler threw exception");
             }
         }
 
@@ -986,7 +986,7 @@ namespace XFramework.XMessage
                     }
                     catch (Exception e)
                     {
-                        LogManager.Error(LogCategories.Message, "Async subscription filter threw exception: {0}", e);
+                        LogManager.Exception(LogCategories.Message, e, "Async subscription filter threw exception");
                         continue;
                     }
 

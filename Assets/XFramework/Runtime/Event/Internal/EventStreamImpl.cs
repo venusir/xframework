@@ -192,7 +192,7 @@ namespace XFramework.XEvent.Internal
             }
             catch (Exception e)
             {
-                LogManager.Error(LogCategories.Event, "EventStream handler threw exception: {0}", e);
+                LogManager.Exception(LogCategories.Event, e, "EventStream handler threw exception");
             }
         }
 
