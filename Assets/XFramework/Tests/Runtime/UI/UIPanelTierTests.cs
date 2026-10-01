@@ -128,6 +128,51 @@ namespace XFramework.XUI.Tests
 
         #region 降频派发
 
+        /// <summary>
+        /// Tier1 档：驱动器按需注册，面板按 2 个节拍格的周期被派发。
+        /// <para>此前 UI 侧只测了 Tier2 / Tier3——Tier1 是最贴近每帧的一档（也是最容易被误当作
+        /// 「反正差不多」而漏测的一档）。</para>
+        /// </summary>
+        [Test]
+        public async Task Tier1Panel_DrivenAtHalfRate()
+        {
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            panel.UpdateTier = UpdateTier.Tier1;
+
+            UpdateManager.Tick(0.016f);
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier1), "出现该档面板后应注册对应驱动器");
+
+            const int steps = 20;
+            for (int i = 0; i <= steps; i++)
+                UpdateManager.Tick(i / 60f);
+
+            Assert.Greater(panel.UpdateCount, 0, "降频不等于不派发");
+            Assert.Less(panel.UpdateCount, steps, "Tier1 按 2 个节拍格的周期派发，不该每帧都被调用");
+        }
+
+        /// <summary>
+        /// <c>UpdateManager.Pause</c> 期间面板停止更新，恢复后继续。
+        /// <para>此前这条只对 HUD / Tip provider 断言过（<c>UIManagerFrameDriverTests</c> 与
+        /// <c>UITipSchedulingTests</c>），面板本身零覆盖——「统一暂停」是 README 明写承诺的面板行为。</para>
+        /// </summary>
+        [Test]
+        public async Task UpdateManagerPaused_PanelsNotDriven_AndResumeContinues()
+        {
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+
+            UpdateManager.Tick(0.016f);
+            int beforePause = panel.UpdateCount;
+            Assert.Greater(beforePause, 0, "前置：未暂停时面板被驱动");
+
+            UpdateManager.Pause();
+            UpdateManager.Tick(0.032f);
+            Assert.AreEqual(beforePause, panel.UpdateCount, "统一暂停期间面板不更新");
+
+            UpdateManager.Resume();
+            UpdateManager.Tick(0.048f);
+            Assert.Greater(panel.UpdateCount, beforePause, "恢复后继续派发");
+        }
+
         [Test]
         public async Task Tier2Panel_DrivenLessOften_WithAccumulatedDelta()
         {

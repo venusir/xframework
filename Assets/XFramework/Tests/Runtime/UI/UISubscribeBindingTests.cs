@@ -101,6 +101,42 @@ namespace XFramework.XUI.Tests
         }
 
         /// <summary>
+        /// 面板关闭 / 全部关闭两个重载同样可用，且同样支持生命周期绑定。
+        /// <para>此前这两个重载在全仓测试里零调用——只有「面板打开」那个被覆盖过，另两个的正确性
+        /// （消息类型、绑定分支）纯靠「同名转发看起来一样」推断。</para>
+        /// </summary>
+        [Test]
+        public async Task Subscribe_ClosedAndAllClosedOverloads_DeliverAndBindToContext()
+        {
+            int closedCount = 0;
+            int allClosedCount = 0;
+            var listener = new GameObject("ClosedListener").AddComponent<SubscribeListener>();
+
+            UIManager.Subscribe((PanelClosedMessage _) => closedCount++, listener);
+            UIManager.Subscribe((AllPanelsClosedMessage _) => allClosedCount++, listener);
+
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.CloseAsync<FakePanel>();
+
+            Assert.AreEqual(1, closedCount, "单个面板关闭应送达 PanelClosedMessage 重载");
+            Assert.AreEqual(0, allClosedCount, "CloseAsync 不该触发「全部关闭」");
+
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(2, closedCount, "CloseAllAsync 会逐个关面板，每个都发 PanelClosedMessage");
+            Assert.AreEqual(1, allClosedCount, "CloseAllAsync 应送达 AllPanelsClosedMessage 重载");
+
+            UnityEngine.Object.DestroyImmediate(listener.gameObject);
+
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            await UIManager.CloseAsync<FakePanel>();
+
+            Assert.AreEqual(2, closedCount, "上下文销毁后自动退订");
+            Assert.AreEqual(1, allClosedCount, "同上");
+        }
+
+        /// <summary>
         /// 既不是 MonoBehaviour 也不实现 <see cref="IDestroyCancellationToken"/>：订得上，但没人会
         /// 自动退订。此时必须留痕——静默的话，故障表现只是「对象没了回调还在跑」，很难追回这里。
         /// </summary>
