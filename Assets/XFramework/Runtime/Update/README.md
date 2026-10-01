@@ -271,6 +271,11 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 `ProcessImmediate` 用于「逻辑变化后需要立刻响应，不等下一次时间切片」。注意它在**派发期间
 调用不会执行更新**，只重置时间基准（在别人的 `OnUpdate` 里再次回调自己会形成嵌套派发）。
 
+**固定步时机没有对应的时钟通道**：`UpdateClock` 只有逻辑 / 墙钟两条轴，而固定步节点恒挂在逻辑轴上。
+因此落在固定步时机上的条目**只重新定锚、不写时刻**——下一次固定步派发的 `deltaTime` 记 0
+（与注册 / 重新启用后的首次派发同一套锚定规则），而不是把逻辑时刻当成固定步时刻写进去。
+立即派发**那一次**的 `fixedTime` 实参也取自时钟的逻辑轴，`deltaTime` 则由调用方给定。
+
 **它与 `Tick` 抛异常时的处置相反，这是有意的**：经 `Tick` 派发时 `OnUpdate` 抛异常会被记 `LogError`
 并**注销该节点**（见「派发期间的注册 / 注销 / 启用 / 禁用」）；而 `ProcessImmediate` 是**显式调用**，
 异常直接上抛给调用方、**不注销**该节点。理由与本仓对 `Settings.Save<T>()` 的裁决同向——显式调用

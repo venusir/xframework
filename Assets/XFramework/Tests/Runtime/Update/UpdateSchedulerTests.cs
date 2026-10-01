@@ -1879,6 +1879,53 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void ProcessImmediate_OnFixedTiming_OnlyReanchors()
+        {
+            // 固定步时机没有对应的时钟通道：UpdateClock 只有 Scaled / Unscaled 两条轴，而固定步
+            // 条目的轴恒为 0。ProcessImmediate 若照常把 clock.Time 写进「上次派发时刻」，下一次
+            // 固定步派发算出的 delta 就是 `fixedTime − 逻辑时刻` 这个跨轴相减的产物——既不是该轴
+            // 承诺的 2^k × Time.fixedDeltaTime，也不是锚定规则给的 0。
+            // 只定锚之后：下一次固定步派发记 0，与「注册/启用后首次派发记 0」同一套语义
+            var scheduler = new UpdateScheduler(UpdateTiming.FixedUpdate);
+            var node = new FixedUpdateNode();
+            scheduler.Register(node, order: 0);
+
+            scheduler.Tick(time: 10.0f);
+            Assert.AreEqual(0f, node.FixedDeltaTimes[0], "首次派发按锚定规则记 0");
+
+            scheduler.ProcessImmediate(node, deltaTime: 0.5f, new UpdateClock(3.0, 3.0));
+            Assert.AreEqual(2, node.OnFixedUpdateCallCount, "首次派发 + 立即派发各一次");
+
+            scheduler.Tick(time: 10.02f);
+            // 下标：0 = 首次派发、1 = 立即派发、2 = 下一次固定步
+            Assert.AreEqual(0f, node.FixedDeltaTimes[2],
+                "固定步条目只重新定锚：不得把逻辑时刻写进时间基准");
+
+            scheduler.Clear();
+        }
+
+        [Test]
+        public void ProcessImmediate_DuringFixedDispatch_AlsoOnlyReanchors()
+        {
+            // 派发中那条路径此前是「只推时间基准、不派发」；固定步时机上连时间基准也不该推——
+            // 推了就会把逻辑时刻写进固定步条目，下一次派发的 delta 随之失真
+            var scheduler = new UpdateScheduler(UpdateTiming.FixedUpdate);
+            var target = new FixedUpdateNode();
+            var caller = new ImmediateCallingFixedNode { Scheduler = scheduler, Target = target };
+            scheduler.Register(target, order: 0);   // 同帧派发；回调节点 order 更大，先轮到 target
+            scheduler.Register(caller, order: 1);
+
+            scheduler.Tick(time: 10.0f);
+            Assert.AreEqual(1, target.OnFixedUpdateCallCount, "首次派发（delta 按锚定规则记 0）");
+
+            scheduler.Tick(time: 10.02f);
+            Assert.AreEqual(0f, target.FixedDeltaTimes[target.FixedDeltaTimes.Count - 1],
+                "派发中那条路径同样只定锚：不得把逻辑时刻写进固定步条目的时间基准");
+
+            scheduler.Clear();
+        }
+
+        [Test]
         public void DisableDuringTick_OnDisableThrows_RestOfFrameStillApplies()
         {
             // 生命周期回调抛异常曾直接穿出 FlushPending —— 循环中断且缓冲不清空，于是排在后面的
@@ -2139,6 +2186,9 @@ namespace XFramework.XUpdate.Tests
             public int OnUpdateCallCount { get; private set; }
             public int OnFixedUpdateCallCount { get; private set; }
 
+            /// <summary>每次固定步派发拿到的 deltaTime，按派发先后追加。</summary>
+            public List<float> FixedDeltaTimes { get; } = new List<float>(4);
+
             public void OnEnable() { }
 
             public void OnDisable() { }
@@ -2152,7 +2202,28 @@ namespace XFramework.XUpdate.Tests
             public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
             {
                 OnFixedUpdateCallCount++;
+                FixedDeltaTimes.Add(deltaTime);
                 return NextTier;
+            }
+        }
+
+        /// <summary>
+        /// 派发期间对另一个节点调用
+        /// <see cref="UpdateScheduler.ProcessImmediate(IUpdateLifecycle, float, in UpdateClock)"/>
+        /// 的固定步替身：用于锁定「派发中那条路径同样只定锚」。
+        /// </summary>
+        private sealed class ImmediateCallingFixedNode : IFixedUpdateable
+        {
+            public UpdateScheduler Scheduler { get; set; }
+            public IFixedUpdateable Target { get; set; }
+
+            public void OnEnable() { }
+            public void OnDisable() { }
+
+            public UpdateTier OnFixedUpdate(float deltaTime, float fixedTime)
+            {
+                Scheduler.ProcessImmediate(Target, deltaTime: 0.5f, new UpdateClock(3.0, 3.0));
+                return UpdateTier.Tier0;
             }
         }
 

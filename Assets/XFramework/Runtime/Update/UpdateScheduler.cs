@@ -780,6 +780,9 @@ namespace XFramework.XUpdate
         /// <para><b>派发期间调用不会执行更新</b>：只把时间基准推到该时刻后返回
         /// （在别人的 <c>OnUpdate</c> 里再次回调自己会形成嵌套派发）。该次调用也不产生 delta——
         /// 下一次正常派发的间隔从这一刻重新起算。</para>
+        /// <para><b>固定步时机只重新定锚</b>：它没有对应的时钟通道（见
+        /// <see cref="ApplyImmediateTimeBase"/>），故不写时刻——下一次固定步派发的 delta 记 0，
+        /// 而不是把逻辑时刻当成固定步时刻写进去。</para>
         /// </summary>
         /// <param name="node">要立即更新的节点。</param>
         /// <param name="deltaTime">传入的时间差。</param>
@@ -812,9 +815,8 @@ namespace XFramework.XUpdate
 
             if (_isIterating)
             {
-                // 只推时间基准、不派发。NeedsAnchor 保持原样：它若仍为 true（注册后还没派发过），
-                // 「首次派发 delta = 0」那条锚定规则要照常生效，不该被这次调用顶掉
-                entry.LastUpdateTime = now;
+                // 只推时间基准、不派发（在别人的回调里再次回调自己会形成嵌套派发）
+                ApplyImmediateTimeBase(ref entry, now, dispatched: false);
                 _buckets[bucket][index] = entry;
                 return;
             }
@@ -827,8 +829,7 @@ namespace XFramework.XUpdate
             {
                 int newTier = Mathf.Clamp(TickNode(node, deltaTime, (float)now), 0, MaxTier);
 
-                entry.NeedsAnchor = false;
-                entry.LastUpdateTime = now;
+                ApplyImmediateTimeBase(ref entry, now, dispatched: true);
 
                 // 活表在回调期间未被改动（改动都进了缓冲），故下标仍然有效
                 _buckets[bucket][index] = entry;
@@ -849,6 +850,37 @@ namespace XFramework.XUpdate
             {
                 // 回调抛异常时也要归位闩锁，异常照旧上抛（缓冲留给下一次 Tick 的 flush）
                 _isIterating = false;
+            }
+        }
+
+        /// <summary>
+        /// 立即派发（<see cref="ProcessImmediate(IUpdateLifecycle, float, in UpdateClock)"/>）之后的
+        /// 时间基准处置：变步长时机把基准推到本帧时刻，<b>固定步时机只重新定锚</b>。
+        /// <para><b>为什么固定步要例外：</b><see cref="UpdateClock"/> 只有 Scaled / Unscaled 两条轴，
+        /// 而固定步条目恒挂在轴 0 上（<see cref="UpdateManager.RegisterFixed(IFixedUpdateable, int, UpdateTier)"/>
+        /// 不传时间轴），于是 <c>clock.GetTime(entry.Axis)</c> 取到的是<b>变步长逻辑时刻</b>——写进去，
+        /// 下一次固定步派发算出的 delta 就是「<c>fixedTime</c> − 逻辑时刻」这个跨轴相减的产物，
+        /// 既不是该轴承诺的 <c>2^k × Time.fixedDeltaTime</c>，也不是锚定规则给的 0。只定锚后下一次
+        /// 派发记 0，与「注册/启用后首次派发记 0」同一套语义，也符合 <c>Entry.NeedsAnchor</c> 自述的
+        /// 「调度器不必去猜现在几点」。</para>
+        /// </summary>
+        /// <param name="entry">条目副本，由调用方写回。</param>
+        /// <param name="now">该条目所属轴本帧的时刻。</param>
+        /// <param name="dispatched">本次是否真的执行了派发。派发期间那条路径只推基准、不派发，
+        /// 此时 <c>NeedsAnchor</c> 保持原样：它若仍为 true（注册后还没派发过），「首次派发 delta = 0」
+        /// 那条锚定规则要照常生效，不该被这次调用顶掉。</param>
+        private void ApplyImmediateTimeBase(ref Entry entry, double now, bool dispatched)
+        {
+            if (_timing == UpdateTiming.FixedUpdate)
+            {
+                entry.NeedsAnchor = true;
+                return;
+            }
+
+            entry.LastUpdateTime = now;
+            if (dispatched)
+            {
+                entry.NeedsAnchor = false;
             }
         }
 

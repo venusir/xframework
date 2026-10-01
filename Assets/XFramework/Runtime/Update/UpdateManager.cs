@@ -658,6 +658,9 @@ namespace XFramework.XUpdate
         /// <see cref="UpdateTimeMode.Unscaled"/> 轴上而 <c>timeScale = 0</c> 时（暂停菜单正是这条轴的
         /// 招牌场景），传入的 <see cref="Time.time"/> 是冻住的，于是解除暂停后的首个 delta 会接近
         /// 整段暂停时长——正是「不追赶」要避免的那种跳变。</para>
+        /// <para><b>固定步时机的节点只重新定锚</b>：<see cref="UpdateClock"/> 里没有固定步这条时间轴，
+        /// 故落到固定步时机上时不写时刻——下一次固定步派发的 delta 记 0（与注册/启用后首次派发
+        /// 同一套锚定语义），而不是把逻辑时刻当成固定步时刻写进去。</para>
         /// </summary>
         /// <param name="node">要立即更新的对象。</param>
         /// <param name="deltaTime">传入的时间差。</param>
@@ -669,6 +672,8 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 立即对指定对象执行一次更新并重新调整档位，时刻按对象所属的时间轴从时钟中取。
+        /// <para><b>固定步时机例外</b>：该时机没有对应的时钟字段（固定步条目恒挂在逻辑轴上），
+        /// 故只重新定锚、不写入时刻——下一次固定步派发的 delta 记 0。</para>
         /// </summary>
         /// <param name="node">要立即更新的对象。</param>
         /// <param name="deltaTime">传入的时间差。</param>
