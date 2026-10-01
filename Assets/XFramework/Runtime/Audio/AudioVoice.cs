@@ -58,6 +58,13 @@ namespace XFramework.XAudio
         /// <summary>是否循环。<b>循环的播放永不被自动回收</b>，必须显式停止。</summary>
         internal bool Loop;
 
+        /// <summary>
+        /// 本次播放的音量缩放（已归一化，<c>&gt;= 1</c> 或原值）。
+        /// <para>缓存下来是为了让音量变更能重算正在播的声音——实际音量是
+        /// 「主音量 × 通道音量 × 本值」，三者任一变化都要重写 <c>AudioSource.volume</c>。</para>
+        /// </summary>
+        internal float VolumeScale = 1f;
+
         /// <summary>处于 <see cref="AudioVoiceState.Starting"/> 期间累计的扫描次数，用于超时兜底。</summary>
         internal int StartingTicks;
     }

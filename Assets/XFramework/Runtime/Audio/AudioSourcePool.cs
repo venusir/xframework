@@ -114,6 +114,7 @@ namespace XFramework.XAudio
             voice.Channel = channel;
             voice.Location = location;
             voice.Loop = false;
+            voice.VolumeScale = 1f;
             voice.StartingTicks = 0;
             voice.ClipLease = default;
 
@@ -156,6 +157,7 @@ namespace XFramework.XAudio
             voice.Channel = null;
             voice.Location = null;
             voice.Loop = false;
+            voice.VolumeScale = 1f;
             voice.StartingTicks = 0;
 
             _exhaustionWarned = false;
@@ -174,6 +176,7 @@ namespace XFramework.XAudio
             voice.Channel = null;
             voice.Location = null;
             voice.Loop = false;
+            voice.VolumeScale = 1f;
             voice.StartingTicks = 0;
 
             _exhaustionWarned = false;

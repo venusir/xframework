@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -42,6 +43,17 @@ namespace XFramework.XAudio
         /// </summary>
         private readonly CancellationTokenSource _lifetimeCts = new CancellationTokenSource();
 
+        /// <summary>
+        /// 通道状态表。惰性创建：只有被<b>写入</b>过的通道才会进表。
+        /// <para>用 <see cref="StringComparer.Ordinal"/>：通道名区分大小写，这是公开承诺的一部分
+        /// （<c>"BGM"</c> 与 <c>"bgm"</c> 是两个通道）。</para>
+        /// </summary>
+        private readonly Dictionary<string, AudioChannelState> _channels =
+            new Dictionary<string, AudioChannelState>(StringComparer.Ordinal);
+
+        private float _masterVolume = 1f;
+        private bool _masterMuted;
+
         private bool _tickerRegistered;
         private bool _disposed;
 
@@ -61,6 +73,9 @@ namespace XFramework.XAudio
             _clipLoader = clipLoader ?? new AudioClipLoader();
             _pool = new AudioSourcePool(Options.MaxVoices);
             _ticker = new AudioTicker(this);
+
+            _masterVolume = Mathf.Clamp01(Options.MasterVolume);
+            _masterMuted = Options.MasterMuted;
         }
 
         #endregion
@@ -223,7 +238,9 @@ namespace XFramework.XAudio
             var voice = _pool.GetSlot(index);
             voice.ClipLease = clipLease;
             voice.Loop = options.Loop;
+            voice.VolumeScale = NormalizeVolumeScale(options.VolumeScale);
             ConfigureSource(voice.Source, clipLease.Clip, options);
+            ApplyVoiceVolume(voice);
             voice.Source.Play();
             voice.State = AudioVoiceState.Starting;
             voice.StartingTicks = 0;
@@ -330,36 +347,85 @@ namespace XFramework.XAudio
         /// <inheritdoc/>
         public float MasterVolume
         {
-            get => throw new NotImplementedException("[Audio] MasterVolume 尚未实现（C3 提交补全）。");
-            set => throw new NotImplementedException("[Audio] MasterVolume 尚未实现（C3 提交补全）。");
+            get => _masterVolume;
+            set
+            {
+                _masterVolume = Mathf.Clamp01(value);
+                RefreshVolumes(null);   // 主音量影响所有通道
+            }
         }
 
         /// <inheritdoc/>
         public bool MasterMuted
         {
-            get => throw new NotImplementedException("[Audio] MasterMuted 尚未实现（C3 提交补全）。");
-            set => throw new NotImplementedException("[Audio] MasterMuted 尚未实现（C3 提交补全）。");
+            get => _masterMuted;
+            set
+            {
+                if (_masterMuted == value)
+                    return;
+
+                _masterMuted = value;
+                RefreshVolumes(null);
+            }
         }
 
         /// <inheritdoc/>
         public void SetChannelVolume(string channel, float volume)
-            => throw new NotImplementedException("[Audio] SetChannelVolume 尚未实现（C3 提交补全）。");
+        {
+            string normalized = NormalizeChannel(channel);
+            GetOrCreateChannel(normalized).Volume = Mathf.Clamp01(volume);
+            RefreshVolumes(normalized);
+        }
 
         /// <inheritdoc/>
         public float GetChannelVolume(string channel)
-            => throw new NotImplementedException("[Audio] GetChannelVolume 尚未实现（C3 提交补全）。");
+        {
+            string normalized = NormalizeChannel(channel);
+
+            // 查询不建状态：只读的人不该留下副作用
+            return _channels.TryGetValue(normalized, out var state) ? state.Volume : 1f;
+        }
 
         /// <inheritdoc/>
         public void SetChannelMuted(string channel, bool muted)
-            => throw new NotImplementedException("[Audio] SetChannelMuted 尚未实现（C3 提交补全）。");
+        {
+            string normalized = NormalizeChannel(channel);
+            var state = GetOrCreateChannel(normalized);   // 写入路径：通道不存在则惰性建状态
+
+            if (state.Muted == muted)
+                return;   // 值没变，没有播放源需要重算
+
+            state.Muted = muted;
+            RefreshVolumes(normalized);
+        }
 
         /// <inheritdoc/>
         public bool IsChannelMuted(string channel)
-            => throw new NotImplementedException("[Audio] IsChannelMuted 尚未实现（C3 提交补全）。");
+        {
+            string normalized = NormalizeChannel(channel);
+
+            // 查询不建状态；注意这里读的是**通道自己的**静音，不含主静音
+            return _channels.TryGetValue(normalized, out var state) && state.Muted;
+        }
 
         /// <inheritdoc/>
         public void RegisterChannel(string channel, AudioChannelConfig config)
-            => throw new NotImplementedException("[Audio] RegisterChannel 尚未实现（C3 提交补全）。");
+        {
+            if (config == null)
+                throw new ArgumentNullException(nameof(config),
+                    "[Audio] config 不能为 null。要恢复默认值请传 new AudioChannelConfig()。");
+
+            string normalized = NormalizeChannel(channel);
+
+            // 调用时读取一次并快照：之后再改这个实例不影响已注册的通道
+            _channels[normalized] = new AudioChannelState
+            {
+                Volume = Mathf.Clamp01(config.Volume),
+                Muted = config.Muted,
+            };
+
+            RefreshVolumes(normalized);
+        }
 
         #endregion
 
@@ -411,7 +477,7 @@ namespace XFramework.XAudio
                 _pool.Invalidate(index);
         }
 
-        /// <summary>把公开参数写进播放源。音量在这里只应用单次缩放；主音量 × 通道音量在 C3 接入。</summary>
+        /// <summary>把公开参数写进播放源。音量不在这里——见 <see cref="ApplyVoiceVolume"/>。</summary>
         private static void ConfigureSource(AudioSource source, AudioClip clip, AudioPlayOptions options)
         {
             source.clip = clip;
@@ -430,8 +496,76 @@ namespace XFramework.XAudio
 
             if (blend > 0f)
                 source.transform.position = options.Position;
+        }
 
-            source.volume = Mathf.Clamp01(options.VolumeScale > 0f ? options.VolumeScale : 1f);
+        /// <summary>
+        /// 单次播放的音量缩放归一化：非正值一律按 <c>1</c> 处理。
+        /// <para>这是让 <c>default(AudioPlayOptions)</c> 安全的关键——它的 <c>VolumeScale</c> 是 <c>0</c>，
+        /// 不归一化的话「忘了写 options」会得到一个完全静音的声音，比报错更难查。</para>
+        /// <para>刻意<b>不</b>在这里钳上限：放大由三档相乘后的最终钳制统一处理（见
+        /// <see cref="ComputeVoiceVolume"/>），这样「用缩放的相对关系」不会被提前压平。</para>
+        /// </summary>
+        private static float NormalizeVolumeScale(float volumeScale)
+            => volumeScale > 0f ? volumeScale : 1f;
+
+        /// <summary>
+        /// 一次播放的实际音量：主音量 × 通道音量 × 单次缩放，任一档静音即为 <c>0</c>，
+        /// 最后钳到 <c>[0, 1]</c> 再写进播放源。
+        /// <para><b>框架自己钳制</b>而不依赖引擎：实测表明 <c>AudioSource.volume</c> 的 setter 确实会把值钳到
+        /// <c>[0, 1]</c>，但公开承诺不该押在引擎行为上（换个平台或版本就可能变）。</para>
+        /// </summary>
+        private float ComputeVoiceVolume(AudioVoice voice)
+        {
+            if (_masterMuted)
+                return 0f;
+
+            var channel = GetOrCreateChannel(voice.Channel);
+            if (channel.Muted)
+                return 0f;
+
+            return Mathf.Clamp01(_masterVolume * channel.Volume * voice.VolumeScale);
+        }
+
+        /// <summary>把当前音量写进某个播放源。播完/空闲的槽位调用它是无害的空写。</summary>
+        private void ApplyVoiceVolume(AudioVoice voice)
+        {
+            voice.Source.volume = ComputeVoiceVolume(voice);
+        }
+
+        /// <summary>
+        /// 音量变更后重算<b>正在播放</b>的声音。
+        /// <para>事件式而非逐帧：只在变更发生时扫一遍槽位（O(池容量)、无分配）。槽位表本身就是活跃播放的
+        /// 注册表，不另维护一张「谁在播」的表——那会多出一处可能不同步的状态。</para>
+        /// </summary>
+        /// <param name="channelFilter">只重算该通道；<c>null</c> 表示全部（主音量变更走这条）。</param>
+        private void RefreshVolumes(string channelFilter)
+        {
+            for (int i = 0; i < _pool.SlotCount; i++)
+            {
+                var voice = _pool.GetSlot(i);
+
+                if (voice.State == AudioVoiceState.Free)
+                    continue;
+
+                if (channelFilter != null &&
+                    !string.Equals(voice.Channel, channelFilter, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                ApplyVoiceVolume(voice);
+            }
+        }
+
+        /// <summary>取通道状态，不存在则按默认值建一个。<b>只有写入路径会走到这里</b>——查询不建状态。</summary>
+        private AudioChannelState GetOrCreateChannel(string channel)
+        {
+            if (_channels.TryGetValue(channel, out var state))
+                return state;
+
+            state = new AudioChannelState();
+            _channels[channel] = state;
+            return state;
         }
 
         /// <summary>
