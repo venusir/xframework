@@ -64,6 +64,42 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 - **全量捕获**（`CaptureUnityLogs`，默认与文件输出端同开关）：挂 `Application.logMessageReceivedThreaded`，把**引擎、第三方库、未捕获异常**的日志也收进同一份文件，每条标 `src:"unity"`；框架自己的日志标 `src:"fw"`，不会因回显被写两遍。外部日志走同一套档位过滤（`MinimumLevel` 与分类覆盖都适用），分类从 `[标签]` 前缀解析（解析不出呈现为 `Unregistered`）。回调在 `AutoInit` 时**无条件挂上**——没有可写输出端时它第一行即返回，因此不存在「第一次 `LogManager` 调用之前发生的日志捕获不到」的时序陷阱。
 - **JSONL 文件**（`LogFileSink`，默认 Editor/Development 开、Release 关）：每条日志一行 JSON，落在 `{persistentDataPath}/XLog/`，**每会话一个文件**（`xlog-{时间}-{会话id}-p{n}.jsonl`）。超 32 MiB 切分片，每个分片首行都重写会话头；目录内保留最新 10 个文件。**运行时即可读**：写入端持有共享读的写句柄，读取方需自行声明共享写（.NET 里是 `FileShare.ReadWrite`；`jq` / `grep` 这类经 CRT 打开文件的工具默认即可）。**Warning 及以上立即落盘**，其余每 64 条批量落盘，`Shutdown` 与 `Application.quitting` 时冲刷——崩溃后要能读到现场。文件写入失败（磁盘满、目录不可写）时该输出端**静默停用**：不记日志（会递归）、不抛异常、不影响控制台通路。
 
+## 配置（`LogOptions`）
+
+不配置也能用（门面按 `LogOptions.Default` 懒建实现）；要改就一次性交给 `LogManager.Configure`：
+
+```csharp
+LogManager.Configure(new LogOptions
+{
+    MinimumLevel  = LogLevel.Info,           // 全局最低档（Release 默认就是 Info）
+    EnableFileSink = true,                   // Release 里显式打开文件输出
+    FileDirectory = @"D:\MyGameLogs",        // 换落盘目录
+    MaxRetainedFiles = 20,                   // 目录内保留份数
+    ImmediateFlushMinLevel = LogLevel.Error, // 只让 Error 及以上立即落盘
+});
+
+// 配置之后再追加自定义输出端（Configure 会重建实现，旧的 sink 会被释放）
+LogManager.AddSink(new MyRemoteSink());
+```
+
+| 字段 | 默认值 | 说明 |
+|---|---|---|
+| `MinimumLevel` | Editor/Development=`Debug`；其余=`Info` | 全局最低档（分类未设覆盖时按它判定） |
+| `EnableConsoleSink` | `true` | 控制台输出端；**关掉它 `LogAssert` 就看不到任何东西** |
+| `CaptureStackTrace` | Editor/Development=`true`；Release=`false` | 是否抓调用点托管堆栈 |
+| `StackTraceMinLevel` | `Error` | 抓栈的最低级别 |
+| `EnableFileSink` | Editor/Development=`true`；Release=`false` | JSONL 文件输出端 |
+| `CaptureUnityLogs` | 跟随 `EnableFileSink` | 是否把引擎 / 第三方 / 未捕获异常收进同一份文件 |
+| `FileDirectory` | `{persistentDataPath}/XLog`（取不到时回退临时目录） | 落盘目录 |
+| `MaxFileBytes` | `32 * 1024 * 1024`（32 MiB） | 单个分片文件的上限，超过则切 `-p2` |
+| `MaxRetainedFiles` | `10` | 目录内保留的最新文件数（启动时轮转） |
+| `ImmediateFlushMinLevel` | `Warning` | 达到该级别即立即 flush（崩溃可读性的下限） |
+| `FlushEveryEntries` | `64` | 低于立即 flush 门槛的条目按条数批量 flush |
+
+> **`Configure` 是「重建实现」**：它会复位分类档位（`SetCategoryLevel` 的覆盖）、释放此前
+> `AddSink` 的自定义输出端，并把整个实现换成按新配置构建的一份。所以顺序是
+> **先 `Configure`、后 `SetCategoryLevel` / `AddSink`**。
+
 ## JSONL schema
 
 固定键序，**可选字段整体省略**（不写 `null`）；一行一条，行内绝不出现裸换行。
