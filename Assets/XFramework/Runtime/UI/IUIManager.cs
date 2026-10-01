@@ -344,9 +344,15 @@ namespace XFramework.XUI
         /// <summary>
         /// 每帧更新。内部遍历所有 IsOpen 的面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>。
         /// <para>借鉴 GameFramework UIFormLogic.OnUpdate 的设计，由管理器统一驱动而非每个面板独立 Update。</para>
-        /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, XFramework.XUI.Controller.IUIController)"/> 会把
-        /// 每帧驱动注册进 <see cref="XUpdate.UpdateManager"/> 的统一调度——因此它受档位降频与
+        /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, XFramework.XUI.Controller.IUIController)"/>
+        /// 与 <see cref="UIManager.SetInstance(IUIManager)"/> 都会把每帧驱动注册进
+        /// <see cref="XUpdate.UpdateManager"/> 的统一调度——因此它受档位降频与
         /// <see cref="XUpdate.UpdateManager.Pause"/> 的统一约束，也不再要求场景里存在 <c>UIRootNode</c>。</para>
+        /// <para><b>它挂在逻辑时间轴（<c>UpdateTimeMode.Scaled</c>）上</b>：<c>Time.timeScale = 0</c> 时
+        /// 面板 / HUD / Tip 全部停止派发；需要暂停期间仍更新 UI 的，只能自行每帧手动调用本方法（注意会与
+        /// 驱动器叠加）。</para>
+        /// <para><b>异常不外抛</b>：某个面板的 <c>OnUpdate</c> 抛异常只会让它自己停更（其余面板照常），
+        /// 不会打断本方法的其余部分。</para>
         /// </summary>
         /// <param name="deltaTime">距上次派发的时间差。</param>
         /// <param name="time">当前时刻。</param>

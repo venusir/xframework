@@ -150,9 +150,20 @@ sequenceDiagram
 
 ## 门面形态
 
-`UIManager` 是**扁平**的静态门面：每个成员都与 `IUIManager` 的对应成员**同名**，转发体一律是 `EnsureGlobalInitialized()` + `_instance.X(...)` 两行。没有嵌套分组类。
+`UIManager` 是**扁平**的静态门面：每个成员都与 `IUIManager` 的对应成员**同名**。绝大多数转发体是 `EnsureGlobalInitialized()` + `_instance.X(...)` 两行；**例外是那组探测型读接口**——它们不加守卫、未初始化时直接返回空值（见下节「未初始化时的行为」）。没有嵌套分组类。
 
 扁平层也容纳接口之外的三类成员：生命周期与实例管理（`Initialize` / `SetInstance` / `Destroy`），接口成员之外的 `SetController` / `TierDriverCount`，以及三种面板消息的 `Subscribe` 重载。
+
+### 未初始化时的行为
+
+门面成员按「探测」与「操作」分成两类，**这条分界由 `UIFacadeProbeTests` 钉住**，改一边会立刻倒掉另一边：
+
+| 类别 | 成员 | 未初始化时 |
+|---|---|---|
+| 探测型读接口 | `IsInitialized`、`UIRoot`、`GetState`、`DumpState`、`TierDriverCount`、`OpenCount`、`IsAnyOpen`、`Panels`、`CanGoBack`、`IsMaskShowing` | 返回空值 / 全零快照 / 空视图（`Panels` 返回 `Array.Empty` 而非 null），**不抛异常**——它们本就该能在 `Initialize` 之前回答「现在什么样」 |
+| 其余全部（含读接口） | `IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer` 与所有开/关/推/弹/遮罩/Tip/HUD 成员 | 抛 `InvalidOperationException`（消息带 `[UIManager]` 前缀并给出修复提示） |
+
+> **为什么 `IsOpen<T>` / `GetTopPanel` 这类「读」也照抛**：它们的实现要先剪枝再取，属「操作」而非纯读。判据不是「读还是写」，而是「未初始化时它能不能给出一个有意义的答案」。
 
 > **为什么不用嵌套静态类分组**：分组会让转发时必然改名（`ShowHudAsync` → `Hud.Attach`、`ShowMask` → `Mask.Show`），「门面名 == 接口名」这条唯一的人工核对手段随之失效；而它换来的只有 IntelliSense 分组——本模块之外，`MessageManager`（48 个成员）、`InputManager`（43 个）、`AssetManager`（37 个）都保持扁平，靠 `#region` 分区。
 
@@ -224,12 +235,16 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 ### 面板驱动更新（OnUpdate）
 
-与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize` 把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
+与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize`（以及 `SetInstance`）把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
 
 派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
 
+> ⚠️ **这条通路挂在 `UpdateManager` 的「逻辑时间轴」上（`UpdateTimeMode.Scaled`），因此 `Time.timeScale = 0` 会把 UI 一起冻住**：面板 `OnUpdate`、HUD 跟随、Tip 动画全部停止派发——这是切换 `timeScale` 暂停游戏时最容易踩的一条。门面**没有**时间轴开关（驱动器类型是 private），唯一的逃生口是自己在需要时每帧手动调 `UIManager.Update(deltaTime, time)`；注意它会与驱动器**叠加**（见该方法注释），恢复 `timeScale` 后要么停掉手动调用，要么先 `Destroy` 再自行驱动。
+>
+> **异常隔离**：面板 `OnUpdate` 抛异常时，只记一条 `[UIManager]` 错误并**停更该面板**（其余面板 / HUD / Tip 照常，驱动器也不会被调度器注销）；该面板下次打开（回池复位）后恢复被驱动。HUD / Tip 的 provider 抛异常时则继续驱动、只记首条日志（换 provider 后重新计数）。
+
 **优势：**
-- **性能可控** — 仅一个 `Update()` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
+- **性能可控** — 仅一个 `Update(float deltaTime, float time)` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
 - **状态感知** — 暂停的面板（失焦状态）自动跳过更新，无需面板内部自行判断
 - **可扩展** — 未来可按优先级、分组等策略精细控制更新顺序
 
@@ -782,6 +797,8 @@ token3.Dispose();
 ```
 
 > 静态 API 不自动绑定生命周期，句柄需在使用方销毁时 `Dispose`；若订阅方实现 `IMessageSubscriber`，改用 `this.Subscribe(...)` 即可自动绑定销毁时机（MonoBehaviour 或 `IDestroyCancellationToken`）。
+>
+> **`UIManager.Subscribe` 的 `context` 三种取值**：传 `MonoBehaviour` / `IDestroyCancellationToken` 对象 → 销毁时自动退订；传**两者皆非**的对象 → 不绑定并打一条告警（留痕，免得「对象已经没了，回调还在跑」）；传 **null** → 不绑定、**不打告警**（这是「我就是要自己管句柄」的正常用法）。
 
 ### 12. 依赖注入
 
@@ -797,6 +814,10 @@ UIManager.SetController(new MyCustomController());
 ```
 
 注入的实例同样接入每帧驱动（`UIManager.Update` 转发给它），**分档驱动器只对框架自带的实现生效**——档位需求由 `UIManagerImpl` 读面板声明后上报，注入实现退化为「只有每帧档」。
+
+> ⚠️ **`SetController` 只对 `UIManagerImpl` 生效**：上面示例里先 `SetInstance(mockManager)` 再 `SetController(...)`，第二步只会打一条告警、控制器**不生效**（它需要 `UIManagerImpl` 的注入点）。自定义 Controller 请在同一实例上配：要么用框架自带实现时调 `SetController`，要么走 `Initialize(uiRoot, controller)`，要么在自己的 `IUIManager` 实现里自行处理拦截。
+>
+> **实例所有权**：`SetInstance` 换实例时只销毁**门面自己创建**的那个（`Initialize` 那条路径），注入进来的不碰；但 `Destroy()` 是「拆掉全局 UI」的终局操作，**无论来源一律销毁**——注入的实现在 `Destroy()` 里会被 `Dispose()`，请确保那时你已经不需要它。
 
 ## 设计原则
 
@@ -833,7 +854,7 @@ UIManager.ShowHudAsync<T>(target, assetPath, offset)  →  静态外观
             ├── hud.DoOpenAsync()                   →  打开 HUD（初始化 Camera 等）
             └── ActiveHudList.Add(hud)              →  注册到每帧更新列表
                     │
-            UIManager.Update()                      →  集中驱动
+            UIManager.Update(deltaTime, time)       →  集中驱动
                     │
             hud.OnUpdate(deltaTime, time)           →  世界坐标转屏幕坐标 + 跟随
                     │
@@ -1010,6 +1031,13 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
   设计，见 `View/UIRootNode.cs` 的注释。
 - **面板资源不会自动卸载**：需显式调 `UnloadPanelAssetAsync`（配套 Asset 侧的 `IAssetPoolController`）。
   **没有**做按 LRU 自动卸载——那是策略，应由项目决定何时调用。
+- **`Time.timeScale = 0` 会冻结整条 UI 每帧通路**（面板 `OnUpdate`、HUD 跟随、Tip 动画），因为驱动器挂在
+  `UpdateManager` 的逻辑时间轴上。门面没有时间轴开关，逃生口与注意事项见「面板驱动更新」一节的警告框。
+- **外部调用 `UpdateManager.Clear()` 会摘掉 UI 的驱动器**：它是公开 API，UI 无从感知，只有下一次
+  `UIManager.Initialize` / `SetInstance` 才会重新注册（门面已不再信任自身记账）。若你的重置流程里调了它，
+  请在同一流程里重新进入 UI 的生命周期入口，否则界面会静默静止。
+- **UI 没有任何线程契约的运行时断言**：面板 / HUD / Tip 的创建、开合与驱动都必须在主线程调用（Unity 对象
+  本身的约束），模块不做检测也不做切线程——跨线程调用是未定义行为。
 
 ## 依赖
 

@@ -392,12 +392,17 @@ namespace XFramework.XUI
 
         #region Public API — Diagnostics
 
-        // 本区与「Query」「Stack Navigation 的 CanGoBack」「Modal Mask 的 IsMaskShowing」里的只读成员
-        // 一律不调 EnsureGlobalInitialized：它们回答的是「现在有没有面板/遮罩」这类探测问题，
-        // 本就该能在 Initialize 之前回答，IUIManager 的文档与 UIManagerImpl 的实现都以此为契约
-        // （「未初始化时返回 0，不抛异常，便于在场景加载早期探测」）。此前门面统一套了守卫，
-        // 于是 UIStateWindow 这类调用方必须先判 IsInitialized 才敢问一句「现在什么样」。
-        // 操作类成员（Open/Close/Push/ShowMask/…）仍然照抛——那才是「还没准备好就用」的真实错误。
+        // 豁免 EnsureGlobalInitialized 的是这样一组成员：本区的 GetState / DumpState / TierDriverCount，
+        // 以及 OpenCount / IsAnyOpen / Panels / CanGoBack / IsMaskShowing 与属性 UIRoot / IsInitialized。
+        // 它们回答的是「现在有没有面板/遮罩」这类探测问题，本就该能在 Initialize 之前回答——
+        // IUIManager 的文档与 UIManagerImpl 的实现都以此为契约（「未初始化时返回 0，不抛异常，
+        // 便于在场景加载早期探测」）。此前门面统一套了守卫，于是 UIStateWindow 这类调用方必须先判
+        // IsInitialized 才敢问一句「现在什么样」。
+        //
+        // 不在这组里的读接口照抛，包括名字听上去同类的 IsOpen<T> / GetPanel<T> / GetTopPanel /
+        // CopyPanels / CopyPanelsInLayer：它们的实现要先剪枝再取，属「操作」而非纯读，门面与实现
+        // 一致抛 InvalidOperationException——这条分界由 UIFacadeProbeTests 钉住。改这段注释时别把
+        // 它们并进豁免清单：「查询区」是按成员所在分区划的，判据不是「读还是写」。
 
         /// <inheritdoc cref="IUIManager.GetState"/>
         public static UIStateSnapshot GetState()
@@ -699,7 +704,12 @@ namespace XFramework.XUI
         /// （可被档位降频、可被 <see cref="UpdateManager.Pause"/> 统一暂停）。保留公开是因为测试与
         /// 自定义驱动方仍可能需要手动推进。</para>
         /// <para><b>手动调用会与驱动器叠加</b>：驱动器不会因为有人手动调用而让位，一次手动调用
-        /// 加一次派发就是每帧驱动两遍（面板拿到两倍步进）。除测试与自定义驱动方外不要调用它。</para>
+        /// 加一次派发就是每帧驱动两遍（面板拿到两倍步进）。除测试与自定义驱动方外不要调用它。
+        /// 需要「暂停期间仍更新 UI」的项目（逻辑时间轴被 <c>Time.timeScale = 0</c> 或
+        /// <see cref="UpdateManager.Pause"/> 冻住）可以改由自己每帧调本方法——那时要先把驱动器摘掉
+        /// （<see cref="Destroy"/>）或接受两倍步进。</para>
+        /// <para><b>异常不外抛</b>：某个面板的 <c>OnUpdate</c> 抛异常只会让该面板停更（记一条
+        /// <c>[UIManager]</c> 错误，其余面板 / HUD / Tip 照常），不会打断本方法的其余部分。</para>
         /// </summary>
         public static void Update(float deltaTime, float time)
         {
