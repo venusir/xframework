@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using XFramework.XAudio;
 using XFramework.XFileManager;
 using XFramework.XLock;
 using XFramework.XMessage;
@@ -45,6 +46,7 @@ namespace XFramework.Architecture.Tests
             (typeof(LockManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(MessageManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(Serializer), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
+            (typeof(AudioManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
         };
 
