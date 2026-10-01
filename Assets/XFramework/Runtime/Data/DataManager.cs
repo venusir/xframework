@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XData
 {
@@ -40,7 +41,7 @@ namespace XFramework.XData
         {
             if (impl != null && _impl != null)
             {
-                Debug.LogWarning("[Data] DataManager.Initialize 被重复调用，忽略重复注入。");
+                LogManager.Warning(LogCategories.Data, "DataManager.Initialize 被重复调用，忽略重复注入。");
                 return;
             }
             _impl = impl;

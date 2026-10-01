@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XSerialize;
 
 namespace XFramework.XData
@@ -116,10 +117,10 @@ namespace XFramework.XData
         {
             if (_blockNameIndex.TryGetValue(block.BlockName, out var occupant) && occupant != block)
             {
-                Debug.LogError(
-                    $"[Data] 数据块名称冲突：\"{block.BlockName}\" 已被 {occupant.GetType().Name} 占用，" +
-                    $"新登入的 {block.GetType().Name} 覆盖了索引项。快照恢复按 blockName 反查，" +
-                    $"因此 {occupant.GetType().Name} 的数据将无法恢复——请让两者的 BlockName 不同。");
+                LogManager.Error(LogCategories.Data,
+                    "数据块名称冲突：\"{0}\" 已被 {1} 占用，新登入的 {2} 覆盖了索引项。" +
+                    "快照恢复按 blockName 反查，因此 {1} 的数据将无法恢复——请让两者的 BlockName 不同。",
+                    block.BlockName, occupant.GetType().Name, block.GetType().Name);
             }
 
             _blockNameIndex[block.BlockName] = block;
@@ -206,14 +207,14 @@ namespace XFramework.XData
             {
                 if (string.IsNullOrEmpty(snap.blockName))
                 {
-                    Debug.LogWarning("[Data] DataBlockSnapshot 缺少 blockName，跳过。");
+                    LogManager.Warning(LogCategories.Data, "DataBlockSnapshot 缺少 blockName，跳过。");
                     failedBlocks++;
                     continue;
                 }
 
                 if (!_blockNameIndex.TryGetValue(snap.blockName, out var block))
                 {
-                    Debug.LogWarning($"[Data] 未注册的数据块: {snap.blockName}，跳过。");
+                    LogManager.Warning(LogCategories.Data, "未注册的数据块: {0}，跳过。", snap.blockName);
                     failedBlocks++;
                     continue;
                 }
@@ -238,7 +239,7 @@ namespace XFramework.XData
             var format = string.IsNullOrEmpty(snap.format) ? defaultFormat : snap.format;
             if (!XSerialize.Serializer.TryGet(format, out var serializer))
             {
-                Debug.LogWarning($"[Data] 不支持的序列化格式: {format}，跳过数据块 {snap.blockName}。");
+                LogManager.Warning(LogCategories.Data, "不支持的序列化格式: {0}，跳过数据块 {1}。", format, snap.blockName);
                 return false;
             }
 
@@ -247,8 +248,9 @@ namespace XFramework.XData
                 // 存档版本高于当前代码版本（如代码回滚）：跳过该块，防止旧代码被新结构数据污染内存
                 if (snap.version > block.DataVersion)
                 {
-                    Debug.LogWarning(
-                        $"[Data] 数据块 {snap.blockName} 的存档版本({snap.version})高于当前代码版本({block.DataVersion})，跳过该块。");
+                    LogManager.Warning(LogCategories.Data,
+                        "数据块 {0} 的存档版本({1})高于当前代码版本({2})，跳过该块。",
+                        snap.blockName, snap.version, block.DataVersion);
                     return false;
                 }
 
@@ -270,8 +272,9 @@ namespace XFramework.XData
 
                 if (targetType == null || targetType == typeof(object))
                 {
-                    Debug.LogWarning(
-                        $"[Data] 数据块 {snap.blockName} 的 saveType 无法解析（{snap.saveType ?? "空"}），回退使用 Block 类型。");
+                    LogManager.Warning(LogCategories.Data,
+                        "数据块 {0} 的 saveType 无法解析（{1}），回退使用 Block 类型。",
+                        snap.blockName, snap.saveType ?? "空");
                     targetType = block.GetType();
                 }
 
@@ -281,7 +284,7 @@ namespace XFramework.XData
                 // 避免强转型实现抛出 NRE 被 catch 吞掉造成静默失败
                 if (saveObj == null)
                 {
-                    Debug.LogWarning($"[Data] 数据块 {snap.blockName} 反序列化结果为空，跳过。");
+                    LogManager.Warning(LogCategories.Data, "数据块 {0} 反序列化结果为空，跳过。", snap.blockName);
                     return false;
                 }
 
@@ -296,7 +299,7 @@ namespace XFramework.XData
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[Data] 恢复数据块 {snap.blockName} 失败: {ex.Message}");
+                LogManager.Warning(LogCategories.Data, "恢复数据块 {0} 失败: {1}", snap.blockName, ex.Message);
                 return false;
             }
         }
@@ -310,7 +313,7 @@ namespace XFramework.XData
         {
             if (!_blocks.TryGetValue(typeof(T), out var block))
             {
-                Debug.LogWarning($"[Data] 标记脏的数据块未注册: {typeof(T).Name}，忽略。");
+                LogManager.Warning(LogCategories.Data, "标记脏的数据块未注册: {0}，忽略。", typeof(T).Name);
                 return;
             }
 
@@ -342,7 +345,7 @@ namespace XFramework.XData
         {
             if (!_blocks.TryGetValue(typeof(T), out var block))
             {
-                Debug.LogWarning($"[Data] 创建快照的数据块未注册: {typeof(T).Name}，返回 null。");
+                LogManager.Warning(LogCategories.Data, "创建快照的数据块未注册: {0}，返回 null。", typeof(T).Name);
                 return null;
             }
 
@@ -355,19 +358,19 @@ namespace XFramework.XData
         {
             if (snap == null)
             {
-                Debug.LogWarning("[Data] ApplyBlockSnapshot 收到 null 快照，忽略。");
+                LogManager.Warning(LogCategories.Data, "ApplyBlockSnapshot 收到 null 快照，忽略。");
                 return false;
             }
 
             if (string.IsNullOrEmpty(snap.blockName))
             {
-                Debug.LogWarning("[Data] DataBlockSnapshot 缺少 blockName，跳过。");
+                LogManager.Warning(LogCategories.Data, "DataBlockSnapshot 缺少 blockName，跳过。");
                 return false;
             }
 
             if (!_blockNameIndex.TryGetValue(snap.blockName, out var block))
             {
-                Debug.LogWarning($"[Data] 未注册的数据块: {snap.blockName}，跳过。");
+                LogManager.Warning(LogCategories.Data, "未注册的数据块: {0}，跳过。", snap.blockName);
                 return false;
             }
 
@@ -387,7 +390,7 @@ namespace XFramework.XData
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Data] 恢复数据块 {snap.blockName} 时抛出异常：{e}");
+                LogManager.Error(LogCategories.Data, "恢复数据块 {0} 时抛出异常：{1}", snap.blockName, e);
             }
 
             return false;
@@ -413,7 +416,8 @@ namespace XFramework.XData
                     }
                     catch (Exception e)
                     {
-                        Debug.LogError($"[Data] 清空数据块 {b.GetType().Name} 时抛出异常，已跳过并继续清空其余块：{e}");
+                        LogManager.Error(LogCategories.Data,
+                            "清空数据块 {0} 时抛出异常，已跳过并继续清空其余块：{1}", b.GetType().Name, e);
                     }
                 });
             }
