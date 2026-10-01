@@ -293,7 +293,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
-- **XPool 集合池 `Configure` 守卫用差值冒充活跃数，`ClearAll` 后永久拒绝重配**：守卫判的是 `CountAll - CountInactive`，而 `CountAll` 只增不减、`Clear` 只清闲置栈——任何一次 `Clear()` 或 `CollectionPoolManager.ClearAll()`（README 推荐切场景调用，框架在 `Application.quitting` 也调）之后，守卫都会看到「N 个活跃实例」并**永久**拒绝重配；集合池没有 `RemovePool` 这类逃生口，`PoolManager` 侧至少还教了那条路。四个集合池（List / HashSet / Dictionary / StringBuilder）一并改用真正的 `CountActive`，各加注释说明为何不能用差值口径。补一条回归用例，已实测改回旧算法时它确实会红
+- **XPool 集合池 `Configure` 守卫用差值冒充活跃数，`ClearAll` 后永久拒绝重配**：守卫判的是 `CountAll - CountInactive`，而 `CountAll` 只增不减、`Clear` 只清闲置栈——任何一次 `Clear()` 或 `CollectionPoolManager.ClearAll()`（切场景时的推荐调用）之后，守卫都会看到「N 个活跃实例」并**永久**拒绝重配；集合池没有 `RemovePool` 这类逃生口，`PoolManager` 侧至少还教了那条路。四个集合池（List / HashSet / Dictionary / StringBuilder）一并改用真正的 `CountActive`，各加注释说明为何不能用差值口径。补一条回归用例，已实测改回旧算法时它确实会红
 
 - **XPool `Return` 按编译期类型定键，基类 / 接口引用归还时静默丢件**：池按 `Type` 定键，而 `Return<T>` 用的是编译期类型——`Base b = Get<Derived>(); Return(b);` 查不到池，实例被静默丢弃，与「未注册类型静默忽略」的宽容语义混在一起无从察觉（GameFramework 的 `Release(IReference)` 改用 `reference.GetType()` 定键正是为了规避这一点）。改为 `typeof(T)` 未命中时按 `item.GetType()` 回落一次，经内部 `IUntypedPool` 逃生口调用（泛型池不变型：`Pool<Runtime> is IPool<T>` 当且仅当类型相等，所以必须有非泛型入口）。回落**只在编译期类型无池时发生**，两边都有池时行为与修复前完全一致——不会把实例改投进另一个池；两条用例分别钉住这两半
 
