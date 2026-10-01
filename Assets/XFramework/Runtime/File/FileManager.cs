@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XFileManager
 {
@@ -91,7 +92,7 @@ namespace XFramework.XFileManager
 
             if (_initialized)
             {
-                Debug.LogWarning("[FileManager] Initialize called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.FileManager, "Initialize called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -345,8 +346,8 @@ namespace XFramework.XFileManager
                 return atomicProvider.WriteAllBytesAtomicAsync(domain, relativePath, data, cancellationToken);
 
             // 降级普通写(语义回退为「直接覆盖」,崩溃防护失效,告警提示)
-            Debug.LogWarning(
-                $"[FileManager] 当前 Provider({_baseProvider?.GetType().Name}) 不支持原子写入,已降级为普通写入。");
+            LogManager.Warning(LogCategories.FileManager,
+                "当前 Provider({0}) 不支持原子写入,已降级为普通写入。", _baseProvider?.GetType().Name);
             return provider.WriteAllBytesAsync(domain, relativePath, data, cancellationToken);
         }
 
@@ -502,8 +503,8 @@ namespace XFramework.XFileManager
             if (_baseProvider is IDirectoryProvider && provider is IDirectoryProvider directoryProvider)
                 return directoryProvider.GetDirectoriesAsync(domain, relativePath, cancellationToken);
 
-            Debug.LogWarning(
-                $"[FileManager] 当前 Provider({_baseProvider?.GetType().Name}) 不支持目录枚举,返回空数组。");
+            LogManager.Warning(LogCategories.FileManager,
+                "当前 Provider({0}) 不支持目录枚举,返回空数组。", _baseProvider?.GetType().Name);
             return UniTask.FromResult(Array.Empty<string>());
         }
 

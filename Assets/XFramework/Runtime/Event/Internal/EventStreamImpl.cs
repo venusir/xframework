@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XEvent.Internal
 {
@@ -191,7 +192,7 @@ namespace XFramework.XEvent.Internal
             }
             catch (Exception e)
             {
-                Debug.LogError($"[Event] EventStream handler threw exception: {e}");
+                LogManager.Error(LogCategories.Event, "EventStream handler threw exception: {0}", e);
             }
         }
 
