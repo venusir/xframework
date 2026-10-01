@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Documentation
+
+- **`Runtime/Bootstrap/README.md` 与 `Runtime/Update/README.md` 补齐「引导流程 × 每帧派发」的边界**：一轮定向审计（问题：「如何保证框架加载完成才执行 Update」）确认**不存在、也不打算有**这样的门控——Update 的调度器建于 `SubsystemRegistration`、PlayerLoop 注入于 `AfterAssembliesLoaded`，都早于首个场景，`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常。两侧都不缺防护：框架内建 ticker 全部「初始化成功后才注册 + 未就绪空转」，使用方回调的正解是 `await Bootstrap.RunAsync()` 之后注册。README 新增：Update 侧把「派发与启动/引导流程无关」写进 `已知限制`；Bootstrap 侧在 `设计取舍` 回答「为什么不自动暂停/不提供就绪门控」，并给出确需加载期安静时的既有写法（`Pause()` → `RunAsync` → `finally Resume()`，只冻逻辑轴，`Unscaled` 节点照常）。同轮归档：`Documentation/Modules/Bootstrap.md` 新增「已评估未采纳与未决」（自动门控与就绪句柄两个方向否决的理由；GameLauncher 启动途中销毁与在途 `RunAsync` 交叠列为未决，推理未实测）；`Documentation/Modules/Update.md` 已评估未采纳补一条「不加加载期硬门控原语」。
+
 ### Added
 
 - **`LocalizationManager.SetPlaceholderFromKey(name, localizationKey)`：按语言解析的键值占位符**。全局占位符存的是**字面量**，所以值本身需要翻译时只能写成 `SetPlaceholder("Guild", Get("guild_legendary"))`——取的是注册当时那个语言的值，切语言后模板更新了、**嵌进去的值还是旧的，没有异常也没有日志**。新入口把翻译推迟到替换发生的当下：注册一次，跟随语言。四条语义各有用例钉住：**注册一次、跟随语言**（替换时经 `GetRaw` 按当前语言 + 回退链解析）；**解析规则与 `Get` 同一条**（两边都没有时返回那条表项的键本身，便于发现漏配）；**单趟、不递归**（替换进去的值不再扫）；**一个名字只有一种含义**（字面量与键值绑定两张表互斥，后注册的覆盖前者）。实现上 `ReplacePlaceholders` 的早退从「`_placeholders` 为空」改成「**两张表都空**」——否则注册了键值绑定却不扫描；`Dispose` 两张表成对置空；门面同步加转发（漏了会被上一轮的 `LocalizationFacadeCompletenessTests` 当场判红）。**验证的看点不在「改前必红」**（新 API 不存在时程序集本就编译不过，那是平凡的），而在语义用例的判别力——做了三次**负向控制**，各只挂一条、失败信息直指语义：「替换时解析」改成「注册时求值」→ `Expected: "Guild: Legendary Guild" But was: "Guild: 传奇公会"`（正是真实症状）；对替换进去的值再扫一遍 → `Expected: "内层：{Inner}" But was: "内层：会被替换"`；去掉两表互斥 → `Expected: "来自表的英文名" But was: "字面量"`
