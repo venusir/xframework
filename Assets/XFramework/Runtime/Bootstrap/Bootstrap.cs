@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using XFramework.XPipeline;
 
 namespace XFramework.XBootstrap
@@ -59,7 +60,7 @@ namespace XFramework.XBootstrap
             {
                 if (ReferenceEquals(StageList[i], stage))
                 {
-                    Debug.LogWarning($"[Bootstrap] 阶段 {stage.GetType().Name} 的同一实例已登记，忽略重复登记。");
+                    LogManager.Warning(LogCategories.Bootstrap, "阶段 {0} 的同一实例已登记，忽略重复登记。", stage.GetType().Name);
                     return;
                 }
             }
@@ -126,7 +127,7 @@ namespace XFramework.XBootstrap
         {
             if (StageList.Count == 0)
             {
-                Debug.LogWarning("[Bootstrap] 未登记任何引导阶段，RunAsync 直接返回。");
+                LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
                 return;
             }
 
@@ -185,7 +186,8 @@ namespace XFramework.XBootstrap
                 }
                 catch (Exception exception)
                 {
-                    Debug.LogError($"[Bootstrap] 阶段 {stage.GetType().Name} 的 Shutdown 抛异常，已跳过：{exception}");
+                    LogManager.Error(LogCategories.Bootstrap, "阶段 {0} 的 Shutdown 抛异常，已跳过：{1}",
+                        stage.GetType().Name, exception);
                 }
             }
         }

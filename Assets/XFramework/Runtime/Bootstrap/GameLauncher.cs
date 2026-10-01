@@ -1,6 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XBootstrap
 {
@@ -39,7 +40,7 @@ namespace XFramework.XBootstrap
             }
             catch (Exception exception)
             {
-                Debug.LogError($"[GameLauncher] 启动失败：{exception}");
+                LogManager.Error(LogCategories.GameLauncher, "启动失败：{0}", exception);
             }
         }
 
