@@ -4,7 +4,7 @@
 
 ## 概述
 
-它比 Unity 自带的 `Debug.unityLogger` + 自定义 `ILogHandler` 多给四样东西（前三样是立项门槛，见 `Documentation/Roadmap.md` §2.2 的历史记录）：
+它比 Unity 自带的 `Debug.unityLogger` + 自定义 `ILogHandler` 多给四样东西（前三样是本模块立项时的门槛——答不出「多给什么」就不该建）：
 
 1. **按分类过滤**：Unity 只有全局开关，没有「只关 Save 的 Debug」。这里每个分类可以单独设档位。
 2. **零 GC 调用路径**：`Debug.Log($"x {a}")` 无论开不开都必然分配；这里**未启用就不格式化**（有测试锁定）。
