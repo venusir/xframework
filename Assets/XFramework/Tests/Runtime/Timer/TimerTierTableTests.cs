@@ -94,6 +94,11 @@ namespace XFramework.XTimer.Tests
                                   / (probe.Times.Count - 1);
                 double expected = TimerCore.TierPeriodOf(tier);
 
+                // 实测值写进测试结果文件：维护向文档的「实测记录」直接抄它，不必回头再跑一遍
+                TestContext.WriteLine(
+                    $"{tier}: 实测 {measured * 1000:0.##} ms / 标称 {expected * 1000:0.##} ms" +
+                    $"（{probe.Times.Count} 次派发）");
+
                 // 容差取 2%：本用例要抓的是「基准换了」（60→50 差 17%）或「补格算法改了」这类
                 // 结构性失配，不是浮点噪声
                 Assert.AreEqual(expected, measured, expected * 0.02,

@@ -14,7 +14,7 @@
 
 ## 二、待立项（已确认要做）
 
-> 节的排列即建议的开工顺序。Audio 已于 2026-10-01 建成（见 2.1）；余下 Logger 与 Timer 仍待立项。
+> 节的排列即建议的开工顺序。Audio 与 Timer 已于 2026-10-01 建成（见 2.1 / 2.3）；余下 Logger 仍待立项。
 
 ### 2.1 Audio —— ✅ 已建成（2026-10-01）
 
@@ -50,20 +50,18 @@
 
 **为什么排在 Audio 之后**：Logger 是横向切面，落地后「新建模块该用哪一个」立刻成为问题。先做 Audio（沿用既有的 `Debug.Log` 约定），Logger 落地时一次回填覆盖到它——避免「第 19 个模块与前面 18 个不一致」。
 
-### 2.3 Timer —— 建议最后做
+### 2.3 Timer —— ✅ 已建成（2026-10-01）
 
-**为什么这是三个里价值论证最薄的**
+> **本条已搬迁**。维护向记录在 `Documentation/Modules/Timer.md`，使用方文档在
+> `Assets/XFramework/Runtime/Timer/README.md`——本文只留指针，不再复述。
 
-框架已强制 UniTask，而 `UniTask.Delay(TimeSpan, DelayType, PlayerLoopTiming)` **已经覆盖了**延时、重复、以及受不受 `timeScale` 影响。立项前必须答得出「比 `UniTask.Delay` 多给什么」，否则做出来就是一个多余的层。能站住的只有四条：
+立项时写下的四条理由**全部落地**：可查询的 `Remaining`、零分配的可复用句柄、不漂移的固定间隔、
+与 Update 的 Tier 自动升降档联动。**红线照原样执行**：暂停与时间缩放完全转接自 Update 的双时间轴，
+模块内没有一行暂停代码、也没有第二条时间口径（`TimerManager` 上刻意没有 `Pause`）。
 
-1. **可查询的句柄**（`Remaining` / `IsCoolingDown`）——`UniTask.Delay` 查不了，这是最硬的一条。
-2. **零分配的可复用句柄**——`UniTask.Delay` 每次要 `CancellationTokenSource`。
-3. **不漂移的固定间隔**——`UniTask.Delay` 累加会漂。
-4. **与 Update 的 Tier 联动**——低频定时器自动降频。
-
-**红线**：暂停与时间缩放**必须架在 Update 的双时间轴之上**，不得另开一套时间口径——那就是在替使用方定时间模型，撞 `CLAUDE.md` 的第一条非目标。
-
-**依赖**：Update（下游）。先例 `Asset ← Event`、`UI ← Update`，方向一致、无环。
+一轮额外裁定：**不做 `ITimerManager` 接口**。本仓「有接口」的分界线是「是否存在可替换的后端」
+（Audio → FMOD、Input → Rewired），Timer 没有——多一个接口只会多出一份必须长期同步的转发契约。
+全部理由与代价见模块文档的「已评估未采纳与未决」。
 
 ## 三、待裁（常见，但边界未定，先别开工）
 
