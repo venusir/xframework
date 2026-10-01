@@ -8,7 +8,9 @@ namespace XFramework.XUpdate
     /// <para>统一管理所有注册到它的更新需求，通过内部的 <see cref="UpdateScheduler"/> 提供档位分桶与时间切片调度。</para>
     /// <para>自动生命周期：通过 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 初始化，<see cref="Application.quitting"/> 时自动清理。</para>
     /// <para>每帧由注入到 PlayerLoop 的驱动自动推进（见 <see cref="IsDrivingPlayerLoop"/>），
-    /// 不依赖场景中存在任何 MonoBehaviour；<see cref="Tick(float)"/> 保留供手动驱动与测试使用。</para>
+    /// 不依赖场景中存在任何 MonoBehaviour；手动驱动请用无参 <c>Tick()</c> / <c>TickFixed()</c>
+    /// （它们与自动驱动的时钟逐字一致），自带时刻的 <see cref="Tick(float)"/> 等重载是给测试与
+    /// 确定性回放用的。</para>
     /// <para>任何对象——静态服务、MonoBehaviour、普通 C# 类——都直接调用 <see cref="Register(IUpdateable, int, UpdateTier, UpdateTimeMode)"/> 注册自身。</para>
     /// </summary>
     /// <remarks>
@@ -446,6 +448,9 @@ namespace XFramework.XUpdate
         /// UI 动画、手柄振动等跟着慢下来」的场景使用；用 <c>timeScale = 0</c> 暂停同样会让逻辑轴
         /// 冻结（驱动把它填进 <see cref="UpdateClock.IsPaused"/>）。两条路径都不影响
         /// <see cref="UpdateTimeMode.Unscaled"/> 轴上的对象。</para>
+        /// <para><b>三个时机一并冻结</b>：固定步时机的节点同样挂在逻辑轴上（<see cref="RegisterFixed"/>
+        /// 不传轴，取默认 <see cref="UpdateTimeMode.Scaled"/>），故一次暂停会三套调度器一起停
+        /// （完整对照表见 <c>Update/README.md</c> 的「时间轴与暂停」）。</para>
         /// <para><b>恢复时不追赶</b>：<see cref="Resume"/> 会把时间基准重锚，恢复后的第一帧
         /// delta 为 0，而不是把整段暂停时长一次性补完。确有追赶需求的逻辑请在节点内自行累加。</para>
         /// </summary>
@@ -623,10 +628,11 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
-        /// 检查对象是否处于启用状态（任一时机）。
+        /// 检查对象是否处于启用状态（任一时机，跨时机对象<b>取与</b>：任一时机认为它被禁用即为禁用）。
         /// </summary>
         /// <param name="node">要检查的对象。</param>
-        /// <returns>如果对象未被禁用则返回 true。</returns>
+        /// <returns>如果对象未被禁用则返回 true；未注册过的对象同样返回 true（「未注册」在查询面上
+        /// 与「已启用」同义——本方法只回答「是否被禁用」，不回答「是否在管理中」）。</returns>
         public static bool IsEnabled(IUpdateLifecycle node)
         {
             if (_schedulers == null || node == null) return false;
@@ -682,7 +688,7 @@ namespace XFramework.XUpdate
         #region Public API — 查询
 
         /// <summary>
-        /// 获取指定 <see cref="UpdateTier"/> 等级的对象数量（含全部时机与时间轴）。
+        /// 获取指定 <see cref="UpdateTier"/> 等级的对象数量（不含禁用对象，含全部时机与时间轴）。
         /// </summary>
         public static int GetCount(UpdateTier tier)
         {
