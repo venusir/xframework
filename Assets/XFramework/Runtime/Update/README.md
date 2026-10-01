@@ -316,6 +316,10 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   其后条目的下标整体平移。于是**别人注销一个条目，你可能因此早一格或晚将近一整个周期被轮到**。
   这是「每格只访问本切片条目」这条性质的代价（彻底修要每格扫全桶），已评估并接受；
   介意首次派发延迟时请用 `ProcessImmediate` 或留在细档位
+- **注册表持节点的强引用，且不识别已销毁对象**：不 `Unregister` 的节点既不会被回收、也不会被自动
+  摘除——框架内的自动注销只由回调抛异常触发。MonoBehaviour 节点被销毁后仍留在桶里：下一次派发若在
+  回调里触碰到已销毁成员，会以 `MissingReferenceException` 的形式被注销并记 `LogError`，否则与普通
+  C# 节点一样静默保留。对象不用时必须自行 `Unregister`
 - **派发与启动/引导流程无关**：驱动在 `AfterAssembliesLoaded` 注入（早于首个场景），此后无论什么流程
   在跑——`Bootstrap.RunAsync`、资源加载、场景切换——派发都照常进行。不存在「框架没就绪就不派发」的
   状态：依赖已初始化服务的回调，请在 `await Bootstrap.RunAsync()` 完成之后再注册，或直接写在自家引导
