@@ -184,6 +184,26 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 在 <c>OnUpdate</c> 里抛异常的面板，用于验证帧通路的异常隔离：坏面板停更，同帧其余面板与驱动器不受影响。
+    /// <para>计数在抛出<b>之前</b>累加（先走 <see cref="UpdateRecordingPanel"/> 的 base）：这样「被驱动过」
+    /// 与「抛过异常」两件事都能从 <see cref="UpdateRecordingPanel.UpdateCount"/> 读到——否则一个空过的
+    /// 用例也会通过。</para>
+    /// </summary>
+    public class ThrowingOnUpdatePanel : UpdateRecordingPanel
+    {
+        /// <summary>置 false 后不再抛，用于验证回池复位后重新打开能恢复驱动。</summary>
+        public bool ShouldThrow = true;
+
+        protected internal override void OnUpdate(float deltaTime, float time)
+        {
+            base.OnUpdate(deltaTime, time);
+
+            if (ShouldThrow)
+                throw new System.InvalidOperationException("[ThrowingOnUpdatePanel] 故意在 OnUpdate 里抛异常");
+        }
+    }
+
+    /// <summary>
     /// 在自己的 <see cref="UIViewBase.OnUpdate"/> 里关闭自己的面板。
     /// <para>这是「遍历中改集合」崩溃的触发场景：默认控制器下的关闭路径同步走完，
     /// 若驱动方直接遍历活动面板集合就会当场抛 InvalidOperationException。</para>

@@ -1272,11 +1272,31 @@ namespace XFramework.XUI
             {
                 var panel = bucket[i];
 
-                // 失焦（IsPaused）的面板不派发：它被别的面板盖住了，看不见也没交互
-                if (panel == null || !panel.IsOpen || panel.IsPaused)
+                // 失焦（IsPaused）的面板不派发：它被别的面板盖住了，看不见也没交互；
+                // 已停更（UpdateFaulted）的面板同理——它的 OnUpdate 抛过异常，继续驱动只会每帧再抛一次
+                if (panel == null || !panel.IsOpen || panel.IsPaused || panel.UpdateFaulted)
                     continue;
 
-                panel.OnUpdate(deltaTime, time);
+                try
+                {
+                    panel.OnUpdate(deltaTime, time);
+                }
+                catch (Exception e)
+                {
+                    // 异常隔离放在这里而不是驱动器里：只有这里知道是哪个面板抛的，也只有这里能让
+                    // 同帧其余面板继续跑。异常一旦逃逸到 UpdateScheduler，它会按契约记 LogError 并
+                    // 注销本节点（见 UpdateScheduler 的派发循环）——而门面记账是单向的
+                    // （_frameDriver 非空即早退），驱动器再也回不来，UI 的整条每帧通路
+                    // （面板 / HUD / Tip）就此永久死亡。
+                    //
+                    // 停更而非继续驱动：OnUpdate 的典型异常（空引用等）是持续态，继续驱动等于每帧
+                    // 刷一条带栈日志；标记随回池复位（见 RecyclePanel），不会把池化实例变成僵尸。
+                    panel.UpdateFaulted = true;
+                    Debug.LogError(
+                        $"[UIManager] Panel '{panel.GetType().Name}'.OnUpdate threw exception; " +
+                        "this panel will not be driven again until it is reopened " +
+                        $"(other panels are unaffected): {e}");
+                }
             }
 
             // 注意：HUD 的 Update 已由 UIManager.Update 在 facade 层处理
@@ -1554,6 +1574,11 @@ namespace XFramework.XUI
             }
             finally
             {
+                // 停更标记随回池复位：面板是池化复用的，不复位会让它下次打开时带着上一轮的
+                // 停更状态回来（一个「开着但永不更新」的僵尸）。放在 finally 而非 OnPoolRecycle：
+                // 后者是用户可覆写、可能忘记调 base 的钩子，框架状态复位不能依赖用户代码。
+                panel.UpdateFaulted = false;
+
                 // 重置本身失败也必须回池：此刻面板已不在任何集合里，没有第二条路径能再碰到它
                 _factory.Release(panel);
             }

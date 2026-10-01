@@ -84,6 +84,16 @@ namespace XFramework.XUI.View
         /// </summary>
         public bool IsPaused { get; private set; }
 
+        /// <summary>
+        /// 面板的每帧更新是否已因异常停更。
+        /// <para>这是<strong>更新维度</strong>的第三种状态（正常 / 暂停 / 停更）：<see cref="UIViewBase.OnUpdate"/>
+        /// 抛出异常后由 <c>UIManagerImpl</c> 置位，此后不再驱动本面板，直到它回池（下次打开自动复位）。</para>
+        /// <para><b>为什么是停更而不是永久注销</b>：面板是池化复用的，永久标记会让下次同类型打开拿回一个
+        /// 「开着但永不更新」的僵尸面板——那比每帧抛异常更难查。复位点选在回池而非 <see cref="OnPoolRecycle"/>：
+        /// 后者是用户可覆写、且可能忘记调用 <c>base</c> 的钩子，框架状态复位不能依赖用户代码。</para>
+        /// </summary>
+        internal bool UpdateFaulted { get; set; }
+
         #endregion
 
         #region Lifecycle Methods (Overridden by Subclass)
