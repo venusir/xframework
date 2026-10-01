@@ -163,9 +163,9 @@ namespace XFramework.XSave
                         continue;
                     }
 
-                    if (!TryDeserializeSnapshot(bytes, snapshotType, Serializer.Default, out var saveData, out var error))
+                    if (!TryDeserializeSnapshot(bytes, snapshotType, Serializer.Default, out var saveData, out var error, out var exception))
                     {
-                        LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, error);
+                        LogMetaParseFailure(path, error, exception);
                         metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes.Length));
                         continue;
                     }
@@ -181,7 +181,8 @@ namespace XFramework.XSave
                 catch (Exception ex)
                 {
                     // CreateMeta 是第三方扩展点，其异常不应打崩整份列表
-                    LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, ex.Message);
+                    LogManager.Exception(LogLevel.Warning, LogCategories.Save, ex,
+                        string.Format("解析存档元数据失败: {0}", path));
                     metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes?.Length ?? 0));
                 }
             }
@@ -225,9 +226,9 @@ namespace XFramework.XSave
             // 与 GetSlotMetasAsync 同一错误处置：损坏即告警并返回带标记的元数据。
             // 返回带标记条目而非 null，是为了让两个元数据 API 结论一致——
             // null 严格表示「该槽位不存在」，而不是「存在但读不了」
-            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out var error))
+            if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out var error, out var exception))
             {
-                LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, error);
+                LogMetaParseFailure(path, error, exception);
                 return BuildCorruptedMeta(playerId, slot, path, bytes.Length);
             }
 
@@ -475,7 +476,7 @@ namespace XFramework.XSave
                 error = ex.Message;
 
                 // 底层异常在此处记 LogError：结果结构体只带摘要文本，堆栈靠这里保留
-                LogManager.Error(LogCategories.Save, "应用存档失败，正在回滚内存数据: {0}", ex);
+                LogManager.Exception(LogCategories.Save, ex, "应用存档失败，正在回滚内存数据");
                 RollbackTo(rollback);
                 return false;
             }
@@ -510,7 +511,7 @@ namespace XFramework.XSave
             }
             catch (Exception rollbackEx)
             {
-                LogManager.Error(LogCategories.Save, "回滚内存数据失败，内存状态可能不完整: {0}", rollbackEx);
+                LogManager.Exception(LogCategories.Save, rollbackEx, "回滚内存数据失败，内存状态可能不完整");
             }
         }
 
@@ -765,6 +766,29 @@ namespace XFramework.XSave
         }
 
         /// <summary>
+        /// 元数据解析失败的告警。
+        /// <para><b>两种失败走两条路</b>：反序列化抛异常时把<b>异常对象</b>交给日志（JSONL 的 <c>exc</c> 字段
+        /// 因此带上类型与抛出栈）；结构校验失败（版本号非法、块列表为空等）没有异常对象，保留原来的
+        /// 文本形态（附上 <paramref name="error"/> 原因）。两种文案都从「解析存档元数据失败: path」起头，
+        /// 既有断言不受影响。</para>
+        /// </summary>
+        /// <param name="path">存档文件路径。</param>
+        /// <param name="error">失败原因文本（无异常时使用）。</param>
+        /// <param name="exception">反序列化异常；无异常时为 <c>null</c>。</param>
+        private static void LogMetaParseFailure(string path, string error, Exception exception)
+        {
+            if (exception != null)
+            {
+                LogManager.Exception(LogLevel.Warning, LogCategories.Save, exception,
+                    string.Format("解析存档元数据失败: {0}", path));
+            }
+            else
+            {
+                LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, error);
+            }
+        }
+
+        /// <summary>
         /// 反序列化存档字节并做最小结构校验：结果非 <c>null</c>、含数据块列表、版本号 <c>&gt;= 1</c>。
         /// <para><b>为什么必须校验：</b>内容为合法 JSON 但不是存档的文件（如 <c>{"foo":1}</c>）也能
         /// 反序列化出一个 <see cref="DataSnapshot"/>，而 <see cref="DataSnapshot.blocks"/> 有字段初始化器
@@ -781,11 +805,14 @@ namespace XFramework.XSave
         /// 后台线程读取既可能拿到中途更换的实例，也让调用方无法固定「本次操作使用哪个序列化器」。</param>
         /// <param name="saveData">反序列化并校验通过的快照；失败时为 <c>null</c>。</param>
         /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
+        /// <param name="exception">反序列化抛出的异常；<b>结构校验失败时为 <c>null</c></b>（那不是异常，文案不同）。</param>
         /// <returns>校验通过返回 <c>true</c>。</returns>
-        private static bool TryDeserializeSnapshot(byte[] bytes, Type snapshotType, ISerializer serializer, out DataSnapshot saveData, out string error)
+        private static bool TryDeserializeSnapshot(byte[] bytes, Type snapshotType, ISerializer serializer,
+            out DataSnapshot saveData, out string error, out Exception exception)
         {
             saveData = null;
             error = null;
+            exception = null;
 
             DataSnapshot data;
             try
@@ -795,6 +822,7 @@ namespace XFramework.XSave
             catch (Exception ex)
             {
                 error = ex.Message;
+                exception = ex; // 解析类失败的异常对象要留给调用方（结构校验失败没有异常，两者文案不同）
                 return false;
             }
 
@@ -832,7 +860,7 @@ namespace XFramework.XSave
         /// <returns>解析结果载体。</returns>
         private static SnapshotParseResult ParseSnapshot(byte[] bytes, Type snapshotType, ISerializer serializer)
         {
-            if (TryDeserializeSnapshot(bytes, snapshotType, serializer, out var saveData, out var error))
+            if (TryDeserializeSnapshot(bytes, snapshotType, serializer, out var saveData, out var error, out _))
                 return new SnapshotParseResult(saveData, null);
 
             return new SnapshotParseResult(null, error);
@@ -929,8 +957,8 @@ namespace XFramework.XSave
             }
             catch (Exception ex)
             {
-                LogManager.Warning(LogCategories.Save,
-                    "元数据侧车解析失败，回退全量解析: {0}, {1}", savePath, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.Save, ex,
+                    string.Format("元数据侧车解析失败，回退全量解析: {0}", savePath));
                 return null;
             }
         }
@@ -1071,7 +1099,7 @@ namespace XFramework.XSave
             }
 
             // 载荷不是有效存档时不为它背书（不重建侧车），避免把垃圾内容「洗白」成看起来正常的槽位
-            if (!TryDeserializeSnapshot(payloadBytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out _))
+            if (!TryDeserializeSnapshot(payloadBytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out _, out _))
                 return;
 
             var meta = BuildMeta(saveData, playerId, slot, payloadPath, payloadBytes.Length);
