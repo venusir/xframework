@@ -60,6 +60,7 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 ## 输出端
 
 - **控制台**（`ConsoleLogSink`，默认开）：渲染成 `[Category] message` 后交给 `Debug.Log/LogWarning/LogError`。渲染文本与 LogType 映射**与迁移前手抄前缀的写法逐字一致**——这是 193 处迁移能靠「测试全绿」验证的前提。
+- **全量捕获**（`CaptureUnityLogs`，默认与文件输出端同开关）：挂 `Application.logMessageReceivedThreaded`，把**引擎、第三方库、未捕获异常**的日志也收进同一份文件，每条标 `src:"unity"`；框架自己的日志标 `src:"fw"`，不会因回显被写两遍。外部日志走同一套档位过滤（`MinimumLevel` 与分类覆盖都适用），分类从 `[标签]` 前缀解析（解析不出呈现为 `Unregistered`）。回调在 `AutoInit` 时**无条件挂上**——没有可写输出端时它第一行即返回，因此不存在「第一次 `LogManager` 调用之前发生的日志捕获不到」的时序陷阱。
 - **JSONL 文件**（`LogFileSink`，默认 Editor/Development 开、Release 关）：每条日志一行 JSON，落在 `{persistentDataPath}/XLog/`，**每会话一个文件**（`xlog-{时间}-{会话id}-p{n}.jsonl`）。超 32 MiB 切分片，每个分片首行都重写会话头；目录内保留最新 10 个文件。**运行时即可读**：写入端持有共享读的写句柄，读取方需自行声明共享写（.NET 里是 `FileShare.ReadWrite`；`jq` / `grep` 这类经 CRT 打开文件的工具默认即可）。**Warning 及以上立即落盘**，其余每 64 条批量落盘，`Shutdown` 与 `Application.quitting` 时冲刷——崩溃后要能读到现场。文件写入失败（磁盘满、目录不可写）时该输出端**静默停用**：不记日志（会递归）、不抛异常、不影响控制台通路。
 
 ## 线程契约

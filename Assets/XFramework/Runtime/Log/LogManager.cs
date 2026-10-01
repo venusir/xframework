@@ -45,6 +45,13 @@ namespace XFramework.XLog
 
         #region Private — Impl
 
+        /// <summary>
+        /// 全量捕获的目标：仅当当前实现是内置实现时返回它。
+        /// <para><b>刻意不走 <see cref="Impl"/></b>：那会让一条第三方日志凭空创建出一个日志实现
+        /// （连同它的文件输出端）。注入自定义实现时捕获自动停用——那是自定义实现自己的策略。</para>
+        /// </summary>
+        internal static LogManagerImpl CaptureTarget => _impl as LogManagerImpl;
+
         /// <summary>取当前实现；未装入时按默认配置构建（懒初始化，「日志永不因未初始化而失效」）。</summary>
         private static ILogManager Impl
         {
@@ -444,6 +451,12 @@ namespace XFramework.XLog
             }
 
             previous?.Shutdown();
+
+            UnityLogCapture.Attach();
+
+            // 立即装入默认实现：会话文件与全量捕获从启动第一帧就生效。若等到第一次框架日志再懒创建，
+            // 「启动阶段」的引擎/第三方日志（恰恰是排查启动失败最需要的那些）会整段丢失。
+            _ = Impl;
 
             Application.quitting -= OnQuitting;
             Application.quitting += OnQuitting;

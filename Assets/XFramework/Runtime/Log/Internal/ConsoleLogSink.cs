@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace XFramework.XLog.Internal
@@ -10,6 +11,27 @@ namespace XFramework.XLog.Internal
     /// </summary>
     internal sealed class ConsoleLogSink : ILogSink
     {
+        #region Private Fields
+
+        /// <summary>
+        /// 回显深度（线程本地）：本输出端调 <c>Debug.Log*</c> 期间为 1。
+        /// <para>Unity 的日志回调会把我们自己的输出再看见一次，<see cref="UnityLogCapture"/> 据此丢弃。
+        /// 线程本地是必需的——日志可能来自任意线程，而回调在调用线程上触发。</para>
+        /// </summary>
+        [ThreadStatic]
+        private static int _echoDepth;
+
+        #endregion
+
+        #region Internal API
+
+        /// <summary>当前线程是否正处在「本输出端调用 <c>Debug.Log*</c>」的窗口内。</summary>
+        internal static bool IsEchoing => _echoDepth > 0;
+
+        #endregion
+
+        #region ILogSink
+
         /// <summary>写入一条日志。任意线程调用（与 <c>Debug.Log</c> 同约束）。</summary>
         /// <param name="entry">日志条目。</param>
         public void Write(in LogEntry entry)
@@ -20,20 +42,28 @@ namespace XFramework.XLog.Internal
 
             string line = "[" + entry.Category.Name + "] " + body;
 
-            switch (entry.Level)
+            _echoDepth++;
+            try
             {
-                case LogLevel.Warning:
-                    Debug.LogWarning(line);
-                    break;
+                switch (entry.Level)
+                {
+                    case LogLevel.Warning:
+                        Debug.LogWarning(line);
+                        break;
 
-                case LogLevel.Error:
-                case LogLevel.Fatal:
-                    Debug.LogError(line);
-                    break;
+                    case LogLevel.Error:
+                    case LogLevel.Fatal:
+                        Debug.LogError(line);
+                        break;
 
-                default:
-                    Debug.Log(line);
-                    break;
+                    default:
+                        Debug.Log(line);
+                        break;
+                }
+            }
+            finally
+            {
+                _echoDepth--;
             }
         }
 
@@ -41,5 +71,7 @@ namespace XFramework.XLog.Internal
         public void Flush()
         {
         }
+
+        #endregion
     }
 }

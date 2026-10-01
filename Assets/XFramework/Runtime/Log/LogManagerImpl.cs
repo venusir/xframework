@@ -20,6 +20,7 @@ namespace XFramework.XLog
 
         private readonly object _sinkLock = new object();
         private readonly bool _captureStackTrace;
+        private readonly bool _captureUnityLogs;
         private readonly LogLevel _stackTraceMinLevel;
 
         private ILogSink[] _sinks;
@@ -43,6 +44,7 @@ namespace XFramework.XLog
         {
             _minimumLevel = (int)options.MinimumLevel;
             _captureStackTrace = options.CaptureStackTrace;
+            _captureUnityLogs = options.CaptureUnityLogs;
             _stackTraceMinLevel = options.StackTraceMinLevel;
 
             var sinks = new List<ILogSink>(2);
@@ -62,6 +64,41 @@ namespace XFramework.XLog
         internal static void MarkMainThread()
         {
             _mainThreadId = Thread.CurrentThread.ManagedThreadId;
+        }
+
+        /// <summary>
+        /// 捕获一条来自 Unity 日志系统的外部日志（引擎 / 第三方 / 未捕获异常）。
+        /// <para>档位过滤与框架日志同一套（否则 <c>MinimumLevel</c> 的「一律丢弃」承诺就自相矛盾）；
+        /// 但<b>只分发给非控制台输出端</b>——把捕获到的日志再交给控制台就是回显，会递归。</para>
+        /// <para>分类从 <c>[标签]</c> 前缀解析：能解析出就注册成同名分类（幂等），否则用
+        /// <c>default</c>（文件里呈现为 <c>Unregistered</c>）。</para>
+        /// </summary>
+        /// <param name="condition">Unity 日志正文（原样保留，不裁剪）。</param>
+        /// <param name="stackTrace">Unity 附带的堆栈（错误及以上通常非空）。</param>
+        /// <param name="type">Unity 的日志类型。</param>
+        internal void CaptureUnityLog(string condition, string stackTrace, LogType type)
+        {
+            if (!_captureUnityLogs)
+                return;
+
+            LogLevel level = MapUnityLevel(type);
+            LogCategory category = ParseCategory(condition);
+            if (!IsEnabled(level, category))
+                return;
+
+            var entry = new LogEntry(
+                level,
+                category,
+                condition ?? string.Empty,
+                DateTime.UtcNow,
+                SafeFrame(),
+                Thread.CurrentThread.ManagedThreadId,
+                LogSource.Unity,
+                Interlocked.Increment(ref _sequence),
+                null,
+                string.IsNullOrEmpty(stackTrace) ? null : stackTrace);
+
+            DispatchCaptured(in entry);
         }
 
         #endregion
@@ -361,6 +398,58 @@ namespace XFramework.XLog
                     DropSink(sinks[i]);
                 }
             }
+        }
+
+        /// <summary>分发捕获到的外部日志：跳过控制台输出端（回显会递归），其余与框架日志同一套摘除策略。</summary>
+        private void DispatchCaptured(in LogEntry entry)
+        {
+            ILogSink[] sinks = _sinks;
+
+            for (int i = 0; i < sinks.Length; i++)
+            {
+                if (sinks[i] is ConsoleLogSink)
+                    continue;
+
+                try
+                {
+                    sinks[i].Write(in entry);
+                }
+                catch (Exception)
+                {
+                    DropSink(sinks[i]);
+                }
+            }
+        }
+
+        /// <summary>Unity 日志类型 → 本模块档位。<c>Assert</c> 归 <c>Error</c>：断言失败在发布版里必须可见。</summary>
+        private static LogLevel MapUnityLevel(LogType type)
+        {
+            switch (type)
+            {
+                case LogType.Warning:
+                    return LogLevel.Warning;
+
+                case LogType.Error:
+                case LogType.Assert:
+                case LogType.Exception:
+                    return LogLevel.Error;
+
+                default:
+                    return LogLevel.Info;
+            }
+        }
+
+        /// <summary>从 <c>[标签] 正文</c> 解析分类；解析不出返回 <c>default</c>（呈现为 <c>Unregistered</c>）。</summary>
+        private static LogCategory ParseCategory(string condition)
+        {
+            if (string.IsNullOrEmpty(condition) || condition[0] != '[')
+                return default;
+
+            int end = condition.IndexOf(']');
+            if (end <= 1)
+                return default;
+
+            return LogCategory.Get(condition.Substring(1, end - 1));
         }
 
         /// <summary>摘除抛异常的 sink：不记日志（会递归）、不向上抛（日志永不抛），只计数。</summary>

@@ -27,6 +27,7 @@ namespace XFramework.XLog
             StackTraceMinLevel = LogLevel.Error;
 
             EnableFileSink = development;
+            CaptureUnityLogs = EnableFileSink;
             FileDirectory = ResolveDefaultDirectory();
             MaxFileBytes = 32 * 1024 * 1024;
             MaxRetainedFiles = 10;
@@ -57,6 +58,14 @@ namespace XFramework.XLog
         /// 在发布版里付 IO 代价。开启后每条日志一行、每会话一个文件（见模块 README 的 schema 表）。
         /// </summary>
         public bool EnableFileSink { get; set; }
+
+        /// <summary>
+        /// 是否把引擎 / 第三方库 / 未捕获异常的日志也收进同一份文件（每条标 <c>src:"unity"</c>）。
+        /// <para>默认与 <see cref="EnableFileSink"/> 的默认值相同（Editor / Development 开）。开启后**外部日志也走
+        /// 同一套档位过滤**——这保证 <see cref="MinimumLevel"/> 的「低于它一律丢弃」不会自相矛盾。</para>
+        /// <para>关闭它，文件里就只剩经 <c>LogManager</c> 发出的日志（<c>src:"fw"</c>）。</para>
+        /// </summary>
+        public bool CaptureUnityLogs { get; set; }
 
         /// <summary>
         /// JSONL 落盘目录。默认 <c>{persistentDataPath}/XLog</c>；取不到时回退 <c>{临时目录}/XLog</c>。

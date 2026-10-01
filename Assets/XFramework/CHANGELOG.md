@@ -31,7 +31,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **JSONL 文件输出端**：每条日志一行 JSON，落在 `{persistentDataPath}/XLog/`，**每会话一个文件**（`xlog-{时间}-{会话id}-p{n}.jsonl`，会话 id 与计时起点由 `AutoInit` 复位——关闭域重载时静态字段跨播放会话存活，不复位会让两次运行共用同一个 session、按 session 切片随即失效）。超 32 MiB 切分片、每片首行重写会话头（任意单个文件都自描述）、目录内保留最新 10 个。**Warning 及以上立即落盘**、其余每 64 条批量落盘、`Shutdown` 与 `Application.quitting` 时冲刷——崩溃后 AI 要能读到现场，这是「不开后台写线程」的理由。**失败即静默停用**：磁盘满、目录被占等 IO 失败后该输出端自我关闭，不记日志（会递归）、不抛异常、不影响控制台通路。
   **实测记录**：先机械提取了全部日志调用点再定分类表，**修正了方案里三处靠人肉记的账**——多出 `LanguageAssetLoader`(3 处)、`Reactive`(2)、`XSerialize`(2) 三个未被列出的真实标签；`[AudioManager]` 不是日志前缀而是 GameObject 名、`[Slot:…]` 是 `SaveMeta.ToString()`，两者都被误收过。`check-docs -Module Log` 报 **0 条** XML 告警。
   **被用例抓出的一条（8 条文件用例首轮全红）**：`Sharing violation`——Windows 的共享规则是**双向**的，写入端声明 `FileShare.Read` 只解决了「允许别人读」，读者还必须自己声明允许写者，而 .NET 的 `File.ReadAllLines` 内部声明的正是 `FileShare.Read`。修法在读者侧（显式传 `FileShare.ReadWrite`），已写进 README——它是「AI/脚本在游戏运行时读日志」的前提，不修就等于这份文件只能等进程退出后才能分析。
-  **本批不含**：「把引擎/第三方/未捕获异常收进同一时间线」的全量捕获（下一批），以及 18 个模块的回填（再之后，按模块拆分提交）。
+  **全量捕获**：挂 `Application.logMessageReceivedThreaded`，把引擎、第三方库（YooAsset 那类）、未捕获异常的日志也收进同一份 JSONL，每条标 `src:"unity"` 与来源 `LogType` 映射出的档位；框架自己的日志标 `src:"fw"`。**去重靠线程本地的回显深度**：控制台输出端调 `Debug.Log*` 前后增减计数，捕获回调据此丢弃自己的回显——一个框架日志因此恰好写一条，而不是「直写一条 + 被捕获再写一条」。外部日志同样走档位过滤（否则 `MinimumLevel` 的「一律丢弃」会自相矛盾），分类从 `[标签]` 前缀解析。**捕获回调在 `AutoInit` 时无条件挂上**（没有可写输出端时第一行即返回）：挂载成本只是每条 Unity 日志一次静态委托调用，换来的是没有「第一次 `LogManager` 调用之前发生的日志捕获不到」这个时序陷阱。同批把默认实现改为 `AutoInit` 时**立即装入**（不再是首次使用时懒创建）——否则启动阶段的引擎/第三方日志（恰恰是排查启动失败最需要的那些）会整段丢失。
+  **本批不含**：18 个模块的回填（下一批，按模块拆分提交）。
 
 ### Fixed
 

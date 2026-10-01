@@ -1,10 +1,9 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Text;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using LogLineDto = XFramework.XLog.Tests.LogTestKit.LogLineDto;
 
 namespace XFramework.XLog.Tests
 {
@@ -18,31 +17,6 @@ namespace XFramework.XLog.Tests
     [TestFixture]
     public class LogFileSinkTests
     {
-        #region Test Doubles
-
-        [Serializable]
-        private class LogLineDto
-        {
-            public string t;
-            public int v;
-            public string session;
-            public int seq;
-            public string ts;
-            public int up;
-            public string lvl;
-            public string cat;
-            public string msg;
-            public int frame;
-            public int thread;
-            public string src;
-            public string exc;
-            public string stack;
-            public int part;
-            public string unity;
-        }
-
-        #endregion
-
         #region Fixture
 
         private string _directory;
@@ -93,33 +67,17 @@ namespace XFramework.XLog.Tests
 
         private string[] Files()
         {
-            string[] files = Directory.GetFiles(_directory, "*.jsonl");
-            Array.Sort(files, StringComparer.Ordinal); // 文件名带时间戳，序号序即时间序
-            return files;
+            return LogTestKit.JsonlFiles(_directory);
         }
 
-        /// <summary>
-        /// 读取文件全部行。
-        /// <para><b>必须显式传 <c>FileShare.ReadWrite</c></b>：Windows 的共享规则是双向的，写入端还开着写句柄，
-        /// 读者只声明「允许别人读」照样冲突——<c>File.ReadAllLines</c> 内部就是这种声明，所以不能用它。
-        /// 这条同时是给外部分析脚本的提示（模块 README 已写明）。</para>
-        /// </summary>
         private static string[] Lines(string path)
         {
-            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            using (var reader = new StreamReader(stream, Encoding.UTF8))
-            {
-                var lines = new List<string>();
-                string line;
-                while ((line = reader.ReadLine()) != null)
-                    lines.Add(line);
-                return lines.ToArray();
-            }
+            return LogTestKit.ReadLines(path);
         }
 
         private static LogLineDto Parse(string line)
         {
-            return JsonUtility.FromJson<LogLineDto>(line);
+            return LogTestKit.ParseLine(line);
         }
 
         #endregion
