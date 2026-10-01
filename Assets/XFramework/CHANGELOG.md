@@ -19,6 +19,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **UI 四项「未做」复核 + 搬迁遗留收尾**：四项（列表虚拟化 / 场景切换安全 / UI 特效层 / UI 引导层）随 `e613867`（2026-09-30 文档分层第五批）从模块 README 搬进 `Documentation/Modules/UI.md` 后一字未动，本轮逐项裁定——列表虚拟化、跨场景引用自动检测、内建特效层三项**判不纳入框架**（理由与替代路径写进 UI README 新增的 `## 设计取舍`；技术文档只留「评估过并否决」那一层，做法与边界不重复），UI 引导层**拆项**（遮罩挖洞**原语**留在 roadmap 并写明范围与做法边界：区域语义 + 单张满屏 `Image` 改可留洞构成、不用 shader、复用引用计数句柄与 `UISorting.SystemOrder` 预留带；**引导编排不做**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构）。README 补 `## 设计取舍` 同时修实一处系统性漂移：`Documentation/Modules/UI.md` 第 4 行声称 README 承载它，而 README 此前只有 `## 设计原则`——「技术文档声称 README 承载 X、README 里却没有」的**第七例**。收尾搬迁遗留两处：`Runtime/Reactive/README.md` 那句「见 UI README 的 `[ ]` 列表」指向的清单已被搬走（断链；且不能改指 `Documentation/`——包内不指向包外），改为在原句内自述事实；`Documentation/Modules/README.md` 的模板代码块漏了表格里已有的 `## 已完成功能与未做（roadmap）` 一行。**搬迁本身（`e613867`）也一并登记**——它当时没进流水
+
 - **UI 模块首轮审计归档（定向 `UIManager.cs`，判据 A–F 全类扫过）**：1 条高危 + 4 条中高（前两条已修；`Dispose` 半拆窗口的语义、`Destroy` 一律 Dispose 注入实例两条只记文档，连同三条未决一起归档进 `Documentation/Modules/UI.md` 新增的「已评估未采纳与未决」）。同轮补的覆盖缺口各一条用例：`SetController` 对注入实现的降级分支、注入实例不被 `SetInstance` 销毁、`Destroy` 之后操作类照抛 + 探测类归零 + `TierDriverCount` 清零、`Destroy` 不是单向闩锁、重复 `Initialize` 告警、`SetInstance(null)`、`Subscribe` 的另两个重载、`UpdateManager.Pause` × 面板、Tier1 专项；24 个 fixture 的 `SetUp` 统一改为先 `UIManager.Destroy()` 归零（NUnit 在 SetUp 中途失败时不跑 TearDown，残留的 `_instanceInitialized` 会让下一个 fixture 的 `Initialize` 静默 no-op，表现为一堆与自身无关的红）。模块 README 的「已知限制」补三条（`timeScale = 0` 冻结、`UpdateManager.Clear()` 摘驱动器、无线程契约断言）。**实测记录**：`Subscribe` 三个 `Action<T>` 重载下无类型 lambda 是编译错误 CS0121（不是静默误判），照纪律用临时探针文件在本仓程序集上编译验证并配了负向控制
 
 ### Changed

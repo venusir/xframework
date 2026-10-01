@@ -89,7 +89,7 @@ if (!writer.TryWriteValue(value, out var actual))
 
 ### 本模块没有的（按 Rx 直觉找来的人请注意）
 
-- **集合型响应式**（R3 的 `ReactiveCollection` 等价物）：**没有**。列表/背包的增量通知由使用方自行组织（UI 侧的「列表虚拟化」也仍是未做项，见 UI README 的 `[ ]` 列表）。
+- **集合型响应式**（R3 的 `ReactiveCollection` 等价物）：**没有**。列表/背包的增量通知由使用方自行组织；UI 模块也没有列表虚拟化这类条目复用原语（`UIBinder` 是「一属性 → 一控件」，池化的是面板/HUD/Tip 实例），长列表由项目自建——取舍与替代路径见 `../UI/README.md` 的 `## 设计取舍`。
 - **命令**（R3 的 `ReactiveCommand` / `CanExecute`）：**没有**。UI 侧走 `UIBinder.BindClick` 直接绑点击，按钮可用性由使用方自己置 `interactable`。
 - **Inspector / 序列化集成**（`BindableReactiveProperty` 那类）：**没有**——本仓在 UI 模块做约定式绑定（`txt_` / `sld_` / `tgl_` 前缀），不走 Inspector 配置。
 
