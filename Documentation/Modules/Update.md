@@ -31,6 +31,7 @@ Runtime/Update/
 - **不加线程断言（`MainThreadGuard` 式）**：契约（所有 API 必须在主线程）写进了 README「已知限制」，但不加机械——用户裁定。仓内四个消费方全在主线程，风险主要是第三方的。
 - **不给门面加完备性守卫**（UI / Settings / Localization / Input / File 五个先例的那种）：那条约定的形状是「**provider 接口**的每个成员在门面上有同名转发」，而 Update 的三个时机接口是**消费方实现**的契约、门面背后没有 provider——形状不适用，硬套会把模块自有的成员判成缺陷。
 - **不改 `ProcessImmediate` 的异常行为**（`Tick` 路径抛异常→隔离 + 注销；`ProcessImmediate` 路径→上抛且不注销）：显式调用该看到失败，与 `Settings.Save<T>()` 的既有裁决同向。本轮补文档，不改行为。
+- **不加「加载期硬门控」原语**（`SuspendDispatch` / `ResumeDispatch` 式，冻结含 `Unscaled` 的全部派发）：2026-10-01 评估后否决。动机是「框架加载完成前不派发」，但问题两侧都不需要它——框架内建 ticker 全部「初始化成功后才注册 + 未就绪空转」，使用方回调的正解是 `await Bootstrap.RunAsync()` 后注册；「加载期冻结逻辑轴」的需求现有 `Pause()` / `Resume()` 已覆盖（不冻 `Unscaled` 是既有设计，不是缺口）。新增原语等于在 `timeScale <= 0` 与 `Pause()` 之外再加一种「冻结」语义，加重 API 面，且无仓内消费者。替代写法与边界写进本模块 README「已知限制」。
 
 **未决**：
 
