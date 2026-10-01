@@ -6,6 +6,7 @@ using UnityEngine;
 using XFramework.XAudio;
 using XFramework.XFileManager;
 using XFramework.XLock;
+using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XSerialize;
 using XFramework.XTimer;
@@ -50,6 +51,7 @@ namespace XFramework.Architecture.Tests
             (typeof(AudioManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(TimerManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
+            (typeof(LogManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
         [Test]
