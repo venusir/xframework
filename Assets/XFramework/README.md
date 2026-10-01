@@ -125,6 +125,22 @@ await Bootstrap.RunAsync();
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 
+## 框架约定的名字
+
+框架刻意**不提供统一的配置文件**：参数由各模块自己的 `Initialize(options)` 接收——**参数即契约**，读签名就知道这个模块依赖什么；一个全局配置文件会把依赖变成隐式的，也会让「模块可单独取用」失效（同「服务不依赖统一入口」那条设计决策）。但框架内部确实定了一些名字——下表把它们集中登记，省得逐个模块翻。**权威定义在对应模块的 README**，本表只是入口。
+
+| 名字 / 值 | 性质与能否更改 | 详情 |
+|---|---|---|
+| `InputSystem_Actions`（须放 `Assets/Resources/`） | **改不了，只能整体替换**：实现自己的 `IInputProvider` 并 `InputManager.Initialize(provider)` | [Input](Runtime/Input/README.md) |
+| `PF_UITipText`（Tip 预制体的 YooAsset 地址） | **改不了，只能整体替换**：实现自己的 `IUITipProvider` 并 `SetTipProvider` | [UI](Runtime/UI/README.md) |
+| `DefaultPackage`（默认资源包名） | 默认包名是内部常量、**改不了**；额外包可任意追加（各自带 `PackageName`） | [Asset](Runtime/Asset/README.md) |
+| 业务资源地址（面板 / HUD / 音频 / 配置表 / 语言表） | **由你决定**：一律以 YooAsset `location` 字符串传入，框架不发明路径约定 | [Asset](Runtime/Asset/README.md) · [Audio](Runtime/Audio/README.md) · [UI](Runtime/UI/README.md) |
+| `localization/lang_{0}`（语言表地址模板） | **可改**：`LocalizationManager.LanguageAssetPath`（公开属性，初始化后仍可改） | [Localization](Runtime/Localization/README.md) |
+| `{persistentDataPath}/XLog/xlog-*.jsonl`（日志落点与命名） | **可改**：`LogOptions.FileDirectory` 等；Release 默认不写文件 | [Log](Runtime/Log/README.md) |
+| `{persistentDataPath}/{类型短名}.json`（Settings 零配置落点） | **可改**：改用显式路径重载 | [Settings](Runtime/Settings/README.md) |
+| `{playerId}/slot_{N}.save`（存档布局）+ `.meta` 侧车 | **可改**：域根由 `FileDomain` 决定，槽位布局是 Save 的约定 | [Save](Runtime/Save/README.md) · [File](Runtime/File/README.md) |
+| `slot_` / `.save` / `.meta`、`xlog-` / `.jsonl`、`Layer_Tip` / `Layer_HUD`、PlayerLoop 三个系统名、`AudioChannels` 推荐通道名、File 的 `.tmp` / `.bak` | **内部实现细节，不是契约**——排查日志与磁盘现场时用得到，别写进你的代码 | 各模块 README 的「已知限制」 |
+
 ## UI 系统
 
 XFramework 提供一套完整的 UI 管理方案，包括面板生命周期管理和临时提示（Tip）。UI 基于 Canvas + UGUI 渲染，通过 `UIRootNode` 挂载在场景中作为 UI 根节点。
