@@ -227,6 +227,35 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void Pause_LeavesUnscaledAxisRunning()
+        {
+            // README「时间轴与暂停」表承诺 Pause 只冻逻辑轴、墙钟轴照常，但此前没有任何用例
+            // 在 Pause 下跑过 Unscaled 轴（其它 Pause 用例都只注册 Scaled 节点），而仓内四个
+            // 生产消费方也全在 Scaled 轴上——这条承诺一直只活在文档里。本用例补上另一半。
+            // 负向控制：把 UpdateScheduler.TickInternal 的 `isLogical && logicalFrozen` 改成
+            // `logicalFrozen`（让冻结波及两条轴），本用例必须变红
+            var scaled = new TestUpdateable();
+            var unscaled = new TestUpdateable();
+            UpdateManager.Register(scaled, order: 0);
+            UpdateManager.Register(unscaled, order: 0, timeMode: UpdateTimeMode.Unscaled);
+
+            UpdateManager.Tick(time: 1.0f);
+            Assert.AreEqual(1, scaled.UpdateCallCount);
+            Assert.AreEqual(1, unscaled.UpdateCallCount);
+
+            UpdateManager.Pause();
+            Assert.IsTrue(UpdateManager.IsPaused);
+
+            UpdateManager.Tick(time: 2.0f);
+            Assert.AreEqual(1, scaled.UpdateCallCount, "暂停期间逻辑轴不派发");
+            Assert.AreEqual(2, unscaled.UpdateCallCount, "暂停期间墙钟轴照常派发");
+
+            UpdateManager.Resume();
+            UpdateManager.Tick(time: 3.0f);
+            Assert.AreEqual(2, scaled.UpdateCallCount, "恢复后逻辑轴继续派发");
+        }
+
+        [Test]
         public void Resume_UnpausesButDoesNotCatchUp()
         {
             var node = new TestUpdateable();
