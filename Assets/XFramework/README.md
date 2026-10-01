@@ -32,6 +32,7 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 | **SettingsManager**     | `SettingsManager.Initialize<T>(path)`               | 设置类型由业务定义，每类独立初始化                         |
 | **AudioManager**        | `AudioManager.Initialize()`                         | 零配置；播放源惰性创建，从不播放就不建任何对象             |
 | **TimerManager**        | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置；没有正在计时的定时器时驱动器退出调度               |
+| **LogManager**          | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置；分级 + 分类过滤；Editor/Development 下自动写 JSONL |
 
 > **关键设计决策：** 服务不依赖统一入口。无需参数的服务自动就绪；需要参数的服务由调用方显式初始化，或实现 `IBootstrapStage` 登记进启动引导。
 
@@ -122,6 +123,7 @@ await Bootstrap.RunAsync();
 | **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
 | **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，可整体替换实现以接 Wwise / FMOD |
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
+| **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 
 ## UI 系统
 
