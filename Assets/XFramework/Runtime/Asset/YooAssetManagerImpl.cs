@@ -21,7 +21,14 @@ namespace XFramework.XAsset
         private readonly string _defaultPackageName;
         private readonly Dictionary<string, ResourcePackage> _packages = new Dictionary<string, ResourcePackage>(2);
 
-        public YooAssetManagerImpl(string defaultPackageName = "DefaultPackage")
+        /// <summary>
+        /// 构造适配器并固定「主包名」。
+        /// <para><b>刻意不给默认参数</b>：默认值只该有一处真相（<c>AssetManagerImpl</c> 的解析，
+        /// 它会参考 <see cref="AssetInitOptions.PackageName"/>）；这里再写一份"DefaultPackage"
+        /// 只会在两个调用点都显式传参的情况下成为永不生效的第二份字面量。</para>
+        /// </summary>
+        /// <param name="defaultPackageName">主包名；由调用方解析好后传入。</param>
+        public YooAssetManagerImpl(string defaultPackageName)
         {
             _defaultPackageName = defaultPackageName;
         }

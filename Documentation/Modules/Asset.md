@@ -39,6 +39,15 @@ Runtime/Asset/
 
 详细变更见 git log。
 
+## 已修（2026-10-01）
+
+- **`AssetInitOptions.PackageName` 此前是静默陷阱**：它只决定「初始化哪个包」（`InitializePackageAsync`），
+  而加载族（`LoadAsync` / `InstantiateAsync` / 预载 / 场景）统一解析到硬编码的 `DefaultPackage`。
+  于是使用方 `InitializeAsync(new AssetInitOptions { PackageName = "MyPack" })` 的真实结果是
+  **初始化了 MyPack、却从一个刚被新建的空 DefaultPackage 上加载**——初始化看着成功、之后每次加载失败
+  （DEBUG 下 YooAsset 直接抛）。修法：`InitializeAsync` 用 `ResolveDefaultPackageName` 解析主包名
+  （非空即采用），并把解析提成可单测的纯函数。**这是行为修复，非 API 变更**：那条路本来就走不通。
+
 ## 已评估未采纳与未决
 
 **已评估未采纳**（逐条理由已在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「本轮评估过并否决」这一层；**下一轮从这里读起**）：
@@ -64,7 +73,9 @@ Runtime/Asset/
   未证实前不写进使用方文档。
 - **Asset 加载链路缺 PlayMode 集成用例**：`AssetHandle<T>` 只有一个 internal 构造、必须包真的 YooAsset 句柄，
   替身造不出来。于是几条**行为了修复却无法自动化验证**（类型不匹配释放句柄、失败路径释放句柄、回池保活与
-  引用计数端到端）。建一套最小 YooAsset Offline 测试环境是后续选项。
+  引用计数端到端）。建一套最小 YooAsset Offline 测试环境是后续选项。**（2026-10-01 部分收口）**
+  主包名解析已提出纯函数 `AssetManagerImpl.ResolveDefaultPackageName` 并由 `AssetPackageNameTests` 钉住三态
+  ——它此前零覆盖，而它决定的正是「初始化与加载是否同一个包」（见下方「已修」）。
 - **主线程断言已出现第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）。
   三份同形 → 值得评估抽公共防线（跨模块 API，需单独计划）。
 - **会话级复位**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，`AssetBootstrapStage`

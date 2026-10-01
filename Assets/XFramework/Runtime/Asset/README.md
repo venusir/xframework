@@ -382,9 +382,9 @@ LoadAsync<GameObject> → 句柄（+1）
 
 ### 多包架构
 
-- 包由内部字典管理，默认包名为 `DefaultPackage`；`InitializePackageAsync(options)` 可追加任意数量的额外包（各包独立版本与清单）
+- 包由内部字典管理，默认包名为 `DefaultPackage`；**主包名可用 `InitializeAsync` 的 `AssetInitOptions.PackageName` 改**（null/空白时用默认名，须与 YooAsset 构建侧的包名一致）；`InitializePackageAsync(options)` 可追加任意数量的额外包（各包独立版本与清单）——**它不改主包**
 - **包复用语义**：包已初始化成功时跳过 `InitializeAsync`，直接刷新版本与清单——因此 `Destroy()` 后重新初始化不会失败（早期版本对已初始化包再次初始化会抛异常）
-- **加载族固定作用于默认包**（`LoadAsync` / `InstantiateAsync` / `PreloadAllAsync` / `LoadSceneAsync`）；包级操作（热更 / 卸载 / 查询 / 下载）通过 `packageName = null` 参数显式指定
+- **加载族固定作用于主包**（`LoadAsync` / `InstantiateAsync` / `PreloadAllAsync` / `LoadSceneAsync`）；包级操作（热更 / 卸载 / 查询 / 下载）通过 `packageName = null` 参数显式指定。「主包」= `InitializeAsync` 那次初始化出来的包（见上一条）
 - **刻意不提供「包切换」API**：对象池与活跃计数以 location 为唯一键，状态化切换包会串资源
 
 ### 热更链路状态流转

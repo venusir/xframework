@@ -25,7 +25,10 @@ namespace XFramework.XAsset
     public sealed class AssetInitOptions
     {
         /// <summary>
-        /// 资源包名。null 或空白时使用默认包（DefaultPackage）。
+        /// 主包名。<b>它同时决定「初始化哪个包」与「加载族作用于哪个包」</b>——加载（<c>LoadAsync</c> /
+        /// <c>InstantiateAsync</c> / 预载 / 场景）不带包名，统一作用于主包，故两者必须是同一个名字。
+        /// null 或空白时用默认包 <c>DefaultPackage</c>（须与 YooAsset 构建侧的包名一致）。
+        /// <para>额外包请走 <c>InitializePackageAsync</c>，它不会改变主包。</para>
         /// </summary>
         public string PackageName;
 

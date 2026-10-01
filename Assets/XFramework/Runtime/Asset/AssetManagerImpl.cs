@@ -37,7 +37,7 @@ namespace XFramework.XAsset
         /// <summary>location → 对象池最大容量。</summary>
         private readonly Dictionary<string, int> _poolMaxSizes = new Dictionary<string, int>();
 
-        /// <summary>默认 YooAsset 资源包名。多资源包场景需扩展为配置注入。</summary>
+        /// <summary>默认 YooAsset 资源包名；可用 <see cref="AssetInitOptions.PackageName"/> 覆盖（见 <see cref="ResolveDefaultPackageName"/>）。</summary>
         private const string DefaultPackageName = "DefaultPackage";
 
         /// <summary>默认每种预制体最多保留的闲置实例数。</summary>
@@ -118,12 +118,27 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 解析主包名：<see cref="AssetInitOptions.PackageName"/> 非空时用它，否则回落到 <see cref="DefaultPackageName"/>。
+        /// <para><b>为什么必须有这条解析</b>：加载族（<c>LoadAsync</c> / <c>InstantiateAsync</c> / 预载 / 场景）
+        /// 全部不带包名、统一解析到**主包**。若"初始化的包"与"主包"不是同一个，
+        /// 加载就会落在一个刚被创建、从未初始化的空包上——初始化看着成功、之后每次加载失败。</para>
+        /// <para>提成纯函数是为了可单测：这条解析此前零覆盖，而它决定的正是「初始化与加载是否同一个包」。</para>
+        /// </summary>
+        /// <param name="options">初始化参数；可为 null（等同全默认）。</param>
+        /// <returns>主包名，非 null 非空。</returns>
+        internal static string ResolveDefaultPackageName(AssetInitOptions options)
+        {
+            string name = options?.PackageName;
+            return string.IsNullOrWhiteSpace(name) ? DefaultPackageName : name;
+        }
+
+        /// <summary>
         /// 实际初始化流程。失败时不重置 _managerImpl（YooAsset 包复用语义已保证重试安全）。
         /// </summary>
         private async UniTask InitializeAsyncCore(IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
-            _managerImpl ??= new YooAssetManagerImpl(DefaultPackageName);
             var initOptions = options ?? new AssetInitOptions();
+            _managerImpl ??= new YooAssetManagerImpl(ResolveDefaultPackageName(initOptions));
             await _managerImpl.InitializePackageAsync(initOptions, progress, cancellationToken);
             _initialized = true;
 
