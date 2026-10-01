@@ -12,6 +12,7 @@
 
 using System.Collections.Generic;
 using UnityEditor;
+using XFramework.XLog;
 using UnityEngine;
 using System.IO;
 
@@ -39,7 +40,7 @@ namespace Venusy609.Xframework.Editor
         {
             InstallUPMDependencies();
             AssetDatabase.Refresh();
-            Debug.Log("[XFramework] 依赖安装完成！请等待 Unity 解析包。");
+            LogManager.Info(LogCategories.XFramework, "依赖安装完成！请等待 Unity 解析包。");
         }
 
         #region UPM Installation
@@ -49,6 +50,8 @@ namespace Venusy609.Xframework.Editor
             string fullPath = Path.GetFullPath(ManifestPath);
             if (!File.Exists(fullPath))
             {
+                // 这一条与下面那条原本没有 [模块] 前缀（全仓唯二违例）；按「迁移逐字保真」本轮保持原样，
+                // 是否补前缀见 Documentation/Modules/Log.md 的未决项。
                 Debug.LogError($"找不到 manifest.json 文件: {fullPath}");
                 return;
             }
@@ -63,7 +66,7 @@ namespace Venusy609.Xframework.Editor
 
                 if (json.Contains($"\"{packageId}\""))
                 {
-                    Debug.Log($"[XFramework] UPM 依赖已存在: {packageId}");
+                    LogManager.Info(LogCategories.XFramework, "UPM 依赖已存在: {0}", packageId);
                     continue;
                 }
 
@@ -92,7 +95,7 @@ namespace Venusy609.Xframework.Editor
 
                 json = json.Insert(insertIndex, newEntry);
                 changed = true;
-                Debug.Log($"[XFramework] 已添加 UPM 依赖: {packageId} -> {packageUrl}");
+                LogManager.Info(LogCategories.XFramework, "已添加 UPM 依赖: {0} -> {1}", packageId, packageUrl);
             }
 
             if (changed)
@@ -101,7 +104,7 @@ namespace Venusy609.Xframework.Editor
             }
             else
             {
-                Debug.Log("[XFramework] 所有 UPM 依赖已存在，无需操作。");
+                LogManager.Info(LogCategories.XFramework, "所有 UPM 依赖已存在，无需操作。");
             }
         }
 
