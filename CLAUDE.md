@@ -42,7 +42,7 @@
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
   - **XML 必须能解析:** 泛型尖括号与 `&` 一律转义(`&lt;T&gt;`、`&amp;`),`<code>` 块内也一样。未转义会触发 CS1570 使**整条注释被编译器丢弃**——该成员的文档条目从生成的 XML 中整条消失,且块内 `cref` 一律不再被检查(死链因此隐形:它表现为「**没有**告警」而不是「有告警」)
-  - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 里**不能带 `()`**;④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
+  - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 要**写全形以消二义**:有重载的成员**必须**写参数列表——无参重载写 `Foo()`、带参写全 `Foo(int, float)`;只在该名字没有重载时才能写裸名。写不全就触发 **CS0419**(编译器替你「假设」一个重载,链接可能指向非本意的那个)——旧说法「cref 里不能带 `()`」是过度概括:`Tick()` 合法、`InitializeAsync()`(该方法带参)非法,差别只在参数列表写没写对;注意 `check-docs` 不统计这个码(见其头部「覆盖范围」);④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
   - 文档指向**根本不存在的东西**(已改名/已删的成员或类型)是内容问题,先确认真实 API 再改,不要机械替换。两类告警都用 `Tools/check-docs.ps1` 查(默认诊断,`-Enforce` 才是门禁)
 - **可见性:** 默认 `internal`;测试通过 `InternalsVisibleTo("Venusy609.Xframework.Tests")` 访问内部实现
 
