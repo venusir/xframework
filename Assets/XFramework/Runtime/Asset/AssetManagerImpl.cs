@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using XFramework.XLog;
 
 namespace XFramework.XAsset
 {
@@ -243,8 +244,9 @@ namespace XFramework.XAsset
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetManager] Prefab at '{location}' lacks component {typeof(T).Name}. " +
-                                 "Destroying instance to prevent resource leak.");
+                LogManager.Warning(LogCategories.AssetManager,
+                    "Prefab at '{0}' lacks component {1}. Destroying instance to prevent resource leak.",
+                    location, typeof(T).Name);
                 DestroyInstance(go);
                 return null;
             }
@@ -259,8 +261,9 @@ namespace XFramework.XAsset
             var component = go.GetComponent<T>();
             if (component == null)
             {
-                Debug.LogWarning($"[AssetManager] Prefab at '{location}' lacks component {typeof(T).Name}. " +
-                                 "Destroying instance to prevent resource leak.");
+                LogManager.Warning(LogCategories.AssetManager,
+                    "Prefab at '{0}' lacks component {1}. Destroying instance to prevent resource leak.",
+                    location, typeof(T).Name);
                 DestroyInstance(go);
                 return null;
             }
@@ -702,8 +705,9 @@ namespace XFramework.XAsset
             if (!handle.IsValid)
                 return;
 
-            Debug.LogWarning($"[AssetManager] Instantiate 的目标 '{location}' 不是 GameObject（加载成功但资源类型不匹配）。" +
-                             "已释放句柄以免引用泄漏，本次返回 null。");
+            LogManager.Warning(LogCategories.AssetManager,
+                "Instantiate 的目标 '{0}' 不是 GameObject（加载成功但资源类型不匹配）。" +
+                "已释放句柄以免引用泄漏，本次返回 null。", location);
             handle.Dispose();
         }
 
@@ -742,7 +746,7 @@ namespace XFramework.XAsset
             catch (Exception e)
             {
                 // 回收失败不影响主流程，只记录
-                Debug.LogError($"[AssetManager] Low memory reclaim failed: {e.Message}");
+                LogManager.Error(LogCategories.AssetManager, "Low memory reclaim failed: {0}", e.Message);
             }
         }
 

@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using XFramework.XLog;
 
 namespace XFramework.XAsset
 {
@@ -63,7 +64,7 @@ namespace XFramework.XAsset
 
             if (_instanceInitialized)
             {
-                Debug.LogWarning("[AssetManager] InitializeAsync was called more than once. Ignoring duplicate.");
+                LogManager.Warning(LogCategories.AssetManager, "InitializeAsync was called more than once. Ignoring duplicate.");
                 return;
             }
 
@@ -503,8 +504,8 @@ namespace XFramework.XAsset
             if (!_poolCapabilityWarned)
             {
                 _poolCapabilityWarned = true;
-                Debug.LogWarning(
-                    "[AssetManager] 当前 IAssetManager 实现不支持 IAssetPoolController，池清理调用被忽略。" +
+                LogManager.Warning(LogCategories.AssetManager,
+                    "当前 IAssetManager 实现不支持 IAssetPoolController，池清理调用被忽略。" +
                     "若要使用该能力，请在自定义实现上实现 IAssetPoolController。");
             }
 
@@ -572,10 +573,10 @@ namespace XFramework.XAsset
                 return;
 
             _mainThreadViolationLogged = true;
-            Debug.LogError(
-                $"[AssetManager] {api} 必须在 Unity 主线程调用：门面的初始化协调是无锁的检查-再赋值序列，" +
+            LogManager.Error(LogCategories.AssetManager,
+                "{0} 必须在 Unity 主线程调用：门面的初始化协调是无锁的检查-再赋值序列，" +
                 "跨线程进入会并发改写实例、等待者表与代际号。从非主线程访问请先切回主线程；" +
-                "线程契约见模块 README「线程契约」段。本提示每个会话只报一次。");
+                "线程契约见模块 README「线程契约」段。本提示每个会话只报一次。", api);
 #endif
         }
 

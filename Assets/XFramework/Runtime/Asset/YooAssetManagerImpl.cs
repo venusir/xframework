@@ -5,6 +5,7 @@ using UnityEngine;
 using UnityEngine.SceneManagement;
 using Cysharp.Threading.Tasks;
 using YooAsset;
+using XFramework.XLog;
 
 namespace XFramework.XAsset
 {
@@ -59,8 +60,9 @@ namespace XFramework.XAsset
             package = YooAssets.TryGetPackage(name);
             if (package == null)
             {
-                Debug.LogError($"[YooAssetManager] Package '{name}' not found. " +
-                               "Call AssetManager.InitializeAsync() or AssetManager.InitializePackageAsync() first.");
+                LogManager.Error(LogCategories.YooAssetManager,
+                    "Package '{0}' not found. Call AssetManager.InitializeAsync() or AssetManager.InitializePackageAsync() first.",
+                    name);
                 return null;
             }
             _packages[name] = package;
@@ -311,7 +313,7 @@ namespace XFramework.XAsset
             var operation = package.LoadAssetSync<T>(location);
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load asset '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -334,7 +336,7 @@ namespace XFramework.XAsset
 
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load sub assets '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -352,7 +354,7 @@ namespace XFramework.XAsset
             var operation = package.LoadSubAssetsSync(location);
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load sub assets '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load sub assets '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -375,7 +377,7 @@ namespace XFramework.XAsset
 
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load raw file '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -393,7 +395,7 @@ namespace XFramework.XAsset
             var operation = package.LoadRawFileSync(location);
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load raw file '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load raw file '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -453,7 +455,7 @@ namespace XFramework.XAsset
 
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load asset '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load asset '{0}': {1}", location, operation.LastError);
                 ReleaseFailedHandle(operation);
                 return default;
             }
@@ -492,7 +494,7 @@ namespace XFramework.XAsset
 
             if (operation.Status != EOperationStatus.Succeed)
             {
-                Debug.LogError($"[YooAssetManager] Failed to load scene '{location}': {operation.LastError}");
+                LogManager.Error(LogCategories.YooAssetManager, "Failed to load scene '{0}': {1}", location, operation.LastError);
                 return default;
             }
 
