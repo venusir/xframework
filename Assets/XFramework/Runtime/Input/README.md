@@ -13,8 +13,15 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 
 ### 1. 输入动作资源
 
-确保项目中存在 `InputSystem_Actions.inputactions` 并放入 `Resources/` 文件夹。
-在 `.inputactions` 中自由定义你的 Action（如 `Jump`, `Move`, `Fire`, `Interact` 等），
+**两条路，任选其一**：
+
+- **零配置默认**：把 `InputSystem_Actions.inputactions` 放进 `Resources/` 文件夹——无参
+  `InputManager.Initialize()` 就按这个名字加载它。
+- **自己加载（推荐给用资源系统的项目）**：资产放哪、叫什么、经什么加载（YooAsset / Addressables /
+  自己的加载器）都由你决定，加载完交给 `InputManager.Initialize(new InputSystemOptions { Asset = ... })`。
+  这条路不把资产钉在 `Resources/` 里（钉进去意味着它总被打进包、且不受资源系统管理）。
+
+无论哪条路，在 `.inputactions` 中自由定义你的 Action（如 `Jump`, `Move`, `Fire`, `Interact` 等），
 **不需要与框架中的任何常量对应**。
 
 ### 2. 初始化
@@ -24,8 +31,10 @@ using XFramework.XInput;
 
 void Awake()
 {
-    InputManager.Initialize();  // 默认使用 InputSystemProvider
-    // 或注入自定义实现：
+    InputManager.Initialize();  // 默认使用 InputSystemProvider（从 Resources 按默认名加载）
+    // 或自己加载资产后交给默认提供者：
+    // InputManager.Initialize(new InputSystemOptions { Asset = myActions });
+    // 或注入自定义实现（Rewired 等）：
     // InputManager.Initialize(new MyCustomProvider());
 }
 

@@ -76,9 +76,7 @@ namespace XFramework.XInput
 
             var provider = new InputSystemProvider();
             provider.Initialize();
-            _provider = provider;
-            _initialized = true;
-            RegisterTicker();
+            AdoptProvider(provider);
         }
 
         /// <summary>
@@ -102,7 +100,49 @@ namespace XFramework.XInput
             // 先在局部变量上初始化、成功后才写字段(与无参重载同形):provider.Initialize 抛异常时零状态变更,
             // 否则会留下「IsInitialized 为 false、查询却已转发到半初始化实例」的中间态
             customProvider.Initialize();
-            _provider = customProvider;
+            AdoptProvider(customProvider);
+        }
+
+        /// <summary>
+        /// 用 Unity Input System 的默认提供者初始化，但使用**由你加载好的**输入资产
+        /// （见 <see cref="InputSystemOptions"/>：YooAsset / Addressables / 自己的加载器皆可）。
+        /// <para><b>与无参重载的关系</b>：无参那条走 <c>Resources.Load("InputSystem_Actions")</c>，
+        /// 是「零配置起步」的默认路径；本重载把加载那一步交给你，其余接线（动作缓存、设备识别、
+        /// 帧驱动注册、重绑定）与无参路径**完全相同**——用的是同一个默认提供者。</para>
+        /// <para>初始化成功后自动注册帧驱动（经 <see cref="XFramework.XUpdate.UpdateManager"/>）。</para>
+        /// </summary>
+        /// <param name="options">已加载的资产；不可为 null，<c>Asset</c> 也不可为 null。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> 为 null。</exception>
+        /// <exception cref="ArgumentException"><c>options.Asset</c> 为 null——没有资产就没有可启用的 ActionMap。</exception>
+        public static void Initialize(InputSystemOptions options)
+        {
+            if (options == null)
+                throw new ArgumentNullException(nameof(options));
+            if (options.Asset == null)
+            {
+                throw new ArgumentException(
+                    "Asset 为空。请先用你惯用的方式加载 InputActionAsset（YooAsset / Addressables / Resources 皆可）再交给本重载。",
+                    nameof(options));
+            }
+
+            if (_initialized)
+            {
+                LogManager.Warning(LogCategories.Input, "Initialize was called more than once. Ignoring duplicate.");
+                return;
+            }
+
+            // 与另两个重载同形：先在局部变量上建好、成功后才接管——重复调用时上面已早退，
+            // 不会留下一个「已 Enable 资产、已订阅设备事件」却被丢弃的提供者
+            var provider = new InputSystemProvider();
+            provider.Initialize(options.Asset);
+            AdoptProvider(provider);
+        }
+
+        /// <summary>接管一个已初始化好的提供者：写字段、置初始化态、注册帧驱动。三个 <c>Initialize</c> 重载共用这一条尾巴。</summary>
+        /// <param name="provider">已 <c>Initialize</c> 成功的提供者。</param>
+        private static void AdoptProvider(IInputProvider provider)
+        {
+            _provider = provider;
             _initialized = true;
             RegisterTicker();
         }
