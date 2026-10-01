@@ -6,8 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Update 固定步时机的 `ProcessImmediate` 把节点锚到逻辑时刻**：`UpdateClock` 只有 Scaled / Unscaled 两条轴，而固定步条目恒挂在轴 0 上（`RegisterFixed` 不传时间轴），于是 `ProcessImmediate` 取到的「该节点所属时刻」实为**变步长逻辑时刻**——下一次真正固定步派发算出的 delta 就是 `fixedTime − 逻辑时刻` 这个跨轴相减的产物，既不是该轴承诺的 `2^k × Time.fixedDeltaTime`，也不是锚定规则给的 0。现落到固定步时机时**只重新定锚、不写时刻**（派发外与派发中两条路径统一）：下一次固定步派发 delta 记 0，与注册/启用后首次派发同一套语义。可达面有限——门面 `ProcessImmediate` 的形参是 `IUpdateable`，纯 `IFixedUpdateable` 够不到，生产影响 ≤1 帧、自带时刻的回放时钟下更大。**改前必红实测**：两条新用例在修复前分别红成 `Expected: 0.0f But was: 7.02000046f`（10.02 − 3.0，即跨轴相减的产物）与 `Expected: 1 But was: 2`（用例自身的计数写错，同批修正）；修复后 `XFramework.XUpdate.Tests` 133/133 通过
+- **Update 异常日志固定报 `OnUpdate`**：三条时机共用这一份调度器代码，LateUpdate / FixedUpdate 时机上的异常会被报成节点上根本没跑过的回调，把排查引向错误的位置。现按实际时机报 `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate`，与转型分支同分级（异常路径才构造字符串，每帧路径的零分配不受影响）
+
 ### Documentation
 
+- **Update 第二轮审计归档（定向 `UpdateManager.cs`，判据 A–F 全类扫过，仍无高危）**：四处新账——① `Enable` 档位口径的三处 XML 注释是上一轮 F1 的**另一半**（README 已勘误、注释没跟上，至今写着「回到注册时声明的档位」，与实现及用例 `Enable_AfterTierMigration_ReturnsToLatestTier` 相反）；② 门面类摘要把手动驱动入口指成 `Tick(float)`（与 `Tick()` / `Tick(float)` 的文档和 README 三处相反，是补无参重载前的残留）；③ `GetCount` 未写「不含禁用对象」、门面 `IsEnabled` 未写「未注册也返回 true」、`Pause` 未写「固定步时机一并冻结」；④ README「已知限制」补一条「注册表持强引用且不识别已销毁对象」。同轮补一条**覆盖缺口**：`Pause()` × 墙钟轴在 README 有承诺却**零断言**（该轴在仓内也零生产使用者），新增 `Pause_LeavesUnscaledAxisRunning` 并以**负向控制**证明其判别力——把冻结条件放开到两条轴后，23 条用例中恰好这一条变红、失败消息即该断言。归档落点：`Documentation/Modules/Update.md` 逐轮追加本轮记录；「已评估未采纳」新增四条（不钳 `ProcessImmediate` 的 `deltaTime`、不拆 `UpdateManager.cs`、不把注入匹配改成父链校验、不给 `UpdateClock` 加固定步时基字段）；「未决」把「LateUpdate / FixedUpdate 零生产使用者」扩写为「墙钟轴同样零生产使用者」
 - **`Runtime/Bootstrap/README.md` 与 `Runtime/Update/README.md` 补齐「引导流程 × 每帧派发」的边界**：一轮定向审计（问题：「如何保证框架加载完成才执行 Update」）确认**不存在、也不打算有**这样的门控——Update 的调度器建于 `SubsystemRegistration`、PlayerLoop 注入于 `AfterAssembliesLoaded`，都早于首个场景，`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常。两侧都不缺防护：框架内建 ticker 全部「初始化成功后才注册 + 未就绪空转」，使用方回调的正解是 `await Bootstrap.RunAsync()` 之后注册。README 新增：Update 侧把「派发与启动/引导流程无关」写进 `已知限制`；Bootstrap 侧在 `设计取舍` 回答「为什么不自动暂停/不提供就绪门控」，并给出确需加载期安静时的既有写法（`Pause()` → `RunAsync` → `finally Resume()`，只冻逻辑轴，`Unscaled` 节点照常）。同轮归档：`Documentation/Modules/Bootstrap.md` 新增「已评估未采纳与未决」（自动门控与就绪句柄两个方向否决的理由；GameLauncher 启动途中销毁与在途 `RunAsync` 交叠列为未决，推理未实测）；`Documentation/Modules/Update.md` 已评估未采纳补一条「不加加载期硬门控原语」。
 
 ### Added
