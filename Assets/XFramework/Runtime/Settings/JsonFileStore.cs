@@ -129,8 +129,8 @@ namespace XFramework.XSettings
                     // IO 失败(磁盘满/权限/占用)只告警不抛:存档失败不该让游戏崩掉。
                     // 参数错误与 IO 失败的区别正在于此——前者是调用方的 bug,后者是环境问题
                     TryDelete(tempPath);
-                    LogManager.Warning(LogCategories.SettingsManager,
-                        "写入设置文件失败：'{0}'（{1}: {2}）", _filePath, ex.GetType().Name, ex.Message);
+                    LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                        string.Format("写入设置文件失败：'{0}'", _filePath));
                 }
             }
         }
@@ -171,8 +171,8 @@ namespace XFramework.XSettings
             catch (Exception ex)
             {
                 // 读失败(占用/权限/IO)与内容损坏同等对待:玩家至多丢设置,不该开不了游戏
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "读取设置文件失败：'{0}'（{1}: {2}）", path, ex.GetType().Name, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                    string.Format("读取设置文件失败：'{0}'", path));
                 return false;
             }
 
@@ -186,8 +186,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "设置文件内容无法解析为 {0}：'{1}'（{2}）", typeof(T).Name, path, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                    string.Format("设置文件内容无法解析为 {0}：'{1}'", typeof(T).Name, path));
                 return false;
             }
         }
@@ -205,8 +205,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "删除文件失败：'{0}'（{1}: {2}）", path, ex.GetType().Name, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                    string.Format("删除文件失败：'{0}'", path));
             }
         }
 

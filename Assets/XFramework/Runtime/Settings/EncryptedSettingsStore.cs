@@ -103,8 +103,8 @@ namespace XFramework.XSettings
             }
             catch (FormatException ex)
             {
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "设置密文不是合法的 Base64，已回退默认值：{0}", ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                    "设置密文不是合法的 Base64，已回退默认值");
                 return new T();
             }
 
@@ -137,8 +137,8 @@ namespace XFramework.XSettings
             }
             catch (Exception ex)
             {
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "解密后的设置内容无法解析为 {0}，已回退默认值：{1}", typeof(T).Name, ex.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
+                    string.Format("解密后的设置内容无法解析为 {0}，已回退默认值", typeof(T).Name));
                 return null;
             }
         }

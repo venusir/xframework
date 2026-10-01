@@ -78,8 +78,8 @@ namespace XFramework.XSettings
                 }
                 catch (Exception e)
                 {
-                    LogManager.Error(LogCategories.SettingsManager,
-                        "字段句柄重放失败（{0}）：{1}: {2}", refs[i], e.GetType().Name, e.Message);
+                    LogManager.Exception(LogCategories.SettingsManager, e,
+                        string.Format("字段句柄重放失败（{0}）", refs[i]));
                 }
             }
         }

@@ -593,8 +593,8 @@ namespace XFramework.XSettings
             }
             catch (Exception e)
             {
-                LogManager.Warning(LogCategories.SettingsManager,
-                    "{0}保存失败，内存改动未落盘：{1}: {2}", trigger, e.GetType().Name, e.Message);
+                LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, e,
+                    string.Format("{0}保存失败，内存改动未落盘", trigger));
             }
         }
 
