@@ -21,12 +21,21 @@
          改法：把限定名换成**声明它的那个类型**。
       ② 参数列表不完整：`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名——
          带默认值的参数也必须写全。（同理 `Register(IUpdateable, int, UpdateTier)` 少了第四个参数。）
-      ③ cref 里不能带 `()`：`InitializeAsync()` 非法，写 `InitializeAsync`。
+      ③ cref 要写全形以消二义：有重载的成员必须写参数列表——无参重载写 `Foo()`、带参写全
+         `Foo(int, float)`；只在该名字没有重载时才能写裸名。`InitializeAsync()`（该方法带参）非法、
+         `Tick()`（无参重载存在）合法，「cref 不能带 ()」是过度概括；写不全触发 **CS0419**，本脚本
+         不统计它（见下「覆盖范围」）。
       ④ 本文件缺 using，导致 cref 的**参数类型**解析不了（如 `CancellationToken`、`IUIController`）——
          把该类型写成全名即可，不必为此给文件加 using。
       另有一类是文档指向**根本不存在的东西**（已改名或已删除的成员/类型），例如 `UIHudManager` 这个类
       在仓内并不存在、`ILockable.Acquire` 的真身是 `LockableExtensions.AddLock`。这属于**内容问题**，
       要先确认真实 API 再改，不要机械替换。
+
+    **覆盖范围：** 本脚本只统计上面两类（CS1570 / CS1574）。同一条检查通道里还会产出它看不到的告警——
+    **CS0419（cref 二义）**、**CS1591（公开成员缺注释）**、CS1573（param 缺说明）、
+    CS1734 / 1735 / 1584 / 1658（cref / paramref 书写错误）等，包内实测有存量。这些码**既不诊断也不进门禁**；
+    要自己看就加 `-p:DocumentationFile=<路径> -t:Rebuild` 从完整输出里筛（`Documentation/ModuleAudit.md`
+    §八已把「纳入这些码」记为候选）。
 
     **遮蔽关系：** CS1570 会掩盖同一块注释里的 CS1574——块解析失败后，块内 cref 一律不再被检查。
     所以「没有 CS1574」推不出「链接都有效」，先清 CS1570 再看 CS1574 的真实数量。
