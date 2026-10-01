@@ -5,6 +5,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XData;
 using XFramework.XFileManager;
+using XFramework.XLog;
 using XFramework.XSerialize;
 
 namespace XFramework.XSave
@@ -158,13 +159,13 @@ namespace XFramework.XSave
 
                     if (bytes.Length == 0)
                     {
-                        Debug.LogWarning($"[Save] 跳过空存档文件: {path}");
+                        LogManager.Warning(LogCategories.Save, "跳过空存档文件: {0}", path);
                         continue;
                     }
 
                     if (!TryDeserializeSnapshot(bytes, snapshotType, Serializer.Default, out var saveData, out var error))
                     {
-                        Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
+                        LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, error);
                         metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes.Length));
                         continue;
                     }
@@ -180,7 +181,7 @@ namespace XFramework.XSave
                 catch (Exception ex)
                 {
                     // CreateMeta 是第三方扩展点，其异常不应打崩整份列表
-                    Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {ex.Message}");
+                    LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, ex.Message);
                     metas.Add(BuildCorruptedMeta(playerId, slot, path, bytes?.Length ?? 0));
                 }
             }
@@ -217,7 +218,7 @@ namespace XFramework.XSave
 
             if (bytes.Length == 0)
             {
-                Debug.LogWarning($"[Save] 跳过空存档文件: {path}");
+                LogManager.Warning(LogCategories.Save, "跳过空存档文件: {0}", path);
                 return null;
             }
 
@@ -226,7 +227,7 @@ namespace XFramework.XSave
             // null 严格表示「该槽位不存在」，而不是「存在但读不了」
             if (!TryDeserializeSnapshot(bytes, DataSnapshot.Factory().GetType(), Serializer.Default, out var saveData, out var error))
             {
-                Debug.LogWarning($"[Save] 解析存档元数据失败: {path}, {error}");
+                LogManager.Warning(LogCategories.Save, "解析存档元数据失败: {0}, {1}", path, error);
                 return BuildCorruptedMeta(playerId, slot, path, bytes.Length);
             }
 
@@ -362,8 +363,8 @@ namespace XFramework.XSave
                     }
                     else
                     {
-                        Debug.LogWarning(
-                            $"[Save] 存档槽位 {slot} 主文件不可用（{outcome.Message}），已从备份恢复。");
+                        LogManager.Warning(LogCategories.Save,
+                            "存档槽位 {0} 主文件不可用（{1}），已从备份恢复。", slot, outcome.Message);
                         return new SaveLoadResult(SaveLoadStatus.LoadedFromBackup, backupOutcome.Meta, outcome.Message);
                     }
                 }
@@ -474,7 +475,7 @@ namespace XFramework.XSave
                 error = ex.Message;
 
                 // 底层异常在此处记 LogError：结果结构体只带摘要文本，堆栈靠这里保留
-                Debug.LogError($"[Save] 应用存档失败，正在回滚内存数据: {ex}");
+                LogManager.Error(LogCategories.Save, "应用存档失败，正在回滚内存数据: {0}", ex);
                 RollbackTo(rollback);
                 return false;
             }
@@ -484,7 +485,7 @@ namespace XFramework.XSave
             if (failedBlocks > 0)
             {
                 error = $"有 {failedBlocks} 个数据块未能恢复";
-                Debug.LogError($"[Save] {error}，正在回滚内存数据。");
+                LogManager.Error(LogCategories.Save, "{0}，正在回滚内存数据。", error);
                 RollbackTo(rollback);
                 return false;
             }
@@ -504,11 +505,12 @@ namespace XFramework.XSave
             {
                 var failed = DataManager.ApplySnapshot(rollback);
                 if (failed > 0)
-                    Debug.LogError($"[Save] 回滚内存数据时有 {failed} 个数据块未能恢复，内存状态可能不完整。");
+                    LogManager.Error(LogCategories.Save,
+                        "回滚内存数据时有 {0} 个数据块未能恢复，内存状态可能不完整。", failed);
             }
             catch (Exception rollbackEx)
             {
-                Debug.LogError($"[Save] 回滚内存数据失败，内存状态可能不完整: {rollbackEx}");
+                LogManager.Error(LogCategories.Save, "回滚内存数据失败，内存状态可能不完整: {0}", rollbackEx);
             }
         }
 
@@ -927,7 +929,8 @@ namespace XFramework.XSave
             }
             catch (Exception ex)
             {
-                Debug.LogWarning($"[Save] 元数据侧车解析失败，回退全量解析: {savePath}, {ex.Message}");
+                LogManager.Warning(LogCategories.Save,
+                    "元数据侧车解析失败，回退全量解析: {0}, {1}", savePath, ex.Message);
                 return null;
             }
         }
@@ -936,8 +939,8 @@ namespace XFramework.XSave
         /// 启动恢复扫描：修复崩溃残留，让存档目录回到一致状态。
         /// <para>扫描域根与每个玩家子目录，逐槽位收敛——载荷缺失但备份在则用备份恢复；
         /// 载荷在则清掉 <c>.tmp</c> 残留并补齐侧车；载荷与备份都不在则清掉孤儿配套文件。</para>
-        /// <para><b>线程约定：</b>扫描主体只调用 <see cref="FileManager"/> 原语与 <c>Debug.Log</c>
-        /// （Unity 保证后者线程安全），不触碰 Unity API 与 <see cref="DataManager"/>。</para>
+        /// <para><b>线程约定：</b>扫描主体只调用 <see cref="FileManager"/> 原语与 <c>LogManager</c>
+        /// （后者任意线程可用，见模块 README 的线程契约），不触碰 Unity API 与 <see cref="DataManager"/>。</para>
         /// <para><b>但它会切回主线程一次</b>：需要重建侧车时走 <c>EnsureSidecarAsync</c> →
         /// <c>WriteSidecarAsync</c>，后者末尾有 <c>ReturnToMainThread</c>；此后整段恢复留在主线程。
         /// 所以「同步阻塞等待它不会死锁」**并不成立**——<b>不要</b>在主线程同步阻塞等待它。
@@ -1013,7 +1016,7 @@ namespace XFramework.XSave
                     // 用读+原子写而非重命名：FileManager 没有 Move，而这样写是幂等的——
                     // 中途再次崩溃只会留下「载荷与备份并存」，下次恢复按载荷已存在处理
                     await FileManager.WriteAllBytesAtomicAsync(SaveDomain, payloadPath, backupBytes, cancellationToken);
-                    Debug.LogWarning($"[Save] 槽位 {payloadPath} 的载荷缺失，已由一代备份恢复。");
+                    LogManager.Warning(LogCategories.Save, "槽位 {0} 的载荷缺失，已由一代备份恢复。", payloadPath);
 
                     // 旧侧车描述的是丢失的那份载荷，留着会让校验和不符而被误判为损坏
                     FileManager.Delete(SaveDomain, metaPath);
@@ -1061,8 +1064,8 @@ namespace XFramework.XSave
             if (existing != null)
             {
                 if (existing.checksum != 0 && existing.checksum != checksum)
-                    Debug.LogWarning(
-                        $"[Save] 槽位 {payloadPath} 的侧车校验和与载荷不符，保留原侧车交由加载侧处理。");
+                    LogManager.Warning(LogCategories.Save,
+                        "槽位 {0} 的侧车校验和与载荷不符，保留原侧车交由加载侧处理。", payloadPath);
 
                 return;
             }

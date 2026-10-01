@@ -4,6 +4,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XFileManager;
+using XFramework.XLog;
 
 namespace XFramework.XSave
 {
@@ -82,7 +83,7 @@ namespace XFramework.XSave
         {
             if (_impl != null)
             {
-                Debug.LogWarning("[Save] SaveManager.Initialize 被重复调用，忽略重复注入。");
+                LogManager.Warning(LogCategories.Save, "SaveManager.Initialize 被重复调用，忽略重复注入。");
                 return;
             }
             _impl = factory != null ? factory() : new SaveManagerImpl();
@@ -114,7 +115,7 @@ namespace XFramework.XSave
         /// <summary>
         /// 执行启动恢复扫描（内部使用，由 <see cref="SaveBootstrapStage"/> 在启动管线中调用）：
         /// 用一代备份恢复丢失的载荷、清掉崩溃残留、补齐元数据侧车。
-        /// <para><b>不切回主线程</b>——全程只碰文件系统与线程安全的 <c>Debug.Log</c>，
+        /// <para><b>不切回主线程</b>——全程只碰文件系统与线程安全的 <c>LogManager</c>，
         /// 因此启动管线中同步阻塞等待它也不会死锁。</para>
         /// <para>注入的自定义实现没有恢复契约，此时跳过（恢复属内部维护动作，不是接口义务）。</para>
         /// </summary>
