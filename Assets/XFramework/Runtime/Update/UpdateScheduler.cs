@@ -166,7 +166,7 @@ namespace XFramework.XUpdate
             /// <summary>从桶移入禁用表，并回调 <see cref="IUpdateLifecycle.OnDisable"/>。</summary>
             Disable,
 
-            /// <summary>从禁用表移回原时间轴的声明档位桶，并回调 <see cref="IUpdateLifecycle.OnEnable"/>。</summary>
+            /// <summary>从禁用表移回它离开时所在的桶（时间轴与档位都记在条目上），并回调 <see cref="IUpdateLifecycle.OnEnable"/>。</summary>
             Enable,
         }
 
