@@ -179,6 +179,39 @@ namespace XFramework.XUI.Tests
 
         #endregion
 
+        #region provider 隔离
+
+        /// <summary>
+        /// HUD provider 抛异常时：同帧 Tip 照常被驱动，驱动器仍在册，且日志只记首条（阻尼）。
+        /// <para>provider 是公开可替换的面，第三方实现可能抛；两者此前共用一条调用序列，前一个抛就把
+        /// 后一个的帧吃掉。provider 没有「停更」机制（停掉它等于停掉全部 HUD / Tip），故改为
+        /// 「继续驱动 + 首次记日志」——第二次不再记，只注册过一次 Expect，多出来的日志即未预期。</para>
+        /// </summary>
+        [Test]
+        public void HudProviderThrows_TipStillDrivenSameFrame_AndLogIsDamped()
+        {
+            var hud = new FaultyHudProvider { ThrowOnUpdate = true };
+            var tip = new CountingTipProvider();
+            UIManager.SetHudProvider(hud);
+            UIManager.SetTipProvider(tip);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[UIManager\] HUD provider 'FaultyHudProvider'\.Update threw"));
+
+            UpdateManager.Tick(0.016f);
+
+            Assert.AreEqual(1, hud.UpdateCount, "前置：HUD provider 确实被驱动过");
+            Assert.AreEqual(1, tip.UpdateCount, "一个 provider 抛异常不该吃掉同帧另一个 provider 的更新");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), "驱动器仍在册");
+
+            UpdateManager.Tick(0.032f);
+
+            Assert.AreEqual(2, hud.UpdateCount, "provider 没有停更机制，下一帧继续被驱动");
+            Assert.AreEqual(2, tip.UpdateCount, "同帧 Tip 照常推进");
+        }
+
+        #endregion
+
         #region 停更标记的复位
 
         /// <summary>

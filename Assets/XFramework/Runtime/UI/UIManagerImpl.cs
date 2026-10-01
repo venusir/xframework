@@ -145,6 +145,17 @@ namespace XFramework.XUI
         private IUiHudProvider _hudProvider;
 
         /// <summary>
+        /// Tip provider 的 <c>Update</c> 是否已因异常记过日志。
+        /// <para>阻尼用：provider 不能像面板那样「停更」（停掉它等于停掉全部 Tip），而持续态异常会每帧
+        /// 刷一条带栈日志。首次记一条并写明「后续不再记录」，比静默吞掉诚实，比每帧刷屏可读。
+        /// 换 provider 时复位——新实现值得一条新的线索。</para>
+        /// </summary>
+        private bool _tipProviderFaultLogged;
+
+        /// <summary>HUD provider 的同款阻尼标记，见 <see cref="_tipProviderFaultLogged"/>。</summary>
+        private bool _hudProviderFaultLogged;
+
+        /// <summary>
         /// 语言变更消息订阅句柄。Dispose 时取消订阅。
         /// </summary>
         private IDisposable _languageChangedSubscription;
@@ -246,6 +257,9 @@ namespace XFramework.XUI
             {
                 _tipProvider = provider;
             }
+
+            // 阻尼标记随 provider 一起换：新实现值得一条新的线索，旧实现的异常不再重复记
+            _tipProviderFaultLogged = false;
         }
 
         /// <inheritdoc/>
@@ -281,6 +295,9 @@ namespace XFramework.XUI
             {
                 _hudProvider = provider;
             }
+
+            // 同 SetTipProvider：阻尼标记随 provider 一起换
+            _hudProviderFaultLogged = false;
         }
 
         #endregion
@@ -1242,9 +1259,62 @@ namespace XFramework.XUI
             // 手动驱动等价于驱动每帧档
             DriveTier(UpdateTier.Tier0, deltaTime, time);
 
-            // HUD 与 Tip 共用同一条帧通路，故同样受档位与 Pause 约束
-            _hudProvider?.Update(deltaTime, time);
-            _tipProvider?.Update(deltaTime, time);
+            // HUD 与 Tip 共用同一条帧通路，故同样受档位与 Pause 约束。
+            // 两者各自隔离：它们是公开可替换的 provider，一个抛异常不该吃掉另一个的帧
+            // （逐面板的隔离在 DriveTier，管不到这里）；而异常一旦逃逸到 UpdateScheduler，
+            // 它会按契约注销驱动器——整条 UI 每帧通路就此永久死亡。
+            UpdateHudProvider(deltaTime, time);
+            UpdateTipProvider(deltaTime, time);
+        }
+
+        /// <summary>
+        /// 驱动 HUD provider 一帧，异常隔离 + 首次日志阻尼（见 <see cref="_hudProviderFaultLogged"/>）。
+        /// </summary>
+        private void UpdateHudProvider(float deltaTime, float time)
+        {
+            if (_hudProvider == null)
+                return;
+
+            try
+            {
+                _hudProvider.Update(deltaTime, time);
+            }
+            catch (Exception e)
+            {
+                if (_hudProviderFaultLogged)
+                    return;
+
+                _hudProviderFaultLogged = true;
+                Debug.LogError(
+                    $"[UIManager] HUD provider '{_hudProvider.GetType().Name}'.Update threw; the frame path " +
+                    "continues and further exceptions from this provider are not logged until it is " +
+                    $"replaced: {e}");
+            }
+        }
+
+        /// <summary>
+        /// 驱动 Tip provider 一帧，隔离与阻尼同 <see cref="UpdateHudProvider"/>。
+        /// </summary>
+        private void UpdateTipProvider(float deltaTime, float time)
+        {
+            if (_tipProvider == null)
+                return;
+
+            try
+            {
+                _tipProvider.Update(deltaTime, time);
+            }
+            catch (Exception e)
+            {
+                if (_tipProviderFaultLogged)
+                    return;
+
+                _tipProviderFaultLogged = true;
+                Debug.LogError(
+                    $"[UIManager] Tip provider '{_tipProvider.GetType().Name}'.Update threw; the frame path " +
+                    "continues and further exceptions from this provider are not logged until it is " +
+                    $"replaced: {e}");
+            }
         }
 
         /// <summary>
