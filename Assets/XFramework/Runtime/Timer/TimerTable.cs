@@ -29,12 +29,13 @@ namespace XFramework.XTimer
         int RunningCount { get; }
 
         /// <summary>
-        /// 扫尾一趟：锚定新槽位、回收已取消的槽位、触发到期的定时器。
+        /// 扫尾一趟：回收已取消的槽位、触发到期的定时器。
         /// </summary>
         /// <param name="now">本轴当前的逻辑时刻。</param>
+        /// <param name="advancePass">本次是否是一个新的「派发轮」。</param>
         /// <returns>本表内最近一次截止的剩余秒数；没有正在计时的定时器时返回
         /// <see cref="double.PositiveInfinity"/>（档位选择据此回到 <see cref="UpdateTier.Tier0"/>）。</returns>
-        double Sweep(double now);
+        double Sweep(double now, bool advancePass);
 
         /// <summary>释放本表全部槽位。</summary>
         /// <returns>被取消的定时器数量（不含已停止的）。</returns>
@@ -113,7 +114,11 @@ namespace XFramework.XTimer
         private int _nextGeneration = 1;
         private bool _leakWarned;
 
-        /// <summary>扫尾趟号，每趟递增。用于识别「本趟刚建的槽位」。</summary>
+        /// <summary>
+        /// 派发轮号。<b>只在真正的派发轮（<c>TimerTicker.OnUpdate</c>）里递增</b>；<c>ProcessImmediate</c>
+        /// 引发的那一趟不递增——它不是一轮派发，只是「立刻重估一次档位」。槽位据此判断自己是不是
+        /// 本趟出生的（见 <see cref="TimerSlot{TState}.BornPass"/>）。
+        /// </summary>
         private int _sweepPass;
 
         #endregion
@@ -149,9 +154,11 @@ namespace XFramework.XTimer
         public int RunningCount => _runningCount;
 
         /// <inheritdoc />
-        public double Sweep(double now)
+        public double Sweep(double now, bool advancePass)
         {
-            _sweepPass++;
+            if (advancePass)
+                _sweepPass++;
+
             double min = double.PositiveInfinity;
 
             // 每轮重读 _slots：回调里创建定时器可能触发扩容换数组，缓存的局部引用会指向旧数组
@@ -162,14 +169,20 @@ namespace XFramework.XTimer
                 if (!slot.Allocated || !slot.Running)
                     continue;
 
-                // 本趟刚建的槽位整趟跳过。回调里创建定时器时它落在这个趟号上——若不跳过，
-                // 「After(0f)」会当场触发，用户代码就在 Create 还没返回、句柄还没拿到时跑起来了
-                if (slot.BornPass == _sweepPass)
-                    continue;
-
                 if (slot.Token.IsCancellationRequested)
                 {
                     ReleaseSlot(i);
+                    continue;
+                }
+
+                // 本趟出生的槽位（回调里刚建的，或 ProcessImmediate 那一趟里刚建完的）绝不触发——
+                // 否则 `After(0f)` 会当场回调，用户代码就在 Create 还没返回、句柄还没拿到时跑起来了。
+                // 但它仍要参与「最近截止」的估计，否则刚建的长定时器会被算漏、档位白拉细一趟
+                if (slot.BornPass == _sweepPass)
+                {
+                    double born = slot.Deadline - now;
+                    if (born < min)
+                        min = born;
                     continue;
                 }
 
@@ -571,9 +584,10 @@ namespace XFramework.XTimer
         public bool Repeating;
 
         /// <summary>
-        /// 出生趟号：被创建（或重开）时所在的扫尾趟。
-        /// <para>扫尾遇到「趟号 == 本趟」的槽位会整趟跳过，保证<b>回调绝不会在 <c>Create</c> 返回句柄之前
-        /// 跑起来</b>——包括「回调里创建 <c>After(0f)</c>」这种当场就该到期的情形。</para>
+        /// 出生趟号：被创建（或重开）时所在的扫尾轮次。
+        /// <para>扫尾遇到「趟号 == 本趟」的槽位<b>绝不触发</b>（但仍参与最近截止的估计），保证回调不会在
+        /// <c>Create</c> 返回句柄之前跑起来——包括「回调里创建 <c>After(0f)</c>」以及
+        /// <c>ProcessImmediate</c> 那一趟里刚建完的槽位这两种当场就该到期的情形。</para>
         /// </summary>
         public int BornPass;
     }

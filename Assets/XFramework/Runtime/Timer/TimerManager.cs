@@ -202,6 +202,17 @@ namespace XFramework.XTimer
             return Core.TickerOf((int)timeMode).IsRegistered;
         }
 
+        /// <summary>
+        /// 测试缝：指定时间轴的驱动器下一拍将落在哪一档。
+        /// <para><b>刻意不做成公开面</b>：「自动降频」是行为而不是承诺，使用方观察到的是触发精度；
+        /// 将来若确有观测需求，加是兼容变更，减不是。</para>
+        /// </summary>
+        /// <param name="timeMode">时间轴。</param>
+        internal static UpdateTier GetDispatchTier(UpdateTimeMode timeMode)
+        {
+            return Core.TickerOf((int)timeMode).Tier;
+        }
+
         #endregion
 
         #region Internal — Auto Lifecycle

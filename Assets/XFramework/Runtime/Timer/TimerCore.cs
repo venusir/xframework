@@ -32,6 +32,26 @@ namespace XFramework.XTimer
 
         #endregion
 
+        #region Constants — Tier
+
+        /// <summary>
+        /// 变步长轴的节拍基准（Hz）。<b>必须与 <c>UpdateScheduler.TickPeriod</c> 一致</b>——后者是
+        /// <c>internal const</c>、跨模块读不到（模块边界不许引用别的模块的 Internal 命名空间），
+        /// 故此处是一份<b>副本</b>，由 <c>TimerTierTableTests</c> 对着 Update 的<b>真实派发节奏</b>锁定：
+        /// 任一侧漂移都会红。
+        /// </summary>
+        internal const int TicksPerSecond = 60;
+
+        /// <summary>
+        /// 选档的安全系数：要求「档位周期 × 本系数 ≤ 剩余」。
+        /// <para>于是最坏相对超时 = 1/8 = 12.5%，且截止前至少还有 8 次派发机会——足以吸收低帧率下
+        /// Update 的周期拉长（帧长超过 50ms 时每档周期会随帧率线性变长）。取 4 太薄（一次卡顿就吃掉
+        /// 半个余量），取 16 则把小定时器全压回 <see cref="UpdateTier.Tier0"/>、省不出开销。</para>
+        /// </summary>
+        private const double TierSafetyFactor = 8d;
+
+        #endregion
+
         #region Static Fields
 
         /// <summary>表标识发号器。<b>跨核心共享</b>，见类型注释。</summary>
@@ -103,7 +123,8 @@ namespace XFramework.XTimer
             TimerHandle handle = _plainTables[axis].Allocate(
                 callback, null, default, duration, repeating, cancellationToken, _logicalNow[axis]);
 
-            _tickers[axis].EnsureRegistered();
+            // 先分配再重估档位：那一趟扫尾要看得见这条新定时器，否则算出来的还是旧档位
+            _tickers[axis].RequestTier(SelectTier(duration));
             return handle;
         }
 
@@ -134,7 +155,7 @@ namespace XFramework.XTimer
             TimerHandle handle = StateTable<TState>(axis).Allocate(
                 null, callback, state, duration, repeating, cancellationToken, _logicalNow[axis]);
 
-            _tickers[axis].EnsureRegistered();
+            _tickers[axis].RequestTier(SelectTier(duration));
             return handle;
         }
 
@@ -181,7 +202,7 @@ namespace XFramework.XTimer
             if (table == null || !table.Restart(handle.Slot, handle.Generation, _logicalNow[table.Axis]))
                 return false;
 
-            _tickers[table.Axis].EnsureRegistered();
+            _tickers[table.Axis].RequestTier(SelectTier(table.DurationOf(handle.Slot, handle.Generation)));
             return true;
         }
 
@@ -236,9 +257,10 @@ namespace XFramework.XTimer
         /// 推进逻辑时钟并扫尾该轴的全部表，由该轴的 <see cref="TimerTicker"/> 每拍调用一次。
         /// </summary>
         /// <param name="axis">时间轴。</param>
-        /// <param name="deltaTime">该轴本拍的真实间隔。</param>
+        /// <param name="deltaTime">该轴本拍的真实间隔；<c>ProcessImmediate</c> 引发的那一趟传 0。</param>
+        /// <param name="advancePass">本次是否是一轮真正的派发（<c>ProcessImmediate</c> 那趟为 <c>false</c>）。</param>
         /// <returns>该轴最近一次截止的剩余秒数；没有正在计时的定时器时为 <see cref="double.PositiveInfinity"/>。</returns>
-        internal double Sweep(int axis, float deltaTime)
+        internal double Sweep(int axis, float deltaTime, bool advancePass)
         {
             _logicalNow[axis] += deltaTime;
             double now = _logicalNow[axis];
@@ -252,13 +274,50 @@ namespace XFramework.XTimer
                 if (table.Axis != axis)
                     continue;
 
-                double candidate = table.Sweep(now);
+                double candidate = table.Sweep(now, advancePass);
                 if (candidate < min)
                     min = candidate;
             }
 
             MaybeGoIdle(axis);
             return min;
+        }
+
+        /// <summary>
+        /// 按「最近一次截止的剩余秒数」选档：取最大的 k ∈ <c>[1, Tier7]</c> 使
+        /// <c>2^k / 60 × 8 ≤ remaining</c>，都不满足则回到 <see cref="UpdateTier.Tier0"/>。
+        /// <para>实测曲线（单轴、最近截止为 D）：0.1 秒 → Tier0、0.5 秒 → Tier1、1 秒 → Tier2、
+        /// 2 秒 → Tier3、5 秒 → Tier5、10 秒 → Tier6、60 秒 → Tier7。0.1 秒以下一律 Tier0 是刻意的：
+        /// 小冷却对精度最敏感，而降频收益最小。</para>
+        /// <para><b>不漂移与不晚点</b>：选档要求「周期 ≤ 剩余 / 8」，而档位在下一拍生效——于是每一拍
+        /// 醒来时距截止至少还有一个周期，永远不会跨过截止才醒。真正触发的那一拍必定落在 Tier0 附近。</para>
+        /// </summary>
+        /// <param name="minRemaining">最近一次截止的剩余秒数；无活跃定时器时为
+        /// <see cref="double.PositiveInfinity"/>。</param>
+        internal static UpdateTier SelectTier(double minRemaining)
+        {
+            if (double.IsPositiveInfinity(minRemaining))
+                return UpdateTier.Tier0;
+
+            for (int k = (int)UpdateTier.Max; k >= 1; k--)
+            {
+                if (minRemaining >= TierPeriodOf((UpdateTier)k) * TierSafetyFactor)
+                    return (UpdateTier)k;
+            }
+
+            return UpdateTier.Tier0;
+        }
+
+        /// <summary>
+        /// 第 k 档的标称周期（秒）= 2^k 个节拍格。<b>只对 k ≥ 1 有意义</b>——<see cref="UpdateTier.Tier0"/>
+        /// 是每帧，周期由帧率决定，不在这张表里。
+        /// <para>用公式而不是字面量：字面量会引入「抄错一位」这条第二条漂移轴，公式只有一个可漂移点
+        /// （<see cref="TicksPerSecond"/>），而锁定它的集成测试直接对着 Update 的实际派发节奏断言。</para>
+        /// </summary>
+        /// <param name="tier">档位。</param>
+        internal static double TierPeriodOf(UpdateTier tier)
+        {
+            return (1 << (int)tier) / (double)TicksPerSecond;
         }
 
         /// <summary>该轴的驱动器。供测试断言注册状态使用。</summary>
