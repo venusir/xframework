@@ -6,7 +6,7 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 
 - **单项职责的服务** — 每个模块只做一件事，彼此正交，可单独取用
 - **静态外观 + 接口 + 内部实现** — 静态类统一入口 + 接口定义契约 + 内部类实现，外部可注入自定义实现
-- **零配置或显式初始化** — 无参服务（LockManager、MessageManager、UpdateManager 等）经 `[RuntimeInitializeOnLoadMethod]` 自就绪；需要配置的服务由调用方显式 `Initialize`，或实现 `IBootstrapStage` 交给启动引导
+- **零配置或显式初始化** — 无参服务（LockManager、MessageManager、UpdateManager 等）经 `[RuntimeInitializeOnLoadMethod]` 自就绪；需要配置的服务由调用方显式 `Initialize`，或实现 `IBootstrapStage` 交给启动引导。**「零配置」指默认可用、按需覆盖**——每个模块都有合理的默认值或无参路径，需要时才覆盖；全部可配置项见「可配置项一览」
 - **通用编排 + 相位分组** — `Pipeline` 提供串行/并行阶段编排、加权进度、失败即停与取消传播；实现 `IPhaseStage` 声明相位号（同相位并行、相位升序串行），`Pipeline.BuildPhaseGroups` 一键装配
 - **更新按需降级** — `IUpdateable.OnUpdate` 返回 `UpdateTier` 等级，调度器自动调整其更新频率；档位按**时长**分档，与帧率无关
 - **不预设 GamePlay 架构** — 框架不决定实体模型、生命周期树与时间模型
@@ -33,6 +33,8 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 | **AudioManager**        | `AudioManager.Initialize()`                         | 零配置；播放源惰性创建，从不播放就不建任何对象             |
 | **TimerManager**        | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置；没有正在计时的定时器时驱动器退出调度               |
 | **LogManager**          | `[RuntimeInitializeOnLoadMethod]` 自动就绪          | 零配置；分级 + 分类过滤；Editor/Development 下自动写 JSONL |
+| **PoolManager**         | 首次 `Get<T>()` 时自动建池                          | 零配置；`Configure<T>` 只在建池前生效                     |
+| **ConfigManager**       | `ConfigManager.Initialize()`（无参）                | 零配置；数据由 `Register` / 批量加载注入，路径语义由调用方定 |
 
 > **关键设计决策：** 服务不依赖统一入口。无需参数的服务自动就绪；需要参数的服务由调用方显式初始化，或实现 `IBootstrapStage` 登记进启动引导。
 
@@ -121,9 +123,65 @@ await Bootstrap.RunAsync();
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
 | **逻辑锁**       | `LockManager` 多来源叠加的门禁（主体 × 类型 × 持有者）：全局锁、聚合状态事件 `OnLockStateChanged`、销毁自动释放、`DumpState` 排查 |
 | **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
+| **事件流**       | `EventStream<T>` 订阅句柄 + 异常隔离 + 重放缓存；是 Message 与 Reactive 的共同底层，也可单独取用 |
+| **输入抽象**     | `InputManager` 纯字符串 API（按下/按住/长按/轴值）+ 多设备检测 + 零 GC 热路径；默认提供者基于 Unity Input System，可整体替换（如 Rewired），资源加载方式自选 |
 | **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，可整体替换实现以接 Wwise / FMOD |
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
+
+## 模块索引
+
+| 模块 | 命名空间 | 职责 | 文档 |
+|---|---|---|---|
+| **Bootstrap** | `XFramework.XBootstrap` | 启动引导：显式登记引导阶段、按相位装配运行启动管线、退出时反向清理 | [README](Runtime/Bootstrap/README.md) |
+| **Pipeline** | `XFramework.XPipeline` | 通用编排：阶段串行/并行/容器嵌套、加权进度聚合、失败与取消传播 | [README](Runtime/Pipeline/README.md) |
+| **Asset** | `XFramework.XAsset` | 资源管理：异步加载、实例化、对象池、场景加载（基于 YooAsset） | [README](Runtime/Asset/README.md) |
+| **Update** | `XFramework.XUpdate` | 统一更新调度：三个派发时机、双时间轴、档位时间切片、PlayerLoop 自驱动 | [README](Runtime/Update/README.md) |
+| **Event** | `XFramework.XEvent` | 事件流引擎：订阅句柄、异常隔离、重放缓存（Message / Reactive 的共同底层） | [README](Runtime/Event/README.md) |
+| **Message** | `XFramework.XMessage` | 消息总线：按类型 / Key 治理通道、过滤器管道、异步订阅、请求-响应 | [README](Runtime/Message/README.md) |
+| **Reactive** | `XFramework.XReactive` | 响应式属性（基于 Event 事件流） | [README](Runtime/Reactive/README.md) |
+| **Localization** | `XFramework.XLocalization` | 本地化：多语言文本、语言切换、UI 自动绑定 | [README](Runtime/Localization/README.md) |
+| **File** | `XFramework.XFileManager` | 跨平台文件系统：路径域抽象、平台 Provider、原子写与一代备份、按域加密 | [README](Runtime/File/README.md) |
+| **Data** | `XFramework.XData` | 数据块管理：快照收集/应用、逐块版本迁移链、脏标记 | [README](Runtime/Data/README.md) |
+| **Serialize** | `XFramework.XSerialize` | 序列化注册表：按格式名取用（json / json-utility），供 Data / Save / Config 复用 | [README](Runtime/Serialize/README.md) |
+| **Save** | `XFramework.XSave` | 存档：原子写与备份恢复、元数据侧车、版本门禁、玩家隔离、槽位复制移动 | [README](Runtime/Save/README.md) |
+| **Config** | `XFramework.XConfig` | 配置表：Json / CSV / ScriptableObject 三种格式、自定义 Loader、声明式批量加载 | [README](Runtime/Config/README.md) |
+| **Pool** | `XFramework.XPool` | 对象池与集合池（List / HashSet / Dictionary / StringBuilder） | [README](Runtime/Pool/README.md) |
+| **Input** | `XFramework.XInput` | 输入抽象层：纯字符串 API、多设备检测、零 GC | [README](Runtime/Input/README.md) |
+| **Audio** | `XFramework.XAudio` | 音频：字符串通道、三档音量相乘、location 加载、池化播放源 | [README](Runtime/Audio/README.md) |
+| **Timer** | `XFramework.XTimer` | 定时器：一次性延时与固定间隔、可查询句柄、与 Update 档位联动 | [README](Runtime/Timer/README.md) |
+| **Log** | `XFramework.XLog` | 日志：六档分级 + 分类过滤、模板化调用、JSONL 落盘与全量捕获 | [README](Runtime/Log/README.md) |
+| **Settings** | `XFramework.XSettings` | 强类型游戏设置：纯 POCO 持久化、字段句柄、版本迁移 | [README](Runtime/Settings/README.md) |
+| **UI** | `XFramework.XUI` | UI 面板管理 / MVVM 绑定 / 导航堆栈 / HUD / Tip | [README](Runtime/UI/README.md) |
+| **Lock** | `XFramework.XLock` | 逻辑锁：多类型锁叠加、全局锁、`using` 自动释放 | [README](Runtime/Lock/README.md) |
+
+## 可配置项一览
+
+**「零配置」指的是「不配置也能跑」，不是「没有可配置项」**——每个模块都有可用的默认值或无参路径，需要时才覆盖。下表是**全部配置面**的索引（每模块一行，细节在各自的 README）。
+
+| 模块 | 你能配置什么（入口） | 何时生效 |
+|---|---|---|
+| **Log** | `LogOptions` 11 字段（`LogManager.Configure`）；`ILogSink` 追加输出端 / `ILogManager` 整体替换；`MinimumLevel` / `SetCategoryLevel`；自定义分类 `LogCategory.Get` | options 在 `Configure` 时快照；档位与输出端实时 |
+| **Asset** | `AssetInitOptions` 4 字段（主包名 / PlayMode / 远端服务 / 低内存回收）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
+| **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `RegisterChannel`；`AudioChannels` 推荐通道名 | 初始化时快照；运行时项立即扫活跃播放源 |
+| **Settings** | `SettingsOptions` 5 字段；四个注入点 `ISettingsStore` / `IAsyncSettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（前两者按类型注入，Store / Migrator / Validator 均可运行时替换） | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
+| **UI** | `IUIController` / `IUITipProvider` / `IUiHudProvider` 三个可注入 provider；`UIManager.TipAssetPath`；`UILayers` / `UISorting` 常量约定；面板 / HUD 实例级参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`） | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
+| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = … })`；或整体替换 `IInputProvider`（28 成员）——无参 `Initialize()` 走 `Resources` 默认 | 初始化时 |
+| **Save** | `SaveOptions` 2 字段（版本号 / 加密 Provider，后者接线到 `FileDomain.SaveData`）；`SaveManagerFactory` 整体替换；运行时 `SetCurrentVersion` / `SetCurrentPlayer` | 初始化时；运行时项实时（写操作进行中会拒绝） |
+| **File** | `IFileProvider` 整体替换；`ICryptoProvider` 按域接线（`SetCryptoProvider`）；可选能力接口 `IAtomicFileProvider` / `IDirectoryProvider`（装饰器须一并实现） | 初始化或运行时接线 |
+| **Pool** | `PoolConfig` 3 字段（`PoolManager.Configure<T>` 与四个集合池各自的 `Configure`） | **首次建池时**一次性消费；池已存在则忽略（需先 `RemovePool<T>`） |
+| **Config** | `IConfigManager` 整体替换；`IConfigLoader` 自定义格式（逐次传入）；`RegisterTable` / `RegisterGlobal` 注入已反序列化数据；`ConfigManifest` 声明式批量清单 | 注册即生效；Loader 随调用 |
+| **Message** | 全局过滤器 `AddFilter<T>` / `RemoveFilter`；请求-响应 `Register<TReq,TRes>`；缓冲淘汰 `EvictBufferedChannel(s)`——**统计没有开关**（常开） | 实时 |
+| **Data** | `IDataManager` 整体替换（`DataManager.Initialize(impl)`）——**无 options** | 初始化时 |
+| **Localization** | `ILocalizationManager` 整体替换；运行时 `LanguageAssetPath`（语言表地址模板）/ `FallbackLanguage` | 运行时实时（下次切换 / 下次回退读取） |
+| **Serialize** | `ISerializer` 按格式名注册（`Register` / `Unregister`，同名覆盖） | 实时 |
+| **Bootstrap** | 登记表：`Register` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options** | 实时（须在 `RunAsync` 之前） |
+| **Update** | 注册参数（`order` / `initialTier` / `timeMode`）与运行时 `Pause` / `Resume` / `Clear`——**无 options**；`timeMode` 注册时读一次 | 注册时 / 实时 |
+| **Lock** | `AutoReleaseOnDestroy`（运行时可变，只影响此后新绑定）；`LockType` 是**使用方自建**的常量类——框架不预设锁类型 | 实时 |
+| **Event** | **无配置点**（订阅期钩子 `EventStream.Create(onEmpty)` 除外） | — |
+| **Reactive** | **无配置点**（仅构造初值） | — |
+| **Timer** | **无配置点**（每次调用的 `UpdateTimeMode` 与取消令牌） | — |
+| **Pipeline** | 装配期配置：`AddStage(stage, timeoutSeconds)`、`IPhaseStage.Phase`、`ParallelStage` / `SequenceStage`、`OnProgressUpdate`——**无 options** | 装配时 |
 
 ## 框架约定的名字
 
