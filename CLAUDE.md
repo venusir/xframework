@@ -26,6 +26,7 @@
   - 注入形式按需差异化,不必齐备:`Initialize(实例)`(如 Data)、工厂 delegate(如 SaveManagerFactory)、无参 `Initialize` + `SetInstance`(如 Config/Input)均符合模板;`Initialize` 也可以带参数(如 Localization 的 `Initialize(defaultLanguage, data)`、Save 的全可选参 `Initialize(factory, options)`)
   - 懒加载豁免:FileManager.EnsureInitialized 在未初始化时自动 Initialize(零配置有意设计),不抛异常;其余门面的 EnsureInitialized 仍按模板抛 InvalidOperationException
   - 宽容语义豁免:InputManager 未初始化时全部查询空引用安全返回默认值(有意设计,对 UI 提示友好,测试锁定),不提供 EnsureInitialized 抛异常
+  - **永不抛豁免:** `LogManager` 未初始化时自动构建默认实现,**不抛 `InvalidOperationException`**——日志是错误路径的最后一张面孔,让「模块没初始化」把它升级成二次故障,代价比一致性大得多。豁免**仅限日志门面**:诊断能力不能成为新的故障源。它的自动初始化走 `SubsystemRegistration`(全量捕获必须早于其它模块的 AutoInit),已在 `AutoInitTests` 族清单登记
   - 纯静态服务(如 LockManager、MessageManager、UpdateManager)的自初始化:**两个特性都要挂**——`#if UNITY_EDITOR [UnityEditor.InitializeOnLoadMethod] #endif` **加**无条件的 `[RuntimeInitializeOnLoadMethod]`。只挂编辑器分支时,**关闭域重载**(Enter Play Mode Options → 取消 Reload Domain)后进入播放不会重新加载程序集,该回调不再执行(Editor 分支的 `#if/#else` 写法即是此坑,已全面清除)。load type **按需要选,不为统一而统一**:要早于首个场景 Awake 用 `BeforeSceneLoad`(如 File 的域根预热——它的价值就在「早于首次使用」),要注入 PlayerLoop 用 `AfterAssembliesLoaded`,只做订阅/注册的用默认档即可。订阅 `Application.quitting` 必须**幂等**(`-=` 后 `+=`):关闭域重载时该订阅跨播放会话存活,重复 `+=` 会逐次累积。族级守卫见 `Tests/Runtime/Architecture/AutoInitTests`(新成员**必须去那里登记**,未登记即红)
   - **门面保持扁平:** 静态门面一律扁平,成员多也不分组——`MessageManager`、`InputManager`、`UIManager`、`AssetManager` 都靠 `#region` 分区(不在此写各自成员数:那是会随开发增长的量,写进来必然定期过期,与「门禁不写固定例数」同一条纪律)。嵌套静态类分组会把「门面名 == 接口名」这条唯一的人工核对手段换掉(转发时必然改名),换来的只是 IntelliSense 分组,而本仓没有任何其它门面认为那值得付这个价(`UIManager` 曾短暂分组,未发布即撤销)
   - **门面转发不变量:** `IXxxManager` 新增成员时**必须同步在门面加转发**,否则它在第三方眼里根本不存在。(实例:`SetLayerVisibility` 曾长期方法完整、文档也有,却只在内部实现上,门面既无转发也无实例属性,第三方实际完全不可达)。**这条不能只靠评审**,扁平门面下十几行就能锁住:接口每个声明成员在门面上存在**同名**的 public static 成员即可。签名不必测——转发体是经 `IXxxManager` 的调用,签名不符编译不过,编译器已经兜住了。见 `UIFacadeCompletenessTests`
@@ -64,11 +65,14 @@
 
 ## 日志与异常
 
-- 日志统一 UnityEngine.Debug.Log/Warning/Error,消息带 `[模块]` 前缀(如 `[Save]`、`[ConfigManager]`)
-- 未初始化访问抛 InvalidOperationException,消息带 `[模块]` 前缀和修复提示
-- 重复 Initialize 打 LogWarning("... called more than once. Ignoring duplicate.") 后忽略
-- Update 循环异常隔离:OnUpdate 抛异常时 LogError 并自动注销,不得打崩整个调度
-- 预期内的失败用 LogWarning 而非抛异常;参数防御用 ArgumentNullException/ArgumentException
+- 运行时日志统一走 `XFramework.XLog`:分类从 `LogCategories` 取(框架内置全表)或 `LogCategory.Get("名字")`(第三方自定义);消息里**不写** `[模块]` 前缀——它由分类渲染层补(分类名就是渲染出来的标签,两者逐字对应)
+- **写模板 + 参数,不要先插值**:`LogManager.Warning(cat, "x {0}", a)` 在档位未启用时**不格式化**(零分配,有测试锁定),`$"x {a}"` 则无论开不开都已经分配过。参数仍在调用方求值(与插值一致),代价高的先用 `IsEnabled` 探测。含**字面花括号**的消息走「现成字符串」重载,或按 `string.Format` 规则写成 `{{`/`}}`
+- 级别映射与迁移前对齐:`Debug.Log`→`Info`、`Debug.LogWarning`→`Warning`、`Debug.LogError`→`Error`;Release 默认档是 `Info`,故可见性不变。六档含义、默认值与 JSONL schema 见模块 README
+- `LogManager` 自身**永不抛异常、永不记日志**:sink 抛异常即被静默摘除并计入 `DroppedSinkCount`——「因为日志坏了而记一条日志」会递归,且测试把意外 Error 当失败。文件写入失败(磁盘满等)同样静默停用该输出端,不影响控制台通路
+- 未初始化访问抛 InvalidOperationException,消息带 `[模块]` 前缀和修复提示(**日志门面除外**,见「架构分层」的第三处豁免)
+- 重复 Initialize 打 Warning("... called more than once. Ignoring duplicate.") 后忽略
+- Update 循环异常隔离:OnUpdate 抛异常时记 Error 并自动注销,不得打崩整个调度
+- 预期内的失败用 Warning 而非抛异常;参数防御用 ArgumentNullException/ArgumentException
 
 ## 依赖管理
 

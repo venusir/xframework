@@ -32,7 +32,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **实测记录（含两处自我更正）**：分类表由机械提取全部日志调用点后定，回填过程中抓住两类误收——① `[AudioManager]` 实为 GameObject 名、`[Slot:…]` 实为 `SaveMeta.ToString()`，都不是日志前缀；② `[XSerialize]`、`[Reactive]`、`[LanguageAssetLoader]` 三处**只出现在异常消息里**（`throw new …($"[模块] …")`），不是日志标签——分类表因此从最初声明的 34 个收敛到 **31 个**，且 `Reactive` 与 `Serialize` 两个模块**根本没有日志可回填**。异常消息按既有约定继续自带 `[模块]` 前缀，不归分类表管。`check-docs -Module Log` 报 **0 条** XML 告警。
   **被用例抓出的一条（8 条文件用例首轮全红）**：`Sharing violation`——Windows 的共享规则是**双向**的，写入端声明 `FileShare.Read` 只解决了「允许别人读」，读者还必须自己声明允许写者，而 .NET 的 `File.ReadAllLines` 内部声明的正是 `FileShare.Read`。修法在读者侧（显式传 `FileShare.ReadWrite`），已写进 README——它是「AI/脚本在游戏运行时读日志」的前提，不修就等于这份文件只能等进程退出后才能分析。
   **全量捕获**：挂 `Application.logMessageReceivedThreaded`，把引擎、第三方库（YooAsset 那类）、未捕获异常的日志也收进同一份 JSONL，每条标 `src:"unity"` 与来源 `LogType` 映射出的档位；框架自己的日志标 `src:"fw"`。**去重靠线程本地的回显深度**：控制台输出端调 `Debug.Log*` 前后增减计数，捕获回调据此丢弃自己的回显——一个框架日志因此恰好写一条，而不是「直写一条 + 被捕获再写一条」。外部日志同样走档位过滤（否则 `MinimumLevel` 的「一律丢弃」会自相矛盾），分类从 `[标签]` 前缀解析。**捕获回调在 `AutoInit` 时无条件挂上**（没有可写输出端时第一行即返回）：挂载成本只是每条 Unity 日志一次静态委托调用，换来的是没有「第一次 `LogManager` 调用之前发生的日志捕获不到」这个时序陷阱。同批把默认实现改为 `AutoInit` 时**立即装入**（不再是首次使用时懒创建）——否则启动阶段的引擎/第三方日志（恰恰是排查启动失败最需要的那些）会整段丢失。
-  **本批不含**：18 个模块的回填（下一批，按模块拆分提交）。
+  **回填已完成**：18 个模块（Pipeline / Bootstrap / Config / Data / Save / Asset / Settings / UI / Input /
+  Audio / Timer / Message / Lock / Update / Pool / Localization / File / Event）加 Editor 工具与 Samples，
+  共 20 个提交、约 190 处调用点，**全部按模块拆分、控制台文案与 LogType 逐字不变**——30+ 处既有
+  `LogAssert`（精确匹配与正则）一条都没改，这是「渲染与迁移前一致」的机械证据。`Reactive` 与
+  `Serialize` 两个模块无需回填（它们那两处方括号文本是异常消息，不是日志）。至此框架内**只有一条
+  日志通路**：`Runtime` 下除控制台输出端自己那三行外，已无任何 `Debug.Log*` 调用。
 
 ### Fixed
 
