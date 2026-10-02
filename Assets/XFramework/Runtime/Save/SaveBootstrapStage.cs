@@ -8,7 +8,7 @@ namespace XFramework.XSave
 
     /// <summary>
     /// <see cref="SaveManager"/> 的引导阶段：初始化门面并跑一次启动恢复扫描。
-    /// <para>Phase = 4。<b>必须晚于 Data(3)</b>——恢复扫描要用 <c>DataManager.CreateSnapshot</c> 回滚数据块，
+    /// <para>Phase = <see cref="BootstrapPhases.Save"/>（4）。<b>必须晚于 Data</b>——恢复扫描要用 <c>DataManager.CreateSnapshot</c> 回滚数据块，
     /// 这是内置相位里唯一的硬性模块间依赖。</para>
     /// </summary>
     public sealed class SaveBootstrapStage : IBootstrapStage
@@ -32,8 +32,8 @@ namespace XFramework.XSave
 
         #region IBootstrapStage
 
-        /// <summary>Phase = 4。晚于 Data(3)，确保快照能力已就绪。</summary>
-        public int Phase => 4;
+        /// <summary>Phase = <see cref="BootstrapPhases.Save"/>（4）。晚于 Data，确保快照能力已就绪。</summary>
+        public int Phase => BootstrapPhases.Save;
 
         /// <inheritdoc/>
         public string Name => GetType().Name;

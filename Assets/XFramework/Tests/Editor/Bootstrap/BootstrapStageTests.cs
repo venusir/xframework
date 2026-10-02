@@ -3,6 +3,7 @@ using NUnit.Framework;
 using XFramework.XAsset;
 using XFramework.XBootstrap;
 using XFramework.XData;
+using XFramework.XLocalization;
 using XFramework.XPipeline;
 using XFramework.XSave;
 
@@ -108,6 +109,16 @@ namespace Venusy609.Xframework.Editor.Tests
                 // 清理 SaveManager 静态态,避免影响其他测试
                 SaveManager.Shutdown();
             }
+        }
+
+        [Test]
+        public void BuiltInStages_PhaseMatchesConstants()
+        {
+            // 防「改了常量、忘了改阶段」的单边漂移——两处必须同源
+            Assert.AreEqual(BootstrapPhases.Asset, new AssetBootstrapStage().Phase);
+            Assert.AreEqual(BootstrapPhases.Data, new DataBootstrapStage().Phase);
+            Assert.AreEqual(BootstrapPhases.Save, new SaveBootstrapStage().Phase);
+            Assert.AreEqual(BootstrapPhases.Localization, new LocalizationBootstrapStage().Phase);
         }
 
         [Test]

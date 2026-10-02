@@ -217,15 +217,7 @@ await Bootstrap.RunAsync(new Progress<PipelineProgress>(p =>
 
 ## 内置 Phase 约定
 
-为保持一致性，框架内置模块使用以下 Phase 值：
-
-| Phase | 模块         | 说明                         |
-| ----- | ------------ | ---------------------------- |
-| 0     | Asset        | 资源管理器初始化（最早）     |
-| 3     | Data         | 数据管理器初始化             |
-| 4     | Save         | 存档管理器初始化             |
-| 90    | Localization | 本地化数据加载               |
-| 90+   | 用户自定义   | 建议业务模块从此范围开始     |
+`Phase` 的取值由使用方自行约定，Pipeline 本身不预设任何值。框架**引导阶段**（XBootstrap 模块）的相位号已公开为 `BootstrapPhases` 常量（Asset=0 / Data=3 / Save=4 / Localization=90 / UserStart=90），其中 **0–89 由框架保留**；约定细节与「怎么插进框架阶段之间」见 Bootstrap 模块 README——那里是这份约定的唯一真相。
 
 ## 设计原则
 

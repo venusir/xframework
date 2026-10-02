@@ -7,15 +7,15 @@ namespace XFramework.XData
 {
 
     /// <summary>
-    /// <see cref="DataManager"/> 的引导阶段。Phase = 3，晚于 Asset(0)、早于 Save(4)。
+    /// <see cref="DataManager"/> 的引导阶段。Phase = <see cref="BootstrapPhases.Data"/>（3），晚于 Asset、早于 Save。
     /// <para>同步瞬时阶段：无取消窗口（没有可取消的 await），故忽略 <c>cancellationToken</c>。</para>
     /// </summary>
     public sealed class DataBootstrapStage : IBootstrapStage
     {
         #region IBootstrapStage
 
-        /// <summary>Phase = 3。晚于 Asset(0)、早于 Save(4)，确保依赖的模块已就绪。</summary>
-        public int Phase => 3;
+        /// <summary>Phase = <see cref="BootstrapPhases.Data"/>（3）。晚于 Asset、早于 Save，确保依赖的模块已就绪。</summary>
+        public int Phase => BootstrapPhases.Data;
 
         /// <inheritdoc/>
         public string Name => GetType().Name;

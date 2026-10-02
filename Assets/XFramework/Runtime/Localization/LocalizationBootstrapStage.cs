@@ -10,7 +10,7 @@ namespace XFramework.XLocalization
 {
 
     /// <summary>
-    /// <see cref="LocalizationManager"/> 的引导阶段。Phase = 90，晚于框架内置相位(0/3/4)。
+    /// <see cref="LocalizationManager"/> 的引导阶段。Phase = <see cref="BootstrapPhases.Localization"/>（90），晚于框架内置相位。
     /// <para><b>不在 <see cref="Bootstrap.RegisterDefaults"/> 的默认组合内</b>——它需要语言数据，
     /// 由使用方构造并显式登记：</para>
     /// <code>
@@ -50,8 +50,8 @@ namespace XFramework.XLocalization
 
         #region IBootstrapStage
 
-        /// <summary>Phase = 90。晚于框架内置相位(0/3/4)，供业务在 90+ 区间自定义（内置相位约定见 Pipeline 模块 README）。</summary>
-        public int Phase => 90;
+        /// <summary>Phase = <see cref="BootstrapPhases.Localization"/>（90）。与 <see cref="BootstrapPhases.UserStart"/> 同值：业务自定义阶段从该区间起（依赖本地化的阶段请取更大值）。</summary>
+        public int Phase => BootstrapPhases.Localization;
 
         /// <inheritdoc/>
         public string Name => GetType().Name;

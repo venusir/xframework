@@ -8,14 +8,14 @@ namespace XFramework.XAsset
 
     /// <summary>
     /// <see cref="AssetManager"/> 的引导阶段：把资源管理器的初始化交给框架启动流程。
-    /// <para>Phase = 0，<b>排在最早</b>——本地化、UI 等模块的数据都要经 YooAsset 地址加载，必须等它就绪。</para>
+    /// <para>Phase = <see cref="BootstrapPhases.Asset"/>（0），<b>排在最早</b>——本地化、UI 等模块的数据都要经 YooAsset 地址加载，必须等它就绪。</para>
     /// </summary>
     public sealed class AssetBootstrapStage : IBootstrapStage
     {
         #region IBootstrapStage
 
-        /// <summary>Phase = 0。内置相位约定见 Pipeline 模块 README。</summary>
-        public int Phase => 0;
+        /// <summary>Phase = <see cref="BootstrapPhases.Asset"/>（0，最早）。</summary>
+        public int Phase => BootstrapPhases.Asset;
 
         /// <inheritdoc/>
         public string Name => GetType().Name;

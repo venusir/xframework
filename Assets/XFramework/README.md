@@ -47,7 +47,7 @@ Bootstrap.RegisterDefaults();                                          // Asset(
 Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myTable)); // Phase 90
 await Bootstrap.RunAsync(progress: myProgress);
 // ...
-Bootstrap.Shutdown();                                                  // 逆登记顺序清理
+Bootstrap.Shutdown();                                                  // 按执行序逆序清理（相位降序）
 ```
 
 `RunAsync` 在失败与取消时**抛出**——启动失败是致命的，不该只留一条日志。整块是**可选**的：零配置项目与自建启动流程的项目都可以不用它。
@@ -175,7 +175,7 @@ await Bootstrap.RunAsync();
 | **Data** | `IDataManager` 整体替换（`DataManager.Initialize(impl)`）——**无 options** | 初始化时 |
 | **Localization** | `ILocalizationManager` 整体替换；运行时 `LanguageAssetPath`（语言表地址模板）/ `FallbackLanguage` | 运行时实时（下次切换 / 下次回退读取） |
 | **Serialize** | `ISerializer` 按格式名注册（`Register` / `Unregister`，同名覆盖） | 实时 |
-| **Bootstrap** | 登记表：`Register` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options** | 实时（须在 `RunAsync` 之前） |
+| **Bootstrap** | 登记表：`Register` / `Unregister` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options**；相位号常量见 `BootstrapPhases` | 实时（须在 `RunAsync` 之前） |
 | **Update** | 注册参数（`order` / `initialTier` / `timeMode`）与运行时 `Pause` / `Resume` / `Clear`——**无 options**；`timeMode` 注册时读一次 | 注册时 / 实时 |
 | **Lock** | `AutoReleaseOnDestroy`（运行时可变，只影响此后新绑定）；`LockType` 是**使用方自建**的常量类——框架不预设锁类型 | 实时 |
 | **Event** | **无配置点**（订阅期钩子 `EventStream.Create(onEmpty)` 除外） | — |
