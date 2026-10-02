@@ -48,6 +48,15 @@ namespace XFramework.XUI.Tests
         #region 探测型读接口
 
         [Test]
+        public void LayerProbes_BeforeInitialize_ReportVisibleAndInteractive()
+        {
+            // 「未被显式隐藏/禁用过的层一律可见可交互」——未初始化时一个显式设置都没有，故为 true。
+            // 这两个成员与 GetState / OpenCount 同属探测型：给场景加载早期的巡检用，不该抛。
+            Assert.IsTrue(UIManager.IsLayerVisible(100));
+            Assert.IsTrue(UIManager.IsLayerInteractive(100));
+        }
+
+        [Test]
         public void GetState_BeforeInitialize_ReturnsAllZero()
         {
             var state = UIManager.GetState();

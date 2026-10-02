@@ -74,6 +74,23 @@ namespace XFramework.XUI.Tests
                 "门面刻意不暴露实例属性；框架内与测试用 internal 的 UIManager.Current");
         }
 
+        [Test]
+        public void LayerReadback_ReflectsExplicitSettings()
+        {
+            // 探测型读的默认口径：没被显式设置过的层一律可见、可交互
+            Assert.IsTrue(UIManager.IsLayerVisible(UILayers.Default));
+            Assert.IsTrue(UIManager.IsLayerInteractive(UILayers.Default));
+
+            UIManager.SetLayerVisibility(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
+
+            Assert.IsFalse(UIManager.IsLayerVisible(UILayers.Default));
+            Assert.IsFalse(UIManager.IsLayerInteractive(UILayers.Default));
+
+            UIManager.SetLayerVisibility(UILayers.Default, true);
+            Assert.IsTrue(UIManager.IsLayerVisible(UILayers.Default));
+        }
+
         #endregion
 
         #region 层交互开关

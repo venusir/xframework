@@ -328,6 +328,25 @@ namespace XFramework.XUI
         /// <param name="interactive">是否允许交互。</param>
         void SetLayerInteractive(int layer, bool interactive);
 
+        /// <summary>
+        /// 层当前是否可见。未被显式隐藏过的层一律可见。
+        /// <para>读的是 <see cref="SetLayerVisibility(int, bool)"/> 记录下来的期望值，不去查场景里的容器——
+        /// 层容器还不存在（该层没开过面板）时同样有答案。</para>
+        /// <para><b>探测型读</b>：未初始化时返回 true，不抛异常（与 <see cref="GetState"/> 同属一类）。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <returns>可见返回 true。</returns>
+        bool IsLayerVisible(int layer);
+
+        /// <summary>
+        /// 层当前是否允许交互。未被显式禁用过的层一律允许。
+        /// <para>同上，读的是 <see cref="SetLayerInteractive(int, bool)"/> 记录下来的期望值。</para>
+        /// <para><b>探测型读</b>：未初始化时返回 true，不抛异常。</para>
+        /// </summary>
+        /// <param name="layer">目标层级。</param>
+        /// <returns>允许交互返回 true。</returns>
+        bool IsLayerInteractive(int layer);
+
         #endregion
 
         #region Sort Order

@@ -160,7 +160,7 @@ sequenceDiagram
 
 | 类别 | 成员 | 未初始化时 |
 |---|---|---|
-| 探测型读接口 | `IsInitialized`、`UIRoot`、`GetState`、`DumpState`、`TierDriverCount`、`OpenCount`、`IsAnyOpen`、`Panels`、`CanGoBack`、`IsMaskShowing` | 返回空值 / 全零快照 / 空视图（`Panels` 返回 `Array.Empty` 而非 null），**不抛异常**——它们本就该能在 `Initialize` 之前回答「现在什么样」 |
+| 探测型读接口 | `IsInitialized`、`UIRoot`、`GetState`、`DumpState`、`TierDriverCount`、`OpenCount`、`IsAnyOpen`、`Panels`、`CanGoBack`、`IsMaskShowing`、`IsLayerVisible`、`IsLayerInteractive` | 返回空值 / 全零快照 / 空视图（`Panels` 返回 `Array.Empty` 而非 null），**不抛异常**——它们本就该能在 `Initialize` 之前回答「现在什么样」（层级回读在未初始化时答 `true`：没有任何层被显式隐藏/禁用过） |
 | 其余全部（含读接口） | `IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer` 与所有开/关/推/弹/遮罩/Tip/HUD 成员 | 抛 `InvalidOperationException`（消息带 `[UIManager]` 前缀并给出修复提示） |
 
 > **为什么 `IsOpen<T>` / `GetTopPanel` 这类「读」也照抛**：它们的实现要先剪枝再取，属「操作」而非纯读。判据不是「读还是写」，而是「未初始化时它能不能给出一个有意义的答案」。
@@ -186,6 +186,8 @@ Popup (200)      — 弹出层（弹窗、确认框）
 Top (300)        — 顶层（Toast、加载提示、系统消息）
 Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 ```
+
+层的整体开关可以**读回**：`UIManager.IsLayerVisible(layer)` / `UIManager.IsLayerInteractive(layer)`。它们读的是 `SetLayerVisibility` / `SetLayerInteractive` 记录下来的期望值，**不去查场景里的容器**——层容器还不存在（该层还没开过面板）时同样有答案；未被显式设置过的层一律答 `true`。这两个成员面向诊断与巡检（诊断窗口的 UI 页签在用），不是每帧路径。
 
 **排序空间**由 `UISorting` 单点定义，**不要在别处硬编码 `sortingOrder`**：
 

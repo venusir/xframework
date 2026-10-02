@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **UI 页签（接替原 `UI State` 独立窗口）**：`UiDiagnosticPanel` 显示面板栈（类型 / 层 / 档位 / 焦点 / 暂停）、状态快照、层级表（可见 / 可交互 / 已打开数，含项目自定义层）与 `DumpState` 全文——旧窗口的信息一项不少。数据全部取自公开查询面，因此与代码里读到的是同一份真相。
 - **诊断窗口壳（菜单 `Tools/XFramework/Diagnostics`）**：左侧页签列表（Order 排序 + 搜索过滤）、顶栏（自动刷新开关 / 刷新 / 复制 / 页签计数）、右侧内容区（默认走 `DiagnosticReportView`；页签实现 `IDiagnosticPanelView` 时整块委托；采集失败时绕开自绘显示错误）。三条取向：
   **① 取数只在 tick 里做，OnGUI 只画。** 被删除的 `UI State` 窗口在 `OnGUI` 里 `Refresh()`，而一帧的 Layout/Repaint 会跑多次，等于每帧多次取数——新窗口把这条纠正过来（`EditorApplication.update` 驱动、只在采到新数据时 `Repaint`）。
   **② 判断逻辑全在可测的 `DiagnosticsWindowModel`**：时钟注入、节流判据、选中钳制、页签表重载、异常隔离、自绘路径选择；窗口里只剩「生命周期 / 转发 / GUILayout」三类语句，16 例 EditMode 用例锁住全部分界（含「自动刷新关着时换页签仍必须重采」）。
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Removed
 
+- **`UI State` 独立窗口（`Assets/XFramework/Editor/UIStateWindow.cs`）与菜单 `Tools/XFramework/UI State` 删除**：内容并入诊断窗口的 UI 页签（面板列表 / 状态快照 / `DumpState` 全文一项不少，另加层级表）。迁移：改用 `Tools/XFramework/Diagnostics`。
 - **删除包内模板残留的 `Documentation/` 目录**（`XFramework.md` + `images/example.png`）：它是 UPM 插件模板留下的骨架，被写成了包内总览，但**已成第二份真相**——零入链（全仓无 markdown 链接指向它）、CHANGELOG 里有**四次针对它的「文档修正」**（每次都是它写了代码中不存在的 API：本地化表 3/4 行、设置表一整套 `Get<T>()`、`UpdateManager.Bind(root)` 等），而本轮核对又发现一批：模块索引只覆盖 17/21、目录树 13/21、速查表 9/21，`UIManager.ShowTipAsync(new TipConfig { Text = … })` 是**两处编译级错误**（签名首参是 `string text`、`TipConfig` 无 `Text` 字段），依赖表漏 Newtonsoft.Json 导致**照它的安装步骤配置会编译失败**，开头「纯 C# 实现、不依赖 MonoBehaviour 继承 / 引入后即可编写 GamePlay」与实现相反（Runtime 有 9 个 MonoBehaviour）。其中唯一独有且有价值的内容——模块索引表——已搬迁进包 README 并补全到 21 个模块；`example.png` 是 2023-08 的模板图、全仓零引用。**包内此后只有 README 一个总览入口**
 
 ### Fixed
@@ -78,6 +80,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **`IUIManager` 新增 `IsLayerVisible(int)` / `IsLayerInteractive(int)`（破坏性变更，仅对第三方 `IUIManager` 实现者成立）**：这补上了 UI 里唯一一处「能写不能读」——`SetLayerVisibility` 早已公开，回读却只在内部实现上。正是 `Documentation/Modules/UI.md` 里记为「将来若要公开，走完整的接口 + 转发 + 完备性测试三步」的那一步，本轮按三步走完：接口 +2、`UIManager` 门面 +2 转发（`UIFacadeCompletenessTests` 自动覆盖）、`Tests/Runtime/UI/FakeUIManager.cs` 同步补齐。两条口径：
+  **① 它们是探测型读**（未初始化时答 `true`，不套 `EnsureGlobalInitialized`）——「没有被显式隐藏过」在未初始化时同样是 `true`，与 `GetState` / `OpenCount` 同属一类；`UIFacadeProbeTests` 补了这条断言，README 的探测型清单同步更新。
+  **② 读的是期望值而不是场景**：`SetLayerVisibility` / `SetLayerInteractive` 记录的字典是唯一真相，**层容器还不存在（该层没开过面板）时也有答案**——这正是这个缺口的本质。
+  **迁移**：第三方实现者补两个成员即可（按期望值语义实现，通常就是查自己的层开关字典）；只想读的调用方无需改动。
 - **补记「UI 门面恢复扁平」**（`9b5b426`）：`467c64d` 曾把门面分成 8 个嵌套静态类，转发时 11 个成员改了名——「门面名 == 接口名」这条唯一的人工核对手段随之失效，而接口新增成员时「忘了加转发」在第三方眼里等于该成员不存在。分组未发布（0.2.0 是扁平 API），故属撤回一个未发布的破坏性变更；完备性守卫换成 `UIFacadeCompletenessTests`（只断同名，签名由编译器兜底）。该规则已进 `CLAUDE.md`「门面保持扁平」
 
 ### Documentation

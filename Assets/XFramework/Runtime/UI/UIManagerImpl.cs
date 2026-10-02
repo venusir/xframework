@@ -1217,18 +1217,14 @@ namespace XFramework.XUI
             }
         }
 
-        /// <summary>
-        /// 层当前是否允许交互。未被显式禁用过的层一律允许。
-        /// </summary>
-        internal bool IsLayerInteractive(int layer)
+        /// <inheritdoc />
+        public bool IsLayerInteractive(int layer)
         {
             return !_layerInteractive.TryGetValue(layer, out var interactive) || interactive;
         }
 
-        /// <summary>
-        /// 层当前是否可见。未被显式隐藏过的层一律可见。
-        /// </summary>
-        internal bool IsLayerVisible(int layer)
+        /// <inheritdoc />
+        public bool IsLayerVisible(int layer)
         {
             return !_layerVisible.TryGetValue(layer, out var visible) || visible;
         }

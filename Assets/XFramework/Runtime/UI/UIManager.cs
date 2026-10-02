@@ -397,8 +397,8 @@ namespace XFramework.XUI
         // 以及 OpenCount / IsAnyOpen / Panels / CanGoBack / IsMaskShowing 与属性 UIRoot / IsInitialized。
         // 它们回答的是「现在有没有面板/遮罩」这类探测问题，本就该能在 Initialize 之前回答——
         // IUIManager 的文档与 UIManagerImpl 的实现都以此为契约（「未初始化时返回 0，不抛异常，
-        // 便于在场景加载早期探测」）。此前门面统一套了守卫，于是 UIStateWindow 这类调用方必须先判
-        // IsInitialized 才敢问一句「现在什么样」。
+        // 便于在场景加载早期探测」）。此前门面统一套了守卫，于是 UIStateWindow（现已并入诊断窗口的
+        // UI 页签）这类调用方必须先判 IsInitialized 才敢问一句「现在什么样」。
         //
         // 不在这组里的读接口照抛，包括名字听上去同类的 IsOpen<T> / GetPanel<T> / GetTopPanel /
         // CopyPanels / CopyPanelsInLayer：它们的实现要先剪枝再取，属「操作」而非纯读，门面与实现
@@ -489,6 +489,19 @@ namespace XFramework.XUI
         {
             EnsureGlobalInitialized();
             _instance.SetLayerInteractive(layer, interactive);
+        }
+
+        /// <inheritdoc cref="IUIManager.IsLayerVisible"/>
+        public static bool IsLayerVisible(int layer)
+        {
+            // 探测型读：未初始化时「没有被显式隐藏过」就是 true，不要套 EnsureGlobalInitialized
+            return _instance == null || _instance.IsLayerVisible(layer);
+        }
+
+        /// <inheritdoc cref="IUIManager.IsLayerInteractive"/>
+        public static bool IsLayerInteractive(int layer)
+        {
+            return _instance == null || _instance.IsLayerInteractive(layer);
         }
 
         #endregion

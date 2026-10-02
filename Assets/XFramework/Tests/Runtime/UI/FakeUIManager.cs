@@ -143,6 +143,10 @@ namespace XFramework.XUI.Tests
 
         public void SetLayerInteractive(int layer, bool interactive) => throw NotSupported();
 
+        public bool IsLayerVisible(int layer) => throw NotSupported();
+
+        public bool IsLayerInteractive(int layer) => throw NotSupported();
+
         public void BringToFront(UIPanelBase panel) => throw NotSupported();
 
         #endregion

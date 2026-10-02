@@ -102,6 +102,10 @@ Runtime/UI/
   本轮只订正了把它描述成「Query 区一律不调守卫」的注释——错的是注释，不是代码。
 - **不给 `IsLayerInteractive` / `IsLayerVisible` 加门面转发**：它们不在 `IUIManager` 里，属未公开的诊断面，
   不是 A2 缺口（判据是「接口声明了但门面够不到」）。将来若要公开，走完整的「接口 + 转发 + 完备性测试」三步。
+  > **2026-10-02 更新（本条已落地，不再属于「未采纳」）**：诊断窗口的 UI 页签需要回读层级状态，于是按上面写好的
+  > 三步公开——`IUIManager` +2（`IsLayerVisible` / `IsLayerInteractive`，探测型读）、`UIManager` +2 转发、
+  > `UIFacadeCompletenessTests` 自动覆盖；`Tests/Runtime/UI/FakeUIManager.cs` 同步补了两个成员（它对接口新增成员
+  > 一向是编译期点名）。破坏性变更只对第三方 `IUIManager` 实现者成立，已进 CHANGELOG。
 - **不在 `SetInstance` 路径消费 `PanelFactoryFactory`**：该钩子是测试专用，`Initialize` 消费即清、`Destroy`
   兜底复位，两条都有用例；「设了钩子又走 SetInstance」在测试纪律下不会跨 fixture 泄漏（见 `UIPanelFactoryInjectionTests`）。
 - **不锁 `Destroy` 一律 Dispose 注入实例的行为**（它是有意为之的终局语义，README「实例所有权」已写明），
