@@ -214,6 +214,9 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 - 手动驱动用无参 `UpdateManager.Tick()`（两个变步长时机）与 `TickFixed()`——它们自行按 Unity 当前
   时间构造时钟，与自动驱动逐字一致（含 `timeScale = 0` 的冻结与双时间轴分割）；
   **注入生效时不要再手动调用**，否则同一帧会派发两次
+- 要**彻底自己驱动**（例如确定性回放）就把自动驱动关掉：`UpdateManager.AutoDriveEnabled = false`——
+  三个驱动委托仍在 PlayerLoop 里但空转（`IsDrivingPlayerLoop` 仍返回 `true`，它只报注入状态），
+  此后自行每帧 `Tick` 即可
 - 带时刻的重载（`Tick(time)` / `TickFixed(fixedTime)` / `ProcessImmediate(node, dt, time)`）只有
   **一条时间源**：两条轴同值、`IsPaused` 恒为 false，是给测试与确定性回放自带时刻用的。
   墙钟轴节点、或 `timeScale <= 0` 的场景请改用 `UpdateClock` 重载 / 无参重载——

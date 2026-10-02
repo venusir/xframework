@@ -114,11 +114,14 @@ namespace XFramework.XUpdate
 
         /// <summary>
         /// 是否允许 PlayerLoop 自动驱动。默认开启。
-        /// <para><b>仅供测试关闭</b>：PlayMode 用例在 <c>yield</c> 期间会被自动驱动派发，
-        /// 精确计数断言会被打乱。经 <c>InternalsVisibleTo</c> 访问，与框架其它测试钩子
-        /// （<c>SetInstance</c> / <c>Initialize(实例)</c>）同惯例。</para>
+        /// <para><b>置 <c>false</c> 即当场停止自动派发</b>——三个驱动委托仍在 PlayerLoop 里，但每个都提前返回
+        /// （空转），项目据此可改为自行每帧 <see cref="Tick()"/>。注意 <see cref="IsDrivingPlayerLoop"/> 仍会返回
+        /// <c>true</c>：它只回答「注入状态」，不回答「有没有东西在派发」。</para>
+        /// <para><b>不要既自动驱动又手动 <c>Tick</c></b>：两条通路会各派发一次（同一帧回调触发两次）。
+        /// 要自己驱动就先把本开关关掉。</para>
+        /// <para>它同时是仓内测试做精确计数断言的既有钩子（PlayMode 用例在 <c>yield</c> 期间会被自动驱动派发）。</para>
         /// </summary>
-        internal static bool AutoDriveEnabled { get; set; } = true;
+        public static bool AutoDriveEnabled { get; set; } = true;
 
         /// <summary>
         /// 驱动委托实例。只创建一次——<see cref="PlayerLoopSystem.updateDelegate"/> 每帧被调用，

@@ -134,6 +134,19 @@ namespace XFramework.XUpdate.Tests
         }
 
         [Test]
+        public void AutoDriveEnabled_IsPublic()
+        {
+            // 它是「项目想自己驱动」的唯一出口：置 false 后三个驱动委托空转（实现里各自提前返回）。
+            // 测试经 InternalsVisibleTo 本就够得着 internal 成员，所以这里必须按**公开可见性**断言——
+            // 否则哪天它退回 internal，不会有任何用例变红。
+            var property = typeof(UpdateManager).GetProperty("AutoDriveEnabled",
+                BindingFlags.Static | BindingFlags.Public);
+
+            Assert.IsNotNull(property, "AutoDriveEnabled 必须是公开静态属性——关闭自动驱动的唯一入口");
+            Assert.AreEqual(typeof(bool), property.PropertyType);
+        }
+
+        [Test]
         public void OnQuitting_ThenAutoInit_RebuildsScheduler()
         {
             // 关闭域重载时进入播放不重新加载程序集，[InitializeOnLoadMethod] 不再执行；
