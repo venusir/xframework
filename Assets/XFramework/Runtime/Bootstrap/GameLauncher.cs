@@ -21,8 +21,9 @@ namespace XFramework.XBootstrap
     /// 登记引导阶段，<c>Start</c> 跑启动管线，<see cref="OnDestroy"/> 反向清理。</item>
     /// <item><b>字段面</b>——在 Inspector 填 Asset / Save / UI / Input / Localization 五组字段，
     /// Awake 里组装成各模块的 options 注入。</item>
-    /// <item><b>覆写 <see cref="ConfigureStages"/></b>——服务实例（<c>IAssetRemoteServices</c> /
-    /// <c>ICryptoProvider</c> / <c>IAssetDecryptionServices</c>）与自定义阶段从这里进。</item>
+    /// <item><b>覆写 <see cref="ConfigureStages"/></b>——服务实例与自定义阶段从这里进：<c>IAssetRemoteServices</c> /
+    /// <c>ICryptoProvider</c> / <c>IAssetDecryptionServices</c>，以及**换输入后端**
+    /// （Rewired 等：留空 Input 字段 + <c>Bootstrap.Register(new InputBootstrapStage(myProvider))</c> 一行）。</item>
     /// </list>
     /// <para><b>它仍是可选件，不是框架的必需入口。</b>不用它的话，在自己的启动流程里调
     /// <see cref="Bootstrap.RunAsync"/> 就行——每帧派发由 <c>UpdateManager</c> 注入的 PlayerLoop 完成，
@@ -67,9 +68,11 @@ namespace XFramework.XBootstrap
         #region Configuration — Input
 
         [Header("Input")]
-        [Tooltip("输入配置资产（InputSystemOptionsAsset：输入资产 + 初始 ActionMap 名）。" +
+        [Tooltip("默认后端（Unity Input System）的配置资产：输入资产 + 初始 ActionMap 名。" +
                  "留空则不登记 Input 引导阶段——自行调 InputManager.Initialize。" +
-                 "（这里是框架类型而非 InputActionAsset：Unity 输入类型按模块边界只允许住在 XInput.Default 内。）")]
+                 "换后端（Rewired 等）请保持留空，改为覆写 ConfigureStages() 注册 " +
+                 "new InputBootstrapStage(myProvider)。" +
+                 "（字段是框架类型而非 InputActionAsset：Unity 输入类型按模块边界只允许住在 XInput.Default 内。）")]
         [SerializeField] private InputSystemOptionsAsset _inputOptions;
 
         #endregion

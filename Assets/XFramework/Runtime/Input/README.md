@@ -466,6 +466,29 @@ public class RewiredProvider : IInputProvider
 }
 ```
 
+### 接进启动流程（换后端也只是一行）
+
+把它包成引导阶段，初始化与清理就都走框架的对称路径：
+
+```csharp
+public sealed class MyLauncher : GameLauncher
+{
+    protected override void ConfigureStages()
+    {
+        base.ConfigureStages();   // 注意：GameLauncher 的 Input 配置字段保持【留空】
+        Bootstrap.Register(new InputBootstrapStage(new RewiredProvider()));
+    }
+}
+```
+
+不用 `GameLauncher` 时同理，在自己的启动流程里 `Bootstrap.Register(new InputBootstrapStage(myProvider))` 即可；
+`Shutdown` 会经 `InputManager.Destroy()` 释放它（对自定义 provider 同样 `Dispose`）。
+
+> **为什么 GameLauncher 的 Input 字段要留空？** 那个字段（`InputSystemOptionsAsset`）是**默认后端**
+> 的配置载体——填它等于让框架去建 Unity Input System 的默认提供者。**换后端属于「服务实例」而非
+> 「数据」**，与 `RemoteServices` / `CryptoProvider` 同档，一律走代码注入（这条边界同样适用于别的模块：
+> 音频换 Wwise / 资源换实现，都是 `SetInstance` 而不是字段）。
+
 ## 已知限制
 
 - **关闭域重载时，第二个播放会话里帧脉冲会静默失效**（Project Settings → Editor → Enter Play Mode Options

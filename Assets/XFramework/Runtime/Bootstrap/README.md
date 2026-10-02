@@ -48,7 +48,7 @@ Bootstrap.Clear();                            // 清空登记表（不影响已�
 | Asset | 主包名 / 运行模式 / 低内存自动回收 | 重建 `AssetBootstrapStage` 并把字段装进 `AssetInitOptions` |
 | Save | 存档格式版本上限 | 重建 `SaveBootstrapStage` 并把字段装进 `SaveOptions` |
 | UI | UI 根节点（场景里的 Canvas 根） | 登记 `UIBootstrapStage`（**留空则不登记**——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
-| Input | 输入配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | 登记 `InputBootstrapStage`（**资产留空则不登记**）。注：字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内 |
+| Input | 输入配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | 登记 `InputBootstrapStage`（**资产留空则不登记**）。注①：字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内；注②：**换后端（Rewired 等）请保持留空**，改为覆写里 `Register(new InputBootstrapStage(myProvider))`（服务实例走代码注入） |
 | Localization | 默认语言 / 语言表（扁平 JSON 的 `TextAsset`） | 登记 `LocalizationBootstrapStage`（**语言留空则不登记**；表可空——此时该阶段打一条警告后跳过） |
 
 复制的字段与各模块 options 一一对应，权威定义仍在各模块 README（`已知限制` / options 的 XML）。
