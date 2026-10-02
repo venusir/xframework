@@ -50,6 +50,15 @@ Runtime/Asset/
 
 ## 已评估未采纳与未决
 
+**覆盖缺口（2026-10-02，下一轮先看这条）**：**真实 YooAsset 初始化路径长期零覆盖**。既有测试全走假实现
+（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个
+**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 CHANGELOG）。
+本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成
+`internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；
+**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是
+最小空包）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对
+它的消费路径**，不要只靠编译通过。
+
 **已评估未采纳**（逐条理由已在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「本轮评估过并否决」这一层；**下一轮从这里读起**）：
 
 2026-10-01 一轮（模块审计，判据 A–F 全类扫过）：
