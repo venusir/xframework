@@ -486,6 +486,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **订正两处「把碰巧写成必须」的注释**：`LogManager.AutoInit` 的 XML 与 `Documentation/Modules/Log.md` 的边界节都写着「必须早于其它模块的 AutoInit（Update/Message/Timer 也在此档）」——而**同档内的相对顺序没有契约**（Unity 不承诺，`AutoInitTests` 锁的也只是档位而非先后），该说法当前成立只是因为另三个同档 AutoInit 恰好都不打日志。已改为如实口径，并写明补救方向（将来本档新增会打日志的 AutoInit 应挪出本档——否则那些日志会落在随后被丢弃的默认实现上）
 - **Roadmap 的「统一框架 Profile」条目**：修掉失效出处（`Documentation/XFramework.md` 已随包内模板残留删除），并在「重开判据」上标注状态——「先回答引导顺序」这条已于 2026-10-02 满足（`BootstrapPhases` 契约化），但不构成重开理由：另一条判据「不替代模块 Options」排除的正是中心化形状
 
+### Fixed
+
+- **Asset 离线模式从未接线文件系统参数——默认 PlayMode 直接启动失败（本轮清点发现）**：`CreatePlayModeParameters` 的离线分支返回裸的 `new OfflinePlayModeParameters()`（`BuildinFileSystemParameters` 为 null），而 YooAsset 的 `InitializationOperation` 遇到**空参数列表直接判失败**（`The file system parameters is empty !`）——`AssetPlayMode.Offline` 正是默认值，YooAsset 自带示例无一例外都显式设置该参数。之所以一直没被发现：Asset 的既有测试全走假实现（`FakeAssetManager`），**真实 YooAsset 初始化路径从未被执行过**。现改为显式给出内置文件系统；`CreatePlayModeParameters` 同时提成 `internal` 以便单测（先例：`ResolveDefaultPackageName`），新 fixture 锁住「离线必须非空 / Host 两个都非空 / 不带解密时保持不设 / 带解密时两个文件系统共用同一适配器」
+- **Audio `PrewarmVoices` 是死选项**：README 与 XML 都承诺「true 则在初始化时一次性建满播放源」，而全仓（含测试）除声明处**没有任何读取点**。现实现它（`AudioSourcePool.Prewarm` 复用既有 `CreateVoice` 循环，与惰性路径形状一致）。另订正 `AudioManagerImpl` 类文档里那段失效的 `<remarks>`——它称部分成员仍抛 `NotImplementedException`，而该异常在文件里早已不存在（全文件唯一出现即这句注释）
+
+### Added
+
+- **`AssetInitOptions.DecryptionServices`：加密资源包的出口**（此前**无法给 bundle 加密**——YooAsset 的文件系统工厂收 `decryptionServices`，而框架一个参数都没接）。新增 public `IAssetDecryptionServices` + `AssetDecryptResult`，镜像 YooAsset 的 `IDecryptionServices`（五个成员，`DecryptFileInfo` 展开成三个参数，返回类型全是 Unity/BCL 类型），公开面不出现 YooAsset 类型——与 `IAssetRemoteServices` 同一包法，第三方接口变更由 internal 适配器吸收。**Offline 与 Host 两条路径都接线**（不接的话编辑器/单机模式读不了加密资源）。`packageRoot` 刻意不开（YooAsset 里它是**每个文件系统各一个**），写进 README 已知限制
+- **`UpdateManager.AutoDriveEnabled` 公开**：此前它是「仅供测试关闭」的 internal 钩子，而注入是 `[RuntimeInitializeOnLoadMethod]` 自动执行的——项目想自己驱动（确定性回放等）没有公开途径，而手动 `Tick` 会与已注入的驱动器每帧各派发一次。语义无需新代码（三个驱动委托本就各自 `if (!AutoDriveEnabled) return;`），只是把它公开、重写文档（置 false 后 `IsDrivingPlayerLoop` 仍为 true，它只报注入状态）
+- **`InputSystemOptions.InitialActionMap`**：默认提供者此前把初始 ActionMap 名 `"Player"` 写死在 `SwitchActionMap`，项目只能在 Initialize 之后再切。现可配（默认值不变）；传 `null`/空串 = 不自动切换，保持资产 `Enable()` 后的全部 map 常开。包 README 的「框架约定的名字」表同步新增 `Player` 一行
+
+### Documentation
+
+- **配置/注入全面清点**（起于用户质疑「框架不应该预设过多配置，由第三方注入比较好」）：判据是「**不想要这个预设时，你要付出什么代价**」——一次注入 / 一个 options 字段 = 健康；抄一个实现 = 有边界但要写清；**不可能 = 越界**。结论：框架在「整体替换实现」层已普遍是注入式，「预设过多」的真身是十余处**策略**没有出口；本轮处理了三处越界出口（见上）与一处死选项。其余分两类落档：**不该开**的策略（UI 排序分层、Update 切片与节拍基、Message 缓冲「只留最后一条」、Event 投递顺序、Timer/Pool/Lock 的静态性——它们是模块不变量，换了等于换模块）写进 `Roadmap.md` §四「不做」并逐条给理由；**本轮未做但可再拾**的三项（Reactive 相等比较器不可注入、Serialize 内置注册静默覆盖、Settings 无 `SetInstance`）记进对应模块技术文档的「已评估未采纳与未决」
+- **UI 层容器撞名 = 代码证伪的假问题**：层参数是 `int`，`Layer_{层号}` 永远拼不出 `Layer_HUD` / `Layer_Tip`。结论记进 UI README 的已知限制，免得下一轮审计重提
+- **包 README 的存档布局格**从「可改」改为「**可改，但代价高**」（要改只能整体替换 `ISaveManager`）
+- **Editor.Tests 的 asmdef 补 `YooAsset` 引用**（新测试用到它的类型）：`autoReferenced` 只对预定义程序集生效，**自定义 asmdef 必须显式列**——漏了它 `dotnet build` 照过（生成的 csproj 不管 asmdef 规则）而 Unity 报 `CS0246`，是一类「dotnet 绿、Unity 红」的假绿
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
