@@ -357,6 +357,18 @@ var uiRoot = GameObject.Find("UIRoot").transform;
 UIManager.Initialize(uiRoot, new MyGameController());
 ```
 
+### 经启动引导初始化（可选）
+
+把 UI 交给框架的引导流程，清理也能跟着走 `Bootstrap.Shutdown` 的逆序：
+
+```csharp
+Bootstrap.Register(new UIBootstrapStage(uiRootTransform, myController));   // Phase 2，晚于 Asset
+```
+
+`UIBootstrapStage` 的两条语义：**已初始化则早退**（`UIRootNode.Awake` 或你手动 `Initialize` 过就算），
+**只销毁自己初始化的那份**——空转阶段不会把别人的管理器拆掉。
+`GameLauncher` 的 Inspector 字段里填了 UI 根，就是登记这个阶段（见 Bootstrap 模块 README）。
+
 ### 2. 自定义 Controller（可选：调度控制）
 
 如果你不需要面板打开/关闭的拦截逻辑，可以跳过此步骤。默认 Controller 全部放行。

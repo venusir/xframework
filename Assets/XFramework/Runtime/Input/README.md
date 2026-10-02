@@ -24,6 +24,9 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
   map——你资产的入口 map 叫别的名字就在这里改。传 `null` / 空串则**不自动切换**，保持资产 `Enable()`
   后的「全部 map 常开」状态（适合自己管 map 的项目）。无参 `Initialize()` 走 `Resources` 的那条路
   沿用 `"Player"`。
+- **交给启动引导（可选）**：`Bootstrap.Register(new InputBootstrapStage(new InputSystemOptions { Asset = myActions }))`
+  ——Phase 1、晚于 Asset，清理跟着 `Bootstrap.Shutdown` 走。两条语义：**已初始化则早退**、
+  **只销毁自己初始化的那份**。`GameLauncher` 的 Inspector 字段里填了输入资产，登记的就是这个阶段。
 
 无论哪条路，在 `.inputactions` 中自由定义你的 Action（如 `Jump`, `Move`, `Fire`, `Interact` 等），
 **不需要与框架中的任何常量对应**。

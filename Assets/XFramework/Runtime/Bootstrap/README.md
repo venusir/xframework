@@ -41,29 +41,41 @@ Bootstrap.Clear();                            // 清空登记表（不影响已�
 
 ## 用 GameLauncher 启动时怎么带配置
 
-`GameLauncher` 的默认行为是**零配置**：`Awake` 里登记默认组合，`Start` 里跑管线。要带配置，**继承并覆写 `ConfigureStages()`**——它取代了「决定登记什么」这一步，在 `Start` 跑管线之前执行：
+`GameLauncher` 在 Inspector 上提供一组**声明式配置字段**——挂上它、填字段，`Awake` 里自动组装成各模块的 options 注入，`Start` 里跑管线。**全为默认/留空时，登记表与行为与零配置完全一致。**
+
+| 分组 | 字段 | 落到哪 |
+| ---- | ---- | ------ |
+| Asset | 主包名 / 运行模式 / 低内存自动回收 | 重建 `AssetBootstrapStage` 并把字段装进 `AssetInitOptions` |
+| Save | 存档格式版本上限 | 重建 `SaveBootstrapStage` 并把字段装进 `SaveOptions` |
+| UI | UI 根节点（场景里的 Canvas 根） | 登记 `UIBootstrapStage`（**留空则不登记**——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
+| Input | 输入资产 / 初始 ActionMap 名 | 登记 `InputBootstrapStage`（**资产留空则不登记**） |
+| Localization | 默认语言 / 语言表（扁平 JSON 的 `TextAsset`） | 登记 `LocalizationBootstrapStage`（**语言留空则不登记**；表可空——此时该阶段打一条警告后跳过） |
+
+复制的字段与各模块 options 一一对应，权威定义仍在各模块 README（`已知限制` / options 的 XML）。
+
+**进阶一：覆写 `ConfigureStages()`** —— 服务实例（`IAssetRemoteServices` / `ICryptoProvider` / `IAssetDecryptionServices`）与自定义阶段从这里进；调 `base` 之后追加或替换，不调 `base` 则完全自建：
 
 ```csharp
 public sealed class MyLauncher : GameLauncher
 {
-    [SerializeField] private int _saveVersion = 1;
+    [SerializeField] private MyRemoteServicesAsset _remoteServices;   // ScriptableObject 实现服务接口
 
     protected override void ConfigureStages()
     {
-        base.ConfigureStages();                     // 或整句省略：默认组合完全不登记
-        Bootstrap.Unregister<SaveBootstrapStage>(); // 摘掉内置的
-        Bootstrap.Register(new SaveBootstrapStage(new SaveOptions { CurrentVersion = _saveVersion }));
+        base.ConfigureStages();                       // 字段面照常生效
+        Bootstrap.Unregister<AssetBootstrapStage>();  // 再换掉 Asset，把服务实例装进去
+        Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions
+        {
+            PlayMode = AssetPlayMode.Host,
+            RemoteServices = _remoteServices,
+        }));
     }
 }
 ```
 
-三种姿势：
+**进阶二：干脆不用它** —— 在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
 
-1. **零配置** —— 什么都不做（默认实现就是 `RegisterDefaults()`）。
-2. **换掉某个内置阶段** —— `base.ConfigureStages()` 之后 `Unregister` + `Register`（上面的例子）。
-3. **完全自建** —— 覆写且不调 `base`，登记什么自己说了算；或干脆不用 `GameLauncher`，在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
-
-⚠ `GameLauncher` 覆盖不到的那一半：配置里若是**服务实例**（`IAssetRemoteServices` / `ICryptoProvider` 那类，本身就是代码），或必须在**任何场景加载之前**生效（`LogOptions`、Asset 的远端地址），场景组件天然晚了一步——那些请走第 3 种姿势。
+⚠ **`GameLauncher` 覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
 
 ## 定义一个阶段
 
