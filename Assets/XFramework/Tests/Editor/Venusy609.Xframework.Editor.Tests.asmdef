@@ -3,7 +3,8 @@
     "references": [
         "Venusy609.Xframework.Editor",
         "Venusy609.Xframework",
-        "UniTask"
+        "UniTask",
+        "YooAsset"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

@@ -45,6 +45,9 @@ AssetManager.SetInstance(myAssetManager);
 ```
 
 > 初始化配置：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，自动释放对象池闲置实例并卸载未使用资源；需自管回收策略的项目可置为 false。
+>
+> **加密资源**：`AssetInitOptions.DecryptionServices`（实现 `IAssetDecryptionServices`，与打包侧的加密方式对应）——
+> Offline 与 Host 两种模式都会接线，编辑器 / 单机模式同样能读加密资源；不传即不加密（默认）。
 
 ### 2. 加载资源
 
@@ -259,6 +262,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | `Destroy()` | 销毁全局管理器，释放全部资源 |
 | `IsInitialized` | 是否已初始化 |
 | `AssetInitOptions.AutoReclaimOnLowMemory = true` | 初始化选项字段：低内存自动回收开关（监听 `Application.lowMemory`，默认开启） |
+| `AssetInitOptions.DecryptionServices` | 初始化选项字段：解密服务（`IAssetDecryptionServices`，镜像 YooAsset 的 `IDecryptionServices`）；`null` = 不加密。Offline / Host 都接线 |
 
 ### 异步加载
 
@@ -444,6 +448,10 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
    本方法没有超时，拒绝比永久挂起好排查。
 6. **`UnloadUnusedAssetsAsync` 不报告失败**（YooAsset 的卸载操作没有失败路径）；
    它只回收引用计数为 0 的资源，未 `Dispose` 的句柄与存活实例引用的资源不受影响。
+7. **文件系统根目录（`packageRoot`）没有出口**：它在 YooAsset 里是**每个文件系统各一个**
+   （内置包根 / 缓存根独立），不在 `AssetInitOptions` 里。要改包根、换用自定义文件系统类或接管
+   其它 YooAsset 参数，只能整体替换 `IAssetManager`。加载寻址同样只有 `location` 字符串一种形式
+   （没有 GUID / `AssetReference` 入口）。
 
 ## 接口承诺到哪为止
 

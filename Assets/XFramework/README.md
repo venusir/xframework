@@ -164,7 +164,7 @@ await Bootstrap.RunAsync();
 | 模块 | 你能配置什么（入口） | 何时生效 |
 |---|---|---|
 | **Log** | `LogOptions` 11 字段（`LogManager.Configure`）；`ILogSink` 追加输出端 / `ILogManager` 整体替换；`MinimumLevel` / `SetCategoryLevel`；自定义分类 `LogCategory.Get` | options 在 `Configure` 时快照；档位与输出端实时 |
-| **Asset** | `AssetInitOptions` 4 字段（主包名 / PlayMode / 远端服务 / 低内存回收）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
+| **Asset** | `AssetInitOptions` 5 字段（主包名 / PlayMode / 远端服务 / 解密服务 / 低内存回收）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
 | **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `RegisterChannel`；`AudioChannels` 推荐通道名 | 初始化时快照；运行时项立即扫活跃播放源 |
 | **Settings** | `SettingsOptions` 5 字段；四个注入点 `ISettingsStore` / `IAsyncSettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（前两者按类型注入，Store / Migrator / Validator 均可运行时替换） | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
 | **UI** | `IUIController` / `IUITipProvider` / `IUiHudProvider` 三个可注入 provider；`UIManager.TipAssetPath`；`UILayers` / `UISorting` 常量约定；面板 / HUD 实例级参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`） | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |

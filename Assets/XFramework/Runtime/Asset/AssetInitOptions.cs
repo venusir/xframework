@@ -48,5 +48,12 @@ namespace XFramework.XAsset
         /// <para>关闭场景：接入方自行管理回收策略（如对低内存事件敏感的机型、自管资源上限的项目）。</para>
         /// </summary>
         public bool AutoReclaimOnLowMemory = true;
+
+        /// <summary>
+        /// 解密服务；为 <c>null</c> 时资源不加密（默认）。非空时必须与打包侧的加密方式对应
+        /// （见 <see cref="IAssetDecryptionServices"/>）。
+        /// <para><b>Offline 与 Host 两种模式都会接线</b>——加密项目的编辑器 / 单机模式同样要能读。</para>
+        /// </summary>
+        public IAssetDecryptionServices DecryptionServices;
     }
 }

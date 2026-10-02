@@ -411,19 +411,32 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统。
+        /// <para><b>内置文件系统参数必须显式给出</b>：YooAsset 的 <c>InitializationOperation</c> 在参数列表为空时
+        /// 直接判失败（<c>The file system parameters is empty !</c>）——留空不是「用默认」，是启动不了。
+        /// 解密服务在两种模式下都接线（加密项目的编辑器 / 单机模式同样要能读）。</para>
         /// </summary>
-        private static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)
+        internal static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)
         {
+            var decryption = options.DecryptionServices == null
+                ? null
+                : new YooAssetDecryptionServicesAdapter(options.DecryptionServices);
+
             if (options.PlayMode == AssetPlayMode.Host)
             {
                 return new HostPlayModeParameters
                 {
-                    BuildinFileSystemParameters = FileSystemParameters.CreateDefaultBuildinFileSystemParameters(),
+                    BuildinFileSystemParameters =
+                        FileSystemParameters.CreateDefaultBuildinFileSystemParameters(decryption),
                     CacheFileSystemParameters = FileSystemParameters.CreateDefaultCacheFileSystemParameters(
-                        new YooAssetRemoteServicesAdapter(options.RemoteServices)),
+                        new YooAssetRemoteServicesAdapter(options.RemoteServices), decryption),
                 };
             }
-            return new OfflinePlayModeParameters();
+
+            return new OfflinePlayModeParameters
+            {
+                BuildinFileSystemParameters =
+                    FileSystemParameters.CreateDefaultBuildinFileSystemParameters(decryption),
+            };
         }
 
         private static void ReportProgress(IProgress<AssetInitReport> progress, float value, string description)
@@ -536,6 +549,44 @@ namespace XFramework.XAsset
             public string GetRemoteMainURL(string fileName) => _inner.GetRemoteMainURL(fileName);
 
             public string GetRemoteFallbackURL(string fileName) => _inner.GetRemoteFallbackURL(fileName);
+        }
+
+        /// <summary>
+        /// 框架 <see cref="IAssetDecryptionServices"/> → YooAsset <see cref="YooAsset.IDecryptionServices"/> 适配器。
+        /// <para>纯转发：参数由 YooAsset 的 <c>DecryptFileInfo</c> 展开，返回值装回 <c>DecryptResult</c>——
+        /// 两边字段一一对应，无信息损失。</para>
+        /// </summary>
+        internal sealed class YooAssetDecryptionServicesAdapter : IDecryptionServices
+        {
+            private readonly IAssetDecryptionServices _inner;
+
+            internal YooAssetDecryptionServicesAdapter(IAssetDecryptionServices inner)
+            {
+                _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+            }
+
+            public DecryptResult LoadAssetBundle(DecryptFileInfo fileInfo)
+                => ToYooAsset(_inner.LoadAssetBundle(fileInfo.BundleName, fileInfo.FileLoadPath, fileInfo.FileLoadCRC));
+
+            public DecryptResult LoadAssetBundleAsync(DecryptFileInfo fileInfo)
+                => ToYooAsset(_inner.LoadAssetBundleAsync(fileInfo.BundleName, fileInfo.FileLoadPath, fileInfo.FileLoadCRC));
+
+            public DecryptResult LoadAssetBundleFallback(DecryptFileInfo fileInfo)
+                => ToYooAsset(_inner.LoadAssetBundleFallback(fileInfo.BundleName, fileInfo.FileLoadPath, fileInfo.FileLoadCRC));
+
+            public byte[] ReadFileData(DecryptFileInfo fileInfo)
+                => _inner.ReadFileData(fileInfo.BundleName, fileInfo.FileLoadPath, fileInfo.FileLoadCRC);
+
+            public string ReadFileText(DecryptFileInfo fileInfo)
+                => _inner.ReadFileText(fileInfo.BundleName, fileInfo.FileLoadPath, fileInfo.FileLoadCRC);
+
+            private static DecryptResult ToYooAsset(AssetDecryptResult result)
+                => new DecryptResult
+                {
+                    Result = result.Bundle,
+                    CreateRequest = result.CreateRequest,
+                    ManagedStream = result.ManagedStream,
+                };
         }
     }
 }
