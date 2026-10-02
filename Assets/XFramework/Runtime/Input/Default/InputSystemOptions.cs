@@ -13,10 +13,20 @@ namespace XFramework.XInput.Default
     /// </summary>
     public sealed class InputSystemOptions
     {
+        /// <summary>初始 ActionMap 的默认名。<c>"Player"</c> 是零配置路径沿用的约定。</summary>
+        public const string DefaultInitialActionMap = "Player";
+
         /// <summary>
         /// 已加载的输入资产。**加载与生命周期都由使用方负责**（框架不接管它的释放）——
         /// 经 <c>AssetManager</c> 加载的句柄请自行持有到输入管理器销毁为止。
         /// </summary>
         public InputActionAsset Asset;
+
+        /// <summary>
+        /// 初始化后自动切换到的 ActionMap 名，默认 <see cref="DefaultInitialActionMap"/>。
+        /// <para><c>null</c> 或空串 = <b>不自动切换</b>：保持资产 <c>Enable()</c> 后的「全部 map 常开」状态——
+        /// 想自己管理 map 的项目用这个形态。名字不存在时只打警告（与无参路径共用同一实现），不抛。</para>
+        /// </summary>
+        public string InitialActionMap = DefaultInitialActionMap;
     }
 }

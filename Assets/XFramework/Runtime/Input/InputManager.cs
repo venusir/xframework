@@ -134,7 +134,7 @@ namespace XFramework.XInput
             // 与另两个重载同形：先在局部变量上建好、成功后才接管——重复调用时上面已早退，
             // 不会留下一个「已 Enable 资产、已订阅设备事件」却被丢弃的提供者
             var provider = new InputSystemProvider();
-            provider.Initialize(options.Asset);
+            provider.Initialize(options.Asset, options.InitialActionMap);
             AdoptProvider(provider);
         }
 

@@ -74,5 +74,51 @@ namespace XFramework.XInput.Tests
             Assert.IsTrue(InputManager.HasAction("Jump"),
                 "自己加载的资产必须成为默认提供者的工作资产——这正是本入口存在的意义");
         }
+
+        /// <summary>两个 map 的资产：<c>Player</c>（默认约定）与 <c>UI</c>（用来验证切换）。</summary>
+        private static InputActionAsset CreateTwoMapAsset()
+        {
+            var asset = ScriptableObject.CreateInstance<InputActionAsset>();
+
+            var player = new InputActionMap("Player");
+            player.AddAction("Jump", InputActionType.Button, "<Keyboard>/space");
+            asset.AddActionMap(player);
+
+            var ui = new InputActionMap("UI");
+            ui.AddAction("Confirm", InputActionType.Button, "<Keyboard>/enter");
+            asset.AddActionMap(ui);
+
+            return asset;
+        }
+
+        /// <summary>
+        /// <c>InitialActionMap</c> 指定初始 map：只有它被启用，其余被切掉——与无参路径的
+        /// <c>SwitchActionMap("Player")</c> 是同一套语义，只是名字可配。
+        /// </summary>
+        [Test]
+        public void Initialize_WithInitialActionMap_SwitchesToThatMap()
+        {
+            var asset = CreateTwoMapAsset();
+
+            InputManager.Initialize(new InputSystemOptions { Asset = asset, InitialActionMap = "UI" });
+
+            Assert.IsTrue(asset.FindActionMap("UI").enabled, "指定的初始 map 应已启用");
+            Assert.IsFalse(asset.FindActionMap("Player").enabled, "SwitchActionMap 会禁用其余 map");
+        }
+
+        /// <summary>
+        /// <c>InitialActionMap</c> 传 <c>null</c> = 不自动切换：保持资产 <c>Enable()</c> 后的
+        /// 「全部 map 常开」状态——想自己管理 map 的项目用这个形态。
+        /// </summary>
+        [Test]
+        public void Initialize_WithNullInitialActionMap_KeepsAllMapsEnabled()
+        {
+            var asset = CreateTwoMapAsset();
+
+            InputManager.Initialize(new InputSystemOptions { Asset = asset, InitialActionMap = null });
+
+            Assert.IsTrue(asset.FindActionMap("Player").enabled, "不切换时不该动任何 map 的启用状态");
+            Assert.IsTrue(asset.FindActionMap("UI").enabled);
+        }
     }
 }

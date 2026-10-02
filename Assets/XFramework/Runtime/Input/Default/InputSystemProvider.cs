@@ -80,15 +80,19 @@ namespace XFramework.XInput.Default
         /// 以指定资产初始化。
         /// <para>测试经 InternalsVisibleTo 注入程序化资产;亦可作为资产自管加载(如经 YooAsset)时的替代入口。</para>
         /// </summary>
-        internal void Initialize(InputActionAsset asset)
+        /// <param name="asset">已加载的输入资产。</param>
+        /// <param name="initialActionMap">初始 ActionMap 名；<c>null</c>/空串 = 不切换（保持全 map 常开）。</param>
+        internal void Initialize(InputActionAsset asset,
+            string initialActionMap = InputSystemOptions.DefaultInitialActionMap)
         {
             _actionAsset = asset ?? throw new ArgumentNullException(nameof(asset));
             _actionAsset.Enable();
 
-            // 默认启用 Player map —— 刻意排在订阅之前:本方法若抛异常,本实例会被调用方直接丢弃
+            // 启用初始 map —— 刻意排在订阅之前:本方法若抛异常,本实例会被调用方直接丢弃
             // (InputManager.Initialize 只在局部变量上持有它,不经过 Dispose),先订阅就会留下无人释放的回调。
             // 如实说明:今天构造不出这条抛异常的路径(map 名不存在只 LogWarning,不抛),属预防性调序
-            SwitchActionMap("Player");
+            if (!string.IsNullOrEmpty(initialActionMap))
+                SwitchActionMap(initialActionMap);
 
             // 监听设备变更
             InputSystem.onDeviceChange += OnInputDeviceChange;

@@ -20,6 +20,10 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 - **自己加载（推荐给用资源系统的项目）**：资产放哪、叫什么、经什么加载（YooAsset / Addressables /
   自己的加载器）都由你决定，加载完交给 `InputManager.Initialize(new InputSystemOptions { Asset = ... })`。
   这条路不把资产钉在 `Resources/` 里（钉进去意味着它总被打进包、且不受资源系统管理）。
+- **初始 ActionMap 可配**：`InputSystemOptions.InitialActionMap`（默认 `"Player"`）决定初始化后切到哪个
+  map——你资产的入口 map 叫别的名字就在这里改。传 `null` / 空串则**不自动切换**，保持资产 `Enable()`
+  后的「全部 map 常开」状态（适合自己管 map 的项目）。无参 `Initialize()` 走 `Resources` 的那条路
+  沿用 `"Player"`。
 
 无论哪条路，在 `.inputactions` 中自由定义你的 Action（如 `Jump`, `Move`, `Fire`, `Interact` 等），
 **不需要与框架中的任何常量对应**。
