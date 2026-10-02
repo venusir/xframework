@@ -504,6 +504,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **包 README 的存档布局格**从「可改」改为「**可改，但代价高**」（要改只能整体替换 `ISaveManager`）
 - **Editor.Tests 的 asmdef 补 `YooAsset` 引用**（新测试用到它的类型）：`autoReferenced` 只对预定义程序集生效，**自定义 asmdef 必须显式列**——漏了它 `dotnet build` 照过（生成的 csproj 不管 asmdef 规则）而 Unity 报 `CS0246`，是一类「dotnet 绿、Unity 红」的假绿
 
+### Added
+
+- **`ReactiveProperty<T>` 的相等比较器可注入**（上一轮清点记下的三项之一）：去重（相同值不通知）此前写死 `EqualityComparer<T>.Default`——浮点容差、大小写不敏感等自定义相等语义做不到，而这正是本模块对外的行为承诺之一。新增构造重载 `(T initialValue, IEqualityComparer<T> comparer)`（原 `(T)` 重载签名不变，转调新重载），`Select` 增加可选 `comparer` 参数（派生值的去重此前写死默认比较器）；传 `null` 等价默认。用例 3 条（容差比较器去重 / 默认比较器对照 / Select 派生同理），红基线为编译级
+
+### Fixed
+
+- **`Serializer.Initialize` 不再静默覆盖使用方提前注册的同名序列化器**（同批三项之一）：`AutoInit` 在进入播放时注册内置两项，使用方若在它之前注册同名格式（如自定义实现接管 `"json"`），那次注册会被**静默覆盖**——而「提前注册」本就是在表达「我要替换它」。现在遇到同名注册会**保留使用方的**、跳过内置，并打一条 `[Serialize]` 告警说明如何恢复内置（`Register` 自身的「同名覆盖」承诺不变——那是显式动作）。这是 Serialize 模块的**第一条日志**，`LogCategories` 因此新增 `Serialize` 分类（该模块此前 `[XSerialize]` 那两处是异常消息前缀，不属分类表）。新增 fixture 3 条，红基线是**行为级**（旧实现下 `Expected: same as <FakeSerializer> But was: <NewtonsoftSerializer>`）
+
+### Documentation
+
+- **Settings 的「没有 `SetInstance`」由未决改判为已评估未采纳**（同批三项之一）：可替换点刻意**下移到** Store / Migrator / Validator（它们才是「会变的地方」），而管理器本身的通知、脏标记与保存时机是**模块语义**——换它等于换模块，与 UI 排序分层、Update 切片节拍同一档（判据见 `Roadmap.md` §四）。理由写进 README 的设计理念表（「替换点在后端」行）
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
