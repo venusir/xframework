@@ -35,6 +35,24 @@ namespace XFramework.Editor.Diagnostics
 
         private static readonly TimerDiagnosticPanel TimerPanel = new TimerDiagnosticPanel();
 
+        private static readonly OverviewDiagnosticPanel OverviewPanel = new OverviewDiagnosticPanel();
+
+        private static readonly MessageDiagnosticPanel MessagePanel = new MessageDiagnosticPanel();
+
+        private static readonly LockDiagnosticPanel LockPanel = new LockDiagnosticPanel();
+
+        private static readonly DataDiagnosticPanel DataPanel = new DataDiagnosticPanel();
+
+        private static readonly BootstrapDiagnosticPanel BootstrapPanel = new BootstrapDiagnosticPanel();
+
+        private static readonly SaveDiagnosticPanel SavePanel = new SaveDiagnosticPanel();
+
+        private static readonly FileDiagnosticPanel FilePanel = new FileDiagnosticPanel();
+
+        private static readonly InputDiagnosticPanel InputPanel = new InputDiagnosticPanel();
+
+        private static readonly SerializeDiagnosticPanel SerializePanel = new SerializeDiagnosticPanel();
+
         #endregion
 
         #region Registration
@@ -42,6 +60,7 @@ namespace XFramework.Editor.Diagnostics
         [InitializeOnLoadMethod]
         private static void Register()
         {
+            DiagnosticsManager.Register(OverviewPanel);
             DiagnosticsManager.Register(UiPanel);
             DiagnosticsManager.Register(LogPanel);
             DiagnosticsManager.Register(PoolPanel);
@@ -51,6 +70,14 @@ namespace XFramework.Editor.Diagnostics
             DiagnosticsManager.Register(LocalizationPanel);
             DiagnosticsManager.Register(AudioPanel);
             DiagnosticsManager.Register(TimerPanel);
+            DiagnosticsManager.Register(MessagePanel);
+            DiagnosticsManager.Register(LockPanel);
+            DiagnosticsManager.Register(DataPanel);
+            DiagnosticsManager.Register(BootstrapPanel);
+            DiagnosticsManager.Register(SavePanel);
+            DiagnosticsManager.Register(FilePanel);
+            DiagnosticsManager.Register(InputPanel);
+            DiagnosticsManager.Register(SerializePanel);
         }
 
         #endregion

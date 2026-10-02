@@ -8,6 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **其余页签（概览 / Message / Lock / Data / Bootstrap / Save / File / Input / Serialize）+ 第三方示例**：全部建立在**已有公开查询面**之上，零 Runtime API 变更。概览页是一张模块状态矩阵（哪些模块已初始化、各自的规模一句话），是诊断窗口的落地点；其余页签各自回答一类问题（Message 的订阅/缓冲规模、Lock 的未绑定主体、Data 的脏块、Bootstrap 的登记表、Save 的忙碌状态、File 的加密提供者、Input 的设备识别、Serialize 的已注册格式）。另加 `Samples/Example/DiagnosticsSample.cs`——第三方页签的完整样板（实现 → 登记 → 采集三步）。
+  **三条边界已写进各页签的文档**：Save 的槽位列表是异步磁盘 IO 不适合轮询（本轮不做）；Input 的启用 ActionMap 列表要动 `IInputProvider`（本轮不做）；Message 的键值通道 key 无法枚举（只给到类型粒度）。
 - **Timer / Localization / Update / Audio 四组诊断回读 + 四个页签**：`TimerManager.CopyActiveTimers(List<TimerInfo>)`、`LocalizationManager.CopyLoadedLanguages(List<LocalizationLanguageInfo>)` / `CachedLanguageCount`、`UpdateManager.CopyNodes(List<UpdateNodeInfo>)`、`AudioManager.CopyChannels(List<AudioChannelInfo>)`（新公开类型 `TimerInfo` / `LocalizationLanguageInfo` / `UpdateNodeInfo` / `AudioChannelInfo`）。四条取向：
   **① 回读的是「名单」而不是「计数」**：`TotalCount` / `GetCount` 回答有多少，`CopyNodes` 回答是谁——「谁在每帧跑」「哪个定时器没触发」这类问题此前只能靠猜。
   **② 定时器表包含已 `Stop` 未释放的槽位**（`TimerInfo.IsRunning` 为 false）：那是「停掉的定时器仍占着槽位」这类泄漏的唯一可见面；令牌已取消的槽位算不在计时，与 `IsActive` 同一口径。剩余时间按**各自那条轴**的逻辑时刻算——两轴时钟不同源，用错轴会把暂停期间的剩余算成负数。
