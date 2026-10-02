@@ -17,9 +17,11 @@ namespace XFramework.Architecture.Tests
     /// 变成每次全量门禁都会跑的自查。
     /// </para>
     /// <para>
-    /// 两条断言分工:<see cref="ProductionCode_DoesNotReferenceOtherModulesInternalNamespaces"/> 扫源码文本
+    /// 三条断言分工:<see cref="ProductionCode_DoesNotReferenceOtherModulesInternalNamespaces"/> 扫源码文本
     /// (含全限定名,不只看 <c>using</c>);<see cref="PublicApi_DoesNotExposeInternalTypes"/> 扫反射后的公开签名
-    /// ——后者是本模块边界的**实质**:实现可以藏在 internal 里,但公开面不能漏出它。
+    /// ——后者是本模块边界的**实质**:实现可以藏在 internal 里,但公开面不能漏出它;
+    /// <see cref="UnityInputTypes_StayInsideTheDefaultNamespace"/> 守的是另一类边界——**可选包的 Unity 类型**
+    /// 只能待在各自的 <c>Default</c> 命名空间里(插件中立承诺)。
     /// </para>
     /// <para>
     /// 测试树整体不受此限:<c>InternalsVisibleTo</c> 是设计的一部分(见 Runtime/AssemblyInfo.cs)。
@@ -126,6 +128,58 @@ namespace XFramework.Architecture.Tests
 
         private static string Relative(string root, string path)
             => path.Substring(root.Length + 1).Replace('\\', '/');
+
+        #endregion
+
+        #region 可选包类型边界（Unity 输入）
+
+        /// <summary>`using UnityEngine.InputSystem*;` 指令（含子命名空间）。</summary>
+        private static readonly Regex UnityInputUsing =
+            new Regex(@"^\s*using\s+UnityEngine\.InputSystem[A-Za-z0-9_.]*\s*;", RegexOptions.Multiline);
+
+        /// <summary>全限定引用（如 <c>UnityEngine.InputSystem.InputActionAsset</c>）——只扫 <c>using</c> 会让它绕过。</summary>
+        private static readonly Regex UnityInputQualified =
+            new Regex(@"UnityEngine\.InputSystem\.", RegexOptions.Multiline);
+
+        /// <summary>Unity 输入类型唯一被允许出现的位置（相对 <c>Runtime/</c>，正斜杠）。</summary>
+        private const string InputDefaultDir = "Input/Default";
+
+        /// <summary>
+        /// Unity 输入类型只允许出现在 <c>Runtime/Input/Default/</c> 内——门面 <c>InputManager</c> 与
+        /// <c>IInputProvider</c> 保持插件中立，替换后端（Rewired 等）的项目在公开面不该看到 Unity 的类型。
+        /// <para>
+        /// <b>为什么需要它</b>：这条边界以前只活在 CHANGELOG 的一句承诺里，而
+        /// <see cref="ProductionCode_DoesNotReferenceOtherModulesInternalNamespaces"/> 查的是跨模块 <c>Internal</c>、
+        /// <see cref="PublicApi_DoesNotExposeInternalTypes"/> 查的是漏出的 internal 类型——**可选包的 Unity 类型
+        /// 外泄不在任何一条的射程内**。于是 2026-10-02 给 <c>GameLauncher</c> 加字段面时，
+        /// 一个 <c>[SerializeField] InputActionAsset</c> 字段活过了编译、测试与文档三道门禁。
+        /// </para>
+        /// </summary>
+        [Test]
+        public void UnityInputTypes_StayInsideTheDefaultNamespace()
+        {
+            var packageRoot = Path.Combine(Application.dataPath, "XFramework");
+            var runtimeRoot = Path.Combine(packageRoot, "Runtime");
+            Assert.IsTrue(Directory.Exists(runtimeRoot), $"找不到 Runtime 目录:{runtimeRoot}(测试壳的 Assets 是否为 junction?)");
+
+            var violations = new List<string>();
+            foreach (var file in Directory.GetFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                var relative = Relative(runtimeRoot, file);
+                if (relative.StartsWith(InputDefaultDir, StringComparison.Ordinal))
+                    continue;
+
+                var code = ReadCodeOnly(file);
+                if (UnityInputUsing.IsMatch(code) || UnityInputQualified.IsMatch(code))
+                    violations.Add(relative);
+            }
+
+            Assert.IsEmpty(violations,
+                "Unity 输入类型（UnityEngine.InputSystem.*）只允许出现在 Runtime/Input/Default/ 内——门面与 " +
+                "IInputProvider 保持插件中立，整体替换后端（Rewired 等）的项目不该在公开面看到 Unity 的类型。" +
+                "要引用输入配置请用该命名空间下的框架类型（InputSystemOptions / InputSystemOptionsAsset）。违规:\n  " +
+                string.Join("\n  ", violations));
+        }
 
         #endregion
 
