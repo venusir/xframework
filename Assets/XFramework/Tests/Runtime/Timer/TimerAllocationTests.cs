@@ -22,8 +22,11 @@ namespace XFramework.XTimer.Tests
         /// <summary>值类型载荷：它的意义就是「别被装箱」。</summary>
         private struct Payload
         {
-            // ReSharper disable once NotAccessedField.Local —— 字段只用来撑出「这是个值类型」的事实
+            // ReSharper disable once NotAccessedField.Local —— 字段只用来撑出「这是个值类型」的事实。
+            // 有意不赋值；结构体不支持字段初始化器（CS8773，本仓 LangVersion 9.0），故用 pragma 消 CS0649
+#pragma warning disable CS0649
             public int Value;
+#pragma warning restore CS0649
         }
 
         #endregion

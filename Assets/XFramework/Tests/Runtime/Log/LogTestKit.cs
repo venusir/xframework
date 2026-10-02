@@ -25,6 +25,8 @@ namespace XFramework.XLog.Tests
         [Serializable]
         internal class LogLineDto
         {
+            // 反射填充：赋值发生在 JsonUtility.FromJson 内部，编译器看不到 → CS0649 是假阳性
+#pragma warning disable CS0649
             public string t;
             public int v;
             public string session;
@@ -41,6 +43,7 @@ namespace XFramework.XLog.Tests
             public string stack;
             public int part;
             public string unity;
+#pragma warning restore CS0649
         }
 
         /// <summary>

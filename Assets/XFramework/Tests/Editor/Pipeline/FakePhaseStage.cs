@@ -25,8 +25,8 @@ namespace Venusy609.Xframework.Editor.Tests
         /// <summary>非空时挂起直到测试放行,用于验证并行启动与相位串行时序。</summary>
         public UniTaskCompletionSource Gate;
 
-        /// <summary>挂起期间报告的进度值。</summary>
-        public float ProgressValue;
+        /// <summary>挂起期间报告的进度值（当前无用例设置它，恒为 0；显式初始化以消 CS0649）。</summary>
+        public float ProgressValue = 0f;
 
         /// <summary>被调度执行次数(验证串行序与中断)。</summary>
         public int ExecuteCount;

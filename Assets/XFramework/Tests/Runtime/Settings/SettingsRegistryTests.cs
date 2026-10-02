@@ -28,7 +28,10 @@ namespace XFramework.XSettings.Tests
             [Serializable]
             public sealed class Same
             {
+                // 反射填充：赋值发生在 Settings 的序列化/反射读写里，编译器看不到 → CS0649 是假阳性
+#pragma warning disable CS0649
                 public int V;
+#pragma warning restore CS0649
             }
         }
 
@@ -37,7 +40,10 @@ namespace XFramework.XSettings.Tests
             [Serializable]
             public sealed class Same
             {
+                // 反射填充：赋值发生在 Settings 的序列化/反射读写里，编译器看不到 → CS0649 是假阳性
+#pragma warning disable CS0649
                 public int V;
+#pragma warning restore CS0649
             }
         }
 

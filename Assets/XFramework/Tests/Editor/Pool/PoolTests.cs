@@ -43,7 +43,8 @@ namespace Venusy609.Xframework.Editor.Tests
         /// <summary>重写相等语义的类型：不同实例可能逻辑相等（<see cref="Id"/> 相同）。</summary>
         private sealed class EqualsItem
         {
-            public int Id;
+            /// <summary>取值相同即逻辑相等——全为 0 正是本类型要的形状（值相等、实例不同）。</summary>
+            public int Id = 0;
 
             public override bool Equals(object obj) => obj is EqualsItem other && other.Id == Id;
             public override int GetHashCode() => Id;
