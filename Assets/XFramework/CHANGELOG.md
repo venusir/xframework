@@ -477,6 +477,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Bootstrap 模块审计一轮（A–F 全量；此前只做过一次单问题定向）**：主题「编排方式对第三方自定义的友好度」，对照 Unity Entities `ICustomBootstrap` / Zenject / VContainer / UGF Procedure / MS.Extensions.Hosting 五种启动流程，7 项发现全部落地为代码或文档（上面四条 + 已知限制 + 归档）。README 新增 `## 已知限制`：**没有超时手段**（`IPipeline` 的超时只在阶段粒度，而 Bootstrap 每相位装配为一个 `ParallelStage`，从 Bootstrap 侧不可达——不响应取消的挂死阶段会挂死整个启动）；`Shutdown` **可能在阶段从未执行过时被调用**（启动在它之前失败/取消，或它是在运行中才登记的，清理实现要能安全空转——内置 `LocalizationBootstrapStage` 是范例）。`IBootstrapStage.Shutdown` 的 XML 补同一条契约，接口示例的 `Phase => 10` 改为 `BootstrapPhases.UserStart`（10 落在框架保留区间内，与新的区间约定冲突）。维护向结论归档进 `Documentation/Modules/Bootstrap.md`（五框架对照表 + 6 条已评估未采纳 + 3 条未决 + 审计轮次），`Pipeline.md` 的异常承载节补失败原因新格式。顺带按 A1 探针「一处改动找齐所有落点」订正三处同义句残留（`IBootstrapStage` 类注释、`Bootstrap` 类注释、包 README 的 `Shutdown` 注释与可配置项一览）
 
+### Added
+
+- **`GameLauncher.ConfigureStages()` 扩展点：带配置启动不再需要放弃这个组件**。此前它是「zero-config or nothing」的入口——`Awake` 无条件 `RegisterDefaults()`，要用 `SaveOptions` 之类的参数就只能整个弃用它、自建启动流程。现 `Awake` 改调 `protected virtual void ConfigureStages()`，其**默认实现就是原来那句 `RegisterDefaults()`**（默认行为逐字不变，纯增量）：调 `base` 之后 `Unregister<T>()` + `Register(你的实例)` 替换内置阶段，不调 `base` 则完全不登记默认组合。只加这一个成员——`Start` / `OnDestroy` 刻意不改 `virtual`（`async void Start` 会诱使覆写者漏调 `base`）。PlayMode 用例 3 条覆盖三种姿势（默认登记 Asset/Data/Save 三件 / 不调 base 登记表为空 / 调 base 后替换 Save 只剩自定义那一个）。**同一轮评估并否决了「把它做成框架的配置与编排核心」**：配置的形状是代码不是数据（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例）、一半配置的生效时机早于任何场景（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`），且两处沿革刻意不挂靠它——理由与「重开判据」的同步归档在 `Documentation/Modules/Bootstrap.md` 与 `Roadmap.md`
+
+### Documentation
+
+- **订正两处「把碰巧写成必须」的注释**：`LogManager.AutoInit` 的 XML 与 `Documentation/Modules/Log.md` 的边界节都写着「必须早于其它模块的 AutoInit（Update/Message/Timer 也在此档）」——而**同档内的相对顺序没有契约**（Unity 不承诺，`AutoInitTests` 锁的也只是档位而非先后），该说法当前成立只是因为另三个同档 AutoInit 恰好都不打日志。已改为如实口径，并写明补救方向（将来本档新增会打日志的 AutoInit 应挪出本档——否则那些日志会落在随后被丢弃的默认实现上）
+- **Roadmap 的「统一框架 Profile」条目**：修掉失效出处（`Documentation/XFramework.md` 已随包内模板残留删除），并在「重开判据」上标注状态——「先回答引导顺序」这条已于 2026-10-02 满足（`BootstrapPhases` 契约化），但不构成重开理由：另一条判据「不替代模块 Options」排除的正是中心化形状
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
