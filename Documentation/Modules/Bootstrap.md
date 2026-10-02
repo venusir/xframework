@@ -47,6 +47,13 @@
 - **`RunAsync` 重入时返回共享任务（join 首次）**：不采纳（本轮只落「警告并忽略」）。要额外定义多个调用方令牌不一致的语义；已被 2026-10-01 的「就绪句柄」否决记录覆盖，重开判据在那条里。
 - **`Stages` 换成只读包装防强转修改**：不采纳。为低危封装泄漏引入分配不值；`IReadOnlyList` + 「实时视图」的文档已足够。
 
+（2026-10-02 追记：用户问「以 `GameLauncher` 为框架配置与模块编排核心是否更合理、框架自身模块初始化顺序是否确定」。顺序的答案是「六条通路、只有 Bootstrap 那条是契约」；核心化的答案是**不采纳**，但采纳了一个最小扩展点——两条结论见下。）
+
+**已评估未采纳（2026-10-02 追记）**：
+
+- **`GameLauncher` 作为框架的配置与编排核心**：不采纳。三条理由：① 与三处成文决定正面相撞——包 README「框架刻意**不提供统一的配置文件**……**参数即契约**」、架构的关键设计决策「服务不依赖统一入口」、本组件自己的定性「可选件、不是必需入口」；② 配置的形状是**代码不是数据**（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例，Inspector/资产序列化不了），且一半配置的生效时机**早于任何场景**（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`）——场景组件结构性地覆盖不到，装进去只能得到「半张脸」；③ 两处沿革**刻意不挂靠它**（删节点系统时解除 GameLauncher ↔ Update；Settings 落盘特意不挂它，原话「把落盘挂在一个可缺席的组件上会让本选项的承诺落空」），且它当前**零使用**（全仓无场景/预制体挂载）。**采纳的替代形状**：给它一个最小扩展点 `protected virtual void ConfigureStages()`（默认实现即 `RegisterDefaults()`，覆写即可带配置）——把「带配置」变成一次 override，而不是把配置中心化。
+- **把 `Awake` / `Start` / `OnDestroy` 改成 `protected virtual`**：不采纳。`async void Start` 变 virtual 会诱使「override 不调 base」这类错误；`ConfigureStages` 已覆盖绝大多数定制需求。真出现需要改启动/清理时机的情形再开。
+
 **未决（2026-10-02 追加）**：
 
 - **Pipeline 侧子阶段粒度超时**：Bootstrap 每相位装配为一个 `ParallelStage`，而超时只在管线**顶层阶段**粒度存在——从 Bootstrap 侧无法为单个引导阶段设置超时，不响应取消的挂死阶段会挂死整个启动（已记进 Bootstrap README 的已知限制）。修法在 Pipeline（`ParallelStage` 支持子阶段超时），未立项。

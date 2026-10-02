@@ -172,8 +172,12 @@ AutoInit 自初始化（SubsystemRegistration，载入期即装入默认实现�
   ——否则「FileManager 报错要记日志」就是循环。`LogCategories` 只存字符串，不引用任何模块。
 - **反向依赖是单向的**：回填之后，所有模块 → Log，Log → 无。跨模块边界测试（`ModuleBoundaryTests`）
   对 `XFramework.XLog.Internal` 的判定天然通过（没有别的模块引用它）。
-- **`AutoInit` 的档位是族级约定的一部分**：`SubsystemRegistration` 是最早一档，捕获回调必须在其它模块
-  的最早 AutoInit 之前就位；改档位要同步 `Tests/Runtime/Architecture/AutoInitTests` 的族清单。
+- **`AutoInit` 的档位是族级约定的一部分**：`SubsystemRegistration` 是最早一档，捕获回调越早就位越好；
+  **但同档内的相对顺序没有契约**（`AutoInitTests` 锁的是档位，不是先后）——「本模块先于同档其它
+  AutoInit（Update / Message / Timer）执行」不是保障，只是「那三个都不打日志」这一事实的结果。
+  将来若本档新增会打日志的 AutoInit，请把它挪出本档（2026-10-02 订正，同 `LogManager.AutoInit`
+  的 XML 注释——两处曾是同一句被写成「必须」的话）。改档位要同步
+  `Tests/Runtime/Architecture/AutoInitTests` 的族清单。
 - **与 `LogAssert` 的关系**：控制台输出端是 `LogAssert` 唯一的通路，所以它默认恒开；关掉它测试全盲。
   捕获与文件输出端**不产生任何 Unity 日志**，因此不干扰既有断言。
 - **与第三方库的关系**：YooAsset 的 `YooLogger` 等绕过本模块的日志，现在会以 `src:"unity"` 出现在同一份
