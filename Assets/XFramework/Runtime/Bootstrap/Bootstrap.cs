@@ -26,8 +26,11 @@ namespace XFramework.XBootstrap
     {
         #region Private Fields
 
-        /// <summary>按登记顺序保存的引导阶段。清理时反向遍历。</summary>
+        /// <summary>按登记顺序保存的引导阶段。清理时按相位逆序遍历。</summary>
         private static readonly List<IBootstrapStage> StageList = new List<IBootstrapStage>();
+
+        /// <summary>是否有一次 <see cref="RunAsync"/> 在途。运行期登记表只读（改动只告警、不阻止）。</summary>
+        private static bool _isRunning;
 
         #endregion
 
@@ -55,6 +58,13 @@ namespace XFramework.XBootstrap
         {
             if (stage == null)
                 throw new ArgumentNullException(nameof(stage));
+
+            if (_isRunning)
+            {
+                LogManager.Warning(LogCategories.Bootstrap,
+                    "RunAsync 运行中登记阶段 {0}：本轮不会执行它（装配期已快照），但它会参与后续的 Shutdown。",
+                    stage.GetType().Name);
+            }
 
             for (int i = 0; i < StageList.Count; i++)
             {
@@ -88,6 +98,14 @@ namespace XFramework.XBootstrap
                 if (ReferenceEquals(StageList[i], stage))
                 {
                     StageList.RemoveAt(i);
+
+                    if (_isRunning)
+                    {
+                        LogManager.Warning(LogCategories.Bootstrap,
+                            "RunAsync 运行中注销阶段 {0}：它本轮仍会执行（装配期已快照），但不会再收到 Shutdown。",
+                            stage.GetType().Name);
+                    }
+
                     return true;
                 }
             }
@@ -112,6 +130,13 @@ namespace XFramework.XBootstrap
                     StageList.RemoveAt(i);
                     removed++;
                 }
+            }
+
+            if (removed > 0 && _isRunning)
+            {
+                LogManager.Warning(LogCategories.Bootstrap,
+                    "RunAsync 运行中注销了 {0} 个 {1} 阶段：它们本轮仍会执行（装配期已快照），但不会再收到 Shutdown。",
+                    removed, typeof(T).Name);
             }
 
             return removed;
@@ -168,6 +193,9 @@ namespace XFramework.XBootstrap
         /// 按相位装配并运行引导管线。
         /// <para>失败与取消<b>会抛出</b>，不像旧节点树启动路径那样只留一条日志：
         /// 启动失败是致命的，调用方必须能感知。</para>
+        /// <para><b>重入只警告并忽略</b>（与 Pipeline 实例自身的重入守卫同形）：每次调用都会装配一条
+        /// 新管线（管线守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的调用<b>立即返回、
+        /// 不代表启动完成</b>——要「等启动结束」，请共享第一次调用的任务，而不是再调一次。</para>
         /// </summary>
         /// <param name="progress">进度接收者，可为 null。</param>
         /// <param name="cancellationToken">取消令牌。</param>
@@ -177,46 +205,62 @@ namespace XFramework.XBootstrap
         public static async UniTask RunAsync(IProgress<PipelineProgress> progress = null,
                                              CancellationToken cancellationToken = default)
         {
-            if (StageList.Count == 0)
+            if (_isRunning)
             {
-                LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
+                LogManager.Warning(LogCategories.Bootstrap, "RunAsync 已在运行中，忽略本次调用。");
                 return;
             }
 
-            IPipeline pipeline = BuildPipeline();
-
-            if (progress != null)
-            {
-                pipeline.OnProgressUpdate += value => progress.Report(value);
-            }
-
-            // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
-            // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
-            // 旧实现为此订阅 OnFailed/OnCancelled 再用两个局部变量记账，现由管线自己落位。
-            PipelineStatus status = PipelineStatus.Idle;
-            string failureReason = null;
+            // 在首个 await 之前同步置位(async 方法在首个未完成 await 之前是同步执行的)
+            _isRunning = true;
 
             try
             {
-                await pipeline.RunAsync(cancellationToken);
+                if (StageList.Count == 0)
+                {
+                    LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
+                    return;
+                }
 
-                // 必须在 finally 的 Destroy 之前读：销毁会把状态回落 Idle
-                status = pipeline.Status;
-                failureReason = pipeline.FailureReason;
+                IPipeline pipeline = BuildPipeline();
+
+                if (progress != null)
+                {
+                    pipeline.OnProgressUpdate += value => progress.Report(value);
+                }
+
+                // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
+                // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
+                // 旧实现为此订阅 OnFailed/OnCancelled 再用两个局部变量记账，现由管线自己落位。
+                PipelineStatus status = PipelineStatus.Idle;
+                string failureReason = null;
+
+                try
+                {
+                    await pipeline.RunAsync(cancellationToken);
+
+                    // 必须在 finally 的 Destroy 之前读：销毁会把状态回落 Idle
+                    status = pipeline.Status;
+                    failureReason = pipeline.FailureReason;
+                }
+                finally
+                {
+                    pipeline.Destroy();
+                }
+
+                if (failureReason != null)
+                {
+                    throw new InvalidOperationException($"[Bootstrap] 启动失败：{failureReason}");
+                }
+
+                if (status == PipelineStatus.Cancelled)
+                {
+                    throw new OperationCanceledException(cancellationToken);
+                }
             }
             finally
             {
-                pipeline.Destroy();
-            }
-
-            if (failureReason != null)
-            {
-                throw new InvalidOperationException($"[Bootstrap] 启动失败：{failureReason}");
-            }
-
-            if (status == PipelineStatus.Cancelled)
-            {
-                throw new OperationCanceledException(cancellationToken);
+                _isRunning = false;
             }
         }
 

@@ -286,6 +286,52 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void RunAsync_SecondCallWhileRunning_WarnsAndReturns()
+        {
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(stage);
+
+            UniTask first = Bootstrap.RunAsync();
+            Assert.AreEqual(1, stage.ExecuteCount, "首次调用应已启动阶段");
+
+            // 第二次调用不 await：断言的是「有没有再跑一遍」，而不是它何时返回
+            // （旧实现会再装配一条管线、同步把 ExecuteCount 推到 2）
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，忽略本次调用。"));
+            Bootstrap.RunAsync();
+
+            Assert.AreEqual(1, stage.ExecuteCount, "重入调用不得让同一批阶段跑两遍");
+
+            stage.Gate.TrySetResult();
+            first.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void RegistryMutation_WhileRunning_WarnsButProceeds()
+        {
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            var late = NewStage("late", 5);
+            Bootstrap.Register(stage);
+
+            UniTask first = Bootstrap.RunAsync();
+            Assert.AreEqual(1, stage.ExecuteCount, "首次调用应已启动阶段");
+
+            // 运行中登记：本轮不执行（装配期已快照），但会被后续 Shutdown 扫到
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 运行中登记阶段 FakeStage"));
+            Bootstrap.Register(late);
+            Assert.AreEqual(2, Bootstrap.Stages.Count, "警告不阻止登记");
+
+            // 运行中注销：本轮仍会执行，但拿不到 Shutdown
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 运行中注销阶段 FakeStage"));
+            Assert.IsTrue(Bootstrap.Unregister(late));
+            Assert.AreEqual(1, Bootstrap.Stages.Count, "警告不阻止注销");
+
+            stage.Gate.TrySetResult();
+            first.GetAwaiter().GetResult();
+        }
+
+        [Test]
         public void RunAsync_StageThrows_ExceptionNamesTheFailedStage()
         {
             // 断言写全「名字 + 冒号」那一段：旧文案是 Failed: {异常消息}，没有名字段，
