@@ -32,6 +32,7 @@
 | [Pipeline](Pipeline.md) | [Pool](Pool.md) | [Reactive](Reactive.md) |
 | [Save](Save.md) | [Serialize](Serialize.md) | [Settings](Settings.md) |
 | [Timer](Timer.md) | [UI](UI.md) | [Update](Update.md) |
+| [Diagnostics](Diagnostics.md) | | |
 
 ## 模板
 

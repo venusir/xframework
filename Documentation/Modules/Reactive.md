@@ -18,7 +18,8 @@ Runtime/Reactive/
 ## 沿革与已否决形状
 
 - **事件流引擎原先物理上住在 `XMessage.Internal` 里**，本模块直接 `using` 它取 `EventStream<T>`——合计 5 个跨模块文件引用同一处内部命名空间，而全框架共用一个 asmdef、`internal` 不构成编译边界，既没有编译器约束、也没有成文约定可依。2026-09-27 把引擎下沉为**独立模块** `XFramework.XEvent`（公开接口 + 静态工厂 + internal 实现，照 Pipeline 先例），这条依赖随之变成**公开、单向、可自查**——`Tests/Editor/Architecture/ModuleBoundaryTests` 会拦住任何模块对别的模块 `Internal` 的新引用。
-- **订阅泄漏是本仓历史上反复出现的一类**（UI / Reactive / Settings 的 README 都专设排查节）；若这类事故再出现，值得单独立项补一个与 `UIStateWindow` 同级的编辑器窗口——即 R3 `ObservableTracker` 那种「列出未释放订阅**及其创建调用栈**」的工具。
+- **订阅泄漏是本仓历史上反复出现的一类**（UI / Reactive / Settings 的 README 都专设排查节）；若这类事故再出现，值得单独立项补一个编辑器窗口——即 R3 `ObservableTracker` 那种「列出未释放订阅**及其创建调用栈**」的工具。
+  > **2026-10-02 更新**：原先的参照物 `UIStateWindow` 已并入诊断窗口删除；窗口壳现在有了（`Tools/XFramework/Diagnostics`，见 [Modules/Diagnostics](Diagnostics.md)），但**它不改变本项目标**——`ObservableTracker` 要的是「订阅 → 创建调用栈」的登记，那是投递热路径上的记账，与本窗口的拉取式页签是两回事。真要做得单独立项，届时它可以是诊断窗口的一个页签。
 
 ## 已评估未采纳与未决
 

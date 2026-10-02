@@ -51,6 +51,15 @@ internal static class MyGamePanelRegistration
 
 `DiagnosticReport` 是采集器的默认实现，也是渲染方复用的那一个：`Clear()` + `Collect()` 重填，不必每次刷新重新分配。
 
+## 编辑器窗口与渲染
+
+包内自带窗口与渲染层：菜单 `Tools/XFramework/Diagnostics`（左栏页签列表 + 顶栏刷新/自动刷新/复制）。
+
+- **默认路径**：页签只实现 `IDiagnosticPanel`，窗口用 `XFramework.Editor.Diagnostics.DiagnosticReportView` 按上面的词汇表渲染。
+- **在自己的窗口里渲染任意报告**：`new DiagnosticReportView().Draw(report)`——报告可以自己填，不必与诊断窗口有关；观感与诊断窗口一致。
+- **混搭自绘**：实现 `XFramework.Editor.Diagnostics.IDiagnosticPanelView`，窗口会把内容区整块委托给它（`Collect` 仍会被调用，因此「复制为文本」照常可用）。标准件用 `DiagnosticItemDrawer` 的单项原语（`DrawSection` / `DrawText` / `DrawKeyValue` / `DrawTable` / `DrawNotice`）。
+- 渲染层在 Editor 程序集（`XFramework.Editor.Diagnostics`）——只随编辑器加载，不进 Player 构建。
+
 ## 契约
 
 ### `Collect` 的调用契约（实现者必读）

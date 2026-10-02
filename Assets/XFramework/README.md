@@ -158,6 +158,7 @@ await Bootstrap.RunAsync();
 | **Settings** | `XFramework.XSettings` | 强类型游戏设置：纯 POCO 持久化、字段句柄、版本迁移 | [README](Runtime/Settings/README.md) |
 | **UI** | `XFramework.XUI` | UI 面板管理 / MVVM 绑定 / 导航堆栈 / HUD / Tip | [README](Runtime/UI/README.md) |
 | **Lock** | `XFramework.XLock` | 逻辑锁：多类型锁叠加、全局锁、`using` 自动释放 | [README](Runtime/Lock/README.md) |
+| **Diagnostics** | `XFramework.XDiagnostics` | 诊断契约：页签注册 + 报告采集（渲染在 Editor 侧，菜单 `Tools/XFramework/Diagnostics`） | [README](Runtime/Diagnostics/README.md) |
 
 ## 可替换的实现一览
 
@@ -166,6 +167,7 @@ await Bootstrap.RunAsync();
 | 模块 | 替换契约 | 接线入口 |
 |---|---|---|
 | **Log** | `ILogManager`（整体）+ `ILogSink`（追加输出端） | `Initialize(ILogManager)` / `AddSink` / `RemoveSink` |
+| **Diagnostics** | 无——注册表是纯静态服务，没有后端可换；要换的是**页签**（`IDiagnosticPanel` 登记）与**渲染**（`IDiagnosticPanelView` 自绘） | `DiagnosticsManager.Register` / 实现 `IDiagnosticPanelView` |
 | **Asset** | `IAssetManager`（能力接口 `IAssetPoolController` 由门面探测） | `SetInstance(IAssetManager)` |
 | **Audio** | `IAudioManager` | `SetInstance(IAudioManager)` |
 | **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)` |
