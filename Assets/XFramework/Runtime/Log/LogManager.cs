@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using XFramework.XLog.Internal;
 
@@ -192,6 +193,69 @@ namespace XFramework.XLog
         /// <param name="sink">输出端。</param>
         /// <returns>是否移除成功。</returns>
         public static bool RemoveSink(ILogSink sink) => Impl.RemoveSink(sink);
+
+        #endregion
+
+        #region Diagnostics — 回读
+
+        // 这四个成员刻意不进 ILogManager：主接口是对第三方开放的替换点，加成员会让所有实现者编译不过
+        // （仓内就有 ForeignLogManager 这样的替身）。回读只对内置实现成立——门面按 CaptureTarget 探测，
+        // 注入第三方实现时一律返回空。这是本仓「可选能力接口 / 内部缝 + 门面探测」那条惯例的又一例。
+
+        // 分类数没有在这里加别名：LogCategory.RegisteredCount 已经公开提供同一个数，
+        // 两个名字指向同一个值就是第二份真相。
+
+        /// <summary>
+        /// 把所有分类的档位状态写入缓冲区（先清空），返回条数。
+        /// <para>回答「这条分类现在会不会输出、为什么」：<see cref="LogCategoryInfo.EffectiveLevel"/> 是在
+        /// 本次调用时现算的（设了覆盖取覆盖、否则取当前全局档）。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；不要放进每帧路径。注入第三方实现时返回 0
+        /// （缓冲区被清空）。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的分类数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyCategories(List<LogCategoryInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            LogManagerImpl target = CaptureTarget;
+            if (target == null)
+            {
+                buffer.Clear();
+                return 0;
+            }
+
+            return target.CopyCategories(buffer);
+        }
+
+        /// <summary>当前输出端数量。<b>只对内置实现成立</b>（注入第三方实现时恒为 0）。</summary>
+        public static int SinkCount => CaptureTarget != null ? CaptureTarget.SinkCount : 0;
+
+        /// <summary>
+        /// 把当前输出端写入缓冲区（先清空），返回条数。
+        /// <para><see cref="ILogSink"/> 没有名字——行身份只能用类型名（给它加 Name 会破坏第三方输出端的实现，
+        /// 不做）。顺序即注册顺序。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；不要放进每帧路径。注入第三方实现时返回 0。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的输出端数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopySinks(List<ILogSink> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            LogManagerImpl target = CaptureTarget;
+            if (target == null)
+            {
+                buffer.Clear();
+                return 0;
+            }
+
+            return target.CopySinks(buffer);
+        }
 
         #endregion
 

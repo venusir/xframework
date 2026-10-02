@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Log 页签与日志回读面**：`LogManager.CopyCategories(List<LogCategoryInfo>)` / `CopySinks(List<ILogSink>)` / `SinkCount` + 新公开类型 `LogCategoryInfo`（名称 / 生效档位 / 是否被覆盖）；Log 页签显示全局档位、分类表与输出端列表。三条取向：
+  **① 不进 `ILogManager`，走门面探测内置实现**（照 `LogManager.CaptureTarget` 先例）：主接口是对第三方开放的替换点，加成员会让所有实现者编译不过（仓内就有 `ForeignLogManager` 这样的替身）。注入第三方实现时回读一律返回空，README 写明。
+  **② 「生效档位」在调用时现算**（设了覆盖取覆盖、否则取当前全局档，在同一个快照里一起读）——因此改过全局档之后回读不会给出陈旧值，这条有专门用例锁定。
+  **③ 分类数没有再在门面上加别名**：`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相（此条比计划**少**一个公开成员）。
+  **顺带**：`LogRegistry` 加 `CopyTo(List<LogCategoryState>)`——先取一次字典引用再遍历，copy-on-write 下拿到的是完整快照，与读路径无锁的理由是同一条。
 - **UI 页签（接替原 `UI State` 独立窗口）**：`UiDiagnosticPanel` 显示面板栈（类型 / 层 / 档位 / 焦点 / 暂停）、状态快照、层级表（可见 / 可交互 / 已打开数，含项目自定义层）与 `DumpState` 全文——旧窗口的信息一项不少。数据全部取自公开查询面，因此与代码里读到的是同一份真相。
 - **诊断窗口壳（菜单 `Tools/XFramework/Diagnostics`）**：左侧页签列表（Order 排序 + 搜索过滤）、顶栏（自动刷新开关 / 刷新 / 复制 / 页签计数）、右侧内容区（默认走 `DiagnosticReportView`；页签实现 `IDiagnosticPanelView` 时整块委托；采集失败时绕开自绘显示错误）。三条取向：
   **① 取数只在 tick 里做，OnGUI 只画。** 被删除的 `UI State` 窗口在 `OnGUI` 里 `Refresh()`，而一帧的 Layout/Repaint 会跑多次，等于每帧多次取数——新窗口把这条纠正过来（`EditorApplication.update` 驱动、只在采到新数据时 `Repaint`）。

@@ -19,6 +19,8 @@ namespace XFramework.Editor.Diagnostics
 
         private static readonly UiDiagnosticPanel UiPanel = new UiDiagnosticPanel();
 
+        private static readonly LogDiagnosticPanel LogPanel = new LogDiagnosticPanel();
+
         #endregion
 
         #region Registration
@@ -27,6 +29,7 @@ namespace XFramework.Editor.Diagnostics
         private static void Register()
         {
             DiagnosticsManager.Register(UiPanel);
+            DiagnosticsManager.Register(LogPanel);
         }
 
         #endregion

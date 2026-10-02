@@ -294,6 +294,52 @@ namespace XFramework.XLog
         /// <inheritdoc/>
         public int DroppedSinkCount => Volatile.Read(ref _droppedSinkCount);
 
+        /// <summary>当前输出端数量。诊断回读用。</summary>
+        internal int SinkCount => _sinks.Length;
+
+        /// <summary>
+        /// 把全部分类的档位状态写入缓冲区（先清空），返回条数。诊断回读用。
+        /// <para>「生效档位」在设了覆盖时取覆盖值、否则取当前全局档——两者都在写入时现读，
+        /// 因此这份快照始终自洽，不存在「先记全局档、后改档」的陈旧值。</para>
+        /// </summary>
+        internal int CopyCategories(List<LogCategoryInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            // 临时表：诊断路径允许分配（调用频率由渲染方决定，见模块 README）
+            var states = new List<LogCategoryState>();
+            LogRegistry.CopyTo(states);
+
+            LogLevel global = MinimumLevel;
+            buffer.Clear();
+            for (int i = 0; i < states.Count; i++)
+            {
+                LogCategoryState state = states[i];
+                int levelOverride = state.LevelOverride;
+                bool overridden = levelOverride != LogCategoryState.FollowGlobal;
+                LogLevel effective = overridden ? (LogLevel)levelOverride : global;
+                buffer.Add(new LogCategoryInfo(state.Name, effective, overridden));
+            }
+
+            return buffer.Count;
+        }
+
+        /// <summary>把当前输出端写入缓冲区（先清空），返回条数。诊断回读用。</summary>
+        internal int CopySinks(List<ILogSink> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            ILogSink[] sinks = _sinks;   // copy-on-write：读到的是一份完整快照
+
+            buffer.Clear();
+            for (int i = 0; i < sinks.Length; i++)
+                buffer.Add(sinks[i]);
+
+            return buffer.Count;
+        }
+
         /// <inheritdoc/>
         public void AddSink(ILogSink sink)
         {

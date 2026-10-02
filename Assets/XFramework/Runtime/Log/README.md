@@ -54,6 +54,8 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 - **档位**：`MinimumLevel`、`SetCategoryLevel`、`ResetCategoryLevel`、`IsEnabled`。
 - **分类**：内置见 `LogCategories`（31 个，与迁移前的 `[前缀]` 一一对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
 - **输出端**：`AddSink(ILogSink)` / `RemoveSink` / `Flush` / `DroppedSinkCount`。
+- **回读（诊断）**：`CopyCategories(List<LogCategoryInfo>)` / `CopySinks(List<ILogSink>)` / `SinkCount`。回答「这条分类现在会不会输出、为什么」（`LogCategoryInfo.EffectiveLevel` 在调用时现算：设了覆盖取覆盖，否则取当前全局档）与「谁在收日志」。分类总数用 `LogCategory.RegisteredCount`。
+  > **只对内置实现成立**：注入第三方 `ILogManager` 后这三个成员一律返回空/0——那类实现不提供回读。它们**刻意不进 `ILogManager`**（给主接口加成员会让所有实现者编译不过）。
 - **生命周期**：`Initialize(impl)`（注入自定义后端）、`Configure(options)`、`Shutdown()`、`Flush()`。
 
 `ILogSink` 是第三方扩展点：实现 `Write(in LogEntry)` 与 `Flush()`，**任意线程调用、不得抛异常**（抛出的 sink 会被静默摘除并计入 `DroppedSinkCount`——「因为日志坏了而记一条日志」会递归）。实现 `IDisposable` 时框架在摘除/关闭时释放它。分发**不持锁**（sink 数组是 copy-on-write 快照），因此 sink 在自己的 `Write` 里再写日志是安全的。

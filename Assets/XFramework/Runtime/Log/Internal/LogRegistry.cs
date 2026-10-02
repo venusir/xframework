@@ -51,6 +51,22 @@ namespace XFramework.XLog.Internal
             }
         }
 
+        /// <summary>
+        /// 把所有分类的当前状态对象写入缓冲区（先清空），返回条数。诊断用。
+        /// <para>先取一次字典引用：copy-on-write 下它就是一份完整快照，遍历期间写者只会替换引用，
+        /// 不会改动我们手里这本字典——与读路径无锁的理由是同一条。</para>
+        /// </summary>
+        internal static int CopyTo(List<LogCategoryState> buffer)
+        {
+            buffer.Clear();
+
+            Dictionary<string, LogCategoryState> map = _map;
+            foreach (KeyValuePair<string, LogCategoryState> pair in map)
+                buffer.Add(pair.Value);
+
+            return buffer.Count;
+        }
+
         /// <summary>把所有分类的档位覆盖还原为「跟随全局」。<c>Shutdown</c> 用它复位。</summary>
         internal static void ResetAllLevels()
         {
