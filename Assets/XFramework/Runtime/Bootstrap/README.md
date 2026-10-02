@@ -39,6 +39,32 @@ foreach (var stage in Bootstrap.Stages)      // 按登记顺序
 Bootstrap.Clear();                            // 清空登记表（不影响已运行的管线）
 ```
 
+## 用 GameLauncher 启动时怎么带配置
+
+`GameLauncher` 的默认行为是**零配置**：`Awake` 里登记默认组合，`Start` 里跑管线。要带配置，**继承并覆写 `ConfigureStages()`**——它取代了「决定登记什么」这一步，在 `Start` 跑管线之前执行：
+
+```csharp
+public sealed class MyLauncher : GameLauncher
+{
+    [SerializeField] private int _saveVersion = 1;
+
+    protected override void ConfigureStages()
+    {
+        base.ConfigureStages();                     // 或整句省略：默认组合完全不登记
+        Bootstrap.Unregister<SaveBootstrapStage>(); // 摘掉内置的
+        Bootstrap.Register(new SaveBootstrapStage(new SaveOptions { CurrentVersion = _saveVersion }));
+    }
+}
+```
+
+三种姿势：
+
+1. **零配置** —— 什么都不做（默认实现就是 `RegisterDefaults()`）。
+2. **换掉某个内置阶段** —— `base.ConfigureStages()` 之后 `Unregister` + `Register`（上面的例子）。
+3. **完全自建** —— 覆写且不调 `base`，登记什么自己说了算；或干脆不用 `GameLauncher`，在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
+
+⚠ `GameLauncher` 覆盖不到的那一半：配置里若是**服务实例**（`IAssetRemoteServices` / `ICryptoProvider` 那类，本身就是代码），或必须在**任何场景加载之前**生效（`LogOptions`、Asset 的远端地址），场景组件天然晚了一步——那些请走第 3 种姿势。
+
 ## 定义一个阶段
 
 实现 `IBootstrapStage`——它就是 Pipeline 的 `IPhaseStage` 加一个 `Shutdown`：
