@@ -35,4 +35,4 @@ Runtime/Settings/
 
 ## 已评估未采纳与未决
 
-- **没有 `SetInstance` / 工厂**（未决，2026-10-02 全面清点时记下）：`SettingsManagerImpl<T>` 是 internal sealed 且门面不提供整体替换——本模块是唯一一个连「换掉管理器行为」都不行的模块（其余模块都有 `SetInstance` 或 provider 等价物），能替换的只有它下面的 Store / Migrator / Validator。属不对称项，要么补一档注入点、要么在 README 写明它为何特殊；本轮未做，可再拾。
+- **没有 `SetInstance` / 工厂**（2026-10-02 全面清点后**裁定不补**）：`SettingsManagerImpl<T>` 是 internal sealed 且门面不提供整体替换——本模块是唯一一个连「换掉管理器行为」都不行的模块（其余模块都有 `SetInstance` 或 provider 等价物）。**不补的理由**：可替换点刻意**下移到** Store / Migrator / Validator（它们才是「会变的地方」，覆盖了加密存储、旧数据迁移、字段校验这些真实需求）；而管理器本身的通知、脏标记与保存时机是**模块语义**，替换它等于换一个模块——与 UI 的排序分层、Update 的切片与节拍同一档（判据见 `Roadmap.md` §四「不把模块内部策略接口化」）。理由已写进 README 的设计理念表（「替换点在后端」行）。

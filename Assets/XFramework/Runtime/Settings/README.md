@@ -19,6 +19,7 @@
 | **纯 POCO**    | 设置类不依赖框架类型；JSON 可读可调试，字段名即业务名下划线之外无额外包装 |
 | **字段级通知** | 经 `SettingRef` 句柄订阅单个字段，赋值相同值不通知；实例被替换时重放一次 |
 | **可替换后端** | `ISettingsStore` 允许替换为加密存储、PlayerPrefs 或远程云存档            |
+| **替换点在后端** | 可替换的是 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`；**本模块不提供 `SetInstance`**——管理器的通知、脏标记与保存时机是**模块语义**而非实现细节，换它等于换模块（同 UI 的排序分层、Update 的调度模型） |
 | **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等      |
 | **显式为主**   | 默认不自动保存、不写盘，行为可预期；需要时按需开启去抖自动保存            |
 
