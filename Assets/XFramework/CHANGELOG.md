@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **诊断渲染层（Editor 侧，公开给第三方复用）**：`DiagnosticReportView`（整份报告视图，实例持滚动状态）+ `DiagnosticItemDrawer`（逐项渲染原语：小节 / 文本 / 键值 / 表格 / 提示，无状态纯绘制）+ `IDiagnosticPanelView`（自绘页签的可选能力接口，窗口探测后整块委托，`Collect` 照常调用因此「复制为文本」不受影响）。三条取向：
+  **① 分层，但两层都要能被第三方用**：Runtime 侧契约保持纯数据（可被文本、编辑器、将来的运行时覆盖层消费），IMGUI 全部落在 Editor 程序集；第三方既能 `new DiagnosticReportView()` 在自己的窗口里画任意报告，也能用单项原语混搭自绘。
+  **② 不做「自定义条目类型 + 渲染器注册表」**：自绘接口配公开原语已覆盖自定义视觉的绝大多数需求，而给数据契约加 `object` 载荷会让文本渲染与运行时覆盖层对这类条目只能降级。
+  **③ 列宽分配抽成纯函数并单测**：`DiagnosticTableLayout.Allocate`（放得下原样返回 / 放不下按可收缩余地等比收缩 / 余地用尽压到下限为止不再继续挤压，宁可溢出）——IMGUI 调用本身不可测，这是与它分离的那块数学，`DiagnosticTableLayoutTests` 9 例锁住全部分界。
+  **顺带**：`Editor/AssemblyInfo.cs` 新增 `InternalsVisibleTo("Venusy609.Xframework.Editor.Tests")`——Editor 程序集此前没有对测试开放 internal，而纯函数缝需要它；对第三方的公开面仍只有 public 类型。
 - **新增 `XDiagnostics` 运行时诊断契约**（框架诊断窗口的地基，窗口与各模块页签随后落地）：静态注册表 `DiagnosticsManager`（`Register` / `Unregister` / `IsRegistered` / `CopyPanels` / `PanelCount` / `Clear`）+ 页签契约 `IDiagnosticPanel`（`Title` / `Order` / `Collect(IDiagnosticReport)`）+ 报告词汇表（小节 / 文本 / 键值 / 表格 / 提示，`DiagnosticReport` 为默认实现、可 `Clear` 复用）+ 纯文本渲染 `DiagnosticReportFormatter`。**Runtime 侧零 GUI 依赖**——同一份报告可以被编辑器窗口、文本、将来的运行时覆盖层或第三方工具消费。四条与直觉相左的决定及理由：
   **① 拉模式，不是推模式。** 页签不缓存、不上报，渲染方每次刷新现调 `Collect`——「窗口里看到的」与「代码里读到的」永远是同一份真相，不存在第二本账；代价（昂贵数据要页签自己缓存）写进模块 README。
   **② 注册幂等是硬要求，但刻意不做「进播放时清空注册表」。** 关闭域重载时 `[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑、`[InitializeOnLoadMethod]` 不跑，两条时序都不能产生重复页签；而清空会把编辑器侧注册的那批页签一并抹掉。
