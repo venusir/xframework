@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **新增 `XDiagnostics` 运行时诊断契约**（框架诊断窗口的地基，窗口与各模块页签随后落地）：静态注册表 `DiagnosticsManager`（`Register` / `Unregister` / `IsRegistered` / `CopyPanels` / `PanelCount` / `Clear`）+ 页签契约 `IDiagnosticPanel`（`Title` / `Order` / `Collect(IDiagnosticReport)`）+ 报告词汇表（小节 / 文本 / 键值 / 表格 / 提示，`DiagnosticReport` 为默认实现、可 `Clear` 复用）+ 纯文本渲染 `DiagnosticReportFormatter`。**Runtime 侧零 GUI 依赖**——同一份报告可以被编辑器窗口、文本、将来的运行时覆盖层或第三方工具消费。四条与直觉相左的决定及理由：
+  **① 拉模式，不是推模式。** 页签不缓存、不上报，渲染方每次刷新现调 `Collect`——「窗口里看到的」与「代码里读到的」永远是同一份真相，不存在第二本账；代价（昂贵数据要页签自己缓存）写进模块 README。
+  **② 注册幂等是硬要求，但刻意不做「进播放时清空注册表」。** 关闭域重载时 `[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑、`[InitializeOnLoadMethod]` 不跑，两条时序都不能产生重复页签；而清空会把编辑器侧注册的那批页签一并抹掉。
+  **③ 没有自动初始化成员，且这是设计结论。** 注册表不订阅 Unity 事件、不做会话复位、不注入 PlayerLoop，静态字段随类型首次使用初始化即可——`AutoInitTests` 族清单因此零改动（已写进类文档，防止下一轮「为了对称」补一个）。
+  **④ 表格「多余单元格被忽略」必须真的丢掉。** 首轮用例抓到实现只在渲染时忽略、`GetCell` 仍能越过 `ColumnCount` 读到它们（`Table_AddRowMoreCells_ExtraIgnored` 红），改为入表即按列数截断。
+  **实测**：文本渲染的对齐口径锁到字符级（列宽按字符数、分隔线 `-+-`、行尾不留空白——末列全空时连分隔符都不输出）；`DiagnosticsRegistryTests` / `DiagnosticReportTests` / `DiagnosticReportFormatterTests` 三个 fixture 全绿（其余 `-Filter Diagnostics` 命中 65 例、0 失败），`check-docs.ps1 -Enforce` 一次通过。
 - **`InputManager.Initialize(InputSystemOptions)`：自己加载输入资产的入口**。无参 `Initialize()` 走 `Resources.Load("InputSystem_Actions")`——零配置起步，却也是唯一路径；资源钉在 `Resources/` 意味着它总被打进包、且不受 YooAsset 之类资源系统管理。新增的 `XFramework.XInput.Default.InputSystemOptions { InputActionAsset Asset }` 把**加载**那一步交还给使用方（YooAsset / Addressables / 自己的加载器皆可），接线与无参路径完全相同（同一个默认提供者、同样注册帧驱动）。**Unity 输入类型只出现在 `XInput.Default`**——门面与 `IInputProvider` 保持插件中立（Rewired 那类用户看到的公开面不受影响）。顺带把三个 `Initialize` 重载共用的尾巴提成私有 `AdoptProvider`，新重载与既有两条同形（先建好、成功后才接管）
 - **`UIManager.TipAssetPath`：Tip 预制体地址可改**。`PF_UITipText` 此前是 `private const`——改不了，只能整体替换 `IUITipProvider`（那意味着把 223 行池化 / 世代守卫 / 逐帧回收逻辑抄一遍）。现在照 `LocalizationManager.LanguageAssetPath` 的先例给可写属性：**改后下次显示生效**；值存在 `UIManagerImpl`（唯一真相），设值时同步推给内置 provider，两处创建默认 provider 的地方（初始化、`SetTipProvider(null)` 重建）在创建后套用它。**不进 `IUIManager`**，照 `SetController` 的「只对内置实现生效」——注入自定义 provider 时地址由那个实现决定，接口不为它加成员（否则测试里的 Fake 会编译失败，且属对第三方的破坏性变更）
 
