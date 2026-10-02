@@ -221,6 +221,7 @@ namespace XFramework.XPipeline
             bool failed = false;
             bool cancelled = false;
             string failDescription = null;
+            string failStageName = null;
             Exception failException = null;
 
             try
@@ -301,6 +302,10 @@ namespace XFramework.XPipeline
                             stage.Name, sw.Elapsed.TotalMilliseconds);
                         failed = true;
                         failDescription = ctx.Description;
+                        // 失败原因要能指名阶段(与容器日志同一「最具体的名字」口径):
+                        // 容器主上下文的 CurrentTaskName 由聚合器写成首失败子阶段的名字;
+                        // 直接挂到管线的阶段没上报过任务名,回落它自己的 Name
+                        failStageName = ctx.CurrentTaskName ?? ctx.Name;
                         failException = ctx.FailureException;
                         break;
                     }
@@ -332,7 +337,7 @@ namespace XFramework.XPipeline
                     RecalculateSnapshot();
                     Broadcast();
                     _status = PipelineStatus.Failed;
-                    FailureReason = $"Failed: {failDescription}";
+                    FailureReason = $"Failed: {failStageName}: {failDescription}";
                     DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
                     // 有异常对象（阶段抛出，含容器内子阶段）就把堆栈带进 JSONL 的 exc 字段；
                     // 超时与「阶段主动置失败」没有异常，走原来的纯文本形态

@@ -286,6 +286,25 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void RunAsync_StageThrows_ExceptionNamesTheFailedStage()
+        {
+            // 断言写全「名字 + 冒号」那一段：旧文案是 Failed: {异常消息}，没有名字段，
+            // 故该断言在修复前必红（FakeStage 的消息里恰好带阶段名，不影响这一点）
+            var bad = NewStage("offender", 0);
+            bad.ThrowOnExecute = true;
+            Bootstrap.Register(bad);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: offender \(\d+\.\d+s\): offender boom"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => Bootstrap.RunAsync().GetAwaiter().GetResult());
+
+            StringAssert.Contains("Failed: offender: offender boom", exception.Message,
+                "启动失败异常要能指名是哪个引导阶段挂的");
+        }
+
+        [Test]
         public void RunAsync_PhaseFailure_StopsSubsequentPhases()
         {
             var log = new List<string>();

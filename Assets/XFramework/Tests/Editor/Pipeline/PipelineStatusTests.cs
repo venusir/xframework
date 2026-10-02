@@ -93,6 +93,20 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void Failed_ReasonNamesTheFailedStage()
+        {
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(new FakeStage { Name = "offender", ThrowOnExecute = true });
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+            pipeline.RunAsync().GetAwaiter().GetResult();
+
+            // 格式：Failed: {最具体的名字}: {描述}——多阶段项目要能从拉取面（Bootstrap 据此抛出
+            // 的异常）直接定位到是哪个阶段失败，而不只是知道「失败发生在管线里」
+            StringAssert.Contains("Failed: offender: ", pipeline.FailureReason);
+        }
+
+        [Test]
         public void Cancelled_LatchesStatus()
         {
             var pipeline = Pipeline.Create();
