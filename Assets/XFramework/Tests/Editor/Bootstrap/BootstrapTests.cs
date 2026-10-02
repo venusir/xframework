@@ -20,7 +20,7 @@ namespace Venusy609.Xframework.Editor.Tests
     {
         #region Test Doubles
 
-        private sealed class FakeStage : IBootstrapStage
+        private class FakeStage : IBootstrapStage
         {
             public string StageName = "stage";
             public int StagePhase;
@@ -78,6 +78,11 @@ namespace Venusy609.Xframework.Editor.Tests
             }
         }
 
+        /// <summary><see cref="FakeStage"/> 的派生类：用于锁定「按精确类型注销不连带派生类」。</summary>
+        private sealed class DerivedFakeStage : FakeStage
+        {
+        }
+
         private static FakeStage NewStage(string name, int phase, List<string> log = null)
         {
             return new FakeStage { StageName = name, StagePhase = phase, Log = log };
@@ -130,6 +135,54 @@ namespace Venusy609.Xframework.Editor.Tests
             Bootstrap.Register(NewStage("b", 1));
 
             Assert.AreEqual(2, Bootstrap.Stages.Count);
+        }
+
+        [Test]
+        public void Unregister_Instance_RemovesAndReturnsTrue()
+        {
+            var a = NewStage("a", 0);
+            var b = NewStage("b", 0);
+            Bootstrap.Register(a);
+            Bootstrap.Register(b);
+
+            Assert.IsTrue(Bootstrap.Unregister(a), "已登记的实例应被移除");
+            Assert.AreEqual(1, Bootstrap.Stages.Count);
+            Assert.AreSame(b, Bootstrap.Stages[0], "只移除目标实例");
+
+            Assert.IsFalse(Bootstrap.Unregister(a), "不在表中的实例返回 false");
+            Assert.AreEqual(1, Bootstrap.Stages.Count, "未命中不得改变登记表");
+        }
+
+        [Test]
+        public void Unregister_Null_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => Bootstrap.Unregister(null));
+        }
+
+        [Test]
+        public void UnregisterByType_ExactTypeOnly_DerivedSurvives()
+        {
+            var baseA = NewStage("baseA", 0);
+            var baseB = NewStage("baseB", 0);
+            var derived = new DerivedFakeStage { StageName = "derived", StagePhase = 0 };
+            Bootstrap.Register(baseA);
+            Bootstrap.Register(baseB);
+            Bootstrap.Register(derived);
+
+            Assert.AreEqual(2, Bootstrap.Unregister<FakeStage>(), "同类型多实例一次全部移除");
+            Assert.AreEqual(1, Bootstrap.Stages.Count);
+            Assert.AreSame(derived, Bootstrap.Stages[0], "派生类不被连带移除");
+        }
+
+        [Test]
+        public void UnregisterByType_NoMatch_ReturnsZeroAndKeepsTable()
+        {
+            var a = NewStage("a", 0);
+            Bootstrap.Register(a);
+
+            Assert.AreEqual(0, Bootstrap.Unregister<DerivedFakeStage>());
+            Assert.AreEqual(1, Bootstrap.Stages.Count);
+            Assert.AreSame(a, Bootstrap.Stages[0]);
         }
 
         [Test]

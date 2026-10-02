@@ -69,11 +69,63 @@ namespace XFramework.XBootstrap
         }
 
         /// <summary>
+        /// 注销一个已登记的引导阶段（按实例）。
+        /// <para><b>替换内置阶段的推荐姿势</b>：先 <see cref="RegisterDefaults"/>，再用
+        /// <see cref="Unregister{T}()"/> 摘掉不要的那个，最后 <see cref="Register(IBootstrapStage)"/> 自己的实例——
+        /// 与调用顺序无关，因此在 <see cref="GameLauncher"/> 在场的场景同样可用
+        /// （它在 Awake 里登记默认组合，与使用方自己 Awake 的先后是不确定的）。</para>
+        /// </summary>
+        /// <param name="stage">要注销的阶段实例。</param>
+        /// <returns>移除了返回 true；该实例不在登记表中返回 false（不打日志）。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="stage"/> 为 null 时抛出。</exception>
+        public static bool Unregister(IBootstrapStage stage)
+        {
+            if (stage == null)
+                throw new ArgumentNullException(nameof(stage));
+
+            for (int i = 0; i < StageList.Count; i++)
+            {
+                if (ReferenceEquals(StageList[i], stage))
+                {
+                    StageList.RemoveAt(i);
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 按<b>精确类型</b>注销全部匹配的阶段，返回移除数量。
+        /// <para>「精确类型」与 <see cref="RegisterDefaults"/> 的跳过口径一致：<b>派生类不会被连带移除</b>
+        /// （`GetType() == typeof(T)`，因此传接口类型也不会命中任何阶段）。</para>
+        /// </summary>
+        /// <typeparam name="T">要移除的引导阶段类型。</typeparam>
+        /// <returns>移除的数量；无匹配返回 0（不打日志）。</returns>
+        public static int Unregister<T>() where T : IBootstrapStage
+        {
+            int removed = 0;
+            for (int i = StageList.Count - 1; i >= 0; i--)
+            {
+                if (StageList[i].GetType() == typeof(T))
+                {
+                    StageList.RemoveAt(i);
+                    removed++;
+                }
+            }
+
+            return removed;
+        }
+
+        /// <summary>
         /// 登记框架内置的三个引导阶段：Asset(Phase 0) → Data(Phase 3) → Save(Phase 4)。
         /// <para>这是「开箱可用」的默认组合，不是强制——只想要其中一部分就自己逐个 <see cref="Register"/>。
         /// Localization 不在默认组合内：它需要语言数据，由使用方自行构造并登记。</para>
         /// <para><b>可重复调用</b>：它按类型跳过已存在的内置阶段，因此重复调用不会叠加
         /// （这是与 <see cref="Register"/> 唯一的语义差异——后者按实例去重，见其说明）。</para>
+        /// <para><b>要替换其中某个内置阶段</b>：用 <see cref="Unregister{T}()"/> 摘掉它再
+        /// <see cref="Register(IBootstrapStage)"/> 自己的实例——不要依赖与本方法的调用先后
+        /// （与 <see cref="GameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
         /// </summary>
         public static void RegisterDefaults()
         {

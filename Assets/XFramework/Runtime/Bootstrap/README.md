@@ -101,9 +101,19 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **登记表按实例去重，不按类型。** 同一个实例重复登记会被忽略，但**同类型的多个实例可以共存**——登记表是「初始化步骤列表」，不是「每类型一个的容器」，参数化的阶段用同一类型登记多次是合法的。唯一例外是 `RegisterDefaults()`：它按类型跳过已存在的内置阶段，因此可重复调用而不叠加。
 
-> ⚠ **要自定义某个内置阶段时的顺序是有讲究的。** 想用 `new SaveBootstrapStage(myOptions)` 替换默认的那个，必须**先 `Register` 再 `RegisterDefaults()`**——后者按类型跳过已存在的内置阶段，于是不会重复。
+> ⚠ **要替换某个内置阶段，用 `Unregister`——它与调用顺序无关。**
 >
-> 反过来（先 `RegisterDefaults()` 再 `Register` 同类型的自定义实例）**两者都会被登记**：同一个门面被初始化两次，第二次会被门面自身的幂等守卫挡下并打警告，而**你的 options 被静默忽略**。这是「按实例去重」这一语义的必然结果，框架无从区分「另一个同类型阶段」与「同一个阶段的替换品」。
+> ```csharp
+> Bootstrap.RegisterDefaults();                          // Asset(0) → Data(3) → Save(4)
+> Bootstrap.Unregister<SaveBootstrapStage>();             // 摘掉内置的那个
+> Bootstrap.Register(new SaveBootstrapStage(myOptions));   // 换成自己的
+> ```
+>
+> 顺序无关这一点在 `GameLauncher` 在场时尤其重要：它在 `Awake` 里登记默认组合，与使用方自己 `Awake` 的执行先后是不确定的。
+>
+> **旧姿势（先 `Register` 再 `RegisterDefaults()`）仍然有效**——后者按类型跳过已存在的内置阶段，于是不会重复；但它对调用顺序敏感：反过来写（先 `RegisterDefaults()` 再 `Register` 同类型的自定义实例）**两者都会被登记**，同一个门面被初始化两次，第二次会被门面自身的幂等守卫挡下并打警告，而**你的 options 被静默忽略**。框架无从区分「另一个同类型阶段」与「同一个阶段的替换品」——`Unregister` 就是为消掉这个歧义而存在的。
+>
+> 另注意 `RegisterDefaults()` 与 `Unregister<T>()` 都按**精确类型**匹配：`class MySaveStage : SaveBootstrapStage` 这样的派生类不会被前者识别为「已有 Save」，从而与内置那份**双份登记**——派生替换也请走 `Unregister`。
 
 **为什么 `RunAsync` 在失败/取消时抛异常？** `PipelineImpl.RunAsync` 在这两种情况下都「正常返回」，单看返回值分不出成功与失败。启动失败是致命的，静默吞掉会让故障表现成「服务莫名其妙没就绪」。所以本模块在 `RunAsync` 返回后读管线的终局拉取面（`IPipeline.Status` / `FailureReason`）并据此抛出——早期版本是订阅 `OnFailed`/`OnCancelled` 再用两个局部变量记账，管线补上拉取面后那套记账已删除。
 

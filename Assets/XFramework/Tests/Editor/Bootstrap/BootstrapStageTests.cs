@@ -1,6 +1,7 @@
 using System.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XAsset;
+using XFramework.XBootstrap;
 using XFramework.XData;
 using XFramework.XPipeline;
 using XFramework.XSave;
@@ -106,6 +107,38 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 // 清理 SaveManager 静态态,避免影响其他测试
                 SaveManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public void RegisterDefaults_ThenUnregister_ThenRegister_ReplacesBuiltInOutOfOrder()
+        {
+            Bootstrap.Clear();
+            try
+            {
+                // README 推荐的替换姿势：与调用顺序解耦（GameLauncher 在 Awake 里登记默认组合也照用）
+                Bootstrap.RegisterDefaults();
+                Assert.AreEqual(1, Bootstrap.Unregister<SaveBootstrapStage>(), "应摘掉内置的 Save 阶段");
+
+                var custom = new SaveBootstrapStage();
+                Bootstrap.Register(custom);
+
+                IBootstrapStage found = null;
+                for (int i = 0; i < Bootstrap.Stages.Count; i++)
+                {
+                    if (Bootstrap.Stages[i] is SaveBootstrapStage)
+                    {
+                        found = Bootstrap.Stages[i];
+                        break;
+                    }
+                }
+
+                Assert.AreEqual(3, Bootstrap.Stages.Count, "替换后仍是三件（Asset + Data + 自定义 Save）");
+                Assert.AreSame(custom, found, "同类型只应剩自定义那一个");
+            }
+            finally
+            {
+                Bootstrap.Clear();
             }
         }
     }
