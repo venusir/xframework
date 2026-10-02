@@ -80,14 +80,14 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 | Localization | `LocalizationManager`、`LocalizationBootstrapStage` | `LanguageAssetLoader` **不在其中**：那三处是 `throw new InvalidOperationException($"[LanguageAssetLoader] …")` 的**异常消息**，不是日志 |
 | File | `FileManager` | |
 | Event | `Event` | |
-| Serialize | — | **无需回填**：`[XSerialize]` 的两处是 `KeyNotFoundException` / `InvalidOperationException` 的消息前缀 |
+| Serialize | `Serialize` | 回填时**无需**（`[XSerialize]` 那两处是异常消息前缀）；**2026-10-02 新增首条日志**（内置注册与使用方注册撞名时保留并告警），该 `[XSerialize]` 前缀仍只用于异常消息 |
 | Reactive | — | **无需回填**：`[Reactive]` 的两处是 `ObjectDisposedException` 的消息前缀 |
 | *(Editor)* | `XFramework` | `XFrameworkDependencyInstaller.cs` 的 6 处；其中 2 处原本**没有前缀**（全仓唯二违例），见「未决」 |
 
 > **两类误收要记住**（回填时逐一核实过）：机械提取 `$"[标签]` 会把**异常消息**和**非日志字符串**
 > 一起收进来——`[AudioManager]` 是 GameObject 名、`[Slot:…]` 是 `SaveMeta.ToString()`、
 > `[XSerialize]` / `[Reactive]` / `[LanguageAssetLoader]` 是异常消息前缀。判定一个标签是否属于
-> 日志，必须看**调用点**（`Debug.Log*` 还是 `throw new …`），不能看字符串。分类表最终 31 个。
+> 日志，必须看**调用点**（`Debug.Log*` 还是 `throw new …`），不能看字符串。分类表在回填时定稿为 31 条，2026-10-02 因 Serialize 模块新增首条日志而加一（`LogCategories` 是唯一真相，此处不另记数）。
 
 **边界**：其它模块 README 里的 `Debug.Log` 代码片段**不改**——判据是 README 自己的判据
 （「删掉它使用方会不会写错代码」），那些片段是示例业务代码在打日志，不是框架契约；教新 API 的地方

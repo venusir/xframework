@@ -81,7 +81,7 @@ namespace XFramework.XLog
 
         #endregion
 
-        #region Lock / Message / Pipeline / Pool / Reactive / Serialize
+        #region Lock / Message / Pipeline / Pool / Serialize
 
         /// <summary>锁模块。</summary>
         public static readonly LogCategory Lock = LogCategory.Get("Lock");
@@ -97,6 +97,12 @@ namespace XFramework.XLog
 
         /// <summary>StringBuilder 池。</summary>
         public static readonly LogCategory StringBuilderPool = LogCategory.Get("StringBuilderPool");
+
+        /// <summary>
+        /// 序列化模块。2026-10-02 新增——本模块此前无日志（<c>[XSerialize]</c> 那两处是异常消息前缀，
+        /// 不属分类表），这是它的第一条日志（内置注册与使用方注册撞名时保留并告警）。
+        /// </summary>
+        public static readonly LogCategory Serialize = LogCategory.Get("Serialize");
 
         #endregion
 

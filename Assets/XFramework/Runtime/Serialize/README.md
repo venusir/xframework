@@ -41,6 +41,11 @@
 Serializer.Register(new MyMessagePackSerializer());
 ```
 
+> **替换内置格式**（如用自定义实现接管 `"json"`）：在模块初始化**之前**注册同名格式即可——
+> `Initialize` 遇到已存在的同名注册会**保留你的**并打一条 `[Serialize]` 告警，不再静默覆盖。
+> 想恢复内置实现请 `Unregister("json")` 后重新 `Register(new NewtonsoftSerializer())`。
+> （`Register` 本身的「同名覆盖」不变——那是显式动作。）
+
 ### MessagePack 集成示例（可选）
 
 1. 通过 Unity Package Manager Git URL 安装 MessagePack-CSharp：

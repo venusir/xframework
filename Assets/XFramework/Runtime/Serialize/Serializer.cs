@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XSerialize
 {
@@ -59,9 +60,28 @@ namespace XFramework.XSerialize
             if (_initialized)
                 return;
 
-            Register(new NewtonsoftSerializer()); // 默认 "json"
-            Register(new JsonSerializer());       // 遗留 "json-utility"，兼容旧 JsonUtility 格式存档
+            RegisterBuiltin("json", new NewtonsoftSerializer());        // 默认
+            RegisterBuiltin("json-utility", new JsonSerializer());      // 遗留，兼容旧 JsonUtility 格式存档
             _initialized = true;
+        }
+
+        /// <summary>
+        /// 注册内置序列化器；**已存在同名注册时保留使用方的**并打一条告警。
+        /// <para>使用方在 <c>Initialize</c>（或 <c>AutoInit</c>）之前自行注册同名格式，表达的是
+        /// 「我要替换这个格式」——直接覆盖会让那次注册**静默失效**。想恢复内置实现：
+        /// <see cref="Unregister"/> 之后重新 <see cref="Register"/> 内置类型即可。</para>
+        /// </summary>
+        private static void RegisterBuiltin(string format, ISerializer builtin)
+        {
+            if (Serializers.TryGetValue(format, out var existing))
+            {
+                LogManager.Warning(LogCategories.Serialize,
+                    "已存在 format = '{0}' 的注册（{1}），保留它、跳过内置的 {2}。要改用内置实现请先 Unregister('{0}')。",
+                    format, existing.GetType().Name, builtin.GetType().Name);
+                return;
+            }
+
+            Serializers[format] = builtin;
         }
 
         /// <summary>
