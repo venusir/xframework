@@ -501,7 +501,7 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 ```
 
 开启后框架自持一个隐藏的常驻宿主接收 `OnApplicationPause`——仅本选项开启时创建，
-全部释放后销毁，关闭则零开销。它刻意**不**挂到 `GameLauncher` 上：后者自己的文档写明
+全部释放后销毁，关闭则零开销。它刻意**不**挂到 `DefaultGameLauncher` 上：后者自己的文档写明
 「是可选件、不是框架的必需入口……场景里没有它也照常运转」，把落盘挂在一个可缺席的组件上
 会让本选项的承诺落空。
 

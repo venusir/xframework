@@ -156,7 +156,7 @@ namespace Venusy609.Xframework.Editor.Tests
             Bootstrap.Clear();
             try
             {
-                // README 推荐的替换姿势：与调用顺序解耦（GameLauncher 在 Awake 里登记默认组合也照用）
+                // README 推荐的替换姿势：与调用顺序解耦（DefaultGameLauncher 在 Awake 里登记默认组合也照用）
                 Bootstrap.RegisterDefaults();
                 Assert.AreEqual(1, Bootstrap.Unregister<SaveBootstrapStage>(), "应摘掉内置的 Save 阶段");
 

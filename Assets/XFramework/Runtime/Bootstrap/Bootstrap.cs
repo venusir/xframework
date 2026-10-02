@@ -82,7 +82,7 @@ namespace XFramework.XBootstrap
         /// 注销一个已登记的引导阶段（按实例）。
         /// <para><b>替换内置阶段的推荐姿势</b>：先 <see cref="RegisterDefaults"/>，再用
         /// <see cref="Unregister{T}()"/> 摘掉不要的那个，最后 <see cref="Register(IBootstrapStage)"/> 自己的实例——
-        /// 与调用顺序无关，因此在 <see cref="GameLauncher"/> 在场的场景同样可用
+        /// 与调用顺序无关，因此在 <see cref="DefaultGameLauncher"/> 在场的场景同样可用
         /// （它在 Awake 里登记默认组合，与使用方自己 Awake 的先后是不确定的）。</para>
         /// </summary>
         /// <param name="stage">要注销的阶段实例。</param>
@@ -150,7 +150,7 @@ namespace XFramework.XBootstrap
         /// （这是与 <see cref="Register"/> 唯一的语义差异——后者按实例去重，见其说明）。</para>
         /// <para><b>要替换其中某个内置阶段</b>：用 <see cref="Unregister{T}()"/> 摘掉它再
         /// <see cref="Register(IBootstrapStage)"/> 自己的实例——不要依赖与本方法的调用先后
-        /// （与 <see cref="GameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
+        /// （与 <see cref="DefaultGameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
         /// </summary>
         public static void RegisterDefaults()
         {

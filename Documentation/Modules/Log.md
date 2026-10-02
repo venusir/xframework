@@ -135,7 +135,7 @@ AutoInit 自初始化（SubsystemRegistration，载入期即装入默认实现�
 
 | 位置 | 为什么不记 |
 |---|---|
-| `Bootstrap/GameLauncher.cs:37`（OCE） | 启动取消是正常路径（应用退出） |
+| `Bootstrap/GameLauncher.cs` 的 `Start`（OCE；**不写行号**——该文件拆过两次，行号已失准过一次） | 启动取消是正常路径（应用退出） |
 | `File/FilePathUtility.cs:142` + `:146`（同一方法的两个子句） | 平台不支持原子写/`File.Replace` → 走降级路径，语义是「换一条路」不是「出错了」 |
 | `Audio/AudioManagerImpl.cs:280`（OCE） | 只有 `Destroy` 会取消内部令牌，此时无调用方可通知 |
 | `Message/MessageBroker.cs:954`（OCE，带 `when` 过滤） | 订阅已退订，属预期 |

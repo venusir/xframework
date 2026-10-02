@@ -9,7 +9,8 @@
 
 - **反向清理原先散落在各引导节点的 `OnDestroy` 中**；现由 `Bootstrap.Shutdown` 按执行序逆序（相位降序）统一完成。
 - **Phase 1 / 2 曾是 Lock / Message 的相位**：二者改为 `[RuntimeInitializeOnLoadMethod]` 自管理生命周期后被移出，这两个值随之空闲。
-- **登记表自 2026-10-02 起支持注销**（`Unregister` / `Unregister<T>`）：此前「替换内置阶段」只能靠调用顺序（先 `Register` 再 `RegisterDefaults`），而 `GameLauncher.Awake` 会无条件登记默认组合，与使用方 `Awake` 的先后由 Unity 决定。
+- **登记表自 2026-10-02 起支持注销**（`Unregister` / `Unregister<T>`）：此前「替换内置阶段」只能靠调用顺序（先 `Register` 再 `RegisterDefaults`），而启动器在 `Awake` 里会无条件登记默认组合，与使用方 `Awake` 的先后由 Unity 决定。
+- **`GameLauncher` 自 2026-10-02 起拆为两层**：抽象底座 `GameLauncher`（只有生命周期接线 + `abstract ConfigureStages`，**零序列化字段**）与默认实现 `DefaultGameLauncher`（八个 Inspector 字段 + 字段驱动的登记）。拆的理由：Unity 无法隐藏继承来的序列化字段，「完全自控的人 Inspector 里干净」只能靠类型层次保证；`abstract` 顺带让编译器兜住「忘了覆写」。**这是破坏性变更**——原先 `class X : GameLauncher` 的代码编译不过（迁移说明见 `CHANGELOG`）。
 
 ## 已评估未采纳与未决
 

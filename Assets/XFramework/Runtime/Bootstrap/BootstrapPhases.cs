@@ -16,7 +16,7 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 输入模块初始化。晚于 <see cref="Asset"/>（输入资产可能经资源系统加载）。
-        /// <para>不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内——它需要资产；由 <c>GameLauncher</c>
+        /// <para>不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内——它需要资产；由 <c>DefaultGameLauncher</c>
         /// 的字段面或使用方自行构造 <see cref="XFramework.XInput.InputBootstrapStage"/> 登记。</para>
         /// </summary>
         public const int Input = 1;
@@ -24,7 +24,7 @@ namespace XFramework.XBootstrap
         /// <summary>
         /// UI 模块初始化。晚于 <see cref="Asset"/>（面板预制体经地址加载）。
         /// <para>不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内——它需要场景里的 Canvas 根；由
-        /// <c>GameLauncher</c> 的字段面或使用方自行构造 <see cref="XFramework.XUI.UIBootstrapStage"/> 登记。</para>
+        /// <c>DefaultGameLauncher</c> 的字段面或使用方自行构造 <see cref="XFramework.XUI.UIBootstrapStage"/> 登记。</para>
         /// </summary>
         public const int UI = 2;
 

@@ -342,7 +342,7 @@ StringBuilderPool.Return(sb);
 ### 示例 6：预配置集合池容量
 
 ```csharp
-// 在初始化阶段（如 GameLauncher.Awake 中）预配置高频集合池
+// 在初始化阶段（如 DefaultGameLauncher.Awake 中）预配置高频集合池
 ListPool<Vector3>.Configure(new PoolConfig { PrewarmSize = 8, MaxSize = 64 });
 DictionaryPool<string, object>.Configure(new PoolConfig { PrewarmSize = 4, MaxSize = 32 });
 StringBuilderPool.Configure(new PoolConfig { PrewarmSize = 4, MaxSize = 32 });

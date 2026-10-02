@@ -39,9 +39,9 @@ foreach (var stage in Bootstrap.Stages)      // 按登记顺序
 Bootstrap.Clear();                            // 清空登记表（不影响已运行的管线）
 ```
 
-## 用 GameLauncher 启动时怎么带配置
+## 用 DefaultGameLauncher 启动时怎么带配置
 
-`GameLauncher` 在 Inspector 上提供一组**声明式配置字段**——挂上它、填字段，`Awake` 里自动组装成各模块的 options 注入，`Start` 里跑管线。**全为默认/留空时，登记表与行为与零配置完全一致。**
+`DefaultGameLauncher` 在 Inspector 上提供一组**声明式配置字段**——挂上它、填字段，`Awake` 里自动组装成各模块的 options 注入，`Start` 里跑管线。**全为默认/留空时，登记表与行为与零配置完全一致。**
 
 | 分组 | 字段 | 落到哪 |
 | ---- | ---- | ------ |
@@ -56,7 +56,7 @@ Bootstrap.Clear();                            // 清空登记表（不影响已�
 **进阶一：覆写 `ConfigureStages()`** —— 服务实例（`IAssetRemoteServices` / `ICryptoProvider` / `IAssetDecryptionServices`）与自定义阶段从这里进；调 `base` 之后追加或替换，不调 `base` 则完全自建：
 
 ```csharp
-public sealed class MyLauncher : GameLauncher
+public sealed class MyLauncher : DefaultGameLauncher
 {
     [SerializeField] private MyRemoteServicesAsset _remoteServices;   // ScriptableObject 实现服务接口
 
@@ -73,9 +73,24 @@ public sealed class MyLauncher : GameLauncher
 }
 ```
 
-**进阶二：干脆不用它** —— 在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
+**进阶二：完全自控（Inspector 里一个字段都不要）** —— 继承抽象底座 `GameLauncher` 并实现 `ConfigureStages`：
+本组件被拆成两层正是为了这一档。Unity **无法隐藏继承来的序列化字段**，所以「Inspector 干净」只能靠类型层次保证——
+底座 `GameLauncher` 不带字段（`ConfigureStages` 是抽象方法，编译器强制你实现），`DefaultGameLauncher` 才带那八个字段。
 
-⚠ **`GameLauncher` 覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
+```csharp
+public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里不会有任何配置字段
+{
+    protected override void ConfigureStages()
+    {
+        Bootstrap.Register(new MyAssetBootstrapStage(myOptions));   // 登记什么全由你定
+        // 要默认组合就调 Bootstrap.RegisterDefaults()；换输入后端则 Register(new InputBootstrapStage(myProvider))
+    }
+}
+```
+
+**进阶三：干脆不用它** —— 在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
+
+⚠ **`DefaultGameLauncher`（以及它的抽象底座 `GameLauncher`）覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
 
 ## 定义一个阶段
 
@@ -151,7 +166,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 > Bootstrap.Register(new SaveBootstrapStage(myOptions));   // 换成自己的
 > ```
 >
-> 顺序无关这一点在 `GameLauncher` 在场时尤其重要：它在 `Awake` 里登记默认组合，与使用方自己 `Awake` 的执行先后是不确定的。
+> 顺序无关这一点在 `DefaultGameLauncher` 在场时尤其重要：它在 `Awake` 里登记默认组合，与使用方自己 `Awake` 的执行先后是不确定的。
 >
 > **旧姿势（先 `Register` 再 `RegisterDefaults()`）仍然有效**——后者按类型跳过已存在的内置阶段，于是不会重复；但它对调用顺序敏感：反过来写（先 `RegisterDefaults()` 再 `Register` 同类型的自定义实例）**两者都会被登记**，同一个门面被初始化两次，第二次会被门面自身的幂等守卫挡下并打警告，而**你的 options 被静默忽略**。框架无从区分「另一个同类型阶段」与「同一个阶段的替换品」——`Unregister` 就是为消掉这个歧义而存在的。
 >
