@@ -51,6 +51,9 @@ namespace XFramework.XSave
         /// </summary>
         /// <param name="version">版本号，必须大于 0。</param>
         /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="version"/> 小于 1 时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">
+        /// 当前有正在进行的写操作（<see cref="IsBusy"/> 为 <c>true</c>）时抛出——与
+        /// <see cref="SetCurrentPlayer"/> 同一条门禁。内置实现会检查，自定义实现请照此办理。</exception>
         void SetCurrentVersion(int version);
 
         #endregion

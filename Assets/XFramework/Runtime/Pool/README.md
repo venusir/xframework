@@ -72,6 +72,8 @@ class BulletSystem
 
 配置在该类型**首次建池**（首次 `Get` / `GetPool`）时一次性消费生效，之后不再读取。若类型已建过池再调用 `Configure<T>`，会告警并忽略；需要重新配置时请先 `RemovePool<T>()` 再 Configure。
 
+**四个集合池（`ListPool` / `HashSetPool` / `DictionaryPool` / `StringBuilderPool`）的 `Configure` 口径不同**：它们**在「无活跃实例」时生效**——首次 `Get` 之前，**或全部归还之后**都可以重配（会重建池对象）；有活跃实例时才告警忽略。
+
 同一类型全局单池：`Get<T>(generator)` 传入的生成器仅首次建池生效；无参入口使用 Configure 的生成器，显式传入的生成器优先，Configure 的容量与预热仍生效。
 
 ```csharp

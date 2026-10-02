@@ -353,7 +353,7 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **全局占位符的值不随语言切换刷新。** 它是语言无关的一张表：值**来自语言表**时（`SetPlaceholder("Guild", Get("guild_legendary"))`），切换语言后模板更新了、嵌进去的值还是旧的——**没有异常、没有日志**，症状是「英文句子里嵌着中文称号」。与「`SetLanguageData` 覆盖当前语言数据不发通知」同族：查询面变了、事件面没有。需要跟随时走 `Get` + `GetFormat`，见 §7 的判定线。
 - **`GetFormat` 的数字 / 日期格式跟随设备文化，不跟随 `CurrentLanguage`。** 它用的是默认 `string.Format` 重载 → `CultureInfo.CurrentCulture`：德语设备上跑英文界面会得到 `1,5` 而不是 `1.5`。**如实标为「观察到的边界，不是缺陷」**——数字格式跟随设备文化本身是有争议但常见的选择，而本模块没有文化概念，也没有带 `IFormatProvider` 的重载。要有确定行为请自行格式化后当参数传入。
 - **`MaxCachedLanguages = 4` 是自定值**，无对标物（Unity Localization 不做 LRU，它靠 Addressables 的引用计数与 `Release`）。且「4」里真正可淘汰的只有 2 个，见「核心机制」一节。
-- **`LanguageAssetLoader` 是内部类型**，没有公开的加载扩展点：要换数据源（比如从远端拉表）只能替换整个 `ILocalizationManager` 实现，或改 `LanguageAssetPath` 让它指向别的资源。
+- **语言表的「加载路径」换不掉**：`LanguageAssetLoader` 是内部类型，而 `SwitchLanguageAsync` 是**门面方法**——它直接 `new LanguageAssetLoader(lang, path)` 走 `AssetManager.LoadAsync`，**不经过 `ILocalizationManager`**。所以「换数据源」的三条实际出路是：① 改 `LanguageAssetPath` 让它指向别的**资源**；② 自己加载后经 `SetLanguageData` 灌进来（再 `SetLanguage`）；③ 自己实现一套异步切换流程。**替换 `ILocalizationManager` 本身不会改变这条加载路径**。
 
 ## 设计取舍
 

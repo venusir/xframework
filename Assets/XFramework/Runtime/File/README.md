@@ -51,6 +51,8 @@ FileManager.SetCryptoProvider(new XorCryptoProvider());
 ```
 
 > **注意：** 未调用 `Initialize()` 时，首次调用任何文件操作将自动选择默认实现并初始化。Console 平台除外——因为 Console 没有内置实现，必须手动传入自定义 `IFileProvider`。
+>
+> **`Initialize` 是一次性的**：重复调用只打一条告警并忽略。**要中途更换 `IFileProvider`（或它的平台选择），必须先 `Destroy()` 再 `Initialize(新 provider)`**；`SetCryptoProvider` 不受此限，可随时调。
 
 ### 3. 基本使用
 

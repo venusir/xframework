@@ -105,6 +105,9 @@ namespace XFramework.XLock
         /// 或实现了 <see cref="IDestroyCancellationToken"/> 的普通对象。两者皆非时不绑定、也不告警——
         /// 那种主体由调用方用 <see cref="RemoveAllLocks"/>/<see cref="RemoveAllSubscriptions"/> 显式收口。</para>
         /// <para>绑定的时机是「主体首次进入任一容器」；关掉它只是不再新建绑定（已存在的不解除）。</para>
+        /// <para><b>它同时是「已销毁主体」的准入门禁</b>：为 <c>true</c>（默认）时，对已销毁主体的
+        /// <see cref="AddLock"/> / 订阅会被忽略并记一条 <c>[Lock]</c> 告警；关掉后这些操作**不再被拒**
+        /// ——「一律加上」，销毁时的清理由调用方自己负责（见 README 的「生命周期收口」）。</para>
         /// <para><see cref="Dispose"/> 会把它复位为 <c>true</c>。</para>
         /// </summary>
         public static bool AutoReleaseOnDestroy { get; set; } = true;
