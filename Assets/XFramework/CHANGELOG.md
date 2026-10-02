@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **诊断窗口壳（菜单 `Tools/XFramework/Diagnostics`）**：左侧页签列表（Order 排序 + 搜索过滤）、顶栏（自动刷新开关 / 刷新 / 复制 / 页签计数）、右侧内容区（默认走 `DiagnosticReportView`；页签实现 `IDiagnosticPanelView` 时整块委托；采集失败时绕开自绘显示错误）。三条取向：
+  **① 取数只在 tick 里做，OnGUI 只画。** 被删除的 `UI State` 窗口在 `OnGUI` 里 `Refresh()`，而一帧的 Layout/Repaint 会跑多次，等于每帧多次取数——新窗口把这条纠正过来（`EditorApplication.update` 驱动、只在采到新数据时 `Repaint`）。
+  **② 判断逻辑全在可测的 `DiagnosticsWindowModel`**：时钟注入、节流判据、选中钳制、页签表重载、异常隔离、自绘路径选择；窗口里只剩「生命周期 / 转发 / GUILayout」三类语句，16 例 EditMode 用例锁住全部分界（含「自动刷新关着时换页签仍必须重采」）。
+  **③ 采集异常写进报告本身**（`Notice(Error)` + 异常全文），不另存错误字段——显示、复制、自绘三条路径因此看到同一份东西。
+  **顺带**：页签标题在重载时缓存并兜底（模块销毁后标题 getter 可能变成会抛的），避免一帧读几十次标题把窗口带崩。
 - **诊断渲染层（Editor 侧，公开给第三方复用）**：`DiagnosticReportView`（整份报告视图，实例持滚动状态）+ `DiagnosticItemDrawer`（逐项渲染原语：小节 / 文本 / 键值 / 表格 / 提示，无状态纯绘制）+ `IDiagnosticPanelView`（自绘页签的可选能力接口，窗口探测后整块委托，`Collect` 照常调用因此「复制为文本」不受影响）。三条取向：
   **① 分层，但两层都要能被第三方用**：Runtime 侧契约保持纯数据（可被文本、编辑器、将来的运行时覆盖层消费），IMGUI 全部落在 Editor 程序集；第三方既能 `new DiagnosticReportView()` 在自己的窗口里画任意报告，也能用单项原语混搭自绘。
   **② 不做「自定义条目类型 + 渲染器注册表」**：自绘接口配公开原语已覆盖自定义视觉的绝大多数需求，而给数据契约加 `object` 载荷会让文本渲染与运行时覆盖层对这类条目只能降级。
