@@ -13,7 +13,7 @@ namespace XFramework.XBootstrap
     /// 框架启动引导的登记与运行入口。
     /// <para>需要异步初始化的模块实现 <see cref="IBootstrapStage"/> 并在此<b>显式登记</b>；
     /// <see cref="RunAsync"/> 按相位装配管线（同相位并行、相位升序串行，复用
-    /// <see cref="Pipeline.BuildPhaseGroups"/>），<see cref="Shutdown"/> 按登记顺序的逆序反向清理。</para>
+    /// <see cref="Pipeline.BuildPhaseGroups"/>），<see cref="Shutdown"/> 按执行序的逆序（相位降序）反向清理。</para>
     /// <para><b>为什么是显式登记而不是反射发现：</b>零反射、顺序可控、可测试，且使用方一眼能看出
     /// 到底有哪些东西会在这个启动流程里跑。框架不替使用方决定该初始化什么——
     /// <see cref="RegisterDefaults"/> 只是把最常用的三件（Asset / Data / Save）打包好，用不用随你。</para>

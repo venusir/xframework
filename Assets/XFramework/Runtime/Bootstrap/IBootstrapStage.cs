@@ -9,7 +9,7 @@ namespace XFramework.XBootstrap
     /// <see cref="IPipelineStage.ExecuteAsync"/> 负责初始化，<see cref="Shutdown"/> 负责反向清理。
     /// 执行、相位分组、并行、进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本接口不再引入第二套执行契约。</para>
     /// <para>登记经 <see cref="Bootstrap.Register"/>；<see cref="Bootstrap.RunAsync"/> 按相位分组装配并运行管线；
-    /// <see cref="Bootstrap.Shutdown"/> 按<b>登记顺序的逆序</b>调用各阶段的 <see cref="Shutdown"/>。</para>
+    /// <see cref="Bootstrap.Shutdown"/> 按<b>执行序的逆序</b>（相位降序）调用各阶段的 <see cref="Shutdown"/>。</para>
     /// </summary>
     /// <example>
     /// <code>
@@ -20,7 +20,7 @@ namespace XFramework.XBootstrap
     ///
     /// public sealed class MyServiceBootstrapStage : IBootstrapStage
     /// {
-    ///     public int Phase => 10;              // 晚于框架内置相位，早于业务区间
+    ///     public int Phase => BootstrapPhases.UserStart;   // 0–89 由框架保留，自定义阶段从 UserStart 起
     ///     public string Name => GetType().Name;
     ///     public float Weight => 1f;
     ///
@@ -47,6 +47,10 @@ namespace XFramework.XBootstrap
         /// 若将来某个模块确实需要异步清理，再为它单独扩展接口。</para>
         /// <para>实现应可重复调用（幂等）；抛出的异常由 <see cref="Bootstrap.Shutdown"/> 隔离，
         /// 不会阻断其它阶段的清理。</para>
+        /// <para><b>可能在 <see cref="IPipelineStage.ExecuteAsync(PipelineStageContext, System.Threading.CancellationToken)"/>
+        /// 从未执行过时被调用</b>——启动在它之前失败/取消，或它是在 <see cref="Bootstrap.RunAsync"/> 运行中才登记的，
+        /// <see cref="Bootstrap.Shutdown"/> 都会扫到它。实现要能在「本阶段什么都没做」时安全空转
+        /// （范例：<c>LocalizationBootstrapStage</c> 只在确实由自己完成初始化时才销毁门面）。</para>
         /// </summary>
         void Shutdown();
     }

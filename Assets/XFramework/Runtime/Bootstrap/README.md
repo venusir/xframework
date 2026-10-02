@@ -51,7 +51,7 @@ using XFramework.XPipeline;
 
 public sealed class MyServiceBootstrapStage : IBootstrapStage
 {
-    public int Phase => 10;                  // 同相位并行，相位升序串行
+    public int Phase => BootstrapPhases.UserStart;   // 0–89 由框架保留；同相位并行，相位升序串行
     public string Name => GetType().Name;
     public float Weight => 1f;               // 0 = 不占进度
 
@@ -134,6 +134,14 @@ UpdateManager.Pause();
 try { await Bootstrap.RunAsync(); }
 finally { UpdateManager.Resume(); }
 ```
+
+## 已知限制
+
+**没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
+
+**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消，或它是在 `RunAsync` 运行中才登记的，`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
+
+**运行中修改登记表只告警、不阻止**，两条反直觉后果与理由见上面「设计取舍」的末两段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
 
 ## 依赖
 
