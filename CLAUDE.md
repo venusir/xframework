@@ -36,6 +36,7 @@
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateTier` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateTier.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md(使用方向;维护向记录按需写入 `Documentation/Modules/<模块>.md`,见「文档分层」);示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
 - **模块边界:** 生产代码不得引用其它模块的 `Internal` 命名空间——Runtime 全树共用一个 asmdef,`internal` 不构成编译边界,这条只能靠约定与自查(见 `Tests/Editor/Architecture/ModuleBoundaryTests`)。跨模块共享的基础设施必须抽为独立模块并给公开面(先例:`XFramework.XEvent` ← Message/Reactive/Input/Settings;`XFramework.XPipeline` ← Bootstrap);测试与 Editor 工具经 `InternalsVisibleTo` 不受此限
+- **可选包的 Unity 类型不得出各自的 `Default` 命名空间:** Unity Input System 的类型(`InputActionAsset` 等)只允许出现在 `Runtime/Input/Default/`——门面与 `IInputProvider` 保持插件中立,第三方(如 Rewired)整体替换后端时公开面不受影响;别的模块要提供「Inspector 里配输入」的入口,就用该命名空间下的框架类型(先例:`InputSystemOptions` / `InputSystemOptionsAsset`)。**判据是「可选包」而非「Unity 类型」**:`Transform` / `TextAsset` 这类 `UnityEngine` 核心类型不受此限(每个项目都有)。机械守卫:`ModuleBoundaryTests.UnityInputTypes_StayInsideTheDefaultNamespace`(源码扫描)
 
 ## 编码规范
 

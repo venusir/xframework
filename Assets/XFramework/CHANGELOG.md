@@ -510,6 +510,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **修一处模块边界越界：`GameLauncher` 的 Input 字段把 Unity 输入类型带出了 `XInput.Default`**（用户指出的）。字段面首版写的是 `[SerializeField] InputActionAsset _inputActions;`，而本框架的承诺是「**Unity 输入类型只出现在 `XInput.Default`**——门面与 `IInputProvider` 保持插件中立（Rewired 那类用户看到的公开面不受影响）」（见本文件 `InputSystemOptions` 条目）。核实后是**全仓唯一**一处越界。修法：新增 `InputSystemOptionsAsset : ScriptableObject`（**住在 `XInput.Default` 内**，字段是输入资产 + 初始 ActionMap 名，带 `ToOptions()`），`GameLauncher` 改持这个**框架类型**的引用——Inspector 里照常可配，且该资产还能被非 `GameLauncher` 的启动路径复用。**顺带补上守卫**：这条承诺此前只活在文档里，既有的两条边界断言查的是跨模块 `Internal` 与漏出的 internal 类型，可选包的 Unity 类型外泄不在射程内（所以它能活过编译、测试、文档三道门禁）；`ModuleBoundaryTests` 新增 `UnityInputTypes_StayInsideTheDefaultNamespace`（源码扫描，`Runtime/Input/Default/` 之外出现 `UnityEngine.InputSystem*` 即红），并在 `CLAUDE.md` 的模块边界节成文（判据写明是**可选包**而非「Unity 类型」——`Transform`/`TextAsset` 这类核心类型不受限）
 - **`Serializer.Initialize` 不再静默覆盖使用方提前注册的同名序列化器**（同批三项之一）：`AutoInit` 在进入播放时注册内置两项，使用方若在它之前注册同名格式（如自定义实现接管 `"json"`），那次注册会被**静默覆盖**——而「提前注册」本就是在表达「我要替换它」。现在遇到同名注册会**保留使用方的**、跳过内置，并打一条 `[Serialize]` 告警说明如何恢复内置（`Register` 自身的「同名覆盖」承诺不变——那是显式动作）。这是 Serialize 模块的**第一条日志**，`LogCategories` 因此新增 `Serialize` 分类（该模块此前 `[XSerialize]` 那两处是异常消息前缀，不属分类表）。新增 fixture 3 条，红基线是**行为级**（旧实现下 `Expected: same as <FakeSerializer> But was: <NewtonsoftSerializer>`）
 
 ### Documentation

@@ -170,7 +170,7 @@ await Bootstrap.RunAsync();
 | **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `RegisterChannel`；`AudioChannels` 推荐通道名 | 初始化时快照；运行时项立即扫活跃播放源 |
 | **Settings** | `SettingsOptions` 5 字段；四个注入点 `ISettingsStore` / `IAsyncSettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（前两者按类型注入，Store / Migrator / Validator 均可运行时替换） | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
 | **UI** | `Initialize(Transform uiRoot, IUIController controller = null)`（或登记 `UIBootstrapStage` / 在 `GameLauncher` 字段面填 UI 根）；`IUIController` / `IUITipProvider` / `IUiHudProvider` 三个可注入 provider；`UIManager.TipAssetPath`；`UILayers` / `UISorting` 常量约定；面板 / HUD 实例级参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`） | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
-| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / 在 `GameLauncher` 字段面填）；或整体替换 `IInputProvider`（28 成员）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
+| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / 在 `GameLauncher` 字段面指向一份 `InputSystemOptionsAsset`）；或整体替换 `IInputProvider`（28 成员）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
 | **Save** | `SaveOptions` 2 字段（版本号 / 加密 Provider，后者接线到 `FileDomain.SaveData`）；`SaveManagerFactory` 整体替换；运行时 `SetCurrentVersion` / `SetCurrentPlayer` | 初始化时；运行时项实时（写操作进行中会拒绝） |
 | **File** | `IFileProvider` 整体替换；`ICryptoProvider` 按域接线（`SetCryptoProvider`）；可选能力接口 `IAtomicFileProvider` / `IDirectoryProvider`（装饰器须一并实现） | 初始化或运行时接线 |
 | **Pool** | `PoolConfig` 3 字段（`PoolManager.Configure<T>` 与四个集合池各自的 `Configure`） | **首次建池时**一次性消费；池已存在则忽略（需先 `RemovePool<T>`） |
@@ -194,7 +194,7 @@ await Bootstrap.RunAsync();
 | 名字 / 值 | 性质与能否更改 | 详情 |
 |---|---|---|
 | `InputSystem_Actions`（默认从 `Assets/Resources/` 加载） | **可改**：自己加载资产（YooAsset / Addressables / 任意方式）后走 `InputManager.Initialize(new InputSystemOptions { Asset = ... })`——`Resources` 只是零配置默认；换输入插件则实现 `IInputProvider` | [Input](Runtime/Input/README.md) |
-| `Player`（初始 ActionMap 名） | **可改**：`InputSystemOptions.InitialActionMap`（`GameLauncher` 字段面有同名项）；传 `null` / 空串则不自动切换（保持全部 map 常开） | [Input](Runtime/Input/README.md) |
+| `Player`（初始 ActionMap 名） | **可改**：`InputSystemOptions.InitialActionMap`（`GameLauncher` 字段面填 `InputSystemOptionsAsset` 时是它的同名项）；传 `null` / 空串则不自动切换（保持全部 map 常开） | [Input](Runtime/Input/README.md) |
 | `PF_UITipText`（Tip 预制体的 YooAsset 地址） | **可改**：`UIManager.TipAssetPath`（内置实现的实例属性，改后下次显示生效；注入自定义 `IUITipProvider` 时由它自己决定） | [UI](Runtime/UI/README.md) |
 | `DefaultPackage`（默认主包名） | **可改**：`InitializeAsync` 的 `AssetInitOptions.PackageName`（须与 YooAsset 构建侧的包名一致）；额外包走 `InitializePackageAsync`，**它不改主包** | [Asset](Runtime/Asset/README.md) |
 | 业务资源地址（面板 / HUD / 音频 / 配置表 / 语言表） | **由你决定**：一律以 YooAsset `location` 字符串传入，框架不发明路径约定 | [Asset](Runtime/Asset/README.md) · [Audio](Runtime/Audio/README.md) · [UI](Runtime/UI/README.md) |
