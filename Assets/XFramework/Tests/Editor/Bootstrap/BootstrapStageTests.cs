@@ -119,6 +119,10 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(BootstrapPhases.Data, new DataBootstrapStage().Phase);
             Assert.AreEqual(BootstrapPhases.Save, new SaveBootstrapStage().Phase);
             Assert.AreEqual(BootstrapPhases.Localization, new LocalizationBootstrapStage().Phase);
+
+            // Input / UI 两个阶段需要构造参数（资产 / 场景 Transform），各自的相位断言在它们的
+            // 夹具里（InputBootstrapStageTests.Phase_IsInput / UIBootstrapStageTests.Phase_IsUI）——
+            // 放在那里就不必在 EditMode 里造一个场景对象
         }
 
         [Test]
