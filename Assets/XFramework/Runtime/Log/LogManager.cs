@@ -441,8 +441,12 @@ namespace XFramework.XLog
         /// <para><b>订阅必须幂等</b>：关闭域重载时 <c>Application.quitting</c> 的订阅表跨播放会话存活，
         /// 重复 <c>+=</c> 会逐次累积——先 <c>-=</c> 再 <c>+=</c> 保证恰好一条。</para>
         /// <para><b>档位取 <see cref="RuntimeInitializeLoadType.SubsystemRegistration"/></b>：它是最早的一档，
-        /// 主线程登记与全量捕获的挂接都必须早于其它模块的 AutoInit（Update/Message/Timer 也在此档）。
-        /// 想改档位请同步更新 <c>Tests/Runtime/Architecture/AutoInitTests</c> 的族清单，否则守卫会红。</para>
+        /// 主线程登记与全量捕获的挂接越早越好。<b>注意同档内的相对顺序没有契约</b>——Unity 不承诺、
+        /// <c>AutoInitTests</c> 锁的也只是档位而非先后，所以「本方法先于同档其它 AutoInit
+        /// （Update / Message / Timer）执行」不是保障，只是「那三个都不打日志」这一事实的结果。
+        /// 将来若本档新增会打日志的 AutoInit，请把它挪出本档——否则那些日志会落在随后被本方法
+        /// 丢弃的默认实现上。想改档位请同步更新 <c>Tests/Runtime/Architecture/AutoInitTests</c>
+        /// 的族清单，否则守卫会红。</para>
         /// </summary>
 #if UNITY_EDITOR
         [UnityEditor.InitializeOnLoadMethod]
