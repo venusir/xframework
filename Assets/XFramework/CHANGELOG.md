@@ -462,6 +462,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Asset 模块审计一轮（判据 A–F 全类扫过，一处高危 + 七项修复）**：范围由「审计门面」扩至整模块。README 新增 `## 线程契约` / `## 已知限制` / `## 接口承诺到哪为止` 三节（此前**从未有过**这三节，而维护文档声称它们在那里）并修掉两处**照抄出错的示例**（`InitializeAsync(progress, options)` 参数顺序相反、`T asset = handle.Asset` 与上文的 `<TextAsset>` 不一致）；`InitializeAsync` 的 XML 补全「options/progress/令牌一律取首个调用者」与作废语义，`SetInstance` 写明**不释放原实例**（与 `Destroy` 相反），`Destroy` 的「释放所有资源」改为精确表述（不卸载 YooAsset 侧的包与已加载资源——那正是「Destroy 后可重新初始化复用」的前提）。维护向结论归档进 `Documentation/Modules/Asset.md`（9 条已评估未采纳 + 4 条未决，含被证伪的那条与「`lowMemory` 回调线程需真机实测」）。`ModuleAudit.md` 第三节**新增判据 B6「共享协调协议代际覆盖面」**（凡「由当前一代写入、由任意一代读取」的共享槽都是代际漏洞候选；本仓实例即本轮 F1）
 
+### Fixed
+
+- **Bootstrap `Shutdown` 按「登记序逆序」清理，而执行序由 `Phase` 决定——两者可相反，且 README 推荐的替换姿势恰好触发它**。执行序由相位决定（`RunAsync_ExecutesStagesByPhaseOrder` 专门锁定「执行序由 Phase 决定而非登记序」），清理却反向遍历登记表，只在两者恰好一致时才等价于文档自述的「后初始化的先清理」。README 推荐的「先 `Register` 再 `RegisterDefaults`」制造的正是不一致：`Register(new SaveBootstrapStage(opts)); RegisterDefaults();` 的执行序是 Asset→Data→Save，清理序却是 Data→Asset→Save（Save 依赖 Data，反而最后拆）。现改为**执行序的逆序**——相位降序，同相位内按登记逆序（同相位并行本无严格先后，取登记逆序作为确定性次序）。**改前必红实测**：新增的乱序登记用例在旧实现上 `Expected: "p4" But was: "p3"`；默认登记组合（Asset→Data→Save）行为不变
+- **Pipeline `FailureReason` 不带失败阶段名**：`StageExecution` 只把 `ex.Message` 写进描述，阶段名只进 `CurrentTaskName` 且无人使用——日志行有名字（`Parallel stage failed: bad (...)`），而 `Bootstrap` 据拉取面抛出的「启动失败」异常没有，多阶段项目从 `catch` 处定位不到是谁挂的。现 `FailureReason = "Failed: {名字}: {描述}"`，名字取 `ctx.CurrentTaskName ?? ctx.Name`（与容器日志同一「最具体的名字」口径：容器取首失败子阶段名，直接阶段没上报过任务名则回落自身 `Name`）。**日志行文案未动**（名字已在上一行，也避免牵动 `PipelineFailureTests` 的精确正则）。**改前必红**：Pipeline 侧 `But was: "Failed: boom"`、Bootstrap 侧 `But was: "[Bootstrap] 启动失败：Failed: offender boom"`
+
+### Added
+
+- **Bootstrap 新增 `Unregister(IBootstrapStage)` / `Unregister<T>()`：替换内置阶段不再依赖调用顺序**。此前唯一姿势是「先 `Register` 再 `RegisterDefaults`」，而 `GameLauncher.Awake` 会无条件登记默认组合，与使用方自己 `Awake` 的先后由 Unity 决定——反序时两者都被登记，门面幂等守卫只留一条告警、**自定义 options 被静默忽略**。`Unregister<T>()` 按**精确类型**移除全部匹配项（与 `RegisterDefaults` 的跳过口径一致：派生类不被连带移除、传接口类型不命中）。README 的 ⚠ 替换指引改写为 `RegisterDefaults → Unregister<T> → Register`，并写明「派生类不被 `RegisterDefaults` 识别为已有 Save，会双份登记」
+- **新增 `BootstrapPhases` 相位常量**（Asset=0 / Data=3 / Save=4 / Localization=90 / UserStart=90）：相位号此前是四个阶段类里各写一份的字面量，约定只活在两份 README 表格中，第三方只能照抄数字。四个内置阶段改引用常量；`BootstrapStageTests` 补「常量与阶段同源」守卫（防改了常量忘改阶段的单边漂移）；README 相位表改列常量名并写明 **0–89 由框架保留**（「1/2 空闲」只是现状、不是承诺），需要精确插进框架阶段之间的场景用 `Unregister` 换掉内置阶段自行编排。Pipeline README 的重复相位表改为指向 Bootstrap（该约定的唯一真相）
+- **Bootstrap `RunAsync` 重入守卫**：每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。重入现在打警告并立即返回——被忽略的那次**不代表启动完成**（要等启动结束应共享第一次调用的任务），README 已写明。`Register`/`Unregister` 在运行中照常执行但打警告，说明两条反直觉后果：运行中登记本轮不执行（装配期已快照）但会被 `Shutdown` 扫到；运行中注销本轮仍执行但拿不到 `Shutdown`。**改前必红**：`Expected: 1 But was: 2`（旧实现真的跑了两遍）
+
+### Documentation
+
+- **Bootstrap 模块审计一轮（A–F 全量；此前只做过一次单问题定向）**：主题「编排方式对第三方自定义的友好度」，对照 Unity Entities `ICustomBootstrap` / Zenject / VContainer / UGF Procedure / MS.Extensions.Hosting 五种启动流程，7 项发现全部落地为代码或文档（上面四条 + 已知限制 + 归档）。README 新增 `## 已知限制`：**没有超时手段**（`IPipeline` 的超时只在阶段粒度，而 Bootstrap 每相位装配为一个 `ParallelStage`，从 Bootstrap 侧不可达——不响应取消的挂死阶段会挂死整个启动）；`Shutdown` **可能在阶段从未执行过时被调用**（启动在它之前失败/取消，或它是在运行中才登记的，清理实现要能安全空转——内置 `LocalizationBootstrapStage` 是范例）。`IBootstrapStage.Shutdown` 的 XML 补同一条契约，接口示例的 `Phase => 10` 改为 `BootstrapPhases.UserStart`（10 落在框架保留区间内，与新的区间约定冲突）。维护向结论归档进 `Documentation/Modules/Bootstrap.md`（五框架对照表 + 6 条已评估未采纳 + 3 条未决 + 审计轮次），`Pipeline.md` 的异常承载节补失败原因新格式。顺带按 A1 探针「一处改动找齐所有落点」订正三处同义句残留（`IBootstrapStage` 类注释、`Bootstrap` 类注释、包 README 的 `Shutdown` 注释与可配置项一览）
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
