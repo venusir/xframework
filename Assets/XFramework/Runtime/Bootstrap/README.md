@@ -27,7 +27,7 @@ await Bootstrap.RunAsync();
 退出时反向清理：
 
 ```csharp
-Bootstrap.Shutdown();   // 按登记顺序的逆序，逐个调 stage.Shutdown()
+Bootstrap.Shutdown();   // 按执行序的逆序（相位降序），逐个调 stage.Shutdown()
 ```
 
 登记表本身可以随时查看与清空（`Stages` **是实时视图而非快照**，后续登记会反映出来——只读用途，勿缓存后假定其不变）：

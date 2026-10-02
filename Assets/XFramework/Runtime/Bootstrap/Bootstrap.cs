@@ -169,25 +169,40 @@ namespace XFramework.XBootstrap
         }
 
         /// <summary>
-        /// 按登记顺序的<b>逆序</b>清理各阶段。
+        /// 按<b>执行序的逆序</b>清理各阶段：相位降序，同相位内按登记逆序。
         /// <para>逆序的理由：后初始化的可能依赖先初始化的（例如 Save 依赖 Data），
-        /// 先拆依赖再拆被依赖者。</para>
+        /// 先拆依赖再拆被依赖者。执行序由 <see cref="IPhaseStage.Phase"/> 决定（见 <see cref="RunAsync"/>），
+        /// 因此清理序也按相位排——直接倒着遍历登记表只在「登记序恰好等于相位序」时才与执行序的逆序一致，
+        /// 而登记顺序是使用方自由给的。</para>
+        /// <para>同相位内各阶段并行执行、本无严格先后，取登记逆序作为确定性次序。</para>
         /// <para>单个阶段抛异常不会阻断其余阶段的清理——清理路径上一个模块的问题
         /// 不应导致别的模块泄漏。</para>
         /// </summary>
         public static void Shutdown()
         {
-            for (int i = StageList.Count - 1; i >= 0; i--)
+            // 收集 distinct 相位并升序排列(相位数量 = 模块数量级,非每帧路径;手写循环,零 LINQ)
+            var phases = new List<int>(StageList.Count);
+            for (int i = 0; i < StageList.Count; i++)
             {
-                IBootstrapStage stage = StageList[i];
-                try
+                int phase = StageList[i].Phase;
+                if (!phases.Contains(phase))
                 {
-                    stage.Shutdown();
+                    phases.Add(phase);
                 }
-                catch (Exception exception)
+            }
+
+            phases.Sort();
+
+            // 相位降序;同相位内按登记逆序
+            for (int p = phases.Count - 1; p >= 0; p--)
+            {
+                int phase = phases[p];
+                for (int i = StageList.Count - 1; i >= 0; i--)
                 {
-                    LogManager.Error(LogCategories.Bootstrap, "阶段 {0} 的 Shutdown 抛异常，已跳过：{1}",
-                        stage.GetType().Name, exception);
+                    if (StageList[i].Phase == phase)
+                    {
+                        ShutdownStage(StageList[i]);
+                    }
                 }
             }
         }
@@ -217,6 +232,22 @@ namespace XFramework.XBootstrap
             }
 
             return pipeline;
+        }
+
+        /// <summary>
+        /// 清理单个阶段：异常隔离在阶段边界上（一个模块的清理问题不得阻断其余模块）。
+        /// </summary>
+        private static void ShutdownStage(IBootstrapStage stage)
+        {
+            try
+            {
+                stage.Shutdown();
+            }
+            catch (Exception exception)
+            {
+                LogManager.Error(LogCategories.Bootstrap, "阶段 {0} 的 Shutdown 抛异常，已跳过：{1}",
+                    stage.GetType().Name, exception);
+            }
         }
 
         #endregion

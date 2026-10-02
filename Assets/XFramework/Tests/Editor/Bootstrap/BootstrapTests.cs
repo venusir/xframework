@@ -13,7 +13,7 @@ namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
     /// 启动引导模块测试：登记语义、相位分组执行、同相位并行、失败与取消的<b>抛出</b>语义、
-    /// 以及「逆登记顺序清理 + 清理异常隔离」。
+    /// 以及「按执行序逆序清理 + 清理异常隔离」。
     /// <para>用纯 C# 假阶段驱动——不依赖任何具体模块，也不依赖节点系统。</para>
     /// </summary>
     class BootstrapTests
@@ -270,12 +270,12 @@ namespace Venusy609.Xframework.Editor.Tests
         #region 清理
 
         [Test]
-        public void Shutdown_RunsInReverseRegistrationOrder()
+        public void Shutdown_SamePhase_RunsInReverseRegistrationOrder()
         {
             var log = new List<string>();
             var a = NewStage("a", 0, log);
-            var b = NewStage("b", 3, log);
-            var c = NewStage("c", 4, log);
+            var b = NewStage("b", 0, log);
+            var c = NewStage("c", 0, log);
             c.ShutdownLog = log;
             b.ShutdownLog = log;
             a.ShutdownLog = log;
@@ -286,7 +286,30 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Bootstrap.Shutdown();
 
-            CollectionAssert.AreEqual(new[] { "c", "b", "a" }, log, "后初始化的先清理");
+            CollectionAssert.AreEqual(new[] { "c", "b", "a" }, log,
+                "同相位内并行执行本无严格先后，取登记逆序作为确定性次序");
+        }
+
+        [Test]
+        public void Shutdown_OutOfOrderRegistration_RunsInReversePhaseOrder()
+        {
+            var log = new List<string>();
+            var p4 = NewStage("p4", 4, log);
+            var p0 = NewStage("p0", 0, log);
+            var p3 = NewStage("p3", 3, log);
+            p4.ShutdownLog = log;
+            p0.ShutdownLog = log;
+            p3.ShutdownLog = log;
+
+            // 故意乱序登记：执行序由 Phase 决定而非登记序（见 RunAsync_ExecutesStagesByPhaseOrder），
+            // 清理序必须是执行序的逆序，而不是登记序的逆序
+            Bootstrap.Register(p4);
+            Bootstrap.Register(p0);
+            Bootstrap.Register(p3);
+
+            Bootstrap.Shutdown();
+
+            CollectionAssert.AreEqual(new[] { "p4", "p3", "p0" }, log, "清理序应为执行序的逆序（相位降序）");
         }
 
         [Test]
