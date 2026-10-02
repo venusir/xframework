@@ -508,6 +508,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **`ReactiveProperty<T>` 的相等比较器可注入**（上一轮清点记下的三项之一）：去重（相同值不通知）此前写死 `EqualityComparer<T>.Default`——浮点容差、大小写不敏感等自定义相等语义做不到，而这正是本模块对外的行为承诺之一。新增构造重载 `(T initialValue, IEqualityComparer<T> comparer)`（原 `(T)` 重载签名不变，转调新重载），`Select` 增加可选 `comparer` 参数（派生值的去重此前写死默认比较器）；传 `null` 等价默认。用例 3 条（容差比较器去重 / 默认比较器对照 / Select 派生同理），红基线为编译级
 
+### Changed
+
+- **【破坏性】`GameLauncher` 拆为抽象底座 + `DefaultGameLauncher` 默认实现**（用户提议：「把它变为虚基类，目前的实现挪到子类作为默认实现，留下 `ConfigureStages` 让第三方自己实现」；命名按用户裁定**交换**——抽象的那个取 `GameLauncher`，具体的叫 `DefaultGameLauncher`）。**底座**只留生命周期接线（`Awake` = `DontDestroyOnLoad` + 调登记；`Start` = `async void` + 异常收敛；`OnDestroy` = `Shutdown`）与 `protected abstract void ConfigureStages()`，**不带任何配置字段**；**默认实现**装原八个 `[SerializeField]` 字段与原来的 `ConfigureStages` 方法体（`virtual` → `override`，保持非 sealed）。拆的理由：**Unity 无法隐藏继承来的序列化字段**，所以「完全自控的人 Inspector 里干净」只能靠类型层次保证；`abstract` 顺带让编译器兜住「忘了覆写」，杜绝「以为在自控、其实默认组合悄悄跑了」的中间态。**迁移（一行为记）**：原先 `class MyLauncher : GameLauncher` 现在**编译不过**（继承到抽象成员未实现）——① 想要字段面就改继承 `DefaultGameLauncher`；② 想要完全自控就在 `GameLauncher` 上实现 `ConfigureStages`（Inspector 里零字段）。全仓**无任何场景/预制体挂过它**（按名字与脚本 GUID 双查零命中），故不涉及存量序列化数据；`LogCategories.GameLauncher` 是字符串分类，与类型名无关，不动
+
 ### Fixed
 
 - **全模块配置面审计：修正 12 处「文档与代码不符」+ 补齐路径/目录视图**（用户要求「审计所有模块的入口，列出可自定义实现的模块与可配置项」）。三个探查代理逐行回代码核对了 19 个模块，对照物是顶层 README 的两张表：新增 **「可替换的实现一览」**（19 个模块，写「无」的 7 个附代码原话理由）与 **「路径与目录」**（默认值 / 能否改 / 改的入口，含 8 处不可改的内部字面量），「可配置项一览」逐行修正并按「能持久改变行为的选择」口径补漏（纯操作不列）。**12 处修正里最实质的四条**：① Settings 说「四个注入点」——`IAsyncSettingsStore` 其实是 store 上的**能力探测**，不是独立注入重载；② File 说「初始化或运行时接线」——`IFileProvider` 是**一次性**的（换它须先 `Destroy()`）；③ Pool 的「首次建池时消费」只对 `PoolManager.Configure<T>` 成立，四个集合池是「**无活跃实例时**生效」；④ Localization README 说「换数据源只能替换 `ILocalizationManager`」——而 `SwitchLanguageAsync` 是门面方法、直接 new 内部 loader，**换实现换不掉那条加载路径**。其余：Asset 的字段面覆盖范围（是第 1/2/4 项）、Update 的 `timeMode`（`RegisterFixed` 没有）、Lock 的 `AutoReleaseOnDestroy`（还控制已销毁主体的准入门禁，XML 同步补齐）、Reactive 的「无配置点」（有 comparer）、Input 漏的 `InputBootstrapStage(IInputProvider)`、UI 的 `TipAssetPath` 是**静态属性**、`.tmp`/`.bak` 是 **`public const`**
