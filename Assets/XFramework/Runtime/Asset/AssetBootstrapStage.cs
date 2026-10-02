@@ -12,6 +12,31 @@ namespace XFramework.XAsset
     /// </summary>
     public sealed class AssetBootstrapStage : IBootstrapStage
     {
+        #region Private Fields
+
+        private readonly AssetInitOptions _options;
+
+        #endregion
+
+        #region Construction
+
+        /// <summary>构造引导阶段。</summary>
+        /// <param name="options">资源初始化选项（包名 / 运行模式 / 远端服务 / 解密服务 / 低内存回收）；
+        /// <c>null</c> 表示用默认值（默认包 + 离线模式）。</param>
+        public AssetBootstrapStage(AssetInitOptions options = null)
+        {
+            _options = options;
+        }
+
+        #endregion
+
+        #region Internal
+
+        /// <summary>本阶段携带的选项（测试缝，用于断言字段面真的注入了）。</summary>
+        internal AssetInitOptions Options => _options;
+
+        #endregion
+
         #region IBootstrapStage
 
         /// <summary>Phase = <see cref="BootstrapPhases.Asset"/>（0，最早）。</summary>
@@ -37,7 +62,7 @@ namespace XFramework.XAsset
             }
 
             context.SetDescription("Initializing Asset Manager...");
-            await AssetManager.InitializeAsync(options: null,
+            await AssetManager.InitializeAsync(options: _options,
                                                progress: new AssetInitProgressRelay(context),
                                                cancellationToken: cancellationToken);
 

@@ -25,6 +25,7 @@ namespace XFramework.XLocalization
 
         private readonly string _defaultLanguage;
         private readonly Dictionary<string, string> _initData;
+        private readonly TextAsset _table;
 
         /// <summary>
         /// 本阶段是否**确实**完成了初始化。<see cref="Shutdown"/> 据此决定要不要销毁——
@@ -44,6 +45,22 @@ namespace XFramework.XLocalization
         {
             _defaultLanguage = defaultLanguage;
             _initData = data;
+        }
+
+        /// <summary>
+        /// 构造引导阶段，语言表用场景/Inspector 里直接引用的 <see cref="TextAsset"/>（扁平 <c>{"key":"value"}</c> JSON，
+        /// 与资源地址加载的语言表同一种格式）。
+        /// <para><b>解析发生在 <see cref="ExecuteAsync"/> 里</b>而不是构造期：格式错误要沿引导管线的
+        /// 标准失败路径报出来（带阶段名与描述），而不是在场景唤醒时抛。</para>
+        /// <para><paramref name="table"/> 为 <c>null</c> 与 <c>data == null</c> 同一条静默降级路径
+        /// （本地化是可选模块，缺数据不该让整个启动失败）。</para>
+        /// </summary>
+        /// <param name="defaultLanguage">默认语言标识，如 <c>"zh_Hans"</c>、<c>"en"</c>。</param>
+        /// <param name="table">扁平 JSON 语言表；<c>null</c> 时执行期静默跳过初始化。</param>
+        public LocalizationBootstrapStage(string defaultLanguage, TextAsset table)
+            : this(defaultLanguage, data: null)
+        {
+            _table = table;
         }
 
         #endregion
@@ -68,8 +85,13 @@ namespace XFramework.XLocalization
         {
             context.SetDescription("Initializing localization...");
 
-            if (_initData == null)
+            // 两条数据来源：字典（直接注入）优先，否则解析 TextAsset。解析失败会抛——
+            // 那是格式错误，走引导流程的标准失败路径（异常原样上抛，由 StageExecution 置 Failed）
+            var data = _initData ?? (_table != null ? LanguageAssetLoader.ParseJson(_table.text) : null);
+
+            if (data == null)
             {
+                // 文案保持原样：走到这里必然 _initData 与 _table 都是 null，原句仍然属实，且既有用例正则钉着它
                 LogManager.Warning(LogCategories.LocalizationBootstrapStage,
                     "ExecuteAsync called but _initData is null. Skipping initialization.");
                 context.SetProgress(1f);
@@ -80,7 +102,7 @@ namespace XFramework.XLocalization
             // 先看有没有已经被初始化（使用方手动 Initialize / SetInstance，或上一次运行留下的实例）——
             // 那种情况下 Initialize 会告警并忽略，本阶段就不算「初始化过」，Shutdown 时也不该去销毁它
             var alreadyInitialized = LocalizationManager.IsInitialized;
-            LocalizationManager.Initialize(_defaultLanguage, _initData);
+            LocalizationManager.Initialize(_defaultLanguage, data);
             _initializedByThisStage = !alreadyInitialized;
 
             context.SetProgress(1f);

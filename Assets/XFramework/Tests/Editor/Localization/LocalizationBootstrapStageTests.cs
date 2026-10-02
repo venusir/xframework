@@ -42,6 +42,59 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ExecuteAsync_WithTextAssetTable_ParsesAndInitializes()
+        {
+            var table = new TextAsset("{\"hello\":\"你好\"}");
+            try
+            {
+                var stage = new LocalizationBootstrapStage("zh_Hans", table);
+                var ctx = new PipelineStageContext();
+
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+                Assert.AreEqual(PipelineStageState.Completed, ctx.State);
+                Assert.AreEqual("你好", LocalizationManager.Get("hello"),
+                    "TextAsset 重载应走与资源加载同一种扁平 JSON 解析");
+            }
+            finally
+            {
+                LocalizationManager.Destroy();
+                Object.DestroyImmediate(table);
+            }
+        }
+
+        [Test]
+        public void ExecuteAsync_WithMalformedTable_Throws()
+        {
+            var table = new TextAsset("{ not json");
+            try
+            {
+                var stage = new LocalizationBootstrapStage("zh_Hans", table);
+
+                Assert.Throws<System.InvalidOperationException>(
+                    () => stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult(),
+                    "格式错误必须抛（走引导失败路径），而不是静默降级");
+            }
+            finally
+            {
+                LocalizationManager.Destroy();
+                Object.DestroyImmediate(table);
+            }
+        }
+
+        [Test]
+        public void ExecuteAsync_WithNullTable_DegradesLikeNullData()
+        {
+            var stage = new LocalizationBootstrapStage("zh_Hans", (TextAsset)null);
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[LocalizationBootstrapStage\] ExecuteAsync called but _initData is null"));
+
+            var ctx = new PipelineStageContext();
+            stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Completed, ctx.State, "表为 null 与 data 为 null 同一条静默降级路径");
+        }
+
+        [Test]
         public void ExecuteAsync_WithInitData_Completes()
         {
             var stage = new LocalizationBootstrapStage("zh_Hans", new Dictionary<string, string> { { "title", "你好" } });

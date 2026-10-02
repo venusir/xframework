@@ -47,10 +47,14 @@ namespace Venusy609.Xframework.Editor.Tests
         /// <summary>最近一次收到的初始化进度上报接收方(转发断言用)。</summary>
         public IProgress<AssetInitReport> LastInitProgress;
 
+        /// <summary>最近一次收到的初始化选项（断言「阶段携带的 options 真的传下去了」用）。</summary>
+        public AssetInitOptions LastInitOptions;
+
         public UniTask InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             InitCallCount++;
             LastInitProgress = progress;
+            LastInitOptions = options;
             return InitTask;
         }
 

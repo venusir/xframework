@@ -120,7 +120,7 @@ namespace XFramework.XLocalization
         /// 为什么不用 <see cref="JsonUtility"/>：它要求顶层根对象匹配一个可序列化的类，而语言表的键是动态的。
         /// 为什么不用 Newtonsoft.Json / System.Text.Json：本模块自述「零外部依赖」是有意的取舍，见 README「设计取舍」。
         /// </remarks>
-        private static Dictionary<string, string> ParseJson(string json)
+        internal static Dictionary<string, string> ParseJson(string json)
         {
             var result = new Dictionary<string, string>();
             if (string.IsNullOrWhiteSpace(json))

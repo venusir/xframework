@@ -64,6 +64,31 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AssetBootstrapStage_WithOptions_PassesThemToInitialize()
+        {
+            AssetManager.Destroy();
+            var fake = new FakeAssetManager();
+            AssetManager.ImplFactory = () => fake;
+            try
+            {
+                var options = new AssetInitOptions { PackageName = "MyPack" };
+                var stage = new AssetBootstrapStage(options);
+                var ctx = new PipelineStageContext();
+
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+                Assert.AreSame(options, stage.Options, "字段面注入的应该就是同一个实例");
+                Assert.AreSame(options, fake.LastInitOptions,
+                    "阶段携带的 options 必须真的传下去——否则字段面就是摆设");
+            }
+            finally
+            {
+                AssetManager.ImplFactory = null;
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
         public void DataBootstrapStage_CompletesSynchronously()
         {
             var stage = new DataBootstrapStage();
