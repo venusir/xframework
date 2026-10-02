@@ -25,10 +25,17 @@ namespace XFramework.XInput.Tests
             InputManager.Destroy();
         }
 
+        /// <summary>
+        /// 清理：先销毁框架门面，再交回 <see cref="InputTestFixture"/> 复位输入系统。
+        /// <para><b>必须 override 而不是隐藏</b>：基类的 <c>TearDown</c> 带 <c>[TearDown]</c> 且负责把
+        /// <c>InputSystem</c> 复位到测试前的状态——只隐藏不调用，后来的 fixture 会继承到本 fixture
+        /// 留下的设备与状态（原实现靠 NUnit「派生先、基类后」双双调用侥幸成立，但编译期一直报 CS0114）。</para>
+        /// </summary>
         [TearDown]
-        public void TearDown()
+        public override void TearDown()
         {
             InputManager.Destroy();
+            base.TearDown();
         }
 
         #endregion
