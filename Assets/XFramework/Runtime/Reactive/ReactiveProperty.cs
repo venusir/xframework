@@ -14,7 +14,8 @@ namespace XFramework.XReactive
     /// <remarks>
     /// 行为契约:
     /// - <see cref="Subscribe"/> 订阅时立即同步回调当前值
-    /// - 设置相同值不通知(去重语义)
+    /// - 设置相同值不通知(去重语义；「相同」默认按 <see cref="EqualityComparer{T}.Default"/>，
+    ///   可经构造重载注入自定义比较器)
     /// - <see cref="Dispose"/> 后<b>读取</b> <see cref="Value"/> 仍返回最后持有的值(宽容读取,与
     ///   <see cref="ReadOnlyReactiveProperty{T}"/> 一致);<b>写入</b> <see cref="Value"/> 与再次
     ///   <see cref="Subscribe"/> 抛 <see cref="ObjectDisposedException"/>
@@ -24,6 +25,10 @@ namespace XFramework.XReactive
         #region Private Fields
 
         private readonly IEventStream<T> _stream = EventStream.Create<T>();
+
+        /// <summary>去重比较器。默认 <see cref="EqualityComparer{T}.Default"/>，可经构造重载注入。</summary>
+        private readonly IEqualityComparer<T> _comparer;
+
         private T _value;
         private bool _disposed;
 
@@ -44,8 +49,21 @@ namespace XFramework.XReactive
         /// </summary>
         /// <param name="initialValue">初始值。</param>
         public ReactiveProperty(T initialValue)
+            : this(initialValue, null)
+        {
+        }
+
+        /// <summary>
+        /// 创建响应式属性并指定初始值与<b>相等比较器</b>。
+        /// <para>「相同值不通知」默认用 <see cref="EqualityComparer{T}.Default"/>；浮点容差、
+        /// 大小写不敏感等自定义相等语义从这里注入。传 <c>null</c> 等价于默认比较器。</para>
+        /// </summary>
+        /// <param name="initialValue">初始值。</param>
+        /// <param name="comparer">相等比较器；<c>null</c> 用默认比较器。</param>
+        public ReactiveProperty(T initialValue, IEqualityComparer<T> comparer)
         {
             _value = initialValue;
+            _comparer = comparer ?? EqualityComparer<T>.Default;
         }
 
         #endregion
@@ -70,8 +88,8 @@ namespace XFramework.XReactive
             set
             {
                 ThrowIfDisposed();
-                // 去重语义:相同值不通知
-                if (EqualityComparer<T>.Default.Equals(_value, value))
+                // 去重语义:相同值不通知(比较器可经构造重载注入)
+                if (_comparer.Equals(_value, value))
                     return;
                 _value = value;
                 _stream.Emit(value);

@@ -32,6 +32,10 @@ namespace XFramework.XReactive
         #region Private Fields
 
         private readonly IEventStream<T> _stream = EventStream.Create<T>();
+
+        /// <summary>映射结果去重比较器。默认 <see cref="EqualityComparer{T}.Default"/>，可经 <c>Select</c> 注入。</summary>
+        private IEqualityComparer<T> _comparer = EqualityComparer<T>.Default;
+
         private IDisposable _sourceSub;
         private T _value;
         private bool _disposed;
@@ -53,14 +57,16 @@ namespace XFramework.XReactive
         /// <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的说明。</para>
         /// </summary>
         internal static ReadOnlyReactiveProperty<TResult> Create<TSource, TResult>(
-            IReactiveProperty<TSource> source, Func<TSource, TResult> selector)
+            IReactiveProperty<TSource> source, Func<TSource, TResult> selector,
+            IEqualityComparer<TResult> comparer = null)
         {
             if (source == null) throw new ArgumentNullException(nameof(source));
             if (selector == null) throw new ArgumentNullException(nameof(selector));
 
             var result = new ReadOnlyReactiveProperty<TResult>
             {
-                _value = selector(source.Value)
+                _value = selector(source.Value),
+                _comparer = comparer ?? EqualityComparer<TResult>.Default,
             };
             // 源订阅:值变化时映射并推送(源自身已去重,这里对映射结果再去重一次)
             result._sourceSub = source.Subscribe(srcValue => result.Set(selector(srcValue)));
@@ -135,8 +141,8 @@ namespace XFramework.XReactive
         {
             if (_disposed)
                 return;
-            // 映射结果去重:与当前值相同不通知
-            if (EqualityComparer<T>.Default.Equals(_value, value))
+            // 映射结果去重:与当前值相同不通知(比较器可经 Select 注入)
+            if (_comparer.Equals(_value, value))
                 return;
             _value = value;
             _stream.Emit(value);
@@ -189,6 +195,10 @@ namespace XFramework.XReactive
         /// <typeparam name="TResult">结果值类型。</typeparam>
         /// <param name="source">源响应式属性。</param>
         /// <param name="selector">值映射函数，必须是纯函数（构造时会被调用两次）。</param>
+        /// <param name="comparer">
+        /// 派生值去重的相等比较器；<c>null</c> 用 <see cref="EqualityComparer{T}.Default"/>。
+        /// 例：<c>level.Select(lv => lv * 0.1f, FloatComparer.Tolerance(0.01f))</c>。
+        /// </param>
         /// <returns>新的只读响应式属性。它是 <see cref="IDisposable"/>，需交给生命周期所有者释放。</returns>
         /// <exception cref="ArgumentNullException">source 或 selector 为 null 时抛出。</exception>
         /// <exception cref="ObjectDisposedException"><paramref name="source"/> 已释放时抛出——
@@ -196,9 +206,10 @@ namespace XFramework.XReactive
         /// <exception cref="Exception">selector 在构造期抛出的异常原样上抛。</exception>
         public static ReadOnlyReactiveProperty<TResult> Select<TSource, TResult>(
             this IReactiveProperty<TSource> source,
-            Func<TSource, TResult> selector)
+            Func<TSource, TResult> selector,
+            IEqualityComparer<TResult> comparer = null)
         {
-            return ReadOnlyReactiveProperty<TResult>.Create(source, selector);
+            return ReadOnlyReactiveProperty<TResult>.Create(source, selector, comparer);
         }
     }
 }

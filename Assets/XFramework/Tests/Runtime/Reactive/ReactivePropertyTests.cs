@@ -51,6 +51,72 @@ namespace XFramework.XReactive.Tests
             CollectionAssert.AreEqual(new[] { 1 }, calls, "设置相同值不通知(去重语义)");
         }
 
+        /// <summary>自定义相等比较器：容差内的浮点变化不再触发通知。</summary>
+        [Test]
+        public void ValueSet_WithToleranceComparer_DedupsWithinTolerance()
+        {
+            var rp = new ReactiveProperty<float>(1f, new ToleranceComparer(0.01f));
+            var calls = new List<float>();
+            rp.Subscribe(calls.Add);
+
+            rp.Value = 1.005f;   // 容差内 → 去重
+            rp.Value = 1.5f;     // 超容差 → 通知
+
+            CollectionAssert.AreEqual(new[] { 1f, 1.5f }, calls,
+                "比较器决定「相同」——容差内的浮点变化应被去重");
+        }
+
+        /// <summary>上一条的对照：默认比较器没有容差语义，同一情形会通知。</summary>
+        [Test]
+        public void ValueSet_WithoutComparer_NotifiesWithinTolerance()
+        {
+            var rp = new ReactiveProperty<float>(1f);
+            var calls = new List<float>();
+            rp.Subscribe(calls.Add);
+
+            rp.Value = 1.005f;
+
+            CollectionAssert.AreEqual(new[] { 1f, 1.005f }, calls, "默认比较器逐位比较，没有容差");
+        }
+
+        /// <summary>派生值的去重同样按注入的比较器（<c>Select</c> 的第三个参数）。</summary>
+        [Test]
+        public void Select_WithComparer_DedupsDerivedValue()
+        {
+            var source = new ReactiveProperty<float>(1f);
+            var derived = source.Select(v => v, new ToleranceComparer(0.01f));
+            try
+            {
+                var calls = new List<float>();
+                derived.Subscribe(calls.Add);
+
+                source.Value = 1.004f;   // 源通知；派生值按容差去重
+                source.Value = 1.9f;     // 超容差 → 派生值通知
+
+                CollectionAssert.AreEqual(new[] { 1f, 1.9f }, calls,
+                    "派生值的去重应按 Select 注入的比较器");
+            }
+            finally
+            {
+                derived.Dispose();
+            }
+        }
+
+        /// <summary>只被 <c>Equals</c> 用到的容差比较器（框架不把它当字典键，散列随意）。</summary>
+        private sealed class ToleranceComparer : IEqualityComparer<float>
+        {
+            private readonly float _tolerance;
+
+            public ToleranceComparer(float tolerance)
+            {
+                _tolerance = tolerance;
+            }
+
+            public bool Equals(float x, float y) => Math.Abs(x - y) <= _tolerance;
+
+            public int GetHashCode(float obj) => 0;
+        }
+
         [Test]
         public void Unsubscribe_StopsNotifications()
         {

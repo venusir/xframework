@@ -4,7 +4,7 @@
 
 XFramework 响应式模块提供**响应式属性**。基于 `XFramework.XEvent` 模块的事件流引擎实现,可在任意 C# 类中使用。
 
-- `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)
+- `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)。「相同」默认按 `EqualityComparer<T>.Default` 判定,**可经构造重载注入自定义比较器**（浮点容差、大小写不敏感等）；`Select` 派生值的去重同样可经其重载注入
 - `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)。同样实现 `IReactiveProperty<T>`(只读接口本无 setter,故不因此获得写入能力),可直接交给收该接口的绑定 API,也可继续 `Select` 做链式映射
 - `IReactivePropertyWriter<T>`:「确实需要写入」时按需索取的能力接口(继承 `IReactiveProperty<T>`,只加 `TryWriteValue`)。双向绑定 API 收它而非具体类,故任何第三方实现都能接入——只读接口本身不因此多出 setter
 - 全局消息总线在 Message 模块(`XFramework.XMessage.MessageManager`),不在此模块
@@ -125,7 +125,7 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 
 - **事件流驱动** — 基于 `XFramework.XEvent` 自研事件流引擎(锁 + 快照线程模型、订阅节点池)
 - **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
-- **相同值去重** — 设置相同值不通知。**这是本模块两个类型的行为,不是接口保证**(见「接口承诺到哪为止」)
+- **相同值去重** — 设置相同值不通知。「相同」默认按 `EqualityComparer<T>.Default`，可经 `ReactiveProperty<T>` 的构造重载 / `Select` 的 `comparer` 参数注入自定义比较器（浮点容差等）。**这是本模块两个类型的行为,不是接口保证**(见「接口承诺到哪为止」)
 - **读宽容、写严格** — 已释放后读取 `Value` 仍返回最后持有的值（与 `ReadOnlyReactiveProperty<T>` 一致）；写入 `Value` 与订阅则抛 `ObjectDisposedException`。读是只读操作、不改变任何状态,让它抛只会把「先 Dispose 再读一次收尾值」变成必须 try/catch 的地雷;写是编程错误,应当被立刻发现。**同样只是本模块类型的行为**——`SettingRef.Value` 在设置类型注销后照抛
 - **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
 - **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
