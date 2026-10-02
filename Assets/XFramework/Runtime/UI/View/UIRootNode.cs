@@ -95,7 +95,10 @@ namespace XFramework.XUI.View
         /// </summary>
         public static UIRootNode FindInScene()
         {
-            return Object.FindObjectOfType<UIRootNode>();
+            // Unity 6 的推荐路径是 FindAnyObjectByType：FindObjectOfType 与 FindFirstObjectByType 都因
+            // 「依赖 instance ID 排序」被过时。它不承诺取到哪一个——但单根是既有设计（见 OnDestroy 注释），
+            // 场景里至多一个 UIRootNode 时无差别。
+            return Object.FindAnyObjectByType<UIRootNode>();
         }
 
         /// <summary>

@@ -207,7 +207,7 @@ XFramework 提供一套完整的 UI 管理方案，包括面板生命周期管�
 
 ```csharp
 // 在场景中挂载 UIRootNode，然后初始化
-var uiRoot = FindFirstObjectByType<UIRootNode>();
+var uiRoot = FindAnyObjectByType<UIRootNode>();
 if (uiRoot != null)
 {
     UIManager.Initialize(uiRoot.transform);
