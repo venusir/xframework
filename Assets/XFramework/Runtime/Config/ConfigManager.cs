@@ -114,6 +114,42 @@ namespace XFramework.XConfig
 
         #endregion
 
+        #region Public API — 诊断回读
+
+        // 这两个成员刻意不进 IConfigManager：主接口是对第三方开放的替换点，加成员会让所有实现者编译不过。
+        // 回读只对内置实现成立——门面按 ConfigManagerImpl 探测，注入其它实现时一律返回空。
+        // （与 LogManager 的回读族同一形状。）
+
+        /// <summary>
+        /// 进行中的加载任务数（并发调用共享同一个任务）。
+        /// <b>只对内置实现成立</b>：注入自定义 <see cref="IConfigManager"/> 时恒为 0。
+        /// </summary>
+        public static int InFlightLoadCount
+            => _instance is ConfigManagerImpl impl ? impl.InFlightLoadCount : 0;
+
+        /// <summary>
+        /// 把已加载的表与全局配置写入缓冲区（先清空），返回条数。
+        /// <para>回答「这个项目加载了哪些配置表、各自多少行、从哪个路径来」——此前只有按类型问的
+        /// <c>IsLoaded&lt;T&gt;()</c>，不知道类型就问不出来。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；顺序未定义。注入自定义实现时返回 0（缓冲区被清空）。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的条目数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyLoaded(List<ConfigLoadedInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            if (_instance is ConfigManagerImpl impl)
+                return impl.CopyLoaded(buffer);
+
+            buffer.Clear();
+            return 0;
+        }
+
+        #endregion
+
         #region Public API — Preload
 
         /// <summary>

@@ -545,6 +545,41 @@ namespace XFramework.XSettings
         }
 
         #endregion
+
+        #region 诊断回读
+
+        // 表是 Dictionary<Type, object>、ISettingsManager<T> 泛型不变，遍历得走 ISettingsDiagnostics
+        // 这条非泛型缝——与 ISettingsDirtyFlush（按需落盘）是同一个理由、同一种形状。
+        // 门面成员不进任何公开接口：它们只服务诊断。
+
+        /// <summary>已注册的设置类型数量。诊断用。</summary>
+        public static int RegisteredTypeCount => Managers.Count;
+
+        /// <summary>
+        /// 把所有已注册的设置类型写入缓冲区（先清空），返回条数。
+        /// <para>回答「注册了哪些设置类型、谁还挂着未提交的改动」。<c>IsDirty</c> 的口径与
+        /// <c>ISettingsManager&lt;T&gt;.IsDirty</c> 逐字一致（有改动待提交，<b>不等于已落盘</b>）。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；顺序未定义。不要放进每帧路径。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的类型数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyRegisteredTypes(List<SettingsTypeInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            foreach (object manager in Managers.Values)
+            {
+                if (manager is ISettingsDiagnostics info)
+                    buffer.Add(new SettingsTypeInfo(info.SettingsType, info.IsDirty));
+            }
+
+            return buffer.Count;
+        }
+
+        #endregion
     }
 
     /// <summary>
@@ -566,5 +601,21 @@ namespace XFramework.XSettings
         /// 它是兜底路径，不该在退出或切后台流程里制造失败。
         /// </summary>
         void SaveIfDirty();
+    }
+
+    /// <summary>
+    /// 诊断回读的非泛型视图，供门面遍历全部已注册类型使用。
+    /// <para>走这条缝的理由与 <see cref="ISettingsDirtyFlush"/> 逐字相同：管理器的表是
+    /// <c>Dictionary&lt;Type, object&gt;</c>，而 <see cref="ISettingsManager{T}"/> 泛型不变。
+    /// <c>IsDirty</c> 由公开属性隐式满足，这里只补一个「我是哪个类型」。</para>
+    /// <para>由 <see cref="SettingsManagerImpl{T}"/> 显式实现，不出现在任何公开面上。</para>
+    /// </summary>
+    internal interface ISettingsDiagnostics
+    {
+        /// <summary>本管理器对应的设置类型。</summary>
+        Type SettingsType { get; }
+
+        /// <summary>是否有未提交的改动（语义同 <see cref="ISettingsManager{T}.IsDirty"/>）。</summary>
+        bool IsDirty { get; }
     }
 }

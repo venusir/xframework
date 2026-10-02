@@ -19,6 +19,15 @@ namespace XFramework.XPool
         /// </summary>
         /// <param name="item">要归还的实例</param>
         void ReturnUntyped(object item);
+
+        /// <summary>闲置实例数。诊断投影用（<see cref="Pool{T}"/> 的公开属性隐式实现它）。</summary>
+        int CountInactive { get; }
+
+        /// <summary>活跃实例数。诊断投影用。</summary>
+        int CountActive { get; }
+
+        /// <summary>累计创建数。诊断投影用。</summary>
+        int CountAll { get; }
     }
 
     /// <summary>

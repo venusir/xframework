@@ -178,6 +178,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 | `Reset<T>()` | 重置为默认值（走 `defaultFactory`）并删除文件 |
 | `IsDirty<T>()` / `MarkDirty<T>()` | 查询 / 手动标记「有未提交改动」 |
 | `SaveAllDirty()` | 把所有脏了的类型一次写盘（显式时机用；不看 `SaveOnPause`） |
+| `RegisteredTypeCount` / `CopyRegisteredTypes(List<SettingsTypeInfo>)` | 已注册类型的清单（类型 + 是否有未提交改动，诊断）。`IsDirty` 的口径与 `IsDirty<T>()` 一致：有改动待提交，**不等于已落盘** |
 | `Observe<T>(Action<T>)` | 订阅**对象被整体替换**（订阅时立即回调） |
 | `GetStore<T>()` / `SetStore<T>(store)` | 获取 / 替换存储后端 |
 | `GetMigrator<T>()` / `SetMigrator<T>(migrator)` | 获取 / 注册格式迁移钩子 |

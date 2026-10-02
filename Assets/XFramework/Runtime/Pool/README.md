@@ -65,6 +65,8 @@ class BulletSystem
 | `PoolManager.GetPool<T>()`                      | 获取 IPool<T> 实例（用于高级操作） |
 | `PoolManager.RemovePool<T>()`                   | 移除并清空指定类型的池             |
 | `PoolManager.ClearAll()`                        | 清空闲置实例（池注册与配置保留，可重复调用，切场景安全） |
+| `PoolManager.PoolCount`                         | 已创建的池数量（诊断） |
+| `PoolManager.CopyPoolStats(List<PoolStats>)`    | 各池的规模快照（闲置/活跃/累计，诊断；只反映已创建的池） |
 
 ## 配置
 

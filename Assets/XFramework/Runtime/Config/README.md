@@ -353,6 +353,15 @@ private void OnConfigChanged(Type type)
 | `GetGlobal<T>()`                | 获取 Global 配置，未加载时抛异常 |
 | `TryGetGlobal<T>(out T config)` | 安全获取 Global 配置             |
 
+### 诊断回读
+
+| 方法 | 说明 |
+| ---- | ---- |
+| `InFlightLoadCount` | 进行中的加载任务数（并发调用共享同一任务） |
+| `CopyLoaded(List<ConfigLoadedInfo>)` | 已加载的表 / 全局配置清单（类型、种类、条目数、资源路径），回答「这个项目加载了哪些配置」 |
+
+> 两者**只对内置实现成立**：`SetInstance` 注入自定义 `IConfigManager` 后一律返回空/0——那类实现不提供回读。它们**刻意不进 `IConfigManager`**（给主接口加成员会让所有实现者编译不过）。
+
 ### 索引
 
 | 类型                                              | 说明                                                              |

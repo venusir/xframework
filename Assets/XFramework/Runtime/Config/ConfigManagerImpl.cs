@@ -746,5 +746,38 @@ namespace XFramework.XConfig
         }
 
         #endregion
+
+        #region Diagnostics — 回读
+
+        /// <summary>进行中的加载任务数（并发调用共享同一个任务）。诊断回读用。</summary>
+        internal int InFlightLoadCount => _inFlightLoads.Count;
+
+        /// <summary>
+        /// 把已加载的表与全局配置写入缓冲区（先清空），返回条数。诊断回读用。
+        /// <para>表在前、全局配置在后；<b>顺序未定义</b>（字典遍历序）。非泛型可读是因为表的存储形态本就是
+        /// <see cref="IDictionary"/>、全局配置的存在性本就按类型记——不需要反射，也不需要动公开接口。</para>
+        /// </summary>
+        internal int CopyLoaded(List<ConfigLoadedInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+
+            foreach (KeyValuePair<Type, IDictionary> pair in _tables)
+                buffer.Add(new ConfigLoadedInfo(pair.Key, ConfigLoadKind.Table, pair.Value.Count, PathOf(pair.Key)));
+
+            foreach (KeyValuePair<Type, object> pair in _globals)
+                buffer.Add(new ConfigLoadedInfo(pair.Key, ConfigLoadKind.Global, 1, PathOf(pair.Key)));
+
+            return buffer.Count;
+        }
+
+        private string PathOf(Type type)
+        {
+            return _assetPaths.TryGetValue(type, out string path) ? path : null;
+        }
+
+        #endregion
     }
 }

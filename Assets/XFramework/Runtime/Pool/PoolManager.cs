@@ -249,6 +249,39 @@ namespace XFramework.XPool
 
         #endregion
 
+        #region Public API — Diagnostics
+
+        /// <summary>已创建的对象池数量（池是首次 <c>Get&lt;T&gt;()</c> 时惰性建的）。诊断用。</summary>
+        public static int PoolCount => _pools.Count;
+
+        /// <summary>
+        /// 把所有已创建池的规模写入缓冲区（先清空），返回条数。
+        /// <para>回答「池在不在漏」：<c>CountActive</c> 只增不减通常意味着有实例被取走后再没归还。</para>
+        /// <para><b>诊断接口</b>：低频调用；行序未定义（字典遍历序）。不要放进每帧路径。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的池数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyPoolStats(List<PoolStats> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+
+            // 池表是 Dictionary<Type, object>，value 的编译期类型是 Pool<T>——经内部缝 IUntypedPool
+            // 才能不看泛型参数地读规模（Pool<T> 的三个公开属性隐式实现了它，池本身零改动）
+            foreach (KeyValuePair<Type, object> pair in _pools)
+            {
+                if (pair.Value is IUntypedPool pool)
+                    buffer.Add(new PoolStats(pair.Key, pool.CountInactive, pool.CountActive, pool.CountAll));
+            }
+
+            return buffer.Count;
+        }
+
+        #endregion
+
         #region Internal
 
         /// <summary>

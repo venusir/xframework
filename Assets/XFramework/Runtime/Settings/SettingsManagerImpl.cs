@@ -15,7 +15,8 @@ namespace XFramework.XSettings
     /// <para>不会自动保存——调用方需显式调用 <see cref="Save"/> 来持久化。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
-    internal sealed class SettingsManagerImpl<T> : ISettingsManager<T>, ISettingsDirtyFlush where T : class, new()
+    internal sealed class SettingsManagerImpl<T> : ISettingsManager<T>, ISettingsDirtyFlush, ISettingsDiagnostics
+        where T : class, new()
     {
         #region Private Fields
 
@@ -309,6 +310,15 @@ namespace XFramework.XSettings
             _changedStream.Complete();
             _changedStream.Dispose();
         }
+
+        #endregion
+
+        #region ISettingsDiagnostics
+
+        /// <inheritdoc />
+        Type ISettingsDiagnostics.SettingsType => typeof(T);
+
+        // IsDirty 是公开属性，隐式满足 ISettingsDiagnostics.IsDirty，不重复实现
 
         #endregion
 

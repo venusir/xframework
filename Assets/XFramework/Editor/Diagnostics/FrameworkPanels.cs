@@ -21,6 +21,12 @@ namespace XFramework.Editor.Diagnostics
 
         private static readonly LogDiagnosticPanel LogPanel = new LogDiagnosticPanel();
 
+        private static readonly PoolDiagnosticPanel PoolPanel = new PoolDiagnosticPanel();
+
+        private static readonly ConfigDiagnosticPanel ConfigPanel = new ConfigDiagnosticPanel();
+
+        private static readonly SettingsDiagnosticPanel SettingsPanel = new SettingsDiagnosticPanel();
+
         #endregion
 
         #region Registration
@@ -30,6 +36,9 @@ namespace XFramework.Editor.Diagnostics
         {
             DiagnosticsManager.Register(UiPanel);
             DiagnosticsManager.Register(LogPanel);
+            DiagnosticsManager.Register(PoolPanel);
+            DiagnosticsManager.Register(ConfigPanel);
+            DiagnosticsManager.Register(SettingsPanel);
         }
 
         #endregion

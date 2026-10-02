@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Pool / Config / Settings 三组诊断回读 + 三个页签**：`PoolManager.CopyPoolStats(List<PoolStats>)` / `PoolCount`（新公开类型 `PoolStats`）、`ConfigManager.CopyLoaded(List<ConfigLoadedInfo>)` / `InFlightLoadCount`（新公开类型 `ConfigLoadedInfo` / `ConfigLoadKind`）、`SettingsManager.CopyRegisteredTypes(List<SettingsTypeInfo>)` / `RegisteredTypeCount`（新公开类型 `SettingsTypeInfo`）。三条取向：
+  **① 全部走门面专属成员，一个主接口都不动**。Pool 本就无接口；Settings 照 `ISettingsDirtyFlush` 先例加了一条同级内部缝 `ISettingsDiagnostics`（泛型不变的 manager 表遍历不了）；Config 直接读内置实现的 `IDictionary` 表——三者合起来让第三方的 `IConfigManager` / `ISettingsManager<T>` 实现零影响。
+  **② Pool 加的是内部缝的成员而不是新公开接口**：`IUntypedPool` 补三个只读属性，`Pool<T>` 的三个**已有公开属性**隐式实现它们，池本身零改动。没有加公开的非泛型 `IPool` 基接口——那会让用显式实现 `IPool<T>` 的第三方编译不过（CS0535）。
+  **③ `IsDirty` 不造第二份真相**：`SettingsTypeInfo.IsDirty` 的文档直接转述 `ISettingsManager<T>.IsDirty` 的口径（有改动待提交 ≠ 已落盘）。
 - **Log 页签与日志回读面**：`LogManager.CopyCategories(List<LogCategoryInfo>)` / `CopySinks(List<ILogSink>)` / `SinkCount` + 新公开类型 `LogCategoryInfo`（名称 / 生效档位 / 是否被覆盖）；Log 页签显示全局档位、分类表与输出端列表。三条取向：
   **① 不进 `ILogManager`，走门面探测内置实现**（照 `LogManager.CaptureTarget` 先例）：主接口是对第三方开放的替换点，加成员会让所有实现者编译不过（仓内就有 `ForeignLogManager` 这样的替身）。注入第三方实现时回读一律返回空，README 写明。
   **② 「生效档位」在调用时现算**（设了覆盖取覆盖、否则取当前全局档，在同一个快照里一起读）——因此改过全局档之后回读不会给出陈旧值，这条有专门用例锁定。
