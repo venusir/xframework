@@ -15,3 +15,7 @@ XSerialize/
 ├── NewtonsoftSerializer.cs # 内置实现（封装 Newtonsoft.Json，支持 Dictionary / 多态）
 └── README.md               # 本文件
 ```
+
+## 已评估未采纳与未决
+
+- **内置注册的静默覆盖**（未决，2026-10-02 全面清点时记下）：`Initialize` 幂等但会把内置两个序列化器注册进字典，于是「使用方在 `Initialize`（或 AutoInit）之前自行注册 `"json"`」会被**静默覆盖**——`Register` 的同名覆盖也是静默的。两种改法（覆盖时告警 / 内置注册可关）都是一行级，本轮未做，可再拾。注意覆盖 `"json"` 会同时改变 Save 与 Data 的落盘格式（两者都走 `Serializer.Default`）。

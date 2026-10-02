@@ -199,7 +199,7 @@ await Bootstrap.RunAsync();
 | `localization/lang_{0}`（语言表地址模板） | **可改**：`LocalizationManager.LanguageAssetPath`（公开属性，初始化后仍可改） | [Localization](Runtime/Localization/README.md) |
 | `{persistentDataPath}/XLog/xlog-*.jsonl`（日志落点与命名） | **可改**：`LogOptions.FileDirectory` 等；Release 默认不写文件 | [Log](Runtime/Log/README.md) |
 | `{persistentDataPath}/{类型短名}.json`（Settings 零配置落点） | **可改**：改用显式路径重载 | [Settings](Runtime/Settings/README.md) |
-| `{playerId}/slot_{N}.save`（存档布局）+ `.meta` 侧车 | **可改**：域根由 `FileDomain` 决定，槽位布局是 Save 的约定 | [Save](Runtime/Save/README.md) · [File](Runtime/File/README.md) |
+| `{playerId}/slot_{N}.save`（存档布局）+ `.meta` 侧车 | **可改，但代价高**：域根由 `FileDomain` 决定；槽位布局（`slot_` / `.save` / `.meta`）是默认实现写死的——要改只能整体替换 `ISaveManager`（`SaveManagerFactory`） | [Save](Runtime/Save/README.md) · [File](Runtime/File/README.md) |
 | `slot_` / `.save` / `.meta`、`xlog-` / `.jsonl`、`Layer_Tip` / `Layer_HUD`、PlayerLoop 三个系统名、`AudioChannels` 推荐通道名、File 的 `.tmp` / `.bak` | **内部实现细节，不是契约**——排查日志与磁盘现场时用得到，别写进你的代码 | 各模块 README 的「已知限制」 |
 
 ## UI 系统

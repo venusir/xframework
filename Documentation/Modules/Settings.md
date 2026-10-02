@@ -32,3 +32,7 @@ Runtime/Settings/
 ## 沿革与已否决形状
 
 - **README 里曾有两句错话，已订正**：门面**并非**没有同步内容读写（含 `WriteAllBytesAtomic` 在内的同步方法就在门面上，`FileManagerExtensions` 已退为兼容面），也**并非**拿不到一代备份（那是 `IAtomicFileProvider` 契约的一部分）——备份能力的真实限制是「异步形态 + 能力探测」，也就是 README 那三条理由里的第 1 条。所以「`ISettingsStore` 是全同步的、构造必然同步加载」不构成不复用的理由。
+
+## 已评估未采纳与未决
+
+- **没有 `SetInstance` / 工厂**（未决，2026-10-02 全面清点时记下）：`SettingsManagerImpl<T>` 是 internal sealed 且门面不提供整体替换——本模块是唯一一个连「换掉管理器行为」都不行的模块（其余模块都有 `SetInstance` 或 provider 等价物），能替换的只有它下面的 Store / Migrator / Validator。属不对称项，要么补一档注入点、要么在 README 写明它为何特殊；本轮未做，可再拾。
