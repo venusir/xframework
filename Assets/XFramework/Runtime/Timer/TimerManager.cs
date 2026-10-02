@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Threading;
 using UnityEngine;
@@ -166,6 +167,23 @@ namespace XFramework.XTimer
         /// 两者最坏相差一个派发周期。</para>
         /// </summary>
         public static int ActiveCount => Core.ActiveCount;
+
+        /// <summary>
+        /// 把所有**占用槽位**的定时器明细写入缓冲区（先清空），返回条数。
+        /// <para>含已 <c>Stop</c> 但未释放的那批（<see cref="TimerInfo.IsRunning"/> 为 false）——
+        /// 那是「停掉的定时器还占着槽位」这类泄漏的唯一可见面，比 <see cref="ActiveCount"/> 多一层信息。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；不要放进每帧路径。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的条数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyActiveTimers(List<TimerInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            return Core.CopyActiveTimers(buffer);
+        }
 
         #endregion
 

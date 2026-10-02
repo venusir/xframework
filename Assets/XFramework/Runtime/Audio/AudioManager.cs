@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -337,6 +338,28 @@ namespace XFramework.XAudio
         /// <summary>某个通道下当前活跃的播放数量。未声明的通道返回 <c>0</c>。</summary>
         /// <param name="channel">通道名；<c>null</c>/空归一化为 <see cref="AudioChannels.Default"/>。</param>
         /// <exception cref="InvalidOperationException">未初始化时抛出。</exception>
+        /// <summary>
+        /// 把已创建的通道写入缓冲区（先清空），返回条数。
+        /// <para>回答「声音听不见」的第一问：哪些通道被用过、各自音量与静音、各有多少路在播。</para>
+        /// <para><b>只对内置实现成立</b>：注入自定义 <see cref="IAudioManager"/> 时返回 0（缓冲区被清空）
+        /// ——那类实现不提供通道表回读。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；顺序未定义。不要放进每帧路径。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的通道数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyChannels(List<AudioChannelInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            if (_instance is AudioManagerImpl impl)
+                return impl.CopyChannels(buffer);
+
+            buffer.Clear();
+            return 0;
+        }
+
         public static int GetActiveVoiceCount(string channel)
         {
             EnsureInitialized();

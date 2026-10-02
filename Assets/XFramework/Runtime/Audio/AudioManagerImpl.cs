@@ -505,6 +505,25 @@ namespace XFramework.XAudio
         public int ActiveVoiceCount => _pool.CountActive();
 
         /// <inheritdoc/>
+        /// <summary>
+        /// 把已创建的通道写入缓冲区（先清空），返回条数。诊断回读用。
+        /// <para>只列已创建的通道——通道是首次在该通道上播放时惰性建的，查询类成员不建状态。</para>
+        /// </summary>
+        internal int CopyChannels(List<AudioChannelInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            foreach (KeyValuePair<string, AudioChannelState> pair in _channels)
+            {
+                AudioChannelState state = pair.Value;
+                buffer.Add(new AudioChannelInfo(pair.Key, state.Volume, state.Muted, GetActiveVoiceCount(pair.Key)));
+            }
+
+            return buffer.Count;
+        }
+
         public int GetActiveVoiceCount(string channel)
         {
             string filter = NormalizeChannel(channel);

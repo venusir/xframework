@@ -10,7 +10,7 @@ namespace XFramework.XUpdate
     /// 切片节拍与相位），因为它们由 PlayerLoop 的不同阶段驱动、节奏互不相干。
     /// <para>取值即内部数组下标，不可改动。</para>
     /// </summary>
-    internal enum UpdateTiming
+    public enum UpdateTiming
     {
         /// <summary>Update 时机（<c>MonoBehaviour.Update</c> 之后）。</summary>
         Update = 0,
@@ -278,6 +278,43 @@ namespace XFramework.XUpdate
         /// 本调度器承载的派发时机，决定调用节点上的哪个方法。
         /// </summary>
         private readonly UpdateTiming _timing;
+
+        /// <summary>
+        /// 把本调度器的节点明细**追加**到缓冲区（不清空），返回追加条数。诊断回读用。
+        /// <para>启用中的节点在桶里，禁用中的在禁用表里——两条都要走，否则「谁被禁用了」看不见。</para>
+        /// </summary>
+        internal int CopyNodes(List<UpdateNodeInfo> buffer)
+        {
+            if (buffer == null)
+                throw new System.ArgumentNullException(nameof(buffer));
+
+            int written = 0;
+
+            for (int b = 0; b < _buckets.Length; b++)
+            {
+                List<Entry> bucket = _buckets[b];
+                if (bucket == null)
+                    continue;
+
+                for (int i = 0; i < bucket.Count; i++)
+                {
+                    Entry entry = bucket[i];
+                    buffer.Add(new UpdateNodeInfo(entry.Node.GetType(), _timing, (UpdateTimeMode)entry.Axis,
+                        (UpdateTier)entry.Tier, true, entry.Order));
+                    written++;
+                }
+            }
+
+            for (int i = 0; i < _disabledEntries.Count; i++)
+            {
+                Entry entry = _disabledEntries[i];
+                buffer.Add(new UpdateNodeInfo(entry.Node.GetType(), _timing, (UpdateTimeMode)entry.Axis,
+                    (UpdateTier)entry.Tier, false, entry.Order));
+                written++;
+            }
+
+            return written;
+        }
 
         /// <summary>
         /// 创建更新调度器实例。

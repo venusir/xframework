@@ -57,6 +57,33 @@ namespace XFramework.XLocalization
 
         public string CurrentLanguage => _currentLanguage;
 
+        /// <summary>当前缓存的语言数。诊断回读用。</summary>
+        internal int CachedLanguageCount => _loadOrder.Count;
+
+        /// <summary>
+        /// 把已缓存的语言写入缓冲区（先清空），返回条数；按最近使用先后（MRU 在前）。
+        /// <para><c>_loadOrder</c> 的尾部是最近使用的，因此从尾到头遍历。</para>
+        /// </summary>
+        internal int CopyLoadedLanguages(List<LocalizationLanguageInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+
+            for (int i = _loadOrder.Count - 1; i >= 0; i--)
+            {
+                string lang = _loadOrder[i];
+                if (!_cache.TryGetValue(lang, out var table))
+                    continue;
+
+                buffer.Add(new LocalizationLanguageInfo(lang, table.Count,
+                    lang == _currentLanguage, lang == _fallbackLanguage));
+            }
+
+            return buffer.Count;
+        }
+
         public string FallbackLanguage
         {
             get => _fallbackLanguage;

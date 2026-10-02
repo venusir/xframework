@@ -235,6 +235,26 @@ namespace XFramework.XTimer
             }
         }
 
+        /// <summary>
+        /// 把所有表里占用槽位的明细写入缓冲区（先清空），返回条数。诊断回读用。
+        /// <para>每张表用自己那条轴当前时刻（<c>_logicalNow</c>）算剩余——两轴的时钟不同源，
+        /// 用错轴会把暂停/时间缩放期间的剩余算成负数。</para>
+        /// </summary>
+        internal int CopyActiveTimers(List<TimerInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            for (int i = 0; i < _allTables.Count; i++)
+            {
+                ITimerTable table = _allTables[i];
+                table.CopyActiveSlots(buffer, _logicalNow[table.Axis]);
+            }
+
+            return buffer.Count;
+        }
+
         /// <summary>停净全部定时器（含已停止未释放的），并让两个驱动器退出调度。</summary>
         /// <returns>被取消的定时器数量。</returns>
         internal int CancelAll()

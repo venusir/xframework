@@ -125,6 +125,35 @@ namespace XFramework.XLocalization
             return _instance.HasLanguage(lang);
         }
 
+        // ── 诊断回读（不进 ILocalizationManager：主接口是第三方替换点，加成员会让实现者编译不过；
+        //    回读只对内置实现成立，注入其它实现时一律返回空）──
+
+        /// <summary>
+        /// 当前缓存的语言数。<b>只对内置实现成立</b>：注入自定义 <see cref="ILocalizationManager"/> 时恒为 0。
+        /// </summary>
+        public static int CachedLanguageCount
+            => _instance is LocalizationManagerImpl impl ? impl.CachedLanguageCount : 0;
+
+        /// <summary>
+        /// 把已缓存的语言写入缓冲区（先清空），返回条数；按最近使用先后（MRU 在前）。
+        /// <para>回答「缓存里有哪些语言、各多少条目、谁在生效」——本地化查不到键时先看这张表。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；不要放进每帧路径。注入自定义实现时返回 0。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的语言数。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyLoadedLanguages(List<LocalizationLanguageInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            if (_instance is LocalizationManagerImpl impl)
+                return impl.CopyLoadedLanguages(buffer);
+
+            buffer.Clear();
+            return 0;
+        }
+
         /// <summary>
         /// 异步切换到指定语言。由内部 <see cref="LanguageAssetLoader"/> 加载目标语言数据。
         /// <para>内部自动使用 <see cref="LanguageAssetPath"/> 拼接资产地址，通过 <see cref="XAsset.AssetManager.LoadAsync{T}(string, CancellationToken)"/> 加载 JSON 文件。</para>

@@ -211,6 +211,9 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   PlayerLoop 工作的库共存；`IsDrivingPlayerLoop` 可查询三个驱动是否都已生效（**诊断用**：每次查询
   都要向引擎取回整棵 PlayerLoop 树并递归三趟，不要放进每帧路径）
 - 注入失败会打 `LogWarning`（门面本身是宽容语义、不会抛异常，不留痕的话表现只是「静止」）
+- **节点名单可回读**：`UpdateManager.CopyNodes(List<UpdateNodeInfo>)` 列出全部已注册节点
+  （类型 / 时机 / 时间轴 / 档位 / 是否启用 / 次序，含已禁用的）。计数（`TotalCount` / `GetCount`）回答
+  「有多少」，它回答「是谁」——诊断用，成本与节点数成正比，不要放进每帧路径
 - 手动驱动用无参 `UpdateManager.Tick()`（两个变步长时机）与 `TickFixed()`——它们自行按 Unity 当前
   时间构造时钟，与自动驱动逐字一致（含 `timeScale = 0` 的冻结与双时间轴分割）；
   **注入生效时不要再手动调用**，否则同一帧会派发两次

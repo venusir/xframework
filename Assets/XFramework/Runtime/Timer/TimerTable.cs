@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using System.Threading;
 using UnityEngine;
@@ -25,6 +26,16 @@ namespace XFramework.XTimer
 
         /// <summary>本表所在的时间轴（<see cref="UpdateTimeMode"/> 的取值）。</summary>
         int Axis { get; }
+
+        /// <summary>
+        /// 把本表占用槽位的明细**追加**到缓冲区（不清空），返回追加条数。诊断回读用。
+        /// <para>含已 <c>Stop</c> 但未释放的槽位（<see cref="TimerInfo.IsRunning"/> 为 false）——
+        /// 只看正在计时的那些会把「停掉的定时器仍占着槽位」这类泄漏藏起来。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；由调用方负责清空（多表共用一份）。</param>
+        /// <param name="now">本轴当前的逻辑时刻。</param>
+        /// <returns>追加的条数。</returns>
+        int CopyActiveSlots(System.Collections.Generic.List<TimerInfo> buffer, double now);
 
         /// <summary>正在计时的槽位数（<b>含令牌已取消但尚未被扫尾回收的</b>）。</summary>
         int RunningCount { get; }
@@ -153,6 +164,55 @@ namespace XFramework.XTimer
 
         /// <inheritdoc />
         public int RunningCount => _runningCount;
+
+        /// <inheritdoc />
+        public int CopyActiveSlots(List<TimerInfo> buffer, double now)
+        {
+            int written = 0;
+
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                TimerSlot<TState> slot = _slots[i];
+                if (!slot.Allocated)
+                    continue;
+
+                // 令牌已取消的槽位算「不在计时」——与 IsActive 同一口径（它们要等下一趟扫尾才被回收）
+                bool running = slot.Running && !slot.Token.IsCancellationRequested;
+
+                float remaining = 0f;
+                if (running)
+                {
+                    double left = slot.Deadline - now;
+                    remaining = left > 0d ? (float)left : 0f;
+                }
+
+                buffer.Add(new TimerInfo((UpdateTimeMode)_axis, i, remaining, slot.Duration,
+                    slot.Repeating, running, CallbackNameOf(slot)));
+                written++;
+            }
+
+            return written;
+        }
+
+        private static string CallbackNameOf(in TimerSlot<TState> slot)
+        {
+            if (slot.Callback != null)
+                return ShortNameOf(slot.Callback.Method);
+
+            if (slot.StateCallback != null)
+                return ShortNameOf(slot.StateCallback.Method);
+
+            return "(无回调)";
+        }
+
+        private static string ShortNameOf(System.Reflection.MethodInfo method)
+        {
+            if (method == null)
+                return "(未知)";
+
+            var declaring = method.DeclaringType;
+            return declaring != null ? declaring.Name + "." + method.Name : method.Name;
+        }
 
         /// <inheritdoc />
         public double Sweep(double now, bool advancePass)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.LowLevel;
 using XFramework.XLog;
@@ -745,6 +746,29 @@ namespace XFramework.XUpdate
                 }
                 return count;
             }
+        }
+
+        /// <summary>
+        /// 把所有已注册节点的明细写入缓冲区（先清空），返回条数（含已禁用的）。
+        /// <para>回答「谁在每帧跑、各在哪个档位、谁被禁用了」——此前只有计数，没有名单。</para>
+        /// <para><b>诊断接口</b>：低频调用，允许分配；节点多时成本与节点数成正比。不要放进每帧路径。</para>
+        /// </summary>
+        /// <param name="buffer">接收结果的缓冲区；会被先清空。</param>
+        /// <returns>写入的节点数。</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="buffer"/> 为 null。</exception>
+        public static int CopyNodes(List<UpdateNodeInfo> buffer)
+        {
+            if (buffer == null)
+                throw new System.ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            if (_schedulers == null)
+                return 0;
+
+            for (int i = 0; i < _schedulers.Length; i++)
+                _schedulers[i].CopyNodes(buffer);
+
+            return buffer.Count;
         }
 
         #endregion

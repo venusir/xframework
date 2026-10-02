@@ -27,6 +27,14 @@ namespace XFramework.Editor.Diagnostics
 
         private static readonly SettingsDiagnosticPanel SettingsPanel = new SettingsDiagnosticPanel();
 
+        private static readonly UpdateDiagnosticPanel UpdatePanel = new UpdateDiagnosticPanel();
+
+        private static readonly LocalizationDiagnosticPanel LocalizationPanel = new LocalizationDiagnosticPanel();
+
+        private static readonly AudioDiagnosticPanel AudioPanel = new AudioDiagnosticPanel();
+
+        private static readonly TimerDiagnosticPanel TimerPanel = new TimerDiagnosticPanel();
+
         #endregion
 
         #region Registration
@@ -39,6 +47,10 @@ namespace XFramework.Editor.Diagnostics
             DiagnosticsManager.Register(PoolPanel);
             DiagnosticsManager.Register(ConfigPanel);
             DiagnosticsManager.Register(SettingsPanel);
+            DiagnosticsManager.Register(UpdatePanel);
+            DiagnosticsManager.Register(LocalizationPanel);
+            DiagnosticsManager.Register(AudioPanel);
+            DiagnosticsManager.Register(TimerPanel);
         }
 
         #endregion

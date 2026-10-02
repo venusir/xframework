@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **Timer / Localization / Update / Audio 四组诊断回读 + 四个页签**：`TimerManager.CopyActiveTimers(List<TimerInfo>)`、`LocalizationManager.CopyLoadedLanguages(List<LocalizationLanguageInfo>)` / `CachedLanguageCount`、`UpdateManager.CopyNodes(List<UpdateNodeInfo>)`、`AudioManager.CopyChannels(List<AudioChannelInfo>)`（新公开类型 `TimerInfo` / `LocalizationLanguageInfo` / `UpdateNodeInfo` / `AudioChannelInfo`）。四条取向：
+  **① 回读的是「名单」而不是「计数」**：`TotalCount` / `GetCount` 回答有多少，`CopyNodes` 回答是谁——「谁在每帧跑」「哪个定时器没触发」这类问题此前只能靠猜。
+  **② 定时器表包含已 `Stop` 未释放的槽位**（`TimerInfo.IsRunning` 为 false）：那是「停掉的定时器仍占着槽位」这类泄漏的唯一可见面；令牌已取消的槽位算不在计时，与 `IsActive` 同一口径。剩余时间按**各自那条轴**的逻辑时刻算——两轴时钟不同源，用错轴会把暂停期间的剩余算成负数。
+  **③ `UpdateTiming` 由 internal 提权为 public**（纯放宽）：它要出现在 `UpdateNodeInfo` 的字段类型上，否则 CS0052。取值即内部数组下标，既有取值不可改动。
+  **④ 全部走门面专属成员，主接口一个不动**（Timer/Update 本就无接口；Localization/Audio 照 `CaptureTarget` 先例探测内置实现，注入自定义实现时回读返回空）。
 - **Pool / Config / Settings 三组诊断回读 + 三个页签**：`PoolManager.CopyPoolStats(List<PoolStats>)` / `PoolCount`（新公开类型 `PoolStats`）、`ConfigManager.CopyLoaded(List<ConfigLoadedInfo>)` / `InFlightLoadCount`（新公开类型 `ConfigLoadedInfo` / `ConfigLoadKind`）、`SettingsManager.CopyRegisteredTypes(List<SettingsTypeInfo>)` / `RegisteredTypeCount`（新公开类型 `SettingsTypeInfo`）。三条取向：
   **① 全部走门面专属成员，一个主接口都不动**。Pool 本就无接口；Settings 照 `ISettingsDirtyFlush` 先例加了一条同级内部缝 `ISettingsDiagnostics`（泛型不变的 manager 表遍历不了）；Config 直接读内置实现的 `IDictionary` 表——三者合起来让第三方的 `IConfigManager` / `ISettingsManager<T>` 实现零影响。
   **② Pool 加的是内部缝的成员而不是新公开接口**：`IUntypedPool` 补三个只读属性，`Pool<T>` 的三个**已有公开属性**隐式实现它们，池本身零改动。没有加公开的非泛型 `IPool` 基接口——那会让用显式实现 `IPool<T>` 的第三方编译不过（CS0535）。

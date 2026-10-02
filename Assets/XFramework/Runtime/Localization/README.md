@@ -267,6 +267,11 @@ string fallback = LocalizationManager.FallbackLanguage;  // 如 "zh_Hans"
 bool initialized = LocalizationManager.IsInitialized;    // true
 ```
 
+**缓存里有哪些语言**也能回读（诊断用）：`LocalizationManager.CachedLanguageCount` 与
+`CopyLoadedLanguages(List<LocalizationLanguageInfo>)`——后者给出每种语言的条目数、是否当前、
+是否回退，按最近使用先后排列。两者**只对内置实现成立**：注入自定义 `ILocalizationManager` 时返回空/0。
+**缺失键没有计数**（那要在 `Get` 热路径上加写入，本模块不做）。
+
 ## 本地化数据格式
 
 ### JSON 文件结构

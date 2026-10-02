@@ -146,6 +146,7 @@ AudioManager.Initialize(new AudioInitOptions
 | `bool IsPlaying(AudioHandle handle)` | **探测型**。加载中的不算「在播」，**暂停中的算** |
 | `int ActiveVoiceCount { get; }` | 活跃播放数，**含加载中与已暂停的**（它们都实打实占着播放源） |
 | `int GetActiveVoiceCount(string channel)` | 按通道计数 |
+| `int CopyChannels(List<AudioChannelInfo>)` | 已创建通道的明细（名称 / 音量 / 静音 / 在播路数）。**只列已创建的通道**（通道在首次播放时惰性创建），且只对内置实现成立。诊断用 |
 
 ### 值类型
 
