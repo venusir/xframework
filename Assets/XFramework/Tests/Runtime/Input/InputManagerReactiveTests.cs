@@ -21,69 +21,6 @@ namespace XFramework.XInput.Tests
     {
         #region Private
 
-        /// <summary>可编程假 Provider:只实现 Observe* 测试用到的成员,其余抛 NotSupportedException。</summary>
-        private sealed class FakeProvider : IInputProvider
-        {
-            public bool Pressed;
-            public bool Released;
-            public bool Held;
-            public float Duration;
-            public float FloatValue;
-            public float FloatRawValue;
-            public Vector2 Vector2Value;
-            public Vector2 Vector2RawValue;
-
-            /// <summary>是否被 Dispose 过(用于断言「参数校验失败不得先释放当前 provider」)。</summary>
-            public bool Disposed;
-
-            /// <summary>置真则 <see cref="Initialize"/> 抛异常(用于断言初始化失败不留中间态)。</summary>
-            public bool ThrowOnInitialize;
-
-            public void Initialize()
-            {
-                if (ThrowOnInitialize)
-                    throw new InvalidOperationException("provider init failed");
-            }
-
-            /// <summary>置真则 <see cref="Tick"/> 抛异常(用于断言 provider 异常不会打死帧驱动)。</summary>
-            public bool ThrowOnTick;
-
-            public void Tick()
-            {
-                if (ThrowOnTick)
-                    throw new InvalidOperationException("provider tick failed");
-            }
-
-            public bool HasAction(string action) => true;
-            public bool WasPressedThisFrame(string action, uint playerId = 0) => Pressed;
-            public bool WasReleasedThisFrame(string action, uint playerId = 0) => Released;
-            public bool IsPressed(string action, uint playerId = 0) => Held;
-            public float GetButtonPressDuration(string action, uint playerId = 0) => Duration;
-            public float ReadFloat(string action, uint playerId = 0) => FloatValue;
-            public float ReadFloatRaw(string action, uint playerId = 0) => FloatRawValue;
-            public Vector2 ReadVector2(string action, uint playerId = 0) => Vector2Value;
-            public Vector2 ReadVector2Raw(string action, uint playerId = 0) => Vector2RawValue;
-
-            public GamepadType ActiveGamepadType => GamepadType.None;
-            public InputDeviceType LastActiveDeviceType => InputDeviceType.None;
-            public void Dispose() { Disposed = true; }
-
-            public void SetVibration(uint playerId, float leftMotor, float rightMotor, float duration) => throw new NotSupportedException();
-            public void StopVibration(uint playerId) => throw new NotSupportedException();
-            public void StopAllVibration() => throw new NotSupportedException();
-            public void SwitchActionMap(string mapName) => throw new NotSupportedException();
-            public void EnableActionMap(string mapName) => throw new NotSupportedException();
-            public void DisableActionMap(string mapName) => throw new NotSupportedException();
-            public void DisableAllActionMaps() => throw new NotSupportedException();
-            public string GetBindingDisplayString(string action, uint playerId = 0) => throw new NotSupportedException();
-            public IReadOnlyList<InputBindingInfo> GetBindings(string action, uint playerId = 0) => throw new NotSupportedException();
-            public string SaveBindingOverrides() => throw new NotSupportedException();
-            public void LoadBindingOverrides(string data) => throw new NotSupportedException();
-            public void ResetBindingOverrides(string action) => throw new NotSupportedException();
-            public void ResetAllBindingOverrides() => throw new NotSupportedException();
-            public IRebindingOperation StartRebinding(string action, string bindingId, uint playerId = 0) => throw new NotSupportedException();
-        }
-
         /// <summary>
         /// 实现 <see cref="IDestroyCancellationToken"/> 的**普通 C# 对象**(非 MonoBehaviour),
         /// 用于验证「订阅随生命周期自动取消」对两类上下文都成立。
@@ -106,9 +43,9 @@ namespace XFramework.XInput.Tests
             }
         }
 
-        private static FakeProvider CreateProvider()
+        private static FakeInputProvider CreateProvider()
         {
-            var provider = new FakeProvider();
+            var provider = new FakeInputProvider();
             InputManager.SetProvider(provider);
             return provider;
         }
@@ -392,7 +329,7 @@ namespace XFramework.XInput.Tests
         [Test]
         public void Initialize_CustomProviderThrows_LeavesUninitialized_AndDoesNotRoute()
         {
-            var bad = new FakeProvider { ThrowOnInitialize = true, Pressed = true };
+            var bad = new FakeInputProvider { ThrowOnInitialize = true, Pressed = true };
 
             Assert.Throws<InvalidOperationException>(() => InputManager.Initialize(bad));
 

@@ -92,7 +92,34 @@ namespace XFramework.XInput.Tests
         [Test]
         public void Ctor_NullOptions_Throws()
         {
-            Assert.Throws<ArgumentNullException>(() => new InputBootstrapStage(null));
+            // 显式转换：InputBootstrapStage 有两个单参构造重载，裸 null 会二义（编译器实测过）
+            Assert.Throws<ArgumentNullException>(() => new InputBootstrapStage((InputSystemOptions)null));
+        }
+
+        [Test]
+        public void Ctor_NullProvider_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => new InputBootstrapStage((IInputProvider)null));
+        }
+
+        /// <summary>自定义后端那条路：一行注册即可，且清理对称（这是「Rewired 项目怎么用」的答案）。</summary>
+        [Test]
+        public void ExecuteAsync_WithCustomProvider_InitializesManagerAndShutdownDisposesIt()
+        {
+            var fake = new FakeInputProvider();
+            var stage = new InputBootstrapStage(fake);
+            var ctx = new PipelineStageContext();
+
+            stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+            Assert.IsTrue(InputManager.IsInitialized);
+            Assert.AreSame(fake, InputManager.Provider, "自定义 provider 应被门面接管");
+            Assert.AreEqual(PipelineStageState.Completed, ctx.State);
+
+            stage.Shutdown();
+
+            Assert.IsTrue(fake.Disposed, "清理要走对称路径：Destroy 对自定义 provider 同样 Dispose");
+            Assert.IsFalse(InputManager.IsInitialized);
         }
 
         [Test]
