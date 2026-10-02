@@ -1,7 +1,13 @@
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.InputSystem;
+using XFramework.XAsset;
 using XFramework.XBootstrap;
+using XFramework.XInput;
+using XFramework.XLocalization;
 using XFramework.XSave;
+using XFramework.XUI;
 
 namespace XFramework.XBootstrap.Tests
 {
@@ -128,6 +134,101 @@ namespace XFramework.XBootstrap.Tests
             finally
             {
                 Object.DestroyImmediate(go);
+            }
+        }
+
+        #endregion
+
+        #region 字段面（Inspector 上声明的配置）
+
+        /// <summary>
+        /// 经反射写 <c>GameLauncher</c> 的私有序列化字段——为不改生产面的可见性，夹具接受这点成本。
+        /// 字段改名会让本夹具直接报「找不到字段」，而不是静默失效。
+        /// </summary>
+        private static void SetField(GameLauncher launcher, string fieldName, object value)
+        {
+            var field = typeof(GameLauncher).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"找不到字段 {fieldName}——它被改名了吗？改名请同步本夹具");
+            field.SetValue(launcher, value);
+        }
+
+        private static T FindStage<T>() where T : class, IBootstrapStage
+        {
+            for (int i = 0; i < Bootstrap.Stages.Count; i++)
+            {
+                if (Bootstrap.Stages[i] is T match)
+                    return match;
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 字段填了就注入到对应模块：包名/存档版本进 options，UI/Input/Localization 各自登记一个阶段。
+        /// <para>做法：先让 GameObject <b>保持未激活</b>再 <c>AddComponent</c>——未激活时 Awake 不跑，
+        /// 于是有窗口把字段设好，再 <c>SetActive(true)</c> 触发 Awake。</para>
+        /// </summary>
+        [Test]
+        public void Awake_WithFields_InjectsThemIntoModules()
+        {
+            var go = new GameObject("launcher-configured");
+            go.SetActive(false);
+            var uiRoot = new GameObject("ui-root", typeof(RectTransform));
+            var inputAsset = ScriptableObject.CreateInstance<InputActionAsset>();
+            try
+            {
+                var launcher = go.AddComponent<GameLauncher>();
+                SetField(launcher, "_assetPackageName", "MyPack");
+                SetField(launcher, "_saveVersion", 7);
+                SetField(launcher, "_uiRoot", uiRoot.transform);
+                SetField(launcher, "_inputActions", inputAsset);
+                SetField(launcher, "_defaultLanguage", "en");
+
+                go.SetActive(true);   // 此刻 Awake 才跑
+
+                Assert.AreEqual(6, Bootstrap.Stages.Count,
+                    "默认三件 + UI + Input + Localization");
+
+                var asset = FindStage<AssetBootstrapStage>();
+                Assert.IsNotNull(asset, "Asset 阶段应被字段面重建（替换掉内置那份）");
+                Assert.AreEqual("MyPack", asset.Options.PackageName, "包名应注入 Asset 阶段");
+                Assert.AreEqual(7, FindStage<SaveBootstrapStage>()?.Options.CurrentVersion,
+                    "存档版本应注入 Save 阶段");
+                Assert.AreEqual(BootstrapPhases.UI, FindStage<UIBootstrapStage>()?.Phase);
+                Assert.AreEqual(BootstrapPhases.Input, FindStage<InputBootstrapStage>()?.Phase);
+                Assert.AreEqual(BootstrapPhases.Localization, FindStage<LocalizationBootstrapStage>()?.Phase);
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+                Object.DestroyImmediate(uiRoot);
+                Object.DestroyImmediate(inputAsset);
+            }
+        }
+
+        /// <summary>留空的字段不登记阶段——与不用本组件时一致（不替使用方初始化他没要的模块）。</summary>
+        [Test]
+        public void Awake_WithOnlyUiRoot_RegistersOnlyTheUiStage()
+        {
+            var go = new GameObject("launcher-ui-only");
+            go.SetActive(false);
+            var uiRoot = new GameObject("ui-root", typeof(RectTransform));
+            try
+            {
+                var launcher = go.AddComponent<GameLauncher>();
+                SetField(launcher, "_uiRoot", uiRoot.transform);
+
+                go.SetActive(true);
+
+                Assert.AreEqual(4, Bootstrap.Stages.Count, "默认三件 + UI");
+                Assert.IsNotNull(FindStage<UIBootstrapStage>());
+                Assert.IsNull(FindStage<InputBootstrapStage>(), "输入资产留空就不该登记 Input 阶段");
+                Assert.IsNull(FindStage<LocalizationBootstrapStage>(), "语言留空就不该登记本地化阶段");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+                Object.DestroyImmediate(uiRoot);
             }
         }
 

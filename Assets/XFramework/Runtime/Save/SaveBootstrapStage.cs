@@ -30,6 +30,13 @@ namespace XFramework.XSave
 
         #endregion
 
+        #region Internal
+
+        /// <summary>本阶段携带的选项（测试缝，用于断言字段面真的注入了）。</summary>
+        internal SaveOptions Options => _options;
+
+        #endregion
+
         #region IBootstrapStage
 
         /// <summary>Phase = <see cref="BootstrapPhases.Save"/>（4）。晚于 Data，确保快照能力已就绪。</summary>
