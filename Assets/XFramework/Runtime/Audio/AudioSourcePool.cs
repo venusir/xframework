@@ -73,6 +73,21 @@ namespace XFramework.XAudio
         internal bool HasHost => _host != null;
 
         /// <summary>
+        /// 一次性建满宿主与全部槽位（<see cref="AudioInitOptions.PrewarmVoices"/>）。
+        /// <para>与惰性路径<b>共用</b> <see cref="CreateVoice"/>，槽位形状完全一致——区别只在时机：
+        /// 预热把「首次播放时创建 N 个对象」的开销提前到初始化，避开第一声的卡顿。</para>
+        /// </summary>
+        internal void Prewarm()
+        {
+            EnsureHost();
+
+            while (_slots.Count < _maxVoices)
+            {
+                _slots.Add(CreateVoice(_slots.Count));
+            }
+        }
+
+        /// <summary>
         /// 预占一个槽位。失败即「播放源已耗尽」，调用方应退化成返回默认句柄。
         /// <para>预占发生在<b>发起加载之前</b>：池满时一次 IO 都不会浪费。</para>
         /// </summary>

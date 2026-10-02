@@ -73,6 +73,26 @@ namespace XFramework.XAudio.Tests
             Assert.AreEqual(1, FindHosts().Length, "宿主是模块级单例，不该按播放次数增长");
         }
 
+        /// <summary>
+        /// <c>PrewarmVoices = true</c>：初始化时就建宿主与全部槽位——与
+        /// <see cref="Play_CreatesHostLazily"/> 的惰性默认配成对照。预热的价值是把
+        /// 「首次播放时创建 N 个对象」的开销提前，避开第一声的卡顿。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator PrewarmVoices_True_CreatesHostAndAllSlotsUpfront()
+        {
+            yield return null;   // 冲掉前一个用例留下的待销毁宿主
+
+            AudioManager.Destroy();
+            yield return null;   // Destroy 是延迟的
+
+            AudioManager.SetInstance(new AudioManagerImpl(
+                new AudioInitOptions { MaxVoices = 3, PrewarmVoices = true }, _loader));
+
+            Assert.AreEqual(1, FindHosts().Length, "预热应连同宿主一起建");
+            Assert.AreEqual(3, CountVoices(), "预热应一次建满 MaxVoices 个播放源，而不是等到播放");
+        }
+
         [UnityTest]
         public IEnumerator Destroy_DestroysHost()
         {
@@ -233,6 +253,13 @@ namespace XFramework.XAudio.Tests
 
         private static AudioHost[] FindHosts()
             => UnityEngine.Object.FindObjectsByType<AudioHost>(FindObjectsInactive.Include);
+
+        /// <summary>播放源个数 = 宿主下的子节点数（每个槽位一个 <c>Voice {index}</c>）。</summary>
+        private static int CountVoices()
+        {
+            var hosts = FindHosts();
+            return hosts.Length == 0 ? 0 : hosts[0].transform.childCount;
+        }
 
         #endregion
     }

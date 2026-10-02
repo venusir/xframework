@@ -13,10 +13,6 @@ namespace XFramework.XAudio
     /// <para><b>资源只走 location</b>：本实现经 <see cref="IAudioClipLoader"/> 从 <c>XAsset</c> 加载，
     /// 播放期间槽位持有资源句柄——它同时是释放凭据与保活凭据，释放点必须恰好一次。</para>
     /// </summary>
-    /// <remarks>
-    /// <para><b>C3 / C4 尚未实现</b>：音量、通道配置、暂停与部分查询成员仍抛
-    /// <see cref="NotImplementedException"/>，在后续提交中逐个补全并配上各自的用例。</para>
-    /// </remarks>
     internal sealed class AudioManagerImpl : IAudioManager
     {
         #region Constants
@@ -78,6 +74,10 @@ namespace XFramework.XAudio
 
             _masterVolume = Mathf.Clamp01(Options.MasterVolume);
             _masterMuted = Options.MasterMuted;
+
+            // 预热是显式选择：不开时连宿主都不建（「从不播放的项目一个 GameObject 都不该建」有用例钉着）
+            if (Options.PrewarmVoices)
+                _pool.Prewarm();
         }
 
         #endregion
