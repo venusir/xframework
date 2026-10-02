@@ -1,10 +1,10 @@
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using XFramework.XAsset;
 using XFramework.XBootstrap;
 using XFramework.XInput;
+using XFramework.XInput.Default;
 using XFramework.XLocalization;
 using XFramework.XSave;
 using XFramework.XUI;
@@ -174,14 +174,14 @@ namespace XFramework.XBootstrap.Tests
             var go = new GameObject("launcher-configured");
             go.SetActive(false);
             var uiRoot = new GameObject("ui-root", typeof(RectTransform));
-            var inputAsset = ScriptableObject.CreateInstance<InputActionAsset>();
+            var inputOptions = ScriptableObject.CreateInstance<InputSystemOptionsAsset>();
             try
             {
                 var launcher = go.AddComponent<GameLauncher>();
                 SetField(launcher, "_assetPackageName", "MyPack");
                 SetField(launcher, "_saveVersion", 7);
                 SetField(launcher, "_uiRoot", uiRoot.transform);
-                SetField(launcher, "_inputActions", inputAsset);
+                SetField(launcher, "_inputOptions", inputOptions);
                 SetField(launcher, "_defaultLanguage", "en");
 
                 go.SetActive(true);   // 此刻 Awake 才跑
@@ -202,7 +202,7 @@ namespace XFramework.XBootstrap.Tests
             {
                 Object.DestroyImmediate(go);
                 Object.DestroyImmediate(uiRoot);
-                Object.DestroyImmediate(inputAsset);
+                Object.DestroyImmediate(inputOptions);
             }
         }
 

@@ -1,7 +1,6 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using UnityEngine.InputSystem;
 using XFramework.XAsset;
 using XFramework.XInput;
 using XFramework.XInput.Default;
@@ -68,11 +67,10 @@ namespace XFramework.XBootstrap
         #region Configuration — Input
 
         [Header("Input")]
-        [Tooltip("输入资产。留空则不登记 Input 引导阶段——自行调 InputManager.Initialize。")]
-        [SerializeField] private InputActionAsset _inputActions;
-
-        [Tooltip("初始化后自动切换到的 ActionMap 名；空 = 不自动切换（保持全部 map 常开）。")]
-        [SerializeField] private string _initialActionMap = InputSystemOptions.DefaultInitialActionMap;
+        [Tooltip("输入配置资产（InputSystemOptionsAsset：输入资产 + 初始 ActionMap 名）。" +
+                 "留空则不登记 Input 引导阶段——自行调 InputManager.Initialize。" +
+                 "（这里是框架类型而非 InputActionAsset：Unity 输入类型按模块边界只允许住在 XInput.Default 内。）")]
+        [SerializeField] private InputSystemOptionsAsset _inputOptions;
 
         #endregion
 
@@ -167,13 +165,9 @@ namespace XFramework.XBootstrap
                 Bootstrap.Register(new UIBootstrapStage(_uiRoot));
             }
 
-            if (_inputActions != null)
+            if (_inputOptions != null)
             {
-                Bootstrap.Register(new InputBootstrapStage(new InputSystemOptions
-                {
-                    Asset = _inputActions,
-                    InitialActionMap = _initialActionMap,
-                }));
+                Bootstrap.Register(new InputBootstrapStage(_inputOptions.ToOptions()));
             }
 
             if (!string.IsNullOrEmpty(_defaultLanguage))
