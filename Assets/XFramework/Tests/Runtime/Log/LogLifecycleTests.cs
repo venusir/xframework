@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -29,6 +30,25 @@ namespace XFramework.XLog.Tests
 
         #endregion
 
+        #region 注入自定义实现
+
+        /// <summary>
+        /// 注入非内置实现会**静默停用 Unity 全量捕获**（`CaptureTarget` 只认内置实现）——
+        /// 那条提醒是 Log 模块唯一的日志，且必须在替换之前发出（见 `LogManager.Initialize` 的 XML）。
+        /// </summary>
+        [Test]
+        public void Initialize_ForeignImpl_WarnsThatUnityCaptureStops()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[LogManager\] 注入的实现不是内置 LogManagerImpl"));
+
+            LogManager.Initialize(new ForeignLogManager());
+
+            Assert.IsNull(LogManager.CaptureTarget,
+                "注入自定义实现后全量捕获的目标为空——这正是那条提醒说的事");
+        }
+
+        #endregion
+
         #region Test Doubles
 
         /// <summary>计数 + 可观测释放的 sink。</summary>
@@ -44,6 +64,55 @@ namespace XFramework.XLog.Tests
             }
 
             public void Dispose() => Disposed = true;
+        }
+
+        /// <summary>
+        /// 最小的非内置 <see cref="ILogManager"/> 替身：只为触发「注入的不是内置实现」这条判定，
+        /// 其余成员一律 <see cref="NotSupportedException"/>（本用例不经过任何日志路径）。
+        /// </summary>
+        private sealed class ForeignLogManager : ILogManager
+        {
+            public bool IsInitialized => true;
+            public LogLevel MinimumLevel { get => LogLevel.Info; set { } }
+            public int DroppedSinkCount => 0;
+
+            public void SetCategoryLevel(LogCategory category, LogLevel level) => throw new NotSupportedException();
+            public void ResetCategoryLevel(LogCategory category) => throw new NotSupportedException();
+            public bool IsEnabled(LogLevel level, LogCategory category) => false;
+            public void Log(LogLevel level, LogCategory category, string message) => throw new NotSupportedException();
+            public void Log<T1>(LogLevel level, LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Log<T1, T2>(LogLevel level, LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Log<T1, T2, T3>(LogLevel level, LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Exception(LogCategory category, Exception exception, string message = null) => throw new NotSupportedException();
+            public void Exception(LogLevel level, LogCategory category, Exception exception, string message = null) => throw new NotSupportedException();
+            public void Verbose(LogCategory category, string message) => throw new NotSupportedException();
+            public void Verbose<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Verbose<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Verbose<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Debug(LogCategory category, string message) => throw new NotSupportedException();
+            public void Debug<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Debug<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Debug<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Info(LogCategory category, string message) => throw new NotSupportedException();
+            public void Info<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Info<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Info<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Warning(LogCategory category, string message) => throw new NotSupportedException();
+            public void Warning<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Warning<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Warning<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Error(LogCategory category, string message) => throw new NotSupportedException();
+            public void Error<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Error<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Error<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void Fatal(LogCategory category, string message) => throw new NotSupportedException();
+            public void Fatal<T1>(LogCategory category, string template, T1 arg1) => throw new NotSupportedException();
+            public void Fatal<T1, T2>(LogCategory category, string template, T1 arg1, T2 arg2) => throw new NotSupportedException();
+            public void Fatal<T1, T2, T3>(LogCategory category, string template, T1 arg1, T2 arg2, T3 arg3) => throw new NotSupportedException();
+            public void AddSink(ILogSink sink) => throw new NotSupportedException();
+            public bool RemoveSink(ILogSink sink) => throw new NotSupportedException();
+            public void Flush() => throw new NotSupportedException();
+            public void Shutdown() { }
         }
 
         /// <summary>违反契约（<c>Write</c> 抛异常）的 sink。</summary>

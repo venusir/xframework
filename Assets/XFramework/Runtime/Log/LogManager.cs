@@ -75,12 +75,28 @@ namespace XFramework.XLog
         /// <summary>当前是否已装入实现。门面按需创建，通常为 <c>true</c>。</summary>
         public static bool IsInitialized => _impl != null;
 
-        /// <summary>注入自定义实现（整体替换后端；测试也用它注入替身）。</summary>
+        /// <summary>
+        /// 注入自定义实现（整体替换后端；测试也用它注入替身）。
+        /// <para><b>注入非内置实现后，Unity 全量捕获随之停用</b>（<see cref="CaptureTarget"/> 只认
+        /// <see cref="LogManagerImpl"/>）——引擎与第三方库的日志不会再进任何输出端。因此在替换<b>之前</b>
+        /// 提醒一次：那一刻当前实现必然是框架实现（含懒建的默认实现），所以这条提醒不会走你注入的实现、
+        /// 不可能因它的异常而失效、也不可能递归——这是本模块「自身永不记日志」的<b>唯一例外</b>，
+        /// 理由是它既不是故障路径、也不经被替换者的手。需要保留全量捕获请改用
+        /// <see cref="Configure"/>（它重建的正是内置实现）。</para>
+        /// </summary>
         /// <param name="impl">实现；为 null 时抛 <see cref="ArgumentNullException"/>。</param>
         public static void Initialize(ILogManager impl)
         {
             if (impl == null)
                 throw new ArgumentNullException(nameof(impl));
+
+            if (!(impl is LogManagerImpl))
+            {
+                Warning(LogCategories.LogManager,
+                    "注入的实现不是内置 LogManagerImpl（{0}）：Unity 全量捕获随之停用——" +
+                    "引擎与第三方库的日志不会再进任何输出端；需要保留请改用 LogManager.Configure(LogOptions)。",
+                    impl.GetType().Name);
+            }
 
             ILogManager previous;
             lock (Gate)

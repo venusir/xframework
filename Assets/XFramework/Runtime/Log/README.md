@@ -190,6 +190,8 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 - 用 .NET 的 `File.ReadAllText` / `File.ReadAllLines` 读运行中的日志文件会撞共享冲突（它们声明的是 `FileShare.Read`），需显式传 `FileShare.ReadWrite`。
 - `exc` **只在调用点手上有异常对象时**才有值：只拿到消息文本的降级路径（平台降级、取消这类本就没有异常的静默分支）不会有它。这不等于丢信息——那些路径本来就没有异常。
 - `src:"unity"` 的捕获条目 `exc` **恒空**（Unity 的回调只给文本与堆栈）：异常文本在 `msg`（condition 原文）与 `stack` 里，用 `lvl` 与 `src` 组合筛选即可。
+- **注入自定义 `ILogManager` 会停用 Unity 全量捕获**（引擎与第三方库的日志不再进任何输出端）——因为捕获只认内置实现（`CaptureTarget => _impl as LogManagerImpl`）。`LogManager.Initialize` 会在替换**之前**打一条 `[LogManager]` 警告提醒（这条警告本身经当前实现发出，因此不可能递归、也不经过你注入的实现）；需要保留捕获请改用 `LogManager.Configure(LogOptions)`。
+- **JSONL 的文件命名不可配**：目录可改（`LogOptions.FileDirectory`），但 `xlog-{时间}-{会话}-p{n}.jsonl` 的命名是内置 sink 的私有常量——要换命名只能自行实现 `ILogSink`（或整体换 `ILogManager`）。
 
 ## 设计取舍
 

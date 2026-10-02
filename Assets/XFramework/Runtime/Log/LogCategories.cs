@@ -22,6 +22,12 @@ namespace XFramework.XLog
         /// <summary>Editor 工具（依赖安装器等）自身的日志。</summary>
         public static readonly LogCategory XFramework = LogCategory.Get("XFramework");
 
+        /// <summary>
+        /// 日志模块自身的日志。本模块**只有一条**日志——<c>LogManager.Initialize</c> 注入非内置实现时
+        /// 提醒「Unity 全量捕获随之停用」（在替换<b>之前</b>经当前实现发出，故不可能递归、也不经过你注入的实现）。
+        /// </summary>
+        public static readonly LogCategory LogManager = LogCategory.Get("LogManager");
+
         #endregion
 
         #region Asset / Audio / Bootstrap
