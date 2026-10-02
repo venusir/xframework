@@ -107,12 +107,14 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 | 常量 | Phase | 模块 | 说明 |
 | ---- | ----- | ---- | ---- |
 | `BootstrapPhases.Asset` | 0 | Asset | 资源管理器初始化（最早——本地化等模块的数据要经 YooAsset 地址加载） |
+| `BootstrapPhases.Input` | 1 | Input | 输入模块初始化（不在默认组合内，需要资产） |
+| `BootstrapPhases.UI` | 2 | UI | UI 模块初始化（不在默认组合内，需要场景里的 Canvas 根） |
 | `BootstrapPhases.Data` | 3 | Data | 数据管理器初始化 |
 | `BootstrapPhases.Save` | 4 | Save | 存档管理器初始化。**硬性晚于 Data**：恢复扫描要用 `DataManager.CreateSnapshot` 回滚数据块 |
 | `BootstrapPhases.Localization` | 90 | Localization | 本地化数据加载（不在默认登记组合内） |
 | `BootstrapPhases.UserStart` | 90 | 用户自定义 | 业务阶段的建议起点（与 Localization 同相位并行——依赖本地化的阶段请取更大的值） |
 
-**0–89 由框架保留**：框架新增模块可能占用其中任意值（1、2、5–89 目前空闲，但只是现状、不是保留承诺）。需要精确插进框架阶段之间（例如「Asset 之后、Data 之前」）时，别赌空闲值——用 `Unregister` 换掉内置阶段，那一段顺序自己编排。
+**0–89 由框架保留**：框架新增模块可能占用其中任意值（5–89 目前空闲，但只是现状、不是保留承诺）。需要精确插进框架阶段之间（例如「Asset 之后、Data 之前」）时，别赌空闲值——用 `Unregister` 换掉内置阶段，那一段顺序自己编排。
 
 **同相位 = 并行**，彼此不可有依赖；有依赖就必须分属不同相位。
 

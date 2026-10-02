@@ -217,7 +217,7 @@ await Bootstrap.RunAsync(new Progress<PipelineProgress>(p =>
 
 ## 内置 Phase 约定
 
-`Phase` 的取值由使用方自行约定，Pipeline 本身不预设任何值。框架**引导阶段**（XBootstrap 模块）的相位号已公开为 `BootstrapPhases` 常量（Asset=0 / Data=3 / Save=4 / Localization=90 / UserStart=90），其中 **0–89 由框架保留**；约定细节与「怎么插进框架阶段之间」见 Bootstrap 模块 README——那里是这份约定的唯一真相。
+`Phase` 的取值由使用方自行约定，Pipeline 本身不预设任何值。框架**引导阶段**（XBootstrap 模块）的相位号已公开为 `BootstrapPhases` 常量（Asset=0 / Input=1 / UI=2 / Data=3 / Save=4 / Localization=90 / UserStart=90），其中 **0–89 由框架保留**；约定细节与「怎么插进框架阶段之间」见 Bootstrap 模块 README——那里是这份约定的唯一真相。
 
 ## 设计原则
 
