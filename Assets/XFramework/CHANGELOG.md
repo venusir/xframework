@@ -516,6 +516,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Settings 的「没有 `SetInstance`」由未决改判为已评估未采纳**（同批三项之一）：可替换点刻意**下移到** Store / Migrator / Validator（它们才是「会变的地方」），而管理器本身的通知、脏标记与保存时机是**模块语义**——换它等于换模块，与 UI 排序分层、Update 切片节拍同一档（判据见 `Roadmap.md` §四）。理由写进 README 的设计理念表（「替换点在后端」行）
 
+### Added
+
+- **`GameLauncher` 声明式配置字段：Inspector 里填、`Awake` 里注入、`Start` 里跑管线**。起于用户连问三轮「为什么不在 GameLauncher 声明所需配置项再注入各模块」——重新推导后我此前两条反对意见不成立（Unity 的标准回答是 ScriptableObject provider，服务实例可以进配置面；真正早于场景的只有 Log，其余模块的配置都在 `Initialize` 时消费，场景组件覆盖得了），剩下的只是形状约束：6 个 options 类型都没有 `[Serializable]`，字段面只能**逐项重述**而非引用 options 对象（改名/删除有编译器兜底）。落地五组字段：Asset（包名 / 运行模式 / 低内存回收）、Save（存档版本）、UI（Canvas 根）、Input（资产 / 初始 ActionMap）、Localization（默认语言 / 语言表 `TextAsset`）。**全为默认或留空时，登记表与行为与零配置逐字相同**；留空的分组不登记阶段（不替使用方初始化他没要的模块）。服务实例（`RemoteServices` / `CryptoProvider` / `DecryptionServices`）与 `LogOptions` 仍不进字段面，理由写进类 XML 与 README
+- **`UIBootstrapStage`（Phase 2）/ `InputBootstrapStage`（Phase 1）**：让 UI 与 Input 也能走引导流程，从而由 `Bootstrap.Shutdown` 对称清理。两者同形——构造校验参数、`ExecuteAsync` 里**已初始化即早退**（`UIRootNode.Awake` 或使用方手动 `Initialize` 都算）、`Shutdown` **只销毁自己初始化的那份**（照 `LocalizationBootstrapStage` 的「谁初始化谁清理」先例）。`BootstrapPhases` 相应新增 `UI = 2` / `Input = 1`（两个现成空档；5–89 仍留给使用方插入点）
+- **`AssetBootstrapStage(AssetInitOptions options = null)`** 与 **`LocalizationBootstrapStage(string defaultLanguage, TextAsset table)`**：字段面要把配置喂给阶段，这两个阶段此前接不住（Asset 阶段写死 `options: null`；Localization 只有字典入口）。语言表的解析放在 `ExecuteAsync` 而非构造期——格式错误要沿引导管线的标准失败路径报出来；`LanguageAssetLoader.ParseJson` 因此从 private 升为 internal（仓内既有先例：把解析抽成 internal 纯函数以便复用/单测）
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
