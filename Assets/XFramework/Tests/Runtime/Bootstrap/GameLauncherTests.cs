@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XAsset;
@@ -6,13 +8,14 @@ using XFramework.XBootstrap;
 using XFramework.XInput;
 using XFramework.XInput.Default;
 using XFramework.XLocalization;
+using XFramework.XPipeline;
 using XFramework.XSave;
 using XFramework.XUI;
 
 namespace XFramework.XBootstrap.Tests
 {
     /// <summary>
-    /// <see cref="GameLauncher"/> 的扩展点：<c>ConfigureStages</c> 覆写后登记什么由子类决定。
+    /// <see cref="DefaultGameLauncher"/> 的扩展点：<c>ConfigureStages</c> 覆写后登记什么由子类决定。
     /// <para><b>为什么在 PlayMode</b>：<c>Awake</c> 是 Unity 生命周期回调，只有真的 <c>AddComponent</c> 才会跑。
     /// 三例都在断言后立刻销毁对象——<c>Start</c> 在下一帧才执行 <c>RunAsync</c>，绝不让它跑起来
     /// （否则会真去初始化 YooAsset）；<c>OnDestroy</c> 里的 <c>Bootstrap.Shutdown</c> 在未初始化态是安全空转。</para>
@@ -31,7 +34,7 @@ namespace XFramework.XBootstrap.Tests
         }
 
         /// <summary>探针：覆写 <c>ConfigureStages</c> 的两种姿势。</summary>
-        private sealed class ProbeLauncher : GameLauncher
+        private sealed class ProbeLauncher : DefaultGameLauncher
         {
             public static ProbeMode Mode;
             public static SaveBootstrapStage Replacement;
@@ -77,7 +80,7 @@ namespace XFramework.XBootstrap.Tests
             try
             {
                 // AddComponent 同步跑 Awake；Start 在下一帧——本例在它之前销毁，不让 RunAsync 真跑起来
-                go.AddComponent<GameLauncher>();
+                go.AddComponent<DefaultGameLauncher>();
 
                 Assert.AreEqual(3, Bootstrap.Stages.Count);
                 Assert.AreEqual(BootstrapPhases.Asset, Bootstrap.Stages[0].Phase);
@@ -142,12 +145,12 @@ namespace XFramework.XBootstrap.Tests
         #region 字段面（Inspector 上声明的配置）
 
         /// <summary>
-        /// 经反射写 <c>GameLauncher</c> 的私有序列化字段——为不改生产面的可见性，夹具接受这点成本。
+        /// 经反射写 <c>DefaultGameLauncher</c> 的私有序列化字段——为不改生产面的可见性，夹具接受这点成本。
         /// 字段改名会让本夹具直接报「找不到字段」，而不是静默失效。
         /// </summary>
-        private static void SetField(GameLauncher launcher, string fieldName, object value)
+        private static void SetField(DefaultGameLauncher launcher, string fieldName, object value)
         {
-            var field = typeof(GameLauncher).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            var field = typeof(DefaultGameLauncher).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.IsNotNull(field, $"找不到字段 {fieldName}——它被改名了吗？改名请同步本夹具");
             field.SetValue(launcher, value);
         }
@@ -177,7 +180,7 @@ namespace XFramework.XBootstrap.Tests
             var inputOptions = ScriptableObject.CreateInstance<InputSystemOptionsAsset>();
             try
             {
-                var launcher = go.AddComponent<GameLauncher>();
+                var launcher = go.AddComponent<DefaultGameLauncher>();
                 SetField(launcher, "_assetPackageName", "MyPack");
                 SetField(launcher, "_saveVersion", 7);
                 SetField(launcher, "_uiRoot", uiRoot.transform);
@@ -215,7 +218,7 @@ namespace XFramework.XBootstrap.Tests
             var uiRoot = new GameObject("ui-root", typeof(RectTransform));
             try
             {
-                var launcher = go.AddComponent<GameLauncher>();
+                var launcher = go.AddComponent<DefaultGameLauncher>();
                 SetField(launcher, "_uiRoot", uiRoot.transform);
 
                 go.SetActive(true);
@@ -230,6 +233,73 @@ namespace XFramework.XBootstrap.Tests
                 Object.DestroyImmediate(go);
                 Object.DestroyImmediate(uiRoot);
             }
+        }
+
+        #endregion
+
+        #region 抽象底座（完全自控）
+
+        /// <summary>「完全自控」的最小实现：只实现底座上的 <c>ConfigureStages</c>。</summary>
+        private sealed class BareLauncher : GameLauncher
+        {
+            protected override void ConfigureStages()
+            {
+                Bootstrap.Register(new BareStage());
+            }
+        }
+
+        private sealed class BareStage : IBootstrapStage
+        {
+            public int Phase => 42;
+
+            public string Name => nameof(BareStage);
+
+            public float Weight => 1f;
+
+            public UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+                => UniTask.CompletedTask;
+
+            public void Shutdown()
+            {
+            }
+        }
+
+        /// <summary>
+        /// 底座自身**不预设任何阶段**：登记表恰好是子类声明的那一个（这条是拆分的目的之一——
+        /// 「完全自控」的人不该被默认组合牵连）。
+        /// </summary>
+        [Test]
+        public void Awake_BaseClass_RegistersOnlyWhatTheSubclassDeclares()
+        {
+            var go = new GameObject("launcher-bare");
+            try
+            {
+                go.AddComponent<BareLauncher>();   // Awake 同步跑
+
+                Assert.AreEqual(1, Bootstrap.Stages.Count, "底座不得自己登记任何阶段");
+                Assert.IsInstanceOf<BareStage>(Bootstrap.Stages[0], "登记表应恰好是子类声明的那一个");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// 底座**不带序列化字段**、字段面全在默认实现上——这是这次拆分的另一半目的：
+        /// 完全自控的人在 Inspector 里应当是干净的（Unity 无法隐藏继承来的序列化字段，
+        /// 所以「不带字段」只能靠类型层次来保证）。
+        /// </summary>
+        [Test]
+        public void BaseClass_HasNoFields_WhileDefaultCarriesTheSurface()
+        {
+            var baseFields = typeof(GameLauncher).GetFields(
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.IsEmpty(baseFields, "抽象底座不得携带任何实例字段");
+
+            var defaultFields = typeof(DefaultGameLauncher).GetFields(
+                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
+            Assert.AreEqual(8, defaultFields.Length, "字段面（Asset×3 / Save×1 / UI×1 / Input×1 / Localization×2）应都在默认实现上");
         }
 
         #endregion
