@@ -10,7 +10,8 @@
 
 | 标记 | 含义 |
 | --- | --- |
-| `[一手核对]` | 读 Luban **5.1.0 发布包自带的模板与程序集元数据**得出。模板在 `Luban/Templates/<codeTarget>/*.sbn`，命令行选项表在 `Luban.dll` 的 `[Option]` 特性字符串里——两者都不需要执行 Luban |
+| `[一手核对]` | 读**本地那份** Luban 5.1.0 发布包自带的模板与程序集元数据得出，可复现。模板在 `Luban/Templates/<codeTarget>/*.sbn`，命令行选项表在 `Luban.dll` 的 `[Option]` 特性字符串里——两者都不需要执行 Luban |
+| `[网上读取]` | 读官方文档页或官方示例仓库的文件得出，**没有本地副本可复现**，可信度低于上一档 |
 | `[探针实测]` | 用一个独立的 C# 探针程序跑过（复现 XFramework 侧的接口/反射语义），10/10 通过 |
 | `[未实测]` | 只有文档或推理支撑，**没跑通过** |
 
@@ -37,9 +38,9 @@
 
 ### 2.1 拿到 Luban
 
-`[一手核对]` 官方**不以 dotnet tool 分发**（`dotnet tool search luban` 无结果），发布形态是 GitHub Release 上的压缩包：
+`[一手核对]` 官方**不以 dotnet tool 分发**（`dotnet tool search luban` 无结果），发布形态是 GitHub Release 上的压缩包。资产名取自 GitHub Releases API（一手）；**用途描述来自官方文档页（二手，未实测）**：
 
-| 资产 | 用途 |
+| 资产 | 用途（二手） |
 | --- | --- |
 | `Luban.7z` | 主生成器（日常导表用这个） |
 | `Luban.Agent.7z` | 供 AI / 脚本做校验与 schema 查询 |
@@ -77,7 +78,7 @@
 
 > **一条已被澄清的漂移**：网上流传「`-t` 是 `--template_search_path`」的说法来自 **3.x 旧文档**。5.1.0 里 `-t` **就是 target**，而 `--template_search_path` 这个字符串在 5.1.0 的全部程序集里**零命中**，自定义模板目录的选项是 `--customTemplateDir`。这正是本文件要逐条标版本的原因。
 
-`[一手核对]` 官方示例 `luban_examples/MiniTemplate/gen.bat` 的形状（逐字）：
+`[网上读取]` 官方示例 `luban_examples/MiniTemplate/gen.bat` 的形状（**经网页读取，非本地逐字**；参数名与 §2.2 的选项表相互印证）：
 
 ```bat
 set WORKSPACE=..
@@ -105,7 +106,7 @@ dotnet <LUBAN>\Luban.dll -t all -c cs-simple-json  -d json --conf <CONF_DIR> -x 
 
 ### 2.3 最小工程结构
 
-**不要在别处复写一份 `luban.conf` 与 schema 范例**——那就是第二份会过期的真相。正确做法是逐字复制官方 `luban_examples/MiniTemplate/` 作基准再改：它含 `luban.conf`、`Defines/`（表结构与枚举定义）、`Datas/`（数据源）、`gen.bat` / `gen.sh`、`output/`。
+**不要在别处复写一份 `luban.conf` 与 schema 范例**——那就是第二份会过期的真相。正确做法是逐字复制官方 `luban_examples/MiniTemplate/` 作基准再改。`[网上读取]` 该模板的结构：`luban.conf`、`Defines/`（表结构与枚举定义）、`Datas/`（数据源）、`gen.bat` / `gen.sh`、`output/`。
 
 框架只对 schema 提**两条要求**，其余随意：
 
