@@ -586,6 +586,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **补上「怎么把 XFramework 装进项目」**：README 的依赖章节此前只写「配置完成后，再通过 Git URL 或本地路径添加 XFramework」，而**全仓（除本文件外）从没有出现过本仓库自己的 Git URL**——第三方照那句话做不出来。现补 `### 安装 XFramework` 两节：**方式一 Git URL**（`?path=Assets/XFramework` 是必需的，因为仓库根是一个完整 Unity 开发工程、包本体在子目录；这种方式落在 `Library/PackageCache`，只读、改不了也推不回），**方式二 git 子模块 + `file:` 本地路径**（`file:` 的相对路径以工程的 `Packages` 文件夹为基准解析，故 `../` 即工程根；含「不要放 `Assets/` 或 `Packages/` 下」两个反例与各自的后果；以及 `git checkout main` 那个 detached HEAD 的坑——不切分支就提交，新提交没有任何分支指向它）
 - **包内 `Tests/` 在导入方不参与编译**（实测：`Library/ScriptAssemblies` 下只出现 Runtime 与 Editor 两个程序集，测试程序集没有产出）——Unity 的规则是包测试要进工程 manifest 的 `testables` 才编译。因此导入方不必为它准备任何东西；要跑这些测试就把包名加进 `testables`
+- **Config README 补「与 Luban 一类外部配置表工具配合」的框架侧契约**（纯文档，零 API 变更）。方式三的示例此前假定生成的行类已经是 `IConfigRow<TKey>`，而 Luban 默认生成的行类**不实现它**——读者照抄会编译不过。另两处从未披露：生成代码的加载入口是**同步**委托，而框架 IO 全走异步通道；以及 `RegisterTable` 注入的表没有资源路径、不参与 `Preload` 的并发语义。现补三个前提、「`Register` 不要求 `new()` 而 `Preload` 要求」这条约束差异，并往「已知限制」加两条（注入的表没有加载路径；经 ConfigManager 会留下多份索引视图，不需要统一查询面的项目可以不走它）。
+  **包内只留不随 Luban 版本漂移的框架侧契约**（判据是易腐性）：示例里不再出现 `ByteBuf` / `DataList` / `Tables` 构造形态这类随版本变化的东西，target 名、命令行、模板等落在仓库维护侧的 `Documentation/Luban.md`（不随包发布）。同批把两处源码 XML 示例里的 `tables.TbItem.DataList` 一并改成版本中立写法（纯注释）——模块 README 自己就注着「Luban 各版本 `DataList` 的 API 不同」，而源码注释把它当稳定契约写着。包 README 原先承诺的「Luban 集成指南」也据此收窄为「框架侧约定」。
+  **本轮同时复评了「要不要重建内建 Luban 适配层」，结论是不重建**：该形状已于 `a25f6d8` 删除，而当时**只记了「移除 Bright.Serialization 依赖」这条动机、「这个形状为什么不好」从未落纸**。三条否决点（硬绑 `"Bright.Serialization.ByteBuf"` 类型名、绑死 `DataList` 反射约定、主键写死 `Dictionary<int, rowType>` 而被随后的 `IConfigRow.Id` 泛型化淘汰）与重开判据现补进 `Documentation/Modules/Config.md`。
 
 ## [0.2.0] - 2026-08-20
 
