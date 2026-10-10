@@ -79,7 +79,6 @@
 
 - package.json 的 dependencies 刻意留空(UPM 不支持 Git URL 依赖);新依赖:
   - UPM 包 → `Packages/manifest.json`(Git URL)
-  - NuGet 包 → `Assets/packages.config` + NuGetForUnity(当前:无)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
 
 ## 文档分层
