@@ -5,7 +5,7 @@
 // 不支持 Git URL 格式（Unity 要求 Semantic Versioning）。因此 XFramework 的
 // package.json 中不声明第三方依赖，而是通过此 Editor 脚本提供一键安装功能。
 //
-// 本脚本处理 UPM 包依赖（UniTask、YooAsset）→ 写入 Packages/manifest.json
+// 本脚本处理 UPM 包依赖（UniTask、YooAsset、Newtonsoft.Json）→ 写入 Packages/manifest.json
 //
 // 使用方式: 菜单栏 -> XFramework -> Install Dependencies
 // -----------------------------------------------------------------------------
@@ -25,10 +25,14 @@ namespace Venusy609.Xframework.Editor
     {
         #region UPM Dependencies (写入 Packages/manifest.json)
 
+        // 值的写法对两类包同形：Git URL 包写 URL，Unity 官方注册表包写版本号。
+        // 这张清单的真相来源是 Assets/XFramework/README.md 的「第三方依赖」表，两处必须一起长——
+        // Newtonsoft.Json 就曾漏在这里：清单写于它入仓之前，之后没跟着补。
         private static readonly Dictionary<string, string> RequiredUPMDependencies = new Dictionary<string, string>
         {
             { "com.cysharp.unitask", "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask" },
             { "com.tuyoogame.yooasset", "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset" },
+            { "com.unity.nuget.newtonsoft-json", "3.2.1" },
         };
 
         private const string ManifestPath = "Packages/manifest.json";
