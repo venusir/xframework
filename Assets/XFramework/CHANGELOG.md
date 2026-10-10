@@ -569,6 +569,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`UIBootstrapStage`（Phase 2）/ `InputBootstrapStage`（Phase 1）**：让 UI 与 Input 也能走引导流程，从而由 `Bootstrap.Shutdown` 对称清理。两者同形——构造校验参数、`ExecuteAsync` 里**已初始化即早退**（`UIRootNode.Awake` 或使用方手动 `Initialize` 都算）、`Shutdown` **只销毁自己初始化的那份**（照 `LocalizationBootstrapStage` 的「谁初始化谁清理」先例）。`BootstrapPhases` 相应新增 `UI = 2` / `Input = 1`（两个现成空档；5–89 仍留给使用方插入点）
 - **`AssetBootstrapStage(AssetInitOptions options = null)`** 与 **`LocalizationBootstrapStage(string defaultLanguage, TextAsset table)`**：字段面要把配置喂给阶段，这两个阶段此前接不住（Asset 阶段写死 `options: null`；Localization 只有字典入口）。语言表的解析放在 `ExecuteAsync` 而非构造期——格式错误要沿引导管线的标准失败路径报出来；`LanguageAssetLoader.ParseJson` 因此从 private 升为 internal（仓内既有先例：把解析抽成 internal 纯函数以便复用/单测）
 
+### Removed
+
+- **包内三项「只删了内容、留下空壳」的残留**（起于「还有 NuGet 残留吗」这一问的顺带清点）：① `Third Party Notices.md` 是 2023 年起的未填模板，全文只有 `[provide component name]` 占位符。删它的判据是**包内零第三方代码**——284 个 Runtime 源文件无一条 `Copyright` 或许可头，vendored DLL 为 0，三个依赖均由使用方自行安装、并不随本包分发，因此没有可声明的内容；该文件本身也零入链。② `Documentation/` 与 ③ `Tests/Runtime/Core/` 是两个空目录加被跟踪的孤儿 `.meta`，来自两次「只搬走内容」的操作（删除包内模板 Documentation/ 的那轮、以及 Tests 的 Core→Node 改名）。已做全包孤儿 meta 扫描，除这两处外无其它
+- **仓库级的 NuGetForUnity 残留**：`Assets/NuGet.config`（含 `.meta`；该工具在 Assets 下自建的配置，GUID 除自身外全仓零引用，也不是 MSBuild 配置链的成员）、`Assets/Packages/`（空目录 + 未被跟踪的 `.meta`）与 `.gitignore` 的两条 `[Aa]ssets/Packages` 忽略规则。0.2.0 移除该工具时只清了工具本体与 NuGet DLL，配套物全部留下；`Assets/Packages*` 未被跟踪、只因那两条规则而隐形，所以 `git status` 一直看着干净。规则侧的「NuGet 包 → `Assets/packages.config` + NuGetForUnity」一条同步删除——它在教人使用一个仓内已不存在的工具。本包第三方依赖全走 UPM，Newtonsoft 由 Unity **官方注册表包** `com.unity.nuget.newtonsoft-json` 提供，不需要 NuGet 客户端
+
+### Fixed
+
+- **一键安装器漏装 Newtonsoft.Json**：`XFrameworkDependencyInstaller` 的 `RequiredUPMDependencies` 只写了 UniTask 与 YooAsset，而 `Venusy609.Xframework.asmdef` 引用 `Newtonsoft.Json` 程序集——用菜单 `XFramework/Install Dependencies` 装出来的第三方项目，Serialize 模块的 asmdef 引用解析不了，直接编译不过。根因：这张清单写于 0.2.0（移除 NuGetForUnity 那一轮），而 Newtonsoft 四天后才随「序列化：新增 NewtonsoftSerializer」入仓，清单此后没跟着 README 的依赖表一起长。现补上 `com.unity.nuget.newtonsoft-json`（`3.2.1`），并在字典上方注明**真相来源是包 README 的「第三方依赖」表**，两处必须一起改。插入逻辑零改动——值的写法对 Git URL 包与 Unity 官方注册表包同形（都是 `"id": "值"`），已存在判定照常生效
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
