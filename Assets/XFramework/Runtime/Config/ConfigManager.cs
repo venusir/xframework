@@ -271,9 +271,9 @@ namespace XFramework.XConfig
         /// <param name="table">Table 包装器实例。</param>
         /// <example>
         /// <code>
-        /// // Luban 示例：反序列化后构造 ConfigTable 注册
-        /// var tables = new GameTables(byteBuf);
-        /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
+        /// // rows 为外部工具（Luban 等）反序列化得到的行集合，其获取方式见该工具的文档——
+        /// // 外部工具的表访问 API 随版本变化，故此处刻意不写出具体形态。
+        /// var dict = rows.ToDictionary(r => r.Id);
         /// var table = new ConfigTable&lt;ItemRow&gt;(dict);
         /// ConfigManager.RegisterTable(table);
         /// // 之后可通过 ConfigManager.GetTable&lt;ItemRow&gt;().Get(id) 查询

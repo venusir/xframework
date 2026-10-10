@@ -73,7 +73,8 @@ namespace XFramework.XConfig
         /// <exception cref="ConfigException">table 为 null 时抛出。</exception>
         /// <example>
         /// <code>
-        /// var dict = tables.TbItem.DataList.ToDictionary(r => r.Id);
+        /// // rows 为外部工具反序列化得到的行集合（获取方式见该工具文档）
+        /// var dict = rows.ToDictionary(r => r.Id);
         /// var table = new ConfigTable&lt;ItemRow&gt;(dict);
         /// ConfigManager.RegisterTable(table);
         /// </code>
