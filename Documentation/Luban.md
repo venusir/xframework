@@ -161,6 +161,8 @@ public partial class Item : XFramework.XConfig.IConfigRow<int>
 
 **若主键字段不叫 `Id`**（比如列名是 `item_id` → 字段 `ItemId`），接缝可以写成普通的隐式实现 `public int Id => ItemId;`，比上面更简单。
 
+> **这套写法有机械守卫**：`Assets/XFramework/Tests/Editor/Config/ExplicitInterfaceRowTests.cs`（复刻生成物的形状——`partial` + `readonly` 字段 + 只有带参构造——并锁住主键从接口泛型实参取、值经接口的 `PropertyInfo` 读得到、键类型不符仍早失败）。该文件做过红证：把 `ConfigTypeHelper.ExtractKeyType` 临时改成「从具体类型取 `Id` 属性」后，6 例中 5 例当场变红，而既有用例全绿。改动本文件里的建议时，那条守卫会先响。
+
 ### 3.3 备选：改 Scriban 模板让生成期就带上接口 `[未实测]`
 
 走 `--customTemplateDir`（复数，可给多个）覆盖 `bean.sbn`。**不推荐**，两条理由：
