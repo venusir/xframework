@@ -392,5 +392,5 @@ git commit -m "chore: 更新 XFramework 子模块"
 
 `ConfigManager` 提供统一的配置加载与查询接口，内置 Json / CSV / ScriptableObject 三种格式，自定义格式通过实现 `IConfigLoader` 扩展，Luban 等外部反序列化结果经 `RegisterTable` / `RegisterGlobal` 注入，一行代码加载与查询。
 
-> 📖 详细文档请参阅 **[Runtime/Config/README.md](Runtime/Config/README.md)**，包含格式对比、自定义 Loader 和 Luban 集成指南。
+> 📖 详细文档请参阅 **[Runtime/Config/README.md](Runtime/Config/README.md)**，包含格式对比、自定义 Loader，以及**与 Luban 一类外部配置表工具配合时框架侧的约定**（行类型要实现什么、IO 怎么接、注入的代价）。外部工具自身的用法（表定义、命令行、生成目标）以其官方文档为准——那部分随工具版本变化，框架不复制它。
 

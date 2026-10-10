@@ -128,23 +128,38 @@ var row = items.Get(1001);
 
 第三方自行完成 IO 和反序列化，直接将数据注入 `ConfigManager`。框架不参与加载过程，仅管理缓存与提供统一查询接口。
 
+**动手前先对三个前提。** 三条都是**框架侧**的契约，不随外部工具版本变化；对不上会编译不过或行为不符预期：
+
+1. **行类型必须实现 `IConfigRow<TKey>`。** 否则 `ConfigTable<T>` 取不到主键类型，构造/注册期即抛 `ConfigException`（错误信息含真实类型名）。**外部工具生成的行类型默认不实现它**——那一步属于你的工具链配置，框架不代劳。
+2. **IO 走框架的异步通道，而生成代码的加载入口往往是同步委托。** 正确顺序是：先用 `AssetManager` / `FileManager` 把字节读全，再让同步委托只从内存里取——不要在同步委托里做 IO。
+3. **注入不是 `Preload` 的等价物，也不是零成本**：逐条见「已知限制」。
+
+> **`Register` 与 `Preload` 的约束不同。** `Preload*Async` 要求 `new()`（`where T : IConfigRow, new()`），`RegisterTable` **不要求**——所以只有带参构造的行类型**可以注册，但不能 Preload**。
+
 **典型场景：Luban（一文件多表）**
 
 ```csharp
-// 需要 using System.Linq;（ToDictionary）、using XFramework.XConfig;
-// 一次 IO，一次反序列化
-var bytes = await LoadLubanData();
-var tables = new GameTables(new ByteBuf(bytes));
+// 需要 using System.Linq;、using System.Collections.Generic;、using XFramework.XConfig;
 
-// 多次注册，每张表一个 ConfigTable
-ConfigManager.RegisterTable(new ConfigTable<ItemRow>(tables.TbItem.DataList.ToDictionary(r => r.Id)));
-ConfigManager.RegisterTable(new ConfigTable<HeroRow>(tables.TbHero.DataList.ToDictionary(r => r.Id)));
-ConfigManager.RegisterTable(new ConfigTable<SkillRow>(tables.TbSkill.DataList.ToDictionary(r => r.Id)));
+// ① Luban 侧：一次 IO、一次反序列化。
+//    这一段的形态随 Luban 版本与其代码目标（cs-bin / cs-simple-json / …）变化，以 Luban 文档为准。
+var bytes  = await LoadConfigBytesAsync();   // 经 AssetManager / FileManager 读进内存
+var tables = new GameTables(/* 用 bytes 构造；具体形态见 Luban 文档 */);
 
-// 查询
+// ② 框架侧：逐表投影 + 注册。这一段与 Luban 版本无关，照抄即可。
+static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
+    => ConfigManager.RegisterTable(new ConfigTable<T>(rows.ToDictionary(r => r.Id)));
+
+// ③ 取出某张表的行集合——「怎么取」是唯一随 Luban 版本变化的地方
+IEnumerable<ItemRow> itemRows = /* 从 tables 里取 Item 表的所有行 */;
+Register<ItemRow, int>(itemRows);
+
+// ④ 查询（与其它方式完全一致）
 var items = ConfigManager.GetTable<ItemRow>();
 var row = items.Get(1001);
 ```
+
+> **可以省掉一次投影**：若你的生成结果已经把行按主键存成了 `Dictionary<TKey, T>`（不少工具的表对象内部就是它，只是对外暴露成只读视图），可以直接把它转成 `IDictionary` 传给 `ConfigTable<T>` 的构造。前提是**运行期那个对象确实是 `Dictionary<TKey, T>`（含派生类）**——`ConfigTable` 构造时沿基类链校验，不满足即抛 `ConfigException`（早失败），不会静默出错。
 
 **Global 配置注册：**
 
@@ -158,10 +173,12 @@ var cfg = ConfigManager.GetGlobal<GameGlobalCfg>();
 
 **反射批注册（非泛型重载）：**
 
+> **与前提一同一条约束**：下面这段同样要求行类型实现 `IConfigRow<TKey>`——它正是从该接口取主键类型的。另外「取行集合」那句也要按你的生成结果改。
+
 ```csharp
 // 需要 using System;（Activator）、using System.Collections;、using System.Collections.Generic;、using System.Linq;
 // 动态遍历 Luban Tables 的 Tb 属性自注册。
-// 示意：Luban 各版本 DataList 的 API 不同，下方以「行列表 + Id 属性」的通用方式构建字典
+// 示意：「取行集合」按你的生成结果改；字典以「行列表 + 主键成员」的通用方式构建
 foreach (var prop in typeof(GameTables).GetProperties())
 {
     if (!prop.Name.StartsWith("Tb"))
@@ -177,12 +194,16 @@ foreach (var prop in typeof(GameTables).GetProperties())
     ConfigManager.RegisterTable(rowType, table);
 }
 
-// 从行类型实现的 IConfigRow<TKey> 提取主键类型，按 Id 属性构建 Dictionary<TKey, T>
+// 从行类型实现的 IConfigRow<TKey> 提取主键类型，按主键成员构建 Dictionary<TKey, T>
 private static IDictionary BuildKeyDictionary(Type rowType, object dataList)
 {
     var keyType = rowType.GetInterfaces()
         .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConfigRow<>))
         .GetGenericArguments()[0];
+
+    // 注意：必须从「接口」上取 Id，不能从行类型上取（rowType.GetProperty("Id")）。
+    // 若行类型是用「显式接口实现」满足该接口的（生成代码已占用了 Id 这个成员名时只能这么做），
+    // 那么 typeof(行类型).GetProperty("Id") 会返回 null，而接口上的 PropertyInfo 仍能正常读到值。
     var idProp = typeof(IConfigRow<>).MakeGenericType(keyType).GetProperty("Id");
 
     var dict = (IDictionary)Activator.CreateInstance(
@@ -538,3 +559,12 @@ ConfigManifest  (批量加载清单)
 - **空表与键类型不匹配的处置不对称**：`JsonLoader` 允许空数组（注册一张空表），
   `ScriptableObjectLoader` 会抛；`ConfigTable` 的键类型不匹配在 `Get` 上抛、在 `TryGet` / `Contains`
   上只告警并返回 `false`。
+- **经 `RegisterTable` / `RegisterGlobal` 注入的表没有资源路径，也不参与 `Preload` 的语义**：注入只写
+  数据与包装器——不写 `_assetPaths`（`CopyLoaded` 里这类条目的 `AssetPath` 恒为 null）、不进
+  `_inFlightLoads`。两个可观察后果：① 同一个类型先注入再 `Preload`（或反过来）**互相覆盖、后到者赢**，
+  且因为路径表里没有记录，**连「assetPath 与首次不同」的那条 Warning 都不会有**；② 并发的 `Preload`
+  与注册之间没有去重，各自完成、各自写入。
+- **经 ConfigManager 走一遍会留下多份索引视图**：外部工具的表对象自己有一份按主键的索引，你为
+  `ConfigTable<T>` 建的 `Dictionary<TKey, T>` 是第二份，`ConfigTable` 构造时还会拷出一份行数组
+  （`GetAll()` 返回的就是它）。这是「让 ConfigManager 成为统一查询面」的代价——**只想省掉这份开销、
+  不需要统一查询面的项目，直接用外部工具自己的表对象即可**。
