@@ -300,11 +300,11 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 | 包名                                              | 版本/URL                                                                         | 说明         | 安装方式 |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- | ------------ | -------- |
-| [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#a9e27c03d411d2fca01cc7410c24c97cd77cb539` | 异步操作库   | UPM      |
-| [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#c14244b2cf1eea020d97ed09f9aef14918e1b2d8`                 | 资源管理系统 | UPM      |
+| [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11` | 异步操作库   | UPM      |
+| [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#2.3.18`                 | 资源管理系统 | UPM      |
 | [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) | `com.unity.nuget.newtonsoft-json`（3.2.1）                           | JSON 序列化库 | UPM      |
 
-> **两个 Git 依赖都钉了提交哈希，请连 `#…` 一起复制。** 不写修订时包管理器会取**默认分支的最新提交**，而上游已经前进过：YooAsset 3.x 把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层，Asset 模块会直接编译不过（实测 51 处 `error CS0246`）。上表这两条哈希是 XFramework 自身编译与测试所用的组合。`?path=` 必须写在 `#` 之前，且哈希必须写完整的 40 位。
+> **两个 Git 依赖都钉了上游的发布 tag，请连 `#…` 一起复制。** 不写修订时包管理器会取**默认分支的最新提交**，而上游已经前进过：YooAsset 3.x 把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层，Asset 模块会直接编译不过（实测：不写修订时 51 处 `error CS0246/CS0234`，钉住后退出码 0、零 `error CS`）。上面这两个 tag 就是 XFramework 自身编译与测试所用的版本，本仓库的 `packages-lock.json` 里锁的也是它们。**`?path=` 必须写在 `#` 之前**（反过来会失败）；这里用 tag 而不是提交哈希，是为了让你一眼看出装的是哪个版本。
 
 ### 安装依赖
 
@@ -315,8 +315,8 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 ```json
 {
   "dependencies": {
-    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#a9e27c03d411d2fca01cc7410c24c97cd77cb539",
-    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#c14244b2cf1eea020d97ed09f9aef14918e1b2d8",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11",
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#2.3.18",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }

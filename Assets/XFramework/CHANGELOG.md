@@ -580,7 +580,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
-- **依赖表的两个 Git 依赖钉上提交哈希——不钉的话，全新工程照 README 装出来的包编译不过（实测）**。README 此前给的是裸 URL（`…YooAsset.git?path=Assets/YooAsset`），而不写修订时包管理器取**默认分支的最新提交**；上游 YooAsset 已经走到 3.x，把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了 `Runtime/Compatibility/Compatible*.cs` 里默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层。**实测**（新建裸 Unity 工程 + `file:` 指向包本体）：未钉版时 51 处 `error CS0246/CS0234` 全部落在 Asset 模块；钉到本仓 `packages-lock.json` 锁定的提交后退出码 0、零 `error CS`，YooAsset 回到框架实际使用的 2.3.18。本仓自己一直没暴露这个问题，只因 `packages-lock.json` 是提交进仓库的——**锁文件保护不了照 README 手装的第三方**。UniTask 同样未钉版本（本仓 2.5.10），按同一理由一并钉上。写法约束来自 Unity 文档：`?path=` 必须写在 `#` 之前（反过来会失败），哈希必须写完整 40 位（不支持短 SHA）
+- **两个 Git 依赖改为锚定上游的发布 tag（YooAsset `#2.3.18` / UniTask `#2.5.11`），且 README 与本仓库的 `Packages/manifest.json` 同时改到同一对 tag**。起因是一个实测：README 此前给的是**裸 URL**（`…YooAsset.git?path=Assets/YooAsset`），而不写修订时包管理器取**默认分支的最新提交**；上游 YooAsset 已经走到 3.x，把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了 `Runtime/Compatibility/Compatible*.cs` 里默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层，Asset 模块因此直接编译不过。**实测**（新建裸 Unity 工程 + `file:` 指向包本体）：不写修订时 51 处 `error CS0246/CS0234` 全部落在 Asset 模块，钉住后退出码 0、零 `error CS`。本仓自己一直没暴露这个问题，只因 `packages-lock.json` 是提交进仓库的——**锁文件保护不了照 README 手装的第三方**。**为什么是 tag 而不是提交哈希**：补查发现本仓原先锁定的两个提交**都不是任何发布版**，而是上游 main 上的中间快照（YooAsset 那个在 `2.3.18` 之后 1 个提交，UniTask 那个在 `2.5.11` 之前 3 个提交）——照 README 把别人家未发布的快照装给第三方，本身就不是个好建议，哈希对读者也零信息量。改用 tag 后版本号一眼可读，且**文档推荐的组合与本仓库编译测试的组合是同一个**（`packages-lock.json` 锁的正是这两个 tag 的提交）。写法约束来自 Unity 文档：`?path=` 必须写在 `#` 之前（反过来会失败）
 
 ### Documentation
 
