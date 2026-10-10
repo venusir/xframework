@@ -300,9 +300,11 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 | 包名                                              | 版本/URL                                                                         | 说明         | 安装方式 |
 | ------------------------------------------------- | -------------------------------------------------------------------------------- | ------------ | -------- |
-| [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask` | 异步操作库   | UPM      |
-| [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset`                 | 资源管理系统 | UPM      |
+| [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#a9e27c03d411d2fca01cc7410c24c97cd77cb539` | 异步操作库   | UPM      |
+| [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#c14244b2cf1eea020d97ed09f9aef14918e1b2d8`                 | 资源管理系统 | UPM      |
 | [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) | `com.unity.nuget.newtonsoft-json`（3.2.1）                           | JSON 序列化库 | UPM      |
+
+> **两个 Git 依赖都钉了提交哈希，请连 `#…` 一起复制。** 不写修订时包管理器会取**默认分支的最新提交**，而上游已经前进过：YooAsset 3.x 把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层，Asset 模块会直接编译不过（实测 51 处 `error CS0246`）。上表这两条哈希是 XFramework 自身编译与测试所用的组合。`?path=` 必须写在 `#` 之前，且哈希必须写完整的 40 位。
 
 ### 安装依赖
 
@@ -313,14 +315,76 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 ```json
 {
   "dependencies": {
-    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask",
-    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset",
+    "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#a9e27c03d411d2fca01cc7410c24c97cd77cb539",
+    "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#c14244b2cf1eea020d97ed09f9aef14918e1b2d8",
     "com.unity.nuget.newtonsoft-json": "3.2.1"
   }
 }
 ```
 
-配置完成后，再通过 Git URL 或本地路径添加 XFramework。消息总线（XMessage）与响应式属性（XReactive）均为框架自研实现，无需额外依赖。
+### 安装 XFramework
+
+第三方依赖配置完成后，用下列两种方式之一引入 XFramework 本体。消息总线（XMessage）与响应式属性（XReactive）均为框架自研实现，无需额外依赖。
+
+#### 方式一：Git URL（只读）
+
+在 `Packages/manifest.json` 的 `dependencies` 中添加：
+
+```json
+{
+  "dependencies": {
+    "com.venusy609.xframework": "https://github.com/venusir/xframework.git?path=Assets/XFramework"
+  }
+}
+```
+
+**`?path=` 是必需的。** XFramework 的仓库根是一个**完整的 Unity 开发工程**（含 `ProjectSettings/`、示例场景、测试与构建工具），UPM 包本体在它的 `Assets/XFramework/` 子目录下，不在仓库根。
+
+这种方式把包拉进 `Library/PackageCache`，是**只读**的：改了不会保留，也无法提交回仓库。只需要用框架、不改框架代码时选它。
+
+#### 方式二：git 子模块 + 本地路径（需要改框架代码时）
+
+想把框架代码和自己的游戏代码放在同一个工作区里改、一起提交推送，就把仓库作为子模块引入，再用 `file:` 指向包本体。
+
+```powershell
+# 在项目根目录执行
+git submodule add https://github.com/venusir/xframework.git Submodules/XFramework
+```
+
+然后在 `Packages/manifest.json` 的 `dependencies` 中添加：
+
+```json
+{
+  "dependencies": {
+    "com.venusy609.xframework": "file:../Submodules/XFramework/Assets/XFramework"
+  }
+}
+```
+
+`file:` 的**相对路径以工程的 `Packages` 文件夹为基准**解析，所以 `../` 就是工程根，`file:../Submodules/…` 正好落在子模块里的包本体。用相对路径而不是绝对路径，换机器、换操作系统都不必改。包会以 **Local** 的形式出现在 Package Manager 里，代码改动即时生效。
+
+**子模块不要放在 `Assets/` 或 `Packages/` 下：**
+
+- 放在 `Assets/` 下，Unity 会把**整个仓库**当松散资源导入——`ProjectSettings/`、`Documentation/`、`Tools/`、`CLAUDE.md`、示例场景与 `InputSystem_Actions` 都会混进你的工程。
+- 放在 `Packages/` 下，Unity 会因为 `package.json` 不在子模块根目录而认不出这是包。
+
+改完框架代码后，提交并推送：
+
+```powershell
+cd Submodules/XFramework
+git checkout main                # 见下方注意
+# ……修改框架代码……
+git commit -am "你的改动"
+git push
+
+cd ../..
+git add Submodules/XFramework    # 把子模块指针移到新提交
+git commit -m "chore: 更新 XFramework 子模块"
+```
+
+> **`git checkout main` 不能省。** 子模块默认检出的是某个**具体提交**而不是分支（detached HEAD）。在这种状态下提交，新提交没有任何分支指向它，推上去也不在 `main` 上，很容易丢。
+
+包内还带有 `Tests/`（框架自身的测试）。它**不会**在导入方编译——UPM 包的测试程序集只有在工程 manifest 的 `testables` 里列出该包时才参与编译，因此不必为它准备任何东西。若想在工程内运行框架自带的测试，在 `Packages/manifest.json` 里加上 `"testables": ["com.venusy609.xframework"]`。
 
 ---
 

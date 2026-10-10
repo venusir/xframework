@@ -578,6 +578,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **一键安装器漏装 Newtonsoft.Json**：`XFrameworkDependencyInstaller` 的 `RequiredUPMDependencies` 只写了 UniTask 与 YooAsset，而 `Venusy609.Xframework.asmdef` 引用 `Newtonsoft.Json` 程序集——用菜单 `XFramework/Install Dependencies` 装出来的第三方项目，Serialize 模块的 asmdef 引用解析不了，直接编译不过。根因：这张清单写于 0.2.0（移除 NuGetForUnity 那一轮），而 Newtonsoft 四天后才随「序列化：新增 NewtonsoftSerializer」入仓，清单此后没跟着 README 的依赖表一起长。现补上 `com.unity.nuget.newtonsoft-json`（`3.2.1`），并在字典上方注明**真相来源是包 README 的「第三方依赖」表**，两处必须一起改。插入逻辑零改动——值的写法对 Git URL 包与 Unity 官方注册表包同形（都是 `"id": "值"`），已存在判定照常生效
 
+### Fixed
+
+- **依赖表的两个 Git 依赖钉上提交哈希——不钉的话，全新工程照 README 装出来的包编译不过（实测）**。README 此前给的是裸 URL（`…YooAsset.git?path=Assets/YooAsset`），而不写修订时包管理器取**默认分支的最新提交**；上游 YooAsset 已经走到 3.x，把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了 `Runtime/Compatibility/Compatible*.cs` 里默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层。**实测**（新建裸 Unity 工程 + `file:` 指向包本体）：未钉版时 51 处 `error CS0246/CS0234` 全部落在 Asset 模块；钉到本仓 `packages-lock.json` 锁定的提交后退出码 0、零 `error CS`，YooAsset 回到框架实际使用的 2.3.18。本仓自己一直没暴露这个问题，只因 `packages-lock.json` 是提交进仓库的——**锁文件保护不了照 README 手装的第三方**。UniTask 同样未钉版本（本仓 2.5.10），按同一理由一并钉上。写法约束来自 Unity 文档：`?path=` 必须写在 `#` 之前（反过来会失败），哈希必须写完整 40 位（不支持短 SHA）
+
+### Documentation
+
+- **补上「怎么把 XFramework 装进项目」**：README 的依赖章节此前只写「配置完成后，再通过 Git URL 或本地路径添加 XFramework」，而**全仓（除本文件外）从没有出现过本仓库自己的 Git URL**——第三方照那句话做不出来。现补 `### 安装 XFramework` 两节：**方式一 Git URL**（`?path=Assets/XFramework` 是必需的，因为仓库根是一个完整 Unity 开发工程、包本体在子目录；这种方式落在 `Library/PackageCache`，只读、改不了也推不回），**方式二 git 子模块 + `file:` 本地路径**（`file:` 的相对路径以工程的 `Packages` 文件夹为基准解析，故 `../` 即工程根；含「不要放 `Assets/` 或 `Packages/` 下」两个反例与各自的后果；以及 `git checkout main` 那个 detached HEAD 的坑——不切分支就提交，新提交没有任何分支指向它）
+- **包内 `Tests/` 在导入方不参与编译**（实测：`Library/ScriptAssemblies` 下只出现 Runtime 与 Editor 两个程序集，测试程序集没有产出）——Unity 的规则是包测试要进工程 manifest 的 `testables` 才编译。因此导入方不必为它准备任何东西；要跑这些测试就把包名加进 `testables`
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
