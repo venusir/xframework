@@ -8,6 +8,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **弹窗定位原语 `UIPopupPosition`**（新公开枚举 `UIPopupDirection` / `UIPopupAlign`）：纯几何静态工具，算出弹窗该摆在锚点元素的哪里——下拉菜单、右键菜单、悬浮说明、组合框展开、嵌套子菜单。补的是本模块此前缺的一种贴附：`ShowHudAsync` 跟**世界** `Transform`、Tip 是**固定位置配置**，两者都不是「锚到屏幕空间 UI 元素」。四条取向：
+  **① 不进 `IUIManager`、不加门面转发、不登记 Bootstrap / AutoInit**——与 `UISorting` / `UILayers` 同类，是纯静态工具而非服务，无接口成员可加；`AutoInitTests` 的族清单只治理带 `[RuntimeInitializeOnLoadMethod]` 的成员，本类刻意没有（这是设计结论，不是遗漏）。
+  **② 返回的是「pivot 应该落在的点」而不是角**：`rectTransform.position` 赋值设置的是物体的 pivot，因此 `popupPivot` 是必需参数——若写死「返回左下角」，中心 pivot（Unity 新建 RectTransform 的默认值）的预制体会**静默错位半个尺寸**。
+  **③ 两个轴都收敛，且用显式分支而非 `Mathf.Clamp`**：只收敛一侧时「锚点贴屏幕左缘 + 弹窗比锚点宽」会把弹窗推出屏幕；而 `Mathf.Clamp` 在弹窗大于可用区域（上界 < 下界）时的返回值取决于输入值、语义不可靠——故弹窗过大一律贴低边，并在文档写明「无法保证完整可见」。
+  **④ `Auto` 在四个方向里依次尝试**（Down → Up → Right → Left，取第一个放得下的），四个都放不下时取可用空间最大的那个再由收敛兜底；实际采用的方向经 `out resolved` 回给调用方，供翻转箭头或换动画用。
+  **顺带**：`GetScreenRect(RectTransform)` 四个角各做一次 `TransformPoint` 后取下界/上界——不用 `GetWorldCorners`、不引入任何缓冲区，**零分配**；锚点被旋转时得到外接矩形，对定位而言正是想要的。**前置条件是画布为 `ScreenSpaceOverlay`**（本框架强制如此），已写进类文档。
 - **其余页签（概览 / Message / Lock / Data / Bootstrap / Save / File / Input / Serialize）+ 第三方示例**：全部建立在**已有公开查询面**之上，零 Runtime API 变更。概览页是一张模块状态矩阵（哪些模块已初始化、各自的规模一句话），是诊断窗口的落地点；其余页签各自回答一类问题（Message 的订阅/缓冲规模、Lock 的未绑定主体、Data 的脏块、Bootstrap 的登记表、Save 的忙碌状态、File 的加密提供者、Input 的设备识别、Serialize 的已注册格式）。另加 `Samples/Example/DiagnosticsSample.cs`——第三方页签的完整样板（实现 → 登记 → 采集三步）。
   **三条边界已写进各页签的文档**：Save 的槽位列表是异步磁盘 IO 不适合轮询（本轮不做）；Input 的启用 ActionMap 列表要动 `IInputProvider`（本轮不做）；Message 的键值通道 key 无法枚举（只给到类型粒度）。
 - **Timer / Localization / Update / Audio 四组诊断回读 + 四个页签**：`TimerManager.CopyActiveTimers(List<TimerInfo>)`、`LocalizationManager.CopyLoadedLanguages(List<LocalizationLanguageInfo>)` / `CachedLanguageCount`、`UpdateManager.CopyNodes(List<UpdateNodeInfo>)`、`AudioManager.CopyChannels(List<AudioChannelInfo>)`（新公开类型 `TimerInfo` / `LocalizationLanguageInfo` / `UpdateNodeInfo` / `AudioChannelInfo`）。四条取向：
