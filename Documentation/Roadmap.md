@@ -15,7 +15,7 @@
 ## 二、待立项（已确认要做）
 
 > 节的排列即建议的开工顺序。Audio 2.1 / Logger 2.2 / Timer 2.3 已于 2026-10-01 建成，
-> ReactiveList 2.4 于 2026-10-11 建成，各自只留指针；本节目前为空——下一个候选见第三、四节。
+> ReactiveList 2.4 于 2026-10-11 建成，各自只留指针；当前在办的是 2.5，其余候选见第三、四节。
 
 ### 2.1 Audio —— ✅ 已建成（2026-10-01）
 
@@ -75,6 +75,51 @@
 
 该轮还顺带修正了 `Documentation/Modules/Reactive.md` 一条**过期未决**（「相等比较器不可注入」——已在
 2026-10-02 落地但条目未同步），教训写进该条目自身。
+
+### 2.5 ReactiveDictionary（按键寻址的集合型响应式）—— 待立项（2026-10-11）
+
+> 扩建既有 `XReactive` 模块（不新建模块）：使用方文档并入
+> `Assets/XFramework/Runtime/Reactive/README.md`，维护向记录并入 `Documentation/Modules/Reactive.md`，
+> 建成后本条只留指针。
+
+**该不该建：建。** 依据是**前瞻性使用方场景**：实体 id → 状态（怪物表、单位注册表、玩家表）、
+槽位 → 内容（背包格、装备栏、建造槽位）、叠加状态 → 层数（buff / 减益）、资源 id → 计数（货币 / 材料 /
+掉落统计）。**刻意不写成「回填既有设施」**——仓内「键 → 值 + 变更通知」的手写设施有 5 处
+（`LockManager` / `UIManagerImpl` / `SettingsManager` + 消息 / `LocalizationManagerImpl` /
+`ConfigManagerImpl`），逐条核对后 **0 处可被本类型替换**：它们各自带领域语义（`LockManager._locks` 是
+**键 → 集合**的三级结构且带聚合边沿与销毁绑定；`SettingRefRegistry<T>` 根本不是键值表——封闭泛型静态类
++ `List`，源码还专门解释了「为什么不是 `Dictionary<Type, List<…>>`」；UI 的公开读面是**栈序列表**；
+Localization / Config 是整表级 / 类型级广播 + LRU / 异步）。**这条差异必须留着**，别让下一轮拿 §2.4 的
+论证来套。Message 的 keyed 通道**不是替代品**：无读面（键集合不可枚举）、键的增删无声、无字典写语义，
+且淘汰是**使用方纪律**而非 `Remove`——而 `Remove(key)` 恰是字典的天然淘汰（不必在实体销毁处手工记账）。
+
+**边界（v1 六条）**：
+
+1. **只做字典**（`ReactiveDictionary<TKey,TValue>`）；`ReactiveSet` 维持延后（`IReadOnlySet<T>` 不在
+   .NET Standard 2.1 API 面内）；有序键值不做——要新增重排词条并给遍历顺序承诺，是另一个容器。
+2. **单一变更流 + `readonly struct` 载荷**（`Kind` / `Key` / `Value` / `OldValue`）；`Clear` 非空发一条
+   `Reset`；**无索引哨兵**——`TKey` 没有通用非法值，Reset 的 `Key` 是 `default`，文档明写「不要读」；
+   索引器 upsert 到**等值**时静默，且**不替换实例**。
+3. **不做 batch / Range**：批量装载走构造（含带 comparer 的重载）。
+4. **回调里不要改动本字典**：嵌套那一轮先跑完，此后外层载荷的 `Key` 可能**已被嵌套轮移除**（键比索引
+   稳定，但会被移除）；遍历中改动使枚举器失效；回调里订阅 / 退订安全。
+5. **零 GC**：struct 载荷 + 泛型流不装箱；`foreach` 装箱如实写明；**遍历顺序不承诺**。
+6. **`IReactiveDictionary<TKey,TValue> : IReadOnlyDictionary<TKey,TValue>`**（接口即只读视图，写面只在
+   具体类）；**订阅不做立即回调**；键比较器经构造注入 + 具体类上的 `Comparer` 属性——依据是仓内**已发生
+   过**的审计 E 类事故（Lock 的引用类型键走默认 `Equals`，两个实体静默合并成一把锁）；**不实现**
+   `IDictionary` / `ICollection<KeyValuePair<>>`。
+
+**两处刻意与生态分歧**（对照物：UniRx `ReactiveDictionary` 与 Cysharp `ObservableDictionary`——源码
+一手读取但**仓内不可复验**，按转述标注）：两家**都不做值相等去重**、`Clear` **都始终发 Reset**；本仓取
+「无变化不发通知」家族规则——等值 upsert 静默（换来可测的不变量「**有通知 ⇔ 状态确实变了**」，正面回答
+审计 F 的双观测面判据）、空表 `Clear` 静默。
+
+**明确不做（其一含重开判据）**：**键的生命周期自动移除**（销毁令牌绑定）——两条硬阻断：
+`IDestroyCancellationToken` 在 Message 模块（会新增 `Reactive → Message` 依赖，现依赖节明写「不依赖它」）、
+令牌回调跑在**取消者线程**（与全族「主线程专用、零同步」正面冲突）；正解是「字典归谁，由谁在销毁处
+`Remove`」。重开判据：先回答「令牌回调线程怎么办 / 该接口迁往哪个中立模块 / 值被替换后旧令牌如何解除」
+三问。其余不做项（有序键值 / 按值查找 / 加锁 / `Version` / `ObserveAdd` 式算子 / 用字典冒充 Set）见模块
+文档。
 
 ## 三、待裁（常见，但边界未定，先别开工）
 
