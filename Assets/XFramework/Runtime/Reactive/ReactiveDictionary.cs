@@ -236,11 +236,17 @@ namespace XFramework.XReactive
 
         /// <summary>
         /// 枚举键值对。<b>遍历顺序不作承诺</b>。
-        /// <para><b>零 GC 提示</b>：本类型<b>不提供</b>无装箱的枚举——<c>foreach</c> 无论直接用还是经
-        /// <see cref="IReadOnlyDictionary{TKey, TValue}"/> 接口，都会把 <c>Dictionary&lt;TKey, TValue&gt;</c>
-        /// 的结构体枚举器装箱一次。热路径请用 <see cref="TryGetValue"/> / 索引器，避免遍历。</para>
+        /// <para><b>零 GC</b>：返回 <c>Dictionary&lt;TKey, TValue&gt;</c> 的结构体枚举器——直接用本类型
+        /// <c>foreach</c> 零分配、不装箱（与 BCL 同法）；<b>经接口</b>（<see cref="IReadOnlyDictionary{TKey, TValue}"/>
+        /// 等）<c>foreach</c> 仍会装箱一次枚举器，无法避免。</para>
+        /// <para><see cref="Keys"/> / <see cref="Values"/> 是 <c>Dictionary</c> 的投影视图：
+        /// <b>每次访问该属性都会分配一个视图对象</b>，遍历它们另有装箱——热路径请直接用本类型的
+        /// <c>foreach</c>，或用 <see cref="TryGetValue"/> / 索引器。</para>
         /// </summary>
-        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator() => _items.GetEnumerator();
+        public Dictionary<TKey, TValue>.Enumerator GetEnumerator() => _items.GetEnumerator();
+
+        IEnumerator<KeyValuePair<TKey, TValue>> IEnumerable<KeyValuePair<TKey, TValue>>.GetEnumerator()
+            => _items.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 

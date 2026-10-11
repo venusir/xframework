@@ -206,13 +206,14 @@ namespace XFramework.XReactive
         }
 
         /// <summary>
-        /// 枚举元素。
-        /// <para><b>零 GC 提示</b>：本类型<b>不提供</b>无装箱的枚举——<c>foreach</c> 无论直接用还是经
-        /// <see cref="IReadOnlyList{T}"/> 接口，都会把 <c>List&lt;T&gt;</c> 的结构体枚举器装箱一次
-        /// （对比：<c>List&lt;T&gt;</c> 本身另有公开的结构体 <c>GetEnumerator</c>，直接 <c>foreach</c> 不装箱）。
-        /// 热路径请用索引 <c>for</c>。</para>
+        /// 枚举元素。返回 <c>List&lt;T&gt;</c> 的结构体枚举器——<b>直接用本类型 <c>foreach</c> 零分配、不装箱</b>
+        /// （与 BCL 的 <c>List&lt;T&gt;</c> 同法）。
+        /// <para><b>经接口</b>（<see cref="IReadOnlyList{T}"/> 等）<c>foreach</c> 仍会装箱一次枚举器——
+        /// 那是接口本身的要求，无法避免；热路径请直接用具体类型遍历。</para>
         /// </summary>
-        public IEnumerator<T> GetEnumerator() => _items.GetEnumerator();
+        public List<T>.Enumerator GetEnumerator() => _items.GetEnumerator();
+
+        IEnumerator<T> IEnumerable<T>.GetEnumerator() => _items.GetEnumerator();
 
         IEnumerator IEnumerable.GetEnumerator() => _items.GetEnumerator();
 
