@@ -70,10 +70,10 @@ using var sub = alive.Subscribe(change =>
 {
     switch (change.Kind)
     {
-        case ReactiveListChangeKind.Add:     // change.Index / change.Item
-        case ReactiveListChangeKind.Remove:  // change.Index / change.Item
-        case ReactiveListChangeKind.Replace: // change.Index / change.Item(新) / change.OldItem(旧)
-        case ReactiveListChangeKind.Reset:   // Clear / Sort——重读列表
+        case ReactiveCollectionChangeKind.Add:     // change.Index / change.Item
+        case ReactiveCollectionChangeKind.Remove:  // change.Index / change.Item
+        case ReactiveCollectionChangeKind.Replace: // change.Index / change.Item(新) / change.OldItem(旧)
+        case ReactiveCollectionChangeKind.Reset:   // Clear / Sort——重读列表
             break;
     }
     // 任何变更后都以列表本身为准(它是唯一真相),不要拿增量拼镜像

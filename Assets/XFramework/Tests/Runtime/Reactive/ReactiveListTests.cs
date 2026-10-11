@@ -49,7 +49,7 @@ namespace XFramework.XReactive.Tests
             list.Add("b");
 
             Assert.AreEqual(2, changes.Count, "两次 Add 两条通知");
-            Assert.AreEqual(ReactiveListChangeKind.Add, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Add, changes[0].Kind);
             Assert.AreEqual(0, changes[0].Index, "Add 的 Index 为追加后的下标");
             Assert.AreEqual("a", changes[0].Item);
             Assert.AreEqual(1, changes[1].Index);
@@ -66,7 +66,7 @@ namespace XFramework.XReactive.Tests
             list.Insert(0, "z");
 
             Assert.AreEqual(1, changes.Count);
-            Assert.AreEqual(ReactiveListChangeKind.Add, changes[0].Kind, "插入与追加同属 Add");
+            Assert.AreEqual(ReactiveCollectionChangeKind.Add, changes[0].Kind, "插入与追加同属 Add");
             Assert.AreEqual(0, changes[0].Index);
             Assert.AreEqual("z", changes[0].Item);
             CollectionAssert.AreEqual(new[] { "z", "a" }, list, "元素已插入");
@@ -82,7 +82,7 @@ namespace XFramework.XReactive.Tests
             list[0] = "b";
 
             Assert.AreEqual(1, changes.Count);
-            Assert.AreEqual(ReactiveListChangeKind.Replace, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Replace, changes[0].Kind);
             Assert.AreEqual(0, changes[0].Index);
             Assert.AreEqual("b", changes[0].Item, "Item 是新值");
             Assert.AreEqual("a", changes[0].OldItem, "OldItem 是旧值——仅 Replace 有意义");
@@ -99,7 +99,7 @@ namespace XFramework.XReactive.Tests
 
             Assert.IsTrue(removed);
             Assert.AreEqual(1, changes.Count);
-            Assert.AreEqual(ReactiveListChangeKind.Remove, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Remove, changes[0].Kind);
             Assert.AreEqual(1, changes[0].Index);
             Assert.AreEqual("b", changes[0].Item, "载荷带被移除的元素");
         }
@@ -127,7 +127,7 @@ namespace XFramework.XReactive.Tests
             list.RemoveAt(0);
 
             Assert.AreEqual(1, changes.Count);
-            Assert.AreEqual(ReactiveListChangeKind.Remove, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Remove, changes[0].Kind);
             Assert.AreEqual(0, changes[0].Index);
             Assert.AreEqual("a", changes[0].Item);
         }
@@ -142,7 +142,7 @@ namespace XFramework.XReactive.Tests
             list.Clear();
 
             Assert.AreEqual(1, changes.Count, "清空只发一条——不是逐项 Remove");
-            Assert.AreEqual(ReactiveListChangeKind.Reset, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Reset, changes[0].Kind);
             Assert.AreEqual(-1, changes[0].Index, "Reset 的 Index 为 -1(无意义)");
             Assert.AreEqual(0, list.Count);
         }
@@ -157,7 +157,7 @@ namespace XFramework.XReactive.Tests
             list.Sort();
 
             Assert.AreEqual(1, changes.Count, "整表操作发一条 Reset,不逐项通知");
-            Assert.AreEqual(ReactiveListChangeKind.Reset, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Reset, changes[0].Kind);
             Assert.AreEqual(-1, changes[0].Index);
             CollectionAssert.AreEqual(new[] { 1, 2, 3 }, list, "已排序");
         }
@@ -203,7 +203,7 @@ namespace XFramework.XReactive.Tests
             list.Sort();     // 单元素
 
             Assert.AreEqual(1, changes.Count, "两次 Sort 都静默——changes 里只有那条 Add");
-            Assert.AreEqual(ReactiveListChangeKind.Add, changes[0].Kind);
+            Assert.AreEqual(ReactiveCollectionChangeKind.Add, changes[0].Kind);
         }
 
         #endregion
@@ -316,7 +316,7 @@ namespace XFramework.XReactive.Tests
             using var subA = list.Subscribe(ch => received.Add(ch.Item));
             using var subB = list.Subscribe(ch =>
             {
-                if (ch.Kind == ReactiveListChangeKind.Add && ch.Item == "b")
+                if (ch.Kind == ReactiveCollectionChangeKind.Add && ch.Item == "b")
                     list.Add("c");
             });
 
@@ -334,7 +334,7 @@ namespace XFramework.XReactive.Tests
             using var subA = list.Subscribe(payloads.Add);
             using var subB = list.Subscribe(ch =>
             {
-                if (ch.Kind == ReactiveListChangeKind.Add && ch.Item == "b")
+                if (ch.Kind == ReactiveCollectionChangeKind.Add && ch.Item == "b")
                     list.Insert(0, "x");     // 位移了后面所有元素
             });
 

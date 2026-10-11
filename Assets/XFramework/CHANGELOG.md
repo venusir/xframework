@@ -592,7 +592,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
-- **新增 `XReactive.ReactiveList<T>`（集合型响应式 v1）**：可订阅增删改的列表 + 只读接口 `IReactiveList<T> : IReadOnlyList<T>` + 零 GC 的 `readonly struct` 变更载荷 `ReactiveListChange<T>`（`Kind` / `Index` / `Item` / `OldItem`）+ 词表 `ReactiveListChangeKind`（Add / Remove / Replace / Reset）。起因是一次提问（`ReactiveProperty<T>` 的 `T` 是 `List` / 数组会怎样——去重退化为引用相等、就地修改零通知、`Value` 是活引用）：这类「一组东西变了，告诉我」的监听（怪物 / 弹幕 / 单位）本仓一直靠手写（`UIManager.Panels` + 三条消息），即同一个轮子被每个模块各写一遍。四条与直觉相左的决定及理由：
+- **新增 `XReactive.ReactiveList<T>`（集合型响应式 v1）**：可订阅增删改的列表 + 只读接口 `IReactiveList<T> : IReadOnlyList<T>` + 零 GC 的 `readonly struct` 变更载荷 `ReactiveListChange<T>`（`Kind` / `Index` / `Item` / `OldItem`）+ 词表 `ReactiveCollectionChangeKind`（Add / Remove / Replace / Reset）。起因是一次提问（`ReactiveProperty<T>` 的 `T` 是 `List` / 数组会怎样——去重退化为引用相等、就地修改零通知、`Value` 是活引用）：这类「一组东西变了，告诉我」的监听（怪物 / 弹幕 / 单位）本仓一直靠手写（`UIManager.Panels` + 三条消息），即同一个轮子被每个模块各写一遍。四条与直觉相左的决定及理由：
   **① 订阅不做立即回调**——与同模块 `IReactiveProperty<T>.Subscribe`（契约是「订阅时立即同步回调当前值」）**语义相反**，因为列表订阅的是**变更流**（不重放、也无法重放），语义对齐 `IEventStream<T>.Subscribe`；初始化姿势是「订阅后立即读一次列表」（主线程同步，两步之间不可能有变更）。
   **② 索引只在当次通知内有效**——载荷是事件的即时描述，不是可重放的操作日志；`Clear` / `Sort` 用一条 `Reset` 兜底（「整表变了，重读」），要全量状态就重读列表，别拿增量拼镜像。
   **③ 不做批量与算子面**——没有 batch 作用域 / `AddRange` / `RemoveRange` / `RemoveAll` / `Select` 派生；批量装载的正解是构造（静默、不发通知），对已订阅列表连续增删就是 N 条通知。

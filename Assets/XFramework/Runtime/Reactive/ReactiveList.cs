@@ -17,7 +17,7 @@ namespace XFramework.XReactive
     /// 行为契约:
     /// - 通知时列表<b>已完成变更</b>：收到任何变更后<b>重读列表</b>即可，不要用增量拼镜像
     ///   （索引只在当次通知内有效，见 <see cref="ReactiveListChange{T}"/>）
-    /// - <see cref="Clear"/> 与 <see cref="Sort"/> 发一条 <see cref="ReactiveListChangeKind.Reset"/>；
+    /// - <see cref="Clear"/> 与 <see cref="Sort"/> 发一条 <see cref="ReactiveCollectionChangeKind.Reset"/>；
     ///   增删改<b>逐项</b>通知——批量装载请走接受 <c>IEnumerable&lt;T&gt;</c> 的构造（静默、不发通知）
     /// - 无变化不发通知：空表 <see cref="Clear"/>、与旧值相等的索引器赋值都不发；
     ///   但 <see cref="Sort"/> 只要元素不少于 2 个就发 Reset（<b>即使次序恰好未变</b>——检测它要一趟全量比较，不做）
@@ -80,7 +80,7 @@ namespace XFramework.XReactive
 
         /// <summary>
         /// 按索引读写元素。get 直通底层列表（越界即抛）。
-        /// <para>set 是<b>替换</b>：写入后发一条 <see cref="ReactiveListChangeKind.Replace"/>；
+        /// <para>set 是<b>替换</b>：写入后发一条 <see cref="ReactiveCollectionChangeKind.Replace"/>；
         /// 与当前元素<b>相等则不发生任何事、不发通知</b>（去重语义，比较器为
         /// <see cref="EqualityComparer{T}.Default"/>——引用类型元素即引用相等，与
         /// <see cref="ReactiveProperty{T}"/> 的去重同源）。</para>
@@ -97,7 +97,7 @@ namespace XFramework.XReactive
                     return;
                 var oldItem = _items[index];
                 _items[index] = value;
-                _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Replace, index, value, oldItem));
+                _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Replace, index, value, oldItem));
             }
         }
 
@@ -114,7 +114,7 @@ namespace XFramework.XReactive
         #region Public API
 
         /// <summary>
-        /// 追加元素并发一条 <see cref="ReactiveListChangeKind.Add"/>（<see cref="ReactiveListChange{T}.Index"/>
+        /// 追加元素并发一条 <see cref="ReactiveCollectionChangeKind.Add"/>（<see cref="ReactiveListChange{T}.Index"/>
         /// 为追加后的下标）。
         /// </summary>
         /// <param name="item">要追加的元素。</param>
@@ -123,11 +123,11 @@ namespace XFramework.XReactive
         {
             ThrowIfDisposed();
             _items.Add(item);
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Add, _items.Count - 1, item, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Add, _items.Count - 1, item, default));
         }
 
         /// <summary>
-        /// 在指定下标处插入元素并发一条 <see cref="ReactiveListChangeKind.Add"/>。
+        /// 在指定下标处插入元素并发一条 <see cref="ReactiveCollectionChangeKind.Add"/>。
         /// </summary>
         /// <param name="index">插入位置。</param>
         /// <param name="item">要插入的元素。</param>
@@ -137,12 +137,12 @@ namespace XFramework.XReactive
         {
             ThrowIfDisposed();
             _items.Insert(index, item);
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Add, index, item, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Add, index, item, default));
         }
 
         /// <summary>
         /// 移除第一个与 <paramref name="item"/> 相等的元素并发一条
-        /// <see cref="ReactiveListChangeKind.Remove"/>（载荷带被移除的元素）。
+        /// <see cref="ReactiveCollectionChangeKind.Remove"/>（载荷带被移除的元素）。
         /// <para>相等按 <see cref="EqualityComparer{T}.Default"/>——引用类型元素即引用相等。
         /// 未命中则什么都不发生、不发通知。</para>
         /// </summary>
@@ -157,12 +157,12 @@ namespace XFramework.XReactive
                 return false;
             var removed = _items[index];
             _items.RemoveAt(index);
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Remove, index, removed, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Remove, index, removed, default));
             return true;
         }
 
         /// <summary>
-        /// 移除指定下标处的元素并发一条 <see cref="ReactiveListChangeKind.Remove"/>。
+        /// 移除指定下标处的元素并发一条 <see cref="ReactiveCollectionChangeKind.Remove"/>。
         /// </summary>
         /// <param name="index">要移除的下标。</param>
         /// <exception cref="ArgumentOutOfRangeException">下标越界时抛出（不留下半完成状态）。</exception>
@@ -173,11 +173,11 @@ namespace XFramework.XReactive
             // 先取再删:越界在读取处抛出,不留半完成状态
             var removed = _items[index];
             _items.RemoveAt(index);
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Remove, index, removed, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Remove, index, removed, default));
         }
 
         /// <summary>
-        /// 清空列表。<b>非空时</b>发一条 <see cref="ReactiveListChangeKind.Reset"/>；
+        /// 清空列表。<b>非空时</b>发一条 <see cref="ReactiveCollectionChangeKind.Reset"/>；
         /// 空表清空不发通知（无变化即无通知）。
         /// </summary>
         /// <exception cref="ObjectDisposedException">列表已释放时抛出。</exception>
@@ -187,11 +187,11 @@ namespace XFramework.XReactive
             if (_items.Count == 0)
                 return;
             _items.Clear();
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Reset, -1, default, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Reset, -1, default, default));
         }
 
         /// <summary>
-        /// 排序。元素少于 2 个时静默；否则发一条 <see cref="ReactiveListChangeKind.Reset"/>
+        /// 排序。元素少于 2 个时静默；否则发一条 <see cref="ReactiveCollectionChangeKind.Reset"/>
         /// ——<b>即使排序后次序恰好未变也发</b>（检测次序变化要一趟全量比较，不做）。
         /// </summary>
         /// <param name="comparer">比较器；<c>null</c> 等价 <see cref="Comparer{T}.Default"/>。</param>
@@ -202,7 +202,7 @@ namespace XFramework.XReactive
             if (_items.Count < 2)
                 return;
             _items.Sort(comparer);
-            _stream.Emit(new ReactiveListChange<T>(ReactiveListChangeKind.Reset, -1, default, default));
+            _stream.Emit(new ReactiveListChange<T>(ReactiveCollectionChangeKind.Reset, -1, default, default));
         }
 
         /// <summary>

@@ -3,11 +3,11 @@ namespace XFramework.XReactive
     /// <summary>
     /// 列表变更载荷：<see cref="ReactiveList{T}"/> 一次变更一条，经 <see cref="IReactiveList{T}.Subscribe"/> 投递。
     /// <para><b>各字段按 <see cref="Kind"/> 取用，其余为默认值</b>：</para>
-    /// <para>· <see cref="ReactiveListChangeKind.Add"/> / <see cref="ReactiveListChangeKind.Remove"/>：
+    /// <para>· <see cref="ReactiveCollectionChangeKind.Add"/> / <see cref="ReactiveCollectionChangeKind.Remove"/>：
     /// 用 <see cref="Index"/> 与 <see cref="Item"/>。</para>
-    /// <para>· <see cref="ReactiveListChangeKind.Replace"/>：用 <see cref="Index"/>、<see cref="Item"/>（新值）
+    /// <para>· <see cref="ReactiveCollectionChangeKind.Replace"/>：用 <see cref="Index"/>、<see cref="Item"/>（新值）
     /// 与 <see cref="OldItem"/>（旧值）。</para>
-    /// <para>· <see cref="ReactiveListChangeKind.Reset"/>：全部字段无意义，重读列表。</para>
+    /// <para>· <see cref="ReactiveCollectionChangeKind.Reset"/>：全部字段无意义，重读列表。</para>
     /// <para><b><see cref="Index"/> 只在当次通知内有效</b>——它是事件的即时描述，<b>不是可重放的操作日志</b>：
     /// 不要拿它把变更拼进镜像，要全量状态请重读列表本身。</para>
     /// <para><b>通知时列表已是变更后的状态</b>：收到任何变更后重读列表即可，不需要第二处真相。</para>
@@ -18,15 +18,15 @@ namespace XFramework.XReactive
     public readonly struct ReactiveListChange<T>
     {
         /// <summary>本条变更的种类。</summary>
-        public readonly ReactiveListChangeKind Kind;
+        public readonly ReactiveCollectionChangeKind Kind;
 
-        /// <summary>发生变更的下标；仅 <see cref="ReactiveListChangeKind.Reset"/> 为 -1（无意义）。</summary>
+        /// <summary>发生变更的下标；仅 <see cref="ReactiveCollectionChangeKind.Reset"/> 为 -1（无意义）。</summary>
         public readonly int Index;
 
-        /// <summary>新增 / 移除 / 替换后的元素；<see cref="ReactiveListChangeKind.Reset"/> 为 default。</summary>
+        /// <summary>新增 / 移除 / 替换后的元素；<see cref="ReactiveCollectionChangeKind.Reset"/> 为 default。</summary>
         public readonly T Item;
 
-        /// <summary>替换前的旧元素，仅 <see cref="ReactiveListChangeKind.Replace"/> 有意义，其余为 default。</summary>
+        /// <summary>替换前的旧元素，仅 <see cref="ReactiveCollectionChangeKind.Replace"/> 有意义，其余为 default。</summary>
         public readonly T OldItem;
 
         /// <summary>
@@ -38,7 +38,7 @@ namespace XFramework.XReactive
         /// <param name="index">发生变更的下标；Reset 传 -1。</param>
         /// <param name="item">新增 / 移除 / 替换后的元素。</param>
         /// <param name="oldItem">替换前的旧元素，其余种类传 default。</param>
-        public ReactiveListChange(ReactiveListChangeKind kind, int index, T item, T oldItem)
+        public ReactiveListChange(ReactiveCollectionChangeKind kind, int index, T item, T oldItem)
         {
             Kind = kind;
             Index = index;

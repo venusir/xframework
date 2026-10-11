@@ -16,7 +16,7 @@ Runtime/Reactive/
 ├── IReactiveList.cs              # 响应式列表接口(只读视图 IReadOnlyList<T> + 变更流订阅,不立即回调)
 ├── ReactiveList.cs               # 响应式列表(增删改 + 单流 struct 载荷通知 + Reset 兜底)
 ├── ReactiveListChange.cs         # 变更载荷 readonly struct(Kind/Index/Item/OldItem)
-└── ReactiveListChangeKind.cs     # 变更词表(Add/Remove/Replace/Reset)
+└── ReactiveCollectionChangeKind.cs     # 变更词表(Add/Remove/Replace/Reset)
 ```
 
 ## 沿革与已否决形状
