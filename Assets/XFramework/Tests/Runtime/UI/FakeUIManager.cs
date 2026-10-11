@@ -121,7 +121,7 @@ namespace XFramework.XUI.Tests
 
         public void HideHud(Transform target) => throw NotSupported();
 
-        public void SetHudProvider(IUiHudProvider provider) => throw NotSupported();
+        public void SetHudProvider(IUIHudProvider provider) => throw NotSupported();
 
         public UIStateSnapshot GetState() => throw NotSupported();
 

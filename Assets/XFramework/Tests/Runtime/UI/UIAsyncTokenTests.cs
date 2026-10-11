@@ -147,7 +147,7 @@ namespace XFramework.XUI.Tests
         }
 
         /// <summary>记录调用参数的 HUD provider，不触碰资源系统。</summary>
-        private sealed class RecordingHudProvider : IUiHudProvider
+        private sealed class RecordingHudProvider : IUIHudProvider
         {
             public int CallCount { get; private set; }
             public int DetachAllCount { get; private set; }

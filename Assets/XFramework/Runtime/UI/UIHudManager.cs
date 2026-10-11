@@ -10,13 +10,13 @@ using XFramework.XUI.View;
 namespace XFramework.XUI
 {
     /// <summary>
-    /// HUD 管理器默认实现。实现 <see cref="IUiHudProvider"/> 接口。
+    /// HUD 管理器默认实现。实现 <see cref="IUIHudProvider"/> 接口。
     /// <para>管理 <see cref="UIHudItem"/> 的附加、分离、对象池映射和每帧驱动。</para>
     /// <para>HUD 容器在 UIRoot 下自动创建（Layer_HUD），使用独立的 Canvas 与面板层级隔离。</para>
     /// <para>一个 3D 目标 Transform 同时只能绑定一个 HUD 实例，重复 Attach 会先 Detach 旧的。</para>
     /// <para>第三方可通过 <see cref="UIManager.SetHudProvider"/> 替换此实现。</para>
     /// </summary>
-    internal sealed class UIHudManagerImpl : IUiHudProvider
+    internal sealed class UIHudManagerImpl : IUIHudProvider
     {
         #region Constants
 
@@ -76,7 +76,7 @@ namespace XFramework.XUI
 
         #endregion
 
-        #region IUiHudProvider
+        #region IUIHudProvider
 
         /// <inheritdoc/>
         public void SetUIRoot(Transform uiRoot)

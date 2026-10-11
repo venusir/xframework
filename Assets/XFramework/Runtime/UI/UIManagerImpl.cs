@@ -143,7 +143,7 @@ namespace XFramework.XUI
         private IUITipProvider _tipProvider;
 
         /// <summary>HUD 提供者。默认 <see cref="UIHudManagerImpl"/>，可由 <see cref="SetHudProvider"/> 替换。</summary>
-        private IUiHudProvider _hudProvider;
+        private IUIHudProvider _hudProvider;
 
         /// <summary>
         /// Tip provider 的 <c>Update</c> 是否已因异常记过日志。
@@ -303,7 +303,7 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc/>
-        public void SetHudProvider(IUiHudProvider provider)
+        public void SetHudProvider(IUIHudProvider provider)
         {
             // 同上：换 provider 前先回收，避免旧 provider 的 HUD 成为孤儿
             if (_hudProvider != null && !ReferenceEquals(_hudProvider, provider))

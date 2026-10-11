@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
+  **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[Unreleased]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
+
 ### Added
 
 - **`UIManager.ShowPopupAsync<T>` 锚定弹窗入口 + 点击外部关闭捕获层**（**门面成员，不进 `IUIManager`**，与 `ShowDialogAsync` 同理由）：把面板贴着锚点控件摆出来，用于下拉菜单、右键菜单、悬浮说明、组合框展开。四条取向：
@@ -338,8 +343,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **UI `OnBlur` 不再置 `IsPaused`（破坏性）**：改由 `OnPause` / `OnResume` 承担。第三方若在重写的 `OnBlur` 里读 `IsPaused`，会看到旧值
 - **UI `ShowTipAsync` 的完成时机变化（破坏性）**：从「播放结束」变为「已创建并开始播放」。Tip 的播放改由统一帧通路推进，故无从等待播完；需要知道何时播完请按 `TipConfig.Duration` 自行计时
 - **UI `UIDefaultController` 默认静默（破坏性）**：它每次拦截都打日志，等于每开一个面板五条带字符串插值的日志。需要观察生命周期流程时用 `new UIDefaultController(verbose: true)`
-- **UI 异步 API 全面接入取消令牌（破坏性）**：`IUIManager` 全部异步成员、`IUIController` 五个回调、`IUiHudProvider.AttachAsync`、`IUITipProvider` 均新增 `CancellationToken`（一律收盘）。两条提交点语义已写进文档：打开以「实例化返回」为提交点、关闭以「`OnBeforeCloseAsync` 放行」为提交点，之后一律走完——「已从集合摘除但未回池」的半关状态比「取消失效」难排查得多
-- **UI `IUITipProvider` 与 `IUiHudProvider` 同形（破坏性）**：新增 `Update(deltaTime, time)` 与 `DetachAll()`
+- **UI 异步 API 全面接入取消令牌（破坏性）**：`IUIManager` 全部异步成员、`IUIController` 五个回调、`IUIHudProvider.AttachAsync`、`IUITipProvider` 均新增 `CancellationToken`（一律收盘）。两条提交点语义已写进文档：打开以「实例化返回」为提交点、关闭以「`OnBeforeCloseAsync` 放行」为提交点，之后一律走完——「已从集合摘除但未回池」的半关状态比「取消失效」难排查得多
+- **UI `IUITipProvider` 与 `IUIHudProvider` 同形（破坏性）**：新增 `Update(deltaTime, time)` 与 `DetachAll()`
 - **UI provider 归属下沉（破坏性）**：`_tipProvider` / `_hudProvider` 由门面静态字段移入 `UIManagerImpl`，`IUIManager` 相应新增五个成员。门面由此退化为纯转发——此前它要自己管懒初始化、还要回头摸 `_instance.UIRoot` 才能给 provider 挂根节点
 - **UI `UnloadAsset` / `ClearAssetCache` 正名（破坏性）**：改为 `ForgetPreload` / `ClearPreloads`，并把真实作用写进文档——**只清记账，不卸载资源**。真释放见新增的 `UnloadPanelAssetAsync`
 

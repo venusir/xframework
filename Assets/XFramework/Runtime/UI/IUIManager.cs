@@ -248,7 +248,7 @@ namespace XFramework.XUI
         /// 设置 HUD 提供者。传 null 恢复默认 <see cref="UIHudManagerImpl"/>。
         /// </summary>
         /// <param name="provider">自定义提供者，或 null 恢复默认。</param>
-        void SetHudProvider(IUiHudProvider provider);
+        void SetHudProvider(IUIHudProvider provider);
 
         #endregion
 

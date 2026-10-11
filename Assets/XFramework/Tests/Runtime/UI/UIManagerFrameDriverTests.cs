@@ -170,9 +170,9 @@ namespace XFramework.XUI.Tests
         }
 
         /// <summary>
-        /// 计数用 HUD 提供者：只关心 <see cref="IUiHudProvider.Update"/> 被调了多少次。
+        /// 计数用 HUD 提供者：只关心 <see cref="IUIHudProvider.Update"/> 被调了多少次。
         /// </summary>
-        private sealed class CountingHudProvider : IUiHudProvider
+        private sealed class CountingHudProvider : IUIHudProvider
         {
             public int UpdateCount { get; private set; }
 

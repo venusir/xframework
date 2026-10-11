@@ -12,7 +12,7 @@ namespace XFramework.XUI.Tests
     /// 成员」变成绿灯。唯独 <c>DetachAll</c> 给空实现——换 provider、<c>Dispose</c>、<c>CloseAllAsync</c>
     /// 三条正常路径都会调它，抛异常等于让替身自己在无关用例里炸掉。</para>
     /// </summary>
-    internal sealed class FaultyHudProvider : IUiHudProvider
+    internal sealed class FaultyHudProvider : IUIHudProvider
     {
         /// <summary>被每帧通路驱动（<c>Update</c>）的次数。</summary>
         public int UpdateCount { get; private set; }

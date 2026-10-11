@@ -14,7 +14,7 @@ Runtime/UI/
 ├── UIManagerImpl.cs           # 默认实现（面板字典、显示栈、资源缓存）
 ├── IUIPanelFactory.cs         # 面板实例来源接口（抽出来是为了测试不依赖 YooAsset）
 ├── AssetPanelFactory.cs       # 默认实现：经 AssetManager 加载预制体并复用其对象池
-├── IUiHudProvider.cs          # HUD 提供者接口
+├── IUIHudProvider.cs          # HUD 提供者接口
 ├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal sealed）
 ├── UILayers.cs                # 推荐层级常量（Background/Default/Popup/Top/Mask）
 ├── UISorting.cs               # 排序空间单点定义（层级带、HUD/Tip/系统保留带、钳制）

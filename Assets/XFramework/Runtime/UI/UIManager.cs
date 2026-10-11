@@ -770,7 +770,7 @@ namespace XFramework.XUI
         }
 
         /// <inheritdoc cref="IUIManager.SetHudProvider"/>
-        public static void SetHudProvider(IUiHudProvider provider)
+        public static void SetHudProvider(IUIHudProvider provider)
         {
             EnsureGlobalInitialized();
             _instance.SetHudProvider(provider);

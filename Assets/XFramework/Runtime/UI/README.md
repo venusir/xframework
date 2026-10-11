@@ -898,7 +898,7 @@ UIManager.ShowHudAsync<T>(target, assetPath, offset)  →  静态外观
             FollowTarget == null?  →  自动触发 OnTargetLost → Detach + 回池
 ```
 
-- `UIHudManagerImpl` 是 `IUiHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 30000），确保 HUD 始终在所有面板之上
+- `UIHudManagerImpl` 是 `IUIHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 30000），确保 HUD 始终在所有面板之上
 - `UIHudItem` 继承自 `UIViewBase`，与面板共享 `OnUpdate` 集中驱动机制
 - 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHudAsync` 会自动替换旧 HUD
 
