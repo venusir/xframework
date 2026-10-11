@@ -83,11 +83,11 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void StopAll_WithChannel_OnlyReturnsLeasesOfThatChannel()
         {
-            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.SE, loop: true));
             AudioManager.Play("audio/b", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
             Assert.AreEqual(2, _loader.OutstandingLeases);
 
-            int stopped = AudioManager.StopAll(AudioChannels.Se);
+            int stopped = AudioManager.StopAll(AudioChannels.SE);
 
             Assert.AreEqual(1, stopped);
             Assert.AreEqual(1, _loader.OutstandingLeases, "另一个通道的租约不该被牵连");

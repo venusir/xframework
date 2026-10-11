@@ -122,10 +122,10 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void VolumeChange_LeavesOtherChannelsUntouched()
         {
-            var se = AudioManager.Play("audio/se", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            var se = AudioManager.Play("audio/se", new AudioPlayOptions(AudioChannels.SE, loop: true));
             var bgm = AudioManager.Play("audio/bgm", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
-            AudioManager.SetChannelVolume(AudioChannels.Se, 0.3f);
+            AudioManager.SetChannelVolume(AudioChannels.SE, 0.3f);
 
             Assert.AreEqual(0.3f, AudioTestKit.VolumeOf(se), 0.001f);
             Assert.AreEqual(1f, AudioTestKit.VolumeOf(bgm), 0.001f, "改一个通道不该影响另一个");
@@ -159,10 +159,10 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void ChannelMuted_ZeroesOnlyThatChannel()
         {
-            var se = AudioManager.Play("audio/se", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            var se = AudioManager.Play("audio/se", new AudioPlayOptions(AudioChannels.SE, loop: true));
             var bgm = AudioManager.Play("audio/bgm", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
-            AudioManager.SetChannelMuted(AudioChannels.Se, true);
+            AudioManager.SetChannelMuted(AudioChannels.SE, true);
 
             Assert.AreEqual(0f, AudioTestKit.VolumeOf(se), 0.001f);
             Assert.AreEqual(1f, AudioTestKit.VolumeOf(bgm), 0.001f, "别的通道不该被牵连");
@@ -197,11 +197,11 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void ChannelVolume_IsClampedToUnitRange()
         {
-            AudioManager.SetChannelVolume(AudioChannels.Se, 2.5f);
-            Assert.AreEqual(1f, AudioManager.GetChannelVolume(AudioChannels.Se), 0.001f);
+            AudioManager.SetChannelVolume(AudioChannels.SE, 2.5f);
+            Assert.AreEqual(1f, AudioManager.GetChannelVolume(AudioChannels.SE), 0.001f);
 
-            AudioManager.SetChannelVolume(AudioChannels.Se, -1f);
-            Assert.AreEqual(0f, AudioManager.GetChannelVolume(AudioChannels.Se), 0.001f);
+            AudioManager.SetChannelVolume(AudioChannels.SE, -1f);
+            Assert.AreEqual(0f, AudioManager.GetChannelVolume(AudioChannels.SE), 0.001f);
         }
 
         [Test]

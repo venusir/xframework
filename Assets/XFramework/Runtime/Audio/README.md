@@ -19,7 +19,7 @@
 ### A. 一次性音效
 
 ```csharp
-AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.Se, volumeScale: 0.8f));
+AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.SE, volumeScale: 0.8f));
 ```
 
 fire-and-forget，不关心它什么时候播完。异常已由框架收口，**不要**再包 `.Forget()`。
@@ -40,7 +40,7 @@ _bgm.Stop();
 
 ```csharp
 AudioManager.Play("audio/sfx_explosion", new AudioPlayOptions(
-    AudioChannels.Se, spatialBlend: 1f, position: hitPoint));
+    AudioChannels.SE, spatialBlend: 1f, position: hitPoint));
 ```
 
 `spatialBlend > 0` 时位置才写进播放源。
@@ -78,7 +78,7 @@ var bgm = await AudioManager.PlayAsync("audio/bgm_main",
     new AudioPlayOptions(AudioChannels.Bgm, volumeScale: 0.6f, loop: true));
 
 // 4. 音量
-AudioManager.SetChannelVolume(AudioChannels.Se, 0.5f);
+AudioManager.SetChannelVolume(AudioChannels.SE, 0.5f);
 
 // 5. 停止
 bgm.Stop();
@@ -154,7 +154,7 @@ AudioManager.Initialize(new AudioInitOptions
 | ---- | ---- |
 | `AudioHandle` | 播放句柄。`readonly struct`、零 GC、可自由复制。`IsDefault` / `Stop()` / `Dispose()` |
 | `AudioPlayOptions` | 播放参数：`Channel` / `VolumeScale` / `Loop` / `Pitch` / `SpatialBlend` / `Position` |
-| `AudioChannels` | 推荐通道常量：`Default`("default") / `Bgm`("bgm") / `Se`("se") / `Voice`("voice") / `UI`("ui") |
+| `AudioChannels` | 推荐通道常量：`Default`("default") / `Bgm`("bgm") / `SE`("se") / `Voice`("voice") / `UI`("ui") |
 | `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume`（默认 `1`，线性值、由 `SetChannelVolume` 钳到 `[0,1]`）/ `Muted`（默认 `false`）。**调用时读取一次并快照**，之后改这个实例不影响已注册的通道；**通道也可以不声明**——未声明的通道首次使用时按同样的默认值惰性建状态 |
 | `AudioInitOptions` | 初始化选项：`MaxVoices` / `MasterVolume` / `MasterMuted` / `PrewarmVoices` |
 

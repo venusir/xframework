@@ -132,13 +132,13 @@ namespace XFramework.XAudio.Tests
             AssertAudioException(() => { var _ = AudioManager.MasterVolume; });
             AssertAudioException(() => { AudioManager.MasterVolume = 0.5f; });
             AssertAudioException(() => { var _ = AudioManager.MasterMuted; });
-            AssertAudioException(() => { AudioManager.SetChannelVolume(AudioChannels.Se, 0.5f); });
-            AssertAudioException(() => { var _ = AudioManager.GetChannelVolume(AudioChannels.Se); });
-            AssertAudioException(() => { AudioManager.SetChannelMuted(AudioChannels.Se, true); });
-            AssertAudioException(() => { var _ = AudioManager.IsChannelMuted(AudioChannels.Se); });
-            AssertAudioException(() => { AudioManager.RegisterChannel(AudioChannels.Se, new AudioChannelConfig()); });
+            AssertAudioException(() => { AudioManager.SetChannelVolume(AudioChannels.SE, 0.5f); });
+            AssertAudioException(() => { var _ = AudioManager.GetChannelVolume(AudioChannels.SE); });
+            AssertAudioException(() => { AudioManager.SetChannelMuted(AudioChannels.SE, true); });
+            AssertAudioException(() => { var _ = AudioManager.IsChannelMuted(AudioChannels.SE); });
+            AssertAudioException(() => { AudioManager.RegisterChannel(AudioChannels.SE, new AudioChannelConfig()); });
             AssertAudioException(() => { var _ = AudioManager.ActiveVoiceCount; });
-            AssertAudioException(() => { var _ = AudioManager.GetActiveVoiceCount(AudioChannels.Se); });
+            AssertAudioException(() => { var _ = AudioManager.GetActiveVoiceCount(AudioChannels.SE); });
         }
 
         /// <summary>

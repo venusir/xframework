@@ -52,7 +52,7 @@ namespace XFramework.XAudio.Tests
         {
             Assert.AreEqual("default", AudioChannels.Default);
             Assert.AreEqual("bgm", AudioChannels.Bgm);
-            Assert.AreEqual("se", AudioChannels.Se);
+            Assert.AreEqual("se", AudioChannels.SE);
             Assert.AreEqual("voice", AudioChannels.Voice);
             Assert.AreEqual("ui", AudioChannels.UI);
         }

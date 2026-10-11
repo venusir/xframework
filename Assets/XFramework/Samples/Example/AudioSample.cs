@@ -37,11 +37,11 @@ namespace XFramework.Example
             AudioManager.Initialize();
 
             // 2. 一次性音效：fire-and-forget。异常已由框架收口，调用方不必（也不应）再包 .Forget()
-            AudioManager.Play(_hitLocation, new AudioPlayOptions(AudioChannels.Se, volumeScale: 0.8f));
+            AudioManager.Play(_hitLocation, new AudioPlayOptions(AudioChannels.SE, volumeScale: 0.8f));
 
             // 3. 3D 音效：只有在 spatialBlend > 0 时位置才会被写进播放源
             AudioManager.Play(_hitLocation, new AudioPlayOptions(
-                AudioChannels.Se, loop: false, spatialBlend: 1f, position: transform.position));
+                AudioChannels.SE, loop: false, spatialBlend: 1f, position: transform.position));
 
             // 4. BGM：需要句柄以便停止，故用 PlayAsync——它的句柄返回时必定已加载成功
             try
@@ -72,7 +72,7 @@ namespace XFramework.Example
         #region 演示：接到 UI 上的几个入口
 
         /// <summary>设置面板：音效通道音量。</summary>
-        public void SetSeVolume(float volume) => AudioManager.SetChannelVolume(AudioChannels.Se, volume);
+        public void SetSEVolume(float volume) => AudioManager.SetChannelVolume(AudioChannels.SE, volume);
 
         /// <summary>设置面板：一键静音人声。静音只是听不见，播放不会中断。</summary>
         public void SetVoiceMuted(bool muted) => AudioManager.SetChannelMuted(AudioChannels.Voice, muted);

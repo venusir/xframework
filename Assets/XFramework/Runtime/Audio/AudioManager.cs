@@ -22,7 +22,7 @@ namespace XFramework.XAudio
     /// AudioManager.Initialize();
     ///
     /// // 2. 一次性音效：fire-and-forget，异常已由框架收口
-    /// AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.Se, 0.8f));
+    /// AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.SE, 0.8f));
     ///
     /// // 3. 背景音乐：拿到句柄以便停止
     /// var bgm = await AudioManager.PlayAsync("audio/bgm_main",
@@ -31,7 +31,7 @@ namespace XFramework.XAudio
     ///
     /// // 4. 音量
     /// AudioManager.MasterVolume = 0.7f;
-    /// AudioManager.SetChannelVolume(AudioChannels.Se, 0.5f);
+    /// AudioManager.SetChannelVolume(AudioChannels.SE, 0.5f);
     /// </code>
     /// </example>
     public static class AudioManager

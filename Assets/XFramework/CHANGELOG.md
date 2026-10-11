@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
   **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[Unreleased]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
 - **`UiDiagnosticPanel` 更名为 `UIDiagnosticPanel`**（同一轮的命名统一）：同级 20 个诊断面板全是 `XxxDiagnosticPanel`（`AudioDiagnosticPanel` / `InputDiagnosticPanel` / …），只有它用了 `Ui`。它是 Editor 程序集的 `internal sealed`，`InternalsVisibleTo` 只开了仓内的 Editor.Tests——**第三方碰不到，零破坏性**。
+- **`AudioChannels.Ui` → `UI`、`AudioChannels.Se` → `SE`**（同一轮的命名统一）：两个都是**两字母缩写**，按新规则该全大写。同文件的 `Bgm`（三字母）与 `Voice`（词）保持 PascalCase——这不是例外，正是同一条规则的另一半。**常量值不变**（仍是 `"ui"` / `"se"`），只改标识符；`AudioSample.PlayUiClick` → `PlayUIClick`、`SetSeVolume` → `SetSEVolume` 一并跟进。
 
 ### Added
 

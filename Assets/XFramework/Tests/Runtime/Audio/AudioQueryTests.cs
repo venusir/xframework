@@ -107,11 +107,11 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void GetActiveVoiceCount_FiltersByChannel()
         {
-            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.Se, loop: true));
-            AudioManager.Play("audio/b", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.SE, loop: true));
+            AudioManager.Play("audio/b", new AudioPlayOptions(AudioChannels.SE, loop: true));
             AudioManager.Play("audio/c", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
-            Assert.AreEqual(2, AudioManager.GetActiveVoiceCount(AudioChannels.Se));
+            Assert.AreEqual(2, AudioManager.GetActiveVoiceCount(AudioChannels.SE));
             Assert.AreEqual(1, AudioManager.GetActiveVoiceCount(AudioChannels.Bgm));
             Assert.AreEqual(0, AudioManager.GetActiveVoiceCount(AudioChannels.Voice));
         }
@@ -132,7 +132,7 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void StopAll_StopsEverythingAndReturnsTheCount()
         {
-            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.SE, loop: true));
             AudioManager.Play("audio/b", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
             int stopped = AudioManager.StopAll();
@@ -144,10 +144,10 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void StopAll_WithChannel_OnlyStopsThatChannel()
         {
-            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.SE, loop: true));
             AudioManager.Play("audio/b", new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
-            int stopped = AudioManager.StopAll(AudioChannels.Se);
+            int stopped = AudioManager.StopAll(AudioChannels.SE);
 
             Assert.AreEqual(1, stopped);
             Assert.AreEqual(1, AudioManager.ActiveVoiceCount);
@@ -157,7 +157,7 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void StopAll_WithNoMatch_ReturnsZero()
         {
-            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.Se, loop: true));
+            AudioManager.Play("audio/a", new AudioPlayOptions(AudioChannels.SE, loop: true));
 
             Assert.AreEqual(0, AudioManager.StopAll(AudioChannels.Bgm));
             Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "没匹配到就不该动任何东西");

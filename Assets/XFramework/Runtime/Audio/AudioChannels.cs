@@ -20,7 +20,7 @@ namespace XFramework.XAudio
         public const string Bgm = "bgm";
 
         /// <summary>音效。</summary>
-        public const string Se = "se";
+        public const string SE = "se";
 
         /// <summary>语音 / 配音。</summary>
         public const string Voice = "voice";
