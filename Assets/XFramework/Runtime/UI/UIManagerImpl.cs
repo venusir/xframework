@@ -1451,13 +1451,20 @@ namespace XFramework.XUI
         /// <summary>
         /// 实例化面板预制体，挂到该层级的容器下。
         /// </summary>
-        private UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer,
+        private async UniTask<T> InstantiatePanelAsync<T>(string assetPath, int layer,
             CancellationToken cancellationToken) where T : UIPanelBase
         {
             // 确定父节点（同一层级的 Container）
             var parent = GetOrCreateLayerContainer(layer);
 
-            return _factory.CreateAsync<T>(assetPath, parent, cancellationToken);
+            var panel = await _factory.CreateAsync<T>(assetPath, parent, cancellationToken);
+
+            // 实例可能来自池子、带着上一轮的结果——对话框的结果通道必须在此刻置成白纸。
+            // 放在这里而不是回池点：「置白纸」与「兑现」是两个时机，合并到回池点会让
+            // 「在 OnOpen 里自我关闭的面板」既回收又清空，随后才开始的等待落在一个全新的挂起任务上。
+            (panel as IDialogResultChannel)?.BeginDialogCycle();
+
+            return panel;
         }
 
         /// <summary>

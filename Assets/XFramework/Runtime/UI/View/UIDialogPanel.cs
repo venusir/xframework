@@ -3,14 +3,23 @@ using Cysharp.Threading.Tasks;
 namespace XFramework.XUI.View
 {
     /// <summary>
-    /// 对话框的结果通道。框架内部使用——让 <c>UIManagerImpl.RecyclePanel</c> 能在不接触
-    /// <see cref="UIDialogPanel{TResult}"/> 泛型参数的前提下，于面板回池时兜底完成挂起的结果并复位。
+    /// 对话框的结果通道。框架内部使用——让 <c>UIManagerImpl</c> 能在不接触
+    /// <see cref="UIDialogPanel{TResult}"/> 泛型参数的前提下驱动结果通道的两个时机。
     /// <para>刻意是 <c>internal</c>：它是框架与面板基类之间的实现契约，不是给使用方的扩展点。</para>
+    /// <para><b>为什么是两个方法而不是一个</b>：它们必须落在<b>不同的位置</b>。兑现要覆盖关闭与
+    /// <c>Dispose</c> 两条路（唯一交点是回池），而置白纸必须早于任何一次打开——两者若合并到回池点，
+    /// 面板在 <c>OnOpen</c> 里自我关闭时就会既回收又清空，随后才开始的等待会落在一个全新的挂起任务上。</para>
     /// </summary>
     internal interface IDialogResultChannel
     {
         /// <summary>
-        /// 面板回池时调用：兜底完成仍未兑现的结果，并为下一次打开复位。
+        /// 面板从池中取出、即将开始新一轮打开时调用：把结果通道置成白纸。
+        /// <para>实现必须<b>幂等</b>——新建实例与池中旧实例走同一条路。</para>
+        /// </summary>
+        void BeginDialogCycle();
+
+        /// <summary>
+        /// 面板回池时调用：兑现仍未兑现的结果，让等待方一定被唤醒。
         /// <para>实现必须<b>幂等</b>——关闭路径与 <c>Dispose</c> 路径共用回池点。</para>
         /// </summary>
         void CompleteOnRecycle();
@@ -30,7 +39,9 @@ namespace XFramework.XUI.View
     /// <b>刻意不走关闭路径</b>（它不 await 关闭动画），因此 <c>OnClose</c> 在那一路上根本不会被调用。
     /// 兜底挂在关闭与 <c>Dispose</c> 共用的回池出口，两条路才都覆盖得到。这与框架对「在途打开的等待者
     /// 不能悬着」的处理是同一个取向。</para>
-    /// <para><b>回池会复位</b>：面板是池化复用的，不复位会让重开的同类型对话框立即返回<b>上一次</b>的结果。</para>
+    /// <para><b>两个时机，缺一不可</b>：面板是池化复用的，所以通道既要在<b>取出时置成白纸</b>
+    /// （否则重开的对话框立即返回<b>上一次</b>的结果），又要在<b>回池时兑现</b>（否则挂起的等待方
+    /// 继续挂）。二者不能合并到回池点——面板在 <c>OnOpen</c> 里自我关闭时，回池会先于调用方的等待发生。</para>
     /// <para><b>子类契约与 <see cref="UIPanelBase"/> 完全一致</b>——照常实现 <see cref="UIPanelBase.OnOpen"/>
     /// 与 <see cref="UIPanelBase.OnClose"/>，本类没有增加也没有封闭任何生命周期钩子。要在关闭时给出
     /// 一个领域默认值（如「取消」），在 <c>OnClose</c> 里调 <see cref="SetResult"/> 即可；
@@ -85,18 +96,29 @@ namespace XFramework.XUI.View
         }
 
         /// <summary>
-        /// 回池点：兜底兑现 + 为下一次打开复位。由 <c>UIManagerImpl.RecyclePanel</c> 调用。
+        /// 取出面板时调用：把结果通道置成白纸。由 <c>UIManagerImpl.InstantiatePanelAsync</c> 调用。
         /// </summary>
-        void IDialogResultChannel.CompleteOnRecycle()
+        void IDialogResultChannel.BeginDialogCycle()
         {
-            // 兜底：走到这里说明本轮open-close周期结束了，等待方无论如何都该被唤醒。
-            // SetResult 幂等，故面板已经给过结果时这里什么都不做
-            SetResult(default);
-
-            // 复位：面板进池，下次取出时必须是一张白纸——否则重开的对话框会立刻返回上一轮的结果
+            // 面板可能来自池子、带着上一轮的结果——不清会让重开的对话框立刻返回旧值
             _source = null;
             _hasResult = false;
             _result = default;
+        }
+
+        /// <summary>
+        /// 回池点调用：兑现仍未兑现的结果。由 <c>UIManagerImpl.RecyclePanel</c> 调用。
+        /// </summary>
+        void IDialogResultChannel.CompleteOnRecycle()
+        {
+            // 兜底：走到这里说明本轮周期结束了，等待方无论如何都该被唤醒。
+            // SetResult 幂等，故面板已经给过结果时这里什么都不做
+            SetResult(default);
+
+            // 只丢掉等待者引用，**刻意不把 _hasResult 清回去**：迟到的 WaitResultAsync
+            // （面板在 OnOpen 里自我关闭时就会走到）应当立刻拿到兜底值，而不是重新挂起。
+            // 置白纸在下一轮打开时做，见 BeginDialogCycle
+            _source = null;
         }
 
         #endregion
