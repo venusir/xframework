@@ -124,6 +124,7 @@
 - **门禁耗时**：测试约 82 秒（双平台），文档约 90~180 秒。
 - **审计不可自动化的部分**：判据清单是「见过的缺陷类」的归纳，新类型的缺陷它照不到；清单里的探针只做诊断、不进门禁，判定仍靠人。
 - **文档分层靠人**：模块 README 与 `Documentation/Modules/` 之间的搬运没有门禁——`check-docs.ps1` 对 `.md` 零覆盖（它只管 XML 注释、编译参与度与 `.meta`）。要机械验证只能自建（「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑），且属一次性工程，不挂进阶段收尾。
+- **零分配断言在本环境可能恒真（尺子坏了）**：2026-10-11 实测——`GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），`Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0。**因此 `TimerAllocationTests` / `LogAllocationTests`（断言 `AreEqual(0L, …)`）是恒真的**——它们锁的结论未被证实（未必为假，但没被验证）。可用的尺子只有 `Profiler.GetMonoUsedSizeLong()` 与 `GC.GetTotalMemory(false)`，前者粒度约 4–8 KB（单次装箱约 32–40 B 看不见，**必须放大到 10 万次量级**）。**写零分配断言时的纪律**：① 先用「分配 1 MB 再读增量」自检尺子，别假设它可用；② 尺子不可用或粒度不够时，优先用**结构断言**（如 `GetEnumerator()` 的返回类型是否值类型——装箱的充要原因，确定性且不依赖尺子，先例 `ReactiveEnumerationAllocationTests`），测量只作第二道防线。详见 `Documentation/Modules/Reactive.md` 的「实测记录」节。
 
 ## 附：一个完整回合
 

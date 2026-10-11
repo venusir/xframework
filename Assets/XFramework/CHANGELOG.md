@@ -624,6 +624,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **包 README 补账**：功能表与模块表**上一轮就漏列了 `ReactiveList`**（本轮同批补上），并加 `ReactiveDictionary<TKey,TValue>` 与键比较器配置点（可配置点表的 Reactive 行）；正文「响应式属性（XReactive）」措辞同步。Event README 的模块定位与「被谁使用」同步。
 - **`Roadmap.md` §2.5 标为已建成**（正文按 §一 搬迁纪律只留指针）；`Modules/Reactive.md` 文件结构 + 沿革 + 延后项同步——延后项**不删除**：`ReactiveDictionary` 标注为重开并建成，其余各项照旧，字典侧新增「有序键值 / 按值查找」两条延后与「键生命周期自动移除」一条 v1.1 候选（含重开三问）。
 
+### Changed
+
+- **`ReactiveList<T>` / `ReactiveDictionary<TKey,TValue>` 的遍历改为零装箱**：两者的 `GetEnumerator()` 此前返回 `IEnumerator<T>`，**每次 `foreach` 都把 BCL 的结构体枚举器装箱一次**（还写在已知限制里，让使用方「热路径用索引 `for`」）。现照 BCL 原样公开结构体枚举器（`List<T>.Enumerator` / `Dictionary<TKey,TValue>.Enumerator`）+ 显式接口实现：**直接用具体类型 `foreach` 零分配**；经接口（`IReadOnlyList<T>` / `IReadOnlyDictionary<TKey,TValue>`）遍历仍装箱一次——那是接口本身的要求。源码兼容（接口转换照旧成立），两类型均未发布。**实测**（一次性探针，尺子 `Profiler.GetMonoUsedSizeLong`）：10 万次直接 `foreach` 的堆增量 512000 B（列表）/ 507904 B（字典）→ **0 B**（BCL 对照始终 0 B）。装箱的充要原因（反射可验）：返回类型是接口；该原因已被 `ReactiveEnumerationAllocationTests` 的结构断言锁住，粗尺子测量作第二道防线。
+
+### Documentation
+
+- **`Modules/Reactive.md` 新增「实测记录」节**（本模块首条性能/分配数字）：① 稠密键值容器 vs BCL 两形状的三条门槛判定；② **本环境两把分配尺子是坏的**；③ 集合遍历零装箱的改造前后数字。全部标注环境（Editor Mono）与「真机 IL2CPP 未测」，方法写明以便复验。
+- **稠密键值容器裁定「不做」**（同批）：用户澄清动机是**效率**（Actor 管理器：全量遍历 + 按键寻址 + N 大）而非顺序，故按本仓纪律**先探针、门槛事先写死**（遍历端到端 ≥1.3× 且 N=4096 单趟 <1% 帧预算；内存 ≤1.35×；查找退化 ≤1.15×）。实测**均不过**：遍历 1.22–1.28×、内存 1.54×、查找退化 1.45–1.61×，写路径另慢 2–3×。**正解写进包内 README**：需要「稠密遍历 + 按键寻址」请自建 `List<T>` + `Dictionary<TKey,int>` 索引（并给出参照量级：`ReactiveDictionary` 在 N=4096 时遍历约 0.12 ms/帧、占帧预算 0.7%）。
+- **顺序线撤回 + 修正一条写错的延后理由**：插入序容器（`ReactiveOrderedDictionary`）**撤回立项**——顺序是**语义**需求不是效率需求，保序删除 O(n) 是它的价；两个候选形态（按 key 排序 / 插入序）保留在延后项，**重开判据改为语义判据**。同时修正 `Modules/Reactive.md` 上一轮写错的理由「有序键值**要新增重排词条**」（词典载荷没有位置字段，四个词条本就够用；顺序由容器结构决定，消费方重读）——它与本轮「移动不通知」的裁定直接矛盾。
+- **`Documentation/Workflow.md` 记入「零分配断言可能恒真」**（尺子实测 + 写这类断言的两条纪律：先自检尺子；尺子不够用时优先用结构断言）。**既有 `TimerAllocationTests` / `LogAllocationTests` 的断言在本环境恒真**——其结论未被证实（未必为假，但没被验证），修订方案待定。
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
