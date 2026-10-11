@@ -1,15 +1,19 @@
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
 namespace XFramework.XUI.Tests
 {
     /// <summary>
-    /// 对话框结果通道的契约测试。
-    /// <para>本 fixture 守的是一整类<b>静默故障</b>：等待方永远不恢复。它不会抛异常、不会报错，
-    /// 只是那条异步流程从此停在那里——所以每一条用例都在钉一个具体的关闭途径。</para>
+    /// 对话框的契约测试：结果通道（<see cref="UIDialogPanel{TResult}"/>）与门面入口
+    /// （<c>UIManager.ShowDialogAsync</c>）。
+    /// <para>本 fixture 守的是一整类<b>静默故障</b>：等待方永不恢复、遮罩盖住对话框、遮罩不释放。
+    /// 它们都不会抛异常、不会报错，只是「流程停在那里」或「看起来不对」——所以每一条用例都在钉一个
+    /// 具体的关闭途径或一处具体的配置。</para>
     /// <para><b>断言用「已完成」而不是「等一会儿看有没有结果」</b>：后者在设计回归时会<b>挂住整套用例</b>
     /// 而不是失败。兜底是同步兑现的，故关闭返回时任务必然已完成，这条断言既精确又不会挂。</para>
     /// </summary>
@@ -199,6 +203,108 @@ namespace XFramework.XUI.Tests
 
             Assert.AreSame(first, second, "本 fixture 依赖伪工厂复用实例；不成立时上面那条用例是空的");
             await UIManager.CloseAsync(second);
+        }
+
+        #endregion
+
+        #region ShowDialogAsync（门面入口）
+
+        /// <summary>取遮罩对象；未显示时返回 null。遮罩名与容器位置见 <c>UIManagerImpl.EnsureMaskInstance</c>。</summary>
+        private Transform FindMask() => _root.transform.Find("UIManager_Mask");
+
+        [Test]
+        public async Task Modal_ShowsMaskOneLayerBelowDialog()
+        {
+            // ★ 本用例是「遮罩层自动推导」的核心断言。此前文档教的 ShowMask() 默认组合
+            //   （UILayers.Mask = 500 层）会算出 16031，远高于 Popup 层对话框的 6401，
+            //   于是对话框被自己的遮罩盖住——变暗且点不动
+            var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+            await UniTask.Yield();
+
+            var mask = FindMask();
+            Assert.IsNotNull(mask, "模态对话框必须挂上遮罩");
+
+            int dialogOrder = UIManager.GetPanel<FakeDialog>().Canvas.sortingOrder;
+            int maskOrder = mask.GetComponent<Canvas>().sortingOrder;
+
+            Assert.AreEqual(UISorting.MaskOrder(UILayers.Popup - 1), maskOrder,
+                "遮罩层应取对话框层 − 1");
+            Assert.Less(maskOrder, dialogOrder, "遮罩必须在对话框之下，否则会盖住对话框");
+
+            await UIManager.CloseAllAsync();
+            await dialog;
+        }
+
+        [Test]
+        public async Task CustomLayer_MaskFollowsIt()
+        {
+            var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>(
+                "PF_FakeDialog", layer: UILayers.Top);
+            await UniTask.Yield();
+
+            Assert.AreEqual(UISorting.MaskOrder(UILayers.Top - 1),
+                FindMask().GetComponent<Canvas>().sortingOrder,
+                "遮罩层应随对话框层一起移动");
+
+            await UIManager.CloseAllAsync();
+            await dialog;
+        }
+
+        [Test]
+        public async Task NonModal_ShowsNoMask()
+        {
+            var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>(
+                "PF_FakeDialog", modal: false);
+            await UniTask.Yield();
+
+            Assert.IsFalse(UIManager.IsMaskShowing, "modal: false 时不应建遮罩");
+
+            await UIManager.CloseAllAsync();
+            await dialog;
+        }
+
+        [Test]
+        public async Task Mask_IsReleasedWhenPanelCloses()
+        {
+            // 遮罩持有经 owner 绑定到面板：不自己 Dispose 也不会泄漏
+            var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+            await UniTask.Yield();
+            Assert.IsTrue(UIManager.IsMaskShowing, "前提：此刻遮罩应在显示中");
+
+            await UIManager.CloseAllAsync();
+
+            // 断言用公开契约而非「对象不存在」——遮罩是单实例复用的，隐藏是失活、对象仍常驻
+            Assert.IsFalse(UIManager.IsMaskShowing,
+                "面板关闭后遮罩必须一并释放，否则界面此后全黑且点不动");
+            await dialog;
+        }
+
+        [Test]
+        public async Task Result_FlowsBackToCaller()
+        {
+            var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+            await UniTask.Yield();
+
+            var panel = UIManager.GetPanel<FakeDialog>();
+            panel.ResultOnClose = FakeDialogResult.Confirm;
+            await UIManager.CloseAsync(panel);
+
+            Assert.AreEqual(FakeDialogResult.Confirm, await dialog);
+        }
+
+        [Test]
+        public async Task OpenFailure_ReturnsDefaultWithoutThrowing()
+        {
+            // 打不开就没有可等的结果——与 OpenAsync 的「失败返回 null」一致，不抛异常
+            _factory.RegisterPanel<FakeDialog>(parent => null);
+
+            // 伪工厂返回 null 之后，管理器会记一条「实例化失败」的错误日志；
+            // 框架把意外 Error 当失败，故这里显式声明它是预期的
+            LogAssert.Expect(LogType.Error, new Regex("Failed to instantiate panel"));
+
+            var result = await UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+
+            Assert.AreEqual(FakeDialogResult.None, result);
         }
 
         #endregion
