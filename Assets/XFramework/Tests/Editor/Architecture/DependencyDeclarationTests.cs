@@ -26,6 +26,11 @@ namespace XFramework.Architecture.Tests
     /// 字符串逐字相等就是那个「同一件事」；解析成对象再比会放过「值相同但写法不同」之外的漂移，
     /// 也放过 README 这个非结构化落点（它是表格 + 代码块，没有 schema 可依）。
     /// </para>
+    /// <para>
+    /// <see cref="Samples_PathResolvesToAnExistingDirectory"/> 守的是同一类事的另一半：<c>package.json</c>
+    /// 的 <c>samples</c> 声明与包内目录必须对得上——示例目录在 <c>Samples~/</c> 下（Unity 完全忽略它），
+    /// 声明写错或目录被移走时 Package Manager 的 Samples 页签会**静默空着**，没有别的地方会报。
+    /// </para>
     /// </summary>
     [TestFixture]
     public class DependencyDeclarationTests
@@ -108,6 +113,31 @@ namespace XFramework.Architecture.Tests
             }
 
             Assert.IsEmpty(violations, "依赖声明的三处落点不一致：\n  " + string.Join("\n  ", violations));
+        }
+
+        [Test]
+        public void Samples_PathResolvesToAnExistingDirectory()
+        {
+            string packageJson = ReadRequiredFile(Path.Combine(PackageRoot, "package.json"));
+            var violations = new List<string>();
+
+            if (!packageJson.Contains("\"samples\""))
+            {
+                violations.Add("package.json 没有 samples 字段——示例目录在 Samples~/ 下（Unity 完全忽略），" +
+                               "不上架就等于包内不存在：消费方既看不到也导不进");
+            }
+
+            // 只钉「路径确实存在」：页签能否点开最终得人眼看，但路径写错（或目录被改名/移出包）会让
+            // 那一页静默空着——没有别的地方会报这件事。
+            foreach (Match sample in Regex.Matches(packageJson, "\"path\"\\s*:\\s*\"([^\"]+)\""))
+            {
+                string relative = sample.Groups[1].Value;
+                string full = Path.Combine(PackageRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+                if (!Directory.Exists(full))
+                    violations.Add($"package.json 声明的示例路径不存在：{relative}（找的是 {full}）");
+            }
+
+            Assert.IsEmpty(violations, "示例声明与包内目录对不上：\n  " + string.Join("\n  ", violations));
         }
 
         #region 反射与文件读取

@@ -44,7 +44,7 @@
     生成**不同的 GUID**——若该文件被 prefab/scene 引用就是断链。逐个检查几乎零成本，故与文档告警
     一并报告、一并在 `-Enforce` 下判失败。
     注意 Unity 自身不给「点开头的文件/目录」与「`~` 结尾」的条目生成 meta（如
-    `Samples/Example/.sample.json`），这两类一律跳过，否则会永远误报。
+    `Samples~/Example/.sample.json`），这两类一律跳过，否则会永远误报。
 
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（两类检查都须为 0）。
 
@@ -116,7 +116,7 @@ if ($missing.Count -gt 0) {
 # 本包以 UPM 形式供第三方引入，缺 .meta 会让对方导入时生成**不同的 GUID**——若该文件被
 # prefab/scene 引用就是断链。检查几乎零成本，故与文档告警一并报告、一并在 -Enforce 下判失败。
 #
-# Unity 自身不给「点开头的文件/目录」与「~ 结尾」的条目生成 meta（如 Samples/Example/.sample.json），
+# Unity 自身不给「点开头的文件/目录」与「~ 结尾」的条目生成 meta（如 Samples~/Example/.sample.json），
 # 这两类一律跳过，否则会永远误报。
 
 $pkgRoot = Join-Path $repoRoot "Assets\XFramework"

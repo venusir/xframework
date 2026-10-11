@@ -12,7 +12,7 @@ namespace XFramework.Example
     /// <para><see cref="ReactiveProperty{T}"/> 是轻量可观察属性，不依赖节点树，直接 new 即可使用。</para>
     /// <para>订阅产生的 disposable 由 <see cref="ViewModelBase"/> 或手动管理。</para>
     /// </summary>
-    public class SampleExample : MonoBehaviour
+    public class ReactiveSample : MonoBehaviour
     {
         #region Private Fields
 
