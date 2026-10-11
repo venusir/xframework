@@ -51,9 +51,11 @@ Runtime/UI/
 ## 沿革与已否决形状
 
 - **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。
-- **`UIPopupPosition`（2026-10-11）来自一轮第三方 UI 方案 `FairyGUI` 的评估**。那轮的动作是逐条筛
+- **`UIPopupPosition`（2026-10-11）来自一轮第三方 UI 方案 `FairyGUI` 的评估**（评估全文见
+  `Documentation/FairyGUI.md`——那轮「该不该接成 UI 后端」的结论、共存的两条硬约束、输入系统那道关
+  都在那里，本文不复述）。那轮的动作是逐条筛
   「它的控制逻辑有什么值得借鉴到本模块」——**筛完只有弹窗定位一条够格**；同一轮另有六项对照本仓全胜
-  （模态遮罩引用计数、`CloseAllAsync` 不关遮罩、`UIPopupPosition` 同类工具不进接口、options 而非全局静态、
+  （模态遮罩引用计数、`CloseAllAsync` 不关遮罩、纯静态工具不进接口、options 而非全局静态、
   `UpdateManager` 而非自持 LateUpdate、排序空间与 HUD/Tip/特效共享），故都不借鉴。
   **没有照抄它的定位实现**（`GRoot.cs` 的 `GetPoupPosition`，注意上游把方法名拼错了）：它只有右侧收敛、
   间隙硬编码 `-1`、翻上去仍溢出时再做一次 `xx += size.x / 2` 的二次调整且与右对齐叠加。本仓改为
