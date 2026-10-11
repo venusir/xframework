@@ -54,7 +54,7 @@ namespace XFramework.XAudio.Tests
             Assert.AreEqual("bgm", AudioChannels.Bgm);
             Assert.AreEqual("se", AudioChannels.Se);
             Assert.AreEqual("voice", AudioChannels.Voice);
-            Assert.AreEqual("ui", AudioChannels.Ui);
+            Assert.AreEqual("ui", AudioChannels.UI);
         }
 
         #endregion

@@ -90,7 +90,7 @@ namespace XFramework.Example
         }
 
         /// <summary>按钮：播一个界面音。</summary>
-        public void PlayUiClick() => AudioManager.Play(_uiClickLocation, AudioPlayOptions.Default);
+        public void PlayUIClick() => AudioManager.Play(_uiClickLocation, AudioPlayOptions.Default);
 
         /// <summary>调试用：当前有几路声音在播（含加载中与已暂停的）。</summary>
         public int ActiveVoices => AudioManager.ActiveVoiceCount;

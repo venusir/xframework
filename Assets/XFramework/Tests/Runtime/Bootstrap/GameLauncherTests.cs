@@ -211,7 +211,7 @@ namespace XFramework.XBootstrap.Tests
 
         /// <summary>留空的字段不登记阶段——与不用本组件时一致（不替使用方初始化他没要的模块）。</summary>
         [Test]
-        public void Awake_WithOnlyUiRoot_RegistersOnlyTheUiStage()
+        public void Awake_WithOnlyUIRoot_RegistersOnlyTheUIStage()
         {
             var go = new GameObject("launcher-ui-only");
             go.SetActive(false);

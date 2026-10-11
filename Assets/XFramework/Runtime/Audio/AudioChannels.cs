@@ -26,6 +26,6 @@ namespace XFramework.XAudio
         public const string Voice = "voice";
 
         /// <summary>界面交互音。</summary>
-        public const string Ui = "ui";
+        public const string UI = "ui";
     }
 }
