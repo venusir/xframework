@@ -18,7 +18,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Bootstrap `RunAsync` 重入守卫**：每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。重入现在打警告并立即返回——被忽略的那次**不代表启动完成**（要等启动结束应共享第一次调用的任务），README 已写明。`Register`/`Unregister` 在运行中照常执行但打警告，说明两条反直觉后果：运行中登记本轮不执行（装配期已快照）但会被 `Shutdown` 扫到；运行中注销本轮仍执行但拿不到 `Shutdown`。**改前必红**：`Expected: 1 But was: 2`（旧实现真的跑了两遍）
 
-- **`GameLauncher.ConfigureStages()` 扩展点：带配置启动不再需要放弃这个组件**。此前它是「zero-config or nothing」的入口——`Awake` 无条件 `RegisterDefaults()`，要用 `SaveOptions` 之类的参数就只能整个弃用它、自建启动流程。现 `Awake` 改调 `protected virtual void ConfigureStages()`，其**默认实现就是原来那句 `RegisterDefaults()`**（默认行为逐字不变，纯增量）：调 `base` 之后 `Unregister<T>()` + `Register(你的实例)` 替换内置阶段，不调 `base` 则完全不登记默认组合。只加这一个成员——`Start` / `OnDestroy` 刻意不改 `virtual`（`async void Start` 会诱使覆写者漏调 `base`）。PlayMode 用例 3 条覆盖三种姿势（默认登记 Asset/Data/Save 三件 / 不调 base 登记表为空 / 调 base 后替换 Save 只剩自定义那一个）。**同一轮评估并否决了「把它做成框架的配置与编排核心」**：配置的形状是代码不是数据（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例）、一半配置的生效时机早于任何场景（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`），且两处沿革刻意不挂靠它——理由与「重开判据」的同步归档在 `Documentation/Modules/Bootstrap.md` 与 `Roadmap.md`
+- **`GameLauncher.ConfigureStages()` 扩展点：带配置启动不再需要放弃这个组件**（**同版内 `GameLauncher` 又被拆为抽象底座 + `DefaultGameLauncher`**，成员面以 `### Changed` 那条为准）。此前它是「zero-config or nothing」的入口——`Awake` 无条件 `RegisterDefaults()`，要用 `SaveOptions` 之类的参数就只能整个弃用它、自建启动流程。现 `Awake` 改调 `protected virtual void ConfigureStages()`，其**默认实现就是原来那句 `RegisterDefaults()`**（默认行为逐字不变，纯增量）：调 `base` 之后 `Unregister<T>()` + `Register(你的实例)` 替换内置阶段，不调 `base` 则完全不登记默认组合。只加这一个成员——`Start` / `OnDestroy` 刻意不改 `virtual`（`async void Start` 会诱使覆写者漏调 `base`）。PlayMode 用例 3 条覆盖三种姿势（默认登记 Asset/Data/Save 三件 / 不调 base 登记表为空 / 调 base 后替换 Save 只剩自定义那一个）。**同一轮评估并否决了「把它做成框架的配置与编排核心」**：配置的形状是代码不是数据（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例）、一半配置的生效时机早于任何场景（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`），且两处沿革刻意不挂靠它——理由与「重开判据」的同步归档在 `Documentation/Modules/Bootstrap.md` 与 `Roadmap.md`
 
 - **`GameLauncher` 声明式配置字段：Inspector 里填、`Awake` 里注入、`Start` 里跑管线**。起于用户连问三轮「为什么不在 GameLauncher 声明所需配置项再注入各模块」——重新推导后我此前两条反对意见不成立（Unity 的标准回答是 ScriptableObject provider，服务实例可以进配置面；真正早于场景的只有 Log，其余模块的配置都在 `Initialize` 时消费，场景组件覆盖得了），剩下的只是形状约束：6 个 options 类型都没有 `[Serializable]`，字段面只能**逐项重述**而非引用 options 对象（改名/删除有编译器兜底）。落地五组字段：Asset（包名 / 运行模式 / 低内存回收）、Save（存档版本）、UI（Canvas 根）、Input（资产 / 初始 ActionMap）、Localization（默认语言 / 语言表 `TextAsset`）。**全为默认或留空时，登记表与行为与零配置逐字相同**；留空的分组不登记阶段（不替使用方初始化他没要的模块）。服务实例（`RemoteServices` / `CryptoProvider` / `DecryptionServices`）与 `LogOptions` 仍不进字段面，理由写进类 XML 与 README
 
@@ -52,7 +52,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Update PlayerLoop 自驱动**：驱动注入 `Update` / `PreLateUpdate` / `FixedUpdate` 三个阶段，不再要求场景里存在 `GameLauncher` 或任何 MonoBehaviour；`IsDrivingPlayerLoop` 可查询注入状态，注入失败打 `LogWarning`（门面是宽容语义、不会抛异常，不留痕的话故障表现只是「静止」）。注入基于 `GetCurrentPlayerLoop` 且只插入不替换，因此与 UniTask 等同样靠注入工作的库共存（有断言钉住）
 
-- **Update 补齐长周期档位**：`UpdateLOD` 增加 `Tier6`（约 1067ms / 64 个固定步）与 `Tier7`（约 2133ms / 128 个固定步）。原阶梯封顶在 `Tier5`，而它在 30fps 下是 1.07 秒、144fps 下只有 222ms——「每秒醒一次」这类需求此前无法表达，只能自己在节点里按 `deltaTime` 累加。档位是 2 的幂的等比梯子，桶数组尺寸随 `UpdateLOD.Max` 自动推导，故补齐只是加枚举成员
+- **Update 补齐长周期档位**：`UpdateLOD`（同版内改名为 `UpdateTier`，见 `### Changed`）增加 `Tier6`（约 1067ms / 64 个固定步）与 `Tier7`（约 2133ms / 128 个固定步）。原阶梯封顶在 `Tier5`，而它在 30fps 下是 1.07 秒、144fps 下只有 222ms——「每秒醒一次」这类需求此前无法表达，只能自己在节点里按 `deltaTime` 累加。档位是 2 的幂的等比梯子，桶数组尺寸随 `UpdateLOD.Max` 自动推导，故补齐只是加枚举成员
 
 - **`UpdateManager.AutoDriveEnabled` 公开**：此前它是「仅供测试关闭」的 internal 钩子，而注入是 `[RuntimeInitializeOnLoadMethod]` 自动执行的——项目想自己驱动（确定性回放等）没有公开途径，而手动 `Tick` 会与已注入的驱动器每帧各派发一次。语义无需新代码（三个驱动委托本就各自 `if (!AutoDriveEnabled) return;`），只是把它公开、重写文档（置 false 后 `IsDrivingPlayerLoop` 仍为 true，它只报注入状态）
 
@@ -72,15 +72,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **请求-响应补全**：`HasHandler<TRequest>()` 探测响应方是否已注册；`TryRequestAsync<TRequest, TResponse>` 在一次调用内完成「查 + 发」，未注册处理器时返回 `(false, default)` 而不抛异常。模块定位是跨模块解耦，请求方本就不该假定响应方已就绪，此前只能靠 try/catch 接 `InvalidOperationException`——既是用异常做控制流，也无法与处理器内部抛出的同类型异常区分。`false` 只表示未注册，处理器自身的异常照常上抛
 
-- **节点订阅扩展**：`NodeExtensions.SubscribeAsync(this BaseNode, ...)`；`Subscribe` 去掉 `where TMessage : class` 约束，框架内置 struct 消息现可用
+- **节点订阅扩展**（**该扩展面随节点系统在本版内被整体删除**，见 `### Removed`「删除节点系统」）：`NodeExtensions.SubscribeAsync(this BaseNode, ...)`；`Subscribe` 去掉 `where TMessage : class` 约束，框架内置 struct 消息现可用
 
-- **节点缓冲订阅**：`NodeExtensions.SubscribeBuffered<TMessage>(this BaseNode, handler)`，订阅即收到最近一条并自动绑定节点生命周期。刻意只提供这一个缓冲重载——带 Key 与带过滤条件的变体一旦同时存在，`(TKey, Action<TMessage>)` 会捕获本意为过滤器的委托实参，使该调用退化为 CS0121 或被静默解析为「把谓词当 Key」
+- **节点缓冲订阅**（**同上，随节点系统删除**）：`NodeExtensions.SubscribeBuffered<TMessage>(this BaseNode, handler)`，订阅即收到最近一条并自动绑定节点生命周期。刻意只提供这一个缓冲重载——带 Key 与带过滤条件的变体一旦同时存在，`(TKey, Action<TMessage>)` 会捕获本意为过滤器的委托实参，使该调用退化为 CS0121 或被静默解析为「把谓词当 Key」
 
 - **发布/订阅入口的主线程断言（Editor）**：`Publish` / `PublishAsync`（含键值重载）与全部 12 个订阅重载的入口在 Editor 下检查是否位于 Unity 主线程，越线程调用记一条 `[Message]` 前缀的 Error——每个 broker 只报首错（`Clear()` 换新实例后重新具备提示能力），Release 构建不编译该断言、零开销。此前这条契约只写在 README 里，而 `PublishAsync` 的旧文案还暗示「不在主线程调用也行，只要自行切回主线程」：文档说一套、成员文档暗示另一套，入口处却没有任何机制。**覆盖边界（三处刻意不判，均已写进文档）**：① 退订路径——令牌可在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 在令牌已取消时的早退路径——它不触碰任何共享状态；③ 处理器内部的线程行为。断言实现为 `internal static MainThreadGuard`，`ref` 闩锁由 broker 实例持有，故测试可用局部变量直接驱动、零全局状态。配套 5 条 EditMode 用例（守卫本体 2 条 + 接线 3 条），其中「主线程调用不得记日志」那条是**负向控制**——缺了它，一个恒打日志的守卫也能让越线程用例通过
 
-- **`SubscribeBuffered` 补上键值带过滤的扩展重载**：`IMessageSubscriber` 扩展面此前只有三个缓冲订阅重载（类型级、带 Key、类型级带过滤），缺「带 Key + 带过滤」这一个——而静态面四个齐全，README 也明写「类型级与带 Key 的 `Subscribe`/`SubscribeAsync`/`SubscribeBuffered` 均有含过滤条件的扩展重载」，第三方照 README 写 `this.SubscribeBuffered(key, filter, handler)` 直接编译不过。加重载前先做了**重载决议的编译复现**（本仓纪律：涉及重载决议不靠纸面推理）：镜像扩展面 12 个重载形状 + 14 个调用形状全部解析成功（含最可疑的两参 `SubscribeBuffered(pred, handler)`，它仍正确落到类型级带过滤版；相邻 `Subscribe`/`SubscribeAsync` 族不受影响），且同一程序在人为造出二义与形状不匹配时确报 CS0121 / CS1503——证明验证程序本身有判别力。配套 2 条用例（销毁令牌自动退订、过滤对重放与实时同时生效），它们在改动前**连编译都过不去**。另补 2 条契约用例：扩展面判空（参数名不得在转发时与 `handler` 调换）、以及把复现程序里的解析结论钉进仓库——两参 `(filter, handler)` 必须落到类型级带过滤版而非被 `(TKey, Action<TMessage>)` 捕获（复现程序不入库，结论会随时间腐化）。**与 `[Unreleased]` 里那条「节点缓冲订阅刻意只提供一个重载」的取舍无关**：那条担心的是 `(TKey, Action<TMessage>)` 捕获本意为过滤器的委托实参，而本次编译复现实测该担心在本方法集上不成立（两参调用仍落到过滤版；键值变体是 3 参，不参与两参调用的竞争），且节点扩展已随节点系统一并删除
+- **`SubscribeBuffered` 补上键值带过滤的扩展重载**：`IMessageSubscriber` 扩展面此前只有三个缓冲订阅重载（类型级、带 Key、类型级带过滤），缺「带 Key + 带过滤」这一个——而静态面四个齐全，README 也明写「类型级与带 Key 的 `Subscribe`/`SubscribeAsync`/`SubscribeBuffered` 均有含过滤条件的扩展重载」，第三方照 README 写 `this.SubscribeBuffered(key, filter, handler)` 直接编译不过。加重载前先做了**重载决议的编译复现**（本仓纪律：涉及重载决议不靠纸面推理）：镜像扩展面 12 个重载形状 + 14 个调用形状全部解析成功（含最可疑的两参 `SubscribeBuffered(pred, handler)`，它仍正确落到类型级带过滤版；相邻 `Subscribe`/`SubscribeAsync` 族不受影响），且同一程序在人为造出二义与形状不匹配时确报 CS0121 / CS1503——证明验证程序本身有判别力。配套 2 条用例（销毁令牌自动退订、过滤对重放与实时同时生效），它们在改动前**连编译都过不去**。另补 2 条契约用例：扩展面判空（参数名不得在转发时与 `handler` 调换）、以及把复现程序里的解析结论钉进仓库——两参 `(filter, handler)` 必须落到类型级带过滤版而非被 `(TKey, Action<TMessage>)` 捕获（复现程序不入库，结论会随时间腐化）。**与 `[0.3.0]` 里那条「节点缓冲订阅刻意只提供一个重载」的取舍无关**：那条担心的是 `(TKey, Action<TMessage>)` 捕获本意为过滤器的委托实参，而本次编译复现实测该担心在本方法集上不成立（两参调用仍落到过滤版；键值变体是 3 参，不参与两参调用的竞争），且节点扩展已随节点系统一并删除
 
-- **运行统计支持按消息类型下钻 `CopyTypeStats`**：`GetStats()` 只给总数、`GetChannelStats<T>` 要先知道类型或 Key——而这两个 API 的既定用途恰恰是排查订阅泄漏，「是哪个消息类型在泄漏」原本答不出。新增 `MessageTypeStats`（消息类型 + 通道数 / 同步订阅数 / 异步订阅数 / 缓冲通道数 / 键值通道数）与 `MessageManager.CopyTypeStats(List<MessageTypeStats> buffer)`：**一行一个消息类型**（该类型的类型级通道与全部键值通道**归并**成一行），调用方持有缓冲区、进入即清空、返回写入行数、零分配——与 UI 的 `CopyPanels` 同惯例。行序未定义（受内部字典遍历序影响），要排名请调用方自行排序；最坏复杂度为 O(键值存储数 × 消息类型数) 而非 O(通道数)，文档如实写明，没有照抄「统计为 O(通道数)」那句。归并查重与键值计数用线性扫描而非字典：字典要么每次调用分配（与「调用方持有缓冲区」的承诺冲突）要么得引入池依赖，而消息类型数是个位数、本方法又不在每帧路径上。顺带把 `GetChannelStats<TMessage>` 里内联的「按消息类型汇总键值通道数」抽成共用助手，并订正两处会误导的过期注释：`MessageStatsAccumulator.BufferedChannelCount`「持有重放缓存的通道数」（上一批订正过同类措辞、这里漏网）与 `KeyedChannelStore.Count`「当前 Key 的通道数量」（它返回的是**全部 Key**）。**口径差别写进了文档**：`GetChannelStats<TMessage>()` 的四个计数只算类型级通道，`CopyTypeStats` 的一行是类型级 + 全部键值通道的合计——两者是两种视图，`KeyedChannelCount` 是唯一共有字段且共用同一份扫表实现，不把前者改成合并视图（那会静默放宽既有公开语义）。6 条新用例，其中两条是设计价值所在：**各行计数之和必须等于总线级计数**（两套统计互为校验，任一侧口径被改先红）与**反复调用零分配**（预热后测 100 次，`GC.GetAllocatedBytesForCurrentThread` 差值为 0，抄 UI 侧同一写法）
+- **运行统计支持按消息类型下钻 `CopyTypeStats`**：`GetStats()` 只给总数、`GetChannelStats<T>` 要先知道类型或 Key——而这两个 API 的既定用途恰恰是排查订阅泄漏，「是哪个消息类型在泄漏」原本答不出。新增 `MessageTypeStats`（消息类型 + 通道数 / 同步订阅数 / 异步订阅数 / 缓冲通道数 / 键值通道数）与 `MessageManager.CopyTypeStats(List<MessageTypeStats> buffer)`：**一行一个消息类型**（该类型的类型级通道与全部键值通道**归并**成一行），调用方持有缓冲区、进入即清空、返回写入行数、零分配——与 UI 的 `CopyPanels` 同惯例。行序未定义（受内部字典遍历序影响），要排名请调用方自行排序；最坏复杂度为 O(键值存储数 × 消息类型数) 而非 O(通道数)，文档如实写明，没有照抄「统计为 O(通道数)」那句。归并查重与键值计数用线性扫描而非字典：字典要么每次调用分配（与「调用方持有缓冲区」的承诺冲突）要么得引入池依赖，而消息类型数是个位数、本方法又不在每帧路径上。顺带把 `GetChannelStats<TMessage>` 里内联的「按消息类型汇总键值通道数」抽成共用助手，并订正两处会误导的过期注释：`MessageStatsAccumulator.BufferedChannelCount`「持有重放缓存的通道数」（上一批订正过同类措辞、这里漏网）与 `KeyedChannelStore.Count`「当前 Key 的通道数量」（它返回的是**全部 Key**）。**口径差别写进了文档**：`GetChannelStats<TMessage>()` 的四个计数只算类型级通道，`CopyTypeStats` 的一行是类型级 + 全部键值通道的合计——两者是两种视图，`KeyedChannelCount` 是唯一共有字段且共用同一份扫表实现，不把前者改成合并视图（那会静默放宽既有公开语义）。6 条新用例，其中两条是设计价值所在：**各行计数之和必须等于总线级计数**（两套统计互为校验，任一侧口径被改先红）与**反复调用零分配**（预热后测 100 次，`GC.GetAllocatedBytesForCurrentThread` 差值为 0（**该尺子后经实测恒返回 0，此结论不成立**，见 `### Documentation` 同条），抄 UI 侧同一写法）
 
 #### Reactive
 
@@ -154,13 +154,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **② Pool 加的是内部缝的成员而不是新公开接口**：`IUntypedPool` 补三个只读属性，`Pool<T>` 的三个**已有公开属性**隐式实现它们，池本身零改动。没有加公开的非泛型 `IPool` 基接口——那会让用显式实现 `IPool<T>` 的第三方编译不过（CS0535）。
   **③ `IsDirty` 不造第二份真相**：`SettingsTypeInfo.IsDirty` 的文档直接转述 `ISettingsManager<T>.IsDirty` 的口径（有改动待提交 ≠ 已落盘）。
 
-- **XPool 补 `CountActive`（`IPool<T>` / `Pool<T>`）**：`CountAll` 是「自建池以来生成过多少」，只增不减——归还、清空、超容丢弃都不减。于是「还有多少实例在外面」根本无从读出，而集合池的 `Configure` 守卫只能拿 `CountAll - CountInactive` 冒充活跃数（见下方 Fixed）。新增的 `CountActive` 随取还增减，超容丢弃的实例同样离开活跃态（不再有人持有它）；递减钳在 0，避免 `CollectionCheck` 关闭时重复归还把它减成负数。文档同时写明：`CountAll - CountInactive` **不等于** `CountActive`，被丢弃的实例仍计入 `CountAll` 却既非活跃也非闲置
+- **XPool 补 `CountActive`（`IPool<T>` / `Pool<T>`）**：`CountAll` 是「自建池以来生成过多少」，只增不减——归还、清空、超容丢弃都不减。于是「还有多少实例在外面」根本无从读出，而集合池的 `Configure` 守卫只能拿 `CountAll - CountInactive` 冒充活跃数（见 `### Fixed` → Pool 的「集合池 `Configure` 守卫用差值冒充活跃数」一条）。新增的 `CountActive` 随取还增减，超容丢弃的实例同样离开活跃态（不再有人持有它）；递减钳在 0，避免 `CollectionCheck` 关闭时重复归还把它减成负数。文档同时写明：`CountAll - CountInactive` **不等于** `CountActive`，被丢弃的实例仍计入 `CountAll` 却既非活跃也非闲置
 
 - **XPool 池满丢弃回调**：闲置达到 `MaxSize` 后归还的实例原先被直接解引用、无人知晓，持有非托管资源或需要确定性释放的对象只能等 GC——这是本模块相对 Unity 官方 `ObjectPool`（有 `actionOnDestroy`）与微软 `ObjectPool`（`Return` 可返回 false 拒绝回收）唯一的功能缺口。`Pool<T>` 构造新增 `onDestroy` 委托，另立 `IPoolDiscardable` 可选能力接口（不给已发布的 `IPoolable` 加成员——那是设计给第三方数据类实现的，加方法即源码破坏），`PoolManager.Configure<T>` 增加三参重载把丢弃回调透传到池。语义要点：归还回调仍**先于**容量判断触发，被丢弃的实例先收 `OnReturn`（清理状态）再收 `OnDiscard`（释放资源）；`Clear()` / `ClearAll()` **不触发**丢弃回调——`ClearAll` 会在应用退出时自动调用，退出期跑用户回调容易碰到已销毁的 Unity 对象
 
 #### Input
 
-- **其余页签（概览 / Message / Lock / Data / Bootstrap / Save / File / Input / Serialize）+ 第三方示例**：全部建立在**已有公开查询面**之上，零 Runtime API 变更。概览页是一张模块状态矩阵（哪些模块已初始化、各自的规模一句话），是诊断窗口的落地点；其余页签各自回答一类问题（Message 的订阅/缓冲规模、Lock 的未绑定主体、Data 的脏块、Bootstrap 的登记表、Save 的忙碌状态、File 的加密提供者、Input 的设备识别、Serialize 的已注册格式）。另加 `Samples/Example/DiagnosticsSample.cs`——第三方页签的完整样板（实现 → 登记 → 采集三步）。
+- **其余页签（概览 / Message / Lock / Data / Bootstrap / Save / File / Input / Serialize）+ 第三方示例**：全部建立在**已有公开查询面**之上，零 Runtime API 变更。概览页是一张模块状态矩阵（哪些模块已初始化、各自的规模一句话），是诊断窗口的落地点；其余页签各自回答一类问题（Message 的订阅/缓冲规模、Lock 的未绑定主体、Data 的脏块、Bootstrap 的登记表、Save 的忙碌状态、File 的加密提供者、Input 的设备识别、Serialize 的已注册格式）。另加 `Samples~/Example/DiagnosticsSample.cs`——第三方页签的完整样板（实现 → 登记 → 采集三步）。
   **三条边界已写进各页签的文档**：Save 的槽位列表是异步磁盘 IO 不适合轮询（本轮不做）；Input 的启用 ActionMap 列表要动 `IInputProvider`（本轮不做）；Message 的键值通道 key 无法枚举（只给到类型粒度）。
 
 - **`InputManager.Initialize(InputSystemOptions)`：自己加载输入资产的入口**。无参 `Initialize()` 走 `Resources.Load("InputSystem_Actions")`——零配置起步，却也是唯一路径；资源钉在 `Resources/` 意味着它总被打进包、且不受 YooAsset 之类资源系统管理。新增的 `XFramework.XInput.Default.InputSystemOptions { InputActionAsset Asset }` 把**加载**那一步交还给使用方（YooAsset / Addressables / 自己的加载器皆可），接线与无参路径完全相同（同一个默认提供者、同样注册帧驱动）。**Unity 输入类型只出现在 `XInput.Default`**——门面与 `IInputProvider` 保持插件中立（Rewired 那类用户看到的公开面不受影响）。顺带把三个 `Initialize` 重载共用的尾巴提成私有 `AdoptProvider`，新重载与既有两条同形（先建好、成功后才接管）
@@ -189,7 +189,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **② 换档位不能用「重新 `Register` 驱动器」。** 已读源码验证：`UpdateScheduler.ApplyOp` 的注册分支插入的是一条 `NeedsAnchor = true` 的新条目，下一次派发 `deltaTime` 记 0——每次创建都吞掉一个档位周期，高频创建时逻辑时钟会**永久停摆、定时器永不触发**。故已派发过的驱动器一律走 `ProcessImmediate`，并把**上一次收到的时刻**原样传回作为时钟（传 `Time.time` 会把基准推到真实时刻，而逻辑时钟是按 `deltaTime` 累积的，两者在暂停之后不再同源，会把整段暂停算成流逝时间）。
   **③ 新增「出生趟号」这个概念。** `ProcessImmediate` 会同步跑一趟扫尾，若刚建的 `After(0f)` 在这趟里到期，回调就在 `Create` 返回句柄之前触发了。故扫尾分「派发轮」与「立即重估」两种：后者不推进趟号，于是刚建好的槽位仍算本趟出生——**只参与最近截止的估计**（否则新定时器算不进档位、白拉细一趟），**绝不触发**。它同时让锚点落在 `Create` 那一刻而不是「下一趟扫尾」。
   **④ 取消令牌不调 `CancellationToken.Register`。** 令牌随槽位存储、在扫尾与各查询点上直接读 `IsCancellationRequested`：省掉「令牌回调在别的线程上跑、而活表只能主线程改」这条竞态，省掉「扩容换数组时标记写丢」，也省掉 `Register` 自身那次分配——「不传令牌时零额外分配」因此是结构性的而非测出来的。
-  **实测记录**：跨模块集成用例 `TimerTierTableTests` 量出的各档真实派发周期与标称值（33.33 / 66.67 / 133.33 / 266.67 / 533.33 / 1066.67 / 2133.33 ms）**逐位吻合**；零分配用例确认创建/释放 1000 次、值类型载荷 1000 次、稳态推进 60 帧的 `GC.GetAllocatedBytesForCurrentThread()` 增量**均为 0 字节**（顺带确认 `UpdateManager.Tick` 自身也是零分配的）。
+  **实测记录**：跨模块集成用例 `TimerTierTableTests` 量出的各档真实派发周期与标称值（33.33 / 66.67 / 133.33 / 266.67 / 533.33 / 1066.67 / 2133.33 ms）**逐位吻合**；零分配用例确认创建/释放 1000 次、值类型载荷 1000 次、稳态推进 60 帧的 `GC.GetAllocatedBytesForCurrentThread()` 增量**均为 0 字节**（**该尺子后经实测恒返回 0，此结论不成立**，见 `### Documentation`「`Workflow.md` 记入『零分配断言可能恒真』」）（顺带确认 `UpdateManager.Tick` 自身也是零分配的）。
   **过程中被用例抓出的两处**：一是 `After(0f)` 原本要两帧才触发（`NeedsAnchor` 让定锚的那一趟不触发），改成出生趟号后恢复为「下一拍即触发」；二是一条用例假设「先创建的槽位下标更小」，而自由链是 LIFO、槽位顺序会反转——它顺带暴露了一条值得写进文档的真实语义：**同一次扫尾里，全停之前已被走访的定时器仍会触发**。
 
 #### Log
@@ -200,7 +200,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **③ 分类数没有再在门面上加别名**：`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相（此条比计划**少**一个公开成员）。
   **顺带**：`LogRegistry` 加 `CopyTo(List<LogCategoryState>)`——先取一次字典引用再遍历，copy-on-write 下拿到的是完整快照，与读路径无锁的理由是同一条。
 
-- **新增 `XLog` 日志模块**（`Documentation/Roadmap.md` §2.2 立项，条件是答得出「比 `Debug.unityLogger` + 自定义 `ILogHandler` 多给什么」）：静态门面 `LogManager` + `ILogManager` 接口 + internal 实现，六档分级（`Verbose/Debug/Info/Warning/Error/Fatal`，另加仅作阈值的 `Off`）+ 分类过滤（全局档 + 按分类覆盖，`LogCategory` 是 interned 的 `readonly struct`——档位存在被引用的状态对象里，复制出去的句柄同样生效）+ 可插拔 `ILogSink` + 控制台渲染。**零 GC 的边界是刻意的**：`Xxx(category, "x {0}", arg)` 在档位未启用时**不格式化**、零分配（`LogAllocationTests` 锁定）；泛型重载避免的是 `params object[]` 数组分配，值类型参数在**启用路径**仍会装箱；3 参是不分配数组的上限（4 参起掉进 `params` 重载——实测全仓仅 2 处需要，改走现成字符串重载）。`LangVersion 9.0` 下 InterpolatedStringHandler 不可用，这是唯一的零 GC 形态。**四条与直觉相左的决定及理由**：
+- **新增 `XLog` 日志模块**（`Documentation/Roadmap.md` §2.2 立项，条件是答得出「比 `Debug.unityLogger` + 自定义 `ILogHandler` 多给什么」）：静态门面 `LogManager` + `ILogManager` 接口 + internal 实现，六档分级（`Verbose/Debug/Info/Warning/Error/Fatal`，另加仅作阈值的 `Off`）+ 分类过滤（全局档 + 按分类覆盖，`LogCategory` 是 interned 的 `readonly struct`——档位存在被引用的状态对象里，复制出去的句柄同样生效）+ 可插拔 `ILogSink` + 控制台渲染。**零 GC 的边界是刻意的**：`Xxx(category, "x {0}", arg)` 在档位未启用时**不格式化**、零分配（`LogAllocationTests` 锁定（**该断言的尺子后经实测恒返回 0，结论不成立**——见 `### Documentation`「`Workflow.md` 记入『零分配断言可能恒真』」））；泛型重载避免的是 `params object[]` 数组分配，值类型参数在**启用路径**仍会装箱；3 参是不分配数组的上限（4 参起掉进 `params` 重载——实测全仓仅 2 处需要，改走现成字符串重载）。`LangVersion 9.0` 下 InterpolatedStringHandler 不可用，这是唯一的零 GC 形态。**四条与直觉相左的决定及理由**：
   **① 门面永不抛异常（对门面模板的第三处有意豁免，前两处是 FileManager 的懒初始化与 InputManager 的宽容语义）。** 日志是错误路径的最后一张面孔——让「模块没初始化」把它升级成二次故障，代价比一致性大得多；sink 抛异常即被静默摘除并计入 `DroppedSinkCount`（「因为日志坏了而记一条日志」会递归，且测试把意外 Error 当失败）。
   **② 分类名 = 迁移前的 `[前缀]` 逐字，因此同一模块内历史遗留的多个标签各是一个分类**（`[Config]` 与 `[ConfigManager]`、`[AssetManager]` 与 `[YooAssetManager]` 都是两个）。这是「迁移期间控制台文本逐字不变、30+ 处 `LogAssert` 零改动」的前提，代价是分类数偏多（31 个）——单独关掉某个标签的控制力反而更细。
   **③ 格式化走 `string.Format(CurrentCulture, …)`，不自研 formatter。** 转义、`null` 参数、`IFormattable` 格式说明符、culture 四项语义**与字符串插值同源**，这是「迁移后文本没变」的免费正确性证明；模板解析失败（消息里有裸花括号）时退回原文，绝不抛。
@@ -284,7 +284,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **UI 层级 API 可达**：`SetLayerVisibility` / `SetLayerInteractive` 此前只存在于内部实现上，**连 `IUIManager` 都没有**，而门面既无转发也无实例属性——第三方虽能在文档里读到它们，实际完全不可达。现补进接口并由门面转发，另暴露 `UIRoot`
 
-- **UI 诊断**：`UIStateSnapshot`（`readonly struct`，零分配）+ `DumpState()` + `Tools/XFramework/UI State` 窗口。用于回答「面板是不是漏关了」「遮罩为什么还亮着」「哪个打开卡在半路」这类只能翻运行时状态才能定位的问题。窗口数据现取自显示栈与在途表，不是另记一份账
+- **UI 诊断**（**独立窗口 `Tools/XFramework/UI State` 同版内被删除**，内容并入诊断窗口的 UI 页签，见 `### Removed`）：`UIStateSnapshot`（`readonly struct`，零分配）+ `DumpState()` + `Tools/XFramework/UI State` 窗口。用于回答「面板是不是漏关了」「遮罩为什么还亮着」「哪个打开卡在半路」这类只能翻运行时状态才能定位的问题。窗口数据现取自显示栈与在途表，不是另记一份账
 
 - **UI 生命周期钩子 `OnPause` / `OnResume`**：把 `OnBlur` 原先承担的两件事正交拆开——交互维度（`OnFocus`/`OnBlur` 管 `IsFocused` + Raycaster）与更新维度（`OnPause`/`OnResume` 管 `IsPaused`）。于是「失焦但仍要按低频更新」这类需求终于可表达，且被覆盖的面板仍会收到语言切换等回调（否则 Pop 回来会看到旧语言）
 
@@ -391,7 +391,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Update 可见性收敛（破坏性）**：`UpdateScheduler` 由 `public` 改为 `internal sealed`，对齐「实现类默认 internal sealed」的框架约定；第三方若直接 `new UpdateScheduler()` 会编译不过，但正因它的内部结构仍在演进，收口可避免依赖上内部细节
 
-- **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变（节拍基准的改动见下条）。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
+- **Update LOD 档位改名（破坏性）**：`UpdateLOD.Frame1/2/4/8/16/32` 改为 `Tier0..Tier5`，枚举值与行为均不变（节拍基准的改动见 `### Changed` 的「Update LOD 节拍由帧数改为时间」一条）。旧名把「每 N 帧」这一实现细节写进了标识符，而档位的真正含义（周期）属于模块约定——做成序数名后，调整节拍基准时不必再改一次名。迁移按 `Frame(2^k) → Tier(k)` 机械替换（`Frame1`→`Tier0`、`Frame8`→`Tier3`、`Frame32`→`Tier5`），第三方只需改标识符
 
 - **Update LOD 节拍由帧数改为时间（破坏性）**：切片节拍原先每帧推进一格，故第 k 档的周期是 2^k **帧**、随帧率缩放（`Tier3` 在 30fps 下 267ms、144fps 下 56ms，跨度 4.8 倍）。现按各轴自己的时间推进（一格 = 1/60 秒），周期与帧率无关。**固定步轴除外**：`Time.fixedTime` 每步恰好等长、本无漂移可修，那里保持每步一格，档位含义是「每 2^k 个固定步」。每帧最多补 3 格——上限决定「周期精确」能覆盖到多慢的帧（余量恒小于一格，故帧长不足 N 格时该补的格数不超过 N），取 3 即帧长 50ms（约 20fps）以内精确；补不上时丢弃**整格**债务而非累积到后续帧，卡顿不会滚雪球。切片算法本身、每帧派发量上限、`deltaTime` 语义均未变，高帧率下只是多出「本帧不推进」的空帧。副作用：`timeScale = 0.5` 时的节流强度不再与 `timeScale` 无关——逻辑轴按逻辑时间计拍，墙钟周期随之翻倍（这正是「逻辑时间轴」的应有之义，但推翻了旧文档的说法）
 
@@ -399,7 +399,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **事件流成员去 Rx 命名（破坏性）**：`IEventStream<T>.OnNext` → `Emit`、`OnCompleted` → `Complete`，订阅参数 `Subscribe(Action<T> onNext)` → `Subscribe(Action<T> handler)`（波及 `IEventStream<T>` / `IBufferedEventStream<T>` / `IReactiveProperty<T>` / `ReactiveProperty<T>` / `ReadOnlyReactiveProperty<T>` / `SettingRef`）。**对第三方的影响面**：XEvent 的公开面是 0.2.0 之后新增的、尚未进入任何版本段，改的是**从未发布过**的名字；唯一触及已发布面的是 `ReactiveProperty<T>.Subscribe` 的**参数名**（源兼容，仅具名实参调用受影响，仓内为零）。**为什么改**：`OnNext` / `OnCompleted` 是 Rx（`IObserver<T>`）术语，与本仓公开面语汇不一致——`On` 前缀在 Update / Pool / UI / Data 等十余处都是「框架回调使用方」的方向（`OnUpdate` / `OnRent` / `OnBound`），而这两个成员是持有者**推入**面；`OnCompleted` 还与 Pipeline 的同名**事件**（`IPipeline.OnCompleted`，`+=` 订阅）同名不同形。`Emit` / `Complete` 与 `Subscribe` / `Dispose` 组成全直白成员面，且不与 Message 的 `Publish` 争词。**为什么现在**：公开面从未发布是唯一窗口，越过后即成为对第三方的破坏性变更；`725422c`（去 Rx 命名）当时的「成员方法名保守保留」是为收窄改动面的权宜（该子句只留在提交信息里，CHANGELOG 那条被丢了），本次补齐。**已评估与否决的替代名**：`Publish`（与总线同词不同契约，会糊掉「流 vs 总线」二分）、`Subject`（带回整套 Rx 契约期望）、`Send`（MediatR 语感为「一对一请求」）、`Invoke`（与 Unity `MonoBehaviour.Invoke` 的按名延迟调用撞名，且描述机制而非动作）、`Broadcast`（本仓文档里「广播」正是总线的词，另撞 `MonoBehaviour.BroadcastMessage`）。内部一并清理：`SubscriptionNode<T>.OnNext` 字段 → `Handler`；`Deliver` 参数 → `handler`。**纯改名，行为零变更**（异常日志前缀仍为 `[Event]`）；Pipeline 的 `OnCompleted` 事件与 Input 的 `IRebindingOperation.OnCompleted` 是各自的事件，不在本次范围内。
 
-- **Reactive README 标注引擎依赖为「已知待解决」**：本模块直接 `using XFramework.XMessage.Internal` 取 `EventStream<T>`，此前 README 把这条依赖写成「单向依赖：Reactive → Message」就算了事，读起来像是受支持的公开契约。现如实标注：这不违规（没有任何成文规则禁止跨模块引用该命名空间），但「没有规则」正是问题——全框架共用一个 asmdef，`internal` 不构成编译边界，既无编译器约束也无成文约定。同类引用合计 5 个跨模块文件（Reactive×2 / Input×1 / Settings×2），消费面只有 `Subscribe` / `OnNext` / `OnCompleted` / `Dispose` 四个成员；统一方案尚未确定。这条待办此前只活在一个提交信息里（「全仓库的模式……其余仍待统一方案」），每次回看都要重新考古一遍，故落到 README
+- **Reactive README 标注引擎依赖为「已知待解决」**（**同版内已解决**：事件流引擎下沉为独立模块 `XFramework.XEvent`，见 `### Changed`）：本模块直接 `using XFramework.XMessage.Internal` 取 `EventStream<T>`，此前 README 把这条依赖写成「单向依赖：Reactive → Message」就算了事，读起来像是受支持的公开契约。现如实标注：这不违规（没有任何成文规则禁止跨模块引用该命名空间），但「没有规则」正是问题——全框架共用一个 asmdef，`internal` 不构成编译边界，既无编译器约束也无成文约定。同类引用合计 5 个跨模块文件（Reactive×2 / Input×1 / Settings×2），消费面只有 `Subscribe` / `OnNext` / `OnCompleted` / `Dispose` 四个成员；统一方案尚未确定。这条待办此前只活在一个提交信息里（「全仓库的模式……其余仍待统一方案」），每次回看都要重新考古一遍，故落到 README
 
 - **补写两组容易被踩的语义（仅文档、注释与测试，无行为变更）**：① Reactive 模块 README 新增「派发顺序与重入」一节——派发顺序是 **LIFO**（后订阅先收到），且**回调内写入本属性会留下陈旧值**：订阅者 A、B 中 B 后订阅（故先收到），B 在收到 `1` 时写入 `2`，嵌套派发让 A、B 都先收到 `2`，随后外层循环继续把 `1` 投给 A——A 最终停在一个 `Value` 已不再是的值上，且不会再有通知来纠正它，故回调里不要写入本属性。这两条都由底层事件流决定，此前只能从引擎的代码注释里读到。② Message README 的「线程」提示补上引擎的**主线程前提**：内部的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏，**不构成「可以多线程发布/订阅」的许可**——`SubscriptionNode.IsDisposed` 在派发循环里是无锁读取的，且快照收集与 `_publishDepth` 自增之间存在窗口，并发退订可能让节点在该窗口内被回池复用。另为 `UIPanelBinding.RegisterBinding` 补一条注释：那里的「立即同步当前值」**不是**上面订阅立即回调的重复——后者被 `isActiveAndEnabled` 挡住，面板未激活时只能靠它兜底，原样看像冗余、删掉即让未激活面板的绑定静默失效。①②两条语义均已补测试钉住（`Dispatch_OrderIsLifo_LaterSubscriberReceivesFirst` / `ReentrantWrite_LaterSubscriberEndsOnStaleValue`），断言值就是文档里的描述，改语义时测试会先红
 
@@ -421,7 +421,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Message 淘汰即回收**：`EvictBufferedChannel` / `EvictBufferedChannels` 丢弃重放缓存后顺带回收因此变空的通道与存储表项，不再残留「已可回收但仍在表中」的空壳；`TrimEmptyChannels` 退居兜底与诊断手段，常规路径下返回 0。返回值语义不变（只计淘汰数，不含回收数）。同时补文档：带 Key 的淘汰是语义要求而非可选优化——漏淘汰会把上一个同 Id 实体的旧值重放给新订阅者
 
-- **节点订阅解析变更**：`BaseNode` 实现 `IMessagePublisher`/`IMessageSubscriber`，`NodeExtensions.Subscribe` 改以 `BaseNode` 为接收者以消除与 `MessageManager.Subscribe(this IMessageSubscriber, ...)` 的重载二义
+- **节点订阅解析变更**（**该扩展面随节点系统在本版内被整体删除**，见 `### Removed`「删除节点系统」）：`BaseNode` 实现 `IMessagePublisher`/`IMessageSubscriber`，`NodeExtensions.Subscribe` 改以 `BaseNode` 为接收者以消除与 `MessageManager.Subscribe(this IMessageSubscriber, ...)` 的重载二义
 
 - **Message 统计字段更名（破坏性）**：`MessageBusStats.MessageTypeCount` 改为 `ChannelStoreCount`。它的值本就是「类型通道表项数 + 键值通道表项数」，同一消息类型既有类型通道又配了键值通道（或配多种 Key 类型）会各占一项而重复计数——原名在说谎，而统计接口的用途正是排查泄漏，误导性命名会直接浪费排查时间。`ToString()` 的标签也由「类型」改为「通道表」。无行为变化，仅更名
 
@@ -443,7 +443,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **补 4 条测试（`TryWriteValue` 此前零覆盖）**：3 条在 `ReactivePropertyTests`（存活写入与 actual 回传、已释放返回 false 不抛、写入派发中目标被释放仍返回 true 且不抛），1 条在 `UIBindingTwoWayTests` 走完整的滑条双向绑定路径。UI 侧那条已用「临时恢复旧的二次读取」验证过改前必红，失败栈为 `ReactiveProperty.get_Value → SliderTwoWayBinding.OnSliderChanged → UnityEvent`
 
-- **`ReadOnlyReactiveProperty<T>` 实现 `IReactiveProperty<T>`，UIBinder 删掉 7 个重复重载**：`Select` 派生值此前只实现 `IDisposable`，落在接口契约之外——于是既不能交给收 `IReactiveProperty<T>` 的绑定 API，也不能作为 `Select` 的源继续映射（`rp.Select(a).Select(b)` 编译不过）。最直接的代价是 `UIBinder` 里长回了 7 对**方法体完全相同**的重载（`BindToText` / `BindToSlider` / `BindToFillAmount` / `BindToSprite` / `BindToToggle` / `BindToActive` / `Bind`），每对里具体类型那版就是为绕过这个缺口而存在。这正是本文件早先那条裁定的残留：「必须是**替换**而非新增重载——两版并存时具体类更精确、永远胜出，接口版会沦为死代码」。现补齐接口实现并删除那 7 个重载（对调用方源码兼容，重载决议改走接口版），另补 4 条测试：2 条锁定「派生值可作为接口使用 + 可链式」，2 条在 `UIBindingInterfaceTests` 里用真实的派生值（而非测试替身）走一遍已被删除的重载原本覆盖的路径
+- **`ReadOnlyReactiveProperty<T>` 实现 `IReactiveProperty<T>`，UIBinder 删掉 7 个重复重载**：`Select` 派生值此前只实现 `IDisposable`，落在接口契约之外——于是既不能交给收 `IReactiveProperty<T>` 的绑定 API，也不能作为 `Select` 的源继续映射（`rp.Select(a).Select(b)` 编译不过）。最直接的代价是 `UIBinder` 里长回了 7 对**方法体完全相同**的重载（`BindToText` / `BindToSlider` / `BindToFillAmount` / `BindToSprite` / `BindToToggle` / `BindToActive` / `Bind`），每对里具体类型那版就是为绕过这个缺口而存在。这正是 `SettingRef` 那条裁定的残留：「必须是**替换**而非新增重载——两版并存时具体类更精确、永远胜出，接口版会沦为死代码」。现补齐接口实现并删除那 7 个重载（对调用方源码兼容，重载决议改走接口版），另补 4 条测试：2 条锁定「派生值可作为接口使用 + 可链式」，2 条在 `UIBindingInterfaceTests` 里用真实的派生值（而非测试替身）走一遍已被删除的重载原本覆盖的路径
 
 - **Reactive 消息总线内部去 R3 化结构**：订阅直落自研事件流，移除内部 ObservableSignal 包装层与信号缓存；公共 API 与行为语义不变（投递顺序、缓冲保留、completed 语义保持）
 
@@ -498,7 +498,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 #### UI
 
 - **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
-  **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[Unreleased]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
+  **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[0.3.0]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
 
 - **`IUIManager` 新增 `IsLayerVisible(int)` / `IsLayerInteractive(int)`（破坏性变更，仅对第三方 `IUIManager` 实现者成立）**：这补上了 UI 里唯一一处「能写不能读」——`SetLayerVisibility` 早已公开，回读却只在内部实现上。正是 `Documentation/Modules/UI.md` 里记为「将来若要公开，走完整的接口 + 转发 + 完备性测试三步」的那一步，本轮按三步走完：接口 +2、`UIManager` 门面 +2 转发（`UIFacadeCompletenessTests` 自动覆盖）、`Tests/Runtime/UI/FakeUIManager.cs` 同步补齐。两条口径：
   **① 它们是探测型读**（未初始化时答 `true`，不套 `EnsureGlobalInitialized`）——「没有被显式隐藏过」在未初始化时同样是 `true`，与 `GetState` / `OpenCount` 同属一类；`UIFacadeProbeTests` 补了这条断言，README 的探测型清单同步更新。
@@ -585,7 +585,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Asset 非成功路径丢弃句柄（8 处）**。类型不匹配（`AssetManagerImpl` 同步/异步实例化各 1 处：`GetAssetObject<T>` 是 `as` 转换，地址指向的不是 GameObject 时返回 null 而句柄**有效**，代码直接 `return null`）与加载失败（`YooAssetManagerImpl` 6 处：`LogError` 后 `return default`）都把刚创建的句柄丢掉。实测 YooAsset：`ProviderOperation.CreateHandle<T>()` 在**创建**时就 `RefCount++` 并登记，`CanDestroyProvider()` 要求 `RefCount <= 0`——被丢弃的句柄让该 provider **永久不可销毁**、bundle 引用保持，此后 `UnloadUnusedAssetsAsync` 再也回收不掉它。加载失败是常见路径（地址写错就会走到），而类型不匹配那条**连日志都没有**。现统一先释放再返回 `default`（对外契约不变），类型不匹配另补一条 `[AssetManager]` 告警。对照：同文件「组件不匹配」分支一直有告警 + 销毁实例，漏的是 GameObject 这一层
 
-- **Asset 回池不去重：同一实例进池两次**。`DestroyInstance` 对同一实例调两次会 `Push` 两次，两次取出拿到同一个 GameObject。`CHANGELOG` 里 UI 批量关闭那条（见上）已把这条根因写在案（「回池没有去重（AssetManager 直接 Push）」），但当时的守卫只加在 **UI 侧**，Asset 侧至今没有兜底。现 `InstanceTracker` 增 `_pooled` 标志（回池点置位、取出时经 `OnEnable` 清除），已回池的实例直接忽略重复 `DestroyInstance`；顺带把 `TryReturnToPool` 改为**先判容量后动实例**（池满时不再先失活脱父，也不留空池条目）。**改前必红**：`Expected: 1 But was: 2`
+- **Asset 回池不去重：同一实例进池两次**。`DestroyInstance` 对同一实例调两次会 `Push` 两次，两次取出拿到同一个 GameObject。`CHANGELOG` 里 UI「批量关闭会把同一个面板关两次」那条已把这条根因写在案（「回池没有去重（AssetManager 直接 Push）」），但当时的守卫只加在 **UI 侧**，Asset 侧至今没有兜底。现 `InstanceTracker` 增 `_pooled` 标志（回池点置位、取出时经 `OnEnable` 清除），已回池的实例直接忽略重复 `DestroyInstance`；顺带把 `TryReturnToPool` 改为**先判容量后动实例**（池满时不再先失活脱父，也不留空池条目）。**改前必红**：`Expected: 1 But was: 2`
 
 - **Asset 下载器的取消路径会漏掉退订**。`DownloadAssetsAsync` 把 `handle.Dispose()` 写在 `await handle.WaitAsync(ct)` 之后——取消时 `WaitAsync` 抛 `OperationCanceledException`，退订被整条跳过，`ProgressChanged` 订阅与三个底层回调永久留在 downloader 上。改为 `try/finally`
 
@@ -655,7 +655,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **异步订阅令牌竞态下通道永久不可回收**：`AsyncSubscription` 构造期间向已取消令牌 `Register` 会同步内联触发退订，而该项尚未入表，退订落空、不回调空通知；此时若仍入表，登记表永远非空使 `IsReclaimable` 恒为 false，自动回收与 `TrimEmptyChannels` 共用该谓词而双双失效，只能等 `Clear()`。现改为已退订的登记项不入表（该窗口仅在跨线程 `Cancel` 时可达，属防御性加固）
 
-- **节点消息订阅补全**：`NodeExtensions.Subscribe` 的 `where TMessage : class` 约束使框架内置 struct 消息全部编译不过，且与 `MessageManager.Subscribe` 同形导致重载二义；`BaseNode` 实现消息标记接口后二者同时解决
+- **节点消息订阅补全**（**同上，随节点系统删除**）：`NodeExtensions.Subscribe` 的 `where TMessage : class` 约束使框架内置 struct 消息全部编译不过，且与 `MessageManager.Subscribe` 同形导致重载二义；`BaseNode` 实现消息标记接口后二者同时解决
 
 - **订阅与过滤器 API 判空**：此前 `null` 过滤器要到派发时才 NRE 并被 `try/catch` 吞成日志（静默失效且订阅保留）
 
@@ -788,7 +788,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **UI 帧通路无异常隔离：任一 `OnUpdate` 抛异常即让整条每帧通路永久死亡**（UI 门面定向审计 P0）：`UIManagerImpl.DriveTier` 的派发循环直接调 `panel.OnUpdate`，异常逃逸到 `UpdateScheduler` 后按节点契约被「记 LogError + 注销该节点」——而门面记账是单向的（`_frameDriver` 非空即早退），驱动器再也回不来：面板 / HUD / Tip 全部静止，唯一线索是一条以内部类名结尾的 `[UpdateScheduler]` 日志（仓内先例：`InputManager.PulseFrame` 早有同款守卫）。现分三层隔离，各管一段：**逐面板**（`DriveTier` 循环内，记 `[UIManager] Panel '…'.OnUpdate threw …` 后**停更该面板**、其余面板照常——标记落在 `UIPanelBase.UpdateFaulted`，复位在 `RecyclePanel` 的 `finally` 而非可被覆写的 `OnPoolRecycle`：框架状态复位不能依赖用户代码）；**整层兜底**（门面 `FrameDriver` / `TierDriver` 的 catch，catch 后仍返回**原档位**——返回值漂移会被调度器改档；它覆盖注入实现的 `Update` 与将来新增而未加守卫的调用）；**provider 调用点**（HUD / Tip 各自隔离、首条日志后阻尼、换 provider 复位——provider 没有「停更」机制，停掉它等于停掉全部 HUD）。**改前必红实测**：stash 掉实现改动后新 fixture 4 条全红，失败消息即缺陷本身（`[UpdateScheduler] FrameDriver.OnUpdate threw exception, unregistering`，栈里 `DriveTier` → `FrameDriver.OnUpdate` → `TickEveryFrameBucket`，分档那条走 `TickSlicedBuckets`）；后两层各自单独 stash 复验，红点都精确落在本层新增的断言上。修复后 UI 全量 PlayMode 198/198
 
-- **补记三条漏记的门面修复**（`bc92ce6` / `e5bc950` / `34aaab8`：提交在 `[Unreleased]` 段内，却从未进流水）：`SetInstance` 注入的实例也接入每帧驱动（此前只有 `Initialize` 注册驱动器，而驱动类是 private sealed、外部无从补注册——注入后面板 / HUD / Tip 全都没有人驱动）；换实例时先收掉旧实例与其分档驱动器（它们各自持有旧 `UIManagerImpl` 引用，换实例后没人再上报需求，会永远留在调度器里按周期空转）；`Initialize` 消费即清 `PanelFactoryFactory`、`Destroy` 的状态复位移进 `finally`（否则 `Dispose` 抛一次异常就把门面留在「`IsInitialized` 仍为 true、驱动器却已全部摘掉」的半死状态）
+- **补记三条漏记的门面修复**（`bc92ce6` / `e5bc950` / `34aaab8`：提交在 `[0.3.0]` 段内，却从未进流水）：`SetInstance` 注入的实例也接入每帧驱动（此前只有 `Initialize` 注册驱动器，而驱动类是 private sealed、外部无从补注册——注入后面板 / HUD / Tip 全都没有人驱动）；换实例时先收掉旧实例与其分档驱动器（它们各自持有旧 `UIManagerImpl` 引用，换实例后没人再上报需求，会永远留在调度器里按周期空转）；`Initialize` 消费即清 `PanelFactoryFactory`、`Destroy` 的状态复位移进 `finally`（否则 `Dispose` 抛一次异常就把门面留在「`IsInitialized` 仍为 true、驱动器却已全部摘掉」的半死状态）
 
 - **UI 双向绑定在目标已失效时泄漏 UnityEvent 监听**：`SliderTwoWayBinding` / `ToggleTwoWayBinding` 的构造函数先 `onValueChanged.AddListener`、后 `target.Subscribe(...)`。而 `Subscribe` 会抛（目标已释放 → `ObjectDisposedException`；设置句柄背后的类型已注销 → 上一版还走 `InvalidOperationException`），它抛出时构造函数随之失败、**绑定对象永远拿不到**，于是 `OnDispose` 里的 `RemoveListener` 永不执行。面板是回池的，残留监听会一直留在控件上，此后每次拖动/切换都打到**上一个 ViewModel 的属性**上。现改为先订阅后挂监听（`Subscribe` 抛出时监听尚未挂上，自然不残留），并为「挂监听本身失败」补了回滚——滑条已销毁时 `AddListener` 同样会抛，此时回滚刚建立的订阅。补 2 条测试（滑条/开关各一），用一个可失效的计数目标把「残留监听是否还在打这个目标」变成可断言的事实；已实测改前必红（`Expected: 0 But was: 1`）
 
@@ -884,7 +884,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Lock README 新增「与相邻能力的边界」**（体例照 Event README）：锁 vs `ReactiveProperty`（开放集合 vs 闭合求和）、锁 vs `UIMaskHandle`（触及 vs 逻辑；两者**键语义相反**：遮罩是单调令牌计数、锁是值相等幂等）、锁 vs `PreconditionChain`（持续被挡 vs 单次校验），以及三个相邻电平开关（`Time.timeScale` / `UpdateManager.Pause` / `InputManager.DisableActionMap`——单写者、不叠加，Lock 的存在就是为了替换这一类但不接管它们）；并如实写明**执行侧仍可能被别处直接改而绕过**
 
-- **Reactive README 补「集合（`ReactiveList<T>`）」节**（使用方向）：快速示例、与 `ReactiveProperty<T>` 的两处关键差别（订阅不立即回调；只有「无变化不发通知」而没有「相同值去重」）、六条已知限制（批量 = 逐项通知、索引瞬时有效、排序恒发 `Reset`、`foreach` 装箱、回调内改动的三种后果、没有 Dictionary / Set 与集合绑定）。原「集合型响应式：**没有**」一条改写为「部分有」，并**明确 `ReactiveList<T>` 不改变 UI 侧「长列表由项目自建」的既有结论**（`UI/README.md` 那句不动）；「接口承诺到哪为止」补「同模块两个 `Subscribe` 语义相反」的显式对照；Event README 的「被谁使用」与模块定位同步。
+- **Reactive README 补「集合（`ReactiveList<T>`）」节**（使用方向；其中「`foreach` 装箱」一条**同版内随零装箱改造消失**，见 `### Changed` → Reactive）：快速示例、与 `ReactiveProperty<T>` 的两处关键差别（订阅不立即回调；只有「无变化不发通知」而没有「相同值去重」）、六条已知限制（批量 = 逐项通知、索引瞬时有效、排序恒发 `Reset`、`foreach` 装箱、回调内改动的三种后果、没有 Dictionary / Set 与集合绑定）。原「集合型响应式：**没有**」一条改写为「部分有」，并**明确 `ReactiveList<T>` 不改变 UI 侧「长列表由项目自建」的既有结论**（`UI/README.md` 那句不动）；「接口承诺到哪为止」补「同模块两个 `Subscribe` 语义相反」的显式对照；Event README 的「被谁使用」与模块定位同步。
 
 - **Reactive README 补「集合（`ReactiveDictionary<TKey,TValue>`）」节**：快速示例、与列表的四处差别（键稳定但条目会被移除 / 无哨兵 / 键比较器可注入 / 遍历顺序不承诺）、字典版已知限制（等值 upsert 不替换实例、键的生命周期由持有者收口——与 Message 的淘汰纪律同姿势）；「已知限制」与「本模块没有的」里「没有字典」的表述改成现状；「接口承诺到哪为止」的 `Subscribe` 语义对照扩到三个接口；「设计原则」把「列表走单流 struct 载荷」泛化为「集合」，并补字典专属两条（键比较器可注入、值相等即空操作）。
 
@@ -928,7 +928,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **UI 模块首轮审计归档（定向 `UIManager.cs`，判据 A–F 全类扫过）**：1 条高危 + 4 条中高（前两条已修；`Dispose` 半拆窗口的语义、`Destroy` 一律 Dispose 注入实例两条只记文档，连同三条未决一起归档进 `Documentation/Modules/UI.md` 新增的「已评估未采纳与未决」）。同轮补的覆盖缺口各一条用例：`SetController` 对注入实现的降级分支、注入实例不被 `SetInstance` 销毁、`Destroy` 之后操作类照抛 + 探测类归零 + `TierDriverCount` 清零、`Destroy` 不是单向闩锁、重复 `Initialize` 告警、`SetInstance(null)`、`Subscribe` 的另两个重载、`UpdateManager.Pause` × 面板、Tier1 专项；24 个 fixture 的 `SetUp` 统一改为先 `UIManager.Destroy()` 归零（NUnit 在 SetUp 中途失败时不跑 TearDown，残留的 `_instanceInitialized` 会让下一个 fixture 的 `Initialize` 静默 no-op，表现为一堆与自身无关的红）。模块 README 的「已知限制」补三条（`timeScale = 0` 冻结、`UpdateManager.Clear()` 摘驱动器、无线程契约断言）。**实测记录**：`Subscribe` 三个 `Action<T>` 重载下无类型 lambda 是编译错误 CS0121（不是静默误判），照纪律用临时探针文件在本仓程序集上编译验证并配了负向控制
 
-- **配置/注入全面清点**（起于用户质疑「框架不应该预设过多配置，由第三方注入比较好」）：判据是「**不想要这个预设时，你要付出什么代价**」——一次注入 / 一个 options 字段 = 健康；抄一个实现 = 有边界但要写清；**不可能 = 越界**。结论：框架在「整体替换实现」层已普遍是注入式，「预设过多」的真身是十余处**策略**没有出口；本轮处理了三处越界出口（见上）与一处死选项。其余分两类落档：**不该开**的策略（UI 排序分层、Update 切片与节拍基、Message 缓冲「只留最后一条」、Event 投递顺序、Timer/Pool/Lock 的静态性——它们是模块不变量，换了等于换模块）写进 `Roadmap.md` §四「不做」并逐条给理由；**本轮未做但可再拾**的三项（Reactive 相等比较器不可注入、Serialize 内置注册静默覆盖、Settings 无 `SetInstance`）记进对应模块技术文档的「已评估未采纳与未决」
+- **配置/注入全面清点**（起于用户质疑「框架不应该预设过多配置，由第三方注入比较好」）：判据是「**不想要这个预设时，你要付出什么代价**」——一次注入 / 一个 options 字段 = 健康；抄一个实现 = 有边界但要写清；**不可能 = 越界**。结论：框架在「整体替换实现」层已普遍是注入式，「预设过多」的真身是十余处**策略**没有出口；本轮处理了三处越界出口（均在 `### Added`，按本条判据改为可配置/可替换）与一处死选项。其余分两类落档：**不该开**的策略（UI 排序分层、Update 切片与节拍基、Message 缓冲「只留最后一条」、Event 投递顺序、Timer/Pool/Lock 的静态性——它们是模块不变量，换了等于换模块）写进 `Roadmap.md` §四「不做」并逐条给理由；**本轮未做但可再拾**的三项（Reactive 相等比较器不可注入、Serialize 内置注册静默覆盖、Settings 无 `SetInstance`）记进对应模块技术文档的「已评估未采纳与未决」
 
 - **UI 层容器撞名 = 代码证伪的假问题**：层参数是 `int`，`Layer_{层号}` 永远拼不出 `Layer_HUD` / `Layer_Tip`。结论记进 UI README 的已知限制，免得下一轮审计重提
 
@@ -968,7 +968,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **`Roadmap.md` §2.4 标为已建成**：立项时六条边界照原样落地；两处与立项时不同（`Version` 计数器实现前砍掉——本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点；`Sort` 签名定为 `Sort(IComparer<T> comparer = null)`）记入条目，正文按 §一 搬迁纪律只留指针。
 
-- **`Documentation/Workflow.md` 记入「零分配断言可能恒真」**（尺子实测 + 写这类断言的两条纪律：先自检尺子；尺子不够用时优先用结构断言）。**既有 `TimerAllocationTests` / `LogAllocationTests` 的断言在本环境恒真**——其结论未被证实（未必为假，但没被验证），修订方案待定。
+- **`Documentation/Workflow.md` 记入「零分配断言可能恒真」**（尺子实测——**点名三处空转的旧实测**：`TimerAllocationTests` / `LogAllocationTests` / `MessageStatsTests:342` + 写这类断言的两条纪律：先自检尺子；尺子不够用时优先用结构断言）。**既有 `TimerAllocationTests` / `LogAllocationTests` 的断言在本环境恒真**——其结论未被证实（未必为假，但没被验证），修订方案待定。
 
 ## [0.2.0] - 2026-08-20
 
