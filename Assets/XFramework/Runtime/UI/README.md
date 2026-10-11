@@ -1054,6 +1054,78 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 
 预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
 
+## 弹窗定位（下拉 / 右键菜单 / Tooltip）
+
+`UIPopupPosition` 是一个**纯几何**静态工具：算出弹窗该摆在锚点元素的哪里。用于下拉菜单、右键菜单、
+悬浮说明、组合框展开、嵌套子菜单——凡是「贴着某个控件弹出来」的场景。
+
+**命名空间**: `XFramework.XUI`
+
+它补的是本模块此前缺的一种贴附：`ShowHudAsync` 跟的是**世界** `Transform`，`TipConfig` 是**固定位置
+配置**，两者都不是「锚到屏幕空间 UI 元素」。UGUI 也没有现成原语（`TMP_Dropdown` 的翻转逻辑是内部的）。
+
+**它只是几何**：无状态、值进值出、零分配。开合时机、点击外部关闭、动画、箭头绘制都不在这里。
+
+### 快速使用
+
+```csharp
+// trigger 是触发它的控件（按钮、格子、列表项…）
+Rect anchorRect = UIPopupPosition.GetScreenRect(trigger);
+
+var popupRect = (RectTransform)panel.transform;
+
+Vector2 pos = UIPopupPosition.CalculatePosition(
+    anchorRect,
+    popupRect.rect.size,                             // 弹窗尺寸
+    UIPopupDirection.Auto,                           // 四向依次尝试
+    UIPopupAlign.Start,                              // 垂直展开时=左对齐
+    new Rect(0f, 0f, Screen.width, Screen.height),   // 换 Screen.safeArea 即避让刘海
+    popupRect.pivot,                                 // 必须传实际 pivot，理由见下
+    out UIPopupDirection resolved);                  // 实际采用的方向（画箭头/选动画用）
+
+popupRect.position = new Vector3(pos.x, pos.y, 0f);
+```
+
+### API 说明
+
+| 参数 | 类型 | 说明 |
+| --- | --- | --- |
+| `anchorScreenRect` | `Rect` | 锚点元素的屏幕矩形，由 `GetScreenRect` 取得 |
+| `popupSize` | `Vector2` | 弹窗尺寸（像素）。非正值按 0 处理，不抛异常 |
+| `direction` | `UIPopupDirection` | `Auto` / `Down` / `Up` / `Left` / `Right` |
+| `align` | `UIPopupAlign` | `Start` / `Center` / `End`，作用在**垂直于方向**的那根轴上 |
+| `screenRect` | `Rect` | 可用区域。传全屏，或传 `Screen.safeArea` 避让刘海与手势条 |
+| `popupPivot` | `Vector2` | 弹窗预制体的 pivot（归一化） |
+| `resolved` | `out UIPopupDirection` | 实际采用的方向 |
+| `offset` | `float` | 主轴方向上的间隙（像素），默认 0 |
+
+**`align` 管哪根轴**：垂直展开（`Down` / `Up`）时它管**水平**——`Start` 左对齐、`Center` 居中、
+`End` 右对齐；水平展开（`Left` / `Right`）时它管**垂直**——`Start` 顶对齐、`Center` 居中、`End` 底对齐。
+
+**`Auto` 怎么选**：按 `Down` → `Up` → `Right` → `Left` 取第一个放得下的；四个都放不下时取可用空间
+最大的那个，再由收敛把它贴到边上。
+
+**为什么 `popupPivot` 是必需参数**：`rectTransform.position` 赋值设置的是物体的 **pivot**，不是它的角。
+若本函数写死「返回左下角」，**中心 pivot（Unity 新建 RectTransform 的默认值）的预制体会静默错位
+半个尺寸**。把 pivot 传进来，返回的就是「pivot 应该落在的点」，对任何 pivot 都正确。
+
+**收敛是双向的**：结果会被钳进 `screenRect` 的**两个轴**。只收敛一侧时，「锚点贴屏幕左缘 + 弹窗比
+锚点宽」会把弹窗推出屏幕。显式指定方向时**不会翻转到别的方向**，只做收敛——代价是可能盖住锚点，
+这是有意的语义。
+
+### 前置条件
+
+**画布须为 `ScreenSpaceOverlay`**（本框架的 `UIRootNode` 强制如此）。该模式下画布世界空间与屏幕像素
+一一对应，故结果可直接赋给 `rectTransform.position`。**换到 `ScreenSpaceCamera` 或 `WorldSpace`
+画布时本函数的结果不再成立**，需要自行换算。
+
+### 已知行为边界
+
+- **弹窗大于可用区域时贴低边**，无法保证完整可见——纯几何函数不做缩放、也不报错
+- **不接管生命周期**：点击外部关闭、开合时机、动画、箭头绘制是调用方（或面板子类）的事。
+  往这里加它们会让一个纯函数变成一个有策略的组件
+- **不做自动刷新**：锚点或屏幕尺寸变化后需再算一次（与 `UISafeArea.Apply` 同理，框架不监听尺寸变化）
+
 ## 已知限制
 
 - **关闭域重载（Enter Play Mode Options）时，UI 的会话复位依赖 `UIRootNode` 的成对生命周期**：
