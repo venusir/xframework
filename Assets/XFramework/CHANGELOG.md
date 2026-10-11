@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **`UIManager.ShowDialogAsync<TPanel, TResult>` 对话框入口**（**门面成员，不进 `IUIManager`**）：把四件必须互相配合、**少配一件都不报错只会「看起来不对」**的事收成一个入口——① 打开面板；② 按对话框所在层**自动推导遮罩层**；③ 把遮罩持有绑到面板上（面板关闭即自动释放）；④ 等待并兑现结果。三条取向：
+  **① 遮罩层自动取 `layer - 1`。** 遮罩必须夹在「要遮住的内容层」与「对话框自身所在层」之间：`MaskOrder(L−1) = L×32 − 1` 而对话框 `PanelOrder(L, 1) = L×32 + 1`，正好差两格。**本仓文档此前教的默认组合正好是错的**——`ShowMask()` 用 `UILayers.Mask`(500) 层，`MaskOrder(500) = 16031` 远高于 Popup 层对话框的 6401，于是对话框被自己的遮罩盖住（变暗且点不动）。`layer` 会先经 `ClampPanelLayer` 再推导，两者基于同一个层号，超限时不会错位。层为 0（最低层）时没有更低的层可放，此时不显示遮罩。
+  **② 不接 `UIMaskStyle`，拆成 `modal` / `maskColor`。** 遮罩层级由 `layer` 推出，收一个含 `Layer` 的结构体再把该字段忽略掉，等于静默丢弃调用方的输入——与本轮要消灭的故障同类。
+  **③ 不自己 `Dispose` 遮罩句柄。** 持有经 `owner` 绑定到面板，释放点是「面板关闭」——手动释放会赶在关闭动画播完之前把变暗撤掉，那是个视觉故障。绑定同时覆盖了 `Dispose` 路径。
+  **为什么不进 `IUIManager` 接口**：它是一次**组合**（用 `OpenAsync` + `ShowMask` 两个已有原语），进接口则每个第三方 `IUIManager` 实现者都要多实现一个成员，而他们本可白拿这个组合；放门面则**任何实现**（含注入的自定义 `IUIManager`）都自动具备。先例：门面上的 `Subscribe` ×3 同为门面专属成员。
 - **`UIDialogPanel<TResult>` 对话框面板基类**（`View/UIDialogPanel.cs`）：在一次打开-关闭周期内把用户的选择回传给等待方。**它的存在理由是一个静默故障**——朴素做法（自己 new 一个 `UniTaskCompletionSource` 塞进 `userData`、在确定/取消按钮回调里完成它）在面板被**非按钮途径**关闭时会让等待方**永远不恢复**（`CloseAllAsync` 切场景、`CloseLayerAsync`、管理器 `Dispose`）。三条取向：
   **① 兜底挂在框架的回池点，不在 `OnClose`。** `UIManagerImpl.Dispose` 同步回池全部面板、**刻意不走关闭路径**（不 await 关闭动画），故 `OnClose` 在那一路上根本不会被调用；而回池是关闭与 `Dispose` **共用的唯一出口**，是唯一能覆盖两条路的位置。这与框架对「在途打开的等待者不能悬着」的处理同一取向（`Dispose` 里对 `_opening` 的加入者显式 `TrySetResult(null)`）。
   **② 回池时复位。** 面板是池化复用的，不复位会让重开的同类型对话框**立即返回上一次的结果**。

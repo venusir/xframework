@@ -778,6 +778,69 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Dialog（模态对话框）
+
+        /// <summary>
+        /// 打开一个对话框并等待用户的选择。
+        /// <para>把四件必须互相配合的事收成一个入口——少配一件都不会报错，只会「看起来不对」：
+        /// ① 打开面板；② <b>按对话框所在层自动推导遮罩层</b>（见 <paramref name="layer"/> 的说明）；
+        /// ③ 把遮罩的持有绑到面板上，面板关闭即自动释放；④ 等待并兑现结果。</para>
+        /// <para><b>结果一定会回来</b>：用户选择、面板被任何途径关闭（含 <c>CloseAllAsync</c> 与
+        /// 管理器 <see cref="Destroy"/>），等待方都会被唤醒。详见 <see cref="UIDialogPanel{TResult}"/>。</para>
+        /// </summary>
+        /// <typeparam name="TPanel">对话框面板类型，需继承 <see cref="UIDialogPanel{TResult}"/>。</typeparam>
+        /// <typeparam name="TResult">用户选择的结果类型。</typeparam>
+        /// <param name="assetPath">面板预制体的 YooAsset 地址。</param>
+        /// <param name="userData">传给面板 <see cref="UIPanelBase.OnOpen"/> 的自定义数据。</param>
+        /// <param name="modal">是否显示模态遮罩（挡输入并变暗）。</param>
+        /// <param name="layer">对话框所在层级，默认 <see cref="UILayers.Popup"/>。
+        /// <b>遮罩层由它推出，取 <c>layer - 1</c></b>：遮罩必须夹在「要遮住的内容层」与「对话框自身所在层」
+        /// 之间才既遮得住下面、又不盖住对话框。用默认的 <see cref="UILayers.Mask"/> 层会把对话框自己盖住
+        /// ——那是本文档此前教错的组合。若 <paramref name="layer"/> 为 0（最低层）则没有更低的层可放，
+        /// 此时不显示遮罩。</param>
+        /// <param name="maskColor">遮罩颜色（含透明度）。传 null 用默认的半透明黑。
+        /// 想要「挡住但不显示」传全透明色即可——全透明仍然挡输入。</param>
+        /// <param name="cancellationToken">取消令牌，<b>只作用于打开阶段</b>。面板打开之后的结束方式是
+        /// 关闭它（或用户做出选择），不提供「取消等待但面板仍开着」这条语义。</param>
+        /// <returns>用户的选择；面板关闭时仍未选择则返回 <c>default(TResult)</c>。
+        /// 面板打开失败（资源加载不到、被控制器拦下）时同样返回 <c>default</c>，与
+        /// <see cref="OpenAsync{T}(string, int, object, CancellationToken)"/> 的「失败返回 null」一致。</returns>
+        public static async UniTask<TResult> ShowDialogAsync<TPanel, TResult>(
+            string assetPath,
+            object userData = null,
+            bool modal = true,
+            int layer = UILayers.Popup,
+            Color? maskColor = null,
+            CancellationToken cancellationToken = default)
+            where TPanel : UIDialogPanel<TResult>
+        {
+            EnsureGlobalInitialized();
+            var impl = _instance;
+
+            // 先钳制再推导遮罩层：两者必须基于同一个层号，否则超限时面板被钳到 899 而遮罩算到 899，
+            // 遮罩反而盖住对话框。钳制一次也让越界只告警一次（OpenAsync 内部会再钳一次，值已合法故不重复告警）
+            int dialogLayer = UISorting.ClampPanelLayer(layer);
+
+            var panel = await impl.OpenAsync<TPanel>(assetPath, dialogLayer, userData, cancellationToken);
+            if (panel == null)
+                return default;
+
+            int maskLayer = dialogLayer - 1;
+            if (modal && maskLayer >= 0)
+            {
+                var style = new UIMaskStyle(maskLayer, maskColor ?? UIMaskStyle.Default.Color);
+
+                // owner 绑定：面板关闭（含 Dispose）时管理器自动释放这一次持有，因此这里
+                // 不自己 Dispose——手动释放会赶在关闭动画播完之前把变暗撤掉，而绑定的释放点
+                // 正是「面板关闭」这个正确的时机
+                impl.ShowMask(style, panel);
+            }
+
+            return await panel.WaitResultAsync();
+        }
+
+        #endregion
+
         #region Public API — UI Controller
 
         /// <summary>
