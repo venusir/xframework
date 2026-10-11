@@ -47,7 +47,7 @@ Runtime/Lock/
 
 ## 审计轮次
 
-2026-09-27 按 `../ModuleAudit.md` 审计一轮（本轮修了什么见 `CHANGELOG` 的 `[Unreleased]`）；
+2026-09-27 按 `../ModuleAudit.md` 审计一轮（本轮修了什么见 `CHANGELOG` 的 `[0.3.0]`）；
 本节只留**下一轮需要知道的**。
 
 ## 沿革与已否决形状

@@ -253,7 +253,7 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 > `ClickToClose` 开启时遮罩还会响应指针悬停（`Button` 的默认 `ColorTint` 过渡带来的轻微变色），这是唯一可见的副作用。
 >
 > **升级提示（0.2.0 及以前装过本包的项目）**：那个版本的遮罩漏了一个 `GraphicRaycaster`，**实际既不挡输入、
-> `clickToClose` 也不生效**（详见 `CHANGELOG.md` 的 `[Unreleased] → Fixed`）。本次修复后遮罩会开始真正吃点击——
+> `clickToClose` 也不生效**（详见 `CHANGELOG.md` 的 `[0.3.0] → Fixed`）。本次修复后遮罩会开始真正吃点击——
 > 若你此前依赖「点击穿透遮罩」，需要改用自己的命中策略。
 
 ### 面板驱动更新（OnUpdate）
