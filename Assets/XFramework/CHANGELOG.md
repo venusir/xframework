@@ -605,6 +605,25 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **Reactive README 补「集合（`ReactiveList<T>`）」节**（使用方向）：快速示例、与 `ReactiveProperty<T>` 的两处关键差别（订阅不立即回调；只有「无变化不发通知」而没有「相同值去重」）、六条已知限制（批量 = 逐项通知、索引瞬时有效、排序恒发 `Reset`、`foreach` 装箱、回调内改动的三种后果、没有 Dictionary / Set 与集合绑定）。原「集合型响应式：**没有**」一条改写为「部分有」，并**明确 `ReactiveList<T>` 不改变 UI 侧「长列表由项目自建」的既有结论**（`UI/README.md` 那句不动）；「接口承诺到哪为止」补「同模块两个 `Subscribe` 语义相反」的显式对照；Event README 的「被谁使用」与模块定位同步。
 - **`Roadmap.md` §2.4 标为已建成**：立项时六条边界照原样落地；两处与立项时不同（`Version` 计数器实现前砍掉——本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点；`Sort` 签名定为 `Sort(IComparer<T> comparer = null)`）记入条目，正文按 §一 搬迁纪律只留指针。
 
+### Changed
+
+- **变更词表改名 `ReactiveListChangeKind` → `ReactiveCollectionChangeKind`**（未发布，[Unreleased] 内原地订正）：字典与列表共用同一份词表——`Add` / `Remove` / `Replace` / `Reset` 四个值的语义完全相同，两套枚举只会各自漂移，消费方还得写两个 `switch`。实测 39 处 / 6 文件，`git mv` 文件与 `.meta`（GUID 保留），破坏是编译器报错级。
+
+### Added
+
+- **新增 `XReactive.ReactiveDictionary<TKey,TValue>`（按键寻址的集合型响应式 v1）**：可订阅增删改的字典 + 只读接口 `IReactiveDictionary<TKey,TValue> : IReadOnlyDictionary<TKey,TValue>` + 零 GC 的 `readonly struct` 变更载荷 `ReactiveDictionaryChange<TKey,TValue>`（`Kind` / `Key` / `Value` / `OldValue`）；索引器 `set` 是 upsert（新键 `Add` / 已有键 `Replace` / 等值静默且不替换实例），`Add` 键重复抛 `ArgumentException`（BCL 镜像），`Remove` 未命中静默，`Clear` 非空才发一条 `Reset`。**三处与 `ReactiveList<T>` 不同**：
+  **① 无索引哨兵**——`TKey` 没有通用非法值，`Reset` 的 `Key` 是 `default(TKey)`（文档明写「不要读」）；
+  **② 键比较器可注入**（构造重载 + `Comparer` 属性）——依据是仓内**已发生过**的审计 E 类事故（Lock 的引用类型键走默认 `Equals`，两个实体静默合并成一把锁）；
+  **③ 键比索引稳定但条目会被移除**——重入后果按此重写（嵌套那一轮可能已把该键移除，外层载荷随后照发，此时按键去查已查不到）。
+  **两处刻意与第三方分歧**（对照 UniRx `ReactiveDictionary` 与 Cysharp `ObservableDictionary`——源码一手读取、**仓内不可复验**，按转述标注）：它们都不做值相等去重、`Clear` 都始终发；本仓取「无变化不发通知」家族规则——等值 upsert 静默**且不替换实例**（换来可测的不变量「**有通知 ⇔ 状态确实变了**」，正面回答审计 F 的双观测面判据）、空表 `Clear` 静默。其余取向与列表一致：单流 struct 载荷、订阅不做立即回调、不做 batch / Range（批量装载走构造）、遍历顺序**显式写明不承诺**、`foreach` 装箱如实写明、零 GC。**明确不做**：键的生命周期自动移除（销毁令牌绑定）——两条硬阻断：`IDestroyCancellationToken` 在 Message 模块（会新增 `Reactive → Message` 依赖）、令牌回调跑在**取消者线程**（与全族主线程专用冲突）；重开判据三问记在模块文档。构造决议用一次性探针实测（不留仓）：5 个构造调用全部按预期解析；负向控制 `new ReactiveDictionary<string,int>(null)` → **CS0121**（编译级报错、非静默，同 D2 先例）。用例 39 条（含两处改前必红抽查）。
+- **立项依据与前一轮不同，值得记住**：`ReactiveDictionary` 的立项**不是**「回填既有设施」——逐条核对后仓内 5 处「键 → 值 + 通知」的手写设施 **0 处可被替换**（`LockManager._locks` 是**键 → 集合**的三级结构且带聚合边沿与销毁绑定、`SettingRefRegistry<T>` 根本不是键值表、UI 的公开读面是栈序列表、Localization / Config 是整表级 / 类型级广播），依据是前瞻性使用方场景（实体 id → 状态 / 槽位 → 内容 / 叠加状态 → 层数 / 资源 id → 计数）。这条差异写在 `Roadmap.md` §2.5 与 `Modules/Reactive.md` 的沿革里，免得下一轮拿 §2.4 的论证来套。
+
+### Documentation
+
+- **Reactive README 补「集合（`ReactiveDictionary<TKey,TValue>`）」节**：快速示例、与列表的四处差别（键稳定但条目会被移除 / 无哨兵 / 键比较器可注入 / 遍历顺序不承诺）、字典版已知限制（等值 upsert 不替换实例、键的生命周期由持有者收口——与 Message 的淘汰纪律同姿势）；「已知限制」与「本模块没有的」里「没有字典」的表述改成现状；「接口承诺到哪为止」的 `Subscribe` 语义对照扩到三个接口；「设计原则」把「列表走单流 struct 载荷」泛化为「集合」，并补字典专属两条（键比较器可注入、值相等即空操作）。
+- **包 README 补账**：功能表与模块表**上一轮就漏列了 `ReactiveList`**（本轮同批补上），并加 `ReactiveDictionary<TKey,TValue>` 与键比较器配置点（可配置点表的 Reactive 行）；正文「响应式属性（XReactive）」措辞同步。Event README 的模块定位与「被谁使用」同步。
+- **`Roadmap.md` §2.5 标为已建成**（正文按 §一 搬迁纪律只留指针）；`Modules/Reactive.md` 文件结构 + 沿革 + 延后项同步——延后项**不删除**：`ReactiveDictionary` 标注为重开并建成，其余各项照旧，字典侧新增「有序键值 / 按值查找」两条延后与「键生命周期自动移除」一条 v1.1 候选（含重开三问）。
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）

@@ -7,7 +7,7 @@ Event 模块提供**事件流引擎**:一个对象即一条流,持有者往流�
 它是框架里**最底层的一层**,被两个模块共同使用:
 
 - **Message**(消息总线)= 按消息类型 / Key **持有并治理一批流**(通道表、淘汰纪律、过滤器管道、异步登记、请求-响应、诊断统计)
-- **Reactive**(响应式属性 / 响应式列表)= 属性是**有当前值的流**(订阅即回调当前值、相同值去重);列表是**变更流**(一次变更一条 `readonly struct` 载荷,不重放、订阅不立即回调)
+- **Reactive**(响应式属性 / 响应式集合)= 属性是**有当前值的流**(订阅即回调当前值、相同值去重);集合(列表与字典)是**变更流**(一次变更一条 `readonly struct` 载荷,不重放、订阅不立即回调)
 
 **命名空间**: `XFramework.XEvent`;实现 `XFramework.XEvent.Internal`(internal,不对外)
 
@@ -149,5 +149,5 @@ var owned = EventStream.Create<int>(onEmpty: () => Debug.Log("没人听了"));
 ## 被谁使用
 
 - `XFramework.XMessage`(消息总线)→ 每个通道持有同步流与缓冲流
-- `XFramework.XReactive`(响应式属性 / 响应式列表)→ 每个属性、每个列表各一条变更流
+- `XFramework.XReactive`(响应式属性 / 响应式集合)→ 每个属性、每个列表、每个字典各一条变更流
 - `XFramework.XInput` / `XFramework.XSettings` → 帧脉冲流 / 设置变更流

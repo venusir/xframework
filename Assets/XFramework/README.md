@@ -126,7 +126,7 @@ await Bootstrap.RunAsync();
 | **配置管理**     | `ConfigManager` 内置 Json / CSV / ScriptableObject 格式，支持自定义 Loader 与 Register 注入，一行代码加载与查询 |
 | **消息总线**     | `MessageManager` 类型化发布/订阅、带 Key 通道、缓冲重放、异步发布 `PublishAsync`、请求-响应、全局过滤器、缓冲淘汰与运行统计 |
 | **逻辑锁**       | `LockManager` 多来源叠加的门禁（主体 × 类型 × 持有者）：全局锁、聚合状态事件 `OnLockStateChanged`、销毁自动释放、`DumpState` 排查 |
-| **响应式属性**   | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定 |
+| **响应式属性 / 集合** | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定；`ReactiveList<T>` / `ReactiveDictionary<TKey,TValue>` 集合变更通知（单流零 GC 载荷、整表操作发一条 `Reset`、订阅不回调当前值） |
 | **事件流**       | `EventStream<T>` 订阅句柄 + 异常隔离 + 重放缓存；是 Message 与 Reactive 的共同底层，也可单独取用 |
 | **输入抽象**     | `InputManager` 纯字符串 API（按下/按住/长按/轴值）+ 多设备检测 + 零 GC 热路径；默认提供者基于 Unity Input System，可整体替换（如 Rewired），资源加载方式自选 |
 | **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，可整体替换实现以接 Wwise / FMOD |
@@ -143,7 +143,7 @@ await Bootstrap.RunAsync();
 | **Update** | `XFramework.XUpdate` | 统一更新调度：三个派发时机、双时间轴、档位时间切片、PlayerLoop 自驱动 | [README](Runtime/Update/README.md) |
 | **Event** | `XFramework.XEvent` | 事件流引擎：订阅句柄、异常隔离、重放缓存（Message / Reactive 的共同底层） | [README](Runtime/Event/README.md) |
 | **Message** | `XFramework.XMessage` | 消息总线：按类型 / Key 治理通道、过滤器管道、异步订阅、请求-响应 | [README](Runtime/Message/README.md) |
-| **Reactive** | `XFramework.XReactive` | 响应式属性（基于 Event 事件流） | [README](Runtime/Reactive/README.md) |
+| **Reactive** | `XFramework.XReactive` | 响应式属性与集合：`ReactiveProperty<T>` 状态同步、`ReactiveList<T>` / `ReactiveDictionary<TKey,TValue>` 集合变更通知（基于 Event 事件流） | [README](Runtime/Reactive/README.md) |
 | **Localization** | `XFramework.XLocalization` | 本地化：多语言文本、语言切换、UI 自动绑定 | [README](Runtime/Localization/README.md) |
 | **File** | `XFramework.XFileManager` | 跨平台文件系统：路径域抽象、平台 Provider、原子写与一代备份、按域加密 | [README](Runtime/File/README.md) |
 | **Data** | `XFramework.XData` | 数据块管理：快照收集/应用、逐块版本迁移链、脏标记 | [README](Runtime/Data/README.md) |
@@ -214,7 +214,7 @@ await Bootstrap.RunAsync();
 | **Update** | 注册参数（`order` / `initialTier` / `timeMode`——**`RegisterFixed` 没有 `timeMode`**）；`AutoDriveEnabled`（关掉即停止 PlayerLoop 自动派发，改为自行 `Tick`）；运行时 `Pause` / `Resume` / `Clear` / `Enable` / `Disable`——**无 options**；`timeMode` 注册时读一次 | 注册时 / 实时 |
 | **Lock** | `AutoReleaseOnDestroy`（运行时可变；关掉后**不再新建销毁绑定**，且对**已销毁主体**的操作不再被拒）；`LockType` 是**使用方自建**的常量类——框架不预设锁类型 | 实时 |
 | **Event** | **无配置点**（订阅期钩子 `EventStream.Create(onEmpty)` 除外） | — |
-| **Reactive** | 构造期：`ReactiveProperty<T>(T initialValue, IEqualityComparer<T> comparer)`——自定义「相同值不通知」的相等语义（浮点容差等）；`Select(..., comparer)` 对派生值同理 | 构造时 |
+| **Reactive** | 构造期：`ReactiveProperty<T>(T initialValue, IEqualityComparer<T> comparer)`——自定义「相同值不通知」的相等语义（浮点容差等）；`Select(..., comparer)` 对派生值同理；`ReactiveDictionary<TKey,TValue>(IEqualityComparer<TKey> comparer)`——键比较器（引用类型作键时的逃生口，大小写不敏感等） | 构造时 |
 | **Timer** | **无配置点**（每次调用的 `UpdateTimeMode` 与取消令牌） | — |
 | **Pipeline** | 装配期：`AddStage(stage, timeoutSeconds)` / `IPhaseStage.Phase` / `IPipelineStage.Name`·`Weight` / `ParallelStage`·`SequenceStage`（可传 `name`）/ `BuildPhaseGroups(..., nameFormat)` / 四个终局与进度事件——**无 options** | 装配时 |
 
@@ -324,7 +324,7 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 ### 安装 XFramework
 
-第三方依赖配置完成后，用下列两种方式之一引入 XFramework 本体。消息总线（XMessage）与响应式属性（XReactive）均为框架自研实现，无需额外依赖。
+第三方依赖配置完成后，用下列两种方式之一引入 XFramework 本体。消息总线（XMessage）与响应式模块（XReactive）均为框架自研实现，无需额外依赖。
 
 #### 方式一：Git URL（只读）
 

@@ -16,7 +16,10 @@ Runtime/Reactive/
 ├── IReactiveList.cs              # 响应式列表接口(只读视图 IReadOnlyList<T> + 变更流订阅,不立即回调)
 ├── ReactiveList.cs               # 响应式列表(增删改 + 单流 struct 载荷通知 + Reset 兜底)
 ├── ReactiveListChange.cs         # 变更载荷 readonly struct(Kind/Index/Item/OldItem)
-└── ReactiveCollectionChangeKind.cs     # 变更词表(Add/Remove/Replace/Reset)
+├── IReactiveDictionary.cs        # 响应式字典接口(只读视图 IReadOnlyDictionary<TKey,TValue> + 变更流订阅)
+├── ReactiveDictionary.cs         # 响应式字典(upsert + 键比较器注入 + 单流 struct 载荷 + Reset 兜底)
+├── ReactiveDictionaryChange.cs   # 字典变更载荷 readonly struct(Kind/Key/Value/OldValue)
+└── ReactiveCollectionChangeKind.cs  # 集合共享词表(Add/Remove/Replace/Reset)
 ```
 
 ## 沿革与已否决形状
@@ -25,8 +28,9 @@ Runtime/Reactive/
 - **订阅泄漏是本仓历史上反复出现的一类**（UI / Reactive / Settings 的 README 都专设排查节）；若这类事故再出现，值得单独立项补一个编辑器窗口——即 R3 `ObservableTracker` 那种「列出未释放订阅**及其创建调用栈**」的工具。
   > **2026-10-02 更新**：原先的参照物 `UIStateWindow` 已并入诊断窗口删除；窗口壳现在有了（`Tools/XFramework/Diagnostics`，见 [Modules/Diagnostics](Diagnostics.md)），但**它不改变本项目标**——`ObservableTracker` 要的是「订阅 → 创建调用栈」的登记，那是投递热路径上的记账，与本窗口的拉取式页签是两回事。真要做得单独立项，届时它可以是诊断窗口的一个页签。
 - **集合型响应式从「拟已否决」翻案为立项**（2026-10-11）：一次提问（`ReactiveProperty<T>` 的 `T` 是 `List` / 数组会怎样）引出论证，初稿按「已否决」记录——理由是「这类原语的最大用场（列表 UI 逐项刷新 / 条目复用）已在 UI 侧被否，剩下的 gameplay 场景里集合语义是 GamePlay 资产、使用方自建更贴」。该理由被一条反例推翻：怪物 / 弹幕 / 单位这类「一组东西变了，告诉我」**没有**堆叠 / 容量 / 主键 / 排序的领域语义，正是通用原语的形状；且本仓对它有手写先例（`UIManager.Panels` + `PanelOpened/Closed/AllPanelsClosed` 三条消息，即同一个轮子被每个模块各写一遍）。立项边界（六条）与「两处与立项时不同」记在 `Documentation/Roadmap.md` §2.4；v1 已建成（`ReactiveList<T>` + 接口 + 载荷 struct + 词表，4 个文件 / 34 条用例）。
+- **`ReactiveDictionary` 同日从延后项重开并建成**（2026-10-11）：用户提出「按键寻址在游戏开发中很常见」并给出四类场景（实体 id → 状态 / 槽位 → 内容 / 叠加状态 → 层数 / 资源 id → 计数），立项边界见 `Roadmap.md` §2.5。**与 ReactiveList 那轮的关键差别（下一轮别再套错）**：本轮的立项依据**不是**「回填既有设施」——逐条核对后仓内 5 处「键 → 值 + 通知」的手写设施 **0 处可被替换**（`LockManager._locks` 是**键 → 集合**的三级结构且带聚合边沿与销毁绑定；`SettingRefRegistry<T>` 根本不是键值表——封闭泛型静态类 + `List`；UI 的公开读面是栈序列表；Localization / Config 是整表级 / 类型级广播 + LRU / 异步），依据是前瞻性使用方场景。形状三处与列表不同：**无索引哨兵**（`Reset` 的 `Key` 是 `default(TKey)`）、**有键比较器**（构造注入 + `Comparer` 属性，依据是 Lock 审计里那类「引用类型键走 `Equals` 静默合并」的事故）、**键比索引稳定但条目会被移除**（重入后果按此重写）。**两处刻意与第三方分歧**（对照 UniRx `ReactiveDictionary` 与 Cysharp `ObservableDictionary`——源码一手读取、**仓内不可复验**，按转述标注）：值相等 upsert 静默（换来「有通知 ⇔ 状态确实变了」，回答审计 F 的双观测面判据）、空表 `Clear` 静默。词表同批改名为共享的 `ReactiveCollectionChangeKind`（39 处 / 6 文件，未发布成本最低）。
 
 ## 已评估未采纳与未决
 
 - **相等比较器不可注入**（未决，2026-10-02 全面清点时记下）——**2026-10-11 标注为已落地（不删除，保留沿革）**：记下时属实，同日 `69e0190` 就加了构造重载 `(T initialValue, IEqualityComparer<T> comparer)` 与 `Select` 的 `comparer` 参数（`CHANGELOG.md` 同日 Added 条目），本条目没跟着更新。教训：清点记下的「未决」可能当天就被落地——引用前先对一遍代码与 CHANGELOG。
-- **ReactiveList 的延后项**（未决，2026-10-11 立项时定下）——**其中 `ReactiveDictionary` 同日即标注为重开**：用户给出真实使用方场景（实体 id → 状态 / 槽位 → 内容 / 叠加状态 → 层数 / 资源 id → 计数），「重开任何一项都需要真实使用方的形状」这条判据当场满足，另立 `Documentation/Roadmap.md` §2.5。**其余各项仍照原样有效**：`ReactiveSet` / 有序集延后——Set 还卡在 `IReadOnlySet<T>` 不在 .NET Standard 2.1 API 面内，形状定不了就不定；批量作用域与 `AddRange` / `RemoveRange` / `RemoveAll` 延后（批量装载的正解是构造：静默、不发通知）；集合的 `Select` 派生、写能力接口（没有可替换的后端，承 Timer 的裁定）、派发期快照一律不做。**两处 v1.1 候选**：`Remove(T)` 的相等比较器目前写死 `EqualityComparer<T>.Default`，可照 `ReactiveProperty<T>` 先例加注入；`Version` 计数器在实现前被砍（本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点，轮询是比订阅更差的模式）。
+- **ReactiveList 的延后项**（未决，2026-10-11 立项时定下）——**其中 `ReactiveDictionary` 同日即标注为重开并建成**（见沿革；条目原文保留在下）：「`ReactiveDictionary` / `ReactiveSet` / 有序集延后——Set 还卡在 `IReadOnlySet<T>` 不在 .NET Standard 2.1 API 面内，形状定不了就不定；批量作用域与 `AddRange` / `RemoveRange` / `RemoveAll` 延后（批量装载的正解是构造：静默、不发通知）；集合的 `Select` 派生、写能力接口（没有可替换的后端，承 Timer 的裁定）、派发期快照一律不做」。**其余各项仍照原样有效**，另 `ReactiveDictionary` 侧新增两条同族延后项：有序键值（要新增重排词条并给遍历顺序承诺，是另一个容器）、按值查找。**两处 v1.1 候选**（列表侧）：`Remove(T)` 的相等比较器目前写死 `EqualityComparer<T>.Default`，可照 `ReactiveProperty<T>` 先例加注入；`Version` 计数器在实现前被砍（本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点，轮询是比订阅更差的模式）。**字典侧一条 v1.1 候选**：键的生命周期自动移除（销毁令牌绑定）——两条硬阻断：`IDestroyCancellationToken` 在 Message 模块（会新增 `Reactive → Message` 依赖）、令牌回调跑在**取消者线程**（与全族主线程专用冲突）；重开先回答「令牌回调线程 / 该接口迁往哪个中立模块 / 值被替换后旧令牌如何解除」三问。
