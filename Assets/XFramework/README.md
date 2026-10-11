@@ -133,6 +133,8 @@ await Bootstrap.RunAsync();
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 
+> 上表列的是**功能亮点**，不是模块全集：Asset / Save / Data / Settings / Localization / File / Serialize / Diagnostics 八个模块见下方「模块索引」与各自的 README。
+
 ## 模块索引
 
 | 模块 | 命名空间 | 职责 | 文档 |
@@ -175,7 +177,7 @@ await Bootstrap.RunAsync();
 | **Settings** | `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（**按类型**注入；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点） | 三个 `Initialize<T>` 重载 / `SetStore<T>` / `SetMigrator<T>` / `SetValidator<T>` |
 | **Localization** | `ILocalizationManager` | `SetInstance(ILocalizationManager)` |
 | **UI** | `IUIManager` + 三个 provider：`IUIController` / `IUITipProvider` / `IUIHudProvider` | `SetInstance` / `SetController` / `SetTipProvider` / `SetHudProvider` |
-| **Input** | `IInputProvider`（28 成员） | `Initialize(IInputProvider)`（**生产路径**，自动注册帧驱动）；`SetProvider` 不注册帧驱动，是测试注入路径 |
+| **Input** | `IInputProvider`（27 成员） | `Initialize(IInputProvider)`（**生产路径**，自动注册帧驱动）；`SetProvider` 不注册帧驱动，是测试注入路径 |
 | **Config** | `IConfigManager`；`IConfigLoader` 逐次传入（**无法全局注册新格式**） | `SetInstance(IConfigManager)` |
 | **Data** | `IDataManager` | `Initialize(IDataManager)`——传 `null` 等价于 `Shutdown()` |
 | **Serialize** | `ISerializer`（按 `Format` 字符串注册） | `Register` / `Unregister` |
@@ -217,6 +219,7 @@ await Bootstrap.RunAsync();
 | **Reactive** | 构造期：`ReactiveProperty<T>(T initialValue, IEqualityComparer<T> comparer)`——自定义「相同值不通知」的相等语义（浮点容差等）；`Select(..., comparer)` 对派生值同理；`ReactiveDictionary<TKey,TValue>(IEqualityComparer<TKey> comparer)`——键比较器（引用类型作键时的逃生口，大小写不敏感等） | 构造时 |
 | **Timer** | **无配置点**（每次调用的 `UpdateTimeMode` 与取消令牌） | — |
 | **Pipeline** | 装配期：`AddStage(stage, timeoutSeconds)` / `IPhaseStage.Phase` / `IPipelineStage.Name`·`Weight` / `ParallelStage`·`SequenceStage`（可传 `name`）/ `BuildPhaseGroups(..., nameFormat)` / 四个终局与进度事件——**无 options** | 装配时 |
+| **Diagnostics** | **无配置点**（页签是**运行时登记**不是配置：`DiagnosticsManager.Register(IDiagnosticPanel)`；渲染契约 `IDiagnosticPanelView` 由 Editor 侧实现） | — |
 
 ## 路径与目录
 
