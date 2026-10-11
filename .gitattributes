@@ -1,0 +1,62 @@
+# XFramework 仓库属性
+#
+# 为什么需要它：Windows 上的 git 默认 core.autocrlf=true（本仓即是），它会在 checkout 时
+# 把 LF 改写成 CRLF、提交时再改回来——于是每次提交都报 "LF will be replaced by CRLF"，
+# 而工作区的行尾实际处于混用状态（2026-10-11 实测：510 个 .cs 里 143 个 CRLF、367 个 LF）。
+# 属性文件的优先级**高于** core.autocrlf，写下这一份就是让新克隆与既有工作区看到同一条
+# 规则：行尾不再取决于「谁在本机 check 出来的」。
+#
+# Unity 侧的前提：工程开着 Force Text（ProjectSettings/EditorSettings.asset），
+# *.unity / *.prefab / *.asset / *.meta 都是 YAML 文本——按文本处理才有可读的 diff 与合并。
+# 注意：属性只影响**今后**的检出与提交；把既有工作区的 CRLF 就地改成 LF 不是它的职责
+# （索引侧本来就是 LF，重新克隆即得一致的工作区）。
+
+# 默认：文本按 LF 归一，二进制不动（text=auto 按内容判断）
+* text=auto eol=lf
+
+# 文本资源：显式标注，不受内容猜测影响
+*.cs         text eol=lf
+*.md         text eol=lf
+*.json       text eol=lf
+*.asmdef     text eol=lf
+*.meta       text eol=lf
+*.txt        text eol=lf
+*.yml        text eol=lf
+*.ps1        text eol=lf
+*.sh         text eol=lf
+*.shader     text eol=lf
+*.unity      text eol=lf
+*.prefab     text eol=lf
+*.asset      text eol=lf
+*.mat        text eol=lf
+*.anim       text eol=lf
+*.controller text eol=lf
+
+# Windows 批处理保持 CRLF（cmd.exe 对 LF 结尾的批处理有已知的解析怪癖）
+*.bat        text eol=crlf
+*.cmd        text eol=crlf
+
+# 二进制资源：不做行尾转换，也不让 git 试图 diff 它们
+*.png        binary
+*.jpg        binary
+*.jpeg       binary
+*.gif        binary
+*.tga        binary
+*.psd        binary
+*.exr        binary
+*.tif        binary
+*.fbx        binary
+*.obj        binary
+*.blend      binary
+*.dll        binary
+*.so         binary
+*.a          binary
+*.unitypackage binary
+*.ttf        binary
+*.otf        binary
+*.wav        binary
+*.mp3        binary
+*.ogg        binary
+*.mp4        binary
+*.zip        binary
+*.7z         binary
