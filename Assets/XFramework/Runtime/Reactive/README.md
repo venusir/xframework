@@ -6,6 +6,7 @@ XFramework 响应式模块提供**响应式属性**。基于 `XFramework.XEvent`
 
 - `ReactiveProperty<T>`:可写响应式值,订阅时立即回调当前值,设置相同值不通知(去重语义)。「相同」默认按 `EqualityComparer<T>.Default` 判定,**可经构造重载注入自定义比较器**（浮点容差、大小写不敏感等）；`Select` 派生值的去重同样可经其重载注入
 - `ReadOnlyReactiveProperty<T>`:由 `Select` 映射派生的只读属性,值随源自动变化(去重)。同样实现 `IReactiveProperty<T>`(只读接口本无 setter,故不因此获得写入能力),可直接交给收该接口的绑定 API,也可继续 `Select` 做链式映射
+- `ReactiveList<T>`:可订阅增删改的列表(集合型响应式)。变更以 `readonly struct` 载荷**单流**投递(零 GC),`Clear` / `Sort` 发一条 `Reset` 兜底;**订阅不做立即回调**(与 `ReactiveProperty<T>` 相反,见「集合」节与「接口承诺到哪为止」)
 - `IReactivePropertyWriter<T>`:「确实需要写入」时按需索取的能力接口(继承 `IReactiveProperty<T>`,只加 `TryWriteValue`)。双向绑定 API 收它而非具体类,故任何第三方实现都能接入——只读接口本身不因此多出 setter
 - 全局消息总线在 Message 模块(`XFramework.XMessage.MessageManager`),不在此模块
 
@@ -55,6 +56,50 @@ healthProp.Dispose();
 >
 > 别在业务代码里手工记账,交给已就位的归口：UI 面板里用 `ViewModelBase.CreateReadOnlyProperty`（创建 + 登记,随 ViewModel 一起释放），或把句柄交给 `UIViewBase.Track`。Reactive 模块本身不管生命周期,这是使用方的责任。
 
+## 集合（`ReactiveList<T>`）
+
+怪物存活表、弹幕、队伍编成这类「一组东西变了要告诉别人」的场景用 `ReactiveList<T>`：
+
+```csharp
+using XFramework.XReactive;
+
+var alive = new ReactiveList<Monster>(capacity: 32);
+
+// 订阅变更。注意:不立即回调——初始化靠「订阅后立即读一次列表」
+using var sub = alive.Subscribe(change =>
+{
+    switch (change.Kind)
+    {
+        case ReactiveListChangeKind.Add:     // change.Index / change.Item
+        case ReactiveListChangeKind.Remove:  // change.Index / change.Item
+        case ReactiveListChangeKind.Replace: // change.Index / change.Item(新) / change.OldItem(旧)
+        case ReactiveListChangeKind.Reset:   // Clear / Sort——重读列表
+            break;
+    }
+    // 任何变更后都以列表本身为准(它是唯一真相),不要拿增量拼镜像
+});
+
+alive.Add(monster);      // → Add(Index = 0)
+alive.Remove(monster);   // → Remove(Index = 0)
+alive.Clear();           // → 一条 Reset
+alive.Dispose();         // 收尾:订阅随之全部取消
+```
+
+只读视图就是接口本身:`IReactiveList<T> : IReadOnlyList<T>`(写面只在 `ReactiveList<T>` 上),
+可直接交给收 `IReadOnlyList<T>` 的 API。批量装载走构造(`new ReactiveList<T>(items)`,静默、不发通知)。
+
+**与 `ReactiveProperty<T>` 的两处关键差别**:① 订阅**不做**立即回调——它是变更流的订阅(不重放),初始化=订阅后立即读一次列表;
+② 没有「相同值去重」这条,只有**无变化不发通知**:空表 `Clear`、与旧值相等的索引器赋值、元素少于 2 的 `Sort` 都静默。
+
+### `ReactiveList<T>` 的已知限制
+
+- **批量 = 逐项通知**:没有 batch 作用域、没有 `AddRange` / `RemoveRange` / `RemoveAll`。批量装载走构造(静默);对已订阅的列表连续增删就是连续 N 条通知。
+- **索引只在当次通知内有效**——载荷是事件的即时描述,**不是可重放的操作日志**,别拿它把变更拼进镜像;要全量状态请重读列表。
+- **排序即使次序未变也发 `Reset`**(检测次序变化要多跑一趟全量比较,不做)。
+- **`foreach` 会装箱一次枚举器**(`List<T>` 的结构体枚举器),热路径请用索引 `for`。
+- **回调里不要改动本列表**:改动会嵌套派发(嵌套那一轮先跑完),外层随后把按旧索引算出的载荷投给剩余订阅者——索引可能已指向别的元素;回调里遍历本列表也不安全(他人改动使枚举器失效)。回调里订阅 / 退订是安全的。
+- **没有** `ReactiveDictionary` / `ReactiveSet` / 有序集,也没有集合绑定 / 列表虚拟化(后者是 UI 侧既有裁定,见 `../UI/README.md` 的 `## 设计取舍`)。
+
 ## 双向绑定
 
 `IReactivePropertyWriter<T>` 是「确实需要写入」时按需索取的能力接口——`ReactiveProperty<T>` 与 Settings 的 `SettingRef<T,TField>` 各自实现，第三方实现同样可接入 `UIBinder.BindTwoWay`。只读接口 `IReactiveProperty<T>` 本身不因此多出 setter。
@@ -87,9 +132,11 @@ if (!writer.TryWriteValue(value, out var actual))
 
 `SettingRef` 那两条不是缺陷，而是它自己的取舍（重放是为了「换实例后 UI 自动跟随」；读抛是为了附上修复提示）。关键是**接口本身没有承诺它们**，所以消费者不能靠接口吃掉这些差异。
 
+> **同模块两个 `Subscribe` 语义相反，别记混**：`IReactiveProperty<T>.Subscribe` 的契约是「订阅时立即同步回调**当前值**」；`IReactiveList<T>.Subscribe` 是**变更流**订阅，**不做立即回调**（语义对齐 `XEvent.IEventStream<T>.Subscribe`——变更不是「当前值」，也无法重放）。列表的初始化姿势是「订阅后立即读一次列表」（主线程同步，两步之间不可能发生变更）。
+
 ### 本模块没有的（按 Rx 直觉找来的人请注意）
 
-- **集合型响应式**（R3 的 `ReactiveCollection` 等价物）：**没有**。列表/背包的增量通知由使用方自行组织；UI 模块也没有列表虚拟化这类条目复用原语（`UIBinder` 是「一属性 → 一控件」，池化的是面板/HUD/Tip 实例），长列表由项目自建——取舍与替代路径见 `../UI/README.md` 的 `## 设计取舍`。
+- **集合型响应式**（R3 的 `ReactiveCollection` 等价物）：**部分有**——`ReactiveList<T>` 提供列表的变更通知（v1）。**没有的**：`ReactiveDictionary` / `ReactiveSet` / 有序集、批量作用域与 Range API、集合的 `Select` 派生。集合绑定 / 列表虚拟化 / 条目复用仍然没有——`UIBinder` 是「一属性 → 一控件」，池化的是面板/HUD/Tip 实例，长列表由项目自建（取舍与替代路径见 `../UI/README.md` 的 `## 设计取舍`）；**`ReactiveList<T>` 只提供通知源，不改变这条 UI 侧结论**。
 - **命令**（R3 的 `ReactiveCommand` / `CanExecute`）：**没有**。UI 侧走 `UIBinder.BindClick` 直接绑点击，按钮可用性由使用方自己置 `interactable`。
 - **Inspector / 序列化集成**（`BindableReactiveProperty` 那类）：**没有**——本仓在 UI 模块做约定式绑定（`txt_` / `sld_` / `tgl_` 前缀），不走 Inspector 配置。
 
@@ -99,13 +146,14 @@ if (!writer.TryWriteValue(value, out var actual))
 
 - **派发顺序是 LIFO**——后订阅的先收到(订阅节点插在链表头部)。框架**没有**控制订阅者相对顺序的手段,别围绕先后次序设计(比较各自收到的值也建立不了顺序)。
 - **回调内写入本属性会嵌套派发,且嵌套那一轮先跑完**。订阅者 A、B 中 B 后订阅(故先收到):B 在收到 `1` 时写入 `2`,嵌套派发让 A、B 都先收到 `2`;随后外层循环继续把 **`1`** 投给 A——A 最终停在一个 `Value` 已不再是的值上,且不会再有通知来纠正它。**回调里不要写入本属性**;确实需要「收到变化后再修正」时,把写入推迟到下一帧再写,而不是就地写(框架**没有**一次性下一帧入口,可自行排期,或实现 `IUpdateable` 经 `UpdateManager` 注册)。
+- **列表版(`ReactiveList<T>`)有同样的问题,且多两条**:回调内改动列表会嵌套派发(嵌套那一轮先跑完);此后外层把按**旧索引**算出的载荷投给剩余订阅者——索引可能已指向别的元素(**索引只在当次通知内有效**)。回调内遍历本列表也不安全:他人改动会让 `foreach` 抛 `InvalidOperationException`,而索引 `for` 不抛、静默读到位移后的元素。回调里**订阅与退订是安全的**(退订同轮立即生效)。
 
 ## 排查订阅泄漏
 
 订阅泄漏在运行时是**无声的**——没人报错、值也照常更新,只是内存与回调悄悄堆积。模块为此提供两样东西:
 
-- **`SubscriptionCount`**(两个类型都有)——当前存活订阅数。源长期存活时(单例上的属性、Settings 句柄)这个数**只增不减**,即说明有订阅没人释放。
-- **`ToString()`**——形如 `ReactiveProperty<Int32>(50)`,与 Settings 的 `SettingRef.ToString()` 同形,排查时一眼看出是谁、现在是多少。
+- **`SubscriptionCount`**(三个类型都有)——当前存活订阅数。源长期存活时(单例上的属性、Settings 句柄)这个数**只增不减**,即说明有订阅没人释放。
+- **`ToString()`**——形如 `ReactiveProperty<Int32>(50)` / `ReactiveList<Int32>(Count=3)`,与 Settings 的 `SettingRef.ToString()` 同形,排查时一眼看出是谁、现在是多少。
 
 最常见的泄漏源就是上一节说的 `Select` 返回值被就地丢弃:
 
@@ -130,6 +178,8 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 - **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
 - **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
 - **异常隔离** — **投递**路径的订阅回调抛异常记 Error 日志后继续;订阅时的立即回调属于注册期、同步执行,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)。两条路径语义不同是有意的:绑定初始化失败应当被看见,而运行期的单个订阅者出错不该拖垮其余订阅者
+- **列表走单流 struct 载荷** — `ReactiveList<T>` 的变更是一条 `readonly struct`（`Kind` / `Index` / `Item` / `OldItem`），零 GC；对照 R3 / BCL `ObservableCollection<T>` 每次通知分配一个事件参数对象。`Clear` 与 `Sort` 用一条 `Reset` 兜底（「整表变了，重读」），不做逐项展开
+- **列表不做批量与算子面** — 没有 batch 作用域 / Range API / `Select` 派生：批量装载走构造（静默、不发通知），其余缺口等真实需求出现再加（同 Event 模块「为什么不做算子面」的取舍）
 
 ## 依赖
 

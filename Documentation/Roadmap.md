@@ -14,8 +14,8 @@
 
 ## 二、待立项（已确认要做）
 
-> 节的排列即建议的开工顺序。Audio 2.1 / Logger 2.2 / Timer 2.3 已于 2026-10-01 建成，各自只留指针；
-> 当前在办的是 2.4，其余候选见第三、四节。
+> 节的排列即建议的开工顺序。Audio 2.1 / Logger 2.2 / Timer 2.3 已于 2026-10-01 建成，
+> ReactiveList 2.4 于 2026-10-11 建成，各自只留指针；本节目前为空——下一个候选见第三、四节。
 
 ### 2.1 Audio —— ✅ 已建成（2026-10-01）
 
@@ -60,37 +60,21 @@
 （Audio → FMOD、Input → Rewired），Timer 没有——多一个接口只会多出一份必须长期同步的转发契约。
 全部理由与代价见模块文档的「已评估未采纳与未决」。
 
-### 2.4 ReactiveList（集合型响应式）—— 待立项（2026-10-11）
+### 2.4 ReactiveList（集合型响应式）—— ✅ 已建成（2026-10-11）
 
-> 扩建既有 `XReactive` 模块（不新建模块）：使用方文档并入
-> `Assets/XFramework/Runtime/Reactive/README.md`，维护向记录并入 `Documentation/Modules/Reactive.md`，
-> 建成后本条只留指针。
+> **本条已搬迁**。使用方文档在 `Assets/XFramework/Runtime/Reactive/README.md`（「集合」节 + 已知限制），
+> 维护向记录在 `Documentation/Modules/Reactive.md`（沿革 + 延后项）——本文只留指针，不再复述。
 
-**该不该建：建。** 起因是一次提问——`ReactiveProperty<T>` 的 T 是 `List` / 数组时，「相同值不通知」退化为
-**引用相等**、就地修改零通知、`Value` 是活引用。原拟按「已否决」记录，被一条反例推翻：怪物 / 弹幕 / 单位
-这类「一组东西变了，告诉我」的监听在游戏里很常见，且没有堆叠 / 容量 / 主键 / 排序的领域语义，正是通用
-原语的形状。本仓对它有手写先例——`UIManager.Panels`（`IReadOnlyList<T>` 活视图）+ 三条手写消息，
-即同一个轮子被每个模块各写一遍。
+立项时写下的六条边界**全部照原样落地**：只做列表；单一变更流 + `readonly struct` 载荷 + `Reset` 兜底
+（索引只在当次通知内有效）；不做 batch 与 Range（批量装载走构造）；回调内改动的三种后果文档化；
+零 GC 且 `foreach` 装箱如实写明；`IReactiveList<T> : IReadOnlyList<T>` 且订阅不做立即回调。
+**两处与立项时不同**：① 拟有的 `Version` 计数器在实现前砍掉——它是本仓无先例的新契约面，而主线程
+同步下「订阅后立即读一次」已是原子的一致点、轮询是比订阅更差的模式（列入 v1.1 候选）；
+② `Sort` 定为 `Sort(IComparer<T> comparer = null)`（镜像模块既有的比较器注入措辞，允许零分配静态比较器）。
+另一处实现期修正：`foreach` 无论直接用还是经接口**都会**装箱枚举器（原以为只有接口路径会），文档已按实际写。
 
-**边界（v1 六条）**：
-
-1. **只做列表**（`ReactiveList<T>`）；Dictionary / Set / 有序集延后——Set 卡在 `IReadOnlySet<T>` 不在
-   .NET Standard 2.1 API 面内，定不了形状就不定。
-2. **单一变更流 + `readonly struct` 载荷**（`Kind` / `Index` / `Item` / `OldItem`）；`Clear` 与 `Sort` 发一条
-   `Reset`（「整表变了，重读」）；**索引只在当次通知内有效——是事件的即时描述，不是可重放的操作日志**；
-   无变化不发通知（空表 `Clear`、<2 元素的 `Sort` 静默）。
-3. **不做 batch 作用域与 Range API**——批量装载的正解是构造（静默、不发通知），文档把「批量 = 逐项通知」
-   写成已知限制。
-4. **回调里不要改动本集合**——列表版的三种后果（回调内遍历抛 `InvalidOperationException` / 索引循环静默
-   读到位移后元素 / 载荷索引过期）写进文档；回调里订阅与退订是安全的。
-5. **零 GC**：struct 载荷 + 泛型流（不装箱）+ 不做派发期快照；经接口 `foreach` 会装箱 `List<T>` 的枚举器，
-   热路径用索引 `for`。
-6. **`IReactiveList<T> : IReadOnlyList<T>`**（接口即只读视图，写面只在具体类）；**`Subscribe` 不做立即回调**
-   ——与 `IReactiveProperty<T>.Subscribe` 相反、语义对齐 `IEventStream<T>`（变更流不重放），同模块两个
-   `Subscribe` 的差异必须互相指认；不加写接口（没有可替换的后端，承 Timer 的裁定）。
-
-**明确不做**（写进使用方文档的「本模块没有的」）：集合绑定 / 列表虚拟化 / 条目复用（`UI/README.md` 的
-「长列表请自建」结论不因本类型落地而改变）；集合的 `Select` 派生；`TryXxx` 写面；派发期快照。
+该轮还顺带修正了 `Documentation/Modules/Reactive.md` 一条**过期未决**（「相等比较器不可注入」——已在
+2026-10-02 落地但条目未同步），教训写进该条目自身。
 
 ## 三、待裁（常见，但边界未定，先别开工）
 

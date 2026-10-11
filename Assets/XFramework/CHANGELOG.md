@@ -590,6 +590,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **包内只留不随 Luban 版本漂移的框架侧契约**（判据是易腐性）：示例里不再出现 `ByteBuf` / `DataList` / `Tables` 构造形态这类随版本变化的东西，target 名、命令行、模板等落在仓库维护侧的 `Documentation/Luban.md`（不随包发布）。同批把两处源码 XML 示例里的 `tables.TbItem.DataList` 一并改成版本中立写法（纯注释）——模块 README 自己就注着「Luban 各版本 `DataList` 的 API 不同」，而源码注释把它当稳定契约写着。包 README 原先承诺的「Luban 集成指南」也据此收窄为「框架侧约定」。
   **本轮同时复评了「要不要重建内建 Luban 适配层」，结论是不重建**：该形状已于 `a25f6d8` 删除，而当时**只记了「移除 Bright.Serialization 依赖」这条动机、「这个形状为什么不好」从未落纸**。三条否决点（硬绑 `"Bright.Serialization.ByteBuf"` 类型名、绑死 `DataList` 反射约定、主键写死 `Dictionary<int, rowType>` 而被随后的 `IConfigRow.Id` 泛型化淘汰）与重开判据现补进 `Documentation/Modules/Config.md`。
 
+### Added
+
+- **新增 `XReactive.ReactiveList<T>`（集合型响应式 v1）**：可订阅增删改的列表 + 只读接口 `IReactiveList<T> : IReadOnlyList<T>` + 零 GC 的 `readonly struct` 变更载荷 `ReactiveListChange<T>`（`Kind` / `Index` / `Item` / `OldItem`）+ 词表 `ReactiveListChangeKind`（Add / Remove / Replace / Reset）。起因是一次提问（`ReactiveProperty<T>` 的 `T` 是 `List` / 数组会怎样——去重退化为引用相等、就地修改零通知、`Value` 是活引用）：这类「一组东西变了，告诉我」的监听（怪物 / 弹幕 / 单位）本仓一直靠手写（`UIManager.Panels` + 三条消息），即同一个轮子被每个模块各写一遍。四条与直觉相左的决定及理由：
+  **① 订阅不做立即回调**——与同模块 `IReactiveProperty<T>.Subscribe`（契约是「订阅时立即同步回调当前值」）**语义相反**，因为列表订阅的是**变更流**（不重放、也无法重放），语义对齐 `IEventStream<T>.Subscribe`；初始化姿势是「订阅后立即读一次列表」（主线程同步，两步之间不可能有变更）。
+  **② 索引只在当次通知内有效**——载荷是事件的即时描述，不是可重放的操作日志；`Clear` / `Sort` 用一条 `Reset` 兜底（「整表变了，重读」），要全量状态就重读列表，别拿增量拼镜像。
+  **③ 不做批量与算子面**——没有 batch 作用域 / `AddRange` / `RemoveRange` / `RemoveAll` / `Select` 派生；批量装载的正解是构造（静默、不发通知），对已订阅列表连续增删就是 N 条通知。
+  **④ 无变化不发通知**——空表 `Clear`、与旧值相等的索引器赋值、元素少于 2 的 `Sort` 都静默；但**排序即使次序未变也发 `Reset`**（检测次序变化要多跑一趟全量比较，不做）。
+  订阅经 `EventStream.Create` 裸透传（无立即回调即无注册期异常要回滚，比 `ReactiveProperty.Subscribe` 少一层 try/catch 补偿），登记自动落进 `SubscriptionTracker` 仅有的两个登记点之一——不自建订阅表，否则泄漏断言对它静默失明。实现期修正一处立项时的推断：`foreach` **无论直接用还是经接口都会**装箱枚举器（原以为只有接口路径会），文档按实际写明「热路径用索引 `for`」。用例 34 条（含改前必红抽查）。
+- **`Documentation/Modules/Reactive.md` 修正一条过期未决**（同批）：「相等比较器不可注入」记于 2026-10-02 全面清点，而 `69e0190` **同日**就已落地（构造重载 `(T initialValue, IEqualityComparer<T> comparer)` + `Select` 的 `comparer` 参数）却未同步——按 `UI.md` 先例**标注为已落地、不删除（保留沿革）**，教训写进条目自身；同节补 `ReactiveList` 的延后项（Dictionary / Set / 批量 / 集合 `Select` 派生）与两处 v1.1 候选（`Remove(T)` 的比较器注入、`Version` 计数器）。
+
+### Documentation
+
+- **Reactive README 补「集合（`ReactiveList<T>`）」节**（使用方向）：快速示例、与 `ReactiveProperty<T>` 的两处关键差别（订阅不立即回调；只有「无变化不发通知」而没有「相同值去重」）、六条已知限制（批量 = 逐项通知、索引瞬时有效、排序恒发 `Reset`、`foreach` 装箱、回调内改动的三种后果、没有 Dictionary / Set 与集合绑定）。原「集合型响应式：**没有**」一条改写为「部分有」，并**明确 `ReactiveList<T>` 不改变 UI 侧「长列表由项目自建」的既有结论**（`UI/README.md` 那句不动）；「接口承诺到哪为止」补「同模块两个 `Subscribe` 语义相反」的显式对照；Event README 的「被谁使用」与模块定位同步。
+- **`Roadmap.md` §2.4 标为已建成**：立项时六条边界照原样落地；两处与立项时不同（`Version` 计数器实现前砍掉——本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点；`Sort` 签名定为 `Sort(IComparer<T> comparer = null)`）记入条目，正文按 §一 搬迁纪律只留指针。
+
 ## [0.2.0] - 2026-08-20
 
 ### 移除 R3 依赖（重大变更）
