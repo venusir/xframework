@@ -34,7 +34,7 @@
 - **管线基础设施(通用编排):** 以「接口 + 静态工厂 + internal 实现」提供,非全局单例:`IPipeline`/`IPipelineStage`/`IPhaseStage`/`PipelineProgress` 公开接口 + `Pipeline.Create()` 工厂 + `internal sealed PipelineImpl`。实例即用即弃;阶段经 `PipelineStageContext` 主动写入(事件驱动聚合,管线不轮询、不持有帧泵);阶段串行逐 await、失败/取消即停、三路互斥终局。相位编排:实现 `IPhaseStage` 声明相位号(同相位并行、相位升序串行,数值含义为模块约定),经 `Pipeline.BuildPhaseGroups` 装配为每相位一个 `ParallelStage`(Weight = Σ 子阶段声明权重)。管线对任何具体模块零依赖,可独立使用
 - **启动引导(Bootstrap):** 需要异步初始化的服务实现 `IBootstrapStage`(`IPhaseStage` + 同步 `Shutdown`;Phase = 模块约定值、Name = 类型名、Weight = 1),经 `Bootstrap.Register` **显式登记**(不反射发现),`Bootstrap.RunAsync` 用 `Pipeline.BuildPhaseGroups` 装配运行,`Bootstrap.Shutdown` 按登记顺序**逆序**清理。ExecuteAsync 内经 PipelineStageContext 写描述并 await 模块初始化,**禁止吞 OperationCanceledException**(取消经 OCE 传播,契约兜底/取消语义由 StageExecution 单一承担);失败与取消在 RunAsync 处**抛出**而非只留日志。阶段类归各模块自己的目录(如 `AssetBootstrapStage` 在 `Runtime/Asset/`),框架不在 Bootstrap 目录里装具体服务
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateTier` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateTier.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
-- **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md(使用方向;维护向记录按需写入 `Documentation/Modules/<模块>.md`,见「文档分层」);示例放 `Samples/`;测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
+- **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md(使用方向;维护向记录按需写入 `Documentation/Modules/<模块>.md`,见「文档分层」);示例放 `Samples~/<名字>/`(Unity **完全忽略**该目录,经 Package Manager 的 Samples 页签导入;代价是示例**不参与编译**——示例只许使用公开 API,改公开面时手工核对示例);测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
 - **模块边界:** 生产代码不得引用其它模块的 `Internal` 命名空间——Runtime 全树共用一个 asmdef,`internal` 不构成编译边界,这条只能靠约定与自查(见 `Tests/Editor/Architecture/ModuleBoundaryTests`)。跨模块共享的基础设施必须抽为独立模块并给公开面(先例:`XFramework.XEvent` ← Message/Reactive/Input/Settings;`XFramework.XPipeline` ← Bootstrap);测试与 Editor 工具经 `InternalsVisibleTo` 不受此限
 - **可选包的 Unity 类型不得出各自的 `Default` 命名空间:** Unity Input System 的类型(`InputActionAsset` 等)只允许出现在 `Runtime/Input/Default/`——门面与 `IInputProvider` 保持插件中立,第三方(如 Rewired)整体替换后端时公开面不受影响;别的模块要提供「Inspector 里配输入」的入口,就用该命名空间下的框架类型(先例:`InputSystemOptions` / `InputSystemOptionsAsset`)。**判据是「可选包」而非「Unity 类型」**:`Transform` / `TextAsset` 这类 `UnityEngine` 核心类型不受此限(每个项目都有)。机械守卫:`ModuleBoundaryTests.UnityInputTypes_StayInsideTheDefaultNamespace`(源码扫描)
 
@@ -43,6 +43,7 @@
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
 - **缩写大小写:** **两字母缩写全大写**——`UI`、`IO` 而非 `Ui`、`Io`(`IUIManager` / `UIHudItem` / `AudioChannels.UI` 而非 `IUiManager` / `UiHudItem` / `Ui`);**三字母及以上按单词**(PascalCase)——`Bgm` / `Json` / `Hud`。依据 .NET 框架设计指南。这条此前是空白,导致 `IUiHudProvider` 与 `UiDiagnosticPanel` 长期与周围不一致(2026-10-11 统一);机械守卫见 `Tests/Editor/Architecture/NamingConventionTests`
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
+- **行尾与文本资源由仓库根 `.gitattributes` 定:** 文本一律 LF(含 Unity 的 Force Text 资源——`*.unity`/`*.prefab`/`*.asset` 不标文本就拿不到可读 diff)、二进制显式标注、`*.bat`/`*.cmd` 保持 CRLF。它**覆盖** Windows 的 `core.autocrlf`,是新克隆与既有工作区共同的真相
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
   - **XML 必须能解析:** 泛型尖括号与 `&` 一律转义(`&lt;T&gt;`、`&amp;`),`<code>` 块内也一样。未转义会触发 CS1570 使**整条注释被编译器丢弃**——该成员的文档条目从生成的 XML 中整条消失,且块内 `cref` 一律不再被检查(死链因此隐形:它表现为「**没有**告警」而不是「有告警」)
   - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 要**写全形以消二义**:有重载的成员**必须**写参数列表——无参重载写 `Foo()`、带参写全 `Foo(int, float)`;只在该名字没有重载时才能写裸名。写不全就触发 **CS0419**(编译器替你「假设」一个重载,链接可能指向非本意的那个)——旧说法「cref 里不能带 `()`」是过度概括:`Tick()` 合法、`InitializeAsync()`(该方法带参)非法,差别只在参数列表写没写对;注意 `check-docs` 不统计这个码(见其头部「覆盖范围」);④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
@@ -81,6 +82,7 @@
 - package.json 的 dependencies 刻意留空(UPM 不支持 Git URL 依赖);新依赖:
   - UPM 包 → `Packages/manifest.json`(Git URL)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
+- **依赖版本只有一份真相:** 第三方依赖的版本/URL 以 `Assets/XFramework/README.md` 的「第三方依赖」表为准;`Editor/XFrameworkDependencyInstaller.cs` 的清单与 `Packages/manifest.json` 必须与之逐字一致,Git URL 必须钉 `#tag`(`?path=` 写在 `#` 之前)。三者由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫——不钉修订时消费方会取上游默认分支,Asset 模块直接编译不过(实测 51 处 `CS0246/CS0234`)
 
 ## 文档分层
 
