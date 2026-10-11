@@ -41,6 +41,7 @@
 ## 编码规范
 
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
+- **缩写大小写:** **两字母缩写全大写**——`UI`、`IO` 而非 `Ui`、`Io`(`IUIManager` / `UIHudItem` / `AudioChannels.UI` 而非 `IUiManager` / `UiHudItem` / `Ui`);**三字母及以上按单词**(PascalCase)——`Bgm` / `Json` / `Hud`。依据 .NET 框架设计指南。这条此前是空白,导致 `IUiHudProvider` 与 `UiDiagnosticPanel` 长期与周围不一致(2026-10-11 统一);机械守卫见 `Tests/Editor/Architecture/NamingConventionTests`
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
   - **XML 必须能解析:** 泛型尖括号与 `&` 一律转义(`&lt;T&gt;`、`&amp;`),`<code>` 块内也一样。未转义会触发 CS1570 使**整条注释被编译器丢弃**——该成员的文档条目从生成的 XML 中整条消失,且块内 `cref` 一律不再被检查(死链因此隐形:它表现为「**没有**告警」而不是「有告警」)
