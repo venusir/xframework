@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
   **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[Unreleased]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
+- **`UiDiagnosticPanel` 更名为 `UIDiagnosticPanel`**（同一轮的命名统一）：同级 20 个诊断面板全是 `XxxDiagnosticPanel`（`AudioDiagnosticPanel` / `InputDiagnosticPanel` / …），只有它用了 `Ui`。它是 Editor 程序集的 `internal sealed`，`InternalsVisibleTo` 只开了仓内的 Editor.Tests——**第三方碰不到，零破坏性**。
 
 ### Added
 
@@ -52,7 +53,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **② 「生效档位」在调用时现算**（设了覆盖取覆盖、否则取当前全局档，在同一个快照里一起读）——因此改过全局档之后回读不会给出陈旧值，这条有专门用例锁定。
   **③ 分类数没有再在门面上加别名**：`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相（此条比计划**少**一个公开成员）。
   **顺带**：`LogRegistry` 加 `CopyTo(List<LogCategoryState>)`——先取一次字典引用再遍历，copy-on-write 下拿到的是完整快照，与读路径无锁的理由是同一条。
-- **UI 页签（接替原 `UI State` 独立窗口）**：`UiDiagnosticPanel` 显示面板栈（类型 / 层 / 档位 / 焦点 / 暂停）、状态快照、层级表（可见 / 可交互 / 已打开数，含项目自定义层）与 `DumpState` 全文——旧窗口的信息一项不少。数据全部取自公开查询面，因此与代码里读到的是同一份真相。
+- **UI 页签（接替原 `UI State` 独立窗口）**：`UIDiagnosticPanel` 显示面板栈（类型 / 层 / 档位 / 焦点 / 暂停）、状态快照、层级表（可见 / 可交互 / 已打开数，含项目自定义层）与 `DumpState` 全文——旧窗口的信息一项不少。数据全部取自公开查询面，因此与代码里读到的是同一份真相。
 - **诊断窗口壳（菜单 `Tools/XFramework/Diagnostics`）**：左侧页签列表（Order 排序 + 搜索过滤）、顶栏（自动刷新开关 / 刷新 / 复制 / 页签计数）、右侧内容区（默认走 `DiagnosticReportView`；页签实现 `IDiagnosticPanelView` 时整块委托；采集失败时绕开自绘显示错误）。三条取向：
   **① 取数只在 tick 里做，OnGUI 只画。** 被删除的 `UI State` 窗口在 `OnGUI` 里 `Refresh()`，而一帧的 Layout/Repaint 会跑多次，等于每帧多次取数——新窗口把这条纠正过来（`EditorApplication.update` 驱动、只在采到新数据时 `Repaint`）。
   **② 判断逻辑全在可测的 `DiagnosticsWindowModel`**：时钟注入、节流判据、选中钳制、页签表重载、异常隔离、自绘路径选择；窗口里只剩「生命周期 / 转发 / GUILayout」三类语句，16 例 EditMode 用例锁住全部分界（含「自动刷新关着时换页签仍必须重采」）。

@@ -12,7 +12,7 @@ namespace XFramework.Editor.Diagnostics.Panels
     /// <para>它接替了原 <c>UI State</c> 独立窗口：后者显示的面板列表、状态快照与 <c>DumpState</c>
     /// 全文在这里一项不少，另加层级可见性/可交互回读（本轮随诊断窗口一起公开）。</para>
     /// </summary>
-    internal sealed class UiDiagnosticPanel : IDiagnosticPanel
+    internal sealed class UIDiagnosticPanel : IDiagnosticPanel
     {
         #region Private Fields
 

@@ -17,7 +17,7 @@ namespace XFramework.Editor.Diagnostics
     {
         #region Panels
 
-        private static readonly UiDiagnosticPanel UiPanel = new UiDiagnosticPanel();
+        private static readonly UIDiagnosticPanel UiPanel = new UIDiagnosticPanel();
 
         private static readonly LogDiagnosticPanel LogPanel = new LogDiagnosticPanel();
 
