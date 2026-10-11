@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **`UIDialogPanel<TResult>` 对话框面板基类**（`View/UIDialogPanel.cs`）：在一次打开-关闭周期内把用户的选择回传给等待方。**它的存在理由是一个静默故障**——朴素做法（自己 new 一个 `UniTaskCompletionSource` 塞进 `userData`、在确定/取消按钮回调里完成它）在面板被**非按钮途径**关闭时会让等待方**永远不恢复**（`CloseAllAsync` 切场景、`CloseLayerAsync`、管理器 `Dispose`）。三条取向：
+  **① 兜底挂在框架的回池点，不在 `OnClose`。** `UIManagerImpl.Dispose` 同步回池全部面板、**刻意不走关闭路径**（不 await 关闭动画），故 `OnClose` 在那一路上根本不会被调用；而回池是关闭与 `Dispose` **共用的唯一出口**，是唯一能覆盖两条路的位置。这与框架对「在途打开的等待者不能悬着」的处理同一取向（`Dispose` 里对 `_opening` 的加入者显式 `TrySetResult(null)`）。
+  **② 回池时复位。** 面板是池化复用的，不复位会让重开的同类型对话框**立即返回上一次的结果**。
+  **③ 子类契约与 `UIPanelBase` 完全一致。** 照常实现 `OnOpen` / `OnClose`，本类既不增加也不封闭任何生命周期钩子——**这是相对初版设计的修订**：初版打算封掉 `OnClose` 并另给一个 `OnCloseCore`，坐实 `Dispose` 那条路之后改为挂回池点，于是「封钩子」变成不必要，子类契约得以保持原样。
+  实现侧：新增 `internal interface IDialogResultChannel`（框架与基类之间的实现契约，不是给使用方的扩展点），由 `RecyclePanel` 的 `finally` 调用——与 `UpdateFaulted = false` 同一位置、同一理由。
 - **弹窗定位原语 `UIPopupPosition`**（新公开枚举 `UIPopupDirection` / `UIPopupAlign`）：纯几何静态工具，算出弹窗该摆在锚点元素的哪里——下拉菜单、右键菜单、悬浮说明、组合框展开、嵌套子菜单。补的是本模块此前缺的一种贴附：`ShowHudAsync` 跟**世界** `Transform`、Tip 是**固定位置配置**，两者都不是「锚到屏幕空间 UI 元素」。四条取向：
   **① 不进 `IUIManager`、不加门面转发、不登记 Bootstrap / AutoInit**——与 `UISorting` / `UILayers` 同类，是纯静态工具而非服务，无接口成员可加；`AutoInitTests` 的族清单只治理带 `[RuntimeInitializeOnLoadMethod]` 的成员，本类刻意没有（这是设计结论，不是遗漏）。
   **② 返回的是「pivot 应该落在的点」而不是角**：`rectTransform.position` 赋值设置的是物体的 pivot，因此 `popupPivot` 是必需参数——若写死「返回左下角」，中心 pivot（Unity 新建 RectTransform 的默认值）的预制体会**静默错位半个尺寸**。

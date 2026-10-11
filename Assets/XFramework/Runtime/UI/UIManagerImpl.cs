@@ -1672,6 +1672,11 @@ namespace XFramework.XUI
                 // 后者是用户可覆写、可能忘记调 base 的钩子，框架状态复位不能依赖用户代码。
                 panel.UpdateFaulted = false;
 
+                // 对话框的结果兜底与复位。同样不能放 OnClose——Dispose 同步回池、
+                // 刻意不走关闭路径，放在那里会让等待方在 Dispose 时永远等下去。
+                // 回池是关闭与 Dispose 共用的唯一出口，故它是唯一能覆盖两条路的位置。
+                (panel as IDialogResultChannel)?.CompleteOnRecycle();
+
                 // 重置本身失败也必须回池：此刻面板已不在任何集合里，没有第二条路径能再碰到它
                 _factory.Release(panel);
             }
