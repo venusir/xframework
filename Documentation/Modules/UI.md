@@ -52,6 +52,26 @@ Runtime/UI/
 ## 沿革与已否决形状
 
 - **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。
+- **锚定弹窗（2026-10-11，第二轮）**：`UIManager.ShowPopupAsync` + `UIManager_PopupCatcher` 落地。
+  **先跑了探针再动手**——「布局驱动的尺寸在本轮布局跑完之前读到的仍是上一次的值」这条前提
+  此前只是推理，而它是本入口存在理由的一半。探针落成了守卫用例（`UIPopupLayoutTests`），
+  **实测结论：前提成立**（`ContentSizeFitter` 驱动的宽度设 300 → 改成 500 → 立刻读仍是 300、
+  强制布局后才是 500）。用例的失败消息写的是「若这条红了意味着什么、下一步该做什么」，
+  而不只是「期望 X 得到 Y」——它红的时候要能直接回答「那这个入口还要不要做」。
+  四条取向：摆之前强制布局（且**同步**，故不会先闪一帧在错位置）；可用区域取 `Screen.safeArea`
+  而非全屏（桌面无差别、移动端不摆进刘海）；返回**面板**而非结果（与 `ShowDialogAsync` 的不对称
+  写进了两边文档）；捕获层与遮罩**同形但独立**。
+  **捕获层不复用遮罩的理由**已从源码坐实：`ApplyMaskStyle` 每次 `ShowMask` 都重设排序与颜色、
+  **以最后一次为准**（遮罩是单实例、不按持有者分身份），共用会让「模态要 0.5 变暗」与
+  「下拉要全透明捕获」互相覆盖。**层级取 `PanelOrder(layer, 0)`**＝`layer × 32`，严格夹在
+  「`layer−1` 层最高面板」（`layer×32−1`）与「`layer` 层第一个面板」（`layer×32+1`）之间；
+  序号 0 在 `RestampSortingOrders` 里从不分配给面板，那个槽位本就是层容器自己的位置（容器无图形，不争）。
+  **一处实现期改动**：计划里捕获层单开一个文件，实际放进 `UIManagerImpl.cs` 的 `#region Popup Click
+  Catcher`——它需要「点击→关面板」「面板关闭→释放」「Dispose→销毁」三个接线点，全在 impl 上，
+  单开会为 60 行付三处 plumbing；遮罩就是同一位置的先例。
+  **顺带发现一处疑似既有缺陷**（遮罩没有 `GraphicRaycaster`），记在下面的「未决」里。
+  **本轮不做**：`ShowPopupAsync` 只在打开时摆一次，**不跟随锚点移动**（写进 README 的已知行为边界）；
+  实际采用的方向没从入口暴露（`async` 不能带 `out`，但 `CalculatePosition` 是纯函数，调用方重算即可）。
 - **对话框（2026-10-11）**：`UIDialogPanel<TResult>` + `UIManager.ShowDialogAsync` 落地。缘起是一轮
   「通用弹窗」评估，它先纠正了一个归类错误——**「弹窗」在本模块其实是两个形态**，此前被当成一个：
   **锚定弹窗**（下拉 / 右键菜单，要贴着控件摆，几何由 `UIPopupPosition` 补上）与**模态对话框**
@@ -162,6 +182,19 @@ Runtime/UI/
 
 **未决**：
 
+- **⚠ 遮罩很可能根本接不到点击，`clickToClose` 因此从未在真实输入下生效过**（2026-10-11 发现，**未实测**）。
+  `EnsureMaskInstance`（`UIManagerImpl.cs:995-1012`）只加 `Canvas` + `Image`，**没有 `GraphicRaycaster`**；
+  而模块里其它每个要挡输入的容器都有（层容器 `:1493`、Tip `:206`、HUD `:382`）。UGUI 的
+  `GraphicRaycaster` 只查**自己 GameObject 上那个 Canvas** 下注册的图形（`GraphicRaycaster.cs:108-118/132`），
+  而 `Graphic.CacheCanvas` 取 `GetComponentsInParent` 的**第一个**（自身优先）——于是遮罩的 `Image`
+  注册在遮罩自己的 Canvas 下，没有任何 raycaster 能命中它。Unity 自己的 `Dropdown.CreateBlocker`
+  专门加了 raycaster，注释写着 `// Add raycaster since it's needed to block.`
+  **佐证强度**：UGUI 源码 + 代码不对称（同上），但**跑不了 Unity 验证**，故记为未决而非既成事实。
+  **没被任何用例覆盖**——`UIMaskTests` 走 `Button.onClick.Invoke()`，绕开了整条射线管道。
+  **修法**：给遮罩也挂 `GraphicRaycaster`（与新建的捕获层一致）。这是**行为变更**（遮罩将开始真正吃点击），
+  需先裁定；裁定后还应补一条真实指针事件的用例，那需要先有 `EventSystem`。
+  **旁证**：本轮新建的 `UIManager_PopupCatcher` 自带 raycaster，并有用例断言它必须在——
+  同一个教训已经在新代码上落实。
 - **`IUIManager : IDisposable` 可被第三方绕过门面直接 `Dispose()`**：门面记账随之脱节（`_instance` 仍指向已释放的
   实现）。改接口形状（去掉 `IDisposable` 或改名）对第三方实现是**源码破坏性变更**，本轮只记文档，不动。
 - **自定义 Tip / HUD provider 运行期注入拿不到 `SetUIRoot`**：`IUITipProvider.SetUIRoot` 的文档写着「在
