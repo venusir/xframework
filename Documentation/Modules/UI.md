@@ -43,6 +43,7 @@ Runtime/UI/
 └── View/
     ├── UIViewBase.cs          # UI 控件抽象基类（Canvas/层级/OnUpdate），UIPanelBase 与 UIHudItem 的公共父类
     ├── UIPanelBase.cs         # 面板基类（所有 UI 面板需继承）
+    ├── UIDialogPanel.cs       # 对话框基类：结果通道（随关闭兑现、回池置白纸）+ internal 结果通道接口
     ├── UIHudItem.cs           # HUD 项基类（3D 世界坐标跟踪、目标丢失自动回收）
     ├── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
     └── UISafeArea.cs          # 安全区适配（推荐挂在 UIRoot 上）
@@ -51,6 +52,30 @@ Runtime/UI/
 ## 沿革与已否决形状
 
 - **`UIManager` 曾短暂分组过**（`467c64d`），未发布即撤销——它是「门面保持扁平」这条规则的直接先例。
+- **对话框（2026-10-11）**：`UIDialogPanel<TResult>` + `UIManager.ShowDialogAsync` 落地。缘起是一轮
+  「通用弹窗」评估，它先纠正了一个归类错误——**「弹窗」在本模块其实是两个形态**，此前被当成一个：
+  **锚定弹窗**（下拉 / 右键菜单，要贴着控件摆，几何由 `UIPopupPosition` 补上）与**模态对话框**
+  （确认框 / 详情面板，要的是遮罩与结果回传）。后者此前能拼出来，但四件必须互相配合的事散在四处文档里，
+  且**配错了全都不报错**：遮罩层配错 → 对话框被自己的遮罩盖住；遮罩不释放 → 此后全黑且点不动；
+  结果配方放错位置 → 等待方永久挂起。本轮把四件收成一个入口。
+  **设计经过两次修订，都是被事实推着走的**：
+  ① 初版打算封掉 `OnClose`、另给 `OnCloseCore`，把兜底写在 `OnClose` 里；坐实
+  `UIManagerImpl.Dispose` 同步回池全部面板、**刻意不走关闭路径**（不 await 关闭动画）之后推翻，
+  改挂回池点——那是关闭与 `Dispose` 唯一的交点。封钩子随之变得不必要，**子类契约得以与
+  `UIPanelBase` 完全一致**。
+  ② 随后又发现「置白纸」与「兑现」必须分处两个时机：合并到回池点会让**在 `OnOpen` 里自我关闭的面板**
+  （仓内既有形状，`SelfClosingOnOpenPanel`）既回收又清空，随后才开始的等待落在一个全新的挂起任务上。
+  现为 `BeginDialogCycle`（`InstantiatePanelAsync` 取出实例时）+ `CompleteOnRecycle`（`RecyclePanel` 的
+  `finally` 里，与 `UpdateFaulted = false` 同一位置、同一理由）。
+  **顺带修了两处已发布文档里的错误用法**（结果配方放在按钮回调里、遮罩层用默认值）——它们独立于本功能，
+  是同一个「散着写就会错」的病灶。
+- **锚定弹窗（第二轮，未做）**：`ShowPopupAsync<T>`（开面板 + 强制布局 + 量尺寸 + `UIPopupPosition` 定位），
+  外加**自建独立不可见捕获层**做「点外部关闭」——**不能用 `ShowMask`**：它是单实例引用计数、
+  只管显示与否不管外观，与「模态调暗」会抢同一个 `Image`，`HideMask()` 更是清掉全部持有。
+  **前置阻塞**：「开完面板后 `rect.size` 还是旧值」目前是**推理、未实测**，而仓内零
+  `ForceRebuildLayoutImmediate` / `LayoutRebuilder` / `ForceUpdateCanvases` 先例——框架从没有过
+  「量一个新实例的已布局尺寸」这个需求。**先跑 15 分钟探针**（带 `ContentSizeFitter` 的预制体，
+  实例化后立刻读 `rect.size` vs 强制布局后读）再决定做不做；相等则「该建」的论据整个塌掉。
 - **`UIPopupPosition`（2026-10-11）来自一轮第三方 UI 方案 `FairyGUI` 的评估**（评估全文见
   `Documentation/FairyGUI.md`——那轮「该不该接成 UI 后端」的结论、共存的两条硬约束、输入系统那道关
   都在那里，本文不复述）。那轮的动作是逐条筛
