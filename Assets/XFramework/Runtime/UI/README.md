@@ -455,16 +455,16 @@ public class MyGameController : IUIController
         return UniTask.FromResult(true);
     }
 
-    private async UniTask<bool> ShowConfirmDialog(string message)
+    private UniTask<bool> ShowConfirmDialog(string message)
     {
-        // 框架没有内建的「等你回结果」通道：结果由面板自己经 userData 带回来。
-        // 弹窗面板在用户点确定/取消时调 result.TrySetResult(...)，这里等它。
-        var result = new UniTaskCompletionSource<bool>();
-
-        await UIManager.PushAsync<ConfirmDialog>(
-            "Assets/UI/ConfirmDialog.prefab", UILayers.Popup, result);
-
-        return await result.Task;
+        // 用 ShowDialogAsync 收口：开面板 + 模态遮罩 + 等结果一次完成。
+        //
+        // 此前这里写的是手写 UniTaskCompletionSource、在确定/取消按钮回调里 TrySetResult。
+        // 那个写法有一个**静默故障**：面板被非按钮途径关闭时（CloseAllAsync 切场景、
+        // CloseLayerAsync、管理器 Dispose）等待方永远不会恢复，且不报任何错。
+        // 面板侧改为继承 UIDialogPanel<bool>，详见「对话框」一节。
+        return UIManager.ShowDialogAsync<ConfirmDialog, bool>(
+            "Assets/UI/ConfirmDialog.prefab", message);
     }
 }
 ```
@@ -733,6 +733,13 @@ UIManager.HideMask();
 // 查询遮罩状态
 bool showing = UIManager.IsMaskShowing;
 ```
+
+> ⚠ **遮罩层决定它挡住谁。** 默认的 `UILayers.Mask`(500) 层**高于** `Popup`(200) 层的面板——
+> 若你要的是「内容变暗、对话框在上面」，必须显式传 `maskLayer: UILayers.Default`，
+> 否则**对话框会被自己的遮罩盖住**（变暗且点不动，看起来像渲染 bug）。
+>
+> **用 `UIManager.ShowDialogAsync` 时不必操心这件事**——它按对话框所在层自动推导遮罩层，
+> 见「对话框」一节。
 
 ### 8. 关闭指定层级
 
@@ -1054,6 +1061,85 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 
 预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
 
+## 对话框（模态弹窗 / 确认框 / 详情面板）
+
+`UIManager.ShowDialogAsync` + `UIDialogPanel<TResult>` 提供**一次调用完成一次弹窗**：打开面板、按层级
+自动挂上模态遮罩、等用户做出选择，然后把结果交回来。
+
+**命名空间**: `XFramework.XUI` / `XFramework.XUI.View`
+
+**它存在的理由不是「省几行」**，而是把四件**必须互相配合、而配错了全都不报错**的事收成一个入口——
+打开面板、遮罩层级、遮罩释放、结果回传。散着写的时候，四处出错的症状分别是「遮罩盖住对话框」
+「界面此后全黑」「等待方永远挂着」，没有一条会抛异常。
+
+### 快速使用
+
+```csharp
+// 打开对话框并等结果。用户没选就被关掉时返回 default（bool 即 false）
+bool confirmed = await UIManager.ShowDialogAsync<ConfirmDialog, bool>(
+    "Assets/UI/ConfirmDialog.prefab");
+
+// 带上数据、换个层级、不要遮罩
+var action = await UIManager.ShowDialogAsync<ItemDetailDialog, ItemAction>(
+    "Assets/UI/ItemDetail.prefab",
+    userData: item,
+    layer: UILayers.Popup,
+    maskColor: new Color(0f, 0f, 0f, 0.6f));
+```
+
+### 面板怎么写
+
+面板继承 `UIDialogPanel<TResult>`（而不是 `UIPanelBase`）。**生命周期契约完全一样**——照常实现 `OnOpen`
+与 `OnClose`，只是多了一个 `SetResult`：
+
+```csharp
+public class ConfirmDialog : UIDialogPanel<bool>
+{
+    protected override UniTask OnOpen(object userData)
+    {
+        // 正常填充 UI，与 UIPanelBase 面板没有区别
+        return UniTask.CompletedTask;
+    }
+
+    private void OnConfirmClicked() { SetResult(true);  CloseSelfAsync().Forget(); }
+    private void OnCancelClicked()  { SetResult(false); CloseSelfAsync().Forget(); }
+
+    protected override UniTask OnClose()
+    {
+        // 兜底：可能被别的途径关掉（CloseAllAsync / 切场景），补一个领域默认值
+        SetResult(false);
+        return UniTask.CompletedTask;
+    }
+}
+```
+
+`SetResult` **幂等、先到者胜**：按钮里设过了，`OnClose` 里这一次就是空操作。
+
+### 结果一定会回来
+
+这是本节最需要记住的一条。等待方会在**每一条**关闭路径上被唤醒：
+
+| 关闭途径 | 是否兑现 |
+| --- | --- |
+| 用户点了确定 / 取消（`SetResult`） | ✅ 立即 |
+| `CloseAsync` / `CloseSelfAsync` / `CloseAllAsync` / `CloseLayerAsync` | ✅ 回池时兜底 |
+| `OnClose` 抛异常 | ✅ 回池在 `finally` 里，兜底照跑 |
+| 管理器 `UIManager.Destroy()`（切场景、退出） | ✅ 同上 |
+
+仍未被选择就关闭时返回 `default(TResult)`。**这条契约正是 `UIDialogPanel` 存在的理由**——
+手写「`UniTaskCompletionSource` 塞进 `userData`、在按钮回调里完成」的写法，在上面后三种途径下
+**会永久挂起且不报任何错**。
+
+### 遮罩层级：框架替你算
+
+模态遮罩必须夹在「要遮住的内容层」与「对话框自身所在层」之间。`ShowDialogAsync` 按
+**`layer - 1`** 自动推导，你不必也不该自己调 `ShowMask`——用默认的 `UILayers.Mask`(500) 层会把
+对话框自己盖住（变暗且点不动）。
+
+不想用遮罩（非模态）传 `modal: false`；想「挡住输入但不显示」传全透明色即可。
+
+---
+
 ## 弹窗定位（下拉 / 右键菜单 / Tooltip）
 
 `UIPopupPosition` 是一个**纯几何**静态工具：算出弹窗该摆在锚点元素的哪里。用于下拉菜单、右键菜单、
@@ -1063,6 +1149,9 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 
 它补的是本模块此前缺的一种贴附：`ShowHudAsync` 跟的是**世界** `Transform`，`TipConfig` 是**固定位置
 配置**，两者都不是「锚到屏幕空间 UI 元素」。UGUI 也没有现成原语（`TMP_Dropdown` 的翻转逻辑是内部的）。
+
+> 要的是**居中弹出的对话框 / 确认框 / 详情面板**、而不是贴着控件的那种，见上一节「对话框」——
+> 那一类不需要定位，需要的是模态遮罩与结果回传。
 
 **它只是几何**：无状态、值进值出、零分配。开合时机、点击外部关闭、动画、箭头绘制都不在这里。
 
