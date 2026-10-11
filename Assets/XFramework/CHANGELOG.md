@@ -8,6 +8,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+- **`UIManager.ShowPopupAsync<T>` 锚定弹窗入口 + 点击外部关闭捕获层**（**门面成员，不进 `IUIManager`**，与 `ShowDialogAsync` 同理由）：把面板贴着锚点控件摆出来，用于下拉菜单、右键菜单、悬浮说明、组合框展开。四条取向：
+  **① 摆位置之前先强制跑一次布局。** 布局驱动的尺寸在布局跑完之前读到的仍是**上一次**的值——池化复用的弹窗换了内容时尤其明显。这条前提**先做成了守卫用例再动手**（`UIPopupLayoutTests`，实测：设 300 → 改成 500 → 立刻读仍是 300、强制布局后才是 500）。它是本入口存在理由的一半：若哪天 UGUI 改成即时生效，价值会静默退化成「省四行」，用例的失败消息直接写着这一点。
+  **② 可用区域取 `Screen.safeArea` 而非全屏。** 弹窗不该摆进刘海/圆角区；桌面与编辑器上它等于全屏，无差别。要换别的区域走 `UIPopupPosition.CalculatePosition` 手写那一步。
+  **③ 返回面板而不是结果**，与 `ShowDialogAsync` 返回结果的不对称是有意的：下拉框要「选了哪一项」，右键菜单往往每个条目各自行动。要结果的让面板继承 `UIDialogPanel<TResult>` 再 `await panel.WaitResultAsync()` 即可。另：`async` 方法不能带 `out` 参数，故实际采用的方向不在此暴露——`CalculatePosition` 是纯函数，同样输入必得同样方向，调用方重算一次即可。
+  **④ 捕获层是与 `UIManager_Mask` 同形但独立的单实例**（`UIManager_PopupCatcher`），**刻意不复用遮罩**：遮罩引用计数且**只管显示与否不管外观**（`ApplyMaskStyle` 每次重设排序与颜色、以最后一次为准），共用会让「模态要 0.5 变暗」与「下拉要全透明捕获」互相覆盖。释放点与 `ReleaseMasksOwnedBy` 同形挂在关闭路径上——面板被任何途径关掉，捕获层都不留在屏幕上继续吃点击；`Dispose` 时一并销毁。
+  **捕获层自带 `GraphicRaycaster`**，这是它能挡输入的前提：UGUI 的 raycaster 只查**自己 GameObject 上那个 Canvas** 下注册的图形，而 `Graphic.CacheCanvas` 取 `GetComponentsInParent` 的第一个（自身优先）。层级取 `PanelOrder(layer, 0)` = `layer × 32`，严格夹在「`layer−1` 层最高面板」（`layer×32−1`）与「`layer` 层第一个面板」（`layer×32+1`）之间；序号 0 在 `RestampSortingOrders` 里从不分配给面板。
+  **顺带**：`UIRootNode`/`UIMaskTests` 之外的全仓 `EventSystem` 引用数为 0（实测），而任何 UGUI 点击都依赖项目自带的事件系统——本入口的点击路径沿用仓内既有做法，用 `Button.onClick.Invoke()` 验证接线，真实指针事件在文档里标明其依赖。
 - **`UIManager.ShowDialogAsync<TPanel, TResult>` 对话框入口**（**门面成员，不进 `IUIManager`**）：把四件必须互相配合、**少配一件都不报错只会「看起来不对」**的事收成一个入口——① 打开面板；② 按对话框所在层**自动推导遮罩层**；③ 把遮罩持有绑到面板上（面板关闭即自动释放）；④ 等待并兑现结果。三条取向：
   **① 遮罩层自动取 `layer - 1`。** 遮罩必须夹在「要遮住的内容层」与「对话框自身所在层」之间：`MaskOrder(L−1) = L×32 − 1` 而对话框 `PanelOrder(L, 1) = L×32 + 1`，正好差两格。**本仓文档此前教的默认组合正好是错的**——`ShowMask()` 用 `UILayers.Mask`(500) 层，`MaskOrder(500) = 16031` 远高于 Popup 层对话框的 6401，于是对话框被自己的遮罩盖住（变暗且点不动）。`layer` 会先经 `ClampPanelLayer` 再推导，两者基于同一个层号，超限时不会错位。层为 0（最低层）时没有更低的层可放，此时不显示遮罩。
   **② 不接 `UIMaskStyle`，拆成 `modal` / `maskColor`。** 遮罩层级由 `layer` 推出，收一个含 `Layer` 的结构体再把该字段忽略掉，等于静默丢弃调用方的输入——与本轮要消灭的故障同类。

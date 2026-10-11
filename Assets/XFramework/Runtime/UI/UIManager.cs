@@ -841,6 +841,100 @@ namespace XFramework.XUI
 
         #endregion
 
+        #region Public API — Popup（锚定弹窗）
+
+        /// <summary>
+        /// 打开一个锚定弹窗：贴着 <paramref name="anchor"/> 摆出来，可选「点外部关闭」。
+        /// <para>用于下拉菜单、右键菜单、悬浮说明、组合框展开——「贴着某个控件弹出来」的那一类。
+        /// 要的是<b>居中弹出的对话框</b>（确认框、详情面板）请用
+        /// <see cref="ShowDialogAsync{TPanel, TResult}"/>：那一类不需要定位，需要的是模态遮罩与结果回传。</para>
+        /// <para><b>返回面板而不是结果</b>，与 <see cref="ShowDialogAsync{TPanel, TResult}"/> 的不对称是有意的：
+        /// 下拉框要「选了哪一项」，右键菜单往往<b>每个条目各自行动</b>、不需要回传。返回面板两种都能表达——
+        /// 要结果的让面板继承 <see cref="UIDialogPanel{TResult}"/>，再 <c>await panel.WaitResultAsync()</c>
+        /// （组合即可，关闭兜底同样生效）。</para>
+        /// </summary>
+        /// <typeparam name="T">要打开的面板类型，需继承 <see cref="UIPanelBase"/>。</typeparam>
+        /// <param name="anchor">锚点控件。它的屏幕矩形决定弹窗摆在哪；<c>null</c> 抛
+        /// <see cref="ArgumentNullException"/>——本 API 的意义就是把它摆到锚点旁边。</param>
+        /// <param name="assetPath">面板预制体的 YooAsset 地址。</param>
+        /// <param name="direction">展开方向，见 <see cref="UIPopupDirection"/>。默认四向依次尝试。</param>
+        /// <param name="align">垂直于展开方向那根轴上的对齐，见 <see cref="UIPopupAlign"/>。</param>
+        /// <param name="layer">弹窗所在层级，默认 <see cref="UILayers.Popup"/>。</param>
+        /// <param name="userData">传给面板 <see cref="UIPanelBase.OnOpen"/> 的自定义数据。</param>
+        /// <param name="closeOnClickOutside">点击弹窗外部是否关闭它。默认 true——右键菜单、下拉框都是这个习惯。</param>
+        /// <param name="cancellationToken">取消令牌，只作用于打开阶段（与
+        /// <see cref="ShowDialogAsync{TPanel, TResult}"/> 同一口径）。</param>
+        /// <returns>打开的面板；资源加载不到或被控制器拦下时返回 <c>null</c>。</returns>
+        /// <remarks>
+        /// <para><b>摆位置之前会先强制跑一次布局</b>，因为布局驱动的尺寸在布局跑完之前读到的仍是
+        /// <b>上一次</b>的值——池化复用的弹窗换了内容时尤其明显（<c>UIPopupLayoutTests</c> 把这条
+        /// 前提钉成了用例）。所以本入口拿到的尺寸是当前的，不是预制体里序列化的那个。</para>
+        /// <para><b>可用区域取 <see cref="Screen.safeArea"/></b>，即弹窗不会摆进刘海/圆角区。桌面与编辑器上
+        /// 它等于全屏，没有差别。要换成别的区域（如自定的工作区）请走
+        /// <see cref="UIPopupPosition.CalculatePosition(in Rect, in Vector2, UIPopupDirection, UIPopupAlign, in Rect, in Vector2, out UIPopupDirection, float)"/>
+        /// 手写那一步。</para>
+        /// <para><b>要拿实际采用的方向</b>（画箭头、选动画）：<c>async</c> 方法不能带 <c>out</c> 参数，
+        /// 而 <see cref="UIPopupPosition.CalculatePosition(in Rect, in Vector2, UIPopupDirection, UIPopupAlign, in Rect, in Vector2, out UIPopupDirection, float)"/>
+        /// 是<b>纯函数</b>——同样的输入必然得到同样的方向，调用方重算一次即可。</para>
+        /// </remarks>
+        public static async UniTask<T> ShowPopupAsync<T>(
+            RectTransform anchor,
+            string assetPath,
+            UIPopupDirection direction = UIPopupDirection.Auto,
+            UIPopupAlign align = UIPopupAlign.Start,
+            int layer = UILayers.Popup,
+            object userData = null,
+            bool closeOnClickOutside = true,
+            CancellationToken cancellationToken = default) where T : UIPanelBase
+        {
+            if (anchor == null)
+                throw new ArgumentNullException(nameof(anchor),
+                    "[UIManager] ShowPopupAsync 需要一个锚点控件——本 API 的意义就是把它摆到锚点旁边。" +
+                    "要居中弹出请用 ShowDialogAsync。");
+
+            EnsureGlobalInitialized();
+            var impl = _instance;
+
+            // 与 ShowDialogAsync 同一条钳制：越界只告警一次，且后续推导都基于钳好的层号
+            int popupLayer = UISorting.ClampPanelLayer(layer);
+
+            var panel = await impl.OpenAsync<T>(assetPath, popupLayer, userData, cancellationToken);
+            if (panel == null)
+                return null;
+
+            var rect = (RectTransform)panel.transform;
+
+            // 量尺寸前必须先跑完布局：否则拿到的是上一次的尺寸（池化复用换了内容时尤其明显）。
+            // 强制布局是同步的，所以不会先闪一帧在错位置
+            UnityEngine.UI.LayoutRebuilder.ForceRebuildLayoutImmediate(rect);
+
+            Vector2 position = UIPopupPosition.CalculatePosition(
+                UIPopupPosition.GetScreenRect(anchor),
+                rect.rect.size,
+                direction,
+                align,
+                Screen.safeArea,
+                rect.pivot,
+                out _);
+
+            rect.position = new Vector3(position.x, position.y, 0f);
+
+            if (closeOnClickOutside)
+            {
+                // 捕获层是内置实现的能力（与 SetController / TipAssetPath 同一探测），注入自定义
+                // IUIManager 时拿不到——出声而不是静默失效，否则使用方只会看到「点了外面没反应」
+                if (impl is UIManagerImpl builtIn)
+                    builtIn.AttachPopupCatcher(panel, popupLayer);
+                else
+                    LogManager.Warning(LogCategories.UIManager,
+                        "Current instance is not UIManagerImpl, so closeOnClickOutside has no effect.");
+            }
+
+            return panel;
+        }
+
+        #endregion
+
         #region Public API — UI Controller
 
         /// <summary>

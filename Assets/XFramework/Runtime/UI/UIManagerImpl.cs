@@ -545,6 +545,16 @@ namespace XFramework.XUI
                 _maskInstance = null;
             }
 
+            // 捕获层与遮罩同一处境：由 new GameObject 创建、未经 AssetManager 托管，直接销毁
+            _popupCatcherTarget = null;
+            _popupCatcherButton = null;
+
+            if (_popupCatcher != null)
+            {
+                UnityEngine.Object.Destroy(_popupCatcher);
+                _popupCatcher = null;
+            }
+
             UIRoot = null;
             IsInitialized = false;
         }
@@ -1068,6 +1078,114 @@ namespace XFramework.XUI
             {
                 PopAsync().Forget();
             }
+        }
+
+        #endregion
+
+        #region Popup Click Catcher
+
+        /// <summary>
+        /// 锚定弹窗的「点外部关闭」捕获层。单实例复用，与 <see cref="_maskInstance"/> 同形但
+        /// <b>刻意不复用它</b>：遮罩是引用计数且<b>只管显示与否不管外观</b>
+        /// （<see cref="ApplyMaskStyle"/> 每次重设排序与颜色，以最后一次为准），
+        /// 两者共用会让「模态对话框要 0.5 变暗」与「下拉框要全透明捕获」互相覆盖。
+        /// </summary>
+        private GameObject _popupCatcher;
+
+        /// <summary>捕获层的点击按钮。与遮罩不同，它在创建时就有——捕获层没有「不挡输入」的形态。</summary>
+        private UnityEngine.UI.Button _popupCatcherButton;
+
+        /// <summary>当前捕获层替哪个面板挡输入。点它即关闭这个面板。</summary>
+        private UIPanelBase _popupCatcherTarget;
+
+        /// <summary>
+        /// 为 <paramref name="panel"/> 挂上捕获层：全屏、全透明、挡输入，点它关闭该面板。
+        /// <para><b>它必须自带 <see cref="UnityEngine.UI.GraphicRaycaster"/></b>——UGUI 的
+        /// raycaster 只查<b>自己 GameObject 上那个 Canvas</b> 下注册的图形，而
+        /// <c>Graphic.CacheCanvas</c> 取的是 <c>GetComponentsInParent</c> 的第一个（自身优先）。
+        /// 少了它，这层就是一个接不到点击的透明图片。（遮罩那边就没有挂，见本文件遮罩区。）</para>
+        /// <para><c>internal</c> 供门面的 <c>ShowPopupAsync</c> 调用——这是内置实现的能力，
+        /// 与 <c>SetController</c> / <c>TipAssetPath</c> 同一类，故不进 <see cref="IUIManager"/>。</para>
+        /// </summary>
+        internal void AttachPopupCatcher(UIPanelBase panel, int layer)
+        {
+            EnsurePopupCatcherInstance();
+
+            _popupCatcherTarget = panel;
+
+            // 排序取该层的第 0 号槽位：严格夹在「layer-1 层最高的面板」((layer-1)*32+31 = layer*32-1)
+            // 与「layer 层第一个面板」(layer*32+1) 之间。序号 0 在 RestampSortingOrders 里从不分配给
+            // 面板（那边从 1 起），该槽位本就是层容器自己的位置——容器无图形，不会与捕获层争
+            var canvas = _popupCatcher.GetComponent<Canvas>();
+            if (canvas != null)
+                canvas.sortingOrder = UISorting.PanelOrder(UISorting.ClampPanelLayer(layer), 0);
+
+            _popupCatcher.SetActive(true);
+        }
+
+        /// <summary>
+        /// 关闭路径上释放：只有当捕获层正替这个面板挡输入时才收起。
+        /// 与 <see cref="ReleaseMasksOwnedBy"/> 同形——面板被任何途径关掉，捕获层都不会留在屏幕上。
+        /// </summary>
+        private void ReleasePopupCatcherOf(UIPanelBase panel)
+        {
+            if (!ReferenceEquals(_popupCatcherTarget, panel))
+                return;
+
+            _popupCatcherTarget = null;
+
+            if (_popupCatcher != null)
+                _popupCatcher.SetActive(false);
+        }
+
+        /// <summary>
+        /// 创建捕获层实例（只做一次，之后复用）。与 <see cref="EnsureMaskInstance"/> 同形，
+        /// 差别只在多了 <see cref="UnityEngine.UI.GraphicRaycaster"/> 与
+        /// <see cref="UnityEngine.UI.Button"/>——前者是它能挡输入的前提，后者是它的用途。
+        /// </summary>
+        private void EnsurePopupCatcherInstance()
+        {
+            if (_popupCatcher != null)
+                return;
+
+            _popupCatcher = new GameObject("UIManager_PopupCatcher", typeof(RectTransform));
+            var rt = _popupCatcher.GetComponent<RectTransform>();
+            rt.SetParent(UIRoot, false);
+            rt.anchorMin = Vector2.zero;
+            rt.anchorMax = Vector2.one;
+            rt.sizeDelta = Vector2.zero;
+            rt.anchoredPosition = Vector2.zero;
+
+            var canvas = _popupCatcher.AddComponent<Canvas>();
+            canvas.overrideSorting = true;
+
+            // 挡输入靠的是「能被射线命中并吃掉」——没有 raycaster 就没有这一层
+            _popupCatcher.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+
+            // 全透明但仍挡输入（UIMaskStyle 的文档也写着「a = 0 仍然挡输入」是合法需求）
+            var image = _popupCatcher.AddComponent<UnityEngine.UI.Image>();
+            image.color = new Color(0f, 0f, 0f, 0f);
+
+            _popupCatcherButton = _popupCatcher.AddComponent<UnityEngine.UI.Button>();
+
+            // 这是一层不可见的挡板，不是可交互控件：关掉默认的 ColorTint，
+            // 免得悬停/按下时对那张全透明图片做无意义的补间（遮罩那边留了默认值，
+            // 于是遮罩会在悬停时变一点色——这里不重复那个副作用）
+            _popupCatcherButton.transition = UnityEngine.UI.Selectable.Transition.None;
+            _popupCatcherButton.onClick.AddListener(OnPopupCatcherClicked);
+
+            _popupCatcher.SetActive(false);
+        }
+
+        private void OnPopupCatcherClicked()
+        {
+            var target = _popupCatcherTarget;
+            if (target == null)
+                return;
+
+            // 与遮罩的 OnMaskClicked 不同：那边是「Pop 栈顶」，这边是「关掉我替谁挡的那个面板」。
+            // 捕获层不假定弹窗在栈顶——它只认自己登记的目标。
+            CloseAsync(target).Forget();
         }
 
         #endregion
@@ -1634,6 +1752,9 @@ namespace XFramework.XUI
 
             // 面板自己打开的遮罩随它一起释放，无需调用方记得配对关闭
             ReleaseMasksOwnedBy(panel);
+
+            // 捕获层同理：面板被任何途径关掉，它都不该留在屏幕上继续吃点击
+            ReleasePopupCatcherOf(panel);
 
             try
             {
