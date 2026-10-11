@@ -84,6 +84,11 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 - **`UpdateManager.Clear()` 之后模块失联**：Clear 摘掉驱动器而 TimerCore 无感知（同 UI 的 P1 事故形态）。恢复路径是调用 `TimerManager.CancelAll()` 再创建，已写进已知限制，但没有自动侦测——**不能**像 UI 那样「每次入口都重注册」，那会踩上面那条「吞时间」。是否要加侦测未定。
 - **`_sweepPass` 的理论溢出**：`int` 每趟 +1，长会话下约 400 天绕回。绕回时「本趟出生」的判定可能误伤一两个新生槽位（表现为该槽位晚一拍触发），不产生错误触发。当前不处理。
 
+**测试侧的一处未决（跨模块，真相在别处）**：`TimerAllocationTests` 的 **4 处**零分配断言用的是**恒真**的尺子
+（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0，分配 1 MB 后增量仍是 0）——它们锁的结论
+**未被证实**（未必为假，但没被验证）。受影响站点全表、可用尺子与改造模板见 `Documentation/Workflow.md`
+§六「零分配断言在本环境可能恒真」；清点与计划见 `FrameworkReview.md` §五 第 11 项。**本模块不重复那份清单。**
+
 ## 与其它模块的边界（下一轮审计时先看这里）
 
 - **对 `XUpdate` 的接触只有两处**：`TimerTicker.cs`（注册/注销/`ProcessImmediate`、档位返回值）与 `TimerCore.cs` 的档位常量与 `UpdateTimeMode` 校验。审计时若发现第三处，那是边界泄漏。

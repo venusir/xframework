@@ -82,6 +82,7 @@
 | 各模块用法 | `Assets/XFramework/Runtime/<模块>/README.md` |
 | 维护向记录（文件结构、版本沿革、审计记忆） | `Documentation/Modules/<模块>.md` |
 | 候选模块与框架级非目标（该不该建 / 边界在哪） | `Documentation/Roadmap.md` |
+| **框架整体体检（缺什么 / 先做什么 / 与同类对照）** | `Documentation/FrameworkReview.md` |
 | 什么内容该写进哪份文档 | `CLAUDE.md` → 文档分层 |
 | 审计判据与探针 | `Documentation/ModuleAudit.md` |
 | 变更历史 | `Assets/XFramework/CHANGELOG.md` |
@@ -125,6 +126,13 @@
 - **审计不可自动化的部分**：判据清单是「见过的缺陷类」的归纳，新类型的缺陷它照不到；清单里的探针只做诊断、不进门禁，判定仍靠人。
 - **文档分层靠人**：模块 README 与 `Documentation/Modules/` 之间的搬运没有门禁——`check-docs.ps1` 对 `.md` 零覆盖（它只管 XML 注释、编译参与度与 `.meta`）。要机械验证只能自建（「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑），且属一次性工程，不挂进阶段收尾。
 - **零分配断言在本环境可能恒真（尺子坏了）**：2026-10-11 实测——`GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），`Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0。**因此 `TimerAllocationTests` / `LogAllocationTests`（断言 `AreEqual(0L, …)`）是恒真的**——它们锁的结论未被证实（未必为假，但没被验证）。可用的尺子只有 `Profiler.GetMonoUsedSizeLong()` 与 `GC.GetTotalMemory(false)`，前者粒度约 4–8 KB（单次装箱约 32–40 B 看不见，**必须放大到 10 万次量级**）。**写零分配断言时的纪律**：① 先用「分配 1 MB 再读增量」自检尺子，别假设它可用；② 尺子不可用或粒度不够时，优先用**结构断言**（如 `GetEnumerator()` 的返回类型是否值类型——装箱的充要原因，确定性且不依赖尺子，先例 `ReactiveEnumerationAllocationTests`），测量只作第二道防线。详见 `Documentation/Modules/Reactive.md` 的「实测记录」节。
+  **受影响站点全表（2026-10-11 清点，共 5 个文件 / 11 处断言——上面点名的 Timer / Log 只是其中两个）**：
+  `Tests/Runtime/Timer/TimerAllocationTests.cs`（4 处）· `Tests/Runtime/Log/LogAllocationTests.cs`（4 处）·
+  `Tests/Runtime/Message/MessageStatsTests.cs`（1 处，`:342`）· `Tests/Runtime/UI/UIDiagnosticsTests.cs`（1 处，`:112`）·
+  `Tests/Runtime/UI/UIPanelQueryTests.cs`（1 处，`:201`）。形态一律 `Assert.AreEqual(0L, GC.GetAllocatedBytesForCurrentThread() 前后差, …)`。
+  **坏形态是靠模仿扩散的**：`LogAllocationTests.cs:12` 的注释自述「断言形态沿用 `TimerAllocationTests`」。
+  **因此新增此类断言时，不要照抄邻近文件的写法——照抄正是它扩散的机制。** 改造模板见 `ReactiveEnumerationAllocationTests`
+  （结构断言 + 粗尺子放大迭代 + 阈值取实测信号的 1/4）。清点与改造计划见 `FrameworkReview.md` §五 第 11 项。
 
 ## 附：一个完整回合
 

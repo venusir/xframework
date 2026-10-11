@@ -167,6 +167,14 @@ AutoInit 自初始化（SubsystemRegistration，载入期即装入默认实现�
 1. **Editor 两处无前缀 `Debug.LogError`**（`XFrameworkDependencyInstaller.cs:52,74`，全仓唯二违例）：经 `LogManager` 会自动补 `[XFramework] ` 前缀 = 改控制台文案。本轮按「逐字保真」保持原样未迁。
 2. **`UIDefaultController` 的 5 条 verbose 日志保持 `Info`**：降到 `Debug` 会改变 Release 可见性（`verbose: true` 的使用方会突然看不到），属行为变更。
 
+**测试侧的一处未决（跨模块，真相在别处）**：`LogAllocationTests` 的 **4 处**零分配断言用的是**恒真**的尺子
+（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0）。它锁的结论——「档位未启用时不格式化、零分配」
+——**未被证实**，而这条恰是本模块对外承诺的卖点之一。**坏形态是靠模仿扩散的**：该文件 `:12` 的注释自述
+「断言形态沿用 `TimerAllocationTests`」。受影响站点全表、可用尺子与改造模板见 `Documentation/Workflow.md`
+§六；清点见 `FrameworkReview.md` §五 第 11 项。**本模块不重复那份清单。**
+一个无需尺子的替代方向：`LogFormatter` 走 `string.Format`，而 `string.Format` 必然调参数的 `ToString()`——
+传一个 `ToString()` 自增计数器的探针类型，「未启用不格式化」就能被**直接观测**，不必测量分配。
+
 ## 与其它模块的边界（下一轮审计时先看这里）
 
 - **零模块依赖**：只用 `System.*` 与 `UnityEngine`；写文件走 `System.IO` 直写而**不经 `FileManager`**

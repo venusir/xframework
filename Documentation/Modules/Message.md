@@ -25,3 +25,12 @@ Runtime/Message/
     ├── MainThreadGuard.cs        # 发布/订阅入口的主线程断言(仅 Editor)
     └── ActionDisposable.cs       # 委托式 IDisposable(幂等)
 ```
+
+## 已评估未采纳与未决
+
+> 本模块此前没有这一节（文件结构之外无待办）。2026-10-11 框架级评估产生了第一条，故按需建立。
+
+**测试侧的一处未决（跨模块，真相在别处）**：`MessageStatsTests:342` 的零分配断言用的是**恒真**的尺子
+（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0）。受影响站点全表、可用尺子与改造模板见
+`Documentation/Workflow.md` §六「零分配断言在本环境可能恒真」；清点见 `FrameworkReview.md` §五 第 11 项。
+**本模块不重复那份清单。**
