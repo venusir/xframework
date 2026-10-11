@@ -240,6 +240,71 @@ namespace XFramework.XUI.Tests
 
         #endregion
 
+        #region 射线管道（点击真的送得到吗）
+
+        /// <summary>
+        /// 遮罩必须自带 <see cref="GraphicRaycaster"/>——这是「点击真的送得到」与「挡得住下方输入」
+        /// 的<b>同一个</b>前提，不是可选装饰。
+        /// <para><b>机制</b>：UGUI 的 raycaster 只查询<b>自己那个 Canvas</b> 下注册的图形，而
+        /// <c>Graphic</c> 注册到<b>最近的</b> Canvas。遮罩自带一个 Canvas
+        /// （<c>overrideSorting = true</c>），于是它的 <c>Image</c> 注册在遮罩自己的 Canvas 上，
+        /// 挂在 UIRoot 那个 Canvas 上的 raycaster <b>看不到它</b>。少了遮罩自己的 raycaster，
+        /// 它就是一张接不到点击的透明图片。</para>
+        /// <para><b>为什么此前是盲区</b>：<c>ClickToClose_PopsTopPanel</c> 验的是<b>接线</b>
+        /// （直接调 <c>Button.onClick.Invoke()</c>），不是 UGUI 的射线管道——测试壳没有
+        /// <c>EventSystem</c> 与输入模块，真实指针事件跑不了（前提同 <c>UIPopupTests</c> 的说明）。
+        /// 接线通了，管道无人过问。</para>
+        /// <para>对照：弹窗捕获层有同样的要求且已被测住
+        /// （<c>UIPopupTests.Catcher_HasGraphicRaycaster</c>）；Tip 与 HUD 的 Canvas 也都显式补了它。</para>
+        /// </summary>
+        [Test]
+        public void Mask_HasGraphicRaycaster()
+        {
+            UIManager.ShowMask(new UIMaskStyle(UILayers.Mask, Color.black, clickToClose: true));
+
+            var mask = _root.transform.Find("UIManager_Mask");
+            Assert.IsNotNull(mask, "前置条件：遮罩已创建");
+            Assert.IsNotNull(mask.GetComponent<Image>(), "挡输入靠的是可被射线命中的图形");
+
+            Assert.IsNotNull(mask.GetComponent<GraphicRaycaster>(),
+                "遮罩必须自带 GraphicRaycaster，否则 clickToClose 永不触发，且挡不住下方输入");
+        }
+
+        /// <summary>
+        /// 钉住上一条的<b>机制</b>：遮罩的 <c>Image</c> 注册在它自己的 Canvas 上，而非 UIRoot 的。
+        /// <para>这条单独成立，才能解释「为什么根 Canvas 上的 raycaster 救不了它」——否则
+        /// 「往 UIRoot 补一个 raycaster」看起来也是个可行修法。</para>
+        /// </summary>
+        [Test]
+        public void Mask_Image_IsRegisteredToItsOwnCanvas()
+        {
+            UIManager.ShowMask();
+
+            var mask = _root.transform.Find("UIManager_Mask");
+            Assert.IsNotNull(mask, "前置条件：遮罩已创建");
+
+            var image = mask.GetComponent<Image>();
+            Assert.AreSame(mask.GetComponent<Canvas>(), image.canvas,
+                "Image 注册到最近的 Canvas，而遮罩自带 Canvas——故只有遮罩自己的 raycaster 能命中它");
+        }
+
+        /// <summary>
+        /// 正向控制：同一套装置下，面板视图<b>确实</b>拿到了 <see cref="GraphicRaycaster"/>
+        /// （<c>UIViewBase</c> 的 <c>[RequireComponent]</c> 自动补齐）。
+        /// <para>它绿而 <c>Mask_HasGraphicRaycaster</c> 红，才说明红的是<b>遮罩</b>本身，
+        /// 而不是「这套测试里根本拿不到 raycaster」。</para>
+        /// </summary>
+        [Test]
+        public async Task Control_PanelView_HasGraphicRaycaster()
+        {
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/first");
+
+            Assert.IsNotNull(panel.GetComponent<GraphicRaycaster>(),
+                "面板视图经 UIViewBase 的 RequireComponent 自带 raycaster——它是本 fixture 的正向控制");
+        }
+
+        #endregion
+
         #region 面板联动
 
         [Test]

@@ -116,6 +116,20 @@ Runtime/UI/
   **附带两条**：① 循环列表**从未被单独评估过**（本文此前全文没出现过它），它是跟着「列表虚拟化」
   一起被打包放走的——重推结论对它同样适用；② `Roadmap.md` §四 把这条写成「UI **否决**」，与本文的
   「已评估未采纳」、README 的「设计取舍」两处用词不一致（**本文这处是准的**）。
+- **遮罩射线缺陷：已实测并修复（2026-10-11）**。原条目记在下方「未决」，判据是「UGUI 源码 + 代码不对称，
+  但**跑不了 Unity 验证**」——那一轮**低估了可测性**：`EventSystem.RaycastAll` 遍历的是全局 raycaster 列表，
+  **既不需要输入模块也不需要 `EventSystem.current`**，只建一个空 `EventSystem` 就能跑真射线。
+  真正的阻碍只有「测试壳没有 `EventSystem`」这一条夹具前提，而它是可以自己搭的。
+  **实测结论**：修复前，屏幕正中（遮罩铺满全屏）命中数为 **0**；去掉修复那一行则新用例立刻红、加回即绿。
+  **两处根因同时坐实**：既点不关，**也挡不住下方输入**（后者原先只是顺带推测）。
+  **留给下一轮的三条**：① 这是 `ModuleAudit` 判据 **D3「测试的假绿」**的教科书样本——`ClickToClose_PopsTopPanel`
+  一直绿，因为 `Button.onClick.Invoke()` 绕开了射线管道，而前提说明就写在 `UIPopupTests` 头部；
+  **「验接线」与「验管道」是两件事，两者都要有**。② 写射线用例的两个夹具坑：
+  **根 `RectTransform` 必须显式摆成屏幕区域 `[0,w]×[0,h]`**（batchmode 下 Overlay 根画布不会自动撑开它，
+  不摆则锚点算出的坐标落进负半轴，`GraphicRaycaster` 判越界后静默返回 0 命中），且
+  **`FakePanelFactory` 造的面板没有 `Graphic`**（只有 Canvas + raycaster），**对面板做射线断言必然为空**。
+  ③ 行为变更已写入 README 与 CHANGELOG：遮罩**从此真正吃点击**，且 `clickToClose` 开启时会有悬停变色
+  （`Button` 默认 `ColorTint`）——这是修复带出的、第三方可见的副作用。
 
 ## 已完成功能与未做（roadmap）
 
@@ -182,19 +196,8 @@ Runtime/UI/
 
 **未决**：
 
-- **⚠ 遮罩很可能根本接不到点击，`clickToClose` 因此从未在真实输入下生效过**（2026-10-11 发现，**未实测**）。
-  `EnsureMaskInstance`（`UIManagerImpl.cs:995-1012`）只加 `Canvas` + `Image`，**没有 `GraphicRaycaster`**；
-  而模块里其它每个要挡输入的容器都有（层容器 `:1493`、Tip `:206`、HUD `:382`）。UGUI 的
-  `GraphicRaycaster` 只查**自己 GameObject 上那个 Canvas** 下注册的图形（`GraphicRaycaster.cs:108-118/132`），
-  而 `Graphic.CacheCanvas` 取 `GetComponentsInParent` 的**第一个**（自身优先）——于是遮罩的 `Image`
-  注册在遮罩自己的 Canvas 下，没有任何 raycaster 能命中它。Unity 自己的 `Dropdown.CreateBlocker`
-  专门加了 raycaster，注释写着 `// Add raycaster since it's needed to block.`
-  **佐证强度**：UGUI 源码 + 代码不对称（同上），但**跑不了 Unity 验证**，故记为未决而非既成事实。
-  **没被任何用例覆盖**——`UIMaskTests` 走 `Button.onClick.Invoke()`，绕开了整条射线管道。
-  **修法**：给遮罩也挂 `GraphicRaycaster`（与新建的捕获层一致）。这是**行为变更**（遮罩将开始真正吃点击），
-  需先裁定；裁定后还应补一条真实指针事件的用例，那需要先有 `EventSystem`。
-  **旁证**：本轮新建的 `UIManager_PopupCatcher` 自带 raycaster，并有用例断言它必须在——
-  同一个教训已经在新代码上落实。
+- ~~遮罩接不到点击~~ —— **2026-10-11 已实测并修复**（原条目判「跑不了 Unity 验证」，那一步是错的：
+  真射线只需一个空 `EventSystem`）。结论与两条夹具坑见上方「沿革与已否决形状」末条。
 - **`IUIManager : IDisposable` 可被第三方绕过门面直接 `Dispose()`**：门面记账随之脱节（`_instance` 仍指向已释放的
   实现）。改接口形状（去掉 `IDisposable` 或改名）对第三方实现是**源码破坏性变更**，本轮只记文档，不动。
 - **自定义 Tip / HUD provider 运行期注入拿不到 `SetUIRoot`**：`IUITipProvider.SetUIRoot` 的文档写着「在

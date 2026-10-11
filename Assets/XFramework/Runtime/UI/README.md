@@ -249,6 +249,13 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 > 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
 
+> **遮罩是真的会挡住输入的**：它自带 `GraphicRaycaster`，全屏吃掉落在它上面的指针事件——这正是「模态」的含义。
+> `ClickToClose` 开启时遮罩还会响应指针悬停（`Button` 的默认 `ColorTint` 过渡带来的轻微变色），这是唯一可见的副作用。
+>
+> **升级提示（0.2.0 及以前装过本包的项目）**：那个版本的遮罩漏了一个 `GraphicRaycaster`，**实际既不挡输入、
+> `clickToClose` 也不生效**（详见 `CHANGELOG.md` 的 `[Unreleased] → Fixed`）。本次修复后遮罩会开始真正吃点击——
+> 若你此前依赖「点击穿透遮罩」，需要改用自己的命中策略。
+
 ### 面板驱动更新（OnUpdate）
 
 与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize`（以及 `SetInstance`）把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。

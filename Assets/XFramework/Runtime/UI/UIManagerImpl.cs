@@ -1001,6 +1001,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 创建遮罩实例（只做一次，之后复用）。不在此处挂 Button——点击开关由
         /// <see cref="ApplyMaskClickToClose"/> 单独管理，以便随时开关。
+        /// <para>与 <see cref="EnsurePopupCatcherInstance"/> 同形，差别只在少了 Button
+        /// （遮罩有「不挡点击」的形态，捕获层没有）——<b>但 GraphicRaycaster 两者都必须有</b>。</para>
         /// </summary>
         private void EnsureMaskInstance()
         {
@@ -1017,6 +1019,12 @@ namespace XFramework.XUI
 
             var maskCanvas = _maskInstance.AddComponent<Canvas>();
             maskCanvas.overrideSorting = true;
+
+            // 挡输入与 clickToClose 都靠这一步：UGUI 的 raycaster 只查自己 GameObject 上那个
+            // Canvas 下注册的图形，而遮罩自带 Canvas（Image 因此注册在它下面，挂在 UIRoot 上的
+            // raycaster 看不到它）。少了它，遮罩就是一张接不到点击的透明图片——
+            // 既点不关，也挡不住下方输入。捕获层一直有这个组件，遮罩此前漏了。
+            _maskInstance.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             _maskInstance.AddComponent<UnityEngine.UI.Image>();
         }
@@ -1103,7 +1111,8 @@ namespace XFramework.XUI
         /// <para><b>它必须自带 <see cref="UnityEngine.UI.GraphicRaycaster"/></b>——UGUI 的
         /// raycaster 只查<b>自己 GameObject 上那个 Canvas</b> 下注册的图形，而
         /// <c>Graphic.CacheCanvas</c> 取的是 <c>GetComponentsInParent</c> 的第一个（自身优先）。
-        /// 少了它，这层就是一个接不到点击的透明图片。（遮罩那边就没有挂，见本文件遮罩区。）</para>
+        /// 少了它，这层就是一个接不到点击的透明图片。（这段注释原先记着「遮罩那边就没有挂」——
+        /// 那是真的，且是个缺陷：遮罩既点不关也挡不住输入，2026-10-11 补上了，两处现在同形。）</para>
         /// <para><c>internal</c> 供门面的 <c>ShowPopupAsync</c> 调用——这是内置实现的能力，
         /// 与 <c>SetController</c> / <c>TipAssetPath</c> 同一类，故不进 <see cref="IUIManager"/>。</para>
         /// </summary>

@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+
+- **模态遮罩挡不住输入、`clickToClose` 从未生效**（`UIManagerImpl.EnsureMaskInstance` 缺 `GraphicRaycaster`）。
+  **根因**：UGUI 的 `GraphicRaycaster` 只查**自己 GameObject 上那个 Canvas** 下注册的图形，而 `Graphic.CacheCanvas`
+  取 `GetComponentsInParent` 的第一个（自身优先）。遮罩自带 `Canvas`（`overrideSorting`），于是它的 `Image` 注册在
+  遮罩自己的 Canvas 下——挂在 `UIRoot` 上的 raycaster 看不到它，**整张遮罩不被任何射线命中**。同一个教训在捕获层上
+  是落实了的（`AttachPopupCatcher` 的注释明写「它必须自带 `GraphicRaycaster`」，`UIPopupTests.Catcher_HasGraphicRaycaster`
+  还专门断言「否则挡不住输入」），唯独遮罩漏了。
+  **实测证据**（2026-10-11，PlayMode，测试壳 640×480）：屏幕正中 `EventSystem.RaycastAll` 命中数为 **0**；
+  同一装置下带 raycaster 的正向对照物正常命中（`UIMaskPointerTests.PositiveControl_IsHitByRaycast` 绿）。
+  **临时停掉修复那一行 → `Mask_IsHitByRaycast` / `ClickToClose_TakesEffectUnderRaycast` 立刻红（命中=0），加回即绿**
+  ——结论与修复互为因果，不是纸面推理。
+  **行为变更（对第三方可见）**：遮罩**从此真正吃点击**——此前点得穿的遮罩以后点不穿；`clickToClose` 也才真正生效。
+  **为什么九个月没被发现**：`UIMaskTests.ClickToClose_PopsTopPanel` 一直是绿的，而它走 `Button.onClick.Invoke()`，
+  验的是**接线**（谁在挡、点了关谁）而非 UGUI 的射线管道（该前提写在 `UIPopupTests` 头部）。接线通了，管道无人过问。
+  现新增 `UIMaskPointerTests`（从射线起步的端到端），并在 `UIMaskTests` 加三条结构断言（含一条正向控制）。
+
 ### Changed
 
 - **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
