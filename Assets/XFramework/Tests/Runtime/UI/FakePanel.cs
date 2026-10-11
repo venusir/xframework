@@ -222,4 +222,58 @@ namespace XFramework.XUI.Tests
             CloseSelfAsync().Forget();
         }
     }
+
+    /// <summary>对话框结果类型。用枚举而非 bool，以便同时验证类型安全与「先到者胜」的两个不同取值。</summary>
+    public enum FakeDialogResult
+    {
+        /// <summary>未选择（兜底值）。</summary>
+        None = 0,
+
+        /// <summary>确定。</summary>
+        Confirm = 1,
+
+        /// <summary>取消。</summary>
+        Cancel = 2,
+    }
+
+    /// <summary>
+    /// 测试用对话框面板。结果由测试显式设置，以便逐条覆盖结果通道的分支。
+    /// </summary>
+    public class FakeDialog : UIDialogPanel<FakeDialogResult>
+    {
+        /// <summary>生命周期回调顺序。</summary>
+        public readonly List<string> Log = new List<string>();
+
+        /// <summary>在 OnOpen 里兑现的结果；null 表示不设。验证「先兑现、后等待」这条顺序。</summary>
+        public FakeDialogResult? ResultOnOpen;
+
+        /// <summary>在 OnClose 里兑现的结果；null 表示不设，走回池兜底。</summary>
+        public FakeDialogResult? ResultOnClose;
+
+        /// <summary>让 OnClose 抛异常，验证兜底在「关闭失败」这条路上仍然兑现。</summary>
+        public bool ThrowOnClose;
+
+        protected override UniTask OnOpen(object userData)
+        {
+            Log.Add("OnOpen");
+
+            if (ResultOnOpen.HasValue)
+                SetResult(ResultOnOpen.Value);
+
+            return UniTask.CompletedTask;
+        }
+
+        protected override UniTask OnClose()
+        {
+            Log.Add("OnClose");
+
+            if (ThrowOnClose)
+                throw new System.InvalidOperationException("fake dialog close failure");
+
+            if (ResultOnClose.HasValue)
+                SetResult(ResultOnClose.Value);
+
+            return UniTask.CompletedTask;
+        }
+    }
 }
