@@ -322,6 +322,10 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 }
 ```
 
+也可以走一键安装：菜单栏 **XFramework → Install Dependencies** 会把上表三个包写进 `Packages/manifest.json`，值与本表逐字相同；若检出**未钉修订**的 Git URL（旧版 README 的写法）会自动纠正，其余不一致只告警、不替你改动。
+
+> **依赖版本只有一份真相：上面这张表。** 安装器清单与 `Packages/manifest.json` 必须与它逐字一致，由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫。
+
 ### 安装 XFramework
 
 第三方依赖配置完成后，用下列两种方式之一引入 XFramework 本体。消息总线（XMessage）与响应式模块（XReactive）均为框架自研实现，无需额外依赖。
