@@ -167,7 +167,9 @@
 #### 中：发布与升级流程
 
 3. **无 git tag、无发布流程**。`CHANGELOG` 的 `[Unreleased]` 自 2026-08-20（`0.2.0`）起累积 **~660 行**、且内部 `###` 子节**按轮次重复出现 50+ 次**——不是 Keep-a-Changelog 的可读形态。`package.json` 的 `version: 0.2.0` 全手工维护。
-4. **无 API 兼容性检查**。没有 `PublicAPI.Shipped.txt` 分析器、没有 ApiCompat。而 `[Unreleased]` 里已攒了 **6 处破坏性改名**（`IUiHudProvider`→`IUIHudProvider`、`UiDiagnosticPanel`→`UIDiagnosticPanel`、`AudioChannels.Ui/Se`、`ReactiveListChangeKind`→`ReactiveCollectionChangeKind`、事件流成员去 Rx 名、集合遍历零装箱），**全靠手工记**。这与本仓「门禁」文化格格不入——它是最适合机械化的一条。
+4. ~~**无 API 兼容性检查**~~ —— **2026-10-13 已落地**。原事实：没有 `PublicAPI.Shipped.txt` 分析器、没有 ApiCompat，而 `[Unreleased]` 里已攒了 **6 处破坏性改名**，全靠手工记——「与门禁文化格格不入，最适合机械化的一条」。
+   现在的形态（**不是**分析器，也不是 ApiCompat）：`Tests/Runtime/Architecture/PublicApiBaselineTests` 反射渲染 Runtime 程序集的公开面成扁平行集合，与 `PublicApiBaseline.txt`（1961 行 / 222 个公开类型）逐行比对；差异天然两分——「已消失/已变更」（破坏性）与「新增」（源兼容）。更新走 `Tools/run-tests.ps1 -UpdateApiBaseline`（**只写盘、永不给绿灯**，绿灯由不带开关的重跑给出）。
+   **为什么没用现成分析器**：Roslyn 分析器在 Unity 侧没有可提交的 csproj 挂载点（Unity 生成的 csproj 被 git 忽略），且 `PublicAPI.Shipped.txt` 要经 `AdditionalFiles` 传给分析器——那条路本仓走不通（详见实施轮的探针结论）。**Editor 程序集（5 类型 / 10 成员）不在射程内**。
 5. **无 CI**。三条门禁全靠人工在阶段收尾时跑（`Workflow.md:122` 自述）。对外发布的项目，门禁应该挂在 push/PR 上而不是人脑里。
 6. **`package.json` 缺 6 个字段**：`keywords` / `samples` / `author` / `license` / `documentationUrl` / `changelogUrl`。UPM 列表页与详情页会因此残缺。
 7. **Samples 上不了架**。目录是 `Samples/Example/`（**非 `Samples~`**），包内有 `.sample.json` 写了 `displayName`/`description`，但 **`package.json` 没有 `samples` 数组** ⇒ Package Manager 的 Samples 页签里看不到它，反而**作为普通包资源被导入**到每个消费方工程。示例只有 7 个，覆盖 22 模块中的 6 个。
@@ -235,7 +237,7 @@
 |---|---|---|
 | 14 | **场景管理立项** | 最大缺口；立项前先回答 §4.1 的四条边界 |
 | 15 | 网络基础层 / 热更编排的**边界裁定** | 热更编排的「下载编排」一半可进框架，「更新策略」一半大概率是 Editor 工具 + 文档 |
-| 16 | **API 兼容性检查**（`PublicAPI.Shipped.txt` 分析器或 ApiCompat） | 与「门禁」文化最契合的一条；`[Unreleased]` 的 6 处破坏性变更就是它要防的东西 |
+| 16 | ~~API 兼容性检查~~ ✅ **已完成**（2026-10-13，1 提交 + 文档 1 提交） | 落成形态是**仓库自有的基线比对**（反射渲染 + 行集合差 + 显式更新开关），不是 `PublicAPI.Shipped.txt` 分析器也不是 ApiCompat——后两者在 Unity 侧没有挂载点。实测：基线 1961 行 / 222 类型 / 34 个 protected 扩展点；红证用真实历史样本（`Subscribe` 形参 `handler`→`onNext`） |
 | 17 | **CI**（push/PR 上跑三条门禁） | 需要 Unity 许可与自托管 runner，成本最高的一项 |
 | 18 | `check-docs.ps1` 收纳其余告警码（先清存量） | CS0419 优先——它隐形 |
 | 19 | ~~门面完备性守卫推广到其余模块~~ → 缩成**一问**（2026-10-13 核对：守卫已有 11 处，覆盖全部适用模块） | 剩下的是「多接口模块只守主接口」——UI 的 `IUIHudProvider`/`IUITipProvider`、Settings 的 `ISettingsStore` 要不要也守。需先裁定再动手，代价仍是一个模块十几行 |

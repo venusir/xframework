@@ -222,6 +222,7 @@
 | 候选 | 现状 |
 |---|---|
 | 跨模块 `Internal` 引用 / 公开面泄漏 internal | **已自动化**（`Tests/Editor/Architecture/ModuleBoundaryTests`） |
+| **公开 API 基线**（破坏性改名 / 删成员 / 可见性收窄 / 形参名与返回类型变更 / 枚举成员改名…） | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/PublicApiBaselineTests` 反射渲染 Runtime 程序集公开面 → 与 `PublicApiBaseline.txt`（1961 行 / 222 类型 / 34 个 protected 扩展点）逐行比对，差异分「已消失/已变更（破坏性）」与「新增（源兼容）」两段。更新走 `Tools/run-tests.ps1 -UpdateApiBaseline`（**只写盘、永不给绿灯**）。**射程**：只查 Runtime 程序集（Editor 那 5 类型 / 10 成员要另写 EditMode fixture——Runtime 测试程序集看不到它）；只查**形状**不查语义（行为变更仍靠 CHANGELOG 的行为变更表）；与 CHANGELOG 迁移表之间**没有机械联系** |
 | 门面转发缺失 | **已自动化，且已覆盖全部适用模块**（2026-10-13 核对）：守卫共 **11 处**——Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI，恰是全部「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`），形态为「接口每个声明成员在门面上存在**同名 + 同元数**的 public static 成员」。<br>**仍开着的是更细的一问**：多接口模块只守了**主**接口——UI 的守卫只覆盖 `IUIManager`，没覆盖 `IUIHudProvider` / `IUITipProvider`；Settings 只覆盖 `ISettingsManager<T>`，没覆盖 `ISettingsStore` / `IAsyncSettingsStore`。这些 provider/store 是否也要同名转发守卫，需要一次裁定。<br>**Message 不属于这一类**：`MessageManager` 是 `IMessagePublisher` / `IMessageSubscriber` 的**扩展方法宿主**（实现在 internal 的 `IMessageBroker` 上），不是「转发到可替换实现」的门面，这条不变量对它不成立。 |
 | 文档声称的 API 是否存在 | 未做：从 README 抓 `` `Type.Member` `` 记号 → 反射核存在性 |
 | **未纳门的文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / 1734 / 1735 / 1584 / 1658…） | **未做**：`check-docs.ps1` 只统计 CS1570 / CS1574，其余码在这条通道里可见而脚本不数（实测有存量，纳入 `-Enforce` 前须先清；先让脚本把它们**诊断**出来看曲线） |

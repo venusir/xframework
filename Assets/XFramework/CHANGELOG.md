@@ -28,6 +28,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   Pipeline 的真跨帧挂起与**生产墙钟超时**（EditMode 必须注入假计时器，生产路径从未被跑到）、
   Pool 的跨帧持有 / 归还 / 复用与 `IPoolable` 回调的**帧号**。
 
+- **公开 API 基线守卫（测试侧）**：Runtime 程序集的公开面由 `Tests/Runtime/Architecture/PublicApiBaselineTests`
+  锁住——反射渲染成扁平行集合（全限定成员名 `::` 签名）与 `PublicApiBaseline.txt`（1961 行 / 222 个公开类型 /
+  34 个 `protected` 扩展点）逐行比对，差异分「**已消失 / 已变更**（破坏性——改名、删成员、可见性收窄、
+  形参名或返回类型变更在行文本上都表现为「这行没了」）」与「**新增**（源兼容）」两段。签名含参数名、默认值、
+  返回类型、可访问性、泛型约束、枚举值与 `const` 字面量——0.3.0 那批真实变更里最轻的两类（**仅形参名**、
+  **返回类型**）编译器一声不吭，只有这种指纹挡得住。更新走
+  `pwsh -File Tools/run-tests.ps1 -UpdateApiBaseline`（**只写盘、永不给绿灯**，绿灯由随后一次不带开关的重跑给出）。
+  **使用方不受影响**：产出的是一份测试侧基线文件，公开面一个字都没动。
+  **射程**：只查 Runtime 程序集（Editor 那 5 类型 / 10 成员不在内）；只查**形状**不查语义——行为变更
+  （如「遮罩从此真正吃点击」）仍只能靠本文件的「行为变更」表。
+
 ### Changed
 
 - **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
@@ -74,6 +85,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Roadmap.md` §三 一句失实陈述（`InstanceTracker`「有族级守卫」）加订正框。
 - `Runtime/{Input,UI}/README.md` 的「已知限制」：相关条目改写为已修。
 - 四个模块文档补「PlayMode 侧覆盖」记录。
+- 公开 API 基线：`Workflow.md` §五 参数表加 `-UpdateApiBaseline`、§六 记两条边界（「测试反写仓库文件」的
+  唯一入口；基线与 `CHANGELOG` 迁移表之间**没有机械联系**）；`FrameworkReview.md` §4.3 第 4 条与 §五 第 16 项
+  标完成（并记「为什么没用现成分析器」）；`ModuleAudit.md` §八 的候选门禁表**新增**「公开 API 基线」一行。
 
 ## [0.3.0] - 2026-10-11
 
