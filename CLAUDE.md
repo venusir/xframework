@@ -41,7 +41,7 @@
 ## 编码规范
 
 - **命名:** 接口 `I` 前缀;私有/受保护字段 `_camelCase`;常量 PascalCase(如 `SlotFilePrefix`,不全大写);方法 `TryXxx(out T)`、`GetOrCreateXxx`;bool 属性 `IsXxx`
-- **缩写大小写:** **两字母缩写全大写**——`UI`、`IO` 而非 `Ui`、`Io`(`IUIManager` / `UIHudItem` / `AudioChannels.UI` 而非 `IUiManager` / `UiHudItem` / `Ui`);**三字母及以上按单词**(PascalCase)——`Bgm` / `Json` / `Hud`。依据 .NET 框架设计指南。这条此前是空白,导致 `IUiHudProvider` 与 `UiDiagnosticPanel` 长期与周围不一致(2026-10-11 统一);机械守卫见 `Tests/Editor/Architecture/NamingConventionTests`
+- **缩写大小写:** **两字母缩写全大写**——`UI`、`IO` 而非 `Ui`、`Io`(`IUIManager` / `UIHudItem` / `AudioChannels.UI` 而非 `IUiManager` / `UiHudItem` / `Ui`);**三字母及以上按单词**(PascalCase)——`Bgm` / `Json` / `Hud`。依据 .NET 框架设计指南。这条此前是空白,导致 `IUiHudProvider` 与 `UiDiagnosticPanel` 长期与周围不一致(2026-10-11 统一);机械守卫见 `Tests/Runtime/Architecture/NamingConventionTests`(2026-10-13 订正:此前写成 `Tests/Editor/Architecture/`,实测该文件在 Runtime 侧——它纯扫源码文本、不需要播放模式,放 Runtime 是为了不被「带 `-Filter` 且未指定平台只跑 PlayMode」的开发回路跳过)
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **行尾与文本资源由仓库根 `.gitattributes` 定:** 文本一律 LF(含 Unity 的 Force Text 资源——`*.unity`/`*.prefab`/`*.asset` 不标文本就拿不到可读 diff)、二进制显式标注、`*.bat`/`*.cmd` 保持 CRLF。它**覆盖** Windows 的 `core.autocrlf`,是新克隆与既有工作区共同的真相
 - **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
