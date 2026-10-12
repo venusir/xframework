@@ -1,7 +1,9 @@
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using XFramework.Architecture.Tests;
 using XFramework.XPool;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
@@ -16,6 +18,9 @@ namespace XFramework.XUI.Tests
     [TestFixture]
     public class UIPanelQueryTests
     {
+        /// <summary>粗尺子阈值 = 实测坏形态信号 1/4（校准方法与数值见 Timer 侧同批用例）。</summary>
+        private const long AllocationThresholdBytes = 400_000;
+
         private GameObject _root;
         private FakePanelFactory _factory;
 
@@ -195,18 +200,31 @@ namespace XFramework.XUI.Tests
                 await UIManager.OpenAsync<FakePanel>($"ui/p{i}");
 
             var buffer = new List<UIPanelBase>(8);
-            for (int i = 0; i < 4; i++)
-                UIManager.CopyPanels(buffer);   // 预热：容量与内部状态就位
 
-            long before = System.GC.GetAllocatedBytesForCurrentThread();
+            AllocationRuler.AssertNoHeapGrowth("反复复制面板列表 10 万次",
+                () => UIManager.CopyPanels(buffer), 100_000, AllocationThresholdBytes);
+        }
 
-            for (int i = 0; i < 100; i++)
-                UIManager.CopyPanels(buffer);
+        /// <summary>
+        /// 结构断言：显示栈声明为<b>具体的</b> <c>List&lt;UIPanelBase&gt;</c>。
+        /// <para><b>为什么这是证据</b>：<c>CopyPanels</c> 的复制走 <c>buffer.AddRange(_stack)</c>，
+        /// 而 <c>AddRange</c> 只有在实参<b>运行期</b>实现 <c>ICollection&lt;T&gt;</c> 时才走 <c>CopyTo</c>
+        /// 快速路径、不经枚举器。字段声明为 <c>List&lt;UIPanelBase&gt;</c> 就保证了运行期对象必然实现它
+        /// （任何赋值进这个字段的对象都得是 <c>List&lt;UIPanelBase&gt;</c>）——源码里那句注释
+        /// 「List 走 ICollection 快速路径，不经枚举器，不分配」由此被钉住。附带效果：声明成接口会让
+        /// 将来任何 <c>foreach (_stack)</c> 每次装箱一个枚举器（Message 侧刚实测过这一档：≈23 B/次）。</para>
+        /// <para><b>射程</b>：拦不住复制路径被改写成 LINQ 或引入临时容器——那由粗尺子兜底。</para>
+        /// </summary>
+        [Test]
+        public void CopyPanels_StructuralEvidence_SourcesFromAConcreteList()
+        {
+            var field = typeof(UIManagerImpl).GetField("_stack", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "UIManagerImpl._stack 找不到——改名了？");
 
-            long allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
-
-            Assert.AreEqual(0, allocated,
-                "CopyPanels 是零分配主入口——由调用方持有缓冲区，逐帧查询也不该产生 GC");
+            Assert.AreEqual(typeof(List<UIPanelBase>), field.FieldType,
+                $"_stack 的声明类型是 {field.FieldType}——必须是具体 List<UIPanelBase>：" +
+                "声明成接口会失去「运行期必然实现 ICollection<T>」这条快速路径前提，" +
+                "且让 foreach 每次装箱一个枚举器");
         }
 
         [Test]

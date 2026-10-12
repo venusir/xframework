@@ -1,7 +1,9 @@
+using System.Reflection;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using XFramework.Architecture.Tests;
 using XFramework.XUpdate;
 
 namespace XFramework.XUI.Tests
@@ -14,6 +16,9 @@ namespace XFramework.XUI.Tests
     [TestFixture]
     public class UIDiagnosticsTests
     {
+        /// <summary>粗尺子阈值 = 实测坏形态信号 1/4（校准方法与数值见 Timer 侧同批用例）。</summary>
+        private const long AllocationThresholdBytes = 400_000;
+
         private GameObject _root;
         private FakePanelFactory _factory;
 
@@ -106,16 +111,41 @@ namespace XFramework.XUI.Tests
         {
             await UIManager.OpenAsync<FakePanel>("ui/a");
 
-            for (int i = 0; i < 4; i++)
-                UIManager.GetState();   // 预热
+            AllocationRuler.AssertNoHeapGrowth("读取状态快照 10 万次",
+                () => UIManager.GetState(), 100_000, AllocationThresholdBytes);
+        }
 
-            long before = System.GC.GetAllocatedBytesForCurrentThread();
-            for (int i = 0; i < 100; i++)
-                UIManager.GetState();
-            long allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
+        /// <summary>
+        /// 结构断言：快照是纯值类型、实例字段全为值类型且 <c>readonly</c>，返回类型也钉在快照上。
+        /// <para><b>为什么这是「<c>GetState</c> 不分配」的确定性证据</b>：构造一个没有引用字段的值类型
+        /// 不可能触发堆分配——这正是本类型 XML 自述「纯值类型、无引用字段，读取时零分配」的机械化。</para>
+        /// <para><b>射程</b>：拦不住 <c>GetState</c> 内部的其它动作（它还会跑 <c>PruneStack</c>）——
+        /// 那一段由粗尺子兜底。</para>
+        /// </summary>
+        [Test]
+        public void GetState_StructuralEvidence_PureValueType()
+        {
+            var snapshot = typeof(UIStateSnapshot);
 
-            Assert.AreEqual(0, allocated,
-                "快照是纯值类型，调试面板以 2Hz 刷新也不该产生 GC");
+            Assert.IsTrue(snapshot.IsValueType,
+                "UIStateSnapshot 必须是值类型——改成类即意味着每次 GetState 都分配一个快照对象");
+
+            var fields = snapshot.GetFields(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+            Assert.IsNotEmpty(fields, "UIStateSnapshot 一个实例字段都没有？反射没找对目标");
+
+            foreach (var field in fields)
+            {
+                Assert.IsTrue(field.FieldType.IsValueType,
+                    $"UIStateSnapshot.{field.Name} 的类型是 {field.FieldType}——出现引用类型字段，" +
+                    "快照构造就可能触发堆分配，调试面板的刷新循环会开始产生 GC");
+                Assert.IsTrue(field.IsInitOnly,
+                    $"UIStateSnapshot.{field.Name} 不是 readonly——快照必须不可变");
+            }
+
+            var getState = typeof(IUIManager).GetMethod("GetState", System.Type.EmptyTypes);
+            Assert.IsNotNull(getState, "IUIManager.GetState() 找不到——改名了？");
+            Assert.AreEqual(snapshot, getState.ReturnType,
+                "IUIManager.GetState() 的返回类型变了——快照一旦是类或接口，每次读取都会分配");
         }
 
         #endregion

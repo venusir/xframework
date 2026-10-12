@@ -210,6 +210,15 @@ Runtime/UI/
 - **`Dispose` 半拆窗口的语义**：注释声明窗口内的门面调用「按半拆状态执行」，实际前半段是**全量放行**
   （重入 `OpenAsync` 会造出不被回收的孤儿面板），尾部两行才转为抛「尚未初始化」。真正的「半拆」需要一个
   `_disposing` 状态位（与「未初始化」区分开），代价是每个入口都要多一个分支；本轮只如实记录。
+- ~~`UIDiagnosticsTests` / `UIPanelQueryTests` 的零分配断言用的是恒真尺子~~ —— **2026-10-12 已处置**：
+  两处站点改为「结构断言 + 放大粗尺子」两道防线（此前只记在 `Workflow.md` §六 的跨模块清单里，本模块
+  自己没有落点）。结构侧：`UIStateSnapshot` 是纯值类型——实例字段全为值类型且 `readonly`、`readonly struct`，
+  连 `IUIManager.GetState()` 的返回类型也钉住——**构造它不可能触发堆分配**；`UIManagerImpl._stack` 必须是
+  具体 `List<UIPanelBase>`——这保证 `CopyPanels` 的 `buffer.AddRange(_stack)` 在运行期必然命中
+  `ICollection<T>` 快速路径（源码注释自述的「不经枚举器，不分配」由此被钉住），声明成接口则连 `foreach`
+  都会装箱枚举器。尺子侧：两处各放大 10 万次，实测堆增量均为 **0 B**。红证：注入 `new object()` →
+  524,288 / 1,564,672 B；`UIStateSnapshot` 改类、`_stack` 改接口声明 → 两条结构断言各自命中。
+  校准方法与模板见 `Documentation/Workflow.md` §六。
 
 **已实测的重载决议结论**（防下一轮重新论证）：`UIManager.Subscribe` 的三个 `Action<T>` 重载下，
 **无类型 lambda**（`Subscribe(m => { })`）是编译错误 CS0121（不是静默挑一个），带显式参数类型的
