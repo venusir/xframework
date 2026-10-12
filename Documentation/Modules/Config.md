@@ -15,6 +15,7 @@
 | 2026-08 | `ConfigTable<T>.GetRows` 新增 `Comparison<T>` 排序重载（缓冲版/便捷版，参照 GameFramework `GetDataRows(Predicate, Comparison)` 形态） |
 | 2026-08 | `ConfigTable<T>` 新增谓词条件查询：`TryGet(predicate, out)` 单匹配、`GetRows(predicate[, List<T>])` 多匹配（缓冲版零 GC）、`Exists(predicate)` 存在性判断 |
 | 2026-08 | 取消语义澄清（取消仅中断调用方等待，底层加载仍会完成并注册）、CsvLoader 按列名匹配成员、文档对齐实现（示例修正为真实签名、移除未实现的「后处理钩子」描述） |
+| 2026-10-12 | **补 PlayMode 侧覆盖**（`Tests/Runtime/Config/ConfigPreloadFrameTests`，此前 65 条用例全在 `Tests/Editor/`）：三条都要求「加载真的跨了几帧」——① 挂起期可观测（`InFlightLoadCount`）；② 并发共享的是**跨帧**的那一个在途任务（此前 Editor 用例验的是同步共享）；③ 上表 2026-08 那条「取消仅中断调用方等待」**第一次被真帧验证**。配套 Runtime 侧 `FakeConfigLoader`（与 Editor 树同名那份互不可见，各存一份是既有先例）。 |
 | 2026-05 | 新增 CSV 格式、非主键索引（`ConfigIndexView`）、批量加载（`ConfigManifest` + `PreloadGroupAsync` / `PreloadAllAsync`）、自定义 `IConfigLoader` 注入、`ConfigTable<T>` 包装器（TKey 由实参自动推断）、`IConfigManager` 接口抽象、`Get` / `TryGet` 便捷查询 |
 
 详细变更见 git log。
