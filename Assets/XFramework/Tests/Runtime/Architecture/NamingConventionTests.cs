@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using UnityEngine;
 
 namespace XFramework.Architecture.Tests
 {
@@ -55,16 +53,12 @@ namespace XFramework.Architecture.Tests
         [Test]
         public void TwoLetterAcronyms_AreAllCaps()
         {
-            var packageRoot = Path.Combine(Application.dataPath, "XFramework");
-            Assert.IsTrue(Directory.Exists(packageRoot),
-                $"找不到包目录：{packageRoot}（测试壳的 Assets 是否为 junction?）");
-
             var violations = new List<string>();
 
-            foreach (var file in Directory.GetFiles(packageRoot, "*.cs", SearchOption.AllDirectories))
+            foreach (var file in SourceScanner.EnumerateSources())
             {
-                var relative = file.Substring(packageRoot.Length + 1).Replace('\\', '/');
-                var lines = ReadCodeOnly(file).Split('\n');
+                var relative = SourceScanner.RelativePath(file);
+                var lines = SourceScanner.ReadCodeOnly(file).Split('\n');
 
                 for (int i = 0; i < lines.Length; i++)
                 {
@@ -81,26 +75,6 @@ namespace XFramework.Architecture.Tests
                 "以下位置用了两字母缩写的错误大小写。规则：两字母缩写全大写（`UI` / `IO`），" +
                 "三字母及以上按单词（`Bgm` / `Json`）。改名时注意同步改文件名与 .meta：\n  " +
                 string.Join("\n  ", violations));
-        }
-
-        /// <summary>
-        /// 读出「只有代码」的文本：注释行按原行数置空，故行号仍与源文件一致。
-        /// <para>与 <c>ModuleBoundaryTests.ReadCodeOnly</c> 同形（两处副本；若出现第三处就该抽出来了）。</para>
-        /// </summary>
-        private static string ReadCodeOnly(string file)
-        {
-            var lines = File.ReadAllLines(file);
-            for (int i = 0; i < lines.Length; i++)
-            {
-                var trimmed = lines[i].TrimStart();
-                if (trimmed.StartsWith("//", StringComparison.Ordinal) ||
-                    trimmed.StartsWith("*", StringComparison.Ordinal) ||
-                    trimmed.StartsWith("/*", StringComparison.Ordinal))
-                {
-                    lines[i] = string.Empty;
-                }
-            }
-            return string.Join("\n", lines);
         }
 
         #endregion

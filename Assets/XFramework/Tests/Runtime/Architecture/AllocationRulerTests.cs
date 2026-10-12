@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace XFramework.Architecture.Tests
@@ -89,6 +92,91 @@ namespace XFramework.Architecture.Tests
                 $"零分配的 10 万次迭代读到了 {growth} B 的增长，噪声地板高于 " +
                 $"{AllocationRuler.QuietFloorBytes} B——下游粗尺子的最小阈值（320 KB）只剩不到 3 倍余量，" +
                 "它们全部失去证据力");
+        }
+
+        #endregion
+
+        #region 坏尺子源码守卫
+
+        /// <summary>
+        /// 两把在本环境**恒返回 0** 的分配尺子。任何地方都不许用——测试里用它就是恒真断言，
+        /// 生产里用它就是假遥测。
+        /// <para><b><c>[B]</c> / <c>[M]</c> 是字符类自规避</b>：本守卫会扫到自己，模式字面量里直接写全
+        /// 也会在自己的定义处命中（同 <c>NamingConventionTests</c> 的 <c>[U]i</c>）。
+        /// **刻意不给本文件开豁免**——豁免是把守卫挖出一个洞。</para>
+        /// </summary>
+        private static readonly Regex[] BrokenRulers =
+        {
+            new Regex(@"GC\.GetAllocated[B]ytesForCurrentThread"),
+            new Regex(@"Profiler\.GetTotalAllocatedMemory[M]Long"),
+        };
+
+        /// <summary>唯一可用的分配尺子——它是共享工具的内部实现，只许出现在那里。</summary>
+        private static readonly Regex SharedRulerReader = new Regex(@"Profiler\.GetMonoUsed[S]izeLong");
+
+        /// <summary>唯一允许读那把可用尺子的文件（白名单即「唯一实现」这条约束本身）。</summary>
+        private const string SharedRulerFile = "Tests/Runtime/Architecture/AllocationRuler.cs";
+
+        /// <summary>
+        /// 两把恒零尺子在包内必须零命中。**在全部 11 处站点改造完成之后提交**——在那之前它自己是红的。
+        /// </summary>
+        [Test]
+        public void BrokenRulers_AreNotUsedAnywhereInThePackage()
+        {
+            var violations = new List<string>();
+
+            foreach (var pattern in BrokenRulers)
+                violations.AddRange(Scan(pattern, null));
+
+            Assert.IsEmpty(violations,
+                "以下位置用了恒返回 0 的分配尺子——它们读到的永远是 0：写在测试里就是恒真断言" +
+                "（本仓有 11 处这样躺了数月才被发现），写在生产里就是假遥测。替代处置：\n" +
+                "  · 要证「不分配」→ 优先结构断言（见 Timer / Message / UI 的 StructuralEvidence 用例），" +
+                "兜底用共享工具 AllocationRuler；\n" +
+                "  · 要观测「没发生」→ 用直接观测（探针 ToString 计数 / 计数 sink，见 Log 侧用例）；\n" +
+                "  · 真要与这两把尺子对话（例如再做一次本环境的实测探针）→ 做成不入仓的一次性探针。\n  " +
+                string.Join("\n  ", violations));
+        }
+
+        /// <summary>
+        /// 可用的那把尺子只许有<b>一个</b>读者：共享工具本身。各 fixture 各写一份测量循环，
+        /// 就是「好形态靠复制扩散」——预热次数、双 Collect、放大倍数、阈值口径会各自漂移，
+        /// 而它们本该只有一份。
+        /// </summary>
+        [Test]
+        public void SharedRuler_IsReadOnlyByTheOneTool()
+        {
+            var violations = Scan(SharedRulerReader, relative => relative == SharedRulerFile);
+
+            Assert.IsEmpty(violations,
+                $"这把可用的分配尺子只允许出现在 {SharedRulerFile} 一个文件里——那里是唯一的测量实现，" +
+                "各 fixture 请调用 AllocationRuler 的断言方法（迭代数与阈值由调用方给，机制只有一份）。\n  " +
+                string.Join("\n  ", violations));
+        }
+
+        /// <summary>
+        /// 扫描包内全部 <c>.cs</c>（注释行已剥），返回命中位置；<paramref name="isAllowed"/> 为 <c>null</c>
+        /// 表示没有任何豁免。
+        /// </summary>
+        private static List<string> Scan(Regex pattern, Func<string, bool> isAllowed)
+        {
+            var hits = new List<string>();
+
+            foreach (var file in SourceScanner.EnumerateSources())
+            {
+                var relative = SourceScanner.RelativePath(file);
+                if (isAllowed != null && isAllowed(relative))
+                    continue;
+
+                var lines = SourceScanner.ReadCodeOnly(file).Split('\n');
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (pattern.IsMatch(lines[i]))
+                        hits.Add($"{relative}:{i + 1}  {lines[i].Trim()}");
+                }
+            }
+
+            return hits;
         }
 
         #endregion
