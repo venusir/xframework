@@ -99,6 +99,12 @@ Runtime/Asset/
   回归用例：`Tests/Runtime/Architecture/SessionResetTests`（3 条，已做改前必红，包括「在途初始化复活」那条）。
   配套新增 Runtime 侧最小假件 `Tests/Runtime/Asset/FakeAssetManager`（此前 Runtime 树只有 UI 侧那个池替身，
   它对 `InitializeAsync` 抛 NotUsed）。
+- **`InstanceTracker` 的退出订阅**（同轮）—— 它原用**静态构造函数 + 匿名 lambda** 订阅 `Application.quitting`：
+  lambda 退订不了、按特性扫描的族清单**扫不到静态构造**、`_activeCounts` 也没有复位入口
+  （`AssetPoolTests` 此前只能用「计数平衡」代替复位）。现改为具名 `AutoInit`（挂 `SubsystemRegistration`：
+  会话开始清空计数 + 幂等 `-=`/`+=` 订阅）并登记进族清单。回归用例：
+  `SessionResetTests.InstanceTracker_ResetClearsStaleActiveCounts`（已做改前必红）。
+  `Roadmap.md` §三 那句「`Application.quitting` 六处……有族级守卫」当时对它是**失实**的，已订正。
 
 ## 审计轮次
 

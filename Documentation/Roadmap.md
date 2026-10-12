@@ -129,7 +129,9 @@
 
 **另有一项不进本表**：**App 生命周期**（前后台 / 焦点 / 低内存 / 退出）。2026-10-01 专项盘点后**裁定暂不做**，理由与升级判据记在这里。
 
-**现状几乎不是缺口。** 五个事件里三个已有消费者且工作正常——`Application.quitting` 六处（Update / Lock / Message / Audio / Pool / InstanceTracker，有 `AutoInitTests` 族级守卫）、`Application.lowMemory` 一处（Asset，带开关）、`Application.wantsToQuit` 一处（Settings，带开关）；第四个 `Application.focusChanged` **零消费者**。唯一的真缺口是 `pause`：Unity 的静态事件里没有它，只能由 MonoBehaviour 接收，而全仓只有一处消费者（`Settings` 自持 80 行宿主，`Runtime/Settings/SettingsPauseNotifier.cs` 的注释正是写着这件事）。使用方入口确实为零——第三方要接前后台只能自己写 MonoBehaviour——但那是十行的轮子。
+**现状几乎不是缺口。** 五个事件里三个已有消费者且工作正常——`Application.quitting` 六处（Update / Lock / Message / Audio / Pool / InstanceTracker，有 `AutoInitTests` 族级守卫）、`Application.lowMemory` 一处（Asset，带开关）、`Application.wantsToQuit` 一处（Settings，带开关）；第四个 `Application.focusChanged` **零消费者**。
+
+> **2026-10-12 订正**：上一段里「六处……有 `AutoInitTests` 族级守卫」当时对 `InstanceTracker` **不成立**——它用的是**静态构造函数 + 匿名 lambda**，而族清单按特性扫描，扫不到静态构造（`Documentation/Modules/Input.md` 当时就指出过这处矛盾，是这句话失实）。本轮已把 `InstanceTracker` 改成具名 `AutoInit`（幂等订阅 + 会话开始清空计数）并登记进族清单，这句话从今天起才成立。原文保留以留痕。唯一的真缺口是 `pause`：Unity 的静态事件里没有它，只能由 MonoBehaviour 接收，而全仓只有一处消费者（`Settings` 自持 80 行宿主，`Runtime/Settings/SettingsPauseNotifier.cs` 的注释正是写着这件事）。使用方入口确实为零——第三方要接前后台只能自己写 MonoBehaviour——但那是十行的轮子。
 
 **为什么不现在做**：唯一真缺口只有 1 个消费者，代价却是一个完整模块（对照刚建成的 Audio：17 文件 / 5 提交 / 136 用例）。更要紧的是，为 1.5 个消费者设计一个公开事件源时，形状（边沿还是电平？`pause` 与 `focus` 是否归一？桌面上什么算「切后台」？订阅顺序？）**每一条都是猜的**，撞 `CLAUDE.md` 的「避免臆测」。
 

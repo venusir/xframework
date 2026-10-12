@@ -103,6 +103,7 @@ namespace XFramework.Architecture.Tests
             FileManager.ResetForNewSession();
             AssetManager.ResetForNewSession();
             Bootstrap.ResetForNewSession();
+            InstanceTracker.AutoInit();
         }
 
         #endregion
@@ -113,6 +114,31 @@ namespace XFramework.Architecture.Tests
         /// 登记表是静态的，同样跨会话存活——而会话 2 只能**追加**新阶段实例，
         /// 旧实例会留在表里被一起装配。所以会话开始必须清空它。
         /// </summary>
+        /// <summary>
+        /// <c>InstanceTracker</c> 的活跃计数是静态的，同样跨会话存活。它此前靠**静态构造函数 + 匿名 lambda**
+        /// 订阅退出清理——退订不了、族清单也扫不到；现在改成具名 <c>AutoInit</c>（幂等订阅 + 会话开始清空）。
+        /// </summary>
+        [Test]
+        public void InstanceTracker_ResetClearsStaleActiveCounts()
+        {
+            var go = new GameObject("InstanceTracker_SessionResetTest");
+            var tracker = go.AddComponent<InstanceTracker>();
+            tracker.Location = "ui/a";
+
+            // AddComponent 时的 OnEnable 早于 Location 赋值（被跳过），这里靠一次失活/激活补记
+            go.SetActive(false);
+            go.SetActive(true);
+            Assert.AreEqual(1, InstanceTracker.GetActiveCount("ui/a"), "前提校验：活跃计数应当已记上");
+
+            SimulateNewSession();
+
+            Assert.AreEqual(0, InstanceTracker.GetActiveCount("ui/a"),
+                "会话开始时活跃计数必须清零——上一会话的实例早已随域销毁，留着就是幽灵计数");
+
+            // 直接销毁是安全的：从未 SetHandle 过的追踪器持有 default 句柄，其 Dispose 是空操作
+            UnityEngine.Object.DestroyImmediate(go);
+        }
+
         [Test]
         public void Bootstrap_ResetClearsTheStageRegistry()
         {

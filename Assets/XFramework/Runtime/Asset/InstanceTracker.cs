@@ -30,10 +30,28 @@ namespace XFramework.XAsset
         /// <summary>location → 当前活跃（SetActive(true)）实例数，供 <see cref="IAssetManager.GetPoolStatus"/> 统计。</summary>
         private static readonly Dictionary<string, int> _activeCounts = new Dictionary<string, int>();
 
-        static InstanceTracker()
+        /// <summary>
+        /// 会话开始时的自初始化：清掉上一会话残留的活跃计数，并挂上退出清理。
+        /// <para><b>为什么不是静态构造函数 + 匿名 lambda</b>：那种写法**退订不了**（lambda 拿不到句柄），
+        /// 且按特性扫描的族清单守卫（<c>AutoInitTests</c>）扫不到静态构造——它会成为一处无守卫的静态状态
+        /// 落点，而本类正是「关闭域重载时静态状态跨会话存活」的典型（原注释写「由域重载自动重置」，
+        /// 关掉域重载就不成立了）。改成具名方法 + 幂等订阅后，它进得了族清单，形态也与其它模块一致。</para>
+        /// <para><b>为什么档位是 <c>SubsystemRegistration</c></b>：必须在任何实例化之前清空，
+        /// 否则上一会话的计数会与新会话的混在一起；这是最早的托管入口。开域重载时清空是纯空操作。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void AutoInit()
         {
-            // 运行时退出时清理静态计数；Editor 退出播放模式时由域重载自动重置
-            Application.quitting += () => _activeCounts.Clear();
+            _activeCounts.Clear();
+
+            Application.quitting -= OnQuitting;
+            Application.quitting += OnQuitting;
+        }
+
+        /// <summary>退出时清理静态计数。幂等；重挂由 <see cref="AutoInit"/> 负责，本方法不自退订。</summary>
+        private static void OnQuitting()
+        {
+            _activeCounts.Clear();
         }
 
         /// <summary>
