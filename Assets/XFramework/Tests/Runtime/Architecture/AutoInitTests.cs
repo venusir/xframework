@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XAudio;
+using XFramework.XBootstrap;
 using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XInput;
@@ -67,6 +68,7 @@ namespace XFramework.Architecture.Tests
             (typeof(LocalizationManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(FileManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(AssetManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(Bootstrap), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
         [Test]

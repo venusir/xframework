@@ -185,6 +185,25 @@ namespace XFramework.XBootstrap
             StageList.Clear();
         }
 
+        /// <summary>
+        /// 会话开始时清空静态登记表。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时 <see cref="StageList"/> 会跨播放会话存活，而会话 2 的
+        /// <c>ConfigureStages</c> 只能**追加**新实例（<see cref="Register"/> 按实例去重、
+        /// <see cref="RegisterDefaults"/> 按类型跳过）——旧阶段实例留在表里被一起装配：同相位并行双跑
+        /// （旧阶段握着上一会话已销毁场景的引用），退出时还会被双份 <see cref="Shutdown"/>
+        /// （第二次 <c>AssetManager.Destroy</c> 撞上已置空的实例）。
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于
+        /// <c>GameLauncher.ConfigureStages</c> 的登记；开域重载时登记表本就是空的，本方法退化为空操作。</para>
+        /// <para><b>与 <see cref="Clear"/> 的分工</b>：那个的定位是「测试复位用」，这里是「会话开始」的自动复位
+        /// ——两者都只清登记表，不影响已初始化的服务。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            StageList.Clear();
+            _isRunning = false;
+        }
+
         #endregion
 
         #region Run / Shutdown

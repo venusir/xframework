@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -8,9 +9,11 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XAsset.Tests;
+using XFramework.XBootstrap;
 using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
+using XFramework.XPipeline;
 using XFramework.XUI;
 using XFramework.XUpdate;
 
@@ -31,6 +34,25 @@ namespace XFramework.Architecture.Tests
     [TestFixture]
     public class SessionResetTests
     {
+        #region Test Doubles
+
+        /// <summary>最小引导阶段：登记表用例只关心「在不在表里」。</summary>
+        private sealed class StubStage : IBootstrapStage
+        {
+            public int Phase => 0;
+            public string Name => nameof(StubStage);
+            public float Weight => 1f;
+
+            public UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
+                => UniTask.CompletedTask;
+
+            public void Shutdown()
+            {
+            }
+        }
+
+        #endregion
+
         #region Fixture
 
         private GameObject _uiRoot;
@@ -45,6 +67,7 @@ namespace XFramework.Architecture.Tests
             FileManager.Destroy();
             AssetManager.Destroy();
             AssetManager.ImplFactory = null;
+            Bootstrap.Clear();
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
@@ -60,6 +83,7 @@ namespace XFramework.Architecture.Tests
             FileManager.Destroy();
             AssetManager.Destroy();
             AssetManager.ImplFactory = null;
+            Bootstrap.Clear();
 
             if (_uiRoot != null)
                 UnityEngine.Object.DestroyImmediate(_uiRoot);
@@ -78,6 +102,28 @@ namespace XFramework.Architecture.Tests
             LocalizationManager.ResetForNewSession();
             FileManager.ResetForNewSession();
             AssetManager.ResetForNewSession();
+            Bootstrap.ResetForNewSession();
+        }
+
+        #endregion
+
+        #region 静态登记表
+
+        /// <summary>
+        /// 登记表是静态的，同样跨会话存活——而会话 2 只能**追加**新阶段实例，
+        /// 旧实例会留在表里被一起装配。所以会话开始必须清空它。
+        /// </summary>
+        [Test]
+        public void Bootstrap_ResetClearsTheStageRegistry()
+        {
+            Bootstrap.Register(new StubStage());
+            Assert.AreEqual(1, Bootstrap.Stages.Count, "前提校验：阶段应当已登记");
+
+            SimulateNewSession();
+
+            Assert.AreEqual(0, Bootstrap.Stages.Count,
+                "会话开始时登记表必须清空——否则第二会话的 ConfigureStages 只能追加，" +
+                "旧阶段实例会被一起装配（同相位并行双跑），退出时还会被双份 Shutdown");
         }
 
         #endregion

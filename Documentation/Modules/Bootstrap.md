@@ -58,7 +58,14 @@
 **未决（2026-10-02 追加）**：
 
 - **Pipeline 侧子阶段粒度超时**：Bootstrap 每相位装配为一个 `ParallelStage`，而超时只在管线**顶层阶段**粒度存在——从 Bootstrap 侧无法为单个引导阶段设置超时，不响应取消的挂死阶段会挂死整个启动（已记进 Bootstrap README 的已知限制）。修法在 Pipeline（`ParallelStage` 支持子阶段超时），未立项。
-- **静态登记表跨播放会话存活**：关闭域重载（Enter Play Mode Options → 取消 Reload Domain）时，上一轮播放登记的阶段不会被自动清除，而 `Clear()` 目前被文档标注为「测试复位用」。与 Update / Input 等模块的「会话级复位」是同一族问题（框架级，非本模块可独解）。
+- ~~静态登记表跨播放会话存活~~ —— **2026-10-12 已修**：关闭域重载时上一轮播放登记的阶段不会被自动清除，
+  而会话 2 的 `ConfigureStages` 只能**追加**新实例（`Register` 按实例去重、`RegisterDefaults` 按类型跳过）
+  ——旧阶段实例留在表里被一起装配：同相位并行双跑（旧阶段握着上一会话已销毁场景的引用），
+  退出时还会被双份 `Shutdown`（第二次 `AssetManager.Destroy` 撞上已置空的实例）。
+  现在 `Bootstrap` 也有会话复位钩子（`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的
+  `SubsystemRegistration` 档，早于首场景 `Awake` 因而早于 `GameLauncher.ConfigureStages`）。
+  **`Clear()` 的定位不变**（测试复位用）——两者都只清登记表、不影响已初始化的服务。
+  回归用例：`Tests/Runtime/Architecture/SessionResetTests.Bootstrap_ResetClearsTheStageRegistry`（已做改前必红）。
 - **运行中 `Shutdown` 与在途 `RunAsync` 交叠**：与上面 GameLauncher 那条同源，仍未实测。
 
 ## 审计轮次
