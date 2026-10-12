@@ -42,7 +42,13 @@ Runtime/Localization/
 - `SetLanguageData` 覆盖当前语言数据时是否该补一条事件面。
 - **键值占位符要不要递归**：本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。
   真要做递归得先定环检测（A→B→A）与深度上限。
-- **MonoBehaviour 分支的订阅绑定没有直接用例**：实测 EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`，该分支只能在 PlayMode 覆盖，而本模块的测试全在 `Tests/Editor/Localization/`，本轮未新增 PlayMode fixture。该分支由 `MessageManager.TryBindToDestroy` 承担，全仓目前都没有直接用例。
+- ~~MonoBehaviour 分支的订阅绑定没有直接用例~~ —— **2026-10-12 已补**：EditMode 下 `Object.DestroyImmediate`
+  **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在
+  PlayMode 覆盖。新增 `Tests/Runtime/Localization/LocalizationDestroyBindingTests`（2 例，本模块第一次有
+  PlayMode 侧）——验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` →
+  `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完
+  时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。
+  注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
 - **`IDestroyCancellationToken` 的实现范例有坑**（属 Message 模块，本轮只记录）：`Runtime/Message/IDestroyCancellationToken.cs` 的 XML 示例写的是 `public CancellationToken DestroyCancellationToken => _cts.Token;` 配 `Dispose()` 里 `_cts.Dispose()`——照抄会在对象销毁后抛 `ObjectDisposedException`，因为 `CancellationTokenSource.Token` 在源释放后不可读（实测撞上）。正解是构造时把令牌取出来缓存。
 
 ## 审计轮次
