@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using XFramework.Architecture.Tests;
 using XFramework.XMessage;
+using XFramework.XMessage.Internal;
 
 namespace XFramework.XMessage.Tests
 {
@@ -13,6 +16,9 @@ namespace XFramework.XMessage.Tests
     [TestFixture]
     public class MessageStatsTests
     {
+        /// <summary>粗尺子阈值 = 实测坏形态信号 1/4（校准方法与数值见 Timer 侧同批用例）。</summary>
+        private const long AllocationThresholdBytes = 400_000;
+
         private sealed class TestMessage
         {
             public int Value { get; set; }
@@ -336,18 +342,78 @@ namespace XFramework.XMessage.Tests
             MessageManager.Publish(new AnotherMessage { Value = 3 });
 
             var buffer = new List<MessageTypeStats>(8);
-            for (int i = 0; i < 4; i++)
-                MessageManager.CopyTypeStats(buffer);   // 预热:容量与内部状态就位
 
-            long before = GC.GetAllocatedBytesForCurrentThread();
+            AllocationRuler.AssertNoHeapGrowth("反复复制类型统计 10 万次",
+                () => MessageManager.CopyTypeStats(buffer),
+                100_000, AllocationThresholdBytes);
+        }
 
-            for (int i = 0; i < 100; i++)
-                MessageManager.CopyTypeStats(buffer);
+        /// <summary>
+        /// 「反复复制统计不分配」的三处结构证据。
+        /// <para><b>为什么这些算证据</b>：① 每一行是<b>值类型</b>——<c>buffer.Add(new MessageTypeStats(…))</c>
+        /// 既不装箱也不新建行对象，其唯一的引用字段是 <c>System.Type</c>（指向既有的类型对象，
+        /// 如 <c>typeof(TestMessage)</c>——它不因统计而创建）；② 累加器是<b>值类型</b>且以 <c>ref</c>
+        /// 逐通道传递（<c>IMessageChannel.Accumulate</c> 的签名就是这条契约），逐层累加没有中间对象；
+        /// ③ broker 的两张表<b>声明为具体泛型字典而不是接口</b>——接口声明会让每次 <c>foreach</c>
+        /// 装箱一个枚举器，<c>MessageChannel.cs</c> 的注释自述这正是要避免的东西。</para>
+        /// <para><b>射程</b>：拦不住实现里新增的临时容器、闭包或 LINQ——那由粗尺子兜底。</para>
+        /// </summary>
+        [Test]
+        public void CopyTypeStats_StructuralEvidence_NoBoxing()
+        {
+            Assert.IsTrue(typeof(MessageTypeStats).IsValueType,
+                "MessageTypeStats 必须是值类型——变成类即意味着每行一次分配");
 
-            long allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+            foreach (var field in typeof(MessageTypeStats).GetFields(
+                         BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic))
+            {
+                Assert.IsTrue(field.FieldType.IsValueType || field.FieldType == typeof(Type),
+                    $"MessageTypeStats.{field.Name} 的类型是 {field.FieldType}——除 System.Type（指向既有类型对象）" +
+                    "之外不该有别的引用类型字段，否则每行都可能新建对象");
+            }
 
-            Assert.AreEqual(0, allocated,
-                "由调用方持有缓冲区,反复调用不应产生 GC——这是「零分配主入口」的全部意义");
+            Assert.IsTrue(typeof(MessageStatsAccumulator).IsValueType,
+                "MessageStatsAccumulator 必须是值类型——它以 ref 逐通道传递，正是为了避免装箱与中间分配");
+
+            var accumulate = typeof(IMessageChannel).GetMethod("Accumulate");
+            Assert.IsNotNull(accumulate, "IMessageChannel.Accumulate 找不到——改名了？");
+
+            var parameters = accumulate.GetParameters();
+            Assert.AreEqual(1, parameters.Length, "Accumulate 应当只有一个参数");
+            Assert.IsTrue(parameters[0].ParameterType.IsByRef,
+                "Accumulate 的参数必须按 ref 传递——按值传递会逐通道复制一份累加器");
+            Assert.AreEqual(typeof(MessageStatsAccumulator), parameters[0].ParameterType.GetElementType(),
+                "Accumulate 的参数类型应当是 MessageStatsAccumulator");
+
+            AssertDeclaredAsConcreteDictionary(typeof(MessageBroker), "_channels");
+            AssertDeclaredAsConcreteDictionary(typeof(MessageBroker), "_keyedChannels");
+        }
+
+        /// <summary>
+        /// 断言某字段声明为<b>具体的泛型字典</b>而非接口：接口声明会让 <c>foreach</c> 每次装箱一个枚举器。
+        /// </summary>
+        private static void AssertDeclaredAsConcreteDictionary(Type type, string fieldName)
+        {
+            var field = type.GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"{type.Name}.{fieldName} 找不到——改名了？");
+
+            Assert.IsFalse(field.FieldType.IsInterface,
+                $"{type.Name}.{fieldName} 的声明类型是接口 {field.FieldType}——接口声明会让 foreach " +
+                "每次装箱一个枚举器（MessageChannel.cs 的注释自述这正是要避免的）");
+
+            bool isDictionary = false;
+            foreach (var face in field.FieldType.GetInterfaces())
+            {
+                if (face.IsGenericType && face.GetGenericTypeDefinition() == typeof(IDictionary<,>))
+                {
+                    isDictionary = true;
+                    break;
+                }
+            }
+
+            Assert.IsTrue(isDictionary,
+                $"{type.Name}.{fieldName} 的声明类型 {field.FieldType} 不是泛型字典——结构变了，" +
+                "请重新核对统计遍历的分配前提");
         }
 
         [Test]
