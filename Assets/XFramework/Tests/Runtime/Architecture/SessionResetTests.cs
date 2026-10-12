@@ -209,7 +209,7 @@ namespace XFramework.Architecture.Tests
         #region 门面逐个复位
 
         [Test]
-        public void Ui_ReinitializesAfterSessionReset()
+        public void UI_ReinitializesAfterSessionReset()
         {
             UIManager.Initialize(_uiRoot.transform);
             Assert.IsTrue(UIManager.IsInitialized, "前提校验：会话 1 应当初始化成功");
