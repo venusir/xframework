@@ -54,11 +54,21 @@
 .PARAMETER Setup
     创建测试壳后退出。新机器上跑一次即可；已存在的联接会跳过，不会删除任何目录。
 
+.PARAMETER UpdateApiBaseline
+    公开 API 基线的**更新模式**：设环境变量 XFW_UPDATE_API_BASELINE=1 后跑基线 fixture，
+    测试会把 Runtime 程序集当前的公开面重写进
+    Assets/XFramework/Tests/Runtime/Architecture/PublicApiBaseline.txt。
+    自带过滤器（只跑 PublicApiBaselineTests，故未显式指定平台时只跑 PlayMode）；与 -Filter/-Fixture 互斥。
+    **本次运行按设计判为失败**（写盘后打印相对旧基线的差异摘要，逼人看一眼）；
+    绿灯由随后一次不带本开关的重跑给出。这是本仓唯一一个「在显式开关下反写仓库文件」的入口——
+    写完务必把它与它的 .meta 一起提交（见 Documentation/Workflow.md §六）。
+
 .EXAMPLE
     pwsh -File Tools/run-tests.ps1 -Setup                # 新机器上先建壳
     pwsh -File Tools/run-tests.ps1 -Filter SettingsDirtyTests          # 定向跑（PlayMode）
     pwsh -File Tools/run-tests.ps1 -Fixture PoolTests -Platform EditMode
     pwsh -File Tools/run-tests.ps1                       # 全量双平台（门禁：应为 0 失败）
+    pwsh -File Tools/run-tests.ps1 -UpdateApiBaseline    # 更新 API 基线（会写盘并以失败收场：请看它打印的差异）
 #>
 param(
     [string]$Filter = "",
@@ -68,7 +78,8 @@ param(
     [int]$ShrinkTolerance = 5,
     [string]$UnityPath = "",
     [switch]$UseRepo,
-    [switch]$Setup
+    [switch]$Setup,
+    [switch]$UpdateApiBaseline
 )
 
 $ErrorActionPreference = "Stop"
@@ -86,6 +97,24 @@ if ($Fixture) {
         Write-Error "-Filter 与 -Fixture 互斥：前者是任意正则片段，后者按 fixture 精确匹配，请只给一个。"
     }
     $Filter = "\.$($Fixture -replace '\.', '\.')\."
+}
+
+# ---------- API 基线更新模式 ----------
+#
+# 本仓首次出现「测试在显式开关下反写仓库文件」：入口只有这一个开关，写出的文件必须经人审阅、
+# 连同 .meta 一起提交（.meta 由 Unity 经测试壳回写，见 Documentation/Workflow.md §六）。
+#
+# 自带过滤器而不是与用户的过滤器叠加：若允许叠加，-UpdateApiBaseline -Filter Xxx 会跑一场
+# 「根本没跑基线」的运行，人却以为已更新——静默空转比报错更难查，故直接互斥。
+# 位置是硬要求：必须在 -Fixture 语法糖之后（否则上面的互斥检查看不到 $Filter），
+# 也必须在平台选择之前（靠 $Filter 非空把默认平台收窄成 PlayMode）。
+if ($UpdateApiBaseline) {
+    if ($Filter) {
+        Write-Error "-UpdateApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑 API 基线 fixture 本身，不要再给过滤器。"
+    }
+    $Filter = "\.PublicApiBaselineTests\."
+    $env:XFW_UPDATE_API_BASELINE = "1"
+    Write-Warning "API 基线更新模式：将重写 PublicApiBaseline.txt，并**按设计判为失败**——请读它打印的差异。"
 }
 
 # ---------- 定位仓库与 Unity ----------
