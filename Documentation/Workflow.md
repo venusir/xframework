@@ -125,14 +125,31 @@
 - **门禁耗时**：测试约 82 秒（双平台），文档约 90~180 秒。
 - **审计不可自动化的部分**：判据清单是「见过的缺陷类」的归纳，新类型的缺陷它照不到；清单里的探针只做诊断、不进门禁，判定仍靠人。
 - **文档分层靠人**：模块 README 与 `Documentation/Modules/` 之间的搬运没有门禁——`check-docs.ps1` 对 `.md` 零覆盖（它只管 XML 注释、编译参与度与 `.meta`）。要机械验证只能自建（「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑），且属一次性工程，不挂进阶段收尾。
-- **零分配断言在本环境可能恒真（尺子坏了）**：2026-10-11 实测——`GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），`Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0。**因此 `TimerAllocationTests` / `LogAllocationTests`（断言 `AreEqual(0L, …)`）是恒真的**——它们锁的结论未被证实（未必为假，但没被验证）。可用的尺子只有 `Profiler.GetMonoUsedSizeLong()` 与 `GC.GetTotalMemory(false)`，前者粒度约 4–8 KB（单次装箱约 32–40 B 看不见，**必须放大到 10 万次量级**）。**写零分配断言时的纪律**：① 先用「分配 1 MB 再读增量」自检尺子，别假设它可用；② 尺子不可用或粒度不够时，优先用**结构断言**（如 `GetEnumerator()` 的返回类型是否值类型——装箱的充要原因，确定性且不依赖尺子，先例 `ReactiveEnumerationAllocationTests`），测量只作第二道防线。详见 `Documentation/Modules/Reactive.md` 的「实测记录」节。
-  **受影响站点全表（2026-10-11 清点，共 5 个文件 / 11 处断言——上面点名的 Timer / Log 只是其中两个）**：
-  `Tests/Runtime/Timer/TimerAllocationTests.cs`（4 处）· `Tests/Runtime/Log/LogAllocationTests.cs`（4 处）·
-  `Tests/Runtime/Message/MessageStatsTests.cs`（1 处，`:342`）· `Tests/Runtime/UI/UIDiagnosticsTests.cs`（1 处，`:112`）·
-  `Tests/Runtime/UI/UIPanelQueryTests.cs`（1 处，`:201`）。形态一律 `Assert.AreEqual(0L, GC.GetAllocatedBytesForCurrentThread() 前后差, …)`。
-  **坏形态是靠模仿扩散的**：`LogAllocationTests.cs:12` 的注释自述「断言形态沿用 `TimerAllocationTests`」。
-  **因此新增此类断言时，不要照抄邻近文件的写法——照抄正是它扩散的机制。** 改造模板见 `ReactiveEnumerationAllocationTests`
-  （结构断言 + 粗尺子放大迭代 + 阈值取实测信号的 1/4）。清点与改造计划见 `FrameworkReview.md` §五 第 11 项。
+- **零分配断言在本环境可能恒真（尺子坏了）——2026-10-12 已处置**：2026-10-11 实测
+  `GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），
+  `Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0；
+  当时 **5 个文件 / 11 处** `Assert.AreEqual(0L, …)` 因此全是恒真的（清点表见 `FrameworkReview.md` §4.2）。
+  2026-10-12 的处置：11 处全部改成**两道防线**，并补了尺子自检与源码守卫。现在这一节的纪律是**机械的**：
+  - **唯一合法的分配尺子是共享工具** `Tests/Runtime/Architecture/AllocationRuler.cs`（`Profiler.GetMonoUsedSizeLong()`，
+    粒度约 4–8 KB）。**不要自己写测量循环**——预热次数、双 Collect、放大倍数、阈值口径只有一份才不会各自漂移。
+  - **两把恒零尺子已被源码守卫封禁**（`AllocationRulerTests.BrokenRulers_AreNotUsedAnywhereInThePackage`，
+    扫**整个包**）：测试里用它们是恒真断言，生产里用它们是假遥测。要跟它们对话（例如再做一次环境实测探针）
+    就做成**不入仓**的一次性探针。
+  - **尺子自检先跑**：`AllocationRulerTests` 的三条自检（看得见 1 MB、看得见 10 万个 32 B 小对象、
+    零分配时保持安静）是全部粗尺子断言的**前提**。尺子坏掉时红在那里，而不是让下游断言集体退化成恒真。
+    若哪天可用尺子也坏了：回到结构断言 + 直接观测，或改用 `GC.GetTotalMemory(false)` 并重跑自检。
+  - **优先结构断言**：能指出「这正是分配/装箱的原因」的事实（反射可验或行为可观测）就别靠尺子——
+    先例是 `GetEnumerator()` 返回类型即装箱的充要原因、`TimerSlot<TState>.State` 的字段类型即装箱的充要原因。
+    粗尺子只作第二道防线，阈值取**实测信号 1/4**（注入「每迭代一个对象」量到 S 再定）。
+  - **一条实测教训（2026-10-12）**：粗尺子对**瞬时垃圾**型回归的灵敏度会被测量窗口内的 GC 削掉一截
+    （格式化回归实测只读到 417,792 B，而同批的持有式注入读到 1.5–3.2 MB）。那类回归**以直接观测为准**
+    （探针 `ToString()` 计数、计数 sink——见 `LogAllocationTests`），尺子是粗网。
+- **「关闭域重载连跑两遍」这条验收脚本表达不了**（2026-10-12 实测）：`Tools/run-tests.ps1` 每次是一个
+  全新的 batchmode 进程，**跨播放会话的静态存活根本不会发生**，所以它验不了会话级复位。
+  自动化等价物 = `Tests/Runtime/Architecture/SessionResetTests`（单会话内模拟「初始化 → 退出 → 复位 → 再初始化」）
+  + `AutoInitTests` 族清单守卫；**真验收是手工的**：把 `ProjectSettings/EditorSettings.asset` 的
+  `m_EnterPlayModeOptions` 临时置 1（关域重载），编辑器内连跑两遍 PlayMode 全量，跑完改回
+  ——仓内**不常住**该设置。
 
 ## 附：一个完整回合
 

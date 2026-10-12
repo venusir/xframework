@@ -6,6 +6,75 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+> **本版无公开 API 变更、无破坏性变更。** `### Changed` 里那一条是编译期抓不到的**行为变更**，
+> 但它只影响「关闭域重载」的开发环境与「第二个播放会话」的启动路径——正常单会话运行逐字不变。
+
+### Added
+
+#### 测试基础设施
+
+- **共享零分配尺子 `AllocationRuler`（测试侧）**：本环境 `GC.GetAllocatedBytesForCurrentThread()` 与
+  `Profiler.GetTotalAllocatedMemoryLong()` **恒返回 0**（分配 1 MB 后增量仍为 0），唯一可用的是
+  `Profiler.GetMonoUsedSizeLong()`（粒度约 4–8 KB，单次装箱看不见，**必须放大迭代**）。放大的写法此前只有
+  一份私有实现（`ReactiveEnumerationAllocationTests`），各模块照抄它就是「好形态靠复制扩散」——现在抽成唯一实现，
+  并配三条**尺子自检**（看得见 1 MB、看得见 10 万个 32 B 小对象、零分配时保持安静）与两条**源码守卫**
+  （两把恒零尺子在**整个包**内零命中；可用的那把尺子只许出现在 `AllocationRuler.cs` 一个文件）。
+  使用方不受影响，但**你的项目若照抄过老写法**（`Assert.AreEqual(0L, GC.GetAllocatedBytesForCurrentThread() 前后差)`），
+  那类断言在本环境是恒真的，请按 `Documentation/Workflow.md` §六 的纪律重写。
+
+- **Config / Localization / Pipeline / Pool 的 PlayMode 侧覆盖**（4 个新 fixture，共 11 例）：这四模块此前的用例
+  全在 EditMode，而它们各有「EditMode 结构上测不到」的一面——Config 的挂起期可观测与**跨帧**共享、
+  Localization 的 `MonoBehaviour.destroyCancellationToken` 绑定（EditMode 下 `DestroyImmediate` 不触发它）、
+  Pipeline 的真跨帧挂起与**生产墙钟超时**（EditMode 必须注入假计时器，生产路径从未被跑到）、
+  Pool 的跨帧持有 / 归还 / 复用与 `IPoolable` 回调的**帧号**。
+
+### Changed
+
+- **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
+  档复位六个门面（Input / UI / Asset / Config / Localization / File）、`Bootstrap` 的静态登记表与
+  `InstanceTracker` 的活跃计数——**只丢引用、不调 `Dispose`**（上一会话的实例可能握着已随域销毁的 Unity 对象），
+  也**不动调用方持有的句柄**（`ConfigManager.ConfigChanged` 的外部订阅、Input 帧脉冲上的订阅）。
+  **编译期抓不到**，但两个前提都成立时才可见差异：① 关闭域重载（Project Settings → Editor → Enter Play Mode
+  Options → 取消 Reload Domain）；② 跨播放会话。正常单会话运行下这些复位是幂等空操作。
+  **`AssetManager` 的两个「只报一次」闩锁随之改为「每会话一次」**（`_poolCapabilityWarned` /
+  `_mainThreadViolationLogged`）——跨会话仍只报一次，换了会话就该重新提示。
+  **重复 `Initialize()` 的语义没有变**：会话内的重复调用仍是「告警 + 忽略」。
+
+### Fixed
+
+#### 会话级复位（跨 Input / UI / Asset / Config / Localization / File / Bootstrap / InstanceTracker）
+
+- **关闭域重载时，第二个播放会话里静态门面静默失效**。缺陷有两道锁：门面 `Initialize()` 因 `_initialized`
+  仍为真而**告警后早退**，以及 `_ticker` 之类的对象字段非空拦掉重建——`Destroy()` 能复位一切，但正常游戏流程
+  不会调它（「谁初始化谁清理」只在退出路径成立，而使用方在启动时调一次 `Initialize` 之后就不再碰了）。
+  逐落点的处置：Input（两道锁一起解）、UI / Config / Localization / File（实例 + 门锁）、
+  **Asset 另作废在途初始化**（上一会话半路中断的初始化不得在第二会话里让实例「复活」——那正是代际号存在的理由）、
+  **`Bootstrap` 清静态登记表**（否则第二会话的 `ConfigureStages` 只能追加新实例，旧阶段实例被一起装配：
+  同相位并行双跑、退出时双份 `Shutdown`）、**`InstanceTracker` 清活跃计数**（其退出订阅从「静态构造函数 +
+  匿名 lambda」改成幂等 `AutoInit`——那处 lambda 退订不了，按特性扫描的族清单也扫不到它）。
+  每个落点都带**改前必红**的回归用例（`Tests/Runtime/Architecture/SessionResetTests` 10 例 +
+  `Tests/Runtime/Input/InputSessionResetTests` 3 例）。
+  **验证手段**：`Tools/run-tests.ps1` **验不了这条**（每次是全新 batchmode 进程，跨会话的静态存活不会发生）；
+  真验收是手工的——把 `ProjectSettings/EditorSettings.asset` 的 `m_EnterPlayModeOptions` 临时置 1，
+  编辑器内连跑两遍 PlayMode 全量，跑完改回（仓内不常住该设置）。
+
+- **5 个文件 / 11 处零分配断言此前是恒真的**（两把尺子在本环境恒返回 0，锁的结论从未被验证过）。
+  11 处全部改成两道防线：**结构断言优先**（句柄 / 快照 / 统计行是值类型、状态槽位按类型参数泛化、
+  表声明为具体字典……——「零分配的原因」本身可反射验证），**粗尺子放大兜底**（阈值取实测信号 1/4），
+  Log 的「未启用不格式化」另加**直接观测**（`ToString()` 计数探针 + 计数 sink + 正对照）。
+  改后实测：**11 处站点的堆增量全为 0 B**——零 GC 卖点第一次被真实测量。改造中的一条发现已写进
+  `Documentation/Workflow.md` §六：粗尺子对**瞬时垃圾**型回归的灵敏度会被测量窗口内的 GC 削掉一截，
+  那类回归以直接观测为准。
+
+### Documentation
+
+- `Documentation/Workflow.md` §六：零分配断言的纪律改为机械可依（唯一尺子、自检、守卫、结构断言优先），
+  并记「关闭域重载连跑两遍」这条验收**脚本表达不了**。
+- `Documentation/Modules/{Input,Asset,Bootstrap,Config,UI,Localization}.md`：会话复位的处置记录；
+  `Roadmap.md` §三 一句失实陈述（`InstanceTracker`「有族级守卫」）加订正框。
+- `Runtime/{Input,UI}/README.md` 的「已知限制」：相关条目改写为已修。
+- 四个模块文档补「PlayMode 侧覆盖」记录。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。

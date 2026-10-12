@@ -145,9 +145,9 @@
 
 | 项 | 事实 | 为什么重要 |
 |---|---|---|
-| **零分配断言恒真** | `GC.GetAllocatedBytesForCurrentThread()` 与 `Profiler.GetTotalAllocatedMemoryLong()` 在本环境**恒返回 0**（实测：分配 1 MB 后增量仍为 0）。受影响 **5 个文件**：Timer / Log / Message / UI×2，形态一律 `Assert.AreEqual(0L, allocated, …)`——**恒真**。`LogAllocationTests.cs:12` 自述是照抄 `TimerAllocationTests` 的形态，**坏形态靠模仿扩散**。可用的是 `Profiler.GetMonoUsedSizeLong()`（粒度 4–8 KB） | 框架的核心卖点之一是零 GC，而**这条卖点从未被测试证实过**。修法模板已存在（`ReactiveEnumerationAllocationTests`：结构断言 + 粗尺子放大迭代 + 阈值取信号 1/4） |
+| ~~**零分配断言恒真**~~ ✅ **2026-10-12 已处置** | 原事实：两把分配尺子恒返回 0，5 个文件 / 11 处断言恒真（`LogAllocationTests.cs:12` 自述照抄 `TimerAllocationTests`，坏形态靠模仿扩散）。处置：8 处改成**结构断言**（句柄/快照/统计行是值类型、状态槽位按类型参数泛化、表声明为具体字典…）、3 处（Log 的关档不格式化）改成**直接观测**（探针 `ToString()` 计数 + 计数 sink + 正对照）、全部保留放大粗尺子兜底。实测：**11 处站点的堆增量全为 0 B**——零 GC 卖点第一次被真实测量 | 新增共享尺子 `AllocationRuler`（唯一实现）+ 三条**尺子自检** + 两条**源码守卫**（两把恒零尺子全包零命中、可用尺子只许一个读者）。改造中的一条发现：粗尺子对**瞬时垃圾**型回归灵敏度会被窗口内 GC 削掉一截（格式化注入只读到 417 KB，持有式注入读到 1.5–3.2 MB）——那类回归以直接观测为准 |
 | **遮罩射线缺陷** | 2026-10-11 **已实测并修复**（`2e7951b`）。此前遮罩既点不关也挡不住输入 | 见 §四.4 的教训；已闭环，列在此处仅为完整 |
-| **测试覆盖失衡** | Config / Localization / Pipeline / Pool **零 PlayMode 侧**；Serialize(1) / Event(3) / Save(3) / Reactive(4) / Asset·Bootstrap 的 Runtime 侧各 1 | 这四类恰是「纯逻辑、本该最好测」的模块。EditMode 覆盖不能替代 PlayMode：**跨帧、跨生命周期、跨静态状态**的问题只在 PlayMode 显形（会话级复位就是例证） |
+| ~~**测试覆盖失衡**~~（四模块已补，其余仍在） | ~~Config / Localization / Pipeline / Pool **零 PlayMode 侧**~~ → **2026-10-12 已补**（各一个 PlayMode fixture，共 11 例；验的都是 EditMode 结构上测不到的：真跨帧、真墙钟超时、真销毁令牌）。**仍失衡的**：Serialize(1) / Event(3) / Save(3) / Reactive(4) / Asset·Bootstrap 的 Runtime 侧各 1 | EditMode 覆盖不能替代 PlayMode：**跨帧、跨生命周期、跨静态状态**的问题只在 PlayMode 显形（会话级复位就是例证）。本轮四模块的补法可直接照抄：先去 README 的「已知限制」里找「只有 PlayMode 才验得了」的那条 |
 | **大文件** | `UIManagerImpl.cs` 2038 行 / `UpdateScheduler.cs` 1420 / `SaveManagerImpl.cs` 1314 / `LockManager.cs` 1125 / `MessageBroker.cs` 1072 | 维护成本，非缺陷。**不建议为拆而拆**——Update 已明确否决过「拆 `UpdateManager.cs`」（`Modules/Update.md`），同一判据适用于其余 |
 
 ### 4.3 仓库工程化与发布形态
@@ -218,9 +218,9 @@
 | # | 项 | 验证方式 |
 |---|---|---|
 | 10 | ~~遮罩射线~~ | ✅ **已完成**（`2e7951b`，含红证） |
-| 11 | **零分配尺子处置**：5 个文件的恒真断言——先加尺子自检（故意分配已知量，断言读数 > 0），再按 `ReactiveEnumerationAllocationTests` 的模板改（结构断言优先，粗尺子放大迭代兜底） | 尺子自检用例必须绿；改后若真红，说明确有分配——那是**发现**不是回归 |
-| 12 | 会话级复位（跨 Input/UI/Asset/Config/Localization/File） | 验收 = **关闭域重载连跑两遍 PlayMode 全量**（`Modules/Input.md` 有复现配方） |
-| 13 | 补 Config / Localization / Pipeline / Pool 的 PlayMode 侧覆盖 | 四个模块各有至少一个跨帧/跨生命周期的用例 |
+| 11 | ~~零分配尺子处置~~ ✅ **已完成**（2026-10-12，6 提交） | 尺子自检三条绿；11 处站点改造后实测**全为 0 B**（真红检查逐站点做过：注入式 + 结构改型） |
+| 12 | ~~会话级复位~~ ✅ **已完成**（2026-10-12，6 提交） | 六门面 + `Bootstrap.StageList` + `InstanceTracker` 全部处置，各带改前必红的回归用例（`SessionResetTests` 10 例）；**手工验收仍待做**（关域重载连跑两遍，脚本表达不了） |
+| 13 | ~~补 Config / Localization / Pipeline / Pool 的 PlayMode 侧覆盖~~ ✅ **已完成**（2026-10-12，4 提交） | 四模块各补一个 PlayMode fixture（3+2+3+3 = 11 例），验的都是 EditMode 结构上测不到的东西（真跨帧、真墙钟、真销毁令牌） |
 
 ### 中期：能力缺口与机械化
 
@@ -272,7 +272,8 @@
 | 新模块候选（场景管理 / 热更编排） | `Roadmap.md` §三（该不该建、边界画在哪是它的职责） | ✅ |
 | 已否决项复核结论 | `Roadmap.md` §四 | ✅ |
 | 建议「不做」的新项（相机 / 远程配置 / 崩溃上报） | `Roadmap.md` §三，标「本轮建议不做，待裁定」——**「不该做」是设计取舍，需用户确认后才进 §四** | ✅ |
-| 本轮的实测结论（遮罩 / 尺子 / 安装器） | 遮罩 → 已闭环（CHANGELOG + `Modules/UI.md` + README）；尺子 → `Modules/Log.md`/`Timer.md`/`Message.md` + `Workflow.md` §六；安装器 → 本文 §4.3 + 实施轮 | 部分 |
+| 本轮的实测结论（遮罩 / 尺子 / 安装器） | 遮罩 → 已闭环（CHANGELOG + `Modules/UI.md` + README）；尺子 → `Modules/{Log,Timer,Message,UI,Reactive}.md` + `Workflow.md` §六（**2026-10-12 处置轮已全部落地**）；安装器 → 本文 §4.3 + 实施轮 | ✅ |
+| 2026-10-12 处置轮的结论（尺子 / 会话复位 / 四模块 PlayMode） | 尺子与四模块 → `Workflow.md` §六 + 各模块文档 + `CHANGELOG`；会话复位 → `Modules/{Input,Asset,Bootstrap,Config,UI,Localization}.md` + `Roadmap.md`（族清单与失实句订正）+ `Runtime/{Input,UI}/README.md` 的已知限制 | ✅ |
 | 框架级评估这份文档本身的存在 | `CLAUDE.md` 文档分层表 | ⏳ 待用户确认拟写文本 |
 
 **本文不复制 `Roadmap.md` 与各模块文档的内容**——那些是它们的真相，重复一份就会各自漂移。
