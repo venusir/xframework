@@ -58,9 +58,9 @@ Runtime/Input/
 
 **未决**：
 
-- **跨播放会话的会话级复位**（本轮唯一留给下一轮的中危项）：见 README「已知限制」第 1 条——关闭域重载时
-  第二个播放会话帧脉冲静默失效。根因跨模块（`UpdateManager.OnQuitting` 释放调度器 + 门面 `_initialized`
-  无会话级复位），修法待设计。**2026-10-01 已实测复现机制**，配方与结论见本节末尾。
+- ~~跨播放会话的会话级复位~~ —— **2026-10-12 已修**（详见下方「会话级复位」一节末尾的处置记录）。
+  原条目：见 README「已知限制」第 1 条——关闭域重载时第二个播放会话帧脉冲静默失效。根因跨模块
+  （`UpdateManager.OnQuitting` 释放调度器 + 门面 `_initialized` 无会话级复位）。
 - **`StartRebinding` 两因同值**（未初始化 / id 不存在都返回 `null`）：见上。
 
 ## 会话级复位：复现配方与实测结论（2026-10-01）
@@ -85,11 +85,11 @@ Runtime/Input/
 
 **两道锁各自都足以造成它**，修的时候两个都要动：
 
-1. `InputManager.Initialize()` 因 `_initialized` 仍为真而早退（`Runtime/Input/InputManager.cs:70-74`）；
-2. 即便它不早退，`RegisterTicker()` 的 `if (_ticker != null) return;`（同文件 `:174`）也会拦掉重建
+1. `InputManager.Initialize()` 因 `_initialized` 仍为真而早退（`Runtime/Input/InputManager.cs:71-75`）；
+2. 即便它不早退，`RegisterTicker()` 的 `if (_ticker != null) return;`（同文件 `:215`）也会拦掉重建
    —— `_ticker` 同样是跨会话存活的静态字段。
 
-**顺带确认的一条**：`InputManager.Destroy()`（同文件 `:129-140`）会同时复位 `_initialized` 与 `_ticker`，
+**顺带确认的一条**：`InputManager.Destroy()`（同文件 `:170-181`）会同时复位 `_initialized` 与 `_ticker`，
 所以**调用方只要调过 `Destroy` 就自愈**。缺陷恰恰在于正常游戏不会调它——`Destroy` 的语义是「释放并重建」，
 而游戏在启动时调一次 `Initialize` 之后就不再碰了。
 
@@ -109,3 +109,33 @@ Runtime/Input/
   那处注释写的是「Editor 退出播放模式时由域重载自动重置」，正属「关闭域重载时跨会话」的那一类。
 - Update 侧**不在**同族名单里：它是被踩过并已修好的那一半（`OnQuitting` 可重建 + `AutoInit` 幂等重建），
   `UpdateManagerTests.OnQuitting_ThenAutoInit_RebuildsScheduler` 钉着它的自愈。本缺陷是「**客户端**没自愈」。
+
+## 处置记录（2026-10-12）
+
+**修法照 Roadmap 早就框定的方向**（「缺的不是『事件』，是**谁在会话开始时把静态状态复位**」），
+先例是 Timer 与 Log 的 `AutoInit`（前者 `ResetCore()` 拆旧核心、后者丢弃上一会话实现 + `LogSession.Reset()`）。
+
+**改动**：门面加 `internal static void ResetForNewSession()`，挂
+`[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]`，并在
+`AutoInitTests` 的族清单登记（未登记即红）。它复位 `_provider` / `_initialized` / `_ticker` /
+`_lastPulseFrame`——**两道锁一起解**，其中 `_ticker` 置空时**不**调 `UpdateManager.Unregister`
+（旧调度器已被整只丢弃），`RegisterTicker` 的非空早退保留（会话内的重复 `Initialize` 仍由 `_initialized` 拦）。
+
+**两条刻意的取舍**：① **只丢引用、不调 `Dispose`**——上一会话的 provider 可能握着已随域销毁的
+`InputActionAsset`，在会话开头对它调 Dispose 只会制造异常与噪音（实例清理归 `Destroy`）；
+② **不动 `_framePulse` 上的订阅**——句柄归订阅方，这是本模块的有意设计（README「已知限制」）。
+
+**回归用例**（`Tests/Runtime/Input/InputSessionResetTests`，**已做改前必红**）：把 `ResetForNewSession`
+的方法体临时清空 → `ResetForNewSession_LetsTheSecondSessionTickAgain` 立刻红，且报的正是本文件配方里的那行
+`Expected: 1, But was: 0`（缺陷被逐字复现）；另一条 `..._DoesNotDisposeThePreviousProvider` 同时红。
+恢复后 3 例全绿。
+
+**验收的可行边界（实测）**：文档口径「关闭域重载连跑两遍 PlayMode 全量」**无法由 `Tools/run-tests.ps1`
+表达**——它每次是全新 batchmode 进程，跨会话的静态存活根本不会发生。**真验收是手工的**（把
+`ProjectSettings/EditorSettings.asset` 的 `m_EnterPlayModeOptions` 临时置 1，编辑器内连跑两遍 PlayMode 全量，
+跑完改回；仓内不常住该设置），自动化等价物就是上面的回归用例 + 族清单守卫。这条已写进 `Workflow.md` §六。
+
+**同族**（`AssetManager` / `ConfigManager` / `LocalizationManager` / `FileManager` / `UIManager` /
+`Bootstrap` 的静态登记表 / `InstanceTracker`）在本轮同一批里做了同形处置，各自的处置记录见对应模块文档；
+**`Roadmap.md:132` 那句「`Application.quitting` 六处（……`InstanceTracker`，有 `AutoInitTests` 族级守卫）」是失实的**
+（`InstanceTracker` 用静态构造函数订阅，特性扫描扫不到它）——本轮已订正。

@@ -182,6 +182,37 @@ namespace XFramework.XInput
 
         #endregion
 
+        #region Session Reset
+
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时，上一播放会话的静态字段会存活到这一会话，而本门面的
+        /// <see cref="Destroy"/> 在正常游戏流程里不会被调用——于是第二个会话的 <c>Initialize</c> 会因
+        /// <c>_initialized</c> 仍为真而**告警后早退**：provider 还在、<c>_ticker</c> 还在，但没有任何调度器
+        /// 持有它，全部 <c>Observe*</c> 静默失效（唯一线索是一条 "called more than once" 警告）。
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于任何
+        /// <c>Initialize</c> 调用；开域重载时静态字段本就是干净的，本方法退化为纯幂等空操作。</para>
+        /// <para><b>两道锁一起解</b>：<c>_initialized</c> 与 <c>_ticker</c> 各自都足以造成上述失效
+        /// （前者让 <c>Initialize</c> 早退，后者让 <see cref="RegisterTicker"/> 拦掉重建）。
+        /// 置空 <c>_ticker</c> 时**不**调 <c>UpdateManager.Unregister</c>——旧调度器已被整只丢弃，
+        /// 而 <c>RegisterTicker</c> 的非空早退仍保留（会话内的重复 <c>Initialize</c> 照旧由 <c>_initialized</c> 拦）。</para>
+        /// <para><b>只丢引用、不调 <c>Dispose</c></b>：上一会话的 provider 可能握着已随域销毁的
+        /// <c>InputActionAsset</c>，在会话开头对它调 Dispose 只会制造异常与噪音；实例清理归
+        /// <see cref="Destroy"/>（谁初始化谁清理）。</para>
+        /// <para><b>不动帧脉冲上的订阅</b>：<c>_framePulse</c> 与本方法无关——句柄归订阅方，
+        /// 这是本模块的有意设计（见 README「已知限制」）。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _provider = null;
+            _initialized = false;
+            _ticker = null;
+            _lastPulseFrame = -1;
+        }
+
+        #endregion
+
         #region Frame Driving
 
         /// <summary>

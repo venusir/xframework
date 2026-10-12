@@ -492,16 +492,23 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 
 ## 已知限制
 
-- **关闭域重载时，第二个播放会话里帧脉冲会静默失效**（Project Settings → Editor → Enter Play Mode Options
-  → 取消 Reload Domain）：退出播放时 `UpdateManager.OnQuitting` 会释放并置空调度器，而第二次进入播放时
-  `Initialize()` 因 `_initialized` 仍为真而**告警后 return**，`RegisterTicker()` 不再执行——`_ticker`
-  仍在、provider 仍在，但**没有任何调度器持有它**，于是 `Observe*` 的帧脉冲永不发布，唯一线索是一条
-  「called more than once」警告。根因跨模块（调度器释放与门面 `_initialized` 的会话级复位是两件事），
-  本轮只归档不修。**验证手段**：改 `ProjectSettings/EditorSettings.asset` 关闭 Reload Domain，连跑两遍
-  PlayMode 全量（Update 那次域重载事故的实证手段）。注意本仓当前两个 reload 都还开着，故本仓内**休眠**。
-- 同族问题（同一根因：门面 `_initialized` 没有会话级复位，`Initialize()` 重复调用是「告警 + 忽略」而非
-  「重新初始化」，**使用方无法自救**）也在 `AssetManager` / `ConfigManager` / `LocalizationManager` /
-  `FileManager` 上成立，见本轮 `CHANGELOG`。
+- ~~关闭域重载时，第二个播放会话里帧脉冲会静默失效~~ —— **2026-10-12 已修**。原因：退出播放时
+  `UpdateManager.OnQuitting` 会释放并置空调度器，而第二次进入播放时 `Initialize()` 因 `_initialized`
+  仍为真而**告警后 return**，`RegisterTicker()` 不再执行——`_ticker` 仍在、provider 仍在，但**没有任何
+  调度器持有它**，于是 `Observe*` 的帧脉冲永不发布，唯一线索是一条「called more than once」警告。
+  现在门面在**会话开始时**复位静态状态（`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的
+  `SubsystemRegistration` 档，早于首场景 `Awake`），两道锁（`_initialized` 与 `_ticker`）一起解；
+  开关域重载时它是幂等空操作。**复位只丢引用、不调 `Dispose`**（上一会话的 provider 可能握着已随域销毁的
+  `InputActionAsset`），也**不动帧脉冲上的订阅**（见下一条：句柄归订阅方）。
+  **验证手段**：改 `ProjectSettings/EditorSettings.asset` 的 `m_EnterPlayModeOptions` 关闭 Reload Domain，
+  连跑两遍 PlayMode 全量（Update 那次域重载事故的实证手段）。**注意这条脚本验不了**——
+  `Tools/run-tests.ps1` 每次是全新 batchmode 进程，跨会话的静态存活根本不会发生；自动化等价物是
+  `Tests/Runtime/Input/InputSessionResetTests`（单会话内模拟「初始化 → 退出 → 复位 → 再初始化」）与
+  `AutoInitTests` 的族清单守卫。
+- 同族门面（`AssetManager` / `ConfigManager` / `LocalizationManager` / `FileManager` / `UIManager` 与
+  `Bootstrap` 的静态登记表）是同一根因，本轮一并处置（清单见 `CHANGELOG`）。注意**重复 `Initialize()`
+  的语义没有变**：会话内的重复调用仍是「告警 + 忽略」——复位发生在会话开始、任何 `Initialize` 之前，
+  第二个会话走的是**首初始化**路径。
 - **`Destroy()` 不退订本模块的订阅**：`Observe*` / `Subscribe` 订的是模块级的帧脉冲流与消息总线，
   `Destroy()` 只释放 Provider、注销帧驱动、复位帧号——**句柄归订阅方**。传了 `context` 的订阅由它的销毁
   令牌收口（见下节）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的

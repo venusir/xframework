@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 using XFramework.XAudio;
 using XFramework.XFileManager;
+using XFramework.XInput;
 using XFramework.XLock;
 using XFramework.XLog;
 using XFramework.XMessage;
@@ -35,7 +36,11 @@ namespace XFramework.Architecture.Tests
     public class AutoInitTests
     {
         /// <summary>
-        /// 族清单：<c>(类型, 方法名, 期望的 load type)</c>。**新增自动初始化时来这里登记**。
+        /// 族清单：<c>(类型, 方法名, 期望的 load type)</c>。**新增自动初始化与会话复位钩子时来这里登记**。
+        /// <para>两类成员共用这张表：<b>自初始化</b>（如 <c>UpdateManager.AutoInit</c>）与
+        /// <b>会话复位</b>（如 <c>InputManager.ResetForNewSession</c>，关域重载时把上一会话残留的静态状态
+        /// 清掉）。它们共守同一条不变量——「靠 <c>RuntimeInitializeOnLoadMethod</c> 触发的成员，
+        /// 其 load type 必须是一次有意识的决定」。</para>
         /// <para>load type 按需要选，不为统一而统一：需要早于首个场景 Awake 的用
         /// <see cref="RuntimeInitializeLoadType.BeforeSceneLoad"/>（如 File 的域根预热——它的价值就在
         /// 「早于首次使用」，默认档位晚于首场景 Awake 等于没预热）；需要注入 PlayerLoop 的用
@@ -52,6 +57,7 @@ namespace XFramework.Architecture.Tests
             (typeof(TimerManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
             (typeof(LogManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(InputManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
         [Test]
