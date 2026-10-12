@@ -167,13 +167,18 @@ AutoInit 自初始化（SubsystemRegistration，载入期即装入默认实现�
 1. **Editor 两处无前缀 `Debug.LogError`**（`XFrameworkDependencyInstaller.cs:52,74`，全仓唯二违例）：经 `LogManager` 会自动补 `[XFramework] ` 前缀 = 改控制台文案。本轮按「逐字保真」保持原样未迁。
 2. **`UIDefaultController` 的 5 条 verbose 日志保持 `Info`**：降到 `Debug` 会改变 Release 可见性（`verbose: true` 的使用方会突然看不到），属行为变更。
 
-**测试侧的一处未决（跨模块，真相在别处）**：`LogAllocationTests` 的 **4 处**零分配断言用的是**恒真**的尺子
-（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0）。它锁的结论——「档位未启用时不格式化、零分配」
-——**未被证实**，而这条恰是本模块对外承诺的卖点之一。**坏形态是靠模仿扩散的**：该文件 `:12` 的注释自述
-「断言形态沿用 `TimerAllocationTests`」。受影响站点全表、可用尺子与改造模板见 `Documentation/Workflow.md`
-§六；清点见 `FrameworkReview.md` §五 第 11 项。**本模块不重复那份清单。**
-一个无需尺子的替代方向：`LogFormatter` 走 `string.Format`，而 `string.Format` 必然调参数的 `ToString()`——
-传一个 `ToString()` 自增计数器的探针类型，「未启用不格式化」就能被**直接观测**，不必测量分配。
+**测试侧的处置（跨模块，真相在别处）**：`LogAllocationTests` 的 **4 处**零分配断言此前用的是**恒真**的尺子
+（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0）——它们锁的结论「档位未启用时不格式化、零分配」
+**从未被证实**，而这条恰是本模块对外承诺的卖点之一。**坏形态是靠模仿扩散的**：该文件 `:12` 的注释自述
+「断言形态沿用 `TimerAllocationTests`」。**2026-10-12 已处置**，正是照本节原先记的那条「无需尺子的替代方向」
+落成的：
+
+- **直接观测（确定性）**：`ToString()` 自增计数的探针（关档后计数必须为 0）+ 只计数的 sink（关档后条目数为 0）
+  + **正对照组**（开档后两者各动一次——防「探针根本没接上」这类假绿）。
+- **放大粗尺子**：四处站点各放大 10 万次，实测堆增量**均为 0 B**——「未启用不格式化」第一次被真实测量。
+- **校准暴露的一条纪律**：注入「先格式化再判档」后探针精确变 1，而尺子只读到 417,792 B——**瞬时垃圾会被
+  测量窗口内的 GC 削掉一部分**（同批的持有式注入读到 1.5–3.2 MB）。这类回归**以探针为准，尺子是粗网**
+  （阈值 400 KB 拦的是持有式 / 大体量分配那一档，不追瞬时垃圾）。校准与改造模板见 `Documentation/Workflow.md` §六。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 
