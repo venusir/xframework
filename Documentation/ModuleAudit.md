@@ -222,7 +222,7 @@
 | 候选 | 现状 |
 |---|---|
 | 跨模块 `Internal` 引用 / 公开面泄漏 internal | **已自动化**（`Tests/Editor/Architecture/ModuleBoundaryTests`） |
-| 门面转发缺失 | 已有两处反射测试（UI / Settings），Message 尚无 |
+| 门面转发缺失 | **已自动化，且已覆盖全部适用模块**（2026-10-13 核对）：守卫共 **11 处**——Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI，恰是全部「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`），形态为「接口每个声明成员在门面上存在**同名 + 同元数**的 public static 成员」。<br>**仍开着的是更细的一问**：多接口模块只守了**主**接口——UI 的守卫只覆盖 `IUIManager`，没覆盖 `IUIHudProvider` / `IUITipProvider`；Settings 只覆盖 `ISettingsManager<T>`，没覆盖 `ISettingsStore` / `IAsyncSettingsStore`。这些 provider/store 是否也要同名转发守卫，需要一次裁定。<br>**Message 不属于这一类**：`MessageManager` 是 `IMessagePublisher` / `IMessageSubscriber` 的**扩展方法宿主**（实现在 internal 的 `IMessageBroker` 上），不是「转发到可替换实现」的门面，这条不变量对它不成立。 |
 | 文档声称的 API 是否存在 | 未做：从 README 抓 `` `Type.Member` `` 记号 → 反射核存在性 |
 | **未纳门的文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / 1734 / 1735 / 1584 / 1658…） | **未做**：`check-docs.ps1` 只统计 CS1570 / CS1574，其余码在这条通道里可见而脚本不数（实测有存量，纳入 `-Enforce` 前须先清；先让脚本把它们**诊断**出来看曲线） |
 | 日志缺 `[模块]` 前缀 | 未做：grep `Debug.Log` 附近是否带前缀 |

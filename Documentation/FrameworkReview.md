@@ -188,7 +188,14 @@
 1. **包 README 的三张清单表无门禁**。功能表（`README.md:118`）、模块索引表（`:138`）、可配置项表（`:197`）全靠手改，而 `check-docs.ps1` 对 `.md` **零覆盖**。**已实测漏过一整轮**（ReactiveList 建成时三张表全漏，跨了一轮才被补）。
 2. **「已知限制」小节缺 5 个模块**：Event / Message / Pipeline / Pool / Serialize。其余 17 个都有，且开场白逐字一致（「知道边界比以为没有边界安全……」）。**这 5 个恰是第三方最容易踩坑的底层件**（Pool 的 `Configure` 只在建池前生效、Event 的订阅语义、Message 的缓冲重放）。
 3. **`check-docs.ps1 -Enforce` 只统计 CS1570 / CS1574**。CS0419 / CS1591 / CS1573 / CS1734 / CS1735 / CS1584 / CS1658 有存量、未纳门（`ModuleAudit.md` §八 已列）。**注意 CS0419 的隐蔽性**：它表现为「**没有**告警」——cref 写不全时编译器替你假设一个重载。
-4. **门面完备性守卫只覆盖 UI / Settings**。`CLAUDE.md` 把「门面转发不变量」列为不可只靠评审的一条，而 22 个模块里只有 2 个有机械守卫（Message 尚无——`ModuleAudit.md` §八 已列）。
+4. ~~**门面完备性守卫只覆盖 UI / Settings**~~ —— **2026-10-13 核对后订正：这句话是失实的。** 守卫共 **11 处**
+   （Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI），恰是全部
+   「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`）。
+   原句的「2 个」与「Message 尚无」都不成立：**Message 不适用这条不变量**（`MessageManager` 是
+   `IMessagePublisher` / `IMessageSubscriber` 的扩展方法宿主，不是转发门面）。
+   **仍开着的是更细的一问**（本条修订后的真实内容）：多接口模块只守了**主**接口——UI 没覆盖
+   `IUIHudProvider` / `IUITipProvider`，Settings 没覆盖 `ISettingsStore` / `IAsyncSettingsStore`，
+   这些 provider / store 型接口要不要同名转发守卫需要一次裁定。详见 `ModuleAudit.md` §八 该行。
 5. **`ModuleAudit.md` 的判据源自 CHANGELOG，存在已知盲区**。Config 模块 31 条提交、两次破坏性重构，而 CHANGELOG 里出现 **0 次**（`Documentation/Modules/Config.md:54`）——「手册从本模块的缺陷史里学到的是零」。**这是判据生成方式的系统性缺陷**，不只是 Config 一个模块的问题。
 6. **示例覆盖面窄**（6/22 模块），且上不了架（§4.3 第 7 条）。第三方上手路径目前只有 README。
 
@@ -231,7 +238,7 @@
 | 16 | **API 兼容性检查**（`PublicAPI.Shipped.txt` 分析器或 ApiCompat） | 与「门禁」文化最契合的一条；`[Unreleased]` 的 6 处破坏性变更就是它要防的东西 |
 | 17 | **CI**（push/PR 上跑三条门禁） | 需要 Unity 许可与自托管 runner，成本最高的一项 |
 | 18 | `check-docs.ps1` 收纳其余告警码（先清存量） | CS0419 优先——它隐形 |
-| 19 | 门面完备性守卫推广到其余模块（Message 优先） | 每模块十几行 |
+| 19 | ~~门面完备性守卫推广到其余模块~~ → 缩成**一问**（2026-10-13 核对：守卫已有 11 处，覆盖全部适用模块） | 剩下的是「多接口模块只守主接口」——UI 的 `IUIHudProvider`/`IUITipProvider`、Settings 的 `ISettingsStore` 要不要也守。需先裁定再动手，代价仍是一个模块十几行 |
 
 ### 远期
 
