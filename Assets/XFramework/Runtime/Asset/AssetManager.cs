@@ -238,6 +238,35 @@ namespace XFramework.XAsset
             _initializeTask = default;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时，上一播放会话的静态字段会存活到这一会话，而 <see cref="Destroy"/>
+        /// 在正常游戏流程里不会被调用——于是第二个会话里 <c>AssetBootstrapStage</c> 见到
+        /// <see cref="IsInitialized"/> 为真即跳过初始化，<c>_instance</c> 仍指向上一会话那个实例
+        /// （其内部持有已随域销毁的 YooAsset 包）。
+        /// <para><b>比其它门面多两件事</b>：① <b>作废在途初始化</b>（<see cref="InvalidateInflightInit"/> +
+        /// 清任务）——上一会话半路中断的初始化不得在第二会话里让实例「复活」；② 复位两个
+        /// <b>「只报一次」闩锁</b>（<c>_poolCapabilityWarned</c> / <c>_mainThreadViolationLogged</c>）——
+        /// 它们是每会话一次的提示，不复位则第二会话静默。</para>
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：早于首场景 <c>Awake</c>，因而早于引导阶段；
+        /// 开域重载时是纯幂等空操作。<b>只丢引用、不调 <c>Dispose</c></b>：上一会话的实例可能握着已随域
+        /// 销毁的 YooAsset 包，清理归 <see cref="Destroy"/>。<b>不卸载 YooAsset 侧的包与已加载资源</b>——
+        /// 与 <see cref="Destroy"/> 同一口径。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _instance = null;
+            _instanceInitialized = false;
+            ImplFactory = null;
+
+            InvalidateInflightInit();
+            _initializeTask = default;
+
+            _poolCapabilityWarned = false;
+            _mainThreadViolationLogged = false;
+        }
+
         #endregion
 
         #region Public API — Unload & Query

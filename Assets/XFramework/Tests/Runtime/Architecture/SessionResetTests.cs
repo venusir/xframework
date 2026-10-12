@@ -1,6 +1,13 @@
+using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XAsset;
+using XFramework.XAsset.Tests;
 using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
@@ -36,6 +43,8 @@ namespace XFramework.Architecture.Tests
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
             FileManager.Destroy();
+            AssetManager.Destroy();
+            AssetManager.ImplFactory = null;
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
@@ -49,9 +58,11 @@ namespace XFramework.Architecture.Tests
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
             FileManager.Destroy();
+            AssetManager.Destroy();
+            AssetManager.ImplFactory = null;
 
             if (_uiRoot != null)
-                Object.DestroyImmediate(_uiRoot);
+                UnityEngine.Object.DestroyImmediate(_uiRoot);
         }
 
         /// <summary>
@@ -66,6 +77,7 @@ namespace XFramework.Architecture.Tests
             ConfigManager.ResetForNewSession();
             LocalizationManager.ResetForNewSession();
             FileManager.ResetForNewSession();
+            AssetManager.ResetForNewSession();
         }
 
         #endregion
@@ -113,6 +125,69 @@ namespace XFramework.Architecture.Tests
             LocalizationManager.Initialize("zh_Hans", new Dictionary<string, string>());
 
             Assert.IsTrue(LocalizationManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
+
+        [Test]
+        public async Task Asset_ReinitializesAfterSessionReset()
+        {
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            await AssetManager.InitializeAsync();
+            Assert.IsTrue(AssetManager.IsInitialized, "前提校验：会话 1 应当初始化成功");
+
+            SimulateNewSession();
+            Assert.IsFalse(AssetManager.IsInitialized, "复位后门面应回到未初始化态");
+
+            // 复位会一并清掉测试钩子（陈旧静态不该跨会话存活），第二会话由用例重新注入假实现
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            await AssetManager.InitializeAsync();
+
+            Assert.IsTrue(AssetManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警早退");
+        }
+
+        /// <summary>
+        /// Asset 比其它门面多一件：**作废在途初始化**。上一会话半路中断的初始化不得在第二会话里
+        /// 让实例「复活」——那正是代际号存在的理由。
+        /// </summary>
+        [Test]
+        public void Asset_ResetInvalidatesTheInFlightInit()
+        {
+            var gate = new UniTaskCompletionSource();
+            var fake = new FakeAssetManager { InitTask = gate.Task };
+            AssetManager.ImplFactory = () => fake;
+
+            UniTask inFlight = AssetManager.InitializeAsync();
+            Assert.AreEqual(1, fake.InitCallCount, "前提校验：初始化应当已发起");
+
+            AssetManager.ResetForNewSession();
+
+            gate.TrySetResult(); // 上一会话的初始化此刻才「完成」——它必须被丢弃
+
+            Assert.Throws<InvalidOperationException>(() => inFlight.GetAwaiter().GetResult(),
+                "上一会话在途的初始化结果不得在第二会话里让实例复活");
+            Assert.IsFalse(AssetManager.IsInitialized);
+            Assert.IsTrue(fake.Disposed, "被作废的那个实例应当已被释放，而不是留在门面里");
+        }
+
+        /// <summary>
+        /// 两个「只报一次」的闩锁是**每会话一次**的提示，不是每进程一次——不复位则第二会话静默。
+        /// 这里用能力缺失分支（假件不实现 <c>IAssetPoolController</c>）来观测它。
+        /// </summary>
+        [Test]
+        public async Task Asset_ResetReArmsTheOnceOnlyPoolWarning()
+        {
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            await AssetManager.InitializeAsync();
+
+            LogAssert.Expect(LogType.Warning, new Regex("不支持 IAssetPoolController"));
+            AssetManager.ClearPool("ui/a");
+
+            AssetManager.ResetForNewSession();
+
+            AssetManager.ImplFactory = () => new FakeAssetManager(); // 复位清掉了钩子，第二会话重新注入
+            await AssetManager.InitializeAsync();
+
+            LogAssert.Expect(LogType.Warning, new Regex("不支持 IAssetPoolController"));
+            AssetManager.ClearPool("ui/a");
         }
 
         [Test]

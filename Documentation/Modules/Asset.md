@@ -87,9 +87,18 @@ Runtime/Asset/
   ——它此前零覆盖，而它决定的正是「初始化与加载是否同一个包」（见下方「已修」）。
 - **主线程断言已出现第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）。
   三份同形 → 值得评估抽公共防线（跨模块 API，需单独计划）。
-- **会话级复位**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，`AssetBootstrapStage`
-  见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的实例（其 `_managerImpl`
-  持有已销毁的 YooAsset 包）。与既有 Input/UI 立项同族，**归入该立项**，本轮未动。
+- ~~会话级复位~~ —— **2026-10-12 已修**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，
+  `AssetBootstrapStage` 见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的
+  实例（其 `_managerImpl` 持有已销毁的 YooAsset 包）。现在门面在会话开始时复位静态状态
+  （`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档）。
+  **比其它门面多两件事**：① 作废在途初始化（`InvalidateInflightInit` + 清任务）——上一会话半路中断的
+  初始化不得在第二会话里让实例「复活」；② 复位两个「只报一次」闩锁（`_poolCapabilityWarned` /
+  `_mainThreadViolationLogged`）——它们是**每会话**一次的提示。注意上面「已评估未采纳」里那条
+  「给 `_poolCapabilityWarned` 加复位入口」当时被否决的理由是「进程级闩锁正是『只告警一次』承诺的实现」——
+  本轮把它改判为**每会话一次**（跨会话仍只报一次，但换了会话就该重新提示）。
+  回归用例：`Tests/Runtime/Architecture/SessionResetTests`（3 条，已做改前必红，包括「在途初始化复活」那条）。
+  配套新增 Runtime 侧最小假件 `Tests/Runtime/Asset/FakeAssetManager`（此前 Runtime 树只有 UI 侧那个池替身，
+  它对 `InitializeAsync` 抛 NotUsed）。
 
 ## 审计轮次
 

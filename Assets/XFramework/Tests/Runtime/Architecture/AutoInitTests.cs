@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
+using XFramework.XAsset;
 using XFramework.XAudio;
 using XFramework.XConfig;
 using XFramework.XFileManager;
@@ -65,6 +66,7 @@ namespace XFramework.Architecture.Tests
             (typeof(ConfigManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(LocalizationManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(FileManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(AssetManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
         [Test]
