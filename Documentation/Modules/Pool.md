@@ -35,3 +35,10 @@ Runtime/Pool/
 | 1.2.0 | 修复 ClearAll 改为清闲置语义（原实现会使 Return 永久失效）、Pool.Clear 保留 Editor 活跃追踪；新增 EditMode 单元测试 |
 | 1.1.0 | 新增 CollectionPool 集合池（List/HashSet/Dictionary/StringBuilder） |
 | 1.0.0 | 初始版本                                                            |
+
+**2026-10-12 补 PlayMode 侧覆盖**（`Tests/Runtime/Pool/PoolFrameLifecycleTests`，3 例；此前 66 条用例全在
+`Tests/Editor/`）：本模块此前的入池-归还用例都是**同一时间片内**完成的，而真实用法里实例常常跨帧被持有
+（`using` 块的 `Dispose` 落在某一帧末尾、复用发生在再下一帧）。三条分别验：① 跨帧持有期间 `CountActive`
+为 1、`Dispose` 归还后计数翻转、再取回**引用同一**（复用的定义）；② `IPoolable.OnRent` / `OnReturn`
+此前只验过**次数**，现在验**帧号**——租出在第一帧、归还落在后续帧且两帧不同；③ `ClearAll` 跨帧后
+池仍注册可用（清的是闲置实例，不是注册表）。
