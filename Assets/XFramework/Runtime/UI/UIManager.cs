@@ -225,6 +225,33 @@ namespace XFramework.XUI
             }
         }
 
+        #region Session Reset
+
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时，上一播放会话的静态字段会存活到这一会话，而 <see cref="Destroy"/>
+        /// 在正常游戏流程里不会被调用——于是第二个会话的 <see cref="Initialize"/> 会**告警后早退**，
+        /// 继续挂在上一会话那个实例上（它内部持有的 Unity 对象多已随域销毁）。
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于
+        /// <c>UIRootNode.Awake</c> 的任何初始化；开域重载时静态字段本就是干净的，本方法退化为纯幂等空操作。</para>
+        /// <para><b>只丢引用、不调 <c>Dispose</c></b>：实例可能握着已随域销毁的 <c>GameObject</c> 与面板对象，
+        /// 在会话开头对它们调 Dispose 只会制造异常与噪音；实例清理归 <see cref="Destroy"/>（谁初始化谁清理）。
+        /// 驱动器（<c>_frameDriver</c> / <c>_tierDrivers</c>）同样只置空——旧调度器已被整只丢弃，
+        /// <c>Unregister</c> 无从谈起。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _instance = null;
+            _instanceInitialized = false;
+            _ownsInstance = false;
+            PanelFactoryFactory = null;
+            _frameDriver = null;
+            _tierDrivers.Clear();
+        }
+
+        #endregion
+
         /// <summary>
         /// 每帧驱动器：把 <see cref="Update"/> 接到 <see cref="UpdateManager"/> 上。
         /// <para>同时承载 Tier0 面板与 HUD 层的驱动，故它常驻注册。</para>

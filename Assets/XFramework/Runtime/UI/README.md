@@ -1255,11 +1255,13 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 
 ## 已知限制
 
-- **关闭域重载（Enter Play Mode Options）时，UI 的会话复位依赖 `UIRootNode` 的成对生命周期**：
-  `UIRootNode.Awake` 里「未初始化才 `Initialize`」与 `OnDestroy` 里「我是当前根才 `Destroy`」构成闭环，
-  正常场景卸载即可自洽；**但绕过 `UIRootNode` 手动调 `UIManager.Initialize` 的项目**在第二个播放会话里
-  会继续挂在上一轮的实例上（`Initialize` 是「已初始化则忽略」，使用方无法自救）。同类根因与验证手段见
-  `../Input/README.md` 的已知限制。
+- **关闭域重载（Enter Play Mode Options）时的会话复位**：~~绕过 `UIRootNode` 手动调 `UIManager.Initialize`
+  的项目在第二个播放会话里会继续挂在上一轮的实例上（`Initialize` 是「已初始化则忽略」，使用方无法自救）~~
+  —— **2026-10-12 已修**：门面在会话开始时复位静态状态（`ResetForNewSession`，挂
+  `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档，早于首场景 `Awake`，因而早于
+  `UIRootNode.Awake` 的初始化；开关域重载时是幂等空操作）。只丢引用、不调 `Dispose`（实例可能握着已随域
+  销毁的 `GameObject` 与面板对象），驱动器同样只置空——旧调度器已被整只丢弃。`UIRootNode` 的成对生命周期
+  照旧有效，两者不再互相依赖。同类根因与验证手段见 `../Input/README.md` 的已知限制。
 - 多根场景未覆盖：第二个场景的 `UIRootNode` 会被静默忽略（面板仍挂在第一个场景的根下）——单根是既有
   设计，见 `View/UIRootNode.cs` 的注释。
 - **面板资源不会自动卸载**：需显式调 `UnloadPanelAssetAsync`（配套 Asset 侧的 `IAssetPoolController`）。

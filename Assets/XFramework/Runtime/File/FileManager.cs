@@ -147,6 +147,28 @@ namespace XFramework.XFileManager
             _destroyed = true;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时，上一播放会话的静态字段会存活到这一会话，而 <see cref="Destroy"/>
+        /// 在正常游戏流程里不会被调用——于是第二个会话的 <c>Initialize</c> 会**告警后早退**
+        /// （<c>Destroy</c> 后允许重新初始化的那条软闩锁也只在调用方真的调过它时才解开）。
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于
+        /// <c>DesktopFileProvider.PrimeRootsOnLoad</c> 的域根预热与任何 <c>Initialize</c> 调用；
+        /// 开域重载时是纯幂等空操作。</para>
+        /// <para><b>只丢引用、不调 <c>Dispose</c></b>：上一会话的 provider 可能握着已随域销毁的资源，
+        /// 在会话开头对它调 Dispose 只会制造异常与噪音；清理归 <see cref="Destroy"/>。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _provider = null;
+            _baseProvider = null;
+            _cryptoProvider = null;
+            _cryptoDomain = null;
+            _initialized = false;
+            _destroyed = false;
+        }
+
         #endregion
 
         #region Crypto

@@ -112,6 +112,24 @@ namespace XFramework.XConfig
             _instanceInitialized = false;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
+        /// 取消 Reload Domain）时，上一播放会话的静态字段会存活到这一会话，而 <see cref="Destroy"/>
+        /// 在正常游戏流程里不会被调用——于是第二个会话的 <see cref="Initialize"/> 会**告警后早退**，
+        /// 继续挂在上一会话那个实例上（使用方无法自救：重复 <c>Initialize</c> 是「告警 + 忽略」）。
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于任何
+        /// <c>Initialize</c> 调用；开域重载时是纯幂等空操作。</para>
+        /// <para><b>不动 <see cref="ConfigChanged"/> 的外部订阅者</b>：那是调用方持有的句柄，与门面实例无关
+        /// （实例侧那条订阅由 <see cref="Destroy"/> 解绑）。只丢引用、不调 <c>Dispose</c>——
+        /// 清理归 <see cref="Destroy"/>。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _instance = null;
+            _instanceInitialized = false;
+        }
+
         #endregion
 
         #region Public API — 诊断回读

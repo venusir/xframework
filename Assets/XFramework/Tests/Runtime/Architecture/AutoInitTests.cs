@@ -4,13 +4,16 @@ using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XAudio;
+using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XInput;
+using XFramework.XLocalization;
 using XFramework.XLock;
 using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XSerialize;
 using XFramework.XTimer;
+using XFramework.XUI;
 using XFramework.XUpdate;
 
 namespace XFramework.Architecture.Tests
@@ -58,6 +61,10 @@ namespace XFramework.Architecture.Tests
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
             (typeof(LogManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(InputManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(UIManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(ConfigManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(LocalizationManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(FileManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
         [Test]

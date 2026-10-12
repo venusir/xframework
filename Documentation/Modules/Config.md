@@ -47,7 +47,11 @@
 
 - **同一类型既作 Table 行类型又作 Global 类型时的错乱**（F8）：`PreloadGlobalAsync` 会加入 Table 的在途任务并直接 return（不注册 Global），随后 `GetGlobal<T>()` 仍抛「未加载」。触发条件不现实，本轮只归档。
 - **`ConfigTypeHelper` 的失败路径不缓存**（F15）：类型未实现 `IConfigRow<>` 时每次调用都重新反射，且抛的是**未被包装**的 `ConfigException`，文案层级与其它失败路径不一致。
-- **会话级复位同族**（D5）：CHANGELOG 把 Config 列为「重复 `Initialize()` 变 no-op、使用方无法自救」的同根因模块——它与「关闭域重载时的会话复位」那一族同根因（该族的归档在 `Runtime/Input/README.md` 与 `Runtime/UI/README.md` 的已知限制里），修法待设计。
+- ~~会话级复位同族~~（D5）—— **2026-10-12 已处置**：Config 被列为「重复 `Initialize()` 变 no-op、使用方无法自救」的同根因模块，本轮按同一形态修（门面加 `ResetForNewSession()`，挂
+  `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档，只清 `_instance` / `_instanceInitialized`，
+  **不动 `ConfigChanged` 的外部订阅者**——那是调用方持有的句柄）。回归用例在
+  `Tests/Runtime/Architecture/SessionResetTests`（已做改前必红），族的收口记录见
+  `Runtime/Input/README.md` 已知限制。
 
 **一条被证伪的发现（如实留档）**：审计取证曾报「同一个实例连调两次 `SetInstance` 会留下两份订阅、事件派发两次」，并给出「裸 `+=` / `-=` 只移除一次」的推理。**复现已把它证伪**——漏看的是 `SetInstance` 里先 `UnsubscribeImplEvents(oldImpl)` 那两行，它对同一个实例同样成立（先退订再订阅，净一份）。生产代码因此一行未改，只留下一条钉住该行为的用例。
 
