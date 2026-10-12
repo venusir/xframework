@@ -108,6 +108,58 @@ namespace XFramework.Architecture.Tests
 
         #endregion
 
+        #region 整条会话序列
+
+        /// <summary>
+        /// 六个门面 + 登记表在会话 1 全部就位 → 退出 → 会话 2 全部重新就位。
+        /// <para>与上面逐门面的用例互补：那些各自只初始化一个门面（对其余门面的复位是空操作），
+        /// 这条验的是「它们同时在场时不互相干扰」——真实应用启动就是这种形状。</para>
+        /// </summary>
+        [Test]
+        public async Task FullSessionCycle_AllFacadesComeBack()
+        {
+            await BootSessionAsync();
+            AssertAllBooted("前提校验：会话 1");
+
+            SimulateNewSession();
+            Assert.IsFalse(UIManager.IsInitialized || ConfigManager.IsInitialized ||
+                           LocalizationManager.IsInitialized || FileManager.IsInitialized ||
+                           AssetManager.IsInitialized || Bootstrap.Stages.Count > 0,
+                "会话边界过后，门面与登记表都应回到「未初始化」");
+
+            await BootSessionAsync();
+            AssertAllBooted("第二个会话");
+        }
+
+        /// <summary>按默认引导形状把六个门面与一个阶段都拉起来。</summary>
+        private async UniTask BootSessionAsync()
+        {
+            UIManager.Initialize(_uiRoot.transform);
+            ConfigManager.Initialize();
+            LocalizationManager.Initialize("zh_Hans", new Dictionary<string, string>());
+            FileManager.Initialize();
+
+            // 复位会清掉测试钩子，故每个会话都要重新注入
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            await AssetManager.InitializeAsync();
+
+            Bootstrap.Register(new StubStage());
+        }
+
+        /// <summary>断言六个门面与登记表都已就位。</summary>
+        private static void AssertAllBooted(string label)
+        {
+            Assert.IsTrue(UIManager.IsInitialized, $"{label}：UI 应当已就位");
+            Assert.IsTrue(ConfigManager.IsInitialized, $"{label}：Config 应当已就位");
+            Assert.IsTrue(LocalizationManager.IsInitialized, $"{label}：Localization 应当已就位");
+            Assert.IsTrue(FileManager.IsInitialized, $"{label}：File 应当已就位");
+            Assert.IsTrue(AssetManager.IsInitialized, $"{label}：Asset 应当已就位");
+            Assert.AreEqual(1, Bootstrap.Stages.Count, $"{label}：登记表应当有 1 个阶段");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), $"{label}：UI 的帧驱动器应当在调度器里");
+        }
+
+        #endregion
+
         #region 静态登记表
 
         /// <summary>
