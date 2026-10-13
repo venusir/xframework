@@ -103,7 +103,7 @@ namespace XFramework.Architecture.Tests
         public void ModuleSets_EqualRuntimeDirectories()
         {
             var violations = new List<string>();
-            var modules = CollectRuntimeModules(violations);
+            var modules = SourceScanner.CollectRuntimeModules(violations);
 
             if (modules != null)
             {
@@ -170,7 +170,7 @@ namespace XFramework.Architecture.Tests
         {
             var violations = new List<string>();
             var rows = ReadTableRows(ModuleIndexHeading, 4, violations);
-            var modules = CollectRuntimeModules(violations);
+            var modules = SourceScanner.CollectRuntimeModules(violations);
             var assemblyNamespaces = CollectAssemblyNamespaces();
 
             // 前向：表里每一行的命名空间必须等于按约定推导的根，且真的存在于程序集
@@ -210,7 +210,7 @@ namespace XFramework.Architecture.Tests
             // 这一条用约定推导根、不用表里的格值，与前向互相独立——互换两行的命名空间也抓得住。
             if (modules != null)
             {
-                foreach (var ns in Sorted(assemblyNamespaces))
+                foreach (var ns in SourceScanner.Sorted(assemblyNamespaces))
                 {
                     bool covered = false;
                     foreach (var module in modules)
@@ -240,7 +240,7 @@ namespace XFramework.Architecture.Tests
         public void FeatureTable_EveryRuntimeModuleIsRegisteredOrExempt()
         {
             var violations = new List<string>();
-            var modules = CollectRuntimeModules(violations);
+            var modules = SourceScanner.CollectRuntimeModules(violations);
             var section = ReadSection(FeatureHeading, violations);
             var rows = section != null ? ReadTableRows(section, FeatureHeading, 2, violations) : null;
 
@@ -263,7 +263,7 @@ namespace XFramework.Architecture.Tests
                 }
             }
 
-            foreach (var module in Sorted(registered))
+            foreach (var module in SourceScanner.Sorted(registered))
             {
                 if (exempt.Contains(module))
                 {
@@ -275,7 +275,7 @@ namespace XFramework.Architecture.Tests
             // ② 登记处 ↔ Runtime 目录：未登记即红；改名/删除后未同步也红
             if (modules != null)
             {
-                foreach (var module in Sorted(modules))
+                foreach (var module in SourceScanner.Sorted(modules))
                 {
                     if (!registered.Contains(module) && !exempt.Contains(module))
                     {
@@ -285,7 +285,7 @@ namespace XFramework.Architecture.Tests
                     }
                 }
 
-                foreach (var module in Sorted(registered))
+                foreach (var module in SourceScanner.Sorted(registered))
                 {
                     if (!modules.Contains(module))
                     {
@@ -294,7 +294,7 @@ namespace XFramework.Architecture.Tests
                     }
                 }
 
-                foreach (var module in Sorted(exempt))
+                foreach (var module in SourceScanner.Sorted(exempt))
                 {
                     if (!modules.Contains(module))
                     {
@@ -536,25 +536,6 @@ namespace XFramework.Architecture.Tests
 
         #region 采集与工具
 
-        /// <summary>模块全集 = <c>Runtime/</c> 的直接子目录（与 <c>ModuleBoundaryTests</c> 同一枚举口径）。</summary>
-        private static HashSet<string> CollectRuntimeModules(List<string> violations)
-        {
-            string runtimeRoot = Path.Combine(SourceScanner.PackageRoot, "Runtime");
-            if (!Directory.Exists(runtimeRoot))
-            {
-                violations.Add($"找不到 Runtime 目录：{runtimeRoot}——测试壳的 Assets 是否为 junction?");
-                return null;
-            }
-
-            var modules = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var directory in Directory.GetDirectories(runtimeRoot))
-            {
-                modules.Add(Path.GetFileName(directory));
-            }
-
-            return modules;
-        }
-
         /// <summary>
         /// Runtime 程序集里出现的全部 <c>XFramework</c> 系命名空间。根命名空间 <c>XFramework</c> 本身也在内——
         /// 哪天有类型落在根上，反向检查会要求把它归到某个模块（那是有意为之，不是遗漏）。
@@ -580,14 +561,6 @@ namespace XFramework.Architecture.Tests
         private static string ExpectedNamespaceRoot(string module)
             => NamespaceExceptions.TryGetValue(module, out string ns) ? ns : "XFramework.X" + module;
 
-        /// <summary>排序副本：集合迭代顺序不稳定，违规消息要可复现。</summary>
-        private static List<string> Sorted(IEnumerable<string> source)
-        {
-            var list = new List<string>(source);
-            list.Sort(StringComparer.Ordinal);
-            return list;
-        }
-
         private static void CheckModuleSet(
             string heading, int columns, HashSet<string> runtimeModules, List<string> violations)
         {
@@ -606,7 +579,7 @@ namespace XFramework.Architecture.Tests
                 }
             }
 
-            foreach (var module in Sorted(runtimeModules))
+            foreach (var module in SourceScanner.Sorted(runtimeModules))
             {
                 if (!inTable.Contains(module))
                 {
@@ -615,7 +588,7 @@ namespace XFramework.Architecture.Tests
                 }
             }
 
-            foreach (var module in Sorted(inTable))
+            foreach (var module in SourceScanner.Sorted(inTable))
             {
                 if (!runtimeModules.Contains(module))
                 {

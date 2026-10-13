@@ -18,6 +18,7 @@
 - **公开 API 基线:** Runtime 程序集 `Venusy609.Xframework` 的公开面由 `Tests/Runtime/Architecture/PublicApiBaselineTests` 锁定(基线 `PublicApiBaseline.txt`,含非 sealed 类上的 `protected` 扩展点)。公开面变了而基线未变即红——**机器只负责说「变了」,判断仍归人**:确属有意时按「提交拆分与授权」单独请用户确认,在 `CHANGELOG.md` 的迁移表补行,再用 `Tools/run-tests.ps1 -UpdateApiBaseline` 更新基线(更新模式**只写盘、永不给绿灯**,绿灯由不带开关的重跑给出)。Editor 程序集不在射程内
 - **文档门禁:** 阶段收尾除全量测试外,再跑 `Tools/check-docs.ps1 -Enforce`(三项都须满足:包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`)。它是独立的一条通道:csproj 未设 `DocumentationFile`,**默认编译根本不检查文档注释**,不开这一枪则写坏文档不会有任何反馈。**哪些码进这一枪以脚本头部「覆盖范围」为唯一真相**(2026-10-13 起十一个码全部纳门;扩容走「先诊断看曲线、清完存量再纳门」)
 - **包 README 清单表门禁:** 包 README 的四张清单表(主要功能 / 模块索引 / 可替换的实现一览 / 可配置项一览)由 `Tests/Runtime/Architecture/ReadmeTableTests` 在测试侧守卫(模块集与 `Runtime/` 直接子目录双向相等、文档链接落盘、命名空间列与程序集双向覆盖、功能表登记表未登记即红)。新模块上线要么同步四表、要么在登记处显式豁免;`check-docs.ps1` 对 `.md` 仍零覆盖,两条通道互补
+- **模块 README「已知限制」门禁:** 每个 `Runtime/<模块>/README.md` 都必须有「已知限制」小节,由 `Tests/Runtime/Architecture/ReadmeSectionTests` 在测试侧守卫(只认 `##` 与 `###` 级标题;**Reactive 以两个集合级小节给出,天然满足**,故无例外表)。新模块上线要么写该小节、要么在豁免登记处写明理由;`check-docs.ps1` 对 `.md` 仍零覆盖,同「包 README 清单表门禁」
 
 ## 架构分层
 

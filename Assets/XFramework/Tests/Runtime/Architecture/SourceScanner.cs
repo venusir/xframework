@@ -41,6 +41,39 @@ namespace XFramework.Architecture.Tests
         internal static string RelativePath(string file)
             => file.Substring(PackageRoot.Length + 1).Replace('\\', '/');
 
+        /// <summary>
+        /// 模块全集 = <c>Runtime/</c> 的直接子目录（与 <c>ModuleBoundaryTests</c> 同一枚举口径）。
+        /// <para><b>为什么在这里</b>：「模块是什么」是 <c>ReadmeTableTests</c>（四张表）与
+        /// <c>ReadmeSectionTests</c>（已知限制小节）共同的输入，同一个问题的两份答案是漂移的起点——
+        /// 按 <c>SourceScanner</c> 的既有判据（出现第三处副本就该抽出来），这里一次抽成唯一实现。
+        /// 目录不存在时记一条违规并返回 <c>null</c>（调用方继续收集其它违规后再断言）。</para>
+        /// </summary>
+        internal static HashSet<string> CollectRuntimeModules(List<string> violations)
+        {
+            string runtimeRoot = Path.Combine(PackageRoot, "Runtime");
+            if (!Directory.Exists(runtimeRoot))
+            {
+                violations.Add($"找不到 Runtime 目录：{runtimeRoot}——测试壳的 Assets 是否为 junction?");
+                return null;
+            }
+
+            var modules = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var directory in Directory.GetDirectories(runtimeRoot))
+            {
+                modules.Add(Path.GetFileName(directory));
+            }
+
+            return modules;
+        }
+
+        /// <summary>排序副本：集合迭代顺序不稳定，违规消息要可复现。</summary>
+        internal static List<string> Sorted(IEnumerable<string> source)
+        {
+            var list = new List<string>(source);
+            list.Sort(StringComparer.Ordinal);
+            return list;
+        }
+
         #endregion
 
         #region 只读代码
