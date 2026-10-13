@@ -159,13 +159,18 @@ await AssetManager.InitializeAsync(options,
 // 2. 请求最新版本号
 string version = await AssetManager.RequestPackageVersionAsync();
 
-// 3. 预检新版本清单（可选，不激活）
+// 3. 预检该版本清单能不能加载（可选；**预检只做可用性检查**——不激活清单，
+//    也不改变下载器基于哪份清单）
 await AssetManager.PreDownloadContentAsync(version);
 
-// 4a. 一键下载全部更新（带进度）
+// 4. 激活新版本清单——**必须在下载之前**：下载器按「当前激活清单」算待下内容，
+//    晚于下载调用等于按旧清单算，会得到一份空荡的待下列表
+await AssetManager.UpdatePackageManifestAsync(version);
+
+// 5a. 一键下载全部更新（带进度）
 bool success = await AssetManager.DownloadAssetsAsync(progress: p => Debug.Log($"{p * 100}%"));
 
-// 4b. 或使用下载器句柄精细控制（暂停/恢复/取消/事件）
+// 5b. 或使用下载器句柄精细控制（暂停/恢复/取消/事件）
 using (var downloader = AssetManager.CreateDownloader(new[] { "hot" }))
 {
     downloader.ProgressChanged += p => Debug.Log($"{p * 100}%");
@@ -178,12 +183,12 @@ using (var downloader = AssetManager.CreateDownloader(new[] { "hot" }))
     bool ok = await downloader.WaitAsync();
 }
 
-// 5. 激活新版本清单（之后 LoadAsync 加载新版本资源）
-await AssetManager.UpdatePackageManifestAsync(version);
+// 6. 下载完成后再加载新版本资源（激活后、下载完成前加载，未下到的 bundle 会走按需下载）
 ```
 
 > 版本号可随时通过 `AssetManager.GetPackageVersion()` 读取。
 > 下载器句柄的 `Dispose()` 仅解除事件订阅，不中止下载；需要中止时调用 `Cancel()`。
+> **顺序不是风格问题是正确性问题**：见下方「热更链路状态流转」与已知限制第 12 条。
 
 ### 8. 卸载与查询
 
@@ -411,11 +416,15 @@ LoadAsync<GameObject> → 句柄（+1）
 
 ```
 RequestPackageVersionAsync → 检查远端新版本号
-  → PreDownloadContentAsync → 预检新版本清单（不激活，可选）
+  → PreDownloadContentAsync → 预检该版本清单能不能加载（不激活，可选）
+  → UpdatePackageManifestAsync → 激活新版本（**下载器的基准在这里切换**）
   → CreateDownloader / DownloadAssetsAsync → 下载（Pause/Resume/Cancel 可控制）
-  → UpdatePackageManifestAsync → 激活新版本（此后 LoadAsync 加载新版本资源）
+  → 此后 LoadAsync 加载新版本资源
 ```
 
+- **激活必须在下载之前**：`CreateDownloader` 按「当前**激活**清单」算待下内容（`ActiveManifest`），
+  而预检**不激活**任何东西。把激活放到下载之后，待下列表就是按旧清单算的——预下载**静默空转**，
+  要等激活后才按需下载。
 - 断点续传由 YooAsset 缓存机制保证；下载失败的资源不会破坏缓存
 - 下载器 `Progress` 在无待下载内容（`TotalDownloadBytes == 0`）时特判返回 1f，避免除零 NaN
 
@@ -479,6 +488,10 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 11. **`IAssetSceneLoader` 是可选能力**：第三方替换 `IAssetManager` 时若未实现它，场景加载返回无效句柄、
     卸载返回 `false`，两者各告警一次。句柄是后端发的凭据，**不要自己伪造**——实现方会校验句柄与
     自己登记的加载是否对得上，对不上的一律拒绝。
+12. **预检（`PreDownloadContentAsync`）只回答「该版本清单能不能加载」**：它**不激活**清单，
+    **也不改变 `CreateDownloader` 的基准**（下载器永远按当前激活清单算）。所以「先预检、后下载」
+    拿不到新版本的内容，得**先激活再下载**；也**拿不到**「要下多少 MB / 多少个文件」——
+    框架没有把预检产出的待下清单透出来。
 
 ## 接口承诺到哪为止
 

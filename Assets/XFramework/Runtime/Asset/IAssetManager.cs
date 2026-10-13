@@ -81,8 +81,10 @@ namespace XFramework.XAsset
         UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 预检指定版本的清单（检查版本是否可用、统计待下载内容，不激活）。
-        /// <para>成功后调用 <see cref="CreateDownloader"/> 会基于该版本创建下载器。</para>
+        /// 预检指定版本的清单：回答「该版本的清单能不能加载」（不激活清单，可选步骤）。
+        /// <para><b>它只做可用性检查</b>：不改变当前激活清单，也<b>不改变 <see cref="CreateDownloader"/> 的基准</b>
+        /// ——下载器永远按「当前激活清单」算待下内容。要下载新版本的内容必须<b>先</b>
+        /// <see cref="UpdatePackageManifestAsync"/> 激活它（详见模块 README 的「热更链路状态流转」与已知限制第 12 条）。</para>
         /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
         /// </summary>
         UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
