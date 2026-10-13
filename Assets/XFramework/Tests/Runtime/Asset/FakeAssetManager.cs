@@ -17,8 +17,11 @@ namespace XFramework.XAsset.Tests
     /// <para><b>为什么 Runtime 树要另有一份</b>：<c>Tests/Editor/Asset/FakeAssetManager</c> 在 Editor 测试
     /// 程序集里（两个程序集互不可见），<c>Tests/Runtime/UI/FakeAssetManager</c> 则是 UI 侧专用的池替身、
     /// 对 <c>InitializeAsync</c> 抛 NotUsed——同名假件按测试树各存一份是既有先例。</para>
+    /// <para><b>它不是 sealed</b>：能力接口由派生类挂上——<c>XFramework.XScene.Tests.FakeSceneAssetManager</c>
+    /// 派生自它并实现 <c>IAssetSceneLoader</c>。这与 Editor 树里 <c>PoolCapableAssetManager</c> 的形态相同：
+    /// 基类刻意**不**实现能力接口，「能力缺失」那条分支正需要它。</para>
     /// </summary>
-    internal sealed class FakeAssetManager : IAssetManager
+    internal class FakeAssetManager : IAssetManager
     {
         /// <summary><see cref="InitializeAsync"/> 的调用计数。</summary>
         public int InitCallCount;
@@ -50,7 +53,8 @@ namespace XFramework.XAsset.Tests
             IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
             => throw NotUsed();
 
-        public UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+        /// <summary><c>virtual</c>：派生假件要观测「谁在什么时候请求了回收」（<c>SceneLoadOptions.UnloadUnusedAfterLoad</c>）。</summary>
+        public virtual UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
             => throw NotUsed();
 
         public void TryUnloadUnusedAsset(string location, string packageName = null) => throw NotUsed();
