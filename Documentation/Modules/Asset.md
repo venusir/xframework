@@ -43,6 +43,7 @@ Runtime/Asset/
 | 2026-08 | 池语义修正（方案 A）：回池保活——回池保留句柄、真正销毁才释放；补齐取消支持与池状态统计 |
 | 2026-10 | 审计轮（见下两节）：等待者按代际登记（作废路径不再静默）、非成功路径释放句柄、回池去重、门面完备性守卫（第九个采用者）、池 PlayMode 用例、下载器取消路径退订与未 Begin 拒绝、主线程契约（断言 + README 两节） |
 | 2026-10-13 | 场景管理立项轮：场景原语**移出** `IAssetManager` 改由能力接口 `IAssetSceneLoader` 承载（破坏性）；场景加载三缺陷修复（失败路径释放句柄、取消后的后台善后、取 `SceneObject` 取代按名回查）；为可测性抽出 internal 场景加载缝（`ISceneLoadSource` / `ISceneLoadOperation`）。使用方文档的「已知限制」新增 4 条。详见 `Documentation/Modules/Scene.md` 与包 `CHANGELOG` |
+| 2026-10-13 | **热更编排边界裁定轮**（框架级评估 §5.2 步骤 8）：① 四个句柄的 `Status` 由上游 `YooAsset.EOperationStatus` 换成框架自有 `AssetOperationStatus`（**破坏性**）——公开面不再绑上游类型，四成员一一对应、换算唯一实现在 `AssetOperationStatusMapper`（未知值回落 `None`，绝不回落 `Succeed`，见 `AssetOperationStatusTests`）；② 订正热更链路顺序：**激活必须先于下载**（预检不改变下载基准）——原文档两处 + 接口 XML 照抄会**静默空转**；③ 真缺口与「判给项目侧」的清单见下节 |
 
 详细变更见 git log。
 
