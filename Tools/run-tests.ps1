@@ -287,6 +287,24 @@ foreach ($currentPlatform in $platforms) {
     #   2) 总数 > 0 才写基线——编译失败会产出 total=0 的结果文件，写进基线会污染此后所有比较
     #   3) 按 Platform 分开记——EditMode 的用例数远小于 PlayMode
     $total = [int]$run.total
+
+    # ---------- 全量跑 0 用例 = 假绿，直接判失败 ----------
+    #
+    # 上面第 2 条守卫把「总数 > 0」当成了写基线的前提，于是最极端的那种缩水——缩到 0——恰好
+    # 绕过了它：结果文件照样产出、failed = 0，走完全部判定后 exit 0。**这不是「0 失败」，是
+    # 一个用例都没跑**，而它对使用者的呈现与真绿一模一样。
+    # 实测（2026-10-14）：把 Assets/XFramework/Tests 改名为 Tests~（Unity 不导入 ~ 目录）后，
+    # 双平台各报「总计 0」、脚本退出码 0 —— 门禁给了一个假绿。改动它的那次实验详见
+    # Documentation/FrameworkReview.md §4.3 第 11 条。
+    # 只在全量形态判：-Filter / -Fixture 命不中用例是正常操作（上面已有专门告警）。
+    if (-not $Filter -and $total -eq 0) {
+        Write-Host ""
+        Write-Host "全量跑一个用例都没执行——这不是「0 失败」，是测试集根本没被跑起来。" -ForegroundColor Red
+        Write-Host "  常见原因：测试 asmdef 被改坏 / 测试目录被改成 ~ 结尾（Unity 不导入 ~ 目录）/ 编译失败。" -ForegroundColor Red
+        Write-Host "  处置：先看日志里的 error CS（$logFile），再确认 Assets/XFramework/Tests 仍叫 Tests。" -ForegroundColor Yellow
+        $anyFailure = $true
+    }
+
     if (-not $Filter -and $total -gt 0) {
         $baselineFile = Join-Path $resultsDir "last-count-$currentPlatform.txt"
         $previous = 0

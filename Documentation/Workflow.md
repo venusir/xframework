@@ -96,7 +96,7 @@
 | `-Filter <片段>` | **正则**匹配（Unity `-testFilter` 的语义，不是子串）；留空 = 全量（门禁）。点号不转义即「任意字符」，`PoolTests` 会连 `CollectionPoolTests` 一起捞 |
 | `-Fixture <类名>` | 按 fixture 精确匹配（内部生成 `\.<类名>\.`）；与 `-Filter` 互斥 |
 | `-Platform` | `All`（默认）/ `PlayMode` / `EditMode`；带 `-Filter` 且未显式指定时只跑 `PlayMode` |
-| `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」） |
+| `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」）。**全量跑 0 用例直接判失败**（2026-10-14 补：缩到 0 恰好绕过上面那条告警，而它对使用者的呈现与真绿一模一样——详见 `FrameworkReview.md` §4.3 第 11 条） |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
 | `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`。自带过滤器（只跑基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
