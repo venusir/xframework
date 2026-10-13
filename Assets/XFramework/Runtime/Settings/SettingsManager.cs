@@ -10,7 +10,7 @@ namespace XFramework.XSettings
     /// <summary>
     /// 全局设置管理器（静态外观）。
     /// <para>提供统一的静态 API 来管理多套强类型设置对象。</para>
-    /// <para>内部维护 <see cref="Dictionary{Type, object}"/> 缓存多个 <see cref="ISettingsManager{T}"/> 实例，
+    /// <para>内部维护 <c>Dictionary&lt;Type, object&gt;</c> 缓存多个 <see cref="ISettingsManager{T}"/> 实例，
     /// 支持同时管理 <c>GameSettings</c>、<c>EditorSettings</c> 等不同类型的设置。</para>
     /// </summary>
     /// <remarks>

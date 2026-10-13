@@ -343,7 +343,6 @@ namespace XFramework.XTimer
 
         /// <summary>该轴的驱动器。供测试断言注册状态使用。</summary>
         /// <param name="axis">时间轴。</param>
-        /// <param name="axis">时间轴。</param>
         internal TimerTicker TickerOf(int axis)
         {
             return _tickers[axis];

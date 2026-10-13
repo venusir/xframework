@@ -335,9 +335,6 @@ namespace XFramework.XAudio
             }
         }
 
-        /// <summary>某个通道下当前活跃的播放数量。未声明的通道返回 <c>0</c>。</summary>
-        /// <param name="channel">通道名；<c>null</c>/空归一化为 <see cref="AudioChannels.Default"/>。</param>
-        /// <exception cref="InvalidOperationException">未初始化时抛出。</exception>
         /// <summary>
         /// 把已创建的通道写入缓冲区（先清空），返回条数。
         /// <para>回答「声音听不见」的第一问：哪些通道被用过、各自音量与静音、各有多少路在播。</para>
@@ -360,6 +357,9 @@ namespace XFramework.XAudio
             return 0;
         }
 
+        /// <summary>某个通道下当前活跃的播放数量。未声明的通道返回 <c>0</c>。</summary>
+        /// <param name="channel">通道名；<c>null</c>/空归一化为 <see cref="AudioChannels.Default"/>。</param>
+        /// <exception cref="InvalidOperationException">未初始化时抛出。</exception>
         public static int GetActiveVoiceCount(string channel)
         {
             EnsureInitialized();

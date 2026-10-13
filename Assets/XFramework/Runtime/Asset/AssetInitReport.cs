@@ -13,6 +13,11 @@ namespace XFramework.XAsset
         /// <summary>当前步骤描述。</summary>
         public readonly string Description;
 
+        /// <summary>
+        /// 创建进度报告。
+        /// </summary>
+        /// <param name="progress">整体进度，0~1。</param>
+        /// <param name="description">当前步骤描述。</param>
         public AssetInitReport(float progress, string description)
         {
             Progress = progress;

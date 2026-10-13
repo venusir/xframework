@@ -11,7 +11,7 @@ namespace XFramework.XPipeline
     /// <para>持有子上下文数组与广播快照,作为子上下文 Owner(<see cref="IStageContextSink"/>):
     /// 子阶段写入即触发组内加权聚合(经共享扫描助手 <see cref="ContextAggregation"/> 完成
     /// Σ(w·p)/Σ(w) 与阈值节流),收敛后转发容器主上下文;首失败诊断捕获(诊断优先);
-    /// 失败时对注入的链接取消源调 <see cref="CancellationTokenSource.Cancel"/> 中断在途兄弟
+    /// 失败时对注入的链接取消源调 <see cref="CancellationTokenSource.Cancel()"/> 中断在途兄弟
     /// (仅并行容器;串行容器注入 null)。</para>
     /// <para>每次执行前经 <see cref="Reset"/> 注入转发目标并复位状态;容器沉降后经
     /// <see cref="ReleaseLinkedCts"/> 释放取消源引用;执行结束经 <see cref="Settle"/> 关闸

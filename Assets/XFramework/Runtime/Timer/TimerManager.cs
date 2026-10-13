@@ -12,7 +12,7 @@ namespace XFramework.XTimer
     /// <see cref="AutoInit"/> 自初始化即可用（同 <c>UpdateManager</c> / <c>LockManager</c> / <c>MessageManager</c>）。</para>
     /// <para><b>时间口径完全来自 <c>XUpdate</c></b>：定时器不新建时间模型，截止时刻建在 Update 给节点的
     /// <c>deltaTime</c> 累积出的逻辑时钟上。于是「受不受 <c>timeScale</c> 影响」「暂停时冻不冻」由
-    /// <paramref name="timeMode"/> 一个参数决定，取舍口径与 Update 完全一致。</para>
+    /// <c>timeMode</c> 一个参数决定，取舍口径与 Update 完全一致。</para>
     /// <para><b>它在 <c>UniTask.Delay</c> 之外多给什么</b>：可查询剩余量的句柄、零分配的可复用槽位、
     /// 不随累加漂移的固定间隔、以及按最近截止时间自动升降的 Update 档位（详见模块 README）。</para>
     /// </summary>
