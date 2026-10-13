@@ -6,9 +6,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-> **本版含公开 API 变更，其中有破坏性变更**：`AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、
-> `IAssetManager.LoadSceneAsync` 从主接口移入可选能力接口 `IAssetSceneLoader`。迁移见
-> `### Changed` 的「破坏性变更迁移表」与「行为变更」。因含破坏性变更，**下次发版应为 `0.4.0`**。
+> **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
+> `AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、`IAssetManager.LoadSceneAsync` 从主接口
+> 移入可选能力接口 `IAssetSceneLoader`。迁移见 `### Changed` 的「破坏性变更迁移表」与「行为变更」。
+> 因含破坏性变更，**下次发版应为 `0.4.0`**。
 
 ### Added
 
@@ -20,6 +21,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （第三方后端也要能产出句柄，同 `AudioHandle` 的取舍），成员 `IsDefault` / `IsValid` / `UnloadAsync(ct)`
   / `Dispose()`（即发即忘，不抛）。门面配 `LoadSceneAsync`（改形，返回句柄）与 `UnloadSceneAsync`
   （**唯一「未初始化也不抛」的成员**——它会被 `Dispose` 调到）。**无卸载路径**这条缺口由此关闭。
+
+#### Scene
+
+- **新增 `XScene` 场景管理模块**（`Documentation/Roadmap.md` §三 的「场景管理」条目立项；该条目是本表最大的一条，
+  本轮把论证与实施一并做完）：静态门面 `SceneManager` + `SceneLoadOptions` + `SceneLoadProgress`，**只管
+  「一个场景资源怎么加载、怎么卸载」**。**没有**场景栈、没有加载界面编排、没有场景间传参通道、没有场景
+  生命周期回调——四条边界逐条落地（理由与配方见 `Runtime/Scene/README.md` 的「设计取舍」）。
+  **无 `ISceneManager` 接口**：本仓「有接口」的分界线是「是否存在可替换的后端」，本模块的后端就是 `XAsset`
+  的 `IAssetSceneLoader`（同 Timer 的取舍）；**无静态状态**，故无初始化、无会话复位、无诊断面板。
+  模块与 `XAsset` 的分工是「编排入口 vs 资源后端」——场景是资源，但资源系统的门面不是场景的入口。
+  **门面与 `UnityEngine.SceneManagement.SceneManager` 同名**（用户裁定接受）：同时 `using` 两者会 CS0104，
+  README 首屏给两条别名写法；模块源码自身一律写别名——**裸写不报错**，会静默遮蔽成自家类型（首轮编译踩到
+  的是另一个同族坑：Unity 6 自己也有 `SceneHandle`，与 YooAsset 的同名类型在同一文件里 CS0104，已用别名消解）。
 
 #### 测试基础设施
 

@@ -1485,6 +1485,21 @@ XFramework.XSave.SaveReport  ::  public readonly struct
 XFramework.XSave.SaveReport#ctor  ::  public(float progress, string description)
 XFramework.XSave.SaveReport.Description  ::  public readonly string
 XFramework.XSave.SaveReport.Progress  ::  public readonly float
+XFramework.XScene.SceneLoadOptions  ::  public readonly struct
+XFramework.XScene.SceneLoadOptions#ctor  ::  public(UnityEngine.SceneManagement.LoadSceneMode mode = Single, bool activateAfterLoad = false, bool unloadUnusedAfterLoad = false)
+XFramework.XScene.SceneLoadOptions.ActivateAfterLoad  ::  public readonly bool
+XFramework.XScene.SceneLoadOptions.Additive  ::  public static XFramework.XScene.SceneLoadOptions Additive { get; }
+XFramework.XScene.SceneLoadOptions.Mode  ::  public readonly UnityEngine.SceneManagement.LoadSceneMode
+XFramework.XScene.SceneLoadOptions.Single  ::  public static XFramework.XScene.SceneLoadOptions Single { get; }
+XFramework.XScene.SceneLoadOptions.UnloadUnusedAfterLoad  ::  public readonly bool
+XFramework.XScene.SceneLoadProgress  ::  public readonly struct
+XFramework.XScene.SceneLoadProgress#ctor  ::  public(float progress, string location)
+XFramework.XScene.SceneLoadProgress.Location  ::  public readonly string
+XFramework.XScene.SceneLoadProgress.Progress  ::  public readonly float
+XFramework.XScene.SceneManager  ::  public static class
+XFramework.XScene.SceneManager.ActiveScene  ::  public static UnityEngine.SceneManagement.Scene ActiveScene { get; }
+XFramework.XScene.SceneManager.LoadSceneAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.AssetSceneHandle>(string location, XFramework.XScene.SceneLoadOptions options = default, System.IProgress<XFramework.XScene.SceneLoadProgress> progress = null, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XScene.SceneManager.SetActiveScene  ::  public static bool(UnityEngine.SceneManagement.Scene scene)
 XFramework.XSerialize.ISerializer  ::  public interface
 XFramework.XSerialize.ISerializer.Deserialize  ::  public object(byte[] data, System.Type type)
 XFramework.XSerialize.ISerializer.Format  ::  public string Format { get; }
