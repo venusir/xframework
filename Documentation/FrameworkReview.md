@@ -198,9 +198,13 @@
    「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`）。
    原句的「2 个」与「Message 尚无」都不成立：**Message 不适用这条不变量**（`MessageManager` 是
    `IMessagePublisher` / `IMessageSubscriber` 的扩展方法宿主，不是转发门面）。
-   **仍开着的是更细的一问**（本条修订后的真实内容）：多接口模块只守了**主**接口——UI 没覆盖
-   `IUIHudProvider` / `IUITipProvider`，Settings 没覆盖 `ISettingsStore` / `IAsyncSettingsStore`，
-   这些 provider / store 型接口要不要同名转发守卫需要一次裁定。详见 `ModuleAudit.md` §八 该行。
+   **守卫形态一并订正**：是「同名」而非「同名 + 同元数」——只有 Log 另查元数（`Signature = 名字 + 参数个数`）、
+   Settings 另有一张改名映射表（`Store`/`Migrator`/`Validator` → `Get*`/`Set*`），其余只查名字
+   （签名不必测：转发体经 `IXxxManager` 调用，不符编译不过）。
+   **provider / store 型接口那一问已裁定（2026-10-13）：不守**——它们是注入的后端契约、游戏侧入口在
+   `IUIManager` / `ISettingsManager<T>` 上且刻意改名（`ShowHudAsync`/`HideHud` vs `AttachAsync`/`Detach`）；
+   接口增成员时实现方编译期即报错，漂移本就显形；同名匹配对 `Load`/`Save` 这类碰巧重名的成员会假通过。
+   结论落 `ModuleAudit.md` §八 该行。
 5. **`ModuleAudit.md` 的判据源自 CHANGELOG，存在已知盲区**（**2026-10-13 复核：证据已翻转、论点收窄**）。~~Config 模块 31 条提交、两次破坏性重构，而 CHANGELOG 里出现 **0 次**（`Documentation/Modules/Config.md:54`）~~ —— 归并轮（`632755b`）给 CHANGELOG 补了模块轴，Config 自此有了自己的 `#### Config` 小节（现两条：`:803` 在 `### Fixed`、`:998` 在 `### Documentation`；全文提及 35 行）。收窄后的论点仍成立：判据是对 `### Fixed` 段归纳的，**对从未进入该段的缺陷史与归纳法本身是盲区**。「手册从本模块的缺陷史里学到的是零」这句随证据一起失效；`Modules/Config.md:59`（行号自 :54 漂移）仍写着旧句，回填已排入执行序列步骤 7。**这是判据生成方式的系统性缺陷**，不只是 Config 一个模块的问题。
 6. **示例覆盖面窄**（6/22 模块）。~~且上不了架（§4.3 第 7 条）~~ —— **2026-10-11 已上架**（`97d5ba9`：Package Manager 的 Samples 页签可见）。覆盖面扩展**已点名不在执行序列内**（无明确完成判据，按需另议）；上手路径目前是 README + 7 个示例。
 
