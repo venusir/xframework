@@ -240,6 +240,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   §六 与 `FrameworkReview.md` §4.3-5 落纸；`FrameworkReview.md` §5.1/§5.2 回填。**使用方不受影响**：
   全部结论落在维护向与仓根文档，公开面一个字都没动。
 
+- 步骤 7 文档欠账收口（`FrameworkReview.md` §5.2 步骤 7 / #21 等五项）：
+  **五个模块补「已知限制」**——`Runtime/{Event,Message,Pipeline,Pool,Serialize}/README.md` 按既有形态
+  （逐字一致的开场白 + 「**结论句。** 机制 / 代价 → 那就改用 X」条目）补写，素材取自各 README 正文与
+  `Modules/<模块>.md` 的在册结论，不新造事实；`Runtime/` 下 23 个模块 README 由此 23/23 都有该小节。
+  同日**补上守卫** `Tests/Runtime/Architecture/ReadmeSectionTests`（每个 `Runtime/<模块>/README.md` 必须有该小节；
+  Reactive 的两个集合级小节天然满足，无例外表；确实不需要者去豁免登记处写明理由），改前必红已验，
+  `CLAUDE.md` 同步补一条同级门禁规则。「模块全集 = `Runtime/` 直接子目录」的枚举随之从 `ReadmeTableTests`
+  抽进 `SourceScanner`（两处守卫共用一份定义）。
+  **`Modules/{Pipeline,Pool}.md` 补「已评估未采纳与未决」**（23/23 模块文档齐），其中 Diagnostics 那条
+  Pool 的「未采纳」按其落点表迁归 Pool（那边留指针）。
+  **Config 的两处失效断言订正**：「CHANGELOG 里一条都没有 / 出现次数是 0」按字面**写下时就不成立**，而
+  「手册从本模块的缺陷史里学到的是零」**仍然成立、但理由要换**——判据归纳的快照是 2026-09-27，本模块第一条
+  `### Fixed` 记录 2026-09-30 才出现，是「归纳入早于缺陷史入册」（0.3.0 已发布小节加订正框，原文保留）。
+  **`ModuleAudit.md`** §七 补上判据来源的盲区（没进过 `### Fixed` 的缺陷史，归纳法从它身上学不到）、
+  §二 的普查步加缓解（必读该模块的 `Modules/<模块>.md` 沿革与 `git log` 缺陷史，不只照清单扫）。
+  **包 README 写明**开发版本 `6000.4.5f1` 与最低要求 `6000.3` 的区别（「最低要求 ≠ 开发版本，不是漂移」）。
+  **对使用方是纯增量的文档改动**：五节「已知限制」正是给他们看的；公开面与运行时行为零改动。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。
