@@ -5,7 +5,7 @@ namespace XFramework.XInput
     /// <summary>
     /// 输入提供者接口。所有底层输入实现（Unity Input System、Rewired 等）必须实现此接口。
     /// <para>使用 string 作为动作标识，不与任何游戏类型耦合。第三方项目可在自己的代码中自由定义动作名和输入封装。</para>
-    /// <para>支持多玩家（通过 <paramref name="playerId"/> 参数，默认 0）。</para>
+    /// <para>支持多玩家（通过 <c>playerId</c> 参数，默认 0）。</para>
     /// </summary>
     public interface IInputProvider : IDisposable
     {

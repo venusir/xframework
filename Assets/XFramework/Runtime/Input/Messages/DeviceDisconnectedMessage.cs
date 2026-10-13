@@ -14,6 +14,12 @@ namespace XFramework.XInput.Messages
         /// <summary>是否为手柄</summary>
         public readonly bool IsGamepad;
 
+        /// <summary>
+        /// 创建设备断开消息。
+        /// </summary>
+        /// <param name="deviceName">设备显示名。</param>
+        /// <param name="deviceId">设备运行时唯一 ID。</param>
+        /// <param name="isGamepad">是否为手柄。</param>
         public DeviceDisconnectedMessage(string deviceName, int deviceId, bool isGamepad)
         {
             DeviceName = deviceName;

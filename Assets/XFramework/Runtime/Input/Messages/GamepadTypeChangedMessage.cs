@@ -11,6 +11,11 @@ namespace XFramework.XInput.Messages
         /// <summary>变化后的手柄类型</summary>
         public readonly GamepadType CurrentType;
 
+        /// <summary>
+        /// 创建手柄类型变化消息。
+        /// </summary>
+        /// <param name="previous">变化前的手柄类型。</param>
+        /// <param name="current">变化后的手柄类型。</param>
         public GamepadTypeChangedMessage(GamepadType previous, GamepadType current)
         {
             PreviousType = previous;
