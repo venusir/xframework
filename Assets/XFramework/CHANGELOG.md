@@ -80,9 +80,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   三例把 `Modules/Bootstrap.md` 记的两条「推理，未实测」（销毁 × 在途启动交叠）升级为**实测**——用真实
   `AssetBootstrapStage` + 真实 `AssetManager` 门面 + 假实现端到端**复现了预言的「启动失败」错误日志链**
   （三条 Error），并实测出一条更重后果：`Shutdown` 清理整张登记表后，**被 Shutdown 的后置相位仍会被
-  在途管线执行**。**其中两例为「钉现状」形态**：缺陷定性与修法属公开行为变更、待裁定；若裁定修复，
-  两条断言翻转为「干净关闭」（`Runtime/Bootstrap/README.md` 的已知限制同步改写）。使用方不受影响：
-  纯测试新增，公开面一个字都没动。
+  在途管线执行**。**该后果已随同日的「彻底修」关闭**（见 `### Fixed` → Bootstrap）：用例 2 的钉现状
+  断言按预言精确翻转（`later.ExecuteCount == 0`）；用例 3 原样保留——不响应取消的在途阶段仍会走失败链，
+  是修复覆盖不到的边界证据。使用方不受影响：纯测试新增，公开面一个字都没动。
 
 ### Changed
 
@@ -112,6 +112,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   取消后的一小段时间里场景状态仍会变。
 - **`AssetManager.UnloadSceneAsync` 是本模块唯一「未初始化也不抛」的成员**：它会被
   `AssetSceneHandle.Dispose` 调到，异常从 `Dispose` 里冒出来没人接得住。未初始化时告警并返回 `false`。
+- **`Bootstrap.Shutdown` 现在会中止在途的 `RunAsync`**：取消经链接令牌传播，管线在下一个阶段边界停止，
+  在途运行以 `OperationCanceledException` 收场（此前清理与在途运行互不感知，被清理过的阶段仍会被在途
+  管线执行）。中止是**协作式**的：不观察令牌的阶段会先跑完自己的沉降点；`Shutdown` 返回后同帧再调
+  `RunAsync` 仍会被重入守卫忽略。`GameLauncher.Start` 同时改传 `destroyCancellationToken`——启动途中
+  销毁 `GameLauncher` 不再产错误日志（不响应取消的阶段除外，见 `### Fixed` → Bootstrap 的覆盖边界）。
+- **`Bootstrap.RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌**（不再是调用方令牌）：
+  `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)`
+  这类过滤与语义都对不上。判据改用 `OperationCanceledException.CancellationToken.IsCancellationRequested`。
 
 ### Fixed
 
@@ -150,6 +158,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **验证手段**：`Tools/run-tests.ps1` **验不了这条**（每次是全新 batchmode 进程，跨会话的静态存活不会发生）；
   真验收是手工的——把 `ProjectSettings/EditorSettings.asset` 的 `m_EnterPlayModeOptions` 临时置 1，
   编辑器内连跑两遍 PlayMode 全量，跑完改回（仓内不常住该设置）。
+
+#### Bootstrap
+
+- **`Shutdown` 与在途 `RunAsync` 互不感知（2026-10-13 实测 + 修复，`948aadb`）**：`Shutdown` 清理的是
+  **整张登记表**（含本轮从未执行的后置相位），而在途管线是装配期快照、不受清理影响——**被 `Shutdown`
+  过的阶段仍会在自己的 `Shutdown` 之后被执行**；真实场景下销毁 `GameLauncher` 还会因初始化代际作废
+  产出三条 Error（`[Pipeline] Parallel stage failed` / `[Pipeline] Pipeline failed` / `[GameLauncher] 启动失败`，
+  `GameLauncherFrameTests` 用例 3 留作端到端证据）。修法：**Bootstrap 内部链接取消源**——`RunAsync`
+  在重入守卫之后创建 `_runCts`（链接调用方令牌）并把链接令牌传给管线，`Shutdown` 先 `Cancel()` 再按
+  相位逆序清理，`GameLauncher.Start` 同时改传 `destroyCancellationToken`（纵深防御）；`ResetForNewSession`
+  一并中止并丢弃遗留取消源。**覆盖边界如实记**：中止是协作式的——不响应取消的在途阶段仍会跑完并产
+  同一条错误链（用例 3 原样保留），停止点是该阶段的沉降处；`Shutdown` 返回时在途运行只是「已收到信号」，
+  同帧再调 `RunAsync` 仍会被重入守卫忽略。两条实现硬约束（写错会让既有用例变红）：取消源创建不得早于
+  重入守卫（否则二次调用覆写字段、首次运行的收尾误 Dispose）；`finally` 只 Dispose 创建时捕获的局部
+  变量、`ReferenceEquals` 判身份后才清字段（`ResetForNewSession` 在途时清 `_isRunning`，允许新旧运行并存）。
+  红证：两处断言（用例 2 的 `later.ExecuteCount`、新用例的 OCE）在修前分别以
+  `Expected: 0 / But was: 1` 与 `Expected: <System.OperationCanceledException> / But was: null` 判红，修复后转绿。
 
 - **5 个文件 / 11 处零分配断言此前是恒真的**（两把尺子在本环境恒返回 0，锁的结论从未被验证过）。
   11 处全部改成两道防线：**结构断言优先**（句柄 / 快照 / 统计行是值类型、状态槽位按类型参数泛化、
@@ -201,6 +226,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （Serialize 另订正一条已过期的未决——`Initialize` 同名注册保留使用方那条 0.3.0 已修）；
   `Runtime/Bootstrap/README.md` 已知限制**新增一条**：启动途中销毁 × 在途启动交叠的使用方面后果
   （含「被 Shutdown 的相位仍会被执行」）。
+
+- Bootstrap「彻底修」的落点（`948aadb`）：`Documentation/Modules/Bootstrap.md` 两条未决处置为已修
+  （实际采纳的修法、两条实现硬约束、覆盖边界）；`Runtime/Bootstrap/README.md` 已知限制改写（协作式中止
+  的两条边界、OCE 令牌判据）、设计取舍补「为何 `Shutdown` 先中止」、测试注意事项补静态态；包
+  `README.md` 启动引导示例注释同步。
 
 ## [0.3.0] - 2026-10-11
 

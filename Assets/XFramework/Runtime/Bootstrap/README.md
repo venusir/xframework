@@ -27,7 +27,7 @@ await Bootstrap.RunAsync();
 退出时反向清理：
 
 ```csharp
-Bootstrap.Shutdown();   // 按执行序的逆序（相位降序），逐个调 stage.Shutdown()
+Bootstrap.Shutdown();   // 先中止在途 RunAsync，再按执行序的逆序（相位降序）逐个调 stage.Shutdown()
 ```
 
 登记表本身可以随时查看与清空（`Stages` **是实时视图而非快照**，后续登记会反映出来——只读用途，勿缓存后假定其不变）：
@@ -176,6 +176,8 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **为什么 `Shutdown` 是同步的？** 框架内置四个模块的清理入口都是同步 `void`，且调用点通常是 `OnDestroy`（没有 await 机会）。将来若某个模块确实需要异步清理，再为它单独扩展接口。
 
+**为什么 `Shutdown` 要先中止在途的 `RunAsync`？** 被清理过的阶段（含本轮从未执行的）不该再被在途管线捡起来执行——否则真实模块会在「已被销毁」与「仍在初始化」之间相撞，落成一串错误日志（启动途中销毁 `GameLauncher` 曾实测复现三条 Error）。所以 `Shutdown` 第一步取消在途运行的**链接令牌**（`RunAsync` 创建它时把调用方令牌链接进来），管线在下一个阶段边界停止，在途运行以 `OperationCanceledException` 收场。两点如实记：① **中止是协作式的**——不观察令牌的阶段会先跑完自己的沉降点，`Shutdown` 返回时在途运行只是「已收到信号」；② 该异常携带的是本次运行的链接令牌，判据用 `IsCancellationRequested`，不要比对令牌身份（详见已知限制）。
+
 **为什么未登记任何阶段不抛异常？** 零配置使用静态服务的项目本就不需要引导流程，此时 `RunAsync` 打一条警告后直接返回。这与门面模板里 `EnsureInitialized` 抛 `InvalidOperationException` 的取向不同，是有意为之。
 
 **为什么 `RunAsync` 重入只警告并忽略？** 每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的那次**立即返回、不代表启动完成**——调用方要「等启动结束」，应共享第一次调用的任务，而不是再调一次。
@@ -194,11 +196,13 @@ finally { UpdateManager.Resume(); }
 
 **没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
 
-**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消，或它是在 `RunAsync` 运行中才登记的，`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
+**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
 
 **运行中修改登记表只告警、不阻止**，两条反直觉后果与理由见上面「设计取舍」的末两段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
 
-**启动途中销毁 `GameLauncher` 会与在途启动交叠（2026-10-13 实测）。** `Start` 的 `RunAsync` 不接收销毁令牌、`OnDestroy` 无条件 `Shutdown()`——加载中途销毁时：① `Shutdown` 会清理**整张登记表**，包括本轮**尚未执行**的后置相位；② 在途管线是装配期快照、不受清理影响，**已被 `Shutdown` 过的阶段仍会被执行**；③ 真实模块会因此留下错误日志（`[GameLauncher] 启动失败` 及管线侧两条 Error）。`GameLauncher` 是 `DontDestroyOnLoad`、正常只在退出时销毁；确需中途销毁的，请先等启动完成（持有 `RunAsync` 的完成信号）再销毁。
+**中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 仍会被重入守卫忽略**——要等它收敛，请持有第一次调用的任务。
+
+**`RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌。** `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)` 这类过滤与语义都对不上。判据用 `OperationCanceledException.CancellationToken.IsCancellationRequested`，**不要比对令牌身份**。另注意一个既有的边界形态：阶段自抛 `OperationCanceledException` 时，链接令牌本身可能尚未取消（`CanBeCanceled == true` 而 `IsCancellationRequested == false`）——异常的类型才是终局判据。
 
 ## 依赖
 
@@ -208,4 +212,4 @@ finally { UpdateManager.Resume(); }
 
 ## 测试注意事项
 
-`Bootstrap` 的登记表是**静态**的。测试须在 `SetUp`/`TearDown` 里调 `Bootstrap.Clear()` 复位，否则用例间互相污染。
+`Bootstrap` 的静态态有两处：**登记表**与**在途运行的取消源**。测试须在 `SetUp`/`TearDown` 里复位，否则用例间互相污染：`Clear()` 清登记表；用例中途 `Shutdown` 过在途启动的，请等那一次运行收敛（持有它的任务）再开始下一个用例——在途运行会经重入守卫静默吞掉后续的 `RunAsync`。

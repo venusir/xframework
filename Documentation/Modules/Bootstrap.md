@@ -11,6 +11,7 @@
 - **Phase 1 / 2 曾是 Lock / Message 的相位**：二者改为 `[RuntimeInitializeOnLoadMethod]` 自管理生命周期后被移出，这两个值随之空闲。
 - **登记表自 2026-10-02 起支持注销**（`Unregister` / `Unregister<T>`）：此前「替换内置阶段」只能靠调用顺序（先 `Register` 再 `RegisterDefaults`），而启动器在 `Awake` 里会无条件登记默认组合，与使用方 `Awake` 的先后由 Unity 决定。
 - **`GameLauncher` 自 2026-10-02 起拆为两层**：抽象底座 `GameLauncher`（只有生命周期接线 + `abstract ConfigureStages`，**零序列化字段**）与默认实现 `DefaultGameLauncher`（八个 Inspector 字段 + 字段驱动的登记）。拆的理由：Unity 无法隐藏继承来的序列化字段，「完全自控的人 Inspector 里干净」只能靠类型层次保证；`abstract` 顺带让编译器兜住「忘了覆写」。**这是破坏性变更**——原先 `class X : GameLauncher` 的代码编译不过（迁移说明见 `CHANGELOG`）。
+- **`Shutdown` 自 2026-10-13 起先中止在途 `RunAsync`、再清理**（`948aadb`；`GameLauncher.Start` 同时改传 `destroyCancellationToken`）：此前清理与在途运行互不感知——「被 `Shutdown` 过的后置相位仍会在自己的 `Shutdown` 之后被执行」。修法（Bootstrap 内部链接取消源）与两条实现硬约束见下节未决处置。
 
 ## 已评估未采纳与未决
 
@@ -23,7 +24,7 @@
 
 **未决**：
 
-- ~~**GameLauncher 启动途中销毁与在途 `RunAsync` 交叠**（推理，未实测）~~ —— **2026-10-13 实测坐实**（`Tests/Runtime/Bootstrap/GameLauncherFrameTests`）：`Start` 里 `RunAsync()` 未传 `destroyCancellationToken`，`OnDestroy` 无条件 `Shutdown()`。实测复现的完整链：销毁 → `Shutdown` → `AssetBootstrapStage.Shutdown()` → `AssetManager.Destroy()` 递增初始化代际 → 在途初始化完成时代际校验抛异常 → 管线失败 → `Start` 记 `[GameLauncher] 启动失败`（共**三条 Error**：`Parallel stage failed` / `Pipeline failed` / `启动失败`）。**另实测出一条本文档此前没记、比预言更重的后果**：`Shutdown` 清理的是**整张登记表**（含从未执行的后置相位），而在途管线是装配期快照、不受清理影响——**被 Shutdown 过的阶段仍会在自己的 Shutdown 之后被执行**（用例 2 的直接证据：其 `ExecuteAsync` 开始那一刻 `ShutdownCount` 已为 1）。影响面仍小（`DontDestroyOnLoad`、正常仅退出时销毁），但「清理后还会被初始化」比「空转安全」重一档。**修法候选与实测效果**：`Start` 改传 `destroyCancellationToken`（`RunAsync` 早已把令牌链接进管线，缺的只是调用方传）——临时注入实测：管线在阶段边界停住、后置相位不再执行（用例 2 的钉现状断言在注入修法后**精确翻转**）。**覆盖边界如实记录**：不响应取消的在途阶段仍会失败并产同一条错误链——修法只覆盖「令牌可穿透 + 阶段边界」两条路。**处置状态：待用户裁定**（属公开行为变更）；探针现为**钉现状**形态，若裁定修复，两条断言翻转为「干净关闭」。
+- ~~**GameLauncher 启动途中销毁与在途 `RunAsync` 交叠**（推理，未实测）~~ —— **2026-10-13 实测坐实**（`Tests/Runtime/Bootstrap/GameLauncherFrameTests`）：`Start` 里 `RunAsync()` 未传 `destroyCancellationToken`，`OnDestroy` 无条件 `Shutdown()`。实测复现的完整链：销毁 → `Shutdown` → `AssetBootstrapStage.Shutdown()` → `AssetManager.Destroy()` 递增初始化代际 → 在途初始化完成时代际校验抛异常 → 管线失败 → `Start` 记 `[GameLauncher] 启动失败`（共**三条 Error**：`Parallel stage failed` / `Pipeline failed` / `启动失败`）。**另实测出一条本文档此前没记、比预言更重的后果**：`Shutdown` 清理的是**整张登记表**（含从未执行的后置相位），而在途管线是装配期快照、不受清理影响——**被 Shutdown 过的阶段仍会在自己的 Shutdown 之后被执行**（用例 2 的直接证据：其 `ExecuteAsync` 开始那一刻 `ShutdownCount` 已为 1）。影响面仍小（`DontDestroyOnLoad`、正常仅退出时销毁），但「清理后还会被初始化」比「空转安全」重一档。**修法候选与实测效果**：`Start` 改传 `destroyCancellationToken`（`RunAsync` 早已把令牌链接进管线，缺的只是调用方传）——临时注入实测：管线在阶段边界停住、后置相位不再执行（用例 2 的钉现状断言在注入修法后**精确翻转**）。**覆盖边界如实记录**：不响应取消的在途阶段仍会失败并产同一条错误链——修法只覆盖「令牌可穿透 + 阶段边界」两条路。**处置状态：2026-10-13 用户裁定「彻底修」并落地**（`948aadb`）。**实际采纳的修法比原候选多一半**：除 `Start` 传 `destroyCancellationToken`（纵深防御）外，主体是 **Bootstrap 内部的链接取消源**——`RunAsync` 在重入守卫之后创建 `_runCts = CreateLinkedTokenSource(调用方令牌)` 并把链接令牌传给管线，`Shutdown` 第一步 `Cancel()` 它再按相位逆序清理，`ResetForNewSession` 一并中止并丢弃；**第三方不传令牌直接调 `RunAsync` 的交叠由此一并覆盖**（下一条未决同此关闭）。两条写错会红的实现硬约束：① 取消源创建不得早于重入守卫（否则二次调用覆写字段、首次运行的收尾误 Dispose 掉别人的取消链）；② `finally` 只 Dispose 创建时捕获的局部变量、`ReferenceEquals` 判身份后才清字段（`ResetForNewSession` 在途时清 `_isRunning`，允许新旧运行并存）。**终局 OCE 改携带链接令牌**而非调用方令牌（Shutdown 触发时后者并未取消）——行为变更已进 CHANGELOG。**覆盖边界保留**：用例 3 原样保留（假实现忽略令牌，三条 Error 链即此边界的证据）；用例 2 的钉现状断言按预言精确翻转（`later.ExecuteCount == 0`）；第三方路径由新用例 `BootstrapTests.Shutdown_DuringInFlightRun_CancelsRunAndSkipsLaterPhases` 钉住（OCE 令牌已取消、`_isRunning` 已释放、后置相位不执行），两处均做过改前必红。
 
 ---
 
@@ -66,7 +67,7 @@
   `SubsystemRegistration` 档，早于首场景 `Awake` 因而早于 `GameLauncher.ConfigureStages`）。
   **`Clear()` 的定位不变**（测试复位用）——两者都只清登记表、不影响已初始化的服务。
   回归用例：`Tests/Runtime/Architecture/SessionResetTests.Bootstrap_ResetClearsTheStageRegistry`（已做改前必红）。
-- ~~**运行中 `Shutdown` 与在途 `RunAsync` 交叠**：与上面 GameLauncher 那条同源，仍未实测。~~ —— **2026-10-13 已实测**（同 fixture 的用例 2/3）：与上面那条同源同结论——`Shutdown` 不取消任何东西，在途管线（装配期快照）照常执行其剩余阶段；第三方在自己的代码里调 `RunAsync` 且不传令牌时交叠同样成立。修法候选、实测效果与覆盖边界见上条。
+- ~~**运行中 `Shutdown` 与在途 `RunAsync` 交叠**：与上面 GameLauncher 那条同源，仍未实测。~~ —— **2026-10-13 已实测**（同 fixture 的用例 2/3）：与上面那条同源同结论——`Shutdown` 不取消任何东西，在途管线（装配期快照）照常执行其剩余阶段；第三方在自己的代码里调 `RunAsync` 且不传令牌时交叠同样成立。**已随上条一并修复**：中止不依赖调用方传令牌（Bootstrap 内部链接取消源），第三方路径由 `BootstrapTests` 的新用例钉住。
 
 ## 审计轮次
 

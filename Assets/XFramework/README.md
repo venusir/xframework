@@ -47,7 +47,7 @@ Bootstrap.RegisterDefaults();                                          // Asset(
 Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myTable)); // Phase 90
 await Bootstrap.RunAsync(progress: myProgress);
 // ...
-Bootstrap.Shutdown();                                                  // 按执行序逆序清理（相位降序）
+Bootstrap.Shutdown();                                                  // 先中止在途 RunAsync，再按执行序逆序清理
 ```
 
 `RunAsync` 在失败与取消时**抛出**——启动失败是致命的，不该只留一条日志。整块是**可选**的：零配置项目与自建启动流程的项目都可以不用它。
