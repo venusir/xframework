@@ -25,6 +25,10 @@ namespace XFramework.XLock
         /// </summary>
         private sealed class GlobalSentinel : ILockable { }
 
+        /// <summary>
+        /// 全局锁的哨兵主体：把它作为 lockSubject 传入即为全局锁（如
+        /// <c>LockManager.AddLock(LockManager.Global, lockType, lockObj)</c>）。
+        /// </summary>
         public static readonly ILockable Global = new GlobalSentinel();
 
         #endregion
@@ -106,7 +110,7 @@ namespace XFramework.XLock
         /// 那种主体由调用方用 <see cref="RemoveAllLocks"/>/<see cref="RemoveAllSubscriptions"/> 显式收口。</para>
         /// <para>绑定的时机是「主体首次进入任一容器」；关掉它只是不再新建绑定（已存在的不解除）。</para>
         /// <para><b>它同时是「已销毁主体」的准入门禁</b>：为 <c>true</c>（默认）时，对已销毁主体的
-        /// <see cref="AddLock"/> / 订阅会被忽略并记一条 <c>[Lock]</c> 告警；关掉后这些操作**不再被拒**
+        /// <see cref="AddLock(ILockable, int, object)"/> / 订阅会被忽略并记一条 <c>[Lock]</c> 告警；关掉后这些操作**不再被拒**
         /// ——「一律加上」，销毁时的清理由调用方自己负责（见 README 的「生命周期收口」）。</para>
         /// <para><see cref="Dispose"/> 会把它复位为 <c>true</c>。</para>
         /// </summary>
@@ -197,7 +201,7 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 订阅指定 <see cref="ILockable"/> 的锁定事件。
-        /// <para><paramref name="subject"/> 为 null 等价于 <see cref="Global"/>——与 <see cref="AddLock"/>、
+        /// <para><paramref name="subject"/> 为 null 等价于 <see cref="Global"/>——与 <see cref="AddLock(ILockable, int, object)"/>、
         /// <see cref="IsLocked"/> 等入口的约定一致。</para>
         /// <para>全局锁的锁定会触发所有主体订阅者；反过来，以 <see cref="Global"/> 订阅只收到全局锁的
         /// 加锁事件，不接收任何主体自己加的锁。</para>
@@ -322,7 +326,7 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 派发一个订阅者，并隔离其异常——订阅者的 bug 不得冒到加锁/解锁路径上。
-        /// <para><b>为什么必须隔离</b>：<see cref="AddLock"/> 先入表再派发，异常若逃出去，调用方就拿不到
+        /// <para><b>为什么必须隔离</b>：<c>AddLock</c> 先入表再派发，异常若逃出去，调用方就拿不到
         /// 那个句柄，而锁已经留在表里——成了没人能释放的永久锁（实测 <see cref="GetLockCount"/> 残留 1）。</para>
         /// <para><b>粒度</b>：本重载包的是**一整条多播委托**，故抛异常者会饿死同一条多播里排在它后面的
         /// 订阅者（下一次派发照常，且日志已记下）。不用 <c>GetInvocationList</c> 逐个隔离——那要给每次
@@ -641,7 +645,7 @@ namespace XFramework.XLock
 
         /// <summary>
         /// 释放该主体的**全部**锁（所有类型），返回释放的锁数量。
-        /// <para>与逐把 <see cref="RemoveLock"/> 的差别只在载荷：整批摘除后每类型只派发一次解锁边沿，
+        /// <para>与逐把 <see cref="RemoveLock(ILockable, int, object)"/> 的差别只在载荷：整批摘除后每类型只派发一次解锁边沿，
         /// 事件里的 <c>lockObj</c> 为 <c>null</c>（一次清掉多把，没有单一的代表对象）。</para>
         /// <para><b>先整块摘下再派发</b>：摘除阶段不跑用户代码；派发遍历的是已摘下的副本，故回调里再加锁
         /// 不会打坏本轮清理（那些落进新的条目，与本轮无关）。</para>

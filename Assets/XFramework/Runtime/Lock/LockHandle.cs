@@ -4,7 +4,7 @@ namespace XFramework.XLock
 {
 
     /// <summary>
-    /// 锁句柄。通过 <see cref="LockableExtensions.AddLock(ILockable, int, object)"/> 或 <see cref="LockManager.AddLock"/> 获取，Dispose 时自动释放锁。
+    /// 锁句柄。通过 <see cref="LockableExtensions.AddLock(ILockable, int, object)"/> 或 <see cref="LockManager.AddLock(ILockable, int, object)"/> 获取，Dispose 时自动释放锁。
     /// <para>支持 <c>using</c> 语法，也支持手动 <see cref="Dispose"/>。</para>
     /// <para>零 GC 分配：直接存储锁的三要素，而非委托。</para>
     /// </summary>
@@ -37,7 +37,7 @@ namespace XFramework.XLock
         /// <para><b>与 <see cref="LockManager.IsLocked"/> 不同</b>：后者是聚合语义（该主体该类型下还有任一持有者即为 true），
         /// 本属性逐句柄精确——别的对象持锁不影响本句柄的答案。</para>
         /// <para><b>不存在「获取失败」的判断</b>：本框架的加锁不会失败（同一主体同类型的锁是持有者集合，可叠加），
-        /// 任何经 <see cref="LockManager.AddLock"/> 得到的句柄都获取成功。本属性回答的是「我这把还在不在」。</para>
+        /// 任何经 <c>LockManager.AddLock</c> 得到的句柄都获取成功。本属性回答的是「我这把还在不在」。</para>
         /// </summary>
         public bool IsHeld => _acquired && LockManager.IsLockedBy(_lockSubject, _lockType, _lockObj);
 
