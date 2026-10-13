@@ -176,6 +176,7 @@
 7. ~~**Samples 上不了架**~~ —— **2026-10-11 已落地**（`97d5ba9`：目录改 `Samples~` + `package.json` 加 `samples` 数组；守卫 `DependencyDeclarationTests.Samples_PathResolvesToAnExistingDirectory` 钉住路径指向真实目录）。**仍开着的一半**：示例仍只有 7 个、覆盖 22 模块中的 6 个（见 §4.4-6）。原事实：目录是 `Samples/Example/`（**非 `Samples~`**），包内有 `.sample.json` 写了 `displayName`/`description`，但 **`package.json` 没有 `samples` 数组** ⇒ Package Manager 的 Samples 页签里看不到它，反而**作为普通包资源被导入**到每个消费方工程。
 8. ~~**模板残留随包分发**~~ —— **2026-10-11 已清**（`e561eab` 删三处 + `97d5ba9` 随 Samples 上架删 `SampleExample.cs`）。原事实：`Editor/EditorExample.cs`、`Tests/Editor/EditorExampleTest.cs`、`Tests/Runtime/RuntimeExampleTest.cs`、`Samples/Example/SampleExample.cs`。
 9. ~~**无 `.gitattributes`、无行尾归一化**~~ —— **2026-10-11 已落地**（`d962a41`：文本一律 LF、二进制显式标注、`*.bat`/`*.cmd` 保持 CRLF；规则已进 `CLAUDE.md`）。原事实：Force Text 只是**工程设置**（`ProjectSettings/EditorSettings.asset:7`），不是仓库保证；`m_LineEndingsForNewScripts: 0`（OS Native）。**实测旁证**：本轮提交时 git 对 7 个文件全部报了 `LF will be replaced by CRLF` 警告——说明换行符正在被运行环境悄悄改写。
+   **仍开着的一半（2026-10-13 发现）**：`.gitattributes` 兜住的是**仓库内容**，工作区仍有漂移——实测 **259 个文本文件**物理是 CRLF 而索引是 LF（`git ls-files --eol` 显示 `i/lf w/crlf`），提交时的 `CRLF will be replaced by LF` 警告即此；`git checkout --` 改不回来（git 认为内容匹配）。已开执行序列**步骤 13**，漂移来源未查明。
 10. ~~**`Tests.Native/` 死残留**~~ —— **2026-10-13 复核：磁盘上已不存在**（本就未入版本控制，无提交可引；`Runtime/Node/`、`Runtime/Loader/` 也早已不在）。原事实：目录里只有 `Tests.Native.csproj`，**未入版本控制**（`git ls-files` 为空，被 `.gitignore` 的 `*.csproj` 排除），而它 `<Compile Include>` 引用的 `Runtime/Node/`、`Runtime/Loader/` **早已删除**。纯本地孤儿。
 
 #### 低：长期形态
@@ -262,6 +263,7 @@
 | 10 | 论证 | #14 场景管理立项（**特意放最后**：通过即开一个完整模块工程，会挤掉其后排期——先清完廉价论证与欠账再决定是否开工） | 无 | 四条边界（Roadmap §三 专段）逐条回答；建/不建落 Roadmap；若建另起实施轮 | **已完成 2026-10-13**（论证与实施并作一轮；条目已搬迁至 `Modules/Scene.md`，Roadmap §2.6 留指针。**注意**：本轮跳过了步骤 1–9，那几步仍待办） |
 | 11 | 形态 | #24 `Tests~` / 包在子目录（§4.3 第 11–12 条；高风险形态改动） | 无 | 三条门禁在新形态下全绿且开发回路可用；不可行者给否决结论并落文档 | 待办 |
 | 12 | 形态 | §4.3-13（`.editorconfig` / Git 钩子 / Issue·PR 模板 / `CONTRIBUTING`；性能基准套件单议） | 无 | 逐项做/不做结论并落文档 | 待办 |
+| 13 | 形态 | 工作区行尾归一化（2026-10-13 发现：259 个文本文件工作区 CRLF、索引 LF；`.gitattributes` 已兜住仓库内容，故提交内容与 `git status` 均正确，见 §4.3-9 尾注） | 先查明漂移来源（编辑器 / 工具写回？） | `git ls-files --eol` 无文本文件 `w/crlf`；来源封堵或如实记「不可封堵」 | 待办 |
 
 步骤 1 为**用户侧**手工验收（配方见 `Workflow.md` §六）；步骤 2/3 已于 2026-10-13 完成。
 
