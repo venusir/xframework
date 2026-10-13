@@ -63,6 +63,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **射程**：只查 Runtime 程序集（Editor 那 5 类型 / 10 成员不在内）；只查**形状**不查语义——行为变更
   （如「遮罩从此真正吃点击」）仍只能靠本文件的「行为变更」表。
 
+- **包 README 四张清单表的机械守卫（测试侧）**：`Tests/Runtime/Architecture/ReadmeTableTests` 锁四张手改表——
+  「模块索引 / 可替换的实现一览（末行 `Bootstrap / Pipeline` 合并行拆开）/ 可配置项一览」的模块集与
+  `Runtime/` 直接子目录**双向相等**；模块索引表的文档链接逐字等于 `Runtime/<模块>/README.md` 且落盘存在；
+  命名空间列与 Runtime 程序集**双向覆盖**（File 的 `XFileManager` 为登记例外，`XUI.Data` 这类子命名空间按
+  前缀归属）；「主要功能」表按**登记表**守：`FeatureTableRegistry`（15 模块 → 触发词）与
+  `FeatureTableExemptions`（8 模块 → 理由）必须与模块全集双向相等，**未登记即红**，豁免句的八个模块名也在守内。
+  **为什么**：ReactiveList 建成那轮三张表全漏、跨一轮才被补（`f1da8be` 逐表核对是一次性的），本条把那次人工
+  核对变成每次全量门禁都跑的用例。**射程**：只守集合与链接——行内说明文字的陈旧（ReactiveList 那轮的另一半）
+  与四表刻意各异的顺序不在内；`check-docs.ps1` 对 `.md` 仍零覆盖（守卫在测试侧不在脚本侧）。
+  **使用方不受影响**：产出的是一份测试侧守卫，公开面一个字都没动。
+
 ### Changed
 
 - **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
@@ -157,6 +168,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   「本轮跳过了步骤 1–9」）、包 `README.md` 四张表、`Runtime/UI/README.md`（「切场景」小节指向新模块，
   并声明两条正解与「不做自动检测」不因它改变）、`Runtime/Asset/README.md`（API 行、模式选择表、
   已知限制 4 条、接口承诺、指向 `XScene` 的使用方入口）。
+
+- 包 README 四张表守卫（`FrameworkReview.md` §5.2 步骤 4 / #22 落地）：`FrameworkReview.md` §4.4-1 标完成
+  （射程与「守不到」一并写明）、§5.1 归档 #22、§5.2 步骤 4 标完成（诊断与红证实录）；`Workflow.md` §六 补
+  守卫射程一条（`check-docs.ps1` 对 `.md` 零覆盖**不变**）；`ModuleAudit.md` §八 候选门禁表**新增**
+  「包 README 四张清单表」一行；`CLAUDE.md` 补一条同义的常驻规则。
 
 ## [0.3.0] - 2026-10-11
 
