@@ -102,6 +102,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | --- | --- | --- |
 | `AssetManager.LoadSceneAsync(loc, additive: true, progress, ct)` | `AssetManager.LoadSceneAsync(loc, LoadSceneMode.Additive, progress, ct)` | **编译器逐处报错**。返回类型由 `Scene` 改为 `AssetSceneHandle`，`bool additive` 改为 `LoadSceneMode mode`；失败判据随之由 `scene.IsValid()` 改为 `handle.IsDefault` |
 | `IAssetManager.LoadSceneAsync(...)` | `IAssetSceneLoader.LoadSceneAsync(...)` | **整条从主接口移出**，改由可选能力接口承载（同 `IAssetPoolController` 的形态）。第三方自定义 `IAssetManager` 实现**不必**再实现它；要提供场景能力的实现改挂 `IAssetSceneLoader`，门面用 `is` 探测 |
+| `handle.Status == YooAsset.EOperationStatus.Succeed` | `handle.Status == AssetOperationStatus.Succeed` | **编译器逐处报错**（返回类型变更，且不再需要 `using YooAsset`）。四个句柄 `AssetHandle<T>` / `RawFileHandle` / `SubAssetsHandle` / `AssetDownloaderHandle` 同改，四个成员与上游**一一对应**（`None` / `Processing` / `Succeed` / `Failed`），语义与取值时机完全不变。理由：公开面不再绑在上游的类型上（YooAsset 3.x 曾把一批类型移进默认不编译的兼容层，透出上游枚举会让本包的公开面被动破坏） |
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 

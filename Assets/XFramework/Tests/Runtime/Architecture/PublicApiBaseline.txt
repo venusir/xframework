@@ -37,7 +37,7 @@ XFramework.XAsset.AssetDownloaderHandle.Pause  ::  public void()
 XFramework.XAsset.AssetDownloaderHandle.Progress  ::  public float Progress { get; }
 XFramework.XAsset.AssetDownloaderHandle.ProgressChanged  ::  public event System.Action<float>
 XFramework.XAsset.AssetDownloaderHandle.Resume  ::  public void()
-XFramework.XAsset.AssetDownloaderHandle.Status  ::  public YooAsset.EOperationStatus Status { get; }
+XFramework.XAsset.AssetDownloaderHandle.Status  ::  public XFramework.XAsset.AssetOperationStatus Status { get; }
 XFramework.XAsset.AssetDownloaderHandle.TotalDownloadBytes  ::  public long TotalDownloadBytes { get; }
 XFramework.XAsset.AssetDownloaderHandle.TotalDownloadCount  ::  public int TotalDownloadCount { get; }
 XFramework.XAsset.AssetDownloaderHandle.WaitAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>(System.Threading.CancellationToken cancellationToken = default)
@@ -49,7 +49,7 @@ XFramework.XAsset.AssetHandle<T>.IsValid  ::  public bool IsValid { get; }
 XFramework.XAsset.AssetHandle<T>.LastError  ::  public string LastError { get; }
 XFramework.XAsset.AssetHandle<T>.Location  ::  public string Location { get; }
 XFramework.XAsset.AssetHandle<T>.Progress  ::  public float Progress { get; }
-XFramework.XAsset.AssetHandle<T>.Status  ::  public YooAsset.EOperationStatus Status { get; }
+XFramework.XAsset.AssetHandle<T>.Status  ::  public XFramework.XAsset.AssetOperationStatus Status { get; }
 XFramework.XAsset.AssetInitOptions  ::  public sealed class
 XFramework.XAsset.AssetInitOptions#ctor  ::  public()
 XFramework.XAsset.AssetInitOptions.AutoReclaimOnLowMemory  ::  public bool
@@ -100,6 +100,11 @@ XFramework.XAsset.AssetManager.TryUnloadUnusedAsset  ::  public static void(stri
 XFramework.XAsset.AssetManager.UnloadSceneAsync  ::  public static Cysharp.Threading.Tasks.UniTask<bool>(XFramework.XAsset.AssetSceneHandle handle, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.UnloadUnusedAssetsAsync  ::  public static Cysharp.Threading.Tasks.UniTask(string packageName = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.UpdatePackageManifestAsync  ::  public static Cysharp.Threading.Tasks.UniTask(string packageVersion, string packageName = null, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XAsset.AssetOperationStatus  ::  public enum : int
+XFramework.XAsset.AssetOperationStatus.Failed  ::  = 3
+XFramework.XAsset.AssetOperationStatus.None  ::  = 0
+XFramework.XAsset.AssetOperationStatus.Processing  ::  = 1
+XFramework.XAsset.AssetOperationStatus.Succeed  ::  = 2
 XFramework.XAsset.AssetPlayMode  ::  public enum : int
 XFramework.XAsset.AssetPlayMode.Host  ::  = 1
 XFramework.XAsset.AssetPlayMode.Offline  ::  = 0
@@ -167,7 +172,7 @@ XFramework.XAsset.RawFileHandle.IsDone  ::  public bool IsDone { get; }
 XFramework.XAsset.RawFileHandle.IsValid  ::  public bool IsValid { get; }
 XFramework.XAsset.RawFileHandle.LastError  ::  public string LastError { get; }
 XFramework.XAsset.RawFileHandle.Progress  ::  public float Progress { get; }
-XFramework.XAsset.RawFileHandle.Status  ::  public YooAsset.EOperationStatus Status { get; }
+XFramework.XAsset.RawFileHandle.Status  ::  public XFramework.XAsset.AssetOperationStatus Status { get; }
 XFramework.XAsset.SubAssetsHandle  ::  public readonly struct : System.IDisposable
 XFramework.XAsset.SubAssetsHandle.Count  ::  public int Count { get; }
 XFramework.XAsset.SubAssetsHandle.Dispose  ::  public virtual void()
@@ -177,7 +182,7 @@ XFramework.XAsset.SubAssetsHandle.IsDone  ::  public bool IsDone { get; }
 XFramework.XAsset.SubAssetsHandle.IsValid  ::  public bool IsValid { get; }
 XFramework.XAsset.SubAssetsHandle.LastError  ::  public string LastError { get; }
 XFramework.XAsset.SubAssetsHandle.Progress  ::  public float Progress { get; }
-XFramework.XAsset.SubAssetsHandle.Status  ::  public YooAsset.EOperationStatus Status { get; }
+XFramework.XAsset.SubAssetsHandle.Status  ::  public XFramework.XAsset.AssetOperationStatus Status { get; }
 XFramework.XAsset.SubAssetsHandle.SubAssetObjects  ::  public System.Collections.Generic.IReadOnlyList<UnityEngine.Object> SubAssetObjects { get; }
 XFramework.XAudio.AudioChannelConfig  ::  public sealed class
 XFramework.XAudio.AudioChannelConfig#ctor  ::  public()

@@ -52,7 +52,7 @@ namespace XFramework.XAsset
         public bool IsDone => _operation.IsDone;
 
         /// <summary>下载状态。</summary>
-        public EOperationStatus Status => _operation.Status;
+        public AssetOperationStatus Status => AssetOperationStatusMapper.From(_operation.Status);
 
         /// <summary>失败信息。未失败时为空字符串。
         /// <para>归一化是必要的：YooAsset 的 <c>Error</c> 在成功路径从不赋值，原样透出的是 <c>null</c>

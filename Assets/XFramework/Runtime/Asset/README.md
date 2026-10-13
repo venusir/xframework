@@ -81,8 +81,13 @@ using (var handle = await AssetManager.LoadAsync<TextAsset>(location))
     bool done = handle.IsDone;    // 加载是否已完成
     float prog = handle.Progress; // 加载进度 0~1
     string err = handle.LastError;// 错误信息
+    AssetOperationStatus st = handle.Status; // 状态：None / Processing / Succeed / Failed
 } // 离开 using 块时自动 Release
 ```
+
+> **`Status` 的类型是框架自己的 `AssetOperationStatus`**（不是 YooAsset 的 `EOperationStatus`）——
+> 四个句柄（`AssetHandle<T>` / `RawFileHandle` / `SubAssetsHandle` / `AssetDownloaderHandle`）同型，
+> 四个成员与上游一一对应，语义与取值时机不变。
 
 ### 4. 加载并实例化
 

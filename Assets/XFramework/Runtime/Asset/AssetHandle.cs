@@ -67,9 +67,9 @@ namespace XFramework.XAsset
         public string LastError => _yooHandle?.LastError ?? string.Empty;
 
         /// <summary>
-        /// 加载操作状态（None / Pending / Succeed / Failed）。
+        /// 加载操作状态（None / Processing / Succeed / Failed）。
         /// </summary>
-        public EOperationStatus Status => _yooHandle?.Status ?? EOperationStatus.None;
+        public AssetOperationStatus Status => AssetOperationStatusMapper.From(_yooHandle?.Status ?? EOperationStatus.None);
 
         #endregion
 
