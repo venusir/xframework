@@ -5,7 +5,7 @@ using System.Reflection;
 namespace XFramework.XConfig
 {
     /// <summary>
-    /// 从 <see cref="IConfigRow{TKey}"/> 实现中提取主键类型 <typeparamref name="TKey"/> 的工具类。
+    /// 从 <see cref="IConfigRow{TKey}"/> 实现中提取主键类型（即接口的 <c>TKey</c>）的工具类。
     /// <para>提取结果按行类型缓存，每表仅反射一次。内部使用。</para>
     /// </summary>
     internal static class ConfigTypeHelper

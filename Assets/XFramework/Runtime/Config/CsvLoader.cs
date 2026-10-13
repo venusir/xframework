@@ -8,7 +8,7 @@ namespace XFramework.XConfig
     /// <summary>
     /// CSV 格式配置加载器。
     /// <para>第一行为表头（字段名），后续行为数据。</para>
-    /// <para>通过反射对行类型 <typeparamref name="T"/> 的公共字段/属性顺序赋值，
+    /// <para>通过反射对行类型 <c>T</c> 的公共字段/属性顺序赋值，
     ///     仅限基础类型（int/float/string/bool/enum），不做递归子对象反序列化。</para>
     /// <para>主键由 <see cref="IConfigRow{TKey}.Id"/> 自动提取，
     ///     CSV 中不需要显式包含 Id 列（若包含则同样被赋值）。</para>

@@ -61,7 +61,8 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 初始化全局配置管理器（无参，仅创建内部实现实例）。
-        /// <para>初始化后可立即调用 <see cref="PreloadTableAsync{T}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 加载配置。</para>
+        /// <para>初始化后可立即调用 <c>PreloadTableAsync&lt;T&gt;()</c> 或 <c>PreloadGlobalAsync&lt;T&gt;()</c> 加载配置
+        /// （两者均有「按格式」与「按自定义 Loader」两个重载，此处泛指这一族方法）。</para>
         /// </summary>
         public static void Initialize()
         {
@@ -438,7 +439,7 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 卸载指定类型的配置（Table 或 Global），释放引用。
-        /// <para>卸载后再次调用 <see cref="PreloadTableAsync{T}"/> 或 <see cref="PreloadGlobalAsync{T}"/> 可重新加载。</para>
+        /// <para>卸载后再次调用 <c>PreloadTableAsync&lt;T&gt;()</c> 或 <c>PreloadGlobalAsync&lt;T&gt;()</c> 可重新加载。</para>
         /// </summary>
         public static void Unload<T>()
         {
