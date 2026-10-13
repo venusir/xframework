@@ -271,6 +271,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   改用框架自有 `AssetOperationStatus`（**破坏性**，迁移表见 `### Changed`）。
   `Documentation/Modules/Asset.md` 的「已评估未采纳与未决」同步记录，文件结构补漏列的一行。
 
+- 红点 / GM 命令台 / 画质档位 / 代码热更四条边界裁定（`FrameworkReview.md` §5.2 步骤 9）：`Roadmap.md` 的落点分两类——
+  **移入 §四（已否决，2026-10-13 用户确认）**：**红点系统**（树结构与父子计数是**领域模型**、「红点怎么算」由策划配置决定；
+  框架侧那一半**已经给了**——`ReactiveProperty` + 集合变更流提供节点可观察性，而 Reactive 刻意只有一个 `Select`、
+  不做算子面）与**画质 / 性能档位**（框架给死的档位**几乎必然被改**；**真问题另有其解**＝项目自定义 settings POCO——
+  `Validator` 钳范围 + 默认值工厂按设备定档，载体是引擎自己的 `QualitySettings`；并注明**别与 `Update` 的「更新档位」
+  （`UpdateTier`）折叠**，那是 LOD 调度、另一件事）。
+  **留 §三「暂不做 + 可判定判据」**：**GM / 调试命令台**（形态已有一半＝诊断窗口的「Editor 工具 + Runtime 数据契约」，
+  缺的那半——文本输入 / 解析 / 权限——仓内**没有原语**：`IInputProvider` 是纯动作名轮询；顺带**订正一处误读**：
+  原先被列为「可复用件」的 `File` 的 `ConsoleFileProvider`，其实是**游戏机平台（Xbox / PS5 / Switch）的文件提供者
+  抽象基类**，与命令台无关）与**代码热更（HybridCLR）**（**不建 Runtime 模块**：HybridCLR 本身就是第三方包、自带上载器与
+  Editor 工具，与 YooAsset 同型；框架代码不该被热更，而热更要求「热更代码与 AOT 代码分属不同程序集」，与「Runtime 单一
+  asmdef」正面冲突。形态＝Editor 工具 + 配方文档 `Documentation/HybridCLR.md`，**配方待真实接入再写**——从未接入时写配方
+  就是臆测）。
+  **使用方不受影响**：公开面与运行时行为零改动，改动全部落在 `Documentation/` 下不随包发布的两份文档（包内新增的只有本记录）。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。
