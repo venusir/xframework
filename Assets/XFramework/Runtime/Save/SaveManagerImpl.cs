@@ -458,6 +458,7 @@ namespace XFramework.XSave
         /// 序列化全部数据块）。这是为「部分应用后仍能恢复」付出的固定成本。</para>
         /// </summary>
         /// <param name="saveData">要应用的快照。</param>
+        /// <param name="failedBlocks">未能恢复的数据块数量（由 <c>DataManager.ApplySnapshot</c> 返回；成功为 0）。</param>
         /// <param name="error">失败原因；成功时为 <c>null</c>。</param>
         /// <returns>应用成功返回 <c>true</c>。</returns>
         private static bool TryApplySnapshot(DataSnapshot saveData, out int failedBlocks, out string error)

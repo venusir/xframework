@@ -3,7 +3,7 @@ using System;
 namespace XFramework.XSave
 {
     /// <summary>
-    /// 存档元数据，用于 <see cref="ISaveManager.GetSlotMetasAsync"/> 返回存档列表概览。
+    /// 存档元数据，用于 <c>ISaveManager.GetSlotMetasAsync</c> 返回存档列表概览。
     /// <para>包含版本号、时间戳、文件路径等基本信息，不包含完整数据块快照。</para>
     /// <para>第三方可继承此类以扩展元数据字段，
     /// 配合 <see cref="XData.DataSnapshot.CreateMeta"/> 在存档读/写时自动映射。</para>
@@ -51,6 +51,9 @@ namespace XFramework.XSave
         /// </summary>
         public ulong checksum;
 
+        /// <summary>
+        /// 调试用的一行摘要：槽位号、版本、时间戳、大小，损坏时附 <c>[损坏]</c> 标记。
+        /// </summary>
         public override string ToString()
         {
             var state = isCorrupted ? " [损坏]" : string.Empty;
