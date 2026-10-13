@@ -192,7 +192,14 @@
     `?path=` 是 UPM 的**官方支持**用法（git 依赖文档：registers the package located in the specified repository subfolder and **disregards the rest of the repository**）；而「不能直接当子模块**包**用」**≠**「不支持子模块」——包 README 的「方式二」已经给了配方：`git submodule add … Submodules/XFramework` + `"com.venusy609.xframework": "file:../Submodules/XFramework/Assets/XFramework"`（`file:` 指向「任何包含包清单的本地文件夹」，相对路径以工程 `Packages/` 为基准）。
     把包搬到仓库根、开发工程下沉子目录**能修好「子模块即包」，但代价是全仓重构**：测试壳的三个 junction、两条 `Tools/*.ps1` 的仓库根推导、全部 `Application.dataPath/XFramework` 推导（`SourceScanner` 与 3 处副本）、`check-docs.ps1` 的三处硬路径、96 行文档引用，以及 README 对外「仓库根是完整 Unity 工程」的表述——**收益只是一个已有替代方案的安装姿势**。
     **重开判据**：出现「必须用 submodule、且不接受 `file:` 配方」的真实使用方；或包要拆成独立仓库发布。
-13. 无 `.editorconfig`（`CLAUDE.md` 有大段编码规范，但机器不强制）、无性能基准套件、无 Git 钩子、无 Issue/PR 模板、无 `CONTRIBUTING`。
+13. **仓库形态的五项设施**（2026-10-14 逐项裁定，§5.2 步骤 12）：
+    - ~~无 `.editorconfig`（`CLAUDE.md` 有大段编码规范，但机器不强制）~~ —— ✅ **2026-10-14 已做**（`c409cb2`）：仓库根新增 `.editorconfig`（包外，不随包分发）——把编码规范落到**编辑器**。它与 `.gitattributes` 是分工不是替代：后者管仓库内容的归一（提交 / 检出），这一份管保存时按不按规范写。内容按**实测**而非惯例：`[*.cs]` 钉 4 空格（全包实测 **4,324 行 4 空格 / 0 行 Tab**）；**`[*.md]` 关掉尾空白 trim**（仓内实测 5 处在用「行尾恰好两空格 = Markdown 硬换行」，trim 会改渲染）；Unity 的 YAML 同样关掉（Unity 自己会写回，编辑器 trim 只制造来回报文）；`*.bat`/`*.cmd` 镜像 `.gitattributes` 保持 CRLF；**JSON 刻意不钉缩进**（仓内本来就是混的：`package.json` 用 Tab、`Packages/manifest.json` 用 2 空格）。**不进门禁也不加守卫**——本仓无构建期分析器（见 §4.3-4 的「为什么没用现成分析器」），这些键只被编辑器里的工具读，坏了的表现是「编辑器不再按规范缩进」，正是它创建前的状态。**它管不到的一处**（指针，不宣称已查明）：Unity 新建脚本的行尾由 `ProjectSettings/EditorSettings.asset` 的 `m_LineEndingsForNewScripts`（本仓文档读作 OS Native）决定——那是 §5.2 **步骤 13** 的射程。
+    - **无性能基准套件 —— 单议**（按 §5.2 步骤 12 原文不并入本轮）。现状订正：仓内唯一沾边的资产是分配尺子 `AllocationRuler`（`Tests/Runtime/Architecture/`），它只回答「这段代码有没有分配」，**不产出吞吐 / 耗时基准**——两者不可互相替代。
+    - **无 Git 钩子 —— 不做**（2026-10-14 用户确认）。理由：与 CI 项同源判据（0 fork / 无 PR 流程 / **未发生过漏跑门禁**），且钩子有它的硬成本——三条门禁 ≈ 82s（测试）+ 90~180s（文档），挂上去**每次提交都要付**。
+    - **无 Issue/PR 模板 —— 不做**（2026-10-14 用户确认）。模板塑造的是**外部来件**，而 GitHub API 实测 **0 issue / 0 PR**（自 2026-01-13 建仓起，`has_issues` 一直开着而无人提过）。
+    - **无 `CONTRIBUTING` —— 不做**（2026-10-14 用户确认）。它服务**外部贡献者**（0 位）；而本仓的流程真相已有两处（`Workflow.md` 管流程、`CLAUDE.md` 管规则），另起一份就是第二份真相。
+    - **重开判据**（上面三条共用，与 `CI.md` 联动）：① **出现第二个贡献者或外部 PR 流程**（同 `CI.md` §四 判据 1）；② **实际发生过一次漏跑门禁**（`CI.md` §四 判据 2 去掉「发布节奏显著加快」这个与本地无关的前置）。届时**四项（含 CI）同轮重裁**——它们是同一次裁定的四个面。
+    - **另一条本轮新增的观察**：~~仓库根没有 README~~ —— ✅ **2026-10-14 已补**（`128be66`）：这个公开仓（MIT、UPM 可装）的 GitHub 落地页原是一张裸文件列表。补的是一份**只指路、不列内容**的极简根 README——讲清「包本体在 `Assets/XFramework/` 子目录」这个关键事实与两条读者路径（用包的 / 开发本仓的），模块清单那类会漂移的内容一律指向包 README，故它不会腐烂。
 14. **依赖声明碎片化**（**2026-10-11 已缓解**）：结构仍是三处（`package.json` 的 `dependencies` 按 UPM 的现实刻意留空），但 `README.md`「第三方依赖」表已定为**唯一真相**，守卫 `DependencyDeclarationTests` 断言安装器清单与 `Packages/manifest.json` 都与它逐字一致（`db02909`），规则已进 `CLAUDE.md`。原事实：版本真相分散在三处，安装器注释自承「两处必须一起长」——第 1 条就是这个碎片化的直接后果，现已由守卫兜住。
 15. ~~**`ProjectSettings/ProjectVersion.txt` = `6000.4.5f1`，而 `package.json` 声明 `unity: 6000.3`**。这是**有意**的（最低要求 ≠ 开发版本），但两处不一致容易被误读为漂移，值得在 README 写明。~~ —— **2026-10-13 已落地**（§5.2 步骤 7）：包 README 的「依赖」节写明两处口径与「最低要求 ≠ 开发版本，不是漂移」的定性。
 
