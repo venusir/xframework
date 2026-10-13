@@ -19,11 +19,11 @@ namespace XFramework.XBootstrap.Tests
     /// 跨帧让出、<c>OnDestroy</c> 与在途启动的交叠；EditMode 里 <c>Awake</c> 不跑、帧不存在，这些形态造不出来。
     /// 既有 <c>GameLauncherTests</c> 刻意在 <c>Start</c> 真跑 <c>RunAsync</c> 之前销毁对象（怕真去初始化 YooAsset），
     /// 本 fixture 补的正是那半边：覆写 <c>ConfigureStages</c> **只登记假阶段**，把 YooAsset 完全绕开。</para>
-    /// <para><b>用例 2/3 以「钉现状」形态提交</b>：它们把 <c>Documentation/Modules/Bootstrap.md</c> 记的
-    /// 两条「推理，未实测」（销毁 × 在途启动交叠）升级为实测。缺陷定性与修法（<c>Start</c> 传
-    /// <c>destroyCancellationToken</c>）属公开行为变更，待用户裁定；**若裁定修复，这两条的断言应翻转为
-    /// 「干净关闭」（用例 2 的 <c>later.ExecuteCount == 0</c>、用例 3 不出现任何 Error）**——别把本轮的
-    /// 钉现状断言当成期望语义照抄。</para>
+    /// <para><b>用例 2/3 覆盖两条不同的边界（2026-10-13 裁定「彻底修」后重写）</b>：
+    /// <c>Shutdown</c> 会先中止在途 <c>RunAsync</c>（Bootstrap 内部令牌链），因此销毁发生在启动途中时，
+    /// <b>后置相位不再被执行</b>——用例 2 断言即此语义（已从「钉现状」翻转）。但中止是<b>协作式</b>的：
+    /// 不响应取消的在途阶段仍会跑完自己的沉降点并走失败链——用例 3 以真实 <c>AssetBootstrapStage</c>
+    /// 加忽略令牌的假实现为证，<b>原样保留</b>；它是修复覆盖不到的边界，不是回归。</para>
     /// </summary>
     [TestFixture]
     public class GameLauncherFrameTests
@@ -185,12 +185,13 @@ namespace XFramework.XBootstrap.Tests
         }
 
         /// <summary>
-        /// 销毁 × 在途启动交叠的**实测**（<c>Modules/Bootstrap.md</c> 的「推理，未实测」升级）。
-        /// <para>两个阶段是刻意的：阶段 0 挂死造出「在途」，阶段 5 从未执行——用来钉住
-        /// <c>Shutdown</c> 会清理**整张登记表**（含未执行的后置相位），而在途管线随后仍会执行它。</para>
+        /// 销毁 × 在途启动交叠：<c>Shutdown</c> 先中止在途运行，<b>后置相位不再执行</b>。
+        /// <para>两个阶段是刻意的：阶段 0 挂死造出「在途」（<b>刻意不挂令牌</b>——不响应取消的在途工作，
+        /// 放行前谁也叫不停它）；阶段 5 从未执行。用来钉住两件事：<c>Shutdown</c> 会清理<b>整张登记表</b>
+        /// （含未执行的后置相位），而放行后的在途管线<b>不会</b>再执行它——取消在阶段边界生效。</para>
         /// </summary>
         [Test]
-        public async Task Destroy_DuringInFlightStart_LaterPhaseStillExecutesAfterItsShutdown()
+        public async Task Destroy_DuringInFlightStart_CancelsRunAndLaterPhaseNeverExecutes()
         {
             var gate = new UniTaskCompletionSource();
             var inFlight = new GateStage { StageName = "在途", PhaseValue = 0, Gate = gate };
@@ -212,15 +213,18 @@ namespace XFramework.XBootstrap.Tests
                 Assert.AreEqual(1, inFlight.ShutdownCount, "在途阶段应被 OnDestroy 的 Shutdown 清理");
                 Assert.AreEqual(1, later.ShutdownCount, "从未执行过的后置相位同样会被清理——Shutdown 扫的是整张登记表");
 
-                // 放行在途阶段：在途管线是装配期快照，Shutdown 不取消任何东西
+                // 放行在途阶段：Shutdown 已取消在途运行，管线应在阶段边界停住，不再进入相位 5
                 gate.TrySetResult();
 
-                Assert.IsTrue(await WaitUntil(() => later.CompletedCount >= 1),
-                    // 钉现状（待裁定）：被 Shutdown 过的阶段仍会被在途管线执行。若裁定修复
-                    // （Start 传 destroyCancellationToken），本条应翻转为 later.ExecuteCount == 0。
-                    "钉现状：被 Shutdown 的阶段仍在自己的 Shutdown 之后被执行");
-                Assert.AreEqual(1, later.ExecuteCount);
-                Assert.AreEqual(1, later.ShutdownCountAtStart, "它执行时 Shutdown 已经发生过——这正是交叠的证据");
+                Assert.IsTrue(await WaitUntil(() => inFlight.CompletedCount >= 1),
+                    "放行后阶段 0 应跑完自己的沉降点（中止是协作式的，它不响应取消）");
+                await UniTask.Yield();
+                await UniTask.Yield();
+
+                Assert.AreEqual(0, later.ExecuteCount,
+                    "被 Shutdown 中止的在途启动不得再执行后置相位（取消在阶段边界生效）");
+                Assert.AreEqual(0, later.CompletedCount);
+                Assert.AreEqual(-1, later.ShutdownCountAtStart, "后置相位从未执行过");
 
                 // 等管线收尾，不给后续 fixture 留在途任务
                 await UniTask.Yield();
@@ -236,6 +240,9 @@ namespace XFramework.XBootstrap.Tests
         /// 真实 <see cref="AssetBootstrapStage"/> 的端到端复现：销毁点掉 <c>AssetManager.Destroy()</c> 的
         /// 初始化代际，在途初始化完成后代际校验抛异常 → 管线失败 → <c>Start</c> 记「启动失败」。
         /// 即 <c>Modules/Bootstrap.md:26</c> 预言的「最坏一条『启动失败』错误日志」的完整链路。
+        /// <para><b>这条是「彻底修」覆盖不到的边界（2026-10-13 裁定后原样保留）</b>：阶段确实把令牌
+        /// 透传给了 <c>InitializeAsync</c>，但实现不响应取消（本用例的 <c>FakeAssetManager</c> 忽略令牌），
+        /// 于是中止是协作式的——在途初始化照常完成、代际校验照常抛。它不是回归，是如实边界。</para>
         /// </summary>
         [Test]
         public async Task Destroy_DuringRealAssetStageInit_ReproducesStartupFailureLog()
@@ -260,7 +267,8 @@ namespace XFramework.XBootstrap.Tests
 
                 Assert.IsFalse(AssetManager.IsInitialized, "销毁后门面应回到未初始化态（代际已递增）");
 
-                // 钉现状（待裁定）：放行在途初始化 → 代际校验抛异常 → 管线失败 → Start 记错误。
+                // 覆盖边界（原样保留）：假实现忽略令牌 → 在途初始化照常完成 → 代际校验抛异常 →
+                // 管线失败 → Start 记错误。中止是协作式的，不响应取消的实现在射程之外。
                 // 只锚消息头，不匹配多行异常详情（异常以 ToString() 追加，锚全长必碎）。
                 LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed"));
                 LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed"));

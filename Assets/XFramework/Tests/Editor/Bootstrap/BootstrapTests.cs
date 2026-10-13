@@ -96,12 +96,16 @@ namespace Venusy609.Xframework.Editor.Tests
         public void SetUp()
         {
             Bootstrap.Clear();
+            // Clear 不清 _isRunning / 在途取消源；会话复位是兜底（internal，经 InternalsVisibleTo 可达）
+            Bootstrap.ResetForNewSession();
         }
 
         [TearDown]
         public void TearDown()
         {
             Bootstrap.Clear();
+            // 中止用例失败时会把在途标记或取消源留下，静默吞掉后续 fixture 的 RunAsync
+            Bootstrap.ResetForNewSession();
         }
 
         #endregion
@@ -381,6 +385,42 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.Throws<OperationCanceledException>(
                 () => Bootstrap.RunAsync(cancellationToken: cts.Token).GetAwaiter().GetResult());
+        }
+
+        /// <summary>
+        /// <c>Shutdown</c> 中止在途运行的三方路径：<b>直接调 <c>RunAsync</c> 且不传令牌</b>——
+        /// 中止信号经 Bootstrap 内部的链接令牌生效，不依赖调用方提供令牌。
+        /// <para>钉住三件事：在途运行以 <see cref="OperationCanceledException"/> 收场（且携带的令牌
+        /// <b>已取消</b>——调用方以 <c>IsCancellationRequested</c> 判断，不要比对令牌身份）；
+        /// 后置相位不再执行（取消在阶段边界生效）；收尾后重入守卫已释放，下一次运行不受上一轮取消影响。</para>
+        /// </summary>
+        [Test]
+        public void Shutdown_DuringInFlightRun_CancelsRunAndSkipsLaterPhases()
+        {
+            var gated = NewStage("gated", 0);
+            gated.Gate = new UniTaskCompletionSource();
+            var later = NewStage("later", 5);
+            Bootstrap.Register(gated);
+            Bootstrap.Register(later);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(1, gated.ExecuteCount, "首次调用应已启动阶段");
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            Bootstrap.Shutdown();
+
+            // 放行不响应取消的在途阶段：整条链随之同步收敛
+            gated.Gate.TrySetResult();
+
+            var exception = Assert.Throws<OperationCanceledException>(() => run.GetAwaiter().GetResult());
+            Assert.IsTrue(exception.CancellationToken.IsCancellationRequested,
+                "Shutdown 触发的取消要携带已取消的令牌（本次运行的链接令牌）");
+            Assert.AreEqual(0, later.ExecuteCount, "被中止的在途运行不得再执行后置相位");
+
+            // 收尾后 _isRunning 应已释放：紧接的 RunAsync 必须真的重跑（取消只作用于被中止的那一轮）
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+            Assert.AreEqual(2, gated.ExecuteCount, "首轮结束后 _isRunning 应已释放——再次 RunAsync 必须真的重跑阶段");
+            Assert.AreEqual(1, later.ExecuteCount, "未被中止的一轮里后置相位应正常执行");
         }
 
         #endregion

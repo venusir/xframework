@@ -13,7 +13,8 @@ namespace XFramework.XBootstrap
     /// 框架启动引导的登记与运行入口。
     /// <para>需要异步初始化的模块实现 <see cref="IBootstrapStage"/> 并在此<b>显式登记</b>；
     /// <see cref="RunAsync"/> 按相位装配管线（同相位并行、相位升序串行，复用
-    /// <see cref="Pipeline.BuildPhaseGroups"/>），<see cref="Shutdown"/> 按执行序的逆序（相位降序）反向清理。</para>
+    /// <see cref="Pipeline.BuildPhaseGroups"/>）；<see cref="Shutdown"/> <b>先中止在途的
+    /// <see cref="RunAsync"/>，再</b>按执行序的逆序（相位降序）反向清理。</para>
     /// <para><b>为什么是显式登记而不是反射发现：</b>零反射、顺序可控、可测试，且使用方一眼能看出
     /// 到底有哪些东西会在这个启动流程里跑。框架不替使用方决定该初始化什么——
     /// <see cref="RegisterDefaults"/> 只是把最常用的三件（Asset / Data / Save）打包好，用不用随你。</para>
@@ -31,6 +32,14 @@ namespace XFramework.XBootstrap
 
         /// <summary>是否有一次 <see cref="RunAsync"/> 在途。运行期登记表只读（改动只告警、不阻止）。</summary>
         private static bool _isRunning;
+
+        /// <summary>
+        /// 本次在途 <see cref="RunAsync"/> 的取消源（非在途时为 null）。
+        /// <para>由 <see cref="RunAsync"/> 在重入守卫之后创建（链接调用方令牌），<see cref="Shutdown"/>
+        /// 取消它以<b>先中止在途、后清理</b>；释放归创建它的那次运行（局部变量 + 身份校验，
+        /// 见 <see cref="RunAsync"/> 收尾处的注释）。</para>
+        /// </summary>
+        private static CancellationTokenSource _runCts;
 
         #endregion
 
@@ -196,12 +205,20 @@ namespace XFramework.XBootstrap
         /// <c>GameLauncher.ConfigureStages</c> 的登记；开域重载时登记表本就是空的，本方法退化为空操作。</para>
         /// <para><b>与 <see cref="Clear"/> 的分工</b>：那个的定位是「测试复位用」，这里是「会话开始」的自动复位
         /// ——两者都只清登记表，不影响已初始化的服务。</para>
+        /// <para><b>在途状态一并复位</b>：<see cref="_isRunning"/> 清 false、上一会话遗留的取消源被中止并丢弃
+        /// ——否则新会话的 <see cref="RunAsync"/> 会被陈旧的在途标记静默吞掉。</para>
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()
         {
             StageList.Clear();
             _isRunning = false;
+
+            // 上一会话在途运行的取消源：显式中止后丢弃。不 Dispose——释放归创建它的那次运行
+            // （它的收尾靠身份校验，不会碰到新会话的取消源）。若那次运行的收尾永远不会到来
+            // （域重载关闭、旧会话的续体已死），这个源留给 GC，属已知且可接受的代价。
+            _runCts?.Cancel();
+            _runCts = null;
         }
 
         #endregion
@@ -212,15 +229,19 @@ namespace XFramework.XBootstrap
         /// 按相位装配并运行引导管线。
         /// <para>失败与取消<b>会抛出</b>，不像旧节点树启动路径那样只留一条日志：
         /// 启动失败是致命的，调用方必须能感知。</para>
+        /// <para><b>在途期间调用 <see cref="Shutdown"/> 会中止本次运行</b>：取消经链接令牌传播，
+        /// 管线在下一个阶段边界停止；中止是协作式的——不观察令牌的阶段会先跑完自己（见 README 已知限制）。</para>
         /// <para><b>重入只警告并忽略</b>（与 Pipeline 实例自身的重入守卫同形）：每次调用都会装配一条
         /// 新管线（管线守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的调用<b>立即返回、
         /// 不代表启动完成</b>——要「等启动结束」，请共享第一次调用的任务，而不是再调一次。</para>
         /// </summary>
         /// <param name="progress">进度接收者，可为 null。</param>
-        /// <param name="cancellationToken">取消令牌。</param>
+        /// <param name="cancellationToken">取消令牌；<see cref="Shutdown"/> 的中止信号与它链接后一并生效。</param>
         /// <returns>管线跑完的异步任务。</returns>
         /// <exception cref="InvalidOperationException">任一阶段失败时抛出，消息含失败原因。</exception>
-        /// <exception cref="OperationCanceledException">启动被取消时抛出。</exception>
+        /// <exception cref="OperationCanceledException">启动被取消时抛出（调用方令牌取消，或 <see cref="Shutdown"/>
+        /// 中止在途运行）。异常携带的是本次运行的<b>链接令牌</b>——判据是
+        /// <see cref="CancellationToken.IsCancellationRequested"/>，不要比对令牌身份。</exception>
         public static async UniTask RunAsync(IProgress<PipelineProgress> progress = null,
                                              CancellationToken cancellationToken = default)
         {
@@ -235,46 +256,70 @@ namespace XFramework.XBootstrap
 
             try
             {
-                if (StageList.Count == 0)
-                {
-                    LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
-                    return;
-                }
-
-                IPipeline pipeline = BuildPipeline();
-
-                if (progress != null)
-                {
-                    pipeline.OnProgressUpdate += value => progress.Report(value);
-                }
-
-                // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
-                // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
-                // 旧实现为此订阅 OnFailed/OnCancelled 再用两个局部变量记账，现由管线自己落位。
-                PipelineStatus status = PipelineStatus.Idle;
-                string failureReason = null;
+                // 本次运行的取消源：链接调用方令牌，Shutdown 的中止信号也经它生效。
+                // 创建位置是硬要求——必须在重入守卫之后：守卫放行的第二次调用会覆写字段，
+                // 让首次运行的收尾误 Dispose 掉别人的取消链。
+                CancellationTokenSource runCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                CancellationToken runToken = runCts.Token;
+                _runCts = runCts;
 
                 try
                 {
-                    await pipeline.RunAsync(cancellationToken);
+                    if (StageList.Count == 0)
+                    {
+                        LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
+                        return;
+                    }
 
-                    // 必须在 finally 的 Destroy 之前读：销毁会把状态回落 Idle
-                    status = pipeline.Status;
-                    failureReason = pipeline.FailureReason;
+                    IPipeline pipeline = BuildPipeline();
+
+                    if (progress != null)
+                    {
+                        pipeline.OnProgressUpdate += value => progress.Report(value);
+                    }
+
+                    // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
+                    // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
+                    // 旧实现为此订阅 OnFailed/OnCancelled 再用两个局部变量记账，现由管线自己落位。
+                    PipelineStatus status = PipelineStatus.Idle;
+                    string failureReason = null;
+
+                    try
+                    {
+                        await pipeline.RunAsync(runToken);
+
+                        // 必须在 finally 的 Destroy 之前读：销毁会把状态回落 Idle
+                        status = pipeline.Status;
+                        failureReason = pipeline.FailureReason;
+                    }
+                    finally
+                    {
+                        pipeline.Destroy();
+                    }
+
+                    if (failureReason != null)
+                    {
+                        throw new InvalidOperationException($"[Bootstrap] 启动失败：{failureReason}");
+                    }
+
+                    if (status == PipelineStatus.Cancelled)
+                    {
+                        // 带本次运行的链接令牌而不是调用方令牌：Shutdown 触发的中止里，调用方令牌
+                        // 并未取消，携带它会让 catch-when 过滤与语义都对不上。
+                        throw new OperationCanceledException(runToken);
+                    }
                 }
                 finally
                 {
-                    pipeline.Destroy();
-                }
+                    // 收尾只碰本次运行创建的那个源（局部变量）：ResetForNewSession 可以在在途时
+                    // 清 _isRunning——允许新旧两次运行并存，无条件写字段会拆掉新运行的取消链。
+                    // Dispose 的也是局部变量而非 _runCts.Token——源释放后再取 Token 会抛 ObjectDisposedException。
+                    if (ReferenceEquals(_runCts, runCts))
+                    {
+                        _runCts = null;
+                    }
 
-                if (failureReason != null)
-                {
-                    throw new InvalidOperationException($"[Bootstrap] 启动失败：{failureReason}");
-                }
-
-                if (status == PipelineStatus.Cancelled)
-                {
-                    throw new OperationCanceledException(cancellationToken);
+                    runCts.Dispose();
                 }
             }
             finally
@@ -285,6 +330,9 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 按<b>执行序的逆序</b>清理各阶段：相位降序，同相位内按登记逆序。
+        /// <para><b>先中止在途的 <see cref="RunAsync"/>，再清理</b>：被清理过的阶段（含从未执行的）
+        /// 不应再被在途管线捡起来执行。中止是协作式的——不观察令牌的阶段会先跑完自己的沉降点，
+        /// 在途运行以 <see cref="OperationCanceledException"/> 收场。</para>
         /// <para>逆序的理由：后初始化的可能依赖先初始化的（例如 Save 依赖 Data），
         /// 先拆依赖再拆被依赖者。执行序由 <see cref="IPhaseStage.Phase"/> 决定（见 <see cref="RunAsync"/>），
         /// 因此清理序也按相位排——直接倒着遍历登记表只在「登记序恰好等于相位序」时才与执行序的逆序一致，
@@ -295,6 +343,10 @@ namespace XFramework.XBootstrap
         /// </summary>
         public static void Shutdown()
         {
+            // 先中止在途运行，再清理：取消是协作式的——当前阶段要自己观察令牌才会立刻停，
+            // 整轮在该阶段的沉降点之后收场；不响应取消的阶段会跑完（如实边界，见 README 已知限制）。
+            _runCts?.Cancel();
+
             // 收集 distinct 相位并升序排列(相位数量 = 模块数量级,非每帧路径;手写循环,零 LINQ)
             var phases = new List<int>(StageList.Count);
             for (int i = 0; i < StageList.Count; i++)

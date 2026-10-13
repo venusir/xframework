@@ -36,7 +36,10 @@ namespace XFramework.XBootstrap
             // 因此必须自行收敛——否则会成为未处理异常。
             try
             {
-                await Bootstrap.RunAsync();
+                // 传销毁令牌：本组件的生命周期就是这次启动的生命周期——销毁时在途启动随之中止。
+                // （OnDestroy 的 Shutdown 也会中止在途运行，这里是纵深防御：令牌是调用方一侧的
+                // 显式声明，不依赖 Shutdown 被调到。）
+                await Bootstrap.RunAsync(cancellationToken: destroyCancellationToken);
             }
             catch (OperationCanceledException)
             {
