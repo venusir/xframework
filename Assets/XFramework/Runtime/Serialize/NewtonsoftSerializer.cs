@@ -10,14 +10,17 @@ namespace XFramework.XSerialize
     /// </summary>
     public sealed class NewtonsoftSerializer : ISerializer
     {
+        /// <summary>格式标识：<c>"json"</c>。</summary>
         public string Format => "json";
 
+        /// <inheritdoc/>
         public byte[] Serialize(object obj, Type type)
         {
             var json = JsonConvert.SerializeObject(obj, Formatting.None);
             return Encoding.UTF8.GetBytes(json);
         }
 
+        /// <inheritdoc/>
         public object Deserialize(byte[] data, Type type)
         {
             var json = Encoding.UTF8.GetString(data);

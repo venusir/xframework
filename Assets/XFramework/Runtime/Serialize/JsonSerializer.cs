@@ -10,14 +10,17 @@ namespace XFramework.XSerialize
     /// </summary>
     public sealed class JsonSerializer : ISerializer
     {
+        /// <summary>格式标识：<c>"json-utility"</c>。</summary>
         public string Format => "json-utility";
 
+        /// <inheritdoc/>
         public byte[] Serialize(object obj, Type type)
         {
             var json = JsonUtility.ToJson(obj, false);
             return System.Text.Encoding.UTF8.GetBytes(json);
         }
 
+        /// <inheritdoc/>
         public object Deserialize(byte[] data, Type type)
         {
             var json = System.Text.Encoding.UTF8.GetString(data);
