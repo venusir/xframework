@@ -35,10 +35,11 @@
     「门禁码合计 / 诊断码合计」两条线标明哪张表管什么；逐条视图按码打标）：CS1570（XML 格式错误）、
     CS1574（cref 无法解析）、CS0419（cref 二义）、CS1591（公开成员缺注释）、CS1573（param 缺说明）、
     CS1571 / CS1572（param tag 重复 / 指向不存在的参数）、CS1734 / CS1735（paramref / typeparamref
-    名字不匹配）、CS1584（cref 语法错误）、CS1658（与 CS1584 成对的细节消息）。**其中门禁码进
-    -Enforce，其余只诊断、不判失败**——两张表都在脚本顶部，改码只改那里（扩容走「先诊断看曲线、
-    清完存量再纳门」，先例见 `Documentation/ModuleAudit.md` §八）。统计面之外的其它编译告警只计
-    一行明示、不进任何判定；要看完整分布加 `-p:DocumentationFile=<路径> -t:Rebuild` 从原始输出里筛。
+    名字不匹配）、CS1584（cref 语法错误）、CS1658（与 CS1584 成对的细节消息）。**这十一个码全部进
+    -Enforce 门禁**（2026-10-13 清完存量后收编；`$CodeLabels` / `$GatedCodes` 两张表都在脚本顶部，
+    改码只改那里——将来某码若要分阶段收编，把它留在 $CodeLabels、暂不放进 $GatedCodes，输出里会以
+    「诊断码合计」单独标出，不会隐形）。统计面之外的其它编译告警只计一行明示、不进任何判定；
+    要看完整分布加 `-p:DocumentationFile=<路径> -t:Rebuild` 从原始输出里筛。
 
     **遮蔽关系：** CS1570 会掩盖同一块注释里的 CS1574——块解析失败后，块内 cref 一律不再被检查。
     所以「没有 CS1574」推不出「链接都有效」，先清 CS1570 再看 CS1574 的真实数量。
@@ -87,7 +88,9 @@ $ErrorActionPreference = "Stop"
 #
 # $CodeLabels：本脚本统计的告警码 → 中文标签。**键集就是统计面**，顺序即汇总列序。
 # $GatedCodes：其中进 -Enforce 门禁的码（必须 ⊆ 上表的键）。未列入的码只诊断、不判失败——
-#   这是「先诊断看曲线、清完存量再往门禁里挪」的分阶段形态（先例与结论见脚本头部「覆盖范围」）。
+#   这是「先诊断看曲线、清完存量再往门禁里挪」的分阶段形态。2026-10-13 清完存量后十一码**已全部
+#   收编**；将来若某码存量大到要分阶段，把它留在 $CodeLabels、暂不放进这里即可（输出里会以
+#   「诊断码合计」单独标出）。移出任何码都要把结论落脚本头部「覆盖范围」与 ModuleAudit.md §八。
 # 统计面之外的码（编译器/分析器的其它告警）：只计一行明示、不进任何判定——不制造新的隐形面。
 $CodeLabels = [ordered]@{
     "CS1570" = "格式"          # XML 格式错误——整块注释被编译器丢弃（遮蔽源）
@@ -102,7 +105,7 @@ $CodeLabels = [ordered]@{
     "CS1584" = "cref 语法"     # cref 属性语法错误（与 CS1658 成对）
     "CS1658" = "见上文"        # CS1584 的细节消息，成对出现（文案以实测为准）
 }
-$GatedCodes = @("CS1570", "CS1574")
+$GatedCodes = @("CS1570", "CS1574", "CS0419", "CS1591", "CS1573", "CS1571", "CS1572", "CS1734", "CS1735", "CS1584", "CS1658")
 $CodeColors = @{ "CS1570" = "Yellow"; "CS0419" = "Magenta" }   # 其余统计码 Gray
 $diagCodes = @($CodeLabels.Keys | Where-Object { $GatedCodes -notcontains $_ })
 
@@ -292,7 +295,7 @@ if ($Module) {
         $metaMissing | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($metaMissing.Count -gt 10) { Write-Host "      …共 $($metaMissing.Count) 个" -ForegroundColor Yellow }
     }
-    Write-Host "  提示：CS1570 会遮蔽同一块注释里的其它告警（先清它，再看其余码的真实数量）；未纳门的码只诊断、不判失败（清单见脚本头部「覆盖范围」）。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
+    Write-Host "  提示：CS1570 会遮蔽同一块注释里的其它告警（先清它，再看其余码的真实数量）。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
 
 Write-Host ""
