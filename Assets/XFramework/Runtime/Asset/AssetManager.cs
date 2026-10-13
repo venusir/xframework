@@ -40,6 +40,9 @@ namespace XFramework.XAsset
         /// <summary>池清理能力缺失的告警是否已发出（只发一次，避免调用方在循环里刷屏）。</summary>
         private static bool _poolCapabilityWarned;
 
+        /// <summary>场景加载能力缺失的告警是否已发出（只发一次，理由同 <see cref="_poolCapabilityWarned"/>）。</summary>
+        private static bool _sceneCapabilityWarned;
+
         /// <summary>越线程访问是否已报首错（只报一次，避免每帧刷屏）。</summary>
         private static bool _mainThreadViolationLogged;
 
@@ -245,9 +248,9 @@ namespace XFramework.XAsset
         /// <see cref="IsInitialized"/> 为真即跳过初始化，<c>_instance</c> 仍指向上一会话那个实例
         /// （其内部持有已随域销毁的 YooAsset 包）。
         /// <para><b>比其它门面多两件事</b>：① <b>作废在途初始化</b>（<see cref="InvalidateInflightInit"/> +
-        /// 清任务）——上一会话半路中断的初始化不得在第二会话里让实例「复活」；② 复位两个
-        /// <b>「只报一次」闩锁</b>（<c>_poolCapabilityWarned</c> / <c>_mainThreadViolationLogged</c>）——
-        /// 它们是每会话一次的提示，不复位则第二会话静默。</para>
+        /// 清任务）——上一会话半路中断的初始化不得在第二会话里让实例「复活」；② 复位三个
+        /// <b>「只报一次」闩锁</b>（<c>_poolCapabilityWarned</c> / <c>_sceneCapabilityWarned</c> /
+        /// <c>_mainThreadViolationLogged</c>）——它们是每会话一次的提示，不复位则第二会话静默。</para>
         /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：早于首场景 <c>Awake</c>，因而早于引导阶段；
         /// 开域重载时是纯幂等空操作。<b>只丢引用、不调 <c>Dispose</c></b>：上一会话的实例可能握着已随域
         /// 销毁的 YooAsset 包，清理归 <see cref="Destroy"/>。<b>不卸载 YooAsset 侧的包与已加载资源</b>——
@@ -264,6 +267,7 @@ namespace XFramework.XAsset
             _initializeTask = default;
 
             _poolCapabilityWarned = false;
+            _sceneCapabilityWarned = false;
             _mainThreadViolationLogged = false;
         }
 
@@ -391,11 +395,49 @@ namespace XFramework.XAsset
             return _instance.InstantiateAsync<T>(location, position, rotation, parent, cancellationToken);
         }
 
-        /// <inheritdoc cref="IAssetManager.LoadSceneAsync(string, bool, Action{float}, CancellationToken)"/>
-        public static UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 异步加载场景，返回可卸载的句柄。
+        /// <para><b>失败返回 <c>default(AssetSceneHandle)</c> 而不抛</b>；取消抛
+        /// <see cref="OperationCanceledException"/>。</para>
+        /// <para>本成员是**后端能力转发**（同 <see cref="ClearPool"/>）：使用方请走 <c>XFramework.XScene</c>
+        /// 的场景管理器，它在这条能力之上再加编排与进度契约。</para>
+        /// <para>当前实现不支持该能力时返回无效句柄并告警一次。</para>
+        /// </summary>
+        /// <param name="location">场景资源地址。</param>
+        /// <param name="mode">单场景（默认）或叠加。</param>
+        /// <param name="progress">进度上报（0~1）。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        public static UniTask<AssetSceneHandle> LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
-            return _instance.LoadSceneAsync(location, additive, progress, cancellationToken);
+
+            var loader = ResolveSceneLoader();
+            if (loader == null) return UniTask.FromResult(default(AssetSceneHandle));
+            return loader.LoadSceneAsync(location, mode, progress, cancellationToken);
+        }
+
+        /// <summary>
+        /// 卸载场景句柄对应的场景。失败返回 <c>false</c>。
+        /// <para><b>本成员刻意不抛异常</b>：它会被 <see cref="AssetSceneHandle.Dispose"/> 调到，而
+        /// <c>Dispose</c> 里的异常没人接得住。门面未初始化时记一条告警并返回 <c>false</c>——
+        /// 这是门面模板的第三处宽容豁免（前两处：<c>FileManager</c> 的懒初始化、<c>InputManager</c> 的宽容查询）。</para>
+        /// <para>当前实现不支持该能力时返回 <c>false</c> 并告警一次。</para>
+        /// </summary>
+        /// <param name="handle">加载时拿到的句柄；<c>default</c> 时空转返回 <c>false</c>。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        public static async UniTask<bool> UnloadSceneAsync(AssetSceneHandle handle, CancellationToken cancellationToken = default)
+        {
+            if (!IsInitialized)
+            {
+                LogManager.Warning(LogCategories.AssetManager,
+                    "UnloadSceneAsync 在未初始化的门面上被调用，句柄未卸载。" +
+                    "请先调用 AssetManager.InitializeAsync() 完成初始化。");
+                return false;
+            }
+
+            var loader = ResolveSceneLoader();
+            if (loader == null) return false;
+            return await loader.UnloadSceneAsync(handle, cancellationToken);
         }
 
         /// <inheritdoc cref="IAssetManager.PreloadAllAsync(IEnumerable{string}, Action{float}, CancellationToken)"/>
@@ -536,6 +578,25 @@ namespace XFramework.XAsset
                 LogManager.Warning(LogCategories.AssetManager,
                     "当前 IAssetManager 实现不支持 IAssetPoolController，池清理调用被忽略。" +
                     "若要使用该能力，请在自定义实现上实现 IAssetPoolController。");
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 取当前实现的场景加载能力。不支持时告警一次（同 <see cref="ResolvePoolController"/>）。
+        /// </summary>
+        private static IAssetSceneLoader ResolveSceneLoader()
+        {
+            if (_instance is IAssetSceneLoader loader)
+                return loader;
+
+            if (!_sceneCapabilityWarned)
+            {
+                _sceneCapabilityWarned = true;
+                LogManager.Warning(LogCategories.AssetManager,
+                    "当前 IAssetManager 实现不支持 IAssetSceneLoader，场景加载 / 卸载调用被忽略。" +
+                    "若要使用该能力，请在自定义实现上实现 IAssetSceneLoader。");
             }
 
             return null;

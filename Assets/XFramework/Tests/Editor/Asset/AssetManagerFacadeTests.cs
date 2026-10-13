@@ -34,9 +34,10 @@ namespace Venusy609.Xframework.Editor.Tests
             AssetManager.ImplFactory = null;
             AssetManager.Destroy();
 
-            // 复位门面的「能力缺失只告警一次」私有静态闩锁：本 fixture 是唯一触碰它的地方，
+            // 复位门面的「能力缺失只告警一次」私有静态闩锁：本 fixture 是唯一触碰它们的地方，
             // 不复位则下一条碰它的用例等不到那条告警（LogAssert.Expect 会判红）
             ResetPoolCapabilityWarning();
+            ResetSceneCapabilityWarning();
         }
 
         #region 初始化状态
@@ -330,13 +331,6 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void LoadSceneAsync_ForwardsToInstance()
-        {
-            AssetManager.LoadSceneAsync("scenes/main").GetAwaiter().GetResult();
-            Assert.AreEqual(1, _fake.SceneLoadCallCount);
-        }
-
-        [Test]
         public void RequestPackageVersionAsync_ForwardsToInstance()
         {
             var version = AssetManager.RequestPackageVersionAsync().GetAwaiter().GetResult();
@@ -601,6 +595,80 @@ namespace Venusy609.Xframework.Editor.Tests
 
         #endregion
 
+        #region 场景能力探测
+
+        [Test]
+        public void LoadSceneAsync_WhenCapabilitySupported_ForwardsAndReturnsHandle()
+        {
+            var scene = default(Scene);
+            var capable = new SceneCapableAssetManager { SceneLoadResult = new AssetSceneHandle(7, scene) };
+            AssetManager.SetInstance(capable);
+
+            var handle = AssetManager.LoadSceneAsync("scenes/main", LoadSceneMode.Additive, null, CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            Assert.AreEqual(7, handle.Id, "应原样返回能力实现给出的句柄");
+            Assert.AreEqual(1, capable.SceneLoadCallCount);
+            Assert.AreEqual("scenes/main", capable.LastSceneLocation);
+            Assert.AreEqual(LoadSceneMode.Additive, capable.LastSceneMode, "模式必须原样下传");
+        }
+
+        [Test]
+        public void UnloadSceneAsync_WhenCapabilitySupported_ForwardsAndReturnsResult()
+        {
+            var capable = new SceneCapableAssetManager { SceneUnloadResult = false };
+            AssetManager.SetInstance(capable);
+            var handle = new AssetSceneHandle(9, default);
+
+            var unloaded = AssetManager.UnloadSceneAsync(handle).GetAwaiter().GetResult();
+
+            Assert.IsFalse(unloaded, "应原样返回能力实现的结果");
+            Assert.AreEqual(1, capable.SceneUnloadCallCount);
+            Assert.AreEqual(9, capable.LastUnloadedHandle.Id, "句柄必须原样下传");
+        }
+
+        [Test]
+        public void LoadSceneAsync_WhenCapabilityMissing_ReturnsDefaultAndWarnsOnce()
+        {
+            ResetSceneCapabilityWarning();
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[AssetManager\] 当前 IAssetManager 实现不支持 IAssetSceneLoader"));
+
+            var first = AssetManager.LoadSceneAsync("scenes/main").GetAwaiter().GetResult();
+            var second = AssetManager.LoadSceneAsync("scenes/main").GetAwaiter().GetResult();
+
+            Assert.IsTrue(first.IsDefault, "能力缺失时返回无效句柄（SetUp 注入的替身不实现该接口）");
+            Assert.IsTrue(second.IsDefault, "第二次调用同样返回无效句柄，且因闩锁不再告警");
+        }
+
+        [Test]
+        public void UnloadSceneAsync_WhenCapabilityMissing_ReturnsFalse()
+        {
+            ResetSceneCapabilityWarning();
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[AssetManager\] 当前 IAssetManager 实现不支持 IAssetSceneLoader"));
+
+            var unloaded = AssetManager.UnloadSceneAsync(new AssetSceneHandle(1, default)).GetAwaiter().GetResult();
+
+            Assert.IsFalse(unloaded);
+        }
+
+        /// <summary>
+        /// **释放路径的宽容豁免**：<see cref="AssetSceneHandle.Dispose"/> 会调到这里，而 Dispose 里的异常
+        /// 没人接得住——所以门面未初始化时只告警并返回 <c>false</c>，不抛 <see cref="InvalidOperationException"/>。
+        /// 这是门面模板的第三处豁免（前两处：FileManager 懒初始化、InputManager 宽容查询）。
+        /// </summary>
+        [Test]
+        public void UnloadSceneAsync_BeforeInitialize_ReturnsFalseWithoutThrowing()
+        {
+            AssetManager.Destroy();
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[AssetManager\] UnloadSceneAsync 在未初始化的门面上被调用"));
+
+            var unloaded = AssetManager.UnloadSceneAsync(new AssetSceneHandle(1, default)).GetAwaiter().GetResult();
+
+            Assert.IsFalse(unloaded);
+        }
+
+        #endregion
+
         #region 实例注入语义
 
         [Test]
@@ -652,6 +720,14 @@ namespace Venusy609.Xframework.Editor.Tests
         {
             var field = typeof(AssetManager).GetField("_poolCapabilityWarned", BindingFlags.NonPublic | BindingFlags.Static);
             Assert.IsNotNull(field, "找不到字段 _poolCapabilityWarned——它被改名了吗？改名请同步本 fixture");
+            field.SetValue(null, false);
+        }
+
+        /// <summary>同上，场景能力那一把闩锁。</summary>
+        private static void ResetSceneCapabilityWarning()
+        {
+            var field = typeof(AssetManager).GetField("_sceneCapabilityWarned", BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.IsNotNull(field, "找不到字段 _sceneCapabilityWarned——它被改名了吗？改名请同步本 fixture");
             field.SetValue(null, false);
         }
 

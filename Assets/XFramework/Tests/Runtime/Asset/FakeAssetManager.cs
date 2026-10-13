@@ -94,9 +94,6 @@ namespace XFramework.XAsset.Tests
         public UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation,
             Transform parent = null, CancellationToken cancellationToken = default) where T : Component => throw NotUsed();
 
-        public UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null,
-            CancellationToken cancellationToken = default) => throw NotUsed();
-
         public UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null,
             CancellationToken cancellationToken = default) => throw NotUsed();
 

@@ -207,11 +207,6 @@ namespace XFramework.XUI.Tests
             => throw NotUsed();
 
         /// <inheritdoc/>
-        public UniTask<Scene> LoadSceneAsync(string location, bool additive = false,
-            Action<float> progress = null, CancellationToken cancellationToken = default)
-            => throw NotUsed();
-
-        /// <inheritdoc/>
         public UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null,
             CancellationToken cancellationToken = default)
             => throw NotUsed();

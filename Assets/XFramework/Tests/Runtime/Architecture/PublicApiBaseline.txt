@@ -87,7 +87,7 @@ XFramework.XAsset.AssetManager.LoadAsync  ::  public static Cysharp.Threading.Ta
 XFramework.XAsset.AssetManager.LoadAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.AssetHandle<T>>(string location, int priority, System.Threading.CancellationToken cancellationToken = default) where T : UnityEngine.Object
 XFramework.XAsset.AssetManager.LoadRawFileAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.RawFileHandle>(string location, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.LoadRawFileSync  ::  public static XFramework.XAsset.RawFileHandle(string location)
-XFramework.XAsset.AssetManager.LoadSceneAsync  ::  public static Cysharp.Threading.Tasks.UniTask<UnityEngine.SceneManagement.Scene>(string location, bool additive = false, System.Action<float> progress = null, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XAsset.AssetManager.LoadSceneAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.AssetSceneHandle>(string location, UnityEngine.SceneManagement.LoadSceneMode mode = Single, System.Action<float> progress = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.LoadSubAssetsAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.SubAssetsHandle>(string location, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.LoadSubAssetsSync  ::  public static XFramework.XAsset.SubAssetsHandle(string location)
 XFramework.XAsset.AssetManager.LoadSync  ::  public static XFramework.XAsset.AssetHandle<T>(string location) where T : UnityEngine.Object
@@ -97,11 +97,20 @@ XFramework.XAsset.AssetManager.RequestPackageVersionAsync  ::  public static Cys
 XFramework.XAsset.AssetManager.SetInstance  ::  public static void(XFramework.XAsset.IAssetManager manager)
 XFramework.XAsset.AssetManager.SetPoolMaxSize  ::  public static void(string location, int maxSize)
 XFramework.XAsset.AssetManager.TryUnloadUnusedAsset  ::  public static void(string location, string packageName = null)
+XFramework.XAsset.AssetManager.UnloadSceneAsync  ::  public static Cysharp.Threading.Tasks.UniTask<bool>(XFramework.XAsset.AssetSceneHandle handle, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.UnloadUnusedAssetsAsync  ::  public static Cysharp.Threading.Tasks.UniTask(string packageName = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetManager.UpdatePackageManifestAsync  ::  public static Cysharp.Threading.Tasks.UniTask(string packageVersion, string packageName = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.AssetPlayMode  ::  public enum : int
 XFramework.XAsset.AssetPlayMode.Host  ::  = 1
 XFramework.XAsset.AssetPlayMode.Offline  ::  = 0
+XFramework.XAsset.AssetSceneHandle  ::  public readonly struct : System.IDisposable
+XFramework.XAsset.AssetSceneHandle#ctor  ::  public(int id, UnityEngine.SceneManagement.Scene scene)
+XFramework.XAsset.AssetSceneHandle.Dispose  ::  public virtual void()
+XFramework.XAsset.AssetSceneHandle.Id  ::  public readonly int
+XFramework.XAsset.AssetSceneHandle.IsDefault  ::  public bool IsDefault { get; }
+XFramework.XAsset.AssetSceneHandle.IsValid  ::  public bool IsValid { get; }
+XFramework.XAsset.AssetSceneHandle.Scene  ::  public readonly UnityEngine.SceneManagement.Scene
+XFramework.XAsset.AssetSceneHandle.UnloadAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>(System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.IAssetDecryptionServices  ::  public interface
 XFramework.XAsset.IAssetDecryptionServices.LoadAssetBundle  ::  public XFramework.XAsset.AssetDecryptResult(string bundleName, string fileLoadPath, uint fileLoadCRC)
 XFramework.XAsset.IAssetDecryptionServices.LoadAssetBundleAsync  ::  public XFramework.XAsset.AssetDecryptResult(string bundleName, string fileLoadPath, uint fileLoadCRC)
@@ -130,7 +139,6 @@ XFramework.XAsset.IAssetManager.LoadAsync  ::  public Cysharp.Threading.Tasks.Un
 XFramework.XAsset.IAssetManager.LoadAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.AssetHandle<T>>(string location, int priority, System.Threading.CancellationToken cancellationToken = default) where T : UnityEngine.Object
 XFramework.XAsset.IAssetManager.LoadRawFileAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.RawFileHandle>(string location, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.IAssetManager.LoadRawFileSync  ::  public XFramework.XAsset.RawFileHandle(string location)
-XFramework.XAsset.IAssetManager.LoadSceneAsync  ::  public Cysharp.Threading.Tasks.UniTask<UnityEngine.SceneManagement.Scene>(string location, bool additive = false, System.Action<float> progress = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.IAssetManager.LoadSubAssetsAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.SubAssetsHandle>(string location, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.IAssetManager.LoadSubAssetsSync  ::  public XFramework.XAsset.SubAssetsHandle(string location)
 XFramework.XAsset.IAssetManager.LoadSync  ::  public XFramework.XAsset.AssetHandle<T>(string location) where T : UnityEngine.Object
@@ -147,6 +155,9 @@ XFramework.XAsset.IAssetPoolController.ClearPool  ::  public int(string location
 XFramework.XAsset.IAssetRemoteServices  ::  public interface
 XFramework.XAsset.IAssetRemoteServices.GetRemoteFallbackURL  ::  public string(string fileName)
 XFramework.XAsset.IAssetRemoteServices.GetRemoteMainURL  ::  public string(string fileName)
+XFramework.XAsset.IAssetSceneLoader  ::  public interface
+XFramework.XAsset.IAssetSceneLoader.LoadSceneAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XAsset.AssetSceneHandle>(string location, UnityEngine.SceneManagement.LoadSceneMode mode = Single, System.Action<float> progress = null, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XAsset.IAssetSceneLoader.UnloadSceneAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>(XFramework.XAsset.AssetSceneHandle handle, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAsset.RawFileHandle  ::  public readonly struct : System.IDisposable
 XFramework.XAsset.RawFileHandle.Dispose  ::  public virtual void()
 XFramework.XAsset.RawFileHandle.GetRawFileData  ::  public byte[]()

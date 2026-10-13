@@ -100,17 +100,28 @@ var healthBar = await AssetManager.InstantiateAsync<HealthBar>("ui/health_bar", 
 ### 5. 场景加载
 
 ```csharp
-// 单场景加载
-var scene = await AssetManager.LoadSceneAsync("scenes/main");
+// 单场景加载：返回可卸载的句柄
+var main = await AssetManager.LoadSceneAsync("scenes/main");
+if (main.IsDefault)
+{
+    // 失败时拿到的是无效句柄（本模块不抛异常）
+    return;
+}
 
-// 叠加式加载 + 进度回调
-var scene = await AssetManager.LoadSceneAsync("scenes/main", additive: true, p =>
+// 叠加式加载 + 进度回调（需要 using UnityEngine.SceneManagement; 取 LoadSceneMode）
+var extra = await AssetManager.LoadSceneAsync("scenes/battle", LoadSceneMode.Additive, p =>
 {
     Debug.Log($"场景加载进度: {p * 100}%");
 });
 
-// 注意：加载失败时返回无效的 default(Scene)，调用方需用 scene.IsValid 校验
+// 配对卸载
+await extra.UnloadAsync();   // 拿得到结果
+main.Dispose();              // 即发即忘：不等结果、不抛异常
 ```
+
+**本成员是后端能力转发**（同 `ClearPool`）：它只管「加载 / 卸载一个场景资源」。场景之间的编排、
+加载界面、场景间传参都不在这里——那些属使用方的游戏流程，框架不预设。能力缺失（第三方实现未实现
+`IAssetSceneLoader`）时返回无效句柄并告警一次。
 
 ### 6. 批量预加载
 
@@ -274,7 +285,8 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | `InstantiateAsync(string location, Transform parent = null, ct)` | 加载并实例化，自动走对象池，引用生命周期自动管理 |
 | `InstantiateAsync(string location, Vector3 pos, Quaternion rot, Transform parent = null, ct)` | 指定位置/旋转实例化 |
 | `InstantiateAsync<T>(...（同上两重载）)` | 实例化并直接取组件；预制体缺该组件时销毁实例并返回 null |
-| `LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, ct)` | 加载场景（单/叠加），失败返回无效 `Scene`（用 `IsValid` 校验） |
+| `LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, ct)` | 加载场景（单/叠加），返回**可卸载的句柄** `AssetSceneHandle`；失败返回无效句柄（用 `IsDefault` 校验）。能力接口 `IAssetSceneLoader` 的后端转发（形态同 `ClearPool`） |
+| `UnloadSceneAsync(AssetSceneHandle handle, ct)` | 卸载句柄对应的场景；失败（句柄失效 / 场景已不在场 / 它是当前唯一场景 / 能力缺失 / 门面未初始化）返回 `false` **而不抛** |
 
 ### 同步加载（会阻塞调用线程）
 
@@ -338,7 +350,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | 静态初始化 / 启动画面 | `LoadSync` / `InstantiateSync` | 阻塞调用线程，注意远端未下载时的卡顿风险 |
 | 图集 / 多 Sprite | `LoadSubAssetsAsync` | 主资源 + 子资源整体加载 |
 | txt / json / 二进制 | `LoadRawFileAsync` | 不经过 Unity 资源管线 |
-| 场景切换 | `LoadSceneAsync` | `additive: true` 叠加加载 |
+| 场景切换 | `LoadSceneAsync` | `LoadSceneMode.Additive` 叠加加载；返回的句柄配 `UnloadAsync`/`Dispose` 成对使用 |
 | 内存告警 / 切关卡 | `UnloadUnusedAssetsAsync` | 只回收引用计数为 0 的资源 |
 | 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见快速使用 7） |
 | 预判断资源状态 | `CheckLocationValid` / `IsNeedDownloadFromRemote` | 纯查询，失败不抛异常 |
@@ -452,12 +464,25 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
    （内置包根 / 缓存根独立），不在 `AssetInitOptions` 里。要改包根、换用自定义文件系统类或接管
    其它 YooAsset 参数，只能整体替换 `IAssetManager`。加载寻址同样只有 `location` 字符串一种形式
    （没有 GUID / `AssetReference` 入口）。
+8. **取消不中止场景加载**：YooAsset 的场景加载没有对外可用的中止入口，取消只让 `await` 提前抛出，
+   底层照跑完、场景最终仍会进来。框架会接力到后台收干净——**Additive 卸掉**（世界回到调用前）、
+   **Single 保留并告警**（卸载它会让工程一个场景都没有，比留着更糟）。调用方不必自己收拾，
+   但要知道「取消之后的一小段时间里场景状态还会变」。
+9. **卸载不了「当前唯一的场景」**：`UnloadSceneAsync` 会提前挡掉并告警——卸载它会让工程没有任何场景，
+   Unity 与 YooAsset 都会失败，提前拒绝给的是能看懂的提示。句柄在拒绝后仍然有效。
+10. **`AssetSceneHandle.Dispose` 是即发即忘**：不等卸载完成、不抛异常（异常只记一条日志）。
+    要确认卸载结果请用 `UnloadAsync`。
+11. **`IAssetSceneLoader` 是可选能力**：第三方替换 `IAssetManager` 时若未实现它，场景加载返回无效句柄、
+    卸载返回 `false`，两者各告警一次。句柄是后端发的凭据，**不要自己伪造**——实现方会校验句柄与
+    自己登记的加载是否对得上，对不上的一律拒绝。
 
 ## 接口承诺到哪为止
 
 1. **加载失败不抛异常**：`LoadAsync` / `LoadSubAssetsAsync` / `LoadRawFileAsync` 失败返回 `default` 句柄
    （`IsValid == false`、`Asset == null`，原因在 `LastError`）；`InstantiateAsync` 失败返回 `null`；
-   `LoadSceneAsync` 失败返回无效 `default(Scene)`（用 `IsValid` 校验）。这是本模块的刻意约定
+   `LoadSceneAsync` 失败返回无效的 `default(AssetSceneHandle)`（用 `IsDefault` 校验），`UnloadSceneAsync`
+   失败返回 `false`——**卸载路径刻意不抛**，因为它会被 `AssetSceneHandle.Dispose` 调到，而 `Dispose`
+   里的异常没人接得住。这是本模块的刻意约定
    ——对照 Addressables 的「失败抛异常」，选它是因为 Unity 加载失败多为可预期的（地址写错、资源未下载）。
    **例外**：初始化与热更链路（`RequestPackageVersionAsync` / `UpdatePackageManifestAsync` /
    `PreDownloadContentAsync`）失败**抛异常**；`DownloadAssetsAsync` 失败返回 `false`、取消抛 `OperationCanceledException`。

@@ -22,6 +22,12 @@ namespace XFramework.XAsset
         private readonly Dictionary<string, ResourcePackage> _packages = new Dictionary<string, ResourcePackage>(2);
         private readonly ISceneLoadSource _sceneLoadSource;
 
+        /// <summary>已成功加载、仍由本适配器持有的场景：句柄 <c>Id</c> → 加载操作。</summary>
+        private readonly Dictionary<int, ISceneLoadOperation> _sceneOperations = new Dictionary<int, ISceneLoadOperation>();
+
+        /// <summary>场景句柄的发号器。从 1 起（<c>0</c> 保留给 <c>default</c>），只增不减。</summary>
+        private int _nextSceneId;
+
         /// <summary>
         /// 构造适配器并固定「主包名」。
         /// <para><b>刻意不给默认参数</b>：默认值只该有一处真相（<c>AssetManagerImpl</c> 的解析，
@@ -508,9 +514,8 @@ namespace XFramework.XAsset
         /// 的 <c>AbortOperation</c> 是 internal），取消只让本方法提前抛出——底层照跑完、场景最终仍会进来。
         /// 本方法因此把善后接力到后台（见 <see cref="SettleCancelledSceneLoad"/>），调用方不必自己收拾。</para>
         /// </summary>
-        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
+        public async UniTask<AssetSceneHandle> LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
-            var mode = additive ? LoadSceneMode.Additive : LoadSceneMode.Single;
             var operation = _sceneLoadSource.LoadScene(location, mode);
             if (operation == null) return default;
 
@@ -554,7 +559,43 @@ namespace XFramework.XAsset
                 return default;
             }
 
-            return scene;
+            // 登记后才交得出手柄：卸载入口就是靠这张表把 Id 找回加载操作的
+            int id = ++_nextSceneId;
+            _sceneOperations[id] = operation;
+            return new AssetSceneHandle(id, scene);
+        }
+
+        /// <summary>
+        /// 卸载句柄对应的场景。
+        /// <para>四种情况返回 <c>false</c> 而不抛：句柄无效、找不到登记项、<b>句柄与登记项不是同一次加载</b>
+        /// （句柄可能来自上一任适配器，而 <c>Id</c> 各自从 1 开始分配——只比 <c>Id</c> 会把「卸载 A」变成
+        /// 「卸载 B」）、以及它是当前唯一的场景（卸载会让工程没有任何场景，引擎与 YooAsset 都会失败，
+        /// 这里提前挡掉并给一条能看懂的告警）。</para>
+        /// </summary>
+        public async UniTask<bool> UnloadSceneAsync(AssetSceneHandle handle, CancellationToken cancellationToken = default)
+        {
+            if (handle.IsDefault) return false;
+            if (!_sceneOperations.TryGetValue(handle.Id, out var operation)) return false;
+            if (operation.SceneObject != handle.Scene) return false;
+
+            // 场景已被别人卸掉（例如 Single 模式切场景时 Unity 卸的旧场景）：登记项已失效，顺手清掉
+            if (!handle.Scene.IsValid() || !handle.Scene.isLoaded)
+            {
+                _sceneOperations.Remove(handle.Id);
+                operation.Release();
+                return false;
+            }
+
+            if (SceneManager.sceneCount <= 1)
+            {
+                LogManager.Warning(LogCategories.YooAssetManager,
+                    "拒绝卸载场景 '{0}'：它是当前唯一的场景。", handle.Scene.name);
+                return false;
+            }
+
+            bool unloaded = await operation.UnloadAsync(cancellationToken);
+            if (unloaded) _sceneOperations.Remove(handle.Id);
+            return unloaded;
         }
 
         /// <summary>
@@ -614,6 +655,8 @@ namespace XFramework.XAsset
         public void Destroy()
         {
             _packages.Clear();
+            // 只丢引用，不 Release：与「Destroy 不卸载 YooAsset 侧已加载资源」同一口径
+            _sceneOperations.Clear();
         }
 
         /// <summary>

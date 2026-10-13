@@ -15,7 +15,7 @@ namespace XFramework.XAsset
     /// Dispose 时直接调用 <see cref="YooAsset.HandleBase.Release"/>。</para>
     /// <para>通常不直接使用，由 <see cref="AssetManager"/> 外观类持有并委派调用。</para>
     /// </summary>
-    internal class AssetManagerImpl : IAssetManager, IAssetPoolController
+    internal class AssetManagerImpl : IAssetManager, IAssetPoolController, IAssetSceneLoader
     {
         #region Private Fields
 
@@ -285,10 +285,16 @@ namespace XFramework.XAsset
             return component;
         }
 
-        public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
+        public async UniTask<AssetSceneHandle> LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
-            return await _managerImpl.LoadSceneAsync(location, additive, progress, cancellationToken);
+            return await _managerImpl.LoadSceneAsync(location, mode, progress, cancellationToken);
+        }
+
+        public async UniTask<bool> UnloadSceneAsync(AssetSceneHandle handle, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return await _managerImpl.UnloadSceneAsync(handle, cancellationToken);
         }
 
         public async UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)

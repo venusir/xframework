@@ -6,10 +6,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-> **本版无公开 API 变更、无破坏性变更。** `### Changed` 里那一条是编译期抓不到的**行为变更**，
-> 但它只影响「关闭域重载」的开发环境与「第二个播放会话」的启动路径——正常单会话运行逐字不变。
+> **本版含公开 API 变更，其中有破坏性变更**：`AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、
+> `IAssetManager.LoadSceneAsync` 从主接口移入可选能力接口 `IAssetSceneLoader`。迁移见
+> `### Changed` 的「破坏性变更迁移表」与「行为变更」。因含破坏性变更，**下次发版应为 `0.4.0`**。
 
 ### Added
+
+#### Asset
+
+- **新增可选能力接口 `IAssetSceneLoader` 与场景句柄 `AssetSceneHandle`**：场景的加载 / 卸载从
+  `IAssetManager` 移入能力接口（同 `IAssetPoolController` 的形态——不扩主接口，第三方实现零影响）。
+  `AssetSceneHandle` 是 `readonly struct : IDisposable`、字段全为值类型（零 GC）、**公开构造**
+  （第三方后端也要能产出句柄，同 `AudioHandle` 的取舍），成员 `IsDefault` / `IsValid` / `UnloadAsync(ct)`
+  / `Dispose()`（即发即忘，不抛）。门面配 `LoadSceneAsync`（改形，返回句柄）与 `UnloadSceneAsync`
+  （**唯一「未初始化也不抛」的成员**——它会被 `Dispose` 调到）。**无卸载路径**这条缺口由此关闭。
 
 #### 测试基础设施
 
@@ -47,11 +57,48 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   也**不动调用方持有的句柄**（`ConfigManager.ConfigChanged` 的外部订阅、Input 帧脉冲上的订阅）。
   **编译期抓不到**，但两个前提都成立时才可见差异：① 关闭域重载（Project Settings → Editor → Enter Play Mode
   Options → 取消 Reload Domain）；② 跨播放会话。正常单会话运行下这些复位是幂等空操作。
-  **`AssetManager` 的两个「只报一次」闩锁随之改为「每会话一次」**（`_poolCapabilityWarned` /
-  `_mainThreadViolationLogged`）——跨会话仍只报一次，换了会话就该重新提示。
+  **`AssetManager` 的「只报一次」闩锁随之改为「每会话一次」**（`_poolCapabilityWarned` /
+  `_sceneCapabilityWarned` / `_mainThreadViolationLogged`）——跨会话仍只报一次，换了会话就该重新提示。
   **重复 `Initialize()` 的语义没有变**：会话内的重复调用仍是「告警 + 忽略」。
 
+#### 破坏性变更迁移表（命名与签名）
+
+| 旧写法 | 新写法 | 说明 |
+| --- | --- | --- |
+| `AssetManager.LoadSceneAsync(loc, additive: true, progress, ct)` | `AssetManager.LoadSceneAsync(loc, LoadSceneMode.Additive, progress, ct)` | **编译器逐处报错**。返回类型由 `Scene` 改为 `AssetSceneHandle`，`bool additive` 改为 `LoadSceneMode mode`；失败判据随之由 `scene.IsValid()` 改为 `handle.IsDefault` |
+| `IAssetManager.LoadSceneAsync(...)` | `IAssetSceneLoader.LoadSceneAsync(...)` | **整条从主接口移出**，改由可选能力接口承载（同 `IAssetPoolController` 的形态）。第三方自定义 `IAssetManager` 实现**不必**再实现它；要提供场景能力的实现改挂 `IAssetSceneLoader`，门面用 `is` 探测 |
+
+#### 行为变更（编译器抓不到，升级前请自己核对）
+
+- **场景加载失败路径不再泄漏底层句柄**：此前失败时 `SceneHandle` 从不 `Release`，该 provider 与它的
+  bundle 引用会永久留在 YooAsset 里（成功路径本来会自愈，见 `### Fixed`）。
+- **取消场景加载之后框架会善后**：YooAsset 的场景加载中止不了，取消只让 `await` 提前抛出。此后框架接力到
+  后台——Additive 加载完成后**卸掉**（世界回到调用前），Single **保留并告警**（见 `### Fixed` 的取舍说明）。
+  取消后的一小段时间里场景状态仍会变。
+- **`AssetManager.UnloadSceneAsync` 是本模块唯一「未初始化也不抛」的成员**：它会被
+  `AssetSceneHandle.Dispose` 调到，异常从 `Dispose` 里冒出来没人接得住。未初始化时告警并返回 `false`。
+
 ### Fixed
+
+#### Asset（场景加载）
+
+- **失败路径的 `SceneHandle` 从不 `Release`**。失败时没有场景，YooAsset 挂在 `sceneUnloaded` 上的兜底
+  永不触发，该 provider 与其 bundle 引用永久留在 `ResourceManager.SceneHandles` 里，此后
+  `UnloadUnusedAssetsAsync` 再也回收不掉它。**成功路径本来会自愈**（`ResourceManager.cs:55` 订阅、
+  `:376-394` 按 `SceneObject` 匹配后 `Release()`）——这条只在失败路径成立，别读成「加载一次泄漏一次」。
+- **取消场景加载不中止，且此后无人收拾**。`UniTask.Yield(ct)` 抛 OCE 后底层照跑完、场景仍会进来
+  （YooAsset 没有对外可用的 Abort）。现在接力到后台收干净：**Additive 完成后卸掉**（世界回到调用前）、
+  **Single 什么都不做只告警**。计划原文写的是 Single「只 `Release`」，实施时改正——释放会让引用计数归零，
+  此后一次 `UnloadUnusedAssetsAsync` 就能回收掉这个**仍在场**的场景所引用的 bundle。
+- **按名字回查场景**。改用操作自己的 `SceneObject` 并校验 `IsValid() && isLoaded`（无效则记错误 + 释放句柄）：
+  `SceneManager.GetSceneByName` 在「同名场景已存在」或「场景尚未进入查询表」时会给错（或给不出）。
+
+**这一批的射程边界（如实记）**：Runtime 测试程序集不引用 YooAsset，测试环境也没有可运行的资源包——
+真路径在用例里跑不起来。修法先在 `YooAssetManagerImpl` 与 `YooAsset.SceneHandle` 之间抽了一条 internal 缝
+（`ISceneLoadSource` / `ISceneLoadOperation`）：**缝之上**（轮询、进度、失败释放、取消善后、取场景对象、
+句柄登记与卸载）有「改前必红」的用例覆盖，**缝之下**约 40 行机械转发只有读源码核对与人工验收。
+红证实测（临时退回旧行为）：`SceneLoadOperationTests` 10 例中 8 例红——失败释放两例 `Expected: 1 But was: 0`、
+取消善后两例（未卸载 / 期望的告警没出现）、按名回查四例；两条与本修复无关的用例保持绿。
 
 #### 会话级复位（跨 Input / UI / Asset / Config / Localization / File / Bootstrap / InstanceTracker）
 

@@ -16,9 +16,10 @@ namespace Venusy609.Xframework.Editor.Tests
     /// <para><b>只查名字，不查签名</b>：签名由编译器兜底——转发体是经 <see cref="IAssetManager"/> 的调用，
     /// 签名不符根本编译不过。于是唯一会漏的就是「压根没写转发」，而名字正是它的判据。
     /// 本模块的 32 个接口成员今天**全部有**同名转发——它是守卫，不是回归。</para>
-    /// <para><b>它是单向的</b>：只断言「接口有、门面缺」。本门面另有 5 个自有成员
-    /// （<c>IsInitialized</c>、<c>SetInstance</c>、<c>Destroy</c>，以及能力接口的 <c>ClearPool</c>/<c>ClearAllPools</c>），
-    /// 反向断言会把它们判成缺陷，故由另外两条断言单独钉住。</para>
+    /// <para><b>它是单向的</b>：只断言「接口有、门面缺」。本门面另有若干自有成员
+    /// （<c>IsInitialized</c>、<c>SetInstance</c>、<c>Destroy</c>，以及两个能力接口的转发），
+    /// 反向断言会把它们判成缺陷，故由另外几条断言单独钉住。（不写成员个数：那是会随开发增长的量，
+    /// 写进来必然定期过期。）</para>
     /// <para><b>IDisposable 不会误报</b>：<see cref="IAssetManager"/> 继承 <c>IDisposable</c>，而门面用
     /// <c>Destroy()</c> 表达注销（名字不同）。实测确认 <c>typeof(I).GetMethods()</c> **只返回接口自己声明**的
     /// 成员（用 BCL 的 <c>IList&lt;int&gt;</c> 验证：它不返回 <c>ICollection&lt;T&gt;</c>/<c>IEnumerable&lt;T&gt;</c>
@@ -77,6 +78,27 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.IsEmpty(missing,
                 "以下 IAssetPoolController 成员在 AssetManager 上找不到同名转发：" +
+                "\n  " + string.Join("\n  ", missing));
+        }
+
+        /// <summary>
+        /// 场景能力接口同样要转发（理由见上一条）。
+        /// <para><b>为什么场景单列一条而不是并进上面那条</b>：两张能力接口的失败原因完全不同
+        /// （池清理漏了是够不到清池；场景漏了是够不到加载与卸载，而卸载路径还被
+        /// <c>AssetSceneHandle.Dispose</c> 依赖），分开报错能直接指向该补哪一个。</para>
+        /// </summary>
+        [Test]
+        public void Facade_ForwardsEverySceneCapabilityMember()
+        {
+            var missing = new List<string>();
+            foreach (var name in InterfaceMemberNames(typeof(IAssetSceneLoader)))
+            {
+                if (!FacadeNames.Contains(name))
+                    missing.Add(name);
+            }
+
+            Assert.IsEmpty(missing,
+                "以下 IAssetSceneLoader 成员在 AssetManager 上找不到同名转发：" +
                 "\n  " + string.Join("\n  ", missing));
         }
 

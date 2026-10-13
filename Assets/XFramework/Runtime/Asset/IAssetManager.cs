@@ -147,12 +147,6 @@ namespace XFramework.XAsset
         UniTask<T> InstantiateAsync<T>(string location, Vector3 position, Quaternion rotation, Transform parent = null, CancellationToken cancellationToken = default) where T : Component;
 
         /// <summary>
-        /// 异步加载场景。
-        /// <para>失败时返回无效的 <c>default(Scene)</c>，调用方需用 <see cref="Scene.IsValid"/> 校验。</para>
-        /// </summary>
-        UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default);
-
-        /// <summary>
         /// 批量预加载资源到缓存（引用计数不增加）。
         /// <para>progress 按完成数量聚合回调（0~1，全部完成后补发 1f）。locations 为空时立即补发 1f。</para>
         /// </summary>

@@ -16,8 +16,10 @@ namespace XFramework.XAsset.Tests
     /// <see cref="YooAssetManagerImpl"/> 场景加载路径的**缝级**测试。
     /// <para><b>为什么必须在这条缝上测</b>：Runtime 测试程序集不引用 YooAsset，测试环境也没有可运行的资源包
     /// ——真路径在用例里跑不起来。<see cref="ISceneLoadSource"/> 之上是框架自己的逻辑（轮询、进度、失败释放、
-    /// 取消善后、取场景对象），之下才是对 YooAsset 的机械转发。本 fixture 打的是上面那一半；
+    /// 取消善后、取场景对象、句柄登记与卸载），之下才是对 YooAsset 的机械转发。本 fixture 打的是上面那一半；
     /// 下面那一半只能靠读源码核对与人工验收，这一点如实写在 <c>Documentation/Modules/Scene.md</c>。</para>
+    /// <para><b>覆盖不到的一处</b>：「拒绝卸载当前唯一的场景」分支在测试壳里不可达——用例造出来的场景
+    /// 必然是 sceneCount 里的第二个。该分支只有推理级保证，同样记在模块文档里。</para>
     /// <para><b>复位</b>：PlayMode 下所有用例共享一个 player 实例。<c>SceneManager.CreateScene</c> 造出来的
     /// 场景不卸载就会留给下一个用例，故 TearDown 必须把它卸掉。</para>
     /// </summary>
@@ -68,19 +70,21 @@ namespace XFramework.XAsset.Tests
         #region Tests — 基本形态
 
         [Test]
-        public async Task SucceededLoad_ReturnsTheOperationsSceneObject()
+        public async Task SucceededLoad_ReturnsValidHandleCarryingTheOperationsScene()
         {
             var scene = CreateRealScene();
             _operation.IsDone = true;
             _operation.IsSucceed = true;
             _operation.SceneObject = scene;
 
-            var result = await _manager.LoadSceneAsync(Location);
+            var handle = await _manager.LoadSceneAsync(Location);
 
-            Assert.AreEqual(scene, result, "返回的必须是操作自己持有的场景对象");
+            Assert.IsFalse(handle.IsDefault, "成功加载必须交出有效句柄");
+            Assert.IsTrue(handle.IsValid);
+            Assert.AreEqual(scene, handle.Scene, "句柄里的场景必须来自操作自己，不能来自按名回查");
             Assert.AreEqual(0, _operation.ReleaseCount, "成功路径不得释放句柄——场景仍在场");
             Assert.AreEqual(Location, _source.LastLocation);
-            Assert.AreEqual(LoadSceneMode.Single, _source.LastMode, "additive 为 false 时应走 Single");
+            Assert.AreEqual(LoadSceneMode.Single, _source.LastMode, "缺省模式应为 Single");
         }
 
         /// <summary>
@@ -95,10 +99,10 @@ namespace XFramework.XAsset.Tests
             _operation.IsSucceed = true;
             _operation.SceneObject = scene;
 
-            var result = await _manager.LoadSceneAsync(Location);
+            var handle = await _manager.LoadSceneAsync(Location);
 
-            Assert.AreNotEqual(Location, result.name, "前提：假件的场景名与 location 不同");
-            Assert.AreEqual(scene, result, "场景对象只能来自操作，不能来自按名回查");
+            Assert.AreNotEqual(Location, handle.Scene.name, "前提：假件的场景名与 location 不同");
+            Assert.AreEqual(scene, handle.Scene, "场景对象只能来自操作，不能来自按名回查");
         }
 
         [Test]
@@ -108,13 +112,13 @@ namespace XFramework.XAsset.Tests
             _operation.IsSucceed = true;
             _operation.SceneObject = CreateRealScene();
 
-            await _manager.LoadSceneAsync(Location, additive: true);
+            await _manager.LoadSceneAsync(Location, LoadSceneMode.Additive);
 
             Assert.AreEqual(LoadSceneMode.Additive, _source.LastMode);
         }
 
         [Test]
-        public async Task FailedLoad_ReturnsDefaultScene()
+        public async Task FailedLoad_ReturnsDefaultHandle()
         {
             LogAssert.Expect(LogType.Error, new Regex("Failed to load scene"));
 
@@ -122,9 +126,10 @@ namespace XFramework.XAsset.Tests
             _operation.IsSucceed = false;
             _operation.LastError = "not found";
 
-            var result = await _manager.LoadSceneAsync(Location);
+            var handle = await _manager.LoadSceneAsync(Location);
 
-            Assert.IsFalse(result.IsValid(), "加载失败必须返回 default(Scene)");
+            Assert.IsTrue(handle.IsDefault, "加载失败必须返回 default(AssetSceneHandle)");
+            Assert.IsFalse(handle.IsValid);
         }
 
         /// <summary>
@@ -147,13 +152,13 @@ namespace XFramework.XAsset.Tests
         }
 
         [Test]
-        public async Task PackageUnavailable_ReturnsDefaultSceneWithoutTouchingTheSource()
+        public async Task PackageUnavailable_ReturnsDefaultHandle()
         {
             _source.NextOperation = null;
 
-            var result = await _manager.LoadSceneAsync(Location);
+            var handle = await _manager.LoadSceneAsync(Location);
 
-            Assert.IsFalse(result.IsValid());
+            Assert.IsTrue(handle.IsDefault);
             Assert.AreEqual(1, _source.LoadCount);
         }
 
@@ -169,7 +174,7 @@ namespace XFramework.XAsset.Tests
             var reported = new List<float>();
             _operation.Progress = 0.25f;
 
-            var task = _manager.LoadSceneAsync(Location, additive: false, progress: p =>
+            var task = _manager.LoadSceneAsync(Location, LoadSceneMode.Single, p =>
             {
                 reported.Add(p);
                 _operation.Progress = 0.75f;
@@ -179,13 +184,13 @@ namespace XFramework.XAsset.Tests
                     _operation.IsSucceed = true;
                     _operation.SceneObject = scene;
                 }
-            }, cancellationToken: CancellationToken.None);
+            }, CancellationToken.None);
 
-            var result = await task;
+            var handle = await task;
 
             CollectionAssert.AreEqual(new[] { 0.25f, 0.75f, 1f }, reported,
                 "进度应按轮询顺序上报，且只在成功路径补发 1f");
-            Assert.AreEqual(scene, result);
+            Assert.AreEqual(scene, handle.Scene);
         }
 
         #endregion
@@ -200,7 +205,7 @@ namespace XFramework.XAsset.Tests
         public async Task CancelledAdditiveLoad_WhenItCompletes_UnloadsTheScene()
         {
             var cts = new CancellationTokenSource();
-            var task = _manager.LoadSceneAsync(Location, additive: true, progress: null, cancellationToken: cts.Token);
+            var task = _manager.LoadSceneAsync(Location, LoadSceneMode.Additive, null, cts.Token);
             await UniTask.Yield(PlayerLoopTiming.Update);
 
             cts.Cancel();
@@ -225,7 +230,7 @@ namespace XFramework.XAsset.Tests
         public async Task CancelledSingleLoad_KeepsTheSceneAndReleasesNothing()
         {
             var cts = new CancellationTokenSource();
-            var task = _manager.LoadSceneAsync(Location, additive: false, progress: null, cancellationToken: cts.Token);
+            var task = _manager.LoadSceneAsync(Location, LoadSceneMode.Single, null, cts.Token);
             await UniTask.Yield(PlayerLoopTiming.Update);
 
             cts.Cancel();
@@ -245,7 +250,7 @@ namespace XFramework.XAsset.Tests
         public async Task CancelledLoad_WhenItFails_ReleasesTheHandle()
         {
             var cts = new CancellationTokenSource();
-            var task = _manager.LoadSceneAsync(Location, additive: true, progress: null, cancellationToken: cts.Token);
+            var task = _manager.LoadSceneAsync(Location, LoadSceneMode.Additive, null, cts.Token);
             await UniTask.Yield(PlayerLoopTiming.Update);
 
             cts.Cancel();
@@ -262,7 +267,87 @@ namespace XFramework.XAsset.Tests
 
         #endregion
 
+        #region Tests — 卸载
+
+        [Test]
+        public async Task Unload_ForwardsToTheRegisteredOperation()
+        {
+            var handle = await LoadRealScene();
+
+            var unloaded = await _manager.UnloadSceneAsync(handle);
+
+            Assert.IsTrue(unloaded);
+            Assert.AreEqual(1, _operation.UnloadCount);
+        }
+
+        /// <summary>卸载成功后登记项应当消失——再卸一次拿到的是 <c>false</c>，而不是重放一次卸载。</summary>
+        [Test]
+        public async Task Unload_IsIdempotent()
+        {
+            var handle = await LoadRealScene();
+            await _manager.UnloadSceneAsync(handle);
+
+            var again = await _manager.UnloadSceneAsync(handle);
+
+            Assert.IsFalse(again, "第二次卸载应当因登记项已清而返回 false");
+            Assert.AreEqual(1, _operation.UnloadCount, "不得重放卸载");
+        }
+
+        [Test]
+        public async Task Unload_DefaultHandle_ReturnsFalse()
+        {
+            var unloaded = await _manager.UnloadSceneAsync(default);
+
+            Assert.IsFalse(unloaded);
+            Assert.AreEqual(0, _source.LoadCount, "无效句柄不该惊动后端");
+        }
+
+        /// <summary>
+        /// 句柄与登记项必须指同一次加载。这里手工造一个「Id 对得上但场景对不上」的句柄——
+        /// 真实场景里它来自上一任适配器（<c>Id</c> 各自从 1 开始分配）。只比 <c>Id</c> 会把
+        /// 「卸载 A」变成「卸载 B」。
+        /// </summary>
+        [Test]
+        public async Task Unload_HandleForAnotherScene_ReturnsFalse()
+        {
+            var handle = await LoadRealScene();
+            var other = new AssetSceneHandle(handle.Id, SceneManager.CreateScene("SceneLoadOperationTests_Other"));
+
+            var unloaded = await _manager.UnloadSceneAsync(other);
+
+            Assert.IsFalse(unloaded, "Id 相同但场景不同的句柄必须被拒绝");
+            Assert.AreEqual(0, _operation.UnloadCount);
+        }
+
+        /// <summary>场景已被别人卸掉（例如 Single 模式切场景时 Unity 卸的旧场景）：登记项顺手清掉，不重放卸载。</summary>
+        [Test]
+        public async Task Unload_WhenSceneWasUnloadedExternally_DropsTheStaleEntry()
+        {
+            var handle = await LoadRealScene();
+            var unload = SceneManager.UnloadSceneAsync(_createdScene);
+            if (unload != null) await unload.ToUniTask();
+            _createdScene = default;
+
+            var unloaded = await _manager.UnloadSceneAsync(handle);
+
+            Assert.IsFalse(unloaded);
+            Assert.AreEqual(1, _operation.ReleaseCount, "没有场景了，句柄应当被补释放");
+            Assert.AreEqual(0, _operation.UnloadCount, "不得重放卸载");
+        }
+
+        #endregion
+
         #region Internal Methods
+
+        /// <summary>发一次「成功加载真场景」并返回句柄；用例的清理仍依赖 TearDown。</summary>
+        private async UniTask<AssetSceneHandle> LoadRealScene()
+        {
+            var scene = CreateRealScene();
+            _operation.IsDone = true;
+            _operation.IsSucceed = true;
+            _operation.SceneObject = scene;
+            return await _manager.LoadSceneAsync(Location);
+        }
 
         /// <summary>造一个真场景；本 fixture 的清理全部依赖它被 TearDown 卸载。</summary>
         private Scene CreateRealScene()

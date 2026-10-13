@@ -314,6 +314,28 @@ namespace XFramework.Architecture.Tests
             AssetManager.ClearPool("ui/a");
         }
 
+        /// <summary>
+        /// 同上的场景能力那一把闩锁（<c>_sceneCapabilityWarned</c>）：不复位则第二会话里
+        /// 「不支持 IAssetSceneLoader」这条告警不会再来一次——而那正是**每会话一次**的承诺。
+        /// </summary>
+        [Test]
+        public async Task Asset_ResetReArmsTheOnceOnlySceneWarning()
+        {
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            await AssetManager.InitializeAsync();
+
+            LogAssert.Expect(LogType.Warning, new Regex("不支持 IAssetSceneLoader"));
+            await AssetManager.LoadSceneAsync("scenes/main");
+
+            AssetManager.ResetForNewSession();
+
+            AssetManager.ImplFactory = () => new FakeAssetManager(); // 复位清掉了钩子，第二会话重新注入
+            await AssetManager.InitializeAsync();
+
+            LogAssert.Expect(LogType.Warning, new Regex("不支持 IAssetSceneLoader"));
+            await AssetManager.LoadSceneAsync("scenes/main");
+        }
+
         [Test]
         public void File_ReinitializesAfterSessionReset()
         {

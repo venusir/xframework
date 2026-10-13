@@ -16,7 +16,6 @@ namespace Venusy609.Xframework.Editor.Tests
     {
         public int LoadCallCount;
         public int InstantiateCallCount;
-        public int SceneLoadCallCount;
         public int PreloadCallCount;
         public int InitializePackageCallCount;
         public int UnloadUnusedAssetsCallCount;
@@ -175,12 +174,6 @@ namespace Venusy609.Xframework.Editor.Tests
             return UniTask.FromResult<T>(null);
         }
 
-        public UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
-        {
-            SceneLoadCallCount++;
-            return UniTask.FromResult(default(Scene));
-        }
-
         public UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             PreloadCallCount++;
@@ -305,6 +298,43 @@ namespace Venusy609.Xframework.Editor.Tests
         {
             ClearAllPoolsCallCount++;
             return ClearAllPoolsResult;
+        }
+    }
+
+    /// <summary>
+    /// 实现场景能力接口（<see cref="IAssetSceneLoader"/>）的替身：供门面「能力探测通过」那条分支断言。
+    /// <para>理由同 <see cref="PoolCapableAssetManager"/>：基类刻意**不**实现该接口，
+    /// 「能力缺失 → 返回无效句柄并告警一次」那条分支正需要它，两者不能合并。</para>
+    /// </summary>
+    internal sealed class SceneCapableAssetManager : FakeAssetManager, IAssetSceneLoader
+    {
+        public int SceneLoadCallCount;
+        public int SceneUnloadCallCount;
+        public string LastSceneLocation;
+        public LoadSceneMode LastSceneMode;
+        public Action<float> LastSceneProgress;
+        public AssetSceneHandle LastUnloadedHandle;
+
+        /// <summary>LoadSceneAsync 的返回值（测试可改，用于断言「原样透传」）。</summary>
+        public AssetSceneHandle SceneLoadResult;
+
+        /// <summary>UnloadSceneAsync 的返回值。</summary>
+        public bool SceneUnloadResult = true;
+
+        public UniTask<AssetSceneHandle> LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, CancellationToken cancellationToken = default)
+        {
+            SceneLoadCallCount++;
+            LastSceneLocation = location;
+            LastSceneMode = mode;
+            LastSceneProgress = progress;
+            return UniTask.FromResult(SceneLoadResult);
+        }
+
+        public UniTask<bool> UnloadSceneAsync(AssetSceneHandle handle, CancellationToken cancellationToken = default)
+        {
+            SceneUnloadCallCount++;
+            LastUnloadedHandle = handle;
+            return UniTask.FromResult(SceneUnloadResult);
         }
     }
 }
