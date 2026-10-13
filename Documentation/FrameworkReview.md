@@ -185,7 +185,7 @@
 12. **包在子目录**：引入必须带 `?path=Assets/XFramework`，因此**不能直接当子模块包用**。
 13. 无 `.editorconfig`（`CLAUDE.md` 有大段编码规范，但机器不强制）、无性能基准套件、无 Git 钩子、无 Issue/PR 模板、无 `CONTRIBUTING`。
 14. **依赖声明碎片化**（**2026-10-11 已缓解**）：结构仍是三处（`package.json` 的 `dependencies` 按 UPM 的现实刻意留空），但 `README.md`「第三方依赖」表已定为**唯一真相**，守卫 `DependencyDeclarationTests` 断言安装器清单与 `Packages/manifest.json` 都与它逐字一致（`db02909`），规则已进 `CLAUDE.md`。原事实：版本真相分散在三处，安装器注释自承「两处必须一起长」——第 1 条就是这个碎片化的直接后果，现已由守卫兜住。
-15. **`ProjectSettings/ProjectVersion.txt` = `6000.4.5f1`，而 `package.json` 声明 `unity: 6000.3`**。这是**有意**的（最低要求 ≠ 开发版本），但两处不一致容易被误读为漂移，值得在 README 写明。
+15. ~~**`ProjectSettings/ProjectVersion.txt` = `6000.4.5f1`，而 `package.json` 声明 `unity: 6000.3`**。这是**有意**的（最低要求 ≠ 开发版本），但两处不一致容易被误读为漂移，值得在 README 写明。~~ —— **2026-10-13 已落地**（§5.2 步骤 7）：包 README 的「依赖」节写明两处口径与「最低要求 ≠ 开发版本，不是漂移」的定性。
 
 ### 4.4 文档与开发者体验
 
