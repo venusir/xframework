@@ -12,15 +12,16 @@ Runtime/Asset/
 ├── IAssetManager.cs               # 资源管理器公共接口
 ├── AssetManager.cs                # 静态外观（全局入口）
 ├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
-├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理）
-├── IAssetRemoteServices.cs        # 远端资源地址服务接口
+├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理 + 热更链路 + 远端 / 解密适配）
+├── IAssetRemoteServices.cs        # 远端资源地址服务接口（主站 / 备站）
+├── IAssetDecryptionServices.cs    # 资源解密服务接口（镜像 YooAsset 的 IDecryptionServices）
 ├── IAssetPoolController.cs        # 资源实例池的受控清理能力（可选能力接口）
 ├── IAssetSceneLoader.cs           # 场景加载与卸载能力（可选能力接口；2026-10-13 从 IAssetManager 移出）
 ├── AssetSceneHandle.cs            # 场景句柄（只读结构体；公开构造，Dispose = 即发即忘卸载）
 ├── ISceneLoadOperation.cs         # 场景加载操作的最小面（internal 测试缝）
 ├── ISceneLoadSource.cs            # 场景加载来源缝（internal 测试缝）
 ├── YooAssetSceneLoadSource.cs     # 缝的默认实现：包住 YooAsset.SceneHandle（internal）
-├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收）
+├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收 / 远端地址服务 / 解密服务）
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
 ├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext
 ├── AssetBootstrapStage.cs         # 引导阶段：资源管理器初始化（Phase 0，最早）
@@ -82,7 +83,12 @@ Runtime/Asset/
   **没有失败路径**（只置 `Succeed`，从不设 `Error`）。**按纪律撤回修复**，改为就地注释记下已验证的事实
   ——加一个恒真的检查是死代码，还会让人以为「失败会被报告」。
 
+2026-10-13 一轮（**热更编排边界裁定**，框架级评估 §5.2 步骤 8；裁定全文与真缺口归属见 `../Roadmap.md` §三 的「热更编排」专段）：
+- **不建「热更编排」模块**：原判「下载编排（队列 / 重试 / 续传 / 进度）是纯基础设施、可进框架」经核对依赖源码后不成立——**这一半 YooAsset 已经提供**（2.3.18 读包内源码逐条核对，清单见 `../Roadmap.md` 该专段），`Asset` 已把它包成 7 个门面成员 + 一个下载器句柄；框架再包一层只会与上游版本耦合地重复编排逻辑。
+- **版本对比 / 整体失败重试（含续跑）/ 下载等待超时 / 更新决策（强制门槛 · 公告 · 灰度）/ 更新 UI 接线 —— 一律判给项目侧**，本模块不接。判据是它们各自依赖「版本号语义」「退避策略」「运营口径」「界面契约」，四样全是项目的。**第三方对照（一手，2026-10-13 读 UGF 源码）**：UGF 有独立 `Download`（断点续传 + 并发下载器数）与 `WebRequest` 模块，但**没有任何**「更新策略 / 强制更新 / CDN」概念——更新流程由使用方自己的 Procedure 承担。
+
 **未决**：
+- **预检与下载的版本绑定断了**（2026-10-13 核实；这是**接线缺陷**，不是缺口）。`PreDownloadContentAsync`（`YooAssetManagerImpl.cs:256-269`）只 `await` 预检 operation 取状态、**把 operation 丢掉**；而 `CreateDownloader`（`:289-298`）走 `package.CreateResourceDownloader(...)` → **`ActiveManifest`**（YooAsset 2.3.18 `ResourcePackage/PlayMode/PlayModeImpl.cs:107/113`）。于是「预检之后下载」拿到的是**旧激活清单**的缺口——**预下载静默空转**，激活之后才按需下载。**YooAsset 那边本就有这块能力**：`PreDownloadContentOperation.CreateResourceDownloader(...)` 基于它自己那份**未激活**的私有 `_manifest` 建下载器（`PreDownloadContentOperation.cs:104-112`），而激活清单是 `UpdatePackageManifestOperation.cs:81` 的职责——**是我们这层把它丢了**。**影响面**：`IAssetManager.cs` 里「成功后调用 `CreateDownloader` 会基于该版本创建下载器」那句承诺**不成立**，`Runtime/Asset/README.md` 的示例与「热更链路状态流转」也按这个不成立的顺序写（**2026-10-13 已把两处文档订正为可工作的顺序**）。**待决的形状**：要让「预检即可知道要下多少、下哪些」成立，得给使用方一个从预检产出的入口（待下字节数或一个下载器句柄）——那是**公开 API 新增**，另起一轮。
 - **`Application.lowMemory` 的回调线程**：Unity 官方文档未声明该回调在哪个线程触发，而 `OnLowMemory` 直接触碰
   GameObject（清池）与 `Resources.UnloadUnusedAssets`——若该回调可能在非主线程触发即为缺陷。**需真机实测**；
   未证实前不写进使用方文档。
