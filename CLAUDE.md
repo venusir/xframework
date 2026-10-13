@@ -16,7 +16,7 @@
 - **性能与 GC:** 框架代码供第三方游戏在运行时使用,必须控制 GC 分配(见「性能与 GC 约定」)
 - **测试:** 完成逻辑后编写单元测试并提供验证步骤。Claude 用 `Tools/run-tests.ps1` 自测:改完一个模块以 `-Filter <类名片段>` 定向跑,阶段收尾跑一次全量。**门禁是「全量 0 失败」,不写固定例数**——例数随开发增长,写进规则必然定期过期(它的真相来源是 runner 的输出,抄进来就是第二份真相)。**每个 fixture 必须复位它触碰的静态门面**——PlayMode 下所有用例共享一个 player 实例,不复位即互相污染,全量的门禁价值会立刻失效
 - **公开 API 基线:** Runtime 程序集 `Venusy609.Xframework` 的公开面由 `Tests/Runtime/Architecture/PublicApiBaselineTests` 锁定(基线 `PublicApiBaseline.txt`,含非 sealed 类上的 `protected` 扩展点)。公开面变了而基线未变即红——**机器只负责说「变了」,判断仍归人**:确属有意时按「提交拆分与授权」单独请用户确认,在 `CHANGELOG.md` 的迁移表补行,再用 `Tools/run-tests.ps1 -UpdateApiBaseline` 更新基线(更新模式**只写盘、永不给绿灯**,绿灯由不带开关的重跑给出)。Editor 程序集不在射程内
-- **文档门禁:** 阶段收尾除全量测试外,再跑 `Tools/check-docs.ps1 -Enforce`(三项都须满足:包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`)。它是独立的一条通道:csproj 未设 `DocumentationFile`,**默认编译根本不检查文档注释**,不开这一枪则写坏文档不会有任何反馈
+- **文档门禁:** 阶段收尾除全量测试外,再跑 `Tools/check-docs.ps1 -Enforce`(三项都须满足:包内 XML 文档告警为 0、所有源文件都已参与编译、所有资源都有 `.meta`)。它是独立的一条通道:csproj 未设 `DocumentationFile`,**默认编译根本不检查文档注释**,不开这一枪则写坏文档不会有任何反馈。**哪些码进这一枪以脚本头部「覆盖范围」为唯一真相**(2026-10-13 起十一个码全部纳门;扩容走「先诊断看曲线、清完存量再纳门」)
 - **包 README 清单表门禁:** 包 README 的四张清单表(主要功能 / 模块索引 / 可替换的实现一览 / 可配置项一览)由 `Tests/Runtime/Architecture/ReadmeTableTests` 在测试侧守卫(模块集与 `Runtime/` 直接子目录双向相等、文档链接落盘、命名空间列与程序集双向覆盖、功能表登记表未登记即红)。新模块上线要么同步四表、要么在登记处显式豁免;`check-docs.ps1` 对 `.md` 仍零覆盖,两条通道互补
 
 ## 架构分层
@@ -46,9 +46,9 @@
 - **缩写大小写:** **两字母缩写全大写**——`UI`、`IO` 而非 `Ui`、`Io`(`IUIManager` / `UIHudItem` / `AudioChannels.UI` 而非 `IUiManager` / `UiHudItem` / `Ui`);**三字母及以上按单词**(PascalCase)——`Bgm` / `Json` / `Hud`。依据 .NET 框架设计指南。这条此前是空白,导致 `IUiHudProvider` 与 `UiDiagnosticPanel` 长期与周围不一致(2026-10-11 统一);机械守卫见 `Tests/Runtime/Architecture/NamingConventionTests`(2026-10-13 订正:此前写成 `Tests/Editor/Architecture/`,实测该文件在 Runtime 侧——它纯扫源码文本、不需要播放模式,放 Runtime 是为了不被「带 `-Filter` 且未指定平台只跑 PlayMode」的开发回路跳过)
 - **风格:** Allman 大括号(换行);`#region` 按功能分区(Public API / Private Fields / Lifecycle / Internal);using 按 System → 第三方(Cysharp、UnityEngine)→ XFramework 排序;同一分区内同步方法与它的异步版本成对相邻、同步在前(既有先例 `Exists`/`ExistsAsync`)
 - **行尾与文本资源由仓库根 `.gitattributes` 定:** 文本一律 LF(含 Unity 的 Force Text 资源——`*.unity`/`*.prefab`/`*.asset` 不标文本就拿不到可读 diff)、二进制显式标注、`*.bat`/`*.cmd` 保持 CRLF。它**覆盖** Windows 的 `core.autocrlf`,是新克隆与既有工作区共同的真相
-- **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
+- **注释:** 全中文 XML doc,公开 API 必须带 `<summary>`(必要时 `<para>`/`<example>`;**这条已部分机械化——CS1591 随文档门禁一起判 0,但机器只查「有没有 XML 注释」**:`<inheritdoc/>`、只有 `<param>` 也算有,「必须有 summary、写得对不对」仍是人工判据);接口实现的成员用 `<inheritdoc/>`;行内注释解释「为什么」而非「是什么」
   - **XML 必须能解析:** 泛型尖括号与 `&` 一律转义(`&lt;T&gt;`、`&amp;`),`<code>` 块内也一样。未转义会触发 CS1570 使**整条注释被编译器丢弃**——该成员的文档条目从生成的 XML 中整条消失,且块内 `cref` 一律不再被检查(死链因此隐形:它表现为「**没有**告警」而不是「有告警」)
-  - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 要**写全形以消二义**:有重载的成员**必须**写参数列表——无参重载写 `Foo()`、带参写全 `Foo(int, float)`;只在该名字没有重载时才能写裸名。写不全就触发 **CS0419**(编译器替你「假设」一个重载,链接可能指向非本意的那个)——旧说法「cref 里不能带 `()`」是过度概括:`Tick()` 合法、`InitializeAsync()`(该方法带参)非法,差别只在参数列表写没写对;注意 `check-docs` 不统计这个码(见其头部「覆盖范围」);④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
+  - **cref 的四个坑**(按序排查):① 带类型限定的 cref **只找该类型自己声明的成员,不找继承来的**(`RectTransform.position` 要写 `Transform.position`,`YooAsset.AssetHandle.Release` 要写 `YooAsset.HandleBase.Release`);② 参数列表要写全,**带默认值的参数也算**(`CloseAsync(UIPanelBase, bool)` 匹配不上三参的真实签名);③ cref 要**写全形以消二义**:有重载的成员**必须**写参数列表——无参重载写 `Foo()`、带参写全 `Foo(int, float)`;只在该名字没有重载时才能写裸名。写不全就触发 **CS0419**(编译器替你「假设」一个重载,链接可能指向非本意的那个)——旧说法「cref 里不能带 `()`」是过度概括:`Tick()` 合法、`InitializeAsync()`(该方法带参)非法,差别只在参数列表写没写对——**该码已纳 `check-docs.ps1 -Enforce` 门禁**;④ cref 引用的**参数类型**在本文件不可见(缺 using)时把该类型写成全名,不必为此加 using
   - 文档指向**根本不存在的东西**(已改名/已删的成员或类型)是内容问题,先确认真实 API 再改,不要机械替换。两类告警都用 `Tools/check-docs.ps1` 查(默认诊断,`-Enforce` 才是门禁)
 - **可见性:** 默认 `internal`;测试通过 `InternalsVisibleTo("Venusy609.Xframework.Tests")` 访问内部实现
 

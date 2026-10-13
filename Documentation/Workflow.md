@@ -41,7 +41,7 @@
 |---|---|---|
 | 编译 | `dotnet build <csproj> --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` | 0 error |
 | 测试 | `pwsh -File Tools/run-tests.ps1 [-Filter <片段>] [-Platform PlayMode\|EditMode\|All]` | 全量双平台 **0 失败** |
-| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | 包内 XML 文档告警 0，且**所有源文件都参与编译** |
+| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | **门禁码**（十一个 XML 文档告警码，清单见脚本头部「覆盖范围」）的包内告警 0、**所有源文件都参与编译**、所有条目都有 `.meta` |
 
 ### 两个易踩点
 
@@ -105,10 +105,10 @@
 
 | 参数 | 说明 |
 |---|---|
-| （无） | 按模块汇总包内 CS1570（XML 格式错误）/ CS1574（cref 无法解析），并报告缺 `.meta` 的条目 |
-| `-Module <名字>` | 逐条列出某模块的告警（文件:行号 + 文案） |
+| （无） | 按模块汇总包内 XML 文档告警（**按码分列**，十一个码与中文标签见脚本头部「覆盖范围」），并报告缺 `.meta` 的条目 |
+| `-Module <名字>` | 逐条列出某模块的告警（文件:行号 + 按码打标 + 文案） |
 | `-Project <csproj…>` | 默认检查包自身的两个程序集（Runtime 与 Editor） |
-| `-Enforce` | 门禁模式：文档告警须 0、所有源文件都参与编译、所有条目都有 `.meta`，任一不满足即失败 |
+| `-Enforce` | 门禁模式：**门禁码**告警须 0、所有源文件都参与编译、所有条目都有 `.meta`，任一不满足即失败（失败清单点名码） |
 
 ### 测试壳
 

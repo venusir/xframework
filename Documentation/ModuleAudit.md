@@ -46,7 +46,7 @@
 
 - **判据**：注释里出现未转义的尖括号/`&` 了吗？`<see cref>` 指向的成员**真的存在**吗？
 - **本仓实例**：XPool 模块一处 `<c>Get&lt;T&gt;()</c>` 式的未转义触发 CS1570，**整块注释被编译器丢弃**，块内 `cref` 随之不再被检查——死链表现为「**没有**告警」而不是「有告警」。
-- **探针**：`pwsh -File Tools/check-docs.ps1 -Module <模块名>`（诊断）；`-Enforce` 是门禁。注意它必须**全量重编**，增量不下发警告。**它的统计范围只有 CS1570 / CS1574**——CS0419（cref 二义）、CS1591（公开成员缺注释）等同样由这条通道产出却不被统计（见 §八），判「cref 都有效」之前先确认这一点（实例：Update 二轮实测发现包内有 CS0419 存量，而 `-Enforce` 照常判绿）。
+- **探针**：`pwsh -File Tools/check-docs.ps1 -Module <模块名>`（诊断）；`-Enforce` 是门禁。注意它必须**全量重编**，增量不下发警告。**统计面与门禁面以脚本头部「覆盖范围」为唯一真相**（本文不复制码表）：2026-10-13 起扩到十一个码、全部纳门（实例留痕：Update 二轮实测曾发现包内有 CS0419 存量而当时的 `-Enforce` 照常判绿——那正是扩容的动因）。它**只查「有注释」不查语义**：CS1591 不检查 summary 的存在与质量。
 - **抓不到什么**：注释内容与实现不符（编译器只管 XML 合不合法）。
 
 ### B. 生命周期与并发
@@ -226,7 +226,7 @@
 | **包 README 四张清单表**（主要功能 / 模块索引 / 可替换的实现一览 / 可配置项一览）与 `Runtime/` 目录·程序集的一致性 | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/ReadmeTableTests`——三张模块级表的模块集与 `Runtime/` 直接子目录**双向相等**、模块索引表的文档链接落盘、命名空间列与程序集**双向覆盖**（File 的 `XFileManager` 为登记例外）、「主要功能」表按登记表守（未登记即红）。**射程**：只守集合与链接——行内说明文字的陈旧与四表刻意各异的顺序不在内；`check-docs.ps1` 对 `.md` 零覆盖**不变**（守卫在测试侧） |
 | 门面转发缺失 | **已自动化，且已覆盖全部适用模块**（2026-10-13 核对）：守卫共 **11 处**——Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI，恰是全部「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`），形态为「接口每个声明成员在门面上存在**同名 + 同元数**的 public static 成员」。<br>**仍开着的是更细的一问**：多接口模块只守了**主**接口——UI 的守卫只覆盖 `IUIManager`，没覆盖 `IUIHudProvider` / `IUITipProvider`；Settings 只覆盖 `ISettingsManager<T>`，没覆盖 `ISettingsStore` / `IAsyncSettingsStore`。这些 provider/store 是否也要同名转发守卫，需要一次裁定。<br>**Message 不属于这一类**：`MessageManager` 是 `IMessagePublisher` / `IMessageSubscriber` 的**扩展方法宿主**（实现在 internal 的 `IMessageBroker` 上），不是「转发到可替换实现」的门面，这条不变量对它不成立。 |
 | 文档声称的 API 是否存在 | 未做：从 README 抓 `` `Type.Member` `` 记号 → 反射核存在性 |
-| **未纳门的文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / 1734 / 1735 / 1584 / 1658…） | **未做**：`check-docs.ps1` 只统计 CS1570 / CS1574，其余码在这条通道里可见而脚本不数（实测有存量，纳入 `-Enforce` 前须先清；先让脚本把它们**诊断**出来看曲线） |
+| **未纳门的文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / CS1571 / CS1572 / 1734 / 1735 / 1584 / 1658…） | **已自动化**（2026-10-13）：`check-docs.ps1` 统计面扩到十一码并**全部纳入 `-Enforce`**（`$CodeLabels` / `$GatedCodes` 两张表在脚本顶部；收编走「先诊断看曲线、清完存量再纳门」，CS1571 / CS1572 就是首跑当天现形后补入的）。**射程**：只覆盖包内两程序集的编译告警；只查「有注释」不查语义；`.md` 零覆盖不变 |
 | 日志缺 `[模块]` 前缀 | 未做：grep `Debug.Log` 附近是否带前缀 |
 | 公开成员零测试覆盖 | 未做：反射列公开成员 → grep 测试目录 |
 | 文档搬迁的行集守恒 | **未做**：`check-docs.ps1` 对 `.md` 零覆盖，README ↔ `Documentation/Modules/` 的搬运没有门禁。可用的机械判据是「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑——一次性工程，不宜挂进阶段收尾 |
