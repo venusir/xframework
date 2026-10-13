@@ -52,3 +52,19 @@ Runtime/Pipeline/
 ├── ContextBell.cs                # 上下文写入门铃(重入折叠/迟写防护,internal,管线与容器共用)
 └── ContextAggregation.cs         # 加权扫描共享助手(加权扫描/阈值节流/状态快照,internal)
 ```
+
+## 已评估未采纳与未决
+
+（按 `Modules/README.md` 的约定**逐轮追加、不覆盖**。下面是从既有设计决定与变更记录（模块 README / CHANGELOG / `Roadmap.md`）里归集的第一批，出处逐条标注；整轮审计（`../ModuleAudit.md` 的 A–F）的结论会在做过后追加到本节。）
+
+**已评估未采纳**（逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层）：
+
+- **不加顶层并行 API**（`RunParallelAsync` 式）：顶层固定串行是「隐式串行根容器」，并行段包成 `ParallelStage` 作为**单个**阶段添加即可表达同一拓扑——多一个入口就多一套「阶段列表怎么排」的语义要维护，而容器嵌套已能表达任意串并行树。见模块 README「容器组合」。
+- **`PipelineProgress` 不改成 `readonly struct`**：它确实违背「进度载荷用 readonly struct」的框架惯例，但它是**交出去**的事件载荷——订阅者可留存它、`Bootstrap` 直接转交给调用方的 `IProgress<PipelineProgress>`，池化需要一个并不存在的归还协议；改成 struct 则经接口传递要装箱，还会改掉 `Report` 的就地覆盖语义与 `Bootstrap.RunAsync` 的公开签名。**这条写给下一次复审**，免得被当成漏网的 GC 问题（模块 README「进度模型」节留了同样一句）。
+- **重入折叠不写成 `while` 排空**：订阅者若在每次广播里都回写上下文，`while` 会死循环（而不管它会栈溢出）——**宁可少广播一次**，故递归深度恒为 2。见模块 README「执行模型」。
+- **失败原因的日志行文案不跟 `FailureReason` 一起改**：名字已在上一行 `Stage 'X' failed` 里，改日志会牵动 `PipelineFailureTests` 的精确正则；缺名字的是**拉取面**（`Bootstrap` 据它抛出异常）。两处形状不一致是有意的，见本文「异常承载」。
+- **超时取「乐观」语义，不等待被放弃的阶段沉降**：触发即取消当前阶段并置 `Failed`，不响应取消的挂起阶段在后台继续跑、只是其后续上下文写入不再影响管线（与 Polly 的 `TimeoutStrategy.Optimistic` 同语义）。写成「等它沉降」等于让一个不响应取消的阶段把编排挂死——超时要中止的是**编排**，不是那个阶段。
+
+**未决**：
+
+- **主线程断言抽公共防线**（跨模块）：Message / Pipeline / Asset 已有三份同形内联副本。归口与升级判据在 `Documentation/Roadmap.md` §五，此处只登记归属——**Pipeline 是三个消费方之一**，真要动得三处一起改。
