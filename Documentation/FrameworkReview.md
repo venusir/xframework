@@ -2,7 +2,7 @@
 
 > **收件人**：框架作者（选型与排期时）+ 下一轮实施者。**不是**使用文档，**不是**审计判据。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> 快照日期：**2026-10-11**。规则在 `CLAUDE.md`，流程与门禁在 `Workflow.md`，审计判据在 `ModuleAudit.md`，候选模块在 `Roadmap.md`——本文不复述它们。
+> 快照日期：**2026-10-11**（§二 统计口径；此后只做订正与回填，数字不追新）。订正与回填：**2026-10-13**（§五 完成标记、§4.3/§4.4/§七 过时项）。规则在 `CLAUDE.md`，流程与门禁在 `Workflow.md`，审计判据在 `ModuleAudit.md`，候选模块在 `Roadmap.md`——本文不复述它们。
 
 ## 一、这份文档怎么用
 
@@ -138,7 +138,7 @@
 
 **已在册、不重复论证**（真相在各处原文）：
 
-- `Roadmap.md` §五 的 **5 条跨模块未决**：会话级复位 / File 异步删除原语 / `Data.CreateSnapshot(bool clearDirty)` / 主线程断言抽公共防线 / Update 节点注销不可观测
+- `Roadmap.md` §五 的 **跨模块未决**：~~会话级复位~~（**2026-10-12 已落地**，见 Roadmap §五 的完成标记）/ File 异步删除原语 / `Data.CreateSnapshot(bool clearDirty)` / 主线程断言抽公共防线 / Update 节点注销不可观测
 - 各 `Documentation/Modules/<模块>.md` 的「**已评估未采纳与未决**」——22 个模块各自的清单
 
 **本轮新识别或新升级的**：
@@ -156,39 +156,40 @@
 
 #### 高：会让第三方拿到坏结果
 
-1. **一键依赖安装器装出的版本与仓内不是同一套**（**已实测**）。
+1. ~~**一键依赖安装器装出的版本与仓内不是同一套**（**已实测**）~~ —— **2026-10-11 已落地**（`db02909`：清单钉 `#tag` 且 `?path=` 在 `#` 之前、已存在的裸 URL 就地纠正、去掉无条件的「依赖安装完成！」假成功提示；守卫 `DependencyDeclarationTests` 反射读 `RequiredUPMDependencies`，断言它与 README 表、`Packages/manifest.json` 三者逐字一致——正是安装器注释自己求的「两处必须一起长」）。
+   原记录（留痕）：
    `Editor/XFrameworkDependencyInstaller.cs:33-34` 写出的 UniTask / YooAsset 是**不带 `#tag`** 的 Git URL；而 `Packages/manifest.json` 钉的是 `#2.5.11` / `#2.3.18`。
    **后果已由本仓自己实测过**：`README.md` 的「第三方依赖」表明写「不写修订时包管理器会取默认分支的最新提交……Asset 模块会直接编译不过（**实测：不写修订时 51 处 `error CS0246/CS0234`，钉住后退出码 0**）」。
    **当前上游状态**（2026-10-11 实测）：YooAsset 默认分支 HEAD 的 `package.json` 已是 **3.0.6**，其兼容类型整文件包在 `#if YOOASSET_LEGACY_API` 内、默认不编译；而本仓引用了其中被移走的 `RawFileHandle`。**三个条件同时成立 ⇒ 今天点一下菜单，装出来的工程必然编译不过。**
    **第二个缺陷**：`:71` 用 `json.Contains(packageId)` 判存在性，**已存在就永不升级**——照旧 README 装过裸 URL 的消费方会**永久**停在裸 URL 上，连手工改成钉 tag 后再点菜单也不会被纠正。
    **附带**：安装器末尾无条件打印「依赖安装完成！」——一次假成功信号。
-2. **无 LICENSE**。仓库根与包内都没有，`package.json` 也无 `license` 字段。**对外发布的阻塞项**：没有许可证，第三方在法律上无权使用。
+2. ~~**无 LICENSE**~~ —— **2026-10-11 已落地**（`08cedb4`：仓库根 `LICENSE` + 包内 `LICENSE.md` + `package.json` 的 `"license": "MIT"`）。原事实：仓库根与包内都没有，`package.json` 也无 `license` 字段。**对外发布的阻塞项**：没有许可证，第三方在法律上无权使用。
 
 #### 中：发布与升级流程
 
-3. **无 git tag、无发布流程**。`CHANGELOG` 的 `[Unreleased]` 自 2026-08-20（`0.2.0`）起累积 **~660 行**、且内部 `###` 子节**按轮次重复出现 50+ 次**——不是 Keep-a-Changelog 的可读形态。`package.json` 的 `version: 0.2.0` 全手工维护。
+3. ~~**无 git tag、无发布流程**~~ —— **2026-10-11 已落地**（`632755b`：`[Unreleased]` 归并为 Keep-a-Changelog 形态，~660 行 → 85 行；`26f6d93`：版本推进到 `0.3.0` 并打 tag `0.3.0`）。原事实：`CHANGELOG` 的 `[Unreleased]` 自 2026-08-20（`0.2.0`）起累积 **~660 行**、且内部 `###` 子节**按轮次重复出现 50+ 次**——不是 Keep-a-Changelog 的可读形态。`package.json` 的 `version: 0.2.0` 全手工维护。
 4. ~~**无 API 兼容性检查**~~ —— **2026-10-13 已落地**。原事实：没有 `PublicAPI.Shipped.txt` 分析器、没有 ApiCompat，而 `[Unreleased]` 里已攒了 **6 处破坏性改名**，全靠手工记——「与门禁文化格格不入，最适合机械化的一条」。
    现在的形态（**不是**分析器，也不是 ApiCompat）：`Tests/Runtime/Architecture/PublicApiBaselineTests` 反射渲染 Runtime 程序集的公开面成扁平行集合，与 `PublicApiBaseline.txt`（1961 行 / 222 个公开类型）逐行比对；差异天然两分——「已消失/已变更」（破坏性）与「新增」（源兼容）。更新走 `Tools/run-tests.ps1 -UpdateApiBaseline`（**只写盘、永不给绿灯**，绿灯由不带开关的重跑给出）。
    **为什么没用现成分析器**：Roslyn 分析器在 Unity 侧没有可提交的 csproj 挂载点（Unity 生成的 csproj 被 git 忽略），且 `PublicAPI.Shipped.txt` 要经 `AdditionalFiles` 传给分析器——那条路本仓走不通（详见实施轮的探针结论）。**Editor 程序集（5 类型 / 10 成员）不在射程内**。
 5. **无 CI**。三条门禁全靠人工在阶段收尾时跑（`Workflow.md:122` 自述）。对外发布的项目，门禁应该挂在 push/PR 上而不是人脑里。
-6. **`package.json` 缺 6 个字段**：`keywords` / `samples` / `author` / `license` / `documentationUrl` / `changelogUrl`。UPM 列表页与详情页会因此残缺。
-7. **Samples 上不了架**。目录是 `Samples/Example/`（**非 `Samples~`**），包内有 `.sample.json` 写了 `displayName`/`description`，但 **`package.json` 没有 `samples` 数组** ⇒ Package Manager 的 Samples 页签里看不到它，反而**作为普通包资源被导入**到每个消费方工程。示例只有 7 个，覆盖 22 模块中的 6 个。
-8. **模板残留随包分发**：`Editor/EditorExample.cs`、`Tests/Editor/EditorExampleTest.cs`、`Tests/Runtime/RuntimeExampleTest.cs`、`Samples/Example/SampleExample.cs`。
-9. **无 `.gitattributes`、无行尾归一化**。Force Text 只是**工程设置**（`ProjectSettings/EditorSettings.asset:7`），不是仓库保证；`m_LineEndingsForNewScripts: 0`（OS Native）。**实测旁证**：本轮提交时 git 对 7 个文件全部报了 `LF will be replaced by CRLF` 警告——说明换行符正在被运行环境悄悄改写。
-10. **`Tests.Native/` 死残留**：目录里只有 `Tests.Native.csproj`，**未入版本控制**（`git ls-files` 为空，被 `.gitignore` 的 `*.csproj` 排除），而它 `<Compile Include>` 引用的 `Runtime/Node/`、`Runtime/Loader/` **早已删除**。纯本地孤儿。
+6. ~~**`package.json` 缺 6 个字段**~~ —— **2026-10-11 已落地**（`08cedb4` + `97d5ba9`：六字段齐备）。原事实：`keywords` / `samples` / `author` / `license` / `documentationUrl` / `changelogUrl` 缺，UPM 列表页与详情页会因此残缺。
+7. ~~**Samples 上不了架**~~ —— **2026-10-11 已落地**（`97d5ba9`：目录改 `Samples~` + `package.json` 加 `samples` 数组；守卫 `DependencyDeclarationTests.Samples_PathResolvesToAnExistingDirectory` 钉住路径指向真实目录）。**仍开着的一半**：示例仍只有 7 个、覆盖 22 模块中的 6 个（见 §4.4-6）。原事实：目录是 `Samples/Example/`（**非 `Samples~`**），包内有 `.sample.json` 写了 `displayName`/`description`，但 **`package.json` 没有 `samples` 数组** ⇒ Package Manager 的 Samples 页签里看不到它，反而**作为普通包资源被导入**到每个消费方工程。
+8. ~~**模板残留随包分发**~~ —— **2026-10-11 已清**（`e561eab` 删三处 + `97d5ba9` 随 Samples 上架删 `SampleExample.cs`）。原事实：`Editor/EditorExample.cs`、`Tests/Editor/EditorExampleTest.cs`、`Tests/Runtime/RuntimeExampleTest.cs`、`Samples/Example/SampleExample.cs`。
+9. ~~**无 `.gitattributes`、无行尾归一化**~~ —— **2026-10-11 已落地**（`d962a41`：文本一律 LF、二进制显式标注、`*.bat`/`*.cmd` 保持 CRLF；规则已进 `CLAUDE.md`）。原事实：Force Text 只是**工程设置**（`ProjectSettings/EditorSettings.asset:7`），不是仓库保证；`m_LineEndingsForNewScripts: 0`（OS Native）。**实测旁证**：本轮提交时 git 对 7 个文件全部报了 `LF will be replaced by CRLF` 警告——说明换行符正在被运行环境悄悄改写。
+10. ~~**`Tests.Native/` 死残留**~~ —— **2026-10-13 复核：磁盘上已不存在**（本就未入版本控制，无提交可引；`Runtime/Node/`、`Runtime/Loader/` 也早已不在）。原事实：目录里只有 `Tests.Native.csproj`，**未入版本控制**（`git ls-files` 为空，被 `.gitignore` 的 `*.csproj` 排除），而它 `<Compile Include>` 引用的 `Runtime/Node/`、`Runtime/Loader/` **早已删除**。纯本地孤儿。
 
 #### 低：长期形态
 
 11. **`Tests/` 随包分发**（45k 行进每个消费方工程）。Unity 惯例可用 `Tests~` 让包管理器跳过导入。
 12. **包在子目录**：引入必须带 `?path=Assets/XFramework`，因此**不能直接当子模块包用**。
 13. 无 `.editorconfig`（`CLAUDE.md` 有大段编码规范，但机器不强制）、无性能基准套件、无 Git 钩子、无 Issue/PR 模板、无 `CONTRIBUTING`。
-14. **依赖声明碎片化**：`package.json` 空 → 版本真相分散在 `Packages/manifest.json`、`Editor/XFrameworkDependencyInstaller.cs`、`README.md` 三处，安装器注释自承「两处必须一起长」。第 1 条就是这个碎片化的直接后果。
+14. **依赖声明碎片化**（**2026-10-11 已缓解**）：结构仍是三处（`package.json` 的 `dependencies` 按 UPM 的现实刻意留空），但 `README.md`「第三方依赖」表已定为**唯一真相**，守卫 `DependencyDeclarationTests` 断言安装器清单与 `Packages/manifest.json` 都与它逐字一致（`db02909`），规则已进 `CLAUDE.md`。原事实：版本真相分散在三处，安装器注释自承「两处必须一起长」——第 1 条就是这个碎片化的直接后果，现已由守卫兜住。
 15. **`ProjectSettings/ProjectVersion.txt` = `6000.4.5f1`，而 `package.json` 声明 `unity: 6000.3`**。这是**有意**的（最低要求 ≠ 开发版本），但两处不一致容易被误读为漂移，值得在 README 写明。
 
 ### 4.4 文档与开发者体验
 
 1. **包 README 的三张清单表无门禁**。功能表（`README.md:118`）、模块索引表（`:138`）、可配置项表（`:197`）全靠手改，而 `check-docs.ps1` 对 `.md` **零覆盖**。**已实测漏过一整轮**（ReactiveList 建成时三张表全漏，跨了一轮才被补）。
-2. **「已知限制」小节缺 5 个模块**：Event / Message / Pipeline / Pool / Serialize。其余 17 个都有，且开场白逐字一致（「知道边界比以为没有边界安全……」）。**这 5 个恰是第三方最容易踩坑的底层件**（Pool 的 `Configure` 只在建池前生效、Event 的订阅语义、Message 的缓冲重放）。
+2. **「已知限制」小节缺 5 个模块**：Event / Message / Pipeline / Pool / Serialize。~~其余 17 个都有，且开场白逐字一致（「知道边界比以为没有边界安全……」）~~ —— **2026-10-13 核对订正**：模块级 `## 已知限制` 实为 **16 个**（Reactive 以两个集合级小节给出，合计 17）；开场白「知道边界比以为没有边界安全」首句出现 **5 处**、整句逐字仅 **4 处**（Config / Data / File / Save）。**这 5 个恰是第三方最容易踩坑的底层件**（Pool 的 `Configure` 只在建池前生效、Event 的订阅语义、Message 的缓冲重放）。补写已排入执行序列步骤 7。
 3. **`check-docs.ps1 -Enforce` 只统计 CS1570 / CS1574**。CS0419 / CS1591 / CS1573 / CS1734 / CS1735 / CS1584 / CS1658 有存量、未纳门（`ModuleAudit.md` §八 已列）。**注意 CS0419 的隐蔽性**：它表现为「**没有**告警」——cref 写不全时编译器替你假设一个重载。
 4. ~~**门面完备性守卫只覆盖 UI / Settings**~~ —— **2026-10-13 核对后订正：这句话是失实的。** 守卫共 **11 处**
    （Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI），恰是全部
@@ -198,8 +199,8 @@
    **仍开着的是更细的一问**（本条修订后的真实内容）：多接口模块只守了**主**接口——UI 没覆盖
    `IUIHudProvider` / `IUITipProvider`，Settings 没覆盖 `ISettingsStore` / `IAsyncSettingsStore`，
    这些 provider / store 型接口要不要同名转发守卫需要一次裁定。详见 `ModuleAudit.md` §八 该行。
-5. **`ModuleAudit.md` 的判据源自 CHANGELOG，存在已知盲区**。Config 模块 31 条提交、两次破坏性重构，而 CHANGELOG 里出现 **0 次**（`Documentation/Modules/Config.md:54`）——「手册从本模块的缺陷史里学到的是零」。**这是判据生成方式的系统性缺陷**，不只是 Config 一个模块的问题。
-6. **示例覆盖面窄**（6/22 模块），且上不了架（§4.3 第 7 条）。第三方上手路径目前只有 README。
+5. **`ModuleAudit.md` 的判据源自 CHANGELOG，存在已知盲区**（**2026-10-13 复核：证据已翻转、论点收窄**）。~~Config 模块 31 条提交、两次破坏性重构，而 CHANGELOG 里出现 **0 次**（`Documentation/Modules/Config.md:54`）~~ —— 归并轮（`632755b`）给 CHANGELOG 补了模块轴，Config 自此有了自己的 `#### Config` 小节（现两条：`:803` 在 `### Fixed`、`:998` 在 `### Documentation`；全文提及 35 行）。收窄后的论点仍成立：判据是对 `### Fixed` 段归纳的，**对从未进入该段的缺陷史与归纳法本身是盲区**。「手册从本模块的缺陷史里学到的是零」这句随证据一起失效；`Modules/Config.md:59`（行号自 :54 漂移）仍写着旧句，回填已排入执行序列步骤 7。**这是判据生成方式的系统性缺陷**，不只是 Config 一个模块的问题。
+6. **示例覆盖面窄**（6/22 模块）。~~且上不了架（§4.3 第 7 条）~~ —— **2026-10-11 已上架**（`97d5ba9`：Package Manager 的 Samples 页签可见）。覆盖面扩展**已点名不在执行序列内**（无明确完成判据，按需另议）；上手路径目前是 README + 7 个示例。
 
 **本轮新得到的一条 DX 教训（实测）**：`UIMaskTests.ClickToClose_PopsTopPanel` 绿了九个月，而它验的是**接线**（`Button.onClick.Invoke()`）不是**射线管道**——缺陷因此隐形。这是 `ModuleAudit.md` 判据 **D3「测试的假绿」**的教科书样本。**可复用的判据**：当一个特性跨「接线」与「引擎管道」两层时，只测接线等于不测。
 
@@ -283,6 +284,6 @@
 | 建议「不做」的新项（相机 / 远程配置 / 崩溃上报） | `Roadmap.md` §三，标「本轮建议不做，待裁定」——**「不该做」是设计取舍，需用户确认后才进 §四** | ✅ |
 | 本轮的实测结论（遮罩 / 尺子 / 安装器） | 遮罩 → 已闭环（CHANGELOG + `Modules/UI.md` + README）；尺子 → `Modules/{Log,Timer,Message,UI,Reactive}.md` + `Workflow.md` §六（**2026-10-12 处置轮已全部落地**）；安装器 → 本文 §4.3 + 实施轮 | ✅ |
 | 2026-10-12 处置轮的结论（尺子 / 会话复位 / 四模块 PlayMode） | 尺子与四模块 → `Workflow.md` §六 + 各模块文档 + `CHANGELOG`；会话复位 → `Modules/{Input,Asset,Bootstrap,Config,UI,Localization}.md` + `Roadmap.md`（族清单与失实句订正）+ `Runtime/{Input,UI}/README.md` 的已知限制 | ✅ |
-| 框架级评估这份文档本身的存在 | `CLAUDE.md` 文档分层表 | ⏳ 待用户确认拟写文本 |
+| 框架级评估这份文档本身的存在 | `CLAUDE.md` 文档分层表 | ✅ 已落（`6359e71`） |
 
 **本文不复制 `Roadmap.md` 与各模块文档的内容**——那些是它们的真相，重复一份就会各自漂移。

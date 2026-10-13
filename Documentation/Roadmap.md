@@ -172,7 +172,7 @@
 
 已成模块的待立项与未决另有其家——都在 `Documentation/Modules/<模块>.md` 的「已评估未采纳与未决」里：
 
-- **会话级复位**（关闭域重载后第二个播放会话静默失效）——归口跨 Input / UI / Asset / Config / Localization / File
+- **会话级复位**（关闭域重载后第二个播放会话静默失效）——归口跨 Input / UI / Asset / Config / Localization / File —— ✅ **2026-10-12 已落地**（六门面 `ResetForNewSession` + `Bootstrap.StageList` + `InstanceTracker`；回归用例 `Tests/Runtime/Architecture/SessionResetTests`。**手工验收仍待做**，见 `FrameworkReview.md` §五 步骤 1）
 - **File 补异步删除原语**——Save 的删除 / 移动因此被迫在主线程做同步 IO
 - **`Data.CreateSnapshot(bool clearDirty)`**——Save 回滚恢复不了脏标记
 - **主线程断言抽公共防线**——Message / Pipeline / Asset 已有三份同形内联副本
