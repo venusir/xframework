@@ -367,6 +367,22 @@ void OnSceneUnloaded(Scene scene)
 }
 ```
 
+## 已知限制
+
+知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
+
+- **`Configure<T>` 只在首次建池之前生效。** 类型已建过池再配置，会告警并忽略——想在 `Awake` 里配置就必须保证它早于第一次 `Get`，或先 `RemovePool<T>()` 再配置。**四个集合池的口径不同**：它们在「无活跃实例」时可重配（首次 `Get` 之前、或全部归还之后）。
+- **容量与预热的两个反直觉点**：不配置时 `MaxSize` **无上限**（闲置实例只增不减，直到 `Clear()` / `ClearAll()`，池化类型多的项目建议显式设上限）；`PrewarmSize` 会被**钳到 `MaxSize`**（配出 `PrewarmSize > MaxSize` 不报错，以 `MaxSize` 为准）。
+- **`CollectionCheck` 只在 Editor 生效。** Release 构建自动关闭、零开销——重复归还这类缺陷在 Release 下抓不到。
+- **委托回调优先于接口。** 传了 `onRent` / `onDestroy` 委托，就不会再调 `IPoolable.OnRent()` / `IPoolDiscardable.OnDiscard()`。
+- **`CountAll` 只增不减，`CountAll - CountInactive` ≠ `CountActive`。** 被丢弃的实例仍计入 `CountAll`，却既非活跃也非闲置——判断「还有多少实例在外面」只能用 `CountActive`。
+- **`Clear()` / `ClearAll()` 不触发丢弃回调。** 它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用（退出期跑用户回调容易碰到已销毁的 Unity 对象）——把资源释放写在 `OnDiscard` 里的类型，走 Clear 路径不会释放。
+- **归还回调先于容量判断触发。** 池满被丢弃的实例会**先**收到 `OnReturn`（清理状态）、**再**收到 `OnDiscard`（释放资源），两个回调都收得到。
+- **`PooledObject<T>.Dispose()` 的幂等只对同一个存储位置成立。** 复制出去的副本（`var h2 = h;`）仍会归还两次——结构体按值复制，防不住。
+- **业务对象池与集合池是两套注册表。** `PoolManager.ClearAll()` 只清业务对象池、`CollectionPoolManager.ClearAll()` 只清集合池，切场景时两个都要调；两者都只清闲置实例，**池注册与 `Configure` 保留**。
+- **泛型集合池按闭合泛型类型独立建池。** `ListPool<int>` 与 `ListPool<Vector3>` 是两个池，容量与预热各算各的。
+- **线程不安全。** 与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
+
 ## 依赖
 
 - Unity 6000.3 或更新版本（与 package.json 的 `unity` 字段一致）

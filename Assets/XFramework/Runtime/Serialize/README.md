@@ -79,3 +79,19 @@ Serializer.Register(new MessagePackSerializer());
 ```
 
 4. 设置 `DataSnapshot.defaultFormat = "msgpack"` 或单个 `DataBlockSnapshot.format` 即可切换格式。
+
+## 已知限制
+
+知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
+
+- **`json-utility` 只为读旧数据保留。** Unity 自带的 `JsonUtility` 不支持字典、多态与 `null` 语义，
+  用它写出的数据会**静默丢字段**（落默认值，不报错）——新数据请一律用 `json`。
+- **覆盖 `"json"` 是个全局动作。** `Data` 与 `Save` 都走 `Serializer.Default`，换掉它等于同时改变
+  两者的落盘格式；已经写出去的旧存档不会跟着迁移，要自己保证新实现读得懂旧数据。
+- **替换内置格式必须早于模块初始化。** 只有在 `Initialize` 之前注册同名格式才会被保留；晚了只留一条
+  `[Serialize]` 告警，然后**静默用回内置实现**。想恢复内置请 `Unregister("json")` 后重新 `Register`。
+- **格式名是跨模块契约。** `DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 里存的是字符串，
+  改名或注销会连带影响 Data / Save / Config 的读写。
+- **`Get` / `Default` / `Shutdown` 三处的失败都是抛异常。** 未注册的格式抛 `KeyNotFoundException`，
+  未初始化时取 `Default` 抛 `InvalidOperationException`（框架经 `AutoInit` 自动初始化，正常不会遇到）；
+  `Shutdown()` 之后连内置格式都没有，两个入口全抛。
