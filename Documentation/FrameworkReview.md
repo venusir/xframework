@@ -184,8 +184,14 @@
 
 #### 低：长期形态
 
-11. **`Tests/` 随包分发**（45k 行进每个消费方工程）。Unity 惯例可用 `Tests~` 让包管理器跳过导入。
-12. **包在子目录**：引入必须带 `?path=Assets/XFramework`，因此**不能直接当子模块包用**。
+11. ~~**`Tests/` 随包分发**（45k 行进每个消费方工程）。Unity 惯例可用 `Tests~` 让包管理器跳过导入。~~ —— **2026-10-14 裁定：不采纳（维持现状）**（§5.2 步骤 11）。
+    **「`Tests~`」这个形态不可行，而且危险。** `~` 在 Unity 里只是「隐藏 / 不导入」，**不是「不分发」**——官方包布局文档写的是 tilde「**hides** these folders in the Project window」；本机 `Library/PackageCache` 里第三方包的 `Documentation~` / `Samples~` / `Tests/` **都实实在在躺在磁盘上**。而**本仓已有直接先例**：`Samples~` 那次改名之后，**本仓自己也不再编译示例**（`CLAUDE.md:40` 记着这个代价）。同理 `Tests~` 会让两个测试程序集一起消失——**且门禁会给假绿**：实测（把 `Tests` 改名后跑全量）双平台各报「总计 0 / 失败 0」而脚本**退出码 0**，即退出判据「三条门禁全绿」会被**假满足**。该缺口已随本轮补上（`216140b`：全量跑 0 用例判失败）。
+    **「移出包目录」是能达成目标的形态，但收益不抵成本**：代价 = **499 个文件**（228 `.cs` / 268 `.meta` / 2 asmdef / 1 基线文本，共 **51,056 行**——原文「45k 行」是估数，此处按实测订正）+ 2 处代码级硬路径（`PublicApiBaselineTests.cs` 的基线路径、`AllocationRulerTests.cs` 的白名单常量）+ **96 行文档引用**（含 `CLAUDE.md` 8 处规则；其中 CHANGELOG 的 11 处按本仓纪律属**有意保留的历史**）；收益只是消费方少 ~499 个文件的导入与磁盘——**不是「少编译 45k 行」**，因为测试程序集在导入方**本就不产出**（`CHANGELOG.md` 的实测 + 本轮裸消费方探针复核）。
+    **重开判据**：消费方实测反馈「导入耗时 / 包体」不可接受，或 Unity 改变 `~` / `testables` 的语义。
+12. ~~**包在子目录**：引入必须带 `?path=Assets/XFramework`，因此**不能直接当子模块包用**。~~ —— **2026-10-14 裁定：不重构（维持现状）**（§5.2 步骤 11）。
+    `?path=` 是 UPM 的**官方支持**用法（git 依赖文档：registers the package located in the specified repository subfolder and **disregards the rest of the repository**）；而「不能直接当子模块**包**用」**≠**「不支持子模块」——包 README 的「方式二」已经给了配方：`git submodule add … Submodules/XFramework` + `"com.venusy609.xframework": "file:../Submodules/XFramework/Assets/XFramework"`（`file:` 指向「任何包含包清单的本地文件夹」，相对路径以工程 `Packages/` 为基准）。
+    把包搬到仓库根、开发工程下沉子目录**能修好「子模块即包」，但代价是全仓重构**：测试壳的三个 junction、两条 `Tools/*.ps1` 的仓库根推导、全部 `Application.dataPath/XFramework` 推导（`SourceScanner` 与 3 处副本）、`check-docs.ps1` 的三处硬路径、96 行文档引用，以及 README 对外「仓库根是完整 Unity 工程」的表述——**收益只是一个已有替代方案的安装姿势**。
+    **重开判据**：出现「必须用 submodule、且不接受 `file:` 配方」的真实使用方；或包要拆成独立仓库发布。
 13. 无 `.editorconfig`（`CLAUDE.md` 有大段编码规范，但机器不强制）、无性能基准套件、无 Git 钩子、无 Issue/PR 模板、无 `CONTRIBUTING`。
 14. **依赖声明碎片化**（**2026-10-11 已缓解**）：结构仍是三处（`package.json` 的 `dependencies` 按 UPM 的现实刻意留空），但 `README.md`「第三方依赖」表已定为**唯一真相**，守卫 `DependencyDeclarationTests` 断言安装器清单与 `Packages/manifest.json` 都与它逐字一致（`db02909`），规则已进 `CLAUDE.md`。原事实：版本真相分散在三处，安装器注释自承「两处必须一起长」——第 1 条就是这个碎片化的直接后果，现已由守卫兜住。
 15. ~~**`ProjectSettings/ProjectVersion.txt` = `6000.4.5f1`，而 `package.json` 声明 `unity: 6000.3`**。这是**有意**的（最低要求 ≠ 开发版本），但两处不一致容易被误读为漂移，值得在 README 写明。~~ —— **2026-10-13 已落地**（§5.2 步骤 7）：包 README 的「依赖」节写明两处口径与「最低要求 ≠ 开发版本，不是漂移」的定性。
