@@ -74,6 +74,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   与四表刻意各异的顺序不在内；`check-docs.ps1` 对 `.md` 仍零覆盖（守卫在测试侧不在脚本侧）。
   **使用方不受影响**：产出的是一份测试侧守卫，公开面一个字都没动。
 
+- **Bootstrap 的 GameLauncher 真生命周期 PlayMode 覆盖**（3 例，`Tests/Runtime/Bootstrap/GameLauncherFrameTests`）：
+  既有 `GameLauncherTests` 刻意不让 `Start` 真跑 `RunAsync`（怕真初始化 YooAsset），本 fixture 覆写
+  `ConfigureStages` 只登记假阶段把那半边补上：真 `AddComponent` 下 `Awake → Start → OnDestroy` 全走完。
+  三例把 `Modules/Bootstrap.md` 记的两条「推理，未实测」（销毁 × 在途启动交叠）升级为**实测**——用真实
+  `AssetBootstrapStage` + 真实 `AssetManager` 门面 + 假实现端到端**复现了预言的「启动失败」错误日志链**
+  （三条 Error），并实测出一条更重后果：`Shutdown` 清理整张登记表后，**被 Shutdown 的后置相位仍会被
+  在途管线执行**。**其中两例为「钉现状」形态**：缺陷定性与修法属公开行为变更、待裁定；若裁定修复，
+  两条断言翻转为「干净关闭」（`Runtime/Bootstrap/README.md` 的已知限制同步改写）。使用方不受影响：
+  纯测试新增，公开面一个字都没动。
+
 ### Changed
 
 - **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
@@ -183,6 +193,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `ModuleAudit.md` A3 探针与 §八、`CLAUDE.md` 文档门禁与 cref ③ 同步；`FrameworkReview.md` §4.4-3
   标完成、§5.1 归档 #18、§5.2 步骤 5 标完成。**使用方不受影响**：包内注释订正 + 仓根工具，公开面
   一个字都没动。
+
+- 测试覆盖失衡六处逐处裁定（`FrameworkReview.md` §5.2 步骤 6 落地）：`FrameworkReview.md` §4.2 该行改写
+  （口径订正——原括号数字是 `Tests/Runtime/<模块>/` **文件数非用例数**；Asset 漂移订正）、§5.1 归档 `步6`、
+  §5.2 步骤 6 标完成；`Modules/Bootstrap.md` 两条未决由「推理」改「实测」（含机制链、修法候选与其实测
+  效果、覆盖边界）；`Modules/{Serialize,Event,Save,Reactive,Asset}.md` 各落「为什么不补」结论
+  （Serialize 另订正一条已过期的未决——`Initialize` 同名注册保留使用方那条 0.3.0 已修）；
+  `Runtime/Bootstrap/README.md` 已知限制**新增一条**：启动途中销毁 × 在途启动交叠的使用方面后果
+  （含「被 Shutdown 的相位仍会被执行」）。
 
 ## [0.3.0] - 2026-10-11
 

@@ -91,6 +91,9 @@ Runtime/Asset/
   引用计数端到端）。建一套最小 YooAsset Offline 测试环境是后续选项。**（2026-10-01 部分收口）**
   主包名解析已提出纯函数 `AssetManagerImpl.ResolveDefaultPackageName` 并由 `AssetPackageNameTests` 钉住三态
   ——它此前零覆盖，而它决定的正是「初始化与加载是否同一个包」（见下方「已修」）。
+  **（2026-10-13 §4.2 处置）**：Runtime 侧现状为 2 fixture / 24 例（对象池语义 + 真 `SceneManager` 跨帧
+  场景缝，后者由场景立项轮新增）——「Asset 的 Runtime 侧只有 1」的旧盘点已漂移；剩余部分不变：
+  真 YooAsset 端到端初始化仍需构建产物，普通 PlayMode 用例补不到。
 - **主线程断言已出现第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）。
   三份同形 → 值得评估抽公共防线（跨模块 API，需单独计划）。
 - ~~会话级复位~~ —— **2026-10-12 已修**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，

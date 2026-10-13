@@ -18,4 +18,6 @@ XSerialize/
 
 ## 已评估未采纳与未决
 
-- **内置注册的静默覆盖**（未决，2026-10-02 全面清点时记下）：`Initialize` 幂等但会把内置两个序列化器注册进字典，于是「使用方在 `Initialize`（或 AutoInit）之前自行注册 `"json"`」会被**静默覆盖**——`Register` 的同名覆盖也是静默的。两种改法（覆盖时告警 / 内置注册可关）都是一行级，本轮未做，可再拾。注意覆盖 `"json"` 会同时改变 Save 与 Data 的落盘格式（两者都走 `Serializer.Default`）。
+- ~~**内置注册的静默覆盖**（未决，2026-10-02 全面清点时记下）~~ —— **2026-10-13 核实：已落地，保留沿革**：清点之后该行为已修——`Initialize` 现经 `RegisterBuiltin` 注册内置项，**同名已存在时保留使用方的**并打一条 `[Serialize]` 告警（`Register` 的同名覆盖不变，那是显式动作）。回归用例 `SerializerTests` 3 条。原条目属「清点记下的未决被随后落地、条目没跟」的又一例（同款教训见 `Modules/Reactive.md` 的相等比较器条目）。原文余下的一半仍是有效提醒：覆盖 `"json"` 会同时改变 Save 与 Data 的落盘格式（两者都走 `Serializer.Default`）。
+
+- **不为 Serialize 补 PlayMode 侧用例**（2026-10-13，§4.2 处置）：全同步纯 CPU（`ISerializer` 就是同步字节数组契约），无帧边界、无 MonoBehaviour、无跨会话静态态；唯一带运行时特性的 `AutoInit` 已由 `AutoInitTests` 族守卫锁死（特性 + load type）。再写一条「跑起来后注册表非空」反而**受用例顺序污染**（任何先行 fixture 调过 `Shutdown()` 就红），不是有效证据。

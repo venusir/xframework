@@ -198,6 +198,8 @@ finally { UpdateManager.Resume(); }
 
 **运行中修改登记表只告警、不阻止**，两条反直觉后果与理由见上面「设计取舍」的末两段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
 
+**启动途中销毁 `GameLauncher` 会与在途启动交叠（2026-10-13 实测）。** `Start` 的 `RunAsync` 不接收销毁令牌、`OnDestroy` 无条件 `Shutdown()`——加载中途销毁时：① `Shutdown` 会清理**整张登记表**，包括本轮**尚未执行**的后置相位；② 在途管线是装配期快照、不受清理影响，**已被 `Shutdown` 过的阶段仍会被执行**；③ 真实模块会因此留下错误日志（`[GameLauncher] 启动失败` 及管线侧两条 Error）。`GameLauncher` 是 `DontDestroyOnLoad`、正常只在退出时销毁；确需中途销毁的，请先等启动完成（持有 `RunAsync` 的完成信号）再销毁。
+
 ## 依赖
 
 - **XFramework.XPipeline** —— 阶段契约与相位分组装配

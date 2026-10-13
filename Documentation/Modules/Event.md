@@ -55,3 +55,4 @@ Runtime/Event/
 **未决**：
 
 - **Event 层没有主线程断言**：Message 在发布 / 订阅入口有 `MainThreadGuard`（仅 Editor、Release 零开销），而本模块的直接调用不经任何断言——README「线程」节已如实标注这条边界。是否要在 `Emit` / `Subscribe` 上加同类断言未定：本模块处在每帧热路径上，加检查要论证它值那一次分支（Message 的入口断言成本之所以可接受，是因为它不在每帧路径上）。
+- **不为 Event 补 PlayMode 侧用例**（2026-10-13，§4.2 处置）：38 例全同步纯内存（锁 + 快照投递），无帧、无 MonoBehaviour、无跨会话静态态；`SubscriptionTracker` 是仅 Editor 观测设施。上面那条若要收口，动作是**加断言**（EditMode 可验），不是 PlayMode 用例。

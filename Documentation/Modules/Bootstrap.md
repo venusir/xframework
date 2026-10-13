@@ -23,7 +23,7 @@
 
 **未决**：
 
-- **GameLauncher 启动途中销毁与在途 `RunAsync` 交叠**（推理，未实测）：`Start` 里 `RunAsync()` 未传 `destroyCancellationToken`，`OnDestroy` 无条件 `Shutdown()`——加载中途销毁时，清理会与在途启动交叠（最坏一条「启动失败」错误日志）。GameLauncher 是 `DontDestroyOnLoad`、正常仅在退出时销毁，影响面小；修法（传令牌 / Shutdown 前取消）未评估。
+- ~~**GameLauncher 启动途中销毁与在途 `RunAsync` 交叠**（推理，未实测）~~ —— **2026-10-13 实测坐实**（`Tests/Runtime/Bootstrap/GameLauncherFrameTests`）：`Start` 里 `RunAsync()` 未传 `destroyCancellationToken`，`OnDestroy` 无条件 `Shutdown()`。实测复现的完整链：销毁 → `Shutdown` → `AssetBootstrapStage.Shutdown()` → `AssetManager.Destroy()` 递增初始化代际 → 在途初始化完成时代际校验抛异常 → 管线失败 → `Start` 记 `[GameLauncher] 启动失败`（共**三条 Error**：`Parallel stage failed` / `Pipeline failed` / `启动失败`）。**另实测出一条本文档此前没记、比预言更重的后果**：`Shutdown` 清理的是**整张登记表**（含从未执行的后置相位），而在途管线是装配期快照、不受清理影响——**被 Shutdown 过的阶段仍会在自己的 Shutdown 之后被执行**（用例 2 的直接证据：其 `ExecuteAsync` 开始那一刻 `ShutdownCount` 已为 1）。影响面仍小（`DontDestroyOnLoad`、正常仅退出时销毁），但「清理后还会被初始化」比「空转安全」重一档。**修法候选与实测效果**：`Start` 改传 `destroyCancellationToken`（`RunAsync` 早已把令牌链接进管线，缺的只是调用方传）——临时注入实测：管线在阶段边界停住、后置相位不再执行（用例 2 的钉现状断言在注入修法后**精确翻转**）。**覆盖边界如实记录**：不响应取消的在途阶段仍会失败并产同一条错误链——修法只覆盖「令牌可穿透 + 阶段边界」两条路。**处置状态：待用户裁定**（属公开行为变更）；探针现为**钉现状**形态，若裁定修复，两条断言翻转为「干净关闭」。
 
 ---
 
@@ -66,7 +66,7 @@
   `SubsystemRegistration` 档，早于首场景 `Awake` 因而早于 `GameLauncher.ConfigureStages`）。
   **`Clear()` 的定位不变**（测试复位用）——两者都只清登记表、不影响已初始化的服务。
   回归用例：`Tests/Runtime/Architecture/SessionResetTests.Bootstrap_ResetClearsTheStageRegistry`（已做改前必红）。
-- **运行中 `Shutdown` 与在途 `RunAsync` 交叠**：与上面 GameLauncher 那条同源，仍未实测。
+- ~~**运行中 `Shutdown` 与在途 `RunAsync` 交叠**：与上面 GameLauncher 那条同源，仍未实测。~~ —— **2026-10-13 已实测**（同 fixture 的用例 2/3）：与上面那条同源同结论——`Shutdown` 不取消任何东西，在途管线（装配期快照）照常执行其剩余阶段；第三方在自己的代码里调 `RunAsync` 且不传令牌时交叠同样成立。修法候选、实测效果与覆盖边界见上条。
 
 ## 审计轮次
 
