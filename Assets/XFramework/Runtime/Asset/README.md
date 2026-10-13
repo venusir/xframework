@@ -123,6 +123,10 @@ main.Dispose();              // 即发即忘：不等结果、不抛异常
 加载界面、场景间传参都不在这里——那些属使用方的游戏流程，框架不预设。能力缺失（第三方实现未实现
 `IAssetSceneLoader`）时返回无效句柄并告警一次。
 
+> **使用方请走 `XFramework.XScene`**（`Runtime/Scene/README.md`）：`SceneManager.LoadSceneAsync` 在这条
+> 能力之上补了选项（模式 / 叠加后激活 / 切完回收）、进度载荷口径与前置校验，并承载「加载界面、场景间
+> 传参、与 UI 共存」三条配方。本节保留的是**资源层**视角。
+
 ### 6. 批量预加载
 
 ```csharp

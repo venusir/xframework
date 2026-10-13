@@ -1312,6 +1312,10 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 与配置元数据提取」的约定冲突；而「自动处理」（替调用方清引用、关面板）等于替项目决定生命周期策略——
 那是架构，不是基础设施。跨场景的引用该由面板自己在 `OnClose` / `OnPoolRecycle` 里解开。
 
+> **场景切换的加载与配对卸载**在 `XFramework.XScene`（`Runtime/Scene/README.md`）：`SceneManager.LoadSceneAsync`
+> 返回可卸载句柄、`SceneLoadOptions` 管模式与叠加后激活。**本节的两条正解与「不做自动检测」不因它改变**——
+> 那个模块同样不碰 UI，`CloseAllAsync()` 仍是你自己的收口动作。
+
 ### 特效层用保留排序带自建
 
 框架**没有**内建 UI 特效层（粒子、叠加特效），但排序空间已经给它留好了位置：`UISorting.SystemOrder = 32000`

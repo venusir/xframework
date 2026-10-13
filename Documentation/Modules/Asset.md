@@ -15,6 +15,11 @@ Runtime/Asset/
 ├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理）
 ├── IAssetRemoteServices.cs        # 远端资源地址服务接口
 ├── IAssetPoolController.cs        # 资源实例池的受控清理能力（可选能力接口）
+├── IAssetSceneLoader.cs           # 场景加载与卸载能力（可选能力接口；2026-10-13 从 IAssetManager 移出）
+├── AssetSceneHandle.cs            # 场景句柄（只读结构体；公开构造，Dispose = 即发即忘卸载）
+├── ISceneLoadOperation.cs         # 场景加载操作的最小面（internal 测试缝）
+├── ISceneLoadSource.cs            # 场景加载来源缝（internal 测试缝）
+├── YooAssetSceneLoadSource.cs     # 缝的默认实现：包住 YooAsset.SceneHandle（internal）
 ├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收）
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
 ├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext
@@ -36,6 +41,7 @@ Runtime/Asset/
 | 2026-08 | 接口扩展：多包架构与初始化配置、卸载控制与存在性查询、热更链路（下载器句柄 + 一键下载）、预加载进度回调、同步加载 / 子资源 / RawFile |
 | 2026-08 | 池语义修正（方案 A）：回池保活——回池保留句柄、真正销毁才释放；补齐取消支持与池状态统计 |
 | 2026-10 | 审计轮（见下两节）：等待者按代际登记（作废路径不再静默）、非成功路径释放句柄、回池去重、门面完备性守卫（第九个采用者）、池 PlayMode 用例、下载器取消路径退订与未 Begin 拒绝、主线程契约（断言 + README 两节） |
+| 2026-10-13 | 场景管理立项轮：场景原语**移出** `IAssetManager` 改由能力接口 `IAssetSceneLoader` 承载（破坏性）；场景加载三缺陷修复（失败路径释放句柄、取消后的后台善后、取 `SceneObject` 取代按名回查）；为可测性抽出 internal 场景加载缝（`ISceneLoadSource` / `ISceneLoadOperation`）。使用方文档的「已知限制」新增 4 条。详见 `Documentation/Modules/Scene.md` 与包 `CHANGELOG` |
 
 详细变更见 git log。
 

@@ -150,6 +150,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   唯一入口；基线与 `CHANGELOG` 迁移表之间**没有机械联系**）；`FrameworkReview.md` §4.3 第 4 条与 §五 第 16 项
   标完成（并记「为什么没用现成分析器」）；`ModuleAudit.md` §八 的候选门禁表**新增**「公开 API 基线」一行。
 
+- 场景管理立项轮：`Documentation/Modules/Scene.md`（新——四条边界的逐条结论、S1/S2/S3 落点取舍、
+  人工验收配方、**实测 vs 推理逐条标注**、测试壳里不可达的那一处）、`Modules/README.md` 文件表、
+  `Modules/Asset.md`（文件结构 + 时间线）、`Roadmap.md`（§三 条目搬迁、`§2.6` 原地留指针、专段由三条改两条）、
+  `FrameworkReview.md`（§三 能力矩阵、§4.1 缺口段回填为完成态、§5.1 归档 #14、§5.2 步 10 标完成并注明
+  「本轮跳过了步骤 1–9」）、包 `README.md` 四张表、`Runtime/UI/README.md`（「切场景」小节指向新模块，
+  并声明两条正解与「不做自动检测」不因它改变）、`Runtime/Asset/README.md`（API 行、模式选择表、
+  已知限制 4 条、接口承诺、指向 `XScene` 的使用方入口）。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。
