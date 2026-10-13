@@ -1,7 +1,7 @@
 namespace XFramework.XLocalization
 {
     /// <summary>
-    /// 语言切换消息。由 <see cref="LocalizationManagerImpl"/> 在切换语言时通过 <see cref="XMessage.MessageManager.Publish"/> 发送。
+    /// 语言切换消息。由 <see cref="LocalizationManagerImpl"/> 在切换语言时通过 <see cref="XMessage.MessageManager.Publish{TMessage}(TMessage)"/> 发送。
     /// <para>任意模块可通过 <c>MessageManager.Subscribe&lt;LanguageChangedMessage&gt;()</c> 监听。</para>
     /// <para>使用 <see langword="readonly struct"/> 避免 GC 分配。</para>
     /// </summary>
@@ -12,6 +12,10 @@ namespace XFramework.XLocalization
         /// </summary>
         public readonly string Language;
 
+        /// <summary>
+        /// 创建语言切换消息。
+        /// </summary>
+        /// <param name="language">新语言标识。</param>
         public LanguageChangedMessage(string language)
         {
             Language = language;
