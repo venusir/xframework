@@ -20,6 +20,7 @@ namespace XFramework.XAsset
     {
         private readonly string _defaultPackageName;
         private readonly Dictionary<string, ResourcePackage> _packages = new Dictionary<string, ResourcePackage>(2);
+        private readonly ISceneLoadSource _sceneLoadSource;
 
         /// <summary>
         /// 构造适配器并固定「主包名」。
@@ -28,9 +29,16 @@ namespace XFramework.XAsset
         /// 只会在两个调用点都显式传参的情况下成为永不生效的第二份字面量。</para>
         /// </summary>
         /// <param name="defaultPackageName">主包名；由调用方解析好后传入。</param>
-        public YooAssetManagerImpl(string defaultPackageName)
+        /// <param name="sceneLoadSource">
+        /// 场景加载来源；省略即生产路径（默认的 YooAsset 适配器）。
+        /// <para><b>它为什么反而有默认值</b>：它不是「第二份真相」，而是<b>测试缝</b>——
+        /// 只有用例会传参（见 <see cref="ISceneLoadSource"/>）。包名那个参数没有默认值，
+        /// 与这个参数有默认值，两条并不矛盾。</para>
+        /// </param>
+        public YooAssetManagerImpl(string defaultPackageName, ISceneLoadSource sceneLoadSource = null)
         {
             _defaultPackageName = defaultPackageName;
+            _sceneLoadSource = sceneLoadSource ?? new YooAssetSceneLoadSource(() => GetOrCreatePackage());
         }
 
         /// <summary>
@@ -496,25 +504,38 @@ namespace XFramework.XAsset
         /// <summary>
         /// 异步加载场景。
         /// <para>失败时返回无效的 <c>default(Scene)</c>，调用方需用 <see cref="Scene.IsValid"/> 校验。</para>
+        /// <para><b>取消不等于中止</b>：YooAsset 的场景加载没有对外可用的中止入口（<c>ProviderOperation</c>
+        /// 的 <c>AbortOperation</c> 是 internal），取消只让本方法提前抛出——底层照跑完、场景最终仍会进来。
+        /// 本方法因此把善后接力到后台（见 <see cref="SettleCancelledSceneLoad"/>），调用方不必自己收拾。</para>
         /// </summary>
         public async UniTask<Scene> LoadSceneAsync(string location, bool additive = false, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
-            var package = GetOrCreatePackage();
-            if (package == null) return default;
-
             var mode = additive ? LoadSceneMode.Additive : LoadSceneMode.Single;
-            var operation = package.LoadSceneAsync(location, mode);
+            var operation = _sceneLoadSource.LoadScene(location, mode);
+            if (operation == null) return default;
 
-            while (!operation.IsDone)
+            try
             {
-                progress?.Invoke(operation.Progress);
-                // 取消时抛出 OperationCanceledException
-                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+                while (!operation.IsDone)
+                {
+                    progress?.Invoke(operation.Progress);
+                    // 取消时抛出 OperationCanceledException（善后见 catch）
+                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                SettleCancelledSceneLoad(operation, mode, location);
+                throw;
             }
 
-            if (operation.Status != EOperationStatus.Succeed)
+            if (!operation.IsSucceed)
             {
                 LogManager.Error(LogCategories.YooAssetManager, "Failed to load scene '{0}': {1}", location, operation.LastError);
+                // 失败路径的句柄必须显式释放：失败时没有场景，YooAsset 挂在 sceneUnloaded 上的兜底
+                // 永不触发，该 provider 会永久留在 SceneHandles 里——此后 UnloadUnusedAssetsAsync
+                // 再也回收不掉它（与资源加载失败路径的 ReleaseFailedHandle 同一条理由）
+                operation.Release();
                 return default;
             }
 
@@ -522,8 +543,69 @@ namespace XFramework.XAsset
             // 会让调用方的进度条停在满格，而它拿到的场景根本不存在
             progress?.Invoke(1f);
 
-            var scene = SceneManager.GetSceneByName(operation.SceneName);
+            // 取操作自己的场景对象，而不是按名字回查：SceneManager.GetSceneByName 在「同名场景已存在」
+            // 或「场景尚未进入查询表」时会给错（或给不出），而操作自己持有的才是权威来源
+            var scene = operation.SceneObject;
+            if (!scene.IsValid() || !scene.isLoaded)
+            {
+                LogManager.Error(LogCategories.YooAssetManager,
+                    "Scene '{0}' reported success but its scene object is not valid/loaded; releasing the handle.", location);
+                operation.Release();
+                return default;
+            }
+
             return scene;
+        }
+
+        /// <summary>
+        /// 取消后的善后入口（fire-and-forget：调用方立刻拿到取消异常，不被加载时长拖住）。
+        /// </summary>
+        private void SettleCancelledSceneLoad(ISceneLoadOperation operation, LoadSceneMode mode, string location)
+            => SettleCancelledSceneLoadAsync(operation, mode, location).Forget();
+
+        /// <summary>
+        /// 取消后的善后：等那个「其实中止不了」的加载跑完，再按模式收干净。
+        /// <para><b>Additive</b>：把它卸掉，世界回到调用前的样子。</para>
+        /// <para><b>Single</b>：<b>什么都不做，只告警</b>。卸载会把工程退化成「一个场景都没有」，
+        /// 比留着更糟；而释放会让引用计数归零，此后一次 <c>UnloadUnusedAssetsAsync</c> 就能回收掉
+        /// 这个<b>仍在场</b>的场景所引用的 bundle。句柄留给 YooAsset 自己的账本：该场景将来被卸载时，
+        /// <c>sceneUnloaded</c> 会自动释放它。</para>
+        /// <para>从接力那一刻起不再响应取消——它唯一的目的是把事情收干净。</para>
+        /// </summary>
+        private async UniTaskVoid SettleCancelledSceneLoadAsync(ISceneLoadOperation operation, LoadSceneMode mode, string location)
+        {
+            try
+            {
+                while (!operation.IsDone)
+                {
+                    await UniTask.Yield(PlayerLoopTiming.Update);
+                }
+
+                if (!operation.IsSucceed)
+                {
+                    operation.Release();
+                    return;
+                }
+
+                if (mode == LoadSceneMode.Additive)
+                {
+                    if (!await operation.UnloadAsync(CancellationToken.None))
+                    {
+                        LogManager.Warning(LogCategories.YooAssetManager,
+                            "A cancelled additive load of scene '{0}' completed but could not be undone; the scene stays loaded.", location);
+                    }
+                }
+                else
+                {
+                    LogManager.Warning(LogCategories.YooAssetManager,
+                        "A cancelled Single-mode load of scene '{0}' completed anyway (YooAsset scene loads cannot be aborted); the scene stays loaded and later unloads normally.", location);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogManager.Error(LogCategories.YooAssetManager,
+                    "Failed to settle a cancelled scene load of '{0}': {1}", location, ex.Message);
+            }
         }
 
         /// <summary>
