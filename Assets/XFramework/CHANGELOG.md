@@ -286,6 +286,22 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   就是臆测）。
   **使用方不受影响**：公开面与运行时行为零改动，改动全部落在 `Documentation/` 下不随包发布的两份文档（包内新增的只有本记录）。
 
+- 包形态两条裁定与一条门禁缺口（`FrameworkReview.md` §5.2 步骤 11 / §4.3 第 11–12 条；2026-10-14 用户确认）：
+  **`Tests~` 形态不采纳**——`~` 在 Unity 里只是「隐藏 / 不导入」，**不是「不分发」**（官方包布局文档 + 本机
+  `Library/PackageCache` 旁证：第三方包的 `Documentation~` / `Samples~` / `Tests/` 都在磁盘上），而 `Samples~`
+  那次的先例证明**本仓自己会跟着不编译**；更要紧的是**门禁会给假绿**——实测把 `Tests` 改名后双平台各报
+  「总计 0 / 失败 0」而脚本退出码 0，退出判据会被假满足。**「把测试移出包目录」也不采纳**：代价 499 个文件与
+  96 行文档引用，而收益只是消费方的导入与磁盘（**不是「少编译 45k 行」**——测试程序集在导入方本就不产出；
+  「45k 行」按实测订正为 51,056 行）。
+  **包在子目录不重构**：`?path=` 是 UPM 官方支持的用法，「不能直接当子模块**包**用」**≠**「不支持子模块」——
+  包 README 的「方式二」已经给了 `file:../Submodules/XFramework/Assets/XFramework` 这条配方。两条各留可判定的重开判据。
+  **裸消费方探针复核**（2026-10-14）：用 `file:` 引本仓包的工程里 `Library/ScriptAssemblies` 只产出
+  `Venusy609.Xframework` 与 `Venusy609.Xframework.Editor` 两个程序集、零 `error CS`；**同一个工程里五个官方包
+  （Input System / uGUI / Multiplayer Center / Test Framework / SBP）的 `Tests/` 也一个都没产出**，而
+  `UnityEngine.TestRunner` 在位——「未列入 `testables` ⇒ 测试程序集不编译」由此证实是**全局规则**，不是本包特例。
+  **仓根工具一处修复**：`Tools/run-tests.ps1` 全量跑 0 用例时原先退出 0（上条实测暴露的假绿缺口），现判失败；
+  `Workflow.md` 的参数表同步。**使用方不受影响**：公开面与运行时行为零改动（包内新增的只有本记录）。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。
