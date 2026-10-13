@@ -1,0 +1,51 @@
+# XFramework —— 编辑器侧的编码规范
+#
+# 真相来源是 CLAUDE.md 的「编码规范」与「行尾与文本资源由仓库根 .gitattributes 定」两节。
+# 两份文件分工不同：**.gitattributes 管的是仓库内容**（提交与检出时怎么归一），
+# **这一份管的是编辑器**（保存时按不按规范写）。两者不是替代关系。
+#
+# 放在仓库根而不是包内：它服务本仓（包目录是 Assets/XFramework，这份文件在它之外），
+# 因此不随 UPM 包分发——与 Documentation/ 的定位同构。
+#
+# 它不进门禁，也没有守卫：本仓没有构建期分析器（无 Directory.Build.props / .ruleset /
+# .globalconfig，Unity 生成的 csproj 又被 git 忽略），所以这些键只被**编辑器里的工具**读取。
+# 校验一下：坏了的表现是「编辑器不再按规范缩进」——那正是这份文件出现之前的状态，
+# 不会静默产出错误产物，故不值得为它加一条守卫。
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# 缩进只钉**实测一致**的两类，不设全局默认值：
+# 全包 .cs 实测 4,324 行 4 空格缩进、0 行 Tab，故钉死；
+# JSON 刻意不钉——仓内它本来就是混的（package.json 用 Tab、Packages/manifest.json 用 2 空格），
+# 钉任何一种都会把另一种改成混排。不钉 = 保持现状。
+[*.cs]
+indent_style = space
+indent_size = 4
+# 下面三键对应 CLAUDE.md 的「风格」一条：Allman 大括号、块级命名空间、
+# using 按 System → 第三方 → XFramework 排序（这条只能表达「System 在前」这一半）。
+# 它们由编辑器里的 Roslyn 系工具读取；本仓没有构建期分析器，故不构成门禁。
+csharp_new_line_before_open_brace = all
+csharp_style_namespace_declarations = block_scoped
+dotnet_sort_system_directives_first = true
+
+[*.ps1]
+indent_style = space
+indent_size = 4
+
+# Windows 批处理保持 CRLF —— 镜像 .gitattributes（cmd.exe 对 LF 结尾的批处理有已知解析怪癖）
+[*.{bat,cmd}]
+end_of_line = crlf
+
+# Markdown：**行尾两个空格是硬换行**，trim 会改渲染。
+# 这不是预防性的：仓内实测有 5 处在用（如 Runtime/File/README.md 的「**先说**：…  」两行并列）。
+[*.md]
+trim_trailing_whitespace = false
+
+# Unity 自己写回的 YAML 文本：编辑器 trim 只会制造与 Unity 的来回报文（diff 噪声）
+[*.{unity,prefab,asset,meta,mat,anim,controller}]
+trim_trailing_whitespace = false
