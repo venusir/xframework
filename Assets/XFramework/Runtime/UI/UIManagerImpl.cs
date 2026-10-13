@@ -1677,6 +1677,8 @@ namespace XFramework.XUI
         /// <summary>
         /// 结束一次在途打开：摘掉记录并把结果广播给全部加入者。
         /// </summary>
+        /// <param name="type">面板类型，作为在途打开记录表的键。</param>
+        /// <param name="entry">在途打开记录；其 Joiners 为 null 表示没有加入者。</param>
         /// <param name="opened">打开成功的面板；失败或未提交时为 null，加入者据此拿到 null。</param>
         private void SettleOpening(Type type, InFlightOpen entry, UIPanelBase opened)
         {

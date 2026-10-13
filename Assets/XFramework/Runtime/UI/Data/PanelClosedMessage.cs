@@ -3,7 +3,7 @@ using System;
 namespace XFramework.XUI.Data
 {
     /// <summary>
-    /// 面板关闭消息。由 <see cref="UIManagerImpl"/> 在面板关闭完成时通过 <see cref="XMessage.MessageManager.Publish"/> 发送。
+    /// 面板关闭消息。由 <see cref="UIManagerImpl"/> 在面板关闭完成时通过 <see cref="XMessage.MessageManager.Publish{TMessage}(TMessage)"/> 发送。
     /// <para>任意模块可通过 <c>MessageManager.Subscribe&lt;PanelClosedMessage&gt;()</c> 监听。</para>
     /// <para>使用 <see langword="readonly struct"/> 避免 GC 分配。</para>
     /// </summary>
@@ -14,6 +14,10 @@ namespace XFramework.XUI.Data
         /// </summary>
         public readonly Type PanelType;
 
+        /// <summary>
+        /// 创建面板关闭消息。
+        /// </summary>
+        /// <param name="panelType">面板类型。</param>
         public PanelClosedMessage(Type panelType)
         {
             PanelType = panelType;

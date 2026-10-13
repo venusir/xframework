@@ -40,6 +40,7 @@ namespace XFramework.XUI
         /// <param name="assetPath">面板预制体的 YooAsset 地址。</param>
         /// <param name="layer">面板层级，数值越大越靠前。建议使用常量管理，默认为 100。</param>
         /// <param name="userData">传递给面板 <see cref="UIPanelBase.OnOpen"/> 的自定义数据。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         /// <returns>打开的面板实例，支持 await。</returns>
         UniTask<T> OpenAsync<T>(string assetPath, int layer = 100, object userData = null,
             CancellationToken cancellationToken = default) where T : UIPanelBase;
@@ -48,13 +49,16 @@ namespace XFramework.XUI
         /// 关闭指定类型的 UI 面板。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask CloseAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
             where T : UIPanelBase;
 
         /// <summary>
         /// 关闭指定的面板实例。
         /// </summary>
+        /// <param name="panel">要关闭的面板实例。</param>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask CloseAsync(UIPanelBase panel, bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -70,7 +74,9 @@ namespace XFramework.XUI
         /// <summary>
         /// 关闭指定层级的所有面板。
         /// </summary>
+        /// <param name="layer">要关闭的层级。</param>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask CloseLayerAsync(int layer, bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
@@ -81,6 +87,7 @@ namespace XFramework.XUI
         /// <para>面板自身持有的遮罩会随面板一起释放，无需配对调用。</para>
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接销毁。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask CloseAllAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         #endregion
@@ -102,12 +109,14 @@ namespace XFramework.XUI
         /// 关闭最后一个面板。</para>
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask PopAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 依次弹出栈顶面板，直到指定类型的面板成为栈顶。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask PopToAsync<T>(bool immediate = false, CancellationToken cancellationToken = default)
             where T : UIPanelBase;
 
@@ -115,12 +124,14 @@ namespace XFramework.XUI
         /// 依次弹出栈顶面板，只保留最早打开的那一个（栈底）。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask PopToRootAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 返回上一个面板。等价于 <see cref="PopAsync"/>，语义化命名，供返回键处理调用。
         /// </summary>
         /// <param name="immediate">是否跳过关闭动画，直接回池。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
         UniTask GoBackAsync(bool immediate = false, CancellationToken cancellationToken = default);
 
         /// <summary>

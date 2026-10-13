@@ -26,15 +26,27 @@ namespace XFramework.XUI.View
         [Tooltip("背景层（如主界面背景）。对应 UILayers.Background。")]
         public int layerBackground = UILayers.Background;
 
+        /// <summary>
+        /// 默认层（大部分面板使用）。与 <see cref="layerBackground"/> 同类：编辑器便利字段，不被运行时读取。
+        /// </summary>
         [Tooltip("默认层（大部分面板使用）。对应 UILayers.Default。")]
         public int layerDefault = UILayers.Default;
 
+        /// <summary>
+        /// 弹出层（弹窗、确认框）。与 <see cref="layerBackground"/> 同类：编辑器便利字段，不被运行时读取。
+        /// </summary>
         [Tooltip("弹出层（弹窗、确认框）。对应 UILayers.Popup。")]
         public int layerPopup = UILayers.Popup;
 
+        /// <summary>
+        /// 顶层（Toast、系统提示）。与 <see cref="layerBackground"/> 同类：编辑器便利字段，不被运行时读取。
+        /// </summary>
         [Tooltip("顶层（Toast、系统提示）。对应 UILayers.Top。")]
         public int layerTop = UILayers.Top;
 
+        /// <summary>
+        /// 模态遮罩层。与 <see cref="layerBackground"/> 同类：编辑器便利字段，不被运行时读取。
+        /// </summary>
         [Tooltip("模态遮罩层。对应 UILayers.Mask，也是 ShowMask 的默认值。")]
         public int layerMask = UILayers.Mask;
 

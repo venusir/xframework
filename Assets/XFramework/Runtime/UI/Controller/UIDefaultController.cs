@@ -36,6 +36,7 @@ namespace XFramework.XUI.Controller
 
         #region IUIController Implementation
 
+        /// <inheritdoc/>
         public UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData,
             CancellationToken cancellationToken = default)
         {
@@ -48,6 +49,7 @@ namespace XFramework.XUI.Controller
             return UniTask.FromResult(true);
         }
 
+        /// <inheritdoc/>
         public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData,
             CancellationToken cancellationToken = default)
         {
@@ -57,6 +59,7 @@ namespace XFramework.XUI.Controller
             return UniTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate,
             CancellationToken cancellationToken = default)
         {
@@ -69,6 +72,7 @@ namespace XFramework.XUI.Controller
             return UniTask.FromResult(true);
         }
 
+        /// <inheritdoc/>
         public UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default)
         {
             if (_verbose)
@@ -77,6 +81,7 @@ namespace XFramework.XUI.Controller
             return UniTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
         {
             if (_verbose)
