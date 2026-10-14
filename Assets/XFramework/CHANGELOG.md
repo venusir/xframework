@@ -312,6 +312,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **仓库根另补了一份极简 README**（评估中发现：这个公开仓原本没有门面，GitHub 落地页是一张裸文件列表），只指路不列内容。
   **使用方不受影响**：五项全部落在包目录之外，包内一个字都没动（本记录是唯一例外）。
 
+- 工作区行尾归一化（`FrameworkReview.md` §5.2 步骤 13 / §4.3-9 尾注；2026-10-14）：工作区残留的 **259 个文本文件**已就地重写为 LF，判据 `git ls-files --eol` 的 `w/crlf` 归零。
+  它们是 2026-10-11 `.gitattributes` 落地**之前**、系统级 `core.autocrlf=true` 下 git 自身物化工作区留下的**冻结核**（此后零新增；`Tools/` 写盘、Editor 写盘、Unity 的 `.meta` 导入三条嫌疑均已实测排除，探针见 `Documentation/Workflow.md` §六）。
+  **索引与入库内容零变化**：`.gitattributes` 一直保证入库为 LF，故本步**没有任何内容提交**，`git status` 全程干净。
+  **使用方不受影响**：公开面与运行时行为零改动，归一的是开发机**工作区字节**这一处旧账（`.gitattributes` 管仓库内容、`.editorconfig` 管编辑器保存，本条补上第三处）。
+  **未封堵的一处如实记录**：Unity 菜单新建的脚本仍会以 CRLF 落盘（`ProjectSettings/EditorSettings.asset` 的 `m_LineEndingsForNewScripts = 0` / OS Native，2026-10-14 用户裁定保持不动）——只影响工作区，不影响入库内容；判据与再归一化配方同在 `Workflow.md` §六。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。

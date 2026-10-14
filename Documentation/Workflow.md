@@ -138,7 +138,14 @@
   -UpdateApiBaseline`（内部设 `XFW_UPDATE_API_BASELINE=1`，测试只认 `"1"`）。写入的基线**必须与它的
   `.meta` 一起提交**——`.meta` 由 Unity 经测试壳回写，漏 `git add` 没有任何机械信号（同上一条）。
 - **`.meta` 门禁看的是磁盘、不是索引**（2026-10-12 实测）：`check-docs.ps1` 报「全部条目都有 `.meta`」，而四个新测试目录的**目录级** `.meta` 一直没入库——它们由 Unity 在导入新目录时生成、经测试壳回写，人没 `git add` 就一直是未跟踪状态。**门禁本来就只能这样**（`.meta` 由 Unity 生成，不查磁盘就没有意义），所以收尾时**还要用 `git status --short` 肉眼核一遍未跟踪文件**——这一步没有机械替代。
-- **工作区行尾漂移（2026-10-13 发现，未修）**：259 个文本文件工作区物理是 CRLF、git 索引是 LF——`.gitattributes` 兜住的是**仓库内容**（提交内容正确、`git status` 干净），提交时的 `CRLF will be replaced by LF` 警告属正常，**别为此全量重写工作区**；**行尾判据用 `git ls-files --eol`**。归一化条目见 `FrameworkReview.md` §5.2 步骤 13。
+- **工作区行尾（2026-10-14 已归一；判据随时可查）**：**判据用 `git ls-files --eol`**——`w/crlf` 表示该文件的磁盘字节是 CRLF 而索引是 LF，`w/lf` 才是与仓规一致。**`git status` 看不见这件事**（比较时会归一，所以提交内容一直是对的），只有这一条判据能发现。2026-10-13 发现时残留 259 个 `w/crlf`，2026-10-14 已就地归一（归零、`git status` 仍净、**内容零变化故无提交**）。
+  **成因**：系统级 `core.autocrlf=true` 加 `.gitattributes`（2026-10-11）落地**之前** git 自身物化工作区留下的**冻结核**（决定性证据：reflog 里 2026-09-10 的 `reset` 恰好只重写 3 个文件而 3 个全是 `w/crlf`；属性层对这批与 LF 批逐字同规则，故不是规则漏网），此后零新增——`Tools/` 两脚本（唯一写跟踪文本的 `-UpdateApiBaseline` 走 C# 显式 `\n`）、Editor 侧唯一写盘路径（`XFrameworkDependencyInstaller` 写 `manifest.json`、保留原字节）、Unity 的 `.meta` 导入（新 `.meta` 实测全 LF）三条嫌疑均已实测排除。
+  **未封堵的一处**：Unity 菜单新建的脚本会以 CRLF 落盘（`ProjectSettings/EditorSettings.asset` 的 `m_LineEndingsForNewScripts = 0` / OS Native，2026-10-14 用户裁定不改动该工程设置）——它只影响工作区字节，提交时的 `CRLF will be replaced by LF` 警告属正常。
+  **再归一化配方**（Git Bash；两步缺一不可，先确认 `git status` 干净、Unity 已关闭）：
+  `git ls-files --eol | awk -F'\t' '$1 ~ /w\/crlf/ {print $2}' > /tmp/eol.txt`（生成清单）→
+  `xargs -0 -a /tmp/eol.txt sed -i 's/\r$//'`（字节归一）→
+  `xargs -0 -a /tmp/eol.txt git checkout --`（**落定索引 stat**：`sed` 单独跑会后留**假报的 ` M`**——哈希与索引逐字相同、`git diff` 空，但 `git status` 说改了；这一条从索引重写并刷新 stat，M 即消失）。
+  不要走 `rm` + `git checkout --`（同样有效，但中途会短暂删掉工作区文件）；`git checkout-index -f` 实测是空操作。全量重检出（`git rm --cached -r . && git reset --hard`）代价大而收益为零——1043 个本来就是 LF。
 - **零分配断言在本环境可能恒真（尺子坏了）——2026-10-12 已处置**：2026-10-11 实测
   `GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），
   `Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0；
