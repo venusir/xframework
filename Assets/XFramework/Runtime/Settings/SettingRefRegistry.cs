@@ -32,6 +32,11 @@ namespace XFramework.XSettings
     /// <c>DefaultPathClaims</c> 同构——句柄是常驻对象（通常声明为 <c>static readonly</c>，活到进程结束），
     /// 若清空，则「创建句柄 → Destroy → 重新 Initialize」之后句柄读值仍然正确、却再也不重放，
     /// 正是本模块文档反复点名的「看起来能用、实际静默失效」。</para>
+    /// <para><b>但在播放会话边界清空（2026-10-14）：</b><see cref="SettingsManager.Destroy"/> 与「会话边界」
+    /// 是两件事——前者是使用方主动重载管理器，后者是关域重载时上一会话的一切都已作废。边界上只清表并
+    /// <b>递增代际号</b>；<b>被使用过</b>的句柄（读 / 写 / <c>TryWriteValue</c> / <c>Subscribe</c>）经
+    /// <see cref="SettingRef{T,TField}"/> 的「用即重登记」自动回到表里，没人再用的句柄自然出表。
+    /// 这样既不跨会话无界累积（第二会话重复重放、重复日志），也不牺牲 <c>static readonly</c> 句柄的重放。</para>
     /// <para><b>线程：</b>与门面的管理器注册表一致，只允许主线程创建与重放。</para>
     /// </summary>
     internal static class SettingRefRegistry<T> where T : class, new()
@@ -41,14 +46,44 @@ namespace XFramework.XSettings
         /// <summary>本设置类型下已创建的句柄。创建即入表，无退表路径（见类型注释）。</summary>
         private static readonly List<IReplayableSettingRef<T>> Refs = new();
 
+        /// <summary>
+        /// 会话代际号：每次会话边界递增。句柄记下自己入表时的代际，两者不等即说明它已被清出表，
+        /// 下次被使用时重新入表——这是「跨会话仍被使用的句柄」与「已被丢弃的句柄」之间
+        /// 唯一 O(1) 且不依赖 GC 的区分手段。
+        /// </summary>
+        private static int _generation = 1;
+
+        #endregion
+
+        #region Constructors
+
+        /// <summary>静态构造：向会话协调器登记本泛型的复位委托（未被触碰过的类型不会走到这里）。</summary>
+        static SettingRefRegistry()
+        {
+            SettingRefSessionCoordinator.Register(ResetForNewSession);
+        }
+
         #endregion
 
         #region Internal
 
+        /// <summary>当前会话代际号。句柄以它判断自己是否还在表里。</summary>
+        internal static int Generation => _generation;
+
         /// <summary>
-        /// 登记一个句柄。由 <see cref="SettingRef{T,TField}.Create"/> 调用。
+        /// 会话边界复位：清空本类型的重放表并递增代际号。由 <see cref="SettingRefSessionCoordinator"/> 调用。
+        /// <para><b>不清句柄本身</b>——它由使用方持有（通常 <c>static readonly</c>），本表只存重放登记。</para>
         /// </summary>
-        /// <param name="handle">新创建的句柄。</param>
+        private static void ResetForNewSession()
+        {
+            Refs.Clear();
+            _generation++;
+        }
+
+        /// <summary>
+        /// 登记一个句柄。由 <see cref="SettingRef{T,TField}"/> 的「用即重登记」调用（创建也是一次使用）。
+        /// </summary>
+        /// <param name="handle">要登记的句柄。</param>
         internal static void Register(IReplayableSettingRef<T> handle)
         {
             Refs.Add(handle);

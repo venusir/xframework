@@ -182,6 +182,25 @@ namespace XFramework.XSettings
             }
         }
 
+        /// <summary>
+        /// 会话边界复位：关闭域重载（Enter Play Mode Options → 取消 Reload Domain）时，上一播放会话的静态字段
+        /// 会存活到第二会话——<see cref="Managers"/> 里留着上一会话的管理器实例，使本门面的
+        /// <see cref="Initialize{T}(ISettingsStore, Func{T}, SettingsOptions)"/> 只打一条告警就<b>返回旧实例</b>
+        /// （使用方照文档再调一次也无法自救）；句柄重放表里的旧句柄则会让第二会话的
+        /// <c>Apply</c> / <c>Load</c> / <c>Reset</c> 重复重放（重复日志、重复副作用）。
+        /// <para><b>只丢引用、不调 Dispose</b>（与 Input / UI / Asset / Config / Localization / File 等门面同形）：
+        /// 会话边界上旧实例持有的资源随播放会话一起消失，替它收尾反而可能与引擎的拆除顺序打架。</para>
+        /// <para><b>刻意不清默认路径占用表</b>：占用关系对应磁盘文件，见 <see cref="DefaultPathClaims"/> 的字段注释。</para>
+        /// <para>挂在 <c>SubsystemRegistration</c> 档——早于首场景 Awake，因而早于使用方的第一次 <c>Initialize</c>。
+        /// 未初始化时调用是幂等空操作（与其它门面一致）。</para>
+        /// </summary>
+        [UnityEngine.RuntimeInitializeOnLoadMethod(UnityEngine.RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            Managers.Clear();
+            SettingRefSessionCoordinator.ClearAll();
+        }
+
         #endregion
 
         #region Data Access

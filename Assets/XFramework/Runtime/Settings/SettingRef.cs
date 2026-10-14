@@ -26,6 +26,11 @@ namespace XFramework.XSettings
     /// <para><b>写入契约：</b>直接改 POCO 字段<b>不会</b>通知也不会置脏；要通知必须经本类的
     /// <see cref="Value"/> 写入。这与本模块改造前的行为一致（当时直改字段同样不通知），
     /// 属于保留的已知限制。</para>
+    /// <para><b>会话边界（关域重载）：</b>重放登记是<b>会话级</b>的——门面在会话开始时清空重放表
+    /// （<see cref="SettingsManager.ResetForNewSession"/>），句柄则在<b>被使用时</b>（读 / 写 /
+    /// <see cref="TryWriteValue"/> / <see cref="Subscribe"/>）自动重新入表。于是 <c>static readonly</c>
+    /// 句柄跨会话照常重放，而上一会话遗留、没人再用的句柄会自然出表（不跨会话累积）。
+    /// <b>维护不变量：给本类加任何新的公开成员时，必须在入口调用 <c>EnsureRegistered()</c>。</b></para>
     /// <para><b>线程：</b>读写须在主线程。</para>
     /// </summary>
     /// <typeparam name="T">设置对象类型。</typeparam>
@@ -40,6 +45,13 @@ namespace XFramework.XSettings
         private readonly Action<T, TField> _setter;
         private readonly string _path;
         private readonly IEventStream<TField> _changedStream = EventStream.Create<TField>();
+
+        /// <summary>
+        /// 本句柄入表时的会话代际号。<see cref="SettingRefRegistry{T}.Generation"/> 与之不等即说明
+        /// 句柄已被会话边界清出表，下次使用时要重新登记。初值 0 与注册表的初值 1 天然不等，
+        /// 故新建句柄首次使用必然入表。
+        /// </summary>
+        private int _registeredGeneration;
 
         #endregion
 
@@ -97,10 +109,10 @@ namespace XFramework.XSettings
                 Expression.Lambda<Action<T, TField>>(assignBody, sourceParam, valueParam).Compile(),
                 path);
 
-            // 创建即入表，实例被整体替换时由注册表重放当前值。
+            // 创建即入表（创建也算一次「使用」），实例被整体替换时由注册表重放当前值。
             // 登记点选在 Create 而非 SettingsManager.Ref：本类构造函数私有，Create 是唯一工厂，
             // 放这里可保证将来新增创建路径也不会漏登记
-            SettingRefRegistry<T>.Register(handle);
+            handle.EnsureRegistered();
 
             return handle;
         }
@@ -124,6 +136,8 @@ namespace XFramework.XSettings
         /// <returns>确实写入了返回 true；设置类型不可用时返回 false。</returns>
         public bool TryWriteValue(TField value, out TField actual)
         {
+            EnsureRegistered();
+
             if (!SettingsManager.IsRegistered<T>())
             {
                 actual = default;
@@ -142,10 +156,15 @@ namespace XFramework.XSettings
         /// </summary>
         public TField Value
         {
-            get => _getter(Current());
+            get
+            {
+                EnsureRegistered();
+                return _getter(Current());
+            }
 
             set
             {
+                EnsureRegistered();
                 var settings = Current();
                 if (EqualityComparer<TField>.Default.Equals(_getter(settings), value))
                     return;
@@ -175,6 +194,8 @@ namespace XFramework.XSettings
         {
             if (handler == null)
                 throw new ArgumentNullException(nameof(handler));
+
+            EnsureRegistered();
 
             // 先注册再立即回调:与 ReactiveProperty 相同顺序,确保回调中的订阅不会丢失后续消息
             var handle = _changedStream.Subscribe(handler);
@@ -223,6 +244,27 @@ namespace XFramework.XSettings
         #endregion
 
         #region Internal
+
+        /// <summary>
+        /// 「用即重登记」：句柄被会话边界清出表后，下次被使用（读 / 写 / <c>TryWriteValue</c> / <c>Subscribe</c>）
+        /// 时自己回到表里。
+        /// <para><b>为什么要它：</b>会话边界必须清表（否则第二会话里上一会话遗留的句柄会跟着重放——
+        /// 重复日志、重复副作用），但 <c>static readonly</c> 句柄在第二会话没有机会「再 Ref 一次」，
+        /// 一律清掉等于把它们静默降级成「永不重放」。代际号是两者之间唯一 O(1) 且不依赖 GC 的判据：
+        /// <b>被用过的句柄</b>重新入表，<b>没人再用的句柄</b>留在表外并被回收。</para>
+        /// <para><b>零分配、无异常路径</b>：读一次静态代际号比较即可，可被内联。</para>
+        /// </summary>
+        private void EnsureRegistered()
+        {
+            var generation = SettingRefRegistry<T>.Generation;
+            if (_registeredGeneration == generation)
+            {
+                return;
+            }
+
+            SettingRefRegistry<T>.Register(this);
+            _registeredGeneration = generation;
+        }
 
         /// <summary>取当前设置实例。句柄不缓存实例，这正是它能自动跟随 Load/Reset/Apply 的原因。</summary>
         private static T Current()

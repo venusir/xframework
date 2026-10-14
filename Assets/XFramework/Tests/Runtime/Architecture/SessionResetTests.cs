@@ -14,6 +14,7 @@ using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
+using XFramework.XSettings;
 using XFramework.XUI;
 using XFramework.XUpdate;
 
@@ -51,6 +52,27 @@ namespace XFramework.Architecture.Tests
             }
         }
 
+        /// <summary>门面级用例的最小设置类型（私有嵌套：不与他处共用重放表）。</summary>
+        [Serializable]
+        private sealed class SessionProbeSettings
+        {
+            public float Volume = 1f;
+        }
+
+        /// <summary>最小内存存储替身：本 fixture 只关心门面的初始化/复位，不碰磁盘。</summary>
+        private sealed class MemoryStore : ISettingsStore
+        {
+            private object _data;
+
+            public bool Exists() => _data != null;
+
+            public T Load<T>() where T : class, new() => _data as T ?? new T();
+
+            public void Save<T>(T settings) where T : class, new() => _data = settings;
+
+            public void Delete() => _data = null;
+        }
+
         #endregion
 
         #region Fixture
@@ -68,6 +90,7 @@ namespace XFramework.Architecture.Tests
             AssetManager.Destroy();
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
+            SettingsManager.Destroy();
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
@@ -84,6 +107,7 @@ namespace XFramework.Architecture.Tests
             AssetManager.Destroy();
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
+            SettingsManager.Destroy();
 
             if (_uiRoot != null)
                 UnityEngine.Object.DestroyImmediate(_uiRoot);
@@ -103,6 +127,7 @@ namespace XFramework.Architecture.Tests
             FileManager.ResetForNewSession();
             AssetManager.ResetForNewSession();
             Bootstrap.ResetForNewSession();
+            SettingsManager.ResetForNewSession();
             InstanceTracker.AutoInit();
         }
 
@@ -348,6 +373,26 @@ namespace XFramework.Architecture.Tests
             FileManager.Initialize();
 
             Assert.IsTrue(FileManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
+
+        /// <summary>
+        /// Settings 门面的会话复位（2026-10-14 补：它当时被同族处置漏掉）。
+        /// <para><b>为什么必须显式断言</b>：第二会话复用旧实例只表现为一条 <c>LogWarning</c>，
+        /// 而 runner 只把意外 Error / Assert / Exception 判失败——不写断言这条缺陷会静默通过。</para>
+        /// </summary>
+        [Test]
+        public void Settings_ReinitializesAfterSessionReset()
+        {
+            SettingsManager.Initialize<SessionProbeSettings>(new MemoryStore(), () => new SessionProbeSettings());
+            Assert.IsTrue(SettingsManager.IsInitialized, "前提校验：会话 1 应当初始化成功");
+
+            SimulateNewSession();
+            Assert.IsFalse(SettingsManager.IsInitialized,
+                "会话边界过后门面应回到未初始化态（否则第二会话的 Initialize 会被『告警 + 返回旧实例』拦下）");
+
+            SettingsManager.Initialize<SessionProbeSettings>(new MemoryStore(), () => new SessionProbeSettings());
+
+            Assert.IsTrue(SettingsManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
         }
 
         #endregion
