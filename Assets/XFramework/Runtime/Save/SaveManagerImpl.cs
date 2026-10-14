@@ -577,7 +577,11 @@ namespace XFramework.XSave
                 if (!exists)
                     return false;
 
-                DeleteSlotFiles(slotPath);
+                await DeleteSlotFilesAsync(slotPath, cancellationToken);
+
+                // 删除在池线程上执行（FileManager.DeleteAsync），返回前切回主线程——本模块的公开承诺是
+                // 「所有涉及 IO 的成员返回前都会切回主线程」
+                await ReturnToMainThread(cancellationToken);
                 return true;
             }
             finally
@@ -619,7 +623,11 @@ namespace XFramework.XSave
                     if (SavePathUtility.TryParseSlot(files[i], out _))
                         deleted++;
 
-                    FileManager.Delete(SaveDomain, files[i]);
+                    await FileManager.DeleteAsync(SaveDomain, files[i], cancellationToken);
+
+                    // 每个文件删完切回主线程：下一轮的 ReportProgress 会把回调交给调用方代码
+                    // （进度条最可能在那里碰 Unity 对象），它的线程不该因为删除改走池线程而改变
+                    await ReturnToMainThread(cancellationToken);
                 }
 
                 ReportProgress(progress, 1f, $"已删除 {deleted} 个存档");
@@ -689,7 +697,10 @@ namespace XFramework.XSave
 
                 // 删除放在最后：写目标成功之前绝不动源，这样移动失败时数据仍在源槽位
                 if (deleteSource)
-                    DeleteSlotFiles(fromPath);
+                {
+                    await DeleteSlotFilesAsync(fromPath, cancellationToken);
+                    await ReturnToMainThread(cancellationToken);
+                }
 
                 return destMeta;
             }
@@ -1132,14 +1143,17 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 删除槽位文件及其全部配套文件（侧车 / 备份 / 临时文件）。
+        /// <para>经 <c>FileManager.DeleteAsync</c> 逐个删除——它在池线程上执行，故这一串删除不再压在主线程
+        /// （此前 File 只有同步原语，1~4 次同步删除全落在调用线程上；<b>调用方必须自行切回主线程</b>）。</para>
         /// </summary>
         /// <param name="slotPath">槽位载荷的相对路径。</param>
-        private static void DeleteSlotFiles(string slotPath)
+        /// <param name="cancellationToken">取消令牌。</param>
+        private static async UniTask DeleteSlotFilesAsync(string slotPath, CancellationToken cancellationToken)
         {
-            FileManager.Delete(SaveDomain, slotPath);
-            FileManager.Delete(SaveDomain, slotPath + SavePathUtility.MetaFileSuffix);
-            FileManager.Delete(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix);
-            FileManager.Delete(SaveDomain, slotPath + FilePathUtility.TempFileSuffix);
+            await FileManager.DeleteAsync(SaveDomain, slotPath, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, slotPath + SavePathUtility.MetaFileSuffix, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.TempFileSuffix, cancellationToken);
         }
 
         /// <summary>
@@ -1300,7 +1314,10 @@ namespace XFramework.XSave
                         if (SavePathUtility.TryParseSlot(files[i], out _))
                             deleted++;
 
-                        FileManager.Delete(SaveDomain, files[i]);
+                        await FileManager.DeleteAsync(SaveDomain, files[i], cancellationToken);
+
+                        // 同 DeleteAllSlotsAsync：删完切回主线程，进度回调的线程不变
+                        await ReturnToMainThread(cancellationToken);
                     }
                 }
 

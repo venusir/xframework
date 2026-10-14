@@ -10,6 +10,7 @@ using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XData;
 using XFramework.XFileManager;
+using XFramework.XFileManager.Tests;
 using XFramework.XSerialize;
 
 namespace XFramework.XSave.Tests
@@ -49,9 +50,12 @@ namespace XFramework.XSave.Tests
             _fileProvider?.Cleanup();
             _fileProvider = new TempFileProvider();
 
-            // FileManager 支持 Destroy 后重新 Initialize（提交 6a），是每个测试注入独立临时目录的前提
+            // FileManager 支持 Destroy 后重新 Initialize（提交 6a），是每个测试注入独立临时目录的前提。
+            // 外面套一层记录删除线程的包装（转发全部能力接口，不会触发降级告警）：
+            // 「删除不在主线程」这条断言必须在被观测的那一层记录，测试体的续体线程不可信
             FileManager.Destroy();
-            FileManager.Initialize(_fileProvider);
+            FileManager.Initialize(new ThreadRecordingFileProvider(_fileProvider));
+            ThreadRecordingFileProvider.Reset();
             Serializer.Initialize();
             DataManager.Initialize(new DataManagerImpl());
             SaveManager.Initialize();
@@ -1054,6 +1058,67 @@ namespace XFramework.XSave.Tests
             Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_2.save.meta"), "侧车应被清理");
             Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save" + FilePathUtility.BackupFileSuffix),
                 "备份应被清理");
+        }
+
+        [Test]
+        public async Task DeleteSlotAsync_RunsDeletionOffTheMainThread()
+        {
+            // 主线程号在任何 await 之前取（测试体的续体线程不可信，见 fixture 注与 File 侧同款用例）
+            var mainThreadId = Environment.CurrentManagedThreadId;
+            await SaveManager.SaveAsync(1);
+            ThreadRecordingFileProvider.Reset();
+
+            await SaveManager.DeleteSlotAsync(1);
+
+            Assert.Greater(ThreadRecordingFileProvider.DeleteCount, 0, "前提：确实发生过删除");
+            Assert.IsFalse(ThreadRecordingFileProvider.AnyDeleteRanOn(mainThreadId),
+                "槽位的 1~4 次删除应经 FileManager.DeleteAsync 在池线程执行——不得压在主线程上");
+        }
+
+        [Test]
+        public async Task DeleteAllSlotsAsync_RunsDeletionOffTheMainThread()
+        {
+            var mainThreadId = Environment.CurrentManagedThreadId;
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+            ThreadRecordingFileProvider.Reset();
+
+            var deleted = await SaveManager.DeleteAllSlotsAsync();
+
+            Assert.AreEqual(2, deleted, "前提：两个槽位都被删掉");
+            Assert.Greater(ThreadRecordingFileProvider.DeleteCount, 1, "前提：批量删除发生了多次");
+            Assert.IsFalse(ThreadRecordingFileProvider.AnyDeleteRanOn(mainThreadId),
+                "批量删除每一个文件都应在池线程执行（否则 N 个槽位会在主线程上串成一串同步 IO）");
+        }
+
+        [Test]
+        public async Task DeletePlayerAsync_RunsDeletionOffTheMainThread()
+        {
+            var mainThreadId = Environment.CurrentManagedThreadId;
+            SaveManager.SetCurrentPlayer("Alice");
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(2);
+            ThreadRecordingFileProvider.Reset();
+
+            var deleted = await SaveManager.DeletePlayerAsync("Alice");
+
+            Assert.AreEqual(2, deleted, "前提：该玩家的两个槽位都被删掉");
+            Assert.IsFalse(ThreadRecordingFileProvider.AnyDeleteRanOn(mainThreadId));
+        }
+
+        [Test]
+        public async Task MoveSlotAsync_RunsSourceDeletionOffTheMainThread()
+        {
+            var mainThreadId = Environment.CurrentManagedThreadId;
+            await SaveManager.SaveAsync(1);
+            ThreadRecordingFileProvider.Reset();
+
+            var destMeta = await SaveManager.MoveSlotAsync(1, 3);
+
+            Assert.IsNotNull(destMeta, "前提：移动成功");
+            Assert.Greater(ThreadRecordingFileProvider.DeleteCount, 0, "前提：源槽位的删除发生了");
+            Assert.IsFalse(ThreadRecordingFileProvider.AnyDeleteRanOn(mainThreadId),
+                "移动 = 复制 + 删源，删源那一半同样不得压在主线程上");
         }
 
         #endregion
