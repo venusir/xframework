@@ -137,7 +137,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 | `BootstrapPhases.Input` | 1 | Input | 输入模块初始化（不在默认组合内，需要资产） |
 | `BootstrapPhases.UI` | 2 | UI | UI 模块初始化（不在默认组合内，需要场景里的 Canvas 根） |
 | `BootstrapPhases.Data` | 3 | Data | 数据管理器初始化 |
-| `BootstrapPhases.Save` | 4 | Save | 存档管理器初始化。**硬性晚于 Data**：恢复扫描要用 `DataManager.CreateSnapshot` 回滚数据块 |
+| `BootstrapPhases.Save` | 4 | Save | 存档管理器初始化。**硬性晚于 Data**：本模块运行期经 `DataManager` 收集/应用数据块快照（阶段自身只用 `FileManager` 跑恢复扫描，不碰 Data） |
 | `BootstrapPhases.Localization` | 90 | Localization | 本地化数据加载（不在默认登记组合内） |
 | `BootstrapPhases.UserStart` | 90 | 用户自定义 | 业务阶段的建议起点（与 Localization 同相位并行——依赖本地化的阶段请取更大的值） |
 

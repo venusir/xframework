@@ -32,8 +32,9 @@ namespace XFramework.XBootstrap
         public const int Data = 3;
 
         /// <summary>
-        /// 存档管理器初始化。硬性晚于 <see cref="Data"/>：恢复扫描要用
-        /// <c>DataManager.CreateSnapshot</c> 回滚数据块，这是内置相位里唯一的硬性模块间依赖。
+        /// 存档管理器初始化。硬性晚于 <see cref="Data"/>：本模块**运行期**经 <c>DataManager</c>
+        /// 收集 / 应用数据块快照（引导阶段本身只用 <c>FileManager</c> 跑恢复扫描、不碰 Data）。
+        /// 这是内置相位里唯一的硬性模块间依赖。
         /// </summary>
         public const int Save = 4;
 
