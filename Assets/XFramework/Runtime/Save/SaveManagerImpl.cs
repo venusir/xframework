@@ -445,11 +445,13 @@ namespace XFramework.XSave
         /// 记成 <c>[Data] 恢复数据块 X 失败</c> 的 warning 并吞掉——但<b>吞掉的是异常，不是计数</b>：
         /// <c>ApplySnapshot</c> 返回未能恢复的块数，本方法据此判定失败并回滚（见下方 <c>failedBlocks</c> 分支），
         /// 所以只要 Data 侧如实返回计数，这里就不会留下「半加载」状态。</para>
-        /// <para><b>三个已知约束（保持此设计的代价，勿在未解决前依赖回滚的完整性）：</b></para>
+        /// <para><b>回滚的完整性（2026-10-14 起）：</b>数据与<b>脏集合</b>都会被还原——脏集合由
+        /// <see cref="DataManager.CreateSnapshot"/> 在清空脏标记之前写进快照（进程内回滚元数据，
+        /// 不进存档），<c>ApplySnapshot</c> 应用时按它还原。因此「加载失败回滚」之后，玩家在加载前的
+        /// 未保存改动仍然是「未保存」，增量保存不会漏块。契约与死因分析在 Data 侧
+        /// （<c>IDataManager.ApplySnapshot</c> 与 <c>Runtime/Data/README.md</c>），本处不复述。</para>
+        /// <para><b>两个已知约束（保持此设计的代价，勿在未解决前依赖回滚的完整性）：</b></para>
         /// <list type="number">
-        /// <item><description><see cref="DataManager.CreateSnapshot"/> 会清空全部脏标记。回滚能恢复<b>数据</b>
-        /// 但恢复不了<b>脏标记集合</b>——将来若做增量保存，这会退化成「下次保存跳过本该保存的块」，
-        /// 即数据丢失。根除需给 Data 模块加 <c>CreateSnapshot(bool clearDirty)</c>（跨模块 API 变更）。</description></item>
         /// <item><description>留存快照本身失败时，异常在动内存之前抛出，内存不受影响。</description></item>
         /// <item><description>回滚本身也可能失败（同一批 <c>OnClear</c>），故为尽力而为：失败必须显式记 LogError
         /// 而不是静默——那会留下「以为已回滚、实则为半清空」的内存态。</description></item>

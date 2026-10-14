@@ -888,6 +888,42 @@ namespace XFramework.XSave.Tests
         }
 
         /// <summary>
+        /// 回滚必须把「数据」与「脏集合」**一起**还原（2026-10-14 闭合的跨模块缺口）：
+        /// 玩家在加载前有未保存改动 → 加载失败回滚 → 那笔改动必须**仍然是未保存**。
+        /// <para>Save 侧此行零代码改动：脏集合由 Data 的快照携带、由 <c>ApplySnapshot</c> 还原
+        /// （最小形态用例在 <c>DirtyTrackingTests.ApplySnapshot_RollbackSnapshot_RestoresDirtyFlags</c>）。
+        /// 本用例证明的是**跨模块端到端闭合**——缺口当初正是从这里被登记出去的。</para>
+        /// </summary>
+        [Test]
+        public async Task TryLoadAsync_BlockRestoreFails_RollsBackDirtyFlagsToo()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 42;
+            DataManager.GetOrCreateBlock<FailingLoadBlock>();
+            await SaveManager.SaveAsync(1);
+
+            wallet.Gold = 7;
+            DataManager.MarkDirty<WalletData>(); // 玩家有未保存改动，此时点了「读档」
+            FailingLoadBlock.RemainingFailures = 1;
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("恢复数据块 FailingLoad 失败"));
+                LogAssert.Expect(LogType.Error, new Regex("未能恢复，正在回滚内存数据"));
+
+                var result = await SaveManager.TryLoadAsync(1);
+
+                Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status);
+                Assert.AreEqual(7, wallet.Gold, "数据应回到加载前");
+                Assert.IsTrue(DataManager.IsDirty<WalletData>(),
+                    "脏集合也必须回到加载前——否则将来做增量保存会漏掉这笔未保存的改动（数据丢失）");
+            }
+            finally
+            {
+                FailingLoadBlock.RemainingFailures = 0;
+            }
+        }
+
+        /// <summary>
         /// 探针 Block：<see cref="IDataBlock.OnLoad"/> 按次数抛异常，用于验证「块恢复失败 →
         /// 判定加载不完整并回滚」这条路径。
         /// <para>「只失败一次」是刻意的：回滚自身也会恢复同一个块，若每次都失败就只测到
