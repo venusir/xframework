@@ -167,17 +167,25 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 ### 生命周期回调（`OnEnable` / `OnDisable`）
 
-这一对**不是对象生命周期事件**，而是「进入 / 离开派发集合」的边沿通知，且**每套调度器各算一份**：
-注册与 `Enable` 让对象进入集合，`Disable` 让它离开。`Unregister` 与 `Clear` 是「停止管理」，
-不宣告（见下）。
+这一对**不是对象生命周期事件**，而是「进入 / 离开派发集合」的边沿通知，且**每套调度器各算一份**。
+收敛成一条规则：**进入集合 ⇒ `OnEnable`；离开集合 ⇒ `OnDisable`**——注册与 `Enable` 让它进入，
+`Disable` 让它离开，而**回调抛异常导致的自动注销同样是一次「离开」**，因此也宣告一次。
+唯一例外是「停止管理」（显式 `Unregister` / `Clear`），它不宣告（见下）。
 
 - 每套调度器上两者**严格交替、且以 `OnEnable` 起头**——对象一注册就会先收到一次启用通知，
-  不会出现「没有配对的 `OnDisable`」
+  不会出现「没有配对的 `OnDisable`」（**唯一的有意例外**是下一条的「停止管理」）。
+  自动注销补发的那次 `OnDisable`（2026-10-14 起）是维持这条不变量的第三条路径
 - **跨时机对象的调用次数 = 它注册的时机数**：一次 `Disable` 会收到 N 次 `OnDisable`（每套一次）。
   这是「启用态本就是每套一份」的直接后果，不是缺陷；要判断「是否已完全停用」的节点按此时机数记账即可
-  （计数归零即完全停用）
-- **`Unregister` / `Clear` 不宣告 `OnDisable`**：配对因此在「停止管理」处断裂，对象的销毁由调用方
-  自己负责（框架内的消费者都是「先摘驱动器再拆实例」）
+  （计数归零即完全停用）。**自动注销只发生在抛异常那一套调度器上**，故它也只宣告一次——计数因此不会
+  归零，这正是这条记账法要告诉你的：还有时机在持有它
+- **显式 `Unregister` / `Clear` 不宣告 `OnDisable`**：配对因此在「停止管理」处断裂，对象的销毁由调用方
+  自己负责（框架内的消费者都是「先摘驱动器再拆实例」）。**自动注销不同**：那次离开是框架替注册方做的
+  决定、调用方无从得知，因此**会宣告一次** `OnDisable`（在本帧收尾时落地）
+- **自愈要带退避**：节点若想在自动注销后自己复活（在 `OnDisable` 里重新 `Register`），**必须带退避**——
+  否则每次派发都抛异常、每次都复活，就是一台「每帧一条 Error」的活锁
+- 要查**别人的**注册态（而不是等自己的边沿），用 `UpdateManager.IsRegistered`——它是诊断 / 防御接口，
+  成本随节点数增长，不要放进每帧路径
 
 写法：一次性订阅与初始化放在**注册之前**的代码里——注册会同步宣告 `OnEnable`，在构造函数里注册会让它
 在构造未完成、字段还没赋值时被回调；把这一对回调当作**每时机的暂停 / 恢复**，清理写成幂等的。
@@ -267,7 +275,8 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 生命周期回调（`OnEnable` / `OnDisable`）抛异常只记 `LogError`，不打断本帧剩余操作的落地；这与
 `OnUpdate` 的「抛异常即注销该对象」不同——后者每帧都被调用（不注销就是每帧刷屏），而生命周期回调只在
-状态迁移时触发。
+状态迁移时触发。（`OnUpdate` 抛异常的那次注销会在**本帧收尾时**给节点补发一次 `OnDisable`——
+它同样是「离开派发集合」的边沿。）
 
 `Clear()` 是例外之外的一点：它**不回调 `OnDisable`**（与 `Unregister` 一致），
 但会一并复位暂停开关。
@@ -286,6 +295,7 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 并**注销该节点**（见「派发期间的注册 / 注销 / 启用 / 禁用」）；而 `ProcessImmediate` 是**显式调用**，
 异常直接上抛给调用方、**不注销**该节点。理由与本仓对 `Settings.Save<T>()` 的裁决同向——显式调用
 应当看到失败（配额、签名、平台 SDK 这类错误该被调用方处理），隐式的每帧回调则不该把调度器带崩。
+（`Tick` 路径那次注销会补发一次 `OnDisable`；`ProcessImmediate` 连注销都不做，自然也不宣告。）
 
 ## 设计原则
 
@@ -323,7 +333,8 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   这是「每格只访问本切片条目」这条性质的代价（彻底修要每格扫全桶），已评估并接受；
   介意首次派发延迟时请用 `ProcessImmediate` 或留在细档位
 - **注册表持节点的强引用，且不识别已销毁对象**：不 `Unregister` 的节点既不会被回收、也不会被自动
-  摘除——框架内的自动注销只由回调抛异常触发。MonoBehaviour 节点被销毁后仍留在桶里：下一次派发若在
+  摘除——框架内的自动注销只由回调抛异常触发（**那一次会给节点补发一份 `OnDisable`**，注册方由此可观测；
+  要主动查别人的注册态用 `UpdateManager.IsRegistered`）。MonoBehaviour 节点被销毁后仍留在桶里：下一次派发若在
   回调里触碰到已销毁成员，会以 `MissingReferenceException` 的形式被注销并记 `LogError`，否则与普通
   C# 节点一样静默保留。对象不用时必须自行 `Unregister`
 - **派发与启动/引导流程无关**：驱动在 `AfterAssembliesLoaded` 注入（早于首个场景），此后无论什么流程

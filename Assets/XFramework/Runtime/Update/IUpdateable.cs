@@ -46,10 +46,11 @@ namespace XFramework.XUpdate
     /// 所有时机共用的生命周期契约。
     /// <para><b>这不是对象生命周期事件，而是「进入 / 离开派发集合」的边沿通知</b>，且
     /// <b>每套调度器各算一份</b>：注册与 <see cref="UpdateManager.Enable(IUpdateLifecycle)"/> 让对象进入
-    /// 集合，<see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 让它离开（禁用期间不会收到该时机的派发回调）。因此：</para>
+    /// 集合，<see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 让它离开（禁用期间不会收到该时机的派发回调）；
+    /// <b>派发回调抛异常导致的自动注销同样是一次「离开」</b>，同样宣告 <see cref="OnDisable"/>。因此：</para>
     /// <list type="bullet">
     /// <item>每套调度器上两者<b>严格交替、且以 <see cref="OnEnable"/> 起头</b>——对象一注册就会先收到一次
-    /// 启用通知，不会出现「没有配对的 <see cref="OnDisable"/>」</item>
+    /// 启用通知，不会出现「没有配对的 <see cref="OnDisable"/>」（唯一的有意例外是下一条的「停止管理」）</item>
     /// <item>同时注册在多个时机上的对象，调用次数等于它注册的<b>时机数</b>：一次
     /// <see cref="UpdateManager.Disable(IUpdateLifecycle)"/> 会收到 N 次 <see cref="OnDisable"/>。
     /// 想知道「是否已完全停用」的节点请按此时机数记账（计数归零即完全停用）</item>
@@ -69,9 +70,10 @@ namespace XFramework.XUpdate
         void OnEnable();
 
         /// <summary>
-        /// 对象离开派发集合时调用（<see cref="UpdateManager.Disable(IUpdateLifecycle)"/>）。
+        /// 对象离开派发集合时调用：被 <see cref="UpdateManager.Disable(IUpdateLifecycle)"/>，或
+        /// <b>因派发回调抛异常被自动注销</b>（后者的宣告在本帧收尾时落地，注册方由此得知自己已被摘掉）。
         /// <para>每套调度器各一次；<see cref="UpdateManager.Unregister(IUpdateLifecycle)"/> 与
-        /// <c>Clear()</c> 不触发本回调。</para>
+        /// <c>Clear()</c> 不触发本回调——那两次是「停止管理」，由调用方自己发起、他自己知道。</para>
         /// </summary>
         void OnDisable();
     }

@@ -35,6 +35,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   README 首屏给两条别名写法；模块源码自身一律写别名——**裸写不报错**，会静默遮蔽成自家类型（首轮编译踩到
   的是另一个同族坑：Unity 6 自己也有 `SceneHandle`，与 YooAsset 的同名类型在同一文件里 CS0104，已用别名消解）。
 
+#### Update
+
+- **新增 `UpdateManager.IsRegistered(IUpdateLifecycle node)`**（2026-10-14）：回答「该节点是否仍在调度中」——
+  `OnUpdate` / `OnLateUpdate` / `OnFixedUpdate` 抛异常会让调度器把节点**自动注销**，此前注册方没有任何查询
+  能知道这件事。跨时机节点**取或**（任一时机仍持有即算在调度中）；被 `Disable` 的节点**仍算注册**（`Enable` 可恢复）。
+  **与 `IsEnabled` 的分工**：一个答「是否在管理中」、一个答「是否被禁用」，两个谓词方向相反（未注册时前者为
+  `false`、后者为 `true`）——这条不对称写进了 XML 文档，别当成缺陷。**使用方不受影响**，除非你要用它；
+  它是诊断 / 防御接口，成本随节点数增长，不要放进每帧路径。配套的边沿修复见 `### Changed` 的行为变更一条。
+
 #### 测试基础设施
 
 - **共享零分配尺子 `AllocationRuler`（测试侧）**：本环境 `GC.GetAllocatedBytesForCurrentThread()` 与
@@ -125,6 +134,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
   **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；
   `static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：注册表仍不随 `Destroy` 清空。
+- **`UpdateManager` 的自动注销现在会补发一次 `OnDisable`**：派发回调抛异常时，调度器照旧记 Error 并**永久
+  摘掉**该节点（只摘抛异常那一套时机），但**在该帧收尾时给它补发一次 `OnDisable`**——它同样是「离开派发
+  集合」的边沿。补发之后，README 明写的「两者严格交替、且以 `OnEnable` 起头，不会出现没有配对的
+  `OnDisable`」才真正成立（此前自动注销走的是「不宣告」那条分支，是唯一一处静默的配对断裂）。
+  **升级需自核**：抛异常的节点会**多收一次 `OnDisable`**（清理请写成幂等的，README 早有此要求；仓内 6 个
+  内置实现的 `OnDisable` 全为空，故框架自身行为不变）。**显式 `Unregister` / `Clear` 保持静默**——那两次
+  由调用方自己发起，配对在「停止管理」处断裂是既有语义。想在 `OnDisable` 里自愈（重新 `Register` 自己）
+  **必须带退避**，否则是每帧一条 Error 的活锁。查询面见 `### Added` 的 `UpdateManager.IsRegistered`。
 - **`DataSnapshot` 现在携带生成时的脏集合，`ApplySnapshot` 应用时按它还原**：同进程内「留回滚点 →
   应用别的快照失败 → 应用回滚点」之后，加载前的未保存改动**仍然是「未保存」**——此前回滚只恢复数据、
   脏标记集合丢失，将来做增量保存会退化成「下次保存跳过本该保存的块」（数据丢失）。

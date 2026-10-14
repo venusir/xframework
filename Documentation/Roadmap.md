@@ -247,6 +247,5 @@
 - **会话级复位**（关闭域重载后第二个播放会话静默失效）——归口跨 Input / UI / Asset / Config / Localization / File / **Settings** —— ✅ **2026-10-12 已落地**（六门面 `ResetForNewSession` + `Bootstrap.StageList` + `InstanceTracker`；回归用例 `Tests/Runtime/Architecture/SessionResetTests`）→ **2026-10-14 手工验收已做**（连跑两遍：第一遍绿、第二遍红，抓到 Settings 是当时漏掉的第八个门面——门面 `Initialize` 告警早退 + 重放注册表跨会话累积 + `PauseNotifier` 计数不归零，由 `FrameworkReview.md` §5.2 步骤 14 修复后重跑两遍全绿）
 - **File 补异步删除原语**——Save 的删除 / 移动因此被迫在主线程做同步 IO
 - **主线程断言抽公共防线**——Message / Pipeline / Asset 已有三份同形内联副本
-- **Update 节点被自动注销对注册方不可观测**
 
 本文不复制它们的内容；要查就回上表那几处。
