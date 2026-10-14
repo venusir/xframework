@@ -199,6 +199,7 @@ namespace XFramework.XSettings
         {
             Managers.Clear();
             SettingRefSessionCoordinator.ClearAll();
+            SettingsPauseNotifier.ResetForNewSession();
         }
 
         #endregion

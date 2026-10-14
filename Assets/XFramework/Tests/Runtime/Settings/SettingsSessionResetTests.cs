@@ -50,6 +50,13 @@ namespace XFramework.XSettings.Tests
             public AudioSettings Audio = new();
         }
 
+        /// <summary>专供「切后台宿主引用计数」一例。</summary>
+        [Serializable]
+        private sealed class PauseSessionSettings
+        {
+            public float Volume = 1f;
+        }
+
         private sealed class MemoryStore : ISettingsStore
         {
             public object Data;
@@ -220,6 +227,28 @@ namespace XFramework.XSettings.Tests
 
             CollectionAssert.AreEqual(new[] { 1f }, received,
                 "会话 2 里被订阅过的句柄必须『用即重登记』并照常重放");
+        }
+
+        [Test]
+        public void SessionBoundary_PauseNotifierRefCount_Resets()
+        {
+            SimulateSessionBoundary();
+
+            // 会话 1：开了 SaveOnPause 的类型申请了宿主。它的管理器**不会被 Dispose**——
+            // 会话边界只丢引用（与七门面同形），那份计数若不清就是永久泄漏
+            SettingsManager.Initialize<PauseSessionSettings>(new MemoryStore(), () => new PauseSessionSettings(),
+                new SettingsOptions { SaveOnPause = true });
+            Assert.IsNotNull(SettingsPauseNotifier.Instance, "前提校验：开启 SaveOnPause 应当申请到宿主");
+
+            SimulateSessionBoundary();
+
+            // 会话 2：同类型重新初始化（照常申请宿主），随后按正常流程 Dispose
+            var manager = SettingsManager.Initialize<PauseSessionSettings>(new MemoryStore(), () => new PauseSessionSettings(),
+                new SettingsOptions { SaveOnPause = true });
+            manager.Dispose();
+
+            Assert.IsTrue(SettingsPauseNotifier.Instance == null,
+                "会话 1 的计数若不随会话边界复位，会话 2 唯一一次 Release 也归不了零——DontDestroyOnLoad 宿主将永不销毁、计数逐会话累积");
         }
 
         [Test]

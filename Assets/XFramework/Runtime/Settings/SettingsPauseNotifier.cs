@@ -61,6 +61,27 @@ namespace XFramework.XSettings
             _instance = null;
         }
 
+        /// <summary>
+        /// 会话边界复位：清掉计数，并销毁活着的宿主。
+        /// <para><b>为什么必须清计数：</b>上一会话 <see cref="Acquire"/> 过的类型在会话边界上只被丢引用、
+        /// 不会被 <c>Dispose</c>（与七门面「只丢引用不 Dispose」同形），那份计数于是永不归还——第二会话
+        /// 再 <see cref="Acquire"/> 就变成 2，此后任何一次 <see cref="Release"/> 都归不了零，
+        /// <c>DontDestroyOnLoad</c> 宿主从此永不销毁、计数逐会话累积。</para>
+        /// <para>由 <see cref="SettingsManager.ResetForNewSession"/> 调用。<b>不给它自己挂
+        /// <c>RuntimeInitializeOnLoadMethod</c></b>——它是门面的内部件，族清单只登记门面那一处。</para>
+        /// </summary>
+        internal static void ResetForNewSession()
+        {
+            // 宿主可能已被引擎随播放会话销毁（伪 null），故先判再销毁
+            if (_instance != null)
+            {
+                Destroy(_instance.gameObject);
+            }
+
+            _instance = null;
+            _refCount = 0;
+        }
+
         #endregion
 
         #region Unity Messages
