@@ -75,7 +75,10 @@ namespace XFramework.XFileManager
         UniTask WriteAllBytesAsync(FileDomain domain, string relativePath, byte[] data, CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 删除指定文件。
+        /// 删除指定文件。缺失即 no-op（幂等）。
+        /// <para><b>执行线程：</b>本方法自身只在调用线程上运行；门面的异步形态
+        /// <c>FileManager.DeleteAsync</c> 会把它放进线程池调用，因此实现须容忍<b>池线程</b>调用
+        /// （与其余异步原语同一条约束，见模块 README 的「线程契约」）。</para>
         /// </summary>
         /// <param name="domain">路径域。</param>
         /// <param name="relativePath">相对于域根目录的文件路径。</param>

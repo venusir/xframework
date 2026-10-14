@@ -438,6 +438,32 @@ namespace XFramework.XFileManager
             _provider.Delete(domain, relativePath);
         }
 
+        /// <summary>
+        /// 异步删除指定文件。
+        /// <para><b>与 <see cref="Delete"/> 的差别只有线程：</b>两者调用的是<b>同一个</b> Provider 原语，
+        /// 本方法把它放进 <c>UniTask.RunOnThreadPool</c> 执行，因而不阻塞调用线程。这是<b>门面唯一一处
+        /// 自己决定 IO 线程</b>的地方——其余异步原语的线程由 Provider 自己安排（<see cref="IFileProvider.Delete"/>
+        /// 没有异步孪生，且各平台的后端删除本质上都是同步原语，故由门面代劳最自然）。</para>
+        /// <para><b>缺失即 no-op</b>（与同步版同语义）。<b>取消语义：</b>令牌只保证「尚未开始的删除不会发生」
+        /// ——已经进入委托的那一次会跑完（池调度不保证可中断），故取消后可能留下部分删除。</para>
+        /// </summary>
+        /// <param name="domain">路径域。</param>
+        /// <param name="relativePath">相对于域根目录的文件路径。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <returns>删除完成的异步任务；IO 失败经任务回传 <see cref="System.IO.IOException"/>。</returns>
+        public static UniTask DeleteAsync(FileDomain domain, string relativePath, CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+
+            // 入口快照是**必需**而非风格：委托在池线程上执行，直读 _provider 会把字段读取拖到
+            // Destroy / SetCryptoProvider(RebuildProvider) 之后——那时它可能已是 null 或另一个实例
+            var provider = _provider;
+            return UniTask.RunOnThreadPool(
+                () => provider.Delete(domain, relativePath),
+                configureAwait: false,
+                cancellationToken);
+        }
+
         #endregion
 
         #region Directory Operations

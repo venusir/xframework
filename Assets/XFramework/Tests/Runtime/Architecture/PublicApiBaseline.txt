@@ -573,6 +573,7 @@ XFramework.XFileManager.FileDomain.Streaming  ::  = 1
 XFramework.XFileManager.FileManager  ::  public static class
 XFramework.XFileManager.FileManager.CreateDirectory  ::  public static void(XFramework.XFileManager.FileDomain domain, string relativePath)
 XFramework.XFileManager.FileManager.Delete  ::  public static void(XFramework.XFileManager.FileDomain domain, string relativePath)
+XFramework.XFileManager.FileManager.DeleteAsync  ::  public static Cysharp.Threading.Tasks.UniTask(XFramework.XFileManager.FileDomain domain, string relativePath, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XFileManager.FileManager.Destroy  ::  public static void()
 XFramework.XFileManager.FileManager.Exists  ::  public static bool(XFramework.XFileManager.FileDomain domain, string relativePath)
 XFramework.XFileManager.FileManager.ExistsAsync  ::  public static Cysharp.Threading.Tasks.UniTask<bool>(XFramework.XFileManager.FileDomain domain, string relativePath, System.Threading.CancellationToken cancellationToken = default)

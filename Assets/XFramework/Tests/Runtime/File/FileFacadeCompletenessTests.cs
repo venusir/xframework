@@ -19,7 +19,8 @@ namespace XFramework.XFileManager.Tests
     /// 映射表：接口名 == 门面名，没有第二份真相。</para>
     /// <para><b>它是单向的</b>：只断言「接口有、门面缺」。本门面**有意**比接口多出模块自有能力
     /// （<c>IsInitialized</c> / <c>Initialize</c> / <c>Destroy</c> / <c>SetCryptoProvider</c> /
-    /// <c>GetCryptoProvider</c> / 7 个同步方法 / <c>WriteAllBytesAtomicAsync</c> / <c>GetDirectoriesAsync</c>），
+    /// <c>GetCryptoProvider</c> / 7 个同步方法 / <c>WriteAllBytesAtomicAsync</c> / <c>GetDirectoriesAsync</c> /
+    /// <c>DeleteAsync</c>——最后一个是门面唯一一处自己决定 IO 线程的原语，见其 XML 文档），
     /// 反向断言会把它们判成缺陷。</para>
     /// <para><b>今天是绿的</b>：本 fixture 是**新增守卫**，不是回归——当前 10 个接口成员在门面上全部有同名
     /// 转发，所以它在加入的第一天就通过。它买的是「以后改坏即红」。</para>
