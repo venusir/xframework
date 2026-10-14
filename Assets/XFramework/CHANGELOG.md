@@ -332,6 +332,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **使用方不受影响**：公开面与运行时行为零改动，归一的是开发机**工作区字节**这一处旧账（`.gitattributes` 管仓库内容、`.editorconfig` 管编辑器保存，本条补上第三处）。
   **未封堵的一处如实记录**：Unity 菜单新建的脚本仍会以 CRLF 落盘（`ProjectSettings/EditorSettings.asset` 的 `m_LineEndingsForNewScripts = 0` / OS Native，2026-10-14 用户裁定保持不动）——只影响工作区，不影响入库内容；判据与再归一化配方同在 `Workflow.md` §六。
 
+- 会话级复位手工验收已执行并结案（`FrameworkReview.md` §5.2 步骤 1 / 步骤 14；2026-10-14）：
+  关域重载连跑两遍 PlayMode 全量——**第一遍绿、第二遍红**，红在 XSettings 的跨会话静态态累积
+  （门面 `Initialize` 告警早退、重放注册表跨会话累积、`PauseNotifier` 计数不归零；两遍唯一不对称是
+  `[SettingsManager]` 27→28）。同轮修复（见 `### Fixed` 的 `#### 会话级复位` 与 `### Changed` 的
+  「重放登记改为会话级」）后重跑：两遍全绿、`Unhandled log message` 0、两遍逐类完全相同。
+  **这份验收自证了存在价值**：相关用例在全新 batchmode 进程里全绿，缺陷只在跨会话下显形——
+  也就是脚本表达不了的那一类。**使用方不受影响**：修复只改静态态的生命周期，公开面与运行时行为零改动
+  （唯一可见后果是 `### Changed` 里那条「会话 1 遗留的订阅者不会因会话 2 的重放复活」）。
+
 ## [0.3.0] - 2026-10-11
 
 > **本版涵盖 `[0.2.0]`（2026-08-20）之后的全部未发布内容**：基础设施、资源与内容、存档与设置三面均有新增与修复，其中带「破坏性」标记的条目 30 余条。

@@ -171,6 +171,12 @@
   + `AutoInitTests` 族清单守卫；**真验收是手工的**：把 `ProjectSettings/EditorSettings.asset` 的
   `m_EnterPlayModeOptions` 临时置 1（关域重载），编辑器内连跑两遍 PlayMode 全量，跑完改回
   ——仓内**不常住**该设置。
+  **2026-10-14 已执行并结案**：第一遍绿、第二遍红——红在 XSettings 的跨会话静态态累积（重复重放；
+  两遍唯一不对称是 `[SettingsManager]` 27→28）⇒ 按「会话边界清空 + 句柄用即重登记」修复
+  （`018aad6` + `4701bbf`）⇒ 重跑两遍全绿（`Unhandled log message` 0、两遍逐类完全相同）。
+  **这条验收自证了价值**：同一个用例在全新 batchmode 进程里 1/1 通过，缺陷只在跨会话下显形——
+  「脚本表达不了」的那部分正是它抓到的。配方原样保留，回归时按上面三步重跑（改设置 → 连跑两遍 → 改回），
+  跑完核 `git status` 干净（该设置不留 diff）。
 
 ## 附：一个完整回合
 
