@@ -218,8 +218,8 @@ if (DataManager.HasDirtyBlocks)
 脏标记生命周期（框架自动联动，业务代码无需手动清理）：
 
 - `MarkDirty<T>()`：标记后 `IsDirty<T>()` / `HasDirtyBlocks` / `GetDirtyBlocks()` 可查询；未注册的 Block 输出警告并忽略。
-- `CreateSnapshot()` 成功后自动清空全部脏标记（快照导出即视为已保存）；导出异常时脏标记保留。
-- `ApplySnapshot()` 恢复后自动清空全部脏标记（恢复即干净）。
+- `CreateSnapshot()` 成功后自动清空全部脏标记（快照导出即视为已保存）；导出异常时脏标记保留。快照同时记下**这一刻的脏集合**（进程内回滚元数据，不进存档），供「留回滚点 → 回滚」把数据与脏集合一起还原。
+- `ApplySnapshot()` 恢复后**按快照携带的脏集合还原**脏标记：**不携带者**（从磁盘读回、手工构造）一律清空（恢复即干净）；**携带者**（同进程内由 `CreateSnapshot()` 产出的回滚点）还原到生成快照那一刻的集合——所以「加载失败 → 回滚」之后，加载前的未保存改动仍是「未保存」。
 - `RemoveBlock<T>()` / `ClearAll()` 联动清理对应脏标记。
 
 > 增量保存的落点（按脏块逐个导出/写入）由 **Save 模块（XFramework.XSave）**负责；本模块提供脏标记 + 单 Block 快照能力（见下文）。
@@ -250,7 +250,7 @@ DataManager.ApplyBlockSnapshot(snap);
 1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType`、`version`（写入时取 `IDataBlock.DataVersion`）存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
 2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化；若快照 `version` 低于 Block 当前 `DataVersion` 则执行迁移链，最后调用 `OnLoad(saveData)`。单块恢复 `ApplyBlockSnapshot(snap)` 复用同一恢复管线。
 
-   **它返回「未能恢复的数据块数量」**（`0` 表示全部成功）。单个块失败（快照缺 `blockName`、块未注册、格式不支持、块版本高于当前代码、反序列化或 `OnLoad` 抛异常）**不会中断整体恢复**，而是被跳过并计入返回值——所以**调用方必须据返回值判断本次加载是否完整**：「部分块未恢复」等价于内存里少了一半数据，当作成功处理是危险的。另外，失败块会停在**「已清空、未加载」**的状态上（清空发生在恢复之前，且对失败块不回滚）；要在失败时恢复原状，请自行在调用前留一份 `CreateSnapshot()` 快照——Save 模块就是这么做的。
+   **它返回「未能恢复的数据块数量」**（`0` 表示全部成功）。单个块失败（快照缺 `blockName`、块未注册、格式不支持、块版本高于当前代码、反序列化或 `OnLoad` 抛异常）**不会中断整体恢复**，而是被跳过并计入返回值——所以**调用方必须据返回值判断本次加载是否完整**：「部分块未恢复」等价于内存里少了一半数据，当作成功处理是危险的。另外，失败块会停在**「已清空、未加载」**的状态上（清空发生在恢复之前，且对失败块不回滚）；要在失败时恢复原状，请自行在调用前留一份 `CreateSnapshot()` 快照——Save 模块就是这么做的（那份快照同时携带生成时的脏集合，故回滚后「哪些块还没存」也一并还原）。
 3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
 4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
 
@@ -281,8 +281,7 @@ DataManager.ApplyBlockSnapshot(snap);
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
 
 - **`BlockName` 必须全局唯一。** 快照恢复是按 `blockName` 反查块的，而名称索引一个名字只能指向一个实例——两个**不同类型**的块返回同一个名字时，只有后注册的那个能恢复，另一个会**静默停在默认值上**。模块会在第二次登入时记一条 `[Data] 数据块名称冲突` 的 `LogError`，但**它只留痕、不阻止**：改名仍是你的事。
-- **`ApplySnapshot` 失败后会留下「已清空、未加载」的半态。** 清空发生在恢复之前，且对失败块不回滚。请据返回值判断是否完整，再决定要不要回滚；要在失败时恢复原状，需自行在调用前留一份 `CreateSnapshot()` 快照。
+- **`ApplySnapshot` 失败后会留下「已清空、未加载」的半态。** 清空发生在恢复之前，且对失败块不回滚。请据返回值判断是否完整，再决定要不要回滚；要在失败时恢复原状，需自行在调用前留一份 `CreateSnapshot()` 快照（它同时携带生成时的脏集合，回滚后一并还原）。
 - **`Shutdown()` 不触发任何块的 `OnClear`。** 它的语义是「注销门面持有的实现」，不是「清空数据」——需要释放块持有的资源（订阅、句柄等）请显式调 `ClearAll()` 或 `RemoveBlock<T>()`。
-- **`CreateSnapshot()` 会清空全部脏标记**（导出即视为已保存）。因此「用 `CreateSnapshot` 留回滚点」这个做法**恢复得了数据、恢复不了脏标记集合**——将来若做增量保存，回滚会让脏数据退化成丢失。
 - **`DataBlockSnapshot.format` 写入端目前恒为 `null`**（导出时只填 `DataSnapshot.defaultFormat`）。该字段保留是为了兼容将来「按块指定格式」；读取端在 `format` 为空时按 `defaultFormat` 回退，故这条不影响行为。
 

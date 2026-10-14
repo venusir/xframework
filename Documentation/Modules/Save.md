@@ -39,6 +39,7 @@ Runtime/Save/
 **未决**：
 
 - **`RecoverAsync` 的设计属性与实现不一致**：那条「全程不切回主线程」曾被用来论证 `File` 侧的域根必须在主线程预热。要让它真正成立，得把侧车写入拆成「切回」与「不切回」两条路径——属线程路径改造，该单独走计划。
-- **`CreateSnapshot` 清脏标记 → 本模块的回滚恢复不了脏标记集合**：根除要给 Data 加 `CreateSnapshot(bool clearDirty)`，属**跨模块公开 API 变更**（Data 侧的技术文档同样记着这条）。
+- ~~**`CreateSnapshot` 清脏标记 → 本模块的回滚恢复不了脏标记集合**~~ —— **2026-10-14 已闭合**：脏集合随快照携带并由 `ApplySnapshot` 还原（Data 侧 `DataSnapshot.dirtyBlockNames`），本模块**零代码改动**；端到端回归锁 `TryLoadAsync_BlockRestoreFails_RollsBackDirtyFlagsToo`。沿革与被否形状见 `Modules/Data.md`。
+- **写盘失败窗口**（2026-10-14 登记，**未修**）：`SaveAsync` 在写盘**之前**就经 `CreateSnapshot` 清了脏（「导出即视为已保存」的固有代价）——写失败时脏标记已丢。重开判据＝出现「写失败后必须重存」的真实需求；届时修法已现成：让 `SaveAsync` 自留一个回滚点再 `ApplySnapshot` 回去（脏集合现已随快照还原）。
 - **`SaveManagerFactory` 的真实替换路径仍无覆盖**：它是公开扩展点。本轮补了「经 factory 注入自定义实现」的用例，但**跨平台/跨进程的真实后端替换**（Console SDK、云存档）在仓内无路径可测——与 File 的移动端 Streaming 同属「如实登记的覆盖空白」。
 - **不为 Save 补 PlayMode 侧用例**（2026-10-13，§4.2 处置）：88 例已在 `Tests/Runtime/`（**PlayMode 平台**）跑真临时 FS + 真线程端到端；门面无帧依赖、无 MonoBehaviour 生命周期面；README 三条已知限制均为流程内 / EditMode 可验的语义事实。真实后端替换的空白（上条）不因 PlayMode 而改变。

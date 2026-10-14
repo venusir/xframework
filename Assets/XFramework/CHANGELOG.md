@@ -125,6 +125,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
   **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；
   `static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：注册表仍不随 `Destroy` 清空。
+- **`DataSnapshot` 现在携带生成时的脏集合，`ApplySnapshot` 应用时按它还原**：同进程内「留回滚点 →
+  应用别的快照失败 → 应用回滚点」之后，加载前的未保存改动**仍然是「未保存」**——此前回滚只恢复数据、
+  脏标记集合丢失，将来做增量保存会退化成「下次保存跳过本该保存的块」（数据丢失）。
+  **对从磁盘读回的快照零影响**（那类快照不携带脏集合，应用后仍与今天一样是干净的）；
+  脏集合是**进程内回滚元数据、不进存档**，故存档字节、校验和与存档格式逐字节不变。
+  登记在 `Roadmap.md` §五 的 `CreateSnapshot(bool clearDirty)` 形状**被取代**（它不闭合：
+  `ApplySnapshot` 没有第二个信息通道，旋钮拿不到「加载前脏了谁」），死因留在 `Documentation/Modules/Data.md`。
+  回归锁：`DirtyTrackingTests` 三条（含一条字节级不变量用例）+ `SaveManagerImplTests.TryLoadAsync_BlockRestoreFails_RollsBackDirtyFlagsToo`。
 
 ### Fixed
 

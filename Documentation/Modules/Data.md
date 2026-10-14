@@ -43,11 +43,11 @@ v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，�
 
 - **不给 Data 加线程守卫**：与 Update 那轮同判——契约（所有 API 必须在主线程）写在 README 里，跨线程改 `Dictionary` 的失败是响亮的（抛 `InvalidOperationException` 或数据错乱），不为它加机械。
 - **不给 `ForEachBlock` 加「遍历期间禁止增删」的断言**：它已改为先取快照再遍历（与 `DispatchListPool`、Lock 的订阅快照同向），回调里的增删是**安全**的，无需禁止。
-- **不给 `CreateSnapshot` 加 `bool clearDirty` 参数**：Save 的回滚因此恢复不了脏标记集合（`SaveManagerImpl` 的注释已记根因）——**跨模块公开 API 变更**，该单独走计划，本轮只归档。
+- **不给 `CreateSnapshot` 加 `bool clearDirty` 参数**（2026-10-14 裁定：**此形状不采纳**）：它**不闭合**——`ApplySnapshot` 在恢复任何块之前无条件清脏，而它只有快照这一个信息通道，旋钮拿不到「加载前脏了谁」；「双旋钮」的第二个于是退化成死重量（要么 no-op，要么只是「要不要用已有信息」）。**承重的是信息，不是旋钮**：采纳的是「脏集合随快照携带、应用时还原」（`DataSnapshot.dirtyBlockNames`，internal 字段、不进存档），**零公开 API 变更**。同类还有两条被否的形状：Save 自持 `GetDirtyBlocks()` + 事后重标（修错地方，README 把「留回滚点」作为官方配方教给第三方）、`ApplySnapshot` 单纯不再清脏（翻掉「恢复即干净」契约与 pin 用例，加载成功后脏标记变陈旧）。
 - **不改 `Shutdown` 让它触发 `OnClear`**：`OnClear` 的 XML 列举的调用时机不含 Shutdown，且 `Shutdown` 的语义是「注销实现」而非「清空数据」；已写进 README 的「已知限制」。
 
 **未决**：
 
-- **`CreateSnapshot` 清脏标记与回滚之间的语义缺口**：见上。根除要给 Data 加参数（跨模块 API 变更）。
+- ~~**`CreateSnapshot` 清脏标记与回滚之间的语义缺口**~~ —— **2026-10-14 已闭合**：脏集合随快照携带（`DataSnapshot.dirtyBlockNames`，进程内元数据不进存档）、由 `ApplySnapshot` 还原，回滚后「加载前的未保存改动仍是未保存」。沿革与三条被否形状见上一条；回归锁在 `DirtyTrackingTests`（三条）与 `SaveManagerImplTests`（一条端到端）。
 - **`DataBlockSnapshot.format` 写入端恒为 null**：保留字段是为了将来「按块指定格式」，但目前没有任何写入路径——要么补上（改存档格式）、要么删掉（牵扯老存档兼容性）。本轮只在 XML 与 README 注明「回退是常规路径」。
 - **`DataSnapshot.Factory` 是可变的公开静态委托**：第三方可替换快照子类，但没有任何「谁替换过、何时替换」的记录；Save 侧靠它取类型（`DataSnapshot.Factory().GetType()`）。目前只有测试在替换。
