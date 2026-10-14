@@ -181,6 +181,15 @@ namespace XFramework.XUpdate
             public IUpdateLifecycle Node;
             public PendingOpKind Kind;
 
+            /// <summary>
+            /// 注销前是否宣告一次 <see cref="IUpdateLifecycle.OnDisable"/>。
+            /// <para><b>为什么需要这个开关：</b>显式 <c>Unregister</c> 保持静默——调用方自己发起的那次他在同一栈里
+            /// 就知道，且 <c>Clear</c> 要靠这条在测试隔离点不跑业务代码；而<b>自动注销</b>（回调抛异常）调用方
+            /// 无从得知。若它也不宣告，「进入 / 离开派发集合严格交替、以 <c>OnEnable</c> 起头」这条契约就被打破
+            /// ——注册方直到下次用到某个功能时才发现自己的节点早已不在调度里。</para>
+            /// </summary>
+            public bool AnnounceDisable;
+
             /// <summary>目标桶的扁平下标（<see cref="BucketOf"/>）。</summary>
             public int Bucket;
 
@@ -446,7 +455,10 @@ namespace XFramework.XUpdate
                 {
                     LogManager.Exception(LogCategories.UpdateScheduler, e, string.Format(
                         "{0}.{1} threw exception, unregistering", entry.Node.GetType().Name, TimingMethodName));
-                    Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
+                    Enqueue(new PendingOp
+                    {
+                        Node = entry.Node, Kind = PendingOpKind.Unregister, AnnounceDisable = true,
+                    });
                     continue;
                 }
 
@@ -514,7 +526,10 @@ namespace XFramework.XUpdate
                     {
                         LogManager.Exception(LogCategories.UpdateScheduler, e, string.Format(
                             "{0}.{1} threw exception, unregistering", entry.Node.GetType().Name, TimingMethodName));
-                        Enqueue(new PendingOp { Node = entry.Node, Kind = PendingOpKind.Unregister });
+                        Enqueue(new PendingOp
+                        {
+                            Node = entry.Node, Kind = PendingOpKind.Unregister, AnnounceDisable = true,
+                        });
                         continue;
                     }
 
@@ -1089,10 +1104,21 @@ namespace XFramework.XUpdate
                 }
 
                 case PendingOpKind.Unregister:
+                {
+                    // 自动注销（回调抛异常）补发一次 OnDisable：它同样是「离开派发集合」的边沿，
+                    // 而这次离开是框架替注册方做的决定、注册方无从得知。守卫取「apply 那一刻仍在桶里」——
+                    // 在禁用表里的节点 Disable 时已宣告过；两处都没有的（未注册、或本帧已被前一条 op 摘掉）
+                    // 再宣告就是一次没有配对 OnEnable 的 OnDisable
+                    if (op.AnnounceDisable && _bucketOf.ContainsKey(op.Node))
+                    {
+                        NotifyLifecycle(op.Node, enable: false);
+                    }
+
                     // 按索引删净（含索引记录）：条目至多一条，但索引一旦失效这里就是最后一道防线
                     RemoveFromIndexedBucket(op.Node);
                     RemoveFromDisabled(op.Node);
                     break;
+                }
 
                 case PendingOpKind.Move:
                 {

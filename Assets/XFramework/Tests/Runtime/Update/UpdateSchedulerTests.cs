@@ -26,9 +26,22 @@ namespace XFramework.XUpdate.Tests
         public List<float> DeltaTimes { get; } = new List<float>(4);
         public List<float> Times { get; } = new List<float>(4);
 
+        /// <summary>
+        /// 在 <see cref="OnEnable"/> 里执行的剧本（可选）。生命周期回调里的增删改调度状态此前是
+        /// 测试盲区——既有替身的生命周期回调只计数或抛异常，谁也不在里面做事。
+        /// </summary>
+        public System.Action OnEnableScript { get; set; }
+
+        /// <summary>在 <see cref="OnDisable"/> 里执行的剧本（可选），用途同上。</summary>
+        public System.Action OnDisableScript { get; set; }
+
+        /// <summary>在 <see cref="OnUpdate"/> 里执行的剧本（可选）——用于「在别的节点派发途中观察状态」。</summary>
+        public System.Action OnUpdateScript { get; set; }
+
         public void OnEnable()
         {
             OnEnableCallCount++;
+            OnEnableScript?.Invoke();
             if (ThrowOnEnable)
                 throw new System.Exception("Test exception");
         }
@@ -36,6 +49,7 @@ namespace XFramework.XUpdate.Tests
         public void OnDisable()
         {
             OnDisableCallCount++;
+            OnDisableScript?.Invoke();
             if (ThrowOnDisable)
                 throw new System.Exception("Test exception");
         }
@@ -45,6 +59,7 @@ namespace XFramework.XUpdate.Tests
             OnUpdateCallCount++;
             DeltaTimes.Add(deltaTime);
             Times.Add(time);
+            OnUpdateScript?.Invoke();
             if (ThrowException)
                 throw new System.Exception("Test exception");
             return ReturnTier;
@@ -59,6 +74,9 @@ namespace XFramework.XUpdate.Tests
             ThrowException = false;
             ThrowOnDisable = false;
             ThrowOnEnable = false;
+            OnEnableScript = null;
+            OnDisableScript = null;
+            OnUpdateScript = null;
             DeltaTimes.Clear();
             Times.Clear();
         }
@@ -1878,6 +1896,185 @@ namespace XFramework.XUpdate.Tests
 
             scheduler.Clear();
         }
+
+        #region 自动注销的可观测性（补发 OnDisable 边沿）
+
+        /// <summary>断言「OnUpdate 抛异常 → 自动注销」那条日志（文案与既有三条用例一致）。</summary>
+        private static void ExpectAutoUnregisterLog()
+        {
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] TestUpdateable.OnUpdate threw exception, unregistering")));
+        }
+
+        [Test]
+        public void AutoUnregister_AnnouncesOnDisable()
+        {
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _node.OnEnableCallCount, "注册时已宣告一次 OnEnable");
+            Assert.AreEqual(1, _node.OnDisableCallCount,
+                "自动注销是「离开派发集合」的边沿，必须宣告一次 OnDisable——否则 README 的「严格交替」不变量被打破、注册方无从得知自己已被摘掉");
+            Assert.AreEqual(0, _scheduler.TotalCount);
+            Assert.AreEqual(0, _scheduler.DisabledCount, "自动注销不是禁用，禁用表不得留下条目");
+        }
+
+        [Test]
+        public void AutoUnregister_AnnouncesOnDisable_SlicedBucket()
+        {
+            // 每帧桶与切片桶是两段各自独立的 catch——上面那条 Tier0 的绿不能推断切片档也绿
+            _scheduler.Register(_node, order: 0, initialTier: UpdateTier.Tier1);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: FrameSeconds);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount, "切片桶的自动注销同样要宣告");
+            Assert.AreEqual(0, _scheduler.TotalCount);
+        }
+
+        [Test]
+        public void AutoUnregister_AnnouncementIsDeferredToFrameEnd()
+        {
+            // 宣告经帧末缓冲落地（与 Disable / Enable / Register 同一语义）：
+            // 本帧剩余派发里读到的计数必须还是 0
+            var thrower = _node;
+            _scheduler.Register(thrower, order: 0);
+            thrower.ThrowException = true;
+
+            var observed = -1;
+            var observer = new TestUpdateable { OnUpdateScript = () => observed = thrower.OnDisableCallCount };
+            _scheduler.Register(observer, order: 1);
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(0, observed, "宣告不得早于本帧剩余派发");
+            Assert.AreEqual(1, thrower.OnDisableCallCount, "帧末收尾时宣告落地");
+        }
+
+        [Test]
+        public void AutoUnregister_SecondTick_DoesNotAnnounceAgain()
+        {
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+            _scheduler.Tick(time: 2.0f);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount, "节点已出表，第二次 Tick 不该再宣告");
+            Assert.AreEqual(1, _node.OnUpdateCallCount, "也不该再被派发");
+        }
+
+        [Test]
+        public void UnregisterAfterAutoUnregister_DoesNotAnnounceAgain()
+        {
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+
+            _scheduler.Unregister(_node);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount, "显式注销对已出表的节点是空操作，不得再宣告一次");
+        }
+
+        [Test]
+        public void AutoUnregister_ReRegisterInsideOnDisable_NodeIsBack()
+        {
+            _node.OnDisableScript = () => _scheduler.Register(_node, order: 0);
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+            Assert.AreEqual(1, _scheduler.TotalCount, "在 OnDisable 里重新注册即可复生（缓冲按入队序、同一轮 flush 落地）");
+            Assert.AreEqual(2, _node.OnEnableCallCount, "复生时再宣告一次 OnEnable");
+            Assert.AreEqual(0, _scheduler.DisabledCount);
+        }
+
+        [Test]
+        public void AutoUnregister_UnregisterSelfInsideOnDisable_StaysRemoved()
+        {
+            _node.OnDisableScript = () => _scheduler.Unregister(_node);
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f));
+
+            Assert.AreEqual(1, _node.OnDisableCallCount, "自注销不得产生第二次宣告");
+            Assert.AreEqual(0, _scheduler.TotalCount);
+        }
+
+        [Test]
+        public void AutoUnregister_OnDisableThrows_IsIsolatedAndRestOfFrameStillApplies()
+        {
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+            _node.ThrowOnDisable = true;
+
+            var other = new TestUpdateable();
+            _scheduler.Register(other, order: 1);
+
+            ExpectAutoUnregisterLog();
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] TestUpdateable.OnDisable threw exception")));
+
+            Assert.DoesNotThrow(() => _scheduler.Tick(time: 1.0f));
+
+            Assert.AreEqual(1, _node.OnDisableCallCount);
+            Assert.AreEqual(1, other.OnUpdateCallCount, "生命周期回调抛异常被隔离，同帧其余节点照常派发");
+        }
+
+        #endregion
+
+        #region 自动注销的不变量锁（改动只落在自动路径上）
+
+        [Test]
+        public void Unregister_DoesNotAnnounceOnDisable()
+        {
+            // 显式注销保持静默是既有契约（README「配对在『停止管理』处断裂」）——
+            // 调用方发起的那次他在同一栈里就知道，而 Clear 还要靠这条在隔离点不跑业务代码
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Unregister(_node);
+
+            Assert.AreEqual(1, _node.OnEnableCallCount);
+            Assert.AreEqual(0, _node.OnDisableCallCount, "显式 Unregister 不得宣告 OnDisable");
+        }
+
+        [Test]
+        public void UnregisterDisabledNode_DoesNotAnnounceAgain()
+        {
+            _scheduler.Register(_node, order: 0);
+            _scheduler.Disable(_node);
+            _scheduler.Unregister(_node);
+
+            Assert.AreEqual(1, _node.OnDisableCallCount, "Disable 时已宣告过一次，注销不得重复");
+        }
+
+        [Test]
+        public void IsEnabled_StaysTrueForAutoRemovedNode()
+        {
+            // 语义锚点：IsEnabled 只回答「是否被禁用」，不回答「是否在管理中」——
+            // 被自动注销的节点返回 true 是既有语义，别在后续轮次顺手「修掉」（查询入口见 UpdateManager.IsRegistered）
+            _scheduler.Register(_node, order: 0);
+            _node.ThrowException = true;
+
+            ExpectAutoUnregisterLog();
+            _scheduler.Tick(time: 1.0f);
+
+            Assert.IsTrue(_scheduler.IsEnabled(_node), "自动注销不是禁用");
+        }
+
+        #endregion
 
         [Test]
         public void ProcessImmediate_OnFixedTiming_OnlyReanchors()

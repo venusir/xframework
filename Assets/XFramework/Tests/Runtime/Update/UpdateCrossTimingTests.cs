@@ -1,5 +1,8 @@
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
 namespace XFramework.XUpdate.Tests
@@ -137,9 +140,14 @@ namespace XFramework.XUpdate.Tests
                 _recorder.Events.Add("target.disable");
             }
 
+            /// <summary>让 <see cref="OnUpdate"/> 抛异常（用于「自动注销只发生在抛异常那一套调度器上」）。</summary>
+            public bool ThrowOnUpdate { get; set; }
+
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 _recorder.Events.Add("target.update");
+                if (ThrowOnUpdate)
+                    throw new System.Exception("Test exception");
                 return UpdateTier.Tier0;
             }
 
@@ -283,6 +291,29 @@ namespace XFramework.XUpdate.Tests
 
             Assert.AreEqual(4, CountEvents(recorder, "target.enable"), "重新进入集合，两个时机再各宣告一次");
             Assert.AreEqual(2, CountEvents(recorder, "target.disable"), "严格成对：两次启用配两次停用");
+        }
+
+        [Test]
+        public void AutoUnregister_CrossTiming_AnnouncesOnlyOnTheFailingTiming()
+        {
+            // 自动注销只摘掉抛异常那一套调度器的条目，故也只宣告一次；同一帧里另一套仍会照常派发它
+            // （「每套调度器各算一份」的直接后果）。这条同时是「不许把配对回调做成全局认领」的回归钩子
+            var recorder = new Recorder();
+            var target = new AllTimingsTarget(recorder) { ThrowOnUpdate = true };
+            UpdateManager.Register(target, order: 0);
+            UpdateManager.RegisterLate(target, order: 0);
+
+            Assert.AreEqual(2, CountEvents(recorder, "target.enable"), "两个时机各宣告一次启用");
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[UpdateScheduler] AllTimingsTarget.OnUpdate threw exception, unregistering")));
+
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.AreEqual(1, CountEvents(recorder, "target.disable"),
+                "只有抛异常那一套宣告离开；LateUpdate 那套条目还在，不该宣告");
+            Assert.AreEqual(1, recorder.LateCount, "同一帧里 LateUpdate 仍照常派发它");
+            Assert.IsTrue(UpdateManager.IsEnabled(target), "它没有被禁用，只是从一套调度器里被摘掉了");
         }
 
         [Test]
