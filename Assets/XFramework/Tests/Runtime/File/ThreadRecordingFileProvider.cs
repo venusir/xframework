@@ -20,6 +20,7 @@ namespace XFramework.XFileManager.Tests
         #region Private Fields
 
         private static readonly List<int> RecordedThreadIds = new();
+        private static readonly List<string> RecordedPaths = new();
         private readonly TempFileProvider _inner;
 
         #endregion
@@ -42,10 +43,14 @@ namespace XFramework.XFileManager.Tests
         public static int LastDeleteThreadId =>
             RecordedThreadIds.Count > 0 ? RecordedThreadIds[RecordedThreadIds.Count - 1] : -1;
 
+        /// <summary>被删除的相对路径，按调用顺序记录（供「删除顺序」类断言用）。</summary>
+        public static IReadOnlyList<string> DeletedPaths => RecordedPaths;
+
         /// <summary>清空记录（每个用例开始前调用）。</summary>
         public static void Reset()
         {
             RecordedThreadIds.Clear();
+            RecordedPaths.Clear();
         }
 
         /// <summary>本次记录里是否有任何一次删除发生在 <paramref name="threadId"/> 上。</summary>
@@ -91,6 +96,7 @@ namespace XFramework.XFileManager.Tests
         public void Delete(FileDomain domain, string relativePath)
         {
             RecordedThreadIds.Add(System.Environment.CurrentManagedThreadId);
+            RecordedPaths.Add(relativePath);
             _inner.Delete(domain, relativePath);
         }
 

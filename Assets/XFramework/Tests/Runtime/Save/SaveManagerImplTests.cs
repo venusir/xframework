@@ -1121,6 +1121,27 @@ namespace XFramework.XSave.Tests
                 "移动 = 复制 + 删源，删源那一半同样不得压在主线程上");
         }
 
+        [Test]
+        public async Task DeleteSlotAsync_DeletesBackupBeforePayload()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);   // 覆盖产生一代 .bak
+            ThreadRecordingFileProvider.Reset();
+
+            await SaveManager.DeleteSlotAsync(1);
+
+            // **顺序承重**：恢复扫描的语义是「载荷缺失且有 .bak ⇒ 用备份原子写回」（见
+            // RecoverAsync_RestoresPayloadFromBackup）。若按「载荷 → .meta → .bak」删，中断（取消 / 崩溃）
+            // 会停在「载荷已删、备份还在」——下次启动就把槽位**复活成上一代内容**（本条改写前实测：
+            // 中断后 LoadAsync 拿回的是 Gold=1，而删除前的最新存档是 Gold=2）。
+            // 先清 .bak 之后，任何中断点只剩两种形态：原封不动、或彻底删除
+            var deleted = ThreadRecordingFileProvider.DeletedPaths;
+            Assert.Greater(deleted.Count, 0, "前提：确实发生过删除");
+            StringAssert.EndsWith(FilePathUtility.BackupFileSuffix, deleted[0],
+                "备份必须最先删除——它一旦留在最后，中断就会把槽位复活成上一代内容");
+            StringAssert.Contains("slot_1.save", deleted[1], "载荷紧随其后");
+        }
+
         #endregion
 
         [Test]

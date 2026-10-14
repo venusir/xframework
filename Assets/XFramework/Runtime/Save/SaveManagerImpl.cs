@@ -614,6 +614,8 @@ namespace XFramework.XSave
                     return 0;
                 }
 
+                OrderBackupsFirst(files);
+
                 var deleted = 0;
                 for (int i = 0; i < files.Length; i++)
                 {
@@ -1150,10 +1152,32 @@ namespace XFramework.XSave
         /// <param name="cancellationToken">取消令牌。</param>
         private static async UniTask DeleteSlotFilesAsync(string slotPath, CancellationToken cancellationToken)
         {
+            // **先清备份**（顺序承重，别改回去）：恢复扫描的语义是「载荷缺失且有 .bak ⇒ 用备份原子写回」。
+            // 若按「载荷 → .meta → .bak」删，中断（取消 / 崩溃）会停在「载荷已删、备份还在」——下次启动
+            // 就把槽位复活成**上一代**内容。先删 .bak 之后，任何中断点只剩两种形态：原封不动、或彻底删除
+            await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix, cancellationToken);
             await FileManager.DeleteAsync(SaveDomain, slotPath, cancellationToken);
             await FileManager.DeleteAsync(SaveDomain, slotPath + SavePathUtility.MetaFileSuffix, cancellationToken);
-            await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix, cancellationToken);
             await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.TempFileSuffix, cancellationToken);
+        }
+
+        /// <summary>
+        /// 把备份文件排到数组最前，供两个批量删除循环使用——理由同 <see cref="DeleteSlotFilesAsync"/> 的
+        /// 「先清备份」。
+        /// <para><b>两档分区而非全排序</b>：档内顺序无所谓，且不依赖文件系统的枚举序（各平台不同）。</para>
+        /// </summary>
+        /// <param name="files">待删除的相对路径数组（原地重排）。</param>
+        private static void OrderBackupsFirst(string[] files)
+        {
+            var write = 0;
+            for (var read = 0; read < files.Length; read++)
+            {
+                if (files[read].EndsWith(FilePathUtility.BackupFileSuffix, StringComparison.Ordinal))
+                {
+                    (files[write], files[read]) = (files[read], files[write]);
+                    write++;
+                }
+            }
         }
 
         /// <summary>
@@ -1306,6 +1330,8 @@ namespace XFramework.XSave
                 var deleted = 0;
                 if (files != null && files.Length > 0)
                 {
+                    OrderBackupsFirst(files);
+
                     for (int i = 0; i < files.Length; i++)
                     {
                         ReportProgress(progress, (float)i / files.Length, $"删除存档 {i + 1}/{files.Length}");
