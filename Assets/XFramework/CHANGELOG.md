@@ -121,6 +121,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`Bootstrap.RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌**（不再是调用方令牌）：
   `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)`
   这类过滤与语义都对不上。判据改用 `OperationCanceledException.CancellationToken.IsCancellationRequested`。
+- **字段句柄（`SettingRef`）的重放登记改为会话级**：播放会话边界清空重放表，句柄在下次被
+  **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
+  **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；
+  `static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：注册表仍不随 `Destroy` 清空。
 
 ### Fixed
 
@@ -144,7 +148,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 红证实测（临时退回旧行为）：`SceneLoadOperationTests` 10 例中 8 例红——失败释放两例 `Expected: 1 But was: 0`、
 取消善后两例（未卸载 / 期望的告警没出现）、按名回查四例；两条与本修复无关的用例保持绿。
 
-#### 会话级复位（跨 Input / UI / Asset / Config / Localization / File / Bootstrap / InstanceTracker）
+#### 会话级复位（跨 Input / UI / Asset / Config / Localization / File / Bootstrap / InstanceTracker / Settings）
 
 - **关闭域重载时，第二个播放会话里静态门面静默失效**。缺陷有两道锁：门面 `Initialize()` 因 `_initialized`
   仍为真而**告警后早退**，以及 `_ticker` 之类的对象字段非空拦掉重建——`Destroy()` 能复位一切，但正常游戏流程
@@ -159,6 +163,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **验证手段**：`Tools/run-tests.ps1` **验不了这条**（每次是全新 batchmode 进程，跨会话的静态存活不会发生）；
   真验收是手工的——把 `ProjectSettings/EditorSettings.asset` 的 `m_EnterPlayModeOptions` 临时置 1，
   编辑器内连跑两遍 PlayMode 全量，跑完改回（仓内不常住该设置）。
+
+- **Settings 是同一轮被漏掉的第八个门面（2026-10-14 补齐；判据是同一句原话）**：`SettingsManager.Initialize<T>`
+  见 `Managers` 里已有同类型即「告警 + 返回旧实例」，而 `Managers` 只在显式 `Destroy` 里清——使用方照文档
+  再调一次无法自救（第二会话复用上一会话的管理器：旧 store、旧脏计数，其自动保存 ticker 也已不在被清空的
+  `UpdateManager` 里）。同轮修掉同根因的另两处：**重放注册表跨会话累积**（第二会话里同一字段再建句柄，
+  `Apply` / `Load` / `Reset` 会重放两次——重复日志与重复副作用）与 **`SettingsPauseNotifier` 计数不归零**
+  （上一会话的计数不随边界归还，第二会话最后一次 `Release` 归不了零，`DontDestroyOnLoad` 宿主永不销毁、
+  计数逐会话累积）。修法为「会话边界清空 + 句柄『用即重登记』」，取舍弃取（弱引用、纯清空两条路各有硬伤）
+  见 `Runtime/Settings/README.md` 的「已知限制」。回归用例 `Tests/Runtime/Settings/SettingsSessionResetTests`
+  7 例（含四条「用即重登记」的逐入口守卫）+ `SessionResetTests.Settings_ReinitializesAfterSessionReset`。
 
 #### Bootstrap
 
