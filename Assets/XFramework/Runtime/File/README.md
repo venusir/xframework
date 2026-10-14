@@ -113,7 +113,7 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 | `WriteAllBytesAtomic` | `WriteAllBytesAtomicAsync` | 原子写 + 一代备份，含「Provider 无原子能力时降级并告警」 |
 | `GetFiles` / `GetDirectories` | `GetFilesAsync` / `GetDirectoriesAsync` | 返回路径相对**域根**、正斜杠分隔 |
 
-加上本就同步的 `Exists` / `Delete` / `CreateDirectory` / `GetPhysicalPath`，同步面即完整。
+加上 `Exists` / `ExistsAsync`、`Delete` / `DeleteAsync` 两对，以及本就同步的 `CreateDirectory` / `GetPhysicalPath`，同步面即完整。（`DeleteAsync` 由门面自己实现，见「线程契约」。）
 
 **适用范围**：同步方法内部调用异步实现然后**阻塞当前线程**等待完成，只适合编辑器工具、小型配置文件、启动期加载。运行时请优先使用异步版本，**勿在每帧路径调用**。
 
@@ -153,6 +153,10 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
   抽象方法**直接放进委托**（`ExistsAsync` / `ReadAllBytesAsync` / `WriteAllBytesAsync`）。因此实现方
   **不得在委托内触碰 Unity API**；需要平台路径这类主线程资源时，请在进入委托前取好——照 `DesktopFileProvider`
   对域根的处理。
+- **`DeleteAsync` 是门面唯一一处自己决定 IO 线程的原语**：`IFileProvider.Delete` 没有异步孪生（各平台的后端
+  删除本质上都是同步原语），故由门面把它放进 `RunOnThreadPool` 调用——其余异步原语的线程由 Provider 自己安排。
+  **随之而来的约束**：Provider 的 `Delete` 现在会在**池线程**上被调用，实现方须容忍（与上一条同源）。
+  取消语义：令牌只保证「尚未开始的删除不会发生」，已进入委托的那一次会跑完。
 
 ## 路径域说明 (`FileDomain`)
 
@@ -480,6 +484,11 @@ FileManager.Initialize();
   PlayerLoop 依赖型的 UniTask（如 WebGL 后端），同步调用一样会死锁，框架无法代为识别。
 - **不实现可选能力接口的后果**见「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
   `IDirectoryProvider` 是 **Save 模块正在依赖**的（存档的崩溃防护、玩家目录发现），不是可选项。
+- **`Delete` 不能离开特定线程的 Provider 在 `DeleteAsync` 下不可用**：门面把同步 `Delete` 放进线程池执行
+  （见「线程契约」），这类 Provider（典型如 WebGL 的 JS 桥）只能继续用同步 `Delete`。**重开判据**：真出现
+  这样的 Provider ⇒ 补一个可选能力接口（形状与 `IAsyncSettingsStore` 同构：提供者实现它、门面探测，
+  回退＝当前的线程池包装）。判为非现状理由：框架对池线程的依赖已是全局的（`ConsoleFileProvider` 把抽象方法
+  直接丢进池委托、存档的原子写同样依赖池）。
 - **切换加密立即使已写入的文件不可读**：旧文件是明文（或旧密钥密文），新配置下解密得到的是垃圾数据而**不是
   抛异常**，表现为「文件损坏」。变更前需自行迁移存量文件。
 - **加解密作用域默认覆盖所有域**：`SetCryptoProvider` 不传 `domain` 会连带加密 `AppData` / `Cache`；
@@ -495,9 +504,11 @@ FileManager.Initialize();
   按契约恒实现 `IAtomicFileProvider` / `IDirectoryProvider`——对它探测必然「通过」，判定会被整个推给装饰器。
   同一件事曾因此有**两种答案**（未加密时告警降级、加密后抛异常或静默返回空数组）。查 `_baseProvider` 把判定权
   收归一处，装饰器侧的同类检查退为兜底、不重复告警也不改变语义。
-- **同步面是异步面的一层包装，不是第二套实现**：所有同步方法都是
-  `XxxAsync(...).AsTask().GetAwaiter().GetResult()`，没有重复的 IO 代码。代价是阻塞调用线程（见「已知限制」），
-  换来的是「编辑器工具 / 启动期」不必写异步。
+- **同步面大多只是异步面的一层包装，但 `Delete` 是直通原语**：`ReadAll*` / `WriteAll*` / 原子写 / 枚举这几个
+  同步方法都是 `XxxAsync(...).AsTask().GetAwaiter().GetResult()`，没有重复的 IO 代码；`Delete` 则直接调
+  Provider——它的异步形态 `DeleteAsync` 调用的是**同一个** `Delete`，不存在第二套实现，因此同步版不必向异步版
+  看齐（包装它只会让调用方多付一次线程池往返、照样阻塞，还会把 Provider 的执行线程从调用线程悄悄改掉）。
+  两者的代价都是阻塞调用线程（见「已知限制」），换来的是「编辑器工具 / 启动期」不必写异步。
 - **`ConsoleFileProvider` 做成抽象类而非接口**：便于未来在基类里添加通用实现而不破坏第三方子类。
 - **`FileManagerExtensions` 保留为一行委托，不删除**：该文件已随 0.2.0 发布过，删掉是源码破坏；保留同名成员、
   内部转调门面，既有调用方零改动。

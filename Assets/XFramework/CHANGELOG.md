@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   / `Dispose()`（即发即忘，不抛）。门面配 `LoadSceneAsync`（改形，返回句柄）与 `UnloadSceneAsync`
   （**唯一「未初始化也不抛」的成员**——它会被 `Dispose` 调到）。**无卸载路径**这条缺口由此关闭。
 
+#### File
+
+- **门面新增 `FileManager.DeleteAsync(FileDomain, string, CancellationToken)`**（2026-10-15）：把
+  `IFileProvider.Delete` 放进 `RunOnThreadPool` 执行，**不阻塞调用线程**——这是门面**唯一一处自己决定 IO 线程**
+  的原语（`IFileProvider` 没有异步删除孪生，且各平台的后端删除本质上都是同步原语，故由门面代劳最自然）。
+  **零接口变更**：`IFileProvider` 一个成员都没动，第三方实现零影响（基线 +1 行，属**源兼容新增**）。
+  缺失即 no-op（与同步版同语义）；**取消**只保证「尚未开始的删除不会发生」（委托一旦进入就会跑完）。
+  **使用方不受影响**，除非你要用它；**但第三方 `IFileProvider` 需要自核一条**：Provider 的 `Delete` 现在会在
+  **池线程**上被调用（与其余异步原语同一条约束）——详见 `### Changed` 的行为变更一条。
+  取舍与两条被否形状（给主接口加成员 / 新增可选能力接口）见 `Runtime/File/README.md`。
+
 #### Scene
 
 - **新增 `XScene` 场景管理模块**（`Documentation/Roadmap.md` §三 的「场景管理」条目立项；该条目是本表最大的一条，
@@ -134,6 +145,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
   **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；
   `static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：注册表仍不随 `Destroy` 清空。
+- **`Save` 的删除不再在主线程做同步 IO**：`DeleteSlotAsync` / `MoveSlotAsync` / `DeleteAllSlotsAsync` /
+  `DeletePlayerAsync` 的删除改经 `FileManager.DeleteAsync` 在池线程执行（此前是 1~4×N 次同步 `FileManager.Delete`
+  压在主线程上，Console 等平台的 SDK 删除若是数百毫秒级会直接卡住）。随之而来的三条：**批量删除跨帧**
+  （每个文件一次切回主线程＝一帧，忙碌门禁为真的时长随文件数增长）；**删除变为可取消**，且取消只保证
+  「尚未开始的不会发生」——可能留下部分删除，由下次启动的恢复扫描收敛；进度回调仍在主线程、次数与计数不变。
+  仍然留在调用线程上的只有 3 处**单次**探测（判据是「是否成批」而非「是否同步」）。
+- **`FileManager.DeleteAsync` 会在池线程上调用第三方 `IFileProvider.Delete`**（编译器抓不到，**最需要自核的一条**）：
+  Provider 的删除实现须容忍池线程调用（与其余异步原语同一条约束）。**逃生舱缺口如实说明**：其 `Delete` 必须
+  留在特定线程的 Provider（典型如 WebGL 的 JS 桥）在 `DeleteAsync` 下不可用，同步 `Delete` 不受影响；
+  真出现这样的 Provider 时会补一个可选能力接口（重开判据见 `Runtime/File/README.md` 的「已知限制」）。
+- **删除槽位的顺序改为「先清备份」**：此前顺序是「载荷 → `.meta` → `.bak` → `.tmp`」，而恢复扫描的语义是
+  「载荷缺失且有 `.bak` ⇒ 用备份原子写回」——于是「载荷已删、备份还在」的中断点（取消 / 崩溃）会让下次启动
+  把该槽位**复活成上一代内容**。先清 `.bak` 之后，任何中断点只剩「原封不动」或「彻底删除」两种形态。
 - **`UpdateManager` 的自动注销现在会补发一次 `OnDisable`**：派发回调抛异常时，调度器照旧记 Error 并**永久
   摘掉**该节点（只摘抛异常那一套时机），但**在该帧收尾时给它补发一次 `OnDisable`**——它同样是「离开派发
   集合」的边沿。补发之后，README 明写的「两者严格交替、且以 `OnEnable` 起头，不会出现没有配对的

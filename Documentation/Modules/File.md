@@ -38,11 +38,21 @@
   `Destroy` 不调 Dispose 不漏资源。
 - **不给同步 API 做「自动切回主线程」**：那会改变 `.AsTask().GetAwaiter().GetResult()` 的阻塞语义，
   而同步面的存在意义就是「调用方自己承担阻塞」。
+- **不给 `IFileProvider` 加 `DeleteAsync` 成员**（2026-10-15）：会让所有第三方实现编译不过——本仓铁律是
+  「不给主接口加成员，第三方实现零影响」。
+- **不新增「异步删除」可选能力接口**（同日）：降级路径恰好就是门面的线程池包装、且**结果完全相同**
+  （对比原子写丢崩溃防护、目录枚举丢结果——那两条的降级都要告警）。**判据**：可选能力接口只用在
+  「降级会产生不同结果、需要告警」处。重开判据见「未决」销账行。
+- **不把 `Delete` 改成 `DeleteAsync(...).AsTask().GetAwaiter().GetResult()` 的阻塞包装**（同日）：调用方
+  **照样阻塞**，只多付一次线程池往返，还会把 Provider 的执行线程从调用线程悄悄改掉。README 那句「同步面是
+  异步面的一层包装」据此**收窄**为「大多只是包装，`Delete` 是直通原语」——改文档而不是改代码迁就它。
+- **不新增 `MoveAsync` / `CopyAsync`**（同日）：Save 的「移动」= 复制 + 删源（刻意非原子，见 Save README）；
+  同盘 `File.Move` 在 WebGL / Console 无可用物理路径，加了也没有消费者。原子替换语义已有
+  `FilePathUtility.ReplaceFileAtomically`（原子写走它）。
 
 **未决**：
 
-- **File 缺异步删除原语**：Save 的 `DeleteSlotAsync` / `MoveSlotAsync` 因此被迫在主线程做同步 IO
-  （已记在 Save README 的「已知限制」）。属跨模块 API 变更，该单独走一轮计划——本轮只指认归属，不重复立项。
+- ~~**File 缺异步删除原语**~~ —— **2026-10-15 已闭合**：门面新增 `DeleteAsync`（基线 +1 行、**零接口变更**）——它把 Provider 的同步 `Delete` 放进 `RunOnThreadPool` 执行，是**门面唯一一处自己决定 IO 线程**的原语。Save 的四个删除 API 随之迁移（`SaveManagerImpl` 5 处 + 每处补 `ReturnToMainThread`），删除不再压在主线程。**形状判据（可复用）**：可选能力接口只用在「**降级会产生不同结果、需要告警**」处（原子写丢崩溃防护、目录枚举丢结果都是；异步删除的降级路径恰好就是这个包装、结果完全相同 ⇒ 能力接口是形式主义）。**重开判据**：真出现「其 `Delete` 不能离开特定线程」的 Provider（典型如 WebGL 的 JS 桥）⇒ 补能力接口（形状与 `IAsyncSettingsStore` 同构）。回归锁：`FileManagerDeleteTests` 5 例（线程断言 + 同步对照 + 幂等 + 取消 + 加密）、`SaveManagerImplTests` 四条线程用例（改前必红）。
 - **`MobileFileProvider.CheckStreamingExists` 的忙等仍未在真机验证**：门面（`FileManager.Exists`）已拒绝
   「移动端 + Streaming」这个组合，但 Provider 是公开类型、可以直接使用，那条 `while (!request.isDone) { }`
   仍在。**未决的是「要不要给 Provider 层也加兜底」**（改成有界等待？），本轮只如实标注风险。
