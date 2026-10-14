@@ -147,6 +147,11 @@ namespace XFramework.XData
                     data.blocks.Add(snap);
             }
 
+            // 回滚元数据必须在清空**之前**捕获：留回滚点的一方（Save 的 TryApplySnapshot）靠它把
+            // 「加载前哪些块还没存」一起带回内存。放在这里（而非循环之前）意味着导出失败时不留回滚点
+            foreach (var dirty in _dirtyBlocks)
+                data.dirtyBlockNames.Add(dirty.BlockName);
+
             // 快照导出成功即视为已保存，清空全部脏标记；序列化异常会向上传播，此时脏标记保留
             _dirtyBlocks.Clear();
 
@@ -188,8 +193,22 @@ namespace XFramework.XData
             // 快照中未出现的 Block 保持清空。
             ForEachBlock(b => b.OnClear());
 
-            // 恢复即干净：无论快照是否为空，内存数据已重置/恢复，清空全部脏标记
+            // 恢复即干净：不携带脏集合的快照（从磁盘读回、手工构造）一律清空；
+            // 携带者（进程内回滚点，由 CreateSnapshot 在清空之前填充）按其还原——
+            // 回滚要把数据与「哪些块还没存」一起还原，否则将来做增量保存时会漏块。
+            // 位置有两个硬约束：在 ForEachBlock(OnClear) **之后**（第三方 OnClear 里若 RemoveBlock，
+            // 解析在后才不会把已移除的块当幽灵写回）、在空快照早退**之前**（块列表为空但脏集合非空的
+            // 回滚点也要还原）。名字解析不到即该块已被移除——跳过不告警（块没了就没有要保护的数据，
+            // 与 RemoveBlock 联动清脏同一结论）
             _dirtyBlocks.Clear();
+            if (data.dirtyBlockNames != null)
+            {
+                for (var i = 0; i < data.dirtyBlockNames.Count; i++)
+                {
+                    if (_blockNameIndex.TryGetValue(data.dirtyBlockNames[i], out var dirtyBlock))
+                        _dirtyBlocks.Add(dirtyBlock);
+                }
+            }
 
             if (data.blocks == null || data.blocks.Count == 0)
                 return 0;

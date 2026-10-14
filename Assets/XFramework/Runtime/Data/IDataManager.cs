@@ -51,13 +51,19 @@ namespace XFramework.XData
 
         /// <summary>
         /// 遍历所有已注册的 <see cref="IDataBlock"/>，调用 <see cref="IDataBlock.OnSave"/> 构建 <see cref="DataSnapshot"/> 快照。
-        /// <para>序列化委托给 <see cref="XSerialize.Serializer"/>，返回值由 Save 模块负责写入到存储后端。</para>
+        /// <para>序列化委托给 <see cref="XSerialize.Serializer"/>，返回值由 Save 模块负责写入到存储后端。
+        /// 导出成功后清空全部脏标记（导出即视为已保存）。</para>
+        /// <para><b>快照同时记下这一刻的脏集合</b>（进程内回滚元数据，不随存档持久化），
+        /// 供「留回滚点 → 加载失败 → 回滚」把数据与脏集合一起还原——见 <see cref="ApplySnapshot(DataSnapshot)"/>。</para>
         /// </summary>
         DataSnapshot CreateSnapshot();
 
         /// <summary>
         /// 将 <see cref="DataSnapshot"/> 快照恢复到当前内存数据中。
         /// <para>反序列化委托给 <see cref="XSerialize.Serializer"/>，加载前会清空现有数据。</para>
+        /// <para><b>脏标记按快照携带的集合还原</b>：不携带者（从磁盘读回、手工构造）一律清空——「恢复即干净」；
+        /// 携带者（同进程内由 <see cref="CreateSnapshot"/> 产出的回滚点）则还原到生成快照那一刻的脏集合。
+        /// 因此「留回滚点 → 应用别的快照失败 → 应用回滚点」之后，加载前的未保存改动仍是「未保存」。</para>
         /// </summary>
         /// <param name="data">要应用的快照。</param>
         /// <returns>

@@ -37,6 +37,18 @@ namespace XFramework.XData
         public List<DataBlockSnapshot> blocks = new();
 
         /// <summary>
+        /// 生成此快照那一刻的脏块名集合（**进程内回滚元数据，不随存档持久化**）。
+        /// <para><b>用途：</b><see cref="DataManagerImpl.ApplySnapshot(DataSnapshot)"/> 应用快照时据它还原脏标记——
+        /// 「留回滚点 → 加载失败 → 应用回滚点」必须把数据与脏集合**一起**还原，否则将来做增量保存时
+        /// 会漏掉本该保存的块（玩家在加载前的未保存改动退化成丢失）。</para>
+        /// <para><b>为什么不进存档：</b>它是 <c>internal</c> 字段，而默认序列化器只写 public 成员
+        /// （与本模块「快照结构必须使用 public 字段」是同一条契约的另一面）。因此存档字节逐字节不变，
+        /// 校验和、侧车与存档格式零影响；从磁盘读回的快照**不携带**它，应用之后仍与今天一样是干净的。
+        /// 换用会写 non-public 成员的序列化器时须自行保持该性质——有一条字节级用例钉着它。</para>
+        /// </summary>
+        internal List<string> dirtyBlockNames = new();
+
+        /// <summary>
         /// 创建与此快照配对的 <see cref="XSave.SaveMeta"/> 实例。
         /// <para>默认实现填充 <see cref="version"/> 和 <see cref="timestamp"/>，
         /// 第三方子类可重写此方法以构造自定义 <see cref="XSave.SaveMeta"/> 子类并填充扩展字段。</para>
