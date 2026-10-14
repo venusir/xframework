@@ -651,6 +651,33 @@ namespace XFramework.XUpdate
             return true;
         }
 
+        /// <summary>
+        /// 检查对象是否仍在调度中（任一时机，跨时机对象<b>取或</b>：任一时机仍持有它即为「在调度中」）。
+        /// <para><b>与 <see cref="IsEnabled"/> 的分工：</b>本方法回答「是否在管理中」，那个回答「是否被禁用」。
+        /// 两个谓词方向相反是刻意的——未注册过的对象在本方法上为 <c>false</c>、在 <c>IsEnabled</c> 上为
+        /// <c>true</c>；被 <see cref="Disable"/> 的节点<b>仍算注册</b>（可用 <see cref="Enable"/> 恢复）。</para>
+        /// <para><b>用途：</b><see cref="IUpdateable.OnUpdate"/> 抛异常会让调度器把节点<b>自动注销</b>
+        /// （那一次它还会收到一份 <see cref="IUpdateLifecycle.OnDisable"/>），本方法是配套的查询面，
+        /// 给「外部观察者查别人的注册态」用。派发期间按<b>最终落地状态</b>回答（未落地的待处理操作也计入，
+        /// 与 <see cref="IsEnabled"/> 同一口径）。</para>
+        /// <para><b>诊断 / 防御定位</b>：单次查询要遍历三套调度器（一套含禁用表的线性扫描），成本随节点数
+        /// 增长，<b>不要放进每帧路径</b>（同 <see cref="CopyNodes"/> 的判词）。</para>
+        /// </summary>
+        /// <param name="node">要检查的对象。</param>
+        /// <returns>仍在调度中返回 true；未注册过、或已被注销（含因回调抛异常被自动注销）的对象返回 false。</returns>
+        public static bool IsRegistered(IUpdateLifecycle node)
+        {
+            if (_schedulers == null || node == null) return false;
+
+            // 取或：只要有一套还持有它就算「在调度中」。门面不维护「节点属于哪个时机」的映射表——
+            // 那是第二份真相，漏同步即幽灵条目（同 Unregister 的注释）
+            for (int i = 0; i < _schedulers.Length; i++)
+            {
+                if (_schedulers[i].IsRegistered(node)) return true;
+            }
+            return false;
+        }
+
         #endregion
 
         #region Public API — 立即处理

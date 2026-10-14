@@ -1,6 +1,8 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
 namespace XFramework.XUpdate.Tests
@@ -16,10 +18,17 @@ namespace XFramework.XUpdate.Tests
     {
         #region Test Doubles
 
-        private sealed class TestUpdateable : IUpdateable
+        private sealed class TestUpdateable : IUpdateable, ILateUpdateable
         {
             public int UpdateCallCount;
+            public int LateCallCount;
             public UpdateTier NextTier = UpdateTier.Tier0;
+
+            /// <summary>让 <see cref="OnUpdate"/> 抛异常（用于「自动注销」这条路径）。</summary>
+            public bool ThrowException;
+
+            /// <summary>在 <see cref="OnUpdate"/> 里执行的剧本（用于「派发期间观察」）。</summary>
+            public System.Action OnUpdateScript;
 
             public void OnEnable() { }
 
@@ -28,6 +37,15 @@ namespace XFramework.XUpdate.Tests
             public UpdateTier OnUpdate(float deltaTime, float time)
             {
                 UpdateCallCount++;
+                OnUpdateScript?.Invoke();
+                if (ThrowException)
+                    throw new System.Exception("Test exception");
+                return NextTier;
+            }
+
+            public UpdateTier OnLateUpdate(float deltaTime, float time)
+            {
+                LateCallCount++;
                 return NextTier;
             }
         }
@@ -52,6 +70,80 @@ namespace XFramework.XUpdate.Tests
             // 复原门面：下面有用例会把它置空，而 PlayMode 下所有 fixture 共享同一个 player
             UpdateManager.AutoInit();
             UpdateManager.Clear();
+        }
+
+        #endregion
+
+        #region IsRegistered（自动注销后的可观测查询）
+
+        [Test]
+        public void IsRegistered_TracksRegistrationLifetime()
+        {
+            var node = new TestUpdateable();
+
+            Assert.IsFalse(UpdateManager.IsRegistered(node),
+                "未注册 ⇒ false——与 IsEnabled 的「未注册 ⇒ true」方向相反，这是两个谓词的分工");
+
+            UpdateManager.Register(node, order: 0);
+            Assert.IsTrue(UpdateManager.IsRegistered(node));
+
+            UpdateManager.Disable(node);
+            Assert.IsTrue(UpdateManager.IsRegistered(node), "被禁用仍算注册：它还在禁用表里，Enable 可以放回去");
+
+            UpdateManager.Enable(node);
+            UpdateManager.Unregister(node);
+            Assert.IsFalse(UpdateManager.IsRegistered(node), "显式注销 ⇒ false");
+        }
+
+        [Test]
+        public void IsRegistered_FalseAfterAutoUnregister()
+        {
+            var node = new TestUpdateable { ThrowException = true };
+            UpdateManager.Register(node, order: 0);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("threw exception, unregistering")));
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.IsFalse(UpdateManager.IsRegistered(node), "自动注销后查询必须能发现——这正是登记的缺口");
+            Assert.IsTrue(UpdateManager.IsEnabled(node), "两个谓词方向相反：它没有被禁用");
+        }
+
+        [Test]
+        public void IsRegistered_CrossTiming_TakesOr()
+        {
+            // 跨时机节点只在一套里抛异常 ⇒ 另一套仍持有它 ⇒ 取或为 true（对照 IsEnabled 的取与）
+            var node = new TestUpdateable { ThrowException = true };
+            UpdateManager.Register(node, order: 0);
+            UpdateManager.RegisterLate(node, order: 0);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("OnUpdate threw exception, unregistering")));
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.IsTrue(UpdateManager.IsRegistered(node), "LateUpdate 那套还持有它（取或）");
+        }
+
+        [Test]
+        public void IsRegistered_ReflectsPendingOperationDuringDispatch()
+        {
+            // 与 IsEnabled 同一口径：派发期间按最终落地状态回答——「注销请求已发出、尚未落表」也要算出去
+            var target = new TestUpdateable();
+            var observed = true;
+            var observer = new TestUpdateable
+            {
+                OnUpdateScript = () =>
+                {
+                    UpdateManager.Unregister(target);
+                    observed = UpdateManager.IsRegistered(target);
+                },
+            };
+
+            UpdateManager.Register(observer, order: 0);
+            UpdateManager.Register(target, order: 1);
+
+            UpdateManager.Tick(time: 1.0f);
+
+            Assert.IsFalse(observed, "派发期间发出的注销请求必须立刻反映在查询上");
+            Assert.IsFalse(UpdateManager.IsRegistered(target), "收尾落地后同样为 false");
         }
 
         #endregion

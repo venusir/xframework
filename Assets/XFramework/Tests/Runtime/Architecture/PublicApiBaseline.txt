@@ -1964,6 +1964,7 @@ XFramework.XUpdate.UpdateManager.IsDrivingPlayerLoop  ::  public static bool IsD
 XFramework.XUpdate.UpdateManager.IsEnabled  ::  public static bool(XFramework.XUpdate.IUpdateLifecycle node)
 XFramework.XUpdate.UpdateManager.IsInitialized  ::  public static bool IsInitialized { get; }
 XFramework.XUpdate.UpdateManager.IsPaused  ::  public static bool IsPaused { get; }
+XFramework.XUpdate.UpdateManager.IsRegistered  ::  public static bool(XFramework.XUpdate.IUpdateLifecycle node)
 XFramework.XUpdate.UpdateManager.Pause  ::  public static void()
 XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateable node, float deltaTime, float time)
 XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateable node, float deltaTime, ref XFramework.XUpdate.UpdateClock clock)

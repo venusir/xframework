@@ -831,6 +831,48 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 检查节点是否仍在本调度器的管理集合里（桶或禁用表）。
+        /// <para><b>与 <see cref="IsEnabled"/> 是方向相反的一问：</b>那个回答「是否被禁用」（未注册 ⇒ true），
+        /// 本方法回答「是否在管理中」（未注册 ⇒ false）。被 <see cref="Disable"/> 的节点<b>仍算注册</b>——
+        /// 它还在禁用表里，<see cref="Enable"/> 可以把它放回去。</para>
+        /// <para>与 <see cref="IsEnabled"/> 同一口径：派发期间状态尚未落表，故先回溯待处理操作、
+        /// 取最后一条决定注册态的操作（<c>Register</c> ⇒ 在、<c>Unregister</c> ⇒ 不在；其余种类不改变注册态）。</para>
+        /// </summary>
+        /// <param name="node">要检查的节点。</param>
+        /// <returns>仍在管理集合里返回 true；未注册过、或已被注销（含因回调抛异常被自动注销）的节点返回 false。</returns>
+        public bool IsRegistered(IUpdateLifecycle node)
+        {
+            if (node == null) return false;
+
+            for (int i = _pendingOps.Count - 1; i >= 0; i--)
+            {
+                if (_pendingOps[i].Node != node) continue;
+
+                switch (_pendingOps[i].Kind)
+                {
+                    case PendingOpKind.Register:
+                        return true;
+
+                    case PendingOpKind.Unregister:
+                        return false;
+
+                    default:
+                        // Disable / Enable / Move 都不改变「是否在管理集合里」，继续向前找
+                        continue;
+                }
+            }
+
+            if (_bucketOf.ContainsKey(node)) return true;
+
+            for (int i = 0; i < _disabledEntries.Count; i++)
+            {
+                if (_disabledEntries[i].Node == node)
+                    return true;
+            }
+            return false;
+        }
+
+        /// <summary>
         /// 立即对指定节点执行一次更新并重新调整档位。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
         /// <para><b>派发期间调用不会执行更新</b>：只把时间基准推到该时刻后返回
