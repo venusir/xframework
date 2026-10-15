@@ -269,5 +269,4 @@ LoadSceneAsync → AssetSceneHandle（场景已在场）
 
 YooAsset 的 `ResourcePackage.LoadSceneAsync` 有这三个参数，本模块一律不转发。`suspendLoad`（加载到 90% 挂起、
 需显式解除）尤其危险：它引入「谁负责激活」的时序，正是「不做场景栈」要躲的那类东西。等出现真实需求
-（例如「必须撤销一次 `Single` 切换」）再评估，重开判据记在 `Documentation/Modules/Scene.md` 的
-「已评估未采纳与未决」。
+（例如「必须撤销一次 `Single` 切换」）再评估。
