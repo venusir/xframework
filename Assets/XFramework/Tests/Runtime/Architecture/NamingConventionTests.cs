@@ -16,8 +16,8 @@ namespace XFramework.Architecture.Tests
     /// 变成每次全量门禁都会跑的自查。
     /// </para>
     /// <para>
-    /// <b>放 PlayMode 而不是 EditMode</b>：<c>Documentation/Workflow.md</c> §二 明写带 <c>-Filter</c>
-    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被最常见的开发回路静默跳过——这条教训来自
+    /// <b>放 PlayMode 而不是 EditMode</b>：本仓的开发回路里，带 <c>-Filter</c>
+    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被这个回路静默跳过——这条教训来自
     /// 同目录的 <c>AutoInitTests</c>。本用例纯扫源码文本、不需要播放模式，放这里**纯粹是为了不被跳过**。
     /// </para>
     /// <para>

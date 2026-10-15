@@ -4,9 +4,9 @@ namespace XFramework.XAudio
 {
     /// <summary>
     /// 一个播放源槽位的状态。
-    /// <para><b>为什么要自持状态机而不是只看 <c>AudioSource.isPlaying</c></b>：实测（见
-    /// <c>Documentation/Modules/Audio.md</c> 的实测记录）表明 <c>Pause()</c> 之后 <c>isPlaying</c>
-    /// 会变成 <c>false</c>——若回收判据只看它，暂停中的播放会被当场回收掉。状态机是唯一可信的来源。</para>
+    /// <para><b>为什么要自持状态机而不是只看 <c>AudioSource.isPlaying</c></b>：实测表明 <c>Pause()</c>
+    /// 之后 <c>isPlaying</c> 会变成 <c>false</c>——若回收判据只看它，暂停中的播放会被当场回收掉。
+    /// 状态机是唯一可信的来源。</para>
     /// </summary>
     internal enum AudioVoiceState
     {

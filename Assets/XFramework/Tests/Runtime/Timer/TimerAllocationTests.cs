@@ -163,8 +163,8 @@ namespace XFramework.XTimer.Tests
         /// 槽位只存 <c>CancellationToken</c> 本身，槽位与表上都没有 <c>CancellationTokenRegistration</c> 的容身之处。
         /// <para><b>如实说明：这是必要条件而非充分条件</b>。登记令牌后必须持有登记句柄才能注销，故
         /// 「设计上没有登记」必然表现为「没有存放登记句柄的字段」；但「<c>Register</c> 完立刻丢弃句柄」
-        /// 的写法能骗过它。<c>Documentation/Modules/Timer.md</c> 已把「不用 <c>Register</c>（它自身分配一次）」
-        /// 记为本模块的设计取舍，本条把它机械锁住，粗尺子兜底。</para>
+        /// 的写法能骗过它。「不用 <c>Register</c>（它自身分配一次）」是本模块已定的设计取舍，
+        /// 本条把它机械锁住，粗尺子兜底。</para>
         /// </summary>
         [Test]
         public void Slot_StoresTheTokenItself_NotARegistration()

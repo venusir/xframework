@@ -17,8 +17,8 @@ namespace XFramework.Architecture.Tests
     /// <see cref="SectionExemptions"/> 登记理由——与 <c>FeatureTableExemptions</c> 同一形状，未登记即红。</para>
     /// <para><b>只认 ## 与 ###</b>：<c>####</c> 及更深是条目级标题，不构成模块级的边界声明
     /// （小节埋在别的节里不算数，Reactive 那种两条并列的集合级小节算）。</para>
-    /// <para><b>放 PlayMode 而不是 EditMode</b>：<c>Documentation/Workflow.md</c> §二 明写带 <c>-Filter</c>
-    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被最常见的开发回路静默跳过（同 <c>ReadmeTableTests</c>、
+    /// <para><b>放 PlayMode 而不是 EditMode</b>：本仓的开发回路里，带 <c>-Filter</c>
+    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被这个回路静默跳过（同 <c>ReadmeTableTests</c>、
     /// <c>AutoInitTests</c>）。读 README 只需文件系统路径，不需要 Unity 资产 API。</para>
     /// <para><b>本守卫守不到什么</b>：① **小节里写了什么**——它能证明「有这一节」，证明不了条目属实、完整、
     /// 不陈旧（ReadmeTableTests 的「行内说明文字陈旧」是同一条边界）；② 条目的详略与措辞；③ 其余小节
@@ -78,7 +78,7 @@ namespace XFramework.Architecture.Tests
                         violations.Add($"Runtime/{module}/README.md 没有「{KnownLimitationsHeading}」小节——" +
                                        "使用方判断「这模块能不能用在我的场景」靠的就是这一节，缺了它只能靠读源码发现边界。" +
                                        "两条路：① 补一节（开场白与条目形态照 Config / Data / File / Save 的既有写法，" +
-                                       "素材在各 Documentation/Modules/<模块>.md）；② 确实无边界可写就去 " +
+                                       "素材在该模块的维护向记录里）；② 确实无边界可写就去 " +
                                        "ReadmeSectionTests.SectionExemptions 登记理由");
                     }
                 }

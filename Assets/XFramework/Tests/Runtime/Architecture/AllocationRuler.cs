@@ -38,7 +38,7 @@ namespace XFramework.Architecture.Tests
 
         /// <summary>
         /// 尺子自检用的噪声地板断言值（字节）。低于它才说明「什么都不分配时尺子是安静的」；
-        /// 一旦越线，下游全部粗尺子断言失去证据力（处置见 <c>Documentation/Workflow.md</c> §六）。
+        /// 一旦越线，下游全部粗尺子断言失去证据力（处置：先跑本类的自检，尺子自身失效时不得用它下任何结论）。
         /// </summary>
         internal const long QuietFloorBytes = 128 * 1024;
 
@@ -100,7 +100,7 @@ namespace XFramework.Architecture.Tests
             Assert.GreaterOrEqual(growth, minGrowthBytes,
                 $"{label}：尺子读到的堆增量应 ≥ {minGrowthBytes} B，实测 {growth} B——本次分配是已知量、" +
                 "对象全程可达。读到 0 或远小于分配量说明这把尺子也失效了，此时全部粗尺子断言失去证据力" +
-                "（处置见 Documentation/Workflow.md §六）。");
+                "（处置：先跑本类的自检；尺子失效时不得用它下任何结论）。");
         }
 
         #endregion

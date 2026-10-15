@@ -8,8 +8,7 @@ namespace XFramework.XInput.Tests
     /// <para><b>它锁的缺陷</b>：关闭域重载（Project Settings → Editor → Enter Play Mode Options →
     /// 取消 Reload Domain）时，上一播放会话的静态状态存活到第二会话，而门面的 <c>Initialize</c> 会因
     /// <c>_initialized</c> 仍为真而**告警后早退**——<c>_ticker</c> 还在、provider 还在，但没有任何调度器
-    /// 持有它，全部 <c>Observe*</c> 静默失效。机制在 2026-10-01 已实测复现
-    /// （配方见 <c>Documentation/Modules/Input.md</c>），本轮修它。</para>
+    /// 持有它，全部 <c>Observe*</c> 静默失效。机制在 2026-10-01 已实测复现，本轮修它。</para>
     /// <para><b>为什么能在单个播放会话里验</b>：缺陷需要「静态状态跨会话存活」与「<c>Initialize</c> 因
     /// <c>_initialized</c> 早退」同时成立——后者在单会话里手动造得出来：调 <c>UpdateManager.OnQuitting()</c>
     /// （<c>Application.quitting</c> 上跑的正是它）模拟会话结束，再调 <c>UpdateManager.AutoInit()</c> 与

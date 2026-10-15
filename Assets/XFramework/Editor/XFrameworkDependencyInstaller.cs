@@ -79,7 +79,7 @@ namespace Venusy609.Xframework.Editor
             if (!File.Exists(fullPath))
             {
                 // 这一条与下面那条原本没有 [模块] 前缀（全仓唯二违例）；按「迁移逐字保真」保持原样，
-                // 是否补前缀见 Documentation/Modules/Log.md 的未决项。
+                // 是否补前缀**未定**——不擅自添加。
                 Debug.LogError($"找不到 manifest.json 文件: {fullPath}");
                 return -1;
             }

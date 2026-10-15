@@ -17,7 +17,7 @@ namespace XFramework.XAsset.Tests
     /// <para><b>为什么必须在这条缝上测</b>：Runtime 测试程序集不引用 YooAsset，测试环境也没有可运行的资源包
     /// ——真路径在用例里跑不起来。<see cref="ISceneLoadSource"/> 之上是框架自己的逻辑（轮询、进度、失败释放、
     /// 取消善后、取场景对象、句柄登记与卸载），之下才是对 YooAsset 的机械转发。本 fixture 打的是上面那一半；
-    /// 下面那一半只能靠读源码核对与人工验收，这一点如实写在 <c>Documentation/Modules/Scene.md</c>。</para>
+    /// 下面那一半只能靠读源码核对与人工验收——如实标注射程，不假装已覆盖。</para>
     /// <para><b>覆盖不到的一处</b>：「拒绝卸载当前唯一的场景」分支在测试壳里不可达——用例造出来的场景
     /// 必然是 sceneCount 里的第二个。该分支只有推理级保证，同样记在模块文档里。</para>
     /// <para><b>复位</b>：PlayMode 下所有用例共享一个 player 实例。<c>SceneManager.CreateScene</c> 造出来的

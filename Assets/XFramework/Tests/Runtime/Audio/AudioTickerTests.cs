@@ -9,8 +9,7 @@ namespace XFramework.XAudio.Tests
     /// <summary>
     /// 回收：播完的槽位被收回、循环的不被自动回收、闲置时 ticker 被注销。
     /// <para><b>这些用例走真实播放驱动</b>，不造内部 seam——前置探针已实测确认 batchmode（无音频设备）下
-    /// Unity 的音频子系统照常推进：<c>isPlaying</c> 会变 <c>false</c>、<c>time</c> 会前进。
-    /// 探针记录见 <c>Documentation/Modules/Audio.md</c> 的实测记录。</para>
+    /// Unity 的音频子系统照常推进：<c>isPlaying</c> 会变 <c>false</c>、<c>time</c> 会前进。</para>
     /// </summary>
     [TestFixture]
     public class AudioTickerTests

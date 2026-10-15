@@ -31,8 +31,8 @@ namespace XFramework.Architecture.Tests
     /// <c>UpdateManagerTests.AutoInit_HasRuntimeInitializeOnLoadMethod</c>）。族级清单比逐个写死断言宽：
     /// 将来新增自动初始化的人**必须来登记一次**，否则本用例红——这条正是本项目存在的理由（旧形状之所以
     /// 扩散，是因为没有一处地方要求新成员做决定）。</para>
-    /// <para><b>放 PlayMode 而不是 EditMode</b>：<c>Documentation/Workflow.md</c> §二 明写带 <c>-Filter</c>
-    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被最常见的开发回路静默跳过。</para>
+    /// <para><b>放 PlayMode 而不是 EditMode</b>：本仓的开发回路里，带 <c>-Filter</c>
+    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被这个回路静默跳过。</para>
     /// <para><b>本用例不覆盖什么</b>：编辑器侧的 <c>[InitializeOnLoadMethod]</c> 没被断言——运行时程序集
     /// 看不到 <c>UnityEditor</c>。少了它不会让模块在播放模式下失效（运行时特性兜着），只影响「域加载即
     /// 就绪」；需要的话得另写一条 EditMode 用例，但那要把清单复制一份（两个测试程序集互不可见），

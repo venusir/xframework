@@ -20,8 +20,8 @@ namespace XFramework.Architecture.Tests
     /// 模块粒度（功能亮点 + 表下显式豁免句），按**登记表**守：<see cref="FeatureTableRegistry"/>
     /// （模块 → 触发词）与 <see cref="FeatureTableExemptions"/>（模块 → 豁免理由）必须与模块全集双向相等，
     /// **未登记即红**——与 <c>AutoInitTests</c> 的族清单同一形状。</para>
-    /// <para><b>放 PlayMode 而不是 EditMode</b>：<c>Documentation/Workflow.md</c> §二 明写带 <c>-Filter</c>
-    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被最常见的开发回路静默跳过（同 <c>AutoInitTests</c>）。
+    /// <para><b>放 PlayMode 而不是 EditMode</b>：本仓的开发回路里，带 <c>-Filter</c>
+    /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被这个回路静默跳过（同 <c>AutoInitTests</c>）。
     /// 读 README 只需文件系统路径（测试壳的 Assets 是指回仓库的 junction），不需要 Unity 资产 API，
     /// 故留在 Runtime 测试程序集。</para>
     /// <para><b>本守卫守不到什么</b>：① **行内说明文字的陈旧**——ReactiveList 那轮的另一半正是既有行的

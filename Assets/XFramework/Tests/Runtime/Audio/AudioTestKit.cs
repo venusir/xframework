@@ -13,7 +13,7 @@ namespace XFramework.XAudio.Tests
     {
         /// <summary>
         /// 造一个运行时 <see cref="AudioClip"/>，不依赖任何资源管线。
-        /// <para><b>实测已确认</b>（见 <c>Documentation/Modules/Audio.md</c> 的实测记录）：batchmode
+        /// <para><b>实测已确认</b>：batchmode
         /// （无音频设备）下这种 clip 能正常播放，<c>isPlaying</c> 与 <c>time</c> 都会推进——因此
         /// 回收相关的用例可以走真实播放驱动，不需要造内部 seam。</para>
         /// </summary>
