@@ -250,6 +250,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- `FrameworkReview.md` §六（已否决项复核 10 条）**迁入 `Ledger.md` §四**，原节改指针；报告头部补定位段
+  （**状态查台账、流水查 CHANGELOG**，本文只留分析与过程档案）。**§4.x / §5.x / §二 / §三 有意不迁**——
+  流水已在 `CHANGELOG`、快照数字（22 模块 / 94k 行）会腐烂、过程档案不该进活台账。
 - **决策台账落成（文档治理一轮）**：`Documentation/Ledger.md`（新——框架级「已做 / 未做 / 待裁 /
   暂不做 / 不做」条目 + 模块台账指针；`Roadmap.md` 并入后删除，其 §三/§四/§五 的条目与专段全部迁入）、
   `Documentation/Modules/README.md`（决策台账的条目格式与状态词表；登记六个此前未入表、形态一致的
