@@ -43,8 +43,10 @@ namespace XFramework.XAsset
         /// <summary>场景加载能力缺失的告警是否已发出（只发一次，理由同 <see cref="_poolCapabilityWarned"/>）。</summary>
         private static bool _sceneCapabilityWarned;
 
-        /// <summary>越线程访问是否已报首错（只报一次，避免每帧刷屏）。</summary>
+#if UNITY_EDITOR
+        /// <summary>越线程访问是否已报首错（只报一次，避免每帧刷屏）。断言仅 Editor 编译，故字段同样门控。</summary>
         private static bool _mainThreadViolationLogged;
+#endif
 
         /// <summary>
         /// 全局资源管理器是否已初始化。
@@ -268,7 +270,9 @@ namespace XFramework.XAsset
 
             _poolCapabilityWarned = false;
             _sceneCapabilityWarned = false;
+#if UNITY_EDITOR
             _mainThreadViolationLogged = false;
+#endif
         }
 
         #endregion
