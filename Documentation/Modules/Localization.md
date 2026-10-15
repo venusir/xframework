@@ -17,39 +17,25 @@ Runtime/Localization/
 └── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
 ```
 
-## 已评估未采纳与未决
+## 决策台账
 
-**已评估未采纳**（逐条理由已在使用方 README 的 `## 设计取舍`，此处只留「本轮评估过并否决」这一层；**下一轮从这里读起**）：
+（逐条理由已在使用方 README 的 `## 设计取舍`，此处只留「本轮评估过并否决」这一层；**下一轮从这里读起**。）
 
-2026-09-29 一轮：
-- 占位符路径改走 `StringBuilderPool`
-- 给 `ILocalizationManager` 加 `IsInitialized`
-- `SetInstance` 时 Dispose 旧实例
-- 换 JSON 库
-
-2026-09-29 追加轮（占位符的多语言边界）：
-- 在 `ReplacePlaceholders` 内部隐式回退到语言表
-- 同一个 `SetPlaceholder` 槽位里靠约定区分「字面量」与「key」
-- 按语言各存一份字面值（`SetPlaceholder(lang, key, value)`）
-- 在 `LanguageChangedMessage` 上自动重解析占位符
-
-不属以上索引的两条：
-- `InputManager` 的 11 处同形手写订阅绑定 —— 与本次修的 `LocalizationManager.Subscribe` 同一缺陷类（闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册），但**不属本轮范围**，留给下一轮 Input 审计。
-- 本轮**未发现新的缺陷类**，`ModuleAudit.md` 第三节无需新增。
-
-**未决**：
-- 并发切换的「后完成者胜」是否要引入代次作废。
-- `SetLanguageData` 覆盖当前语言数据时是否该补一条事件面。
-- **键值占位符要不要递归**：本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。
-  真要做递归得先定环检测（A→B→A）与深度上限。
-- ~~MonoBehaviour 分支的订阅绑定没有直接用例~~ —— **2026-10-12 已补**：EditMode 下 `Object.DestroyImmediate`
-  **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在
-  PlayMode 覆盖。新增 `Tests/Runtime/Localization/LocalizationDestroyBindingTests`（2 例，本模块第一次有
-  PlayMode 侧）——验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` →
-  `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完
-  时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。
-  注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
-- **`IDestroyCancellationToken` 的实现范例有坑**（属 Message 模块，本轮只记录）：`Runtime/Message/IDestroyCancellationToken.cs` 的 XML 示例写的是 `public CancellationToken DestroyCancellationToken => _cts.Token;` 配 `Dispose()` 里 `_cts.Dispose()`——照抄会在对象销毁后抛 `ObjectDisposedException`，因为 `CancellationTokenSource.Token` 在源释放后不可读（实测撞上）。正解是构造时把令牌取出来缓存。
+- 不做：**占位符路径改走 `StringBuilderPool`**（2026-09-29 · 审计轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**给 `ILocalizationManager` 加 `IsInitialized`**（2026-09-29 · 审计轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**`SetInstance` 时 Dispose 旧实例**（2026-09-29 · 审计轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**换 JSON 库**（2026-09-29 · 审计轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**在 `ReplacePlaceholders` 内部隐式回退到语言表**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**同一个 `SetPlaceholder` 槽位里靠约定区分「字面量」与「key」**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**按语言各存一份字面值（`SetPlaceholder(lang, key, value)`）**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 不做：**在 `LanguageChangedMessage` 上自动重解析占位符**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
+- 未做：**`InputManager` 的 11 处同形手写订阅绑定**（2026-09-29 · 审计轮）——与 `LocalizationManager.Subscribe` 同一缺陷类（闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册）；原条目**不属本轮范围**、把它外推给「下一轮 Input 审计」，而该轮（2026-09-30）的 `Input.md` 里没有认领条目——**至今无人认领**；本模块保留「外推给 Input」的事实、不替 Input 裁定。
+- 已做：**审计轮未发现新的缺陷类**（2026-09-29 · 审计轮）——`ModuleAudit.md` 第三节无需新增。
+- 待裁：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮）。
+- 待裁：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮）。
+- 暂不做：**键值占位符不做递归**（2026-09-29 · 追加轮）——本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。重开判据：真要做递归时，先定环检测（A→B→A）与深度上限。
+- 已做：**MonoBehaviour 分支的订阅绑定补上直接用例**（2026-10-12 · `3b16e06`，`Tests/Runtime/Localization/LocalizationDestroyBindingTests` 2 例）——EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在 PlayMode 覆盖；这是本模块第一次有 PlayMode 侧用例，验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` → `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
+- 未做：**`IDestroyCancellationToken` 的实现范例有坑**（2026-09-29 · 审计轮）——`Runtime/Message/IDestroyCancellationToken.cs` 的 XML 示例写的是 `public CancellationToken DestroyCancellationToken => _cts.Token;` 配 `Dispose()` 里 `_cts.Dispose()`——照抄会在对象销毁后抛 `ObjectDisposedException`，因为 `CancellationTokenSource.Token` 在源释放后不可读（实测撞上）。正解是构造时把令牌取出来缓存。**属 Message 模块，本轮只记录**。
 
 ## 审计轮次
 
