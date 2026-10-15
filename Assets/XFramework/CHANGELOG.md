@@ -250,6 +250,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **删除 `Documentation/FrameworkReview.md`**（2026-10-11 那一轮的框架级评估报告）：决策早已迁入
+  `Ledger.md` + 各模块台账、流水在 `CHANGELOG`；残留资产**分流**——§三 同类框架对照表 + §二 的
+  「已经领先的地方」进 `Ledger.md` §五（标为快照、只作立项调研起点），公开 API 基线的形态取舍与
+  `Tests~` 的成本测算并入对应条目，其余（规模数字、探针事实、已落地条目的原事实留痕、§5.x 过程档案、
+  §七 落点表）按裁定不再保留。删前先清 7 处**包内/工具**注释对它的引用（顺带修掉同类「包内指向包外」）。
 - `FrameworkReview.md` §六（已否决项复核 10 条）**迁入 `Ledger.md` §四**，原节改指针；报告头部补定位段
   （**状态查台账、流水查 CHANGELOG**，本文只留分析与过程档案）。**§4.x / §5.x / §二 / §三 有意不迁**——
   流水已在 `CHANGELOG`、快照数字（22 模块 / 94k 行）会腐烂、过程档案不该进活台账。

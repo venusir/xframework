@@ -82,7 +82,6 @@
 | 各模块用法 | `Assets/XFramework/Runtime/<模块>/README.md` |
 | 维护向记录（文件结构、版本沿革、审计记忆） | `Documentation/Modules/<模块>.md` |
 | 框架级决策（候选模块 / 跨模块 / 工程化 / 外部）与模块台账索引 | `Documentation/Ledger.md` |
-| **框架整体体检（缺什么 / 先做什么 / 与同类对照）** | `Documentation/FrameworkReview.md` |
 | 什么内容该写进哪份文档 | `CLAUDE.md` → 文档分层 |
 | 审计判据与探针 | `Documentation/ModuleAudit.md` |
 | 变更历史 | `Assets/XFramework/CHANGELOG.md` |
@@ -96,7 +95,7 @@
 | `-Filter <片段>` | **正则**匹配（Unity `-testFilter` 的语义，不是子串）；留空 = 全量（门禁）。点号不转义即「任意字符」，`PoolTests` 会连 `CollectionPoolTests` 一起捞 |
 | `-Fixture <类名>` | 按 fixture 精确匹配（内部生成 `\.<类名>\.`）；与 `-Filter` 互斥 |
 | `-Platform` | `All`（默认）/ `PlayMode` / `EditMode`；带 `-Filter` 且未显式指定时只跑 `PlayMode` |
-| `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」）。**全量跑 0 用例直接判失败**（2026-10-14 补：缩到 0 恰好绕过上面那条告警，而它对使用者的呈现与真绿一模一样——详见 `FrameworkReview.md` §4.3 第 11 条） |
+| `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」）。**全量跑 0 用例直接判失败**（2026-10-14 补：缩到 0 恰好绕过上面那条告警，而它对使用者的呈现与真绿一模一样——详见 `Documentation/Ledger.md` 的「`Tests~` / 把测试移出包目录」条） |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
 | `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`。自带过滤器（只跑基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
@@ -149,7 +148,7 @@
 - **零分配断言在本环境可能恒真（尺子坏了）——2026-10-12 已处置**：2026-10-11 实测
   `GC.GetAllocatedBytesForCurrentThread()` **恒返回 0**（分配 1 MB 数组后增量仍是 0 B），
   `Profiler.GetTotalAllocatedMemoryLong()` 与 `Profiler.GetMonoHeapSizeLong()` 同样恒 0；
-  当时 **5 个文件 / 11 处** `Assert.AreEqual(0L, …)` 因此全是恒真的（清点表见 `FrameworkReview.md` §4.2）。
+  当时 **5 个文件 / 11 处** `Assert.AreEqual(0L, …)` 因此全是恒真的（清点与处置见各模块的决策台账：`Modules/{Log,Timer,Message,UI,Reactive}.md`）。
   2026-10-12 的处置：11 处全部改成**两道防线**，并补了尺子自检与源码守卫。现在这一节的纪律是**机械的**：
   - **唯一合法的分配尺子是共享工具** `Tests/Runtime/Architecture/AllocationRuler.cs`（`Profiler.GetMonoUsedSizeLong()`，
     粒度约 4–8 KB）。**不要自己写测量循环**——预热次数、双 Collect、放大倍数、阈值口径只有一份才不会各自漂移。

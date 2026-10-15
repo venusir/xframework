@@ -44,7 +44,7 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - 不做：**给 `IConfigManager` / `ISettingsManager<T>` / `ILogManager` / `ILocalizationManager` / `IAudioManager` 加回读成员**（2026-10-02 · 建成轮）——门面专属成员 + 内置实现探测可完全替代，且第三方实现零影响；代价是注入自定义实现时回读为空（各模块 README 已写明）。无重开判据。
 - 不做：**`LogManager.CategoryCount`**（2026-10-02 · 建成轮）——`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相。无重开判据。
 - 不做：**注册表的自动初始化成员——不要补**（2026-10-02 · 建成轮）——注册表不订阅 Unity 事件、不做会话复位、不注入 PlayerLoop，因此 `AutoInitTests` 族清单零改动。这是设计结论，不是遗漏。无重开判据。
-- 已做：**主线程断言维持三份内联副本、不抽公共防线；诊断模块不加第四份**（2026-10-15 · `Ledger.md`「主线程断言三份副本——不抽公共防线」条，判据见 `FrameworkReview.md` §4.2）——本条原记诊断模块**不加第四份内联副本**的立场，随框架级裁定一并结案（它是诊断设施，不是断言宿主）。
+- 已做：**主线程断言维持三份内联副本、不抽公共防线；诊断模块不加第四份**（2026-10-15 · `Ledger.md`「主线程断言三份副本——不抽公共防线」条）——本条原记诊断模块**不加第四份内联副本**的立场，随框架级裁定一并结案（它是诊断设施，不是断言宿主）。
 - 未做：**`UpdateNodeInfo.TimeMode` 在 `FixedUpdate` 下无意义**（2026-10-02 · 建成轮）——当前保留字段并文档说明「判断以 `Timing` 为准」。
 - 未做：**窗口焦点/跨会话状态**（2026-10-02 · 建成轮）——本仓零 `EditorPrefs` 使用，选中页签与筛选不跨会话记忆。
 - 未做：**Event / Reactive 订阅注册表、Asset 句柄表、Input 启用 ActionMap 列表、Localization 缺失项计数、Log 最近日志环形缓冲、Save 槽位列表、Message 键值通道 key 枚举、运行时覆盖层本体**（2026-10-02 · 建成轮）——本轮不做，各有理由，见 CHANGELOG 与 `../Ledger.md`。
