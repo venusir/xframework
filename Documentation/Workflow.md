@@ -41,7 +41,7 @@
 |---|---|---|
 | 编译 | `dotnet build <csproj> --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` | 0 error |
 | 测试 | `pwsh -File Tools/run-tests.ps1 [-Filter <片段>] [-Platform PlayMode\|EditMode\|All]` | 全量双平台 **0 失败** |
-| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | **门禁码**（十一个 XML 文档告警码，清单见脚本头部「覆盖范围」）的包内告警 0、**所有源文件都参与编译**、所有条目都有 `.meta` |
+| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | **门禁码**（十一个 XML 文档告警码，清单见脚本头部「覆盖范围」）的包内告警 0、**所有源文件都参与编译**、所有条目都有 `.meta`、**决策台账结构合规**（每模块有 `## 决策台账`、条目状态词合法、`Modules/README.md` 文件表与 `Runtime/` 双向相等——规范见 `Documentation/Modules/README.md`；只守结构，不守内容属实） |
 
 ### 两个易踩点
 

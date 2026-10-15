@@ -250,6 +250,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **决策台账落成（文档治理一轮）**：`Documentation/Ledger.md`（新——框架级「已做 / 未做 / 待裁 /
+  暂不做 / 不做」条目 + 模块台账指针；`Roadmap.md` 并入后删除，其 §三/§四/§五 的条目与专段全部迁入）、
+  `Documentation/Modules/README.md`（决策台账的条目格式与状态词表；登记六个此前未入表、形态一致的
+  「暗节名」）、23 个 `Documentation/Modules/<模块>.md`（「已完成功能与未做」「已评估未采纳与未决」
+  两节合流为「决策台账」——状态写行首、条目永不移动、每条带日期与证据）、
+  `Tools/check-docs.ps1`（文档通道第四项判定：每模块有台账、状态词合法、模块文件表与 `Runtime/`
+  双向相等；**只守结构，守不了内容属实**）、`CLAUDE.md`（文档分层表 Roadmap 行换 Ledger 行 +
+  模块行补台账；文档门禁三项改四项）、`Workflow.md` §二/§四、`FrameworkReview.md`（引用改指；
+  §5.1/§5.2 明标为那一轮评审的过程档案）、全仓引用改指约 30 处（含包内三处 XML 注释去掉对外部
+  文档的指点）。**顺带订正的既有失效**：`ModuleAudit.md` 的「三档判据」误引两处与 §八 一行陈旧标题、
+  `FrameworkReview.md` §5.2 九处已失效的「步骤 1 仍待办」残留、`Modules/{Log,Config,Input,Asset}.md`
+  的行号与「会增长的量」陈旧计数、`Runtime/Scene/README.md` 一处「包内指向包外」的规则违反、
+  `Modules/UI.md` 一处同文件内自相矛盾（「锚定弹窗未做」块与已落地记录并存）。
 - `Documentation/Workflow.md` §六：零分配断言的纪律改为机械可依（唯一尺子、自检、守卫、结构断言优先），
   并记「关闭域重载连跑两遍」这条验收**脚本表达不了**。
 - `Documentation/Modules/{Input,Asset,Bootstrap,Config,UI,Localization}.md`：会话复位的处置记录；

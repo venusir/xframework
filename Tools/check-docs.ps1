@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    XFramework 包内自检：XML 文档注释的编译告警（按码统计，门禁码见「覆盖范围」）+ 资源 .meta 完整性。
+    XFramework 文档通道自检：XML 文档注释的编译告警（按码统计，门禁码见「覆盖范围」）+ 资源 .meta 完整性
+    + 决策台账结构。
 
 .DESCRIPTION
     **一、文档注释告警。** Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本
@@ -50,8 +51,17 @@
     注意 Unity 自身不给「点开头的文件/目录」与「`~` 结尾」的条目生成 meta（如
     `Samples~/Example/.sample.json`），这两类一律跳过，否则会永远误报。
 
+    **三、决策台账结构。** `Documentation/Modules/<模块>.md` 的 `## 决策台账` 与
+    `Documentation/Ledger.md` 的框架级条目是「已做 / 未做 / 待裁 / 暂不做 / 不做」的唯一落点
+    （条目格式与状态词表的规范在 `Documentation/Modules/README.md`）。守三件事：① 每个模块都有台账
+    （模块集以 `Assets/XFramework/Runtime/` 的直接子目录为准）；② 台账里每条顶层 bullet 的状态词 ∈
+    六个合法值；③ `Modules/README.md` 的文件表与模块集**双向相等**。
+    **守不住**：条目内容属实、理由正确、状态没写旧——与被守卫的「已知限制」小节同一条边界
+    （能证明有这一节/这一条，证明不了条目属实）。**历史**：`Documentation/` 在台账落地前零机械覆盖，
+    这也是它腐烂（同一结论在 5~8 处各记一遍、失效指针无人发现）的原因之一。
+
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（**门禁码**的告警须为 0、
-    所有源文件都须参与编译、所有条目都须有 `.meta`）。
+    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -228,6 +238,97 @@ foreach ($p in $Project) {
     }
 }
 
+# ---------- 再查「决策台账结构」 ----------
+#
+# 台账 = Documentation/Modules/<模块>.md 的 `## 决策台账` 节 + Documentation/Ledger.md 的
+# 框架级条目。规范（条目格式与状态词表）的唯一真相在 Documentation/Modules/README.md。
+# 本检查守三件事：① 每个模块都有台账；② 台账里每条顶层 bullet 的状态词 ∈ 六个合法值；
+# ③ Modules/README.md 的文件表与 Runtime/ 直接子目录**双向相等**（模块是什么只有一个答案）。
+# **守不住**：条目内容属实、理由正确、状态没写旧——与测试侧对「已知限制」小节的边界同一条。
+$ledgerStatusPattern = '^- (已做|未做|待裁|暂不做|不做|已推翻)：'
+$ledgerProblems = @()
+$ledgerEntries = 0
+
+function Test-LedgerSection {
+    param([string[]]$Lines, [string]$HeadingRegex, [string]$Label, [string]$StatusPattern)
+    $violations = @()
+    $count = 0
+    $inside = $false
+    foreach ($line in $Lines) {
+        if (-not $inside) {
+            if ($line -match $HeadingRegex) { $inside = $true }
+            continue
+        }
+        # 遇到同级或更高级标题即出节（`##`/`#`）；更深的标题（`###`+）留在节内
+        if ($line -match '^#{1,2}\s') { break }
+        if ($line -match '^- ') {
+            $count++
+            if ($line -notmatch $StatusPattern) {
+                $head = $line.Substring(0, [Math]::Min(46, $line.Length))
+                $violations += ("{0} 里有一条不合格式的条目（状态词须为 已做/未做/待裁/暂不做/不做/已推翻 且紧跟全角冒号）：{1}…" -f $Label, $head)
+            }
+        }
+    }
+    return @{ Violations = $violations; Count = $count; Found = $inside }
+}
+
+$runtimeRoot = Join-Path $repoRoot "Assets\XFramework\Runtime"
+$docsModules = Join-Path $repoRoot "Documentation\Modules"
+$ledgerModules = @(Get-ChildItem -Directory $runtimeRoot | Select-Object -ExpandProperty Name)
+$ledgerModules = @($ledgerModules | Sort-Object)
+
+foreach ($m in $ledgerModules) {
+    $md = Join-Path $docsModules "$m.md"
+    $label = "Documentation/Modules/$m.md"
+    if (-not (Test-Path $md)) {
+        $ledgerProblems += "$label 不存在——Runtime/$m 的台账没有落点（模块清单以 Runtime/ 子目录为准）"
+        continue
+    }
+    $r = Test-LedgerSection -Lines (Get-Content $md) -HeadingRegex '^#{2,3}\s+.*决策台账' -Label $label -StatusPattern $ledgerStatusPattern
+    if (-not $r.Found) {
+        $ledgerProblems += "$label 没有「## 决策台账」节——模块的已做/未做/不做条目要有唯一落点"
+        continue
+    }
+    $ledgerProblems += $r.Violations
+    $ledgerEntries += $r.Count
+}
+
+$ledgerIndexPath = Join-Path $docsModules "README.md"
+$indexModules = @()
+if (Test-Path $ledgerIndexPath) {
+    $inFileTable = $false
+    foreach ($line in (Get-Content $ledgerIndexPath)) {
+        if (-not $inFileTable) {
+            if ($line -match '^##\s+文件\s*$') { $inFileTable = $true }
+            continue
+        }
+        if ($line -match '^##\s') { break }
+        foreach ($hit in [regex]::Matches($line, '\]\(([^)/]+)\.md\)')) { $indexModules += $hit.Groups[1].Value }
+    }
+} else {
+    $ledgerProblems += "Documentation/Modules/README.md 不存在（台账规范与模块清单的维护处）"
+}
+
+if ($indexModules.Count -gt 0) {
+    $onlyInIndex = @($indexModules | Where-Object { $ledgerModules -notcontains $_ })
+    $onlyOnDisk = @($ledgerModules | Where-Object { $indexModules -notcontains $_ })
+    if ($onlyInIndex.Count -gt 0) { $ledgerProblems += "Modules/README.md 文件表登记了 Runtime/ 下没有的模块：$($onlyInIndex -join '、')" }
+    if ($onlyOnDisk.Count -gt 0) { $ledgerProblems += "Runtime/ 下有模块没进 Modules/README.md 文件表：$($onlyOnDisk -join '、')（新模块上线要么补表、要么改名）" }
+}
+
+$ledgerPath = Join-Path $repoRoot "Documentation\Ledger.md"
+if (-not (Test-Path $ledgerPath)) {
+    $ledgerProblems += "Documentation/Ledger.md 不存在——框架级决策（跨模块 / 候选 / 工程化）的台账"
+} else {
+    $r = Test-LedgerSection -Lines (Get-Content $ledgerPath) -HeadingRegex '^##\s+三、' -Label "Documentation/Ledger.md §三" -StatusPattern $ledgerStatusPattern
+    if (-not $r.Found) {
+        $ledgerProblems += "Documentation/Ledger.md 没有「## 三、框架级决策」节"
+    } else {
+        $ledgerProblems += $r.Violations
+        $ledgerEntries += $r.Count
+    }
+}
+
 # ---------- 报告 ----------
 
 # 身份 = 源文件 + 行号 + 代码 + 文案，**不含 Project**：同一条告警可能由两次编译产生
@@ -295,6 +396,13 @@ if ($Module) {
         $metaMissing | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($metaMissing.Count -gt 10) { Write-Host "      …共 $($metaMissing.Count) 个" -ForegroundColor Yellow }
     }
+    if ($ledgerProblems.Count -eq 0) {
+        Write-Host ("  决策台账: {0} 个模块都有台账、条目格式合法（{1} 条），文件表与 Runtime/ 双向相等" -f $ledgerModules.Count, $ledgerEntries) -ForegroundColor DarkGray
+    } else {
+        Write-Host ("  决策台账: {0} 处不合规" -f $ledgerProblems.Count) -ForegroundColor Yellow
+        $ledgerProblems | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+        if ($ledgerProblems.Count -gt 10) { Write-Host "      …共 $($ledgerProblems.Count) 处" -ForegroundColor Yellow }
+    }
     Write-Host "  提示：CS1570 会遮蔽同一块注释里的其它告警（先清它，再看其余码的真实数量）。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
 
@@ -316,6 +424,7 @@ if ($gatedWarnings.Count -gt 0) {
 }
 if ($metaMissing.Count -gt 0) { $problems += "包内有 $($metaMissing.Count) 个条目缺 .meta（第三方导入会拿到不同 GUID）" }
 if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
+if ($ledgerProblems.Count -gt 0) { $problems += "决策台账结构有 $($ledgerProblems.Count) 处不合规（每个模块要有台账、条目状态词要合法、文件表与 Runtime/ 双向相等）——规范见 Documentation/Modules/README.md" }
 
 if ($problems.Count -gt 0) {
     Write-Host ""
@@ -332,5 +441,5 @@ if ($diagLeft.Count -gt 0) {
     $leftParts = ($diagLeft | Group-Object Code | Sort-Object Name | ForEach-Object { "$($_.Name)×$($_.Count)" }) -join "、"
     Write-Host ("未纳门码（只诊断、不判失败）：{0}" -f $leftParts) -ForegroundColor DarkYellow
 }
-Write-Host ("文档门禁：通过（门禁码 0 条：{0}，且所有源文件都参与了编译）" -f ($GatedCodes -join " / ")) -ForegroundColor Green
+Write-Host ("文档门禁：通过（门禁码 0 条：{0}；所有源文件都参与了编译；决策台账 {1} 个模块 / {2} 条条目合规）" -f ($GatedCodes -join " / "), $ledgerModules.Count, $ledgerEntries) -ForegroundColor Green
 exit 0

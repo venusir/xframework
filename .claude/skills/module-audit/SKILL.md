@@ -23,7 +23,7 @@ description: 对某个模块做系统性审计——找潜在问题、与成熟�
 ```bash
 dotnet build <csproj> --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo   # 0 error
 pwsh -File Tools/run-tests.ps1                                                   # 全量双平台 0 失败
-pwsh -File Tools/check-docs.ps1 -Enforce                                         # 文档门禁（XML 告警 0 + 全部源文件参与编译 + 全部条目有 .meta）
+pwsh -File Tools/check-docs.ps1 -Enforce                                         # 文档门禁（XML 告警 0 + 全部源文件参与编译 + 全部条目有 .meta + 决策台账结构合规）
 ```
 
 定向跑用 `-Filter <正则>` / `-Fixture <类名>`；**带 `-Filter` 且未显式 `-Platform` 时只跑 PlayMode**，`Tests/Editor/` 下的用例会假绿。
@@ -31,5 +31,5 @@ pwsh -File Tools/check-docs.ps1 -Enforce                                        
 ## 三条提醒（细节在手册里）
 
 - **审计轮只产出清单，不动代码**；范围由人圈定后才进「计划 → 逐提交实现 → 提交」。
-- **结论按收件人分流**：使用方要知道的进模块 README（`已知限制` / `设计取舍` / `接口承诺到哪为止`）；只有维护方要知道的（已评估未采纳、未决项）进 `Documentation/Modules/<模块>.md`。落点表见手册 §五。
+- **结论按收件人分流**：使用方要知道的进模块 README（`已知限制` / `设计取舍` / `接口承诺到哪为止`）；只有维护方要知道的（已评估未采纳、未决项）进 `Documentation/Modules/<模块>.md` 的**决策台账**（条目格式与状态词表见 `Documentation/Modules/README.md`）；框架级的进 `Documentation/Ledger.md`。落点表见手册 §五。
 - **涉及重载决议或公开面形状的结论，一律先写复现程序编译验证**再写进文档或提交信息——本仓有过一次「只看规范、未编译验证」的假结论被写进文档的教训。
