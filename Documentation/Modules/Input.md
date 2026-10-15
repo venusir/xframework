@@ -38,30 +38,16 @@ Runtime/Input/
 | 2.0.0 | **破坏性重构**：移除 PlayerInputState 和 InputActions，改为纯字符串 API；所有游戏须自行封装输入                                                                              |
 | 1.0.0 | 初始版本                                                                                                                                                                     |
 
-## 已评估未采纳与未决
+## 决策台账
 
-（2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，零高危。已修项见 `CHANGELOG`。）
+（2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，零高危；逐条理由的展开见使用方 README 的相关章节。已修项见 `CHANGELOG`。）
 
-**已评估未采纳**（逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层）：
-
-- **不给 `Observe*` 的闭包做池化**：分配发生在订阅期（低频），每帧路径只有一次 `_framePulse.Emit(int)`；
-  为它引入池会把句柄生命周期复杂化。C1 类判据的前提是「频度」，这里不成立。
-- **不把 `StartRebinding` 的 `null` 拆成「未初始化」与「id 不存在」两种信号**：文档只承诺了后者；拆开要动
-  返回值形状（公开 API），而两条路径的调用方处理相同（都该当失败处理）。
-- **不给 `Destroy()` 加「退订本模块所有订阅」**：`_framePulse` 是模块级共享流，退订它会连带清掉其它
-  订阅者；「句柄归订阅方」是 UI 已定的仓内语义，补文档即可（已补进 README「已知限制」）。
-- **不加「接口成员与门面一一对应」的反射断言**：门面**有意**比接口多 16 个成员（`IsInitialized` /
-  `Provider` / `SetProvider` / `Initialize(IInputProvider)` / `Destroy` / 8 个 `Observe*` / 3 个 `Subscribe`），
-  那条断言会把模块自有能力判成缺陷。守卫只断言「接口声明的成员都有同名转发」。
-- **不改 `InputSystemProvider.Initialize(asset)` 里那处预防性调序的行为面**：`SwitchActionMap("Player")`
-  挪到设备订阅之前是纯防御（见 `CHANGELOG`），**今天构造不出它抛异常的路径**，故没有为它写用例。
-
-**未决**：
-
-- ~~跨播放会话的会话级复位~~ —— **2026-10-12 已修**（详见下方「会话级复位」一节末尾的处置记录）。
-  原条目：见 README「已知限制」第 1 条——关闭域重载时第二个播放会话帧脉冲静默失效。根因跨模块
-  （`UpdateManager.OnQuitting` 释放调度器 + 门面 `_initialized` 无会话级复位）。
-- **`StartRebinding` 两因同值**（未初始化 / id 不存在都返回 `null`）：见上。
+- 不做：**不给 `Observe*` 的闭包做池化**（2026-09-30 · 审计轮）——分配发生在订阅期（低频），每帧路径只有一次 `_framePulse.Emit(int)`；为它引入池会把句柄生命周期复杂化。C1 类判据的前提是「频度」，这里不成立。无重开判据。
+- 不做：**不把 `StartRebinding` 的 `null` 拆成「未初始化」与「id 不存在」两种信号**（2026-09-30 · 审计轮）——文档只承诺了后者；拆开要动返回值形状（公开 API），而两条路径的调用方处理相同（都该当失败处理）。两因同值（未初始化 / id 不存在都返回 `null`）这点维持现状。无重开判据。
+- 不做：**不给 `Destroy()` 加「退订本模块所有订阅」**（2026-09-30 · 审计轮）——`_framePulse` 是模块级共享流，退订它会连带清掉其它订阅者；「句柄归订阅方」是 UI 已定的仓内语义，补文档即可（已补进 README「已知限制」）。无重开判据。
+- 不做：**不加「接口成员与门面一一对应」的反射断言**（2026-09-30 · 审计轮）——门面**有意**比接口多出的成员（`IsInitialized` / `Provider` / `SetProvider` / `Initialize(IInputProvider)` / `Destroy` / `Observe*` / `Subscribe*`）会被那条断言判成缺陷；守卫只断言「接口声明的成员都有同名转发」。无重开判据。
+- 不做：**不动 `InputSystemProvider.Initialize(asset)` 里那处预防性调序的行为面**（2026-09-30 · 审计轮）——`SwitchActionMap("Player")` 挪到设备订阅之前是纯防御（见 `CHANGELOG`）；今天构造不出它抛异常的路径，故没有为它写用例。无重开判据。
+- 已做：**跨播放会话的会话级复位**（2026-10-12 · `facdfd5`；`InputSessionResetTests` 改前必红）——原缺陷：关闭域重载时第二个播放会话帧脉冲静默失效（见 README「已知限制」第 1 条），根因跨模块（`UpdateManager.OnQuitting` 释放调度器 + 门面 `_initialized` 无会话级复位）；修法与实测验收见下方「会话级复位」与「处置记录（2026-10-12）」两节，`AutoInitTests` 族清单已登记。
 
 ## 会话级复位：复现配方与实测结论（2026-10-01）
 
@@ -104,9 +90,11 @@ Runtime/Input/
 
 - `AssetManager` / `ConfigManager` / `LocalizationManager` / `FileManager` 同一根因（重复 `Initialize()`
   变 no-op、使用方无法自救），修的时候一并裁定。
-- **`Runtime/Asset/InstanceTracker.cs:33` 是一处未登记的落点**：它用**静态构造函数**订阅
+- **`Runtime/Asset/InstanceTracker.cs`（原 `:33`）当时是一处未登记的落点**：它**当时**用**静态构造函数**订阅
   `Application.quitting`，而 `AutoInitTests` 的族清单只扫 `RuntimeInitializeOnLoadMethod` ——它扫不到。
   那处注释写的是「Editor 退出播放模式时由域重载自动重置」，正属「关闭域重载时跨会话」的那一类。
+  **本轮（2026-10-12，`2f990a8`）已改为具名 `AutoInit()`**（`[RuntimeInitializeOnLoadMethod]` +
+  幂等订阅）并进族清单——同款处置见「处置记录（2026-10-12）」。
 - Update 侧**不在**同族名单里：它是被踩过并已修好的那一半（`OnQuitting` 可重建 + `AutoInit` 幂等重建），
   `UpdateManagerTests.OnQuitting_ThenAutoInit_RebuildsScheduler` 钉着它的自愈。本缺陷是「**客户端**没自愈」。
 

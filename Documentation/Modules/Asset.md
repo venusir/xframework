@@ -25,6 +25,7 @@ Runtime/Asset/
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
 ├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext
 ├── AssetBootstrapStage.cs         # 引导阶段：资源管理器初始化（Phase 0，最早）
+├── AssetOperationStatus.cs        # 资源操作状态（四句柄共用）+ 与 YooAsset.EOperationStatus 的唯一换算
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
 ├── AssetDownloaderHandle.cs       # 下载器句柄（事件/控制/等待）
 ├── SubAssetsHandle.cs             # 子资源句柄（图集/多 Sprite）
@@ -56,74 +57,28 @@ Runtime/Asset/
   （DEBUG 下 YooAsset 直接抛）。修法：`InitializeAsync` 用 `ResolveDefaultPackageName` 解析主包名
   （非空即采用），并把解析提成可单测的纯函数。**这是行为修复，非 API 变更**：那条路本来就走不通。
 
-## 已评估未采纳与未决
+## 决策台账
 
-**覆盖缺口（2026-10-02，下一轮先看这条）**：**真实 YooAsset 初始化路径长期零覆盖**。既有测试全走假实现
-（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个
-**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 CHANGELOG）。
-本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成
-`internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；
-**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是
-最小空包）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对
-它的消费路径**，不要只靠编译通过。
+（本节吸收原「已评估未采纳与未决」。逐条理由的展开在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「评估过并否决」这一层；**下一轮从这里读起**。历轮：2026-10-01 模块审计（判据 A–F 全类扫过）；2026-10-02 覆盖清点；2026-10-13 热更编排边界裁定（框架级评估 §5.2 步骤 8，裁定全文与真缺口归属见 `../Ledger.md` 的「热更编排」条）。）
 
-**已评估未采纳**（逐条理由已在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「本轮评估过并否决」这一层；**下一轮从这里读起**）：
-
-2026-10-01 一轮（模块审计，判据 A–F 全类扫过）：
-- 整体改用 `AsyncLazy` / `UniTask.Preserve()` 重写门面的初始化协调协议（现有语义——同一异常实例、代际作废——
-  有用例钉住，重写改动面大于收益；只修正了「promise 只支持单个 continuation」那句理由句的表述范围）
-- 合并门面与 `AssetManagerImpl` 的两层同构协议（实现层失败时刻意不销毁 `_managerImpl`，包复用语义保证重试安全）
-- 给 `AssetManagerImpl` 的同构协议补代际防护（internal，且经门面使用时已被代际保护，不可达）
-- 统一 `[YooAssetManager]` 日志前缀为 `[AssetManager]`（内部适配层的有意区分，信息量更大）
-- 给门面的 `_poolCapabilityWarned` 加复位入口（进程级闩锁正是「只告警一次」承诺的实现；测试改用反射复位）
-- 优化 `PreloadAllAsync` 的每迭代闭包（低频批量路径，「频度是判据的前提」）
-- 把三个句柄从 readonly struct 改成类，或给它们加双 Dispose 守卫（零分配是刻意设计；YooAsset 已兜底）
-- 删掉 `GetOrCreatePackage` 调用点的 `package == null` 防御分支（实测不可达，但保留零成本）
-- **`UnloadUnusedAssetsAsync` 补状态检查**：审计取证曾报「不检查 `operation.Status`，失败静默」，修复写完被
-  **编译器当场拦下**（该操作没有 `LastError`）。读 YooAsset 源码确认：`UnloadUnusedAssetsOperation`
-  **没有失败路径**（只置 `Succeed`，从不设 `Error`）。**按纪律撤回修复**，改为就地注释记下已验证的事实
-  ——加一个恒真的检查是死代码，还会让人以为「失败会被报告」。
-
-2026-10-13 一轮（**热更编排边界裁定**，框架级评估 §5.2 步骤 8；裁定全文与真缺口归属见 `../Ledger.md` 的「热更编排」条）：
-- **不建「热更编排」模块**：原判「下载编排（队列 / 重试 / 续传 / 进度）是纯基础设施、可进框架」经核对依赖源码后不成立——**这一半 YooAsset 已经提供**（2.3.18 读包内源码逐条核对，清单见 `../Ledger.md` 该条），`Asset` 已把它包成 7 个门面成员 + 一个下载器句柄；框架再包一层只会与上游版本耦合地重复编排逻辑。
-- **版本对比 / 整体失败重试（含续跑）/ 下载等待超时 / 更新决策（强制门槛 · 公告 · 灰度）/ 更新 UI 接线 —— 一律判给项目侧**，本模块不接。判据是它们各自依赖「版本号语义」「退避策略」「运营口径」「界面契约」，四样全是项目的。**第三方对照（一手，2026-10-13 读 UGF 源码）**：UGF 有独立 `Download`（断点续传 + 并发下载器数）与 `WebRequest` 模块，但**没有任何**「更新策略 / 强制更新 / CDN」概念——更新流程由使用方自己的 Procedure 承担。
-
-**未决**：
-- **预检与下载的版本绑定断了**（2026-10-13 核实；这是**接线缺陷**，不是缺口）。`PreDownloadContentAsync`（`YooAssetManagerImpl.cs:256-269`）只 `await` 预检 operation 取状态、**把 operation 丢掉**；而 `CreateDownloader`（`:289-298`）走 `package.CreateResourceDownloader(...)` → **`ActiveManifest`**（YooAsset 2.3.18 `ResourcePackage/PlayMode/PlayModeImpl.cs:107/113`）。于是「预检之后下载」拿到的是**旧激活清单**的缺口——**预下载静默空转**，激活之后才按需下载。**YooAsset 那边本就有这块能力**：`PreDownloadContentOperation.CreateResourceDownloader(...)` 基于它自己那份**未激活**的私有 `_manifest` 建下载器（`PreDownloadContentOperation.cs:104-112`），而激活清单是 `UpdatePackageManifestOperation.cs:81` 的职责——**是我们这层把它丢了**。**影响面**：`IAssetManager.cs` 里「成功后调用 `CreateDownloader` 会基于该版本创建下载器」那句承诺**不成立**，`Runtime/Asset/README.md` 的示例与「热更链路状态流转」也按这个不成立的顺序写（**2026-10-13 已把两处文档订正为可工作的顺序**）。**待决的形状**：要让「预检即可知道要下多少、下哪些」成立，得给使用方一个从预检产出的入口（待下字节数或一个下载器句柄）——那是**公开 API 新增**，另起一轮。
-- **`Application.lowMemory` 的回调线程**：Unity 官方文档未声明该回调在哪个线程触发，而 `OnLowMemory` 直接触碰
-  GameObject（清池）与 `Resources.UnloadUnusedAssets`——若该回调可能在非主线程触发即为缺陷。**需真机实测**；
-  未证实前不写进使用方文档。
-- **Asset 加载链路缺 PlayMode 集成用例**：`AssetHandle<T>` 只有一个 internal 构造、必须包真的 YooAsset 句柄，
-  替身造不出来。于是几条**行为了修复却无法自动化验证**（类型不匹配释放句柄、失败路径释放句柄、回池保活与
-  引用计数端到端）。建一套最小 YooAsset Offline 测试环境是后续选项。**（2026-10-01 部分收口）**
-  主包名解析已提出纯函数 `AssetManagerImpl.ResolveDefaultPackageName` 并由 `AssetPackageNameTests` 钉住三态
-  ——它此前零覆盖，而它决定的正是「初始化与加载是否同一个包」（见下方「已修」）。
-  **（2026-10-13 §4.2 处置）**：Runtime 侧现状为 2 fixture / 24 例（对象池语义 + 真 `SceneManager` 跨帧
-  场景缝，后者由场景立项轮新增）——「Asset 的 Runtime 侧只有 1」的旧盘点已漂移；剩余部分不变：
-  真 YooAsset 端到端初始化仍需构建产物，普通 PlayMode 用例补不到。
-- **主线程断言第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）：
-  **2026-10-15 已结——不抽公共防线**（判据与三份差异对照见 `FrameworkReview.md` §4.2）。本模块那份**补齐了两个缺口**：
-  ① 覆盖——新增 `Tests/Editor/Asset/AssetMainThreadGuardTests`（4 例：负向控制 / 闩锁 / 真接线 / 会话复位让提示重新具备）——
-  此前这份守卫**零覆盖**；② 门控对齐——闩锁字段 `_mainThreadViolationLogged` 移入 `#if UNITY_EDITOR`（三份里唯一在外的），
-  该改动**无观测面**，属代码一致性。
-- ~~会话级复位~~ —— **2026-10-12 已修**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，
-  `AssetBootstrapStage` 见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的
-  实例（其 `_managerImpl` 持有已销毁的 YooAsset 包）。现在门面在会话开始时复位静态状态
-  （`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档）。
-  **比其它门面多两件事**：① 作废在途初始化（`InvalidateInflightInit` + 清任务）——上一会话半路中断的
-  初始化不得在第二会话里让实例「复活」；② 复位两个「只报一次」闩锁（`_poolCapabilityWarned` /
-  `_mainThreadViolationLogged`）——它们是**每会话**一次的提示。注意上面「已评估未采纳」里那条
-  「给 `_poolCapabilityWarned` 加复位入口」当时被否决的理由是「进程级闩锁正是『只告警一次』承诺的实现」——
-  本轮把它改判为**每会话一次**（跨会话仍只报一次，但换了会话就该重新提示）。
-  回归用例：`Tests/Runtime/Architecture/SessionResetTests`（3 条，已做改前必红，包括「在途初始化复活」那条）。
-  配套新增 Runtime 侧最小假件 `Tests/Runtime/Asset/FakeAssetManager`（此前 Runtime 树只有 UI 侧那个池替身，
-  它对 `InitializeAsync` 抛 NotUsed）。
-- **`InstanceTracker` 的退出订阅**（同轮）—— 它原用**静态构造函数 + 匿名 lambda** 订阅 `Application.quitting`：
-  lambda 退订不了、按特性扫描的族清单**扫不到静态构造**、`_activeCounts` 也没有复位入口
-  （`AssetPoolTests` 此前只能用「计数平衡」代替复位）。现改为具名 `AutoInit`（挂 `SubsystemRegistration`：
-  会话开始清空计数 + 幂等 `-=`/`+=` 订阅）并登记进族清单。回归用例：
-  `SessionResetTests.InstanceTracker_ResetClearsStaleActiveCounts`（已做改前必红）。
-  `Ledger.md` 的「App 生命周期」条（原 `Roadmap.md` §三）那句「`Application.quitting` 六处……有族级守卫」当时对它是**失实**的，已订正。
+- 未做：**真实 YooAsset 初始化路径的端到端覆盖（覆盖缺口）**（2026-10-02 · 覆盖清点，下一轮先看这条）——既有测试全走假实现（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 `CHANGELOG`）。本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成 `internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是**最小空包**）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对它的消费路径**，不要只靠编译通过。
+- 不做：**不整体改用 `AsyncLazy` / `UniTask.Preserve()` 重写门面的初始化协调协议**（2026-10-01 · 审计轮）——现有语义（同一异常实例、代际作废）有用例钉住，重写改动面大于收益；只修正了「promise 只支持单个 continuation」那句理由句的表述范围。无重开判据。
+- 不做：**不合并门面与 `AssetManagerImpl` 的两层同构协议**（2026-10-01 · 审计轮）——实现层失败时刻意不销毁 `_managerImpl`，包复用语义保证重试安全。无重开判据。
+- 不做：**不给 `AssetManagerImpl` 的同构协议补代际防护**（2026-10-01 · 审计轮）——它是 internal，且经门面使用时已被代际保护，那条路径不可达。无重开判据。
+- 不做：**不统一 `[YooAssetManager]` 日志前缀为 `[AssetManager]`**（2026-10-01 · 审计轮）——内部适配层与门面的有意区分，信息量更大。无重开判据。
+- 已推翻：**~~不给门面的 `_poolCapabilityWarned` 加复位入口~~**（2026-10-01 · 审计轮）——当时理由「进程级闩锁正是『只告警一次』承诺的实现；测试改用反射复位」。被 2026-10-12「会话级复位同时复位两个『只报一次』闩锁（`_poolCapabilityWarned` / `_mainThreadViolationLogged`）——跨会话仍只报一次，但换了会话就该重新提示」取代。
+- 不做：**不优化 `PreloadAllAsync` 的每迭代闭包**（2026-10-01 · 审计轮）——低频批量路径，「频度是判据的前提」。无重开判据。
+- 不做：**不把三个句柄从 readonly struct 改成类，也不给它们加双 Dispose 守卫**（2026-10-01 · 审计轮）——零分配是刻意设计；YooAsset 已兜底。无重开判据。
+- 不做：**不删掉 `GetOrCreatePackage` 调用点的 `package == null` 防御分支**（2026-10-01 · 审计轮）——实测不可达，但保留零成本。无重开判据。
+- 已推翻：**~~给 `UnloadUnusedAssetsAsync` 补 `operation.Status` 状态检查（审计取证：不检查即「失败静默」）~~**（2026-10-01 · 审计轮）——修复写完被**编译器当场拦下**（该操作没有 `LastError`）；读 YooAsset 源码确认 `UnloadUnusedAssetsOperation` **没有失败路径**（只置 `Succeed`，从不设 `Error`），**按纪律撤回修复**，改为就地注释记下已验证的事实——加一个恒真的检查是死代码，还会让人以为「失败会被报告」。被 2026-10-01「`UnloadUnusedAssetsOperation` 没有失败路径」取代。
+- 不做：**不建「热更编排」模块**（2026-10-13 · 热更编排边界裁定）——原判「下载编排（队列 / 重试 / 续传 / 进度）是纯基础设施、可进框架」经核对依赖源码后不成立：**这一半 YooAsset 已经提供**（2.3.18 读包内源码逐条核对，清单见 `../Ledger.md` 该条），`Asset` 已把它包成 7 个门面成员 + 一个下载器句柄；框架再包一层只会与上游版本耦合地重复编排逻辑。无重开判据。
+- 不做：**版本对比 / 整体失败重试（含续跑）/ 下载等待超时 / 更新决策（强制门槛 · 公告 · 灰度）/ 更新 UI 接线——一律判给项目侧**（2026-10-13 · 热更编排边界裁定）——本模块不接：判据是它们各自依赖「版本号语义」「退避策略」「运营口径」「界面契约」，四样全是项目的。**第三方对照（一手，2026-10-13 读 UGF 源码）**：UGF 有独立 `Download`（断点续传 + 并发下载器数）与 `WebRequest` 模块，但**没有任何**「更新策略 / 强制更新 / CDN」概念——更新流程由使用方自己的 Procedure 承担。无重开判据。
+- 待裁：**预检与下载的版本绑定断了**（2026-10-13 · 源码核实；这是**接线缺陷**，不是缺口）——`PreDownloadContentAsync`（`YooAssetManagerImpl.cs:256-269`）只 `await` 预检 operation 取状态、**把 operation 丢掉**；而 `CreateDownloader`（`:289-298`）走 `package.CreateResourceDownloader(...)` → **`ActiveManifest`**（YooAsset 2.3.18 `ResourcePackage/PlayMode/PlayModeImpl.cs:107/113`）。于是「预检之后下载」拿到的是**旧激活清单**的缺口——**预下载静默空转**，激活之后才按需下载。**YooAsset 那边本就有这块能力**：`PreDownloadContentOperation.CreateResourceDownloader(...)` 基于它自己那份**未激活**的私有 `_manifest` 建下载器（`PreDownloadContentOperation.cs:104-112`），而激活清单是 `UpdatePackageManifestOperation.cs:81` 的职责——**是我们这层把它丢了**。**影响面**：`IAssetManager.cs` 里「成功后调用 `CreateDownloader` 会基于该版本创建下载器」那句承诺**不成立**，`Runtime/Asset/README.md` 的示例与「热更链路状态流转」也按这个不成立的顺序写（**2026-10-13 已把两处文档订正为可工作的顺序**）。**待决的形状**：要让「预检即可知道要下多少、下哪些」成立，得给使用方一个从预检产出的入口（待下字节数或一个下载器句柄）——那是**公开 API 新增**，另起一轮。
+- 未做：**`Application.lowMemory` 的回调线程未证实**（2026-10-01 · 审计轮）——Unity 官方文档未声明该回调在哪个线程触发，而 `OnLowMemory` 直接触碰 GameObject（清池）与 `Resources.UnloadUnusedAssets`——若该回调可能在非主线程触发即为缺陷。**需真机实测**；未证实前不写进使用方文档。
+- 未做：**Asset 加载链路缺 PlayMode 集成用例**（2026-10-01 · 审计轮）——`AssetHandle<T>` 只有一个 internal 构造、必须包真的 YooAsset 句柄，替身造不出来，于是几条**行为已修复却无法自动化验证**（类型不匹配释放句柄、失败路径释放句柄、回池保活与引用计数端到端）；建一套最小 YooAsset Offline 测试环境是后续选项。**（2026-10-01 部分收口）** 主包名解析已提出纯函数 `AssetManagerImpl.ResolveDefaultPackageName` 并由 `AssetPackageNameTests` 钉住三态——它此前零覆盖，而它决定的正是「初始化与加载是否同一个包」（见「已修（2026-10-01）」节）。**（2026-10-13 §4.2 处置）**：Runtime 侧现状为 2 fixture / 24 例（对象池语义 + 真 `SceneManager` 跨帧场景缝，后者由场景立项轮新增）——「Asset 的 Runtime 侧只有 1」的旧盘点已漂移；剩余部分不变：真 YooAsset 端到端初始化仍需构建产物，普通 PlayMode 用例补不到。
+- 已做：**主线程断言第三份内联副本——不抽公共防线**（2026-10-15 · `Tests/Editor/Asset/AssetMainThreadGuardTests`（4 例）；判据与三份差异对照见 `FrameworkReview.md` §4.2）——Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面三份副本评估后都**各自保留**；本模块那份**补齐了两个缺口**：① 覆盖——新增 `AssetMainThreadGuardTests`（负向控制 / 闩锁 / 真接线 / 会话复位让提示重新具备），此前这份守卫**零覆盖**；② 门控对齐——闩锁字段 `_mainThreadViolationLogged` 移入 `#if UNITY_EDITOR`（三份里唯一在外的），该改动**无观测面**，属代码一致性。
+- 已做：**会话级复位**（2026-10-12 · `ResetForNewSession`；回归用例 `Tests/Runtime/Architecture/SessionResetTests`，3 条已做改前必红）——域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，`AssetBootstrapStage` 见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的实例（其 `_managerImpl` 持有已销毁的 YooAsset 包）；现在门面在会话开始时复位静态状态（`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档）。**比其它门面多两件事**：① 作废在途初始化（`InvalidateInflightInit` + 清任务）——上一会话半路中断的初始化不得在第二会话里让实例「复活」（含「在途初始化复活」那条回归用例）；② 复位两个「只报一次」闩锁（`_poolCapabilityWarned` / `_mainThreadViolationLogged`）——它们是**每会话**一次的提示（即上方「已推翻」那条的改判：跨会话仍只报一次，但换了会话就该重新提示）。配套新增 Runtime 侧最小假件 `Tests/Runtime/Asset/FakeAssetManager`（此前 Runtime 树只有 UI 侧那个池替身，它对 `InitializeAsync` 抛 NotUsed）。
+- 已做：**`InstanceTracker` 的退出订阅改为具名 `AutoInit` 并登记进族清单**（2026-10-12 · `SessionResetTests.InstanceTracker_ResetClearsStaleActiveCounts`，已做改前必红）——它原用**静态构造函数 + 匿名 lambda** 订阅 `Application.quitting`：lambda 退订不了、按特性扫描的族清单**扫不到静态构造**、`_activeCounts` 也没有复位入口（`AssetPoolTests` 此前只能用「计数平衡」代替复位）；现改为具名 `AutoInit`（挂 `SubsystemRegistration`：会话开始清空计数 + 幂等 `-=`/`+=` 订阅）。`Ledger.md` 的「App 生命周期」条（原 `Roadmap.md` §三）那句「`Application.quitting` 六处……有族级守卫」当时对它是**失实**的，已订正。
 
 ## 审计轮次
 

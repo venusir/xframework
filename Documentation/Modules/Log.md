@@ -34,7 +34,7 @@ Assets/XFramework/Runtime/Log/
 
 Tests/Runtime/Log/：LogTestKit、LogLevelFilterTests、LogRenderingFidelityTests、LogAllocationTests、
                     LogFileSinkTests、LogCaptureTests、LogConcurrencyTests、LogLifecycleTests
-Tests/Editor/Log/： LogFormatterTests、LogCategoryRegistryTests、LogFacadeCompletenessTests、LogJsonEscapingTests
+Tests/Editor/Log/： LogFormatterTests、LogCategoryRegistryTests、LogFacadeCompletenessTests、LogJsonEscapingTests、LogDiagnosticsReadbackTests
 ```
 
 不开 `Internal/` 之外的子目录；测试 asmdef 沿用两个既有测试根，未新建。
@@ -83,7 +83,7 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 | Serialize | `Serialize` | 回填时**无需**（`[XSerialize]` 那两处是异常消息前缀）；**2026-10-02 新增首条日志**（内置注册与使用方注册撞名时保留并告警），该 `[XSerialize]` 前缀仍只用于异常消息 |
 | LogManager | `LogManager` | **2026-10-02 新增**：Log 模块自身的**唯一一条**日志——注入非内置 `ILogManager` 时提醒「Unity 全量捕获随之停用」。它**在替换之前**经当前实现发出（那一刻必然是框架实现），故不可能递归；这是「LogManager 自身永不记日志」那条规则的**唯一例外**，理由写在 `Initialize` 的 XML 里 |
 | Reactive | — | **无需回填**：`[Reactive]` 的两处是 `ObjectDisposedException` 的消息前缀 |
-| *(Editor)* | `XFramework` | `XFrameworkDependencyInstaller.cs` 的 6 处；其中 2 处原本**没有前缀**（全仓唯二违例），见「未决」 |
+| *(Editor)* | `XFramework` | `Editor/XFrameworkDependencyInstaller.cs` 现有 9 处（7 处经 `LogManager`、2 处保持无前缀 `Debug.LogError`——全仓唯二违例），见「决策台账」 |
 
 > **两类误收要记住**（回填时逐一核实过）：机械提取 `$"[标签]` 会把**异常消息**和**非日志字符串**
 > 一起收进来——`[AudioManager]` 是 GameObject 名、`[Slot:…]` 是 `SaveMeta.ToString()`、
@@ -94,91 +94,30 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 （「删掉它使用方会不会写错代码」），那些片段是示例业务代码在打日志，不是框架契约；教新 API 的地方
 只有包 README 与 Log 模块 README。
 
-## 已完成功能与未做（roadmap）
+## 决策台账
 
-### 已完成（v1，2026-10-01）
+（本节由原「已完成功能与未做（roadmap）」与「已评估未采纳与未决」两节合流。v1 的功能说明与用法在使用方 README；静默 catch 的口径、历轮裁定与测试侧处置都在下面的条目里。）
 
-六档分级 + 分类过滤（全局档 + 分类覆盖）· 模板 + 泛型参数（arity 0..3，未启用零分配）·
-控制台输出端（逐字兼容迁移前文本与 LogType）· JSONL 文件输出端（每会话一文件 / 切分 / 轮转 /
-flush 策略 / 失败即静默）· 全量捕获（引擎 / 第三方 / 未捕获异常，回显去重）· 门面永不抛 ·
-AutoInit 自初始化（SubsystemRegistration，载入期即装入默认实现）· 门面完备性守卫 · 31 个内置分类。
-
-**回填也已完成**（同日，20 个提交）：18 个模块 + Editor 工具 + Samples，约 190 处调用点，
-按模块拆分、**控制台文案与 LogType 逐字不变**（30+ 处既有 `LogAssert` 一条未改）。
-`Reactive` 与 `Serialize` 无需回填（无日志）。至此 Runtime 下除控制台输出端自己那三行外，
-**不再有任何 `Debug.Log*` 调用**——框架里只有一条日志通路。
-
-**异常入 JSONL**（同日后续）：`ILogManager.Exception` 增加级别可指定的重载，框架里 47 处
-「异常只有文本 / 异常对象没进结构化字段」的站点全部改为把**异常对象**交给日志——17 处只传
-`ex.Message` 的（含 Save 元数据解析的 3 个入口）、30 处「对象已作为格式实参传入、`ToString()`
-混在 `msg` 里」的、以及 2 条把异常转成状态/文本后丢弃的主线（Pipeline 的用户阶段异常经
-`PipelineStageContext.FailureException` 一路带到编排级终局日志；Save 的 `TryDeserializeSnapshot`
-加 `out Exception`）。至此 `exc` 成为稳定 schema：`jq 'select(.exc)'` 可靠地取出
-「类型 + 异常链 + 抛出点堆栈」，`msg` 恢复成「人读的一句话」。既有断言改了 **10 条**、落在
-2 个文件（`UpdateSchedulerTests` 5 + `PipelineSubscriberIsolationTests` 5）——**都因为正则依赖
-`": "` 这个已被换行取代的分隔符**。教训记在这里：评估「文案变化会不会弄红断言」时，
-**不锚定的头匹配不敏感，但带尾部冒号或内嵌异常文本的会**，两类必须分开数
-（本次首轮评估只数了前者，被 10 条里剩下的 7 条打回来）。
-
-### 未做
-
-| 项 | 为什么不做 |
-|---|---|
-| 会话级复位（与其它模块的静态门面同族问题） | 属框架级未决项，不在本模块范围内（见 `Documentation/Modules/Input.md` 的实测配方）。本模块的 `AutoInit` 已把「丢弃上一会话的实现 + 复位会话 id + 重挂退出订阅」做齐，可作为将来那件事的参照 |
-
-## 已评估未采纳与未决
-
-**静默 catch 的口径**（下一轮审计直接引用本节，不必重新普查）：
-
-判据是一句话：**这个 catch 若被命中，有没有别的出口能让人看见**？据此，全仓「不记日志的 catch」
-只有两类、七个位置，全部是有意为之：
-
-| 位置 | 为什么不记 |
-|---|---|
-| `Bootstrap/GameLauncher.cs` 的 `Start`（OCE；**不写行号**——该文件拆过两次，行号已失准过一次） | 启动取消是正常路径（应用退出） |
-| `File/FilePathUtility.cs:142` + `:146`（同一方法的两个子句） | 平台不支持原子写/`File.Replace` → 走降级路径，语义是「换一条路」不是「出错了」 |
-| `Audio/AudioManagerImpl.cs:280`（OCE） | 只有 `Destroy` 会取消内部令牌，此时无调用方可通知 |
-| `Message/MessageBroker.cs:954`（OCE，带 `when` 过滤） | 订阅已退订，属预期 |
-| `Log/Internal/*` 的全部 catch | 模块承诺「永不抛、永不记日志」（见 README 的设计取舍） |
-| `Pipeline/Pipeline.cs:353`（OCE 防御分支） | 语义上转为 Cancelled 并派发 `OnCancelled`，非静默 |
-| `Pipeline/StageExecution.cs:34`（OCE） | 取消不是失败；**异常分支不在此列**——它现在会经 `FailureException` 落盘 |
-
-其余所有 catch 要么 `throw;` 重抛（异常对象保留），要么记日志。
-
-**已评估未采纳**（逐条列出，避免下一轮重新论证）：
-
-| 项 | 不采纳的理由 |
-|---|---|
-| 砍掉 `ILogManager`（照 Timer 先例做纯静态门面） | 日志的「可替换后端」形式上存在（整体换 Serilog / 自研上报）；更要紧的是**门面转发完备性只有反射能锁，而反射需要一个接口**——多 30 个转发行换一条机械保证，值 |
-| 第三方日志库（ZLogger / Serilog / NLog） | ZLogger 的核心卖点是 `InterpolatedStringHandler`，**需要 C# 10**，本包 `LangVersion 9.0`；且它们不解决本包真正的问题（分类前缀约定 + 与 Unity Console / `LogAssert` 逐字兼容） |
-| 编译期剥离（`[Conditional("DEBUG")]`） | 现有日志 175/193 是 Warning/Error，Release 也必须输出；且它会连**实参求值**一起删掉，与「按档位过滤」语义不同 |
-| 替换 `Debug.unityLogger.logHandler` | 全局副作用大（Unity Console、`LogAssert`、第三方工具都挂在上面），且 `ILogHandler.LogFormat(…, params object[])` 自身就分配数组 |
-| 自研 formatter（不走 `string.Format`） | 逐字保真的免费证明就是「与插值同源」；自研要在 `{{`、null、`IFormattable`、culture 四处逐一对齐，任何一处差一点就是 30+ 处 `LogAssert` 变红 |
-| per-sink 独立档位 | 会让 `IsEnabled` 的语义变成「有没有任何一个 sink 想要」，第三方无法推理；要「文件全收、控制台安静」用分类档位即可 |
-| 结构化参数（`Warning(cat, "x {path}", …)` 带字段名） | 193 个调用点每个都要给参数起名，迁移成本翻倍；AI 分析已由「单行 JSON + cat/lvl」满足。记为未决 |
-| 后台写线程 / `ConcurrentQueue` 泵 | 崩溃后 AI 要读的正是最后几条，而后台队列会把它们留在内存里；还需引入 Update 依赖或 PlayerLoop 注入，与「零模块依赖」冲突 |
-| 单个 JSON 数组文档（优点是可整体 `json.load`） | **崩溃可读性会整份失效**：写入被打断即 `]` 缺失、整个文件语法无效——而那正是日志最需要被读到的时刻（本模块的 flush 策略本身就承认「随时可能断」）。追加写还要维护 `[`/`]`/逗号与「是不是第一条」的跨行状态，与「失败即静默」的简单实现相斥；`jq`/`grep`/`tail` 那条逐行工具链也随之失效。JSONL 的代价（不能整体 `json.load`）由逐行 parse 覆盖 |
-| 异常入口的「形态 (a)」：把实参从 `ex.Message` 换成 `ex` | 零 API 增长，但 `exc` 仍为空、堆栈只是混进 `msg`——正是要消掉的那种混法（30 处「对象已传」的站点此前就处于这个终态的变体，正是它们促使了形态 (b)） |
-| 异常入口的「形态 (c)」：让 `Log(...)` 家族也收异常 | +16 个公开成员，只为错误路径的模板一致性；错误路径上的 `string.Format` 相对栈展开可忽略，不值得用公开面换 |
-| 给异常入口再加泛型重载（`Exception<T1>(level, cat, ex, template, arg)`） | 同上：14 个调用点全在 catch 块里，「未启用不格式化」是**每帧路径**的承诺（`LogAllocationTests` 的执行对象），不是错误路径的 |
-
-**未决**（需单独裁定的两项，都属「改文案 = 仅对仓内的行为变更」）：
-
-1. **Editor 两处无前缀 `Debug.LogError`**（`XFrameworkDependencyInstaller.cs:52,74`，全仓唯二违例）：经 `LogManager` 会自动补 `[XFramework] ` 前缀 = 改控制台文案。本轮按「逐字保真」保持原样未迁。
-2. **`UIDefaultController` 的 5 条 verbose 日志保持 `Info`**：降到 `Debug` 会改变 Release 可见性（`verbose: true` 的使用方会突然看不到），属行为变更。
-
-**测试侧的处置（跨模块，真相在别处）**：`LogAllocationTests` 的 **4 处**零分配断言此前用的是**恒真**的尺子
-（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0）——它们锁的结论「档位未启用时不格式化、零分配」
-**从未被证实**，而这条恰是本模块对外承诺的卖点之一。**坏形态是靠模仿扩散的**：该文件 `:12` 的注释自述
-「断言形态沿用 `TimerAllocationTests`」。**2026-10-12 已处置**，正是照本节原先记的那条「无需尺子的替代方向」
-落成的：
-
-- **直接观测（确定性）**：`ToString()` 自增计数的探针（关档后计数必须为 0）+ 只计数的 sink（关档后条目数为 0）
-  + **正对照组**（开档后两者各动一次——防「探针根本没接上」这类假绿）。
-- **放大粗尺子**：四处站点各放大 10 万次，实测堆增量**均为 0 B**——「未启用不格式化」第一次被真实测量。
-- **校准暴露的一条纪律**：注入「先格式化再判档」后探针精确变 1，而尺子只读到 417,792 B——**瞬时垃圾会被
-  测量窗口内的 GC 削掉一部分**（同批的持有式注入读到 1.5–3.2 MB）。这类回归**以探针为准，尺子是粗网**
-  （阈值 400 KB 拦的是持有式 / 大体量分配那一档，不追瞬时垃圾）。校准与改造模板见 `Documentation/Workflow.md` §六。
+- 已做：**v1 功能面建成**（2026-10-01 · 使用方 README 与 `CHANGELOG`）——六档分级 + 分类过滤（全局档 + 分类覆盖）、模板 + 泛型参数（arity 0..3，未启用零分配）、控制台输出端（逐字兼容迁移前文本与 LogType）、JSONL 文件输出端（每会话一文件 / 切分 / 轮转 / flush 策略 / 失败即静默）、全量捕获（引擎 / 第三方 / 未捕获异常，回显去重）、门面永不抛、AutoInit 自初始化（`SubsystemRegistration`，载入期即装入默认实现）、门面完备性守卫、内置分类。原「已完成（v1）」的逐项 ✅ 静态清单不再维护——都是已建成的静态清单，留在这里只会年复一年地陈旧。
+- 已做：**18 个模块 + Editor 工具 + Samples 的日志回填**（2026-10-01 · 同日 20 个提交）——约 190 处调用点，按模块拆分为可独立 review 的提交；策略是**逐字保真**：控制台文案与 LogType 逐字不变（30+ 处既有 `LogAssert` 一条未改），配方与分类映射见上文「迁移指南」。`Reactive` 与 `Serialize` 无需回填（无日志）；至此 Runtime 下除控制台输出端自己那三行外，**不再有任何 `Debug.Log*` 调用**——框架里只有一条日志通路。
+- 已做：**异常入 JSONL**（2026-10-01 · 同日后续）——`ILogManager.Exception` 增加级别可指定的重载，框架里 47 处「异常只有文本 / 异常对象没进结构化字段」的站点全部改为把**异常对象**交给日志：17 处只传 `ex.Message` 的（含 Save 元数据解析的 3 个入口）、30 处「对象已作为格式实参传入、`ToString()` 混在 `msg` 里」的、以及 2 条把异常转成状态/文本后丢弃的主线（Pipeline 的用户阶段异常经 `PipelineStageContext.FailureException` 一路带到编排级终局日志；Save 的 `TryDeserializeSnapshot` 加 `out Exception`）。至此 `exc` 成为稳定 schema：`jq 'select(.exc)'` 可靠地取出「类型 + 异常链 + 抛出点堆栈」，`msg` 恢复成「人读的一句话」。既有断言改了 **10 条**、落在 2 个文件（`UpdateSchedulerTests` 5 + `PipelineSubscriberIsolationTests` 5）——**都因为正则依赖 `": "` 这个已被换行取代的分隔符**。教训：评估「文案变化会不会弄红断言」时，**不锚定的头匹配不敏感，但带尾部冒号或内嵌异常文本的会**，两类必须分开数（本次首轮评估只数了前者，被 10 条里剩下的 7 条打回来）。
+- 已做：**会话级复位**（2026-10-12 · `SessionResetTests`；实测配方见 `Documentation/Modules/Input.md`）——本模块的 `AutoInit` 已把「丢弃上一会话的实现 + 复位会话 id + 重挂退出订阅」做齐（原条目即以此作为框架级那件事的参照）；框架级八门面复位（`ResetForNewSession`）同期落地，原「属框架级未决项，不在本模块范围内」的登记随之闭合。
+- 不做：**不给全仓「不记日志的 catch」补日志**（2026-10-01 · 静默 catch 普查）——判据是一句话：**这个 catch 若被命中，有没有别的出口能让人看见**？据此全仓只有两类、七个位置，全部有意为之：① `Bootstrap/GameLauncher.cs` 的 `Start`（OCE；**不写行号**——该文件拆过两次，行号已失准过一次）——启动取消是正常路径（应用退出）；② `File/FilePathUtility.cs:142` + `:146`（同一方法的两个子句）——平台不支持原子写/`File.Replace` → 走降级路径，语义是「换一条路」不是「出错了」；③ `Audio/AudioManagerImpl.cs:280`（OCE）——只有 `Destroy` 会取消内部令牌，此时无调用方可通知；④ `Message/MessageBroker.cs:954`（OCE，带 `when` 过滤）——订阅已退订，属预期；⑤ `Log/Internal/*` 的全部 catch——模块承诺「永不抛、永不记日志」（见 README 的设计取舍）；⑥ `Pipeline/Pipeline.cs:370`（OCE 防御分支）——语义上转为 Cancelled 并派发 `OnCancelled`，非静默；⑦ `Pipeline/StageExecution.cs:34`（OCE）——取消不是失败；**异常分支不在此列**——它现在会经 `FailureException` 落盘。其余所有 catch 要么 `throw;` 重抛（异常对象保留），要么记日志。无重开判据（下一轮审计直接引用本条，不必重新普查）。
+- 不做：**不砍掉 `ILogManager`（不照 Timer 先例做纯静态门面）**（2026-10-01 · v1 定案）——日志的「可替换后端」形式上存在（整体换 Serilog / 自研上报）；更要紧的是**门面转发完备性只有反射能锁，而反射需要一个接口**——多出一批转发行换一条机械保证，值。无重开判据。
+- 不做：**不引第三方日志库（ZLogger / Serilog / NLog）**（2026-10-01 · v1 定案）——ZLogger 的核心卖点是 `InterpolatedStringHandler`，**需要 C# 10**，本包 `LangVersion 9.0`；且它们不解决本包真正的问题（分类前缀约定 + 与 Unity Console / `LogAssert` 逐字兼容）。无重开判据。
+- 不做：**不做编译期剥离（`[Conditional("DEBUG")]`）**（2026-10-01 · v1 定案）——现有日志 175/193 是 Warning/Error，Release 也必须输出；且它会连**实参求值**一起删掉，与「按档位过滤」语义不同。无重开判据。
+- 不做：**不替换 `Debug.unityLogger.logHandler`**（2026-10-01 · v1 定案）——全局副作用大（Unity Console、`LogAssert`、第三方工具都挂在上面），且 `ILogHandler.LogFormat(…, params object[])` 自身就分配数组。无重开判据。
+- 不做：**不自研 formatter（坚持走 `string.Format`）**（2026-10-01 · v1 定案）——逐字保真的免费证明就是「与插值同源」；自研要在 `{{`、null、`IFormattable`、culture 四处逐一对齐，任何一处差一点就是 30+ 处 `LogAssert` 变红。无重开判据。
+- 不做：**不做 per-sink 独立档位**（2026-10-01 · v1 定案）——会让 `IsEnabled` 的语义变成「有没有任何一个 sink 想要」，第三方无法推理；要「文件全收、控制台安静」用分类档位即可。无重开判据。
+- 待裁：**结构化参数（`Warning(cat, "x {path}", …)` 带字段名）**（2026-10-01 · 记为未决）——193 个调用点每个都要给参数起名，迁移成本翻倍；AI 分析已由「单行 JSON + cat/lvl」满足。记为未决，待单独裁定。
+- 不做：**不做后台写线程 / `ConcurrentQueue` 泵**（2026-10-01 · v1 定案）——崩溃后 AI 要读的正是最后几条，而后台队列会把它们留在内存里；还需引入 Update 依赖或 PlayerLoop 注入，与「零模块依赖」冲突。无重开判据。
+- 不做：**不采用单个 JSON 数组文档（坚持 JSONL）**（2026-10-01 · v1 定案）——**崩溃可读性会整份失效**：写入被打断即 `]` 缺失、整个文件语法无效——而那正是日志最需要被读到的时刻（本模块的 flush 策略本身就承认「随时可能断」）。追加写还要维护 `[`/`]`/逗号与「是不是第一条」的跨行状态，与「失败即静默」的简单实现相斥；`jq`/`grep`/`tail` 那条逐行工具链也随之失效。JSONL 的代价（不能整体 `json.load`）由逐行 parse 覆盖。无重开判据。
+- 不做：**异常入口不采用形态 (a)（把实参从 `ex.Message` 换成 `ex`）**（2026-10-01 · v1 定案）——零 API 增长，但 `exc` 仍为空、堆栈只是混进 `msg`——正是要消掉的那种混法（30 处「对象已传」的站点此前就处于这个终态的变体，正是它们促使了形态 (b)）。无重开判据。
+- 不做：**异常入口不采用形态 (c)（让 `Log(...)` 家族也收异常）**（2026-10-01 · v1 定案）——+16 个公开成员，只为错误路径的模板一致性；错误路径上的 `string.Format` 相对栈展开可忽略，不值得用公开面换。无重开判据。
+- 不做：**不给异常入口再加泛型重载（`Exception<T1>(level, cat, ex, template, arg)`）**（2026-10-01 · v1 定案）——同上：14 个调用点全在 catch 块里，「未启用不格式化」是**每帧路径**的承诺（`LogAllocationTests` 的执行对象），不是错误路径的。无重开判据。
+- 待裁：**Editor 两处无前缀 `Debug.LogError` 未迁**（2026-10-01 · 回填轮）——`Assets/XFramework/Editor/XFrameworkDependencyInstaller.cs:83,135`（全仓唯二违例）：经 `LogManager` 会自动补 `[XFramework] ` 前缀 = 改控制台文案；本轮按「逐字保真」保持原样未迁。属「改文案 = 仅对仓内的行为变更」，待单独裁定。
+- 待裁：**`UIDefaultController` 的 5 条 verbose 日志保持 `Info`**（2026-10-01 · 回填轮）——降到 `Debug` 会改变 Release 可见性（`verbose: true` 的使用方会突然看不到），属行为变更，待单独裁定。
+- 已做：**`LogAllocationTests` 的 4 处零分配断言从恒真尺子改为「确定性探针 + 放大粗尺子」**（2026-10-12 · 实测；校准与改造模板见 `Documentation/Workflow.md` §六）——此前用的是**恒真**的尺子（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0），锁的「档位未启用时不格式化、零分配」**从未被证实**，而这条恰是本模块对外承诺的卖点之一；**坏形态是靠模仿扩散的**：该文件 `:12` 的注释自述「断言形态沿用 `TimerAllocationTests`」。本次正照原记的「无需尺子的替代方向」落成：① **直接观测（确定性）**——`ToString()` 自增计数的探针（关档后计数必须为 0）+ 只计数的 sink（关档后条目数为 0）+ **正对照组**（开档后两者各动一次——防「探针根本没接上」这类假绿）；② **放大粗尺子**——四处站点各放大 10 万次，实测堆增量**均为 0 B**，「未启用不格式化」第一次被真实测量；③ **校准暴露的一条纪律**——注入「先格式化再判档」后探针精确变 1，而尺子只读到 417,792 B，**瞬时垃圾会被测量窗口内的 GC 削掉一部分**（同批的持有式注入读到 1.5–3.2 MB），这类回归**以探针为准，尺子是粗网**（阈值 400 KB 拦的是持有式 / 大体量分配那一档，不追瞬时垃圾）。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 

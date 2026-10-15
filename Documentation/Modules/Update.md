@@ -56,7 +56,6 @@ README 缺「注册表持强引用」边界）。**本轮碰了行为**——与
   `new UpdateClock`）各自唯一匹配，**没有任何形状被两个重载同时接住**；② `Tick(default)`
   **不二义**，静默落到 `Tick(float)`（不是编译错误）；③ `Tick(Time.timeAsDouble)` 是**编译错误**
   CS1503——`double` → `float` 不是隐式转换，故「换了双精度时间 API」不会静默丢精度。记在这里免得下一轮重新论证（真要动重载形状，先把这三条实测重跑一遍）。
-
 - 已做：**「节点被自动注销」对注册方由此可观测**（2026-10-14 · `81e27a8` / `7a63231`，用户裁定「甲＋乙」）——两条一起做：① **补发 `OnDisable` 边沿**（自动注销是「离开派发集合」，宣告在那帧收尾落地；零公开 API）——它顺带**修回**了 README 明写、而当时正被打破的不变量「两者严格交替、不会出现没有配对的 `OnDisable`」，也让节点的按时机计数不再永不归零；② **`UpdateManager.IsRegistered(node)`**（登记里写的形状，公开 API 新增一行）给「外部观察者查别人的注册态」，与 `IsEnabled` 分工写在 XML doc 里（两谓词方向相反：未注册时一个为 false、一个为 true）。回归锁：`UpdateSchedulerTests` 9 条自动注销用例 + 3 条不变量锁、`UpdateCrossTimingTests` 1 条、`UpdateManagerTests` 4 条（反向注入 9 条全红、锁与既有全绿已取证）。**被否形状**：catch 里改发 `Disable`（会让 `IsEnabled` 一词两义、多出永不释放的中间态、污染 `DisabledCount` 诊断语义）、可选能力接口 `IUpdateFailureAware`（异常本就是节点自己抛的、日志已记录原因）。
 - 未做：**迁移仓内两个消费方的防线**（`InputManager._ticker != null` / `SettingsAutoSaveTicker` 吞异常重试）（2026-10-14 · 上条闭合的遗留半）——它们的自记账仍有效，仓内 6 个 `OnDisable` 实现全空 ⇒ 边沿对仓内零影响，迁移只是可选清理。
 - 未做：**`IsDrivingPlayerLoop` 的边界**（2026-09-30 · 审计轮）——它不读 `_schedulers`，故 `OnQuitting()` 之后仍可能返回 `true`（引擎是否在退出时重置 PlayerLoop **未确认**）。已在 XML 文档里注明「它只回答注入状态，不回答有没有东西在派发」。

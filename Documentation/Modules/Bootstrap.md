@@ -46,7 +46,6 @@
 
 - 不做：**`GameLauncher` 作为框架的配置与编排核心**（2026-10-02 · 追记）——三条理由：① 与三处成文决定正面相撞——包 README「框架刻意**不提供统一的配置文件**……**参数即契约**」、架构的关键设计决策「服务不依赖统一入口」、本组件自己的定性「可选件、不是必需入口」；② 配置的形状是**代码不是数据**（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例，Inspector/资产序列化不了），且一半配置的生效时机**早于任何场景**（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`）——场景组件结构性地覆盖不到，装进去只能得到「半张脸」；③ 两处沿革**刻意不挂靠它**（删节点系统时解除 GameLauncher ↔ Update；Settings 落盘特意不挂它，原话「把落盘挂在一个可缺席的组件上会让本选项的承诺落空」），且它当前**零使用**（全仓无场景/预制体挂载）。**采纳的替代形状**：给它一个最小扩展点 `protected virtual void ConfigureStages()`（默认实现即 `RegisterDefaults()`，覆写即可带配置）——把「带配置」变成一次 override，而不是把配置中心化。无重开判据。
 - 暂不做：**把 `Awake` / `Start` / `OnDestroy` 改成 `protected virtual`**（2026-10-02 · 追记）——`async void Start` 变 virtual 会诱使「override 不调 base」这类错误；`ConfigureStages` 已覆盖绝大多数定制需求。重开判据：出现需要改启动/清理时机的真实情形。
-
 - 未做：**Pipeline 侧子阶段粒度超时**（2026-10-02 · 二轮审计）——Bootstrap 每相位装配为一个 `ParallelStage`，而超时只在管线**顶层阶段**粒度存在——从 Bootstrap 侧无法为单个引导阶段设置超时，不响应取消的挂死阶段会挂死整个启动（已记进 Bootstrap README 的已知限制）。修法在 Pipeline（`ParallelStage` 支持子阶段超时），未立项。
 - 已做：**静态登记表跨播放会话存活——会话复位钩子落地**（2026-10-12 · `ebeaf4e`）——关闭域重载时上一轮播放登记的阶段不会被自动清除，
   而会话 2 的 `ConfigureStages` 只能**追加**新实例（`Register` 按实例去重、`RegisterDefaults` 按类型跳过）
