@@ -250,6 +250,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **「包内不指向包外」补齐源码注释这一路，并机械化**：两轮清出 22 处历史违例（1 处 `Runtime/Scene/README.md`
+  + 7 处引用当时将删的评估报告 + 15 处引用其余维护向文档；其中 **2 处在 Runtime 生产代码的 XML 注释**里，
+  随包发布、第三方在 IDE 里直接读到死指针）。全部改成**自足表述**（结论内联、不给出处路径）；新增守卫
+  `Tests/Runtime/Architecture/PackageBoundaryTests`（扫包内 `.cs` 原文含注释与消息串，豁免登记处照既有形状），
+  `CLAUDE.md` 的规则文本从「只讲 README」扩到「含源码注释」。
 - **删除 `Documentation/FrameworkReview.md`**（2026-10-11 那一轮的框架级评估报告）：决策早已迁入
   `Ledger.md` + 各模块台账、流水在 `CHANGELOG`；残留资产**分流**——§三 同类框架对照表 + §二 的
   「已经领先的地方」进 `Ledger.md` §五（标为快照、只作立项调研起点），公开 API 基线的形态取舍与
