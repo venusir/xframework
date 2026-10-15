@@ -89,13 +89,6 @@ Runtime/UI/
   `finally` 里，与 `UpdateFaulted = false` 同一位置、同一理由）。
   **顺带修了两处已发布文档里的错误用法**（结果配方放在按钮回调里、遮罩层用默认值）——它们独立于本功能，
   是同一个「散着写就会错」的病灶。
-- **锚定弹窗（第二轮，未做）**：`ShowPopupAsync<T>`（开面板 + 强制布局 + 量尺寸 + `UIPopupPosition` 定位），
-  外加**自建独立不可见捕获层**做「点外部关闭」——**不能用 `ShowMask`**：它是单实例引用计数、
-  只管显示与否不管外观，与「模态调暗」会抢同一个 `Image`，`HideMask()` 更是清掉全部持有。
-  **前置阻塞**：「开完面板后 `rect.size` 还是旧值」目前是**推理、未实测**，而仓内零
-  `ForceRebuildLayoutImmediate` / `LayoutRebuilder` / `ForceUpdateCanvases` 先例——框架从没有过
-  「量一个新实例的已布局尺寸」这个需求。**先跑 15 分钟探针**（带 `ContentSizeFitter` 的预制体，
-  实例化后立刻读 `rect.size` vs 强制布局后读）再决定做不做；相等则「该建」的论据整个塌掉。
 - **`UIPopupPosition`（2026-10-11）来自一轮第三方 UI 方案 `FairyGUI` 的评估**（评估全文见
   `Documentation/FairyGUI.md`——那轮「该不该接成 UI 后端」的结论、共存的两条硬约束、输入系统那道关
   都在那里，本文不复述）。那轮的动作是逐条筛
@@ -131,114 +124,36 @@ Runtime/UI/
   ③ 行为变更已写入 README 与 CHANGELOG：遮罩**从此真正吃点击**，且 `clickToClose` 开启时会有悬停变色
   （`Button` 默认 `ColorTint`）——这是修复带出的、第三方可见的副作用。
 
-## 已完成功能与未做（roadmap）
+## 决策台账
 
-> 本清单由模块 README 搬入（`e613867`，2026-09-30 文档分层第五批）：README 只留使用方要知道的边界
-> （「面板资源不会自动卸载」→ 其 `## 已知限制`），「建了什么 / 还差什么」属维护向。四项未做于
-> 2026-10-01 逐项复核——三项判不纳入框架（转入下方「已评估未采纳与未决」），一项拆分后保留。
+（本节由模块 README 的「建了什么 / 还差什么」与历轮审计结论合流。2026-09-30 `e613867` 搬入前者——
+README 只留使用方要知道的边界（「面板资源不会自动卸载」→ 其 `## 已知限制`）。2026-10-01 **第一轮
+定向审计**——`UIManager.cs` 静态门面及其生命周期相邻面（`IUIManager` 契约、`UIManagerImpl` 的
+派发/回收路径、消费方与 24 个 fixture 的覆盖现状），判据 A–F 逐类扫过，**1 条高危 + 4 条中高**：
+① 帧通路无异常隔离、② `Time.timeScale = 0` 静默冻结整条 UI 通路且模块内零文档、③ 门面记账与调度器
+实况脱节（`UpdateManager.Clear()` 之后永久失联）、④ `Dispose` 半拆窗口的注释承诺只兑现一半、
+⑤ `Destroy` 一律 Dispose 实例与 `SetInstance` 的所有权声明相反。**碰了行为**的是 ①②③（已修，经
+用户裁定；隔离语义取「停更该面板」，② 只补文档），④⑤ 只记档、见下方条目。第三方对照本轮未做
+（外部对标物路径未定位），改用仓内对照：帧驱动异常隔离 ↔ `InputManager.PulseFrame`；`Destroy` 与
+注入实例 ↔ Config（不 Dispose）/ Localization、Asset（一律 Dispose）；记账脱节 ↔ Asset 的
+「代际号 + 作废在途」。同日**四项「未做」复核**：三项转不纳入（见下方 `不做` 条目）、一项拆分后留档。）
 
-### 已完成
-
-- [x] ✅ 基础面板管理 — OpenAsync / CloseAsync / IsOpen / GetPanel
-- [x] ✅ 显示栈导航 — PushAsync / PopAsync / GoBackAsync / PopToAsync / PopToRootAsync / CanGoBack
-- [x] ✅ 模态遮罩 — ShowMask / HideMask 支持透明度与点击关闭
-- [x] ✅ 资源预热 — PreloadAsync / ForgetPreload / ClearPreloads（只清记账，不卸载资源）
-- [x] ✅ 打开/关闭动画 — PlayOpenAnimation / PlayCloseAnimation 虚拟方法
-- [x] ✅ 多语言联动 — OnLanguageChanged 与 XLocalization 集成
-- [x] ✅ MVVM 绑定 — 通过 UIPanelBinding（约定式）+ UIBinder（精确式）+ ReactiveProperty 实现 View ↔ ViewModel 绑定
-- [x] ✅ 调度控制 — 通过 IUIController + PreconditionChain 实现面板生命周期的 AOP 控制
-- [x] ✅ 面板 OnUpdate — 由 UIManager 集中驱动，仅已打开且未暂停的面板执行更新
-- [x] ✅ 临时提示 Tip — 扣血提示、浮动文字，支持世界坐标定位、渐隐动画、对象池复用
-- [x] ✅ 世界空间 HUD — NPC名/血条/标记，3D坐标跟踪，目标丢失自动回收，独立Canvas渲染
-
-### 未做
-
-- [ ] **遮罩挖洞（引导 / 聚焦用）** —— 给 `UIMaskStyle` 加区域语义（如 `Rect? Cutout` + 要不要射线
-  穿透），把 `EnsureMaskInstance` 的「单张满屏 `Image`」改成可留洞的构成（多图拼接，或自绘
-  `Graphic` 重写 `OnPopulateMesh`；**不用 shader**——仓内零 shader / 材质资产，UPM 包引入 shader 会
-  加重资产面），复用现有的引用计数句柄与 `UISorting.SystemOrder = 32000` 预留带（它的注释本来就写着
-  「新手引导挖洞层」）。
-  **只做原语，不做引导编排**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构，按 `CLAUDE.md`
-  「不预设 GamePlay 架构」不属于本框架（2026-10-01 复核时从原「UI 引导层」拆出，编排那半转「不做」）。
+- 已做：**v1 功能面建成**（2026-09-30 · `e613867`）——面板管理 / 显示栈导航 / 模态遮罩 / 资源预热 / 开闭动画 / 多语言联动 / MVVM 绑定 / 调度控制 / 面板 OnUpdate / Tip / 世界空间 HUD。功能说明与用法在使用方 README，逐条变更证据在 `CHANGELOG`；**原 README 搬入的逐项 ✅ 清单不再维护**——全是已建成的静态清单，留在这里只会年复一年地陈旧。
+- 未做：**遮罩挖洞（引导 / 聚焦用）**（2026-10-01 复核 · 原「UI 引导层」拆出的原语半）——给 `UIMaskStyle` 加区域语义（如 `Rect? Cutout` + 要不要射线穿透），把 `EnsureMaskInstance` 的「单张满屏 `Image`」改成可留洞的构成（多图拼接，或自绘 `Graphic` 重写 `OnPopulateMesh`；**不用 shader**——仓内零 shader / 材质资产，UPM 包引入 shader 会加重资产面），复用现有的引用计数句柄与 `UISorting.SystemOrder = 32000` 预留带（它的注释本来就写着「新手引导挖洞层」）。**只做原语，不做引导编排**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构，按 `CLAUDE.md`「不预设 GamePlay 架构」不属于本框架（复核时从原「UI 引导层」拆出，编排那半转 `不做`）。
+- 不做：**不改门面的探测豁免政策本身**（2026-10-01 · 第一轮）——`IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer` 未初始化时照抛是**有意**的（实现在取之前要先剪枝，属操作而非纯读），`UIFacadeProbeTests` 把这条分界钉住；本轮只订正了把它描述成「Query 区一律不调守卫」的注释——错的是注释，不是代码。无重开判据。
+- 已做：**公开层级可见性回读**（2026-10-02 · `6f4a259`）——诊断窗口的 UI 页签需要回读层级状态，按「接口 + 转发 + 完备性测试」三步公开：`IUIManager` +2（`IsLayerVisible` / `IsLayerInteractive`，探测型读）、`UIManager` +2 转发、`UIFacadeCompletenessTests` 自动覆盖；`Tests/Runtime/UI/FakeUIManager.cs` 同步补两个成员（它对接口新增成员一向是编译期点名）。破坏性变更只对第三方 `IUIManager` 实现者成立，已进 `CHANGELOG`。**本条此前是 `不做`**（「属未公开诊断面、不是 A2 缺口」）——需求出现后按原计划写好的三步转正。
+- 不做：**不在 `SetInstance` 路径消费 `PanelFactoryFactory`**（2026-10-01 · 第一轮）——该钩子是测试专用，`Initialize` 消费即清、`Destroy` 兜底复位，两条都有用例；「设了钩子又走 SetInstance」在测试纪律下不会跨 fixture 泄漏（见 `UIPanelFactoryInjectionTests`）。无重开判据。
+- 不做：**不锁 `Destroy` 一律 Dispose 注入实例的行为**（2026-10-01 · 第一轮）——它是有意为之的终局语义（README「实例所有权」已写明），也不再为它加断言；该行为是否要改成「遵循 `_ownsInstance`」仍是未决（见下方「`Dispose` 半拆窗口」条），先不用测试把它钉死。无重开判据。
+- 不做：**不给门面加「驱动是否仍在调度器里」的自检**（2026-10-01 · 第一轮）——本轮的最小修法是「每次都真的 Register」（`UpdateManager.Clear` 那条），已覆盖同一条失联；引入查询 API 要动 Update 模块的公开面，收益与代价不成比例。重开判据：将来第二条路径再踩到这条失联 ⇒ 重新评估。
+- 已做：**遮罩补 `GraphicRaycaster`——此前既点不关也挡不住输入**（2026-10-11 · `2e7951b`）——原条目判「跑不了 Unity 验证」，那一步**低估了可测性**：`EventSystem.RaycastAll` 遍历全局 raycaster 列表，既不需要输入模块也不需要 `EventSystem.current`，真射线只需一个空 `EventSystem`。实测：修复前屏幕正中（遮罩铺满全屏）命中数为 **0**；去掉修复那一行则新用例立刻红、加回即绿，**两处根因同时坐实**（既点不关，也挡不住下方输入）。三条留档在「沿革」末条：D3 假绿教科书样本、两个射线夹具坑、行为变更（遮罩从此真正吃点击）。
+- 未做：**`IUIManager : IDisposable` 可被第三方绕过门面直接 `Dispose()`**（2026-10-01 · 第一轮）——门面记账随之脱节（`_instance` 仍指向已释放的实现）。改接口形状（去掉 `IDisposable` 或改名）对第三方实现是**源码破坏性变更**，本轮只记文档，不动。
+- 待裁：**自定义 Tip / HUD provider 运行期注入拿不到 `SetUIRoot`**（2026-10-01 · 第一轮）——`IUITipProvider.SetUIRoot` 的文档写着「在 `UIManager.Initialize` 时自动调用」，而经 `SetTipProvider` / `SetHudProvider` 在初始化**之后**注入的实现不会收到该调用（只有门面自建的默认实现会）。两条修法——注入时补调 `SetUIRoot(UIRoot)`（更贴合接口意图，行为变更）或文档写明「自行读 `UIManager.UIRoot`」——都需要先裁定。
+- 待裁：**`AllPanelsClosedMessage` 无条件发布**（2026-10-01 · 第一轮）——控制器拦下部分关闭（或根本没有面板）时它照发，于是「事件面」说「全关了」而「查询面」（`OpenCount`）显示还有面板。消息名表达的是「全部关闭这一次动作完成」还是「现在一个都没有了」，需要一次语义裁定。
+- 未做：**`Dispose` 半拆窗口的语义**（2026-10-01 · 第一轮）——注释声明窗口内的门面调用「按半拆状态执行」，实际前半段是**全量放行**（重入 `OpenAsync` 会造出不被回收的孤儿面板），尾部两行才转为抛「尚未初始化」。真正的「半拆」需要一个 `_disposing` 状态位（与「未初始化」区分开），代价是每个入口都要多一个分支；本轮只如实记录。
+- 已做：**两处零分配断言从恒真尺子改为「结构断言 + 放大粗尺子」**（2026-10-12）——`UIDiagnosticsTests` / `UIPanelQueryTests` 此前用的是恒真尺子（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0，此前只记在 `Workflow.md` §六 的跨模块清单里，本模块自己没有落点）。结构侧：`UIStateSnapshot` 是纯值类型（实例字段全值类型且 `readonly`、`readonly struct`，`IUIManager.GetState()` 返回类型也钉住）⇒ 构造它不可能触发堆分配；`UIManagerImpl._stack` 必须是具体 `List<UIPanelBase>` ⇒ `buffer.AddRange(_stack)` 运行期必然命中 `ICollection<T>` 快速路径（源码注释自述的「不经枚举器，不分配」由此被钉住），声明成接口则连 `foreach` 都会装箱枚举器。尺子侧：两处各放大 10 万次，实测堆增量均为 **0 B**；红证：注入 `new object()` → 524,288 / 1,564,672 B；`UIStateSnapshot` 改类、`_stack` 改接口声明 → 两条结构断言各自命中。校准方法与模板见 `Documentation/Workflow.md` §六。
+- 已做：**D2 结论——三条 `Action<T>` 重载并存不构成缺陷**（2026-10-01 · 探针编译实测）——`UIManager.Subscribe` 的三个重载下，**无类型 lambda**（`Subscribe(m => { })`）是编译错误 CS0121（不是静默挑一个），带显式参数类型的 `Subscribe((PanelOpenedMessage m) => { })` 正常编译；由临时探针文件在本仓真实程序集上编译得出（带负向控制：同一文件里的带类型调用无告警），**不是纸面推理**。
+- 不做：**不内建列表虚拟化**（2026-10-01 四项复核；2026-10-11 重推，结论不变）——`UIBinder` / `UIPanelBinding` 都是「一属性 → 一控件」，无任何集合 / 索引绑定；对象池的池化对象是面板 / HUD / Tip 实例而非列表条目（`AssetPanelFactory.cs:23-47`），仓内零滚动 / 列表代码。判据：列表是**叶子组件**，与面板生命周期、统一调度、排序空间、遮罩没有一处耦合（对照 Tip / HUD / 遮罩都是跨切面基础设施，故内建），而各项目的条目类型 / 分页 / 选中 / 布局差异极大。重推补上的理由：**可复用的只有等高情形的几行算术，真正费时的不等高与不定布局无法一般化**——上游 `FairyGUI` 也靠砍布局空间换来（`GList.cs:1428` / `:1172` / `:1456`），而「砍哪种布局」是项目自己的决定。替代路径见 README `## 设计取舍 → 列表虚拟化由项目自建`。无重开判据（结构性理由，与有没有人用无关，见 `FairyGUI.md` §五）。
+- 不做：**不做「跨场景引用的自动检测」**（2026-10-01 · 四项复核）——原「场景切换安全」项只有这一句描述，且方向与本仓约定冲突：检测只能靠反射扫用户对象图（本仓反射仅用于 Type 驱动的 API 边界与配置元数据提取），「自动处理」更是替项目决定生命周期策略（架构，不是基础设施）。切场景的两条正解（UIRoot 常驻 + `CloseAllAsync()` 收口 / 每场景一根走 `UIRootNode` 成对生命周期）写进 README `## 设计取舍`；「多根不预设」是既有裁定（`UIRootNode.cs:80-82`）。无重开判据。
+- 不做：**不内建 UI 特效层**（2026-10-01 · 四项复核）——`UIManager.UIRoot` 与 `UISorting.SystemOrder` 都是公开 API，`Layer_HUD` / `Layer_Tip` 建容器的写法就在仓内（`UIHudManager.cs:365-379`、`Tip/UITipManager.cs:187-199`）——自建特效 Canvas 是十几行的事（配方在 README `## 设计取舍`）。内建必须替项目决定相机类型 / `RenderTexture` / 是否挡输入的结构，拆掉的概率大于用上的概率。无重开判据。
 
 > 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。
-
-## 已评估未采纳与未决
-
-（2026-10-01 **第一轮**，定向审计 `UIManager.cs`（静态门面）及其生命周期相邻面——`IUIManager` 契约、
-`UIManagerImpl` 的派发/回收路径、消费方（Editor 工具 / Sample / 模块自引用）与 24 个 fixture 的覆盖现状。
-判据 A–F 逐类扫过，**1 条高危 + 4 条中高**：① 帧通路无异常隔离（一个坏面板打死整条每帧通路，见 CHANGELOG）；
-② `Time.timeScale = 0` 静默冻结整条 UI 通路且模块内零文档；③ 门面记账与调度器实况脱节（`UpdateManager.Clear()`
-之后永久失联）；④ `Dispose` 半拆窗口的注释承诺只兑现一半；⑤ `Destroy` 一律 Dispose 实例与 `SetInstance`
-的所有权声明相反。本轮**碰了行为**（①②③ 已修，经用户裁定；隔离语义取「停更该面板」；② 只补文档）。
-第三方对照**本轮未做**（外部对标物路径未定位），改用仓内对照：帧驱动异常隔离 ↔ `InputManager.PulseFrame`；
-`Destroy` 与注入实例 ↔ Config（不 Dispose）/ Localization、Asset（一律 Dispose）；记账脱节 ↔ Asset 的「代际号 +
-作废在途」。D2 的重载决议结论已按纪律**写复现程序编译验证**（见下最后一条）。
-
-**已评估未采纳**（理由在本文件；使用方要知道的边界同时写进了模块 README 的对应小节）：
-
-- **不改门面的探测豁免政策本身**：`IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer`
-  未初始化时照抛是**有意**的（实现在取之前要先剪枝，属操作而非纯读），`UIFacadeProbeTests` 把这条分界钉住。
-  本轮只订正了把它描述成「Query 区一律不调守卫」的注释——错的是注释，不是代码。
-- **不给 `IsLayerInteractive` / `IsLayerVisible` 加门面转发**：它们不在 `IUIManager` 里，属未公开的诊断面，
-  不是 A2 缺口（判据是「接口声明了但门面够不到」）。将来若要公开，走完整的「接口 + 转发 + 完备性测试」三步。
-  > **2026-10-02 更新（本条已落地，不再属于「未采纳」）**：诊断窗口的 UI 页签需要回读层级状态，于是按上面写好的
-  > 三步公开——`IUIManager` +2（`IsLayerVisible` / `IsLayerInteractive`，探测型读）、`UIManager` +2 转发、
-  > `UIFacadeCompletenessTests` 自动覆盖；`Tests/Runtime/UI/FakeUIManager.cs` 同步补了两个成员（它对接口新增成员
-  > 一向是编译期点名）。破坏性变更只对第三方 `IUIManager` 实现者成立，已进 CHANGELOG。
-- **不在 `SetInstance` 路径消费 `PanelFactoryFactory`**：该钩子是测试专用，`Initialize` 消费即清、`Destroy`
-  兜底复位，两条都有用例；「设了钩子又走 SetInstance」在测试纪律下不会跨 fixture 泄漏（见 `UIPanelFactoryInjectionTests`）。
-- **不锁 `Destroy` 一律 Dispose 注入实例的行为**（它是有意为之的终局语义，README「实例所有权」已写明），
-  也不再为它加断言——该行为是否要改成「遵循 `_ownsInstance`」仍是未决（见下），先不用测试把它钉死。
-- **不给门面加「驱动是否仍在调度器里」的自检**（例如要求 `UpdateManager` 提供 `IsRegistered`）：本轮的最小修法
-  是「每次都真的 Register」（`UpdateManager.Clear` 那条），已覆盖同一条失联；引入查询 API 要动 Update 模块的公开面，
-  收益与代价不成比例（若将来第二条路径再踩到，这条要重新评估）。
-
-**未决**：
-
-- ~~遮罩接不到点击~~ —— **2026-10-11 已实测并修复**（原条目判「跑不了 Unity 验证」，那一步是错的：
-  真射线只需一个空 `EventSystem`）。结论与两条夹具坑见上方「沿革与已否决形状」末条。
-- **`IUIManager : IDisposable` 可被第三方绕过门面直接 `Dispose()`**：门面记账随之脱节（`_instance` 仍指向已释放的
-  实现）。改接口形状（去掉 `IDisposable` 或改名）对第三方实现是**源码破坏性变更**，本轮只记文档，不动。
-- **自定义 Tip / HUD provider 运行期注入拿不到 `SetUIRoot`**：`IUITipProvider.SetUIRoot` 的文档写着「在
-  `UIManager.Initialize` 时自动调用」，而经 `SetTipProvider` / `SetHudProvider` 在初始化**之后**注入的实现不会收到
-  该调用（只有门面自建的默认实现会）。两条修法——注入时补调 `SetUIRoot(UIRoot)`（更贴合接口意图）或文档写明
-  「自行读 `UIManager.UIRoot`」——都需要先裁定，且第一条是行为变更。
-- **`AllPanelsClosedMessage` 无条件发布**：控制器拦下部分关闭（或根本没有面板）时它照发，于是「事件面」说
-  「全关了」而「查询面」（`OpenCount`）显示还有面板。消息名表达的是「全部关闭这一次动作完成」还是「现在一个
-  都没有了」，需要一次语义裁定——本轮只把它记在这里。
-- **`Dispose` 半拆窗口的语义**：注释声明窗口内的门面调用「按半拆状态执行」，实际前半段是**全量放行**
-  （重入 `OpenAsync` 会造出不被回收的孤儿面板），尾部两行才转为抛「尚未初始化」。真正的「半拆」需要一个
-  `_disposing` 状态位（与「未初始化」区分开），代价是每个入口都要多一个分支；本轮只如实记录。
-- ~~`UIDiagnosticsTests` / `UIPanelQueryTests` 的零分配断言用的是恒真尺子~~ —— **2026-10-12 已处置**：
-  两处站点改为「结构断言 + 放大粗尺子」两道防线（此前只记在 `Workflow.md` §六 的跨模块清单里，本模块
-  自己没有落点）。结构侧：`UIStateSnapshot` 是纯值类型——实例字段全为值类型且 `readonly`、`readonly struct`，
-  连 `IUIManager.GetState()` 的返回类型也钉住——**构造它不可能触发堆分配**；`UIManagerImpl._stack` 必须是
-  具体 `List<UIPanelBase>`——这保证 `CopyPanels` 的 `buffer.AddRange(_stack)` 在运行期必然命中
-  `ICollection<T>` 快速路径（源码注释自述的「不经枚举器，不分配」由此被钉住），声明成接口则连 `foreach`
-  都会装箱枚举器。尺子侧：两处各放大 10 万次，实测堆增量均为 **0 B**。红证：注入 `new object()` →
-  524,288 / 1,564,672 B；`UIStateSnapshot` 改类、`_stack` 改接口声明 → 两条结构断言各自命中。
-  校准方法与模板见 `Documentation/Workflow.md` §六。
-
-**已实测的重载决议结论**（防下一轮重新论证）：`UIManager.Subscribe` 的三个 `Action<T>` 重载下，
-**无类型 lambda**（`Subscribe(m => { })`）是编译错误 CS0121（不是静默挑一个），带显式参数类型的
-`Subscribe((PanelOpenedMessage m) => { })` 正常编译——该结论由临时探针文件在本仓真实程序集上编译得出
-（带负向控制：同一文件里的带类型调用无告警），**不是纸面推理**。故三条重载的并存不构成 D2 缺陷。
-
-（2026-10-01 **同日追加：四项「未做」复核**。起因是用户找不到 README 里那几项待做（它们随 `e613867`
-搬进了本文件）——借机逐项判定「仍缺能力 / 已有原语可表达 / 不该由本框架做」，三项据此转「不纳入」，
-一项拆分后留在上面 roadmap 的 `### 未做`。使用方要知道的做法与边界写进 README 新增的 `## 设计取舍`。）
-
-- **不内建列表虚拟化**：`UIBinder` / `UIPanelBinding` 都是「一属性 → 一控件」，无任何集合 / 索引绑定；
-  对象池的池化对象是面板 / HUD / Tip 实例而非列表条目（`AssetPanelFactory.cs:23-47`），仓内零滚动 / 列表代码。
-  判据：列表是**叶子组件**，与面板生命周期、统一调度、排序空间、遮罩没有一处耦合（对照 Tip / HUD / 遮罩
-  都是跨切面基础设施，故内建），而各项目的条目类型 / 分页 / 选中 / 布局差异极大。替代路径见 README
-  `## 设计取舍 → 列表虚拟化由项目自建`。
-- **不做「跨场景引用的自动检测」**：原「场景切换安全」项只有这一句描述，且方向与本仓约定冲突——检测只能
-  靠反射扫用户对象图（本仓反射仅用于 Type 驱动的 API 边界与配置元数据提取），「自动处理」更是替项目决定
-  生命周期策略（架构，不是基础设施）。切场景的两条正解（UIRoot 常驻 + `CloseAllAsync()` 收口 / 每场景一根
-  走 `UIRootNode` 成对生命周期）写进 README `## 设计取舍`；「多根不预设」是既有裁定（`UIRootNode.cs:80-82`）。
-- **不内建 UI 特效层**：`UIManager.UIRoot` 与 `UISorting.SystemOrder` 都是公开 API，`Layer_HUD` / `Layer_Tip`
-  建容器的写法就在仓内（`UIHudManager.cs:365-379`、`Tip/UITipManager.cs:187-199`）——自建特效 Canvas 是十几行
-  的事（配方在 README `## 设计取舍`）。内建必须替项目决定相机类型 / `RenderTexture` / 是否挡输入的结构，
-  拆掉的概率大于用上的概率。
