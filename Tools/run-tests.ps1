@@ -294,8 +294,8 @@ foreach ($currentPlatform in $platforms) {
     # 绕过了它：结果文件照样产出、failed = 0，走完全部判定后 exit 0。**这不是「0 失败」，是
     # 一个用例都没跑**，而它对使用者的呈现与真绿一模一样。
     # 实测（2026-10-14）：把 Assets/XFramework/Tests 改名为 Tests~（Unity 不导入 ~ 目录）后，
-    # 双平台各报「总计 0」、脚本退出码 0 —— 门禁给了一个假绿。改动它的那次实验详见
-    # Documentation/FrameworkReview.md §4.3 第 11 条。
+    # 双平台各报「总计 0」、脚本退出码 0 —— 门禁给了一个假绿（那次形态评估的结论与重开判据
+    # 见 Documentation/Ledger.md 的「Tests~ / 把测试移出包目录」条）。
     # 只在全量形态判：-Filter / -Fixture 命不中用例是正常操作（上面已有专门告警）。
     if (-not $Filter -and $total -eq 0) {
         Write-Host ""

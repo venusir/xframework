@@ -13,7 +13,7 @@ namespace XFramework.XConfig.Tests
     /// <para><b>为什么这三条只能在 PlayMode</b>：它们都要求「加载真的跨了几帧」——EditMode 里
     /// <c>UniTask</c> 没有 PlayerLoop 泵，<c>await UniTask.Yield()</c> 不会让出到下一帧，
     /// 「挂起期」根本不存在，测出来的只是同步语义。本模块此前的用例全在 <c>Tests/Editor/</c>，
-    /// 这是它第一次有 PlayMode 侧（覆盖失衡盘点见 <c>FrameworkReview.md</c> §4.2）。</para>
+    /// 这是它第一次有 PlayMode 侧（2026-10-13 覆盖失衡盘点的处置之一）。</para>
     /// <para><b>三条各自的赌注</b>：① 挂起期可观测（<c>InFlightLoadCount</c>）；② 并发共享的是
     /// **跨帧**的那一个在途任务；③ README/`Config.md` 承诺的「取消只中断调用方等待，底层仍完成并注册」
     /// ——这条此前从未被真帧验证过。</para>

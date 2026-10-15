@@ -6,7 +6,7 @@ using NUnit.Framework;
 namespace XFramework.Architecture.Tests
 {
     /// <summary>
-    /// 模块 README 的「已知限制」小节**存在性守卫**（`FrameworkReview.md` §4.4-2 / §5.2 步骤 7）。
+    /// 模块 README 的「已知限制」小节**存在性守卫**。
     /// <para><b>为什么需要它</b>：该小节此前缺了 5 个模块（Event / Message / Pipeline / Pool / Serialize），
     /// 而这五个恰是第三方最容易踩坑的底层件；补写是一次性的，不守卫就会再缺——与「包 README 四张表」
     /// 当初的处境同形（那四张表实测漏过一整轮，补完才加的守卫）。</para>

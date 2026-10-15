@@ -12,7 +12,7 @@ namespace XFramework.XPool.Tests
     /// <para><b>为什么值得单独一组</b>：本模块此前的入池-归还用例都是**同一时间片内**完成的
     /// （取出、断言、还回去）。而真实用法里实例常常跨帧被持有——`using` 块的 `Dispose` 落在某一帧的
     /// 末尾、归还后的复用发生在再下一帧。`IPoolable` 的回调此前也只验过**次数**，没验过它们落在哪一帧。
-    /// 本模块此前的 66 条用例全在 <c>Tests/Editor/</c>（覆盖失衡盘点见 <c>FrameworkReview.md</c> §4.2）。</para>
+    /// 本模块此前的用例全在 <c>Tests/Editor/</c>（2026-10-13 覆盖失衡盘点的处置之一）。</para>
     /// <para>纯 C# 对象，不碰 Unity GameObject——这一组验的是**时间**，不是引擎生命周期。</para>
     /// </summary>
     [TestFixture]

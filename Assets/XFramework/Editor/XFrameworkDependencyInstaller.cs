@@ -94,8 +94,7 @@ namespace Venusy609.Xframework.Editor
                 string packageUrl = kvp.Value;
 
                 // 判存在性要连**值**一起读：旧实现只判键名（json.Contains("\"包名\"")），于是
-                // 照旧版 README 装过**裸 URL** 的消费方被永久跳过——此后无论怎么点菜单都不会被纠正
-                // （见 Documentation/FrameworkReview.md §4.3 第 1 条）。
+                // 照旧版 README 装过**裸 URL** 的消费方被永久跳过——此后无论怎么点菜单都不会被纠正。
                 Match entry = Regex.Match(json, $"\"{Regex.Escape(packageId)}\"\\s*:\\s*\"([^\"]*)\"");
                 if (entry.Success)
                 {

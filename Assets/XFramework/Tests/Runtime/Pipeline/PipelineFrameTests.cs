@@ -16,7 +16,7 @@ namespace XFramework.XPipeline.Tests
     /// ② 超时的生产路径是 <c>UniTask.Delay(…, DelayType.Realtime)</c>，而 EditMode 用例必须注入
     /// 确定性计时器（其注释自述「真实延时由 PlayerLoop 泵送，永不触发」）——**生产的那条真实墙钟路径
     /// 只有 PlayMode 测得到**。</para>
-    /// <para>本模块此前的 89 条用例全在 <c>Tests/Editor/</c>（覆盖失衡盘点见 <c>FrameworkReview.md</c> §4.2）。</para>
+    /// <para>本模块此前的用例全在 <c>Tests/Editor/</c>（2026-10-13 覆盖失衡盘点的处置之一）。</para>
     /// </summary>
     [TestFixture]
     public class PipelineFrameTests

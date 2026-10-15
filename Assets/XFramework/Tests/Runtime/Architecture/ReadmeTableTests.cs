@@ -8,7 +8,7 @@ using XFramework.XLock;
 namespace XFramework.Architecture.Tests
 {
     /// <summary>
-    /// 包 README 四张手改清单表的**机械守卫**（`FrameworkReview.md` §5.2 步骤 4 / #22）。
+    /// 包 README 四张手改清单表的**机械守卫**。
     /// <para><b>为什么需要它</b>：四张表全靠人手同步，实测已漏过一整轮——ReactiveList 建成那轮三张表全漏，
     /// 跨一轮才被补（2026-10-11 的逐表核对是一次性的）。本 fixture 把那次人工核对变成每次全量门禁都会跑的
     /// 用例：「新模块 / 新功能上线要同步表」从此不靠记性。</para>
