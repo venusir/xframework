@@ -45,13 +45,13 @@ Runtime/Pool/
 
 ## 已评估未采纳与未决
 
-（按 `Modules/README.md` 的约定**逐轮追加、不覆盖**。下面是从既有设计决定与变更记录（模块 README / CHANGELOG / `Roadmap.md`）里归集的第一批，出处逐条标注；整轮审计（`../ModuleAudit.md` 的 A–F）的结论会在做过后追加到本节。）
+（按 `Modules/README.md` 的约定**逐轮追加、不覆盖**。下面是从既有设计决定与变更记录（模块 README / CHANGELOG / 当时的 `Roadmap.md`，今 `Ledger.md`）里归集的第一批，出处逐条标注；整轮审计（`../ModuleAudit.md` 的 A–F）的结论会在做过后追加到本节。）
 
 **已评估未采纳**：
 
 - **不加公开的非泛型 `IPool` 基接口**：会让用显式实现 `IPool<T>` 的第三方编译不过（CS0535）。诊断回读与非泛型入口改走**内部缝** `IUntypedPool`（`Pool<T>` 的三个已有公开属性隐式实现它，池本身零改动）。（出处：诊断模块那一轮，`CHANGELOG` 的「Pool / Config / Settings 三组诊断回读」。**本条原先记在 `Diagnostics.md` 的「已评估未采纳」里**——按落点表「决策归模块」迁到此处，那边留指针。）
 - **不给 `IPoolable` 加成员**：池满丢弃回调另立可选能力接口 `IPoolDiscardable`。`IPoolable` 是设计给第三方数据类实现的，给它加方法即**源码破坏**——新能力一律走可选能力接口（`A2` 的同一条形状）。
-- **不把静态性接口化 / 配置化**（`PoolManager` 与四个集合池的静态门面）：这不是「配置」而是**模块不变量**——换掉它，池的全局唯一性与「`Configure` 只消费一次」等保证都不再成立。判据与同批结论（Timer / Lock 同判）见 `Roadmap.md` §四「把模块内部策略接口化」。
+- **不把静态性接口化 / 配置化**（`PoolManager` 与四个集合池的静态门面）：这不是「配置」而是**模块不变量**——换掉它，池的全局唯一性与「`Configure` 只消费一次」等保证都不再成立。判据与同批结论（Timer / Lock 同判）见 `Ledger.md` 的「把模块内部策略接口化」条。
 - **不支持值类型池**（`where T : class`）：实例复用依赖**引用同一性**——Editor 的重复归还检测与 `CountActive` 的取还配对都会因此失真。1.3.0 取齐 `UnityEngine.Pool` / GameFramework / `Microsoft.Extensions.ObjectPool` 的既有约束，标签是**破坏性**。
 - **不把 `PooledObject<T>` 做成「防得住副本」的形态**：副本各自持有一份 `_disposed`，结构体复制天然无法共享标志——要防住只能让包装器不再是值类型，而本模块的 `using` 形态正是靠值类型做到零 GC 的。故只保护**同一个存储位置**，边界如实写进 XML doc 与使用方 README。
 

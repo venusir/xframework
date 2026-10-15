@@ -94,7 +94,7 @@ Runtime/Input/
 而游戏在启动时调一次 `Initialize` 之后就不再碰了。
 
 **验收标准**：关闭域重载连跑两遍 PlayMode 全量。注意这条**一个 App 生命周期事件源通不过**
-（理由见 `Documentation/Roadmap.md` §三）——缺的不是「事件」，是「谁在会话开始时把静态状态复位」。
+（理由见 `Documentation/Ledger.md` 的「App 生命周期」条）——缺的不是「事件」，是「谁在会话开始时把静态状态复位」。
 
 **为什么不留一个红的用例**：门禁是「全量 0 失败」，而永久红的用例会训练人忽略红色——本仓在 File / Save
 那里吃过这个亏（同一失败消息连红 7 次，被当成环境噪音，见 `ModuleAudit.md` D3）。**下一轮修它时写
@@ -112,7 +112,7 @@ Runtime/Input/
 
 ## 处置记录（2026-10-12）
 
-**修法照 Roadmap 早就框定的方向**（「缺的不是『事件』，是**谁在会话开始时把静态状态复位**」），
+**修法照 `Ledger.md` 的「App 生命周期」条早就框定的方向**（「缺的不是『事件』，是**谁在会话开始时把静态状态复位**」），
 先例是 Timer 与 Log 的 `AutoInit`（前者 `ResetCore()` 拆旧核心、后者丢弃上一会话实现 + `LogSession.Reset()`）。
 
 **改动**：门面加 `internal static void ResetForNewSession()`，挂
@@ -137,5 +137,5 @@ Runtime/Input/
 
 **同族**（`AssetManager` / `ConfigManager` / `LocalizationManager` / `FileManager` / `UIManager` /
 `Bootstrap` 的静态登记表 / `InstanceTracker`）在本轮同一批里做了同形处置，各自的处置记录见对应模块文档；
-**`Roadmap.md:132` 那句「`Application.quitting` 六处（……`InstanceTracker`，有 `AutoInitTests` 族级守卫）」是失实的**
-（`InstanceTracker` 用静态构造函数订阅，特性扫描扫不到它）——本轮已订正。
+**`Ledger.md` 的「App 生命周期」条（原 `Roadmap.md`）那句「`Application.quitting` 六处（……`InstanceTracker`，有 `AutoInitTests` 族级守卫）」当时是失实的**
+（`InstanceTracker` 用静态构造函数订阅，特性扫描扫不到它）——本轮已订正，该条自身也留了订正痕迹。

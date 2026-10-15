@@ -81,7 +81,7 @@
 | 分层与扩展方式（静态服务、可选能力接口、管线、Bootstrap） | `CLAUDE.md` → 架构分层 |
 | 各模块用法 | `Assets/XFramework/Runtime/<模块>/README.md` |
 | 维护向记录（文件结构、版本沿革、审计记忆） | `Documentation/Modules/<模块>.md` |
-| 候选模块与框架级非目标（该不该建 / 边界在哪） | `Documentation/Roadmap.md` |
+| 框架级决策（候选模块 / 跨模块 / 工程化 / 外部）与模块台账索引 | `Documentation/Ledger.md` |
 | **框架整体体检（缺什么 / 先做什么 / 与同类对照）** | `Documentation/FrameworkReview.md` |
 | 什么内容该写进哪份文档 | `CLAUDE.md` → 文档分层 |
 | 审计判据与探针 | `Documentation/ModuleAudit.md` |

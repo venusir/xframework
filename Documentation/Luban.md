@@ -239,5 +239,5 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 ## 五、边界
 
 - **不重建内建适配层**。理由、沿革与重开判据见 `Documentation/Modules/Config.md` 的「已评估未采纳」。
-- **不做 Editor 一键导表**。它会往包里引入「调用外部进程」这条零先例的路径，且把 Luban 的安装位置、schema 位置、输出目录这些逐项目的东西固化进框架。同取向先例见 `Roadmap.md` 对 HybridCLR 的裁定（「多半该是 Editor 工具 + 文档，而不是 Runtime 模块」）。结论落在**文档**这一侧。
+- **不做 Editor 一键导表**。它会往包里引入「调用外部进程」这条零先例的路径，且把 Luban 的安装位置、schema 位置、输出目录这些逐项目的东西固化进框架。同取向先例见 `Ledger.md` 的「代码热更（HybridCLR）」条（「不建 Runtime 模块；形态＝Editor 工具 + 配方文档」）。结论落在**文档**这一侧。
 - **包内 README 不指向本文件**。规则「包内不指向包外」：第三方装了包却打不开仓库。使用方需要的东西已经在包内 README 里写全了（§一是它的摘要）。

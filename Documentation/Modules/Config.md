@@ -34,7 +34,7 @@
 - **不给 `IConfigManager` 加 `CancellationToken`**：门面的取消是「只中断调用方等待」（文档已明写、实测与代码一致）；把 token 下推到接口会把「底层仍会完成」这条承诺推翻。
 - **不给 CSV 加引号/转义支持**：那是「CSV 方言到哪为止」的取舍，已写进 README 的「已知限制」。
 - **不改 `BuildIndex` 的缓存语义**：同名换类型/换 selector 属调用方错误，已写进「已知限制」。
-- **不重建内建 Luban 适配层**（2026-10-10 复评）。该形状曾存在，于 `a25f6d8`（2026-05-25）「移除内建 Luban 支持」整体删除（-497 行）：Runtime 树内第二个 asmdef `Venusy609.Xframework.Luban` + `Runtime/Config/Luban/LubanLoader.cs`（220 行，反射遍历 `Tb*` 属性、从 `DataList` 取行、主键写死 `Dictionary<int, rowType>`）+ `Editor/LubanTemplates/*.cs.txt` + `ConfigFormat.Luban` 枚举值。**那次删除只记了「移除 Bright.Serialization 程序集依赖」一条动机，「这个形状为什么不好」从未落过纸**——照 `Roadmap.md` 的纪律（已否决项要带理由 + 出处，否则下一轮会被当新问题重新论证），三条否决点在此补记：
+- **不重建内建 Luban 适配层**（2026-10-10 复评）。该形状曾存在，于 `a25f6d8`（2026-05-25）「移除内建 Luban 支持」整体删除（-497 行）：Runtime 树内第二个 asmdef `Venusy609.Xframework.Luban` + `Runtime/Config/Luban/LubanLoader.cs`（220 行，反射遍历 `Tb*` 属性、从 `DataList` 取行、主键写死 `Dictionary<int, rowType>`）+ `Editor/LubanTemplates/*.cs.txt` + `ConfigFormat.Luban` 枚举值。**那次删除只记了「移除 Bright.Serialization 程序集依赖」一条动机，「这个形状为什么不好」从未落过纸**——照 `Ledger.md` §一 的纪律（已否决项要带理由 + 出处，否则下一轮会被当新问题重新论证），三条否决点在此补记：
   - ① **硬绑类型名字符串** `"Bright.Serialization.ByteBuf"`（`Type.GetType` + `Activator.CreateInstance`）——Luban 侧包名或类型名一变即静默失配；而 Luban 现有多套运行时（`cs-simple-json` / `cs-bin` / `cs-newtonsoft-json` / `cs-dotnet-json`），绑任一套都是赌。
   - ② **绑死 `TbXxx.DataList` 反射约定**——该 API 随版本变（5.1.0 里它仍在，但同族还有 `DataMap` / `Get` / 索引器，多键表与单行表的形态又各不相同）。
   - ③ **主键写死 `Dictionary<int, rowType>`**（当时 `IConfigRow.Id` 就是固定的 `int`——删除当天稍后的 `9a8b547` 才把它泛型化为 `TKey`）。今天是任何非 int 主键都走不通；更硬的一条是：`LubanLoader` 还实现着**单泛型**的 `IConfigLoader.LoadTableAsync<T>`，而该接口今天是双泛型的 `LoadTableAsync<T, TKey>`——**那段代码按今天的接口编不过**（CS0535）。

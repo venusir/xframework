@@ -8,7 +8,7 @@ namespace XFramework.XLog
     /// <summary>
     /// 日志管理器外观。分级、分类过滤、模板化调用与可插拔输出端。
     /// <para><b>它比 Unity 自带的 <c>Debug.unityLogger</c> + 自定义 <c>ILogHandler</c> 多给什么</b>
-    /// （Roadmap §2.2 的立项门槛）：① <b>按分类过滤</b>——Unity 只有全局开关，没有「只关 Save 的 Debug」；
+    /// （立项时定下的门槛）：① <b>按分类过滤</b>——Unity 只有全局开关，没有「只关 Save 的 Debug」；
     /// ② <b>零 GC 调用路径</b>——<c>Debug.Log($"…")</c> 无论开不开都必然分配，这里未启用就不格式化；
     /// ③ <b>前缀不再靠人手抄</b>——<c>[模块]</c> 由分类渲染层补，约定从文档纪律变成代码保证；
     /// ④ <b>结构化落盘</b>——每条日志一行 JSONL，把引擎/第三方/未捕获异常也收进同一时间线，供 AI 分析。</para>

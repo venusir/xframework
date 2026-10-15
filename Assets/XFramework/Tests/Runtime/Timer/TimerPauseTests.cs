@@ -7,7 +7,7 @@ namespace XFramework.XTimer.Tests
 {
     /// <summary>
     /// 暂停与时间缩放：本模块<b>没有自己的暂停开关</b>，语义全部来自 Update 的双时间轴。
-    /// <para><b>这是 Roadmap 立项时划的红线</b>：暂停与时间缩放必须架在 Update 的双时间轴之上，
+    /// <para><b>这是立项时划的红线</b>：暂停与时间缩放必须架在 Update 的双时间轴之上，
     /// 不得另开一套时间口径——那等于替使用方决定时间模型，撞框架的第一条非目标。故
     /// <see cref="TimerManager"/> 上没有 <c>Pause</c>，只有一个 <c>UpdateTimeMode</c> 参数；
     /// 下面的用例锁的就是「这条转接没走样」。</para>

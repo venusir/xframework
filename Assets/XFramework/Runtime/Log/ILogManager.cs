@@ -5,7 +5,7 @@ namespace XFramework.XLog
     /// <summary>
     /// 日志管理器。第三方可整体替换（注入自己的实现走别的后端），也可只追加 <see cref="ILogSink"/>。
     /// <para><b>为什么叫 <c>ILogManager</c> 而不是 <c>ILogger</c></b>：后者已被 <c>UnityEngine.ILogger</c>
-    /// 占用（见 Roadmap §2.2）。</para>
+    /// 占用。</para>
     /// <para><b>模板 + 参数</b>：<c>Xxx(category, "x {0}", arg)</c> 形式的重载在<b>档位未启用时不格式化</b>
     /// ——这是本模块相对 <c>Debug.Log($"…")</c> 的核心性能承诺。参数仍在调用方求值（与插值一致），
     /// 代价高的先用 <see cref="IsEnabled"/> 探测。泛型重载避免的是 <c>params object[]</c> 数组分配，

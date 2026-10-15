@@ -55,7 +55,7 @@ Runtime/Pipeline/
 
 ## 已评估未采纳与未决
 
-（按 `Modules/README.md` 的约定**逐轮追加、不覆盖**。下面是从既有设计决定与变更记录（模块 README / CHANGELOG / `Roadmap.md`）里归集的第一批，出处逐条标注；整轮审计（`../ModuleAudit.md` 的 A–F）的结论会在做过后追加到本节。）
+（按 `Modules/README.md` 的约定**逐轮追加、不覆盖**。下面是从既有设计决定与变更记录（模块 README / CHANGELOG / 当时的 `Roadmap.md`，今 `Ledger.md`）里归集的第一批，出处逐条标注；整轮审计（`../ModuleAudit.md` 的 A–F）的结论会在做过后追加到本节。）
 
 **已评估未采纳**（逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层）：
 
