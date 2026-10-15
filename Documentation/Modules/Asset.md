@@ -101,8 +101,11 @@ Runtime/Asset/
   **（2026-10-13 §4.2 处置）**：Runtime 侧现状为 2 fixture / 24 例（对象池语义 + 真 `SceneManager` 跨帧
   场景缝，后者由场景立项轮新增）——「Asset 的 Runtime 侧只有 1」的旧盘点已漂移；剩余部分不变：
   真 YooAsset 端到端初始化仍需构建产物，普通 PlayMode 用例补不到。
-- **主线程断言已出现第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）。
-  三份同形 → 值得评估抽公共防线（跨模块 API，需单独计划）。
+- **主线程断言第三份内联副本**（Message 的 `MainThreadGuard`、Pipeline 的阶段写入断言、Asset 门面）：
+  **2026-10-15 已结——不抽公共防线**（判据与三份差异对照见 `FrameworkReview.md` §4.2）。本模块那份**补齐了两个缺口**：
+  ① 覆盖——新增 `Tests/Editor/Asset/AssetMainThreadGuardTests`（4 例：负向控制 / 闩锁 / 真接线 / 会话复位让提示重新具备）——
+  此前这份守卫**零覆盖**；② 门控对齐——闩锁字段 `_mainThreadViolationLogged` 移入 `#if UNITY_EDITOR`（三份里唯一在外的），
+  该改动**无观测面**，属代码一致性。
 - ~~会话级复位~~ —— **2026-10-12 已修**：域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，
   `AssetBootstrapStage` 见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的
   实例（其 `_managerImpl` 持有已销毁的 YooAsset 包）。现在门面在会话开始时复位静态状态

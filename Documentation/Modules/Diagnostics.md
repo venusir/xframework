@@ -44,7 +44,7 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - **给 `IConfigManager` / `ISettingsManager<T>` / `ILogManager` / `ILocalizationManager` / `IAudioManager` 加回读成员**（未采纳）：门面专属成员 + 内置实现探测可完全替代，且第三方实现零影响；代价是注入自定义实现时回读为空（各模块 README 已写明）。
 - **`LogManager.CategoryCount`**（未采纳）：`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相。
 - **注册表的自动初始化成员**（未采纳，且**不要补**）：注册表不订阅 Unity 事件、不做会话复位、不注入 PlayerLoop，因此 `AutoInitTests` 族清单零改动。这是设计结论，不是遗漏。
-- **主线程断言**（未决）：`Roadmap.md` §五 已把「主线程断言抽公共防线」记为未决；诊断模块只写文档、不加第四份内联副本。
+- **主线程断言**：**2026-10-15 已结**——`Roadmap.md` §五 那条以「**不抽公共防线**」结案（判据见 `FrameworkReview.md` §4.2）；诊断模块**不加第四份内联副本**的立场不变（它是诊断设施，不是断言宿主）。
 - **`UpdateNodeInfo.TimeMode` 在 `FixedUpdate` 下无意义**（未决）：当前保留字段并文档说明「判断以 `Timing` 为准」。
 - **窗口焦点/跨会话状态**（未决）：本仓零 `EditorPrefs` 使用，选中页签与筛选不跨会话记忆。
 - **Event / Reactive 订阅注册表、Asset 句柄表、Input 启用 ActionMap 列表、Localization 缺失项计数、Log 最近日志环形缓冲、Save 槽位列表、Message 键值通道 key 枚举、运行时覆盖层本体**（本轮不做，各有理由，见 CHANGELOG 与 `Roadmap.md`）。
