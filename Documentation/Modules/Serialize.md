@@ -16,8 +16,7 @@ XSerialize/
 └── README.md               # 本文件
 ```
 
-## 已评估未采纳与未决
+## 决策台账
 
-- ~~**内置注册的静默覆盖**（未决，2026-10-02 全面清点时记下）~~ —— **2026-10-13 核实：已落地，保留沿革**：清点之后该行为已修——`Initialize` 现经 `RegisterBuiltin` 注册内置项，**同名已存在时保留使用方的**并打一条 `[Serialize]` 告警（`Register` 的同名覆盖不变，那是显式动作）。回归用例 `SerializerTests` 3 条。原条目属「清点记下的未决被随后落地、条目没跟」的又一例（同款教训见 `Modules/Reactive.md` 的相等比较器条目）。原文余下的一半仍是有效提醒：覆盖 `"json"` 会同时改变 Save 与 Data 的落盘格式（两者都走 `Serializer.Default`）。
-
-- **不为 Serialize 补 PlayMode 侧用例**（2026-10-13，§4.2 处置）：全同步纯 CPU（`ISerializer` 就是同步字节数组契约），无帧边界、无 MonoBehaviour、无跨会话静态态；唯一带运行时特性的 `AutoInit` 已由 `AutoInitTests` 族守卫锁死（特性 + load type）。再写一条「跑起来后注册表非空」反而**受用例顺序污染**（任何先行 fixture 调过 `Shutdown()` 就红），不是有效证据。
+- 已做：**内置注册不再静默覆盖使用方的同名序列化器**（2026-10-13 · 回归用例 `SerializerTests` 3 条）——`Initialize` 现经 `RegisterBuiltin` 注册内置项，**同名已存在时保留使用方的**并打一条 `[Serialize]` 告警（`Register` 的同名覆盖不变，那是显式动作；另半条提醒仍有效：覆盖 `"json"` 会同时改变 Save 与 Data 的落盘格式，两者都走 `Serializer.Default`）。该行为在 2026-10-02 全面清点时被记为未决、随后落地，属「清点记下的未决被随后落地、条目没跟」的又一例（同款教训见 `Modules/Reactive.md` 的相等比较器条目）。
+- 不做：**不为 Serialize 补 PlayMode 侧用例**（2026-10-13 · `FrameworkReview` §4.2 处置）——全同步纯 CPU（`ISerializer` 就是同步字节数组契约），无帧边界、无 MonoBehaviour、无跨会话静态态；唯一带运行时特性的 `AutoInit` 已由 `AutoInitTests` 族守卫锁死（特性 + load type）。再写一条「跑起来后注册表非空」反而**受用例顺序污染**（任何先行 fixture 调过 `Shutdown()` 就红），不是有效证据。无重开判据。
