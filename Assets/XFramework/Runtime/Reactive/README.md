@@ -1,4 +1,4 @@
-# XFramework / Reactive 模块
+# Reactive —— 响应式属性与集合：订阅即知变化，基于 XEvent 事件流
 
 ## 概述
 
@@ -56,6 +56,25 @@ healthProp.Dispose();
 > 尤其注意 `BindToXxx` 返回的是**绑定方**的句柄——释放它**不能**释放派生值。所以 `src.Select(f).BindToText(label)` 这种写法即使把绑定句柄收好了,派生值照样泄漏。
 >
 > 别在业务代码里手工记账,交给已就位的归口：UI 面板里用 `ViewModelBase.CreateReadOnlyProperty`（创建 + 登记,随 ViewModel 一起释放），或把句柄交给 `UIViewBase.Track`。Reactive 模块本身不管生命周期,这是使用方的责任。
+
+## 模块结构
+
+```text
+Runtime/Reactive/
+├── IReactiveProperty.cs             # 响应式属性接口（Value 只读 + Subscribe，面向接口编程）
+├── IReactivePropertyWriter.cs       # 可写能力接口（继承前者 + TryWriteValue），双向绑定按需索取
+├── ReactiveProperty.cs              # 响应式属性（可写值 + 自动通知 + 去重）
+├── ReadOnlyReactiveProperty.cs      # 只读派生属性 + Select 映射扩展
+├── IReactiveList.cs                 # 列表接口（只读视图 IReadOnlyList<T> + 变更流订阅，不立即回调）
+├── ReactiveList.cs                  # 响应式列表（增删改 + 单流 struct 载荷 + Reset 兜底）
+├── ReactiveListChange.cs            # 列表变更载荷 readonly struct（Kind/Index/Item/OldItem）
+├── IReactiveDictionary.cs           # 字典接口（只读视图 IReadOnlyDictionary<TKey,TValue> + 变更流订阅）
+├── ReactiveDictionary.cs            # 响应式字典（upsert + 键比较器注入 + 单流 struct 载荷 + Reset 兜底）
+├── ReactiveDictionaryChange.cs      # 字典变更载荷 readonly struct（Kind/Key/Value/OldValue）
+└── ReactiveCollectionChangeKind.cs  # 集合共享词表（Add / Remove / Replace / Reset）
+```
+
+十一个文件都是公开面，本模块没有 `internal` 类型。
 
 ## 集合（`ReactiveList<T>`）
 
@@ -158,7 +177,18 @@ buffs.Dispose();            // 收尾:订阅随之全部取消
   「带 Key 的淘汰是语义要求」）。
 - **没有** `ReactiveSet` / 有序键值 / 按值查找,也没有集合绑定 / 列表虚拟化。
 
-## 双向绑定
+## 行为契约
+
+两条语义由底层事件流决定,都容易踩:
+
+- **派发顺序是 LIFO**——后订阅的先收到(订阅节点插在链表头部)。框架**没有**控制订阅者相对顺序的手段,别围绕先后次序设计(比较各自收到的值也建立不了顺序)。
+- **回调内写入本属性会嵌套派发,且嵌套那一轮先跑完**。订阅者 A、B 中 B 后订阅(故先收到):B 在收到 `1` 时写入 `2`,嵌套派发让 A、B 都先收到 `2`;随后外层循环继续把 **`1`** 投给 A——A 最终停在一个 `Value` 已不再是的值上,且不会再有通知来纠正它。**回调里不要写入本属性**;确实需要「收到变化后再修正」时,把写入推迟到下一帧再写,而不是就地写(框架**没有**一次性下一帧入口,可自行排期,或实现 `IUpdateable` 经 `UpdateManager` 注册)。
+- **列表版(`ReactiveList<T>`)有同样的问题,且多两条**:回调内改动列表会嵌套派发(嵌套那一轮先跑完);此后外层把按**旧索引**算出的载荷投给剩余订阅者——索引可能已指向别的元素(**索引只在当次通知内有效**)。回调内遍历本列表也不安全:他人改动会让 `foreach` 抛 `InvalidOperationException`,而索引 `for` 不抛、静默读到位移后的元素。回调里**订阅与退订是安全的**(退订同轮立即生效)。
+- **字典版(`ReactiveDictionary<TKey,TValue>`)同理,但形状不同**:**键是稳定的,条目不是**——嵌套那一轮可能已经把那个键移除了,外层载荷随后照发,此时按载荷的 `Key` 去查已经查不到。要状态就重读字典,别从载荷重建。
+
+## 典型场景
+
+### 双向绑定
 
 `IReactivePropertyWriter<T>` 是「确实需要写入」时按需索取的能力接口——`ReactiveProperty<T>` 与 Settings 的 `SettingRef<T,TField>` 各自实现，第三方实现同样可接入 `UIBinder.BindTwoWay`。只读接口 `IReactiveProperty<T>` 本身不因此多出 setter。
 
@@ -176,6 +206,33 @@ if (!writer.TryWriteValue(value, out var actual))
 > **`true` 不等于「值变了」。** 返回 `true` 只说明目标现在持有的值就是 `actual`——写入与当前值相同时会被去重、订阅者不会收到通知，但 `TryWriteValue` 照旧返回 `true`。把它当「值变了」用（落盘、重算、重放副作用）会在每次空写时多做一遍。
 
 > **`actual` 与「规范化」无关。** 不要指望目标会取整或钳制：随框架发布的两个实现都不做规范化，`actual` 恒等于你写进去的 `value`。`actual` 的价值在于省掉一次二次读取，不在于取代调用方自己的回填判断（`UIBinder` 的双向绑定仍会比对 `actual` 与输入值再决定是否回填控件）。
+
+### 排查订阅泄漏
+
+订阅泄漏在运行时是**无声的**——没人报错、值也照常更新,只是内存与回调悄悄堆积。模块为此提供两样东西:
+
+- **`SubscriptionCount`**(四个类型都有)——当前存活订阅数。源长期存活时(单例上的属性、Settings 句柄)这个数**只增不减**,即说明有订阅没人释放。
+- **`ToString()`**——形如 `ReactiveProperty<Int32>(50)` / `ReactiveList<Int32>(Count=3)` / `ReactiveDictionary<String, Int32>(Count=3)`,与 Settings 的 `SettingRef.ToString()` 同形,排查时一眼看出是谁、现在是多少。
+
+最常见的泄漏源就是「快速使用」里说的 `Select` 返回值被就地丢弃:
+
+```csharp
+// 症状:每次打开面板这个数就 +1
+Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
+// 输出: ReactiveProperty<Int32>(100) 订阅数=3   ← 本该是 0 或 1
+```
+
+两个成员都**只用于排查**,不要拿它们做逻辑分支:它们是实现的当前状态,不是契约。
+
+同类工具:Message 模块的 `MessageManager.GetStats()`、UI 模块的 `UIManager.DumpState()`。
+
+> **没有自动跟踪器**:本仓只有上面这种**拉取式**诊断,没有 R3 `ObservableTracker` 那样的「列出未释放订阅**及其创建调用栈**」的编辑器工具——排查靠这两条信号 + 人工核对。
+
+## 线程契约
+
+**本模块按主线程专用设计——自身未做任何同步。** 底层引擎的锁与快照只保证订阅链表与终止标志**在并发退订下不被写坏**,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程契约」节)。
+
+跨线程写入本模块会让**去重判断与派发载荷分叉**:最后一个订阅者见到的值不再是 `Value`,且不会再有通知来纠正它。需要从别的线程改值时,请先切回主线程。
 
 ## 接口承诺到哪为止
 
@@ -199,43 +256,12 @@ if (!writer.TryWriteValue(value, out var actual))
 - **命令**（R3 的 `ReactiveCommand` / `CanExecute`）：**没有**。UI 侧走 `UIBinder.BindClick` 直接绑点击，按钮可用性由使用方自己置 `interactable`。
 - **Inspector / 序列化集成**（`BindableReactiveProperty` 那类）：**没有**——本仓在 UI 模块做约定式绑定（`txt_` / `sld_` / `tgl_` 前缀），不走 Inspector 配置。
 
-## 派发顺序与重入
-
-两条语义由底层事件流决定,都容易踩:
-
-- **派发顺序是 LIFO**——后订阅的先收到(订阅节点插在链表头部)。框架**没有**控制订阅者相对顺序的手段,别围绕先后次序设计(比较各自收到的值也建立不了顺序)。
-- **回调内写入本属性会嵌套派发,且嵌套那一轮先跑完**。订阅者 A、B 中 B 后订阅(故先收到):B 在收到 `1` 时写入 `2`,嵌套派发让 A、B 都先收到 `2`;随后外层循环继续把 **`1`** 投给 A——A 最终停在一个 `Value` 已不再是的值上,且不会再有通知来纠正它。**回调里不要写入本属性**;确实需要「收到变化后再修正」时,把写入推迟到下一帧再写,而不是就地写(框架**没有**一次性下一帧入口,可自行排期,或实现 `IUpdateable` 经 `UpdateManager` 注册)。
-- **列表版(`ReactiveList<T>`)有同样的问题,且多两条**:回调内改动列表会嵌套派发(嵌套那一轮先跑完);此后外层把按**旧索引**算出的载荷投给剩余订阅者——索引可能已指向别的元素(**索引只在当次通知内有效**)。回调内遍历本列表也不安全:他人改动会让 `foreach` 抛 `InvalidOperationException`,而索引 `for` 不抛、静默读到位移后的元素。回调里**订阅与退订是安全的**(退订同轮立即生效)。
-- **字典版(`ReactiveDictionary<TKey,TValue>`)同理,但形状不同**:**键是稳定的,条目不是**——嵌套那一轮可能已经把那个键移除了,外层载荷随后照发,此时按载荷的 `Key` 去查已经查不到。要状态就重读字典,别从载荷重建。
-
-## 排查订阅泄漏
-
-订阅泄漏在运行时是**无声的**——没人报错、值也照常更新,只是内存与回调悄悄堆积。模块为此提供两样东西:
-
-- **`SubscriptionCount`**(四个类型都有)——当前存活订阅数。源长期存活时(单例上的属性、Settings 句柄)这个数**只增不减**,即说明有订阅没人释放。
-- **`ToString()`**——形如 `ReactiveProperty<Int32>(50)` / `ReactiveList<Int32>(Count=3)` / `ReactiveDictionary<String, Int32>(Count=3)`,与 Settings 的 `SettingRef.ToString()` 同形,排查时一眼看出是谁、现在是多少。
-
-最常见的泄漏源就是上一节说的 `Select` 返回值被就地丢弃:
-
-```csharp
-// 症状:每次打开面板这个数就 +1
-Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
-// 输出: ReactiveProperty<Int32>(100) 订阅数=3   ← 本该是 0 或 1
-```
-
-两个成员都**只用于排查**,不要拿它们做逻辑分支:它们是实现的当前状态,不是契约。
-
-同类工具:Message 模块的 `MessageManager.GetStats()`、UI 模块的 `UIManager.DumpState()`。
-
-> **没有自动跟踪器**:本仓只有上面这种**拉取式**诊断,没有 R3 `ObservableTracker` 那样的「列出未释放订阅**及其创建调用栈**」的编辑器工具——排查靠这两条信号 + 人工核对。
-
 ## 设计原则
 
 - **事件流驱动** — 基于 `XFramework.XEvent` 自研事件流引擎(锁 + 快照线程模型、订阅节点池)
 - **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
 - **相同值去重** — 设置相同值不通知。「相同」默认按 `EqualityComparer<T>.Default`，可经 `ReactiveProperty<T>` 的构造重载 / `Select` 的 `comparer` 参数注入自定义比较器（浮点容差等）。集合侧的同源规则是**无变化不发通知**（空表 `Clear`、等值 upsert、元素少于 2 的 `Sort`）。**这些都是本模块类型的行为,不是接口保证**(见「接口承诺到哪为止」)
 - **读宽容、写严格** — 已释放后读取 `Value` 仍返回最后持有的值（与 `ReadOnlyReactiveProperty<T>` 一致）；写入 `Value` 与订阅则抛 `ObjectDisposedException`。读是只读操作、不改变任何状态,让它抛只会把「先 Dispose 再读一次收尾值」变成必须 try/catch 的地雷;写是编程错误,应当被立刻发现。**同样只是本模块类型的行为**——`SettingRef.Value` 在设置类型注销后照抛
-- **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程契约」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
 - **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
 - **异常隔离** — **投递**路径的订阅回调抛异常记 Error 日志后继续;订阅时的立即回调属于注册期、同步执行,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)。两条路径语义不同是有意的:绑定初始化失败应当被看见,而运行期的单个订阅者出错不该拖垮其余订阅者
 - **集合走单流 struct 载荷** — `ReactiveList<T>` 与 `ReactiveDictionary<TKey,TValue>` 的变更各是一条 `readonly struct`（列表：`Kind` / `Index` / `Item` / `OldItem`；字典：`Kind` / `Key` / `Value` / `OldValue`），零 GC；对照 UniRx / BCL `ObservableCollection<T>` 每次通知分配一个事件参数对象。整表操作用一条 `Reset` 兜底（「整表变了，重读」），不做逐项展开。共享词表 `ReactiveCollectionChangeKind`
@@ -247,4 +273,4 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 - `XFramework.XEvent` 的**事件流引擎**——单向依赖:Reactive → Event。用的是它的**公开面**(`IEventStream<T>` / `EventStream.Create` / `SubscriptionCount`),不再触碰任何模块的 `Internal` 命名空间
 - 全局消息总线在 XMessage 模块,需要发布/订阅消息时 `using XFramework.XMessage`;本模块**不**依赖它
 
-> **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`Complete` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「派发顺序与重入」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。
+> **引擎的语义契约**(派发顺序 LIFO、重入的后果、异常隔离、`Complete` 与 `Dispose` 的差别、缓冲重放)现由 [Event README](../Event/README.md) 承载——本模块「行为契约」一节描述的正是这些语义在属性上的表现,若哪天引擎改了语义,请同步改那两处。
