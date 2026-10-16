@@ -381,7 +381,7 @@ git submodule add https://github.com/venusir/xframework.git Submodules/XFramewor
 
 **子模块不要放在 `Assets/` 或 `Packages/` 下：**
 
-- 放在 `Assets/` 下，Unity 会把**整个仓库**当松散资源导入——`ProjectSettings/`、`Documentation/`、`Tools/`、`CLAUDE.md`、示例场景与 `InputSystem_Actions` 都会混进你的工程。
+- 放在 `Assets/` 下，Unity 会把**整个仓库**当松散资源导入——`ProjectSettings/`、维护向文档目录、`Tools/`、`CLAUDE.md`、示例场景与 `InputSystem_Actions` 都会混进你的工程。
 - 放在 `Packages/` 下，Unity 会因为 `package.json` 不在子模块根目录而认不出这是包。
 
 改完框架代码后，提交并推送：

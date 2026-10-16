@@ -35,7 +35,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Scene
 
-- **新增 `XScene` 场景管理模块**（`Documentation/Roadmap.md` §三 的「场景管理」条目立项；该条目是本表最大的一条，
+- **新增 `XScene` 场景管理模块**（`当时的候选模块路线图` §三 的「场景管理」条目立项；该条目是本表最大的一条，
   本轮把论证与实施一并做完）：静态门面 `SceneManager` + `SceneLoadOptions` + `SceneLoadProgress`，**只管
   「一个场景资源怎么加载、怎么卸载」**。**没有**场景栈、没有加载界面编排、没有场景间传参通道、没有场景
   生命周期回调——四条边界逐条落地（理由与配方见 `Runtime/Scene/README.md` 的「设计取舍」）。
@@ -64,7 +64,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   并配三条**尺子自检**（看得见 1 MB、看得见 10 万个 32 B 小对象、零分配时保持安静）与两条**源码守卫**
   （两把恒零尺子在**整个包**内零命中；可用的那把尺子只许出现在 `AllocationRuler.cs` 一个文件）。
   使用方不受影响，但**你的项目若照抄过老写法**（`Assert.AreEqual(0L, GC.GetAllocatedBytesForCurrentThread() 前后差)`），
-  那类断言在本环境是恒真的，请按 `Documentation/Workflow.md` §六 的纪律重写。
+  那类断言在本环境是恒真的，请按 `维护向的工作流手册` §六 的纪律重写。
 
 - **Config / Localization / Pipeline / Pool 的 PlayMode 侧覆盖**（4 个新 fixture，共 11 例）：这四模块此前的用例
   全在 EditMode，而它们各有「EditMode 结构上测不到」的一面——Config 的挂起期可观测与**跨帧**共享、
@@ -172,7 +172,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **对从磁盘读回的快照零影响**（那类快照不携带脏集合，应用后仍与今天一样是干净的）；
   脏集合是**进程内回滚元数据、不进存档**，故存档字节、校验和与存档格式逐字节不变。
   登记在 `Roadmap.md` §五 的 `CreateSnapshot(bool clearDirty)` 形状**被取代**（它不闭合：
-  `ApplySnapshot` 没有第二个信息通道，旋钮拿不到「加载前脏了谁」），死因留在 `Documentation/Modules/Data.md`。
+  `ApplySnapshot` 没有第二个信息通道，旋钮拿不到「加载前脏了谁」），死因留在 `Data 模块的维护向记录`。
   回归锁：`DirtyTrackingTests` 三条（含一条字节级不变量用例）+ `SaveManagerImplTests.TryLoadAsync_BlockRestoreFails_RollsBackDirtyFlagsToo`。
 
 ### Fixed
@@ -245,7 +245,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   表声明为具体字典……——「零分配的原因」本身可反射验证），**粗尺子放大兜底**（阈值取实测信号 1/4），
   Log 的「未启用不格式化」另加**直接观测**（`ToString()` 计数探针 + 计数 sink + 正对照）。
   改后实测：**11 处站点的堆增量全为 0 B**——零 GC 卖点第一次被真实测量。改造中的一条发现已写进
-  `Documentation/Workflow.md` §六：粗尺子对**瞬时垃圾**型回归的灵敏度会被测量窗口内的 GC 削掉一截，
+  `维护向的工作流手册` §六：粗尺子对**瞬时垃圾**型回归的灵敏度会被测量窗口内的 GC 削掉一截，
   那类回归以直接观测为准。
 
 ### Documentation
@@ -255,7 +255,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   随包发布、第三方在 IDE 里直接读到死指针）。全部改成**自足表述**（结论内联、不给出处路径）；新增守卫
   `Tests/Runtime/Architecture/PackageBoundaryTests`（扫包内 `.cs` 原文含注释与消息串，豁免登记处照既有形状），
   `CLAUDE.md` 的规则文本从「只讲 README」扩到「含源码注释」。
-- **删除 `Documentation/FrameworkReview.md`**（2026-10-11 那一轮的框架级评估报告）：决策早已迁入
+- **删除那份框架级评估报告**（2026-10-11 那一轮的框架级评估报告）：决策早已迁入
   `Ledger.md` + 各模块台账、流水在 `CHANGELOG`；残留资产**分流**——§三 同类框架对照表 + §二 的
   「已经领先的地方」进 `Ledger.md` §五（标为快照、只作立项调研起点），公开 API 基线的形态取舍与
   `Tests~` 的成本测算并入对应条目，其余（规模数字、探针事实、已落地条目的原事实留痕、§5.x 过程档案、
@@ -263,10 +263,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `FrameworkReview.md` §六（已否决项复核 10 条）**迁入 `Ledger.md` §四**，原节改指针；报告头部补定位段
   （**状态查台账、流水查 CHANGELOG**，本文只留分析与过程档案）。**§4.x / §5.x / §二 / §三 有意不迁**——
   流水已在 `CHANGELOG`、快照数字（22 模块 / 94k 行）会腐烂、过程档案不该进活台账。
-- **决策台账落成（文档治理一轮）**：`Documentation/Ledger.md`（新——框架级「已做 / 未做 / 待裁 /
+- **决策台账落成（文档治理一轮）**：`框架级决策台账`（新——框架级「已做 / 未做 / 待裁 /
   暂不做 / 不做」条目 + 模块台账指针；`Roadmap.md` 并入后删除，其 §三/§四/§五 的条目与专段全部迁入）、
-  `Documentation/Modules/README.md`（决策台账的条目格式与状态词表；登记六个此前未入表、形态一致的
-  「暗节名」）、23 个 `Documentation/Modules/<模块>.md`（「已完成功能与未做」「已评估未采纳与未决」
+  `维护向记录的目录规范`（决策台账的条目格式与状态词表；登记六个此前未入表、形态一致的
+  「暗节名」）、23 个 `<模块> 模块的维护向记录`（「已完成功能与未做」「已评估未采纳与未决」
   两节合流为「决策台账」——状态写行首、条目永不移动、每条带日期与证据）、
   `Tools/check-docs.ps1`（文档通道第四项判定：每模块有台账、状态词合法、模块文件表与 `Runtime/`
   双向相等；**只守结构，守不了内容属实**）、`CLAUDE.md`（文档分层表 Roadmap 行换 Ledger 行 +
@@ -276,9 +276,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `FrameworkReview.md` §5.2 九处已失效的「步骤 1 仍待办」残留、`Modules/{Log,Config,Input,Asset}.md`
   的行号与「会增长的量」陈旧计数、`Runtime/Scene/README.md` 一处「包内指向包外」的规则违反、
   `Modules/UI.md` 一处同文件内自相矛盾（「锚定弹窗未做」块与已落地记录并存）。
-- `Documentation/Workflow.md` §六：零分配断言的纪律改为机械可依（唯一尺子、自检、守卫、结构断言优先），
+- `维护向的工作流手册` §六：零分配断言的纪律改为机械可依（唯一尺子、自检、守卫、结构断言优先），
   并记「关闭域重载连跑两遍」这条验收**脚本表达不了**。
-- `Documentation/Modules/{Input,Asset,Bootstrap,Config,UI,Localization}.md`：会话复位的处置记录；
+- `Input / Asset / Bootstrap / Config / UI / Localization 六模块的维护向记录`：会话复位的处置记录；
   `Roadmap.md` §三 一句失实陈述（`InstanceTracker`「有族级守卫」）加订正框。
 - `Runtime/{Input,UI}/README.md` 的「已知限制」：相关条目改写为已修。
 - 四个模块文档补「PlayMode 侧覆盖」记录。
@@ -286,7 +286,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   唯一入口；基线与 `CHANGELOG` 迁移表之间**没有机械联系**）；`FrameworkReview.md` §4.3 第 4 条与 §五 第 16 项
   标完成（并记「为什么没用现成分析器」）；`ModuleAudit.md` §八 的候选门禁表**新增**「公开 API 基线」一行。
 
-- 场景管理立项轮：`Documentation/Modules/Scene.md`（新——四条边界的逐条结论、S1/S2/S3 落点取舍、
+- 场景管理立项轮：`Scene 模块的维护向记录`（新——四条边界的逐条结论、S1/S2/S3 落点取舍、
   人工验收配方、**实测 vs 推理逐条标注**、测试壳里不可达的那一处）、`Modules/README.md` 文件表、
   `Modules/Asset.md`（文件结构 + 时间线）、`Roadmap.md`（§三 条目搬迁、`§2.6` 原地留指针、专段由三条改两条）、
   `FrameworkReview.md`（§三 能力矩阵、§4.1 缺口段回填为完成态、§5.1 归档 #14、§5.2 步 10 标完成并注明
@@ -317,7 +317,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Runtime/Bootstrap/README.md` 已知限制**新增一条**：启动途中销毁 × 在途启动交叠的使用方面后果
   （含「被 Shutdown 的相位仍会被执行」）。
 
-- Bootstrap「彻底修」的落点（`948aadb`）：`Documentation/Modules/Bootstrap.md` 两条未决处置为已修
+- Bootstrap「彻底修」的落点（`948aadb`）：`Bootstrap 模块的维护向记录` 两条未决处置为已修
   （实际采纳的修法、两条实现硬约束、覆盖边界）；`Runtime/Bootstrap/README.md` 已知限制改写（协作式中止
   的两条边界、OCE 令牌判据）、设计取舍补「为何 `Shutdown` 先中止」、测试注意事项补静态态；包
   `README.md` 启动引导示例注释同步。
@@ -325,7 +325,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - 裁定销账轮（滚动表步骤 2/3 结清，`6672eec` + `9f35757` + 本提交）：**#19** provider/store 守卫范围
   裁定「不守」并订正守卫形态（`ModuleAudit.md` §八 / `FrameworkReview.md` §4.4-4）；**#23** 相机 /
   远程配置 / 崩溃上报三条「建议不做」经用户确认移入 `Roadmap.md` §四（§三 专段撤下留指针，§四 复核
-  记录注明「增补三条、非重开」）；**#17 CI** 成本要点成文于新 `Documentation/CI.md`（Unity 许可形态 /
+  记录注明「增补三条、非重开」）；**#17 CI** 成本要点成文于新 `CI 成本与裁定记录`（Unity 许可形态 /
   runner / 与测试壳关系，外部事实标核对状态），裁定**暂不接入** + 三条可判定重开判据，`Workflow.md`
   §六 与 `FrameworkReview.md` §4.3-5 落纸；`FrameworkReview.md` §5.1/§5.2 回填。**使用方不受影响**：
   全部结论落在维护向与仓根文档，公开面一个字都没动。
@@ -358,7 +358,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （`CreateDownloader` 按**当前激活清单**算待下内容，而预检**不激活**——原文档把激活写在下载之后，照抄会**静默空转**；
   现顺序为「请求版本 → 预检（可选）→ **激活** → 下载 → 加载」，已知限制新增第 12 条）；② 四个句柄的 `Status`
   改用框架自有 `AssetOperationStatus`（**破坏性**，迁移表见 `### Changed`）。
-  `Documentation/Modules/Asset.md` 的「已评估未采纳与未决」同步记录，文件结构补漏列的一行。
+  `Asset 模块的维护向记录` 的「已评估未采纳与未决」同步记录，文件结构补漏列的一行。
 
 - 红点 / GM 命令台 / 画质档位 / 代码热更四条边界裁定（`FrameworkReview.md` §5.2 步骤 9）：`Roadmap.md` 的落点分两类——
   **移入 §四（已否决，2026-10-13 用户确认）**：**红点系统**（树结构与父子计数是**领域模型**、「红点怎么算」由策划配置决定；
@@ -371,9 +371,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   原先被列为「可复用件」的 `File` 的 `ConsoleFileProvider`，其实是**游戏机平台（Xbox / PS5 / Switch）的文件提供者
   抽象基类**，与命令台无关）与**代码热更（HybridCLR）**（**不建 Runtime 模块**：HybridCLR 本身就是第三方包、自带上载器与
   Editor 工具，与 YooAsset 同型；框架代码不该被热更，而热更要求「热更代码与 AOT 代码分属不同程序集」，与「Runtime 单一
-  asmdef」正面冲突。形态＝Editor 工具 + 配方文档 `Documentation/HybridCLR.md`，**配方待真实接入再写**——从未接入时写配方
+  asmdef」正面冲突。形态＝Editor 工具 + 一份 HybridCLR 配方文档，**配方待真实接入再写**——从未接入时写配方
   就是臆测）。
-  **使用方不受影响**：公开面与运行时行为零改动，改动全部落在 `Documentation/` 下不随包发布的两份文档（包内新增的只有本记录）。
+  **使用方不受影响**：公开面与运行时行为零改动，改动全部落在 `维护向文档目录` 下不随包发布的两份文档（包内新增的只有本记录）。
 
 - 包形态两条裁定与一条门禁缺口（`FrameworkReview.md` §5.2 步骤 11 / §4.3 第 11–12 条；2026-10-14 用户确认）：
   **`Tests~` 形态不采纳**——`~` 在 Unity 里只是「隐藏 / 不导入」，**不是「不分发」**（官方包布局文档 + 本机
@@ -397,12 +397,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **`[*.md]` 关掉尾空白 trim**（仓内有 5 处在用「行尾恰好两空格 = Markdown 硬换行」，trim 会改渲染），Unity 的 YAML
   同样关掉（Unity 自己会写回），`*.bat`/`*.cmd` 镜像 `.gitattributes` 保持 CRLF，JSON 刻意不钉缩进（仓内本来就混）。
   **Git 钩子 / Issue·PR 模板 / `CONTRIBUTING` 三项不做**——它们的预期用户是外部贡献者与来件，而实测 0 fork / 0 issue /
-  0 PR；三条共用可判定的重开判据，与 `Documentation/CI.md` 的裁定联动（届时四项同轮重裁）。性能基准套件按原文仍「单议」。
+  0 PR；三条共用可判定的重开判据，与 `CI 成本与裁定记录` 的裁定联动（届时四项同轮重裁）。性能基准套件按原文仍「单议」。
   **仓库根另补了一份极简 README**（评估中发现：这个公开仓原本没有门面，GitHub 落地页是一张裸文件列表），只指路不列内容。
   **使用方不受影响**：五项全部落在包目录之外，包内一个字都没动（本记录是唯一例外）。
 
 - 工作区行尾归一化（`FrameworkReview.md` §5.2 步骤 13 / §4.3-9 尾注；2026-10-14）：工作区残留的 **259 个文本文件**已就地重写为 LF，判据 `git ls-files --eol` 的 `w/crlf` 归零。
-  它们是 2026-10-11 `.gitattributes` 落地**之前**、系统级 `core.autocrlf=true` 下 git 自身物化工作区留下的**冻结核**（此后零新增；`Tools/` 写盘、Editor 写盘、Unity 的 `.meta` 导入三条嫌疑均已实测排除，探针见 `Documentation/Workflow.md` §六）。
+  它们是 2026-10-11 `.gitattributes` 落地**之前**、系统级 `core.autocrlf=true` 下 git 自身物化工作区留下的**冻结核**（此后零新增；`Tools/` 写盘、Editor 写盘、Unity 的 `.meta` 导入三条嫌疑均已实测排除，探针见 `维护向的工作流手册` §六）。
   **索引与入库内容零变化**：`.gitattributes` 一直保证入库为 LF，故本步**没有任何内容提交**，`git status` 全程干净。
   **使用方不受影响**：公开面与运行时行为零改动，归一的是开发机**工作区字节**这一处旧账（`.gitattributes` 管仓库内容、`.editorconfig` 管编辑器保存，本条补上第三处）。
   **未封堵的一处如实记录**：Unity 菜单新建的脚本仍会以 CRLF 落盘（`ProjectSettings/EditorSettings.asset` 的 `m_LineEndingsForNewScripts = 0` / OS Native，2026-10-14 用户裁定保持不动）——只影响工作区，不影响入库内容；判据与再归一化配方同在 `Workflow.md` §六。
@@ -445,7 +445,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Bootstrap `RunAsync` 重入守卫**：每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。重入现在打警告并立即返回——被忽略的那次**不代表启动完成**（要等启动结束应共享第一次调用的任务），README 已写明。`Register`/`Unregister` 在运行中照常执行但打警告，说明两条反直觉后果：运行中登记本轮不执行（装配期已快照）但会被 `Shutdown` 扫到；运行中注销本轮仍执行但拿不到 `Shutdown`。**改前必红**：`Expected: 1 But was: 2`（旧实现真的跑了两遍）
 
-- **`GameLauncher.ConfigureStages()` 扩展点：带配置启动不再需要放弃这个组件**（**同版内 `GameLauncher` 又被拆为抽象底座 + `DefaultGameLauncher`**，成员面以 `### Changed` 那条为准）。此前它是「zero-config or nothing」的入口——`Awake` 无条件 `RegisterDefaults()`，要用 `SaveOptions` 之类的参数就只能整个弃用它、自建启动流程。现 `Awake` 改调 `protected virtual void ConfigureStages()`，其**默认实现就是原来那句 `RegisterDefaults()`**（默认行为逐字不变，纯增量）：调 `base` 之后 `Unregister<T>()` + `Register(你的实例)` 替换内置阶段，不调 `base` 则完全不登记默认组合。只加这一个成员——`Start` / `OnDestroy` 刻意不改 `virtual`（`async void Start` 会诱使覆写者漏调 `base`）。PlayMode 用例 3 条覆盖三种姿势（默认登记 Asset/Data/Save 三件 / 不调 base 登记表为空 / 调 base 后替换 Save 只剩自定义那一个）。**同一轮评估并否决了「把它做成框架的配置与编排核心」**：配置的形状是代码不是数据（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例）、一半配置的生效时机早于任何场景（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`），且两处沿革刻意不挂靠它——理由与「重开判据」的同步归档在 `Documentation/Modules/Bootstrap.md` 与 `Roadmap.md`
+- **`GameLauncher.ConfigureStages()` 扩展点：带配置启动不再需要放弃这个组件**（**同版内 `GameLauncher` 又被拆为抽象底座 + `DefaultGameLauncher`**，成员面以 `### Changed` 那条为准）。此前它是「zero-config or nothing」的入口——`Awake` 无条件 `RegisterDefaults()`，要用 `SaveOptions` 之类的参数就只能整个弃用它、自建启动流程。现 `Awake` 改调 `protected virtual void ConfigureStages()`，其**默认实现就是原来那句 `RegisterDefaults()`**（默认行为逐字不变，纯增量）：调 `base` 之后 `Unregister<T>()` + `Register(你的实例)` 替换内置阶段，不调 `base` 则完全不登记默认组合。只加这一个成员——`Start` / `OnDestroy` 刻意不改 `virtual`（`async void Start` 会诱使覆写者漏调 `base`）。PlayMode 用例 3 条覆盖三种姿势（默认登记 Asset/Data/Save 三件 / 不调 base 登记表为空 / 调 base 后替换 Save 只剩自定义那一个）。**同一轮评估并否决了「把它做成框架的配置与编排核心」**：配置的形状是代码不是数据（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例）、一半配置的生效时机早于任何场景（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`），且两处沿革刻意不挂靠它——理由与「重开判据」的同步归档在 `Bootstrap 模块的维护向记录` 与 `Roadmap.md`
 
 - **`GameLauncher` 声明式配置字段：Inspector 里填、`Awake` 里注入、`Start` 里跑管线**。起于用户连问三轮「为什么不在 GameLauncher 声明所需配置项再注入各模块」——重新推导后我此前两条反对意见不成立（Unity 的标准回答是 ScriptableObject provider，服务实例可以进配置面；真正早于场景的只有 Log，其余模块的配置都在 `Initialize` 时消费，场景组件覆盖得了），剩下的只是形状约束：6 个 options 类型都没有 `[Serializable]`，字段面只能**逐项重述**而非引用 options 对象（改名/删除有编译器兜底）。落地五组字段：Asset（包名 / 运行模式 / 低内存回收）、Save（存档版本）、UI（Canvas 根）、Input（资产 / 初始 ActionMap）、Localization（默认语言 / 语言表 `TextAsset`）。**全为默认或留空时，登记表与行为与零配置逐字相同**；留空的分组不登记阶段（不替使用方初始化他没要的模块）。服务实例（`RemoteServices` / `CryptoProvider` / `DecryptionServices`）与 `LogOptions` 仍不进字段面，理由写进类 XML 与 README
 
@@ -596,7 +596,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Audio
 
-- **新增 `XAudio` 音频模块**（`Documentation/Roadmap.md` §2.1 立项的第一个模块）：静态门面 `AudioManager` + `IAudioManager` 接口 + internal 实现，自持隐藏宿主并池化 `AudioSource`；字符串通道 + 三档音量相乘 + 代际安全的 `readonly struct` 句柄 + 播完自动回收 + 管理器级暂停。**公开面不含任何 Unity 内置音频类型**——资源一律以 location 字符串标识，故 `IAudioManager` 可被 Wwise / FMOD 等中间件整体替换（同 `InputManager` 换 Rewired 的形态）。三条与直觉相左的决定及理由：
+- **新增 `XAudio` 音频模块**（`当时的候选模块路线图` §2.1 立项的第一个模块）：静态门面 `AudioManager` + `IAudioManager` 接口 + internal 实现，自持隐藏宿主并池化 `AudioSource`；字符串通道 + 三档音量相乘 + 代际安全的 `readonly struct` 句柄 + 播完自动回收 + 管理器级暂停。**公开面不含任何 Unity 内置音频类型**——资源一律以 location 字符串标识，故 `IAudioManager` 可被 Wwise / FMOD 等中间件整体替换（同 `InputManager` 换 Rewired 的形态）。三条与直觉相左的决定及理由：
   **① 没有 `Play(AudioClip)` 重载。** 保留它会同时毁掉后端中立性（Wwise 的事件、FMOD 的 `EventInstance` 都没有 `AudioClip`）与「资源生命周期只有一套语义」——原设计里「调用方在播放期间释放自己持有的资源句柄 → 声音静默中断」这个只能靠文档挡的坑随之消失。代价是回不到 Inspector 直引的用法（已写进模块 README 的已知限制）。
   **② `AudioHandle` 的字段公开、构造函数可由第三方调用。** 照抄 `LockHandle` 的 `internal` 构造会把「整体替换引擎」这条路彻底堵死——实现方既造不出句柄，也读不回自己编码进去的值。框架级的唯一契约是 `default(AudioHandle)` 必须被任何实现视为无效。
   **③ 回收判据是框架自己的状态机，不是 `AudioSource.isPlaying`。** 前置探针实测确认 `Pause()` 之后 `isPlaying` 就是 `false`，只看它会把暂停中的播放当场回收——`AudioVoiceState.Paused` 因此存在。
@@ -611,7 +611,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **③ `UpdateTiming` 由 internal 提权为 public**（纯放宽）：它要出现在 `UpdateNodeInfo` 的字段类型上，否则 CS0052。取值即内部数组下标，既有取值不可改动。
   **④ 全部走门面专属成员，主接口一个不动**（Timer/Update 本就无接口；Localization/Audio 照 `CaptureTarget` 先例探测内置实现，注入自定义实现时回读返回空）。
 
-- **新增 `XTimer` 定时器模块**（`Documentation/Roadmap.md` §2.3 立项的第二个模块）：静态门面 `TimerManager` + 代际安全的 `readonly struct` 句柄，一次性延时与固定间隔两类。**纯静态服务**——无 `ITimerManager`、无 `Initialize`、自动初始化、零配置（与 Update / Lock / Message / Pool 同族：本仓「有接口」的分界线是「是否存在可替换的后端」，Timer 没有）。立项时写下的四条「比 `UniTask.Delay` 多给什么」全部兑现：可查询的 `Remaining`、零分配的可复用句柄、不漂移的固定间隔（锚点 + k×间隔网格，跳拍不补发）、与 Update 的 Tier 自动升降档联动（60 秒的定时器每 2.1 秒才被扫一次，且临近截止自动升回每帧档，触发精度不受影响）。**红线照原样执行**：暂停与时间缩放完全转接自 Update 的双时间轴，模块内没有一行暂停代码。四条与直觉相左的决定及理由：
+- **新增 `XTimer` 定时器模块**（`当时的候选模块路线图` §2.3 立项的第二个模块）：静态门面 `TimerManager` + 代际安全的 `readonly struct` 句柄，一次性延时与固定间隔两类。**纯静态服务**——无 `ITimerManager`、无 `Initialize`、自动初始化、零配置（与 Update / Lock / Message / Pool 同族：本仓「有接口」的分界线是「是否存在可替换的后端」，Timer 没有）。立项时写下的四条「比 `UniTask.Delay` 多给什么」全部兑现：可查询的 `Remaining`、零分配的可复用句柄、不漂移的固定间隔（锚点 + k×间隔网格，跳拍不补发）、与 Update 的 Tier 自动升降档联动（60 秒的定时器每 2.1 秒才被扫一次，且临近截止自动升回每帧档，触发精度不受影响）。**红线照原样执行**：暂停与时间缩放完全转接自 Update 的双时间轴，模块内没有一行暂停代码。四条与直觉相左的决定及理由：
   **① `TimerManager` 上没有 `Pause` / `Resume`。** 暂停与时间缩放必须架在 Update 的双时间轴之上，另开一套时间口径等于替使用方决定时间模型。代价是使用方要理解 `UpdateTimeMode`——但那与他们在 Update 里学到的是同一套，不必为定时器再学一遍。
   **② 换档位不能用「重新 `Register` 驱动器」。** 已读源码验证：`UpdateScheduler.ApplyOp` 的注册分支插入的是一条 `NeedsAnchor = true` 的新条目，下一次派发 `deltaTime` 记 0——每次创建都吞掉一个档位周期，高频创建时逻辑时钟会**永久停摆、定时器永不触发**。故已派发过的驱动器一律走 `ProcessImmediate`，并把**上一次收到的时刻**原样传回作为时钟（传 `Time.time` 会把基准推到真实时刻，而逻辑时钟是按 `deltaTime` 累积的，两者在暂停之后不再同源，会把整段暂停算成流逝时间）。
   **③ 新增「出生趟号」这个概念。** `ProcessImmediate` 会同步跑一趟扫尾，若刚建的 `After(0f)` 在这趟里到期，回调就在 `Create` 返回句柄之前触发了。故扫尾分「派发轮」与「立即重估」两种：后者不推进趟号，于是刚建好的槽位仍算本趟出生——**只参与最近截止的估计**（否则新定时器算不进档位、白拉细一趟），**绝不触发**。它同时让锚点落在 `Create` 那一刻而不是「下一趟扫尾」。
@@ -627,7 +627,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **③ 分类数没有再在门面上加别名**：`LogCategory.RegisteredCount` 已公开提供同一个数，两个名字指向同一个值就是第二份真相（此条比计划**少**一个公开成员）。
   **顺带**：`LogRegistry` 加 `CopyTo(List<LogCategoryState>)`——先取一次字典引用再遍历，copy-on-write 下拿到的是完整快照，与读路径无锁的理由是同一条。
 
-- **新增 `XLog` 日志模块**（`Documentation/Roadmap.md` §2.2 立项，条件是答得出「比 `Debug.unityLogger` + 自定义 `ILogHandler` 多给什么」）：静态门面 `LogManager` + `ILogManager` 接口 + internal 实现，六档分级（`Verbose/Debug/Info/Warning/Error/Fatal`，另加仅作阈值的 `Off`）+ 分类过滤（全局档 + 按分类覆盖，`LogCategory` 是 interned 的 `readonly struct`——档位存在被引用的状态对象里，复制出去的句柄同样生效）+ 可插拔 `ILogSink` + 控制台渲染。**零 GC 的边界是刻意的**：`Xxx(category, "x {0}", arg)` 在档位未启用时**不格式化**、零分配（`LogAllocationTests` 锁定（**该断言的尺子后经实测恒返回 0，结论不成立**——见 `### Documentation`「`Workflow.md` 记入『零分配断言可能恒真』」））；泛型重载避免的是 `params object[]` 数组分配，值类型参数在**启用路径**仍会装箱；3 参是不分配数组的上限（4 参起掉进 `params` 重载——实测全仓仅 2 处需要，改走现成字符串重载）。`LangVersion 9.0` 下 InterpolatedStringHandler 不可用，这是唯一的零 GC 形态。**四条与直觉相左的决定及理由**：
+- **新增 `XLog` 日志模块**（`当时的候选模块路线图` §2.2 立项，条件是答得出「比 `Debug.unityLogger` + 自定义 `ILogHandler` 多给什么」）：静态门面 `LogManager` + `ILogManager` 接口 + internal 实现，六档分级（`Verbose/Debug/Info/Warning/Error/Fatal`，另加仅作阈值的 `Off`）+ 分类过滤（全局档 + 按分类覆盖，`LogCategory` 是 interned 的 `readonly struct`——档位存在被引用的状态对象里，复制出去的句柄同样生效）+ 可插拔 `ILogSink` + 控制台渲染。**零 GC 的边界是刻意的**：`Xxx(category, "x {0}", arg)` 在档位未启用时**不格式化**、零分配（`LogAllocationTests` 锁定（**该断言的尺子后经实测恒返回 0，结论不成立**——见 `### Documentation`「`Workflow.md` 记入『零分配断言可能恒真』」））；泛型重载避免的是 `params object[]` 数组分配，值类型参数在**启用路径**仍会装箱；3 参是不分配数组的上限（4 参起掉进 `params` 重载——实测全仓仅 2 处需要，改走现成字符串重载）。`LangVersion 9.0` 下 InterpolatedStringHandler 不可用，这是唯一的零 GC 形态。**四条与直觉相左的决定及理由**：
   **① 门面永不抛异常（对门面模板的第三处有意豁免，前两处是 FileManager 的懒初始化与 InputManager 的宽容语义）。** 日志是错误路径的最后一张面孔——让「模块没初始化」把它升级成二次故障，代价比一致性大得多；sink 抛异常即被静默摘除并计入 `DroppedSinkCount`（「因为日志坏了而记一条日志」会递归，且测试把意外 Error 当失败）。
   **② 分类名 = 迁移前的 `[前缀]` 逐字，因此同一模块内历史遗留的多个标签各是一个分类**（`[Config]` 与 `[ConfigManager]`、`[AssetManager]` 与 `[YooAssetManager]` 都是两个）。这是「迁移期间控制台文本逐字不变、30+ 处 `LogAssert` 零改动」的前提，代价是分类数偏多（31 个）——单独关掉某个标签的控制力反而更细。
   **③ 格式化走 `string.Format(CurrentCulture, …)`，不自研 formatter。** 转义、`null` 参数、`IFormattable` 格式说明符、culture 四项语义**与字符串插值同源**，这是「迁移后文本没变」的免费正确性证明；模板解析失败（消息里有裸花括号）时退回原文，绝不抛。
@@ -723,7 +723,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **`UIBootstrapStage`（Phase 2）/ `InputBootstrapStage`（Phase 1）**：让 UI 与 Input 也能走引导流程，从而由 `Bootstrap.Shutdown` 对称清理。两者同形——构造校验参数、`ExecuteAsync` 里**已初始化即早退**（`UIRootNode.Awake` 或使用方手动 `Initialize` 都算）、`Shutdown` **只销毁自己初始化的那份**（照 `LocalizationBootstrapStage` 的「谁初始化谁清理」先例）。`BootstrapPhases` 相应新增 `UI = 2` / `Input = 1`（两个现成空档；5–89 仍留给使用方插入点）
 
-- **`Documentation/Modules/Reactive.md` 修正一条过期未决**（同批）：「相等比较器不可注入」记于 2026-10-02 全面清点，而 `69e0190` **同日**就已落地（构造重载 `(T initialValue, IEqualityComparer<T> comparer)` + `Select` 的 `comparer` 参数）却未同步——按 `UI.md` 先例**标注为已落地、不删除（保留沿革）**，教训写进条目自身；同节补 `ReactiveList` 的延后项（Dictionary / Set / 批量 / 集合 `Select` 派生）与两处 v1.1 候选（`Remove(T)` 的比较器注入、`Version` 计数器）。
+- **`Reactive 模块的维护向记录` 修正一条过期未决**（同批）：「相等比较器不可注入」记于 2026-10-02 全面清点，而 `69e0190` **同日**就已落地（构造重载 `(T initialValue, IEqualityComparer<T> comparer)` + `Select` 的 `comparer` 参数）却未同步——按 `UI.md` 先例**标注为已落地、不删除（保留沿革）**，教训写进条目自身；同节补 `ReactiveList` 的延后项（Dictionary / Set / 批量 / 集合 `Select` 派生）与两处 v1.1 候选（`Remove(T)` 的比较器注入、`Version` 计数器）。
 
 #### Lock
 
@@ -920,14 +920,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Settings 实现类可见性收紧**：`SettingsManagerImpl<T>` 由 `public` 降为 `internal sealed`，对齐门面模板「公开面只留接口」。公开面从未暴露过该具体类型——`Initialize` 返回的一直是 `ISettingsManager<T>`，故实际无可观察影响
 
-- **Settings 实例替换时向字段句柄重放当前值（行为变更）**：`Notify()` 此前只推 `Observe` 的事件流，从不触碰任何 `SettingRef` 自身的流，而它的四个调用点 `Apply` / `Load` / `LoadAsync` / `Reset` **全部是「换掉实例」**。于是绑定到句柄的 UI 在玩家点「恢复默认」后停留在旧值——而 README 与 `Documentation/XFramework.md` 都写着「句柄会自动跟随实例替换」，文档承诺与实现相反。现在实例一换，每个句柄都会向订阅者**无条件重放**一次当前值（即使数值未变）。刻意不做去重：可比较的只有「上一实例的值」，而需要知道的是「订阅者上次收到什么」，二者在本模块已文档化的「直改 POCO 不通知」缺口上分叉——直改成 1f 再 `Load` 回 1f，比较会判定「没变」而让订阅者永久停留在陈旧值，正是本次要消灭的那类缺陷。代价如实写进文档：回调语义应按「当前值是这个」而非「用户刚改了它」理解，非幂等的响应（如「画质变更 → 重建渲染管线」）会在实例替换时被多做一次；需要精确区分时用 `Observe`。重放注册表刻意不随 `Destroy` 清空，与门面 `DefaultPathClaims` 同因——关联关系比 `Destroy` 活得久
+- **Settings 实例替换时向字段句柄重放当前值（行为变更）**：`Notify()` 此前只推 `Observe` 的事件流，从不触碰任何 `SettingRef` 自身的流，而它的四个调用点 `Apply` / `Load` / `LoadAsync` / `Reset` **全部是「换掉实例」**。于是绑定到句柄的 UI 在玩家点「恢复默认」后停留在旧值——而 README 与 `早期的框架文档` 都写着「句柄会自动跟随实例替换」，文档承诺与实现相反。现在实例一换，每个句柄都会向订阅者**无条件重放**一次当前值（即使数值未变）。刻意不做去重：可比较的只有「上一实例的值」，而需要知道的是「订阅者上次收到什么」，二者在本模块已文档化的「直改 POCO 不通知」缺口上分叉——直改成 1f 再 `Load` 回 1f，比较会判定「没变」而让订阅者永久停留在陈旧值，正是本次要消灭的那类缺陷。代价如实写进文档：回调语义应按「当前值是这个」而非「用户刚改了它」理解，非幂等的响应（如「画质变更 → 重建渲染管线」）会在实例替换时被多做一次；需要精确区分时用 `Observe`。重放注册表刻意不随 `Destroy` 清空，与门面 `DefaultPathClaims` 同因——关联关系比 `Destroy` 活得久
 
 #### UI
 
 - **`IUiHudProvider` 更名为 `IUIHudProvider`**（命名一致性）：同命名空间的兄弟接口是 `IUIManager` / `IUITipProvider` / `IUIController` / `IUIPanelFactory`，实现类也是 `UIHudManagerImpl` / `UIHudItem`——**只有它用了 `IUi`**。根因是**规则的空白**：`CLAUDE.md` 的「命名」小节只写了「接口 `I` 前缀」，**没有缩写大小写的约定**，于是评审没有判据可依，这条不一致长了很久。现按「两字母缩写全大写」统一（依据 .NET 框架设计指南），并把这条规则补进 `CLAUDE.md`、加一条源码扫描守卫（`NamingConventionTests`）防它再长出来。
   **对第三方无影响**：该类型尚未发布（`[0.2.0]` 明写「公共 API 不变」，全部 HUD 条目都在 `[0.3.0]` 内），故**不留 `[Obsolete]` 别名**——与 `ReactiveListChangeKind → ReactiveCollectionChangeKind` 那次同一处境。
 
-- **`IUIManager` 新增 `IsLayerVisible(int)` / `IsLayerInteractive(int)`（破坏性变更，仅对第三方 `IUIManager` 实现者成立）**：这补上了 UI 里唯一一处「能写不能读」——`SetLayerVisibility` 早已公开，回读却只在内部实现上。正是 `Documentation/Modules/UI.md` 里记为「将来若要公开，走完整的接口 + 转发 + 完备性测试三步」的那一步，本轮按三步走完：接口 +2、`UIManager` 门面 +2 转发（`UIFacadeCompletenessTests` 自动覆盖）、`Tests/Runtime/UI/FakeUIManager.cs` 同步补齐。两条口径：
+- **`IUIManager` 新增 `IsLayerVisible(int)` / `IsLayerInteractive(int)`（破坏性变更，仅对第三方 `IUIManager` 实现者成立）**：这补上了 UI 里唯一一处「能写不能读」——`SetLayerVisibility` 早已公开，回读却只在内部实现上。正是 `UI 模块的维护向记录` 里记为「将来若要公开，走完整的接口 + 转发 + 完备性测试三步」的那一步，本轮按三步走完：接口 +2、`UIManager` 门面 +2 转发（`UIFacadeCompletenessTests` 自动覆盖）、`Tests/Runtime/UI/FakeUIManager.cs` 同步补齐。两条口径：
   **① 它们是探测型读**（未初始化时答 `true`，不套 `EnsureGlobalInitialized`）——「没有被显式隐藏过」在未初始化时同样是 `true`，与 `GetState` / `OpenCount` 同属一类；`UIFacadeProbeTests` 补了这条断言，README 的探测型清单同步更新。
   **② 读的是期望值而不是场景**：`SetLayerVisibility` / `SetLayerInteractive` 记录的字典是唯一真相，**层容器还不存在（该层没开过面板）时也有答案**——这正是这个缺口的本质。
   **迁移**：第三方实现者补两个成员即可（按期望值语义实现，通常就是查自己的层开关字典）；只想读的调用方无需改动。
@@ -974,7 +974,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Update
 
-- **删除包内模板残留的 `Documentation/` 目录**（`XFramework.md` + `images/example.png`）：它是 UPM 插件模板留下的骨架，被写成了包内总览，但**已成第二份真相**——零入链（全仓无 markdown 链接指向它）、CHANGELOG 里有**四次针对它的「文档修正」**（每次都是它写了代码中不存在的 API：本地化表 3/4 行、设置表一整套 `Get<T>()`、`UpdateManager.Bind(root)` 等），而本轮核对又发现一批：模块索引只覆盖 17/21、目录树 13/21、速查表 9/21，`UIManager.ShowTipAsync(new TipConfig { Text = … })` 是**两处编译级错误**（签名首参是 `string text`、`TipConfig` 无 `Text` 字段），依赖表漏 Newtonsoft.Json 导致**照它的安装步骤配置会编译失败**，开头「纯 C# 实现、不依赖 MonoBehaviour 继承 / 引入后即可编写 GamePlay」与实现相反（Runtime 有 9 个 MonoBehaviour）。其中唯一独有且有价值的内容——模块索引表——已搬迁进包 README 并补全到 21 个模块；`example.png` 是 2023-08 的模板图、全仓零引用。**包内此后只有 README 一个总览入口**
+- **删除包内模板残留的文档目录**（`XFramework.md` + `images/example.png`）：它是 UPM 插件模板留下的骨架，被写成了包内总览，但**已成第二份真相**——零入链（全仓无 markdown 链接指向它）、CHANGELOG 里有**四次针对它的「文档修正」**（每次都是它写了代码中不存在的 API：本地化表 3/4 行、设置表一整套 `Get<T>()`、`UpdateManager.Bind(root)` 等），而本轮核对又发现一批：模块索引只覆盖 17/21、目录树 13/21、速查表 9/21，`UIManager.ShowTipAsync(new TipConfig { Text = … })` 是**两处编译级错误**（签名首参是 `string text`、`TipConfig` 无 `Text` 字段），依赖表漏 Newtonsoft.Json 导致**照它的安装步骤配置会编译失败**，开头「纯 C# 实现、不依赖 MonoBehaviour 继承 / 引入后即可编写 GamePlay」与实现相反（Runtime 有 9 个 MonoBehaviour）。其中唯一独有且有价值的内容——模块索引表——已搬迁进包 README 并补全到 21 个模块；`example.png` 是 2023-08 的模板图、全仓零引用。**包内此后只有 README 一个总览入口**
 
 #### Pool
 
@@ -986,7 +986,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 跨模块 / 框架级
 
-- **包内三项「只删了内容、留下空壳」的残留**（起于「还有 NuGet 残留吗」这一问的顺带清点）：① `Third Party Notices.md` 是 2023 年起的未填模板，全文只有 `[provide component name]` 占位符。删它的判据是**包内零第三方代码**——284 个 Runtime 源文件无一条 `Copyright` 或许可头，vendored DLL 为 0，三个依赖均由使用方自行安装、并不随本包分发，因此没有可声明的内容；该文件本身也零入链。② `Documentation/` 与 ③ `Tests/Runtime/Core/` 是两个空目录加被跟踪的孤儿 `.meta`，来自两次「只搬走内容」的操作（删除包内模板 Documentation/ 的那轮、以及 Tests 的 Core→Node 改名）。已做全包孤儿 meta 扫描，除这两处外无其它
+- **包内三项「只删了内容、留下空壳」的残留**（起于「还有 NuGet 残留吗」这一问的顺带清点）：① `Third Party Notices.md` 是 2023 年起的未填模板，全文只有 `[provide component name]` 占位符。删它的判据是**包内零第三方代码**——284 个 Runtime 源文件无一条 `Copyright` 或许可头，vendored DLL 为 0，三个依赖均由使用方自行安装、并不随本包分发，因此没有可声明的内容；该文件本身也零入链。② `维护向文档目录` 与 ③ `Tests/Runtime/Core/` 是两个空目录加被跟踪的孤儿 `.meta`，来自两次「只搬走内容」的操作（删除包内模板 维护向文档目录 的那轮、以及 Tests 的 Core→Node 改名）。已做全包孤儿 meta 扫描，除这两处外无其它
 
 - **仓库级的 NuGetForUnity 残留**：`Assets/NuGet.config`（含 `.meta`；该工具在 Assets 下自建的配置，GUID 除自身外全仓零引用，也不是 MSBuild 配置链的成员）、`Assets/Packages/`（空目录 + 未被跟踪的 `.meta`）与 `.gitignore` 的两条 `[Aa]ssets/Packages` 忽略规则。0.2.0 移除该工具时只清了工具本体与 NuGet DLL，配套物全部留下；`Assets/Packages*` 未被跟踪、只因那两条规则而隐形，所以 `git status` 一直看着干净。规则侧的「NuGet 包 → `Assets/packages.config` + NuGetForUnity」一条同步删除——它在教人使用一个仓内已不存在的工具。本包第三方依赖全走 UPM，Newtonsoft 由 Unity **官方注册表包** `com.unity.nuget.newtonsoft-json` 提供，不需要 NuGet 客户端
 
@@ -1056,7 +1056,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Update `ProcessImmediate` 的既有语义写进文档**：派发期间调用它只重置时间基准、不执行更新（在别人的 `OnUpdate` 里再次回调自己会形成嵌套派发）。该行为本次未改，只是补上说明——此前文档没有提，容易误以为「任何时候都能立即执行」
 
-- **文档修正（Update）**：模块 README 重写（修正 `Frame30`→`Frame32`、失效的目录树、一段**无法编译**的 `static class : IUpdateable` 示例，补入三个时机/双时间轴/暂停/派发期语义/已知限制）；`Documentation/XFramework.md` 中不存在的 `UpdateManager.Bind(root)`、少一个形参的 `OnUpdate` 签名与启动流程示意一并订正
+- **文档修正（Update）**：模块 README 重写（修正 `Frame30`→`Frame32`、失效的目录树、一段**无法编译**的 `static class : IUpdateable` 示例，补入三个时机/双时间轴/暂停/派发期语义/已知限制）；`早期的框架文档` 中不存在的 `UpdateManager.Bind(root)`、少一个形参的 `OnUpdate` 签名与启动流程示意一并订正
 
 - **Settings 自动保存因一次写失败而永久停摆**：驱动器裸调 `_owner.Save()`，而 `UpdateScheduler` 对抛异常的 `OnUpdate` 是「LogError + **永久注销**」。于是「store 抛异常」这个可由环境恢复的失败——云存档无网、平台 SDK 报错、配额耗尽——会变成**本次会话再也不自动保存**，且没有重新注册的路径。现吞住异常并按下一个去抖窗口重试（不重算窗口就是每帧重试，持续失败的 store 会以约 7.5 次/秒空转），每个失败周期只告警一次（否则是每秒两次的日志洪水），`IsDirty` 保持为真故改动不丢。退出兜底的同形问题一并隔离。显式调用的 `Save<T>()` 保持抛——配额、签名这类失败该被调用方看到，吞掉还会改变 `IsDirty` 语义
 
@@ -1088,7 +1088,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **异步与键值重载的二义**：键值 `PublishAsync` 的 `strategy` 取消默认值，避免两参调用 `(消息, 策略)` 与 `(Key, 消息)` 无法裁决
 
-- **文档修正**：UI README 引用了不存在的 `MessageManager.Unsubscribe`；`IMessageSubscriber` 扩展文档夸大了生命周期绑定范围（实际仅 `MonoBehaviour`）；`Documentation/XFramework.md` 的 Node README 链接漂移
+- **文档修正**：UI README 引用了不存在的 `MessageManager.Unsubscribe`；`IMessageSubscriber` 扩展文档夸大了生命周期绑定范围（实际仅 `MonoBehaviour`）；`早期的框架文档` 的 Node README 链接漂移
 
 - **同步 `Publish` 的异步处理器异常日志与等待路径不一致**：`PublishAsync` 的等待路径把处理器异常统一收在 `InvokeGuardedAsync`（记 `[Message]` 前缀的 Error、当次即报、订阅已退订时随之结束的 `OperationCanceledException` 静默丢弃），而同步 `Publish` 触发的 fire-and-forget 路径只用一个 `try/catch` 兜住**同步段**，异步段（`await` 之后）的异常交给裸 `.Forget()`——它落到 `UniTaskScheduler`，记成无模块前缀的 `LogType.Exception` 并延后到调度器 tick 才报（`LogType.Exception` 还会让 Unity 测试框架判该用例失败）。同一个处理器，经 `Publish` 触发与经 `PublishAsync` 触发会得到两种日志。现改为两条路径共用 `InvokeGuardedAsync`：异常隔离语义不再因路径分叉，且该守卫**永不 fault**——并行/顺序两条等待路径早已依赖的性质，至此补齐到第三条路径。补 3 条用例（异步段抛出、返回已 fault 的 `UniTask`、令牌未取消时抛 `OperationCanceledException` 的负向守卫），前两条已实测改前必红，失败消息即缺陷本身：`Unhandled log message: '[Exception] InvalidOperationException: ...'`
 
@@ -1106,7 +1106,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Localization
 
-- **Localization 模块审计一轮（三项高危 + 五项收口）**：按 `Documentation/ModuleAudit.md` 的判据 A–F 全类扫过，修的不是「不够优雅」而是会**静默出错**的地方。① **`GetFormat` 把「保留的未注册占位符」当格式项解析**——`ReplacePlaceholders` 承诺未注册的 `{Name}`「原样输出」，紧接着 `string.Format` 就把它当复合格式项，抛 `FormatException`；两条各自被文档承诺的行为合起来就是一个异常，**README 自己的示例（`GetFormat("ui_guild_info", "5")`）就会抛**（实测：修复前三条红全是这条）。现在交给 `string.Format` 之前先做一次**花括号归一**：放行合法格式项与 `{{`/`}}`，其余转义为字面量——由此可得一条强不变式「当前能正常格式化的文本，输出逐字不变」。② **JSON 解析器不解码转义序列**：`\n` 得到的是字面反斜杠+n、`\uXXXX` 原样输出——`System.Text.Json` 默认就转义非 ASCII、Python `json.dumps` 默认 `ensure_ascii=True`，用它们导出的语言表整表中招。现解码 `\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对；无转义时仍走零拷贝切片快路径）。③ **JSON 格式错误静默降级**：三处 `break` 直接返回**已经读到的半张表**——`{"a":1}` 产出非空字典 `{"a":""}`（一种「所有值都是空串」的语言，还绕过了 `Count == 0` 兜底），`{"a":"1","b"}` 静默丢掉 `b`，`{"a":"1"} oops` 照常成功；而类文档白纸黑字写着「加载/解析失败抛异常(不静默)」。现一律抛 `InvalidOperationException`（带字符位置），只对**尾随逗号**与 **UTF-8 BOM** 保持宽容（两者都不影响数据完整性）。另五项收口：`LocalizationManager.Subscribe` 改走 `MessageManager.TryBindToDestroy`（此前手写的那一遍，正是那份实现点名警告的三处：闭包分配、只认 `MonoBehaviour` 而漏掉 `IDestroyCancellationToken`、已取消令牌仍去注册——**改前必红是编译级的**：形参还原成 `MonoBehaviour` 后三个调用点全部 CS1503）；`LocalizationBootstrapStage.Shutdown` 不再销毁非本阶段初始化的管理器（空转路径 + 使用方手动 `Initialize` 的组合下，启动收尾会把使用方那份连数据一起销毁）；`EvictIfNeeded` 加进度守卫（找不到候选时旧写法是**主线程死循环**，今天不可达，但「必有候选」依赖一条只靠调用点自律的隐式不变式）；`Dispose` 补复位两个语言字段（它已经清了缓存与 `LanguageAssetPath`，意图就是复位到未初始化）；未初始化实现不再抛裸 `ArgumentNullException(key)`；删掉全仓零读的 `Impl.IsInitialized`，并让 `Get` 复用 `GetRaw` 消掉整段重复的查找逻辑。顺带补上模块两个招牌特性（LRU 淘汰、占位符引擎）的**首批用例**——此前零直接覆盖——以及第三个门面转发完备性守卫（照 UI / Settings 先例，已验证「改掉一个转发名即红」）
+- **Localization 模块审计一轮（三项高危 + 五项收口）**：按 `维护向的模块审计手册` 的判据 A–F 全类扫过，修的不是「不够优雅」而是会**静默出错**的地方。① **`GetFormat` 把「保留的未注册占位符」当格式项解析**——`ReplacePlaceholders` 承诺未注册的 `{Name}`「原样输出」，紧接着 `string.Format` 就把它当复合格式项，抛 `FormatException`；两条各自被文档承诺的行为合起来就是一个异常，**README 自己的示例（`GetFormat("ui_guild_info", "5")`）就会抛**（实测：修复前三条红全是这条）。现在交给 `string.Format` 之前先做一次**花括号归一**：放行合法格式项与 `{{`/`}}`，其余转义为字面量——由此可得一条强不变式「当前能正常格式化的文本，输出逐字不变」。② **JSON 解析器不解码转义序列**：`\n` 得到的是字面反斜杠+n、`\uXXXX` 原样输出——`System.Text.Json` 默认就转义非 ASCII、Python `json.dumps` 默认 `ensure_ascii=True`，用它们导出的语言表整表中招。现解码 `\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对；无转义时仍走零拷贝切片快路径）。③ **JSON 格式错误静默降级**：三处 `break` 直接返回**已经读到的半张表**——`{"a":1}` 产出非空字典 `{"a":""}`（一种「所有值都是空串」的语言，还绕过了 `Count == 0` 兜底），`{"a":"1","b"}` 静默丢掉 `b`，`{"a":"1"} oops` 照常成功；而类文档白纸黑字写着「加载/解析失败抛异常(不静默)」。现一律抛 `InvalidOperationException`（带字符位置），只对**尾随逗号**与 **UTF-8 BOM** 保持宽容（两者都不影响数据完整性）。另五项收口：`LocalizationManager.Subscribe` 改走 `MessageManager.TryBindToDestroy`（此前手写的那一遍，正是那份实现点名警告的三处：闭包分配、只认 `MonoBehaviour` 而漏掉 `IDestroyCancellationToken`、已取消令牌仍去注册——**改前必红是编译级的**：形参还原成 `MonoBehaviour` 后三个调用点全部 CS1503）；`LocalizationBootstrapStage.Shutdown` 不再销毁非本阶段初始化的管理器（空转路径 + 使用方手动 `Initialize` 的组合下，启动收尾会把使用方那份连数据一起销毁）；`EvictIfNeeded` 加进度守卫（找不到候选时旧写法是**主线程死循环**，今天不可达，但「必有候选」依赖一条只靠调用点自律的隐式不变式）；`Dispose` 补复位两个语言字段（它已经清了缓存与 `LanguageAssetPath`，意图就是复位到未初始化）；未初始化实现不再抛裸 `ArgumentNullException(key)`；删掉全仓零读的 `Impl.IsInitialized`，并让 `Get` 复用 `GetRaw` 消掉整段重复的查找逻辑。顺带补上模块两个招牌特性（LRU 淘汰、占位符引擎）的**首批用例**——此前零直接覆盖——以及第三个门面转发完备性守卫（照 UI / Settings 先例，已验证「改掉一个转发名即红」）
 
 #### File
 
@@ -1182,7 +1182,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Settings 测试用例生来就错**：`ObserveField_FieldIsolation_IndependentCallbacks` 断言「只改 Volume 时 Name 观察者不回调」，与同一文件里的 `ObserveField_FirstValue_AlwaysPasses` 直接矛盾。该用例随「移除 R3 依赖」那次提交与该测试文件一同引入即错，并非后续回归——R3 原实现的 `Select().DistinctUntilChanged()` 同样放行首个值，故它在 R3 下也一样会失败
 
-- **文档修正（Settings）**：`Documentation/XFramework.md` 的「设置操作」表此前记录了一整套**代码中不存在**的 API（`Get<T>()` / `ResetToDefaults` / `ApplyAsync` 等），第三方照文档接入会踩空；现改为如实描述。Settings 模块 README 同步重写，补入两级订阅分工、写入契约与「已知限制」一节
+- **文档修正（Settings）**：`早期的框架文档` 的「设置操作」表此前记录了一整套**代码中不存在**的 API（`Get<T>()` / `ResetToDefaults` / `ApplyAsync` 等），第三方照文档接入会踩空；现改为如实描述。Settings 模块 README 同步重写，补入两级订阅分工、写入契约与「已知限制」一节
 
 - **Settings 选项在初始化之后仍能影响行为**：`SettingsOptions` 是可变 POCO 而管理器长期持有它的引用，四个字段却各有各的读取时机——`AutoSave` / `AutoSaveDelay` 只在构造期读（事后改静默无效），`CurrentVersion` 每次读写实时读，`SaveOnQuit` 在构造与 `Dispose` 各读一次。后两者是真缺陷：`SaveOnQuit` 中途由 true 翻成 false 时，构造期订阅了 `Application.wantsToQuit` 而 `Dispose` 按「当前是否 true」判断，退订不执行，管理器被该静态事件**永久 root** 到进程结束；`CurrentVersion` 中途改会让上下半场写出的落盘格式不同，旧版本客户端读到下半场的文件会整份拒绝，用户的设置看起来凭空重置。现改为构造时快照进 readonly 字段，并**去掉 `_options` 字段本身**——不留活引用，「读活选项」在结构上不再可能，而 `AutoSave` / `AutoSaveDelay` 本就只在构造期用得上
 
@@ -1281,23 +1281,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Bootstrap
 
-- **`Runtime/Bootstrap/README.md` 与 `Runtime/Update/README.md` 补齐「引导流程 × 每帧派发」的边界**：一轮定向审计（问题：「如何保证框架加载完成才执行 Update」）确认**不存在、也不打算有**这样的门控——Update 的调度器建于 `SubsystemRegistration`、PlayerLoop 注入于 `AfterAssembliesLoaded`，都早于首个场景，`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常。两侧都不缺防护：框架内建 ticker 全部「初始化成功后才注册 + 未就绪空转」，使用方回调的正解是 `await Bootstrap.RunAsync()` 之后注册。README 新增：Update 侧把「派发与启动/引导流程无关」写进 `已知限制`；Bootstrap 侧在 `设计取舍` 回答「为什么不自动暂停/不提供就绪门控」，并给出确需加载期安静时的既有写法（`Pause()` → `RunAsync` → `finally Resume()`，只冻逻辑轴，`Unscaled` 节点照常）。同轮归档：`Documentation/Modules/Bootstrap.md` 新增「已评估未采纳与未决」（自动门控与就绪句柄两个方向否决的理由；GameLauncher 启动途中销毁与在途 `RunAsync` 交叠列为未决，推理未实测）；`Documentation/Modules/Update.md` 已评估未采纳补一条「不加加载期硬门控原语」。
+- **`Runtime/Bootstrap/README.md` 与 `Runtime/Update/README.md` 补齐「引导流程 × 每帧派发」的边界**：一轮定向审计（问题：「如何保证框架加载完成才执行 Update」）确认**不存在、也不打算有**这样的门控——Update 的调度器建于 `SubsystemRegistration`、PlayerLoop 注入于 `AfterAssembliesLoaded`，都早于首个场景，`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常。两侧都不缺防护：框架内建 ticker 全部「初始化成功后才注册 + 未就绪空转」，使用方回调的正解是 `await Bootstrap.RunAsync()` 之后注册。README 新增：Update 侧把「派发与启动/引导流程无关」写进 `已知限制`；Bootstrap 侧在 `设计取舍` 回答「为什么不自动暂停/不提供就绪门控」，并给出确需加载期安静时的既有写法（`Pause()` → `RunAsync` → `finally Resume()`，只冻逻辑轴，`Unscaled` 节点照常）。同轮归档：`Bootstrap 模块的维护向记录` 新增「已评估未采纳与未决」（自动门控与就绪句柄两个方向否决的理由；GameLauncher 启动途中销毁与在途 `RunAsync` 交叠列为未决，推理未实测）；`Update 模块的维护向记录` 已评估未采纳补一条「不加加载期硬门控原语」。
 
-- **Roadmap 的「统一框架 Profile」条目**：修掉失效出处（`Documentation/XFramework.md` 已随包内模板残留删除），并在「重开判据」上标注状态——「先回答引导顺序」这条已于 2026-10-02 满足（`BootstrapPhases` 契约化），但不构成重开理由：另一条判据「不替代模块 Options」排除的正是中心化形状
+- **Roadmap 的「统一框架 Profile」条目**：修掉失效出处（`早期的框架文档` 已随包内模板残留删除），并在「重开判据」上标注状态——「先回答引导顺序」这条已于 2026-10-02 满足（`BootstrapPhases` 契约化），但不构成重开理由：另一条判据「不替代模块 Options」排除的正是中心化形状
 
 #### Pipeline
 
-- **Bootstrap 模块审计一轮（A–F 全量；此前只做过一次单问题定向）**：主题「编排方式对第三方自定义的友好度」，对照 Unity Entities `ICustomBootstrap` / Zenject / VContainer / UGF Procedure / MS.Extensions.Hosting 五种启动流程，7 项发现全部落地为代码或文档（上面四条 + 已知限制 + 归档）。README 新增 `## 已知限制`：**没有超时手段**（`IPipeline` 的超时只在阶段粒度，而 Bootstrap 每相位装配为一个 `ParallelStage`，从 Bootstrap 侧不可达——不响应取消的挂死阶段会挂死整个启动）；`Shutdown` **可能在阶段从未执行过时被调用**（启动在它之前失败/取消，或它是在运行中才登记的，清理实现要能安全空转——内置 `LocalizationBootstrapStage` 是范例）。`IBootstrapStage.Shutdown` 的 XML 补同一条契约，接口示例的 `Phase => 10` 改为 `BootstrapPhases.UserStart`（10 落在框架保留区间内，与新的区间约定冲突）。维护向结论归档进 `Documentation/Modules/Bootstrap.md`（五框架对照表 + 6 条已评估未采纳 + 3 条未决 + 审计轮次），`Pipeline.md` 的异常承载节补失败原因新格式。顺带按 A1 探针「一处改动找齐所有落点」订正三处同义句残留（`IBootstrapStage` 类注释、`Bootstrap` 类注释、包 README 的 `Shutdown` 注释与可配置项一览）
+- **Bootstrap 模块审计一轮（A–F 全量；此前只做过一次单问题定向）**：主题「编排方式对第三方自定义的友好度」，对照 Unity Entities `ICustomBootstrap` / Zenject / VContainer / UGF Procedure / MS.Extensions.Hosting 五种启动流程，7 项发现全部落地为代码或文档（上面四条 + 已知限制 + 归档）。README 新增 `## 已知限制`：**没有超时手段**（`IPipeline` 的超时只在阶段粒度，而 Bootstrap 每相位装配为一个 `ParallelStage`，从 Bootstrap 侧不可达——不响应取消的挂死阶段会挂死整个启动）；`Shutdown` **可能在阶段从未执行过时被调用**（启动在它之前失败/取消，或它是在运行中才登记的，清理实现要能安全空转——内置 `LocalizationBootstrapStage` 是范例）。`IBootstrapStage.Shutdown` 的 XML 补同一条契约，接口示例的 `Phase => 10` 改为 `BootstrapPhases.UserStart`（10 落在框架保留区间内，与新的区间约定冲突）。维护向结论归档进 `Bootstrap 模块的维护向记录`（五框架对照表 + 6 条已评估未采纳 + 3 条未决 + 审计轮次），`Pipeline.md` 的异常承载节补失败原因新格式。顺带按 A1 探针「一处改动找齐所有落点」订正三处同义句残留（`IBootstrapStage` 类注释、`Bootstrap` 类注释、包 README 的 `Shutdown` 注释与可配置项一览）
 
 #### Asset
 
-- **修四处「文档与实现相反」**：Localization README 说语言表放「`Resources` 目录」——那是 YooAsset 迁移前的残留，实现走的是 `AssetManager.LoadAsync<TextAsset>` 的 **YooAsset 地址**，照 README 放文件必然加载失败；该 README 的架构树漏列 `LanguageChangedMessage.cs`；`Documentation/XFramework.md` 的「本地化操作」表四行里**三行是不存在的 API**（`GetText` / `SetLanguageAsync` / `HasKey`）；`CLAUDE.md` 把 Localization 归在「**无参** `Initialize` + `SetInstance`」变体下，实际是两参必填——无参那档的例子改为 Config/Input，并补上「`Initialize` 也可以带参数」这一档
+- **修四处「文档与实现相反」**：Localization README 说语言表放「`Resources` 目录」——那是 YooAsset 迁移前的残留，实现走的是 `AssetManager.LoadAsync<TextAsset>` 的 **YooAsset 地址**，照 README 放文件必然加载失败；该 README 的架构树漏列 `LanguageChangedMessage.cs`；`早期的框架文档` 的「本地化操作」表四行里**三行是不存在的 API**（`GetText` / `SetLanguageAsync` / `HasKey`）；`CLAUDE.md` 把 Localization 归在「**无参** `Initialize` + `SetInstance`」变体下，实际是两参必填——无参那档的例子改为 Config/Input，并补上「`Initialize` 也可以带参数」这一档
 
-- **Asset 模块审计一轮（判据 A–F 全类扫过，一处高危 + 七项修复）**：范围由「审计门面」扩至整模块。README 新增 `## 线程契约` / `## 已知限制` / `## 接口承诺到哪为止` 三节（此前**从未有过**这三节，而维护文档声称它们在那里）并修掉两处**照抄出错的示例**（`InitializeAsync(progress, options)` 参数顺序相反、`T asset = handle.Asset` 与上文的 `<TextAsset>` 不一致）；`InitializeAsync` 的 XML 补全「options/progress/令牌一律取首个调用者」与作废语义，`SetInstance` 写明**不释放原实例**（与 `Destroy` 相反），`Destroy` 的「释放所有资源」改为精确表述（不卸载 YooAsset 侧的包与已加载资源——那正是「Destroy 后可重新初始化复用」的前提）。维护向结论归档进 `Documentation/Modules/Asset.md`（9 条已评估未采纳 + 4 条未决，含被证伪的那条与「`lowMemory` 回调线程需真机实测」）。`ModuleAudit.md` 第三节**新增判据 B6「共享协调协议代际覆盖面」**（凡「由当前一代写入、由任意一代读取」的共享槽都是代际漏洞候选；本仓实例即本轮 F1）
+- **Asset 模块审计一轮（判据 A–F 全类扫过，一处高危 + 七项修复）**：范围由「审计门面」扩至整模块。README 新增 `## 线程契约` / `## 已知限制` / `## 接口承诺到哪为止` 三节（此前**从未有过**这三节，而维护文档声称它们在那里）并修掉两处**照抄出错的示例**（`InitializeAsync(progress, options)` 参数顺序相反、`T asset = handle.Asset` 与上文的 `<TextAsset>` 不一致）；`InitializeAsync` 的 XML 补全「options/progress/令牌一律取首个调用者」与作废语义，`SetInstance` 写明**不释放原实例**（与 `Destroy` 相反），`Destroy` 的「释放所有资源」改为精确表述（不卸载 YooAsset 侧的包与已加载资源——那正是「Destroy 后可重新初始化复用」的前提）。维护向结论归档进 `Asset 模块的维护向记录`（9 条已评估未采纳 + 4 条未决，含被证伪的那条与「`lowMemory` 回调线程需真机实测」）。`ModuleAudit.md` 第三节**新增判据 B6「共享协调协议代际覆盖面」**（凡「由当前一代写入、由任意一代读取」的共享槽都是代际漏洞候选；本仓实例即本轮 F1）
 
 #### Update
 
-- **Update 第二轮审计归档（定向 `UpdateManager.cs`，判据 A–F 全类扫过，仍无高危）**：四处新账——① `Enable` 档位口径的三处 XML 注释是上一轮 F1 的**另一半**（README 已勘误、注释没跟上，至今写着「回到注册时声明的档位」，与实现及用例 `Enable_AfterTierMigration_ReturnsToLatestTier` 相反）；② 门面类摘要把手动驱动入口指成 `Tick(float)`（与 `Tick()` / `Tick(float)` 的文档和 README 三处相反，是补无参重载前的残留）；③ `GetCount` 未写「不含禁用对象」、门面 `IsEnabled` 未写「未注册也返回 true」、`Pause` 未写「固定步时机一并冻结」；④ README「已知限制」补一条「注册表持强引用且不识别已销毁对象」。同轮补一条**覆盖缺口**：`Pause()` × 墙钟轴在 README 有承诺却**零断言**（该轴在仓内也零生产使用者），新增 `Pause_LeavesUnscaledAxisRunning` 并以**负向控制**证明其判别力——把冻结条件放开到两条轴后，23 条用例中恰好这一条变红、失败消息即该断言。归档落点：`Documentation/Modules/Update.md` 逐轮追加本轮记录；「已评估未采纳」新增四条（不钳 `ProcessImmediate` 的 `deltaTime`、不拆 `UpdateManager.cs`、不把注入匹配改成父链校验、不给 `UpdateClock` 加固定步时基字段）；「未决」把「LateUpdate / FixedUpdate 零生产使用者」扩写为「墙钟轴同样零生产使用者」
+- **Update 第二轮审计归档（定向 `UpdateManager.cs`，判据 A–F 全类扫过，仍无高危）**：四处新账——① `Enable` 档位口径的三处 XML 注释是上一轮 F1 的**另一半**（README 已勘误、注释没跟上，至今写着「回到注册时声明的档位」，与实现及用例 `Enable_AfterTierMigration_ReturnsToLatestTier` 相反）；② 门面类摘要把手动驱动入口指成 `Tick(float)`（与 `Tick()` / `Tick(float)` 的文档和 README 三处相反，是补无参重载前的残留）；③ `GetCount` 未写「不含禁用对象」、门面 `IsEnabled` 未写「未注册也返回 true」、`Pause` 未写「固定步时机一并冻结」；④ README「已知限制」补一条「注册表持强引用且不识别已销毁对象」。同轮补一条**覆盖缺口**：`Pause()` × 墙钟轴在 README 有承诺却**零断言**（该轴在仓内也零生产使用者），新增 `Pause_LeavesUnscaledAxisRunning` 并以**负向控制**证明其判别力——把冻结条件放开到两条轴后，23 条用例中恰好这一条变红、失败消息即该断言。归档落点：`Update 模块的维护向记录` 逐轮追加本轮记录；「已评估未采纳」新增四条（不钳 `ProcessImmediate` 的 `deltaTime`、不拆 `UpdateManager.cs`、不把注入匹配改成父链校验、不给 `UpdateClock` 加固定步时基字段）；「未决」把「LateUpdate / FixedUpdate 零生产使用者」扩写为「墙钟轴同样零生产使用者」
 
 - **归档第二族「关闭域重载时第二个播放会话静默失效」**（`Runtime/Input/README.md`、`Runtime/UI/README.md`）——它与本次修的「自动初始化没被调用」常被混为一谈，分开记才不会下一轮重新论证。Input 最严重：退出播放时 `UpdateManager.OnQuitting` 释放并置空调度器，第二会话里 `Initialize()` 因 `_initialized` 为真而告警 return、`RegisterTicker()` 不再执行 → `_ticker` 还在但**没有调度器持有它** → 帧脉冲永不发布、`Observe*` 静默失效，唯一线索是一条「called more than once」警告。`Asset` / `Config` / `Localization` / `File` 同根因：使用方**照文档再调一次 `Initialize()` 会被「已初始化则忽略」变成 no-op——框架让他无法自救**。UI 因 `UIRootNode` 的成对生命周期部分自洽，条目写成边界提醒 + 多根场景未覆盖。三处都写明验证手段（关闭 Reload Domain 连跑两遍 PlayMode 全量；本仓当前两个 reload 都还开着，故缺陷在仓内休眠）
 
@@ -1335,18 +1335,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
-- **Config 模块的变更史不在本文件里——这是补记**。Config 有 31 条提交（含 `fix(...)` 与两次破坏性重构：「移除内建 Luban 支持」、「`IConfigRow.Id` 由固定 `int` 改为泛型 `TKey`」），而本 CHANGELOG 里 `Config` / `ConfigManager` 的出现次数是 **0**。后果不是「读者少看到几条」：`Documentation/ModuleAudit.md` 的 A–F 判据是对本文件的 `### Fixed` 段做归纳得出的，**所以审计手册从本模块的缺陷史里学到的是零**；UI 与 Update 都有的「破坏性变更迁移表」，Config 那两次破坏性重构也没有。变更史的事实来源目前是 git log 与 `Documentation/Modules/Config.md` 的「模块版本记录」（该表按年月记，含 2026-05 与 2026-08 两批）。**本模块其余的变更不回填**——那需要改写已发布版本的段落（等于改「0.2.0 当时到底记了什么」），与「一处只写一份真相」的取向相悖；此处只把缺口如实标出
+- **Config 模块的变更史不在本文件里——这是补记**。Config 有 31 条提交（含 `fix(...)` 与两次破坏性重构：「移除内建 Luban 支持」、「`IConfigRow.Id` 由固定 `int` 改为泛型 `TKey`」），而本 CHANGELOG 里 `Config` / `ConfigManager` 的出现次数是 **0**。后果不是「读者少看到几条」：`维护向的模块审计手册` 的 A–F 判据是对本文件的 `### Fixed` 段做归纳得出的，**所以审计手册从本模块的缺陷史里学到的是零**；UI 与 Update 都有的「破坏性变更迁移表」，Config 那两次破坏性重构也没有。变更史的事实来源目前是 git log 与 `Config 模块的维护向记录` 的「模块版本记录」（该表按年月记，含 2026-05 与 2026-08 两批）。**本模块其余的变更不回填**——那需要改写已发布版本的段落（等于改「0.2.0 当时到底记了什么」），与「一处只写一份真相」的取向相悖；此处只把缺口如实标出
 
 > **订正（2026-10-13）**：上条里「本 CHANGELOG 里 `Config` / `ConfigManager` 的出现次数是 **0**」**写下即失实**——该条自身就含 `Config`，同一份 CHANGELOG 另有 13 行顺带提及它（`5f3b6fa` 时的实测）。它真正想说的是「**没有一条以本模块为主体的记录**」，那在写下之前成立，而在写下它的同一提交添了第一条（`### Fixed` → `#### Config`）之后不再成立；归并轮补齐了 `#### Config` 的模块轴，现共两条。
-> **「手册从本模块的缺陷史里学到的是零」仍成立，但理由要换**：判据归纳的快照日期是 2026-09-27（`Documentation/ModuleAudit.md` 头部），本模块第一条 `### Fixed` 记录 2026-09-30 才出现——**归纳入早于缺陷史入册**，与「CHANGELOG 里一条都没有」无关。其余部分（31 条提交的主体不回填、变更史见 git log 与 `Modules/Config.md`）不变。**原文保留以留痕。**
+> **「手册从本模块的缺陷史里学到的是零」仍成立，但理由要换**：判据归纳的快照日期是 2026-09-27（`维护向的模块审计手册` 头部），本模块第一条 `### Fixed` 记录 2026-09-30 才出现——**归纳入早于缺陷史入册**，与「CHANGELOG 里一条都没有」无关。其余部分（31 条提交的主体不回填、变更史见 git log 与 `Modules/Config.md`）不变。**原文保留以留痕。**
 
 - **Config README 补「与 Luban 一类外部配置表工具配合」的框架侧契约**（纯文档，零 API 变更）。方式三的示例此前假定生成的行类已经是 `IConfigRow<TKey>`，而 Luban 默认生成的行类**不实现它**——读者照抄会编译不过。另两处从未披露：生成代码的加载入口是**同步**委托，而框架 IO 全走异步通道；以及 `RegisterTable` 注入的表没有资源路径、不参与 `Preload` 的并发语义。现补三个前提、「`Register` 不要求 `new()` 而 `Preload` 要求」这条约束差异，并往「已知限制」加两条（注入的表没有加载路径；经 ConfigManager 会留下多份索引视图，不需要统一查询面的项目可以不走它）。
-  **包内只留不随 Luban 版本漂移的框架侧契约**（判据是易腐性）：示例里不再出现 `ByteBuf` / `DataList` / `Tables` 构造形态这类随版本变化的东西，target 名、命令行、模板等落在仓库维护侧的 `Documentation/Luban.md`（不随包发布）。同批把两处源码 XML 示例里的 `tables.TbItem.DataList` 一并改成版本中立写法（纯注释）——模块 README 自己就注着「Luban 各版本 `DataList` 的 API 不同」，而源码注释把它当稳定契约写着。包 README 原先承诺的「Luban 集成指南」也据此收窄为「框架侧约定」。
-  **本轮同时复评了「要不要重建内建 Luban 适配层」，结论是不重建**：该形状已于 `a25f6d8` 删除，而当时**只记了「移除 Bright.Serialization 依赖」这条动机、「这个形状为什么不好」从未落纸**。三条否决点（硬绑 `"Bright.Serialization.ByteBuf"` 类型名、绑死 `DataList` 反射约定、主键写死 `Dictionary<int, rowType>` 而被随后的 `IConfigRow.Id` 泛型化淘汰）与重开判据现补进 `Documentation/Modules/Config.md`。
+  **包内只留不随 Luban 版本漂移的框架侧契约**（判据是易腐性）：示例里不再出现 `ByteBuf` / `DataList` / `Tables` 构造形态这类随版本变化的东西，target 名、命令行、模板等落在仓库维护侧的 `Luban 接入配方`（不随包发布）。同批把两处源码 XML 示例里的 `tables.TbItem.DataList` 一并改成版本中立写法（纯注释）——模块 README 自己就注着「Luban 各版本 `DataList` 的 API 不同」，而源码注释把它当稳定契约写着。包 README 原先承诺的「Luban 集成指南」也据此收窄为「框架侧约定」。
+  **本轮同时复评了「要不要重建内建 Luban 适配层」，结论是不重建**：该形状已于 `a25f6d8` 删除，而当时**只记了「移除 Bright.Serialization 依赖」这条动机、「这个形状为什么不好」从未落纸**。三条否决点（硬绑 `"Bright.Serialization.ByteBuf"` 类型名、绑死 `DataList` 反射约定、主键写死 `Dictionary<int, rowType>` 而被随后的 `IConfigRow.Id` 泛型化淘汰）与重开判据现补进 `Config 模块的维护向记录`。
 
 #### Log
 
-- **订正两处「把碰巧写成必须」的注释**：`LogManager.AutoInit` 的 XML 与 `Documentation/Modules/Log.md` 的边界节都写着「必须早于其它模块的 AutoInit（Update/Message/Timer 也在此档）」——而**同档内的相对顺序没有契约**（Unity 不承诺，`AutoInitTests` 锁的也只是档位而非先后），该说法当前成立只是因为另三个同档 AutoInit 恰好都不打日志。已改为如实口径，并写明补救方向（将来本档新增会打日志的 AutoInit 应挪出本档——否则那些日志会落在随后被丢弃的默认实现上）
+- **订正两处「把碰巧写成必须」的注释**：`LogManager.AutoInit` 的 XML 与 `Log 模块的维护向记录` 的边界节都写着「必须早于其它模块的 AutoInit（Update/Message/Timer 也在此档）」——而**同档内的相对顺序没有契约**（Unity 不承诺，`AutoInitTests` 锁的也只是档位而非先后），该说法当前成立只是因为另三个同档 AutoInit 恰好都不打日志。已改为如实口径，并写明补救方向（将来本档新增会打日志的 AutoInit 应挪出本档——否则那些日志会落在随后被丢弃的默认实现上）
 
 #### Settings
 
@@ -1354,9 +1354,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
-- **UI 四项「未做」复核 + 搬迁遗留收尾**：四项（列表虚拟化 / 场景切换安全 / UI 特效层 / UI 引导层）随 `e613867`（2026-09-30 文档分层第五批）从模块 README 搬进 `Documentation/Modules/UI.md` 后一字未动，本轮逐项裁定——列表虚拟化、跨场景引用自动检测、内建特效层三项**判不纳入框架**（理由与替代路径写进 UI README 新增的 `## 设计取舍`；技术文档只留「评估过并否决」那一层，做法与边界不重复），UI 引导层**拆项**（遮罩挖洞**原语**留在 roadmap 并写明范围与做法边界：区域语义 + 单张满屏 `Image` 改可留洞构成、不用 shader、复用引用计数句柄与 `UISorting.SystemOrder` 预留带；**引导编排不做**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构）。README 补 `## 设计取舍` 同时修实一处系统性漂移：`Documentation/Modules/UI.md` 第 4 行声称 README 承载它，而 README 此前只有 `## 设计原则`——「技术文档声称 README 承载 X、README 里却没有」的**第七例**。收尾搬迁遗留两处：`Runtime/Reactive/README.md` 那句「见 UI README 的 `[ ]` 列表」指向的清单已被搬走（断链；且不能改指 `Documentation/`——包内不指向包外），改为在原句内自述事实；`Documentation/Modules/README.md` 的模板代码块漏了表格里已有的 `## 已完成功能与未做（roadmap）` 一行。**搬迁本身（`e613867`）也一并登记**——它当时没进流水
+- **UI 四项「未做」复核 + 搬迁遗留收尾**：四项（列表虚拟化 / 场景切换安全 / UI 特效层 / UI 引导层）随 `e613867`（2026-09-30 文档分层第五批）从模块 README 搬进 `UI 模块的维护向记录` 后一字未动，本轮逐项裁定——列表虚拟化、跨场景引用自动检测、内建特效层三项**判不纳入框架**（理由与替代路径写进 UI README 新增的 `## 设计取舍`；技术文档只留「评估过并否决」那一层，做法与边界不重复），UI 引导层**拆项**（遮罩挖洞**原语**留在 roadmap 并写明范围与做法边界：区域语义 + 单张满屏 `Image` 改可留洞构成、不用 shader、复用引用计数句柄与 `UISorting.SystemOrder` 预留带；**引导编排不做**——步骤机 / 触发器 / 进度持久化是 GamePlay 架构）。README 补 `## 设计取舍` 同时修实一处系统性漂移：`UI 模块的维护向记录` 第 4 行声称 README 承载它，而 README 此前只有 `## 设计原则`——「技术文档声称 README 承载 X、README 里却没有」的**第七例**。收尾搬迁遗留两处：`Runtime/Reactive/README.md` 那句「见 UI README 的 `[ ]` 列表」指向的清单已被搬走（断链；且不能改指 `维护向文档目录`——包内不指向包外），改为在原句内自述事实；`维护向记录的目录规范` 的模板代码块漏了表格里已有的 `## 已完成功能与未做（roadmap）` 一行。**搬迁本身（`e613867`）也一并登记**——它当时没进流水
 
-- **UI 模块首轮审计归档（定向 `UIManager.cs`，判据 A–F 全类扫过）**：1 条高危 + 4 条中高（前两条已修；`Dispose` 半拆窗口的语义、`Destroy` 一律 Dispose 注入实例两条只记文档，连同三条未决一起归档进 `Documentation/Modules/UI.md` 新增的「已评估未采纳与未决」）。同轮补的覆盖缺口各一条用例：`SetController` 对注入实现的降级分支、注入实例不被 `SetInstance` 销毁、`Destroy` 之后操作类照抛 + 探测类归零 + `TierDriverCount` 清零、`Destroy` 不是单向闩锁、重复 `Initialize` 告警、`SetInstance(null)`、`Subscribe` 的另两个重载、`UpdateManager.Pause` × 面板、Tier1 专项；24 个 fixture 的 `SetUp` 统一改为先 `UIManager.Destroy()` 归零（NUnit 在 SetUp 中途失败时不跑 TearDown，残留的 `_instanceInitialized` 会让下一个 fixture 的 `Initialize` 静默 no-op，表现为一堆与自身无关的红）。模块 README 的「已知限制」补三条（`timeScale = 0` 冻结、`UpdateManager.Clear()` 摘驱动器、无线程契约断言）。**实测记录**：`Subscribe` 三个 `Action<T>` 重载下无类型 lambda 是编译错误 CS0121（不是静默误判），照纪律用临时探针文件在本仓程序集上编译验证并配了负向控制
+- **UI 模块首轮审计归档（定向 `UIManager.cs`，判据 A–F 全类扫过）**：1 条高危 + 4 条中高（前两条已修；`Dispose` 半拆窗口的语义、`Destroy` 一律 Dispose 注入实例两条只记文档，连同三条未决一起归档进 `UI 模块的维护向记录` 新增的「已评估未采纳与未决」）。同轮补的覆盖缺口各一条用例：`SetController` 对注入实现的降级分支、注入实例不被 `SetInstance` 销毁、`Destroy` 之后操作类照抛 + 探测类归零 + `TierDriverCount` 清零、`Destroy` 不是单向闩锁、重复 `Initialize` 告警、`SetInstance(null)`、`Subscribe` 的另两个重载、`UpdateManager.Pause` × 面板、Tier1 专项；24 个 fixture 的 `SetUp` 统一改为先 `UIManager.Destroy()` 归零（NUnit 在 SetUp 中途失败时不跑 TearDown，残留的 `_instanceInitialized` 会让下一个 fixture 的 `Initialize` 静默 no-op，表现为一堆与自身无关的红）。模块 README 的「已知限制」补三条（`timeScale = 0` 冻结、`UpdateManager.Clear()` 摘驱动器、无线程契约断言）。**实测记录**：`Subscribe` 三个 `Action<T>` 重载下无类型 lambda 是编译错误 CS0121（不是静默误判），照纪律用临时探针文件在本仓程序集上编译验证并配了负向控制
 
 - **配置/注入全面清点**（起于用户质疑「框架不应该预设过多配置，由第三方注入比较好」）：判据是「**不想要这个预设时，你要付出什么代价**」——一次注入 / 一个 options 字段 = 健康；抄一个实现 = 有边界但要写清；**不可能 = 越界**。结论：框架在「整体替换实现」层已普遍是注入式，「预设过多」的真身是十余处**策略**没有出口；本轮处理了三处越界出口（均在 `### Added`，按本条判据改为可配置/可替换）与一处死选项。其余分两类落档：**不该开**的策略（UI 排序分层、Update 切片与节拍基、Message 缓冲「只留最后一条」、Event 投递顺序、Timer/Pool/Lock 的静态性——它们是模块不变量，换了等于换模块）写进 `Roadmap.md` §四「不做」并逐条给理由；**本轮未做但可再拾**的三项（Reactive 相等比较器不可注入、Serialize 内置注册静默覆盖、Settings 无 `SetInstance`）记进对应模块技术文档的「已评估未采纳与未决」
 
@@ -1378,11 +1378,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **补记 `74b3583`**：`LockHandle` 的持锁语义由 `IsValid`（恒真缓存字段）改为 `IsHeld`（逐主体逐句柄实时查询）——该次变更当时未记 CHANGELOG
 
-- **文档分层：模块 README 归使用方，维护记录抽到仓库根的 `Documentation/Modules/`**。模块 README 是随包发给第三方的东西，但里面长着「下一轮审计需要知道的」内容——`Lock` / `Localization` 的 `## 审计记录` 开头就写着「本节只留**下一轮需要知道的**」。切分线因此画在**收件人**而不是「技术 vs 使用」上：`Input` 的「关闭域重载后第二个播放会话帧脉冲静默失效」、`Save` 的「删除/移动在主线程付同步 IO」语感全是维护者向（带根因、带实测、带「本轮只归档不修」），内容却是使用方判断「这模块能不能用在我的场景」的唯一依据，搬走他们会写出错代码。判据定为一句：**把这段删掉，使用方会不会写错代码或误判行为？** 17 个模块的文件结构、模块版本记录（4 张表用的是**模块独立成包时代的本地版本号**——`Pool 1.3.0` / `Input 2.4.0`，与包 CHANGELOG 的语义化版本不是同一套；`Config` 那张按年月记，且该模块在整个 CHANGELOG 里一条记录都没有）、沿革叙述、审计记忆（含已评估未采纳与未决项）搬进 `Documentation/Modules/<模块>.md`；`已知限制` / `设计取舍` / `接口承诺` / 线程与性能契约**一律留在 README**。落点选仓库根是因为 `package.json` 无 `files` 字段、目录内无 `.npmignore`，故它天然不随包发布，也不需要 `.meta`。规则落在 `CLAUDE.md` 新节 `## 文档分层` 与 `ModuleAudit.md` §五的落点表（**已评估未采纳从 README 改落技术文档**）；`Workflow.md` 的提交内环加一步「核对文档」——两问、答「不用」是合法结论，并明说**它不是门禁**（三条门禁都机械可判定，这一条不是）。**搬迁顺手修出 README 里的既有损坏**：`Data` 的「目录结构」代码块**没有收尾围栏**（文件在代码块内部就结束了），以及五份文件清单已经腐烂——`Asset` 缺 4 个文件（`AssetBootstrapStage` / `AssetInitReport` / `AssetInitProgressRelay` / `IAssetPoolController`）、`Message` 缺 4 个（四份统计与策略类型）、`Lock` / `Data` / `Serialize` 各缺 1 个；补齐行的描述一律取自各文件自己的 `<summary>`，不臆造。这类清单没有任何门禁能发现它过期，搬迁前的逐树核对才让它现形。搬迁内容零丢失：逐（源 → 目标）配对跑「源侧删除行 ⊆ 目标侧新增行」的行集守恒断言，并做过改前必红（故意删掉技术文档里一行 → 断言精确报出该行）。`Assets/XFramework/` 的公开面、示例与运行时行为零变化
+- **文档分层：模块 README 归使用方，维护记录抽到仓库根的 `维护向记录目录`**。模块 README 是随包发给第三方的东西，但里面长着「下一轮审计需要知道的」内容——`Lock` / `Localization` 的 `## 审计记录` 开头就写着「本节只留**下一轮需要知道的**」。切分线因此画在**收件人**而不是「技术 vs 使用」上：`Input` 的「关闭域重载后第二个播放会话帧脉冲静默失效」、`Save` 的「删除/移动在主线程付同步 IO」语感全是维护者向（带根因、带实测、带「本轮只归档不修」），内容却是使用方判断「这模块能不能用在我的场景」的唯一依据，搬走他们会写出错代码。判据定为一句：**把这段删掉，使用方会不会写错代码或误判行为？** 17 个模块的文件结构、模块版本记录（4 张表用的是**模块独立成包时代的本地版本号**——`Pool 1.3.0` / `Input 2.4.0`，与包 CHANGELOG 的语义化版本不是同一套；`Config` 那张按年月记，且该模块在整个 CHANGELOG 里一条记录都没有）、沿革叙述、审计记忆（含已评估未采纳与未决项）搬进 `<模块> 模块的维护向记录`；`已知限制` / `设计取舍` / `接口承诺` / 线程与性能契约**一律留在 README**。落点选仓库根是因为 `package.json` 无 `files` 字段、目录内无 `.npmignore`，故它天然不随包发布，也不需要 `.meta`。规则落在 `CLAUDE.md` 新节 `## 文档分层` 与 `ModuleAudit.md` §五的落点表（**已评估未采纳从 README 改落技术文档**）；`Workflow.md` 的提交内环加一步「核对文档」——两问、答「不用」是合法结论，并明说**它不是门禁**（三条门禁都机械可判定，这一条不是）。**搬迁顺手修出 README 里的既有损坏**：`Data` 的「目录结构」代码块**没有收尾围栏**（文件在代码块内部就结束了），以及五份文件清单已经腐烂——`Asset` 缺 4 个文件（`AssetBootstrapStage` / `AssetInitReport` / `AssetInitProgressRelay` / `IAssetPoolController`）、`Message` 缺 4 个（四份统计与策略类型）、`Lock` / `Data` / `Serialize` 各缺 1 个；补齐行的描述一律取自各文件自己的 `<summary>`，不臆造。这类清单没有任何门禁能发现它过期，搬迁前的逐树核对才让它现形。搬迁内容零丢失：逐（源 → 目标）配对跑「源侧删除行 ⊆ 目标侧新增行」的行集守恒断言，并做过改前必红（故意删掉技术文档里一行 → 断言精确报出该行）。`Assets/XFramework/` 的公开面、示例与运行时行为零变化
 
 #### Diagnostics
 
-- **诊断窗口文档收口**：新增 `Documentation/Modules/Diagnostics.md`（文件结构 / 沿革 / 已评估未采纳与未决）；`Documentation/Modules/README.md` 索引补一行；包 `README.md` 的模块表与可替换点表各补一行；`Documentation/Modules/UI.md` 里「不给 `IsLayerInteractive` / `IsLayerVisible` 加门面转发」那条**标注为已落地**（不删除，保留沿革）；`Documentation/Modules/Reactive.md` 的订阅追踪条目更新参照物（`UIStateWindow` → 诊断窗口），并写明「窗口壳不改变该目标」；`Documentation/Roadmap.md` 的 GM / 调试命令台条目补上「本轮给了一半答案、仍待裁」。`Runtime/Diagnostics/README.md` 增「编辑器窗口与渲染」一节（默认路径 / 复用视图 / 自绘接口三条用法）。
+- **诊断窗口文档收口**：新增 `Diagnostics 模块的维护向记录`（文件结构 / 沿革 / 已评估未采纳与未决）；`维护向记录的目录规范` 索引补一行；包 `README.md` 的模块表与可替换点表各补一行；`UI 模块的维护向记录` 里「不给 `IsLayerInteractive` / `IsLayerVisible` 加门面转发」那条**标注为已落地**（不删除，保留沿革）；`Reactive 模块的维护向记录` 的订阅追踪条目更新参照物（`UIStateWindow` → 诊断窗口），并写明「窗口壳不改变该目标」；`当时的候选模块路线图` 的 GM / 调试命令台条目补上「本轮给了一半答案、仍待裁」。`Runtime/Diagnostics/README.md` 增「编辑器窗口与渲染」一节（默认路径 / 复用视图 / 自绘接口三条用法）。
 
 #### 跨模块 / 框架级
 
@@ -1398,7 +1398,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **`Roadmap.md` §2.4 标为已建成**：立项时六条边界照原样落地；两处与立项时不同（`Version` 计数器实现前砍掉——本仓无先例的新契约面，且主线程同步下「订阅后立即读」已是原子一致点；`Sort` 签名定为 `Sort(IComparer<T> comparer = null)`）记入条目，正文按 §一 搬迁纪律只留指针。
 
-- **`Documentation/Workflow.md` 记入「零分配断言可能恒真」**（尺子实测——**点名三处空转的旧实测**：`TimerAllocationTests` / `LogAllocationTests` / `MessageStatsTests:342` + 写这类断言的两条纪律：先自检尺子；尺子不够用时优先用结构断言）。**既有 `TimerAllocationTests` / `LogAllocationTests` 的断言在本环境恒真**——其结论未被证实（未必为假，但没被验证），修订方案待定。
+- **`维护向的工作流手册` 记入「零分配断言可能恒真」**（尺子实测——**点名三处空转的旧实测**：`TimerAllocationTests` / `LogAllocationTests` / `MessageStatsTests:342` + 写这类断言的两条纪律：先自检尺子；尺子不够用时优先用结构断言）。**既有 `TimerAllocationTests` / `LogAllocationTests` 的断言在本环境恒真**——其结论未被证实（未必为假，但没被验证），修订方案待定。
 
 ## [0.2.0] - 2026-08-20
 

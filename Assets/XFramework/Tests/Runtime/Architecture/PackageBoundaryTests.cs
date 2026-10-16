@@ -6,14 +6,18 @@ using NUnit.Framework;
 namespace XFramework.Architecture.Tests
 {
     /// <summary>
-    /// 「**包内不指向包外**」的机械守卫：包内 `.cs` 的任何文本（**含注释与字符串**）
+    /// 「**包内不指向包外**」的机械守卫：包内**全部文本**（`.cs` 的注释与字符串、`.md` 的正文）
     /// 不得出现 `Documentation/`——它在仓库根、不随包发布，第三方装了包打不开它。
     /// <para><b>为什么需要它</b>：这条规则此前只写在 `CLAUDE.md` 的「文档分层」里、且只声明管 README，
     /// 于是**源码注释**这一路长期无人管：2026-10-15 两轮清出 22 处（1 处 README + 7 处引用当时将删的
     /// 评估报告 + 15 处引用其余维护向文档），其中 **2 处落在 Runtime 生产代码的 XML 注释里**——
     /// 那些注释随包发布，第三方在 IDE 里直接读到死指针。手工发现 22 次之后，这条该由机器来拦。</para>
+    /// <para><b>2026-10-16 扩到 `.md`（用户裁定「包内不要引用包外资源」）</b>：当时守卫只扫 `.cs`，
+    /// 于是 `Save/README.md` 藏着一处「见 `Modules/Save.md` 的未决」、`CHANGELOG.md` 有数十处指向
+    /// `Documentation/` 各文件——**都在包内、都随包发布、第三方都打不开**。规则一旦扩到全部文本，
+    /// 判据就只剩一条「有没有那条路径」，不再区分「指路」与「历史陈述」——豁免要显式登记理由。</para>
     /// <para><b>守法</b>：扫 <see cref="SourceScanner.EnumerateSources"/> 的全部 `.cs`（含 `Samples~`——
-    /// 它虽不被 Unity 编译，但仍在包内），原文出现 `Documentation/` 即记违规。
+    /// 它虽不被 Unity 编译，但仍在包内）与包内全部 `.md`，原文出现 `Documentation/` 即记违规。
     /// **扫原文而不是 <see cref="SourceScanner.ReadCodeOnly"/> 剥注释后的文本**：要抓的恰恰是注释与
     /// 消息串里的指路，剥掉注释等于把射程裁成零。</para>
     /// <para><b>为什么本文件自己不算违规</b>：守法的描述里必须出现那个字符串（否则没法说明在查什么），
@@ -38,9 +42,10 @@ namespace XFramework.Architecture.Tests
         private const string SelfExemption = "Tests/Runtime/Architecture/PackageBoundaryTests.cs";
 
         /// <summary>
-        /// 豁免登记处：包内确实需要出现该记号的 `.cs`（相对路径 → 理由，会进违规消息）。
+        /// 豁免登记处：包内确实需要出现该记号的**文本文件**（`.cs` 或 `.md`，相对路径 → 理由，会进违规消息）。
         /// **当前为空**——将来若某个文件非写它不可（例如又一份守卫的守法描述），来这里登记理由，
-        /// 而不是让守卫红着或把它删掉。
+        /// 而不是让守卫红着或把它删掉。**理由要写成「为什么这里非写路径不可」**，
+        /// 别用它兜「懒得改成自足表述」。
         /// </summary>
         private static readonly (string File, string Reason)[] FileExemptions =
         {
@@ -82,6 +87,35 @@ namespace XFramework.Architecture.Tests
 
             Assert.IsEmpty(violations,
                 "包内源码指向了包外的维护向文档（`Documentation/` 不随包发布）：\n  " +
+                string.Join("\n  ", violations));
+        }
+
+        [Test]
+        public void PackageMarkdown_DoNotReferenceRepoDocumentation()
+        {
+            var violations = new List<string>();
+            var exempt = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in FileExemptions) exempt.Add(entry.File);
+
+            foreach (var file in Directory.GetFiles(SourceScanner.PackageRoot, "*.md", SearchOption.AllDirectories))
+            {
+                string relative = SourceScanner.RelativePath(file);
+                if (exempt.Contains(relative)) continue;
+
+                string[] lines = File.ReadAllLines(file);
+                for (int i = 0; i < lines.Length; i++)
+                {
+                    if (lines[i].IndexOf(RepoDocsMarker, StringComparison.Ordinal) < 0) continue;
+
+                    violations.Add($"{relative}:{i + 1} 出现「{RepoDocsMarker}」——包内不指向包外" +
+                                   "（第三方装了包打不开它）。改成**自足表述**：用「该模块的维护向记录」" +
+                                   "「框架级决策台账」这类**描述**代替路径，或把结论内联；" +
+                                   "确实非指不可就去 PackageBoundaryTests.FileExemptions 登记理由");
+                }
+            }
+
+            Assert.IsEmpty(violations,
+                "包内 markdown 指向了包外的维护向文档（`Documentation/` 不随包发布）：\n  " +
                 string.Join("\n  ", violations));
         }
 
