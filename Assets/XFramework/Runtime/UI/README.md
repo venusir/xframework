@@ -1,4 +1,4 @@
-# XFramework / UI 模块
+# UI —— 面板管理、MVVM 绑定与导航栈（含 HUD / Tip / 对话框 / 弹窗定位）
 
 ## 概述
 
@@ -7,340 +7,6 @@ XFramework UI 模块提供完整的 UI 面板管理功能。通过 `IUIManager` 
 此外还提供 **MVVM 数据绑定**（View ↔ ViewModel 基于 ReactiveProperty）、**调度控制**（通过 IUIController + PreconditionChain 实现面板生命周期 AOP 拦截）以及 **世界空间 HUD**（NPC名/血条 3D 跟踪）和 **临时提示 Tip**（扣血/浮动文字）。
 
 **命名空间**: `XFramework.XUI`
-
-## 架构设计
-
-本模块按四个子目录分层（骨架见下节「四层架构」）：
-
-| 分组 | 装什么 |
-|---|---|
-| 根目录 | 门面、接口、层级 / 排序 / 遮罩等基础类型 |
-| `Controller/` | 调度控制与前提条件链 |
-| `Data/` | ViewModel、绑定与面板消息 |
-| `Tip/` | 临时提示 |
-| `View/` | 面板 / HUD / 控件基类与场景根 |
-
-> **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，全局消息总线位于 `Runtime/Message/`（`XFramework.XMessage`），均不在 UI 模块目录下。
-
-## 四层架构
-
-```mermaid
-flowchart TB
-    subgraph 调用层
-        A[业务代码]
-    end
-
-    subgraph 外观层
-        B["UIManager<br/>static class"]
-    end
-
-    subgraph 接口层
-        C["IUIManager<br/>interface"]
-    end
-
-    subgraph 实现层
-        D["UIManagerImpl<br/>internal class"]
-    end
-
-    subgraph 控制层
-        K["IUIController<br/>interface"]
-        L["UIDefaultController"]
-        M["自定义控制器<br/>+PreconditionChain"]
-    end
-
-    subgraph 数据层
-        N["IViewModel<br/>interface"]
-        O["ViewModelBase"]
-        P["UIPanelBinding<br/>component"]
-        PA["UIBinder<br/>static"]
-        Q["ReactiveProperty<T>"]
-    end
-
-    subgraph 场景层
-        E["UIRootNode<br/>MonoBehaviour"]
-        F(("Canvas 根节点"))
-    end
-
-    subgraph 面板层
-        G["UIPanelBase<br/>abstract class"]
-        H[自定义面板]
-    end
-
-    A --> B
-    B --> C
-    C --> D
-    D --> E
-    E --> F
-    D --> G
-    G --> H
-
-    D -->|注入| K
-    K --> L
-    K --> M
-    M -->|组合| R["PreconditionChain"]
-
-    H -->|挂载| P
-    G -->|持有| P
-    P -->|绑定| N
-    N --> O
-    N --> Q
-```
-
-## 生命周期流程（含 Controller 拦截）
-
-```mermaid
-sequenceDiagram
-    participant Biz as 业务代码
-    participant Mgr as UIManager
-    participant Ctrl as IUIController
-    participant Panel as UIPanelBase
-    participant VM as IViewModel
-
-    Biz->>Mgr: OpenAsync〈T〉(assetPath, layer, userData)
-    Mgr->>Ctrl: OnBeforeOpenAsync(type, assetPath, layer, userData)
-    alt Controller 拦截
-        Ctrl-->>Mgr: false
-        Mgr-->>Biz: null (打开被拦截)
-    else Controller 放行
-        Ctrl-->>Mgr: true
-        Mgr->>Panel: Instantiate & DoOpenAsync(userData)
-        Panel->>VM: BindViewModel (可选)
-        Panel-->>Mgr: 打开完成
-        Mgr->>Ctrl: OnAfterOpenAsync(type, panel, userData)
-        Ctrl-->>Mgr: CompletedTask
-        Mgr-->>Biz: T (面板实例)
-    end
-
-    Note over Biz,VM: ... 面板生命周期 ...
-
-    Biz->>Mgr: CloseAsync〈T〉()
-    Mgr->>Ctrl: OnBeforeCloseAsync(type, panel, immediate)
-    alt Controller 拦截
-        Ctrl-->>Mgr: false
-        Mgr-->>Biz: 关闭被拦截
-    else Controller 放行
-        Ctrl-->>Mgr: true
-        Mgr->>Panel: DoCloseAsync(immediate)
-        Panel->>VM: Deactivate
-        Panel-->>Mgr: 关闭完成
-        Mgr->>Ctrl: OnAfterCloseAsync(type)
-        Ctrl-->>Mgr: CompletedTask
-    end
-```
-
-## 核心类型
-
-| 类型                      | 所属层 | 职责                                                                                                                                      |
-| ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                            |
-| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                         |
-| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、显示栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
-| **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
-| **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
-| **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
-| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager（销毁只在自己是当前根时发生）与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。 |
-| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
-| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
-| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
-| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                              |
-| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建与订阅归口，生命周期为 OnBound / OnUnbound / Dispose（无 InitializeAsync）。              |
-| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                         |
-| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
-| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                                |
-
-## 门面形态
-
-`UIManager` 是**扁平**的静态门面：每个成员都与 `IUIManager` 的对应成员**同名**。绝大多数转发体是 `EnsureGlobalInitialized()` + `_instance.X(...)` 两行；**例外是那组探测型读接口**——它们不加守卫、未初始化时直接返回空值（见下节「未初始化时的行为」）。没有嵌套分组类。
-
-扁平层也容纳接口之外的三类成员：生命周期与实例管理（`Initialize` / `SetInstance` / `Destroy`），接口成员之外的 `SetController` / `TierDriverCount`，以及三种面板消息的 `Subscribe` 重载。
-
-### 未初始化时的行为
-
-门面成员按「探测」与「操作」分成两类，**这条分界由 `UIFacadeProbeTests` 钉住**，改一边会立刻倒掉另一边：
-
-| 类别 | 成员 | 未初始化时 |
-|---|---|---|
-| 探测型读接口 | `IsInitialized`、`UIRoot`、`GetState`、`DumpState`、`TierDriverCount`、`OpenCount`、`IsAnyOpen`、`Panels`、`CanGoBack`、`IsMaskShowing`、`IsLayerVisible`、`IsLayerInteractive` | 返回空值 / 全零快照 / 空视图（`Panels` 返回 `Array.Empty` 而非 null），**不抛异常**——它们本就该能在 `Initialize` 之前回答「现在什么样」（层级回读在未初始化时答 `true`：没有任何层被显式隐藏/禁用过） |
-| 其余全部（含读接口） | `IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer` 与所有开/关/推/弹/遮罩/Tip/HUD 成员 | 抛 `InvalidOperationException`（消息带 `[UIManager]` 前缀并给出修复提示） |
-
-> **为什么 `IsOpen<T>` / `GetTopPanel` 这类「读」也照抛**：它们的实现要先剪枝再取，属「操作」而非纯读。判据不是「读还是写」，而是「未初始化时它能不能给出一个有意义的答案」。
-
-> **为什么不用嵌套静态类分组**：分组会让转发时必然改名（`ShowHudAsync` → `Hud.Attach`、`ShowMask` → `Mask.Show`），「门面名 == 接口名」这条唯一的人工核对手段随之失效；而它换来的只有 IntelliSense 分组——本模块之外，`MessageManager`（48 个成员）、`InputManager`（43 个）、`AssetManager`（37 个）都保持扁平，靠 `#region` 分区。
-
-### 扩展清单
-
-新增 `IUIManager` 成员时，**必须同步在门面加静态转发**，否则它在第三方眼里根本不存在——`SetLayerVisibility` 就曾经长期处于这种状态：方法完整、文档也有，但只在内部实现上，门面既无转发也无实例属性，第三方实际完全调不到。
-
-`UIFacadeCompletenessTests` 把这条锁住了：接口每个声明成员，在门面上必须存在**同名**的 public static 成员。判据只查名字、不查签名——签名由编译器兜底（转发体是经 `IUIManager` 的调用，签名不符根本编译不过），所以测试不需要任何映射表，也就不会成为第二份真相。它拦不住的是「转发接错线」（`SetLayerVisibility` 转发到了 `SetLayerInteractive`）与「假转发」（空实现、抛异常），那两条只能靠行为测试。
-
-## 核心概念
-
-### 层级系统
-
-使用 `int` 类型表示层级，数值越大越靠前。推荐值在 `UILayers` 里，也可自定义：
-
-```
-Background (0)   — 背景层（主界面背景）
-Default (100)    — 默认层（大部分面板）
-Popup (200)      — 弹出层（弹窗、确认框）
-Top (300)        — 顶层（Toast、加载提示、系统消息）
-Mask (500)       — 模态遮罩层（ShowMask 的默认值）
-```
-
-层的整体开关可以**读回**：`UIManager.IsLayerVisible(layer)` / `UIManager.IsLayerInteractive(layer)`。它们读的是 `SetLayerVisibility` / `SetLayerInteractive` 记录下来的期望值，**不去查场景里的容器**——层容器还不存在（该层还没开过面板）时同样有答案；未被显式设置过的层一律答 `true`。这两个成员面向诊断与巡检（诊断窗口的 UI 页签在用），不是每帧路径。
-
-**排序空间**由 `UISorting` 单点定义，**不要在别处硬编码 `sortingOrder`**：
-
-| 带 | 取值 | 常量 | 说明 |
-| --- | --- | --- | --- |
-| 面板层 | `layer × LayerStride + 层内序号` | `LayerStride = 32` · `MaxIndexInLayer = 31` · `MaxPanelLayer = 899` | 层上限 899、每层最多 31 个面板，超出会告警并钳制 |
-| 遮罩 | `maskLayer × LayerStride + MaskIndex` | `MaskIndex = 31` | 取该层末位：挡住该层及以下、被更高层盖住 |
-| HUD | `30000` | `HudOrder` | 高于全部面板层 |
-| Tip | `31000` | `TipOrder` | 高于 HUD |
-| 预留 | `32000` | `SystemOrder` | 新手引导挖洞层、全局加载遮罩 |
-
-**写代码时用常量名，别抄数字**（`UISorting.MaxSortingOrder = 32767` / `MinSortingOrder = -32768` 是整套取值必须落进的边界）。
-
-> ⚠️ **为什么取值必须这么紧：`Canvas.sortingOrder` 是 16 位有符号量。**
->
-> 它名义上是 `int`，但运行时只保留 `[-32768, 32767]`，写入超出的值会被**静默截断回绕**：
-> 实测 `100001 → -31071`、`500000 → -24288`、`990000 → 6960`，不报任何错。
->
-> 因此「`layer × 1000`」这类看起来很自然的写法只要层号 ≥ 33 就全盘失效——本框架早先正是如此，
-> 层 200 实存 `+3393`、层 300 实存 `-27679`，于是 Top 层反而渲染在 Popup 之下。
-> 所有取值一律经 `UISorting` 推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip`
-> 会拦住任何越界的新取值。
-
-**层内序号 = 显示栈中的相对次序**：面板每次入栈/出栈后整体重排，于是排序与显示栈是同一份真相，不存在「计数器用久了溢出到邻层区间」的问题。
-
-### 显示栈与导航
-
-**所有打开路径都会入栈**（`OpenAsync` 与 `PushAsync` 都在内），栈序即显示次序。两者的区别只在语义读法上，不在行为上——所以「先 `OpenAsync` 开主界面、再 `PushAsync` 开二级页」之后依然可以 `PopAsync` 退回。
-
-- `PushAsync` — 打开新面板并入栈，当前栈顶失焦（OnBlur），新面板获得焦点（OnOpen）
-- `OpenAsync` — 同样入栈；已打开则聚焦（BringToFront）而不重复创建
-- `PopAsync` — 弹出栈顶面板并关闭，恢复新栈顶焦点（OnFocus）
-- `GoBackAsync` — 等价于 `PopAsync`，语义化命名，供返回键处理调用
-- `PopToAsync<T>` — 依次弹出栈顶，直到指定类型成为栈顶
-- `PopToRootAsync` — 依次弹出栈顶，只保留最早打开的那一个
-- `CanGoBack` — 显示栈中是否还有可退回的面板（栈深 > 1）
-
-**栈底面板不参与弹出**：栈深为 1 时 `PopAsync` 是 no-op，用 `CloseAsync` 关闭最后一个面板。
-
-**同类型单实例**：同一面板类型同时只允许一个实例，重复打开会聚焦已有实例而非新建。显示栈因此与活动面板一一对应。
-
-### 模态遮罩
-
-通过 `ShowMask` / `HideMask` 创建全屏半透明遮罩，阻止下方 UI 交互：
-
-- 支持设置透明度（alpha 0-1）
-- 支持点击关闭（clickToClose）—— 点击遮罩自动 Pop 栈顶面板
-- 遮罩位于独立层级（默认 Mask 层），不影响面板排序
-
-样式由 `UIMaskStyle` 结构体描述（`ShowMask(maskLayer, alpha, clickToClose)` 的具名参数只是它的便捷写法）：
-
-| 字段 | 说明 |
-| --- | --- |
-| `Layer` | 遮罩所在层级。**`0` 是合法层级**（`UILayers.Background`），所以本结构体刻意不用「0 = 未指定」这类哨兵 |
-| `Color` | 遮罩颜色（含透明度）。**`a = 0` 仍然挡输入**——「挡住但不显示」是合法需求 |
-| `ClickToClose` | 点击遮罩是否关闭显示栈顶面板 |
-
-需要一份默认样式时显式写 `UIMaskStyle.Default`。
-
-> 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
-
-> **遮罩是真的会挡住输入的**：它自带 `GraphicRaycaster`，全屏吃掉落在它上面的指针事件——这正是「模态」的含义。
-> `ClickToClose` 开启时遮罩还会响应指针悬停（`Button` 的默认 `ColorTint` 过渡带来的轻微变色），这是唯一可见的副作用。
->
-> **升级提示（0.2.0 及以前装过本包的项目）**：那个版本的遮罩漏了一个 `GraphicRaycaster`，**实际既不挡输入、
-> `clickToClose` 也不生效**（详见 `CHANGELOG.md` 的 `[0.3.0] → Fixed`）。本次修复后遮罩会开始真正吃点击——
-> 若你此前依赖「点击穿透遮罩」，需要改用自己的命中策略。
-
-### 面板驱动更新（OnUpdate）
-
-与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize`（以及 `SetInstance`）把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
-
-派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
-
-> ⚠️ **这条通路挂在 `UpdateManager` 的「逻辑时间轴」上（`UpdateTimeMode.Scaled`），因此 `Time.timeScale = 0` 会把 UI 一起冻住**：面板 `OnUpdate`、HUD 跟随、Tip 动画全部停止派发——这是切换 `timeScale` 暂停游戏时最容易踩的一条。门面**没有**时间轴开关（驱动器类型是 private），唯一的逃生口是自己在需要时每帧手动调 `UIManager.Update(deltaTime, time)`；注意它会与驱动器**叠加**（见该方法注释），恢复 `timeScale` 后要么停掉手动调用，要么先 `Destroy` 再自行驱动。
->
-> **异常隔离**：面板 `OnUpdate` 抛异常时，只记一条 `[UIManager]` 错误并**停更该面板**（其余面板 / HUD / Tip 照常，驱动器也不会被调度器注销）；该面板下次打开（回池复位）后恢复被驱动。HUD / Tip 的 provider 抛异常时则继续驱动、只记首条日志（换 provider 后重新计数）。
-
-**优势：**
-- **性能可控** — 仅一个 `Update(float deltaTime, float time)` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
-- **状态感知** — 暂停的面板（失焦状态）自动跳过更新，无需面板内部自行判断
-- **可扩展** — 未来可按优先级、分组等策略精细控制更新顺序
-
-```csharp
-public class GameHudPanel : UIPanelBase
-{
-    // 注意修饰符：OnUpdate 是 protected internal，跨程序集覆写必须沿用同一修饰符，
-    // 写成 protected 会得到 CS0507「cannot change access modifiers」
-    protected internal override void OnUpdate(float deltaTime, float time)
-    {
-        // 仅在面板打开且未暂停时执行
-        UpdateHealthBar(deltaTime);
-        UpdateAmmoDisplay();
-    }
-}
-```
-
-> ⚠️ **`deltaTime` 不是 `Time.deltaTime`**
->
-> 它是**距上次派发**的间隔。面板可以声明较低档位而被降频派发（见 `UpdateTier`），此时两者相差整数倍——
-> 继续用 `Time.deltaTime` 做积分会慢若干倍。任何累加/插值都必须用传入的 `deltaTime`。
->
-> 好处是：只要按它积分，面板无论跑在哪个档位、甚至中途改档，行为都一致。
-
-> ⚠️ **OnUpdate 与 ReactiveProperty 的使用边界**
->
-> **ReactiveProperty 是推模式（事件驱动），OnUpdate 是拉模式（帧驱动），两者职责互补，不应混用。**
->
-> - **ReactiveProperty** — 数据变化时自动推送，绑定后无需手动更新 UI。适用于健康值、货币数量、开关状态等**事件驱动**的数据刷新。
-> - **OnUpdate** — 按档位周期派发，适用于倒计时、进度条插值、拖拽跟随、位置追踪等**帧驱动**的持续逻辑。
->
-> ❌ **反模式：在 OnUpdate 中轮询 ReactiveProperty 手动刷新 UI**
-> ```csharp
-> protected internal override void OnUpdate(float deltaTime, float time)
-> {
->     // 错误：_vm.Health 已通过 UIBinder 绑定到 healthText，
->     // 每帧再手动 Set 健康值是一种冗余更新
->     healthText.text = _vm.Health.Value.ToString();
-> }
-> ```
->
-> ✅ **正确区分：绑定用 ReactiveProperty，帧驱动用 OnUpdate**
-> ```csharp
-> protected override async UniTask OnOpen(object userData)
-> {
->     // ReactiveProperty 绑定 — 值变化自动推送到 UI，无需 OnUpdate 参与
->     _vm.Health.BindToText(healthText, v => $"HP: {v}");
->     _vm.Score.BindToText(scoreText, v => $"{v:N0}");
-> }
->
-> protected internal override void OnUpdate(float deltaTime, float time)
-> {
->     // OnUpdate — 纯帧驱动逻辑，与 ReactiveProperty 无关。
->     // 用传入的 deltaTime，不用 Time.deltaTime
->     _countdownTimer -= deltaTime;
->     _countdownText.text = Mathf.CeilToInt(_countdownTimer).ToString();
-> }
-> ```
-
-### 资源缓存
-
-预加载面板预制体到内存缓存，后续 `OpenAsync` 时直接从缓存实例化：
-
-```csharp
-// 预加载——后续打开时不卡顿
-await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
-
-// 移除指定缓存
-UIManager.ForgetPreload<SettingsPanel>();
-
-// 清空所有缓存（切换场景时）
-UIManager.ClearPreloads();
-```
 
 ## 快速使用
 
@@ -863,21 +529,257 @@ UIManager.SetController(new MyCustomController());
 >
 > **实例所有权**：`SetInstance` 换实例时只销毁**门面自己创建**的那个（`Initialize` 那条路径），注入进来的不碰；但 `Destroy()` 是「拆掉全局 UI」的终局操作，**无论来源一律销毁**——注入的实现在 `Destroy()` 里会被 `Dispose()`，请确保那时你已经不需要它。
 
-## 设计原则
+## 模块结构
 
-- **四层架构** — 外观层、控制层、数据层、面板层各司其职
-- **接口可替换** — 通过 `IUIManager` 接口，可替换底层实现
-- **静态外观** — `UIManager` 提供全局入口，任意位置可直接调用
-- **层级灵活** — `int` 类型表示层级，第三方项目可自由定义常量扩展
-- **显示栈导航** — 所有打开路径统一入栈，支持 Push/Pop/PopTo/PopToRoot，Blur/Focus 焦点管理
-- **资源缓存** — 预加载面板预制体到缓存，后续打开时零加载延迟
-- **动画支持** — `PlayOpenAnimation` / `PlayCloseAnimation` 可重写，支持 DOTween 等
-- **多语言联动** — `OnLanguageChanged` 与 `LocalizationManager` 无缝集成
-- **AOP 调度控制** — 通过 IUIController 五阶段生命周期拦截 + PreconditionChain 链式校验
-- **MVVM 数据绑定** — 基于 ReactiveProperty 的 View ↔ ViewModel 双向/单向绑定，支持约定式（UIPanelBinding）与精确式（UIBinder）两种风格
-- **面板驱动更新** — UIManager 集中驱动 OnUpdate，仅已打开且未暂停的面板执行（借鉴 GameFramework 设计）
-- **HUD 世界空间** — UIHudItem 自动 3D→屏幕坐标转换，目标丢失自动回收，与面板共享 UIViewBase 驱动
-- **避免 GC** — 使用固定字典容量（8/4）、值类型遍历、List 复用，减少 GC 分配
+```text
+Runtime/UI/
+├── UIManager.cs               # 静态外观（全局入口）
+├── IUIManager.cs              # UI 管理器公共接口
+├── UIManagerImpl.cs           # 默认实现（面板字典、显示栈、资源缓存）
+├── IUIPanelFactory.cs         # 面板实例来源接口（抽出来是为了测试不依赖 YooAsset）
+├── AssetPanelFactory.cs       # 默认实现：经 AssetManager 加载预制体并复用其对象池
+├── IUIHudProvider.cs          # HUD 提供者接口
+├── UIHudManager.cs            # internal：HUD 管理器（Attach / Detach / Update 驱动）
+├── UIBootstrapStage.cs        # 引导阶段：把 UI 的初始化与清理接进启动管线（Phase 2）
+├── UILayers.cs                # 推荐层级常量（Background / Default / Popup / Top / Mask）
+├── UISorting.cs               # 排序空间单点定义（层级带、HUD/Tip/系统保留带、钳制）
+├── UIPopupPosition.cs         # 弹窗定位纯函数（含 UIPopupDirection / UIPopupAlign 两个枚举）
+├── UIMaskStyle.cs             # 遮罩样式（层级 / 颜色 / 透明度 / 点击关闭）
+├── UIMaskHandle.cs            # 遮罩引用计数句柄（readonly struct）
+├── UIStateSnapshot.cs         # 状态快照（readonly struct，读取零分配）
+├── Controller/
+│   ├── IUIController.cs       # 调度控制接口（五阶段生命周期拦截）
+│   ├── UIDefaultController.cs # 默认控制器（全部放行）
+│   └── PreconditionChain.cs   # 前提条件链（链式组合异步校验条件）
+├── Data/
+│   ├── IViewModel.cs          # ViewModel 接口
+│   ├── ViewModelBase.cs       # ViewModel 抽象基类（属性创建与订阅归口）
+│   ├── UIPanelBinding.cs      # UI 绑定组件（挂 Panel Prefab 上，约定式绑定）
+│   ├── UIBinder.cs            # UI 绑定工具（静态扩展方法，精确绑定）
+│   ├── PanelOpenedMessage.cs  # 面板打开消息（readonly struct）
+│   ├── PanelClosedMessage.cs  # 面板关闭消息（readonly struct）
+│   └── AllPanelsClosedMessage.cs  # 全部面板关闭消息（readonly struct）
+├── Tip/
+│   ├── IUITipProvider.cs      # Tip 提供者接口
+│   ├── UITipManager.cs        # internal：Tip 管理器（实例化、容器、回池）
+│   ├── UITipItem.cs           # 挂在 Tip 预制体上的组件（每帧推进动画）
+│   └── UITipConfig.cs         # 显示配置（位置 / 颜色 / 时长 / 浮动距离 / 字号）
+└── View/
+    ├── UIViewBase.cs          # UI 控件抽象基类（Canvas / 层级 / OnUpdate 集中驱动）
+    ├── UIPanelBase.cs         # 面板基类（所有 UI 面板需继承）
+    ├── UIDialogPanel.cs       # 对话框基类（结果通道：随关闭兑现、回池置白纸）
+    ├── UIHudItem.cs           # HUD 项基类（3D 世界坐标跟踪、目标丢失自动回收）
+    ├── UIRootNode.cs          # 场景 Canvas 载体（初始化 UIManager）
+    └── UISafeArea.cs          # 安全区适配（推荐挂在 UIRoot 上）
+```
+
+三十四个文件按四个子目录分层（`Controller/` 调度控制、`Data/` 绑定与消息、`Tip/` 临时提示、`View/` 控件基类）；标 `internal` 的两个是 HUD / Tip 管理器的默认实现。
+
+## 行为契约
+
+### 层级系统
+
+使用 `int` 类型表示层级，数值越大越靠前。推荐值在 `UILayers` 里，也可自定义：
+
+```
+Background (0)   — 背景层（主界面背景）
+Default (100)    — 默认层（大部分面板）
+Popup (200)      — 弹出层（弹窗、确认框）
+Top (300)        — 顶层（Toast、加载提示、系统消息）
+Mask (500)       — 模态遮罩层（ShowMask 的默认值）
+```
+
+层的整体开关可以**读回**：`UIManager.IsLayerVisible(layer)` / `UIManager.IsLayerInteractive(layer)`。它们读的是 `SetLayerVisibility` / `SetLayerInteractive` 记录下来的期望值，**不去查场景里的容器**——层容器还不存在（该层还没开过面板）时同样有答案；未被显式设置过的层一律答 `true`。这两个成员面向诊断与巡检（诊断窗口的 UI 页签在用），不是每帧路径。
+
+**排序空间**由 `UISorting` 单点定义，**不要在别处硬编码 `sortingOrder`**：
+
+| 带 | 取值 | 常量 | 说明 |
+| --- | --- | --- | --- |
+| 面板层 | `layer × LayerStride + 层内序号` | `LayerStride = 32` · `MaxIndexInLayer = 31` · `MaxPanelLayer = 899` | 层上限 899、每层最多 31 个面板，超出会告警并钳制 |
+| 遮罩 | `maskLayer × LayerStride + MaskIndex` | `MaskIndex = 31` | 取该层末位：挡住该层及以下、被更高层盖住 |
+| HUD | `30000` | `HudOrder` | 高于全部面板层 |
+| Tip | `31000` | `TipOrder` | 高于 HUD |
+| 预留 | `32000` | `SystemOrder` | 新手引导挖洞层、全局加载遮罩 |
+
+**写代码时用常量名，别抄数字**（`UISorting.MaxSortingOrder = 32767` / `MinSortingOrder = -32768` 是整套取值必须落进的边界）。
+
+> ⚠️ **为什么取值必须这么紧：`Canvas.sortingOrder` 是 16 位有符号量。**
+>
+> 它名义上是 `int`，但运行时只保留 `[-32768, 32767]`，写入超出的值会被**静默截断回绕**：
+> 实测 `100001 → -31071`、`500000 → -24288`、`990000 → 6960`，不报任何错。
+>
+> 因此「`layer × 1000`」这类看起来很自然的写法只要层号 ≥ 33 就全盘失效——本框架早先正是如此，
+> 层 200 实存 `+3393`、层 300 实存 `-27679`，于是 Top 层反而渲染在 Popup 之下。
+> 所有取值一律经 `UISorting` 推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip`
+> 会拦住任何越界的新取值。
+
+**层内序号 = 显示栈中的相对次序**：面板每次入栈/出栈后整体重排，于是排序与显示栈是同一份真相，不存在「计数器用久了溢出到邻层区间」的问题。
+
+### 显示栈与导航
+
+**所有打开路径都会入栈**（`OpenAsync` 与 `PushAsync` 都在内），栈序即显示次序。两者的区别只在语义读法上，不在行为上——所以「先 `OpenAsync` 开主界面、再 `PushAsync` 开二级页」之后依然可以 `PopAsync` 退回。
+
+- `PushAsync` — 打开新面板并入栈，当前栈顶失焦（OnBlur），新面板获得焦点（OnOpen）
+- `OpenAsync` — 同样入栈；已打开则聚焦（BringToFront）而不重复创建
+- `PopAsync` — 弹出栈顶面板并关闭，恢复新栈顶焦点（OnFocus）
+- `GoBackAsync` — 等价于 `PopAsync`，语义化命名，供返回键处理调用
+- `PopToAsync<T>` — 依次弹出栈顶，直到指定类型成为栈顶
+- `PopToRootAsync` — 依次弹出栈顶，只保留最早打开的那一个
+- `CanGoBack` — 显示栈中是否还有可退回的面板（栈深 > 1）
+
+**栈底面板不参与弹出**：栈深为 1 时 `PopAsync` 是 no-op，用 `CloseAsync` 关闭最后一个面板。
+
+**同类型单实例**：同一面板类型同时只允许一个实例，重复打开会聚焦已有实例而非新建。显示栈因此与活动面板一一对应。
+
+### 模态遮罩
+
+通过 `ShowMask` / `HideMask` 创建全屏半透明遮罩，阻止下方 UI 交互：
+
+- 支持设置透明度（alpha 0-1）
+- 支持点击关闭（clickToClose）—— 点击遮罩自动 Pop 栈顶面板
+- 遮罩位于独立层级（默认 Mask 层），不影响面板排序
+
+样式由 `UIMaskStyle` 结构体描述（`ShowMask(maskLayer, alpha, clickToClose)` 的具名参数只是它的便捷写法）：
+
+| 字段 | 说明 |
+| --- | --- |
+| `Layer` | 遮罩所在层级。**`0` 是合法层级**（`UILayers.Background`），所以本结构体刻意不用「0 = 未指定」这类哨兵 |
+| `Color` | 遮罩颜色（含透明度）。**`a = 0` 仍然挡输入**——「挡住但不显示」是合法需求 |
+| `ClickToClose` | 点击遮罩是否关闭显示栈顶面板 |
+
+需要一份默认样式时显式写 `UIMaskStyle.Default`。
+
+> 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
+
+> **遮罩是真的会挡住输入的**：它自带 `GraphicRaycaster`，全屏吃掉落在它上面的指针事件——这正是「模态」的含义。
+> `ClickToClose` 开启时遮罩还会响应指针悬停（`Button` 的默认 `ColorTint` 过渡带来的轻微变色），这是唯一可见的副作用。
+>
+> **升级提示（0.2.0 及以前装过本包的项目）**：那个版本的遮罩漏了一个 `GraphicRaycaster`，**实际既不挡输入、
+> `clickToClose` 也不生效**（详见 `CHANGELOG.md` 的 `[0.3.0] → Fixed`）。本次修复后遮罩会开始真正吃点击——
+> 若你此前依赖「点击穿透遮罩」，需要改用自己的命中策略。
+
+## 架构设计
+
+本模块按四个子目录分层（骨架见下节「四层架构」）：
+
+| 分组 | 装什么 |
+|---|---|
+| 根目录 | 门面、接口、层级 / 排序 / 遮罩等基础类型 |
+| `Controller/` | 调度控制与前提条件链 |
+| `Data/` | ViewModel、绑定与面板消息 |
+| `Tip/` | 临时提示 |
+| `View/` | 面板 / HUD / 控件基类与场景根 |
+
+> **ReactiveProperty\<T\>** 等响应式基础类型位于 `Runtime/Reactive/`，全局消息总线位于 `Runtime/Message/`（`XFramework.XMessage`），均不在 UI 模块目录下。
+
+### 四层架构
+
+```mermaid
+flowchart TB
+    subgraph 调用层
+        A[业务代码]
+    end
+
+    subgraph 外观层
+        B["UIManager<br/>static class"]
+    end
+
+    subgraph 接口层
+        C["IUIManager<br/>interface"]
+    end
+
+    subgraph 实现层
+        D["UIManagerImpl<br/>internal class"]
+    end
+
+    subgraph 控制层
+        K["IUIController<br/>interface"]
+        L["UIDefaultController"]
+        M["自定义控制器<br/>+PreconditionChain"]
+    end
+
+    subgraph 数据层
+        N["IViewModel<br/>interface"]
+        O["ViewModelBase"]
+        P["UIPanelBinding<br/>component"]
+        PA["UIBinder<br/>static"]
+        Q["ReactiveProperty<T>"]
+    end
+
+    subgraph 场景层
+        E["UIRootNode<br/>MonoBehaviour"]
+        F(("Canvas 根节点"))
+    end
+
+    subgraph 面板层
+        G["UIPanelBase<br/>abstract class"]
+        H[自定义面板]
+    end
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    E --> F
+    D --> G
+    G --> H
+
+    D -->|注入| K
+    K --> L
+    K --> M
+    M -->|组合| R["PreconditionChain"]
+
+    H -->|挂载| P
+    G -->|持有| P
+    P -->|绑定| N
+    N --> O
+    N --> Q
+```
+
+### 核心类型
+
+| 类型                      | 所属层 | 职责                                                                                                                                      |
+| ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                            |
+| **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                         |
+| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、显示栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
+| **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
+| **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
+| **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
+| **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager（销毁只在自己是当前根时发生）与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。 |
+| **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
+| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
+| **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
+| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                              |
+| **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建与订阅归口，生命周期为 OnBound / OnUnbound / Dispose（无 InitializeAsync）。              |
+| **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                         |
+| **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
+| **ReactiveProperty\<T\>** | 数据层 | **响应式属性**。值变更时自动通知订阅者，是 View ↔ ViewModel 数据绑定核心。                                                                |
+
+### 门面形态
+
+`UIManager` 是**扁平**的静态门面：每个成员都与 `IUIManager` 的对应成员**同名**。绝大多数转发体是 `EnsureGlobalInitialized()` + `_instance.X(...)` 两行；**例外是那组探测型读接口**——它们不加守卫、未初始化时直接返回空值（见下节「未初始化时的行为」）。没有嵌套分组类。
+
+扁平层也容纳接口之外的三类成员：生命周期与实例管理（`Initialize` / `SetInstance` / `Destroy`），接口成员之外的 `SetController` / `TierDriverCount`，以及三种面板消息的 `Subscribe` 重载。
+
+#### 未初始化时的行为
+
+门面成员按「探测」与「操作」分成两类，**这条分界由 `UIFacadeProbeTests` 钉住**，改一边会立刻倒掉另一边：
+
+| 类别 | 成员 | 未初始化时 |
+|---|---|---|
+| 探测型读接口 | `IsInitialized`、`UIRoot`、`GetState`、`DumpState`、`TierDriverCount`、`OpenCount`、`IsAnyOpen`、`Panels`、`CanGoBack`、`IsMaskShowing`、`IsLayerVisible`、`IsLayerInteractive` | 返回空值 / 全零快照 / 空视图（`Panels` 返回 `Array.Empty` 而非 null），**不抛异常**——它们本就该能在 `Initialize` 之前回答「现在什么样」（层级回读在未初始化时答 `true`：没有任何层被显式隐藏/禁用过） |
+| 其余全部（含读接口） | `IsOpen<T>` / `GetPanel<T>` / `GetTopPanel` / `CopyPanels` / `CopyPanelsInLayer` 与所有开/关/推/弹/遮罩/Tip/HUD 成员 | 抛 `InvalidOperationException`（消息带 `[UIManager]` 前缀并给出修复提示） |
+
+> **为什么 `IsOpen<T>` / `GetTopPanel` 这类「读」也照抛**：它们的实现要先剪枝再取，属「操作」而非纯读。判据不是「读还是写」，而是「未初始化时它能不能给出一个有意义的答案」。
+
+> **为什么不用嵌套静态类分组**：分组会让转发时必然改名（`ShowHudAsync` → `Hud.Attach`、`ShowMask` → `Mask.Show`），「门面名 == 接口名」这条唯一的人工核对手段随之失效；而它换来的只有 IntelliSense 分组——本模块之外，`MessageManager`（48 个成员）、`InputManager`（43 个）、`AssetManager`（37 个）都保持扁平，靠 `#region` 分区。
+
+#### 扩展清单
+
+新增 `IUIManager` 成员时，**必须同步在门面加静态转发**，否则它在第三方眼里根本不存在——`SetLayerVisibility` 就曾经长期处于这种状态：方法完整、文档也有，但只在内部实现上，门面既无转发也无实例属性，第三方实际完全调不到。
+
+`UIFacadeCompletenessTests` 把这条锁住了：接口每个声明成员，在门面上必须存在**同名**的 public static 成员。判据只查名字、不查签名——签名由编译器兜底（转发体是经 `IUIManager` 的调用，签名不符根本编译不过），所以测试不需要任何映射表，也就不会成为第二份真相。它拦不住的是「转发接错线」（`SetLayerVisibility` 转发到了 `SetLayerInteractive`）与「假转发」（空实现、抛异常），那两条只能靠行为测试。
 
 ## HUD 世界空间 UI（NPC / 怪物头顶名字、血条、标记）
 
@@ -1253,6 +1155,142 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 - **不做自动刷新**：锚点或屏幕尺寸变化后需再算一次（与 `UISafeArea.Apply` 同理，框架不监听尺寸变化）。
   `ShowPopupAsync` 只在打开时摆一次，之后**不会跟随锚点移动**——那需要你自己在锚点变化时重算
 
+## 内部机制
+
+### 生命周期流程（含 Controller 拦截）
+
+```mermaid
+sequenceDiagram
+    participant Biz as 业务代码
+    participant Mgr as UIManager
+    participant Ctrl as IUIController
+    participant Panel as UIPanelBase
+    participant VM as IViewModel
+
+    Biz->>Mgr: OpenAsync〈T〉(assetPath, layer, userData)
+    Mgr->>Ctrl: OnBeforeOpenAsync(type, assetPath, layer, userData)
+    alt Controller 拦截
+        Ctrl-->>Mgr: false
+        Mgr-->>Biz: null (打开被拦截)
+    else Controller 放行
+        Ctrl-->>Mgr: true
+        Mgr->>Panel: Instantiate & DoOpenAsync(userData)
+        Panel->>VM: BindViewModel (可选)
+        Panel-->>Mgr: 打开完成
+        Mgr->>Ctrl: OnAfterOpenAsync(type, panel, userData)
+        Ctrl-->>Mgr: CompletedTask
+        Mgr-->>Biz: T (面板实例)
+    end
+
+    Note over Biz,VM: ... 面板生命周期 ...
+
+    Biz->>Mgr: CloseAsync〈T〉()
+    Mgr->>Ctrl: OnBeforeCloseAsync(type, panel, immediate)
+    alt Controller 拦截
+        Ctrl-->>Mgr: false
+        Mgr-->>Biz: 关闭被拦截
+    else Controller 放行
+        Ctrl-->>Mgr: true
+        Mgr->>Panel: DoCloseAsync(immediate)
+        Panel->>VM: Deactivate
+        Panel-->>Mgr: 关闭完成
+        Mgr->>Ctrl: OnAfterCloseAsync(type)
+        Ctrl-->>Mgr: CompletedTask
+    end
+```
+
+### 面板驱动更新（OnUpdate）
+
+与每个面板挂载独立 `MonoBehaviour.Update()` 不同，XFramework 由 **UIManager 集中驱动**面板的 `OnUpdate`。`UIManager.Initialize`（以及 `SetInstance`）把驱动器注册进 `UpdateManager` 的统一调度，故这条通路**可被档位降频、可被 `UpdateManager.Pause` 统一暂停**，也不再要求场景里存在 `UIRootNode`。
+
+派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
+
+> ⚠️ **这条通路挂在 `UpdateManager` 的「逻辑时间轴」上（`UpdateTimeMode.Scaled`），因此 `Time.timeScale = 0` 会把 UI 一起冻住**：面板 `OnUpdate`、HUD 跟随、Tip 动画全部停止派发——这是切换 `timeScale` 暂停游戏时最容易踩的一条。门面**没有**时间轴开关（驱动器类型是 private），唯一的逃生口是自己在需要时每帧手动调 `UIManager.Update(deltaTime, time)`；注意它会与驱动器**叠加**（见该方法注释），恢复 `timeScale` 后要么停掉手动调用，要么先 `Destroy` 再自行驱动。
+>
+> **异常隔离**：面板 `OnUpdate` 抛异常时，只记一条 `[UIManager]` 错误并**停更该面板**（其余面板 / HUD / Tip 照常，驱动器也不会被调度器注销）；该面板下次打开（回池复位）后恢复被驱动。HUD / Tip 的 provider 抛异常时则继续驱动、只记首条日志（换 provider 后重新计数）。
+
+**优势：**
+- **性能可控** — 仅一个 `Update(float deltaTime, float time)` 入口，避免引擎层为每个面板产生原生调用开销（借鉴 GameFramework `UIForm.OnUpdate` 设计）
+- **状态感知** — 暂停的面板（失焦状态）自动跳过更新，无需面板内部自行判断
+- **可扩展** — 未来可按优先级、分组等策略精细控制更新顺序
+
+```csharp
+public class GameHudPanel : UIPanelBase
+{
+    // 注意修饰符：OnUpdate 是 protected internal，跨程序集覆写必须沿用同一修饰符，
+    // 写成 protected 会得到 CS0507「cannot change access modifiers」
+    protected internal override void OnUpdate(float deltaTime, float time)
+    {
+        // 仅在面板打开且未暂停时执行
+        UpdateHealthBar(deltaTime);
+        UpdateAmmoDisplay();
+    }
+}
+```
+
+> ⚠️ **`deltaTime` 不是 `Time.deltaTime`**
+>
+> 它是**距上次派发**的间隔。面板可以声明较低档位而被降频派发（见 `UpdateTier`），此时两者相差整数倍——
+> 继续用 `Time.deltaTime` 做积分会慢若干倍。任何累加/插值都必须用传入的 `deltaTime`。
+>
+> 好处是：只要按它积分，面板无论跑在哪个档位、甚至中途改档，行为都一致。
+
+> ⚠️ **OnUpdate 与 ReactiveProperty 的使用边界**
+>
+> **ReactiveProperty 是推模式（事件驱动），OnUpdate 是拉模式（帧驱动），两者职责互补，不应混用。**
+>
+> - **ReactiveProperty** — 数据变化时自动推送，绑定后无需手动更新 UI。适用于健康值、货币数量、开关状态等**事件驱动**的数据刷新。
+> - **OnUpdate** — 按档位周期派发，适用于倒计时、进度条插值、拖拽跟随、位置追踪等**帧驱动**的持续逻辑。
+>
+> ❌ **反模式：在 OnUpdate 中轮询 ReactiveProperty 手动刷新 UI**
+> ```csharp
+> protected internal override void OnUpdate(float deltaTime, float time)
+> {
+>     // 错误：_vm.Health 已通过 UIBinder 绑定到 healthText，
+>     // 每帧再手动 Set 健康值是一种冗余更新
+>     healthText.text = _vm.Health.Value.ToString();
+> }
+> ```
+>
+> ✅ **正确区分：绑定用 ReactiveProperty，帧驱动用 OnUpdate**
+> ```csharp
+> protected override async UniTask OnOpen(object userData)
+> {
+>     // ReactiveProperty 绑定 — 值变化自动推送到 UI，无需 OnUpdate 参与
+>     _vm.Health.BindToText(healthText, v => $"HP: {v}");
+>     _vm.Score.BindToText(scoreText, v => $"{v:N0}");
+> }
+>
+> protected internal override void OnUpdate(float deltaTime, float time)
+> {
+>     // OnUpdate — 纯帧驱动逻辑，与 ReactiveProperty 无关。
+>     // 用传入的 deltaTime，不用 Time.deltaTime
+>     _countdownTimer -= deltaTime;
+>     _countdownText.text = Mathf.CeilToInt(_countdownTimer).ToString();
+> }
+> ```
+
+### 资源缓存
+
+预加载面板预制体到内存缓存，后续 `OpenAsync` 时直接从缓存实例化：
+
+```csharp
+// 预加载——后续打开时不卡顿
+await UIManager.PreloadAsync<SettingsPanel>("ui/panels/settings");
+
+// 移除指定缓存
+UIManager.ForgetPreload<SettingsPanel>();
+
+// 清空所有缓存（切换场景时）
+UIManager.ClearPreloads();
+```
+
+## 线程契约
+
+**面板 / HUD / Tip 的创建、开合与驱动都必须在主线程调用**（Unity 对象本身的约束）——模块**不做检测、也不做切线程**，跨线程调用是**未定义行为**（没有任何断言会拦你）。
+
+射程具体是两处：**门面的全部成员**（含探测型读接口）与**面板 / HUD / Tip 的生命周期方法**（`OnOpen` / `OnClose` / `OnUpdate` / 跟随与动画）。后者的派发入口只有一个——`UIManager.Update`，由 `UpdateManager` 在主线程驱动（见「内部机制」的「面板驱动更新」）。
+
 ## 已知限制
 
 - **关闭域重载（Enter Play Mode Options）时的会话复位**：~~绕过 `UIRootNode` 手动调 `UIManager.Initialize`
@@ -1333,6 +1371,22 @@ canvas.sortingOrder = UISorting.SystemOrder;                   // 用保留带�
 
 **为什么不内建**：特效 Canvas 的结构取决于项目用哪种相机（Screen Space Overlay / Camera / RenderTexture）、
 是否需要挡输入、要不要与 3D 场景共深度——框架替它定一套，项目多半还得拆掉重做。
+
+## 设计原则
+
+- **四层架构** — 外观层、控制层、数据层、面板层各司其职
+- **接口可替换** — 通过 `IUIManager` 接口，可替换底层实现
+- **静态外观** — `UIManager` 提供全局入口，任意位置可直接调用
+- **层级灵活** — `int` 类型表示层级，第三方项目可自由定义常量扩展
+- **显示栈导航** — 所有打开路径统一入栈，支持 Push/Pop/PopTo/PopToRoot，Blur/Focus 焦点管理
+- **资源缓存** — 预加载面板预制体到缓存，后续打开时零加载延迟
+- **动画支持** — `PlayOpenAnimation` / `PlayCloseAnimation` 可重写，支持 DOTween 等
+- **多语言联动** — `OnLanguageChanged` 与 `LocalizationManager` 无缝集成
+- **AOP 调度控制** — 通过 IUIController 五阶段生命周期拦截 + PreconditionChain 链式校验
+- **MVVM 数据绑定** — 基于 ReactiveProperty 的 View ↔ ViewModel 双向/单向绑定，支持约定式（UIPanelBinding）与精确式（UIBinder）两种风格
+- **面板驱动更新** — UIManager 集中驱动 OnUpdate，仅已打开且未暂停的面板执行（借鉴 GameFramework 设计）
+- **HUD 世界空间** — UIHudItem 自动 3D→屏幕坐标转换，目标丢失自动回收，与面板共享 UIViewBase 驱动
+- **避免 GC** — 使用固定字典容量（8/4）、值类型遍历、List 复用，减少 GC 分配
 
 ## 依赖
 

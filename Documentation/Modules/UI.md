@@ -16,6 +16,7 @@ Runtime/UI/
 ├── AssetPanelFactory.cs       # 默认实现：经 AssetManager 加载预制体并复用其对象池
 ├── IUIHudProvider.cs          # HUD 提供者接口
 ├── UIHudManager.cs            # HUD 管理器（Attach/Detach/Update 驱动，internal sealed）
+├── UIBootstrapStage.cs        # 引导阶段：UI 的初始化与清理接进启动管线（Phase 2；2026-10-16 补录）
 ├── UILayers.cs                # 推荐层级常量（Background/Default/Popup/Top/Mask）
 ├── UISorting.cs               # 排序空间单点定义（层级带、HUD/Tip/系统保留带、钳制）
 ├── UIPopupPosition.cs         # 弹窗定位纯函数（UIPopupDirection / UIPopupAlign 两个枚举同文件）
