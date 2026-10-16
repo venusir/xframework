@@ -60,17 +60,18 @@
     （能证明有这一节/这一条，证明不了条目属实）。**历史**：`Documentation/` 在台账落地前零机械覆盖，
     这也是它腐烂（同一结论在 5~8 处各记一遍、失效指针无人发现）的原因之一。
 
-    **四、模块 README 的文件树与磁盘的一致性（诊断，不纳门）。** `Runtime/<模块>/README.md` 的
+    **四、模块 README 的文件树与磁盘的一致性。** `Runtime/<模块>/README.md` 的
     `## 模块结构` 与 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 收**同一批文件**（后者是
     维护者视角的详述版），两份并存的唯一理由是发布边界（`Documentation/` 不随包发布，第三方在包内
     读不到权威副本），规范见 `Documentation/ModuleReadme.md` §六。本检查守 README 那一份：它列出的
     `.cs` 文件名集合必须**等于**模块目录下递归的 `.cs` 集合——**漏收**（磁盘有、README 没列）与
     **残影**（README 列了磁盘上没有的）两个方向都抓。不比对权威副本：磁盘才是真相，两份都是派生。
-    **未重整的模块**（README 还没有 `## 模块结构`）只计数、不判违规。**解析失败记违规并明说
-    「无法解析」，不静默通过。** **守不住**：哪个文件在干什么（对应关系）——那是评审的事。
+    **未重整的模块**（README 还没有 `## 模块结构`）只计数、不判违规（逐模块重整 23/23 完成后
+    已无此类）。**解析失败记违规并明说「无法解析」，不静默通过。** **守不住**：哪个文件在干什么
+    （对应关系）——那是评审的事。
 
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（**门禁码**的告警须为 0、
-    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规；**第四条不在此列**，它是诊断项）。
+    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规、模块 README 的文件树与磁盘一致）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -338,7 +339,7 @@ if (-not (Test-Path $ledgerPath)) {
     }
 }
 
-# ---------- 再查「模块 README 的文件树与磁盘一致」（诊断，不纳门） ----------
+# ---------- 再查「模块 README 的文件树与磁盘一致」 ----------
 #
 # README 的 `## 模块结构` 与 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 收**同一批文件**
 # （后者是维护者视角的详述版；两份并存的唯一理由是发布边界：Documentation/ 不随包发布）。
@@ -493,7 +494,7 @@ if ($Module) {
         $ledgerProblems | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($ledgerProblems.Count -gt 10) { Write-Host "      …共 $($ledgerProblems.Count) 处" -ForegroundColor Yellow }
     }
-    # 文件树子集：诊断项（不纳门）。未重整的模块只计数——重整是逐模块推进的，不是一次性清零。
+    # 文件树子集：2026-10-16 起纳门（逐模块重整 23/23 完成后开闸）。
     $treeLine = "  README 文件树: 已重整 {0}/{1} 个模块" -f $treeRestructured, $ledgerModules.Count
     if ($treeProblems.Count -eq 0) {
         Write-Host $treeLine -ForegroundColor DarkGray
@@ -524,6 +525,7 @@ if ($gatedWarnings.Count -gt 0) {
 if ($metaMissing.Count -gt 0) { $problems += "包内有 $($metaMissing.Count) 个条目缺 .meta（第三方导入会拿到不同 GUID）" }
 if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
 if ($ledgerProblems.Count -gt 0) { $problems += "决策台账结构有 $($ledgerProblems.Count) 处不合规（每个模块要有台账、条目状态词要合法、文件表与 Runtime/ 双向相等）——规范见 Documentation/Modules/README.md" }
+if ($treeProblems.Count -gt 0) { $problems += "模块 README 的文件树有 $($treeProblems.Count) 处与磁盘不一致（漏收 / 残影）——每个模块目录下的 .cs 都要列进「## 模块结构」" }
 
 if ($problems.Count -gt 0) {
     Write-Host ""
@@ -540,5 +542,5 @@ if ($diagLeft.Count -gt 0) {
     $leftParts = ($diagLeft | Group-Object Code | Sort-Object Name | ForEach-Object { "$($_.Name)×$($_.Count)" }) -join "、"
     Write-Host ("未纳门码（只诊断、不判失败）：{0}" -f $leftParts) -ForegroundColor DarkYellow
 }
-Write-Host ("文档门禁：通过（门禁码 0 条：{0}；所有源文件都参与了编译；决策台账 {1} 个模块 / {2} 条条目合规）" -f ($GatedCodes -join " / "), $ledgerModules.Count, $ledgerEntries) -ForegroundColor Green
+Write-Host ("文档门禁：通过（门禁码 0 条：{0}；所有源文件都参与了编译；决策台账 {1} 个模块 / {2} 条条目合规；README 文件树 {3} 个模块与磁盘一致）" -f ($GatedCodes -join " / "), $ledgerModules.Count, $ledgerEntries, $treeRestructured) -ForegroundColor Green
 exit 0
