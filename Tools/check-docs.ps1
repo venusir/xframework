@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     XFramework 文档通道自检：XML 文档注释的编译告警（按码统计，门禁码见「覆盖范围」）+ 资源 .meta 完整性
-    + 决策台账结构。
+    + 决策台账结构 + 模块 README 的文件树子集。
 
 .DESCRIPTION
     **一、文档注释告警。** Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本
@@ -60,8 +60,17 @@
     （能证明有这一节/这一条，证明不了条目属实）。**历史**：`Documentation/` 在台账落地前零机械覆盖，
     这也是它腐烂（同一结论在 5~8 处各记一遍、失效指针无人发现）的原因之一。
 
+    **四、模块 README 的文件树子集（诊断，不纳门）。** 模块 README 的 `## 模块结构` 是
+    `Documentation/Modules/<模块>.md` 的 `## 文件结构` 的**使用向子集**——两份并存的唯一理由是发布
+    边界（`Documentation/` 不随包发布，第三方在包内读不到权威副本），粒度与方向见
+    `Documentation/ModuleReadme.md` §六。本检查守「子集」一条：README 列出的每个文件名都必须出现在
+    权威副本里；README 有该节而权威副本没有 `## 文件结构` 也判不合规（子集无从谈起）。**未重整的
+    模块**（README 还没有 `## 模块结构`）只计数、不判违规。**守不住**「README 漏收了一个该收的
+    文件」——「使用方会不会直接接触」不是机械判据，它只能抓改名/删除后留下的残影。**解析失败记
+    违规并明说「无法解析」，不静默通过。**
+
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（**门禁码**的告警须为 0、
-    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规）。
+    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规；**第四条不在此列**，它是诊断项）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -329,6 +338,91 @@ if (-not (Test-Path $ledgerPath)) {
     }
 }
 
+# ---------- 再查「模块 README 的文件树 ⊆ 维护向清单」（诊断，不纳门） ----------
+#
+# 模块 README 的 `## 模块结构` 是 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 的**使用向子集**
+# ——两份并存的唯一理由是发布边界（Documentation/ 不随包发布，第三方在包内读不到权威副本）。
+# 守「子集」一条：README 列出的每个文件名都须出现在权威副本里；README 有该节而权威副本没有
+# `## 文件结构` 也判违规（子集无从谈起）。未重整的模块（README 还没有该节）只计数、不判违规。
+# **守不住**「README 漏收了一个该收的文件」——「使用方会不会直接接触」不是机械判据，它只能抓
+# 改名/删除后留下的残影。粒度与方向见 Documentation/ModuleReadme.md §六。
+
+$treeFileNamePattern = '[A-Za-z0-9_\-]+\.(cs|md|asmdef|json)'
+
+function Get-SectionFileNames {
+    param([string[]]$Lines, [string]$HeadingRegex)
+    # 取该节之后的**第一个 fenced 块**（免得把节内 C# 示例里的标识符当文件名）；整节没有 fenced
+    # 块时认整节——权威侧的 Modules/File.md 用的是两列表格。行内 `# 说明` 与表格第二列在比对前剥掉。
+    $inside = $false
+    $section = @()
+    foreach ($line in $Lines) {
+        if (-not $inside) {
+            if ($line -match $HeadingRegex) { $inside = $true }
+            continue
+        }
+        if ($line -match '^#{1,2}\s') { break }
+        $section += $line
+    }
+    if (-not $inside) { return @{ Found = $false; Names = @() } }
+
+    $fenceIdx = @()
+    for ($i = 0; $i -lt $section.Count; $i++) {
+        if ($section[$i] -match '^\s*```') { $fenceIdx += $i }
+    }
+    $body = $section
+    if ($fenceIdx.Count -ge 2 -and $fenceIdx[1] -gt $fenceIdx[0] + 1) {
+        $body = $section[($fenceIdx[0] + 1)..($fenceIdx[1] - 1)]
+    } elseif ($fenceIdx.Count -eq 1 -and $fenceIdx[0] -lt $section.Count - 1) {
+        $body = $section[($fenceIdx[0] + 1)..($section.Count - 1)]
+    } elseif ($fenceIdx.Count -ge 1) {
+        $body = @()   # 空的 fenced 块：解析不出任何文件名，交给「无法解析」那条违规
+    }
+
+    $names = @()
+    foreach ($line in $body) {
+        $text = $line
+        if ($text -match '^\s*\|') { $text = ($text -split '\|')[1] }
+        elseif ($text -match '\s#\s') { $text = ($text -split '\s#\s')[0] }
+        foreach ($hit in [regex]::Matches($text, $treeFileNamePattern)) { $names += $hit.Value }
+    }
+    return @{ Found = $true; Names = @($names | Sort-Object -Unique) }
+}
+
+$treeProblems = @()
+$treeRestructured = 0
+foreach ($m in $ledgerModules) {
+    $readmePath = Join-Path $runtimeRoot "$m\README.md"
+    if (-not (Test-Path $readmePath)) { continue }   # 缺 README 本身由测试侧守卫点名，这里不重复报
+    $r = Get-SectionFileNames -Lines (Get-Content $readmePath) -HeadingRegex '^#{2,3}\s+.*模块结构'
+    if (-not $r.Found) { continue }                  # 未重整：只计数、不判违规
+    $treeRestructured++
+
+    $readmeLabel = "Runtime/$m/README.md 的「## 模块结构」"
+    $mdPath = Join-Path $docsModules "$m.md"
+    if (-not (Test-Path $mdPath)) {
+        $treeProblems += "$readmeLabel 无从比对：Documentation/Modules/$m.md 不存在"
+        continue
+    }
+    $a = Get-SectionFileNames -Lines (Get-Content $mdPath) -HeadingRegex '^#{2,3}\s+.*文件结构'
+    if (-not $a.Found) {
+        $treeProblems += "$readmeLabel 有文件树，而 Documentation/Modules/$m.md 没有「## 文件结构」——权威副本不存在，子集无从谈起"
+        continue
+    }
+    if ($r.Names.Count -eq 0) {
+        $treeProblems += "$readmeLabel 无法解析（该节里没有可解析的 fenced 块，或块里没有一行像文件名）——不静默通过"
+        continue
+    }
+    if ($a.Names.Count -eq 0) {
+        $treeProblems += "Documentation/Modules/$m.md 的「## 文件结构」无法解析（一行文件名都没有）"
+        continue
+    }
+    $strays = @($r.Names | Where-Object { @($a.Names) -notcontains $_ })
+    if ($strays.Count -gt 0) {
+        # 注意：消息里不要用反引号包裹节名——` 紧贴收尾的 " 会被当成转义引号，字符串不终止（实测踩过）。
+        $treeProblems += "$readmeLabel 列了权威副本里没有的文件：$($strays -join '、')——权威副本在 Documentation/Modules/$m.md 的「## 文件结构」"
+    }
+}
+
 # ---------- 报告 ----------
 
 # 身份 = 源文件 + 行号 + 代码 + 文案，**不含 Project**：同一条告警可能由两次编译产生
@@ -402,6 +496,15 @@ if ($Module) {
         Write-Host ("  决策台账: {0} 处不合规" -f $ledgerProblems.Count) -ForegroundColor Yellow
         $ledgerProblems | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($ledgerProblems.Count -gt 10) { Write-Host "      …共 $($ledgerProblems.Count) 处" -ForegroundColor Yellow }
+    }
+    # 文件树子集：诊断项（不纳门）。未重整的模块只计数——重整是逐模块推进的，不是一次性清零。
+    $treeLine = "  README 文件树: 已重整 {0}/{1} 个模块" -f $treeRestructured, $ledgerModules.Count
+    if ($treeProblems.Count -eq 0) {
+        Write-Host $treeLine -ForegroundColor DarkGray
+    } else {
+        Write-Host ("{0}，其中 {1} 处不合规" -f $treeLine, $treeProblems.Count) -ForegroundColor Yellow
+        $treeProblems | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+        if ($treeProblems.Count -gt 10) { Write-Host "      …共 $($treeProblems.Count) 处" -ForegroundColor Yellow }
     }
     Write-Host "  提示：CS1570 会遮蔽同一块注释里的其它告警（先清它，再看其余码的真实数量）。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
