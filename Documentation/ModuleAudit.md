@@ -185,7 +185,8 @@
 
 | 结论性质 | 落点（按优先级） |
 |---|---|
-| 使用方需要知道的边界 | 模块 README `## 已知限制`（先例：Update / Settings / Input） |
+| 使用方需要知道的边界（**违约**：承诺了没做到） | 模块 README `## 已知限制`（先例：Update / Settings / Input） |
+| 使用方按直觉写就会错、但框架**没承诺过**的行为 | 模块 README `## 行为契约`（先例：File / Config / Lock / Save）——与上一行的分界见 `ModuleReadme.md` §七 |
 | 「为什么是 A 而不是 B」，**影响使用方怎么用** | 模块 README `## 设计取舍`（先例：Bootstrap） |
 | 接口承诺的边界 | 模块 README `## 接口承诺到哪为止`（先例：Reactive） |
 | **已评估未采纳（含理由）** | `Documentation/Modules/<模块>.md` →「决策台账」的 `不做` / `暂不做` 条目（条目格式与状态词表见 `Modules/README.md`；逐轮追加，不覆盖） |
@@ -204,6 +205,7 @@
 | `CLAUDE.md` | **规则**（命名、风格、性能、日志、架构分层、模块边界、文档分层…） |
 | `Documentation/Workflow.md` | **流程**（节奏、三条门禁、验证纪律、审计轮） |
 | 本文 | **判据与探针**（该看什么、拿什么命令看、看不到什么） |
+| `Documentation/ModuleReadme.md` | **写作规范**（模块 README 的一级骨架、命名唯一写法、文件树两份分工、门禁射程） |
 | `Documentation/Modules/<模块>.md` | **维护记忆**（文件结构、版本沿革、已评估未采纳、逐轮审计记录） |
 | `Assets/XFramework/CHANGELOG.md` | **变更流水**（改了什么、为什么、根因与实测证据） |
 
@@ -225,12 +227,12 @@
 |---|---|
 | 跨模块 `Internal` 引用 / 公开面泄漏 internal | **已自动化**（`Tests/Editor/Architecture/ModuleBoundaryTests`） |
 | **公开 API 基线**（破坏性改名 / 删成员 / 可见性收窄 / 形参名与返回类型变更 / 枚举成员改名…） | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/PublicApiBaselineTests` 反射渲染 Runtime 程序集公开面 → 与 `PublicApiBaseline.txt`（1961 行 / 222 类型 / 34 个 protected 扩展点）逐行比对，差异分「已消失/已变更（破坏性）」与「新增（源兼容）」两段。更新走 `Tools/run-tests.ps1 -UpdateApiBaseline`（**只写盘、永不给绿灯**）。**射程**：只查 Runtime 程序集（Editor 那 5 类型 / 10 成员要另写 EditMode fixture——Runtime 测试程序集看不到它）；只查**形状**不查语义（行为变更仍靠 CHANGELOG 的行为变更表）；与 CHANGELOG 迁移表之间**没有机械联系** |
-| **包 README 四张清单表**（主要功能 / 模块索引 / 可替换的实现一览 / 可配置项一览）与 `Runtime/` 目录·程序集的一致性 | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/ReadmeTableTests`——三张模块级表的模块集与 `Runtime/` 直接子目录**双向相等**、模块索引表的文档链接落盘、命名空间列与程序集**双向覆盖**（File 的 `XFileManager` 为登记例外）、「主要功能」表按登记表守（未登记即红）。**射程**：只守集合与链接——行内说明文字的陈旧与四表刻意各异的顺序不在内；`check-docs.ps1` 对 `.md` 零覆盖**不变**（守卫在测试侧） |
+| **包 README 四张清单表**（主要功能 / 模块索引 / 可替换的实现一览 / 可配置项一览）与 `Runtime/` 目录·程序集的一致性 | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/ReadmeTableTests`——三张模块级表的模块集与 `Runtime/` 直接子目录**双向相等**、模块索引表的文档链接落盘、命名空间列与程序集**双向覆盖**（File 的 `XFileManager` 为登记例外）、「主要功能」表按登记表守（未登记即红）。**射程**：只守集合与链接——行内说明文字的陈旧与四表刻意各异的顺序不在内；`check-docs.ps1` 对**包内** `.md` 零覆盖**不变**（守卫在测试侧） |
 | **模块 README 的「已知限制」小节**是否存在 | **已自动化**（2026-10-13）：`Tests/Runtime/Architecture/ReadmeSectionTests`——每个 `Runtime/<模块>/README.md` 必须含一条 `##` 或 `###` 级、标题带「已知限制」的标题行（Reactive 以两个集合级小节给出，天然满足，故无例外表；确实不需要该小节的模块去 `SectionExemptions` 登记理由）。**射程**：只查「有没有这一节」——**里面写了什么、条目是否属实 / 完整 / 不陈旧一概不查**（与「包 README 四张清单表」那条的「行内说明文字陈旧」同一条边界）；其余小节（设计取舍 / 接口承诺 / 线程契约）不在内 |
 | 门面转发缺失 | **已自动化，且已覆盖全部适用模块**（2026-10-13 核对）：守卫共 **11 处**——Asset / Audio / Config / Data / File / Input / Localization / Log / Save / Settings / UI，恰是全部「静态门面转发到可替换接口」的模块（9 个 `I*Manager` + File 的 `IFileProvider` + Input 的 `IInputProvider`），形态为「接口每个声明成员在门面上存在**同名**的 public static 成员」。**形态订正**（2026-10-13）：是「同名」而非「同名 + 同元数」——只有 Log 另查元数（`Signature = 名字 + 参数个数`），Settings 另有一张改名映射表（`Store`/`Migrator`/`Validator` → `Get*`/`Set*`），其余 9 处只查名字；签名不必测（转发体经 `IXxxManager` 调用，不符编译不过）。<br>**provider/store 型接口的守卫范围——已裁定：不守**（2026-10-13 用户裁定）：UI 的 `IUIHudProvider` / `IUITipProvider`、Settings 的 `ISettingsStore` / `IAsyncSettingsStore` 不补同名转发守卫。三条理由：① 它们是**注入的后端契约**，游戏侧入口在 `IUIManager` / `ISettingsManager<T>` 上且**刻意改名**（`ShowHudAsync`/`HideHud` vs `AttachAsync`/`Detach`）——同名守卫会把两类不同契约强行折叠；② 后端接口增成员时**实现方编译期即报错**（接口实现缺成员），漂移本就显形，不需要运行期断言；③ 同名匹配对 `Load`/`Save` 这类**碰巧重名**的成员会「假通过」，制造守住了的错觉。<br>**Message 不属于这一类**：`MessageManager` 是 `IMessagePublisher` / `IMessageSubscriber` 的**扩展方法宿主**（实现在 internal 的 `IMessageBroker` 上），不是「转发到可替换实现」的门面，这条不变量对它不成立。 |
 | 文档声称的 API 是否存在 | 未做：从 README 抓 `` `Type.Member` `` 记号 → 反射核存在性 |
 | **包内指向包外**（`Documentation/` 不随包发布，包内 README 与**源码注释**都不得引用它） | **已自动化**（2026-10-15）：`Tests/Runtime/Architecture/PackageBoundaryTests.PackageSources_DoNotReferenceRepoDocumentation`（扫包内 `.cs` 原文，含注释与消息串）。**射程**：只认 `Documentation/` 这一个记号，写成别的形式指路它看不见；不判自足表述写得对不对。历史：两轮手工清出 22 处（含 2 处 Runtime 生产代码的 XML 注释）后才上的机器 |
-| **文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / CS1571 / CS1572 / 1734 / 1735 / 1584 / 1658…；行标题原写「未纳门」，2026-10-15 订正） | **已自动化**（2026-10-13）：`check-docs.ps1` 统计面扩到十一码并**全部纳入 `-Enforce`**（`$CodeLabels` / `$GatedCodes` 两张表在脚本顶部；收编走「先诊断看曲线、清完存量再纳门」，CS1571 / CS1572 就是首跑当天现形后补入的）。**射程**：只覆盖包内两程序集的编译告警；只查「有注释」不查语义；`.md` 零覆盖不变 |
+| **文档告警码**（CS0419 cref 二义、CS1591 缺注释、CS1573 / CS1571 / CS1572 / 1734 / 1735 / 1584 / 1658…；行标题原写「未纳门」，2026-10-15 订正） | **已自动化**（2026-10-13）：`check-docs.ps1` 统计面扩到十一码并**全部纳入 `-Enforce`**（`$CodeLabels` / `$GatedCodes` 两张表在脚本顶部；收编走「先诊断看曲线、清完存量再纳门」，CS1571 / CS1572 就是首跑当天现形后补入的）。**射程**：只覆盖包内两程序集的编译告警；只查「有注释」不查语义；**包内** `.md` 零覆盖不变 |
 | 日志缺 `[模块]` 前缀 | 未做：grep `Debug.Log` 附近是否带前缀 |
 | 公开成员零测试覆盖 | 未做：反射列公开成员 → grep 测试目录 |
-| 文档搬迁的行集守恒 | **未做**：`check-docs.ps1` 对 `.md` 零覆盖，README ↔ `Documentation/Modules/` 的搬运没有门禁。可用的机械判据是「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑——一次性工程，不宜挂进阶段收尾 |
+| 文档搬迁的行集守恒 | **未做**：`check-docs.ps1` 对**包内** `.md` 零覆盖（它读 `Documentation/` 下三处只为决策台账结构），README ↔ `Documentation/Modules/` 的搬运没有门禁。可用的机械判据是「源侧删除行 ⊆ 目标侧新增行」的 git 断言，逐（源→目标）配对跑——一次性工程，不宜挂进阶段收尾 |
