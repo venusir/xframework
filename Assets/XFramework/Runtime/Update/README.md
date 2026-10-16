@@ -1,6 +1,8 @@
-# XFramework / Update 模块
+# Update —— 统一更新调度：三个时机 × 双时间轴 × 档位时间切片
 
 ## 概述
+
+命名空间 `XFramework.XUpdate`。
 
 Update 模块提供统一的更新调度服务，管理任意对象（静态服务、MonoBehaviour、普通 C# 类）的更新需求。
 
@@ -8,12 +10,6 @@ Update 模块提供统一的更新调度服务，管理任意对象（静态服�
 - **两条时间轴**：逻辑时间（受 `timeScale`）与墙钟时间（不受影响）
 - **档位时间切片**：按档位把更新负载摊到各节拍格上（一格 = 1/60 秒），避免帧消耗集中
 - **自动驱动**：注入 PlayerLoop，不需要场景里存在任何 MonoBehaviour
-
-**命名空间**: `XFramework.XUpdate`
-
-## 架构设计
-
-对外面是 `IUpdateable.cs`（`IUpdateLifecycle` / `IUpdateable` / `ILateUpdateable` / `IFixedUpdateable` / `UpdateTier`）、`UpdateClock.cs`（`UpdateClock` / `UpdateTimeMode`）与静态门面 `UpdateManager.cs`；`UpdateScheduler.cs` 是纯调度逻辑，`internal`。
 
 ## 快速使用
 
@@ -80,7 +76,25 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 
 固定步长时机没有时间轴参数：Unity 的固定步长本就随 `timeScale` 停摆。
 
-## 机制说明
+## 模块结构
+
+```text
+Runtime/Update/
+├── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）+ Tick / TickFixed / ProcessImmediate
+├── IUpdateable.cs                # 契约：IUpdateLifecycle / IUpdateable / ILateUpdateable /
+│                                 #       IFixedUpdateable / UpdateTier
+├── UpdateClock.cs                # 时间基：UpdateClock（time + unscaledTime + isPaused）/ UpdateTimeMode
+├── UpdateNodeInfo.cs             # 诊断回读载荷：CopyNodes 的列表元素（readonly struct）
+└── UpdateScheduler.cs            # internal：纯调度逻辑（档位分桶 + 时间切片 + 双时间轴）
+```
+
+五个文件里只有 `UpdateScheduler.cs` 是 `internal`（纯调度逻辑）；其余四个是使用方直接接触的公开面。
+
+## 架构设计
+
+对外面是 `IUpdateable.cs`（`IUpdateLifecycle` / `IUpdateable` / `ILateUpdateable` / `IFixedUpdateable` / `UpdateTier`）、`UpdateClock.cs`（`UpdateClock` / `UpdateTimeMode`）与静态门面 `UpdateManager.cs`；`UpdateScheduler.cs` 是纯调度逻辑，`internal`。
+
+## 内部机制
 
 ### 档位分级调度
 
@@ -297,17 +311,12 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
 应当看到失败（配额、签名、平台 SDK 这类错误该被调用方处理），隐式的每帧回调则不该把调度器带崩。
 （`Tick` 路径那次注销会补发一次 `OnDisable`；`ProcessImmediate` 连注销都不做，自然也不宣告。）
 
-## 设计原则
+## 线程契约
 
-- **不依赖场景对象** — `UpdateManager` 自注入 PlayerLoop 驱动，不依赖任何 MonoBehaviour；
-  调用方直接调 `Register` / `RegisterLate` / `RegisterFixed` 登记自身
-- **显式注册** — 时机与时间轴都由注册时的实参与接口实现决定，调度器不做任何自动发现
-- **单一写入点** — 所有注册/注销/启用/禁用/迁移都经内部操作队列，派发结束后由唯一入口应用到桶
-- **避免 GC** — 每帧路径无 LINQ、无闭包、无装箱；`UpdateClock` 是栈上结构体
-- **不做并行** — 派发是主线程上的同步回调，没有等待点：`OnUpdate` 返回即本次派发结束，不存在
-  「本帧两个节点同时在跑」。需要异步或分帧的工作请在节点内部自己做（UniTask），节点只负责被驱动。
-  真并发（线程 / Job System）不在框架职责内——Unity API 的主线程限制让「并行更新」在语义上不成立，
-  Message 模块同样声明了不做线程调度；需要通用的并行/串行/相位编排请用 `Pipeline` 模块
+**所有 API 必须在主线程调用，而且模块内没有任何守卫**：注册 / 注销 / 启停 / 暂停 / 驱动全部直接改写
+桶与索引，既没有断言也没有同步原语。从池线程调 `Register` 之类的入口不会报错，而是**静默地与主线程的
+派发竞争**——表现可能是难以复现的错乱，也可能是遍历中被改动的异常。框架自己的四个消费方全在主线程，
+第三方若打算跨线程使用，请自行切回主线程。
 
 ## 已知限制
 
@@ -324,10 +333,6 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   `initialTier`（若期间经 `OnUpdate` 返回值迁移过，回来的是迁移后的档位；见「档位由谁决定」），
   但档位较粗时首次派发最坏要等满一个整周期
 - **同时手动 `Tick` 且注入生效会派发两次**：注入生效时请只依赖自动驱动
-- **所有 API 必须在主线程调用，而且模块内没有任何守卫**：注册 / 注销 / 启停 / 暂停 / 驱动全部直接改写
-  桶与索引，既没有断言也没有同步原语。从池线程调 `Register` 之类的入口不会报错，而是**静默地与主线程的
-  派发竞争**——表现可能是难以复现的错乱，也可能是遍历中被改动的异常。框架自己的四个消费方全在主线程，
-  第三方若打算跨线程使用，请自行切回主线程
 - **同桶内其它节点的增删会改变本节点的派发相位**：切片档的相位就是桶内下标对 `2^k` 取模，而增删会让
   其后条目的下标整体平移。于是**别人注销一个条目，你可能因此早一格或晚将近一整个周期被轮到**。
   这是「每格只访问本切片条目」这条性质的代价（彻底修要每格扫全桶），已评估并接受；
@@ -342,6 +347,19 @@ UpdateManager.Register(ticker, order: 0, timeMode: UpdateTimeMode.Unscaled);
   状态：依赖已初始化服务的回调，请在 `await Bootstrap.RunAsync()` 完成之后再注册，或直接写在自家引导
   阶段里。需要加载期安静请用 `Pause()` / `Resume()`（只冻逻辑轴，`Unscaled` 节点照常，见「时间轴与
   暂停」）；注意 `Register` 的同步 `OnEnable` 与 `ProcessImmediate` 都不受暂停约束
+- **所有 API 限主线程，且模块内没有守卫**（见「线程契约」）
+
+## 设计原则
+
+- **不依赖场景对象** — `UpdateManager` 自注入 PlayerLoop 驱动，不依赖任何 MonoBehaviour；
+  调用方直接调 `Register` / `RegisterLate` / `RegisterFixed` 登记自身
+- **显式注册** — 时机与时间轴都由注册时的实参与接口实现决定，调度器不做任何自动发现
+- **单一写入点** — 所有注册/注销/启用/禁用/迁移都经内部操作队列，派发结束后由唯一入口应用到桶
+- **避免 GC** — 每帧路径无 LINQ、无闭包、无装箱；`UpdateClock` 是栈上结构体
+- **不做并行** — 派发是主线程上的同步回调，没有等待点：`OnUpdate` 返回即本次派发结束，不存在
+  「本帧两个节点同时在跑」。需要异步或分帧的工作请在节点内部自己做（UniTask），节点只负责被驱动。
+  真并发（线程 / Job System）不在框架职责内——Unity API 的主线程限制让「并行更新」在语义上不成立，
+  Message 模块同样声明了不做线程调度；需要通用的并行/串行/相位编排请用 `Pipeline` 模块
 
 ## 依赖
 

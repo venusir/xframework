@@ -12,6 +12,7 @@ Runtime/Update/
 ├── IUpdateable.cs                # 契约：IUpdateLifecycle / IUpdateable / ILateUpdateable /
 │                                 #       IFixedUpdateable / UpdateTier
 ├── UpdateClock.cs                # 时间基：UpdateClock（time + unscaledTime + isPaused）/ UpdateTimeMode
+├── UpdateNodeInfo.cs             # 诊断回读载荷：CopyNodes 的列表元素（readonly struct；2026-10-16 补录——它一直是公开面，此前漏在本树之外）
 ├── UpdateScheduler.cs            # 纯调度逻辑（档位分桶 + 时间切片 + 双时间轴），internal
 └── UpdateManager.cs              # 静态门面（含 PlayerLoop 注入驱动）
 ```
