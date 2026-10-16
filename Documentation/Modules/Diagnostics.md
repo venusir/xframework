@@ -9,7 +9,8 @@ Runtime/Diagnostics/          契约与注册表（随包发布，零 GUI 依赖
 ├── IDiagnosticPanel.cs       页签契约：Title / Order / Collect
 ├── IDiagnosticReport.cs      采集器（写侧）契约
 ├── DiagnosticReport.cs       采集器默认实现（可 Clear 复用）
-├── DiagnosticItem.cs         报告条目 readonly struct + 种类枚举
+├── DiagnosticItem.cs         报告条目 readonly struct
+├── DiagnosticItemKind.cs     条目种类枚举（2026-10-16 补录——从 DiagnosticItem.cs 拆出后漏在本树之外）
 ├── DiagnosticTable.cs        表格（表头固定、行只增不改）
 ├── DiagnosticLevel.cs        提示级别
 ├── DiagnosticOrders.cs       Order 建议取值带

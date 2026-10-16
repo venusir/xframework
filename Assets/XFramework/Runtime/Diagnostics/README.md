@@ -1,10 +1,14 @@
-# XDiagnostics 运行时诊断
+# Diagnostics —— 运行时诊断契约：页签注册表 + 报告采集，渲染方任意
 
-给框架与游戏自己的运行时状态提供**一条统一出口**：一个页签注册表（谁能被看到）+ 一份报告采集契约（看到什么）。
+## 概述
+
+命名空间 `XFramework.XDiagnostics`。给框架与游戏自己的运行时状态提供**一条统一出口**：一个页签注册表（谁能被看到）+ 一份报告采集契约（看到什么）。
 
 本模块只有**纯数据**——零 GUI 依赖、不引用任何渲染 API。渲染方可以由任何东西充当：包内附带的编辑器窗口、你自己的工具窗口，或将来可能有的运行时覆盖层。它们消费的都是同一份 `DiagnosticReport`。
 
-## 快速开始：写一个自己的页签
+**它不替使用方决定「看什么」**：注册表显式登记（零反射），页签由各模块与游戏自己提供；本模块只固定「怎么写」与「谁在主线程」。
+
+## 快速使用：写一个自己的页签
 
 ```csharp
 using System.Collections.Generic;
@@ -39,6 +43,24 @@ internal static class MyGamePanelRegistration
 
 写完后打开诊断视图（包内自带编辑器窗口：菜单 `Tools/XFramework/Diagnostics`）就能看到这个页签。想在**未进入播放模式**时也看到它，把注册放在带 `#if UNITY_EDITOR [UnityEditor.InitializeOnLoadMethod] #endif` 的编辑器分支里——但页签本身仍要能安静地处理「模块未初始化」的情况。
 
+## 模块结构
+
+```text
+Runtime/Diagnostics/
+├── IDiagnosticPanel.cs            # 页签契约：Title / Order / Collect
+├── IDiagnosticReport.cs           # 采集器（写侧）契约
+├── DiagnosticReport.cs            # 采集器默认实现（Clear 后复用，零重分配）
+├── DiagnosticItem.cs              # 报告条目（readonly struct）
+├── DiagnosticItemKind.cs          # 条目种类枚举
+├── DiagnosticTable.cs             # 表格（表头固定、行只增不改）
+├── DiagnosticLevel.cs             # 提示级别（Info / Warning / Error）
+├── DiagnosticOrders.cs            # Order 的建议取值带（Framework = 0 / User = 1000）
+├── DiagnosticReportFormatter.cs   # 报告 → 纯文本（复制按钮与单测都走它）
+└── DiagnosticsManager.cs          # 登记表（静态门面，无接口）
+```
+
+十个文件都是公开面，本模块没有 `internal` 类型。窗口与渲染层在 **`Editor/Diagnostics/`**（不随 Player 构建），见「编辑器窗口与渲染」。
+
 ## 报告词汇表
 
 | 写入方法 | 语义 | 文本渲染形如 |
@@ -51,16 +73,7 @@ internal static class MyGamePanelRegistration
 
 `DiagnosticReport` 是采集器的默认实现，也是渲染方复用的那一个：`Clear()` + `Collect()` 重填，不必每次刷新重新分配。
 
-## 编辑器窗口与渲染
-
-包内自带窗口与渲染层：菜单 `Tools/XFramework/Diagnostics`（左栏页签列表 + 顶栏刷新/自动刷新/复制）。
-
-- **默认路径**：页签只实现 `IDiagnosticPanel`，窗口用 `XFramework.Editor.Diagnostics.DiagnosticReportView` 按上面的词汇表渲染。
-- **在自己的窗口里渲染任意报告**：`new DiagnosticReportView().Draw(report)`——报告可以自己填，不必与诊断窗口有关；观感与诊断窗口一致。
-- **混搭自绘**：实现 `XFramework.Editor.Diagnostics.IDiagnosticPanelView`，窗口会把内容区整块委托给它（`Collect` 仍会被调用，因此「复制为文本」照常可用）。标准件用 `DiagnosticItemDrawer` 的单项原语（`DrawSection` / `DrawText` / `DrawKeyValue` / `DrawTable` / `DrawNotice`）。
-- 渲染层在 Editor 程序集（`XFramework.Editor.Diagnostics`）——只随编辑器加载，不进 Player 构建。
-
-## 契约
+## 行为契约
 
 ### `Collect` 的调用契约（实现者必读）
 
@@ -69,14 +82,6 @@ internal static class MyGamePanelRegistration
 3. **不得抛异常**：渲染方会兜底捕获，但抛出会让本次报告整份作废，只显示一条错误提示。
 4. **允许分配、允许遍历全表**：这是诊断路径，不适用「每帧路径零分配」那套约定；但**不得被每帧调用**——调用频率由渲染方决定（编辑器窗口默认 0.5 秒一次）。
 5. **模块未初始化时不得抛**：写一行「未初始化」说明即可。
-
-### 线程契约
-
-| 操作 | 线程 |
-|---|---|
-| `DiagnosticsManager` 全部成员（登记 / 注销 / 拷贝 / 计数 / 清空） | 主线程 |
-| `IDiagnosticPanel.Collect` 与 `IDiagnosticReport.*` | 主线程（与渲染方同线程） |
-| `DiagnosticReportFormatter.ToText` | 任意线程（纯函数，只读入参） |
 
 ### 注册、排序与去重
 
@@ -92,6 +97,23 @@ internal static class MyGamePanelRegistration
 - 域重载**开**：每次进播放都会重载，登记与注册照常重跑。
 - 域重载**关**：上一会话登记过的页签**跨播放会话存活**。`[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑（重复登记被幂等吸收），`[InitializeOnLoadMethod]` 不重跑（编辑器侧注册的那批本来就应该长期在）。因此**运行时注册的页签请在自己的退出路径里 `Unregister`**。
 - **刻意不做**「进播放时清空注册表」：那会把编辑器侧注册的框架页签一并抹掉。
+
+## 线程契约
+
+| 操作 | 线程 |
+|---|---|
+| `DiagnosticsManager` 全部成员（登记 / 注销 / 拷贝 / 计数 / 清空） | 主线程 |
+| `IDiagnosticPanel.Collect` 与 `IDiagnosticReport.*` | 主线程（与渲染方同线程） |
+| `DiagnosticReportFormatter.ToText` | 任意线程（纯函数，只读入参） |
+
+## 编辑器窗口与渲染
+
+包内自带窗口与渲染层：菜单 `Tools/XFramework/Diagnostics`（左栏页签列表 + 顶栏刷新/自动刷新/复制）。
+
+- **默认路径**：页签只实现 `IDiagnosticPanel`，窗口用 `XFramework.Editor.Diagnostics.DiagnosticReportView` 按上面的词汇表渲染。
+- **在自己的窗口里渲染任意报告**：`new DiagnosticReportView().Draw(report)`——报告可以自己填，不必与诊断窗口有关；观感与诊断窗口一致。
+- **混搭自绘**：实现 `XFramework.Editor.Diagnostics.IDiagnosticPanelView`，窗口会把内容区整块委托给它（`Collect` 仍会被调用，因此「复制为文本」照常可用）。标准件用 `DiagnosticItemDrawer` 的单项原语（`DrawSection` / `DrawText` / `DrawKeyValue` / `DrawTable` / `DrawNotice`）。
+- 渲染层在 Editor 程序集（`XFramework.Editor.Diagnostics`）——只随编辑器加载，不进 Player 构建。
 
 ## 已知限制
 

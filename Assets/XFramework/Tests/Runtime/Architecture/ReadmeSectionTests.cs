@@ -73,6 +73,7 @@ namespace XFramework.Architecture.Tests
             "Timer",       // 打样：骨架与重排是否合身由它先验
             "Serialize",   // 退化样本：原本缺 概述 / 快速使用 / 模块结构 / 线程契约 四节
             "Bootstrap",   // 边界样本：首节是「定位」；权威副本没有文件结构，反方向补建
+            "Diagnostics", // 边界样本：线程契约原埋在「契约」节下，提升为 ##；首节带限定词
         };
 
         /// <summary>
