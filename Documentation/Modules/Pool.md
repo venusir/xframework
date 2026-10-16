@@ -22,6 +22,9 @@ Runtime/Pool/
 ├── IPool.cs                       # 池操作接口（用于 DI / 测试）
 ├── Pool.cs                        # 泛型池实现（核心）
 ├── PoolManager.cs                 # 全局静态管理器
+├── PoolStats.cs                   # 诊断快照：CopyPoolStats 的列表元素（2026-10-16 补录——它一直是公开面，此前漏在本树之外）
+├── Internal/
+│   └── PoolLogCategories.cs       # 本模块的日志分类定义（internal；2026-10-16 补录——同上）
 └── README.md
 ```
 

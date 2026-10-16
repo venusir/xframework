@@ -1,4 +1,4 @@
-# XPool —— 纯 C# 对象池
+# Pool —— 纯 C# 对象池与集合池
 
 ## 概述
 
@@ -13,7 +13,7 @@ XPool 是一个**零 GC 分配**的泛型对象池系统，用于复用频繁创
 - **线程不安全**：与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
 - **与 AssetManager 解耦**：AssetManager 内部继续管理 GameObject/Prefab 池，PoolManager 只管纯 C# 对象。
 
-## 快速开始
+## 快速使用
 
 ```csharp
 using XFramework.XPool;
@@ -49,7 +49,60 @@ class BulletSystem
 }
 ```
 
-## API 速查
+## 模块结构
+
+```text
+Runtime/Pool/
+├── PoolManager.cs                 # 全局静态管理器（门面）
+├── Pool.cs                        # 泛型池实现（核心）
+├── IPool.cs                       # 池操作接口（用于依赖反转 / 测试）
+├── IPoolable.cs                   # 生命周期回调接口（OnRent / OnReturn）
+├── IPoolDiscardable.cs            # 可选能力接口：实例被池丢弃时释放资源（OnDiscard）
+├── PoolConfig.cs                  # 配置结构体（值类型，零装箱）
+├── PooledObject.cs                # using 包装器（struct，零 GC）
+├── PoolStats.cs                   # 诊断快照：CopyPoolStats 的列表元素
+├── CollectionPool/
+│   ├── ListPool.cs                # List<T> 池，Return 自动 Clear()
+│   ├── HashSetPool.cs             # HashSet<T> 池，Return 自动 Clear()
+│   ├── DictionaryPool.cs          # Dictionary<K,V> 池，Return 自动 Clear()
+│   ├── StringBuilderPool.cs       # StringBuilder 池，Return 自动 Clear()
+│   └── CollectionPoolManager.cs   # 集合池统一管理器，一键 ClearAll()
+└── Internal/
+    └── PoolLogCategories.cs       # internal：本模块的日志分类定义
+```
+
+十四个文件里只有 `Internal/PoolLogCategories.cs` 是 `internal`；其余全是使用方直接接触的公开面。
+
+## 行为契约
+
+### 回调优先级
+
+当同时传入委托和实现 `IPoolable` 接口时：
+
+```
+委托回调 > IPoolable 接口
+```
+
+即：如果传入了 `onRent` 委托，则不会调用 `IPoolable.OnRent()`。丢弃回调同理：传入了 `onDestroy` 委托就不会调用 `IPoolDiscardable.OnDiscard()`。
+
+### 计数与丢弃语义
+
+| 属性（`IPool<T>`） | 含义                                                                             |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `CountInactive`    | 池内当前闲置实例数（可立即复用）                                                 |
+| `CountActive`      | 已取出、尚未归还的实例数                                                         |
+| `CountAll`         | 自建池以来生成过的总实例数——**只增不减**，归还、清空与被丢弃都不会让它减小       |
+
+因此 `CountAll - CountInactive` **不等于** `CountActive`：被丢弃的实例仍计入 `CountAll`，却既非活跃也非闲置。要判断「还有多少实例在外面」请用 `CountActive`。
+
+闲置实例达到 `MaxSize` 后，归还的实例不再入池而是交给 GC，此时触发丢弃回调。两点需要注意：
+
+- 归还回调（`onReturn` / `IPoolable.OnReturn()`）**先于**容量判断触发，所以被丢弃的实例会先收到归还回调（清理状态）、再收到丢弃回调（释放资源）。
+- `Clear()` / `ClearAll()` **不触发**丢弃回调——它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用，此时跑用户回调容易碰到已销毁的 Unity 对象。
+
+`PooledObject<T>` 的 `Dispose()` 幂等（重复 `using` 或手动调用不会重复归还），但只对同一个存储位置成立：`var h2 = h; h.Dispose(); h2.Dispose();` 这类复制出去的副本仍会归还两次。
+
+## API 参考
 
 | API                                             | 说明                               |
 | ----------------------------------------------- | ---------------------------------- |
@@ -68,9 +121,9 @@ class BulletSystem
 | `PoolManager.PoolCount`                         | 已创建的池数量（诊断） |
 | `PoolManager.CopyPoolStats(List<PoolStats>)`    | 各池的规模快照（闲置/活跃/累计，诊断；只反映已创建的池） |
 
-## 配置
+### 配置
 
-### 池容量与预热
+#### 池容量与预热
 
 配置在该类型**首次建池**（首次 `Get` / `GetPool`）时一次性消费生效，之后不再读取。若类型已建过池再调用 `Configure<T>`，会告警并忽略；需要重新配置时请先 `RemovePool<T>()` 再 Configure。
 
@@ -91,13 +144,13 @@ PoolManager.Configure<EnemyData>(new PoolConfig
 
 不配置时 `MaxSize` 为 **无上限**——闲置实例只增不减，直到 `Clear()` / `ClearAll()`。长期运行且池化类型较多时，建议显式设一个上限。
 
-### 第三个字段：`CollectionCheck`
+#### 第三个字段：`CollectionCheck`
 
 `PoolConfig` 还有一个字段，默认 `true`：
 
 - **`CollectionCheck`** — 重复归还检测（同一实例被 `Return` 多次）。**仅 Editor 下生效，Release 构建自动关闭、零开销**；默认配置（`PoolConfig.Default`）把它设为 `true`。除非你要在 Editor 里刻意压测最坏路径，否则不用动它——它抓的是「用方把同一个对象还了两次」这类缺陷，代价只在编辑器的开发期。
 
-### 自定义生成器（无无参构造函数的类型）
+#### 自定义生成器（无无参构造函数的类型）
 
 ```csharp
 // 示例：Enemy 需要配置参数
@@ -105,7 +158,7 @@ PoolManager.Configure<Enemy>(new PoolConfig { MaxSize = 50 },
     generator: () => new Enemy(enemyConfigSO));
 ```
 
-### 委托回调（替代 IPoolable）
+#### 委托回调（替代 IPoolable）
 
 ```csharp
 // 直接构造 Pool 实例（绕过 PoolManager）
@@ -117,55 +170,7 @@ var pool = new Pool<MyData>(
 );
 ```
 
-## 回调优先级
-
-当同时传入委托和实现 `IPoolable` 接口时：
-
-```
-委托回调 > IPoolable 接口
-```
-
-即：如果传入了 `onRent` 委托，则不会调用 `IPoolable.OnRent()`。丢弃回调同理：传入了 `onDestroy` 委托就不会调用 `IPoolDiscardable.OnDiscard()`。
-
-## 计数与丢弃语义
-
-| 属性（`IPool<T>`） | 含义                                                                             |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `CountInactive`    | 池内当前闲置实例数（可立即复用）                                                 |
-| `CountActive`      | 已取出、尚未归还的实例数                                                         |
-| `CountAll`         | 自建池以来生成过的总实例数——**只增不减**，归还、清空与被丢弃都不会让它减小       |
-
-因此 `CountAll - CountInactive` **不等于** `CountActive`：被丢弃的实例仍计入 `CountAll`，却既非活跃也非闲置。要判断「还有多少实例在外面」请用 `CountActive`。
-
-闲置实例达到 `MaxSize` 后，归还的实例不再入池而是交给 GC，此时触发丢弃回调。两点需要注意：
-
-- 归还回调（`onReturn` / `IPoolable.OnReturn()`）**先于**容量判断触发，所以被丢弃的实例会先收到归还回调（清理状态）、再收到丢弃回调（释放资源）。
-- `Clear()` / `ClearAll()` **不触发**丢弃回调——它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用，此时跑用户回调容易碰到已销毁的 Unity 对象。
-
-`PooledObject<T>` 的 `Dispose()` 幂等（重复 `using` 或手动调用不会重复归还），但只对同一个存储位置成立：`var h2 = h; h.Dispose(); h2.Dispose();` 这类复制出去的副本仍会归还两次。
-
-## 与 AssetManager 的关系
-
-| 功能     | PoolManager              | AssetManager                    |
-| -------- | ------------------------ | ------------------------------- |
-| 管理对象 | 纯 C# 引用类型           | GameObject / Prefab 实例        |
-| 池 key   | `Type`                   | `string location`（资源路径）   |
-| 归还语义 | 仅放回池                 | 放回池 + 释放 YooAsset 资源引用 |
-| 生命周期 | 静态，应用退出时自动清理 | `InitializeAsync` / `Dispose`   |
-
-两者完全独立，互不依赖。GameObject 的池化仍由 AssetManager 通过 `InstantiateAsync` / `DestroyInstance` 管理。
-
-## GC 与性能
-
-| 特性            | 实现                                        |
-| --------------- | ------------------------------------------- |
-| **内部存储**    | `Stack<T>` — 连续内存，无链式节点分配       |
-| **配置**        | `PoolConfig` 是 `struct` — 栈分配，0 GC     |
-| **泛型调用**    | 直接泛型方法，无 `object` 转换，无拆箱      |
-| **惰性创建**    | 首次 `Get<T>()` 时才建池，非预热类型 0 开销 |
-| **Editor 检测** | `#if UNITY_EDITOR` 包裹，Release 零开销     |
-
-## 使用示例
+## 典型场景
 
 ### 示例 1：子弹数据池
 
@@ -280,35 +285,7 @@ void LogHealth(int currentHp, int maxHp)
 }
 ```
 
-## 集合池（CollectionPool）
-
-XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`**，无需手动清空。
-
-### 集合池 API
-
-| API                                       | 说明                                             |
-| ----------------------------------------- | ------------------------------------------------ |
-| `ListPool<T>.Get()`                       | 获取 `List<T>`，池空时自动 `new List<T>()`       |
-| `ListPool<T>.GetPooled(out list)`         | using 方式获取 `List<T>`，块结束自动归还         |
-| `ListPool<T>.Return(list)`                | 归还 `List<T>`，自动 `Clear()`                   |
-| `HashSetPool<T>.Get()`                    | 获取 `HashSet<T>`                                |
-| `HashSetPool<T>.GetPooled(out set)`       | using 方式获取 `HashSet<T>`，块结束自动归还      |
-| `HashSetPool<T>.Return(set)`              | 归还 `HashSet<T>`，自动 `Clear()`                |
-| `DictionaryPool<K,V>.Get()`               | 获取 `Dictionary<K,V>`                           |
-| `DictionaryPool<K,V>.GetPooled(out dict)` | using 方式获取 `Dictionary<K,V>`，块结束自动归还 |
-| `DictionaryPool<K,V>.Return(dict)`        | 归还 `Dictionary<K,V>`，自动 `Clear()`           |
-| `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                             |
-| `StringBuilderPool.GetPooled(out sb)`     | using 方式获取 `StringBuilder`，块结束自动归还   |
-| `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`             |
-| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）                  |
-| `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转           |
-| `CollectionPoolManager.ClearAll()`        | 一键清空所有集合池的闲置实例                     |
-
-> **注意：** 泛型集合池按闭合泛型类型独立建池。例如 `ListPool<int>` 和 `ListPool<Vector3>` 是两个独立的池，仅在首次 `Get()` 时创建。
->
-> **两套注册表：** `CollectionPoolManager.ClearAll()` 只清集合池，`PoolManager.ClearAll()` 只清业务对象池——切场景时两者都要调（见示例 7）。
-
-### 使用示例 5：集合池
+### 示例 5：集合池
 
 ```csharp
 using XFramework.XPool;
@@ -367,6 +344,50 @@ void OnSceneUnloaded(Scene scene)
 }
 ```
 
+## 集合池（CollectionPool）
+
+XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`**，无需手动清空。
+
+### 集合池 API
+
+| API                                       | 说明                                             |
+| ----------------------------------------- | ------------------------------------------------ |
+| `ListPool<T>.Get()`                       | 获取 `List<T>`，池空时自动 `new List<T>()`       |
+| `ListPool<T>.GetPooled(out list)`         | using 方式获取 `List<T>`，块结束自动归还         |
+| `ListPool<T>.Return(list)`                | 归还 `List<T>`，自动 `Clear()`                   |
+| `HashSetPool<T>.Get()`                    | 获取 `HashSet<T>`                                |
+| `HashSetPool<T>.GetPooled(out set)`       | using 方式获取 `HashSet<T>`，块结束自动归还      |
+| `HashSetPool<T>.Return(set)`              | 归还 `HashSet<T>`，自动 `Clear()`                |
+| `DictionaryPool<K,V>.Get()`               | 获取 `Dictionary<K,V>`                           |
+| `DictionaryPool<K,V>.GetPooled(out dict)` | using 方式获取 `Dictionary<K,V>`，块结束自动归还 |
+| `DictionaryPool<K,V>.Return(dict)`        | 归还 `Dictionary<K,V>`，自动 `Clear()`           |
+| `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                             |
+| `StringBuilderPool.GetPooled(out sb)`     | using 方式获取 `StringBuilder`，块结束自动归还   |
+| `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`             |
+| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）                  |
+| `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转           |
+| `CollectionPoolManager.ClearAll()`        | 一键清空所有集合池的闲置实例                     |
+
+> **注意：** 泛型集合池按闭合泛型类型独立建池。例如 `ListPool<int>` 和 `ListPool<Vector3>` 是两个独立的池，仅在首次 `Get()` 时创建。
+>
+> **两套注册表：** `CollectionPoolManager.ClearAll()` 只清集合池，`PoolManager.ClearAll()` 只清业务对象池——切场景时两者都要调（见示例 7）。
+
+## 线程契约
+
+**线程不安全，只能在主线程使用**——与 `UnityEngine.Pool` 同一口径。本模块不提供线程同步（池内部是普通 `Stack<T>` 与计数字段，从别的线程并发访问即数据竞争），也不做线程断言（因此 Release 与 Editor 下都不会给你提示）。
+
+确需跨线程使用时，请在**调用侧**自行加锁，或为每个线程各建一套池（本模块的池按 `Type` / 闭合泛型全局唯一，没有「按线程分池」的入口）。
+
+## 性能代价
+
+| 特性            | 实现                                        |
+| --------------- | ------------------------------------------- |
+| **内部存储**    | `Stack<T>` — 连续内存，无链式节点分配       |
+| **配置**        | `PoolConfig` 是 `struct` — 栈分配，0 GC     |
+| **泛型调用**    | 直接泛型方法，无 `object` 转换，无拆箱      |
+| **惰性创建**    | 首次 `Get<T>()` 时才建池，非预热类型 0 开销 |
+| **Editor 检测** | `#if UNITY_EDITOR` 包裹，Release 零开销     |
+
 ## 已知限制
 
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
@@ -381,7 +402,20 @@ void OnSceneUnloaded(Scene scene)
 - **`PooledObject<T>.Dispose()` 的幂等只对同一个存储位置成立。** 复制出去的副本（`var h2 = h;`）仍会归还两次——结构体按值复制，防不住。
 - **业务对象池与集合池是两套注册表。** `PoolManager.ClearAll()` 只清业务对象池、`CollectionPoolManager.ClearAll()` 只清集合池，切场景时两个都要调；两者都只清闲置实例，**池注册与 `Configure` 保留**。
 - **泛型集合池按闭合泛型类型独立建池。** `ListPool<int>` 与 `ListPool<Vector3>` 是两个池，容量与预热各算各的。
-- **线程不安全。** 与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
+- **线程不安全。** 与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁（见「线程契约」）。
+
+## 与相邻模块的关系
+
+### 与 AssetManager 的边界
+
+| 功能     | PoolManager              | AssetManager                    |
+| -------- | ------------------------ | ------------------------------- |
+| 管理对象 | 纯 C# 引用类型           | GameObject / Prefab 实例        |
+| 池 key   | `Type`                   | `string location`（资源路径）   |
+| 归还语义 | 仅放回池                 | 放回池 + 释放 YooAsset 资源引用 |
+| 生命周期 | 静态，应用退出时自动清理 | `InitializeAsync` / `Dispose`   |
+
+两者完全独立，互不依赖。GameObject 的池化仍由 AssetManager 通过 `InstantiateAsync` / `DestroyInstance` 管理——**「池」这个词在两个模块里指的是两件事**：注册表、`ClearAll` 与生命周期互不相干，不要试图用一个去清另一个。
 
 ## 依赖
 
