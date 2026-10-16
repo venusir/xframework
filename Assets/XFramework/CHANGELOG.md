@@ -250,6 +250,33 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **模块 README 结构统一（2026-10-16：规范 + 门禁 + 23 个模块逐次重整）**：普查 23 份模块 README
+  （共 9196 行）得到的结论是**问题不在内容缺失，在不可预测**——同一件事有多种写法（`快速使用` 14 家
+  vs `快速开始` 6 家）、API 小节 8 种名字、**线程小节 5 种名字且 11 家一个字没写**、`##` 级标题里只
+  出现一次的有 78 种、H1 有 4 种形态。立项依据是一组对照：**唯一被守卫锁死的「已知限制」23/23 齐，
+  完全没守卫的「线程契约」11 家空白**——没守卫的约定必然腐烂。
+  - **规范**：新建模块 README 结构规范（一级骨架 17 节、**5 项必答** = 概述 / 快速使用 / 模块结构 /
+    线程契约 / 已知限制；特性节；旧名→新名对照表；文件树两份分工；H1 与措辞；门禁射程）。对照表的
+    完备性判据是「遍历全部模块 README 的 `##` 标题，每个名字要么在目标列、要么在保持 / 模块特有列」
+    （实测 121 个去重标题名 0 未覆盖）。
+  - **门禁两条**：`ReadmeSectionTests` 加五节必答表（逐模块重整期以「已重整模块」登记表过渡——
+    让每个提交自带验证、窗口期为零；23/23 完成后整表退休、作用于全部模块）；`check-docs.ps1` 加
+    「README 的文件树 **== 磁盘**」检查，同日纳门为第五项判定。两条各做过负向控制。
+  - **文件树两份分工**（用户裁定）：README 也列全、`internal` 逐个标注；权威侧（维护文档）仍是
+    逐文件详述版。**两处都由磁盘锚定**——README 侧与磁盘的一致性由守卫抓，漏收与残影两个方向都管。
+  - **顺带抓出的存量问题**：**11 份权威副本各漏一个公开文件**（全是「类型从别的文件拆出来后树没跟上」：
+    `TimerInfo` / `DiagnosticItemKind` / `LogCategoryInfo` / `UpdateNodeInfo` / `AudioChannelInfo` /
+    `LocalizationLanguageInfo` / `PoolStats` / `PoolLogCategories` / `InputSystemOptions` /
+    `InputSystemOptionsAsset` / `InputBootstrapStage` / `UIBootstrapStage`）；Log README 的内置分类
+    计数陈旧（31 vs 源码 33）；`Save/README.md` 一处「包内指向包外」；`Scene/README.md` 一处悬空的
+    「§四」节号；`Audio` 一处失实声称（包 README 写「Audio README 已登记」而实际没有）；**5 处 `.cs`
+    死指针**（`Event`×2、`Message`×3 都指向 README 里根本不存在的节）；`File` 一处原文重复。
+- **「包内不指向包外」扩到包内全部 `.md`（用户裁定「包内不要引用包外资源」），清出 48 处**：守卫
+  `PackageBoundaryTests` 新增 `PackageMarkdown_DoNotReferenceRepoDocumentation`（扫包内全部 `.md`，
+  与原 `.cs` 那条共用豁免登记处）。48 处 = `CHANGELOG.md` 47 处 + 包 `README.md` 1 处——此前只扫
+  `.cs`，这些一直没被看见。改法统一为**用描述代替路径**（「X 模块的维护向记录」「框架级决策台账」
+  「维护向的工作流手册」…）。**判据只有「有没有那条路径」一条**，不再区分「指路」与「历史陈述」；
+  确需保留路径的走豁免登记处写明理由。
 - **「包内不指向包外」补齐源码注释这一路，并机械化**：两轮清出 22 处历史违例（1 处 `Runtime/Scene/README.md`
   + 7 处引用当时将删的评估报告 + 15 处引用其余维护向文档；其中 **2 处在 Runtime 生产代码的 XML 注释**里，
   随包发布、第三方在 IDE 里直接读到死指针）。全部改成**自足表述**（结论内联、不给出处路径）；新增守卫
