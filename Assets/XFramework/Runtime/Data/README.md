@@ -1,6 +1,8 @@
-# XData 运行时数据模块
+# Data —— 运行时可变数据：按 GamePlay 模块组织的块 + 全量/单块快照 + 脏标记
 
 ## 概述
+
+命名空间 `XFramework.XData`。
 
 XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏运行过程中产生和变更的数据（如玩家状态、背包物品、任务进度等），并向 Save 模块提供序列化/反序列化接口。
 
@@ -22,37 +24,7 @@ XData 是 XFramework 的运行时可变数据管理模块，负责管理游戏�
 | 存储     | 内存表                            | 内存 Block（持久化由 Save 模块负责）       |
 | 数据模型 | `IConfigRow<TKey>` (按主键索引)   | `IDataBlock` (按模块组织)                  |
 
-## 架构
-
-```
-DataBootstrapStage (引导阶段，Phase=3)
-    └── DataManagerImpl (内部实现)
-            └── Blocks : Dictionary<Type, IDataBlock>   ← 按 GamePlay 模块组织
-
-DataManager (静态门面)
-    └── 转发到 DataManagerImpl
-
-SaveBootstrapStage (引导阶段，Phase=4)
-    └── SaveManagerImpl (内部实现)
-            ├── FileManager (文件读写)
-            └── DataManager (快照导出/恢复)
-```
-
-### 设计原则
-
-- **引导阶段 + 静态服务**：`DataBootstrapStage`（`IBootstrapStage`，Phase 3）在启动管线里注入 `DataManager` 静态门面，此后全局可访问；反向清理经其 `Shutdown` 调 `DataManager.Shutdown()`。
-  **要换掉数据层实现**（例如接自己的存储/同步方案）就实现 `IDataManager`（16 个成员）并注入：
-
-  ```csharp
-  DataManager.Initialize(new MyDataManager());   // 传 null 等效于 Shutdown()
-  ```
-
-  已注入非 null 实现时重复调用只告警并忽略；不经引导流程的项目也可以直接调它（`DataManager.IsInitialized` 可探测）。**本模块没有 options 对象**——实现即配置。
-- **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
-- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
-- **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。
-
-## 快速开始
+## 快速使用
 
 ### 一、定义数据块
 
@@ -245,18 +217,22 @@ DataManager.ApplyBlockSnapshot(snap);
 - `CreateBlockSnapshot<T>()`：仅导出目标块，**不清空脏标记**（读取不代表已保存）；未注册输出警告并返回 `null`；`OnSave()` 返回 `null` 时返回 `null`（不警告）。
 - `ApplyBlockSnapshot(snap)`：按 `blockName` 索引已注册块（未知输出警告并返回 `false`，不创建实例）；恢复前清空目标块数据，**复用与 `ApplySnapshot` 相同的恢复管线**（版本迁移、saveType 回退、格式解析）；成功恢复后清除该块脏标记，失败保留。
 
-## 序列化原理
+## 模块结构
 
-1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType`、`version`（写入时取 `IDataBlock.DataVersion`）存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
-2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化；若快照 `version` 低于 Block 当前 `DataVersion` 则执行迁移链，最后调用 `OnLoad(saveData)`。单块恢复 `ApplyBlockSnapshot(snap)` 复用同一恢复管线。
+```text
+Runtime/Data/
+├── DataManager.cs            # 静态门面：转发到实现 + IsInitialized / Initialize
+├── IDataManager.cs           # 服务接口：块管理 / 快照 / 脏标记（可整体替换）
+├── DataManagerImpl.cs        # 默认实现：Blocks 字典 + 快照导出/恢复管线
+├── IDataBlock.cs             # 数据块契约：BlockName / DataVersion / OnSave / OnLoad / OnMigrate / OnClear
+├── DataSnapshot.cs           # 存档快照数据结构（含块级 DataBlockSnapshot 与 CreateMeta）
+├── DataBootstrapStage.cs     # 引导阶段：初始化门面（Phase 3）
+└── DataException.cs          # 异常类型
+```
 
-   **它返回「未能恢复的数据块数量」**（`0` 表示全部成功）。单个块失败（快照缺 `blockName`、块未注册、格式不支持、块版本高于当前代码、反序列化或 `OnLoad` 抛异常）**不会中断整体恢复**，而是被跳过并计入返回值——所以**调用方必须据返回值判断本次加载是否完整**：「部分块未恢复」等价于内存里少了一半数据，当作成功处理是危险的。另外，失败块会停在**「已清空、未加载」**的状态上（清空发生在恢复之前，且对失败块不回滚）；要在失败时恢复原状，请自行在调用前留一份 `CreateSnapshot()` 快照——Save 模块就是这么做的（那份快照同时携带生成时的脏集合，故回滚后「哪些块还没存」也一并还原）。
-3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
-4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
+七个文件都是公开面（`DataManagerImpl` 属可跨命名空间注入的那一类实现，故为 public），本模块没有 `internal` 类型。
 
-> 文件 I/O 等持久化逻辑由 **Save 模块（XFramework.XSave）**负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
-
-## 注意事项
+## 行为契约
 
 ### 序列化要求
 - 快照结构体（含 Block 自身）必须使用 `public` 字段：默认序列化器 `NewtonsoftSerializer`（Newtonsoft.Json）不序列化私有字段，JsonUtility 的 `[SerializeField]` 私有字段约定不再适用；自定义序列化器（如 MessagePack）可放宽。
@@ -273,7 +249,37 @@ DataManager.ApplyBlockSnapshot(snap);
 - **迁移指南**：已存在、尚未接入版本控制的第三方 Block，补 `DataVersion => 0` + 恒等 `OnMigrate(object s, int v) => s` 即可保持原行为；后续结构变更时再 +1 并实现真实迁移。
 - **版本号分工**：`DataSnapshot.version` 保留为存档级格式版本，与块级 `DataBlockSnapshot.version` 相互独立，各自管理。
 
-### 线程安全
+## 架构设计
+
+```
+DataBootstrapStage (引导阶段，Phase=3)
+    └── DataManagerImpl (内部实现)
+            └── Blocks : Dictionary<Type, IDataBlock>   ← 按 GamePlay 模块组织
+
+DataManager (静态门面)
+    └── 转发到 DataManagerImpl
+
+SaveBootstrapStage (引导阶段，Phase=4)
+    └── SaveManagerImpl (内部实现)
+            ├── FileManager (文件读写)
+            └── DataManager (快照导出/恢复)
+```
+
+## 内部机制
+
+### 序列化原理
+
+1. **导出快照**：`CreateSnapshot()` 遍历所有已注册的 `IDataBlock`，调用 `OnSave()` 获取快照对象，通过 `XSerialize.Serializer` 序列化为字节数组并 Base64 编码，连同 `blockName`、`saveType`、`version`（写入时取 `IDataBlock.DataVersion`）存入 `DataBlockSnapshot`。默认序列化器为 `NewtonsoftSerializer`（基于 Newtonsoft.Json，format = "json"）；`JsonSerializer`（JsonUtility）以 format = "json-utility" 保留，用于读写旧 JsonUtility 格式存档。
+2. **恢复快照**：`ApplySnapshot(data)` 先清空所有已注册 Block 的数据（仅清数据、保留注册），再遍历快照，按 `blockName` 索引已注册的 Block（不创建实例、不反射），按 `saveType` 反序列化；若快照 `version` 低于 Block 当前 `DataVersion` 则执行迁移链，最后调用 `OnLoad(saveData)`。单块恢复 `ApplyBlockSnapshot(snap)` 复用同一恢复管线。
+
+   **它返回「未能恢复的数据块数量」**（`0` 表示全部成功）。单个块失败（快照缺 `blockName`、块未注册、格式不支持、块版本高于当前代码、反序列化或 `OnLoad` 抛异常）**不会中断整体恢复**，而是被跳过并计入返回值——所以**调用方必须据返回值判断本次加载是否完整**：「部分块未恢复」等价于内存里少了一半数据，当作成功处理是危险的。另外，失败块会停在**「已清空、未加载」**的状态上（清空发生在恢复之前，且对失败块不回滚）；要在失败时恢复原状，请自行在调用前留一份 `CreateSnapshot()` 快照——Save 模块就是这么做的（那份快照同时携带生成时的脏集合，故回滚后「哪些块还没存」也一并还原）。
+3. **`OnSave()` 返回 `null`** 的 Block 不参与快照。
+4. **旧存档兼容**：快照缺失 `saveType` 或类型无法解析（如类型重命名）时，回退使用 Block 自身类型反序列化并输出 `[Data]` 前缀警告；该用法要求 `OnSave()` 返回类型与 Block 类型一致方可正确恢复。
+
+> 文件 I/O 等持久化逻辑由 **Save 模块（XFramework.XSave）**负责，可通过 `DataManager.CreateSnapshot()` 获取数据后写入文件。
+
+## 线程契约
+
 - 所有 `DataManager` API **必须在主线程**调用，内部未做线程同步处理。
 
 ## 已知限制
@@ -285,3 +291,16 @@ DataManager.ApplyBlockSnapshot(snap);
 - **`Shutdown()` 不触发任何块的 `OnClear`。** 它的语义是「注销门面持有的实现」，不是「清空数据」——需要释放块持有的资源（订阅、句柄等）请显式调 `ClearAll()` 或 `RemoveBlock<T>()`。
 - **`DataBlockSnapshot.format` 写入端目前恒为 `null`**（导出时只填 `DataSnapshot.defaultFormat`）。该字段保留是为了兼容将来「按块指定格式」；读取端在 `format` 为空时按 `defaultFormat` 回退，故这条不影响行为。
 
+## 设计原则
+
+- **引导阶段 + 静态服务**：`DataBootstrapStage`（`IBootstrapStage`，Phase 3）在启动管线里注入 `DataManager` 静态门面，此后全局可访问；反向清理经其 `Shutdown` 调 `DataManager.Shutdown()`。
+  **要换掉数据层实现**（例如接自己的存储/同步方案）就实现 `IDataManager`（16 个成员）并注入：
+
+  ```csharp
+  DataManager.Initialize(new MyDataManager());   // 传 null 等效于 Shutdown()
+  ```
+
+  已注入非 null 实现时重复调用只告警并忽略；不经引导流程的项目也可以直接调它（`DataManager.IsInitialized` 可探测）。**本模块没有 options 对象**——实现即配置。
+- **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
+- **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
+- **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。

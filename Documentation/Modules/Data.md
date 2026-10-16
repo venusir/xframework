@@ -8,7 +8,7 @@
 ## 文件结构
 
 ```
-XData/
+Runtime/Data/
 ├── IDataBlock.cs             # 数据块接口定义
 ├── IDataManager.cs           # 服务接口
 ├── DataManager.cs            # 静态门面
