@@ -235,7 +235,7 @@ Debug.Log($"{vm.Hp} 订阅数={vm.Hp.SubscriptionCount}");
 - **订阅立即回调** — 订阅时立即同步回调当前值(UI 初始绑定依赖此语义)
 - **相同值去重** — 设置相同值不通知。「相同」默认按 `EqualityComparer<T>.Default`，可经 `ReactiveProperty<T>` 的构造重载 / `Select` 的 `comparer` 参数注入自定义比较器（浮点容差等）。集合侧的同源规则是**无变化不发通知**（空表 `Clear`、等值 upsert、元素少于 2 的 `Sort`）。**这些都是本模块类型的行为,不是接口保证**(见「接口承诺到哪为止」)
 - **读宽容、写严格** — 已释放后读取 `Value` 仍返回最后持有的值（与 `ReadOnlyReactiveProperty<T>` 一致）；写入 `Value` 与订阅则抛 `ObjectDisposedException`。读是只读操作、不改变任何状态,让它抛只会把「先 Dispose 再读一次收尾值」变成必须 try/catch 的地雷;写是编程错误,应当被立刻发现。**同样只是本模块类型的行为**——`SettingRef.Value` 在设置类型注销后照抛
-- **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
+- **主线程专用** — 引擎的锁与快照只保证订阅链表与终止标志在并发退订下不被写坏,**不构成「可以多线程读写」的许可**(详见 Event 模块 README 的「线程契约」节)。本模块自身未做任何同步:跨线程写入会让去重判断与派发载荷分叉(最后一个订阅者见到的值不再是 `Value`,且无人纠正)
 - **接口即只读视图** — `IReactiveProperty<T>.Value` 无 setter,写值经具体实现类型,避免外部误写状态。可写属性、`Select` 派生值、Settings 的 `SettingRef` 句柄一律实现该接口,于是绑定 API 只认接口、任何第三方实现都能接入
 - **异常隔离** — **投递**路径的订阅回调抛异常记 Error 日志后继续;订阅时的立即回调属于注册期、同步执行,它抛出的异常原样上抛(订阅已自动清理,不会泄漏)。两条路径语义不同是有意的:绑定初始化失败应当被看见,而运行期的单个订阅者出错不该拖垮其余订阅者
 - **集合走单流 struct 载荷** — `ReactiveList<T>` 与 `ReactiveDictionary<TKey,TValue>` 的变更各是一条 `readonly struct`（列表：`Kind` / `Index` / `Item` / `OldItem`；字典：`Kind` / `Key` / `Value` / `OldValue`），零 GC；对照 UniRx / BCL `ObservableCollection<T>` 每次通知分配一个事件参数对象。整表操作用一条 `Reset` 兜底（「整表变了，重读」），不做逐项展开。共享词表 `ReactiveCollectionChangeKind`

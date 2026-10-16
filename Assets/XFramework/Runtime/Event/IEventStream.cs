@@ -11,7 +11,7 @@ namespace XFramework.XEvent
     /// ——那些是 <c>XFramework.XMessage</c> 的职责(总线按类型 / Key 持有并治理一批流)。判据:状态是
     /// 「一条流」用本模块,状态是「一张表」用 Message。</para>
     /// <para><b>线程:</b>按主线程使用设计。内部的锁与快照只用于让订阅链表在并发退订下不被写坏,
-    /// <b>不构成跨线程发布 / 订阅的许可</b>(详见模块 README「线程」节)。</para>
+    /// <b>不构成跨线程发布 / 订阅的许可</b>(详见模块 README「线程契约」节)。</para>
     /// </summary>
     /// <typeparam name="T">事件载荷类型。</typeparam>
     public interface IEventStream<T> : IDisposable

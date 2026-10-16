@@ -74,6 +74,7 @@ namespace XFramework.Architecture.Tests
             "Serialize",   // 退化样本：原本缺 概述 / 快速使用 / 模块结构 / 线程契约 四节
             "Bootstrap",   // 边界样本：首节是「定位」；权威副本没有文件结构，反方向补建
             "Diagnostics", // 边界样本：线程契约原埋在「契约」节下，提升为 ##；首节带限定词
+            "Event",       // 边界样本：改节名牵动 4 处外部指针（含 2 个 .cs 与 1 个跨 README 锚点）
         };
 
         /// <summary>
