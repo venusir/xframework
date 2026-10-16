@@ -13,6 +13,7 @@ Runtime/Localization/
 ├── LocalizationManager.cs         # 静态外观（全局入口）
 ├── LocalizationManagerImpl.cs     # 默认实现（LRU 缓存）
 ├── LocalizationBootstrapStage.cs  # 引导阶段（IBootstrapStage，Phase 90）
+├── LocalizationLanguageInfo.cs    # 诊断回读载荷：CopyLoadedLanguages 的列表元素（2026-10-16 补录——它一直是公开面，此前漏在本树之外）
 ├── LanguageChangedMessage.cs      # 语言切换消息（readonly struct，无装箱）
 └── LanguageAssetLoader.cs          # 语言数据异步加载器（内部）
 ```
