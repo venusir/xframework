@@ -8,11 +8,11 @@
 ## 文件结构
 
 ```
-XSerialize/
+Runtime/Serialize/
 ├── ISerializer.cs          # 序列化器接口（同步，字节数组输出）
 ├── Serializer.cs           # 静态门面，管理已注册的序列化器（字典索引）
-├── JsonSerializer.cs       # 内置默认实现（封装 Unity JsonUtility）
-├── NewtonsoftSerializer.cs # 内置实现（封装 Newtonsoft.Json，支持 Dictionary / 多态）
+├── JsonSerializer.cs       # 遗留格式实现（format = "json-utility"，封装 Unity JsonUtility；新数据请用 json）
+├── NewtonsoftSerializer.cs # 内置默认实现（format = "json"，封装 Newtonsoft.Json，支持 Dictionary / 多态）
 └── README.md               # 本文件
 ```
 

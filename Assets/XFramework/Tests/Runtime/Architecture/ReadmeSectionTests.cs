@@ -70,7 +70,8 @@ namespace XFramework.Architecture.Tests
         /// </summary>
         private static readonly string[] RestructuredModules =
         {
-            "Timer",   // 打样：骨架与重排是否合身由它先验
+            "Timer",       // 打样：骨架与重排是否合身由它先验
+            "Serialize",   // 退化样本：原本缺 概述 / 快速使用 / 模块结构 / 线程契约 四节
         };
 
         /// <summary>

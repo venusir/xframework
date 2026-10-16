@@ -1,14 +1,47 @@
-# XSerialize
+# Serialize —— 按格式名取用的序列化注册表，解耦 Data / Save / Config 与具体序列化实现
 
-序列化抽象层，解耦 `DataManager` 与具体序列化格式。
+## 概述
 
-## 架构
+命名空间 `XFramework.XSerialize`。序列化抽象层，解耦 `DataManager` 与具体序列化格式。
+
+**它解决的是「换格式不用改调用方」**：`Data` / `Save` / `Config` 只认 `ISerializer` 这个接口与一个格式名，具体实现（Newtonsoft / Unity JsonUtility / 第三方）由注册表决定。开箱已注册两个格式，见「API 参考」的「内置默认」。
+
+## 快速使用
+
+```csharp
+// 默认序列化器（format = "json"，基于 Newtonsoft）——框架进入播放时已自动注册
+ISerializer json = Serializer.Default;
+
+byte[] bytes = json.Serialize(myObject, typeof(MyType));
+MyType back = (MyType)json.Deserialize(bytes, typeof(MyType));
+
+// 按格式名取用；未注册的格式抛 KeyNotFoundException，探测用 TryGet
+ISerializer legacy = Serializer.Get("json-utility");
+```
+
+接入 `Data` / `Save` / `Config` 时**不需要直接调用本模块**——它们自己通过格式名走注册表。直接用它只有两种场合：**扩展一种新格式**（见「典型场景」），或**自己做一次格式无关的序列化**。
+
+## 模块结构
+
+```text
+Runtime/Serialize/
+├── Serializer.cs           # 静态门面：注册表（Dictionary<格式名, ISerializer>）+ AutoInit
+├── ISerializer.cs          # 序列化器接口：Format + Serialize / Deserialize（同步、字节数组进出）
+├── NewtonsoftSerializer.cs # 内置默认实现（format = "json"）
+└── JsonSerializer.cs       # 遗留格式实现（format = "json-utility"，封装 Unity JsonUtility）
+```
+
+四个文件都是公开面，本模块没有 `internal` 类型。
+
+## 架构设计
 
 - `DataManager` 通过 `Serializer.Get(format)` 获取序列化器，不再硬编码 `JsonUtility`。
 - `DataSnapshot` 顶层仍为 JsonUtility 兼容格式（`DataBlockSnapshot.data` 用 Base64 存储原始字节）。
 - 第三方可实现 `ISerializer` 并调用 `Serializer.Register()` 扩展自定义格式。
 
-## 内置默认
+## API 参考
+
+### 内置默认
 
 框架初始化时（`[RuntimeInitializeOnLoadMethod]`，见 `Serializer.AutoInit`）自动注册两个：
 
@@ -20,7 +53,7 @@
 > Unity 自带的 `JsonUtility` 不支持字典、多态与 `null` 语义，故默认实现是 Newtonsoft；`json-utility`
 > 只作兼容保留，新数据请用 `json`。
 
-## API 参考
+### 注册表成员
 
 | 成员 | 说明 |
 | ---- | ---- |
@@ -33,7 +66,7 @@
 | `Initialize()` | 注册内置两个（幂等，框架已自动调用） |
 | `Shutdown()` | 清空全部注册并把模块复位为未初始化 |
 
-## 第三方扩展
+## 典型场景
 
 实现 `ISerializer`，然后注册：
 
@@ -79,6 +112,12 @@ Serializer.Register(new MessagePackSerializer());
 ```
 
 4. 设置 `DataSnapshot.defaultFormat = "msgpack"` 或单个 `DataBlockSnapshot.format` 即可切换格式。
+
+## 线程契约
+
+**注册表本身没有任何同步原语，也没有主线程断言**——`Get` / `TryGet` / `Register` / `Unregister` / `Shutdown` 直接读写同一个静态字典，从别的线程并发调用即数据竞争。与框架其余静态门面同一口径：**一律在主线程调用**。
+
+`ISerializer` 的实现不涉及 I/O、也没有等待点（接口注释原文：「序列化本质为同步 CPU 操作」），框架**不在内部切线程**——谁调用 `Serializer.Get(...).Serialize(...)`，序列化就在谁的线程上跑。
 
 ## 已知限制
 
