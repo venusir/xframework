@@ -1,4 +1,4 @@
-# XInput —— 纯字符串驱动的输入系统
+# Input —— 纯字符串驱动的输入抽象层：动作名由使用方定义，后端可整体替换
 
 ## 概述
 
@@ -9,7 +9,7 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
 - **自动设备检测**：支持键盘/鼠标、手柄、触摸的自动识别，以及手柄类型（Xbox/PS4/PS5/Switch）检测。
 - **热路径零 GC**：每帧读取路径（按钮/轴值/时长）基于字符串缓存字典，无装箱、无堆分配；`GetBindings`/重绑定等低频设置 UI 路径允许少量分配。
 
-## 快速开始
+## 快速使用
 
 ### 1. 输入动作资源
 
@@ -286,11 +286,38 @@ sub.Dispose();
 > 不支持双人键鼠；无 InputUser 级设备配对；`playerId > 0` 的读取为控件级原始值，不应用绑定处理器。
 > 完整档（每玩家 action 实例 + 设备配对）待需求明确后另行实现。
 
-## 自定义输入封装（第三方游戏必须做）
+## 模块结构
+
+```text
+Runtime/Input/
+├── InputManager.cs                   # 全局静态外观（静态类，直接调用）
+├── IInputProvider.cs                 # 输入提供者接口（核心抽象 = 后端替换点）
+├── IRebindingOperation.cs            # 交互式按键重绑定操作句柄接口
+├── InputBindingInfo.cs               # 绑定信息结构体（UI 按键提示用）
+├── InputDeviceType.cs                # 输入设备类型枚举
+├── GamepadType.cs                    # 手柄类型枚举
+├── InputBootstrapStage.cs            # 引导阶段：初始化门面（Phase 1），带 provider 或 options 两种构造
+├── Messages/
+│   ├── DeviceConnectedMessage.cs
+│   ├── DeviceDisconnectedMessage.cs
+│   └── GamepadTypeChangedMessage.cs
+└── Default/                          # 默认后端（Unity Input System）；Unity 输入类型只许住在这里
+    ├── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
+    ├── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
+    ├── InputSystemOptions.cs         # Initialize 的配置载荷（Asset + InitialActionMap）
+    └── InputSystemOptionsAsset.cs    # 上面那份配置的 ScriptableObject 载体（Inspector 可配）
+```
+
+十四个文件都是公开面（`Default/` 下四个是默认后端的配置载体与实现），本模块没有 `internal` 类型。
+**`Default/` 这个目录是边界**：Unity Input System 的类型只允许出现在该命名空间里。
+
+## 典型场景
+
+### 自定义输入封装（第三方游戏必须做）
 
 由于框架不定义任何动作名，每个游戏应**自行封装**专属的输入类。
 
-### 示例：动作游戏角色输入
+#### 示例：动作游戏角色输入
 
 ```csharp
 namespace MyGame.Input
@@ -337,7 +364,7 @@ namespace MyGame.Input
 }
 ```
 
-### 示例：RTS 游戏输入封装
+#### 示例：RTS 游戏输入封装
 
 ```csharp
 namespace MyRTSGame.Input
@@ -381,7 +408,7 @@ namespace MyRTSGame.Input
 }
 ```
 
-### 示例：UI 输入封装
+#### 示例：UI 输入封装
 
 ```csharp
 namespace MyGame.Input
@@ -421,24 +448,7 @@ namespace MyGame.Input
 }
 ```
 
-## 关键原理
-
-### 字符串查找与缓存
-
-`InputSystemProvider` 内部维护一个 `Dictionary<string, InputAction>` 缓存，**首次查找后缓存** `InputAction` 引用，后续调用直接命中缓存，零开销。
-
-### GC 友好
-
-- 字符串常量 `"Jump"` 等为编译时常量，不产生 GC。
-- 缓存字典仅在首次访问时分配一次。
-- 所有方法的输入和输出都是原生类型（bool, float, Vector2），无装箱。
-
-### ActionMap 管理
-
-- `SwitchActionMap` = 禁用所有 + 启用指定（互斥模式）
-- `EnableActionMap` = 叠加启用（不冲突的操作模式并存，如 Gameplay + Debug）
-
-## 扩展：自定义 IInputProvider（如 Rewired）
+### 扩展：自定义 IInputProvider（如 Rewired）
 
 实现 `IInputProvider` 接口即可切换底层：
 
@@ -466,7 +476,7 @@ public class RewiredProvider : IInputProvider
 }
 ```
 
-### 接进启动流程（换后端也只是一行）
+#### 接进启动流程（换后端也只是一行）
 
 把它包成引导阶段，初始化与清理就都走框架的对称路径：
 
@@ -490,6 +500,34 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 > 一律走代码注入（这条边界同样适用于别的模块：音频换 Wwise / 资源换实现，都是 `SetInstance` 而不是字段）。
 > 继承底座还有个直接好处：Inspector 里不会挂着一堆你根本用不上的配置字段。
 
+## 内部机制
+
+### 字符串查找与缓存
+
+`InputSystemProvider` 内部维护一个 `Dictionary<string, InputAction>` 缓存，**首次查找后缓存** `InputAction` 引用，后续调用直接命中缓存，零开销。
+
+### GC 友好
+
+- 字符串常量 `"Jump"` 等为编译时常量，不产生 GC。
+- 缓存字典仅在首次访问时分配一次。
+- 所有方法的输入和输出都是原生类型（bool, float, Vector2），无装箱。
+
+### ActionMap 管理
+
+- `SwitchActionMap` = 禁用所有 + 启用指定（互斥模式）
+- `EnableActionMap` = 叠加启用（不冲突的操作模式并存，如 Gameplay + Debug）
+
+## 线程契约
+
+- **`InputManager` 的所有调用都在主线程**：查询、状态变更（`Initialize` / `SetProvider` / `Destroy` /
+  `SwitchActionMap` / 振动）以及 `Tick()` 的驱动。底层 Unity Input System 本身要求主线程；本模块不做
+  线程同步，也没有跨线程断言——**越线程调用没有守卫会拦你**。
+- **`Observe*` 的回调在主线程**：它们由帧脉冲驱动，而帧脉冲只由 `Tick()`（进而由 `UpdateManager`
+  在主线程驱动）发布。
+- **`destroyCancellationToken` 的回调跑在取消者的线程上**：传了 `context` 的订阅，若在非主线程销毁该
+  对象，退订会在线程池线程上改写订阅表。`MonoBehaviour` 由 Unity 在主线程销毁，不受影响；自定义
+  `IDestroyCancellationToken` 实现要自己保证在主线程取消。
+
 ## 已知限制
 
 - ~~关闭域重载时，第二个播放会话里帧脉冲会静默失效~~ —— **2026-10-12 已修**。原因：退出播放时
@@ -511,19 +549,8 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   第二个会话走的是**首初始化**路径。
 - **`Destroy()` 不退订本模块的订阅**：`Observe*` / `Subscribe` 订的是模块级的帧脉冲流与消息总线，
   `Destroy()` 只释放 Provider、注销帧驱动、复位帧号——**句柄归订阅方**。传了 `context` 的订阅由它的销毁
-  令牌收口（见下节）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的
+  令牌收口（见「线程契约」）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的
   `UIManager.Subscribe`。
-
-## 线程契约
-
-- **`InputManager` 的所有调用都在主线程**：查询、状态变更（`Initialize` / `SetProvider` / `Destroy` /
-  `SwitchActionMap` / 振动）以及 `Tick()` 的驱动。底层 Unity Input System 本身要求主线程；本模块不做
-  线程同步，也没有跨线程断言——**越线程调用没有守卫会拦你**。
-- **`Observe*` 的回调在主线程**：它们由帧脉冲驱动，而帧脉冲只由 `Tick()`（进而由 `UpdateManager`
-  在主线程驱动）发布。
-- **`destroyCancellationToken` 的回调跑在取消者的线程上**：传了 `context` 的订阅，若在非主线程销毁该
-  对象，退订会在线程池线程上改写订阅表。`MonoBehaviour` 由 Unity 在主线程销毁，不受影响；自定义
-  `IDestroyCancellationToken` 实现要自己保证在主线程取消。
 
 ## 依赖
 
@@ -538,4 +565,3 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 - 可选：Rewired（如需自定义实现）
 - 框架内依赖：`XMessage`（设备连接 / 断开与手柄类型变化经消息总线发布）、`XEvent`（`Observe*` 的帧脉冲流）、
   `XUpdate`（`Initialize` 成功后自动注册帧驱动）
-

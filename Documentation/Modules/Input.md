@@ -15,13 +15,16 @@ Runtime/Input/
 ├── InputBindingInfo.cs               # 绑定信息结构体（UI 按键提示用）
 ├── InputDeviceType.cs                # 输入设备类型枚举
 ├── GamepadType.cs                    # 手柄类型枚举
+├── InputBootstrapStage.cs            # 引导阶段：初始化门面（Phase 1）（2026-10-16 补录——它一直是公开面，此前漏在本树之外）
 ├── Messages/                         # 消息定义
 │   ├── DeviceConnectedMessage.cs
 │   ├── DeviceDisconnectedMessage.cs
 │   └── GamepadTypeChangedMessage.cs
 ├── Default/
 │   ├── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
-│   └── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
+│   ├── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
+│   ├── InputSystemOptions.cs         # Initialize 的配置载荷（Asset + InitialActionMap；2026-10-16 补录）
+│   └── InputSystemOptionsAsset.cs    # 上面那份配置的 ScriptableObject 载体（Inspector 可配；2026-10-16 补录）
 └── README.md
 ```
 

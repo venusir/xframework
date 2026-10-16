@@ -88,6 +88,7 @@ namespace XFramework.Architecture.Tests
             "Pool",        // 「使用示例 ×7」合成典型场景（含原挂在集合池下的 5–7）；「配置」并入 API 参考
             "Lock",        // 「诊断 / ILockable 扩展方法」并入 API 参考；线程契约从已知限制提升
             "File",        // 「设计决策与性能考量」拆为性能代价与设计原则；顺带去掉一处原文重复
+            "Input",       // 「自定义输入封装 / 扩展 IInputProvider」并入典型场景；权威副本补两个 Default 文件
         };
 
         /// <summary>
