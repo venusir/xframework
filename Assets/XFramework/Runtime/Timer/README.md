@@ -1,4 +1,4 @@
-# XFramework / Timer 模块
+# Timer —— 一次性延时与固定间隔定时器，句柄可查询、可重开、零分配
 
 ## 概述
 
@@ -20,6 +20,70 @@
 | 重复起停同一件事 | 句柄复用，零分配 | 每次要一个新的 `CancellationTokenSource` |
 | 固定间隔长期运行 | 落在「锚点 + k × 间隔」网格上，不漂 | 逐次累加，会漂 |
 | 低频定时器的开销 | 自动降频，60 秒的定时器每 2.1 秒才被扫一次 | 每帧一个 `PlayerLoop` 回调 |
+
+## 快速使用
+
+```csharp
+// 1. 延时（一次性）：到点回调一次，随后句柄自动失效
+TimerManager.After(3f, () => Respawn());
+
+// 2. 固定间隔：返回句柄以便查询与停止
+var tick = TimerManager.Every(1f, () => Score++);
+float left = tick.Remaining;
+
+// 3. 不用了释放槽位（句柄是可复制的值，离开作用域不会自动停表）
+tick.Dispose();
+```
+
+## 模块结构
+
+```text
+Runtime/Timer/
+├── TimerManager.cs   # 静态门面：After / Every / CancelAll / ActiveCount
+├── TimerHandle.cs    # 句柄（readonly struct）：Remaining / Stop / Restart / Dispose
+└── TimerInfo.cs      # CopyActiveTimers 的明细载荷（readonly struct）
+```
+
+其余文件（调度引擎、槽位表、驱动器）是 `internal`，使用方不直接接触——完整清单与各文件职责在该模块的维护向记录里。
+
+## API 参考
+
+### 创建（`TimerManager`）
+
+| 成员 | 说明 |
+| --- | --- |
+| `After(float delay, Action callback, UpdateTimeMode = Scaled, CancellationToken = default)` | 一次性延时。`delay >= 0` 且有限 |
+| `After<TState>(float delay, Action<TState> callback, TState state, ...)` | 同上，回调收到 `state`。**零闭包、值类型不装箱** |
+| `Every(float interval, Action callback, ...)` | 固定间隔。`interval > 0` 且有限 |
+| `Every<TState>(float interval, Action<TState> callback, TState state, ...)` | 同上 |
+
+`timeMode` 排在 `cancellationToken` **之前**——与全仓公开 API 的参数序一致（配置参数在前、令牌收尾）。
+
+两条失败形态：
+
+- **参数非法抛异常**：`callback` 为 null → `ArgumentNullException`；时长非有限、`interval <= 0`、`timeMode` 越界 → `ArgumentOutOfRangeException`。
+- **创建时令牌已被取消**：记一条 `[Timer]` 告警并返回 `default(TimerHandle)`，**不抛也不同步回调**。
+
+### 句柄（`TimerHandle`）
+
+| 成员 | 说明 |
+| --- | --- |
+| `IsDefault` | 是否 `default(TimerHandle)`。纯字段检查，任何阶段都安全 |
+| `IsActive` | 是否仍在计时。**实时查询**（句柄是不可变值类型，缓存不了） |
+| `Remaining` | 距下一拍还剩多少秒；无效/已停/已取消 → `0` |
+| `Stop()` | 停表但**保留槽位**，可 `Restart` |
+| `Restart()` | 用原时长重新起算（首拍 = 此刻 + 原时长） |
+| `Dispose()` | 停表**并释放槽位**，句柄随之失效 |
+
+`IsActive` 的一条边界：**被暂停的定时器仍算在计时**（冻结的是时间轴，不是定时器的存在）；而**令牌已取消的立刻算作不在计时**，不等槽位被回收。
+
+### 门面其余成员
+
+| 成员 | 说明 |
+| --- | --- |
+| `CancelAll()` | 停净全部（含已 `Stop` 未释放的），返回被取消的数量。**彻底复位**，之后仍可继续创建 |
+| `ActiveCount` | 正在计时的数量（两轴合计） |
+| `CopyActiveTimers(List<TimerInfo>)` | 占用槽位的定时器明细（轴 / 槽位 / 剩余 / 时长 / 重复 / 是否在计时 / 回调名），**含已 Stop 未释放的**。诊断用 |
 
 ## 典型场景
 
@@ -78,66 +142,6 @@ _cooldown.Dispose();     // 单个：停表并释放槽位
 TimerManager.CancelAll(); // 全部：彻底复位，之后仍可继续创建
 ```
 
-## 快速使用
-
-```csharp
-// 1. 延时（一次性）：到点回调一次，随后句柄自动失效
-TimerManager.After(3f, () => Respawn());
-
-// 2. 固定间隔：返回句柄以便查询与停止
-var tick = TimerManager.Every(1f, () => Score++);
-float left = tick.Remaining;
-
-// 3. 不用了释放槽位（句柄是可复制的值，离开作用域不会自动停表）
-tick.Dispose();
-```
-
-## 完整 API 参考
-
-### 创建（`TimerManager`）
-
-| 成员 | 说明 |
-| --- | --- |
-| `After(float delay, Action callback, UpdateTimeMode = Scaled, CancellationToken = default)` | 一次性延时。`delay >= 0` 且有限 |
-| `After<TState>(float delay, Action<TState> callback, TState state, ...)` | 同上，回调收到 `state`。**零闭包、值类型不装箱** |
-| `Every(float interval, Action callback, ...)` | 固定间隔。`interval > 0` 且有限 |
-| `Every<TState>(float interval, Action<TState> callback, TState state, ...)` | 同上 |
-
-`timeMode` 排在 `cancellationToken` **之前**——与全仓公开 API 的参数序一致（配置参数在前、令牌收尾）。
-
-两条失败形态：
-
-- **参数非法抛异常**：`callback` 为 null → `ArgumentNullException`；时长非有限、`interval <= 0`、`timeMode` 越界 → `ArgumentOutOfRangeException`。
-- **创建时令牌已被取消**：记一条 `[Timer]` 告警并返回 `default(TimerHandle)`，**不抛也不同步回调**。
-
-### 句柄（`TimerHandle`）
-
-| 成员 | 说明 |
-| --- | --- |
-| `IsDefault` | 是否 `default(TimerHandle)`。纯字段检查，任何阶段都安全 |
-| `IsActive` | 是否仍在计时。**实时查询**（句柄是不可变值类型，缓存不了） |
-| `Remaining` | 距下一拍还剩多少秒；无效/已停/已取消 → `0` |
-| `Stop()` | 停表但**保留槽位**，可 `Restart` |
-| `Restart()` | 用原时长重新起算（首拍 = 此刻 + 原时长） |
-| `Dispose()` | 停表**并释放槽位**，句柄随之失效 |
-
-`IsActive` 的一条边界：**被暂停的定时器仍算在计时**（冻结的是时间轴，不是定时器的存在）；而**令牌已取消的立刻算作不在计时**，不等槽位被回收。
-
-### 门面其余成员
-
-| 成员 | 说明 |
-| --- | --- |
-| `CancelAll()` | 停净全部（含已 `Stop` 未释放的），返回被取消的数量。**彻底复位**，之后仍可继续创建 |
-| `ActiveCount` | 正在计时的数量（两轴合计） |
-| `CopyActiveTimers(List<TimerInfo>)` | 占用槽位的定时器明细（轴 / 槽位 / 剩余 / 时长 / 重复 / 是否在计时 / 回调名），**含已 Stop 未释放的**。诊断用 |
-
-## 与相邻模块的关系
-
-| 模块 | 关系 |
-| --- | --- |
-| **Update** | **唯一依赖**。定时器是 Update 的消费者：时间来自它的 `deltaTime`，档位用它的 `UpdateTier`，暂停用它的双时间轴 |
-| Settings / UI / Audio / … | **不依赖**。需要联动请在项目侧接线（例如把 `Remaining` 喂给进度条） |
-
 ## 内部机制
 
 ### 逻辑时钟
@@ -186,18 +190,6 @@ tick.Dispose();
 
 取消令牌是唯一允许跨线程的输入：在别的线程上取消是安全的（模块只读 `IsCancellationRequested`）。
 
-## 设计原则
-
-- **不新建时间模型** — 时间、暂停、时间缩放全部转接自 Update；本模块只有一个 `UpdateTimeMode` 参数
-- **句柄即入口** — 同一语义只有一处真相，门面不重复暴露
-- **回调里什么都能做** — 创建、停止、重开、全停、抛异常都被用例钉住，不要求调用方遵守额外纪律
-- **不做并行** — 回调在主线程上同步执行，没有等待点；需要异步的工作请在回调里自己起 UniTask
-
-## 依赖
-
-- **框架内**：`XUpdate`（唯一）。时间口径、档位、双时间轴全部来自它
-- **第三方**：无
-
 ## 已知限制
 
 - **同轴最细的定时器决定其余所有定时器的扫描频率**：一条轴只有一条驱动器，档位取该轴上最近的截止。一条 0.5 秒的定时器会把同轴那条 60 秒的一起拉到细档——此时降频收益归零。双轴已经把「暂停菜单类」与「玩法定时器」天然分开，但同一轴内的混用无法避免。
@@ -235,3 +227,22 @@ Audio 的播放源封顶，是因为槽位背后是稀缺的引擎资源；定�
 ### 为什么不提供「按 owner 分组取消」
 
 一个对象的多个定时器各存句柄即可；若确实需要「一锅端」，那通常说明该对象的生命周期本身该由使用方的架构管——框架替它决定实体模型，撞第一条非目标。真的要一锅端，`destroyCancellationToken` 是现成的机制。
+
+## 与相邻模块的关系
+
+| 模块 | 关系 |
+| --- | --- |
+| **Update** | **唯一依赖**。定时器是 Update 的消费者：时间来自它的 `deltaTime`，档位用它的 `UpdateTier`，暂停用它的双时间轴 |
+| Settings / UI / Audio / … | **不依赖**。需要联动请在项目侧接线（例如把 `Remaining` 喂给进度条） |
+
+## 设计原则
+
+- **不新建时间模型** — 时间、暂停、时间缩放全部转接自 Update；本模块只有一个 `UpdateTimeMode` 参数
+- **句柄即入口** — 同一语义只有一处真相，门面不重复暴露
+- **回调里什么都能做** — 创建、停止、重开、全停、抛异常都被用例钉住，不要求调用方遵守额外纪律
+- **不做并行** — 回调在主线程上同步执行，没有等待点；需要异步的工作请在回调里自己起 UniTask
+
+## 依赖
+
+- **框架内**：`XUpdate`（唯一）。时间口径、档位、双时间轴全部来自它
+- **第三方**：无

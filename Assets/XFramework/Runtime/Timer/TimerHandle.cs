@@ -74,7 +74,8 @@ namespace XFramework.XTimer
         /// <para><b>这是一次实时查询而非缓存字段</b>：本结构是不可变值类型，<see cref="Stop"/> / <see cref="Dispose"/>
         /// 无法改写自身状态，故答案只能向门面现取。</para>
         /// <para><b>被暂停的定时器仍算在计时</b>：<c>Time.timeScale = 0</c> 或 <c>UpdateManager.Pause()</c> 冻结的是
-        /// 逻辑时间轴，不是定时器的存在——恢复后它会从暂停处续上（见模块 README 的「暂停与时间轴」）。</para>
+        /// 逻辑时间轴，不是定时器的存在——恢复后它会从暂停处续上（见模块 README 的「句柄」一节；
+        /// 双时间轴本身的语义见 <c>XFramework.XUpdate</c> 模块 README 的「时间轴与暂停」）。</para>
         /// <para><b>令牌已取消的定时器立刻算作不在计时</b>（不等槽位被回收），因此本属性是「还会不会触发」的准确答案。</para>
         /// <para><see cref="Stop"/> 过的定时器为 <c>false</c>；<see cref="Restart"/> 可以让它重新为 <c>true</c>。</para>
         /// </summary>

@@ -11,6 +11,7 @@
 Runtime/Timer/
 ├── TimerManager.cs   # 公开门面（扁平 + #region 分区）：After/Every 四个重载、CancelAll、ActiveCount、AutoInit
 ├── TimerHandle.cs    # 句柄：readonly struct : IDisposable，字段私有、构造 internal
+├── TimerInfo.cs      # 诊断明细：readonly struct，CopyActiveTimers 的载荷（2026-10-16 补录——它一直是 public，此前漏在本树之外）
 ├── TimerCore.cs      # 引擎：两条轴各自的逻辑时钟、表集合、句柄操作、扫尾、选档公式与周期表（internal）
 ├── TimerTable.cs     # ITimerTable + TimerTable<TState> + TimerSlot<TState> + NoState（internal）
 ├── TimerTicker.cs    # IUpdateable：每轴一个的驱动器，持有档位镜像与「上次收到的时刻」（internal）
