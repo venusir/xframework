@@ -1,4 +1,4 @@
-# SettingsManager — 强类型游戏设置管理器
+# Settings —— 强类型游戏设置：纯 POCO + 字段句柄 + 版本迁移
 
 ## 概述
 
@@ -11,19 +11,7 @@
   因此 UI 模块现成的 `BindToSlider` / `BindToText` 等绑定扩展方法可直接使用
 - 两级订阅分工：**字段值变化**归句柄，**设置对象被整体替换**归 `Observe`
 
-## 设计理念
-
-| 原则           | 说明                                                                     |
-| -------------- | ------------------------------------------------------------------------ |
-| **强类型**     | 编译期类型安全，IDE 智能提示，告别 `GetFloat("key")` 的魔法字符串        |
-| **纯 POCO**    | 设置类不依赖框架类型；JSON 可读可调试，字段名即业务名下划线之外无额外包装 |
-| **字段级通知** | 经 `SettingRef` 句柄订阅单个字段，赋值相同值不通知；实例被替换时重放一次 |
-| **可替换后端** | `ISettingsStore` 允许替换为加密存储、PlayerPrefs 或远程云存档            |
-| **替换点在后端** | 可替换的是 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`；**本模块不提供 `SetInstance`**——管理器的通知、脏标记与保存时机是**模块语义**而非实现细节，换它等于换模块（同 UI 的排序分层、Update 的调度模型） |
-| **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等      |
-| **显式为主**   | 默认不自动保存、不写盘，行为可预期；需要时按需开启去抖自动保存            |
-
-## 快速开始
+## 快速使用
 
 ### 1. 定义设置类（纯 POCO）
 
@@ -159,6 +147,33 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
 });
 ```
 
+## 模块结构
+
+```text
+Runtime/Settings/
+├── SettingsManager.cs              # 全局静态外观
+├── ISettingsManager.cs             # 管理器接口
+├── SettingsManagerImpl.cs          # internal：默认实现
+├── SettingRef.cs                   # 字段句柄（IReactiveProperty + IReactivePropertyWriter）
+├── SettingRefRegistry.cs           # internal：句柄重放注册表（实例替换时通知订阅者 + 会话代际号）
+├── SettingRefSessionCoordinator.cs # internal：注册表的会话边界协调器（泛型静态表无法统一遍历）
+├── ISettingsStore.cs               # 存储后端接口
+├── IAsyncSettingsStore.cs          # 可选能力：异步存储
+├── JsonFileStore.cs                # 默认 JSON 文件存储（原子写 + 一代备份）
+├── EncryptedSettingsStore.cs       # 加解密装饰器（可叠在任意后端上）
+├── SettingsOptions.cs              # 选项（版本 / 自动保存 / 退出与切后台兜底）
+├── SettingsEnvelope.cs             # internal：版本信封
+├── ISettingsMigrator.cs            # 迁移钩子
+├── ISettingsValidator.cs           # 载荷校验钩子
+├── SettingsAutoSaveTicker.cs       # internal：自动保存帧驱动器
+├── SettingsPauseNotifier.cs        # internal：切后台兜底的宿主（MonoBehaviour）
+├── SettingsTypeInfo.cs             # 诊断回读载荷：CopyRegisteredTypes 的列表元素
+└── Messages/
+    └── SettingsChangedMessage.cs   # 变更消息（readonly struct）
+```
+
+十八个文件：标 `internal` 的六个是默认实现、注册表与两个内部宿主；其余是公开面（两个接口、两个钩子接口、两个内置 Store、句柄、选项与消息）。
+
 ## API 参考
 
 ### SettingsManager（静态外观）
@@ -203,7 +218,7 @@ MessageManager.Subscribe<SettingsChangedMessage>(msg =>
   关域重载跨会话后，句柄在下次被使用时自动重新入表（见「已知限制」）
 - **刻意不实现 `IDisposable`**：它通常声明为静态字段并活到进程结束，若带释放语义，
   「面板关闭时 Dispose 掉 ViewModel」这类正常操作会连带废掉它。取消订阅请释放 `Subscribe` 的返回值
-- 读写须在主线程
+- 读写须在主线程（见「线程契约」）
 
 ### ISettingsStore（存储后端接口）
 
@@ -419,7 +434,7 @@ SettingsManager.Load<GameSettings>();   // 让校验器也作用于启动时读�
 
 `readonly struct` 消息，通过 `MessageManager` 发布。包含 `SettingsType`（发生变更的设置类型）。
 
-## 高级用法
+## 典型场景
 
 ### 自定义默认值
 
@@ -556,6 +571,24 @@ SettingsManager.Save<GameSettings>();
 > 写入新后端。框架刻意不做隐式重新加载——那会静默丢掉内存中尚未保存的修改。故替换时会打
 > LogWarning 提醒；如需读取新后端已有数据，请随后调用 `Load`。
 
+## 线程契约
+
+- **句柄读写须在主线程**：`SettingRef.Value` 的读与写都要解析当前设置实例并可能派发通知，模块内没有同步原语。
+- **迁移器与校验器可能在非主线程运行**：后端只实现同步接口、而调用方用的是 `LoadAsync` 时，
+  整段同步读被挪到线程池，两个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——
+  需要碰就只走同步 `Load`。
+- **存储后端那一层相反**：`JsonFileStore` 的成员**可被任意线程调用**（同一实例上的读写由内部锁串行化，
+  同步 `Save` 与在飞的 `SaveAsync` 会同时出现）。所以「主线程」这条约束的射程是**句柄与管理器**，
+  不是后端实现——自建后端时按它自己的并发模型写。
+
+## 性能代价
+
+- `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配
+- `SettingRef` 的值读写零分配；去重基准是 POCO 的实时值（不缓存，故无陈旧锚点）
+- 实例被替换时的重放按句柄数线性遍历，`Apply` / `Load` / `Reset` 都是低频调用，不在热路径
+- 句柄与内部事件流在 `Ref` 调用时一次性分配（故须调用一次并缓存），不在热路径
+- 关闭自动保存时不注册任何帧回调
+
 ## 已知限制
 
 - **写入契约**：直接改 POCO 字段不通知、不置脏。框架无法感知对普通字段的赋值，
@@ -566,7 +599,7 @@ SettingsManager.Save<GameSettings>();
   （而非静默共用一份文件），该表**刻意不随 `Destroy` 清空**——占用关系对应的是磁盘文件，
   文件不会随 Destroy 消失；若清空则「A 初始化 → Destroy → B 初始化」会让 B 悄悄接管 A 的路径
 - **实例替换会重放**：`Apply` / `Load` / `Reset` 之后每个已创建的句柄都会向订阅者推一次当前值，
-  即使数值未变。代价是非幂等的响应会被多做一次（见「字段订阅与 UI 绑定」一节的说明）；
+  即使数值未变。代价是非幂等的响应会被多做一次（见「快速使用」5 的说明）；
   换来的是 UI 不会停留在旧值。这一行为刻意不做去重，理由见上
 - **重放注册表不随 `Destroy` 清空，但在播放会话边界清空**。`Destroy` 与「会话边界」是两件事：前者是
   调用方主动重载管理器（关联关系该活得比它久，见默认路径占用表同理），后者是关域重载时上一会话的一切
@@ -577,7 +610,8 @@ SettingsManager.Save<GameSettings>();
   每次调用都会新建一个**独立重放**的句柄，放进循环或每帧路径既重复编译表达式、也让注册表无谓增长
 - **容器内的字段不跟踪**：`List<ReactiveProperty<T>>` 之类不在句柄体系内；
   `SettingRef` 的路径也必须是对设置对象自身成员的连续访问（不支持方法调用、索引器、闭包捕获）
-- **句柄读写须在主线程**
+- **句柄读写须在主线程**（见「线程契约」）
+- **迁移器与校验器可能在非主线程运行**（见「线程契约」）
 - **`IsDirty` 的语义边界**：它表示「内存改动是否已**提交给存储后端**」，而**不**保证已成功落盘
   ——`ISettingsStore.Save<T>` 返回 `void`，框架无从得知后端内部是否真的写成功。于是写失败分两类：
   - **只告警不抛的后端**（`JsonFileStore` 即如此，为的是磁盘满时也不崩游戏）：框架按「已提交」
@@ -593,19 +627,10 @@ SettingsManager.Save<GameSettings>();
   类型若没有它，所有字段会落到 C# 类型默认值、**字段初始化器一律不执行**（`public int Range = 3`
   会解析成 `0`）。约束把这条陷阱变成了编译期错误。新增字段能在旧存档上取到初始化器的值，
   靠的也正是这一点
-- **迁移器与校验器可能在非主线程运行**：后端只实现同步接口、而调用方用的是 `LoadAsync` 时，
-  整段同步读被挪到线程池，两个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——
-  需要碰就只走同步 `Load`
 
-## 避免 GC
+## 与相邻模块的关系
 
-- `SettingsChangedMessage` 使用 `readonly struct`，避免堆分配
-- `SettingRef` 的值读写零分配；去重基准是 POCO 的实时值（不缓存，故无陈旧锚点）
-- 实例被替换时的重放按句柄数线性遍历，`Apply` / `Load` / `Reset` 都是低频调用，不在热路径
-- 句柄与内部事件流在 `Ref` 调用时一次性分配（故须调用一次并缓存），不在热路径
-- 关闭自动保存时不注册任何帧回调
-
-## 与项目其他模块的对比
+三个同族门面（都是「静态外观 + 接口 + 实现」）的并排对照：
 
 | 特性       | LocalizationManager      | InputManager                | SettingsManager              |
 | ---------- | ------------------------ | --------------------------- | ---------------------------- |
@@ -613,3 +638,15 @@ SettingsManager.Save<GameSettings>();
 | 初始化     | `Initialize(data)`       | `Initialize()`              | `Initialize<T>(path, …)`     |
 | 响应式订阅 | N/A                      | `ObserveXxx`                | `SettingRef` / `Observe`     |
 | 消息通知   | `LanguageChangedMessage` | `DeviceConnectedMessage` 等 | `SettingsChangedMessage`     |
+
+## 设计原则
+
+| 原则           | 说明                                                                     |
+| -------------- | ------------------------------------------------------------------------ |
+| **强类型**     | 编译期类型安全，IDE 智能提示，告别 `GetFloat("key")` 的魔法字符串        |
+| **纯 POCO**    | 设置类不依赖框架类型；JSON 可读可调试，字段名即业务名下划线之外无额外包装 |
+| **字段级通知** | 经 `SettingRef` 句柄订阅单个字段，赋值相同值不通知；实例被替换时重放一次 |
+| **可替换后端** | `ISettingsStore` 允许替换为加密存储、PlayerPrefs 或远程云存档            |
+| **替换点在后端** | 可替换的是 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`；**本模块不提供 `SetInstance`**——管理器的通知、脏标记与保存时机是**模块语义**而非实现细节，换它等于换模块（同 UI 的排序分层、Update 的调度模型） |
+| **多类型共存** | 内部按 `Type` 索引，支持同时管理 `GameSettings`、`EditorSettings` 等      |
+| **显式为主**   | 默认不自动保存、不写盘，行为可预期；需要时按需开启去抖自动保存            |

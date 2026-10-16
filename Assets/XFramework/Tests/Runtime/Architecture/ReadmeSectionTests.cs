@@ -91,6 +91,7 @@ namespace XFramework.Architecture.Tests
             "Input",       // 「自定义输入封装 / 扩展 IInputProvider」并入典型场景；权威副本补两个 Default 文件
             "Asset",       // 「加载模式选择」并入典型场景；「GC 与性能」从内部机制提出为性能代价
             "Config",      // 三种接入方式 + 批量加载 + 高级特性合成典型场景；权威副本于此轮才建起文件结构
+            "Settings",    // 「高级用法」→典型场景；线程契约从三处零散事实组装成节
         };
 
         /// <summary>
