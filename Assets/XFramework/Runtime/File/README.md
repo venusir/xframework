@@ -1,4 +1,4 @@
-# XFileManager — 跨平台文件系统
+# File —— 跨平台文件系统：路径域抽象 × 平台 Provider × 原子写与按域加密
 
 ## 概述
 
@@ -13,21 +13,7 @@
 | Xbox / PS5 / Switch     | `ConsoleFileProvider`（抽象基类） | 第三方需继承并实现平台 SDK API                                     |
 | WebGL                   | 需自定义 `IFileProvider`          | 无内置实现                                                         |
 
-## 核心设计理念
-
-本模块借鉴了以下成熟框架的设计思想，并进行了整合与进一步优化：
-
-| 框架/引擎         | 借鉴点                                      | 本模块对应                                                     |
-| ----------------- | ------------------------------------------- | -------------------------------------------------------------- |
-| **Godot**         | `user://` / `res://` 虚拟路径概念           | `FileDomain` 枚举：`AppData`、`Streaming`、`Cache`、`SaveData` |
-| **Unreal Engine** | `IPlatformFile` 接口抽象、`FPaths` 路径工具 | `IFileProvider` + `GetPhysicalPath()`                          |
-| **LÖVE2D**        | `love.filesystem` 极简 API 设计             | `FileManager` 静态外观——统一的文件操作 API                      |
-| **YooAsset**      | 不同平台读取方式策略封装                    | `DesktopFileProvider` vs `MobileFileProvider`                  |
-| **自定义增强**    | 可插拔加解密层、Console SaveData 独立域     | `ICryptoProvider` + `FileDomain.SaveData`                      |
-
----
-
-## 快速开始
+## 快速使用
 
 ### 1. 依赖项
 
@@ -72,7 +58,28 @@ if (FileManager.Exists(FileDomain.Streaming, "config/game_settings.csv"))
 
 ---
 
-## 路径与异常契约
+## 模块结构
+
+```text
+Runtime/File/
+├── FileManager.cs            # 跨平台文件管理器静态外观（异步 + 同步两面）
+├── FileManagerExtensions.cs  # 兼容面：同名同步方法的一行委托（同步 API 已收敛到门面）
+├── FileDomain.cs             # 路径域枚举定义（AppData / Streaming / Cache / SaveData）
+├── IFileProvider.cs          # 平台文件提供者接口（含读失败契约）
+├── IAtomicFileProvider.cs    # 原子写入能力契约（可选能力接口）
+├── IDirectoryProvider.cs     # 子目录枚举能力契约（可选能力接口）
+├── ICryptoProvider.cs        # 加解密提供者接口
+├── CryptoFileProvider.cs     # 加解密装饰器（内部）
+├── XorCryptoProvider.cs      # 基于 XOR 的轻量加解密实现
+├── DesktopFileProvider.cs    # 桌面平台实现（System.IO）
+├── MobileFileProvider.cs     # 移动平台实现（Streaming 域走 UnityWebRequest）
+├── ConsoleFileProvider.cs    # 控制台平台抽象基类（第三方继承后接平台 SDK）
+└── FilePathUtility.cs        # 路径工具（归一化 / 文件名提取 / 路径沙箱校验）
+```
+
+十三个文件都是公开面（`CryptoFileProvider` 是装饰器但为 public——它要实现可选能力接口并被门面 `is` 探测），本模块没有 `internal` 类型。
+
+## 行为契约
 
 ### 相对路径一律正斜杠
 
@@ -98,11 +105,35 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 底层 Provider 未实现 `IAtomicFileProvider`（如 WebGL 自定义实现）时，自动降级为普通写入并告警——**只有实现该接口才能获得崩溃防护**。
 
-同步版本 `WriteAllBytesAtomic` 语义完全相同（含降级路径），代价是阻塞当前线程，见「同步 API」。
+同步版本 `WriteAllBytesAtomic` 语义完全相同（含降级路径），代价是阻塞当前线程，见「API 参考」的「同步 API」。
 
 ---
 
-## 同步 API
+## 架构设计
+
+```
+┌──────────────────────────────────────────────┐
+│              FileManager (静态外观)             │
+│  ReadAllTextAsync / WriteAllBytesAsync / ...  │
+├──────────────────────────────────────────────┤
+│  CryptoFileProvider (加解密装饰器,可选)          │
+│  IFileProvider + ICryptoProvider              │
+├──────────────────────────────────────────────┤
+│  IFileProvider (平台抽象层)                     │
+│  ┌───────────────┬──────────────┬───────────┐ │
+│  │DesktopProvider│MobileProvider│ConsolePro..│ │
+│  └───────────────┴──────────────┴───────────┘ │
+├──────────────────────────────────────────────┤
+│  FileDomain 枚举 (路径域，对标 Godot 虚拟路径)   │
+│  AppData / Streaming / Cache / SaveData       │
+└──────────────────────────────────────────────┘
+```
+
+---
+
+## API 参考
+
+### 同步 API
 
 门面提供与异步版一一对应的同步内容读写：
 
@@ -119,7 +150,7 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 > **旧入口**：`FileManagerExtensions` 上仍有同名方法（该文件已随 0.2.0 发布），现为一行委托，与门面行为完全一致。新代码直接用门面即可。
 
-### 移动端 Streaming 域：同步访问被拒绝，而不是挂起
+#### 移动端 Streaming 域：同步访问被拒绝，而不是挂起
 
 这是**唯一一组**同步调用不可用的组合（移动端 Provider + `Streaming` 域）。两种失败都不是「慢」——
 一个必然死锁，另一个的安全性从未被验证过：
@@ -138,25 +169,109 @@ await FileManager.WriteAllBytesAtomicAsync(FileDomain.SaveData, "slot_1.save", b
 
 > **自建 Provider 注意**：判定只覆盖内置的 `MobileFileProvider`。第三方 Provider 若其异步读同样依赖主线程 PlayerLoop 推进，同步调用一样会死锁，框架无法代为识别。
 
+### 加密支持
+
+模块内置了基于 XOR 的轻量加解密实现，适合存档防篡改等场景。
+
+```csharp
+// 启用默认加密
+FileManager.SetCryptoProvider(new XorCryptoProvider());
+
+// 使用自定义密钥
+FileManager.SetCryptoProvider(new XorCryptoProvider("my-complex-key-2024"));
+
+// 禁用加密
+FileManager.SetCryptoProvider(null);
+```
+
+如需强加密（AES 等），实现 `ICryptoProvider` 接口即可：
+
+```csharp
+public class AesCryptoProvider : ICryptoProvider
+{
+    public byte[] Encrypt(byte[] plainData) { /* AES 加密 */ }
+    public byte[] Decrypt(byte[] cipherData) { /* AES 解密 */ }
+}
+```
+
 ---
 
-## 线程契约
+## 典型场景
 
-- **域根在主线程解析一次后缓存**：`Application.persistentDataPath` 一类属性受 Unity 的主线程限定，故三个域根
-  （`AppData`/`SaveData`、`Streaming`、`Cache`）由 `DesktopFileProvider.PrimeRoots()` 在主线程取好并缓存——
-  预热点有两处：`FileManager.Initialize`（零配置懒初始化也走它），以及 `[InitializeOnLoadMethod]` /
-  `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**文件原语可从任意线程调用**。
-  `SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢全程不切回主线程。
-- **首次初始化须在主线程**：平台判定（`Application.platform`）与域根解析都发生在 `FileManager.Initialize` 里。
-  初始化完成后不再有主线程要求——这一点是本模块与其它门面的区别，也是「零配置懒初始化」的隐含前提。
-- **自建 Provider 的约束**：内置实现把 IO 放在 `UniTask.RunOnThreadPool` 上执行，`ConsoleFileProvider` 更把
-  抽象方法**直接放进委托**（`ExistsAsync` / `ReadAllBytesAsync` / `WriteAllBytesAsync`）。因此实现方
-  **不得在委托内触碰 Unity API**；需要平台路径这类主线程资源时，请在进入委托前取好——照 `DesktopFileProvider`
-  对域根的处理。
-- **`DeleteAsync` 是门面唯一一处自己决定 IO 线程的原语**：`IFileProvider.Delete` 没有异步孪生（各平台的后端
-  删除本质上都是同步原语），故由门面把它放进 `RunOnThreadPool` 调用——其余异步原语的线程由 Provider 自己安排。
-  **随之而来的约束**：Provider 的 `Delete` 现在会在**池线程**上被调用，实现方须容忍（与上一条同源）。
-  取消语义：令牌只保证「尚未开始的删除不会发生」，已进入委托的那一次会跑完。
+### 接入 Console 平台（Xbox / PS5 / Switch）
+
+1. 继承 `ConsoleFileProvider` 并实现抽象方法：
+
+```csharp
+public class XboxFileProvider : ConsoleFileProvider
+{
+    public override byte[] ReadAllBytes(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
+    public override void WriteAllBytes(FileDomain domain, string relativePath, byte[] data) { /* Xbox GDK API */ }
+    public override bool Exists(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
+    public override void Delete(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
+    public override string GetPhysicalPath(FileDomain domain, string relativePath) { /* 平台路径映射 */ }
+}
+```
+
+2. 在应用启动时传入：
+
+```csharp
+#if UNITY_XBOX
+FileManager.Initialize(new XboxFileProvider());
+#endif
+```
+
+3. **同时实现可选能力接口**——基类只实现 `IFileProvider`，下面几项缺失时对应能力会**静默降级**（只留一条告警日志）：
+
+| 缺失项 | 后果 |
+| ------ | ---- |
+| 不实现 `IAtomicFileProvider` | `WriteAllBytesAtomicAsync` **降级为普通写并告警**：没有 `.tmp → 替换`、没有一代 `.bak`，写入中途崩溃会留下截断文件。**Save 模块的存档正依赖它** |
+| 不实现 `IDirectoryProvider` | `GetDirectoriesAsync` **告警并返回空数组**：玩家目录发现（`SaveManager.GetAllPlayerIdsAsync`）恒为空 |
+| 不重写 `GetFilesAsync` | 基类默认返回**空数组**（「Console 平台枚举文件需要平台 SDK 支持」）：**Save 的槽位枚举恒为空列表，启动恢复扫描也扫不到任何东西** |
+| 不重写 `CreateDirectory` | 基类是空实现，目录不会真的被创建 |
+
+> **抽象方法为什么是同步的？** 基类的异步方法就是把它们丢进 `UniTask.RunOnThreadPool` 的委托里（见「线程契约」）。所以派生类里**可以**阻塞等待平台 SDK——那发生在池线程上，不是主线程。但也正因如此，**实现方不得在委托内触碰 Unity API**；平台路径这类主线程资源请在进入委托前取好。
+>
+> 注意这与「设置模块的构造函数会同步读一次」是两回事：那里的阻塞发生在**主线程**上，所以平台存档在设置侧的正确形态是「同步侧读本地镜像」，见 Settings 模块 README。
+
+### 多平台账户隔离
+
+`FileManager` 的默认实现在桌面/移动平台使用 `Application.persistentDataPath` 作为存储根目录，该路径按 **OS 登录用户** 隔离（如 `C:\Users\Lunta\...` vs `C:\Users\XiaoMing\...`）。
+
+如需按 **平台账户**（Steam、PSN、Xbox Live 等）进一步隔离，第三方可通过自定义 `IFileProvider` 在 `GetPhysicalPath` 中注入平台账户 ID 子目录，对上层调用完全透明：
+
+```csharp
+public class SteamFileProvider : DesktopFileProvider
+{
+    public override string GetPhysicalPath(FileDomain domain, string relativePath)
+    {
+        var defaultPath = base.GetPhysicalPath(domain, relativePath);
+
+        if (domain != FileDomain.SaveData)
+            return defaultPath;
+
+        // 在 SaveData 域下注入 Steam 账户子目录
+        var steamId = SteamUser.GetSteamID().ToString();
+        var root = base.GetPhysicalPath(domain, null);
+        var relWithSteam = $"{steamId}/{relativePath?.TrimStart('/') ?? ""}";
+        return Path.Combine(root, relWithSteam.TrimEnd('/'));
+    }
+}
+```
+
+初始化时替换默认 Provider：
+
+```csharp
+#if STEAMWORKS_ENABLED
+FileManager.Initialize(new SteamFileProvider());
+#else
+FileManager.Initialize();
+#endif
+```
+
+不同平台账户的文件将自动隔离到各自子目录，无需业务代码修改。
+
+---
 
 ## 路径域说明 (`FileDomain`)
 
@@ -334,141 +449,30 @@ for (int i = 0; i < 3; i++)
 
 ---
 
-## 加密支持
+## 线程契约
 
-模块内置了基于 XOR 的轻量加解密实现，适合存档防篡改等场景。
+- **域根在主线程解析一次后缓存**：`Application.persistentDataPath` 一类属性受 Unity 的主线程限定，故三个域根
+  （`AppData`/`SaveData`、`Streaming`、`Cache`）由 `DesktopFileProvider.PrimeRoots()` 在主线程取好并缓存——
+  预热点有两处：`FileManager.Initialize`（零配置懒初始化也走它），以及 `[InitializeOnLoadMethod]` /
+  `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**文件原语可从任意线程调用**。
+  `SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢全程不切回主线程。
+- **首次初始化须在主线程**：平台判定（`Application.platform`）与域根解析都发生在 `FileManager.Initialize` 里。
+  初始化完成后不再有主线程要求——这一点是本模块与其它门面的区别，也是「零配置懒初始化」的隐含前提。
+- **自建 Provider 的约束**：内置实现把 IO 放在 `UniTask.RunOnThreadPool` 上执行，`ConsoleFileProvider` 更把
+  抽象方法**直接放进委托**（`ExistsAsync` / `ReadAllBytesAsync` / `WriteAllBytesAsync`）。因此实现方
+  **不得在委托内触碰 Unity API**；需要平台路径这类主线程资源时，请在进入委托前取好——照 `DesktopFileProvider`
+  对域根的处理。
+- **`DeleteAsync` 是门面唯一一处自己决定 IO 线程的原语**：`IFileProvider.Delete` 没有异步孪生（各平台的后端
+  删除本质上都是同步原语），故由门面把它放进 `RunOnThreadPool` 调用——其余异步原语的线程由 Provider 自己安排。
+  **随之而来的约束**：Provider 的 `Delete` 现在会在**池线程**上被调用，实现方须容忍（与上一条同源）。
+  取消语义：令牌只保证「尚未开始的删除不会发生」，已进入委托的那一次会跑完。
 
-```csharp
-// 启用默认加密
-FileManager.SetCryptoProvider(new XorCryptoProvider());
-
-// 使用自定义密钥
-FileManager.SetCryptoProvider(new XorCryptoProvider("my-complex-key-2024"));
-
-// 禁用加密
-FileManager.SetCryptoProvider(null);
-```
-
-如需强加密（AES 等），实现 `ICryptoProvider` 接口即可：
-
-```csharp
-public class AesCryptoProvider : ICryptoProvider
-{
-    public byte[] Encrypt(byte[] plainData) { /* AES 加密 */ }
-    public byte[] Decrypt(byte[] cipherData) { /* AES 解密 */ }
-}
-```
-
----
-
-## 架构概览
-
-```
-┌──────────────────────────────────────────────┐
-│              FileManager (静态外观)             │
-│  ReadAllTextAsync / WriteAllBytesAsync / ...  │
-├──────────────────────────────────────────────┤
-│  CryptoFileProvider (加解密装饰器,可选)          │
-│  IFileProvider + ICryptoProvider              │
-├──────────────────────────────────────────────┤
-│  IFileProvider (平台抽象层)                     │
-│  ┌───────────────┬──────────────┬───────────┐ │
-│  │DesktopProvider│MobileProvider│ConsolePro..│ │
-│  └───────────────┴──────────────┴───────────┘ │
-├──────────────────────────────────────────────┤
-│  FileDomain 枚举 (路径域，对标 Godot 虚拟路径)   │
-│  AppData / Streaming / Cache / SaveData       │
-└──────────────────────────────────────────────┘
-```
-
----
-
-## 接入 Console 平台（Xbox / PS5 / Switch）
-
-1. 继承 `ConsoleFileProvider` 并实现抽象方法：
-
-```csharp
-public class XboxFileProvider : ConsoleFileProvider
-{
-    public override byte[] ReadAllBytes(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
-    public override void WriteAllBytes(FileDomain domain, string relativePath, byte[] data) { /* Xbox GDK API */ }
-    public override bool Exists(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
-    public override void Delete(FileDomain domain, string relativePath) { /* Xbox GDK API */ }
-    public override string GetPhysicalPath(FileDomain domain, string relativePath) { /* 平台路径映射 */ }
-}
-```
-
-2. 在应用启动时传入：
-
-```csharp
-#if UNITY_XBOX
-FileManager.Initialize(new XboxFileProvider());
-#endif
-```
-
-3. **同时实现可选能力接口**——基类只实现 `IFileProvider`，下面几项缺失时对应能力会**静默降级**（只留一条告警日志）：
-
-| 缺失项 | 后果 |
-| ------ | ---- |
-| 不实现 `IAtomicFileProvider` | `WriteAllBytesAtomicAsync` **降级为普通写并告警**：没有 `.tmp → 替换`、没有一代 `.bak`，写入中途崩溃会留下截断文件。**Save 模块的存档正依赖它** |
-| 不实现 `IDirectoryProvider` | `GetDirectoriesAsync` **告警并返回空数组**：玩家目录发现（`SaveManager.GetAllPlayerIdsAsync`）恒为空 |
-| 不重写 `GetFilesAsync` | 基类默认返回**空数组**（「Console 平台枚举文件需要平台 SDK 支持」）：**Save 的槽位枚举恒为空列表，启动恢复扫描也扫不到任何东西** |
-| 不重写 `CreateDirectory` | 基类是空实现，目录不会真的被创建 |
-
-> **抽象方法为什么是同步的？** 基类的异步方法就是把它们丢进 `UniTask.RunOnThreadPool` 的委托里（见「线程契约」）。所以派生类里**可以**阻塞等待平台 SDK——那发生在池线程上，不是主线程。但也正因如此，**实现方不得在委托内触碰 Unity API**；平台路径这类主线程资源请在进入委托前取好。
->
-> 注意这与「设置模块的构造函数会同步读一次」是两回事：那里的阻塞发生在**主线程**上，所以平台存档在设置侧的正确形态是「同步侧读本地镜像」，见 Settings 模块 README。
-
----
-
-## 多平台账户隔离
-
-`FileManager` 的默认实现在桌面/移动平台使用 `Application.persistentDataPath` 作为存储根目录，该路径按 **OS 登录用户** 隔离（如 `C:\Users\Lunta\...` vs `C:\Users\XiaoMing\...`）。
-
-如需按 **平台账户**（Steam、PSN、Xbox Live 等）进一步隔离，第三方可通过自定义 `IFileProvider` 在 `GetPhysicalPath` 中注入平台账户 ID 子目录，对上层调用完全透明：
-
-```csharp
-public class SteamFileProvider : DesktopFileProvider
-{
-    public override string GetPhysicalPath(FileDomain domain, string relativePath)
-    {
-        var defaultPath = base.GetPhysicalPath(domain, relativePath);
-
-        if (domain != FileDomain.SaveData)
-            return defaultPath;
-
-        // 在 SaveData 域下注入 Steam 账户子目录
-        var steamId = SteamUser.GetSteamID().ToString();
-        var root = base.GetPhysicalPath(domain, null);
-        var relWithSteam = $"{steamId}/{relativePath?.TrimStart('/') ?? ""}";
-        return Path.Combine(root, relWithSteam.TrimEnd('/'));
-    }
-}
-```
-
-初始化时替换默认 Provider：
-
-```csharp
-#if STEAMWORKS_ENABLED
-FileManager.Initialize(new SteamFileProvider());
-#else
-FileManager.Initialize();
-#endif
-```
-
-不同平台账户的文件将自动隔离到各自子目录，无需业务代码修改。
-
----
-
-## 设计决策与性能考量
+## 性能代价
 
 - **避免 Main Thread 卡顿：** IO 操作通过 `UniTask.RunOnThreadPool` 在子线程执行；域根不在池线程解析
   （见「线程契约」），故调用方无需关心自己身处哪个线程。
 - **无 GC 分配热路径：** 枚举传递 `FileDomain`（值类型），`ICryptoProvider` 默认不启用，不加载时无额外开销。
-- **Console 安全：** `ConsoleFileProvider` 为抽象类而非接口，便于未来在基类中添加通用实现而不破坏第三方子类。
-- **扩展性：** 第三方可通过 `IFileProvider` 接口完全替换文件系统后端（如自定义加密 VFS 或远程存储后端）。
-
----
+- **同步面阻塞调用线程**（见「API 参考」的「同步 API」）：适合编辑器工具与启动期，勿在每帧路径调用。
 
 ## 已知限制
 
@@ -476,13 +480,13 @@ FileManager.Initialize();
 
 - **移动端 `Streaming` 域的同步内容读与同步 `Exists` 都不可用**：两者都抛 `NotSupportedException`，请改用
   `ExistsAsync` / `ReadAllTextAsync` / `ReadAllBytesAsync`。前者是机制上的必死锁（续体依赖 PlayerLoop），
-  后者是**安全性未经验证的忙等**——理由见上节。
+  后者是**安全性未经验证的忙等**——理由见「API 参考」的「移动端 Streaming 域」。
 - **同步 API 一律阻塞调用线程**，只适合编辑器工具、小型配置文件、启动期加载；**勿在每帧路径调用**。
   它们的免死锁前提是「每个 Provider 的异步实现都用 `RunOnThreadPool(configureAwait: false)`」——
   内置实现全部满足（11 处无一例外），第三方实现不一定。
 - **自建 Provider 的死锁盲区**：同步不可用性的判定只识别内置的 `MobileFileProvider`。第三方 Provider 若返回
   PlayerLoop 依赖型的 UniTask（如 WebGL 后端），同步调用一样会死锁，框架无法代为识别。
-- **不实现可选能力接口的后果**见「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
+- **不实现可选能力接口的后果**见「典型场景」的「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
   `IDirectoryProvider` 是 **Save 模块正在依赖**的（存档的崩溃防护、玩家目录发现），不是可选项。
 - **`Delete` 不能离开特定线程的 Provider 在 `DeleteAsync` 下不可用**：门面把同步 `Delete` 放进线程池执行
   （见「线程契约」），这类 Provider（典型如 WebGL 的 JS 桥）只能继续用同步 `Delete`。**重开判据**：真出现
@@ -512,3 +516,17 @@ FileManager.Initialize();
 - **`ConsoleFileProvider` 做成抽象类而非接口**：便于未来在基类里添加通用实现而不破坏第三方子类。
 - **`FileManagerExtensions` 保留为一行委托，不删除**：该文件已随 0.2.0 发布过，删掉是源码破坏；保留同名成员、
   内部转调门面，既有调用方零改动。
+
+## 设计原则
+
+本模块借鉴了以下成熟框架的设计思想，并进行了整合与进一步优化：
+
+| 框架/引擎         | 借鉴点                                      | 本模块对应                                                     |
+| ----------------- | ------------------------------------------- | -------------------------------------------------------------- |
+| **Godot**         | `user://` / `res://` 虚拟路径概念           | `FileDomain` 枚举：`AppData`、`Streaming`、`Cache`、`SaveData` |
+| **Unreal Engine** | `IPlatformFile` 接口抽象、`FPaths` 路径工具 | `IFileProvider` + `GetPhysicalPath()`                          |
+| **LÖVE2D**        | `love.filesystem` 极简 API 设计             | `FileManager` 静态外观——统一的文件操作 API                      |
+| **YooAsset**      | 不同平台读取方式策略封装                    | `DesktopFileProvider` vs `MobileFileProvider`                  |
+| **自定义增强**    | 可插拔加解密层、Console SaveData 独立域     | `ICryptoProvider` + `FileDomain.SaveData`                      |
+
+- **扩展性：** 第三方可通过 `IFileProvider` 接口完全替换文件系统后端（如自定义加密 VFS 或远程存储后端）。
