@@ -1,23 +1,12 @@
-# XFramework / Message 模块
+# Message —— 全局消息总线：按类型 / Key 持有并治理一批事件流
 
 ## 概述
+
+**命名空间**: `XFramework.XMessage`；事件流引擎见 `XFramework.XEvent`
 
 Message 模块提供**全局消息总线**。总线按消息类型 / Key 持有并治理一批**事件流**——事件流引擎本身在 `XFramework.XEvent` 模块（`Runtime/Event/`），本模块依赖它的公开面（`IEventStream<T>` / `EventStream.Create`），不触碰其内部实现。通过静态外观 `MessageManager` 提供全局消息发布/订阅能力。
 
 消息总线支持:类型化消息、带键值通道、缓冲订阅(新订阅者立即收到最近一条)、异步处理器订阅、订阅级过滤条件、全局过滤器管道、请求-响应模式。
-
-**命名空间**: `XFramework.XMessage`;事件流引擎见 `XFramework.XEvent`
-
-## 架构设计
-
-本模块的公开面与内部面：
-
-| 面 | 类型 |
-|---|---|
-| **公开** | `IMessagePublisher` / `IMessageSubscriber`(同在 `IMessageBroker.cs`)、`MessageManager`(静态门面)、`IMessageFilter`、`IDestroyCancellationToken` |
-| **internal** | `IMessageBroker`、`MessageBroker`、`MessageChannel`、`AsyncSubscription`、`DispatchListPool`、`MainThreadGuard`、`ActionDisposable` |
-
-> 事件流本身(`EventStream` / `BufferedEventStream`)已迁至 `XFramework.XEvent` 模块——见 [Event README](../Event/README.md)。本模块的 `MessageChannel` 通过它的公开面持有两条流。
 
 ## 快速使用
 
@@ -99,17 +88,6 @@ await MessageManager.PublishAsync("Score", msg, MessagePublishStrategy.Parallel)
 顺序是硬保证：**全局过滤器 → 同步订阅者（与 `Publish` 同序）→ 缓冲通道写入 → 异步处理器**。
 
 > **注意**：同步 `Publish` 同样会触发异步处理器（fire-and-forget），所以同一调用点混用 `Publish` 与 `PublishAsync` 会让处理器被触发两次。
-
-> **线程**：本模块不做线程调度，**发布与订阅入口必须在主线程调用**（Editor 下越线程调用会在入口记一条 `[Message]` 前缀的 Error，每个 broker 只报首错；Release 不编译该断言）。底层事件流引擎的线程模型（锁与快照只为让订阅链表在并发退订下不被写坏、**不构成多线程许可**、快照收集与派发深度之间存在窗口）见 [Event README 的「线程契约」节](../Event/README.md#线程契约)——**断言覆盖不到的三处**：① 退订路径——令牌可能在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 重载在令牌已取消时的早退路径（不触碰共享状态，故不判）；③ 处理器内部的线程行为。需要从后台线程发消息时，请先切回主线程再调用。
-
-> **从后台线程发消息**:不要直接调 `Publish` / `PublishAsync`(入口有主线程断言)。标准配方是先切回主线程:
->
-> ```csharp
-> await UniTask.SwitchToMainThread(cancellationToken);
-> MessageManager.Publish(msg);
-> ```
->
-> **本模块刻意不提供跨线程投递 API**——那会鼓励它明确不支持的用法(见上一条的线程契约)。
 
 ### 带 Key 的消息
 
@@ -204,55 +182,43 @@ var removedCount = MessageManager.ClearFilters<HealthChangedMessage>();
 - **过滤器拦截会一并阻止缓冲缓存写入**——被拦下的消息不会进入重放缓存，因此缓冲订阅重放的是「上一次通过过滤器的消息」。
 - **过滤器管道在没有任何订阅者时也会执行**——有副作用的过滤器（日志、埋点）会为无人消费的消息触发。之所以不改成「先查订阅者再过滤」，是因为那会破坏 `PublishAsync` 与缓冲语义的一致性。
 
-## 内存管理
+## 模块结构
 
-通道的回收按「**是否持有可重放缓存**」分两类——这是「订阅前发布的消息可重放」这一语义的必然代价：
-
-| 通道 | 状态 | 回收方式 |
-|---|---|---|
-| 普通通道 | 链表空 | **自动回收**（事件流回调持有者摘除空通道） |
-| 缓冲通道（持有重放缓存） | 链表空但**仍持有缓存值** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
-| 空缓冲通道（订阅过缓冲、该类型从未发布） | 链表空且**无缓存值** | 属可回收之列：`TrimEmptyChannels` 会摘除它（连同键值存储表项）；若同一通道另有订阅清零事件，自动回收同样会摘除 |
-
-> **自动回收不覆盖纯缓冲空壳**：缓冲流刻意不提供「空流通知」（见 `XEvent.EventStream.CreateBuffered` 的说明），且「有没有缓存值」只有持有者知道，所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道不会被自动回收，只能靠 `TrimEmptyChannels` 摘除。这是已知边界，不是漏实现。
-
-### 带 Key 的淘汰是语义要求，不只是省内存
-
-带 Key 的高频发布（如按实体 Id 发布）会为每个 Key 保留一条消息。**实体生命周期结束时必须淘汰**，否则后果不只是内存不回落：
-
-```csharp
-// 按实体发布：每个 Key 各持有一条重放缓存
-MessageManager.Publish(entityId, new HealthChangedMessage { Value = 100 });
-
-// 实体销毁时淘汰该实体的全部通道（跨消息类型，一次调用）
-MessageManager.EvictBufferedChannels(entityId);
+```text
+Runtime/Message/
+├── MessageManager.cs             # 静态外观（全局入口）+ 标记接口扩展方法
+├── IMessageBroker.cs             # IMessagePublisher / IMessageSubscriber（公开）+ IMessageBroker（internal）
+├── MessageBroker.cs              # internal：消息代理实现（订阅直落事件流）
+├── IMessageFilter.cs             # 消息过滤器接口
+├── IDestroyCancellationToken.cs  # 销毁令牌契约（订阅自动退订的绑定对象）
+├── MessagePublishStrategy.cs     # PublishAsync 等待异步处理器时的调度策略
+├── MessageBusStats.cs            # 总线只读统计快照（readonly struct）
+├── MessageChannelStats.cs        # 单通道只读统计快照
+├── MessageTypeStats.cs           # 单类型通道统计（类型级 + 全部键值通道的合计）
+└── Internal/                     # 总线内部实现（internal）
+    ├── MessageChannel.cs         # 通道对象（聚合同步流与缓冲流）+ 键值通道存储
+    ├── AsyncSubscription.cs      # 异步订阅登记项（退订句柄 + 令牌生命周期）
+    ├── DispatchListPool.cs       # 派发快照 List 池（与 XEvent 的同名池是两份，不合并）
+    ├── MainThreadGuard.cs        # 发布 / 订阅入口的主线程断言（仅 Editor）
+    └── ActionDisposable.cs       # 委托式 IDisposable（幂等）
 ```
 
-漏掉这一步的失败是静默的：实体 42 死亡后其通道仍持有死亡那一刻的血量，若新生成的实体复用同一个 Id，新实体的血条订阅者会**立刻重放到上一个实体的死亡血量**——表现为满血的新实体血条一亮起来就是空的。这类 bug 不报错、不抛异常，只能靠淘汰纪律避免。
+十四个文件：根下九个里 `MessageBroker` 是 internal，`Internal/` 下五个全是实现件——使用方直接接触的是门面、两个接口、过滤器契约、策略枚举与三个统计快照。
 
-类型级通道没有这个问题（每个消息类型至多一条缓存，且有界）；键值通道的缓存则必须与实体生命周期绑定，建议把淘汰调用写在实体销毁的同一处。
+## 架构设计
 
-**按 Key 淘汰优于按消息类型淘汰**：一个实体往往参与多种带 Key 的消息（血量、位置、状态……），按消息类型淘汰就得在实体销毁处写 N 次调用，且每新增一种消息都要回去补一处——漏掉的那一处正是上面那类静默 bug。`EvictBufferedChannels<TKey>(key)` 按「这个实体」而不是「这个消息类型」来清理，与实体的生命周期同形。
+本模块的公开面与内部面：
 
-### 淘汰 API
+| 面 | 类型 |
+|---|---|
+| **公开** | `IMessagePublisher` / `IMessageSubscriber`(同在 `IMessageBroker.cs`)、`MessageManager`(静态门面)、`IMessageFilter`、`IDestroyCancellationToken` |
+| **internal** | `IMessageBroker`、`MessageBroker`、`MessageChannel`、`AsyncSubscription`、`DispatchListPool`、`MainThreadGuard`、`ActionDisposable` |
 
-```csharp
-MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 类型级，O(1)；返回是否存在并已淘汰
-MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key 与该消息类型，O(1)；返回是否存在并已淘汰
-MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该消息类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
-MessageManager.EvictBufferedChannels(entityId);                            // 该 Key 跨全部消息类型（实体销毁处用这个）；返回淘汰数量
-MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无可重放缓存的空通道（含订阅过缓冲但从未发布的空壳），常规路径下返回 0
-```
+> 事件流本身(`EventStream` / `BufferedEventStream`)已迁至 `XFramework.XEvent` 模块——见 [Event README](../Event/README.md)。本模块的 `MessageChannel` 通过它的公开面持有两条流。
 
-- 类型级单数版的行为已完全包含在复数版中，保留它只是因为它是 O(1) 快路径（复数版需按消息类型扫全表）。
-- `EvictBufferedChannels<TKey>(key)` 按 Key 类型扫全表，与 `EvictBufferedChannel<TKey, TMessage>(key)` 的 O(1) 快路径不同——前者是实体销毁处的一次性调用，不在热路径上。
-- 淘汰的返回值只计**淘汰**的缓冲通道数，不含顺带回收的通道数与存储表项数。
-- `TrimEmptyChannels` 的返回值同样只计**通道**数：键值存储整体清空而被一并摘除时不计入——结构清理一律不计入返回值。
-- 淘汰只丢重放缓存，不会回收仍有活订阅者的通道。
+## API 参考
 
-淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
-
-## 运行统计
+### 运行统计
 
 订阅泄漏（订阅数只增不减）与缓冲内存驻留是事件总线最常见的事故，可用统计 API 定位：
 
@@ -279,7 +245,7 @@ Debug.Log(rows[0]);   // MessageTypeStats(EnemyHealthChanged, 通道 50000, ... 
 
 `ChannelStoreCount` 是两张通道表（类型通道表 + 键值通道表）的**表项数之和**，**不是消息类型的个数**——同一消息类型若既有类型通道又配了键值通道，或配了多种 Key 类型，都会各占一项。它衡量的是表的规模，用来确认「该消失的表项是否真的消失了」（例如实体的最后一个 Key 被淘汰后，键值存储表项应当一并摘除）。
 
-## 标记接口扩展方法
+### 标记接口扩展方法
 
 实现 `IMessagePublisher` / `IMessageSubscriber` 的类型可直接用 `this.Publish()` / `this.Subscribe()` 等扩展方法，无需每次都写 `MessageManager.` 前缀:
 
@@ -333,7 +299,7 @@ public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancel
 
 订阅自动绑定订阅者的销毁时机：`MonoBehaviour` 用其 `destroyCancellationToken`，普通 C# 对象实现 `IDestroyCancellationToken`（定义于本模块）即可；两者皆非时不会自动绑定，需自行持有返回的 `IDisposable`。
 
-## 适用场景与选型
+## 典型场景
 
 框架内并存多套通信机制，选错了会造成调用链难追踪或状态不同步。判据如下：
 
@@ -351,16 +317,72 @@ public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancel
 
 > 框架内确实存在功能重叠：`SettingsChangedMessage`（走消息总线）与 `ConfigManager.ConfigChanged`（走 C# event）是同一类需求的两种实现。选型以「是否跨模块」为准，而非以「哪个更先进」为准。
 
-## 设计原则
+## 内部机制
 
-- **引擎来自下层模块** — 事件流由 `XFramework.XEvent` 提供(锁 + 快照线程模型、订阅节点池);本模块只负责「类型 / Key → 通道」的映射与治理,不自己造流
-- **生命周期绑定** — 订阅可自动绑定到订阅者生命周期(MonoBehaviour 或 `IDestroyCancellationToken`),对象销毁时自动取消
-- **类型安全** — 消息通过泛型类型标识,编译期安全
-- **双模式访问** — 同时支持静态 API 与标记接口扩展方法
-- **请求-响应支持** — 提供异步请求-响应模式,适合服务定位场景
-- **全局过滤器** — 支持注册全局消息过滤器,统一拦截和处理
-- **异常隔离** — 订阅回调/过滤条件抛异常记 Error 日志后继续,不影响其他订阅者
-- **自动回收** — 订阅清零的通道由事件流回调自动摘除;缓冲通道因需保留重放缓存,提供显式淘汰 API 主动释放
+### 内存管理：通道按「有无重放缓存」分两类回收
+
+通道的回收按「**是否持有可重放缓存**」分两类——这是「订阅前发布的消息可重放」这一语义的必然代价：
+
+| 通道 | 状态 | 回收方式 |
+|---|---|---|
+| 普通通道 | 链表空 | **自动回收**（事件流回调持有者摘除空通道） |
+| 缓冲通道（持有重放缓存） | 链表空但**仍持有缓存值** | 须经 `EvictBufferedChannel` 系列**显式淘汰**；淘汰会顺带回收因此变空的通道与存储 |
+| 空缓冲通道（订阅过缓冲、该类型从未发布） | 链表空且**无缓存值** | 属可回收之列：`TrimEmptyChannels` 会摘除它（连同键值存储表项）；若同一通道另有订阅清零事件，自动回收同样会摘除 |
+
+> **自动回收不覆盖纯缓冲空壳**：缓冲流刻意不提供「空流通知」（见 `XEvent.EventStream.CreateBuffered` 的说明），且「有没有缓存值」只有持有者知道，所以「只有缓冲订阅、从未发布、也从未有过同步/异步订阅」的通道不会被自动回收，只能靠 `TrimEmptyChannels` 摘除。这是已知边界，不是漏实现。
+
+### 带 Key 的淘汰是语义要求，不只是省内存
+
+带 Key 的高频发布（如按实体 Id 发布）会为每个 Key 保留一条消息。**实体生命周期结束时必须淘汰**，否则后果不只是内存不回落：
+
+```csharp
+// 按实体发布：每个 Key 各持有一条重放缓存
+MessageManager.Publish(entityId, new HealthChangedMessage { Value = 100 });
+
+// 实体销毁时淘汰该实体的全部通道（跨消息类型，一次调用）
+MessageManager.EvictBufferedChannels(entityId);
+```
+
+漏掉这一步的失败是静默的：实体 42 死亡后其通道仍持有死亡那一刻的血量，若新生成的实体复用同一个 Id，新实体的血条订阅者会**立刻重放到上一个实体的死亡血量**——表现为满血的新实体血条一亮起来就是空的。这类 bug 不报错、不抛异常，只能靠淘汰纪律避免。
+
+类型级通道没有这个问题（每个消息类型至多一条缓存，且有界）；键值通道的缓存则必须与实体生命周期绑定，建议把淘汰调用写在实体销毁的同一处。
+
+**按 Key 淘汰优于按消息类型淘汰**：一个实体往往参与多种带 Key 的消息（血量、位置、状态……），按消息类型淘汰就得在实体销毁处写 N 次调用，且每新增一种消息都要回去补一处——漏掉的那一处正是上面那类静默 bug。`EvictBufferedChannels<TKey>(key)` 按「这个实体」而不是「这个消息类型」来清理，与实体的生命周期同形。
+
+### 淘汰 API
+
+```csharp
+MessageManager.EvictBufferedChannel<HealthChangedMessage>();               // 类型级，O(1)；返回是否存在并已淘汰
+MessageManager.EvictBufferedChannel<int, HealthChangedMessage>(entityId);  // 指定 Key 与该消息类型，O(1)；返回是否存在并已淘汰
+MessageManager.EvictBufferedChannels<HealthChangedMessage>();              // 该消息类型全部（类型级 + 所有 Key 类型的所有 Key）；返回淘汰数量
+MessageManager.EvictBufferedChannels(entityId);                            // 该 Key 跨全部消息类型（实体销毁处用这个）；返回淘汰数量
+MessageManager.TrimEmptyChannels();                                        // 兜底：回收无订阅者且无可重放缓存的空通道（含订阅过缓冲但从未发布的空壳），常规路径下返回 0
+```
+
+- 类型级单数版的行为已完全包含在复数版中，保留它只是因为它是 O(1) 快路径（复数版需按消息类型扫全表）。
+- `EvictBufferedChannels<TKey>(key)` 按 Key 类型扫全表，与 `EvictBufferedChannel<TKey, TMessage>(key)` 的 O(1) 快路径不同——前者是实体销毁处的一次性调用，不在热路径上。
+- 淘汰的返回值只计**淘汰**的缓冲通道数，不含顺带回收的通道数与存储表项数。
+- `TrimEmptyChannels` 的返回值同样只计**通道**数：键值存储整体清空而被一并摘除时不计入——结构清理一律不计入返回值。
+- 淘汰只丢重放缓存，不会回收仍有活订阅者的通道。
+
+淘汰后再次发布会重建空缓冲通道，重放缓存从下一条消息重新建立。
+
+## 线程契约
+
+**本模块不做线程调度，发布与订阅入口必须在主线程调用**（Editor 下越线程调用会在入口记一条 `[Message]` 前缀的 Error，每个 broker 只报首错；Release 不编译该断言）。
+
+底层事件流引擎的线程模型（锁与快照只为让订阅链表在并发退订下不被写坏、**不构成多线程许可**、快照收集与派发深度之间存在窗口）见 [Event README 的「线程契约」节](../Event/README.md#线程契约)。
+
+**断言覆盖不到的三处**：① 退订路径——令牌可能在任意线程被取消（谁取消令牌，退订就在谁的线程执行）；② 4 个 `SubscribeAsync` 重载在令牌已取消时的早退路径（不触碰共享状态，故不判）；③ 处理器内部的线程行为。
+
+需要从后台线程发消息时，请先切回主线程再调用——**不要直接调 `Publish` / `PublishAsync`**（入口有主线程断言）。标准配方：
+
+```csharp
+await UniTask.SwitchToMainThread(cancellationToken);
+MessageManager.Publish(msg);
+```
+
+**本模块刻意不提供跨线程投递 API**——那会鼓励它明确不支持的用法。
 
 ## 已知限制
 
@@ -374,6 +396,17 @@ public class PlayerModel : IMessagePublisher, IMessageSubscriber, IDestroyCancel
 - **订阅自动绑定需要 `MonoBehaviour` 或 `IDestroyCancellationToken`。** 两者皆非时**不会**自动绑定、也不告警——必须自行持有返回的 `IDisposable`，否则订阅随对象一起泄漏。
 - **`TryRequestAsync` 返回的 `false` 只表示「未注册处理器」。** 处理器自身抛出的异常照常向上传播；响应类型不一致属**编程错误**，它同样抛 `InvalidOperationException` 而不折算成 `false`。`HasHandler<TRequest>()` 只回答「这个请求类型有没有处理器」，响应类型是否匹配不在它的答案里。
 - **统计与淘汰的返回值各有口径，且统计接口不能进每帧路径。** `BufferedChannelCount` 数的是「建有缓冲订阅流的通道」（含无可重放值的空壳），不等于「各持有一条消息的通道数」；`ChannelStoreCount` 是两张通道表的**表项数之和**，不是消息类型个数；淘汰与 `TrimEmptyChannels` 的返回值只计通道数，顺带回收的表项不计。`GetStats()` 为 O(通道数)，`CopyTypeStats` 最坏 O(键值存储数 × 消息类型数)。
+
+## 设计原则
+
+- **引擎来自下层模块** — 事件流由 `XFramework.XEvent` 提供(锁 + 快照线程模型、订阅节点池);本模块只负责「类型 / Key → 通道」的映射与治理,不自己造流
+- **生命周期绑定** — 订阅可自动绑定到订阅者生命周期(MonoBehaviour 或 `IDestroyCancellationToken`),对象销毁时自动取消
+- **类型安全** — 消息通过泛型类型标识,编译期安全
+- **双模式访问** — 同时支持静态 API 与标记接口扩展方法
+- **请求-响应支持** — 提供异步请求-响应模式,适合服务定位场景
+- **全局过滤器** — 支持注册全局消息过滤器,统一拦截和处理
+- **异常隔离** — 订阅回调/过滤条件抛异常记 Error 日志后继续,不影响其他订阅者
+- **自动回收** — 订阅清零的通道由事件流回调自动摘除;缓冲通道因需保留重放缓存,提供显式淘汰 API 主动释放
 
 ## 依赖
 

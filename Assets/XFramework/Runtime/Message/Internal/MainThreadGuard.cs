@@ -6,7 +6,7 @@ namespace XFramework.XMessage.Internal
     /// <summary>
     /// 发布/订阅入口的主线程契约断言(仅 Editor 编译;Release 构建零开销)。
     /// <para><b>为什么需要它:</b>消息总线的通道表、过滤器管道缓存与缓冲流都按「主线程使用」设计
-    /// (见模块 README「线程」段),但入口处此前没有任何机制拦住跨线程调用——文档说一套,而
+    /// (见模块 README「线程契约」节),但入口处此前没有任何机制拦住跨线程调用——文档说一套,而
     /// <c>PublishAsync</c> 的旧文案还暗示「不在主线程调用也行,只要自行切回主线程」。本断言把这条契约
     /// 变成开发期可见的事实。</para>
     /// <para><b>覆盖边界(三处不覆盖,均属有意):</b>① <b>退订路径</b>——令牌可在任意线程被取消
@@ -39,7 +39,7 @@ namespace XFramework.XMessage.Internal
             LogManager.Error(LogCategories.Message,
                 "{0} 必须在 Unity 主线程调用:通道表、过滤器缓存与缓冲流都按主线程使用设计," +
                 "跨线程调用会并发改写这些结构。从非主线程发消息请先切回主线程;" +
-                "线程契约见模块 README「线程」段。本提示每个 broker 生命周期只报一次。", api);
+                "线程契约见模块 README「线程契约」节。本提示每个 broker 生命周期只报一次。", api);
 #endif
         }
     }

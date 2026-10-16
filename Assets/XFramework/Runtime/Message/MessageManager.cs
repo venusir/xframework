@@ -39,7 +39,7 @@ namespace XFramework.XMessage
 
         /// <summary>
         /// 发布指定类型的消息。
-        /// <para><b>发布与订阅入口必须在主线程调用</b>(线程契约见模块 README「线程」段):通道表、
+        /// <para><b>发布与订阅入口必须在主线程调用</b>(线程契约见模块 README「线程契约」节):通道表、
         /// 过滤器缓存与缓冲流都按主线程使用设计。Editor 下从非主线程调用会记一条 <c>[Message]</c> 前缀的
         /// Error(每个 broker 生命周期只报一次),Release 下该断言不编译。</para>
         /// </summary>
@@ -53,7 +53,7 @@ namespace XFramework.XMessage
         /// <para>顺序硬保证:全局过滤器 → 同步订阅者(与 Publish 同序) → 缓冲通道写入 → 异步处理器。</para>
         /// <para>同步 <see cref="Publish{TMessage}(TMessage)"/> 同样会触发异步处理器(fire-and-forget),
         /// 故同一调用点若两种发布混用,处理器会被触发两次。</para>
-        /// <para><b>必须在主线程调用</b>(线程契约见模块 README「线程」段):本方法不做线程调度,同步订阅者
+        /// <para><b>必须在主线程调用</b>(线程契约见模块 README「线程契约」节):本方法不做线程调度,同步订阅者
         /// 与处理器的同步前段都在调用线程上执行;而通道表、过滤器缓存与缓冲流按主线程使用设计,从非主线程
         /// 调用会并发改写这些结构。Editor 下越线程调用会记一条 <c>[Message]</c> 前缀的 Error(每 broker 只报
         /// 一次),Release 下该断言不编译。需要从后台线程发消息时,请先切回主线程再调本方法。</para>
@@ -108,7 +108,7 @@ namespace XFramework.XMessage
         /// <para>处理器收到的令牌即订阅自身的令牌:退订会取消它,使在途 await 提前结束。</para>
         /// <para><paramref name="cancellationToken"/> 与订阅生命周期绑定:<b>令牌取消即自动退订</b>,
         /// 与 AddTo 约定一致;传入已取消的令牌则不会登记、也不会创建通道,返回空句柄。</para>
-        /// <para><b>入口须在主线程</b>(线程契约见模块 README「线程」段;Editor 下越线程调用会记 Error);
+        /// <para><b>入口须在主线程</b>(线程契约见模块 README「线程契约」节;Editor 下越线程调用会记 Error);
         /// 但<b>令牌可能在任意线程被取消</b>——谁取消令牌,退订就在谁的线程执行,这条路径不受入口断言保护。
         /// 从后台线程取消令牌时,请自行保证那一刻没有其它线程正在发布/订阅。</para>
         /// </summary>

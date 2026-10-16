@@ -84,6 +84,7 @@ namespace XFramework.Architecture.Tests
             "Update",      // 最大的低档位模块：机制说明 → 内部机制（8 个子节原样），线程契约提升
             "Audio",       // 「与音频中间件的边界」并入与相邻模块的关系；补登两个内部字面量
             "Localization", // 「核心机制：LRU 缓存」→ 内部机制；线程契约提升；清一处指向维护文档的悬空指针
+            "Message",     // 线程契约从引用块提为小节，5 处 .cs 死指针（指向不存在的「线程」段）随之修正
         };
 
         /// <summary>
