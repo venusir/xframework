@@ -5,6 +5,21 @@
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 > 变更流水记在 `CHANGELOG.md` 与 git 提交里；本文件只留**下一轮需要知道的**。
 
+## 文件结构
+
+```
+Runtime/Bootstrap/
+├── Bootstrap.cs            # 静态门面：登记表（Register / Unregister / Clear / Stages）+ RunAsync / Shutdown
+├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
+├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
+├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含任何配置字段，ConfigureStages 为抽象
+└── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 八组 Inspector 声明式字段
+
+Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
+```
+
+（本节 2026-10-16 补建——此前是 23 份里唯二没有文件结构的一份。）
+
 ## 沿革与已否决形状
 
 - **反向清理原先散落在各引导节点的 `OnDestroy` 中**；现由 `Bootstrap.Shutdown` 按执行序逆序（相位降序）统一完成。

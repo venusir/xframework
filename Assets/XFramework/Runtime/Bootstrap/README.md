@@ -1,8 +1,8 @@
-# XFramework / Bootstrap 模块
+# Bootstrap —— 显式登记的启动引导：按相位装配启动管线，退出时逆序清理
 
-框架启动引导的**登记表与运行入口**。让需要异步初始化的服务把自己的初始化与反向清理交给一个统一的、有序的启动流程。
+## 概述
 
-## 定位
+命名空间 `XFramework.XBootstrap`。框架启动引导的**登记表与运行入口**。让需要异步初始化的服务把自己的初始化与反向清理交给一个统一的、有序的启动流程。
 
 框架自己**不预设该初始化什么**。它提供的只有两样东西：
 
@@ -39,7 +39,22 @@ foreach (var stage in Bootstrap.Stages)      // 按登记顺序
 Bootstrap.Clear();                            // 清空登记表（不影响已运行的管线）
 ```
 
-## 用 DefaultGameLauncher 启动时怎么带配置
+## 模块结构
+
+```text
+Runtime/Bootstrap/
+├── Bootstrap.cs            # 静态门面：登记表（Register / Unregister / Clear / Stages）+ RunAsync / Shutdown
+├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
+├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
+├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含任何配置字段，ConfigureStages 为抽象
+└── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 八组 Inspector 声明式字段
+```
+
+五个文件都是公开面，本模块没有 `internal` 类型。
+
+## 典型场景
+
+### 用 DefaultGameLauncher 启动时怎么带配置
 
 `DefaultGameLauncher` 在 Inspector 上提供一组**声明式配置字段**——挂上它、填字段，`Awake` 里自动组装成各模块的 options 注入，`Start` 里跑管线。**全为默认/留空时，登记表与行为与零配置完全一致。**
 
@@ -92,7 +107,7 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里�
 
 ⚠ **`DefaultGameLauncher`（以及它的抽象底座 `GameLauncher`）覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
 
-## 定义一个阶段
+### 定义一个阶段
 
 实现 `IBootstrapStage`——它就是 Pipeline 的 `IPhaseStage` 加一个 `Shutdown`：
 
@@ -145,12 +160,25 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **同相位 = 并行**，彼此不可有依赖；有依赖就必须分属不同相位。
 
-## 与 Pipeline 的关系
+## 线程契约
 
-本模块**不含任何编排逻辑**。相位分组、同相位并行、加权进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本模块只做两件事：
+**登记表没有任何同步原语**（模块内既无锁、也无主线程断言）：`Register` / `Unregister` / `Clear` / `Stages` 直接读写同一个静态列表，**登记与查询都应在主线程发生**——从别的线程并发访问即数据竞争，且不会有任何提示。
 
-- 用 `Pipeline.BuildPhaseGroups` 把登记表装配成「每相位一个 `ParallelStage`」
-- 补上 Pipeline 没有的那一半——**反向清理**
+`RunAsync` 不改变阶段的线程规则：阶段在哪个线程执行，由阶段自己与它的 await 决定（Pipeline 的既有契约：从后台线程回来必须先 `await UniTask.SwitchToMainThread(cancellationToken)` 再写 `PipelineStageContext`，见「典型场景」的四条）。`Shutdown` 是同步方法，`DefaultGameLauncher` 在 `OnDestroy` 里调它——都在主线程。
+
+## 已知限制
+
+**没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
+
+**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
+
+**运行中修改登记表只告警、不阻止**，两条反直觉后果与理由见上面「设计取舍」的末两段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
+
+**中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 仍会被重入守卫忽略**——要等它收敛，请持有第一次调用的任务。
+
+**`RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌。** `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)` 这类过滤与语义都对不上。判据用 `OperationCanceledException.CancellationToken.IsCancellationRequested`，**不要比对令牌身份**。另注意一个既有的边界形态：阶段自抛 `OperationCanceledException` 时，链接令牌本身可能尚未取消（`CanBeCanceled == true` 而 `IsCancellationRequested == false`）——异常的类型才是终局判据。
+
+**模块有两处静态态，写测试时要复位。** 登记表与在途运行的取消源都跨用例存活：`Clear()` 清登记表；用例中途 `Shutdown` 过在途启动的，请等那一次运行收敛（持有它的任务）再开始下一个用例——否则在途运行会经重入守卫**静默吞掉**后续的 `RunAsync`，表现是「第二个用例什么都没发生」。
 
 ## 设计取舍
 
@@ -192,24 +220,17 @@ try { await Bootstrap.RunAsync(); }
 finally { UpdateManager.Resume(); }
 ```
 
-## 已知限制
+## 与相邻模块的关系
 
-**没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
+### 与 Pipeline 的边界
 
-**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
+本模块**不含任何编排逻辑**。相位分组、同相位并行、加权进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本模块只做两件事：
 
-**运行中修改登记表只告警、不阻止**，两条反直觉后果与理由见上面「设计取舍」的末两段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
-
-**中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 仍会被重入守卫忽略**——要等它收敛，请持有第一次调用的任务。
-
-**`RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌。** `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)` 这类过滤与语义都对不上。判据用 `OperationCanceledException.CancellationToken.IsCancellationRequested`，**不要比对令牌身份**。另注意一个既有的边界形态：阶段自抛 `OperationCanceledException` 时，链接令牌本身可能尚未取消（`CanBeCanceled == true` 而 `IsCancellationRequested == false`）——异常的类型才是终局判据。
+- 用 `Pipeline.BuildPhaseGroups` 把登记表装配成「每相位一个 `ParallelStage`」
+- 补上 Pipeline 没有的那一半——**反向清理**
 
 ## 依赖
 
 - **XFramework.XPipeline** —— 阶段契约与相位分组装配
 - **UniTask** —— 异步
 - 使用 `RegisterDefaults()` 时另需 XAsset / XData / XSave
-
-## 测试注意事项
-
-`Bootstrap` 的静态态有两处：**登记表**与**在途运行的取消源**。测试须在 `SetUp`/`TearDown` 里复位，否则用例间互相污染：`Clear()` 清登记表；用例中途 `Shutdown` 过在途启动的，请等那一次运行收敛（持有它的任务）再开始下一个用例——在途运行会经重入守卫静默吞掉后续的 `RunAsync`。
