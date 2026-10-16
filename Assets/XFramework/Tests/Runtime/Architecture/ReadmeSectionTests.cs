@@ -86,6 +86,7 @@ namespace XFramework.Architecture.Tests
             "Localization", // 「核心机制：LRU 缓存」→ 内部机制；线程契约提升；清一处指向维护文档的悬空指针
             "Message",     // 线程契约从引用块提为小节，5 处 .cs 死指针（指向不存在的「线程」段）随之修正
             "Pool",        // 「使用示例 ×7」合成典型场景（含原挂在集合池下的 5–7）；「配置」并入 API 参考
+            "Lock",        // 「诊断 / ILockable 扩展方法」并入 API 参考；线程契约从已知限制提升
         };
 
         /// <summary>

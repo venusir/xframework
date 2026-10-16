@@ -1,99 +1,12 @@
-# XFramework / Lock 模块
+# Lock —— 对象级逻辑锁：多来源叠加，全部释放才解锁
 
 ## 概述
 
-XFramework 锁模块提供对象级别的锁管理功能。通过 `ILockable` 接口，任意对象都可以成为锁主体，支持多类型锁的并发管理。锁模块通过静态外观 `LockManager` 提供全局锁服务，并支持 `using` 语法自动释放锁句柄。
-
 **命名空间**: `XFramework.XLock`
 
-**典型场景**：UI 面板打开时锁定角色移动、技能动画播放时锁定技能输入、网络请求期间锁定 UI 按钮等——详见下节。
+XFramework 锁模块提供对象级别的锁管理功能。通过 `ILockable` 接口，任意对象都可以成为锁主体，支持多类型锁的并发管理。锁模块通过静态外观 `LockManager` 提供全局锁服务，并支持 `using` 语法自动释放锁句柄。
 
-## 典型场景
-
-七族。每族只给最小形状，完整 API 见「快速使用」。
-
-### A. 角色控制封锁：多来源叠加是它唯一的硬价值
-
-技能读条、受击硬直、剧情演出、载具切换、死亡到复活——这些来源会**同时**发生，而它们互不认识：
-
-```csharp
-private sealed class DialogueLockToken { }                      // 类型化 token，见「键的语义」
-private static readonly object Dialogue = new DialogueLockToken();
-
-using (player.AddLock(LockType.Movement, Dialogue))
-{
-    await PlayCutsceneAsync();      // 期间受击再加一把，互不干扰
-}
-```
-
-用 bool 或 `IsMoving` 表达的话，**后关闭的那一方会把别人的封锁一起关掉**——这正是本模块存在的理由。
-
-### B. 全局与系统级：一次加锁，影响所有主体
-
-断线重连、加载屏、场景切换、赛季结算。不必遍历实体逐个封锁：`IsLocked(任何主体, type)` 都返回 true。
-
-```csharp
-using (LockManager.AddLock(LockType.Input, LoadingToken))
-{
-    await LoadSceneAsync();
-}
-```
-
-> ⚠️ **全局锁没有所有者**：它挂在 `Global` 哨兵上，而哨兵既不是 `MonoBehaviour` 也不实现
-> `IDestroyCancellationToken`——**永不自动释放、也不随场景切换清理**。上面那个 `using` 不是可选的：
-> 加载/断线这类长流程被中断时，漏放的全局锁会跨场景存活，而它**是全局的**——这是「玩家一直不能动」
-> 最常见的成因。
-
-### C. UI 交互门与防重入
-
-请求发出到响应期间禁用按钮：用**请求本身**当持有者，而不是给按钮置一个 bool。
-
-```csharp
-if (LockManager.IsLockedBy(ui, LockType.Confirm, request)) return;   // 同一请求正在飞，防重入
-using var gate = ui.AddLock(LockType.Confirm, request);
-await SendAsync();
-```
-
-### D. 替代互相打架的 bool
-
-```csharp
-if (!player.IsLocked(LockType.Movement))   // 聚合：自己的锁 + 全局锁一起算
-    Move();
-```
-
-**等「解锁了再继续」**（框架不提供等待原语，正确写法如下）：
-
-```csharp
-if (!LockManager.IsLocked(player, LockType.Movement)) return;   // ← 少了这行会永久挂起
-using var sub = player.OnLockStateChanged((t, locked) =>
-{
-    if (t == LockType.Movement && !locked) tcs.TrySetResult();
-});
-await tcs.Task.AttachExternalCancellation(ct);
-```
-
-> 先查一次不是冗余：**没有锁定时订阅不会收到任何回调**（聚合事件只播报「当前已锁定」的类型），
-> 少了那行 `tcs` 永远等不到结果——而且挂起时没有任何症状指向这里。
-
-### E. 状态镜像与表现层
-
-```csharp
-// 订阅时立即播报一次当前状态，之后只在聚合值真翻转时回调
-using var sub = player.OnLockStateChanged((type, locked) =>
-{
-    if (type == LockType.Movement) moveStick.SetInteractable(!locked);
-});
-```
-
-要把它接到 UI 属性上，见「与相邻能力的边界」里的合用桥。
-
-### F. 事故排查
-
-「玩家一直不能动」用 `DumpState()` 一眼看出是谁锁着，见「诊断」；**先怀疑全局锁**（它不会自动释放）。
-
-### G. 生命周期收口
-
-实体回池 / 销毁时自动释放（`AutoReleaseOnDestroy`），或显式 `RemoveAllLocks()`，见「生命周期与清理」。
+**典型场景**：UI 面板打开时锁定角色移动、技能动画播放时锁定技能输入、网络请求期间锁定 UI 按钮等——详见「典型场景」。
 
 ## 快速使用
 
@@ -225,7 +138,40 @@ using var sub = player.OnLockStateChanged((lockType, isLocked) =>
 > ——它对每一把首次锁 / 最后一次解锁都触发（主体锁也算）。只关心全局锁请写
 > `LockManager.OnLocked(LockManager.Global, handler)`（以 `Global` 订阅 = 只收到全局锁的加/解锁）。
 
-## ILockable 扩展方法
+## 模块结构
+
+```text
+Runtime/Lock/
+├── LockManager.cs                # 静态外观（全局入口）+ Global 哨兵
+├── ILockable.cs                  # 可锁主体标记接口（主体身份按引用同一判定）
+├── LockableExtensions.cs         # ILockable 扩展方法（AddLock / IsLocked / OnLockStateChanged …）
+├── LockHandle.cs                 # 锁句柄（readonly struct，支持 using）
+└── LockStateSnapshot.cs          # 诊断快照：GetSnapshot 的返回值
+```
+
+五个文件都是公开面，本模块没有 `internal` 类型。
+
+## 行为契约
+
+### 全局锁影响范围
+
+全局锁（`LockManager.Global`）对某个类型的锁定，会影响**所有主体**的该类型锁判断：
+
+```csharp
+// 全局锁定移动
+LockManager.AddLock(LockManager.Global, LockType.Movement, "server_pause");
+
+// 所有主体的移动锁都被判定为锁定
+LockManager.IsLocked(player, LockType.Movement);   // → true
+LockManager.IsLocked(enemy, LockType.Movement);    // → true
+
+// 全局解锁后恢复
+LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
+```
+
+## API 参考
+
+### ILockable 扩展方法
 
 实现了 `ILockable` 的类型可以直接使用便捷的扩展方法：
 
@@ -255,7 +201,7 @@ public class Player : ILockable
 }
 ```
 
-## 诊断
+### 诊断
 
 排查「玩家一直不能动」「谁的锁忘了放」这类问题时，三个入口：
 
@@ -290,31 +236,94 @@ bool blockedByAnything = n > 0;
 - **这一组不是业务分支的依据**（与 `IEventStream.SubscriptionCount` 同属「拉取面」）：它反映的是实现此刻
   的状态；玩法判断请查 `IsLocked`。
 
-## 与相邻能力的边界
+## 典型场景
 
-仓内还有两个能力常在同一个问题上被想起，另有一个看着像但不一样：
+七族。每族只给最小形状，完整 API 见「快速使用」。
 
-| 对照 | 它是什么 | 判据 |
-|---|---|---|
-| **`ReactiveProperty<bool>`** | 布尔**值**：可派生、可绑定 UI、闭合来源的布尔代数 | 封锁来源会不会**在互不认识的情况下增加**？会 → 用锁；不会（就是已知的那几个条件）→ 用 Reactive |
-| **`UIMaskHandle`**（`UIManager.ShowMask`） | UI 层**触及**门：引用计数句柄 + owner 联动 + 强制清空逃生阀 | 这个「不能做」是 UI 层级问题（点击穿透）还是**逻辑状态**问题？两者常成对出现，不是二选一 |
-| **`PreconditionChain` / `IUIController`** | **单次操作**的允许 / 拒绝（可含 `await` 校验），不留状态 | 是「这一下能不能做」还是「这段时间都不能做」？前者用校验链，后者用锁 |
+### A. 角色控制封锁：多来源叠加是它唯一的硬价值
 
-**合用的桥**：门禁用 Lock，显示用 `ReactiveProperty<bool>`——订阅 `OnLockStateChanged` 把聚合值写进属性，
-再交给现有的 UI 绑定通路。反过来（把 `ReactiveProperty` 当门禁去查）会丢掉「谁挡着」这条信息。
+技能读条、受击硬直、剧情演出、载具切换、死亡到复活——这些来源会**同时**发生，而它们互不认识：
 
-**锁与遮罩的键语义是相反的**，别混：遮罩每次 `ShowMask` 发一枚**单调令牌**，同一来源持两次算两把；锁的
-`lockObj` 是**值相等**，同一 token 加两次只算一把（幂等）。两者都各自被测试钉住了。
+```csharp
+private sealed class DialogueLockToken { }                      // 类型化 token，见「键的语义」
+private static readonly object Dialogue = new DialogueLockToken();
 
-**相邻的三个「电平开关」**（`Time.timeScale` / `UpdateManager.Pause` / `InputManager.DisableActionMap`）：
-它们都是**单写者**开关，不叠加——两个系统各关一次、一方恢复即丢失另一方的意图。**Lock 的存在就是为了替换
-这一类用法**，但不接管它们（各归各的模块，Lock 对框架内模块零依赖）。
+using (player.AddLock(LockType.Movement, Dialogue))
+{
+    await PlayCutsceneAsync();      // 期间受击再加一把，互不干扰
+}
+```
 
-> **锁只回答「要不要响应」**：执行侧（`InputManager` 的 ActionMap、面板的 `Raycaster.enabled`）仍可能被别处
-> 直接写而绕过。仓内成文的先例是 `UIManager.SetLayerInteractive`——它必须「记住期望值 + 在焦点变化后重贴」，
-> 否则一次焦点变化就把外部禁用的意图冲掉。同理：**别处直接改执行侧状态，锁挡不住**。
+用 bool 或 `IsMoving` 表达的话，**后关闭的那一方会把别人的封锁一起关掉**——这正是本模块存在的理由。
 
-## 机制说明
+### B. 全局与系统级：一次加锁，影响所有主体
+
+断线重连、加载屏、场景切换、赛季结算。不必遍历实体逐个封锁：`IsLocked(任何主体, type)` 都返回 true。
+
+```csharp
+using (LockManager.AddLock(LockType.Input, LoadingToken))
+{
+    await LoadSceneAsync();
+}
+```
+
+> ⚠️ **全局锁没有所有者**：它挂在 `Global` 哨兵上，而哨兵既不是 `MonoBehaviour` 也不实现
+> `IDestroyCancellationToken`——**永不自动释放、也不随场景切换清理**。上面那个 `using` 不是可选的：
+> 加载/断线这类长流程被中断时，漏放的全局锁会跨场景存活，而它**是全局的**——这是「玩家一直不能动」
+> 最常见的成因。
+
+### C. UI 交互门与防重入
+
+请求发出到响应期间禁用按钮：用**请求本身**当持有者，而不是给按钮置一个 bool。
+
+```csharp
+if (LockManager.IsLockedBy(ui, LockType.Confirm, request)) return;   // 同一请求正在飞，防重入
+using var gate = ui.AddLock(LockType.Confirm, request);
+await SendAsync();
+```
+
+### D. 替代互相打架的 bool
+
+```csharp
+if (!player.IsLocked(LockType.Movement))   // 聚合：自己的锁 + 全局锁一起算
+    Move();
+```
+
+**等「解锁了再继续」**（框架不提供等待原语，正确写法如下）：
+
+```csharp
+if (!LockManager.IsLocked(player, LockType.Movement)) return;   // ← 少了这行会永久挂起
+using var sub = player.OnLockStateChanged((t, locked) =>
+{
+    if (t == LockType.Movement && !locked) tcs.TrySetResult();
+});
+await tcs.Task.AttachExternalCancellation(ct);
+```
+
+> 先查一次不是冗余：**没有锁定时订阅不会收到任何回调**（聚合事件只播报「当前已锁定」的类型），
+> 少了那行 `tcs` 永远等不到结果——而且挂起时没有任何症状指向这里。
+
+### E. 状态镜像与表现层
+
+```csharp
+// 订阅时立即播报一次当前状态，之后只在聚合值真翻转时回调
+using var sub = player.OnLockStateChanged((type, locked) =>
+{
+    if (type == LockType.Movement) moveStick.SetInteractable(!locked);
+});
+```
+
+要把它接到 UI 属性上，见「与相邻模块的关系」里的合用桥。
+
+### F. 事故排查
+
+「玩家一直不能动」用 `DumpState()` 一眼看出是谁锁着，见「API 参考」的「诊断」；**先怀疑全局锁**（它不会自动释放）。
+
+### G. 生命周期收口
+
+实体回池 / 销毁时自动释放（`AutoReleaseOnDestroy`），或显式 `RemoveAllLocks()`，见「生命周期与清理」。
+
+## 内部机制
 
 ### 多锁叠加
 
@@ -368,22 +377,6 @@ using (LockManager.AddLock(player, LockType.Movement, SkillCasting))
 主体（`ILockable`）那一侧规则相反：按**引用同一**判定，不看 `Equals` 重写（见 `ILockable` 的文档）——
 主体是「锁谁」，身份就该是那个对象本身；`lockObj` 是「谁锁的」，是一个调用方选定的名字。
 
-## 全局锁影响范围
-
-全局锁（`LockManager.Global`）对某个类型的锁定，会影响**所有主体**的该类型锁判断：
-
-```csharp
-// 全局锁定移动
-LockManager.AddLock(LockManager.Global, LockType.Movement, "server_pause");
-
-// 所有主体的移动锁都被判定为锁定
-LockManager.IsLocked(player, LockType.Movement);   // → true
-LockManager.IsLocked(enemy, LockType.Movement);    // → true
-
-// 全局解锁后恢复
-LockManager.RemoveLock(LockManager.Global, LockType.Movement, "server_pause");
-```
-
 ## 生命周期与清理
 
 锁与订阅都挂在 `LockManager` 的静态表上，键是**主体本身**。主体在持有锁/订阅的状态下死亡（实体销毁、
@@ -416,26 +409,14 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
 > 一对「加了又解」的幻影事件，订阅者无从与真实事件区分。关掉 `AutoReleaseOnDestroy` 即恢复
 > 「一律加上」的行为。
 
-## 设计原则
+## 线程契约
 
-- **组合式锁** — 多类型锁独立管理，互不干扰
-- **多来源叠加** — 同一类型锁可被多个来源持有，全部释放才解锁
-- **LockHandle 安全释放** — 通过 `readonly struct` + `IDisposable` 实现零 GC 的 `using` 安全释放
-- **全局锁** — 支持跨主体的全局锁，适合服务器暂停、全屏 Loading 等场景
-- **事件驱动** — 锁状态变化可被订阅，解耦业务逻辑
-- **生命周期收口** — 主体销毁时自动释放（`AutoReleaseOnDestroy`），或经 `RemoveAllLocks` 显式收口
+**主线程专用**：模块里的四个容器都不加锁、也没有线程断言（与 `XEvent` 的流、`DisposableBag` 同一约定）——从别的线程并发访问即数据竞争，且不会有任何提示。
 
-## 依赖
-
-- `XMessage.IDestroyCancellationToken`（公开接口，用于「非 MonoBehaviour 主体」的销毁绑定）
-- `MessageManager.TryBindToDestroy` 未复用：它绑的是**订阅者**的令牌而本模块要绑**主体**的，且它丢弃
-  `CancellationTokenRegistration`——逐次注册会在长寿命主体的令牌上堆积永不回收的回调节点
+一条容易漏的边界：**销毁令牌的回调跑在「取消者线程」上**——跨线程取消 `IDestroyCancellationToken` 会并发改写这些容器。`MonoBehaviour.destroyCancellationToken` 由 Unity 在主线程取消，不受影响；而自定义 `IDestroyCancellationToken` 实现者若在别的线程取消令牌，就会撞上这条。
 
 ## 已知限制
 
-- **主线程专用**：四个容器都不加锁、也没有线程断言（与 `XEvent` 的流、`DisposableBag` 同一约定）。
-  销毁令牌的回调跑在**取消者线程**上——跨线程取消 `IDestroyCancellationToken` 会并发改写容器
-  （`MonoBehaviour.destroyCancellationToken` 由 Unity 在主线程取消，不受影响）。
 - **跨对象订阅不在自动释放的覆盖范围内**：自动释放绑的是**主体**的令牌。A 订阅 B 的锁事件、A 先死时
   不会自动退订——需持有句柄或用 `DisposableBag` 收口。
 - **既非 `MonoBehaviour` 也非 `IDestroyCancellationToken` 的主体不会被自动释放**（也不告警）：由调用方
@@ -444,7 +425,7 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
   try/catch（只有全局派发分支是逐订阅者隔离）。取舍同 `Pipeline.DispatchSafely`——`GetInvocationList`
   逐个隔离要给每次派发分配一个委托数组。
 - **`lockObj` 按值相等判定**（键相等 = 同一把锁）、**`lockType` 是全框架共享的 `int` 命名空间**：
-  见「键的语义」。
+  见「内部机制」的「键的语义」。
 - **池化订阅句柄的 ABA**：`ActionDisposable` 归还池后被重新租出时，原持有者的第二次 `Dispose()` 会
   静默退掉**新**订阅。常见形态（同一句柄调两次）由 `_targetDict == null` 挡住，只有「旧句柄跨越一次
   归还」才会命中。
@@ -463,6 +444,7 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
 - **容器未池化**：`AddLock` 对新主体 / 新类型各 `new` 一次字典或集合（加一次就解的临时主体会产生两次
   分配）。容器生命周期与主体、类型同长，不属于「频繁创建销毁」；池化后把它们交给第三方可长期持有的静态
   表，会引入仓内反复警惕的陈旧引用与 ABA 风险。
+- **主线程专用**（见「线程契约」）。
 
 ## 设计取舍
 
@@ -470,7 +452,7 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
   节点化则要给每次订阅分配对象、给句柄引入按节点定位的问题，收益不成立。快照用**池**而不是复用单字段
   ——回调里再加一把全局锁会重入派发，单字段会被内层清空。
 - **主体键按引用同一、`lockObj` 保持值相等**：主体是「锁谁」，身份就是那个对象；`lockObj` 是「谁锁的」，
-  是调用方选定的名字。两条规则不同是有意的（见「键的语义」）。
+  是调用方选定的名字。两条规则不同是有意的（见「内部机制」的「键的语义」）。
 - **自动释放没有复用 `MessageManager.TryBindToDestroy`**：它绑订阅者的令牌（本模块要绑主体），且丢弃
   registration。本模块自持「每主体一次、主体空闲时注销」的绑定。
 - **不告警**：主体两类都不是时不记 warning（`UIManager.BindToContext` 在同类情况下会告警）。理由：
@@ -479,3 +461,44 @@ player.RemoveAllSubscriptions();               // 只丢订阅，不动锁
   各 fixture 调用。
 - **两份 `ActionDisposable` 不合并**（本模块与 `XMessage.Internal`）：仓内既定取舍是「不为十行适配器
   建立跨模块实现依赖」，且本模块这份是池化的、形状本就不同。
+
+## 与相邻模块的关系
+
+### 与相邻能力的边界
+
+仓内还有两个能力常在同一个问题上被想起，另有一个看着像但不一样：
+
+| 对照 | 它是什么 | 判据 |
+|---|---|---|
+| **`ReactiveProperty<bool>`** | 布尔**值**：可派生、可绑定 UI、闭合来源的布尔代数 | 封锁来源会不会**在互不认识的情况下增加**？会 → 用锁；不会（就是已知的那几个条件）→ 用 Reactive |
+| **`UIMaskHandle`**（`UIManager.ShowMask`） | UI 层**触及**门：引用计数句柄 + owner 联动 + 强制清空逃生阀 | 这个「不能做」是 UI 层级问题（点击穿透）还是**逻辑状态**问题？两者常成对出现，不是二选一 |
+| **`PreconditionChain` / `IUIController`** | **单次操作**的允许 / 拒绝（可含 `await` 校验），不留状态 | 是「这一下能不能做」还是「这段时间都不能做」？前者用校验链，后者用锁 |
+
+**合用的桥**：门禁用 Lock，显示用 `ReactiveProperty<bool>`——订阅 `OnLockStateChanged` 把聚合值写进属性，
+再交给现有的 UI 绑定通路。反过来（把 `ReactiveProperty` 当门禁去查）会丢掉「谁挡着」这条信息。
+
+**锁与遮罩的键语义是相反的**，别混：遮罩每次 `ShowMask` 发一枚**单调令牌**，同一来源持两次算两把；锁的
+`lockObj` 是**值相等**，同一 token 加两次只算一把（幂等）。两者都各自被测试钉住了。
+
+**相邻的三个「电平开关」**（`Time.timeScale` / `UpdateManager.Pause` / `InputManager.DisableActionMap`）：
+它们都是**单写者**开关，不叠加——两个系统各关一次、一方恢复即丢失另一方的意图。**Lock 的存在就是为了替换
+这一类用法**，但不接管它们（各归各的模块，Lock 对框架内模块零依赖）。
+
+> **锁只回答「要不要响应」**：执行侧（`InputManager` 的 ActionMap、面板的 `Raycaster.enabled`）仍可能被别处
+> 直接写而绕过。仓内成文的先例是 `UIManager.SetLayerInteractive`——它必须「记住期望值 + 在焦点变化后重贴」，
+> 否则一次焦点变化就把外部禁用的意图冲掉。同理：**别处直接改执行侧状态，锁挡不住**。
+
+## 设计原则
+
+- **组合式锁** — 多类型锁独立管理，互不干扰
+- **多来源叠加** — 同一类型锁可被多个来源持有，全部释放才解锁
+- **LockHandle 安全释放** — 通过 `readonly struct` + `IDisposable` 实现零 GC 的 `using` 安全释放
+- **全局锁** — 支持跨主体的全局锁，适合服务器暂停、全屏 Loading 等场景
+- **事件驱动** — 锁状态变化可被订阅，解耦业务逻辑
+- **生命周期收口** — 主体销毁时自动释放（`AutoReleaseOnDestroy`），或经 `RemoveAllLocks` 显式收口
+
+## 依赖
+
+- `XMessage.IDestroyCancellationToken`（公开接口，用于「非 MonoBehaviour 主体」的销毁绑定）
+- `MessageManager.TryBindToDestroy` 未复用：它绑的是**订阅者**的令牌而本模块要绑**主体**的，且它丢弃
+  `CancellationTokenRegistration`——逐次注册会在长寿命主体的令牌上堆积永不回收的回调节点
