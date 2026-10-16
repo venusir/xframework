@@ -60,14 +60,14 @@
     （能证明有这一节/这一条，证明不了条目属实）。**历史**：`Documentation/` 在台账落地前零机械覆盖，
     这也是它腐烂（同一结论在 5~8 处各记一遍、失效指针无人发现）的原因之一。
 
-    **四、模块 README 的文件树子集（诊断，不纳门）。** 模块 README 的 `## 模块结构` 是
-    `Documentation/Modules/<模块>.md` 的 `## 文件结构` 的**使用向子集**——两份并存的唯一理由是发布
-    边界（`Documentation/` 不随包发布，第三方在包内读不到权威副本），粒度与方向见
-    `Documentation/ModuleReadme.md` §六。本检查守「子集」一条：README 列出的每个文件名都必须出现在
-    权威副本里；README 有该节而权威副本没有 `## 文件结构` 也判不合规（子集无从谈起）。**未重整的
-    模块**（README 还没有 `## 模块结构`）只计数、不判违规。**守不住**「README 漏收了一个该收的
-    文件」——「使用方会不会直接接触」不是机械判据，它只能抓改名/删除后留下的残影。**解析失败记
-    违规并明说「无法解析」，不静默通过。**
+    **四、模块 README 的文件树与磁盘的一致性（诊断，不纳门）。** `Runtime/<模块>/README.md` 的
+    `## 模块结构` 与 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 收**同一批文件**（后者是
+    维护者视角的详述版），两份并存的唯一理由是发布边界（`Documentation/` 不随包发布，第三方在包内
+    读不到权威副本），规范见 `Documentation/ModuleReadme.md` §六。本检查守 README 那一份：它列出的
+    `.cs` 文件名集合必须**等于**模块目录下递归的 `.cs` 集合——**漏收**（磁盘有、README 没列）与
+    **残影**（README 列了磁盘上没有的）两个方向都抓。不比对权威副本：磁盘才是真相，两份都是派生。
+    **未重整的模块**（README 还没有 `## 模块结构`）只计数、不判违规。**解析失败记违规并明说
+    「无法解析」，不静默通过。** **守不住**：哪个文件在干什么（对应关系）——那是评审的事。
 
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（**门禁码**的告警须为 0、
     所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规；**第四条不在此列**，它是诊断项）。
@@ -338,21 +338,21 @@ if (-not (Test-Path $ledgerPath)) {
     }
 }
 
-# ---------- 再查「模块 README 的文件树 ⊆ 维护向清单」（诊断，不纳门） ----------
+# ---------- 再查「模块 README 的文件树与磁盘一致」（诊断，不纳门） ----------
 #
-# 模块 README 的 `## 模块结构` 是 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 的**使用向子集**
-# ——两份并存的唯一理由是发布边界（Documentation/ 不随包发布，第三方在包内读不到权威副本）。
-# 守「子集」一条：README 列出的每个文件名都须出现在权威副本里；README 有该节而权威副本没有
-# `## 文件结构` 也判违规（子集无从谈起）。未重整的模块（README 还没有该节）只计数、不判违规。
-# **守不住**「README 漏收了一个该收的文件」——「使用方会不会直接接触」不是机械判据，它只能抓
-# 改名/删除后留下的残影。粒度与方向见 Documentation/ModuleReadme.md §六。
+# README 的 `## 模块结构` 与 `Documentation/Modules/<模块>.md` 的 `## 文件结构` 收**同一批文件**
+# （后者是维护者视角的详述版；两份并存的唯一理由是发布边界：Documentation/ 不随包发布）。
+# 本检查守 README 那一份 **== 磁盘**：**漏收**（磁盘有、README 没列）与**残影**（README 列了磁盘上
+# 没有的）两个方向都抓。**不比对权威副本**——磁盘才是真相，两份都是它的派生。
+# 未重整的模块（README 还没有该节）只计数、不判违规。射程只到 `.cs`（README 侧的非 `.cs` 记号不作数）。
+# 规范见 Documentation/ModuleReadme.md §六。
 
 $treeFileNamePattern = '[A-Za-z0-9_\-]+\.(cs|md|asmdef|json)'
 
 function Get-SectionFileNames {
     param([string[]]$Lines, [string]$HeadingRegex)
     # 取该节之后的**第一个 fenced 块**（免得把节内 C# 示例里的标识符当文件名）；整节没有 fenced
-    # 块时认整节——权威侧的 Modules/File.md 用的是两列表格。行内 `# 说明` 与表格第二列在比对前剥掉。
+    # 块时认整节（容错：树也可能没写围栏）。行内 `# 说明` 与表格第一格之外的列在比对前剥掉。
     $inside = $false
     $section = @()
     foreach ($line in $Lines) {
@@ -398,28 +398,24 @@ foreach ($m in $ledgerModules) {
     $treeRestructured++
 
     $readmeLabel = "Runtime/$m/README.md 的「## 模块结构」"
-    $mdPath = Join-Path $docsModules "$m.md"
-    if (-not (Test-Path $mdPath)) {
-        $treeProblems += "$readmeLabel 无从比对：Documentation/Modules/$m.md 不存在"
-        continue
-    }
-    $a = Get-SectionFileNames -Lines (Get-Content $mdPath) -HeadingRegex '^#{2,3}\s+.*文件结构'
-    if (-not $a.Found) {
-        $treeProblems += "$readmeLabel 有文件树，而 Documentation/Modules/$m.md 没有「## 文件结构」——权威副本不存在，子集无从谈起"
-        continue
-    }
     if ($r.Names.Count -eq 0) {
         $treeProblems += "$readmeLabel 无法解析（该节里没有可解析的 fenced 块，或块里没有一行像文件名）——不静默通过"
         continue
     }
-    if ($a.Names.Count -eq 0) {
-        $treeProblems += "Documentation/Modules/$m.md 的「## 文件结构」无法解析（一行文件名都没有）"
-        continue
+
+    # 磁盘是真相：模块目录下递归的全部 .cs（子目录如 Internal/、Default/ 也算）
+    $diskNames = @(Get-ChildItem (Join-Path $runtimeRoot $m) -Recurse -Filter *.cs -File -ErrorAction SilentlyContinue |
+        ForEach-Object { $_.Name } | Sort-Object -Unique)
+    $listed = @($r.Names | Where-Object { $_ -like '*.cs' })   # 射程只到 .cs；树里的 README.md 等不作数
+
+    $notListed = @($diskNames | Where-Object { $listed -notcontains $_ })
+    $strays = @($listed | Where-Object { $diskNames -notcontains $_ })
+    if ($notListed.Count -gt 0) {
+        $treeProblems += "$readmeLabel 漏收了磁盘上有的文件：$($notListed -join '、')——该节要把模块目录下的 .cs 列全，internal 的也要列（逐个标注即可）"
     }
-    $strays = @($r.Names | Where-Object { @($a.Names) -notcontains $_ })
     if ($strays.Count -gt 0) {
         # 注意：消息里不要用反引号包裹节名——` 紧贴收尾的 " 会被当成转义引号，字符串不终止（实测踩过）。
-        $treeProblems += "$readmeLabel 列了权威副本里没有的文件：$($strays -join '、')——权威副本在 Documentation/Modules/$m.md 的「## 文件结构」"
+        $treeProblems += "$readmeLabel 列了磁盘上没有的文件：$($strays -join '、')——多半是改名或删除后的残影"
     }
 }
 

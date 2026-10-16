@@ -41,10 +41,13 @@ tick.Dispose();
 Runtime/Timer/
 ├── TimerManager.cs   # 静态门面：After / Every / CancelAll / ActiveCount
 ├── TimerHandle.cs    # 句柄（readonly struct）：Remaining / Stop / Restart / Dispose
-└── TimerInfo.cs      # CopyActiveTimers 的明细载荷（readonly struct）
+├── TimerInfo.cs      # CopyActiveTimers 的明细载荷（readonly struct）
+├── TimerCore.cs      # internal：调度引擎——逻辑时钟、表集合、扫尾、选档
+├── TimerTable.cs     # internal：按（轴, 状态类型）分的槽位表与代际
+└── TimerTicker.cs    # internal：每轴一个的 Update 驱动器
 ```
 
-其余文件（调度引擎、槽位表、驱动器）是 `internal`，使用方不直接接触——完整清单与各文件职责在该模块的维护向记录里。
+带 `internal` 标记的三个文件使用方不直接接触——逐文件的职责详述在该模块的维护向记录里。
 
 ## API 参考
 
