@@ -76,6 +76,7 @@ namespace XFramework.Architecture.Tests
             "Diagnostics", // 边界样本：线程契约原埋在「契约」节下，提升为 ##；首节带限定词
             "Event",       // 边界样本：改节名牵动 4 处外部指针（含 2 个 .cs 与 1 个跨 README 锚点）
             "Log",         // 大模块：20 个文件（含 Internal/ 子树）的树；顺带抓出 README 里陈旧的内置分类计数
+            "Save",        // 顺带抓出一处「包内指向包外」（引维护向文档），守卫只扫 .cs 所以此前看不见
         };
 
         /// <summary>
