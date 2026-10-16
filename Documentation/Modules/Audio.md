@@ -16,6 +16,7 @@ Runtime/Audio/
 ├── AudioPlayOptions.cs       # 单次播放参数（六个字段全部后端中立）
 ├── AudioChannels.cs          # 推荐通道常量（不是枚举，见 README 设计取舍）
 ├── AudioChannelConfig.cs     # RegisterChannel 的配置（Volume / Muted）
+├── AudioChannelInfo.cs       # 诊断回读载荷：CopyChannels 的列表元素（2026-10-16 补录——它一直是公开面，此前漏在本树之外）
 ├── AudioChannelState.cs      # 一个通道的音量状态（internal，惰性创建）
 ├── AudioInitOptions.cs       # 初始化选项
 ├── AudioVoice.cs             # 槽位记录 + AudioVoiceState 状态机（internal）

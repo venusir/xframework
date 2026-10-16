@@ -1,4 +1,4 @@
-# XFramework / Audio 模块
+# Audio —— 音频播放的静态服务：字符串通道 × 三档音量相乘 × 池化播放源
 
 ## 概述
 
@@ -13,56 +13,6 @@
    因此本模块的公开面不含任何 Unity 内置音频类型。
 2. **通道是开放的字符串域**，不是枚举。`AudioChannels` 给的是推荐常量，项目可自建任意通道名。
 3. **零配置即可用**：`Initialize()` 之后就能播，播放源惰性创建，从不播放的项目一个 GameObject 都不建。
-
-## 典型场景
-
-### A. 一次性音效
-
-```csharp
-AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.SE, volumeScale: 0.8f));
-```
-
-fire-and-forget，不关心它什么时候播完。异常已由框架收口，**不要**再包 `.Forget()`。
-
-### B. 背景音乐
-
-```csharp
-_bgm = await AudioManager.PlayAsync("audio/bgm_main",
-    new AudioPlayOptions(AudioChannels.Bgm, loop: true));
-
-// 换场景或退出时：
-_bgm.Stop();
-```
-
-**循环播放永不被自动回收**，必须显式 `Stop`。
-
-### C. 定点 3D 音效
-
-```csharp
-AudioManager.Play("audio/sfx_explosion", new AudioPlayOptions(
-    AudioChannels.SE, spatialBlend: 1f, position: hitPoint));
-```
-
-`spatialBlend > 0` 时位置才写进播放源。
-
-### D. 设置面板
-
-```csharp
-AudioManager.MasterVolume = 0.8f;
-AudioManager.SetChannelVolume(AudioChannels.Bgm, 0.6f);
-AudioManager.SetChannelMuted(AudioChannels.Voice, true);
-```
-
-变更**立刻**作用到正在播放的声音上。静音只是听不见，播放不会中断。
-
-### E. 暂停菜单
-
-```csharp
-AudioManager.Pause();    // 全部音频暂停
-AudioManager.Resume();
-```
-
-暂停期间新起的声音也会立刻进入暂停（见「设计取舍」）。
 
 ## 快速使用
 
@@ -96,7 +46,32 @@ AudioManager.Initialize(new AudioInitOptions
 });
 ```
 
-## 完整 API 参考
+## 模块结构
+
+```text
+Runtime/Audio/
+├── IAudioManager.cs          # 公开接口 = 后端整体替换点（不含任何 Unity 内置音频类型）
+├── AudioManager.cs           # 静态门面（扁平 + #region 分区）+ AutoInit
+├── AudioManagerImpl.cs       # 默认实现：槽位 / 通道 / 音量 / 暂停 / 加载编排
+├── AudioHandle.cs            # 播放句柄（readonly struct，字段公开且对门面不透明）
+├── AudioPlayOptions.cs       # 单次播放参数（六个字段全部后端中立）
+├── AudioChannels.cs          # 推荐通道常量（不是枚举，见「设计取舍」）
+├── AudioChannelConfig.cs     # RegisterChannel 的配置（Volume / Muted）
+├── AudioChannelInfo.cs       # 诊断回读载荷：CopyChannels 的列表元素
+├── AudioInitOptions.cs       # 初始化选项
+├── IAudioClipLoader.cs       # internal：加载缝（测试缝，不是第二个后端替换点）
+├── AudioClipLoader.cs        # internal：默认加载缝，经 XAsset 加载
+├── AudioChannelState.cs      # internal：一个通道的音量状态（惰性创建）
+├── AudioVoice.cs             # internal：槽位记录 + AudioVoiceState 状态机
+├── AudioSourcePool.cs        # internal：宿主与槽位、回收扫尾、池耗尽策略
+├── AudioHost.cs              # internal：隐藏宿主 MonoBehaviour（纯挂载点）
+├── AudioTicker.cs            # internal：IUpdateable，Tier1 + Unscaled 的回收驱动
+└── AudioClipLease.cs         # internal：资源租约（本体 + 释放动作）
+```
+
+十七个文件：前九个是使用方直接接触的公开面，标 `internal` 的八个是默认实现的零件与两条测试缝。
+
+## API 参考
 
 ### 播放
 
@@ -176,66 +151,66 @@ AudioManager.Initialize(new AudioInitOptions
 `ArgumentException`，异常消息指出该用 `MasterVolume`。不拦的话，调用方会静默建出一个没人收听的通道，
 而以为自己控住了总音量。
 
-## 与音频中间件的边界
+## 典型场景
 
-本模块的公开面**不含任何 Unity 内置音频类型**（没有 `AudioClip`、没有 `AudioMixerGroup`、没有
-`AudioSource.priority`），因此除了默认实现，还可以：
-
-### 整体替换 `IAudioManager`
-
-使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
-`location` 直接解释成自己的事件名：
+### A. 一次性音效
 
 ```csharp
-AudioManager.SetInstance(new MyWwiseAudioManager());
+AudioManager.Play("audio/sfx_hit", new AudioPlayOptions(AudioChannels.SE, volumeScale: 0.8f));
 ```
 
-这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
-`AudioHandle` 的两个字段是公开的且对门面不透明，实现方可以按自己的需要编码（有效句柄的
-`Generation` 必须非 `0`，`default(AudioHandle)` 必须被视为无效）。
+fire-and-forget，不关心它什么时候播完。异常已由框架收口，**不要**再包 `.Forget()`。
 
-**注意**：`SetInstance` **不会** Dispose 先前持有的实例。若之前已 `Initialize`，请先 `Destroy`。
-
-### 用项目自己的 AudioMixer
-
-框架只写自己池里播放源的 `volume`，**不碰** `AudioMixer`。要让声音进入项目自己的总线/效果链，
-把混音交给 Mixer：让框架的通道音量留在 `1.0`，项目自己用 `AudioMixer.SetFloat` 控制总线音量。
-两者是相乘关系，不会互相覆盖。
-
-### 关于「跟随移动物体的 3D 发射器」
-
-本模块的播放源是**定点**的：`spatialBlend > 0` 时只写一次位置，不跟随。跟随需要一个每帧写
-Transform 的宿主对象，那是项目侧的 MonoBehaviour——框架不去追 Transform。
-
-## 与相邻模块的关系
-
-| 模块 | 关系 |
-| ---- | ---- |
-| **Asset** | 唯一的资源来源。所有音频资源必须注册进 YooAsset 的 location；启动画面可用 `AssetManager.PreloadAllAsync` 预热音效，之后 `Play` 走缓存 |
-| **Settings** | **无硬依赖**（Settings 是可选模块）。要把音量做进设置里，项目侧接三行——见「常见配方」 |
-| **Localization** | **无硬依赖**。切语言时重播语音由项目自己订阅 `LanguageChangedMessage` 决定（见「设计取舍」） |
-| **Update** | 内部用 `UpdateManager` 驱动播完回收，档位 `Tier1`、时间轴 `Unscaled`。**使用方无需做任何事** |
-| **Pool** | **不使用**。`PoolManager` 只服务纯 C# 对象，不涉及 GameObject 与资源引用；播放源池是模块自持的第三套 |
-
-### 常见配方：音量接进 Settings
+### B. 背景音乐
 
 ```csharp
-private static readonly SettingRef<GameSettings, float> BgmVolume =
-    SettingsManager.Ref<GameSettings, float>(s => s.Audio.BgmVolume);   // 调用一次并缓存
+_bgm = await AudioManager.PlayAsync("audio/bgm_main",
+    new AudioPlayOptions(AudioChannels.Bgm, loop: true));
 
-// 初始化时接一次即可
-BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
+// 换场景或退出时：
+_bgm.Stop();
 ```
 
-`SettingRef.Subscribe` **订阅时立即同步回调一次当前值**，正好补上「启动时把已存档音量推给音频」这一步。
+**循环播放永不被自动回收**，必须显式 `Stop`。
+
+### C. 定点 3D 音效
+
+```csharp
+AudioManager.Play("audio/sfx_explosion", new AudioPlayOptions(
+    AudioChannels.SE, spatialBlend: 1f, position: hitPoint));
+```
+
+`spatialBlend > 0` 时位置才写进播放源。
+
+### D. 设置面板
+
+```csharp
+AudioManager.MasterVolume = 0.8f;
+AudioManager.SetChannelVolume(AudioChannels.Bgm, 0.6f);
+AudioManager.SetChannelMuted(AudioChannels.Voice, true);
+```
+
+变更**立刻**作用到正在播放的声音上。静音只是听不见，播放不会中断。
+
+### E. 暂停菜单
+
+```csharp
+AudioManager.Pause();    // 全部音频暂停
+AudioManager.Resume();
+```
+
+暂停期间新起的声音也会立刻进入暂停（见「设计取舍」）。
 
 ## 内部机制
 
 ### 播放源池与隐藏宿主
 
 首次播放时惰性创建宿主 `[AudioManager] Audio Host`（`DontDestroyOnLoad`，BGM 因此能跨场景连续），
-每个播放占用一个子 GameObject + `AudioSource`。播放源的 `AudioSource` 与 `Transform` 在创建时缓存，
+每个播放占用一个子 GameObject（命名 `Voice {index}`）+ `AudioSource`。播放源的 `AudioSource` 与 `Transform` 在创建时缓存，
 运行期没有任何 `GetComponent`。
+
+> **这两个名字是内部字面量、不可配置**：宿主会出现在 Hierarchy 里、播放源会出现在性能分析器里，
+> 知道它们是为了认出「这是框架建的」——别拿这两个名字做自己的对象命名。
 
 `MaxVoices` 是**唯一的并发策略**：取不到空闲槽位时返回 `default(AudioHandle)` 并记一条限流告警
 （同一段耗尽期只告警一次，释放任一槽位后重新允许告警）。**框架不做优先级抢占**——抢占必须先回答
@@ -292,31 +267,13 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 
 回调（无）与事件（无）：本模块没有可订阅的公开事件，因此不存在「回调在哪个线程」的问题。
 
-## 设计原则
-
-- **不预设游戏架构**：通道是开放字符串域、音量模型是线性的三档相乘、播放源归框架所有——只提供
-  正交的播放能力，不替使用方决定混音策略、不决定「什么声音该在什么时候响」。
-- **单一资源来源**：只接受 location，资源生命周期只有一套语义。
-- **失败形态确定**：加载失败不抛（返回可安全探测的句柄）、参数非法抛、取消抛且不泄漏。
-- **探测型成员宽松**：句柄可以长于管理器，对它的查询与停止永远安全。
-
-## 依赖
-
-| 依赖 | 用途 | 必需 |
-| ---- | ---- | ---- |
-| **UniTask** | 异步播放与加载 | 是 |
-| **YooAsset**（经 `XAsset`） | 资源加载 | 是（除非整体替换 `IAudioManager`） |
-| `com.unity.modules.audio` | Unity 内置音频 | 是（Unity 自带模块，无需安装） |
-
-**不依赖** Settings / Localization / Config / UI 中任何一个。
-
 ## 已知限制
 
 - **所有音频资源必须注册进 YooAsset 的 location。** `[SerializeField] AudioClip hitSfx;` 那种 Inspector
   直接引用的用法用不了——不过这是本框架的一贯立场（UI 的面板同样必须走 location）。建议在加载画面用
   `AssetManager.PreloadAllAsync` 预热常用音效。
 - **没有同步播放路径。** 只有异步加载；`Play` 是「立即返回 + 后台加载」，不是同步加载。
-- **3D 播放源是定点的**，不跟随移动物体（见「与音频中间件的边界」）。
+- **3D 播放源是定点的**，不跟随移动物体（见「与相邻模块的关系」的「与音频中间件的边界」）。
 - **切后台不会自动暂停。** 本模块不接 `OnApplicationPause`——「是谁暂停的、谁来恢复」必须由项目掌握
   （玩家本来就在暂停菜单里切后台时，回到前台不能替他 `Resume`）。需要的话由项目在自己的生命周期回调里
   调 `Pause()` / `Resume()`。
@@ -372,3 +329,74 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 类型的接触收敛到两个文件；二是 `AssetHandle` 内部包着 YooAsset 的句柄，**没有活的 YooAsset 环境就构造不出
 有效实例**，于是测试替身既无法表达「加载成功」，也无法观测「释放了几次」——而「资源租约释放点恰好一次」
 是本模块最要紧的不变量（少一次即泄漏，多一次即重复释放）。
+
+## 与相邻模块的关系
+
+| 模块 | 关系 |
+| ---- | ---- |
+| **Asset** | 唯一的资源来源。所有音频资源必须注册进 YooAsset 的 location；启动画面可用 `AssetManager.PreloadAllAsync` 预热音效，之后 `Play` 走缓存 |
+| **Settings** | **无硬依赖**（Settings 是可选模块）。要把音量做进设置里，项目侧接三行——见「常见配方」 |
+| **Localization** | **无硬依赖**。切语言时重播语音由项目自己订阅 `LanguageChangedMessage` 决定（见「设计取舍」） |
+| **Update** | 内部用 `UpdateManager` 驱动播完回收，档位 `Tier1`、时间轴 `Unscaled`。**使用方无需做任何事** |
+| **Pool** | **不使用**。`PoolManager` 只服务纯 C# 对象，不涉及 GameObject 与资源引用；播放源池是模块自持的第三套 |
+
+### 常见配方：音量接进 Settings
+
+```csharp
+private static readonly SettingRef<GameSettings, float> BgmVolume =
+    SettingsManager.Ref<GameSettings, float>(s => s.Audio.BgmVolume);   // 调用一次并缓存
+
+// 初始化时接一次即可
+BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
+```
+
+`SettingRef.Subscribe` **订阅时立即同步回调一次当前值**，正好补上「启动时把已存档音量推给音频」这一步。
+
+### 与音频中间件的边界
+
+本模块的公开面**不含任何 Unity 内置音频类型**（没有 `AudioClip`、没有 `AudioMixerGroup`、没有
+`AudioSource.priority`），因此除了默认实现，还可以：
+
+#### 整体替换 `IAudioManager`
+
+使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
+`location` 直接解释成自己的事件名：
+
+```csharp
+AudioManager.SetInstance(new MyWwiseAudioManager());
+```
+
+这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
+`AudioHandle` 的两个字段是公开的且对门面不透明，实现方可以按自己的需要编码（有效句柄的
+`Generation` 必须非 `0`，`default(AudioHandle)` 必须被视为无效）。
+
+**注意**：`SetInstance` **不会** Dispose 先前持有的实例。若之前已 `Initialize`，请先 `Destroy`。
+
+#### 用项目自己的 AudioMixer
+
+框架只写自己池里播放源的 `volume`，**不碰** `AudioMixer`。要让声音进入项目自己的总线/效果链，
+把混音交给 Mixer：让框架的通道音量留在 `1.0`，项目自己用 `AudioMixer.SetFloat` 控制总线音量。
+两者是相乘关系，不会互相覆盖。
+
+#### 关于「跟随移动物体的 3D 发射器」
+
+本模块的播放源是**定点**的：`spatialBlend > 0` 时只写一次位置，不跟随。跟随需要一个每帧写
+Transform 的宿主对象，那是项目侧的 MonoBehaviour——框架不去追 Transform。
+
+## 设计原则
+
+- **不预设游戏架构**：通道是开放字符串域、音量模型是线性的三档相乘、播放源归框架所有——只提供
+  正交的播放能力，不替使用方决定混音策略、不决定「什么声音该在什么时候响」。
+- **单一资源来源**：只接受 location，资源生命周期只有一套语义。
+- **失败形态确定**：加载失败不抛（返回可安全探测的句柄）、参数非法抛、取消抛且不泄漏。
+- **探测型成员宽松**：句柄可以长于管理器，对它的查询与停止永远安全。
+
+## 依赖
+
+| 依赖 | 用途 | 必需 |
+| ---- | ---- | ---- |
+| **UniTask** | 异步播放与加载 | 是 |
+| **YooAsset**（经 `XAsset`） | 资源加载 | 是（除非整体替换 `IAudioManager`） |
+| `com.unity.modules.audio` | Unity 内置音频 | 是（Unity 自带模块，无需安装） |
+
+**不依赖** Settings / Localization / Config / UI 中任何一个。
