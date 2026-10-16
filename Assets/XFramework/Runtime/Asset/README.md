@@ -1,26 +1,10 @@
-# XFramework / Asset 模块
+# Asset —— 资源管理（YooAsset 后端）：异步加载 / 实例化 / 对象池 / 场景 / 热更
 
 ## 概述
 
-XFramework 资源管理模块提供异步资源加载、实例化、场景切换和对象池功能。基于 **YooAsset** 底层实现，通过 `IAssetManager` 接口解耦，统一使用 `UniTask` 异步风格。
-
 **命名空间**: `XFramework.XAsset`
 
-## 架构设计
-
-### 分层调用链
-
-```
-调用方
-  → AssetManager        静态门面，全局唯一入口（所有静态方法都委托给实例）
-  → IAssetManager       公共接口，可替换
-  → AssetManagerImpl    默认实现：对象池 + 实例引用计数管理
-  → YooAssetManagerImpl YooAsset 适配器：多包管理 + 热更链路
-  → YooAsset            底层资源管线
-```
-
-- `AssetManager` 与 `IAssetManager` 是对外唯一公开层；`AssetManagerImpl` / `YooAssetManagerImpl` 为 internal，第三方不直接使用
-- 替换底层实现：实现 `IAssetManager` 后通过 `AssetManager.SetInstance(...)` 注入（也用于单元测试）
+XFramework 资源管理模块提供异步资源加载、实例化、场景切换和对象池功能。基于 **YooAsset** 底层实现，通过 `IAssetManager` 接口解耦，统一使用 `UniTask` 异步风格。
 
 ## 快速使用
 
@@ -273,7 +257,69 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 
 > 子资源与 RawFile 均提供 `LoadXxxSync` 同步版本（同上节风险说明）。
 
-## 完整 API 参考
+## 模块结构
+
+```text
+Runtime/Asset/
+├── AssetManager.cs                # 静态外观（全局入口）
+├── IAssetManager.cs               # 资源管理器公共接口
+├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
+├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理 + 热更链路 + 远端 / 解密适配）
+├── IAssetRemoteServices.cs        # 远端资源地址服务接口（主站 / 备站）
+├── IAssetDecryptionServices.cs    # 资源解密服务接口（镜像 YooAsset 的 IDecryptionServices）
+├── IAssetPoolController.cs        # 资源实例池的受控清理能力（可选能力接口）
+├── IAssetSceneLoader.cs           # 场景加载与卸载能力（可选能力接口；2026-10-13 从 IAssetManager 移出）
+├── AssetSceneHandle.cs            # 场景句柄（只读结构体；公开构造，Dispose = 即发即忘卸载）
+├── ISceneLoadOperation.cs         # internal：场景加载操作的最小面（测试缝）
+├── ISceneLoadSource.cs            # internal：场景加载来源缝（测试缝）
+├── YooAssetSceneLoadSource.cs     # internal：缝的默认实现，包住 YooAsset.SceneHandle
+├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收 / 远端地址服务 / 解密服务）
+├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
+├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext
+├── AssetBootstrapStage.cs         # 引导阶段：资源管理器初始化（Phase 0，最早）
+├── AssetOperationStatus.cs        # 资源操作状态（四句柄共用）+ 与 YooAsset.EOperationStatus 的唯一换算
+├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
+├── AssetDownloaderHandle.cs       # 下载器句柄（事件 / 控制 / 等待）
+├── SubAssetsHandle.cs             # 子资源句柄（图集 / 多 Sprite）
+├── RawFileHandle.cs               # 原始文件句柄（txt / json / 二进制）
+└── InstanceTracker.cs             # internal：实例引用追踪组件（挂在实例上保活）
+```
+
+二十二个文件：标 `internal` 的四个是测试缝与内部组件（`InstanceTracker` 由 `AddComponent` 挂到实例上，使用方不直接接触），其余是公开面。
+
+## 行为契约
+
+1. **句柄不释放 = 资源泄漏（最常见的坑）**：`LoadAsync` 返回的句柄必须用 `using` 管理或显式 `Dispose`，否则引用计数不为 0，`UnloadUnusedAssetsAsync` 永远回收不掉，内存持续增长。
+2. **加载失败不抛异常**：`LoadAsync` 失败返回 `default` 句柄（`IsValid == false`、`Asset == null`），`InstantiateAsync` 失败返回 `null`。失败原因在 `LastError`，调用方需校验返回值。
+3. **`DestroyInstance` 回池不等于释放资源**：回池实例保留资源引用（保活），只有真正销毁（池满 / `Dispose()` / `Object.Destroy`）才释放。回池的资源量按 `GetPoolStatus` 的 `pooledCount` 观察。
+4. **直接 `Object.Destroy` 不回池**：实例不会进对象池复用，但 `OnDestroy` 会释放资源引用，不会泄漏——代价只是少了复用。
+5. **同步加载卡顿**：`LoadSync` / `InstantiateSync` 阻塞调用线程；Host 模式下资源未下载时可能长时间卡住，运行时高频路径禁用。
+6. **`UnloadUnusedAssetsAsync` 只回收引用计数为 0 的资源**：未 `Dispose` 的句柄、存活实例引用的资源不受影响——它不解决句柄泄漏，只回收真正闲置的资源。
+7. **下载器 `Dispose()` 不中止下载**：只解除事件订阅；需要中止调用 `Cancel()`（已下载部分保留，断点续传）。
+8. **Offline 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
+9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
+10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
+11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。
+12. **`LoadAllAsync` 的句柄必须逐项释放**：返回的句柄数组每个元素占引用计数（与 `LoadAsync` 相同），需逐项 `using` 或 `Dispose`；单项失败为 `default` 句柄（`IsValid == false`，释放安全）。批量预热请用 `PreloadAllAsync`（不占引用计数）。
+13. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
+
+## 架构设计
+
+### 分层调用链
+
+```
+调用方
+  → AssetManager        静态门面，全局唯一入口（所有静态方法都委托给实例）
+  → IAssetManager       公共接口，可替换
+  → AssetManagerImpl    默认实现：对象池 + 实例引用计数管理
+  → YooAssetManagerImpl YooAsset 适配器：多包管理 + 热更链路
+  → YooAsset            底层资源管线
+```
+
+- `AssetManager` 与 `IAssetManager` 是对外唯一公开层；`AssetManagerImpl` / `YooAssetManagerImpl` 为 internal，第三方不直接使用
+- 替换底层实现：实现 `IAssetManager` 后通过 `AssetManager.SetInstance(...)` 注入（也用于单元测试）
+
+## API 参考
 
 全部方法均位于 `AssetManager` 静态门面（`XFramework.XAsset`），以下为速查。`ct` 表示 `CancellationToken`。
 
@@ -351,7 +397,9 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | `GetPoolStatus(string location)` | 返回 `(pooledCount, activeCount, maxPoolSize)` 三元组（调试用） |
 | `DestroyInstance(GameObject instance)` / `DestroyInstance<T>(T component)` | 回池（池未满）或销毁实例，引用自动释放 |
 
-## 加载模式选择
+## 典型场景
+
+### 加载模式选择
 
 按场景选择 API 的决策清单：
 
@@ -366,7 +414,7 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 | txt / json / 二进制 | `LoadRawFileAsync` | 不经过 Unity 资源管线 |
 | 场景切换 | `LoadSceneAsync` | `LoadSceneMode.Additive` 叠加加载；返回的句柄配 `UnloadAsync`/`Dispose` 成对使用 |
 | 内存告警 / 切关卡 | `UnloadUnusedAssetsAsync` | 只回收引用计数为 0 的资源 |
-| 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见快速使用 7） |
+| 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见「快速使用」7） |
 | 预判断资源状态 | `CheckLocationValid` / `IsNeedDownloadFromRemote` | 纯查询，失败不抛异常 |
 
 ## 内部机制
@@ -440,14 +488,6 @@ RequestPackageVersionAsync → 检查远端新版本号
 - `DownloadAssetsAsync` / `AssetDownloaderHandle.WaitAsync`：取消时自动调用 `Cancel()` 中止下载后抛出
 - 其余加载类 API：取消后返回的句柄状态可能半途，需自行 `Dispose` 收尾
 
-### GC 与性能
-
-- 句柄均为 `readonly struct`（`AssetHandle<T>` / `SubAssetsHandle` / `RawFileHandle`），传递零分配
-- 对象池复用实例，减少 `Instantiate`/`Destroy` 开销；回池实例取出无需重新加载
-- `GetPoolStatus` 的活跃计数由 `OnEnable`/`OnDisable` 统计，无每帧轮询
-- 加载族路径无每帧闭包分配（`PreloadAllAsync` 的进度聚合闭包仅在启动期一次性调用）
-- **同步 API 的代价**：`LoadSync`/`InstantiateSync` 阻塞调用线程；远端未下载时可能长时间卡住，运行时高频路径禁用
-
 ## 线程契约
 
 **本模块按主线程使用设计。** `AssetManager` 门面的全部成员（含 `InitializeAsync` / `SetInstance` / `Destroy` /
@@ -462,6 +502,14 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 `YooAssetsDriver.Update` 驱动；所有 `await` 的续体经 UniTask 的 PlayerLoop 推进——两者都在主线程。
 
 需要从后台线程加载资源时，请先 `await UniTask.SwitchToMainThread(cancellationToken)` 再进入本模块。
+
+## 性能代价
+
+- 句柄均为 `readonly struct`（`AssetHandle<T>` / `SubAssetsHandle` / `RawFileHandle`），传递零分配
+- 对象池复用实例，减少 `Instantiate`/`Destroy` 开销；回池实例取出无需重新加载
+- `GetPoolStatus` 的活跃计数由 `OnEnable`/`OnDisable` 统计，无每帧轮询
+- 加载族路径无每帧闭包分配（`PreloadAllAsync` 的进度聚合闭包仅在启动期一次性调用）
+- **同步 API 的代价**：`LoadSync`/`InstantiateSync` 阻塞调用线程；远端未下载时可能长时间卡住，运行时高频路径禁用
 
 ## 已知限制
 
@@ -515,23 +563,7 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
    要真正回收内存请用 `UnloadUnusedAssetsAsync`（配合 `ClearPool` 清掉闲置实例）。
 4. **`PreloadAllAsync` 不占引用计数**，只把内容拉进缓存；需要持有请用 `LoadAllAsync`（其句柄必须逐项释放）。
 
-## 注意事项与常见误区
-
-1. **句柄不释放 = 资源泄漏（最常见的坑）**：`LoadAsync` 返回的句柄必须用 `using` 管理或显式 `Dispose`，否则引用计数不为 0，`UnloadUnusedAssetsAsync` 永远回收不掉，内存持续增长。
-2. **加载失败不抛异常**：`LoadAsync` 失败返回 `default` 句柄（`IsValid == false`、`Asset == null`），`InstantiateAsync` 失败返回 `null`。失败原因在 `LastError`，调用方需校验返回值。
-3. **`DestroyInstance` 回池不等于释放资源**：回池实例保留资源引用（保活），只有真正销毁（池满 / `Dispose()` / `Object.Destroy`）才释放。回池的资源量按 `GetPoolStatus` 的 `pooledCount` 观察。
-4. **直接 `Object.Destroy` 不回池**：实例不会进对象池复用，但 `OnDestroy` 会释放资源引用，不会泄漏——代价只是少了复用。
-5. **同步加载卡顿**：`LoadSync` / `InstantiateSync` 阻塞调用线程；Host 模式下资源未下载时可能长时间卡住，运行时高频路径禁用。
-6. **`UnloadUnusedAssetsAsync` 只回收引用计数为 0 的资源**：未 `Dispose` 的句柄、存活实例引用的资源不受影响——它不解决句柄泄漏，只回收真正闲置的资源。
-7. **下载器 `Dispose()` 不中止下载**：只解除事件订阅；需要中止调用 `Cancel()`（已下载部分保留，断点续传）。
-8. **Offline 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
-9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
-10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
-11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。
-12. **`LoadAllAsync` 的句柄必须逐项释放**：返回的句柄数组每个元素占引用计数（与 `LoadAsync` 相同），需逐项 `using` 或 `Dispose`；单项失败为 `default` 句柄（`IsValid == false`，释放安全）。批量预热请用 `PreloadAllAsync`（不占引用计数）。
-13. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
-
-## 与相关模块的关系
+## 与相邻模块的关系
 
 - **XFramework.XBootstrap / XFramework.XPipeline**（启动引导与相位分组编排）：`AssetBootstrapStage`（`IBootstrapStage`，Phase 0）负责自动初始化；初始化步骤进度经 `AssetInitReport`（本模块自持中性载荷）上报，由引导阶段经 `AssetInitProgressRelay` 直写管线阶段上下文
 - **XFramework.XPool**：本模块内置的**实例对象池**（按 location 键、容量上限）只服务 `InstantiateAsync`；`PoolManager` 是通用对象池（任意类型池化），职责不同，两者不混用
