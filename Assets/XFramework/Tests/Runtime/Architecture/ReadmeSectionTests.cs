@@ -15,9 +15,11 @@ namespace XFramework.Architecture.Tests
     /// <para><b>守法</b>：模块全集取自 <c>Runtime/</c> 的直接子目录
     /// （<see cref="SourceScanner.CollectRuntimeModules"/>，与 <c>ReadmeTableTests</c> 同一份定义——
     /// 「模块是什么」只能有一个答案）。**五节必答**由 <see cref="RequiredHeadings"/> 声明；其余按需节不在射程。</para>
-    /// <para><b>过渡期用登记表</b>：<see cref="RestructuredModules"/> 逐个登记已重整的模块——为什么不是
-    /// 「等 23/23 齐了再一次开闸」，见该字段的注释。登记表当前为空，故此刻对**全部**模块生效的仍只有
-    /// 「已知限制」这一节（<see cref="EveryRuntimeModuleReadme_HasKnownLimitationsSection"/>）。</para>
+    /// <para><b>过渡期的登记表已退休</b>（2026-10-16，逐模块重整 23/23 完成）：五节要求现在作用于
+    /// **全部**模块，终态不留第二份模块清单。过渡期为什么要用登记表而不是「等齐了再一次开闸」：
+    /// 仓内「先诊断看曲线、清完存量再纳门」的先例成立的前提是**清存量在一个提交里完成**，而那是
+    /// 23 次增量推进——登记表让「把模块加进表」与「把它的 README 改到位」必须同一个提交完成，
+    /// 于是每个提交自身是绿的、且自带验证，窗口期为零。</para>
     /// <para><b>只认 ## 与 ###</b>：<c>####</c> 及更深是条目级标题，不构成模块级的边界声明；小节埋在
     /// 别的节底下不算数——Diagnostics 的「线程契约」曾埋在 `## 契约` 下，要提升为 `##`。Reactive 那种
     /// 两条并列的集合级 `### 已知限制` 算（层级上限按节声明，见 <see cref="RequiredHeadings"/>）。</para>
@@ -56,43 +58,6 @@ namespace XFramework.Architecture.Tests
                              "不是全量文件清单"),
             ("线程契约", 2, 2, "最短合法形态是一句话，例如「全部 API 仅在主线程调用」"),
             (KnownLimitationsHeading, 2, 3, "条目式；素材在该模块的维护向记录里"),
-        };
-
-        /// <summary>
-        /// **已重整模块登记表**——守卫只对表内模块要求五节齐全。
-        /// <para><b>为什么不是「全量重整完再把守卫开起来」</b>：仓内「先诊断看曲线、清完存量再纳门」的
-        /// 先例（XML 告警码）成立的前提是**清存量在一个提交里完成**；这里是 23 个模块逐次增量推进，
-        /// 前提不成立——那会是 23 个提交零机械验证，且没有东西阻止后一个模块的改动把前一个已重整的
-        /// 模块结构拆掉。改成登记表后：**「把模块加进本表」与「把它的 README 改到位」必须同一个提交
-        /// 完成**，于是每个提交自身是绿的、且自带验证，窗口期为零。</para>
-        /// <para><b>退休时点</b>：全量重整完成的那一次提交把本表的用法翻成「作用于全部模块」
-        /// （届时它整表删除——终态不留第二份模块清单）。</para>
-        /// </summary>
-        private static readonly string[] RestructuredModules =
-        {
-            "Timer",       // 打样：骨架与重排是否合身由它先验
-            "Serialize",   // 退化样本：原本缺 概述 / 快速使用 / 模块结构 / 线程契约 四节
-            "Bootstrap",   // 边界样本：首节是「定位」；权威副本没有文件结构，反方向补建
-            "Diagnostics", // 边界样本：线程契约原埋在「契约」节下，提升为 ##；首节带限定词
-            "Event",       // 边界样本：改节名牵动 4 处外部指针（含 2 个 .cs 与 1 个跨 README 锚点）
-            "Log",         // 大模块：20 个文件（含 Internal/ 子树）的树；顺带抓出 README 里陈旧的内置分类计数
-            "Save",        // 顺带抓出一处「包内指向包外」（引维护向文档），守卫只扫 .cs 所以此前看不见
-            "Reactive",    // 线程契约原先只是「设计原则」里的一条，提升为独立小节；两个集合节保持原位
-            "Pipeline",    // 拆「核心概念」一节（其子节按性质分入架构设计 / 行为契约 / 内部机制）
-            "Scene",       // 「场景间传参 / 加载界面」并入典型场景；顺带清掉一处悬空的「§四」节号引用
-            "Data",        // 「线程安全 / 设计原则」两条从 ### 提升为 ##；「架构」内只剩一张图
-            "Update",      // 最大的低档位模块：机制说明 → 内部机制（8 个子节原样），线程契约提升
-            "Audio",       // 「与音频中间件的边界」并入与相邻模块的关系；补登两个内部字面量
-            "Localization", // 「核心机制：LRU 缓存」→ 内部机制；线程契约提升；清一处指向维护文档的悬空指针
-            "Message",     // 线程契约从引用块提为小节，5 处 .cs 死指针（指向不存在的「线程」段）随之修正
-            "Pool",        // 「使用示例 ×7」合成典型场景（含原挂在集合池下的 5–7）；「配置」并入 API 参考
-            "Lock",        // 「诊断 / ILockable 扩展方法」并入 API 参考；线程契约从已知限制提升
-            "File",        // 「设计决策与性能考量」拆为性能代价与设计原则；顺带去掉一处原文重复
-            "Input",       // 「自定义输入封装 / 扩展 IInputProvider」并入典型场景；权威副本补两个 Default 文件
-            "Asset",       // 「加载模式选择」并入典型场景；「GC 与性能」从内部机制提出为性能代价
-            "Config",      // 三种接入方式 + 批量加载 + 高级特性合成典型场景；权威副本于此轮才建起文件结构
-            "Settings",    // 「高级用法」→典型场景；线程契约从三处零散事实组装成节
-            "UI",          // 拆「核心概念」（行三层归行为契约、后两节归内部机制）；四个特性节原样保留
         };
 
         /// <summary>
@@ -162,42 +127,32 @@ namespace XFramework.Architecture.Tests
         }
 
         [Test]
-        public void EveryRestructuredModuleReadme_HasRequiredSections()
+        public void EveryRuntimeModuleReadme_HasRequiredSections()
         {
             var violations = new List<string>();
             var modules = SourceScanner.CollectRuntimeModules(violations);
 
-            var registered = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var module in RestructuredModules)
-            {
-                if (!registered.Add(module))
-                {
-                    violations.Add($"RestructuredModules 重复登记模块 {module}");
-                }
-            }
+            var exempt = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in SectionExemptions) exempt.Add(entry.Module);
 
             if (modules != null)
             {
-                foreach (var module in SourceScanner.Sorted(RestructuredModules))
+                foreach (var module in SourceScanner.Sorted(modules))
                 {
-                    if (!modules.Contains(module))
-                    {
-                        violations.Add($"RestructuredModules 登记了 {module}，但 Runtime/ 下没有该目录" +
-                                       "——模块改名/删除后请同步登记处");
-                        continue;
-                    }
-
                     string path = Path.Combine(SourceScanner.PackageRoot, "Runtime", module, "README.md");
                     if (!File.Exists(path))
                     {
-                        violations.Add($"RestructuredModules 登记了 {module}，但 Runtime/{module}/README.md 不存在" +
-                                       "——登记表跟着模块改名/删除一起走");
+                        violations.Add($"Runtime/{module}/ 下没有 README.md——每个模块都要有使用方文档" +
+                                       "（模块索引表也按这一条守链接），补文档或从 Runtime/ 移走整个模块目录");
                         continue;
                     }
 
                     var lines = File.ReadAllLines(path);
                     foreach (var required in RequiredHeadings)
                     {
+                        // 豁免只覆盖「已知限制」那一节；登记处本身的一致性由上个用例负责
+                        if (required.Name == KnownLimitationsHeading && exempt.Contains(module)) continue;
+
                         if (HasHeading(lines, required.Name, required.MinLevel, required.MaxLevel)) continue;
 
                         string levelText = required.MinLevel == required.MaxLevel
@@ -210,7 +165,7 @@ namespace XFramework.Architecture.Tests
             }
 
             Assert.IsEmpty(violations,
-                "已登记的模块 README 缺必答小节，或登记表与 Runtime 目录对不上：\n  " +
+                "模块 README 缺必答小节（五节必答自 2026-10-16 起作用于**全部**模块）：\n  " +
                 string.Join("\n  ", violations));
         }
 
