@@ -1,10 +1,10 @@
-# Config 配置系统
+# Config —— 配置表：Json / CSV / ScriptableObject 三种格式 + 声明式批量加载
 
 ## 概述
 
-`XConfig` 提供统一的配置加载与查询接口，支持三种数据接入方式，覆盖内置格式、自定义格式和已反序列化数据的注入。
-
 **命名空间**：`XFramework.XConfig`
+
+`XConfig` 提供统一的配置加载与查询接口，支持三种数据接入方式，覆盖内置格式、自定义格式和已反序列化数据的注入。
 
 - **Table 配置**：多行数据，按主键索引，通过 `ConfigTable<T>` 包装器查询
 - **Global 配置**：单例数据，通过 `GetGlobal<T>()` 获取
@@ -15,7 +15,7 @@
 
 ---
 
-## 快速开始
+## 快速使用
 
 ```csharp
 using XFramework.XConfig;
@@ -40,7 +40,242 @@ Debug.Log($"Item: {row.Name}, Price: {row.Price}");
 
 ---
 
-## 三种接入方式
+## 模块结构
+
+```text
+Runtime/Config/
+├── ConfigManager.cs          # 静态外观（全局入口）
+├── IConfigManager.cs         # 可替换的后端契约
+├── ConfigManagerImpl.cs      # 默认实现：五个字典（表 / 全局 / 包装器 / 路径 / 在途）+ 事件派发
+├── IConfigRow.cs             # 行契约（TKey Id，含复合主键用法）
+├── IConfigTable.cs           # 表契约的非泛型面（零反射注入路径用）
+├── ConfigTable.cs            # 表包装器（构造接收 IDictionary，含条件查询与 BuildIndex）
+├── ConfigIndexView.cs        # 非主键索引视图（Get / TryGet）
+├── IConfigLoader.cs          # 自定义加载器接口（策略对象，框架不持有引用）
+├── JsonLoader.cs             # 内置：JSON（JsonUtility）
+├── CsvLoader.cs              # 内置：CSV（Split(',')，方言边界见「已知限制」）
+├── ScriptableObjectLoader.cs # 内置：ScriptableObject（经 AssetManager）
+├── ConfigLoadHelper.cs       # 加载调度助手（并发共享同一任务）
+├── ConfigTextLoader.cs       # 文本类格式的公共读入段
+├── ConfigTypeHelper.cs       # 主键类型推导（reflection 边界，结果缓存）
+├── ConfigFormat.cs           # 内置格式枚举（Json / ScriptableObject / Csv）
+├── ConfigLoadKind.cs         # 已加载条目种类（Table / Global）
+├── ConfigLoadedInfo.cs       # 诊断回读载荷：CopyLoaded 的列表元素
+├── ConfigManifest.cs         # 声明式批量清单（AddTable / AddGlobal + 分组）
+└── ConfigException.cs        # 本模块统一异常（包装底层异常）
+```
+
+十九个文件都是公开面，本模块没有 `internal` 类型。
+
+## 行为契约
+
+### 非主键索引
+
+对 Table 构建非主键索引，按任意字段分组查询。索引仅构建一次并自动缓存，后续查询 O(1)。
+
+```csharp
+var items = ConfigManager.GetTable<ItemRow>();
+
+// 按 Quality 字段构建索引
+var byQuality = items.BuildIndex("Quality", r => r.Quality);
+
+// 查询所有 Epic 品质的物品
+var epics = byQuality.Get(ItemQuality.Epic); // IReadOnlyList<ItemRow>
+
+// 支持 TryGet 安全查询
+if (byQuality.TryGet(ItemQuality.Legendary, out var legendaries))
+{
+    foreach (var item in legendaries)
+        Debug.Log(item.Name);
+}
+```
+
+> 构建时 O(n) 遍历全表一次，后续查询 O(1)，零额外 GC。同一 `indexName` 重复调用返回缓存。
+
+### 加载语义与失败处理
+
+- **重复 Preload**：同一类型已加载时，再次 `Preload*Async` 直接返回缓存数据，不重复 IO；若传入的 assetPath 与首次不同，打 LogWarning（`[Config] 'X' is already loaded from 'old', ignoring new assetPath 'new'. To load from a different path, call Unload<X>() first.`）并忽略新路径。需要换路径加载时，先 `Unload<T>()`。
+- **并发 Preload**：同一类型的并发调用共享同一进行中的加载任务，不会重复 IO；加载失败时所有等待者收到同一异常实例。
+- **加载失败**：抛 `ConfigException`（包装底层异常，如资源不存在、反序列化失败），调用方应 try/catch 处理；批量加载（`PreloadGroupAsync` / `PreloadAllAsync`）中单项失败同样抛异常中断。
+- **未加载查询**：`GetTable<T>()` / `GetGlobal<T>()` 在未加载时抛 `ConfigException`；`TryGetTable` / `TryGetGlobal` / `TryGet` 返回 `false`，不抛异常。
+- **Unload 在途**：某类型仍在加载中时调用 `Unload<T>()` 会打 LogWarning——在途加载仍会完成并注册数据，卸载可能不生效；若确需阻止该配置就绪，请在加载完成后再次 `Unload<T>()`。
+
+---
+
+## 架构设计
+
+```
+ConfigManager (静态外观)
+    └── IConfigManager (接口)
+            └── ConfigManagerImpl (默认实现)
+                    ├── _tables: Dictionary<Type, IDictionary>     (Table 数据)
+                    ├── _globals: Dictionary<Type, object>         (Global 数据)
+                    ├── _tableWrappers: Dictionary<Type, object>   (ConfigTable 缓存)
+                    ├── _assetPaths: Dictionary<Type, string>      (首次加载路径，用于路径变化检测)
+                    └── _inFlightLoads: Dictionary<Type, ...>      (进行中的加载任务，并发共享)
+
+IConfigLoader (自定义加载器)
+    ├── JsonLoader : IConfigLoader
+    ├── ScriptableObjectLoader : IConfigLoader
+    └── CsvLoader : IConfigLoader
+
+ConfigTable<T> : IConfigTable  (Table 包装器，构造函数接收 IDictionary)
+    └── BuildIndex → ConfigIndexView<T, TIndex>  (非主键索引)
+
+ConfigManifest  (批量加载清单)
+    └── List<ConfigManifestEntry>  (条目列表)
+```
+
+各层职责：
+- **ConfigManager**：静态外观，对外暴露所有 API，内部委托到 `IConfigManager` 实例
+- **ConfigManagerImpl**：默认实现，管理字典缓存、加载调度（并发共享同一任务）、事件派发
+- **IConfigLoader**：策略接口，每种配置格式对应一个实现
+- **ConfigTable\<T\>**：只读包装器，封装字典查询，支持索引构建
+- **ConfigManifest**：声明式清单，描述配置的加载路径和分组
+
+## API 参考
+
+### 初始化 & 生命周期
+
+| 方法                          | 说明                          |
+| ----------------------------- | ----------------------------- |
+| `Initialize()`                | 初始化默认实现                |
+| `SetInstance(IConfigManager)` | 注入自定义实现（用于测试/DI） |
+| `Destroy()`                   | 丢弃门面持有的实例（**不**取消在途加载） |
+| `IsInitialized`               | 是否已初始化（静态属性）      |
+
+### Preload（方式一 / 方式二）
+
+| 方法                                                             | 说明                          |
+| ---------------------------------------------------------------- | ----------------------------- |
+| `PreloadTableAsync<T>(string path, ConfigFormat format = Json)`  | 使用内置格式加载 Table        |
+| `PreloadTableAsync<T>(string path, IConfigLoader loader)`        | 使用自定义 Loader 加载 Table  |
+| `PreloadGlobalAsync<T>(string path, ConfigFormat format = Json)` | 使用内置格式加载 Global       |
+| `PreloadGlobalAsync<T>(string path, IConfigLoader loader)`       | 使用自定义 Loader 加载 Global |
+
+> 以上方法均支持可选 `CancellationToken` 参数（取消语义见「典型场景」的「CancellationToken 取消」）。
+
+### 批量预加载
+
+| 方法                                                       | 说明               |
+| ---------------------------------------------------------- | ------------------ |
+| `PreloadGroupAsync(string group, ConfigManifest manifest)` | 按分组批量加载     |
+| `PreloadAllAsync(ConfigManifest manifest)`                 | 加载清单中全部配置 |
+
+### Register（方式三）
+
+| 方法                                              | 说明                        |
+| ------------------------------------------------- | --------------------------- |
+| `RegisterTable<T>(ConfigTable<T> table)`          | 注入已反序列化的 Table 数据 |
+| `RegisterTable(Type rowType, IConfigTable table)` | 非泛型重载，供反射调用      |
+| `RegisterGlobal<T>(T config)`                     | 注入 Global 配置单例        |
+
+### Query — Table
+
+| 方法                                     | 说明                               |
+| ---------------------------------------- | ---------------------------------- |
+| `GetTable<T>()`                          | 获取 Table 包装器，未加载时抛异常  |
+| `TryGetTable<T>(out ConfigTable<T>)`     | 安全获取 Table 包装器              |
+| `Get<T, TKey>(TKey key)`                 | 按主键直接获取行（无需先拿包装器） |
+| `TryGet<T, TKey>(TKey key, out T value)` | 安全按主键获取行                   |
+
+**ConfigTable\<T\> 成员：**
+
+| 成员                                  | 说明                                                        |
+| ------------------------------------- | ----------------------------------------------------------- |
+| `.Get<TKey>(key)`                     | 按主键查询，TKey 自动推断                                   |
+| `.TryGet<TKey>(key, out value)`       | 安全查询                                                    |
+| `.Contains<TKey>(key)`                | 判断主键是否存在                                            |
+| `.GetAll()`                           | 获取所有行（零 GC，返回内部缓存数组，**不要修改**）         |
+| `.Count`                              | 行数                                                        |
+| `.TryGet(predicate, out value)`       | 按条件查首行，未找到返回 false（零 GC）                     |
+| `.GetRows(predicate, List<T> result)` | 按条件查多行，追加填充（零 GC）                             |
+| `.GetRows(predicate)`                 | 按条件查多行（便捷版，返回新列表）                          |
+| `.GetRows(predicate, comp, result)`   | 按条件查多行并按比较器排序（追加填充，零 GC）               |
+| `.GetRows(predicate, comp)`           | 按条件查多行并排序（便捷版，返回新列表）                    |
+| `.Exists(predicate)`                  | 是否存在满足条件的行（零 GC）                               |
+| `.BuildIndex<TIndex>(name, selector)` | 构建非主键索引                                              |
+
+> **条件查询定位**：`.TryGet(predicate)` / `.GetRows(predicate)` 是 O(n) 全表扫描，适合一次性/低频条件查询；高频固定条件查询请用 `.BuildIndex<TIndex>()`（构建一次、O(1) 查询）。
+>
+> **顺序语义**：`GetAll()` / `GetRows` 的结果顺序为构造时字典枚举的快照顺序（无删除操作时通常等于插入序，但**不保证**与配置文件行序一致）；依赖严格顺序请按字段自行排序。
+
+### Query — Global
+
+| 方法                            | 说明                             |
+| ------------------------------- | -------------------------------- |
+| `GetGlobal<T>()`                | 获取 Global 配置，未加载时抛异常 |
+| `TryGetGlobal<T>(out T config)` | 安全获取 Global 配置             |
+
+### 诊断回读
+
+| 方法 | 说明 |
+| ---- | ---- |
+| `InFlightLoadCount` | 进行中的加载任务数（并发调用共享同一任务） |
+| `CopyLoaded(List<ConfigLoadedInfo>)` | 已加载的表 / 全局配置清单（类型、种类、条目数、资源路径），回答「这个项目加载了哪些配置」 |
+
+> 两者**只对内置实现成立**：`SetInstance` 注入自定义 `IConfigManager` 后一律返回空/0——那类实现不提供回读。它们**刻意不进 `IConfigManager`**（给主接口加成员会让所有实现者编译不过）。
+
+### 索引
+
+| 类型                                              | 说明                                                              |
+| ------------------------------------------------- | ----------------------------------------------------------------- |
+| `ConfigTable<T>.BuildIndex<TIndex>(string, Func)` | 构建索引（O(n)，仅首次）                                         |
+| `ConfigIndexView<T, TIndex>.Get(key)`             | 按索引键查询，返回 `IReadOnlyList<T>`（键不存在返回空数组，非 null） |
+| `ConfigIndexView<T, TIndex>.TryGet(key, out)`     | 安全查询索引                                                      |
+
+### 变更事件
+
+订阅 `ConfigManager.ConfigChanged` 事件，在 Table 注册/加载、Global 注册/加载、卸载时接收通知。
+
+```csharp
+ConfigManager.Initialize();
+ConfigManager.ConfigChanged += OnConfigChanged;
+
+private void OnConfigChanged(Type type)
+{
+    Debug.Log($"Config changed: {type.Name}");
+    // 例如：刷新 UI、重建缓存
+}
+```
+
+| 成员                          | 说明                           |
+| ----------------------------- | ------------------------------ |
+| `ConfigManager.ConfigChanged` | 配置变更事件（`Action<Type>`） |
+
+> 事件参数为配置行类型或 Global 配置类型，可通过 `typeof(T)` 判断具体变更。
+>
+> **注入自定义实现时本事件不触发，而且触发不了**：`ConfigChanged` 是门面上的**静态字段式事件**，C# 只允许
+> **声明它的类型**触发它——第三方 `IConfigManager` 实现没有任何办法让它响（原文档写的「注入的自定义实现
+> 需要自行派发」在 C# 里做不到）。门面只在实现是框架自带的 `ConfigManagerImpl` 时才接上它。需要变更通知的
+> 自定义实现请自建事件源。
+
+### 卸载
+
+| 方法            | 说明                                  |
+| --------------- | ------------------------------------- |
+| `Unload<T>()`   | 卸载指定类型的配置（Table 或 Global） |
+| `IsLoaded<T>()` | 判断指定类型是否已加载                |
+
+### IConfigLoader 接口
+
+```csharp
+public interface IConfigLoader
+{
+    UniTask<ConfigTable<T>> LoadTableAsync<T, TKey>(string assetPath) where T : IConfigRow<TKey>, new();
+    UniTask<T> LoadGlobalAsync<T>(string assetPath) where T : class, new();
+}
+```
+
+- 无状态设计：建议实现为无字段的轻量对象，每次使用 `new` 传入即可
+- `assetPath` 由调用方定义语义（文件路径、AssetBundle 地址等），Loader 自行解析
+- `LoadTableAsync<T, TKey>` 返回 `ConfigTable<T>`（构造函数接收 `IDictionary`，如 `Dictionary<TKey, T>`），框架从中提取内部字典进行管理；构造时校验字典键/值类型与行类型 `IConfigRow<TKey>` 声明一致，不一致抛 `ConfigException`（早失败，错误信息含真实键类型）
+
+---
+
+## 典型场景
+
+### 三种接入方式
 
 | 方式       | 入口                                        | 适用场景                                                          |
 | ---------- | ------------------------------------------- | ----------------------------------------------------------------- |
@@ -52,7 +287,7 @@ Debug.Log($"Item: {row.Name}, Price: {row.Price}");
 
 ---
 
-### 方式一：内置格式（Json / ScriptableObject / CSV）
+#### 方式一：内置格式（Json / ScriptableObject / CSV）
 
 适用于项目使用标准 Json、ScriptableObject 或 CSV 存储配置，每个文件对应一张表。
 
@@ -82,7 +317,7 @@ Debug.Log(row.Name);
 
 ---
 
-### 方式二：自定义 Loader（一文件一表）
+#### 方式二：自定义 Loader（一文件一表）
 
 当配置使用 Json / ScriptableObject / CSV 以外的格式，且每个文件只包含一张表时，实现 `IConfigLoader` 并传入。
 
@@ -124,7 +359,7 @@ var row = items.Get(1001);
 
 ---
 
-### 方式三：Register 直接注入（多表 / 已反序列化数据）
+#### 方式三：Register 直接注入（多表 / 已反序列化数据）
 
 第三方自行完成 IO 和反序列化，直接将数据注入 `ConfigManager`。框架不参与加载过程，仅管理缓存与提供统一查询接口。
 
@@ -216,7 +451,7 @@ private static IDictionary BuildKeyDictionary(Type rowType, object dataList)
 
 ---
 
-## 批量加载
+### 批量加载
 
 通过 `ConfigManifest` 声明式描述所有配置及其分组，配合 `PreloadGroupAsync` / `PreloadAllAsync` 实现批量加载，避免分散调用。
 
@@ -241,203 +476,9 @@ var items = ConfigManager.GetTable<ItemRow>();
 
 ---
 
-## 非主键索引
+### 高级特性
 
-对 Table 构建非主键索引，按任意字段分组查询。索引仅构建一次并自动缓存，后续查询 O(1)。
-
-```csharp
-var items = ConfigManager.GetTable<ItemRow>();
-
-// 按 Quality 字段构建索引
-var byQuality = items.BuildIndex("Quality", r => r.Quality);
-
-// 查询所有 Epic 品质的物品
-var epics = byQuality.Get(ItemQuality.Epic); // IReadOnlyList<ItemRow>
-
-// 支持 TryGet 安全查询
-if (byQuality.TryGet(ItemQuality.Legendary, out var legendaries))
-{
-    foreach (var item in legendaries)
-        Debug.Log(item.Name);
-}
-```
-
-> 构建时 O(n) 遍历全表一次，后续查询 O(1)，零额外 GC。同一 `indexName` 重复调用返回缓存。
-
----
-
-## 变更事件
-
-订阅 `ConfigManager.ConfigChanged` 事件，在 Table 注册/加载、Global 注册/加载、卸载时接收通知。
-
-```csharp
-ConfigManager.Initialize();
-ConfigManager.ConfigChanged += OnConfigChanged;
-
-private void OnConfigChanged(Type type)
-{
-    Debug.Log($"Config changed: {type.Name}");
-    // 例如：刷新 UI、重建缓存
-}
-```
-
-> 事件参数为配置行类型或 Global 配置类型，可通过 `typeof(T)` 判断具体变更。
->
-> **注入自定义实现时本事件不触发，而且触发不了**：`ConfigChanged` 是门面上的**静态字段式事件**，C# 只允许
-> **声明它的类型**触发它——第三方 `IConfigManager` 实现没有任何办法让它响（原文档写的「注入的自定义实现
-> 需要自行派发」在 C# 里做不到）。门面只在实现是框架自带的 `ConfigManagerImpl` 时才接上它。需要变更通知的
-> 自定义实现请自建事件源。
-
----
-
-## 加载语义与失败处理
-
-- **重复 Preload**：同一类型已加载时，再次 `Preload*Async` 直接返回缓存数据，不重复 IO；若传入的 assetPath 与首次不同，打 LogWarning（`[Config] 'X' is already loaded from 'old', ignoring new assetPath 'new'. To load from a different path, call Unload<X>() first.`）并忽略新路径。需要换路径加载时，先 `Unload<T>()`。
-- **并发 Preload**：同一类型的并发调用共享同一进行中的加载任务，不会重复 IO；加载失败时所有等待者收到同一异常实例。
-- **加载失败**：抛 `ConfigException`（包装底层异常，如资源不存在、反序列化失败），调用方应 try/catch 处理；批量加载（`PreloadGroupAsync` / `PreloadAllAsync`）中单项失败同样抛异常中断。
-- **未加载查询**：`GetTable<T>()` / `GetGlobal<T>()` 在未加载时抛 `ConfigException`；`TryGetTable` / `TryGetGlobal` / `TryGet` 返回 `false`，不抛异常。
-- **Unload 在途**：某类型仍在加载中时调用 `Unload<T>()` 会打 LogWarning——在途加载仍会完成并注册数据，卸载可能不生效；若确需阻止该配置就绪，请在加载完成后再次 `Unload<T>()`。
-
----
-
-## 完整 API 参考
-
-### 初始化 & 生命周期
-
-| 方法                          | 说明                          |
-| ----------------------------- | ----------------------------- |
-| `Initialize()`                | 初始化默认实现                |
-| `SetInstance(IConfigManager)` | 注入自定义实现（用于测试/DI） |
-| `Destroy()`                   | 丢弃门面持有的实例（**不**取消在途加载） |
-| `IsInitialized`               | 是否已初始化（静态属性）      |
-
-### Preload（方式一 / 方式二）
-
-| 方法                                                             | 说明                          |
-| ---------------------------------------------------------------- | ----------------------------- |
-| `PreloadTableAsync<T>(string path, ConfigFormat format = Json)`  | 使用内置格式加载 Table        |
-| `PreloadTableAsync<T>(string path, IConfigLoader loader)`        | 使用自定义 Loader 加载 Table  |
-| `PreloadGlobalAsync<T>(string path, ConfigFormat format = Json)` | 使用内置格式加载 Global       |
-| `PreloadGlobalAsync<T>(string path, IConfigLoader loader)`       | 使用自定义 Loader 加载 Global |
-
-> 以上方法均支持可选 `CancellationToken` 参数（取消语义见「CancellationToken 取消」）。
-
-### 批量预加载
-
-| 方法                                                       | 说明               |
-| ---------------------------------------------------------- | ------------------ |
-| `PreloadGroupAsync(string group, ConfigManifest manifest)` | 按分组批量加载     |
-| `PreloadAllAsync(ConfigManifest manifest)`                 | 加载清单中全部配置 |
-
-### Register（方式三）
-
-| 方法                                              | 说明                        |
-| ------------------------------------------------- | --------------------------- |
-| `RegisterTable<T>(ConfigTable<T> table)`          | 注入已反序列化的 Table 数据 |
-| `RegisterTable(Type rowType, IConfigTable table)` | 非泛型重载，供反射调用      |
-| `RegisterGlobal<T>(T config)`                     | 注入 Global 配置单例        |
-
-### Query — Table
-
-| 方法                                     | 说明                               |
-| ---------------------------------------- | ---------------------------------- |
-| `GetTable<T>()`                          | 获取 Table 包装器，未加载时抛异常  |
-| `TryGetTable<T>(out ConfigTable<T>)`     | 安全获取 Table 包装器              |
-| `Get<T, TKey>(TKey key)`                 | 按主键直接获取行（无需先拿包装器） |
-| `TryGet<T, TKey>(TKey key, out T value)` | 安全按主键获取行                   |
-
-**ConfigTable\<T\> 成员：**
-
-| 成员                                  | 说明                                                        |
-| ------------------------------------- | ----------------------------------------------------------- |
-| `.Get<TKey>(key)`                     | 按主键查询，TKey 自动推断                                   |
-| `.TryGet<TKey>(key, out value)`       | 安全查询                                                    |
-| `.Contains<TKey>(key)`                | 判断主键是否存在                                            |
-| `.GetAll()`                           | 获取所有行（零 GC，返回内部缓存数组，**不要修改**）         |
-| `.Count`                              | 行数                                                        |
-| `.TryGet(predicate, out value)`       | 按条件查首行，未找到返回 false（零 GC）                     |
-| `.GetRows(predicate, List<T> result)` | 按条件查多行，追加填充（零 GC）                             |
-| `.GetRows(predicate)`                 | 按条件查多行（便捷版，返回新列表）                          |
-| `.GetRows(predicate, comp, result)`   | 按条件查多行并按比较器排序（追加填充，零 GC）               |
-| `.GetRows(predicate, comp)`           | 按条件查多行并排序（便捷版，返回新列表）                    |
-| `.Exists(predicate)`                  | 是否存在满足条件的行（零 GC）                               |
-| `.BuildIndex<TIndex>(name, selector)` | 构建非主键索引                                              |
-
-> **条件查询定位**：`.TryGet(predicate)` / `.GetRows(predicate)` 是 O(n) 全表扫描，适合一次性/低频条件查询；高频固定条件查询请用 `.BuildIndex<TIndex>()`（构建一次、O(1) 查询）。
->
-> **顺序语义**：`GetAll()` / `GetRows` 的结果顺序为构造时字典枚举的快照顺序（无删除操作时通常等于插入序，但**不保证**与配置文件行序一致）；依赖严格顺序请按字段自行排序。
-
-### Query — Global
-
-| 方法                            | 说明                             |
-| ------------------------------- | -------------------------------- |
-| `GetGlobal<T>()`                | 获取 Global 配置，未加载时抛异常 |
-| `TryGetGlobal<T>(out T config)` | 安全获取 Global 配置             |
-
-### 诊断回读
-
-| 方法 | 说明 |
-| ---- | ---- |
-| `InFlightLoadCount` | 进行中的加载任务数（并发调用共享同一任务） |
-| `CopyLoaded(List<ConfigLoadedInfo>)` | 已加载的表 / 全局配置清单（类型、种类、条目数、资源路径），回答「这个项目加载了哪些配置」 |
-
-> 两者**只对内置实现成立**：`SetInstance` 注入自定义 `IConfigManager` 后一律返回空/0——那类实现不提供回读。它们**刻意不进 `IConfigManager`**（给主接口加成员会让所有实现者编译不过）。
-
-### 索引
-
-| 类型                                              | 说明                                                              |
-| ------------------------------------------------- | ----------------------------------------------------------------- |
-| `ConfigTable<T>.BuildIndex<TIndex>(string, Func)` | 构建索引（O(n)，仅首次）                                         |
-| `ConfigIndexView<T, TIndex>.Get(key)`             | 按索引键查询，返回 `IReadOnlyList<T>`（键不存在返回空数组，非 null） |
-| `ConfigIndexView<T, TIndex>.TryGet(key, out)`     | 安全查询索引                                                      |
-
-### 变更事件
-
-| 成员                          | 说明                           |
-| ----------------------------- | ------------------------------ |
-| `ConfigManager.ConfigChanged` | 配置变更事件（`Action<Type>`） |
-
-### 卸载
-
-| 方法            | 说明                                  |
-| --------------- | ------------------------------------- |
-| `Unload<T>()`   | 卸载指定类型的配置（Table 或 Global） |
-| `IsLoaded<T>()` | 判断指定类型是否已加载                |
-
----
-
-## 支持的数据格式
-
-```csharp
-public enum ConfigFormat
-{
-    Json = 0,             // JSON，通过 JsonUtility 反序列化
-    ScriptableObject = 1, // ScriptableObject，通过 AssetManager（YooAsset）加载
-    Csv = 2,              // CSV，第一行为表头，后续行为数据行
-}
-```
-
----
-
-## IConfigLoader 接口
-
-```csharp
-public interface IConfigLoader
-{
-    UniTask<ConfigTable<T>> LoadTableAsync<T, TKey>(string assetPath) where T : IConfigRow<TKey>, new();
-    UniTask<T> LoadGlobalAsync<T>(string assetPath) where T : class, new();
-}
-```
-
-- 无状态设计：建议实现为无字段的轻量对象，每次使用 `new` 传入即可
-- `assetPath` 由调用方定义语义（文件路径、AssetBundle 地址等），Loader 自行解析
-- `LoadTableAsync<T, TKey>` 返回 `ConfigTable<T>`（构造函数接收 `IDictionary`，如 `Dictionary<TKey, T>`），框架从中提取内部字典进行管理；构造时校验字典键/值类型与行类型 `IConfigRow<TKey>` 声明一致，不一致抛 `ConfigException`（早失败，错误信息含真实键类型）
-
----
-
-## 高级特性
-
-### 复合主键
+#### 复合主键
 
 `IConfigRow<TKey>` 支持 `ValueTuple` 作为复合主键：
 
@@ -455,7 +496,7 @@ var table = await ConfigManager.PreloadTableAsync<SkillEffectRow>("config/effect
 var row = table.Get((1001, 5)); // 双键查询
 ```
 
-### 自定义实现注入
+#### 自定义实现注入
 
 通过 `SetInstance` 注入自定义 `IConfigManager` 实现，适用于测试、依赖注入或完全替换内部逻辑：
 
@@ -468,7 +509,7 @@ ConfigManager.SetInstance(customManager);
 
 > 注入的实例生命周期由调用方管理，`Destroy()` 只会清除静态引用，不会销毁注入的实例。
 
-### CancellationToken 取消
+#### CancellationToken 取消
 
 所有 Preload 与批量加载方法均支持可选 `CancellationToken`：
 
@@ -482,7 +523,7 @@ await ConfigManager.PreloadTableAsync<ItemRow>("config/items", cancellationToken
 
 > **取消语义**：取消仅中断调用方等待（`await` 抛出 `OperationCanceledException`）；底层加载仍会完成并注册数据。取消后若需要该配置，直接通过 `GetTable<T>()` 等查询即可，无需重新加载。
 
-### struct vs class 行类型
+#### struct vs class 行类型
 
 |         | struct                            | class                              |
 | ------- | --------------------------------- | ---------------------------------- |
@@ -494,36 +535,16 @@ await ConfigManager.PreloadTableAsync<ItemRow>("config/items", cancellationToken
 
 ---
 
-## 架构说明
+## 支持的数据格式
 
+```csharp
+public enum ConfigFormat
+{
+    Json = 0,             // JSON，通过 JsonUtility 反序列化
+    ScriptableObject = 1, // ScriptableObject，通过 AssetManager（YooAsset）加载
+    Csv = 2,              // CSV，第一行为表头，后续行为数据行
+}
 ```
-ConfigManager (静态外观)
-    └── IConfigManager (接口)
-            └── ConfigManagerImpl (默认实现)
-                    ├── _tables: Dictionary<Type, IDictionary>     (Table 数据)
-                    ├── _globals: Dictionary<Type, object>         (Global 数据)
-                    ├── _tableWrappers: Dictionary<Type, object>   (ConfigTable 缓存)
-                    ├── _assetPaths: Dictionary<Type, string>      (首次加载路径，用于路径变化检测)
-                    └── _inFlightLoads: Dictionary<Type, ...>      (进行中的加载任务，并发共享)
-
-IConfigLoader (自定义加载器)
-    ├── JsonLoader : IConfigLoader
-    ├── ScriptableObjectLoader : IConfigLoader
-    └── CsvLoader : IConfigLoader
-
-ConfigTable<T> : IConfigTable  (Table 包装器，构造函数接收 IDictionary)
-    └── BuildIndex → ConfigIndexView<T, TIndex>  (非主键索引)
-
-ConfigManifest  (批量加载清单)
-    └── List<ConfigManifestEntry>  (条目列表)
-```
-
-各层职责：
-- **ConfigManager**：静态外观，对外暴露所有 API，内部委托到 `IConfigManager` 实例
-- **ConfigManagerImpl**：默认实现，管理字典缓存、加载调度（并发共享同一任务）、事件派发
-- **IConfigLoader**：策略接口，每种配置格式对应一个实现
-- **ConfigTable\<T\>**：只读包装器，封装字典查询，支持索引构建
-- **ConfigManifest**：声明式清单，描述配置的加载路径和分组
 
 ## 线程契约
 

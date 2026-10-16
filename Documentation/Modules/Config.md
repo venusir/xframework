@@ -22,6 +22,33 @@
 
 详细变更见 git log；包级变更自 0.3.0 起另见 `CHANGELOG` 的 `#### Config` 小节。
 
+## 文件结构
+
+```
+Runtime/Config/
+├── ConfigManager.cs          # 静态外观（全局入口）
+├── IConfigManager.cs         # 可替换的后端契约
+├── ConfigManagerImpl.cs      # 默认实现：五个字典（表 / 全局 / 包装器 / 路径 / 在途）+ 事件派发
+├── IConfigRow.cs             # 行契约（TKey Id，含复合主键用法）
+├── IConfigTable.cs           # 表契约的非泛型面（零反射注入路径用）
+├── ConfigTable.cs            # 表包装器（构造接收 IDictionary，含条件查询与 BuildIndex）
+├── ConfigIndexView.cs        # 非主键索引视图（Get / TryGet）
+├── IConfigLoader.cs          # 自定义加载器接口（策略对象，框架不持有引用）
+├── JsonLoader.cs             # 内置：JSON（JsonUtility）
+├── CsvLoader.cs              # 内置：CSV（Split(',')，方言边界见 README 已知限制）
+├── ScriptableObjectLoader.cs # 内置：ScriptableObject（经 AssetManager）
+├── ConfigLoadHelper.cs       # 加载调度助手（并发共享同一任务）
+├── ConfigTextLoader.cs       # 文本类格式的公共读入段
+├── ConfigTypeHelper.cs       # 主键类型推导（reflection 边界，结果缓存）
+├── ConfigFormat.cs           # 内置格式枚举（Json / ScriptableObject / Csv）
+├── ConfigLoadKind.cs         # 已加载条目种类（Table / Global）
+├── ConfigLoadedInfo.cs       # 诊断回读载荷：CopyLoaded 的列表元素
+├── ConfigManifest.cs         # 声明式批量清单（AddTable / AddGlobal + 分组）
+└── ConfigException.cs        # 本模块统一异常（包装底层异常）
+```
+
+（本节 2026-10-16 补建——此前是 23 份里唯二没有文件结构的一份，另一份是 Bootstrap，同日一并补。）
+
 ## 决策台账
 
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过。**一条高危已修**——CSV 的值类型行静默产出默认值；另有一条发现被复现**证伪**（见下）。已修项见 `CHANGELOG`。本节的否决条目逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层——**例外**：Luban 那条的理由是维护向的，本文件自带。）
