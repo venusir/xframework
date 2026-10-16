@@ -75,6 +75,7 @@ namespace XFramework.Architecture.Tests
             "Bootstrap",   // 边界样本：首节是「定位」；权威副本没有文件结构，反方向补建
             "Diagnostics", // 边界样本：线程契约原埋在「契约」节下，提升为 ##；首节带限定词
             "Event",       // 边界样本：改节名牵动 4 处外部指针（含 2 个 .cs 与 1 个跨 README 锚点）
+            "Log",         // 大模块：20 个文件（含 Internal/ 子树）的树；顺带抓出 README 里陈旧的内置分类计数
         };
 
         /// <summary>

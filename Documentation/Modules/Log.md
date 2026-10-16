@@ -9,10 +9,11 @@
 ## 文件结构
 
 ```
-Assets/XFramework/Runtime/Log/
+Runtime/Log/
 ├── LogLevel.cs              公开：六档 + Off（仅作阈值）
 ├── LogCategory.cs           公开：interned readonly struct；default 合法（呈现 Unregistered）
 ├── LogCategories.cs         公开：33 个框架内置分类（集中声明，名字 = 迁移前的 [标签] 逐字）
+├── LogCategoryInfo.cs       公开：分类档位状态的只读快照（2026-10-16 补录——它一直是 CopyCategories 的载荷，此前漏在本树之外）
 ├── LogEntry.cs              公开：一次日志的只读快照（sink 的输入形态）
 ├── LogSource.cs             公开：Framework / Unity
 ├── ILogSink.cs              公开：第三方扩展点（任意线程、不得抛、可选 IDisposable）

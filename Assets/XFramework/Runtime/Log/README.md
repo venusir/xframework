@@ -1,8 +1,8 @@
-# XFramework.XLog — 日志
-
-分级、分类过滤、模板化调用、可插拔输出端，以及一份**给 AI 读的**结构化时间线。
+# Log —— 分级、分类过滤、模板化调用、可插拔输出端，以及一份给 AI 读的结构化时间线
 
 ## 概述
+
+命名空间 `XFramework.XLog`。
 
 它比 Unity 自带的 `Debug.unityLogger` + 自定义 `ILogHandler` 多给四样东西（前三样是本模块立项时的门槛——答不出「多给什么」就不该建）：
 
@@ -25,7 +25,36 @@ LogManager.Info(LogCategories.Pipeline, "Stage '{0}' start", stage.Name);
 
 **写模板 + 参数，不要先插值**。`LogManager.Warning(cat, "x {0}", a)` 在档位未启用时**不格式化**、零分配；`LogManager.Warning(cat, $"x {a}")` 则无论开不开都已经分配过了。参数仍在调用方求值（与插值一致）——代价高的先用 `LogManager.IsEnabled(level, category)` 探测。
 
-## 分级与过滤
+## 模块结构
+
+```text
+Runtime/Log/
+├── LogLevel.cs               # 公开：六档 + Off（仅作阈值）
+├── LogCategory.cs            # 公开：interned readonly struct；default 合法（呈现 Unregistered）
+├── LogCategories.cs          # 公开：框架内置分类（集中声明，名字 = 迁移前的 [标签] 逐字）
+├── LogCategoryInfo.cs        # 公开：分类档位状态的只读快照（CopyCategories 的载荷）
+├── LogEntry.cs               # 公开：一次日志的只读快照（sink 的输入形态）
+├── LogSource.cs              # 公开：Framework / Unity
+├── ILogSink.cs               # 公开：第三方扩展点（任意线程、不得抛、可选 IDisposable）
+├── ILogManager.cs            # 公开：门面全量转发契约
+├── LogOptions.cs             # 公开：配置（档位 / 三个开关 / 目录 / 切分 / 保留数 / flush 策略 / 抓栈）
+├── LogManager.cs             # 公开：静态门面 + AutoInit（SubsystemRegistration）
+├── LogManagerImpl.cs         # internal：过滤、格式化、分发、摘除、捕获入口、帧号缓存
+└── Internal/                 # internal 实现（命名空间 XFramework.XLog.Internal）
+    ├── LogCategoryState.cs   # 分类的可变状态（名字 + 档位覆盖；句柄复制后仍生效）
+    ├── LogRegistry.cs        # 分类驻留表（copy-on-write 字典，读路径无锁）
+    ├── LogFormatter.cs       # 模板格式化（走 CurrentCulture，失败退回原文）
+    ├── LogTokens.cs          # JSONL 的 lvl / src token
+    ├── JsonLineWriter.cs     # 转义 + 时间戳 + 线程本地行缓冲
+    ├── LogSession.cs         # 会话 id + 环境快照（由 AutoInit 在主线程复位）
+    ├── ConsoleLogSink.cs     # 控制台输出端 + 回显深度（[ThreadStatic]）
+    ├── LogFileSink.cs        # JSONL 文件输出端（切分 / 轮转 / flush 策略 / 失败即静默）
+    └── UnityLogCapture.cs    # logMessageReceivedThreaded 的回调与去重
+```
+
+标 `internal` 的那些使用方不直接接触：`LogManagerImpl` 是门面背后那一份实现，`Internal/` 下是它的零件（要整体替换就实现 `ILogManager`，要加输出端就实现 `ILogSink`——都不必碰它们）。
+
+## 行为契约
 
 六档，数值越大越严重，**比较即过滤**：
 
@@ -52,7 +81,7 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 - **写日志**：`Verbose / Debug / Info / Warning / Error / Fatal`，每档 4 个重载（现成字符串、模板 + 1/2/3 参）；通用入口 `Log(level, category, …)`。
 - **异常**：`Exception(category, exception, message = null)`（级别固定 `Error`）与 `Exception(level, category, exception, message = null)`（级别可指定——「跳过一条损坏的存档」这种可恢复失败用 `Warning`）。两者都把异常对象送进 JSONL 的 `exc` 字段；`exception` 为 null 时什么都不做；**正文不要重复异常文本**（类型、消息与堆栈由渲染层补）。
 - **档位**：`MinimumLevel`、`SetCategoryLevel`、`ResetCategoryLevel`、`IsEnabled`。
-- **分类**：内置见 `LogCategories`（31 个，与迁移前的 `[前缀]` 一一对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
+- **分类**：内置见 `LogCategories`（框架内置全表，名字与迁移前的 `[标签]` 逐字对应）；自定义用 `LogCategory.Get("MyTag")`（幂等、任意线程安全）。`default(LogCategory)` 合法，呈现为 `[Unregistered]`。
 - **输出端**：`AddSink(ILogSink)` / `RemoveSink` / `Flush` / `DroppedSinkCount`。
 - **回读（诊断）**：`CopyCategories(List<LogCategoryInfo>)` / `CopySinks(List<ILogSink>)` / `SinkCount`。回答「这条分类现在会不会输出、为什么」（`LogCategoryInfo.EffectiveLevel` 在调用时现算：设了覆盖取覆盖，否则取当前全局档）与「谁在收日志」。分类总数用 `LogCategory.RegisteredCount`。
   > **只对内置实现成立**：注入第三方 `ILogManager` 后这三个成员一律返回空/0——那类实现不提供回读。它们**刻意不进 `ILogManager`**（给主接口加成员会让所有实现者编译不过）。
@@ -60,13 +89,13 @@ LogManager.ResetCategoryLevel(LogCategories.UpdateScheduler);   // 还原为跟�
 
 `ILogSink` 是第三方扩展点：实现 `Write(in LogEntry)` 与 `Flush()`，**任意线程调用、不得抛异常**（抛出的 sink 会被静默摘除并计入 `DroppedSinkCount`——「因为日志坏了而记一条日志」会递归）。实现 `IDisposable` 时框架在摘除/关闭时释放它。分发**不持锁**（sink 数组是 copy-on-write 快照），因此 sink 在自己的 `Write` 里再写日志是安全的。
 
-## 输出端
+### 输出端
 
 - **控制台**（`ConsoleLogSink`，默认开）：渲染成 `[Category] message` 后交给 `Debug.Log/LogWarning/LogError`。渲染文本与 LogType 映射**与迁移前手抄前缀的写法逐字一致**——这是 193 处迁移能靠「测试全绿」验证的前提。
 - **全量捕获**（`CaptureUnityLogs`，默认与文件输出端同开关）：挂 `Application.logMessageReceivedThreaded`，把**引擎、第三方库、未捕获异常**的日志也收进同一份文件，每条标 `src:"unity"`；框架自己的日志标 `src:"fw"`，不会因回显被写两遍。外部日志走同一套档位过滤（`MinimumLevel` 与分类覆盖都适用），分类从 `[标签]` 前缀解析（解析不出呈现为 `Unregistered`）。回调在 `AutoInit` 时**无条件挂上**——没有可写输出端时它第一行即返回，因此不存在「第一次 `LogManager` 调用之前发生的日志捕获不到」的时序陷阱。
 - **JSONL 文件**（`LogFileSink`，默认 Editor/Development 开、Release 关）：每条日志一行 JSON，落在 `{persistentDataPath}/XLog/`，**每会话一个文件**（`xlog-{时间}-{会话id}-p{n}.jsonl`）。超 32 MiB 切分片，每个分片首行都重写会话头；目录内保留最新 10 个文件。**运行时即可读**：写入端持有共享读的写句柄，读取方需自行声明共享写（.NET 里是 `FileShare.ReadWrite`；`jq` / `grep` 这类经 CRT 打开文件的工具默认即可）。**Warning 及以上立即落盘**，其余每 64 条批量落盘，`Shutdown` 与 `Application.quitting` 时冲刷——崩溃后要能读到现场。文件写入失败（磁盘满、目录不可写）时该输出端**静默停用**：不记日志（会递归）、不抛异常、不影响控制台通路。
 
-## 配置（`LogOptions`）
+### 配置（`LogOptions`）
 
 不配置也能用（门面按 `LogOptions.Default` 懒建实现）；要改就一次性交给 `LogManager.Configure`：
 
@@ -142,7 +171,9 @@ LogManager.AddSink(new MyRemoteSink());
 
 > **`exc` 与 `stack` 不是一回事，别混读**：`exc` 是**异常自己**的 `ToString()`（类型、异常链、抛出点堆栈），只在调用点手上有异常对象时才有值；`stack` 是**日志调用点**的托管堆栈（门面 → sink → 业务），Error 及以上默认抓。想知道「异常从哪儿抛的」看 `exc`；想知道「谁记的这条日志」看 `stack`。
 
-## 用 AI 分析日志
+## 典型场景
+
+### 用 AI 分析日志
 
 ```bash
 # 报错速览（先按会话切片：多份日志混在一起时）
