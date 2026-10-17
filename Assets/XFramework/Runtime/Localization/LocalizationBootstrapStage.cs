@@ -16,7 +16,7 @@ namespace XFramework.XLocalization
     /// <code>
     /// Bootstrap.Register(new LocalizationBootstrapStage("en", myLanguageTable));
     /// </code>
-    /// <para>与框架内置的另外三个阶段一样，本类型是 <c>public</c> 的：使用方需要能构造、替换、
+    /// <para>与其它内置阶段一样，本类型是 <c>public</c> 的：使用方需要能构造、替换、
     /// 或自行组合这些阶段，而不是只能接受框架预设的那一套。</para>
     /// </summary>
     public sealed class LocalizationBootstrapStage : IBootstrapStage

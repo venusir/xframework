@@ -43,11 +43,12 @@ namespace XFramework.XBootstrap
     {
         /// <summary>
         /// 反向清理本阶段初始化的服务。由 <see cref="Bootstrap.Shutdown"/> 逆序调用。
-        /// <para><b>为什么是同步的：</b>框架内置的四个模块（Asset / Data / Save / Localization）的清理入口
-        /// 都是同步 <c>void</c>，且调用点通常是没有 await 机会的 <c>OnDestroy</c>。
+        /// <para><b>为什么是同步的：</b>框架内置的六个阶段（Asset / Input / UI / Data / Save / Localization）
+        /// 的清理入口都是同步 <c>void</c>，且调用点通常是没有 await 机会的 <c>OnDestroy</c>。
         /// 若将来某个模块确实需要异步清理，再为它单独扩展接口。</para>
         /// <para>实现应可重复调用（幂等）；抛出的异常由 <see cref="Bootstrap.Shutdown"/> 隔离，
-        /// 不会阻断其它阶段的清理。</para>
+        /// 不会阻断其它阶段的清理。<b>只销毁本阶段自己初始化的那份</b>——不要把使用方手动
+        /// <c>Initialize</c> / <c>SetInstance</c> 或上一轮运行留下的实例一起销毁。</para>
         /// <para><b>可能在 <see cref="IPipelineStage.ExecuteAsync(PipelineStageContext, System.Threading.CancellationToken)"/>
         /// 从未执行过时被调用</b>——启动在它之前失败/取消，它是在 <see cref="Bootstrap.RunAsync"/> 运行中才登记的，
         /// 或 <see cref="Bootstrap.Shutdown"/> 中止了在途启动，都会让 <see cref="Bootstrap.Shutdown"/> 扫到它。

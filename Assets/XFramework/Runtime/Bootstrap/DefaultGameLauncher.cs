@@ -87,6 +87,9 @@ namespace XFramework.XBootstrap
         /// 例：先 <see cref="Bootstrap.Unregister{T}()"/> 掉内置的 Asset 阶段，再
         /// <see cref="Bootstrap.Register"/> 一个带 <c>RemoteServices</c> / <c>DecryptionServices</c> 的）；
         /// 不调 <c>base</c> 则完全不登记默认组合，登记什么自己说了算。</para>
+        /// <para><b>外部组件的 Awake 不适合作替换点</b>：本组件在自己的 Awake 里无条件登记默认阶段，
+        /// 与其它组件 Awake 的先后由 Unity 决定；外部先跑时会被本组件稍后的登记覆盖或形成同相位双份。
+        /// 要替换内置阶段，请放在本覆写里（与 <c>base</c> 同一调用栈，顺序确定）。</para>
         /// <para>时机：<c>Awake</c> 内、<c>Start</c> 跑管线之前。登记先后不影响执行顺序
         /// （执行序由相位决定），但整张表必须在 <see cref="Bootstrap.RunAsync"/> 之前定稿。</para>
         /// </summary>

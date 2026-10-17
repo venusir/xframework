@@ -7,7 +7,7 @@
 XFramework 管线模块提供**通用异步阶段编排**能力(附**相位分组编排**这一声明式装配形态):
 
 - **通用阶段编排**:阶段按添加顺序串行执行、进度加权聚合广播、失败/取消传播。实例即用即弃(非全局单例),第三方可独立使用,无框架内模块依赖。
-- **相位分组编排**:实现 `IPhaseStage` 声明相位号,同相位阶段并行执行、相位升序串行;经 `Pipeline.BuildPhaseGroups` 一键装配为「每相位一个并行阶段」。启动引导模块 `Bootstrap.RunAsync` 的管线即由此装配而成;框架引导模块(Asset/Data/Save/Localization)均以相位阶段形态参与。
+- **相位分组编排**:实现 `IPhaseStage` 声明相位号,同相位阶段并行执行、相位升序串行;经 `Pipeline.BuildPhaseGroups` 一键装配为「每相位一个并行阶段」。启动引导模块 `Bootstrap.RunAsync` 的管线即由此装配而成;框架引导模块(Asset / Input / UI / Data / Save / Localization)均以相位阶段形态参与。
 
 **核心理念**: 阶段声明「我要做什么」(实现 `IPipelineStage`),管线负责「按什么顺序、报多少进度、失败怎么办」;并行归 `ParallelStage`、串行子段归 `SequenceStage`,编排级归管线,容器可任意嵌套表达任意串并行拓扑。
 
@@ -184,7 +184,9 @@ public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
 
 ```
 Phase 0:  [AssetBootstrapStage]───────────────┐
-Phase 3:  [DataBootstrapStage]────────────────┤  组间串行(等上一相位完成)
+Phase 1:  [InputBootstrapStage]───────────────┤
+Phase 2:  [UIBootstrapStage]──────────────────┤  组间串行(等上一相位完成)
+Phase 3:  [DataBootstrapStage]────────────────┤
 Phase 4:  [SaveBootstrapStage]────────────────┤
 Phase 90: [LocalizationBootstrapStage]────────┘
 ```

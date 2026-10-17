@@ -13,9 +13,10 @@ Runtime/Bootstrap/
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
 ├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含任何配置字段，ConfigureStages 为抽象
-└── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 八组 Inspector 声明式字段
+└── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 五组 / 八个 Inspector 字段
 
 Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
+Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理语义）、BootstrapStageTests（内置阶段直连）
 ```
 
 （本节 2026-10-16 补建——此前是 23 份里唯二没有文件结构的一份。）
@@ -27,6 +28,7 @@ Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用�
 - **登记表自 2026-10-02 起支持注销**（`Unregister` / `Unregister<T>`）：此前「替换内置阶段」只能靠调用顺序（先 `Register` 再 `RegisterDefaults`），而启动器在 `Awake` 里会无条件登记默认组合，与使用方 `Awake` 的先后由 Unity 决定。
 - **`GameLauncher` 自 2026-10-02 起拆为两层**：抽象底座 `GameLauncher`（只有生命周期接线 + `abstract ConfigureStages`，**零序列化字段**）与默认实现 `DefaultGameLauncher`（八个 Inspector 字段 + 字段驱动的登记）。拆的理由：Unity 无法隐藏继承来的序列化字段，「完全自控的人 Inspector 里干净」只能靠类型层次保证；`abstract` 顺带让编译器兜住「忘了覆写」。**这是破坏性变更**——原先 `class X : GameLauncher` 的代码编译不过（迁移说明见 `CHANGELOG`）。
 - **`Shutdown` 自 2026-10-13 起先中止在途 `RunAsync`、再清理**（`948aadb`；`GameLauncher.Start` 同时改传 `destroyCancellationToken`）：此前清理与在途运行互不感知——「被 `Shutdown` 过的后置相位仍会在自己的 `Shutdown` 之后被执行」。修法（Bootstrap 内部链接取消源）与两条实现硬约束见下节未决处置。
+- **「`Unregister` 与调用顺序无关」的承诺于 2026-10-17 收窄**：此前 README / XML 声称替换内置阶段与调用顺序无关、在 `DefaultGameLauncher` 在场时同样可用。控制流复核显示启动器在自己的 `Awake` 里**无条件**登记 Asset、并用 `Unregister<SaveBootstrapStage>()` 摘掉所有 Save 阶段——使用方组件的 `Awake` 先跑时仍会被覆盖或双份登记。README 现明确：唯一与 `Awake` 顺序无关的路径是继承启动器覆写 `ConfigureStages`；外部 `Awake` 的替换不保证；`RegisterDefaults` 与启动器混用也会产生同相位双份。
 
 ## 决策台账
 
