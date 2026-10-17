@@ -229,6 +229,11 @@ namespace XFramework.XInput.Default
 
         public float GetButtonPressDuration(string action, uint playerId = 0)
         {
+            // 预热缓存（INP-001）：本方法可能从未被 WasPressedThisFrame / IsPressed 等读取 API 访问过；
+            // 计时遍历只覆盖 _actionCache，不预热就永远不计时。GetAction 对不存在的动作返回 null
+            //（Editor 下按既有策略告警一次），不影响下面的返回值。
+            GetAction(action);
+
             if (_buttonPressStartTimes.TryGetValue(action, out var startTime) && startTime > 0f)
             {
                 return Time.unscaledTime - startTime;

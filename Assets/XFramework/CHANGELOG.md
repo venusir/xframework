@@ -208,6 +208,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Input
+
+- **长按时长只为「已被其它读取 API 访问过」的动作计时（INP-001）**：`UpdateButtonPressDurations` 只遍历
+  `_actionCache`，而缓存只在 `WasPressedThisFrame` / `IsPressed` / `Read*` 或 `GetAction` 时写入——从未被
+  这些 API 访问过的动作永远不计时，`GetButtonPressDuration` / `ObservePressDuration` 恒返回 0，
+  无异常无日志；README 的蓄力条示例正是这种写法。修法：`GetButtonPressDuration` 开头 `GetAction(action)`
+  预热缓存；`IInputProvider` XML 与 README 写明保证。
+  回归：`InputSystemProviderTests.GetButtonPressDuration_NeverReadAction_IsTrackedAfterWarmUp`，改前红。
+
 #### Audio
 
 - **短于一拍的 one-shot 卡在 `Starting` 到 60 拍超时并误报（AUD-001）**：`PlayCoreAsync` 在 `Source.Play()`

@@ -85,6 +85,9 @@ float pressDuration = InputManager.GetButtonPressDuration("Jump");
 
 > **动作名拼写校验**:Editor 下读取不存在的动作名会打 LogWarning(同一动作只警告一次,不刷屏);
 > 运行时可用 `InputManager.HasAction("Jump")` 主动校验封装里的动作名拼写。
+>
+> **计时保证**：`GetButtonPressDuration` / `ObservePressDuration` 自己会预热动作缓存，不依赖先调用其它
+> 读取 API——只靠它们计时（如蓄力条）的调用方同样能拿到累计时长（INP-001）。
 
 ### 4. ActionMap 切换
 

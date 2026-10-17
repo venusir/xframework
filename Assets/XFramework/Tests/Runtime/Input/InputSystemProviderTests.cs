@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -318,6 +319,44 @@ namespace XFramework.XInput.Tests
 
         private static GamepadType DetectProduct(string product)
             => InputSystemProvider.DetectGamepadTypeFrom(new InputDeviceDescription { product = product });
+
+        #endregion
+
+        #region 长按计时（INP-001）
+
+        /// <summary>
+        /// 从未被读取 API 访问过的动作也必须能累计长按时长（INP-001）。
+        /// <para>改前：计时遍历只覆盖 <c>_actionCache</c>，而缓存只在 <c>WasPressedThisFrame</c> 等读取
+        /// 或 <c>GetAction</c> 时写入——只调 <c>GetButtonPressDuration</c> 的项目（README 的蓄力条示例）
+        /// 永远拿到 0。修法：本方法自己预热缓存。</para>
+        /// </summary>
+        [UnityTest]
+        public IEnumerator GetButtonPressDuration_NeverReadAction_IsTrackedAfterWarmUp()
+        {
+            InputSystem.AddDevice<Keyboard>();
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            // 预热前：动作从未进过缓存，Tick 的计时遍历不会覆盖它
+            Press(Keyboard.current.spaceKey);
+            provider.Tick();
+            Assert.AreEqual(0f, provider.GetButtonPressDuration("Jump"), "预热前不计时（存量行为）");
+            Release(Keyboard.current.spaceKey);
+            yield return null;
+
+            // 预热（本方法必须自己把动作放进缓存），再按一次
+            Assert.AreEqual(0f, provider.GetButtonPressDuration("Jump"), "这次调用负责预热缓存");
+            Press(Keyboard.current.spaceKey);
+            provider.Tick();
+            yield return null;
+
+            Assert.Greater(provider.GetButtonPressDuration("Jump"), 0f,
+                "GetButtonPressDuration 自身必须预热缓存，否则从未被读取 API 访问的动作永远不计时");
+            Release(Keyboard.current.spaceKey);
+
+            provider.Dispose();
+        }
 
         #endregion
     }
