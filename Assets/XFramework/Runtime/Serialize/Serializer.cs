@@ -147,7 +147,9 @@ namespace XFramework.XSerialize
         /// <summary>
         /// 获取默认序列化器（format = "json"）。
         /// </summary>
-        /// <exception cref="KeyNotFoundException">默认序列化器未注册（Initialize 未被调用）。</exception>
+        /// <exception cref="InvalidOperationException">默认序列化器不可用：尚未调用
+        /// <see cref="Initialize"/>，或初始化后通过 <see cref="Unregister"/> 注销了内置的 json 实现
+        /// （后者不会因再次调用 <see cref="Initialize"/> 而恢复——它是 no-op）。</exception>
         public static ISerializer Default
         {
             get
@@ -156,7 +158,8 @@ namespace XFramework.XSerialize
                     return serializer;
 
                 throw new InvalidOperationException(
-                    "[XSerialize] 默认序列化器不可用，请确认 Serializer.Initialize() 已被调用。");
+                    "[XSerialize] 默认序列化器不可用：可能尚未调用 Serializer.Initialize()，" +
+                    "或初始化后用 Unregister(\"json\") 注销了内置实现。");
             }
         }
 

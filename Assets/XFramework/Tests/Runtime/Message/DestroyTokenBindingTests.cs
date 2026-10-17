@@ -165,6 +165,46 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(2, subscriber.ReceivedCount, "实时同样走过滤:25 通过、1 被拦");
         }
 
+        [Test]
+        public void Subscribe_AfterOwnerDisposed_DoesNotThrow()
+        {
+            // 钉住随包 XML 示例的修正形状：令牌必须在构造时缓存。
+            // 旧示例的 `=> _cts.Token` 在 Dispose 之后再订阅会抛 ObjectDisposedException——
+            // 改前必红：把本类的 getter 换回旧形状，本用例即红。
+            var subscriber = new DisposedTokenSourceSubscriber();
+            subscriber.Dispose();
+
+            Assert.DoesNotThrow(() => subscriber.Subscribe<TestMessage>(subscriber.Handle),
+                "对象销毁后再订阅不应抛 ObjectDisposedException——令牌应已缓存且处于取消态");
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(0, subscriber.ReceivedCount, "令牌已取消，订阅应被立即释放");
+        }
+
+        /// <summary>按修正后的 XML 示例实现：令牌在构造时缓存，<see cref="Dispose"/> 后可安全读取。</summary>
+        private sealed class DisposedTokenSourceSubscriber : IMessageSubscriber, IDestroyCancellationToken
+        {
+            private readonly CancellationTokenSource _cts = new CancellationTokenSource();
+            private readonly CancellationToken _token;
+
+            public DisposedTokenSourceSubscriber()
+            {
+                _token = _cts.Token;
+            }
+
+            public int ReceivedCount { get; private set; }
+
+            public CancellationToken DestroyCancellationToken => _token;
+
+            public void Dispose()
+            {
+                _cts.Cancel();
+                _cts.Dispose();
+            }
+
+            public void Handle(TestMessage message) => ReceivedCount++;
+        }
+
         private sealed class PlainSubscriber : IMessageSubscriber
         {
             public int ReceivedCount { get; private set; }

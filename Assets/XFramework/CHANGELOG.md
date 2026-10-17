@@ -303,6 +303,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **随包 XML 示例修正（2026-10-17，第二轮审计）**：`TimerManager.After<TState>` 的示例把 `this` 与 lambda
+  写反（TMR-001，照抄 CS1503）；`IDataBlock` 示例缺 `DataVersion` / `OnMigrate`（DATA-001，照抄 CS0535）；
+  `Serializer.Default` 的 `<exception>` 写成 `KeyNotFoundException`、异常消息又教了一个 no-op 的
+  `Initialize()`（SER-001）；`Select` 的 comparer 示例引用了仓内不存在的 `FloatComparer`（RCT-003）；
+  `IDestroyCancellationToken` 示例在 `Dispose` 之后再读 `_cts.Token` 会抛 ODE（MSG-002，改为构造时缓存令牌）。
+  MSG-002 另补 `DestroyTokenBindingTests.Subscribe_AfterOwnerDisposed_DoesNotThrow`（改前红：ODE）。
 - **XCamera 模块文档与包 README 四表**（2026-10-17）：新增 `Runtime/Camera/README.md`（18 节骨架、5 项必答）、
   维护向模块记录、包 README 的功能 / 模块索引 / 可替换实现 / 可配置项四表同步；`ReadmeTableTests` 登记 `Camera`。
   **核心包依赖表不新增 Cinemachine**（核心不依赖它）；Cinemachine 3.1.7 的安装与版本归独立扩展包。

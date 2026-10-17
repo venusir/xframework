@@ -13,6 +13,7 @@ namespace XFramework.XData
     /// public class BagData : IDataBlock
     /// {
     ///     public string BlockName => nameof(BagData);
+    ///     public int DataVersion => 0;               // 尚未引入版本控制时返 0
     ///     public List&lt;BagItem&gt; Items = new();
     ///     public int Gold;
     ///
@@ -20,6 +21,7 @@ namespace XFramework.XData
     ///     private struct SaveSnap { public List&lt;BagItem&gt; items; public int gold; }
     ///
     ///     public object OnSave() => new SaveSnap { items = Items, gold = Gold };
+    ///     public object OnMigrate(object data, int fromVersion) => data;   // 无版本差时恒等返回
     ///     public void OnLoad(object data) { if (data is SaveSnap s) { Items = s.items; Gold = s.gold; } }
     ///     public void OnClear() { Items.Clear(); Gold = 0; }
     /// }

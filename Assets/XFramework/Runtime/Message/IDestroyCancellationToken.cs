@@ -17,8 +17,11 @@ namespace XFramework.XMessage
     /// public sealed class PlayerModel : IDestroyCancellationToken
     /// {
     ///     readonly CancellationTokenSource _cts = new CancellationTokenSource();
+    ///     readonly CancellationToken _token;   // 构造时缓存：Dispose 之后再读 _cts.Token 会抛 ObjectDisposedException
     ///
-    ///     public CancellationToken DestroyCancellationToken => _cts.Token;
+    ///     public PlayerModel() => _token = _cts.Token;
+    ///
+    ///     public CancellationToken DestroyCancellationToken => _token;
     ///
     ///     public void Dispose()
     ///     {

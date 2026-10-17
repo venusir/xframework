@@ -31,7 +31,7 @@ namespace XFramework.XTimer
     /// _cooldown.Restart();
     ///
     /// // 4. 随对象销毁自动停（零闭包：static lambda + 状态）
-    /// TimerManager.After(1.5f, this, static self => self.OnDone(), cancellationToken: destroyCancellationToken);
+    /// TimerManager.After(1.5f, static self => self.OnDone(), this, cancellationToken: destroyCancellationToken);
     /// </code>
     /// </example>
     public static class TimerManager

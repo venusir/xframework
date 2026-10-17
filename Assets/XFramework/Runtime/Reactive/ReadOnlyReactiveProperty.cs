@@ -197,7 +197,8 @@ namespace XFramework.XReactive
         /// <param name="selector">值映射函数，必须是纯函数（构造时会被调用两次）。</param>
         /// <param name="comparer">
         /// 派生值去重的相等比较器；<c>null</c> 用 <see cref="EqualityComparer{T}.Default"/>。
-        /// 例：<c>level.Select(lv => lv * 0.1f, FloatComparer.Tolerance(0.01f))</c>。
+        /// 需要按浮点容差去重时，传入一个自实现的 <see cref="IEqualityComparer{T}"/> 即可
+        /// （框架不内置容差比较器）。
         /// </param>
         /// <returns>新的只读响应式属性。它是 <see cref="IDisposable"/>，需交给生命周期所有者释放。</returns>
         /// <exception cref="ArgumentNullException">source 或 selector 为 null 时抛出。</exception>

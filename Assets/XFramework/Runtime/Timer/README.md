@@ -116,7 +116,7 @@ public float CooldownProgress => _ready ? 1f : 1f - _cooldown.Remaining / 8f;
 ### B. 延时做一件事，并随对象销毁自动取消
 
 ```csharp
-TimerManager.After(1.5f, this, static self => self.OnWarmupDone(),
+TimerManager.After(1.5f, static self => self.OnWarmupDone(), this,
     cancellationToken: destroyCancellationToken);
 ```
 
