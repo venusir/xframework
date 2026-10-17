@@ -69,10 +69,14 @@ namespace XFramework.XAsset
             }
 
             context.SetDescription("Initializing Asset Manager...");
+
+            // 标记在 await 之前：Shutdown 可能在初始化在途时到来（启动途中销毁 GameLauncher 即此形态），
+            // 此时本阶段确实接管了这次初始化，必须由它作废在途任务并清理半初始化实例——
+            // 标记放在 await 之后会让这条路径跳过清理，在途初始化反而在 Shutdown 之后完成。
+            _initializedByThisStage = true;
             await AssetManager.InitializeAsync(options: _options,
                                                progress: new AssetInitProgressRelay(context),
                                                cancellationToken: cancellationToken);
-            _initializedByThisStage = true;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
