@@ -222,7 +222,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
 
-**运行中 `Register` / `Unregister` 只告警、不阻止**，后果与理由见上面「设计取舍」的「登记表请在 `RunAsync` 之前定稿」段：运行中登记的阶段本轮不执行、运行中注销的阶段拿不到 `Shutdown`。
+**运行中修改登记表只告警、不阻止**（`Register` / `Unregister` / `RegisterDefaults` / `Clear`），后果与理由见上面「设计取舍」的「登记表请在 `RunAsync` 之前定稿」段：运行中新增的阶段本轮不执行（但会被 `Shutdown` 扫到）；运行中注销 / 清掉的阶段本轮仍执行但拿不到 `Shutdown`。
 
 **中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 仍会被重入守卫忽略**——要等它收敛，请持有第一次调用的任务。
 
@@ -274,7 +274,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **为什么 `RunAsync` 重入只警告并忽略？** 每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的那次**立即返回、不代表启动完成**——调用方要「等启动结束」，应共享第一次调用的任务，而不是再调一次。
 
-**登记表请在 `RunAsync` 之前定稿。** 运行中的 `Register` / `Unregister` 照常生效但都打警告，因为两条后果都反直觉：运行中 `Register` 的阶段**本轮不执行**（装配期已快照）但会被 `Shutdown` 扫到；运行中 `Unregister` 的阶段**本轮仍执行**但拿不到 `Shutdown`（资源泄漏的候选）。
+**登记表请在 `RunAsync` 之前定稿。** 运行中的修改（`Register` / `Unregister` / `RegisterDefaults` / `Clear`）照常生效但都打警告，因为后果都反直觉：运行中新增的阶段**本轮不执行**（装配期已快照）但会被 `Shutdown` 扫到；运行中注销 / 清掉的阶段**本轮仍执行**但拿不到 `Shutdown`（资源泄漏的候选）。
 
 **为什么引导流程不暂停 Update（也不提供「就绪」门控）？** 每帧派发由 Update 模块自注入 PlayerLoop 独立驱动，与引导流程无关——`RunAsync` 期间（Asset 初始化可能持续数秒）派发照常进行。这不构成缺口：依赖已初始化服务的回调，正确接法是 `await RunAsync()` 完成之后再注册，或直接写在自家引导阶段里。框架不自动暂停——那等于替使用方决定「加载期算不算可派发的时间」，而且失败/中断路径会让整个应用背上「忘了恢复即静默冻结」的风险。确需加载期安静时自行接管（只冻逻辑轴，`Unscaled` 节点照常）：
 

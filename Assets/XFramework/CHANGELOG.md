@@ -266,6 +266,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   红证：两处断言（用例 2 的 `later.ExecuteCount`、新用例的 OCE）在修前分别以
   `Expected: 0 / But was: 1` 与 `Expected: <System.OperationCanceledException> / But was: null` 判红，修复后转绿。
 
+- **运行中 `RegisterDefaults` / `Clear` 原本静默改表**：README / XML 承诺「运行中修改登记表只告警」，
+  但这两条路径直接改表、不产任何提示。现在两者都打 `[Bootstrap]` 警告并说明后果（新增阶段本轮不执行、
+  但会被 `Shutdown` 扫到；`Clear` 清掉的阶段在途仍执行、但拿不到 `Shutdown`）。回归用例
+  `BootstrapTests.RegisterDefaults_WhileRunning_WarnsButProceeds` / `Clear_WhileRunning_WarnsButProceeds`，
+  改前必红：`Expected log did not appear`。
+
 - **5 个文件 / 11 处零分配断言此前是恒真的**（两把尺子在本环境恒返回 0，锁的结论从未被验证过）。
   11 处全部改成两道防线：**结构断言优先**（句柄 / 快照 / 统计行是值类型、状态槽位按类型参数泛化、
   表声明为具体字典……——「零分配的原因」本身可反射验证），**粗尺子放大兜底**（阈值取实测信号 1/4），

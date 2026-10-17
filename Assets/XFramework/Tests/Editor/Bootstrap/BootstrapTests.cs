@@ -336,6 +336,46 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void RegisterDefaults_WhileRunning_WarnsButProceeds()
+        {
+            var gated = NewStage("gated", 0);
+            gated.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(gated);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(1, gated.ExecuteCount, "首次调用应已启动阶段");
+
+            // 运行中 RegisterDefaults 与 Register 同一后果：本轮不执行、但会参与后续 Shutdown
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 运行中调用 RegisterDefaults"));
+            Bootstrap.RegisterDefaults();
+
+            Assert.AreEqual(4, Bootstrap.Stages.Count, "警告不阻止登记：默认三件应被追加");
+
+            gated.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void Clear_WhileRunning_WarnsButProceeds()
+        {
+            var gated = NewStage("gated", 0);
+            gated.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(gated);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(1, gated.ExecuteCount, "首次调用应已启动阶段");
+
+            // 运行中 Clear 比 Unregister 更重：在途阶段仍执行，但全部拿不到 Shutdown
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 运行中调用 Clear"));
+            Bootstrap.Clear();
+
+            Assert.AreEqual(0, Bootstrap.Stages.Count, "警告不阻止清空");
+
+            gated.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+        }
+
+        [Test]
         public void RunAsync_StageThrows_ExceptionNamesTheFailedStage()
         {
             // 断言写全「名字 + 冒号」那一段：旧文案是 Failed: {异常消息}，没有名字段，

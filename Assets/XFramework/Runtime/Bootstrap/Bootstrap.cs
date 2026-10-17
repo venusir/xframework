@@ -162,9 +162,17 @@ namespace XFramework.XBootstrap
         /// <para><b>要替换其中某个内置阶段</b>：用 <see cref="Unregister{T}()"/> 摘掉它再
         /// <see cref="Register(IBootstrapStage)"/> 自己的实例——不要依赖与本方法的调用先后
         /// （与 <see cref="DefaultGameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
+        /// <para><b>运行中调用会告警</b>：新增的阶段本轮不执行（装配期已快照），但会参与后续的
+        /// <see cref="Shutdown"/>。</para>
         /// </summary>
         public static void RegisterDefaults()
         {
+            if (_isRunning)
+            {
+                LogManager.Warning(LogCategories.Bootstrap,
+                    "RunAsync 运行中调用 RegisterDefaults：本轮不会执行新增的阶段（装配期已快照），但它们会参与后续的 Shutdown。");
+            }
+
             RegisterDefaultsEntry(new XAsset.AssetBootstrapStage());
             RegisterDefaultsEntry(new XData.DataBootstrapStage());
             RegisterDefaultsEntry(new XSave.SaveBootstrapStage());
@@ -190,9 +198,17 @@ namespace XFramework.XBootstrap
         /// <summary>
         /// 清空登记表。测试复位用。
         /// <para>不影响已初始化的服务——它只管登记表。</para>
+        /// <para><b>运行中调用会告警</b>：在途阶段仍会执行（装配期已快照），但它们不会再收到
+        /// <see cref="Shutdown"/>。</para>
         /// </summary>
         public static void Clear()
         {
+            if (_isRunning)
+            {
+                LogManager.Warning(LogCategories.Bootstrap,
+                    "RunAsync 运行中调用 Clear：本轮仍会执行已装配的阶段（装配期已快照），但它们不会再收到 Shutdown。");
+            }
+
             StageList.Clear();
         }
 
