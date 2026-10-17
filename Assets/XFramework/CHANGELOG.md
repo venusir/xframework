@@ -268,7 +268,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
     `自定义输入封装（第三方游戏必须做）` / `把第三方事件接进流` 仍归 `典型场景`。
   - **门禁不动**：`ReadmeSectionTests` 只守 5 个必答节（子串匹配），新增按需节不在射程；
     `check-docs.ps1` 只按「模块结构」定位文件树，新节名不含该词。
-  - **本轮范围**：规范 + File 打样；其余模块按新映射后续分批迁移。
+  - **落地范围**：规范 + File 打样，其余 14 个建节模块分三批迁移完毕（A：Settings / Input / Log / Audio；
+    B：Asset / Save / Config / Data / Localization；C：UI / Diagnostics / Bootstrap / Pipeline / Serialize）。
+    **不建节的 8 个模块**：Event / Lock / Message / Pool / Reactive / Scene / Timer / Update——没有
+    「框架接受第三方实现」的接线入口；Scene / Timer / Update 已在原有章节解释为何没有替换点。
 - **模块 README 结构统一（2026-10-16：规范 + 门禁 + 23 个模块逐次重整）**：普查 23 份模块 README
   （共 9196 行）得到的结论是**问题不在内容缺失，在不可预测**——同一件事有多种写法（`快速使用` 14 家
   vs `快速开始` 6 家）、API 小节 8 种名字、**线程小节 5 种名字且 11 家一个字没写**、`##` 级标题里只
