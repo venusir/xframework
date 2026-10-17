@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **UI 暂停逃生口订正（2026-10-17，UI-B-002）**：README 原写「先 `Destroy` 再自行驱动」——`Destroy` 后
+  门面未初始化，`UIManager.Update` 会抛。改为「`UpdateManager.Clear()` 摘驱动器后自行调用」，并给出恢复
+  自动驱动的路径；不加公开 API（用户裁定：文档化）。
 - **Diagnostics 登记幂等承诺订正（2026-10-17，DIAG-001）**：去重只按同一实例——关闭域重载时用 `new` 登记
   会每次进播放多出一个同名页签；管理器 XML、模块 README 与随包示例统一改为「静态只读实例登记」或退出时
   `Unregister`，去重语义不变（用户裁定：改文档，不改行为）。

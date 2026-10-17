@@ -1218,7 +1218,7 @@ sequenceDiagram
 
 派发时只驱动「已打开且未暂停」的面板（被覆盖而失焦的面板不计入）。
 
-> ⚠️ **这条通路挂在 `UpdateManager` 的「逻辑时间轴」上（`UpdateTimeMode.Scaled`），因此 `Time.timeScale = 0` 会把 UI 一起冻住**：面板 `OnUpdate`、HUD 跟随、Tip 动画全部停止派发——这是切换 `timeScale` 暂停游戏时最容易踩的一条。门面**没有**时间轴开关（驱动器类型是 private），唯一的逃生口是自己在需要时每帧手动调 `UIManager.Update(deltaTime, time)`；注意它会与驱动器**叠加**（见该方法注释），恢复 `timeScale` 后要么停掉手动调用，要么先 `Destroy` 再自行驱动。
+> ⚠️ **这条通路挂在 `UpdateManager` 的「逻辑时间轴」上（`UpdateTimeMode.Scaled`），因此 `Time.timeScale = 0` 会把 UI 一起冻住**：面板 `OnUpdate`、HUD 跟随、Tip 动画全部停止派发——这是切换 `timeScale` 暂停游戏时最容易踩的一条。门面**没有**时间轴开关（驱动器类型是 private），唯一的逃生口是自己在需要时每帧手动调 `UIManager.Update(deltaTime, time)`；注意它会与驱动器**叠加**（见该方法注释）。恢复 `timeScale` 后要停掉叠加：用 `UpdateManager.Clear()` 摘掉 UI 的驱动器后再自行调用（要恢复自动驱动时按「已知限制」里的恢复路径重进 `UIManager.Initialize` / `SetInstance`）。**不要用 `Destroy` 走这条路**——`Destroy` 后 `_instance` 为空，`UIManager.Update` 会直接抛「尚未初始化」（UI-B-002）。
 >
 > **异常隔离**：面板 `OnUpdate` 抛异常时，只记一条 `[UIManager]` 错误并**停更该面板**（其余面板 / HUD / Tip 照常，驱动器也不会被调度器注销）；该面板下次打开（回池复位）后恢复被驱动。HUD / Tip 的 provider 抛异常时则继续驱动、只记首条日志（换 provider 后重新计数）。
 
