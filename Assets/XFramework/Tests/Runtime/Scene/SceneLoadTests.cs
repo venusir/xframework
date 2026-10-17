@@ -229,6 +229,41 @@ namespace XFramework.XScene.Tests
             Assert.AreEqual(0, _fake.UnloadUnusedCallCount, "取消路径不得执行后处理");
         }
 
+        [Test]
+        public async Task LoadSceneAsync_CanceledDuringCleanup_StillReturnsHandle()
+        {
+            _fake.SceneLoadResult = new AssetSceneHandle(1, default);
+            _fake.Gate = new UniTaskCompletionSource();
+            var cts = new CancellationTokenSource();
+
+            var task = SceneManager.LoadSceneAsync(Location,
+                new SceneLoadOptions(LoadSceneMode.Single, unloadUnusedAfterLoad: true), null, cts.Token);
+
+            Assert.AreEqual(1, _fake.UnloadUnusedCallCount, "回收段应已开始（加载同步完成）");
+
+            // 加载已同步完成、回收段在途——此刻取消不得丢掉已加载成功的句柄（SCN-001）
+            cts.Cancel();
+            _fake.Gate.TrySetResult();
+
+            AssetSceneHandle handle = default;
+            try
+            {
+                handle = await task;
+            }
+            catch (OperationCanceledException)
+            {
+                Assert.Fail("加载成功后的回收阶段不应再受调用方令牌约束——取消丢掉了已加载成功的句柄");
+            }
+            finally
+            {
+                cts.Dispose();
+            }
+
+            Assert.AreEqual(1, handle.Id, "加载成功后的回收阶段不应再受调用方令牌约束");
+            Assert.AreEqual(CancellationToken.None, _fake.LastUnloadUnusedToken,
+                "回收段应收到 CancellationToken.None");
+        }
+
         #endregion
 
         #region Internal Methods

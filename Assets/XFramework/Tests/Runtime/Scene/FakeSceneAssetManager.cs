@@ -48,6 +48,12 @@ namespace XFramework.XScene.Tests
         /// <summary>资源回收（<c>UnloadUnusedAssetsAsync</c>）调用次数——<c>UnloadUnusedAfterLoad</c> 的观测点。</summary>
         public int UnloadUnusedCallCount;
 
+        /// <summary>最近一次回收调用收到的令牌——断言「回收段是否响应调用方取消」。</summary>
+        public CancellationToken LastUnloadUnusedToken;
+
+        /// <summary>回收前等待的门闩（用例控制「加载成功后、回收在途」的时刻）。</summary>
+        public UniTaskCompletionSource Gate;
+
         #endregion
 
         #region IAssetSceneLoader
@@ -80,10 +86,16 @@ namespace XFramework.XScene.Tests
 
         #region Overrides
 
-        public override UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
+        public override async UniTask UnloadUnusedAssetsAsync(string packageName = null, CancellationToken cancellationToken = default)
         {
             UnloadUnusedCallCount++;
-            return UniTask.CompletedTask;
+            LastUnloadUnusedToken = cancellationToken;
+
+            if (Gate != null)
+                await Gate.Task;
+
+            // 显式检查令牌：不依赖 UniTask.Yield 的取消语义，直接回答「门面传的是哪个令牌」
+            cancellationToken.ThrowIfCancellationRequested();
         }
 
         #endregion

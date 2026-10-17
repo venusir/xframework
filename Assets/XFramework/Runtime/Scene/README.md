@@ -208,6 +208,8 @@ LoadSceneAsync → AssetSceneHandle（场景已在场）
 
 - **取消不中止加载**：YooAsset 的场景加载没有中止入口，取消只让 `await` 提前抛出。此后 `XAsset` 会接力善后
   （叠加加载卸掉；单场景加载保留并告警），所以**取消之后的一小段时间里场景状态仍会变**。
+- **加载成功后的回收段不响应取消**：`UnloadUnusedAfterLoad` 在句柄就绪之后执行，此时再取消不会丢句柄
+  （否则 Additive 场景会留在 Hierarchy 且外部无卸载凭据）——取消只对「加载等待」生效（SCN-001）。
 - **卸载不了「当前唯一的场景」**：`UnloadAsync` 返回 `false` 并打一条告警（卸载它会让工程没有任何场景，
   Unity 与 YooAsset 都会失败）。句柄在拒绝后仍然有效。
 - **`Dispose` 是即发即忘**：不等卸载完成。要确认结果请用 `UnloadAsync`。

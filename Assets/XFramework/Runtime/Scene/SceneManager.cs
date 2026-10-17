@@ -30,9 +30,10 @@ namespace XFramework.XScene
         /// 异步加载场景，返回可卸载的句柄。
         /// <para><b>失败返回 <c>default(AssetSceneHandle)</c> 而不抛</b>（与 <c>XAsset</c> 同口径，用
         /// <see cref="AssetSceneHandle.IsDefault"/> 校验）；取消抛 <see cref="OperationCanceledException"/>。</para>
-        /// <para><b>取消不中止底层加载</b>——YooAsset 的场景加载没有对外可用的中止入口。善后由 <c>XAsset</c>
-        /// 接力完成：叠加加载完成后会被卸掉，单场景加载保留并告警。取消时**不会**执行
-        /// <see cref="SceneLoadOptions.ActivateAfterLoad"/> 与 <see cref="SceneLoadOptions.UnloadUnusedAfterLoad"/>。</para>
+        /// <para><b>取消只中止加载等待</b>——底层加载本身不中止（YooAsset 没有对外可用的中止入口），
+        /// 善后由 <c>XAsset</c> 接力完成。加载**一旦成功**，激活与回收两步不再响应调用方令牌
+        /// （句柄保证交回；否则 Additive 场景会留在 Hierarchy 且外部无卸载凭据，SCN-001）；
+        /// 取消发生在加载成功之前时，两步都不执行。</para>
         /// </summary>
         /// <param name="location">场景资源地址。</param>
         /// <param name="options">加载选项；省略即单场景、不激活、不回收。</param>
@@ -64,7 +65,9 @@ namespace XFramework.XScene
 
             if (options.UnloadUnusedAfterLoad)
             {
-                await AssetManager.UnloadUnusedAssetsAsync(cancellationToken: cancellationToken);
+                // 加载成功后的回收段不再响应调用方令牌：此刻场景已进来、句柄已就绪，
+                // 因取消丢掉句柄会让 Additive 场景留在 Hierarchy 且外部无卸载凭据（SCN-001）。
+                await AssetManager.UnloadUnusedAssetsAsync(cancellationToken: CancellationToken.None);
             }
 
             return handle;

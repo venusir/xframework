@@ -208,6 +208,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Scene
+
+- **加载成功后的回收段受调用方令牌约束，取消丢句柄（SCN-001）**：加载成功 → 进入跨帧回收 → 令牌取消 →
+  OCE 抛出、`return handle` 不可达；Additive 场景留在 Hierarchy 且外部无卸载凭据，Single 模式调用方误以为
+  加载失败。修法：回收调用改用 `CancellationToken.None`，XML/README 写明「加载成功后的回收阶段不响应取消」。
+  回归：`SceneLoadTests.LoadSceneAsync_CanceledDuringCleanup_StillReturnsHandle`（门闩式假件，改前红）。
+
 #### Asset（资源加载）
 
 - **资产加载族取消不释放 YooAsset 句柄（AST-001）**：`LoadAsync` / `LoadSubAssetsAsync` / `LoadRawFileAsync`
