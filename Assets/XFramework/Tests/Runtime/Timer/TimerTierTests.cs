@@ -157,6 +157,31 @@ namespace XFramework.XTimer.Tests
                 $"4 秒里剩余量出现了 {samples.Count} 个不同取值——驱动器几乎每帧都在跑，降频没生效");
         }
 
+        /// <summary>
+        /// 一次性回调里新建的定时器不得被本趟扫尾漏算（TMR-002）。
+        /// <para>场景：60 秒定时器把档位压到 Tier7；0.1 秒一次性定时器到期回调里再建一条 0.1 秒——
+        /// 新定时器复用刚释放的槽位下标（正是本趟循环当前所在的下标），而循环已越过它。
+        /// 改前 <c>min</c> 只看得到 60 秒定时器，档位停在 Tier7，新定时器要等约 2.13 秒才被第一次看到；
+        /// 改后扫尾重算「本趟出生」的槽位，0.33 秒内必触发。</para>
+        /// </summary>
+        [Test]
+        public void TimerCreatedInsideOneShotCallback_FiresWithinTheNextTierStep()
+        {
+            int secondFired = 0;
+
+            TimerManager.After(60f, Noop);
+            TimerManager.After(0.1f, () =>
+            {
+                TimerManager.After(0.1f, () => secondFired++);
+            });
+
+            // 0.33 秒 ≈ 20 帧 @60fps：覆盖第一条 0.1 秒触发与第二条 0.1 秒到期
+            _driver.Advance(20);
+
+            Assert.AreEqual(1, secondFired,
+                "回调里新建的 0.1 秒定时器必须在 0.33 秒内触发（改前档位停在 Tier7，约 2.13 秒后才醒）");
+        }
+
         [Test]
         public void NoActiveTimers_GoesIdleAtTier0()
         {

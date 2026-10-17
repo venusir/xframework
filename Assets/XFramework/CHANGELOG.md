@@ -208,6 +208,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Timer
+
+- **回调里新建的定时器可能晚一个档周期触发（TMR-002）**：一次性定时器在回调前释放槽位，回调里新建的
+  定时器经自由链复用同一个下标，而 `Sweep` 的循环已越过它——本趟 `min` 漏算，`SelectTier` 保持粗档，
+  同轴新建的 0.1 秒定时器可晚约 2.13 秒触发。修法：扫尾在「本趟触发过回调」时补扫一次
+  `BornPass == 当前趟` 的槽位、重新折入最近截止（扫尾期间新建定时器只可能发生在回调里，故不增加常态开销）。
+  回归：`TimerTierTests.TimerCreatedInsideOneShotCallback_FiresWithinTheNextTierStep`，改前红。
+
 #### Lock
 
 - **解锁回调里重加同类型锁被随后的清理静默丢弃（LOCK-001）**：`RemoveLock` 原先**先派发、后摘除**——

@@ -221,6 +221,7 @@ namespace XFramework.XTimer
                 _sweepPass++;
 
             double min = double.PositiveInfinity;
+            bool firedAny = false;
 
             // 每轮重读 _slots：回调里创建定时器可能触发扩容换数组，缓存的局部引用会指向旧数组
             for (int i = 0; i < _slots.Length; i++)
@@ -256,6 +257,7 @@ namespace XFramework.XTimer
                 }
 
                 Fire(i, now, slot);
+                firedAny = true;
 
                 // 触发后重新取剩余：重复定时器已推进到下一拍，一次性定时器已释放
                 TimerSlot<TState> after = _slots[i];
@@ -264,6 +266,23 @@ namespace XFramework.XTimer
                     double next = after.Deadline - now;
                     if (next < min)
                         min = next;
+                }
+            }
+
+            // 扫尾重算：一次性定时器在回调前释放槽位，回调里新建的定时器会复用同一个下标，
+            // 而循环已越过它——不补扫就会漏掉它的截止，档位停在粗档（TMR-002）。
+            // 只有本趟真的触发过回调才需要补扫：扫尾期间新建定时器只可能发生在回调里。
+            if (firedAny)
+            {
+                for (int i = 0; i < _slots.Length; i++)
+                {
+                    TimerSlot<TState> slot = _slots[i];
+                    if (!slot.Allocated || !slot.Running || slot.BornPass != _sweepPass)
+                        continue;
+
+                    double remaining = slot.Deadline - now;
+                    if (remaining < min)
+                        min = remaining;
                 }
             }
 
