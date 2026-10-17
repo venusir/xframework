@@ -12,8 +12,10 @@ namespace XFramework.XSave
     /// 通过 <see cref="XFileManager.FileManager"/> 写入到 <see cref="XFileManager.FileDomain.SaveData"/>。</para>
     /// <para>第三方可实现此接口接入自定义存储后端（如 Steam Cloud、PS5 SaveData API）。</para>
     /// <para><b>禁止在主线程用 <c>.GetAwaiter().GetResult()</c> 同步阻塞等待这些成员</b>：它们依赖
-    /// PlayerLoop 泵把续体送回来，主线程阻塞等待即死锁（唯一例外是内部的 <c>RecoverAsync</c>，
-    /// 它全程不切回主线程）。实现方若要替换默认实现，需自行保证同样的线程语义：返回前切回主线程。</para>
+    /// PlayerLoop 泵把续体送回来，主线程阻塞等待即死锁。实现方若要替换默认实现，需自行保证同样的线程语义：
+    /// 返回前切回主线程。**入口自身要求主线程**：`SaveAsync` 等在首个 `await` 之前就会触碰
+    /// <see cref="XData.DataManager"/> 与使用方的 <c>IDataBlock.OnSave</c>（后者通常访问 Unity API），
+    /// 从池线程调用会把「只能主线程」的异常指向使用方的 Block（SAVE-010）。</para>
     /// <para><b>命名约定：</b>所有涉及 IO 的成员一律异步并以 <c>Async</c> 后缀结尾，不提供同步版本——
     /// 同步 IO 会阻塞主线程，而 Console 等平台的 Provider 可能是数百毫秒的平台 SDK 调用。</para>
     /// </summary>
@@ -52,8 +54,9 @@ namespace XFramework.XSave
         /// <param name="version">版本号，必须大于 0。</param>
         /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="version"/> 小于 1 时抛出。</exception>
         /// <exception cref="System.InvalidOperationException">
-        /// 当前有正在进行的写操作（<see cref="IsBusy"/> 为 <c>true</c>）时抛出——与
-        /// <see cref="SetCurrentPlayer"/> 同一条门禁。内置实现会检查，自定义实现请照此办理。</exception>
+        /// **接口约定**：当前有正在进行的写操作（<see cref="IsBusy"/> 为 <c>true</c>）时应抛出——与
+        /// <see cref="SetCurrentPlayer"/> 同一条门禁。**内置实现当前不设忙碌守卫**（2026-09-27 裁定：
+        /// 调用顺序由使用方负责，`IsBusy` 只作可观测面）；自定义实现如选择检查，请照此约定。</exception>
         void SetCurrentVersion(int version);
 
         #endregion
@@ -67,13 +70,15 @@ namespace XFramework.XSave
         /// </summary>
         /// <param name="playerId">玩家 ID。</param>
         /// <exception cref="System.ArgumentException"><paramref name="playerId"/> 非法时抛出。</exception>
-        /// <exception cref="System.InvalidOperationException">有写操作进行中时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">**接口约定**：有写操作进行中时应抛出。
+        /// **内置实现当前不设忙碌守卫**（2026-09-27 裁定），自定义实现可选择检查。</exception>
         void SetCurrentPlayer(string playerId);
 
         /// <summary>
         /// 清除玩家上下文，退回到无玩家隔离模式。
         /// </summary>
-        /// <exception cref="System.InvalidOperationException">有写操作进行中时抛出。</exception>
+        /// <exception cref="System.InvalidOperationException">**接口约定**：有写操作进行中时应抛出。
+        /// **内置实现当前不设忙碌守卫**（2026-09-27 裁定）。</exception>
         void ClearCurrentPlayer();
 
         /// <summary>

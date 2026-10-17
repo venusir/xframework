@@ -232,6 +232,9 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 
 ## 线程契约
 
+- **公开写入口必须在主线程调用**（SAVE-010）：`SaveAsync` 等在首个 `await` 之前就会触碰 `DataManager` 与
+  使用方的 `IDataBlock.OnSave`（后者通常访问 Unity API）；从池线程调用会把「只能主线程」的异常指向使用方的
+  Block，而不是本模块的入口。
 - 文件 IO 由 Provider 在**线程池**上执行；载荷的序列化与反序列化同样在池线程上完成。
 - 本模块的公开异步 API **在返回前都会切回主线程**，因此调用方在 `await` 之后可以安全地访问 Unity API 与 `DataManager`。
 - 代价是这些方法依赖 PlayerLoop 泵，**禁止在主线程用 `.GetAwaiter().GetResult()` 同步阻塞等待**，否则会死锁。

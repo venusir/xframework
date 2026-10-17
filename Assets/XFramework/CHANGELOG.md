@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Save 线程契约与忙碌门禁订正（2026-10-17，SAVE-007/008/010）**：`ISaveManager` 的 XML 不再声称
+  「内置实现会检查忙碌并抛异常」（实际无守卫，2026-09-27 裁定维持）；`RecoverAsync` 的「全程不切回主线程」
+  订正为「需要重建侧车时切回一次」；README 线程契约补「公开写入口必须在主线程调用」。
 - **Reactive 已知边界补链式 Select 的中间派生值（2026-10-17，RCT-001）**：`d2 = d1.Select(g)` 后 `d1`
   不可达，`d2.Dispose()` 不会拆 `d1 → root` 的订阅；README 写明「逐级持有、逐级释放」，是否提供
   「拥有上游」的显式入口记 `待裁`（用户裁定：本批只文档化）。

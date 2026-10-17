@@ -97,7 +97,8 @@ namespace XFramework.XFileManager
             }
 
             // 借着这次初始化（约定在主线程）把域根预热好：之后的 IO 在池线程上跑，
-            // SaveManagerImpl 的启动恢复扫描更是刻意不切回主线程，那里只有缓存可读
+            // SaveManagerImpl 的启动恢复扫描多数路径也不切回主线程（需要重建侧车时除外，见 Save 模块），
+            // 那里只有缓存可读
             DesktopFileProvider.PrimeRoots();
 
             if (provider != null)
