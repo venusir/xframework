@@ -231,5 +231,39 @@ namespace XFramework.XUI.Tests
         }
 
         #endregion
+
+        #region Clear 后的恢复（UIA-002）
+
+        /// <summary>
+        /// <c>UpdateManager.Clear()</c> 之后按 README 的恢复路径（再调一次 <c>Initialize</c>）
+        /// 必须把每帧驱动器与全部分档驱动器都接回来（UIA-002）。
+        /// <para>改前：<c>Initialize</c> 因 <c>_instanceInitialized</c> 早退，连每帧驱动器也不重注册；
+        /// <c>SetInstance</c> 只恢复每帧驱动器，Tier 面板因 <c>_tierDemand</c> 边沿不重发而永久静止。</para>
+        /// </summary>
+        [Test]
+        public async Task UpdateManagerClear_ThenInitialize_RestoresAllDrivers()
+        {
+            var panel = await UIManager.OpenAsync<UpdateRecordingPanel>("ui/a");
+            panel.UpdateTier = UpdateTier.Tier2;
+            UpdateManager.Tick(0.016f);
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier2), "前置：Tier2 驱动器已注册");
+
+            UpdateManager.Clear();
+            Assert.AreEqual(0, UpdateManager.TotalCount, "前置：Clear 摘掉全部驱动器");
+
+            UIManager.Initialize(_root.transform);   // README 的恢复路径
+
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier0), "每帧驱动器必须恢复");
+            Assert.AreEqual(1, UpdateManager.GetCount(UpdateTier.Tier2), "分档驱动器也必须恢复");
+            Assert.AreEqual(1, UIManager.TierDriverCount, "门面记账应反映实况");
+
+            int before = panel.UpdateCount;
+            for (int i = 0; i <= 30; i++)
+                UpdateManager.Tick(i / 60f);
+
+            Assert.Greater(panel.UpdateCount, before, "恢复后 Tier2 面板应重新被驱动");
+        }
+
+        #endregion
     }
 }

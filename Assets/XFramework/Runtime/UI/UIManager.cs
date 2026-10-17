@@ -80,6 +80,11 @@ namespace XFramework.XUI
         /// <param name="controller">自定义 UI 控制器（可选），用于拦截面板打开/关闭逻辑。</param>
         public static void Initialize(Transform uiRoot, IUIController controller = null)
         {
+            // 先把驱动器接上（UIA-002）：UpdateManager.Clear() 是公开 API，会摘掉每帧与分档驱动器而
+            // 门面毫无感知；下面的 _instanceInitialized 早退会让「README 的恢复路径（再调一次
+            // Initialize）」变成永久静止。EnsureFrameDriverRegistered 幂等，正常路径重复调用无害。
+            EnsureFrameDriverRegistered();
+
             if (_instanceInitialized)
             {
                 LogManager.Warning(LogCategories.UIManager, "Initialize was called more than once. Ignoring duplicate.");
@@ -103,22 +108,20 @@ namespace XFramework.XUI
             _instance = impl;
             _instanceInitialized = true;
             _ownsInstance = true;
-
-            // 每帧驱动并入统一调度：可在 Initialize 之后被档位降频、被 Pause 统一暂停，
-            // 也不再要求场景里必须存在 UIRootNode
-            EnsureFrameDriverRegistered();
         }
 
         /// <summary>
-        /// 确保每帧驱动器已注册。生命周期两条入口（<see cref="Initialize"/> 与
-        /// <see cref="SetInstance"/>）共用，每次都真的向调度器注册一遍——重复注册是安全的
-        /// （同节点「先摘再插」），而「信任自身记账」会让 <c>UpdateManager.Clear()</c> 之后的 UI 永久失联
-        /// （见方法体内注释）。
+        /// 确保每帧驱动器与现存的全部<b>分档驱动器</b>都已注册。生命周期两条入口
+        /// （<see cref="Initialize"/> 与 <see cref="SetInstance"/>）共用，每次都真的向调度器注册一遍——
+        /// 重复注册是安全的（同节点「先摘再插」），而「信任自身记账」会让 <c>UpdateManager.Clear()</c>
+        /// 之后的 UI 永久失联（见方法体内注释）。
         /// <para><b>为什么注入实例也必须有驱动器</b>：驱动器只调 <see cref="Update"/>，而
         /// <see cref="Update"/> 转发给「当前实例」，与实现类型无关——所以它对注入的自定义
         /// <see cref="IUIManager"/> 同样成立。此前只有 <see cref="Initialize"/> 注册驱动器，
         /// 于是走 <see cref="SetInstance"/> 注入之后面板、HUD、Tip 全都没有人来驱动，
         /// 而 <see cref="Update"/> 的文档还写着「不需要自行调用」。</para>
+        /// <para><b>分档驱动器为什么也要重注册</b>：它们的注册/注销由 <c>OnTierDemandChanged</c> 的
+        /// <b>边沿</b>驱动；<c>Clear()</c> 之后已有面板不会重发需求，不在这里补就永久静止（UIA-002）。</para>
         /// </summary>
         private static void EnsureFrameDriverRegistered()
         {
@@ -134,6 +137,11 @@ namespace XFramework.XUI
             // 代价只落在生命周期入口（Initialize / SetInstance，极低频）：同 order 的节点间会重排一次
             // （驱动器因此移到同级 order 0 节点的末尾）——这是可接受的，因为这里不做的话代价是永久失联。
             UpdateManager.Register(_frameDriver, order: 0);
+
+            // 分档驱动器同样重注册（UIA-002）：Clear() 之后档位需求是边沿回调（OnTierDemandChanged），
+            // 已有面板不会重发需求——不在这里补，Tier1–7 的面板会永久静止。
+            foreach (var kv in _tierDrivers)
+                UpdateManager.Register(kv.Value, order: 0, initialTier: (UpdateTier)kv.Key);
         }
 
         /// <summary>

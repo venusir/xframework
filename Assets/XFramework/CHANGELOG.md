@@ -210,6 +210,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **`UpdateManager.Clear()` 后 README 的恢复路径不成立，分档面板永久静止（UIA-002）**：`Initialize` 因
+  `_instanceInitialized` 早退，连每帧驱动器也不重注册；`SetInstance` 只恢复每帧驱动器，Tier1–7 面板因
+  `_tierDemand` 边沿不重发而永久静止。修法：把 `EnsureFrameDriverRegistered` 提到早退之前，并让它遍历
+  现存 `_tierDrivers` 一并重注册；README 的恢复路径同步。
+  回归：`UIPanelTierTests.UpdateManagerClear_ThenInitialize_RestoresAllDrivers`，改前红。
 - **弹窗尺寸单位错配：Canvas 参考单位当屏幕像素（UI-C-001）**：`ShowPopupAsync` 把 `rect.rect.size`
   传给 `UIPopupPosition.CalculatePosition`，而锚点与可用区域都是屏幕像素；挂 `CanvasScaler`
   （项目侧常规）时弹窗位置与钳制整体错位。修法：改传 `UIPopupPosition.GetScreenRect(rect).size`
