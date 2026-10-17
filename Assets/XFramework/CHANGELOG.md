@@ -303,6 +303,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Update 时间轴与 Localization 重载文档（2026-10-17，第二轮审计）**：`IUpdateable` / `ILateUpdateable` 的
+  `time` 参数与 README 时间表补「`Unscaled` 轴为 `Time.unscaledTime`」（UPD-005）；Localization 补
+  `new LocalizationBootstrapStage("en", null)` 的 CS0121 二义与显式强转写法（LOC-001 文档侧）。
 - **公开面模板句与固定计数清扫（2026-10-17，第二轮审计）**：删除 Config / Save / File / Lock / Input /
   Localization / Asset / Audio / Pipeline 的「N 个文件都是公开面 / 本模块没有 internal」模板句，文件树按磁盘
   逐文件标注 `internal`（CONF-002 / SAVE-011 / FILE-003 / LOCK-002 / INP-004 / LOC-002 / AST-005 /

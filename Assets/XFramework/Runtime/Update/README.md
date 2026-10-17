@@ -50,8 +50,8 @@ public sealed class MyService : IUpdateable
 
 | 时机 | 接口 | 时间基准 | 适用 |
 | ---- | ---- | -------- | ---- |
-| `Update` | `IUpdateable` | `Time.time` | 绝大多数逻辑 |
-| `LateUpdate` | `ILateUpdateable` | `Time.time` | 需要「本帧所有 Update 都已跑完」：跟随移动目标、相机跟随 |
+| `Update` | `IUpdateable` | `Time.time`（`Unscaled` 轴为 `Time.unscaledTime`） | 绝大多数逻辑 |
+| `LateUpdate` | `ILateUpdateable` | `Time.time`（`Unscaled` 轴为 `Time.unscaledTime`） | 需要「本帧所有 Update 都已跑完」：跟随移动目标、相机跟随 |
 | `FixedUpdate` | `IFixedUpdateable` | `Time.fixedTime` | 物理、确定性模拟（要固定增量而非每帧变化的 delta） |
 
 同一对象可以实现多个接口，会被分别登记到对应时机。注册用 `UpdateManager.Register` /

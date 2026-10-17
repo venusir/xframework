@@ -91,7 +91,8 @@ namespace XFramework.XUpdate
         /// 执行更新并返回下一帧的 <see cref="UpdateTier"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次更新的时间差。</param>
-        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>），可用于绝对时间计算。</param>
+        /// <param name="time">当前时间：<c>Scaled</c> 轴为 <see cref="UnityEngine.Time.time"/>，
+        /// <c>Unscaled</c> 轴为 <see cref="UnityEngine.Time.unscaledTime"/>；可用于绝对时间计算。</param>
         /// <returns>下一帧的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
         /// <c>initialTier</c> 声明（两者的分工见 <c>Update/README.md</c> 的「档位由谁决定」）。</returns>
         UpdateTier OnUpdate(float deltaTime, float time);
@@ -141,7 +142,8 @@ namespace XFramework.XUpdate
         /// 执行延迟更新并返回下一次派发所采用的 <see cref="UpdateTier"/> 等级。
         /// </summary>
         /// <param name="deltaTime">距上次派发的时间差。</param>
-        /// <param name="time">当前时间（<see cref="UnityEngine.Time.time"/>）。</param>
+        /// <param name="time">当前时间：<c>Scaled</c> 轴为 <see cref="UnityEngine.Time.time"/>，
+        /// <c>Unscaled</c> 轴为 <see cref="UnityEngine.Time.unscaledTime"/>。</param>
         /// <returns>下一次派发的更新频率等级——这是<b>运行时自适应</b>的通道；静态档位请在注册时用
         /// <c>initialTier</c> 声明。</returns>
         UpdateTier OnLateUpdate(float deltaTime, float time);

@@ -289,6 +289,10 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 构造参数即 `LocalizationManager.Initialize(lang, data)` 的两个实参；**未提供语言数据时**它打一条警告并直接置「已完成」——本地化是可选模块，缺数据不该让整个启动失败。
 
+> **源码兼容注意**：新增 `TextAsset` 重载后，`new LocalizationBootstrapStage("en", null)` 会在
+> `Dictionary<string, string>` 与 `TextAsset` 两个重载之间**二义（CS0121）**；显式 `null` 请写成
+> `(Dictionary<string, string>)null`，或改用命名实参 `data: null`。
+
 反向清理经其 `Shutdown`：**只销毁本阶段自己初始化的那份**。空转路径（无数据）什么都没建，`Shutdown` 便什么都不做；
 使用方先手动 `Initialize` / `SetInstance`、再登记本阶段时，`Initialize` 会告警并忽略，本阶段同样不算「初始化过」。
 重复调用是空操作（`IBootstrapStage` 要求幂等）。
