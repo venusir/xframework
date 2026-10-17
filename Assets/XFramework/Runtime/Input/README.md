@@ -448,6 +448,14 @@ namespace MyGame.Input
 }
 ```
 
+## 自定义实现
+
+本模块的实现方入口：替换整个输入后端。
+
+- **实现哪个契约**：`IInputProvider`（插件中立，公开面不含 Unity Input System 类型）。
+- **怎么接线**：`InputManager.Initialize(provider)`，或包成 `InputBootstrapStage` 登记进 `Bootstrap`；`Shutdown` 会经 `InputManager.Destroy()` 释放它。
+- **要守什么**：全部调用在主线程，`destroyCancellationToken` 的取消也须在主线程（见「线程契约」）；`Destroy()` 只释放 Provider、不代退订（见「已知限制」）。
+
 ### 扩展：自定义 IInputProvider（如 Rewired）
 
 实现 `IInputProvider` 接口即可切换底层：

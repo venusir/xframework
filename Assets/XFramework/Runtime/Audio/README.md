@@ -201,6 +201,29 @@ AudioManager.Resume();
 
 暂停期间新起的声音也会立刻进入暂停（见「设计取舍」）。
 
+## 自定义实现
+
+本模块的实现方入口：用音频中间件整体替换后端。
+
+- **实现哪个契约**：`IAudioManager`（公开面不含任何 Unity 音频类型，中间件可实现）。
+- **怎么接线**：`AudioManager.SetInstance(impl)`；若之前已 `Initialize`，先 `Destroy()`。
+- **要守什么**：有效句柄的 `Generation` 必须非 `0`，`default(AudioHandle)` 必须视为无效；`SetInstance` 不会 Dispose 先前持有的实例（见下）。
+
+### 推荐第三方实现：Wwise / FMOD
+
+使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
+`location` 直接解释成自己的事件名：
+
+```csharp
+AudioManager.SetInstance(new MyWwiseAudioManager());
+```
+
+这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
+`AudioHandle` 的两个字段是公开的且对门面不透明，实现方可以按自己的需要编码（有效句柄的
+`Generation` 必须非 `0`，`default(AudioHandle)` 必须被视为无效）。
+
+**注意**：`SetInstance` **不会** Dispose 先前持有的实例。若之前已 `Initialize`，请先 `Destroy`。
+
 ## 内部机制
 
 ### 播放源池与隐藏宿主
@@ -355,22 +378,7 @@ BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
 ### 与音频中间件的边界
 
 本模块的公开面**不含任何 Unity 内置音频类型**（没有 `AudioClip`、没有 `AudioMixerGroup`、没有
-`AudioSource.priority`），因此除了默认实现，还可以：
-
-#### 整体替换 `IAudioManager`
-
-使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
-`location` 直接解释成自己的事件名：
-
-```csharp
-AudioManager.SetInstance(new MyWwiseAudioManager());
-```
-
-这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
-`AudioHandle` 的两个字段是公开的且对门面不透明，实现方可以按自己的需要编码（有效句柄的
-`Generation` 必须非 `0`，`default(AudioHandle)` 必须被视为无效）。
-
-**注意**：`SetInstance` **不会** Dispose 先前持有的实例。若之前已 `Initialize`，请先 `Destroy`。
+`AudioSource.priority`）。整体替换后端的写法见「自定义实现」；其余边界如下：
 
 #### 用项目自己的 AudioMixer
 

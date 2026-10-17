@@ -529,14 +529,34 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 > 它把所有脏了的类型一次写盘，不看任何开关（那是调用方的显式指令，语义同逐个 `Save`）。
 > 它同样是「菜单关闭 / 场景切换 / 进入过场前先把一切存下来」的入口。
 
-### 自定义存储后端
-
-需要平台存档（主机 SDK）、云存档或特殊格式时，实现 `ISettingsStore` 即可：
+### 运行时切换存储后端
 
 ```csharp
-public class PlatformSaveStore : ISettingsStore { /* ... */ }
+SettingsManager.SetStore<GameSettings>(new PlayerPrefsStore());
+SettingsManager.Load<GameSettings>(); // 读取新后端的已有数据
+SettingsManager.Save<GameSettings>();
+```
 
-SettingsManager.Initialize<GameSettings>(new PlatformSaveStore(...));
+> **替换只换后端、不迁移数据**：内存中的设置仍是旧后端加载的内容，下一次 `Save` 会把它们
+> 写入新后端。框架刻意不做隐式重新加载——那会静默丢掉内存中尚未保存的修改。故替换时会打
+> LogWarning 提醒；如需读取新后端已有数据，请随后调用 `Load`。
+
+## 自定义实现
+
+本模块的实现方入口：替换存储后端或挂迁移 / 校验钩子。
+
+- **实现哪个契约**：`ISettingsStore`（主存储后端）；平台存档实现可选能力 `IAsyncSettingsStore`；钩子是 `ISettingsMigrator<T>` / `ISettingsValidator<T>`。接口签名与失败语义见「API 参考」。
+- **怎么接线**：`SettingsManager.Initialize<T>(store, ...)`；运行中替换用 `SetStore<T>`；钩子用 `SetMigrator<T>` / `SetValidator<T>`。
+- **要守什么**：构造函数必然走同步路径，同步 `Load` 必须快速返回（见「API 参考」的「IAsyncSettingsStore」）；`Save` 返回 `void`，写失败分「只告警」与「抛异常」两类（见「已知限制」）；钩子可能在线程池运行（见「线程契约」）；平台存档的完整配方见「API 参考」的「需要平台存档」。
+
+### 自定义存储后端
+
+特殊格式或非平台存档的云同步时，实现 `ISettingsStore` 即可（平台存档请实现 `IAsyncSettingsStore`，见「API 参考」的「需要平台存档」）：
+
+```csharp
+public class CustomStore : ISettingsStore { /* ... */ }
+
+SettingsManager.Initialize<GameSettings>(new CustomStore(...));
 ```
 
 **只是要加密则不必自己写**，用现成的装饰器：
@@ -558,18 +578,6 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
 >
 > **用途是防篡改而非保密**：密钥随游戏分发，加密强度上限取决于注入的 `ICryptoProvider`
 > （内置 `XorCryptoProvider` 只防普通用户手改）。真正敏感的数据不要放在设置里。
-
-### 运行时切换存储后端
-
-```csharp
-SettingsManager.SetStore<GameSettings>(new PlayerPrefsStore());
-SettingsManager.Load<GameSettings>(); // 读取新后端的已有数据
-SettingsManager.Save<GameSettings>();
-```
-
-> **替换只换后端、不迁移数据**：内存中的设置仍是旧后端加载的内容，下一次 `Save` 会把它们
-> 写入新后端。框架刻意不做隐式重新加载——那会静默丢掉内存中尚未保存的修改。故替换时会打
-> LogWarning 提醒；如需读取新后端已有数据，请随后调用 `Load`。
 
 ## 线程契约
 

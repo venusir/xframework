@@ -199,6 +199,14 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 2. **排序用 `seq`，不要用 `ts`**——`ts` 是墙钟，并发写入可能落在同一毫秒。
 3. **`frame` 定位「崩在第几帧」**，`up`（自会话起的毫秒）定位「启动后多久」。
 
+## 自定义实现
+
+本模块的实现方入口：追加输出端或整体替换日志实现。
+
+- **实现哪个契约**：追加输出端实现 `ILogSink`（`Write(in LogEntry)` / `Flush()`）；整体替换实现 `ILogManager`。契约原文见「API 参考」。
+- **怎么接线**：`LogManager.AddSink(sink)` / `RemoveSink`；整体替换用 `LogManager.Initialize(impl)`；换文件命名只能走前两者之一。
+- **要守什么**：sink 任意线程调用、不得抛（抛出的 sink 被静默摘除并计入 `DroppedSinkCount`）；分发不持锁，可在 `Write` 里再写日志（见「API 参考」）；注入自定义 `ILogManager` 会停用 Unity 全量捕获（见「已知限制」）。
+
 ## 线程契约
 
 - `LogManager` 的日志调用**任意线程可用**（`seq` 用 `Interlocked` 分配，并发后仍能靠 `LogEntry.Sequence` 定序）。这一条继承自 `Debug.Log` 的既有用法，不是本模块新增的承诺。
