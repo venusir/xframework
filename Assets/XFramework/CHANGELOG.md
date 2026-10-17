@@ -429,6 +429,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Config 文件形状与前置条件补文档（2026-10-17，CONF-003/013）**：README 补 Json `{"Items":[...]}` schema、
+  三种格式都经 `AssetManager` 读取（必须先初始化）；门面完备性注释删固定计数；补录审计 F10 的台账条目。
 - **Lock / Timer / Localization 文档小错订正（2026-10-17，LOCK-003/004、TMR-004/011、LOC-008/011）**：
   Lock 的 `CopyLockedTypes` 成本改为 O((n+m)²)、`RemoveAllSubscriptions` 的「三张表」改为两张表 + 组合订阅、
   `UnboundSubscribedSubjectCount` 不再一律称为孤儿；Timer 订正 `CancelAll` 不重置逻辑时钟、`TimerHandle`

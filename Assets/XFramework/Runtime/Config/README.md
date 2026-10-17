@@ -11,7 +11,7 @@
 
 所有配置加载后常驻内存，通过 `Unload<T>()` 显式释放。
 
-> **相关模块**：`ScriptableObject` 格式经 [Asset 模块](../Asset/README.md)（YooAsset）加载；自定义序列化格式可与 [Serialize 模块](../Serialize/README.md) 的 `ISerializer` 配合；与运行时可变数据模块 Data 的区别见 [Data 模块 README](../Data/README.md) 的对比表。
+> **相关模块**：三种格式的读取都经 [Asset 模块](../Asset/README.md)（YooAsset）——`ScriptableObject` 读资源、Json / CSV 读 `TextAsset`，**都要求 `AssetManager` 已初始化**；自定义序列化格式可与 [Serialize 模块](../Serialize/README.md) 的 `ISerializer` 配合；与运行时可变数据模块 Data 的区别见 [Data 模块 README](../Data/README.md) 的对比表。
 
 ---
 
@@ -553,6 +553,13 @@ public enum ConfigFormat
     Csv = 2,              // CSV，第一行为表头，后续行为数据行
 }
 ```
+
+### 文件形状与前置条件
+
+- **Json（Table）**：对象包一个 `Items` 数组——`{"Items":[{"Id":1001,"Name":"..."}]}`（加载器用 `ListWrapper<T>` 包装；`JsonUtility` 不支持顶层裸数组）。Global 直接是一个 JSON 对象。
+- **ScriptableObject**：Table 用包含 `T[]` / `List<T>` 的包装 SO；Global 直接是目标类型的 SO。
+- **CSV**：第一行表头、后续数据行；Global 只取最后一行。
+- **前置**：三种格式都经 `AssetManager` 读取（SO 读资源、Json / CSV 读 `TextAsset`），**必须先 `AssetManager.InitializeAsync`**；未初始化时加载抛 `ConfigException`（CONF-003）。
 
 ## 线程契约
 

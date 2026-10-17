@@ -15,12 +15,12 @@ namespace Venusy609.Xframework.Editor.Tests
     /// <c>SaveFacadeCompletenessTests</c>，本条是第八个采用者。</para>
     /// <para><b>只查名字，不查签名</b>：签名由编译器兜底——转发体是经 <see cref="IConfigManager"/> 的调用，
     /// 签名不符根本编译不过。于是唯一会漏的就是「压根没写转发」，而名字正是它的判据。</para>
-    /// <para><b>它是单向的</b>：只断言「接口有、门面缺」。本门面另有 5 个自有成员
+    /// <para><b>它是单向的</b>：只断言「接口有、门面缺」。本门面另有一组自有成员
     /// （<c>ConfigChanged</c> 事件、<c>IsInitialized</c>、<c>Initialize</c>、<c>SetInstance</c>、
-    /// <c>Destroy</c>），且 6 个异步成员在门面上各多一个 <c>CancellationToken</c> 形参——
+    /// <c>Destroy</c>），且异步成员在门面上各多一个 <c>CancellationToken</c> 形参——
     /// 反向断言与签名断言都会把它们判成缺陷。注意 <c>ConfigChanged</c> 是**字段式事件**，
     /// 反射里以 <c>add_</c>/<c>remove_</c> 访问器出现（SpecialName，已被过滤），不在本断言的范围内。</para>
-    /// <para><b>今天是绿的</b>：本 fixture 是**新增守卫**，不是回归——17 个接口成员全部有同名转发，
+    /// <para><b>今天是绿的</b>：本 fixture 是**新增守卫**，不是回归——接口成员全部有同名转发，
     /// 所以它在加入的第一天就通过。它买的是「以后改坏即红」。</para>
     /// <para><b>拦不住什么</b>：转发接错线与假转发（空实现、抛异常）反射都看不出来，那两条只能靠行为测试
     /// （见 <c>ConfigManagerFacadeTests</c>）。别高估这一条。</para>
