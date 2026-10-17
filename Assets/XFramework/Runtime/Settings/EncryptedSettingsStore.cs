@@ -1,5 +1,7 @@
 using System;
 using System.Text;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XFileManager;
 using XFramework.XLog;
@@ -32,7 +34,7 @@ namespace XFramework.XSettings
     /// SettingsManager.Initialize&lt;GameSettings&gt;(store);
     /// </code>
     /// </example>
-    public sealed class EncryptedSettingsStore : ISettingsStore
+    public sealed class EncryptedSettingsStore : ISettingsStore, IAsyncSettingsStore
     {
         #region Private Fields
 
@@ -80,18 +82,83 @@ namespace XFramework.XSettings
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
 
-            // 缩进对密文没有意义,内层看到的只是 Base64,故不生成可读格式
-            var json = JsonUtility.ToJson(settings, false);
-            var cipher = _crypto.Encrypt(Encoding.UTF8.GetBytes(json));
-
-            _inner.Save(new SettingsCipherBlob { Data = Convert.ToBase64String(cipher) });
+            _inner.Save(ToCipherBlob(settings));
         }
 
         /// <inheritdoc />
         public T Load<T>() where T : class, new()
         {
-            var blob = _inner.Load<SettingsCipherBlob>();
+            return FromCipherBlob<T>(_inner.Load<SettingsCipherBlob>());
+        }
 
+        #endregion
+
+        #region IAsyncSettingsStore
+
+        /// <inheritdoc />
+        public UniTask<bool> ExistsAsync(CancellationToken cancellationToken = default)
+        {
+            if (_inner is IAsyncSettingsStore asyncStore)
+                return asyncStore.ExistsAsync(cancellationToken);
+
+            // 内层同步：与管理器的降级语义完全一致——整段同步调用挪到线程池
+            return UniTask.RunOnThreadPool(Exists, configureAwait: true, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public UniTask<T> LoadAsync<T>(CancellationToken cancellationToken = default) where T : class, new()
+        {
+            if (_inner is IAsyncSettingsStore asyncStore)
+                return LoadEncryptedAsync<T>(asyncStore, cancellationToken);
+
+            return UniTask.RunOnThreadPool(Load<T>, configureAwait: true, cancellationToken);
+        }
+
+        /// <inheritdoc />
+        public UniTask SaveAsync<T>(T settings, CancellationToken cancellationToken = default) where T : class, new()
+        {
+            if (settings == null)
+                throw new ArgumentNullException(nameof(settings));
+
+            if (_inner is IAsyncSettingsStore asyncStore)
+            {
+                // 序列化与加密在调用线程完成（与管理器的异步路径同一取舍），只有 IO 交给内层
+                var blob = ToCipherBlob(settings);
+                return asyncStore.SaveAsync(blob, cancellationToken);
+            }
+
+            return UniTask.RunOnThreadPool(() => Save(settings), configureAwait: true, cancellationToken);
+        }
+
+        /// <summary>
+        /// 内层异步时读回密文并在当前线程解密——与同步 <see cref="Load{T}"/> 同一段回退语义。
+        /// </summary>
+        private async UniTask<T> LoadEncryptedAsync<T>(IAsyncSettingsStore asyncStore,
+            CancellationToken cancellationToken) where T : class, new()
+        {
+            var blob = await asyncStore.LoadAsync<SettingsCipherBlob>(cancellationToken);
+            return FromCipherBlob<T>(blob);
+        }
+
+        #endregion
+
+        #region Private Methods
+
+        /// <summary>序列化 + 加密，产出交给内层的密文外壳（同步 / 异步两条写路径共用）。</summary>
+        private SettingsCipherBlob ToCipherBlob<T>(T settings) where T : class, new()
+        {
+            // 缩进对密文没有意义,内层看到的只是 Base64,故不生成可读格式
+            var json = JsonUtility.ToJson(settings, false);
+            var cipher = _crypto.Encrypt(Encoding.UTF8.GetBytes(json));
+            return new SettingsCipherBlob { Data = Convert.ToBase64String(cipher) };
+        }
+
+        /// <summary>
+        /// 密文外壳 → 设置对象（同步 / 异步两条读路径共用）。
+        /// <para>无数据 / Base64 非法 / 解密失败 / 解析失败一律告警回退默认值——与同步行为逐字一致。</para>
+        /// </summary>
+        private T FromCipherBlob<T>(SettingsCipherBlob blob) where T : class, new()
+        {
             // 内层无数据时按其契约返回 new SettingsCipherBlob(),此时 Data 为 null
             if (blob == null || string.IsNullOrEmpty(blob.Data))
                 return new T();
@@ -117,13 +184,8 @@ namespace XFramework.XSettings
                 return new T();
             }
 
-            var loaded = FromJsonOrDefault<T>(Encoding.UTF8.GetString(plain));
-            return loaded ?? new T();
+            return FromJsonOrDefault<T>(Encoding.UTF8.GetString(plain)) ?? new T();
         }
-
-        #endregion
-
-        #region Private Methods
 
         /// <summary>
         /// 解密后的明文解析为 <typeparamref name="T"/>，解析失败告警并返回 <c>null</c>。

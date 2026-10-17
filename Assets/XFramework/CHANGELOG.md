@@ -57,6 +57,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **池线程**上被调用（与其余异步原语同一条约束）——详见 `### Changed` 的行为变更一条。
   取舍与两条被否形状（给主接口加成员 / 新增可选能力接口）见 `Runtime/File/README.md`。
 
+#### Settings
+
+- **`EncryptedSettingsStore` 实现 `IAsyncSettingsStore`（2026-10-17，SET-001）**：装饰器此前只实现
+  `ISettingsStore`，包住平台异步后端后管理器的能力探测探测不到异步接口 → 降级为线程池调同步成员，
+  平台侧数据永不参与读写且无告警（违反「装饰器必须实现底层可选能力接口」不变量）。现在内层异步则转发
+  （加解密在调用线程完成），否则自身按管理器同款线程池降级。**公开 API 新增（源兼容）**：类声明增加
+  `IAsyncSettingsStore` 与 `ExistsAsync` / `LoadAsync` / `SaveAsync`；基线已更新。
+  回归：`EncryptedSettingsStoreTests.AsyncInnerStore_AsyncCapabilityIsForwarded`（改前红）。
+
 #### Scene
 
 - **新增 `XScene` 场景管理模块**（`当时的候选模块路线图` §三 的「场景管理」条目立项；该条目是本表最大的一条，

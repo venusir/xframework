@@ -333,6 +333,8 @@ namespace XFramework.XUI
             if (hud == null)
                 return;
 
+            // 回池复位停更标记：池化实例不得把「OnUpdate 抛过异常」带进下一次使用
+            hud.UpdateFaulted = false;
             hud.OnPoolRecycle();
 
             if (hud.gameObject != null)

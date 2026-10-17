@@ -234,7 +234,7 @@ Runtime/Settings/
 | 实现 | 说明 |
 | ---- | ---- |
 | `JsonFileStore(string filePath)` | JSON 文件，原子写 + 一代备份 |
-| `EncryptedSettingsStore(inner, cryptoProvider)` | 加解密装饰器，可叠在任意后端之上 |
+| `EncryptedSettingsStore(inner, cryptoProvider)` | 加解密装饰器，可叠在任意后端之上；实现 `ISettingsStore` + `IAsyncSettingsStore`（内层的能力原样保留） |
 
 > **为什么 `JsonFileStore` 直接用 `System.IO`、不经 `FileManager`？** 三条理由，按硬度排：
 >
@@ -357,7 +357,9 @@ SettingsManager.Initialize<GameSettings>(
   的固有代价，也正是它换来「构造函数不阻塞」的原因。
 - **平台侧在 Console 上不是原子写**：`ConsoleFileProvider` 未实现 `IAtomicFileProvider`，
   `WriteAllBytesAtomicAsync` 会**降级为普通写并告警**，崩溃防护失效。要保住它需自行实现该接口。
-- **可与 `EncryptedSettingsStore` 叠加**：装饰器只管编解码，不关心内层是镜像还是平台，叠上去即两者都是密文。
+- **可与 `EncryptedSettingsStore` 叠加**：装饰器只管编解码，不关心内层是镜像还是平台，叠上去即两者都是密文；
+  装饰器自身实现了 `IAsyncSettingsStore`（SET-001），叠上去**不会**把平台后端的异步能力遮蔽掉——内层异步时
+  读写仍走异步成员（加解密在调用线程完成），内层同步时按管理器同款线程池降级。
 
 > 上面这段代码已逐个核对签名、并整体编译通过；但**本框架不含此类、也没有配套测试**——它是写法
 > 示意，不是可直接投产的组件。

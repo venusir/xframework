@@ -1605,12 +1605,15 @@ XFramework.XSerialize.Serializer.Register  ::  public static void(XFramework.XSe
 XFramework.XSerialize.Serializer.Shutdown  ::  public static void()
 XFramework.XSerialize.Serializer.TryGet  ::  public static bool(string format, out XFramework.XSerialize.ISerializer serializer)
 XFramework.XSerialize.Serializer.Unregister  ::  public static bool(string format)
-XFramework.XSettings.EncryptedSettingsStore  ::  public sealed class : XFramework.XSettings.ISettingsStore
+XFramework.XSettings.EncryptedSettingsStore  ::  public sealed class : XFramework.XSettings.IAsyncSettingsStore
 XFramework.XSettings.EncryptedSettingsStore#ctor  ::  public(XFramework.XSettings.ISettingsStore inner, XFramework.XFileManager.ICryptoProvider cryptoProvider)
 XFramework.XSettings.EncryptedSettingsStore.Delete  ::  public virtual void()
 XFramework.XSettings.EncryptedSettingsStore.Exists  ::  public virtual bool()
+XFramework.XSettings.EncryptedSettingsStore.ExistsAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask<bool>(System.Threading.CancellationToken cancellationToken = default)
 XFramework.XSettings.EncryptedSettingsStore.Load  ::  public virtual T()
+XFramework.XSettings.EncryptedSettingsStore.LoadAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask<T>(System.Threading.CancellationToken cancellationToken = default)
 XFramework.XSettings.EncryptedSettingsStore.Save  ::  public virtual void(T settings)
+XFramework.XSettings.EncryptedSettingsStore.SaveAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask(T settings, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XSettings.IAsyncSettingsStore  ::  public interface : XFramework.XSettings.ISettingsStore
 XFramework.XSettings.IAsyncSettingsStore.ExistsAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>(System.Threading.CancellationToken cancellationToken = default)
 XFramework.XSettings.IAsyncSettingsStore.LoadAsync  ::  public Cysharp.Threading.Tasks.UniTask<T>(System.Threading.CancellationToken cancellationToken = default)

@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -220,6 +223,87 @@ namespace XFramework.XSettings.Tests
             Assert.AreEqual(0.75f, SettingsManager.Settings<SampleSettings>().MasterVolume, 1e-5f,
                 "加密对版本化透明：信封由管理器在加密前套上，读取时先解密再拆信封");
             Assert.AreEqual("carol", SettingsManager.Settings<SampleSettings>().PlayerName);
+        }
+
+        #endregion
+
+        #region 可选异步能力（SET-001）
+
+        /// <summary>异步能力可观测的假存储：记录走的是异步还是同步成员。</summary>
+        private sealed class AsyncMemoryStore : IAsyncSettingsStore
+        {
+            public object Data;
+            public int ExistsAsyncCalls;
+            public int LoadAsyncCalls;
+            public int SaveAsyncCalls;
+            public int SyncCalls;
+
+            public bool Exists()
+            {
+                SyncCalls++;
+                return Data != null;
+            }
+
+            public T Load<T>() where T : class, new()
+            {
+                SyncCalls++;
+                return Data as T ?? new T();
+            }
+
+            public void Save<T>(T settings) where T : class, new()
+            {
+                SyncCalls++;
+                Data = settings;
+            }
+
+            public void Delete() => Data = null;
+
+            public UniTask<bool> ExistsAsync(CancellationToken cancellationToken = default)
+            {
+                ExistsAsyncCalls++;
+                return UniTask.FromResult(Data != null);
+            }
+
+            public UniTask<T> LoadAsync<T>(CancellationToken cancellationToken = default) where T : class, new()
+            {
+                LoadAsyncCalls++;
+                return UniTask.FromResult(Data as T ?? new T());
+            }
+
+            public UniTask SaveAsync<T>(T settings, CancellationToken cancellationToken = default) where T : class, new()
+            {
+                SaveAsyncCalls++;
+                Data = settings;
+                return UniTask.CompletedTask;
+            }
+        }
+
+        /// <summary>
+        /// 装饰器必须显式实现底层的可选异步能力（SET-001）：包住平台异步后端后，管理器的能力探测
+        /// 应命中装饰器并走异步成员，而不是降级为线程池调同步成员。
+        /// <para>改前：装饰器只实现 <see cref="ISettingsStore"/>，探测不到 <see cref="IAsyncSettingsStore"/>，
+        /// 平台侧数据永不参与读写且无告警（违反 CLAUDE.md 的装饰器不变量）。</para>
+        /// </summary>
+        [Test]
+        public async Task AsyncInnerStore_AsyncCapabilityIsForwarded()
+        {
+            var inner = new AsyncMemoryStore();
+            var store = new EncryptedSettingsStore(inner, new XorCryptoProvider("unit-test-key"));
+
+            Assert.IsTrue(store is IAsyncSettingsStore, "装饰器必须显式实现底层的可选能力接口");
+
+            await store.SaveAsync(new SampleSettings { MasterVolume = 0.75f, PlayerName = "async" });
+            Assert.AreEqual(1, inner.SaveAsyncCalls, "写应走内层的异步成员");
+            Assert.AreEqual(0, inner.SyncCalls, "不应降级为线程池同步调用");
+
+            Assert.IsTrue(await store.ExistsAsync());
+            Assert.AreEqual(1, inner.ExistsAsyncCalls);
+
+            var loaded = await store.LoadAsync<SampleSettings>();
+            Assert.AreEqual(1, inner.LoadAsyncCalls);
+            Assert.AreEqual(0.75f, loaded.MasterVolume, 1e-5f, "异步路径同样要解密");
+            Assert.AreEqual("async", loaded.PlayerName);
+            Assert.AreEqual(0, inner.SyncCalls, "全程不应触碰同步成员");
         }
 
         #endregion
