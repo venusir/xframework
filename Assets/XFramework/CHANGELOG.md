@@ -161,6 +161,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **`DataManager.ApplySnapshot` 的清空阶段逐块隔离**（DATA-007）：第三方 `IDataBlock.OnClear` 抛异常不再
+  中止整次恢复，改为记一条 `[Data]` Error、计入返回的失败块数（Save 据此回滚 `Corrupt`），其余块继续清空。
 - **场景加载失败路径不再泄漏底层句柄**：此前失败时 `SceneHandle` 从不 `Release`，该 provider 与它的
   bundle 引用会永久留在 YooAsset 里（成功路径本来会自愈，见 `### Fixed`）。
 - **取消场景加载之后框架会善后**：YooAsset 的场景加载中止不了，取消只让 `await` 提前抛出。此后框架接力到

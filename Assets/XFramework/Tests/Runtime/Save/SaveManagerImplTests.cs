@@ -306,8 +306,11 @@ namespace XFramework.XSave.Tests
             ExplodingBlock.RemainingThrows = 1;
             try
             {
-                // 应用失败会记 LogError（结果结构体只带摘要文本，堆栈靠这里保留）
-                LogAssert.Expect(LogType.Error, new Regex("应用存档失败，正在回滚内存数据"));
+                // 应用失败会记 LogError（结果结构体只带摘要文本，堆栈靠这里保留）。
+                // DATA-007 后清空阶段的异常由 Data 逐块隔离并计入失败数，先记一条 [Data] 错误；
+                // Save 侧按失败数走「有 N 个数据块未能恢复」的回滚分支。
+                LogAssert.Expect(LogType.Error, new Regex("数据块 OnClear 抛出异常"));
+                LogAssert.Expect(LogType.Error, new Regex("正在回滚内存数据"));
 
                 var result = await SaveManager.TryLoadAsync(1);
 
@@ -323,10 +326,9 @@ namespace XFramework.XSave.Tests
         /// <summary>
         /// 探针 Block：在 <see cref="IDataBlock.OnClear"/> 中按次数抛异常，
         /// 用于验证「应用快照失败 → 回滚内存」这条路径。
-        /// <para><b>为什么抛在 OnClear 而不是 OnLoad：</b><see cref="XData.DataManagerImpl"/> 的
-        /// <c>ApplySnapshot</c> 只在清空阶段无保护（<c>ForEachBlock(b =&gt; b.OnClear())</c>），
-        /// 恢复阶段走 <c>TryRestoreBlock</c>，其内部 try/catch 会把异常记成 warning 并吞掉——
-        /// 抛在 OnLoad 上根本到不了 <see cref="SaveManagerImpl"/>，也就测不到回滚。</para>
+        /// <para><b>为什么抛在 OnClear 而不是 OnLoad：</b>清空阶段的异常由 <see cref="XData.DataManagerImpl"/>
+        /// 逐块隔离并计入失败数（DATA-007），这个计数会驱动 Save 的回滚；恢复阶段的异常只被记成 warning
+        /// 并吞掉，到不了 <see cref="SaveManagerImpl"/> 的失败判定。</para>
         /// <para>「只抛一次」也是刻意的：若每次都抛，回滚自身的 <c>ApplySnapshot</c> 也会失败，
         /// 就只测到「回滚失败」分支，而要验证的「回滚成功」反而没覆盖。</para>
         /// </summary>
