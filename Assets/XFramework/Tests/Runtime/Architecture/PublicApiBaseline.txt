@@ -295,7 +295,7 @@ XFramework.XCamera.CameraBlendStyle.EaseInOut  ::  = 1
 XFramework.XCamera.CameraBlendStyle.EaseOut  ::  = 3
 XFramework.XCamera.CameraBlendStyle.Linear  ::  = 4
 XFramework.XCamera.CameraHandle  ::  public readonly struct : System.IDisposable, System.IEquatable<XFramework.XCamera.CameraHandle>
-XFramework.XCamera.CameraHandle#ctor  ::  public(int id, int generation)
+XFramework.XCamera.CameraHandle#ctor  ::  public(int id, int generation, string namedId = null)
 XFramework.XCamera.CameraHandle.Activate  ::  public void()
 XFramework.XCamera.CameraHandle.Deactivate  ::  public void()
 XFramework.XCamera.CameraHandle.Dispose  ::  public virtual void()
@@ -306,6 +306,7 @@ XFramework.XCamera.CameraHandle.GetHashCode  ::  public override int()
 XFramework.XCamera.CameraHandle.Id  ::  public readonly int
 XFramework.XCamera.CameraHandle.IsActive  ::  public bool()
 XFramework.XCamera.CameraHandle.IsDefault  ::  public bool IsDefault { get; }
+XFramework.XCamera.CameraHandle.NamedId  ::  public readonly string
 XFramework.XCamera.CameraHandle.ToString  ::  public override string()
 XFramework.XCamera.CameraHandle.TransitionTo  ::  public void(float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraHandle.Unregister  ::  public bool()
@@ -331,7 +332,6 @@ XFramework.XCamera.CameraManager.Unregister  ::  public static bool(XFramework.X
 XFramework.XCamera.ICameraManager  ::  public interface
 XFramework.XCamera.ICameraManager.Activate  ::  public void(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager.Activate  ::  public void(string cameraId)
-XFramework.XCamera.ICameraManager.ActiveCameraId  ::  public string ActiveCameraId { get; }
 XFramework.XCamera.ICameraManager.ActiveHandle  ::  public XFramework.XCamera.CameraHandle ActiveHandle { get; }
 XFramework.XCamera.ICameraManager.CameraIds  ::  public System.Collections.Generic.IReadOnlyCollection<string> CameraIds { get; }
 XFramework.XCamera.ICameraManager.Deactivate  ::  public void(XFramework.XCamera.CameraHandle handle)
@@ -348,7 +348,6 @@ XFramework.XCamera.UnityCameraManager  ::  public sealed class : System.IDisposa
 XFramework.XCamera.UnityCameraManager#ctor  ::  public(System.Collections.Generic.IReadOnlyDictionary<string, UnityEngine.Camera> cameras)
 XFramework.XCamera.UnityCameraManager.Activate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.UnityCameraManager.Activate  ::  public virtual void(string cameraId)
-XFramework.XCamera.UnityCameraManager.ActiveCameraId  ::  public string ActiveCameraId { get; }
 XFramework.XCamera.UnityCameraManager.ActiveHandle  ::  public XFramework.XCamera.CameraHandle ActiveHandle { get; }
 XFramework.XCamera.UnityCameraManager.CameraIds  ::  public System.Collections.Generic.IReadOnlyCollection<string> CameraIds { get; }
 XFramework.XCamera.UnityCameraManager.Deactivate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)

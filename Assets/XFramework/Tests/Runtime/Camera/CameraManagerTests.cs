@@ -115,7 +115,7 @@ namespace XFramework.XCamera.Tests
             {
                 OutputCamera = _camera,
                 CameraIds = ids,
-                ActiveCameraId = "main",
+                ActiveHandle = new CameraHandle(0, 1, "main"),
                 IsTransitioning = true,
             };
             CameraManager.Initialize(fake);

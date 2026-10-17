@@ -8,16 +8,16 @@ namespace XFramework.XCamera
     /// <para><b>命名 / 动态双键</b>：常驻相机用 string id（构造 map 或具体实现的
     /// <c>Register(string, T)</c>）；随预制创建 / 销毁的动态相机用 <see cref="CameraHandle"/>
     /// （<see cref="Register{T}(T)"/> 返回句柄，之后按句柄操作）。动态相机活动时
-    /// <see cref="ActiveCameraId"/> 为 <c>null</c>，请改用 <see cref="ActiveHandle"/> /
-    /// <see cref="IsActive(CameraHandle)"/>。</para>
+    /// <see cref="CameraHandle.NamedId"/> 为 <c>null</c>（门面便利 <c>CameraManager.ActiveCameraId</c>
+    /// 直接读它）；按句柄操作用 <see cref="IsActive(CameraHandle)"/>。</para>
     /// <para><b>过场边界</b>：随 CG 预制创建、由 Timeline / Cinemachine 接管 Brain 的过场相机
     /// <b>不经过本接口</b>——Timeline 期间调用激活 / 过渡会与过场冲突；这类相机由过场系统管理。</para>
     /// <para><b>线程</b>：全部成员仅在主线程调用。</para>
     /// <para><b>未知 id / 无效句柄</b>：实现应告警并 no-op，<b>不得抛异常</b>；<c>null</c> id 抛
     /// <see cref="System.ArgumentNullException"/>。无效句柄包括 <c>default(CameraHandle)</c>、
     /// 已注销的旧句柄与代际不符的句柄。</para>
-    /// <para><b>过渡语义</b>：<see cref="ActiveCameraId"/> / <see cref="ActiveHandle"/> 在过渡期间返回
-    /// <b>目标</b>；<see cref="IsTransitioning"/> 表示是否有过渡在途。过渡中断、回退与曲线细节由后端定义，
+    /// <para><b>过渡语义</b>：<see cref="ActiveHandle"/>（及其 <see cref="CameraHandle.NamedId"/>）在过渡期间
+    /// 返回<b>目标</b>；<see cref="IsTransitioning"/> 表示是否有过渡在途。过渡中断、回退与曲线细节由后端定义，
     /// 使用方以这些查询为可移植信号。</para>
     /// </summary>
     public interface ICameraManager
@@ -31,10 +31,9 @@ namespace XFramework.XCamera
         /// <remarks>枚举期间不要注册 / 注销；实现对返回集合的跨线程一致性不作承诺。</remarks>
         IReadOnlyCollection<string> CameraIds { get; }
 
-        /// <summary>当前活动相机的命名 id；过渡期间是目标 id；动态相机活动或没有活动相机时为 <c>null</c>。</summary>
-        string ActiveCameraId { get; }
-
         /// <summary>当前活动相机的句柄（命名与动态都有）；过渡期间是目标；没有活动相机时为 <c>default</c>。</summary>
+        /// <remarks>命名相机的 string id 在其 <see cref="CameraHandle.NamedId"/> 里（动态为 <c>null</c>）；门面便利
+        /// <c>CameraManager.ActiveCameraId</c> 直接读它，O(1)。</remarks>
         CameraHandle ActiveHandle { get; }
 
         /// <summary>是否有相机过渡在途。</summary>

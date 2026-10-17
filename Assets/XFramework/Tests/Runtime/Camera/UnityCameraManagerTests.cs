@@ -81,7 +81,7 @@ namespace XFramework.XCamera.Tests
 
             Assert.IsTrue(_cameraA.enabled);
             Assert.IsFalse(_cameraB.enabled);
-            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreEqual("a", manager.ActiveHandle.NamedId);
             Assert.AreSame(_cameraA, manager.OutputCamera);
             Assert.IsTrue(manager.IsActive("a"));
             Assert.IsFalse(manager.IsTransitioning);
@@ -96,7 +96,7 @@ namespace XFramework.XCamera.Tests
             LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
             manager.Activate("missing");
 
-            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreEqual("a", manager.ActiveHandle.NamedId);
             Assert.IsTrue(_cameraA.enabled);
         }
 
@@ -109,7 +109,7 @@ namespace XFramework.XCamera.Tests
             manager.Deactivate("a");
 
             Assert.IsFalse(_cameraA.enabled);
-            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsNull(manager.ActiveHandle.NamedId);
             Assert.IsNull(manager.OutputCamera);
         }
 
@@ -127,7 +127,7 @@ namespace XFramework.XCamera.Tests
             Tick(0f); // 注册入缓冲，本拍生效且首次 delta 锚定为 0
 
             Assert.IsTrue(manager.IsTransitioning);
-            Assert.AreEqual("b", manager.ActiveCameraId);
+            Assert.AreEqual("b", manager.ActiveHandle.NamedId);
             Assert.IsTrue(_cameraB.enabled);
             Assert.IsFalse(_cameraA.enabled);
             Assert.AreEqual(_cameraA.transform.position.x, _cameraB.transform.position.x, 0.001f,
@@ -142,7 +142,7 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f);
             Assert.AreEqual(40f, _cameraB.fieldOfView, 0.001f);
             Assert.IsFalse(manager.IsTransitioning);
-            Assert.AreEqual("b", manager.ActiveCameraId);
+            Assert.AreEqual("b", manager.ActiveHandle.NamedId);
         }
 
         [Test]
@@ -166,7 +166,7 @@ namespace XFramework.XCamera.Tests
 
             Tick(1.5f);
             Assert.AreEqual(0f, _cameraA.transform.position.x, 0.001f);
-            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreEqual("a", manager.ActiveHandle.NamedId);
             Assert.IsFalse(manager.IsTransitioning);
         }
 
@@ -183,7 +183,7 @@ namespace XFramework.XCamera.Tests
             manager.Activate("a");
 
             Assert.IsFalse(manager.IsTransitioning);
-            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreEqual("a", manager.ActiveHandle.NamedId);
             Assert.IsTrue(_cameraA.enabled);
             Assert.IsFalse(_cameraB.enabled);
             Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f,
@@ -201,7 +201,7 @@ namespace XFramework.XCamera.Tests
             manager.Deactivate("b");
 
             Assert.IsFalse(manager.IsTransitioning);
-            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsNull(manager.ActiveHandle.NamedId);
             Assert.IsFalse(_cameraB.enabled);
             Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f);
         }
@@ -231,7 +231,7 @@ namespace XFramework.XCamera.Tests
             manager.TransitionTo("b", 1f);
 
             Assert.IsFalse(manager.IsTransitioning);
-            Assert.AreEqual("b", manager.ActiveCameraId);
+            Assert.AreEqual("b", manager.ActiveHandle.NamedId);
             Assert.IsTrue(_cameraB.enabled);
         }
 
@@ -244,7 +244,7 @@ namespace XFramework.XCamera.Tests
             LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
             manager.TransitionTo("missing", 1f);
 
-            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreEqual("a", manager.ActiveHandle.NamedId);
             Assert.IsFalse(manager.IsTransitioning);
         }
 
@@ -265,12 +265,12 @@ namespace XFramework.XCamera.Tests
                 CollectionAssert.Contains(manager.CameraIds, "c");
 
                 manager.Activate("c");
-                Assert.AreEqual("c", manager.ActiveCameraId);
+                Assert.AreEqual("c", manager.ActiveHandle.NamedId);
                 Assert.AreSame(extra, manager.OutputCamera);
 
                 Assert.IsTrue(manager.Unregister("c"));
                 CollectionAssert.DoesNotContain(manager.CameraIds, "c");
-                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsNull(manager.ActiveHandle.NamedId);
             }
             finally
             {
@@ -295,7 +295,7 @@ namespace XFramework.XCamera.Tests
                 manager.Activate(handle);
 
                 Assert.AreEqual(handle, manager.ActiveHandle);
-                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsNull(manager.ActiveHandle.NamedId);
                 Assert.AreSame(extra, manager.OutputCamera);
                 Assert.IsTrue(manager.IsActive(handle));
                 Assert.IsTrue(extra.enabled);
@@ -303,7 +303,7 @@ namespace XFramework.XCamera.Tests
                 Assert.IsFalse(_cameraB.enabled);
 
                 Assert.IsTrue(manager.Unregister(handle));
-                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsNull(manager.ActiveHandle.NamedId);
                 Assert.IsFalse(manager.IsActive(handle));
                 Assert.IsFalse(extra.enabled);
             }
@@ -331,7 +331,7 @@ namespace XFramework.XCamera.Tests
 
                 Assert.IsTrue(manager.IsTransitioning);
                 Assert.AreEqual(handle, manager.ActiveHandle);
-                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsNull(manager.ActiveHandle.NamedId);
                 Assert.AreSame(extra, manager.OutputCamera);
 
                 Tick(0.5f);
@@ -363,7 +363,7 @@ namespace XFramework.XCamera.Tests
                 LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
                 manager.Activate(handle);
 
-                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsNull(manager.ActiveHandle.NamedId);
                 Assert.IsFalse(manager.IsActive(handle));
                 Assert.IsFalse(manager.Unregister(handle));
             }
@@ -381,7 +381,7 @@ namespace XFramework.XCamera.Tests
             LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
             manager.Activate(default(CameraHandle));
 
-            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsNull(manager.ActiveHandle.NamedId);
             Assert.IsFalse(manager.IsActive(default(CameraHandle)));
             Assert.IsFalse(manager.Unregister(default(CameraHandle)));
         }

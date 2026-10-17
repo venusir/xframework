@@ -193,24 +193,15 @@ namespace XFramework.XCamera
         }
 
         /// <inheritdoc/>
-        public string ActiveCameraId
-        {
-            get
-            {
-                ThrowIfDisposed();
-                var index = ActiveSlot;
-                return index >= 0 ? _slots[index].Id : null;
-            }
-        }
-
-        /// <inheritdoc/>
         public CameraHandle ActiveHandle
         {
             get
             {
                 ThrowIfDisposed();
                 var index = ActiveSlot;
-                return index >= 0 ? new CameraHandle(index, _slots[index].Generation) : default;
+                return index >= 0
+                    ? new CameraHandle(index, _slots[index].Generation, _slots[index].Id)
+                    : default;
             }
         }
 

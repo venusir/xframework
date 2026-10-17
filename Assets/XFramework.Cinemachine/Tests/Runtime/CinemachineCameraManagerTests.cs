@@ -78,7 +78,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _manager.Activate("a");
             Pump();
 
-            Assert.AreEqual("a", _manager.ActiveCameraId);
+            Assert.AreEqual("a", _manager.ActiveHandle.NamedId);
             Assert.AreSame(_camera, _manager.OutputCamera);
             Assert.IsTrue(_manager.IsActive("a"));
             Assert.IsFalse(_manager.IsTransitioning);
@@ -95,7 +95,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
             _manager.Activate("missing");
 
-            Assert.AreEqual("a", _manager.ActiveCameraId);
+            Assert.AreEqual("a", _manager.ActiveHandle.NamedId);
         }
 
         [Test]
@@ -108,7 +108,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Pump();
 
             Assert.IsFalse(_manager.IsActive("a"));
-            Assert.AreEqual("b", _manager.ActiveCameraId);
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
         }
 
         #endregion
@@ -124,13 +124,13 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _manager.TransitionTo("b", 0.2f, CameraBlendStyle.Linear);
             Pump(0.1f);
             Assert.IsTrue(_manager.IsTransitioning);
-            Assert.AreEqual("b", _manager.ActiveCameraId);
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
 
             for (var i = 0; i < 4 && _manager.IsTransitioning; i++)
                 Pump(0.05f);
 
             Assert.IsFalse(_manager.IsTransitioning);
-            Assert.AreEqual("b", _manager.ActiveCameraId);
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
             Assert.IsTrue(_manager.IsActive("b"));
             Assert.IsFalse(_manager.IsActive("a"));
         }
@@ -145,7 +145,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Pump();
 
             Assert.IsFalse(_manager.IsTransitioning);
-            Assert.AreEqual("b", _manager.ActiveCameraId);
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
         }
 
         [Test]
@@ -157,7 +157,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
             _manager.TransitionTo("missing", 1f);
 
-            Assert.AreEqual("a", _manager.ActiveCameraId);
+            Assert.AreEqual("a", _manager.ActiveHandle.NamedId);
         }
 
         #endregion
@@ -177,7 +177,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
 
                 _manager.Activate("c");
                 Pump();
-                Assert.AreEqual("c", _manager.ActiveCameraId);
+                Assert.AreEqual("c", _manager.ActiveHandle.NamedId);
 
                 Assert.IsTrue(_manager.Unregister("c"));
                 CollectionAssert.DoesNotContain(_manager.CameraIds, "c");
@@ -203,7 +203,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
                 Pump();
 
                 Assert.AreEqual(handle, _manager.ActiveHandle);
-                Assert.IsNull(_manager.ActiveCameraId);
+                Assert.IsNull(_manager.ActiveHandle.NamedId);
                 Assert.AreSame(_camera, _manager.OutputCamera);
                 Assert.IsTrue(_manager.IsActive(handle));
                 Assert.AreEqual(int.MaxValue, extra.Priority.Value);
@@ -235,7 +235,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
 
                 Assert.IsTrue(_manager.IsTransitioning);
                 Assert.AreEqual(handle, _manager.ActiveHandle);
-                Assert.IsNull(_manager.ActiveCameraId);
+                Assert.IsNull(_manager.ActiveHandle.NamedId);
 
                 for (var i = 0; i < 4 && _manager.IsTransitioning; i++)
                     Pump(0.05f);
@@ -265,7 +265,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
                 _manager.Deactivate("a");
                 Pump();
 
-                Assert.IsNull(_manager.ActiveCameraId);
+                Assert.IsNull(_manager.ActiveHandle.NamedId);
                 Assert.IsTrue(_manager.ActiveHandle.IsDefault);
                 Assert.AreSame(_camera, _manager.OutputCamera);
 

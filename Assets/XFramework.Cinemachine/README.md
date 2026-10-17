@@ -92,7 +92,7 @@ style / duration）；多一个包要装。
 
 - **只支持 Cinemachine 3.x**（按 3.1.7 编写）；2.x 的类型名与字段名不同，需要自己的 `ICameraManager` 实现。
 - **动态 vcam 用 `CameraHandle`**（`Register<T>`）：预制 `OnDestroy` 里 `Unregister` / `Dispose`；动态 vcam
-  活动时 `ActiveCameraId` 为 `null`，用 `ActiveHandle`。
+  活动时 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`，用 `ActiveHandle`。
 - **Timeline / 过场不接管**：过场 vcam 不注册；Brain 的活动相机未注册时激活 / 过渡会告警「可能与过场冲突」；
   细节见 Runtime README。
 - **项目在 Brain 上配置的 `CustomBlends` 会覆盖** `TransitionTo` 请求的 style / duration；本包不强行清空项目配置。

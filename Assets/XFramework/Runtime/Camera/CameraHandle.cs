@@ -6,17 +6,20 @@ namespace XFramework.XCamera
     /// 动态相机句柄。由 <see cref="CameraManager.Register{T}(T)"/>（或 <see cref="ICameraManager.Register{T}(T)"/>）
     /// 返回，用于激活 / 反激活 / 过渡与注销；随预制一起创建、销毁的相机不需要 string id。
     /// <para>支持 <c>using</c> 语法（<see cref="Dispose"/> 即注销），也可手动 <see cref="Unregister"/>。</para>
-    /// <para>零 GC：不可变值类型，只存两个整型，不存对象引用、不存委托；可自由复制与存入容器。</para>
+    /// <para>零 GC：不可变值类型，只存两个整型 + 一个命名 id 字符串引用；不存委托、不存实现对象；
+    /// 复制不分配。</para>
     /// </summary>
     /// <remarks>
     /// <para><b>为什么字段是公开的</b>：本模块的后端替换点是整体替换 <see cref="ICameraManager"/>。
-    /// 第三方实现必须能<b>造出</b>句柄、也必须能<b>读回</b>自己编码进去的值，因此两个字段必须是公开面
+    /// 第三方实现必须能<b>造出</b>句柄、也必须能<b>读回</b>自己编码进去的值，因此字段必须是公开面
     /// （与 <see cref="XAudio.AudioHandle"/> 同一条理由）。</para>
-    /// <para><b>门面不解释任何字段</b>：<see cref="Activate"/> / <see cref="TransitionTo"/> / <see cref="Unregister"/>
-    /// 一律转发给当前实现，由实现校验。<b>框架级的唯一契约</b>是 <see cref="Generation"/> 为 <c>0</c>
-    /// 保留给 <c>default(CameraHandle)</c>，任何实现都必须把它视为无效。</para>
+    /// <para><b>门面不解释 <see cref="Id"/> / <see cref="Generation"/></b>：<see cref="Activate"/> /
+    /// <see cref="TransitionTo"/> / <see cref="Unregister"/> 一律转发给当前实现，由实现校验。<b>框架级的唯一
+    /// 契约</b>是 <see cref="Generation"/> 为 <c>0</c> 保留给 <c>default(CameraHandle)</c>，任何实现都必须把它视为无效。</para>
     /// <para><b>注销后的旧句柄</b>：实现应按「槽位 + 代际」双校验；槽位复用后代际递增，旧句柄自然失效——
     /// 激活 / 过渡 / 反激活告警 no-op，<see cref="IsActive"/> / <see cref="Unregister"/> 返回 <c>false</c>。</para>
+    /// <para><b><see cref="NamedId"/></b>：命名相机的 string id；动态相机与 <c>default</c> 为 <c>null</c>。
+    /// <see cref="CameraManager.ActiveCameraId"/> 直接读它（O(1)），实现必须为命名槽位填上对应的 id。</para>
     /// </remarks>
     public readonly struct CameraHandle : IEquatable<CameraHandle>, IDisposable
     {
@@ -35,6 +38,13 @@ namespace XFramework.XCamera
         /// </summary>
         public readonly int Generation;
 
+        /// <summary>
+        /// 命名相机的 string id；动态相机与 <c>default</c> 为 <c>null</c>。
+        /// <para><b>不参与身份比较</b>（身份是 <see cref="Id"/> + <see cref="Generation"/>）：同一槽位 / 代际
+        /// 必然对同一个命名 id。它供 <see cref="CameraManager.ActiveCameraId"/> 直接读取。</para>
+        /// </summary>
+        public readonly string NamedId;
+
         #endregion
 
         #region Constructors
@@ -46,10 +56,12 @@ namespace XFramework.XCamera
         /// </summary>
         /// <param name="id">实现方自定的标识。</param>
         /// <param name="generation">代际号；有效句柄必须非 <c>0</c>。</param>
-        public CameraHandle(int id, int generation)
+        /// <param name="namedId">命名相机的 string id；动态相机传 <c>null</c>（默认）。</param>
+        public CameraHandle(int id, int generation, string namedId = null)
         {
             Id = id;
             Generation = generation;
+            NamedId = namedId;
         }
 
         #endregion
@@ -130,7 +142,7 @@ namespace XFramework.XCamera
             return (Id * 397) ^ Generation;
         }
 
-        /// <summary>相等比较：<see cref="Id"/> 与 <see cref="Generation"/> 都相同。</summary>
+        /// <summary>相等比较：<see cref="Id"/> 与 <see cref="Generation"/> 都相同（<see cref="NamedId"/> 不参与）。</summary>
         /// <param name="left">左操作数。</param>
         /// <param name="right">右操作数。</param>
         public static bool operator ==(CameraHandle left, CameraHandle right)
@@ -149,7 +161,9 @@ namespace XFramework.XCamera
         /// <inheritdoc/>
         public override string ToString()
         {
-            return "CameraHandle(" + Id + ", " + Generation + ")";
+            return NamedId == null
+                ? "CameraHandle(" + Id + ", " + Generation + ")"
+                : "CameraHandle(" + Id + ", " + Generation + ", " + NamedId + ")";
         }
 
         #endregion

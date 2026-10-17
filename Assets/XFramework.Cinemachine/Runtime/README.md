@@ -58,18 +58,20 @@ Runtime/
 - `TransitionTo`：设置 `brain.DefaultBlend`（style / duration），调整优先级并激活目标；Brain 负责混合。
   `duration <= 0` 或 `Cut` 等价于 `Activate`。
 - **命名 / 动态双键**：常驻 vcam 用 string id；动态 vcam 用 `CameraHandle`（`Register<T>` 返回）。
-  `ActiveHandle` 对命名与动态都有效；动态 vcam 活动时 `ActiveCameraId` 为 `null`；`CameraIds` 只列命名 vcam。
+  `ActiveHandle` 对命名与动态都有效；动态 vcam 活动时 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId`
+  为 `null`；`CameraIds` 只列命名 vcam。
 - `Register<T>(vcam)` 注册动态 vcam（**不激活**、不改场景）；类型不符抛 `ArgumentException`，`null` 抛
   `ArgumentNullException`；`Unregister(handle)` 只更新注册表与反查表，不改变场景。
 - 无效 / 已注销 / `default` 句柄：激活 / 过渡 / 反激活告警并 no-op；`IsActive` 返回 `false`；
   `Unregister` 返回 `false`。
 - 未知 id：告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`。
-- `ActiveCameraId` / `ActiveHandle` = `brain.ActiveVirtualCamera` 反查命名 id / 槽位句柄；`IsTransitioning` =
+- `ActiveHandle` = `brain.ActiveVirtualCamera` 反查槽位句柄（`NamedId` 即命名 id，动态为 `null`）；
+  `CameraManager.ActiveCameraId` 是门面便利（= `ActiveHandle.NamedId`）；`IsTransitioning` =
   `brain.IsBlending`；`OutputCamera` = `brain.OutputCamera`；`CameraIds` = 命名注册表键视图。
 - `Register` / `Unregister` 只更新注册表与反查表，不改变场景；替换 / 注销活动相机前请先 `Deactivate`。
 - **Timeline / 过场**：过场相机不注册；若 Brain 的活动相机未注册（Timeline / 外来 vcam），
-  `Activate` / `TransitionTo`（非 cut）会告警「可能与过场冲突」。`ActiveCameraId` / `ActiveHandle` 对这种
-  未注册活动相机返回 `null` / `default`；`OutputCamera` / `IsTransitioning` 仍可用。
+  `Activate` / `TransitionTo`（非 cut）会告警「可能与过场冲突」。`CameraManager.ActiveCameraId` /
+  `ActiveHandle` 对这种未注册活动相机返回 `null` / `default`；`OutputCamera` / `IsTransitioning` 仍可用。
 
 ## 架构设计
 
@@ -84,7 +86,7 @@ Runtime/
 | `Register(string, CinemachineVirtualCameraBase)` | 命名注册 / 替换（不动场景） |
 | `Register<T>(T)` | 动态注册，返回 `CameraHandle`（不激活、不动场景） |
 | `Unregister(string)` / `Unregister(CameraHandle)` | 注销（不动场景） |
-| `OutputCamera` / `CameraIds` / `ActiveCameraId` / `ActiveHandle` / `IsTransitioning` | 查询 |
+| `OutputCamera` / `CameraIds` / `ActiveHandle`（`NamedId`）/ `IsTransitioning` | 查询（命名 id 走 `CameraManager.ActiveCameraId`） |
 | `Activate` / `Deactivate` / `TransitionTo` / `IsActive`（string 与 `CameraHandle` 重载） | 契约操作 |
 | `Dispose()` | 清空注册表与反查表；不改变场景 |
 
@@ -129,7 +131,8 @@ handle.Dispose(); // 门面已销毁也安全
 
 - 实现 `ICameraManager`；注册在实现类自己的构造 / 注册方法里完成。
 - 义务：仅主线程；未知 id 告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`；
-  `ActiveCameraId` / `IsTransitioning` / `OutputCamera` 与过渡目标一致；`Activate` 取消在途过渡。
+  `ActiveHandle`（`NamedId` 为命名 id）/ `IsTransitioning` / `OutputCamera` 与过渡目标一致；`Activate`
+  取消在途过渡。
 - 义务与边界的完整说明在核心包 `Runtime/Camera/README.md` 的「自定义实现」与「行为契约」。
 
 ## 内部机制
@@ -157,9 +160,10 @@ handle.Dispose(); // 门面已销毁也安全
 ## 已知限制
 
 - **只支持 Cinemachine 3.x**（3.1.7 编写）；2.x 需要自己的实现。
-- **动态 vcam 的 `ActiveCameraId` 为 `null`**：用 `ActiveHandle` / `IsActive(handle)`；`CameraIds` 只列命名 vcam。
+- **动态 vcam 的 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`**：用 `ActiveHandle` /
+  `IsActive(handle)`；`CameraIds` 只列命名 vcam。
 - **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` / `TransitionTo`
-  会告警「可能与过场冲突」，`ActiveCameraId` / `ActiveHandle` 返回 `null` / `default`（`OutputCamera` /
+  会告警「可能与过场冲突」，`CameraManager.ActiveCameraId` / `ActiveHandle` 返回 `null` / `default`（`OutputCamera` /
   `IsTransitioning` 仍可用）。
 - **`Unregister` 不改变场景**：动态 vcam 的 GameObject 由预制 / 场景销毁；`Unregister` 只移除槽位与反查表。
 - **`brain.CustomBlends` 会覆盖** `TransitionTo` 请求的 style / duration；本包不强行清空项目配置。
@@ -179,7 +183,7 @@ handle.Dispose(); // 门面已销毁也安全
 
 ## 接口承诺到哪为止
 
-- 核心包承诺的 `ActiveCameraId` / `IsTransitioning` / `OutputCamera` 语义在这里成立；过渡曲线、回退与
+- 核心包承诺的 `ActiveHandle`（`NamedId`）/ `IsTransitioning` / `OutputCamera` 语义在这里成立；过渡曲线、回退与
   中断的细节由 Cinemachine Brain 决定。
 - `TransitionTo` 请求的 style / duration 是**建议**：`CustomBlends` 命中时会以项目配置为准。
 - 不承诺「过渡到已是活动相机会重启混合」。

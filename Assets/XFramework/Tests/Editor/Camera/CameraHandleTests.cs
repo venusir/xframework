@@ -26,6 +26,33 @@ namespace XFramework.XCamera.Tests
             Assert.IsFalse(handle.IsDefault);
             Assert.AreEqual(0, handle.Id);
             Assert.AreEqual(1, handle.Generation);
+            Assert.IsNull(handle.NamedId);
+        }
+
+        [Test]
+        public void NamedId_IsCarriedByTheHandle()
+        {
+            var handle = new CameraHandle(0, 1, "main");
+
+            Assert.AreEqual("main", handle.NamedId);
+        }
+
+        [Test]
+        public void Equality_IgnoresNamedId()
+        {
+            var left = new CameraHandle(3, 2, "main");
+            var right = new CameraHandle(3, 2, "battle");
+
+            Assert.IsTrue(left == right, "NamedId 是槽位元数据，不参与句柄身份");
+            Assert.AreEqual(left.GetHashCode(), right.GetHashCode());
+        }
+
+        [Test]
+        public void ToString_ContainsNamedId()
+        {
+            var text = new CameraHandle(3, 2, "main").ToString();
+
+            StringAssert.Contains("main", text);
         }
 
         [Test]

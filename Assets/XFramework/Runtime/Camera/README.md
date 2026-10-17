@@ -68,11 +68,14 @@ Runtime/Camera/
 ## 行为契约
 
 - **仅主线程**；注册表与活动状态不是线程安全的。
-- `ActiveCameraId` 在过渡期间返回**目标**；没有活动相机返回 `null`。`OutputCamera` 同步返回目标的输出相机。
+- `CameraManager.ActiveCameraId`（= `ActiveHandle.NamedId`）在过渡期间返回**目标**；动态相机活动或无活动返回
+  `null`。`OutputCamera` 同步返回目标的输出相机。
 - `CameraIds` 是**实时视图**（`Dictionary` 的键集合）：枚举期间不要注册 / 注销；它**只列命名 id**，
   动态句柄不在其中。
-- **命名 / 动态双键**：常驻相机用 string id；动态相机用 `CameraHandle`。`ActiveHandle` 对命名与动态都有效
-  （过渡期间是目标）；动态相机活动时 `ActiveCameraId` 为 `null`，请用 `ActiveHandle` / `IsActive(handle)`。
+- **命名 / 动态双键**：常驻相机用 string id；动态相机用 `CameraHandle`。`ActiveHandle` 是唯一的活动查询
+  （命名与动态都有；过渡期间是目标）；命名 id 在 `ActiveHandle.NamedId` 里，门面便利
+  `CameraManager.ActiveCameraId` 直接读它（O(1)）；动态相机活动时两者都为 `null`，请用
+  `ActiveHandle` / `IsActive(handle)`。
 - `Register<T>(handle)` 注册动态相机并返回句柄；注册**不激活**，新相机初始关闭。`T` 由后端解释
   （`UnityCameraManager` 要 `Camera`，Cinemachine 扩展要它的 vcam 基类）；类型不符抛 `ArgumentException`，
   `null` 抛 `ArgumentNullException`。
@@ -84,8 +87,8 @@ Runtime/Camera/
   （`IsActive(null)` 返回 `false`）。
 - **Timeline / 过场**：随 CG 预制创建、由 Timeline / Cinemachine 接管 Brain 的过场相机**不经过本模块**。
   过渡期间不要调用 `Activate` / `TransitionTo`；Cinemachine 扩展包会对「Brain 的活动相机未注册」告警；
-  `ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`，`OutputCamera` /
-  `IsTransitioning` 仍可用。
+  `CameraManager.ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`，
+  `OutputCamera` / `IsTransitioning` 仍可用。
 - `Activate` = cut，并取消在途过渡；`TransitionTo` 期间再次调用从**当前视觉状态**重新开始；
   `duration <= 0` 或 `CameraBlendStyle.Cut` 等价于 cut。
 - `Deactivate` 是否回退由后端定义：`UnityCameraManager` **不回退**（活动 id 变 `null`）；Cinemachine 由
@@ -120,8 +123,8 @@ Runtime/Camera/
 | `IsInitialized` | 是否有实现 |
 | `OutputCamera` | 当前输出相机；无则 `null` |
 | `CameraIds` | 已注册**命名** id 的实时视图；动态句柄不在其中 |
-| `ActiveCameraId` | 活动 / 过渡中的命名 id；动态相机活动或无活动时 `null` |
-| `ActiveHandle` | 活动 / 过渡目标的句柄；无活动为 `default` |
+| `ActiveCameraId`（门面便利） | = `ActiveHandle.NamedId`；命名 / 过渡目标返回 id，动态活动或无活动返回 `null`（O(1)） |
+| `ActiveHandle` | 唯一的活动查询；活动 / 过渡目标的句柄，`NamedId` 为命名 id；无活动为 `default` |
 | `IsTransitioning` | 是否有过渡在途 |
 | `Register<T>(T)` | 注册动态相机，返回 `CameraHandle`；不激活 |
 | `Unregister(CameraHandle)` | 注销动态相机；无效句柄返回 `false` |
@@ -201,8 +204,9 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **命名注册**在实现类自己的构造 / 命名 `Register` 方法里完成；**动态注册**走接口的 `Register<T>(T)`：
   实现把后端相机对象转成槽位并返回 `CameraHandle`（`Id` = 槽位下标、`Generation` 从 1 起，`default` 无效）。
 - **义务**：仅主线程；未知 id / 无效 / 已注销 / `default` 句柄告警并 no-op，不得抛；`null` id / 句柄抛
-  `ArgumentNullException`；`Register<T>` 的类型不符抛 `ArgumentException`。`ActiveCameraId`（命名 id）/
-  `ActiveHandle` / `IsTransitioning` / `OutputCamera` 在过渡期间与目标保持一致；`Activate` 取消在途过渡；
+  `ArgumentNullException`；`Register<T>` 的类型不符抛 `ArgumentException`。`ActiveHandle`（命名槽位的
+  `NamedId` 必须填对应 id，动态槽位填 `null`；门面 `CameraManager.ActiveCameraId` 直接读它）/ `IsTransitioning` /
+  `OutputCamera` 在过渡期间与目标保持一致；`Activate` 取消在途过渡；
   `Unregister` 按「槽位 + 代际」双校验，旧句柄失配；不得在每帧路径分配。
 - **所有权**：实现若持有调度 / 场景引用，实现 `IDisposable`；门面的 `Destroy` 会调用它。
 - `Register` 不激活相机；`Unregister` 若在活动 / 过渡目标上清活动状态、**不回退**。
@@ -253,10 +257,11 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 
 - **一次只有一台活动相机**（默认实现）：分屏、小地图、RenderTexture 多路渲染不在这里；请直接用 Unity
   的多相机 / `Camera.rect` / `targetTexture`，或写自己的 `ICameraManager`。
-- **动态相机的 `ActiveCameraId` 为 `null`**：动态槽位没有命名 id，请用 `ActiveHandle` / `IsActive(handle)`；
-  `CameraIds` 只列命名 id。
-- **Timeline / 过场相机不经过本模块**：由过场系统接管 Brain；`ActiveCameraId` / `ActiveHandle` 对未注册的
-  过场 vcam 返回 `null` / `default`（`OutputCamera` / `IsTransitioning` 仍可用）；过场期间不要调用
+- **动态相机的 `CameraManager.ActiveCameraId`（= `ActiveHandle.NamedId`）为 `null`**：动态槽位没有命名 id，
+  请用 `ActiveHandle` / `IsActive(handle)`；`CameraIds` 只列命名 id。
+- **Timeline / 过场相机不经过本模块**：由过场系统接管 Brain；`CameraManager.ActiveCameraId` /
+  `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`（`OutputCamera` / `IsTransitioning` 仍可用）；
+  过场期间不要调用
   `Activate` / `TransitionTo`。Cinemachine 扩展包会对「Brain 的活动相机未注册」告警。
 - **同一台相机不要同时注册成命名与动态**：两个槽位会互相关闭（一次只有一台活动相机）。
 - **管理器不销毁相机对象**：动态相机随预制 / 场景销毁；`Unregister` 只移除槽位并关闭相机。
@@ -293,7 +298,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 |---|---|---|
 | 激活 / 反激活 / 切换 | Camera | 是 |
 | 过渡 / cut | Camera | 是 |
-| 当前活动相机 / 输出相机 | Camera | 是（`ActiveCameraId` / `OutputCamera`） |
+| 当前活动相机 / 输出相机 | Camera | 是（`ActiveHandle` / `OutputCamera`；门面 `ActiveCameraId` 是便利） |
 | 注册表查询 | Camera | 是（`CameraIds`） |
 | 过渡状态 | Camera | 是（`IsTransitioning`） |
 | 跟随 / 瞄准 / 轨道 | Cinemachine | 否 |
@@ -325,8 +330,8 @@ Cinemachine 已给的一律不重写。
 ### 与 Timeline / 过场的边界
 
 过场相机由 Timeline 的 Cinemachine Track 驱动，会接管 `CinemachineBrain`；它们**不经过本模块**。过场期间
-`CameraManager` 的 `Activate` / `TransitionTo` 会与过场冲突，不要调用；`ActiveCameraId` / `ActiveHandle`
-对未注册的过场 vcam 返回 `null` / `default`，`OutputCamera` / `IsTransitioning` 仍可读。过场结束后由调用方
+`CameraManager` 的 `Activate` / `TransitionTo` 会与过场冲突，不要调用；`CameraManager.ActiveCameraId` /
+`ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`，`OutputCamera` / `IsTransitioning` 仍可读。过场结束后由调用方
 恢复玩法相机。
 
 ### 与 UI 的边界

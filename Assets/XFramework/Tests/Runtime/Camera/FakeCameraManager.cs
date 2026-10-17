@@ -13,8 +13,6 @@ namespace XFramework.XCamera.Tests
 
         public IReadOnlyCollection<string> CameraIds { get; set; } = Array.Empty<string>();
 
-        public string ActiveCameraId { get; set; }
-
         public CameraHandle ActiveHandle { get; set; }
 
         public bool IsTransitioning { get; set; }
@@ -66,7 +64,7 @@ namespace XFramework.XCamera.Tests
         public bool IsActive(string cameraId)
         {
             return cameraId != null &&
-                   string.Equals(ActiveCameraId, cameraId, StringComparison.Ordinal);
+                   string.Equals(ActiveHandle.NamedId, cameraId, StringComparison.Ordinal);
         }
 
         public CameraHandle Register<T>(T handle) where T : class

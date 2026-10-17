@@ -59,13 +59,15 @@ namespace XFramework.XCamera
             }
         }
 
-        /// <summary>当前活动相机 id；过渡期间是目标 id；无活动相机时为 <c>null</c>。</summary>
+        /// <summary>当前活动相机的命名 id；过渡期间是目标 id；动态相机活动或无活动相机时为 <c>null</c>。</summary>
+        /// <remarks>= <see cref="ActiveHandle"/>.<see cref="CameraHandle.NamedId"/>（O(1)、零遍历）；
+        /// 动态相机没有命名 id。</remarks>
         public static string ActiveCameraId
         {
             get
             {
                 EnsureInitialized();
-                return _impl.ActiveCameraId;
+                return _impl.ActiveHandle.NamedId;
             }
         }
 

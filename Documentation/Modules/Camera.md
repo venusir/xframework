@@ -32,7 +32,8 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 已做：**v1 功能面建成**（2026-10-17）——`ICameraManager` 初始成员（`OutputCamera` / `CameraIds` / `ActiveCameraId` / `IsTransitioning` / `Activate` / `Deactivate` / `TransitionTo` / `IsActive`）；`CameraManager` 门面（生命周期 / 同名转发 / 会话复位 / 门面完备性测试）；`UnityCameraManager` 默认实现（一次一台活动相机、位姿 / FOV 插值、懒注册 LateUpdate ticker、取消 / 重开语义）；使用方 README 与包 README 四表同步。逐条证据在 `CHANGELOG`。
 - 已做：**Cinemachine 支持以独立可选扩展包提供**（2026-10-17）——`com.venusy609.xframework.cinemachine`（单独 asmdef，依赖 Cinemachine 3.1.7），实现同一 `ICameraManager`；核心包零 Cinemachine 依赖。理由与 3.x API 实测见 `Documentation/Cinemachine.md`。
 - 已做：**句柄化动态相机注册 / 激活**（2026-10-17）——`CameraHandle`（槽位 + 代际；`AudioHandle` 同形，`Generation = 0` 无效）+ `ICameraManager` 的 `Register<T>` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` + 门面转发 + 两个实现的槽位表。命名 string id 保留；动态相机随预制 `Register` / `Dispose`，不需要 authoring id。**主接口直扩**（用户裁定，非可选能力接口）；模块未发布、仓外无 `ICameraManager` 实现，扩展包同轮更新。
-- 不做：**Timeline / 过场相机进本模块**（2026-10-17 · 用户场景裁定）——过场由 Timeline 的 Cinemachine Track 接管 Brain；管理器改优先级 / 混合会与过场冲突；`ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 null / default，`OutputCamera` / `IsTransitioning` 仍可用；Cinemachine 扩展包对未注册活动相机告警。无重开判据。
+- 已做：**合并 `ActiveCameraId` / `ActiveHandle`**（2026-10-17 · 用户裁定）——`ActiveHandle` 是接口 / 实现上唯一的活动查询；`CameraHandle` 新增 `NamedId`（命名 id；动态 / `default` 为 null），`CameraManager.ActiveCameraId` 直接读 `ActiveHandle.NamedId`（**O(1)、零遍历**）；`ICameraManager` / `UnityCameraManager` / `CinemachineCameraManager` 移除 `ActiveCameraId`。理由：两属性并行；命名 id 随句柄携带即可，接口不再维护第二份。对接口 / 类实现者是源码破坏（未发布、无仓外实现）。
+- 不做：**Timeline / 过场相机进本模块**（2026-10-17 · 用户场景裁定）——过场由 Timeline 的 Cinemachine Track 接管 Brain；管理器改优先级 / 混合会与过场冲突；`CameraManager.ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 null / default，`OutputCamera` / `IsTransitioning` 仍可用；Cinemachine 扩展包对未注册活动相机告警。无重开判据。
 - 不做：**string id 的动态注册**（2026-10-17 · 用户质疑）——随预制实例创建 / 销毁的相机没有稳定 authoring id；用句柄（槽位 + 代际）而不是让调用方生成 / 配对 id。无重开判据。
 - 不做：**核心包硬依赖 Cinemachine**（2026-10-17 · 立项裁定）——Cinemachine 2.x / 3.x 的 API 不兼容，核心包一旦引用就必须锁一个主版本，把 2D / 2.x / 自定义后端项目挡在外面。替代是独立扩展包。无重开判据。
 - 不做：**相机栈 / push-pop / 返回上一相机**（2026-10-17 · 立项裁定）——「谁在栈顶 / 返回上一台」= 生命周期树，与 Update 的「组」API 同一条推理链。无重开判据。
@@ -62,7 +63,7 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 
 用户追问「门面的动态相机」，场景分两类：
 
-1. **Timeline / 过场相机**（随 CG 预制创建 / 销毁，Timeline 接管 Brain）——**不经过本模块**；管理器改优先级 / 混合会与过场冲突。扩展包对「Brain 的活动相机未注册」告警；`ActiveCameraId` / `ActiveHandle` 对未注册活动相机返回 null / default。
+1. **Timeline / 过场相机**（随 CG 预制创建 / 销毁，Timeline 接管 Brain）——**不经过本模块**；管理器改优先级 / 混合会与过场冲突。扩展包对「Brain 的活动相机未注册」告警；`CameraManager.ActiveCameraId` / `ActiveHandle` 对未注册活动相机返回 null / default。
 2. **非 Timeline、随预制创建 / 销毁的动态相机**——需要管理器接管，但 string id 不适合：实例没有稳定 authoring id，还要生成 / 配对注销。
 
 用户裁定**直接扩主接口**（不用可选能力接口）：
@@ -70,8 +71,12 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - `CameraHandle`（`readonly struct`，`Id` + `Generation`；`Generation = 0` 保留给 `default`；`AudioHandle` 同形；便捷方法 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` / `Unregister` / `Dispose`）。
 - `ICameraManager` 增加 `Register<T>(T)` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive`；命名 string 操作保留，形成**双键**。
 - 两个实现同构：槽位表（`Slot`: 相机 / 可选命名 id / `Generation` / `Used`），槽位下标 = `CameraHandle.Id`；`Unregister` 清槽位、代际递增，旧句柄按代际失配失效。
-- 动态活动时 `ActiveCameraId` 为 null，用 `ActiveHandle` / `IsActive(handle)`；`CameraIds` 只列命名 id。
+- 动态活动时 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 null，用 `ActiveHandle` / `IsActive(handle)`；`CameraIds` 只列命名 id。
 - 守卫：`CameraHandleTests`（default / 相等性 / 短路）、`CameraFacadeCompletenessTests`（接口每成员在门面同名）、`UnityCameraManagerTests` / `CinemachineCameraManagerTests` 的动态端到端与 stale/default/未注册活动相机用例、`PublicApiBaseline` 更新。
+
+**随后（同日）用户指出 `ActiveCameraId` / `ActiveHandle` 并行、且门面遍历推导不可取**：`CameraHandle` 增加
+`NamedId`（命名 id；动态 / `default` 为 null），接口 / 实现移除 `ActiveCameraId`，`CameraManager.ActiveCameraId`
+直接读 `ActiveHandle.NamedId`（O(1)、零遍历）。`CameraHandleTests` 补 `NamedId` 用例；基线 / 文档 / CHANGELOG 同步。
 
 ### 已否决形状
 

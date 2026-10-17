@@ -184,19 +184,6 @@ namespace XFramework.XCamera.Cinemachine
         }
 
         /// <inheritdoc/>
-        public string ActiveCameraId
-        {
-            get
-            {
-                ThrowIfDisposed();
-                var active = _brain.ActiveVirtualCamera;
-                return active != null && _reverse.TryGetValue(active, out var index)
-                    ? _slots[index].Id
-                    : null;
-            }
-        }
-
-        /// <inheritdoc/>
         public CameraHandle ActiveHandle
         {
             get
@@ -204,7 +191,7 @@ namespace XFramework.XCamera.Cinemachine
                 ThrowIfDisposed();
                 var active = _brain.ActiveVirtualCamera;
                 return active != null && _reverse.TryGetValue(active, out var index)
-                    ? new CameraHandle(index, _slots[index].Generation)
+                    ? new CameraHandle(index, _slots[index].Generation, _slots[index].Id)
                     : default;
             }
         }

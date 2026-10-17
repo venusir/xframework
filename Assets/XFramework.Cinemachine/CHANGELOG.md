@@ -9,10 +9,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Added
 
 - **`CinemachineCameraManager : ICameraManager`**（按 Cinemachine **3.1.7** 编写）：用 vcam 优先级做激活 /
-  反激活，用 `CinemachineBrain` 的 `DefaultBlend` 做过渡；`OutputCamera` / `CameraIds` / `ActiveCameraId` /
-  `ActiveHandle` / `IsTransitioning` 查询；命名 `Register(string, vcam)` 与动态 `Register<T>(vcam)` 维护注册表。
+  反激活，用 `CinemachineBrain` 的 `DefaultBlend` 做过渡；`OutputCamera` / `CameraIds` / `ActiveHandle` /
+  `IsTransitioning` 查询；命名 `Register(string, vcam)` 与动态 `Register<T>(vcam)` 维护注册表。
 - **动态 vcam 句柄**：`Register<T>` 返回核心包的 `CameraHandle`，按句柄激活 / 过渡 / 注销；动态 vcam 活动时
-  `ActiveCameraId` 为 `null`，用 `ActiveHandle` / `IsActive(handle)`。
+  `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`，用 `ActiveHandle` / `IsActive(handle)`。
 - **测试**：`CinemachineCameraManagerTests`（PlayMode，`UpdateMethods.ManualUpdate` 确定性推进；含动态 vcam 与
   未注册活动相机告警）与 `CinemachineDependencyTests`（依赖三处 / 示例路径 / 包内不指向包外）。
 - **示例**：`Samples~/Cinemachine` 演示 Brain + 两个 vcam 的接线与切换。
