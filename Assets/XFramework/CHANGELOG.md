@@ -264,6 +264,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **XCamera 模块文档与包 README 四表**（2026-10-17）：新增 `Runtime/Camera/README.md`（18 节骨架、5 项必答）、
   维护向模块记录、包 README 的功能 / 模块索引 / 可替换实现 / 可配置项四表同步；`ReadmeTableTests` 登记 `Camera`。
   **核心包依赖表不新增 Cinemachine**（核心不依赖它）；Cinemachine 3.1.7 的安装与版本归独立扩展包。
+- **Cinemachine 扩展包维护向记录**（2026-10-17）：扩展包的版本、Cinemachine 3.x API 实测、升级与漂移点落在
+  维护向记录（不随包发布）；扩展包自己的 README / CHANGELOG 随扩展包发布。
 - **模块 README 规范增补「自定义实现」按需节（2026-10-17）**：一级骨架 17 节 → 18 节（必答仍 5 项），
   新增按需节 `## 自定义实现`，排在 `## 典型场景`（含特性节）之后、`## 内部机制` 之前。动因是普查发现
   实现方内容没有稳定的家：23 份中 17 份有可替换后端 / 扩展点，但主落点分散在 `## 典型场景`（6）、
