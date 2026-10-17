@@ -227,6 +227,14 @@ Phase 90: [LocalizationBootstrapStage]────────┘
 
 > **为什么广播载荷是类,而不是框架惯例里的 readonly struct?** `Broadcast` 每次广播新分配一个 `PipelineProgress`,看似违背「进度载荷用 readonly struct」的惯例(`AssetInitReport` / `SaveReport`)——那两者是模块在热点路径上**自建自用**的上报结构,而 `PipelineProgress` 是**交出去**的事件载荷:订阅者可以留存它(`Bootstrap` 就直接转交给调用方的 `IProgress<PipelineProgress>`),池化需要一个并不存在的归还协议;改成 struct 则经接口传递要装箱,还会改掉 `Report` 的就地覆盖语义与 `Bootstrap.RunAsync` 的公开签名。分配量本身也受阈值节流约束(≥1% 或描述/任务名/状态变化才广播),不在每帧路径上。此条写给下一次复审,免得再被当成漏网的 GC 问题。
 
+## 自定义实现
+
+本模块的实现方入口：实现阶段并装配进管线。
+
+- **实现哪个契约**：`IPipelineStage`（`Name` / `Weight` / `ExecuteAsync`）；需要按相位分组时实现 `IPhaseStage`（多一个 `Phase`）。
+- **怎么接线**：`Pipeline.Create()` + `AddStage`（或 `BuildPhaseGroups` 装配相位组）；容器（`ParallelStage` / `SequenceStage`）可嵌套。
+- **要守什么**：执行模型（串行逐 await、失败 / 取消即停、三路互斥终局）见「行为契约」；取消须经 `OperationCanceledException` 传播、不得吞；从后台线程回来必须先 `SwitchToMainThread` 再写 `PipelineStageContext`（见「线程契约」）；自定义相位号请避开框架保留的 0–89（见「内置相位约定」与「已知限制」）。
+
 ## 内部机制
 
 ### 并行/串行容器语义（组内细节）

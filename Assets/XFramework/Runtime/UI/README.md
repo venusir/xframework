@@ -1155,6 +1155,14 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 - **不做自动刷新**：锚点或屏幕尺寸变化后需再算一次（与 `UISafeArea.Apply` 同理，框架不监听尺寸变化）。
   `ShowPopupAsync` 只在打开时摆一次，之后**不会跟随锚点移动**——那需要你自己在锚点变化时重算
 
+## 自定义实现
+
+本模块的实现方入口：整体替换 UI 管理器、替换拦截控制器，或替换 HUD / Tip 的能力提供者。
+
+- **实现哪个契约**：`IUIManager`（整体替换，经 `SetInstance`）；`IUIController`（开 / 关拦截，经 `SetController` 或 `Initialize(uiRoot, controller)`）；`IUIHudProvider` / `IUITipProvider`（可选能力，经 `SetHudProvider` / `SetTipProvider` 替换）。
+- **怎么接线**：`UIManager.SetInstance(manager)`；控制器见「快速使用」2，实例所有权与注入顺序见「快速使用」12。
+- **要守什么**：`SetController` 只对 `UIManagerImpl` 生效；注入实现退化为「只有每帧档」，`Destroy()` 会连注入实例一起销毁（见「快速使用」12）；`IUIManager` 新增成员必须同步门面转发（见「架构设计」的「扩展清单」）；排序与分层方案不可单独替换，换方案等于整体替换 `IUIManager`（见「已知限制」）。
+
 ## 内部机制
 
 ### 生命周期流程（含 Controller 拦截）

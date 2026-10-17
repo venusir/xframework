@@ -107,6 +107,14 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里�
 
 ⚠ **`DefaultGameLauncher`（以及它的抽象底座 `GameLauncher`）覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
 
+## 自定义实现
+
+本模块的实现方入口：写一个启动阶段并登记。
+
+- **实现哪个契约**：`IBootstrapStage`（= `IPhaseStage` + 同步 `Shutdown`）；Phase / Name / Weight 的约定见「内置相位约定」。
+- **怎么接线**：`Bootstrap.Register(stage)`；替换内置阶段用 `Unregister<T>()` 再 `Register`（按精确类型匹配，见「设计取舍」）；`RegisterDefaults()` 登记框架内置组合。
+- **要守什么**：`ExecuteAsync` 的四条执行契约见下；相位 0–89 由框架保留；`Shutdown` 可能在阶段从未执行过时被调用（见「已知限制」）。
+
 ### 定义一个阶段
 
 实现 `IBootstrapStage`——它就是 Pipeline 的 `IPhaseStage` 加一个 `Shutdown`：
@@ -164,7 +172,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **登记表没有任何同步原语**（模块内既无锁、也无主线程断言）：`Register` / `Unregister` / `Clear` / `Stages` 直接读写同一个静态列表，**登记与查询都应在主线程发生**——从别的线程并发访问即数据竞争，且不会有任何提示。
 
-`RunAsync` 不改变阶段的线程规则：阶段在哪个线程执行，由阶段自己与它的 await 决定（Pipeline 的既有契约：从后台线程回来必须先 `await UniTask.SwitchToMainThread(cancellationToken)` 再写 `PipelineStageContext`，见「典型场景」的四条）。`Shutdown` 是同步方法，`DefaultGameLauncher` 在 `OnDestroy` 里调它——都在主线程。
+`RunAsync` 不改变阶段的线程规则：阶段在哪个线程执行，由阶段自己与它的 await 决定（Pipeline 的既有契约：从后台线程回来必须先 `await UniTask.SwitchToMainThread(cancellationToken)` 再写 `PipelineStageContext`，见「自定义实现」的「定义一个阶段」的四条）。`Shutdown` 是同步方法，`DefaultGameLauncher` 在 `OnDestroy` 里调它——都在主线程。
 
 ## 已知限制
 

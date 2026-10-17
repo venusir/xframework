@@ -19,7 +19,7 @@ MyType back = (MyType)json.Deserialize(bytes, typeof(MyType));
 ISerializer legacy = Serializer.Get("json-utility");
 ```
 
-接入 `Data` / `Save` / `Config` 时**不需要直接调用本模块**——它们自己通过格式名走注册表。直接用它只有两种场合：**扩展一种新格式**（见「典型场景」），或**自己做一次格式无关的序列化**。
+接入 `Data` / `Save` / `Config` 时**不需要直接调用本模块**——它们自己通过格式名走注册表。直接用它只有两种场合：**扩展一种新格式**（见「自定义实现」），或**自己做一次格式无关的序列化**。
 
 ## 模块结构
 
@@ -66,7 +66,13 @@ Runtime/Serialize/
 | `Initialize()` | 注册内置两个（幂等，框架已自动调用） |
 | `Shutdown()` | 清空全部注册并把模块复位为未初始化 |
 
-## 典型场景
+## 自定义实现
+
+本模块的实现方入口：实现并注册序列化器。
+
+- **实现哪个契约**：`ISerializer`（`Format` 字符串 + 同步的 `Serialize` / `Deserialize`）。
+- **怎么接线**：`Serializer.Register(serializer)` / `Unregister(format)`；替换内置格式须在模块初始化**之前**注册同名格式。
+- **要守什么**：格式名是跨模块契约（`DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 用它）；替换 `"json"` 是全局动作，且必须早于初始化；未注册的格式 `Get` 抛 `KeyNotFoundException`，未初始化取 `Default` 抛 `InvalidOperationException`（见「已知限制」）。
 
 实现 `ISerializer`，然后注册：
 

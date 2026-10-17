@@ -98,6 +98,14 @@ Runtime/Diagnostics/
 - 域重载**关**：上一会话登记过的页签**跨播放会话存活**。`[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑（重复登记被幂等吸收），`[InitializeOnLoadMethod]` 不重跑（编辑器侧注册的那批本来就应该长期在）。因此**运行时注册的页签请在自己的退出路径里 `Unregister`**。
 - **刻意不做**「进播放时清空注册表」：那会把编辑器侧注册的框架页签一并抹掉。
 
+## 自定义实现
+
+本模块的实现方入口：写一个诊断页签（或编辑器自绘视图）。
+
+- **实现哪个契约**：`IDiagnosticPanel`（`Title` / `Order` / `Collect`）；编辑器侧自绘实现 `IDiagnosticPanelView`（见「编辑器窗口与渲染」）。
+- **怎么接线**：`DiagnosticsManager.Register(panel)` / `Unregister`；运行时注册用 `[RuntimeInitializeOnLoadMethod]`，完整示例见「快速使用：写一个自己的页签」。
+- **要守什么**：`Collect` 的五条调用契约（主线程、可重复且无副作用、不得抛、不得每帧调用、模块未初始化不得抛）见「行为契约」；注册按实例去重、`Order` 升序稳定；关闭域重载时运行时注册的页签需自行 `Unregister`（见「行为契约」的「生命周期」）。
+
 ## 线程契约
 
 | 操作 | 线程 |
