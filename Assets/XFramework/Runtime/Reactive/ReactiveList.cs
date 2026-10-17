@@ -82,8 +82,8 @@ namespace XFramework.XReactive
         /// 按索引读写元素。get 直通底层列表（越界即抛）。
         /// <para>set 是<b>替换</b>：写入后发一条 <see cref="ReactiveCollectionChangeKind.Replace"/>；
         /// 与当前元素<b>相等则不发生任何事、不发通知</b>（去重语义，比较器为
-        /// <see cref="EqualityComparer{T}.Default"/>——引用类型元素即引用相等，与
-        /// <see cref="ReactiveProperty{T}"/> 的去重同源）。</para>
+        /// <see cref="EqualityComparer{T}.Default"/>——<b>重写 <c>Equals</c> 的类型按 <c>Equals</c> 判等，
+        /// 不是引用相等</b>；与 <see cref="ReactiveProperty{T}"/> 的去重同源）。</para>
         /// </summary>
         /// <param name="index">下标。</param>
         /// <exception cref="ObjectDisposedException"><b>写入</b>已释放的列表时抛出；读取不抛。</exception>
@@ -143,8 +143,8 @@ namespace XFramework.XReactive
         /// <summary>
         /// 移除第一个与 <paramref name="item"/> 相等的元素并发一条
         /// <see cref="ReactiveCollectionChangeKind.Remove"/>（载荷带被移除的元素）。
-        /// <para>相等按 <see cref="EqualityComparer{T}.Default"/>——引用类型元素即引用相等。
-        /// 未命中则什么都不发生、不发通知。</para>
+        /// <para>相等按 <see cref="EqualityComparer{T}.Default"/>——<b>重写 <c>Equals</c> 的类型按
+        /// <c>Equals</c> 判等，不是引用相等</b>。未命中则什么都不发生、不发通知。</para>
         /// </summary>
         /// <param name="item">要移除的元素。</param>
         /// <returns>确实移除了返回 true。</returns>
@@ -196,6 +196,9 @@ namespace XFramework.XReactive
         /// </summary>
         /// <param name="comparer">比较器；<c>null</c> 等价 <see cref="Comparer{T}.Default"/>。</param>
         /// <exception cref="ObjectDisposedException">列表已释放时抛出。</exception>
+        /// <exception cref="InvalidOperationException">比较器抛出，或比较器给出非法次序（BCL 的
+        /// <c>List.Sort</c> 包装为 <c>InvalidOperationException</c>）时上抛——此时列表<b>可能已部分重排</b>
+        /// 且不补发 <see cref="ReactiveCollectionChangeKind.Reset"/>；异常后请重读列表（RCT-006）。</exception>
         public void Sort(IComparer<T> comparer = null)
         {
             ThrowIfDisposed();

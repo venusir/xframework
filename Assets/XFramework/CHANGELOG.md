@@ -429,6 +429,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Reactive 相等 / 分配 / 异常边界订正（2026-10-17，RCT-002/004/005/006/007/010/011）**：相等语义改为
+  `EqualityComparer<T>.Default`（重写 `Equals` 即按 `Equals`，不是引用相等）；`Keys` / `Values` 首次访问
+  缓存视图；自定义键比较器下「键稳定」只对比较器等值成立；`Sort` 异常后可能已部分重排且不补发 `Reset`；
+  值比较器不可注入记 `未做`；未实现 `IEquatable<T>` 的结构体去重 / 查找装箱；`Subscribe` 立即回调抛出时
+  不登记订阅。XML 与 README 同批。
 - **Pool 已知限制补四处口径（2026-10-17，POOL-004/006/007/009）**：`MaxSize <= 0` 等于无上限；池的日志分类
   按简单类型名合并（跨命名空间同名类型互相影响）；集合池 `Configure` 重建后旧 `GetPool()` 引用失效；
   `RemovePool` 丢弃闲置实例但不走丢弃回调。四个集合池的 `GetPool` XML 同步。

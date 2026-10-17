@@ -33,6 +33,8 @@ Runtime/Reactive/
 
 ## 决策台账
 
+- 未做：**字典的值相等比较器不可注入**（2026-10-17 · 第二轮审计，RCT-007）——`ReactiveDictionary` 写死 `EqualityComparer<TValue>.Default`，列表侧同族问题有台账条目、字典侧没有；README 已点明。重开判据：出现需要自定义值相等语义的真实使用方。
+
 - 已做：**`ReactiveProperty<T>` 相等比较器可注入**（2026-10-02 · `69e0190`）——构造重载 `(T initialValue, IEqualityComparer<T> comparer)` 与 `Select` 的 `comparer` 参数（`CHANGELOG.md` 同日 Added 条目）。原条目于当日全面清点时登记为「未决」，**记下时属实、同日即被落地**，而条目一直没跟着更新（2026-10-11 才标注为已落地，不删除、保留沿革）。教训：清点记下的「未决」可能当天就被落地——引用前先对一遍代码与 CHANGELOG。
 - 已做：**`ReactiveDictionary` 从延后项重开并建成**（2026-10-11 · `763b50d`）——它原列在 `ReactiveList` 立项的延后项里（条目原文：「`ReactiveDictionary` / `ReactiveSet` / 有序集延后」），同日即标注为重开并建成（见「沿革」与 `Ledger.md` 的「ReactiveDictionary 建成」条）；**其余各项仍照原样有效**（见下方逐条）。
 - 暂不做：**`ReactiveSet` / 有序集**（2026-10-11 · 立项延后）——Set 还卡在 `IReadOnlySet<T>` 不在 .NET Standard 2.1 API 面内，形状定不了就不定。重开判据：`IReadOnlySet<T>` 进入可用 API 面（API 兼容级别上调）。

@@ -19,9 +19,13 @@ namespace XFramework.XReactive
         /// <summary>当前值。无 setter——接口是只读视图,写值经具体实现类型或 <see cref="IReactivePropertyWriter{T}"/>。</summary>
         T Value { get; }
 
-        /// <summary>订阅值变化。<b>订阅时立即同步回调一次当前值</b>,这是本接口唯一的契约。</summary>
+        /// <summary>订阅值变化。<b>订阅时立即同步回调一次当前值</b>,这是本接口唯一的契约。
+        /// <para><b>立即回调抛出时不得登记订阅</b>：异常向上抛，实现必须保证这条订阅没有留在流上
+        /// （<see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 的构造期依赖这条隐含要求）。</para></summary>
         /// <param name="handler">值变化时的回调，不可为 null。</param>
         /// <returns>取消订阅的句柄；释放它即不再收到投递。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 null 时抛出。</exception>
+        /// <exception cref="ObjectDisposedException">属性已释放时抛出（取值本身是宽容的，订阅不是）。</exception>
         IDisposable Subscribe(Action<T> handler);
     }
 }

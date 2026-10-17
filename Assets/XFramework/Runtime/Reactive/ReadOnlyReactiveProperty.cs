@@ -5,7 +5,7 @@ using XFramework.XEvent;
 namespace XFramework.XReactive
 {
     /// <summary>
-    /// 只读响应式属性。由 <see cref="ReactiveProperty{T}"/> 通过 <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 派生。
+    /// 只读响应式属性。由任意 <see cref="IReactiveProperty{T}"/>（<see cref="ReactiveProperty{T}"/> 只是最常见的一种）通过 <see cref="ReactivePropertyExtensions.Select{TSource, TResult}"/> 派生。
     /// <para>仅暴露 <see cref="Value"/>（只读）和 <see cref="Subscribe"/>，不可赋值。</para>
     /// <para>基于 XEvent 事件流引擎实现,内部订阅源属性做值映射。</para>
     /// <para>使用完毕后需调用 <see cref="Dispose"/> 释放内部订阅。</para>
