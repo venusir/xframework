@@ -10,7 +10,7 @@
 
 ```
 Runtime/Camera/
-├── ICameraManager.cs      # 公开：后端契约（命名 id / 动态句柄双键；5 查询 + 4 字符串操作 + 4 句柄操作）
+├── ICameraManager.cs      # 公开：后端契约（命名 id / 动态句柄双键；查询、字符串与句柄操作）
 ├── CameraHandle.cs        # 公开：动态相机句柄（Id + Generation；Generation=0 是 default 保留值；便捷方法）
 ├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 接口同名转发）
 ├── UnityCameraManager.cs  # 公开：默认实现（槽位表 + 命名/动态双键 + 位姿/FOV 插值 + 懒注册 LateUpdate ticker）

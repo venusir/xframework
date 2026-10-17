@@ -253,7 +253,7 @@ Runtime/Data/
 
 本模块的实现方入口：整体替换数据层实现。
 
-- **实现哪个契约**：`IDataManager`（16 个成员，块管理 / 快照 / 脏标记）。
+- **实现哪个契约**：`IDataManager`（块管理 / 快照 / 脏标记）。
 - **怎么接线**：`DataManager.Initialize(new MyDataManager())`；传 `null` 等效于 `Shutdown()`；不经引导流程也可直接调用（`DataManager.IsInitialized` 可探测）。
 - **要守什么**：已注入非 null 实现时重复调用只告警并忽略；**本模块没有 options 对象**——实现即配置。`Shutdown()` 不触发任何块的 `OnClear`（见「已知限制」）；所有 API 必须在主线程调用（见「线程契约」）。
 

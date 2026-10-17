@@ -23,7 +23,7 @@ Editor/Diagnostics/           窗口与渲染（不发布）
 ├── FrameworkPanels.cs        框架自带页签的唯一登记点
 ├── Rendering/                公开渲染层：DiagnosticReportView / DiagnosticItemDrawer /
 │                             IDiagnosticPanelView / DiagnosticTableLayout（internal 纯函数）
-└── Panels/                   18 个框架页签
+└── Panels/                   框架页签（每个面板一个文件）
 
 Tests/Runtime/Diagnostics/    注册表、报告、文本渲染
 Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核

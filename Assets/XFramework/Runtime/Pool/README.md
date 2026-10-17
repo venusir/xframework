@@ -367,7 +367,7 @@ XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`*
 | `StringBuilderPool.Get()`                 | 获取 `StringBuilder`                             |
 | `StringBuilderPool.GetPooled(out sb)`     | using 方式获取 `StringBuilder`，块结束自动归还   |
 | `StringBuilderPool.Return(sb)`            | 归还 `StringBuilder`，自动 `Clear()`             |
-| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（首次 `Get()` 前）                  |
+| `XXXPool<T>.Configure(PoolConfig config)` | 预配置池参数（无活跃实例时；有活跃实例则告警并拒绝） |
 | `XXXPool<T>.GetPool()`                    | 获取内部 `IPool<T>` 接口，用于依赖反转           |
 | `CollectionPoolManager.ClearAll()`        | 一键清空所有集合池的闲置实例                     |
 

@@ -69,7 +69,7 @@ Runtime/Audio/
 └── AudioClipLease.cs         # internal：资源租约（本体 + 释放动作）
 ```
 
-十七个文件：前九个是使用方直接接触的公开面，标 `internal` 的八个是默认实现的零件与两条测试缝。
+文件树中标 `internal` 的是默认实现的零件与两条测试缝；其余是使用方直接接触的公开面。
 
 ## API 参考
 

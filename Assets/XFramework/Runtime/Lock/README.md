@@ -142,14 +142,15 @@ using var sub = player.OnLockStateChanged((lockType, isLocked) =>
 
 ```text
 Runtime/Lock/
-├── LockManager.cs                # 静态外观（全局入口）+ Global 哨兵
+├── LockManager.cs                # 静态外观（全局入口）+ Global 哨兵 + 四个 internal 支撑类型
 ├── ILockable.cs                  # 可锁主体标记接口（主体身份按引用同一判定）
 ├── LockableExtensions.cs         # ILockable 扩展方法（AddLock / IsLocked / OnLockStateChanged …）
 ├── LockHandle.cs                 # 锁句柄（readonly struct，支持 using）
 └── LockStateSnapshot.cs          # 诊断快照：GetSnapshot 的返回值
 ```
 
-五个文件都是公开面，本模块没有 `internal` 类型。
+`LockManager.cs` 末尾另有四个 internal 支撑类型（`ActionDisposable` / `EmptyDisposable` /
+`LockSubjectReferenceComparer` / `LockSnapshotPool`），不属于公开面。
 
 ## 行为契约
 

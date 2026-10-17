@@ -302,13 +302,13 @@ Runtime/Input/
 │   ├── DeviceDisconnectedMessage.cs
 │   └── GamepadTypeChangedMessage.cs
 └── Default/                          # 默认后端（Unity Input System）；Unity 输入类型只许住在这里
-    ├── InputSystemProvider.cs        # 基于 Unity Input System 的默认实现
-    ├── SystemRebindingOperation.cs   # Unity Input System 的 IRebindingOperation 实现
+    ├── InputSystemProvider.cs        # internal：基于 Unity Input System 的默认实现
+    ├── SystemRebindingOperation.cs   # internal：Unity Input System 的 IRebindingOperation 实现
     ├── InputSystemOptions.cs         # Initialize 的配置载荷（Asset + InitialActionMap）
     └── InputSystemOptionsAsset.cs    # 上面那份配置的 ScriptableObject 载体（Inspector 可配）
 ```
 
-十四个文件都是公开面（`Default/` 下四个是默认后端的配置载体与实现），本模块没有 `internal` 类型。
+文件树中标 `internal` 的是默认后端实现；其余（含 `Default/` 下的配置载体）是使用方直接接触的公开面。
 **`Default/` 这个目录是边界**：Unity Input System 的类型只允许出现在该命名空间里。
 
 ## 典型场景

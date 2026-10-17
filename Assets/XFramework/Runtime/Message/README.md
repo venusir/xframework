@@ -211,7 +211,7 @@ Runtime/Message/
 
 | 面 | 类型 |
 |---|---|
-| **公开** | `IMessagePublisher` / `IMessageSubscriber`(同在 `IMessageBroker.cs`)、`MessageManager`(静态门面)、`IMessageFilter`、`IDestroyCancellationToken` |
+| **公开** | `IMessagePublisher` / `IMessageSubscriber`(同在 `IMessageBroker.cs`)、`MessageManager`(静态门面)、`IMessageFilter`、`IDestroyCancellationToken`、`MessagePublishStrategy`、`MessageBusStats` / `MessageChannelStats` / `MessageTypeStats` |
 | **internal** | `IMessageBroker`、`MessageBroker`、`MessageChannel`、`AsyncSubscription`、`DispatchListPool`、`MainThreadGuard`、`ActionDisposable` |
 
 > 事件流本身(`EventStream` / `BufferedEventStream`)已迁至 `XFramework.XEvent` 模块——见 [Event README](../Event/README.md)。本模块的 `MessageChannel` 通过它的公开面持有两条流。

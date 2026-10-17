@@ -50,12 +50,12 @@ Runtime/Save/
 ├── SaveOptions.cs         # 初始化选项（格式版本、加密 Provider）
 ├── SaveLoadResult.cs      # 加载状态与结果
 ├── SaveReport.cs          # 进度载荷（readonly struct）
-├── SavePathUtility.cs     # 路径构造、槽位解析与标识校验
-├── SaveIntegrity.cs       # 载荷校验和（FNV-1a 64）
+├── SavePathUtility.cs     # internal：路径构造、槽位解析与标识校验
+├── SaveIntegrity.cs       # internal：载荷校验和（FNV-1a 64）
 └── SaveBootstrapStage.cs  # 引导阶段：初始化门面 + 跑一次启动恢复扫描
 ```
 
-十个文件都是公开面，本模块没有 `internal` 类型。
+文件树中标 `internal` 的是模块内部件，其余是使用方直接接触的公开面。
 
 ## 行为契约
 

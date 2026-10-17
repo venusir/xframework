@@ -46,26 +46,26 @@ Debug.Log($"Item: {row.Name}, Price: {row.Price}");
 Runtime/Config/
 ├── ConfigManager.cs          # 静态外观（全局入口）
 ├── IConfigManager.cs         # 可替换的后端契约
-├── ConfigManagerImpl.cs      # 默认实现：五个字典（表 / 全局 / 包装器 / 路径 / 在途）+ 事件派发
+├── ConfigManagerImpl.cs      # internal：默认实现：五个字典（表 / 全局 / 包装器 / 路径 / 在途）+ 事件派发
 ├── IConfigRow.cs             # 行契约（TKey Id，含复合主键用法）
 ├── IConfigTable.cs           # 表契约的非泛型面（零反射注入路径用）
 ├── ConfigTable.cs            # 表包装器（构造接收 IDictionary，含条件查询与 BuildIndex）
 ├── ConfigIndexView.cs        # 非主键索引视图（Get / TryGet）
 ├── IConfigLoader.cs          # 自定义加载器接口（策略对象，框架不持有引用）
-├── JsonLoader.cs             # 内置：JSON（JsonUtility）
-├── CsvLoader.cs              # 内置：CSV（Split(',')，方言边界见「已知限制」）
-├── ScriptableObjectLoader.cs # 内置：ScriptableObject（经 AssetManager）
-├── ConfigLoadHelper.cs       # 加载调度助手（并发共享同一任务）
-├── ConfigTextLoader.cs       # 文本类格式的公共读入段
-├── ConfigTypeHelper.cs       # 主键类型推导（reflection 边界，结果缓存）
+├── JsonLoader.cs             # internal：内置 JSON（JsonUtility）
+├── CsvLoader.cs              # internal：内置 CSV（Split(',')，方言边界见「已知限制」）
+├── ScriptableObjectLoader.cs # internal：内置 ScriptableObject（经 AssetManager）
+├── ConfigLoadHelper.cs       # internal：加载调度助手（并发共享同一任务）
+├── ConfigTextLoader.cs       # internal：文本类格式的公共读入段
+├── ConfigTypeHelper.cs       # internal：主键类型推导（reflection 边界，结果缓存）
 ├── ConfigFormat.cs           # 内置格式枚举（Json / ScriptableObject / Csv）
 ├── ConfigLoadKind.cs         # 已加载条目种类（Table / Global）
 ├── ConfigLoadedInfo.cs       # 诊断回读载荷：CopyLoaded 的列表元素
-├── ConfigManifest.cs         # 声明式批量清单（AddTable / AddGlobal + 分组）
+├── ConfigManifest.cs         # 声明式批量清单（AddTable / AddGlobal + 分组；含 internal 条目）
 └── ConfigException.cs        # 本模块统一异常（包装底层异常）
 ```
 
-十九个文件都是公开面，本模块没有 `internal` 类型。
+文件树中标 `internal` 的是模块内部件，其余是使用方直接接触的公开面。
 
 ## 行为契约
 

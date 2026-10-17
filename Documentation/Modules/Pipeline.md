@@ -45,7 +45,7 @@ Runtime/Pipeline/
 ├── Pipeline.cs                   # 静态门面:创建实例 + 相位分组装配助手 BuildPhaseGroups
 ├── PipelineStageContext.cs       # 阶段执行上下文(阶段写面;读取面在 PipelineProgress / IPipeline.Status)
 ├── PipelineProgress.cs           # 全局进度快照(事件载荷)
-├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获)
+├── StageExecution.cs             # 阶段执行共享包装(契约兜底/取消/异常捕获,internal)
 ├── ParallelStage.cs              # 并行阶段(组内并行、事件驱动组内聚合,public)
 ├── SequenceStage.cs              # 串行阶段(组内串行子段,public)
 ├── StageAggregator.cs            # 容器子阶段共享聚合器(门铃 + 加权聚合,internal)

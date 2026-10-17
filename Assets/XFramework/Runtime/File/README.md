@@ -69,7 +69,7 @@ Runtime/File/
 ├── IAtomicFileProvider.cs    # 原子写入能力契约（可选能力接口）
 ├── IDirectoryProvider.cs     # 子目录枚举能力契约（可选能力接口）
 ├── ICryptoProvider.cs        # 加解密提供者接口
-├── CryptoFileProvider.cs     # 加解密装饰器（内部）
+├── CryptoFileProvider.cs     # internal：加解密装饰器（实现两个可选能力接口）
 ├── XorCryptoProvider.cs      # 基于 XOR 的轻量加解密实现
 ├── DesktopFileProvider.cs    # 桌面平台实现（System.IO）
 ├── MobileFileProvider.cs     # 移动平台实现（Streaming 域走 UnityWebRequest）
@@ -77,7 +77,7 @@ Runtime/File/
 └── FilePathUtility.cs        # 路径工具（归一化 / 文件名提取 / 路径沙箱校验）
 ```
 
-十三个文件都是公开面（`CryptoFileProvider` 是装饰器但为 public——它要实现可选能力接口并被门面 `is` 探测），本模块没有 `internal` 类型。
+文件树中标 `internal` 的是模块内部件（`CryptoFileProvider` 虽是装饰器，但为 `internal`），其余是使用方直接接触的公开面。
 
 ## 行为契约
 

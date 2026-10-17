@@ -303,6 +303,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **公开面模板句与固定计数清扫（2026-10-17，第二轮审计）**：删除 Config / Save / File / Lock / Input /
+  Localization / Asset / Audio / Pipeline 的「N 个文件都是公开面 / 本模块没有 internal」模板句，文件树按磁盘
+  逐文件标注 `internal`（CONF-002 / SAVE-011 / FILE-003 / LOCK-002 / INP-004 / LOC-002 / AST-005 /
+  AUD-010 / PIPE-001）；Message 公开面表补 4 个公开类型（MSG-006）；删掉 Camera / Diagnostics / Data /
+  Update 的固定计数（CAM-006 / DIAG-006 / DATA-012 / UPD-004）；Pool API 表的 `Configure` 前提改为
+  「无活跃实例时」（POOL-005）。
 - **契约句订正（2026-10-17，第二轮审计）**：Serialize README 的「替换内置格式」语义写反（SER-002：
   `Register` 总是静默覆盖，内置注册只在 `Initialize` 时让位于使用方）；Asset README 热更链仍写
   「预检 → 下载 → 激活」（AST-002，改为「预检 → 激活 → 下载」）；Audio 的 `Play` 失败契约在接口 remark /

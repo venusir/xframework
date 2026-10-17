@@ -263,8 +263,8 @@ using (var handle = await AssetManager.LoadRawFileAsync("configs/server_list"))
 Runtime/Asset/
 ├── AssetManager.cs                # 静态外观（全局入口）
 ├── IAssetManager.cs               # 资源管理器公共接口
-├── AssetManagerImpl.cs            # 默认实现（对象池 + 生命周期管理）
-├── YooAssetManagerImpl.cs         # YooAsset 底层适配器（多包管理 + 热更链路 + 远端 / 解密适配）
+├── AssetManagerImpl.cs            # internal：默认实现（对象池 + 生命周期管理）
+├── YooAssetManagerImpl.cs         # internal：YooAsset 底层适配器（多包管理 + 热更链路 + 远端 / 解密适配）
 ├── IAssetRemoteServices.cs        # 远端资源地址服务接口（主站 / 备站）
 ├── IAssetDecryptionServices.cs    # 资源解密服务接口（镜像 YooAsset 的 IDecryptionServices）
 ├── IAssetPoolController.cs        # 资源实例池的受控清理能力（可选能力接口）
@@ -275,9 +275,9 @@ Runtime/Asset/
 ├── YooAssetSceneLoadSource.cs     # internal：缝的默认实现，包住 YooAsset.SceneHandle
 ├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收 / 远端地址服务 / 解密服务）
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
-├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext
+├── AssetInitProgressRelay.cs      # internal：进度直写桥：AssetInitReport → PipelineStageContext
 ├── AssetBootstrapStage.cs         # 引导阶段：资源管理器初始化（Phase 0，最早）
-├── AssetOperationStatus.cs        # 资源操作状态（四句柄共用）+ 与 YooAsset.EOperationStatus 的唯一换算
+├── AssetOperationStatus.cs        # 资源操作状态（四句柄共用）+ internal 映射器：与 YooAsset.EOperationStatus 的唯一换算
 ├── AssetHandle.cs                 # 资源句柄（只读结构体，委托 YooAsset.AssetHandle）
 ├── AssetDownloaderHandle.cs       # 下载器句柄（事件 / 控制 / 等待）
 ├── SubAssetsHandle.cs             # 子资源句柄（图集 / 多 Sprite）
@@ -285,7 +285,8 @@ Runtime/Asset/
 └── InstanceTracker.cs             # internal：实例引用追踪组件（挂在实例上保活）
 ```
 
-二十二个文件：标 `internal` 的四个是测试缝与内部组件（`InstanceTracker` 由 `AddComponent` 挂到实例上，使用方不直接接触），其余是公开面。
+文件树中标 `internal` 的是测试缝与内部组件（`AssetManagerImpl` / `YooAssetManagerImpl` / `AssetInitProgressRelay`
+等默认实现的零件，以及 `InstanceTracker`），其余是使用方直接接触的公开面。
 
 ## 行为契约
 

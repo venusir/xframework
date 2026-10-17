@@ -127,7 +127,7 @@ Runtime/Pipeline/
 ├── Pipeline.cs                   # 静态门面：Create 工厂 + BuildPhaseGroups 分组助手
 ├── PipelineStageContext.cs       # 阶段执行上下文（阶段写面；读取面在 PipelineProgress / IPipeline.Status）
 ├── PipelineProgress.cs           # 全局进度快照（事件载荷）
-├── StageExecution.cs             # 阶段执行共享包装（契约兜底 / 取消 / 异常捕获）
+├── StageExecution.cs             # internal：阶段执行共享包装（契约兜底 / 取消 / 异常捕获）
 ├── ParallelStage.cs              # 并行阶段（组内并行、事件驱动组内聚合）
 ├── SequenceStage.cs              # 串行阶段（组内串行子段）
 ├── StageAggregator.cs            # internal：容器子阶段共享聚合器（门铃 + 加权聚合）
@@ -135,7 +135,7 @@ Runtime/Pipeline/
 └── ContextAggregation.cs         # internal：加权扫描共享助手（阈值节流 / 状态快照）
 ```
 
-标 `internal` 的三个是编排内部件，使用方不直接接触；其余九个是公开面。
+标 `internal` 的四个是编排内部件，使用方不直接接触；其余八个是公开面。
 
 ## 架构设计
 
@@ -143,8 +143,8 @@ Runtime/Pipeline/
 
 | 面 | 类型 |
 |---|---|
-| **公开** | `IPipeline`、`IPipelineStage`(含 `PipelineStageState`)、`IPhaseStage`、`Pipeline`(静态门面)、`PipelineStageContext`、`PipelineProgress`、`StageExecution`、`ParallelStage`、`SequenceStage` |
-| **internal** | `StageAggregator`、`ContextBell`、`ContextAggregation` |
+| **公开** | `IPipeline`、`IPipelineStage`(含 `PipelineStageState`)、`IPhaseStage`、`Pipeline`(静态门面)、`PipelineStageContext`、`PipelineProgress`、`ParallelStage`、`SequenceStage` |
+| **internal** | `StageExecution`、`StageAggregator`、`ContextBell`、`ContextAggregation` |
 
 > 管线不依赖上层模块,依赖方向单向:Bootstrap → Pipeline(装配在引导模块侧,复用本模块的相位分组助手)。
 

@@ -268,14 +268,14 @@ bool initialized = LocalizationManager.IsInitialized;    // true
 Runtime/Localization/
 ├── LocalizationManager.cs            # 静态外观（全局入口）
 ├── ILocalizationManager.cs           # 可替换的后端契约
-├── LocalizationManagerImpl.cs        # 默认实现（LRU 缓存 + 占位符引擎）
+├── LocalizationManagerImpl.cs        # internal：默认实现（LRU 缓存 + 占位符引擎）
 ├── LocalizationLanguageInfo.cs       # 诊断回读载荷：CopyLoadedLanguages 的列表元素
 ├── LanguageChangedMessage.cs         # 语言切换消息（readonly struct，无装箱）
 ├── LocalizationBootstrapStage.cs     # 引导阶段（IBootstrapStage，Phase 90）
 └── LanguageAssetLoader.cs            # internal：语言数据异步加载器（YooAsset → JSON 解析）
 ```
 
-七个文件里只有 `LanguageAssetLoader.cs` 是 `internal`；其余六个是使用方直接接触的公开面。
+文件树中标 `internal` 的是默认实现与加载器，其余是使用方直接接触的公开面。
 
 ## 典型场景
 
