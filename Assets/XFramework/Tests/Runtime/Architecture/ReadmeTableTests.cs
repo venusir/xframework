@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XLock;
@@ -19,7 +20,9 @@ namespace XFramework.Architecture.Tests
     /// <see cref="NamespaceExceptions"/>），反向抓程序集里不属于任何模块的游离命名空间；④「主要功能」不是
     /// 模块粒度（功能亮点 + 表下显式豁免句），按**登记表**守：<see cref="FeatureTableRegistry"/>
     /// （模块 → 触发词）与 <see cref="FeatureTableExemptions"/>（模块 → 豁免理由）必须与模块全集双向相等，
-    /// **未登记即红**——与 <c>AutoInitTests</c> 的族清单同一形状。</para>
+    /// **未登记即红**——与 <c>AutoInitTests</c> 的族清单同一形状；⑤ 包 README 里带 <c>#锚点</c> 的
+    /// <c>.md</c> 链接必须指向目标文件里存在的 <c>##</c> 标题（2026-10-17 加：守「可替换的实现一览」的
+    /// 「实现方入口」锚点与既有的 Tip 锚点）。</para>
     /// <para><b>放 PlayMode 而不是 EditMode</b>：本仓的开发回路里，带 <c>-Filter</c>
     /// 且未指定平台时只跑 PlayMode，EditMode 侧的守卫会被这个回路静默跳过（同 <c>AutoInitTests</c>）。
     /// 读 README 只需文件系统路径（测试壳的 Assets 是指回仓库的 junction），不需要 Unity 资产 API，
@@ -29,7 +32,9 @@ namespace XFramework.Architecture.Tests
     /// ③ 行内容正确性（职责、说明是否属实）仍靠评审；④ 其余 <c>.md</c> 表不在射程——「路径与目录」
     /// 「框架约定的名字」仍靠评审，「第三方依赖」表由 Editor 侧 <c>DependencyDeclarationTests</c> 另守
     /// （两个测试程序集互不可见，不跨引）；⑤ 两条解析前提「每个节只有一张表」「单元格内无转义竖线」
-    /// 当前成立，被破坏时列数校验会报「格式坏」而不是静默误解析。</para>
+    /// 当前成立，被破坏时列数校验会报「格式坏」而不是静默误解析；⑥ **锚点指向的语义**——只校验
+    /// 「目标文件里存在规范化后同名的 <c>##</c> 标题」，不校验那一节的内容是不是链接想指的（内容正确性
+    /// 仍靠评审）。</para>
     /// <para><b>新模块 / 新例外来这里登记</b>：<see cref="NamespaceExceptions"/>（命名空间不符合
     /// <c>XFramework.X&lt;模块&gt;</c> 推导的模块）、<see cref="FeatureTableRegistry"/>（上功能表的模块及其
     /// 触发词）、<see cref="FeatureTableExemptions"/>（刻意不上功能表的模块及理由）。</para>
@@ -163,6 +168,63 @@ namespace XFramework.Architecture.Tests
 
             Assert.IsEmpty(violations,
                 "包 README 的模块文档链接指不到真文件：\n  " + string.Join("\n  ", violations));
+        }
+
+        [Test]
+        public void AnchorLinks_PointToExistingHeadings()
+        {
+            var violations = new List<string>();
+            var lines = ReadReadmeLines(violations);
+            if (lines == null) return;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i];
+                int searchFrom = 0;
+                while (true)
+                {
+                    int open = line.IndexOf("](", searchFrom, StringComparison.Ordinal);
+                    if (open < 0) break;
+
+                    int close = line.IndexOf(')', open + 2);
+                    if (close < 0) break;
+
+                    string target = line.Substring(open + 2, close - open - 2).Trim();
+                    searchFrom = close + 1;
+
+                    int hash = target.IndexOf('#');
+                    if (hash <= 0) continue;
+
+                    string pathPart = target.Substring(0, hash);
+                    string fragment = target.Substring(hash + 1);
+                    if (fragment.Length == 0) continue;
+                    if (!pathPart.EndsWith(".md", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (pathPart.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                        pathPart.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    string full = Path.Combine(SourceScanner.PackageRoot,
+                        pathPart.Replace('/', Path.DirectorySeparatorChar));
+                    if (!File.Exists(full))
+                    {
+                        violations.Add($"README.md:{i + 1} 的锚点链接目标不存在：{target}");
+                        continue;
+                    }
+
+                    string expected = Uri.UnescapeDataString(fragment);
+                    if (!HasLevelTwoHeading(full, expected))
+                    {
+                        violations.Add($"README.md:{i + 1} 的锚点链接 {target} 找不到对应标题" +
+                                       $"——目标文件里没有规范化后等于「{expected}」的 ## 标题");
+                    }
+                }
+            }
+
+            Assert.IsEmpty(violations,
+                "包 README 的节锚点失效（链接指向的标题不存在或被改名）：\n  " +
+                string.Join("\n  ", violations));
         }
 
         [Test]
@@ -530,6 +592,48 @@ namespace XFramework.Architecture.Tests
             if (close <= open + 2) return null;
 
             return cell.Substring(open + 2, close - open - 2).Trim();
+        }
+
+        /// <summary>目标文件是否存在某个 <c>##</c> 标题，其 GitHub 风格锚点等于 <paramref name="anchor"/>。</summary>
+        private static bool HasLevelTwoHeading(string path, string anchor)
+        {
+            foreach (string line in File.ReadAllLines(path))
+            {
+                string trimmed = line.TrimStart();
+                if (!trimmed.StartsWith("## ", StringComparison.Ordinal)) continue;
+
+                if (string.Equals(ToAnchor(trimmed.Substring(3).Trim()), anchor, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// GitHub 风格锚点：小写；去掉行内 markdown 标记与标点；每个空白转一个 <c>-</c>（**不折叠**——
+        /// <c>提示 / 浮动</c> 的 ` / ` 会变成 <c>--</c>，与 GitHub 一致）。只覆盖本仓 README 实际出现的形态
+        /// （中文标题、全角括号、<c>/</c>、空格），不追求与 GitHub 全量一致。
+        /// </summary>
+        private static string ToAnchor(string heading)
+        {
+            var builder = new StringBuilder(heading.Length);
+            foreach (char c in heading)
+            {
+                if (c == '`' || c == '*') continue;
+
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-')
+                {
+                    builder.Append(char.ToLowerInvariant(c));
+                }
+                else if (char.IsWhiteSpace(c))
+                {
+                    builder.Append('-');
+                }
+            }
+
+            return builder.ToString();
         }
 
         #endregion
