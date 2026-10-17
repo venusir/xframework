@@ -26,6 +26,8 @@
 
 ## 决策台账
 
+- 已做：**解密失败统一抛 `IOException`**（2026-10-17 · `db2e3e1`，FILE-001）——`CryptoFileProvider` 把 `Decrypt` 返回 null 转成 IO 失败，字节面与文本面一致；内置 XOR 永不返回 null，默认路径不变。
+
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，**零高危**；逐条理由的展开见使用方 README 的相关章节，此处只留「评估过并否决」这一层。已修项见 `CHANGELOG`。）
 
 - 不做：**不给 `ConsoleFileProvider` 写测试派生类**（2026-09-30 · 审计轮）——它锁的是「本仓没有的使用方式」（全仓零派生）；真正该锁的「不实现可选能力接口时门面如何降级」已由 `NonAtomicFileProvider` / `NonEnumerableFileProvider` 两个替身覆盖。无重开判据。

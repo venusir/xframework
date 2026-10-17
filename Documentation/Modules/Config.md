@@ -51,6 +51,8 @@ Runtime/Config/
 
 ## 决策台账
 
+- 已做：**Json / ScriptableObject 行类型只能用字段**（2026-10-17 · `bb6232b`，CONF-001）——三处 README 示例与门面 XML 把主键写成自动属性，而两条内置路径都不序列化属性（Json 撞 `Duplicate Id '0'`、SO 的 Inspector 无处填写）；示例改为字段并在「已知限制」成文，`Tests/Editor/Config/JsonRowSerializationTests` 钉住「属性版读回 0、字段版读回 1001」。
+
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过。**一条高危已修**——CSV 的值类型行静默产出默认值；另有一条发现被复现**证伪**（见下）。已修项见 `CHANGELOG`。本节的否决条目逐条理由见使用方 README 的相关章节，此处只留「评估过并否决」这一层——**例外**：Luban 那条的理由是维护向的，本文件自带。）
 
 - 不做：**不给 Config 加线程守卫**（2026-09-30 · 审计轮）——与 Update / Data 同判（契约写进 README 的「线程契约」、失败响亮），不为它加机械。无重开判据。

@@ -28,6 +28,8 @@ Runtime/Message/
 
 ## 决策台账
 
+- 已做：**投递期间禁止通道回收**（2026-10-17 · `c3e16c9`，MSG-001）——`MessageChannel` 加投递深度闩锁，`IsReclaimable` 在派发期间恒 false；四条发布路径共用 `EmitSyncAndBuffer`。首条 `Publish` 的同步订阅清零不再让通道在缓冲写入前被摘除。
+
 > 本节此前不存在（文件结构之外无待办）；2026-10-11 框架级评估产生了第一条，故按需建立。
 
 - 已做：**`MessageStatsTests` 的零分配断言从恒真尺子改为「结构断言 + 放大粗尺子」**（2026-10-12 · 用例 `CopyTypeStats_StructuralEvidence_NoBoxing`；10 万次反复复制，实测堆增量 **0 B**）——原尺子 `GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0。结构证据：`MessageTypeStats` 是值类型且除 `System.Type`（指向既有类型对象）外无引用类型字段；`MessageStatsAccumulator` 是值类型且 `IMessageChannel.Accumulate` 按 `ref` 收它；`MessageBroker._channels` / `_keyedChannels` **声明为具体泛型字典而不是接口**。红证意外地互为印证：把 `_channels` 临时改回 `IDictionary<,>` 声明，结构断言立刻红，**且尺子同时读到 2,334,720 B（≈23 B/迭代的装箱枚举器）**——这条结构约束不是洁癖，它守的是真实存在的分配；注入式（`new object()`）红证另读到 1,007,616 B。校准与改造模板见 `Documentation/Workflow.md` §六（该处置是跨模块的，真相在那里）。

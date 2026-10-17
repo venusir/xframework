@@ -60,6 +60,8 @@ Runtime/Asset/
 
 ## 决策台账
 
+- 已做：**资产加载取消时释放已创建的 YooAsset 句柄**（2026-10-17 · `84dec73`，AST-001）——三条异步加载路径共用 `WaitOrReleaseAsync`，取消时 `Release()` 后重抛；为可测性抽出 internal 等待缝 `IAssetLoadWait`（照 `ISceneLoadSource` 先例）。真实 YooAsset 包上的「取消后 provider 不增长」仍无端到端用例。
+
 （本节吸收原「已评估未采纳与未决」。逐条理由的展开在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「评估过并否决」这一层；**下一轮从这里读起**。历轮：2026-10-01 模块审计（判据 A–F 全类扫过）；2026-10-02 覆盖清点；2026-10-13 热更编排边界裁定（框架级评估 §5.2 步骤 8，裁定全文与真缺口归属见 `../Ledger.md` 的「热更编排」条）；2026-10-17 Bootstrap 审计轮。）
 
 - 已做：**引导阶段的 `Shutdown` 只销毁自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`AssetBootstrapStage` 新增 `_initializedByThisStage`：已初始化早退路径不再在 `Shutdown` 里销毁使用方注入的管理器，与 Localization / Input / UI 的「谁初始化谁清理」对齐。回归用例 `BootstrapStageTests.AssetBootstrapStage_AlreadyInitialized_ShutdownDoesNotDestroy` / `..._InitializedByStage_ShutdownDestroys`（前者改前必红：`Expected: True But was: False`）。

@@ -127,6 +127,10 @@ Runtime/UI/
 
 ## 决策台账
 
+- 已做：**HUD 逐实例异常隔离**（2026-10-17 · `446bc38`，UI-B-001）——逐 HUD try/catch + `UpdateFaulted` 停更标记（回池复位在 `RecycleHud`）；一个 HUD 抛异常不再让其余 HUD 静默停更。
+- 已做：**弹窗尺寸按屏幕像素换算**（2026-10-17 · `069e0c3`，UI-C-001）——`ShowPopupAsync` 改传 `GetScreenRect(rect).size`，挂 `CanvasScaler` 不再错位。
+- 已做：**`UpdateManager.Clear()` 后的驱动器恢复**（2026-10-17 · `5681ce1`，UIA-002）——`Initialize` 在早退前重接每帧驱动器，并一并重注册现存分档驱动器。
+
 （本节由模块 README 的「建了什么 / 还差什么」与历轮审计结论合流。2026-09-30 `e613867` 搬入前者——
 README 只留使用方要知道的边界（「面板资源不会自动卸载」→ 其 `## 已知限制`）。2026-10-01 **第一轮
 定向审计**——`UIManager.cs` 静态门面及其生命周期相邻面（`IUIManager` 契约、`UIManagerImpl` 的

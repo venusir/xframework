@@ -42,6 +42,8 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 
 ## 决策台账
 
+- 已做：**扫尾补算「本趟出生」的槽位**（2026-10-17 · `b699202`，TMR-002）——回调里新建的定时器复用刚释放的下标，原实现本趟 `min` 漏算、档位停在粗档；现在触发过回调的扫尾补扫一次 `BornPass == 当前趟` 的槽位（未触发回调的扫尾不做第二次遍历）。
+
 - 已做：**v1 功能面建成**（2026-10-01 · 使用方 README + `CHANGELOG`）——一次性延时 `After` / 固定间隔 `Every`（各带 `Action` 与零闭包 `Action<TState>` 两种重载）；池化槽位 + 代际安全句柄 + 自由链复用 + 2 倍增长（无上限）；不漂移的固定间隔（锚点 + k×interval 网格）+ 跳拍不补发；双时间轴（`Scaled` / `Unscaled`），暂停与时间缩放零代码转接；档位自动升降档 + 周期表跨模块集成锁定；取消令牌（含 `destroyCancellationToken`）、回调异常隔离、遍历期重入安全；句柄查询与控制（`Remaining` / `IsActive` / `Stop` / `Restart` / `Dispose`）+ 门面 `CancelAll` / `ActiveCount`。原「已完成（v1）」清单即上述各项，功能说明与用法在使用方 README，逐条变更证据在 `CHANGELOG`。
 - 暂不做：**「每档一个驱动器」的分桶**（2026-10-01 · v1 评估）——那是 UI 的 `TierDriver` 范式；收益是档位互不干扰（一条短定时器不再拖累同轴的长定时器），代价是管理器自维护分桶、且「新定时器落哪档」变成创建时的静态决定——「临近自动升档」这条需求本身就没有了；当前形态（单驱动器 + 动态档位）是「自动升降档」这条需求的直接推论。重开判据：真出现大规模混用场景。
 - 不做：**`ITimerManager` 接口**（2026-10-01 · v1 评估）——本仓「有接口」的分界线是**是否存在可替换的后端**（Audio → FMOD/Wwise、Input → Rewired、File → 平台 Provider）；Timer 没有：它是纯编排原语，第三方没有「另一套定时器引擎」要接。多一个接口只会多出一份必须长期同步的转发契约（仓库有 `SetLayerVisibility` 那道疤），以及一个「门面完备性测试」。与 Update / Lock / Message / Pool 同族。无重开判据。

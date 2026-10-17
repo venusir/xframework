@@ -43,6 +43,8 @@ Runtime/Input/
 
 ## 决策台账
 
+- 已做：**`GetButtonPressDuration` 自己预热动作缓存**（2026-10-17 · `9a505ae`，INP-001）——从未被读取 API 访问过的动作同样能累计时长，`ObservePressDuration` 随之修复；`IInputProvider` XML 与 README 写明保证。
+
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，零高危；逐条理由的展开见使用方 README 的相关章节。已修项见 `CHANGELOG`。）
 
 - 不做：**不给 `Observe*` 的闭包做池化**（2026-09-30 · 审计轮）——分配发生在订阅期（低频），每帧路径只有一次 `_framePulse.Emit(int)`；为它引入池会把句柄生命周期复杂化。C1 类判据的前提是「频度」，这里不成立。无重开判据。

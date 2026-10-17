@@ -45,6 +45,8 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 
 ## 决策台账
 
+- 已做：**`Play()` 后同步读一次 `isPlaying`**（2026-10-17 · `248d473`，AUD-001）——短于一拍的 one-shot 不再卡在 `Starting` 到 60 拍超时并误报；实测（P-06）`Play()` 后同步读为真。
+
 - 已做：**v1 功能面建成**（2026-10-01 · 使用方 README + `CHANGELOG`）——门面模板全套（`Initialize` / `SetInstance` / `Destroy` / `EnsureInitialized`）+ `AutoInit`；隐藏宿主 + 池化 `AudioSource` + 代际安全句柄 + 播完回收（含 `Starting` 超时兜底）；字符串通道 + 推荐常量 + 惰性通道状态 + `RegisterChannel`；location 播放路径（`Play` / `PlayAsync`）+ 全部失败/取消/竞态路径；三档音量相乘 + 变更即时生效 + 静音；`Stop` / `StopAll` / 手动 `Pause`/`Resume` / 查询与计数。原「已完成（v1）」清单即上述各项，功能说明与用法在使用方 README，逐条变更证据在 `CHANGELOG`。
 - 未做：**并发抢占 / 优先级策略**（2026-10-01 · v2 候选）——需先答「抢谁」= 替使用方定混音策略；`AudioSource.priority` 的引擎语义需实测。
 - 未做：**淡入淡出 / crossfade**（2026-10-01 · v2 候选）——需要每 voice 的淡变状态与时间源，且与 `Pause` 交互；自成一块。
