@@ -937,7 +937,9 @@ namespace XFramework.XUI
 
             Vector2 position = UIPopupPosition.CalculatePosition(
                 UIPopupPosition.GetScreenRect(anchor),
-                rect.rect.size,
+                // 尺寸也必须取屏幕像素：rect.rect.size 是 Canvas 参考单位，挂 CanvasScaler 时
+                // 与锚点（GetScreenRect = 屏幕像素）不成比例，弹窗位置与钳制会整体错位（UI-C-001）。
+                UIPopupPosition.GetScreenRect(rect).size,
                 direction,
                 align,
                 Screen.safeArea,

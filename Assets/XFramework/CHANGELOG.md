@@ -210,6 +210,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **弹窗尺寸单位错配：Canvas 参考单位当屏幕像素（UI-C-001）**：`ShowPopupAsync` 把 `rect.rect.size`
+  传给 `UIPopupPosition.CalculatePosition`，而锚点与可用区域都是屏幕像素；挂 `CanvasScaler`
+  （项目侧常规）时弹窗位置与钳制整体错位。修法：改传 `UIPopupPosition.GetScreenRect(rect).size`
+  （与锚点同一条转换）；README 的手动示例同步。
+  回归：`UIPopupTests.Popup_WithCanvasScaler_StillPlacesByScreenPixels`（2× CanvasScaler，改前红）。
 - **HUD 每帧派发无逐实例异常隔离（UI-B-001）**：`UIHudManager.Update` 直接循环调 `hud.OnUpdate`，
   一个 HUD 抛异常会中断本轮遍历（外层 provider 隔离只保住整条 UI 通路并阻尼日志），症状是「其他 HUD
   静默停更」。修法：照面板侧 `DriveTier` 加逐 HUD try/catch + `UpdateFaulted` 停更标记（回池复位）。

@@ -1103,7 +1103,7 @@ var popupRect = (RectTransform)panel.transform;
 
 Vector2 pos = UIPopupPosition.CalculatePosition(
     anchorRect,
-    popupRect.rect.size,                             // 弹窗尺寸
+    UIPopupPosition.GetScreenRect(popupRect).size,   // 弹窗尺寸：屏幕像素（不是 rect.rect.size 的 Canvas 参考单位）
     UIPopupDirection.Auto,                           // 四向依次尝试
     UIPopupAlign.Start,                              // 垂直展开时=左对齐
     new Rect(0f, 0f, Screen.width, Screen.height),   // 换 Screen.safeArea 即避让刘海

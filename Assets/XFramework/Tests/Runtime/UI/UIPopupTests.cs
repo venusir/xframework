@@ -37,6 +37,16 @@ namespace XFramework.XUI.Tests
 
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<FakePanel>();
+            _factory.RegisterPanel<SizedFakePanel>(parent =>
+            {
+                var go = new GameObject("SizedFakePanel", typeof(RectTransform));
+                if (parent != null)
+                    go.transform.SetParent(parent, false);
+
+                // 弹窗尺寸单位用例需要非零尺寸（参考单位；CanvasScaler 下与屏幕像素相差 scaleFactor 倍）
+                go.GetComponent<RectTransform>().sizeDelta = new Vector2(120f, 60f);
+                return go.AddComponent<SizedFakePanel>();
+            });
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -116,6 +126,45 @@ namespace XFramework.XUI.Tests
             var popupRect = UIPopupPosition.GetScreenRect((RectTransform)panel.transform);
 
             Assert.AreEqual(anchorRect.yMax, popupRect.yMin, 0.5f, "Direction.Up 应贴在锚点上方");
+        }
+
+        /// <summary>
+        /// 挂了 <c>CanvasScaler</c>（项目侧常规）时，弹窗尺寸必须按屏幕像素换算（UI-C-001）。
+        /// <para>改前：<c>ShowPopupAsync</c> 把 <c>rect.rect.size</c>（Canvas 参考单位）直接当屏幕像素传给
+        /// <c>CalculatePosition</c>，而锚点走的是 <c>GetScreenRect</c>（屏幕像素）——缩放系数不为 1 时
+        /// 两者不成比例，弹窗位置与钳制整体错位。改用 <c>GetScreenRect(rect).size</c>（与锚点同一条转换）。</para>
+        /// </summary>
+        [Test]
+        public async Task Popup_WithCanvasScaler_StillPlacesByScreenPixels()
+        {
+            AddCanvasScaler();
+            var anchor = CreateAnchor(new Vector2(100f, 40f));
+
+            var panel = await UIManager.ShowPopupAsync<SizedFakePanel>(
+                anchor, "PF_FakePopup", UIPopupDirection.Down, UIPopupAlign.Start,
+                closeOnClickOutside: false);
+
+            var anchorRect = UIPopupPosition.GetScreenRect(anchor);
+            var popupRect = UIPopupPosition.GetScreenRect((RectTransform)panel.transform);
+
+            Assert.AreEqual(anchorRect.xMin, popupRect.xMin, 0.5f, "Align.Start 应左对齐锚点（屏幕像素）");
+            Assert.AreEqual(anchorRect.yMin, popupRect.yMax, 0.5f,
+                "Down 应贴在锚点下方——弹窗尺寸必须按屏幕像素换算，而不是 Canvas 参考单位（UI-C-001）");
+        }
+
+        /// <summary>给 UI 根挂一个 2× 的 <c>ScaleWithScreenSize</c> 缩放（参考分辨率取屏幕的一半）。</summary>
+        private void AddCanvasScaler()
+        {
+            var canvas = _root.AddComponent<Canvas>();
+            canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+
+            var scaler = _root.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(Screen.width / 2f, Screen.height / 2f);
+            scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+            scaler.matchWidthOrHeight = 0f; // 按宽度缩放 → scaleFactor ≈ 2
+
+            Canvas.ForceUpdateCanvases();
         }
 
         [Test]
@@ -218,5 +267,10 @@ namespace XFramework.XUI.Tests
         }
 
         #endregion
+    }
+
+    /// <summary>带固定参考尺寸（120×60）的面板——弹窗尺寸单位用例需要非零尺寸。</summary>
+    public class SizedFakePanel : FakePanel
+    {
     }
 }
