@@ -243,6 +243,26 @@ namespace Venusy609.Xframework.Editor.Tests
             CollectionAssert.AreEqual(new[] { "p0", "p3", "p4" }, log, "应按相位升序串行执行");
         }
 
+        /// <summary>
+        /// <see cref="Bootstrap.RunAsync"/> 把管线进度原样转交给调用方的
+        /// <see cref="IProgress{PipelineProgress}"/>；用 <see cref="PipelineProgress"/> 自身作持有者，
+        /// 结束后即可读到最终快照。
+        /// </summary>
+        [Test]
+        public void RunAsync_ProgressRelay_WritesFinalSnapshotToHolder()
+        {
+            Bootstrap.Register(NewStage("progress", 0));
+
+            var holder = new PipelineProgress();
+            Bootstrap.RunAsync(holder).GetAwaiter().GetResult();
+
+            Assert.AreEqual(1f, holder.OverallProgress, 0.001f, "完成后全局进度应为 1");
+            Assert.AreEqual("Completed", holder.Description);
+            Assert.AreEqual(1, holder.TotalStageCount, "一个相位组 = 管线顶层一个阶段");
+            Assert.AreEqual(1, holder.CompletedStageCount);
+            Assert.AreEqual(0, holder.FailedStageCount);
+        }
+
         [Test]
         public void RunAsync_NoStages_WarnsAndReturns()
         {
