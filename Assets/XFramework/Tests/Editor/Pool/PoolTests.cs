@@ -424,5 +424,30 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.That(pool.CountInactive, Is.EqualTo(1));
             Assert.AreSame(item, pool.Get());
         }
+
+        [Test]
+        public void Get_RentCallbackThrows_RollsBackActiveCount()
+        {
+            var pool = new Pool<TestItem>(() => new TestItem(),
+                onRent: _ => throw new InvalidOperationException("rent boom"));
+
+            Assert.Throws<InvalidOperationException>(() => pool.Get());
+            Assert.AreEqual(0, pool.CountActive,
+                "租出回调抛出时账本必须回滚，否则 CountActive 永久虚高（POOL-001）");
+        }
+
+        [Test]
+        public void Return_ReturnCallbackThrows_StillLeavesActiveState()
+        {
+            var pool = new Pool<TestItem>(() => new TestItem(),
+                onReturn: _ => throw new InvalidOperationException("return boom"));
+
+            var item = pool.Get();
+            Assert.AreEqual(1, pool.CountActive, "前提：实例已处于活跃态");
+
+            Assert.Throws<InvalidOperationException>(() => pool.Return(item));
+            Assert.AreEqual(0, pool.CountActive,
+                "归还回调抛出也必须落账，否则 CountActive 永久虚高（POOL-001）");
+        }
     }
 }

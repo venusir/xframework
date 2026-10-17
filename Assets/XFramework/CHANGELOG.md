@@ -221,6 +221,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Pool
+
+- **用户回调抛出时池账本不回滚（POOL-001）**：`Get` 的租出回调（`onRent` / `IPoolable.OnRent`）抛出时
+  `CountActive` 已 +1 且实例不在栈里，计数永久虚高；`Return` 的归还回调抛出时 `CountActive` 不递减。
+  修法：`Get` 在回调异常时回滚计数与 Editor 追踪集（实例不归还池，可能已被部分初始化）；`Return` 把递减
+  放进 `finally`。回归：`PoolTests` 两例（改前 1≠0）。
+
 #### Bootstrap
 
 - **引导阶段的「只清理自己初始化的那份」在重跑 / 失败路径不成立（AST-004 / DATA-002 / SAVE-005）**：Asset 阶段

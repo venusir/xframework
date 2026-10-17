@@ -153,11 +153,24 @@ namespace XFramework.XPool
             _activeSet?.Add(item);
 #endif
 
-            // 委托优先，其次接口
-            if (_onRent != null)
-                _onRent(item);
-            else if (item is IPoolable poolable)
-                poolable.OnRent();
+            // 委托优先，其次接口。**回调抛出必须回滚账本**（POOL-001）：调用方拿不到实例，
+            // 若不回滚，CountActive 永久虚高、实例悬空。实例不归还池——它可能已被回调部分初始化。
+            try
+            {
+                if (_onRent != null)
+                    _onRent(item);
+                else if (item is IPoolable poolable)
+                    poolable.OnRent();
+            }
+            catch
+            {
+                if (_activeCount > 0)
+                    _activeCount--;
+#if UNITY_EDITOR
+                _activeSet?.Remove(item);
+#endif
+                throw;
+            }
 
             return item;
         }
@@ -179,15 +192,21 @@ namespace XFramework.XPool
 #endif
 
             // 委托优先，其次接口
-            if (_onReturn != null)
-                _onReturn(item);
-            else if (item is IPoolable poolable)
-                poolable.OnReturn();
-
-            // 归还即离开活跃态：无论接下来是入栈复用还是超容丢弃，都不再有人持有它。
-            // 钳在 0 是因为 CollectionCheck 关闭时的重复归还会走到这里两次，不该把计数减成负数。
-            if (_activeCount > 0)
-                _activeCount--;
+            try
+            {
+                if (_onReturn != null)
+                    _onReturn(item);
+                else if (item is IPoolable poolable)
+                    poolable.OnReturn();
+            }
+            finally
+            {
+                // 归还即离开活跃态：无论接下来是入栈复用还是超容丢弃，都不再有人持有它。
+                // 放在 finally 里：归还回调抛出也必须落账，否则 CountActive 永久虚高（POOL-001）。
+                // 钳在 0 是因为 CollectionCheck 关闭时的重复归还会走到这里两次，不该把计数减成负数。
+                if (_activeCount > 0)
+                    _activeCount--;
+            }
 
             if (_stack.Count < _maxSize)
             {
