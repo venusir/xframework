@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Timer 已知限制补「粗档下新建定时器可提前一个档周期」（2026-10-17，TMR-003）**：锚点取上一次派发的
+  逻辑时刻，60 秒定时器存在时 `After(1f)` 可能约 40ms 后触发；干净修法需要 Update 暴露当前轴时刻查询面，
+  记 `待裁`（用户裁定：本批只文档化）。
 - **File 线程契约补移动端 Streaming 例外（2026-10-17，FILE-002）**：`MobileFileProvider` 的异步入口在池线程
   读 `Application.streamingAssetsPath` / 构造 `UnityWebRequest` 会抛 `UnityException`；README 的线程契约、
   性能代价与已知限制三处改为「移动端 Streaming 异步入口必须主线程，桌面端与其余域不受影响」。
