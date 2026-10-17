@@ -73,6 +73,13 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理语义）
   **`Clear()` 的定位不变**（测试复位用）——两者都只清登记表、不影响已初始化的服务。
   回归用例：`Tests/Runtime/Architecture/SessionResetTests.Bootstrap_ResetClearsTheStageRegistry`（已做改前必红）。
 - 已做：**运行中 `Shutdown` 与在途 `RunAsync` 交叠——实测并随修复覆盖第三方路径**（2026-10-13 · `948aadb`）——`GameLauncherFrameTests` 用例 2/3 与上条同源同结论：`Shutdown` 不取消任何东西，在途管线（装配期快照）照常执行其剩余阶段；第三方在自己的代码里调 `RunAsync` 且不传令牌时交叠同样成立。**已随上条一并修复**：中止不依赖调用方传令牌（Bootstrap 内部链接取消源），第三方路径由 `BootstrapTests` 的新用例钉住。
+- 已做：**运行中的 `RegisterDefaults` / `Clear` 补告警**（2026-10-17 · `f7e50df` · 重新审计）——README / XML 承诺「运行中修改登记表只告警」，但这两条路径静默改表；现在与 `Register` / `Unregister` 同形告警，并说明后果（新增阶段本轮不执行但会被 `Shutdown` 扫到；`Clear` 清掉的阶段在途仍执行但拿不到 `Shutdown`）。回归用例 `BootstrapTests.RegisterDefaults_WhileRunning_WarnsButProceeds` / `Clear_WhileRunning_WarnsButProceeds`（改前必红：`Expected log did not appear`）。
+- 已做：**会话复位 × 在途运行的 `_isRunning` 代际修复**（2026-10-17 · `1b13809` · 重新审计）——`ResetForNewSession` 允许新旧运行并存，旧实现却在 `finally` 无条件清 `_isRunning`，会把新运行正在持有的守卫一起清掉，第三个 `RunAsync` 被错误放行、同一批阶段并发跑两遍。改用运行代际号做归属。回归用例 `BootstrapTests.ResetForNewSession_DuringInFlightRun_OldRunDoesNotClearNewRunsGuard`（改前必红：`Expected: 1 But was: 2`）。
+- 已做：**Asset / Data / Save 引导阶段的清理所有权对齐**（2026-10-17 · `7d6a4be` + `8d9e650` · 重新审计）——三个阶段新增 `_initializedByThisStage`，`Shutdown` 只销毁自己初始化的那份，与 Localization / Input / UI 的「谁初始化谁清理」一致。**Asset 的标记放在 `await` 之前**：初始化在途时 `Shutdown` 仍须由本阶段作废在途任务——这条由全量 PlayMode 的 `GameLauncherFrameTests` 抓到（标记放在 `await` 之后会让失败链证据消失，`8d9e650` 修正）。回归用例 `BootstrapStageTests` 六个所有权用例（三条改前必红）。逐模块记录见 `Modules/Asset.md` / `Data.md` / `Save.md`。
+- 不做：**`DefaultGameLauncher` 按相位补缺 / 同相位冲突告警**（2026-10-17 · 重新审计）——按相位补缺会改变字段面语义（外部登记的同相位阶段是否算「替换」无法判定），冲突告警则会把「使用方有意替换」也变成噪音；本轮采纳的是文档收窄：唯一与 `Awake` 顺序无关的路径是覆写 `ConfigureStages`。重开判据：出现第三方真实踩坑报告。
+- 不做：**`BootstrapPhases.PreAsset` 常量 / 负相位契约**（2026-10-17 · 重新审计）——框架不为「早于 Asset」保留槽位；需要时在 `RunAsync` 之前自行初始化。公开常量会把一个未论证的位置变成承诺。重开判据：出现真实第三方诉求。
+- 不做：**多启动器守卫**（2026-10-17 · 重新审计）——不给 `GameLauncher` 引入单例静态态；README 写明「同一会话只应有一个启动器」。重开判据：出现真实多启动器用法。
+- 不做：**改 `BootstrapPhases.UserStart` 的值**（2026-10-17 · 重新审计）——它与 `Localization` 同值 90 是「不依赖本地化的业务阶段尽早开始」的有意取舍；依赖本地化的阶段取更大值，README 已写明。无重开判据。
 
 ## 审计轮次
 
@@ -81,3 +88,6 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理语义）
 
   **可复用的一条**：这次「`Shutdown` 用逆登记序」是典型的「实现与自己文档里的理由相悖」，而**框架自己推荐的用法**（先 `Register` 再 `RegisterDefaults`）恰好就是触发条件——查时序类缺陷时，把「文档推荐的用法」代进实现走一遍，比顺序读代码更容易撞见。
   **另一条**：相位号升为常量后，「插进框架阶段之间」的正解是 `Unregister` 换掉内置阶段自行编排，而不是赌「空闲值」——已写进 README 的相位约定。
+- **2026-10-17 重新审计**：主题「第三方自定义实现的友好度」（承接 2026-10-02 的二轮）。方法：Bootstrap 五个源文件 + 六个内置阶段 + Pipeline 相位契约 + README / 维护向记录 + 全部 Bootstrap 测试逐条读；按 `ModuleAudit.md` 的 A–F 判据扫过（A1/A2/B3/B4/B6/D3/D4 有命中，B1/B2/B5/C1/C2/E/F 无问题）。**发现与处置**：① 收窄「替换与调用顺序无关」承诺（文档；唯一可靠路径 = 启动器 `ConfigureStages` 覆写）；② `RegisterDefaults` / `Clear` 运行期告警（`f7e50df`）；③ 会话复位代际修复（`1b13809`）；④ Asset / Data / Save 清理所有权对齐（`7d6a4be` + `8d9e650`，Asset 的在途初始化标记由全量 PlayMode 反推修正）；⑤ README 新增「行为契约」，补齐会话复位 / 重跑 / 单启动器 / 主线程 / pre-Asset 等第三方义务；⑥ 补 `RunAsync` 进度中继覆盖。**未做**：启动器按相位补缺 / 冲突告警、pre-Asset 常量、多启动器守卫（三条见台账）。
+
+  **可复用的一条**：2026-10-02 引入 `Unregister` 时只验证了「同一段登记代码内」的顺序，没有把**框架自己的启动器**也代进推荐用法——「顺序无关」类承诺必须把所有会登记的组件（尤其是框架自己的 `Awake`）都走一遍。这与上一轮「把文档推荐的用法代进实现」是同一把尺子的两面：上一轮查的是**实现**，这一轮查的是**承诺的射程**。
