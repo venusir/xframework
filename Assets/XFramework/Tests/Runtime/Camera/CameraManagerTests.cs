@@ -148,6 +148,74 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual(CameraBlendStyle.Linear, fake.LastTransitionStyle);
         }
 
+        [Test]
+        public void Forwarding_ActiveHandle()
+        {
+            var handle = new CameraHandle(2, 5);
+            var fake = new FakeCameraManager { ActiveHandle = handle };
+            CameraManager.Initialize(fake);
+
+            Assert.AreEqual(handle, CameraManager.ActiveHandle);
+        }
+
+        [Test]
+        public void Forwarding_Register()
+        {
+            var expected = new CameraHandle(3, 1);
+            var fake = new FakeCameraManager { RegisterResult = expected };
+            CameraManager.Initialize(fake);
+
+            var handle = CameraManager.Register(_camera);
+
+            Assert.AreEqual(expected, handle);
+            Assert.AreSame(_camera, fake.LastRegistered);
+        }
+
+        [Test]
+        public void Forwarding_Unregister()
+        {
+            var fake = new FakeCameraManager { UnregisterResult = false };
+            CameraManager.Initialize(fake);
+            var handle = new CameraHandle(1, 2);
+
+            Assert.IsFalse(CameraManager.Unregister(handle));
+            Assert.AreEqual(handle, fake.LastUnregistered);
+        }
+
+        [Test]
+        public void Unregister_WhenNotInitialized_ReturnsFalse()
+        {
+            Assert.IsFalse(CameraManager.Unregister(new CameraHandle(0, 1)));
+        }
+
+        [Test]
+        public void Forwarding_HandleCommands()
+        {
+            var fake = new FakeCameraManager();
+            CameraManager.Initialize(fake);
+            var handle = new CameraHandle(4, 2);
+
+            CameraManager.Activate(handle);
+            Assert.AreEqual(handle, fake.LastActivatedHandle);
+
+            CameraManager.Deactivate(handle);
+            Assert.AreEqual(handle, fake.LastDeactivatedHandle);
+
+            CameraManager.TransitionTo(handle, 0.5f, CameraBlendStyle.Linear);
+            Assert.AreEqual(handle, fake.LastTransitionHandle);
+
+            fake.ActiveHandle = handle;
+            Assert.IsTrue(CameraManager.IsActive(handle));
+        }
+
+        [Test]
+        public void Register_Null_Throws()
+        {
+            CameraManager.Initialize(new FakeCameraManager());
+
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Register<Camera>(null));
+        }
+
         #endregion
     }
 }

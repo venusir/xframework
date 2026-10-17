@@ -10,15 +10,17 @@
 
 ```
 Runtime/Camera/
-├── ICameraManager.cs      # 公开：后端契约（OutputCamera / CameraIds / ActiveCameraId / IsTransitioning / 四操作）
-├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 同名转发）
-├── UnityCameraManager.cs  # 公开：默认实现（UnityEngine.Camera 注册表 + 位姿/FOV 插值 + 懒注册 LateUpdate ticker）
+├── ICameraManager.cs      # 公开：后端契约（命名 id / 动态句柄双键；5 查询 + 4 字符串操作 + 4 句柄操作）
+├── CameraHandle.cs        # 公开：动态相机句柄（Id + Generation；Generation=0 是 default 保留值；便捷方法）
+├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 接口同名转发）
+├── UnityCameraManager.cs  # 公开：默认实现（槽位表 + 命名/动态双键 + 位姿/FOV 插值 + 懒注册 LateUpdate ticker）
 ├── CameraBlendStyle.cs    # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
 └── README.md              # 使用说明
 
 Tests/Runtime/Camera/      # PlayMode：FakeCameraManager / CameraManagerTests / CameraFacadeCompletenessTests / UnityCameraManagerTests
-Tests/Editor/Architecture/ModuleBoundaryTests.cs  # 新增 CoreRuntime_DoesNotReferenceCinemachine（核心包零 Cinemachine 依赖）
-Runtime/Log/LogCategories.cs                     # 新增 CameraManager 分类
+Tests/Editor/Camera/       # EditMode：CameraHandleTests（default / 相等性 / 便捷方法短路）
+Tests/Editor/Architecture/ModuleBoundaryTests.cs  # CoreRuntime_DoesNotReferenceCinemachine（核心包零 Cinemachine 依赖）
+Runtime/Log/LogCategories.cs                     # CameraManager 分类
 ```
 
 **Cinemachine 不在本模块**：`com.venusy609.xframework.cinemachine` 是独立可选扩展包（`Assets/XFramework.Cinemachine/`，单独 asmdef，依赖 Cinemachine 3.1.7）。核心包与它的唯一联系是 `ICameraManager` 契约；核心 `Runtime/` 不得出现任何 Cinemachine 类型，由 `ModuleBoundaryTests.CoreRuntime_DoesNotReferenceCinemachine` 机械守卫。
@@ -27,8 +29,11 @@ Runtime/Log/LogCategories.cs                     # 新增 CameraManager 分类
 
 ## 决策台账
 
-- 已做：**v1 功能面建成**（2026-10-17）——`ICameraManager` 八成员（`OutputCamera` / `CameraIds` / `ActiveCameraId` / `IsTransitioning` / `Activate` / `Deactivate` / `TransitionTo` / `IsActive`）；`CameraManager` 门面（生命周期 / 同名转发 / 会话复位 / 门面完备性测试）；`UnityCameraManager` 默认实现（一次一台活动相机、位姿 / FOV 插值、懒注册 LateUpdate ticker、取消 / 重开语义）；使用方 README 与包 README 四表同步。逐条证据在 `CHANGELOG`。
+- 已做：**v1 功能面建成**（2026-10-17）——`ICameraManager` 初始成员（`OutputCamera` / `CameraIds` / `ActiveCameraId` / `IsTransitioning` / `Activate` / `Deactivate` / `TransitionTo` / `IsActive`）；`CameraManager` 门面（生命周期 / 同名转发 / 会话复位 / 门面完备性测试）；`UnityCameraManager` 默认实现（一次一台活动相机、位姿 / FOV 插值、懒注册 LateUpdate ticker、取消 / 重开语义）；使用方 README 与包 README 四表同步。逐条证据在 `CHANGELOG`。
 - 已做：**Cinemachine 支持以独立可选扩展包提供**（2026-10-17）——`com.venusy609.xframework.cinemachine`（单独 asmdef，依赖 Cinemachine 3.1.7），实现同一 `ICameraManager`；核心包零 Cinemachine 依赖。理由与 3.x API 实测见 `Documentation/Cinemachine.md`。
+- 已做：**句柄化动态相机注册 / 激活**（2026-10-17）——`CameraHandle`（槽位 + 代际；`AudioHandle` 同形，`Generation = 0` 无效）+ `ICameraManager` 的 `Register<T>` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` + 门面转发 + 两个实现的槽位表。命名 string id 保留；动态相机随预制 `Register` / `Dispose`，不需要 authoring id。**主接口直扩**（用户裁定，非可选能力接口）；模块未发布、仓外无 `ICameraManager` 实现，扩展包同轮更新。
+- 不做：**Timeline / 过场相机进本模块**（2026-10-17 · 用户场景裁定）——过场由 Timeline 的 Cinemachine Track 接管 Brain；管理器改优先级 / 混合会与过场冲突；`ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 null / default，`OutputCamera` / `IsTransitioning` 仍可用；Cinemachine 扩展包对未注册活动相机告警。无重开判据。
+- 不做：**string id 的动态注册**（2026-10-17 · 用户质疑）——随预制实例创建 / 销毁的相机没有稳定 authoring id；用句柄（槽位 + 代际）而不是让调用方生成 / 配对 id。无重开判据。
 - 不做：**核心包硬依赖 Cinemachine**（2026-10-17 · 立项裁定）——Cinemachine 2.x / 3.x 的 API 不兼容，核心包一旦引用就必须锁一个主版本，把 2D / 2.x / 自定义后端项目挡在外面。替代是独立扩展包。无重开判据。
 - 不做：**相机栈 / push-pop / 返回上一相机**（2026-10-17 · 立项裁定）——「谁在栈顶 / 返回上一台」= 生命周期树，与 Update 的「组」API 同一条推理链。无重开判据。
 - 不做：**跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline**（2026-10-17 · 立项裁定）——Cinemachine 的行为编排；框架内建只会与它竞争（与 Tween 同一理由）。无重开判据。
@@ -53,10 +58,28 @@ Runtime/Log/LogCategories.cs                     # 新增 CameraManager 分类
 
 结论：**编排仍归 Cinemachine**；框架补的是「状态 + 过渡 + 查询」的统一入口。核心包不锁 Cinemachine 版本（接口 + 默认 `UnityCameraManager`），Cinemachine 3.1.7 的实现放独立可选扩展包。采用率没有公开统计；Cinemachine 是 3D 事实标准但非全量，核心包因此不做硬依赖。
 
+### 2026-10-17（第二问）：动态相机句柄，主接口直扩
+
+用户追问「门面的动态相机」，场景分两类：
+
+1. **Timeline / 过场相机**（随 CG 预制创建 / 销毁，Timeline 接管 Brain）——**不经过本模块**；管理器改优先级 / 混合会与过场冲突。扩展包对「Brain 的活动相机未注册」告警；`ActiveCameraId` / `ActiveHandle` 对未注册活动相机返回 null / default。
+2. **非 Timeline、随预制创建 / 销毁的动态相机**——需要管理器接管，但 string id 不适合：实例没有稳定 authoring id，还要生成 / 配对注销。
+
+用户裁定**直接扩主接口**（不用可选能力接口）：
+
+- `CameraHandle`（`readonly struct`，`Id` + `Generation`；`Generation = 0` 保留给 `default`；`AudioHandle` 同形；便捷方法 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` / `Unregister` / `Dispose`）。
+- `ICameraManager` 增加 `Register<T>(T)` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive`；命名 string 操作保留，形成**双键**。
+- 两个实现同构：槽位表（`Slot`: 相机 / 可选命名 id / `Generation` / `Used`），槽位下标 = `CameraHandle.Id`；`Unregister` 清槽位、代际递增，旧句柄按代际失配失效。
+- 动态活动时 `ActiveCameraId` 为 null，用 `ActiveHandle` / `IsActive(handle)`；`CameraIds` 只列命名 id。
+- 守卫：`CameraHandleTests`（default / 相等性 / 短路）、`CameraFacadeCompletenessTests`（接口每成员在门面同名）、`UnityCameraManagerTests` / `CinemachineCameraManagerTests` 的动态端到端与 stale/default/未注册活动相机用例、`PublicApiBaseline` 更新。
+
 ### 已否决形状
 
 - **核心包直接引用 Cinemachine**（2026-10-17 评估中一度考虑）：会让所有消费者被迫安装并锁一个主版本；改为扩展包。
 - **只给示例适配器、不进包的 Cinemachine 实现**（2026-10-17 早期计划）：用户明确要求「Cinemachine 直接实现，不要只是示例」；改为独立扩展包里的 Runtime 实现。
+- **可选能力接口 `ICameraRegistry`**（2026-10-17）：作为「不扩主接口」的替代方案评估；用户选择**主接口直扩**——动态注册 / 激活是管理器的核心能力，不是后端可有可无的能力。
+- **用 string id 注册动态相机**（2026-10-17）：随预制实例创建 / 销毁的相机没有稳定 authoring id；句柄（槽位 + 代际）才是答案。
+- **让 CameraManager 接管 Timeline 过场相机**（2026-10-17）：过场系统已经接管 Brain；管理器插一手会冲突。
 - **相机栈 / 状态机 / 跟随策略**：生命周期树与 GamePlay 编排，按项目定位否决。
 
 ## 审计记忆

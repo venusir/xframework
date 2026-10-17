@@ -1,0 +1,157 @@
+using System;
+
+namespace XFramework.XCamera
+{
+    /// <summary>
+    /// 动态相机句柄。由 <see cref="CameraManager.Register{T}(T)"/>（或 <see cref="ICameraManager.Register{T}(T)"/>）
+    /// 返回，用于激活 / 反激活 / 过渡与注销；随预制一起创建、销毁的相机不需要 string id。
+    /// <para>支持 <c>using</c> 语法（<see cref="Dispose"/> 即注销），也可手动 <see cref="Unregister"/>。</para>
+    /// <para>零 GC：不可变值类型，只存两个整型，不存对象引用、不存委托；可自由复制与存入容器。</para>
+    /// </summary>
+    /// <remarks>
+    /// <para><b>为什么字段是公开的</b>：本模块的后端替换点是整体替换 <see cref="ICameraManager"/>。
+    /// 第三方实现必须能<b>造出</b>句柄、也必须能<b>读回</b>自己编码进去的值，因此两个字段必须是公开面
+    /// （与 <see cref="XAudio.AudioHandle"/> 同一条理由）。</para>
+    /// <para><b>门面不解释任何字段</b>：<see cref="Activate"/> / <see cref="TransitionTo"/> / <see cref="Unregister"/>
+    /// 一律转发给当前实现，由实现校验。<b>框架级的唯一契约</b>是 <see cref="Generation"/> 为 <c>0</c>
+    /// 保留给 <c>default(CameraHandle)</c>，任何实现都必须把它视为无效。</para>
+    /// <para><b>注销后的旧句柄</b>：实现应按「槽位 + 代际」双校验；槽位复用后代际递增，旧句柄自然失效——
+    /// 激活 / 过渡 / 反激活告警 no-op，<see cref="IsActive"/> / <see cref="Unregister"/> 返回 <c>false</c>。</para>
+    /// </remarks>
+    public readonly struct CameraHandle : IEquatable<CameraHandle>, IDisposable
+    {
+        #region Public Fields
+
+        /// <summary>
+        /// 实现方自定的标识。内置实现用它承载槽位下标；第三方实现可承载自己的句柄 id。
+        /// <para><b>门面不解释它</b>，只有产生它的那个实现知道含义。</para>
+        /// </summary>
+        public readonly int Id;
+
+        /// <summary>
+        /// 实现方自定的代际号，用于让「已被注销 / 槽位已复用」的旧句柄失效。
+        /// <para><b><c>0</c> 是保留值</b>：<c>default(CameraHandle)</c> 的 <see cref="Generation"/> 为 <c>0</c>，
+        /// 实现必须把它视为无效句柄——有效句柄的代际必须从 <c>1</c> 起。</para>
+        /// </summary>
+        public readonly int Generation;
+
+        #endregion
+
+        #region Constructors
+
+        /// <summary>
+        /// 构造一个句柄。
+        /// <para><b>本构造函数供 <see cref="ICameraManager"/> 实现方使用</b>，常规调用方不应直接调用——
+        /// 请用 <see cref="CameraManager.Register{T}(T)"/> 取得句柄。</para>
+        /// </summary>
+        /// <param name="id">实现方自定的标识。</param>
+        /// <param name="generation">代际号；有效句柄必须非 <c>0</c>。</param>
+        public CameraHandle(int id, int generation)
+        {
+            Id = id;
+            Generation = generation;
+        }
+
+        #endregion
+
+        #region Public API
+
+        /// <summary>本句柄是否是默认值（即 <c>default(CameraHandle)</c>）。</summary>
+        public bool IsDefault => Generation == 0;
+
+        /// <summary>立即切换到这台相机（cut）。<c>default</c> 句柄为空操作。</summary>
+        public void Activate()
+        {
+            if (IsDefault)
+                return;
+
+            CameraManager.Activate(this);
+        }
+
+        /// <summary>反激活这台相机。<c>default</c> 句柄为空操作。</summary>
+        public void Deactivate()
+        {
+            if (IsDefault)
+                return;
+
+            CameraManager.Deactivate(this);
+        }
+
+        /// <summary>过渡到这台相机。<c>default</c> 句柄为空操作。</summary>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0</c> 等价于 cut。</param>
+        /// <param name="style">过渡样式。</param>
+        public void TransitionTo(float duration, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            if (IsDefault)
+                return;
+
+            CameraManager.TransitionTo(this, duration, style);
+        }
+
+        /// <summary>这台相机是否为当前活动（过渡期间的目标也算活动）。</summary>
+        public bool IsActive()
+        {
+            return !IsDefault && CameraManager.IsActive(this);
+        }
+
+        /// <summary>注销这台相机；返回是否真的移除了一个已注册的相机。</summary>
+        /// <remarks><c>default</c> 句柄、已注销的旧句柄、或门面尚未初始化 / 已销毁时返回 <c>false</c>——
+        /// 预制在 <c>OnDestroy</c> 里调用它时门面可能已经先销毁。</remarks>
+        public bool Unregister()
+        {
+            return !IsDefault && CameraManager.Unregister(this);
+        }
+
+        /// <summary>注销这台相机，供 <c>using</c> 使用。等价于 <see cref="Unregister"/>。</summary>
+        public void Dispose()
+        {
+            Unregister();
+        }
+
+        #endregion
+
+        #region Equality
+
+        /// <inheritdoc/>
+        public bool Equals(CameraHandle other)
+        {
+            return Id == other.Id && Generation == other.Generation;
+        }
+
+        /// <inheritdoc/>
+        public override bool Equals(object obj)
+        {
+            return obj is CameraHandle other && Equals(other);
+        }
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            return (Id * 397) ^ Generation;
+        }
+
+        /// <summary>相等比较：<see cref="Id"/> 与 <see cref="Generation"/> 都相同。</summary>
+        /// <param name="left">左操作数。</param>
+        /// <param name="right">右操作数。</param>
+        public static bool operator ==(CameraHandle left, CameraHandle right)
+        {
+            return left.Equals(right);
+        }
+
+        /// <summary>不等比较。</summary>
+        /// <param name="left">左操作数。</param>
+        /// <param name="right">右操作数。</param>
+        public static bool operator !=(CameraHandle left, CameraHandle right)
+        {
+            return !left.Equals(right);
+        }
+
+        /// <inheritdoc/>
+        public override string ToString()
+        {
+            return "CameraHandle(" + Id + ", " + Generation + ")";
+        }
+
+        #endregion
+    }
+}

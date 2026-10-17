@@ -31,6 +31,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   Cinemachine 3.1.7 的一等实现由**独立可选扩展包** `com.venusy609.xframework.cinemachine` 提供（单独 asmdef，
   单独安装，不随核心包发布）。原「不做：相机管理」中「编排归 Cinemachine」仍成立，推翻的是「不需要统一入口」
   这一半。**使用方不受影响**，除非你要用它：不注入实现时所有门面成员抛「尚未初始化」。
+- **`CameraHandle` 动态相机注册 / 激活**（2026-10-17）：`ICameraManager` 新增 `Register<T>(T)` /
+  `Unregister(CameraHandle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive`；
+  `CameraManager` 门面同名转发；`UnityCameraManager` 与 Cinemachine 扩展包用槽位表 + 代际实现。命名 string id
+  保留（双键）；动态相机随预制 `Register` / `Dispose`，不需要 authoring id。`CameraHandle` 的 `Generation == 0`
+  保留给 `default`，便捷方法默认短路。**对第三方 `ICameraManager` 实现是源码破坏**（需补 7 个成员）；模块
+  未发布、当前无仓外实现。
+- **过场相机边界**（2026-10-17）：Timeline / 过场相机不经过本模块；Cinemachine 扩展包对「Brain 的活动相机未注册」
+  告警；`ActiveCameraId` / `ActiveHandle` 对未注册活动相机返回 null / default，`OutputCamera` / `IsTransitioning`
+  仍可用。
 - **`LogCategories` 新增 `CameraManager`**（同上）。
 
 #### File
@@ -266,6 +275,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **核心包依赖表不新增 Cinemachine**（核心不依赖它）；Cinemachine 3.1.7 的安装与版本归独立扩展包。
 - **Cinemachine 扩展包维护向记录**（2026-10-17）：扩展包的版本、Cinemachine 3.x API 实测、升级与漂移点落在
   维护向记录（不随包发布）；扩展包自己的 README / CHANGELOG 随扩展包发布。
+- **XCamera 动态句柄与过场边界文档**（2026-10-17）：模块 README 增加命名 / 动态双键、`CameraHandle`、动态预制
+  配方、Timeline 边界；扩展包 README 增加动态 vcam 与未注册活动相机告警；维护向记录补槽位 / 代际与主接口
+  直扩的裁定。
 - **模块 README 规范增补「自定义实现」按需节（2026-10-17）**：一级骨架 17 节 → 18 节（必答仍 5 项），
   新增按需节 `## 自定义实现`，排在 `## 典型场景`（含特性节）之后、`## 内部机制` 之前。动因是普查发现
   实现方内容没有稳定的家：23 份中 17 份有可替换后端 / 扩展点，但主落点分散在 `## 典型场景`（6）、

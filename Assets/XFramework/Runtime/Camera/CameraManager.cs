@@ -6,7 +6,7 @@ using XFramework.XLog;
 namespace XFramework.XCamera
 {
     /// <summary>
-    /// 相机管理的静态门面：注入后端实现，转发激活 / 反激活 / 过渡与查询。
+    /// 相机管理的静态门面：注入后端实现，转发命名相机与动态相机的激活 / 反激活 / 过渡与查询。
     /// <para><b>为什么需要它</b>：游戏代码需要「切到哪台相机 / 何时过渡」，但不该直接依赖
     /// Cinemachine 的 vcam 与 Brain 类型。门面把这件事收敛成一个后端中立的入口；相机编排
     /// （跟随 / 瞄准 / 震屏 / 约束）仍归 Cinemachine，本模块只做状态与过渡。</para>
@@ -18,6 +18,11 @@ namespace XFramework.XCamera
     /// CameraManager.Activate("main");
     /// CameraManager.TransitionTo("battle", 0.8f, CameraBlendStyle.EaseInOut);
     /// var camera = CameraManager.OutputCamera; // 世界↔屏幕、射线直接用 UnityEngine.Camera
+    ///
+    /// // 随预制创建 / 销毁的动态相机：用句柄，不生成 string id
+    /// var handle = CameraManager.Register(prefabCamera);
+    /// CameraManager.Activate(handle);
+    /// CameraManager.Unregister(handle); // 或 handle.Dispose()
     /// </code>
     /// </example>
     /// </summary>
@@ -74,6 +79,16 @@ namespace XFramework.XCamera
             }
         }
 
+        /// <summary>当前活动相机的句柄（命名与动态都有）；过渡期间是目标；无活动为 <c>default</c>。</summary>
+        public static CameraHandle ActiveHandle
+        {
+            get
+            {
+                EnsureInitialized();
+                return _impl.ActiveHandle;
+            }
+        }
+
         /// <summary>立即切换到指定相机（cut）。</summary>
         /// <param name="cameraId">已注册的相机 id。</param>
         public static void Activate(string cameraId)
@@ -107,6 +122,64 @@ namespace XFramework.XCamera
         {
             EnsureInitialized();
             return _impl.IsActive(cameraId);
+        }
+
+        /// <summary>注册一台动态相机，返回其后端句柄。</summary>
+        /// <typeparam name="T">后端相机类型；由实现解释（UnityCameraManager 要 <see cref="Camera"/>，
+        /// Cinemachine 实现要它的 vcam 基类）。</typeparam>
+        /// <param name="handle">后端相机对象。</param>
+        /// <returns>动态相机句柄。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handle"/> 为 <c>null</c>。</exception>
+        public static CameraHandle Register<T>(T handle) where T : class
+        {
+            if (handle == null)
+                throw new ArgumentNullException(nameof(handle));
+
+            EnsureInitialized();
+            return _impl.Register(handle);
+        }
+
+        /// <summary>注销一台动态相机。</summary>
+        /// <param name="handle">寄存器返回的句柄。</param>
+        /// <returns>确实移除了才返回 <c>true</c>；门面未初始化 / 已销毁时安全返回 <c>false</c>。</returns>
+        public static bool Unregister(CameraHandle handle)
+        {
+            return _impl != null && _impl.Unregister(handle);
+        }
+
+        /// <summary>立即切换到指定句柄的相机（cut）。</summary>
+        /// <param name="handle">相机句柄。</param>
+        public static void Activate(CameraHandle handle)
+        {
+            EnsureInitialized();
+            _impl.Activate(handle);
+        }
+
+        /// <summary>反激活指定句柄的相机。</summary>
+        /// <param name="handle">相机句柄。</param>
+        public static void Deactivate(CameraHandle handle)
+        {
+            EnsureInitialized();
+            _impl.Deactivate(handle);
+        }
+
+        /// <summary>过渡到指定句柄的相机。</summary>
+        /// <param name="handle">相机句柄。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0</c> 等价于 cut。</param>
+        /// <param name="style">过渡样式。</param>
+        public static void TransitionTo(CameraHandle handle, float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            EnsureInitialized();
+            _impl.TransitionTo(handle, duration, style);
+        }
+
+        /// <summary>指定句柄的相机是否为当前活动（过渡期间的目标也算活动）。</summary>
+        /// <param name="handle">相机句柄。</param>
+        public static bool IsActive(CameraHandle handle)
+        {
+            EnsureInitialized();
+            return _impl.IsActive(handle);
         }
 
         #endregion

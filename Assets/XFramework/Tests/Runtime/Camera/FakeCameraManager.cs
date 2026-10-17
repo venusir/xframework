@@ -15,9 +15,19 @@ namespace XFramework.XCamera.Tests
 
         public string ActiveCameraId { get; set; }
 
+        public CameraHandle ActiveHandle { get; set; }
+
         public bool IsTransitioning { get; set; }
 
         public bool Disposed { get; private set; }
+
+        public CameraHandle RegisterResult { get; set; }
+
+        public bool UnregisterResult { get; set; } = true;
+
+        public object LastRegistered { get; private set; }
+
+        public CameraHandle LastUnregistered { get; private set; }
 
         public string LastActivated { get; private set; }
 
@@ -28,6 +38,12 @@ namespace XFramework.XCamera.Tests
         public float LastTransitionDuration { get; private set; }
 
         public CameraBlendStyle LastTransitionStyle { get; private set; }
+
+        public CameraHandle LastActivatedHandle { get; private set; }
+
+        public CameraHandle LastDeactivatedHandle { get; private set; }
+
+        public CameraHandle LastTransitionHandle { get; private set; }
 
         public void Activate(string cameraId)
         {
@@ -51,6 +67,39 @@ namespace XFramework.XCamera.Tests
         {
             return cameraId != null &&
                    string.Equals(ActiveCameraId, cameraId, StringComparison.Ordinal);
+        }
+
+        public CameraHandle Register<T>(T handle) where T : class
+        {
+            LastRegistered = handle;
+            return RegisterResult;
+        }
+
+        public bool Unregister(CameraHandle handle)
+        {
+            LastUnregistered = handle;
+            return UnregisterResult;
+        }
+
+        public void Activate(CameraHandle handle)
+        {
+            LastActivatedHandle = handle;
+        }
+
+        public void Deactivate(CameraHandle handle)
+        {
+            LastDeactivatedHandle = handle;
+        }
+
+        public void TransitionTo(CameraHandle handle, float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            LastTransitionHandle = handle;
+        }
+
+        public bool IsActive(CameraHandle handle)
+        {
+            return handle == ActiveHandle;
         }
 
         public void Dispose()

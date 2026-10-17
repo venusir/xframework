@@ -25,6 +25,7 @@ namespace XFramework.XCamera.Tests
         [SetUp]
         public void SetUp()
         {
+            CameraManager.Destroy();
             UpdateManager.AutoDriveEnabled = false;
             UpdateManager.AutoInit();
             UpdateManager.Clear();
@@ -42,6 +43,7 @@ namespace XFramework.XCamera.Tests
         [TearDown]
         public void TearDown()
         {
+            CameraManager.Destroy();
             UpdateManager.AutoDriveEnabled = true;
             UpdateManager.AutoInit();
             UpdateManager.Clear();
@@ -269,6 +271,151 @@ namespace XFramework.XCamera.Tests
                 Assert.IsTrue(manager.Unregister("c"));
                 CollectionAssert.DoesNotContain(manager.CameraIds, "c");
                 Assert.IsNull(manager.ActiveCameraId);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void RegisterDynamic_Activate_Unregister()
+        {
+            var manager = CreateManager();
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+            extra.transform.position = new Vector3(20f, 0f, 0f);
+
+            try
+            {
+                var handle = manager.Register(extra);
+                Assert.IsFalse(handle.IsDefault);
+                Assert.IsFalse(extra.enabled);
+
+                manager.Activate(handle);
+
+                Assert.AreEqual(handle, manager.ActiveHandle);
+                Assert.IsNull(manager.ActiveCameraId);
+                Assert.AreSame(extra, manager.OutputCamera);
+                Assert.IsTrue(manager.IsActive(handle));
+                Assert.IsTrue(extra.enabled);
+                Assert.IsFalse(_cameraA.enabled);
+                Assert.IsFalse(_cameraB.enabled);
+
+                Assert.IsTrue(manager.Unregister(handle));
+                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsFalse(manager.IsActive(handle));
+                Assert.IsFalse(extra.enabled);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void TransitionTo_DynamicHandle_InterpolatesAndCompletes()
+        {
+            var manager = CreateManager();
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+            extra.transform.position = new Vector3(20f, 0f, 0f);
+
+            try
+            {
+                manager.Activate("a");
+                var handle = manager.Register(extra);
+
+                manager.TransitionTo(handle, 1f, CameraBlendStyle.Linear);
+                Tick(0f);
+
+                Assert.IsTrue(manager.IsTransitioning);
+                Assert.AreEqual(handle, manager.ActiveHandle);
+                Assert.IsNull(manager.ActiveCameraId);
+                Assert.AreSame(extra, manager.OutputCamera);
+
+                Tick(0.5f);
+                Assert.AreEqual(10f, extra.transform.position.x, 0.01f);
+
+                Tick(1f);
+                Assert.AreEqual(20f, extra.transform.position.x, 0.001f);
+                Assert.IsFalse(manager.IsTransitioning);
+                Assert.AreEqual(handle, manager.ActiveHandle);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void StaleHandle_IsNoOp()
+        {
+            var manager = CreateManager();
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+
+            try
+            {
+                var handle = manager.Register(extra);
+                Assert.IsTrue(manager.Unregister(handle));
+
+                LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
+                manager.Activate(handle);
+
+                Assert.IsNull(manager.ActiveCameraId);
+                Assert.IsFalse(manager.IsActive(handle));
+                Assert.IsFalse(manager.Unregister(handle));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void DefaultHandle_IsNoOp()
+        {
+            var manager = CreateManager();
+
+            LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
+            manager.Activate(default(CameraHandle));
+
+            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsFalse(manager.IsActive(default(CameraHandle)));
+            Assert.IsFalse(manager.Unregister(default(CameraHandle)));
+        }
+
+        [Test]
+        public void RegisterDynamic_WrongType_Throws()
+        {
+            var manager = CreateManager();
+
+            Assert.Throws<ArgumentException>(() => manager.Register<object>(new object()));
+            Assert.Throws<ArgumentNullException>(() => manager.Register<Camera>(null));
+        }
+
+        [Test]
+        public void Facade_DynamicRegister_ActivatesAndUnregisters()
+        {
+            var manager = CreateManager();
+            CameraManager.Initialize(manager);
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+            extra.transform.position = new Vector3(20f, 0f, 0f);
+
+            try
+            {
+                var handle = CameraManager.Register(extra);
+                CameraManager.Activate(handle);
+
+                Assert.AreEqual(handle, CameraManager.ActiveHandle);
+                Assert.IsNull(CameraManager.ActiveCameraId);
+                Assert.AreSame(extra, CameraManager.OutputCamera);
+                Assert.IsTrue(CameraManager.IsActive(handle));
+
+                Assert.IsTrue(CameraManager.Unregister(handle));
+                Assert.IsFalse(CameraManager.IsActive(handle));
             }
             finally
             {

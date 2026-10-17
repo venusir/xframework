@@ -189,6 +189,104 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void RegisterDynamic_Activate_Unregister()
+        {
+            var extraObject = new GameObject("VcamC");
+            var extra = extraObject.AddComponent<CinemachineCamera>();
+
+            try
+            {
+                var handle = _manager.Register(extra);
+                Assert.IsFalse(handle.IsDefault);
+
+                _manager.Activate(handle);
+                Pump();
+
+                Assert.AreEqual(handle, _manager.ActiveHandle);
+                Assert.IsNull(_manager.ActiveCameraId);
+                Assert.AreSame(_camera, _manager.OutputCamera);
+                Assert.IsTrue(_manager.IsActive(handle));
+                Assert.AreEqual(int.MaxValue, extra.Priority.Value);
+
+                Assert.IsTrue(_manager.Unregister(handle));
+                Assert.IsFalse(_manager.IsActive(handle));
+                Assert.IsFalse(_manager.Unregister(handle));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void TransitionTo_DynamicHandle_BlendsAndCompletes()
+        {
+            _manager.Activate("a");
+            Pump();
+
+            var extraObject = new GameObject("VcamC");
+            var extra = extraObject.AddComponent<CinemachineCamera>();
+
+            try
+            {
+                var handle = _manager.Register(extra);
+                _manager.TransitionTo(handle, 0.2f, CameraBlendStyle.Linear);
+                Pump(0.1f);
+
+                Assert.IsTrue(_manager.IsTransitioning);
+                Assert.AreEqual(handle, _manager.ActiveHandle);
+                Assert.IsNull(_manager.ActiveCameraId);
+
+                for (var i = 0; i < 4 && _manager.IsTransitioning; i++)
+                    Pump(0.05f);
+
+                Assert.IsFalse(_manager.IsTransitioning);
+                Assert.AreEqual(handle, _manager.ActiveHandle);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void Activate_WhenBrainActiveIsUnregistered_LogsWarning()
+        {
+            _manager.Activate("a");
+            Pump();
+
+            var extraObject = new GameObject("ExternalVcam");
+            var extra = extraObject.AddComponent<CinemachineCamera>();
+
+            try
+            {
+                extra.Priority = int.MaxValue;
+                extra.Prioritize();
+                _manager.Deactivate("a");
+                Pump();
+
+                Assert.IsNull(_manager.ActiveCameraId);
+                Assert.IsTrue(_manager.ActiveHandle.IsDefault);
+                Assert.AreSame(_camera, _manager.OutputCamera);
+
+                LogAssert.Expect(LogType.Warning, new Regex("未在 CameraManager 注册.*"));
+                _manager.Activate("b");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void RegisterDynamic_WrongType_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => _manager.Register<object>(new object()));
+            Assert.Throws<ArgumentNullException>(
+                () => _manager.Register<CinemachineVirtualCameraBase>(null));
+        }
+
+        [Test]
         public void Dispose_ThrowsOnUse()
         {
             _manager.Dispose();
