@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Reactive 已知边界补链式 Select 的中间派生值（2026-10-17，RCT-001）**：`d2 = d1.Select(g)` 后 `d1`
+  不可达，`d2.Dispose()` 不会拆 `d1 → root` 的订阅；README 写明「逐级持有、逐级释放」，是否提供
+  「拥有上游」的显式入口记 `待裁`（用户裁定：本批只文档化）。
 - **UI 暂停逃生口订正（2026-10-17，UI-B-002）**：README 原写「先 `Destroy` 再自行驱动」——`Destroy` 后
   门面未初始化，`UIManager.Update` 会抛。改为「`UpdateManager.Clear()` 摘驱动器后自行调用」，并给出恢复
   自动驱动的路径；不加公开 API（用户裁定：文档化）。

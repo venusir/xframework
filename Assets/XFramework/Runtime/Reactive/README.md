@@ -56,6 +56,8 @@ healthProp.Dispose();
 > 尤其注意 `BindToXxx` 返回的是**绑定方**的句柄——释放它**不能**释放派生值。所以 `src.Select(f).BindToText(label)` 这种写法即使把绑定句柄收好了,派生值照样泄漏。
 >
 > 别在业务代码里手工记账,交给已就位的归口：UI 面板里用 `ViewModelBase.CreateReadOnlyProperty`（创建 + 登记,随 ViewModel 一起释放），或把句柄交给 `UIViewBase.Track`。Reactive 模块本身不管生命周期,这是使用方的责任。
+>
+> **链式 `Select` 的中间派生值不可达（RCT-001）**：`d2 = d1.Select(g)` 之后 `d1` 不在任何可达引用上；`d2.Dispose()` 只退订 `d2 → d1`，`d1 → root` 的订阅与中间 selector 会活到 root 被 Dispose，且每次源变化继续跑中间 selector。长寿命属性上请显式持有每一级派生值并逐级释放——只保留 `d2` 而丢掉 `d1` 的写法会在长寿命源上泄漏订阅与 CPU。是否提供「派生值拥有上游」的显式构造入口仍待裁（不建议 Dispose 级联，会误杀共享下游）。
 
 ## 模块结构
 
