@@ -59,7 +59,9 @@ Runtime/Asset/
 
 ## 决策台账
 
-（本节吸收原「已评估未采纳与未决」。逐条理由的展开在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「评估过并否决」这一层；**下一轮从这里读起**。历轮：2026-10-01 模块审计（判据 A–F 全类扫过）；2026-10-02 覆盖清点；2026-10-13 热更编排边界裁定（框架级评估 §5.2 步骤 8，裁定全文与真缺口归属见 `../Ledger.md` 的「热更编排」条）。）
+（本节吸收原「已评估未采纳与未决」。逐条理由的展开在使用方 README 的 `## 已知限制` / `## 接口承诺到哪为止`，此处只留「评估过并否决」这一层；**下一轮从这里读起**。历轮：2026-10-01 模块审计（判据 A–F 全类扫过）；2026-10-02 覆盖清点；2026-10-13 热更编排边界裁定（框架级评估 §5.2 步骤 8，裁定全文与真缺口归属见 `../Ledger.md` 的「热更编排」条）；2026-10-17 Bootstrap 审计轮。）
+
+- 已做：**引导阶段的 `Shutdown` 只销毁自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`AssetBootstrapStage` 新增 `_initializedByThisStage`：已初始化早退路径不再在 `Shutdown` 里销毁使用方注入的管理器，与 Localization / Input / UI 的「谁初始化谁清理」对齐。回归用例 `BootstrapStageTests.AssetBootstrapStage_AlreadyInitialized_ShutdownDoesNotDestroy` / `..._InitializedByStage_ShutdownDestroys`（前者改前必红：`Expected: True But was: False`）。
 
 - 未做：**真实 YooAsset 初始化路径的端到端覆盖（覆盖缺口）**（2026-10-02 · 覆盖清点，下一轮先看这条）——既有测试全走假实现（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 `CHANGELOG`）。本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成 `internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是**最小空包**）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对它的消费路径**，不要只靠编译通过。
 - 不做：**不整体改用 `AsyncLazy` / `UniTask.Preserve()` 重写门面的初始化协调协议**（2026-10-01 · 审计轮）——现有语义（同一异常实例、代际作废）有用例钉住，重写改动面大于收益；只修正了「promise 只支持单个 continuation」那句理由句的表述范围。无重开判据。

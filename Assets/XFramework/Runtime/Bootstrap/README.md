@@ -62,7 +62,7 @@ Runtime/Bootstrap/
 - **只销毁自己初始化的那份**：执行时发现服务已初始化（使用方手动 `Initialize` / `SetInstance`，
   或上一次运行留下的实例）就早退，并在 `Shutdown` 里跳过销毁——否则会把使用方的管理器一起拆掉。
   内置的 `LocalizationBootstrapStage` / `InputBootstrapStage` / `UIBootstrapStage` 是范例；
-  自定义阶段也应遵循同一口径。
+  Asset / Data / Save 三个阶段同样按此口径（`_initializedByThisStage`）。
 - **`ExecuteAsync` 可能被重复执行**：失败后重试、或 `Shutdown` 后再次 `RunAsync`，都会重跑同一批阶段
   实例。要么让 `ExecuteAsync` 可重入（已初始化即早退，像内置阶段那样），要么在重建前 `Clear()` 并
   重新构造阶段。
@@ -220,7 +220,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
 
-**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——内置的 `LocalizationBootstrapStage` 就是范例：只在确实由自己完成初始化时才销毁门面。
+**`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——六个内置阶段都按此口径（例如 `LocalizationBootstrapStage` 只在确实由自己完成初始化时才销毁门面）。
 
 **运行中修改登记表只告警、不阻止**（`Register` / `Unregister` / `RegisterDefaults` / `Clear`），后果与理由见上面「设计取舍」的「登记表请在 `RunAsync` 之前定稿」段：运行中新增的阶段本轮不执行（但会被 `Shutdown` 扫到）；运行中注销 / 清掉的阶段本轮仍执行但拿不到 `Shutdown`。
 

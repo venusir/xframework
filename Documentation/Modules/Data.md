@@ -37,7 +37,9 @@ v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，�
 
 ## 决策台账
 
-（2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过。**一条高危已修**——两个块取同一个 `BlockName` 时静默丢数据；其余是文档与测试。逐条理由的展开见使用方 README 的相关章节，此处只留「评估过并否决」这一层。已修项见 `CHANGELOG`。）
+（2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过。**一条高危已修**——两个块取同一个 `BlockName` 时静默丢数据；其余是文档与测试。逐条理由的展开见使用方 README 的相关章节，此处只留「评估过并否决」这一层。已修项见 `CHANGELOG`。2026-10-17 追加 Bootstrap 审计轮的所有权结论。）
+
+- 已做：**引导阶段的 `Shutdown` 只注销自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`DataBootstrapStage` 新增 `_initializedByThisStage`：执行前已初始化（使用方注入 / 上一轮运行留下）时不再在 `Shutdown` 里 `DataManager.Shutdown()`。回归用例 `BootstrapStageTests.DataBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown` / `..._InitializedByStage_ShutdownShutsDown`（前者改前必红：`Expected: True But was: False`）。
 
 - 不做：**不给 Data 加线程守卫**（2026-09-30 · 审计轮）——与 Update 那轮同判：契约（所有 API 必须在主线程）写在 README 里，跨线程改 `Dictionary` 的失败是响亮的（抛 `InvalidOperationException` 或数据错乱），不为它加机械。无重开判据。
 - 不做：**不给 `ForEachBlock` 加「遍历期间禁止增删」的断言**（2026-09-30 · 审计轮）——它已改为先取快照再遍历（与 `DispatchListPool`、Lock 的订阅快照同向），回调里的增删是**安全**的，无需禁止。无重开判据。

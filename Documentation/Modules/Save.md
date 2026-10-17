@@ -28,7 +28,9 @@ Runtime/Save/
 
 ## 决策台账
 
-（2026-09-30 第二轮审计。首轮 2026-09-27 自述零高危，**且此后 Save 的代码零变更**——最后一次 `.cs` 改动是 2026-09-19 的 File 侧修复，Save 一行未改，此后的提交全是文档与测试。本轮的重点因此是**复审**：接缝、漂移、首轮未覆盖的面。）
+（2026-09-30 第二轮审计。首轮 2026-09-27 自述零高危，**且此后 Save 的代码零变更**——最后一次 `.cs` 改动是 2026-09-19 的 File 侧修复，Save 一行未改，此后的提交全是文档与测试。本轮的重点因此是**复审**：接缝、漂移、首轮未覆盖的面。2026-10-17 追加 Bootstrap 审计轮的所有权结论。）
+
+- 已做：**引导阶段的 `Shutdown` 只注销自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`SaveBootstrapStage` 新增 `_initializedByThisStage`：执行前已初始化（使用方注入 / 上一轮运行留下）时不再在 `Shutdown` 里 `SaveManager.Shutdown()`；恢复扫描行为不变。回归用例 `BootstrapStageTests.SaveBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown` / `..._InitializedByStage_ShutdownShutsDown`（前者改前必红：`Expected: True But was: False`）。
 
 - 不做：**不改 `RecoverAsync` 让它真的「全程不切回主线程」**（2026-09-30 · 第二轮审计）——本轮只订正文档：`WriteSidecarAsync` 被 `SaveAsync` 与恢复扫描**共用**，对前者而言那次 `ReturnToMainThread` 是**必需的**（公开异步 API 的契约就是「返回前切回主线程」）；要拆就得引入「不切回的写入路径」，在刚做过多次手术的线程路径上再动一刀，收益只是让一条文档声明成立。真正悬着的那一半（线程契约本身）见下方「`RecoverAsync` 的设计属性与实现不一致」条。无重开判据。
 - 不做：**不给 `SaveManager.Shutdown` 加「取消在途操作」**（2026-09-30 · 第二轮审计）——`ISaveManager` 不是 `IDisposable`，实现也不持非托管资源；`Shutdown` 的语义是「注销门面持有的实现」，在途操作跑完即可。无重开判据。

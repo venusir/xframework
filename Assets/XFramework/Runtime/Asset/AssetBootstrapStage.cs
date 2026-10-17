@@ -16,6 +16,13 @@ namespace XFramework.XAsset
 
         private readonly AssetInitOptions _options;
 
+        /// <summary>
+        /// 本阶段是否<b>确实</b>完成了初始化。<see cref="Shutdown"/> 据此决定要不要销毁——
+        /// 「本阶段初始化的服务才由本阶段清理」，空转 / 已初始化早退路径不该把使用方
+        /// 手动注入的管理器一起销毁。
+        /// </summary>
+        private bool _initializedByThisStage;
+
         #endregion
 
         #region Construction
@@ -65,14 +72,22 @@ namespace XFramework.XAsset
             await AssetManager.InitializeAsync(options: _options,
                                                progress: new AssetInitProgressRelay(context),
                                                cancellationToken: cancellationToken);
+            _initializedByThisStage = true;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// 反向清理：<b>只销毁本阶段自己初始化的那份</b>——已初始化早退路径什么都没建，
+        /// 不碰使用方手动注入的管理器。幂等。
+        /// </summary>
         public void Shutdown()
         {
+            if (!_initializedByThisStage)
+                return;
+
+            _initializedByThisStage = false;
             AssetManager.Destroy();
         }
 

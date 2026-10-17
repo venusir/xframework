@@ -1,5 +1,8 @@
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XBootstrap;
 using XFramework.XData;
@@ -132,6 +135,150 @@ namespace Venusy609.Xframework.Editor.Tests
             finally
             {
                 // 清理 SaveManager 静态态,避免影响其他测试
+                SaveManager.Shutdown();
+            }
+        }
+
+        /// <summary>
+        /// 所有权契约：阶段执行时发现门面已初始化（使用方手动注入 / 上一轮运行留下），
+        /// <c>Shutdown</c> 不得销毁它——否则会把使用方的管理器一起拆掉。
+        /// </summary>
+        [Test]
+        public void AssetBootstrapStage_AlreadyInitialized_ShutdownDoesNotDestroy()
+        {
+            var fake = new FakeAssetManager();
+            AssetManager.SetInstance(fake);
+            try
+            {
+                var stage = new AssetBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+                stage.Shutdown();
+
+                Assert.IsTrue(AssetManager.IsInitialized,
+                    "阶段未初始化它，Shutdown 不得销毁使用方注入的实例");
+            }
+            finally
+            {
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
+        public void AssetBootstrapStage_InitializedByStage_ShutdownDestroys()
+        {
+            AssetManager.Destroy();
+            var fake = new FakeAssetManager();
+            AssetManager.ImplFactory = () => fake;
+            try
+            {
+                var stage = new AssetBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+                Assert.IsTrue(AssetManager.IsInitialized, "前提：本阶段应已完成初始化");
+
+                stage.Shutdown();
+
+                Assert.IsFalse(AssetManager.IsInitialized, "本阶段初始化的服务应由本阶段清理");
+            }
+            finally
+            {
+                AssetManager.ImplFactory = null;
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
+        public void DataBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown()
+        {
+            DataManager.Initialize(new DataManagerImpl());
+            try
+            {
+                var stage = new DataBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                LogAssert.Expect(LogType.Warning,
+                    new Regex(@"\[Data\] DataManager\.Initialize 被重复调用"));
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+                stage.Shutdown();
+
+                Assert.IsTrue(DataManager.IsInitialized,
+                    "阶段未初始化它，Shutdown 不得注销使用方注入的实现");
+            }
+            finally
+            {
+                DataManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public void DataBootstrapStage_InitializedByStage_ShutdownShutsDown()
+        {
+            DataManager.Shutdown();
+            try
+            {
+                var stage = new DataBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+                Assert.IsTrue(DataManager.IsInitialized, "前提：本阶段应已完成初始化");
+
+                stage.Shutdown();
+
+                Assert.IsFalse(DataManager.IsInitialized, "本阶段初始化的服务应由本阶段清理");
+            }
+            finally
+            {
+                DataManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public async Task SaveBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown()
+        {
+            SaveManager.Shutdown();
+            SaveManager.Initialize();
+            try
+            {
+                var stage = new SaveBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                LogAssert.Expect(LogType.Warning,
+                    new Regex(@"\[Save\] SaveManager\.Initialize 被重复调用"));
+                await stage.ExecuteAsync(ctx, default);
+
+                stage.Shutdown();
+
+                Assert.IsTrue(SaveManager.IsInitialized,
+                    "阶段未初始化它，Shutdown 不得注销使用方注入的实现");
+            }
+            finally
+            {
+                SaveManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public async Task SaveBootstrapStage_InitializedByStage_ShutdownShutsDown()
+        {
+            SaveManager.Shutdown();
+            try
+            {
+                var stage = new SaveBootstrapStage();
+                var ctx = new PipelineStageContext();
+
+                await stage.ExecuteAsync(ctx, default);
+                Assert.IsTrue(SaveManager.IsInitialized, "前提：本阶段应已完成初始化");
+
+                stage.Shutdown();
+
+                Assert.IsFalse(SaveManager.IsInitialized, "本阶段初始化的服务应由本阶段清理");
+            }
+            finally
+            {
                 SaveManager.Shutdown();
             }
         }

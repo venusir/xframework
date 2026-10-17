@@ -167,6 +167,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`Bootstrap.RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌**（不再是调用方令牌）：
   `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)`
   这类过滤与语义都对不上。判据改用 `OperationCanceledException.CancellationToken.IsCancellationRequested`。
+- **Asset / Data / Save 三个引导阶段的 `Shutdown` 只销毁自己初始化的门面**：此前它们无条件
+  `AssetManager.Destroy()` / `DataManager.Shutdown()` / `SaveManager.Shutdown()`，使用方先手动
+  `Initialize` / `SetInstance` 再登记默认组合时，`Shutdown` 会把使用方的实例一起拆掉。现在三者与
+  Localization / Input / UI 一致：只在自己确实完成初始化时才清理，已初始化早退路径不再接管。
+  回归用例见 `BootstrapStageTests` 六个所有权用例（三条改前必红：`Expected: True But was: False`）。
 - **字段句柄（`SettingRef`）的重放登记改为会话级**：播放会话边界清空重放表，句柄在下次被
   **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
   **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；

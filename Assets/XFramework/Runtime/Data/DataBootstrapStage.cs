@@ -12,6 +12,16 @@ namespace XFramework.XData
     /// </summary>
     public sealed class DataBootstrapStage : IBootstrapStage
     {
+        #region Private Fields
+
+        /// <summary>
+        /// 本阶段是否<b>确实</b>完成了初始化。<see cref="Shutdown"/> 据此决定要不要注销——
+        /// 「本阶段初始化的服务才由本阶段清理」，已初始化早退路径不该把使用方注入的实现一起注销。
+        /// </summary>
+        private bool _initializedByThisStage;
+
+        #endregion
+
         #region IBootstrapStage
 
         /// <summary>Phase = <see cref="BootstrapPhases.Data"/>（3）。晚于 Asset、早于 Save，确保依赖的模块已就绪。</summary>
@@ -28,16 +38,24 @@ namespace XFramework.XData
         {
             context.SetDescription("Initializing Data Manager...");
 
+            bool wasInitialized = DataManager.IsInitialized;
             DataManager.Initialize(new DataManagerImpl());
+            _initializedByThisStage = !wasInitialized;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
             return UniTask.CompletedTask;
         }
 
-        /// <inheritdoc/>
+        /// <summary>
+        /// 反向清理：<b>只注销本阶段自己初始化的那份</b>——已初始化早退路径不碰使用方注入的实现。幂等。
+        /// </summary>
         public void Shutdown()
         {
+            if (!_initializedByThisStage)
+                return;
+
+            _initializedByThisStage = false;
             DataManager.Shutdown();
         }
 
