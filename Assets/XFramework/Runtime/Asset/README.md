@@ -349,6 +349,8 @@ Runtime/Asset/
 | `InstantiateAsync<T>(...（同上两重载）)` | 实例化并直接取组件；预制体缺该组件时销毁实例并返回 null |
 | `LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, ct)` | 加载场景（单/叠加），返回**可卸载的句柄** `AssetSceneHandle`；失败返回无效句柄（用 `IsDefault` 校验）。能力接口 `IAssetSceneLoader` 的后端转发（形态同 `ClearPool`） |
 | `UnloadSceneAsync(AssetSceneHandle handle, ct)` | 卸载句柄对应的场景；失败（句柄失效 / 场景已不在场 / 它是当前唯一场景 / 能力缺失 / 门面未初始化）返回 `false` **而不抛** |
+| `ClearPool(string location)` | 销毁该地址的**闲置实例池**（实例池，不是 YooAsset 资源池），返回实际销毁数；没有池返回 0。要真正回收内存请配合 `UnloadUnusedAssetsAsync` |
+| `ClearAllPools()` | 清空全部闲置实例池，返回销毁数（AST-006） |
 
 ### 同步加载（会阻塞调用线程）
 

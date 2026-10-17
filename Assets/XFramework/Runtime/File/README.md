@@ -480,7 +480,8 @@ for (int i = 0; i < 3; i++)
 - **`DeleteAsync` 是门面唯一一处自己决定 IO 线程的原语**：`IFileProvider.Delete` 没有异步孪生（各平台的后端
   删除本质上都是同步原语），故由门面把它放进 `RunOnThreadPool` 调用——其余异步原语的线程由 Provider 自己安排。
   **随之而来的约束**：Provider 的 `Delete` 现在会在**池线程**上被调用，实现方须容忍（与上一条同源）。
-  取消语义：令牌只保证「尚未开始的删除不会发生」，已进入委托的那一次会跑完。
+  取消语义：令牌只保证「尚未开始的删除不会发生」，已进入委托的那一次会跑完。**注意**：委托跑完后 UniTask
+  的尾部取消检查仍可能抛 `OperationCanceledException`——此时**删除已经完成**，不要据异常推断「没删」（FILE-006）。
 
 ## 性能代价
 
@@ -495,6 +496,9 @@ for (int i = 0; i < 3; i++)
 
 - **移动端 `Streaming` 的异步入口要求主线程**（FILE-002）：池线程调用会在 `Application.streamingAssetsPath` /
   `UnityWebRequest` 处抛 `UnityException`；桌面端与移动端非 Streaming 域可任意线程调用（见「线程契约」）。
+- **移动端 `Streaming` 的文件 / 目录枚举静默返回空数组**（FILE-005）：移动端的 Streaming 走 UnityWebRequest，
+  没有可枚举的文件系统；`GetFilesAsync` / `GetDirectoriesAsync` 对它返回空数组而不告警。需要枚举清单请随包
+  附一份索引文件。
 
 - **移动端 `Streaming` 域的同步内容读与同步 `Exists` 都不可用**：两者都抛 `NotSupportedException`，请改用
   `ExistsAsync` / `ReadAllTextAsync` / `ReadAllBytesAsync`。前者是机制上的必死锁（续体依赖 PlayerLoop），

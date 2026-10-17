@@ -429,6 +429,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Asset / Diagnostics / Audio / File 文档订正（2026-10-17）**：
+  Asset（AST-006）：API 表补 `ClearPool` / `ClearAllPools`。
+  Diagnostics（DIAG-004）：概览页签补 Camera 行。
+  Audio（AUD-006/011）：生命周期表补 `CopyChannels` 未初始化返回 0；台账的「不做只读通道快照」改 `已推翻`
+  （`CopyChannels` 已落地），剩余逐 voice 明细改 `未做`。
+  File（FILE-005/006/007/010/012）：补移动端 Streaming 枚举静默返回空数组、`DeleteAsync` 取消可能已完成删除、
+  `ConsoleFileProvider` 五个抽象成员的直接文档、移动端写 Streaming 不重定向、台账去固定计数。
 - **Input / Update / UI 文档订正（2026-10-17）**：
   Input（INP-005/006/007/012）：README 依赖版本对齐 6000.3 / InputSystem 1.19.0；类 XML 不再写「每帧需调
   `Tick`」（自动驱动）；`SetProvider` 明确不注册帧驱动；空 `bindingId` 回退时 `OnCompleted` 的 Id 为 `""`。

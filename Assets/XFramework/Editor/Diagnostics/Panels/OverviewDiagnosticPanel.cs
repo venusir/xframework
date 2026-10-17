@@ -17,6 +17,7 @@ using XFramework.XSettings;
 using XFramework.XTimer;
 using XFramework.XUI;
 using XFramework.XUpdate;
+using XFramework.XCamera;
 
 namespace XFramework.Editor.Diagnostics.Panels
 {
@@ -55,6 +56,8 @@ namespace XFramework.Editor.Diagnostics.Panels
             Row(table, "Settings", SettingsManager.IsInitialized, $"{SettingsManager.RegisteredTypeCount} 个类型");
             Row(table, "Serialize", Serializer.IsInitialized, "-");
             Row(table, "Audio", AudioManager.IsInitialized, AudioManager.IsInitialized ? $"{AudioManager.ActiveVoiceCount} 路在播" : "-");
+            Row(table, "Camera", CameraManager.IsInitialized,
+                CameraManager.IsInitialized ? (CameraManager.ActiveCameraId ?? "无活动相机") : "-");
             Row(table, "Update", UpdateManager.IsInitialized, $"{UpdateManager.TotalCount} 个节点");
             Row(table, "Log", LogManager.IsInitialized, $"{LogCategory.RegisteredCount} 个分类");
 

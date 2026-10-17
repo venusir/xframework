@@ -66,7 +66,7 @@ namespace XFramework.XFileManager
         /// <inheritdoc />
         public UniTask WriteAllTextAsync(FileDomain domain, string relativePath, string content, CancellationToken cancellationToken = default)
         {
-            // Streaming 域只读，写入走 DesktopProvider（它会定位到 AppData/Cache 等可写域）
+            // Streaming 域只读：向它写入会失败，**不会**重定向到可写域。可写数据请放 AppData / Cache / SaveData。
             return _desktopProvider.WriteAllTextAsync(domain, relativePath, content, cancellationToken);
         }
 

@@ -59,12 +59,12 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - 不做：**不提供 `Play(AudioClip, ...)` 重载**（2026-10-01 · v1 评估）——它会同时毁掉两件事：`IAudioManager` 的后端中立性（Wwise 的事件 / FMOD 的 `EventInstance` 都没有 `AudioClip`），以及「资源生命周期只有一套语义」；「回不到 Inspector 直引」这条代价已写进 README 的已知限制。无重开判据。
 - 暂不做：**不提供 `IAudioProvider` 分层引擎缝**（2026-10-01 · v1 评估）——本仓「后端可换」有两种形态，分界线是「替换轴只有一条且贯穿全模块 → 整体替换」（Input 换 Rewired / Save / Asset / Localization / Config / UI）vs「替换轴按平台或能力切分、需组合多个实现 → 分层 Provider 缝」（**全仓只有 File**）；Audio 属前者。**不盲做的理由是拿不到 Wwise/FMOD 的 API 形状**：Wwise 的播放单元是 Event + EventInstance、音量是 RTPC、3D 发射器要挂 GameObject，FMOD 是 `EventInstance`——与「clip + volume + transform.position」都不同构，凭记忆猜出来的缝大概率是谁都不合身的最小公约数。重开判据：手上有真实中间件项目（有 Wwise/FMOD 的 API 参考即可设计）。
 - 暂不做：**不把 `IAudioClipLoader` 提升为公开面**（2026-10-01 · v1 评估）——与上一条同源（同一「整体替换 vs 分层缝」判据）；先观察是否真有「只换资源来源、不换播放引擎」的需求。重开判据：出现「只换资源来源、不换播放引擎」的真实需求。
-- 不做：**不做只读的通道状态快照**（2026-10-01 · v1 评估）——`GetChannelVolume` / `IsChannelMuted` 已覆盖查询需求；再加一个「列出全部已声明通道」会引入一处需要与惰性创建同步的枚举面。无重开判据。
+- 已推翻：**~~不做只读的通道状态快照~~**（2026-10-01 · v1 评估）——原理由「`GetChannelVolume` / `IsChannelMuted` 已覆盖查询需求」**已被 2026-10-02 的 `CopyChannels` 推翻**：诊断回读面已落地（通道名 / 音量 / 静音 / 在播路数），只剩逐 voice 明细未做（见下方条目）。
 - 不做：**框架内建「语音随语言切换」缺席**（2026-10-01 · v1 评估）——那要发明一套「语言 → 语音资源路径」的约定，而 `XLocalization` 本身只有语言表模板、没有「按 key 取资源路径」的概念；且「切语言时当前台词停在半句还是重播」是 GamePlay 时序决定。README 只给订阅 `LanguageChangedMessage` 的做法。无重开判据。
 - 待裁：**`Play` 与 `PlayAsync` 的句柄契约不对称**（2026-10-01 · v1 记录）——前者在预占槽位时就返回、加载失败只让句柄失效；后者在加载完成后才返回、失败返回 `default`。两条契约各自自洽、也已写进 README 的对照表，但「同一个方法族返回两种失败形态」是否值得再收敛，未定。
 - 未做：**`AudioSourcePool.StartingTimeoutTicks = 60`（约 2 秒）是自定值，真机未验证**（2026-10-01 · v1 记录）——兜底的是「某平台 `Play()` 之后 `isPlaying` 永不变真」这种情形；本仓只实测了批处理模式下的桌面行为，**真机（尤其移动端）未验证**。
 - 未做：**`TryReserve` 的线性扫描**（2026-10-01 · v1 记录）——O(槽位数)，`MaxVoices` 默认 32；若将来允许把上限调到很大，需要换空闲链表。
-- 待裁：**门面无 `DumpState` 类诊断面**（2026-10-01 · v1 记录）——Owner 侧目前只能看 `ActiveVoiceCount` 与分通道计数；本仓文化偏好诊断面，但配音源明细会泄漏 internal 结构，形状未定。
+- 未做：**门面没有逐 voice 明细回读**（2026-10-01 · v1 记录；2026-10-17 第二轮审计刷新）——`CopyChannels` 已提供通道级回读（见上方「已推翻」条）；剩余的是逐 voice 明细，会泄漏 internal 结构，形状未定。重开判据：出现需要逐 voice 诊断的真实使用方。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 

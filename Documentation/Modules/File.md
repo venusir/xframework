@@ -32,9 +32,9 @@
 
 - 不做：**不给 `ConsoleFileProvider` 写测试派生类**（2026-09-30 · 审计轮）——它锁的是「本仓没有的使用方式」（全仓零派生）；真正该锁的「不实现可选能力接口时门面如何降级」已由 `NonAtomicFileProvider` / `NonEnumerableFileProvider` 两个替身覆盖。无重开判据。
 - 不做：**不给「首次初始化须在主线程」加强制断言**（2026-09-30 · 审计轮）——失败已经响亮（池线程读 `Application.*` 抛 `UnityException`），断言只是把同一条错误提前；`MainThreadGuard` 是「静默出错」才需要的。无重开判据。
-- 不做：**不动 `Destroy()` 对 Provider 的处置**（2026-09-30 · 审计轮）——`IFileProvider` **不是** `IDisposable`（10 个成员里没有），`Destroy` 不调 Dispose 不漏资源。无重开判据。
+- 不做：**不动 `Destroy()` 对 Provider 的处置**（2026-09-30 · 审计轮）——`IFileProvider` **不是** `IDisposable`（接口成员里没有），`Destroy` 不调 Dispose 不漏资源。无重开判据。
 - 不做：**不给同步 API 做「自动切回主线程」**（2026-09-30 · 审计轮）——那会改变 `.AsTask().GetAwaiter().GetResult()` 的阻塞语义，而同步面的存在意义就是「调用方自己承担阻塞」。无重开判据。
-- 不做：**两处覆盖空白按「测不了」登记、不按「以后补」**（2026-09-30 · 审计轮）——① `ConsoleFileProvider` 的 12 个公开方法（5 abstract + 7 virtual）零覆盖（仓内无派生类）；② `MobileFileProvider` 的 Streaming 私有路径（`CheckStreamingExists` / `ReadStreamingText` / `ReadStreamingBytes` / `GetStreamingUrl`）零覆盖（仓内无移动设备路径，任何替身都会结构性绕开真实链路）。这正是 `CHANGELOG` 记过的教训：8 个 fixture 全注入 `TempFileProvider`，于是「域根解析是否碰了 Unity API」这一整类缺陷在替身上不可见。重开判据：仓内出现真机或派生类的验证通道。
+- 不做：**两处覆盖空白按「测不了」登记、不按「以后补」**（2026-09-30 · 审计轮）——① `ConsoleFileProvider` 的公开方法（abstract + virtual）零覆盖（仓内无派生类）；② `MobileFileProvider` 的 Streaming 私有路径（`CheckStreamingExists` / `ReadStreamingText` / `ReadStreamingBytes` / `GetStreamingUrl`）零覆盖（仓内无移动设备路径，任何替身都会结构性绕开真实链路）。这正是 `CHANGELOG` 记过的教训：文件测试 fixture 全注入 `TempFileProvider`，于是「域根解析是否碰了 Unity API」这一整类缺陷在替身上不可见。重开判据：仓内出现真机或派生类的验证通道。
 - 未做：**`MobileFileProvider.CheckStreamingExists` 的忙等未在真机验证**（2026-09-30 · 审计轮）——门面（`FileManager.Exists`）已拒绝「移动端 + Streaming」组合，但 Provider 是公开类型、可直接使用，那条 `while (!request.isDone) { }` 仍在；**未决的是「要不要给 Provider 层也加兜底」**（改成有界等待？），本轮只如实标注风险。已知证据：桌面 + `file://` 下自旋会完成（红基线 16.1 秒跑完）；移动端（Android `jar:file://` / iOS）无路径可验。
 - 未做：**`FileRootsTimingTests` 的命名空间与同目录其余 fixture 不一致**（2026-09-30）——`XFramework.XFile.Tests` vs `XFramework.XFileManager.Tests`，纯命名问题，等下次动那批测试时顺手统一。
 - 已做：**门面新增 `DeleteAsync`，补齐异步删除原语**（2026-10-15 · `61111e0`）——把 Provider 的同步 `Delete` 放进 `RunOnThreadPool` 执行，是**门面唯一一处自己决定 IO 线程**的原语；基线 +1 行、**零接口变更**。Save 的四个删除 API 随之迁移（`SaveManagerImpl` 5 处 + 每处补 `ReturnToMainThread`），删除不再压在主线程。回归锁：`FileManagerDeleteTests` 5 例（线程断言 + 同步对照 + 幂等 + 取消 + 加密）、`SaveManagerImplTests` 四条线程用例（改前必红）。

@@ -28,19 +28,19 @@ namespace XFramework.XFileManager
     {
         #region IFileProvider — 需第三方重写的核心方法
 
-        /// <inheritdoc />
+        /// <summary>读取文件全部字节；文件不存在返回 <c>null</c>，IO 失败抛 <see cref="System.IO.IOException"/>。</summary>
         public abstract byte[] ReadAllBytes(FileDomain domain, string relativePath);
 
-        /// <inheritdoc />
+        /// <summary>写入全部字节；失败抛 <see cref="System.IO.IOException"/>。</summary>
         public abstract void WriteAllBytes(FileDomain domain, string relativePath, byte[] data);
 
-        /// <inheritdoc />
+        /// <summary>判断文件是否存在。</summary>
         public abstract bool Exists(FileDomain domain, string relativePath);
 
-        /// <inheritdoc />
+        /// <summary>删除文件；文件不存在时为空操作。</summary>
         public abstract void Delete(FileDomain domain, string relativePath);
 
-        /// <inheritdoc />
+        /// <summary>取物理路径（诊断 / 平台 SDK 使用）。</summary>
         public abstract string GetPhysicalPath(FileDomain domain, string relativePath);
 
         #endregion

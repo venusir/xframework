@@ -283,6 +283,7 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 | 成员 | 未初始化 / 已销毁时 |
 | ---- | ---- |
 | `Stop` / `IsPlaying` | 安全返回 `false`（探测型豁免） |
+| `CopyChannels`（诊断回读） | 清空缓冲并返回 `0`，不抛（与 Asset 的诊断回读同一宽容口径；AUD-006） |
 | 其余全部（`Play` / `PlayAsync` / `StopAll` / 音量 / 查询计数） | 抛 `InvalidOperationException` |
 
 ## 线程契约
