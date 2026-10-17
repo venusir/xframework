@@ -208,6 +208,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### File
+
+- **`ICryptoProvider.Decrypt` 返回 `null` 时两个读面结果不一致（FILE-001）**：同一解密失败在
+  `ReadAllBytesAsync` 返回 `null`（=文件不存在）、`ReadAllTextAsync` 抛 `ArgumentNullException`
+  （既非 IOException 也不在失败契约表里）；Save 据此把 `Corrupt` 报成 `Missing`。修法：装饰器把
+  `null` 统一转成 `IOException("解密失败")`，两个读面一致；内置 XOR 永不返回 null，默认路径不变。
+  回归：`FileManagerCryptoTests.DecryptFailure_ByteAndTextFaces_ThrowSameIOException`，改前红。
+
 #### Log
 
 - **同会话重建实现截断同名 JSONL 且 `seq` 重计（LOG-001）**：文件基名只含会话起始时刻 + 会话 id，

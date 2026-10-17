@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Text;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -110,6 +111,22 @@ namespace XFramework.XFileManager
             return _targetDomain == null || _targetDomain.Value == domain;
         }
 
+        /// <summary>
+        /// 解密并把 <c>null</c> 转成 <see cref="IOException"/>。
+        /// <para><see cref="ICryptoProvider.Decrypt"/> 的契约是「失败返回 <c>null</c>」，而
+        /// <see cref="IFileProvider"/> 的 <c>null</c> 专指「文件不存在」——两者在同一个返回值上撞车，
+        /// 会让调用方把「密文损坏」误判为「没有文件」。统一转成 IO 失败，字节面与文本面给出同一种结果
+        /// （FILE-001）。内置 XOR 永不返回 <c>null</c>（错误密钥解出垃圾数据），故默认路径不触发。</para>
+        /// </summary>
+        private byte[] DecryptOrThrow(byte[] bytes)
+        {
+            var plain = _crypto.Decrypt(bytes);
+            if (plain == null)
+                throw new IOException("解密失败：ICryptoProvider.Decrypt 返回 null（密钥错误或数据损坏）。");
+
+            return plain;
+        }
+
         #endregion
 
         #region IFileProvider — 读写经加解密层
@@ -121,7 +138,7 @@ namespace XFramework.XFileManager
             if (bytes == null)
                 return null;
 
-            return Encoding.UTF8.GetString(ShouldCrypt(domain) ? _crypto.Decrypt(bytes) : bytes);
+            return Encoding.UTF8.GetString(ShouldCrypt(domain) ? DecryptOrThrow(bytes) : bytes);
         }
 
         /// <inheritdoc />
@@ -131,7 +148,7 @@ namespace XFramework.XFileManager
             if (bytes == null)
                 return null;
 
-            return ShouldCrypt(domain) ? _crypto.Decrypt(bytes) : bytes;
+            return ShouldCrypt(domain) ? DecryptOrThrow(bytes) : bytes;
         }
 
         /// <inheritdoc />

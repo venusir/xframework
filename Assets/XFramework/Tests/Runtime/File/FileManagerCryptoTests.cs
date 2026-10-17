@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -225,6 +226,54 @@ namespace XFramework.XFileManager.Tests
                 FileManager.SetCryptoProvider(null);
             }
         }
+
+        #region 解密失败语义
+
+        private sealed class NullDecryptCryptoProvider : ICryptoProvider
+        {
+            public byte[] Encrypt(byte[] plainData) => plainData;
+
+            public byte[] Decrypt(byte[] cipherData) => null;
+        }
+
+        /// <summary>
+        /// 解密失败的两个读面必须给出同一种可观测结果（FILE-001）。
+        /// <para>改前：字节面返回 <c>null</c>（=文件不存在），文本面抛 <c>ArgumentNullException</c>
+        /// （既非 IOException 也不在失败契约表里）。改为统一抛 <see cref="IOException"/>。</para>
+        /// </summary>
+        [Test]
+        public async Task DecryptFailure_ByteAndTextFaces_ThrowSameIOException()
+        {
+            FileManager.SetCryptoProvider(new NullDecryptCryptoProvider());
+            try
+            {
+                await FileManager.WriteAllBytesAsync(FileDomain.AppData, "corrupt.bin", Encoding.UTF8.GetBytes("x"));
+
+                try
+                {
+                    await FileManager.ReadAllBytesAsync(FileDomain.AppData, "corrupt.bin");
+                    Assert.Fail("解密失败应抛 IOException（字节面）");
+                }
+                catch (IOException)
+                {
+                }
+
+                try
+                {
+                    await FileManager.ReadAllTextAsync(FileDomain.AppData, "corrupt.bin");
+                    Assert.Fail("解密失败应抛 IOException（文本面）");
+                }
+                catch (IOException)
+                {
+                }
+            }
+            finally
+            {
+                FileManager.SetCryptoProvider(null);
+            }
+        }
+
+        #endregion
 
         #endregion
     }

@@ -505,6 +505,9 @@ for (int i = 0; i < 3; i++)
   直接丢进池委托、存档的原子写同样依赖池）。
 - **切换加密立即使已写入的文件不可读**：旧文件是明文（或旧密钥密文），新配置下解密得到的是垃圾数据而**不是
   抛异常**，表现为「文件损坏」。变更前需自行迁移存量文件。
+- **解密失败的可观测结果取决于 `ICryptoProvider`**：内置 XOR 对错误密钥解出垃圾数据（不抛）；按接口契约
+  返回 `null` 的第三方实现，字节面与文本面**统一抛 `IOException("解密失败")`**（不再是一面返回 `null`、
+  一面抛 `ArgumentNullException`，FILE-001）。
 - **加解密作用域默认覆盖所有域**：`SetCryptoProvider` 不传 `domain` 会连带加密 `AppData` / `Cache`；
   只想保护存档应显式传 `FileDomain.SaveData`。
 
