@@ -170,20 +170,20 @@ await Bootstrap.RunAsync();
 
 | 模块 | 替换契约 | 接线入口 |
 |---|---|---|
-| **Log** | `ILogManager`（整体）+ `ILogSink`（追加输出端） | `Initialize(ILogManager)` / `AddSink` / `RemoveSink` |
-| **Diagnostics** | 无——注册表是纯静态服务，没有后端可换；要换的是**页签**（`IDiagnosticPanel` 登记）与**渲染**（`IDiagnosticPanelView` 自绘） | `DiagnosticsManager.Register` / 实现 `IDiagnosticPanelView` |
-| **Asset** | `IAssetManager`（两个能力接口 `IAssetPoolController` / `IAssetSceneLoader` 均由门面探测） | `SetInstance(IAssetManager)` |
+| **Log** | `ILogManager`（整体）+ `ILogSink`（追加输出端） | `Initialize(ILogManager)` / `AddSink` / `RemoveSink`（[实现方入口](Runtime/Log/README.md#自定义实现)） |
+| **Diagnostics** | 无——注册表是纯静态服务，没有后端可换；要换的是**页签**（`IDiagnosticPanel` 登记）与**渲染**（`IDiagnosticPanelView` 自绘） | `DiagnosticsManager.Register` / 实现 `IDiagnosticPanelView`（[实现方入口](Runtime/Diagnostics/README.md#自定义实现)） |
+| **Asset** | `IAssetManager`（两个能力接口 `IAssetPoolController` / `IAssetSceneLoader` 均由门面探测） | `SetInstance(IAssetManager)`（[实现方入口](Runtime/Asset/README.md#自定义实现)） |
 | **Scene** | **无** | 代码原话：「门面无状态，后端就是 `IAssetSceneLoader` 能力接口——本仓『有接口』的分界线是『是否存在可替换的后端』，而那里已经有接口了」（同 Timer 的取舍） |
-| **Audio** | `IAudioManager` | `SetInstance(IAudioManager)` |
-| **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)` |
-| **File** | `IFileProvider`（可选能力 `IAtomicFileProvider` / `IDirectoryProvider`）；`ICryptoProvider` 按域接线 | `Initialize(provider)`——**一次性**，换它必须先 `Destroy()`；`SetCryptoProvider` 可随时调 |
-| **Settings** | `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（**按类型**注入；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点） | 三个 `Initialize<T>` 重载 / `SetStore<T>` / `SetMigrator<T>` / `SetValidator<T>` |
-| **Localization** | `ILocalizationManager` | `SetInstance(ILocalizationManager)` |
-| **UI** | `IUIManager` + 三个 provider：`IUIController` / `IUITipProvider` / `IUIHudProvider` | `SetInstance` / `SetController` / `SetTipProvider` / `SetHudProvider` |
-| **Input** | `IInputProvider`（27 成员） | `Initialize(IInputProvider)`（**生产路径**，自动注册帧驱动）；`SetProvider` 不注册帧驱动，是测试注入路径 |
-| **Config** | `IConfigManager`；`IConfigLoader` 逐次传入（**无法全局注册新格式**） | `SetInstance(IConfigManager)` |
-| **Data** | `IDataManager` | `Initialize(IDataManager)`——传 `null` 等价于 `Shutdown()` |
-| **Serialize** | `ISerializer`（按 `Format` 字符串注册） | `Register` / `Unregister` |
+| **Audio** | `IAudioManager` | `SetInstance(IAudioManager)`（[实现方入口](Runtime/Audio/README.md#自定义实现)） |
+| **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)`（[实现方入口](Runtime/Save/README.md#自定义实现)） |
+| **File** | `IFileProvider`（可选能力 `IAtomicFileProvider` / `IDirectoryProvider`）；`ICryptoProvider` 按域接线 | `Initialize(provider)`——**一次性**，换它必须先 `Destroy()`；`SetCryptoProvider` 可随时调（[实现方入口](Runtime/File/README.md#自定义实现)） |
+| **Settings** | `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（**按类型**注入；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点） | 三个 `Initialize<T>` 重载 / `SetStore<T>` / `SetMigrator<T>` / `SetValidator<T>`（[实现方入口](Runtime/Settings/README.md#自定义实现)） |
+| **Localization** | `ILocalizationManager` | `SetInstance(ILocalizationManager)`（[实现方入口](Runtime/Localization/README.md#自定义实现)） |
+| **UI** | `IUIManager` + 三个 provider：`IUIController` / `IUITipProvider` / `IUIHudProvider` | `SetInstance` / `SetController` / `SetTipProvider` / `SetHudProvider`（[实现方入口](Runtime/UI/README.md#自定义实现)） |
+| **Input** | `IInputProvider`（27 成员） | `Initialize(IInputProvider)`（**生产路径**，自动注册帧驱动）；`SetProvider` 不注册帧驱动，是测试注入路径（[实现方入口](Runtime/Input/README.md#自定义实现)） |
+| **Config** | `IConfigManager`；`IConfigLoader` 逐次传入（**无法全局注册新格式**） | `SetInstance(IConfigManager)`（[实现方入口](Runtime/Config/README.md#自定义实现)） |
+| **Data** | `IDataManager` | `Initialize(IDataManager)`——传 `null` 等价于 `Shutdown()`（[实现方入口](Runtime/Data/README.md#自定义实现)） |
+| **Serialize** | `ISerializer`（按 `Format` 字符串注册） | `Register` / `Unregister`（[实现方入口](Runtime/Serialize/README.md#自定义实现)） |
 | **Message** | **无** | `IMessageBroker` 是 internal，XML 原话：「刻意收敛，不是遗漏」——零配置纯静态服务 |
 | **Update** | **无** | 自管理的静态服务（`AutoInit` + PlayerLoop 注入） |
 | **Timer** | **无** | 代码原话：「纯静态服务，没有 `ITimerManager` 这类后端替换点」 |
@@ -191,7 +191,7 @@ await Bootstrap.RunAsync();
 | **Event** | **无** | 「公开接口 + 静态工厂 + internal 实现」——接口可自行实现，但框架内没有接受第三方实现的入口 |
 | **Reactive** | **无** | 接口公开（可面向接口编程、可自定义实现），但没有注入句柄 |
 | **Pool** | **部分** | 管理器级无注入点；单个池可用公开构造自建（`Pool<T>` + `IPool<T>`），`GetPool<T>()` 做依赖反转 |
-| **Bootstrap / Pipeline** | 不是「换后端」，是**装配入口** | `Bootstrap.Register` / `Unregister<T>`；`Pipeline.Create()` + `AddStage` / `BuildPhaseGroups` |
+| **Bootstrap / Pipeline** | 不是「换后端」，是**装配入口** | `Bootstrap.Register` / `Unregister<T>`；`Pipeline.Create()` + `AddStage` / `BuildPhaseGroups`（[Bootstrap 实现方入口](Runtime/Bootstrap/README.md#自定义实现)；[Pipeline 实现方入口](Runtime/Pipeline/README.md#自定义实现)） |
 
 ## 可配置项一览
 
