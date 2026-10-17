@@ -21,6 +21,7 @@ Runtime/Asset/
 ├── ISceneLoadOperation.cs         # 场景加载操作的最小面（internal 测试缝）
 ├── ISceneLoadSource.cs            # 场景加载来源缝（internal 测试缝）
 ├── YooAssetSceneLoadSource.cs     # 缝的默认实现：包住 YooAsset.SceneHandle（internal）
+├── IAssetLoadWait.cs              # 资产加载等待缝（internal 测试缝）+ HandleBase 适配
 ├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收 / 远端地址服务 / 解密服务）
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
 ├── AssetInitProgressRelay.cs      # 进度直写桥：AssetInitReport → PipelineStageContext

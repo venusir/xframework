@@ -273,6 +273,7 @@ Runtime/Asset/
 ├── ISceneLoadOperation.cs         # internal：场景加载操作的最小面（测试缝）
 ├── ISceneLoadSource.cs            # internal：场景加载来源缝（测试缝）
 ├── YooAssetSceneLoadSource.cs     # internal：缝的默认实现，包住 YooAsset.SceneHandle
+├── IAssetLoadWait.cs              # internal：资产加载等待缝（测试缝）+ HandleBase 适配
 ├── AssetInitOptions.cs            # 初始化配置（包名 / 运行模式 / 低内存回收 / 远端地址服务 / 解密服务）
 ├── AssetInitReport.cs             # 初始化进度载荷（readonly struct，中性，不依赖管线）
 ├── AssetInitProgressRelay.cs      # internal：进度直写桥：AssetInitReport → PipelineStageContext
@@ -495,7 +496,8 @@ RequestPackageVersionAsync → 检查远端新版本号
 所有公开异步 API 均支持 `CancellationToken`，取消时抛出 `OperationCanceledException`：
 
 - `DownloadAssetsAsync` / `AssetDownloaderHandle.WaitAsync`：取消时自动调用 `Cancel()` 中止下载后抛出
-- 其余加载类 API：取消后返回的句柄状态可能半途，需自行 `Dispose` 收尾
+- 其余加载类 API：取消时**底层已创建的 YooAsset 句柄会被释放后重抛**——调用方拿到的是异常，不是句柄，
+  不需要（也无法）再 `Dispose` 什么（AST-001）
 
 ## 线程契约
 

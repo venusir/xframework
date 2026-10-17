@@ -350,10 +350,7 @@ namespace XFramework.XAsset
             if (package == null) return default;
 
             var operation = package.LoadSubAssetsAsync(location);
-            while (!operation.IsDone)
-            {
-                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
-            }
+            await WaitOrReleaseAsync(new HandleBaseWait(operation), cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
             {
@@ -391,10 +388,7 @@ namespace XFramework.XAsset
             if (package == null) return default;
 
             var operation = package.LoadRawFileAsync(location);
-            while (!operation.IsDone)
-            {
-                await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
-            }
+            await WaitOrReleaseAsync(new HandleBaseWait(operation), cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
             {
@@ -475,6 +469,29 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 等待一次资产加载；取消时先释放已创建的 YooAsset 句柄再重抛。
+        /// <para><b>为什么必须释放</b>：YooAsset 在 <c>CreateHandle</c> 时即 <c>RefCount++</c>，取消后若把
+        /// 异常直接抛给调用方，句柄无人 <c>Release</c> → provider 与 bundle 引用永久驻留，
+        /// <c>UnloadUnusedAssetsAsync</c> 再也回收不掉（AST-001）。与场景路径的
+        /// <c>SettleCancelledSceneLoad</c> 是同一条理由——此前只有场景族做了取消善后，资产族没有。</para>
+        /// </summary>
+        /// <param name="operation">加载等待缝；生产用 <see cref="HandleBaseWait"/> 包住 YooAsset 句柄。</param>
+        /// <param name="cancellationToken">取消令牌。</param>
+        internal static async UniTask WaitOrReleaseAsync(IAssetLoadWait operation, CancellationToken cancellationToken)
+        {
+            try
+            {
+                while (!operation.IsDone)
+                    await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                operation.Release();
+                throw;
+            }
+        }
+
+        /// <summary>
         /// 异步加载资源。每次调用均从 YooAsset 获取新句柄，返回 <see cref="AssetHandle{T}"/> 包装。
         /// </summary>
         public async UniTask<AssetHandle<T>> LoadAsync<T>(string location, uint priority = 0, CancellationToken cancellationToken = default)
@@ -485,7 +502,7 @@ namespace XFramework.XAsset
                 return default;
 
             var operation = package.LoadAssetAsync(location, priority);
-            await operation.WithCancellation(cancellationToken);
+            await WaitOrReleaseAsync(new HandleBaseWait(operation), cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
             {

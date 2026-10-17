@@ -208,6 +208,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Asset（资源加载）
+
+- **资产加载族取消不释放 YooAsset 句柄（AST-001）**：`LoadAsync` / `LoadSubAssetsAsync` / `LoadRawFileAsync`
+  在取消时把已 `RefCount++` 的句柄丢掉，无人 `Release` → provider 与 bundle 引用永久驻留，
+  `UnloadUnusedAssetsAsync` 再也回收不掉；场景族有取消善后、资产族没有。修法：三条路径共用
+  `WaitOrReleaseAsync`，取消时 `Release()` 后重抛；为可测性抽出 internal 等待缝 `IAssetLoadWait`
+  （生产适配 `HandleBaseWait`）。README 的取消契约订正为「取消时句柄被释放后重抛，拿到的是异常不是句柄」。
+  回归：`AssetLoadWaitTests` 两例（反向注入 `Release` 后改前红）。
+  **端到端缺口如实记**：真实 YooAsset 包上的「取消后 provider 不增长」仍无自动化用例（审计报告 §7 Asset 残留）。
+
 #### File
 
 - **`ICryptoProvider.Decrypt` 返回 `null` 时两个读面结果不一致（FILE-001）**：同一解密失败在
