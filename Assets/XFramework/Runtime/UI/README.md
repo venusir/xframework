@@ -654,6 +654,8 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 需要一份默认样式时显式写 `UIMaskStyle.Default`。
 
+> **重复 `ShowMask` 的样式以最后一次调用为准**（UI-C-004）：遮罩是单实例引用计数句柄，重复调用不会叠加实例，只会更新当前样式（颜色 / 层级 / 点击关闭）；`HideMask` 释放最后一层引用时才隐藏。此前的说明只在源码注释与 CHANGELOG，现补进使用方文档。
+
 > 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
 
 > **遮罩是真的会挡住输入的**：它自带 `GraphicRaycaster`，全屏吃掉落在它上面的指针事件——这正是「模态」的含义。
@@ -747,7 +749,7 @@ flowchart TB
 | ------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | **UIManager**             | 外观层 | 全局 UI 管理器静态外观（单例）。所有调用入口。                                                                                            |
 | **IUIManager**            | 接口层 | UI 管理器接口。定义所有可用操作。                                                                                                         |
-| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典、显示栈、遮罩管理、预加载缓存与排序计数器。支持注入 IUIController 拦截生命周期。                             |
+| **UIManagerImpl**         | 实现层 | 内部实现。维护活动面板字典（键为面板运行期类型）、显示栈、遮罩管理、预加载缓存与排序重排。支持注入 IUIController 拦截生命周期。                             |
 | **UIPanelBase**           | View/  | 面板基类。提供 OnOpen / OnClose / OnFocus / OnBlur / OnUpdate / OnLanguageChanged 等生命周期方法与动画钩子，内置 ViewModel 绑定。         |
 | **UIViewBase**            | View/  | UI 视图抽象基类。提供 Canvas / Raycaster 管理、层级属性、OnUpdate 集中驱动、OnPoolRecycle 回池钩子。UIPanelBase 与 UIHudItem 的公共父类。 |
 | **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
@@ -755,7 +757,7 @@ flowchart TB
 | **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
 | **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
 | **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
-| **IViewModel**            | 数据层 | **ViewModel 接口**。标记型，纯粹的类型约束。                                                                                              |
+| **IViewModel**            | 数据层 | **ViewModel 接口**。`IDisposable` + `OnBound` / `OnUnbound` 两个生命周期钩子（不是标记型）。                                                              |
 | **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建与订阅归口，生命周期为 OnBound / OnUnbound / Dispose（无 InitializeAsync）。              |
 | **UIPanelBinding**        | 数据层 | **UI 绑定组件**。挂载在 Panel Prefab 上，持有 IViewModel 引用，提供约定式绑定（BindByConvention）与生命周期管理。                         |
 | **UIBinder**              | 数据层 | **UI 绑定工具**。静态扩展方法，提供 BindToText/BindToSlider/BindToClick 等精确绑定，支持 format 格式化。与 UIPanelBinding 互补。          |
@@ -920,13 +922,13 @@ UIManager.ShowTipAsync(text, config)  →  静态外观
     └── UITipManagerImpl.ShowTipAsync()    →  内部管理器（实例化、容器、回池）
             │
             ├── AssetManager.InstantiateAsync<UITipItem>()  →  获取组件实例（含对象池）
-            ├── tipItem.PlayAsync()                         →  异步播放动画
+            ├── tipItem.Begin(text, config)                 →  起播（帧推进由 UIManager.Update 统一驱动）
             └── AssetManager.DestroyInstance()              →  回池
 ```
 
 - `UITipManagerImpl` 是 `IUITipProvider` 的默认实现（可用 `UIManager.SetTipProvider` 替换），在 UIRoot 下自动创建 `Layer_Tip` 独立子 Canvas（排序值取 `UISorting.TipOrder`），确保 Tip 始终在所有面板之上
 - `UIManager.CloseAllAsync` 会一并回收在播 Tip（与 HUD 同理：它们不是面板，但共享同一个 UIRoot 与生命周期。遮罩不在其列——它是引用计数句柄，需显式 `HideMask()`）
-- `UITipItem` 基于 UniTask 的异步循环驱动帧动画，支持 `CancellationToken` 取消
+- `UITipItem` 的帧推进由 `UIManager.Update` 统一驱动（不再自驱动帧循环），支持 `CancellationToken` 取消
 
 ### 快速使用
 

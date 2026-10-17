@@ -10,7 +10,7 @@ namespace XFramework.XUI.Controller
     /// <summary>
     /// 默认 UI 控制器。所有操作直接放行。
     /// <para>当未通过 <see cref="XUI.UIManager.SetController(IUIController)"/> 设置自定义控制器时使用此默认实现。</para>
-    /// <para><b>默认静默</b>：每次拦截都会打日志，意味着每开一个面板就是五条带字符串插值的日志——
+    /// <para><b>默认静默</b>：每次拦截都会打日志，意味着每开一个面板就要打一组带字符串插值的日志——
     /// 在生产环境纯属噪音。需要观察拦截流程时用 <c>new UIDefaultController(verbose: true)</c>。</para>
     /// </summary>
     public sealed class UIDefaultController : IUIController

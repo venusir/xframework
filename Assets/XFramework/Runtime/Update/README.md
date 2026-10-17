@@ -320,6 +320,13 @@ Runtime/Update/
 
 ## 已知限制
 
+- **`Clear()` 的连带影响（UPD-001）**：它摘掉调度器里的**所有**节点，包括 UI / Timer / Audio / Input / Settings
+  等模块的驱动器。恢复入口各不相同：UI 重进 `Initialize` / `SetInstance`；Timer 下一次 `After` / `Every`
+  重新注册；**Audio / Input / Settings 有自记账，不会自愈**——需各自的 `Destroy` + `Initialize`；Camera 在
+  下一次生命周期事件恢复。详见各模块 README。
+- **永不 tick 的调度器上跨时机操作无界缓冲（UPD-007）**：`timeScale = 0` 时 FixedUpdate 调度器不派发，
+  跨时机的注册 / 注销会一直堆在 `_pendingOps` 里；当前仓内无实际风险，但没有上界。极长暂停后大量跨时机
+  操作请留意。
 - **约 30fps 及以下时 `Tier1` 与 `Tier0` 同频**：帧长达到 2 格后，`Tier1`（2 格一轮）每帧都会被
   轮到一次，档位单调但不再更省。这是刻意的取舍——帧率低于 30 时对象本就无法比帧更早被观察到，
   让它在帧内多跑一次只会加重最吃紧设备的每帧负担

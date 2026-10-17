@@ -30,6 +30,8 @@ namespace XFramework.XUI.Controller
         /// <summary>
         /// 面板打开后调用（面板已实例化、激活并完成 OnOpen）。
         /// <para>适合在面板完全就绪后执行额外逻辑，如播放音效、埋点上报。</para>
+        /// <para><b>例外</b>：面板在自己的 <c>OnOpen</c> 里自关时，本回调被跳过（那次打开没有完成）；
+        /// 本回调自身抛异常时面板状态已提交，不会回滚（UI-C-009）。</para>
         /// </summary>
         /// <param name="panelType">面板类型。</param>
         /// <param name="panel">面板实例。</param>
@@ -55,7 +57,7 @@ namespace XFramework.XUI.Controller
             CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 面板关闭后调用（面板已销毁）。
+        /// 面板关闭后调用（**面板已回池，不是已销毁**——池化实例可能被下一次打开复用）。
         /// <para>适合清理与该面板相关的全局状态。</para>
         /// </summary>
         /// <param name="panelType">面板类型。</param>

@@ -38,7 +38,8 @@ namespace XFramework.XUI.Data
         #region Public — Bind / Unbind
 
         /// <summary>
-        /// 绑定 ViewModel 到此面板。面板关闭前需调用 <see cref="Unbind"/>。
+        /// 绑定 ViewModel 到此面板。**不需要在关闭前手动 <see cref="Unbind"/>**：面板回池时
+        /// <see cref="XFramework.XUI.View.UIPanelBase.OnPoolRecycle"/> 会自动解绑（UI-B-007）。
         /// <para>调用后会自动调用 <see cref="CacheComponents"/> 缓存子节点组件。</para>
         /// </summary>
         /// <param name="viewModel">面板的 ViewModel 实例。</param>
@@ -54,7 +55,8 @@ namespace XFramework.XUI.Data
 
         /// <summary>
         /// 解绑当前 ViewModel，释放所有订阅。
-        /// <para>面板关闭时自动调用（通过 <see cref="OnDestroy"/>）。</para>
+        /// <para>面板关闭（回池）时由 <see cref="XFramework.XUI.View.UIPanelBase.OnPoolRecycle"/> 自动调用；<see cref="OnDestroy"/>
+        /// 只作「面板被直接销毁」的兜底（池化面板关闭时不会触发 OnDestroy，UI-B-007）。</para>
         /// </summary>
         public void Unbind()
         {

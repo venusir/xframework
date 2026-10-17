@@ -429,6 +429,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Input / Update / UI 文档订正（2026-10-17）**：
+  Input（INP-005/006/007/012）：README 依赖版本对齐 6000.3 / InputSystem 1.19.0；类 XML 不再写「每帧需调
+  `Tick`」（自动驱动）；`SetProvider` 明确不注册帧驱动；空 `bindingId` 回退时 `OnCompleted` 的 Id 为 `""`。
+  Update（UPD-001/007）：`Clear()` 的连带影响与各模块恢复入口写进 XML/README；永不 tick 的调度器上跨时机
+  操作无界缓冲写进已知限制。
+  UI（UI-B-003/007/009/012、UI-C-004/009/012）：Tip 改为 `Begin` 且不再自驱动；`UIPanelBinding` 回池自动
+  解绑（`OnDestroy` 仅兜底）；HUD/Tip 无档位声明通道；核心类型表两处陈旧描述；遮罩样式「最后一次
+  `ShowMask` 为准」；`OnAfterClose` 是回池不是销毁、`OnAfterOpen` 的自关/异常边界；控制器日志条数去固定值。
 - **Config 文件形状与前置条件补文档（2026-10-17，CONF-003/013）**：README 补 Json `{"Items":[...]}` schema、
   三种格式都经 `AssetManager` 读取（必须先初始化）；门面完备性注释删固定计数；补录审计 F10 的台账条目。
 - **Lock / Timer / Localization 文档小错订正（2026-10-17，LOCK-003/004、TMR-004/011、LOC-008/011）**：

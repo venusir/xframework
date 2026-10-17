@@ -29,8 +29,8 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 由 <see cref="UIManager.Update"/> 调用，驱动所有在播 Tip 的每帧推进。
-        /// <para>于是 Tip 与面板、HUD 共用同一条帧通路：可被档位降频、被
-        /// <c>UpdateManager.Pause</c> 统一暂停。</para>
+        /// <para>于是 Tip 与面板、HUD 共用同一条帧通路：受 <c>UpdateManager.Pause</c> 统一暂停。
+        /// **HUD 与 Tip 恒由每帧驱动器（Tier0）驱动，没有档位声明通道**——与面板不同，不能降频（UI-B-009）。</para>
         /// </summary>
         /// <param name="deltaTime">距上次派发的间隔。</param>
         /// <param name="time">当前时刻。</param>

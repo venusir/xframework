@@ -14,7 +14,8 @@ namespace XFramework.XInput
     /// 全局输入管理器外观。提供静态方法直接访问输入状态。
     /// <para>内部持有 <see cref="IInputProvider"/> 实例，所有调用委托到该实例。</para>
     /// <para>默认使用 <see cref="InputSystemProvider"/>（基于 Unity Input System），也可通过 <see cref="Initialize(IInputProvider)"/> 注入自定义实现（如 Rewired 适配器）。</para>
-    /// <para>使用前需调用 <see cref="Initialize()"/>。每帧需调用 <see cref="Tick()"/>。</para>
+    /// <para>使用前需调用 <see cref="Initialize()"/>。帧驱动由框架自动注册（<c>InputTicker</c> 走
+    /// <c>UpdateManager</c>，Tier0）；`SetProvider` 注入路径不注册，需调用方自行按帧调 <see cref="Tick()"/>。</para>
     /// <para>框架不定义任何游戏专属动作（如 Jump、Attack），第三方游戏需自行封装。详见 README 中的完整示例。</para>
     /// </summary>
     public static class InputManager
@@ -150,6 +151,8 @@ namespace XFramework.XInput
         /// <summary>
         /// 设置外部已创建的 <see cref="IInputProvider"/> 实例作为全局提供者。
         /// <para>适用于依赖注入或单元测试场景。</para>
+        /// <para><b>不注册帧驱动</b>：注入路径要求调用方自行按帧调 <see cref="Tick"/>（或接受
+        /// <c>Observe*</c> 不推进）；生产路径请用 <c>Initialize</c>，它会注册 <c>InputTicker</c>（INP-007）。</para>
         /// </summary>
         public static void SetProvider(IInputProvider provider)
         {
@@ -581,6 +584,8 @@ namespace XFramework.XInput
         /// <summary>
         /// 开始交互式按键重绑定。调用后框架等待用户按下物理按键/按钮。
         /// <para>用于按键设置 UI：用户选择一个绑定项，按下新按键完成重绑定。</para>
+        /// <para><b>空 bindingId 的回退</b>：此时 <see cref="IRebindingOperation.OnCompleted"/> 回调里的 Id 为
+        /// <c>""</c>（不是实际覆盖的绑定 id）——需要拿到目标绑定的 id，请先经 <see cref="GetBindings"/> 传入（INP-012）。</para>
         /// </summary>
         /// <param name="action">要重新绑定的动作名称</param>
         /// <param name="bindingId">

@@ -222,6 +222,8 @@ namespace XFramework.XInput
         /// <summary>
         /// 开始交互式按键重绑定。调用后框架等待用户按下物理按键/按钮。
         /// <para>用于按键设置 UI：用户选择一个绑定项，按下新按键完成重绑定。</para>
+        /// <para><b>空 bindingId 的回退</b>：此时 <see cref="IRebindingOperation.OnCompleted"/> 回调里的 Id 为
+        /// <c>""</c>（不是实际覆盖的绑定 id）——需要拿到目标绑定的 id，请先经 <see cref="GetBindings"/> 传入（INP-012）。</para>
         /// </summary>
         /// <param name="action">要重新绑定的动作名称</param>
         /// <param name="bindingId">

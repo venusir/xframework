@@ -348,6 +348,10 @@ namespace XFramework.XUpdate
         /// 现对齐 <see cref="XMessage.MessageManager.Clear"/> 与
         /// 框架内其它静态门面 <c>Clear</c> 的既有命名与语义，
         /// 并与「静态门面在 <c>Destroy</c> 后可重新初始化」的框架惯例一致。</para>
+        /// <para><b>连带影响（UPD-001）</b>：它摘掉的是调度器里的**所有**节点，包括框架内各模块的驱动器。
+        /// 恢复入口各不相同：UI 重进 <c>Initialize</c> / <c>SetInstance</c>；Timer 下一次 <c>After</c> /
+        /// <c>Every</c> 会重新注册；**Audio / Input / Settings 有自记账，不会自愈**——需各自的
+        /// <c>Destroy</c> + <c>Initialize</c>；Camera 在下一次生命周期事件恢复。详见各模块 README。</para>
         /// </summary>
         public static void Clear()
         {

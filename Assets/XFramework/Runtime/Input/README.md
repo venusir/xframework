@@ -565,11 +565,11 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 
 ## 依赖
 
-- Unity 2022.3 LTS 或更新版本
-- Unity Input System Package（用于默认实现）
+- Unity 6000.3 LTS 或更新版本（与包要求一致）
+- Unity Input System Package（用于默认实现；整体替换 `IInputProvider` 时不需要）
   ```json
   {
-    "com.unity.inputsystem": "1.7.0"
+    "com.unity.inputsystem": "1.19.0"
   }
   ```
 - Unity Input System Test Framework（随 Input System 包自带，仅测试 asmdef 引用，无额外安装）
