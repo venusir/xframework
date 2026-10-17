@@ -184,19 +184,17 @@ FileManager.SetCryptoProvider(new XorCryptoProvider("my-complex-key-2024"));
 FileManager.SetCryptoProvider(null);
 ```
 
-如需强加密（AES 等），实现 `ICryptoProvider` 接口即可：
-
-```csharp
-public class AesCryptoProvider : ICryptoProvider
-{
-    public byte[] Encrypt(byte[] plainData) { /* AES 加密 */ }
-    public byte[] Decrypt(byte[] cipherData) { /* AES 解密 */ }
-}
-```
+需要 AES 等强加密时，实现 `ICryptoProvider` 接口——示例见「自定义实现」的「ICryptoProvider」。
 
 ---
 
-## 典型场景
+## 自定义实现
+
+本模块的实现方入口：实现哪个契约、怎么接线、要守什么。
+
+- **实现哪个契约**：`IFileProvider` 是主契约；控制台平台继承 `ConsoleFileProvider`；可选能力 `IAtomicFileProvider` / `IDirectoryProvider`；加解密实现 `ICryptoProvider`。
+- **怎么接线**：`FileManager.Initialize(provider)` 一次性注入（更换实现须先 `Destroy()`）；加解密走 `FileManager.SetCryptoProvider(...)`。
+- **要守什么**：原子写的降级语义见「行为契约」；委托内不得触碰 Unity API、`Delete` 会在池线程被调用见「线程契约」；自建 Provider 的死锁盲区与可选能力缺失后果见「已知限制」。
 
 ### 接入 Console 平台（Xbox / PS5 / Switch）
 
@@ -270,6 +268,18 @@ FileManager.Initialize();
 ```
 
 不同平台账户的文件将自动隔离到各自子目录，无需业务代码修改。
+
+### ICryptoProvider
+
+需要 AES 等强加密时，实现 `ICryptoProvider` 接口即可：
+
+```csharp
+public class AesCryptoProvider : ICryptoProvider
+{
+    public byte[] Encrypt(byte[] plainData) { /* AES 加密 */ }
+    public byte[] Decrypt(byte[] cipherData) { /* AES 解密 */ }
+}
+```
 
 ---
 
@@ -486,7 +496,7 @@ for (int i = 0; i < 3; i++)
   内置实现全部满足（11 处无一例外），第三方实现不一定。
 - **自建 Provider 的死锁盲区**：同步不可用性的判定只识别内置的 `MobileFileProvider`。第三方 Provider 若返回
   PlayerLoop 依赖型的 UniTask（如 WebGL 后端），同步调用一样会死锁，框架无法代为识别。
-- **不实现可选能力接口的后果**见「典型场景」的「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
+- **不实现可选能力接口的后果**见「自定义实现」的「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与
   `IDirectoryProvider` 是 **Save 模块正在依赖**的（存档的崩溃防护、玩家目录发现），不是可选项。
 - **`Delete` 不能离开特定线程的 Provider 在 `DeleteAsync` 下不可用**：门面把同步 `Delete` 放进线程池执行
   （见「线程契约」），这类 Provider（典型如 WebGL 的 JS 桥）只能继续用同步 `Delete`。**重开判据**：真出现
