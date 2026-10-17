@@ -404,6 +404,10 @@ XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`*
 - **`Clear()` / `ClearAll()` 不触发丢弃回调。** 它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用（退出期跑用户回调容易碰到已销毁的 Unity 对象）——把资源释放写在 `OnDiscard` 里的类型，走 Clear 路径不会释放。
 - **归还回调先于容量判断触发。** 池满被丢弃的实例会**先**收到 `OnReturn`（清理状态）、**再**收到 `OnDiscard`（释放资源），两个回调都收得到。
 - **`PooledObject<T>.Dispose()` 的幂等只对同一个存储位置成立。** 复制出去的副本（`var h2 = h;`）仍会归还两次——结构体按值复制，防不住。
+- **`MaxSize <= 0` 等于无上限**（POOL-004）：`PoolConfig.MaxSize` 的非正值被当作「不设上限」，不是「不保留闲置实例」。要表达后者请用 `MaxSize = 1` 并配合 `Clear()`。
+- **日志分类按简单类型名合并**（POOL-006）：池的日志分类用 `typeof(T).Name` 作键——不同命名空间的同名类型共用同一分类，档位互相影响。需要区分时请给池化类型起唯一名字。
+- **集合池 `Configure` 重建后旧 `GetPool()` 引用失效**（POOL-007）：重建在无活跃实例时发生；此前拿到的 `IPool<T>` 指向旧池，之后的 `Get` / `Return` 不会反映新配置，且没有告警。
+- **`RemovePool<T>` 丢弃闲置实例但不走丢弃回调**（POOL-009）：与 `Clear` 同口径。已移出池的旧 `PooledObject<T>` 归还时落回旧池实例（它仍在内存里），不会报错，也不会回到 `PoolManager` 的新池。
 - **业务对象池与集合池是两套注册表。** `PoolManager.ClearAll()` 只清业务对象池、`CollectionPoolManager.ClearAll()` 只清集合池，切场景时两个都要调；两者都只清闲置实例，**池注册与 `Configure` 保留**。
 - **泛型集合池按闭合泛型类型独立建池。** `ListPool<int>` 与 `ListPool<Vector3>` 是两个池，容量与预热各算各的。
 - **线程不安全。** 与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁（见「线程契约」）。

@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Pool 已知限制补四处口径（2026-10-17，POOL-004/006/007/009）**：`MaxSize <= 0` 等于无上限；池的日志分类
+  按简单类型名合并（跨命名空间同名类型互相影响）；集合池 `Configure` 重建后旧 `GetPool()` 引用失效；
+  `RemovePool` 丢弃闲置实例但不走丢弃回调。四个集合池的 `GetPool` XML 同步。
 - **Log 分类命名空间与懒建线程边界（2026-10-17，LOG-005/011）**：README 的已知限制补「分类是全局裸字符串键、
   同名静默合并、外部标签只增」；线程契约补「`Shutdown` 后工作线程首条日志会触发懒建并在该线程读 Unity API」，
   同时订正 sink 重入的两种路径（LOG-002 遗留的另一处表述）。

@@ -110,6 +110,7 @@ namespace XFramework.XPool
 
         /// <summary>
         /// 获取内部 <see cref="IPool{T}"/> 接口，用于依赖反转。
+        /// <para><b>重建后失效</b>：<c>Configure</c> 在无活跃实例时重建内部池，此前拿到的引用指向旧池。</para>
         /// </summary>
         public static IPool<StringBuilder> GetPool()
         {
