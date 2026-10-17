@@ -22,7 +22,8 @@ namespace XFramework.XEvent
     /// <list type="number">
     /// <item><description>仅 Editor 编译:Release 下整段是空操作(与 <c>MainThreadGuard</c>、<c>Pool&lt;T&gt;</c>
     /// 的活跃集同法),订阅热路径上只剩一次静态 <c>bool</c> 读。</description></item>
-    /// <item><description><b>必须可复位</b>:<see cref="Reset"/> 由域重载与每个 fixture 的 SetUp 调用——
+    /// <item><description><b>必须可复位</b>:<see cref="Reset"/> 由使用方显式调用（测试 fixture 的 SetUp，
+    /// 或将来若补域重载钩子则由它调用）——**本类型没有任何自动钩子**，不调用就会让计数跨用例/跨会话累积；
     /// 缺了它,跟踪器自己就会成为泄漏源,而它正是来抓这个的。</description></item>
     /// <item><description><b>diff 语义,不是「必须为 0」</b>:长期存活的订阅是合法的(单例上的属性、Settings
     /// 句柄;Reactive README 明写「源长期存活时只增不减**不必然是泄漏**」),故断言只应比较「用例前后是否
@@ -57,7 +58,7 @@ namespace XFramework.XEvent
                 System.Threading.Interlocked.Add(ref _liveCount, -count);
         }
 
-        /// <summary>清零。由域重载与每个 fixture 的 SetUp 调用(约束 2)。</summary>
+        /// <summary>清零。由使用方显式调用（测试 fixture 的 SetUp 等）；本类型没有自动钩子（约束 2）。</summary>
         internal static void Reset() => System.Threading.Volatile.Write(ref _liveCount, 0);
 #else
         /// <summary>Release:恒 0(整段跟踪不编译)。</summary>

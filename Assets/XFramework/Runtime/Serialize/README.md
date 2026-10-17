@@ -1,10 +1,10 @@
-# Serialize —— 按格式名取用的序列化注册表，解耦 Data / Save / Config 与具体序列化实现
+# Serialize —— 按格式名取用的序列化注册表，解耦 Data / Save 与具体序列化实现
 
 ## 概述
 
 命名空间 `XFramework.XSerialize`。序列化抽象层，解耦 `DataManager` 与具体序列化格式。
 
-**它解决的是「换格式不用改调用方」**：`Data` / `Save` / `Config` 只认 `ISerializer` 这个接口与一个格式名，具体实现（Newtonsoft / Unity JsonUtility / 第三方）由注册表决定。开箱已注册两个格式，见「API 参考」的「内置默认」。
+**它解决的是「换格式不用改调用方」**：`Data` / `Save` 只认 `ISerializer` 这个接口与一个格式名，具体实现（Newtonsoft / Unity JsonUtility / 第三方）由注册表决定。开箱已注册两个格式，见「API 参考」的「内置默认」。
 
 ## 快速使用
 
@@ -19,7 +19,7 @@ MyType back = (MyType)json.Deserialize(bytes, typeof(MyType));
 ISerializer legacy = Serializer.Get("json-utility");
 ```
 
-接入 `Data` / `Save` / `Config` 时**不需要直接调用本模块**——它们自己通过格式名走注册表。直接用它只有两种场合：**扩展一种新格式**（见「自定义实现」），或**自己做一次格式无关的序列化**。
+接入 `Data` / `Save` 时**不需要直接调用本模块**——它们自己通过格式名走注册表。直接用它只有两种场合：**扩展一种新格式**（见「自定义实现」），或**自己做一次格式无关的序列化**。
 
 ## 模块结构
 
@@ -58,10 +58,10 @@ Runtime/Serialize/
 | 成员 | 说明 |
 | ---- | ---- |
 | `Get(format)` | 取指定格式的序列化器；**未注册时抛 `KeyNotFoundException`** |
-| `TryGet(format, out serializer)` | 同上但不抛——探测用 |
+| `TryGet(format, out serializer)` | 同上但不抛（未注册返回 `false`）——探测用；`format` 为 `null` 仍抛 `ArgumentNullException`（SER-004） |
 | `Default` | 默认序列化器（`format = "json"`）；未初始化时抛 `InvalidOperationException` |
 | `Register(serializer)` | 按 `serializer.Format` 注册；**同名覆盖** |
-| `Unregister(format)` | 摘除指定格式 |
+| `Unregister(format)` | 摘除指定格式；`format` 为 `null` 抛 `ArgumentNullException` |
 | `IsInitialized` | 模块是否已初始化 |
 | `Initialize()` | 注册内置两个（幂等，框架已自动调用） |
 | `Shutdown()` | 清空全部注册并把模块复位为未初始化 |
@@ -138,7 +138,7 @@ Serializer.Register(new MessagePackSerializer());
   若使用方已先注册，则**保留使用方的**并打一条 `[Serialize]` 告警。想恢复内置请 `Unregister("json")`
   后重新 `Register` 内置类型。
 - **格式名是跨模块契约。** `DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 里存的是字符串，
-  改名或注销会连带影响 Data / Save / Config 的读写。
+  改名或注销会连带影响 Data / Save 的读写。
 - **`Get` / `Default` / `Shutdown` 三处的失败都是抛异常。** 未注册的格式抛 `KeyNotFoundException`，
   未初始化时取 `Default` 抛 `InvalidOperationException`（框架经 `AutoInit` 自动初始化，正常不会遇到）；
   `Shutdown()` 之后连内置格式都没有，两个入口全抛。

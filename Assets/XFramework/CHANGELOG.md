@@ -429,6 +429,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Event / Serialize / Scene / Data 文档订正（2026-10-17，EVT-003/004/005、SER-003/004、SCN-002/005、DATA-013）**：
+  Event README 的「每订阅零分配」「被两个模块使用」「五个公开文件」订正，`SubscriptionTracker` 明确无自动复位
+  钩子；Serialize 的消费方改为 Data / Save（模块 README、包 README、门禁豁免理由三处），`TryGet` / `Unregister`
+  的 null 参数契约补齐；Scene 补「后端缺 `IAssetSceneLoader` 时返回无效句柄」与主线程守卫理由句；Data 补
+  `ApplyBlockSnapshot` 的 `OnClear` 调用点与半态。
 - **Reactive 相等 / 分配 / 异常边界订正（2026-10-17，RCT-002/004/005/006/007/010/011）**：相等语义改为
   `EqualityComparer<T>.Default`（重写 `Equals` 即按 `Equals`，不是引用相等）；`Keys` / `Values` 首次访问
   缓存视图；自定义键比较器下「键稳定」只对比较器等值成立；`Sort` 异常后可能已部分重排且不补发 `Reset`；

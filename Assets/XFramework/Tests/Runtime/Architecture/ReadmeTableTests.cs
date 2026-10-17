@@ -97,7 +97,7 @@ namespace XFramework.Architecture.Tests
             ("Settings", "设置类型由业务定义，没有统一入口"),
             ("Localization", "可选装配件（「启动引导」一行已写明 Localization 可选）"),
             ("File", "更底层的文件域 / Provider 抽象，主要由 Save / Settings 消费"),
-            ("Serialize", "内部复用件：供 Data / Save / Config 复用，无独立用法面"),
+            ("Serialize", "内部复用件：供 Data / Save 复用，无独立用法面"),
             ("Diagnostics", "Editor 侧工具面，非运行时亮点"),
         };
 

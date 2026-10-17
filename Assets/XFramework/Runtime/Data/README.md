@@ -296,6 +296,7 @@ SaveBootstrapStage (引导阶段，Phase=4)
 
 - **`BlockName` 必须全局唯一。** 快照恢复是按 `blockName` 反查块的，而名称索引一个名字只能指向一个实例——两个**不同类型**的块返回同一个名字时，只有后注册的那个能恢复，另一个会**静默停在默认值上**。模块会在第二次登入时记一条 `[Data] 数据块名称冲突` 的 `LogError`，但**它只留痕、不阻止**：改名仍是你的事。
 - **`ApplySnapshot` 失败后会留下「已清空、未加载」的半态。** 清空发生在恢复之前，且对失败块不回滚。请据返回值判断是否完整，再决定要不要回滚；要在失败时恢复原状，需自行在调用前留一份 `CreateSnapshot()` 快照（它同时携带生成时的脏集合，回滚后一并还原）。
+- **单块恢复（`ApplyBlockSnapshot`）与全量恢复同源**：恢复前先清空目标块，`OnClear` 之后若反序列化 / 迁移失败，该块停在「已清空」状态。`OnClear` 的调用点除 `RemoveBlock` / `ClearAll` / `ApplySnapshot` 外还有 `ApplyBlockSnapshot`（DATA-013）。
 - **`Shutdown()` 不触发任何块的 `OnClear`。** 它的语义是「注销门面持有的实现」，不是「清空数据」——需要释放块持有的资源（订阅、句柄等）请显式调 `ClearAll()` 或 `RemoveBlock<T>()`。
 - **`DataBlockSnapshot.format` 写入端目前恒为 `null`**（导出时只填 `DataSnapshot.defaultFormat`）。该字段保留是为了兼容将来「按块指定格式」；读取端在 `format` 为空时按 `defaultFormat` 回退，故这条不影响行为。
 

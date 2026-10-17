@@ -153,7 +153,7 @@ await Bootstrap.RunAsync();
 | **Localization** | `XFramework.XLocalization` | 本地化：多语言文本、语言切换、UI 自动绑定 | [README](Runtime/Localization/README.md) |
 | **File** | `XFramework.XFileManager` | 跨平台文件系统：路径域抽象、平台 Provider、原子写与一代备份、按域加密 | [README](Runtime/File/README.md) |
 | **Data** | `XFramework.XData` | 数据块管理：快照收集/应用、逐块版本迁移链、脏标记 | [README](Runtime/Data/README.md) |
-| **Serialize** | `XFramework.XSerialize` | 序列化注册表：按格式名取用（json / json-utility），供 Data / Save / Config 复用 | [README](Runtime/Serialize/README.md) |
+| **Serialize** | `XFramework.XSerialize` | 序列化注册表：按格式名取用（json / json-utility），供 Data / Save 复用 | [README](Runtime/Serialize/README.md) |
 | **Save** | `XFramework.XSave` | 存档：原子写与备份恢复、元数据侧车、版本门禁、玩家隔离、槽位复制移动 | [README](Runtime/Save/README.md) |
 | **Config** | `XFramework.XConfig` | 配置表：Json / CSV / ScriptableObject 三种格式、自定义 Loader、声明式批量加载 | [README](Runtime/Config/README.md) |
 | **Pool** | `XFramework.XPool` | 对象池与集合池（List / HashSet / Dictionary / StringBuilder） | [README](Runtime/Pool/README.md) |

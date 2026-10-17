@@ -202,7 +202,7 @@ LoadSceneAsync → AssetSceneHandle（场景已在场）
 ## 线程契约
 
 **全部成员限主线程**。Unity 的场景 API 与 YooAsset 的加载都是主线程 API；本模块不做线程切换，也不加断言
-（越过 Asset 侧已有的主线程守卫没有意义）。
+（Asset 的 `LoadSceneAsync` / `UnloadSceneAsync` **本身没有**主线程守卫，SCN-005——本模块与它同口径，不另设断言）。
 
 ## 已知限制
 
@@ -210,6 +210,9 @@ LoadSceneAsync → AssetSceneHandle（场景已在场）
   （叠加加载卸掉；单场景加载保留并告警），所以**取消之后的一小段时间里场景状态仍会变**。
 - **加载成功后的回收段不响应取消**：`UnloadUnusedAfterLoad` 在句柄就绪之后执行，此时再取消不会丢句柄
   （否则 Additive 场景会留在 Hierarchy 且外部无卸载凭据）——取消只对「加载等待」生效（SCN-001）。
+- **后端缺 `IAssetSceneLoader` 时返回无效句柄**（SCN-002）：`LoadSceneAsync` 返回 `default(AssetSceneHandle)`，
+  唯一提示是 Asset 侧每会话一次的告警；调用方无法区分「加载失败」与「后端缺能力」。自定义 `IAssetManager`
+  实现请显式实现该能力接口。
 - **卸载不了「当前唯一的场景」**：`UnloadAsync` 返回 `false` 并打一条告警（卸载它会让工程没有任何场景，
   Unity 与 YooAsset 都会失败）。句柄在拒绝后仍然有效。
 - **`Dispose` 是即发即忘**：不等卸载完成。要确认结果请用 `UnloadAsync`。

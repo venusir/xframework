@@ -114,7 +114,10 @@ namespace XFramework.XSerialize
         /// <summary>
         /// 注销指定 format 的序列化器。
         /// </summary>
+        /// <param name="format">序列化格式标识。</param>
         /// <returns>是否成功移除。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="format"/> 为 <c>null</c> 时抛出
+        /// （底层字典不接受 null 键，SER-004）。</exception>
         public static bool Unregister(string format)
         {
             return Serializers.Remove(format);
@@ -137,8 +140,13 @@ namespace XFramework.XSerialize
 
         /// <summary>
         /// 尝试获取指定 format 的序列化器。
+        /// <para>「不抛」只针对<b>未注册</b>的格式（返回 <c>false</c>）；<paramref name="format"/> 为
+        /// <c>null</c> 时仍抛 <see cref="ArgumentNullException"/>（SER-004）。</para>
         /// </summary>
+        /// <param name="format">序列化格式标识。</param>
+        /// <param name="serializer">取到的序列化器；未注册时为 <c>null</c>。</param>
         /// <returns>是否成功获取。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="format"/> 为 <c>null</c> 时抛出。</exception>
         public static bool TryGet(string format, out ISerializer serializer)
         {
             return Serializers.TryGetValue(format, out serializer);
