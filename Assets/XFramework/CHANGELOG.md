@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **File 线程契约补移动端 Streaming 例外（2026-10-17，FILE-002）**：`MobileFileProvider` 的异步入口在池线程
+  读 `Application.streamingAssetsPath` / 构造 `UnityWebRequest` 会抛 `UnityException`；README 的线程契约、
+  性能代价与已知限制三处改为「移动端 Streaming 异步入口必须主线程，桌面端与其余域不受影响」。
 - **Settings 线程 / 生命周期 / 会话边界文档订正（2026-10-17，第二轮审计）**：线程契约补「默认值工厂与
   迁移器 / 校验器同线程（同步 store 的 `LoadAsync` 降级在池线程）」（SET-002）；生命周期表补「释放请用
   `SettingsManager.Destroy()`，直接 `Dispose` 会留僵尸登记」（SET-003）；会话边界订正「旧订阅者不会复活」

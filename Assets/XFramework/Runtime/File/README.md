@@ -464,8 +464,13 @@ for (int i = 0; i < 3; i++)
 - **域根在主线程解析一次后缓存**：`Application.persistentDataPath` 一类属性受 Unity 的主线程限定，故三个域根
   （`AppData`/`SaveData`、`Streaming`、`Cache`）由 `DesktopFileProvider.PrimeRoots()` 在主线程取好并缓存——
   预热点有两处：`FileManager.Initialize`（零配置懒初始化也走它），以及 `[InitializeOnLoadMethod]` /
-  `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**文件原语可从任意线程调用**。
-  `SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢全程不切回主线程。
+  `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**桌面与移动端的非
+  Streaming 域，文件原语可从任意线程调用**。`SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢
+  全程不切回主线程。
+- **移动端 `Streaming` 域是线程契约的例外**（FILE-002）：`MobileFileProvider` 的异步入口每次都会读
+  `Application.streamingAssetsPath` 并构造 `UnityWebRequest`，两者都受 Unity 主线程限定——在池线程调用
+  `ReadAllTextAsync(FileDomain.Streaming, ...)` / `ExistsAsync` 会抛 `UnityException`。**请在主线程发起**；
+  桌面端的 `Streaming` 与移动端的其余域不受影响。
 - **首次初始化须在主线程**：平台判定（`Application.platform`）与域根解析都发生在 `FileManager.Initialize` 里。
   初始化完成后不再有主线程要求——这一点是本模块与其它门面的区别，也是「零配置懒初始化」的隐含前提。
 - **自建 Provider 的约束**：内置实现把 IO 放在 `UniTask.RunOnThreadPool` 上执行，`ConsoleFileProvider` 更把
@@ -480,13 +485,16 @@ for (int i = 0; i < 3; i++)
 ## 性能代价
 
 - **避免 Main Thread 卡顿：** IO 操作通过 `UniTask.RunOnThreadPool` 在子线程执行；域根不在池线程解析
-  （见「线程契约」），故调用方无需关心自己身处哪个线程。
+  （见「线程契约」）。桌面与移动端非 Streaming 域无需关心调用线程；**移动端 Streaming 例外**（见「线程契约」）。
 - **无 GC 分配热路径：** 枚举传递 `FileDomain`（值类型），`ICryptoProvider` 默认不启用，不加载时无额外开销。
 - **同步面阻塞调用线程**（见「API 参考」的「同步 API」）：适合编辑器工具与启动期，勿在每帧路径调用。
 
 ## 已知限制
 
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
+
+- **移动端 `Streaming` 的异步入口要求主线程**（FILE-002）：池线程调用会在 `Application.streamingAssetsPath` /
+  `UnityWebRequest` 处抛 `UnityException`；桌面端与移动端非 Streaming 域可任意线程调用（见「线程契约」）。
 
 - **移动端 `Streaming` 域的同步内容读与同步 `Exists` 都不可用**：两者都抛 `NotSupportedException`，请改用
   `ExistsAsync` / `ReadAllTextAsync` / `ReadAllBytesAsync`。前者是机制上的必死锁（续体依赖 PlayerLoop），
