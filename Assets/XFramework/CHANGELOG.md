@@ -303,6 +303,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **契约句订正（2026-10-17，第二轮审计）**：Serialize README 的「替换内置格式」语义写反（SER-002：
+  `Register` 总是静默覆盖，内置注册只在 `Initialize` 时让位于使用方）；Asset README 热更链仍写
+  「预检 → 下载 → 激活」（AST-002，改为「预检 → 激活 → 下载」）；Audio 的 `Play` 失败契约在接口 remark /
+  门面 XML / README 三处与实现相反（AUD-007：加载失败不返回 default，`IsPlaying` 也区分不了「加载中」与
+  「加载失败」）、通道惰性创建的入口清单（AUD-008：音量 / 静音设置与 `RegisterChannel` 同样会创建）、
+  `Stop` 后「代际递增」的措辞（AUD-009：代际在下次预占才递增）；PoolStats 的 `CountAll` 注释与 README
+  补「`Clear()` 不归零，集合池 `Configure` 重建才归零」（POOL-003）。
 - **随包 XML 示例修正（2026-10-17，第二轮审计）**：`TimerManager.After<TState>` 的示例把 `this` 与 lambda
   写反（TMR-001，照抄 CS1503）；`IDataBlock` 示例缺 `DataVersion` / `OnMigrate`（DATA-001，照抄 CS0535）；
   `Serializer.Default` 的 `<exception>` 写成 `KeyNotFoundException`、异常消息又教了一个 no-op 的

@@ -133,8 +133,10 @@ Serializer.Register(new MessagePackSerializer());
   用它写出的数据会**静默丢字段**（落默认值，不报错）——新数据请一律用 `json`。
 - **覆盖 `"json"` 是个全局动作。** `Data` 与 `Save` 都走 `Serializer.Default`，换掉它等于同时改变
   两者的落盘格式；已经写出去的旧存档不会跟着迁移，要自己保证新实现读得懂旧数据。
-- **替换内置格式必须早于模块初始化。** 只有在 `Initialize` 之前注册同名格式才会被保留；晚了只留一条
-  `[Serialize]` 告警，然后**静默用回内置实现**。想恢复内置请 `Unregister("json")` 后重新 `Register`。
+- **替换内置格式：`Register` 总是静默覆盖，内置注册只在 `Initialize` 时让位于使用方。** 任何时候调用
+  `Register` 都会覆盖同名的现有注册，**没有告警**；内置实现只在 `Initialize` / `AutoInit` 注册时检查同名条目——
+  若使用方已先注册，则**保留使用方的**并打一条 `[Serialize]` 告警。想恢复内置请 `Unregister("json")`
+  后重新 `Register` 内置类型。
 - **格式名是跨模块契约。** `DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 里存的是字符串，
   改名或注销会连带影响 Data / Save / Config 的读写。
 - **`Get` / `Default` / `Shutdown` 三处的失败都是抛异常。** 未注册的格式抛 `KeyNotFoundException`，

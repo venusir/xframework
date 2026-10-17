@@ -108,14 +108,16 @@ namespace XFramework.XAudio
         /// <summary>
         /// 播放一个音频资源（fire-and-forget），立即返回句柄。
         /// <para>资源经 <paramref name="location"/> 异步加载；本方法在<b>预占播放源时</b>就返回句柄，
-        /// <b>加载失败时该句柄会失效</b>（用 <see cref="IsPlaying"/> 查询）。需要「拿到句柄时必定已加载成功」
-        /// 请用 <see cref="PlayAsync"/>。</para>
+        /// 加载失败时该句柄会静默失效。但 <see cref="IsPlaying"/> 在<b>加载窗口内同样为 false</b>——
+        /// 它区分不了「仍在加载」与「加载失败」；需要「拿到句柄时必定已加载成功」请用
+        /// <see cref="PlayAsync"/>。</para>
         /// <para>方法内部已做异常收口（取消静默、其余记 <c>[Audio]</c> 错误日志），调用方无需也不应再包
         /// <c>.Forget()</c>。一次性音效用它最顺手。</para>
         /// </summary>
         /// <param name="location">资源地址。为 null/空白时抛 <see cref="ArgumentException"/>。</param>
         /// <param name="options">播放参数；省略时等价于 <see cref="AudioPlayOptions.Default"/>。</param>
-        /// <returns>播放句柄；播放源耗尽或加载失败时为 <c>default(AudioHandle)</c>。</returns>
+        /// <returns>播放句柄；播放源耗尽时为 <c>default(AudioHandle)</c>。加载失败不影响返回值——
+        /// 返回的是预占句柄，失败发生在返回之后，句柄静默失效。</returns>
         /// <exception cref="InvalidOperationException">未初始化时抛出。</exception>
         /// <exception cref="ArgumentException"><paramref name="location"/> 为 null/空白时抛出。</exception>
         public static AudioHandle Play(string location, AudioPlayOptions options = default)

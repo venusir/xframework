@@ -5,7 +5,8 @@ namespace XFramework.XAudio
     /// <para><b>回答什么问题</b>：哪些通道被用过、各自的音量与静音、各有多少路声音在播——「声音听不见」
     /// 的第一件事就是看这里（通道被静音 / 音量为 0 是常见现场）。</para>
     /// <para><b>怎么取</b>：<see cref="AudioManager.CopyChannels(System.Collections.Generic.List{AudioChannelInfo})"/>。
-    /// 只列出**已创建**的通道——通道是首次在该通道上播放时惰性创建的，没播过的通道不在这张表里
+    /// 只列出**已创建**的通道——通道在第一次被**写入**时惰性创建（播放、<c>SetChannelVolume</c> /
+    /// <c>SetChannelMuted</c> / <c>RegisterChannel</c>），没写过的通道不在这张表里
     /// （<c>GetChannelVolume</c> 之类的查询不会创建它）。</para>
     /// </summary>
     public readonly struct AudioChannelInfo

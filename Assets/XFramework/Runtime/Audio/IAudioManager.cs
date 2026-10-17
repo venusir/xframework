@@ -21,9 +21,10 @@ namespace XFramework.XAudio
     /// 空引用安全感）：</para>
     /// <para>① <see cref="Stop"/> 与 <see cref="IsPlaying"/> 是<b>探测型</b>成员——句柄的生命周期可以长于
     /// 管理器，实现必须让「过期句柄 / 未知句柄」安全返回 <c>false</c> 而不是抛异常。</para>
-    /// <para>② 加载失败<b>不抛</b>：返回 <c>default(AudioHandle)</c> 并自行记日志（与 <c>XAsset</c> 的
-    /// 「失败返回 default、不抛」同一契约）。参数非法（location 为 null/空白）才抛
-    /// <see cref="ArgumentException"/>。</para>
+    /// <para>② 加载失败<b>不抛</b>并自行记日志：<see cref="PlayAsync"/> 返回 <c>default(AudioHandle)</c>；
+    /// <see cref="Play"/> 返回的是预占句柄（加载发生在返回之后），失败时句柄静默失效——且没有公开面能
+    /// 区分「仍在加载」与「加载失败」（<see cref="IsPlaying"/> 在两种情况下都是 <c>false</c>）。
+    /// 参数非法（location 为 null/空白）才抛 <see cref="ArgumentException"/>。</para>
     /// </remarks>
     public interface IAudioManager : IDisposable
     {
@@ -32,14 +33,16 @@ namespace XFramework.XAudio
         /// <summary>
         /// 播放一个音频资源（fire-and-forget），立即返回句柄。
         /// <para>资源经 <c>location</c> 异步加载；本方法在<b>预占播放源时</b>就返回句柄，
-        /// <b>加载失败时该句柄会失效</b>（用 <see cref="IsPlaying"/> 查询）。需要「拿到句柄时必定已加载成功」
-        /// 请用 <see cref="PlayAsync"/>。</para>
+        /// 加载失败时该句柄会静默失效。但 <see cref="IsPlaying"/> 在<b>加载窗口内同样为 false</b>——
+        /// 它区分不了「仍在加载」与「加载失败」；需要「拿到句柄时必定已加载成功」请用
+        /// <see cref="PlayAsync"/>。</para>
         /// <para>方法内部已做异常收口（取消静默、其余记 <c>[Audio]</c> 错误日志），调用方无需（也不应）
         /// 再包 <c>.Forget()</c>。一次性音效用它最顺手。</para>
         /// </summary>
         /// <param name="location">资源地址（中间件实现可解释为事件名）。为 null/空白时抛 <see cref="ArgumentException"/>。</param>
         /// <param name="options">播放参数；省略时等价于 <see cref="AudioPlayOptions.Default"/>。</param>
-        /// <returns>播放句柄；播放源耗尽或加载失败时为 <c>default(AudioHandle)</c>。</returns>
+        /// <returns>播放句柄；播放源耗尽时为 <c>default(AudioHandle)</c>。加载失败不影响返回值——
+        /// 返回的是预占句柄，失败发生在返回之后，句柄静默失效。</returns>
         AudioHandle Play(string location, AudioPlayOptions options = default);
 
         /// <summary>

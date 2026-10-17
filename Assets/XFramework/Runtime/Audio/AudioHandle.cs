@@ -70,7 +70,8 @@ namespace XFramework.XAudio
         /// 停止这次播放。
         /// <para>转调 <see cref="AudioManager.Stop"/>。返回是否真的停掉了一个在播的声音；
         /// <c>default(AudioHandle)</c> 与非默认值句柄在门面已销毁时都安全返回 <c>false</c>（不抛）。</para>
-        /// <para>重复调用是安全的：第一次停止后槽位代际即递增，后续调用自然落空。</para>
+        /// <para>重复调用是安全的：第一次停止后槽位即置空闲（代际不在这里递增，下一次预占才递增），
+        /// 后续调用经 <c>IsCurrent</c> 自然落空。</para>
         /// </summary>
         /// <returns>真的停止了这次播放时返回 <c>true</c>。</returns>
         public bool Stop()

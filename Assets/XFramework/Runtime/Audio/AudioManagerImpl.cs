@@ -507,7 +507,8 @@ namespace XFramework.XAudio
         /// <inheritdoc/>
         /// <summary>
         /// 把已创建的通道写入缓冲区（先清空），返回条数。诊断回读用。
-        /// <para>只列已创建的通道——通道是首次在该通道上播放时惰性建的，查询类成员不建状态。</para>
+        /// <para>只列已创建的通道——通道在第一次被写入时惰性建（播放、音量/静音设置、RegisterChannel），
+        /// 查询类成员不建状态。</para>
         /// </summary>
         internal int CopyChannels(List<AudioChannelInfo> buffer)
         {

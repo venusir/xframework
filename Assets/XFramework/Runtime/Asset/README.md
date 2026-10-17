@@ -414,7 +414,7 @@ Runtime/Asset/
 | txt / json / 二进制 | `LoadRawFileAsync` | 不经过 Unity 资源管线 |
 | 场景切换 | `LoadSceneAsync` | `LoadSceneMode.Additive` 叠加加载；返回的句柄配 `UnloadAsync`/`Dispose` 成对使用 |
 | 内存告警 / 切关卡 | `UnloadUnusedAssetsAsync` | 只回收引用计数为 0 的资源 |
-| 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见「快速使用」7） |
+| 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 激活 → 下载（见「快速使用」7） |
 | 预判断资源状态 | `CheckLocationValid` / `IsNeedDownloadFromRemote` | 纯查询，失败不抛异常 |
 
 ## 自定义实现

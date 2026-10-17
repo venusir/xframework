@@ -95,6 +95,9 @@ Runtime/Pool/
 
 因此 `CountAll - CountInactive` **不等于** `CountActive`：被丢弃的实例仍计入 `CountAll`，却既非活跃也非闲置。要判断「还有多少实例在外面」请用 `CountActive`。
 
+> 集合池（`ListPool` / `HashSetPool` / `DictionaryPool` / `StringBuilderPool`）是唯一的例外：`Configure`
+> 在无活跃实例时**重建池**，计数会从新池的 0 重新开始。`Clear()` 不会让计数归零。
+
 闲置实例达到 `MaxSize` 后，归还的实例不再入池而是交给 GC，此时触发丢弃回调。两点需要注意：
 
 - 归还回调（`onReturn` / `IPoolable.OnReturn()`）**先于**容量判断触发，所以被丢弃的实例会先收到归还回调（清理状态）、再收到丢弃回调（释放资源）。

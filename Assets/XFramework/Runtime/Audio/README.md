@@ -77,7 +77,7 @@ Runtime/Audio/
 
 | 成员 | 说明 |
 | ---- | ---- |
-| `AudioHandle Play(string location, AudioPlayOptions options = default)` | fire-and-forget。**句柄在预占播放源时即返回**，加载失败会让它失效（用 `IsPlaying` 查询） |
+| `AudioHandle Play(string location, AudioPlayOptions options = default)` | fire-and-forget。**句柄在预占播放源时即返回**；加载失败不让句柄变 default，但会静默失效——`IsPlaying` 区分不了「加载中」与「加载失败」，需要确定结果请用 `PlayAsync` |
 | `UniTask<AudioHandle> PlayAsync(string location, AudioPlayOptions options = default, CancellationToken ct = default)` | 等待加载完成。**句柄返回时必定已起播**；加载失败返回 `default(AudioHandle)` |
 
 两条路径的失败契约不同，这是最容易踩的一处：
@@ -85,12 +85,13 @@ Runtime/Audio/
 | | `Play` | `PlayAsync` |
 | --- | --- | --- |
 | 拿不到播放源 | 返回 `default(AudioHandle)` + 限流告警 | 同左 |
-| 加载失败 | 返回**预占句柄**，随后它失效 | 返回 `default(AudioHandle)` |
+| 加载失败 | 返回**预占句柄**，随后静默失效（不可观测） | 返回 `default(AudioHandle)` |
 | 参数非法（location 为 null/空白） | 抛 `ArgumentException` | 抛 `ArgumentException` |
 | 取消 | ——（内部令牌随 `Destroy` 取消，静默） | 抛 `OperationCanceledException`，不泄漏槽位与资源 |
 
 判断一次播放是否有效，用 `AudioManager.IsPlaying(handle)`，不要判 `handle.IsDefault`——那只能识别
-「池满/加载失败返回的 default」，识别不了「预占成功但加载失败而失效的句柄」。
+「池满返回的 default」。但 `IsPlaying` 对「加载中」与「加载失败」都返回 `false`，两者无法区分；
+需要确定结果请用 `PlayAsync`。
 
 ### 控制
 
@@ -121,7 +122,7 @@ Runtime/Audio/
 | `bool IsPlaying(AudioHandle handle)` | **探测型**。加载中的不算「在播」，**暂停中的算** |
 | `int ActiveVoiceCount { get; }` | 活跃播放数，**含加载中与已暂停的**（它们都实打实占着播放源） |
 | `int GetActiveVoiceCount(string channel)` | 按通道计数 |
-| `int CopyChannels(List<AudioChannelInfo>)` | 已创建通道的明细（名称 / 音量 / 静音 / 在播路数）。**只列已创建的通道**（通道在首次播放时惰性创建），且只对内置实现成立。诊断用 |
+| `int CopyChannels(List<AudioChannelInfo>)` | 已创建通道的明细（名称 / 音量 / 静音 / 在播路数）。**只列已创建的通道**——通道在第一次被写入时惰性创建（播放、`SetChannelVolume` / `SetChannelMuted` / `RegisterChannel`）；查询类成员不创建。只对内置实现成立，诊断用 |
 
 ### 值类型
 
@@ -396,7 +397,7 @@ Transform 的宿主对象，那是项目侧的 MonoBehaviour——框架不去�
 - **不预设游戏架构**：通道是开放字符串域、音量模型是线性的三档相乘、播放源归框架所有——只提供
   正交的播放能力，不替使用方决定混音策略、不决定「什么声音该在什么时候响」。
 - **单一资源来源**：只接受 location，资源生命周期只有一套语义。
-- **失败形态确定**：加载失败不抛（返回可安全探测的句柄）、参数非法抛、取消抛且不泄漏。
+- **失败形态确定**：加载失败不抛（`PlayAsync` 返回 default；`Play` 的预占句柄静默失效）、参数非法抛、取消抛且不泄漏。
 - **探测型成员宽松**：句柄可以长于管理器，对它的查询与停止永远安全。
 
 ## 依赖

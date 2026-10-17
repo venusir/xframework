@@ -20,7 +20,8 @@ namespace XFramework.XPool
         /// <summary>活跃实例数（已取出、未归还）。</summary>
         public readonly int CountActive;
 
-        /// <summary>累计创建过的实例数（只增不减，除非池被清空）。</summary>
+        /// <summary>累计创建过的实例数。只增不减——<c>Clear()</c> 也不减；
+        /// 集合池在 <c>Configure</c> 重建后会从新池的 0 重新计数。</summary>
         public readonly int CountAll;
 
         internal PoolStats(Type objectType, int countInactive, int countActive, int countAll)
