@@ -149,12 +149,12 @@ namespace XFramework.XTimer
 
         /// <summary>
         /// 取消全部定时器（两轴合计，含已 <see cref="TimerHandle.Stop"/> 但未释放的），并让内部驱动器退出调度。
-        /// <para>本方法是<b>彻底复位</b>：所有槽位被释放、所有句柄（含已停止的）失效、逻辑时钟归零。
-        /// 之后仍可继续创建定时器。</para>
+        /// <para>本方法是<b>彻底复位槽位与句柄</b>：所有槽位被释放、所有句柄（含已停止的）失效；**逻辑时钟不重置**
+        /// （它仍是该轴已流逝的时间）。之后仍可继续创建定时器。</para>
         /// <para><c>UpdateManager.Clear()</c> 会连带摘掉本模块的驱动器（它清的是全局注册表）。若在它之后发现
         /// 定时器不再触发，调用本方法即可让模块重新同步。</para>
         /// </summary>
-        /// <returns>被取消的定时器数量（不含已停止的）。</returns>
+        /// <returns>被取消的定时器数量（不含已停止的；令牌已取消但尚未被扫尾回收的也不计）。</returns>
         public static int CancelAll()
         {
             return Core.CancelAll();

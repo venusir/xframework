@@ -27,7 +27,7 @@ namespace XFramework.XTimer
         /// <summary>是否是固定间隔的重复定时器。</summary>
         public readonly bool IsRepeating;
 
-        /// <summary>是否正在计时；false = 已 <c>Stop</c> 但槽位尚未释放。</summary>
+        /// <summary>是否正在计时；false = 已 <c>Stop</c> 但槽位尚未释放，或令牌已取消、尚未被扫尾回收。</summary>
         public readonly bool IsRunning;
 
         /// <summary>

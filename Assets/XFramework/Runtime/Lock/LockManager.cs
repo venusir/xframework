@@ -683,7 +683,8 @@ namespace XFramework.XLock
         }
 
         /// <summary>
-        /// 丢弃该主体的全部订阅（加锁/解锁/聚合状态三张表都覆盖）。
+        /// 丢弃该主体的全部订阅（`OnLocked` / `OnUnlocked` / `OnLockStateChanged` 三路；底层是两张订阅表，
+        /// 聚合状态是其中一张表上的组合订阅）。
         /// <para>不返回数量：多播委托的条数要物化调用列表（一次分配），而调用方关心的是「不再有回调」。</para>
         /// <para>调用方手上的旧句柄随后 <c>Dispose</c> 是安全的——表里已无该键，退订退化为空操作。</para>
         /// <para>不影响该主体的锁：锁与订阅分开清理，正是为了让「只清订阅」这件事可表达。</para>
@@ -925,7 +926,8 @@ namespace XFramework.XLock
         /// <para><b>聚合视角</b>：含 <see cref="Global"/> 层的锁——与 <see cref="IsLocked"/> 一致，故
         /// 「该主体是否被任何类型锁着」即<c>返回值 &gt; 0</c>（类型域是开放的 <c>int</c>，未锁定的类型无从枚举）。</para>
         /// <para><paramref name="buffer"/> 会先被清空；返回写入条数；**行序未定义**；同一类型若同时被主体与
-        /// 全局锁住只出现一次。成本最坏 O(该主体类型数 + 全局类型数)。</para>
+        /// 全局锁住只出现一次。成本 O((该主体类型数 + 全局类型数)²)——去重走 `buffer.Contains`，是线性查找
+        /// （LOCK-003）。</para>
         /// </summary>
         /// <param name="subject">锁主体；null 表示全局（与其余入口一致）。</param>
         /// <param name="buffer">调用方提供的缓冲，不为 null。</param>

@@ -80,8 +80,8 @@ namespace XFramework.XTimer
         /// 只把时间基准写成传入的时刻，<b>原样传回上一次收到的时刻即可做到零漂移</b>。</para>
         /// <para><b>时钟为什么不能用 <c>Time.time</c></b>：那会把基准推到真实时刻，而逻辑时钟是按
         /// <c>deltaTime</c> 累积的，两者在暂停/时间缩放之后不再同源——传错会把整段暂停算成流逝时间。</para>
-        /// <para><b>在别的回调里调用时不生效</b>：调度器的迭代闩锁下 <c>ProcessImmediate</c> 只重锚不派发，
-        /// 于是跨轴创建更近的定时器最坏要等一个旧档周期（同轴不受影响，那趟扫尾的返回值本就涵盖它）。</para>
+        /// <para><b>在别的回调里调用时不生效</b>：调度器的迭代闩锁（跨时机共享）下 <c>ProcessImmediate</c> 只重锚不派发，
+        /// 于是任何 XUpdate 派发回调里创建更近的定时器最坏要等一个旧档周期；同轴创建由扫尾的补算覆盖（TMR-002）。</para>
         /// </summary>
         /// <param name="needed">希望落到的档位。</param>
         internal void RequestTier(UpdateTier needed)

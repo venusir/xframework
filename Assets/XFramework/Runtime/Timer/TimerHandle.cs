@@ -15,7 +15,7 @@ namespace XFramework.XTimer
     /// <para><b>为什么字段不公开、构造函数是 internal</b>（与 <c>AudioHandle</c> 相反、与 <c>LockHandle</c> 相同）：
     /// 本模块是纯静态服务，没有 <c>ITimerManager</c> 这类后端替换点，不存在需要自行造句柄的第三方实现者。
     /// 公开构造只会让使用方造出「看着有效、实则指向不存在槽位」的句柄。</para>
-    /// <para><b>身份是三元组</b>：<c>Id</c> 只是槽位下标，而槽位会被复用——没有代际就无法让旧句柄失效。
+    /// <para><b>身份是三元组</b>：<c>Slot</c> 只是槽位下标，而槽位会被复用——没有代际就无法让旧句柄失效。
     /// <c>default(TimerHandle)</c> 的代际为 <c>0</c>，被保留为无效标记，任何有效句柄的代际都不是 <c>0</c>。</para>
     /// </remarks>
     public readonly struct TimerHandle : IDisposable

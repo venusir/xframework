@@ -227,7 +227,7 @@ bool blockedByAnything = n > 0;
 | `LockedSubjectCount` / `LockCount` | 规模 |
 | **`UnboundSubjectCount`** | **有锁但没有销毁绑定**——这批永远不会自动释放，只能靠调用方显式 `RemoveAllLocks` 收口（`AutoReleaseOnDestroy` 为 `false` 时它必然等于主体总数） |
 | `SubscribedSubjectCount` | 两张订阅表的键之并集 |
-| **`UnboundSubscribedSubjectCount`** | 有订阅但没有销毁绑定 = 孤儿订阅，静态表永久残留 |
+| **`UnboundSubscribedSubjectCount`** | 有订阅但没有销毁绑定 = 不会自动退订；含 Global / 长寿命订阅，不一定都是孤儿（LOCK-004） |
 
 两条使用须知：
 

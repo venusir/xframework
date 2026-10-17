@@ -429,6 +429,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Lock / Timer / Localization 文档小错订正（2026-10-17，LOCK-003/004、TMR-004/011、LOC-008/011）**：
+  Lock 的 `CopyLockedTypes` 成本改为 O((n+m)²)、`RemoveAllSubscriptions` 的「三张表」改为两张表 + 组合订阅、
+  `UnboundSubscribedSubjectCount` 不再一律称为孤儿；Timer 订正 `CancelAll` 不重置逻辑时钟、`TimerHandle`
+  成员名 `Slot`、`TimerInfo.IsRunning` 的取消态、`CancelAll` 计数口径、跨轴限制的静态闩锁范围；Localization
+  补无并发写的读前提与占位符全局命名空间。
 - **Event / Serialize / Scene / Data 文档订正（2026-10-17，EVT-003/004/005、SER-003/004、SCN-002/005、DATA-013）**：
   Event README 的「每订阅零分配」「被两个模块使用」「五个公开文件」订正，`SubscriptionTracker` 明确无自动复位
   钩子；Serialize 的消费方改为 Data / Save（模块 README、包 README、门禁豁免理由三处），`TryGet` / `Unregister`

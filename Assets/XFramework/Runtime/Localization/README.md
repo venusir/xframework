@@ -208,6 +208,8 @@ var info  = LocalizationManager.GetFormat("ui_guild_info", guild); // 表里写 
 
 **管理占位符：**
 
+> **占位符名是全局命名空间**（LOC-011）：两个不相关的系统用同一个名字会静默互相覆盖（后注册者胜），没有冲突告警。建议加前缀（如 `"MyGame.PlayerName"`）。
+
 ```csharp
 // 更新占位符值（如玩家改名）
 LocalizationManager.SetPlaceholder("PlayerName", "李四");
@@ -359,7 +361,7 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 **语言切换必须在主线程调用。** `SetLanguage` 会经 `MessageManager.Publish` 广播 `LanguageChangedMessage`，而消息总线的发布入口有主线程契约（Editor 下越线程调用会记一条 `[Message]` 前缀的 Error）。
 
-本模块自身不做任何线程同步：`Get` 从任意线程读是安全的，**但改状态不是**——`SetLanguage` / `SetLanguageData` / `SetPlaceholder` / `SetPlaceholderFromKey` 全部要在主线程调用。
+本模块自身不做任何线程同步：**无并发写的前提下**，`Get` 从任意线程读是安全的（底层 `Dictionary` 没有同步原语；主线程写 + 其它线程读时，调用方须自行保证不在读取期间发生写）。改状态不是——`SetLanguage` / `SetLanguageData` / `SetPlaceholder` / `SetPlaceholderFromKey` 全部要在主线程调用，且模块**没有**运行时断言（LOC-008）。
 
 ## 已知限制
 
