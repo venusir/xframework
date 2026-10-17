@@ -30,6 +30,16 @@ namespace XFramework.XPool
         {
             // 闭包捕获静态字段而非绑定当前实例，Configure 重建池后注册的 Clear 自动指向新池
             CollectionPoolManager.Register(() => _pool.Clear());
+            CollectionPoolManager.RegisterReset(ResetCore);
+        }
+
+        /// <summary>会话边界重建内部池（默认配置）；不 Dispose 已取出的实例。</summary>
+        internal static void ResetCore()
+        {
+            _pool = new Pool<StringBuilder>(
+                () => new StringBuilder(),
+                PoolConfig.Default,
+                onReturn: sb => sb.Clear());
         }
 
         /// <summary>

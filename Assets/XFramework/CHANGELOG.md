@@ -217,6 +217,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Pool
+
+- **池的静态状态跨会话存活且无会话复位（POOL-002）**：关闭域重载时第二会话继承上一会话的池实例、配置与
+  生成器闭包；`Configure` 被静默忽略，`MaxSize` / `PrewarmSize` 失效，集合池的 `Configure` 可能永久被拒。
+  修法：`PoolManager.ResetForNewSession`（`SubsystemRegistration`）清空 `_pools` / `_configs`（只丢引用
+  不 Dispose），并让 `CollectionPoolManager` 注册/执行各集合池的内部池重建；已登记 `AutoInitTests` 族清单。
+  回归：`SessionResetTests` 两例（业务池 + 集合池），改前红。
+
 #### UI
 
 - **`UpdateManager.Clear()` 后 README 的恢复路径不成立，分档面板永久静止（UIA-002）**：`Initialize` 因

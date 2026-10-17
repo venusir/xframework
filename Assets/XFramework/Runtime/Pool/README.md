@@ -396,6 +396,7 @@ XPool 内置常用集合类型的静态池，**Return 时自动调用 `Clear()`*
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
 
 - **`Configure<T>` 只在首次建池之前生效。** 类型已建过池再配置，会告警并忽略——想在 `Awake` 里配置就必须保证它早于第一次 `Get`，或先 `RemovePool<T>()` 再配置。**四个集合池的口径不同**：它们在「无活跃实例」时可重配（首次 `Get` 之前、或全部归还之后）。
+- **关闭域重载时会话复位清空池表**：`PoolManager.ResetForNewSession`（`SubsystemRegistration` 档）清空池实例与一次性配置，并把四个集合池的内部池重建为默认配置——上一会话未归还的实例归还会落到旧池（静默忽略）。因此第二会话的 `Configure` 重新生效（POOL-002）。
 - **容量与预热的两个反直觉点**：不配置时 `MaxSize` **无上限**（闲置实例只增不减，直到 `Clear()` / `ClearAll()`，池化类型多的项目建议显式设上限）；`PrewarmSize` 会被**钳到 `MaxSize`**（配出 `PrewarmSize > MaxSize` 不报错，以 `MaxSize` 为准）。
 - **`CollectionCheck` 只在 Editor 生效。** Release 构建自动关闭、零开销——重复归还这类缺陷在 Release 下抓不到。
 - **委托回调优先于接口。** 传了 `onRent` / `onDestroy` 委托，就不会再调 `IPoolable.OnRent()` / `IPoolDiscardable.OnDiscard()`。

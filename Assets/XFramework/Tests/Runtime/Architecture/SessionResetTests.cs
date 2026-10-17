@@ -15,6 +15,7 @@ using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
+using XFramework.XPool;
 using XFramework.XSettings;
 using XFramework.XUI;
 using XFramework.XUpdate;
@@ -58,6 +59,12 @@ namespace XFramework.Architecture.Tests
         private sealed class SessionProbeSettings
         {
             public float Volume = 1f;
+        }
+
+        /// <summary>池复位用例的最小对象类型。</summary>
+        private sealed class PoolProbe
+        {
+            public int Value;
         }
 
         /// <summary>最小内存存储替身：本 fixture 只关心门面的初始化/复位，不碰磁盘。</summary>
@@ -132,6 +139,7 @@ namespace XFramework.Architecture.Tests
             AssetManager.ResetForNewSession();
             Bootstrap.ResetForNewSession();
             SettingsManager.ResetForNewSession();
+            PoolManager.ResetForNewSession();
             InstanceTracker.AutoInit();
         }
 
@@ -400,6 +408,46 @@ namespace XFramework.Architecture.Tests
             SettingsManager.Initialize<SessionProbeSettings>(new MemoryStore(), () => new SessionProbeSettings());
 
             Assert.IsTrue(SettingsManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
+
+        /// <summary>
+        /// 池的静态状态（POOL-002）：关闭域重载时上一会话的池实例与一次性配置会存活，
+        /// 第二会话的 <c>Configure</c> 被静默忽略。会话复位必须清空两者。
+        /// </summary>
+        [Test]
+        public void Pool_ResetForNewSession_ClearsPoolsAndConfigs()
+        {
+            PoolManager.Configure<PoolProbe>(new PoolConfig { MaxSize = 1, PrewarmSize = 2 });
+            var first = PoolManager.GetPool<PoolProbe>();
+            Assert.IsTrue(PoolManager.HasPool<PoolProbe>(), "前置：池已创建");
+
+            SimulateNewSession();
+
+            Assert.IsFalse(PoolManager.HasPool<PoolProbe>(), "会话复位应清空池表");
+
+            // 第二会话的 Configure 不再被「池已存在」拦下
+            PoolManager.Configure<PoolProbe>(new PoolConfig { MaxSize = 3 });
+            var second = PoolManager.GetPool<PoolProbe>();
+
+            Assert.AreNotSame(first, second, "第二会话应拿到全新的池，而不是上一会话的实例");
+        }
+
+        /// <summary>
+        /// 集合池的内部池同样重建（POOL-002）：静态构造在关闭域重载时不重跑，
+        /// 必须由会话复位把 <c>_pool</c> 换成默认配置的新实例。
+        /// </summary>
+        [Test]
+        public void CollectionPool_ResetForNewSession_RecreatesInnerPool()
+        {
+            ListPool<int>.Configure(new PoolConfig { MaxSize = 2 });
+            ListPool<int>.Get();
+            Assert.Greater(ListPool<int>.CountAll, 0, "前置：集合池已创建并产生过实例");
+            var first = ListPool<int>.GetPool();
+
+            SimulateNewSession();
+
+            Assert.AreEqual(0, ListPool<int>.CountAll, "复位后计数应从新池的 0 起");
+            Assert.AreNotSame(first, ListPool<int>.GetPool(), "集合池的内部池应被重建");
         }
 
         #endregion

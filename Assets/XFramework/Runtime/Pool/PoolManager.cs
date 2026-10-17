@@ -42,6 +42,27 @@ namespace XFramework.XPool
 
         #endregion
 
+        #region Session Reset
+
+        /// <summary>
+        /// 会话开始时复位静态状态。**关闭域重载**时上一播放会话的池实例、一次性配置与生成器闭包
+        /// 会存活到这一会话——<c>Configure</c> 见到池已存在即静默忽略（只有一条告警），
+        /// <c>MaxSize</c> / <c>PrewarmSize</c> 失效，生成器闭包可能捕获上一会话已销毁的对象（POOL-002）。
+        /// <para>只丢引用、不 Dispose：已取出的实例仍可归还（落到旧池并被静默忽略），
+        /// 与其余门面的「只丢引用不 Dispose」同一口径。</para>
+        /// <para>集合池（<c>ListPool</c> 等）的静态构造在关闭域重载时不重跑，故由
+        /// <see cref="CollectionPoolManager.ResetForNewSession"/> 重建它们各自的内部池。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _pools.Clear();
+            _configs.Clear();
+            CollectionPoolManager.ResetForNewSession();
+        }
+
+        #endregion
+
         #region Public API — Get / Return
 
         /// <summary>

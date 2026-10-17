@@ -27,6 +27,16 @@ namespace XFramework.XPool
         static HashSetPool()
         {
             CollectionPoolManager.Register(() => _pool.Clear());
+            CollectionPoolManager.RegisterReset(ResetCore);
+        }
+
+        /// <summary>会话边界重建内部池（默认配置）；不 Dispose 已取出的实例。</summary>
+        internal static void ResetCore()
+        {
+            _pool = new Pool<HashSet<T>>(
+                () => new HashSet<T>(),
+                PoolConfig.Default,
+                onReturn: set => set.Clear());
         }
 
         /// <summary>

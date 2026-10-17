@@ -19,6 +19,13 @@ namespace XFramework.XPool
         private static readonly List<Action> _clearActions = new();
 
         /// <summary>
+        /// 会话复位回调：把各集合池的内部 <c>Pool</c> 重建为默认配置。
+        /// <para>与 <c>_clearActions</c> 一样只在静态构造时注册；静态构造在关闭域重载时不重跑，
+        /// 故清空这张表等于永久失去复位能力。</para>
+        /// </summary>
+        private static readonly List<Action> _resetActions = new();
+
+        /// <summary>
         /// 已注册的 <c>Clear</c> 回调总数。
         /// <para>仅供单元测试观察注册行为（internal），业务代码不应依赖。</para>
         /// </summary>
@@ -44,6 +51,29 @@ namespace XFramework.XPool
             foreach (var clearAction in _clearActions)
             {
                 clearAction();
+            }
+        }
+
+        /// <summary>
+        /// 注册一个集合池的「重建内部池」回调。由各集合池的静态构造函数调用（internal：不是使用方入口）。
+        /// </summary>
+        /// <param name="resetAction">把内部 <c>Pool</c> 重建为默认配置的回调。</param>
+        internal static void RegisterReset(Action resetAction)
+        {
+            if (resetAction == null) return;
+            _resetActions.Add(resetAction);
+        }
+
+        /// <summary>
+        /// 会话边界：把所有已被触碰过的集合池重建为默认配置。
+        /// <para>只重建内部池、不 Dispose 任何已取出的实例——与其余门面的「只丢引用不 Dispose」同口径；
+        /// 上一会话未归还的实例会在归还时落到旧池（与 <c>PooledObject.Dispose</c> 的既有语义一致）。</para>
+        /// </summary>
+        internal static void ResetForNewSession()
+        {
+            foreach (var resetAction in _resetActions)
+            {
+                resetAction();
             }
         }
     }
