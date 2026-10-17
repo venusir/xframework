@@ -272,6 +272,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `BootstrapTests.RegisterDefaults_WhileRunning_WarnsButProceeds` / `Clear_WhileRunning_WarnsButProceeds`，
   改前必红：`Expected log did not appear`。
 
+- **会话复位后旧运行会清掉新运行的重入守卫**：`ResetForNewSession` 允许新旧运行并存，而旧实现的
+  `finally` 无条件 `_isRunning = false`——新会话的运行已开始时，旧运行收尾会把它的守卫一起清掉，
+  第三个 `RunAsync` 被错误放行、同一批阶段并发跑两遍。现在用运行代际号做归属：只有仍持有当前代际
+  的运行才清守卫。回归用例
+  `BootstrapTests.ResetForNewSession_DuringInFlightRun_OldRunDoesNotClearNewRunsGuard`
+  （改前必红：`Expected: 1 But was: 2`）。
+
 - **5 个文件 / 11 处零分配断言此前是恒真的**（两把尺子在本环境恒返回 0，锁的结论从未被验证过）。
   11 处全部改成两道防线：**结构断言优先**（句柄 / 快照 / 统计行是值类型、状态槽位按类型参数泛化、
   表声明为具体字典……——「零分配的原因」本身可反射验证），**粗尺子放大兜底**（阈值取实测信号 1/4），

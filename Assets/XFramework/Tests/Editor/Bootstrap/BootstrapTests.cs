@@ -463,6 +463,48 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(1, later.ExecuteCount, "未被中止的一轮里后置相位应正常执行");
         }
 
+        /// <summary>
+        /// 会话复位 × 在途运行：旧运行收尾时<b>不得</b>清掉新运行的重入守卫。
+        /// <para><see cref="Bootstrap.ResetForNewSession"/> 允许新旧两次运行并存（旧运行的续体可能还活着）；
+        /// 旧实现的 <c>finally</c> 无条件清 <c>_isRunning</c>，会把新运行正在持有的守卫一起清掉——
+        /// 后续 <c>RunAsync</c> 被错误放行，同一批阶段并发跑两遍。代际号修复后，旧运行只清理自己的归属。</para>
+        /// </summary>
+        [Test]
+        public void ResetForNewSession_DuringInFlightRun_OldRunDoesNotClearNewRunsGuard()
+        {
+            var oldStage = NewStage("old", 0);
+            oldStage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(oldStage);
+
+            UniTask oldRun = Bootstrap.RunAsync();
+            Assert.AreEqual(1, oldStage.ExecuteCount, "前提：旧运行应已启动");
+
+            // 会话边界：清表、取消旧运行、释放 _isRunning，允许新会话开始自己的运行
+            Bootstrap.ResetForNewSession();
+
+            var newStage = NewStage("new", 0);
+            newStage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(newStage);
+
+            UniTask newRun = Bootstrap.RunAsync();
+            Assert.AreEqual(1, newStage.ExecuteCount, "前提：新运行应已启动");
+
+            // 放行旧运行：它以 OCE 收场。旧实现的 finally 会在这里把新运行的重入守卫清掉。
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            oldStage.Gate.TrySetResult();
+            Assert.Throws<OperationCanceledException>(() => oldRun.GetAwaiter().GetResult());
+
+            // 第三次调用必须仍被重入守卫忽略；若守卫被误清，它会真的重跑 newStage
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，忽略本次调用。"));
+            UniTask third = Bootstrap.RunAsync();
+
+            Assert.AreEqual(1, newStage.ExecuteCount, "旧运行收尾不得清掉新运行持有的 _isRunning");
+
+            newStage.Gate.TrySetResult();
+            third.GetAwaiter().GetResult();
+            newRun.GetAwaiter().GetResult();
+        }
+
         #endregion
 
         #region 清理

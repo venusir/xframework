@@ -34,6 +34,14 @@ namespace XFramework.XBootstrap
         private static bool _isRunning;
 
         /// <summary>
+        /// 运行代际号：每次 <see cref="RunAsync"/> 开始与 <see cref="ResetForNewSession"/> 都递增。
+        /// <para><see cref="ResetForNewSession"/> 允许在途的旧运行与新会话的运行并存；旧运行的收尾
+        /// 只有代际号仍等于自己那一代时才清 <see cref="_isRunning"/>——无条件写 false 会把新运行
+        /// 正在持有的重入守卫一起清掉，后续 <see cref="RunAsync"/> 被错误放行、同一批阶段并发跑两遍。</para>
+        /// </summary>
+        private static int _runGeneration;
+
+        /// <summary>
         /// 本次在途 <see cref="RunAsync"/> 的取消源（非在途时为 null）。
         /// <para>由 <see cref="RunAsync"/> 在重入守卫之后创建（链接调用方令牌），<see cref="Shutdown"/>
         /// 取消它以<b>先中止在途、后清理</b>；释放归创建它的那次运行（局部变量 + 身份校验，
@@ -230,6 +238,9 @@ namespace XFramework.XBootstrap
         internal static void ResetForNewSession()
         {
             StageList.Clear();
+
+            // 作废上一会话所有在途运行的收尾权：它们的 finally 不得再清 _isRunning
+            _runGeneration++;
             _isRunning = false;
 
             // 上一会话在途运行的取消源：显式中止后丢弃。不 Dispose——释放归创建它的那次运行
@@ -271,6 +282,7 @@ namespace XFramework.XBootstrap
 
             // 在首个 await 之前同步置位(async 方法在首个未完成 await 之前是同步执行的)
             _isRunning = true;
+            int runGeneration = ++_runGeneration;
 
             try
             {
@@ -342,7 +354,12 @@ namespace XFramework.XBootstrap
             }
             finally
             {
-                _isRunning = false;
+                // 只清自己那一代的归属：ResetForNewSession 可能在途递增代际并允许新运行开始，
+                // 旧运行的收尾不能把新运行的 _isRunning 一起清掉。
+                if (_runGeneration == runGeneration)
+                {
+                    _isRunning = false;
+                }
             }
         }
 
