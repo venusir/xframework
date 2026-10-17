@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -191,6 +192,36 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AssetBootstrapStage_InitFails_ShutdownDoesNotDestroyLaterManualInit()
+        {
+            AssetManager.Destroy();
+            var failing = new FakeAssetManager
+            {
+                InitTask = UniTask.FromException(new System.InvalidOperationException("boom")),
+            };
+            AssetManager.ImplFactory = () => failing;
+            try
+            {
+                var stage = new AssetBootstrapStage();
+                Assert.Throws<System.InvalidOperationException>(() =>
+                    stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult(),
+                    "初始化失败应上抛");
+
+                // 失败后使用方手动注入另一份实例；本阶段的 Shutdown 不得销毁它
+                AssetManager.SetInstance(new FakeAssetManager());
+                stage.Shutdown();
+
+                Assert.IsTrue(AssetManager.IsInitialized,
+                    "失败路径必须复位所有权标记，Shutdown 不得销毁使用方手动初始化的实例（AST-004）");
+            }
+            finally
+            {
+                AssetManager.ImplFactory = null;
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
         public void DataBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown()
         {
             DataManager.Initialize(new DataManagerImpl());
@@ -229,6 +260,29 @@ namespace Venusy609.Xframework.Editor.Tests
                 stage.Shutdown();
 
                 Assert.IsFalse(DataManager.IsInitialized, "本阶段初始化的服务应由本阶段清理");
+            }
+            finally
+            {
+                DataManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public void DataBootstrapStage_RunTwice_ShutdownStillShutsDown()
+        {
+            DataManager.Shutdown();
+            try
+            {
+                var stage = new DataBootstrapStage();
+                stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult();
+
+                // 重跑：第二次 wasInitialized 为真，所有权标记不得被覆写成 false
+                stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult();
+
+                stage.Shutdown();
+
+                Assert.IsFalse(DataManager.IsInitialized,
+                    "重跑后 Shutdown 仍应注销第一次由本阶段初始化的门面（DATA-002）");
             }
             finally
             {
@@ -276,6 +330,31 @@ namespace Venusy609.Xframework.Editor.Tests
                 stage.Shutdown();
 
                 Assert.IsFalse(SaveManager.IsInitialized, "本阶段初始化的服务应由本阶段清理");
+            }
+            finally
+            {
+                SaveManager.Shutdown();
+            }
+        }
+
+        [Test]
+        public async Task SaveBootstrapStage_RunTwice_ShutdownStillShutsDown()
+        {
+            SaveManager.Shutdown();
+            try
+            {
+                var stage = new SaveBootstrapStage();
+                await stage.ExecuteAsync(new PipelineStageContext(), default);
+
+                // 重跑：第二次 wasInitialized 为真（重复 Initialize 告警），所有权标记不得被覆写成 false
+                LogAssert.Expect(LogType.Warning,
+                    new Regex(@"\[Save\] SaveManager\.Initialize 被重复调用"));
+                await stage.ExecuteAsync(new PipelineStageContext(), default);
+
+                stage.Shutdown();
+
+                Assert.IsFalse(SaveManager.IsInitialized,
+                    "重跑后 Shutdown 仍应注销第一次由本阶段初始化的门面（SAVE-005）");
             }
             finally
             {

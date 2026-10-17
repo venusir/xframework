@@ -40,7 +40,11 @@ namespace XFramework.XData
 
             bool wasInitialized = DataManager.IsInitialized;
             DataManager.Initialize(new DataManagerImpl());
-            _initializedByThisStage = !wasInitialized;
+
+            // 只在**本次**完成初始化时置位；重跑时 wasInitialized 为真，绝不能把上一轮置的 true
+            // 覆写成 false——否则 Shutdown 不再注销第一次由本阶段初始化的门面（DATA-002）。
+            if (!wasInitialized)
+                _initializedByThisStage = true;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);

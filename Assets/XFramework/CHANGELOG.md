@@ -221,6 +221,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Bootstrap
+
+- **引导阶段的「只清理自己初始化的那份」在重跑 / 失败路径不成立（AST-004 / DATA-002 / SAVE-005）**：Asset 阶段
+  初始化失败后所有权标记仍为 `true`，使用方随后手动注入的实例会被本阶段的 `Shutdown` 一并销毁；Data / Save
+  阶段在同一实例上重跑时把标记覆写为 `false`，`Shutdown` 不再注销第一次由本阶段初始化的门面。修法：Asset
+  在失败 `catch` 里复位标记；Data / Save 只在首次成功初始化时置位。回归：`BootstrapStageTests` 三例（改前红）。
+
 #### Data
 
 - **脏集合默认判等、同名索引误删、快照遍历/清空无隔离（DATA-004/005/007/008/010）**：`_dirtyBlocks` 改用
