@@ -25,6 +25,9 @@ namespace XFramework.XMessage.Internal
         private IBufferedEventStream<TMessage> _buffered;
         private List<AsyncSubscription<TMessage>> _async;
 
+        /// <summary>投递中的重入深度：&gt;0 时禁止回收（见 <see cref="BeginDispatch"/>）。</summary>
+        private int _dispatchDepth;
+
         #endregion
 
         #region Lifecycle
@@ -35,6 +38,19 @@ namespace XFramework.XMessage.Internal
         /// 由持有者据此判定并回收空通道;<c>null</c> 表示不参与自动回收。
         /// </param>
         internal MessageChannel(Action onEmpty) => _onEmpty = onEmpty;
+
+        /// <summary>
+        /// 标记「一次投递开始」：同步派发与缓冲写入之间不得回收通道。
+        /// <para><b>为什么需要它</b>：首条 <c>Publish</c> 时最后一个同步订阅者可能在回调里自退订，
+        /// 此时 <c>_buffered</c> 尚为 <c>null</c>、<c>IsReclaimable</c> 会判真——通道在缓冲写入前被摘除，
+        /// 随后的写入落在孤儿通道上，该条消息永久失去可重放性。</para>
+        /// <para><b>为什么是深度而不是布尔</b>：订阅者回调里可以再发布同类型消息（重入），
+        /// 内层投递结束时外层仍在投递中。</para>
+        /// </summary>
+        internal void BeginDispatch() => _dispatchDepth++;
+
+        /// <summary>标记「一次投递结束」。与 <see cref="BeginDispatch"/> 成对，必须放在 <c>finally</c> 里。</summary>
+        internal void EndDispatch() => _dispatchDepth--;
 
         #endregion
 
@@ -101,7 +117,8 @@ namespace XFramework.XMessage.Internal
         /// 只能靠 <c>TrimEmptyChannels</c> 摘除。</para>
         /// </summary>
         public bool IsReclaimable =>
-            (_sync == null || _sync.SubscriptionCount == 0)
+            _dispatchDepth == 0
+            && (_sync == null || _sync.SubscriptionCount == 0)
             && (_async == null || _async.Count == 0)
             && (_buffered == null || (_buffered.SubscriptionCount == 0 && !_buffered.HasCachedValue));
 

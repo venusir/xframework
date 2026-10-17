@@ -208,6 +208,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Message
+
+- **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里
+  自退订 → `IsReclaimable` 判真（此时缓冲流尚未创建）→ 通道被摘除，随后的缓冲写入落在孤儿通道上，
+  该条消息永久失去可重放性。修法：`MessageChannel` 加投递深度闩锁，`IsReclaimable` 在投递期间恒为
+  false；四条发布路径（类型 / 键值 × 同步 / 异步）共用 `EmitSyncAndBuffer`，整段禁止回收。
+  回归：`MessageEvictionTests` 两条（类型与键值路径），改前红。
+
 #### Timer
 
 - **回调里新建的定时器可能晚一个档周期触发（TMR-002）**：一次性定时器在回调前释放槽位，回调里新建的

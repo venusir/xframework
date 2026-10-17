@@ -400,6 +400,41 @@ namespace XFramework.XMessage.Tests
             Assert.AreEqual(0, MessageManager.TrimEmptyChannels(), "Clear 之后不应残留通道");
         }
 
+        /// <summary>
+        /// 首条 <c>Publish</c> 时最后一个同步订阅者在回调里自退订——通道不得在缓冲写入前被回收，
+        /// 否则该条消息永久失去可重放性（MSG-001）。
+        /// <para>改前必红：此刻 <c>_buffered</c> 尚为 <c>null</c>，<c>IsReclaimable</c> 判真，
+        /// 通道被摘除；随后的缓冲写入落在孤儿通道上，新缓冲订阅者收不到重放。</para>
+        /// </summary>
+        [Test]
+        public void Publish_LastSyncSubscriberUnsubscribesInsideCallback_BufferedReplayStillWorks()
+        {
+            IDisposable subscription = null;
+            subscription = MessageManager.Subscribe<TestMessage>(_ => subscription.Dispose());
+
+            MessageManager.Publish(new TestMessage { Value = 42 });
+
+            int replayed = -1;
+            MessageManager.SubscribeBuffered<TestMessage>(msg => replayed = msg.Value);
+
+            Assert.AreEqual(42, replayed, "首条 Publish 的同步订阅清零不得让通道在缓冲写入前被回收");
+        }
+
+        /// <summary>键值路径同形（MSG-001 的三个变体之一）。</summary>
+        [Test]
+        public void PublishKeyed_LastSyncSubscriberUnsubscribesInsideCallback_BufferedReplayStillWorks()
+        {
+            IDisposable subscription = null;
+            subscription = MessageManager.Subscribe<int, TestMessage>(7, _ => subscription.Dispose());
+
+            MessageManager.Publish(7, new TestMessage { Value = 43 });
+
+            int replayed = -1;
+            MessageManager.SubscribeBuffered<int, TestMessage>(7, msg => replayed = msg.Value);
+
+            Assert.AreEqual(43, replayed, "键值路径同形：同步订阅清零不得让通道在缓冲写入前被回收");
+        }
+
         #endregion
     }
 }

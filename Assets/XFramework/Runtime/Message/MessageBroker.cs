@@ -78,11 +78,8 @@ namespace XFramework.XMessage
 
             var channel = GetOrCreateChannel<TMessage>();
 
-            // 推送给普通订阅者(Sync 为 null 表示从未有人订阅,跳过)
-            channel.Sync?.Emit(message);
-
-            // 推送给缓冲订阅者(GetOrCreate:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
-            channel.GetOrCreateBuffered().Emit(message);
+            // 同步派发 + 缓冲写入整段禁止回收（MSG-001）
+            EmitSyncAndBuffer(channel, message);
 
             // 异步处理器排在同步投递之后,fire-and-forget 启动
             DispatchAsyncFireAndForget(channel, message);
@@ -102,14 +99,35 @@ namespace XFramework.XMessage
 
             var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
-            // 推送给键值订阅者(Sync 为 null 表示该 Key 从未有人订阅,跳过)
-            channel.Sync?.Emit(message);
-
-            // 推送给键值缓冲订阅者(GetOrCreate:同上,订阅前发布的消息可重放)
-            channel.GetOrCreateBuffered().Emit(message);
+            // 同步派发 + 缓冲写入整段禁止回收（MSG-001，键值路径同形）
+            EmitSyncAndBuffer(channel, message);
 
             // 异步处理器排在同步投递之后,fire-and-forget 启动
             DispatchAsyncFireAndForget(channel, message);
+        }
+
+        /// <summary>
+        /// 同步投递 + 缓冲写入,整段禁止通道回收。
+        /// <para><b>为什么必须连在一起</b>:首条 <c>Publish</c> 时最后一个同步订阅者可能在回调里自退订,
+        /// 而此刻 <c>_buffered</c> 尚为 <c>null</c>——<c>IsReclaimable</c> 会判真,通道在缓冲写入前被摘除,
+        /// 随后的写入落在孤儿通道上,该条消息永久失去可重放性(MSG-001)。</para>
+        /// <para>深度计数支持订阅者回调里重入发布同类型消息。</para>
+        /// </summary>
+        private static void EmitSyncAndBuffer<TMessage>(MessageChannel<TMessage> channel, TMessage message)
+        {
+            channel.BeginDispatch();
+            try
+            {
+                // 推送给普通订阅者(Sync 为 null 表示从未有人订阅,跳过)
+                channel.Sync?.Emit(message);
+
+                // 推送给缓冲订阅者(GetOrCreate:确保订阅前发布的消息也被缓存,新订阅者可重放最近一条)
+                channel.GetOrCreateBuffered().Emit(message);
+            }
+            finally
+            {
+                channel.EndDispatch();
+            }
         }
 
         #endregion
@@ -134,8 +152,7 @@ namespace XFramework.XMessage
             var channel = GetOrCreateChannel<TMessage>();
 
             // 同步段与 Publish 完全同序:同步订阅者 -> 缓冲通道写入 -> 异步处理器
-            channel.Sync?.Emit(message);
-            channel.GetOrCreateBuffered().Emit(message);
+            EmitSyncAndBuffer(channel, message);
 
             return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
         }
@@ -155,8 +172,7 @@ namespace XFramework.XMessage
 
             var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
-            channel.Sync?.Emit(message);
-            channel.GetOrCreateBuffered().Emit(message);
+            EmitSyncAndBuffer(channel, message);
 
             return DispatchAsyncAwaitable(channel, message, strategy, cancellationToken);
         }
