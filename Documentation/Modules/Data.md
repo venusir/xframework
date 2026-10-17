@@ -37,6 +37,8 @@ v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，�
 
 ## 决策台账
 
+- 已做：**数据层的身份/隔离四处修正**（2026-10-18 · `DataRobustnessTests`，DATA-004/005/007/008/010）——脏集合改引用同一比较器；名称索引只摘属于自己的项、BlockName 前置校验；`CreateSnapshot` 先取快照再遍历；`ApplySnapshot` 清空阶段逐块隔离、null 条目计数。
+
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过。**一条高危已修**——两个块取同一个 `BlockName` 时静默丢数据；其余是文档与测试。逐条理由的展开见使用方 README 的相关章节，此处只留「评估过并否决」这一层。已修项见 `CHANGELOG`。2026-10-17 追加 Bootstrap 审计轮的所有权结论。）
 
 - 已做：**引导阶段的 `Shutdown` 只注销自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`DataBootstrapStage` 新增 `_initializedByThisStage`：执行前已初始化（使用方注入 / 上一轮运行留下）时不再在 `Shutdown` 里 `DataManager.Shutdown()`。回归用例 `BootstrapStageTests.DataBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown` / `..._InitializedByStage_ShutdownShutsDown`（前者改前必红：`Expected: True But was: False`）。

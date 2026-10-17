@@ -219,6 +219,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Data
+
+- **脏集合默认判等、同名索引误删、快照遍历/清空无隔离（DATA-004/005/007/008/010）**：`_dirtyBlocks` 改用
+  引用同一比较器（重写 `Equals` 的不同块不再塌成一条）；`RemoveBlock` / `RegisterBlock` 摘名称索引时只摘
+  属于自己的项，`BlockName` 在写入容器前校验（不留半注册态）；`CreateSnapshot` 先取块快照再遍历（`OnSave`
+  里增删块不再抛 `InvalidOperationException`）；`ApplySnapshot` 的清空阶段逐块隔离并计入返回值，快照里的
+  null 条目计数而不 NRE。回归：`DataRobustnessTests` 五例（改前分别 1≠2、索引被误删、NRE、OnClear 异常
+  逃逸、枚举失效）。
+
 #### UI
 
 - **以基类 `T` 打开的面板在关闭 / 导航 / 查询路径失效（UIA-001）**：打开记账用 `typeof(T)`，而关闭 /

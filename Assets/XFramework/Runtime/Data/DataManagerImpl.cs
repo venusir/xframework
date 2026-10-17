@@ -16,7 +16,15 @@ namespace XFramework.XData
 
         private readonly Dictionary<Type, IDataBlock> _blocks = new();
         private readonly Dictionary<string, IDataBlock> _blockNameIndex = new();
-        private readonly HashSet<IDataBlock> _dirtyBlocks = new();
+
+        /// <summary>
+        /// 脏块集合。**按引用同一判定身份**（DATA-004）：重写 <c>Equals</c> 的不同块用默认比较器会被
+        /// 塌成一条，<c>GetDirtyBlocks</c> 漏块 → 增量保存静默丢改动。仓内已有三份同形自持比较器
+        /// （<c>XPool</c> / <c>Lock</c> / <c>UpdateScheduler</c>）。
+        /// </summary>
+        private readonly HashSet<IDataBlock> _dirtyBlocks
+            = new HashSet<IDataBlock>(DataBlockReferenceComparer.Instance);
+
         private readonly Dictionary<string, Type> _saveTypeCache = new(); // saveType → 类型（反射解析结果缓存）
 
         #endregion
@@ -31,6 +39,7 @@ namespace XFramework.XData
                 return (T)existing;
 
             var block = new T();
+            EnsureValidBlockName(block);
             _blocks[type] = block;
             IndexBlockByName(block);
             return block;
@@ -52,8 +61,10 @@ namespace XFramework.XData
         public void RegisterBlock<T>(T block) where T : class, IDataBlock
         {
             // 参数防御放在最前：原先 null 会先被写进 _blocks、再在取 BlockName 时抛 NRE，
-            // 于是容器里留下一个 null 条目——此后 TryGetBlock 返回 true 而值为 null、遍历时炸
+            // 于是容器里留下一个 null 条目——此后 TryGetBlock 返回 true 而值为 null、遍历时炸。
+            // BlockName 同样在写入 **之前** 校验（DATA-005）：null/空名会在写索引时抛 ANE，留下半注册态。
             if (block == null) throw new ArgumentNullException(nameof(block));
+            EnsureValidBlockName(block);
 
             // 覆盖同名 Block 时先清理旧实例：OnClear 释放其资源/订阅，并移除脏标记，避免泄漏与假脏
             if (_blocks.TryGetValue(typeof(T), out var old))
@@ -62,8 +73,9 @@ namespace XFramework.XData
                 _dirtyBlocks.Remove(old);
 
                 // 旧实例的名称索引一并摘掉：它已不在 _blocks 里，索引留着会让按名恢复命中一个幽灵对象
-                // （新旧名字不同时尤其隐蔽——那个旧名字会一直指向它）
-                _blockNameIndex.Remove(old.BlockName);
+                // （新旧名字不同时尤其隐蔽——那个旧名字会一直指向它）。只在索引确实指向旧实例时摘
+                // （DATA-005：同名冲突时索引可能已属于另一个块）。
+                RemoveNameIndexIfOwner(old);
             }
 
             _blocks[typeof(T)] = block;
@@ -78,7 +90,7 @@ namespace XFramework.XData
             {
                 block.OnClear();
                 _blocks.Remove(type);
-                _blockNameIndex.Remove(block.BlockName);
+                RemoveNameIndexIfOwner(block); // 只在索引属于该实例时摘（DATA-005）
                 _dirtyBlocks.Remove(block); // 联动清理脏标记
                 return true;
             }
@@ -113,6 +125,27 @@ namespace XFramework.XData
         /// <para>刻意**只报错不阻止**：改名是使用方的事，且迁移期偶尔需要临时共用名字——
         /// 与仓内「回退都留痕」的惯例一致。</para>
         /// </summary>
+        /// <summary>
+        /// 校验块的 <c>BlockName</c> 非空。**必须在写入任何容器之前调用**（DATA-005）：null/空名会在
+        /// 字典写入时抛异常，留下「已在 _blocks、却不在名称索引」的半注册态。
+        /// </summary>
+        private static void EnsureValidBlockName(IDataBlock block)
+        {
+            if (string.IsNullOrEmpty(block.BlockName))
+                throw new ArgumentException("IDataBlock.BlockName 不能为 null 或空。", nameof(block));
+        }
+
+        /// <summary>
+        /// 只有当名称索引确实指向该实例时才摘除（DATA-005）：两个不同类型返回同一 <c>BlockName</c> 时，
+        /// 索引会被后登记者覆盖；被遮蔽者移除时若无条件摘除，会把占用者的索引误删（其数据从此无法恢复）。
+        /// </summary>
+        private void RemoveNameIndexIfOwner(IDataBlock block)
+        {
+            var name = block.BlockName;
+            if (_blockNameIndex.TryGetValue(name, out var occupant) && ReferenceEquals(occupant, block))
+                _blockNameIndex.Remove(name);
+        }
+
         private void IndexBlockByName(IDataBlock block)
         {
             if (_blockNameIndex.TryGetValue(block.BlockName, out var occupant) && occupant != block)
@@ -140,9 +173,13 @@ namespace XFramework.XData
             if (string.IsNullOrEmpty(data.defaultFormat))
                 data.defaultFormat = "json";
 
-            foreach (var pair in _blocks)
+            // 先取快照再遍历（DATA-008）：OnSave 里增删块（第三方把缓存块换成新实例、或回收资源）
+            // 会让活字典的枚举器失效并抛 InvalidOperationException。低频路径，一次分配可接受——
+            // 与 ForEachBlock 同一取舍。
+            var blocks = new List<IDataBlock>(_blocks.Values);
+            for (int i = 0; i < blocks.Count; i++)
             {
-                var snap = BuildBlockSnapshot(pair.Value);
+                var snap = BuildBlockSnapshot(blocks[i]);
                 if (snap != null)
                     data.blocks.Add(snap);
             }
@@ -191,12 +228,28 @@ namespace XFramework.XData
             // 恢复到快照状态：先清空所有已注册 Block 的数据（仅清数据、保留注册，
             // 不能 ClearAll 否则名称索引被清空，后续无法匹配快照中的 block），
             // 快照中未出现的 Block 保持清空。
-            ForEachBlock(b => b.OnClear());
+            // **逐块隔离（DATA-007）**：第三方 OnClear 抛异常不该中止整次恢复，也不该让内存停在
+            // 「部分块已清、后续块未清」且无记录的状态；失败计入返回值（Save 据此回滚）。
+            var failedBlocks = 0;
+            var clearTargets = new List<IDataBlock>(_blocks.Values);
+            for (int i = 0; i < clearTargets.Count; i++)
+            {
+                try
+                {
+                    clearTargets[i].OnClear();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Data, e,
+                        "数据块 OnClear 抛出异常，跳过该块的清理（本次恢复计为失败）。");
+                    failedBlocks++;
+                }
+            }
 
             // 恢复即干净：不携带脏集合的快照（从磁盘读回、手工构造）一律清空；
             // 携带者（进程内回滚点，由 CreateSnapshot 在清空之前填充）按其还原——
             // 回滚要把数据与「哪些块还没存」一起还原，否则将来做增量保存时会漏块。
-            // 位置有两个硬约束：在 ForEachBlock(OnClear) **之后**（第三方 OnClear 里若 RemoveBlock，
+            // 位置有两个硬约束：在清空阶段**之后**（第三方 OnClear 里若 RemoveBlock，
             // 解析在后才不会把已移除的块当幽灵写回）、在空快照早退**之前**（块列表为空但脏集合非空的
             // 回滚点也要还原）。名字解析不到即该块已被移除——跳过不告警（块没了就没有要保护的数据，
             // 与 RemoveBlock 联动清脏同一结论）
@@ -211,7 +264,7 @@ namespace XFramework.XData
             }
 
             if (data.blocks == null || data.blocks.Count == 0)
-                return 0;
+                return failedBlocks;
 
             var defaultFormat = data.defaultFormat;
             if (string.IsNullOrEmpty(defaultFormat))
@@ -219,11 +272,17 @@ namespace XFramework.XData
 
             // 恢复失败不中断整体恢复（单个坏块不该让其余数据也读不出来），但必须计数上报：
             // 调用方需要据此判断本次加载是否完整——「部分块没恢复」等价于内存里少了一半数据，
-            // 静默成功是危险的
-            var failedBlocks = 0;
+            // 静默成功是危险的。failedBlocks 已在清空阶段起算（DATA-007）。
 
             foreach (var snap in data.blocks)
             {
+                if (snap == null)
+                {
+                    LogManager.Warning(LogCategories.Data, "DataBlockSnapshot 为 null，跳过。");
+                    failedBlocks++;
+                    continue;
+                }
+
                 if (string.IsNullOrEmpty(snap.blockName))
                 {
                     LogManager.Warning(LogCategories.Data, "DataBlockSnapshot 缺少 blockName，跳过。");
@@ -448,6 +507,29 @@ namespace XFramework.XData
                 _blockNameIndex.Clear();
                 _dirtyBlocks.Clear();
             }
+        }
+
+        #endregion
+
+        #region Private — Comparers
+
+        /// <summary>
+        /// 脏集合的**引用同一**比较器（DATA-004）：重写 <c>Equals</c> 的不同块用默认比较器会被塌成一条，
+        /// 导致 <c>GetDirtyBlocks</c> 漏块。.NET Standard 2.1 没有现成的 <c>ReferenceEqualityComparer</c>，
+        /// 照 <c>XPool</c> / <c>Lock</c> / <c>UpdateScheduler</c> 的先例自持一份。
+        /// </summary>
+        private sealed class DataBlockReferenceComparer : IEqualityComparer<IDataBlock>
+        {
+            internal static readonly DataBlockReferenceComparer Instance = new DataBlockReferenceComparer();
+
+            private DataBlockReferenceComparer()
+            {
+            }
+
+            public bool Equals(IDataBlock x, IDataBlock y) => ReferenceEquals(x, y);
+
+            public int GetHashCode(IDataBlock obj)
+                => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(obj);
         }
 
         #endregion
