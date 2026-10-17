@@ -26,7 +26,8 @@ namespace XFramework.XUI
         #region Fields
 
         /// <summary>
-        /// 活动面板字典。key: 面板类型, value: 面板实例。
+        /// 活动面板字典。key: 面板的**运行期类型**（UIA-001：基类 T 打开的派生面板按真实类型记账），
+        /// value: 面板实例。
         /// </summary>
         private readonly Dictionary<Type, UIPanelBase> _activePanels
             = new Dictionary<Type, UIPanelBase>(8);
@@ -572,8 +573,11 @@ namespace XFramework.XUI
             // 钳制层级：超过上限会撞进遮罩/HUD/Tip 的保留带
             layer = UISorting.ClampPanelLayer(layer);
 
-            // 已打开的面板直接聚焦（不触发 Controller 拦截）
-            if (_activePanels.TryGetValue(type, out var existingPanel) && existingPanel != null)
+            // 已打开的面板直接聚焦（不触发 Controller 拦截）。
+            // 去重按「请求类型精确匹配 → assetPath」两步：具体类型沿用「同类型单实例」的旧语义；
+            // 基类 T（如 OpenAsync<UIPanelBase>）没有精确键，按资源地址区分不同面板（UIA-001）。
+            var existingPanel = FindOpenPanelForRequest(type, assetPath);
+            if (existingPanel != null)
             {
                 RefocusOpenPanel(existingPanel);
                 return existingPanel as T;
@@ -638,7 +642,7 @@ namespace XFramework.XUI
                 // 而没有任何集合或调用方还记得它
                 if (!IsInitialized)
                 {
-                    RollbackPanel(type, panel);
+                    RollbackPanel(panel);
                     pending = null;
                     WarnOpenAbandoned(type);
                     return null;
@@ -648,8 +652,9 @@ namespace XFramework.XUI
                 panel.AssetPath = assetPath;
 
                 // 注册（内含按栈位重排 sortingOrder）并打开。
-                // 此后取消不再生效：注册已发生，中途放弃会留下半开状态
-                RegisterPanel(type, panel);
+                // 此后取消不再生效：注册已发生，中途放弃会留下半开状态。
+                // 键取实例运行期类型（UIA-001）：基类 T 打开的派生面板必须能按真实类型被关闭/导航/查询。
+                RegisterPanel(panel.GetType(), panel);
                 await panel.DoOpenAsync(userData);
 
                 // 面板开起来了，但它属于一个已被拆掉的管理器。先按关闭路径把它收干净——
@@ -657,7 +662,7 @@ namespace XFramework.XUI
                 if (!IsInitialized)
                 {
                     await panel.DoCloseAsync(immediate: true);
-                    RollbackPanel(type, panel);
+                    RollbackPanel(panel);
                     pending = null;
                     WarnOpenAbandoned(type);
                     return null;
@@ -670,23 +675,23 @@ namespace XFramework.XUI
                 // 面板可能在自己的 OnOpen 里就把自己关了（此时它已回池）。那种情况下
                 // 「打开完成」并没有发生，故跳过下面两个表达该语义的回调，但仍把实例
                 // 返回给调用方——调用方应检查 IsOpen。
-                if (!_activePanels.ContainsKey(type))
+                if (!_activePanels.ContainsKey(panel.GetType()))
                     return panel;
 
                 // OnOpenImpl 会把 raycaster 打开；层被整体禁交互时要按层状态压回去
                 ApplyLayerInteractivity(panel);
 
-                MessageManager.Publish(new PanelOpenedMessage(type));
+                MessageManager.Publish(new PanelOpenedMessage(panel.GetType()));
 
                 // ★ Controller 拦截点：打开后回调
-                await _controller.OnAfterOpenAsync(type, panel, userData, cancellationToken);
+                await _controller.OnAfterOpenAsync(panel.GetType(), panel, userData, cancellationToken);
 
                 return panel;
             }
             catch
             {
                 if (!committed && pending != null)
-                    RollbackPanel(type, pending);
+                    RollbackPanel(pending);
 
                 throw;
             }
@@ -700,11 +705,13 @@ namespace XFramework.XUI
             where T : UIPanelBase
         {
             EnsureInitialized();
-            var type = typeof(T);
 
-            if (_activePanels.TryGetValue(type, out var panel) && panel != null)
+            // 用 GetPanel<T> 而不是按 typeof(T) 直接查字典：基类 T 打开的面板以运行期类型为键，
+            // 直接查 typeof(T) 会静默不关（UIA-001）。
+            var panel = GetPanel<T>();
+            if (panel != null)
             {
-                await ClosePanelInternalAsync(panel, type, immediate, cancellationToken);
+                await ClosePanelInternalAsync(panel, panel.GetType(), immediate, cancellationToken);
             }
         }
 
@@ -726,16 +733,43 @@ namespace XFramework.XUI
         {
             EnsureInitialized();
             PruneStack();
-            return _activePanels.ContainsKey(typeof(T));
+
+            if (_activePanels.ContainsKey(typeof(T)))
+                return true;
+
+            // 基类查询：抽象类 / 接口才回落到「可赋值实例」。具体类保持精确语义——
+            // IsOpen<FakePanel> 不该因为派生类 FakePanelB 开着就报 true（UIA-001）。
+            if (!AllowsDerivedLookup(typeof(T)))
+                return false;
+
+            foreach (var kv in _activePanels)
+            {
+                if (kv.Value is T)
+                    return true;
+            }
+
+            return false;
         }
 
         public T GetPanel<T>() where T : UIPanelBase
         {
             EnsureInitialized();
             PruneStack();
-            var type = typeof(T);
-            _activePanels.TryGetValue(type, out var panel);
-            return panel as T;
+
+            if (_activePanels.TryGetValue(typeof(T), out var exact))
+                return exact as T;
+
+            // 基类查询：抽象类 / 接口才回落到「可赋值实例」（从栈顶向下取最后打开的那个）
+            if (!AllowsDerivedLookup(typeof(T)))
+                return null;
+
+            for (int i = _stack.Count - 1; i >= 0; i--)
+            {
+                if (_stack[i] is T match)
+                    return match;
+            }
+
+            return null;
         }
 
         public async UniTask CloseLayerAsync(int layer, bool immediate = false,
@@ -804,7 +838,9 @@ namespace XFramework.XUI
 
             // 目标已打开：置顶并恢复焦点。此处刻意不先 BlurTopPanel——栈顶可能就是它自己，
             // 先模糊就得再恢复一次；让位的判断归 RefocusOpenPanel 统一处理。
-            if (_activePanels.TryGetValue(type, out var existing) && existing != null)
+            // 去重规则同 OpenAsync（UIA-001）。
+            var existing = FindOpenPanelForRequest(type, assetPath);
+            if (existing != null)
             {
                 RefocusOpenPanel(existing);
                 return existing as T;
@@ -1698,6 +1734,47 @@ namespace XFramework.XUI
         #region Internal — Panel Lifecycle
 
         /// <summary>
+        /// 基类查询是否允许回落到「可赋值实例」。
+        /// <para>只对抽象类 / 接口开启：具体类保持「精确类型」语义——否则
+        /// <c>IsOpen&lt;FakePanel&gt;</c> 会因为派生类开着而误报 true。</para>
+        /// </summary>
+        private static bool AllowsDerivedLookup(Type type) => type.IsAbstract || type.IsInterface;
+
+        /// <summary>
+        /// 查找一次打开请求应命中的已打开面板。
+        /// <para>先按 <paramref name="requestedType"/> 精确匹配：具体类型沿用「同类型单实例」的旧语义，
+        /// 避免同一类型从不同资源地址被重复实例化。基类 T（如 <c>OpenAsync&lt;UIPanelBase&gt;</c>）
+        /// 没有精确键，再按 <paramref name="assetPath"/> 命中——同一资源仍是 Refocus，不同资源才新建
+        /// （UIA-001）。</para>
+        /// </summary>
+        private UIPanelBase FindOpenPanelForRequest(Type requestedType, string assetPath)
+        {
+            if (_activePanels.TryGetValue(requestedType, out var exact) && exact != null)
+                return exact;
+
+            return FindOpenPanelByAssetPath(assetPath);
+        }
+
+        /// <summary>
+        /// 查找已打开、且来自同一资源地址的面板。
+        /// <para>基类 T 的多面板场景（随包示例 <c>OpenAsync&lt;UIPanelBase&gt;</c> 打开不同面板）靠它区分。</para>
+        /// </summary>
+        private UIPanelBase FindOpenPanelByAssetPath(string assetPath)
+        {
+            if (string.IsNullOrEmpty(assetPath))
+                return null;
+
+            foreach (var kv in _activePanels)
+            {
+                var panel = kv.Value;
+                if (panel != null && panel.AssetPath == assetPath)
+                    return panel;
+            }
+
+            return null;
+        }
+
+        /// <summary>
         /// 注册面板到活动字典，并入显示栈尾（新打开的面板显示在最前）。
         /// </summary>
         private void RegisterPanel(Type type, UIPanelBase panel)
@@ -1710,7 +1787,7 @@ namespace XFramework.XUI
                     "Panel '{0}' is already active while registering a new instance. " +
                     "This breaks the one-instance-per-type invariant; the previous instance is being recycled.",
                     type.Name);
-                RollbackPanel(type, oldPanel);
+                RollbackPanel(oldPanel);
             }
 
             _activePanels[type] = panel;
@@ -1860,9 +1937,9 @@ namespace XFramework.XUI
         /// 回滚一次失败的打开：从活动集合与显示栈中摘除，交还工厂。
         /// <para>幂等——未注册过时前两步是空操作，<c>OnPoolRecycle</c> 对尚未打开的面板也安全。</para>
         /// </summary>
-        private void RollbackPanel(Type type, UIPanelBase panel)
+        private void RollbackPanel(UIPanelBase panel)
         {
-            _activePanels.Remove(type);
+            _activePanels.Remove(panel.GetType());
             _stack.Remove(panel);
             RecyclePanel(panel);
         }
@@ -1943,9 +2020,8 @@ namespace XFramework.XUI
 
         /// <summary>
         /// 移除活动字典里指向已销毁面板的条目。
-        /// <para>按<b>值</b>反查而不是拿 <c>panel.GetType()</c> 当键：字典的键是打开时传入的
-        /// <c>typeof(T)</c>，若调用方用基类开派生面板（<c>OpenAsync&lt;BasePanel&gt;</c>），
-        /// 两者并不相同——按实例类型反查会漏掉那些条目。</para>
+        /// <para>按<b>值</b>判空：不依赖「键 == 值的运行期类型」这条隐含约定——键在 UIA-001 后
+        /// 就是运行期类型，但这里刻意不利用它，免得将来键的形状变化时静默漏删。</para>
         /// </summary>
         private void PruneActivePanels()
         {

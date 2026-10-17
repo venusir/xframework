@@ -620,12 +620,17 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 **所有打开路径都会入栈**（`OpenAsync` 与 `PushAsync` 都在内），栈序即显示次序。两者的区别只在语义读法上，不在行为上——所以「先 `OpenAsync` 开主界面、再 `PushAsync` 开二级页」之后依然可以 `PopAsync` 退回。
 
 - `PushAsync` — 打开新面板并入栈，当前栈顶失焦（OnBlur），新面板获得焦点（OnOpen）
-- `OpenAsync` — 同样入栈；已打开则聚焦（BringToFront）而不重复创建
+- `OpenAsync` — 同样入栈；同一资源地址已打开则聚焦（BringToFront）而不重复创建
 - `PopAsync` — 弹出栈顶面板并关闭，恢复新栈顶焦点（OnFocus）
 - `GoBackAsync` — 等价于 `PopAsync`，语义化命名，供返回键处理调用
 - `PopToAsync<T>` — 依次弹出栈顶，直到指定类型成为栈顶
 - `PopToRootAsync` — 依次弹出栈顶，只保留最早打开的那一个
 - `CanGoBack` — 显示栈中是否还有可退回的面板（栈深 > 1）
+
+**`T` 可以是基类**：打开记账按面板的**运行期类型**，去重按「请求类型精确匹配 → 同一资源地址」两步——
+`OpenAsync<UIPanelBase>` 连续打开不同资源会得到不同面板（随包示例即此写法），同一资源再次打开仍是聚焦。
+查询的回退规则区分类型：`IsOpen<T>` / `GetPanel<T>` 对**具体类型**精确匹配；对**抽象类 / 接口**匹配派生
+实例（`IsOpen<UIPanelBase>` 命中任一打开的面板，`GetPanel<UIPanelBase>` 返回最后打开的那个）。
 
 **栈底面板不参与弹出**：栈深为 1 时 `PopAsync` 是 no-op，用 `CloseAsync` 关闭最后一个面板。
 

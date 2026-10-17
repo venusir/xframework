@@ -219,6 +219,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### UI
+
+- **以基类 `T` 打开的面板在关闭 / 导航 / 查询路径失效（UIA-001）**：打开记账用 `typeof(T)`，而关闭 /
+  导航 / 置顶按实例运行期类型 `GetType()` 反查——`T` 是基类时（随包示例正是 `OpenAsync<UIPanelBase>`）
+  第二个面板会命中原面板并 Refocus、`CloseAsync(panel)` 静默不关、`Pop*` 静默失效。修法：打开记账改为
+  面板的运行期类型；去重按「请求类型精确匹配 → 同一资源地址」两步；`IsOpen/GetPanel/CloseAsync<T>` 对
+  具体类型精确匹配、对抽象类 / 接口回落到派生实例。示例写法保持原样。
+  回归：`UIPanelBaseTypeOpenTests` 两例（基类打开的第二个面板可开/可关/可 Pop + 同资源仍聚焦），改前红。
+
 #### Pool
 
 - **池的静态状态跨会话存活且无会话复位（POOL-002）**：关闭域重载时第二会话继承上一会话的池实例、配置与
