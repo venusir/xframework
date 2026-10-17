@@ -83,7 +83,8 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
-        /// <para>传入装箱的 <c>ConfigTable&lt;T&gt;</c> 实例，框架通过反射提取内部字典。</para>
+        /// <para>传入装箱的 <c>ConfigTable&lt;T&gt;</c> 实例，框架通过 <see cref="IConfigTable.Data"/>
+        /// 取出内部字典（**无反射**）。</para>
         /// <para>第三方反射调用示例（推荐使用泛型版，避免手动构造 ConfigTable）：</para>
         /// </summary>
         /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>

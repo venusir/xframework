@@ -545,7 +545,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             if (!_tables.TryGetValue(type, out var dict))
                 throw new ConfigException(
-                    $"Table '{type.Name}' is not loaded. Call PreloadAsync<{type.Name}>() first.");
+                    $"Table '{type.Name}' is not loaded. Call PreloadTableAsync<{type.Name}>() first.");
             return GetOrCreateWrapper<T>(type, dict);
         }
 
@@ -594,7 +594,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             if (!_globals.TryGetValue(type, out var obj))
                 throw new ConfigException(
-                    $"Global config '{type.Name}' is not loaded. Call PreloadAsync<{type.Name}>() first.");
+                    $"Global config '{type.Name}' is not loaded. Call PreloadGlobalAsync<{type.Name}>() first.");
             return (T)obj;
         }
 

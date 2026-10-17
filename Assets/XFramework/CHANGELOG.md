@@ -429,6 +429,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Config XML/异常消息口径订正（2026-10-17，CONF-004 部分）**：未加载异常消息改教真实存在的
+  `PreloadTableAsync<T>()` / `PreloadGlobalAsync<T>()`（原文的 `PreloadAsync` 不存在）；`IConfigLoader` 不再
+  声称可扩展 `ConfigFormat` 枚举（自定义 Loader 走重载）；非泛型 `RegisterTable` 改为「经 `IConfigTable.Data`
+  取字典，无反射」；CSV 写明**必须包含主键列**（缺列时多行撞 `Duplicate Id`）。
 - **Asset / Diagnostics / Audio / File 文档订正（2026-10-17）**：
   Asset（AST-006）：API 表补 `ClearPool` / `ClearAllPools`。
   Diagnostics（DIAG-004）：概览页签补 Camera 行。

@@ -4,7 +4,8 @@ namespace XFramework.XConfig
 {
     /// <summary>
     /// 配置加载器统一接口，由 XFramework 内部 Loader 实现。
-    /// <para>第三方可自行实现此接口，配合 <see cref="ConfigFormat"/> 自定义枚举值扩展新的配置格式。</para>
+    /// <para>第三方可自行实现此接口，在 <c>PreloadTableAsync</c> / <c>PreloadGlobalAsync</c> 的
+    /// <b>Loader 重载</b>里传入——内置 <see cref="ConfigFormat"/> 枚举不扩展（C# 枚举不能在外部加成员）。</para>
     /// </summary>
     public interface IConfigLoader
     {
