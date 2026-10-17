@@ -429,6 +429,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Message 淘汰语义与线程契约订正（2026-10-17，MSG-003/005）**：`EvictBuffered*` 会 `Dispose` 整条缓冲流、
+  终止仍挂着的缓冲订阅者——README 原写「只丢重放缓存，不会回收仍有活订阅者的通道」，已订正并记 `待裁`
+  （「只清缓存保订阅」需 Event 新原语）；线程契约扩写断言射程（`EvictBuffered*` / `TrimEmptyChannels` /
+  统计族无断言）。
 - **Save 线程契约与忙碌门禁订正（2026-10-17，SAVE-007/008/010）**：`ISaveManager` 的 XML 不再声称
   「内置实现会检查忙碌并抛异常」（实际无守卫，2026-09-27 裁定维持）；`RecoverAsync` 的「全程不切回主线程」
   订正为「需要重建侧车时切回一次」；README 线程契约补「公开写入口必须在主线程调用」。
