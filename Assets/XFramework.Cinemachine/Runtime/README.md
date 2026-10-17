@@ -5,6 +5,9 @@
 `CinemachineCameraManager` 把 Cinemachine 的 vcam 优先级与 `CinemachineBrain` 混合接进核心包的
 `ICameraManager`：游戏代码只调 `CameraManager`，不直接依赖 Cinemachine 类型。
 
+**本包是适配器，不是行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline
+由 Cinemachine 提供并在 Cinemachine 里配置；本包只负责注册、优先级 / Brain 混合与状态查询。
+
 **命名 / 动态双键**：常驻 vcam 用 string id；随预制创建 / 销毁的动态 vcam 用 `CameraHandle`（`Register<T>`）。
 **Timeline / 过场相机**由过场系统接管 Brain，不经过本管理器；Brain 的活动相机未注册时，激活 / 过渡会告警
 「可能与过场冲突」。
@@ -175,6 +178,8 @@ handle.Dispose(); // 门面已销毁也安全
 ## 设计取舍
 
 - **优先用 Brain 自己的能力**：管理器只切优先级与 `DefaultBlend`，不自己插值、不另建调度器。
+- **不替 Cinemachine 做行为**：跟随 / 震屏 / 缩放在 Cinemachine 里配置，本包只做优先级与混合的适配；
+  需要这些行为的项目装本包，但行为本身仍归 Cinemachine。
 - **不劫持 Brain 的 custom blends**：项目配置优先；管理器只写 `DefaultBlend`。
 - **动态 vcam 用 `CameraHandle` 而不是 string id**：随预制实例创建 / 销毁的 vcam 没有稳定 authoring id；
   句柄带代际，旧句柄自然失效。

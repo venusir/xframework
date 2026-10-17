@@ -8,6 +8,7 @@
 ## 一、结论与边界
 
 - **独立可选扩展包**：`com.venusy609.xframework.cinemachine`（`Assets/XFramework.Cinemachine/`），版本 `0.1.0`，单独 asmdef，不随核心包发布。
+- **适配器，不是行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline 由 Cinemachine 提供并在 Cinemachine 里配置；本包只负责注册、优先级 / Brain 混合与状态查询。需要这些行为的项目装本包，但**行为本身仍归 Cinemachine**。
 - **核心包零 Cinemachine 依赖**：由 `ModuleBoundaryTests.CoreRuntime_DoesNotReferenceCinemachine` 守卫。
 - **只支持 Cinemachine 3.x**（按 **3.1.7** 编写）：2.x 的类型名、字段名与命名空间都不同；2.x 项目需要自己的 `ICameraManager` 实现。
 - **命名 / 动态双键**：常驻 vcam 用 string id；动态 vcam 用 `CameraHandle`（`Register<T>` 返回）；动态活动时 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`，用 `ActiveHandle` / `IsActive(handle)`。两个实现同为槽位表（`Slot`: vcam / 可选命名 id / `Generation` / `Used`）。
@@ -49,7 +50,7 @@ Assets/XFramework.Cinemachine/
 
 ## 四、决策台账
 
-- 已做：**Cinemachine 3.1.7 一等实现以独立可选扩展包提供**（2026-10-17）——`CinemachineCameraManager` 用优先级做激活 / 反激活、`DefaultBlend` 做过渡；核心包保持零依赖。理由：2.x / 3.x API 不兼容，核心包一旦引用就必须锁一个主版本；采用率没有公开统计，不能假设所有消费者都用 Cinemachine。
+- 已做：**Cinemachine 3.1.7 一等实现以独立可选扩展包提供**（2026-10-17）——`CinemachineCameraManager` 用优先级做激活 / 反激活、`DefaultBlend` 做过渡；核心包保持零依赖。理由：2.x / 3.x API 不兼容，核心包一旦引用就必须锁一个主版本；采用率没有公开统计，不能假设所有消费者都用 Cinemachine。**扩展包是适配器，不是行为库**——跟随 / 震屏 / 缩放在 Cinemachine 里配置，本包只做注册与状态适配。
 - 已做：**`Activate` 在「正在混合且目标已是活动相机」时短暂失活 / 激活目标 GameObject**（2026-10-17 · 测试锁定）——Brain 的公开面没有「强制完成 / 重开混合」的入口；副作用是该 vcam 的 `PreviousStateIsValid` 重置，写进使用方 README。
 - 已做：**改优先级后立即 `Prioritize()`**（2026-10-17 · `CinemachineCameraManagerTests` 改前必红：不调用时 `TransitionTo_BlendsAndCompletes` / `TransitionTo_ZeroDuration_Cuts` 失败，Brain 仍停在旧活动相机）。
 - 已做：**动态 vcam 句柄（`Register<T>` / `ActiveHandle` / 槽位表）**（2026-10-17 · 用户裁定主接口直扩）——命名 vcam 保持 string id；动态 vcam 随预制 `Register` / `Dispose`，不需要 authoring id。槽位下标 = `CameraHandle.Id`，代际递增防旧句柄误用；动态活动时 `ActiveHandle.NamedId` 为 `null`，用 `ActiveHandle`。

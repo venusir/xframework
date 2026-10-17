@@ -145,12 +145,14 @@ Runtime/Camera/
 ### 1. 无 Cinemachine 的简单项目
 
 用 `UnityCameraManager` + 静态相机；切场景或进战斗时调 `Activate` / `TransitionTo`。过渡走
-`UpdateManager` 的 LateUpdate，暂停（`timeScale <= 0`）会冻结过渡。
+`UpdateManager` 的 LateUpdate，暂停（`timeScale <= 0`）会冻结过渡。跟随 / 震屏等行为由项目侧脚本实现，
+配方见「已知限制」的三条路径。
 
 ### 2. Cinemachine 3.x 项目
 
 安装独立扩展包 `com.venusy609.xframework.cinemachine`，用 `CinemachineCameraManager` 注入门面。
-场景仍按 Cinemachine 的方式配置 Brain 与 vcam；游戏代码只调门面。
+场景仍按 Cinemachine 的方式配置 Brain 与 vcam；游戏代码只调门面。**扩展包是适配器，不是行为库**——
+跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline 仍在 Cinemachine 里配置。
 
 ### 3. 等待一次过渡完成
 
@@ -273,6 +275,14 @@ public sealed class DynamicCameraOwner : MonoBehaviour
   的项目要自己换 UI 根，不在本模块射程。
 - **Cinemachine 支持是可选扩展包**：核心包不依赖它；扩展包只支持 Cinemachine 3.x，2.x 项目需要自己的
   `ICameraManager` 实现。
+- **需要跟随 / 震屏 / 缩放等行为时**：核心本身不提供这些（见「接口承诺到哪为止」的能力归属）。三条路径：
+  - **Cinemachine 级需求**（3D 跟随 / 瞄准 / 震屏 / 碰撞 / 约束 / Dolly / Target Group / Timeline）→ 安装
+    `com.venusy609.xframework.cinemachine` 扩展包，并在 Cinemachine 里配置 vcam / Brain。**扩展包只把
+    Cinemachine 接进 `CameraManager`，行为本身由 Cinemachine 提供**。
+  - **简单需求**（2D 跟随、基础震屏、FOV 缩放）→ 项目侧十几行脚本即可，不必装 Cinemachine：跟随用
+    `UpdateManager.RegisterLate`（LateUpdate）+ `Vector3.SmoothDamp`；震屏 / 缩放计时用 `TimerManager`；
+    相机属性直接经 `OutputCamera`（`UnityEngine.Camera`）读写。
+  - **别的相机系统** → 实现 `ICameraManager`；核心包不锁后端。
 - 未知 id 只告警不抛；被销毁的相机在注册表里表现为 `null`，`OutputCamera` 返回 `null`，但 `CameraIds`
   仍可能列出该 id，直到调用方 `Unregister`。
 
@@ -288,7 +298,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **为什么 `TransitionTo` 是 `void` + `IsTransitioning`**：不把完成语义绑到一个 await 上；后端可以自由
   决定怎么驱动过渡。需要等待时用 `UniTask.WaitUntil`（典型场景 3）。`TransitionToAsync` 列为 v1.1 候选。
 - **为什么不做相机栈 / follow / shake**：栈是生命周期树（与 Update 的「组」API 同一条推理链）；跟随 /
-  震屏 / 约束是 Cinemachine 的行为编排，框架重复实现只会与它竞争。
+  震屏 / 约束是 Cinemachine 的行为编排，框架重复实现只会与它竞争。需要这些行为时的三条路径见「已知限制」。
 - **为什么默认实现只做静态相机的位姿 / FOV 插值**：它要为零依赖项目提供一个可用、可测、行为明确的兜底；
   不追求覆盖 Cinemachine 的能力面。
 

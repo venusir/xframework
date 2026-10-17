@@ -6,6 +6,9 @@
 **它不是框架必需件**：不用 Cinemachine 的项目只用核心包 + `UnityCameraManager` 即可；本包只服务
 Cinemachine 3.x 项目。核心包**零 Cinemachine 依赖**，版本锁只落在本包。
 
+**它是适配器，不是相机行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline
+由 Cinemachine 提供并在 Cinemachine 里配置；本包只负责注册、优先级 / Brain 混合与状态查询。
+
 - 包名：`com.venusy609.xframework.cinemachine`
 - 版本：`0.1.0`
 - 依赖：`com.unity.cinemachine` **3.1.7**（由本包 `package.json` 自动解析）；核心包 `com.venusy609.xframework`（需先安装）
