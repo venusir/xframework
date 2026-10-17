@@ -59,6 +59,13 @@ namespace XFramework.XUI.View
             }
         }
 
+        /// <summary>
+        /// 本 HUD 的 <see cref="OnUpdate"/> 是否抛过异常（停更标记）。
+        /// <para>由 <see cref="XFramework.XUI.UIHudManagerImpl.Update"/> 设置；回池时复位
+        /// （<see cref="OnPoolRecycle"/>），避免池化实例把停更状态带进下一次使用。</para>
+        /// </summary>
+        internal bool UpdateFaulted { get; set; }
+
         #endregion
 
         #region Events
@@ -99,6 +106,13 @@ namespace XFramework.XUI.View
             OnTargetLost = null;
             _camera = null;
             return UniTask.CompletedTask;
+        }
+
+        /// <summary>回池时复位停更标记——池化实例不得把「OnUpdate 抛过异常」带进下一次使用。</summary>
+        protected internal override void OnPoolRecycle()
+        {
+            UpdateFaulted = false;
+            base.OnPoolRecycle();
         }
 
         #endregion

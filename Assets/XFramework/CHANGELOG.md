@@ -208,6 +208,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### UI
+
+- **HUD 每帧派发无逐实例异常隔离（UI-B-001）**：`UIHudManager.Update` 直接循环调 `hud.OnUpdate`，
+  一个 HUD 抛异常会中断本轮遍历（外层 provider 隔离只保住整条 UI 通路并阻尼日志），症状是「其他 HUD
+  静默停更」。修法：照面板侧 `DriveTier` 加逐 HUD try/catch + `UpdateFaulted` 停更标记（回池复位）。
+  回归：`UIHudManagerTests.HudOnUpdateThrows_OtherHudsAreStillDriven`，改前红。
+
 #### Input
 
 - **长按时长只为「已被其它读取 API 访问过」的动作计时（INP-001）**：`UpdateButtonPressDurations` 只遍历

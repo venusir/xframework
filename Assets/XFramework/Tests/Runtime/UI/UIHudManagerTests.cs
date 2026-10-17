@@ -1,8 +1,10 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
@@ -24,6 +26,8 @@ namespace XFramework.XUI.Tests
         private const string StubPath = "ui/hud/ok";
         private const string ThrowingPath = "ui/hud/throw";
         private const string AsyncClosePath = "ui/hud/async";
+        private const string UpdateThrowingPath = "ui/hud/update-throw";
+        private const string CountingPath = "ui/hud/counting";
 
         #endregion
 
@@ -47,6 +51,8 @@ namespace XFramework.XUI.Tests
             _assets.RegisterPrefab<HudStubItem>(StubPath);
             _assets.RegisterPrefab<ThrowingHudItem>(ThrowingPath);
             _assets.RegisterPrefab<AsyncCloseHudItem>(AsyncClosePath);
+            _assets.RegisterPrefab<UpdateThrowingHudItem>(UpdateThrowingPath);
+            _assets.RegisterPrefab<CountingHudItem>(CountingPath);
             AssetManager.SetInstance(_assets);
 
             _root = new GameObject("UIRoot_HudTest", typeof(RectTransform));
@@ -173,6 +179,42 @@ namespace XFramework.XUI.Tests
         }
 
         #endregion
+
+        #region 逐 HUD 异常隔离（UI-B-001）
+
+        /// <summary>
+        /// 一个 HUD 的 <c>OnUpdate</c> 抛异常不得中断本轮 HUD 遍历（UI-B-001）。
+        /// <para>改前：<c>UIHudManagerImpl.Update</c> 的循环直接调 <c>hud.OnUpdate</c>，异常逃到外层
+        /// provider 隔离，同帧其余 HUD 都不会被驱动；症状是「其他 HUD 静默停更」。
+        /// 修法：逐 HUD try/catch + 停更标记（回池复位），照面板侧 <c>DriveTier</c> 的先例。</para>
+        /// </summary>
+        [Test]
+        public async Task HudOnUpdateThrows_OtherHudsAreStillDriven()
+        {
+            var secondTarget = new GameObject("Target2");
+            try
+            {
+                // 先挂计数 HUD、后挂抛异常 HUD：派发是倒序遍历，抛异常者排在前
+                var counting = await UIManager.ShowHudAsync<CountingHudItem>(secondTarget.transform, CountingPath);
+                await UIManager.ShowHudAsync<UpdateThrowingHudItem>(_target.transform, UpdateThrowingPath);
+
+                LogAssert.Expect(LogType.Error, new Regex("OnUpdate threw exception"));
+                Assert.DoesNotThrow(() => UIManager.Update(0.016f, 0f),
+                    "单个 HUD 的异常必须被就地隔离，不得逃到 provider 层");
+
+                Assert.AreEqual(1, counting.UpdateCount, "抛异常者之后的 HUD 本帧仍须被驱动");
+
+                // 第二帧：抛过的 HUD 停更（不重复刷日志），另一个继续
+                Assert.DoesNotThrow(() => UIManager.Update(0.016f, 0f));
+                Assert.AreEqual(2, counting.UpdateCount, "停更只作用于抛异常的那一个");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(secondTarget);
+            }
+        }
+
+        #endregion
     }
 
     #region Test Doubles
@@ -215,6 +257,21 @@ namespace XFramework.XUI.Tests
             RecycledAfterClose = CloseCompleted;
             base.OnPoolRecycle();
         }
+    }
+
+    /// <summary>每帧更新即抛异常的 HUD，用于验证逐 HUD 异常隔离。</summary>
+    public class UpdateThrowingHudItem : UIHudItem
+    {
+        protected internal override void OnUpdate(float deltaTime, float time)
+            => throw new InvalidOperationException("[UpdateThrowingHudItem] 故意在 OnUpdate 里抛异常");
+    }
+
+    /// <summary>记录被驱动次数的 HUD。</summary>
+    public class CountingHudItem : UIHudItem
+    {
+        public int UpdateCount;
+
+        protected internal override void OnUpdate(float deltaTime, float time) => UpdateCount++;
     }
 
     #endregion

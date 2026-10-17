@@ -219,7 +219,25 @@ namespace XFramework.XUI
                     continue;
                 }
 
-                hud.OnUpdate(deltaTime, time);
+                // 已停更（UpdateFaulted）的 HUD：OnUpdate 抛过异常，继续驱动只会每帧再抛一次
+                if (hud.UpdateFaulted)
+                    continue;
+
+                try
+                {
+                    hud.OnUpdate(deltaTime, time);
+                }
+                catch (Exception e)
+                {
+                    // 逐 HUD 隔离（UI-B-001，照面板侧 DriveTier 的先例）：一个 HUD 抛异常不得中断
+                    // 本轮遍历——异常逃到外层 provider 隔离后，同帧其余 HUD 会静默停更。
+                    // 停更而非继续驱动：典型异常是持续态，继续驱动等于每帧刷一条带栈日志；
+                    // 标记随回池复位（UIHudItem.OnPoolRecycle），不会把池化实例变成僵尸。
+                    hud.UpdateFaulted = true;
+                    LogManager.Exception(LogCategories.UIHudManager, e, string.Format(
+                        "HUD '{0}'.OnUpdate threw exception; this HUD will not be driven again until it is recycled " +
+                        "(other HUDs are unaffected)", hud.GetType().Name));
+                }
             }
         }
 
