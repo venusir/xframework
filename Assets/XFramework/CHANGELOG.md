@@ -208,6 +208,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Log
+
+- **同会话重建实现截断同名 JSONL 且 `seq` 重计（LOG-001）**：文件基名只含会话起始时刻 + 会话 id，
+  `Configure` / `Shutdown` 后重建的 sink 以 `FileMode.Create` 打开同一文件，启动段被截掉；新实现的
+  序号从 1 重数，违背 README 的「会话内单调」。修法：基名改用 sink 创建时刻（含毫秒），同会话重建
+  生成新文件、不截断旧文件；`seq` 提到 `LogSession`（会话级、`Interlocked` 分配，`Reset` 时归零）。
+  回归：`LogFileSinkTests.ConfigureFileSink_SameSession_NewSinkDoesNotTruncateExistingLog`，改前红。
+
 #### Message
 
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里

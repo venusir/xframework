@@ -239,6 +239,32 @@ namespace XFramework.XLog.Tests
 
         #region 切分与轮转
 
+        /// <summary>
+        /// 同会话内重建实现：不得复用并截断同名文件，<c>seq</c> 也不得重计（LOG-001）。
+        /// <para>改前必红：基名只含会话起始时刻 + 会话 id，重建出的 sink 用 <c>FileMode.Create</c>
+        /// 打开同一文件，启动段被截掉、只剩 after；新实现的 <c>seq</c> 从 1 重数。</para>
+        /// </summary>
+        [Test]
+        public void ConfigureFileSink_SameSession_NewSinkDoesNotTruncateExistingLog()
+        {
+            LogManager.Info(LogCategories.Save, "before");
+            LogManager.Flush();
+
+            ConfigureFileSink(); // 重建实现（同一会话）
+
+            LogManager.Info(LogCategories.Save, "after");
+            LogManager.Flush();
+
+            string[] files = Files();
+            Assert.AreEqual(2, files.Length, "重建不应复用并截断同名文件");
+
+            var before = Parse(Lines(files[0])[1]);
+            var after = Parse(Lines(files[1])[1]);
+            Assert.AreEqual("before", before.msg, "重建前的日志必须还在");
+            Assert.AreEqual("after", after.msg);
+            Assert.Greater(after.seq, before.seq, "seq 必须会话内单调，不能随重建重计");
+        }
+
         [Test]
         public void MaxFileBytes_SplitsIntoParts_EachWithHeader()
         {

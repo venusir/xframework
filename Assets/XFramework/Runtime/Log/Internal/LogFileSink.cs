@@ -50,8 +50,11 @@ namespace XFramework.XLog.Internal
         {
             _directory = options.FileDirectory;
             _session = LogSession.Id;
+
+            // 基名取 sink 创建时刻（含毫秒）而不是会话起始时刻：同会话内 Configure 重建会创建新 sink，
+            // 若沿用同一个基名，FileMode.Create 会把本会话已写的 JSONL 截断（LOG-001）。
             _baseName = FilePrefix
-                        + LogSession.StartUtc.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
+                        + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)
                         + "-" + _session;
             _maxFileBytes = options.MaxFileBytes;
             _maxRetainedFiles = options.MaxRetainedFiles;

@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Threading;
 using UnityEngine;
 
 namespace XFramework.XLog.Internal
@@ -32,6 +33,9 @@ namespace XFramework.XLog.Internal
         /// <summary>会话起始 UTC 刻度。<b>不能留零值</b>：若 AutoInit 尚未跑过就被用到，零值会写出年份 1 的时间戳。</summary>
         private static long _startTicks = DateTime.UtcNow.Ticks;
 
+        /// <summary>会话内日志序号；随 <see cref="Reset"/> 归零，跨实现实例共享。</summary>
+        private static long _sequence;
+
         #endregion
 
         #region Internal API
@@ -45,10 +49,18 @@ namespace XFramework.XLog.Internal
         /// <summary>自本次会话开始的 UTC 时刻。</summary>
         internal static DateTime StartUtc => new DateTime(_startTicks, DateTimeKind.Utc);
 
+        /// <summary>
+        /// 分配下一个会话内日志序号（任意线程）。
+        /// <para><b>为什么在会话级而不是实现实例上</b>：<c>LogManager.Configure</c> 会重建实现；
+        /// 序号若随实例从 1 重计，同一会话的 JSONL 就无法靠 <c>seq</c> 定序（LOG-001）。</para>
+        /// </summary>
+        internal static long NextSequence() => Interlocked.Increment(ref _sequence);
+
         /// <summary>重新生成会话（新的 id 与计时起点）并抓取环境快照。在主线程调用。</summary>
         internal static void Reset()
         {
             ResetClock();
+            Interlocked.Exchange(ref _sequence, 0);
 
             try
             {

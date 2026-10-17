@@ -26,7 +26,6 @@ namespace XFramework.XLog
         private ILogSink[] _sinks;
         private int _minimumLevel;
         private int _droppedSinkCount;
-        private long _sequence;
 
         /// <summary>主线程 id；由 <c>AutoInit</c> 在主线程登记。非主线程不读 <c>Time.frameCount</c>（Unity 的主线程约束）。</summary>
         private static int _mainThreadId = -1;
@@ -94,7 +93,7 @@ namespace XFramework.XLog
                 SafeFrame(),
                 Thread.CurrentThread.ManagedThreadId,
                 LogSource.Unity,
-                Interlocked.Increment(ref _sequence),
+                LogSession.NextSequence(),
                 null,
                 string.IsNullOrEmpty(stackTrace) ? null : stackTrace);
 
@@ -428,7 +427,7 @@ namespace XFramework.XLog
                 SafeFrame(),
                 Thread.CurrentThread.ManagedThreadId,
                 LogSource.Framework,
-                Interlocked.Increment(ref _sequence),
+                LogSession.NextSequence(),
                 exception,
                 CaptureStack(level));
 
