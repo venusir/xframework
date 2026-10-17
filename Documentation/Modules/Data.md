@@ -48,3 +48,8 @@ v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，�
 - 已做：**回滚能恢复脏标记集合**（2026-10-14 · 回归锁 `DirtyTrackingTests` 三条 + `SaveManagerImplTests` 一条端到端）——原条目所记「`CreateSnapshot` 清脏标记与回滚之间的语义缺口」已闭合：脏集合随快照携带（`DataSnapshot.dirtyBlockNames`，进程内元数据不进存档）、由 `ApplySnapshot` 还原，回滚后「加载前的未保存改动仍是未保存」。沿革与三条被否形状见上方「`CreateSnapshot` 加 `bool clearDirty` 参数」条。
 - 未做：**`DataBlockSnapshot.format` 写入端恒为 null**（2026-09-30 · 审计轮）——保留字段是为了将来「按块指定格式」，但目前没有任何写入路径：要么补上（改存档格式）、要么删掉（牵扯老存档兼容性）。本轮只在 XML 与 README 注明「回退是常规路径」。
 - 未做：**`DataSnapshot.Factory` 是可变的公开静态委托**（2026-09-30 · 审计轮）——第三方可替换快照子类，但没有任何「谁替换过、何时替换」的记录；Save 侧靠它取类型（`DataSnapshot.Factory().GetType()`）。目前只有测试在替换。
+- 待裁：**`DataManager._impl` 是否纳入会话复位族**（2026-10-17 · 第二轮审计）——Save/Data 不在复位族内，默认启动器路径自愈，手动初始化且无 Shutdown 钩子时可能继承上一会话实例（DATA-003）。重开判据：关闭域重载两遍 PlayMode 复现门面陈旧。
+- 待裁：**写入端格式契约（`Serializer.Default` vs `defaultFormat`）**（2026-10-17 · 第二轮审计）——写入恒用 `Serializer.Default`，读取按 `defaultFormat`；经 `Factory` 子类把 `defaultFormat` 设为非 `"json"` 会让整份存档读不回（DATA-006）。重开判据：出现第二个需要非默认写入格式的使用方。
+- 待裁：**脏集合载体是否提升为公开面**（2026-10-17 · 第二轮审计）——`DataSnapshot.dirtyBlockNames` 是 internal 字段，第三方 `IDataManager` 实现无法兑现接口的脏集合还原契约（DATA-009）。重开判据：出现真实的第三方 `IDataManager` 实现。
+- 待裁：**块版本过新经 Save 变成整份 `Corrupt`**（2026-10-17 · 第二轮审计）——Data 跳过未来版本块，Save 把失败计数当作整份失败并回滚报 `Corrupt`（DATA-011）。重开判据：出现代码回滚/多版本并存的实际场景。
+

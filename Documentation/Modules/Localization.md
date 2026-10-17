@@ -30,13 +30,16 @@ Runtime/Localization/
 - 不做：**同一个 `SetPlaceholder` 槽位里靠约定区分「字面量」与「key」**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
 - 不做：**按语言各存一份字面值（`SetPlaceholder(lang, key, value)`）**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
 - 不做：**在 `LanguageChangedMessage` 上自动重解析占位符**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
-- 未做：**`InputManager` 的 11 处同形手写订阅绑定**（2026-09-29 · 审计轮）——与本次修的 `LocalizationManager.Subscribe` 同一缺陷类（闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册）；原条目**不属本轮范围**、把它外推给「下一轮 Input 审计」，而该轮（2026-09-30）的 `Input.md` 里没有认领条目——**至今无人认领**；本模块保留「外推给 Input」的事实、不替 Input 裁定。
+- 已做：**`InputManager` 的 11 处订阅绑定改走 `TryBindToDestroy`**（2026-09-30 · `fc07a5b`）——闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册三处缺陷一并修复；`Input.md` 仍未认领该事实，建议在 Input 台账补交叉引用。
 - 已做：**审计轮未发现新的缺陷类**（2026-09-29 · 审计轮）——`ModuleAudit.md` 第三节无需新增。
 - 待裁：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮）。
 - 待裁：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮）。
 - 暂不做：**键值占位符不做递归**（2026-09-29 · 追加轮）——本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。重开判据：真要做递归时，先定环检测（A→B→A）与深度上限。
 - 已做：**MonoBehaviour 分支的订阅绑定补上直接用例**（2026-10-12 · `3b16e06`，`Tests/Runtime/Localization/LocalizationDestroyBindingTests` 2 例）——EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在 PlayMode 覆盖；这是本模块第一次有 PlayMode 侧用例，验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` → `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
-- 未做：**`IDestroyCancellationToken` 的实现范例有坑**（2026-09-29 · 审计轮）——`Runtime/Message/IDestroyCancellationToken.cs` 的 XML 示例写的是 `public CancellationToken DestroyCancellationToken => _cts.Token;` 配 `Dispose()` 里 `_cts.Dispose()`——照抄会在对象销毁后抛 `ObjectDisposedException`，因为 `CancellationTokenSource.Token` 在源释放后不可读（实测撞上）。正解是构造时把令牌取出来缓存。**属 Message 模块，本轮只记录**。
+
+- 待裁：**`TextAsset` 重载的源不兼容**（2026-10-17 · 第二轮审计）——新增 `(string, TextAsset)` 重载使既有 `("en", null)` 变 CS0121，CHANGELOG 只记新增（LOC-001）；文档声明还是改静态工厂。重开判据：出现按旧写法调用并升级的使用方。
+- 待裁：**在途 `SwitchLanguageAsync` 的代次守卫**（2026-10-17 · 第二轮审计）——续体经静态门面写回，加载期间 `SetInstance`/`Destroy` 会把旧配置注入新实例或抛「尚未初始化」（LOC-004）。重开判据：出现运行时切换语言并重建管理器的使用方。
+- 待裁：**空语言表两条入口的口径**（2026-10-17 · 第二轮审计）——引导阶段静默装上空表、异步加载器硬失败（LOC-006）；统一为「空表 = 缺表（警告跳过）」还是「空表 = 合法语言」。重开判据：出现空语言表的实际数据源。
 
 ## 审计轮次
 

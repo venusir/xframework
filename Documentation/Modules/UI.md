@@ -158,3 +158,5 @@ README 只留使用方要知道的边界（「面板资源不会自动卸载」�
 - 不做：**不内建 UI 特效层**（2026-10-01 · 四项复核）——`UIManager.UIRoot` 与 `UISorting.SystemOrder` 都是公开 API，`Layer_HUD` / `Layer_Tip` 建容器的写法就在仓内（`UIHudManager.cs:365-379`、`Tip/UITipManager.cs:187-199`）——自建特效 Canvas 是十几行的事（配方在 README `## 设计取舍`）。内建必须替项目决定相机类型 / `RenderTexture` / 是否挡输入的结构，拆掉的概率大于用上的概率。无重开判据。
 
 > 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。
+- 待裁：**重复 `ShowDialogAsync` 是否重置结果通道**（2026-10-17 · 第二轮审计）——对已打开对话框再次调用不会重置结果通道，上一轮已 `SetResult` 未回收时会立即返回旧结果（UI-B-013）。重开判据：出现真实的重复对话框调用场景。
+

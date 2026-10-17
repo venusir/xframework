@@ -43,6 +43,8 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 暂不做：**`TransitionToAsync`**（2026-10-17 · v1.1 候选）——v1 用 `IsTransitioning` + `UniTask.WaitUntil` 已能等待；异步入口要重新定义后端如何上报完成（Cinemachine Brain 没有公开的完成回调）。重开判据：真实使用方需要 await 且 `IsTransitioning` 轮询不够。
 - 暂不做：**`IBootstrapStage` / `DefaultGameLauncher` 相机字段**（2026-10-17 · v1.1 候选）——实现由调用方在组合根注入，且 `DefaultGameLauncher` 没有可序列化的相机注册表（句柄类型由后端决定）。重开判据：出现「启动引导必须负责相机初始化」的真实使用方。
 
+- 待裁：**`OutputCamera` null 语义与 `Unregister` 活动状态**（2026-10-17 · 第二轮审计）——核心接口承诺与 Cinemachine 适配器行为不一致：适配器恒返回非空、`Unregister` 只清 Manager 视图（CAM-005）。重开判据：扩展包用户报告按接口文档写会误判。
+
 ## 沿革与已否决形状
 
 ### 2026-10-13：不做

@@ -67,8 +67,8 @@ Runtime/Config/
   **替代形状（现状，即默认不再重开）**：框架只留 `RegisterTable` / `RegisterGlobal` 注入面——`IConfigRow<TKey>` 与 `ConfigTable<T>(IDictionary)`，二者都**不要求 `new()`**。适配责任与 Luban 版本绑定在**使用方**一侧：使用方契约在 `Runtime/Config/README.md` 的「方式三」，完整配方（接缝写法、已核对事实、版本漂移点）在 [`Documentation/Luban.md`](../Luban.md)。
   **重开判据**（须同时满足 ①②，并带一次真实导表的实测）：① Luban 侧出现**稳定的公开契约**（官方承诺行类实现某接口，或提供版本无关的抽象），使适配层不再需要猜类型名与表的内部形状；② 形状满足包内既有约束——不新增第三方程序集依赖、不在 Runtime 树内新增 asmdef、不让不使用 Luban 的项目为它背负成本；③ 有实测证明注入面**表达不了** Luban 数据（当前无此证据：`TKey` 支持任意类型与 `ValueTuple` 复合键，`RegisterTable` 有非泛型重载，`RegisterGlobal` 覆盖单行表；纯列表表本就没有主键，接不进来是应当的）。
   **不算重开理由**：「Luban 发新版本了」（那恰是否决点本身）、「使用方想要开箱即用」（那是文档与配方该回答的事）、「接入还要写几行 partial 接缝文件」（那是使用方一次性的工具链配置，不是框架的运行时代价）。
-- 未做：**同一类型既作 Table 行类型又作 Global 类型时的错乱**（F8）（2026-09-30 · 审计轮）——`PreloadGlobalAsync` 会加入 Table 的在途任务并直接 return（不注册 Global），随后 `GetGlobal<T>()` 仍抛「未加载」。触发条件不现实，本轮只归档。
-- 未做：**`ConfigTypeHelper` 的失败路径不缓存**（F15）（2026-09-30 · 审计轮）——类型未实现 `IConfigRow<>` 时每次调用都重新反射，且抛的是**未被包装**的 `ConfigException`，文案层级与其它失败路径不一致。
+- 未做：**同一类型既作 Table 行类型又作 Global 类型时的错乱**（F8）（2026-09-30 · 审计轮）——`PreloadGlobalAsync` 会加入 Table 的在途任务并直接 return（不注册 Global），随后 `GetGlobal<T>()` 仍抛「未加载」。触发条件不现实，本轮只归档。2026-10-17 复核：新增一面——Global 先、Table 后时 Table 侧读 `_tables[type]` 抛未包装的 `KeyNotFoundException`；修法可给 `InFlightLoad` 记录结果种类。
+- 不做：**不缓存 `ConfigTypeHelper` 的失败路径**（F15）（2026-10-17 · 第二轮审计改判）——类型未实现 `IConfigRow<>` 时每次调用都会抛异常，异常成本远高于重新反射，缓存失败哨兵的收益可忽略。重开判据：出现高频失败重试路径（如热更后反复重载同一坏类型）。
 - 已做：**会话级复位落成**（2026-10-12 · `b6c9e8a`，回归用例 `Tests/Runtime/Architecture/SessionResetTests`，已做改前必红）——Config 被列为「重复 `Initialize()` 变 no-op、使用方无法自救」的同根因模块，本轮按同一形态修：门面加 `ResetForNewSession()`，挂 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档，只清 `_instance` / `_instanceInitialized`，**不动 `ConfigChanged` 的外部订阅者**——那是调用方持有的句柄。族的收口记录见 `Runtime/Input/README.md` 已知限制。
 - 已推翻：**~~同一个实例连调两次 `SetInstance` 会留下两份订阅、事件派发两次~~**（2026-09-30 · 复现探针；原为审计取证的发现，附「裸 `+=` / `-=` 只移除一次」的推理）——**复现已把它证伪**：漏看的是 `SetInstance` 里先 `UnsubscribeImplEvents(oldImpl)` 那两行，它对同一个实例同样成立（先退订再订阅，净一份）。生产代码因此一行未改，只留下一条钉住该行为的用例。被 2026-09-30「复现证伪——不构成缺陷，净一份订阅」取代。
 
