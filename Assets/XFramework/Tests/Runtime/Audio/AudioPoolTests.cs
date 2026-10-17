@@ -249,6 +249,36 @@ namespace XFramework.XAudio.Tests
 
         #endregion
 
+        #region 短音效回收（AUD-001）
+
+        /// <summary>
+        /// 短于一个扫尾节拍的 one-shot 不得卡在 <c>Starting</c> 等 60 拍超时（AUD-001）。
+        /// <para>改前：<c>Play()</c> 后只置 <c>Starting</c>，下一拍 <c>Sweep</c> 时 clip 已播完、
+        /// <c>isPlaying</c> 为 false，于是占槽约 2 秒（Tier1 × 60 拍）后被强制回收并误报「起播超时」。</para>
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ShortOneShot_IsReclaimedAfterItEnds()
+        {
+            var shortClip = AudioTestKit.CreateClip("short", 0.01f);
+            _loader.Clip = shortClip;
+            try
+            {
+                AudioManager.Play("audio/short");
+                Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "起播后应占一个槽位");
+
+                yield return new WaitForSecondsRealtime(0.3f);
+
+                Assert.AreEqual(0, AudioManager.ActiveVoiceCount,
+                    "短于 1 拍的 one-shot 播完后应立即回收，而不是卡到起播超时");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(shortClip);
+            }
+        }
+
+        #endregion
+
         #region Helpers
 
         private static AudioHost[] FindHosts()

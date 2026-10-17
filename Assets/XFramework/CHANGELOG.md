@@ -208,6 +208,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Audio
+
+- **短于一拍的 one-shot 卡在 `Starting` 到 60 拍超时并误报（AUD-001）**：`PlayCoreAsync` 在 `Source.Play()`
+  后只置 `Starting`，下一拍 `Sweep` 时短 clip 已播完、`isPlaying` 为 false——占槽约 2 秒（Tier1 × 60 拍）
+  后被强制回收并打「起播超时」误告警。修法：`Play()` 后同步读一次 `isPlaying`（P-06 实测为真），为真
+  直接转 `Playing`；超时告警措辞改为「连续 N 拍从未观察到 isPlaying 变真」。
+  回归：`AudioPoolTests.ShortOneShot_IsReclaimedAfterItEnds`（0.01s clip，改前 0.3s 后仍占槽）。
+
 #### Scene
 
 - **加载成功后的回收段受调用方令牌约束，取消丢句柄（SCN-001）**：加载成功 → 进入跨帧回收 → 令牌取消 →

@@ -255,6 +255,13 @@ namespace XFramework.XAudio
                 voice.Source.Pause();
                 voice.State = AudioVoiceState.Paused;
             }
+            else if (voice.Source.isPlaying)
+            {
+                // P-06 实测：Play() 之后同步读一次 isPlaying。短于一个扫尾节拍的 one-shot
+                // 在下一次 Sweep 时已经播完——只看下一拍的 isPlaying 会把它误判为「从未起播」，
+                // 卡在 Starting 到 60 拍超时（AUD-001）。
+                voice.State = AudioVoiceState.Playing;
+            }
             else
             {
                 voice.State = AudioVoiceState.Starting;

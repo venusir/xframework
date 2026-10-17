@@ -230,9 +230,9 @@ namespace XFramework.XAudio
                         else if (++voice.StartingTicks > StartingTimeoutTicks)
                         {
                             LogManager.Warning(LogCategories.Audio,
-                                "播放源起播超时（'{0}'），槽位被强制回收。" +
+                                "播放源起播超时（'{0}'）：连续 {1} 拍从未观察到 isPlaying 变真，槽位被强制回收。" +
                                 "这通常意味着该平台的 AudioSource 在 Play() 后不会报告 isPlaying。",
-                                voice.Location);
+                                voice.Location, StartingTimeoutTicks);
                             Release(i);
                         }
                         else
