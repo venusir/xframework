@@ -207,6 +207,67 @@ namespace XFramework.XLock.Tests
             Assert.AreEqual(0, LockManager.GetLockCount(_subjectA, TypeA));
         }
 
+        /// <summary>
+        /// 解锁回调里对同一 (主体, 类型) 重新加锁——新锁不得被本轮的清理静默丢弃。
+        /// <para>改前必红：<c>RemoveLock</c> 先派发后摘除，回调里 <c>AddLock</c> 取到尚未摘除的空集合、
+        /// 加锁成功并播报 <c>OnGlobalLocked</c>，返回后整个集合被删——新锁无解锁事件地消失。
+        /// 负向控制：<c>RemoveAllLocks</c> 先整块摘下再派发，同形状必须保持成立。</para>
+        /// </summary>
+        [Test]
+        public void RemoveLock_ReAddSameTypeInsideUnlockedCallback_KeepsNewLock()
+        {
+            LockHandle? readded = null;
+            Action<ILockable, int, object> onUnlocked = (subject, type, _) =>
+            {
+                if (ReferenceEquals(subject, _subjectA) && type == TypeA)
+                    readded = LockManager.AddLock(_subjectA, TypeA, "new");
+            };
+
+            LockManager.OnGlobalUnlocked += onUnlocked;
+            try
+            {
+                LockManager.AddLock(_subjectA, TypeA, "old").Dispose();
+            }
+            finally
+            {
+                LockManager.OnGlobalUnlocked -= onUnlocked;
+            }
+
+            Assert.IsTrue(readded.HasValue, "回调里的 AddLock 应返回有效句柄");
+            Assert.IsTrue(LockManager.IsLocked(_subjectA, TypeA),
+                "回调里重加的锁不应被随后的清理静默丢弃");
+
+            readded.Value.Dispose();
+        }
+
+        /// <summary>负向控制：<c>RemoveAllLocks</c> 对同一形状必须已经正确（先摘除、后派发）。</summary>
+        [Test]
+        public void RemoveAllLocks_ReAddSameTypeInsideUnlockedCallback_KeepsNewLock()
+        {
+            LockHandle? readded = null;
+            Action<ILockable, int, object> onUnlocked = (subject, type, _) =>
+            {
+                if (ReferenceEquals(subject, _subjectA) && type == TypeA)
+                    readded = LockManager.AddLock(_subjectA, TypeA, "new");
+            };
+
+            LockManager.OnGlobalUnlocked += onUnlocked;
+            try
+            {
+                LockManager.AddLock(_subjectA, TypeA, "old");
+                LockManager.RemoveAllLocks(_subjectA);
+            }
+            finally
+            {
+                LockManager.OnGlobalUnlocked -= onUnlocked;
+            }
+
+            Assert.IsTrue(readded.HasValue, "回调里的 AddLock 应返回有效句柄");
+            Assert.IsTrue(LockManager.IsLocked(_subjectA, TypeA), "RemoveAllLocks 的既有语义应保持");
+
+            readded.Value.Dispose();
+        }
+
         #endregion
     }
 }

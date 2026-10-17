@@ -208,6 +208,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Lock
+
+- **解锁回调里重加同类型锁被随后的清理静默丢弃（LOCK-001）**：`RemoveLock` 原先**先派发、后摘除**——
+  最后一把锁移除后，`OnGlobalUnlocked` / `OnUnlocked` 回调里对同一 (主体, 类型) `AddLock` 会取到尚未
+  摘除的空集合、加锁成功并播报 `OnGlobalLocked`，返回后整个集合被删：新锁无解锁事件地消失，
+  `IsHeld` / `IsLocked` 为 false。改为照 `RemoveAllLocks` 的先摘除、后派发；
+  `TryUnbindDestroyBinding` 留在派发后按现有条件执行（它自检锁与订阅，不会误摘）。
+  回归：`LockDispatchRobustnessTests` 两条（同形状的红证 + `RemoveAllLocks` 负向控制），改前红。
+
 #### Config
 
 - **README 行类型示例用自动属性，Json / ScriptableObject 路径主键恒 0（CONF-001，P0）**：三处示例把主键写成

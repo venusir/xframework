@@ -606,6 +606,8 @@ namespace XFramework.XLock
         /// <summary>
         /// 释放一个针对特定 <see cref="ILockable"/> 的锁。
         /// <para>全局锁请使用 <see cref="Global"/> 作为 lockSubject。</para>
+        /// <para><b>先摘除、再派发</b>：解锁回调里对同一 (主体, 类型) 重新加锁是安全的——新锁落进新的条目，
+        /// 不会被本轮清理丢弃（与 <see cref="RemoveAllLocks"/> 同一纪律）。</para>
         /// </summary>
         public static void RemoveLock(ILockable lockSubject, int lockType, object lockObj)
         {
@@ -625,15 +627,19 @@ namespace XFramework.XLock
 
             if (wasNonEmpty && lockSet.Count == 0)
             {
+                // 先摘除、再派发（与 RemoveAllLocks 同一纪律）：回调里对同一 (主体, 类型)
+                // 重新加锁时，新锁落进新的条目，不会被本轮清理一并删掉。
+                typeDict.Remove(lockType);
+                bool subjectBecameEmpty = typeDict.Count == 0;
+                if (subjectBecameEmpty)
+                    _locks.Remove(subjectKey);
+
                 DispatchSafely(OnGlobalUnlocked, subjectKey, lockType, lockObj, nameof(OnGlobalUnlocked));
                 NotifyOnUnlocked(lockSubject, lockType, lockObj);
 
-                typeDict.Remove(lockType);
-                if (typeDict.Count == 0)
-                {
-                    _locks.Remove(subjectKey);
+                // 自检型：回调里若已重新加锁/订阅，这里会直接返回，不会误摘
+                if (subjectBecameEmpty)
                     TryUnbindDestroyBinding(subjectKey);
-                }
             }
         }
 
