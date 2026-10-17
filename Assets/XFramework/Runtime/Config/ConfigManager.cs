@@ -26,7 +26,7 @@ namespace XFramework.XConfig
     /// [Serializable]
     /// public struct ItemRow : IConfigRow&lt;int&gt;
     /// {
-    ///     public int Id { get; set; }
+    ///     public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     ///     public string Name;
     ///     public int Price;
     /// }

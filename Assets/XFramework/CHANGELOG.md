@@ -208,6 +208,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Config
+
+- **README 行类型示例用自动属性，Json / ScriptableObject 路径主键恒 0（CONF-001，P0）**：三处示例把主键写成
+  `public int Id { get; set; }`。Json 路径经 `JsonUtility`、SO 路径经 Unity 序列化，二者都**不序列化属性**——
+  多行 JSON 撞 `Duplicate Id '0'` 加载失败，单行则静默产出键 0 的表（`.Get(1001)` 报 not found），
+  SO 路径的 Inspector 里也无处填写；CSV 走反射写属性，恰好不受影响，进一步掩盖了问题。
+  示例改为字段，README 的「已知限制」补一条成文边界；`Tests/Editor/Config/JsonRowSerializationTests`
+  用属性版 / 字段版两条断言钉住该事实（属性版读回 0、字段版读回 1001）。
+
 #### Asset（场景加载）
 
 - **失败路径的 `SceneHandle` 从不 `Release`**。失败时没有场景，YooAsset 挂在 `sceneUnloaded` 上的兜底

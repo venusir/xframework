@@ -24,7 +24,7 @@ using XFramework.XConfig;
 [Serializable]
 public struct ItemRow : IConfigRow<int>
 {
-    public int Id { get; set; }
+    public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     public string Name;
     public int Price;
 }
@@ -296,7 +296,7 @@ public interface IConfigLoader
 [Serializable]
 public struct ItemRow : IConfigRow<int>
 {
-    public int Id { get; set; }
+    public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     public string Name;
     public int Price;
 }
@@ -515,7 +515,7 @@ await ConfigManager.PreloadTableAsync<ItemRow>("config/items", cancellationToken
 |         | struct                            | class                              |
 | ------- | --------------------------------- | ---------------------------------- |
 | GC 分配 | 零 GC                             | 每次装箱/缓存产生 GC               |
-| 可变性  | 通过 `{ get; set; }` 属性保持可变 | 引用类型，注意不要意外修改缓存数据 |
+| 可变性  | 数据用字段承载（Json / ScriptableObject 只序列化字段），字段直接可改 | 引用类型，注意不要意外修改缓存数据 |
 | 推荐    | ✅ 优先使用 struct                 | 仅在需要继承或多态时使用 class     |
 
 > 框架对 `IConfigRow` 不约束 struct 或 class，两者均可实现。
@@ -568,6 +568,11 @@ public enum ConfigFormat
 
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
 
+- **Json / ScriptableObject 行类型只能用字段**：这两条内置路径都走 Unity 序列化，属性（`{ get; set; }`）
+  **不会被写入**——主键写成自动属性会恒为 `default`：多行 JSON 直接撞 `Duplicate Id '0'` 加载失败，
+  单行则静默产出键 0 的表（`.Get(1001)` 报 not found），SO 路径的 Inspector 里也无处填写。
+  CSV 走反射写成员，属性可用，因此这个坑只在 Json / ScriptableObject 路径显形；
+  `Tests/Editor/Config/JsonRowSerializationTests` 钉住了该事实。
 - **重复注册会静默覆盖**：`RegisterTable` / `RegisterGlobal` 对同一类型再注册直接替换，且**已发出去的
   旧 `ConfigTable<T>` 引用与新 `GetTable<T>()` 不是同一实例**（包装器缓存被丢弃）。
 - **`Unload<T>()` 在途时可能不生效**：在途加载完成后仍会注册数据（上节已写明）；更隐蔽的一半是——
