@@ -496,19 +496,6 @@ var table = await ConfigManager.PreloadTableAsync<SkillEffectRow>("config/effect
 var row = table.Get((1001, 5)); // 双键查询
 ```
 
-#### 自定义实现注入
-
-通过 `SetInstance` 注入自定义 `IConfigManager` 实现，适用于测试、依赖注入或完全替换内部逻辑：
-
-```csharp
-var customManager = new MyCustomConfigManager();
-ConfigManager.SetInstance(customManager);
-
-// 之后所有 ConfigManager 静态调用委托到 customManager
-```
-
-> 注入的实例生命周期由调用方管理，`Destroy()` 只会清除静态引用，不会销毁注入的实例。
-
 #### CancellationToken 取消
 
 所有 Preload 与批量加载方法均支持可选 `CancellationToken`：
@@ -534,6 +521,27 @@ await ConfigManager.PreloadTableAsync<ItemRow>("config/items", cancellationToken
 > 框架对 `IConfigRow` 不约束 struct 或 class，两者均可实现。
 
 ---
+
+## 自定义实现
+
+本模块的实现方入口：整体替换管理器、传入自定义 Loader，或直接注册表。
+
+- **实现哪个契约**：`IConfigManager`（整体替换，经 `SetInstance`）；`IConfigLoader`（逐次传入的自定义加载器）；表 / Global 也可经 `RegisterTable` / `RegisterGlobal` 直接注入已反序列化数据。
+- **怎么接线**：`ConfigManager.SetInstance(manager)`；自定义 Loader 在 `PreloadTableAsync` / `PreloadGlobalAsync` 的调用点传入；批量注册见「典型场景」的「三种接入方式」方式三。
+- **要守什么**：`IConfigLoader` 必须无状态；行类型必须实现 `IConfigRow<TKey>`，否则 `ConfigTable<T>` 构造期抛 `ConfigException`（见「API 参考」）；注入自定义 `IConfigManager` 后 `ConfigChanged` 不会触发且无法触发，诊断回读一律空/0（见「API 参考」的「变更事件」）。
+
+### 自定义实现注入
+
+通过 `SetInstance` 注入自定义 `IConfigManager` 实现，适用于测试、依赖注入或完全替换内部逻辑：
+
+```csharp
+var customManager = new MyCustomConfigManager();
+ConfigManager.SetInstance(customManager);
+
+// 之后所有 ConfigManager 静态调用委托到 customManager
+```
+
+> 注入的实例生命周期由调用方管理，`Destroy()` 只会清除静态引用，不会销毁注入的实例。
 
 ## 支持的数据格式
 

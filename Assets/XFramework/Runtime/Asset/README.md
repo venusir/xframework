@@ -417,6 +417,14 @@ Runtime/Asset/
 | 远端资源更新 | Host 模式热更链 | 版本 → 预检 → 下载 → 激活（见「快速使用」7） |
 | 预判断资源状态 | `CheckLocationValid` / `IsNeedDownloadFromRemote` | 纯查询，失败不抛异常 |
 
+## 自定义实现
+
+本模块的实现方入口：替换资源管线或提供可选能力接口。
+
+- **实现哪个契约**：`IAssetManager`（主接口，整体替换 YooAsset 适配层）；可选能力接口 `IAssetPoolController` / `IAssetSceneLoader`（门面按能力探测）。初始化服务 `IAssetRemoteServices` / `IAssetDecryptionServices` 经 `AssetInitOptions` 传入，不是管理器接口。
+- **怎么接线**：`AssetManager.SetInstance(manager)`；其余初始化走 `InitializeAsync(options, ...)`。
+- **要守什么**：未实现 `IAssetSceneLoader` 时场景加载返回无效句柄、卸载返回 `false`，各告警一次；句柄是后端凭据，不得伪造（实现方会校验，见「已知限制」）；`Destroy()` / `SetInstance()` 会作废在途初始化（见「已知限制」）。
+
 ## 内部机制
 
 ### 生命周期与引用计数模型

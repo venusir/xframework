@@ -302,6 +302,14 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 3. 解析 JSON → 注入缓存 → 同步切换
 4. 支持 `CancellationToken` 取消（`OperationCanceledException` 传播，不静默）
 
+## 自定义实现
+
+本模块的实现方入口：整体替换本地化管理器。
+
+- **实现哪个契约**：`ILocalizationManager`（门面 `IsInitialized` 的语义是「已装实例」，不是「实例已装好数据」）。
+- **怎么接线**：`LocalizationManager.SetInstance(manager)`；本模块不提供工厂 / options。
+- **要守什么**：`SetInstance` 不会 Dispose 被替换掉的旧实例（见「设计取舍」）；替换 **不会** 改变 `SwitchLanguageAsync` 的资产加载路径——换数据源请走改路径 / `SetLanguageData` / 自建流程三条路（见「已知限制」）；接口刻意不加 `IsInitialized`，别指望门面替你判断数据是否就绪（见「设计取舍」）。
+
 ## 内部机制
 
 ### LRU 缓存

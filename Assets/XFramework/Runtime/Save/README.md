@@ -165,23 +165,6 @@ DataSnapshot.Factory = () => new MySnapshot();
 
 `Factory` 自动提供反序列化类型推导（`Factory().GetType()`）、Meta 实例创建（`CreateMeta()`）与**侧车类型**（侧车经 `Factory().CreateMeta()` 取类型后序列化），无需额外配置。
 
-### 自定义存储后端
-
-实现 `ISaveManager` 接口并注册：
-
-```csharp
-public class MyCloudSaveManager : ISaveManager
-{
-    // 实现各方法，可接入 Steam Cloud、PlayFab 等
-}
-
-SaveManager.Initialize(() => new MyCloudSaveManager());
-```
-
-### 自定义序列化格式
-
-通过 `Serializer.Register()` 注册自定义序列化器，`DataSnapshot` 的 `defaultFormat` 和 `DataBlockSnapshot` 的 `format` 字段已预留格式选择能力。
-
 ### 加密
 
 `SaveOptions.CryptoProvider` 非空时经 `FileManager.SetCryptoProvider` 接线，**只作用于 `FileDomain.SaveData`**，不会连带加密 AppData / Cache。加密不削弱其他保障：`CryptoFileProvider` 本身实现了 `IAtomicFileProvider` 与 `IDirectoryProvider`，原子写与目录枚举照常可用。
@@ -221,6 +204,31 @@ public class PlayerData : IDataBlock
 存档**格式整体变更**（新增/删除数据块、改变快照结构）时，递增 `SaveOptions.CurrentVersion`：旧客户端会干净地拒绝新存档，而不是按块跳过导致「一半新数据、一半空着」的半加载。
 
 避免在框架层面操作原始序列化数据（JSON/bytes），业务层在迁移链中自行兼容是最可靠的方式。
+
+## 自定义实现
+
+本模块的实现方入口：替换存档后端或注册自定义序列化格式。
+
+- **实现哪个契约**：`ISaveManager`（整个存档后端，经工厂注入）；序列化格式经 `Serialize` 模块的 `ISerializer` 注册（`Serializer.Register`），由 `DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 选择。
+- **怎么接线**：`SaveManager.Initialize(factory, options)`（工厂委托）。
+- **要守什么**：文件 IO 与载荷序列化跑在线程池，公开异步 API 返回前切回主线程，**禁止在主线程同步阻塞等待**（见「线程契约」）；存档依赖的原子写与目录枚举能力见 `File` README 的「自定义实现」。
+
+### 自定义存储后端
+
+实现 `ISaveManager` 接口并注册：
+
+```csharp
+public class MyCloudSaveManager : ISaveManager
+{
+    // 实现各方法，可接入 Steam Cloud、PlayFab 等
+}
+
+SaveManager.Initialize(() => new MyCloudSaveManager());
+```
+
+### 自定义序列化格式
+
+通过 `Serializer.Register()` 注册自定义序列化器，`DataSnapshot` 的 `defaultFormat` 和 `DataBlockSnapshot` 的 `format` 字段已预留格式选择能力。
 
 ## 线程契约
 

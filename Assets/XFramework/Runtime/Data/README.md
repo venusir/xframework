@@ -249,6 +249,14 @@ Runtime/Data/
 - **迁移指南**：已存在、尚未接入版本控制的第三方 Block，补 `DataVersion => 0` + 恒等 `OnMigrate(object s, int v) => s` 即可保持原行为；后续结构变更时再 +1 并实现真实迁移。
 - **版本号分工**：`DataSnapshot.version` 保留为存档级格式版本，与块级 `DataBlockSnapshot.version` 相互独立，各自管理。
 
+## 自定义实现
+
+本模块的实现方入口：整体替换数据层实现。
+
+- **实现哪个契约**：`IDataManager`（16 个成员，块管理 / 快照 / 脏标记）。
+- **怎么接线**：`DataManager.Initialize(new MyDataManager())`；传 `null` 等效于 `Shutdown()`；不经引导流程也可直接调用（`DataManager.IsInitialized` 可探测）。
+- **要守什么**：已注入非 null 实现时重复调用只告警并忽略；**本模块没有 options 对象**——实现即配置。`Shutdown()` 不触发任何块的 `OnClear`（见「已知限制」）；所有 API 必须在主线程调用（见「线程契约」）。
+
 ## 架构设计
 
 ```
@@ -294,13 +302,6 @@ SaveBootstrapStage (引导阶段，Phase=4)
 ## 设计原则
 
 - **引导阶段 + 静态服务**：`DataBootstrapStage`（`IBootstrapStage`，Phase 3）在启动管线里注入 `DataManager` 静态门面，此后全局可访问；反向清理经其 `Shutdown` 调 `DataManager.Shutdown()`。
-  **要换掉数据层实现**（例如接自己的存储/同步方案）就实现 `IDataManager`（16 个成员）并注入：
-
-  ```csharp
-  DataManager.Initialize(new MyDataManager());   // 传 null 等效于 Shutdown()
-  ```
-
-  已注入非 null 实现时重复调用只告警并忽略；不经引导流程的项目也可以直接调它（`DataManager.IsInitialized` 可探测）。**本模块没有 options 对象**——实现即配置。
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
 - **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
 - **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。
