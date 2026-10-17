@@ -182,9 +182,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   Localization / Input / UI 一致：只在自己确实完成初始化时才清理，已初始化早退路径不再接管。
   回归用例见 `BootstrapStageTests` 六个所有权用例（三条改前必红：`Expected: True But was: False`）。
 - **字段句柄（`SettingRef`）的重放登记改为会话级**：播放会话边界清空重放表，句柄在下次被
-  **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。对使用方的可见后果只有一条——
-  **会话 1 遗留的订阅者不会因会话 2 的重放复活**（要跟着新值走就在会话 2 重新 `Subscribe`）；
-  `static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：注册表仍不随 `Destroy` 清空。
+  **读 / 写 / `TryWriteValue` / `Subscribe`** 时自动重新入表。**订正（2026-10-17，SET-004）**：此前这里
+  写的「会话 1 遗留的订阅者不会因会话 2 的重放复活」与实现相反——边界只清登记表、**不清句柄自身的订阅流**，
+  句柄在会话 2 被使用即重新入表，旧订阅者仍会收到重放；要避免旧回调请在会话 2 重新 `Ref` + `Subscribe`，
+  或在边界前释放旧订阅（彻底清流仍待裁）。`static readonly` 句柄跨会话照常重放。`Destroy` 语义不变：
+  注册表仍不随 `Destroy` 清空。
 - **`Save` 的删除不再在主线程做同步 IO**：`DeleteSlotAsync` / `MoveSlotAsync` / `DeleteAllSlotsAsync` /
   `DeletePlayerAsync` 的删除改经 `FileManager.DeleteAsync` 在池线程执行（此前是 1~4×N 次同步 `FileManager.Delete`
   压在主线程上，Console 等平台的 SDK 删除若是数百毫秒级会直接卡住）。随之而来的三条：**批量删除跨帧**
@@ -418,6 +420,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Settings 线程 / 生命周期 / 会话边界文档订正（2026-10-17，第二轮审计）**：线程契约补「默认值工厂与
+  迁移器 / 校验器同线程（同步 store 的 `LoadAsync` 降级在池线程）」（SET-002）；生命周期表补「释放请用
+  `SettingsManager.Destroy()`，直接 `Dispose` 会留僵尸登记」（SET-003）；会话边界订正「旧订阅者不会复活」
+  ——边界只清登记表、不清句柄订阅流，`SessionBoundary_HandleReadInNewSession_StillReplays` 钉住现状
+  （SET-004）。
 - **Update 时间轴与 Localization 重载文档（2026-10-17，第二轮审计）**：`IUpdateable` / `ILateUpdateable` 的
   `time` 参数与 README 时间表补「`Unscaled` 轴为 `Time.unscaledTime`」（UPD-005）；Localization 补
   `new LocalizationBootstrapStage("en", null)` 的 CS0121 二义与显式强转写法（LOC-001 文档侧）。
@@ -664,7 +671,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   「重放登记改为会话级」）后重跑：两遍全绿、`Unhandled log message` 0、两遍逐类完全相同。
   **这份验收自证了存在价值**：相关用例在全新 batchmode 进程里全绿，缺陷只在跨会话下显形——
   也就是脚本表达不了的那一类。**使用方不受影响**：修复只改静态态的生命周期，公开面与运行时行为零改动
-  （唯一可见后果是 `### Changed` 里那条「会话 1 遗留的订阅者不会因会话 2 的重放复活」）。
+  （**订正（2026-10-17）**：唯一可见后果并非「会话 1 遗留的订阅者不会因会话 2 的重放复活」——边界只清
+  登记表、不清句柄订阅流，旧订阅者仍会随句柄在第二会话的重新入表而被重放；详见 `### Changed` 的
+  「重放登记改为会话级」与模块 README 的已知限制，SET-004）。
 
 - 主线程断言三份副本经评估**不抽公共防线**（`FrameworkReview.md` §4.2 / `Roadmap.md` §五 销账；2026-10-15）：
   Message（`MainThreadGuard`）/ Pipeline（阶段写入）/ Asset（门面入口）三份同形副本，**共同部分只有三行**

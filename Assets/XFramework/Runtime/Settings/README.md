@@ -193,6 +193,11 @@ Runtime/Settings/
 | `Reset<T>()` | 重置为默认值（走 `defaultFactory`）并删除文件 |
 | `IsDirty<T>()` / `MarkDirty<T>()` | 查询 / 手动标记「有未提交改动」 |
 | `SaveAllDirty()` | 把所有脏了的类型一次写盘（显式时机用；不看 `SaveOnPause`） |
+
+> **释放请统一用 `SettingsManager.Destroy()`**：`ISettingsManager<T>` 是公开 `IDisposable`，但直接
+> `Dispose` 门面返回的实例**不会**从门面注册表里摘除——`IsRegistered` 仍为 true，`TrySettings` /
+> `CopyRegisteredTypes` 会抛 `ObjectDisposedException`，`TryWriteValue` 的异常还会抛进 UI 事件。
+> `Destroy()` 是唯一会同步清理注册表的入口；直接 `Dispose` 只适用于你自己 `new` 出来的实例（SET-003）。
 | `RegisteredTypeCount` / `CopyRegisteredTypes(List<SettingsTypeInfo>)` | 已注册类型的清单（类型 + 是否有未提交改动，诊断）。`IsDirty` 的口径与 `IsDirty<T>()` 一致：有改动待提交，**不等于已落盘** |
 | `Observe<T>(Action<T>)` | 订阅**对象被整体替换**（订阅时立即回调） |
 | `GetStore<T>()` / `SetStore<T>(store)` | 获取 / 替换存储后端 |
@@ -584,9 +589,10 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
 ## 线程契约
 
 - **句柄读写须在主线程**：`SettingRef.Value` 的读与写都要解析当前设置实例并可能派发通知，模块内没有同步原语。
-- **迁移器与校验器可能在非主线程运行**：后端只实现同步接口、而调用方用的是 `LoadAsync` 时，
-  整段同步读被挪到线程池，两个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——
-  需要碰就只走同步 `Load`。
+- **迁移器、校验器与默认值工厂可能在非主线程运行**：后端只实现同步接口、而调用方用的是 `LoadAsync` 时，
+  整段同步读被挪到线程池，三个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——需要碰就只走同步
+  `Load`。**默认值工厂尤其容易踩**：下面「自定义默认值」的示例用了 `SystemInfo.graphicsMemorySize`，
+  那条在池线程会抛 `UnityException`；要读设备信息请先在调用线程算好，再闭包进工厂（SET-002）。
 - **存储后端那一层相反**：`JsonFileStore` 的成员**可被任意线程调用**（同一实例上的读写由内部锁串行化，
   同步 `Save` 与在飞的 `SaveAsync` 会同时出现）。所以「主线程」这条约束的射程是**句柄与管理器**，
   不是后端实现——自建后端时按它自己的并发模型写。
@@ -615,9 +621,12 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
   调用方主动重载管理器（关联关系该活得比它久，见默认路径占用表同理），后者是关域重载时上一会话的一切
   都已作废——不清就会跨会话累积：第二会话里同一字段再建句柄，`Apply` / `Load` / `Reset` 会把它重放两次
   （重复日志、重复副作用）。边界只清表并递增代际号；**被使用过的句柄**（读 / 写 / `TryWriteValue` /
-  `Subscribe`）在下次使用时**自动重新入表**，没人再用的句柄自然出表。**两条配套边界**：① 会话 1 遗留的
-  订阅者不会因会话 2 的重放复活——要跟着新值走就在会话 2 重新 `Subscribe`；② `Ref` 仍务必调用一次并缓存，
-  每次调用都会新建一个**独立重放**的句柄，放进循环或每帧路径既重复编译表达式、也让注册表无谓增长
+  `Subscribe`）在下次使用时**自动重新入表**，没人再用的句柄自然出表。**两条配套边界**：① **会话 1 遗留的
+  订阅者在会话 2 仍可能被重放**——边界只清句柄的登记表，**不清句柄自身的订阅流**；句柄在会话 2 被使用
+  （读 / 写 / `TryWriteValue` / `Subscribe`）即重新入表，旧订阅者仍挂在流上。要避免旧回调，请在会话 2
+  重新 `Ref` 并 `Subscribe`，或在会话边界前自行释放旧订阅（彻底清流属破坏性设计，仍待裁）；② `Ref` 仍务必
+  调用一次并缓存，每次调用都会新建一个**独立重放**的句柄，放进循环或每帧路径既重复编译表达式、也让注册表
+  无谓增长
 - **容器内的字段不跟踪**：`List<ReactiveProperty<T>>` 之类不在句柄体系内；
   `SettingRef` 的路径也必须是对设置对象自身成员的连续访问（不支持方法调用、索引器、闭包捕获）
 - **句柄读写须在主线程**（见「线程契约」）

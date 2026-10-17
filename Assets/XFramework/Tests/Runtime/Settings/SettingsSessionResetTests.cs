@@ -135,6 +135,11 @@ namespace XFramework.XSettings.Tests
             SettingsManager.Apply(new NullableSessionSettings { Audio = null });
         }
 
+        /// <summary>
+        /// 钉住现状（SET-004）：边界只清句柄登记表，**不清句柄自身的订阅流**——会话 1 的订阅者仍在流上，
+        /// 句柄在会话 2 被读即重新入表并照常重放给旧订阅者。README/CHANGELOG 已按此订正
+        /// （「旧订阅者不会复活」是错的）；彻底清流属破坏性设计，仍待裁。
+        /// </summary>
         [Test]
         public void SessionBoundary_HandleReadInNewSession_StillReplays()
         {
