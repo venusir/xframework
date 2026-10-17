@@ -204,6 +204,74 @@ namespace XFramework.XLog.Tests
             Assert.IsNotNull(Find("[Acme] 够门槛"));
         }
 
+        /// <summary>
+        /// 自定义 sink 在 <c>Write</c> 里调 <c>Debug.Log*</c>：同步捕获会回到同一个 sink，
+        /// 若不设重入闩锁就是无限递归（StackOverflow 不可捕获）。LOG-002。
+        /// <para><b>探针有界</b>：sink 只对 <c>trigger</c> 这一条发一次 <c>Debug.Log</c>，
+        /// 嵌套回来的 <c>sink echo</c> 不再发——真实的无限递归会把整个测试进程打崩，
+        /// 而「文件里出现了 <c>sink echo</c>」已足以证明重入没有被挡住。改前红、改后绿。</para>
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CustomSink_WritingThroughDebugLog_DoesNotRecurse()
+        {
+            LogManager.Configure(new LogOptions
+            {
+                MinimumLevel = LogLevel.Verbose,
+                EnableConsoleSink = false, // 只留文件 sink + 自定义 sink，Debug.Log 的噪音最小
+                EnableFileSink = true,
+                CaptureUnityLogs = true,
+                CaptureStackTrace = false,
+                FileDirectory = _directory,
+                ImmediateFlushMinLevel = LogLevel.Warning,
+                FlushEveryEntries = 64,
+            });
+
+            var sink = new EchoingSink();
+            LogManager.AddSink(sink);
+
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                LogManager.Info(LogCategories.Save, "trigger");
+                yield return null;
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+            }
+
+            LogManager.Flush();
+
+            Assert.AreEqual(1, sink.TriggerWrites, "trigger 只应进入 sink 一次");
+            Assert.IsNull(Find("sink echo"),
+                "sink 内经 Debug.Log 的嵌套捕获必须被丢弃，不得再次写入文件 sink");
+        }
+
+        /// <summary>有界探针：只对 trigger 发一次 <c>Debug.Log</c>，嵌套回来的回显不再发。</summary>
+        private sealed class EchoingSink : ILogSink
+        {
+            public int TriggerWrites;
+
+            private bool _echoed;
+
+            public void Write(in LogEntry entry)
+            {
+                if (entry.Message != "trigger")
+                    return;
+
+                TriggerWrites++;
+                if (_echoed)
+                    return;
+
+                _echoed = true;
+                Debug.Log("sink echo");
+            }
+
+            public void Flush()
+            {
+            }
+        }
+
         #endregion
     }
 }

@@ -215,6 +215,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   序号从 1 重数，违背 README 的「会话内单调」。修法：基名改用 sink 创建时刻（含毫秒），同会话重建
   生成新文件、不截断旧文件；`seq` 提到 `LogSession`（会话级、`Interlocked` 分配，`Reset` 时归零）。
   回归：`LogFileSinkTests.ConfigureFileSink_SameSession_NewSinkDoesNotTruncateExistingLog`，改前红。
+- **自定义 sink 在 `Write` 里调 `Debug.Log*` 会同步重入捕获 → StackOverflow（LOG-002）**：Unity 的日志回调
+  在调用线程上同步触发，嵌套捕获再次分发到同一个 sink，无限递归且不可捕获；README 却写「sink 内再写日志
+  是安全的」。修法：`LogManagerImpl` 加 `[ThreadStatic]` 分发深度，`CaptureUnityLog` 在分发期间直接丢弃
+  嵌套的 Unity 日志（构造条目之前就返回，零分配）；经 `LogManager` 的嵌套投递保持既有行为
+  （`ReentrantSink` 用例锁定）。README / `ILogSink` XML 区分两条重入路径。
+  回归：`LogCaptureTests.CustomSink_WritingThroughDebugLog_DoesNotRecurse`，改前红。
 
 #### Message
 

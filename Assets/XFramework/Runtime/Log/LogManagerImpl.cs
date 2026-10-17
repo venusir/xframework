@@ -33,6 +33,15 @@ namespace XFramework.XLog
         /// <summary>最近一次在主线程读到的帧号；非主线程的条目取它。</summary>
         private static int _cachedFrame;
 
+        /// <summary>
+        /// 当前线程的分发深度（LOG-002）：<see cref="CaptureUnityLog"/> 据此丢弃 sink 内经
+        /// <c>Debug.Log*</c> 的回显。<b>不阻止经 <c>LogManager</c> 的嵌套投递</b>——那是既有行为
+        /// （<c>ReentrantSink</c> 用例锁定）；但 sink 的 <c>Debug.Log*</c> 被同步捕获回来时会无限递归，
+        /// 必须在捕获入口挡住。线程本地是必需的——别的线程的日志与本线程的重入无关。
+        /// </summary>
+        [ThreadStatic]
+        private static int _dispatchDepth;
+
         #endregion
 
         #region Constructors
@@ -77,7 +86,8 @@ namespace XFramework.XLog
         /// <param name="type">Unity 的日志类型。</param>
         internal void CaptureUnityLog(string condition, string stackTrace, LogType type)
         {
-            if (!_captureUnityLogs)
+            // 重入（sink 内 Debug.Log / 控制台回显）直接丢弃：构造条目之前就返回，零成本
+            if (!_captureUnityLogs || _dispatchDepth > 0)
                 return;
 
             LogLevel level = MapUnityLevel(type);
@@ -436,39 +446,58 @@ namespace XFramework.XLog
 
         private void Dispatch(in LogEntry entry)
         {
-            ILogSink[] sinks = _sinks; // 快照：分发期间增删 sink 不影响本轮
-
-            for (int i = 0; i < sinks.Length; i++)
+            // 只做标记，不丢条目：捕获路径据此挡住 sink 内经 Debug.Log 的回显（LOG-002）；
+            // 经 LogManager 的嵌套投递保持既有行为（ReentrantSink 用例锁定）
+            _dispatchDepth++;
+            try
             {
-                try
+                ILogSink[] sinks = _sinks; // 快照：分发期间增删 sink 不影响本轮
+
+                for (int i = 0; i < sinks.Length; i++)
                 {
-                    sinks[i].Write(in entry);
+                    try
+                    {
+                        sinks[i].Write(in entry);
+                    }
+                    catch (Exception)
+                    {
+                        DropSink(sinks[i]);
+                    }
                 }
-                catch (Exception)
-                {
-                    DropSink(sinks[i]);
-                }
+            }
+            finally
+            {
+                _dispatchDepth--;
             }
         }
 
         /// <summary>分发捕获到的外部日志：跳过控制台输出端（回显会递归），其余与框架日志同一套摘除策略。</summary>
         private void DispatchCaptured(in LogEntry entry)
         {
-            ILogSink[] sinks = _sinks;
-
-            for (int i = 0; i < sinks.Length; i++)
+            // 同样只做标记：捕获分发期间 sink 再调 Debug.Log 会被 CaptureUnityLog 丢弃
+            _dispatchDepth++;
+            try
             {
-                if (sinks[i] is ConsoleLogSink)
-                    continue;
+                ILogSink[] sinks = _sinks;
 
-                try
+                for (int i = 0; i < sinks.Length; i++)
                 {
-                    sinks[i].Write(in entry);
+                    if (sinks[i] is ConsoleLogSink)
+                        continue;
+
+                    try
+                    {
+                        sinks[i].Write(in entry);
+                    }
+                    catch (Exception)
+                    {
+                        DropSink(sinks[i]);
+                    }
                 }
-                catch (Exception)
-                {
-                    DropSink(sinks[i]);
-                }
+            }
+            finally
+            {
+                _dispatchDepth--;
             }
         }
 
