@@ -6,6 +6,7 @@ using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XAudio;
 using XFramework.XBootstrap;
+using XFramework.XCamera;
 using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XInput;
@@ -65,6 +66,7 @@ namespace XFramework.Architecture.Tests
             (typeof(LogManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(InputManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(UIManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(CameraManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(ConfigManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(LocalizationManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(FileManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),

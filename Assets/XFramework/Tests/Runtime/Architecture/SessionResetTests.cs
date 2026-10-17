@@ -10,6 +10,7 @@ using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XAsset.Tests;
 using XFramework.XBootstrap;
+using XFramework.XCamera;
 using XFramework.XConfig;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
@@ -84,6 +85,7 @@ namespace XFramework.Architecture.Tests
         {
             // 归零：不依赖上一个 fixture 的 TearDown（SetUp 中途失败时它不会执行）
             UIManager.Destroy();
+            CameraManager.Destroy();
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
             FileManager.Destroy();
@@ -101,6 +103,7 @@ namespace XFramework.Architecture.Tests
         public void TearDown()
         {
             UIManager.Destroy();
+            CameraManager.Destroy();
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
             FileManager.Destroy();
@@ -122,6 +125,7 @@ namespace XFramework.Architecture.Tests
             UpdateManager.AutoInit();
 
             UIManager.ResetForNewSession();
+            CameraManager.ResetForNewSession();
             ConfigManager.ResetForNewSession();
             LocalizationManager.ResetForNewSession();
             FileManager.ResetForNewSession();
@@ -136,7 +140,7 @@ namespace XFramework.Architecture.Tests
         #region 整条会话序列
 
         /// <summary>
-        /// 六个门面 + 登记表在会话 1 全部就位 → 退出 → 会话 2 全部重新就位。
+        /// 各门面 + 登记表在会话 1 全部就位 → 退出 → 会话 2 全部重新就位。
         /// <para>与上面逐门面的用例互补：那些各自只初始化一个门面（对其余门面的复位是空操作），
         /// 这条验的是「它们同时在场时不互相干扰」——真实应用启动就是这种形状。</para>
         /// </summary>
@@ -147,19 +151,21 @@ namespace XFramework.Architecture.Tests
             AssertAllBooted("前提校验：会话 1");
 
             SimulateNewSession();
-            Assert.IsFalse(UIManager.IsInitialized || ConfigManager.IsInitialized ||
-                           LocalizationManager.IsInitialized || FileManager.IsInitialized ||
-                           AssetManager.IsInitialized || Bootstrap.Stages.Count > 0,
+            Assert.IsFalse(UIManager.IsInitialized || CameraManager.IsInitialized ||
+                           ConfigManager.IsInitialized || LocalizationManager.IsInitialized ||
+                           FileManager.IsInitialized || AssetManager.IsInitialized ||
+                           Bootstrap.Stages.Count > 0,
                 "会话边界过后，门面与登记表都应回到「未初始化」");
 
             await BootSessionAsync();
             AssertAllBooted("第二个会话");
         }
 
-        /// <summary>按默认引导形状把六个门面与一个阶段都拉起来。</summary>
+        /// <summary>按默认引导形状把各门面与一个阶段都拉起来。</summary>
         private async UniTask BootSessionAsync()
         {
             UIManager.Initialize(_uiRoot.transform);
+            CameraManager.Initialize(new UnityCameraManager(new Dictionary<string, Camera>()));
             ConfigManager.Initialize();
             LocalizationManager.Initialize("zh_Hans", new Dictionary<string, string>());
             FileManager.Initialize();
@@ -171,10 +177,11 @@ namespace XFramework.Architecture.Tests
             Bootstrap.Register(new StubStage());
         }
 
-        /// <summary>断言六个门面与登记表都已就位。</summary>
+        /// <summary>断言各门面与登记表都已就位。</summary>
         private static void AssertAllBooted(string label)
         {
             Assert.IsTrue(UIManager.IsInitialized, $"{label}：UI 应当已就位");
+            Assert.IsTrue(CameraManager.IsInitialized, $"{label}：Camera 应当已就位");
             Assert.IsTrue(ConfigManager.IsInitialized, $"{label}：Config 应当已就位");
             Assert.IsTrue(LocalizationManager.IsInitialized, $"{label}：Localization 应当已就位");
             Assert.IsTrue(FileManager.IsInitialized, $"{label}：File 应当已就位");

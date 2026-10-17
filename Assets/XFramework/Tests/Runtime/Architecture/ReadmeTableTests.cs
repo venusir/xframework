@@ -82,6 +82,7 @@ namespace XFramework.Architecture.Tests
             ("Timer", "TimerManager"),
             ("Log", "LogManager"),
             ("Scene", "SceneManager"),
+            ("Camera", "CameraManager"),
         };
 
         /// <summary>

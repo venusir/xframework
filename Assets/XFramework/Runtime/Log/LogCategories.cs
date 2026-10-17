@@ -145,5 +145,12 @@ namespace XFramework.XLog
         public static readonly LogCategory Update = LogCategory.Get("Update");
 
         #endregion
+
+        #region Camera
+
+        /// <summary>相机管理门面与默认实现。</summary>
+        public static readonly LogCategory CameraManager = LogCategory.Get("CameraManager");
+
+        #endregion
     }
 }

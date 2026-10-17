@@ -22,6 +22,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   / `Dispose()`（即发即忘，不抛）。门面配 `LoadSceneAsync`（改形，返回句柄）与 `UnloadSceneAsync`
   （**唯一「未初始化也不抛」的成员**——它会被 `Dispose` 调到）。**无卸载路径**这条缺口由此关闭。
 
+#### Camera
+
+- **新增 `XCamera` 相机管理模块：后端中立的激活 / 反激活 / 过渡入口**（2026-10-17）：静态门面 `CameraManager` +
+  `ICameraManager` + `UnityCameraManager` 默认实现 + `CameraBlendStyle`。查询面含 `OutputCamera`（当前输出相机，
+  世界↔屏幕 / 射线直接用 `UnityEngine.Camera`）、`CameraIds`、`ActiveCameraId`、`IsTransitioning`。
+  **核心包零 Cinemachine 依赖**：相机编排（跟随 / 瞄准 / 震屏 / 约束）仍归 Cinemachine，框架只统一状态与过渡；
+  Cinemachine 3.1.7 的一等实现由**独立可选扩展包** `com.venusy609.xframework.cinemachine` 提供（单独 asmdef，
+  单独安装，不随核心包发布）。原「不做：相机管理」中「编排归 Cinemachine」仍成立，推翻的是「不需要统一入口」
+  这一半。**使用方不受影响**，除非你要用它：不注入实现时所有门面成员抛「尚未初始化」。
+- **`LogCategories` 新增 `CameraManager`**（同上）。
+
 #### File
 
 - **门面新增 `FileManager.DeleteAsync(FileDomain, string, CancellationToken)`**（2026-10-15）：把
@@ -250,6 +261,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **XCamera 模块文档与包 README 四表**（2026-10-17）：新增 `Runtime/Camera/README.md`（18 节骨架、5 项必答）、
+  维护向模块记录、包 README 的功能 / 模块索引 / 可替换实现 / 可配置项四表同步；`ReadmeTableTests` 登记 `Camera`。
+  **核心包依赖表不新增 Cinemachine**（核心不依赖它）；Cinemachine 3.1.7 的安装与版本归独立扩展包。
 - **模块 README 规范增补「自定义实现」按需节（2026-10-17）**：一级骨架 17 节 → 18 节（必答仍 5 项），
   新增按需节 `## 自定义实现`，排在 `## 典型场景`（含特性节）之后、`## 内部机制` 之前。动因是普查发现
   实现方内容没有稳定的家：23 份中 17 份有可替换后端 / 扩展点，但主落点分散在 `## 典型场景`（6）、

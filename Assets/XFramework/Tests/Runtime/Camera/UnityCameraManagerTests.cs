@@ -1,0 +1,301 @@
+using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
+using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XUpdate;
+
+namespace XFramework.XCamera.Tests
+{
+    /// <summary>
+    /// 默认实现的行为：激活 / 反激活 / cut / 插值过渡 / 中断 / 注册表 / 生命周期。
+    /// <para>用 <see cref="UpdateManager.Tick(float)"/> 手动驱动，不依赖真实帧时长。</para>
+    /// </summary>
+    [TestFixture]
+    public class UnityCameraManagerTests
+    {
+        #region Fixture
+
+        private GameObject _objectA;
+        private GameObject _objectB;
+        private Camera _cameraA;
+        private Camera _cameraB;
+
+        [SetUp]
+        public void SetUp()
+        {
+            UpdateManager.AutoDriveEnabled = false;
+            UpdateManager.AutoInit();
+            UpdateManager.Clear();
+
+            _objectA = new GameObject("CameraA");
+            _objectB = new GameObject("CameraB");
+            _cameraA = _objectA.AddComponent<Camera>();
+            _cameraB = _objectB.AddComponent<Camera>();
+            _cameraA.transform.position = Vector3.zero;
+            _cameraB.transform.position = new Vector3(10f, 0f, 0f);
+            _cameraA.fieldOfView = 60f;
+            _cameraB.fieldOfView = 40f;
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            UpdateManager.AutoDriveEnabled = true;
+            UpdateManager.AutoInit();
+            UpdateManager.Clear();
+
+            if (_objectA != null)
+                UnityEngine.Object.DestroyImmediate(_objectA);
+            if (_objectB != null)
+                UnityEngine.Object.DestroyImmediate(_objectB);
+        }
+
+        private UnityCameraManager CreateManager()
+        {
+            return new UnityCameraManager(new Dictionary<string, Camera>
+            {
+                ["a"] = _cameraA,
+                ["b"] = _cameraB,
+            });
+        }
+
+        private static void Tick(float time)
+        {
+            UpdateManager.Tick(time);
+        }
+
+        #endregion
+
+        #region Activation
+
+        [Test]
+        public void Activate_EnablesTargetAndDisablesOthers()
+        {
+            var manager = CreateManager();
+
+            manager.Activate("a");
+
+            Assert.IsTrue(_cameraA.enabled);
+            Assert.IsFalse(_cameraB.enabled);
+            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.AreSame(_cameraA, manager.OutputCamera);
+            Assert.IsTrue(manager.IsActive("a"));
+            Assert.IsFalse(manager.IsTransitioning);
+        }
+
+        [Test]
+        public void Activate_UnknownId_LogsWarningAndNoOps()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
+            manager.Activate("missing");
+
+            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.IsTrue(_cameraA.enabled);
+        }
+
+        [Test]
+        public void Deactivate_ActiveCamera_ClearsActiveAndOutput()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            manager.Deactivate("a");
+
+            Assert.IsFalse(_cameraA.enabled);
+            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsNull(manager.OutputCamera);
+        }
+
+        #endregion
+
+        #region Transition
+
+        [Test]
+        public void TransitionTo_InterpolatesAndCompletes()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            manager.TransitionTo("b", 1f, CameraBlendStyle.Linear);
+            Tick(0f); // 注册入缓冲，本拍生效且首次 delta 锚定为 0
+
+            Assert.IsTrue(manager.IsTransitioning);
+            Assert.AreEqual("b", manager.ActiveCameraId);
+            Assert.IsTrue(_cameraB.enabled);
+            Assert.IsFalse(_cameraA.enabled);
+            Assert.AreEqual(_cameraA.transform.position.x, _cameraB.transform.position.x, 0.001f,
+                "过渡起点应是源相机的当前位姿");
+
+            Tick(0.5f);
+            Assert.AreEqual(5f, _cameraB.transform.position.x, 0.01f);
+            Assert.AreEqual(50f, _cameraB.fieldOfView, 0.01f);
+            Assert.IsTrue(manager.IsTransitioning);
+
+            Tick(1f);
+            Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f);
+            Assert.AreEqual(40f, _cameraB.fieldOfView, 0.001f);
+            Assert.IsFalse(manager.IsTransitioning);
+            Assert.AreEqual("b", manager.ActiveCameraId);
+        }
+
+        [Test]
+        public void TransitionTo_DuringTransition_RestartsFromCurrentVision()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+            manager.TransitionTo("b", 1f, CameraBlendStyle.Linear);
+            Tick(0f); // 注册生效拍
+            Tick(0.5f);
+            Assert.AreEqual(5f, _cameraB.transform.position.x, 0.01f);
+
+            manager.TransitionTo("a", 1f, CameraBlendStyle.Linear);
+
+            Assert.AreEqual(5f, _cameraA.transform.position.x, 0.001f,
+                "新过渡应从当前视觉状态起步");
+            Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f,
+                "旧目标应恢复自己的原始位姿");
+            Assert.IsTrue(_cameraA.enabled);
+            Assert.IsFalse(_cameraB.enabled);
+
+            Tick(1.5f);
+            Assert.AreEqual(0f, _cameraA.transform.position.x, 0.001f);
+            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.IsFalse(manager.IsTransitioning);
+        }
+
+        [Test]
+        public void Activate_DuringTransition_CancelsAndRestoresTargetPose()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+            manager.TransitionTo("b", 1f, CameraBlendStyle.Linear);
+            Tick(0f); // 注册生效拍
+            Tick(0.5f);
+            Assert.AreEqual(5f, _cameraB.transform.position.x, 0.01f);
+
+            manager.Activate("a");
+
+            Assert.IsFalse(manager.IsTransitioning);
+            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.IsTrue(_cameraA.enabled);
+            Assert.IsFalse(_cameraB.enabled);
+            Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f,
+                "被取消的目标应恢复自己的原始位姿");
+        }
+
+        [Test]
+        public void Deactivate_TransitionTarget_CancelsTransition()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+            Tick(0f);
+            manager.TransitionTo("b", 1f, CameraBlendStyle.Linear);
+
+            manager.Deactivate("b");
+
+            Assert.IsFalse(manager.IsTransitioning);
+            Assert.IsNull(manager.ActiveCameraId);
+            Assert.IsFalse(_cameraB.enabled);
+            Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f);
+        }
+
+        [Test]
+        public void TransitionTo_ZeroDuration_Cuts()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            manager.TransitionTo("b", 0f);
+
+            Assert.IsFalse(manager.IsTransitioning);
+            Assert.IsTrue(_cameraB.enabled);
+            Assert.IsFalse(_cameraA.enabled);
+            Assert.AreEqual(10f, _cameraB.transform.position.x, 0.001f,
+                "cut 不应把目标先搬到源相机的位姿");
+        }
+
+        [Test]
+        public void TransitionTo_ProjectionMismatch_Cuts()
+        {
+            _cameraB.orthographic = true;
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            manager.TransitionTo("b", 1f);
+
+            Assert.IsFalse(manager.IsTransitioning);
+            Assert.AreEqual("b", manager.ActiveCameraId);
+            Assert.IsTrue(_cameraB.enabled);
+        }
+
+        [Test]
+        public void TransitionTo_UnknownId_LogsWarningAndNoOps()
+        {
+            var manager = CreateManager();
+            manager.Activate("a");
+
+            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
+            manager.TransitionTo("missing", 1f);
+
+            Assert.AreEqual("a", manager.ActiveCameraId);
+            Assert.IsFalse(manager.IsTransitioning);
+        }
+
+        #endregion
+
+        #region Registry / Lifetime
+
+        [Test]
+        public void RegisterAndUnregister_UpdateRegistry()
+        {
+            var manager = CreateManager();
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+
+            try
+            {
+                manager.Register("c", extra);
+                CollectionAssert.Contains(manager.CameraIds, "c");
+
+                manager.Activate("c");
+                Assert.AreEqual("c", manager.ActiveCameraId);
+                Assert.AreSame(extra, manager.OutputCamera);
+
+                Assert.IsTrue(manager.Unregister("c"));
+                CollectionAssert.DoesNotContain(manager.CameraIds, "c");
+                Assert.IsNull(manager.ActiveCameraId);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void Dispose_ThrowsOnUse()
+        {
+            var manager = CreateManager();
+            manager.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => manager.Activate("a"));
+            Assert.Throws<ObjectDisposedException>(() => manager.TransitionTo("a", 1f));
+        }
+
+        [Test]
+        public void NullId_Throws()
+        {
+            var manager = CreateManager();
+
+            Assert.Throws<ArgumentNullException>(() => manager.Activate(null));
+            Assert.Throws<ArgumentNullException>(() => manager.Deactivate(null));
+            Assert.Throws<ArgumentNullException>(() => manager.TransitionTo(null, 1f));
+        }
+
+        #endregion
+    }
+}

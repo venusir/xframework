@@ -17,11 +17,13 @@ namespace XFramework.Architecture.Tests
     /// 变成每次全量门禁都会跑的自查。
     /// </para>
     /// <para>
-    /// 三条断言分工:<see cref="ProductionCode_DoesNotReferenceOtherModulesInternalNamespaces"/> 扫源码文本
+    /// 断言分工:<see cref="ProductionCode_DoesNotReferenceOtherModulesInternalNamespaces"/> 扫源码文本
     /// (含全限定名,不只看 <c>using</c>);<see cref="PublicApi_DoesNotExposeInternalTypes"/> 扫反射后的公开签名
     /// ——后者是本模块边界的**实质**:实现可以藏在 internal 里,但公开面不能漏出它;
     /// <see cref="UnityInputTypes_StayInsideTheDefaultNamespace"/> 守的是另一类边界——**可选包的 Unity 类型**
-    /// 只能待在各自的 <c>Default</c> 命名空间里(插件中立承诺)。
+    /// 只能待在各自的 <c>Default</c> 命名空间里(插件中立承诺);
+    /// <see cref="CoreRuntime_DoesNotReferenceCinemachine"/> 守核心包的**零 Cinemachine 依赖**——Cinemachine
+    /// 支持在独立可选扩展包里,核心包引用它就会把所有消费者拖进版本锁。
     /// </para>
     /// <para>
     /// 测试树整体不受此限:<c>InternalsVisibleTo</c> 是设计的一部分(见 Runtime/AssemblyInfo.cs)。
@@ -178,6 +180,36 @@ namespace XFramework.Architecture.Tests
                 "Unity 输入类型（UnityEngine.InputSystem.*）只允许出现在 Runtime/Input/Default/ 内——门面与 " +
                 "IInputProvider 保持插件中立，整体替换后端（Rewired 等）的项目不该在公开面看到 Unity 的类型。" +
                 "要引用输入配置请用该命名空间下的框架类型（InputSystemOptions / InputSystemOptionsAsset）。违规:\n  " +
+                string.Join("\n  ", violations));
+        }
+
+        #endregion
+
+        #region 核心包不引用 Cinemachine
+
+        /// <summary>
+        /// 核心 <c>Runtime/</c> 的代码不得出现 Cinemachine：Cinemachine 支持在独立可选扩展包
+        /// <c>com.venusy609.xframework.cinemachine</c> 里，核心包保持零 Cinemachine 依赖——否则所有消费者
+        /// 都会被拖进某个主版本（2.x / 3.x 的 API 不兼容）。
+        /// <para>剥注释后扫描；文档里提到 Cinemachine 不算引用。</para>
+        /// </summary>
+        [Test]
+        public void CoreRuntime_DoesNotReferenceCinemachine()
+        {
+            var packageRoot = Path.Combine(Application.dataPath, "XFramework");
+            var runtimeRoot = Path.Combine(packageRoot, "Runtime");
+            Assert.IsTrue(Directory.Exists(runtimeRoot), $"找不到 Runtime 目录:{runtimeRoot}(测试壳的 Assets 是否为 junction?)");
+
+            var violations = new List<string>();
+            foreach (var file in Directory.GetFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories))
+            {
+                if (ReadCodeOnly(file).IndexOf("Cinemachine", StringComparison.Ordinal) >= 0)
+                    violations.Add(Relative(runtimeRoot, file));
+            }
+
+            Assert.IsEmpty(violations,
+                "核心 Runtime 不得引用 Cinemachine——Cinemachine 支持在独立可选扩展包 " +
+                "com.venusy609.xframework.cinemachine 中，核心包保持零 Cinemachine 依赖。违规:\n  " +
                 string.Join("\n  ", violations));
         }
 

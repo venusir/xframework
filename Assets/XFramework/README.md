@@ -133,6 +133,7 @@ await Bootstrap.RunAsync();
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 | **场景管理**     | `SceneManager` 加载返回**可卸载句柄**（成对释放，`Dispose` 即发即忘）；失败返回无效句柄不抛；`SceneLoadOptions` 管模式 / 叠加后激活 / 切完回收。**只做原语**——不做场景栈、不内建加载界面、不预设场景间传参 |
+| **相机管理**     | `CameraManager` 后端中立的激活 / 反激活 / 过渡入口（`ICameraManager`）；默认 `UnityCameraManager` 直接驱动 `Camera`；Cinemachine 3.x 由独立可选扩展包提供。不做跟随 / 震屏 / 相机栈 |
 
 > 上表列的是**功能亮点**，不是模块全集：Asset / Save / Data / Settings / Localization / File / Serialize / Diagnostics 八个模块见下方「模块索引」与各自的 README。
 
@@ -144,6 +145,7 @@ await Bootstrap.RunAsync();
 | **Pipeline** | `XFramework.XPipeline` | 通用编排：阶段串行/并行/容器嵌套、加权进度聚合、失败与取消传播 | [README](Runtime/Pipeline/README.md) |
 | **Asset** | `XFramework.XAsset` | 资源管理：异步加载、实例化、对象池、场景资源的加载与卸载（基于 YooAsset） | [README](Runtime/Asset/README.md) |
 | **Scene** | `XFramework.XScene` | 场景管理：加载、配对卸载、激活与进度契约（后端是 Asset 的场景能力接口） | [README](Runtime/Scene/README.md) |
+| **Camera** | `XFramework.XCamera` | 相机管理：后端中立的激活 / 反激活 / 过渡入口；默认 Unity Camera 实现，Cinemachine 3.x 由独立扩展包提供 | [README](Runtime/Camera/README.md) |
 | **Update** | `XFramework.XUpdate` | 统一更新调度：三个派发时机、双时间轴、档位时间切片、PlayerLoop 自驱动 | [README](Runtime/Update/README.md) |
 | **Event** | `XFramework.XEvent` | 事件流引擎：订阅句柄、异常隔离、重放缓存（Message / Reactive 的共同底层） | [README](Runtime/Event/README.md) |
 | **Message** | `XFramework.XMessage` | 消息总线：按类型 / Key 治理通道、过滤器管道、异步订阅、请求-响应 | [README](Runtime/Message/README.md) |
@@ -174,6 +176,7 @@ await Bootstrap.RunAsync();
 | **Diagnostics** | 无——注册表是纯静态服务，没有后端可换；要换的是**页签**（`IDiagnosticPanel` 登记）与**渲染**（`IDiagnosticPanelView` 自绘） | `DiagnosticsManager.Register` / 实现 `IDiagnosticPanelView`（[实现方入口](Runtime/Diagnostics/README.md#自定义实现)） |
 | **Asset** | `IAssetManager`（两个能力接口 `IAssetPoolController` / `IAssetSceneLoader` 均由门面探测） | `SetInstance(IAssetManager)`（[实现方入口](Runtime/Asset/README.md#自定义实现)） |
 | **Scene** | **无** | 代码原话：「门面无状态，后端就是 `IAssetSceneLoader` 能力接口——本仓『有接口』的分界线是『是否存在可替换的后端』，而那里已经有接口了」（同 Timer 的取舍） |
+| **Camera** | `ICameraManager` | `Initialize(ICameraManager)`；默认 `UnityCameraManager`；Cinemachine 3.x 由官方扩展包 `com.venusy609.xframework.cinemachine` 提供（单独安装）（[实现方入口](Runtime/Camera/README.md#自定义实现)） |
 | **Audio** | `IAudioManager` | `SetInstance(IAudioManager)`（[实现方入口](Runtime/Audio/README.md#自定义实现)） |
 | **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)`（[实现方入口](Runtime/Save/README.md#自定义实现)） |
 | **File** | `IFileProvider`（可选能力 `IAtomicFileProvider` / `IDirectoryProvider`）；`ICryptoProvider` 按域接线 | `Initialize(provider)`——**一次性**，换它必须先 `Destroy()`；`SetCryptoProvider` 可随时调（[实现方入口](Runtime/File/README.md#自定义实现)） |
@@ -204,6 +207,7 @@ await Bootstrap.RunAsync();
 | **Log** | `LogOptions` 11 字段（`LogManager.Configure`——**会丢弃已加的自定义 sink 并复位分类档位**）；`ILogSink` 追加 / 移除；`ILogManager` 整体替换（**注入非内置实现会停用 Unity 全量捕获**，替换前会有一条 `[LogManager]` 提醒）；`MinimumLevel` / `SetCategoryLevel` / `ResetCategoryLevel`；自定义分类 `LogCategory.Get` | options 在 `Configure` 时快照；档位与输出端实时 |
 | **Asset** | `AssetInitOptions` 5 字段（主包名 / PlayMode / 远端服务 / 解密服务 / 低内存回收；**`DefaultGameLauncher` 字段面覆盖第 1、2、4 项**，两个服务走覆写）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
 | **Scene** | 每次加载的 `SceneLoadOptions` 3 字段（模式 / 叠加后激活 / 切完回收）——**模块无 options、无注入点** | 每次加载时 |
+| **Camera** | 无 options；每次过渡的 `duration` / `CameraBlendStyle`；相机注册表由实现类构造时注入（`UnityCameraManager.Register` / 自定义实现） | 调用时 / 构造时 |
 | **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `SetChannelMuted` / `RegisterChannel` / `Pause` / `Resume`；每次播放 `AudioPlayOptions` 6 字段、`RegisterChannel` 用 `AudioChannelConfig` 2 字段；`AudioChannels` 推荐通道名（`"master"` 是保留名） | 初始化时快照；运行时项立即扫活跃播放源 |
 | **Settings** | `SettingsOptions` 5 字段；**按类型**注入 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（均可运行时替换；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点）；`defaultFactory` 决定持久层无数据时的默认值 | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
 | **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `UIBootstrapStage` / `DefaultGameLauncher` 字段面填 UI 根）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |

@@ -76,7 +76,7 @@
 | [Pipeline](Pipeline.md) | [Pool](Pool.md) | [Reactive](Reactive.md) |
 | [Save](Save.md) | [Scene](Scene.md) | [Serialize](Serialize.md) |
 | [Settings](Settings.md) | [Timer](Timer.md) | [UI](UI.md) |
-| [Update](Update.md) | [Diagnostics](Diagnostics.md) | |
+| [Update](Update.md) | [Diagnostics](Diagnostics.md) | [Camera](Camera.md) |
 
 ## 模板
 
