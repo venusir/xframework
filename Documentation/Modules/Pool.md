@@ -56,6 +56,6 @@ Runtime/Pool/
 - 不做：**不支持值类型池**（`where T : class`）（2026-09-27 · `0840a21`，1.3.0 的破坏性标签）——实例复用依赖**引用同一性**：Editor 的重复归还检测与 `CountActive` 的取还配对都会因此失真；1.3.0 取齐 `UnityEngine.Pool` / GameFramework / `Microsoft.Extensions.ObjectPool` 的既有约束。无重开判据。
 - 不做：**不把 `PooledObject<T>` 做成「防得住副本」的形态**（2026-09-27 · `99fce31`）——副本各自持有一份 `_disposed`，结构体复制天然无法共享标志——要防住只能让包装器不再是值类型，而本模块的 `using` 形态正是靠值类型做到零 GC 的。故只保护**同一个存储位置**，边界如实写进 XML doc 与使用方 README。无重开判据。
 - 暂不做：**集合池没有 `RemovePool` 这类移除入口**（2026-10-17 · 第二轮审计改判）——`PoolManager` 侧有，四个集合池只有 `Configure` / `GetPool` / `ClearAll`；`Configure` 在无活跃实例时重建，已覆盖「必须重建池」的主场景。重开判据：出现需要丢弃集合池注册的使用方，或 POOL-002 的会话复位落地需要重置入口。
-- 待裁：**池的静态状态是否补 `ResetForNewSession`**（2026-10-17 · 第二轮审计）——`PoolManager._pools/_configs` 与集合池 `_pool` 跨会话存活且不复位，第二会话 `Configure` 被静默忽略（POOL-002）；也可明示「刻意跨会话保留」。重开判据：关闭域重载连跑两遍的手工验收复现配置失效。
+- 已做：**池的静态状态补 `ResetForNewSession`**（2026-10-17 · `e6166c1`，POOL-002）——`SubsystemRegistration` 清空 `_pools`/`_configs`（只丢引用不 Dispose），`CollectionPoolManager` 重建四个集合池的内部池；已登记 `AutoInitTests` 族清单。用户裁定：框架静态态复位，不保留跨会话池。
 - 待裁：**`CollectionPoolManager.Register` 是否收窄为 internal**（2026-10-17 · 第二轮审计）——公开面过宽、文档自述「不应手动使用」，收窄属破坏性变更（POOL-010）。重开判据：公开 API 变更授权后。
 

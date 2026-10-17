@@ -49,5 +49,5 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - 未做：**`UpdateNodeInfo.TimeMode` 在 `FixedUpdate` 下无意义**（2026-10-02 · 建成轮）——当前保留字段并文档说明「判断以 `Timing` 为准」。
 - 未做：**窗口焦点/跨会话状态**（2026-10-02 · 建成轮）——本仓零 `EditorPrefs` 使用，选中页签与筛选不跨会话记忆。
 - 未做：**Event / Reactive 订阅注册表、Asset 句柄表、Input 启用 ActionMap 列表、Localization 缺失项计数、Log 最近日志环形缓冲、Save 槽位列表、Message 键值通道 key 枚举、运行时覆盖层本体**（2026-10-02 · 建成轮）——本轮不做，各有理由，见 CHANGELOG 与 `../Ledger.md`。
-- 待裁：**页签「按实例幂等」的文档承诺 vs 改去重语义**（2026-10-17 · 第二轮审计）——管理器 XML 与示例称重复登记被幂等吸收，但去重只按实例，`[RuntimeInitializeOnLoadMethod]` + `new` 每会话多一个同名页签（DIAG-001）。重开判据：出现依赖按标题去重的使用方。
+- 已做：**文档改为「按实例幂等」，去重语义不变**（2026-10-17 · `eebbfed`，DIAG-001）——管理器 XML、模块 README 与随包示例统一为「静态只读实例登记（或退出时 `Unregister`）」；用户裁定不改按标题去重的行为。
 

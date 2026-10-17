@@ -127,6 +127,8 @@ Runtime/UI/
 
 ## 决策台账
 
+- 已做：**打开记账改为面板运行期类型**（2026-10-17 · `57c417d`，UIA-001）——基类 `T` 打开的派生面板不再被关闭/导航/查询路径漏掉；去重按「请求类型精确匹配 → 同一资源地址」两步；`IsOpen/GetPanel/CloseAsync<T>` 对具体类型精确匹配、对抽象类/接口回落到派生实例。用户裁定：修行为而非限定用法。
+
 - 已做：**HUD 逐实例异常隔离**（2026-10-17 · `446bc38`，UI-B-001）——逐 HUD try/catch + `UpdateFaulted` 停更标记（回池复位在 `RecycleHud`）；一个 HUD 抛异常不再让其余 HUD 静默停更。
 - 已做：**弹窗尺寸按屏幕像素换算**（2026-10-17 · `069e0c3`，UI-C-001）——`ShowPopupAsync` 改传 `GetScreenRect(rect).size`，挂 `CanvasScaler` 不再错位。
 - 已做：**`UpdateManager.Clear()` 后的驱动器恢复**（2026-10-17 · `5681ce1`，UIA-002）——`Initialize` 在早退前重接每帧驱动器，并一并重注册现存分档驱动器。
