@@ -1,0 +1,14 @@
+{
+    "name": "Venusy609.Xframework.Cinemachine.Editor.Tests",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.Cinemachine"
+    ],
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": []
+}

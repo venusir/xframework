@@ -1,0 +1,30 @@
+{
+    "name": "com.venusy609.xframework.cinemachine",
+    "displayName": "XFramework Cinemachine",
+    "version": "0.1.0",
+    "unity": "6000.3",
+    "description": "XFramework 的可选 Cinemachine 扩展：用 ICameraManager 统一相机的激活 / 反激活 / 过渡。按 Cinemachine 3.1.7 编写，核心包不依赖 Cinemachine。",
+    "keywords": [
+        "framework",
+        "camera",
+        "cinemachine",
+        "unity"
+    ],
+    "author": {
+        "name": "venusir",
+        "url": "https://github.com/venusir"
+    },
+    "license": "MIT",
+    "documentationUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.Cinemachine/README.md",
+    "changelogUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.Cinemachine/CHANGELOG.md",
+    "dependencies": {
+        "com.unity.cinemachine": "3.1.7"
+    },
+    "samples": [
+        {
+            "displayName": "Cinemachine 相机示例",
+            "description": "把 Brain 与 vcam 接进 CameraManager：激活、过渡与切换。",
+            "path": "Samples~/Cinemachine"
+        }
+    ]
+}
