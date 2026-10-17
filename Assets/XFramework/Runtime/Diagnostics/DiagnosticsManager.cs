@@ -18,8 +18,10 @@ namespace XFramework.XDiagnostics
     /// <para><b>生命周期与域重载</b>：注册表是静态的，随程序集一起重建。</para>
     /// <para>· 域重载<b>开</b>：每次进播放都会重载，登记与注册会照常重跑。</para>
     /// <para>· 域重载<b>关</b>：上一会话登记过的页签<b>会跨播放会话存活</b>——<c>[RuntimeInitializeOnLoadMethod]</c>
-    /// 每次进播放都会重跑（重复登记被幂等吸收），而 <c>[InitializeOnLoadMethod]</c> 不会（它注册的那批
-    /// 本来就该长期在）。因此运行时注册的页签请在自己的退出路径里 <see cref="Unregister"/>。</para>
+    /// 每次进播放都会重跑；<b>去重只按同一实例</b>（不同实例即使标题相同也会各占一个页签），所以用
+    /// <c>new</c> 登记的实现每进一次播放就会多出一个同名页签。运行时注册请二选一：用<b>静态只读实例</b>
+    /// 登记（重复登记被吸收），或在退出路径里 <see cref="Unregister"/>。而 <c>[InitializeOnLoadMethod]</c>
+    /// 不会重跑（它注册的那批本来就该长期在）。</para>
     /// <para>· <b>刻意不做</b>「进播放时清空注册表」：那会把编辑器侧注册的框架页签一并抹掉。</para>
     /// <para><b>测试</b>：登记表是静态的，fixture 必须在 SetUp/TearDown 里调 <see cref="Clear"/> 复位
     /// （PlayMode 下所有用例共享一个 player 实例）。</para>
@@ -44,8 +46,8 @@ namespace XFramework.XDiagnostics
 
         /// <summary>
         /// 登记一个页签。
-        /// <para><b>同一实例重复登记</b>：静默忽略（记一条 Warning）——关闭域重载时两条注册路径都会重跑，
-        /// 幂等是硬要求。</para>
+        /// <para><b>同一实例重复登记</b>：静默忽略（记一条 Warning）。跨播放会话的幂等只覆盖「同一实例」——
+        /// 不同实例即使标题相同也会各占一个页签（下方标题重复分支仅告警，不合并）。</para>
         /// <para><b>标题重复（不同实例）</b>：两个都保留，记一条 Warning。标题由各实现自己决定，
         /// 框架不替调用方裁定谁该赢。</para>
         /// <para>插入位置按 <see cref="IDiagnosticPanel.Order"/> 升序、同值排在既有同值之后（稳定），

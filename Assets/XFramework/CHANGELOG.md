@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Diagnostics 登记幂等承诺订正（2026-10-17，DIAG-001）**：去重只按同一实例——关闭域重载时用 `new` 登记
+  会每次进播放多出一个同名页签；管理器 XML、模块 README 与随包示例统一改为「静态只读实例登记」或退出时
+  `Unregister`，去重语义不变（用户裁定：改文档，不改行为）。
 - **Timer 已知限制补「粗档下新建定时器可提前一个档周期」（2026-10-17，TMR-003）**：锚点取上一次派发的
   逻辑时刻，60 秒定时器存在时 `After(1f)` 可能约 40ms 后触发；干净修法需要 Update 暴露当前轴时刻查询面，
   记 `待裁`（用户裁定：本批只文档化）。

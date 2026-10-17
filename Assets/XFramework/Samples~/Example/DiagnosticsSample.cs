@@ -35,18 +35,22 @@ namespace XFramework.Example
     /// <summary>把示例页签登记进诊断窗口。</summary>
     public static class GameDiagnosticPanelRegistration
     {
+        /// <summary>登记用的静态只读实例——关闭域重载时 Register 每次进播放都会重跑，去重只按同一实例。</summary>
+        private static readonly GameDiagnosticPanel Panel = new GameDiagnosticPanel();
+
         /// <summary>
         /// 用 <see cref="RuntimeInitializeOnLoadMethodAttribute"/> 在进播放时登记。
+        /// <para><b>必须复用同一个实例</b>：登记表跨播放会话存活，而去重只按同一实例——每次
+        /// <c>new</c> 会多出一个同名页签（DIAG-001）。另一条路是在退出路径里
+        /// <see cref="DiagnosticsManager.Unregister"/>。</para>
         /// <para>想在**未进入播放模式**时也看到页签，改用
         /// <c>#if UNITY_EDITOR [UnityEditor.InitializeOnLoadMethod] #endif</c>（并保证 Collect 能安静地
-        /// 处理「模块未初始化」）——登记是幂等的，两条时序都不会产生重复页签。</para>
-        /// <para>运行时登记的页签请在退出路径里 <see cref="DiagnosticsManager.Unregister"/>：
-        /// 关闭域重载时静态登记表跨播放会话存活。</para>
+        /// 处理「模块未初始化」）。</para>
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void Register()
         {
-            DiagnosticsManager.Register(new GameDiagnosticPanel());
+            DiagnosticsManager.Register(Panel);
         }
     }
 }

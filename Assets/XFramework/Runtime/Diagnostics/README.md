@@ -33,10 +33,14 @@ internal sealed class MyGamePanel : IDiagnosticPanel
 
 internal static class MyGamePanelRegistration
 {
+    // 静态只读实例：关闭域重载时 Register 每次进播放都会重跑，去重只按「同一实例」——
+    // 每次 new 会多出一个同名页签（DIAG-001）。另一条路是在退出路径里 Unregister。
+    private static readonly MyGamePanel Panel = new MyGamePanel();
+
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Register()
     {
-        DiagnosticsManager.Register(new MyGamePanel());
+        DiagnosticsManager.Register(Panel);
     }
 }
 ```
@@ -85,7 +89,7 @@ Runtime/Diagnostics/
 
 ### 注册、排序与去重
 
-- **按实例去重**：同一实例重复登记被静默忽略（记一条 Warning）。关闭域重载时两条注册路径都会重跑，幂等是硬要求。
+- **按实例去重**：同一实例重复登记被静默忽略（记一条 Warning）。**幂等只覆盖同一实例**——不同实例即使标题相同也会各占一个页签；关闭域重载时用 `new` 登记会每进一次播放多出一个同名页签，请用静态只读实例或退出时 `Unregister`（DIAG-001）。
 - **标题可以重复**：不同实例用同一个 `Title` 时两个都保留，记一条 Warning——标题由各实现自己决定，框架不替调用方裁定。
 - **排序**：`Order` 升序，同值按注册先后（稳定）。`DiagnosticOrders.Framework = 0`、`DiagnosticOrders.User = 1000` 是建议值，不是约束。
 - `Title` 为 null 或空白会在登记时抛 `ArgumentException`；`panel` 为 null 抛 `ArgumentNullException`。
@@ -95,7 +99,7 @@ Runtime/Diagnostics/
 登记表是静态的，随程序集一起重建。
 
 - 域重载**开**：每次进播放都会重载，登记与注册照常重跑。
-- 域重载**关**：上一会话登记过的页签**跨播放会话存活**。`[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑（重复登记被幂等吸收），`[InitializeOnLoadMethod]` 不重跑（编辑器侧注册的那批本来就应该长期在）。因此**运行时注册的页签请在自己的退出路径里 `Unregister`**。
+- 域重载**关**：上一会话登记过的页签**跨播放会话存活**。`[RuntimeInitializeOnLoadMethod]` 每次进播放都重跑，而**去重只按同一实例**——每次 `new` 都会多出一个同名页签（DIAG-001）；`[InitializeOnLoadMethod]` 不重跑（编辑器侧注册的那批本来就应该长期在）。因此运行时注册二选一：用**静态只读实例**登记（重复登记被吸收），或在退出路径里 `Unregister`。
 - **刻意不做**「进播放时清空注册表」：那会把编辑器侧注册的框架页签一并抹掉。
 
 ## 自定义实现
