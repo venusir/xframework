@@ -211,7 +211,8 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 
 - `LogManager` 的日志调用**任意线程可用**（`seq` 用 `Interlocked` 分配，并发后仍能靠 `LogEntry.Sequence` 定序）。这一条继承自 `Debug.Log` 的既有用法，不是本模块新增的承诺。
 - 非主线程的条目 `Frame` 取最近一次主线程读到的值（不跨线程触碰 Unity API）。
-- 自定义 sink 需自行保证线程安全；框架分发时不持锁，sink 内再写日志是安全的（可重入）。
+- 自定义 sink 需自行保证线程安全；框架分发时不持锁。**重入的两种路径**：经 `LogManager` 再写会正常嵌套投递（请自行收口）；经 `Debug.Log*` 再写会被丢弃（同步捕获的闩锁，见「API 参考」）。
+- **首次构建与 `Shutdown` 后的首条日志**：门面按 `LogOptions.Default` 懒建实现，默认选项的推导会读 `Application.*` 与 `Debug.isDebugBuild`（主线程限定）。正常情况下 `AutoInit` 已在主线程建好；**`Shutdown` 之后若第一条日志来自工作线程**，会在该线程触碰 Unity API 抛异常——请先回主线程调一次 `Configure` 或任意日志，再让工作线程写（LOG-011）。
 - 捕获回调在**调用线程**上同步触发（实测），框架自己的输出经线程本地的回显深度去重。
 
 ## 性能代价
@@ -226,6 +227,7 @@ jq -r 'select(.exc) | .cat' xlog-*.jsonl | sort | uniq -c | sort -rn
 - 控制台里 Error 的调用点堆栈比迁移前**深了几帧**（多了日志门面与 sink 的内部帧）——栈没丢，只是多了中间层；精确调用点在 JSONL 的 `stack` 里。
 - `Fatal` 与 `Error` 在控制台**同为 `LogError`**（Unity 没有第五种 LogType）；文件里以 `lvl` 区分。
 - Release 默认**不写文件**（`EnableFileSink` 默认随 Editor/Development），需要现场日志时显式开。
+- **分类是全局裸字符串键**（LOG-005）：`LogCategory.Get("Save")` 与另一个作者的同名分类是同一个；不同系统同名会静默合并、档位互相影响。外部日志的 `[标签]` 会被永久注册，注册表只增不减。建议给分类加前缀（如 `"MyGame.Save"`），并用 `CopyCategories` 检查是否撞名。
 - 分类名与迁移前的 `[标签]` 是**逐字对应**的，所以同一模块内历史遗留的多个标签各是一个分类（`Config` 与 `ConfigManager`、`AssetManager` 与 `YooAssetManager` 都是两个）——按模块统一静音时要逐个设，或先改调用点。
 - 外部日志的 `[标签]` 若从未注册过，会被 `LogCategory.Get` 顺带注册成一个分类（幂等）——捕获带标签的第三方日志有这一处副作用。
 - 用 .NET 的 `File.ReadAllText` / `File.ReadAllLines` 读运行中的日志文件会撞共享冲突（它们声明的是 `FileShare.Read`），需显式传 `FileShare.ReadWrite`。

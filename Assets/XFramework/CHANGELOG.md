@@ -429,6 +429,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **Log 分类命名空间与懒建线程边界（2026-10-17，LOG-005/011）**：README 的已知限制补「分类是全局裸字符串键、
+  同名静默合并、外部标签只增」；线程契约补「`Shutdown` 后工作线程首条日志会触发懒建并在该线程读 Unity API」，
+  同时订正 sink 重入的两种路径（LOG-002 遗留的另一处表述）。
 - **Message 淘汰语义与线程契约订正（2026-10-17，MSG-003/005）**：`EvictBuffered*` 会 `Dispose` 整条缓冲流、
   终止仍挂着的缓冲订阅者——README 原写「只丢重放缓存，不会回收仍有活订阅者的通道」，已订正并记 `待裁`
   （「只清缓存保订阅」需 Event 新原语）；线程契约扩写断言射程（`EvictBuffered*` / `TrimEmptyChannels` /
