@@ -1,8 +1,12 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using TMPro;
 using UnityEngine;
+using UnityEngine.TestTools;
 using UnityEngine.UI;
+using XFramework.XLocalization;
+using XFramework.XMessage;
 using XFramework.XReactive;
 using XFramework.XUI.Data;
 
@@ -235,6 +239,83 @@ namespace XFramework.XUI.Tests
             finally
             {
                 UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        #endregion
+
+        #region 本地化文本绑定（UI-B-010）
+
+        /// <summary>
+        /// UI-B-010：<see cref="UIBinder.BindToLocalizedText(TMP_Text, string, UIViewBase)"/> 的历史泄漏
+        /// 修复点回归——显式句柄释放后不再刷新。
+        /// <para>本工程未导入 TMP Essentials，TMP 组件会打字体相关日志，故关闭日志断言；文本赋值本身可用。</para>
+        /// </summary>
+        [Test]
+        public void BindToLocalizedText_RefreshesAndStopsAfterDispose()
+        {
+            LocalizationManager.Destroy();
+            LocalizationManager.Initialize("en", new Dictionary<string, string> { { "title", "Hello" } });
+            LocalizationManager.SetLanguageData("ja", new Dictionary<string, string> { { "title", "こんにちは" } });
+
+            var go = new GameObject("TMP_Bind", typeof(RectTransform));
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                var tmp = go.AddComponent<TextMeshProUGUI>();
+                var handle = tmp.BindToLocalizedText("title");
+                Assert.AreEqual("Hello", tmp.text, "绑定时应写入当前语言的文本");
+
+                LocalizationManager.SetLanguage("ja");
+                Assert.AreEqual("こんにちは", tmp.text, "语言切换应刷新");
+
+                handle.Dispose();
+                LocalizationManager.SetLanguage("en");
+                Assert.AreEqual("こんにちは", tmp.text, "释放后不再刷新");
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+                UnityEngine.Object.DestroyImmediate(go);
+                LocalizationManager.Destroy();
+                MessageManager.Clear();
+            }
+        }
+
+        /// <summary>
+        /// UI-B-010：绑定到宿主视图时，视图销毁（OnDestroy → DisposeTracked）应释放订阅——
+        /// 「面板回池/销毁后全局订阅永久驻留」正是这条修复要消灭的缺陷。
+        /// </summary>
+        [Test]
+        public void BindToLocalizedText_OwnerDestroy_ReleasesSubscription()
+        {
+            LocalizationManager.Destroy();
+            LocalizationManager.Initialize("en", new Dictionary<string, string> { { "title", "Hello" } });
+            LocalizationManager.SetLanguageData("ja", new Dictionary<string, string> { { "title", "こんにちは" } });
+
+            var textGo = new GameObject("TMP_OwnerBind", typeof(RectTransform));
+            var ownerGo = new GameObject("Owner", typeof(RectTransform));
+            LogAssert.ignoreFailingMessages = true;
+            try
+            {
+                var tmp = textGo.AddComponent<TextMeshProUGUI>();
+                var owner = ownerGo.AddComponent<FakePanel>();
+                tmp.BindToLocalizedText("title", owner);
+
+                LocalizationManager.SetLanguage("ja");
+                Assert.AreEqual("こんにちは", tmp.text, "绑定后应随语言切换刷新");
+
+                UnityEngine.Object.DestroyImmediate(ownerGo); // 视图销毁 → OnDestroy → DisposeTracked
+                LocalizationManager.SetLanguage("en");
+                Assert.AreEqual("こんにちは", tmp.text, "宿主视图销毁后订阅应已释放（历史泄漏修复点）");
+            }
+            finally
+            {
+                LogAssert.ignoreFailingMessages = false;
+                UnityEngine.Object.DestroyImmediate(textGo);
+                UnityEngine.Object.DestroyImmediate(ownerGo);
+                LocalizationManager.Destroy();
+                MessageManager.Clear();
             }
         }
 

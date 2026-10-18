@@ -232,6 +232,40 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(UIPopupDirection.Left, resolved);
         }
 
+        [Test]
+        public void Auto_WithNonZeroSafeAreaOrigin_UsesSafeAreaNotFullScreen()
+        {
+            // UI-C-011：真实 Screen.safeArea 原点常非零（刘海 / 导航栏）；既有用例只喂零原点。
+            // 安全区底边 100：锚点下方 150-150=0 放不下，但若按整屏（原点 0）会误判为放得下。
+            var safeArea = new Rect(0f, 100f, 1000f, 900f);
+            var anchor = new Rect(400f, 150f, 100f, 40f);
+
+            UIPopupPosition.CalculatePosition(anchor, PopupSize, UIPopupDirection.Auto,
+                UIPopupAlign.Start, safeArea, Vector2.zero, out var resolved);
+
+            Assert.AreEqual(UIPopupDirection.Up, resolved, "应以安全区而非整屏为可用空间");
+            AssertPoint(400f, 190f,
+                UIPopupPosition.CalculatePosition(anchor, PopupSize, UIPopupDirection.Auto,
+                    UIPopupAlign.Start, safeArea, Vector2.zero, out _),
+                "翻到上方后弹窗底边应贴锚点顶边");
+        }
+
+        [Test]
+        public void Auto_OffsetParticipatesInFit_FlipsWhenGapPushesOut()
+        {
+            // UI-C-011：offset 本身参与「放不放得下」的判定
+            var anchor = new Rect(400f, 200f, 100f, 40f); // 下方 200，无 offset 时放得下 150
+
+            UIPopupPosition.CalculatePosition(anchor, PopupSize, UIPopupDirection.Auto,
+                UIPopupAlign.Start, ScreenRect, Vector2.zero, out var withoutOffset);
+            Assert.AreEqual(UIPopupDirection.Down, withoutOffset, "前提：无 offset 时下方放得下");
+
+            UIPopupPosition.CalculatePosition(anchor, PopupSize, UIPopupDirection.Auto,
+                UIPopupAlign.Start, ScreenRect, Vector2.zero, out var withOffset, offset: 100f);
+            Assert.AreEqual(UIPopupDirection.Up, withOffset,
+                "offset 参与放得下判定：200 < 150 + 100，应翻转");
+        }
+
         #endregion
 
         #region Pivot
