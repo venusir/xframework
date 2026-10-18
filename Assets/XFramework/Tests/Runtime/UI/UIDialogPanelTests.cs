@@ -293,6 +293,29 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
+        public async Task RepeatedShowDialog_ResetsResultChannel()
+        {
+            // UI-B-013：面板仍开着时再次 ShowDialogAsync，不得立即返回上一轮结果。
+            var first = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+            await UniTask.Yield();
+
+            var panel = UIManager.GetPanel<FakeDialog>();
+            panel.SetResult(FakeDialogResult.Confirm);
+            Assert.AreEqual(FakeDialogResult.Confirm, await first, "前提：第一轮结果已兑现");
+
+            var second = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>("PF_FakeDialog");
+            await UniTask.Yield();
+
+            Assert.AreEqual(UniTaskStatus.Pending, second.Status,
+                "重复打开必须开启新一轮结果通道，不能立即返回上一轮结果");
+
+            panel.SetResult(FakeDialogResult.Cancel);
+            Assert.AreEqual(FakeDialogResult.Cancel, await second, "第二轮应返回新结果");
+
+            await UIManager.CloseAllAsync();
+        }
+
+        [Test]
         public async Task OpenFailure_ReturnsDefaultWithoutThrowing()
         {
             // 打不开就没有可等的结果——与 OpenAsync 的「失败返回 null」一致，不抛异常

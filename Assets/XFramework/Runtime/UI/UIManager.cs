@@ -861,6 +861,10 @@ namespace XFramework.XUI
             // 遮罩反而盖住对话框。钳制一次也让越界只告警一次（OpenAsync 内部会再钳一次，值已合法故不重复告警）
             int dialogLayer = UISorting.ClampPanelLayer(layer);
 
+            // 重复打开已存在的对话框：先复位结果通道，否则 WaitResultAsync 会立即返回上一轮结果（UI-B-013）。
+            if (impl.IsOpen<TPanel>() && impl.GetPanel<TPanel>() is IDialogResultChannel existingDialog)
+                existingDialog.BeginDialogCycle();
+
             var panel = await impl.OpenAsync<TPanel>(assetPath, dialogLayer, userData, cancellationToken);
             if (panel == null)
                 return default;

@@ -509,6 +509,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   controller → 早退路径应用它；`UIManagerImpl.Dispose` 的面板回池循环逐面板隔离（AssetManager 已销毁
   时一个面板抛异常不再截断其余清理）。回归：
   `UIBootstrapStageTests.ExecuteAsync_AlreadyInitialized_AppliesController`（改前 `Expected: True But was: False`）。
+- **重复 `ShowDialogAsync` 复用上一轮结果通道（UI-B-013）**：面板仍开着时再次调用不会重置结果，
+  上一轮已 `SetResult` 的等待方会立即返回旧值。修法：重复打开前对现有面板调 `BeginDialogCycle`
+  （并以默认值释放上一轮遗留的挂起等待者）；回归：
+  `UIDialogPanelTests.RepeatedShowDialog_ResetsResultChannel`（改前 `Expected: Pending But was: Succeeded`）。
 
 #### Message
 

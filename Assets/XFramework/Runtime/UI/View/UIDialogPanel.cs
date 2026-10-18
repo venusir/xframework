@@ -100,6 +100,10 @@ namespace XFramework.XUI.View
         /// </summary>
         void IDialogResultChannel.BeginDialogCycle()
         {
+            // 重复打开同一面板时，上一轮可能还有挂起的等待者（UI-B-013）：
+            // 先以默认值兑现它，再置白纸——否则它永远等下去。
+            _source?.TrySetResult(_hasResult ? _result : default);
+
             // 面板可能来自池子、带着上一轮的结果——不清会让重开的对话框立刻返回旧值
             _source = null;
             _hasResult = false;
