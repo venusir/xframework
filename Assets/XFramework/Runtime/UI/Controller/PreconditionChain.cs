@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using Cysharp.Threading.Tasks;
 
 namespace XFramework.XUI.Controller
@@ -75,10 +76,23 @@ namespace XFramework.XUI.Controller
         /// <para>任何一个条件返回 false 则立即返回 false 并停止执行后续条件。</para>
         /// </summary>
         /// <returns>true 表示所有条件通过，false 表示被某个条件拦截。</returns>
-        public async UniTask<bool> ExecuteAsync()
+        public UniTask<bool> ExecuteAsync() => ExecuteAsync(default);
+
+        /// <summary>
+        /// 依次执行所有前提条件，并在**条件之间**检查取消。
+        /// <para>任何一个条件返回 false 则立即返回 false 并停止执行后续条件；令牌取消则抛
+        /// <see cref="OperationCanceledException"/>，不再执行后续条件。</para>
+        /// <para><b>取消只保证条件之间的检查点</b>：某个条件内部是否响应取消由该条件自己的实现决定——
+        /// 链不会把令牌注入条件（<see cref="Add"/> 的委托形状是公开契约，增加参数会破坏既有实现）。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌；取消时抛 <see cref="OperationCanceledException"/>。</param>
+        /// <returns>true 表示所有条件通过，false 表示被某个条件拦截。</returns>
+        public async UniTask<bool> ExecuteAsync(CancellationToken cancellationToken)
         {
             for (int i = 0; i < _conditions.Count; i++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
+
                 var canProceed = await _conditions[i](_panelType, _assetPath, _layer, _userData);
                 if (!canProceed)
                     return false;

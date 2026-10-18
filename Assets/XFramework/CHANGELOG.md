@@ -99,6 +99,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   不变——两个默认句柄相等，默认句柄与任何有效句柄不等。源兼容新增；公开 API 基线已同步（接口与
   `Equals` / `GetHashCode` 行）。
 
+#### UI
+
+- **`PreconditionChain.ExecuteAsync(CancellationToken)` 重载（UI-C-007）**：在**条件之间**检查取消——
+  令牌取消即抛 `OperationCanceledException`，不再执行后续条件。条件内部是否响应取消由该条件自己的
+  实现决定（链不把令牌注入条件，`Add` 的委托形状保持不变）。源兼容新增；公开 API 基线已同步。
+
 #### 测试基础设施
 
 - **共享零分配尺子 `AllocationRuler`（测试侧）**：本环境 `GC.GetAllocatedBytesForCurrentThread()` 与

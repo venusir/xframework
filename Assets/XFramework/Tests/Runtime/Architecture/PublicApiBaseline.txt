@@ -1731,6 +1731,7 @@ XFramework.XUI.Controller.PreconditionChain  ::  public sealed class
 XFramework.XUI.Controller.PreconditionChain#ctor  ::  public(System.Type panelType, string assetPath, int layer, object userData)
 XFramework.XUI.Controller.PreconditionChain.Add  ::  public XFramework.XUI.Controller.PreconditionChain(System.Func<System.Type, string, int, object, Cysharp.Threading.Tasks.UniTask<bool>> condition)
 XFramework.XUI.Controller.PreconditionChain.ExecuteAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>()
+XFramework.XUI.Controller.PreconditionChain.ExecuteAsync  ::  public Cysharp.Threading.Tasks.UniTask<bool>(System.Threading.CancellationToken cancellationToken)
 XFramework.XUI.Controller.UIDefaultController  ::  public sealed class : XFramework.XUI.Controller.IUIController
 XFramework.XUI.Controller.UIDefaultController#ctor  ::  public(bool verbose = false)
 XFramework.XUI.Controller.UIDefaultController.OnAfterCloseAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask(System.Type panelType, System.Threading.CancellationToken cancellationToken = default)
