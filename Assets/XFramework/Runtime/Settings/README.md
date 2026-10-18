@@ -589,6 +589,9 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
 ## 线程契约
 
 - **句柄读写须在主线程**：`SettingRef.Value` 的读与写都要解析当前设置实例并可能派发通知，模块内没有同步原语。
+  **Editor 下写入口有首错断言**：`SettingRef` 的所有经 `EnsureRegistered` 的入口、`SettingsManager.Initialize` /
+  `Destroy` / `Ref` 在越线程调用时记一条 `[SettingsManager]` Error（Release 零开销；每个会话只报一次）。
+  断言只是提示，不是并发保护。
 - **迁移器、校验器与默认值工厂可能在非主线程运行**：后端只实现同步接口、而调用方用的是 `LoadAsync` 时，
   整段同步读被挪到线程池，三个钩子随之在线程池线程上执行。它们若碰 Unity API 会炸——需要碰就只走同步
   `Load`。**默认值工厂尤其容易踩**：下面「自定义默认值」的示例用了 `SystemInfo.graphicsMemorySize`，

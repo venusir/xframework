@@ -106,6 +106,8 @@ namespace XFramework.XSettings
         public static ISettingsManager<T> Initialize<T>(Func<T> defaultFactory = null, SettingsOptions options = null)
             where T : class, new()
         {
+            SettingsThreadGuard.AssertEntry("Initialize");
+
             var type = typeof(T);
             var filePath = BuildDefaultFilePath(type);
 
@@ -138,6 +140,8 @@ namespace XFramework.XSettings
             ISettingsStore store, Func<T> defaultFactory = null, SettingsOptions options = null)
             where T : class, new()
         {
+            SettingsThreadGuard.AssertEntry("Initialize");
+
             var type = typeof(T);
             if (Managers.TryGetValue(type, out var existing))
             {
@@ -162,6 +166,8 @@ namespace XFramework.XSettings
         /// </summary>
         public static void Destroy()
         {
+            SettingsThreadGuard.AssertEntry("Destroy");
+
             try
             {
                 foreach (var manager in Managers.Values)
@@ -204,6 +210,7 @@ namespace XFramework.XSettings
             Managers.Clear();
             SettingRefSessionCoordinator.ClearAll();
             SettingsPauseNotifier.ResetForNewSession();
+            SettingsThreadGuard.ResetForNewSession();
         }
 
         #endregion
@@ -292,6 +299,7 @@ namespace XFramework.XSettings
         public static SettingRef<T, TField> Ref<T, TField>(Expression<Func<T, TField>> selector)
             where T : class, new()
         {
+            SettingsThreadGuard.AssertEntry("Ref");
             return SettingRef<T, TField>.Create(selector);
         }
 

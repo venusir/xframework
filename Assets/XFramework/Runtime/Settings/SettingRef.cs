@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Reflection;
 using XFramework.XEvent;
+using XFramework.XLog;
 using XFramework.XReactive;
 
 namespace XFramework.XSettings
@@ -258,6 +259,7 @@ namespace XFramework.XSettings
         /// </summary>
         private void EnsureRegistered()
         {
+            SettingsThreadGuard.AssertEntry("SettingRef");
             var generation = SettingRefRegistry<T>.Generation;
             if (_registeredGeneration == generation)
             {
@@ -331,5 +333,38 @@ namespace XFramework.XSettings
         }
 
         #endregion
+    }
+
+    /// <summary>
+    /// Settings 写入口的 Editor-only 主线程断言（SET-018）。
+    /// <para><b>为什么需要</b>：设置 POCO、脏集合与句柄重放表都是无锁结构；跨线程写 `Dictionary` / `List`
+    /// 不会抛异常，只会丢项或撕裂状态，故障点远离误用点。</para>
+    /// <para><b>只报首错</b>：主线程检测复用 UniTask 的 <c>PlayerLoopHelper.IsMainThread</c>（与
+    /// Message/Pipeline/Asset/Timer 同源）；这里内联本地副本，不引用其它模块的 Internal 命名空间。
+    /// Release 下整段是空操作。</para>
+    /// </summary>
+    internal static class SettingsThreadGuard
+    {
+        private static bool _logged;
+
+        internal static void AssertEntry(string api)
+        {
+#if UNITY_EDITOR
+            if (_logged || Cysharp.Threading.Tasks.PlayerLoopHelper.IsMainThread)
+                return;
+
+            _logged = true;
+            LogManager.Error(LogCategories.SettingsManager,
+                "{0} 必须在 Unity 主线程调用：设置对象、脏集合与句柄重放表都是无锁结构，" +
+                "跨线程写入会静默损坏（并发写 Dictionary/List 不会报错，只会丢项或撕裂状态）。" +
+                "从非主线程操作请先切回主线程；线程契约见模块 README「线程契约」节。本提示每个会话只报一次。", api);
+#endif
+        }
+
+        /// <summary>会话边界复位首错闩锁（与其它跨会话静态态同一纪律）。</summary>
+        internal static void ResetForNewSession()
+        {
+            _logged = false;
+        }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -222,6 +223,22 @@ namespace XFramework.XSettings.Tests
 
             Assert.DoesNotThrow(() => SettingsManager.Initialize<SameNameCaseB.SameName>(),
                 "初始化失败不得占用默认路径；同名类型应能接管该路径");
+
+            SettingsManager.Destroy();
+        }
+
+        [Test]
+        public void Initialize_FromBackgroundThread_LogsMainThreadViolationOnce()
+        {
+            // SET-018：写入口的 Editor-only 首错断言
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape("[SettingsManager] Initialize 必须在 Unity 主线程调用")));
+            Task.Run(() => SettingsManager.Initialize<SampleSettings>(new FakeStore()))
+                .GetAwaiter().GetResult();
+
+            // 第二次越界必须被首错闩锁吸收；若未吸收，LogAssert 会把多出的 Error 判失败
+            Task.Run(() => SettingsManager.Initialize<SampleSettings>(new FakeStore()))
+                .GetAwaiter().GetResult();
 
             SettingsManager.Destroy();
         }

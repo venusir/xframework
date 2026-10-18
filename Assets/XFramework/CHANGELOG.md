@@ -414,6 +414,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （版本化路径同样快照 `Data`）。回归：
   `SettingsAsyncTests.SaveAsync_SyncOnlyStore_SerializesSnapshotBeforePool`（改前 `Expected: False But was: True`）。
   `SaveAsync` 与 `Reset`/`Load` 的并发无序化（SET-014）按裁定只文档化，写进 README 已知限制。
+- **Settings 写入口无主线程守卫（SET-018）**：`SettingRef` 的重放表与门面的 `Managers` 都是静态无锁
+  结构，并发写会静默损坏。修法：补 Editor-only 首错断言（`SettingRef.EnsureRegistered`、`SettingsManager`
+  的 `Initialize` / `Destroy` / `Ref`；`ResetForNewSession` 复位闩锁），README 线程契约同步。回归：
+  `SettingsManagerLifecycleTests.Initialize_FromBackgroundThread_LogsMainThreadViolationOnce`（改前
+  Expected log did not appear）。
 
 #### Message
 
