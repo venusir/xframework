@@ -324,6 +324,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   后被强制回收并打「起播超时」误告警。修法：`Play()` 后同步读一次 `isPlaying`（P-06 实测为真），为真
   直接转 `Playing`；超时告警措辞改为「连续 N 拍从未观察到 isPlaying 变真」。
   回归：`AudioPoolTests.ShortOneShot_IsReclaimedAfterItEnds`（0.01s clip，改前 0.3s 后仍占槽）。
+- **`UpdateManager.Clear()` 后 ticker 不再重注册（AUD-002）**：`EnsureTickerRegistered` 只信本地
+  `_tickerRegistered`；调度器被外部摘掉后该标志仍为 true，下一次 `Play` 不再注册，回收永久停摆。
+  修法：以 `UpdateManager.IsRegistered(_ticker)` 为准（注销同理）。回归：
+  `AudioPoolTests.Play_AfterUpdateManagerClear_ReregistersTicker`（改前 `Expected: 0 But was: 2`）。
+- **外部销毁的 `AudioSource` 让 Sweep 抛 MissingReference（AUD-003）**：`Sweep` 直接读 `isPlaying`，
+  一次异常中断整轮扫尾并留下永久占用的槽位。修法：状态机入口按 Unity 假 null 收尾回收；`Pause` /
+  `Resume` / `PlayCoreAsync` 同样加假 null 防御。回归：
+  `AudioPoolTests.ExternallyDestroyedSource_IsReclaimedWithoutThrowing`（改前 Unhandled log：
+  `[UpdateScheduler] AudioTicker.OnUpdate threw exception`）。
 
 #### Scene
 

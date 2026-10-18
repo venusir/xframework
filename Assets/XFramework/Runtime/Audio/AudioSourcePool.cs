@@ -211,6 +211,18 @@ namespace XFramework.XAudio
             {
                 var voice = _slots[i];
 
+                // 被外部销毁的播放源是 Unity 假 null；继续读 isPlaying 会抛 MissingReference，
+                // 让整个 Sweep 中断并留下永久占用的槽位（AUD-003）。
+                if (voice.State != AudioVoiceState.Free &&
+                    voice.State != AudioVoiceState.Loading &&
+                    voice.Source == null)
+                {
+                    LogManager.Warning(LogCategories.Audio,
+                        "播放源已被外部销毁，回收槽位：'{0}'。", voice.Location);
+                    Release(i);
+                    break;
+                }
+
                 switch (voice.State)
                 {
                     case AudioVoiceState.Free:

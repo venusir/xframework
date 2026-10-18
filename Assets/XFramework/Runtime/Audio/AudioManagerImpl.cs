@@ -240,6 +240,18 @@ namespace XFramework.XAudio
             }
 
             var voice = _pool.GetSlot(index);
+
+            // 播放源可能被外部销毁（Unity 假 null）；继续下去会在 ConfigureSource 处抛 MissingReference，
+            // 留下永久 Loading 且持有租约的槽位（AUD-003）。
+            if (voice.Source == null)
+            {
+                SafeDisposeLease(clipLease, location);
+                _pool.Release(index);
+                LogManager.Warning(LogCategories.Audio,
+                    "播放源已被外部销毁，无法起播：'{0}'。", location);
+                return default;
+            }
+
             voice.ClipLease = clipLease;
             voice.Loop = options.Loop;
             voice.VolumeScale = NormalizeVolumeScale(options.VolumeScale);
@@ -368,6 +380,14 @@ namespace XFramework.XAudio
                 if (voice.State != AudioVoiceState.Starting && voice.State != AudioVoiceState.Playing)
                     continue;   // 空闲与加载中的槽位不动：前者没什么可暂停，后者会在起播时就进入暂停
 
+                if (voice.Source == null)
+                {
+                    LogManager.Warning(LogCategories.Audio,
+                        "播放源已被外部销毁，暂停时回收槽位：'{0}'。", voice.Location);
+                    _pool.Release(i);
+                    continue;
+                }
+
                 voice.Source.Pause();
                 voice.State = AudioVoiceState.Paused;
             }
@@ -389,6 +409,14 @@ namespace XFramework.XAudio
 
                 if (voice.State != AudioVoiceState.Paused)
                     continue;
+
+                if (voice.Source == null)
+                {
+                    LogManager.Warning(LogCategories.Audio,
+                        "播放源已被外部销毁，恢复时回收槽位：'{0}'。", voice.Location);
+                    _pool.Release(i);
+                    continue;
+                }
 
                 voice.Source.UnPause();
 
@@ -695,7 +723,9 @@ namespace XFramework.XAudio
         /// <summary>首个播放时注册 ticker；之后每次注册都是空操作。</summary>
         private void EnsureTickerRegistered()
         {
-            if (_tickerRegistered)
+            // 不能只信本地记账：UpdateManager.Clear() 或异常自动注销会把 ticker 从调度器里摘掉，
+            // 而 _tickerRegistered 仍为 true——此后 Play 不再注册，回收永久停摆（AUD-002）。
+            if (_tickerRegistered && UpdateManager.IsRegistered(_ticker))
                 return;
 
             // 时间轴用 Unscaled：回收是记账而不是玩法逻辑，timeScale = 0 期间照样要能把播完的槽位收回来
@@ -706,10 +736,9 @@ namespace XFramework.XAudio
         /// <summary>最后一个播放结束时注销 ticker，闲置时零帧开销。</summary>
         private void UnregisterTicker()
         {
-            if (!_tickerRegistered)
-                return;
+            if (UpdateManager.IsRegistered(_ticker))
+                UpdateManager.Unregister(_ticker);
 
-            UpdateManager.Unregister(_ticker);
             _tickerRegistered = false;
         }
 

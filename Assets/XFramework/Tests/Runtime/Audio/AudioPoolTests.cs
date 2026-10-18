@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -275,6 +276,59 @@ namespace XFramework.XAudio.Tests
             {
                 UnityEngine.Object.DestroyImmediate(shortClip);
             }
+        }
+
+        /// <summary>
+        /// <c>UpdateManager.Clear()</c> 摘掉 ticker 后，本地 <c>_tickerRegistered</c> 仍为 true；
+        /// 下一次 Play 若不向调度器核对，回收会永久停摆（AUD-002）。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator Play_AfterUpdateManagerClear_ReregistersTicker()
+        {
+            var shortClip = AudioTestKit.CreateClip("short-clear", 0.01f);
+            _loader.Clip = shortClip;
+            try
+            {
+                AudioManager.Play("audio/first");
+                Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "前提：第一声已占槽");
+
+                // 在 ticker 仍注册、槽位仍活跃时摘掉调度器——本地 _tickerRegistered 仍为 true
+                UpdateManager.Clear();
+
+                AudioManager.Play("audio/second");
+                Assert.AreEqual(2, AudioManager.ActiveVoiceCount);
+
+                yield return new WaitForSecondsRealtime(0.3f);
+
+                Assert.AreEqual(0, AudioManager.ActiveVoiceCount,
+                    "UpdateManager.Clear() 之后 Play 必须重新注册 ticker，否则两声音效都不会被回收（AUD-002）");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(shortClip);
+            }
+        }
+
+        /// <summary>
+        /// 播放源被外部销毁后，Sweep 读 <c>isPlaying</c> 会抛 MissingReference 并中断整轮扫尾；
+        /// 必须在状态机入口按 Unity 假 null 收尾（AUD-003）。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ExternallyDestroyedSource_IsReclaimedWithoutThrowing()
+        {
+            var handle = AudioManager.Play("audio/a");
+            Assert.IsFalse(handle.IsDefault, "前提：已起播");
+            var source = AudioTestKit.FindSourceFor(handle);
+            Assert.IsNotNull(source, "前提：能找到播放源");
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[Audio] 播放源已被外部销毁")));
+            UnityEngine.Object.DestroyImmediate(source);
+
+            yield return new WaitForSecondsRealtime(0.2f);
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount,
+                "被外部销毁的播放源必须在 Sweep 中收尾回收（AUD-003）");
         }
 
         #endregion
