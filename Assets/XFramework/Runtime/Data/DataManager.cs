@@ -55,6 +55,22 @@ namespace XFramework.XData
             _impl = null;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态（DATA-003）。**关闭域重载**（Project Settings → Editor →
+        /// Enter Play Mode Options → 取消 Reload Domain）时，上一会话的 <c>_impl</c> 会存活到第二会话，
+        /// 于是 <see cref="DataBootstrapStage"/> 见到 <see cref="IsInitialized"/> 为真即跳过初始化，
+        /// 旧实例（连同它的数据块）被带进新会话。
+        /// <para><b>只丢引用、不调 <c>Dispose</c></b>：上一会话的实例可能握着已随域销毁的对象；
+        /// 实例清理归调用方（谁初始化谁清理）。</para>
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：早于首场景 <c>Awake</c>，因而早于引导阶段；
+        /// 开域重载时是纯幂等空操作。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _impl = null;
+        }
+
         #endregion
 
         #region Block

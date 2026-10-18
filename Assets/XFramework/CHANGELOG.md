@@ -250,6 +250,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **同名动作跨已启用 map 会有一次歧义 Warning**（INP-014）：解析仍按资产顺序，警告指出胜出的 map。
 - **Serialize 的第三方格式不跨播放会话保留**（SER-006，仅关闭域重载时可见）：会话开始时注册表清空并
   重建内置格式，第三方需在新会话重新 `Register`。
+- **`DataManager` 在会话开始时只丢实现引用**（DATA-003，仅关闭域重载时可见）：第二会话由引导阶段或
+  使用方重新 `Initialize`；旧实例不 Dispose。
 
 ### Fixed
 
@@ -327,6 +329,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   状态，重试被「已初始化」早退；`slot_01.save` 与 `slot_1.save` 被识别为同一槽位的两条元数据。
   修法：选项应用失败回滚 `_impl = null`；`TryParseSlot` 拒绝前导零别名。回归：
   `SaveManagerImplTests.LeadingZeroSlotAlias_IsNotListedAsSeparateSlot`（改前 `Expected: 1 But was: 2`）。
+- **门面跨会话存活（DATA-003）**：关闭域重载时 `_impl` 带进第二会话，`DataBootstrapStage` 见到
+  `IsInitialized` 为真即跳过初始化，旧实例与数据块被复用。修法：新增 `ResetForNewSession`
+  （`SubsystemRegistration`）只丢 `_impl` 引用、不 Dispose。回归：
+  `SessionResetTests.Data_ReinitializesAfterSessionReset`（改前 `Expected: False But was: True`）。
 
 #### UI
 

@@ -12,6 +12,7 @@ using XFramework.XAsset.Tests;
 using XFramework.XBootstrap;
 using XFramework.XCamera;
 using XFramework.XConfig;
+using XFramework.XData;
 using XFramework.XFileManager;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
@@ -113,6 +114,7 @@ namespace XFramework.Architecture.Tests
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
             SettingsManager.Destroy();
+            DataManager.Shutdown();
             Serializer.Shutdown();
             Serializer.Initialize();
             UpdateManager.AutoInit();
@@ -133,6 +135,7 @@ namespace XFramework.Architecture.Tests
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
             SettingsManager.Destroy();
+            DataManager.Shutdown();
             Serializer.Shutdown();
             Serializer.Initialize();
 
@@ -159,6 +162,7 @@ namespace XFramework.Architecture.Tests
             SettingsManager.ResetForNewSession();
             PoolManager.ResetForNewSession();
             Serializer.ResetForNewSession();
+            DataManager.ResetForNewSession();
             InstanceTracker.AutoInit();
         }
 
@@ -460,6 +464,19 @@ namespace XFramework.Architecture.Tests
 
             Assert.IsTrue(UpdateManager.AutoDriveEnabled,
                 "会话边界必须把 AutoDriveEnabled 复位为 true（UPD-008）");
+        }
+
+        [Test]
+        public void Data_ReinitializesAfterSessionReset()
+        {
+            DataManager.Initialize(new DataManagerImpl());
+            Assert.IsTrue(DataManager.IsInitialized, "前提校验：会话 1 应当初始化成功");
+
+            SimulateNewSession();
+            Assert.IsFalse(DataManager.IsInitialized, "复位后门面应回到未初始化态");
+
+            DataManager.Initialize(new DataManagerImpl());
+            Assert.IsTrue(DataManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
         }
 
         /// <summary>

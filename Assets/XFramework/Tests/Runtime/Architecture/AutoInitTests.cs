@@ -8,6 +8,7 @@ using XFramework.XAudio;
 using XFramework.XBootstrap;
 using XFramework.XCamera;
 using XFramework.XConfig;
+using XFramework.XData;
 using XFramework.XFileManager;
 using XFramework.XInput;
 using XFramework.XLocalization;
@@ -77,6 +78,7 @@ namespace XFramework.Architecture.Tests
             (typeof(SettingsManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(PoolManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(Serializer), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(DataManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(InstanceTracker), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 
