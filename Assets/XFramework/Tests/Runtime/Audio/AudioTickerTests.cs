@@ -136,6 +136,35 @@ namespace XFramework.XAudio.Tests
             Assert.AreEqual(0, UpdateManager.TotalCount, "没播过任何东西时不该占用调度槽位");
         }
 
+        /// <summary>
+        /// AUD-013：<see cref="AudioListener.pause"/> 是全局暂停，不是 <see cref="AudioSource.Pause"/>。
+        /// 若全局暂停也让 <c>isPlaying</c> 变 false，<c>Sweep</c> 会把在播的一次性音效当成「播完」回收。
+        /// 本用例先做探针、再作为回归锁：暂停期间句柄必须仍在播。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator GlobalListenerPause_DoesNotRecycleOneShot()
+        {
+            var longClip = AudioTestKit.CreateClip("long", 1f);
+            _loader.Clip = longClip;
+            bool originalPause = AudioListener.pause;
+            try
+            {
+                var handle = AudioManager.Play("audio/a");
+                yield return null;
+
+                AudioListener.pause = true;
+                yield return WaitRealtime(0.2f);
+
+                Assert.IsTrue(AudioManager.IsPlaying(handle),
+                    "全局暂停期间一次性音效不得被 Sweep 回收（isPlaying 的暂停语义不改变播放存在）");
+            }
+            finally
+            {
+                AudioListener.pause = originalPause;
+                UnityEngine.Object.DestroyImmediate(longClip);
+            }
+        }
+
         #endregion
 
         #region Helpers

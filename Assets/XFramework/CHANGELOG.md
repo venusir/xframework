@@ -455,6 +455,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `AudioClipLifetimeTests.InvalidLeaseWithReleaseAction_IsDisposed`（改前 `Expected: 1 But was: 0`）。
 - **删除无消费点的内部成员（AUD-012）**：`AudioSourcePool.MaxVoices` / `HasHost` 全仓零引用
   （`HasHost` 的注释称「测试用来断言」，实际测试用的是 `CountVoices` / `FindHosts`）。删除。
+- **全局暂停期间在播的一次性音效被误回收（AUD-013）**：探针实测 `AudioListener.pause = true` 会让
+  `AudioSource.isPlaying` 变 `false`——`Sweep` 的 `Playing` 分支据此把暂停中的一次性音效当成「播完」，
+  句柄立即失效；`Starting` 分支还会在暂停 60 拍后强制回收。修法：两态都识别全局暂停（暂停期间不计
+  超时拍、不回收），恢复后按正常判据收尾。回归：
+  `AudioTickerTests.GlobalListenerPause_DoesNotRecycleOneShot`（改前 `Expected: True But was: False`）。
 
 #### Scene
 

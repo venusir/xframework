@@ -265,7 +265,8 @@ AudioManager.SetInstance(new MyWwiseAudioManager());
 最后一个播放结束时注销——闲置时零帧开销。
 
 回收判据是**框架自己的状态机**，不是只看 `AudioSource.isPlaying`：因为 `Pause()` 之后 `isPlaying` 就是
-`false`，只看它会**把暂停中的播放当场回收掉**。
+`false`，只看它会**把暂停中的播放当场回收掉**。全局 `AudioListener.pause` 同样如此（探针实测）：暂停
+期间在播的一次性音效与 `Starting` 中的音效都不会被回收或计入超时；恢复后继续按正常判据收尾（AUD-013）。
 
 ## 生命周期与清理
 

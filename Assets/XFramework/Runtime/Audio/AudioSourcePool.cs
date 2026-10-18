@@ -194,8 +194,9 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 扫一遍槽位，回收播完的。返回是否仍有活跃槽位（false 时调用方应注销 ticker）。
-        /// <para><b>判据是自持状态机而非只看 <c>isPlaying</c></b>：实测表明 <c>Pause()</c> 之后
-        /// <c>isPlaying</c> 会变 <c>false</c>，只看它会把暂停中的播放当场回收。</para>
+        /// <para><b>判据是自持状态机而非只看 <c>isPlaying</c></b>：实测表明 <c>AudioSource.Pause()</c> 与
+        /// 全局 <c>AudioListener.pause</c> 之后 <c>isPlaying</c> 都会变 <c>false</c>，只看它会把暂停中的
+        /// 播放当场回收（AUD-013）。</para>
         /// </summary>
         internal bool Sweep()
         {
@@ -233,6 +234,12 @@ namespace XFramework.XAudio
                             voice.State = AudioVoiceState.Playing;
                             active++;
                         }
+                        else if (AudioListener.pause)
+                        {
+                            // AUD-013：全局暂停期间 isPlaying 为 false 是暂停而非超时——
+                            // 不累计超时拍，否则暂停足够久会把新起的音效强制回收。
+                            active++;
+                        }
                         else if (++voice.StartingTicks > StartingTimeoutTicks)
                         {
                             LogManager.Warning(LogCategories.Audio,
@@ -256,7 +263,9 @@ namespace XFramework.XAudio
 
                     case AudioVoiceState.Playing:
                         // 循环的播放永不被自动回收——必须显式 Stop
-                        if (voice.Loop || voice.Source.isPlaying)
+                        // AUD-013：全局暂停（AudioListener.pause）期间 isPlaying 同样变 false，
+                        // 但播放本身没有结束；此时回收会把暂停中的一次性音效当成「播完」。
+                        if (voice.Loop || voice.Source.isPlaying || AudioListener.pause)
                             active++;
                         else
                             Release(i);
