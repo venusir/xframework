@@ -497,6 +497,13 @@ namespace XFramework.XCamera
 
         private void TransitionToSlot(int targetIndex, float duration, CameraBlendStyle style)
         {
+            // 非有限时长会让过渡永不结束（NaN 比较恒 false）或永久挂起（+∞），并逐帧写坏位姿（CAM-003）。
+            if (float.IsNaN(duration) || float.IsInfinity(duration))
+            {
+                throw new ArgumentOutOfRangeException(nameof(duration), duration,
+                    "[Camera] 过渡时长必须是有限值；NaN / ±∞ 会让过渡永不结束或逐帧写坏位姿。");
+            }
+
             var target = _slots[targetIndex].Camera;
             if (target == null)
             {

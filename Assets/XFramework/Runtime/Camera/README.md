@@ -90,7 +90,7 @@ Runtime/Camera/
   `CameraManager.ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`，
   `OutputCamera` / `IsTransitioning` 仍可用。
 - `Activate` = cut，并取消在途过渡；`TransitionTo` 期间再次调用从**当前视觉状态**重新开始；
-  `duration <= 0` 或 `CameraBlendStyle.Cut` 等价于 cut。
+  `duration <= 0.0001`（内置实现的 Epsilon）或 `CameraBlendStyle.Cut` 等价于 cut；NaN / ±∞ 抛 `ArgumentOutOfRangeException`。
 - `Deactivate` 是否回退由后端定义：`UnityCameraManager` **不回退**（活动 id 变 `null`）；Cinemachine 由
   Brain 的优先级队列决定回退。
 - `UnityCameraManager`：构造时不改变相机位置 / FOV，但会把所有已注册相机置为关闭；需要调用 `Activate`
@@ -130,7 +130,7 @@ Runtime/Camera/
 | `Unregister(CameraHandle)` | 注销动态相机；无效句柄返回 `false` |
 | `Activate(string)` / `Activate(CameraHandle)` | 立即切换（cut），取消在途过渡 |
 | `Deactivate(string)` / `Deactivate(CameraHandle)` | 反激活指定相机；回退语义由后端定义 |
-| `TransitionTo(string \| CameraHandle, float, CameraBlendStyle)` | 过渡；`duration <= 0` / `Cut` 等价于 cut |
+| `TransitionTo(string \| CameraHandle, float, CameraBlendStyle)` | 过渡；`duration <= 0.0001` / `Cut` 等价于 cut；NaN / ±∞ 抛异常 |
 | `IsActive(string)` / `IsActive(CameraHandle)` | 是否为当前活动（过渡目标也算） |
 
 `CameraHandle` 自身提供便捷方法：`Activate()` / `Deactivate()` / `TransitionTo(...)` / `IsActive()` /

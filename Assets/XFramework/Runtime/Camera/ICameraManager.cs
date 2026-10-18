@@ -56,7 +56,7 @@ namespace XFramework.XCamera
 
         /// <summary>过渡到指定命名相机。</summary>
         /// <param name="cameraId">已注册的命名相机 id。</param>
-        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0</c> 等价于 cut。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c>（内置实现的 Epsilon）等价于 cut；NaN / ±∞ 抛异常。</param>
         /// <param name="style">过渡样式；后端可将其作为建议而非强制契约。</param>
         /// <remarks>过渡期间再次调用会从当前视觉状态重新开始；未知 id 告警并 no-op；<c>null</c> 抛异常。</remarks>
         void TransitionTo(string cameraId, float duration,
@@ -94,7 +94,7 @@ namespace XFramework.XCamera
 
         /// <summary>过渡到指定句柄的相机。</summary>
         /// <param name="handle">相机句柄。</param>
-        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0</c> 等价于 cut。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c>（内置实现的 Epsilon）等价于 cut；NaN / ±∞ 抛异常。</param>
         /// <param name="style">过渡样式。</param>
         void TransitionTo(CameraHandle handle, float duration,
             CameraBlendStyle style = CameraBlendStyle.EaseInOut);

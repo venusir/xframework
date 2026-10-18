@@ -448,9 +448,28 @@ namespace XFramework.XCamera.Tests
         #region 被外部销毁的相机
 
         [Test]
-        public void DestroyedActiveCamera_IsReportedAsInactive()
+        public void TransitionTo_NonFiniteDuration_Throws()
         {
             var manager = new UnityCameraManager(new Dictionary<string, Camera>
+            {
+                ["A"] = _cameraA,
+                ["B"] = _cameraB,
+            });
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => manager.TransitionTo("B", float.NaN),
+                "NaN 会让过渡永不结束并逐帧写坏位姿（CAM-003）");
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => manager.TransitionTo("B", float.PositiveInfinity),
+                "+∞ 会让过渡永久挂起（CAM-003）");
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => manager.TransitionTo("B", float.NegativeInfinity),
+                "−∞ 同样不是合法的时长（CAM-003）");
+        }
+
+        [Test]
+        public void DestroyedActiveCamera_IsReportedAsInactive()
+        {            var manager = new UnityCameraManager(new Dictionary<string, Camera>
             {
                 ["A"] = _cameraA,
                 ["B"] = _cameraB,

@@ -438,6 +438,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`CameraManager.Destroy` 先 Dispose 后置空（CAM-002）**：第三方 `Dispose` 抛出时 `_impl` 仍非空，
   之后 `Initialize` 永久早退。修法：先清槽再 Dispose（Audio 先例）。回归：
   `CameraManagerTests.Destroy_DisposeThrows_StillClearsInstance`（改前 `Expected: False But was: True`）。
+- **过渡时长无有限性校验（CAM-003）**：NaN 让过渡永不结束且逐帧写坏位姿，+∞ 永久挂起；文档写
+  `duration <= 0` 而实现是 `<= 0.0001`。修法：入口拒绝 NaN / ±∞（`ArgumentOutOfRangeException`）；
+  `ICameraManager` 两处与 README 两处统一为 `<= 0.0001`。回归：
+  `UnityCameraManagerTests.TransitionTo_NonFiniteDuration_Throws`（改前 `Expected: <ArgumentOutOfRangeException> But was: null`）。
 
 #### Message
 
