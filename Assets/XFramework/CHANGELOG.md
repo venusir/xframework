@@ -139,6 +139,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
+- **（公开常量值变更）`UISorting.MaxIndexInLayer` 由 31 改为 30**：遮罩独占层内第 31 位，面板序号
+  上限随之降为 30；同层第 31 个及以后的面板会被钳到 30（UI-C-002）。`PanelOrder` / `MaskOrder`
+  现在也会钳制越界 layer（UI-C-003）。公开 API 基线已同步。
 - **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
   档复位六个门面（Input / UI / Asset / Config / Localization / File）、`Bootstrap` 的静态登记表与
   `InstanceTracker` 的活跃计数——**只丢引用、不调 `Dispose`**（上一会话的实例可能握着已随域销毁的 Unity 对象），
@@ -492,6 +495,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `AttachAsync` 早退。回归：
   `UIPanelSelfCloseTests.Destroy_RecycledPanel_ReportsNotOpenOrFocused`（改前 `Expected: False But was: True`）/
   `DirectDestroy_ReleasesTrackedSubscriptions_AndIsolatesThrowing`。
+- **遮罩与同层第 31 个面板同序、公开排序入口不钳 layer（UI-C-002/003）**：`MaskIndex == MaxIndexInLayer == 31`
+  而面板序号从 1 起，第 31 个面板与遮罩同序；公开 `PanelOrder` / `MaskOrder` 对 layer 不设防。
+  修法：面板层内上限改为 30（`LayerStride - 2`），遮罩独占 31；两个公开入口补 `ClampPanelLayer`。
+  回归：`UISortingTests.PanelIndexAtMaskBoundary_IsClampedBehindMask`（改前 `Expected: less than 16031
+  But was: 16031`）/ `PublicOrderEntries_ClampOutOfRangeLayers`（改前 `Expected: 28769 But was: 28801`）。
 
 #### Message
 

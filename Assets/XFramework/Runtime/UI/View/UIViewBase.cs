@@ -224,9 +224,10 @@ namespace XFramework.XUI.View
         /// <summary>
         /// 直接销毁时兜底释放 <see cref="Track"/> 登记的订阅（UI-B-004）。
         /// <para>池化路径关闭时不会触发 OnDestroy；直接销毁（框架支持）时没有 OnPoolRecycle，
-        /// 不在这里释放就会永久残留。子类覆写 OnDestroy 时请调用 base。</para>
+        /// 不在这里释放就会永久残留。保持 private 以免扩大公开扩展点；子类若自己定义 OnDestroy，
+        /// Unity 只会调用最派生的那一个，基类兜底不会执行。</para>
         /// </summary>
-        protected virtual void OnDestroy()
+        private void OnDestroy()
         {
             DisposeTracked();
         }

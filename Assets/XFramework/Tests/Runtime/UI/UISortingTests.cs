@@ -179,6 +179,36 @@ namespace XFramework.XUI.Tests
                 "钳制后不得撞进 HUD 保留带");
         }
 
+        [Test]
+        public void PanelIndexAtMaskBoundary_IsClampedBehindMask()
+        {
+            int maxPanel = UISorting.PanelOrder(UILayers.Mask, UISorting.MaxIndexInLayer);
+            int overflow = UISorting.PanelOrder(UILayers.Mask, UISorting.MaxIndexInLayer + 1);
+
+            Assert.AreEqual(maxPanel, overflow, "超过层内上限的面板序号应钳到 MaxIndexInLayer");
+            Assert.Less(maxPanel, UISorting.MaskOrder(UILayers.Mask),
+                "遮罩必须高于同层所有面板，不能与第 31 个面板同序（UI-C-002）");
+        }
+
+        [Test]
+        public void PublicOrderEntries_ClampOutOfRangeLayers()
+        {
+            // UI-C-003：公开入口此前不钳 layer，越界会撞进保留带甚至 16 位回绕。
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("exceeds the panel layer limit"));
+            Assert.AreEqual(
+                UISorting.PanelOrder(UISorting.MaxPanelLayer, 1),
+                UISorting.PanelOrder(UISorting.MaxPanelLayer + 1, 1),
+                "公开 PanelOrder 必须钳制越界层");
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("exceeds the panel layer limit"));
+            Assert.AreEqual(
+                UISorting.MaskOrder(UISorting.MaxPanelLayer),
+                UISorting.MaskOrder(UISorting.MaxPanelLayer + 1),
+                "公开 MaskOrder 必须钳制越界层");
+        }
+
         #endregion
     }
 }

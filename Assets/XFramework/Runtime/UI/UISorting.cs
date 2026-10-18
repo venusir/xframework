@@ -28,8 +28,10 @@ namespace XFramework.XUI
         /// </summary>
         public const int LayerStride = 32;
 
-        /// <summary>层内可用的最大序号（第 32 个及以后会被钳制到它）。</summary>
-        public const int MaxIndexInLayer = LayerStride - 1;
+        /// <summary>层内可用的最大面板序号（第 31 个及以后会被钳制到它）。</summary>
+        /// <para><b>为什么不是 31</b>：<see cref="MaskIndex"/> 固定占用层内末位（31），而面板序号从 1 起——
+        /// 若面板上限也是 31，同层第 31 个面板会与遮罩同序（UI-C-002）。</para>
+        public const int MaxIndexInLayer = LayerStride - 2;
 
         /// <summary>
         /// 面板层可用上限。超过它会撞进 HUD / Tip / 系统保留带，使用处会告警并钳制。
@@ -37,10 +39,10 @@ namespace XFramework.XUI
         public const int MaxPanelLayer = 899;
 
         /// <summary>
-        /// 遮罩在其所在层内的序号。取末位，于是遮罩挡住该层及以下的所有面板，
+        /// 遮罩在其所在层内的序号。取末位（31），于是遮罩挡住该层及以下的所有面板，
         /// 而被更高层的面板盖住——「系统提示盖在遮罩上」这类需求交给更高的层即可。
         /// </summary>
-        public const int MaskIndex = MaxIndexInLayer;
+        public const int MaskIndex = LayerStride - 1;
 
         /// <summary>HUD 带。高于全部面板层，但低于 Tip。</summary>
         public const int HudOrder = 30000;
@@ -71,6 +73,10 @@ namespace XFramework.XUI
         /// <see cref="MaxIndexInLayer"/>。</param>
         public static int PanelOrder(int layer, int indexInLayer)
         {
+            // 公开入口必须自己钳制（UI-C-003）：内部调用点已钳，但第三方直接调用时
+            // 越界层会静默撞进保留带甚至回绕。
+            layer = ClampPanelLayer(layer);
+
             int index = indexInLayer < 0 ? 0
                 : indexInLayer > MaxIndexInLayer ? MaxIndexInLayer
                 : indexInLayer;
@@ -81,9 +87,10 @@ namespace XFramework.XUI
         /// <summary>
         /// 遮罩的排序值。
         /// </summary>
-        /// <param name="maskLayer">遮罩所在层级，见 <see cref="UILayers.Mask"/>。</param>
+        /// <param name="maskLayer">遮罩所在层级，见 <see cref="UILayers.Mask"/>；越界会被钳制。</param>
         public static int MaskOrder(int maskLayer)
         {
+            maskLayer = ClampPanelLayer(maskLayer);
             return maskLayer * LayerStride + MaskIndex;
         }
 

@@ -1934,7 +1934,7 @@ XFramework.XUI.UISorting.HudOrder  ::  public const int = 30000
 XFramework.XUI.UISorting.LayerStride  ::  public const int = 32
 XFramework.XUI.UISorting.MaskIndex  ::  public const int = 31
 XFramework.XUI.UISorting.MaskOrder  ::  public static int(int maskLayer)
-XFramework.XUI.UISorting.MaxIndexInLayer  ::  public const int = 31
+XFramework.XUI.UISorting.MaxIndexInLayer  ::  public const int = 30
 XFramework.XUI.UISorting.MaxPanelLayer  ::  public const int = 899
 XFramework.XUI.UISorting.MaxSortingOrder  ::  public const int = 32767
 XFramework.XUI.UISorting.MinSortingOrder  ::  public const int = -32768
