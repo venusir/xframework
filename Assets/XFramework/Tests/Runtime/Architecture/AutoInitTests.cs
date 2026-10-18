@@ -57,6 +57,7 @@ namespace XFramework.Architecture.Tests
         private static readonly (Type Type, string Method, RuntimeInitializeLoadType LoadType)[] Registry =
         {
             (typeof(UpdateManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(UpdateManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(UpdateManager), "AutoInjectDriver", RuntimeInitializeLoadType.AfterAssembliesLoaded),
             (typeof(LockManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(MessageManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),

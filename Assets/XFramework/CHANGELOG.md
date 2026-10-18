@@ -420,6 +420,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `SettingsManagerLifecycleTests.Initialize_FromBackgroundThread_LogsMainThreadViolationOnce`（改前
   Expected log did not appear）。
 
+#### Update
+
+- **`AutoDriveEnabled` 跨会话存活且不复位（UPD-008）**：关闭域重载时第二会话可能继承上一会话的
+  `false`，整套自动派发静默停摆而 `IsDrivingPlayerLoop` / `IsInitialized` 仍报 true。修法：补
+  `UpdateManager.ResetForNewSession`（`SubsystemRegistration`）复位为 `true`；AutoInit 本身不覆盖它
+  （测试会显式关掉再调用 AutoInit）。已登记 `AutoInitTests` 族清单。回归：
+  `SessionResetTests.Update_ResetForNewSession_RestoresAutoDrive`。
+
 #### Message
 
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里

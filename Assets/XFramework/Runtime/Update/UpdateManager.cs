@@ -95,6 +95,18 @@ namespace XFramework.XUpdate
         }
 
         /// <summary>
+        /// 会话边界复位：关闭域重载时 <see cref="AutoDriveEnabled"/> 跨会话存活，上一会话把它置为
+        /// <c>false</c>（确定性回放 / 测试）会让第二会话的自动派发静默全程停摆而 <c>IsDrivingPlayerLoop</c>
+        /// 仍报 true（UPD-008）。这里把它复位为默认值 <c>true</c>；AutoInit 本身不覆盖它——
+        /// 测试会显式把它关掉再调用 AutoInit。
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            AutoDriveEnabled = true;
+        }
+
+        /// <summary>
         /// 应用退出时清理内部状态：清空注册并释放调度器，下一次 <see cref="AutoInit"/> 会重建。
         /// <para><b>不再有不可逆闩锁：</b>「退出后不复用」由调用时机结构性保证——<see cref="AutoInit"/>
         /// 只在程序集加载与进入播放时触发，进程退出后不会被再调用；而编辑器关闭域重载时，

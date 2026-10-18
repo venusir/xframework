@@ -130,6 +130,7 @@ namespace XFramework.Architecture.Tests
         {
             UpdateManager.OnQuitting();
             UpdateManager.AutoInit();
+            UpdateManager.ResetForNewSession();
 
             UIManager.ResetForNewSession();
             CameraManager.ResetForNewSession();
@@ -432,14 +433,24 @@ namespace XFramework.Architecture.Tests
             Assert.AreNotSame(first, second, "第二会话应拿到全新的池，而不是上一会话的实例");
         }
 
+        [Test]
+        public void Update_ResetForNewSession_RestoresAutoDrive()
+        {
+            UpdateManager.AutoDriveEnabled = false;
+
+            UpdateManager.ResetForNewSession();
+
+            Assert.IsTrue(UpdateManager.AutoDriveEnabled,
+                "会话边界必须把 AutoDriveEnabled 复位为 true（UPD-008）");
+        }
+
         /// <summary>
         /// 集合池的内部池同样重建（POOL-002）：静态构造在关闭域重载时不重跑，
         /// 必须由会话复位把 <c>_pool</c> 换成默认配置的新实例。
         /// </summary>
         [Test]
         public void CollectionPool_ResetForNewSession_RecreatesInnerPool()
-        {
-            ListPool<int>.Configure(new PoolConfig { MaxSize = 2 });
+        {            ListPool<int>.Configure(new PoolConfig { MaxSize = 2 });
             ListPool<int>.Get();
             Assert.Greater(ListPool<int>.CountAll, 0, "前置：集合池已创建并产生过实例");
             var first = ListPool<int>.GetPool();
