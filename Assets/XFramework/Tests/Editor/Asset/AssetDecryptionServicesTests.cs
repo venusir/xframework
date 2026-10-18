@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Reflection;
 using NUnit.Framework;
@@ -12,6 +13,8 @@ namespace XFramework.XAsset.Tests
     /// <para><b>为什么值得单测</b>：这条链路此前零覆盖——Asset 的既有用例全走假实现（<c>FakeAssetManager</c>），
     /// 真实 YooAsset 初始化路径从未被执行过，于是「离线模式的 <c>BuildinFileSystemParameters</c> 没接线」
     /// （会让初始化直接失败）与「解密服务没有出口」两件事都无从被测试发现。</para>
+    /// <para>EditorSimulate 分支不直测主映射方法（它会真的执行一次模拟构建，依赖消费方工程的 YooAsset 构建配置）；
+    /// 其参数接线由纯函数 <c>CreateEditorSimulateParameters</c> 覆盖。</para>
     /// </summary>
     class AssetDecryptionServicesTests
     {
@@ -98,7 +101,7 @@ namespace XFramework.XAsset.Tests
         public void CreatePlayModeParameters_Offline_WiresBuildinFileSystem()
         {
             var parameters = (OfflinePlayModeParameters)YooAssetManagerImpl.CreatePlayModeParameters(
-                new AssetInitOptions { PlayMode = AssetPlayMode.Offline });
+                new AssetInitOptions { PlayMode = AssetPlayMode.Offline }, "TestPackage");
 
             // 红基线：修复前这里是裸的 new OfflinePlayModeParameters()，BuildinFileSystemParameters 为 null，
             // 而 YooAsset 的 InitializationOperation 遇到空参数列表直接判失败
@@ -111,7 +114,7 @@ namespace XFramework.XAsset.Tests
         public void CreatePlayModeParameters_Host_WiresBothFileSystems()
         {
             var parameters = (HostPlayModeParameters)YooAssetManagerImpl.CreatePlayModeParameters(
-                new AssetInitOptions { PlayMode = AssetPlayMode.Host, RemoteServices = new FakeRemote() });
+                new AssetInitOptions { PlayMode = AssetPlayMode.Host, RemoteServices = new FakeRemote() }, "TestPackage");
 
             Assert.IsNotNull(parameters.BuildinFileSystemParameters, "Host 的内置文件系统不能为空");
             Assert.IsNotNull(parameters.CacheFileSystemParameters, "Host 的缓存文件系统不能为空");
@@ -128,7 +131,7 @@ namespace XFramework.XAsset.Tests
                 DecryptionServices = fake,
             };
 
-            var parameters = (HostPlayModeParameters)YooAssetManagerImpl.CreatePlayModeParameters(options);
+            var parameters = (HostPlayModeParameters)YooAssetManagerImpl.CreatePlayModeParameters(options, "TestPackage");
 
             var buildin = GetDecryptionService(parameters.BuildinFileSystemParameters);
             var cache = GetDecryptionService(parameters.CacheFileSystemParameters);
@@ -141,10 +144,36 @@ namespace XFramework.XAsset.Tests
         public void CreatePlayModeParameters_WithoutDecryption_LeavesItUnset()
         {
             var parameters = (OfflinePlayModeParameters)YooAssetManagerImpl.CreatePlayModeParameters(
-                new AssetInitOptions { PlayMode = AssetPlayMode.Offline });
+                new AssetInitOptions { PlayMode = AssetPlayMode.Offline }, "TestPackage");
 
             Assert.IsNull(GetDecryptionService(parameters.BuildinFileSystemParameters),
                 "不传解密服务时不该凭空造一个——默认行为必须是不解密");
+        }
+
+        [Test]
+        public void CreateEditorSimulateParameters_WiresEditorFileSystem()
+        {
+            const string packageRoot = "C:/xfw-simulate/DefaultPackage";
+
+            var parameters = YooAssetManagerImpl.CreateEditorSimulateParameters(packageRoot);
+
+            Assert.IsNotNull(parameters.EditorFileSystemParameters,
+                "编辑器模拟模式必须显式给出编辑器文件系统参数——留空时 YooAsset 初始化会失败");
+            Assert.AreEqual(packageRoot, parameters.EditorFileSystemParameters.PackageRoot,
+                "模拟构建产出的根目录必须原样传给 YooAsset");
+            StringAssert.Contains("DefaultEditorFileSystem", parameters.EditorFileSystemParameters.FileSystemClass,
+                "文件系统类必须是 YooAsset 的默认编辑器实现");
+            Assert.IsNull(GetDecryptionService(parameters.EditorFileSystemParameters),
+                "EditorSimulate 直接读取原始资源，不该接线解密服务");
+        }
+
+        [Test]
+        public void CreateEditorSimulateParameters_EmptyRoot_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => YooAssetManagerImpl.CreateEditorSimulateParameters(null),
+                "空根目录必须在这里就拒绝——拖到 YooAsset 初始化阶段报错会丢失「是谁传了空」的线索");
+            Assert.Throws<ArgumentException>(() => YooAssetManagerImpl.CreateEditorSimulateParameters(""));
+            Assert.Throws<ArgumentException>(() => YooAssetManagerImpl.CreateEditorSimulateParameters("   "));
         }
 
         #endregion

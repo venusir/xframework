@@ -3,7 +3,7 @@ using System;
 namespace XFramework.XAsset
 {
     /// <summary>
-    /// 资源运行模式。
+    /// 资源运行模式。框架映射 Offline / Host / EditorSimulate 三种；WebPlayMode 与 CustomPlayMode 不在支持范围内。
     /// </summary>
     public enum AssetPlayMode
     {
@@ -16,6 +16,14 @@ namespace XFramework.XAsset
         /// 热更模式。内置包 + 远端资源站，支持版本检查与下载更新。
         /// </summary>
         Host = 1,
+
+        /// <summary>
+        /// 编辑器模拟模式。资源直接经 <c>AssetDatabase</c> 加载（虚拟 bundle），无需先构建资源包；
+        /// 初始化时按包名执行一次模拟构建。
+        /// <para><b>仅 Unity 编辑器可用</b>；打包后的运行时传此值会抛
+        /// <see cref="PlatformNotSupportedException"/>。Player 构建请使用 Offline 或 Host。</para>
+        /// </summary>
+        EditorSimulate = 2,
     }
 
     /// <summary>
@@ -38,7 +46,7 @@ namespace XFramework.XAsset
         public AssetPlayMode PlayMode = AssetPlayMode.Offline;
 
         /// <summary>
-        /// 远端地址服务。HostPlayMode 必填，Offline 忽略。
+        /// 远端地址服务。HostPlayMode 必填；Offline 与 EditorSimulate 忽略。
         /// </summary>
         public IAssetRemoteServices RemoteServices;
 
@@ -52,7 +60,9 @@ namespace XFramework.XAsset
         /// <summary>
         /// 解密服务；为 <c>null</c> 时资源不加密（默认）。非空时必须与打包侧的加密方式对应
         /// （见 <see cref="IAssetDecryptionServices"/>）。
-        /// <para><b>Offline 与 Host 两种模式都会接线</b>——加密项目的编辑器 / 单机模式同样要能读。</para>
+        /// <para><b>Offline 与 Host 两种模式都会接线</b>——加密项目的单机 / 热更模式同样要能读。</para>
+        /// <para><b>EditorSimulate 忽略该字段</b>：模拟模式直接读取原始资源，不经过加密 bundle，
+        /// 因此无法用它验证加密链路。</para>
         /// </summary>
         public IAssetDecryptionServices DecryptionServices;
     }

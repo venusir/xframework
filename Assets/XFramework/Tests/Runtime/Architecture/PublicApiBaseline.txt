@@ -106,6 +106,7 @@ XFramework.XAsset.AssetOperationStatus.None  ::  = 0
 XFramework.XAsset.AssetOperationStatus.Processing  ::  = 1
 XFramework.XAsset.AssetOperationStatus.Succeed  ::  = 2
 XFramework.XAsset.AssetPlayMode  ::  public enum : int
+XFramework.XAsset.AssetPlayMode.EditorSimulate  ::  = 2
 XFramework.XAsset.AssetPlayMode.Host  ::  = 1
 XFramework.XAsset.AssetPlayMode.Offline  ::  = 0
 XFramework.XAsset.AssetSceneHandle  ::  public readonly struct : System.IDisposable

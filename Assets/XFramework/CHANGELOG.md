@@ -21,6 +21,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （第三方后端也要能产出句柄，同 `AudioHandle` 的取舍），成员 `IsDefault` / `IsValid` / `UnloadAsync(ct)`
   / `Dispose()`（即发即忘，不抛）。门面配 `LoadSceneAsync`（改形，返回句柄）与 `UnloadSceneAsync`
   （**唯一「未初始化也不抛」的成员**——它会被 `Dispose` 调到）。**无卸载路径**这条缺口由此关闭。
+- **新增 `AssetPlayMode.EditorSimulate` 编辑器模拟模式**（2026-10-18）：资源直接经 `AssetDatabase`
+  加载（虚拟 bundle），**无需先构建资源包**；初始化时框架按包名调用 YooAsset 的
+  `EditorSimulateModeHelper.SimulateBuild`，产物在 `Bundles/<ActiveBuildTarget>/<包名>/Simulate`。
+  仅 Unity 编辑器可用——Player 构建传此值抛 `PlatformNotSupportedException`（不静默降级）；
+  `RemoteServices` 与 `DecryptionServices` 在该模式忽略。枚举成员追加在末尾（`= 2`），既有数值不变，
+  场景序列化不会错位。**公开 API 源兼容新增，基线 +1 行**。WebPlayMode / CustomPlayMode 仍不映射
+  （理由与重开判据见模块决策台账）。回归用例：
+  `AssetDecryptionServicesTests.CreateEditorSimulateParameters_WiresEditorFileSystem` /
+  `..._EmptyRoot_Throws`。
 
 #### Camera
 

@@ -99,7 +99,9 @@ namespace XFramework.XAsset
         public async UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
         {
             if (options == null) throw new ArgumentNullException(nameof(options));
-            if (options.PlayMode != AssetPlayMode.Offline && options.PlayMode != AssetPlayMode.Host)
+            if (options.PlayMode != AssetPlayMode.Offline
+                && options.PlayMode != AssetPlayMode.Host
+                && options.PlayMode != AssetPlayMode.EditorSimulate)
                 throw new ArgumentException($"[AssetManager] Unsupported PlayMode: {options.PlayMode}");
             if (options.PlayMode == AssetPlayMode.Host && options.RemoteServices == null)
                 throw new ArgumentException("[AssetManager] HostPlayMode requires RemoteServices. Provide AssetInitOptions.RemoteServices.");
@@ -120,7 +122,7 @@ namespace XFramework.XAsset
             {
                 ReportProgress(progress, 0.2f, $"Initializing package '{packageName}'...");
 
-                var initParameters = CreatePlayModeParameters(options);
+                var initParameters = CreatePlayModeParameters(options, packageName);
                 var initOperation = package.InitializeAsync(initParameters);
                 await initOperation.WithCancellation(cancellationToken);
 
@@ -419,13 +421,36 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
-        /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统。
+        /// 按选项映射 YooAsset 初始化参数。Offline 用内置包；Host 用内置 + 缓存（远端）双文件系统；
+        /// EditorSimulate 用编辑器文件系统（模拟构建产物）。
         /// <para><b>内置文件系统参数必须显式给出</b>：YooAsset 的 <c>InitializationOperation</c> 在参数列表为空时
-        /// 直接判失败（<c>The file system parameters is empty !</c>）——留空不是「用默认」，是启动不了。
-        /// 解密服务在两种模式下都接线（加密项目的编辑器 / 单机模式同样要能读）。</para>
+        /// 直接判失败（<c>The file system parameters is empty !</c>）——留空不是「用默认」，是启动不了。</para>
+        /// <para>解密服务在 Offline / Host 下接线（加密项目的单机 / 热更模式同样要能读）；
+        /// EditorSimulate 直接读取原始资源，不使用解密服务。</para>
         /// </summary>
-        internal static InitializeParameters CreatePlayModeParameters(AssetInitOptions options)
+        /// <param name="options">初始化配置。</param>
+        /// <param name="packageName">已解析的包名（<see cref="AssetInitOptions.PackageName"/> 的解析结果）。</param>
+        internal static InitializeParameters CreatePlayModeParameters(AssetInitOptions options, string packageName)
         {
+            if (options.PlayMode == AssetPlayMode.EditorSimulate)
+            {
+#if UNITY_EDITOR
+                var buildResult = EditorSimulateModeHelper.SimulateBuild(packageName);
+                if (buildResult == null)
+                {
+                    throw new InvalidOperationException(
+                        $"[AssetManager] Editor simulate build for package '{packageName}' returned no result. " +
+                        "Check that the YooAsset Editor assembly is installed and the package exists in YooAsset build settings.");
+                }
+
+                return CreateEditorSimulateParameters(buildResult.PackageRootDirectory);
+#else
+                throw new PlatformNotSupportedException(
+                    $"[AssetManager] EditorSimulate play mode (package '{packageName}') is only supported in the Unity Editor. " +
+                    "Use Offline or Host for player builds.");
+#endif
+            }
+
             var decryption = options.DecryptionServices == null
                 ? null
                 : new YooAssetDecryptionServicesAdapter(options.DecryptionServices);
@@ -445,6 +470,28 @@ namespace XFramework.XAsset
             {
                 BuildinFileSystemParameters =
                     FileSystemParameters.CreateDefaultBuildinFileSystemParameters(decryption),
+            };
+        }
+
+        /// <summary>
+        /// 构造编辑器模拟模式的初始化参数。<paramref name="packageRoot"/> 由模拟构建产出。
+        /// <para>独立成纯函数是为了让 EditMode 用例验证接线而不真的执行一次模拟构建；
+        /// 该模式使用虚拟 bundle、直接读取原始资源，因此不接线解密服务。</para>
+        /// </summary>
+        /// <param name="packageRoot">模拟构建的输出根目录。</param>
+        /// <exception cref="ArgumentException"><paramref name="packageRoot"/> 为 null / 空白。</exception>
+        internal static EditorSimulateModeParameters CreateEditorSimulateParameters(string packageRoot)
+        {
+            if (string.IsNullOrWhiteSpace(packageRoot))
+            {
+                throw new ArgumentException(
+                    "[AssetManager] Editor simulate package root is null or empty.", nameof(packageRoot));
+            }
+
+            return new EditorSimulateModeParameters
+            {
+                EditorFileSystemParameters =
+                    FileSystemParameters.CreateDefaultEditorFileSystemParameters(packageRoot),
             };
         }
 

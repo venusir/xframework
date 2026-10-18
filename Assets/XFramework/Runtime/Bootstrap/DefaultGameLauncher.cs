@@ -26,7 +26,9 @@ namespace XFramework.XBootstrap
         [Tooltip("主包名；空 = 默认包 DefaultPackage（须与 YooAsset 构建侧的包名一致）。")]
         [SerializeField] private string _assetPackageName = "";
 
-        [Tooltip("资源运行模式：Offline 内嵌、无热更；Host 支持版本检查与下载。")]
+        [Tooltip("资源运行模式：Offline 内嵌、无热更；Host 支持版本检查与下载；" +
+                 "EditorSimulate 仅编辑器可用（资源直接走 AssetDatabase，无需打包；" +
+                 "Player 构建请改用 Offline 或 Host）。")]
         [SerializeField] private AssetPlayMode _assetPlayMode = AssetPlayMode.Offline;
 
         [Tooltip("低内存时自动回收：释放对象池闲置实例并卸载未引用资源。")]
