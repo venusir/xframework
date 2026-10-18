@@ -290,6 +290,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   删除路径补侧车配套文件（恢复扫描的孤儿清理同步）；查询面在载荷缺失时回退一代备份，列表也纳入
   仅备份可恢复的槽位。回归：`SaveManagerImplTests` 四条（改前分别 `Expected: False But was: True` /
   `Expected: True But was: False`）。
+- **IO 失败形态不一致、恢复扫描无逐槽隔离（SAVE-004/012）**：文件被占用 / 权限错误时 `TryLoadAsync`
+  直接抛（违背「预期失败不抛」）；恢复扫描一个槽位损坏会中止后续相位。修法：`LoadCoreAsync` 捕获
+  非取消异常并返回 `Corrupt`；恢复扫描逐槽位 `try/catch`（取消仍传播）。**覆盖缺口如实记**：
+  这两条的错误注入需要可抛 IO 的 File Provider 缝，本轮未构造自动化用例。
 
 #### UI
 

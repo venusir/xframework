@@ -434,6 +434,17 @@ namespace XFramework.XSave
 
                 return new SaveLoadResult(status, null, message);
             }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // SAVE-004：TryLoadAsync 的契约是「预期失败不抛」。文件被占用 / 权限错误等
+                // IO 异常此前会直接抛给调用方；统一映射成 Corrupt（查询面同样按不可用处理）。
+                LogManager.Exception(LogCategories.Save, ex, "读取存档失败，已按损坏回报");
+                return new SaveLoadResult(SaveLoadStatus.Corrupt, null, $"读取存档失败：{ex.Message}");
+            }
             finally
             {
                 ExitBusy();
@@ -1123,7 +1134,20 @@ namespace XFramework.XSave
                 if (!processed.Add(payloadPath))
                     continue;
 
-                await RecoverSlotAsync(playerId, slot, payloadPath, cancellationToken);
+                try
+                {
+                    await RecoverSlotAsync(playerId, slot, payloadPath, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    // SAVE-012：逐槽位隔离——一个槽位损坏不得中止后续槽位的恢复扫描。
+                    LogManager.Exception(LogCategories.Save, e,
+                        string.Format("恢复槽位 {0} 时抛出异常，已跳过并继续", payloadPath));
+                }
             }
         }
 
