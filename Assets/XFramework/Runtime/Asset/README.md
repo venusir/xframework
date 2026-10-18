@@ -558,6 +558,10 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
     **也不改变 `CreateDownloader` 的基准**（下载器永远按当前激活清单算）。所以「先预检、后下载」
     拿不到新版本的内容，得**先激活再下载**；也**拿不到**「要下多少 MB / 多少个文件」——
     框架没有把预检产出的待下清单透出来。
+13. **会话复位只丢引用、不 Dispose，但会退订旧实例的 `Application.lowMemory`**（AST-008）：关闭域重载时
+    上一会话的 `AssetManagerImpl` 会存活，静态事件会把它钉住并继续回调；`ResetForNewSession` 在丢引用前
+    调用内部退订入口（`DetachLowMemoryHandler`，幂等、不 Dispose）。**第三方 `IAssetManager` 实现若有
+    自己的静态事件订阅，框架探测不到**——需自行在会话边界退订。
 
 ## 接口承诺到哪为止
 

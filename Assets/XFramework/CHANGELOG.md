@@ -254,6 +254,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   使用方重新 `Initialize`；旧实例不 Dispose。
 - **`SaveManager` 在会话开始时只丢实现引用**（SAVE-001，仅关闭域重载时可见）：第二会话的
   `SaveBootstrapStage` 会重新初始化并重接 `SaveOptions.CryptoProvider`；旧实例不 Dispose。
+- **`AssetManager` 在会话开始时退订旧实例的低内存事件**（AST-008，仅关闭域重载时可见）：复位只丢引用、
+  不 Dispose，但旧实例不再被 `Application.lowMemory` 钉住；第三方实现需自行退订自己的静态事件。
 
 ### Fixed
 
@@ -454,6 +456,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （生产适配 `HandleBaseWait`）。README 的取消契约订正为「取消时句柄被释放后重抛，拿到的是异常不是句柄」。
   回归：`AssetLoadWaitTests` 两例（反向注入 `Release` 后改前红）。
   **端到端缺口如实记**：真实 YooAsset 包上的「取消后 provider 不增长」仍无自动化用例（审计报告 §7 Asset 残留）。
+- **会话复位时旧实例仍被 `Application.lowMemory` 钉住（AST-008）**：`ResetForNewSession` 只丢引用、
+  不 Dispose，而实例在初始化时订阅了静态低内存事件——关闭域重载时整只旧实例跨会话存活，第二会话的
+  低内存事件仍回调上一会话的对象。修法：`AssetManagerImpl` 抽出幂等的 `AttachLowMemoryHandler` /
+  `DetachLowMemoryHandler`，复位在丢引用前退订（只 `-=`、不 Dispose）。回归：
+  `SessionResetTests.Asset_ResetDetachesLowMemoryHandlerFromOldInstance`（改前 `Expected: False But was: True`）。
 
 #### File
 

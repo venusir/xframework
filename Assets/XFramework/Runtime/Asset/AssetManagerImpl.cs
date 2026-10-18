@@ -143,11 +143,10 @@ namespace XFramework.XAsset
             _initialized = true;
 
             // 初始化成功后才订阅低内存事件（失败不订阅，避免回调中未初始化报错噪音）
-            _autoReclaimOnLowMemory = initOptions.AutoReclaimOnLowMemory;
-            if (_autoReclaimOnLowMemory)
-            {
-                Application.lowMemory += OnLowMemory;
-            }
+            if (initOptions.AutoReclaimOnLowMemory)
+                AttachLowMemoryHandler();
+            else
+                DetachLowMemoryHandler();
         }
 
         public async UniTask InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, CancellationToken cancellationToken = default)
@@ -472,11 +471,7 @@ namespace XFramework.XAsset
             _disposed = true;
 
             // 静态事件必须退订，防止实例被事件持有导致泄漏
-            if (_autoReclaimOnLowMemory)
-            {
-                Application.lowMemory -= OnLowMemory;
-                _autoReclaimOnLowMemory = false;
-            }
+            DetachLowMemoryHandler();
 
             DestroyAllPooledInstances();
 
@@ -746,6 +741,29 @@ namespace XFramework.XAsset
             if (_disposed || !_initialized) return;
             ReclaimMemoryAsync().Forget();
         }
+
+        /// <summary>
+        /// 订阅 <see cref="Application.lowMemory"/>（幂等）。
+        /// <para>会话复位需要「只退订、不 Dispose」的入口（AST-008）：旧实例被静态事件钉住时，
+        /// 关闭域重载会把整只实例带进第二会话，低内存事件仍回调上一会话的对象。</para>
+        /// </summary>
+        internal void AttachLowMemoryHandler()
+        {
+            if (_autoReclaimOnLowMemory) return;
+            _autoReclaimOnLowMemory = true;
+            Application.lowMemory += OnLowMemory;
+        }
+
+        /// <summary>退订 <see cref="Application.lowMemory"/>（幂等，不 Dispose）。</summary>
+        internal void DetachLowMemoryHandler()
+        {
+            if (!_autoReclaimOnLowMemory) return;
+            Application.lowMemory -= OnLowMemory;
+            _autoReclaimOnLowMemory = false;
+        }
+
+        /// <summary>当前是否订阅着低内存事件（测试缝 / 诊断）。</summary>
+        internal bool IsLowMemoryHandlerAttached => _autoReclaimOnLowMemory;
 
         /// <summary>
         /// 内存回收主流程：清池 → 卸载未使用资源 → 请求 Unity 回收。

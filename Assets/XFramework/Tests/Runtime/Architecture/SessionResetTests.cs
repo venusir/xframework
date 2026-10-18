@@ -483,6 +483,24 @@ namespace XFramework.Architecture.Tests
             Assert.IsTrue(DataManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
         }
 
+        /// <summary>
+        /// AST-008：旧实例订阅了 <see cref="Application.lowMemory"/>，仅丢引用会让静态事件把它钉住；
+        /// 会话复位必须「只退订、不 Dispose」。
+        /// </summary>
+        [Test]
+        public void Asset_ResetDetachesLowMemoryHandlerFromOldInstance()
+        {
+            var impl = new AssetManagerImpl();
+            impl.AttachLowMemoryHandler();
+            AssetManager.SetInstance(impl);
+            Assert.IsTrue(impl.IsLowMemoryHandlerAttached, "前提：会话 1 的实例已订阅 lowMemory");
+
+            SimulateNewSession();
+
+            Assert.IsFalse(impl.IsLowMemoryHandlerAttached,
+                "会话复位必须退订旧实例的 Application.lowMemory——只丢引用会让静态事件把旧实例钉住");
+        }
+
         [Test]
         public void Save_ReinitializesAfterSessionResetAndRestoresCryptoWiring()
         {
