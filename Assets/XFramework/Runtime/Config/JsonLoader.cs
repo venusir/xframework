@@ -17,6 +17,28 @@ namespace XFramework.XConfig
         async UniTask<ConfigTable<T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
             var text = await LoadTextAsync(assetPath);
+            return ParseTable<T, TKey>(text, assetPath);
+        }
+
+        async UniTask<T> IConfigLoader.LoadGlobalAsync<T>(string assetPath)
+        {
+            var text = await LoadTextAsync(assetPath);
+            return ParseGlobal<T>(text, assetPath);
+        }
+
+        #endregion
+
+        #region Internal — 解析段（CONF-012）
+
+        /// <summary>
+        /// 把 JSON 文本解析成 <see cref="ConfigTable{T}"/>。
+        /// <para><b>为什么抽出来</b>（照 <see cref="CsvLoader.ParseTable{T, TKey}"/> 先例）：测试进程里
+        /// <c>AssetManager</c> 从未初始化，真实 Loader 路径会在 <c>ConfigTextLoader</c> 抛错——解析段与
+        /// 资源加载解耦后才能直接单测；JSON 正路径此前正是零覆盖，CONF-001 因此长期存活。</para>
+        /// </summary>
+        internal static ConfigTable<T> ParseTable<T, TKey>(string text, string assetPath)
+            where T : IConfigRow<TKey>, new()
+        {
             try
             {
                 var list = JsonUtility.FromJson<ListWrapper<T>>(text);
@@ -44,9 +66,9 @@ namespace XFramework.XConfig
             }
         }
 
-        async UniTask<T> IConfigLoader.LoadGlobalAsync<T>(string assetPath)
+        /// <summary>把 JSON 文本解析成 Global 配置对象（解析段，CONF-012）。</summary>
+        internal static T ParseGlobal<T>(string text, string assetPath) where T : class, new()
         {
-            var text = await LoadTextAsync(assetPath);
             try
             {
                 var config = JsonUtility.FromJson<T>(text);
