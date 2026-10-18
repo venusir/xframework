@@ -93,6 +93,23 @@ namespace XFramework.XSerialize
             _initialized = false;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态注册表（SER-006）。**关闭域重载**（Project Settings → Editor →
+        /// Enter Play Mode Options → 取消 Reload Domain）时，上一会话的静态注册表会存活到这一会话。
+        /// <para><b>清空后立即重注册两个内置格式</b>：从本钩子到 <see cref="AutoInit"/>（AfterSceneLoad 档）
+        /// 之间存在一段时间，期间 <see cref="Default"/> 不能落在「未注册」窗口里抛异常。</para>
+        /// <para><b>第三方格式不跨会话保留</b>——使用方需在新会话自行重新注册（见 README「已知限制」）。
+        /// 这也意味着在 <see cref="Initialize"/> 之前注册的同名内置覆盖同样会被清掉。</para>
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：早于首场景 <c>Awake</c>，因而早于
+        /// <see cref="AutoInit"/> 与任何使用方的注册调用。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            Shutdown();
+            Initialize();
+        }
+
         #endregion
 
         #region Public API

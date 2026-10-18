@@ -248,6 +248,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **重绑定事件的订阅者异常被逐个隔离**（INP-013）：一个处理器抛异常不再阻止其余处理器，日志为
   `[Input] Rebinding On... subscriber threw exception`。
 - **同名动作跨已启用 map 会有一次歧义 Warning**（INP-014）：解析仍按资产顺序，警告指出胜出的 map。
+- **Serialize 的第三方格式不跨播放会话保留**（SER-006，仅关闭域重载时可见）：会话开始时注册表清空并
+  重建内置格式，第三方需在新会话重新 `Register`。
 
 ### Fixed
 
@@ -688,6 +690,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `SwitchLanguageAsync` / `SetPlaceholder` 在门面与 impl 两侧补校验。回归：7 条新用例（改前分别
   `Expected log did not appear`、空表置已初始化、`Expected: <ArgumentNullException> But was: null`、
   `[{0, 5}]` 字面输出、`ParamName "targetLanguage"`）。
+
+#### Serialize
+
+- **序列化注册表跨会话存活（SER-006）**：关闭域重载时上一会话的静态注册表会带进第二会话，第三方格式
+  继续可用、内置同名覆盖也保留；且 `Reset` 到 `AutoInit` 之间存在 `Default` 抛异常窗口。修法：新增
+  `ResetForNewSession`（`SubsystemRegistration`）：清空注册表并**立即重注册两个内置格式**；第三方格式
+  需在新会话自行重新注册。回归：`SessionResetTests.Serialize_ResetClearsCustomFormatsAndRestoresBuiltins`
+  （改前 `Expected: False But was: True`）。
 
 #### Asset（场景加载）
 

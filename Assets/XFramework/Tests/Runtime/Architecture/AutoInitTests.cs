@@ -76,6 +76,7 @@ namespace XFramework.Architecture.Tests
             (typeof(Bootstrap), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(SettingsManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(PoolManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(Serializer), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(InstanceTracker), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 

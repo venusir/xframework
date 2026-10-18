@@ -16,6 +16,7 @@ using XFramework.XFileManager;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
 using XFramework.XPool;
+using XFramework.XSerialize;
 using XFramework.XSettings;
 using XFramework.XUI;
 using XFramework.XUpdate;
@@ -81,6 +82,18 @@ namespace XFramework.Architecture.Tests
             public void Delete() => _data = null;
         }
 
+        /// <summary>最小序列化器替身（SER-006 用例只关心注册表条目）。</summary>
+        private sealed class FakeSerializer : ISerializer
+        {
+            public FakeSerializer(string format) => Format = format;
+
+            public string Format { get; }
+
+            public byte[] Serialize(object obj, Type type) => Array.Empty<byte>();
+
+            public object Deserialize(byte[] data, Type type) => null;
+        }
+
         #endregion
 
         #region Fixture
@@ -100,6 +113,8 @@ namespace XFramework.Architecture.Tests
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
             SettingsManager.Destroy();
+            Serializer.Shutdown();
+            Serializer.Initialize();
             UpdateManager.AutoInit();
             UpdateManager.Clear();
 
@@ -118,6 +133,8 @@ namespace XFramework.Architecture.Tests
             AssetManager.ImplFactory = null;
             Bootstrap.Clear();
             SettingsManager.Destroy();
+            Serializer.Shutdown();
+            Serializer.Initialize();
 
             if (_uiRoot != null)
                 UnityEngine.Object.DestroyImmediate(_uiRoot);
@@ -141,6 +158,7 @@ namespace XFramework.Architecture.Tests
             Bootstrap.ResetForNewSession();
             SettingsManager.ResetForNewSession();
             PoolManager.ResetForNewSession();
+            Serializer.ResetForNewSession();
             InstanceTracker.AutoInit();
         }
 
@@ -442,6 +460,28 @@ namespace XFramework.Architecture.Tests
 
             Assert.IsTrue(UpdateManager.AutoDriveEnabled,
                 "会话边界必须把 AutoDriveEnabled 复位为 true（UPD-008）");
+        }
+
+        /// <summary>
+        /// SER-006：序列化注册表是静态的，会话边界必须清空并**立即重注册内置格式**——
+        /// 否则第三方格式跨会话存活，且 Reset 到 AutoInit 之间存在 <see cref="Serializer.Default"/> 抛异常的窗口。
+        /// </summary>
+        [Test]
+        public void Serialize_ResetClearsCustomFormatsAndRestoresBuiltins()
+        {
+            Serializer.Shutdown();
+            Serializer.Initialize();
+            Serializer.Register(new FakeSerializer("custom"));
+            Assert.IsTrue(Serializer.TryGet("custom", out _), "前提校验：第三方格式已注册");
+
+            SimulateNewSession();
+
+            Assert.IsTrue(Serializer.IsInitialized, "会话复位必须立即重注册内置格式");
+            Assert.IsTrue(Serializer.TryGet("json", out _), "内置默认格式应随复位重建");
+            Assert.IsTrue(Serializer.TryGet("json-utility", out _), "内置遗留格式应随复位重建");
+            Assert.IsFalse(Serializer.TryGet("custom", out _),
+                "第三方格式不跨会话存活——需在新会话自行重新注册");
+            Assert.DoesNotThrow(() => _ = Serializer.Default, "复位后 Default 不得落在未注册窗口里");
         }
 
         /// <summary>

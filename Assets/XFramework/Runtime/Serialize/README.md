@@ -142,3 +142,6 @@ Serializer.Register(new MessagePackSerializer());
 - **`Get` / `Default` / `Shutdown` 三处的失败都是抛异常。** 未注册的格式抛 `KeyNotFoundException`，
   未初始化时取 `Default` 抛 `InvalidOperationException`（框架经 `AutoInit` 自动初始化，正常不会遇到）；
   `Shutdown()` 之后连内置格式都没有，两个入口全抛。
+- **第三方注册不跨播放会话保留（仅关闭域重载时可见）**：会话开始时 `ResetForNewSession`
+  （`SubsystemRegistration` 档）清空注册表并**立即重注册两个内置格式**；第三方自行 `Register` 的格式
+  需要在新会话重新注册。这也意味着在 `Initialize` 之前注册的同名内置覆盖同样会被清掉。
