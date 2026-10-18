@@ -79,6 +79,9 @@ namespace XFramework.XTimer
         /// <summary>各轴当前派发趟号；新表与扫尾途中的分配据此判断「出生趟」（TMR-010）。</summary>
         private readonly int[] _axisPass = new int[AxisCount];
 
+        /// <summary>主线程越界提示的首错闩锁（仅 Editor 使用）。</summary>
+        private bool _mainThreadViolationLogged;
+
         #endregion
 
         #region Constructors
@@ -112,6 +115,8 @@ namespace XFramework.XTimer
         internal TimerHandle Create(float duration, Action callback, UpdateTimeMode timeMode,
             CancellationToken cancellationToken, bool repeating)
         {
+            AssertMainThread("After/Every");
+
             if (callback == null)
                 throw new ArgumentNullException(nameof(callback));
 
@@ -145,6 +150,8 @@ namespace XFramework.XTimer
         internal TimerHandle Create<TState>(float duration, Action<TState> callback, TState state,
             UpdateTimeMode timeMode, CancellationToken cancellationToken, bool repeating)
         {
+            AssertMainThread("After/Every");
+
             if (callback == null)
                 throw new ArgumentNullException(nameof(callback));
 
@@ -192,6 +199,8 @@ namespace XFramework.XTimer
         /// <param name="handle">定时器句柄。</param>
         internal bool Stop(in TimerHandle handle)
         {
+            AssertMainThread("Stop");
+
             ITimerTable table = Resolve(in handle);
             if (table == null || !table.Stop(handle.Slot, handle.Generation))
                 return false;
@@ -204,6 +213,8 @@ namespace XFramework.XTimer
         /// <param name="handle">定时器句柄。</param>
         internal bool Restart(in TimerHandle handle)
         {
+            AssertMainThread("Restart");
+
             ITimerTable table = Resolve(in handle);
             if (table == null || !table.Restart(handle.Slot, handle.Generation, _logicalNow[table.Axis]))
                 return false;
@@ -216,6 +227,8 @@ namespace XFramework.XTimer
         /// <param name="handle">定时器句柄。</param>
         internal void Release(in TimerHandle handle)
         {
+            AssertMainThread("Dispose/Release");
+
             ITimerTable table = Resolve(in handle);
             if (table == null || !table.Release(handle.Slot, handle.Generation))
                 return;
@@ -264,6 +277,8 @@ namespace XFramework.XTimer
         /// <returns>被取消的定时器数量。</returns>
         internal int CancelAll()
         {
+            AssertMainThread("CancelAll");
+
             int cancelled = 0;
 
             for (int i = 0; i < _allTables.Count; i++)
@@ -288,6 +303,8 @@ namespace XFramework.XTimer
         /// <returns>该轴最近一次截止的剩余秒数；没有正在计时的定时器时为 <see cref="double.PositiveInfinity"/>。</returns>
         internal double Sweep(int axis, float deltaTime, bool advancePass)
         {
+            AssertMainThread("Sweep");
+
             _logicalNow[axis] += deltaTime;
             double now = _logicalNow[axis];
 
@@ -408,6 +425,29 @@ namespace XFramework.XTimer
             }
 
             _tickers[axis].GoIdle();
+        }
+
+        /// <summary>
+        /// 写入口的主线程契约断言（仅 Editor 编译；Release 下整段是空操作）。
+        /// <para><b>为什么需要</b>：槽位表、自由链与逻辑时钟都是无锁结构，跨线程调用不会报错，
+        /// 而是静默地与主线程的派发竞争（TMR-006）。</para>
+        /// <para><b>只报首错</b>：越线程调用通常每帧重复发生；主线程检测复用 UniTask 的
+        /// <c>PlayerLoopHelper.IsMainThread</c>，与 Message/Pipeline/Asset 同源。这里内联本地副本，
+        /// 不引用 <c>XMessage.Internal.MainThreadGuard</c>（生产代码不得跨模块引用 Internal 命名空间）。</para>
+        /// </summary>
+        /// <param name="api">被调用的入口名，用于拼装报错文案。</param>
+        private void AssertMainThread(string api)
+        {
+#if UNITY_EDITOR
+            if (_mainThreadViolationLogged || Cysharp.Threading.Tasks.PlayerLoopHelper.IsMainThread)
+                return;
+
+            _mainThreadViolationLogged = true;
+            LogManager.Error(LogCategories.Timer,
+                "{0} 必须在 Unity 主线程调用：定时器的槽位表、自由链与逻辑时钟都是无锁结构，" +
+                "跨线程调用会静默地与主线程的派发竞争。从非主线程操作请先切回主线程；" +
+                "线程契约见模块 README「线程契约」节。本提示每个核心生命周期只报一次。", api);
+#endif
         }
 
         /// <summary>校验时间轴取值，返回轴下标。</summary>

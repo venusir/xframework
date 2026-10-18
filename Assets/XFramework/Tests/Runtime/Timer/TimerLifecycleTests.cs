@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -268,6 +269,21 @@ namespace XFramework.XTimer.Tests
         {
             Assert.AreEqual(Enum.GetValues(typeof(UpdateTimeMode)).Length, TimerCore.AxisCount,
                 "AxisCount 必须从 UpdateTimeMode 枚举派生，不能有第二份常量副本（TMR-009）");
+        }
+
+        /// <summary>
+        /// 写入口的 Editor-only 首错断言（TMR-006）：池线程调用记一条 <c>[Timer]</c> Error，
+        /// 同一核心生命周期内的第二次越界不再刷屏。
+        /// </summary>
+        [Test]
+        public void WriteEntry_FromBackgroundThread_LogsMainThreadViolationOnce()
+        {
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape("[Timer] After/Every 必须在 Unity 主线程调用")));
+            Task.Run(() => TimerManager.After(1f, Noop)).GetAwaiter().GetResult();
+
+            // 第二次越界必须被首错闩锁吸收；若未被吸收，LogAssert 会把多出的 Error 判失败
+            Task.Run(() => TimerManager.After(1f, Noop)).GetAwaiter().GetResult();
         }
 
         #endregion

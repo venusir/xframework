@@ -403,6 +403,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同一趟被扫到时趟号 +1，新生槽位被当成旧槽位。修法：核心维护各轴当前趟号；新表继承该趟号、本轮
   新表不再自增趟号，分配时把轴趟号写入 `BornPass`。回归：
   `TimerTierTests.StatefulTimer_NewTableCreatedInsideSweep_DoesNotFireInSameBeat`（改前 `Expected: False But was: True`）。
+- **写入口无主线程守卫（TMR-006）**：`After/Every` / `Stop` / `Restart` / `Release` / `CancelAll` / `Sweep`
+  直接改写无锁槽位表，池线程调用静默与主线程派发竞争。修法：`TimerCore` 补 Editor-only 首错断言
+  （沿用 Message/Pipeline/Asset 的内联形态，不抽公共防线；Release 零开销），README 线程契约同步。
+  回归：`TimerLifecycleTests.WriteEntry_FromBackgroundThread_LogsMainThreadViolationOnce`（改前
+  Expected log did not appear）。
 
 #### Lock
 
