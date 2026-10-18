@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XAsset.Tests;
@@ -14,6 +15,8 @@ using XFramework.XCamera;
 using XFramework.XConfig;
 using XFramework.XData;
 using XFramework.XFileManager;
+using XFramework.XInput;
+using XFramework.XInput.Default;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
 using XFramework.XPool;
@@ -161,6 +164,7 @@ namespace XFramework.Architecture.Tests
             LocalizationManager.ResetForNewSession();
             FileManager.ResetForNewSession();
             AssetManager.ResetForNewSession();
+            InputManager.ResetForNewSession();
             Bootstrap.ResetForNewSession();
             SettingsManager.ResetForNewSession();
             PoolManager.ResetForNewSession();
@@ -481,6 +485,37 @@ namespace XFramework.Architecture.Tests
 
             DataManager.Initialize(new DataManagerImpl());
             Assert.IsTrue(DataManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
+
+        /// <summary>
+        /// INP-002：默认 provider 订阅了 <c>InputSystem.onDeviceChange</c>（静态回调表跨会话存活），
+        /// 仅丢引用会让旧实例被钉住、设备消息逐会话叠加；复位必须「只退订、不 Dispose」。
+        /// </summary>
+        [Test]
+        public void Input_ResetUnbindsOldProviderDeviceChanges()
+        {
+            var asset = ScriptableObject.CreateInstance<InputActionAsset>();
+            var map = new InputActionMap("Player");
+            map.AddAction("Jump", InputActionType.Button, "<Keyboard>/space");
+            asset.AddActionMap(map);
+
+            var provider = new InputSystemProvider();
+            try
+            {
+                provider.Initialize(asset);
+                InputManager.SetProvider(provider);
+                Assert.IsTrue(provider.IsDeviceChangeSubscribed, "前提：会话 1 的 provider 已订阅设备事件");
+
+                SimulateNewSession();
+
+                Assert.IsFalse(provider.IsDeviceChangeSubscribed,
+                    "会话复位必须退订旧 provider 的 InputSystem.onDeviceChange——只丢引用会让静态事件把它钉住");
+            }
+            finally
+            {
+                provider.Dispose();
+                UnityEngine.Object.DestroyImmediate(asset);
+            }
         }
 
         /// <summary>

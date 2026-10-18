@@ -256,6 +256,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `SaveBootstrapStage` 会重新初始化并重接 `SaveOptions.CryptoProvider`；旧实例不 Dispose。
 - **`AssetManager` 在会话开始时退订旧实例的低内存事件**（AST-008，仅关闭域重载时可见）：复位只丢引用、
   不 Dispose，但旧实例不再被 `Application.lowMemory` 钉住；第三方实现需自行退订自己的静态事件。
+- **`InputManager` 在会话开始时退订旧 provider 的设备事件**（INP-002，仅关闭域重载时可见）：复位只丢
+  引用、不 Dispose，但默认 provider 不再被 `InputSystem.onDeviceChange` 钉住；第三方 provider 需自行退订。
 
 ### Fixed
 
@@ -402,6 +404,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `GetAction` 命中后扫描其余已启用 map，按动作名 Warning 一次。回归：3 条新用例（改前分别
   `Expected: <ArgumentNullException> But was: null`、`InvalidOperationException: subscriber boom`、
   `Expected: 1 But was: 0`）。
+- **会话复位后旧 provider 仍挂在 `InputSystem.onDeviceChange` 上（INP-002）**：`ResetForNewSession`
+  只丢引用、不 Dispose，而默认 provider 在初始化时订阅了静态设备事件——关闭域重载后旧实例被钉住，
+  第二会话的设备消息逐会话叠加。修法：`InputSystemProvider` 抽出幂等的 `Attach/DetachDeviceChanges`，
+  门面经内部能力接口在丢引用前退订（只 `-=`、不 Dispose）。回归：
+  `SessionResetTests.Input_ResetUnbindsOldProviderDeviceChanges`（改前 `Expected: False But was: True`）。
 
 #### Audio
 

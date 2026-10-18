@@ -208,6 +208,11 @@ namespace XFramework.XInput
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()
         {
+            // INP-002：默认 provider 订阅了 InputSystem.onDeviceChange（静态回调表跨会话存活），
+            // 只丢引用会让旧实例被钉住、第二会话的设备消息逐会话叠加。只退订、不 Dispose。
+            if (_provider is IInputProviderSessionReset sessionReset)
+                sessionReset.UnbindSessionEvents();
+
             _provider = null;
             _initialized = false;
             _ticker = null;

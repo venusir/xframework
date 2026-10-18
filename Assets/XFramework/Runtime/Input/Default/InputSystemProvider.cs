@@ -16,7 +16,7 @@ namespace XFramework.XInput.Default
     /// <para>支持手柄类型自动检测（Xbox / PS4 / PS5 / Switch Pro）。</para>
     /// <para>不包含任何游戏专属动作定义（如 Jump、Attack），第三方游戏需自行定义输入封装。</para>
     /// </summary>
-    internal sealed class InputSystemProvider : IInputProvider
+    internal sealed class InputSystemProvider : IInputProvider, IInputProviderSessionReset
     {
         #region Private Fields
 
@@ -39,6 +39,9 @@ namespace XFramework.XInput.Default
 
         // 同名动作跨已启用 map 的歧义告警去重（INP-014）：按动作名只警告一次，防止刷屏
         private readonly HashSet<string> _warnedAmbiguousActionNames = new HashSet<string>();
+
+        // 是否已订阅 InputSystem.onDeviceChange（INP-002：会话复位需要「只退订、不 Dispose」）
+        private bool _deviceChangeSubscribed;
 
         // 振动到期时刻:玩家 ID → Time.unscaledTime 绝对时刻;由 Tick 帧驱动到期自动停止,不使用协程
         private readonly Dictionary<uint, float> _vibrationUntilTimes = new Dictionary<uint, float>(4);
@@ -105,7 +108,7 @@ namespace XFramework.XInput.Default
                 SwitchActionMap(initialActionMap);
 
             // 监听设备变更
-            InputSystem.onDeviceChange += OnInputDeviceChange;
+            AttachDeviceChanges();
 
             LogManager.Info(LogCategories.Input, "Initialized successfully.");
         }
@@ -714,7 +717,7 @@ namespace XFramework.XInput.Default
 
         public void Dispose()
         {
-            InputSystem.onDeviceChange -= OnInputDeviceChange;
+            DetachDeviceChanges();
 
             StopAllVibration();
 
@@ -735,6 +738,34 @@ namespace XFramework.XInput.Default
         #endregion
 
         #region Private — Device Management
+
+        /// <summary>
+        /// 订阅 <c>InputSystem.onDeviceChange</c>（幂等）。
+        /// </summary>
+        private void AttachDeviceChanges()
+        {
+            if (_deviceChangeSubscribed) return;
+            InputSystem.onDeviceChange += OnInputDeviceChange;
+            _deviceChangeSubscribed = true;
+        }
+
+        /// <summary>
+        /// 退订 <c>InputSystem.onDeviceChange</c>（幂等，不 Dispose）。
+        /// <para>会话复位要在丢弃旧 provider 引用前调用（INP-002）：静态回调表跨会话存活，
+        /// 只丢引用会让旧实例被钉住、设备消息逐会话叠加。</para>
+        /// </summary>
+        private void DetachDeviceChanges()
+        {
+            if (!_deviceChangeSubscribed) return;
+            InputSystem.onDeviceChange -= OnInputDeviceChange;
+            _deviceChangeSubscribed = false;
+        }
+
+        /// <inheritdoc/>
+        void IInputProviderSessionReset.UnbindSessionEvents() => DetachDeviceChanges();
+
+        /// <summary>当前是否订阅着设备变更事件（测试缝 / 诊断）。</summary>
+        internal bool IsDeviceChangeSubscribed => _deviceChangeSubscribed;
 
         private void OnInputDeviceChange(InputDevice device, InputDeviceChange change)
         {

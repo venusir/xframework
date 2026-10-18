@@ -236,4 +236,17 @@ namespace XFramework.XInput
 
         #endregion
     }
+
+    /// <summary>
+    /// 会话复位用的内部能力：默认后端在这里退订静态引擎事件（INP-002）。
+    /// <para><b>第三方实现不需要实现它</b>——门面探测不到时只丢引用（见 README「已知限制」）。</para>
+    /// </summary>
+    internal interface IInputProviderSessionReset
+    {
+        /// <summary>
+        /// 只退订静态事件（<c>InputSystem.onDeviceChange</c>），<b>不</b> Dispose。
+        /// <para>会话复位在丢弃旧 provider 引用前调用；幂等。</para>
+        /// </summary>
+        void UnbindSessionEvents();
+    }
 }

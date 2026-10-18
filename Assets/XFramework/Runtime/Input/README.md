@@ -566,6 +566,10 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   `Bootstrap` 的静态登记表）是同一根因，本轮一并处置（清单见 `CHANGELOG`）。注意**重复 `Initialize()`
   的语义没有变**：会话内的重复调用仍是「告警 + 忽略」——复位发生在会话开始、任何 `Initialize` 之前，
   第二个会话走的是**首初始化**路径。
+- **会话复位只退订默认 provider 的设备事件，不 Dispose**（INP-002）：关闭域重载时
+  `InputSystem.onDeviceChange` 的静态回调表跨会话存活，只丢引用会让旧 provider 被钉住、设备消息逐会话
+  叠加。复位对实现了内部解绑能力的 provider 调用 `-=`；**第三方 provider 若自己订阅了静态事件，门面
+  探测不到**——需自行在会话边界退订。
 - **`playerId > 0` 的复合绑定只读第一个子项**（INP-010）：对 D-pad / 2DVector 这类复合绑定，
   按玩家读取会取到第一个子项（通常是 `ButtonControl`），`ReadVector2` 可能恒为零；`playerId == 0`
   则是 action 级全设备读取。需要逐玩家读取复合轴请自行组合各子项，或把动作拆成独立的 1D 轴。
