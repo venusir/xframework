@@ -474,6 +474,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   是否持有该引用为准；`LogOptions` 改为「每次构建实现时读取」（`Configure` 或懒建/自动初始化）；
   README 的 `CaptureUnityLogs` 改为「默认值与 `EnableFileSink` 相同（构造时一次性拷贝，之后改不联动）」；
   维护文档的 `XFrameworkDependencyInstaller.cs` 行号 `135` 订正为 `134`。
+- **Settings / Reactive / Camera / CLAUDE.md 口径订正（2026-10-17，SET-011、RCT-009、CAM-005、AST-009）**：
+  `JsonFileStore` 的「主文件缺失不回退备份」理由改为实际原因（Reset 会同时删 `.bak`；缺失按无数据处理），
+  不再写「防 Reset 复活」的错误理由；Reactive README 写明不提供主线程断言及理由；Camera 的
+  `OutputCamera` / `Unregister` 契约窄化（适配器可恒非空、注销只清管理器视图，CAM-005）；CLAUDE.md
+  的宽容语义豁免补 `AssetManager.UnloadSceneAsync`（代码自称第三处）。
 - **Asset / Diagnostics / Audio / File 文档订正（2026-10-17）**：
   Asset（AST-006）：API 表补 `ClearPool` / `ClearAllPools`。
   Diagnostics（DIAG-004）：概览页签补 Camera 行。

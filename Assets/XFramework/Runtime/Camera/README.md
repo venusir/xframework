@@ -283,8 +283,13 @@ public sealed class DynamicCameraOwner : MonoBehaviour
     `UpdateManager.RegisterLate`（LateUpdate）+ `Vector3.SmoothDamp`；震屏 / 缩放计时用 `TimerManager`；
     相机属性直接经 `OutputCamera`（`UnityEngine.Camera`）读写。
   - **别的相机系统** → 实现 `ICameraManager`；核心包不锁后端。
-- 未知 id 只告警不抛；被销毁的相机在注册表里表现为 `null`，`OutputCamera` 返回 `null`，但 `CameraIds`
+- **未知 id 只告警不抛；被销毁的相机在注册表里表现为 `null`，`OutputCamera` 返回 `null`，但 `CameraIds`
   仍可能列出该 id，直到调用方 `Unregister`。
+- **`OutputCamera` 不能当作「有活动相机」的判据**（CAM-005）：核心接口只承诺「没有输出相机时可为 null」；
+  Cinemachine 适配器即使活动 vcam 未注册也返回 Brain 的输出相机（恒非空）。判断活动状态请用
+  `ActiveHandle` / `IsActive`。
+- **`Unregister` 只清管理器视图**（CAM-005）：Cinemachine 适配器下 Brain 仍可能继续使用该 vcam；
+  需要真正停用请另行降优先级 / 停用 vcam。
 
 ## 设计取舍
 

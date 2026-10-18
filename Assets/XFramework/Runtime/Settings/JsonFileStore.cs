@@ -75,9 +75,10 @@ namespace XFramework.XSettings
         {
             lock (_ioLock)
             {
-                // 主文件不存在 = 无持久化数据,交给上层用 defaultFactory。
-                // 这里必须与「存在但损坏」分开:若缺失也回退备份,Reset(删文件)之后的下一次 Load
-                // 会把玩家刚重置掉的旧数据从 .bak 里恢复回来
+                // 主文件不存在 = 无持久化数据，交给上层用 defaultFactory（与 File 的「不存在 → 空」契约一致）。
+                // 备份只在「主文件存在但损坏」时使用：主文件缺失通常意味着首次运行，或已经被 Reset 删除
+                //（Reset 会同时删 .bak，所以这里回退备份并不会把旧数据复活）。代价是原子替换的降级窗口里
+                // 备份存在却不被使用——那条窗口由上层重试/恢复扫描兜底，见模块 README 的已知限制（SET-011）。
                 if (!File.Exists(_filePath))
                     return new T();
 

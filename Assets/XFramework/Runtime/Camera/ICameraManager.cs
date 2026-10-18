@@ -24,7 +24,11 @@ namespace XFramework.XCamera
     {
         /// <summary>当前输出相机；没有活动相机时为 <c>null</c>。</summary>
         /// <remarks>过渡期间返回目标的输出相机。使用方可直接用它做世界↔屏幕、射线、FOV 等
-        /// <see cref="Camera"/> 操作——本模块刻意不重复封装这些成员。</remarks>
+        /// <see cref="Camera"/> 操作——本模块刻意不重复封装这些成员。
+        /// <para><b>不要用 <c>OutputCamera != null</c> 判断「是否有已注册的活动相机」</b>：Cinemachine 适配器
+        /// 即使活动 vcam 未注册也会返回 Brain 的输出相机（恒非空）；要判断活动状态请用
+        /// <see cref="ActiveHandle"/> / <see cref="IsActive(string)"/>。核心接口只承诺「没有输出相机时可为 null」，
+        /// 不承诺「有输出相机就一定有已注册的活动相机」（CAM-005）。</para></remarks>
         Camera OutputCamera { get; }
 
         /// <summary>已注册的<b>命名</b>相机 id（主线程实时视图）。动态句柄不在其中。</summary>
@@ -74,7 +78,9 @@ namespace XFramework.XCamera
         /// <summary>注销一台动态相机。</summary>
         /// <param name="handle">寄存器返回的句柄。</param>
         /// <returns>确实移除了才返回 <c>true</c>；<c>default</c> / 已注销 / 无效句柄返回 <c>false</c>。</returns>
-        /// <remarks>若它在活动 / 过渡目标上，实现会清掉活动状态（不回退到另一台相机）。</remarks>
+        /// <remarks>若它在活动 / 过渡目标上，实现会清掉活动状态（不回退到另一台相机）。
+        /// <para><b>只清管理器视图</b>：Cinemachine 适配器不会让 Brain 停止使用该 vcam——注销后 Brain 仍可能
+        /// 继续输出它，需要另行停用 / 降优先级（CAM-005）。</para></remarks>
         bool Unregister(CameraHandle handle);
 
         /// <summary>立即切换到指定句柄的相机（cut）。</summary>
