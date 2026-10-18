@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
@@ -74,6 +75,69 @@ namespace XFramework.XLog.Tests
                 () => LogManager.Configure(new LogOptions { FlushEveryEntries = 0 }));
             Assert.Throws<ArgumentException>(
                 () => LogManager.Configure(new LogOptions { EnableFileSink = true, FileDirectory = null }));
+        }
+
+        [Test]
+        public void AddSink_Duplicate_IsIgnoredOnce()
+        {
+            var sink = new CountingSink();
+            LogManager.AddSink(sink);
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[LogManager] AddSink: 同一 sink 实例已登记")));
+            LogManager.AddSink(sink);
+
+            sink.Writes = 0; // 重复登记本身的告警也会写进 sink；只看后续这条日志的投递次数
+            LogManager.Info(LogCategories.Save, "dedup probe");
+            Assert.AreEqual(1, sink.Writes, "重复登记不得让同一条日志写两次（LOG-006）");
+
+            LogManager.RemoveSink(sink);
+        }
+
+        [Test]
+        public void RemoveSink_DisposesOnce()
+        {
+            var sink = new CountingSink();
+            LogManager.AddSink(sink);
+
+            Assert.IsTrue(LogManager.RemoveSink(sink));
+            Assert.IsTrue(sink.Disposed, "移除时应释放可释放的 sink");
+            Assert.IsFalse(LogManager.RemoveSink(sink), "第二次移除应返回 false（LOG-006）");
+        }
+
+        [Test]
+        public void FileSink_WriteFailure_IsDroppedAndCounted()
+        {
+            // 把「目录」占成一个文件：LogFileSink 首次写入时必然 IO 失败并 Die()
+            string invalidDirectory = Path.Combine(
+                Path.GetTempPath(), "xlog-not-a-dir-" + Guid.NewGuid().ToString("N"));
+            File.WriteAllText(invalidDirectory, "x");
+            try
+            {
+                LogManager.Configure(new LogOptions
+                {
+                    MinimumLevel = LogLevel.Verbose,
+                    EnableConsoleSink = true,
+                    CaptureStackTrace = false,
+                    EnableFileSink = true,
+                    CaptureUnityLogs = false,
+                    FileDirectory = invalidDirectory,
+                    MaxFileBytes = 32 * 1024 * 1024,
+                    MaxRetainedFiles = 10,
+                    ImmediateFlushMinLevel = LogLevel.Warning,
+                    FlushEveryEntries = 64,
+                });
+
+                int before = LogManager.DroppedSinkCount;
+                LogManager.Info(LogCategories.Save, "trigger file sink death");
+
+                Assert.Greater(LogManager.DroppedSinkCount, before,
+                    "文件 sink 在 IO 失败后必须被摘除并计数（LOG-003）");
+            }
+            finally
+            {
+                File.Delete(invalidDirectory);
+            }
         }
 
         #endregion

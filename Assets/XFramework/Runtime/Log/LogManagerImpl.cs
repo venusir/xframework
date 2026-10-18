@@ -372,13 +372,25 @@ namespace XFramework.XLog
             if (sink == null)
                 throw new ArgumentNullException(nameof(sink));
 
+            bool duplicate;
             lock (_sinkLock)
             {
                 ILogSink[] current = _sinks;
-                var next = new ILogSink[current.Length + 1];
-                Array.Copy(current, next, current.Length);
-                next[current.Length] = sink;
-                _sinks = next;
+                duplicate = Array.IndexOf(current, sink) >= 0;
+                if (!duplicate)
+                {
+                    var next = new ILogSink[current.Length + 1];
+                    Array.Copy(current, next, current.Length);
+                    next[current.Length] = sink;
+                    _sinks = next;
+                }
+            }
+
+            // 在锁外告警：dispatch 可能回调 AddSink/RemoveSink，持锁记日志会死锁（LOG-006）
+            if (duplicate)
+            {
+                LogManager.Warning(LogCategories.LogManager,
+                    "AddSink: 同一 sink 实例已登记，忽略重复登记。");
             }
         }
 
@@ -388,7 +400,13 @@ namespace XFramework.XLog
             if (sink == null)
                 return false;
 
-            if (!TryRemoveSink(sink))
+            // 移除全部匹配（按引用）并只释放一次（LOG-006）；正常路径因 AddSink 去重只有一项，
+            // 循环是防御性的。
+            bool removed = false;
+            while (TryRemoveSink(sink))
+                removed = true;
+
+            if (!removed)
                 return false;
 
             DisposeSink(sink);
@@ -479,7 +497,13 @@ namespace XFramework.XLog
                     catch (Exception)
                     {
                         DropSink(sinks[i]);
+                        continue;
                     }
+
+                    // 文件 sink 的 IO 失败走 Die()（静默停用），不会抛；在这里摘除并计数，
+                    // 否则死 sink 会一直占着 _sinks 且 DroppedSinkCount 不增（LOG-003）。
+                    if (sinks[i] is LogFileSink fileSink && fileSink.IsDead)
+                        DropSink(fileSink);
                 }
             }
             finally
@@ -509,7 +533,11 @@ namespace XFramework.XLog
                     catch (Exception)
                     {
                         DropSink(sinks[i]);
+                        continue;
                     }
+
+                    if (sinks[i] is LogFileSink fileSink && fileSink.IsDead)
+                        DropSink(fileSink);
                 }
             }
             finally

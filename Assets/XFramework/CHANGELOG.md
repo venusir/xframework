@@ -376,6 +376,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   旧文件、`FlushEveryEntries=0` 每条 flush、启用文件 sink 但 `FileDirectory=null` 首次写入即静默停用。
   修法：`LogManager.Configure` 入口做最小校验并抛 `ArgumentOutOfRangeException` / `ArgumentException`。
   回归：`LogLifecycleTests.Configure_RejectsFileOptionsThatWouldMisbehave`。
+- **文件 sink 的 IO 失败后仍留在册、不计 `DroppedSinkCount`（LOG-003）**：`Die()` 只置 `_dead` 并关写入端，
+  sink 占据 `_sinks` 直到显式移除，诊断页签照旧显示。修法：分发循环在 `Write` 返回后检查
+  `LogFileSink.IsDead`，命中即摘除并计入现有 `DroppedSinkCount`（不新增健康回读 API）。回归：
+  `LogLifecycleTests.FileSink_WriteFailure_IsDroppedAndCounted`（改前 `Expected: greater than 0 But was: 0`）。
+- **`AddSink` 允许重复登记、`RemoveSink` 只摘首个并释放（LOG-006）**：重复登记会让同一 sink 写两次，
+  移除后剩余登记写到已释放实例。修法：`AddSink` 按引用去重并告警（锁外告警防死锁）；`RemoveSink`
+  移除全部匹配且只 `Dispose` 一次。回归：`LogLifecycleTests.AddSink_Duplicate_IsIgnoredOnce` /
+  `RemoveSink_DisposesOnce`。
 
 #### Message
 

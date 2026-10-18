@@ -299,11 +299,11 @@ namespace XFramework.XLog
         /// <summary>因 <see cref="ILogSink.Write"/> 或 <see cref="ILogSink.Flush"/> 抛异常被静默摘除的 sink 次数。诊断用——该模块因此不再产生任何日志。</summary>
         int DroppedSinkCount { get; }
 
-        /// <summary>追加一个 sink。重复追加同一个实例会写两次（框架不做去重）。</summary>
+        /// <summary>追加一个 sink。同一实例重复登记会被忽略并告警（按引用去重，LOG-006）。</summary>
         /// <param name="sink">输出端。</param>
         void AddSink(ILogSink sink);
 
-        /// <summary>摘除一个 sink（按引用，移除首个匹配）。</summary>
+        /// <summary>摘除一个 sink（按引用，移除全部匹配并只释放一次）。</summary>
         /// <param name="sink">输出端。</param>
         /// <returns>是否移除成功。</returns>
         bool RemoveSink(ILogSink sink);
