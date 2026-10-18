@@ -88,6 +88,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `false`、后者为 `true`）——这条不对称写进了 XML 文档，别当成缺陷。**使用方不受影响**，除非你要用它；
   它是诊断 / 防御接口，成本随节点数增长，不要放进每帧路径。配套的边沿修复见 `### Changed` 的行为变更一条。
 
+#### Timer
+
+- **`TimerHandle` 实现 `IEquatable<TimerHandle>` 与 `==` / `!=` / `GetHashCode`（TMR-007）**：按
+  TableId / Slot / Generation 三元组比较，可直接作字典键 / `HashSet` 元素（相等句柄哈希一致）。
+  **代际是身份的一部分**：同一槽位被复用后旧句柄与新句柄不等（ABA 防线）；`Generation == 0` 的无效语义
+  不变——两个默认句柄相等，默认句柄与任何有效句柄不等。源兼容新增；公开 API 基线已同步（接口与
+  `Equals` / `GetHashCode` 行）。
+
 #### 测试基础设施
 
 - **共享零分配尺子 `AllocationRuler`（测试侧）**：本环境 `GC.GetAllocatedBytesForCurrentThread()` 与

@@ -99,6 +99,41 @@ namespace XFramework.XTimer.Tests
             Assert.AreEqual(original.Remaining, copy.Remaining);
         }
 
+        [Test]
+        public void Equality_SameTriplet_IsEqual()
+        {
+            // TMR-007：按 TableId / Slot / Generation 三元组比较
+            var a = new TimerHandle(1, 2, 3);
+            var b = new TimerHandle(1, 2, 3);
+
+            Assert.IsTrue(a.Equals(b));
+            Assert.IsTrue(a == b);
+            Assert.IsFalse(a != b);
+            Assert.AreEqual(a.GetHashCode(), b.GetHashCode(), "相等句柄的哈希必须一致（可作字典键）");
+        }
+
+        [Test]
+        public void Equality_AnyComponentDiffers_IsNotEqual()
+        {
+            var handle = new TimerHandle(1, 2, 3);
+
+            Assert.IsFalse(handle == new TimerHandle(9, 2, 3), "表不同");
+            Assert.IsFalse(handle == new TimerHandle(1, 9, 3), "槽位不同");
+            Assert.IsFalse(handle == new TimerHandle(1, 2, 9), "代际不同——槽位复用的 ABA 防线");
+            Assert.IsTrue(handle != new TimerHandle(1, 2, 9));
+        }
+
+        [Test]
+        public void Equality_DefaultHandle_EqualsItselfAndDiffersFromValid()
+        {
+            var invalid = default(TimerHandle);
+
+            Assert.IsTrue(invalid == default(TimerHandle), "两个默认句柄相等");
+            Assert.IsFalse(invalid == new TimerHandle(1, 2, 3), "默认句柄与有效句柄不等");
+            Assert.IsFalse(new TimerHandle(1, 2, 0) == new TimerHandle(1, 2, 3),
+                "代际 0 是保留的无效标记，不因三元组其余部分相同而相等");
+        }
+
         #endregion
     }
 }

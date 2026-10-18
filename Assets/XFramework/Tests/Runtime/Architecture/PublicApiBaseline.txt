@@ -1694,8 +1694,11 @@ XFramework.XSettings.SettingsTypeInfo  ::  public readonly struct
 XFramework.XSettings.SettingsTypeInfo.IsDirty  ::  public readonly bool
 XFramework.XSettings.SettingsTypeInfo.SettingsType  ::  public readonly System.Type
 XFramework.XSettings.SettingsTypeInfo.ToString  ::  public override string()
-XFramework.XTimer.TimerHandle  ::  public readonly struct : System.IDisposable
+XFramework.XTimer.TimerHandle  ::  public readonly struct : System.IDisposable, System.IEquatable<XFramework.XTimer.TimerHandle>
 XFramework.XTimer.TimerHandle.Dispose  ::  public virtual void()
+XFramework.XTimer.TimerHandle.Equals  ::  public override bool(object obj)
+XFramework.XTimer.TimerHandle.Equals  ::  public virtual bool(XFramework.XTimer.TimerHandle other)
+XFramework.XTimer.TimerHandle.GetHashCode  ::  public override int()
 XFramework.XTimer.TimerHandle.IsActive  ::  public bool IsActive { get; }
 XFramework.XTimer.TimerHandle.IsDefault  ::  public bool IsDefault { get; }
 XFramework.XTimer.TimerHandle.Remaining  ::  public float Remaining { get; }

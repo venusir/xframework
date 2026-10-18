@@ -18,7 +18,7 @@ namespace XFramework.XTimer
     /// <para><b>身份是三元组</b>：<c>Slot</c> 只是槽位下标，而槽位会被复用——没有代际就无法让旧句柄失效。
     /// <c>default(TimerHandle)</c> 的代际为 <c>0</c>，被保留为无效标记，任何有效句柄的代际都不是 <c>0</c>。</para>
     /// </remarks>
-    public readonly struct TimerHandle : IDisposable
+    public readonly struct TimerHandle : IDisposable, IEquatable<TimerHandle>
     {
         #region Private Fields
 
@@ -120,6 +120,41 @@ namespace XFramework.XTimer
             if (!IsDefault)
                 TimerManager.Release(this);
         }
+
+        #endregion
+
+        #region Equality
+
+        /// <summary>
+        /// 按三元组（表标识 / 槽位 / 代际）比较两个句柄是否指向同一个定时器。
+        /// <para><b>代际是身份的一部分</b>：同一槽位被复用后旧句柄与新句柄不等——这正是 ABA 防线。
+        /// <c>Generation == 0</c> 的无效语义不变：两个默认句柄相等，默认句柄与任何有效句柄不等。</para>
+        /// </summary>
+        /// <param name="other">另一个句柄。</param>
+        /// <returns>三元组完全相同时返回 true。</returns>
+        public bool Equals(TimerHandle other)
+            => _table == other._table && _slot == other._slot && _generation == other._generation;
+
+        /// <inheritdoc/>
+        public override bool Equals(object obj) => obj is TimerHandle other && Equals(other);
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                int hash = _table;
+                hash = (hash * 397) ^ _slot;
+                hash = (hash * 397) ^ _generation;
+                return hash;
+            }
+        }
+
+        /// <summary>三元组相等（<see cref="Equals(TimerHandle)"/> 的运算符形式）。</summary>
+        public static bool operator ==(TimerHandle left, TimerHandle right) => left.Equals(right);
+
+        /// <summary>三元组不等。</summary>
+        public static bool operator !=(TimerHandle left, TimerHandle right) => !left.Equals(right);
 
         #endregion
     }
