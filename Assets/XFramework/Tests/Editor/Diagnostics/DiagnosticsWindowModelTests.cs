@@ -124,6 +124,24 @@ namespace XFramework.Editor.Diagnostics.Tests
         }
 
         [Test]
+        public void Tick_PanelsDisappear_ClearsReportAndRequestsOneRepaint()
+        {
+            var panel = new FakePanel("A", r => r.KeyValue("A", "1"));
+            DiagnosticsManager.Register(panel);
+            var model = new DiagnosticsWindowModel();
+
+            Assert.IsTrue(model.Tick(0d, manual: false));
+            StringAssert.Contains("A", DiagnosticReportFormatter.ToText(model.Report));
+
+            DiagnosticsManager.Unregister(panel);
+
+            Assert.IsTrue(model.Tick(0d, manual: false), "页签消失应请求一次重绘（DIAG-002）");
+            Assert.AreEqual(string.Empty, DiagnosticReportFormatter.ToText(model.Report),
+                "注册表变空后不得继续显示上一个页签的陈旧内容");
+            Assert.IsFalse(model.Tick(0d, manual: false), "清空后不再重复请求重绘");
+        }
+
+        [Test]
         public void Tick_CollectsSelectedPanel()
         {
             DiagnosticsManager.Register(new FakePanel("A", r => r.KeyValue("A", "1")));

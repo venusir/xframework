@@ -21,6 +21,7 @@ namespace XFramework.Editor.Diagnostics
         private int _selectedIndex = -1;
         private double _nextRefreshTime;
         private bool _dirty = true;
+        private bool _panelsBecameEmpty;
 
         #endregion
 
@@ -62,7 +63,17 @@ namespace XFramework.Editor.Diagnostics
             ReloadPanels();
 
             if (!HasPanels)
-                return false;
+            {
+                // 注册表变空后必须清掉上一个页签的报告（否则「复制」仍输出陈旧内容，DIAG-002）。
+                // 只在「本来有页签、这一次变空」时请求重绘；空窗口的后续 Tick 保持返回 false
+                //（Tick_NoPanels_ReturnsFalse 锁定这一条）。
+                bool changed = _panelsBecameEmpty;
+                _panelsBecameEmpty = false;
+                _report.Clear();
+                Failed = false;
+                _dirty = false;
+                return changed;
+            }
 
             if (!manual && !_dirty)
             {
@@ -136,7 +147,11 @@ namespace XFramework.Editor.Diagnostics
                 _titles.Add(SafeTitle(_panels[i]));
 
             if (_panels.Count == 0)
+            {
                 _selectedIndex = -1;
+                if (previousCount > 0)
+                    _panelsBecameEmpty = true;
+            }
             else if (_selectedIndex < 0)
                 _selectedIndex = 0;
             else if (_selectedIndex >= _panels.Count)

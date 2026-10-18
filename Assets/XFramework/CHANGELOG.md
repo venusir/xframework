@@ -232,6 +232,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   装配错误被吞掉。修法：两个重载都抛 `ArgumentNullException`，`IPipeline` XML 补 `<exception>`。
   回归：`PipelineTests.AddStage_Null_Throws`（改前 `Expected: <ArgumentNullException> But was: null`）。
 
+#### Diagnostics
+
+- **注册表变空后报告与「复制」停在旧页签（DIAG-002）**：`DiagnosticsWindowModel.Tick` 在 `!HasPanels`
+  时直接返回，`_report` 与 `Failed` 不清理，复制按钮仍输出上一个页签的陈旧内容。修法：变空时清空报告、
+  复位失败标记，并在「本来有页签、这一次变空」时返回 `true` 请求一次重绘（空窗口的后续 Tick 仍返回
+  `false`，保持 `Tick_NoPanels_ReturnsFalse` 的契约）。回归：
+  `DiagnosticsWindowModelTests.Tick_PanelsDisappear_ClearsReportAndRequestsOneRepaint`（改前 `Expected: True But was: False`）。
+
 #### Event
 
 - **池化订阅节点归还时不清 `Next`（EVT-001）**：`SubscriptionNodePool.Return` 只清 `Handler`，池中的空闲节点
