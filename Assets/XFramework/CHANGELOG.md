@@ -401,6 +401,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   保存计数、替换设置并广播。修法：`SwitchToMainThread` 之后补 `ThrowIfDisposed`。回归：
   `SettingsAsyncTests.SaveAsync_DisposeDuringAwait_ThrowsObjectDisposed` /
   `LoadAsync_DisposeDuringAwait_ThrowsObjectDisposed`（Save 改前 `Expected: True But was: False`）。
+- **默认值工厂返回 null 无防御（SET-009）**：store 返回 null 有防御 + 告警，工厂没有。修法：
+  `CreateDefault` 对工厂产出做 null 检查并回退 `new T()`。回归：
+  `SettingsDefaultValueTests.Constructor_FactoryReturnsNull_FallsBackToNewT`。
+- **默认路径占用在初始化成功前写入、键比较区分大小写（SET-010）**：初始化失败（工厂抛异常）会留下
+  占用，另一个同名类型被误报冲突；文件系统不区分大小写而字典区分。修法：占用移到初始化成功之后，
+  字典改用 `StringComparer.OrdinalIgnoreCase`。回归：
+  `SettingsManagerLifecycleTests.DefaultPathClaim_WrittenOnlyAfterSuccessfulInitialization`
+  （改前改判为 `Expected: No Exception to be thrown`）。
 
 #### Message
 

@@ -555,7 +555,18 @@ namespace XFramework.XSettings
         /// </summary>
         private T CreateDefault()
         {
-            return RunValidator(_defaultFactory != null ? _defaultFactory() : new T());
+            T created = _defaultFactory != null ? _defaultFactory() : new T();
+
+            // 工厂返回 null 与 store 返回 null 同一条防御线（SET-009）：
+            // 否则后续字段访问会在远离初始化点的地方 NRE。
+            if (created == null)
+            {
+                LogManager.Warning(LogCategories.SettingsManager,
+                    "默认值工厂返回 null，已回退 new T()。请检查 Initialize 传入的工厂。");
+                created = new T();
+            }
+
+            return RunValidator(created);
         }
 
         /// <summary>

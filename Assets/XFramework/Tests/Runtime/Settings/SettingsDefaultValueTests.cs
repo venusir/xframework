@@ -61,6 +61,19 @@ namespace XFramework.XSettings.Tests
         }
 
         [Test]
+        public void Constructor_FactoryReturnsNull_FallsBackToNewT()
+        {
+            // SET-009：工厂返回 null 与 store 返回 null 同一条防御线
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[SettingsManager] 默认值工厂返回 null")));
+
+            var manager = new SettingsManagerImpl<SampleSettings>(
+                new FakeStore { HasData = false }, () => null);
+
+            Assert.IsNotNull(manager.Settings, "工厂返回 null 时必须回退 new T()");
+        }
+
+        [Test]
         public void Constructor_NoFactory_FallsBackToNewT()
         {
             var manager = new SettingsManagerImpl<SampleSettings>(new FakeStore { HasData = false });

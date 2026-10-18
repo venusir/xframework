@@ -58,7 +58,8 @@ namespace XFramework.XSettings
         /// 而文件不会随 Destroy 消失。若清空，则「A 初始化 → Destroy → B 初始化」会让 B 悄悄
         /// 接管 A 的路径，并在 A 的存档存在时把 A 的数据当作 B 解析——正是本表要防的那种事。</para>
         /// </summary>
-        private static readonly Dictionary<string, Type> DefaultPathClaims = new();
+        private static readonly Dictionary<string, Type> DefaultPathClaims =
+            new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
 
         #endregion
 
@@ -115,8 +116,11 @@ namespace XFramework.XSettings
                     $"（'{filePath}'）。默认路径取类型短名，同名类型需改用显式路径的 Initialize 重载。");
             }
 
+            // 占用必须在初始化成功之后写入（SET-010）：初始化失败（工厂抛异常等）时
+            // 不应把路径占住，否则另一个同名类型会被误报为冲突。
+            var manager = Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
             DefaultPathClaims[filePath] = type;
-            return Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
+            return manager;
         }
 
         /// <summary>

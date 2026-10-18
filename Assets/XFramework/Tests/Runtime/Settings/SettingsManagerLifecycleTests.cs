@@ -189,5 +189,43 @@ namespace XFramework.XSettings.Tests
         }
 
         #endregion
+
+        #region 默认路径占用
+
+        /// <summary>同名类型（短名相同、完整名不同）——默认路径按短名生成，两者会算出同一路径。</summary>
+        private static class SameNameCaseA
+        {
+            public sealed class SameName
+            {
+                public int A;
+            }
+        }
+
+        private static class SameNameCaseB
+        {
+            public sealed class SameName
+            {
+                public int B;
+            }
+        }
+
+        [Test]
+        public void DefaultPathClaim_WrittenOnlyAfterSuccessfulInitialization()
+        {
+            // SET-010：初始化失败（工厂抛异常）不得把默认路径占住，
+            // 否则另一个同名类型会被误报为路径冲突。
+            SettingsManager.Destroy();
+
+            Assert.Throws<InvalidOperationException>(() =>
+                SettingsManager.Initialize<SameNameCaseA.SameName>(
+                    () => throw new InvalidOperationException("factory boom")));
+
+            Assert.DoesNotThrow(() => SettingsManager.Initialize<SameNameCaseB.SameName>(),
+                "初始化失败不得占用默认路径；同名类型应能接管该路径");
+
+            SettingsManager.Destroy();
+        }
+
+        #endregion
     }
 }
