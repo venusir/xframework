@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XMessage;
 
@@ -77,8 +78,7 @@ namespace XFramework.XMessage.Tests
         [Test]
         public void Subscribe_AlreadyCancelled_DisposesImmediately()
         {
-            var subscriber = new TokenOwningSubscriber();
-            subscriber.Destroy();
+            var subscriber = new TokenOwningSubscriber();            subscriber.Destroy();
 
             subscriber.Subscribe<TestMessage>(subscriber.Handle);
             MessageManager.Publish(new TestMessage { Value = 1 });
@@ -199,6 +199,95 @@ namespace XFramework.XMessage.Tests
             MessageManager.Publish(new TestMessage { Value = 1 });
             Assert.AreEqual(0, subscriber.ReceivedCount, "令牌已取消，订阅应被立即释放");
         }
+
+        #region 扩展 SubscribeAsync 四个重载（MSG-008）
+
+        [Test]
+        public void SubscribeAsync_Extension_Plain_BindsToDestroyToken()
+        {
+            var subscriber = new TokenOwningSubscriber();
+            subscriber.SubscribeAsync<TestMessage>((msg, ct) =>
+            {
+                subscriber.Handle(msg);
+                return UniTask.CompletedTask;
+            });
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "前提：异步订阅应正常投递");
+
+            subscriber.Destroy();
+            MessageManager.Publish(new TestMessage { Value = 2 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "令牌取消后应自动退订");
+        }
+
+        [Test]
+        public void SubscribeAsync_Extension_Filtered_BindsToDestroyToken()
+        {
+            var subscriber = new TokenOwningSubscriber();
+            subscriber.SubscribeAsync<TestMessage>(
+                m => m.Value > 10,
+                (msg, ct) =>
+                {
+                    subscriber.Handle(msg);
+                    return UniTask.CompletedTask;
+                });
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            Assert.AreEqual(0, subscriber.ReceivedCount, "过滤条件外不得投递");
+
+            MessageManager.Publish(new TestMessage { Value = 11 });
+            Assert.AreEqual(1, subscriber.ReceivedCount);
+
+            subscriber.Destroy();
+            MessageManager.Publish(new TestMessage { Value = 12 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "令牌取消后应自动退订");
+        }
+
+        [Test]
+        public void SubscribeAsync_Extension_Keyed_BindsToDestroyToken()
+        {
+            var subscriber = new TokenOwningSubscriber();
+            subscriber.SubscribeAsync<string, TestMessage>(
+                "k",
+                (msg, ct) =>
+                {
+                    subscriber.Handle(msg);
+                    return UniTask.CompletedTask;
+                });
+
+            MessageManager.Publish("k", new TestMessage { Value = 1 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "前提：键值订阅应正常投递");
+
+            subscriber.Destroy();
+            MessageManager.Publish("k", new TestMessage { Value = 2 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "令牌取消后应自动退订");
+        }
+
+        [Test]
+        public void SubscribeAsync_Extension_KeyedFiltered_BindsToDestroyToken()
+        {
+            var subscriber = new TokenOwningSubscriber();
+            subscriber.SubscribeAsync<string, TestMessage>(
+                "k",
+                m => m.Value > 10,
+                (msg, ct) =>
+                {
+                    subscriber.Handle(msg);
+                    return UniTask.CompletedTask;
+                });
+
+            MessageManager.Publish("k", new TestMessage { Value = 1 });
+            Assert.AreEqual(0, subscriber.ReceivedCount, "过滤条件外不得投递");
+
+            MessageManager.Publish("k", new TestMessage { Value = 11 });
+            Assert.AreEqual(1, subscriber.ReceivedCount);
+
+            subscriber.Destroy();
+            MessageManager.Publish("k", new TestMessage { Value = 12 });
+            Assert.AreEqual(1, subscriber.ReceivedCount, "令牌取消后应自动退订");
+        }
+
+        #endregion
 
         /// <summary>按修正后的 XML 示例实现：令牌在构造时缓存，<see cref="Dispose"/> 后可安全读取。</summary>
         private sealed class DisposedTokenSourceSubscriber : IMessageSubscriber, IDestroyCancellationToken

@@ -382,10 +382,39 @@ namespace XFramework.XMessage.Tests
 
             var received = new List<int>();
             MessageManager.SubscribeBuffered<TestMessage>(msg => received.Add(msg.Value));
+            CollectionAssert.IsEmpty(received, "淘汰后新订阅者不得重放旧缓冲值（MSG-008 的缓冲重放面）");
 
             MessageManager.Publish(new TestMessage { Value = 2 });
 
             CollectionAssert.AreEqual(new[] { 2 }, received, "陈旧句柄释放后,新订阅者仍须恰好收到一条实时消息");
+        }
+
+        [Test]
+        public void EvictBufferedChannel_WithLiveSubscriber_DropsCacheAndStopsDelivery()
+        {
+            // MSG-008：淘汰对「有活缓冲订阅者」的语义此前零覆盖——EvictBuffered 会释放缓冲流，
+            // 活订阅者随之停止接收，而不只是丢掉重放缓存。
+            var received = new List<int>();
+            var live = MessageManager.SubscribeBuffered<TestMessage>(msg => received.Add(msg.Value));
+            MessageManager.Publish(new TestMessage { Value = 1 });
+            CollectionAssert.AreEqual(new[] { 1 }, received, "前提：活订阅者已收到一条");
+
+            Assert.IsTrue(MessageManager.EvictBufferedChannel<TestMessage>(),
+                "有活缓冲订阅者时淘汰仍应成功（释放缓冲流）");
+
+            MessageManager.Publish(new TestMessage { Value = 2 });
+            CollectionAssert.AreEqual(new[] { 1 }, received,
+                "淘汰会释放缓冲流，活订阅者随之停止接收");
+
+            var late = new List<int>();
+            MessageManager.SubscribeBuffered<TestMessage>(msg => late.Add(msg.Value));
+            CollectionAssert.AreEqual(new[] { 2 }, late,
+                "淘汰后新订阅者只重放淘汰之后的最新值（不得是淘汰前的 1）");
+
+            MessageManager.Publish(new TestMessage { Value = 3 });
+            CollectionAssert.AreEqual(new[] { 2, 3 }, late, "重建后的缓冲流继续接收新消息");
+
+            Assert.DoesNotThrow(() => live.Dispose(), "淘汰后旧句柄 Dispose 应为安全空操作");
         }
 
         [Test]
