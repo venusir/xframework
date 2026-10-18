@@ -371,6 +371,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   该条消息永久失去可重放性。修法：`MessageChannel` 加投递深度闩锁，`IsReclaimable` 在投递期间恒为
   false；四条发布路径（类型 / 键值 × 同步 / 异步）共用 `EmitSyncAndBuffer`，整段禁止回收。
   回归：`MessageEvictionTests` 两条（类型与键值路径），改前红。
+- **销毁令牌的取消登记不随订阅句柄回收（MSG-004）**：`TryBindToDestroy` 丢弃 `token.Register` 返回的
+  `CancellationTokenRegistration`；长寿命 `IDestroyCancellationToken` 所有者反复订阅/退订会持续累积登记，
+  直到令牌取消。修法：返回合并句柄 `DestroyBoundDisposable`（释放时先撤销登记再释放订阅）；12 个订阅扩展
+  方法改为返回合并句柄，Input / Localization / UI 的共用入口同步适配。回归：
+  `DestroyTokenBindingTests.DisposeSubscription_AlsoDisposesCancellationRegistration`（改前句柄释放后取消令牌
+  会二次释放订阅，`Expected: 1 But was: 2`）。
 
 #### Timer
 

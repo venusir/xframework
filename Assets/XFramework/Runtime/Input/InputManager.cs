@@ -291,7 +291,7 @@ namespace XFramework.XInput
         private static void BindToContext(IDisposable subscription, object context)
         {
             if (context == null) return;
-            if (MessageManager.TryBindToDestroy(context, subscription)) return;
+            if (MessageManager.TryBindToDestroy(context, subscription) != null) return;
 
             LogManager.Warning(LogCategories.Input,
                 "context of type '{0}' is neither a MonoBehaviour nor an IDestroyCancellationToken, " +

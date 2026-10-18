@@ -503,32 +503,28 @@ namespace XFramework.XMessage
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>订阅指定类型的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(filter, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>订阅指定键值的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>订阅指定键值的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable Subscribe<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.Subscribe(key, filter, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>异步订阅。消息到达时执行异步处理器。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
@@ -538,8 +534,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             var disposable = _broker.SubscribeAsync(asyncHandler, cancellationToken);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>异步订阅，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
@@ -550,8 +545,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             var disposable = _broker.SubscribeAsync(filter, asyncHandler, cancellationToken);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>异步订阅指定键值的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
@@ -562,8 +556,7 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             var disposable = _broker.SubscribeAsync(key, asyncHandler, cancellationToken);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>异步订阅指定键值的消息，并附加过滤条件。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
@@ -575,16 +568,14 @@ namespace XFramework.XMessage
             CancellationToken cancellationToken = default)
         {
             var disposable = _broker.SubscribeAsync(key, filter, asyncHandler, cancellationToken);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>订阅带缓冲的消息。新订阅者会立即收到最近一次发布的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>
@@ -595,16 +586,14 @@ namespace XFramework.XMessage
         public static IDisposable SubscribeBuffered<TKey, TMessage>(this IMessageSubscriber subscriber, TKey key, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(key, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>订阅带缓冲的消息，并附加过滤条件。新订阅者会立即收到最近一次发布的消息。订阅自动绑定订阅者的销毁时机（MonoBehaviour 或 IDestroyCancellationToken）。</summary>
         public static IDisposable SubscribeBuffered<TMessage>(this IMessageSubscriber subscriber, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(filter, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         /// <summary>
@@ -617,8 +606,7 @@ namespace XFramework.XMessage
             this IMessageSubscriber subscriber, TKey key, Predicate<TMessage> filter, Action<TMessage> handler)
         {
             var disposable = _broker.SubscribeBuffered(key, filter, handler);
-            TryBindToDestroy(subscriber, disposable);
-            return disposable;
+            return TryBindToDestroy(subscriber, disposable) ?? disposable;
         }
 
         #endregion
@@ -714,8 +702,8 @@ namespace XFramework.XMessage
         /// </summary>
         /// <param name="subscriber">订阅者：<see cref="MonoBehaviour"/> 或实现 <see cref="IDestroyCancellationToken"/> 的对象。</param>
         /// <param name="disposable">订阅句柄。</param>
-        /// <returns>确实做了绑定返回 true；订阅者两类都不是（未绑定）返回 false。</returns>
-        internal static bool TryBindToDestroy(object subscriber, IDisposable disposable)
+        /// <returns>已绑定时返回可释放的合并句柄（释放它会同时撤销销毁登记）；订阅者两类都不是时返回 <c>null</c>。</returns>
+        internal static IDisposable TryBindToDestroy(object subscriber, IDisposable disposable)
         {
             CancellationToken token;
             if (subscriber is MonoBehaviour mono)
@@ -728,20 +716,49 @@ namespace XFramework.XMessage
             }
             else
             {
-                return false;
+                return null;
             }
 
             // 已取消则立即释放，否则注册到取消回调
             if (!token.CanBeCanceled || token.IsCancellationRequested)
             {
                 disposable.Dispose();
-            }
-            else
-            {
-                token.Register(s => ((IDisposable)s).Dispose(), disposable);
+                return disposable;
             }
 
-            return true;
+            // 合并句柄：释放订阅时一并撤销取消登记（MSG-004）。长寿命令牌上反复订阅/退订
+            // 若不撤销登记，CancellationTokenSource 的回调列表会持续增长到令牌取消。
+            var bound = new DestroyBoundDisposable(disposable);
+            bound.SetRegistration(
+                token.Register(s => ((DestroyBoundDisposable)s).DisposeSubscriptionOnly(), bound));
+            return bound;
+        }
+
+        /// <summary>订阅 + 销毁令牌登记的合并句柄。</summary>
+        private sealed class DestroyBoundDisposable : IDisposable
+        {
+            private readonly IDisposable _subscription;
+            private CancellationTokenRegistration _registration;
+
+            public DestroyBoundDisposable(IDisposable subscription) => _subscription = subscription;
+
+            public void SetRegistration(CancellationTokenRegistration registration)
+                => _registration = registration;
+
+            /// <summary>令牌取消路径：只释放订阅；登记正由令牌自身回调，无需再撤销。</summary>
+            public void DisposeSubscriptionOnly()
+            {
+                _subscription.Dispose();
+            }
+
+            public void Dispose()
+            {
+                // 先撤销登记再释放订阅：否则取消回调可能在释放之后再次释放同一订阅（MSG-004）。
+                // 订阅句柄按契约必须可重复 Dispose（ActionDisposable 等均为幂等），
+                // 与旧行为一致；这里不额外加锁。
+                _registration.Dispose();
+                _subscription.Dispose();
+            }
         }
         #endregion
     }

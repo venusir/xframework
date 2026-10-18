@@ -730,8 +730,9 @@ namespace XFramework.XUI
             if (context == null)
                 return subscription;
 
-            if (MessageManager.TryBindToDestroy(context, subscription))
-                return subscription;
+            var bound = MessageManager.TryBindToDestroy(context, subscription);
+            if (bound != null)
+                return bound;
 
             // 订是订上了，但没有任何人会在它销毁时退订。留痕而不是静默——静默的话故障表现只是
             // 「对象已经没了，回调还在跑」，从现象追回这里要绕很远。

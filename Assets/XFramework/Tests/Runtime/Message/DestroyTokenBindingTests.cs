@@ -166,9 +166,28 @@ namespace XFramework.XMessage.Tests
         }
 
         [Test]
-        public void Subscribe_AfterOwnerDisposed_DoesNotThrow()
+        public void DisposeSubscription_AlsoDisposesCancellationRegistration()
         {
-            // 钉住随包 XML 示例的修正形状：令牌必须在构造时缓存。
+            // MSG-004：长寿命 IDestroyCancellationToken 所有者反复订阅/退订时，登记必须随句柄回收，
+            // 否则 CancellationTokenSource 上的 registration 会持续累积，直到令牌取消。
+            using var cts = new CancellationTokenSource();
+            var subscriber = new RawTokenSubscriber(cts.Token);
+            var probe = new CountingDisposable();
+
+            var handle = MessageManager.TryBindToDestroy(subscriber, probe);
+            Assert.IsNotNull(handle, "绑定时必须返回可释放的合并句柄");
+
+            handle.Dispose();
+            Assert.AreEqual(1, probe.DisposeCount, "句柄释放应释放订阅");
+
+            cts.Cancel();
+            Assert.AreEqual(1, probe.DisposeCount,
+                "令牌取消时不得再次释放已释放的订阅——登记必须随句柄一起回收（MSG-004）");
+        }
+
+        [Test]
+        public void Subscribe_AfterOwnerDisposed_DoesNotThrow()
+        {            // 钉住随包 XML 示例的修正形状：令牌必须在构造时缓存。
             // 旧示例的 `=> _cts.Token` 在 Dispose 之后再订阅会抛 ObjectDisposedException——
             // 改前必红：把本类的 getter 换回旧形状，本用例即红。
             var subscriber = new DisposedTokenSourceSubscriber();
@@ -210,6 +229,24 @@ namespace XFramework.XMessage.Tests
             public int ReceivedCount { get; private set; }
 
             public void Handle(TestMessage message) => ReceivedCount++;
+        }
+
+        /// <summary>只提供销毁令牌的订阅者；用于直接调用 <c>TryBindToDestroy</c> 的白盒用例。</summary>
+        private sealed class RawTokenSubscriber : IDestroyCancellationToken
+        {
+            private readonly CancellationToken _token;
+
+            public RawTokenSubscriber(CancellationToken token) => _token = token;
+
+            public CancellationToken DestroyCancellationToken => _token;
+        }
+
+        /// <summary>计数式句柄：记录 Dispose 次数，用于观察登记是否在取消时二次释放。</summary>
+        private sealed class CountingDisposable : IDisposable
+        {
+            public int DisposeCount;
+
+            public void Dispose() => DisposeCount++;
         }
     }
 }
