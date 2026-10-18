@@ -34,6 +34,19 @@ namespace XFramework.XSave.Tests
             public void OnClear() => Gold = 0;
         }
 
+        /// <summary>同一 blockName 的「更新版」块：写入 version=1 的存档，模拟代码回滚后的加载（DATA-011）。</summary>
+        [Serializable]
+        private sealed class WalletDataV1 : IDataBlock
+        {
+            public string BlockName => "Wallet";
+            public int Gold;
+            public int DataVersion => 1;
+            public object OnSave() => Gold;
+            public object OnMigrate(object saveData, int fromVersion) => saveData;
+            public void OnLoad(object data) { if (data is int i) Gold = i; }
+            public void OnClear() => Gold = 0;
+        }
+
         private TempFileProvider _fileProvider;
 
         [OneTimeTearDown]
@@ -839,6 +852,26 @@ namespace XFramework.XSave.Tests
             Assert.IsFalse(result.IsSuccess);
             Assert.IsNotNull(result.Message, "应说明需要先升级客户端");
             Assert.AreEqual(7, wallet.Gold, "被拒绝的存档不得部分应用到内存");
+        }
+
+        [Test]
+        public async Task TryLoadAsync_BlockVersionTooNew_ReturnsVersionTooNew()
+        {
+            // DATA-011：整份版本不变、但某块版本高于当前代码。Data 会跳过该块并计入失败；
+            // Save 必须据此回报 VersionTooNew，而不是整份 Corrupt。
+            DataManager.RegisterBlock(new WalletDataV1 { Gold = 5 });
+            await SaveManager.SaveAsync(1);
+
+            // 模拟代码回滚：换回当前版本 0 的块再加载
+            DataManager.Shutdown();
+            DataManager.Initialize(new DataManagerImpl());
+            DataManager.RegisterBlock(new WalletData());
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.VersionTooNew, result.Status,
+                "块版本过新应映射为 VersionTooNew，而不是整份 Corrupt（DATA-011）");
+            Assert.IsFalse(result.IsSuccess);
         }
 
         [Test]

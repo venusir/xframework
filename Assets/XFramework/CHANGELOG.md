@@ -280,6 +280,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   快照 `defaultFormat` 设为非 `"json"` 时，整份存档读不回。修法：`BuildBlockSnapshot` 按快照的
   `defaultFormat` 取序列化器（`Serializer.Get`）；单块导出仍用 `Serializer.Default.Format`。
   回归：`DataRobustnessTests.CreateSnapshot_UsesSnapshotsDefaultFormat`（改前 `Expected: 1 But was: 0`）。
+- **块版本过新被 Save 报成 `Corrupt`（DATA-011）**：Data 对版本过新的块只跳过并计入失败，Save 据此
+  整份回滚并报 `Corrupt`。修法：应用快照前按 blockName 对照当前块版本，命中即返回 `VersionTooNew`
+  （主文件与备份路径都覆盖）。回归：
+  `SaveManagerImplTests.TryLoadAsync_BlockVersionTooNew_ReturnsVersionTooNew`（改前旧路径整份回滚并记
+  `[Save] 有 1 个数据块未能恢复`）。
 
 #### UI
 

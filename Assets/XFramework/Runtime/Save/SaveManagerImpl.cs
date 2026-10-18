@@ -330,6 +330,11 @@ namespace XFramework.XSave
                         return new SaveLoadResult(SaveLoadStatus.VersionTooNew, null,
                             $"存档版本({outcome.SaveData.version})高于当前客户端支持的版本({CurrentVersion})，请先升级客户端");
 
+                    // 块版本过新（DATA-011）：Data 会跳过该块并计入失败，Save 若照旧回滚会把整份
+                    // 存档误报成 Corrupt。这里先按 blockName 对照当前块版本，命中即整份拒绝。
+                    if (TryFindTooNewBlock(outcome.SaveData, out var tooNewMessage))
+                        return new SaveLoadResult(SaveLoadStatus.VersionTooNew, null, tooNewMessage);
+
                     if (!TryApplySnapshot(outcome.SaveData, out _, out var applyError))
                         return new SaveLoadResult(SaveLoadStatus.Corrupt, null, $"快照无法完整应用到内存：{applyError}");
 
@@ -357,6 +362,10 @@ namespace XFramework.XSave
                     else if (backupOutcome.SaveData.version > CurrentVersion)
                     {
                         backupMessage = $"备份版本({backupOutcome.SaveData.version})高于当前客户端支持的版本({CurrentVersion})";
+                    }
+                    else if (TryFindTooNewBlock(backupOutcome.SaveData, out var backupTooNewMessage))
+                    {
+                        backupMessage = backupTooNewMessage;
                     }
                     else if (!TryApplySnapshot(backupOutcome.SaveData, out _, out var backupApplyError))
                     {
@@ -434,6 +443,39 @@ namespace XFramework.XSave
 
             var saveData = parsed.SaveData;
             return LoadOutcome.Ok(saveData, BuildMeta(saveData, playerId, slot, path, bytes.Length), bytes);
+        }
+
+        /// <summary>
+        /// 快照中是否存在版本高于当前代码的数据块（DATA-011）。
+        /// <para>Data 的 <c>ApplySnapshot</c> 对「块版本过新」只跳过该块并计入失败；Save 若照旧回滚，
+        /// 会把整份存档误报成 <c>Corrupt</c>。先在应用前按 blockName 对照当前块版本，命中即整份拒绝。</para>
+        /// </summary>
+        /// <param name="saveData">要检查的快照。</param>
+        /// <param name="message">命中时的拒绝原因；未命中为 <c>null</c>。</param>
+        /// <returns>存在版本过新的块返回 <c>true</c>。</returns>
+        private static bool TryFindTooNewBlock(DataSnapshot saveData, out string message)
+        {
+            message = null;
+            if (saveData?.blocks == null || saveData.blocks.Count == 0)
+                return false;
+
+            var codeVersions = new Dictionary<string, int>(StringComparer.Ordinal);
+            DataManager.ForEachBlock(block => codeVersions[block.BlockName] = block.DataVersion);
+
+            for (int i = 0; i < saveData.blocks.Count; i++)
+            {
+                var snap = saveData.blocks[i];
+                if (snap != null &&
+                    codeVersions.TryGetValue(snap.blockName, out var codeVersion) &&
+                    snap.version > codeVersion)
+                {
+                    message = $"数据块 '{snap.blockName}' 的版本({snap.version})高于当前代码支持的版本({codeVersion})，" +
+                              "整份存档已拒绝。请先升级客户端";
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         /// <summary>
