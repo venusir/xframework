@@ -2049,8 +2049,8 @@ XFramework.XUpdate.UpdateManager.IsInitialized  ::  public static bool IsInitial
 XFramework.XUpdate.UpdateManager.IsPaused  ::  public static bool IsPaused { get; }
 XFramework.XUpdate.UpdateManager.IsRegistered  ::  public static bool(XFramework.XUpdate.IUpdateLifecycle node)
 XFramework.XUpdate.UpdateManager.Pause  ::  public static void()
-XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateable node, float deltaTime, float time)
-XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateable node, float deltaTime, ref XFramework.XUpdate.UpdateClock clock)
+XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateLifecycle node, float deltaTime, float time)
+XFramework.XUpdate.UpdateManager.ProcessImmediate  ::  public static void(XFramework.XUpdate.IUpdateLifecycle node, float deltaTime, ref XFramework.XUpdate.UpdateClock clock)
 XFramework.XUpdate.UpdateManager.Register  ::  public static void(XFramework.XUpdate.IUpdateable node, int order, XFramework.XUpdate.UpdateTier initialTier = Tier0, XFramework.XUpdate.UpdateTimeMode timeMode = Scaled)
 XFramework.XUpdate.UpdateManager.RegisterFixed  ::  public static void(XFramework.XUpdate.IFixedUpdateable node, int order, XFramework.XUpdate.UpdateTier initialTier = Tier0)
 XFramework.XUpdate.UpdateManager.RegisterLate  ::  public static void(XFramework.XUpdate.ILateUpdateable node, int order, XFramework.XUpdate.UpdateTier initialTier = Tier0, XFramework.XUpdate.UpdateTimeMode timeMode = Scaled)

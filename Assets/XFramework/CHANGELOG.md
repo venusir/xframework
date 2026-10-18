@@ -87,6 +87,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **与 `IsEnabled` 的分工**：一个答「是否在管理中」、一个答「是否被禁用」，两个谓词方向相反（未注册时前者为
   `false`、后者为 `true`）——这条不对称写进了 XML 文档，别当成缺陷。**使用方不受影响**，除非你要用它；
   它是诊断 / 防御接口，成本随节点数增长，不要放进每帧路径。配套的边沿修复见 `### Changed` 的行为变更一条。
+- **`ProcessImmediate` 形参放宽为 `IUpdateLifecycle`（UPD-003）**：纯 `ILateUpdateable` / `IFixedUpdateable`
+  节点现在可直接立即处理；传 `IUpdateable` 的既有调用源兼容。迁移表见 `### Changed`，公开 API 基线已同步
+  （两处签名变化）。
 
 #### Timer
 
@@ -169,8 +172,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `handle.Status == YooAsset.EOperationStatus.Succeed` | `handle.Status == AssetOperationStatus.Succeed` | **编译器逐处报错**（返回类型变更，且不再需要 `using YooAsset`）。四个句柄 `AssetHandle<T>` / `RawFileHandle` / `SubAssetsHandle` / `AssetDownloaderHandle` 同改，四个成员与上游**一一对应**（`None` / `Processing` / `Succeed` / `Failed`），语义与取值时机完全不变。理由：公开面不再绑在上游的类型上（YooAsset 3.x 曾把一批类型移进默认不编译的兼容层，透出上游枚举会让本包的公开面被动破坏） |
 | `ICameraManager.ActiveCameraId` / `UnityCameraManager.ActiveCameraId` / `CinemachineCameraManager.ActiveCameraId` | `ICameraManager.ActiveHandle.NamedId`（或门面 `CameraManager.ActiveCameraId`） | 接口与实现上的 `ActiveCameraId` 移除——两者并行，`ActiveHandle` 是唯一活动查询；命名 id 由句柄携带（`NamedId`，动态为 `null`）。门面 `CameraManager.ActiveCameraId` 保留，直接读 `ActiveHandle.NamedId`（O(1)） |
 | `new CameraHandle(id, generation)` | `new CameraHandle(id, generation, namedId)` | 构造签名扩展：`namedId` 有默认值 `null`，**两参调用源兼容**（基线把签名变化记为「已变更」）。命名槽位填命名 id，动态槽位传 `null` |
+| `UpdateManager.ProcessImmediate(IUpdateable, float, float)` / `(IUpdateable, float, in UpdateClock)` | 同上，形参改为 `IUpdateLifecycle` | **形参放宽**：纯 `ILateUpdateable` / `IFixedUpdateable` 节点现在可达。传 `IUpdateable` 的既有调用源兼容（实参隐式上转），重新编译即可；已编译的第三方程序集需重编。跨时机语义见下一条行为变更 |
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
+
+- **`UpdateManager.ProcessImmediate` 的跨时机语义写清（UPD-003）**：一次调用向三套调度器**全部转发**——
+  同时实现多个时机接口的节点会在每个时机各派发一次（`OnUpdate` + `OnLateUpdate` 各一次），不是「一次更新」；
+  固定步时机只重新定锚、不写时刻。此前 XML 只写「一次更新」，与实现不符。
 
 - **`DataManager.ApplySnapshot` 的清空阶段逐块隔离**（DATA-007）：第三方 `IDataBlock.OnClear` 抛异常不再
   中止整次恢复，改为记一条 `[Data]` Error、计入返回的失败块数（Save 据此回滚 `Corrupt`），其余块继续清空。

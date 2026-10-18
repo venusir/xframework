@@ -517,6 +517,48 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(1, node.UpdateCallCount, "带时钟的重载同样应立刻派发一次");
         }
 
+        /// <summary>只实现 LateUpdate 时机的节点（UPD-003 的形参放宽用例）。</summary>
+        private sealed class LateOnlyNode : ILateUpdateable
+        {
+            public int LateCallCount;
+
+            public void OnEnable() { }
+
+            public void OnDisable() { }
+
+            public UpdateTier OnLateUpdate(float deltaTime, float time)
+            {
+                LateCallCount++;
+                return UpdateTier.Tier0;
+            }
+        }
+
+        [Test]
+        public void ProcessImmediate_AcceptsLateOnlyNode()
+        {
+            // UPD-003：形参从 IUpdateable 放宽为 IUpdateLifecycle——纯 LateUpdate 节点此前够不到
+            var node = new LateOnlyNode();
+            UpdateManager.RegisterLate(node, order: 0);
+
+            UpdateManager.ProcessImmediate(node, deltaTime: 0.5f, time: 1.0f);
+
+            Assert.AreEqual(1, node.LateCallCount, "纯 LateUpdate 节点应能被立即派发");
+        }
+
+        [Test]
+        public void ProcessImmediate_CrossTimingNode_DispatchesEachTimingOnce()
+        {
+            // UPD-003 文档面：跨时机节点一次调用会 OnUpdate + OnLateUpdate 各一次（不是「一次更新」）
+            var node = new TestUpdateable();
+            UpdateManager.Register(node, order: 0);
+            UpdateManager.RegisterLate(node, order: 0);
+
+            UpdateManager.ProcessImmediate(node, deltaTime: 0.5f, time: 1.0f);
+
+            Assert.AreEqual(1, node.UpdateCallCount, "Update 时机一次");
+            Assert.AreEqual(1, node.LateCallCount, "LateUpdate 时机一次");
+        }
+
         [Test]
         public void IsPaused_TrueWhenTimeScaleZero()
         {

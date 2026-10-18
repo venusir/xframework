@@ -701,7 +701,11 @@ namespace XFramework.XUpdate
         /// <summary>
         /// 立即对指定对象执行一次更新并重新调整档位。
         /// <para>用于外部逻辑变化时需要立即响应，不等下一次时间切片。</para>
-        /// <para><b>墙钟轴节点请用 <see cref="ProcessImmediate(IUpdateable, float, in UpdateClock)"/></b>：
+        /// <para><b>跨时机节点</b>：形参是 <see cref="IUpdateLifecycle"/>，纯
+        /// <see cref="ILateUpdateable"/> / <see cref="IFixedUpdateable"/> 节点也能直接处理；
+        /// 同时实现多个时机接口的节点一次调用会在每个时机各派发一次（<c>OnUpdate</c> + <c>OnLateUpdate</c>
+        /// 各一次）——不是「一次更新」，而是「一次向三套调度器全部转发」。</para>
+        /// <para><b>墙钟轴节点请用 <see cref="ProcessImmediate(IUpdateLifecycle, float, in UpdateClock)"/></b>：
         /// 本重载只有一条时间源，会把同一个值写进该节点所在轴的「上次派发时刻」。节点在
         /// <see cref="UpdateTimeMode.Unscaled"/> 轴上而 <c>timeScale = 0</c> 时（暂停菜单正是这条轴的
         /// 招牌场景），传入的 <see cref="Time.time"/> 是冻住的，于是解除暂停后的首个 delta 会接近
@@ -710,23 +714,25 @@ namespace XFramework.XUpdate
         /// 故落到固定步时机上时不写时刻——下一次固定步派发的 delta 记 0（与注册/启用后首次派发
         /// 同一套锚定语义），而不是把逻辑时刻当成固定步时刻写进去。</para>
         /// </summary>
-        /// <param name="node">要立即更新的对象。</param>
+        /// <param name="node">要立即更新的对象（任意更新时机接口）。</param>
         /// <param name="deltaTime">传入的时间差。</param>
         /// <param name="time">当前时间（<see cref="Time.time"/>）。</param>
-        public static void ProcessImmediate(IUpdateable node, float deltaTime, float time)
+        public static void ProcessImmediate(IUpdateLifecycle node, float deltaTime, float time)
         {
             ProcessImmediate(node, deltaTime, new UpdateClock(time, time));
         }
 
         /// <summary>
         /// 立即对指定对象执行一次更新并重新调整档位，时刻按对象所属的时间轴从时钟中取。
+        /// <para><b>跨时机节点</b>：一次调用会向三套调度器全部转发——同时实现多个时机接口的节点
+        /// 会在每个时机各派发一次。</para>
         /// <para><b>固定步时机例外</b>：该时机没有对应的时钟字段（固定步条目恒挂在逻辑轴上），
         /// 故只重新定锚、不写入时刻——下一次固定步派发的 delta 记 0。</para>
         /// </summary>
-        /// <param name="node">要立即更新的对象。</param>
+        /// <param name="node">要立即更新的对象（任意更新时机接口）。</param>
         /// <param name="deltaTime">传入的时间差。</param>
         /// <param name="clock">本帧的时间基。</param>
-        public static void ProcessImmediate(IUpdateable node, float deltaTime, in UpdateClock clock)
+        public static void ProcessImmediate(IUpdateLifecycle node, float deltaTime, in UpdateClock clock)
         {
             if (_schedulers == null || node == null) return;
 
