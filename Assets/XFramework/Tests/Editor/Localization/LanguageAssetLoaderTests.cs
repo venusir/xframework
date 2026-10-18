@@ -22,6 +22,8 @@ namespace Venusy609.Xframework.Editor.Tests
         [SetUp]
         public void SetUp()
         {
+            // LOC-010：先复位静态门面（上一个 fixture 若在 TearDown 之前失败，会带着它的状态进来）
+            LocalizationManager.Destroy();
             LocalizationManager.Initialize("en", new Dictionary<string, string> { { "hi", "hello" } });
         }
 

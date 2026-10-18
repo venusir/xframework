@@ -333,6 +333,28 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.DoesNotThrow(() => LocalizationManager.SetPlaceholder("Name", string.Empty));
         }
 
+        [Test]
+        public void SwitchLanguageAsync_CachedLanguage_SwitchesSynchronously()
+        {
+            // LOC-010：SwitchLanguageAsync 此前零直接覆盖——缓存命中路径不碰 AssetManager
+            LocalizationManager.SetLanguageData("ja", new Dictionary<string, string> { { "title", "こんにちは" } });
+
+            LocalizationManager.SwitchLanguageAsync("ja").GetAwaiter().GetResult();
+
+            Assert.AreEqual("ja", LocalizationManager.CurrentLanguage, "缓存命中应直接同步切换");
+        }
+
+        [Test]
+        public void SwitchLanguageAsync_MissingAssetPath_ThrowsWithRepairHint()
+        {
+            // LOC-010：未设置 LanguageAssetPath 时不得去加载空模板
+            LocalizationManager.LanguageAssetPath = "";
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                LocalizationManager.SwitchLanguageAsync("ja").GetAwaiter().GetResult());
+            StringAssert.Contains("LanguageAssetPath is not set", ex.Message);
+        }
+
         #endregion
 
         #region 键值占位符（按语言解析）
