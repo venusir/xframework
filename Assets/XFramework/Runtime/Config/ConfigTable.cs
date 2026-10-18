@@ -38,36 +38,12 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 校验注入字典的键/值类型与行类型声明一致，不一致构造即抛（早失败）。
-        /// <para>沿基类链识别 <see cref="Dictionary{TKey, TValue}"/>（兼容派生类——查询期强转允许派生）；非 Dictionary 系的 IDictionary 同样拒绝，因为查询时强转必然失败。</para>
+        /// <para>具体判据与消息见 <see cref="ConfigDictionaryValidator"/>——与
+        /// <see cref="IConfigManager.RegisterTable(Type, IConfigTable)"/> 共用同一套校验（CONF-008）。</para>
         /// </summary>
         private void ValidateDictionary(IDictionary dict)
         {
-            var args = GetDictionaryArguments(dict.GetType());
-            if (args == null)
-            {
-                throw new ConfigException(
-                    $"Table '{typeof(T).Name}' expects a Dictionary<{_keyType.Name}, {typeof(T).Name}>, " +
-                    $"but the injected IDictionary is '{dict.GetType().Name}'. " +
-                    $"Load or register the table with a Dictionary<{_keyType.Name}, {typeof(T).Name}>.");
-            }
-            if (args[0] != _keyType || args[1] != typeof(T))
-            {
-                throw new ConfigException(
-                    $"Table '{typeof(T).Name}' dictionary type mismatch. " +
-                    $"Row type declares '{_keyType.Name}' keys, but the injected dictionary is " +
-                    $"'Dictionary<{args[0].Name}, {args[1].Name}>'.");
-            }
-        }
-
-        /// <summary>沿基类链查找泛型 <see cref="Dictionary{TKey, TValue}"/> 并返回其泛型参数；找不到返回 null。</summary>
-        private static Type[] GetDictionaryArguments(Type dictType)
-        {
-            for (var t = dictType; t != null && t != typeof(object); t = t.BaseType)
-            {
-                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>))
-                    return t.GetGenericArguments();
-            }
-            return null;
+            ConfigDictionaryValidator.Validate(typeof(T), _keyType, dict);
         }
 
         #region Query
@@ -337,5 +313,50 @@ namespace XFramework.XConfig
         IDictionary IConfigTable.Data => _dict;
 
         #endregion
+    }
+
+    /// <summary>
+    /// Table 注入字典的键/值类型校验。由 <see cref="ConfigTable{T}"/> 构造函数与
+    /// <see cref="IConfigManager.RegisterTable(Type, IConfigTable)"/> 共用同一套判据与消息（CONF-008）。
+    /// <para>沿基类链识别 <see cref="Dictionary{TKey, TValue}"/>（兼容派生类——查询期强转允许派生）；
+    /// 非 Dictionary 系的 IDictionary 同样拒绝，因为查询时强转必然失败。</para>
+    /// </summary>
+    internal static class ConfigDictionaryValidator
+    {
+        /// <summary>
+        /// 校验注入字典的键/值类型与行类型声明一致，不一致抛出 <see cref="ConfigException"/>。
+        /// </summary>
+        /// <param name="rowType">行类型（字典的 value 类型必须等于它）。</param>
+        /// <param name="keyType">行类型声明的主键类型（字典的 key 类型必须等于它）。</param>
+        /// <param name="dict">注入的字典（调用方保证非 null）。</param>
+        internal static void Validate(Type rowType, Type keyType, IDictionary dict)
+        {
+            var args = GetDictionaryArguments(dict.GetType());
+            if (args == null)
+            {
+                throw new ConfigException(
+                    $"Table '{rowType.Name}' expects a Dictionary<{keyType.Name}, {rowType.Name}>, " +
+                    $"but the injected IDictionary is '{dict.GetType().Name}'. " +
+                    $"Load or register the table with a Dictionary<{keyType.Name}, {rowType.Name}>.");
+            }
+            if (args[0] != keyType || args[1] != rowType)
+            {
+                throw new ConfigException(
+                    $"Table '{rowType.Name}' dictionary type mismatch. " +
+                    $"Row type declares '{keyType.Name}' keys, but the injected dictionary is " +
+                    $"'Dictionary<{args[0].Name}, {args[1].Name}>'.");
+            }
+        }
+
+        /// <summary>沿基类链查找泛型 <see cref="Dictionary{TKey, TValue}"/> 并返回其泛型参数；找不到返回 null。</summary>
+        internal static Type[] GetDictionaryArguments(Type dictType)
+        {
+            for (var t = dictType; t != null && t != typeof(object); t = t.BaseType)
+            {
+                if (t.IsGenericType && t.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                    return t.GetGenericArguments();
+            }
+            return null;
+        }
     }
 }

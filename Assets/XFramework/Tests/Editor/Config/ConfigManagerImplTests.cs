@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -30,10 +31,34 @@ namespace Venusy609.Xframework.Editor.Tests
             public int Value;
         }
 
+        /// <summary>与 <see cref="TestItemRow"/> 主键相同、行类型不同的表类型（CONF-008 错配用）。</summary>
+        private class OtherItemRow : IConfigRow<int>
+        {
+            public int Id { get; set; }
+        }
+
+        /// <summary>同时可作为 Table 行类型与 Global 配置类型的类（CONF-009 跨身份在途用）。</summary>
+        private class HybridRow : IConfigRow<int>
+        {
+            public int Id { get; set; }
+        }
+
+        /// <summary>Data 为 null 的自定义 IConfigTable（CONF-008 防御用）。</summary>
+        private sealed class NullDataTable : IConfigTable
+        {
+            public IDictionary Data => null;
+        }
+
         private static ConfigTable<TestItemRow> MakeTable()
         {
             return new ConfigTable<TestItemRow>(
                 new Dictionary<int, TestItemRow> { [1] = new TestItemRow { Id = 1 } });
+        }
+
+        private static ConfigTable<HybridRow> MakeHybridTable()
+        {
+            return new ConfigTable<HybridRow>(
+                new Dictionary<int, HybridRow> { [1] = new HybridRow { Id = 1 } });
         }
 
         [Test]
@@ -137,6 +162,108 @@ namespace Venusy609.Xframework.Editor.Tests
             // 已加载后省略路径直接返回，不抛异常（与 Table 版行为对齐）
             Assert.DoesNotThrow(() =>
                 impl.PreloadGlobalAsync<TestGlobalConfig>("").GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void RegisterTable_NonGeneric_RowTypeMismatch_Throws()
+        {
+            // CONF-008：rowType 与 table.Data 的行类型不匹配必须在注册期失败，
+            // 否则 IsLoaded/CopyLoaded 报错类型、查询期才炸。
+            var impl = new ConfigManagerImpl();
+            var table = MakeTable();
+
+            Assert.Throws<ConfigException>(() => impl.RegisterTable(typeof(OtherItemRow), table));
+            Assert.IsFalse(impl.IsLoaded<OtherItemRow>(), "校验失败不得留下已加载状态");
+
+            // 负向控制：行类型正确时注册成功
+            impl.RegisterTable(typeof(TestItemRow), table);
+            Assert.IsTrue(impl.IsLoaded<TestItemRow>());
+        }
+
+        [Test]
+        public void RegisterTable_NonGeneric_NullData_Throws()
+        {
+            // CONF-008：自定义 IConfigTable 的 Data 为 null 时不得写入（否则 CopyLoaded 在 Count 上 NRE）
+            var impl = new ConfigManagerImpl();
+
+            Assert.Throws<ConfigException>(() => impl.RegisterTable(typeof(TestItemRow), new NullDataTable()));
+            Assert.IsFalse(impl.IsLoaded<TestItemRow>());
+        }
+
+        [Test]
+        public void PreloadTableAsync_JoiningGlobalInFlight_DoesNotThrow()
+        {
+            // CONF-009：同一 CLR 类型先起 Global、再起 Table，两身份不得互相加入。
+            // 改前 Table 会加入 Global 的在途任务，Global 完成后读 _tables[type] 抛 KeyNotFoundException。
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+
+            var globalTcs = new UniTaskCompletionSource<HybridRow>();
+            fake.SetGlobalTask(globalTcs.Task);
+            var globalTask = impl.PreloadGlobalAsync<HybridRow>("config/g", fake);
+
+            var tableTcs = new UniTaskCompletionSource<ConfigTable<HybridRow>>();
+            fake.SetTableTask(tableTcs.Task);
+            var tableTask = impl.PreloadTableAsync<HybridRow>("config/t", fake);
+
+            Assert.AreEqual(1, fake.LoadTableCallCount, "跨身份不得加入 Global 的在途任务");
+
+            tableTcs.TrySetResult(MakeHybridTable());
+            Assert.IsNotNull(tableTask.GetAwaiter().GetResult());
+
+            globalTcs.TrySetResult(new HybridRow { Id = 2 });
+            globalTask.GetAwaiter().GetResult();
+            Assert.IsTrue(impl.IsLoaded<HybridRow>());
+        }
+
+        [Test]
+        public void PreloadGlobalAsync_JoiningTableInFlight_RegistersGlobal()
+        {
+            // CONF-009 反方向：Global 不得加入 Table 的在途任务后直接 return（那会漏掉 Global 注册）
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+
+            var tableTcs = new UniTaskCompletionSource<ConfigTable<HybridRow>>();
+            fake.SetTableTask(tableTcs.Task);
+            var tableTask = impl.PreloadTableAsync<HybridRow>("config/t", fake);
+
+            var globalTcs = new UniTaskCompletionSource<HybridRow>();
+            fake.SetGlobalTask(globalTcs.Task);
+            var globalTask = impl.PreloadGlobalAsync<HybridRow>("config/g", fake);
+
+            Assert.AreEqual(1, fake.LoadGlobalCallCount, "跨身份不得加入 Table 的在途任务");
+
+            globalTcs.TrySetResult(new HybridRow { Id = 2 });
+            globalTask.GetAwaiter().GetResult();
+            Assert.AreEqual(2, impl.GetGlobal<HybridRow>().Id, "Global 必须完成注册");
+
+            tableTcs.TrySetResult(MakeHybridTable());
+            tableTask.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void PreloadTableAsync_WaiterUnloadsDuringBroadcast_OtherWaitersStillGetTable()
+        {
+            // CONF-010：广播同步执行续体。先醒的等待者重入 Unload<T>() 后，
+            // 后续等待者不得再读 _tables[type]（改前抛 KeyNotFoundException）。
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+            var tcs = new UniTaskCompletionSource<ConfigTable<TestItemRow>>();
+            fake.SetTableTask(tcs.Task);
+
+            var creator = impl.PreloadTableAsync<TestItemRow>("config/items", fake);
+            var waiter1 = impl.PreloadTableAsync<TestItemRow>("config/items", fake);
+            var waiter2 = impl.PreloadTableAsync<TestItemRow>("config/items", fake);
+
+            // 第一个等待者的续体在广播中重入 Unload；第二个等待者仍应拿到加载结果
+            var unload = waiter1.ContinueWith(_ => impl.Unload<TestItemRow>());
+
+            tcs.TrySetResult(MakeTable());
+
+            Assert.IsNotNull(creator.GetAwaiter().GetResult());
+            Assert.IsNotNull(waiter2.GetAwaiter().GetResult(), "先醒的等待者卸载后，后续等待者仍应拿到结果");
+            unload.GetAwaiter().GetResult();
+            Assert.IsFalse(impl.IsLoaded<TestItemRow>(), "卸载发生在加载完成后，数据应被移除");
         }
     }
 }

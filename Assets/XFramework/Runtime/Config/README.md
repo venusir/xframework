@@ -95,7 +95,7 @@ if (byQuality.TryGet(ItemQuality.Legendary, out var legendaries))
 ### 加载语义与失败处理
 
 - **重复 Preload**：同一类型已加载时，再次 `Preload*Async` 直接返回缓存数据，不重复 IO；若传入的 assetPath 与首次不同，打 LogWarning（`[Config] 'X' is already loaded from 'old', ignoring new assetPath 'new'. To load from a different path, call Unload<X>() first.`）并忽略新路径。需要换路径加载时，先 `Unload<T>()`。
-- **并发 Preload**：同一类型的并发调用共享同一进行中的加载任务，不会重复 IO；加载失败时所有等待者收到同一异常实例。
+- **并发 Preload**：同一类型、**同一身份**（Table / Global）的并发调用共享同一进行中的加载任务，不会重复 IO；加载失败时所有等待者收到同一异常实例。同一 CLR 类型同时以 Table 与 Global 身份加载时两者**各自独立**（互不加入、互不等待）——`Unload<T>()` 仍同时清两种身份。
 - **加载失败**：抛 `ConfigException`（包装底层异常，如资源不存在、反序列化失败），调用方应 try/catch 处理；批量加载（`PreloadGroupAsync` / `PreloadAllAsync`）中单项失败同样抛异常中断。
 - **未加载查询**：`GetTable<T>()` / `GetGlobal<T>()` 在未加载时抛 `ConfigException`；`TryGetTable` / `TryGetGlobal` / `TryGet` 返回 `false`，不抛异常。
 - **Unload 在途**：某类型仍在加载中时调用 `Unload<T>()` 会打 LogWarning——在途加载仍会完成并注册数据，卸载可能不生效；若确需阻止该配置就绪，请在加载完成后再次 `Unload<T>()`。
@@ -169,6 +169,11 @@ ConfigManifest  (批量加载清单)
 | `RegisterTable<T>(ConfigTable<T> table)`          | 注入已反序列化的 Table 数据 |
 | `RegisterTable(Type rowType, IConfigTable table)` | 非泛型重载，供反射调用      |
 | `RegisterGlobal<T>(T config)`                     | 注入 Global 配置单例        |
+
+> **非泛型重载会校验行类型**：`RegisterTable(Type rowType, IConfigTable table)` 要求
+> `table.Data` 非 null，且其 `Dictionary<TKey, T>` 的键/值类型与 `rowType` 声明一致——
+> 不匹配在**注册期**抛 `ConfigException`（与 `ConfigTable<T>` 构造函数的判据相同），
+> 不会等到查询时才在包装器构造处失败。
 
 ### Query — Table
 

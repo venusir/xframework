@@ -103,11 +103,12 @@ namespace XFramework.XConfig
                 return GetOrCreateWrapper<T>(type, existingDict);
             }
 
-            // 并发调用共享同一进行中的任务；任务成功后 _tables 已写入，直接取缓存包装器
-            if (_inFlightLoads.TryGetValue(type, out var load))
+            // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载——
+            // 同一 CLR 类型还可能以 Global 身份在途，跨身份加入会读到另一本字典（CONF-009）。
+            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
             {
                 await AwaitInFlight(load);
-                return GetOrCreateWrapper<T>(type, _tables[type]);
+                return GetTableResult<T>(type, load);
             }
 
             if (string.IsNullOrEmpty(assetPath))
@@ -115,11 +116,14 @@ namespace XFramework.XConfig
                     $"assetPath must be provided when preloading Table '{type.Name}' for the first time.");
 
             var task = PreloadTableCoreAsync<T>(assetPath, format, null);
-            var inFlight = new InFlightLoad { Task = task };
+            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
             _inFlightLoads[type] = inFlight;
             try
             {
-                return await task;
+                // 携带结果：等待者醒来后不得重读 _tables[type]（先醒者可能已 Unload，CONF-010）
+                var result = await task;
+                inFlight.Result = result;
+                return result;
             }
             catch (Exception ex)
             {
@@ -149,8 +153,8 @@ namespace XFramework.XConfig
                 return;
             }
 
-            // 并发调用共享同一进行中的任务
-            if (_inFlightLoads.TryGetValue(type, out var load))
+            // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
+            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
             {
                 await AwaitInFlight(load);
                 return;
@@ -161,7 +165,7 @@ namespace XFramework.XConfig
                     $"assetPath must be provided when preloading Global config '{type.Name}' for the first time.");
 
             var task = PreloadGlobalCoreAsync<T>(assetPath, format, null);
-            var inFlight = new InFlightLoad { Task = task };
+            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -195,11 +199,11 @@ namespace XFramework.XConfig
                 return GetOrCreateWrapper<T>(type, existingDict);
             }
 
-            // 并发调用共享同一进行中的任务；任务成功后 _tables 已写入，直接取缓存包装器
-            if (_inFlightLoads.TryGetValue(type, out var load))
+            // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
+            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
             {
                 await AwaitInFlight(load);
-                return GetOrCreateWrapper<T>(type, _tables[type]);
+                return GetTableResult<T>(type, load);
             }
 
             if (loader == null)
@@ -208,11 +212,14 @@ namespace XFramework.XConfig
                 throw new ConfigException($"assetPath must be provided when preloading Table '{type.Name}'.");
 
             var task = PreloadTableCoreAsync<T>(assetPath, default, loader);
-            var inFlight = new InFlightLoad { Task = task };
+            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
             _inFlightLoads[type] = inFlight;
             try
             {
-                return await task;
+                // 携带结果：等待者醒来后不得重读 _tables[type]（先醒者可能已 Unload，CONF-010）
+                var result = await task;
+                inFlight.Result = result;
+                return result;
             }
             catch (Exception ex)
             {
@@ -273,8 +280,8 @@ namespace XFramework.XConfig
                 return;
             }
 
-            // 并发调用共享同一进行中的任务
-            if (_inFlightLoads.TryGetValue(type, out var load))
+            // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
+            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
             {
                 await AwaitInFlight(load);
                 return;
@@ -286,7 +293,7 @@ namespace XFramework.XConfig
                 throw new ConfigException($"assetPath must be provided when preloading Global config '{type.Name}'.");
 
             var task = PreloadGlobalCoreAsync<T>(assetPath, default, loader);
-            var inFlight = new InFlightLoad { Task = task };
+            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -384,19 +391,20 @@ namespace XFramework.XConfig
                 if (_tables.ContainsKey(entry.RowType))
                     return;
 
-                // 并发调用共享同一进行中的任务
-                if (_inFlightLoads.TryGetValue(entry.RowType, out var load))
+                // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
+                if (_inFlightLoads.TryGetValue(entry.RowType, out var load) && load.Kind == InFlightKind.Table)
                 {
                     await AwaitInFlight(load);
                     return;
                 }
 
                 var task = LoadManifestTableCoreAsync(entry);
-                var inFlight = new InFlightLoad { Task = task };
+                var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
                 _inFlightLoads[entry.RowType] = inFlight;
                 try
                 {
-                    await task;
+                    // 携带结果供跨入口加入者使用（CONF-010）
+                    inFlight.Result = await task;
                 }
                 catch (Exception ex)
                 {
@@ -414,15 +422,15 @@ namespace XFramework.XConfig
                 if (_globals.ContainsKey(entry.RowType))
                     return;
 
-                // 并发调用共享同一进行中的任务
-                if (_inFlightLoads.TryGetValue(entry.RowType, out var load))
+                // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
+                if (_inFlightLoads.TryGetValue(entry.RowType, out var load) && load.Kind == InFlightKind.Global)
                 {
                     await AwaitInFlight(load);
                     return;
                 }
 
                 var task = LoadManifestGlobalCoreAsync(entry);
-                var inFlight = new InFlightLoad { Task = task };
+                var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
                 _inFlightLoads[entry.RowType] = inFlight;
                 try
                 {
@@ -442,8 +450,9 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 清单 Table 条目的实际加载流程（运行时 Type 路径，仅清单批量加载使用）。
+        /// <para>返回加载出的 <see cref="IConfigTable"/>，供在途等待者直接取结果（CONF-010）。</para>
         /// </summary>
-        private async UniTask LoadManifestTableCoreAsync(ConfigManifestEntry entry)
+        private async UniTask<object> LoadManifestTableCoreAsync(ConfigManifestEntry entry)
         {
             var keyType = ConfigTypeHelper.GetKeyType(entry.RowType);
             try
@@ -456,6 +465,7 @@ namespace XFramework.XConfig
                 _tableWrappers[entry.RowType] = tableObj;
                 _assetPaths[entry.RowType] = entry.AssetPath;
                 RaiseConfigChanged(entry.RowType);
+                return configTable;
             }
             catch (Exception ex) when (ex is not ConfigException)
             {
@@ -518,6 +528,9 @@ namespace XFramework.XConfig
         /// 非泛型注册 Table 数据，供反射调用（如动态遍历 Luban Tables 的 Tb 属性）。
         /// <para>接收 <see cref="IConfigTable"/> 实例（<c>ConfigTable&lt;T&gt;</c> 实现了此接口），
         /// 通过 <see cref="IConfigTable.Data"/> 直接获取内部字典，零反射开销。</para>
+        /// <para><paramref name="rowType"/> 与 <see cref="IConfigTable.Data"/> 的行类型不一致时
+        /// 在注册期抛 <see cref="ConfigException"/>（CONF-008）——否则 <c>IsLoaded</c>/<c>CopyLoaded</c>
+        /// 会报错类型，而查询期才在包装器构造时失败。</para>
         /// </summary>
         public void RegisterTable(Type rowType, IConfigTable table)
         {
@@ -526,7 +539,17 @@ namespace XFramework.XConfig
             if (table == null)
                 throw new ConfigException(
                     $"Cannot register null table for Table '{rowType.Name}'.");
-            _tables[rowType] = table.Data;
+
+            // CONF-008：Data 可能为 null（自定义 IConfigTable），且其键/值类型必须与 rowType 一致。
+            // 校验与 ConfigTable<T> 构造函数共用同一套判据。
+            var data = table.Data;
+            if (data == null)
+                throw new ConfigException(
+                    $"Cannot register Table '{rowType.Name}': table.Data is null.");
+            var keyType = ConfigTypeHelper.GetKeyType(rowType);
+            ConfigDictionaryValidator.Validate(rowType, keyType, data);
+
+            _tables[rowType] = data;
             _tableWrappers[rowType] = table;
             _assetPaths.Remove(rowType); // 注入条目不来自资源路径（CONF-007）
             RaiseConfigChanged(rowType);
@@ -683,6 +706,18 @@ namespace XFramework.XConfig
         }
 
         /// <summary>
+        /// 取在途 Table 加载的结果。等待者不重读 <c>_tables[type]</c>——先醒的等待者可能已经
+        /// <c>Unload&lt;T&gt;()</c>，重读会抛 <see cref="KeyNotFoundException"/>（CONF-010）。
+        /// </summary>
+        private static ConfigTable<T> GetTableResult<T>(Type type, InFlightLoad load) where T : IConfigRow
+        {
+            if (load.Result is ConfigTable<T> table)
+                return table;
+            throw new ConfigException(
+                $"In-flight Table load for '{type.Name}' completed without a result.");
+        }
+
+        /// <summary>
         /// 进行中的加载任务共享句柄。UniTask 的 promise 只支持单个 continuation，
         /// 多个等待者不能直接 await 同一进行中任务；由创建者 await 实际任务，
         /// 加入者各自持有完成信号（Waiters），创建者完成时同步广播结果。
@@ -692,11 +727,24 @@ namespace XFramework.XConfig
             /// <summary>实际加载任务（仅创建者 await）。</summary>
             public UniTask Task;
 
+            /// <summary>加载身份。同一字典按 Type 单键存放，加入者必须身份一致（CONF-009）。</summary>
+            public InFlightKind Kind;
+
+            /// <summary>加载结果（Table 的身份持有 <see cref="IConfigTable"/> 对象），供等待者直接返回。</summary>
+            public object Result;
+
             /// <summary>加载失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
             public Exception Exception;
 
             /// <summary>加入者的完成信号（创建者完成时广播 TrySetResult/TrySetException）。</summary>
             public List<UniTaskCompletionSource> Waiters = new();
+        }
+
+        /// <summary>在途加载的身份：Table 与 Global 各自独立，互不加入（CONF-009）。</summary>
+        private enum InFlightKind
+        {
+            Table,
+            Global,
         }
 
         /// <summary>
@@ -712,12 +760,16 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 创建者完成时广播结果给所有加入者并清理登记。
-        /// <para>仅当字典登记仍指向本次加载时清理，避免误清并发中新启动的任务（等价于原 RemoveInFlightIfMine 语义）。</para>
+        /// <para><b>先移除、后广播</b>：广播同步执行续体，续体重入 <c>Unload&lt;T&gt;()</c> /
+        /// <c>Preload*</c> 时不应再看到这条已完成的任务（CONF-010）。
+        /// 仅当字典登记仍指向本次加载时移除——跨身份加载会替换登记项（CONF-009），
+        /// 但被替换的旧任务仍必须唤醒自己的等待者，因此广播无条件执行。</para>
         /// </summary>
         private void CompleteInFlight(Type type, InFlightLoad load)
         {
-            if (!_inFlightLoads.TryGetValue(type, out var current) || !ReferenceEquals(current, load))
-                return;
+            if (_inFlightLoads.TryGetValue(type, out var current) && ReferenceEquals(current, load))
+                _inFlightLoads.Remove(type);
+
             if (load.Exception != null)
             {
                 for (int i = 0; i < load.Waiters.Count; i++)
@@ -728,7 +780,6 @@ namespace XFramework.XConfig
                 for (int i = 0; i < load.Waiters.Count; i++)
                     load.Waiters[i].TrySetResult();
             }
-            _inFlightLoads.Remove(type);
         }
 
         /// <summary>

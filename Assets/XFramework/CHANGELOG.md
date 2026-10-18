@@ -221,6 +221,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   登记在 `Roadmap.md` §五 的 `CreateSnapshot(bool clearDirty)` 形状**被取代**（它不闭合：
   `ApplySnapshot` 没有第二个信息通道，旋钮拿不到「加载前脏了谁」），死因留在 `Data 模块的维护向记录`。
   回归锁：`DirtyTrackingTests` 三条（含一条字节级不变量用例）+ `SaveManagerImplTests.TryLoadAsync_BlockRestoreFails_RollsBackDirtyFlagsToo`。
+- **非泛型 `RegisterTable(Type, IConfigTable)` 现在在注册期校验行类型**（CONF-008）：`table.Data` 为 null
+  或其 `Dictionary<TKey,T>` 与 `rowType` 不一致时抛 `ConfigException`，不再等到查询期才在包装器构造处失败。
+  同一 CLR 类型同时以 Table 与 Global 身份并发加载时两者**各自独立完成**（互不加入）；在途等待者直接拿到
+  加载结果，先醒者重入 `Unload<T>()` 不再影响后续等待者（CONF-009/010）。
 
 ### Fixed
 
@@ -609,6 +613,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   CSV Global 要求 `lines.Length >= 2`；预载 null 抛 `ConfigException`；三处 Register 清掉路径记录。
   回归：`ConfigManagerImplTests.PreloadGlobalAsync_LoaderReturnsNull_ThrowsAndDoesNotMarkLoaded`
   （改前 `Expected: <ConfigException> But was: null`）。
+- **非泛型注册不校验行类型、跨身份在途任务互相加入、等待者广播期间重入卸载（CONF-008/009/010）**：
+  `RegisterTable(Type, IConfigTable)` 把 `rowType` 直接当键、不校验 `table.Data` 的行类型，
+  `IsLoaded`/`CopyLoaded` 报错类型、查询期才在 `ConfigTable<T>` 构造处炸；`_inFlightLoads` 按 Type 单键且
+  不记录身份，Table 侧会加入 Global 的在途任务（反之 Global 直接 return、漏掉注册）；等待者广播同步执行
+  续体，先醒者重入 `Unload<T>()` 后后续等待者重读 `_tables[type]` 抛 `KeyNotFoundException`。修法：注册期
+  用与 `ConfigTable<T>` 相同的字典校验（抽 `ConfigDictionaryValidator`）；`InFlightLoad` 记录
+  `Kind`/`Result`，只加入同身份任务，等待者直接返回携带的结果；`CompleteInFlight` 先移除登记再无条件广播。
+  回归：`ConfigManagerImplTests` 五条（改前分别 `Expected: <ConfigException> But was: null`、
+  `Expected: 1 But was: 0`、`KeyNotFoundException`）。
 
 #### Asset（场景加载）
 
