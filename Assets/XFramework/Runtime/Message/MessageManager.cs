@@ -672,24 +672,6 @@ namespace XFramework.XMessage
         }
 
         /// <summary>
-        /// 设置全新的 <see cref="MessageBroker"/> 实例，同时清理旧 Broker 的所有订阅和请求处理器。
-        /// <para>适用于测试场景（如注入 mock broker）或需要在运行时彻底重置消息系统。</para>
-        /// </summary>
-        /// <param name="broker">新的 Broker 实例，不可为 <c>null</c>。</param>
-        /// <exception cref="ArgumentNullException"><paramref name="broker"/> 为 <c>null</c> 时抛出。</exception>
-        internal static void SetInstance(MessageBroker broker)
-        {
-            if (broker == null) throw new ArgumentNullException(nameof(broker));
-            _broker.Clear();
-            _broker = broker;
-            lock (_requestGate)
-            {
-                _requestHandlers.Clear();
-                _requestCount = 0;
-            }
-        }
-
-        /// <summary>
         /// 将订阅绑定到订阅者的生命周期，对象销毁时自动取消。
         /// <para>支持两类订阅者：<see cref="MonoBehaviour"/>（用其 <see cref="MonoBehaviour.destroyCancellationToken"/>），
         /// 以及实现了 <see cref="IDestroyCancellationToken"/> 的普通 C# 对象（用其 <see cref="IDestroyCancellationToken.DestroyCancellationToken"/>）。</para>

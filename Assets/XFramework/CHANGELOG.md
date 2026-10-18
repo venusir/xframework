@@ -377,6 +377,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   方法改为返回合并句柄，Input / Localization / UI 的共用入口同步适配。回归：
   `DestroyTokenBindingTests.DisposeSubscription_AlsoDisposesCancellationRegistration`（改前句柄释放后取消令牌
   会二次释放订阅，`Expected: 1 But was: 2`）。
+- **同步订阅的过滤器异常落到 `[Event]` 文案（MSG-007）**：过滤与回调组合的闭包抛异常后由事件流兜底，
+  日志是 `[Event] EventStream handler threw exception`，与处理器异常同文案、不在 `[Message]` 检索面。
+  修法：四条同步过滤路径共用 `InvokeFiltered`，过滤异常记 `[Message] Sync subscription filter threw exception`
+  并跳过本条；异常隔离语义不变。回归：`MessageBusTests` 三条既有用例改断言新文案（改前 Unhandled log
+  为 `[Event] …`）。
+- **删除无调用点的 internal `MessageManager.SetInstance`（MSG-009）**：XML 宣传「注入 mock broker」，
+  但 `MessageBroker` 是 sealed 具体类，且全仓零调用点。删除后不再维护一个不可兑现的入口。
 
 #### Timer
 

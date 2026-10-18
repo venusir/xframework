@@ -62,6 +62,32 @@ namespace XFramework.XMessage
 
         #endregion
 
+        #region Sync subscription helper
+
+        /// <summary>
+        /// 同步订阅的过滤 + 回调。过滤异常记一条 <c>[Message]</c> Error 后跳过本条，
+        /// 不再落到 Event 流的通用「handler threw exception」文案（MSG-007）。
+        /// <para>异常隔离语义不变：本条不投递、订阅保留、其他订阅者不受影响。</para>
+        /// </summary>
+        private static void InvokeFiltered<TMessage>(
+            Predicate<TMessage> filter, Action<TMessage> handler, TMessage message)
+        {
+            bool pass;
+            try
+            {
+                pass = filter.Invoke(message);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Message, e, "Sync subscription filter threw exception");
+                return;
+            }
+
+            if (pass) handler(message);
+        }
+
+        #endregion
+
         #region Publish
 
         public void Publish<TMessage>(TMessage message)
@@ -199,7 +225,7 @@ namespace XFramework.XMessage
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             return GetOrCreateChannel<TMessage>().GetOrCreateSync().Subscribe(m =>
             {
-                if (filter.Invoke(m)) handler(m);
+                InvokeFiltered(filter, handler, m);
             });
         }
 
@@ -219,7 +245,7 @@ namespace XFramework.XMessage
             return GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
                 .GetOrCreateSync().Subscribe(m =>
                 {
-                    if (filter.Invoke(m)) handler(m);
+                    InvokeFiltered(filter, handler, m);
                 });
         }
 
@@ -302,7 +328,7 @@ namespace XFramework.XMessage
             if (handler == null) throw new ArgumentNullException(nameof(handler));
             return GetOrCreateChannel<TMessage>().GetOrCreateBuffered().Subscribe(m =>
             {
-                if (filter.Invoke(m)) handler(m);
+                InvokeFiltered(filter, handler, m);
             });
         }
 
@@ -331,7 +357,7 @@ namespace XFramework.XMessage
             return GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key)
                 .GetOrCreateBuffered().Subscribe(m =>
                 {
-                    if (filter.Invoke(m)) handler(m);
+                    InvokeFiltered(filter, handler, m);
                 });
         }
 
