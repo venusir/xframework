@@ -294,6 +294,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   直接抛（违背「预期失败不抛」）；恢复扫描一个槽位损坏会中止后续相位。修法：`LoadCoreAsync` 捕获
   非取消异常并返回 `Corrupt`；恢复扫描逐槽位 `try/catch`（取消仍传播）。**覆盖缺口如实记**：
   这两条的错误注入需要可抛 IO 的 File Provider 缝，本轮未构造自动化用例。
+- **初始化半态与槽位前导零别名（SAVE-009/013）**：`Initialize` 在选项应用失败时把 `_impl` 留在半配置
+  状态，重试被「已初始化」早退；`slot_01.save` 与 `slot_1.save` 被识别为同一槽位的两条元数据。
+  修法：选项应用失败回滚 `_impl = null`；`TryParseSlot` 拒绝前导零别名。回归：
+  `SaveManagerImplTests.LeadingZeroSlotAlias_IsNotListedAsSeparateSlot`（改前 `Expected: 1 But was: 2`）。
 
 #### UI
 

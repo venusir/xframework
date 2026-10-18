@@ -86,18 +86,31 @@ namespace XFramework.XSave
                 LogManager.Warning(LogCategories.Save, "SaveManager.Initialize 被重复调用，忽略重复注入。");
                 return;
             }
-            _impl = factory != null ? factory() : new SaveManagerImpl();
 
-            if (options == null)
-                return;
+            var impl = factory != null ? factory() : new SaveManagerImpl();
 
-            _impl.SetCurrentVersion(options.CurrentVersion);
+            try
+            {
+                if (options != null)
+                {
+                    impl.SetCurrentVersion(options.CurrentVersion);
 
-            // 加密接线放在初始化而非节点里：调用方直接 Initialize 时也应生效，
-            // 否则「传了 CryptoProvider 却被静默忽略」会很难查。
-            // 作用域限定 SaveData，避免连带加密 AppData / Cache（见 SaveOptions.CryptoProvider）
-            if (options.CryptoProvider != null)
-                FileManager.SetCryptoProvider(options.CryptoProvider, FileDomain.SaveData);
+                    // 加密接线放在初始化而非节点里：调用方直接 Initialize 时也应生效，
+                    // 否则「传了 CryptoProvider 却被静默忽略」会很难查。
+                    // 作用域限定 SaveData，避免连带加密 AppData / Cache（见 SaveOptions.CryptoProvider）
+                    if (options.CryptoProvider != null)
+                        FileManager.SetCryptoProvider(options.CryptoProvider, FileDomain.SaveData);
+                }
+
+                // 半初始化回滚（SAVE-009）：选项应用失败时不得把 _impl 留在半配置状态，
+                // 否则下一次 Initialize 会因「已初始化」早退，调用方永远无法自救。
+                _impl = impl;
+            }
+            catch
+            {
+                _impl = null;
+                throw;
+            }
         }
 
         /// <summary>

@@ -1130,6 +1130,19 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task LeadingZeroSlotAlias_IsNotListedAsSeparateSlot()
+        {
+            await SaveManager.SaveAsync(1);
+            var bytes = await FileManager.ReadAllBytesAsync(FileDomain.SaveData, "slot_1.save");
+            await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_01.save", bytes);
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+
+            Assert.AreEqual(1, metas.FindAll(m => m.slot == 1).Count,
+                "前导零别名不得被识别为同一槽位的第二个条目（SAVE-013）");
+        }
+
+        [Test]
         public async Task DeleteAllSlotsAsync_RemovesSidecarsAndBackups()
         {
             await SaveManager.SaveAsync(1);

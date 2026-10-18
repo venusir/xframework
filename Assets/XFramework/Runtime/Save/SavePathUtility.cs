@@ -127,6 +127,11 @@ namespace XFramework.XSave
             if (!int.TryParse(digits, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed))
                 return false;
 
+            // 拒绝前导零别名（SAVE-013）：slot_01.save 与 slot_1.save 会指向同一槽位，
+            // 枚举时产生两条同槽位元数据，删除时又只删规范文件名，别名永远残留。
+            if (digits.Length > 1 && digits[0] == '0')
+                return false;
+
             slot = parsed;
             return true;
         }
