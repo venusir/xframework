@@ -64,6 +64,17 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AddStage_Null_Throws()
+        {
+            var pipeline = Pipeline.Create();
+
+            Assert.Throws<ArgumentNullException>(() => pipeline.AddStage(null),
+                "AddStage(null) 必须按仓内参数防御约定抛异常（PIPE-004）");
+            Assert.Throws<ArgumentNullException>(() => pipeline.AddStage(null, 1f),
+                "带超时的重载同样不得静默忽略 null（PIPE-004）");
+        }
+
+        [Test]
         public void RunWhileRunning_Ignored()
         {
             var stage = new FakeStage { Gate = new UniTaskCompletionSource() };

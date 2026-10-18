@@ -228,6 +228,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   退化为 `Failed: : Stage 'X' timed out…`。修法：`_status`（失败时连同 `FailureReason`）移到广播之前；
   超时分支按「阶段主动置失败」同一口径写阶段名。回归：`PipelineFrameTests` 两例（改前分别
   `Expected: Cancelled But was: Running` 与 `Expected: String starting with "Failed: 挂死: "`）。
+- **`AddStage(null)` 静默忽略（PIPE-004）**：与仓内「参数防御用 `ArgumentNullException`」的约定不一致，
+  装配错误被吞掉。修法：两个重载都抛 `ArgumentNullException`，`IPipeline` XML 补 `<exception>`。
+  回归：`PipelineTests.AddStage_Null_Throws`（改前 `Expected: <ArgumentNullException> But was: null`）。
 
 #### Event
 

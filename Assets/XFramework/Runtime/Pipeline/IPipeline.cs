@@ -64,6 +64,7 @@ namespace XFramework.XPipeline
         /// <summary>
         /// 追加阶段。装配期调用;重复添加同一实例被忽略;运行中调用打 <c>[Pipeline]</c> 警告并忽略。
         /// </summary>
+        /// <exception cref="System.ArgumentNullException"><paramref name="stage"/> 为 <c>null</c> 时抛出。</exception>
         void AddStage(IPipelineStage stage);
 
         /// <summary>
@@ -73,6 +74,7 @@ namespace XFramework.XPipeline
         /// 经 <see cref="OnFailed"/> 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,
         /// 其后续上下文写入被忽略)。</para>
         /// </summary>
+        /// <exception cref="System.ArgumentNullException"><paramref name="stage"/> 为 <c>null</c> 时抛出。</exception>
         void AddStage(IPipelineStage stage, float timeoutSeconds);
 
         /// <summary>

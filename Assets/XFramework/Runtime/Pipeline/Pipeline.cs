@@ -148,7 +148,7 @@ namespace XFramework.XPipeline
 
         public void AddStage(IPipelineStage stage, float timeoutSeconds)
         {
-            if (stage == null) return;
+            if (stage == null) throw new ArgumentNullException(nameof(stage));
 
             // 运行期装配防护:管线运行中追加阶段打警告并忽略(与 RunAsync 重入守卫同风格);
             // 运行中 _contexts 已按启动时刻快照,入列会使阶段列表与上下文数组错位(越界/语义未定义)
