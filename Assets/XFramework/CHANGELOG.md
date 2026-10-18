@@ -472,6 +472,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `ICameraManager` 两处与 README 两处统一为 `<= 0.0001`。回归：
   `UnityCameraManagerTests.TransitionTo_NonFiniteDuration_Throws`（改前 `Expected: <ArgumentOutOfRangeException> But was: null`）。
 
+#### UI
+
+- **`ReleaseCurrentInstance` 在 Dispose 抛出时不复位初始化标记（UIA-003）**：只置空实例，`Initialize` 因
+  `_instanceInitialized` 仍为 true 永久早退。修法：`finally` 里一并复位。回归：
+  `UIPanelSelfCloseTests.SetInstance_OldOwnedDisposeThrows_InitializeRecovers`（改前 `Expected: True But was: False`）。
+- **语言切换刷新无逐面板隔离（UIA-005）**：一个面板的 `OnLanguageChanged` 抛异常会中断其后所有面板。
+  修法：逐面板 `try/catch`，失败记 `[UIManager]` Error 后继续。回归：
+  `UIPanelSelfCloseTests.LanguageChanged_OnePanelThrows_OthersStillRefresh`（改前 Unhandled log 为
+  `[Event] EventStream handler threw exception`）。
+- **批量关闭无逐面板隔离（UIA-007）**：`CloseLayerAsync` / `CloseAllAsync` 一个面板关闭异常即中断整批，
+  HUD/Tip 已回收、`AllPanelsClosedMessage` 不发布。修法：逐面板 `try/catch`（取消仍向上传播），
+  失败记 Error 后继续；收尾消息与控制器回调照常执行。回归：
+  `UIPanelSelfCloseTests.CloseAllAsync_OnePanelThrows_OthersStillCloseAndMessagePublished`（改前
+  Expected log did not appear）。
+
 #### Message
 
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里

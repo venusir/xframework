@@ -1,7 +1,13 @@
+using System;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XLocalization;
+using XFramework.XMessage;
 using XFramework.XUI.Data;
 using XFramework.XUpdate;
 
@@ -193,6 +199,65 @@ namespace XFramework.XUI.Tests
 
             Assert.IsNotNull(again, "自关后面板应已回池，再次打开不应失败");
             Assert.IsFalse(UIManager.IsOpen<SelfClosingOnOpenPanel>(), "它仍会再次自关");
+        }
+
+        [Test]
+        public void SetInstance_OldOwnedDisposeThrows_InitializeRecovers()
+        {
+            // UIA-003：ReleaseCurrentInstance 的 finally 必须复位 _instanceInitialized，
+            // 否则 Initialize 因「已初始化」永久早退，门面停在半死状态。
+            var throwing = new FakeUIManager { ThrowOnDispose = true };
+            SetPrivateStatic("_instance", throwing);
+            SetPrivateStatic("_ownsInstance", true);
+            SetPrivateStatic("_instanceInitialized", true);
+
+            Assert.Throws<InvalidOperationException>(() => UIManager.SetInstance(new FakeUIManager()));
+
+            UIManager.Initialize(_root.transform);
+            Assert.IsTrue(UIManager.IsInitialized,
+                "旧实例 Dispose 抛出后 Initialize 必须能恢复（UIA-003）");
+        }
+
+        [Test]
+        public async Task LanguageChanged_OnePanelThrows_OthersStillRefresh()
+        {
+            // UIA-005：一个面板的 OnLanguageChanged 抛异常不得中断其余面板
+            _factory.RegisterPanel<ThrowingOnLanguagePanel>();
+            _factory.RegisterPanel<LanguageProbePanel>();
+
+            await UIManager.OpenAsync<ThrowingOnLanguagePanel>("ui/throw-lang");
+            var probe = await UIManager.OpenAsync<LanguageProbePanel>("ui/probe-lang");
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("语言变更时抛出异常")));
+            MessageManager.Publish(new LanguageChangedMessage("en"));
+
+            Assert.AreEqual("en", probe.LastLanguage,
+                "一个面板抛异常不得中断其余面板的语言刷新（UIA-005）");
+        }
+
+        [Test]
+        public async Task CloseAllAsync_OnePanelThrows_OthersStillCloseAndMessagePublished()
+        {
+            // UIA-007：批量关闭必须逐面板隔离，且收尾消息仍要发布
+            _factory.RegisterPanel<ThrowingOnClosePanel>();
+            await UIManager.OpenAsync<ThrowingOnClosePanel>("ui/throw-close");
+            await UIManager.OpenAsync<FakePanel>("ui/other-close");
+
+            int closed = 0;
+            var sub = MessageManager.Subscribe<AllPanelsClosedMessage>(_ => closed++);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("批量关闭面板")));
+            await UIManager.CloseAllAsync();
+
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "其余面板仍应被关闭（UIA-007）");
+            Assert.AreEqual(1, closed, "AllPanelsClosedMessage 仍应发布（UIA-007）");
+            sub.Dispose();
+        }
+
+        private static void SetPrivateStatic(string name, object value)
+        {
+            typeof(UIManager).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)
+                .SetValue(null, value);
         }
     }
 }

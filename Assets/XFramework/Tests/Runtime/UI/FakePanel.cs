@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using XFramework.XUI.View;
@@ -275,5 +276,20 @@ namespace XFramework.XUI.Tests
 
             return UniTask.CompletedTask;
         }
+    }
+
+    /// <summary>语言刷新会抛异常的面板（UIA-005 隔离用例）。</summary>
+    public class ThrowingOnLanguagePanel : FakePanel
+    {
+        protected internal override void OnLanguageChanged(string lang)
+            => throw new InvalidOperationException("language boom");
+    }
+
+    /// <summary>记录最近一次语言刷新的面板（UIA-005 的对照）。</summary>
+    public class LanguageProbePanel : FakePanel
+    {
+        public string LastLanguage;
+
+        protected internal override void OnLanguageChanged(string lang) => LastLanguage = lang;
     }
 }

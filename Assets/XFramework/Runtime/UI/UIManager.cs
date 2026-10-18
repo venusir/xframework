@@ -195,11 +195,13 @@ namespace XFramework.XUI
             finally
             {
                 // 放在 finally 里：Dispose 抛异常时也不能让门面继续指着一个正在被拆的实例。
-                //
+                // 初始化标记一并复位（UIA-003）：只置空实例会让 Initialize 因 _instanceInitialized
+                // 仍为 true 而永久早退，门面停在「已初始化但没有实例」的半死状态。
                 // 「先 Dispose 再置 null」这个顺序是有意的：Dispose 会走到用户代码边（面板的
                 // OnPoolRecycle、provider 的 DetachAll），那期间若有人调门面方法，应当按半拆状态
                 // 执行，而不是突然抛「尚未初始化」——那是换一种坏法，不是修好。
                 _instance = null;
+                _instanceInitialized = false;
             }
         }
 

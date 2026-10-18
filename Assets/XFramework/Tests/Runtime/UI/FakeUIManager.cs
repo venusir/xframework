@@ -28,6 +28,9 @@ namespace XFramework.XUI.Tests
         /// <summary>是否被调用过 <see cref="Dispose"/>（验证所有权语义：注入的实例归调用方管）。</summary>
         public bool Disposed { get; private set; }
 
+        /// <summary>为 true 时 <see cref="Dispose"/> 抛异常，用于验证门面的闩锁复位（UIA-003）。</summary>
+        public bool ThrowOnDispose { get; set; }
+
         public void Update(float deltaTime, float time)
         {
             UpdateCount++;
@@ -39,6 +42,8 @@ namespace XFramework.XUI.Tests
         public void Dispose()
         {
             Disposed = true;
+            if (ThrowOnDispose)
+                throw new InvalidOperationException("fake UI dispose failure");
         }
 
         #endregion

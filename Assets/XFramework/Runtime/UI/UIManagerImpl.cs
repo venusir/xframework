@@ -789,7 +789,7 @@ namespace XFramework.XUI
 
             foreach (var item in toClose)
             {
-                await ClosePanelInternalAsync(item.panel, item.type, immediate, cancellationToken);
+                await SafeClosePanelForBatchAsync(item.panel, item.type, immediate, cancellationToken);
             }
         }
 
@@ -817,7 +817,7 @@ namespace XFramework.XUI
 
             foreach (var item in toClose)
             {
-                await ClosePanelInternalAsync(item.panel, item.type, immediate, cancellationToken);
+                await SafeClosePanelForBatchAsync(item.panel, item.type, immediate, cancellationToken);
             }
 
             MessageManager.Publish(new AllPanelsClosedMessage());
@@ -1799,6 +1799,28 @@ namespace XFramework.XUI
         /// 关闭面板的内部实现。面板回池由 UIManagerImpl 控制。
         /// </summary>
         /// <returns>确实完成了关闭返回 true；面板为空或已被 Controller 拦下返回 false。</returns>
+        /// <summary>
+        /// 批量关闭的单面板隔离（UIA-007）：一个面板的 OnClose / 回收抛异常不得中断整批；
+        /// 取消仍然向上传播（批量操作的取消语义由调用方决定）。
+        /// </summary>
+        private async UniTask SafeClosePanelForBatchAsync(UIPanelBase panel, Type type, bool immediate,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                await ClosePanelInternalAsync(panel, type, immediate, cancellationToken);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    string.Format("批量关闭面板 {0} 时抛出异常，已跳过并继续", type.Name));
+            }
+        }
+
         private async UniTask<bool> ClosePanelInternalAsync(UIPanelBase panel, Type type, bool immediate,
             CancellationToken cancellationToken)
         {
@@ -2104,7 +2126,16 @@ namespace XFramework.XUI
                     var panel = snapshot[i];
                     if (panel != null && panel.IsOpen)
                     {
-                        panel.OnLanguageChanged(msg.Language);
+                        try
+                        {
+                            panel.OnLanguageChanged(msg.Language);
+                        }
+                        catch (Exception e)
+                        {
+                            // 逐面板隔离（UIA-005）：一个面板的刷新失败不得中断其余面板。
+                            LogManager.Exception(LogCategories.UIManager, e,
+                                string.Format("刷新面板 {0} 的语言变更时抛出异常，已跳过并继续", panel.GetType().Name));
+                        }
                     }
                 }
             }
