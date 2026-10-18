@@ -132,9 +132,28 @@ namespace XFramework.XSave
 
                 var path = files[i];
 
-                // 严格解析：非 slot_<非负整数>.save 的文件直接不认，不产生 slot = -1 的脏元数据
+                // 严格解析：非 slot_<非负整数>.save 的文件直接不认，不产生 slot = -1 的脏元数据；
+                // 仅备份可恢复的槽位也要纳入查询面（SAVE-003）——载荷在时以载荷条目为准。
+                bool isBackup = false;
                 if (!SavePathUtility.TryParseSlot(path, out var slot))
-                    continue;
+                {
+                    if (path.EndsWith(FilePathUtility.BackupFileSuffix, StringComparison.Ordinal) &&
+                        SavePathUtility.TryParseSlot(
+                            path.Substring(0, path.Length - FilePathUtility.BackupFileSuffix.Length), out slot))
+                    {
+                        if (FileManager.Exists(SaveDomain,
+                                path.Substring(0, path.Length - FilePathUtility.BackupFileSuffix.Length)))
+                        {
+                            continue;
+                        }
+
+                        isBackup = true;
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                }
 
                 byte[] bytes = null;
                 try
@@ -142,7 +161,9 @@ namespace XFramework.XSave
                     // 侧车优先：小文件，避免为了拿元数据而读入并反序列化整个载荷。
                     // 侧车路径刻意不校验校验和——校验需要读载荷，那正是这里要避免的开销；
                     // 校验发生在 LoadAsync（那时载荷字节已在手上，几乎免费）
-                    var sidecar = await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
+                    var sidecar = isBackup
+                        ? null
+                        : await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
                     if (sidecar != null)
                     {
                         metas.Add(sidecar);
@@ -204,7 +225,28 @@ namespace XFramework.XSave
             var path = SavePathUtility.BuildSlotPath(playerId, slot);
 
             if (!FileManager.Exists(SaveDomain, path))
-                return null;
+            {
+                // SAVE-003：载荷缺失但一代备份存在时，查询面也要反映「可恢复」；
+                // 备份没有自己的侧车，直接读载荷并解析。
+                var backupPath = path + FilePathUtility.BackupFileSuffix;
+                if (!FileManager.Exists(SaveDomain, backupPath))
+                    return null;
+
+                var backupBytes = await FileManager.ReadAllBytesAsync(SaveDomain, backupPath, cancellationToken);
+                await ReturnToMainThread(cancellationToken);
+
+                if (backupBytes == null || backupBytes.Length == 0)
+                    return null;
+
+                if (!TryDeserializeSnapshot(backupBytes, DataSnapshot.Factory().GetType(), Serializer.Default,
+                        out var backupData, out var backupError, out var backupException))
+                {
+                    LogMetaParseFailure(backupPath, backupError, backupException);
+                    return BuildCorruptedMeta(playerId, slot, backupPath, backupBytes.Length);
+                }
+
+                return BuildMeta(backupData, playerId, slot, backupPath, backupBytes.Length);
+            }
 
             // 与列表同一策略：侧车优先，缺失才回退全量解析
             var sidecar = await TryReadSidecarAsync(playerId, slot, path, cancellationToken);
@@ -763,8 +805,12 @@ namespace XFramework.XSave
                 return false;
 
             var playerId = _playerId;
+            var payloadPath = SavePathUtility.BuildSlotPath(playerId, slot);
 
-            var exists = await FileManager.ExistsAsync(SaveDomain, SavePathUtility.BuildSlotPath(playerId, slot), cancellationToken);
+            // SAVE-003：仅备份可恢复的槽位也算「存在」，与 TryLoadAsync 的 LoadedFromBackup 对齐。
+            var exists = await FileManager.ExistsAsync(SaveDomain, payloadPath, cancellationToken) ||
+                         await FileManager.ExistsAsync(
+                             SaveDomain, payloadPath + FilePathUtility.BackupFileSuffix, cancellationToken);
             await ReturnToMainThread(cancellationToken);
 
             return exists;
@@ -1119,8 +1165,11 @@ namespace XFramework.XSave
 
             if (!FileManager.Exists(SaveDomain, payloadPath))
             {
-                // 载荷与备份都没有：清掉孤儿配套文件，让该槽位彻底消失而不是留一堆半截文件
+                // 载荷与备份都没有：清掉孤儿配套文件（含侧车自己的 .bak/.tmp），
+                // 让该槽位彻底消失而不是留一堆半截文件（SAVE-002）。
                 FileManager.Delete(SaveDomain, metaPath);
+                FileManager.Delete(SaveDomain, metaPath + FilePathUtility.BackupFileSuffix);
+                FileManager.Delete(SaveDomain, metaPath + FilePathUtility.TempFileSuffix);
                 FileManager.Delete(SaveDomain, tempPath);
                 return;
             }
@@ -1194,13 +1243,18 @@ namespace XFramework.XSave
         /// <param name="cancellationToken">取消令牌。</param>
         private static async UniTask DeleteSlotFilesAsync(string slotPath, CancellationToken cancellationToken)
         {
+            var metaPath = slotPath + SavePathUtility.MetaFileSuffix;
+
             // **先清备份**（顺序承重，别改回去）：恢复扫描的语义是「载荷缺失且有 .bak ⇒ 用备份原子写回」。
             // 若按「载荷 → .meta → .bak」删，中断（取消 / 崩溃）会停在「载荷已删、备份还在」——下次启动
-            // 就把槽位复活成**上一代**内容。先删 .bak 之后，任何中断点只剩两种形态：原封不动、或彻底删除
+            // 就把槽位复活成**上一代**内容。先删 .bak 之后，任何中断点只剩两种形态：原封不动、或彻底删除。
+            // 侧车同样经原子写，故它自己的 .bak/.tmp 也要清（SAVE-002）。
             await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.BackupFileSuffix, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, metaPath + FilePathUtility.BackupFileSuffix, cancellationToken);
             await FileManager.DeleteAsync(SaveDomain, slotPath, cancellationToken);
-            await FileManager.DeleteAsync(SaveDomain, slotPath + SavePathUtility.MetaFileSuffix, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, metaPath, cancellationToken);
             await FileManager.DeleteAsync(SaveDomain, slotPath + FilePathUtility.TempFileSuffix, cancellationToken);
+            await FileManager.DeleteAsync(SaveDomain, metaPath + FilePathUtility.TempFileSuffix, cancellationToken);
         }
 
         /// <summary>

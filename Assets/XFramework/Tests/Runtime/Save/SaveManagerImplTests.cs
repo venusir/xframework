@@ -1078,6 +1078,58 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task DeleteSlotAsync_RemovesSidecarBackupAndTemp()
+        {
+            await SaveManager.SaveAsync(1);
+            await FileManager.WriteAllTextAsync(FileDomain.SaveData, SidecarPath + ".bak", "stale");
+            await FileManager.WriteAllTextAsync(FileDomain.SaveData, SidecarPath + ".tmp", "stale");
+
+            await SaveManager.DeleteSlotAsync(1);
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, SidecarPath + ".bak"),
+                "侧车备份应被清除（SAVE-002）");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, SidecarPath + ".tmp"),
+                "侧车临时文件应被清除（SAVE-002）");
+        }
+
+        [Test]
+        public async Task SlotExistsAsync_BackupOnly_ReturnsTrue()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1); // 产生一代 .bak
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1),
+                "仅备份可恢复的槽位也算存在（SAVE-003）");
+        }
+
+        [Test]
+        public async Task GetSlotMetaAsync_BackupOnly_ReturnsMeta()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+
+            var meta = await SaveManager.GetSlotMetaAsync(1);
+
+            Assert.IsNotNull(meta, "仅备份可恢复的槽位应能查询元数据（SAVE-003）");
+            StringAssert.EndsWith(".bak", meta.relativePath, "元数据应来自备份文件");
+        }
+
+        [Test]
+        public async Task GetSlotMetasAsync_BackupOnly_IsListed()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+
+            var metas = await SaveManager.GetSlotMetasAsync();
+
+            Assert.IsTrue(metas.Exists(m => m.slot == 1),
+                "仅备份可恢复的槽位也应出现在列表里（SAVE-003）");
+        }
+
+        [Test]
         public async Task DeleteAllSlotsAsync_RemovesSidecarsAndBackups()
         {
             await SaveManager.SaveAsync(1);

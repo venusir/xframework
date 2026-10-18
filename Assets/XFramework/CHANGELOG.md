@@ -285,6 +285,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （主文件与备份路径都覆盖）。回归：
   `SaveManagerImplTests.TryLoadAsync_BlockVersionTooNew_ReturnsVersionTooNew`（改前旧路径整份回滚并记
   `[Save] 有 1 个数据块未能恢复`）。
+- **槽位清理漏侧车 `.bak`/`.tmp`、查询面只看载荷（SAVE-002/003）**：侧车也经原子写，其 `.meta.bak` /
+  `.meta.tmp` 不在删除面内；仅备份可恢复的槽位被 `SlotExists` / `GetSlotMeta` / 列表隐藏。修法：
+  删除路径补侧车配套文件（恢复扫描的孤儿清理同步）；查询面在载荷缺失时回退一代备份，列表也纳入
+  仅备份可恢复的槽位。回归：`SaveManagerImplTests` 四条（改前分别 `Expected: False But was: True` /
+  `Expected: True But was: False`）。
 
 #### UI
 
