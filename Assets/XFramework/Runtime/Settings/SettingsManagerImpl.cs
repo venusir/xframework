@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using XFramework.XMessage;
 using XFramework.XEvent;
 using XFramework.XLog;
@@ -482,21 +483,41 @@ namespace XFramework.XSettings
         private static async UniTask WriteAsync(ISettingsStore store, T settings, CancellationToken cancellationToken)
         {
             if (store is IAsyncSettingsStore asyncStore)
+            {
                 await asyncStore.SaveAsync(settings, cancellationToken);
+            }
             else
+            {
+                // 同步降级路径会把序列化挪到池线程；先把活对象在主线程序列化成独立快照（SET-013），
+                // 避免池线程 JsonUtility.ToJson 与主线程继续修改同一对象竞态。
+                T snapshot = Snapshot(settings);
                 await UniTask.RunOnThreadPool(
-                    () => store.Save(settings), configureAwait: false, cancellationToken);
+                    () => store.Save(snapshot), configureAwait: false, cancellationToken);
+            }
         }
 
         /// <summary>异步写入版本化信封，分流规则同非版本化重载。</summary>
         private static async UniTask WriteAsync(ISettingsStore store, SettingsEnvelope<T> envelope, CancellationToken cancellationToken)
         {
             if (store is IAsyncSettingsStore asyncStore)
+            {
                 await asyncStore.SaveAsync(envelope, cancellationToken);
+            }
             else
+            {
+                var snapshot = new SettingsEnvelope<T>
+                {
+                    Version = envelope.Version,
+                    Data = Snapshot(envelope.Data),
+                };
                 await UniTask.RunOnThreadPool(
-                    () => store.Save(envelope), configureAwait: false, cancellationToken);
+                    () => store.Save(snapshot), configureAwait: false, cancellationToken);
+            }
         }
+
+        /// <summary>在调用线程上做一次序列化往返，得到一个与活对象断开的快照（SET-013）。</summary>
+        private static T Snapshot(T settings)
+            => JsonUtility.FromJson<T>(JsonUtility.ToJson(settings));
 
         /// <summary>异步读取入口：按是否启用版本化分流。</summary>
         private async UniTask<T> ReadAsync(IAsyncSettingsStore store, CancellationToken cancellationToken)

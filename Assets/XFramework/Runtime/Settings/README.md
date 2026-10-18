@@ -631,6 +631,12 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
   `SettingRef` 的路径也必须是对设置对象自身成员的连续访问（不支持方法调用、索引器、闭包捕获）
 - **句柄读写须在主线程**（见「线程契约」）
 - **迁移器与校验器可能在非主线程运行**（见「线程契约」）
+- **同步降级路径会在调用线程先做一次序列化快照**（SET-013）：store 只实现同步接口时，
+  `SaveAsync` 为避免池线程 `JsonUtility.ToJson` 与主线程继续改同一对象竞态，会先在调用线程
+  `ToJson` → `FromJson` 得到独立快照，再把快照交给池线程。代价是这条路径多一次序列化往返。
+- **`SaveAsync` 与 `Reset` / `Load` 不得并发**（SET-014）：框架没有管理器级闸门；在飞的 `SaveAsync`
+  与随后的 `Reset` / `Load` 无序化——重置可能被旧快照复活、`_savedCount` 被旧快照覆盖。
+  请调用方串行化这些操作（例如 `await SaveAsync()` 完成后再 `Reset` / `Load`）。
 - **`IsDirty` 的语义边界**：它表示「内存改动是否已**提交给存储后端**」，而**不**保证已成功落盘
   ——`ISettingsStore.Save<T>` 返回 `void`，框架无从得知后端内部是否真的写成功。于是写失败分两类：
   - **只告警不抛的后端**（`JsonFileStore` 即如此，为的是磁盘满时也不崩游戏）：框架按「已提交」

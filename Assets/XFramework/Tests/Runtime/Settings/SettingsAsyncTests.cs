@@ -24,6 +24,7 @@ namespace XFramework.XSettings.Tests
     {
         #region Test Doubles
 
+        [Serializable]
         private sealed class SampleSettings
         {
             public int Volume;
@@ -106,6 +107,30 @@ namespace XFramework.XSettings.Tests
             }
         }
 
+        /// <summary>记录 Save 收到的对象引用，用于验证同步降级路径是否交出了独立快照。</summary>
+        private sealed class RefRecordingStore : ISettingsStore
+        {
+            public object LastSaved;
+            public object Data;
+            public bool HasData;
+
+            public bool Exists() => HasData;
+            public T Load<T>() where T : class, new() => Data as T ?? new T();
+
+            public void Save<T>(T settings) where T : class, new()
+            {
+                LastSaved = settings;
+                Data = settings;
+                HasData = true;
+            }
+
+            public void Delete()
+            {
+                HasData = false;
+                Data = null;
+            }
+        }
+
         private static SettingsManagerImpl<SampleSettings> CreateManager(ISettingsStore store)
             => new SettingsManagerImpl<SampleSettings>(store, () => new SampleSettings { Volume = 5 });
 
@@ -169,6 +194,21 @@ namespace XFramework.XSettings.Tests
 
             Assert.AreEqual(1, store.SyncSaveCalls, "仅同步的 store 经线程池降级后完成保存");
             Assert.AreEqual(42, ((SampleSettings)store.Data).Volume);
+        }
+
+        [Test]
+        public async Task SaveAsync_SyncOnlyStore_SerializesSnapshotBeforePool()
+        {
+            // SET-013：池线程不得直接序列化活对象；交出去的是主线程序列化出的独立快照
+            var store = new RefRecordingStore();
+            var manager = CreateManager(store);
+            manager.Settings.Volume = 42;
+
+            await manager.SaveAsync();
+
+            Assert.IsFalse(ReferenceEquals(store.LastSaved, manager.Settings),
+                "同步降级路径必须把主线程序列化出的快照交给池线程（SET-013）");
+            Assert.AreEqual(42, ((SampleSettings)store.LastSaved).Volume, "快照内容与写入时一致");
         }
 
         [Test]

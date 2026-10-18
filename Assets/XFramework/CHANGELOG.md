@@ -409,6 +409,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   字典改用 `StringComparer.OrdinalIgnoreCase`。回归：
   `SettingsManagerLifecycleTests.DefaultPathClaim_WrittenOnlyAfterSuccessfulInitialization`
   （改前改判为 `Expected: No Exception to be thrown`）。
+- **同步降级 `SaveAsync` 把活对象交给池线程序列化（SET-013）**：`JsonUtility.ToJson` 在池线程读
+  主线程可能仍在修改的对象。修法：在调用线程先 `ToJson` → `FromJson` 得到独立快照再下池线程
+  （版本化路径同样快照 `Data`）。回归：
+  `SettingsAsyncTests.SaveAsync_SyncOnlyStore_SerializesSnapshotBeforePool`（改前 `Expected: False But was: True`）。
+  `SaveAsync` 与 `Reset`/`Load` 的并发无序化（SET-014）按裁定只文档化，写进 README 已知限制。
 
 #### Message
 
