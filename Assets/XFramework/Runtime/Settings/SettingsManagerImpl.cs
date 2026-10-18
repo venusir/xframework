@@ -228,9 +228,19 @@ namespace XFramework.XSettings
                 throw new ArgumentNullException(nameof(callback));
 
             // 先注册再立即回调:与 ReactiveProperty / SettingRef 的顺序一致,
-            // 确保回调中建立的订阅不会丢失后续消息
+            // 确保回调中建立的订阅不会丢失后续消息。
+            // 立即回调抛出时必须先退订再上抛——否则句柄交不出去，订阅会一直留在流上（SET-005）。
             var handle = _changedStream.Subscribe(callback);
-            callback(_settings);
+            try
+            {
+                callback(_settings);
+            }
+            catch
+            {
+                handle.Dispose();
+                throw;
+            }
+
             return handle;
         }
 

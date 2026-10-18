@@ -87,6 +87,29 @@ namespace XFramework.XSettings.Tests
             Assert.Throws<ArgumentNullException>(() => manager.Observe(null));
         }
 
+        [Test]
+        public void Observe_ImmediateCallbackThrows_SubscriptionIsCleanedUp()
+        {
+            // SET-005：先注册后立即回调；回调抛出时句柄交不出去，必须先退订再上抛
+            var manager = CreateManager();
+            int calls = 0;
+            bool throwOnce = true;
+
+            Assert.Throws<InvalidOperationException>(() => manager.Observe(_ =>
+            {
+                calls++;
+                if (throwOnce)
+                {
+                    throwOnce = false;
+                    throw new InvalidOperationException("observe boom");
+                }
+            }));
+
+            manager.Apply(new TestSettings { Volume = 10 });
+
+            Assert.AreEqual(1, calls, "立即回调抛出后订阅必须已被清理；若泄漏，Apply 会再次回调");
+        }
+
         #endregion
     }
 }

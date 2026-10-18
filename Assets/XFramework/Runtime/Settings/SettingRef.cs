@@ -132,7 +132,7 @@ namespace XFramework.XSettings
         /// 应当被看见），只有本方法承担「不抛」的契约。</para>
         /// </summary>
         /// <param name="value">要写入的值。</param>
-        /// <param name="actual">写入后句柄解析到的实时值；无法写入时为 default。</param>
+        /// <param name="actual">写入的值（Settings 的 setter 不做规范化，故与实际存储值一致）；无法写入时为 default。</param>
         /// <returns>确实写入了返回 true；设置类型不可用时返回 false。</returns>
         public bool TryWriteValue(TField value, out TField actual)
         {
@@ -145,7 +145,9 @@ namespace XFramework.XSettings
             }
 
             Value = value;
-            actual = Value;
+            // 直接回传写入值，不再重读 Value（SET-006）：订阅者在派发中销毁管理器时，
+            // 重读会抛 ObjectDisposedException 并穿过 UI 事件；Settings 的 setter 不做规范化。
+            actual = value;
             return true;
         }
 

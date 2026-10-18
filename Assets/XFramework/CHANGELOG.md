@@ -385,6 +385,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   移除全部匹配且只 `Dispose` 一次。回归：`LogLifecycleTests.AddSink_Duplicate_IsIgnoredOnce` /
   `RemoveSink_DisposesOnce`。
 
+#### Settings
+
+- **`Observe` 的立即回调抛出后订阅泄漏（SET-005）**：`Observe` 先注册再同步回调；回调抛异常时句柄
+  永远交不出去，订阅留在 `_changedStream` 上直到管理器释放。修法：`try { callback } catch { handle.Dispose(); throw; }`
+  （照 `SettingRef.Subscribe` 先例）。回归：`SettingsManagerImplTests.Observe_ImmediateCallbackThrows_SubscriptionIsCleanedUp`
+  （改前 Apply 会再次回调，`Expected: 1 But was: 2`）。
+- **`TryWriteValue` 在派发后重读 `Value`（SET-006）**：订阅者在写入派发中销毁管理器时，重读会抛异常
+  并穿过 UI 事件。修法：`actual` 直接回传写入值（Settings 的 setter 不做规范化）。回归：
+  `SettingRefTests.Ref_TryWriteValue_SubscriberDisposesManager_DoesNotThrow`（改前 `Expected: No Exception to be thrown`）。
+
 #### Message
 
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里

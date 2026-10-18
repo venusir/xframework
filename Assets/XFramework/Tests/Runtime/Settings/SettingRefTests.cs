@@ -223,6 +223,29 @@ namespace XFramework.XSettings.Tests
         }
 
         [Test]
+        public void Ref_TryWriteValue_SubscriberDisposesManager_DoesNotThrow()
+        {
+            // SET-006：写入派发中订阅者销毁管理器；旧实现随后重读 Value 会抛 ODE 并穿进 UI 事件
+            Init();
+            var volume = SettingsManager.Ref<GameSettings, float>(s => s.Audio.MasterVolume);
+            int calls = 0;
+            using var handle = volume.Subscribe(_ =>
+            {
+                // 第一次是订阅即回调；第二次是本次写入的派发
+                if (++calls == 2)
+                    SettingsManager.Destroy();
+            });
+
+            bool ok = false;
+            float actual = -1f;
+
+            Assert.DoesNotThrow(() => ok = volume.TryWriteValue(0.5f, out actual),
+                "订阅者在派发中销毁管理器时，TryWriteValue 不得把异常抛进 UI 事件");
+            Assert.IsTrue(ok);
+            Assert.AreEqual(0.5f, actual, 1e-5f, "actual 直接回传写入值");
+        }
+
+        [Test]
         public void Ref_TryWriteValue_UnregisteredType_ReturnsFalseWithoutThrowing()
         {
             Init();
