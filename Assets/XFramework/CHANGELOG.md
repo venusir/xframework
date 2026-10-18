@@ -403,6 +403,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （既非 IOException 也不在失败契约表里）；Save 据此把 `Corrupt` 报成 `Missing`。修法：装饰器把
   `null` 统一转成 `IOException("解密失败")`，两个读面一致；内置 XOR 永不返回 null，默认路径不变。
   回归：`FileManagerCryptoTests.DecryptFailure_ByteAndTextFaces_ThrowSameIOException`，改前红。
+- **Dedicated Server 平台落默认分支、空域根静默兜底（FILE-009/011）**：`WindowsServer` / `LinuxServer`
+  不在平台 switch 里，Dedicated Server 构建会抛「无内置 Provider」；`GetDomainRoot` 的空根兜底绕过
+  `PrimeRoots` 的空串校验，返回空串会让相对路径落到进程工作目录。修法：补两个 Server 平台分支
+  （走 Desktop Provider）；空根改为抛 `InvalidOperationException`。
+  **覆盖缺口如实记**：平台分支需对应构建、空根需 Unity 路径未就绪，均未构造自动化用例。
 
 #### Log
 

@@ -111,8 +111,10 @@ namespace XFramework.XFileManager
                 {
                     case RuntimePlatform.WindowsPlayer:
                     case RuntimePlatform.WindowsEditor:
+                    case RuntimePlatform.WindowsServer:
                     case RuntimePlatform.LinuxPlayer:
                     case RuntimePlatform.LinuxEditor:
+                    case RuntimePlatform.LinuxServer:
                     case RuntimePlatform.OSXPlayer:
                     case RuntimePlatform.OSXEditor:
                         _baseProvider = new DesktopFileProvider();

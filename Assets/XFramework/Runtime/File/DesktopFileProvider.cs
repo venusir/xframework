@@ -270,19 +270,33 @@ namespace XFramework.XFileManager
             if (_appDataRoot == null)
                 PrimeRoots();
 
+            string root;
             switch (domain)
             {
                 case FileDomain.AppData:
                 case FileDomain.SaveData:
                     // 桌面平台 SaveData 等同于 AppData
-                    return _appDataRoot ?? Application.persistentDataPath;
+                    root = _appDataRoot ?? Application.persistentDataPath;
+                    break;
                 case FileDomain.Streaming:
-                    return _streamingRoot ?? Application.streamingAssetsPath;
+                    root = _streamingRoot ?? Application.streamingAssetsPath;
+                    break;
                 case FileDomain.Cache:
-                    return _cacheRoot ?? Application.temporaryCachePath;
+                    root = _cacheRoot ?? Application.temporaryCachePath;
+                    break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(domain), domain, null);
             }
+
+            // 空根兜底绕过 PrimeRoots 的空串校验（FILE-011）：返回空串会让相对路径落到进程工作目录。
+            // 这里显式拒绝，而不是静默写错地方。
+            if (string.IsNullOrEmpty(root))
+            {
+                throw new InvalidOperationException(
+                    "[FileManager] 域根为空。请在主线程调用 FileManager.Initialize()，或确保 Unity 的路径属性已就绪。");
+            }
+
+            return root;
         }
 
         /// <summary>
