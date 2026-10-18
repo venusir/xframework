@@ -163,6 +163,9 @@ namespace XFramework.XDiagnostics
         /// <summary>
         /// 清空全部登记（含框架页签）。<b>主要给测试复位与宿主彻底重启用</b>，
         /// 常规代码不应调用——它会把别处登记的页签一并抹掉。
+        /// <para>编辑器侧的框架页签可经内部登记入口恢复（<c>Editor/Diagnostics/FrameworkPanels</c> 的
+        /// <c>Register</c>）——关闭域重载时 <c>[InitializeOnLoadMethod]</c> 不会重跑，
+        /// 这是同一编辑器会话内唯一的恢复路径（DIAG-003）。</para>
         /// </summary>
         public static void Clear()
         {

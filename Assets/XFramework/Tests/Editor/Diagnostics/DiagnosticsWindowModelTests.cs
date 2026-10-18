@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using XFramework.Editor.Diagnostics;
 using XFramework.XDiagnostics;
@@ -107,6 +109,57 @@ namespace XFramework.Editor.Diagnostics.Tests
         public void TearDown()
         {
             DiagnosticsManager.Clear();
+            // DIAG-003：Clear 会抹掉框架页签，而关闭域重载时 [InitializeOnLoadMethod] 不会重跑——
+            // 恢复入口是 FrameworkPanels.Register（已对测试程序集可见）
+            FrameworkPanels.Register();
+        }
+
+        #endregion
+
+        #region 框架页签登记（DIAG-003 / DIAG-005）
+
+        [Test]
+        public void Clear_ThenFrameworkPanelsRegister_RestoresFrameworkPanels()
+        {
+            DiagnosticsManager.Clear();
+            var buffer = new List<IDiagnosticPanel>();
+            Assert.AreEqual(0, DiagnosticsManager.CopyPanels(buffer), "前提：Clear 后登记表为空");
+
+            FrameworkPanels.Register();
+
+            Assert.Greater(DiagnosticsManager.CopyPanels(buffer), 0,
+                "恢复入口应把框架页签重新登记——关闭域重载时这是同一编辑器会话内唯一的恢复路径");
+        }
+
+        [Test]
+        public void FrameworkPanels_RegisterCoversEveryDiagnosticPanelType()
+        {
+            // DIAG-005：双向集合相等。新增 *DiagnosticPanel 却忘记在 FrameworkPanels.Register 登记时，
+            // 页签会静默不显示；本用例必须红。
+            var registered = new HashSet<Type>();
+            foreach (var field in typeof(FrameworkPanels).GetFields(
+                         BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public))
+            {
+                if (typeof(IDiagnosticPanel).IsAssignableFrom(field.FieldType))
+                    registered.Add(field.GetValue(null).GetType());
+            }
+
+            var discovered = new HashSet<Type>();
+            foreach (var type in typeof(FrameworkPanels).Assembly.GetTypes())
+            {
+                if (!type.IsAbstract && typeof(IDiagnosticPanel).IsAssignableFrom(type) &&
+                    type.Name.EndsWith("DiagnosticPanel", StringComparison.Ordinal))
+                {
+                    discovered.Add(type);
+                }
+            }
+
+            Assert.Greater(discovered.Count, 0, "前提：应当能扫到框架页签类型");
+            CollectionAssert.AreEquivalent(discovered, registered,
+                "每个 *DiagnosticPanel 都必须在 FrameworkPanels.Register 里显式登记（双向相等）");
+
+            // 负向控制：扫描只针对 Editor 程序集，测试程序集里的页签不在射程内
+            Assert.IsFalse(discovered.Contains(typeof(FakePanel)), "扫描不应捞到测试程序集里的页签");
         }
 
         #endregion

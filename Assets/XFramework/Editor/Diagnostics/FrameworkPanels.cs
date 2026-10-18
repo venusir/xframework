@@ -58,7 +58,7 @@ namespace XFramework.Editor.Diagnostics
         #region Registration
 
         [InitializeOnLoadMethod]
-        private static void Register()
+        internal static void Register()
         {
             DiagnosticsManager.Register(OverviewPanel);
             DiagnosticsManager.Register(UIPanel);
