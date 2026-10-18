@@ -250,6 +250,11 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - **`MoveSlotAsync` 不是原子操作。** 目标写入成功、删除源之前若进程被杀，会同时留下两份副本——**不丢数据**，但需要调用方知晓（接口注释里也写着）。要严格原子需要文件系统的重命名，而 WebGL / Console 没有可用的物理路径。
 - **枚举侧车时不校验校验和。** 侧车（`slot_N.save.meta`）只为免去「枚举时对每个槽位全量反序列化」而存在，而校验需要读载荷——那正是它要避免的开销；**校验发生在加载时**（那时载荷已在手上，几乎免费）。所以「元数据列表里看起来正常」不等于「载荷没坏」，需要确证就调 `TryLoadAsync`。
 - **删除跨帧执行，读面在删除完成前仍可能看到该槽位**（SAVE-006）：`DeleteSlotAsync` 返回时文件已删完；但在它等待切回主线程的帧间隙里，`SlotExistsAsync` / `GetSlotMetasAsync` 仍可能读到尚未删除的载荷或侧车。需要强一致请在删除返回后重新查询，不要依赖删除期间的快照。
+- **会话开始时门面只丢实现引用（关闭域重载时）**：`ResetForNewSession`（`SubsystemRegistration` 档）把
+  `_impl` 置空、**不调 `Dispose`**；玩家上下文 / 忙标志 / 版本号都在旧实例上，随它一起丢弃。第二会话由
+  `SaveBootstrapStage` 或使用方重新 `Initialize`——**重新初始化必须带同一份 `SaveOptions`**，否则加密、
+  版本号等接线不会恢复（SAVE-001 的「第二会话加密接线丢失」正是：File 复位清掉加密，而 Save 的
+  `Initialize` 因「已初始化」早退、没重接）。
 
 ## 依赖
 

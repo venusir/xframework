@@ -16,6 +16,7 @@ using XFramework.XLock;
 using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XPool;
+using XFramework.XSave;
 using XFramework.XSerialize;
 using XFramework.XSettings;
 using XFramework.XTimer;
@@ -79,6 +80,7 @@ namespace XFramework.Architecture.Tests
             (typeof(PoolManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(Serializer), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(DataManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
+            (typeof(SaveManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(InstanceTracker), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
         };
 

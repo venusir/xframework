@@ -17,6 +17,7 @@ using XFramework.XFileManager;
 using XFramework.XLocalization;
 using XFramework.XPipeline;
 using XFramework.XPool;
+using XFramework.XSave;
 using XFramework.XSerialize;
 using XFramework.XSettings;
 using XFramework.XUI;
@@ -115,6 +116,7 @@ namespace XFramework.Architecture.Tests
             Bootstrap.Clear();
             SettingsManager.Destroy();
             DataManager.Shutdown();
+            SaveManager.Shutdown();
             Serializer.Shutdown();
             Serializer.Initialize();
             UpdateManager.AutoInit();
@@ -136,6 +138,7 @@ namespace XFramework.Architecture.Tests
             Bootstrap.Clear();
             SettingsManager.Destroy();
             DataManager.Shutdown();
+            SaveManager.Shutdown();
             Serializer.Shutdown();
             Serializer.Initialize();
 
@@ -163,6 +166,7 @@ namespace XFramework.Architecture.Tests
             PoolManager.ResetForNewSession();
             Serializer.ResetForNewSession();
             DataManager.ResetForNewSession();
+            SaveManager.ResetForNewSession();
             InstanceTracker.AutoInit();
         }
 
@@ -477,6 +481,31 @@ namespace XFramework.Architecture.Tests
 
             DataManager.Initialize(new DataManagerImpl());
             Assert.IsTrue(DataManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
+
+        [Test]
+        public void Save_ReinitializesAfterSessionResetAndRestoresCryptoWiring()
+        {
+            // SAVE-001：门面跨会话存活会让 SaveBootstrapStage 的 Initialize 早退，
+            // 而 File 复位已清掉加密接线——第二会话的存档在无加密状态下读写。
+            FileManager.Initialize();
+            var crypto = new XorCryptoProvider("session-reset-key");
+            SaveManager.Initialize(null, new SaveOptions { CryptoProvider = crypto });
+
+            Assert.IsTrue(SaveManager.IsInitialized, "前提校验：会话 1 初始化成功");
+            Assert.AreSame(crypto, FileManager.GetCryptoProvider(), "前提校验：加密接线已生效");
+
+            SimulateNewSession();
+
+            Assert.IsFalse(SaveManager.IsInitialized, "复位后 Save 门面应回到未初始化态");
+            Assert.IsNull(FileManager.GetCryptoProvider(), "前提校验：File 复位已清掉加密接线");
+
+            FileManager.Initialize();
+            SaveManager.Initialize(null, new SaveOptions { CryptoProvider = crypto });
+
+            Assert.IsTrue(SaveManager.IsInitialized, "第二会话必须能重新初始化");
+            Assert.AreSame(crypto, FileManager.GetCryptoProvider(),
+                "第二会话重新初始化必须恢复加密接线（SAVE-001）——旧实现因 Initialize 早退而丢失");
         }
 
         /// <summary>

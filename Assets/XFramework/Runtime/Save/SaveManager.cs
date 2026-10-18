@@ -121,6 +121,23 @@ namespace XFramework.XSave
             _impl = null;
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态（SAVE-001）。**关闭域重载**（Project Settings → Editor →
+        /// Enter Play Mode Options → 取消 Reload Domain）时，上一会话的 <c>_impl</c> 会存活到第二会话，
+        /// <see cref="SaveBootstrapStage"/> 见到 <see cref="IsInitialized"/> 为真即跳过初始化——
+        /// 它同时会跳过 <see cref="Initialize"/> 里的加密接线，而 File 的会话复位已清掉加密提供者，
+        /// 于是第二会话在**无加密**状态下读写存档。
+        /// <para><b>只丢引用、不 <c>Dispose</c></b>：玩家上下文 / 忙标志 / 版本号都在实例上，
+        /// 随旧实例一起丢弃；实例清理归调用方（谁初始化谁清理）。</para>
+        /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：早于首场景 <c>Awake</c>，因而早于引导阶段；
+        /// 开域重载时是纯幂等空操作。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _impl = null;
+        }
+
         #endregion
 
         #region Internal

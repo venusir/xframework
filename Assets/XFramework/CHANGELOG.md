@@ -252,6 +252,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   重建内置格式，第三方需在新会话重新 `Register`。
 - **`DataManager` 在会话开始时只丢实现引用**（DATA-003，仅关闭域重载时可见）：第二会话由引导阶段或
   使用方重新 `Initialize`；旧实例不 Dispose。
+- **`SaveManager` 在会话开始时只丢实现引用**（SAVE-001，仅关闭域重载时可见）：第二会话的
+  `SaveBootstrapStage` 会重新初始化并重接 `SaveOptions.CryptoProvider`；旧实例不 Dispose。
 
 ### Fixed
 
@@ -333,6 +335,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `IsInitialized` 为真即跳过初始化，旧实例与数据块被复用。修法：新增 `ResetForNewSession`
   （`SubsystemRegistration`）只丢 `_impl` 引用、不 Dispose。回归：
   `SessionResetTests.Data_ReinitializesAfterSessionReset`（改前 `Expected: False But was: True`）。
+- **门面跨会话存活、第二会话加密接线丢失（SAVE-001）**：关闭域重载时 `_impl` 带进第二会话，
+  `SaveBootstrapStage` 的 `Initialize` 因「已初始化」早退——它同时跳过了 `SaveOptions.CryptoProvider`
+  的接线，而 File 的会话复位已清掉加密提供者，第二会话于是在**无加密**状态下读写存档。修法：新增
+  `ResetForNewSession`（`SubsystemRegistration`）只丢 `_impl` 引用、不 Dispose，引导阶段重新初始化时
+  重接加密。回归：`SessionResetTests.Save_ReinitializesAfterSessionResetAndRestoresCryptoWiring`
+  （改前 `Expected: False But was: True`）。
 
 #### UI
 
