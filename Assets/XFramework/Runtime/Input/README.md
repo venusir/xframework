@@ -209,10 +209,15 @@ rebindOp.OnPotentialMatch += (keyName) =>
 // rebindOp.Cancel();
 ```
 
+> **事件订阅者逐个隔离**：`OnCompleted` / `OnCancelled` / `OnPotentialMatch` 的某一个处理器抛异常会记一条
+> `[Input]` Error，其余处理器继续执行——与 `Observe*` 的处理器隔离同一条判定线。
+
 ### 9. 响应式订阅（可选）
 
 > 替代轮询 `Update()` 的声明式输入方式。所有 `ObserveXxx` 方法返回 `IDisposable`，传入 `this` 可自动随组件销毁取消订阅。
 > 公共 API 零外部响应式库依赖 — 内部由 `Tick()` 发布的帧脉冲驱动，调用方不需要了解任何响应式库。
+> `action` 为 null/空串与 `callback` 为 null 一样在**订阅前**抛 `ArgumentNullException`——不再等到每帧
+> 在事件流里抛（那时日志前缀是 `[Event]`，故障点远离调用方）。
 
 #### 按钮事件
 
@@ -564,8 +569,9 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 - **`playerId > 0` 的复合绑定只读第一个子项**（INP-010）：对 D-pad / 2DVector 这类复合绑定，
   按玩家读取会取到第一个子项（通常是 `ButtonControl`），`ReadVector2` 可能恒为零；`playerId == 0`
   则是 action 级全设备读取。需要逐玩家读取复合轴请自行组合各子项，或把动作拆成独立的 1D 轴。
-- **同名动作跨已启用 map 时按资产顺序静默胜出**（INP-014）：缓存只按名字失效，无法区分同名动作的来源；
-  框架不做歧义解析，只在启用 map 时给出一次警告。请确保同一动作名只在一个已启用的 map 中定义。
+- **同名动作跨已启用 map 时按资产顺序胜出**（INP-014）：缓存只按名字失效，无法区分同名动作的来源；
+  框架不做完整歧义解析，在**动作解析时按动作名**给出一次 Warning（指出胜出的 map）。请确保同一动作名
+  只在一个已启用的 map 中定义。
 - **`Initialize` 早于 `UpdateManager` 就绪时帧驱动注册会失败**（INP-003）：调度器未建立（`Initialize`
   早于 `UpdateManager.AutoInit`）或已清理（`OnQuitting` 之后）时 `UpdateManager.Register` 会静默丢弃。
   现在会记一条 `[Input]` Warning 且不保留 ticker；在 `UpdateManager` 就绪后 `InputManager.Destroy()` +

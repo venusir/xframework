@@ -243,6 +243,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Destroy()` + `Initialize()` 可恢复。
 - **`playerId > 0` 的读取跟随 `effectivePath`**（INP-009）：重绑定 / 覆盖变更后读到新控件；直接
   `ApplyBindingOverride` 不经模块时缓存不会自动失效。
+- **`Observe*` 的 null/空 `action` 现在立即抛 `ArgumentNullException`**（INP-011）：此前订阅成功、
+  每帧在事件流里抛 `[Event]` ANE。
+- **重绑定事件的订阅者异常被逐个隔离**（INP-013）：一个处理器抛异常不再阻止其余处理器，日志为
+  `[Input] Rebinding On... subscriber threw exception`。
+- **同名动作跨已启用 map 会有一次歧义 Warning**（INP-014）：解析仍按资产顺序，警告指出胜出的 map。
 
 ### Fixed
 
@@ -371,6 +376,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   ticker；Map 三入口先校验后动作、失败一律 Warning 且不改变状态；路径缓存改用 `effectivePath`，并在
   `LoadBindingOverrides`（finally）/ `Reset*BindingOverrides` / 重绑定完成时失效。回归：5 条新用例（改前
   分别 Expected log did not appear（两条）、map 被禁用、Unity ANE、Expected: True But was: False）。
+- **Observe* 空 action 延后到每帧炸、重绑定回调无异常隔离、同名动作零告警（INP-011/013/014）**：
+  `Observe*(null, …)` 订阅成功后在每帧的 EventStream 抛 `[Event]` ANE；`SystemRebindingOperation` 的
+  三个用户事件直接多播 `Invoke`，第一个抛异常的订阅者会中断其后全部订阅者；同名动作跨已启用 map
+  按资产顺序静默胜出，README 却声称「只在启用 map 时给出一次警告」。修法：8 个 `Observe*` 在订阅前
+  校验 `action` 非 null/空；重绑定事件按 `GetInvocationList` 逐个 try/catch 并记 `[Input]` Error；
+  `GetAction` 命中后扫描其余已启用 map，按动作名 Warning 一次。回归：3 条新用例（改前分别
+  `Expected: <ArgumentNullException> But was: null`、`InvalidOperationException: subscriber boom`、
+  `Expected: 1 But was: 0`）。
 
 #### Audio
 

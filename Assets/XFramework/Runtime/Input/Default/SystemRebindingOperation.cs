@@ -1,5 +1,6 @@
 using System;
 using UnityEngine.InputSystem;
+using XFramework.XLog;
 
 namespace XFramework.XInput.Default
 {
@@ -63,7 +64,7 @@ namespace XFramework.XInput.Default
                     IsOverridden = true
                 };
 
-                OnCompleted?.Invoke(newBindingInfo);
+                NotifyCompleted(newBindingInfo);
             });
 
             // ---- 取消回调 ----
@@ -71,7 +72,7 @@ namespace XFramework.XInput.Default
             {
                 op.Dispose();
                 if (_restoreEnabled) action.Enable();
-                OnCancelled?.Invoke();
+                NotifyCancelled();
             });
 
             // ---- 可能匹配回调（实时预览按键名）----
@@ -79,9 +80,76 @@ namespace XFramework.XInput.Default
             {
                 if (op.selectedControl != null)
                 {
-                    OnPotentialMatch?.Invoke(op.selectedControl.displayName);
+                    NotifyPotentialMatch(op.selectedControl.displayName);
                 }
             });
+        }
+
+        /// <summary>
+        /// 逐个调用订阅者并隔离异常（INP-013）：与 <c>Observe*</c> 的处理器隔离对称。
+        /// <para>多播委托直接 <c>Invoke</c> 时，第一个抛异常的订阅者会中断其后全部订阅者；
+        /// 重绑定事件是低频路径，<c>GetInvocationList</c> 的分配可接受。</para>
+        /// </summary>
+        private void NotifyCompleted(InputBindingInfo info)
+        {
+            var handlers = OnCompleted;
+            if (handlers == null) return;
+
+            Delegate[] list = handlers.GetInvocationList();
+            for (int i = 0; i < list.Length; i++)
+            {
+                try
+                {
+                    ((Action<InputBindingInfo>)list[i])(info);
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Exception(LogCategories.Input, ex,
+                        "Rebinding OnCompleted subscriber threw exception");
+                }
+            }
+        }
+
+        /// <inheritdoc cref="NotifyCompleted"/>
+        private void NotifyCancelled()
+        {
+            var handlers = OnCancelled;
+            if (handlers == null) return;
+
+            Delegate[] list = handlers.GetInvocationList();
+            for (int i = 0; i < list.Length; i++)
+            {
+                try
+                {
+                    ((Action)list[i])();
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Exception(LogCategories.Input, ex,
+                        "Rebinding OnCancelled subscriber threw exception");
+                }
+            }
+        }
+
+        /// <inheritdoc cref="NotifyCompleted"/>
+        private void NotifyPotentialMatch(string displayName)
+        {
+            var handlers = OnPotentialMatch;
+            if (handlers == null) return;
+
+            Delegate[] list = handlers.GetInvocationList();
+            for (int i = 0; i < list.Length; i++)
+            {
+                try
+                {
+                    ((Action<string>)list[i])(displayName);
+                }
+                catch (Exception ex)
+                {
+                    LogManager.Exception(LogCategories.Input, ex,
+                        "Rebinding OnPotentialMatch subscriber threw exception");
+                }
+            }
         }
 
         #endregion

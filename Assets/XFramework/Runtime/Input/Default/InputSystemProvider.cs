@@ -37,6 +37,9 @@ namespace XFramework.XInput.Default
         // 空串表示无 Gamepad 绑定(纯键鼠动作),避免每帧重复遍历绑定解析
         private readonly Dictionary<string, string> _playerBindingPaths = new Dictionary<string, string>(8);
 
+        // 同名动作跨已启用 map 的歧义告警去重（INP-014）：按动作名只警告一次，防止刷屏
+        private readonly HashSet<string> _warnedAmbiguousActionNames = new HashSet<string>();
+
         // 振动到期时刻:玩家 ID → Time.unscaledTime 绝对时刻;由 Tick 帧驱动到期自动停止,不使用协程
         private readonly Dictionary<uint, float> _vibrationUntilTimes = new Dictionary<uint, float>(4);
 
@@ -91,6 +94,7 @@ namespace XFramework.XInput.Default
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
             _playerBindingPaths.Clear();
+            _warnedAmbiguousActionNames.Clear();
 
             _actionAsset.Enable();
 
@@ -723,6 +727,7 @@ namespace XFramework.XInput.Default
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
             _playerBindingPaths.Clear();
+            _warnedAmbiguousActionNames.Clear();
 
             LogManager.Info(LogCategories.Input, "Disposed.");
         }
@@ -858,6 +863,7 @@ namespace XFramework.XInput.Default
                     if (action != null)
                     {
                         _actionCache[actionName] = action;
+                        WarnIfAmbiguous(actionName, map);
                         return action;
                     }
                 }
@@ -878,6 +884,29 @@ namespace XFramework.XInput.Default
             }
             #endif
             return fallback;
+        }
+
+        /// <summary>
+        /// 同名动作跨多个已启用 map 时按动作名告警一次（INP-014）。解析仍按资产顺序，
+        /// 不做完整歧义解析；只在缓存未命中、重新解析时扫描其余已启用 map。
+        /// </summary>
+        private void WarnIfAmbiguous(string actionName, InputActionMap winner)
+        {
+            var maps = _actionAsset.actionMaps;
+            for (int i = 0; i < maps.Count; i++)
+            {
+                var other = maps[i];
+                if (ReferenceEquals(other, winner) || !other.enabled) continue;
+                if (other.FindAction(actionName) == null) continue;
+
+                if (_warnedAmbiguousActionNames.Add(actionName))
+                {
+                    LogManager.Warning(LogCategories.Input,
+                        "Action '{0}' exists in multiple enabled action maps; using '{1}' by asset order.",
+                        actionName, winner.name);
+                }
+                return;
+            }
         }
 
         /// <summary>

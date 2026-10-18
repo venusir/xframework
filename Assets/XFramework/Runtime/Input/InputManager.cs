@@ -628,6 +628,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObservePressed(string action, Action callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 订阅帧脉冲,每帧检测一次按下状态
             var sub = _framePulse.Subscribe(_ =>
@@ -652,6 +653,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveReleased(string action, Action callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 订阅帧脉冲,每帧检测一次释放状态
             var sub = _framePulse.Subscribe(_ =>
@@ -676,6 +678,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveHeld(string action, Action<bool> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
@@ -707,6 +710,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObservePressDuration(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
@@ -738,6 +742,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveVector2(string action, Action<Vector2> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
@@ -768,6 +773,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveFloat(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
@@ -798,6 +804,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveVector2Raw(string action, Action<Vector2> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;
@@ -828,6 +835,7 @@ namespace XFramework.XInput
         /// <returns>可手动取消订阅的句柄</returns>
         public static IDisposable ObserveFloatRaw(string action, Action<float> callback, object context = null, uint playerId = 0)
         {
+            if (string.IsNullOrEmpty(action)) throw new ArgumentNullException(nameof(action));
             if (callback == null) throw new ArgumentNullException(nameof(callback));
             // 内联闭包状态机实现去重:首次必过,之后相同值去重
             var hasLast = false;

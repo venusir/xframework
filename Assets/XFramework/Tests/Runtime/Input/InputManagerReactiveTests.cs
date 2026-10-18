@@ -285,6 +285,21 @@ namespace XFramework.XInput.Tests
         }
 
         [Test]
+        public void Observe_NullOrEmptyAction_Throws()
+        {
+            // INP-011：此前 action 不校验，订阅成功后在每帧的 EventStream 里抛 [Event] ANE
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObservePressed(null, () => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObservePressed(string.Empty, () => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveReleased(null, () => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveHeld(null, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObservePressDuration(null, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveVector2(null, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveFloat(null, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveVector2Raw(null, _ => { }));
+            Assert.Throws<ArgumentNullException>(() => InputManager.ObserveFloatRaw(null, _ => { }));
+        }
+
+        [Test]
         public void Observe_WithoutProvider_NoCallbackNoThrow()
         {
             // 未 SetProvider:provider 为 null,Observe 仍可订阅,Tick 不崩且读默认值(首次必过)

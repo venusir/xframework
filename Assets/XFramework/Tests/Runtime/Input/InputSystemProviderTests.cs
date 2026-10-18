@@ -427,6 +427,83 @@ namespace XFramework.XInput.Tests
 
         #endregion
 
+        #region 重绑定事件隔离（INP-013）
+
+        [Test]
+        public void RebindEvent_ThrowingSubscriber_DoesNotPreventOthers()
+        {
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            var op = provider.StartRebinding("Jump", null);
+            Assert.IsNotNull(op);
+
+            int reached = 0;
+            op.OnCancelled += () => throw new InvalidOperationException("subscriber boom");
+            op.OnCancelled += () => reached++;
+
+            LogAssert.Expect(LogType.Error,
+                new Regex("Rebinding OnCancelled subscriber threw exception"));
+
+            op.Cancel();
+
+            Assert.AreEqual(1, reached, "前一个订阅者抛异常不得阻止后续订阅者");
+
+            provider.Dispose();
+        }
+
+        #endregion
+
+        #region 同名动作歧义告警（INP-014）
+
+        [Test]
+        public void SameNameAction_TwoEnabledMaps_WarnsOnceAndFirstMapWins()
+        {
+            InputSystem.AddDevice<Keyboard>();
+            var asset = ScriptableObject.CreateInstance<InputActionAsset>();
+            var playerMap = new InputActionMap("Player");
+            playerMap.AddAction("Jump", InputActionType.Button, "<Keyboard>/space");
+            var uiMap = new InputActionMap("UI");
+            uiMap.AddAction("Jump", InputActionType.Button, "<Keyboard>/a");
+            asset.AddActionMap(playerMap);
+            asset.AddActionMap(uiMap);
+
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset, null); // 全部 map 启用
+
+            int ambiguityWarnings = 0;
+            Application.LogCallback handler = (condition, stackTrace, type) =>
+            {
+                if (type == LogType.Warning && condition.Contains("multiple enabled action maps"))
+                    ambiguityWarnings++;
+            };
+            Application.logMessageReceived += handler;
+            try
+            {
+                Press(Keyboard.current.spaceKey);
+                Assert.IsTrue(provider.WasPressedThisFrame("Jump"), "第一个 map（资产顺序）胜出");
+                Release(Keyboard.current.spaceKey);
+
+                Press(Keyboard.current.aKey);
+                Assert.IsFalse(provider.WasPressedThisFrame("Jump"), "第二个 map 的同名动作不生效（不做歧义解析）");
+                Release(Keyboard.current.aKey);
+
+                // 再次解析不得重复告警（按动作名去重）
+                provider.WasPressedThisFrame("Jump");
+            }
+            finally
+            {
+                Application.logMessageReceived -= handler;
+            }
+
+            Assert.AreEqual(1, ambiguityWarnings, "同名动作按名字只告警一次");
+
+            provider.Dispose();
+        }
+
+        #endregion
+
         #region 长按计时（INP-001）
 
         /// <summary>
