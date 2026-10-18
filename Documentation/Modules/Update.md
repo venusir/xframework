@@ -61,7 +61,7 @@ README 缺「注册表持强引用」边界）。**本轮碰了行为**——与
 - 未做：**迁移仓内两个消费方的防线**（`InputManager._ticker != null` / `SettingsAutoSaveTicker` 吞异常重试）（2026-10-14 · 上条闭合的遗留半）——它们的自记账仍有效，仓内各 `OnDisable` 实现全空 ⇒ 边沿对仓内零影响，迁移只是可选清理。
 - 未做：**`IsDrivingPlayerLoop` 的边界**（2026-09-30 · 审计轮）——它不读 `_schedulers`，故 `OnQuitting()` 之后仍可能返回 `true`（引擎是否在退出时重置 PlayerLoop **未确认**）。已在 XML 文档里注明「它只回答注入状态，不回答有没有东西在派发」。
 - 未做：**`FixedUpdate` 时机在仓内零生产使用者**（2026-09-30；2026-10-01 扩写；2026-10-17 第二轮审计修正）——`LateUpdate` 已有 Camera 的懒注册 ticker，墙钟轴（`Unscaled`）已有 Audio / Timer，只剩 FixedUpdate 没有生产使用方；`Pause()` × 墙钟轴的组合此前连用例都没有（2026-10-01 补上 `Pause_LeavesUnscaledAxisRunning`，并以负向控制证明其判别力）；下一轮若要改这几处的语义，别以为有生产用例兜底。
-- 待裁：**`Clear()` 是否改成有序 `PendingOp`**（2026-10-17 · 第二轮审计）——派发回调里 `Clear(); Register(x);` 会先插入并宣告 `OnEnable`、再被清掉（UPD-002）；维持现状则文档写明「Clear 恒压过同窗口操作」。重开判据：出现重置后立即重建的真实使用方。
-- 待裁：**门面 `ProcessImmediate` 形参是否放宽为 `IUpdateLifecycle`**（2026-10-17 · 第二轮审计）——当前形参 `IUpdateable` 使纯 `ILateUpdateable`/`IFixedUpdateable` 节点够不到（UPD-003），属公开 API 变更。重开判据：出现纯 Late/Fixed 节点需要立即响应的使用方。
-- 待裁：**`AutoDriveEnabled` 会话复位 vs 保留用户选择**（2026-10-17 · 第二轮审计）——跨会话存活且 `AutoInit` 不复位，第二会话可能继承 false 导致自动派发静默停摆（UPD-008）。重开判据：关闭域重载两遍 PlayMode 复现停摆。
+- 暂不做：**`Clear()` 不改成有序 `PendingOp`**（2026-10-18 · 裁定）——派发回调里 `Clear(); Register(x);` 会先插入并宣告 `OnEnable`、再被清掉（UPD-002）；本轮文档写明「Clear 恒压过同窗口操作」，有序化留待出现重置后立即重建的真实使用方。
+- 已做：**门面 `ProcessImmediate` 形参放宽为 `IUpdateLifecycle`**（2026-10-18 · `b21c05a`）——纯 `ILateUpdateable`/`IFixedUpdateable` 节点现在可达；XML 写清跨时机节点一次调用会 `OnUpdate` + `OnLateUpdate` 各一次，公开 API 基线已同步（UPD-003）。
+- 已做：**`AutoDriveEnabled` 会话边界复位**（2026-10-18 · `98c0b42`）——`ResetForNewSession`（`SubsystemRegistration`）把它复位为 `true`，关闭域重载后第二会话不再继承上一会话的 `false`（UPD-008）。
 

@@ -51,5 +51,5 @@ Runtime/Event/
 - 不做：**不合并两份 internal 实现**（`DispatchListPool` / `ActionDisposable` 在 Event 与 Message 各留一份）（2026-09-27 · `2520c44`，理由也写在两处注释里，见 `CHANGELOG` 的「事件流引擎下沉」条目）——十行适配器不值得跨模块绑定，先例是 UI 的 `UIBinder` 内联。无重开判据。
 - 不做：**不加 Event 层主线程断言**（2026-10-17 · 第二轮审计改判）——原「每帧热路径付一次分支」的成本论据在 Release 不成立（Editor-only 断言零开销），但 Event 的直接调用频率高、当前无使用方要求；保留 README 的线程契约与「锁不是并发许可」的边界，不加断言。无重开判据。
 - 不做：**不为 Event 补 PlayMode 侧用例**（2026-10-13 · §4.2 处置）——全量用例均同步纯内存（锁 + 快照投递），无帧、无 MonoBehaviour、无跨会话静态态；`SubscriptionTracker` 是仅 Editor 观测设施。上面那条若要收口，动作是**加断言**（EditMode 可验），不是 PlayMode 用例。无重开判据。
-- 待裁：**`SubscriptionTracker.Reset` 的文档/自动钩子二选一**（2026-10-17 · 第二轮审计）——文档称由域重载与每个 fixture 的 SetUp 调用，两者都不成立（EVT-005）；或改文档，或补 `RuntimeInitializeOnLoadMethod` 并登记族清单。重开判据：出现依赖绝对计数跨会话的使用方。
+- 暂不做：**不补 `SubscriptionTracker.Reset` 的自动钩子**（2026-10-18 · `633b049`）——文档已订正为如实描述（由域重载与每个 fixture 的 SetUp 调用）；补 `RuntimeInitializeOnLoadMethod` 并登记族清单留待出现真实需求。重开判据：出现依赖绝对计数跨会话的使用方（EVT-005）。
 

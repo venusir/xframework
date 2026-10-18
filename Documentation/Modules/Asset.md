@@ -85,6 +85,9 @@ Runtime/Asset/
 - 已做：**会话级复位**（2026-10-12 · `ResetForNewSession`；回归用例 `Tests/Runtime/Architecture/SessionResetTests`，3 条已做改前必红）——域重载关闭时 `AssetManager._instanceInitialized` 跨播放会话存活，`AssetBootstrapStage` 见到 `IsInitialized` 为真即跳过初始化，第二个播放会话的 `_instance` 指向上一会话的实例（其 `_managerImpl` 持有已销毁的 YooAsset 包）；现在门面在会话开始时复位静态状态（`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration` 档）。**比其它门面多两件事**：① 作废在途初始化（`InvalidateInflightInit` + 清任务）——上一会话半路中断的初始化不得在第二会话里让实例「复活」（含「在途初始化复活」那条回归用例）；② 复位两个「只报一次」闩锁（`_poolCapabilityWarned` / `_mainThreadViolationLogged`）——它们是**每会话**一次的提示（即上方「已推翻」那条的改判：跨会话仍只报一次，但换了会话就该重新提示）。配套新增 Runtime 侧最小假件 `Tests/Runtime/Asset/FakeAssetManager`（此前 Runtime 树只有 UI 侧那个池替身，它对 `InitializeAsync` 抛 NotUsed）。
 - 已做：**`InstanceTracker` 的退出订阅改为具名 `AutoInit` 并登记进族清单**（2026-10-12 · `SessionResetTests.InstanceTracker_ResetClearsStaleActiveCounts`，已做改前必红）——它原用**静态构造函数 + 匿名 lambda** 订阅 `Application.quitting`：lambda 退订不了、按特性扫描的族清单**扫不到静态构造**、`_activeCounts` 也没有复位入口（`AssetPoolTests` 此前只能用「计数平衡」代替复位）；现改为具名 `AutoInit`（挂 `SubsystemRegistration`：会话开始清空计数 + 幂等 `-=`/`+=` 订阅）。`Ledger.md` 的「App 生命周期」条（原 `Roadmap.md` §三）那句「`Application.quitting` 六处……有族级守卫」当时对它是**失实**的，已订正。
 
+- 已做：**会话复位退订旧实例的 `Application.lowMemory`**（2026-10-18 · `68db39a`）——`AssetManagerImpl` 抽出幂等 `Attach/DetachLowMemoryHandler`，复位在丢引用前退订（只 `-=`、不 Dispose）；第三方实现自带静态订阅时框架探测不到，README 已写明（AST-008）。
+- 已做：**CLAUDE.md 豁免清单补 `AssetManager.UnloadSceneAsync`**（2026-10-18 · `deee388`）——它是第三处「未初始化也不抛」的宽容语义豁免（AST-009）。
+
 ## 审计轮次
 
 2026-10-01 按 `../ModuleAudit.md` 审计一轮（判据 A–F 全类扫过，逐类「扫过、无问题」的留痕在当轮提交信息里；

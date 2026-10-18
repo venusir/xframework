@@ -41,5 +41,5 @@ Runtime/Save/
 - 暂不做：**写盘失败窗口（脏标记先丢）不修**（2026-10-14 登记 · 未修）——`SaveAsync` 在写盘**之前**就经 `CreateSnapshot` 清了脏（「导出即视为已保存」的固有代价），写失败时脏标记已丢；届时修法已现成：让 `SaveAsync` 自留一个回滚点再 `ApplySnapshot` 回去（脏集合现已随快照还原）。重开判据：出现「写失败后必须重存」的真实需求。
 - 不做：**`SaveManagerFactory` 的真实替换路径按「仓内测不了」登记、不按「以后补」**（2026-09-30 · 第二轮审计）——它是公开扩展点，本轮补了「经 factory 注入自定义实现」的用例，但**跨平台/跨进程的真实后端替换**（Console SDK、云存档）在仓内无路径可测——与 File 的移动端 Streaming 同属「如实登记的覆盖空白」。重开判据：仓内出现可测的真实后端替换通道（Console SDK / 云存档）。
 - 不做：**不为 Save 补 PlayMode 侧用例**（2026-10-13 · 覆盖失衡盘点的处置）——88 例已在 `Tests/Runtime/`（**PlayMode 平台**）跑真临时 FS + 真线程端到端；门面无帧依赖、无 MonoBehaviour 生命周期面；README 三条已知限制均为流程内 / EditMode 可验的语义事实。真实后端替换的空白（上条）不因 PlayMode 而改变。无重开判据。
-- 待裁：**Save 是否纳入会话复位族**（2026-10-17 · 第二轮审计）——Save 不在复位族内且无排除理由；默认启动器路径安全，手动初始化且无 Shutdown 钩子时可能留下陈旧 `_playerId`/加密接线（SAVE-001）。重开判据：关闭域重载两遍 PlayMode 复现会话残留。
+- 已做：**Save 纳入会话复位族**（2026-10-18 · `753b501`）——新增 `ResetForNewSession`（`SubsystemRegistration`）只丢 `_impl`、不 Dispose（玩家上下文/忙标志/版本号都在实例上）；同时修复「File 复位后第二会话加密接线丢失」——引导阶段重新初始化时会重接 `SaveOptions.CryptoProvider`（SAVE-001）。
 

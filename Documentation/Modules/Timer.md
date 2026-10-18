@@ -67,6 +67,9 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 
 - 待裁：**`Create`/`Restart` 的锚点需要 Update 当前轴时刻**（2026-10-17 · 第二轮审计）——锚点取 `_logicalNow`，粗档下新定时器可提前一个档位周期触发（TMR-003）；干净修法需 Update 暴露当前轴时刻查询面（跨模块公开面）。2026-10-17 用户裁定：本批只文档化（README 已知限制），修法继续待裁。重开判据：出现对短定时器提前触发敏感的使用方。
 
+- 已做：**`TimerHandle` 实现 `IEquatable<TimerHandle>` 与相等运算符**（2026-10-18 · `9a9e295`）——按 TableId / Slot / Generation 三元组比较，可直接作字典键 / `HashSet` 元素；代际是身份的一部分，槽位复用后旧句柄与新句柄不等（ABA 防线）；`Generation == 0` 的无效语义不变（TMR-007）。
+- 已做：**写路径补 Editor-only 主线程断言**（2026-10-18 · `1a77de9`）——沿用 Message / Pipeline / Asset 的内联形态，不抽公共防线；Release 零开销（TMR-006）。
+
 ## 与其它模块的边界（下一轮审计时先看这里）
 
 - **对 `XUpdate` 的接触只有两处**：`TimerTicker.cs`（注册/注销/`ProcessImmediate`、档位返回值）与 `TimerCore.cs` 的档位常量与 `UpdateTimeMode` 校验。审计时若发现第三处，那是边界泄漏。

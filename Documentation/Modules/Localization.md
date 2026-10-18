@@ -37,9 +37,9 @@ Runtime/Localization/
 - 暂不做：**键值占位符不做递归**（2026-09-29 · 追加轮）——本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。重开判据：真要做递归时，先定环检测（A→B→A）与深度上限。
 - 已做：**MonoBehaviour 分支的订阅绑定补上直接用例**（2026-10-12 · `3b16e06`，`Tests/Runtime/Localization/LocalizationDestroyBindingTests` 2 例）——EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在 PlayMode 覆盖；这是本模块第一次有 PlayMode 侧用例，验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` → `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
 
-- 待裁：**`TextAsset` 重载的源不兼容**（2026-10-17 · 第二轮审计）——新增 `(string, TextAsset)` 重载使既有 `("en", null)` 变 CS0121，CHANGELOG 只记新增（LOC-001）；文档声明还是改静态工厂。重开判据：出现按旧写法调用并升级的使用方。
-- 待裁：**在途 `SwitchLanguageAsync` 的代次守卫**（2026-10-17 · 第二轮审计）——续体经静态门面写回，加载期间 `SetInstance`/`Destroy` 会把旧配置注入新实例或抛「尚未初始化」（LOC-004）。重开判据：出现运行时切换语言并重建管理器的使用方。
-- 待裁：**空语言表两条入口的口径**（2026-10-17 · 第二轮审计）——引导阶段静默装上空表、异步加载器硬失败（LOC-006）；统一为「空表 = 缺表（警告跳过）」还是「空表 = 合法语言」。重开判据：出现空语言表的实际数据源。
+- 暂不做：**`TextAsset` 重载仍保留双重重载**（2026-10-18 · 文档订正）——新增 `(string, TextAsset)` 重载使既有 `("en", null)` 变 CS0121（LOC-001）；本轮只文档声明「显式 `null` 需强转」，静态工厂改造留待公开 API 变更授权。重开判据：出现按旧写法调用并升级的使用方。
+- 已做：**在途 `SwitchLanguageAsync` 的代次守卫**（2026-10-18 · `ea8dbd1`）——门面加实例代次，loader 捕获发起时实例 + 代次，`await` 后先查代次再解析，过期则 Warning + 丢弃；`SetInstance` 传同一实例不自增（LOC-004）。
+- 已做：**空语言表统一为「空表 = 缺表」**（2026-10-18 · `999f6ee`）——引导阶段 Warning + 跳过（不置已初始化），异步加载器维持硬失败；显式 `Initialize` 仍按调用方数据安装（LOC-006）。
 
 ## 审计轮次
 
