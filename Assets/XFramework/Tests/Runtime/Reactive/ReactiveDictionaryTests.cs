@@ -459,6 +459,20 @@ namespace XFramework.XReactive.Tests
         }
 
         [Test]
+        public void EnumeratingValuesWhileMutated_InvalidatesEnumerator()
+        {
+            // RCT-008：既有用例只验证 Keys；Values 是另一条活视图，同样必须失效
+            using var dict = new ReactiveDictionary<string, int>(new[] { KV("a", 1), KV("b", 2) });
+            using var e = dict.Values.GetEnumerator();
+            Assert.IsTrue(e.MoveNext());
+
+            dict.Remove("a");
+
+            Assert.Throws<InvalidOperationException>(() => e.MoveNext(),
+                "Values 是活视图：改动同样使其枚举器失效");
+        }
+
+        [Test]
         public void SubscribeInsideHandler_IsSafe()
         {
             using var dict = new ReactiveDictionary<string, int>();

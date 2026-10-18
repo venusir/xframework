@@ -206,6 +206,21 @@ namespace XFramework.XReactive.Tests
             Assert.AreEqual(ReactiveCollectionChangeKind.Add, changes[0].Kind);
         }
 
+        [Test]
+        public void Sort_WithComparer_UsesProvidedOrdering()
+        {
+            // RCT-008：Sort(comparer) 参数此前零覆盖——只测了默认升序，传错比较器不会被发现
+            using var list = new ReactiveList<int>(new[] { 3, 1, 2 });
+            var changes = new List<ReactiveListChange<int>>();
+            using var sub = list.Subscribe(changes.Add);
+
+            list.Sort(Comparer<int>.Create((a, b) => b.CompareTo(a)));
+
+            CollectionAssert.AreEqual(new[] { 3, 2, 1 }, list, "应使用传入的比较器，而不是默认升序");
+            Assert.AreEqual(1, changes.Count, "整表操作只发一条 Reset");
+            Assert.AreEqual(ReactiveCollectionChangeKind.Reset, changes[0].Kind);
+        }
+
         #endregion
 
         #region 通知时机

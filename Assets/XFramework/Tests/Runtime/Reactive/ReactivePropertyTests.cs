@@ -420,6 +420,39 @@ namespace XFramework.XReactive.Tests
             CollectionAssert.AreEqual(new[] { "v2", "v6" }, calls, "派生值可继续 Select 做链式映射");
         }
 
+        [Test]
+        public void ChainedSelect_DisposingFinalOnly_LeavesIntermediateSubscribed()
+        {
+            // RCT-001 已裁定「只文档化：逐级持有、逐级释放」。本用例把这条边界钉成断言，
+            // 防止将来误以为 Dispose 最终值会级联拆掉上游。（RCT-008 的「结构性失明」面）
+            var root = new ReactiveProperty<int>(1);
+            try
+            {
+                int intermediateCalls = 0;
+                var middle = root.Select(v => { intermediateCalls++; return v * 2; });
+                var final = middle.Select(v => $"v{v}");
+
+                int before = intermediateCalls;
+                final.Dispose();
+
+                root.Value = 2;
+
+                Assert.Greater(intermediateCalls, before,
+                    "只释放最终值时，中间 selector 仍被源变化驱动（RCT-001 的已知边界）");
+                Assert.AreEqual(4, middle.Value, "中间值仍在更新");
+
+                middle.Dispose();
+                int afterMiddleDispose = intermediateCalls;
+                root.Value = 3;
+
+                Assert.AreEqual(afterMiddleDispose, intermediateCalls, "逐级释放后源订阅才断开");
+            }
+            finally
+            {
+                root.Dispose();
+            }
+        }
+
         #endregion
 
         #region 派发顺序与重入（README「派发顺序与重入」节记录的就是这里）
@@ -563,6 +596,26 @@ namespace XFramework.XReactive.Tests
 
             rp.Dispose();
             Assert.AreEqual(0, rp.SubscriptionCount, "Dispose 后清零");
+        }
+
+        [Test]
+        public void ReadOnly_SubscriptionCount_TracksLiveSubscriptions()
+        {
+            // RCT-008：ReadOnlyReactiveProperty.SubscriptionCount 此前零覆盖
+            using var root = new ReactiveProperty<int>(1);
+            using var readOnly = root.Select(x => x * 2);
+
+            Assert.AreEqual(0, readOnly.SubscriptionCount, "初始无订阅");
+
+            var a = readOnly.Subscribe(_ => { });
+            var b = readOnly.Subscribe(_ => { });
+            Assert.AreEqual(2, readOnly.SubscriptionCount, "两次订阅");
+            Assert.AreEqual(1, root.SubscriptionCount, "只读属性自身对源只有一条订阅");
+
+            a.Dispose();
+            Assert.AreEqual(1, readOnly.SubscriptionCount, "退订后递减");
+            b.Dispose();
+            Assert.AreEqual(0, readOnly.SubscriptionCount, "全部退订后归零");
         }
 
         [Test]
