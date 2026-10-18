@@ -74,6 +74,12 @@ namespace XFramework.XLog
             _mainThreadId = Thread.CurrentThread.ManagedThreadId;
         }
 
+        /// <summary>会话边界复位帧号缓存（LOG-009）：否则第二条播放会话的池线程日志会带上一会话的帧号。</summary>
+        internal static void ResetCachedFrame()
+        {
+            Volatile.Write(ref _cachedFrame, 0);
+        }
+
         /// <summary>
         /// 捕获一条来自 Unity 日志系统的外部日志（引擎 / 第三方 / 未捕获异常）。
         /// <para>档位过滤与框架日志同一套（否则 <c>MinimumLevel</c> 的「一律丢弃」承诺就自相矛盾）；
@@ -90,7 +96,18 @@ namespace XFramework.XLog
             if (!_captureUnityLogs || _dispatchDepth > 0)
                 return;
 
+            // 没有非控制台输出端时捕获条目无处可去（DispatchCaptured 会跳过控制台），
+            // 先挡住，避免为一条最终被丢弃的日志解析分类、分配条目（LOG-004）。
+            if (!HasNonConsoleSink())
+                return;
+
             LogLevel level = MapUnityLevel(type);
+
+            // 先按全局档早退，再解析分类：`[标签]` 解析要 Substring，是捕获路径唯一的分段分配。
+            // 代价是分类覆盖无法让低于全局档的外部日志通过——这是刻意的性能取舍（LOG-004）。
+            if (level < (LogLevel)Volatile.Read(ref _minimumLevel))
+                return;
+
             LogCategory category = ParseCategory(condition);
             if (!IsEnabled(level, category))
                 return;
@@ -530,6 +547,19 @@ namespace XFramework.XLog
                 return default;
 
             return LogCategory.Get(condition.Substring(1, end - 1));
+        }
+
+        /// <summary>是否存在控制台之外的输出端（捕获条目只分发给它们，LOG-004）。</summary>
+        private bool HasNonConsoleSink()
+        {
+            ILogSink[] sinks = _sinks;
+            for (int i = 0; i < sinks.Length; i++)
+            {
+                if (!(sinks[i] is ConsoleLogSink))
+                    return true;
+            }
+
+            return false;
         }
 
         /// <summary>摘除抛异常的 sink：不记日志（会递归）、不向上抛（日志永不抛），只计数。</summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 using XFramework.XLog.Internal;
 
@@ -51,7 +52,7 @@ namespace XFramework.XLog
         /// <para><b>刻意不走 <see cref="Impl"/></b>：那会让一条第三方日志凭空创建出一个日志实现
         /// （连同它的文件输出端）。注入自定义实现时捕获自动停用——那是自定义实现自己的策略。</para>
         /// </summary>
-        internal static LogManagerImpl CaptureTarget => _impl as LogManagerImpl;
+        internal static LogManagerImpl CaptureTarget => Volatile.Read(ref _impl) as LogManagerImpl;
 
         /// <summary>取当前实现；未装入时按默认配置构建（懒初始化，「日志永不因未初始化而失效」）。</summary>
         private static ILogManager Impl
@@ -74,7 +75,7 @@ namespace XFramework.XLog
         #region Lifecycle
 
         /// <summary>当前是否已装入实现。门面按需创建，通常为 <c>true</c>。</summary>
-        public static bool IsInitialized => _impl != null;
+        public static bool IsInitialized => Volatile.Read(ref _impl) != null;
 
         /// <summary>
         /// 注入自定义实现（整体替换后端；测试也用它注入替身）。
@@ -117,10 +118,29 @@ namespace XFramework.XLog
         /// <para>刻意不叫 <c>Initialize(LogOptions)</c>：与注入重载同名会造成「传 null 是配默认还是清空」的二义。</para>
         /// </summary>
         /// <param name="options">配置；为 null 时抛 <see cref="ArgumentNullException"/>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="options"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentOutOfRangeException">`MaxFileBytes` / `MaxRetainedFiles` / `FlushEveryEntries` 非正（LOG-010）。</exception>
+        /// <exception cref="ArgumentException">启用文件输出端但 `FileDirectory` 为空（LOG-010）。</exception>
         public static void Configure(LogOptions options)
         {
             if (options == null)
                 throw new ArgumentNullException(nameof(options));
+
+            // 最小参数校验（LOG-010）：0 / 负值在实现里会变成「每条日志切一个文件」「删光旧文件」
+            // 「每条都 flush」这类静默异常行为，不如在入口直接拒绝。
+            if (options.MaxFileBytes <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.MaxFileBytes,
+                    "MaxFileBytes 必须为正数；0 或负值会让每条日志都触发文件切分。");
+            if (options.MaxRetainedFiles <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.MaxRetainedFiles,
+                    "MaxRetainedFiles 必须为正数；0 或负值会删光所有旧日志。");
+            if (options.FlushEveryEntries <= 0)
+                throw new ArgumentOutOfRangeException(nameof(options), options.FlushEveryEntries,
+                    "FlushEveryEntries 必须为正数；0 或负值会让每条日志都 flush。");
+            if (options.EnableFileSink && string.IsNullOrEmpty(options.FileDirectory))
+                throw new ArgumentException(
+                    "启用文件输出端时 FileDirectory 不能为空；否则文件 sink 会在首次写入时静默停用。",
+                    nameof(options));
 
             var next = new LogManagerImpl(options);
             ILogManager previous;
@@ -536,6 +556,7 @@ namespace XFramework.XLog
         {
             LogSession.Reset(); // 新会话：新的 session id 与计时起点（关闭域重载时静态字段跨播放会话存活）
             LogManagerImpl.MarkMainThread();
+            LogManagerImpl.ResetCachedFrame(); // 帧号缓存同样跨会话存活；不清会让首条池线程日志带上上一会话帧号（LOG-009）
 
             ILogManager previous;
             lock (Gate)

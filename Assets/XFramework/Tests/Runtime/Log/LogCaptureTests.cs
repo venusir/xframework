@@ -204,6 +204,21 @@ namespace XFramework.XLog.Tests
             Assert.IsNotNull(Find("[Acme] 够门槛"));
         }
 
+        [UnityTest]
+        public IEnumerator GlobalMinimumLevel_EarlyOutsBeforeCategoryOverride()
+        {
+            ConfigureCapture(minimumLevel: LogLevel.Warning);
+            LogCategory probe = LogCategory.Get("AcmeEarlyOut");
+            LogManager.SetCategoryLevel(probe, LogLevel.Debug);
+
+            Debug.Log("[AcmeEarlyOut] 被全局档拦下");
+            yield return null;
+            LogManager.Flush();
+
+            Assert.IsNull(Find("[AcmeEarlyOut] 被全局档拦下"),
+                "全局档早退优先于分类覆盖（LOG-004）：否则捕获路径仍要为每条低于全局档的外部日志解析分类");
+        }
+
         /// <summary>
         /// 自定义 sink 在 <c>Write</c> 里调 <c>Debug.Log*</c>：同步捕获会回到同一个 sink，
         /// 若不设重入闩锁就是无限递归（StackOverflow 不可捕获）。LOG-002。

@@ -363,6 +363,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   嵌套的 Unity 日志（构造条目之前就返回，零分配）；经 `LogManager` 的嵌套投递保持既有行为
   （`ReentrantSink` 用例锁定）。README / `ILogSink` XML 区分两条重入路径。
   回归：`LogCaptureTests.CustomSink_WritingThroughDebugLog_DoesNotRecurse`，改前红。
+- **捕获路径在档位过滤前解析分类，且没有「无输出端」早退（LOG-004）**：低于全局档的外部日志仍会为
+  `[标签]` 解析付出一次 `Substring`；没有非控制台输出端时也会构造条目（最终被丢弃）。修法：
+  `CaptureUnityLog` 先查非控制台输出端、再按全局档早退，最后才解析分类。**行为变更**：分类覆盖不能
+  再让低于全局档的外部日志通过（刻意的性能取舍）。回归：
+  `LogCaptureTests.GlobalMinimumLevel_EarlyOutsBeforeCategoryOverride`（改前会写入文件）。
+- **会话复位残留（LOG-009）**：`_cachedFrame` 跨会话存活，第二会话首条池线程日志会带上一会话帧号；
+  `_impl` 的读取未走屏障。修法：`LogManager.AutoInit` 调用 `LogManagerImpl.ResetCachedFrame()`；
+  `CaptureTarget` / `IsInitialized` 改 `Volatile.Read`。分类名跨会话保留属刻意（分类句柄是静态的），
+  已写进 README 已知限制。回归：`LogLifecycleTests.ResetCachedFrame_ClearsSessionStaleFrame`。
+- **`LogOptions` 零校验（LOG-010）**：`MaxFileBytes=0` 每条日志切一个文件、`MaxRetainedFiles<=0` 删光
+  旧文件、`FlushEveryEntries=0` 每条 flush、启用文件 sink 但 `FileDirectory=null` 首次写入即静默停用。
+  修法：`LogManager.Configure` 入口做最小校验并抛 `ArgumentOutOfRangeException` / `ArgumentException`。
+  回归：`LogLifecycleTests.Configure_RejectsFileOptionsThatWouldMisbehave`。
 
 #### Message
 

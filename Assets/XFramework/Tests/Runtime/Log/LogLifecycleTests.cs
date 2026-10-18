@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
@@ -45,6 +46,34 @@ namespace XFramework.XLog.Tests
 
             Assert.IsNull(LogManager.CaptureTarget,
                 "注入自定义实现后全量捕获的目标为空——这正是那条提醒说的事");
+        }
+
+        [Test]
+        public void ResetCachedFrame_ClearsSessionStaleFrame()
+        {
+            // LOG-009：_cachedFrame 跨会话存活；不清会让第二会话首条池线程日志带上上一会话帧号
+            FieldInfo field = typeof(LogManagerImpl).GetField(
+                "_cachedFrame", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "前提校验：帧号缓存字段存在");
+
+            field.SetValue(null, 12345);
+            LogManagerImpl.ResetCachedFrame();
+
+            Assert.AreEqual(0, (int)field.GetValue(null), "会话复位必须把帧号缓存归零");
+        }
+
+        [Test]
+        public void Configure_RejectsFileOptionsThatWouldMisbehave()
+        {
+            // LOG-010：0 / 负值在实现里会变成「每条切一个文件」「删光旧文件」「每条都 flush」
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => LogManager.Configure(new LogOptions { MaxFileBytes = 0 }));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => LogManager.Configure(new LogOptions { MaxRetainedFiles = 0 }));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => LogManager.Configure(new LogOptions { FlushEveryEntries = 0 }));
+            Assert.Throws<ArgumentException>(
+                () => LogManager.Configure(new LogOptions { EnableFileSink = true, FileDirectory = null }));
         }
 
         #endregion
