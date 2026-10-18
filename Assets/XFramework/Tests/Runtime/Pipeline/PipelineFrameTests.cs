@@ -60,6 +60,8 @@ namespace XFramework.XPipeline.Tests
             pipeline.OnCancelled += () => cancelled = true;
             pipeline.OnCompleted += () => completed = true;
             pipeline.OnFailed += _ => failed = true;
+            PipelineStatus? statusAtLastProgress = null;
+            pipeline.OnProgressUpdate += _ => statusAtLastProgress = pipeline.Status;
 
             using var cts = new CancellationTokenSource();
             UniTask run = pipeline.RunAsync(cts.Token);
@@ -75,6 +77,8 @@ namespace XFramework.XPipeline.Tests
             Assert.IsFalse(completed, "取消不得同时报完成");
             Assert.IsFalse(failed, "取消不得同时报失败");
             Assert.AreEqual(PipelineStatus.Cancelled, pipeline.Status);
+            Assert.AreEqual(PipelineStatus.Cancelled, statusAtLastProgress,
+                "终局进度广播时 Status 必须已经落位（PIPE-003）");
             Assert.AreEqual(0, later.ExecuteCount, "取消后尚未开始的阶段不得执行");
         }
 
@@ -91,11 +95,18 @@ namespace XFramework.XPipeline.Tests
 
             LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed"));
 
+            PipelineStatus? statusAtLastProgress = null;
+            pipeline.OnProgressUpdate += _ => statusAtLastProgress = pipeline.Status;
+
             await pipeline.RunAsync();
 
             Assert.AreEqual(PipelineStatus.Failed, pipeline.Status);
+            StringAssert.StartsWith("Failed: 挂死: ", pipeline.FailureReason,
+                "失败原因必须在冒号后指名阶段——超时分支此前漏写阶段名（PIPE-002）");
+            Assert.AreEqual(PipelineStatus.Failed, statusAtLastProgress,
+                "终局进度广播时 Status 必须已经落位（PIPE-003）");
             StringAssert.Contains("timed out after 0.05s", pipeline.FailureReason,
-                "失败原因应带超时信息——它是使用方唯一的线索");
+                "失败原因仍应带超时信息——它是使用方唯一的线索");
             Assert.AreEqual(0, later.ExecuteCount, "超时后尚未开始的阶段不得执行");
         }
 

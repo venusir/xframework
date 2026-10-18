@@ -221,6 +221,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Pipeline
+
+- **终局状态晚于广播、超时失败不带阶段名（PIPE-002/003）**：取消 / 失败分支先 `Broadcast()` 再写
+  `_status`，订阅者在终局进度回调里读到 `Running`；超时分支没有写 `failStageName`，`FailureReason`
+  退化为 `Failed: : Stage 'X' timed out…`。修法：`_status`（失败时连同 `FailureReason`）移到广播之前；
+  超时分支按「阶段主动置失败」同一口径写阶段名。回归：`PipelineFrameTests` 两例（改前分别
+  `Expected: Cancelled But was: Running` 与 `Expected: String starting with "Failed: 挂死: "`）。
+
 #### Event
 
 - **池化订阅节点归还时不清 `Next`（EVT-001）**：`SubscriptionNodePool.Return` 只清 `Handler`，池中的空闲节点

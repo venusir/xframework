@@ -276,6 +276,8 @@ namespace XFramework.XPipeline
                                 stage.Name, sw.Elapsed.TotalMilliseconds);
                             failed = true;
                             failDescription = ctx.Description;
+                            // 超时分支与「阶段主动置失败」同一口径：失败原因必须指名阶段（PIPE-002）
+                            failStageName = ctx.CurrentTaskName ?? ctx.Name;
                             break;
                         }
 
@@ -326,18 +328,20 @@ namespace XFramework.XPipeline
                 _bell.Settle();
                 if (cancelled)
                 {
+                    // 落位先于广播（PIPE-003）：订阅者在终局进度回调里必须读到终局状态，而不是 Running
+                    _status = PipelineStatus.Cancelled;
                     RecalculateSnapshot();
                     Broadcast();
-                    _status = PipelineStatus.Cancelled;
                     DispatchSafely(OnCancelled, nameof(OnCancelled));
                     LogManager.Warning(LogCategories.Pipeline, "Pipeline cancelled.");
                 }
                 else if (failed)
                 {
-                    RecalculateSnapshot();
-                    Broadcast();
+                    // 落位先于广播（PIPE-003）：Status 与 FailureReason 都要在终局进度回调前可读
                     _status = PipelineStatus.Failed;
                     FailureReason = $"Failed: {failStageName}: {failDescription}";
+                    RecalculateSnapshot();
+                    Broadcast();
                     DispatchSafely(OnFailed, FailureReason, nameof(OnFailed));
                     // 有异常对象（阶段抛出，含容器内子阶段）就把堆栈带进 JSONL 的 exc 字段；
                     // 超时与「阶段主动置失败」没有异常，走原来的纯文本形态
