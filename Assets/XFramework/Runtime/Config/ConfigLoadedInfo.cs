@@ -34,7 +34,7 @@ namespace XFramework.XConfig
             AssetPath = assetPath;
         }
 
-        /// <summary>单行摘要，形如 <c>ItemConfig(表, 128 行)</c>。</summary>
+        /// <summary>单行摘要，形如 <c>ItemConfig(Table, 128 条)</c>（<see cref="Kind"/> 输出枚举名）。</summary>
         public override string ToString()
             => $"{ConfigType?.Name}({Kind}, {EntryCount} 条)";
     }

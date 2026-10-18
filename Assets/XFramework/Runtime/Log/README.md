@@ -120,7 +120,7 @@ LogManager.AddSink(new MyRemoteSink());
 | `CaptureStackTrace` | Editor/Development=`true`；Release=`false` | 是否抓调用点托管堆栈 |
 | `StackTraceMinLevel` | `Error` | 抓栈的最低级别 |
 | `EnableFileSink` | Editor/Development=`true`；Release=`false` | JSONL 文件输出端 |
-| `CaptureUnityLogs` | 跟随 `EnableFileSink` | 是否把引擎 / 第三方 / 未捕获异常收进同一份文件 |
+| `CaptureUnityLogs` | 默认与 `EnableFileSink` 的默认值相同（构造时一次性拷贝；之后改 `EnableFileSink` 不联动） | 是否把引擎 / 第三方 / 未捕获异常收进同一份文件 |
 | `FileDirectory` | `{persistentDataPath}/XLog`（取不到时回退临时目录） | 落盘目录 |
 | `MaxFileBytes` | `32 * 1024 * 1024`（32 MiB） | 单个分片文件的上限，超过则切 `-p2` |
 | `MaxRetainedFiles` | `10` | 目录内保留的最新文件数（启动时轮转） |

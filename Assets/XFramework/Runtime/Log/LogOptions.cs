@@ -5,7 +5,7 @@ using UnityEngine;
 namespace XFramework.XLog
 {
     /// <summary>
-    /// 日志配置。仅在调用 <c>LogManager.Configure</c> 时读取；之后改本对象不影响已生效的配置。
+    /// 日志配置。在每次构建实现时读取（<c>LogManager.Configure</c> 或门面的懒建 / 自动初始化）；之后改本对象不影响已生效的配置。
     /// <para><b>不配置也能用</b>：门面在没有任何配置时用 <see cref="Default"/> 构建默认实现——
     /// 日志不能有「必须先初始化」这道门槛。</para>
     /// </summary>

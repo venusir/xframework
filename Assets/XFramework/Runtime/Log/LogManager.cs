@@ -182,7 +182,7 @@ namespace XFramework.XLog
 
         #region Sinks
 
-        /// <summary>因 <see cref="ILogSink.Write"/> 抛异常被静默摘除的 sink 次数。诊断用。</summary>
+        /// <summary>因 <see cref="ILogSink.Write"/> 或 <see cref="ILogSink.Flush"/> 抛异常被静默摘除的 sink 次数。诊断用。</summary>
         public static int DroppedSinkCount => Impl.DroppedSinkCount;
 
         /// <summary>追加一个 sink。重复追加同一个实例会写两次（框架不做去重）。</summary>

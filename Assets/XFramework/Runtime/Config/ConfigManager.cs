@@ -50,7 +50,8 @@ namespace XFramework.XConfig
         /// <summary>
         /// 配置变更事件。Table 注册/加载、Global 注册/加载、卸载后触发。类型为配置行类型或 Global 配置类型。
         /// <para>仅在静态类全局实例（通过 <see cref="Initialize"/> 或 <see cref="SetInstance"/> 设置）操作时触发。
-        /// 注入的自定义实现需要自行派发。</para>
+        /// <b>注入自定义 <see cref="IConfigManager"/> 后本事件不会触发，且实现无法自行派发</b>——它是门面上的
+        /// 静态字段式事件，C# 只允许声明它的类型触发；需要变更通知请使用内置实现，或订阅自定义实现自己的事件源。</para>
         /// </summary>
         public static event Action<Type> ConfigChanged;
 
@@ -288,6 +289,7 @@ namespace XFramework.XConfig
         /// </summary>
         /// <typeparam name="T">配置行类型。</typeparam>
         /// <param name="table">Table 包装器实例。</param>
+        /// <exception cref="ConfigException">table 为 null 时抛出。</exception>
         /// <example>
         /// <code>
         /// // rows 为外部工具（Luban 等）反序列化得到的行集合，其获取方式见该工具的文档——
@@ -310,6 +312,7 @@ namespace XFramework.XConfig
         /// </summary>
         /// <param name="rowType">配置行类型，需实现 <see cref="IConfigRow{TKey}"/>。</param>
         /// <param name="table"><see cref="IConfigTable"/> 实例。</param>
+        /// <exception cref="ConfigException">rowType 或 table 为 null 时抛出。</exception>
         public static void RegisterTable(Type rowType, IConfigTable table)
         {
             EnsureGlobalInitialized();
@@ -321,6 +324,7 @@ namespace XFramework.XConfig
         /// </summary>
         /// <typeparam name="T">配置类型，必须为 class。</typeparam>
         /// <param name="config">配置单例实例。</param>
+        /// <exception cref="ConfigException">config 为 null 时抛出。</exception>
         public static void RegisterGlobal<T>(T config) where T : class
         {
             EnsureGlobalInitialized();

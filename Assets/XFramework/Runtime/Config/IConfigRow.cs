@@ -31,9 +31,20 @@ namespace XFramework.XConfig
     ///     public int  Damage;
     ///     public (int skillId, int level) Id => (SkillId, Level);
     /// }
-    /// 
+    ///
     /// // 三键示例
-    /// var row = table.Get((1001, 5));
+    /// [Serializable]
+    /// public struct DropRow : IConfigRow&lt;(int mapId, int monsterId, int difficulty)&gt;
+    /// {
+    ///     public int MapId;
+    ///     public int MonsterId;
+    ///     public int Difficulty;
+    ///     public (int mapId, int monsterId, int difficulty) Id => (MapId, MonsterId, Difficulty);
+    /// }
+    ///
+    /// // 查询（元组元素的类型与顺序必须与主键声明一致）
+    /// var effect = effectTable.Get((1001, 5));
+    /// var drop = dropTable.Get((1, 1001, 3));
     /// </code>
     /// </example>
     public interface IConfigRow<TKey> : IConfigRow

@@ -458,6 +458,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `PreloadTableAsync<T>()` / `PreloadGlobalAsync<T>()`（原文的 `PreloadAsync` 不存在）；`IConfigLoader` 不再
   声称可扩展 `ConfigFormat` 枚举（自定义 Loader 走重载）；非泛型 `RegisterTable` 改为「经 `IConfigTable.Data`
   取字典，无反射」；CSV 写明**必须包含主键列**（缺列时多行撞 `Duplicate Id`）。
+- **Config 剩余口径订正（2026-10-17，CONF-004 尾）**：`ConfigChanged` 的 XML 不再写「注入的自定义实现需要
+  自行派发」——静态字段式事件只能由声明类型触发，与 README 的「不触发且无法触发」对齐；三处 `Register`
+  补 null 的 `<exception cref="ConfigException">`；`IConfigRow` 的三键示例改为真正的三键行类型（原示例仍是
+  双键）；`ConfigLoadedInfo.ToString` 的示例改为实际输出形态；README 文件树的 `ConfigLoadHelper` 描述从
+  「加载调度助手」改为「泛型委托缓存」。
+- **Log 口径订正（2026-10-17，LOG-008 部分）**：`DroppedSinkCount` 补齐 `Flush` 抛异常也会摘除计数；
+  `ILogManager.Shutdown` 不再说「实现随即不可用」——旧实现对象仍报告 `IsInitialized = true`，可用性以门面
+  是否持有该引用为准；`LogOptions` 改为「每次构建实现时读取」（`Configure` 或懒建/自动初始化）；
+  README 的 `CaptureUnityLogs` 改为「默认值与 `EnableFileSink` 相同（构造时一次性拷贝，之后改不联动）」；
+  维护文档的 `XFrameworkDependencyInstaller.cs` 行号 `135` 订正为 `134`。
 - **Asset / Diagnostics / Audio / File 文档订正（2026-10-17）**：
   Asset（AST-006）：API 表补 `ClearPool` / `ClearAllPools`。
   Diagnostics（DIAG-004）：概览页签补 Camera 行。

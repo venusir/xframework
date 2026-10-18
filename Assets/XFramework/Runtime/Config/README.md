@@ -55,7 +55,7 @@ Runtime/Config/
 ├── JsonLoader.cs             # internal：内置 JSON（JsonUtility）
 ├── CsvLoader.cs              # internal：内置 CSV（Split(',')，方言边界见「已知限制」）
 ├── ScriptableObjectLoader.cs # internal：内置 ScriptableObject（经 AssetManager）
-├── ConfigLoadHelper.cs       # internal：加载调度助手（并发共享同一任务）
+├── ConfigLoadHelper.cs       # internal：泛型委托缓存（消除加载调用的反射）
 ├── ConfigTextLoader.cs       # internal：文本类格式的公共读入段
 ├── ConfigTypeHelper.cs       # internal：主键类型推导（reflection 边界，结果缓存）
 ├── ConfigFormat.cs           # 内置格式枚举（Json / ScriptableObject / Csv）

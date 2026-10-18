@@ -17,7 +17,7 @@ namespace XFramework.XLog
     {
         #region 状态
 
-        /// <summary>当前是否已装入实现。门面按需创建，通常为 <c>true</c>。</summary>
+        /// <summary>当前是否已装入实现。门面按需创建，通常为 <c>true</c>；内置实现恒为 <c>true</c>，<see cref="Shutdown"/> 后也不翻转。</summary>
         bool IsInitialized { get; }
 
         /// <summary>全局最低档位：低于它的日志一律丢弃（分类未设覆盖时按它判定）。</summary>
@@ -296,7 +296,7 @@ namespace XFramework.XLog
 
         #region 输出端与生命周期
 
-        /// <summary>因 <see cref="ILogSink.Write"/> 抛异常被静默摘除的 sink 次数。诊断用——该模块因此不再产生任何日志。</summary>
+        /// <summary>因 <see cref="ILogSink.Write"/> 或 <see cref="ILogSink.Flush"/> 抛异常被静默摘除的 sink 次数。诊断用——该模块因此不再产生任何日志。</summary>
         int DroppedSinkCount { get; }
 
         /// <summary>追加一个 sink。重复追加同一个实例会写两次（框架不做去重）。</summary>
@@ -311,7 +311,7 @@ namespace XFramework.XLog
         /// <summary>把所有 sink 的缓冲刷到目标。</summary>
         void Flush();
 
-        /// <summary>冲刷并释放所有 sink，复位档位；实现随即不可用（门面会另建默认实现）。</summary>
+        /// <summary>冲刷并释放所有 sink，复位档位。门面会丢弃该实现并另建默认实现；旧实现对象不应再被使用，但 <see cref="IsInitialized"/> 仍报告 <c>true</c>——可用性以门面是否持有该引用为准。</summary>
         void Shutdown();
 
         #endregion
