@@ -255,6 +255,32 @@ namespace XFramework.XEvent.Tests
             Assert.AreEqual(0, stream.SubscriptionCount, "释放清零");
         }
 
+        /// <summary>
+        /// EVT-006：流释放后再 Dispose 旧句柄，`Remove` 返回 false 的守卫分支。
+        /// <para>删掉守卫会让订阅数变负、节点二次回池——新订阅者可能拿到同一节点而静默失联。</para>
+        /// </summary>
+        [Test]
+        public void DisposeStream_ThenDisposeOldHandle_DoesNotCorruptCountOrPool()
+        {
+            var stream = EventStream.Create<int>();
+            var handle = stream.Subscribe(_ => { });
+
+            stream.Dispose();
+
+            Assert.DoesNotThrow(() => handle.Dispose());
+            Assert.DoesNotThrow(() => handle.Dispose());
+            Assert.AreEqual(0, stream.SubscriptionCount, "流释放后重复 Dispose 旧句柄不得把计数减成负数");
+
+            // 负向控制：节点池未被二次回池时，新流的订阅与派发照常工作
+            var other = EventStream.Create<int>();
+            int calls = 0;
+            using (other.Subscribe(_ => calls++))
+            {
+                other.Emit(1);
+            }
+            Assert.AreEqual(1, calls, "旧句柄的重复 Dispose 不得影响新流（节点二次回池会静默断电）");
+        }
+
         #endregion
 
         #region 异常语义(隔离 + 日志,不传播)

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
@@ -86,6 +87,64 @@ namespace XFramework.XSerialize.Tests
             Serializer.Register(mine);   // 显式注册即覆盖（文档承诺「同名覆盖」）
 
             Assert.AreSame(mine, Serializer.Get("json"), "Register 是显式动作，覆盖是它的承诺");
+        }
+
+        #endregion
+
+        #region 失败面（SER-005）
+
+        [Test]
+        public void Default_Uninitialized_ThrowsInvalidOperationException()
+        {
+            // SetUp 已 Shutdown；未注册默认格式时取 Default 必须是 IOE，而不是 KeyNotFound
+            Assert.Throws<InvalidOperationException>(() => _ = Serializer.Default);
+        }
+
+        [Test]
+        public void Default_AfterUnregisterJson_ThrowsInvalidOperationException()
+        {
+            Serializer.Initialize();
+            Assert.IsTrue(Serializer.Unregister("json"));
+
+            Assert.Throws<InvalidOperationException>(() => _ = Serializer.Default,
+                "注销内置 json 后 Default 不可用；重新 Initialize 是 no-op，不会恢复");
+        }
+
+        [Test]
+        public void TryGet_UnregisteredFormat_ReturnsFalse()
+        {
+            Serializer.Initialize();
+
+            Assert.IsFalse(Serializer.TryGet("nope", out var serializer), "未注册格式经 TryGet 返回 false");
+            Assert.IsNull(serializer);
+        }
+
+        [Test]
+        public void TryGet_NullFormat_ThrowsArgumentNullException()
+        {
+            Serializer.Initialize();
+
+            Assert.Throws<ArgumentNullException>(() => Serializer.TryGet(null, out _),
+                "「不抛」只针对未注册；null 格式仍抛 ANE（SER-004）");
+        }
+
+        [Test]
+        public void Unregister_MissingFormat_ReturnsFalse()
+        {
+            Serializer.Initialize();
+
+            Assert.IsFalse(Serializer.Unregister("nope"), "未注册格式的 Unregister 返回 false，不抛");
+        }
+
+        [Test]
+        public void Shutdown_ThenGet_ThrowsKeyNotFound()
+        {
+            Serializer.Initialize();
+            Serializer.Shutdown();
+
+            Assert.Throws<KeyNotFoundException>(() => Serializer.Get("json"),
+                "Shutdown 之后连内置格式都没有，Get 全抛");
+            Assert.Throws<InvalidOperationException>(() => _ = Serializer.Default);
         }
 
         #endregion
