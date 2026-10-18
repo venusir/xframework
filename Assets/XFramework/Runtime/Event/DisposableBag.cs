@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using XFramework.XEvent.Internal;
+using XFramework.XLog;
 
 namespace XFramework.XEvent
 {
@@ -73,7 +74,19 @@ namespace XFramework.XEvent
             try
             {
                 for (int i = 0; i < pending.Count; i++)
-                    pending[i].Dispose();
+                {
+                    // 逐项隔离（EVT-002）：一个句柄的释放失败不得中断其余句柄，也不得传播给调用方。
+                    // 与 Settings 的批量释放同一纪律：失败记 Error，继续处理后面的项。
+                    try
+                    {
+                        pending[i].Dispose();
+                    }
+                    catch (Exception e)
+                    {
+                        LogManager.Exception(LogCategories.Event, e,
+                            "DisposableBag item threw exception");
+                    }
+                }
             }
             finally
             {

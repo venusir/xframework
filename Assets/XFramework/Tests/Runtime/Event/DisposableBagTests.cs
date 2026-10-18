@@ -1,5 +1,8 @@
 using System;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XEvent;
 
 namespace XFramework.XEvent.Tests
@@ -17,6 +20,18 @@ namespace XFramework.XEvent.Tests
             public int DisposeCount;
 
             public void Dispose() => DisposeCount++;
+        }
+
+        /// <summary>释放时抛异常的句柄:用于验证逐项隔离。</summary>
+        private sealed class ThrowingProbe : IDisposable
+        {
+            public int DisposeCount;
+
+            public void Dispose()
+            {
+                DisposeCount++;
+                throw new InvalidOperationException("dispose boom");
+            }
         }
 
         [Test]
@@ -91,6 +106,28 @@ namespace XFramework.XEvent.Tests
         {
             var bag = new DisposableBag();
             Assert.Throws<ArgumentNullException>(() => bag.Add(null));
+        }
+
+        [Test]
+        public void Clear_OneItemThrows_OthersStillDisposed_AndDoesNotThrow()
+        {
+            // 逐项隔离（EVT-002）：一个句柄的 Dispose 抛异常不得中断其余句柄，也不得传播给调用方
+            var bag = new DisposableBag();
+            var first = new Probe();
+            var thrower = new ThrowingProbe();
+            var last = new Probe();
+            bag.Add(first);
+            bag.Add(thrower);
+            bag.Add(last);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape("[Event] DisposableBag item threw exception")));
+            Assert.DoesNotThrow(() => bag.Clear(), "单个句柄释放失败不得传播");
+
+            Assert.AreEqual(1, first.DisposeCount);
+            Assert.AreEqual(1, thrower.DisposeCount);
+            Assert.AreEqual(1, last.DisposeCount, "抛异常之后的句柄仍必须被释放");
+            Assert.AreEqual(0, bag.Count, "本轮句柄全部换出，容器应清空");
         }
 
         [Test]

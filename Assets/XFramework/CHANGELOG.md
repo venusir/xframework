@@ -227,6 +227,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   仍指向它曾经链接的节点——若那是一个仍在订阅的节点，整个 Handler 闭包链被池钉住；关闭域重载时跨会话
   也不释放。修法：归还时一并 `node.Next = null`。回归：`EventStreamTests.SubscriptionNodePool_Return_BreaksNextChain`
   （改前 `Expected: null But was: <node>`）。
+- **`DisposableBag.Clear` 一项释放失败中断整批（EVT-002）**：某个句柄的 `Dispose` 抛异常会打断循环、
+  其余句柄永久丢失且不可观测。修法：逐项 `try/catch`，失败记 `[Event]` Error 后继续；`Dispose` 走同一条
+  `Clear` 路径。回归：`DisposableBagTests.Clear_OneItemThrows_OthersStillDisposed_AndDoesNotThrow`（改前
+  `Expected: No Exception to be thrown`）。README 的「行为契约」补第 15 条。
 
 #### Pool
 
