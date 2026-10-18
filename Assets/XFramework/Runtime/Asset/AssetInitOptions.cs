@@ -8,22 +8,22 @@ namespace XFramework.XAsset
     public enum AssetPlayMode
     {
         /// <summary>
-        /// 离线模式。资源全部内嵌（StreamingAssets），无热更。
-        /// </summary>
-        Offline = 0,
-
-        /// <summary>
-        /// 热更模式。内置包 + 远端资源站，支持版本检查与下载更新。
-        /// </summary>
-        Host = 1,
-
-        /// <summary>
         /// 编辑器模拟模式。资源直接经 <c>AssetDatabase</c> 加载（虚拟 bundle），无需先构建资源包；
         /// 初始化时按包名执行一次模拟构建。
         /// <para><b>仅 Unity 编辑器可用</b>；打包后的运行时传此值会抛
         /// <see cref="PlatformNotSupportedException"/>。Player 构建请使用 Offline 或 Host。</para>
         /// </summary>
-        EditorSimulate = 2,
+        EditorSimulate = 0,
+
+        /// <summary>
+        /// 离线模式。资源全部内嵌（StreamingAssets），无热更。
+        /// </summary>
+        Offline = 1,
+
+        /// <summary>
+        /// 热更模式。内置包 + 远端资源站，支持版本检查与下载更新。
+        /// </summary>
+        Host = 2,
     }
 
     /// <summary>
