@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using NUnit.Framework;
 
 namespace XFramework.XFileManager.Tests
@@ -5,7 +7,7 @@ namespace XFramework.XFileManager.Tests
     /// <summary>
     /// <see cref="FilePathUtility"/> 纯函数测试。
     /// <para>覆盖:反斜杠归一、前导斜杠去除、文件名提取（兼容两种分隔符）、绝对路径相对化。
-    /// 均为纯字符串操作，不依赖真实文件系统，可安全地在任意平台运行。</para>
+    /// 除原子替换降级路径（真实临时文件）外均为纯字符串操作，可安全地在任意平台运行。</para>
     /// </summary>
     [TestFixture]
     public class FilePathUtilityTests
@@ -146,5 +148,40 @@ namespace XFramework.XFileManager.Tests
             Assert.IsTrue(FilePathUtility.TryNormalizeRelativePath("a..txt", out var normalized));
             Assert.AreEqual("a..txt", normalized);
         }
+
+        #region 原子替换的降级路径（FILE-008）
+
+        /// <summary>
+        /// FILE-008：真实平台上 <see cref="File.Replace"/> 不抛，降级分支进不去；把分支体抽成
+        /// internal 缝后可直接覆盖——清旧备份、正式文件轮为备份、临时文件移为正式文件。
+        /// </summary>
+        [Test]
+        public void ReplaceFileFallback_RotatesBackupAndMovesTempIntoPlace()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "xfw-atomic-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(root);
+            var src = Path.Combine(root, "slot.save" + FilePathUtility.TempFileSuffix);
+            var dst = Path.Combine(root, "slot.save");
+            var bak = dst + FilePathUtility.BackupFileSuffix;
+
+            try
+            {
+                File.WriteAllText(src, "new");
+                File.WriteAllText(dst, "old");
+                File.WriteAllText(bak, "older");
+
+                FilePathUtility.ReplaceFileFallback(src, dst, bak);
+
+                Assert.AreEqual("new", File.ReadAllText(dst), "正式文件应换成新内容");
+                Assert.AreEqual("old", File.ReadAllText(bak), "旧正式文件应轮为一代备份（覆盖更老的备份）");
+                Assert.IsFalse(File.Exists(src), "临时文件应被移走");
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        #endregion
     }
 }

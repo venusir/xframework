@@ -1176,6 +1176,32 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task DeleteSlotAsync_PreCancelledToken_ThrowsWithoutDeleting()
+        {
+            // SAVE-014：删除 API 的取消路径零覆盖。预取消令牌必须在触碰文件之前就抛 OCE；
+            // 用 await 而非 GetResult——池线程上的异常会让 fixture 收尾卡死。
+            await SaveManager.SaveAsync(1);
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "前提：槽位存在");
+
+            using var cts = new CancellationTokenSource();
+            cts.Cancel();
+
+            bool cancelled = false;
+            try
+            {
+                await SaveManager.DeleteSlotAsync(1, cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                cancelled = true;
+            }
+
+            Assert.IsTrue(cancelled, "预取消令牌应经 OperationCanceledException 传播");
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "取消不得删除文件");
+            Assert.IsFalse(SaveManager.IsBusy, "取消路径也必须释放忙碌门禁");
+        }
+
+        [Test]
         public async Task DeleteAllSlotsAsync_RunsDeletionOffTheMainThread()
         {
             var mainThreadId = Environment.CurrentManagedThreadId;

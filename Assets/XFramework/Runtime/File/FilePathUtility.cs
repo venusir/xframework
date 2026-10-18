@@ -151,6 +151,16 @@ namespace XFramework.XFileManager
                     return;
             }
 
+            ReplaceFileFallback(srcPath, dstPath, backupPath);
+        }
+
+        /// <summary>
+        /// 原子替换的降级路径（FILE-008 测试缝）：清掉旧备份，把旧正式文件轮为备份，再把临时文件移为正式文件。
+        /// <para>这是「平台不支持 <c>File.Replace</c>」时唯一改变磁盘状态的段落；
+        /// 抽出来是为了让降级分支可被直接覆盖（真实平台上 <c>File.Replace</c> 不抛，分支进不去）。</para>
+        /// </summary>
+        internal static void ReplaceFileFallback(string srcPath, string dstPath, string backupPath)
+        {
             if (File.Exists(backupPath))
                 File.Delete(backupPath);
 
