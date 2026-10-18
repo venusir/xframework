@@ -1,10 +1,12 @@
 using System;
+using System.Collections;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using XFramework.XAsset;
 using XFramework.XUpdate;
 
 namespace XFramework.XAudio.Tests
@@ -189,6 +191,37 @@ namespace XFramework.XAudio.Tests
             {
                 UnityEngine.Object.DestroyImmediate(clip);
             }
+        }
+
+        #endregion
+
+        #region 默认实现的生产路径（AUD-014）
+
+        /// <summary>
+        /// AUD-014：全部播放 fixture 都注入 <see cref="FakeAudioClipLoader"/>，默认 <see cref="AudioClipLoader"/>
+        /// 与无参 <see cref="AudioManager.Initialize"/> 的生产路径零覆盖。这里走一次真实缝：
+        /// AssetManager 未初始化时，默认 loader 的加载异常必须被 Audio 侧兜住并记 Error。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator DefaultInitialize_UsesProductionLoader_AndFailureIsContained()
+        {
+            AudioManager.Destroy();
+            AssetManager.Destroy();
+
+            AudioManager.Initialize();
+            Assert.IsTrue(AudioManager.IsInitialized, "无参 Initialize 应完成（加载是惰性的）");
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[Audio\] 加载音频资源 'audio/missing' 时发生未预期异常"));
+            var handle = AudioManager.Play("audio/missing");
+
+            yield return null; // 让异步失败路径落地
+
+            Assert.IsFalse(AudioManager.IsPlaying(handle),
+                "生产 loader 的失败路径同样不得让句柄报告在播");
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount, "失败路径不得占住槽位");
+
+            AudioManager.Destroy();
         }
 
         #endregion

@@ -80,6 +80,8 @@ namespace XFramework.XAudio.Tests
             var second = AudioManager.Play("audio/b");
 
             Assert.AreEqual(first.Id, second.Id, "回收掉的槽位应被下一次播放复用");
+            Assert.AreNotEqual(first.Generation, second.Generation,
+                "复用槽位必须递增代际——旧句柄的 ABA 防线（AUD-005）");
         }
 
         #endregion
@@ -125,9 +127,13 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void NoPlayback_DoesNotRegisterTicker()
         {
-            int baseline = UpdateManager.TotalCount;
+            // AUD-005：原断言比较的是同一个表达式——恒真。fixture 已清空调度器，直接断言基线为 0。
+            Assert.AreEqual(0, UpdateManager.TotalCount, "前提：fixture 已清空调度器");
 
-            Assert.AreEqual(baseline, UpdateManager.TotalCount, "没播过任何东西时不该占用调度槽位");
+            // 走一遍读路径：读 API 不得懒注册 ticker
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+
+            Assert.AreEqual(0, UpdateManager.TotalCount, "没播过任何东西时不该占用调度槽位");
         }
 
         #endregion

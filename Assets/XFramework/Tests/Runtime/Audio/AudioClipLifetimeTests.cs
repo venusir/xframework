@@ -37,6 +37,11 @@ namespace XFramework.XAudio.Tests
         public void TearDown()
         {
             AudioManager.Destroy();
+
+            // AUD-005：每个用例离开时必须归还全部租约——少一次是资源泄漏，这条契约不能靠逐个用例自觉
+            Assert.AreEqual(0, _loader.OutstandingLeases,
+                "用例离开时不得遗留未归还的租约（Destroy 必须先归还再丢弃实现）");
+
             UpdateManager.Clear();
 
             if (_clip != null)

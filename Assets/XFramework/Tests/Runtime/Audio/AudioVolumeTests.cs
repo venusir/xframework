@@ -78,7 +78,8 @@ namespace XFramework.XAudio.Tests
         [Test]
         public void Play_WithoutOptions_IsFullVolume()
         {
-            var handle = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            // AUD-005：原名不副实——原实现传了 loop: true 的 options。这里真正省略实参。
+            var handle = AudioManager.Play("audio/a");
 
             Assert.AreEqual(1f, AudioTestKit.VolumeOf(handle), 0.001f);
         }
