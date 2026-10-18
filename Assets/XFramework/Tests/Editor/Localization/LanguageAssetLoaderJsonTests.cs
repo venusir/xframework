@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XLocalization;
 
 namespace Venusy609.Xframework.Editor.Tests
@@ -150,6 +153,17 @@ namespace Venusy609.Xframework.Editor.Tests
             LoadJson("{\"a\":\"1\",}");
 
             Assert.AreEqual("1", LocalizationManager.Get("a"), "尾随逗号不丢数据，容忍");
+        }
+
+        [Test]
+        public void DuplicateKey_WarnsAndLastWins()
+        {
+            // LOC-007：重复键此前静默后者胜；JSON 规范未禁止重复键，不抛但必须留痕
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[LocalizationManager\] Duplicate key 'a'"));
+
+            LoadJson("{\"a\":\"1\",\"a\":\"2\"}");
+
+            Assert.AreEqual("2", LocalizationManager.Get("a"), "重复键后者胜（与主流 JSON 解析器一致）");
         }
 
         #endregion

@@ -200,7 +200,7 @@ var info  = LocalizationManager.GetFormat("ui_guild_info", guild); // 表里写 
 | 写法 | 含义 | `GetFormat` 里的行为 |
 |---|---|---|
 | `{PlayerName}` | 全局占位符（两类） | 已注册 → 替换；未注册 → **原样显示**，不会被参数填 |
-| `{0}` / `{0,-5}` / `{0:N2}` | `string.Format` 位置参数 | 照常格式化 |
+| `{0}` / `{0,-5}` / `{0, 5}` / `{0:N2}` | `string.Format` 位置参数 | 照常格式化（空格位置与 .NET 一致：索引后、逗号后、对齐值后；`+` 号不被 .NET 接受，按字面显示） |
 | `{{` / `}}` | 字面花括号 | 显示为 `{` / `}` |
 
 即：**要由 `GetFormat` 的实参填的值，必须写成 `{0}` 这种位置形式**。写成 `{GuildLevel}` 只会原样显示
@@ -356,6 +356,8 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **转义序列会解码**：`\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对）。这条不是可选项——`System.Text.Json` 默认就把非 ASCII 转义成 `\uXXXX`，Python 的 `json.dumps` 默认 `ensure_ascii=True`，不解码就是整张表把 `中文` 原样显示给玩家。
 - **格式错误抛 `InvalidOperationException`（带字符位置）**，不再返回「已经读到的半张表」。
   宽容的例外只有两个、且都不影响数据完整性：**尾随逗号**与 **UTF-8 BOM**。
+- **重复键不抛，记一条 Warning 后后者胜**：JSON 规范未禁止重复键，抛会破坏手写表的兼容性；
+  但静默丢数据与模块判定线相反，所以 `[LocalizationManager] Duplicate key 'x' ...` 会指出位置。
 
 ## 线程契约
 
@@ -370,6 +372,8 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **并发切换语言是「后完成者胜」，不是「后请求者胜」。** `SwitchLanguageAsync` 没有在途去重、没有请求代次作废：快速连点 EN → JA → KO 时，若 JA 的资源加载最慢，最终生效的是 JA。要严格按最后一次选择收口，调用方得自己串行化（前一次 `await` 完再发下一次，或取消上一次的令牌）。**注意区分两种「代次」**：门面只做**实例代次**（`SetInstance` / `Destroy` / 会话复位会让在途续体失效，见下一条），**不做**同一实例内的请求代次——后者仍是后完成者胜。
 - **加载期间实例被替换/销毁时，本次切换被丢弃。** `SwitchLanguageAsync` 的续体绑定**发起时**的实例与代次；期间若 `SetInstance` 或 `Destroy`，不向新实例写回旧语言数据、不切语言、不抛异常，只记一条 `[LocalizationManager]` Warning。**直接对 `ILocalizationManager` 实例调 `Dispose()` 不经过门面，这条守卫拦不住**——销毁请走 `LocalizationManager.Destroy()`。
 - **`Destroy` 会在第三方 `Dispose` 抛异常时记录并复位状态。** 异常记一条 `[LocalizationManager]` Error，`_instance` 与 `_instanceInitialized` 仍复位，门面可再次 `Initialize`——这保证 `Bootstrap.Shutdown` 的逆序清理不会被一个清理失败的实现中断。
+- **空表按缺表处理（两条加载入口）**：`LocalizationBootstrapStage` 对 `Count == 0` 的字典 / `{}` TextAsset 记 Warning 并**跳过初始化**（`IsInitialized` 保持 false）；`LanguageAssetLoader`（`SwitchLanguageAsync` 的加载路径）仍**硬失败**（`Parsed empty language data`）。显式 `LocalizationManager.Initialize(lang, empty)` 仍按调用方提供的数据安装——那是显式行为，不在两条加载入口的判定线上。
+- **空值参数的处置**：`FallbackLanguage` 与 `SwitchLanguageAsync` 拒绝 null/空串（`ArgumentNullException`）；`SetPlaceholder` 拒绝 null 值、空串合法；`Get` / `GetFormat` / `SetPlaceholderFromKey` 的既有校验不变。
 - **`SetLanguageData` 覆盖「当前语言」的数据时不会发通知。** 查询面立刻变了（`Get` 返回新文本），事件面没有变化（`LanguageChangedMessage` 只在 `SetLanguage` 真的换了语言时发）——已订阅刷新的 UI 会继续显示旧文本。运行时热更语言表要自己再触发一次刷新。
 - **注入的 `Dictionary` 按引用持有，不拷贝。** `Initialize` / `SetLanguageData` / `LocalizationBootstrapStage` 的构造参数都是如此——注入即视为移交所有权，事后改这个字典会直接改到已加载的语言表。
 - **键值占位符的值若含 `{0}`，`GetFormat` 会把它当格式项消费掉。** 替换发生在 `string.Format` 之前，所以一条表项写作 `"ui_tip": "确认({0})"`、又被 `SetPlaceholderFromKey` 引进来时，`{0}` 会被调用方传的实参填上。这条今天就存在（字面量占位符同理），键值占位符只是把暴露面略微放大：值来自语言表，而表是译者/工具产出的。要显示字面量花括号就写 `{{0}}`。

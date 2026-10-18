@@ -99,6 +99,18 @@ namespace XFramework.XLocalization
                 return UniTask.CompletedTask;
             }
 
+            // 空表 = 缺表（LOC-006）：与异步加载器的「Parsed empty language data」同一判定线。
+            // 静默装上空表会让 IsInitialized 为 true、所有查询返回键本身，故障点远离数据源。
+            if (data.Count == 0)
+            {
+                LogManager.Warning(LogCategories.LocalizationBootstrapStage,
+                    "Localization data is empty. Skipping initialization.");
+                _initializedByThisStage = false;
+                context.SetProgress(1f);
+                context.SetState(PipelineStageState.Completed);
+                return UniTask.CompletedTask;
+            }
+
             // 先看有没有已经被初始化（使用方手动 Initialize / SetInstance，或上一次运行留下的实例）——
             // 那种情况下 Initialize 会告警并忽略，本阶段就不算「初始化过」，Shutdown 时也不该去销毁它
             var alreadyInitialized = LocalizationManager.IsInitialized;

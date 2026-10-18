@@ -206,6 +206,10 @@ namespace XFramework.XLocalization
         /// <param name="cancellationToken">取消令牌</param>
         public static async UniTask SwitchLanguageAsync(string lang, CancellationToken cancellationToken = default)
         {
+            // null/空串没有合理语义：null 会落到 loader 的 targetLanguage ANE、空串会去加载 "lang_"（LOC-009）
+            if (string.IsNullOrEmpty(lang))
+                throw new ArgumentNullException(nameof(lang));
+
             EnsureGlobalInitialized();
 
             // 已在缓存中，直接同步切换
@@ -247,6 +251,9 @@ namespace XFramework.XLocalization
             }
             set
             {
+                // 门面侧与 impl 侧都校验：第三方 impl 不走本门面时仍受自己的实现保护（LOC-009）
+                if (string.IsNullOrEmpty(value))
+                    throw new ArgumentNullException(nameof(value));
                 EnsureGlobalInitialized();
                 _instance.FallbackLanguage = value;
             }
@@ -284,6 +291,9 @@ namespace XFramework.XLocalization
         /// <inheritdoc cref="ILocalizationManager.SetPlaceholder"/>
         public static void SetPlaceholder(string key, string value)
         {
+            // 门面侧与 impl 侧都校验（LOC-009）；null 值此前被静默替换为空串
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
             EnsureGlobalInitialized();
             _instance.SetPlaceholder(key, value);
         }

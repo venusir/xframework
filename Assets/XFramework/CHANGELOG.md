@@ -231,6 +231,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `[LocalizationManager]` Error，门面状态仍复位——`Bootstrap.Shutdown` 不会被一个清理失败的实现中断。
 - **语言加载的过期续体会被丢弃**（LOC-004）：`SwitchLanguageAsync` 在 `await` 期间若实例被 `SetInstance` /
   `Destroy` 换掉，本次切换不生效（不写新实例、不抛异常），只记一条 Warning。
+- **Localization 的空表与空值口径统一**（LOC-006/009）：引导阶段遇空表记 Warning 并跳过（不再静默装上空表）；
+  `FallbackLanguage` / `SwitchLanguageAsync` 的 null/空串与 `SetPlaceholder` 的 null 值改抛
+  `ArgumentNullException`。异步加载器对空表仍是硬失败。
+- **语言 JSON 的重复键现在会记 Warning**（LOC-007）：行为仍是后者胜（与主流解析器一致），但不再静默。
+- **`GetFormat` 的对齐格式项补齐 .NET 空格语法**（LOC-003）：`{0, 5}` 等带空格写法现在正常格式化；
+  `+` 号不再被当作合法符号（按非格式项字面输出，而不是交给 `string.Format` 抛异常）。
 
 ### Fixed
 
@@ -645,6 +651,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   代次，`await` 后先查代次再解析，过期则 Warning + 丢弃。回归：`LanguageAssetLoaderTests` 两条 +
   `LocalizationManagerTests` 一条（改前分别 `Expected: False But was: True`、`InvalidOperationException:
   尚未初始化`、`Dispose boom`）。
+- **空表两条入口相反、`{0, 5}` 被判非法、重复键静默、空值参数三种处置（LOC-003/006/007/009）**：
+  引导阶段静默装上空表（`IsInitialized == true`、零警告）而异步加载器硬失败；解析器把合法的带空白对齐
+  格式项 `{0, 5}` 判为非法并转义为字面量（同时接受了 .NET 不接受的 `+`）；JSON 重复键静默后者胜；
+  空值参数三种处置（`FallbackLanguage = null` 下次 `Get` 抛裸 ANE、`SwitchLanguageAsync("")` 去加载
+  `"lang_"`、`SetPlaceholder(name, null)` 静默替换为空串）。修法：空表在引导阶段 Warning + 跳过
+  （不置已初始化），异步加载器维持硬失败；解析器按 .NET 实际语法放行索引后 / 逗号后 / 对齐值后的
+  ASCII 空格、只接受负号；重复键记 `[LocalizationManager]` Warning 后后者胜；`FallbackLanguage` /
+  `SwitchLanguageAsync` / `SetPlaceholder` 在门面与 impl 两侧补校验。回归：7 条新用例（改前分别
+  `Expected log did not appear`、空表置已初始化、`Expected: <ArgumentNullException> But was: null`、
+  `[{0, 5}]` 字面输出、`ParamName "targetLanguage"`）。
 
 #### Asset（场景加载）
 

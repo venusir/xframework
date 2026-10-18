@@ -115,6 +115,49 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ExecuteAsync_EmptyDictionary_SkipsWithoutInitializing()
+        {
+            // LOC-006：空表 = 缺表。此前静默装上空表且 IsInitialized == true。
+            var stage = new LocalizationBootstrapStage("zh_Hans", new Dictionary<string, string>());
+            LogAssert.Expect(LogType.Warning,
+                new Regex(@"\[LocalizationBootstrapStage\] Localization data is empty"));
+
+            var ctx = new PipelineStageContext();
+            stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Completed, ctx.State, "空表跳过路径也应写完成终态");
+            Assert.AreEqual(1f, ctx.Progress, 0.001f);
+            Assert.IsFalse(LocalizationManager.IsInitialized, "空表不得置已初始化");
+
+            stage.Shutdown(); // 本阶段什么都没建，Shutdown 应为空操作
+            Assert.IsFalse(LocalizationManager.IsInitialized);
+        }
+
+        [Test]
+        public void ExecuteAsync_EmptyJsonTextAsset_Skips()
+        {
+            // 与上一个用例同一判定线：`{}` 解析成功但零条目，按缺表处理
+            var table = new TextAsset("{}");
+            try
+            {
+                var stage = new LocalizationBootstrapStage("zh_Hans", table);
+                LogAssert.Expect(LogType.Warning,
+                    new Regex(@"\[LocalizationBootstrapStage\] Localization data is empty"));
+
+                var ctx = new PipelineStageContext();
+                stage.ExecuteAsync(ctx, default).GetAwaiter().GetResult();
+
+                Assert.AreEqual(PipelineStageState.Completed, ctx.State);
+                Assert.IsFalse(LocalizationManager.IsInitialized, "空表不得置已初始化");
+            }
+            finally
+            {
+                LocalizationManager.Destroy();
+                Object.DestroyImmediate(table);
+            }
+        }
+
+        [Test]
         public void Shutdown_AfterInitialize_DestroysManager()
         {
             var stage = new LocalizationBootstrapStage("zh_Hans", new Dictionary<string, string> { { "title", "你好" } });

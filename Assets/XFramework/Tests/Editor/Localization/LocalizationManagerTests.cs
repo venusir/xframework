@@ -100,6 +100,25 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void GetFormat_AlignmentWithSpaces_StillWork()
+        {
+            // LOC-003：.NET 允许索引后、逗号后、对齐值后的 ASCII 空格；旧解析器把它们当非格式项转义。
+            UseTable(
+                ("s1", "[{0, 5}]"),
+                ("s2", "[{0 ,5}]"),
+                ("s3", "[{0,5 }]"),
+                ("s4", "[{0, -5}]"),
+                ("s5", "[{0,+5}]"));
+
+            Assert.AreEqual("[    x]", LocalizationManager.GetFormat("s1", "x"), "逗号后空格");
+            Assert.AreEqual("[    x]", LocalizationManager.GetFormat("s2", "x"), "索引后空格");
+            Assert.AreEqual("[    x]", LocalizationManager.GetFormat("s3", "x"), "对齐值后空格");
+            Assert.AreEqual("[x    ]", LocalizationManager.GetFormat("s4", "x"), "负号 + 空格");
+            Assert.AreEqual("[{0,+5}]", LocalizationManager.GetFormat("s5", "x"),
+                "「+」不是 .NET 合法对齐符号，应按非格式项字面输出（旧实现交给 string.Format 会抛）");
+        }
+
+        [Test]
         public void GetFormat_EscapedBraces_RenderLiteral()
         {
             UseTable(("code", "{{literal}}"));
@@ -280,6 +299,38 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.Throws<ArgumentNullException>(() => LocalizationManager.Get(null));
             Assert.Throws<ArgumentNullException>(() => LocalizationManager.Get(string.Empty));
             Assert.Throws<ArgumentNullException>(() => LocalizationManager.GetFormat(null));
+        }
+
+        [Test]
+        public void FallbackLanguage_NullOrEmpty_Throws()
+        {
+            // LOC-009：此前 setter 不校验，null 会在下一次 Get 变成 Dictionary 的裸 ANE
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.FallbackLanguage = null);
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.FallbackLanguage = string.Empty);
+        }
+
+        [Test]
+        public void SwitchLanguageAsync_NullOrEmpty_Throws()
+        {
+            // LOC-009：null/空串此前分别落到 loader 的 targetLanguage ANE 与「加载 lang_」的畸形地址
+            LocalizationManager.LanguageAssetPath = "localization/lang_{0}";
+
+            var nullEx = Assert.Throws<ArgumentNullException>(
+                () => LocalizationManager.SwitchLanguageAsync(null).GetAwaiter().GetResult());
+            Assert.AreEqual("lang", nullEx.ParamName, "参数名应指向门面参数 lang");
+
+            Assert.Throws<ArgumentNullException>(
+                () => LocalizationManager.SwitchLanguageAsync(string.Empty).GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void SetPlaceholder_NullValue_Throws()
+        {
+            // LOC-009：null 值此前被静默替换为空串
+            Assert.Throws<ArgumentNullException>(() => LocalizationManager.SetPlaceholder("Name", null));
+
+            // 负向控制：空串是合法的字面量
+            Assert.DoesNotThrow(() => LocalizationManager.SetPlaceholder("Name", string.Empty));
         }
 
         #endregion

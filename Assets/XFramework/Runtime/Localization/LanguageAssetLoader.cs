@@ -163,6 +163,7 @@ namespace XFramework.XLocalization
                     break;
                 }
 
+                var keyStart = i;
                 var key = ReadJsonString(span, ref i, json);
                 SkipWhitespace(span, ref i);
                 if (i >= span.Length || span[i] != ':')
@@ -170,6 +171,14 @@ namespace XFramework.XLocalization
                 i++; // 跳过 ':'
 
                 var value = ReadJsonString(span, ref i, json);
+                if (result.ContainsKey(key))
+                {
+                    // 重复键：JSON 规范未禁止，主流解析器后者胜。不抛（兼容手写表），但必须留痕，
+                    // 否则就是「静默丢数据」（LOC-007）。
+                    LogManager.Warning(LogCategories.LocalizationManager,
+                        "Duplicate key '{0}' in language JSON at position {1}; the later value wins.",
+                        key, keyStart);
+                }
                 result[key] = value;
 
                 SkipWhitespace(span, ref i);

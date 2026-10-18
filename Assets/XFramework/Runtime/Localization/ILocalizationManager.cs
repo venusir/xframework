@@ -20,6 +20,7 @@ namespace XFramework.XLocalization
 
         /// <summary>
         /// 获取或设置回退语言。当目标键在当前语言中不存在时自动使用回退语言的值。
+        /// <para>设置为 <c>null</c> 或空串抛 <see cref="ArgumentNullException"/>——空回退语言没有合理语义。</para>
         /// </summary>
         string FallbackLanguage { get; set; }
 
@@ -65,7 +66,7 @@ namespace XFramework.XLocalization
         /// <para><b>与全局占位符共用花括号语法</b>：先替换 <c>{Name}</c> 形式的全局占位符，再执行
         /// <c>string.Format</c>。两类语法会互相干扰，故实现会把<b>不是合法复合格式项</b>的花括号
         /// 转义为字面量：<c>{Name}</c>（未注册或已替换完的残留）、游离的 <c>}</c> 都按字面显示，
-        /// 而 <c>{0}</c> / <c>{0,-5}</c> / <c>{0:N2}</c> 与已转义的 <c>{{</c> / <c>}}</c> 照常工作。</para>
+        /// 而 <c>{0}</c> / <c>{0,-5}</c> / <c>{0, 5}</c> / <c>{0:N2}</c> 与已转义的 <c>{{</c> / <c>}}</c> 照常工作。</para>
         /// <para>即：需要位置参数就写 <c>{0}</c>，不要把「本该由参数填的值」写成 <c>{Name}</c>——
         /// 后者只会原样显示，不会被参数替换。</para>
         /// <para>键为 <c>null</c> 或空串时抛 <see cref="ArgumentNullException"/>。</para>
@@ -93,6 +94,8 @@ namespace XFramework.XLocalization
         /// 用错的症状是「切换语言后模板换了、嵌进去的值没换」，无异常也无日志。</para>
         /// <para>同一个名字只有一种含义：与 <see cref="SetPlaceholderFromKey"/> 注册的键值绑定<b>互斥</b>，
         /// 后注册的覆盖前者。</para>
+        /// <para><paramref name="value"/> 为 <c>null</c> 时抛 <see cref="ArgumentNullException"/>；
+        /// 空串是合法的字面量。</para>
         /// </summary>
         void SetPlaceholder(string key, string value);
 

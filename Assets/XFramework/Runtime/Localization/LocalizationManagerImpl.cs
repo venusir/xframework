@@ -87,7 +87,13 @@ namespace XFramework.XLocalization
         public string FallbackLanguage
         {
             get => _fallbackLanguage;
-            set => _fallbackLanguage = value;
+            set
+            {
+                // 空回退语言没有合理语义：null 会在下一次 Get 变成 Dictionary 的裸 ANE（LOC-009）
+                if (string.IsNullOrEmpty(value))
+                    throw new ArgumentNullException(nameof(value));
+                _fallbackLanguage = value;
+            }
         }
 
         /// <summary>
@@ -250,6 +256,9 @@ namespace XFramework.XLocalization
         {
             if (string.IsNullOrEmpty(key))
                 throw new ArgumentNullException(nameof(key));
+            // null 值此前被静默替换为空串（LOC-009）；空串仍是合法字面量，只有 null 被拒绝
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
 
             if (_placeholders == null)
                 _placeholders = new Dictionary<string, string>();
@@ -408,9 +417,10 @@ namespace XFramework.XLocalization
         /// 「保持原样输出」，而 <c>string.Format</c> 会把 <c>{Name}</c> 当格式项解析——两条承诺合起来
         /// 就是一个 <c>FormatException</c>。于是「命名占位符」与「位置参数」这两套<b>共用花括号语法</b>
         /// 的能力根本不能共存，README 里那个 <c>GetFormat("ui_guild_info", "5")</c> 的示例就是反例。</para>
-        /// <para><b>规则</b>：放行合法复合格式项（<c>{0}</c> / <c>{0,-5}</c> / <c>{0:N2}</c>）与已转义的
-        /// <c>{{</c> / <c>}}</c>，其余花括号一律转义。由这条规则可得：**当前能正常格式化的文本输出逐字不变**，
-        /// 只把原先会抛 <c>FormatException</c> 的文本改为原样显示。</para>
+        /// <para><b>规则</b>：放行合法复合格式项（<c>{0}</c> / <c>{0,-5}</c> / <c>{0, 5}</c> / <c>{0:N2}</c>）与已转义的
+        /// <c>{{</c> / <c>}}</c>，其余花括号一律转义。对齐符号只接受 <c>-</c>（.NET 不接受 <c>+</c>）；
+        /// 索引后、逗号后、对齐值后的 ASCII 空格与 .NET 一致，tab 不接受。由这条规则可得：
+        /// **当前能正常格式化的文本输出逐字不变**，只把原先会抛 <c>FormatException</c> 的文本改为原样显示。</para>
         /// </summary>
         private static string NormalizeBracesForFormat(string text)
         {
@@ -480,24 +490,31 @@ namespace XFramework.XLocalization
             end = start;
             var i = start + 1; // 跳过 '{'
 
-            // index：至少一位数字
+            // index：至少一位数字；.NET 允许数字之后、',' / ':' / '}' 之前有 ASCII 空格
             var digitStart = i;
             while (i < span.Length && span[i] >= '0' && span[i] <= '9')
                 i++;
             if (i == digitStart)
                 return false;
+            while (i < span.Length && span[i] == ' ')
+                i++;
 
-            // 可选的对齐：',' 后跟可选符号与至少一位数字
+            // 可选的对齐：',' 后允许 ASCII 空格，再跟可选负号（.NET 只接受 '-'，不接受 '+'）与至少一位数字
             if (i < span.Length && span[i] == ',')
             {
                 i++;
-                if (i < span.Length && (span[i] == '-' || span[i] == '+'))
+                while (i < span.Length && span[i] == ' ')
+                    i++;
+                if (i < span.Length && span[i] == '-')
                     i++;
                 digitStart = i;
                 while (i < span.Length && span[i] >= '0' && span[i] <= '9')
                     i++;
                 if (i == digitStart)
                     return false;
+                // 对齐值之后、':' / '}' 之前同样允许 ASCII 空格
+                while (i < span.Length && span[i] == ' ')
+                    i++;
             }
 
             // 可选的格式说明：':' 之后到第一个 '}' 为止
