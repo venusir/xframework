@@ -35,6 +35,12 @@ namespace XFramework.XAudio.Tests
         /// <summary>非 <c>null</c> 时加载抛该异常（用于验证「缝的契约是失败不抛，真抛了要兜住」）。</summary>
         internal Exception ThrowOnLoad;
 
+        /// <summary>
+        /// 为 true 时，<see cref="Clip"/> 为 null 也返回一个<b>没有本体但有释放动作</b>的租约——
+        /// 模拟「location 指向非 AudioClip，底层加载成功但 Asset 为 null」（AUD-004）。
+        /// </summary>
+        internal bool ReleaseOnFailure;
+
         /// <summary>被请求过的地址，按顺序。</summary>
         internal IReadOnlyList<string> Requested => _requested;
 
@@ -69,7 +75,13 @@ namespace XFramework.XAudio.Tests
                 throw ThrowOnLoad;
 
             if (Clip == null)
-                return default;
+            {
+                if (!ReleaseOnFailure)
+                    return default;
+
+                _issued++;
+                return new AudioClipLease(null, OnLeaseReleased);
+            }
 
             _issued++;
             return new AudioClipLease(Clip, OnLeaseReleased);

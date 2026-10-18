@@ -333,6 +333,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Resume` / `PlayCoreAsync` 同样加假 null 防御。回归：
   `AudioPoolTests.ExternallyDestroyedSource_IsReclaimedWithoutThrowing`（改前 Unhandled log：
   `[UpdateScheduler] AudioTicker.OnUpdate threw exception`）。
+- **无效租约仍持有释放动作却不 Dispose（AUD-004）**：location 指向非 AudioClip 时底层加载成功但
+  `Asset` 为 null，租约 `IsValid=false` 却仍有 YooAsset 句柄的释放动作；`SafeDisposeLease` /
+  `DisposeClipLease` 按 `IsValid` 早退，引用计数无界增长。修法：无条件 `Dispose`（`default` 是安全
+  空操作）；租约契约改为「IsValid 只表示本体是否拿到」。回归：
+  `AudioClipLifetimeTests.InvalidLeaseWithReleaseAction_IsDisposed`（改前 `Expected: 1 But was: 0`）。
 
 #### Scene
 

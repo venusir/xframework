@@ -687,10 +687,8 @@ namespace XFramework.XAudio
         /// 不保证 <c>XAsset</c> 的包还没销毁——那时释放会抛。退出路径上不该再炸一次。</para>
         /// </summary>
         private static void SafeDisposeLease(AudioClipLease lease, string location)
-        {
-            if (!lease.IsValid)
-                return;
-
+        {            // 不能按 IsValid 早退（AUD-004）：加载成功但 location 指向非 AudioClip 时，租约没有资源本体，
+            // 却仍持有底层 YooAsset 句柄的释放动作——跳过它就是引用计数无界增长。
             try
             {
                 lease.Dispose();

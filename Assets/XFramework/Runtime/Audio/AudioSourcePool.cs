@@ -343,12 +343,7 @@ namespace XFramework.XAudio
         /// </summary>
         private static void DisposeClipLease(AudioVoice voice)
         {
-            if (!voice.ClipLease.IsValid)
-            {
-                voice.ClipLease = default;
-                return;
-            }
-
+            // 不能按 IsValid 早退（AUD-004）：没有资源本体不代表没有释放动作。
             try
             {
                 voice.ClipLease.Dispose();

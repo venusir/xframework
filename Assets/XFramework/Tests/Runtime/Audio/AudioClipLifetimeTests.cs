@@ -57,6 +57,21 @@ namespace XFramework.XAudio.Tests
         }
 
         [Test]
+        public void InvalidLeaseWithReleaseAction_IsDisposed()
+        {
+            // AUD-004：location 指向非 AudioClip 时加载成功但 Asset 为 null；
+            // 租约没有本体、却仍持有底层句柄的释放动作，不得按 IsValid 跳过 Dispose。
+            _loader.Clip = null;
+            _loader.ReleaseOnFailure = true;
+
+            AudioManager.Play("audio/not-a-clip");
+
+            Assert.AreEqual(1, _loader.ReleasedLeases,
+                "IsValid=false 不等于没有释放动作；底层句柄仍必须释放（AUD-004）");
+            Assert.AreEqual(0, _loader.OutstandingLeases);
+        }
+
+        [Test]
         public void Stop_ReturnsTheLease()
         {
             var handle = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));

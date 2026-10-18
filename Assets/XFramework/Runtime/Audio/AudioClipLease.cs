@@ -10,8 +10,9 @@ namespace XFramework.XAudio
     /// 编排三处全部绑在 <c>XAsset</c> 的句柄类型上；更要紧的是，<c>AssetHandle</c> 内部包着 YooAsset 的句柄，
     /// <b>没有活的 YooAsset 环境就造不出有效实例</b>，于是加载缝的实现方（尤其是测试替身）根本无法表达
     /// 「加载成功」，更无法观测「释放了几次」——而「不 Dispose 即泄漏」正是本模块最要紧的不变量。</para>
-    /// <para><b>契约</b>：<see cref="IsValid"/> 为 <c>false</c> 的租约表示加载失败，
-    /// <see cref="Dispose"/> 对它是安全的空操作；有效租约的 <see cref="Dispose"/> 必须恰好调用一次。</para>
+    /// <para><b>契约</b>：<see cref="IsValid"/> 只表示「资源本体是否拿到」；<see cref="Dispose"/> 无条件
+    /// 执行释放动作（<c>default</c> 与没有释放动作的租约是安全空操作）。<b>不得按 IsValid 跳过 Dispose</b>：
+    /// location 指向非 AudioClip 时加载成功但本体为 null，租约仍持有底层句柄的释放动作（AUD-004）。</para>
     /// </summary>
     /// <remarks>
     /// <para><b>代价（如实记录）</b>：释放动作以委托形式持有，因此每次成功加载会产生一次委托分配。
@@ -67,7 +68,8 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 归还租约，执行它的释放动作——那是底层资源唯一的释放凭据，不调用即泄漏。
-        /// <para><c>default(AudioClipLease)</c> 与无释放动作的租约都是安全的空操作。</para>
+        /// <para><c>default(AudioClipLease)</c> 与无释放动作的租约都是安全的空操作；<b>与
+        /// <see cref="IsValid"/> 无关</b>（见类型注释，AUD-004）。</para>
         /// </summary>
         public void Dispose() => _release?.Invoke();
 
