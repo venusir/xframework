@@ -547,7 +547,7 @@ namespace XFramework.XUI
             }
 
             // 捕获层与遮罩同一处境：由 new GameObject 创建、未经 AssetManager 托管，直接销毁
-            _popupCatcherTarget = null;
+            _popupCatcherTargets.Clear();
             _popupCatcherButton = null;
 
             if (_popupCatcher != null)
@@ -978,8 +978,8 @@ namespace XFramework.XUI
             EnsureInitialized();
 
             // 样式属于每一次 ShowMask 调用，本方法只用于「正在显示时改」。
-            // 没有遮罩时无对象可改，出声而不是静默丢弃。
-            if (_maskInstance == null)
+            // 没有遮罩（或已被 HideMask 隐藏）时无对象可改，出声而不是静默丢弃（UI-C-005）。
+            if (_maskInstance == null || !_maskInstance.activeSelf)
             {
                 LogManager.Warning(LogCategories.UIManager,
                     "SetMaskClickToClose: 遮罩尚未显示，本次调用无效。" +
@@ -1139,8 +1139,10 @@ namespace XFramework.XUI
         /// <summary>捕获层的点击按钮。与遮罩不同，它在创建时就有——捕获层没有「不挡输入」的形态。</summary>
         private UnityEngine.UI.Button _popupCatcherButton;
 
-        /// <summary>当前捕获层替哪个面板挡输入。点它即关闭这个面板。</summary>
-        private UIPanelBase _popupCatcherTarget;
+        /// <summary>
+        /// 当前捕获层替哪些面板挡输入（栈式；UI-C-006）。点它关闭栈顶那个，关闭后自动回落到下一个。
+        /// </summary>
+        private readonly List<UIPanelBase> _popupCatcherTargets = new List<UIPanelBase>();
 
         /// <summary>
         /// 为 <paramref name="panel"/> 挂上捕获层：全屏、全透明、挡输入，点它关闭该面板。
@@ -1156,16 +1158,26 @@ namespace XFramework.XUI
         {
             EnsurePopupCatcherInstance();
 
-            _popupCatcherTarget = panel;
+            // 栈式（UI-C-006）：嵌套弹窗各自入栈，关闭内层后外层仍可点外部关闭。
+            for (int i = _popupCatcherTargets.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(_popupCatcherTargets[i], panel))
+                    _popupCatcherTargets.RemoveAt(i);
+            }
 
+            _popupCatcherTargets.Add(panel);
+            UpdatePopupCatcherSorting(layer);
+            _popupCatcher.SetActive(true);
+        }
+
+        private void UpdatePopupCatcherSorting(int layer)
+        {
             // 排序取该层的第 0 号槽位：严格夹在「layer-1 层最高的面板」((layer-1)*32+31 = layer*32-1)
             // 与「layer 层第一个面板」(layer*32+1) 之间。序号 0 在 RestampSortingOrders 里从不分配给
             // 面板（那边从 1 起），该槽位本就是层容器自己的位置——容器无图形，不会与捕获层争
-            var canvas = _popupCatcher.GetComponent<Canvas>();
+            var canvas = _popupCatcher != null ? _popupCatcher.GetComponent<Canvas>() : null;
             if (canvas != null)
                 canvas.sortingOrder = UISorting.PanelOrder(UISorting.ClampPanelLayer(layer), 0);
-
-            _popupCatcher.SetActive(true);
         }
 
         /// <summary>
@@ -1174,13 +1186,27 @@ namespace XFramework.XUI
         /// </summary>
         private void ReleasePopupCatcherOf(UIPanelBase panel)
         {
-            if (!ReferenceEquals(_popupCatcherTarget, panel))
+            for (int i = _popupCatcherTargets.Count - 1; i >= 0; i--)
+            {
+                if (ReferenceEquals(_popupCatcherTargets[i], panel))
+                {
+                    _popupCatcherTargets.RemoveAt(i);
+                    break;
+                }
+            }
+
+            // 去掉已销毁的目标；剩下的栈顶决定捕获层的排序（UI-C-006）
+            while (_popupCatcherTargets.Count > 0 && _popupCatcherTargets[_popupCatcherTargets.Count - 1] == null)
+                _popupCatcherTargets.RemoveAt(_popupCatcherTargets.Count - 1);
+
+            if (_popupCatcherTargets.Count == 0)
+            {
+                if (_popupCatcher != null)
+                    _popupCatcher.SetActive(false);
                 return;
+            }
 
-            _popupCatcherTarget = null;
-
-            if (_popupCatcher != null)
-                _popupCatcher.SetActive(false);
+            UpdatePopupCatcherSorting(_popupCatcherTargets[_popupCatcherTargets.Count - 1].Layer);
         }
 
         /// <summary>
@@ -1224,12 +1250,15 @@ namespace XFramework.XUI
 
         private void OnPopupCatcherClicked()
         {
-            var target = _popupCatcherTarget;
-            if (target == null)
+            while (_popupCatcherTargets.Count > 0 && _popupCatcherTargets[_popupCatcherTargets.Count - 1] == null)
+                _popupCatcherTargets.RemoveAt(_popupCatcherTargets.Count - 1);
+
+            if (_popupCatcherTargets.Count == 0)
                 return;
 
-            // 与遮罩的 OnMaskClicked 不同：那边是「Pop 栈顶」，这边是「关掉我替谁挡的那个面板」。
-            // 捕获层不假定弹窗在栈顶——它只认自己登记的目标。
+            var target = _popupCatcherTargets[_popupCatcherTargets.Count - 1];
+
+            // 与遮罩的 OnMaskClicked 不同：那边是「Pop 栈顶」，这边是「关掉捕获层栈顶那个面板」。
             CloseAsync(target).Forget();
         }
 

@@ -200,6 +200,19 @@ namespace XFramework.XUI.Tests
             Assert.IsFalse(IsMaskVisible(), "不应凭空创建遮罩");
         }
 
+        [Test]
+        public void SetMaskClickToClose_AfterHideMask_Warns()
+        {
+            // UI-C-005：实例还在但已隐藏时同样无对象可改，必须告警而不是静默无效。
+            UIManager.ShowMask();
+            UIManager.HideMask();
+            Assert.IsFalse(IsMaskVisible(), "前提：遮罩已隐藏");
+
+            LogAssert.Expect(LogType.Warning,
+                new System.Text.RegularExpressions.Regex("遮罩尚未显示"));
+            UIManager.SetMaskClickToClose(true);
+        }
+
         private bool IsMaskVisible()
         {
             var mask = _root.transform.Find("UIManager_Mask");

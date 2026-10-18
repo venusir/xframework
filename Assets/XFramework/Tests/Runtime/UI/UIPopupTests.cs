@@ -37,6 +37,7 @@ namespace XFramework.XUI.Tests
 
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<FakePanel>();
+            _factory.RegisterPanel<FakePanelB>();
             _factory.RegisterPanel<SizedFakePanel>(parent =>
             {
                 var go = new GameObject("SizedFakePanel", typeof(RectTransform));
@@ -264,6 +265,37 @@ namespace XFramework.XUI.Tests
             var catcher = FindCatcher();
             Assert.IsTrue(catcher == null || !catcher.gameObject.activeSelf,
                 "弹窗关闭后捕获层必须收起");
+        }
+
+        [Test]
+        public async Task NestedPopups_CatcherClick_ClosesInnerThenOuter()
+        {
+            // UI-C-006：捕获层是栈式的——嵌套弹窗打开后外层仍保留，关内层后捕获层回落到外层。
+            var anchor = CreateAnchor(new Vector2(100f, 40f));
+            await UIManager.ShowPopupAsync<FakePanel>(
+                anchor, "PF_FakePopup", closeOnClickOutside: true);
+            await UIManager.ShowPopupAsync<FakePanelB>(
+                anchor, "PF_FakePopupB", closeOnClickOutside: true);
+
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "前提：外层已打开");
+            Assert.IsTrue(UIManager.IsOpen<FakePanelB>(), "前提：内层已打开");
+
+            var button = CatcherButton(FindCatcher());
+            button.onClick.Invoke();
+            await UniTask.Yield();
+            await UniTask.Yield();
+
+            Assert.IsFalse(UIManager.IsOpen<FakePanelB>(), "第一次点击应关闭内层（UI-C-006）");
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "外层应保留，捕获层回落到外层");
+
+            button.onClick.Invoke();
+            await UniTask.Yield();
+            await UniTask.Yield();
+
+            Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "第二次点击应关闭外层（UI-C-006）");
+            var catcher = FindCatcher();
+            Assert.IsTrue(catcher == null || !catcher.gameObject.activeSelf,
+                "两个弹窗都关闭后捕获层应收起");
         }
 
         #endregion

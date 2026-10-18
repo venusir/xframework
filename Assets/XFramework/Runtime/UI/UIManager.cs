@@ -865,6 +865,11 @@ namespace XFramework.XUI
             if (panel == null)
                 return default;
 
+            // 面板可能在 OnOpen 里自关（UIA-006）：消失的面板再挂遮罩会留下孤儿遮罩，
+            // 永久挡住整层输入且不会被关闭路径回收。
+            if (!panel.IsOpen)
+                return default;
+
             int maskLayer = dialogLayer - 1;
             if (modal && maskLayer >= 0)
             {
@@ -940,6 +945,10 @@ namespace XFramework.XUI
 
             var panel = await impl.OpenAsync<T>(assetPath, popupLayer, userData, cancellationToken);
             if (panel == null)
+                return null;
+
+            // 面板可能在 OnOpen 里自关（UIA-006）：不再为已消失的面板挂捕获层。
+            if (!panel.IsOpen)
                 return null;
 
             var rect = (RectTransform)panel.transform;

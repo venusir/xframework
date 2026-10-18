@@ -500,6 +500,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   修法：面板层内上限改为 30（`LayerStride - 2`），遮罩独占 31；两个公开入口补 `ClampPanelLayer`。
   回归：`UISortingTests.PanelIndexAtMaskBoundary_IsClampedBehindMask`（改前 `Expected: less than 16031
   But was: 16031`）/ `PublicOrderEntries_ClampOutOfRangeLayers`（改前 `Expected: 28769 But was: 28801`）。
+- **弹窗校验、遮罩显示判定与捕获层栈（UIA-006/UI-C-005/006）**：`ShowDialogAsync` / `ShowPopupAsync`
+  在 `OpenAsync` 之后校验面板仍打开，避免为自关面板挂孤儿遮罩/捕获层；`SetMaskClickToClose` 同时
+  检查遮罩是否显示中；捕获层由单目标改为栈式（`List<UIPanelBase>`），关内层后回落到外层。
+  回归：`UIMaskTests.SetMaskClickToClose_AfterHideMask_Warns`（改前 Expected log did not appear）/
+  `UIPopupTests.NestedPopups_CatcherClick_ClosesInnerThenOuter`（改前第二次点击外层仍开着）。
 
 #### Message
 
