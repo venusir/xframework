@@ -374,6 +374,48 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void StaleHandle_AfterSlotReuse_IsNoOp()
+        {
+            // CAM-004：既有用例只覆盖「槽位空置」；这里覆盖槽位被复用后的 ABA——
+            // 旧句柄按代际失配必须失效，不得操作新相机。
+            var manager = CreateManager();
+            var firstObject = new GameObject("CameraReuseA");
+            var secondObject = new GameObject("CameraReuseB");
+            var first = firstObject.AddComponent<Camera>();
+            var second = secondObject.AddComponent<Camera>();
+
+            try
+            {
+                var oldHandle = manager.Register(first);
+                Assert.IsTrue(manager.Unregister(oldHandle));
+
+                var newHandle = manager.Register(second);
+                Assert.AreEqual(oldHandle.Id, newHandle.Id, "前提：新相机应复用刚空出的槽位");
+                Assert.AreNotEqual(oldHandle.Generation, newHandle.Generation, "前提：复用时代际必须递增");
+
+                manager.Activate(newHandle);
+                Assert.IsTrue(manager.IsActive(newHandle), "前提：新句柄应已成为活动相机");
+
+                LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
+                manager.Activate(oldHandle);
+                Assert.IsTrue(manager.IsActive(newHandle), "旧句柄 Activate 不得抢占复用槽位上的新相机");
+                Assert.IsFalse(manager.IsActive(oldHandle));
+
+                LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
+                manager.Deactivate(oldHandle);
+                Assert.IsTrue(manager.IsActive(newHandle), "旧句柄 Deactivate 不得停用新相机");
+
+                Assert.IsFalse(manager.Unregister(oldHandle), "旧句柄注销应返回 false");
+                Assert.IsTrue(manager.Unregister(newHandle), "新句柄仍有效");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(firstObject);
+                UnityEngine.Object.DestroyImmediate(secondObject);
+            }
+        }
+
+        [Test]
         public void DefaultHandle_IsNoOp()
         {
             var manager = CreateManager();
