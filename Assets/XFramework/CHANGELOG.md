@@ -356,6 +356,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`ActivateAfterLoad` 丢弃 `SetActiveScene` 的返回值（SCN-004）**：激活失败不可观测。修法：失败时记
   一条 `[SceneManager]` Warning，说明新实例仍挂在原激活场景下；README 已知限制同步。
   **覆盖缺口如实记**：引擎拒绝激活的场景在自动化用例里难以稳定构造，本条只有文档与代码核对。
+- **操作报成功但场景对象无效时先补发 1f（AST-007）**：违反 `IAssetSceneLoader`「失败路径不补发 1f」的
+  契约，调用方进度条停在满格却拿到无效句柄。修法：把 `progress?.Invoke(1f)` 移到场景有效性检查与登记
+  之后。回归：`SceneLoadOperationTests.SucceededButInvalidScene_DoesNotReportOneAndReleases`（改前
+  `Expected: not collection containing 1.0f`）。
 
 #### Asset（资源加载）
 

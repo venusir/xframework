@@ -566,9 +566,7 @@ namespace XFramework.XAsset
             }
 
             // 1f 只在成功路径补发：进度面与结果面必须一致——失败时先报 100% 再返回无效 Scene
-            // 会让调用方的进度条停在满格，而它拿到的场景根本不存在
-            progress?.Invoke(1f);
-
+            // 会让调用方的进度条停在满格，而它拿到的场景根本不存在（AST-007）。
             // 取操作自己的场景对象，而不是按名字回查：SceneManager.GetSceneByName 在「同名场景已存在」
             // 或「场景尚未进入查询表」时会给错（或给不出），而操作自己持有的才是权威来源
             var scene = operation.SceneObject;
@@ -579,6 +577,8 @@ namespace XFramework.XAsset
                 operation.Release();
                 return default;
             }
+
+            progress?.Invoke(1f);
 
             // 登记后才交得出手柄：卸载入口就是靠这张表把 Id 找回加载操作的
             int id = ++_nextSceneId;

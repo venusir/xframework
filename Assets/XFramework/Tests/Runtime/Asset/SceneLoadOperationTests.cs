@@ -175,6 +175,25 @@ namespace XFramework.XAsset.Tests
         }
 
         [Test]
+        public async Task SucceededButInvalidScene_DoesNotReportOneAndReleases()
+        {
+            // AST-007：操作报成功但场景对象无效时，进度面不得先报 100%——
+            // 调用方的进度条会停在满格，而它拿到的场景根本不存在。
+            LogAssert.Expect(LogType.Error, new Regex("not valid/loaded"));
+
+            var reported = new List<float>();
+            _operation.IsDone = true;
+            _operation.IsSucceed = true;
+            _operation.SceneObject = default;
+
+            var handle = await _manager.LoadSceneAsync(Location, LoadSceneMode.Single, reported.Add);
+
+            Assert.IsTrue(handle.IsDefault);
+            Assert.AreEqual(1, _operation.ReleaseCount, "失败路径必须释放句柄");
+            CollectionAssert.DoesNotContain(reported, 1f, "失败路径不得补发 1f（AST-007）");
+        }
+
+        [Test]
         public async Task PackageUnavailable_ReturnsDefaultHandle()
         {
             _source.NextOperation = null;
