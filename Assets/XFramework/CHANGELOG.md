@@ -603,6 +603,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   SO 路径的 Inspector 里也无处填写；CSV 走反射写属性，恰好不受影响，进一步掩盖了问题。
   示例改为字段，README 的「已知限制」补一条成文边界；`Tests/Editor/Config/JsonRowSerializationTests`
   用属性版 / 字段版两条断言钉住该事实（属性版读回 0、字段版读回 1001）。
+- **CSV Global 只有表头、预载返回 null、注入条目残留路径（CONF-005/006/007）**：只有表头行时把表头当
+  数据行（全 string 字段静默得到「字段值 = 列名」）；自定义 Loader 返回 null 仍记为已加载；`RegisterTable` /
+  `RegisterGlobal` 不清理 `_assetPaths`，`CopyLoaded` 报旧路径、下一次 Preload 打假 Warning。修法：
+  CSV Global 要求 `lines.Length >= 2`；预载 null 抛 `ConfigException`；三处 Register 清掉路径记录。
+  回归：`ConfigManagerImplTests.PreloadGlobalAsync_LoaderReturnsNull_ThrowsAndDoesNotMarkLoaded`
+  （改前 `Expected: <ConfigException> But was: null`）。
 
 #### Asset（场景加载）
 

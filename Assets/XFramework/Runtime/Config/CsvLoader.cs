@@ -91,6 +91,12 @@ namespace XFramework.XConfig
                     throw new ConfigException(
                         $"CSV file '{assetPath}' is empty.");
 
+                // Global 至少需要表头 + 一行数据；只有表头时把表头当数据行会得到
+                // 「字段值 = 列名」的静默错误（CONF-005）。
+                if (lines.Length < 2)
+                    throw new ConfigException(
+                        $"CSV Global '{assetPath}' has a header but no data row.");
+
                 var config = new T();
                 var headers = lines[0].Split(',');
                 var members = MapColumns(headers, GetColumnMap(typeof(T)), typeof(T), assetPath);

@@ -84,6 +84,19 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void PreloadGlobalAsync_LoaderReturnsNull_ThrowsAndDoesNotMarkLoaded()
+        {
+            // CONF-006：自定义 Loader 返回 null 时不得记为已加载。
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+            fake.SetGlobalTask(UniTask.FromResult<TestGlobalConfig>(null));
+
+            Assert.Throws<ConfigException>(() =>
+                impl.PreloadGlobalAsync<TestGlobalConfig>("config/game", fake).GetAwaiter().GetResult());
+            Assert.IsFalse(impl.IsLoaded<TestGlobalConfig>(), "null 配置不得记为已加载");
+        }
+
+        [Test]
         public void PreloadFailed_AllowsRetry()
         {
             var impl = new ConfigManagerImpl();

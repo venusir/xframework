@@ -316,6 +316,15 @@ namespace XFramework.XConfig
             {
                 var loader = customLoader ?? Loaders[format];
                 var config = await loader.LoadGlobalAsync<T>(assetPath);
+
+                // 自定义 Loader 返回 null 时不得记为已加载（CONF-006）：否则 GetGlobal<T>()
+                // 会返回 null 而 IsLoaded 报 true，故障点远离加载点。
+                if (config == null)
+                {
+                    throw new ConfigException(
+                        $"Loader returned null Global config for '{type.Name}' from '{assetPath}'.");
+                }
+
                 _globals[type] = config;
                 _assetPaths[type] = assetPath;
                 RaiseConfigChanged(type);
@@ -501,6 +510,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             _tables[type] = table._dict;
             _tableWrappers[type] = table;
+            _assetPaths.Remove(type); // 注入条目不来自资源路径（CONF-007）
             RaiseConfigChanged(type);
         }
 
@@ -518,6 +528,7 @@ namespace XFramework.XConfig
                     $"Cannot register null table for Table '{rowType.Name}'.");
             _tables[rowType] = table.Data;
             _tableWrappers[rowType] = table;
+            _assetPaths.Remove(rowType); // 注入条目不来自资源路径（CONF-007）
             RaiseConfigChanged(rowType);
         }
 
@@ -530,6 +541,7 @@ namespace XFramework.XConfig
                 throw new ConfigException(
                     $"Cannot register null config for Global '{typeof(T).Name}'.");
             _globals[typeof(T)] = config;
+            _assetPaths.Remove(typeof(T)); // 注入条目不来自资源路径（CONF-007）
             RaiseConfigChanged(typeof(T));
         }
 
