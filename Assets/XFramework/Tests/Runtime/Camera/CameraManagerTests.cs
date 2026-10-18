@@ -56,6 +56,22 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void Destroy_DisposeThrows_StillClearsInstance()
+        {
+            var throwing = new FakeCameraManager { ThrowOnDispose = true };
+            CameraManager.Initialize(throwing);
+
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Destroy());
+            Assert.IsFalse(CameraManager.IsInitialized,
+                "Dispose 抛出也必须清掉实例，否则留下永久闩锁（CAM-002）");
+
+            var next = new FakeCameraManager();
+            Assert.DoesNotThrow(() => CameraManager.Initialize(next),
+                "旧实例 Dispose 失败不得阻止下一次 Initialize");
+            Assert.IsTrue(CameraManager.IsInitialized);
+        }
+
+        [Test]
         public void Initialize_Twice_LogsWarningAndKeepsFirst()
         {
             var first = new FakeCameraManager();

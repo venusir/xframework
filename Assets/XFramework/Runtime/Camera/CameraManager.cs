@@ -209,10 +209,13 @@ namespace XFramework.XCamera
         /// <summary>销毁门面并释放注入的实现（若它实现 <see cref="IDisposable"/>）。</summary>
         public static void Destroy()
         {
-            if (_impl is IDisposable disposable)
-                disposable.Dispose();
-
+            // 先清槽再 Dispose（CAM-002）：第三方 Dispose 抛出时不得留下「已销毁却仍被门面持有」
+            // 的永久闩锁——之后再 Initialize 会因 _impl 非空而静默早退（Audio 是先清槽的先例）。
+            var impl = _impl;
             _impl = null;
+
+            if (impl is IDisposable disposable)
+                disposable.Dispose();
         }
 
         #endregion

@@ -178,7 +178,9 @@ namespace XFramework.XCamera
             {
                 ThrowIfDisposed();
                 var index = ActiveSlot;
-                return index >= 0 ? _slots[index].Camera : null;
+                // 被外部销毁的相机是 Unity 假 null：直接返回引用会让调用方拿到一个「非 null 但不可用」的对象。
+                // 查询面统一按 null 报告（CAM-001）。
+                return IsUsable(index) ? _slots[index].Camera : null;
             }
         }
 
@@ -199,7 +201,7 @@ namespace XFramework.XCamera
             {
                 ThrowIfDisposed();
                 var index = ActiveSlot;
-                return index >= 0
+                return IsUsable(index)
                     ? new CameraHandle(index, _slots[index].Generation, _slots[index].Id)
                     : default;
             }
@@ -267,7 +269,8 @@ namespace XFramework.XCamera
             ThrowIfDisposed();
             return cameraId != null &&
                    _idToSlot.TryGetValue(cameraId, out var index) &&
-                   index == ActiveSlot;
+                   index == ActiveSlot &&
+                   IsUsable(index);
         }
 
         /// <inheritdoc/>
@@ -318,7 +321,7 @@ namespace XFramework.XCamera
         {
             ThrowIfDisposed();
             var index = Resolve(handle);
-            return index >= 0 && index == ActiveSlot;
+            return index >= 0 && index == ActiveSlot && IsUsable(index);
         }
 
         #endregion
@@ -388,6 +391,10 @@ namespace XFramework.XCamera
         #region Internal
 
         private int ActiveSlot => _transitionSlot >= 0 ? _transitionSlot : _activeSlot;
+
+        /// <summary>槽位是否仍持有一台可用的相机；被外部销毁的相机在 Unity 里是假 null（CAM-001）。</summary>
+        private bool IsUsable(int index)
+            => index >= 0 && index < _slots.Count && _slots[index].Used && _slots[index].Camera != null;
 
         private CameraHandle AllocateSlot(Camera camera, string id)
         {

@@ -428,6 +428,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （测试会显式关掉再调用 AutoInit）。已登记 `AutoInitTests` 族清单。回归：
   `SessionResetTests.Update_ResetForNewSession_RestoresAutoDrive`。
 
+#### Camera
+
+- **被外部销毁的活动相机仍被视为活动（CAM-001）**：Unity 的假 null 让 `OutputCamera` 返回一个
+  「非 null 但不可用」的引用，`ActiveHandle` / `IsActive` 继续报活，README 的「返回 null」不成立。
+  修法：查询面统一经 `IsUsable`（`Used && Camera != null`）判定；被销毁的活动相机按 null / default /
+  false 报告。回归：`UnityCameraManagerTests.DestroyedActiveCamera_IsReportedAsInactive`（改前
+  `Expected: null But was: <null>`）。
+- **`CameraManager.Destroy` 先 Dispose 后置空（CAM-002）**：第三方 `Dispose` 抛出时 `_impl` 仍非空，
+  之后 `Initialize` 永久早退。修法：先清槽再 Dispose（Audio 先例）。回归：
+  `CameraManagerTests.Destroy_DisposeThrows_StillClearsInstance`（改前 `Expected: False But was: True`）。
+
 #### Message
 
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里

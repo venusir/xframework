@@ -444,5 +444,30 @@ namespace XFramework.XCamera.Tests
         }
 
         #endregion
+
+        #region 被外部销毁的相机
+
+        [Test]
+        public void DestroyedActiveCamera_IsReportedAsInactive()
+        {
+            var manager = new UnityCameraManager(new Dictionary<string, Camera>
+            {
+                ["A"] = _cameraA,
+                ["B"] = _cameraB,
+            });
+            manager.Activate("A");
+            Assert.AreSame(_cameraA, manager.OutputCamera, "前提校验：A 是活动相机");
+
+            UnityEngine.Object.DestroyImmediate(_objectA);
+
+            Assert.IsNull(manager.OutputCamera,
+                "被销毁的活动相机必须按 null 报告——直接返回引用会给出一个非 null 但不可用的对象（CAM-001）");
+            Assert.IsTrue(manager.ActiveHandle.IsDefault,
+                "ActiveHandle 不得继续报告已销毁的相机（CAM-001）");
+            Assert.IsFalse(manager.IsActive("A"),
+                "IsActive 不得继续报告已销毁的相机（CAM-001）");
+        }
+
+        #endregion
     }
 }

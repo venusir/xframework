@@ -19,6 +19,9 @@ namespace XFramework.XCamera.Tests
 
         public bool Disposed { get; private set; }
 
+        /// <summary>为 true 时 Dispose 抛异常，用于验证门面的闩锁顺序（CAM-002）。</summary>
+        public bool ThrowOnDispose { get; set; }
+
         public CameraHandle RegisterResult { get; set; }
 
         public bool UnregisterResult { get; set; } = true;
@@ -103,6 +106,8 @@ namespace XFramework.XCamera.Tests
         public void Dispose()
         {
             Disposed = true;
+            if (ThrowOnDispose)
+                throw new InvalidOperationException("dispose boom");
         }
     }
 }
