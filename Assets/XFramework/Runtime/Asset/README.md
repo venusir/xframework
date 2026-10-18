@@ -20,6 +20,12 @@ using XFramework.XAsset;
 // 方式二：手动初始化
 await AssetManager.InitializeAsync();
 
+// 编辑器模拟（仅编辑器）：无需先打包，资源直接经 AssetDatabase 加载
+await AssetManager.InitializeAsync(new AssetInitOptions
+{
+    PlayMode = AssetPlayMode.EditorSimulate,
+});
+
 // 带步骤进度（可选）：AssetInitReport 为模块自持的中性载荷（Progress + Description）
 await AssetManager.InitializeAsync(options: null,
     progress: new Progress<AssetInitReport>(r => Debug.Log($"{r.Progress:P0} {r.Description}")));
@@ -31,7 +37,13 @@ AssetManager.SetInstance(myAssetManager);
 > 初始化配置：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，自动释放对象池闲置实例并卸载未使用资源；需自管回收策略的项目可置为 false。
 >
 > **加密资源**：`AssetInitOptions.DecryptionServices`（实现 `IAssetDecryptionServices`，与打包侧的加密方式对应）——
-> Offline 与 Host 两种模式都会接线，编辑器 / 单机模式同样能读加密资源；不传即不加密（默认）。
+> Offline 与 Host 两种模式都会接线，单机 / 热更模式同样能读加密资源；不传即不加密（默认）。
+>
+> **编辑器模拟（`AssetPlayMode.EditorSimulate`）**：初始化时框架按包名自动执行一次 YooAsset 模拟构建
+> （`EditorSimulateModeHelper.SimulateBuild`），产物在 `Bundles/<ActiveBuildTarget>/<包名>/Simulate`；
+> 资源直接读原始资源、**不需要先构建 bundle**。**仅 Unity 编辑器可用**——Player 构建传此值会抛
+> `PlatformNotSupportedException`，请改用 Offline 或 Host。该模式忽略 `RemoteServices` 与
+> `DecryptionServices`（虚拟 bundle 不读加密资源）。模拟构建是同步的，耗时随工程资源量增长。
 
 ### 2. 加载资源
 
@@ -298,12 +310,14 @@ Runtime/Asset/
 5. **同步加载卡顿**：`LoadSync` / `InstantiateSync` 阻塞调用线程；Host 模式下资源未下载时可能长时间卡住，运行时高频路径禁用。
 6. **`UnloadUnusedAssetsAsync` 只回收引用计数为 0 的资源**：未 `Dispose` 的句柄、存活实例引用的资源不受影响——它不解决句柄泄漏，只回收真正闲置的资源。
 7. **下载器 `Dispose()` 不中止下载**：只解除事件订阅；需要中止调用 `Cancel()`（已下载部分保留，断点续传）。
-8. **Offline 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
+8. **Offline / EditorSimulate 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
 9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
 10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
 11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。
 12. **`LoadAllAsync` 的句柄必须逐项释放**：返回的句柄数组每个元素占引用计数（与 `LoadAsync` 相同），需逐项 `using` 或 `Dispose`；单项失败为 `default` 句柄（`IsValid == false`，释放安全）。批量预热请用 `PreloadAllAsync`（不占引用计数）。
 13. **额外包初始化应顺序进行**：`InitializePackageAsync` 建议在默认包初始化完成后依次调用，并发初始化多个额外包不受保护。
+14. **EditorSimulate 只在编辑器内可用**：Player 构建传 `AssetPlayMode.EditorSimulate` 时初始化抛 `PlatformNotSupportedException`，**不会静默降级为 Offline**——把模拟模式误打进包里必须显式暴露。
+15. **EditorSimulate 忽略 `RemoteServices` / `DecryptionServices`**：虚拟 bundle 直接读原始资源，不访问远端也不解密；加密链路只能用 Offline / Host 验证。
 
 ## 架构设计
 
@@ -335,7 +349,8 @@ Runtime/Asset/
 | `Destroy()` | 销毁全局管理器，释放全部资源 |
 | `IsInitialized` | 是否已初始化 |
 | `AssetInitOptions.AutoReclaimOnLowMemory = true` | 初始化选项字段：低内存自动回收开关（监听 `Application.lowMemory`，默认开启） |
-| `AssetInitOptions.DecryptionServices` | 初始化选项字段：解密服务（`IAssetDecryptionServices`，镜像 YooAsset 的 `IDecryptionServices`）；`null` = 不加密。Offline / Host 都接线 |
+| `AssetInitOptions.PlayMode` | 初始化选项字段：运行模式 `Offline`（默认）/ `Host` / `EditorSimulate`（仅编辑器，见「快速使用」第 1 节） |
+| `AssetInitOptions.DecryptionServices` | 初始化选项字段：解密服务（`IAssetDecryptionServices`，镜像 YooAsset 的 `IDecryptionServices`）；`null` = 不加密。Offline / Host 接线；EditorSimulate 忽略 |
 
 ### 异步加载
 
@@ -542,7 +557,8 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 7. **文件系统根目录（`packageRoot`）没有出口**：它在 YooAsset 里是**每个文件系统各一个**
    （内置包根 / 缓存根独立），不在 `AssetInitOptions` 里。要改包根、换用自定义文件系统类或接管
    其它 YooAsset 参数，只能整体替换 `IAssetManager`。加载寻址同样只有 `location` 字符串一种形式
-   （没有 GUID / `AssetReference` 入口）。
+   （没有 GUID / `AssetReference` 入口）。**EditorSimulate 的模拟产物根目录同样没有配置出口**——
+   固定为 YooAsset 默认路径，要改仍只能整体替换 `IAssetManager`。
 8. **取消不中止场景加载**：YooAsset 的场景加载没有对外可用的中止入口，取消只让 `await` 提前抛出，
    底层照跑完、场景最终仍会进来。框架会接力到后台收干净——**Additive 卸掉**（世界回到调用前）、
    **Single 保留并告警**（卸载它会让工程一个场景都没有，比留着更糟）。调用方不必自己收拾，
@@ -562,6 +578,18 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
     上一会话的 `AssetManagerImpl` 会存活，静态事件会把它钉住并继续回调；`ResetForNewSession` 在丢引用前
     调用内部退订入口（`DetachLowMemoryHandler`，幂等、不 Dispose）。**第三方 `IAssetManager` 实现若有
     自己的静态事件订阅，框架探测不到**——需自行在会话边界退订。
+14. **只支持 Offline / Host / EditorSimulate 三种运行模式**：YooAsset 的 `WebPlayMode` 与 `CustomPlayMode`
+    未映射。`WebPlayMode` 是 WebGL 平台**唯一**可用模式（上游对其他模式直接抛异常），因此**本模块的资源管线
+    当前不适用于 WebGL**；`CustomPlayMode` 需要向公开面暴露 YooAsset 的文件系统参数类型，与模块「公开面不出现
+    第三方类型」的原则冲突。两者的替代路径都是 `AssetManager.SetInstance` 整体替换 `IAssetManager`。
+15. **EditorSimulate 的模拟构建同步、不可取消**：`SimulateBuild` 在初始化同步段执行，耗时随工程资源量增长；
+    `CancellationToken` 中断不了它（取消只在构建结束后的 await 处生效）。
+16. **包复用下运行模式与模拟清单不会自动刷新**：包已初始化成功时 `InitializeAsync` 跳过上游初始化
+    （同一会话重初始化、关闭域重载后的第二次播放都会跳过模拟构建），模式在包首次成功初始化后固定；
+    `Destroy()` 也不会从 YooAssets 注册表移除包。需要刷新请重开编辑器或触发域重载。
+17. **Player 构建误留 EditorSimulate 会中止启动**：`DefaultGameLauncher` 的 Inspector 值随场景序列化；
+    打包前未改回 Offline / Host 时，Asset 引导阶段（Phase 0）抛 `PlatformNotSupportedException`，
+    整条启动管线中止。打包检查该字段。
 
 ## 接口承诺到哪为止
 
@@ -579,6 +607,8 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
    包注册与 bundle 缓存**保持存活**——这正是「`Destroy()` 后可重新初始化复用」的前提。
    要真正回收内存请用 `UnloadUnusedAssetsAsync`（配合 `ClearPool` 清掉闲置实例）。
 4. **`PreloadAllAsync` 不占引用计数**，只把内容拉进缓存；需要持有请用 `LoadAllAsync`（其句柄必须逐项释放）。
+5. **运行模式的承诺面**：非 WebGL 的 Player 构建承诺 `Offline` / `Host`；编辑器内额外承诺 `EditorSimulate`；
+   `WebPlayMode` / `CustomPlayMode` 不在承诺面内（见「已知限制」第 14 条）。
 
 ## 与相邻模块的关系
 

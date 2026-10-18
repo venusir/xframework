@@ -46,6 +46,7 @@ Runtime/Asset/
 | 2026-10 | 审计轮（见下两节）：等待者按代际登记（作废路径不再静默）、非成功路径释放句柄、回池去重、门面完备性守卫（第九个采用者）、池 PlayMode 用例、下载器取消路径退订与未 Begin 拒绝、主线程契约（断言 + README 两节） |
 | 2026-10-13 | 场景管理立项轮：场景原语**移出** `IAssetManager` 改由能力接口 `IAssetSceneLoader` 承载（破坏性）；场景加载三缺陷修复（失败路径释放句柄、取消后的后台善后、取 `SceneObject` 取代按名回查）；为可测性抽出 internal 场景加载缝（`ISceneLoadSource` / `ISceneLoadOperation`）。使用方文档的「已知限制」新增 4 条。详见 `Documentation/Modules/Scene.md` 与包 `CHANGELOG` |
 | 2026-10-13 | **热更编排边界裁定轮**（框架级评估 §5.2 步骤 8）：① 四个句柄的 `Status` 由上游 `YooAsset.EOperationStatus` 换成框架自有 `AssetOperationStatus`（**破坏性**）——公开面不再绑上游类型，四成员一一对应、换算唯一实现在 `AssetOperationStatusMapper`（未知值回落 `None`，绝不回落 `Succeed`，见 `AssetOperationStatusTests`）；② 订正热更链路顺序：**激活必须先于下载**（预检不改变下载基准）——原文档两处 + 接口 XML 照抄会**静默空转**；③ 真缺口与「判给项目侧」的清单见下节 |
+| 2026-10-18 | 新增 `AssetPlayMode.EditorSimulate`（仅编辑器；模拟构建由框架自动触发）；Web / Custom 明确不映射，理由与重开判据见决策台账 |
 
 详细变更见 git log。
 
@@ -66,7 +67,7 @@ Runtime/Asset/
 
 - 已做：**引导阶段的 `Shutdown` 只销毁自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`AssetBootstrapStage` 新增 `_initializedByThisStage`：已初始化早退路径不再在 `Shutdown` 里销毁使用方注入的管理器，与 Localization / Input / UI 的「谁初始化谁清理」对齐。回归用例 `BootstrapStageTests.AssetBootstrapStage_AlreadyInitialized_ShutdownDoesNotDestroy` / `..._InitializedByStage_ShutdownDestroys`（前者改前必红：`Expected: True But was: False`）。
 
-- 未做：**真实 YooAsset 初始化路径的端到端覆盖（覆盖缺口）**（2026-10-02 · 覆盖清点，下一轮先看这条）——既有测试全走假实现（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 `CHANGELOG`）。本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成 `internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是**最小空包**）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对它的消费路径**，不要只靠编译通过。
+- 未做：**真实 YooAsset 初始化路径的端到端覆盖（覆盖缺口）**（2026-10-02 · 覆盖清点，下一轮先看这条）——既有测试全走假实现（`FakeAssetManager` / `ImplFactory`），于是「离线模式的 `BuildinFileSystemParameters` 从未接线」这个**默认 PlayMode 直接启动失败**的缺陷活到了 2026-10-02 才被清点发现（修法与证据见 `CHANGELOG`）。本轮补上的一半是**参数映射单测**（`AssetDecryptionServicesTests`：`CreatePlayModeParameters` 提成 `internal` 后直测两种模式的产物 + 解密服务是否真的接进 YooAsset 参数，经反射读 `CreateParameters`）；**仍未覆盖的一半**是端到端初始化（需要构建产物，测试工程没有）——引入 Asset 侧集成测试（哪怕是**最小空包**）之前，凡是改动 `YooAssetManagerImpl` 与 YooAsset 的接线，都要**回到 YooAsset 源码逐行核对它的消费路径**，不要只靠编译通过。**2026-10-18 补充**：EditorSimulate 的 `SimulateBuild` 编排同样无端到端用例——本仓没有 YooAsset 构建配置资产，只能在消费方工程手测；参数接线由纯函数 `CreateEditorSimulateParameters` 的用例覆盖。
 - 不做：**不整体改用 `AsyncLazy` / `UniTask.Preserve()` 重写门面的初始化协调协议**（2026-10-01 · 审计轮）——现有语义（同一异常实例、代际作废）有用例钉住，重写改动面大于收益；只修正了「promise 只支持单个 continuation」那句理由句的表述范围。无重开判据。
 - 不做：**不合并门面与 `AssetManagerImpl` 的两层同构协议**（2026-10-01 · 审计轮）——实现层失败时刻意不销毁 `_managerImpl`，包复用语义保证重试安全。无重开判据。
 - 不做：**不给 `AssetManagerImpl` 的同构协议补代际防护**（2026-10-01 · 审计轮）——它是 internal，且经门面使用时已被代际保护，那条路径不可达。无重开判据。
@@ -87,6 +88,11 @@ Runtime/Asset/
 
 - 已做：**会话复位退订旧实例的 `Application.lowMemory`**（2026-10-18 · `68db39a`）——`AssetManagerImpl` 抽出幂等 `Attach/DetachLowMemoryHandler`，复位在丢引用前退订（只 `-=`、不 Dispose）；第三方实现自带静态订阅时框架探测不到，README 已写明（AST-008）。
 - 已做：**CLAUDE.md 豁免清单补 `AssetManager.UnloadSceneAsync`**（2026-10-18 · `deee388`）——它是第三处「未初始化也不抛」的宽容语义豁免（AST-009）。
+- 已做：**运行模式范围裁定为 Offline / Host / EditorSimulate**（2026-10-18 · `f8a64bf`，用户裁定；`AssetDecryptionServicesTests.CreateEditorSimulateParameters_*`）——EditorSimulate 以显式枚举成员 opt-in，初始化时由框架调用 `EditorSimulateModeHelper.SimulateBuild` 自动模拟构建；枚举成员追加末位（`= 2`）避免既有场景反序列化错位；该模式用虚拟 bundle 直接读原始资源，故忽略 `DecryptionServices` / `RemoteServices`。
+- 暂不做：**映射 WebPlayMode**（2026-10-18 · 用户裁定）——它仅 WebGL 可用，且需要 WebServer / WebRemote 文件系统参数与 Web 专用解密接口 `IWebDecryptionServices`（与现有 `IDecryptionServices` 形状不同）；框架其它模块在 WebGL 也均无开箱支持。重开判据：出现真实 WebGL 发布需求，且愿为它增加 Web 文件系统配置面。
+- 不做：**映射 CustomPlayMode**（2026-10-18 · 用户裁定）——它要求使用方提供 `List<FileSystemParameters>`（YooAsset 类型），与「公开面不出现第三方类型」的原则冲突；整体替换 `IAssetManager` 已是该场景的出口。无重开判据。
+- 不做：**EditorSimulate 在非编辑器平台静默降级为 Offline**（2026-10-18 · 实现裁定）——静默降级会让「模拟模式误打进包」永远不被发现；初始化失败必须显式可见。无重开判据。
+- 暂不做：**缓存 SimulateBuild 产物**（2026-10-18 · 上游行为核对）——YooAsset 每次调用都会重跑模拟构建；框架加缓存会引入失效判定与包复用语义冲突。重开判据：实测模拟构建成为进入播放的显著瓶颈。
 
 ## 审计轮次
 
