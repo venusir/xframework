@@ -1,8 +1,13 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XBootstrap;
 using XFramework.XPipeline;
+using XFramework.XUI.Controller;
+using XFramework.XUI.View;
 
 namespace XFramework.XUI.Tests
 {
@@ -110,6 +115,51 @@ namespace XFramework.XUI.Tests
         public void Phase_IsUI()
         {
             Assert.AreEqual(BootstrapPhases.UI, new UIBootstrapStage(_root.transform).Phase);
+        }
+
+        [Test]
+        public async Task ExecuteAsync_AlreadyInitialized_AppliesController()
+        {
+            // UI-C-008：已初始化早退时构造传入的 controller 不能被静默丢弃。
+            var factory = new FakePanelFactory();
+            factory.RegisterPanel<FakePanel>();
+            UIManager.PanelFactoryFactory = () => factory;
+
+            UIManager.Initialize(_root.transform);
+            var controller = new RecordingController();
+            var stage = new UIBootstrapStage(_root.transform, controller);
+
+            await stage.ExecuteAsync(new PipelineStageContext(), default);
+            await UIManager.OpenAsync<FakePanel>("ui/controller-probe");
+
+            Assert.IsTrue(controller.BeforeOpenCalled,
+                "已初始化早退路径也必须应用构造传入的 controller（UI-C-008）");
+        }
+
+        private sealed class RecordingController : IUIController
+        {
+            public bool BeforeOpenCalled;
+
+            public UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData,
+                CancellationToken cancellationToken = default)
+            {
+                BeforeOpenCalled = true;
+                return UniTask.FromResult(true);
+            }
+
+            public UniTask OnAfterOpenAsync(Type panelType, UIPanelBase panel, object userData,
+                CancellationToken cancellationToken = default)
+                => UniTask.CompletedTask;
+
+            public UniTask<bool> OnBeforeCloseAsync(Type panelType, UIPanelBase panel, bool immediate,
+                CancellationToken cancellationToken = default)
+                => UniTask.FromResult(true);
+
+            public UniTask OnAfterCloseAsync(Type panelType, CancellationToken cancellationToken = default)
+                => UniTask.CompletedTask;
+
+            public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
+                => UniTask.CompletedTask;
         }
     }
 }

@@ -505,6 +505,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   检查遮罩是否显示中；捕获层由单目标改为栈式（`List<UIPanelBase>`），关内层后回落到外层。
   回归：`UIMaskTests.SetMaskClickToClose_AfterHideMask_Warns`（改前 Expected log did not appear）/
   `UIPopupTests.NestedPopups_CatcherClick_ClosesInnerThenOuter`（改前第二次点击外层仍开着）。
+- **控制器丢弃与回收截断（UI-C-008/010）**：`UIBootstrapStage` 已初始化早退时静默丢弃构造传入的
+  controller → 早退路径应用它；`UIManagerImpl.Dispose` 的面板回池循环逐面板隔离（AssetManager 已销毁
+  时一个面板抛异常不再截断其余清理）。回归：
+  `UIBootstrapStageTests.ExecuteAsync_AlreadyInitialized_AppliesController`（改前 `Expected: True But was: False`）。
 
 #### Message
 

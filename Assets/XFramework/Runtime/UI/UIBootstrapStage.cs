@@ -67,6 +67,10 @@ namespace XFramework.XUI
             {
                 // 已被 UIRootNode.Awake / 使用方初始化：不重复调用（那只会打一条重复初始化告警），
                 // 也不接管——Shutdown 时不销毁别人的管理器
+                // 但构造传入的 controller 不能被静默丢弃（UI-C-008）。
+                if (_controller != null)
+                    UIManager.SetController(_controller);
+
                 context.SetProgress(1f);
                 context.SetState(PipelineStageState.Completed);
                 return UniTask.CompletedTask;

@@ -501,7 +501,20 @@ namespace XFramework.XUI
             // 会跑在已拆掉的管理器之后。不播关闭动画是既有取舍，本次只补齐回池钩子。
             var panels = new List<UIPanelBase>(_activePanels.Values);
             for (int i = 0; i < panels.Count; i++)
-                RecyclePanel(panels[i]);
+            {
+                try
+                {
+                    RecyclePanel(panels[i]);
+                }
+                catch (Exception e)
+                {
+                    // 逐面板隔离（UI-C-010）：AssetManager 已销毁时面板回池会抛；
+                    // 一个失败不得截断其余面板的清理。
+                    LogManager.Exception(LogCategories.UIManager, e,
+                        string.Format("回池面板 {0} 时抛出异常，已跳过并继续",
+                            panels[i] != null ? panels[i].GetType().Name : "(null)"));
+                }
+            }
 
             // 在途打开的加入者不能悬着：以 null 结束，否则它们会永远等下去
             foreach (var entry in _opening.Values)
