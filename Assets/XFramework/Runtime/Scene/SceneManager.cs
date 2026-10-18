@@ -3,6 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine.SceneManagement;
 using XFramework.XAsset;
+using XFramework.XLog;
 
 // 名字必须区分开：本文件同时可见 XFramework.XScene 与 UnityEngine.SceneManagement，两边各有一个
 // SceneManager。**裸写不报错**——本命名空间的自有类型会静默遮蔽 Unity 那个（C# 判的是类型名），
@@ -60,7 +61,13 @@ namespace XFramework.XScene
 
             if (options.ActivateAfterLoad && options.Mode == LoadSceneMode.Additive)
             {
-                SetActiveScene(handle.Scene);
+                if (!SetActiveScene(handle.Scene))
+                {
+                    // 激活失败不可观测会让「新实例挂错场景」难以排查（SCN-004）。
+                    LogManager.Warning(LogCategory.Get("SceneManager"),
+                        "场景 '{0}' 加载成功但无法设为激活场景（引擎拒绝）；新实例仍挂在原激活场景下。",
+                        handle.Scene.name);
+                }
             }
 
             if (options.UnloadUnusedAfterLoad)

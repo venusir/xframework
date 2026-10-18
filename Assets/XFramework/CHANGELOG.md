@@ -353,6 +353,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   修法：订阅 `SceneManager.sceneUnloaded` 按场景清表（YooAsset 已自行释放，管理器不二次 Release）；
   `Destroy` 退订，复用实例时重新挂上。回归：
   `SceneLoadOperationTests.ExternalSceneUnload_PrunesSceneOperationRegistration`（改前 `Expected: 0 But was: 1`）。
+- **`ActivateAfterLoad` 丢弃 `SetActiveScene` 的返回值（SCN-004）**：激活失败不可观测。修法：失败时记
+  一条 `[SceneManager]` Warning，说明新实例仍挂在原激活场景下；README 已知限制同步。
+  **覆盖缺口如实记**：引擎拒绝激活的场景在自动化用例里难以稳定构造，本条只有文档与代码核对。
 
 #### Asset（资源加载）
 

@@ -218,6 +218,8 @@ LoadSceneAsync → AssetSceneHandle（场景已在场）
 - **`Dispose` 是即发即忘**：不等卸载完成。要确认结果请用 `UnloadAsync`。
 - **叠加加载不会改变激活场景**（与 Unity 一致）：要改就用 `activateAfterLoad` 或 `SetActiveScene`。
 - **`SceneLoadOptions.ActivateAfterLoad` 在 `Single` 模式下无效果**：Unity 自己会激活新场景。
+  Additive 模式下若引擎拒绝激活（`SetActiveScene` 返回 `false`），会记一条 `[SceneManager]` Warning
+  ——新实例此时仍挂在原激活场景下（SCN-004）。
 - **场景地址只有 `location` 字符串一种形式**（没有 GUID / `AssetReference` 入口）——与 `XAsset` 的寻址一致。
 - **本模块不认识「场景被谁卸载了」**：句柄的 `IsValid` 只是 `Id != 0 && Scene.IsValid() && Scene.isLoaded`，
   场景被 Unity 直接卸掉后它就变无效，但本模块不会主动通知你。
