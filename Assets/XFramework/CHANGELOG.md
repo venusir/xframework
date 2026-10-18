@@ -392,6 +392,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同轴新建的 0.1 秒定时器可晚约 2.13 秒触发。修法：扫尾在「本趟触发过回调」时补扫一次
   `BornPass == 当前趟` 的槽位、重新折入最近截止（扫尾期间新建定时器只可能发生在回调里，故不增加常态开销）。
   回归：`TimerTierTests.TimerCreatedInsideOneShotCallback_FiresWithinTheNextTierStep`，改前红。
+- **泄漏告警只看正在计时数，漏掉「Stop 后忘记 Dispose」（TMR-005）**：`WarnIfLeaking` 用 `_runningCount`
+  判定，而主泄漏形态下 Stop 后 RunningCount 已回到 0，告警永远不响。修法：改用 `_allocatedCount`，
+  消息里分列「已分配 / 正在计时」。回归：`TimerLifecycleTests.LeakWarning_FiresOnAllocatedSlots_EvenWhenStopped`
+  （改前 Expected log did not appear）。
+- **`AxisCount` 是跨模块常量的第二份副本（TMR-009）**：手写 `2` 与 `UpdateTimeMode` 脱钩。修法：改为
+  `Enum.GetValues(typeof(UpdateTimeMode)).Length`；回归 `TimerLifecycleTests.AxisCount_MatchesUpdateTimeModeEnum`
+  锁住派生关系。
+- **新表的扫尾趟号从 0 起算，回调里用全新 `TState` 建的 `After(0f)` 同拍触发（TMR-010）**：新表在
+  同一趟被扫到时趟号 +1，新生槽位被当成旧槽位。修法：核心维护各轴当前趟号；新表继承该趟号、本轮
+  新表不再自增趟号，分配时把轴趟号写入 `BornPass`。回归：
+  `TimerTierTests.StatefulTimer_NewTableCreatedInsideSweep_DoesNotFireInSameBeat`（改前 `Expected: False But was: True`）。
 
 #### Lock
 

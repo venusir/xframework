@@ -422,9 +422,11 @@ namespace XFramework.XTimer
         /// <param name="repeating">是否固定间隔。</param>
         /// <param name="token">取消令牌；<c>default</c> 表示不受约束。</param>
         /// <param name="now">本轴当前的逻辑时刻——锚点取它，于是「延时」从创建那一刻起算。</param>
+        /// <param name="bornPass">出生趟号；负值表示取本表当前的 <c>_sweepPass</c>。核心在派发途中创建
+        /// 定时器时传入所属轴的当前趟号，避免「新表尚未扫到、槽位出生趟被当成上一趟」而同一拍触发（TMR-010）。</param>
         /// <returns>新句柄。</returns>
         internal TimerHandle Allocate(Action callback, Action<TState> stateCallback, TState state,
-            float duration, bool repeating, CancellationToken token, double now)
+            float duration, bool repeating, CancellationToken token, double now, int bornPass = -1)
         {
             if (_freeHead < 0)
                 Grow();
@@ -444,7 +446,7 @@ namespace XFramework.XTimer
             slot.Running = true;
             slot.Anchor = now;
             slot.Deadline = now + duration;
-            slot.BornPass = _sweepPass;
+            slot.BornPass = bornPass >= 0 ? bornPass : _sweepPass;
             slot.Generation = generation;
             slot.Token = token;
             slot.NextFree = -1;
@@ -455,6 +457,13 @@ namespace XFramework.XTimer
             WarnIfLeaking();
 
             return new TimerHandle(TableId, index, generation);
+        }
+
+        /// <summary>让新表继承所属轴当前的派发趟号（TMR-010）。</summary>
+        /// <param name="pass">所属轴的当前趟号。</param>
+        internal void InheritSweepPass(int pass)
+        {
+            _sweepPass = pass;
         }
 
         #endregion
@@ -601,20 +610,22 @@ namespace XFramework.XTimer
         }
 
         /// <summary>
-        /// 活跃数首次达到 <see cref="LeakWarnThreshold"/> 时告警一次。
+        /// 已分配槽位首次达到 <see cref="LeakWarnThreshold"/> 时告警一次。
         /// <para>本模块<b>不设容量上限</b>：槽位是纯托管内存，封顶后唯一能给的失败形态是「静默返回空句柄」，
         /// 那比内存增长更难诊断。这条告警是它的替代品——只报一次，不刷屏。</para>
+        /// <para><b>看已分配数而不是正在计时数</b>：`Stop` 后忘记 `Dispose` 是主泄漏形态，
+        /// 此时 RunningCount 已回到 0，只看它告警永远不会响（TMR-005）。</para>
         /// </summary>
         private void WarnIfLeaking()
         {
-            if (_leakWarned || _runningCount < LeakWarnThreshold)
+            if (_leakWarned || _allocatedCount < LeakWarnThreshold)
                 return;
 
             _leakWarned = true;
             LogManager.Warning(LogCategories.Timer,
-                "单个表上正在计时的定时器已达 {0} 个（轴 {1}，已分配 {2} 个槽位）。" +
+                "单个表上已分配的槽位已达 {0} 个（正在计时 {1} 个，轴 {2}）。" +
                 "若非有意为之，请检查是否有忘记 Dispose 的定时器；本条不再重复打印。",
-                LeakWarnThreshold, (UpdateTimeMode)_axis, _allocatedCount);
+                LeakWarnThreshold, _runningCount, (UpdateTimeMode)_axis);
         }
 
         #endregion

@@ -28,8 +28,8 @@ namespace XFramework.XTimer
     {
         #region Constants
 
-        /// <summary>时间轴数量（<see cref="UpdateTimeMode"/> 的取值个数）。</summary>
-        private const int AxisCount = 2;
+        /// <summary>时间轴数量（<see cref="UpdateTimeMode"/> 的取值个数；从枚举派生，避免第二份常量副本，TMR-009）。</summary>
+        internal static readonly int AxisCount = Enum.GetValues(typeof(UpdateTimeMode)).Length;
 
         #endregion
 
@@ -75,6 +75,9 @@ namespace XFramework.XTimer
 
         /// <summary>各轴的逻辑时钟：只由该轴收到的 <c>deltaTime</c> 推进，因此暂停时自然冻结。</summary>
         private readonly double[] _logicalNow = new double[AxisCount];
+
+        /// <summary>各轴当前派发趟号；新表与扫尾途中的分配据此判断「出生趟」（TMR-010）。</summary>
+        private readonly int[] _axisPass = new int[AxisCount];
 
         #endregion
 
@@ -122,7 +125,8 @@ namespace XFramework.XTimer
             }
 
             TimerHandle handle = _plainTables[axis].Allocate(
-                callback, null, default, duration, repeating, cancellationToken, _logicalNow[axis]);
+                callback, null, default, duration, repeating, cancellationToken, _logicalNow[axis],
+                _axisPass[axis]);
 
             // 先分配再重估档位：那一趟扫尾要看得见这条新定时器，否则算出来的还是旧档位
             _tickers[axis].RequestTier(SelectTier(duration));
@@ -154,7 +158,8 @@ namespace XFramework.XTimer
             }
 
             TimerHandle handle = StateTable<TState>(axis).Allocate(
-                null, callback, state, duration, repeating, cancellationToken, _logicalNow[axis]);
+                null, callback, state, duration, repeating, cancellationToken, _logicalNow[axis],
+                _axisPass[axis]);
 
             _tickers[axis].RequestTier(SelectTier(duration));
             return handle;
@@ -286,7 +291,14 @@ namespace XFramework.XTimer
             _logicalNow[axis] += deltaTime;
             double now = _logicalNow[axis];
 
+            if (advancePass)
+                _axisPass[axis]++;
+
             double min = double.PositiveInfinity;
+
+            // 快照当前表数：本趟回调里新建的表在下方循环里仍会被扫到（用于折入最近截止），
+            // 但它不能再把趟号 +1——它已继承本轮趟号，否则新生槽位会被当成旧槽位（TMR-010）。
+            int tableCountAtStart = _allTables.Count;
 
             // 每轮重读 Count：回调里创建带状态定时器会新增一张表
             for (int i = 0; i < _allTables.Count; i++)
@@ -295,7 +307,8 @@ namespace XFramework.XTimer
                 if (table.Axis != axis)
                     continue;
 
-                double candidate = table.Sweep(now, advancePass);
+                bool advanceThisTable = advancePass && i < tableCountAtStart;
+                double candidate = table.Sweep(now, advanceThisTable);
                 if (candidate < min)
                     min = candidate;
             }
@@ -376,6 +389,9 @@ namespace XFramework.XTimer
                 return (TimerTable<TState>)existing;
 
             var table = new TimerTable<TState>(axis, NextTableId());
+            // 新表从所属轴当前趟号起算：否则表内第一趟扫尾会把「刚在回调里出生」的槽位当成旧槽位
+            //（新表 pass 从 0 起、扫尾时 +1），After(0f) 会在同一拍触发（TMR-010）。
+            table.InheritSweepPass(_axisPass[axis]);
             _stateTables.Add(key, table);
             _allTables.Add(table);
             return table;

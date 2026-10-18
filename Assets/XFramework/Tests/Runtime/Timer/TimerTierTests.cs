@@ -231,5 +231,39 @@ namespace XFramework.XTimer.Tests
         }
 
         #endregion
+
+        #region 回调内新建带状态定时器
+
+        private sealed class FreshState
+        {
+        }
+
+        /// <summary>
+        /// 全新 TState 的回调里建 <c>After(0f)</c>：新表在同一趟被扫到，若趟号从 0 起算并再 +1，
+        /// 新生槽位会被当成旧槽位、当场触发（TMR-010）。新表应继承所属轴当前趟号。
+        /// </summary>
+        [Test]
+        public void StatefulTimer_NewTableCreatedInsideSweep_DoesNotFireInSameBeat()
+        {
+            // 先让轴跑过几趟，确保「新表从 0 起算」的坑能显形（第一趟 0→1 恰好会碰巧对位）
+            var keepAlive = TimerManager.Every(60f, Noop);
+            _driver.Advance(5);
+
+            bool fired = false;
+            TimerManager.After(0f, () =>
+            {
+                TimerManager.After(0f, (FreshState _) => { fired = true; }, new FreshState());
+            });
+
+            _driver.Advance();
+            Assert.IsFalse(fired, "新表的新生槽位不得在同一拍触发（TMR-010）");
+
+            _driver.Advance();
+            Assert.IsTrue(fired, "下一拍应触发");
+
+            keepAlive.Dispose();
+        }
+
+        #endregion
     }
 }

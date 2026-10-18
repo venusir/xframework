@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading;
 using NUnit.Framework;
 using UnityEngine;
@@ -231,6 +233,41 @@ namespace XFramework.XTimer.Tests
             Assert.AreEqual(0, TimerManager.ActiveCount);
             Assert.IsFalse(TimerManager.IsTickerRegistered(UpdateTimeMode.Scaled),
                 "被忽略的创建不该把驱动器拉起来");
+        }
+
+        #endregion
+
+        #region 泄漏告警与轴常量
+
+        /// <summary>
+        /// 泄漏告警看「已分配槽位」而不是「正在计时」：Stop 后忘记 Dispose 是主泄漏形态，
+        /// 此时 ActiveCount 已回到 0，只看它告警永远不会响（TMR-005）。
+        /// </summary>
+        [Test]
+        public void LeakWarning_FiresOnAllocatedSlots_EvenWhenStopped()
+        {
+            var handles = new List<TimerHandle>(1024);
+            for (int i = 0; i < 1023; i++)
+                handles.Add(TimerManager.After(60f, Noop));
+
+            for (int i = 0; i < handles.Count; i++)
+                TimerManager.Stop(handles[i]);
+
+            Assert.AreEqual(0, TimerManager.ActiveCount, "前提校验：已停的定时器不再计时");
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[Timer] 单个表上已分配的槽位已达 1024 个")));
+            handles.Add(TimerManager.After(60f, Noop));
+
+            Assert.AreEqual(1, TimerManager.ActiveCount,
+                "停表不释放槽位，只有第 1024 个在计时");
+        }
+
+        [Test]
+        public void AxisCount_MatchesUpdateTimeModeEnum()
+        {
+            Assert.AreEqual(Enum.GetValues(typeof(UpdateTimeMode)).Length, TimerCore.AxisCount,
+                "AxisCount 必须从 UpdateTimeMode 枚举派生，不能有第二份常量副本（TMR-009）");
         }
 
         #endregion
