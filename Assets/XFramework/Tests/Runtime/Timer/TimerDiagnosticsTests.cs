@@ -15,13 +15,13 @@ namespace XFramework.XTimer.Tests
         [SetUp]
         public void SetUp()
         {
-            TimerManager.CancelAll();
+            TimerTestKit.SetUp();
         }
 
         [TearDown]
         public void TearDown()
         {
-            TimerManager.CancelAll();
+            TimerTestKit.TearDown();
         }
 
         [Test]

@@ -118,17 +118,21 @@ namespace XFramework.XTimer.Tests
         [Test]
         public void TierRefinesAsTheDeadlineApproaches()
         {
-            TimerManager.After(5f, Noop);
+            var handle = TimerManager.After(5f, Noop);
             _driver.Advance(2);
 
             UpdateTier atStart = TimerManager.GetDispatchTier(UpdateTimeMode.Scaled);
             Assert.Greater((int)atStart, (int)UpdateTier.Tier0, "5 秒的定时器起步不该停在每帧档");
 
-            // 走到只剩 0.1 秒：剩下的余量已经不足 8 个 Tier5 周期，档位必须一路细下来
-            _driver.Advance(300);
+            // 走到只剩约 0.1 秒但**尚未触发**：292 帧 ≈ 4.87 秒（加前 2 帧 ≈ 4.9 秒）。
+            // 原断言走到 5 秒之后——那时定时器已触发并释放，档位回 Tier0 只是因为空闲（TMR-008）。
+            _driver.Advance(292);
 
+            Assert.IsTrue(handle.IsActive, "前提：定时器应尚未触发（否则档位回 Tier0 只是因为空闲）");
             Assert.AreEqual(UpdateTier.Tier0, TimerManager.GetDispatchTier(UpdateTimeMode.Scaled),
                 "临近截止时必须回到每帧档，否则触发会晚将近一整个粗档周期");
+
+            handle.Dispose();
         }
 
         /// <summary>

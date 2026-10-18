@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XUpdate;
@@ -127,12 +128,15 @@ namespace XFramework.XTimer.Tests
         [Test]
         public void Remaining_TracksTheDeadline()
         {
-            TimerHandle handle = TimerManager.After(1f, new Action(() => { }));
+            // TMR-008：用 0.1 秒（SelectTier 落 Tier0）而不是 1 秒（Tier2）——逐帧递减的前提是每帧
+            // 都派发；原断言按 Tier0 算、实际 Tier2，靠 0.03 容差盖住了差异。
+            TimerHandle handle = TimerManager.After(0.1f, new Action(() => { }));
 
-            _driver.Advance(10); // 第 1 帧只定锚，其后 9 帧各推进 1/60 秒
+            _driver.Advance(4); // 第 1 帧只定锚，其后 3 帧各推进 1/60 秒
 
-            Assert.AreEqual(1f - 9f / 60f, handle.Remaining, 0.03f,
-                "剩余量随逻辑时钟递减——这就是冷却读条的分母");
+            Assert.IsTrue(handle.IsActive, "前提：尚未到期");
+            Assert.AreEqual(0.1f - 3f / 60f, handle.Remaining, 1e-4f,
+                "剩余量随逻辑时钟逐帧递减——这就是冷却读条的分母");
 
             handle.Dispose();
         }
@@ -144,6 +148,46 @@ namespace XFramework.XTimer.Tests
             _driver.Advance(60); // 早已经触发，槽位也已释放
 
             Assert.AreEqual(0f, handle.Remaining);
+        }
+
+        #endregion
+
+        #region 带状态重载（TMR-008）
+
+        private sealed class StateProbe
+        {
+        }
+
+        [Test]
+        public void AfterWithState_DeliversTheSameStateInstance()
+        {
+            // TMR-008：After<TState> 的状态投递此前零断言
+            var state = new StateProbe();
+            StateProbe received = null;
+
+            TimerManager.After(0.05f, s => received = s, state);
+
+            _driver.Advance(4);
+
+            Assert.AreSame(state, received, "After<TState> 必须把创建时的状态原样交给回调");
+        }
+
+        [Test]
+        public void EveryWithState_DeliversTheSameStateInstanceEveryTick()
+        {
+            // TMR-008：Every<TState> 每次触发都必须投递同一状态实例
+            var state = new StateProbe();
+            var received = new List<StateProbe>();
+
+            var handle = TimerManager.Every(0.05f, s => received.Add(s), state);
+
+            _driver.Advance(8); // ≈ 0.117 秒：0.05 间隔至少触发两次
+
+            Assert.GreaterOrEqual(received.Count, 2, "前提：重复定时器应触发多次");
+            for (int i = 0; i < received.Count; i++)
+                Assert.AreSame(state, received[i], "Every<TState> 每次都必须投递同一状态实例");
+
+            handle.Dispose();
         }
 
         #endregion

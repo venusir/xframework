@@ -81,6 +81,33 @@ namespace XFramework.XTimer.Tests
             handle.Dispose();
         }
 
+        /// <summary>
+        /// TMR-008：核心换代（<see cref="TimerManager.AutoInit"/> 的会话复位）必须让旧句柄立刻失效，
+        /// 新核心照常工作。既有用例用的是合成句柄，没有真正走过换代。
+        /// </summary>
+        [Test]
+        public void AutoInit_ReplacesTheCore_OldHandleGoesStale()
+        {
+            bool oldFired = false;
+            var oldHandle = TimerManager.After(1f, () => oldFired = true);
+            Assert.IsTrue(oldHandle.IsActive);
+
+            TimerManager.AutoInit(); // 会话边界：整个换掉核心
+
+            Assert.IsFalse(oldHandle.IsActive, "核心换代后旧句柄必须失效");
+            Assert.AreEqual(0f, oldHandle.Remaining);
+            Assert.IsFalse(oldHandle.Stop());
+            Assert.DoesNotThrow(() => oldHandle.Dispose());
+
+            bool newFired = false;
+            var fresh = TimerManager.After(0.05f, () => newFired = true);
+            _driver.Advance(4);
+
+            Assert.IsTrue(newFired, "换代后的新核心应照常工作");
+            Assert.IsFalse(oldFired, "旧核心的定时器不得在新的会话里触发");
+            fresh.Dispose();
+        }
+
         #endregion
 
         #region 停止 / 重开 / 释放
