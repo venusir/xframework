@@ -1,7 +1,9 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
 
@@ -129,7 +131,10 @@ namespace XFramework.XUI.Tests
 
             _factory.ThrowOnRelease = true;   // 让回池这一步失败，模拟 Dispose 中途抛异常
 
-            Assert.Throws<InvalidOperationException>(() => UIManager.Destroy());
+            // UI-C-010：回池循环逐面板隔离——失败记 Error 后继续，不再让 Destroy 整体抛出。
+            LogAssert.Expect(LogType.Error,
+                new Regex(Regex.Escape("回池面板 FakePanel 时抛出异常")));
+            Assert.DoesNotThrow(() => UIManager.Destroy());
 
             Assert.IsFalse(UIManager.IsInitialized,
                 "Dispose 抛异常也必须复位状态，否则门面停在半死状态");
