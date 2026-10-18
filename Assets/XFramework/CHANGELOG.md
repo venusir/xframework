@@ -227,6 +227,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   加载结果，先醒者重入 `Unload<T>()` 不再影响后续等待者（CONF-009/010）。
 - **`ConfigTable<T>` 的 null 参数改抛 `ArgumentNullException`**（CONF-011）：构造函数与 `BuildIndex` 的
   `indexName` / `keySelector` 为 null 时，不再以 `NullReferenceException` 或 `Dictionary` 的裸 ANE 收场。
+- **`LocalizationManager.Destroy` 不再向调用方抛第三方 `Dispose` 的异常**（LOC-005）：异常记一条
+  `[LocalizationManager]` Error，门面状态仍复位——`Bootstrap.Shutdown` 不会被一个清理失败的实现中断。
+- **语言加载的过期续体会被丢弃**（LOC-004）：`SwitchLanguageAsync` 在 `await` 期间若实例被 `SetInstance` /
+  `Destroy` 换掉，本次切换不生效（不写新实例、不抛异常），只记一条 Warning。
 
 ### Fixed
 
@@ -630,6 +634,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   （构造期快照）与 `Get` / `TryGet` / `Contains`（实时字典）脱钩。修法：null 字典 / null selector /
   null 索引名改抛 `ArgumentNullException`；XML 与 README 写明 `Data` 的只读契约。回归：
   `ConfigTableTests` 三条（改前分别 `NullReferenceException` 与 `Expected: "indexName" But was: "key"`）。
+
+#### Localization
+
+- **`Destroy` 无 try/finally、在途语言加载经静态门面写回（LOC-004/005）**：第三方 `Dispose` 抛异常后
+  `_instanceInitialized` 仍为 true——`Initialize` 永久早退、调用打到半销毁实例，并中断 `Bootstrap.Shutdown`
+  的逆序清理；`SwitchLanguageAsync` 的续体在 `await` 后经静态门面写入，加载期间 `SetInstance` 会把旧配置
+  注入新实例、`Destroy` 会让续体抛「尚未初始化」。修法：`Destroy` catch + `LogManager.Exception` + finally
+  复位；门面加实例代次（Initialize / SetInstance 引用变化 / Destroy / 会话复位），loader 捕获发起时实例 +
+  代次，`await` 后先查代次再解析，过期则 Warning + 丢弃。回归：`LanguageAssetLoaderTests` 两条 +
+  `LocalizationManagerTests` 一条（改前分别 `Expected: False But was: True`、`InvalidOperationException:
+  尚未初始化`、`Dispose boom`）。
 
 #### Asset（场景加载）
 

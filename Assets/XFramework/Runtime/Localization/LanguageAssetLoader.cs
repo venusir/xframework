@@ -5,6 +5,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XLog;
 
 namespace XFramework.XLocalization
 {
@@ -51,14 +52,19 @@ namespace XFramework.XLocalization
         /// <summary>
         /// 执行语言切换。目标语言已在缓存中则直接切换(跳过加载);否则经 <see cref="AssetManager"/>
         /// 加载目标语言 JSON → 解析 → 注入缓存并同步切换。
+        /// <para>续体绑定**发起时**的实例与代次：加载期间门面被 <c>SetInstance</c> / <c>Destroy</c>
+        /// 换掉时丢弃本次结果，不向新实例写回旧配置（LOC-004）。</para>
         /// <para>注:AssetManager 底层(YooAssetManagerImpl)已在加载失败时统一记录 Debug.LogError。</para>
         /// </summary>
         public async UniTask LoadAsync(CancellationToken cancellationToken)
         {
+            // 捕获发起时实例与代次：await 之后不得经静态门面写回（可能已换实例/已销毁）
+            var manager = LocalizationManager.CaptureForOperation(out var generation);
+
             // 已在缓存中则直接切换,跳过加载
-            if (LocalizationManager.HasLanguage(_targetLanguage))
+            if (manager.HasLanguage(_targetLanguage))
             {
-                LocalizationManager.SetLanguage(_targetLanguage);
+                manager.SetLanguage(_targetLanguage);
                 return;
             }
 
@@ -66,6 +72,15 @@ namespace XFramework.XLocalization
             var assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
             var json = await LoadTextFunc(assetLocation, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+
+            // 过期续体：先于解析判断，避免把过期数据报成格式错误
+            if (!LocalizationManager.IsCurrentForOperation(manager, generation))
+            {
+                LogManager.Warning(LogCategories.LocalizationManager,
+                    "Discarding language load for '{0}': the manager was replaced or destroyed while loading.",
+                    _targetLanguage);
+                return;
+            }
 
             // 解析 JSON
             var data = ParseJson(json);
@@ -75,9 +90,9 @@ namespace XFramework.XLocalization
                     $"[LanguageAssetLoader] Parsed empty language data for '{_targetLanguage}'.");
             }
 
-            // 注入缓存并同步切换
-            LocalizationManager.SetLanguageData(_targetLanguage, data);
-            LocalizationManager.SetLanguage(_targetLanguage);
+            // 注入缓存并同步切换（用捕获的实例，不经静态门面）
+            manager.SetLanguageData(_targetLanguage, data);
+            manager.SetLanguage(_targetLanguage);
         }
 
         #endregion

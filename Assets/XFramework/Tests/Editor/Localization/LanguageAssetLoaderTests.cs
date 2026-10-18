@@ -148,5 +148,45 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.IsTrue(cancelled, "取消应经 OperationCanceledException 传播");
             Assert.AreEqual("en", LocalizationManager.CurrentLanguage, "取消不得切换语言");
         }
+
+        [Test]
+        public void LoadAsync_InstanceReplacedDuringLoad_DropsStaleData()
+        {
+            // LOC-004：续体经静态门面写回时，加载期间 SetInstance 会把旧配置注入新实例。
+            var loader = new LanguageAssetLoader("ja", Template);
+            var gate = new UniTaskCompletionSource<string>();
+            loader.LoadTextFunc = (location, ct) => gate.Task;
+
+            var task = loader.LoadAsync(default);
+
+            var replacement = new LocalizationManagerImpl();
+            replacement.InitWithDefault("en", new Dictionary<string, string> { { "seed", "new" } });
+            LocalizationManager.SetInstance(replacement);
+
+            gate.TrySetResult(JsonContent);
+            task.GetAwaiter().GetResult();
+
+            Assert.IsFalse(replacement.HasLanguage("ja"), "过期续体不得把旧配置注入新实例");
+            Assert.AreEqual("en", replacement.CurrentLanguage, "过期续体不得切换新实例的语言");
+        }
+
+        [Test]
+        public void LoadAsync_DestroyedDuringLoad_CompletesWithoutWriting()
+        {
+            // LOC-004：加载期间 Destroy 会让续体抛「尚未初始化」；应安静丢弃并保持可重新初始化。
+            var loader = new LanguageAssetLoader("ja", Template);
+            var gate = new UniTaskCompletionSource<string>();
+            loader.LoadTextFunc = (location, ct) => gate.Task;
+
+            var task = loader.LoadAsync(default);
+            LocalizationManager.Destroy();
+
+            gate.TrySetResult(JsonContent);
+            Assert.DoesNotThrow(() => task.GetAwaiter().GetResult(), "销毁后过期续体应安静丢弃");
+            Assert.IsFalse(LocalizationManager.IsInitialized);
+
+            LocalizationManager.Initialize("en", new Dictionary<string, string> { { "seed", "again" } });
+            Assert.IsFalse(LocalizationManager.HasLanguage("ja"), "过期续体不得写回新会话实例");
+        }
     }
 }

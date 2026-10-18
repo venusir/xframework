@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XLocalization;
 
 namespace Venusy609.Xframework.Editor.Tests
@@ -426,6 +429,50 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.AreSame(LocalizationManager.Get("ui_x"), LocalizationManager.Get("ui_x"),
                 "两类都摘干净后应回到零分配快路径（原样返回缓存里那个实例）");
+        }
+
+        #endregion
+
+        #region 生命周期（LOC-005）
+
+        [Test]
+        public void Destroy_DisposeThrows_StateResetsAndCanInitializeAgain()
+        {
+            // 第三方 impl 的 Dispose 抛异常时，Destroy 不得把门面留在「已初始化」状态：
+            // 否则 Initialize 永久早退、调用打到半销毁实例，并中断 Bootstrap.Shutdown 的逆序清理。
+            LocalizationManager.Destroy(); // 清掉 SetUp 的正常实例
+            LocalizationManager.SetInstance(new ThrowingDisposeManager());
+
+            LogAssert.Expect(LogType.Error, new Regex("Dispose"));
+            Assert.DoesNotThrow(() => LocalizationManager.Destroy());
+
+            Assert.IsFalse(LocalizationManager.IsInitialized, "Dispose 抛异常后仍必须复位门面状态");
+
+            Assert.DoesNotThrow(() => LocalizationManager.Initialize(
+                "en", new Dictionary<string, string> { { "k", "v" } }));
+            Assert.IsTrue(LocalizationManager.IsInitialized, "状态复位后应能重新初始化");
+        }
+
+        /// <summary>Dispose 必抛的假实现：只覆盖 LOC-005 需要的生命周期面。</summary>
+        private sealed class ThrowingDisposeManager : ILocalizationManager
+        {
+            public string CurrentLanguage => "en";
+            public string FallbackLanguage { get; set; } = "en";
+            public string LanguageAssetPath { get; set; }
+
+            public void SetLanguageData(string lang, Dictionary<string, string> data) { }
+            public void SetLanguage(string lang) { }
+            public bool HasLanguage(string lang) => false;
+            public string Get(string key) => key;
+            public string GetFormat(string key, params object[] args) => key;
+            public bool ContainsKey(string key) => false;
+            public void SetPlaceholder(string key, string value) { }
+            public void SetPlaceholderFromKey(string key, string localizationKey) { }
+            public void RemovePlaceholder(string key) { }
+            public void ClearPlaceholders() { }
+            public bool HasPlaceholder(string key) => false;
+
+            public void Dispose() => throw new InvalidOperationException("Dispose boom");
         }
 
         #endregion

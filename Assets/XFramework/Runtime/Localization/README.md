@@ -367,7 +367,9 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 知道边界比以为没有边界安全。以下都是刻意的取舍、跨模块的能力缺口或行为变更，**不是待修的缺陷**：
 
-- **并发切换语言是「后完成者胜」，不是「后请求者胜」。** `SwitchLanguageAsync` 没有在途去重、没有代次作废：快速连点 EN → JA → KO 时，若 JA 的资源加载最慢，最终生效的是 JA。要严格按最后一次选择收口，调用方得自己串行化（前一次 `await` 完再发下一次，或取消上一次的令牌）。
+- **并发切换语言是「后完成者胜」，不是「后请求者胜」。** `SwitchLanguageAsync` 没有在途去重、没有请求代次作废：快速连点 EN → JA → KO 时，若 JA 的资源加载最慢，最终生效的是 JA。要严格按最后一次选择收口，调用方得自己串行化（前一次 `await` 完再发下一次，或取消上一次的令牌）。**注意区分两种「代次」**：门面只做**实例代次**（`SetInstance` / `Destroy` / 会话复位会让在途续体失效，见下一条），**不做**同一实例内的请求代次——后者仍是后完成者胜。
+- **加载期间实例被替换/销毁时，本次切换被丢弃。** `SwitchLanguageAsync` 的续体绑定**发起时**的实例与代次；期间若 `SetInstance` 或 `Destroy`，不向新实例写回旧语言数据、不切语言、不抛异常，只记一条 `[LocalizationManager]` Warning。**直接对 `ILocalizationManager` 实例调 `Dispose()` 不经过门面，这条守卫拦不住**——销毁请走 `LocalizationManager.Destroy()`。
+- **`Destroy` 会在第三方 `Dispose` 抛异常时记录并复位状态。** 异常记一条 `[LocalizationManager]` Error，`_instance` 与 `_instanceInitialized` 仍复位，门面可再次 `Initialize`——这保证 `Bootstrap.Shutdown` 的逆序清理不会被一个清理失败的实现中断。
 - **`SetLanguageData` 覆盖「当前语言」的数据时不会发通知。** 查询面立刻变了（`Get` 返回新文本），事件面没有变化（`LanguageChangedMessage` 只在 `SetLanguage` 真的换了语言时发）——已订阅刷新的 UI 会继续显示旧文本。运行时热更语言表要自己再触发一次刷新。
 - **注入的 `Dictionary` 按引用持有，不拷贝。** `Initialize` / `SetLanguageData` / `LocalizationBootstrapStage` 的构造参数都是如此——注入即视为移交所有权，事后改这个字典会直接改到已加载的语言表。
 - **键值占位符的值若含 `{0}`，`GetFormat` 会把它当格式项消费掉。** 替换发生在 `string.Format` 之前，所以一条表项写作 `"ui_tip": "确认({0})"`、又被 `SetPlaceholderFromKey` 引进来时，`{0}` 会被调用方传的实参填上。这条今天就存在（字面量占位符同理），键值占位符只是把暴露面略微放大：值来自语言表，而表是译者/工具产出的。要显示字面量花括号就写 `{{0}}`。
@@ -376,7 +378,7 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **全局占位符的值不随语言切换刷新。** 它是语言无关的一张表：值**来自语言表**时（`SetPlaceholder("Guild", Get("guild_legendary"))`），切换语言后模板更新了、嵌进去的值还是旧的——**没有异常、没有日志**，症状是「英文句子里嵌着中文称号」。与「`SetLanguageData` 覆盖当前语言数据不发通知」同族：查询面变了、事件面没有。需要跟随时走 `Get` + `GetFormat`，见「快速使用」§7 的判定线。
 - **`GetFormat` 的数字 / 日期格式跟随设备文化，不跟随 `CurrentLanguage`。** 它用的是默认 `string.Format` 重载 → `CultureInfo.CurrentCulture`：德语设备上跑英文界面会得到 `1,5` 而不是 `1.5`。**如实标为「观察到的边界，不是缺陷」**——数字格式跟随设备文化本身是有争议但常见的选择，而本模块没有文化概念，也没有带 `IFormatProvider` 的重载。要有确定行为请自行格式化后当参数传入。
 - **`MaxCachedLanguages = 4` 是自定值**，无对标物（Unity Localization 不做 LRU，它靠 Addressables 的引用计数与 `Release`）。且「4」里真正可淘汰的只有 2 个，见「内部机制」的「LRU 缓存」。
-- **语言表的「加载路径」换不掉**：`LanguageAssetLoader` 是内部类型，而 `SwitchLanguageAsync` 是**门面方法**——它直接 `new LanguageAssetLoader(lang, path)` 走 `AssetManager.LoadAsync`，**不经过 `ILocalizationManager`**。所以「换数据源」的三条实际出路是：① 改 `LanguageAssetPath` 让它指向别的**资源**；② 自己加载后经 `SetLanguageData` 灌进来（再 `SetLanguage`）；③ 自己实现一套异步切换流程。**替换 `ILocalizationManager` 本身不会改变这条加载路径**。
+- **语言表的「加载路径」换不掉**：`LanguageAssetLoader` 是内部类型，而 `SwitchLanguageAsync` 是**门面方法**——它直接 `new LanguageAssetLoader(lang, path)` 走 `AssetManager.LoadAsync`；缓存写入绑定**发起时的实例**（经 `ILocalizationManager`），但**加载动作本身不经过接口**（接口没有加载能力）。所以「换数据源」的三条实际出路是：① 改 `LanguageAssetPath` 让它指向别的**资源**；② 自己加载后经 `SetLanguageData` 灌进来（再 `SetLanguage`）；③ 自己实现一套异步切换流程。**替换 `ILocalizationManager` 本身不会改变这条加载路径**。
 
 ## 设计取舍
 
@@ -384,7 +386,7 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **缺键返回键本身，不抛也不记日志。** 与 .NET `ResourceManager` 一致（缺资源返回资源名），也是行业默认。好处是缺表时 UI 显示的是可搜索的 key 而不是空白；代价是「表漏了一条」在运行期没有信号——要检测就用 `ContainsKey`，或在导出侧校验。
 - **不给 `ILocalizationManager` 加 `IsInitialized`。** 接口加成员对第三方实现是**源码破坏**（先例：`IPoolable` 不为新能力加成员），而门面的 `IsInitialized` 已经够用。代价是门面那个属性的语义是「**已经装了实例**」，不是「实例已装好数据」——`SetInstance` 传一个未初始化的实现进去，它照样返回 `true`（此时取值按「找不到」处理，返回键本身）。
 - **`SetInstance` 不 Dispose 被替换掉的旧实例。** 本 impl 的 `Dispose` 不做任何非托管释放（只清集合、置空引用），旧实例被替换后交给 GC 回收等价；硬做反而会给「临时换实现」的场景埋雷。
-- **不做并发切换的代次作废。** 要引入状态与一个作废窗口，而「后完成者胜」在多数使用方那里已被 UI 交互天然串行化。已记为已知限制，处置记在该模块的维护向记录里。
+- **不做并发切换的请求代次作废。** 要引入状态与一个作废窗口，而「后完成者胜」在多数使用方那里已被 UI 交互天然串行化。已记为已知限制，处置记在该模块的维护向记录里。**实例代次是另一条线**（`SetInstance` / `Destroy` / 会话复位使在途续体失效），它只防跨实例写回，不改变同一实例内的后完成者胜。
 - **占位符替换没走 `StringBuilderPool`。** 分配只发生在「注册了占位符且文本含 `{`」时，而典型热路径 `GetFormat` 本来就要走 `string.Format`（必然分配）；频度未实测，而全仓目前**零使用先例**，引它会新增 Localization → XPool 的跨模块依赖。先记为已知限制。
 - **不做 `SetPlaceholder(string lang, string key, string value)`（按语言各存一份字面值）。** 四条理由：① 与语言表机制重复——需要翻译的值本来就该在表里；② 调用方要按每种语言各注册一次，漏一种就是一个缺口；③ 新加载一种语言时不会自动有值；④ 它会把更好的那条路（**值指向一条表项**）堵死。
   对标物给的就是后者：Unity Localization 1.0.0 让 `LocalizedString` 本身可作变量（"When accessed in a Smart String this gives access to the **translated value**"），由替换发生的当下解析——变量仍是语言无关的一个引用，翻译发生在替换时。

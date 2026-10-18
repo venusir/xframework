@@ -24,6 +24,12 @@ namespace XFramework.XLocalization
         private static bool _instanceInitialized;
 
         /// <summary>
+        /// 实例代次：Initialize / SetInstance（引用变化）/ Destroy / 会话复位时自增。
+        /// 在途加载的续体用「实例 + 代次」判断自己是否仍属于当前实例（LOC-004）。
+        /// </summary>
+        private static int _generation;
+
+        /// <summary>
         /// 全局本地化管理器是否已初始化。
         /// </summary>
         public static bool IsInitialized => _instanceInitialized && _instance != null;
@@ -48,6 +54,7 @@ namespace XFramework.XLocalization
 
             _instance = impl;
             _instanceInitialized = true;
+            _generation++;
         }
 
         /// <summary>
@@ -56,7 +63,11 @@ namespace XFramework.XLocalization
         /// </summary>
         public static void SetInstance(ILocalizationManager manager)
         {
-            _instance = manager ?? throw new ArgumentNullException(nameof(manager));
+            if (manager == null) throw new ArgumentNullException(nameof(manager));
+            // 同一实例重复注入不算「换了实例」：在途加载的实例守卫应继续有效。
+            if (!ReferenceEquals(_instance, manager))
+                _generation++;
+            _instance = manager;
             _instanceInitialized = true;
         }
 
@@ -65,12 +76,23 @@ namespace XFramework.XLocalization
         /// </summary>
         public static void Destroy()
         {
-            if (_instance != null)
+            try
             {
-                _instance.Dispose();
-                _instance = null;
+                _instance?.Dispose();
             }
-            _instanceInitialized = false;
+            catch (Exception ex)
+            {
+                // 第三方 Dispose 抛异常不得把门面留在半销毁态（Initialize 会永久早退），
+                // 也不得中断 Bootstrap.Shutdown 的逆序清理——记录后由 finally 复位状态（LOC-005）。
+                LogManager.Exception(LogCategories.LocalizationManager, ex,
+                    "Dispose threw during Destroy; state was reset.");
+            }
+            finally
+            {
+                _instance = null;
+                _instanceInitialized = false;
+                _generation++;
+            }
         }
 
         /// <summary>
@@ -87,6 +109,7 @@ namespace XFramework.XLocalization
         {
             _instance = null;
             _instanceInitialized = false;
+            _generation++;
         }
 
         #endregion
@@ -175,6 +198,9 @@ namespace XFramework.XLocalization
         /// <para>内部自动使用 <see cref="LanguageAssetPath"/> 拼接资产地址，通过 <see cref="XAsset.AssetManager.LoadAsync{T}(string, CancellationToken)"/> 加载 JSON 文件。</para>
         /// <para>已在缓存中的语言会直接同步切换，无需异步加载。</para>
         /// <para>支持 <paramref name="cancellationToken"/> 取消正在进行的加载任务。</para>
+        /// <para><b>实例被替换/销毁时丢弃续体</b>：加载期间若调用 <see cref="SetInstance"/> / <see cref="Destroy"/>，
+        /// 本次切换不会生效（不向新实例写回旧数据、不抛异常），并记一条 Warning。同一实例内的并发切换
+        /// 仍是「后完成者胜」。</para>
         /// </summary>
         /// <param name="lang">目标语言标识，如 <c>"ja"</c>, <c>"en"</c></param>
         /// <param name="cancellationToken">取消令牌</param>
@@ -337,6 +363,26 @@ namespace XFramework.XLocalization
             if (!_instanceInitialized || _instance == null)
                 throw new InvalidOperationException(
                     "[LocalizationManager] LocalizationManager 尚未初始化。请登记 LocalizationBootstrapStage，或调用 LocalizationManager.Initialize(lang, data) 完成初始化。");
+        }
+
+        /// <summary>
+        /// 捕获发起操作的实例与代次（LOC-004）。加载续体在 <c>await</c> 之后用
+        /// <see cref="IsCurrentForOperation"/> 判断是否仍属于当前实例。
+        /// </summary>
+        internal static ILocalizationManager CaptureForOperation(out int generation)
+        {
+            EnsureGlobalInitialized();
+            generation = _generation;
+            return _instance;
+        }
+
+        /// <summary>
+        /// 实例与代次是否仍是发起时的那个。实例被 <see cref="SetInstance"/> 替换、
+        /// 被 <see cref="Destroy"/> 销毁或会话复位后返回 <c>false</c>，续体应丢弃结果。
+        /// </summary>
+        internal static bool IsCurrentForOperation(ILocalizationManager instance, int generation)
+        {
+            return _generation == generation && ReferenceEquals(_instance, instance);
         }
 
         #endregion
