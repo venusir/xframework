@@ -176,6 +176,18 @@ namespace XFramework.XSettings.Tests
             Assert.Throws<ObjectDisposedException>(() => manager.Observe(_ => { }));
         }
 
+        [Test]
+        public void Dispose_ThenMigratorValidatorAccess_Throws()
+        {
+            var manager = CreateManager(new FakeStore());
+            manager.Dispose();
+
+            Assert.Throws<ObjectDisposedException>(() => { _ = manager.Migrator; });
+            Assert.Throws<ObjectDisposedException>(() => manager.Migrator = null);
+            Assert.Throws<ObjectDisposedException>(() => { _ = manager.Validator; });
+            Assert.Throws<ObjectDisposedException>(() => manager.Validator = null);
+        }
+
         #endregion
     }
 }

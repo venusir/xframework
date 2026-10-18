@@ -394,6 +394,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`TryWriteValue` 在派发后重读 `Value`（SET-006）**：订阅者在写入派发中销毁管理器时，重读会抛异常
   并穿过 UI 事件。修法：`actual` 直接回传写入值（Settings 的 setter 不做规范化）。回归：
   `SettingRefTests.Ref_TryWriteValue_SubscriberDisposesManager_DoesNotThrow`（改前 `Expected: No Exception to be thrown`）。
+- **`Migrator` / `Validator` 释放后仍可读写（SET-007）**：`Dispose` 的契约是「之后所有成员抛 ODE」，
+  两个自动属性仍照常读写。修法：改为带 `ThrowIfDisposed` 的显式属性。回归：
+  `SettingsManagerLifecycleTests.Dispose_ThenMigratorValidatorAccess_Throws`。
+- **在飞 `SaveAsync` / `LoadAsync` 不感知 `Dispose`（SET-008）**：`await` 期间释放管理器，续体仍会提交
+  保存计数、替换设置并广播。修法：`SwitchToMainThread` 之后补 `ThrowIfDisposed`。回归：
+  `SettingsAsyncTests.SaveAsync_DisposeDuringAwait_ThrowsObjectDisposed` /
+  `LoadAsync_DisposeDuringAwait_ThrowsObjectDisposed`（Save 改前 `Expected: True But was: False`）。
 
 #### Message
 

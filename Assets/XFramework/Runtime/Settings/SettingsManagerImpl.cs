@@ -248,15 +248,43 @@ namespace XFramework.XSettings
 
         #region Migration
 
+        private ISettingsMigrator<T> _migrator;
+
         /// <inheritdoc />
-        public ISettingsMigrator<T> Migrator { get; set; }
+        public ISettingsMigrator<T> Migrator
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return _migrator;
+            }
+            set
+            {
+                ThrowIfDisposed();
+                _migrator = value;
+            }
+        }
 
         #endregion
 
         #region Validation
 
+        private ISettingsValidator<T> _validator;
+
         /// <inheritdoc />
-        public ISettingsValidator<T> Validator { get; set; }
+        public ISettingsValidator<T> Validator
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return _validator;
+            }
+            set
+            {
+                ThrowIfDisposed();
+                _validator = value;
+            }
+        }
 
         #endregion
 
@@ -369,6 +397,9 @@ namespace XFramework.XSettings
             // 使调用方 await 之后可以安全访问 Unity API
             await UniTask.SwitchToMainThread(cancellationToken);
 
+            // await 期间可能已被释放（SET-008）：不得在释放后提交保存计数
+            ThrowIfDisposed();
+
             // 提交成功的是快照那一刻的内容;期间若有新改动,_changeCount 已增长,仍是脏的
             _savedCount = snapshot;
         }
@@ -398,6 +429,10 @@ namespace XFramework.XSettings
 
             // 替换与通知必须在主线程:Notify 会经 MessageManager 广播,订阅者通常随即访问 Unity API
             await UniTask.SwitchToMainThread(cancellationToken);
+
+            // await 期间可能已被释放（SET-008）：不得在释放后替换设置并广播
+            ThrowIfDisposed();
+
             _settings = loaded;
             _savedCount = _changeCount; // 内存此刻与持久层一致
             Notify();

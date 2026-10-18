@@ -109,6 +109,37 @@ namespace XFramework.XSettings.Tests
         private static SettingsManagerImpl<SampleSettings> CreateManager(ISettingsStore store)
             => new SettingsManagerImpl<SampleSettings>(store, () => new SampleSettings { Volume = 5 });
 
+        /// <summary>异步成员在闸门上等待，供「await 期间释放」用例精确控制时序。</summary>
+        private sealed class GatedAsyncStore : IAsyncSettingsStore
+        {
+            public readonly UniTaskCompletionSource Gate = new();
+            public object Data;
+            public bool HasData;
+
+            public bool Exists() => HasData;
+            public T Load<T>() where T : class, new() => Data as T ?? new T();
+            public void Save<T>(T settings) where T : class, new() { Data = settings; HasData = true; }
+            public void Delete() { }
+
+            public UniTask<bool> ExistsAsync(CancellationToken cancellationToken = default)
+                => UniTask.FromResult(HasData);
+
+            public async UniTask<T> LoadAsync<T>(CancellationToken cancellationToken = default)
+                where T : class, new()
+            {
+                await Gate.Task;
+                return Data as T ?? new T();
+            }
+
+            public async UniTask SaveAsync<T>(T settings, CancellationToken cancellationToken = default)
+                where T : class, new()
+            {
+                await Gate.Task;
+                Data = settings;
+                HasData = true;
+            }
+        }
+
         #endregion
 
         #region SaveAsync
@@ -151,6 +182,32 @@ namespace XFramework.XSettings.Tests
             Assert.Throws<ObjectDisposedException>(() => manager.SaveAsync());
         }
 
+        [Test]
+        public async Task SaveAsync_DisposeDuringAwait_ThrowsObjectDisposed()
+        {
+            var store = new GatedAsyncStore();
+            var manager = CreateManager(store);
+            manager.Settings.Volume = 42;
+
+            UniTask save = manager.SaveAsync();
+            await UniTask.Yield();
+            manager.Dispose();
+            store.Gate.TrySetResult();
+
+            bool threw = false;
+            try
+            {
+                await save;
+            }
+            catch (ObjectDisposedException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw,
+                "释放后在 await 窗口内完成的任务必须报 ObjectDisposedException，不得静默提交（SET-008）");
+        }
+
         #endregion
 
         #region LoadAsync
@@ -173,9 +230,33 @@ namespace XFramework.XSettings.Tests
         }
 
         [Test]
-        public async Task LoadAsync_AsyncStore_NoData_UsesDefaultFactory()
+        public async Task LoadAsync_DisposeDuringAwait_ThrowsObjectDisposed()
         {
-            var store = new AsyncStore { HasData = false };
+            var store = new GatedAsyncStore { HasData = true, Data = new SampleSettings { Volume = 99 } };
+            var manager = CreateManager(store);
+
+            UniTask load = manager.LoadAsync();
+            await UniTask.Yield();
+            manager.Dispose();
+            store.Gate.TrySetResult();
+
+            bool threw = false;
+            try
+            {
+                await load;
+            }
+            catch (ObjectDisposedException)
+            {
+                threw = true;
+            }
+
+            Assert.IsTrue(threw,
+                "释放后在 await 窗口内完成的任务必须报 ObjectDisposedException，不得替换设置并广播（SET-008）");
+        }
+
+        [Test]
+        public async Task LoadAsync_AsyncStore_NoData_UsesDefaultFactory()
+        {            var store = new AsyncStore { HasData = false };
             var manager = CreateManager(store);
             manager.Settings.Volume = 42;
 
