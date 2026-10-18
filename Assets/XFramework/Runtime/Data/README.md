@@ -299,6 +299,7 @@ SaveBootstrapStage (引导阶段，Phase=4)
 - **单块恢复（`ApplyBlockSnapshot`）与全量恢复同源**：恢复前先清空目标块，`OnClear` 之后若反序列化 / 迁移失败，该块停在「已清空」状态。`OnClear` 的调用点除 `RemoveBlock` / `ClearAll` / `ApplySnapshot` 外还有 `ApplyBlockSnapshot`（DATA-013）。
 - **`Shutdown()` 不触发任何块的 `OnClear`。** 它的语义是「注销门面持有的实现」，不是「清空数据」——需要释放块持有的资源（订阅、句柄等）请显式调 `ClearAll()` 或 `RemoveBlock<T>()`。
 - **`DataBlockSnapshot.format` 写入端目前恒为 `null`**（导出时只填 `DataSnapshot.defaultFormat`）。该字段保留是为了兼容将来「按块指定格式」；读取端在 `format` 为空时按 `defaultFormat` 回退，故这条不影响行为。
+- **脏集合载体（`DataSnapshot.dirtyBlockNames`）不在公开面上**（DATA-009）：`IDataManager` 的脏集合还原契约只有内置实现能完整兑现；第三方实现若需要同样的回滚语义，请用旁表记录脏块，并在 `CreateSnapshot` / `ApplySnapshot` 内自行维护。
 
 ## 设计原则
 

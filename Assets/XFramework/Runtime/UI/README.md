@@ -1321,6 +1321,9 @@ UIManager.ClearPreloads();
   **没有**做按 LRU 自动卸载——那是策略，应由项目决定何时调用。
 - **`Time.timeScale = 0` 会冻结整条 UI 每帧通路**（面板 `OnUpdate`、HUD 跟随、Tip 动画），因为驱动器挂在
   `UpdateManager` 的逻辑时间轴上。门面没有时间轴开关，逃生口与注意事项见「面板驱动更新」一节的警告框。
+- **手动 `UIManager.Update` 只驱动每帧档（Tier0）与 HUD**：分档面板（Tier1–7）由各自的档位驱动器驱动，
+  手动入口不覆盖它们；`Time.timeScale = 0` 时靠手动调用救不了分档面板。完整恢复路径见上一条与
+  UIA-002 的 `Initialize`/`SetInstance` 重注册。
 - **面板的排序与分层方案不可替换**：`UISorting` 是静态类，每次打开 / 关闭 / 置顶都会由 `RestampSortingOrders`
   按显示栈重排全部面板。`UILayers` 的五个值是**建议值**（你可以给自己的层号），但排序空间的形状
   （层步长 32、每层 31 个序号、层号上限 899）是**模块不变量**——它与遮罩排序、栈重排、回池复位共同依赖，

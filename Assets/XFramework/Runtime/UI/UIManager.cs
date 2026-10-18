@@ -747,7 +747,8 @@ namespace XFramework.XUI
         #region Public API — Update
 
         /// <summary>
-        /// 每帧更新。遍历所有 IsOpen 的面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>，并驱动 HUD 层。
+        /// 每帧更新。驱动<b>每帧档（Tier0）</b>的 `IsOpen` 面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>，并驱动 HUD 层；
+        /// <b>不覆盖 Tier1–7 面板</b>——它们由各自的档位驱动器驱动。
         /// <para><b>不需要自行调用</b>：<see cref="Initialize(Transform, IUIController)"/> 与
         /// <see cref="SetInstance"/> 都会把它注册进 <see cref="UpdateManager"/> 的统一调度
         /// （可被档位降频、可被 <see cref="UpdateManager.Pause"/> 统一暂停）。保留公开是因为测试与
@@ -755,8 +756,9 @@ namespace XFramework.XUI
         /// <para><b>手动调用会与驱动器叠加</b>：驱动器不会因为有人手动调用而让位，一次手动调用
         /// 加一次派发就是每帧驱动两遍（面板拿到两倍步进）。除测试与自定义驱动方外不要调用它。
         /// 需要「暂停期间仍更新 UI」的项目（逻辑时间轴被 <c>Time.timeScale = 0</c> 或
-        /// <see cref="UpdateManager.Pause"/> 冻住）可以改由自己每帧调本方法——那时要先把驱动器摘掉
-        /// （<see cref="Destroy"/>）或接受两倍步进。</para>
+        /// <see cref="UpdateManager.Pause"/> 冻住）可以改由自己每帧调本方法——那时要先用
+        /// <see cref="UpdateManager.Clear"/> 把驱动器摘掉（不要用 <see cref="Destroy"/>：销毁后门面未初始化，
+        /// 本方法会抛「尚未初始化」），或接受两倍步进。</para>
         /// <para><b>异常不外抛</b>：某个面板的 <c>OnUpdate</c> 抛异常只会让该面板停更（记一条
         /// <c>[UIManager]</c> 错误，其余面板 / HUD / Tip 照常），不会打断本方法的其余部分。</para>
         /// </summary>

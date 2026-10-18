@@ -463,6 +463,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   补 null 的 `<exception cref="ConfigException">`；`IConfigRow` 的三键示例改为真正的三键行类型（原示例仍是
   双键）；`ConfigLoadedInfo.ToString` 的示例改为实际输出形态；README 文件树的 `ConfigLoadHelper` 描述从
   「加载调度助手」改为「泛型委托缓存」。
+- **Pipeline / UI / File / Input / Data / Save / Update 边界补文档（2026-10-17，PIPE-005/006、UIA-004、FILE-004、INP-010/014、DATA-009、SAVE-006、UPD-002）**：
+  Pipeline 补「容器实例不可跨管线并发复用」「`Destroy` 不中断在途运行、`Status` 不保证恒为 Idle」；
+  UI 的 `Update` 改为「只驱动 Tier0 与 HUD」（`IUIManager` / 门面 / README 三处），手动逃生口改用
+  `UpdateManager.Clear()`（不再写 `Destroy`）；File 补原子写的 `.tmp` 残留与降级替换的短暂缺失窗口；
+  Input 补 `playerId > 0` 复合绑定只读首子项与同名动作歧义告警；Data 补脏集合载体不在公开面；
+  Save 补删除跨帧的读面窗口；Update 补 `Clear` 恒压过同窗口操作。
 - **Log 口径订正（2026-10-17，LOG-008 部分）**：`DroppedSinkCount` 补齐 `Flush` 抛异常也会摘除计数；
   `ILogManager.Shutdown` 不再说「实现随即不可用」——旧实现对象仍报告 `IsInitialized = true`，可用性以门面
   是否持有该引用为准；`LogOptions` 改为「每次构建实现时读取」（`Configure` 或懒建/自动初始化）；

@@ -210,7 +210,7 @@ Phase 90: [LocalizationBootstrapStage]────────┘
 - **写入线程契约**: 阶段经 `PipelineStageContext` 写入须与 `RunAsync` 调度同一上下文(Unity 主线程)——写入同步触发聚合与订阅者回调,整条链非线程安全;Editor 下越线程写入打 LogError 提示(Release 构建零开销)
 - **订阅者异常隔离**: 四个事件的订阅者抛出的异常记 `[Pipeline] {事件名} subscriber threw:` 后继续,不改变阶段状态与终局——订阅方(如 UI)的 bug 不会把无辜阶段打成 Failed,不会把完成/取消改报成失败,也不会让 `RunAsync` 抛出
 - **重入折叠与终局关闸**: 订阅者在广播里回写上下文(如 UI 反向驱动)不会递归——一次外部写入最多补一次聚合,**递归深度恒为 2**;终局广播与终局事件期间关闸,写入不再触发聚合,故**终局事件之后不会再收到进度广播**。折叠刻意不写成 while 排空:订阅者若在每次广播都回写,while 会死循环而不管它会栈溢出,宁可少广播一次
-- **终局从拉取面读**: `RunAsync` 在失败/取消时也「正常返回」,分不出结果——`IPipeline.Status`(`Idle`/`Running`/`Completed`/`Failed`/`Cancelled`)与 `FailureReason` 在运行结束后**保持终局值**(仅 `Destroy` 回落 `Idle`),且**落位先于终局事件**(订阅者在回调里即可读到)。`Bootstrap.RunAsync` 即据此把失败/取消转成异常。`FailureReason` 的格式为 `Failed: {最具体的名字}: {描述}`——容器取**首失败子阶段**的名字,直接挂到管线的阶段取自身名字(它上报过任务名时用任务名),因此调用方从拉取面或异常即可定位到失败阶段
+- **终局从拉取面读**: `RunAsync` 在失败/取消时也「正常返回」,分不出结果——`IPipeline.Status`(`Idle`/`Running`/`Completed`/`Failed`/`Cancelled`)与 `FailureReason` 在运行结束后**保持终局值**（`Destroy` 当刻回落 `Idle`；被放弃的在途运行结束时仍会写回终局状态，见「已知限制」），且**落位先于终局事件**(订阅者在回调里即可读到)。`Bootstrap.RunAsync` 即据此把失败/取消转成异常。`FailureReason` 的格式为 `Failed: {最具体的名字}: {描述}`——容器取**首失败子阶段**的名字,直接挂到管线的阶段取自身名字(它上报过任务名时用任务名),因此调用方从拉取面或异常即可定位到失败阶段
 
 ### 容器组合
 
@@ -286,6 +286,8 @@ Phase 90: [LocalizationBootstrapStage]────────┘
 - **相位号 0–89 由框架保留。** 自定义相位阶段的 `Phase` 请避开这一段（框架引导阶段已占 0 / 1 / 2 / 3 / 4 / 90），否则组间顺序会与预期不符。约定见「内置相位约定」。
 - **取消的生效范围由阶段决定。** 同步瞬时阶段没有取消窗口；要真正可中断，阶段必须把 `CancellationToken` 传进内层异步服务，且不得吞掉 `OperationCanceledException`。
 - **写入须与 `RunAsync` 同线程。** 阶段经 `PipelineStageContext` 写入会同步触发聚合与订阅者回调，整条链非线程安全；Editor 下越线程写入打 LogError（Release 零开销）。
+- **容器实例不可跨管线并发复用。** `ParallelStage` / `SequenceStage` 在实例字段上保存本轮的执行上下文与聚合器；顺序复用安全（每次 `ExecuteAsync` 都会重置），但同一实例同时参与两条管线（或重入）会串台。并发场景请为每条管线各建一个容器实例。
+- **`Destroy` 不中断在途运行，也不保证 `Status` 恒为 `Idle`。** `Destroy` 当刻把 `Status` 回落 `Idle` 并清空事件；被放弃的那次运行结束后仍会把终局状态写回拉取面（事件已清空、不再广播）。要真正停止请取消传给 `RunAsync` 的 token。
 
 ## 依赖
 

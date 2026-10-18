@@ -522,6 +522,11 @@ for (int i = 0; i < 3; i++)
   一面抛 `ArgumentNullException`，FILE-001）。
 - **加解密作用域默认覆盖所有域**：`SetCryptoProvider` 不传 `domain` 会连带加密 `AppData` / `Cache`；
   只想保护存档应显式传 `FileDomain.SaveData`。
+- **原子写在中途取消或失败时可能留下 `.tmp` 文件**（FILE-004）：`.tmp` 不属于正式文件、不会自动清理，
+  下一次原子写会覆盖同名临时文件；磁盘上残留 `.tmp` 可作为「上次写入被打断」的证据。
+- **`ReplaceFileAtomically` 的降级路径存在「正式文件短暂不存在」的窗口**（FILE-004）：Provider 不支持
+  原子替换时会退化为删除 + 移动，两步之间正式文件不可见。需要强一致的读取请避开正在写入的同一文件，
+  或在写入完成后重读。
 
 ## 设计取舍
 

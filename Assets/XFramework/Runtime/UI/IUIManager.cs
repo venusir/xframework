@@ -372,7 +372,8 @@ namespace XFramework.XUI
         #region Per-Frame Update
 
         /// <summary>
-        /// 每帧更新。内部遍历所有 IsOpen 的面板调用 <see cref="UIViewBase.OnUpdate(float, float)"/>。
+        /// 每帧更新。内部驱动<b>每帧档（Tier0）</b>的 `IsOpen` 面板与 HUD 层调用 <see cref="UIViewBase.OnUpdate(float, float)"/>；
+        /// <b>不覆盖 Tier1–7 面板</b>——它们由各自的档位驱动器驱动（见「已知限制」）。
         /// <para>借鉴 GameFramework UIFormLogic.OnUpdate 的设计，由管理器统一驱动而非每个面板独立 Update。</para>
         /// <para><b>调用方不需要自行驱动</b>：<see cref="UIManager.Initialize(Transform, XFramework.XUI.Controller.IUIController)"/>
         /// 与 <see cref="UIManager.SetInstance(IUIManager)"/> 都会把每帧驱动注册进

@@ -558,6 +558,11 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   `Bootstrap` 的静态登记表）是同一根因，本轮一并处置（清单见 `CHANGELOG`）。注意**重复 `Initialize()`
   的语义没有变**：会话内的重复调用仍是「告警 + 忽略」——复位发生在会话开始、任何 `Initialize` 之前，
   第二个会话走的是**首初始化**路径。
+- **`playerId > 0` 的复合绑定只读第一个子项**（INP-010）：对 D-pad / 2DVector 这类复合绑定，
+  按玩家读取会取到第一个子项（通常是 `ButtonControl`），`ReadVector2` 可能恒为零；`playerId == 0`
+  则是 action 级全设备读取。需要逐玩家读取复合轴请自行组合各子项，或把动作拆成独立的 1D 轴。
+- **同名动作跨已启用 map 时按资产顺序静默胜出**（INP-014）：缓存只按名字失效，无法区分同名动作的来源；
+  框架不做歧义解析，只在启用 map 时给出一次警告。请确保同一动作名只在一个已启用的 map 中定义。
 - **`Destroy()` 不退订本模块的订阅**：`Observe*` / `Subscribe` 订的是模块级的帧脉冲流与消息总线，
   `Destroy()` 只释放 Provider、注销帧驱动、复位帧号——**句柄归订阅方**。传了 `context` 的订阅由它的销毁
   令牌收口（见「线程契约」）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的

@@ -36,7 +36,9 @@ namespace XFramework.XPipeline
 
         /// <summary>
         /// 终局状态。运行结束后<b>保持</b>终局值(不回落 <see cref="PipelineStatus.Idle"/>),故可在
-        /// <see cref="RunAsync"/> 返回后直接读取——不必订阅终局事件再自己记账;仅 <see cref="Destroy"/> 回落 Idle。
+        /// <see cref="RunAsync"/> 返回后直接读取——不必订阅终局事件再自己记账;仅 <see cref="Destroy"/> 当刻回落 Idle。
+        /// <para>注意：`Destroy` <b>不中断在途运行</b>，被放弃的那次运行结束时仍会把它的终局状态写回
+        /// <see cref="Status"/>（此时事件已清空、不再广播）——所以「Destroy 之后 Status 恒为 Idle」不成立。</para>
         /// <para>落位先于终局事件:订阅者在事件回调里读到的已是本次结果。</para>
         /// </summary>
         PipelineStatus Status { get; }
@@ -81,9 +83,10 @@ namespace XFramework.XPipeline
         UniTask RunAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
-        /// 销毁管线:清空装配的阶段、事件订阅与终局状态(回落 <see cref="PipelineStatus.Idle"/>)。
+        /// 销毁管线:清空装配的阶段、事件订阅与终局状态(当刻回落 <see cref="PipelineStatus.Idle"/>)。
         /// <para>调用后不应再使用此实例。本方法<b>不中断在途运行</b>——运行中调用请先取消传给
-        /// <see cref="RunAsync"/> 的 token;被放弃的那次运行此后不再广播(其门铃已随运行结束关闭)。</para>
+        /// <see cref="RunAsync"/> 的 token;被放弃的那次运行此后不再广播(其门铃已随运行结束关闭)，
+        /// 但它结束时会再次写回终局 <see cref="Status"/>（事件已清空，只有拉取面可见）。</para>
         /// </summary>
         void Destroy();
     }
