@@ -243,16 +243,23 @@ namespace Venusy609.Xframework.Editor.Tests
         [Test]
         public void RegisteredActionCount_GrowsOncePerClosedGenericType()
         {
-            // 静态构造只在首次触碰某个闭合泛型时执行一次，重复 Get/Return 不应重复注册
+            // 静态构造只在首次触碰某个闭合泛型时执行一次，重复 Get/Return 不应重复注册。
+            // POOL-008：断言不能写死「before + 1」——同一会话重跑时静态构造已执行过，差值本就是 0。
+            // 不变量改为「至多 +1」且「重复触碰不再增长」。
             var before = CollectionPoolManager.RegisteredActionCount;
 
             var first = ListPool<RegistrationProbe>.Get();
             ListPool<RegistrationProbe>.Return(first);
+            var afterFirst = CollectionPoolManager.RegisteredActionCount;
+
             var second = ListPool<RegistrationProbe>.Get();
             ListPool<RegistrationProbe>.Return(second);
+            var afterSecond = CollectionPoolManager.RegisteredActionCount;
 
-            Assert.That(CollectionPoolManager.RegisteredActionCount, Is.EqualTo(before + 1),
-                "每个闭合泛型类型只注册一次 Clear 回调");
+            Assert.That(afterFirst - before, Is.LessThanOrEqualTo(1),
+                "每个闭合泛型类型至多注册一次 Clear 回调");
+            Assert.That(afterSecond, Is.EqualTo(afterFirst),
+                "重复 Get/Return 不应重复注册（重跑时差值应为 0）");
         }
 
         [Test]

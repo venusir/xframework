@@ -20,6 +20,8 @@ namespace XFramework.XPool.Tests
         [TearDown]
         public void TearDown()
         {
+            // POOL-008：只 ClearAll 会留下池实例本身，同一会话重跑时 PoolCount 断言会串扰
+            PoolManager.RemovePool<DiagnosticsItem>();
             PoolManager.ClearAll();
         }
 

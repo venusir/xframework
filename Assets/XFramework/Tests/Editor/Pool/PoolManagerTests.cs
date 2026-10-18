@@ -250,7 +250,9 @@ namespace Venusy609.Xframework.Editor.Tests
         public void Return_BaseTypedReference_WhenBasePoolExists_IsStillRejectedLoudly()
         {
             // 两边都有池时不做回落：否则从 Pool<BaseItem> 租出的实例会被改投进 Pool<DerivedItem>，
-            // 「报错拒绝」的响失败会变成静默丢件
+            // 「报错拒绝」的响失败会变成静默丢件。
+            // POOL-008：这条守卫是 Editor-only 诊断（Pool.Return 的 _activeSet 分支在 #if UNITY_EDITOR 内）；
+            // Player 构建里没有这层检查，拒收依赖调用方不跨池归还。
             var fromBase = PoolManager.Get<BaseItem>();
             var fromDerived = PoolManager.Get<DerivedItem>();
 

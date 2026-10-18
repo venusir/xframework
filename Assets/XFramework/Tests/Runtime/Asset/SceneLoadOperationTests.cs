@@ -353,12 +353,22 @@ namespace XFramework.XAsset.Tests
         public async Task Unload_HandleForAnotherScene_ReturnsFalse()
         {
             var handle = await LoadRealScene();
-            var other = new AssetSceneHandle(handle.Id, SceneManager.CreateScene("SceneLoadOperationTests_Other"));
+            var otherScene = SceneManager.CreateScene("SceneLoadOperationTests_Other");
+            try
+            {
+                var other = new AssetSceneHandle(handle.Id, otherScene);
 
-            var unloaded = await _manager.UnloadSceneAsync(other);
+                var unloaded = await _manager.UnloadSceneAsync(other);
 
-            Assert.IsFalse(unloaded, "Id 相同但场景不同的句柄必须被拒绝");
-            Assert.AreEqual(0, _operation.UnloadCount);
+                Assert.IsFalse(unloaded, "Id 相同但场景不同的句柄必须被拒绝");
+                Assert.AreEqual(0, _operation.UnloadCount);
+            }
+            finally
+            {
+                // SCN-006：第二个场景不是 _createdScene，TearDown 不会清它——用例自己收尾
+                var unloadOther = SceneManager.UnloadSceneAsync(otherScene);
+                if (unloadOther != null) await unloadOther.ToUniTask();
+            }
         }
 
         /// <summary>场景已被别人卸掉（例如 Single 模式切场景时 Unity 卸的旧场景）：登记项顺手清掉，不重放卸载。</summary>
