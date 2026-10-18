@@ -601,7 +601,9 @@ public enum ConfigFormat
 - **`BuildIndex` 只按 `indexName` 缓存**：同名换 `TIndex` 会抛 `InvalidCastException`（不是
   `ConfigException`）、换 selector 会**静默返回旧索引**。
 - **`GetAll()` 返回内部数组引用**（零 GC 的代价），请勿修改元素；`IConfigTable.Data` 以非泛型
-  `IDictionary` 暴露内部字典——那是「零反射注入路径」的代价。
+  `IDictionary` 暴露内部字典——那是「零反射注入路径」的代价。**两者都按只读对待**：`Data` 返回的是
+  可变引用，修改它会使 `Count` / `GetAll` / `BuildIndex`（构造期快照）与 `Get` / `TryGet` / `Contains`
+  （实时字典）互相脱钩。
 - **空表与键类型不匹配的处置不对称**：`JsonLoader` 允许空数组（注册一张空表），
   `ScriptableObjectLoader` 会抛；`ConfigTable` 的键类型不匹配在 `Get` 上抛、在 `TryGet` / `Contains`
   上只告警并返回 `false`。

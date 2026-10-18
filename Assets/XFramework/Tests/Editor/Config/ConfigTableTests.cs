@@ -78,6 +78,13 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void Constructor_NullDictionary_ThrowsArgumentNullException()
+        {
+            // CONF-011：null 字典此前在 dict.GetType() 处抛裸 NRE，参数防御应为 ArgumentNullException
+            Assert.Throws<ArgumentNullException>(() => new ConfigTable<TestItemRow>(null));
+        }
+
+        [Test]
         public void TryGet_Hit_ReturnsTrue()
         {
             var table = MakeTable();
@@ -167,6 +174,23 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.IsNotNull(empty, "不存在的索引键应返回空数组而非 null");
             Assert.AreEqual(0, empty.Count);
             Assert.IsFalse(byQuality.TryGet(999, out _));
+        }
+
+        [Test]
+        public void BuildIndex_NullSelector_ThrowsArgumentNullException()
+        {
+            // CONF-011：null selector 此前在首次遍历时抛裸 NRE
+            var table = MakeTable();
+            Assert.Throws<ArgumentNullException>(() => table.BuildIndex<int>("Quality", null));
+        }
+
+        [Test]
+        public void BuildIndex_NullIndexName_ThrowsArgumentNullException()
+        {
+            // CONF-011：null 索引名应走参数防御，而不是 Dictionary.TryGetValue 的裸 ANE（参数名为 key）
+            var table = MakeTable();
+            var ex = Assert.Throws<ArgumentNullException>(() => table.BuildIndex(null, r => r.Quality));
+            Assert.AreEqual("indexName", ex.ParamName, "参数名应指向 indexName");
         }
 
         #endregion

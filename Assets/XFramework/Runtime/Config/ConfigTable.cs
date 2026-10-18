@@ -7,7 +7,8 @@ using XFramework.XLog;
 namespace XFramework.XConfig
 {
     /// <summary>
-    /// Table 配置数据的只读包装器，通过 <see cref="IConfigManager.GetTable{T}"/> 获取。
+    /// Table 配置数据的查询包装器，通过 <see cref="IConfigManager.GetTable{T}"/> 获取。
+    /// <para>包装器不复制注入的字典、也不写入它；查询直接落在字典上（`GetAll` 是构造期快照）。</para>
     /// <para>TKey 隐藏在类型内部，通过 .Get(key) / .TryGet(key) 查询时由实参自动推断主键类型。</para>
     /// <para>主键类型在构造时从 <see cref="IConfigRow{TKey}"/> 提取并缓存，查询时按实参类型与缓存比对，不匹配时报错（错误信息含真实键类型）。</para>
     /// <para>建议缓存此包装器以复用后续查询，避免每次查字典。</para>
@@ -26,9 +27,13 @@ namespace XFramework.XConfig
         /// <para>构造时校验注入字典的键/值类型与行类型声明的 <see cref="IConfigRow{TKey}"/> 一致，不一致抛出 <see cref="ConfigException"/>（早失败）。</para>
         /// </summary>
         /// <param name="dict">内部字典（<see cref="Dictionary{TKey, T}"/>，存储为 <see cref="IDictionary"/>）。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="dict"/> 为 null。</exception>
         /// <exception cref="ConfigException">字典键/值类型与行类型声明不一致，或不是 <see cref="Dictionary{TKey, TValue}"/>（含派生类）时抛出。</exception>
         public ConfigTable(IDictionary dict)
         {
+            if (dict == null)
+                throw new ArgumentNullException(nameof(dict));
+
             _keyType = ConfigTypeHelper.GetKeyType(typeof(T));
             ValidateDictionary(dict);
             _dict = dict;
@@ -276,6 +281,7 @@ namespace XFramework.XConfig
         /// <param name="indexName">索引名称（同表内唯一），建议使用字段名如 "Quality"。</param>
         /// <param name="keySelector">索引键选择器，如 r => r.Quality。</param>
         /// <returns><see cref="ConfigIndexView{T, TIndex}"/> 只读视图。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="indexName"/> 或 <paramref name="keySelector"/> 为 null。</exception>
         /// <example>
         /// <code>
         /// var items = ConfigManager.GetTable&lt;ItemRow&gt;();
@@ -285,6 +291,12 @@ namespace XFramework.XConfig
         /// </example>
         public ConfigIndexView<T, TIndex> BuildIndex<TIndex>(string indexName, Func<T, TIndex> keySelector)
         {
+            // 参数防御必须在缓存查询之前：命中缓存时也不该接受 null selector。
+            if (indexName == null)
+                throw new ArgumentNullException(nameof(indexName));
+            if (keySelector == null)
+                throw new ArgumentNullException(nameof(keySelector));
+
             if (_indices.TryGetValue(indexName, out var cached))
                 return (ConfigIndexView<T, TIndex>)cached;
 
@@ -309,7 +321,11 @@ namespace XFramework.XConfig
 
         #region IConfigTable
 
-        /// <summary>暴露内部字典，供非泛型反射路径访问。</summary>
+        /// <summary>
+        /// 暴露内部字典，供非泛型反射路径访问。
+        /// <para><b>只读使用</b>：返回可变引用；修改会使 <c>Count</c>/<c>GetAll</c>（构造期快照）
+        /// 与 <c>Get</c>/<c>TryGet</c>（实时字典）脱钩（CONF-011）。</para>
+        /// </summary>
         IDictionary IConfigTable.Data => _dict;
 
         #endregion

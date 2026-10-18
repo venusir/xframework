@@ -225,6 +225,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   或其 `Dictionary<TKey,T>` 与 `rowType` 不一致时抛 `ConfigException`，不再等到查询期才在包装器构造处失败。
   同一 CLR 类型同时以 Table 与 Global 身份并发加载时两者**各自独立完成**（互不加入）；在途等待者直接拿到
   加载结果，先醒者重入 `Unload<T>()` 不再影响后续等待者（CONF-009/010）。
+- **`ConfigTable<T>` 的 null 参数改抛 `ArgumentNullException`**（CONF-011）：构造函数与 `BuildIndex` 的
+  `indexName` / `keySelector` 为 null 时，不再以 `NullReferenceException` 或 `Dictionary` 的裸 ANE 收场。
 
 ### Fixed
 
@@ -622,6 +624,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `Kind`/`Result`，只加入同身份任务，等待者直接返回携带的结果；`CompleteInFlight` 先移除登记再无条件广播。
   回归：`ConfigManagerImplTests` 五条（改前分别 `Expected: <ConfigException> But was: null`、
   `Expected: 1 But was: 0`、`KeyNotFoundException`）。
+- **`ConfigTable` 的 null 参数抛裸 NRE、`Data` 可变暴露的契约未成文（CONF-011）**：
+  `new ConfigTable<T>(null)` 在 `dict.GetType()` 处抛 NRE，`BuildIndex(name, null)` 在首次遍历时抛 NRE，
+  `IConfigTable.Data` 暴露可变字典但文档只说「暴露」——修改它会让 `Count` / `GetAll` / `BuildIndex`
+  （构造期快照）与 `Get` / `TryGet` / `Contains`（实时字典）脱钩。修法：null 字典 / null selector /
+  null 索引名改抛 `ArgumentNullException`；XML 与 README 写明 `Data` 的只读契约。回归：
+  `ConfigTableTests` 三条（改前分别 `NullReferenceException` 与 `Expected: "indexName" But was: "key"`）。
 
 #### Asset（场景加载）
 
