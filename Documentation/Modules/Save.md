@@ -43,3 +43,5 @@ Runtime/Save/
 - 不做：**不为 Save 补 PlayMode 侧用例**（2026-10-13 · 覆盖失衡盘点的处置）——88 例已在 `Tests/Runtime/`（**PlayMode 平台**）跑真临时 FS + 真线程端到端；门面无帧依赖、无 MonoBehaviour 生命周期面；README 三条已知限制均为流程内 / EditMode 可验的语义事实。真实后端替换的空白（上条）不因 PlayMode 而改变。无重开判据。
 - 已做：**Save 纳入会话复位族**（2026-10-18 · `753b501`）——新增 `ResetForNewSession`（`SubsystemRegistration`）只丢 `_impl`、不 Dispose（玩家上下文/忙标志/版本号都在实例上）；同时修复「File 复位后第二会话加密接线丢失」——引导阶段重新初始化时会重接 `SaveOptions.CryptoProvider`（SAVE-001）。
 
+
+- 不做：**不为 `GetSlotMetasAsync(default)` 补显式重载/文档提示**（2026-10-18 · 独立工程 dotnet build 探针）——单实参 `default` 字面量正确绑定到 `(CancellationToken)` 重载（可选参数的 `(IProgress<SaveReport>, CancellationToken)` 候选被排除），未产生 CS0121；审计推断不成立。无重开判据。

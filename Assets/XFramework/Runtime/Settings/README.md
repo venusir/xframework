@@ -184,6 +184,11 @@ Runtime/Settings/
 | `Initialize<T>(ISettingsStore store, Func<T> defaultFactory?, SettingsOptions?)` | 用自定义存储后端初始化 |
 | `Initialize<T>(Func<T> defaultFactory?, SettingsOptions?)` | 用**默认路径**初始化（零配置） |
 | `Destroy()` | 释放所有管理器；之后可重新 `Initialize` |
+
+> **不要把 `null` 字面量直接作为唯一实参**（SET-015）：`Initialize<T>(null)` 会在文件路径重载与
+> 默认路径重载之间二义（CS0121）。省略参数请用命名实参（`Initialize<T>(options: ...)`），或显式强转
+> `(string)null` / `(Func<T>)null`。`Ref<T,TField>` 的字段类型与 `TField` 不匹配时抛带
+> `[SettingsManager]` 前缀的 `ArgumentException`（不要等运行到赋值才看到 BCL 裸文案）。
 | `Settings<T>()` | 获取当前设置对象引用；未初始化时抛异常 |
 | `TrySettings<T>(out T)` / `IsRegistered<T>()` | 探测入口，未初始化时不抛异常 |
 | `Ref<T, TField>(Expression<Func<T,TField>>)` | **创建字段句柄，调用一次并缓存** |

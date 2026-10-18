@@ -44,3 +44,5 @@ Runtime/Settings/
 - 已做：**加密装饰器实现内层异步能力**（2026-10-17 · `d078656`，SET-001）——`EncryptedSettingsStore` 实现 `IAsyncSettingsStore`：内层异步则转发（加解密在调用线程完成），否则自身按管理器同款线程池降级；公开 API 源兼容新增已获批准并更新基线。
 - 不做：**会话边界不替使用方清句柄订阅流**（2026-10-18 · 裁定 + 文档订正）——会话边界只清重放登记表，不清句柄的订阅流；句柄在第二会话被使用即重新入表并重放给会话 1 的旧订阅者（SET-004），README 的「旧订阅者不会复活」已订正为如实描述。要避免旧回调请重新 `Ref` + `Subscribe`，或在边界前释放旧订阅。无重开判据。
 
+
+- 已做：**SET-015 编译/运行探针与修复提示**（2026-10-18 · 独立工程 dotnet build + `SettingsManagerFacadeTests.Ref_FieldTypeMismatch_ThrowsWithRepairHint`）——`Initialize<T>(null)` 在 `(string, Func<T>, SettingsOptions)` 与 `(Func<T>, SettingsOptions)` 之间 CS0121（探针复现），XML 与 README 写明用命名实参或显式强转；`Ref<T,TField>` 字段类型不匹配时原抛 BCL 裸 `ArgumentException`，已包装为 `[SettingsManager]` 前缀 + 修复提示，不改签名。

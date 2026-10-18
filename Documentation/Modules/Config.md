@@ -81,3 +81,5 @@ Runtime/Config/
 > **订正（2026-10-13）**：上面那句的**前提不成立**（「出现次数是 0」是字面误述——写下时已有 13 行顺带提及），**结论则要换理由**——判据的归纳快照日期是 **2026-09-27**（`../ModuleAudit.md` 头部），而本模块第一条 `### Fixed` 记录到 **2026-09-30** 才随本轮审计的修复出现：**归纳入早于缺陷史入册**，所以「已成稿的 A–F 清单从本模块学到的是零」依然为真，与「CHANGELOG 里一条都没有」无关。另一半也仍然成立：本模块提交的主体不在 CHANGELOG（补记自己声明不回填）。**下一轮若要重做归纳，本模块的缺陷史这次会被读到**（`CHANGELOG` 的 `### Fixed` → `#### Config`）。表述的分歧与本轮回收见 `../ModuleAudit.md` §七 的「已知边界」-5。
 
 - 不做：**`IConfigTable.Data` 不改只读包装**（2026-10-18 · 裁定）——返回可变引用是「零反射注入路径」的代价；修改会使 `Count`/`GetAll`/`BuildIndex`（构造期快照）与 `Get`/`TryGet`/`Contains`（实时字典）脱钩，XML 与 README 已写明只读契约（CONF-011）。无重开判据。
+
+- 已做：**CONF-016 编译探针与文档**（2026-10-18 · 独立工程 dotnet build）——`PreloadTableAsync<T>("path", default)` 在 `ConfigFormat` / `IConfigLoader` 重载间 CS0121（探针复现）；XML 与 README 写明显式 `ConfigFormat.Json` 或强转，不加重载。

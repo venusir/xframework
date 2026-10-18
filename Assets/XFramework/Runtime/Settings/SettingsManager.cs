@@ -73,6 +73,9 @@ namespace XFramework.XSettings
         /// <summary>
         /// 初始化指定类型的设置管理器，使用指定 JSON 文件路径作为存储后端。
         /// <para>仅首次调用有效：重复调用同一类型会打 LogWarning 并返回已存在的实例。</para>
+        /// <para><b>不要把 <c>null</c> 字面量直接作为第一个实参</b>（SET-015）：它会与本类的
+        /// <c>Initialize&lt;T&gt;(Func&lt;T&gt;, SettingsOptions)</c> 重载二义（CS0121）。要省略路径请用默认路径重载
+        /// 或命名实参（<c>Initialize&lt;T&gt;(options: ...)</c>）；确实要传空路径时显式写成 <c>(string)null</c>。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="filePath">JSON 文件完整路径。</param>
@@ -97,6 +100,8 @@ namespace XFramework.XSettings
         /// 届时请改用显式路径的 <see cref="Initialize{T}(string, Func{T}, SettingsOptions)"/> 重载。</para>
         /// <para>参数顺序与另外两个重载一致（工厂在前、选项在后）；
         /// 只传选项时请用具名实参：<c>Initialize&lt;T&gt;(options: new SettingsOptions { AutoSave = true })</c>。</para>
+        /// <para><b>不要把 <c>null</c> 字面量直接作为唯一实参</b>（SET-015）：它会与文件路径重载二义
+        /// （CS0121）。省略参数请用命名实参，或显式强转 <c>(Func&lt;T&gt;)null</c>。</para>
         /// </summary>
         /// <typeparam name="T">设置对象类型。</typeparam>
         /// <param name="defaultFactory">可选的默认值工厂。为 <c>null</c> 时使用 <c>new T()</c>。</param>
@@ -286,7 +291,9 @@ namespace XFramework.XSettings
         /// <typeparam name="TField">字段类型。</typeparam>
         /// <param name="selector">字段选择器，如 <c>s =&gt; s.Audio.MasterVolume</c>。路径必须以字段结尾。</param>
         /// <returns>与设置对象解耦的字段句柄，每次读写都作用于当前的设置实例。</returns>
-        /// <exception cref="ArgumentException">选择器不以字段结尾，或路径含不支持的结构时抛出。</exception>
+        /// <exception cref="ArgumentException">选择器不以字段结尾，或路径含不支持的结构时抛出；
+        /// 字段类型与 <typeparamref name="TField"/> 不匹配（不可隐式转换）时同样抛出，消息带
+        /// <c>[SettingsManager]</c> 前缀与修复提示（SET-015）。</exception>
         /// <example>
         /// <code>
         /// private static readonly SettingRef&lt;GameSettings, float&gt; MasterVolume =

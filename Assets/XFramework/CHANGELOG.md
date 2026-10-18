@@ -573,6 +573,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   的 `Initialize` / `Destroy` / `Ref`；`ResetForNewSession` 复位闩锁），README 线程契约同步。回归：
   `SettingsManagerLifecycleTests.Initialize_FromBackgroundThread_LogsMainThreadViolationOnce`（改前
   Expected log did not appear）。
+- **`Ref<T,TField>` 字段类型不匹配抛 BCL 裸异常（SET-015）**：字段是 `int` 而 `TField` 写成 `float` 这类
+  「看似可隐式转换」的调用能通过编译，但表达式树赋值在运行期抛
+  `Expression of type 'System.Single' cannot be used for assignment to type 'System.Int32'`——无模块前缀、
+  不含字段名与修复方向。修法：包装为 `[SettingsManager]` 前缀的 `ArgumentException`，消息指出字段路径
+  与 `TField`；不改变签名。同轮编译探针确认 `Initialize<T>(null)` 在 `(string, Func<T>, SettingsOptions)`
+  与 `(Func<T>, SettingsOptions)` 之间 CS0121，XML/README 写明用命名实参或显式强转；CONF-016 的
+  `PreloadTableAsync<T>(path, default)` 二义同样只补文档；SAVE-015 的 `GetSlotMetasAsync(default)`
+  **未复现**二义（正确绑定到 `CancellationToken` 重载）。回归：
+  `SettingsManagerFacadeTests.Ref_FieldTypeMismatch_ThrowsWithRepairHint`（改前 `Expected: String
+  starting with "[SettingsManager]" But was: "Expression of type 'System.Single'…"`）。
 
 #### Update
 

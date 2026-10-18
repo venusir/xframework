@@ -150,6 +150,10 @@ ConfigManifest  (批量加载清单)
 | ---------------------------------------------------------------- | ----------------------------- |
 | `PreloadTableAsync<T>(string path, ConfigFormat format = Json)`  | 使用内置格式加载 Table        |
 | `PreloadTableAsync<T>(string path, IConfigLoader loader)`        | 使用自定义 Loader 加载 Table  |
+
+> **`default` 字面量不能直接当第二个实参**（CONF-016）：`PreloadTableAsync<T>(path, default)` 会在
+> `ConfigFormat` / `IConfigLoader` 两个重载间二义（CS0121）。省略格式请写 `ConfigFormat.Json`，
+> 或显式强转 `(ConfigFormat)default` / `(IConfigLoader)loader`。
 | `PreloadGlobalAsync<T>(string path, ConfigFormat format = Json)` | 使用内置格式加载 Global       |
 | `PreloadGlobalAsync<T>(string path, IConfigLoader loader)`       | 使用自定义 Loader 加载 Global |
 

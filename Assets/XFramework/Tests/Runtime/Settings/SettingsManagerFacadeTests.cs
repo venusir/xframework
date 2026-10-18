@@ -134,6 +134,20 @@ namespace XFramework.XSettings.Tests
             Assert.GreaterOrEqual(notified, 1, "LoadAsync 应通知订阅者");
         }
 
+        [Test]
+        public void Ref_FieldTypeMismatch_ThrowsWithRepairHint()
+        {
+            // SET-015：字段是 int 而 TField 声明为 float 时，表达式树赋值会抛 BCL 裸 ArgumentException。
+            // 探针确认该调用可编译（隐式转换进入表达式树），故障发生在运行期——必须带模块前缀与修复提示。
+            SettingsManager.Initialize<SettingsA>(new SeededStore(), () => new SettingsA());
+
+            var ex = Assert.Throws<ArgumentException>(
+                () => SettingsManager.Ref<SettingsA, float>(s => s.Volume));
+
+            StringAssert.StartsWith("[SettingsManager]", ex.Message, "异常应带模块前缀，而不是 BCL 裸文案");
+            StringAssert.Contains("字段类型", ex.Message, "应指出字段类型与 TField 不匹配");
+        }
+
         #endregion
 
         #region 未初始化保护

@@ -99,23 +99,36 @@ namespace XFramework.XSettings
             var valueParam = Expression.Parameter(typeof(TField), "v");
             var target = Rebind(body, selector.Parameters[0], sourceParam);
 
-            // 赋值表达式的类型是 TField,而 Action<,> 要求 void 体——Lambda<TDelegate> 会因此拒绝。
-            // 用 Block 把赋值与一个 void 表达式串起来,使整个体的类型为 void
-            var assignBody = Expression.Block(
-                Expression.Assign(target, valueParam),
-                Expression.Empty());
+            try
+            {
+                // 赋值表达式的类型是 TField,而 Action<,> 要求 void 体——Lambda<TDelegate> 会因此拒绝。
+                // 用 Block 把赋值与一个 void 表达式串起来,使整个体的类型为 void
+                var assignBody = Expression.Block(
+                    Expression.Assign(target, valueParam),
+                    Expression.Empty());
 
-            var handle = new SettingRef<T, TField>(
-                selector.Compile(),
-                Expression.Lambda<Action<T, TField>>(assignBody, sourceParam, valueParam).Compile(),
-                path);
+                var handle = new SettingRef<T, TField>(
+                    selector.Compile(),
+                    Expression.Lambda<Action<T, TField>>(assignBody, sourceParam, valueParam).Compile(),
+                    path);
 
-            // 创建即入表（创建也算一次「使用」），实例被整体替换时由注册表重放当前值。
-            // 登记点选在 Create 而非 SettingsManager.Ref：本类构造函数私有，Create 是唯一工厂，
-            // 放这里可保证将来新增创建路径也不会漏登记
-            handle.EnsureRegistered();
+                // 创建即入表（创建也算一次「使用」），实例被整体替换时由注册表重放当前值。
+                // 登记点选在 Create 而非 SettingsManager.Ref：本类构造函数私有，Create 是唯一工厂，
+                // 放这里可保证将来新增创建路径也不会漏登记
+                handle.EnsureRegistered();
 
-            return handle;
+                return handle;
+            }
+            catch (ArgumentException ex) when (!ex.Message.StartsWith("[SettingsManager]"))
+            {
+                // SET-015：字段是 int 而 TField 写成 float 这类「看似可隐式转换」的调用能通过编译，
+                // 但表达式树赋值会在运行期抛 BCL 裸 ArgumentException（消息不含字段名与修复方向）。
+                // 包成模块自己的异常，早失败且可照做。
+                throw new ArgumentException(
+                    $"[SettingsManager] Ref 的字段类型与 TField 不匹配：选择器字段 '{path}' 必须是 " +
+                    $"'{typeof(TField).Name}' 或可隐式转换为它（收到的表达式：'{selector}'）。",
+                    nameof(selector), ex);
+            }
         }
 
         #endregion
