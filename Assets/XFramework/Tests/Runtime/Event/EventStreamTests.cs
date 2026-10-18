@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XEvent;
+using XFramework.XEvent.Internal;
 
 namespace XFramework.XEvent.Tests
 {
@@ -127,6 +128,23 @@ namespace XFramework.XEvent.Tests
             stream.Subscribe(calls.Add);
             stream.Emit(42);
             CollectionAssert.AreEqual(new[] { 42 }, calls, "池复用后投递正常");
+        }
+
+        [Test]
+        public void SubscriptionNodePool_Return_BreaksNextChain()
+        {
+            var first = SubscriptionNodePool<int>.Rent();
+            var second = SubscriptionNodePool<int>.Rent();
+            first.Next = second;
+
+            SubscriptionNodePool<int>.Return(first);
+
+            Assert.IsNull(first.Next,
+                "回池节点必须断开 Next，否则池会钉住后续节点及其 Handler 闭包（EVT-001）");
+            Assert.IsNull(first.Handler, "回池节点必须清空 Handler");
+
+            second.Next = null;
+            SubscriptionNodePool<int>.Return(second);
         }
 
         #endregion

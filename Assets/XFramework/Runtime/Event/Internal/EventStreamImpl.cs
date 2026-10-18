@@ -310,6 +310,9 @@ namespace XFramework.XEvent.Internal
         public static void Return(SubscriptionNode<T> node)
         {
             node.Handler = null;
+            // 必须断开 Next：否则池中的空闲节点会钉住它曾经指向的节点及其 Handler 闭包
+            // （派发中退订放弃回池的节点、以及仍在订阅的节点），跨会话也不释放（EVT-001）。
+            node.Next = null;
             lock (_pool)
             {
                 _pool.Push(node);

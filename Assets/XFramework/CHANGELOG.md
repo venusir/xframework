@@ -221,6 +221,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### Event
+
+- **池化订阅节点归还时不清 `Next`（EVT-001）**：`SubscriptionNodePool.Return` 只清 `Handler`，池中的空闲节点
+  仍指向它曾经链接的节点——若那是一个仍在订阅的节点，整个 Handler 闭包链被池钉住；关闭域重载时跨会话
+  也不释放。修法：归还时一并 `node.Next = null`。回归：`EventStreamTests.SubscriptionNodePool_Return_BreaksNextChain`
+  （改前 `Expected: null But was: <node>`）。
+
 #### Pool
 
 - **用户回调抛出时池账本不回滚（POOL-001）**：`Get` 的租出回调（`onRent` / `IPoolable.OnRent`）抛出时
