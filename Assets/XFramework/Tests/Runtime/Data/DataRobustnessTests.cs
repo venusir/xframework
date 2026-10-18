@@ -72,6 +72,23 @@ namespace XFramework.XData.Tests
             public void OnClear() { }
         }
 
+        /// <summary>记录 Serialize 调用次数的自定义格式——验证写入端按快照 defaultFormat 取序列化器（DATA-006）。</summary>
+        private sealed class RecordingSerializer : ISerializer
+        {
+            public const string FormatName = "data-probe-format";
+
+            public int SerializeCalls;
+            public string Format => FormatName;
+
+            public byte[] Serialize(object obj, Type type)
+            {
+                SerializeCalls++;
+                return new byte[] { 1, 2, 3 };
+            }
+
+            public object Deserialize(byte[] data, Type type) => null;
+        }
+
         private sealed class ThrowingClearBlock : IDataBlock
         {
             public string BlockName => "ThrowClear";
@@ -215,6 +232,29 @@ namespace XFramework.XData.Tests
 
             Assert.DoesNotThrow(() => DataManager.CreateSnapshot(),
                 "OnSave 里注册/移除块不应让快照遍历失效（DATA-008）");
+        }
+
+        [Test]
+        public void CreateSnapshot_UsesSnapshotsDefaultFormat()
+        {
+            var serializer = new RecordingSerializer();
+            Serializer.Register(serializer);
+            DataSnapshot.Factory = () => new DataSnapshot { defaultFormat = RecordingSerializer.FormatName };
+
+            try
+            {
+                DataManager.RegisterBlock(new NameBlockA());
+
+                DataManager.CreateSnapshot();
+
+                Assert.AreEqual(1, serializer.SerializeCalls,
+                    "写入端必须使用快照的 defaultFormat，而不是恒用 Serializer.Default（DATA-006）");
+            }
+            finally
+            {
+                DataSnapshot.Factory = () => new DataSnapshot();
+                Serializer.Unregister(RecordingSerializer.FormatName);
+            }
         }
     }
 }

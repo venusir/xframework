@@ -179,7 +179,7 @@ namespace XFramework.XData
             var blocks = new List<IDataBlock>(_blocks.Values);
             for (int i = 0; i < blocks.Count; i++)
             {
-                var snap = BuildBlockSnapshot(blocks[i]);
+                var snap = BuildBlockSnapshot(blocks[i], data.defaultFormat);
                 if (snap != null)
                     data.blocks.Add(snap);
             }
@@ -199,13 +199,15 @@ namespace XFramework.XData
         /// 构建单个 Block 的快照条目（全量导出与单块导出共用的序列化逻辑）。
         /// <para>序列化异常向上传播，由调用方决定处理（全量导出异常时脏标记保留）。</para>
         /// </summary>
-        private DataBlockSnapshot BuildBlockSnapshot(IDataBlock block)
+        private DataBlockSnapshot BuildBlockSnapshot(IDataBlock block, string format)
         {
             var saveObj = block.OnSave();
             if (saveObj == null)
                 return null;
 
-            var serializer = XSerialize.Serializer.Default;
+            // 写入端与读取端对称（DATA-006）：读取按快照的 defaultFormat，写入也按它；
+            // 此前恒用 Serializer.Default，经 Factory 子类把 defaultFormat 设为非 json 会让整份存档读不回。
+            var serializer = XSerialize.Serializer.Get(format);
             var rawData = serializer.Serialize(saveObj, saveObj.GetType());
             return new DataBlockSnapshot
             {
@@ -429,7 +431,7 @@ namespace XFramework.XData
             }
 
             // 单块导出不清空脏标记：仅读取当前数据，不代表该块已保存
-            return BuildBlockSnapshot(block);
+            return BuildBlockSnapshot(block, XSerialize.Serializer.Default.Format);
         }
 
         /// <inheritdoc/>

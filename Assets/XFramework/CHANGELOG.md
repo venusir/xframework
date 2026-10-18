@@ -276,6 +276,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   里增删块不再抛 `InvalidOperationException`）；`ApplySnapshot` 的清空阶段逐块隔离并计入返回值，快照里的
   null 条目计数而不 NRE。回归：`DataRobustnessTests` 五例（改前分别 1≠2、索引被误删、NRE、OnClear 异常
   逃逸、枚举失效）。
+- **写入端恒用 `Serializer.Default`，与读取端 `defaultFormat` 不对称（DATA-006）**：经 `Factory` 子类把
+  快照 `defaultFormat` 设为非 `"json"` 时，整份存档读不回。修法：`BuildBlockSnapshot` 按快照的
+  `defaultFormat` 取序列化器（`Serializer.Get`）；单块导出仍用 `Serializer.Default.Format`。
+  回归：`DataRobustnessTests.CreateSnapshot_UsesSnapshotsDefaultFormat`（改前 `Expected: 1 But was: 0`）。
 
 #### UI
 
