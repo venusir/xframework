@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -71,6 +72,66 @@ namespace XFramework.XSettings.Tests
         {
             // 门面是静态的，测试间必须复位，否则用例执行顺序会互相影响
             SettingsManager.Destroy();
+        }
+
+        #endregion
+
+        #region 存储转发（SET-016）
+
+        [Test]
+        public void GetStore_ReturnsInitializedStore()
+        {
+            var store = new SeededStore();
+            SettingsManager.Initialize<SettingsA>(store, () => new SettingsA());
+
+            Assert.AreSame(store, SettingsManager.GetStore<SettingsA>(),
+                "GetStore 必须返回 Initialize 注入的后端");
+        }
+
+        [Test]
+        public void SetStore_ReplacesBackend_AndSaveUsesTheNewOne()
+        {
+            var oldStore = new SeededStore();
+            SettingsManager.Initialize<SettingsA>(oldStore, () => new SettingsA { Volume = 1 });
+
+            var newStore = new SeededStore();
+            SettingsManager.SetStore<SettingsA>(newStore);
+            Assert.AreSame(newStore, SettingsManager.GetStore<SettingsA>());
+
+            SettingsManager.Settings<SettingsA>().Volume = 7;
+            SettingsManager.Save<SettingsA>();
+
+            Assert.IsNotNull(newStore.Payload, "Save 应落到新后端");
+            Assert.IsNull(oldStore.Payload, "反向注入：旧后端不得再被使用");
+        }
+
+        [Test]
+        public async Task SaveAsync_WritesThroughToStore()
+        {
+            var store = new SeededStore();
+            SettingsManager.Initialize<SettingsA>(store, () => new SettingsA { Volume = 3 });
+
+            await SettingsManager.SaveAsync<SettingsA>();
+
+            Assert.IsNotNull(store.Payload, "SaveAsync 应经门面转发到存储");
+            Assert.AreEqual(3, ((SettingsA)store.Payload).Volume);
+        }
+
+        [Test]
+        public async Task LoadAsync_ReloadsFromStoreAndNotifies()
+        {
+            var store = new SeededStore { Payload = new SettingsA { Volume = 5 } };
+            SettingsManager.Initialize<SettingsA>(store, () => new SettingsA());
+
+            int notified = 0;
+            using var sub = SettingsManager.Observe<SettingsA>(_ => notified++);
+
+            store.Payload = new SettingsA { Volume = 9 };
+            await SettingsManager.LoadAsync<SettingsA>();
+
+            Assert.AreEqual(9, SettingsManager.Settings<SettingsA>().Volume,
+                "LoadAsync 应从存储重新加载并覆盖当前值");
+            Assert.GreaterOrEqual(notified, 1, "LoadAsync 应通知订阅者");
         }
 
         #endregion

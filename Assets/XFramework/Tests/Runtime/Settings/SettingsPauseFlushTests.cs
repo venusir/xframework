@@ -149,18 +149,29 @@ namespace XFramework.XSettings.Tests
         [Test]
         public void SaveOnPause_AcquiresHost_AndLastReleaseDestroysIt()
         {
-            Assume.That(SettingsPauseNotifier.Instance, Is.Null, "前提：进入用例时没有残留宿主");
+            // SET-017：原用 Assume——上一个用例泄漏宿主时本用例会 skip 而不是失败。
+            // 宿主泄漏是 fixture 缺陷，必须显式红。
+            Assert.IsNull(SettingsPauseNotifier.Instance,
+                "进入用例时不得有残留宿主——上一个用例泄漏了（直接构造的 SaveOnPause 管理器必须自行 Dispose）");
 
             var first = CreateManager(new CountingStore(), new SettingsOptions { SaveOnPause = true });
             var second = CreateManager(new CountingStore(), new SettingsOptions { SaveOnPause = true });
+            try
+            {
+                Assert.IsNotNull(SettingsPauseNotifier.Instance, "首个开启者创建宿主");
 
-            Assert.IsNotNull(SettingsPauseNotifier.Instance, "首个开启者创建宿主");
+                first.Dispose();
+                Assert.IsNotNull(SettingsPauseNotifier.Instance, "还有开启者时宿主必须留着");
 
-            first.Dispose();
-            Assert.IsNotNull(SettingsPauseNotifier.Instance, "还有开启者时宿主必须留着");
-
-            second.Dispose();
-            Assert.IsNull(SettingsPauseNotifier.Instance, "最后一个开启者释放后销毁宿主");
+                second.Dispose();
+                Assert.IsNull(SettingsPauseNotifier.Instance, "最后一个开启者释放后销毁宿主");
+            }
+            finally
+            {
+                // SET-017：断言失败时也不得把宿主留给后续 fixture（Dispose 幂等）
+                first.Dispose();
+                second.Dispose();
+            }
         }
 
         [Test]
@@ -169,10 +180,14 @@ namespace XFramework.XSettings.Tests
             var before = SettingsPauseNotifier.Instance;
 
             var manager = CreateManager(new CountingStore());
-
-            Assert.AreSame(before, SettingsPauseNotifier.Instance, "关闭时不创建宿主——默认路径零开销");
-
-            manager.Dispose();
+            try
+            {
+                Assert.AreSame(before, SettingsPauseNotifier.Instance, "关闭时不创建宿主——默认路径零开销");
+            }
+            finally
+            {
+                manager.Dispose();
+            }
         }
 
         #endregion
