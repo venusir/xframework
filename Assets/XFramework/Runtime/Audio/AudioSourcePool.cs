@@ -51,9 +51,6 @@ namespace XFramework.XAudio
         /// <summary>已创建的槽位数（含空闲的）。</summary>
         internal int SlotCount => _slots.Count;
 
-        /// <summary>容量上限。</summary>
-        internal int MaxVoices => _maxVoices;
-
         internal AudioVoice GetSlot(int index) => _slots[index];
 
         /// <summary>当前活跃槽位数（非 <see cref="AudioVoiceState.Free"/>，含加载中）。</summary>
@@ -68,9 +65,6 @@ namespace XFramework.XAudio
 
             return active;
         }
-
-        /// <summary>宿主是否已创建（测试用来断言「从不播放就不建对象」）。</summary>
-        internal bool HasHost => _host != null;
 
         /// <summary>
         /// 一次性建满宿主与全部槽位（<see cref="AudioInitOptions.PrewarmVoices"/>）。

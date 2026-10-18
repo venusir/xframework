@@ -338,6 +338,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `DisposeClipLease` 按 `IsValid` 早退，引用计数无界增长。修法：无条件 `Dispose`（`default` 是安全
   空操作）；租约契约改为「IsValid 只表示本体是否拿到」。回归：
   `AudioClipLifetimeTests.InvalidLeaseWithReleaseAction_IsDisposed`（改前 `Expected: 1 But was: 0`）。
+- **删除无消费点的内部成员（AUD-012）**：`AudioSourcePool.MaxVoices` / `HasHost` 全仓零引用
+  （`HasHost` 的注释称「测试用来断言」，实际测试用的是 `CountVoices` / `FindHosts`）。删除。
 
 #### Scene
 
