@@ -83,3 +83,7 @@ Assets/XFramework.Cinemachine/
 - `CinemachineCameraManagerTests`（PlayMode）：激活 / 反激活 / 未知 id / cut / 过渡完成 / 命名与动态双键 / stale-default / 未注册活动相机告警 / 注册表 / Dispose / null id / 错误句柄类型；用 `CinemachineBrain.UpdateMethods.ManualUpdate` + `ManualUpdate(frame, delta)`，不依赖真实帧时长。
 - `CinemachineDependencyTests`（EditMode）：Cinemachine 版本三处一致、核心版本一致、`Runtime/README.md` 五节必答、示例路径、扩展包内 `.cs` / `.md` 不指向包外的维护向文档。
 - **不在射程**：扩展包的公开 API 未纳入核心的 `PublicApiBaselineTests`（基线只扫核心程序集）；扩展包的命名 / 文件树 / 台账不受核心 `check-docs` 覆盖。改动扩展包时按核心的同名约定人工核对。
+
+## 八、台账
+
+- 未做：**适配器对 `OutputCamera` null 语义与 `Unregister` 活动状态的实现与核心契约不一致**（2026-10-18 · CAM-005）——核心已窄化措辞（允许 null、不保证 Cinemachine Brain 停用），扩展包的实际行为尚未对齐。重开判据：扩展包用户报告按核心文档写会误判，或扩展包进入功能迭代。
