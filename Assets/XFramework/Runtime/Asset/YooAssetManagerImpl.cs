@@ -45,6 +45,7 @@ namespace XFramework.XAsset
         {
             _defaultPackageName = defaultPackageName;
             _sceneLoadSource = sceneLoadSource ?? new YooAssetSceneLoadSource(() => GetOrCreatePackage());
+            EnsureSceneUnloadedSubscribed();
         }
 
         /// <summary>
@@ -533,6 +534,9 @@ namespace XFramework.XAsset
         /// </summary>
         public async UniTask<AssetSceneHandle> LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
+            // Destroy 之后复用同一实例时重新挂上 sceneUnloaded（AST-003 / SCN-003）
+            EnsureSceneUnloadedSubscribed();
+
             var operation = _sceneLoadSource.LoadScene(location, mode);
             if (operation == null) return default;
 
@@ -666,11 +670,58 @@ namespace XFramework.XAsset
             }
         }
 
+        /// <summary>当前仍在册的场景加载操作数（诊断/测试用）。</summary>
+        internal int SceneOperationCount => _sceneOperations.Count;
+
+        /// <summary>
+        /// 场景被卸载（外部卸载或 Single 模式切场景）时清掉对应登记项。
+        /// <para>原实现只在 <see cref="UnloadSceneAsync"/> 里按句柄清；Single 模式切场景时 Unity 自己卸载旧场景，
+        /// 登记项无人清理，会话内线性增长（AST-003 / SCN-003）；真适配器下「外部卸载后清登记项」分支
+        /// 也因 YooAsset 同步 Release 后 <c>SceneObject</c> 归 default 而不可达。订阅 <c>sceneUnloaded</c>
+        /// 是唯一可靠的回收点；YooAsset 侧已自行释放，这里只清表、不再 Release。</para>
+        /// </summary>
+        private void OnSceneUnloaded(Scene scene)
+        {
+            if (_sceneOperations.Count == 0)
+                return;
+
+            List<int> stale = null;
+            foreach (var pair in _sceneOperations)
+            {
+                if (pair.Value.SceneObject == scene)
+                    (stale ?? (stale = new List<int>())).Add(pair.Key);
+            }
+
+            if (stale == null)
+                return;
+
+            for (int i = 0; i < stale.Count; i++)
+                _sceneOperations.Remove(stale[i]);
+        }
+
+        private void EnsureSceneUnloadedSubscribed()
+        {
+            if (_sceneUnloadedSubscribed)
+                return;
+
+            SceneManager.sceneUnloaded += OnSceneUnloaded;
+            _sceneUnloadedSubscribed = true;
+        }
+
+        /// <summary>是否已订阅 <c>SceneManager.sceneUnloaded</c>（Destroy 后复用同一实例时要重新挂上）。</summary>
+        private bool _sceneUnloadedSubscribed;
+
         /// <summary>
         /// 销毁服务。清空包引用（不从 YooAssets 注册表移除，允许后续重新初始化复用）。
         /// </summary>
         public void Destroy()
         {
+            if (_sceneUnloadedSubscribed)
+            {
+                SceneManager.sceneUnloaded -= OnSceneUnloaded;
+                _sceneUnloadedSubscribed = false;
+            }
+
             _packages.Clear();
             // 只丢引用，不 Release：与「Destroy 不卸载 YooAsset 侧已加载资源」同一口径
             _sceneOperations.Clear();

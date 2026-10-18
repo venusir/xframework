@@ -347,6 +347,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   OCE 抛出、`return handle` 不可达；Additive 场景留在 Hierarchy 且外部无卸载凭据，Single 模式调用方误以为
   加载失败。修法：回收调用改用 `CancellationToken.None`，XML/README 写明「加载成功后的回收阶段不响应取消」。
   回归：`SceneLoadTests.LoadSceneAsync_CanceledDuringCleanup_StillReturnsHandle`（门闩式假件，改前红）。
+- **场景加载登记表在外部卸载后不清理（AST-003/SCN-003）**：`_sceneOperations` 只在显式 `UnloadSceneAsync`
+  里按句柄清；Single 模式切场景或外部卸载时 Unity 自己卸掉旧场景，登记项无人清理，会话内线性增长。
+  真适配器下原「外部卸载后清登记项」分支也因 YooAsset 同步 Release 后 `SceneObject` 归 default 而不可达。
+  修法：订阅 `SceneManager.sceneUnloaded` 按场景清表（YooAsset 已自行释放，管理器不二次 Release）；
+  `Destroy` 退订，复用实例时重新挂上。回归：
+  `SceneLoadOperationTests.ExternalSceneUnload_PrunesSceneOperationRegistration`（改前 `Expected: 0 But was: 1`）。
 
 #### Asset（资源加载）
 

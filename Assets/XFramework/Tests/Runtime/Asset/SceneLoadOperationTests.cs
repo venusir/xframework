@@ -87,6 +87,29 @@ namespace XFramework.XAsset.Tests
             Assert.AreEqual(LoadSceneMode.Single, _source.LastMode, "缺省模式应为 Single");
         }
 
+        [Test]
+        public async Task ExternalSceneUnload_PrunesSceneOperationRegistration()
+        {
+            // AST-003 / SCN-003：Single 模式切场景或外部卸载不会经过 UnloadSceneAsync，
+            // 登记表必须靠 sceneUnloaded 回收，否则会话内线性增长。
+            var scene = CreateRealScene();
+            _operation.IsDone = true;
+            _operation.IsSucceed = true;
+            _operation.SceneObject = scene;
+
+            var handle = await _manager.LoadSceneAsync(Location);
+            Assert.IsFalse(handle.IsDefault, "前提：加载成功");
+            Assert.AreEqual(1, _manager.SceneOperationCount, "前提：登记项已写入");
+
+            var unload = SceneManager.UnloadSceneAsync(scene);
+            while (unload != null && !unload.isDone)
+                await UniTask.Yield();
+            await UniTask.Yield(); // 让 sceneUnloaded 回调跑完
+
+            Assert.AreEqual(0, _manager.SceneOperationCount,
+                "场景被外部卸载后登记项必须被清理（AST-003/SCN-003）");
+        }
+
         /// <summary>
         /// 反例守卫：**不许按名字回查场景**。假件的场景名与 location 故意不同——一旦实现退回
         /// <c>SceneManager.GetSceneByName(location)</c> 这类查表，本用例立刻红。
@@ -331,7 +354,12 @@ namespace XFramework.XAsset.Tests
             var unloaded = await _manager.UnloadSceneAsync(handle);
 
             Assert.IsFalse(unloaded);
-            Assert.AreEqual(1, _operation.ReleaseCount, "没有场景了，句柄应当被补释放");
+            // 新语义（AST-003/SCN-003）：sceneUnloaded 事件已经清掉登记项；真实适配器里
+            // YooAsset 也在同一事件内自行 Release，管理器不得二次释放。假件不模拟
+            // YooAsset 的自释放，故这里只能断言「管理器没有再次 Release / Unload」。
+            Assert.AreEqual(0, _manager.SceneOperationCount, "sceneUnloaded 应已清掉登记项");
+            Assert.AreEqual(0, _operation.ReleaseCount,
+                "管理器不得在 sceneUnloaded 之后二次 Release（YooAsset 已自行释放）");
             Assert.AreEqual(0, _operation.UnloadCount, "不得重放卸载");
         }
 
