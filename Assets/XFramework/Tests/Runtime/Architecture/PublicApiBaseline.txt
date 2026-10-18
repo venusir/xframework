@@ -310,6 +310,8 @@ XFramework.XCamera.CameraHandle.NamedId  ::  public readonly string
 XFramework.XCamera.CameraHandle.ToString  ::  public override string()
 XFramework.XCamera.CameraHandle.TransitionTo  ::  public void(float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraHandle.Unregister  ::  public bool()
+XFramework.XCamera.CameraHandle.op_Equality  ::  public static bool(XFramework.XCamera.CameraHandle left, XFramework.XCamera.CameraHandle right)
+XFramework.XCamera.CameraHandle.op_Inequality  ::  public static bool(XFramework.XCamera.CameraHandle left, XFramework.XCamera.CameraHandle right)
 XFramework.XCamera.CameraManager  ::  public static class
 XFramework.XCamera.CameraManager.Activate  ::  public static void(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.CameraManager.Activate  ::  public static void(string cameraId)
@@ -1043,6 +1045,8 @@ XFramework.XLog.LogCategory.IsValid  ::  public bool IsValid { get; }
 XFramework.XLog.LogCategory.Name  ::  public string Name { get; }
 XFramework.XLog.LogCategory.RegisteredCount  ::  public static int RegisteredCount { get; }
 XFramework.XLog.LogCategory.ToString  ::  public override string()
+XFramework.XLog.LogCategory.op_Equality  ::  public static bool(XFramework.XLog.LogCategory left, XFramework.XLog.LogCategory right)
+XFramework.XLog.LogCategory.op_Inequality  ::  public static bool(XFramework.XLog.LogCategory left, XFramework.XLog.LogCategory right)
 XFramework.XLog.LogCategoryInfo  ::  public readonly struct
 XFramework.XLog.LogCategoryInfo.EffectiveLevel  ::  public readonly XFramework.XLog.LogLevel
 XFramework.XLog.LogCategoryInfo.IsOverridden  ::  public readonly bool
@@ -1704,6 +1708,8 @@ XFramework.XTimer.TimerHandle.IsDefault  ::  public bool IsDefault { get; }
 XFramework.XTimer.TimerHandle.Remaining  ::  public float Remaining { get; }
 XFramework.XTimer.TimerHandle.Restart  ::  public bool()
 XFramework.XTimer.TimerHandle.Stop  ::  public bool()
+XFramework.XTimer.TimerHandle.op_Equality  ::  public static bool(XFramework.XTimer.TimerHandle left, XFramework.XTimer.TimerHandle right)
+XFramework.XTimer.TimerHandle.op_Inequality  ::  public static bool(XFramework.XTimer.TimerHandle left, XFramework.XTimer.TimerHandle right)
 XFramework.XTimer.TimerInfo  ::  public readonly struct
 XFramework.XTimer.TimerInfo.CallbackName  ::  public readonly string
 XFramework.XTimer.TimerInfo.Duration  ::  public readonly float

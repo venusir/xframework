@@ -298,7 +298,12 @@ namespace XFramework.Architecture.Tests
             foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.NonPublic |
                                                    BindingFlags.Instance | BindingFlags.Static | BindingFlags.DeclaredOnly))
             {
-                if (method.IsSpecialName || IsCompilerGenerated(method)) // 访问器、运算符隐藏名、编译器产物
+                // 访问器（get_/set_/add_/remove_）与编译器产物跳过；运算符（op_*）是公开面的一部分，
+                // 必须纳入基线（此前与访问器一起被 IsSpecialName 一刀切掉，`TimerHandle` 的 ==/!= 等
+                // 运算符因此不在射程内）。
+                if (method.IsSpecialName && !method.Name.StartsWith("op_", StringComparison.Ordinal))
+                    continue;
+                if (IsCompilerGenerated(method))
                     continue;
                 if (!IsVisible(method.IsPublic, method.IsFamily || method.IsFamilyOrAssembly, extensible))
                     continue;
