@@ -1,4 +1,7 @@
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUpdate;
 
 namespace XFramework.XInput.Tests
@@ -101,6 +104,30 @@ namespace XFramework.XInput.Tests
                 Assert.AreEqual(2, observed,
                     "复位不该退订帧脉冲上的订阅——句柄归订阅方，它有义务自己 Dispose");
             }
+        }
+
+        /// <summary>
+        /// INP-003：调度器缺失（Initialize 早于 AutoInit / OnQuitting 之后）时，UpdateManager.Register
+        /// 静默丢弃帧驱动；门面仍报已初始化，Observe* 全哑且零日志。修法：复核 IsRegistered，
+        /// 失败告警且不保留 ticker（调度器就绪后可 Destroy + Initialize 重试）。
+        /// </summary>
+        [Test]
+        public void Initialize_WhenSchedulerMissing_WarnsAndCanRetry()
+        {
+            UpdateManager.OnQuitting(); // 模拟「调度器尚未建立 / 已清理」
+            LogAssert.Expect(LogType.Warning, new Regex("Input ticker could not be registered"));
+
+            InputManager.Initialize(new FakeInputProvider());
+
+            Assert.IsTrue(InputManager.IsInitialized, "provider 已接管，门面仍应报已初始化");
+            Assert.AreEqual(0, UpdateManager.TotalCount, "调度器缺失时注册被静默丢弃");
+
+            // 调度器就绪后重试：失败不保留 ticker，Destroy + Initialize 应能重新注册
+            UpdateManager.AutoInit();
+            InputManager.Destroy();
+            InputManager.Initialize(new FakeInputProvider());
+
+            Assert.AreEqual(1, UpdateManager.TotalCount, "调度器就绪后重试应重新注册帧驱动");
         }
 
         #endregion

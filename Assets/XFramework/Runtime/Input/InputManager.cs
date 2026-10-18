@@ -247,8 +247,22 @@ namespace XFramework.XInput
         private static void RegisterTicker()
         {
             if (_ticker != null) return;
-            _ticker = new InputTicker();
-            UpdateManager.Register(_ticker, order: 0, UpdateTier.Tier0);
+
+            var ticker = new InputTicker();
+            UpdateManager.Register(ticker, order: 0, UpdateTier.Tier0);
+
+            // INP-003：UpdateManager.Register 返回 void，调度器未建立（Initialize 早于 AutoInit）
+            // 或已被清理（OnQuitting 之后）时注册被静默丢弃——IsInitialized 仍为真、Observe* 全哑。
+            // 复核注册结果；失败时不保留 ticker，保留「调度器就绪后 Destroy + Initialize」的重试窗口。
+            if (!UpdateManager.IsRegistered(ticker))
+            {
+                LogManager.Warning(LogCategories.Input,
+                    "Input ticker could not be registered: UpdateManager is not initialized. " +
+                    "Call InputManager.Destroy() and Initialize() again after UpdateManager is ready.");
+                return;
+            }
+
+            _ticker = ticker;
         }
 
         private static void UnregisterTicker()

@@ -86,6 +86,12 @@ namespace XFramework.XInput.Default
             string initialActionMap = InputSystemOptions.DefaultInitialActionMap)
         {
             _actionAsset = asset ?? throw new ArgumentNullException(nameof(asset));
+
+            // 同实例重新初始化时清掉旧资产的缓存（INP-009）
+            _actionCache.Clear();
+            _buttonPressStartTimes.Clear();
+            _playerBindingPaths.Clear();
+
             _actionAsset.Enable();
 
             // 启用初始 map —— 刻意排在订阅之前:本方法若抛异常,本实例会被调用方直接丢弃
@@ -269,6 +275,23 @@ namespace XFramework.XInput.Default
 
         public void SwitchActionMap(string mapName)
         {
+            if (_actionAsset == null) return;
+
+            // INP-008：先校验后动作——未知/空名不得先把现有 map 全部禁用
+            if (string.IsNullOrEmpty(mapName))
+            {
+                LogManager.Warning(LogCategories.Input,
+                    "ActionMap name is null or empty; no action maps were changed.");
+                return;
+            }
+
+            if (_actionAsset.FindActionMap(mapName) == null)
+            {
+                LogManager.Warning(LogCategories.Input,
+                    "ActionMap '{0}' not found; no action maps were changed.", mapName);
+                return;
+            }
+
             DisableAllActionMaps();
             EnableActionMap(mapName);
         }
@@ -276,6 +299,12 @@ namespace XFramework.XInput.Default
         public void EnableActionMap(string mapName)
         {
             if (_actionAsset == null) return;
+
+            if (string.IsNullOrEmpty(mapName))
+            {
+                LogManager.Warning(LogCategories.Input, "ActionMap name is null or empty.");
+                return;
+            }
 
             var targetMap = _actionAsset.FindActionMap(mapName);
             if (targetMap != null)
@@ -299,6 +328,12 @@ namespace XFramework.XInput.Default
         {
             if (_actionAsset == null) return;
 
+            if (string.IsNullOrEmpty(mapName))
+            {
+                LogManager.Warning(LogCategories.Input, "ActionMap name is null or empty.");
+                return;
+            }
+
             var targetMap = _actionAsset.FindActionMap(mapName);
             if (targetMap != null)
             {
@@ -309,6 +344,11 @@ namespace XFramework.XInput.Default
                 InvalidateCaches();
 
                 LogManager.Info(LogCategories.Input, "Disabled action map: {0}", mapName);
+            }
+            else
+            {
+                // 与 EnableActionMap 对称：找不到 map 不再完全静默（INP-008）
+                LogManager.Warning(LogCategories.Input, "ActionMap '{0}' not found.", mapName);
             }
         }
 
@@ -529,13 +569,22 @@ namespace XFramework.XInput.Default
         public void LoadBindingOverrides(string data)
         {
             if (_actionAsset == null || string.IsNullOrEmpty(data)) return;
-            _actionAsset.LoadBindingOverridesFromJson(data);
+            try
+            {
+                _actionAsset.LoadBindingOverridesFromJson(data);
+            }
+            finally
+            {
+                // 覆盖可能改变 playerId>0 读到的控件；解析中途抛异常也要失效缓存（INP-009）
+                InvalidatePlayerBindingPaths();
+            }
         }
 
         public void ResetBindingOverrides(string action)
         {
             var inputAction = GetAction(action);
             inputAction?.RemoveAllBindingOverrides();
+            InvalidatePlayerBindingPaths();
         }
 
         public void ResetAllBindingOverrides()
@@ -545,6 +594,7 @@ namespace XFramework.XInput.Default
             {
                 map.RemoveAllBindingOverrides();
             }
+            InvalidatePlayerBindingPaths();
         }
 
         #endregion
@@ -614,7 +664,13 @@ namespace XFramework.XInput.Default
                 throw;
             }
 
-            return new SystemRebindingOperation(rebindOp, inputAction, bindingIndex, bindingId ?? string.Empty, wasEnabled);
+            var operation = new SystemRebindingOperation(
+                rebindOp, inputAction, bindingIndex, bindingId ?? string.Empty, wasEnabled);
+
+            // INP-009：重绑定完成后 playerId>0 的控件路径缓存失效。
+            // provider 先于用户处理器订阅（SystemRebindingOperation 按订阅顺序调用）。
+            operation.OnCompleted += _ => InvalidatePlayerBindingPaths();
+            return operation;
         }
 
         /// <summary>
@@ -899,8 +955,20 @@ namespace XFramework.XInput.Default
             => control.IsPressed();
 
         /// <summary>
+        /// 失效 playerId&gt;0 的「action 名 → Gamepad 控件路径」缓存。
+        /// <para>覆盖 / 重绑定会改变 <see cref="InputBinding.effectivePath"/>，缓存只按 action 名 key
+        /// （INP-009）。只清这一张表——不影响 action 缓存与长按计时。</para>
+        /// </summary>
+        private void InvalidatePlayerBindingPaths()
+        {
+            _playerBindingPaths.Clear();
+        }
+
+        /// <summary>
         /// 取 action 第一个 Gamepad 绑定的控件路径尾(如 "buttonSouth"、"leftStick"),结果缓存。
         /// <para>复合绑定取子项路径(如摇杆复合的 leftStick 部件);纯键鼠动作缓存空串,避免每帧重复遍历。</para>
+        /// <para>用 <see cref="InputBinding.effectivePath"/> 而非 <see cref="InputBinding.path"/>：
+        /// 覆盖 / 重绑定后前者才反映实际控件（INP-009）。</para>
         /// </summary>
         private string GetPlayerGamepadControlPath(InputAction inputAction)
         {
@@ -912,7 +980,7 @@ namespace XFramework.XInput.Default
                 var b = bindings[i];
                 if (b.isComposite) continue; // 复合根无路径,其子项才是具体设备绑定
 
-                var bindingPath = b.path;
+                var bindingPath = b.effectivePath;
                 if (!string.IsNullOrEmpty(bindingPath) && bindingPath.StartsWith("<Gamepad>/", StringComparison.Ordinal))
                 {
                     var tail = bindingPath.Substring("<Gamepad>/".Length);

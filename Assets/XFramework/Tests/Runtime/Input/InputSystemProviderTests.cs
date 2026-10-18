@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -319,6 +320,110 @@ namespace XFramework.XInput.Tests
 
         private static GamepadType DetectProduct(string product)
             => InputSystemProvider.DetectGamepadTypeFrom(new InputDeviceDescription { product = product });
+
+        #endregion
+
+        #region ActionMap 失败路径（INP-008）
+
+        [Test]
+        public void SwitchActionMap_UnknownMap_LeavesCurrentMapEnabled()
+        {
+            InputSystem.AddDevice<Keyboard>();
+            var asset = ScriptableObject.CreateInstance<InputActionAsset>();
+            var playerMap = new InputActionMap("Player");
+            playerMap.AddAction("Jump", InputActionType.Button, "<Keyboard>/space");
+            asset.AddActionMap(playerMap);
+
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset); // 启用并切到 Player
+
+            LogAssert.Expect(LogType.Warning, new Regex("ActionMap 'Typo' not found"));
+
+            provider.SwitchActionMap("Typo");
+
+            Assert.IsTrue(playerMap.enabled, "未知 map 不得先禁用现有 map");
+            Press(Keyboard.current.spaceKey);
+            Assert.IsTrue(provider.WasPressedThisFrame("Jump"), "Player map 应仍然工作");
+            Release(Keyboard.current.spaceKey);
+
+            provider.Dispose();
+        }
+
+        [Test]
+        public void DisableActionMap_UnknownMap_Warns()
+        {
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            LogAssert.Expect(LogType.Warning, new Regex("ActionMap 'Typo' not found"));
+
+            provider.DisableActionMap("Typo");
+
+            provider.Dispose();
+        }
+
+        [Test]
+        public void SwitchActionMap_NullOrEmpty_WarnsAndLeavesMaps()
+        {
+            InputSystem.AddDevice<Keyboard>();
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            LogAssert.Expect(LogType.Warning, new Regex("null or empty"));
+            provider.SwitchActionMap(null);
+            Assert.IsTrue(asset.FindActionMap("Player").enabled, "null 名不得先禁用现有 map");
+
+            LogAssert.Expect(LogType.Warning, new Regex("null or empty"));
+            provider.SwitchActionMap(string.Empty);
+            Assert.IsTrue(asset.FindActionMap("Player").enabled, "空名不得先禁用现有 map");
+
+            provider.Dispose();
+        }
+
+        #endregion
+
+        #region playerId>0 绑定路径缓存（INP-009）
+
+        [Test]
+        public void PlayerBindingPath_OverrideChange_ReadsEffectivePath()
+        {
+            var gamepadA = InputSystem.AddDevice<Gamepad>();
+            var gamepadB = InputSystem.AddDevice<Gamepad>();
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Gamepad>/buttonSouth");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset, null); // 全部 map 启用、不切换
+
+            // playerId 1 跳过 Gamepad.current；让 B 成为 current，玩家 1 映射到 A
+            gamepadB.MakeCurrent();
+
+            // 先读一次，填充 _playerBindingPaths（buttonSouth）
+            Set(gamepadA.buttonSouth, 1f);
+            gamepadB.MakeCurrent();
+            Assert.IsTrue(provider.WasPressedThisFrame("Jump", 1), "前提：玩家 1 读的是 A 的 buttonSouth");
+            Set(gamepadA.buttonSouth, 0f);
+
+            // 通过 provider 的覆盖载入入口改绑到 buttonEast
+            var action = asset.FindAction("Jump", true);
+            action.ApplyBindingOverride(0, "<Gamepad>/buttonEast");
+            provider.LoadBindingOverrides(provider.SaveBindingOverrides());
+
+            Set(gamepadA.buttonEast, 1f);
+            gamepadB.MakeCurrent();
+            Assert.IsTrue(provider.WasPressedThisFrame("Jump", 1),
+                "覆盖后 playerId>0 应按 effectivePath 读新控件；改前缓存仍指向 buttonSouth");
+            Set(gamepadA.buttonEast, 0f);
+
+            // 清除全部覆盖后缓存同样失效
+            provider.ResetAllBindingOverrides();
+            Set(gamepadA.buttonSouth, 1f);
+            gamepadB.MakeCurrent();
+            Assert.IsTrue(provider.WasPressedThisFrame("Jump", 1), "清除覆盖后应恢复默认绑定");
+            Set(gamepadA.buttonSouth, 0f);
+
+            provider.Dispose();
+        }
 
         #endregion
 

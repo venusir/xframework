@@ -237,6 +237,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **语言 JSON 的重复键现在会记 Warning**（LOC-007）：行为仍是后者胜（与主流解析器一致），但不再静默。
 - **`GetFormat` 的对齐格式项补齐 .NET 空格语法**（LOC-003）：`{0, 5}` 等带空格写法现在正常格式化；
   `+` 号不再被当作合法符号（按非格式项字面输出，而不是交给 `string.Format` 抛异常）。
+- **Input 的 ActionMap 失败路径不再改变状态**（INP-008）：`SwitchActionMap` 传 null/空名/不存在的 map
+  只记 Warning，不再先 `DisableAllActionMaps()`；`DisableActionMap` 找不到 map 也会记 Warning。
+- **调度器缺失时 `Initialize` 会告警**（INP-003）：帧驱动注册失败不再静默；`UpdateManager` 就绪后
+  `Destroy()` + `Initialize()` 可恢复。
+- **`playerId > 0` 的读取跟随 `effectivePath`**（INP-009）：重绑定 / 覆盖变更后读到新控件；直接
+  `ApplyBindingOverride` 不经模块时缓存不会自动失效。
 
 ### Fixed
 
@@ -357,6 +363,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   无异常无日志；README 的蓄力条示例正是这种写法。修法：`GetButtonPressDuration` 开头 `GetAction(action)`
   预热缓存；`IInputProvider` XML 与 README 写明保证。
   回归：`InputSystemProviderTests.GetButtonPressDuration_NeverReadAction_IsTrackedAfterWarmUp`，改前红。
+- **调度器缺失时帧驱动静默丢失、ActionMap 失败路径三态不对称、覆盖/重绑定后 playerId>0 读旧控件
+  （INP-003/008/009）**：`RegisterTicker` 盲信 `UpdateManager.Register`（void），调度器为 null 时静默
+  空转而 `IsInitialized` 仍为真、`Observe*` 全哑、零日志；`SwitchActionMap` 名写错时先禁用全部 map 再
+  Warning，`DisableActionMap` 找不到 map 完全静默；`_playerBindingPaths` 不在覆盖/重绑定后失效，且取
+  `binding.path` 而非 `effectivePath`。修法：`RegisterTicker` 用 `IsRegistered` 复核，失败 Warning 且不保留
+  ticker；Map 三入口先校验后动作、失败一律 Warning 且不改变状态；路径缓存改用 `effectivePath`，并在
+  `LoadBindingOverrides`（finally）/ `Reset*BindingOverrides` / 重绑定完成时失效。回归：5 条新用例（改前
+  分别 Expected log did not appear（两条）、map 被禁用、Unity ANE、Expected: True But was: False）。
 
 #### Audio
 

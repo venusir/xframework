@@ -527,6 +527,9 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 
 - `SwitchActionMap` = 禁用所有 + 启用指定（互斥模式）
 - `EnableActionMap` = 叠加启用（不冲突的操作模式并存，如 Gameplay + Debug）
+- **失败路径先校验后动作**：`SwitchActionMap` 收到 null / 空名 / 不存在的 map 时只记 Warning，
+  **不改变任何 map 状态**（不会先把现有 map 全部禁用）；`EnableActionMap` / `DisableActionMap`
+  找不到 map 同样记 Warning。
 
 ## 线程契约
 
@@ -563,6 +566,14 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   则是 action 级全设备读取。需要逐玩家读取复合轴请自行组合各子项，或把动作拆成独立的 1D 轴。
 - **同名动作跨已启用 map 时按资产顺序静默胜出**（INP-014）：缓存只按名字失效，无法区分同名动作的来源；
   框架不做歧义解析，只在启用 map 时给出一次警告。请确保同一动作名只在一个已启用的 map 中定义。
+- **`Initialize` 早于 `UpdateManager` 就绪时帧驱动注册会失败**（INP-003）：调度器未建立（`Initialize`
+  早于 `UpdateManager.AutoInit`）或已清理（`OnQuitting` 之后）时 `UpdateManager.Register` 会静默丢弃。
+  现在会记一条 `[Input]` Warning 且不保留 ticker；在 `UpdateManager` 就绪后 `InputManager.Destroy()` +
+  `Initialize()` 即可恢复。
+- **`playerId > 0` 的读取按绑定的 `effectivePath`**（INP-009）：重绑定 / `LoadBindingOverrides` /
+  `ResetBindingOverrides` / `ResetAllBindingOverrides` 会失效路径缓存，之后读到新控件。**直接对
+  `InputAction` 调 `ApplyBindingOverride` 不经过本模块，缓存不会失效**——那之后再调一次上述任一入口，
+  或重建 provider。
 - **`Destroy()` 不退订本模块的订阅**：`Observe*` / `Subscribe` 订的是模块级的帧脉冲流与消息总线，
   `Destroy()` 只释放 Provider、注销帧驱动、复位帧号——**句柄归订阅方**。传了 `context` 的订阅由它的销毁
   令牌收口（见「线程契约」）；没传的要自己持有并 Dispose 返回的句柄。同族语义见 `../UI/README.md` 的
