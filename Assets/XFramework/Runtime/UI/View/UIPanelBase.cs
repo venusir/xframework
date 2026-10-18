@@ -197,6 +197,13 @@ namespace XFramework.XUI.View
         {
             base.OnPoolRecycle();
 
+            // 框架侧复位交互维度（UI-B-006）：用户重写 OnPoolRecycle 时可能忘记调 base，
+            // 但状态复位不能依赖用户代码——这里在基类链上做，且回池路径必经。
+            IsFocused = false;
+            IsPaused = false;
+            if (Raycaster != null)
+                Raycaster.enabled = false;
+
             // 优先用已缓存的引用，兜底 GetComponent：调用方可能绕过 Binding 属性直接
             // GetComponent<UIPanelBinding>().Bind(vm)，那时 _binding 仍是 null。
             // 回池不是每帧路径，这一次 GetComponent 可以接受。

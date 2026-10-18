@@ -486,6 +486,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   失败记 Error 后继续；收尾消息与控制器回调照常执行。回归：
   `UIPanelSelfCloseTests.CloseAllAsync_OnePanelThrows_OthersStillCloseAndMessagePublished`（改前
   Expected log did not appear）。
+- **View/HUD/Binding 生命周期复位（UI-B-004/005/006/008/011）**：`UIViewBase` 补 `OnDestroy` 兜底释放
+  `Track` 订阅（直接销毁路径）、`DisposeTracked` / `UIPanelBinding.Unbind` 逐项隔离；回池复位
+  `_state` / `IsFocused` / `IsPaused` / `Raycaster`；HUD 映射摘除已销毁条目；`EnsureContainer` 失败时
+  `AttachAsync` 早退。回归：
+  `UIPanelSelfCloseTests.Destroy_RecycledPanel_ReportsNotOpenOrFocused`（改前 `Expected: False But was: True`）/
+  `DirectDestroy_ReleasesTrackedSubscriptions_AndIsolatesThrowing`。
 
 #### Message
 

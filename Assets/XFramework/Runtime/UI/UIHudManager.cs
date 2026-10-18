@@ -108,7 +108,8 @@ namespace XFramework.XUI
                 return null;
             }
 
-            EnsureContainer();
+            if (!EnsureContainer())
+                return null;
 
             // 同一目标已有 HUD → 先 Detach
             if (_hudMap.TryGetValue(target, out var existing))
@@ -215,6 +216,8 @@ namespace XFramework.XUI
                 var hud = _activeHudList[i];
                 if (hud == null || !hud.IsOpen)
                 {
+                    // 已销毁 / 已关闭的 HUD 也把映射条目摘掉，否则它会永远留在 _hudMap 里（UI-B-005）。
+                    RemoveMapEntry(hud);
                     _activeHudList.RemoveAt(i);
                     continue;
                 }
@@ -251,7 +254,13 @@ namespace XFramework.XUI
         private void DetachInternal(UIHudItem hud, Transform target)
         {
             if (hud == null)
+            {
+                // HUD 已被外部销毁：映射条目仍指向它（值不是 ReferenceEquals(null)），
+                // 不按 target 摘掉会永远留在表里（UI-B-005）。
+                if (target != null)
+                    _hudMap.Remove(target);
                 return;
+            }
 
             // 取消事件订阅
             hud.OnTargetLost -= OnHudTargetLost;
@@ -366,15 +375,15 @@ namespace XFramework.XUI
         /// <summary>
         /// 确保 HUD 容器节点已创建。在 UIRoot 下创建 Layer_HUD 节点。
         /// </summary>
-        private void EnsureContainer()
+        private bool EnsureContainer()
         {
             if (_hudContainer != null)
-                return;
+                return true;
 
             if (_uiRoot == null)
             {
                 LogManager.Error(LogCategories.UIHudManager, "EnsureContainer: uiRoot is null. HUD cannot be created.");
-                return;
+                return false;
             }
 
             var existing = _uiRoot.Find(HudContainerName);
@@ -382,7 +391,7 @@ namespace XFramework.XUI
             {
                 _hudContainer = existing;
                 _hudContainerCanvas = existing.GetComponent<Canvas>();
-                return;
+                return true;
             }
 
             var go = new GameObject(HudContainerName, typeof(RectTransform));
@@ -402,6 +411,7 @@ namespace XFramework.XUI
             go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             _hudContainer = go.transform;
+            return true;
         }
 
         #endregion

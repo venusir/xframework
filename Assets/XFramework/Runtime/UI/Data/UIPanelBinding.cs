@@ -62,13 +62,34 @@ namespace XFramework.XUI.Data
         {
             if (_viewModel != null)
             {
-                _viewModel.OnUnbound();
-                _viewModel.Dispose();
+                try
+                {
+                    _viewModel.OnUnbound();
+                    _viewModel.Dispose();
+                }
+                catch (Exception e)
+                {
+                    // 逐项隔离（UI-B-008）：ViewModel 的清理失败不得跳过后续绑定释放。
+                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                        "释放 ViewModel 时抛出异常，已跳过并继续");
+                }
+
                 _viewModel = null;
             }
 
-            foreach (var binding in _bindings)
-                binding?.Dispose();
+            for (int i = 0; i < _bindings.Count; i++)
+            {
+                try
+                {
+                    _bindings[i]?.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                        "释放绑定时抛出异常，已跳过并继续");
+                }
+            }
+
             _bindings.Clear();
 
             _componentCache.Clear();

@@ -259,5 +259,48 @@ namespace XFramework.XUI.Tests
             typeof(UIManager).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)
                 .SetValue(null, value);
         }
+
+        private sealed class TrackProbe : IDisposable
+        {
+            public bool Disposed;
+
+            public void Dispose() => Disposed = true;
+        }
+
+        private sealed class ThrowingTrackProbe : IDisposable
+        {
+            public void Dispose() => throw new InvalidOperationException("track boom");
+        }
+
+        [Test]
+        public async Task Destroy_RecycledPanel_ReportsNotOpenOrFocused()
+        {
+            // UI-B-006：UIManager.Destroy() 直接回池不走 DoCloseAsync，必须由框架侧复位状态。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/state-reset");
+            Assert.IsTrue(panel.IsOpen, "前提：面板已打开");
+            Assert.IsTrue(panel.IsFocused, "前提：首个面板获得焦点");
+
+            UIManager.Destroy();
+
+            Assert.IsFalse(panel.IsOpen, "回池后不得继续报 IsOpen（UI-B-006）");
+            Assert.IsFalse(panel.IsFocused, "回池后不得继续报 IsFocused（UI-B-006）");
+        }
+
+        [Test]
+        public async Task DirectDestroy_ReleasesTrackedSubscriptions_AndIsolatesThrowing()
+        {
+            // UI-B-004/008：直接销毁面板时 OnDestroy 兜底释放 Track 订阅，且逐项隔离。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/track");
+            var throwing = new ThrowingTrackProbe();
+            var probe = new TrackProbe();
+            panel.Track(throwing);
+            panel.Track(probe);
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape("释放 Track 登记的订阅时抛出异常")));
+            UnityEngine.Object.DestroyImmediate(panel.gameObject);
+
+            Assert.IsTrue(probe.Disposed,
+                "直接销毁面板时，抛异常句柄之后的 Track 订阅仍必须释放（UI-B-004/008）");
+        }
     }
 }

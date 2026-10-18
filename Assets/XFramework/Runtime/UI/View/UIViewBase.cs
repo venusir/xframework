@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UI;
+using XFramework.XLog;
 using XFramework.XUpdate;
 
 namespace XFramework.XUI.View
@@ -73,6 +74,7 @@ namespace XFramework.XUI.View
 
         /// <summary>
         /// 释放全部已登记的订阅。回池时由 <see cref="OnPoolRecycle"/> 调用。
+        /// <para>逐项隔离（UI-B-008）：一个句柄释放失败不得跳过其余句柄。</para>
         /// </summary>
         private void DisposeTracked()
         {
@@ -80,7 +82,17 @@ namespace XFramework.XUI.View
                 return;
 
             for (int i = 0; i < _tracked.Count; i++)
-                _tracked[i]?.Dispose();
+            {
+                try
+                {
+                    _tracked[i]?.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("UIViewBase"), e,
+                        "释放 Track 登记的订阅时抛出异常，已跳过并继续");
+                }
+            }
 
             // 保留 List 实例以便复用，只清元素
             _tracked.Clear();
@@ -198,11 +210,25 @@ namespace XFramework.XUI.View
         {
             DisposeTracked();
 
+            // 框架侧复位打开状态（UI-B-006）：UIManager.Destroy() 直接回池时不走 DoCloseAsync，
+            // 不复位会让 pooled 实例继续报 IsOpen == true。
+            _state = ViewState.Closed;
+
             if (Canvas != null)
             {
                 Canvas.sortingOrder = 0;
                 Canvas.overrideSorting = false;
             }
+        }
+
+        /// <summary>
+        /// 直接销毁时兜底释放 <see cref="Track"/> 登记的订阅（UI-B-004）。
+        /// <para>池化路径关闭时不会触发 OnDestroy；直接销毁（框架支持）时没有 OnPoolRecycle，
+        /// 不在这里释放就会永久残留。子类覆写 OnDestroy 时请调用 base。</para>
+        /// </summary>
+        protected virtual void OnDestroy()
+        {
+            DisposeTracked();
         }
 
         #endregion
