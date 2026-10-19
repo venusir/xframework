@@ -543,7 +543,13 @@ namespace XFramework.XAsset
         /// </summary>
         /// <param name="operation">加载等待缝；生产用 <see cref="HandleBaseWait"/> 包住 YooAsset 句柄。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        internal static async UniTask WaitOrReleaseAsync(IAssetLoadWait operation, CancellationToken cancellationToken)
+        /// <remarks>
+        /// 泛型而非接口形参：<see cref="HandleBaseWait"/> 是 struct，按接口形参传递会在每次加载时装箱一次
+        /// （R3-AST-007）；泛型实例化对值类型直接调用，不装箱。测试替身是 class，同样可用——不为装箱
+        /// 加 <c>struct</c> 约束。
+        /// </remarks>
+        internal static async UniTask WaitOrReleaseAsync<TWait>(TWait operation, CancellationToken cancellationToken)
+            where TWait : IAssetLoadWait
         {
             try
             {

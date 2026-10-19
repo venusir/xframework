@@ -326,6 +326,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`PreloadAllAsync(null)` 抛裸 NRE（R3-AST-008）**：`LoadAllAsync` 对 null 抛 `ArgumentNullException`，
   同族的 `PreloadAllAsync` 却在 `foreach` 处抛 NRE。修法：门面与实现都补 `ArgumentNullException`。
   回归：`AssetManagerFacadeTests.PreloadAllAsync_Null_ThrowsArgumentNullException`。
+- **`WaitOrReleaseAsync` 的接口形参每次加载装箱一次（R3-AST-007）**：`HandleBaseWait` 是 struct，按
+  `IAssetLoadWait` 形参传递会装箱；改为泛型约束（不附加 `struct`，测试替身是 class）。
+  `AssetLoadWaitTests` 两例仍绿。
 
 #### Pipeline
 
