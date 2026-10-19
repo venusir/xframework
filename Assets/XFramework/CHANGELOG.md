@@ -417,6 +417,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **`FocusPanel` 无条件补发 `OnFocus`/`OnResume`（R3-UIA-005）**：重开已聚焦面板、`PopTo` 已在栈顶、
+  `PopToRoot` 栈深≤1 都会触发假的恢复信号。修法：按 `IsFocused` / `IsPaused` 状态守卫。
+  回归：`UIPanelPauseResumeTests.ReopenFocusedPanel_DoesNotEmitDuplicateFocusOrResume`（改前红）。
 - **provider 的 `DetachAll` 与回滚异常未隔离（R3-UIA-004/006）**：`CloseAllAsync` / `Dispose` 直接调用
   `_hudProvider.DetachAll()`，一个 provider 抛异常会阻断另一个；打开失败的回滚在清除 `pending` 之前执行，
   回滚自身抛异常会二次回滚并覆盖原始异常。修法：逐 provider `try/catch`；先置空 `pending` 再回滚、

@@ -118,6 +118,22 @@ namespace XFramework.XUI.Tests
                 "对一个从未暂停过的面板调「恢复」是语义错位，不应触发");
         }
 
+        [Test]
+        public async Task ReopenFocusedPanel_DoesNotEmitDuplicateFocusOrResume()
+        {
+            var panel = await UIManager.OpenAsync<FakePanelB>("ui/a");
+            Assert.IsTrue(panel.IsFocused);
+            panel.Log.Clear();
+
+            var again = await UIManager.OpenAsync<FakePanelB>("ui/a");
+
+            Assert.AreSame(panel, again);
+            Assert.IsFalse(panel.Logged("OnFocus"),
+                "已聚焦的面板重开不应补发 OnFocus（R3-UIA-005）");
+            Assert.IsFalse(panel.Logged("OnResume"),
+                "未暂停的面板重开不应补发 OnResume（R3-UIA-005）");
+        }
+
         #endregion
 
         #region 暂停只影响更新维度

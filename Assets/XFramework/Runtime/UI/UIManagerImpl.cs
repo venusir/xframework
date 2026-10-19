@@ -2048,8 +2048,12 @@ namespace XFramework.XUI
         {
             if (panel != null && panel.IsOpen)
             {
-                panel.OnFocus();    // 交互维度
-                panel.OnResume();   // 更新维度
+                // 按状态守卫（R3-UIA-005）：重开已聚焦面板、PopTo 已在栈顶、PopToRoot 栈深≤1
+                // 都会走到这里；无条件补发会制造假的 OnFocus / OnResume。
+                if (!panel.IsFocused)
+                    panel.OnFocus();    // 交互维度
+                if (panel.IsPaused)
+                    panel.OnResume();   // 更新维度
                 ApplyLayerInteractivity(panel);
             }
         }
