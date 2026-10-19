@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **兼容声明与门禁射程订正（R3-CIN-004/007/008）**：「兼容核心 0.3.0」失实——该 tag 早于 Camera 模块、不含
+  `ICameraManager`；改为「核心包必须包含 Camera 模块」。`OutputCamera` 不再承诺「与过渡目标一致」，
+  改为「可能为 null、不保证等于目标」。补记核心包门禁不覆盖本包的射程缺口。
 - **`Activate` 在混合中途不能强制完成（R3-CIN-001）**：旧实现用短暂失活 / 激活 GameObject 试图重新入队，
   但同步 off/on 后 Brain 仍视同一目标为活动相机，原过渡按原时长继续。修法：改用上游文档明说的
   `CinemachineBrain.ActiveBlend = null`；补 PlayMode 用例（改前 `IsBlending` 恒 true）。

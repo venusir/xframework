@@ -134,8 +134,8 @@ handle.Dispose(); // 门面已销毁也安全
 
 - 实现 `ICameraManager`；注册在实现类自己的构造 / 注册方法里完成。
 - 义务：仅主线程；未知 id 告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`；
-  `ActiveHandle`（`NamedId` 为命名 id）/ `IsTransitioning` / `OutputCamera` 与过渡目标一致；`Activate`
-  取消在途过渡。
+  `ActiveHandle`（`NamedId` 为命名 id）/ `IsTransitioning`；**`OutputCamera` 可能为 `null`、不保证等于
+  过渡目标**（Brain 的输出相机可为过渡源）；`Activate` 取消在途过渡（R3-CIN-007）。
 - 义务与边界的完整说明在核心包 `Runtime/Camera/README.md` 的「自定义实现」与「行为契约」。
 
 ## 内部机制

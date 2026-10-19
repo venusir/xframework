@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Cinemachine 扩展包的兼容声明与门禁缺口（2026-10-19，R3-CIN-004/005/006/007/008）**：核心包版本基线改为
+  「必须包含 Camera 模块」（`0.3.0` tag 早于 Camera）；删去「Brain 无公开完成回调」的过度表述（改为「无 await
+  形态的完成回调」）；`OutputCamera` 改为「可能为 null、不保证等于目标」；扩展 README 登记核心门禁不覆盖本包。
 - **订正 Camera 的 `OutputCamera` 过度承诺（2026-10-19，R3-CAM-003）**：Cinemachine 适配器返回的 Brain
   输出相机**可能为 null**（Brain 所在对象没有 `Camera` 时），接口 XML 与 README 不再写「恒非空」。
 - **订正 Diagnostics 的契约句与恢复入口（2026-10-19，R3-DIAG-002/003）**：`Collect` 抛异常的渲染结果是

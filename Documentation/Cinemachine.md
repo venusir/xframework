@@ -60,7 +60,7 @@ Assets/XFramework.Cinemachine/
 - 不做：**核心包硬依赖 Cinemachine**（2026-10-17）——版本锁会排除 2.x / 2D / 自定义后端项目。无重开判据。
 - 不做：**在扩展包里清空 `brain.CustomBlends`**（2026-10-17）——项目配置优先；清空会悄悄改写项目行为。无重开判据。
 - 不做：**支持 Cinemachine 2.x**（2026-10-17）——2.x 与 3.x 的类型名、命名空间、混合字段全不同，一份代码无法同时编译；2.x 项目写自己的 `ICameraManager`。无重开判据。
-- 暂不做：**`TransitionToAsync` / 过渡完成回调**（2026-10-17 · v1.1 候选）——Brain 的公开面没有完成回调，需要轮询 `IsBlending`；核心接口当前用 `IsTransitioning` 覆盖。重开判据：真实使用方需要 await 且轮询不够。
+- 暂不做：**`TransitionToAsync` / 过渡完成回调**（2026-10-17 · v1.1 候选；2026-10-19 订正措辞）——Brain 没有 **await 形态**的完成回调，需要轮询 `IsBlending`（`ActiveBlend` / `CameraActivated` 等可观测，只是没有 Task/UniTask 形态）；核心接口当前用 `IsTransitioning` 覆盖。重开判据：真实使用方需要 await 且轮询不够。
 
 ## 五、依赖与安装
 

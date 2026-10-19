@@ -12,6 +12,7 @@ Cinemachine 3.x 项目。核心包**零 Cinemachine 依赖**，版本锁只落�
 - 包名：`com.venusy609.xframework.cinemachine`
 - 版本：`0.1.0`
 - 依赖：`com.unity.cinemachine` **3.1.7**（由本包 `package.json` 自动解析）；核心包 `com.venusy609.xframework`（需先安装）
+- **核心包版本基线**：必须包含 `CameraManager` / `ICameraManager` 的版本；仓库 tag `0.3.0` **早于 Camera 模块**，不含本包所需的核心类型（安装时不要钉 `0.3.0`，跟随 `main` 或用包含 Camera 的 tag）
 - 命名空间：`XFramework.XCamera.Cinemachine`
 
 ## 安装
@@ -107,6 +108,8 @@ style / duration）；多一个包要装。
 
 ## 版本与维护
 
-- 本包版本 `0.1.0`；兼容核心包版本见本 README 的安装说明（当前 `0.3.0`）。
+- 本包版本 `0.1.0`；**核心包必须包含 Camera 模块**（`0.3.0` tag 早于 Camera，不含本包所需类型）。
 - 升级 Cinemachine 3.x 时只改本包；核心包的 `ICameraManager` 不变。
+- **门禁射程**：核心包的 `check-docs` / `PublicApiBaseline` / README 表格与章节守卫**不覆盖本包**；本包只有
+  自己的 `CinemachineDependencyTests`（依赖三处 / 示例路径 / 包内不指向包外）。这条缺口已登记在仓库级决策台账（R3-CIN-008）。
 - 维护向记录（3.1.7 API 实测、决策与升级说明）在仓库根的维护文档里，不随本包发布。
