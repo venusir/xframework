@@ -385,6 +385,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Log
+
+- **Flush 路径的死亡 sink 不摘除（R3-LOG-001）**：文件 sink 在 `Flush` 内 IO 失败只 `Die()`、不抛，
+  `LogManager` 的 catch 不触发，死 sink 留在 `_sinks` 且不计 `DroppedSinkCount`。修法：`Flush` 后复查
+  `IsDead` 并摘除。回归：`LogCaptureTests.Flush_DeadFileSink_IsDroppedAndCounted`（改前计数 0）。
+
 #### Message
 
 - **`TryBindToDestroy` 把 None 令牌与已取消并成一枝（R3-MSG-004）**：`IDestroyCancellationToken` 返回

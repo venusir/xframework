@@ -175,6 +175,38 @@ namespace XFramework.XLog.Tests
 
         #region 开关与过滤
 
+        [Test]
+        public void Flush_DeadFileSink_IsDroppedAndCounted()
+        {
+            // 用「文件」冒充目录：文件输出端打开失败、静默停用；Flush 时必须被摘除并计数（R3-LOG-001）
+            var filePath = Path.Combine(Path.GetTempPath(), "XLogDead-" + Guid.NewGuid().ToString("N"));
+            File.WriteAllText(filePath, "x");
+            try
+            {
+                LogManager.Configure(new LogOptions
+                {
+                    MinimumLevel = LogLevel.Verbose,
+                    EnableConsoleSink = false,
+                    EnableFileSink = true,
+                    CaptureUnityLogs = false,
+                    FileDirectory = filePath,
+                    ImmediateFlushMinLevel = LogLevel.Verbose,
+                    FlushEveryEntries = 1,
+                });
+
+                // 首次写入才会打开文件；打开失败即静默停用（Die）
+                LogManager.Info(LogCategory.Get("TestDeadSink"), "trigger open");
+                LogManager.Flush();
+
+                Assert.AreEqual(1, LogManager.DroppedSinkCount,
+                    "静默停用的文件 sink 应在 Flush 时被摘除并计入 DroppedSinkCount");
+            }
+            finally
+            {
+                File.Delete(filePath);
+            }
+        }
+
         [UnityTest]
         public IEnumerator CaptureDisabled_WritesNothing()
         {

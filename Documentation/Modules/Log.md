@@ -125,6 +125,7 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 
 - 已做：**文件 sink 死亡的可观测面**（2026-10-18 · `eeddeb3`）——`Die()` 现在通知 impl 摘除 sink 并计入现有 `DroppedSinkCount`；不新增健康回读 API（LOG-003）。
 - 已做：**`AddSink` 按引用去重 × `RemoveSink` 移除全部匹配且只释放一次**（2026-10-18 · `eeddeb3`）——重复登记改为告警 + 忽略，剩余登记不再写到已释放实例（LOG-006）。
+- 已做：**Flush 路径的死亡 sink 摘除**（2026-10-20 · R3-LOG-001，本轮修复）——Write 路径已通知 impl 摘除；`Flush` 内 IO 失败只 `Die()`、不抛，死 sink 留在表里且不计 `DroppedSinkCount`。修法：`Flush` 后复查 `IsDead` 并摘除；回归 `LogCaptureTests.Flush_DeadFileSink_IsDroppedAndCounted`（改前计数 0）。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 

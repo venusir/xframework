@@ -426,7 +426,13 @@ namespace XFramework.XLog
                 catch (Exception)
                 {
                     DropSink(sinks[i]);
+                    continue;
                 }
+
+                // 文件输出端在 Flush 内部静默停用（Die）时不会抛，管理器必须同形摘除
+                // （R3-LOG-001）：否则死 sink 留在表里，每条日志仍会经它，也不计入 DroppedSinkCount。
+                if (sinks[i] is LogFileSink fileSink && fileSink.IsDead)
+                    DropSink(fileSink);
             }
         }
 
