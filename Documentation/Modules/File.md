@@ -42,3 +42,4 @@
 - 不做：**不给 `IFileProvider` 加 `DeleteAsync` 成员**（2026-10-15）——会让所有第三方实现编译不过；本仓铁律是「不给主接口加成员，第三方实现零影响」。无重开判据。
 - 不做：**不把 `Delete` 改成 `DeleteAsync(...).AsTask().GetAwaiter().GetResult()` 的阻塞包装**（2026-10-15）——调用方**照样阻塞**，只多付一次线程池往返，还会把 Provider 的执行线程从调用线程悄悄改掉。README 那句「同步面是异步面的一层包装」据此**收窄**为「大多只是包装，`Delete` 是直通原语」——改文档而不是改代码迁就它。无重开判据。
 - 不做：**不新增 `MoveAsync` / `CopyAsync`**（2026-10-15）——Save 的「移动」= 复制 + 删源（刻意非原子，见 Save README）；同盘 `File.Move` 在 WebGL / Console 无可用物理路径，加了也没有消费者。原子替换语义已有 `FilePathUtility.ReplaceFileAtomically`（原子写走它）。无重开判据。
+- 已做：**补 `OSXServer` 平台分支**（2026-10-20 · R3-FILE-001，本轮修复）——macOS Server 构建落 default 抛 `PlatformNotSupportedException`，本可用 `DesktopFileProvider`；加 case。运行期需 macOS Server 构建实测（R3-PRB-04 登记 `未做`）。

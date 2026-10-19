@@ -117,6 +117,7 @@ namespace XFramework.XFileManager
                     case RuntimePlatform.LinuxServer:
                     case RuntimePlatform.OSXPlayer:
                     case RuntimePlatform.OSXEditor:
+                    case RuntimePlatform.OSXServer:   // R3-FILE-001：macOS Server 构建也走桌面实现
                         _baseProvider = new DesktopFileProvider();
                         break;
 
