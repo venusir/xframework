@@ -417,6 +417,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **基类 `T` 的在途打开键只按类型，不同资源串台（R3-UIA-001）**：`OpenAsync<UIPanelBase>("a")` 与
+  `OpenAsync<UIPanelBase>("b")` 并发时，第二次会命中第一次的在途记录并共用结果。修法：在途键改为
+  「(请求类型, assetPath)」；不同资源各开各的。回归：
+  `UIPanelConcurrencyTests.ConcurrentOpen_SameBaseType_DifferentPaths_BothOpen`（改前 `CreateCount` 1）。
 - **以基类 `T` 打开的面板在关闭 / 导航 / 查询路径失效（UIA-001）**：打开记账用 `typeof(T)`，而关闭 /
   导航 / 置顶按实例运行期类型 `GetType()` 反查——`T` 是基类时（随包示例正是 `OpenAsync<UIPanelBase>`）
   第二个面板会命中原面板并 Refocus、`CloseAsync(panel)` 静默不关、`Pop*` 静默失效。修法：打开记账改为

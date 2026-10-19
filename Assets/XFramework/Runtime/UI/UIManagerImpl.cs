@@ -112,8 +112,8 @@ namespace XFramework.XUI
         /// 会把第一个实例直接回池，而它的 <c>IsOpen</c> 仍是 true、首个调用方拿到的是池中
         /// 失活引用，<see cref="PanelOpenedMessage"/> 还会发两次。</para>
         /// </summary>
-        private readonly Dictionary<Type, InFlightOpen> _opening
-            = new Dictionary<Type, InFlightOpen>(4);
+        private readonly Dictionary<(Type RequestType, string AssetPath), InFlightOpen> _opening
+            = new Dictionary<(Type, string), InFlightOpen>(4);
 
         /// <summary>
         /// 面板按各自 <see cref="UIViewBase.UpdateTier"/> 分桶。某一档的驱动器被派发时只驱动本桶，
@@ -395,7 +395,7 @@ namespace XFramework.XUI
             {
                 sb.Append("In-flight opens:\n");
                 foreach (var kv in _opening)
-                    sb.Append("  ").Append(kv.Key.Name).Append('\n');
+                    sb.Append("  ").Append(kv.Key.RequestType.Name).Append(" @ ").Append(kv.Key.AssetPath).Append('\n');
             }
 
             return sb.ToString();
@@ -606,22 +606,16 @@ namespace XFramework.XUI
                 return existingPanel as T;
             }
 
-            // 正在打开：加入同一次打开，共享首个调用者的结果
-            if (_opening.TryGetValue(type, out var inFlight))
+            // 正在打开：加入**同一次请求**（请求类型 + 资源地址）的打开，共享首个调用者的结果。
+            // 键必须带 assetPath（R3-UIA-001）：基类 T（如 OpenAsync<UIPanelBase>）并发打开不同资源
+            // 不是同一次请求，只按类型匹配会串台、把后者的结果当成前者的。
+            if (_opening.TryGetValue((type, assetPath), out var inFlight))
             {
-#if UNITY_EDITOR
-                if (inFlight.AssetPath != assetPath)
-                {
-                    LogManager.Warning(LogCategories.UIManager,
-                        "Panel '{0}' is already being opened from '{1}'; the request for '{2}' will reuse that result.",
-                        type.Name, inFlight.AssetPath, assetPath);
-                }
-#endif
                 return await JoinOpeningAsync<T>(inFlight, cancellationToken);
             }
 
             var entry = new InFlightOpen { AssetPath = assetPath };
-            _opening[type] = entry;
+            _opening[(type, assetPath)] = entry;
 
             UIPanelBase pending = null;
             UIPanelBase opened = null;
@@ -1768,12 +1762,12 @@ namespace XFramework.XUI
         /// <summary>
         /// 结束一次在途打开：摘掉记录并把结果广播给全部加入者。
         /// </summary>
-        /// <param name="type">面板类型，作为在途打开记录表的键。</param>
+        /// <param name="type">面板请求类型（与 entry 的 AssetPath 一起构成在途记录表的键）。</param>
         /// <param name="entry">在途打开记录；其 Joiners 为 null 表示没有加入者。</param>
         /// <param name="opened">打开成功的面板；失败或未提交时为 null，加入者据此拿到 null。</param>
         private void SettleOpening(Type type, InFlightOpen entry, UIPanelBase opened)
         {
-            _opening.Remove(type);
+            _opening.Remove((type, entry.AssetPath));
 
             if (entry.Joiners == null)
                 return;

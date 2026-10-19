@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XUI.Data;
+using XFramework.XUI.View;
 using XFramework.XUpdate;
 
 namespace XFramework.XUI.Tests
@@ -187,6 +188,54 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(2, _factory.CreateCount, "去重按类型隔离，不同类型各开各的");
             Assert.IsTrue(UIManager.IsOpen<FakePanel>());
             Assert.IsTrue(UIManager.IsOpen<FakePanelB>());
+        }
+
+        [Test]
+        public async Task ConcurrentOpen_SameBaseType_DifferentPaths_BothOpen()
+        {
+            UIPanelBase first = null;
+            UIPanelBase second = null;
+
+            try
+            {
+                // 基类 T 的两次请求要落到不同具体类型（否则活动集合按运行期类型键会互相覆盖，
+                // 那是另一个缺陷，不是本用例要测的「在途键串台」）。
+                int created = 0;
+                _factory.RegisterPanel<UIPanelBase>(parent =>
+                {
+                    var go = new GameObject("BasePanel", typeof(RectTransform));
+                    if (parent != null)
+                        go.transform.SetParent(parent, false);
+
+                    created++;
+                    return created == 1
+                        ? (UIPanelBase)go.AddComponent<FakePanel>()
+                        : go.AddComponent<FakePanelB>();
+                });
+                _factory.Gate = new UniTaskCompletionSource<object>();
+
+                var a = UIManager.OpenAsync<UIPanelBase>("ui/a").Preserve();
+                await UniTask.Yield();
+                var b = UIManager.OpenAsync<UIPanelBase>("ui/b").Preserve();
+                await UniTask.Yield();
+
+                Assert.AreEqual(2, _factory.CreateCount,
+                    "不同 assetPath 是两次独立请求，不得共享同一次在途打开");
+
+                _factory.Gate.TrySetResult(null);
+                first = await a;
+                second = await b;
+
+                Assert.IsNotNull(first);
+                Assert.IsNotNull(second);
+                Assert.AreNotSame(first, second, "基类 T 并发打开不同资源不得串台");
+            }
+            finally
+            {
+                _factory.Gate = null;
+                if (first != null) UnityEngine.Object.DestroyImmediate(first.gameObject);
+                if (second != null) UnityEngine.Object.DestroyImmediate(second.gameObject);
+            }
         }
 
         #endregion
