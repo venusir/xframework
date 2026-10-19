@@ -61,11 +61,11 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 - 未做：**升档通道依赖 Update 的既有语义**（2026-10-01 · v1 记录）——`ProcessImmediate` 不重置 `NeedsAnchor`、只把 `LastUpdateTime` 写成传入时刻（`UpdateScheduler.cs` 的 `ApplyImmediateTimeBase`）；这是本模块最脆的一处耦合，`TimerTierTests.TierSwitch_DoesNotMoveTheDeadline` 是它的哨兵——Update 将来改这条语义会红。
 - 未做：**`_lastSeen` 用 `float` 回传**（2026-10-01 · v1 记录）——`OnUpdate` 只给 `float time`，回传给 `ProcessImmediate` 时相对调度器内部的 `double` 有一次 ≤ 0.5 ULP 的**一次性**截断（一小时会话约 0.24ms），不累积、不随档位切换次数增长。当前接受，未写用例。
 - 未做：**安全系数 8 是自定值**（2026-10-01 · v1 记录）——给出「最坏相对超时 12.5%、截止前至少 8 次派发机会」两个可核对的数字，但没有实测「卡顿到多少 fps 才会破防」；若将来收到「触发偶尔偏晚」的真实反馈，这里是第一个该调的地方。
-- 待裁：**`UpdateManager.Clear()` 之后模块失联**（2026-10-01 · v1 记录）——Clear 摘掉驱动器而 TimerCore 无感知（同 UI 的 P1 事故形态）；恢复路径是调用 `TimerManager.CancelAll()` 再创建，已写进已知限制，但没有自动侦测——**不能**像 UI 那样「每次入口都重注册」，那会踩上面那条「吞时间」。是否要加侦测未定。
+- 暂不做：**`UpdateManager.Clear()` 之后模块失联**（2026-10-01 · v1 记录；2026-10-19 R3-ADJ-10 裁定为暂不做）——Clear 摘掉驱动器而 TimerCore 无感知（同 UI 的 P1 事故形态）；恢复路径是调用 `TimerManager.CancelAll()` 再创建，已写进已知限制，但没有自动侦测——**不能**像 UI 那样「每次入口都重注册」，那会踩上面那条「吞时间」。重开判据：使用方无法调用 `CancelAll`（拿不到引用）或出现真实事故。
 - 未做：**`_sweepPass` 的理论溢出**（2026-10-01 · v1 记录）——`int` 每趟 +1，长会话下约 400 天绕回；绕回时「本趟出生」的判定可能误伤一两个新生槽位（表现为该槽位晚一拍触发），不产生错误触发。当前不处理。
 - 已做：**零分配断言的恒真尺子改为「结构断言 + 放大粗尺子」两道防线**（2026-10-12 · `6694173`）——`TimerAllocationTests` 的 4 处断言此前用的是**恒真**的尺子（`GC.GetAllocatedBytesForCurrentThread()` 在本环境恒返回 0，分配 1 MB 后增量仍是 0）。现为①三条**结构断言**（`TimerHandle` 是值类型且实例字段全值类型 + readonly；`TimerSlot<TState>.State` 的字段类型就是类型参数本身、槽位无 `object` 字段；槽位与表上都没有 `CancellationTokenRegistration` 的容身之处——**如实说明这是必要条件**，`Register` 完丢弃句柄的写法能骗过它）；②四条**放大粗尺子**（创建/释放 10 万次、扫尾 4 万帧，阈值取实测信号 1/4）。共享尺子工具是 `Tests/Runtime/Architecture/AllocationRuler.cs`（跨模块），校准与改造模板见 `Documentation/Workflow.md` §六。实测（PlayMode，本环境）四条站点的堆增量**均为 0 B**——零分配承诺第一次被真实测量；注入「每迭代一个对象」的坏形态则分别读到 1,576,960 / 1,568,768 / 1,564,672 / 606,208 B（红证已做）。
 
-- 待裁：**`Create`/`Restart` 的锚点需要 Update 当前轴时刻**（2026-10-17 · 第二轮审计）——锚点取 `_logicalNow`，粗档下新定时器可提前一个档位周期触发（TMR-003）；干净修法需 Update 暴露当前轴时刻查询面（跨模块公开面）。2026-10-17 用户裁定：本批只文档化（README 已知限制），修法继续待裁。重开判据：出现对短定时器提前触发敏感的使用方。
+- 暂不做：**`Create`/`Restart` 的锚点需要 Update 当前轴时刻**（2026-10-17 · 第二轮审计；2026-10-19 R3-ADJ-11 裁定为暂不做）——锚点取 `_logicalNow`，粗档下新定时器可提前一个档位周期触发（TMR-003）；干净修法需 Update 暴露当前轴时刻查询面（跨模块公开面）。2026-10-17 用户裁定：本批只文档化（README 已知限制），修法继续暂不做。重开判据：出现对短定时器提前触发敏感的使用方。
 
 - 已做：**`TimerHandle` 实现 `IEquatable<TimerHandle>` 与相等运算符**（2026-10-18 · `9a9e295`）——按 TableId / Slot / Generation 三元组比较，可直接作字典键 / `HashSet` 元素；代际是身份的一部分，槽位复用后旧句柄与新句柄不等（ABA 防线）；`Generation == 0` 的无效语义不变（TMR-007）。
 - 已做：**写路径补 Editor-only 主线程断言**（2026-10-18 · `1a77de9`）——沿用 Message / Pipeline / Asset 的内联形态，不抽公共防线；Release 零开销（TMR-006）。

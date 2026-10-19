@@ -895,6 +895,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **归档第三轮审计的 14 条待裁与框架级结论（2026-10-19）**：`Modules/Asset/Audio/Localization/Log/Settings/Timer/UI.md`
+  的待裁条目按 R3-ADJ-01..14 落定（`不做` / `暂不做` / `未做` / `已做`）；`Ledger.md` 补「公开枚举整数值纳入
+  基线」`待裁`、「依赖清单从 asmdef 反查」`未做`、「Cinemachine 扩展包门禁」`未做`，并追加第三轮判据复核；
+  `Modules/README.md` 的机械守卫射程描述与实际检查对齐（文件表，不是 Ledger 索引）。
 - **包 README 补「包自身 Git URL 不钉修订」说明（2026-10-19，R3-ADJ-14）**：写明与第三方依赖必须钉 `#tag`
   的有意不对称、如何钉 `0.3.0`（`?path=` 在 `#` 之前），并提示该 tag 早于 Camera / Scene 且 `AssetPlayMode`
   整数值不同。

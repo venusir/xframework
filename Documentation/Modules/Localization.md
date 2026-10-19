@@ -32,8 +32,8 @@ Runtime/Localization/
 - 不做：**在 `LanguageChangedMessage` 上自动重解析占位符**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
 - 已做：**`InputManager` 的 11 处订阅绑定改走 `TryBindToDestroy`**（2026-09-30 · `fc07a5b`）——闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册三处缺陷一并修复；`Input.md` 仍未认领该事实，建议在 Input 台账补交叉引用。
 - 已做：**审计轮未发现新的缺陷类**（2026-09-29 · 审计轮）——`ModuleAudit.md` 第三节无需新增。
-- 待裁：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮）。
-- 待裁：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮）。
+- 不做：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-03 裁定为不做）——当前语义可接受；代次作废会增加状态机复杂度，且无使用方需求。无重开判据。
+- 暂不做：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-04 裁定为暂不做）——覆盖当前语言是低频运维动作，新增事件会扩大公开面。重开判据：使用方运行期覆盖当前语言数据且绑定文本需自动刷新。
 - 暂不做：**键值占位符不做递归**（2026-09-29 · 追加轮）——本轮定为**不递归**（与既有单趟扫描一致，值里再含 `{Key}` 不二次扫描）。重开判据：真要做递归时，先定环检测（A→B→A）与深度上限。
 - 已做：**MonoBehaviour 分支的订阅绑定补上直接用例**（2026-10-12 · `3b16e06`，`Tests/Runtime/Localization/LocalizationDestroyBindingTests` 2 例）——EditMode 下 `Object.DestroyImmediate` **不触发** `MonoBehaviour.destroyCancellationToken`（Editor 侧那份 fixture 自己记着这句话），该分支只能在 PlayMode 覆盖；这是本模块第一次有 PlayMode 侧用例，验的是**本模块自己的归口入口** `LocalizationManager.Subscribe` → `MessageManager.TryBindToDestroy`：① 对象销毁后跨帧自动退订；② **同帧边界**——`Destroy` 已调用但帧还没走完时令牌尚未取消、回调照常送达（实测确认：`destroyCancellationToken` 在帧末才取消，不是 `Destroy()` 当场）。注：UI 与 Lock 侧此前已各有同类用例，本条此前说的是本模块的入口没有。
 
