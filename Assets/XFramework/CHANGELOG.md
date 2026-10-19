@@ -366,6 +366,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   路径与形态，加入者参数不一致时打 Warning。回归：
   `ConfigManagerImplTests.PreloadTableAsync_ConcurrentDifferentPaths_WarnsAndSharesFirst`。
 
+#### Input
+
+- **同帧按下+释放的长按时长虚增（R3-INP-002）**：`UpdateButtonPressDurations` 用 `else if` 处理释放，两个边沿
+  同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
+  仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
+
 #### Pipeline
 
 - **终局状态晚于广播、超时失败不带阶段名（PIPE-002/003）**：取消 / 失败分支先 `Broadcast()` 再写

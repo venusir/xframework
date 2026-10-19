@@ -52,6 +52,9 @@ namespace XFramework.XInput.Default
         // 长按计时：记录每个动作首次按下时间（按需增长，支持任意动作名）
         private readonly Dictionary<string, float> _buttonPressStartTimes = new Dictionary<string, float>(32);
 
+        /// <summary>「本帧按下与释放边沿同时出现」的待决标记：下一帧按按钮是否仍按下来结算（R3-INP-002）。</summary>
+        private readonly Dictionary<string, bool> _buttonReleasePending = new Dictionary<string, bool>(4);
+
         // GamepadType 检测缓存:按设备 ID 记忆最近识别结果,避免每帧解析 capabilities JSON(有分配)
         private int _detectedGamepadDeviceId;
         private GamepadType _detectedGamepadType;
@@ -96,6 +99,7 @@ namespace XFramework.XInput.Default
             // 同实例重新初始化时清掉旧资产的缓存（INP-009）
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
+            _buttonReleasePending.Clear();
             _playerBindingPaths.Clear();
             _warnedAmbiguousActionNames.Clear();
 
@@ -265,13 +269,29 @@ namespace XFramework.XInput.Default
                 var inputAction = kvp.Value;
                 if (inputAction == null) continue;
 
-                if (inputAction.WasPressedThisFrame())
-                {
-                    _buttonPressStartTimes[actionName] = Time.unscaledTime;
-                }
-                else if (inputAction.WasReleasedThisFrame())
-                {
+                // 按下与释放必须各自判断（R3-INP-002）：同一帧内按下与释放的边沿可能同时为真，
+                // `else if` 会吞掉释放分支。先处理释放、再处理按下——同帧同时出现时以「本帧的按下」
+                // 为新的计时起点（测试锁定的既有语义：上一帧的释放边沿不得吞掉本帧的新按下）。
+                bool pressed = inputAction.WasPressedThisFrame();
+                bool released = inputAction.WasReleasedThisFrame();
+
+                if (released)
                     _buttonPressStartTimes[actionName] = 0f;
+
+                if (pressed)
+                    _buttonPressStartTimes[actionName] = Time.unscaledTime;
+
+                if (pressed && released)
+                {
+                    // 两个边沿同帧出现时无法当场区分「上一帧的释放 + 本帧新按下」与「本帧按下+释放」；
+                    // 下一帧再看按钮是否仍按住：仍按住 = 新按下有效；已抬起 = 真正的同帧按下+释放，清零。
+                    _buttonReleasePending[actionName] = true;
+                }
+                else if (_buttonReleasePending.TryGetValue(actionName, out var pending) && pending)
+                {
+                    _buttonReleasePending[actionName] = false;
+                    if (!inputAction.IsPressed())
+                        _buttonPressStartTimes[actionName] = 0f;
                 }
             }
         }
@@ -388,6 +408,7 @@ namespace XFramework.XInput.Default
         {
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
+            _buttonReleasePending.Clear();
             _playerBindingPaths.Clear();
         }
 
@@ -729,6 +750,7 @@ namespace XFramework.XInput.Default
 
             _actionCache.Clear();
             _buttonPressStartTimes.Clear();
+            _buttonReleasePending.Clear();
             _playerBindingPaths.Clear();
             _warnedAmbiguousActionNames.Clear();
 
