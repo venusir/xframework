@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Log 的捕获口径与分类计数（2026-10-19，R3-LOG-002/003/004）**：全量捕获改为「先全局档早退，再分类覆盖」，
+  消除前后两句矛盾；`Modules/Log.md` 删去「33 个内置分类」固定计数；`LogFileSink` XML 改为「每个文件输出端
+  一个文件；正常流程每会话一个，同会话内重建会新建文件」。
 - **订正 Message 的台账与 XML（2026-10-19，R3-MSG-001/002/005）**：`Modules/Message.md` 的 MSG-002 条目由
   `未做` 转 `已做`（`4e8645b` 修 ODE、`04b2f33` 补 `IMessageSubscriber`）；补「只清缓存保订阅」`待裁` 条目；
   `MessageBroker` 的过滤异常说明改为「就地记 `[Message]`」；`MessageBusStats` 删去已不存在的 `SetInstance`。
