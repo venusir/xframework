@@ -54,6 +54,9 @@ namespace XFramework.XScene.Tests
         /// <summary>回收前等待的门闩（用例控制「加载成功后、回收在途」的时刻）。</summary>
         public UniTaskCompletionSource Gate;
 
+        /// <summary>非 null 时回收调用抛出该异常（后端失败的观测点）。</summary>
+        public Exception UnloadUnusedException;
+
         #endregion
 
         #region IAssetSceneLoader
@@ -93,6 +96,9 @@ namespace XFramework.XScene.Tests
 
             if (Gate != null)
                 await Gate.Task;
+
+            if (UnloadUnusedException != null)
+                throw UnloadUnusedException;
 
             // 显式检查令牌：不依赖 UniTask.Yield 的取消语义，直接回答「门面传的是哪个令牌」
             cancellationToken.ThrowIfCancellationRequested();

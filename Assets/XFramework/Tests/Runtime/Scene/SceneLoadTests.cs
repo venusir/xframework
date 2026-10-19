@@ -264,6 +264,21 @@ namespace XFramework.XScene.Tests
                 "回收段应收到 CancellationToken.None");
         }
 
+        [Test]
+        public async Task LoadSceneAsync_UnloadUnusedThrows_StillReturnsHandle()
+        {
+            _fake.SceneLoadResult = new AssetSceneHandle(1, default);
+            _fake.UnloadUnusedException = new InvalidOperationException("回收后端失败");
+
+            LogAssert.Expect(LogType.Error, new Regex("资源回收失败"));
+
+            var handle = await SceneManager.LoadSceneAsync(Location,
+                new SceneLoadOptions(LoadSceneMode.Single, unloadUnusedAfterLoad: true));
+
+            Assert.AreEqual(1, handle.Id,
+                "回收抛非取消异常时句柄仍必须交回——否则场景已进来、外部却无卸载凭据（SCN-002）");
+        }
+
         #endregion
 
         #region Internal Methods

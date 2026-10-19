@@ -74,7 +74,17 @@ namespace XFramework.XScene
             {
                 // 加载成功后的回收段不再响应调用方令牌：此刻场景已进来、句柄已就绪，
                 // 因取消丢掉句柄会让 Additive 场景留在 Hierarchy 且外部无卸载凭据（SCN-001）。
-                await AssetManager.UnloadUnusedAssetsAsync(cancellationToken: CancellationToken.None);
+                // 回收是尽力而为的顺手动作，后端抛非取消异常时同样不能让 return handle
+                // 不可达——否则与取消路径同形：场景已进来、句柄却丢了（SCN-002）。
+                try
+                {
+                    await AssetManager.UnloadUnusedAssetsAsync(cancellationToken: CancellationToken.None);
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("SceneManager"), e,
+                        "场景已加载，但加载后的资源回收失败；句柄仍返回。");
+                }
             }
 
             return handle;
