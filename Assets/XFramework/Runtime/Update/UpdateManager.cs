@@ -361,9 +361,11 @@ namespace XFramework.XUpdate
         /// 框架内其它静态门面 <c>Clear</c> 的既有命名与语义，
         /// 并与「静态门面在 <c>Destroy</c> 后可重新初始化」的框架惯例一致。</para>
         /// <para><b>连带影响（UPD-001）</b>：它摘掉的是调度器里的**所有**节点，包括框架内各模块的驱动器。
-        /// 恢复入口各不相同：UI 重进 <c>Initialize</c> / <c>SetInstance</c>；Timer 下一次 <c>After</c> /
-        /// <c>Every</c> 会重新注册；**Audio / Input / Settings 有自记账，不会自愈**——需各自的
-        /// <c>Destroy</c> + <c>Initialize</c>；Camera 在下一次生命周期事件恢复。详见各模块 README。</para>
+        /// 恢复入口各不相同：UI 重进 <c>Initialize</c>（<c>SetInstance</c> 不重接驱动器）；Timer 只有在
+        /// <c>Clear</c> 时处于空闲（无定时器在计时）才会在下一次 <c>After</c> / <c>Every</c> 重新注册——
+        /// 若 <c>Clear</c> 时仍有定时器在计时，需先 <c>CancelAll</c> 再创建；**Audio / Input / Settings 有
+        /// 自记账，不会自愈**——需各自的 <c>Destroy</c> + <c>Initialize</c>；Camera 在下一次生命周期事件恢复。
+        /// 详见各模块 README。</para>
         /// </summary>
         public static void Clear()
         {
@@ -713,6 +715,8 @@ namespace XFramework.XUpdate
         /// <para><b>固定步时机的节点只重新定锚</b>：<see cref="UpdateClock"/> 里没有固定步这条时间轴，
         /// 故落到固定步时机上时不写时刻——下一次固定步派发的 delta 记 0（与注册/启用后首次派发
         /// 同一套锚定语义），而不是把逻辑时刻当成固定步时刻写进去。</para>
+        /// <para><b>对已禁用 / 仍在缓冲中的节点静默无操作</b>：内部找不到条目时直接返回（既不派发、
+        /// 也不报错）——它处理的是「已在管理中的节点」，不负责把未受管的节点拉进来（UPD-004）。</para>
         /// </summary>
         /// <param name="node">要立即更新的对象（任意更新时机接口）。</param>
         /// <param name="deltaTime">传入的时间差。</param>

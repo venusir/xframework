@@ -311,6 +311,9 @@ Runtime/Update/
 应当看到失败（配额、签名、平台 SDK 这类错误该被调用方处理），隐式的每帧回调则不该把调度器带崩。
 （`Tick` 路径那次注销会补发一次 `OnDisable`；`ProcessImmediate` 连注销都不做，自然也不宣告。）
 
+**对已禁用 / 仍在缓冲中的节点静默无操作**：`ProcessImmediate` 内部找不到条目时直接返回（既不派发、
+也不报错）——它处理的是「已在管理中的节点」，不负责把未受管的节点拉进来（UPD-004）。
+
 ## 线程契约
 
 **所有 API 必须在主线程调用，而且模块内没有任何守卫**：注册 / 注销 / 启停 / 暂停 / 驱动全部直接改写
@@ -321,9 +324,10 @@ Runtime/Update/
 ## 已知限制
 
 - **`Clear()` 的连带影响（UPD-001）**：它摘掉调度器里的**所有**节点，包括 UI / Timer / Audio / Input / Settings
-  等模块的驱动器。恢复入口各不相同：UI 重进 `Initialize` / `SetInstance`；Timer 下一次 `After` / `Every`
-  重新注册；**Audio / Input / Settings 有自记账，不会自愈**——需各自的 `Destroy` + `Initialize`；Camera 在
-  下一次生命周期事件恢复。详见各模块 README。
+  等模块的驱动器。恢复入口各不相同：UI 重进 `Initialize`（`SetInstance` 不重接驱动器）；Timer 只有在
+  `Clear` 时处于空闲（无定时器在计时）才会在下一次 `After` / `Every` 重新注册——若 `Clear` 时仍有定时器
+  在计时，需先 `CancelAll` 再创建；**Audio / Input / Settings 有自记账，不会自愈**——需各自的
+  `Destroy` + `Initialize`；Camera 在下一次生命周期事件恢复。详见各模块 README。
 - **永不 tick 的调度器上跨时机操作无界缓冲（UPD-007）**：`timeScale = 0` 时 FixedUpdate 调度器不派发，
   跨时机的注册 / 注销会一直堆在 `_pendingOps` 里；当前仓内无实际风险，但没有上界。极长暂停后大量跨时机
   操作请留意。

@@ -1247,8 +1247,8 @@ namespace XFramework.XUpdate
         /// <para>而不是「先全部注销再全部注册」——后者表达不出调用顺序：同一帧内
         /// 「迁移档位的同时被注销」的节点会在注册阶段被重新插回桶里（永久复活），
         /// 而 Register→Unregister→Register 这类序列无论怎么调两阶段顺序都得不到正确结果。</para>
-        /// <para>索引先自增再应用：应用会触发用户回调，回调里可能继续入队、甚至调用
-        /// <see cref="Clear"/> 清空本缓冲，每轮重新读 <c>Count</c> 才能安全退出。</para>
+        /// <para>索引先自增再应用：应用会触发用户回调，回调里可能继续入队；<c>Clear</c> 也作为一条
+        /// 缓冲操作排队（UPD-002），不会直接清空本缓冲，故每轮重新读 <c>Count</c> 即可安全退出。</para>
         /// </summary>
         private void FlushPending()
         {
