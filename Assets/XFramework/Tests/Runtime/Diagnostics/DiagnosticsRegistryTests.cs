@@ -1,6 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XDiagnostics;
 
 namespace XFramework.XDiagnostics.Tests
@@ -44,6 +47,16 @@ namespace XFramework.XDiagnostics.Tests
             public RawTitlePanel(string title) => _title = title;
 
             public string Title => _title;
+
+            public int Order => 0;
+
+            public void Collect(IDiagnosticReport report) { }
+        }
+
+        /// <summary>Title 的 getter 抛异常（R3-DIAG-001：模块销毁后 getter 可能变坏）。</summary>
+        private sealed class ThrowingTitlePanel : IDiagnosticPanel
+        {
+            public string Title => throw new InvalidOperationException("标题 getter 坏了");
 
             public int Order => 0;
 
@@ -116,6 +129,41 @@ namespace XFramework.XDiagnostics.Tests
             DiagnosticsManager.Register(second);
 
             Assert.AreEqual(2, DiagnosticsManager.PanelCount);
+            Assert.IsTrue(DiagnosticsManager.IsRegistered(second));
+        }
+
+        [Test]
+        public void Register_TitleGetterThrows_StillRegisters()
+        {
+            var panel = new ThrowingTitlePanel();
+
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Title 抛出异常"));
+
+            DiagnosticsManager.Register(panel);
+
+            Assert.AreEqual(1, DiagnosticsManager.PanelCount);
+            Assert.IsTrue(DiagnosticsManager.IsRegistered(panel));
+        }
+
+        [Test]
+        public void Register_SecondThrowingPanel_CollisionCheckDoesNotThrow()
+        {
+            var first = new ThrowingTitlePanel();
+            var second = new ThrowingTitlePanel();
+
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Title 抛出异常"));
+            DiagnosticsManager.Register(first);
+
+            // 第二次登记：新页签读一次 + 冲突扫描对已在册页签读一次，两处都必须走兜底；
+            // 同型兜底名 "(ThrowingTitlePanel)" 相等，还会命中标题重复的 Warning 分支。
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Title 抛出异常"));
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Title 抛出异常"));
+            LogAssert.Expect(LogType.Warning, new Regex("已被 ThrowingTitlePanel 占用"));
+
+            DiagnosticsManager.Register(second);
+
+            Assert.AreEqual(2, DiagnosticsManager.PanelCount);
+            Assert.IsTrue(DiagnosticsManager.IsRegistered(first));
             Assert.IsTrue(DiagnosticsManager.IsRegistered(second));
         }
 

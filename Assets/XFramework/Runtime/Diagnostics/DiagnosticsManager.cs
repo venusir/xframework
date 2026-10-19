@@ -62,7 +62,7 @@ namespace XFramework.XDiagnostics
             if (panel == null)
                 throw new ArgumentNullException(nameof(panel));
 
-            string title = panel.Title;
+            string title = SafeTitle(panel);
             if (string.IsNullOrWhiteSpace(title))
                 throw new ArgumentException("诊断页签必须有非空白的 Title。", nameof(panel));
 
@@ -78,7 +78,7 @@ namespace XFramework.XDiagnostics
 
             for (int i = 0; i < _panels.Count; i++)
             {
-                if (string.Equals(_panels[i].Title, title, StringComparison.Ordinal))
+                if (string.Equals(SafeTitle(_panels[i]), title, StringComparison.Ordinal))
                 {
                     LogManager.Warning(LogCategories.XFramework,
                         "诊断页签标题 '{0}' 已被 {1} 占用；两个页签都会保留。",
@@ -173,6 +173,24 @@ namespace XFramework.XDiagnostics
         public static void Clear()
         {
             _panels.Clear();
+        }
+
+        /// <summary>
+        /// 读取页签标题的兜底（R3-DIAG-001）：第三方 getter 可能抛异常，登记与幂等判定
+        /// 不能因此整体失败——与渲染侧的 <c>SafeTitle</c> 对称。
+        /// </summary>
+        private static string SafeTitle(IDiagnosticPanel panel)
+        {
+            try
+            {
+                return panel.Title;
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.XFramework, e,
+                    "读取诊断页签 Title 抛出异常，已使用类型名代替。");
+                return "(" + panel.GetType().Name + ")";
+            }
         }
 
         #endregion
