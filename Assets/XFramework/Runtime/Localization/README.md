@@ -355,7 +355,8 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 - **转义序列会解码**：`\" \\ \/ \b \f \n \r \t \uXXXX`（含代理对）。这条不是可选项——`System.Text.Json` 默认就把非 ASCII 转义成 `\uXXXX`，Python 的 `json.dumps` 默认 `ensure_ascii=True`，不解码就是整张表把 `中文` 原样显示给玩家。
 - **格式错误抛 `InvalidOperationException`（带字符位置）**，不再返回「已经读到的半张表」。
-  宽容的例外只有两个、且都不影响数据完整性：**尾随逗号**与 **UTF-8 BOM**。
+  宽容的例外**有三个**、且都不影响数据完整性：**尾随逗号**、**UTF-8 BOM**、以及**字符串里的原始控制字符**
+  （如未转义的换行 / 制表——解析器不拒绝，见「已知限制」）。
 - **重复键不抛，记一条 Warning 后后者胜**：JSON 规范未禁止重复键，抛会破坏手写表的兼容性；
   但静默丢数据与模块判定线相反，所以 `[LocalizationManager] Duplicate key 'x' ...` 会指出位置。
 
@@ -378,6 +379,10 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 - **注入的 `Dictionary` 按引用持有，不拷贝。** `Initialize` / `SetLanguageData` / `LocalizationBootstrapStage` 的构造参数都是如此——注入即视为移交所有权，事后改这个字典会直接改到已加载的语言表。
 - **键值占位符的值若含 `{0}`，`GetFormat` 会把它当格式项消费掉。** 替换发生在 `string.Format` 之前，所以一条表项写作 `"ui_tip": "确认({0})"`、又被 `SetPlaceholderFromKey` 引进来时，`{0}` 会被调用方传的实参填上。这条今天就存在（字面量占位符同理），键值占位符只是把暴露面略微放大：值来自语言表，而表是译者/工具产出的。要显示字面量花括号就写 `{{0}}`。
 - **`GetFormat` 会吞掉非法花括号。** 非复合格式项的花括号（未注册的 `{Name}`、游离的 `}`）按字面显示，不再抛 `FormatException`；依赖那个异常做表校验的用法会静默。合法的格式项照旧，索引越界（如表里写 `{1}` 而只传了 1 个实参）仍由 `string.Format` 报错。
+- **`LanguageAssetPath` 必须包含 `{0}`**：缺占位符时每种语言都拼出同一路径（语言切换被静默忽略）；
+  坏模板（非法花括号）会抛没有模块前缀的 `FormatException`（R3-LOC-004）。
+- **JSON 字符串里的原始控制字符会被接受**：未转义的换行 / 制表等不会被解析器拒绝，这是第三种宽容
+  （前两种是尾随逗号与 UTF-8 BOM）；不影响数据完整性，但不符合严格 JSON（R3-LOC-005）。
 - **`Get` 在占位符路径上有分配。** 未注册任何占位符时走零分配快路径（原样返回缓存里的字符串实例）；一旦注册了占位符且文本含 `{`，每次 `Get` 会分配一个 `StringBuilder` 与结果串。
 - **全局占位符的值不随语言切换刷新。** 它是语言无关的一张表：值**来自语言表**时（`SetPlaceholder("Guild", Get("guild_legendary"))`），切换语言后模板更新了、嵌进去的值还是旧的——**没有异常、没有日志**，症状是「英文句子里嵌着中文称号」。与「`SetLanguageData` 覆盖当前语言数据不发通知」同族：查询面变了、事件面没有。需要跟随时走 `Get` + `GetFormat`，见「快速使用」§7 的判定线。
 - **`GetFormat` 的数字 / 日期格式跟随设备文化，不跟随 `CurrentLanguage`。** 它用的是默认 `string.Format` 重载 → `CultureInfo.CurrentCulture`：德语设备上跑英文界面会得到 `1,5` 而不是 `1.5`。**如实标为「观察到的边界，不是缺陷」**——数字格式跟随设备文化本身是有争议但常见的选择，而本模块没有文化概念，也没有带 `IFormatProvider` 的重载。要有确定行为请自行格式化后当参数传入。

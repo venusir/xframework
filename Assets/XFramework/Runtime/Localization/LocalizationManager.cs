@@ -120,6 +120,8 @@ namespace XFramework.XLocalization
         /// 语言数据文件的 YooAsset 地址模板。
         /// <para>默认为 <c>"localization/lang_{0}"</c>。切换语言时，通过 <see cref="SwitchLanguageAsync"/> 使用此模板拼接地址。</para>
         /// <para>拼接示例：<c>string.Format(LanguageAssetPath, "ja")</c> → <c>"localization/lang_ja"</c></para>
+        /// <para><b>必须包含 <c>{0}</c></b>：缺占位符时每种语言都拼出同一路径（语言切换被静默忽略）；
+        /// 坏模板（非法花括号）会抛没有模块前缀的 <see cref="System.FormatException"/>（R3-LOC-004）。</para>
         /// <para>数据文件需为 <see cref="TextAsset"/>，内容为 JSON 格式的键值对：<c>{"key": "value", ...}</c></para>
         /// </summary>
         public static string LanguageAssetPath

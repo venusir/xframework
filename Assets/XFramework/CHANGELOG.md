@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Localization 的样例与宽容口径（2026-10-19，R3-LOC-001/005 + LOC-004 文档面）**：`ToString` 样例改为
+  实际输出 `zh-Hans(当前), 128 条`；JSON 原始控制字符列为第三种宽容；`LanguageAssetPath` 写明必须包含
+  `{0}`（缺占位符语言被静默忽略，坏模板抛无前缀 `FormatException`）。
 - **订正 Data 的失败计数与隐式前提（2026-10-19，R3-DATA-004/005）**：`ApplySnapshot` 的失败原因补「清空阶段
   `OnClear` 抛异常」与「快照条目为 null」（实现本就计数，文档原先漏列）；补「`RegisterBlock<T>` 以静态类型
   为键」与「`BlockName` 注册后不得改变」两条已知限制。

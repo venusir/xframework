@@ -29,7 +29,7 @@ namespace XFramework.XLocalization
             IsFallback = isFallback;
         }
 
-        /// <summary>单行摘要，形如 <c>zh-Hans(当前, 128 条)</c>。</summary>
+        /// <summary>单行摘要，形如 <c>zh-Hans(当前), 128 条</c>（非当前/回退语言为 <c>zh-Hans(128 条)</c>）。</summary>
         public override string ToString()
         {
             string tag = IsCurrent ? "(当前)" : (IsFallback ? "(回退)" : string.Empty);
