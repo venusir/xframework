@@ -14,7 +14,7 @@ namespace XFramework.XMessage
     /// </summary>
     /// <example>
     /// <code>
-    /// public sealed class PlayerModel : IDestroyCancellationToken
+    /// public sealed class PlayerModel : IMessageSubscriber, IDestroyCancellationToken
     /// {
     ///     readonly CancellationTokenSource _cts = new CancellationTokenSource();
     ///     readonly CancellationToken _token;   // 构造时缓存：Dispose 之后再读 _cts.Token 会抛 ObjectDisposedException
@@ -23,6 +23,8 @@ namespace XFramework.XMessage
     ///
     ///     public CancellationToken DestroyCancellationToken => _token;
     ///
+    ///     void OnPlayerDied(PlayerDiedMessage message) { /* 占位：订阅回调 */ }
+    ///
     ///     public void Dispose()
     ///     {
     ///         _cts.Cancel();
@@ -30,7 +32,8 @@ namespace XFramework.XMessage
     ///     }
     /// }
     ///
-    /// // 订阅随 PlayerModel 销毁自动取消
+    /// // 订阅随 PlayerModel 销毁自动取消：Subscribe&lt;T&gt; 是 IMessageSubscriber 的扩展方法，
+    /// // 类声明必须同时实现 IMessageSubscriber 与 IDestroyCancellationToken
     /// model.Subscribe&lt;PlayerDiedMessage&gt;(OnPlayerDied);
     /// </code>
     /// </example>

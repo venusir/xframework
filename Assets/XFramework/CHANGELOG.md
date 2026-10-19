@@ -663,6 +663,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Message
 
+- **`IDestroyCancellationToken` 的 XML 示例缺 `IMessageSubscriber`，照抄 CS1929（R3-MSG-003）**：R2 修掉了
+  「销毁后读 `_cts.Token` 抛 ObjectDisposedException」半边，但示例类仍只实现 `IDestroyCancellationToken`，
+  而 `Subscribe<T>` 扩展方法的接收者是 `IMessageSubscriber`——照抄示例得到 CS1929，随包 XML 仍不可编译。
+  修法：类声明补 `IMessageSubscriber`，并注明 `Subscribe<T>` 是 `IMessageSubscriber` 的扩展方法。
+  验证：临时 `netstandard2.1` 编译探针（原样 CS1929，补接口后 0 error）。
 - **首条 `Publish` 时同步订阅清零导致通道在缓冲写入前被回收（MSG-001）**：最后一个同步订阅者在回调里
   自退订 → `IsReclaimable` 判真（此时缓冲流尚未创建）→ 通道被摘除，随后的缓冲写入落在孤儿通道上，
   该条消息永久失去可重放性。修法：`MessageChannel` 加投递深度闩锁，`IsReclaimable` 在投递期间恒为
