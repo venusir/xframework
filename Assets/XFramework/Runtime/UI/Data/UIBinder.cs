@@ -301,8 +301,10 @@ namespace XFramework.XUI.Data
 
             protected override void OnDispose()
             {
-                _slider.onValueChanged.RemoveListener(_onSliderChanged);
+                // 先解属性订阅再摘控件监听（R3-UIB-005）：控件可能已销毁，RemovedListener 仍可能
+                // 触碰 Unity 对象；属性订阅是纯托管资源，先释放它，即使后面抛异常也不会泄漏订阅。
                 _upstream?.Dispose();
+                _slider.onValueChanged.RemoveListener(_onSliderChanged);
             }
         }
 
@@ -371,8 +373,9 @@ namespace XFramework.XUI.Data
 
             protected override void OnDispose()
             {
-                _toggle.onValueChanged.RemoveListener(_onToggleChanged);
+                // 同 SliderTwoWayBinding：先解属性订阅再摘控件监听（R3-UIB-005）
                 _upstream?.Dispose();
+                _toggle.onValueChanged.RemoveListener(_onToggleChanged);
             }
         }
 

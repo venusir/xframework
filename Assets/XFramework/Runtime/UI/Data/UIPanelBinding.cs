@@ -62,14 +62,24 @@ namespace XFramework.XUI.Data
         {
             if (_viewModel != null)
             {
+                // OnUnbound 与 Dispose 分开隔离（R3-UIB-006）：OnUnbound 抛异常不得跳过 Dispose，
+                // 否则整个 ViewModel 的响应式属性与订阅全部泄漏。
                 try
                 {
                     _viewModel.OnUnbound();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                        "ViewModel.OnUnbound 抛出异常，已跳过并继续");
+                }
+
+                try
+                {
                     _viewModel.Dispose();
                 }
                 catch (Exception e)
                 {
-                    // 逐项隔离（UI-B-008）：ViewModel 的清理失败不得跳过后续绑定释放。
                     LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
                         "释放 ViewModel 时抛出异常，已跳过并继续");
                 }

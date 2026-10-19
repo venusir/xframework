@@ -417,6 +417,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **双向绑定释放顺序与 ViewModel 隔离（R3-UIB-005/006）**：`Slider`/`Toggle` 双向绑定先摘控件监听再解属性
+  订阅——控件已销毁时监听摘除可能抛异常、把属性订阅漏掉；`UIPanelBinding.Unbind` 的 `OnUnbound`/`Dispose`
+  同 try，`ViewModelBase.Dispose` 两个循环也无逐项隔离。修法：先解属性订阅再摘监听；`OnUnbound` 与
+  `Dispose` 分开 try；属性/订阅逐个 try/catch。回归：`ViewModelBaseTests` 两例（改前均红）。
 - **HUD 派发重入与停更后目标丢失（R3-UIB-002/003）**：倒序索引循环在用户 `OnUpdate` 里 `HideHud` 下方 HUD
   时会把同一实例移位到当前下标、同帧驱动两次；`UpdateFaulted` 分支先于目标丢失判定，停更 HUD 的目标销毁后
   不再回收、常驻屏幕。修法：每轮重新夹紧下标 + `lastProcessed` 去重；停更分支先处理目标丢失。

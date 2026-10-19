@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using XFramework.XLog;
 using XFramework.XReactive;
 
 namespace XFramework.XUI.Data
@@ -43,12 +44,34 @@ namespace XFramework.XUI.Data
         /// </summary>
         public virtual void Dispose()
         {
-            foreach (var prop in _properties)
-                prop?.Dispose();
+            // 逐项隔离（R3-UIB-006）：一个属性/订阅释放失败不得跳过其余项——
+            // 否则后续订阅永久泄漏，且异常会打断面板回池的收尾。
+            for (int i = 0; i < _properties.Count; i++)
+            {
+                try
+                {
+                    _properties[i]?.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("ViewModelBase"), e,
+                        "释放 ViewModel 属性时抛出异常，已跳过并继续");
+                }
+            }
             _properties.Clear();
 
-            foreach (var sub in _subscriptions)
-                sub?.Dispose();
+            for (int i = 0; i < _subscriptions.Count; i++)
+            {
+                try
+                {
+                    _subscriptions[i]?.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategory.Get("ViewModelBase"), e,
+                        "释放 ViewModel 订阅时抛出异常，已跳过并继续");
+                }
+            }
             _subscriptions.Clear();
         }
 
