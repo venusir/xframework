@@ -417,6 +417,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **provider 的 `DetachAll` 与回滚异常未隔离（R3-UIA-004/006）**：`CloseAllAsync` / `Dispose` 直接调用
+  `_hudProvider.DetachAll()`，一个 provider 抛异常会阻断另一个；打开失败的回滚在清除 `pending` 之前执行，
+  回滚自身抛异常会二次回滚并覆盖原始异常。修法：逐 provider `try/catch`；先置空 `pending` 再回滚、
+  回滚异常只记日志。回归：`CloseAllAsync_OneProviderDetachThrows_OtherStillDetached` /
+  `Open_OnOpenThrows_AndRollbackThrows_PreservesOriginalException`（改前均红）。
 - **绕过 `CloseAsync` 直接销毁面板时遮罩/捕获层持有不回收（R3-UIA-003）**：外部 `Destroy` 不走
   `ReleaseMasksOwnedBy` / `ReleasePopupCatcherOf`；遮罩与全屏捕获层永久驻留。修法：帧剪枝发现栈空洞时
   同步清理指向已销毁面板的遮罩/捕获持有，并在无持有者时隐藏。回归：

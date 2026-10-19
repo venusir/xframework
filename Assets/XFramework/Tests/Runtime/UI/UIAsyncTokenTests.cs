@@ -1,8 +1,10 @@
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
 
@@ -91,6 +93,26 @@ namespace XFramework.XUI.Tests
         /// <para>它们不是面板，但与面板共享同一个 UIRoot 与生命周期。此前实现里没有这一步，而
         /// README 与实现内注释都写着「已经做了」——注释说交给门面处理，门面只转发一行。</para>
         /// </summary>
+        [Test]
+        public async Task CloseAllAsync_OneProviderDetachThrows_OtherStillDetached()
+        {
+            var hud = new FaultyHudProvider { ThrowOnDetachAll = true };
+            var tip = new CountingTipProvider();
+            UIManager.SetHudProvider(hud);
+            UIManager.SetTipProvider(tip);
+
+            LogAssert.Expect(LogType.Error, new Regex("HUD provider.DetachAll 抛出异常"));
+
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(1, hud.DetachAllCount);
+            Assert.AreEqual(1, tip.DetachAllCount,
+                "一个 provider 的 DetachAll 抛异常不得阻断另一个（R3-UIA-004）");
+
+            // TearDown 的 Destroy 还会再调一次 DetachAll；关掉开关，免得它产生第二条未预期日志
+            hud.ThrowOnDetachAll = false;
+        }
+
         [Test]
         public async Task CloseAllAsync_DetachesHudAndTips()
         {

@@ -25,6 +25,9 @@ namespace XFramework.XUI.Tests
 
         public bool HasActive => false;
 
+        /// <summary>置 true 时 <c>DetachAll</c> 抛异常（R3-UIA-004 的隔离用例）。</summary>
+        public bool ThrowOnDetachAll { get; set; }
+
         public void Update(float deltaTime, float time)
         {
             UpdateCount++;
@@ -36,6 +39,9 @@ namespace XFramework.XUI.Tests
         public void DetachAll()
         {
             DetachAllCount++;
+
+            if (ThrowOnDetachAll)
+                throw new InvalidOperationException("[FaultyHudProvider] 故意在 DetachAll 里抛异常");
         }
 
         // SetUIRoot 记数：注入路径会在初始化后补调一次（R3-ADJ-12），用例据此断言接线

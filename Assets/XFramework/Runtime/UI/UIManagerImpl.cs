@@ -550,11 +550,11 @@ namespace XFramework.XUI
             _assetCache.Clear();
 
             // provider 随实例一同归口：Tip 与 HUD 都是回池而非销毁，
-            // 不回收的话它们会留在场景里无人认领
-            _tipProvider?.DetachAll();
+            // 不回收的话它们会留在场景里无人认领；逐 provider 隔离（R3-UIA-004）。
+            SafeDetachAll(_tipProvider);
             _tipProvider = null;
 
-            _hudProvider?.DetachAll();
+            SafeDetachAll(_hudProvider);
             _hudProvider = null;
 
             // 销毁遮罩。它由 new GameObject 创建、从未经 AssetManager 托管，
@@ -708,7 +708,22 @@ namespace XFramework.XUI
             catch
             {
                 if (!committed && pending != null)
-                    RollbackPanel(pending);
+                {
+                    // 先置空再回滚（R3-UIA-006）：回滚自身抛异常时不得二次回滚；
+                    // 回滚异常只记日志，不覆盖正在传播的原始异常。
+                    UIPanelBase toRollback = pending;
+                    pending = null;
+                    try
+                    {
+                        RollbackPanel(toRollback);
+                    }
+                    catch (Exception e)
+                    {
+                        LogManager.Exception(LogCategories.UIManager, e,
+                            string.Format("回滚面板 {0} 时抛出异常，已跳过（保留原始异常）",
+                                toRollback != null ? toRollback.GetType().Name : "(null)"));
+                    }
+                }
 
                 throw;
             }
@@ -822,8 +837,8 @@ namespace XFramework.XUI
             //
             // 遮罩不在其列：它是引用计数句柄（谁持有谁释放），在这里强制清掉会让别的系统手里的
             // 句柄凭空失效。要连遮罩一起收，请显式调 HideMask()。
-            _hudProvider?.DetachAll();
-            _tipProvider?.DetachAll();
+            SafeDetachAll(_hudProvider);
+            SafeDetachAll(_tipProvider);
 
             // 收集所有面板（避免遍历中修改字典）
             var toClose = new List<(UIPanelBase panel, Type type)>();
@@ -1008,6 +1023,41 @@ namespace XFramework.XUI
             }
 
             ApplyMaskClickToClose(clickToClose);
+        }
+
+        /// <summary>
+        /// 回收 HUD provider 的全部 HUD，并隔离其异常（R3-UIA-004）：第三方 provider 的
+        /// <c>DetachAll</c> 抛异常不得中断管理器清理，也不得吃掉 Tip 侧的同名调用。
+        /// </summary>
+        private static void SafeDetachAll(IUIHudProvider provider)
+        {
+            if (provider == null) return;
+
+            try
+            {
+                provider.DetachAll();
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    "HUD provider.DetachAll 抛出异常，已隔离并继续。");
+            }
+        }
+
+        /// <summary>回收 Tip provider 的全部 Tip，异常隔离同 <see cref="SafeDetachAll(IUIHudProvider)"/>。</summary>
+        private static void SafeDetachAll(IUITipProvider provider)
+        {
+            if (provider == null) return;
+
+            try
+            {
+                provider.DetachAll();
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    "Tip provider.DetachAll 抛出异常，已隔离并继续。");
+            }
         }
 
         /// <summary>

@@ -242,6 +242,29 @@ namespace XFramework.XUI.Tests
 
         #region 失败回滚
 
+        /// <summary>
+        /// 回滚自身抛异常时，原始打开异常不得被覆盖，也不得二次回滚（R3-UIA-006）。
+        /// </summary>
+        [Test]
+        public void Open_OnOpenThrows_AndRollbackThrows_PreservesOriginalException()
+        {
+            _factory.ThrowOnRelease = true;
+            try
+            {
+                LogAssert.Expect(LogType.Error, new Regex("回滚面板 ThrowingPanel 时抛出异常"));
+
+                var ex = Assert.ThrowsAsync<InvalidOperationException>(async () =>
+                    await UIManager.OpenAsync<ThrowingPanel>("ui/boom"));
+
+                StringAssert.Contains("[ThrowingPanel] 故意在 OnOpen 里抛异常", ex.Message,
+                    "回滚异常不得覆盖原始打开异常");
+            }
+            finally
+            {
+                _factory.ThrowOnRelease = false;
+            }
+        }
+
         [Test]
         public async Task OpenAsync_BlockedByController_LeavesNothingRegistered()
         {
