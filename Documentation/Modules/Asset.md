@@ -88,11 +88,12 @@ Runtime/Asset/
 
 - 已做：**会话复位退订旧实例的 `Application.lowMemory`**（2026-10-18 · `68db39a`）——`AssetManagerImpl` 抽出幂等 `Attach/DetachLowMemoryHandler`，复位在丢引用前退订（只 `-=`、不 Dispose）；第三方实现自带静态订阅时框架探测不到，README 已写明（AST-008）。
 - 已做：**CLAUDE.md 豁免清单补 `AssetManager.UnloadSceneAsync`**（2026-10-18 · `deee388`）——它是第三处「未初始化也不抛」的宽容语义豁免（AST-009）。
-- 已做：**运行模式范围裁定为 Offline / Host / EditorSimulate**（2026-10-18 · `f8a64bf`，用户裁定；`AssetDecryptionServicesTests.CreateEditorSimulateParameters_*`）——EditorSimulate 以显式枚举成员 opt-in，初始化时由框架调用 `EditorSimulateModeHelper.SimulateBuild` 自动模拟构建；枚举按上游 `EPlayMode` 顺序排列（包未发布，无既有序列化兼容负担）；该模式用虚拟 bundle 直接读原始资源，故忽略 `DecryptionServices` / `RemoteServices`。
+- 已做：**运行模式范围裁定为 Offline / Host / EditorSimulate**（2026-10-18 · `f8a64bf`，用户裁定；`AssetDecryptionServicesTests.CreateEditorSimulateParameters_*`）——EditorSimulate 以显式枚举成员 opt-in，初始化时由框架调用 `EditorSimulateModeHelper.SimulateBuild` 自动模拟构建；枚举按上游 `EPlayMode` 顺序排列（`0.3.0` 的 `Offline=0/Host=1` 从未分发，2026-10-19 用户确认，故无需恢复旧整数值；从 `0.3.0` 源码升级时反序列化后需重新选择运行模式，R3-AST-001）；该模式用虚拟 bundle 直接读原始资源，故忽略 `DecryptionServices` / `RemoteServices`。
 - 暂不做：**映射 WebPlayMode**（2026-10-18 · 用户裁定）——它仅 WebGL 可用，且需要 WebServer / WebRemote 文件系统参数与 Web 专用解密接口 `IWebDecryptionServices`（与现有 `IDecryptionServices` 形状不同）；框架其它模块在 WebGL 也均无开箱支持。重开判据：出现真实 WebGL 发布需求，且愿为它增加 Web 文件系统配置面。
 - 不做：**映射 CustomPlayMode**（2026-10-18 · 用户裁定）——它要求使用方提供 `List<FileSystemParameters>`（YooAsset 类型），与「公开面不出现第三方类型」的原则冲突；整体替换 `IAssetManager` 已是该场景的出口。无重开判据。
 - 不做：**EditorSimulate 在非编辑器平台静默降级为 Offline**（2026-10-18 · 实现裁定）——静默降级会让「模拟模式误打进包」永远不被发现；初始化失败必须显式可见。无重开判据。
 - 暂不做：**缓存 SimulateBuild 产物**（2026-10-18 · 上游行为核对）——YooAsset 每次调用都会重跑模拟构建；框架加缓存会引入失效判定与包复用语义冲突。重开判据：实测模拟构建成为进入播放的显著瓶颈。
+- 已做：**`DefaultGameLauncher` 的 Host 模式提示补 `RemoteServices` 前置**（2026-10-19 · R3-AST-009）——Inspector 提供 Host 但没有 `RemoteServices` 注入点，选 Host 必在启动抛 `ArgumentException`；字段 tooltip 已写明「需在引导代码里注入」。
 
 ## 审计轮次
 

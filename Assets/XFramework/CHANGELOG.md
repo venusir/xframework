@@ -26,7 +26,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `EditorSimulateModeHelper.SimulateBuild`，产物在 `Bundles/<ActiveBuildTarget>/<包名>/Simulate`。
   仅 Unity 编辑器可用——Player 构建传此值抛 `PlatformNotSupportedException`（不静默降级）；
   `RemoteServices` 与 `DecryptionServices` 在该模式忽略。枚举按上游 `EPlayMode` 顺序排列
-  （`EditorSimulate = 0` / `Offline = 1` / `Host = 2`）；包未发布，无需为既有序列化让位。
+  （`EditorSimulate = 0` / `Offline = 1` / `Host = 2`）。`0.3.0` 的枚举是 `Offline = 0` / `Host = 1`，
+  但该 tag **从未分发过**（2026-10-19 用户确认），因此无需为既有序列化让位；若从 `0.3.0` 的源码 / 场景
+  升级，整数值已变，反序列化后需重新选择运行模式（见 `### Changed` 的行为变更节）。
   **公开 API 源兼容新增，基线 +1 行**。WebPlayMode / CustomPlayMode 仍不映射
   （理由与重开判据见模块决策台账）。回归用例：
   `AssetDecryptionServicesTests.CreateEditorSimulateParameters_WiresEditorFileSystem` /
@@ -192,6 +194,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **`AssetPlayMode` 的整数值与 `0.3.0` 不同（R3-AST-001）**：当前为 `EditorSimulate = 0` /
+  `Offline = 1` / `Host = 2`，而 `0.3.0` 是 `Offline = 0` / `Host = 1`。该 tag **从未分发**（2026-10-19
+  用户确认），故不恢复旧值；若你从 `0.3.0` 的源码 / 场景升级，反序列化后请重新选择运行模式——
+  `0` 现在解释为 `EditorSimulate`，在 Player 构建里会抛 `PlatformNotSupportedException`。
 - **`UpdateManager.ProcessImmediate` 的跨时机语义写清（UPD-003）**：一次调用向三套调度器**全部转发**——
   同时实现多个时机接口的节点会在每个时机各派发一次（`OnUpdate` + `OnLateUpdate` 各一次），不是「一次更新」；
   固定步时机只重新定锚、不写时刻。此前 XML 只写「一次更新」，与实现不符。
@@ -883,6 +889,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **`AssetPlayMode` 的序列化迁移说明与 Host 模式 tooltip（2026-10-19，R3-AST-001/009）**：`0.3.0` 的枚举是
+  `Offline=0/Host=1`，当前是 `EditorSimulate=0/Offline=1/Host=2`；该 tag 从未分发（用户确认），故保留当前
+  顺序，只在行为变更节写明「从 0.3.0 源码升级需重新选择运行模式」。`DefaultGameLauncher` 的 Host tooltip
+  补「需注入 `RemoteServices`，否则启动抛 `ArgumentException`」。
 - **删除不可实现的「用项目自己的 AudioMixer」配方（2026-10-19，R3-AUD-001）**：框架动态创建的播放源
   `outputAudioMixerGroup` 恒为 `null`，声音不会进入项目 Mixer 的总线/效果链，`AudioMixer.SetFloat`
   对框架声音静默无效。README 的该配方已删除并改为真实边界（要接入需整体替换 `IAudioManager`），
