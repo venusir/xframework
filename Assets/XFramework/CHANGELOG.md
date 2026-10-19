@@ -385,6 +385,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Bootstrap
+
+- **Shutdown 取消异常与登记表遍历（R3-BST-001/003）**：`_runCts.Cancel()` 的回调抛异常会以 `AggregateException`
+  在任何 `stage.Shutdown()` 之前逃出；`Shutdown` 在活引用 `StageList` 上索引遍历，阶段清理里 `Clear/Unregister`
+  会越界或跳过其余阶段。修法：`Cancel` 逐处隔离；入口先快照登记表。回归：
+  `BootstrapTests.Shutdown_CancellationCallbackThrows_StillShutsDownAllStages` /
+  `Shutdown_StageClearsRegistry_AllStagesStillShutDown`（改前均红）。
+
 #### Audio
 
 - **音量刷新假 null、Sweep 的 break 过早注销（R3-AUD-002/003）**：外部销毁的播放源上写 `volume` 会抛

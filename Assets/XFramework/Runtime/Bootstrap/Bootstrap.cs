@@ -246,7 +246,17 @@ namespace XFramework.XBootstrap
             // 上一会话在途运行的取消源：显式中止后丢弃。不 Dispose——释放归创建它的那次运行
             // （它的收尾靠身份校验，不会碰到新会话的取消源）。若那次运行的收尾永远不会到来
             // （域重载关闭、旧会话的续体已死），这个源留给 GC，属已知且可接受的代价。
-            _runCts?.Cancel();
+            try
+            {
+                _runCts?.Cancel();
+            }
+            catch (Exception e)
+            {
+                // 阶段注册的取消回调抛异常会以 AggregateException 冒出（R3-BST-001）；
+                // 会话复位必须继续，不能让它把后面的复位全部跳过。
+                LogManager.Exception(LogCategories.Bootstrap, e,
+                    "会话复位时取消回调抛出异常，已隔离并继续。");
+            }
             _runCts = null;
         }
 
@@ -380,13 +390,26 @@ namespace XFramework.XBootstrap
         {
             // 先中止在途运行，再清理：取消是协作式的——当前阶段要自己观察令牌才会立刻停，
             // 整轮在该阶段的沉降点之后收场；不响应取消的阶段会跑完（如实边界，见 README 已知限制）。
-            _runCts?.Cancel();
+            try
+            {
+                _runCts?.Cancel();
+            }
+            catch (Exception e)
+            {
+                // 取消回调抛异常不得在任何 stage.Shutdown 之前逃出（R3-BST-001）：清理必须继续。
+                LogManager.Exception(LogCategories.Bootstrap, e,
+                    "Shutdown 时取消回调抛出异常，已隔离并继续清理。");
+            }
+
+            // 入口先快照登记表（R3-BST-003）：阶段的 Shutdown 里若 Clear/Unregister，
+            // 活引用上的索引遍历会越界或跳过其余阶段。
+            var stages = new List<IBootstrapStage>(StageList);
 
             // 收集 distinct 相位并升序排列(相位数量 = 模块数量级,非每帧路径;手写循环,零 LINQ)
-            var phases = new List<int>(StageList.Count);
-            for (int i = 0; i < StageList.Count; i++)
+            var phases = new List<int>(stages.Count);
+            for (int i = 0; i < stages.Count; i++)
             {
-                int phase = StageList[i].Phase;
+                int phase = stages[i].Phase;
                 if (!phases.Contains(phase))
                 {
                     phases.Add(phase);
@@ -399,11 +422,11 @@ namespace XFramework.XBootstrap
             for (int p = phases.Count - 1; p >= 0; p--)
             {
                 int phase = phases[p];
-                for (int i = StageList.Count - 1; i >= 0; i--)
+                for (int i = stages.Count - 1; i >= 0; i--)
                 {
-                    if (StageList[i].Phase == phase)
+                    if (stages[i].Phase == phase)
                     {
-                        ShutdownStage(StageList[i]);
+                        ShutdownStage(stages[i]);
                     }
                 }
             }

@@ -80,6 +80,7 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理语义）
 - 不做：**`BootstrapPhases.PreAsset` 常量 / 负相位契约**（2026-10-17 · 重新审计）——框架不为「早于 Asset」保留槽位；需要时在 `RunAsync` 之前自行初始化。公开常量会把一个未论证的位置变成承诺。重开判据：出现真实第三方诉求。
 - 不做：**多启动器守卫**（2026-10-17 · 重新审计）——不给 `GameLauncher` 引入单例静态态；README 写明「同一会话只应有一个启动器」。重开判据：出现真实多启动器用法。
 - 不做：**改 `BootstrapPhases.UserStart` 的值**（2026-10-17 · 重新审计）——它与 `Localization` 同值 90 是「不依赖本地化的业务阶段尽早开始」的有意取舍；依赖本地化的阶段取更大值，README 已写明。无重开判据。
+- 已做：**Shutdown 取消隔离与登记表快照**（2026-10-20 · R3-BST-001/003，本轮修复）——`_runCts.Cancel()` 在阶段注册的取消回调抛异常时会以 `AggregateException` 在任何 `stage.Shutdown()` 之前逃出；`Shutdown` 在活引用 `StageList` 上索引遍历，阶段 `Shutdown` 里 `Clear/Unregister` 会越界或跳过其余阶段。修法：`Cancel` 逐处 try/catch 记 Error；入口先快照登记表；回归 `BootstrapTests` 两例（改前异常逃逸/跳过阶段）。
 
 ## 审计轮次
 

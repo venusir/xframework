@@ -29,6 +29,13 @@ namespace Venusy609.Xframework.Editor.Tests
             public UniTaskCompletionSource Gate;
             /// <summary>非 null 时：阶段启动后立即取消它，模拟「运行中取消」。</summary>
             public CancellationTokenSource CancelAfterStart;
+
+            /// <summary>置真时在阶段令牌上注册一个抛异常的取消回调（R3-BST-001 的隔离用例）。</summary>
+            public bool RegisterThrowingCancellationCallback;
+
+            /// <summary>Shutdown 收尾动作（可在其中按需改登记表）。</summary>
+            public Action OnShutdown;
+
             public List<string> Log;
             public List<string> ShutdownLog;
 
@@ -44,6 +51,12 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 ExecuteCount++;
                 Log?.Add(StageName);
+
+                if (RegisterThrowingCancellationCallback)
+                {
+                    cancellationToken.Register(
+                        () => throw new InvalidOperationException("cancel callback boom"));
+                }
 
                 if (CancelAfterStart != null)
                 {
@@ -70,6 +83,7 @@ namespace Venusy609.Xframework.Editor.Tests
             public void Shutdown()
             {
                 ShutdownLog?.Add(StageName);
+                OnShutdown?.Invoke();
 
                 if (ThrowOnShutdown)
                 {
@@ -196,6 +210,48 @@ namespace Venusy609.Xframework.Editor.Tests
             Bootstrap.Clear();
 
             Assert.AreEqual(0, Bootstrap.Stages.Count);
+        }
+
+        [Test]
+        public void Shutdown_CancellationCallbackThrows_StillShutsDownAllStages()
+        {
+            var throwing = NewStage("throwing", 0);
+            throwing.RegisterThrowingCancellationCallback = true;
+            // 闸住 ExecuteAsync：_runCts 保持在途，Shutdown 的 Cancel 才会真正触发阶段令牌上的回调
+            throwing.Gate = new UniTaskCompletionSource();
+            var normal = NewStage("normal", 1);
+            normal.ShutdownLog = new List<string>();
+
+            Bootstrap.Register(throwing);
+            Bootstrap.Register(normal);
+            Bootstrap.RunAsync(); // 在途；令牌仍链接到 _runCts
+
+            LogAssert.Expect(LogType.Error, new Regex("取消回调抛出异常"));
+            Assert.DoesNotThrow(() => Bootstrap.Shutdown());
+
+            CollectionAssert.Contains(normal.ShutdownLog, "normal",
+                "取消回调异常不得跳过阶段清理（R3-BST-001）");
+
+            throwing.Gate.TrySetResult();
+        }
+
+        [Test]
+        public void Shutdown_StageClearsRegistry_AllStagesStillShutDown()
+        {
+            var first = NewStage("first", 0);
+            first.ShutdownLog = new List<string>();
+            var clearing = NewStage("clearing", 1);
+            clearing.ShutdownLog = new List<string>();
+            clearing.OnShutdown = Bootstrap.Clear;
+
+            Bootstrap.Register(first);
+            Bootstrap.Register(clearing);
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Assert.DoesNotThrow(() => Bootstrap.Shutdown());
+
+            CollectionAssert.Contains(first.ShutdownLog, "first",
+                "阶段 Shutdown 里 Clear 登记表不得跳过其余阶段（R3-BST-003）");
         }
 
         [Test]
