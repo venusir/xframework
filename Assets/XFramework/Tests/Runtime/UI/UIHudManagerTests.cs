@@ -28,6 +28,7 @@ namespace XFramework.XUI.Tests
         private const string AsyncClosePath = "ui/hud/async";
         private const string UpdateThrowingPath = "ui/hud/update-throw";
         private const string CountingPath = "ui/hud/counting";
+        private const string ReentrantPath = "ui/hud/reentrant";
 
         #endregion
 
@@ -53,6 +54,7 @@ namespace XFramework.XUI.Tests
             _assets.RegisterPrefab<AsyncCloseHudItem>(AsyncClosePath);
             _assets.RegisterPrefab<UpdateThrowingHudItem>(UpdateThrowingPath);
             _assets.RegisterPrefab<CountingHudItem>(CountingPath);
+            _assets.RegisterPrefab<ReentrantHudItem>(ReentrantPath);
             AssetManager.SetInstance(_assets);
 
             _root = new GameObject("UIRoot_HudTest", typeof(RectTransform));
@@ -214,6 +216,63 @@ namespace XFramework.XUI.Tests
             }
         }
 
+        /// <summary>
+        /// 停更的 HUD 仍要处理目标丢失（R3-UIB-003）：停更只该停「更新」，不该停「回收」——
+        /// 否则目标销毁后 HUD 常驻屏幕、映射永远清不掉。
+        /// </summary>
+        [Test]
+        public async Task FaultedHud_TargetDestroyed_IsStillDetached()
+        {
+            var target = new GameObject("FaultedTarget");
+            try
+            {
+                var hud = await UIManager.ShowHudAsync<UpdateThrowingHudItem>(
+                    target.transform, UpdateThrowingPath);
+
+                LogAssert.Expect(LogType.Error, new Regex("OnUpdate threw exception"));
+                UIManager.Update(0.016f, 0f); // 首次驱动抛异常 → UpdateFaulted
+
+                UnityEngine.Object.DestroyImmediate(target);
+                UIManager.Update(0.016f, 0f); // 目标丢失应回收，而不是被停更分支跳过
+                await UniTask.Yield();
+
+                Assert.IsFalse(hud.IsOpen, "停更 HUD 的目标销毁后仍应被回收（R3-UIB-003）");
+            }
+            finally
+            {
+                if (target != null)
+                    UnityEngine.Object.DestroyImmediate(target);
+            }
+        }
+
+        /// <summary>
+        /// OnUpdate 里 HideHud 其它 HUD 不得让同一实例同帧被驱动两次（R3-UIB-002）。
+        /// 倒序遍历 + 删除下方条目会把当前实例移位到当前下标；没有 lastProcessed 守卫会重复驱动。
+        /// </summary>
+        [Test]
+        public async Task HudOnUpdate_HidesOtherHud_NoDoubleDriveOrCrash()
+        {
+            var otherTarget = new GameObject("OtherTarget");
+            try
+            {
+                await UIManager.ShowHudAsync<CountingHudItem>(
+                    otherTarget.transform, CountingPath);
+                var reentrant = await UIManager.ShowHudAsync<ReentrantHudItem>(
+                    _target.transform, ReentrantPath);
+
+                ReentrantHudItem.OnUpdateAction = () => UIManager.HideHud(otherTarget.transform);
+
+                Assert.DoesNotThrow(() => UIManager.Update(0.016f, 0f));
+                Assert.AreEqual(1, reentrant.UpdateCount,
+                    "同一 HUD 不得在同一帧被驱动两次（R3-UIB-002）");
+            }
+            finally
+            {
+                ReentrantHudItem.OnUpdateAction = null;
+                UnityEngine.Object.DestroyImmediate(otherTarget);
+            }
+        }
+
         #endregion
     }
 
@@ -272,6 +331,27 @@ namespace XFramework.XUI.Tests
         public int UpdateCount;
 
         protected internal override void OnUpdate(float deltaTime, float time) => UpdateCount++;
+    }
+
+    /// <summary>
+    /// 在 OnUpdate 里执行一次外部动作的 HUD（用于重入：HideHud 其它 HUD / CloseAllAsync）。
+    /// <para>动作只执行一次，避免后续帧重复触发。</para>
+    /// </summary>
+    public class ReentrantHudItem : UIHudItem
+    {
+        public static Action OnUpdateAction;
+
+        public int UpdateCount { get; private set; }
+
+        protected internal override void OnUpdate(float deltaTime, float time)
+        {
+            UpdateCount++;
+            base.OnUpdate(deltaTime, time);
+
+            var action = OnUpdateAction;
+            OnUpdateAction = null;
+            action?.Invoke();
+        }
     }
 
     #endregion

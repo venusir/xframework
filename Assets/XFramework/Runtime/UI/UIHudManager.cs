@@ -211,9 +211,23 @@ namespace XFramework.XUI
                 return;
 
             // 倒序遍历，防止 HUD 回收时列表收缩导致索引错位
+            // 用户 OnUpdate 里可能 HideHud / CloseAllAsync 改写列表（R3-UIB-002）：每轮重新夹紧下标，
+            // 并用 lastProcessed 防止「删除下方条目后同一实例移位到当前下标」被同帧驱动两次。
+            UIHudItem lastProcessed = null;
             for (int i = _activeHudList.Count - 1; i >= 0; i--)
             {
+                if (i >= _activeHudList.Count)
+                {
+                    i = _activeHudList.Count;   // 夹紧后由 for 的 i-- 落到新的末尾
+                    continue;
+                }
+
                 var hud = _activeHudList[i];
+                if (ReferenceEquals(hud, lastProcessed))
+                    continue;   // 回调改写列表后同一实例移到了当前下标
+
+                lastProcessed = hud;
+
                 if (hud == null || !hud.IsOpen)
                 {
                     // 已销毁 / 已关闭的 HUD 也把映射条目摘掉，否则它会永远留在 _hudMap 里（UI-B-005）。
@@ -222,9 +236,14 @@ namespace XFramework.XUI
                     continue;
                 }
 
-                // 已停更（UpdateFaulted）的 HUD：OnUpdate 抛过异常，继续驱动只会每帧再抛一次
+                // 已停更（UpdateFaulted）的 HUD：OnUpdate 抛过异常，继续驱动只会每帧再抛一次。
+                // 但**目标丢失的回收不能停**（R3-UIB-003）：否则 HUD 常驻屏幕、映射永远清不掉。
                 if (hud.UpdateFaulted)
+                {
+                    if (hud.FollowTarget == null)
+                        OnHudTargetLost(hud);
                     continue;
+                }
 
                 try
                 {

@@ -417,6 +417,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **HUD 派发重入与停更后目标丢失（R3-UIB-002/003）**：倒序索引循环在用户 `OnUpdate` 里 `HideHud` 下方 HUD
+  时会把同一实例移位到当前下标、同帧驱动两次；`UpdateFaulted` 分支先于目标丢失判定，停更 HUD 的目标销毁后
+  不再回收、常驻屏幕。修法：每轮重新夹紧下标 + `lastProcessed` 去重；停更分支先处理目标丢失。
+  回归：`UIHudManagerTests.HudOnUpdate_HidesOtherHud_NoDoubleDriveOrCrash` /
+  `FaultedHud_TargetDestroyed_IsStillDetached`（改前均红）。
 - **打开在途时 Dispose 会对同一面板二次回池（R3-UIA-007）**：`Dispose` 的批量回池与在途打开续体的
   `RollbackPanel` 共用 `RecyclePanel` 出口且无认领守卫，`OnPoolRecycle` / 对话框结果兜底会执行两次。
   修法：面板加内部回池认领标记（`IsRecycled` / `MarkRecycled` / `MarkReopened`），`RecyclePanel` 只认领一次。
