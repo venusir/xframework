@@ -762,6 +762,17 @@ namespace XFramework.XAsset
             _autoReclaimOnLowMemory = false;
         }
 
+        /// <summary>
+        /// 会话复位入口：只退订引擎事件、不 Dispose（R3-AST-002）。
+        /// <para>低内存事件挂在门面实现上，<c>sceneUnloaded</c> 挂在 YooAsset 适配器上——
+        /// 两者都只 <c>-=</c>，旧实例随静态事件跨会话存活的路径就此断开。</para>
+        /// </summary>
+        internal void DetachSessionSubscriptions()
+        {
+            DetachLowMemoryHandler();
+            _managerImpl?.DetachSceneUnloadedHandler();
+        }
+
         /// <summary>当前是否订阅着低内存事件（测试缝 / 诊断）。</summary>
         internal bool IsLowMemoryHandlerAttached => _autoReclaimOnLowMemory;
 

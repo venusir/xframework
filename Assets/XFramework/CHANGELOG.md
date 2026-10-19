@@ -298,12 +298,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   使用方重新 `Initialize`；旧实例不 Dispose。
 - **`SaveManager` 在会话开始时只丢实现引用**（SAVE-001，仅关闭域重载时可见）：第二会话的
   `SaveBootstrapStage` 会重新初始化并重接 `SaveOptions.CryptoProvider`；旧实例不 Dispose。
-- **`AssetManager` 在会话开始时退订旧实例的低内存事件**（AST-008，仅关闭域重载时可见）：复位只丢引用、
-  不 Dispose，但旧实例不再被 `Application.lowMemory` 钉住；第三方实现需自行退订自己的静态事件。
+- **`AssetManager` 在会话开始时退订旧实例的引擎事件**（AST-008 / R3-AST-002，仅关闭域重载时可见）：复位只丢
+  引用、不 Dispose，但旧实例不再被 `Application.lowMemory` 或 `SceneManager.sceneUnloaded` 钉住；第三方实现需
+  自行退订自己的静态事件。
 - **`InputManager` 在会话开始时退订旧 provider 的设备事件**（INP-002，仅关闭域重载时可见）：复位只丢
   引用、不 Dispose，但默认 provider 不再被 `InputSystem.onDeviceChange` 钉住；第三方 provider 需自行退订。
 
 ### Fixed
+
+#### Asset
+
+- **会话复位未拆 `SceneManager.sceneUnloaded` 订阅（R3-AST-002，回归）**：`AssetManager.ResetForNewSession`
+  只退订了 `Application.lowMemory`；YooAsset 适配器的 `sceneUnloaded` 实例订阅跨会话存活，旧实例被静态事件
+  钉住并继续回调。修法：适配器抽出幂等 `DetachSceneUnloadedHandler`，门面经
+  `AssetManagerImpl.DetachSessionSubscriptions` 一并退订（只 `-=`、不 Dispose）。回归：
+  `YooAssetManagerImplTests` 两例。
 
 #### Pipeline
 

@@ -261,10 +261,11 @@ namespace XFramework.XAsset
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()
         {
-            // AST-008：实例订阅了 Application.lowMemory，只丢引用会让静态事件把旧实例钉住——
-            // 关闭域重载时整只实例跨会话存活，低内存事件仍回调上一会话的对象。
+            // AST-008 / R3-AST-002：实例订阅了 Application.lowMemory，适配器订阅了
+            // SceneManager.sceneUnloaded——只丢引用会让静态事件把旧实例钉住，关闭域重载时整只实例
+            // 跨会话存活并继续回调上一会话的对象。
             if (_instance is AssetManagerImpl impl)
-                impl.DetachLowMemoryHandler();
+                impl.DetachSessionSubscriptions();
 
             _instance = null;
             _instanceInitialized = false;

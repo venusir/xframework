@@ -755,6 +755,22 @@ namespace XFramework.XAsset
             _sceneUnloadedSubscribed = true;
         }
 
+        /// <summary>
+        /// 退订 <c>SceneManager.sceneUnloaded</c>（幂等，不 Dispose）。会话复位用（R3-AST-002）：
+        /// 旧实例如被静态事件钉住，关闭域重载后会跨会话存活并继续回调。
+        /// </summary>
+        internal void DetachSceneUnloadedHandler()
+        {
+            if (!_sceneUnloadedSubscribed)
+                return;
+
+            SceneManager.sceneUnloaded -= OnSceneUnloaded;
+            _sceneUnloadedSubscribed = false;
+        }
+
+        /// <summary>当前是否订阅着 <c>SceneManager.sceneUnloaded</c>（测试缝 / 诊断）。</summary>
+        internal bool IsSceneUnloadedHandlerAttached => _sceneUnloadedSubscribed;
+
         /// <summary>是否已订阅 <c>SceneManager.sceneUnloaded</c>（Destroy 后复用同一实例时要重新挂上）。</summary>
         private bool _sceneUnloadedSubscribed;
 
@@ -763,11 +779,7 @@ namespace XFramework.XAsset
         /// </summary>
         public void Destroy()
         {
-            if (_sceneUnloadedSubscribed)
-            {
-                SceneManager.sceneUnloaded -= OnSceneUnloaded;
-                _sceneUnloadedSubscribed = false;
-            }
+            DetachSceneUnloadedHandler();
 
             _packages.Clear();
             // 只丢引用，不 Release：与「Destroy 不卸载 YooAsset 侧已加载资源」同一口径
