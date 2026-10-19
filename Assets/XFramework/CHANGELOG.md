@@ -332,6 +332,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **多 `IConfigRow<>` 实现静默取第一个、基类回退循环是死代码（R3-CONF-010）**：`ConfigTypeHelper` 按接口
+  枚举顺序取第一个主键且无告警；`GetInterfaces()` 已含继承接口，基类回退循环不可达。修法：删除死代码；
+  多接口实现时打 Warning（仍取第一个，行为不变）。回归：
+  `ConfigManagerImplTests.GetKeyType_MultipleIConfigRow_LogsWarning`。
 - **Loader 返回 null 的归因与未加载提示（R3-CONF-006/007）**：自定义 Table loader 返回 null 时只会在
   `table._dict` 处抛 NRE 文本；未加载异常的修复提示写 `PreloadTableAsync<T>()`，照抄 CS7036（缺必填
   assetPath）。修法：null 包装器给专名 `ConfigException`；提示补 `("path")`。回归：

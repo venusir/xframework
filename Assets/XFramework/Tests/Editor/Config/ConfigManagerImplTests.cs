@@ -111,6 +111,23 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreSame(r1, r2, "加入者拿到的是首个调用方的结果");
         }
 
+        /// <summary>同时实现两个不同主键的 IConfigRow（R3-CONF-010 多接口告警用）。</summary>
+        private sealed class MultiKeyRow : IConfigRow<int>, IConfigRow<string>
+        {
+            int IConfigRow<int>.Id => 0;
+            string IConfigRow<string>.Id => "0";
+        }
+
+        [Test]
+        public void GetKeyType_MultipleIConfigRow_LogsWarning()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("实现了多个 IConfigRow<>"));
+
+            var keyType = ConfigTypeHelper.GetKeyType(typeof(MultiKeyRow));
+
+            Assert.IsNotNull(keyType, "多接口实现仍取第一个，但必须告警（R3-CONF-010）");
+        }
+
         [Test]
         public void PreloadTableAsync_LoaderReturnsNull_ThrowsNamedMessage()
         {

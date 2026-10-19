@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Reflection;
+using XFramework.XLog;
 
 namespace XFramework.XConfig
 {
@@ -31,30 +32,34 @@ namespace XFramework.XConfig
 
         private static Type ExtractKeyType(Type rowType)
         {
-            // 遍历接口查找 IConfigRow<T>
+            Type found = null;
+
+            // GetInterfaces() 已包含从基类继承的接口，故无需再单独遍历 BaseType
+            // （旧实现的那段循环是死代码，R3-CONF-010）。
             foreach (var iface in rowType.GetInterfaces())
             {
-                if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IConfigRow<>))
+                if (!iface.IsGenericType || iface.GetGenericTypeDefinition() != typeof(IConfigRow<>))
+                    continue;
+
+                var candidate = iface.GetGenericArguments()[0];
+                if (found == null)
                 {
-                    return iface.GetGenericArguments()[0];
+                    found = candidate;
+                    continue;
+                }
+
+                // 多接口实现时静默取第一个会让主键类型取决于接口枚举顺序（CLR 不保证）；
+                // 告警后仍取第一个，与既有行为一致（R3-CONF-010）。
+                if (found != candidate)
+                {
+                    LogManager.Warning(LogCategories.Config,
+                        "行类型 '{0}' 实现了多个 IConfigRow<>（{1} 与 {2}），取第一个。",
+                        rowType.Name, found, candidate);
                 }
             }
 
-            // 检查基类是否继承 IConfigRow<T>
-            var baseType = rowType.BaseType;
-            while (baseType != null && baseType != typeof(object))
-            {
-                foreach (var iface in baseType.GetInterfaces())
-                {
-                    if (iface.IsGenericType && iface.GetGenericTypeDefinition() == typeof(IConfigRow<>))
-                    {
-                        var key = iface.GetGenericArguments()[0];
-                        KeyTypeCache[rowType] = key;
-                        return key;
-                    }
-                }
-                baseType = baseType.BaseType;
-            }
+            if (found != null)
+                return found;
 
             throw new ConfigException(
                 $"Type '{rowType.FullName}' does not implement IConfigRow<TKey>. " +
