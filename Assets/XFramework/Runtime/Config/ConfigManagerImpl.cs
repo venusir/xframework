@@ -261,6 +261,15 @@ namespace XFramework.XConfig
             {
                 var loader = customLoader ?? Loaders[format];
                 var tableObj = await InvokeLoader<T>(loader, keyType, assetPath);
+
+                // 自定义 Loader 返回 null 时给出专名消息（R3-CONF-007）：
+                // 否则下一行的 table._dict 只会抛出 NRE 文本，排查方向被带偏。
+                if (tableObj == null)
+                {
+                    throw new ConfigException(
+                        $"Loader returned null Table for '{type.Name}' from '{assetPath}'.");
+                }
+
                 var table = (ConfigTable<T>)tableObj;
                 _tables[type] = table._dict;
                 _tableWrappers[type] = table;
@@ -605,7 +614,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             if (!_tables.TryGetValue(type, out var dict))
                 throw new ConfigException(
-                    $"Table '{type.Name}' is not loaded. Call PreloadTableAsync<{type.Name}>() first.");
+                    $"Table '{type.Name}' is not loaded. Call PreloadTableAsync<{type.Name}>(\"path\") first.");
             return GetOrCreateWrapper<T>(type, dict);
         }
 
@@ -654,7 +663,7 @@ namespace XFramework.XConfig
             var type = typeof(T);
             if (!_globals.TryGetValue(type, out var obj))
                 throw new ConfigException(
-                    $"Global config '{type.Name}' is not loaded. Call PreloadGlobalAsync<{type.Name}>() first.");
+                    $"Global config '{type.Name}' is not loaded. Call PreloadGlobalAsync<{type.Name}>(\"path\") first.");
             return (T)obj;
         }
 

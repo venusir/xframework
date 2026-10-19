@@ -84,6 +84,7 @@ Runtime/Config/
 
 - 已做：**CONF-016 编译探针与文档**（2026-10-18 · 独立工程 dotnet build）——`PreloadTableAsync<T>("path", default)` 在 `ConfigFormat` / `IConfigLoader` 重载间 CS0121（探针复现）；XML 与 README 写明显式 `ConfigFormat.Json` 或强转，不加重载。
 
+- 已做：**Loader 返回 null 的归因与未加载提示**（2026-10-19 · R3-CONF-006/007，本轮修复）——自定义 Table loader 返回 null 只有 NRE 文本；未加载提示缺必填 assetPath（照抄 CS7036）。修法：null 包装器给专名 `ConfigException`；提示补 `("path")`；回归 `ConfigManagerImplTests` 两例。
 - 已做：**CSV 数值解析改 `InvariantCulture`**（2026-10-19 · R3-CONF-005，本轮修复）——`int`/`float`/`double` 的 `TryParse` 未指定 culture，de-DE 会把 `1.5` 读成 `15`。修法：统一 `InvariantCulture`；回归 `CsvLoaderTests.ParseTable_FloatWithDot_UsesInvariantCulture`（改前 15.0，改后 1.5）。
 - 已做：**在途加载参数不一致时告警**（2026-10-19 · R3-CONF-003，本轮修复）——同一类型的并发 `Preload` 只按 Type+Kind 匹配，第二调用方的 assetPath/format/loader 不同也直接加入、无提示。修法：`InFlightLoad` 记录首个请求的路径与形态，加入者参数不一致时打 Warning；回归 `ConfigManagerImplTests.PreloadTableAsync_ConcurrentDifferentPaths_WarnsAndSharesFirst`。
 - 已做：**行类型示例必须「字段 + 显式实现 `IConfigRow<TKey>.Id`」**（2026-10-19 · R3-CONF-001，本轮修复；临时 `netstandard2.1` 编译探针正/负）——R2 把示例从自动属性改成裸字段时只修了一半：`IConfigRow<TKey>.Id` 是属性，C# 字段不能实现接口属性，三处示例照抄即 `CS0535`。三处已统一为「字段承载序列化 + `int IConfigRow<int>.Id => Id;`」，「已知限制」同步成文。

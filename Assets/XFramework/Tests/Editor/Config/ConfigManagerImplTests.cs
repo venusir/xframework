@@ -112,6 +112,31 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void PreloadTableAsync_LoaderReturnsNull_ThrowsNamedMessage()
+        {
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader(); // 未注入任务 → 返回 null 包装器
+
+            var ex = Assert.Throws<ConfigException>(() =>
+                impl.PreloadTableAsync<TestItemRow>("config/x", fake).GetAwaiter().GetResult());
+
+            StringAssert.Contains("Loader returned null Table", ex.Message,
+                "自定义 Loader 返回 null 必须给出专名消息，而不是 NRE 文本（R3-CONF-007）");
+            Assert.IsFalse(impl.IsLoaded<TestItemRow>());
+        }
+
+        [Test]
+        public void GetTable_NotLoaded_MessageIncludesRequiredAssetPath()
+        {
+            var impl = new ConfigManagerImpl();
+
+            var ex = Assert.Throws<ConfigException>(() => impl.GetTable<TestItemRow>());
+
+            StringAssert.Contains("PreloadTableAsync<TestItemRow>(\"path\")", ex.Message,
+                "修复提示必须带上必填的 assetPath，否则照抄 CS7036（R3-CONF-006）");
+        }
+
+        [Test]
         public void PreloadGlobalAsync_ConcurrentCalls_LoadOnce()
         {
             var impl = new ConfigManagerImpl();

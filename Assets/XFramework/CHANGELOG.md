@@ -332,6 +332,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **Loader 返回 null 的归因与未加载提示（R3-CONF-006/007）**：自定义 Table loader 返回 null 时只会在
+  `table._dict` 处抛 NRE 文本；未加载异常的修复提示写 `PreloadTableAsync<T>()`，照抄 CS7036（缺必填
+  assetPath）。修法：null 包装器给专名 `ConfigException`；提示补 `("path")`。回归：
+  `ConfigManagerImplTests.PreloadTableAsync_LoaderReturnsNull_ThrowsNamedMessage` /
+  `GetTable_NotLoaded_MessageIncludesRequiredAssetPath`。
 - **CSV 数值解析走当前区域文化（R3-CONF-005）**：`int`/`float`/`double` 的 `TryParse` 未指定 culture，
   de-DE 等小数逗号区域会把 `1.5` 读成 `15`。修法：统一 `InvariantCulture`（整数 `Integer`、浮点 `Float`）。
   回归：`CsvLoaderTests.ParseTable_FloatWithDot_UsesInvariantCulture`（改前 15.0，改后 1.5）。
