@@ -417,6 +417,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **重复打开面板时遮罩/捕获层按请求层排序（R3-UIA-002）**：`ShowDialogAsync` / `ShowPopupAsync` 推导遮罩 /
+  捕获层时用本次请求的 `layer`；面板已存在时 `OpenAsync` 只是聚焦、不改它的 `Layer`，遮罩被放到错误的层。
+  修法：改用 `panel.Layer`。回归：`UIDialogPanelTests.RepeatedOpen_DifferentLayer_MaskFollowsExistingPanelLayer`
+  （改前 9599，改后 6399）。
 - **基类 `T` 的在途打开键只按类型，不同资源串台（R3-UIA-001）**：`OpenAsync<UIPanelBase>("a")` 与
   `OpenAsync<UIPanelBase>("b")` 并发时，第二次会命中第一次的在途记录并共用结果。修法：在途键改为
   「(请求类型, assetPath)」；不同资源各开各的。回归：

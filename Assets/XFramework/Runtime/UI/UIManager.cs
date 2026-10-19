@@ -874,7 +874,9 @@ namespace XFramework.XUI
             if (!panel.IsOpen)
                 return default;
 
-            int maskLayer = dialogLayer - 1;
+            // 遮罩层跟随**面板实际 Layer**而不是本次请求层（R3-UIA-002）：重复打开已存在的对话框时
+            // OpenAsync 会聚焦原面板、不会改它的 Layer；按请求层推导会把遮罩放到错误的层。
+            int maskLayer = panel.Layer - 1;
             if (modal && maskLayer >= 0)
             {
                 var style = new UIMaskStyle(maskLayer, maskColor ?? UIMaskStyle.Default.Color);
@@ -979,7 +981,7 @@ namespace XFramework.XUI
                 // 捕获层是内置实现的能力（与 SetController / TipAssetPath 同一探测），注入自定义
                 // IUIManager 时拿不到——出声而不是静默失效，否则使用方只会看到「点了外面没反应」
                 if (impl is UIManagerImpl builtIn)
-                    builtIn.AttachPopupCatcher(panel, popupLayer);
+                    builtIn.AttachPopupCatcher(panel, panel.Layer);   // 跟随面板实际 Layer（R3-UIA-002）
                 else
                     LogManager.Warning(LogCategories.UIManager,
                         "Current instance is not UIManagerImpl, so closeOnClickOutside has no effect.");

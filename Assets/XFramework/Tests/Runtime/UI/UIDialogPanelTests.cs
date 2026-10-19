@@ -251,6 +251,30 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
+        public async Task RepeatedOpen_DifferentLayer_MaskFollowsExistingPanelLayer()
+        {
+            // R3-UIA-002：重复打开已存在的对话框时，OpenAsync 聚焦原面板、不会改它的 Layer；
+            // 遮罩必须跟随面板实际 Layer，而不是本次请求层。
+            var first = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>(
+                "PF_FakeDialog", layer: UILayers.Popup);
+            await UniTask.Yield();
+            Assert.AreEqual(UISorting.MaskOrder(UILayers.Popup - 1),
+                FindMask().GetComponent<Canvas>().sortingOrder, "前提：首开的遮罩在 Popup-1");
+
+            var second = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>(
+                "PF_FakeDialog", layer: UILayers.Top);
+            await UniTask.Yield();
+
+            Assert.AreEqual(UISorting.MaskOrder(UILayers.Popup - 1),
+                FindMask().GetComponent<Canvas>().sortingOrder,
+                "重复打开时应跟随面板实际 Layer（Popup），而不是本次请求层（Top）");
+
+            await UIManager.CloseAllAsync();
+            await first;
+            await second;
+        }
+
+        [Test]
         public async Task NonModal_ShowsNoMask()
         {
             var dialog = UIManager.ShowDialogAsync<FakeDialog, FakeDialogResult>(
