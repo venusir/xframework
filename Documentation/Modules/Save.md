@@ -32,6 +32,7 @@ Runtime/Save/
 
 - 已做：**引导阶段的 `Shutdown` 只注销自己初始化的那份**（2026-10-17 · Bootstrap 审计轮）——`SaveBootstrapStage` 新增 `_initializedByThisStage`：执行前已初始化（使用方注入 / 上一轮运行留下）时不再在 `Shutdown` 里 `SaveManager.Shutdown()`；恢复扫描行为不变。回归用例 `BootstrapStageTests.SaveBootstrapStage_AlreadyInitialized_ShutdownDoesNotShutdown` / `..._InitializedByStage_ShutdownShutsDown`（前者改前必红：`Expected: True But was: False`）。
 
+- 已做：**缺失+备份损坏报 Corrupt、元数据查询异常隔离**（2026-10-19 · R3-SAVE-002/003，本轮修复）——主文件缺失且备份损坏时按 `Missing` 回报；`GetSlotMetaAsync` 异常直抛。修法：`Missing` 仅在无备份时成立；查询面异常记 Error 并按损坏条目回报；回归 `TryLoadAsync_MissingPayloadAndCorruptBackup_ReportsCorrupt`。
 - 已做：**复制/移动认备份**（2026-10-19 · R3-SAVE-001，本轮修复）——`TransferSlotAsync` 源读取只走载荷、目标占用只查载荷；仅备份可恢复的槽位在查询面算存在、复制/移动却不可用。修法：源载荷缺失时回退备份、目标占用也认 `.bak`；回归两例。
 - 已推翻：**~~不改 `RecoverAsync` 让它真的「全程不切回主线程」~~**（2026-09-30 · 第二轮审计）——~~本轮只订正文档：`WriteSidecarAsync` 被 `SaveAsync` 与恢复扫描共用，对前者而言那次 `ReturnToMainThread` 是必需的（公开异步 API 的契约就是「返回前切回主线程」）；要拆就得引入「不切回的写入路径」，在刚做过多次手术的线程路径上再动一刀，收益只是让一条文档声明成立。~~ 被 2026-10-19「R3-ADJ-08：只订正文档、双路径改造记 `未做`」取代：文档已订正为「每次读侧车都切回主线程」，改造本身作为开放条目跟踪，不再记作 `不做`。
 - 不做：**不给 `SaveManager.Shutdown` 加「取消在途操作」**（2026-09-30 · 第二轮审计）——`ISaveManager` 不是 `IDisposable`，实现也不持非托管资源；`Shutdown` 的语义是「注销门面持有的实现」，在途操作跑完即可。无重开判据。

@@ -496,6 +496,25 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task TryLoadAsync_MissingPayloadAndCorruptBackup_ReportsCorrupt()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 7;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 8;
+            await SaveManager.SaveAsync(1); // 留下 .bak
+
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+            await FileManager.WriteAllBytesAsync(
+                FileDomain.SaveData, "slot_1.save.bak", Encoding.UTF8.GetBytes("not a save file"));
+
+            var result = await SaveManager.TryLoadAsync(1);
+
+            Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status,
+                "主文件缺失 + 备份损坏应报 Corrupt 而不是 Missing（R3-SAVE-002）");
+        }
+
+        [Test]
         public async Task CopySlotAsync_SourceOnlyBackup_UsesBackup()
         {
             var wallet = DataManager.GetOrCreateBlock<WalletData>();

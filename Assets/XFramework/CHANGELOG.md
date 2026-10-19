@@ -381,6 +381,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Save
 
+- **缺失+备份损坏报 Missing、元数据查询无异常隔离（R3-SAVE-002/003）**：主文件缺失且备份损坏时按
+  `Missing` 回报（应 `Corrupt`，两份坏文件值得留证据）；`GetSlotMetaAsync` 的解密/IO 异常直抛。修法：
+  `Missing` 仅在无备份时成立；查询面异常记 Error 并按损坏条目回报。回归：
+  `SaveManagerImplTests.TryLoadAsync_MissingPayloadAndCorruptBackup_ReportsCorrupt`。
 - **复制/移动只认载荷，不认备份（R3-SAVE-001）**：`TransferSlotAsync` 的源读取只走载荷路径、目标占用只查载荷；
   仅备份可恢复的槽位在查询面算「存在」，在复制/移动上却不可用。修法：源载荷缺失时回退备份；目标占用也认
   `.bak`。回归：`SaveManagerImplTests.CopySlotAsync_SourceOnlyBackup_UsesBackup` /

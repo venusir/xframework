@@ -224,6 +224,8 @@ namespace XFramework.XSave
             var playerId = _playerId;
             var path = SavePathUtility.BuildSlotPath(playerId, slot);
 
+            try
+            {
             if (!FileManager.Exists(SaveDomain, path))
             {
                 // SAVE-003：载荷缺失但一代备份存在时，查询面也要反映「可恢复」；
@@ -275,6 +277,19 @@ namespace XFramework.XSave
             }
 
             return BuildMeta(saveData, playerId, slot, path, bytes.Length);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // 解密 / IO 异常不外抛（R3-SAVE-003）：查询面按「存在但读不了」回报，
+                // 与 GetSlotMetasAsync 的损坏条目口径一致。
+                LogManager.Exception(LogCategories.Save, ex,
+                    string.Format("读取槽位元数据失败，已按损坏回报: {0}", path));
+                return BuildCorruptedMeta(playerId, slot, path, 0);
+            }
         }
 
         /// <inheritdoc/>
@@ -424,7 +439,9 @@ namespace XFramework.XSave
                 // 3. 主文件与备份都不可用。备份的失败原因一并带上——否则调用方分不清
                 //    「没有备份」与「备份也坏了」，而两者的处置不同：前者只能重开，后者说明两份文件
                 //    都值得留证据（玩家可能想找回）
-                var status = outcome.Status == SaveLoadStatus.Missing
+                // 主文件缺失且备份也损坏时，证据在两份文件上——按 Corrupt 而不是 Missing 回报
+                // （R3-SAVE-002）：Missing 会让调用方以为「没有存档」，而实际有一份值得留证据的坏备份。
+                var status = outcome.Status == SaveLoadStatus.Missing && backupMessage == null
                     ? SaveLoadStatus.Missing
                     : SaveLoadStatus.Corrupt;
 
