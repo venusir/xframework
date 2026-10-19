@@ -194,6 +194,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **`AllPanelsClosedMessage` 只在真正全关时发布（R3-ADJ-13）**：此前 `CloseAllAsync` 无条件发布——
+  控制器拦下关闭（面板仍开着）或本来就没有面板时也发，订阅者会误判 `OpenCount == 0`。现在只有
+  「确实发起过关闭且结束时 `OpenCount == 0`」才发布一次。
 - **注入的 Tip / HUD provider 会收到 `SetUIRoot`（R3-ADJ-12）**：此前只有门面自建的默认实现收到；
   初始化后经 `SetTipProvider` / `SetHudProvider` 注入的实现拿不到，与接口文档「Initialize 时自动调用」
   不一致。现在初始化后注入会补调一次；初始化前注入的仍在 `Initialize` 时补调。默认 provider 的调用次数不变。

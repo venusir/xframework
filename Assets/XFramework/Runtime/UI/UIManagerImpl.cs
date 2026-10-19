@@ -843,7 +843,10 @@ namespace XFramework.XUI
                 await SafeClosePanelForBatchAsync(item.panel, item.type, immediate, cancellationToken);
             }
 
-            MessageManager.Publish(new AllPanelsClosedMessage());
+            // 事件面与查询面一致（R3-ADJ-13）：只有「确实发起过关闭且最终一个面板都不剩」才发布。
+            // 控制器拦下关闭（面板仍在）或本来就没有面板时发布，会让订阅者误判 OpenCount == 0。
+            if (toClose.Count > 0 && OpenCount == 0)
+                MessageManager.Publish(new AllPanelsClosedMessage());
 
             // ★ Controller 拦截点：全部关闭后回调
             await _controller.OnAllPanelsClosedAsync(cancellationToken);

@@ -254,6 +254,42 @@ namespace XFramework.XUI.Tests
             sub.Dispose();
         }
 
+        /// <summary>
+        /// 事件面与查询面一致（R3-ADJ-13）：没有面板时 `CloseAllAsync` 不该发布「全部关闭」——
+        /// 它表达的是「一次全部关闭动作完成」，不是「当前恰好没有面板」。
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_NoPanels_DoesNotPublishAllPanelsClosed()
+        {
+            int closed = 0;
+            var sub = MessageManager.Subscribe<AllPanelsClosedMessage>(_ => closed++);
+
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(0, UIManager.OpenCount);
+            Assert.AreEqual(0, closed, "没有面板时不应发布 AllPanelsClosedMessage");
+            sub.Dispose();
+        }
+
+        /// <summary>
+        /// 控制器拦下关闭时面板仍在，事件面不得谎报「全关」（R3-ADJ-13）。
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_ControllerBlocksClose_DoesNotPublishAllPanelsClosed()
+        {
+            await UIManager.OpenAsync<FakePanel>("ui/blocked-close");
+            UIManager.SetController(new BlockingController { BlockClose = true });
+
+            int closed = 0;
+            var sub = MessageManager.Subscribe<AllPanelsClosedMessage>(_ => closed++);
+
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(1, UIManager.OpenCount, "控制器拦下后面板应仍然打开");
+            Assert.AreEqual(0, closed, "还有面板开着时不应发布 AllPanelsClosedMessage");
+            sub.Dispose();
+        }
+
         private static void SetPrivateStatic(string name, object value)
         {
             typeof(UIManager).GetField(name, BindingFlags.Static | BindingFlags.NonPublic)
