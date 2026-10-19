@@ -330,6 +330,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `IAssetLoadWait` 形参传递会装箱；改为泛型约束（不附加 `struct`，测试替身是 class）。
   `AssetLoadWaitTests` 两例仍绿。
 
+#### Localization
+
+- **Bootstrap 阶段二次执行覆写所有权，Shutdown 漏销毁（R3-LOC-002）**：`ExecuteAsync` 第二次运行时
+  `alreadyInitialized` 为真（正是本阶段建的），却把 `_initializedByThisStage` 覆写为 false；空数据分支也
+  直接置 false。修法：所有权只在「本次确实创建」时置位，二次执行保留既有所有权。回归：
+  `LocalizationBootstrapStageTests.ExecuteAsync_Twice_ShutdownStillDestroysOwnManager`（改前红）。
+
 #### Config
 
 - **多 `IConfigRow<>` 实现静默取第一个、基类回退循环是死代码（R3-CONF-010）**：`ConfigTypeHelper` 按接口

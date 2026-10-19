@@ -105,7 +105,8 @@ namespace XFramework.XLocalization
             {
                 LogManager.Warning(LogCategories.LocalizationBootstrapStage,
                     "Localization data is empty. Skipping initialization.");
-                _initializedByThisStage = false;
+                // 不改所有权标记（R3-LOC-002）：若本阶段上一趟已初始化，空数据跳过不能把
+                // 「这份管理器归我清理」抹掉，否则 Shutdown 会漏销毁。
                 context.SetProgress(1f);
                 context.SetState(PipelineStageState.Completed);
                 return UniTask.CompletedTask;
@@ -115,7 +116,10 @@ namespace XFramework.XLocalization
             // 那种情况下 Initialize 会告警并忽略，本阶段就不算「初始化过」，Shutdown 时也不该去销毁它
             var alreadyInitialized = LocalizationManager.IsInitialized;
             LocalizationManager.Initialize(_defaultLanguage, data);
-            _initializedByThisStage = !alreadyInitialized;
+
+            // 只在「本次确实创建了实例」时置位；二次执行不能把上一趟的所有权覆写为 false
+            // （R3-LOC-002——那时 alreadyInitialized 为真，但管理器正是本阶段建的那一份）。
+            _initializedByThisStage |= !alreadyInitialized;
 
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);

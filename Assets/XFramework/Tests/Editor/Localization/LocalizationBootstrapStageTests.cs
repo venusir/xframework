@@ -95,6 +95,32 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ExecuteAsync_Twice_ShutdownStillDestroysOwnManager()
+        {
+            var stage = new LocalizationBootstrapStage("zh_Hans",
+                new Dictionary<string, string> { { "title", "你好" } });
+
+            try
+            {
+                stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult();
+                Assert.IsTrue(LocalizationManager.IsInitialized, "前提：首次执行已初始化");
+
+                // 二次执行：Initialize 告警早退；所有权不得被覆写为 false（R3-LOC-002）
+                LogAssert.Expect(LogType.Warning, new Regex("Initialize was called more than once"));
+                stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult();
+
+                stage.Shutdown();
+
+                Assert.IsFalse(LocalizationManager.IsInitialized,
+                    "二次执行后 Shutdown 仍应销毁本阶段初始化的管理器");
+            }
+            finally
+            {
+                LocalizationManager.Destroy();
+            }
+        }
+
+        [Test]
         public void ExecuteAsync_WithInitData_Completes()
         {
             var stage = new LocalizationBootstrapStage("zh_Hans", new Dictionary<string, string> { { "title", "你好" } });
