@@ -38,6 +38,7 @@ Runtime/Settings/
 
 ## 决策台账
 
+- 已做：**加密装饰器同步降级在调用线程序列化**（2026-10-19 · R3-SET-001，回归修复）——内层同步时 `SaveAsync` 把 `Save(settings)` 整段丢线程池，活对象在池线程 `JsonUtility.ToJson`；改为先 `ToCipherBlob` 再只把 IO 交线程池；回归 `EncryptedSettingsStoreTests.SaveAsync_SyncInner_EncryptsOnCallingThread`。
 - 未做：**`DefaultPathClaims` 刻意不随会话边界清空（当前维持）**（2026-10-14 · 会话级复位轮）——占用关系对应磁盘文件（清掉反而会放行「B 接管 A 的存档」），且体量有界（每路径一条）——与无界的重放表不同，故不适用同一处置。
 - 不做：**被丢弃的旧管理器仍被 `Application.wantsToQuit` root**（2026-10-14 · 会话级复位轮；2026-10-19 R3-ADJ-09 裁定为不做）——开了 `SaveOnQuit` 时，会话边界只丢引用不 `Dispose`（与七门面同形），旧管理器的 `Dispose` 永不调用。与 2026-10-18 框架级裁定「会话边界只丢引用、不替使用方 Dispose」一致，`SaveOnQuit` 下是可接受残留。重开判据：框架级会话边界裁定被推翻。
 - 不做：**没有 `SetInstance` / 工厂**（2026-10-02 · 全面清点后裁定不补）——`SettingsManagerImpl<T>` 是 internal sealed 且门面不提供整体替换——本模块是唯一一个连「换掉管理器行为」都不行的模块（其余模块都有 `SetInstance` 或 provider 等价物）。**不补的理由**：可替换点刻意**下移到** Store / Migrator / Validator（它们才是「会变的地方」，覆盖了加密存储、旧数据迁移、字段校验这些真实需求）；而管理器本身的通知、脏标记与保存时机是**模块语义**，替换它等于换一个模块——与 UI 的排序分层、Update 的切片与节拍同一档（判据见 `Ledger.md` 的「把模块内部策略接口化」条）。理由已写进 README 的设计理念表（「替换点在后端」行）。无重开判据。

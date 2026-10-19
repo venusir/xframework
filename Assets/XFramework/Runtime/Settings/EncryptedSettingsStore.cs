@@ -127,7 +127,11 @@ namespace XFramework.XSettings
                 return asyncStore.SaveAsync(blob, cancellationToken);
             }
 
-            return UniTask.RunOnThreadPool(() => Save(settings), configureAwait: true, cancellationToken);
+            // 同步内层：序列化/加密必须在**调用线程**完成，只把 IO 交给线程池
+            // （R3-SET-001）：否则活对象会被池线程 JsonUtility.ToJson，调用方继续修改即竞态。
+            // 与管理器的非异步降级路径（先 Snapshot 再 RunOnThreadPool）同一取舍。
+            var cipherBlob = ToCipherBlob(settings);
+            return UniTask.RunOnThreadPool(() => _inner.Save(cipherBlob), configureAwait: true, cancellationToken);
         }
 
         /// <summary>

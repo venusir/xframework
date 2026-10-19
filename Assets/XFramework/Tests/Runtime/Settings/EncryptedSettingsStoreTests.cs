@@ -51,6 +51,20 @@ namespace XFramework.XSettings.Tests
             public byte[] Decrypt(byte[] cipherData) => null;
         }
 
+        /// <summary>记录 Encrypt 所在线程的提供者（R3-SET-001 的调用线程断言）。</summary>
+        private sealed class ThreadRecordingCryptoProvider : ICryptoProvider
+        {
+            public int EncryptThreadId { get; private set; }
+
+            public byte[] Encrypt(byte[] plainData)
+            {
+                EncryptThreadId = Thread.CurrentThread.ManagedThreadId;
+                return plainData;
+            }
+
+            public byte[] Decrypt(byte[] cipherData) => cipherData;
+        }
+
         #endregion
 
         #region Fixture
@@ -92,6 +106,23 @@ namespace XFramework.XSettings.Tests
         #endregion
 
         #region 加解密
+
+        /// <summary>
+        /// 同步内层 + 异步写：序列化/加密必须发生在调用线程（R3-SET-001），
+        /// 否则池线程会 JsonUtility.ToJson 活对象，调用方继续修改即竞态。
+        /// </summary>
+        [Test]
+        public async Task SaveAsync_SyncInner_EncryptsOnCallingThread()
+        {
+            var crypto = new ThreadRecordingCryptoProvider();
+            var store = new EncryptedSettingsStore(new MemoryStore(), crypto);
+
+            int callerThread = Thread.CurrentThread.ManagedThreadId;
+            await store.SaveAsync(new SampleSettings { MasterVolume = 0.5f });
+
+            Assert.AreEqual(callerThread, crypto.EncryptThreadId,
+                "加密（连同序列化）必须在调用线程完成");
+        }
 
         [Test]
         public void Save_EncryptsBeforeHandingToInner()

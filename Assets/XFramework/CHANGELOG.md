@@ -379,6 +379,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Settings
+
+- **加密装饰器同步降级把活对象交池线程（R3-SET-001，回归）**：`EncryptedSettingsStore.SaveAsync` 在内层同步时
+  把 `Save(settings)` 整段丢线程池，活对象在池线程 `JsonUtility.ToJson`——SET-013 的竞态在推荐用法上复活。
+  修法：序列化/加密在调用线程完成，只把 IO 交给线程池。回归：
+  `EncryptedSettingsStoreTests.SaveAsync_SyncInner_EncryptsOnCallingThread`（改前记录到池线程）。
+
 #### Pipeline
 
 - **终局状态晚于广播、超时失败不带阶段名（PIPE-002/003）**：取消 / 失败分支先 `Broadcast()` 再写
