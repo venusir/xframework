@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 File 的权限契约与计数（2026-10-19，R3-FILE-003/005）**：读失败契约并列
+  `IOException` 与 `UnauthorizedAccessException`（后者不是前者的子类，桌面实现会抛）；删去
+  `RunOnThreadPool` 的「11 处」固定计数。
 - **订正 Reactive 的接口双承诺与台账（2026-10-19，R3-RCT-001/002）**：`IReactivePropertyWriter.TryWriteValue` 的
   `actual` 口径改为「由实现直接给出；重入写入时两个实现可能分叉」（原文档同时承诺「写入后实际值」与
   「恒等于 value」，互相矛盾）；`Modules/Reactive.md` 补 RCT-009「不加主线程断言」`暂不做` 条目。

@@ -92,7 +92,8 @@ Runtime/File/
 | 场景     | 行为                                                               |
 | -------- | ------------------------------------------------------------------ |
 | 文件不存在 | 读方法返回 `null`（非异常；移动端 Streaming 域 404 同样视为不存在） |
-| IO 失败  | 抛 `IOException`（权限、磁盘、网络错误等）                          |
+| IO 失败  | 抛 `IOException`（磁盘、网络错误等）                               |
+| 权限不足  | 桌面实现抛 `UnauthorizedAccessException`（**不是 `IOException` 的子类**，调用方必须两者都接） |
 | 参数非法 | 抛 `ArgumentNullException` / `ArgumentException`                    |
 
 ### 原子写入
@@ -505,7 +506,7 @@ for (int i = 0; i < 3; i++)
   后者是**安全性未经验证的忙等**——理由见「API 参考」的「移动端 Streaming 域」。
 - **同步 API 一律阻塞调用线程**，只适合编辑器工具、小型配置文件、启动期加载；**勿在每帧路径调用**。
   它们的免死锁前提是「每个 Provider 的异步实现都用 `RunOnThreadPool(configureAwait: false)`」——
-  内置实现全部满足（11 处无一例外），第三方实现不一定。
+  内置实现全部满足（无一例外），第三方实现不一定。
 - **自建 Provider 的死锁盲区**：同步不可用性的判定只识别内置的 `MobileFileProvider`。第三方 Provider 若返回
   PlayerLoop 依赖型的 UniTask（如 WebGL 后端），同步调用一样会死锁，框架无法代为识别。
 - **不实现可选能力接口的后果**见「自定义实现」的「接入 Console 平台」一节的能力缺失表——其中 `IAtomicFileProvider` 与

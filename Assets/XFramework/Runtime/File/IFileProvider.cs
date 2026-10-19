@@ -12,7 +12,9 @@ namespace XFramework.XFileManager
     /// <para><b>统一读失败契约（所有实现必须遵守）：</b></para>
     /// <list type="bullet">
     /// <item>文件不存在 → 读方法返回 <c>null</c>（非异常）</item>
-    /// <item>IO 失败（权限、磁盘、网络错误等）→ 抛 <see cref="System.IO.IOException"/></item>
+    /// <item>IO 失败（磁盘、网络错误等）→ 抛 <see cref="System.IO.IOException"/></item>
+    /// <item><b>权限不足</b> → 桌面实现抛 <see cref="System.UnauthorizedAccessException"/>（它不是
+    /// <see cref="System.IO.IOException"/> 的子类，调用方必须两者都接；R3-FILE-003）</item>
     /// <item>参数非法（<c>null</c>、路径穿越等）→ 抛 <see cref="System.ArgumentNullException"/> / <see cref="System.ArgumentException"/></item>
     /// </list>
     /// </remarks>
