@@ -131,7 +131,7 @@ Runtime/Audio/
 | `AudioHandle` | 播放句柄。`readonly struct`、零 GC、可自由复制。`IsDefault` / `Stop()` / `Dispose()` |
 | `AudioPlayOptions` | 播放参数：`Channel` / `VolumeScale` / `Loop` / `Pitch` / `SpatialBlend` / `Position` |
 | `AudioChannels` | 推荐通道常量：`Default`("default") / `Bgm`("bgm") / `SE`("se") / `Voice`("voice") / `UI`("ui") |
-| `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume`（默认 `1`，线性值、由 `SetChannelVolume` 钳到 `[0,1]`）/ `Muted`（默认 `false`）。**调用时读取一次并快照**，之后改这个实例不影响已注册的通道；**通道也可以不声明**——未声明的通道首次使用时按同样的默认值惰性建状态 |
+| `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume`（默认 `1`，线性值；**`RegisterChannel` 快照时**钳到 `[0,1]`）/ `Muted`（默认 `false`）。**调用时读取一次并快照**，之后改这个实例不影响已注册的通道；**通道也可以不声明**——未声明的通道首次使用时按同样的默认值惰性建状态 |
 | `AudioInitOptions` | 初始化选项：`MaxVoices` / `MasterVolume` / `MasterMuted` / `PrewarmVoices` |
 
 ### 参数归一化
@@ -314,6 +314,11 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 - **没有优先级抢占**，只有全局的 `MaxVoices` 上限；也没有按通道的独立上限。
 - **`AudioManager.Pause()` 不碰 `AudioListener.pause`**——那是项目的全局开关。项目用它暂停时，框架的
   播放会被连带暂停（这是期望行为）。
+- **不要直接 `Dispose` 门面持有的管理器实例**：经 `SetInstance` 注入后由调用方持有生命周期，但门面
+  不会感知你自行 `Dispose`——后续调用会打到已释放实例、门面卡死。销毁请走 `AudioManager.Destroy()`
+  （它先丢引用、再 `Dispose`，之后可重新 `Initialize` / `SetInstance`）。
+- **3D 空间参数不可配置**：框架只写 `spatialBlend` 与 `position`，不暴露衰减曲线（rolloff）、
+  min/max distance、spread、doppler 等；需要这些时整体替换 `IAudioManager`。
 
 ## 设计取舍
 

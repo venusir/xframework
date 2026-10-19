@@ -10,7 +10,7 @@ namespace XFramework.XAudio
     public sealed class AudioChannelConfig
     {
         /// <summary>
-        /// 通道音量，线性值。由 <see cref="AudioManager.SetChannelVolume"/> 钳到 <c>[0, 1]</c>。
+        /// 通道音量，线性值。`RegisterChannel` 在**快照时**钳到 <c>[0, 1]</c>；之后改这个实例不影响已注册的通道。
         /// </summary>
         public float Volume = 1f;
 

@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Audio 的钳制点与已知限制（2026-10-19，R3-AUD-005/006/007）**：`AudioChannelConfig.Volume` 的钳制点是
+  `RegisterChannel` 快照时（不是 `SetChannelVolume`，README 与 XML 同步）；已知限制补「不要直接 Dispose
+  门面持有的管理器实例」与「3D 空间参数不可配置」。
 - **订正 Serialize 的多态/Default/type 形参口径（2026-10-19，R3-SER-001/002/003/005/006）**：Newtonsoft 实现未启用
   `TypeNameHandling`，**不保留多态类型信息**（README 与 XML 同步）；替换内置格式在初始化之后 `Register` 也会
   覆盖（删去「必须在初始化之前」两句）；`Get(null)` 补 `ArgumentNullException`；`Serialize` 的 `type` 形参
