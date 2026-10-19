@@ -310,7 +310,7 @@ Runtime/Asset/
 5. **同步加载卡顿**：`LoadSync` / `InstantiateSync` 阻塞调用线程；Host 模式下资源未下载时可能长时间卡住，运行时高频路径禁用。
 6. **`UnloadUnusedAssetsAsync` 只回收引用计数为 0 的资源**：未 `Dispose` 的句柄、存活实例引用的资源不受影响——它不解决句柄泄漏，只回收真正闲置的资源。
 7. **下载器 `Dispose()` 不中止下载**：只解除事件订阅；需要中止调用 `Cancel()`（已下载部分保留，断点续传）。
-8. **Offline / EditorSimulate 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。
+8. **Offline / EditorSimulate 模式没有热更**：`RequestPackageVersionAsync` / `DownloadAssetsAsync` 等版本与下载类 API 仅 Host 模式有意义；Host 模式必须先 `InitializeAsync` 再走热更链。**对不存在的包**，三个热更 API 记 Error 后静默返回（`RequestPackageVersionAsync` 返回 `null`，另两个 no-op），不抛；其余失败抛 `InvalidOperationException`（R3-AST-004）。
 9. **多包时加载族固定默认包**：`LoadAsync` 等不带 `packageName` 参数；包级操作（热更 / 卸载 / 查询）需显式传 `packageName`，默认包可省略。
 10. **`PreloadAllAsync` 取消时进度可能不收敛**：取消抛出 `OperationCanceledException` 前，进度回调可能停在中间值不补发 1f；UI 侧应以异常处理收尾。
 11. **低内存自动回收**：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，触发时清空对象池闲置实例并卸载全部包中未使用资源（引用计数为 0），随后请求 `Resources.UnloadUnusedAssets`。Host 模式下卸载只释放内存，bundle 缓存文件保留，重新加载无需下载。对低内存事件敏感或自管回收策略的项目可置为 false。

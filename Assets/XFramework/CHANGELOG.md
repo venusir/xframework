@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Asset 热更 API 的无包语义（2026-10-19，R3-AST-004）**：三个热更 API 对不存在的包记 Error 后静默返回
+  （`RequestPackageVersionAsync` 返回 null，另两个 no-op），不抛；XML/README 改为与实现一致，其余失败仍抛
+  `InvalidOperationException`。
 - **补 Input 的复合绑定 Raw 读限制（2026-10-19，R3-INP-003）**：WASD / 2DVector / 1DAxis / D-pad 的
   `ReadVector2Raw` / `ReadFloatRaw` 不合成子项、恒为默认值；需要它们请用平滑读或自行读子项。
 - **订正 Lock 与 Bootstrap 的包内表述（2026-10-19，R3-LOCK-002/BST-002）**：Lock 的 XML/README 移除 R2 审计编号，

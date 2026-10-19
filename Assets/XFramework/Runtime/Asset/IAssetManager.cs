@@ -70,13 +70,15 @@ namespace XFramework.XAsset
 
         /// <summary>
         /// 请求指定包的最新资源版本号（Host 模式，先于下载/更新调用）。
-        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// <para><b>包不存在时记 Error 并返回 <c>null</c>（不抛）</b>；其余失败（初始化未完成、远端请求失败）
+        /// 抛 <see cref="InvalidOperationException"/>（R3-AST-004）。</para>
         /// </summary>
         UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default);
 
         /// <summary>
         /// 将指定包的活动清单更新到指定版本（激活该版本资源，之后 <see cref="LoadAsync{T}(string, CancellationToken)"/> 加载该版本）。
-        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// <para><b>包不存在时记 Error 并直接返回（no-op，不抛）</b>；其余失败抛
+        /// <see cref="InvalidOperationException"/>（R3-AST-004）。</para>
         /// </summary>
         UniTask UpdatePackageManifestAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
 
@@ -85,7 +87,8 @@ namespace XFramework.XAsset
         /// <para><b>它只做可用性检查</b>：不改变当前激活清单，也<b>不改变 <see cref="CreateDownloader"/> 的基准</b>
         /// ——下载器永远按「当前激活清单」算待下内容。要下载新版本的内容必须<b>先</b>
         /// <see cref="UpdatePackageManifestAsync"/> 激活它（详见模块 README 的「热更链路状态流转」与已知限制第 12 条）。</para>
-        /// <para>失败时抛 <see cref="InvalidOperationException"/>。</para>
+        /// <para><b>包不存在时记 Error 并直接返回（no-op，不抛）</b>；其余失败抛
+        /// <see cref="InvalidOperationException"/>（R3-AST-004）。</para>
         /// </summary>
         UniTask PreDownloadContentAsync(string packageVersion, string packageName = null, CancellationToken cancellationToken = default);
 
