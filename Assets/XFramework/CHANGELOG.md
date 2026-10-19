@@ -895,6 +895,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Event 的「不为 PlayMode 补用例」理由（2026-10-19，R3-EVT-001）**：旧理由「无跨会话静态态」与模块内
+  三处静态池/计数矛盾；改为「无帧、无 MonoBehaviour，静态池/计数不承载跨会话逻辑状态」，结论不变。
 - **订正 Log 的捕获口径与分类计数（2026-10-19，R3-LOG-002/003/004）**：全量捕获改为「先全局档早退，再分类覆盖」，
   消除前后两句矛盾；`Modules/Log.md` 删去「33 个内置分类」固定计数；`LogFileSink` XML 改为「每个文件输出端
   一个文件；正常流程每会话一个，同会话内重建会新建文件」。
