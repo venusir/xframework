@@ -146,10 +146,13 @@ namespace XFramework.XLog
 
         #endregion
 
-        #region Camera
+        #region Camera / Scene
 
         /// <summary>相机管理门面与默认实现。</summary>
         public static readonly LogCategory CameraManager = LogCategory.Get("CameraManager");
+
+        /// <summary>场景管理门面（激活失败、回收失败等）。</summary>
+        public static readonly LogCategory SceneManager = LogCategory.Get("SceneManager");
 
         #endregion
     }

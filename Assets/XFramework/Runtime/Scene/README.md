@@ -288,5 +288,5 @@ YooAsset 的 `ResourcePackage.LoadSceneAsync` 有这三个参数，本模块一�
 ## 依赖
 
 - `XFramework.XAsset`（`IAssetSceneLoader` 能力接口 + `AssetSceneHandle`）
-- `XFramework.XLog`（间接：日志由 `XAsset` 侧打）
+- `XFramework.XLog`（直接：本模块有自己的内置分类 `LogCategories.SceneManager`，激活失败与回收失败经它上报）
 - `UniTask`（框架层已提供）、`UnityEngine.SceneManagement`（Unity 核心，非可选包）

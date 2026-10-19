@@ -64,7 +64,7 @@ namespace XFramework.XScene
                 if (!SetActiveScene(handle.Scene))
                 {
                     // 激活失败不可观测会让「新实例挂错场景」难以排查（SCN-004）。
-                    LogManager.Warning(LogCategory.Get("SceneManager"),
+                    LogManager.Warning(LogCategories.SceneManager,
                         "场景 '{0}' 加载成功但无法设为激活场景（引擎拒绝）；新实例仍挂在原激活场景下。",
                         handle.Scene.name);
                 }
@@ -82,7 +82,7 @@ namespace XFramework.XScene
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("SceneManager"), e,
+                    LogManager.Exception(LogCategories.SceneManager, e,
                         "场景已加载，但加载后的资源回收失败；句柄仍返回。");
                 }
             }

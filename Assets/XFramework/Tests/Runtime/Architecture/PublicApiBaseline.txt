@@ -1027,6 +1027,7 @@ XFramework.XLog.LogCategories.Message  ::  public static readonly XFramework.XLo
 XFramework.XLog.LogCategories.Pipeline  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.PoolManager  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.Save  ::  public static readonly XFramework.XLog.LogCategory
+XFramework.XLog.LogCategories.SceneManager  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.Serialize  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.SettingsManager  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.StringBuilderPool  ::  public static readonly XFramework.XLog.LogCategory

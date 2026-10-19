@@ -90,6 +90,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   **门面与 `UnityEngine.SceneManagement.SceneManager` 同名**（用户裁定接受）：同时 `using` 两者会 CS0104，
   README 首屏给两条别名写法；模块源码自身一律写别名——**裸写不报错**，会静默遮蔽成自家类型（首轮编译踩到
   的是另一个同族坑：Unity 6 自己也有 `SceneHandle`，与 YooAsset 的同名类型在同一文件里 CS0104，已用别名消解）。
+- **`LogCategories` 新增 `SceneManager`（R3-SCN-003）**：场景模块此前用 `LogCategory.Get("SceneManager")`
+  现取，分类表里没有、也不在第三方「有哪些分类」的发现入口里。**公开 API 源兼容新增**；基线已同步。
+  Scene README 的依赖说明随之从「XLog 间接」改为「直接」。
 
 #### Update
 
