@@ -133,6 +133,9 @@ namespace XFramework.XPipeline
             finally
             {
                 _aggregator.Settle();
+                // 解除对上一轮管线的引用（R3-PIPE-004），上下文本身保留给诊断/测试读取
+                if (_stageCtx != null)
+                    _stageCtx.Owner = null;
             }
         }
 

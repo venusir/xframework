@@ -393,6 +393,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Pipeline
 
+- **沉降后仍钉住上一轮管线（R3-PIPE-004）**：容器 `_stageCtx.Owner` 指向 `PipelineImpl`，长寿命容器跨管线
+  复用时钉住管线与订阅者闭包。修法：`finally` 里把 `Owner` 置 null（上下文本身保留给诊断/测试）。回归：
+  两容器各一例。
 - **非有限超时与取消路径沉降（R3-PIPE-002/003）**：`+∞` 超时让 `TimeSpan.FromSeconds` 溢出、被外层 catch 成
   Failed；容器取消路径 `throw OCE` 跳过 `_aggregator.Settle()`，迟到写入仍可能聚合/广播。修法：入口把
   ±∞/NaN 归一为「不启用」；`Settle` 移入 `finally`。回归：

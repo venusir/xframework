@@ -28,6 +28,19 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AfterRun_StageContextReferenceIsReleased()
+        {
+            var stage = new ParallelStage(new[] { new FakeStage { Name = "a" } });
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(stage);
+
+            pipeline.RunAsync().GetAwaiter().GetResult();
+
+            Assert.IsNull(stage._stageCtx.Owner,
+                "沉降后应解除上一轮管线引用（R3-PIPE-004）");
+        }
+
+        [Test]
         public void ParallelChildren_AllExecute()
         {
             var a = new FakeStage { Name = "a" };

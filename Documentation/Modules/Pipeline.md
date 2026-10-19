@@ -65,3 +65,4 @@ Runtime/Pipeline/
 - 已做：**主线程断言三份副本——不抽公共防线**（2026-10-15 · `ac9a9da`；判据「共享的那部分是不是有难度的那部分」，见 `Ledger.md` 的同名条）——本模块与 Message / Asset 三份**各自保留**：它们的共同部分只有三行，而断言绑在哪个语义位置、文案与闩锁寿命逐模块不同（本模块绑在「越线程**写入**」这个位置、按次运行重报）。
 - 已做：**容器元素 null 校验**（2026-10-20 · R3-PIPE-001，本轮修复）——`ParallelStage`/`SequenceStage` 构造只校验列表 null/空，元素 null 在读 `Weight` 时抛裸 NRE；改为与 `AddStage(null)` 同形抛 `ArgumentNullException`。回归两例。
 - 已做：**非有限超时与取消路径沉降**（2026-10-20 · R3-PIPE-002/003，本轮修复）——`+∞` 超时会让 `TimeSpan.FromSeconds` 溢出；容器取消路径 `throw OCE` 跳过 `_aggregator.Settle()`。修法：入口把 ±∞/NaN 归一为「不启用」；`Settle` 移入 `finally`。回归 `PositiveInfinityTimeout_IsTreatedAsDisabled`。
+- 已做：**沉降后解除 Owner 引用**（2026-10-20 · R3-PIPE-004，本轮修复）——容器 `_stageCtx.Owner` 指向上一轮 `PipelineImpl`，长寿命容器跨管线复用时钉住管线与订阅者闭包。修法：`finally` 里把 `Owner` 置 null，上下文本身保留给诊断/测试读取；回归两容器各一例。

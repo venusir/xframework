@@ -136,6 +136,10 @@ namespace XFramework.XPipeline
             finally
             {
                 _aggregator.Settle();
+                // 解除对上一轮管线（Owner = PipelineImpl）的引用（R3-PIPE-004）：长寿命容器跨管线复用时
+                // 会把上一轮管线与订阅者闭包一直钉住。上下文本身保留——诊断与用例仍可读终态。
+                if (_stageCtx != null)
+                    _stageCtx.Owner = null;
             }
         }
 
