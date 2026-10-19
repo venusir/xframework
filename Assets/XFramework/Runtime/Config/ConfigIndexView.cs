@@ -31,6 +31,9 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 安全按索引键获取匹配行。
+        /// <para><b>失败时 <paramref name="values"/> 为 <c>null</c></b>（不是空数组）——这与
+        /// <see cref="Get"/> 返回空数组不对称，是刻意的：调用方用返回值判断命中，无需再判空。
+        /// 需要「失败也拿空数组」时请用 <see cref="Get"/>。</para>
         /// </summary>
         public bool TryGet(TIndex key, out IReadOnlyList<T> values)
         {

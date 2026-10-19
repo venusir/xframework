@@ -10,9 +10,9 @@ namespace XFramework.XConfig
     /// <para>第一行为表头（字段名），后续行为数据。</para>
     /// <para>通过反射对行类型 <c>T</c> 的公共字段/属性顺序赋值，
     ///     仅限基础类型（int/float/string/bool/enum），不做递归子对象反序列化。</para>
-    /// <para>主键由 <see cref="IConfigRow{TKey}.Id"/> 自动提取，
-    ///     **CSV 必须包含主键列**（列名与主键成员名一致，通常为 <c>Id</c>）：缺列时主键恒为默认值，
-    ///     多行会撞 <c>Duplicate Id</c>；包含时该列按普通成员赋值。</para>
+    /// <para>主键由 <see cref="IConfigRow{TKey}.Id"/> 自动提取。**默认实现（主键由字段承载）要求 CSV 含
+    /// 同名列**；若 <c>Id</c> 是计算属性 / 显式接口实现（不来自 CSV 列），该列可省略。缺列且主键来自字段时
+    /// 主键恒为默认值，多行会撞 <c>Duplicate Id</c>；包含时该列按普通成员赋值。</para>
     /// </summary>
     internal sealed class CsvLoader : IConfigLoader
     {

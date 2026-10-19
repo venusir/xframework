@@ -895,6 +895,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Config 的注册/预载语义与 XML（2026-10-19，R3-CONF-004/008/009/011）**：`Register` 后 `Preload` 命中
+  「已加载」直接返回注入数据、不会加载 assetPath（反向才由 `Register` 覆盖）；`PreloadGlobalAsync(path, default)`
+  与 Table 同形二义（CS0121）；CSV 主键列只对「字段承载主键」是必需的（计算/显式主键可省略）；
+  `ConfigIndexView.TryGet` 失败时 `values` 为 null，与 `Get` 的空数组不对称。
 - **订正 UI 的驱动器恢复、回池钩子与绑定示例（2026-10-19，R3-UIA-010/UIB-001/004/008）**：`SetInstance` 不会
   重接驱动器（只有 `Initialize` 会）；`UIDefaultController` 注释改为「默认静默 + verbose 模板化」；
   `OnPoolRecycle` 标注「重写必须调用 base」；绑定示例改用 `UIViewBase.Track` / `UIPanelBinding.RegisterBinding`，

@@ -204,6 +204,8 @@ namespace XFramework.XConfig
 
         /// <summary>
         /// 预加载 Global 类型的配置。如果已加载则直接返回。
+        /// <para><b>与 <c>PreloadGlobalAsync&lt;T&gt;(string, IConfigLoader, CancellationToken)</c> 重载二义（CS0121）</b>：
+        /// 要省略格式请写显式默认值 <c>ConfigFormat.Json</c>（或强转 <c>(ConfigFormat)default</c>）。</para>
         /// </summary>
         /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
         /// <param name="assetPath">资源路径（YooAsset 地址），首次加载时必填。</param>

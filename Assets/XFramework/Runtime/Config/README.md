@@ -153,12 +153,12 @@ ConfigManifest  (批量加载清单)
 | ---------------------------------------------------------------- | ----------------------------- |
 | `PreloadTableAsync<T>(string path, ConfigFormat format = Json)`  | 使用内置格式加载 Table        |
 | `PreloadTableAsync<T>(string path, IConfigLoader loader)`        | 使用自定义 Loader 加载 Table  |
-
-> **`default` 字面量不能直接当第二个实参**（CONF-016）：`PreloadTableAsync<T>(path, default)` 会在
-> `ConfigFormat` / `IConfigLoader` 两个重载间二义（CS0121）。省略格式请写 `ConfigFormat.Json`，
-> 或显式强转 `(ConfigFormat)default` / `(IConfigLoader)loader`。
 | `PreloadGlobalAsync<T>(string path, ConfigFormat format = Json)` | 使用内置格式加载 Global       |
 | `PreloadGlobalAsync<T>(string path, IConfigLoader loader)`       | 使用自定义 Loader 加载 Global |
+
+> **`default` 字面量不能直接当第二个实参**（CONF-016）：`PreloadTableAsync<T>(path, default)` 与
+> `PreloadGlobalAsync<T>(path, default)` 都会在 `ConfigFormat` / `IConfigLoader` 两个重载间二义（CS0121）。
+> 省略格式请写 `ConfigFormat.Json`，或显式强转 `(ConfigFormat)default` / `(IConfigLoader)loader`。
 
 > 以上方法均支持可选 `CancellationToken` 参数（取消语义见「典型场景」的「CancellationToken 取消」）。
 
@@ -640,9 +640,9 @@ public enum ConfigFormat
   上只告警并返回 `false`。
 - **经 `RegisterTable` / `RegisterGlobal` 注入的表没有资源路径，也不参与 `Preload` 的语义**：注入只写
   数据与包装器——不写 `_assetPaths`（`CopyLoaded` 里这类条目的 `AssetPath` 恒为 null）、不进
-  `_inFlightLoads`。两个可观察后果：① 同一个类型先注入再 `Preload`（或反过来）**互相覆盖、后到者赢**，
-  且因为路径表里没有记录，**连「assetPath 与首次不同」的那条 Warning 都不会有**；② 并发的 `Preload`
-  与注册之间没有去重，各自完成、各自写入。
+  `_inFlightLoads`。两个可观察后果：① 同一个类型**先注入再 `Preload`** 时，`Preload` 命中「已加载」直接
+  返回注入的数据、**不会加载 assetPath**（也没有路径 Warning）；**先 `Preload` 再注入**时 `Register`
+  会替换已加载的数据（后到者赢）。② 并发的 `Preload` 与注册之间没有去重，各自完成、各自写入。
 - **经 ConfigManager 走一遍会留下多份索引视图**：外部工具的表对象自己有一份按主键的索引，你为
   `ConfigTable<T>` 建的 `Dictionary<TKey, T>` 是第二份，`ConfigTable` 构造时还会拷出一份行数组
   （`GetAll()` 返回的就是它）。这是「让 ConfigManager 成为统一查询面」的代价——**只想省掉这份开销、
