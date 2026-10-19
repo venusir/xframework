@@ -99,6 +99,8 @@ namespace XFramework.XCamera.Cinemachine
                 var slot = _slots[existing];
                 if (slot.Camera != null)
                     _reverse.Remove(slot.Camera);
+                else
+                    PruneReverseEntries(existing);   // 替换掉的是被外部销毁的 vcam：旧键已不可寻址（CIN-003）
                 slot.Camera = camera;
                 _reverse[camera] = existing;
                 return;
@@ -218,6 +220,13 @@ namespace XFramework.XCamera.Cinemachine
                 return;
             }
 
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 '{0}' 已被外部销毁，激活已忽略。", cameraId);
+                return;
+            }
+
             ActivateSlot(index);
         }
 
@@ -230,6 +239,13 @@ namespace XFramework.XCamera.Cinemachine
             if (!_idToSlot.TryGetValue(cameraId, out var index))
             {
                 LogManager.Warning(LogCategories.CameraManager, "未知相机 id: {0}", cameraId);
+                return;
+            }
+
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 '{0}' 已被外部销毁，反激活已忽略。", cameraId);
                 return;
             }
 
@@ -246,6 +262,13 @@ namespace XFramework.XCamera.Cinemachine
             if (!_idToSlot.TryGetValue(cameraId, out var index))
             {
                 LogManager.Warning(LogCategories.CameraManager, "未知相机 id: {0}", cameraId);
+                return;
+            }
+
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 '{0}' 已被外部销毁，过渡已忽略。", cameraId);
                 return;
             }
 
@@ -272,6 +295,13 @@ namespace XFramework.XCamera.Cinemachine
                 return;
             }
 
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，激活已忽略。", handle);
+                return;
+            }
+
             ActivateSlot(index);
         }
 
@@ -283,6 +313,13 @@ namespace XFramework.XCamera.Cinemachine
             if (index < 0)
             {
                 LogManager.Warning(LogCategories.CameraManager, "相机句柄无效或已注销: {0}", handle);
+                return;
+            }
+
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，反激活已忽略。", handle);
                 return;
             }
 
@@ -298,6 +335,13 @@ namespace XFramework.XCamera.Cinemachine
             if (index < 0)
             {
                 LogManager.Warning(LogCategories.CameraManager, "相机句柄无效或已注销: {0}", handle);
+                return;
+            }
+
+            if (TryPruneDestroyed(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，过渡已忽略。", handle);
                 return;
             }
 
@@ -369,6 +413,8 @@ namespace XFramework.XCamera.Cinemachine
             var slot = _slots[index];
             if (slot.Camera != null)
                 _reverse.Remove(slot.Camera);
+            else
+                PruneReverseEntries(index);   // 被外部销毁的 vcam：键已不可寻址（CIN-003）
             if (slot.Id != null)
                 _idToSlot.Remove(slot.Id);
 
@@ -399,6 +445,46 @@ namespace XFramework.XCamera.Cinemachine
 
             index = -1;
             return false;
+        }
+
+        /// <summary>
+        /// 槽位里的 vcam 是否已被外部销毁（Unity 假 null）。是则顺手清掉反查表的陈旧键（CIN-003）——
+        /// 被销毁的 Unity 对象作为字典键可能已不可寻址（哈希随实例 ID 失效），只能按值定位后整表重建。
+        /// </summary>
+        private bool TryPruneDestroyed(int index)
+        {
+            if (_slots[index].Camera != null)
+                return false;
+
+            PruneReverseEntries(index);
+            return true;
+        }
+
+        private void PruneReverseEntries(int index)
+        {
+            var found = false;
+            foreach (var pair in _reverse)
+            {
+                if (pair.Value == index)
+                {
+                    found = true;
+                    break;
+                }
+            }
+
+            if (!found)
+                return;
+
+            var keep = new List<KeyValuePair<ICinemachineCamera, int>>(_reverse.Count);
+            foreach (var pair in _reverse)
+            {
+                if (pair.Value != index)
+                    keep.Add(pair);
+            }
+
+            _reverse.Clear();
+            for (var i = 0; i < keep.Count; i++)
+                _reverse[keep[i].Key] = keep[i].Value;
         }
 
         private void ActivateSlot(int index)

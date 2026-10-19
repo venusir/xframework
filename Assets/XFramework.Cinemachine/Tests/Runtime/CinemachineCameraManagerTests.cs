@@ -1,5 +1,7 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using Unity.Cinemachine;
@@ -373,6 +375,102 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.NaN));
             Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.PositiveInfinity));
             Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.NegativeInfinity));
+        }
+
+        #endregion
+
+        #region 被外部销毁的 vcam
+
+        [Test]
+        public void Activate_ExternallyDestroyedVcam_WarnsAndNoOps()
+        {
+            _manager.Activate("b");
+            Pump();
+            UnityEngine.Object.DestroyImmediate(_vcamAObject);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            _manager.Activate("a");
+
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId,
+                "激活已销毁的 vcam 不得改变活动相机（CIN-003）");
+        }
+
+        [Test]
+        public void Deactivate_ExternallyDestroyedVcam_WarnsAndNoOps()
+        {
+            _manager.Activate("a");
+            Pump();
+            UnityEngine.Object.DestroyImmediate(_vcamAObject);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            Assert.DoesNotThrow(() => _manager.Deactivate("a"),
+                "反激活已销毁的 vcam 不得抛 MissingReferenceException（CIN-003）");
+        }
+
+        [Test]
+        public void TransitionTo_ExternallyDestroyedVcam_WarnsAndNoOps()
+        {
+            _manager.Activate("b");
+            Pump();
+            UnityEngine.Object.DestroyImmediate(_vcamAObject);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            _manager.TransitionTo("a", 1f);
+
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId,
+                "过渡到已销毁的 vcam 必须整体忽略（CIN-003）");
+        }
+
+        [Test]
+        public void HandleChangeSurface_ExternallyDestroyedVcam_WarnsAndNoOps()
+        {
+            _manager.Activate("b");
+            Pump();
+
+            var extraObject = new GameObject("VcamC");
+            var extra = extraObject.AddComponent<CinemachineCamera>();
+            var handle = _manager.Register(extra);
+
+            try
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+                _manager.Activate(handle);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+                _manager.TransitionTo(handle, 1f);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+                Assert.DoesNotThrow(() => _manager.Deactivate(handle),
+                    "反激活已销毁的 vcam 不得抛 MissingReferenceException（CIN-003）");
+
+                Assert.AreEqual("b", _manager.ActiveHandle.NamedId,
+                    "句柄变更面在 vcam 销毁后必须全部 no-op（CIN-003）");
+            }
+            finally
+            {
+                if (extraObject != null)
+                    UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        [Test]
+        public void DestroyedVcam_PrunesStaleReverseEntry()
+        {
+            _manager.Activate("a");
+            Pump();
+            UnityEngine.Object.DestroyImmediate(_vcamAObject);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            _manager.Deactivate("a");
+
+            var field = typeof(CinemachineCameraManager).GetField("_reverse",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "反查表字段名变了，请同步本用例");
+            var reverse = (IDictionary)field.GetValue(_manager);
+            Assert.AreEqual(1, reverse.Count,
+                "已销毁 vcam 在反查表里的陈旧键必须被清掉（CIN-003）；剩余的一项应是 b");
         }
 
         #endregion

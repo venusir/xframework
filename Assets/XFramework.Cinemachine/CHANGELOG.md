@@ -19,6 +19,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **过渡时长未校验有限性（R3-CIN-002）**：NaN / ±∞ 直接交给 `CinemachineBlendDefinition`，而核心
   `UnityCameraManager` 对同一参数抛 `ArgumentOutOfRangeException`——同一接口两种实现行为相反。现在
   适配器补同形校验；回归 `TransitionTo_NonFiniteDuration_Throws`（改前必红）。
+- **外部销毁 vcam 后的变更面（R3-CIN-003）**：`Deactivate` 直接访问已销毁组件的 `gameObject` 抛
+  `MissingReferenceException`，`Activate` / `TransitionTo` 静默 no-op，且反查表残留陈旧键。六处变更面
+  （id/handle × Activate/Deactivate/TransitionTo）统一按假 null 检测：Warning 后整体忽略，并清掉反查表里
+  该槽位的陈旧键（被销毁对象作字典键已不可寻址，按值定位后整表重建）。回归：`Activate_/Deactivate_/
+  TransitionTo_ExternallyDestroyedVcam_WarnsAndNoOps`、`HandleChangeSurface_ExternallyDestroyedVcam_
+  WarnsAndNoOps`、`DestroyedVcam_PrunesStaleReverseEntry`（改前必红）。
 
 ## [0.1.0] - 2026-10-17
 
