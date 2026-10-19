@@ -609,7 +609,7 @@ namespace XFramework.XAsset
             {
                 while (!operation.IsDone)
                 {
-                    progress?.Invoke(operation.Progress);
+                    InvokeSceneProgress(progress, operation.Progress, location);
                     // 取消时抛出 OperationCanceledException（善后见 catch）
                     await UniTask.Yield(PlayerLoopTiming.Update, cancellationToken);
                 }
@@ -643,12 +643,32 @@ namespace XFramework.XAsset
                 return default;
             }
 
-            progress?.Invoke(1f);
+            InvokeSceneProgress(progress, 1f, location);
 
             // 登记后才交得出手柄：卸载入口就是靠这张表把 Id 找回加载操作的
             int id = ++_nextSceneId;
             _sceneOperations[id] = new SceneRegistration(operation, scene);
             return new AssetSceneHandle(id, scene);
+        }
+
+        /// <summary>
+        /// 调用场景加载进度回调，并隔离订阅者异常（R3-AST-005）。
+        /// <para>进度回调是使用方代码；抛出非 OCE 异常会从 <see cref="LoadSceneAsync"/> 逃出，
+        /// 此时操作既未释放也未登记——变成永久泄漏的 provider。这里记 Error 后继续。</para>
+        /// </summary>
+        private static void InvokeSceneProgress(Action<float> progress, float value, string location)
+        {
+            if (progress == null) return;
+
+            try
+            {
+                progress(value);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.YooAssetManager, e,
+                    $"场景加载进度回调抛出异常（location '{location}'），已忽略并继续。");
+            }
         }
 
         /// <summary>

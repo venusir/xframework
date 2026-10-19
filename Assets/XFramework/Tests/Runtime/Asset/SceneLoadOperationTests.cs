@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
@@ -373,6 +374,26 @@ namespace XFramework.XAsset.Tests
                 var unloadOther = SceneManager.UnloadSceneAsync(otherScene);
                 if (unloadOther != null) await unloadOther.ToUniTask();
             }
+        }
+
+        /// <summary>
+        /// 进度回调抛异常不得让加载失败或泄漏句柄（R3-AST-005）：旧实现在成功补发 1f 与循环内的
+        /// 进度调用处直接 Invoke，异常逃出后操作既不释放也不登记。
+        /// </summary>
+        [Test]
+        public async Task ProgressCallbackThrows_LoadStillSucceedsAndRegisters()
+        {
+            var scene = CreateRealScene();
+            _operation.IsDone = true;
+            _operation.IsSucceed = true;
+            _operation.SceneObject = scene;
+
+            LogAssert.Expect(LogType.Error, new Regex("场景加载进度回调抛出异常"));
+            var handle = await _manager.LoadSceneAsync(Location, progress: _ =>
+                throw new InvalidOperationException("progress boom"));
+
+            Assert.IsFalse(handle.IsDefault, "进度回调异常不应导致加载失败");
+            Assert.AreEqual(1, _manager.SceneOperationCount, "登记项必须写入，否则句柄永远卸不掉");
         }
 
         /// <summary>

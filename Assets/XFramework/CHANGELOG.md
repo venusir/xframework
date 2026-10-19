@@ -318,6 +318,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   提前丢句柄，登记项成永久残影。修法：登记项保存**加载时的 `Scene` 快照**；卸载拿到终态前不丢句柄与登记项。
   回归：`SceneLoadOperationTests.ExternalSceneUnload_PrunesSceneOperationRegistration` 改前红（登记项残留 1）、
   `Unload_Fails_KeepsRegistrationForRetry`；假件 `Release()` 同步模拟真语义（清空 `SceneObject`）。
+- **场景进度回调与下载器事件未隔离订阅者异常（R3-AST-005/006）**：进度回调抛非 OCE 异常会让加载操作
+  既未释放也未登记；下载器三个事件直接 `Invoke`，一个订阅者抛异常会打断 YooAsset 的整轮更新并饿死
+  后续订阅者。修法：进度回调记 Error 后继续；下载器事件按调用列表逐个 `try/catch`。回归：
+  `SceneLoadOperationTests.ProgressCallbackThrows_LoadStillSucceedsAndRegisters`、
+  `AssetDownloaderHandleTests` 两例。
 
 #### Pipeline
 

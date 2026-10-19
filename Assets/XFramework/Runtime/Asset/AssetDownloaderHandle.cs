@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 using YooAsset;
 
 namespace XFramework.XAsset
@@ -148,11 +149,55 @@ namespace XFramework.XAsset
 
         #region Internal
 
-        private void OnDownloadUpdate(DownloadUpdateData data) => ProgressChanged?.Invoke(data.Progress);
+        // 逐订阅者隔离（R3-AST-006）：三个事件由 YooAsset 的 OperationSystem 在更新循环里同步调用，
+        // 任一订阅者抛异常都会打断整轮更新。多播直接 Invoke 会在抛出者处中断、后续订阅者收不到，
+        // 因此按调用列表逐个 try/catch。
+        private void OnDownloadUpdate(DownloadUpdateData data)
+            => InvokeIsolated(ProgressChanged, data.Progress, "ProgressChanged");
 
-        private void OnDownloadFinish(DownloaderFinishData data) => Completed?.Invoke(data.Succeed);
+        private void OnDownloadFinish(DownloaderFinishData data)
+            => InvokeIsolated(Completed, data.Succeed, "Completed");
 
-        private void OnDownloadError(DownloadErrorData data) => DownloadError?.Invoke(data.FileName, data.ErrorInfo);
+        private void OnDownloadError(DownloadErrorData data)
+            => InvokeIsolated(DownloadError, data.FileName, data.ErrorInfo, "DownloadError");
+
+        internal static void InvokeIsolated<T>(Action<T> handlers, T arg, string eventName)
+        {
+            if (handlers == null) return;
+
+            Delegate[] list = handlers.GetInvocationList();
+            for (int i = 0; i < list.Length; i++)
+            {
+                try
+                {
+                    ((Action<T>)list[i])(arg);
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.YooAssetManager, e,
+                        $"下载器事件 {eventName} 的订阅者抛出异常，已隔离并继续（不影响 YooAsset 的 OperationSystem 更新）。");
+                }
+            }
+        }
+
+        internal static void InvokeIsolated<T1, T2>(Action<T1, T2> handlers, T1 arg1, T2 arg2, string eventName)
+        {
+            if (handlers == null) return;
+
+            Delegate[] list = handlers.GetInvocationList();
+            for (int i = 0; i < list.Length; i++)
+            {
+                try
+                {
+                    ((Action<T1, T2>)list[i])(arg1, arg2);
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.YooAssetManager, e,
+                        $"下载器事件 {eventName} 的订阅者抛出异常，已隔离并继续（不影响 YooAsset 的 OperationSystem 更新）。");
+                }
+            }
+        }
 
         #endregion
     }
