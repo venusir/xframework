@@ -32,6 +32,7 @@ Runtime/Localization/
 - 不做：**在 `LanguageChangedMessage` 上自动重解析占位符**（2026-09-29 · 追加轮）——理由见使用方 README 的 `## 设计取舍`。无重开判据。
 - 已做：**`InputManager` 的 11 处订阅绑定改走 `TryBindToDestroy`**（2026-09-30 · `fc07a5b`）——闭包分配 / 只认 `MonoBehaviour` / 已取消令牌仍注册三处缺陷一并修复；`Input.md` 仍未认领该事实，建议在 Input 台账补交叉引用。
 - 已做：**审计轮未发现新的缺陷类**（2026-09-29 · 审计轮）——`ModuleAudit.md` 第三节无需新增。
+- 已做：**格式说明里的 `{` 按字面处理**（2026-10-19 · R3-LOC-003，本轮修复）——`{0:0{0}` 这类非格式项被交给 `string.Format` 抛 `FormatException`；旧字面化只转义开头，内层 `{0}` 又被当成新格式项。修法：非格式项从 `{` 到下一个 `}` 整段按字面；回归 `GetFormat_FormatSpecWithBrace_RendersLiterally`（改前红）。IL2CPP 行为仍需真机探针（登记 `未做`）。
 - 已做：**Bootstrap 阶段二次执行保留所有权**（2026-10-19 · R3-LOC-002，本轮修复）——第二次 `ExecuteAsync` 时 `alreadyInitialized` 为真（正是本阶段建的），却把 `_initializedByThisStage` 覆写为 false；空数据分支也直接置 false，`Shutdown` 漏销毁。修法：所有权只在「本次确实创建」时置位、二次执行保留；回归 `LocalizationBootstrapStageTests.ExecuteAsync_Twice_ShutdownStillDestroysOwnManager`（改前红）。
 - 不做：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-03 裁定为不做）——当前语义可接受；代次作废会增加状态机复杂度，且无使用方需求。无重开判据。
 - 暂不做：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-04 裁定为暂不做）——覆盖当前语言是低频运维动作，新增事件会扩大公开面。重开判据：使用方运行期覆盖当前语言数据且绑定文本需自动刷新。

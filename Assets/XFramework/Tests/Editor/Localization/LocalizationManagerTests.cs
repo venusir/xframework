@@ -58,6 +58,17 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void GetFormat_FormatSpecWithBrace_RendersLiterally()
+        {
+            // 格式说明（':' 之后）里出现 '{' 不是合法复合格式项；旧实现让 string.Format 抛 FormatException
+            UseTable(("evil", "值 {0:0{0} 结束"));
+
+            Assert.DoesNotThrow(() => LocalizationManager.GetFormat("evil", 1));
+            Assert.AreEqual("值 {0:0{0} 结束", LocalizationManager.GetFormat("evil", 1),
+                "格式说明里的花括号应按字面输出（R3-LOC-003）");
+        }
+
+        [Test]
         public void GetFormat_UnregisteredNamedPlaceholder_WithoutAnyPlaceholderRegistered()
         {
             // 一个占位符都没注册时，ReplacePlaceholders 直接早退——这条路径同样会炸

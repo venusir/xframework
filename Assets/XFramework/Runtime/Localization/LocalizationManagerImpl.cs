@@ -453,8 +453,26 @@ namespace XFramework.XLocalization
                         continue;
                     }
 
-                    sb.Append("{{"); // 非格式项（含未注册的 {Name}）→ 输出为字面量 '{'
-                    i++;
+                    // 非格式项（含未注册的 {Name}、或格式说明里带 '{' 的项）→ 从该 '{' 到下一个 '}'
+                    // 整段按字面输出（R3-LOC-003）：只转义开头会把内层的 {0} 当成新的合法格式项，
+                    // 该段文本被部分替换，既不是字面也不是格式。
+                    int literalEnd = i;
+                    while (literalEnd < span.Length && span[literalEnd] != '}')
+                        literalEnd++;
+                    if (literalEnd < span.Length)
+                        literalEnd++; // 含收尾的 '}'
+
+                    for (int j = i; j < literalEnd; j++)
+                    {
+                        if (span[j] == '{')
+                            sb.Append("{{");
+                        else if (span[j] == '}')
+                            sb.Append("}}");
+                        else
+                            sb.Append(span[j]);
+                    }
+
+                    i = literalEnd;
                     continue;
                 }
 
@@ -522,7 +540,13 @@ namespace XFramework.XLocalization
             {
                 i++;
                 while (i < span.Length && span[i] != '}')
+                {
+                    // 格式说明里出现 '{' 不是合法复合格式项（R3-LOC-003）：交给 string.Format 会抛
+                    // FormatException，按字面处理才是「非格式项按字面」的承诺。
+                    if (span[i] == '{')
+                        return false;
                     i++;
+                }
             }
 
             if (i >= span.Length || span[i] != '}')

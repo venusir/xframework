@@ -332,6 +332,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Localization
 
+- **格式说明里出现 `{` 仍抛 `FormatException`（R3-LOC-003）**：`{0:0{0}` 这类非格式项被当作合法格式项交给
+  `string.Format`；旧的字面化只转义开头，内层 `{0}` 又被当成新的格式项。修法：非格式项从 `{` 到下一个 `}`
+  整段按字面输出。回归：`LocalizationManagerTests.GetFormat_FormatSpecWithBrace_RendersLiterally`（改前红）。
 - **Bootstrap 阶段二次执行覆写所有权，Shutdown 漏销毁（R3-LOC-002）**：`ExecuteAsync` 第二次运行时
   `alreadyInitialized` 为真（正是本阶段建的），却把 `_initializedByThisStage` 覆写为 false；空数据分支也
   直接置 false。修法：所有权只在「本次确实创建」时置位，二次执行保留既有所有权。回归：
