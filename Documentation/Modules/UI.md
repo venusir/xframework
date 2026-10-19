@@ -154,6 +154,7 @@ README 只留使用方要知道的边界（「面板资源不会自动卸载」�
 - 不做：**不给门面加「驱动是否仍在调度器里」的自检**（2026-10-01 · 第一轮）——本轮的最小修法是「每次都真的 Register」（`UpdateManager.Clear` 那条），已覆盖同一条失联；引入查询 API 要动 Update 模块的公开面，收益与代价不成比例。重开判据：将来第二条路径再踩到这条失联 ⇒ 重新评估。
 - 已做：**遮罩补 `GraphicRaycaster`——此前既点不关也挡不住输入**（2026-10-11 · `2e7951b`）——原条目判「跑不了 Unity 验证」，那一步**低估了可测性**：`EventSystem.RaycastAll` 遍历全局 raycaster 列表，既不需要输入模块也不需要 `EventSystem.current`，真射线只需一个空 `EventSystem`。实测：修复前屏幕正中（遮罩铺满全屏）命中数为 **0**；去掉修复那一行则新用例立刻红、加回即绿，**两处根因同时坐实**（既点不关，也挡不住下方输入）。三条留档在「沿革」末条：D3 假绿教科书样本、两个射线夹具坑、行为变更（遮罩从此真正吃点击）。
 - 未做：**`IUIManager : IDisposable` 可被第三方绕过门面直接 `Dispose()`**（2026-10-01 · 第一轮）——门面记账随之脱节（`_instance` 仍指向已释放的实现）。改接口形状（去掉 `IDisposable` 或改名）对第三方实现是**源码破坏性变更**，本轮只记文档，不动。
+- 已做：**约定绑定类型不匹配/重名告警**（2026-10-19 · R3-UIB-009/013，本轮修复）——`img_` 无 `Image` 静默跳过；同名约定节点后者覆盖前者。修法：编辑器下类型不匹配告警；同名只保留第一个并告警。回归 `UIPanelBindingConventionTests` 两例（改前均红）。
 - 已做：**补 UIBinder 公开绑定方法覆盖**（2026-10-19 · R3-UIB-012，本轮补测试）——新增 `UIBinderTests` 五例（FillAmount / Slider / Toggle / Active / Click，含释放后不再更新）；TMP 方法与真实 Tip 帧循环仍不可测（未导入 TMP Essentials），登记为覆盖缺口。
 - 已做：**无主相机时 HUD 重查降频**（2026-10-19 · R3-UIB-011，本轮修复）——`Camera.main` 每帧白查；降频到 1 秒一次并只告警一次。回归 `Hud_NoMainCamera_RetriesLookupAtMostOncePerSecond`（改前每帧查）。
 - 已做：**Tip 帧循环逐项隔离**（2026-10-19 · R3-UIB-007，本轮修复）——一个 Tip 的 `Tick` 抛异常会中断本轮、其余 Tip 停更；改为逐个 `try/catch`，抛异常实例直接回收。`UITipItem.Tick` 非虚、无直接注入缝，本轮未构造自动化用例（登记为覆盖缺口）。

@@ -417,6 +417,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **约定绑定节点类型不匹配/重名无告警（R3-UIB-009/013）**：`img_` 挂在没有 `Image` 的节点上静默跳过
+  （与 README「未找到会告警」相反）；面板内同名约定节点后者覆盖前者、先出现的永久未绑。修法：编辑器下
+  类型不匹配告警；同名节点只保留第一个并告警。回归：`UIPanelBindingConventionTests` 两例（改前均红）。
 - **无主相机时 HUD 每帧重查 `Camera.main`（R3-UIB-011）**：`Camera.main` 是带标签的查找，无主相机场景
   每帧白查。修法：降频到 1 秒一次，并只告警一次。回归：
   `UIHudManagerTests.Hud_NoMainCamera_RetriesLookupAtMostOncePerSecond`（改前每帧查，改后 1 秒一次）。

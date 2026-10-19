@@ -259,32 +259,66 @@ namespace XFramework.XUI.Data
             if (name.StartsWith("txt_", StringComparison.OrdinalIgnoreCase))
             {
                 var text = node.GetComponent<Text>();
-                if (text != null) _componentCache[node.name] = text;
+                if (text != null) CacheConventionNode(node.name, text);
+                else WarnConventionMismatch(node.name, "Text");
             }
             else if (name.StartsWith("img_", StringComparison.OrdinalIgnoreCase))
             {
                 var image = node.GetComponent<Image>();
-                if (image != null) _componentCache[node.name] = image;
+                if (image != null) CacheConventionNode(node.name, image);
+                else WarnConventionMismatch(node.name, "Image");
             }
             else if (name.StartsWith("btn_", StringComparison.OrdinalIgnoreCase))
             {
                 var button = node.GetComponent<Button>();
-                if (button != null) _componentCache[node.name] = button;
+                if (button != null) CacheConventionNode(node.name, button);
+                else WarnConventionMismatch(node.name, "Button");
             }
             else if (name.StartsWith("sld_", StringComparison.OrdinalIgnoreCase))
             {
                 var slider = node.GetComponent<Slider>();
-                if (slider != null) _componentCache[node.name] = slider;
+                if (slider != null) CacheConventionNode(node.name, slider);
+                else WarnConventionMismatch(node.name, "Slider");
             }
             else if (name.StartsWith("tgl_", StringComparison.OrdinalIgnoreCase))
             {
                 var toggle = node.GetComponent<Toggle>();
-                if (toggle != null) _componentCache[node.name] = toggle;
+                if (toggle != null) CacheConventionNode(node.name, toggle);
+                else WarnConventionMismatch(node.name, "Toggle");
             }
 
             // 递归子节点
             for (int i = 0; i < node.childCount; i++)
                 CacheComponentsRecursive(node.GetChild(i), depth + 1, maxDepth);
+        }
+
+        /// <summary>
+        /// 登记一个约定节点。同名节点只保留第一个并告警（R3-UIB-013）——字典按大小写不敏感比较，
+        /// 后者覆盖前者会让「另一个同名节点」永久未绑且无任何提示。
+        /// </summary>
+        private void CacheConventionNode(string nodeName, Component component)
+        {
+            if (_componentCache.ContainsKey(nodeName))
+            {
+                LogManager.Warning(LogCategory.Get("UIPanelBinding"),
+                    "面板内存在重复的约定节点名 '{0}'，只绑定第一个；请保证约定节点名唯一。", nodeName);
+                return;
+            }
+
+            _componentCache[nodeName] = component;
+        }
+
+        /// <summary>
+        /// 约定节点存在但组件类型不匹配时告警（R3-UIB-009，仅编辑器）。
+        /// <para>README 承诺「未找到会告警」；此前 `img_xxx` 挂在没有 Image 的节点上会静默跳过。</para>
+        /// </summary>
+        private static void WarnConventionMismatch(string nodeName, string expectedComponent)
+        {
+#if UNITY_EDITOR
+            LogManager.Warning(LogCategory.Get("UIPanelBinding"),
+                "约定节点 '{0}' 未找到 {1} 组件，已跳过；请检查节点命名与组件类型是否匹配。",
+                nodeName, expectedComponent);
+#endif
         }
 
         #endregion
