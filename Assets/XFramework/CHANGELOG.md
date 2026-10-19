@@ -895,6 +895,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Camera 的 `OutputCamera` 过度承诺（2026-10-19，R3-CAM-003）**：Cinemachine 适配器返回的 Brain
+  输出相机**可能为 null**（Brain 所在对象没有 `Camera` 时），接口 XML 与 README 不再写「恒非空」。
 - **订正 Diagnostics 的契约句与恢复入口（2026-10-19，R3-DIAG-002/003）**：`Collect` 抛异常的渲染结果是
   「错误提示 + 堆栈两行」（不是一条）；`Clear()` 抹掉框架页签且包外宿主无法恢复，XML 与已知限制写明；
   删去「十个文件」固定计数。
