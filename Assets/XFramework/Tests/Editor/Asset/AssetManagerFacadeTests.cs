@@ -414,6 +414,12 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void PreloadAllAsync_Null_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() => AssetManager.PreloadAllAsync(null));
+        }
+
+        [Test]
         public void PreloadAllAsync_ForwardsToInstance()
         {
             AssetManager.PreloadAllAsync(new[] { "a", "b" }).GetAwaiter().GetResult();

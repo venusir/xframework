@@ -323,6 +323,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   后续订阅者。修法：进度回调记 Error 后继续；下载器事件按调用列表逐个 `try/catch`。回归：
   `SceneLoadOperationTests.ProgressCallbackThrows_LoadStillSucceedsAndRegisters`、
   `AssetDownloaderHandleTests` 两例。
+- **`PreloadAllAsync(null)` 抛裸 NRE（R3-AST-008）**：`LoadAllAsync` 对 null 抛 `ArgumentNullException`，
+  同族的 `PreloadAllAsync` 却在 `foreach` 处抛 NRE。修法：门面与实现都补 `ArgumentNullException`。
+  回归：`AssetManagerFacadeTests.PreloadAllAsync_Null_ThrowsArgumentNullException`。
 
 #### Pipeline
 

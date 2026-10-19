@@ -299,6 +299,7 @@ namespace XFramework.XAsset
         public async UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureInitialized();
+            if (locations == null) throw new ArgumentNullException(nameof(locations));
 
             // 先收集全部 location：避免重复枚举，且预加载过程中的总数/计数基于快照
             var list = new List<string>();

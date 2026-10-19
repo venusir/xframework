@@ -454,6 +454,7 @@ namespace XFramework.XAsset
         public static UniTask PreloadAllAsync(IEnumerable<string> locations, Action<float> progress = null, CancellationToken cancellationToken = default)
         {
             EnsureGlobalInitialized();
+            if (locations == null) throw new ArgumentNullException(nameof(locations));
             return _instance.PreloadAllAsync(locations, progress, cancellationToken);
         }
 
