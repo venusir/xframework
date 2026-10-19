@@ -69,7 +69,28 @@ namespace XFramework.XLocalization
             }
 
             // 通过 AssetManager 加载 JSON 文件(实际地址 = 模板拼接目标语言)
-            var assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
+            // 模板校验（R3-LOC-004）：缺 {0} 时所有语言拼出同一路径、语言切换被静默忽略；
+            // 坏模板（非法花括号/非格式串）给出带模块前缀的消息，而不是裸 FormatException。
+            if (_assetPathTemplate == null ||
+                _assetPathTemplate.IndexOf("{0", StringComparison.Ordinal) < 0)
+            {
+                LogManager.Warning(LogCategories.LocalizationManager,
+                    "LanguageAssetPath 模板 '{0}' 缺少 {{0}} 占位符；语言切换会被忽略（所有语言解析到同一路径）。",
+                    _assetPathTemplate);
+            }
+
+            string assetLocation;
+            try
+            {
+                assetLocation = string.Format(_assetPathTemplate, _targetLanguage);
+            }
+            catch (Exception e) when (e is FormatException || e is ArgumentNullException)
+            {
+                throw new InvalidOperationException(
+                    $"[LocalizationManager] LanguageAssetPath 模板无效：'{_assetPathTemplate}'。" +
+                    "模板必须是含 {{0}} 的复合格式字符串。", e);
+            }
+
             var json = await LoadTextFunc(assetLocation, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -171,15 +192,26 @@ namespace XFramework.XLocalization
                 i++; // 跳过 ':'
 
                 var value = ReadJsonString(span, ref i, json);
-                if (result.ContainsKey(key))
+
+                if (key.Length == 0)
                 {
-                    // 重复键：JSON 规范未禁止，主流解析器后者胜。不抛（兼容手写表），但必须留痕，
-                    // 否则就是「静默丢数据」（LOC-007）。
+                    // 空键入库后不可达（GetRaw 对空键直接抛 ANE），且此前零告警（R3-LOC-006）；
+                    // 保留「消费值」但不入库，明确留痕。
                     LogManager.Warning(LogCategories.LocalizationManager,
-                        "Duplicate key '{0}' in language JSON at position {1}; the later value wins.",
-                        key, keyStart);
+                        "空键（\"\"）在语言 JSON 位置 {0} 被忽略：空键入库后不可达。", keyStart);
                 }
-                result[key] = value;
+                else
+                {
+                    if (result.ContainsKey(key))
+                    {
+                        // 重复键：JSON 规范未禁止，主流解析器后者胜。不抛（兼容手写表），但必须留痕，
+                        // 否则就是「静默丢数据」（LOC-007）。
+                        LogManager.Warning(LogCategories.LocalizationManager,
+                            "Duplicate key '{0}' in language JSON at position {1}; the later value wins.",
+                            key, keyStart);
+                    }
+                    result[key] = value;
+                }
 
                 SkipWhitespace(span, ref i);
                 if (i >= span.Length)

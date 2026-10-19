@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XLocalization;
 
@@ -69,6 +72,51 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual("localization/lang_ja", loadedLocation, "加载地址应由模板拼接目标语言");
             Assert.AreEqual("ja", LocalizationManager.CurrentLanguage, "加载成功应切换当前语言");
             Assert.AreEqual("こんにちは", LocalizationManager.Get("title"), "解析后的数据应注入缓存");
+        }
+
+        [Test]
+        public void TemplateWithoutPlaceholder_WarnsAndStillLoads()
+        {
+            var loader = new LanguageAssetLoader("ja", "localization/lang");
+            string loaded = null;
+            loader.LoadTextFunc = (location, ct) =>
+            {
+                loaded = location;
+                return UniTask.FromResult(JsonContent);
+            };
+
+            LogAssert.Expect(LogType.Warning, new Regex("缺少 \\{0\\} 占位符"));
+
+            loader.LoadAsync(default).GetAwaiter().GetResult();
+
+            Assert.AreEqual("localization/lang", loaded, "缺占位符时所有语言解析到同一路径");
+        }
+
+        [Test]
+        public void MalformedTemplate_ThrowsModulePrefixedException()
+        {
+            var loader = new LanguageAssetLoader("ja", "localization/lang_{0");
+            loader.LoadTextFunc = (location, ct) => UniTask.FromResult(JsonContent);
+
+            var ex = Assert.Throws<InvalidOperationException>(
+                () => loader.LoadAsync(default).GetAwaiter().GetResult());
+
+            StringAssert.Contains("[LocalizationManager]", ex.Message,
+                "坏模板必须给带模块前缀的消息，而不是裸 FormatException（R3-LOC-004）");
+        }
+
+        [Test]
+        public void EmptyKey_WarnsAndIsSkipped()
+        {
+            var loader = new LanguageAssetLoader("ja", Template);
+            loader.LoadTextFunc = (location, ct) =>
+                UniTask.FromResult("{\"\":\"空\",\"ok\":\"よし\"}");
+
+            LogAssert.Expect(LogType.Warning, new Regex("空键"));
+
+            loader.LoadAsync(default).GetAwaiter().GetResult();
+
+            Assert.AreEqual("よし", LocalizationManager.Get("ok"), "其余键正常入库");
         }
 
         [Test]

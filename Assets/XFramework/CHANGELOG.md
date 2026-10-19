@@ -332,6 +332,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Localization
 
+- **坏路径模板与空键零告警（R3-LOC-004/006）**：`LanguageAssetPath` 缺 `{0}` 时语言被静默忽略，坏模板抛裸
+  `FormatException`；语言 JSON 的空键入库后不可达。修法：缺占位符 Warning、坏模板包成带模块前缀的
+  `InvalidOperationException`、空键 Warning 并跳过。回归：`LanguageAssetLoaderTests` 三例（改前均红/无告警）。
 - **格式说明里出现 `{` 仍抛 `FormatException`（R3-LOC-003）**：`{0:0{0}` 这类非格式项被当作合法格式项交给
   `string.Format`；旧的字面化只转义开头，内层 `{0}` 又被当成新的格式项。修法：非格式项从 `{` 到下一个 `}`
   整段按字面输出。回归：`LocalizationManagerTests.GetFormat_FormatSpecWithBrace_RendersLiterally`（改前红）。
