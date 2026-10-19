@@ -31,6 +31,7 @@ Runtime/Lock/
 - 未做：**订正 `SubscriptionTracker` 那句「全仓订阅只有两处登记点」**（2026-09-27 · 审计轮，裁定本轮不动）——Lock 是第三处、且不受跟踪；该句属 Event 侧文档，本轮未动。
 - 未做：**跨对象订阅的自动退订**（2026-09-27 · 审计轮）——形态是 `OnLocked(subject, handler, IDestroyCancellationToken owner)` 重载（arity 不同，无重载二义风险），本轮未做。
 - 未做：**`ActionDisposable` 池化的 ABA**（2026-09-27 · 审计轮）——可改成「Rent 返回带代号的包装」消除，代价是每次订阅多一次分配。仓内另有更彻底的答案可参考：UI 遮罩用**单调令牌 + 条目表**（`UIManagerImpl`），令牌不回收即无 ABA。
+- 已做：**`AddLock` 先绑定销毁再派发首次锁定事件**（2026-10-20 · R3-LOCK-001，本轮修复）——订阅者可能在回调里 `RemoveAllLocks` 并退订；晚绑定会给已空闲主体重新挂上销毁绑定并残留。修法：`EnsureDestroyBinding` 移到派发之前；回归 `LockInternalStateTests.AddLock_FirstLockSubscriberClearsAndUnsubscribes_NoBindingResidue`（改前残留 1 条）。
 
 ## 审计轮次
 

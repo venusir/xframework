@@ -581,13 +581,15 @@ namespace XFramework.XLock
             bool wasEmpty = lockSet.Count == 0;
             lockSet.Add(lockObj);
 
+            // 先绑定再派发（R3-LOCK-001）：订阅者可能在「首次锁定」回调里 RemoveAllLocks 并退订，
+            // 此时主体已空闲；晚绑定会把它重新挂上销毁绑定，残留到 Dispose 或下一次「有锁→空闲」。
+            EnsureDestroyBinding(subjectKey);
+
             if (wasEmpty && lockSet.Count == 1)
             {
                 DispatchSafely(OnGlobalLocked, subjectKey, lockType, lockObj, nameof(OnGlobalLocked));
                 NotifyOnLocked(lockSubject, lockType, lockObj);
             }
-
-            EnsureDestroyBinding(subjectKey);
 
             return new LockHandle(lockSubject, lockType, lockObj);
         }

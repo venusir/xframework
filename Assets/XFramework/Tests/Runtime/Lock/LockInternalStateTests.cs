@@ -76,6 +76,30 @@ namespace XFramework.XLock.Tests
         #endregion
 
         [Test]
+        public void AddLock_FirstLockSubscriberClearsAndUnsubscribes_NoBindingResidue()
+        {
+            var subject = new TokenSubject();
+            IDisposable sub = null;
+            sub = LockManager.OnLocked(subject, _ =>
+            {
+                LockManager.RemoveAllLocks(subject);
+                sub.Dispose(); // 在首次锁定回调里退订
+            });
+
+            try
+            {
+                LockManager.AddLock(subject, TypeA, new object());
+
+                Assert.AreEqual(0, Container("_destroyBindings").Count,
+                    "首次锁定回调里清空并退订主题后不得残留销毁绑定（R3-LOCK-001）");
+            }
+            finally
+            {
+                subject.DisposeCts();
+            }
+        }
+
+        [Test]
         public void AfterReleaseAndUnsubscribe_AllContainersAreEmpty()
         {
             var subject = new Subject();
