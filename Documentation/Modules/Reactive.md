@@ -49,6 +49,8 @@ Runtime/Reactive/
 
 - 暂不做：**链式 `Select` 中间派生值的释放形状**（2026-10-18 · 用户裁定 + `dfa837b`）——中间派生值不可达，`d2.Dispose()` 无法释放 `d1→root` 的订阅与 selector（RCT-001）；用户裁定本批只文档化（逐级持有、逐级释放），「拥有上游」的显式入口暂不做。回归锁 `ReactivePropertyTests.ChainedSelect_DisposingFinalOnly_LeavesIntermediateSubscribed` 钉住当前边界。重开判据：出现长寿命属性上的链式映射使用方。
 
+- 暂不做：**不给响应式属性加主线程断言**（2026-10-19 · R2 RCT-009 裁定补录，R3-RCT-002）——纯托管实例，误用后果是数据竞争（值 / 载荷分叉）而非引擎异常；需要严格检测的项目在自己的调用点加 Editor-only 断言。重开判据：出现依赖模块内断言的调试场景。
+
 ## 实测记录
 
 > **事实分级**：**实测** = 本仓跑出来的数字（方法在下方，可复验）；**推导** = 算式或 BCL 设计层事实，未在本仓实测。环境：Unity 6000.4.5f1 / Editor(batch, Mono) / WindowsEditor——**真机 IL2CPP 未测**，数字不可跨运行时外推。

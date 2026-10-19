@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Reactive 的接口双承诺与台账（2026-10-19，R3-RCT-001/002）**：`IReactivePropertyWriter.TryWriteValue` 的
+  `actual` 口径改为「由实现直接给出；重入写入时两个实现可能分叉」（原文档同时承诺「写入后实际值」与
+  「恒等于 value」，互相矛盾）；`Modules/Reactive.md` 补 RCT-009「不加主线程断言」`暂不做` 条目。
 - **订正 Event 的「不为 PlayMode 补用例」理由（2026-10-19，R3-EVT-001）**：旧理由「无跨会话静态态」与模块内
   三处静态池/计数矛盾；改为「无帧、无 MonoBehaviour，静态池/计数不承载跨会话逻辑状态」，结论不变。
 - **订正 Log 的捕获口径与分类计数（2026-10-19，R3-LOG-002/003/004）**：全量捕获改为「先全局档早退，再分类覆盖」，
