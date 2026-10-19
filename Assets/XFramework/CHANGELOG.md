@@ -895,6 +895,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Serialize 的多态/Default/type 形参口径（2026-10-19，R3-SER-001/002/003/005/006）**：Newtonsoft 实现未启用
+  `TypeNameHandling`，**不保留多态类型信息**（README 与 XML 同步）；替换内置格式在初始化之后 `Register` 也会
+  覆盖（删去「必须在初始化之前」两句）；`Get(null)` 补 `ArgumentNullException`；`Serialize` 的 `type` 形参
+  内置实现忽略；`Default` 按 `json` 是否注册判断，与 `IsInitialized` 不是同一面。
 - **订正 Config 的注册/预载语义与 XML（2026-10-19，R3-CONF-004/008/009/011）**：`Register` 后 `Preload` 命中
   「已加载」直接返回注入数据、不会加载 assetPath（反向才由 `Register` 覆盖）；`PreloadGlobalAsync(path, default)`
   与 Table 同形二义（CS0121）；CSV 主键列只对「字段承载主键」是必需的（计算/显式主键可省略）；

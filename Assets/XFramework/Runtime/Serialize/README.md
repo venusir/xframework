@@ -50,8 +50,8 @@ Runtime/Serialize/
 | `json` | `NewtonsoftSerializer` | Newtonsoft.Json | **默认**——`Serializer.Default` 取的就是它 |
 | `json-utility` | `JsonSerializer` | Unity JsonUtility | 遗留格式，保留用于读写旧版本写出的存档 |
 
-> Unity 自带的 `JsonUtility` 不支持字典、多态与 `null` 语义，故默认实现是 Newtonsoft；`json-utility`
-> 只作兼容保留，新数据请用 `json`。
+> Unity 自带的 `JsonUtility` 不支持字典与 `null` 语义；Newtonsoft 支持字典，但**同样不保留多态类型信息**
+> （未启用 `TypeNameHandling`），多态字段按声明类型序列化。`json-utility` 只作兼容保留，新数据请用 `json`。
 
 ### 注册表成员
 
@@ -59,7 +59,7 @@ Runtime/Serialize/
 | ---- | ---- |
 | `Get(format)` | 取指定格式的序列化器；**未注册时抛 `KeyNotFoundException`** |
 | `TryGet(format, out serializer)` | 同上但不抛（未注册返回 `false`）——探测用；`format` 为 `null` 仍抛 `ArgumentNullException`（SER-004） |
-| `Default` | 默认序列化器（`format = "json"`）；未初始化时抛 `InvalidOperationException` |
+| `Default` | 默认序列化器（`format = "json"`）；**按 `json` 是否注册判断**——未注册时抛 `InvalidOperationException`（未初始化，或初始化后 `Unregister("json")`；与 `IsInitialized` 不是同一面） |
 | `Register(serializer)` | 按 `serializer.Format` 注册；**同名覆盖** |
 | `Unregister(format)` | 摘除指定格式；`format` 为 `null` 抛 `ArgumentNullException` |
 | `IsInitialized` | 模块是否已初始化 |
@@ -71,8 +71,8 @@ Runtime/Serialize/
 本模块的实现方入口：实现并注册序列化器。
 
 - **实现哪个契约**：`ISerializer`（`Format` 字符串 + 同步的 `Serialize` / `Deserialize`）。
-- **怎么接线**：`Serializer.Register(serializer)` / `Unregister(format)`；替换内置格式须在模块初始化**之前**注册同名格式。
-- **要守什么**：格式名是跨模块契约（`DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 用它）；替换 `"json"` 是全局动作，且必须早于初始化；未注册的格式 `Get` 抛 `KeyNotFoundException`，未初始化取 `Default` 抛 `InvalidOperationException`（见「已知限制」）。
+- **怎么接线**：`Serializer.Register(serializer)` / `Unregister(format)`；替换内置格式时直接 `Register` 同名实现即可覆盖（后注册者胜），初始化之前注册则会被 `Initialize` 保留并打一条告警。
+- **要守什么**：格式名是跨模块契约（`DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 用它）；替换 `"json"` 是全局动作；未注册的格式 `Get` 抛 `KeyNotFoundException`，`Default` 在 `json` 未注册时抛 `InvalidOperationException`（见「已知限制」）。
 
 实现 `ISerializer`，然后注册：
 
@@ -80,8 +80,9 @@ Runtime/Serialize/
 Serializer.Register(new MyMessagePackSerializer());
 ```
 
-> **替换内置格式**（如用自定义实现接管 `"json"`）：在模块初始化**之前**注册同名格式即可——
-> `Initialize` 遇到已存在的同名注册会**保留你的**并打一条 `[Serialize]` 告警，不再静默覆盖。
+> **替换内置格式**（如用自定义实现接管 `"json"`）：初始化**之后**直接 `Register` 同名实现即可覆盖（后注册者胜）；
+> 初始化**之前**注册则 `Initialize` 会保留你的并打一条 `[Serialize]` 告警、不再静默覆盖。两种时机都可用，
+> 区别只是初始化之前注册会多一条告警。
 > 想恢复内置实现请 `Unregister("json")` 后重新 `Register(new NewtonsoftSerializer())`。
 > （`Register` 本身的「同名覆盖」不变——那是显式动作。）
 
@@ -129,7 +130,7 @@ Serializer.Register(new MessagePackSerializer());
 
 知道边界比以为没有边界安全。以下都是刻意的取舍或跨模块的能力缺口，**不是待修的缺陷**：
 
-- **`json-utility` 只为读旧数据保留。** Unity 自带的 `JsonUtility` 不支持字典、多态与 `null` 语义，
+- **`json-utility` 只为读旧数据保留。** Unity 自带的 `JsonUtility` 不支持字典与 `null` 语义；
   用它写出的数据会**静默丢字段**（落默认值，不报错）——新数据请一律用 `json`。
 - **覆盖 `"json"` 是个全局动作。** `Data` 与 `Save` 都走 `Serializer.Default`，换掉它等于同时改变
   两者的落盘格式；已经写出去的旧存档不会跟着迁移，要自己保证新实现读得懂旧数据。

@@ -146,6 +146,8 @@ namespace XFramework.XSerialize
         /// <param name="format">序列化格式标识，如 "json"。</param>
         /// <returns>对应的序列化器。</returns>
         /// <exception cref="KeyNotFoundException">未找到指定 format 的序列化器。</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="format"/> 为 <c>null</c> 时抛出
+        /// （底层字典不接受 null 键；与 <see cref="Unregister"/> 同形，R3-SER-003）。</exception>
         public static ISerializer Get(string format)
         {
             if (Serializers.TryGetValue(format, out var serializer))

@@ -19,9 +19,12 @@ namespace XFramework.XSerialize
 
         /// <summary>
         /// 将对象序列化为字节数组。
+        /// <para><b>内置实现忽略 <paramref name="type"/></b>（按对象的运行期/声明类型序列化）；
+        /// 它保留给需要显式类型信息的自定义实现。跨实现的语义可能分叉，调用方不要依赖它改变结果
+        /// （R3-SER-005）。</para>
         /// </summary>
         /// <param name="obj">待序列化的对象，不可为 null。</param>
-        /// <param name="type">对象类型。</param>
+        /// <param name="type">对象类型；内置实现不使用。</param>
         /// <returns>序列化后的字节数组。</returns>
         byte[] Serialize(object obj, Type type);
 
