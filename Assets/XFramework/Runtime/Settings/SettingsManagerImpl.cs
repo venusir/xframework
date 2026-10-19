@@ -123,6 +123,7 @@ namespace XFramework.XSettings
         public void Apply(T settings)
         {
             ThrowIfDisposed();
+            SettingsThreadGuard.AssertEntry("Apply");   // R3-SET-003：写入口按 README 的线程契约守卫
 
             if (settings == null)
                 throw new ArgumentNullException(nameof(settings));
@@ -164,6 +165,7 @@ namespace XFramework.XSettings
         public void Save()
         {
             ThrowIfDisposed();
+            SettingsThreadGuard.AssertEntry("Save");    // R3-SET-003
 
             // 先取快照:写入期间若有新改动(如用户在保存过程中继续拖动滑条),计数会继续增长,
             // 保存结束后两者不等、仍是脏的。用布尔标志就会把这次改动吞掉
@@ -193,6 +195,7 @@ namespace XFramework.XSettings
             // 释放检查放在同步段:若写进 async 方法体,异常会被状态机包进返回的 UniTask,
             // 调用方拿不到同步失败(与 SavePathUtility 把校验做成同步纯函数是同一条理由)
             ThrowIfDisposed();
+            SettingsThreadGuard.AssertEntry("SaveAsync");   // R3-SET-003（同步段守卫）
             return SaveAsyncCore(cancellationToken);
         }
 

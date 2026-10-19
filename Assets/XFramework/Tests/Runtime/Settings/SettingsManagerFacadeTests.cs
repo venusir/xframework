@@ -1,5 +1,9 @@
 using System;
+using System.Collections.Generic;
+using System.Reflection;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -24,6 +28,12 @@ namespace XFramework.XSettings.Tests
         private sealed class SettingsB
         {
             public int Quality;
+        }
+
+        /// <summary>默认路径占用用例专用类型（R3-SET-002）：名字唯一，不与其他用例的占用表交叉。</summary>
+        private sealed class SettingsPathClaimProbe
+        {
+            public int Value;
         }
 
         /// <summary>内存假存储：始终「无持久化数据」，构造走 defaultFactory 路径。</summary>
@@ -66,6 +76,45 @@ namespace XFramework.XSettings.Tests
         #endregion
 
         #region Lifecycle
+
+        [Test]
+        public void Initialize_DefaultPath_AfterExplicitPath_DoesNotClaimDefaultPath()
+        {
+            var manager = SettingsManager.Initialize<SettingsPathClaimProbe>(new MemoryStore());
+            Assert.IsNotNull(manager);
+
+            // 再次调用默认路径重载：返回旧实例、告警；不得把默认路径记成自己的占用
+            LogAssert.Expect(LogType.Warning, new Regex("more than once"));
+            Assert.AreSame(manager, SettingsManager.Initialize<SettingsPathClaimProbe>());
+
+            var field = typeof(SettingsManager).GetField("DefaultPathClaims",
+                BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(field);
+            var claims = (Dictionary<string, Type>)field.GetValue(null);
+
+            Assert.IsFalse(claims.ContainsValue(typeof(SettingsPathClaimProbe)),
+                "已用显式路径初始化时，默认路径占用不得被写入（R3-SET-002）");
+        }
+
+        [Test]
+        public async Task Save_FromPoolThread_LogsMainThreadError()
+        {
+            SettingsThreadGuard.ResetForNewSession();
+            var manager = SettingsManager.Initialize<SettingsPathClaimProbe>(new MemoryStore());
+
+            try
+            {
+                // Save 不触发 Message 发布（Apply 会经 Notify 在池线程发消息，产生第二条错误日志）
+                LogAssert.Expect(LogType.Error, new Regex("Save 必须在 Unity 主线程调用"));
+
+                await UniTask.RunOnThreadPool(() => manager.Save());
+            }
+            finally
+            {
+                // 首错闩锁是每会话一次的静态态：复位给同 fixture 的其它用例
+                SettingsThreadGuard.ResetForNewSession();
+            }
+        }
 
         [TearDown]
         public void TearDown()

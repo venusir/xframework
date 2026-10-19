@@ -381,6 +381,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Settings
 
+- **默认路径占用与写入口主线程断言（R3-SET-002/003）**：已用显式路径初始化后，`Initialize<T>()` 返回旧实例却
+  仍写 `DefaultPathClaims`（同名类型会被误报冲突）；`Apply`/`Save`/`SaveAsync` 写入口没有 README 承诺的
+  Editor-only 主线程断言。修法：只在本次确实创建实例时占用默认路径；三个写入口补
+  `SettingsThreadGuard.AssertEntry`。回归：`SettingsManagerFacadeTests` 两例。
 - **加密装饰器同步降级把活对象交池线程（R3-SET-001，回归）**：`EncryptedSettingsStore.SaveAsync` 在内层同步时
   把 `Save(settings)` 整段丢线程池，活对象在池线程 `JsonUtility.ToJson`——SET-013 的竞态在推荐用法上复活。
   修法：序列化/加密在调用线程完成，只把 IO 交给线程池。回归：

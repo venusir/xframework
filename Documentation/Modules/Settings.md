@@ -38,6 +38,7 @@ Runtime/Settings/
 
 ## 决策台账
 
+- 已做：**默认路径占用与写入口主线程断言**（2026-10-19 · R3-SET-002/003，本轮修复）——已用显式路径初始化后默认路径 `Initialize<T>()` 仍写 `DefaultPathClaims`；`Apply`/`Save`/`SaveAsync` 无 README 承诺的 Editor-only 断言。修法：只在确实创建实例时占用；三个写入口补守卫；回归 `SettingsManagerFacadeTests` 两例。
 - 已做：**加密装饰器同步降级在调用线程序列化**（2026-10-19 · R3-SET-001，回归修复）——内层同步时 `SaveAsync` 把 `Save(settings)` 整段丢线程池，活对象在池线程 `JsonUtility.ToJson`；改为先 `ToCipherBlob` 再只把 IO 交线程池；回归 `EncryptedSettingsStoreTests.SaveAsync_SyncInner_EncryptsOnCallingThread`。
 - 未做：**`DefaultPathClaims` 刻意不随会话边界清空（当前维持）**（2026-10-14 · 会话级复位轮）——占用关系对应磁盘文件（清掉反而会放行「B 接管 A 的存档」），且体量有界（每路径一条）——与无界的重放表不同，故不适用同一处置。
 - 不做：**被丢弃的旧管理器仍被 `Application.wantsToQuit` root**（2026-10-14 · 会话级复位轮；2026-10-19 R3-ADJ-09 裁定为不做）——开了 `SaveOnQuit` 时，会话边界只丢引用不 `Dispose`（与七门面同形），旧管理器的 `Dispose` 永不调用。与 2026-10-18 框架级裁定「会话边界只丢引用、不替使用方 Dispose」一致，`SaveOnQuit` 下是可接受残留。重开判据：框架级会话边界裁定被推翻。

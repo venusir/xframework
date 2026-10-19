@@ -125,8 +125,12 @@ namespace XFramework.XSettings
 
             // 占用必须在初始化成功之后写入（SET-010）：初始化失败（工厂抛异常等）时
             // 不应把路径占住，否则另一个同名类型会被误报为冲突。
+            // 已经初始化过（例如先用显式路径的 store 初始化）时，本次只是返回旧实例，
+            // 不能把默认路径记成自己的占用（R3-SET-002）。
+            bool alreadyInitialized = Managers.ContainsKey(type);
             var manager = Initialize<T>(new JsonFileStore(filePath), defaultFactory, options);
-            DefaultPathClaims[filePath] = type;
+            if (!alreadyInitialized)
+                DefaultPathClaims[filePath] = type;
             return manager;
         }
 
