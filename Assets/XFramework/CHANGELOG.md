@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Data 的失败计数与隐式前提（2026-10-19，R3-DATA-004/005）**：`ApplySnapshot` 的失败原因补「清空阶段
+  `OnClear` 抛异常」与「快照条目为 null」（实现本就计数，文档原先漏列）；补「`RegisterBlock<T>` 以静态类型
+  为键」与「`BlockName` 注册后不得改变」两条已知限制。
 - **订正 Audio 的钳制点与已知限制（2026-10-19，R3-AUD-005/006/007）**：`AudioChannelConfig.Volume` 的钳制点是
   `RegisterChannel` 快照时（不是 `SetChannelVolume`，README 与 XML 同步）；已知限制补「不要直接 Dispose
   门面持有的管理器实例」与「3D 空间参数不可配置」。

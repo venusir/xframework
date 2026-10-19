@@ -26,6 +26,9 @@ namespace XFramework.XData
 
         /// <summary>
         /// 注册已创建的数据块实例。
+        /// <para><b>键是静态类型 <c>typeof(T)</c></b>：请用块的具体类型注册；用基类/接口类型注册会让
+        /// <see cref="GetOrCreateBlock{T}"/> / <see cref="TryGetBlock{T}"/> / <see cref="HasBlock{T}"/>
+        /// 以具体类型为键时查不到（R3-DATA-005）。</para>
         /// </summary>
         void RegisterBlock<T>(T block) where T : class, IDataBlock;
 
@@ -68,7 +71,8 @@ namespace XFramework.XData
         /// <param name="data">要应用的快照。</param>
         /// <returns>
         /// <b>未能恢复的数据块数量</b>；<c>0</c> 表示全部恢复成功。
-        /// <para>单个块失败（快照缺 blockName、块未注册、格式不支持、块版本高于当前代码、反序列化或
+        /// <para>单个块失败（清空阶段 <see cref="IDataBlock.OnClear"/> 抛异常、快照条目为 <c>null</c>、
+        /// 快照缺 blockName、块未注册、格式不支持、块版本高于当前代码、反序列化或
         /// <see cref="IDataBlock.OnLoad"/> 抛异常）不会中断整体恢复，而是被跳过并计入此值——
         /// 调用方必须据此判断本次加载是否<b>完整</b>：「部分块未恢复」等价于内存里少了一半数据，
         /// 当作成功处理是危险的。</para>

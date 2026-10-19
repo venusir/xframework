@@ -32,6 +32,8 @@ namespace XFramework.XData
         /// <summary>
         /// 数据块唯一名称，用于快照索引，替代 AssemblyQualifiedName 反射方式。
         /// <para>建议使用 nameof(MyBlock) 或字符串常量，与类名保持一致。</para>
+        /// <para><b>注册后不得改变</b>：<c>RegisterBlock</c> 时建立名称索引，之后改它会让快照按新名
+        /// 索引不到、旧名留下残影（R3-DATA-005）。</para>
         /// </summary>
         string BlockName { get; }
 
