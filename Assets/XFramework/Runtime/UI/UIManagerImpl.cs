@@ -265,6 +265,12 @@ namespace XFramework.XUI
             }
             else
             {
+                // 初始化之后注入的 provider 也要收到 UIRoot（R3-ADJ-12）：接口文档承诺
+                // 「Initialize 时自动调用」，注入是另一条到达同一状态的路径；不补调就只对
+                // 门面自建的默认实现成立。未初始化时 UIRoot 为 null，Initialize 会统一套用。
+                if (UIRoot != null)
+                    provider.SetUIRoot(UIRoot);
+
                 _tipProvider = provider;
             }
 
@@ -320,6 +326,10 @@ namespace XFramework.XUI
             }
             else
             {
+                // 同 SetTipProvider：注入时补调 SetUIRoot（R3-ADJ-12）
+                if (UIRoot != null)
+                    provider.SetUIRoot(UIRoot);
+
                 _hudProvider = provider;
             }
 

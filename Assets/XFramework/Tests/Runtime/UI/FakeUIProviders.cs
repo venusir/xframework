@@ -38,8 +38,7 @@ namespace XFramework.XUI.Tests
             DetachAllCount++;
         }
 
-        // SetUIRoot 记数而非抛：注入的 provider 目前拿不到这次调用（门面只在初始化自己的默认实现时调），
-        // 留一个观测点，将来若改为注入时补调，这里能立刻断言
+        // SetUIRoot 记数：注入路径会在初始化后补调一次（R3-ADJ-12），用例据此断言接线
         public int UIRootSetCount { get; private set; }
 
         public void SetUIRoot(Transform uiRoot)

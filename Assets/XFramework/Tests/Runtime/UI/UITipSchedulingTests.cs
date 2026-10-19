@@ -64,6 +64,29 @@ namespace XFramework.XUI.Tests
                 "Tip 应经 UpdateManager 派发，不再自建 UniTask 循环");
         }
 
+        /// <summary>
+        /// 初始化之后注入的 provider 必须收到一次 <c>SetUIRoot</c>（R3-ADJ-12）——
+        /// 接口文档承诺的接线不能只在门面自建的默认实现上成立。
+        /// </summary>
+        [Test]
+        public void SetTipProvider_AfterInitialize_ReceivesUIRootOnce()
+        {
+            Assert.AreEqual(1, _tip.UIRootSetCount,
+                "初始化后注入的 Tip provider 必须收到一次 SetUIRoot");
+            Assert.AreSame(_root.transform, _tip.LastUIRoot);
+        }
+
+        /// <summary>HUD 注入路径与 Tip 同形（R3-ADJ-12）。</summary>
+        [Test]
+        public void SetHudProvider_AfterInitialize_ReceivesUIRootOnce()
+        {
+            var hud = new FaultyHudProvider();
+            UIManager.SetHudProvider(hud);
+
+            Assert.AreEqual(1, hud.UIRootSetCount,
+                "初始化后注入的 HUD provider 必须收到一次 SetUIRoot");
+        }
+
         [Test]
         public void Tip_StoppedByPause()
         {
@@ -124,10 +147,16 @@ namespace XFramework.XUI.Tests
         {
             public int UpdateCount { get; private set; }
             public int DetachAllCount { get; private set; }
+            public int UIRootSetCount { get; private set; }
+            public Transform LastUIRoot { get; private set; }
             public float LastDeltaTime { get; private set; }
             public float LastTime { get; private set; }
 
-            public void SetUIRoot(Transform uiRoot) { }
+            public void SetUIRoot(Transform uiRoot)
+            {
+                UIRootSetCount++;
+                LastUIRoot = uiRoot;
+            }
 
             public UniTask ShowTipAsync(string text, TipConfig config = default,
                 CancellationToken cancellationToken = default)

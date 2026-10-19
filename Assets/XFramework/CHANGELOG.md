@@ -194,6 +194,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **注入的 Tip / HUD provider 会收到 `SetUIRoot`（R3-ADJ-12）**：此前只有门面自建的默认实现收到；
+  初始化后经 `SetTipProvider` / `SetHudProvider` 注入的实现拿不到，与接口文档「Initialize 时自动调用」
+  不一致。现在初始化后注入会补调一次；初始化前注入的仍在 `Initialize` 时补调。默认 provider 的调用次数不变。
 - **`AssetPlayMode` 的整数值与 `0.3.0` 不同（R3-AST-001）**：当前为 `EditorSimulate = 0` /
   `Offline = 1` / `Host = 2`，而 `0.3.0` 是 `Offline = 0` / `Host = 1`。该 tag **从未分发**（2026-10-19
   用户确认），故不恢复旧值；若你从 `0.3.0` 的源码 / 场景升级，反序列化后请重新选择运行模式——
