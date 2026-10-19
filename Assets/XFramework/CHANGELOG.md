@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **包 README 补「包自身 Git URL 不钉修订」说明（2026-10-19，R3-ADJ-14）**：写明与第三方依赖必须钉 `#tag`
+  的有意不对称、如何钉 `0.3.0`（`?path=` 在 `#` 之前），并提示该 tag 早于 Camera / Scene 且 `AssetPlayMode`
+  整数值不同。
 - **订正 `RecoverAsync` 的线程契约表述（2026-10-19，R3-ADJ-08/SAVE-004/SAVE-006）**：实现会在**每次读侧车**
   时切回主线程（`EnsureSidecarAsync` 无条件调 `TryReadSidecarAsync`），而文档写成「只有重建侧车时切一次」。
   `SaveManager` / `SaveManagerImpl` / `SaveBootstrapStage` / Save README 与 File 侧四处「全程不切回主线程」

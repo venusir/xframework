@@ -362,6 +362,12 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 **`?path=` 是必需的。** XFramework 的仓库根是一个**完整的 Unity 开发工程**（含 `ProjectSettings/`、示例场景、测试与构建工具），UPM 包本体在它的 `Assets/XFramework/` 子目录下，不在仓库根。
 
+> **包自身不钉修订（跟随 `main`），与「第三方依赖必须钉 `#tag`」形成有意的不对称**：XFramework 是本仓库
+> 自己发布的包，跟随 `main` 才能拿到后续修复；第三方依赖钉 tag 是为了避免上游默认分支漂移。需要稳定版本时，
+> 把 URL 改成钉 `0.3.0`：`https://github.com/venusir/xframework.git?path=Assets/XFramework#0.3.0`
+> （**`?path=` 必须在 `#` 之前**）。注意 `0.3.0` 早于 Camera / Scene 等模块，且 `AssetPlayMode` 的整数值与
+> 当前不同（见 CHANGELOG 的行为变更节）。
+
 这种方式把包拉进 `Library/PackageCache`，是**只读**的：改了不会保留，也无法提交回仓库。只需要用框架、不改框架代码时选它。
 
 #### 方式二：git 子模块 + 本地路径（需要改框架代码时）
