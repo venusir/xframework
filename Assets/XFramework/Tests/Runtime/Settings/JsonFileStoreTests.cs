@@ -18,8 +18,18 @@ namespace XFramework.XSettings.Tests
     [TestFixture]
     public class JsonFileStoreTests
     {
-        #region Test Doubles
+        [Test]
+        public void Save_DirectoryCreationFails_WarnsInsteadOfThrowing()
+        {
+            // 非法路径字符会让 Directory.CreateDirectory 抛异常；它必须落在受保护范围内（R3-SET-005）
+            var store = new JsonFileStore("Z:\\invalid<>path\\settings.json");
 
+            LogAssert.Expect(LogType.Warning, new Regex("写入设置文件失败"));
+
+            Assert.DoesNotThrow(() => store.Save(new PersistedSettings()));
+        }
+
+        #region Test Doubles
         /// <summary>被持久化的设置类型。JsonUtility 要求 <see cref="SerializableAttribute"/>。</summary>
         [Serializable]
         private sealed class PersistedSettings

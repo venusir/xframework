@@ -38,6 +38,7 @@ Runtime/Settings/
 
 ## 决策台账
 
+- 已做：**PauseNotifier 代际、目录创建与静默回默认**（2026-10-19 · R3-SET-004/005/006，本轮修复）——`SettingsPauseNotifier` 计数无代际、旧会话 `Release` 可串到新会话；`JsonFileStore.Save` 的目录创建与 `ToJson` 在 try 外；加密装饰器对「文件存在但不是密文外壳」静默回默认。修法：代际 token；两段纳入受保护范围；`Data` 为空且文件存在时 Warning。回归三例。
 - 已做：**默认路径占用与写入口主线程断言**（2026-10-19 · R3-SET-002/003，本轮修复）——已用显式路径初始化后默认路径 `Initialize<T>()` 仍写 `DefaultPathClaims`；`Apply`/`Save`/`SaveAsync` 无 README 承诺的 Editor-only 断言。修法：只在确实创建实例时占用；三个写入口补守卫；回归 `SettingsManagerFacadeTests` 两例。
 - 已做：**加密装饰器同步降级在调用线程序列化**（2026-10-19 · R3-SET-001，回归修复）——内层同步时 `SaveAsync` 把 `Save(settings)` 整段丢线程池，活对象在池线程 `JsonUtility.ToJson`；改为先 `ToCipherBlob` 再只把 IO 交线程池；回归 `EncryptedSettingsStoreTests.SaveAsync_SyncInner_EncryptsOnCallingThread`。
 - 未做：**`DefaultPathClaims` 刻意不随会话边界清空（当前维持）**（2026-10-14 · 会话级复位轮）——占用关系对应磁盘文件（清掉反而会放行「B 接管 A 的存档」），且体量有界（每路径一条）——与无界的重放表不同，故不适用同一处置。

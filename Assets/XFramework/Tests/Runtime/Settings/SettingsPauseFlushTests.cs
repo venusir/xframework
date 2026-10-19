@@ -20,8 +20,27 @@ namespace XFramework.XSettings.Tests
     [TestFixture]
     public class SettingsPauseFlushTests
     {
-        #region Test Doubles
+        [Test]
+        public void Release_FromPreviousSession_DoesNotDropNewSessionHost()
+        {
+            SettingsPauseNotifier.ResetForNewSession();
 
+            int oldGeneration = SettingsPauseNotifier.Acquire();
+            Assert.IsNotNull(SettingsPauseNotifier.Instance);
+
+            SettingsPauseNotifier.ResetForNewSession(); // 会话边界：旧代际作废
+            int newGeneration = SettingsPauseNotifier.Acquire();
+            Assert.IsNotNull(SettingsPauseNotifier.Instance, "新会话宿主应已创建");
+
+            SettingsPauseNotifier.Release(oldGeneration); // 旧会话归还：忽略
+            Assert.IsNotNull(SettingsPauseNotifier.Instance,
+                "旧代际归还不得销毁新会话宿主（R3-SET-004）");
+
+            SettingsPauseNotifier.Release(newGeneration);
+            Assert.IsNull(SettingsPauseNotifier.Instance);
+        }
+
+        #region Test Doubles
         private sealed class SettingsA
         {
             public int Volume;

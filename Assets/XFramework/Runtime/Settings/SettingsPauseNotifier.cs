@@ -30,25 +30,34 @@ namespace XFramework.XSettings
         /// 申请宿主：首个调用者创建它，其余只增加计数。
         /// <para>用计数而非布尔是因为宿主被「开了该选项的每个设置类型」共享。</para>
         /// </summary>
-        internal static void Acquire()
+        /// <summary>会话代际：每次会话复位递增；上一会话的 Release 携带旧代际，不得扣减新会话计数（R3-SET-004）。</summary>
+        private static int _generation;
+
+        internal static int Acquire()
         {
             _refCount++;
 
             // Unity 的「伪 null」在这里正好合用：宿主被销毁（如退出播放模式）后此判断仍为真，
             // 于是下次 Acquire 会重建，不会留下一个指向已销毁组件的引用
-            if (_instance != null)
-                return;
+            if (_instance == null)
+            {
+                var host = new GameObject("[SettingsManager] Pause Notifier");
+                DontDestroyOnLoad(host);
+                _instance = host.AddComponent<SettingsPauseNotifier>();
+            }
 
-            var host = new GameObject("[SettingsManager] Pause Notifier");
-            DontDestroyOnLoad(host);
-            _instance = host.AddComponent<SettingsPauseNotifier>();
+            return _generation;
         }
 
         /// <summary>
         /// 归还宿主：计数归零时销毁 GameObject。
         /// </summary>
-        internal static void Release()
+        /// <param name="generation"><see cref="Acquire"/> 返回的代际；旧会话的归还直接忽略。</param>
+        internal static void Release(int generation)
         {
+            if (generation != _generation)
+                return; // 上一会话的 Release 不得串到新会话（R3-SET-004）
+
             // 防御性钳制：Acquire/Release 由 _saveOnPause 快照成对控制，正常不会失衡，
             // 但计数为负会让后续 Release 永远销毁不掉宿主
             if (_refCount > 0)
@@ -80,6 +89,7 @@ namespace XFramework.XSettings
 
             _instance = null;
             _refCount = 0;
+            _generation++;   // 使上一会话未归还的 Release 失效（R3-SET-004）
         }
 
         #endregion

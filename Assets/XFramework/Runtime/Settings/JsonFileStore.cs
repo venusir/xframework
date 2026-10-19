@@ -109,12 +109,6 @@ namespace XFramework.XSettings
 
             lock (_ioLock)
             {
-                var dir = Path.GetDirectoryName(_filePath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                var json = JsonUtility.ToJson(settings, true);
-
                 // 原子写:先落 .tmp,再整份替换正式文件,旧内容留作 .bak。
                 // 直接 WriteAllText 覆盖正式文件的话,写到一半崩溃就留下截断的 JSON
                 var tempPath = _filePath + FilePathUtility.TempFileSuffix;
@@ -122,6 +116,14 @@ namespace XFramework.XSettings
 
                 try
                 {
+                    // 目录创建与序列化也纳入受保护范围（R3-SET-005）：它们同样会抛
+                    // （目录不可写 / ToJson 失败），此前落在 try 之外、异常直接逃给调用方。
+                    var dir = Path.GetDirectoryName(_filePath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                        Directory.CreateDirectory(dir);
+
+                    var json = JsonUtility.ToJson(settings, true);
+
                     File.WriteAllText(tempPath, json);
                     FilePathUtility.ReplaceFileAtomically(tempPath, _filePath, backupPath);
                 }

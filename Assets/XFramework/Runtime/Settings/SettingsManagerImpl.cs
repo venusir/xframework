@@ -47,6 +47,9 @@ namespace XFramework.XSettings
         /// </summary>
         private readonly bool _saveOnPause;
 
+        /// <summary>申请 Pause 宿主时拿到的会话代际（R3-SET-004）：旧会话的 Release 不扣减新会话计数。</summary>
+        private int _pauseNotifierGeneration;
+
         /// <summary>
         /// 变更计数。用计数而非布尔标志，是为了让「保存过程中又发生改动」不被吞掉：
         /// Save 在开始时取快照、结束后把 _savedCount 设为快照值，期间的改动会让两者重新不等。
@@ -102,7 +105,7 @@ namespace XFramework.XSettings
 
             // 切后台只能由 MonoBehaviour 接收，故申请一个共享宿主；关闭时零开销（同自动保存的取舍）
             if (_saveOnPause)
-                SettingsPauseNotifier.Acquire();
+                _pauseNotifierGeneration = SettingsPauseNotifier.Acquire();
         }
 
         #endregion
@@ -347,7 +350,7 @@ namespace XFramework.XSettings
                 UnityEngine.Application.wantsToQuit -= OnWantsToQuit;
 
             if (_saveOnPause)
-                SettingsPauseNotifier.Release();
+                SettingsPauseNotifier.Release(_pauseNotifierGeneration);
 
             _changedStream.Complete();
             _changedStream.Dispose();

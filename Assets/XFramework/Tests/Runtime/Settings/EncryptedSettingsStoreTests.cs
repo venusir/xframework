@@ -65,6 +65,18 @@ namespace XFramework.XSettings.Tests
             public byte[] Decrypt(byte[] cipherData) => cipherData;
         }
 
+        /// <summary>「文件存在但读出来不是密文外壳」的假存储（R3-SET-006）。</summary>
+        private sealed class ExistsButEmptyStore : ISettingsStore
+        {
+            public bool Exists() => true;
+
+            public T Load<T>() where T : class, new() => new T();
+
+            public void Save<T>(T settings) where T : class, new() { }
+
+            public void Delete() { }
+        }
+
         #endregion
 
         #region Fixture
@@ -122,6 +134,18 @@ namespace XFramework.XSettings.Tests
 
             Assert.AreEqual(callerThread, crypto.EncryptThreadId,
                 "加密（连同序列化）必须在调用线程完成");
+        }
+
+        [Test]
+        public void Load_FileExistsButNotCipherEnvelope_Warns()
+        {
+            var store = new EncryptedSettingsStore(new ExistsButEmptyStore(), new XorCryptoProvider());
+
+            LogAssert.Expect(LogType.Warning, new Regex("不是密文外壳"));
+
+            var loaded = store.Load<SampleSettings>();
+
+            Assert.IsNotNull(loaded, "仍按既有语义回退默认值");
         }
 
         [Test]

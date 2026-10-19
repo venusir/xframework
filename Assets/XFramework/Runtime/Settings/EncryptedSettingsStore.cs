@@ -88,7 +88,7 @@ namespace XFramework.XSettings
         /// <inheritdoc />
         public T Load<T>() where T : class, new()
         {
-            return FromCipherBlob<T>(_inner.Load<SettingsCipherBlob>());
+            return FromCipherBlob<T>(_inner.Load<SettingsCipherBlob>(), _inner.Exists());
         }
 
         #endregion
@@ -141,7 +141,8 @@ namespace XFramework.XSettings
             CancellationToken cancellationToken) where T : class, new()
         {
             var blob = await asyncStore.LoadAsync<SettingsCipherBlob>(cancellationToken);
-            return FromCipherBlob<T>(blob);
+            bool exists = await asyncStore.ExistsAsync(cancellationToken);
+            return FromCipherBlob<T>(blob, exists);
         }
 
         #endregion
@@ -161,11 +162,21 @@ namespace XFramework.XSettings
         /// 密文外壳 → 设置对象（同步 / 异步两条读路径共用）。
         /// <para>无数据 / Base64 非法 / 解密失败 / 解析失败一律告警回退默认值——与同步行为逐字一致。</para>
         /// </summary>
-        private T FromCipherBlob<T>(SettingsCipherBlob blob) where T : class, new()
+        /// <param name="blob">内层读回的密文外壳。</param>
+        /// <param name="fileExists">内层文件是否存在：用于区分「从未写过」与「写了但不是密文外壳」（R3-SET-006）。</param>
+        private T FromCipherBlob<T>(SettingsCipherBlob blob, bool fileExists) where T : class, new()
         {
             // 内层无数据时按其契约返回 new SettingsCipherBlob(),此时 Data 为 null
             if (blob == null || string.IsNullOrEmpty(blob.Data))
+            {
+                if (fileExists)
+                {
+                    LogManager.Warning(LogCategories.SettingsManager,
+                        "设置文件存在但不是密文外壳（SettingsCipherBlob.Data 为空），已回退默认值；" +
+                        "文件可能来自未加密写入或格式不符。");
+                }
                 return new T();
+            }
 
             byte[] plain;
             try

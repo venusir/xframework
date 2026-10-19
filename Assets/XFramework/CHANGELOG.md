@@ -381,6 +381,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Settings
 
+- **PauseNotifier 代际、目录创建与静默回默认（R3-SET-004/005/006）**：`SettingsPauseNotifier` 的引用计数无代际，
+  会话复位后旧管理器的 `Release` 会扣减新会话计数；`JsonFileStore.Save` 的目录创建与 `ToJson` 在 try 之外，
+  失败直接外抛；加密装饰器对「文件存在但不是密文外壳」静默回默认。修法：代际 token（`Acquire` 返回、
+  `Release` 校验）；两段纳入受保护范围；`Data` 为空且文件存在时 Warning。回归：
+  `SettingsPauseFlushTests.Release_FromPreviousSession_DoesNotDropNewSessionHost`、
+  `JsonFileStoreTests.Save_DirectoryCreationFails_WarnsInsteadOfThrowing`、
+  `EncryptedSettingsStoreTests.Load_FileExistsButNotCipherEnvelope_Warns`。
 - **默认路径占用与写入口主线程断言（R3-SET-002/003）**：已用显式路径初始化后，`Initialize<T>()` 返回旧实例却
   仍写 `DefaultPathClaims`（同名类型会被误报冲突）；`Apply`/`Save`/`SaveAsync` 写入口没有 README 承诺的
   Editor-only 主线程断言。修法：只在本次确实创建实例时占用默认路径；三个写入口补
