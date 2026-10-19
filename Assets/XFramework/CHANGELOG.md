@@ -166,6 +166,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   断言按预言精确翻转（`later.ExecuteCount == 0`）；用例 3 原样保留——不响应取消的在途阶段仍会走失败链，
   是修复覆盖不到的边界证据。使用方不受影响：纯测试新增，公开面一个字都没动。
 
+#### Audio
+
+- **`AudioHandle` 实现 `IEquatable<AudioHandle>` 与相等运算符（R3-AUD-004）**：按 Id / Generation 比较，
+  可直接作字典键 / `HashSet` 元素；代际是身份的一部分，槽位复用后旧句柄与新句柄不等（ABA 防线）。
+  **源兼容新增**；公开 API 基线已同步。回归：`AudioHandleTests.Handles_CompareByIdAndGeneration`。
+
 ### Changed
 
 - **（公开常量值变更）`UISorting.MaxIndexInLayer` 由 31 改为 30**：遮罩独占层内第 31 位，面板序号

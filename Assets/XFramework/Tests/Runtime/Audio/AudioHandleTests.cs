@@ -164,6 +164,22 @@ namespace XFramework.XAudio.Tests
             Assert.IsFalse(default(AudioHandle).Stop());
         }
 
+        [Test]
+        public void Handles_CompareByIdAndGeneration()
+        {
+            var a = new AudioHandle(1, 2);
+            var b = new AudioHandle(1, 2);
+            var otherGeneration = new AudioHandle(1, 3);
+            var otherId = new AudioHandle(2, 2);
+
+            Assert.IsTrue(a == b);
+            Assert.IsFalse(a != b);
+            Assert.AreEqual(a.GetHashCode(), b.GetHashCode());
+            Assert.IsTrue(a != otherGeneration);
+            Assert.IsTrue(a != otherId);
+            Assert.IsFalse(a == default);
+        }
+
         #endregion
 
         #region 多槽位互不干扰

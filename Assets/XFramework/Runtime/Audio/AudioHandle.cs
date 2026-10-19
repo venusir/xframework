@@ -19,7 +19,7 @@ namespace XFramework.XAudio
     /// <see cref="AudioManager.IsPlaying"/> 一律转发给当前实现，由实现校验。<b>框架级的唯一契约</b>是
     /// <see cref="Generation"/> 为 <c>0</c> 保留给 <c>default(AudioHandle)</c>，任何实现都必须把它视为无效。</para>
     /// </remarks>
-    public readonly struct AudioHandle : IDisposable
+    public readonly struct AudioHandle : IDisposable, IEquatable<AudioHandle>
     {
         #region Public Fields
 
@@ -88,6 +88,34 @@ namespace XFramework.XAudio
         /// <para>与 <see cref="Stop"/> 一样对默认句柄与已销毁门面安全。</para>
         /// </summary>
         public void Dispose() => Stop();
+
+        #endregion
+
+        #region Equality
+
+        /// <summary>
+        /// 按 <see cref="Id"/> / <see cref="Generation"/> 比较（R3-AUD-004）：代际是身份的一部分，
+        /// 槽位复用后旧句柄与新句柄不等（ABA 防线）。
+        /// </summary>
+        public bool Equals(AudioHandle other) => Id == other.Id && Generation == other.Generation;
+
+        /// <inheritdoc/>
+        public override bool Equals(object obj) => obj is AudioHandle other && Equals(other);
+
+        /// <inheritdoc/>
+        public override int GetHashCode()
+        {
+            unchecked
+            {
+                return (Id * 397) ^ Generation;
+            }
+        }
+
+        /// <summary>两个句柄的 Id 与 Generation 都相同。</summary>
+        public static bool operator ==(AudioHandle left, AudioHandle right) => left.Equals(right);
+
+        /// <summary>两个句柄的 Id 或 Generation 不同。</summary>
+        public static bool operator !=(AudioHandle left, AudioHandle right) => !left.Equals(right);
 
         #endregion
     }

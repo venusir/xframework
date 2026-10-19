@@ -201,13 +201,18 @@ XFramework.XAudio.AudioChannels.Default  ::  public const string = "default"
 XFramework.XAudio.AudioChannels.SE  ::  public const string = "se"
 XFramework.XAudio.AudioChannels.UI  ::  public const string = "ui"
 XFramework.XAudio.AudioChannels.Voice  ::  public const string = "voice"
-XFramework.XAudio.AudioHandle  ::  public readonly struct : System.IDisposable
+XFramework.XAudio.AudioHandle  ::  public readonly struct : System.IDisposable, System.IEquatable<XFramework.XAudio.AudioHandle>
 XFramework.XAudio.AudioHandle#ctor  ::  public(int id, int generation)
 XFramework.XAudio.AudioHandle.Dispose  ::  public virtual void()
+XFramework.XAudio.AudioHandle.Equals  ::  public override bool(object obj)
+XFramework.XAudio.AudioHandle.Equals  ::  public virtual bool(XFramework.XAudio.AudioHandle other)
 XFramework.XAudio.AudioHandle.Generation  ::  public readonly int
+XFramework.XAudio.AudioHandle.GetHashCode  ::  public override int()
 XFramework.XAudio.AudioHandle.Id  ::  public readonly int
 XFramework.XAudio.AudioHandle.IsDefault  ::  public bool IsDefault { get; }
 XFramework.XAudio.AudioHandle.Stop  ::  public bool()
+XFramework.XAudio.AudioHandle.op_Equality  ::  public static bool(XFramework.XAudio.AudioHandle left, XFramework.XAudio.AudioHandle right)
+XFramework.XAudio.AudioHandle.op_Inequality  ::  public static bool(XFramework.XAudio.AudioHandle left, XFramework.XAudio.AudioHandle right)
 XFramework.XAudio.AudioInitOptions  ::  public sealed class
 XFramework.XAudio.AudioInitOptions#ctor  ::  public()
 XFramework.XAudio.AudioInitOptions.MasterMuted  ::  public bool
