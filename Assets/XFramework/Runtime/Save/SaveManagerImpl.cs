@@ -1084,8 +1084,8 @@ namespace XFramework.XSave
         /// 载荷在则清掉 <c>.tmp</c> 残留并补齐侧车；载荷与备份都不在则清掉孤儿配套文件。</para>
         /// <para><b>线程约定：</b>扫描主体只调用 <see cref="FileManager"/> 原语与 <c>LogManager</c>
         /// （后者任意线程可用，见模块 README 的线程契约），不触碰 Unity API 与 <see cref="DataManager"/>。</para>
-        /// <para><b>但它会切回主线程一次</b>：需要重建侧车时走 <c>EnsureSidecarAsync</c> →
-        /// <c>WriteSidecarAsync</c>，后者末尾有 <c>ReturnToMainThread</c>；此后整段恢复留在主线程。
+        /// <para><b>但它会在每次读侧车时切回主线程</b>：<c>EnsureSidecarAsync</c> 无条件调用
+        /// <c>TryReadSidecarAsync</c>，后者入口即 <c>ReturnToMainThread</c>——不是只有重建侧车时才切一次。
         /// 所以「同步阻塞等待它不会死锁」**并不成立**——<b>不要</b>在主线程同步阻塞等待它。
         /// 调用方若要写 <c>PipelineStageContext</c> 这类要求主线程的对象，须自行切回。</para>
         /// </summary>

@@ -13,7 +13,8 @@ namespace XFramework.XFileManager.Tests
     /// 本 fixture 刻意走零配置的真实 Provider，锁住两件事：<b>目标目录存在时</b>枚举不抛；
     /// 以及<b>从线程池线程调用</b>同样不抛。</para>
     /// <para>用 <see cref="FileDomain.SaveData"/> 域（桌面即 <c>persistentDataPath</c>），与
-    /// <c>SaveManagerImpl.RecoverAsync</c> 里唯一不切回主线程的那条路径同域；只读枚举，不写任何文件。</para>
+    /// <c>SaveManagerImpl.RecoverAsync</c> 里在池线程执行文件原语的路径同域（读侧车时它会切回主线程）；
+    /// 只读枚举，不写任何文件。</para>
     /// </summary>
     [TestFixture]
     public class DesktopFileProviderThreadTests
@@ -64,9 +65,10 @@ namespace XFramework.XFileManager.Tests
 
         /// <summary>
         /// 缺陷回归锁：Provider 的 IO 在 <c>RunOnThreadPool(configureAwait: false)</c> 上完成后会把
-        /// 池线程留给调用方续体，而 <c>SaveManagerImpl.RecoverAsync</c> 的契约正是「全程不切回主线程」
-        /// ——因此域根解析必须与线程无关。此前它在这里读 <c>Application.persistentDataPath</c>，
-        /// 于是每次启动的恢复扫描必崩（EditMode 的 SaveBootstrapStage 用例独红了 7 次）。
+        /// 池线程留给调用方续体，而 <c>SaveManagerImpl.RecoverAsync</c> 的文件原语正是在池线程执行
+        /// （读侧车时才切回主线程）——因此域根解析必须与线程无关。此前它在这里读
+        /// <c>Application.persistentDataPath</c>，于是每次启动的恢复扫描必崩（EditMode 的
+        /// SaveBootstrapStage 用例独红了 7 次）。
         /// </summary>
         [Test]
         public async Task GetFilesAsync_FromThreadPool_DoesNotThrow()

@@ -20,7 +20,7 @@ namespace XFramework.XFileManager
         /// <summary>
         /// 域根缓存。Unity 的路径属性（<see cref="Application.persistentDataPath"/> 等）只能在主线程读取，
         /// 而本类的 IO 在线程池上执行、调用方续体也可能停留在池线程（<c>SaveManagerImpl.RecoverAsync</c>
-        /// 的线程契约就是「全程不切回主线程」）。故域根在<b>主线程解析一次后缓存</b>，此后
+        /// 的文件原语多数在池线程执行，读侧车时才切回主线程）。故域根在<b>主线程解析一次后缓存</b>，此后
         /// <see cref="GetPhysicalPath"/> 退化为纯字符串运算，可从任意线程调用。
         /// </summary>
         private static string _appDataRoot;

@@ -240,7 +240,7 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - 代价是这些方法依赖 PlayerLoop 泵，**禁止在主线程用 `.GetAwaiter().GetResult()` 同步阻塞等待**，否则会死锁。
 - **删除也在池线程上执行**（经 `FileManager.DeleteAsync`），返回前同样切回主线程。两点随之而来：**批量删除跨帧**——每个文件一次切回即一帧，忙碌门禁（`IsBusy`）为真的时长随文件数增长，期间并发的另一个写操作会被拒；进度回调仍在主线程、次数与计数不变。**删除可取消**，且取消只保证「尚未开始的删除不会发生」（`RunOnThreadPool` 的委托一旦进入就会跑完）——可能留下部分删除，由下次启动的恢复扫描收敛。
 - **仍有 3 处单次同步探测留在调用线程上**：`GetSlotMetaAsync` 的存在性检查、`LoadCoreAsync` 的备份探测、`TransferSlotAsync` 的目标占用探测。判据是「**是否成批**」而非「是否同步」——单次 `File.Exists` 是微秒级，为它换一次线程往返（还要再补一次切回）不划算。改这三处属「内部单次探测的线程语义」议题，与 `RecoverAsync` 的线程契约一并裁定（见该模块的维护向记录）。
-- **内部 `SaveManager.RecoverAsync` 不是「全程不切回主线程」**：它自身不做切线程，但**只要恢复过程中需要重建侧车，它就会切回主线程一次**（`EnsureSidecarAsync` → `WriteSidecarAsync` 末尾的 `ReturnToMainThread`），此后整段恢复都留在主线程。所以「启动管线里同步阻塞等待它也不会死锁」**只在无需重建侧车的路径上成立**——**不要**在主线程同步阻塞等待它（`SaveBootstrapStage` 是 `await` 它的）。
+- **内部 `SaveManager.RecoverAsync` 不是「全程不切回主线程」**：它自身不做切线程，但**每读一次侧车就会切回主线程一次**（`EnsureSidecarAsync` 无条件调用 `TryReadSidecarAsync`，后者入口即 `ReturnToMainThread`）——不是只有重建侧车时才切。所以「启动管线里同步阻塞等待它也不会死锁」**不成立**——**不要**在主线程同步阻塞等待它（`SaveBootstrapStage` 是 `await` 它的）。
   - 它仍然与其它成员不同的一点：恢复扫描里碰文件系统的那些调用**必须在池线程上也能跑**（那半程确实不碰 Unity API）。这正是 `File` 模块把域根改到主线程预热（`PrimeRoots`）的理由——见 `File/README.md` 的「线程契约」。
 
 ## 已知限制

@@ -889,6 +889,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 `RecoverAsync` 的线程契约表述（2026-10-19，R3-ADJ-08/SAVE-004/SAVE-006）**：实现会在**每次读侧车**
+  时切回主线程（`EnsureSidecarAsync` 无条件调 `TryReadSidecarAsync`），而文档写成「只有重建侧车时切一次」。
+  `SaveManager` / `SaveManagerImpl` / `SaveBootstrapStage` / Save README 与 File 侧四处「全程不切回主线程」
+  残留统一改为「文件原语在池线程执行，读侧车时切回主线程」；`Modules/Save.md` 的双路径改造条目由 `待裁`
+  转 `未做`（本轮只订正文档，改造单独计划）。
 - **`AssetPlayMode` 的序列化迁移说明与 Host 模式 tooltip（2026-10-19，R3-AST-001/009）**：`0.3.0` 的枚举是
   `Offline=0/Host=1`，当前是 `EditorSimulate=0/Offline=1/Host=2`；该 tag 从未分发（用户确认），故保留当前
   顺序，只在行为变更节写明「从 0.3.0 源码升级需重新选择运行模式」。`DefaultGameLauncher` 的 Host tooltip

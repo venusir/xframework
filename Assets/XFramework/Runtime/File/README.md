@@ -465,8 +465,8 @@ for (int i = 0; i < 3; i++)
   （`AppData`/`SaveData`、`Streaming`、`Cache`）由 `DesktopFileProvider.PrimeRoots()` 在主线程取好并缓存——
   预热点有两处：`FileManager.Initialize`（零配置懒初始化也走它），以及 `[InitializeOnLoadMethod]` /
   `[RuntimeInitializeOnLoadMethod]` 加载钩子。此后 `GetPhysicalPath` 是纯字符串运算，**桌面与移动端的非
-  Streaming 域，文件原语可从任意线程调用**。`SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条才敢
-  全程不切回主线程。
+  Streaming 域，文件原语可从任意线程调用**。`SaveManagerImpl.RecoverAsync` 的启动恢复扫描正是靠这条
+  才能在池线程执行文件原语（它读侧车时会切回主线程）。
 - **移动端 `Streaming` 域是线程契约的例外**（FILE-002）：`MobileFileProvider` 的异步入口每次都会读
   `Application.streamingAssetsPath` 并构造 `UnityWebRequest`，两者都受 Unity 主线程限定——在池线程调用
   `ReadAllTextAsync(FileDomain.Streaming, ...)` / `ExistsAsync` 会抛 `UnityException`。**请在主线程发起**；
@@ -532,7 +532,8 @@ for (int i = 0; i < 3; i++)
 
 - **域根在主线程预热一次后缓存，不让池线程解析**：`Application.persistentDataPath` 一类属性受 Unity 的主线程
   限定，池线程读它会抛 `UnityException`。此前域根是在 `RunOnThreadPool` 的**委托内部**解析的，于是每次启动的
-  恢复扫描必崩——而 `SaveManagerImpl.RecoverAsync` 的契约恰恰是「全程不切回主线程」。现由 `PrimeRoots` 在主线程
+  恢复扫描必崩——而 `SaveManagerImpl.RecoverAsync` 的文件原语在池线程执行（读侧车时切回主线程），正是这类
+  崩的发生地。现由 `PrimeRoots` 在主线程
   取好，`GetPhysicalPath` 退化为纯字符串运算，「文件原语可从任意线程调用」这条承诺至此才真正成立。
 - **可选能力探测查基础 Provider，不查生效 Provider**：启用加解密时生效的是 `CryptoFileProvider` 装饰器，而装饰器
   按契约恒实现 `IAtomicFileProvider` / `IDirectoryProvider`——对它探测必然「通过」，判定会被整个推给装饰器。

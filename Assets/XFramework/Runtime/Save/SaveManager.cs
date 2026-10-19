@@ -145,9 +145,10 @@ namespace XFramework.XSave
         /// <summary>
         /// 执行启动恢复扫描（内部使用，由 <see cref="SaveBootstrapStage"/> 在启动管线中调用）：
         /// 用一代备份恢复丢失的载荷、清掉崩溃残留、补齐元数据侧车。
-        /// <para><b>多数路径不切回主线程</b>——只碰文件系统与线程安全的 <c>LogManager</c>；但**需要重建侧车时
-        /// 会切回主线程一次**（`EnsureSidecarAsync` → `WriteSidecarAsync` 末尾的 `ReturnToMainThread`），
-        /// 此后整段恢复留在主线程。因此**不要**在主线程同步阻塞等待它（见 `ISaveManager` 的线程契约）。</para>
+        /// <para><b>它会在每次读侧车时切回主线程</b>——只碰文件系统与线程安全的 <c>LogManager</c>，但
+        /// <c>EnsureSidecarAsync</c> 无条件调用 <c>TryReadSidecarAsync</c>，后者入口即
+        /// <c>ReturnToMainThread</c>（不是只有重建侧车时才切一次）。因此**不要**在主线程同步阻塞等待它
+        /// （见 `ISaveManager` 的线程契约）。</para>
         /// <para>注入的自定义实现没有恢复契约，此时跳过（恢复属内部维护动作，不是接口义务）。</para>
         /// </summary>
         /// <param name="cancellationToken">取消令牌。</param>

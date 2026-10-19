@@ -57,9 +57,8 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 初始化门面并 await 启动恢复扫描。
-        /// <para>恢复扫描的多数路径不切回主线程，但需要重建侧车时会切回一次（见
-        /// <see cref="SaveManager.RecoverAsync"/> 的线程约定）；<see cref="PipelineStageContext"/> 有越线程
-        /// 写入断言，因此写上下文之前必须切回主线程。</para>
+        /// <para>恢复扫描会在**每次读侧车**时切回主线程（`TryReadSidecarAsync` 入口，不是只有重建侧车
+        /// 时才切）；<see cref="PipelineStageContext"/> 有越线程写入断言，因此写上下文之前必须切回主线程。</para>
         /// </summary>
         public async UniTask ExecuteAsync(PipelineStageContext context, CancellationToken cancellationToken)
         {
