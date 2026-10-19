@@ -496,6 +496,43 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task CopySlotAsync_SourceOnlyBackup_UsesBackup()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 41;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 42;
+            await SaveManager.SaveAsync(1); // .bak 现在是 41
+
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save"); // 载荷缺失、备份在
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "前提：仅备份也算存在");
+
+            await SaveManager.CopySlotAsync(1, 2);
+
+            wallet.Gold = 0;
+            await SaveManager.LoadAsync(2);
+            Assert.AreEqual(41, wallet.Gold, "源载荷缺失时应从备份复制（R3-SAVE-001）");
+        }
+
+        [Test]
+        public async Task CopySlotAsync_TargetOnlyBackup_Throws()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 1;
+            await SaveManager.SaveAsync(1);
+            wallet.Gold = 2;
+            await SaveManager.SaveAsync(2);
+            wallet.Gold = 3;
+            await SaveManager.SaveAsync(2); // slot 2 留下 .bak
+
+            FileManager.Delete(FileDomain.SaveData, "slot_2.save"); // 载荷缺失、备份在
+
+            await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.CopySlotAsync(1, 2),
+                "仅备份可恢复的目标也算占用（R3-SAVE-001）");
+        }
+
+        [Test]
         public async Task CopySlotAsync_SameSlot_Throws()
         {
             await SaveManager.SaveAsync(1);

@@ -773,13 +773,25 @@ namespace XFramework.XSave
             try
             {
                 // 目标占用检查放在最前：明确拒绝好过写完再发现覆盖了不该覆盖的存档。
-                // overwrite 为 true 时不检查——写入本身就是原子替换，旧目标会留下 .bak
-                if (!overwrite && FileManager.Exists(SaveDomain, toPath))
+                // overwrite 为 true 时不检查——写入本身就是原子替换，旧目标会留下 .bak。
+                // 仅备份可恢复的目标也算占用（R3-SAVE-001）：与 SlotExistsAsync 的查询面一致。
+                if (!overwrite &&
+                    (await FileManager.ExistsAsync(SaveDomain, toPath, cancellationToken) ||
+                     await FileManager.ExistsAsync(SaveDomain, toPath + FilePathUtility.BackupFileSuffix, cancellationToken)))
+                {
                     throw new InvalidOperationException(
                         $"[Save] 目标槽位 {toSlot} 已存在存档，拒绝覆盖。如需覆盖请传 overwrite: true。");
+                }
 
                 // 复用加载路径的校验：源载荷会被读取、按侧车校验和核验、并解析（解析已在线程池上）
                 var source = await ReadAndValidateAsync(playerId, fromSlot, fromPath, cancellationToken);
+                if (source.SaveData == null)
+                {
+                    // 载荷缺失但备份仍在时，按查询面/加载面的同一语义从备份恢复源数据（R3-SAVE-001）
+                    var backupPath = fromPath + FilePathUtility.BackupFileSuffix;
+                    if (await FileManager.ExistsAsync(SaveDomain, backupPath, cancellationToken))
+                        source = await ReadAndValidateAsync(playerId, fromSlot, backupPath, cancellationToken);
+                }
                 if (source.SaveData == null)
                     throw new InvalidOperationException($"[Save] 源槽位 {fromSlot} 不可用：{source.Message}");
 

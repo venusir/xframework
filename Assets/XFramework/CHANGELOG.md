@@ -379,6 +379,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Save
+
+- **复制/移动只认载荷，不认备份（R3-SAVE-001）**：`TransferSlotAsync` 的源读取只走载荷路径、目标占用只查载荷；
+  仅备份可恢复的槽位在查询面算「存在」，在复制/移动上却不可用。修法：源载荷缺失时回退备份；目标占用也认
+  `.bak`。回归：`SaveManagerImplTests.CopySlotAsync_SourceOnlyBackup_UsesBackup` /
+  `CopySlotAsync_TargetOnlyBackup_Throws`。
+
 #### Settings
 
 - **PauseNotifier 代际、目录创建与静默回默认（R3-SET-004/005/006）**：`SettingsPauseNotifier` 的引用计数无代际，
