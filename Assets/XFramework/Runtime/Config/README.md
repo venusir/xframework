@@ -57,7 +57,7 @@ Runtime/Config/
 ├── IConfigLoader.cs          # 自定义加载器接口（策略对象，框架不持有引用）
 ├── JsonLoader.cs             # internal：内置 JSON（JsonUtility）
 ├── CsvLoader.cs              # internal：内置 CSV（Split(',')，方言边界见「已知限制」）
-├── ScriptableObjectLoader.cs # internal：内置 ScriptableObject（经 AssetManager）
+├── ScriptableObjectLoader.cs # internal：内置 ScriptableObject（经 AssetManager；同文件含公开基类 ScriptableObjectTable<,>）
 ├── ConfigLoadHelper.cs       # internal：泛型委托缓存（消除加载调用的反射）
 ├── ConfigTextLoader.cs       # internal：文本类格式的公共读入段
 ├── ConfigTypeHelper.cs       # internal：主键类型推导（reflection 边界，结果缓存）
@@ -572,7 +572,25 @@ public enum ConfigFormat
 ### 文件形状与前置条件
 
 - **Json（Table）**：对象包一个 `Items` 数组——`{"Items":[{"Id":1001,"Name":"..."}]}`（加载器用 `ListWrapper<T>` 包装；`JsonUtility` 不支持顶层裸数组）。Global 直接是一个 JSON 对象。
-- **ScriptableObject**：Table 用包含 `T[]` / `List<T>` 的包装 SO；Global 直接是目标类型的 SO。
+- **ScriptableObject（Table）**：**资产必须继承公开基类 `ScriptableObjectTable<TRow, TKey>`**——普通 `ScriptableObject` 会得到明确的 `ConfigException`（「must inherit ScriptableObjectTable…」），而不是「AssetManager 未初始化 / 资源不存在」的误归因。最小形状：
+
+  ```csharp
+  [Serializable]
+  public struct SettingsRow : IConfigRow<int>
+  {
+      public int Id;      // 字段承载 Unity 序列化
+      public int Volume;
+      int IConfigRow<int>.Id => Id;   // 字段不能实现接口属性
+  }
+
+  // Table 资产：继承公开基类，行列表由基类的 Items 承载
+  [CreateAssetMenu(menuName = "Config/SettingsTable")]
+  public sealed class SettingsTable : ScriptableObjectTable<SettingsRow, int> { }
+  ```
+
+  在 Project 窗口用 **Create → Config → SettingsTable** 创建资产，把行填进 Inspector 的 `Items`，再用
+  `PreloadTableAsync<SettingsRow>("config/settings", ConfigFormat.ScriptableObject)` 加载。
+- **ScriptableObject（Global）**：直接是目标类型的 SO。
 - **CSV**：第一行表头、后续数据行；Global 只取最后一行。
 - **前置**：三种格式都经 `AssetManager` 读取（SO 读资源、Json / CSV 读 `TextAsset`），**必须先 `AssetManager.InitializeAsync`**；未初始化时加载抛 `ConfigException`（CONF-003）。
 

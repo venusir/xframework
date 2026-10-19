@@ -728,6 +728,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   修法：三处示例统一为「字段承载序列化 + 显式接口实现 `int IConfigRow<int>.Id => Id;`」；README 的
   「已知限制」把这条写成成文边界。验证：临时 `netstandard2.1` 编译探针（原样 CS0535，补显式实现后
   0 error）；`JsonRowSerializationTests` / `ExplicitInterfaceRowTests` 已用同形钉住。
+- **SO Table 资产形状零文档、普通 SO 得到误归因（R3-CONF-002）**：`ScriptableObjectLoader` 只接受
+  `ScriptableObjectTable<TRow,TKey>` 的资产，但 README 只说「包含 `T[]` / `List<T>` 的包装 SO」，
+  公开基类零提及；按文档建普通 SO 会在加载时得到「Ensure AssetManager is initialized…」的误导消息。
+  修法：README 补最小子类示例与资产创建步骤；loader 先按 `ScriptableObject` 加载再自检形状，
+  普通 SO 得到「must inherit ScriptableObjectTable<…>」；新增 `ScriptableObjectTableTests` 覆盖
+  正确/错误形状、空列表与重复主键。
 - **README 行类型示例用自动属性，Json / ScriptableObject 路径主键恒 0（CONF-001，P0）**：三处示例把主键写成
   `public int Id { get; set; }`。Json 路径经 `JsonUtility`、SO 路径经 Unity 序列化，二者都**不序列化属性**——
   多行 JSON 撞 `Duplicate Id '0'` 加载失败，单行则静默产出键 0 的表（`.Get(1001)` 报 not found），

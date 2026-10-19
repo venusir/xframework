@@ -85,3 +85,5 @@ Runtime/Config/
 - 已做：**CONF-016 编译探针与文档**（2026-10-18 · 独立工程 dotnet build）——`PreloadTableAsync<T>("path", default)` 在 `ConfigFormat` / `IConfigLoader` 重载间 CS0121（探针复现）；XML 与 README 写明显式 `ConfigFormat.Json` 或强转，不加重载。
 
 - 已做：**行类型示例必须「字段 + 显式实现 `IConfigRow<TKey>.Id`」**（2026-10-19 · R3-CONF-001，本轮修复；临时 `netstandard2.1` 编译探针正/负）——R2 把示例从自动属性改成裸字段时只修了一半：`IConfigRow<TKey>.Id` 是属性，C# 字段不能实现接口属性，三处示例照抄即 `CS0535`。三处已统一为「字段承载序列化 + `int IConfigRow<int>.Id => Id;`」，「已知限制」同步成文。
+
+- 已做：**SO Table 资产必须继承公开基类 `ScriptableObjectTable<TRow,TKey>`**（2026-10-19 · R3-CONF-002，本轮修复）——普通 SO 会在加载时得到「AssetManager 未初始化 / 资源不存在」的误归因。修法：loader 先按 `ScriptableObject` 加载再自检形状（`BuildTable` 内部缝），README 补最小子类示例与创建步骤；`ScriptableObjectTableTests` 覆盖正确/错误形状、空列表与重复主键。

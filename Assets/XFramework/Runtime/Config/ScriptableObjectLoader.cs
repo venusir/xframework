@@ -9,7 +9,9 @@ namespace XFramework.XConfig
     /// <summary>
     /// ScriptableObject 格式配置加载器。
     /// <para>通过 <see cref="AssetManager"/> 加载 SO 资源。</para>
-    /// <para>Table 类型：加载包含 <c>T[]</c> 列表的 SO 包装类。</para>
+    /// <para>Table 类型：资产必须继承 <see cref="ScriptableObjectTable{TRow,TKey}"/>
+    /// （它是公开基类，承载行列表）；普通 <see cref="ScriptableObject"/> 会得到明确的
+    /// <see cref="ConfigException"/>，而不是「AssetManager 未初始化」的误归因。</para>
     /// <para>Global 类型：直接加载目标类型的 SO。</para>
     /// </summary>
     internal sealed class ScriptableObjectLoader : IConfigLoader
@@ -18,20 +20,10 @@ namespace XFramework.XConfig
 
         async UniTask<ConfigTable<T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
-            var tableAsset = await LoadSOAsync<ScriptableObjectTable<T, TKey>>(assetPath);
-            if (tableAsset?.Items == null || tableAsset.Items.Count == 0)
-                throw new ConfigException(
-                    $"SO Table '{typeof(T).Name}' from '{assetPath}' contains no items.");
-
-            var dict = new Dictionary<TKey, T>(tableAsset.Items.Count);
-            foreach (var item in tableAsset.Items)
-            {
-                if (dict.ContainsKey(item.Id))
-                    throw new ConfigException(
-                        $"Duplicate Id '{item.Id}' found in SO Table '{typeof(T).Name}' from '{assetPath}'.");
-                dict[item.Id] = item;
-            }
-            return new ConfigTable<T>(dict);
+            // 按最宽类型加载再自检：直接按 ScriptableObjectTable<T,TKey> 加载时，普通 SO 会
+            // 在 AssetManager 侧表现为「资源不存在/类型不匹配」，错误消息把排查方向带偏（R3-CONF-002）。
+            var asset = await LoadSOAsync<ScriptableObject>(assetPath);
+            return BuildTable<T, TKey>(asset, assetPath);
         }
 
         async UniTask<T> IConfigLoader.LoadGlobalAsync<T>(string assetPath)
@@ -46,6 +38,34 @@ namespace XFramework.XConfig
         #endregion
 
         #region Internal
+
+        /// <summary>
+        /// 从已加载的 SO 资产构建 Table 并校验形状（测试缝：不依赖 AssetManager）。
+        /// </summary>
+        internal static ConfigTable<T> BuildTable<T, TKey>(ScriptableObject asset, string assetPath)
+            where T : IConfigRow<TKey>
+        {
+            if (asset is not ScriptableObjectTable<T, TKey> tableAsset)
+            {
+                throw new ConfigException(
+                    $"SO Table asset '{assetPath}' must inherit ScriptableObjectTable<{typeof(T).Name}, {typeof(TKey).Name}>; " +
+                    $"got '{asset?.GetType().Name ?? "null"}'.");
+            }
+
+            if (tableAsset.Items == null || tableAsset.Items.Count == 0)
+                throw new ConfigException(
+                    $"SO Table '{typeof(T).Name}' from '{assetPath}' contains no items.");
+
+            var dict = new Dictionary<TKey, T>(tableAsset.Items.Count);
+            foreach (var item in tableAsset.Items)
+            {
+                if (dict.ContainsKey(item.Id))
+                    throw new ConfigException(
+                        $"Duplicate Id '{item.Id}' found in SO Table '{typeof(T).Name}' from '{assetPath}'.");
+                dict[item.Id] = item;
+            }
+            return new ConfigTable<T>(dict);
+        }
 
         private static async UniTask<T> LoadSOAsync<T>(string assetPath) where T : UnityEngine.Object
         {
