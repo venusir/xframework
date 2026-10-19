@@ -319,6 +319,7 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 | [UniTask](https://github.com/Cysharp/UniTask)     | `https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11` | 异步操作库   | UPM      |
 | [YooAsset](https://github.com/tuyoogame/YooAsset) | `https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#2.3.18`                 | 资源管理系统 | UPM      |
 | [Newtonsoft.Json](https://github.com/JamesNK/Newtonsoft.Json) | `com.unity.nuget.newtonsoft-json`（3.2.1）                           | JSON 序列化库 | UPM      |
+| [Input System](https://docs.unity3d.com/Packages/com.unity.inputsystem@1.19/manual/index.html) | `com.unity.inputsystem`（1.19.0） | 输入系统（核心程序集**无条件引用**） | UPM（Unity 注册表） |
 
 > **两个 Git 依赖都钉了上游的发布 tag，请连 `#…` 一起复制。** 不写修订时包管理器会取**默认分支的最新提交**，而上游已经前进过：YooAsset 3.x 把 `IRemoteServices`、`IDecryptionServices`、`RawFileHandle`、`InitializeParameters` 等类型移进了默认不编译的 `#if YOOASSET_LEGACY_API` 兼容层，Asset 模块会直接编译不过（实测：不写修订时 51 处 `error CS0246/CS0234`，钉住后退出码 0、零 `error CS`）。上面这两个 tag 就是 XFramework 自身编译与测试所用的版本，本仓库的 `packages-lock.json` 里锁的也是它们。**`?path=` 必须写在 `#` 之前**（反过来会失败）；这里用 tag 而不是提交哈希，是为了让你一眼看出装的是哪个版本。
 
@@ -326,19 +327,20 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 > **重要：** 由于 Unity 包管理器的限制，UPM 包的 `package.json` 中 `dependencies` 字段只支持语义化版本号，不支持 Git URL。因此 XFramework 不在自身 `package.json` 中声明第三方依赖，而是需要您在**项目根目录的 `Packages/manifest.json`** 中手动添加。
 
-在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下三个包：
+在项目 `Packages/manifest.json` 的 `dependencies` 中添加以下四个包：
 
 ```json
 {
   "dependencies": {
     "com.cysharp.unitask": "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11",
     "com.tuyoogame.yooasset": "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#2.3.18",
-    "com.unity.nuget.newtonsoft-json": "3.2.1"
+    "com.unity.nuget.newtonsoft-json": "3.2.1",
+    "com.unity.inputsystem": "1.19.0"
   }
 }
 ```
 
-也可以走一键安装：菜单栏 **XFramework → Install Dependencies** 会把上表三个包写进 `Packages/manifest.json`，值与本表逐字相同；若检出**未钉修订**的 Git URL（旧版 README 的写法）会自动纠正，其余不一致只告警、不替你改动。
+也可以走一键安装：菜单栏 **XFramework → Install Dependencies** 会把上表四个包写进 `Packages/manifest.json`，值与本表逐字相同；若检出**未钉修订**的 Git URL（旧版 README 的写法）会自动纠正，其余不一致只告警、不替你改动。
 
 > **依赖版本只有一份真相：上面这张表。** 安装器清单与 `Packages/manifest.json` 必须与它逐字一致，由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫。
 

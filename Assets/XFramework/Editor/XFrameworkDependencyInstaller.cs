@@ -42,6 +42,9 @@ namespace Venusy609.Xframework.Editor
             { "com.cysharp.unitask", "https://github.com/Cysharp/UniTask.git?path=src/UniTask/Assets/Plugins/UniTask#2.5.11" },
             { "com.tuyoogame.yooasset", "https://github.com/tuyoogame/YooAsset.git?path=Assets/YooAsset#2.3.18" },
             { "com.unity.nuget.newtonsoft-json", "3.2.1" },
+            // 核心程序集 asmdef 无条件引用 Unity.InputSystem；不列它，按本清单装完的工程
+            // 会因程序集引用解析不到而整体编译失败（R3-INP-001）。
+            { "com.unity.inputsystem", "1.19.0" },
         };
 
         private const string ManifestPath = "Packages/manifest.json";

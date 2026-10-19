@@ -871,6 +871,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **包 README/安装器补 Input System 依赖（2026-10-19，R3-INP-001）**：核心程序集 asmdef 无条件引用
+  `Unity.InputSystem`，但依赖表、安装 JSON 与一键安装器只列 UniTask / YooAsset / Newtonsoft——第三方
+  按 README 装完会因程序集引用缺失整体编译失败。三处补 `com.unity.inputsystem`（1.19.0）；
+  `DependencyDeclarationTests` 的逐字一致守卫自动覆盖新条目。
 - **Config XML/异常消息口径订正（2026-10-17，CONF-004 部分）**：未加载异常消息改教真实存在的
   `PreloadTableAsync<T>()` / `PreloadGlobalAsync<T>()`（原文的 `PreloadAsync` 不存在）；`IConfigLoader` 不再
   声称可扩展 `ConfigFormat` 枚举（自定义 Loader 走重载）；非泛型 `RegisterTable` 改为「经 `IConfigTable.Data`
