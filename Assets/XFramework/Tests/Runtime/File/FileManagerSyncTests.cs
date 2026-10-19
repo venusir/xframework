@@ -134,6 +134,16 @@ namespace XFramework.XFileManager.Tests
         }
 
         [Test]
+        public void MobileStreaming_RejectsTraversalPath()
+        {
+            var provider = new MobileFileProvider();
+
+            Assert.Throws<ArgumentException>(() => provider.Exists(FileDomain.Streaming, "../evil"));
+            Assert.Throws<ArgumentException>(() => provider.Exists(FileDomain.Streaming, "..\\evil"),
+                "反斜杠同样要归一后再校验（R3-FILE-002）");
+        }
+
+        [Test]
         public void IsSyncStreamingUnsupported_DesktopProviderStreamingDomain_IsFalse()
         {
             Assert.IsFalse(

@@ -224,8 +224,15 @@ namespace XFramework.XFileManager
         /// </summary>
         private static string GetStreamingUrl(string relativePath)
         {
-            // 确保路径以 / 开头
-            var path = relativePath;
+            // 与桌面实现共用路径沙箱（R3-FILE-002）：归一化反斜杠并拒绝盘符 / UNC / '..' 段。
+            // 移动 Streaming 域此前绕过 GetPhysicalPath，`../` 会原样拼进 URL。
+            if (!FilePathUtility.TryNormalizeRelativePath(relativePath, out var normalized))
+                throw new ArgumentException(
+                    $"[FileManager] 非法相对路径 '{relativePath}':不允许盘符、UNC 或 '..' 段穿越。",
+                    nameof(relativePath));
+
+            // 确保路径以 / 开头（空路径表示域根）
+            var path = normalized ?? string.Empty;
             if (!path.StartsWith("/"))
                 path = "/" + path;
 

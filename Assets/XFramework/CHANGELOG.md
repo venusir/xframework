@@ -393,6 +393,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### File
 
+- **移动 Streaming 路径绕过归一与沙箱（R3-FILE-002）**：`GetStreamingUrl` 不经过 `GetPhysicalPath`，反斜杠不归一、
+  `../` 可原样拼进 URL。修法：与桌面实现共用 `TryNormalizeRelativePath`，非法路径抛 `ArgumentException`。
+  回归：`FileManagerSyncTests.MobileStreaming_RejectsTraversalPath`；Android/iOS 真机行为登记探针。
 - **`OSXServer` 平台落 default 抛异常（R3-FILE-001）**：macOS Server 构建本可用 `DesktopFileProvider`，却抛
   `PlatformNotSupportedException`。修法：补 `case RuntimePlatform.OSXServer`；运行期需 macOS Server 构建实测。
 
