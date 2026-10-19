@@ -53,7 +53,7 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - 未做：**切后台自动暂停**（2026-10-01 · v2 候选）——需「谁暂停的」状态机 + iOS/Android 真机实测（见使用方 README 设计取舍）。
 - 未做：**借用项目提供的 `AudioSource`**（2026-10-01 · v2 候选）——音量归属 / `Stop` 语义 / 源销毁失效 / 借用期冲突四条语义，可独立提交。
 - 不做：**ducking（音效压低 BGM）**（2026-10-01 · v2 候选）——混音设计理念，项目间差异大；Mixer 侧才是它的家。无重开判据。
-- 暂不做：**框架音量 → 项目 Mixer 的驱动接口**（2026-10-01 · v2 候选）——先观察是否真有需求；现在给的是「框架音量留 1.0、Mixer 独占控制」。重开判据：出现真实需求。
+- 暂不做：**框架音量 → 项目 Mixer 的驱动接口**（2026-10-01 · v2 候选）——先观察是否真有需求；~~现在给的是「框架音量留 1.0、Mixer 独占控制」~~（2026-10-19 订正：该理由不成立——框架动态声源的 `outputAudioMixerGroup` 恒 `null`，声音进不了项目 Mixer，`AudioMixer.SetFloat` 静默无效；结论不变：要接入项目 Mixer 只能整体替换 `IAudioManager`，公开面不新增路由入口。R3-AUD-001）。重开判据：出现真实需求，且接受新增「不暴露 Unity 类型的路由扩展点」。
 - 暂不做：**`AudioBootstrapStage` / `AudioSettingsBridge<T>` / `AudioHandle.State` / 通道级上限 / `DumpState` 这批便利面**（2026-10-01 · v2 候选）——等真实反馈；`DumpState` 的诊断面形状另见下方 `待裁` 条。重开判据：出现真实使用反馈。
 - 不做：**跟随 Transform 的 3D 发射器**（2026-10-01 · v2 候选）——本质是项目侧 MonoBehaviour。无重开判据。
 - 不做：**不提供 `Play(AudioClip, ...)` 重载**（2026-10-01 · v1 评估）——它会同时毁掉两件事：`IAudioManager` 的后端中立性（Wwise 的事件 / FMOD 的 `EventInstance` 都没有 `AudioClip`），以及「资源生命周期只有一套语义」；「回不到 Inspector 直引」这条代价已写进 README 的已知限制。无重开判据。

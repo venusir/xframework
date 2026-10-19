@@ -299,6 +299,9 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
   直接引用的用法用不了——不过这是本框架的一贯立场（UI 的面板同样必须走 location）。建议在加载画面用
   `AssetManager.PreloadAllAsync` 预热常用音效。
 - **没有同步播放路径。** 只有异步加载；`Play` 是「立即返回 + 后台加载」，不是同步加载。
+- **框架声源不接入项目的 AudioMixer 总线**：动态创建的播放源 `outputAudioMixerGroup` 恒为
+  `null`，`AudioMixer.SetFloat` 对框架声音无效。要接入项目自己的总线/效果链需整体替换
+  `IAudioManager` / 自定义后端（见「自定义实现」）。
 - **3D 播放源是定点的**，不跟随移动物体（见「与相邻模块的关系」的「与音频中间件的边界」）。
 - **切后台不会自动暂停。** 本模块不接 `OnApplicationPause`——「是谁暂停的、谁来恢复」必须由项目掌握
   （玩家本来就在暂停菜单里切后台时，回到前台不能替他 `Resume`）。需要的话由项目在自己的生命周期回调里
@@ -385,9 +388,10 @@ BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
 
 #### 用项目自己的 AudioMixer
 
-框架只写自己池里播放源的 `volume`，**不碰** `AudioMixer`。要让声音进入项目自己的总线/效果链，
-把混音交给 Mixer：让框架的通道音量留在 `1.0`，项目自己用 `AudioMixer.SetFloat` 控制总线音量。
-两者是相乘关系，不会互相覆盖。
+**当前不支持**：框架动态创建的播放源没有设置 `outputAudioMixerGroup`（恒为 `null`），声音不会进入
+项目 Mixer 的总线/效果链——`AudioMixer.SetFloat` 对框架声音**静默无效**。公开面也没有设置输出组 /
+路由的入口。要让框架声音进入项目自己的 Mixer，只能整体替换 `IAudioManager`（自定义后端，见
+「自定义实现」）；目前没有「不暴露 Unity 类型的路由扩展点」这一形态。
 
 #### 关于「跟随移动物体的 3D 发射器」
 

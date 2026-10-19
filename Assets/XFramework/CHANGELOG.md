@@ -877,6 +877,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **删除不可实现的「用项目自己的 AudioMixer」配方（2026-10-19，R3-AUD-001）**：框架动态创建的播放源
+  `outputAudioMixerGroup` 恒为 `null`，声音不会进入项目 Mixer 的总线/效果链，`AudioMixer.SetFloat`
+  对框架声音静默无效。README 的该配方已删除并改为真实边界（要接入需整体替换 `IAudioManager`），
+  已知限制补一条；决策台账同步订正原理由。
 - **包 README/安装器补 Input System 依赖（2026-10-19，R3-INP-001）**：核心程序集 asmdef 无条件引用
   `Unity.InputSystem`，但依赖表、安装 JSON 与一键安装器只列 UniTask / YooAsset / Newtonsoft——第三方
   按 README 装完会因程序集引用缺失整体编译失败。三处补 `com.unity.inputsystem`（1.19.0）；
