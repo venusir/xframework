@@ -1214,6 +1214,8 @@ namespace XFramework.XSave
             {
                 // 载荷在：.tmp 只可能是崩溃残留（原子写之后它绝不该留存）
                 FileManager.Delete(SaveDomain, tempPath);
+                // 侧车自己的 .tmp 同样可能残留（R3-SAVE-005）：只清载荷 .tmp 会把它永久留下
+                FileManager.Delete(SaveDomain, metaPath + FilePathUtility.TempFileSuffix);
             }
 
             if (!FileManager.Exists(SaveDomain, payloadPath))

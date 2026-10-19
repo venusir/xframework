@@ -496,6 +496,21 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task RecoverAsync_PayloadPresent_ClearsMetaTemp()
+        {
+            var wallet = DataManager.GetOrCreateBlock<WalletData>();
+            wallet.Gold = 1;
+            await SaveManager.SaveAsync(1);
+            await FileManager.WriteAllBytesAsync(
+                FileDomain.SaveData, "slot_1.save.meta.tmp", new byte[] { 1 });
+
+            await SaveManager.RecoverAsync(default);
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save.meta.tmp"),
+                "载荷存在时恢复扫描也应清掉 .meta.tmp（R3-SAVE-005）");
+        }
+
+        [Test]
         public async Task TryLoadAsync_MissingPayloadAndCorruptBackup_ReportsCorrupt()
         {
             var wallet = DataManager.GetOrCreateBlock<WalletData>();

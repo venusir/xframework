@@ -381,6 +381,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Save
 
+- **恢复扫描不清 `.meta.tmp`（R3-SAVE-005）**：载荷存在时只清载荷 `.tmp`，侧车自己的 `.tmp` 永久残留。
+  修法：同分支一并清 `metaPath + .tmp`。回归：`SaveManagerImplTests.RecoverAsync_PayloadPresent_ClearsMetaTemp`。
 - **缺失+备份损坏报 Missing、元数据查询无异常隔离（R3-SAVE-002/003）**：主文件缺失且备份损坏时按
   `Missing` 回报（应 `Corrupt`，两份坏文件值得留证据）；`GetSlotMetaAsync` 的解密/IO 异常直抛。修法：
   `Missing` 仅在无备份时成立；查询面异常记 Error 并按损坏条目回报。回归：
