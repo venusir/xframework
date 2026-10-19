@@ -33,9 +33,13 @@ namespace XFramework.XData.Tests
         [Test]
         public void AutoInit_DefaultAvailable()
         {
-            // 运行时由 AutoInit（[RuntimeInitializeOnLoadMethod] / [InitializeOnLoadMethod]）
-            // 在加载时注册内置序列化器，无需显式 Initialize 即可用 Default。
-            // 此处锁定契约：模块已就绪且默认格式为 "json"。
+            // 先清掉 SetUp 的 Initialize，否则本用例只是「Initialize 生效」的自证——
+            // 删掉 AutoInit 仍然是绿的（R3-SER-004）。
+            Serializer.Shutdown();
+            Assert.IsFalse(Serializer.IsInitialized, "前提：已清空注册表");
+
+            Serializer.AutoInit(); // 被测入口：运行时钩子走的就是它
+
             Assert.IsTrue(Serializer.IsInitialized, "AutoInit 后模块应已就绪");
             Assert.AreEqual("json", Serializer.Default.Format, "默认序列化器格式应为 json");
         }

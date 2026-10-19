@@ -1053,6 +1053,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **修正 `AutoInit_DefaultAvailable` 的自证（2026-10-20，R3-SER-004）**：SetUp 已 `Initialize` 后再断言「已就绪」，
+  删掉 AutoInit 仍是绿的；改为先 `Shutdown` 再调 `AutoInit`，入口被真正覆盖。
 - **补 UIBinder 公开绑定方法覆盖（2026-10-19，R3-UIB-012）**：`UIBinderTests` 五例（FillAmount / Slider / Toggle /
   Active / Click），含「释放后不再更新」；TMP 相关方法与真实 Tip 帧循环仍不可测（未导入 TMP Essentials），
   已在台账登记覆盖缺口。
