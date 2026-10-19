@@ -54,4 +54,5 @@ v1（Table 模型）→ v2（Block 模型）。**0.1.0 从未对外发布**，�
 - 已做：**写入端格式契约（`Serializer.Default` vs `defaultFormat`）**（2026-10-18 · `1a23c48`）——写入端改为按快照的 `defaultFormat` 取序列化器，与读取端对称；单块导出/恢复仍用 `Serializer.Default.Format` 并写进 README（DATA-006）。
 - 不做：**脏集合载体不提升为公开面**（2026-10-18 · 裁定）——`DataSnapshot.dirtyBlockNames` 保持 internal；第三方 `IDataManager` 实现无法兑现的脏集合还原契约，README 限定其用旁表兑现（DATA-009）。无重开判据。
 - 已做：**块版本过新经 Save 变成整份 `Corrupt`**（2026-10-18 · `3c04254`）——Save 侧在应用快照前预扫描块版本，`snap.version > block.DataVersion` 命中即返回 `SaveLoadStatus.VersionTooNew`（主文件与备份路径都覆盖），枚举已存在、零接口变更（DATA-011）。
+- 已做：**同实例重复注册幂等、OnClear 异常隔离**（2026-10-20 · R3-DATA-001/003，本轮修复）——同实例 `RegisterBlock` 会先 `OnClear` 清空自身；`RegisterBlock`/`RemoveBlock` 的 `OnClear` 异常外泄并中止。修法：同实例幂等早退；两处 `OnClear` 逐项隔离并继续；回归 `RegisterBlockTests` 三例。
 

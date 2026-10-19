@@ -379,6 +379,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Data
+
+- **同实例重复注册先清空自己、OnClear 异常外泄（R3-DATA-001/003）**：`RegisterBlock` 对同一实例重复注册会先
+  调 `OnClear` 清空自身数据；`RegisterBlock`/`RemoveBlock` 的 `OnClear` 异常直接外泄并中止（`ClearAll`/
+  `ApplySnapshot` 却逐块隔离）。修法：同实例注册幂等早退；两处 `OnClear` 逐项隔离并继续替换/移除。回归：
+  `RegisterBlockTests` 三例（改前均红/异常外泄）。
+
 #### Save
 
 - **恢复扫描不清 `.meta.tmp`（R3-SAVE-005）**：载荷存在时只清载荷 `.tmp`，侧车自己的 `.tmp` 永久残留。

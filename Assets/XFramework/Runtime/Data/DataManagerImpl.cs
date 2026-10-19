@@ -69,7 +69,22 @@ namespace XFramework.XData
             // 覆盖同名 Block 时先清理旧实例：OnClear 释放其资源/订阅，并移除脏标记，避免泄漏与假脏
             if (_blocks.TryGetValue(typeof(T), out var old))
             {
-                old.OnClear();
+                // 同实例重复注册不得先清空自己（DATA-001）：原样注册应当是幂等空操作。
+                if (ReferenceEquals(old, block))
+                    return;
+
+                try
+                {
+                    old.OnClear();
+                }
+                catch (Exception e)
+                {
+                    // 逐项隔离（DATA-003）：旧块的 OnClear 抛异常不得让替换半途而废；
+                    // 旧实例即将被替换掉，留在容器里比记一条 Error 更危险。
+                    LogManager.Exception(LogCategories.Data, e,
+                        "旧数据块 OnClear 抛出异常，已跳过清理并继续替换。");
+                }
+
                 _dirtyBlocks.Remove(old);
 
                 // 旧实例的名称索引一并摘掉：它已不在 _blocks 里，索引留着会让按名恢复命中一个幽灵对象
@@ -88,7 +103,17 @@ namespace XFramework.XData
             var type = typeof(T);
             if (_blocks.TryGetValue(type, out var block))
             {
-                block.OnClear();
+                try
+                {
+                    block.OnClear();
+                }
+                catch (Exception e)
+                {
+                    // 逐项隔离（DATA-003）：OnClear 抛异常仍要完成移除，否则块永远留在容器里。
+                    LogManager.Exception(LogCategories.Data, e,
+                        "数据块 OnClear 抛出异常，已跳过清理并继续移除。");
+                }
+
                 _blocks.Remove(type);
                 RemoveNameIndexIfOwner(block); // 只在索引属于该实例时摘（DATA-005）
                 _dirtyBlocks.Remove(block); // 联动清理脏标记

@@ -16,7 +16,7 @@ namespace XFramework.XData.Tests
     public class RegisterBlockTests
     {
         [Serializable]
-        private sealed class WalletData : IDataBlock
+        private class WalletData : IDataBlock
         {
             public string BlockName => "Wallet";
             public int Gold;
@@ -25,7 +25,14 @@ namespace XFramework.XData.Tests
             public object OnSave() => Gold;
             public object OnMigrate(object saveData, int fromVersion) => saveData;
             public void OnLoad(object data) { if (data is int i) Gold = i; }
-            public void OnClear() { Gold = 0; ClearCount++; }
+            public virtual void OnClear() { Gold = 0; ClearCount++; }
+        }
+
+        /// <summary>OnClear 抛异常的 Wallet 子类（R3-DATA-003 的隔离用例）。</summary>
+        private sealed class ThrowingClearWallet : WalletData
+        {
+            public override void OnClear()
+                => throw new InvalidOperationException("clear boom");
         }
 
         /// <summary>
@@ -54,6 +61,44 @@ namespace XFramework.XData.Tests
         public void TearDown()
         {
             DataManager.Shutdown();
+        }
+
+        [Test]
+        public void RegisterBlock_SameInstance_DoesNotClearItself()
+        {
+            var block = new WalletData { Gold = 10 };
+            DataManager.RegisterBlock(block);
+            DataManager.RegisterBlock(block);
+
+            Assert.AreEqual(0, block.ClearCount,
+                "同实例重复注册不得先清空自己（R3-DATA-001）");
+            Assert.AreEqual(10, block.Gold);
+        }
+
+        [Test]
+        public void RegisterBlock_OldOnClearThrows_StillReplaces()
+        {
+            var old = new ThrowingClearWallet();
+            DataManager.RegisterBlock<WalletData>(old);
+
+            var replacement = new WalletData { Gold = 20 };
+            LogAssert.Expect(LogType.Error, new Regex("旧数据块 OnClear"));
+
+            Assert.DoesNotThrow(() => DataManager.RegisterBlock(replacement));
+            Assert.AreSame(replacement, DataManager.GetOrCreateBlock<WalletData>(),
+                "旧块 OnClear 抛异常仍应完成替换（R3-DATA-003）");
+        }
+
+        [Test]
+        public void RemoveBlock_OnClearThrows_StillRemoves()
+        {
+            DataManager.RegisterBlock<WalletData>(new ThrowingClearWallet());
+
+            LogAssert.Expect(LogType.Error, new Regex("数据块 OnClear"));
+
+            Assert.IsTrue(DataManager.RemoveBlock<WalletData>());
+            Assert.IsFalse(DataManager.HasBlock<WalletData>(),
+                "OnClear 抛异常仍应完成移除（R3-DATA-003）");
         }
 
         [Test]
