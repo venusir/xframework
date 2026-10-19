@@ -57,7 +57,7 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 - 不做：**不用「每次创建都重新 `Register` 驱动器」来换档位**（2026-10-01 · 读源码验证）——`UpdateScheduler.ApplyOp` 的注册分支插入的是一条 `NeedsAnchor = true` 的新条目，下一次派发 `deltaTime` 记 0——每次创建都吞掉一个档位周期，高频创建时逻辑时钟会**永久停摆、定时器永不触发**；故已派发过的驱动器一律走 `ProcessImmediate`，并把上一次收到的时刻原样传回。无重开判据。
 - 不做：**不设容量上限**（2026-10-01 · v1 评估）——封顶后唯一能给的失败形态是「静默返回空句柄」，比内存增长更难诊断；替代品是单表活跃数 1024 时的一条一次性告警。无重开判据。
 - 不做：**不为「停止的定时器」保留重开能力之外的额外语义**（2026-10-01 · v1 评估）——`Stop` 保留槽位是刻意的（见 README 设计取舍），但一次性定时器触发后即释放——「触发过的还想重开」请先 `Stop`。无重开判据。
-- 未做：**回调里跨轴创建更近的定时器，最坏晚一个旧档周期**（2026-10-01 · v1 记录）——调度器的 `_isIterating` 是**跨调度器共享的静态闩锁**，它下面 `ProcessImmediate` 只重锚不派发；同轴创建不受影响（那趟扫尾的返回值本就涵盖它）。若真实需求出现，可加一条「延迟到下次 Tick 开头的升档请求队列」。
+- 未做：**回调里跨轴创建更近的定时器，最坏晚一个旧档周期**（2026-10-01 · v1 记录）——调度器的 `_isIterating` 是**跨调度器共享的静态闩锁**，它下面 `ProcessImmediate` 只重锚不派发；~~同轴创建不受影响（那趟扫尾的返回值本就涵盖它）~~（2026-10-19 订正：同轴**跨表**创建原先不被涵盖，已由 R3-TMR-001 修复；跨轴仍受该闩锁限制）。若真实需求出现，可加一条「延迟到下次 Tick 开头的升档请求队列」。
 - 未做：**升档通道依赖 Update 的既有语义**（2026-10-01 · v1 记录）——`ProcessImmediate` 不重置 `NeedsAnchor`、只把 `LastUpdateTime` 写成传入时刻（`UpdateScheduler.cs` 的 `ApplyImmediateTimeBase`）；这是本模块最脆的一处耦合，`TimerTierTests.TierSwitch_DoesNotMoveTheDeadline` 是它的哨兵——Update 将来改这条语义会红。
 - 未做：**`_lastSeen` 用 `float` 回传**（2026-10-01 · v1 记录）——`OnUpdate` 只给 `float time`，回传给 `ProcessImmediate` 时相对调度器内部的 `double` 有一次 ≤ 0.5 ULP 的**一次性**截断（一小时会话约 0.24ms），不累积、不随档位切换次数增长。当前接受，未写用例。
 - 未做：**安全系数 8 是自定值**（2026-10-01 · v1 记录）——给出「最坏相对超时 12.5%、截止前至少 8 次派发机会」两个可核对的数字，但没有实测「卡顿到多少 fps 才会破防」；若将来收到「触发偶尔偏晚」的真实反馈，这里是第一个该调的地方。
@@ -69,6 +69,8 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 
 - 已做：**`TimerHandle` 实现 `IEquatable<TimerHandle>` 与相等运算符**（2026-10-18 · `9a9e295`）——按 TableId / Slot / Generation 三元组比较，可直接作字典键 / `HashSet` 元素；代际是身份的一部分，槽位复用后旧句柄与新句柄不等（ABA 防线）；`Generation == 0` 的无效语义不变（TMR-007）。
 - 已做：**写路径补 Editor-only 主线程断言**（2026-10-18 · `1a77de9`）——沿用 Message / Pipeline / Asset 的内联形态，不抽公共防线；Release 零开销（TMR-006）。
+
+- 已做：**跨表补扫本趟新建定时器**（2026-10-19 · R3-TMR-001，本轮修复）——TMR-002 的补扫只在触发回调的那张表内；状态表重复定时器回调里创建的无状态定时器落在默认表（本趟已先扫过），档位停在 Tier5，0.1 秒定时器迟到约 0.33 秒。修法：`ITimerTable.Sweep` 返回 `firedAny`，全部表扫完后 `TimerCore` 统一调 `GetBornThisPassMin`；回归 `TimerTierTests.StateCallback_CreatingStatelessTimer_IsCoveredAcrossTables`（改前 0.333s，改后约 0.1s）。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 

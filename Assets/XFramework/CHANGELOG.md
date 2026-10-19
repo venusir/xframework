@@ -689,6 +689,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Timer
 
+- **TMR-002 的补扫只在表内，跨表新建仍被拖到粗档（R3-TMR-001）**：状态表（带 `TState`）的重复定时器
+  回调里创建无状态定时器，后者落在默认表；默认表在本趟已先被扫过，扫尾的 `firedAny` 补扫只扫本表槽位，
+  本趟 `min` 漏掉新定时器——档位停在 Tier5，0.1 秒定时器迟到约 0.33 秒（实测；审计估算最坏约 2.13 秒）。
+  修法：`ITimerTable.Sweep` 返回「本趟是否触发过回调」，全部表扫完后由 `TimerCore` 统一调用
+  `GetBornThisPassMin` 汇总所有表的本趟新生槽位。回归：
+  `TimerTierTests.StateCallback_CreatingStatelessTimer_IsCoveredAcrossTables`（改前 0.333s，改后约 0.1s）。
 - **回调里新建的定时器可能晚一个档周期触发（TMR-002）**：一次性定时器在回调前释放槽位，回调里新建的
   定时器经自由链复用同一个下标，而 `Sweep` 的循环已越过它——本趟 `min` 漏算，`SelectTier` 保持粗档，
   同轴新建的 0.1 秒定时器可晚约 2.13 秒触发。修法：扫尾在「本趟触发过回调」时补扫一次

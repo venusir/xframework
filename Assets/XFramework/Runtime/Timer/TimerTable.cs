@@ -15,6 +15,27 @@ namespace XFramework.XTimer
     }
 
     /// <summary>
+    /// 一张表扫尾一趟的结果。
+    /// <para>拆出 <see cref="FiredAny"/> 是为了让 <see cref="TimerCore"/> 在全部表扫完后
+    /// 统一补扫「本趟新建的槽位」——回调可能跨表创建定时器，单表内的扫尾看不到别的表
+    /// （R3-TMR-001）。</para>
+    /// </summary>
+    internal readonly struct TimerSweepResult
+    {
+        /// <summary>本表内最近一次截止的剩余秒数；没有正在计时的定时器时为 <see cref="double.PositiveInfinity"/>。</summary>
+        public readonly double NextDue;
+
+        /// <summary>本趟是否触发过回调（决定是否需要跨表补扫）。</summary>
+        public readonly bool FiredAny;
+
+        public TimerSweepResult(double nextDue, bool firedAny)
+        {
+            NextDue = nextDue;
+            FiredAny = firedAny;
+        }
+    }
+
+    /// <summary>
     /// 一张槽位表的最小操作面，让 <see cref="TimerCore"/> 不必知道状态类型。
     /// <para>句柄操作都以「槽位下标 + 代际」寻址：<b>两者必须同时相符</b>才算命中——
     /// 槽位会被复用，只看下标会让早已释放的旧句柄操作到别人的定时器上。</para>
@@ -45,9 +66,17 @@ namespace XFramework.XTimer
         /// </summary>
         /// <param name="now">本轴当前的逻辑时刻。</param>
         /// <param name="advancePass">本次是否是一个新的「派发轮」。</param>
-        /// <returns>本表内最近一次截止的剩余秒数；没有正在计时的定时器时返回
-        /// <see cref="double.PositiveInfinity"/>（档位选择据此回到 <see cref="UpdateTier.Tier0"/>）。</returns>
-        double Sweep(double now, bool advancePass);
+        /// <returns>本表的最近截止与「本趟是否触发过回调」。</returns>
+        TimerSweepResult Sweep(double now, bool advancePass);
+
+        /// <summary>
+        /// 本趟新建槽位（<c>BornPass == 当前趟号</c>）里最近截止的剩余秒数。
+        /// <para>由 <see cref="TimerCore"/> 在**全部表**扫完后统一调用：回调里跨表创建的定时器
+        /// 可能落在已扫过的表里，单表扫尾看不到（R3-TMR-001）。</para>
+        /// </summary>
+        /// <param name="now">本轴当前的逻辑时刻。</param>
+        /// <returns>最小剩余秒数；没有本趟新建的槽位时返回 <see cref="double.PositiveInfinity"/>。</returns>
+        double GetBornThisPassMin(double now);
 
         /// <summary>释放本表全部槽位。</summary>
         /// <returns>被取消的定时器数量（不含已停止的）。</returns>
@@ -215,7 +244,7 @@ namespace XFramework.XTimer
         }
 
         /// <inheritdoc />
-        public double Sweep(double now, bool advancePass)
+        public TimerSweepResult Sweep(double now, bool advancePass)
         {
             if (advancePass)
                 _sweepPass++;
@@ -269,21 +298,25 @@ namespace XFramework.XTimer
                 }
             }
 
-            // 扫尾重算：一次性定时器在回调前释放槽位，回调里新建的定时器会复用同一个下标，
-            // 而循环已越过它——不补扫就会漏掉它的截止，档位停在粗档（TMR-002）。
-            // 只有本趟真的触发过回调才需要补扫：扫尾期间新建定时器只可能发生在回调里。
-            if (firedAny)
-            {
-                for (int i = 0; i < _slots.Length; i++)
-                {
-                    TimerSlot<TState> slot = _slots[i];
-                    if (!slot.Allocated || !slot.Running || slot.BornPass != _sweepPass)
-                        continue;
+            // 本表内「回调里新建定时器复用刚释放的下标」的补扫不在这里做：回调可能跨表创建，
+            // 只有全部表扫完后由 TimerCore 统一调 GetBornThisPassMin 才覆盖所有场景（R3-TMR-001）。
+            return new TimerSweepResult(min, firedAny);
+        }
 
-                    double remaining = slot.Deadline - now;
-                    if (remaining < min)
-                        min = remaining;
-                }
+        /// <inheritdoc />
+        public double GetBornThisPassMin(double now)
+        {
+            double min = double.PositiveInfinity;
+
+            for (int i = 0; i < _slots.Length; i++)
+            {
+                TimerSlot<TState> slot = _slots[i];
+                if (!slot.Allocated || !slot.Running || slot.BornPass != _sweepPass)
+                    continue;
+
+                double remaining = slot.Deadline - now;
+                if (remaining < min)
+                    min = remaining;
             }
 
             return min;

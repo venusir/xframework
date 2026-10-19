@@ -97,6 +97,41 @@ namespace XFramework.XTimer.Tests
         }
 
         /// <summary>
+        /// 跨表补扫（R3-TMR-001）：**重复**状态表定时器回调里创建的无状态定时器落在默认表；
+        /// 默认表在本趟已扫过，若不跨表补扫，本趟 <c>min</c> 只剩状态定时器的下一个 5 秒截止，
+        /// 档位停在 Tier5——0.1 秒的定时器要等约 0.53 秒。
+        /// </summary>
+        [Test]
+        public void StateCallback_CreatingStatelessTimer_IsCoveredAcrossTables()
+        {
+            double createdAt = -1;
+            double firedAt = -1;
+
+            // 重复（Every）而非一次性：一次性触发后状态表的本趟 min 为 +∞，SelectTier(+∞) 恰好
+            // 回到 Tier0，会把缺口掩盖掉；重复定时器留下「下一个 5 秒截止」，档位真的停在粗档。
+            TimerManager.Every(5f, _ =>
+            {
+                if (createdAt < 0)
+                {
+                    createdAt = _driver.ScaledTime;
+                    TimerManager.After(0.1f, () => firedAt = _driver.ScaledTime);
+                }
+            }, 0);
+
+            _driver.Advance(2);
+            Assert.AreEqual(UpdateTier.Tier5, TimerManager.GetDispatchTier(UpdateTimeMode.Scaled));
+
+            // 400 帧 ≈ 6.67 秒：够 5 秒状态定时器触发，也够「未修复时」的 0.1 秒定时器
+            // 在下一个 Tier5 拍（约 +0.53 秒）触发，从而让断言看到真实迟到量而不是「没触发」。
+            _driver.Advance(400);
+
+            Assert.GreaterOrEqual(createdAt, 0, "5 秒状态定时器没有触发");
+            Assert.GreaterOrEqual(firedAt, 0, "回调里创建的 0.1 秒定时器没有触发");
+            Assert.LessOrEqual(firedAt - createdAt, 0.2,
+                $"跨表新建的短定时器被拖到粗档：{firedAt - createdAt:F3}s（应约 0.1s）");
+        }
+
+        /// <summary>
         /// 逆方向不成立：更粗的请求一律忽略，拉粗由每趟扫尾的返回值决定（那里才知道真实的最近截止）。
         /// </summary>
         [Test]

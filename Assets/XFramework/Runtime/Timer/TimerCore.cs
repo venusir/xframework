@@ -312,6 +312,7 @@ namespace XFramework.XTimer
                 _axisPass[axis]++;
 
             double min = double.PositiveInfinity;
+            bool firedAny = false;
 
             // 快照当前表数：本趟回调里新建的表在下方循环里仍会被扫到（用于折入最近截止），
             // 但它不能再把趟号 +1——它已继承本轮趟号，否则新生槽位会被当成旧槽位（TMR-010）。
@@ -325,9 +326,27 @@ namespace XFramework.XTimer
                     continue;
 
                 bool advanceThisTable = advancePass && i < tableCountAtStart;
-                double candidate = table.Sweep(now, advanceThisTable);
-                if (candidate < min)
-                    min = candidate;
+                TimerSweepResult result = table.Sweep(now, advanceThisTable);
+                if (result.NextDue < min)
+                    min = result.NextDue;
+                firedAny |= result.FiredAny;
+            }
+
+            // 跨表补扫（R3-TMR-001）：回调里新建的定时器可能落在**已扫过**的表里（例如状态表回调
+            // 创建无状态定时器，而默认表在 _allTables 中排在前面）——单表扫尾看不到，必须等全部表
+            // 扫完再统一取「本趟新建槽位」的最小截止。没有回调触发时不可能有新槽位，跳过。
+            if (firedAny)
+            {
+                for (int i = 0; i < _allTables.Count; i++)
+                {
+                    ITimerTable table = _allTables[i];
+                    if (table.Axis != axis)
+                        continue;
+
+                    double born = table.GetBornThisPassMin(now);
+                    if (born < min)
+                        min = born;
+                }
             }
 
             MaybeGoIdle(axis);

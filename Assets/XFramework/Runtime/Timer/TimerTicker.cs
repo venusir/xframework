@@ -81,7 +81,8 @@ namespace XFramework.XTimer
         /// <para><b>时钟为什么不能用 <c>Time.time</c></b>：那会把基准推到真实时刻，而逻辑时钟是按
         /// <c>deltaTime</c> 累积的，两者在暂停/时间缩放之后不再同源——传错会把整段暂停算成流逝时间。</para>
         /// <para><b>在别的回调里调用时不生效</b>：调度器的迭代闩锁（跨时机共享）下 <c>ProcessImmediate</c> 只重锚不派发，
-        /// 于是任何 XUpdate 派发回调里创建更近的定时器最坏要等一个旧档周期；同轴创建由扫尾的补算覆盖（TMR-002）。</para>
+        /// 于是任何 XUpdate 派发回调里创建更近的定时器最坏要等一个旧档周期；同轴创建由 <see cref="TimerCore.Sweep"/>
+        /// 在**全部表**扫完后的跨表补扫覆盖（TMR-002 / R3-TMR-001）。</para>
         /// </summary>
         /// <param name="needed">希望落到的档位。</param>
         internal void RequestTier(UpdateTier needed)
