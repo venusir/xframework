@@ -417,6 +417,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **Tip 帧循环无逐项隔离（R3-UIB-007）**：一个 Tip 的 `Tick` 抛异常会中断本轮，其余 Tip 停更且异常
+  逃到 provider 层。修法：逐个 `try/catch`，抛异常的实例直接回收（避免持续态每帧刷日志）。
+  注：`UITipItem.Tick` 非虚、无直接注入缝，本轮未构造自动化用例。
 - **双向绑定释放顺序与 ViewModel 隔离（R3-UIB-005/006）**：`Slider`/`Toggle` 双向绑定先摘控件监听再解属性
   订阅——控件已销毁时监听摘除可能抛异常、把属性订阅漏掉；`UIPanelBinding.Unbind` 的 `OnUnbound`/`Dispose`
   同 try，`ViewModelBase.Dispose` 两个循环也无逐项隔离。修法：先解属性订阅再摘监听；`OnUnbound` 与

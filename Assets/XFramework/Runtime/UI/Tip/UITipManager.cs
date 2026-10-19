@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -129,8 +130,22 @@ namespace XFramework.XUI
             {
                 var tip = _activeTips[i];
 
-                // 仍在播放就跳过；播完、或已被外部销毁的则回收
-                if (tip != null && !tip.Tick(deltaTime))
+                bool recycle;
+                try
+                {
+                    // 仍在播放就跳过；播完、或已被外部销毁的则回收
+                    recycle = tip == null || !tip.Tick(deltaTime);
+                }
+                catch (Exception e)
+                {
+                    // 逐项隔离（R3-UIB-007）：一个 Tip 抛异常不得中断本轮；抛异常的实例直接回收，
+                    // 避免持续态每帧刷一条带栈日志（与 HUD 的停更取舍一致）。
+                    LogManager.Exception(LogCategories.UITipManager, e,
+                        "Tip 更新抛出异常，已回收该实例并继续。");
+                    recycle = true;
+                }
+
+                if (!recycle)
                     continue;
 
                 _activeTips.RemoveAt(i);
