@@ -379,6 +379,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Audio
+
+- **音量刷新假 null、Sweep 的 break 过早注销（R3-AUD-002/003）**：外部销毁的播放源上写 `volume` 会抛
+  MissingReference；`Sweep` 的 `break` 让后面槽位不计入 active、其余死槽位轮不到。修法：刷新时跳过
+  `Source == null`；`break` 改 `continue`。
+
 #### Data
 
 - **单块快照不记录序列化格式（R3-DATA-002）**：`CreateBlockSnapshot` 用 `Serializer.Default.Format` 写出数据却不记

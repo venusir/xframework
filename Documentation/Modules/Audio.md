@@ -72,4 +72,5 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - **不依赖 Settings / Localization**（两个可选模块），README 只给接线片段。
 - **不用 `PoolManager`**：那套池只服务纯 C# 对象。播放源池是模块自持的第三套（Asset 侧预设体池是第二套）。
 
+- 已做：**音量刷新假 null、Sweep 的 break**（2026-10-20 · R3-AUD-002/003，本轮修复）——外部销毁的播放源上写 `volume` 会抛 MissingReference；`Sweep` 的 `break` 让后面槽位不计入 active、其余死槽位轮不到。修法：刷新时跳过 `Source == null`；`break` 改 `continue`。
 - 已做：**全局暂停期间不回收在播音效（AudioListener.pause）**（2026-10-18 · 探针 + 本提交）——探针实测 `AudioListener.pause = true` 会让 `AudioSource.isPlaying` 变 false；`Sweep` 的 `Playing` 与 `Starting` 两态都识别全局暂停（暂停期间不回收、不计超时拍），恢复后照常判定（AUD-013）。

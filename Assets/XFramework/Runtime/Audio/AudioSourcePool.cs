@@ -215,7 +215,9 @@ namespace XFramework.XAudio
                     LogManager.Warning(LogCategories.Audio,
                         "播放源已被外部销毁，回收槽位：'{0}'。", voice.Location);
                     Release(i);
-                    break;
+                    // continue 而不是 break（R3-AUD-003）：break 会提前结束整趟扫尾，
+                    // 后面的活跃槽位不计入 active，ticker 被过早注销、其余死槽位也永远轮不到。
+                    continue;
                 }
 
                 switch (voice.State)

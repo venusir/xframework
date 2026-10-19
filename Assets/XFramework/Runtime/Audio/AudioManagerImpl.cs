@@ -660,6 +660,11 @@ namespace XFramework.XAudio
                 if (voice.State == AudioVoiceState.Free)
                     continue;
 
+                // 外部销毁的播放源是 Unity 假 null（R3-AUD-002）：写 volume 会抛 MissingReference，
+                // 音量刷新不该被一个死槽位打断——交给下一次 Sweep 回收。
+                if (voice.Source == null)
+                    continue;
+
                 if (channelFilter != null &&
                     !string.Equals(voice.Channel, channelFilter, StringComparison.Ordinal))
                 {
