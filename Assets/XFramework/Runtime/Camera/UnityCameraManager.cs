@@ -229,6 +229,16 @@ namespace XFramework.XCamera
                 return;
             }
 
+            // 被外部销毁的相机在 Unity 里是假 null：槽位仍看似有效，SetOnlyActive 会跳过它并
+            // 把其它活相机全部关掉——激活静默「成功」却没有任何相机在输出。变更面必须挡在
+            // 这里（CAM-002）。
+            if (!IsUsable(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 '{0}' 已被外部销毁，激活已忽略。", cameraId);
+                return;
+            }
+
             ActivateSlot(index);
         }
 
@@ -260,6 +270,13 @@ namespace XFramework.XCamera
                 return;
             }
 
+            if (!IsUsable(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 '{0}' 已被外部销毁，过渡已忽略。", cameraId);
+                return;
+            }
+
             TransitionToSlot(index, duration, style);
         }
 
@@ -281,6 +298,13 @@ namespace XFramework.XCamera
             if (index < 0)
             {
                 LogManager.Warning(LogCategories.CameraManager, "相机句柄无效或已注销: {0}", handle);
+                return;
+            }
+
+            if (!IsUsable(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，激活已忽略。", handle);
                 return;
             }
 
@@ -310,6 +334,13 @@ namespace XFramework.XCamera
             if (index < 0)
             {
                 LogManager.Warning(LogCategories.CameraManager, "相机句柄无效或已注销: {0}", handle);
+                return;
+            }
+
+            if (!IsUsable(index))
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，过渡已忽略。", handle);
                 return;
             }
 

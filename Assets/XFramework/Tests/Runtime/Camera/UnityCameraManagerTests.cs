@@ -529,6 +529,72 @@ namespace XFramework.XCamera.Tests
                 "IsActive 不得继续报告已销毁的相机（CAM-001）");
         }
 
+        [Test]
+        public void Activate_ExternallyDestroyedCamera_WarnsAndKeepsActiveCamera()
+        {
+            var manager = CreateManager();
+            manager.Activate("b");
+            Assert.IsTrue(_cameraB.enabled, "前提校验：b 是活动相机");
+
+            UnityEngine.Object.DestroyImmediate(_objectA);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            manager.Activate("a");
+
+            Assert.IsTrue(_cameraB.enabled,
+                "激活已销毁的相机不得把其它活相机一并关掉（CAM-002）");
+            Assert.IsTrue(manager.IsActive("b"), "活动相机必须仍是 b（CAM-002）");
+        }
+
+        [Test]
+        public void TransitionTo_ExternallyDestroyedCamera_WarnsAndKeepsActiveCamera()
+        {
+            var manager = CreateManager();
+            manager.Activate("b");
+            Assert.IsTrue(_cameraB.enabled, "前提校验：b 是活动相机");
+
+            UnityEngine.Object.DestroyImmediate(_objectA);
+
+            LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+            manager.TransitionTo("a", 1f);
+
+            Assert.IsFalse(manager.IsTransitioning, "过渡到已销毁的相机必须整体忽略（CAM-002）");
+            Assert.IsTrue(_cameraB.enabled, "其它活相机不得被关掉（CAM-002）");
+            Assert.IsTrue(manager.IsActive("b"), "活动相机必须仍是 b（CAM-002）");
+        }
+
+        [Test]
+        public void HandleChangeSurface_ExternallyDestroyedCamera_WarnsAndKeepsActiveCamera()
+        {
+            var manager = CreateManager();
+            manager.Activate("b");
+            Assert.IsTrue(_cameraB.enabled, "前提校验：b 是活动相机");
+
+            var extraObject = new GameObject("CameraC");
+            var extra = extraObject.AddComponent<Camera>();
+            var handle = manager.Register(extra);
+
+            try
+            {
+                UnityEngine.Object.DestroyImmediate(extraObject);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+                manager.Activate(handle);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁"));
+                manager.TransitionTo(handle, 1f);
+
+                Assert.IsFalse(manager.IsTransitioning, "过渡到已销毁的相机必须整体忽略（CAM-002）");
+                Assert.IsTrue(_cameraB.enabled, "其它活相机不得被关掉（CAM-002）");
+                Assert.IsTrue(manager.IsActive("b"), "活动相机必须仍是 b（CAM-002）");
+            }
+            finally
+            {
+                if (extraObject != null)
+                    UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
         #endregion
     }
 }
