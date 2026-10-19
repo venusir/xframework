@@ -332,6 +332,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **CSV 数值解析走当前区域文化（R3-CONF-005）**：`int`/`float`/`double` 的 `TryParse` 未指定 culture，
+  de-DE 等小数逗号区域会把 `1.5` 读成 `15`。修法：统一 `InvariantCulture`（整数 `Integer`、浮点 `Float`）。
+  回归：`CsvLoaderTests.ParseTable_FloatWithDot_UsesInvariantCulture`（改前 15.0，改后 1.5）。
 - **在途加载参数不一致时静默复用首个结果（R3-CONF-003）**：同一类型的并发 `Preload` 只按 Type+Kind 匹配，
   第二调用方的 assetPath / format / loader 不同也直接加入、无任何提示。修法：`InFlightLoad` 记录首个请求的
   路径与形态，加入者参数不一致时打 Warning。回归：

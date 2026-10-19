@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Reflection;
 using Cysharp.Threading.Tasks;
 
@@ -208,19 +209,19 @@ namespace XFramework.XConfig
             }
             else if (memberType == typeof(int))
             {
-                if (!int.TryParse(rawValue, out var i))
+                if (!int.TryParse(rawValue, NumberStyles.Integer, CultureInfo.InvariantCulture, out var i))
                     throw ParseError(assetPath, row, columnName, rawValue, memberType);
                 value = i;
             }
             else if (memberType == typeof(float))
             {
-                if (!float.TryParse(rawValue, out var f))
+                if (!float.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var f))
                     throw ParseError(assetPath, row, columnName, rawValue, memberType);
                 value = f;
             }
             else if (memberType == typeof(double))
             {
-                if (!double.TryParse(rawValue, out var d))
+                if (!double.TryParse(rawValue, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
                     throw ParseError(assetPath, row, columnName, rawValue, memberType);
                 value = d;
             }

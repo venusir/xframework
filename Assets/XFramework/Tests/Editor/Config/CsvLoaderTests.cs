@@ -79,5 +79,35 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(7, table.GetAll()[0].Id, "Id 应是 7 而不是默认值 0");
             Assert.AreEqual("gamma", table.GetAll()[0].Name);
         }
+        /// <summary>带 float 字段的行类型（区域文化用例）。</summary>
+        [Serializable]
+        private struct FloatRow : IConfigRow<int>
+        {
+            public int Id;
+            public float Value;
+
+            int IConfigRow<int>.Id => Id;
+        }
+
+        [Test]
+        public void ParseTable_FloatWithDot_UsesInvariantCulture()
+        {
+            var original = System.Threading.Thread.CurrentThread.CurrentCulture;
+            try
+            {
+                // de-DE 的小数点是逗号；旧实现走当前区域文化，会把 1.5 读成 15。
+                System.Threading.Thread.CurrentThread.CurrentCulture =
+                    new System.Globalization.CultureInfo("de-DE");
+
+                var table = CsvLoader.ParseTable<FloatRow, int>("Id,Value\n1,1.5\n", "test.csv");
+
+                Assert.AreEqual(1.5f, table.Get(1).Value, 1e-4f,
+                    "CSV 数值解析必须与区域文化无关（R3-CONF-005）");
+            }
+            finally
+            {
+                System.Threading.Thread.CurrentThread.CurrentCulture = original;
+            }
+        }
     }
 }
