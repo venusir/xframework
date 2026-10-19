@@ -166,6 +166,13 @@ namespace XFramework.XPipeline
             }
 
             _stages.Add(stage);
+
+            // 非有限值（±∞ / NaN）按「不启用超时」处理（R3-PIPE-002）：+∞ 会让
+            // TimeSpan.FromSeconds 抛 OverflowException，而调用方显然不是想「永远等」；
+            // NaN 与负值在运行期判断里本就等价于不启用，统一在入口归一。
+            if (float.IsNaN(timeoutSeconds) || float.IsInfinity(timeoutSeconds))
+                timeoutSeconds = 0f;
+
             _stageTimeouts.Add(timeoutSeconds);
         }
 

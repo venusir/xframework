@@ -41,6 +41,18 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void PositiveInfinityTimeout_IsTreatedAsDisabled()
+        {
+            var stage = new FakeStage { Name = "A" };
+            var pipeline = Pipeline.Create();
+            pipeline.AddStage(stage, float.PositiveInfinity);
+
+            // 未归一的话 TimeSpan.FromSeconds(+∞) 会溢出、管线以 Failed 收场（R3-PIPE-002）
+            Assert.DoesNotThrowAsync(async () => { await pipeline.RunAsync(); });
+            Assert.AreEqual(1, stage.ExecuteCount);
+        }
+
+        [Test]
         public void Timeout_TriggersFailure_AndStopsLaterStages()
         {
             var a = new CtxCapturingStage { Gate = new UniTaskCompletionSource() };

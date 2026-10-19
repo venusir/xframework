@@ -64,3 +64,4 @@ Runtime/Pipeline/
 - 不做：**超时取「乐观」语义，不等待被放弃的阶段沉降**（2026-08-31 · `a03e864`）——触发即取消当前阶段并置 `Failed`，不响应取消的挂起阶段在后台继续跑、只是其后续上下文写入不再影响管线（与 Polly 的 `TimeoutStrategy.Optimistic` 同语义）。写成「等它沉降」等于让一个不响应取消的阶段把编排挂死——超时要中止的是**编排**，不是那个阶段。无重开判据。
 - 已做：**主线程断言三份副本——不抽公共防线**（2026-10-15 · `ac9a9da`；判据「共享的那部分是不是有难度的那部分」，见 `Ledger.md` 的同名条）——本模块与 Message / Asset 三份**各自保留**：它们的共同部分只有三行，而断言绑在哪个语义位置、文案与闩锁寿命逐模块不同（本模块绑在「越线程**写入**」这个位置、按次运行重报）。
 - 已做：**容器元素 null 校验**（2026-10-20 · R3-PIPE-001，本轮修复）——`ParallelStage`/`SequenceStage` 构造只校验列表 null/空，元素 null 在读 `Weight` 时抛裸 NRE；改为与 `AddStage(null)` 同形抛 `ArgumentNullException`。回归两例。
+- 已做：**非有限超时与取消路径沉降**（2026-10-20 · R3-PIPE-002/003，本轮修复）——`+∞` 超时会让 `TimeSpan.FromSeconds` 溢出；容器取消路径 `throw OCE` 跳过 `_aggregator.Settle()`。修法：入口把 ±∞/NaN 归一为「不启用」；`Settle` 移入 `finally`。回归 `PositiveInfinityTimeout_IsTreatedAsDisabled`。

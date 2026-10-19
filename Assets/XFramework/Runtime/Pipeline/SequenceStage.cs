@@ -73,6 +73,10 @@ namespace XFramework.XPipeline
             // 复位聚合器并注入转发目标(串行无在途兄弟,不注入链接取消源)
             _aggregator.Reset(context, null);
 
+            // 取消路径也要沉降（R3-PIPE-003）：Settle 放 finally，否则 throw OCE 会跳过它。
+            try
+            {
+
             // 装配全部子上下文:State 留默认 Pending(直写字段零广播)——未开始子阶段不占进度,
             // 子段切换进度回落与管线「阶段切换回落属预期」一致(Pending 移出聚合分母)
             for (int i = 0; i < _children.Count; i++)
@@ -124,8 +128,12 @@ namespace XFramework.XPipeline
 
             // 成功:正常返回,由管线契约兜底补置 Completed
 
-            // 迟写防护:执行结束后子阶段 fire-and-forget 写入直接忽略
-            _aggregator.Settle();
+            // 迟写防护由 finally 统一执行（R3-PIPE-003）
+            }
+            finally
+            {
+                _aggregator.Settle();
+            }
         }
 
         #endregion

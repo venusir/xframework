@@ -73,6 +73,11 @@ namespace XFramework.XPipeline
             // 复位聚合器并注入转发目标与链接取消源(失败时经聚合器中断兄弟子阶段)
             _aggregator.Reset(context, cts);
 
+            // 取消路径也要沉降（R3-PIPE-003）：Settle 放 finally，否则 throw OCE 会跳过它，
+            // 子阶段迟到的 fire-and-forget 写入仍可能聚合/广播。
+            try
+            {
+
             // 先装配全部子上下文(聚合遍历时数组必须完整——首个子阶段同步写进度即触发聚合),
             // 再并行启动。子上下文直写 Executing(不经 SetState):与管线「执行即执行中」契约一致
             // (阶段只写进度/描述,不写状态的子阶段进度同样参与聚合),且零广播——避免凭空增加 0 进度广播。
@@ -126,8 +131,12 @@ namespace XFramework.XPipeline
             }
             // 成功:正常返回,由管线契约兜底补置 Completed
 
-            // 迟写防护:沉降后子阶段 fire-and-forget 写入直接忽略
-            _aggregator.Settle();
+            // 迟写防护由 finally 统一执行（R3-PIPE-003）
+            }
+            finally
+            {
+                _aggregator.Settle();
+            }
         }
 
         #endregion

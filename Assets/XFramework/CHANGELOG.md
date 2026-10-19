@@ -393,6 +393,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Pipeline
 
+- **非有限超时与取消路径沉降（R3-PIPE-002/003）**：`+∞` 超时让 `TimeSpan.FromSeconds` 溢出、被外层 catch 成
+  Failed；容器取消路径 `throw OCE` 跳过 `_aggregator.Settle()`，迟到写入仍可能聚合/广播。修法：入口把
+  ±∞/NaN 归一为「不启用」；`Settle` 移入 `finally`。回归：
+  `PipelineTimeoutTests.PositiveInfinityTimeout_IsTreatedAsDisabled`。
 - **容器元素 null 抛裸 NRE（R3-PIPE-001）**：`ParallelStage`/`SequenceStage` 构造只校验列表 null/空；元素 null
   在读 `Weight` 时抛 NRE。修法：与 `AddStage(null)` 同形抛 `ArgumentNullException`。回归：两容器各一例。
 
