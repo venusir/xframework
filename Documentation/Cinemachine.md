@@ -61,6 +61,11 @@ Assets/XFramework.Cinemachine/
 - 不做：**在扩展包里清空 `brain.CustomBlends`**（2026-10-17）——项目配置优先；清空会悄悄改写项目行为。无重开判据。
 - 不做：**支持 Cinemachine 2.x**（2026-10-17）——2.x 与 3.x 的类型名、命名空间、混合字段全不同，一份代码无法同时编译；2.x 项目写自己的 `ICameraManager`。无重开判据。
 - 暂不做：**`TransitionToAsync` / 过渡完成回调**（2026-10-17 · v1.1 候选；2026-10-19 订正措辞）——Brain 没有 **await 形态**的完成回调，需要轮询 `IsBlending`（`ActiveBlend` / `CameraActivated` 等可观测，只是没有 Task/UniTask 形态）；核心接口当前用 `IsTransitioning` 覆盖。重开判据：真实使用方需要 await 且轮询不够。
+- 已做：**过渡时长有限性校验与核心同形**（2026-10-20 · R3-CIN-002/CAM-001）——NaN / ±∞ 直接交给 `CinemachineBlendDefinition`，而核心 `UnityCameraManager` 对同一参数抛 `ArgumentOutOfRangeException`；同一接口两种实现行为相反。修法：`TransitionToSlot` 补同形校验与消息；回归 `TransitionTo_NonFiniteDuration_Throws`（改前不抛）。
+- 已做：**外部销毁 vcam 的变更面统一告警 no-op**（2026-10-20 · R3-CIN-003）——`Deactivate` 访问已销毁组件的 `gameObject` 抛 `MissingReferenceException`，`Activate` / `TransitionTo` 静默 no-op，反查表残留陈旧键（被销毁对象作字典键已不可寻址）。修法：六处变更面（id/handle × 三操作）统一假 null 检测 → Warning 后忽略，并按值定位重建反查表；`Register` 替换与 `ReleaseSlot` 两条清理路径同步补齐；回归五个用例（改前必红）。
+- 已做：**兼容声明与门禁射程订正**（2026-10-19 · R3-CIN-004/007/008，文档订正）——「兼容核心 0.3.0」失实（该 tag 早于 Camera 模块），改为「核心包必须包含 Camera 模块」；`OutputCamera` 不再承诺「与过渡目标一致」，改为「可能为 null、不保证等于目标」；扩展包不在核心 `check-docs` / `PublicApiBaseline` / 四张 README 表 / 边界与命名扫描射程的缺口已登记（`Ledger.md` 的 `未做` 条）。
+- 已做：**「测试锁定」声称改为指向真实用例**（2026-10-19 · R3-CIN-005）——强制 cut 与槽位 ABA 的两处声称原先没有对应用例；本轮补 `Activate_DuringBlend_…`（改前 `IsBlending` 恒 true）与 `DynamicHandle_AfterSlotReuse_OldHandleIsRejected`，文档改为指向它们。
+- 已做：**完成回调措辞订正为「没有 await 形态」**（2026-10-19 · R3-CIN-006，文档订正）——`IsBlending` / `ActiveBlend` / `CameraActivated` 均可观测，原句「Brain 无公开完成回调」失实；见上方 `暂不做` 条已订正。
 
 ## 五、依赖与安装
 
@@ -80,10 +85,10 @@ Assets/XFramework.Cinemachine/
 
 ## 七、测试射程
 
-- `CinemachineCameraManagerTests`（PlayMode）：激活 / 反激活 / 未知 id / cut / 过渡完成 / 命名与动态双键 / stale-default / 未注册活动相机告警 / 注册表 / Dispose / null id / 错误句柄类型；用 `CinemachineBrain.UpdateMethods.ManualUpdate` + `ManualUpdate(frame, delta)`，不依赖真实帧时长。
+- `CinemachineCameraManagerTests`（PlayMode）：激活 / 反激活 / 未知 id / cut / 过渡完成 / 命名与动态双键 / stale-default / 未注册活动相机告警 / 注册表 / Dispose / null id / 错误句柄类型 / 非有限时长 / 外部销毁 vcam 的六处变更面与反查表清理；用 `CinemachineBrain.UpdateMethods.ManualUpdate` + `ManualUpdate(frame, delta)`，不依赖真实帧时长。
 - `CinemachineDependencyTests`（EditMode）：Cinemachine 版本三处一致、核心版本一致、`Runtime/README.md` 五节必答、示例路径、扩展包内 `.cs` / `.md` 不指向包外的维护向文档。
 - **不在射程**：扩展包的公开 API 未纳入核心的 `PublicApiBaselineTests`（基线只扫核心程序集）；扩展包的命名 / 文件树 / 台账不受核心 `check-docs` 覆盖。改动扩展包时按核心的同名约定人工核对。
 
 ## 八、台账
 
-- 未做：**适配器对 `OutputCamera` null 语义与 `Unregister` 活动状态的实现与核心契约不一致**（2026-10-18 · CAM-005）——核心已窄化措辞（允许 null、不保证 Cinemachine Brain 停用），扩展包的实际行为尚未对齐。重开判据：扩展包用户报告按核心文档写会误判，或扩展包进入功能迭代。
+- 已做：**适配器对 `OutputCamera` null 语义与 `Unregister` 活动状态**（2026-10-18 · CAM-005；2026-10-19 R3-CAM-003 结案）——核心契约已窄化为「可能为 null、不保证等于目标」，适配器「直接转发 Brain 输出相机、`Unregister` 不改场景状态」即契约本身，不再存在需要对齐的差异。

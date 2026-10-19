@@ -45,3 +45,5 @@
 - 已做：**补 `OSXServer` 平台分支**（2026-10-20 · R3-FILE-001，本轮修复）——macOS Server 构建落 default 抛 `PlatformNotSupportedException`，本可用 `DesktopFileProvider`；加 case。运行期需 macOS Server 构建实测（R3-PRB-04 登记 `未做`）。
 - 已做：**移动 Streaming 路径归一与沙箱**（2026-10-20 · R3-FILE-002，本轮修复）——`GetStreamingUrl` 绕过 `GetPhysicalPath`，反斜杠不归一、`../` 可原样拼进 URL；改为与桌面实现共用 `TryNormalizeRelativePath`，非法路径抛 ANE。回归 `FileManagerSyncTests.MobileStreaming_RejectsTraversalPath`；Android/iOS 真机行为登记探针 `未做`。
 - 已做：**Destroy 后的 crypto 设置闩锁**（2026-10-20 · R3-FILE-004，本轮修复）——`SetCryptoProvider`/`GetCryptoProvider` 不查 `_destroyed`，销毁期间的设置会被下一次 `Initialize` 悄悄采纳；两入口补 `ThrowIfDestroyed`。回归 `FileManagerCryptoTests.CryptoProvider_AfterDestroy_ThrowsObjectDisposed`。
+- 未做：**macOS Server 构建的平台分支运行验证**（2026-10-20 · R3-PRB-04，承接 R2 FILE-009）——代码侧 `OSXServer` 分支已补（FILE-001），但需 Server Build Support 真构建确认运行期路径。配方：Server 平台构建，核对退出码与运行期文件路径。见 `AuditRound3.md` §11.1。
+- 未做：**Android / iOS 的 Streaming 读路径真机验证**（2026-10-20 · 代码侧 FILE-002 已修）——路径归一与沙箱在 EditMode 有覆盖，`jar:file://` / iOS Streaming 的真实可用性只有真机能回答。配方：移动端真机跑 `LoadStreamingTextAsync` / `Exists`（后者对「移动端 + Streaming」组合本就拒绝，属已知边界）。

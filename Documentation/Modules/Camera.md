@@ -44,6 +44,9 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 暂不做：**`IBootstrapStage` / `DefaultGameLauncher` 相机字段**（2026-10-17 · v1.1 候选）——实现由调用方在组合根注入，且 `DefaultGameLauncher` 没有可序列化的相机注册表（句柄类型由后端决定）。重开判据：出现「启动引导必须负责相机初始化」的真实使用方。
 
 - 已做：**`OutputCamera` null 语义与 `Unregister` 活动状态**（2026-10-18 · `deee388`）——核心只窄化措辞：`OutputCamera` 允许返回 null、`Unregister` 不保证 Cinemachine Brain 停用；扩展包的实际行为另记扩展包台账 `未做`（CAM-005）。
+- 已做：**外部销毁相机的变更面校验**（2026-10-20 · R3-CAM-002，本轮修复）——查询面已按 null 报告，但 `Activate` / `TransitionTo` 仍把假 null 的槽位当有效：`ActivateSlot` 关掉其它活相机却不启用目标，静默「成功」且没有任何相机输出。修法：四处变更面（id/handle × `Activate` / `TransitionTo`）追加 `IsUsable` 校验，不可用即 Warning 并整体忽略；回归 `UnityCameraManagerTests` 三例（改前红：活相机被关掉）。
+- 已做：**`OutputCamera` 契约措辞改为「可能为 null、不保证等于目标」**（2026-10-19 · R3-CAM-003，文档订正）——Brain 对象无 Camera 时输出相机为 null，过渡期间也可能不是目标；`ICameraManager` XML 与模块 README 同步。
+- 已做：**扩展适配器的过渡时长有限性校验**（2026-10-20 · R3-CIN-002/CAM-001，扩展包）——`CinemachineCameraManager` 把 NaN / ±∞ 直接交给 `CinemachineBlendDefinition`，与核心实现「抛 `ArgumentOutOfRangeException`」相反；补同形校验与消息，回归 `TransitionTo_NonFiniteDuration_Throws`（改前不抛）。
 
 ## 沿革与已否决形状
 

@@ -511,6 +511,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   复位失败标记，并在「本来有页签、这一次变空」时返回 `true` 请求一次重绘（空窗口的后续 Tick 仍返回
   `false`，保持 `Tick_NoPanels_ReturnsFalse` 的契约）。回归：
   `DiagnosticsWindowModelTests.Tick_PanelsDisappear_ClearsReportAndRequestsOneRepaint`（改前 `Expected: True But was: False`）。
+- **`Register` 的标题读取无异常隔离（R3-DIAG-001）**：第三方页签的 `Title` getter 抛异常会让登记整体
+  抛出，幂等判定与冲突扫描一并失效，与渲染侧的 `SafeTitle` 不对称。修法：登记侧新增私有 `SafeTitle`
+  （异常记 Error 后以「(类型名)」兜底），两处 `Title` 读取都经它。回归：`DiagnosticsRegistryTests` 两例
+  （改前 getter 异常外泄）。
 
 #### Event
 
@@ -733,6 +737,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   契约，调用方进度条停在满格却拿到无效句柄。修法：把 `progress?.Invoke(1f)` 移到场景有效性检查与登记
   之后。回归：`SceneLoadOperationTests.SucceededButInvalidScene_DoesNotReportOneAndReleases`（改前
   `Expected: not collection containing 1.0f`）。
+- **回收段的非取消异常吞掉已就绪句柄（R3-SCN-002）**：`LoadSceneAsync` 只把取消做成「不丢句柄」；回收
+  后端抛非取消异常时 `return handle` 仍不可达——场景已进来、外部却无卸载凭据（与 SCN-001 同形）。修法：
+  回收 await 包 try/catch 记 Error，异常不阻止句柄交回。回归：
+  `SceneLoadTests.LoadSceneAsync_UnloadUnusedThrows_StillReturnsHandle`（改前异常外泄）。
 
 #### Asset（资源加载）
 
@@ -864,6 +872,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `duration <= 0` 而实现是 `<= 0.0001`。修法：入口拒绝 NaN / ±∞（`ArgumentOutOfRangeException`）；
   `ICameraManager` 两处与 README 两处统一为 `<= 0.0001`。回归：
   `UnityCameraManagerTests.TransitionTo_NonFiniteDuration_Throws`（改前 `Expected: <ArgumentOutOfRangeException> But was: null`）。
+- **外部销毁相机的变更面静默「成功」（R3-CAM-002）**：查询面已按 null 报告，但 `Activate` / `TransitionTo`
+  仍把假 null 的槽位当有效：关掉其它活相机、却不启用已销毁的目标，无告警且没有任何相机输出。修法：
+  四处变更面（id/handle × `Activate` / `TransitionTo`）追加 `IsUsable` 校验，不可用即 Warning 并整体忽略。
+  回归：`UnityCameraManagerTests` 三例（改前「其它活相机被关掉」断言红）。
 
 #### UI
 

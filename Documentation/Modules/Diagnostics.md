@@ -50,4 +50,7 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - 未做：**窗口焦点/跨会话状态**（2026-10-02 · 建成轮）——本仓零 `EditorPrefs` 使用，选中页签与筛选不跨会话记忆。
 - 未做：**Event / Reactive 订阅注册表、Asset 句柄表、Input 启用 ActionMap 列表、Localization 缺失项计数、Log 最近日志环形缓冲、Save 槽位列表、Message 键值通道 key 枚举、运行时覆盖层本体**（2026-10-02 · 建成轮）——本轮不做，各有理由，见 CHANGELOG 与 `../Ledger.md`。
 - 已做：**文档改为「按实例幂等」，去重语义不变**（2026-10-17 · `eebbfed`，DIAG-001）——管理器 XML、模块 README 与随包示例统一为「静态只读实例登记（或退出时 `Unregister`）」；用户裁定不改按标题去重的行为。
+- 已做：**`Register` 的标题读取异常隔离**（2026-10-20 · R3-DIAG-001，本轮修复）——坏 getter 会让登记整体抛出，幂等判定与冲突扫描一并失效，与渲染侧 `SafeTitle` 不对称。修法：登记侧新增私有 `SafeTitle`（异常记 Error、以「(类型名)」兜底），两处读取都经它；回归 `DiagnosticsRegistryTests` 两例（改前 getter 异常外泄）。
+- 已做：**`Clear()` 抹框架页签且包外无恢复入口已成文**（2026-10-19 · R3-DIAG-002，文档订正）——`Clear` 的 XML 写明「包外宿主无法恢复框架页签，需要时自行保存并重登记或不要调用」；**不新增公开恢复 API**（无使用方，公开面新增须单独确认）。
+- 已做：**`IDiagnosticPanel` 错误提示契约句与 README 计数订正**（2026-10-19 · R3-DIAG-003，文档订正）——「只显示一条错误提示」实际写提示 + 堆栈两条；README 的「十个文件」固定计数已删。
 

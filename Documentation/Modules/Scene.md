@@ -74,6 +74,8 @@ Tests/Editor/Scene/              # EditMode：SceneLoadOptionsTests（纯结构�
 - 已做：**加载成功后的回收段不响应调用方取消**（2026-10-17 · `c7edcfa`，SCN-001）——回收调用改用 `CancellationToken.None`：句柄已就绪后再取消不得丢句柄（Additive 场景会留在 Hierarchy 且外部无卸载凭据）；README/XML 已成文。
 
 - 已做：**`sceneUnloaded` 清表在真适配器下生效**（2026-10-19 · R3-SCN-001，回归）——登记项改存**加载时的 `Scene` 快照**，YooAsset 先 `Release` 导致 `SceneObject` 归 default 也不影响匹配；修复落在 Asset 适配器，本模块的「外部卸载感知」契约因此真正成立。
+- 已做：**回收段的非取消异常不再吞掉句柄**（2026-10-20 · R3-SCN-002，本轮修复）——`LoadSceneAsync` 只把取消做成「不丢句柄」，回收后端抛非取消异常时 `return handle` 仍不可达（与 SCN-001 同形：场景已进来、外部无卸载凭据）。修法：回收 await 包 try/catch 记 Error，异常不阻止句柄交回；假件补 `UnloadUnusedException` 可编程位；回归 `SceneLoadTests.LoadSceneAsync_UnloadUnusedThrows_StillReturnsHandle`（改前异常外泄）。
+- 已做：**日志分类进内置表 `LogCategories.SceneManager`**（2026-10-20 · R3-SCN-003，公开 API 源兼容新增）——此前 `LogCategory.Get("SceneManager")` 现取，不在分类表、也不在第三方的分类发现入口里；模块 README 的 XLog 依赖说明随之从「间接」改为「直接」；基线已同步。
 
 - 已做：**v1 功能面建成**（2026-10-13）——加载（单 / 叠加）、配对卸载（`UnloadAsync` / `Dispose`）、激活与查询；`SceneLoadOptions`（模式 / 叠加后激活 / 切完回收）；`IProgress<SceneLoadProgress>` 进度契约（含地址，失败路径不补发 `1f`）；未初始化 / 空地址的前置校验（带 `[SceneManager]` 前缀与修复提示）。原「已完成（v1）」清单即此四项，逐条证据在 `CHANGELOG`。
 - 暂不做：**Diagnostics 面板**（2026-10-13 · v1.1 候选复核）——模块无状态，能列的只有 Unity 本就给的事实（`sceneCount` / 各场景名）。重开判据：将来长出「本模块自己记的账」。
