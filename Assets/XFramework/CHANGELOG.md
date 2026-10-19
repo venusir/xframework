@@ -417,6 +417,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **打开在途时 Dispose 会对同一面板二次回池（R3-UIA-007）**：`Dispose` 的批量回池与在途打开续体的
+  `RollbackPanel` 共用 `RecyclePanel` 出口且无认领守卫，`OnPoolRecycle` / 对话框结果兜底会执行两次。
+  修法：面板加内部回池认领标记（`IsRecycled` / `MarkRecycled` / `MarkReopened`），`RecyclePanel` 只认领一次。
+  回归：`UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_RecyclesPanelOnce`（改前 2 次）。
 - **`FocusPanel` 无条件补发 `OnFocus`/`OnResume`（R3-UIA-005）**：重开已聚焦面板、`PopTo` 已在栈顶、
   `PopToRoot` 栈深≤1 都会触发假的恢复信号。修法：按 `IsFocused` / `IsPaused` 状态守卫。
   回归：`UIPanelPauseResumeTests.ReopenFocusedPanel_DoesNotEmitDuplicateFocusOrResume`（改前红）。

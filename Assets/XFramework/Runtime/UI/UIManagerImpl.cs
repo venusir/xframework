@@ -1889,6 +1889,7 @@ namespace XFramework.XUI
                 RollbackPanel(oldPanel);
             }
 
+            panel.MarkReopened();
             _activePanels[type] = panel;
             _stack.Add(panel);
             RestampSortingOrders();
@@ -1995,9 +1996,12 @@ namespace XFramework.XUI
         /// </summary>
         private void RecyclePanel(UIPanelBase panel)
         {
-            if (panel == null)
+            // 认领守卫（R3-UIA-007）：Dispose 的批量回池与在途打开续体的回滚可能先后到达同一面板；
+            // 只有第一次执行 OnPoolRecycle / 结果兜底，第二次静默跳过。
+            if (panel == null || panel.IsRecycled)
                 return;
 
+            panel.MarkRecycled();
             try
             {
                 panel.OnPoolRecycle();

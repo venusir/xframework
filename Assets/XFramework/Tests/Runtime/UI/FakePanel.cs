@@ -67,6 +67,31 @@ namespace XFramework.XUI.Tests
     {
     }
 
+    /// <summary>
+    /// OnOpen 可被外部闸门挂起的面板：用于「打开在途时 Dispose」的二次回滚用例（R3-UIA-007）。
+    /// </summary>
+    public class GatedOnOpenPanel : FakePanel
+    {
+        /// <summary>置非 null 时 OnOpen 会等它完成；用例在 Dispose 之后放行。</summary>
+        public static UniTaskCompletionSource Gate;
+
+        /// <summary>OnPoolRecycle 被执行的次数。</summary>
+        public int PoolRecycleCount { get; private set; }
+
+        protected override async UniTask OnOpen(object userData)
+        {
+            await base.OnOpen(userData);
+            if (Gate != null)
+                await Gate.Task;
+        }
+
+        protected internal override void OnPoolRecycle()
+        {
+            PoolRecycleCount++;
+            base.OnPoolRecycle();
+        }
+    }
+
     /// <summary>第三个测试面板类型。</summary>
     public class FakePanelC : FakePanel
     {

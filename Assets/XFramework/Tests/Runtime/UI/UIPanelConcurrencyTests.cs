@@ -37,6 +37,7 @@ namespace XFramework.XUI.Tests
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<FakePanelB>();
             _factory.RegisterPanel<ThrowingPanel>();
+            _factory.RegisterPanel<GatedOnOpenPanel>();
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -241,6 +242,36 @@ namespace XFramework.XUI.Tests
         #endregion
 
         #region 失败回滚
+
+        /// <summary>
+        /// 打开在途时 Dispose：Dispose 的批量回池与打开续体的回滚都会走到同一面板，
+        /// OnPoolRecycle 只能执行一次（R3-UIA-007）。
+        /// </summary>
+        [Test]
+        public async Task Dispose_DuringInFlightOpen_RecyclesPanelOnce()
+        {
+            GatedOnOpenPanel.Gate = new UniTaskCompletionSource();
+            try
+            {
+                var open = UIManager.OpenAsync<GatedOnOpenPanel>("ui/gated").Preserve();
+                await UniTask.Yield();
+
+                var panel = UIManager.GetPanel<GatedOnOpenPanel>();
+                Assert.IsNotNull(panel, "前提：面板已注册、OnOpen 在途");
+
+                UIManager.Destroy();          // 批量回池已注册面板
+                GatedOnOpenPanel.Gate.TrySetResult(); // 放行在途 OnOpen
+                var result = await open;
+
+                Assert.IsNull(result, "管理器已销毁，打开应放弃");
+                Assert.AreEqual(1, panel.PoolRecycleCount,
+                    "Dispose 与在途续体不得对同一面板执行两次 OnPoolRecycle");
+            }
+            finally
+            {
+                GatedOnOpenPanel.Gate = null;
+            }
+        }
 
         /// <summary>
         /// 回滚自身抛异常时，原始打开异常不得被覆盖，也不得二次回滚（R3-UIA-006）。
