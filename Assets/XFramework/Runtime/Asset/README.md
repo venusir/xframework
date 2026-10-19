@@ -574,21 +574,24 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
     **也不改变 `CreateDownloader` 的基准**（下载器永远按当前激活清单算）。所以「先预检、后下载」
     拿不到新版本的内容，得**先激活再下载**；也**拿不到**「要下多少 MB / 多少个文件」——
     框架没有把预检产出的待下清单透出来。
-13. **会话复位只丢引用、不 Dispose，但会退订旧实例的引擎事件**（AST-008 / R3-AST-002）：关闭域重载时
+13. **场景卸载失败时登记项与句柄保留**（R3-AST-003/SCN-001）：`UnloadSceneAsync` 返回 `false`（场景仍加载）
+    后可以重试；只有成功才移除登记项。外部卸载由 `SceneManager.sceneUnloaded` 清理——它按**加载时捕获的
+    `Scene` 快照**匹配，不依赖已被 YooAsset 释放的句柄；否则真适配器下比较恒 false、登记项永远清不掉。
+14. **会话复位只丢引用、不 Dispose，但会退订旧实例的引擎事件**（AST-008 / R3-AST-002）：关闭域重载时
     上一会话的 `AssetManagerImpl` 会存活，静态事件会把它钉住并继续回调；`ResetForNewSession` 在丢引用前
     调用内部退订入口（`DetachSessionSubscriptions`：`Application.lowMemory` 与适配器的
     `SceneManager.sceneUnloaded`，均幂等、不 Dispose）。**第三方 `IAssetManager` 实现若有自己的静态事件
     订阅，框架探测不到**——需自行在会话边界退订。
-14. **只支持 Offline / Host / EditorSimulate 三种运行模式**：YooAsset 的 `WebPlayMode` 与 `CustomPlayMode`
+15. **只支持 Offline / Host / EditorSimulate 三种运行模式**：YooAsset 的 `WebPlayMode` 与 `CustomPlayMode`
     未映射。`WebPlayMode` 是 WebGL 平台**唯一**可用模式（上游对其他模式直接抛异常），因此**本模块的资源管线
     当前不适用于 WebGL**；`CustomPlayMode` 需要向公开面暴露 YooAsset 的文件系统参数类型，与模块「公开面不出现
     第三方类型」的原则冲突。两者的替代路径都是 `AssetManager.SetInstance` 整体替换 `IAssetManager`。
-15. **EditorSimulate 的模拟构建同步、不可取消**：`SimulateBuild` 在初始化同步段执行，耗时随工程资源量增长；
+16. **EditorSimulate 的模拟构建同步、不可取消**：`SimulateBuild` 在初始化同步段执行，耗时随工程资源量增长；
     `CancellationToken` 中断不了它（取消只在构建结束后的 await 处生效）。
-16. **包复用下运行模式与模拟清单不会自动刷新**：包已初始化成功时 `InitializeAsync` 跳过上游初始化
+17. **包复用下运行模式与模拟清单不会自动刷新**：包已初始化成功时 `InitializeAsync` 跳过上游初始化
     （同一会话重初始化、关闭域重载后的第二次播放都会跳过模拟构建），模式在包首次成功初始化后固定；
     `Destroy()` 也不会从 YooAssets 注册表移除包。需要刷新请重开编辑器或触发域重载。
-17. **Player 构建误留 EditorSimulate 会中止启动**：`DefaultGameLauncher` 的 Inspector 值随场景序列化；
+18. **Player 构建误留 EditorSimulate 会中止启动**：`DefaultGameLauncher` 的 Inspector 值随场景序列化；
     打包前未改回 Offline / Host 时，Asset 引导阶段（Phase 0）抛 `PlatformNotSupportedException`，
     整条启动管线中止。打包检查该字段。
 

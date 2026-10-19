@@ -313,6 +313,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   钉住并继续回调。修法：适配器抽出幂等 `DetachSceneUnloadedHandler`，门面经
   `AssetManagerImpl.DetachSessionSubscriptions` 一并退订（只 `-=`、不 Dispose）。回归：
   `YooAssetManagerImplTests` 两例。
+- **场景登记项按已释放的句柄比对，外部卸载后永远清不掉（R3-SCN-001 / R3-AST-003，回归）**：真适配器下
+  YooAsset 先在 `sceneUnloaded` 里 `Release`，`SceneObject` 归 default，管理器再比对恒 false；卸载失败路径又
+  提前丢句柄，登记项成永久残影。修法：登记项保存**加载时的 `Scene` 快照**；卸载拿到终态前不丢句柄与登记项。
+  回归：`SceneLoadOperationTests.ExternalSceneUnload_PrunesSceneOperationRegistration` 改前红（登记项残留 1）、
+  `Unload_Fails_KeepsRegistrationForRetry`；假件 `Release()` 同步模拟真语义（清空 `SceneObject`）。
 
 #### Pipeline
 

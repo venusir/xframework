@@ -22,8 +22,26 @@ namespace XFramework.XAsset
         private readonly Dictionary<string, ResourcePackage> _packages = new Dictionary<string, ResourcePackage>(2);
         private readonly ISceneLoadSource _sceneLoadSource;
 
-        /// <summary>已成功加载、仍由本适配器持有的场景：句柄 <c>Id</c> → 加载操作。</summary>
-        private readonly Dictionary<int, ISceneLoadOperation> _sceneOperations = new Dictionary<int, ISceneLoadOperation>();
+        /// <summary>已成功加载、仍由本适配器持有的场景：句柄 <c>Id</c> → 加载操作与场景快照。</summary>
+        private readonly Dictionary<int, SceneRegistration> _sceneOperations = new Dictionary<int, SceneRegistration>();
+
+        /// <summary>
+        /// 登记项：加载操作 + **加载时捕获的 <see cref="Scene"/> 快照**。
+        /// <para>不能只靠 <c>Operation.SceneObject</c> 比对：真适配器下 YooAsset 会在自己的
+        /// <c>sceneUnloaded</c> 订阅里先 <c>Release</c>，等本适配器的回调跑到时 <c>SceneObject</c> 已是
+        /// default——比较恒 false，登记项永远清不掉（R3-SCN-001）。快照不随句柄释放而变。</para>
+        /// </summary>
+        private readonly struct SceneRegistration
+        {
+            public readonly ISceneLoadOperation Operation;
+            public readonly Scene Scene;
+
+            public SceneRegistration(ISceneLoadOperation operation, Scene scene)
+            {
+                Operation = operation;
+                Scene = scene;
+            }
+        }
 
         /// <summary>场景句柄的发号器。从 1 起（<c>0</c> 保留给 <c>default</c>），只增不减。</summary>
         private int _nextSceneId;
@@ -629,7 +647,7 @@ namespace XFramework.XAsset
 
             // 登记后才交得出手柄：卸载入口就是靠这张表把 Id 找回加载操作的
             int id = ++_nextSceneId;
-            _sceneOperations[id] = operation;
+            _sceneOperations[id] = new SceneRegistration(operation, scene);
             return new AssetSceneHandle(id, scene);
         }
 
@@ -643,14 +661,14 @@ namespace XFramework.XAsset
         public async UniTask<bool> UnloadSceneAsync(AssetSceneHandle handle, CancellationToken cancellationToken = default)
         {
             if (handle.IsDefault) return false;
-            if (!_sceneOperations.TryGetValue(handle.Id, out var operation)) return false;
-            if (operation.SceneObject != handle.Scene) return false;
+            if (!_sceneOperations.TryGetValue(handle.Id, out var registration)) return false;
+            if (registration.Scene != handle.Scene) return false;
 
             // 场景已被别人卸掉（例如 Single 模式切场景时 Unity 卸的旧场景）：登记项已失效，顺手清掉
             if (!handle.Scene.IsValid() || !handle.Scene.isLoaded)
             {
                 _sceneOperations.Remove(handle.Id);
-                operation.Release();
+                registration.Operation.Release();
                 return false;
             }
 
@@ -661,7 +679,9 @@ namespace XFramework.XAsset
                 return false;
             }
 
-            bool unloaded = await operation.UnloadAsync(cancellationToken);
+            // 拿到终态前不丢登记项与句柄（R3-AST-003）：失败时适配器仍持有句柄，调用方可重试；
+            // 只有卸载成功才移除登记项。
+            bool unloaded = await registration.Operation.UnloadAsync(cancellationToken);
             if (unloaded) _sceneOperations.Remove(handle.Id);
             return unloaded;
         }
@@ -735,7 +755,7 @@ namespace XFramework.XAsset
             List<int> stale = null;
             foreach (var pair in _sceneOperations)
             {
-                if (pair.Value.SceneObject == scene)
+                if (pair.Value.Scene == scene)
                     (stale ?? (stale = new List<int>())).Add(pair.Key);
             }
 

@@ -64,7 +64,13 @@ namespace XFramework.XAsset.Tests
         /// <summary>卸载前等待的帧数（模拟真实卸载跨帧完成）。</summary>
         public int UnloadDelayFrames { get; set; }
 
-        public void Release() => ReleaseCount++;
+        public void Release()
+        {
+            ReleaseCount++;
+            // 模拟真实现：YooAsset 的 HandleBase.Release 之后 SceneObject 归 default。
+            // SCN-001 的回归锁依赖这一点——否则假件会让「按 SceneObject 比对」结构性假绿。
+            SceneObject = default;
+        }
 
         public async UniTask<bool> UnloadAsync(CancellationToken cancellationToken)
         {

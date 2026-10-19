@@ -101,6 +101,10 @@ namespace XFramework.XAsset.Tests
             Assert.IsFalse(handle.IsDefault, "前提：加载成功");
             Assert.AreEqual(1, _manager.SceneOperationCount, "前提：登记项已写入");
 
+            // 模拟真实现里 YooAsset 在自己的 sceneUnloaded 订阅中先 Release：句柄的 SceneObject 归
+            // default。管理器必须靠**加载时的 Scene 快照**匹配，不能再读 SceneObject（R3-SCN-001）。
+            _operation.Release();
+
             var unload = SceneManager.UnloadSceneAsync(scene);
             while (unload != null && !unload.isDone)
                 await UniTask.Yield();
@@ -369,6 +373,29 @@ namespace XFramework.XAsset.Tests
                 var unloadOther = SceneManager.UnloadSceneAsync(otherScene);
                 if (unloadOther != null) await unloadOther.ToUniTask();
             }
+        }
+
+        /// <summary>
+        /// 卸载失败时登记项与句柄必须保留，调用方可重试（R3-AST-003）：旧适配器在等待前就丢了句柄，
+        /// 失败后登记项成了「有表项、无句柄」的永久残影。
+        /// </summary>
+        [Test]
+        public async Task Unload_Fails_KeepsRegistrationForRetry()
+        {
+            var handle = await LoadRealScene();
+            _operation.UnloadResult = false;
+
+            var first = await _manager.UnloadSceneAsync(handle);
+
+            Assert.IsFalse(first);
+            Assert.AreEqual(1, _manager.SceneOperationCount,
+                "失败后登记项必须保留，调用方可重试");
+
+            _operation.UnloadResult = true;
+            var second = await _manager.UnloadSceneAsync(handle);
+
+            Assert.IsTrue(second, "第二次卸载应成功");
+            Assert.AreEqual(0, _manager.SceneOperationCount);
         }
 
         /// <summary>场景已被别人卸掉（例如 Single 模式切场景时 Unity 卸的旧场景）：登记项顺手清掉，不重放卸载。</summary>

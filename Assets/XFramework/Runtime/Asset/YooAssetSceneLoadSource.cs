@@ -88,7 +88,6 @@ namespace XFramework.XAsset
             {
                 var handle = _handle;
                 if (handle == null) return false;
-                _handle = null;
 
                 var operation = handle.UnloadAsync();
                 try
@@ -97,11 +96,16 @@ namespace XFramework.XAsset
                 }
                 finally
                 {
-                    // 走到这里只有两种可能：① 卸载已结清——成功时 YooAsset 自动释放引用计数，
-                    // 失败时（场景已失效 / 引擎拒绝 / 句柄无效）它不会释放，这里补一次，
-                    // 否则该 provider 的引用计数永久 +1；② 等待被取消而卸载仍在后台跑——由 YooAsset 自己结清。
-                    if (operation.IsDone && operation.Status != EOperationStatus.Succeed)
-                        handle.Release();
+                    // 拿到终态后才丢句柄（R3-AST-003）：失败路径上管理器还要靠它重试/结算；
+                    // 等待被取消而卸载仍在后台跑时保留句柄，由下一次调用或管理器清理。
+                    if (operation.IsDone)
+                    {
+                        _handle = null;
+                        // 成功时 YooAsset 自动释放引用计数，失败时不会——这里补一次，
+                        // 否则该 provider 的引用计数永久 +1。
+                        if (operation.Status != EOperationStatus.Succeed)
+                            handle.Release();
+                    }
                 }
 
                 return operation.Status == EOperationStatus.Succeed;
