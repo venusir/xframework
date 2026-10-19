@@ -381,6 +381,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Data
 
+- **单块快照不记录序列化格式（R3-DATA-002）**：`CreateBlockSnapshot` 用 `Serializer.Default.Format` 写出数据却不记
+  `format`；换默认序列化器后旧单块快照按新默认读不回。修法：单块快照自带 `format`（全量快照仍由外层
+  `defaultFormat` 承载，字节不变）。回归：`BlockSnapshotTests.CreateBlockSnapshot_RecordsFormat`。
 - **同实例重复注册先清空自己、OnClear 异常外泄（R3-DATA-001/003）**：`RegisterBlock` 对同一实例重复注册会先
   调 `OnClear` 清空自身数据；`RegisterBlock`/`RemoveBlock` 的 `OnClear` 异常直接外泄并中止（`ClearAll`/
   `ApplySnapshot` 却逐块隔离）。修法：同实例注册幂等早退；两处 `OnClear` 逐项隔离并继续替换/移除。回归：

@@ -204,7 +204,7 @@ namespace XFramework.XData
             var blocks = new List<IDataBlock>(_blocks.Values);
             for (int i = 0; i < blocks.Count; i++)
             {
-                var snap = BuildBlockSnapshot(blocks[i], data.defaultFormat);
+                var snap = BuildBlockSnapshot(blocks[i], data.defaultFormat, recordFormat: false);
                 if (snap != null)
                     data.blocks.Add(snap);
             }
@@ -224,7 +224,14 @@ namespace XFramework.XData
         /// 构建单个 Block 的快照条目（全量导出与单块导出共用的序列化逻辑）。
         /// <para>序列化异常向上传播，由调用方决定处理（全量导出异常时脏标记保留）。</para>
         /// </summary>
-        private DataBlockSnapshot BuildBlockSnapshot(IDataBlock block, string format)
+        /// <param name="block">要导出的块。</param>
+        /// <param name="format">实际使用的序列化格式。</param>
+        /// <param name="recordFormat">
+        /// 是否把格式写进快照条目。单块快照没有外层 <c>defaultFormat</c> 可依（R3-DATA-002），
+        /// 必须自带格式，否则换默认序列化器后旧快照读不回；全量快照由 <c>defaultFormat</c> 承载，
+        /// 条目里保持 null 以不改动既有存档字节。
+        /// </param>
+        private DataBlockSnapshot BuildBlockSnapshot(IDataBlock block, string format, bool recordFormat)
         {
             var saveObj = block.OnSave();
             if (saveObj == null)
@@ -242,6 +249,8 @@ namespace XFramework.XData
                 // 记录写档时的数据版本，读档时据此执行迁移链
                 version = block.DataVersion,
                 data = Convert.ToBase64String(rawData),
+                // 单块快照自带格式（R3-DATA-002）；全量快照仍由外层 defaultFormat 承载
+                format = recordFormat ? format : null,
             };
         }
 
@@ -456,7 +465,7 @@ namespace XFramework.XData
             }
 
             // 单块导出不清空脏标记：仅读取当前数据，不代表该块已保存
-            return BuildBlockSnapshot(block, XSerialize.Serializer.Default.Format);
+            return BuildBlockSnapshot(block, XSerialize.Serializer.Default.Format, recordFormat: true);
         }
 
         /// <inheritdoc/>

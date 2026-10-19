@@ -96,6 +96,18 @@ namespace XFramework.XData.Tests
         }
 
         [Test]
+        public void CreateBlockSnapshot_RecordsFormat()
+        {
+            DataManager.RegisterBlock(new WalletData { Gold = 5 });
+
+            var snap = DataManager.CreateBlockSnapshot<WalletData>();
+
+            Assert.IsNotNull(snap);
+            Assert.AreEqual(Serializer.Default.Format, snap.format,
+                "单块快照必须自带序列化格式（R3-DATA-002）");
+        }
+
+        [Test]
         public void CreateBlockSnapshot_Unregistered_ReturnsNullWithWarning()
         {
             LogAssert.Expect(LogType.Warning, new Regex("未注册"));
