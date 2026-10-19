@@ -1065,6 +1065,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **补 Timer 的 Clear 恢复路径用例（2026-10-20，R3-TMR-002）**：`UpdateManager.Clear()` 后 `CancelAll` + 重建的
+  恢复路径此前零覆盖；新增 `TimerLifecycleTests.ClearThenCancelAllAndRecreate_RecoversScheduling`。
 - **修正 `AutoInit_DefaultAvailable` 的自证（2026-10-20，R3-SER-004）**：SetUp 已 `Initialize` 后再断言「已就绪」，
   删掉 AutoInit 仍是绿的；改为先 `Shutdown` 再调 `AutoInit`，入口被真正覆盖。
 - **补 UIBinder 公开绑定方法覆盖（2026-10-19，R3-UIB-012）**：`UIBinderTests` 五例（FillAmount / Slider / Toggle /

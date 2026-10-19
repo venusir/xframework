@@ -71,6 +71,7 @@ Tests/Runtime/Timer/  # 全部 PlayMode；无 EditMode 侧（没有 Editor 工�
 - 已做：**写路径补 Editor-only 主线程断言**（2026-10-18 · `1a77de9`）——沿用 Message / Pipeline / Asset 的内联形态，不抽公共防线；Release 零开销（TMR-006）。
 
 - 已做：**跨表补扫本趟新建定时器**（2026-10-19 · R3-TMR-001，本轮修复）——TMR-002 的补扫只在触发回调的那张表内；状态表重复定时器回调里创建的无状态定时器落在默认表（本趟已先扫过），档位停在 Tier5，0.1 秒定时器迟到约 0.33 秒。修法：`ITimerTable.Sweep` 返回 `firedAny`，全部表扫完后 `TimerCore` 统一调 `GetBornThisPassMin`；回归 `TimerTierTests.StateCallback_CreatingStatelessTimer_IsCoveredAcrossTables`（改前 0.333s，改后约 0.1s）。
+- 已做：**`UpdateManager.Clear()` 恢复路径补用例**（2026-10-20 · R3-TMR-002，本轮补测试）——`CancelAll` + 重建后新定时器正常触发；`TimerLifecycleTests.ClearThenCancelAllAndRecreate_RecoversScheduling` 锁定。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 

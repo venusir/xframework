@@ -314,5 +314,21 @@ namespace XFramework.XTimer.Tests
         }
 
         #endregion
+
+        [Test]
+        public void ClearThenCancelAllAndRecreate_RecoversScheduling()
+        {
+            int fired = 0;
+            TimerManager.After(0.1f, () => fired++);
+
+            UpdateManager.Clear();   // 摘掉 Timer 的驱动器
+            TimerManager.CancelAll();
+            TimerManager.After(0.1f, () => fired++);
+
+            _driver.Advance(10);
+
+            Assert.AreEqual(1, fired,
+                "Clear 后按 CancelAll + 重建的恢复路径应重新驱动新定时器（R3-TMR-002）");
+        }
     }
 }
