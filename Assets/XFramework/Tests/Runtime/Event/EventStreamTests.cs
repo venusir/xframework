@@ -224,6 +224,18 @@ namespace XFramework.XEvent.Tests
         }
 
         [Test]
+        public void OnEmpty_Throws_DisposeDoesNotThrowAndLogsEventError()
+        {
+            var stream = EventStream.Create<int>(() => throw new InvalidOperationException("empty boom"));
+            var sub = stream.Subscribe(_ => { });
+
+            LogAssert.Expect(LogType.Error, new Regex("onEmpty 回调抛出异常"));
+
+            Assert.DoesNotThrow(() => sub.Dispose(),
+                "onEmpty 异常不得从退订路径冒泡（R3-EVT-002）");
+        }
+
+        [Test]
         public void Dispose_DoesNotInvokeOnEmpty()
         {
             var emptyCount = 0;

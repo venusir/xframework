@@ -229,7 +229,18 @@ namespace XFramework.XEvent.Internal
             }
 
             if (becameEmpty)
-                _onEmpty?.Invoke();
+            {
+                // onEmpty 是使用方回调（R3-EVT-002）：抛异常不得从 Dispose 路径冒泡给退订方，
+                // 也不该被误归因为某个 handler 的异常——记 Event 专用日志后隔离。
+                try
+                {
+                    _onEmpty?.Invoke();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Event, e, "onEmpty 回调抛出异常，已隔离");
+                }
+            }
         }
 
         /// <summary>从链表摘除节点;节点不属于本流时返回 <c>false</c>(链表为空也返回 false)。</summary>

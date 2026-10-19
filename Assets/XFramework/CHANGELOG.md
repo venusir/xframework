@@ -385,10 +385,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。
 
+#### Event
+
+- **`onEmpty` 回调异常未隔离（R3-EVT-002）**：退订路径上异常冒泡给 `Dispose()` 调用方，派发路径则被误归因为
+  handler 异常。修法：try/catch 记 `[Event]` 专用日志。回归：
+  `EventStreamTests.OnEmpty_Throws_DisposeDoesNotThrowAndLogsEventError`（改前红）。
+
 #### Lock
 
-- **`AddLock` 先派发后绑定销毁，空闲主体残留绑定（R3-LOCK-001）**：订阅者在首次锁定回调里 `RemoveAllLocks`
-  并退订后，`EnsureDestroyBinding` 仍会给已空闲主体挂上绑定。修法：先绑定再派发。回归：
+- **`AddLock` 先派发后绑定销毁，空闲主体残留绑定（R3-LOCK-001）**：订阅者在首次锁定回调里 `RemoveAllLocks`  并退订后，`EnsureDestroyBinding` 仍会给已空闲主体挂上绑定。修法：先绑定再派发。回归：
   `LockInternalStateTests.AddLock_FirstLockSubscriberClearsAndUnsubscribes_NoBindingResidue`（改前残留 1 条）。
 
 #### Bootstrap
