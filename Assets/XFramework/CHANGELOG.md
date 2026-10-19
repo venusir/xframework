@@ -368,6 +368,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Input
 
+- **`BindToContext` 丢弃合并句柄，登记钉在 CTS 上（R3-INP-006）**：11 个 `Observe*` 只返回原订阅，手动 Dispose
+  不会撤销销毁令牌登记，登记一直累积到所有者销毁。修法：`BindToContext` 返回
+  `MessageManager.TryBindToDestroy` 的合并句柄，11 个 `Observe*` 转发它。
 - **Provider Dispose 抛异常留下半状态、死字段（R3-INP-004/005）**：`Destroy`/`SetProvider` 先 Dispose 再复位，
   第三方 `IInputProvider.Dispose` 抛异常时 `_provider` / `_initialized` / ticker 停在半状态；`_currentMapName`
   只写不读。修法：先复位状态、再隔离 Dispose 异常（同实例重复注入不 Dispose 自己）；删除死字段。

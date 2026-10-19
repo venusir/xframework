@@ -328,19 +328,25 @@ namespace XFramework.XInput
         /// <summary>
         /// 把订阅绑到 <paramref name="context"/> 的销毁时机上——与 UI / Localization 同一个归口实现
         /// （<see cref="MessageManager.TryBindToDestroy"/>），不在这里重写一遍。
+        /// <para>返回**合并句柄**（R3-INP-006）：手动 Dispose 它时同时撤销销毁令牌登记与订阅；
+        /// 旧实现丢弃了合并句柄、只返回原订阅，登记会一直钉在令牌上直到所有者销毁。</para>
         /// <para>既非 <see cref="MonoBehaviour"/> 也非 <see cref="IDestroyCancellationToken"/> 时**留痕而非静默**：
         /// 订是订上了，但没有谁会在它销毁时退订——静默的话，故障表现只是「对象已经没了，回调还在跑」。</para>
         /// </summary>
-        private static void BindToContext(IDisposable subscription, object context)
+        private static IDisposable BindToContext(IDisposable subscription, object context)
         {
-            if (context == null) return;
-            if (MessageManager.TryBindToDestroy(context, subscription) != null) return;
+            if (context == null) return subscription;
+
+            var bound = MessageManager.TryBindToDestroy(context, subscription);
+            if (bound != null) return bound;
 
             LogManager.Warning(LogCategories.Input,
                 "context of type '{0}' is neither a MonoBehaviour nor an IDestroyCancellationToken, " +
                 "so the subscription will not be disposed automatically. " +
                 "Hold the returned handle and dispose it yourself.",
                 context.GetType().Name);
+
+            return subscription;
         }
 
         #endregion
@@ -666,9 +672,9 @@ namespace XFramework.XInput
                     callback();
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -691,9 +697,9 @@ namespace XFramework.XInput
                     callback();
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -722,9 +728,9 @@ namespace XFramework.XInput
                 callback(pressed);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -754,9 +760,9 @@ namespace XFramework.XInput
                 callback(duration);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -786,9 +792,9 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -817,9 +823,9 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -848,9 +854,9 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         /// <summary>
@@ -879,9 +885,9 @@ namespace XFramework.XInput
                 callback(value);
             });
 
-            BindToContext(sub, context);
+            var bound = BindToContext(sub, context);
 
-            return sub;
+            return bound;
         }
 
         #endregion
@@ -898,8 +904,8 @@ namespace XFramework.XInput
         public static IDisposable Subscribe(Action<DeviceConnectedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            BindToContext(sub, context);
-            return sub;
+            var bound = BindToContext(sub, context);
+            return bound;
         }
 
         /// <summary>
@@ -912,8 +918,8 @@ namespace XFramework.XInput
         public static IDisposable Subscribe(Action<DeviceDisconnectedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            BindToContext(sub, context);
-            return sub;
+            var bound = BindToContext(sub, context);
+            return bound;
         }
 
         /// <summary>
@@ -926,8 +932,8 @@ namespace XFramework.XInput
         public static IDisposable Subscribe(Action<GamepadTypeChangedMessage> handler, object context = null)
         {
             var sub = MessageManager.Subscribe(handler);
-            BindToContext(sub, context);
-            return sub;
+            var bound = BindToContext(sub, context);
+            return bound;
         }
 
         #endregion
