@@ -431,7 +431,8 @@ namespace XFramework.XUI
         #region Public API — Diagnostics
 
         // 豁免 EnsureGlobalInitialized 的是这样一组成员：本区的 GetState / DumpState / TierDriverCount，
-        // 以及 OpenCount / IsAnyOpen / Panels / CanGoBack / IsMaskShowing 与属性 UIRoot / IsInitialized。
+        // 以及 OpenCount / IsAnyOpen / Panels / CanGoBack / IsMaskShowing / IsLayerVisible /
+        // IsLayerInteractive 与属性 UIRoot / IsInitialized。
         // 它们回答的是「现在有没有面板/遮罩」这类探测问题，本就该能在 Initialize 之前回答——
         // IUIManager 的文档与 UIManagerImpl 的实现都以此为契约（「未初始化时返回 0，不抛异常，
         // 便于在场景加载早期探测」）。此前门面统一套了守卫，于是 UIStateWindow（现已并入诊断窗口的

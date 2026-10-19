@@ -945,6 +945,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **补默认面板工厂的直接构造覆盖（2026-10-19，R3-UIA-008/009）**：`AssetPanelFactoryTests` 四例（正路径、
+  缺组件、实例化失败、回收），经 `AssetManager.SetInstance` 注入 `FakeAssetManager`；门面豁免注释补
+  `IsLayerVisible` / `IsLayerInteractive`。
 - **订正 Asset 热更 API 的无包语义（2026-10-19，R3-AST-004）**：三个热更 API 对不存在的包记 Error 后静默返回
   （`RequestPackageVersionAsync` 返回 null，另两个 no-op），不抛；XML/README 改为与实现一致，其余失败仍抛
   `InvalidOperationException`。
