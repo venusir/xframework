@@ -54,7 +54,15 @@ namespace XFramework.XInput.Tests
 
         public GamepadType ActiveGamepadType => GamepadType.None;
         public InputDeviceType LastActiveDeviceType => InputDeviceType.None;
-        public void Dispose() { Disposed = true; }
+        /// <summary>置真则 <see cref="Dispose"/> 抛异常（R3-INP-004 的隔离用例）。</summary>
+        public bool ThrowOnDispose;
+
+        public void Dispose()
+        {
+            Disposed = true;
+            if (ThrowOnDispose)
+                throw new InvalidOperationException("provider dispose failed");
+        }
 
         public void SetVibration(uint playerId, float leftMotor, float rightMotor, float duration) => throw new NotSupportedException();
         public void StopVibration(uint playerId) => throw new NotSupportedException();

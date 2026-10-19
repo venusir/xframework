@@ -159,12 +159,24 @@ namespace XFramework.XInput
             // 先校验后副作用:传 null 时不得先释放掉当前的 provider(否则管理器会留着指向已释放实例)
             if (provider == null) throw new ArgumentNullException(nameof(provider));
 
-            if (_provider != null)
-            {
-                _provider.Dispose();
-            }
+            var previous = _provider;
             _provider = provider;
             _initialized = true;
+
+            // 替换时旧实例的 Dispose 异常只隔离、不影响新实例就位（R3-INP-004）；
+            // 同一实例重复注入不得把自己 Dispose 掉。
+            if (previous != null && !ReferenceEquals(previous, provider))
+            {
+                try
+                {
+                    previous.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Input, e,
+                        "替换 Input provider 时旧实例 Dispose 抛出异常，已隔离并继续。");
+                }
+            }
         }
 
         /// <summary>
@@ -172,15 +184,27 @@ namespace XFramework.XInput
         /// </summary>
         public static void Destroy()
         {
-            if (_provider != null)
-            {
-                _provider.Dispose();
-                _provider = null;
-            }
+            // 先完成状态复位、再 Dispose 旧实例（R3-INP-004）：第三方 provider 的 Dispose
+            // 抛异常不得留下「_provider 非空 / _initialized 为真 / ticker 已注销」的半状态。
+            var provider = _provider;
+            _provider = null;
             _initialized = false;
 
             UnregisterTicker();
             _lastPulseFrame = -1;
+
+            if (provider != null)
+            {
+                try
+                {
+                    provider.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Input, e,
+                        "Input provider.Dispose 抛出异常，已隔离并继续（管理器状态已完成复位）。");
+                }
+            }
         }
 
         #endregion

@@ -54,6 +54,24 @@ namespace XFramework.XInput.Tests
 
         #region 生命周期隔离
 
+        /// <summary>
+        /// 第三方 provider 的 Dispose 抛异常不得留下半状态（R3-INP-004）：门面必须先复位
+        /// `_provider` / `_initialized` / ticker，再隔离 Dispose 异常。
+        /// </summary>
+        [Test]
+        public void Destroy_ProviderDisposeThrows_StillResetsFacade()
+        {
+            var provider = new FakeInputProvider { ThrowOnDispose = true };
+            InputManager.SetProvider(provider);
+
+            LogAssert.Expect(LogType.Error, new Regex("Input provider.Dispose 抛出异常"));
+
+            Assert.DoesNotThrow(() => InputManager.Destroy());
+            Assert.IsFalse(InputManager.IsInitialized,
+                "Dispose 异常不得留下半初始化状态");
+            Assert.IsTrue(provider.Disposed);
+        }
+
         [SetUp]
         public void SetUp() => InputManager.Destroy();
 

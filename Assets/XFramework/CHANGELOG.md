@@ -368,6 +368,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Input
 
+- **Provider Dispose 抛异常留下半状态、死字段（R3-INP-004/005）**：`Destroy`/`SetProvider` 先 Dispose 再复位，
+  第三方 `IInputProvider.Dispose` 抛异常时 `_provider` / `_initialized` / ticker 停在半状态；`_currentMapName`
+  只写不读。修法：先复位状态、再隔离 Dispose 异常（同实例重复注入不 Dispose 自己）；删除死字段。
+  回归：`InputManagerReactiveTests.Destroy_ProviderDisposeThrows_StillResetsFacade`（改前异常逃逸且状态未复位）。
 - **同帧按下+释放的长按时长虚增（R3-INP-002）**：`UpdateButtonPressDurations` 用 `else if` 处理释放，两个边沿
   同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决，下一帧按按钮是否
   仍按下来结算（区分「上一帧释放 + 本帧新按下」与「本帧按下+释放」）。真机长按精度仍建议探针复核。

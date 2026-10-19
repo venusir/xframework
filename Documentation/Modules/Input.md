@@ -44,6 +44,7 @@ Runtime/Input/
 ## 决策台账
 
 - 已做：**`GetButtonPressDuration` 自己预热动作缓存**（2026-10-17 · `9a505ae`，INP-001）——从未被读取 API 访问过的动作同样能累计时长，`ObservePressDuration` 随之修复；`IInputProvider` XML 与 README 写明保证。
+- 已做：**Provider Dispose 异常隔离与死字段清理**（2026-10-19 · R3-INP-004/005，本轮修复）——`Destroy`/`SetProvider` 先 Dispose 再复位，第三方 Dispose 抛异常会留下半状态；`_currentMapName` 只写不读。修法：先复位状态再隔离 Dispose 异常（同实例重复注入不 Dispose 自己）；删除死字段；回归 `Destroy_ProviderDisposeThrows_StillResetsFacade`。
 - 已做：**同帧按下+释放的长按时长虚增**（2026-10-19 · R3-INP-002，本轮修复）——`UpdateButtonPressDurations` 用 `else if` 处理释放，两个边沿同帧出现时释放分支被吞掉、开始时间留在表里。修法：两个边沿都处理；同帧双边缘标记待决、下一帧按按钮是否仍按下来结算。真机长按精度仍建议探针复核。
 
 （2026-09-30 按 `../ModuleAudit.md` 审计一轮，判据 A–F 全类扫过，零高危；逐条理由的展开见使用方 README 的相关章节。已修项见 `CHANGELOG`。）

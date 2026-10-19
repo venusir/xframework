@@ -21,7 +21,7 @@ namespace XFramework.XInput.Default
         #region Private Fields
 
         private InputActionAsset _actionAsset;
-        private string _currentMapName;
+        // _currentMapName 已删除（R3-INP-005）：只写不读的死字段。
         private GamepadType _activeGamepadType;
         private InputDeviceType _lastActiveDeviceType;
 
@@ -340,7 +340,6 @@ namespace XFramework.XInput.Default
                 if (targetMap.enabled) return;
 
                 targetMap.Enable();
-                _currentMapName = mapName;
                 InvalidateCaches();
 
                 LogManager.Info(LogCategories.Input, "Enabled action map: {0}", mapName);
