@@ -426,6 +426,13 @@ namespace XFramework.XCamera.Cinemachine
 
         private void TransitionToSlot(int index, float duration, CameraBlendStyle style)
         {
+            // 与核心 UnityCameraManager 同形校验：同一接口两种实现不得对 NaN / ±∞ 给出相反行为（CIN-002）。
+            if (float.IsNaN(duration) || float.IsInfinity(duration))
+            {
+                throw new ArgumentOutOfRangeException(nameof(duration), duration,
+                    "[Camera] 过渡时长必须是有限值；NaN / ±∞ 会让过渡永不结束或逐帧写坏位姿。");
+            }
+
             var target = _slots[index].Camera;
             if (target == null)
                 return;

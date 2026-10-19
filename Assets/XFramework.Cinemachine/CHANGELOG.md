@@ -16,6 +16,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `CinemachineBrain.ActiveBlend = null`；补 PlayMode 用例（改前 `IsBlending` 恒 true）。
 - **槽位复用 ABA 无用例（R3-CIN-005）**：补 `DynamicHandle_AfterSlotReuse_OldHandleIsRejected`，
   锁定「旧句柄按代际失配失效、不得操作到复用槽位的新相机」。
+- **过渡时长未校验有限性（R3-CIN-002）**：NaN / ±∞ 直接交给 `CinemachineBlendDefinition`，而核心
+  `UnityCameraManager` 对同一参数抛 `ArgumentOutOfRangeException`——同一接口两种实现行为相反。现在
+  适配器补同形校验；回归 `TransitionTo_NonFiniteDuration_Throws`（改前必红）。
 
 ## [0.1.0] - 2026-10-17
 

@@ -365,6 +365,16 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.Throws<ArgumentNullException>(() => _manager.TransitionTo(null, 1f));
         }
 
+        [Test]
+        public void TransitionTo_NonFiniteDuration_Throws()
+        {
+            // 核心 UnityCameraManager 对 NaN / ±∞ 抛 ArgumentOutOfRangeException——同一接口的
+            // 两种实现不得行为相反（CIN-002 / CAM-001）。
+            Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _manager.TransitionTo("b", float.NegativeInfinity));
+        }
+
         #endregion
     }
 }
