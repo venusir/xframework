@@ -460,7 +460,8 @@ public class MainMenuPanel : UIPanelBase
 ```csharp
 using XFramework.XUI.Data;
 
-// 绑定后语言切换时自动刷新，返回 IDisposable 可存入 UIPanelBinding._bindings 统一管理
+// 绑定后语言切换时自动刷新；返回的 IDisposable 交给 UIViewBase.Track(...)（或在
+// UIPanelBinding.RegisterBinding 里登记）统一释放——不要直接操作私有字段
 titleText.BindToLocalizedText("ui_main_title");
 ```
 
@@ -1173,7 +1174,7 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 - **实现哪个契约**：`IUIManager`（整体替换，经 `SetInstance`）；`IUIController`（开 / 关拦截，经 `SetController` 或 `Initialize(uiRoot, controller)`）；`IUIHudProvider` / `IUITipProvider`（可选能力，经 `SetHudProvider` / `SetTipProvider` 替换）。
 - **怎么接线**：`UIManager.SetInstance(manager)`；控制器见「快速使用」2，实例所有权与注入顺序见「快速使用」12。
 - **provider 的 `SetUIRoot`**：初始化时与初始化之后注入（`SetTipProvider` / `SetHudProvider`）都会调用一次——注入的实现可以直接使用 `uiRoot`，不必自己去读 `UIManager.UIRoot`（R3-ADJ-12）。
-- **要守什么**：`SetController` 只对 `UIManagerImpl` 生效；注入实现退化为「只有每帧档」，`Destroy()` 会连注入实例一起销毁（见「快速使用」12）；`IUIManager` 新增成员必须同步门面转发（见「架构设计」的「扩展清单」）；排序与分层方案不可单独替换，换方案等于整体替换 `IUIManager`（见「已知限制」）。
+- **要守什么**：`SetController` 只对 `UIManagerImpl` 生效；注入实现退化为「只有每帧档」，`Destroy()` 会连注入实例一起销毁（见「快速使用」12）；`IUIManager` 新增成员必须同步门面转发（见「架构设计」的「扩展清单」）；排序与分层方案不可单独替换，换方案等于整体替换 `IUIManager`（见「已知限制」）；**重写 `OnPoolRecycle` 必须调用 `base.OnPoolRecycle()`**——基类在该钩子里释放 `Track` 登记的订阅、解绑 ViewModel、复位打开/焦点/暂停与 Canvas 排序，不调 base 会全部跳过（R3-UIB-004）。
 
 ## 内部机制
 
@@ -1328,7 +1329,7 @@ UIManager.ClearPreloads();
   `UpdateManager` 的逻辑时间轴上。门面没有时间轴开关，逃生口与注意事项见「面板驱动更新」一节的警告框。
 - **手动 `UIManager.Update` 只驱动每帧档（Tier0）与 HUD**：分档面板（Tier1–7）由各自的档位驱动器驱动，
   手动入口不覆盖它们；`Time.timeScale = 0` 时靠手动调用救不了分档面板。完整恢复路径见上一条与
-  UIA-002 的 `Initialize`/`SetInstance` 重注册。
+  UIA-002 的 `Initialize` 重注册（`SetInstance` 不重接驱动器）。
 - **面板的排序与分层方案不可替换**：`UISorting` 是静态类，每次打开 / 关闭 / 置顶都会由 `RestampSortingOrders`
   按显示栈重排全部面板。`UILayers` 的五个值是**建议值**（你可以给自己的层号），但排序空间的形状
   （层步长 32、每层 30 个面板序号（遮罩占第 31 个）、层号上限 899）是**模块不变量**——它与遮罩排序、栈重排、回池复位共同依赖，
@@ -1336,8 +1337,9 @@ UIManager.ClearPreloads();
   （**顺带澄清一件不会发生的事**：层容器名 `Layer_{层号}` 与 HUD / Tip 容器的 `Layer_HUD` / `Layer_Tip`
   **不可能撞名**——层号是 `int`，`Layer_{int}` 永远拼不出字符串层名。写在这里，免得下一轮审计把它当新问题。）
 - **外部调用 `UpdateManager.Clear()` 会摘掉 UI 的驱动器**：它是公开 API，UI 无从感知，只有下一次
-  `UIManager.Initialize` / `SetInstance` 才会重新注册——两者都会把**每帧驱动器与已有的全部分档驱动器**
-  一起接回去（UIA-002）。若你的重置流程里调了它，请在同一流程里重新进入 UI 的生命周期入口，否则界面会静默静止。
+  `UIManager.Initialize` 才会重新注册——它会把**每帧驱动器与已有的全部分档驱动器**一起接回去；
+  `SetInstance` **不会**重接驱动器（UIA-002 / R3-UIA-010）。若你的重置流程里调了它，请在同一流程里重新进入
+  UI 的 `Initialize`，否则界面会静默静止。
 - **UI 没有任何线程契约的运行时断言**：面板 / HUD / Tip 的创建、开合与驱动都必须在主线程调用（Unity 对象
   本身的约束），模块不做检测也不做切线程——跨线程调用是未定义行为。
 

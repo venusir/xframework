@@ -205,6 +205,8 @@ namespace XFramework.XUI.View
         /// <summary>
         /// 视图即将回池时由框架调用。子类可重写以重置自定义状态。
         /// <para>基类实现释放 <see cref="Track"/> 登记的订阅，并重置 Canvas.sortingOrder 与 overrideSorting。</para>
+        /// <para><b>重写时必须调用 <c>base.OnPoolRecycle()</c></b>：不调用会跳过上述订阅释放与状态复位，
+        /// 池化实例下次打开时仍带着旧状态（R3-UIB-004）。</para>
         /// </summary>
         protected internal virtual void OnPoolRecycle()
         {

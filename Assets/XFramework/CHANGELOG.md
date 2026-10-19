@@ -895,6 +895,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 UI 的驱动器恢复、回池钩子与绑定示例（2026-10-19，R3-UIA-010/UIB-001/004/008）**：`SetInstance` 不会
+  重接驱动器（只有 `Initialize` 会）；`UIDefaultController` 注释改为「默认静默 + verbose 模板化」；
+  `OnPoolRecycle` 标注「重写必须调用 base」；绑定示例改用 `UIViewBase.Track` / `UIPanelBinding.RegisterBinding`，
+  不再引用私有字段。
 - **订正 Update 的 Clear 恢复指引与 ProcessImmediate 边界（2026-10-19，R3-UPD-001/002/003/004）**：Timer 只有在
   `Clear` 时处于空闲才会在下一次 `After` / `Every` 重新注册（有定时器在计时时需先 `CancelAll`）；UI 的
   `SetInstance` 不重接驱动器；`ProcessImmediate` 对已禁用/缓冲中的节点静默 no-op；`FlushPending` 注释改为

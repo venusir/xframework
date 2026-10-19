@@ -192,13 +192,15 @@ namespace XFramework.XUI.View
         /// <para>解绑必须挂在回池点而非关闭点——关闭是逻辑操作，可被
         /// <see cref="Controller.IUIController.OnBeforeCloseAsync"/> 返回 false 拦下，
         /// 此时面板仍然开着，解绑是误伤。</para>
+        /// <para><b>重写时必须调用 <c>base.OnPoolRecycle()</c></b>：基类链负责交互维度复位与 ViewModel 解绑；
+        /// 不调用会跳过它们，池化实例下次打开时仍带着旧状态（R3-UIB-004）。</para>
         /// </summary>
         protected internal override void OnPoolRecycle()
         {
             base.OnPoolRecycle();
 
-            // 框架侧复位交互维度（UI-B-006）：用户重写 OnPoolRecycle 时可能忘记调 base，
-            // 但状态复位不能依赖用户代码——这里在基类链上做，且回池路径必经。
+            // 框架侧复位交互维度（UI-B-006）：复位链在基类方法里，回池路径必经；
+            // 但子类若重写本方法且不调 base，这段会被跳过——使用方文档已写明「必须调用 base」。
             IsFocused = false;
             IsPaused = false;
             if (Raycaster != null)
