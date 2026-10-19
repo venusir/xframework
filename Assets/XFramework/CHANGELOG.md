@@ -391,6 +391,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `LogManager` 的 catch 不触发，死 sink 留在 `_sinks` 且不计 `DroppedSinkCount`。修法：`Flush` 后复查
   `IsDead` 并摘除。回归：`LogCaptureTests.Flush_DeadFileSink_IsDroppedAndCounted`（改前计数 0）。
 
+#### Pool
+
+- **租出回调异常时实例静默丢弃、不走丢弃回调（R3-POOL-001）**：`Get` 账本已回滚，但实例不再入栈、
+  也不走 `onDestroy` / `IPoolDiscardable.OnDiscard`，资源泄漏且无日志。修法：失败分支调用丢弃回调
+  （自身异常只记 Error）并 Warning。回归：`PoolTests.Get_RentCallbackThrows_InvokesDiscardCallback`。
+
 #### Message
 
 - **`TryBindToDestroy` 把 None 令牌与已取消并成一枝（R3-MSG-004）**：`IDestroyCancellationToken` 返回

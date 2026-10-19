@@ -437,6 +437,21 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void Get_RentCallbackThrows_InvokesDiscardCallback()
+        {
+            int destroyed = 0;
+            var pool = new Pool<TestItem>(() => new TestItem(),
+                onRent: _ => throw new InvalidOperationException("rent boom"),
+                onDestroy: _ => destroyed++);
+
+            LogAssert.Expect(LogType.Warning, new System.Text.RegularExpressions.Regex("租出回调抛出异常"));
+
+            Assert.Throws<InvalidOperationException>(() => pool.Get());
+            Assert.AreEqual(1, destroyed,
+                "租出失败后实例不再归还池，必须走丢弃回调释放资源（R3-POOL-001）");
+        }
+
+        [Test]
         public void Return_ReturnCallbackThrows_StillLeavesActiveState()
         {
             var pool = new Pool<TestItem>(() => new TestItem(),

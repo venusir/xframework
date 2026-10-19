@@ -162,13 +162,30 @@ namespace XFramework.XPool
                 else if (item is IPoolable poolable)
                     poolable.OnRent();
             }
-            catch
+            catch (Exception e)
             {
                 if (_activeCount > 0)
                     _activeCount--;
 #if UNITY_EDITOR
                 _activeSet?.Remove(item);
 #endif
+                // 实例不再归还池，但必须走丢弃回调释放资源（R3-POOL-001）；
+                // 丢弃回调自身抛异常只记 Error，不掩盖原始租出异常。
+                try
+                {
+                    if (_onDestroy != null)
+                        _onDestroy(item);
+                    else if (item is IPoolDiscardable discardable)
+                        discardable.OnDiscard();
+                }
+                catch (Exception discardEx)
+                {
+                    LogManager.Exception(PoolLogCategory<T>.Value, discardEx,
+                        "租出失败后的丢弃回调抛出异常，已隔离。");
+                }
+
+                LogManager.Warning(PoolLogCategory<T>.Value,
+                    "租出回调抛出异常，实例已丢弃且不再归还池：{0}", e.Message);
                 throw;
             }
 
