@@ -391,6 +391,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   handler 异常。修法：try/catch 记 `[Event]` 专用日志。回归：
   `EventStreamTests.OnEmpty_Throws_DisposeDoesNotThrowAndLogsEventError`（改前红）。
 
+#### Pipeline
+
+- **容器元素 null 抛裸 NRE（R3-PIPE-001）**：`ParallelStage`/`SequenceStage` 构造只校验列表 null/空；元素 null
+  在读 `Weight` 时抛 NRE。修法：与 `AddStage(null)` 同形抛 `ArgumentNullException`。回归：两容器各一例。
+
 #### Lock
 
 - **`AddLock` 先派发后绑定销毁，空闲主体残留绑定（R3-LOCK-001）**：订阅者在首次锁定回调里 `RemoveAllLocks`  并退订后，`EnsureDestroyBinding` 仍会给已空闲主体挂上绑定。修法：先绑定再派发。回归：

@@ -20,6 +20,14 @@ namespace Venusy609.Xframework.Editor.Tests
         #region 并行执行
 
         [Test]
+        public void Constructor_NullElement_ThrowsArgumentNullException()
+        {
+            Assert.Throws<ArgumentNullException>(() =>
+                new ParallelStage(new IPipelineStage[] { null }),
+                "元素 null 必须与 AddStage(null) 同形抛 ANE（R3-PIPE-001）");
+        }
+
+        [Test]
         public void ParallelChildren_AllExecute()
         {
             var a = new FakeStage { Name = "a" };

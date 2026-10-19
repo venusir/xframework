@@ -39,7 +39,13 @@ namespace XFramework.XPipeline
             _name = name;
 
             // 阶段权重 = Σ子阶段声明权重,构造期缓存;运行期子上下文权重改写不参与(防任务权重泄漏到管线级)
-            for (int i = 0; i < _children.Count; i++) _weight += _children[i].Weight;
+            for (int i = 0; i < _children.Count; i++)
+            {
+                // 元素 null 与 AddStage(null) 同形防御（R3-PIPE-001）：否则会在读 Weight 时抛裸 NRE。
+                if (_children[i] == null)
+                    throw new ArgumentNullException(nameof(stages), $"stages[{i}] is null.");
+                _weight += _children[i].Weight;
+            }
 
             _aggregator = new StageAggregator(_children.Count);
         }
