@@ -417,6 +417,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **无主相机时 HUD 每帧重查 `Camera.main`（R3-UIB-011）**：`Camera.main` 是带标签的查找，无主相机场景
+  每帧白查。修法：降频到 1 秒一次，并只告警一次。回归：
+  `UIHudManagerTests.Hud_NoMainCamera_RetriesLookupAtMostOncePerSecond`（改前每帧查，改后 1 秒一次）。
 - **Tip 帧循环无逐项隔离（R3-UIB-007）**：一个 Tip 的 `Tick` 抛异常会中断本轮，其余 Tip 停更且异常
   逃到 provider 层。修法：逐个 `try/catch`，抛异常的实例直接回收（避免持续态每帧刷日志）。
   注：`UITipItem.Tick` 非虚、无直接注入缝，本轮未构造自动化用例。

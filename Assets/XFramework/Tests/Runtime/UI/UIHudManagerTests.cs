@@ -273,6 +273,27 @@ namespace XFramework.XUI.Tests
             }
         }
 
+        /// <summary>
+        /// 无主相机时 `Camera.main` 不得每帧重查（R3-UIB-011）：降到 1 秒一次，且只告警一次。
+        /// </summary>
+        [Test]
+        public async Task Hud_NoMainCamera_RetriesLookupAtMostOncePerSecond()
+        {
+            Assert.IsNull(Camera.main, "前提：测试场景没有主相机");
+
+            var hud = await UIManager.ShowHudAsync<HudStubItem>(_target.transform, StubPath);
+
+            LogAssert.Expect(LogType.Warning, new Regex("找不到主相机"));
+            UIManager.Update(0f, 0f);
+            Assert.AreEqual(1, hud.CameraLookupCount);
+
+            UIManager.Update(0f, 0.5f);
+            Assert.AreEqual(1, hud.CameraLookupCount, "1 秒内不应每帧重查 Camera.main");
+
+            UIManager.Update(0f, 1.1f);
+            Assert.AreEqual(2, hud.CameraLookupCount, "超过 1 秒后应重试一次");
+        }
+
         #endregion
     }
 

@@ -1,6 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XUI.View
 {
@@ -18,6 +19,15 @@ namespace XFramework.XUI.View
         private Camera _camera;
         private CanvasGroup _canvasGroup;
         private RectTransform _rectTransform;
+
+        /// <summary>下一次允许重查 <c>Camera.main</c> 的时刻（逻辑时间）；R3-UIB-011。</summary>
+        private float _nextCameraLookupTime;
+
+        /// <summary>「找不到主相机」只告警一次，避免每帧刷日志。</summary>
+        private bool _cameraMissingWarned;
+
+        /// <summary><c>Camera.main</c> 的查询次数（测试缝 / 性能诊断）。</summary>
+        internal int CameraLookupCount { get; private set; }
 
         #endregion
 
@@ -105,6 +115,8 @@ namespace XFramework.XUI.View
             FollowTarget = null;
             OnTargetLost = null;
             _camera = null;
+            _nextCameraLookupTime = 0f;
+            _cameraMissingWarned = false;
             return UniTask.CompletedTask;
         }
 
@@ -126,9 +138,27 @@ namespace XFramework.XUI.View
 
             if (_camera == null)
             {
+                // 没有主相机时不要每帧重查（R3-UIB-011）：Camera.main 是带标签的查找，
+                // 无主相机的场景会每帧白查；降频到 1 秒一次，并只告警一次。
+                if (time < _nextCameraLookupTime)
+                    return;
+
+                CameraLookupCount++;
                 _camera = Camera.main;
                 if (_camera == null)
+                {
+                    _nextCameraLookupTime = time + 1f;
+
+                    if (!_cameraMissingWarned)
+                    {
+                        _cameraMissingWarned = true;
+                        LogManager.Warning(LogCategories.UIHudManager,
+                            "HUD '{0}' 找不到主相机（Camera.main），此后每 1 秒重试一次。",
+                            GetType().Name);
+                    }
+
                     return;
+                }
             }
 
             var screenPos = _camera.WorldToScreenPoint(FollowTarget.position);
