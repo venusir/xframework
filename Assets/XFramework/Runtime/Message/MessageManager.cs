@@ -701,8 +701,14 @@ namespace XFramework.XMessage
                 return null;
             }
 
-            // 已取消则立即释放，否则注册到取消回调
-            if (!token.CanBeCanceled || token.IsCancellationRequested)
+            // 不可取消的令牌（CancellationToken.None）无法绑定销毁——返回原订阅句柄，
+            // 由调用方自行释放（R3-MSG-004）。此前把它与「已取消」并成一枝，订阅被立即释放、
+            // 处理器永远收不到消息。
+            if (!token.CanBeCanceled)
+                return disposable;
+
+            // 已取消则立即释放
+            if (token.IsCancellationRequested)
             {
                 disposable.Dispose();
                 return disposable;

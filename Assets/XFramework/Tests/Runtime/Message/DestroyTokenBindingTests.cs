@@ -43,6 +43,16 @@ namespace XFramework.XMessage.Tests
             public void Handle(TestMessage message) => ReceivedCount++;
         }
 
+        /// <summary>销毁令牌为 <see cref="CancellationToken.None"/> 的订阅者（R3-MSG-004）。</summary>
+        private sealed class NoneTokenSubscriber : IMessageSubscriber, IDestroyCancellationToken
+        {
+            public int ReceivedCount { get; private set; }
+
+            public CancellationToken DestroyCancellationToken => CancellationToken.None;
+
+            public void Handle(TestMessage message) => ReceivedCount++;
+        }
+
         #endregion
 
         #region Setup / Teardown
@@ -60,6 +70,19 @@ namespace XFramework.XMessage.Tests
         }
 
         #endregion
+
+        [Test]
+        public void Subscribe_NoneDestroyToken_StillReceivesMessages()
+        {
+            var subscriber = new NoneTokenSubscriber();
+            var handle = subscriber.Subscribe<TestMessage>(subscriber.Handle);
+
+            MessageManager.Publish(new TestMessage { Value = 1 });
+
+            Assert.AreEqual(1, subscriber.ReceivedCount,
+                "None 令牌视为无法绑定，但订阅必须保留（R3-MSG-004）");
+            handle.Dispose();
+        }
 
         [Test]
         public void Subscribe_DestroyTokenOwner_UnsubscribesOnCancel()
