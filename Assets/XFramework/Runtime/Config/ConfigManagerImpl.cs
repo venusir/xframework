@@ -107,6 +107,7 @@ namespace XFramework.XConfig
             // 同一 CLR 类型还可能以 Global 身份在途，跨身份加入会读到另一本字典（CONF-009）。
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
             {
+                WarnIfInFlightMismatch(type, load, assetPath, "ConfigFormat:" + format);
                 await AwaitInFlight(load);
                 return GetTableResult<T>(type, load);
             }
@@ -116,7 +117,11 @@ namespace XFramework.XConfig
                     $"assetPath must be provided when preloading Table '{type.Name}' for the first time.");
 
             var task = PreloadTableCoreAsync<T>(assetPath, format, null);
-            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
+            var inFlight = new InFlightLoad
+            {
+                Task = task, Kind = InFlightKind.Table,
+                AssetPath = assetPath, RequestKind = "ConfigFormat:" + format,
+            };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -156,6 +161,7 @@ namespace XFramework.XConfig
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
             {
+                WarnIfInFlightMismatch(type, load, assetPath, "ConfigFormat:" + format);
                 await AwaitInFlight(load);
                 return;
             }
@@ -165,7 +171,11 @@ namespace XFramework.XConfig
                     $"assetPath must be provided when preloading Global config '{type.Name}' for the first time.");
 
             var task = PreloadGlobalCoreAsync<T>(assetPath, format, null);
-            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
+            var inFlight = new InFlightLoad
+            {
+                Task = task, Kind = InFlightKind.Global,
+                AssetPath = assetPath, RequestKind = "ConfigFormat:" + format,
+            };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -202,6 +212,7 @@ namespace XFramework.XConfig
             // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
             {
+                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
                 await AwaitInFlight(load);
                 return GetTableResult<T>(type, load);
             }
@@ -212,7 +223,11 @@ namespace XFramework.XConfig
                 throw new ConfigException($"assetPath must be provided when preloading Table '{type.Name}'.");
 
             var task = PreloadTableCoreAsync<T>(assetPath, default, loader);
-            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
+            var inFlight = new InFlightLoad
+            {
+                Task = task, Kind = InFlightKind.Table,
+                AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
+            };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -283,6 +298,7 @@ namespace XFramework.XConfig
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
             {
+                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader?.GetType().Name);
                 await AwaitInFlight(load);
                 return;
             }
@@ -293,7 +309,11 @@ namespace XFramework.XConfig
                 throw new ConfigException($"assetPath must be provided when preloading Global config '{type.Name}'.");
 
             var task = PreloadGlobalCoreAsync<T>(assetPath, default, loader);
-            var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
+            var inFlight = new InFlightLoad
+            {
+                Task = task, Kind = InFlightKind.Global,
+                AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
+            };
             _inFlightLoads[type] = inFlight;
             try
             {
@@ -394,12 +414,17 @@ namespace XFramework.XConfig
                 // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
                 if (_inFlightLoads.TryGetValue(entry.RowType, out var load) && load.Kind == InFlightKind.Table)
                 {
+                    WarnIfInFlightMismatch(entry.RowType, load, entry.AssetPath, "Manifest");
                     await AwaitInFlight(load);
                     return;
                 }
 
                 var task = LoadManifestTableCoreAsync(entry);
-                var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Table };
+                var inFlight = new InFlightLoad
+                {
+                    Task = task, Kind = InFlightKind.Table,
+                    AssetPath = entry.AssetPath, RequestKind = "Manifest",
+                };
                 _inFlightLoads[entry.RowType] = inFlight;
                 try
                 {
@@ -736,6 +761,10 @@ namespace XFramework.XConfig
             /// <summary>加载失败异常（创建者 catch 记录，广播给加入者，保持同一异常实例）。</summary>
             public Exception Exception;
 
+            /// <summary>首个调用方的资源路径与请求形态（仅用于诊断参数不一致的并发请求，R3-CONF-003）。</summary>
+            public string AssetPath;
+            public string RequestKind;
+
             /// <summary>加入者的完成信号（创建者完成时广播 TrySetResult/TrySetException）。</summary>
             public List<UniTaskCompletionSource> Waiters = new();
         }
@@ -751,6 +780,28 @@ namespace XFramework.XConfig
         /// 加入者等待广播。注册自己的完成信号而非直接 await 共享任务（UniTask promise 只支持单个 continuation）。
         /// <para>单线程模型下，进入「进行中」分支时创建者任务必未完成，广播不会漏掉。</para>
         /// </summary>
+        /// <summary>
+        /// 第二个调用方加入在途加载时，若 assetPath / 请求形态与首个调用方不同则告警（R3-CONF-003）。
+        /// <para>加入者拿到的是首个调用方的结果——参数不同意味着它请求的东西没有被加载；
+        /// 此前完全静默，使用方只会看到「加载过了但数据不对」。</para>
+        /// </summary>
+        private static void WarnIfInFlightMismatch(Type type, InFlightLoad load, string assetPath, string requestKind)
+        {
+            if (load.AssetPath == null && load.RequestKind == null)
+                return; // 非本模块创建的条目（防御）
+
+            bool pathDiffers = !string.Equals(load.AssetPath, assetPath, StringComparison.Ordinal);
+            bool kindDiffers = !string.Equals(load.RequestKind, requestKind, StringComparison.Ordinal);
+            if (!pathDiffers && !kindDiffers)
+                return;
+
+            LogManager.Warning(LogCategories.Config,
+                "配置 '{0}' 的在途加载参数不一致：首个 {1}，第二个调用方 {2}——将复用首个调用方的结果。",
+                type.Name,
+                load.RequestKind + " @ " + load.AssetPath,
+                requestKind + " @ " + assetPath);
+        }
+
         private static async UniTask AwaitInFlight(InFlightLoad load)
         {
             var tcs = new UniTaskCompletionSource();

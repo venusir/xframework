@@ -330,6 +330,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `IAssetLoadWait` 形参传递会装箱；改为泛型约束（不附加 `struct`，测试替身是 class）。
   `AssetLoadWaitTests` 两例仍绿。
 
+#### Config
+
+- **在途加载参数不一致时静默复用首个结果（R3-CONF-003）**：同一类型的并发 `Preload` 只按 Type+Kind 匹配，
+  第二调用方的 assetPath / format / loader 不同也直接加入、无任何提示。修法：`InFlightLoad` 记录首个请求的
+  路径与形态，加入者参数不一致时打 Warning。回归：
+  `ConfigManagerImplTests.PreloadTableAsync_ConcurrentDifferentPaths_WarnsAndSharesFirst`。
+
 #### Pipeline
 
 - **终局状态晚于广播、超时失败不带阶段名（PIPE-002/003）**：取消 / 失败分支先 `Broadcast()` 再写

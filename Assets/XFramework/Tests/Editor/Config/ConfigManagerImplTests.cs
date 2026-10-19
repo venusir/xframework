@@ -1,8 +1,11 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XConfig;
 
 namespace Venusy609.Xframework.Editor.Tests
@@ -84,6 +87,28 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreSame(r1, r2, "三个调用方应拿到同一缓存包装器");
             Assert.AreSame(r1, r3, "三个调用方应拿到同一缓存包装器");
             Assert.IsTrue(impl.IsLoaded<TestItemRow>());
+        }
+
+        [Test]
+        public void PreloadTableAsync_ConcurrentDifferentPaths_WarnsAndSharesFirst()
+        {
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+            var tcs = new UniTaskCompletionSource<ConfigTable<TestItemRow>>();
+            fake.SetTableTask(tcs.Task);
+
+            var t1 = impl.PreloadTableAsync<TestItemRow>("config/a", fake);
+
+            LogAssert.Expect(LogType.Warning, new Regex(
+                "在途加载参数不一致.*config/a.*config/b"));
+            var t2 = impl.PreloadTableAsync<TestItemRow>("config/b", fake);
+
+            Assert.AreEqual(1, fake.LoadTableCallCount, "参数不同也仍共享首个在途任务");
+            tcs.TrySetResult(MakeTable());
+
+            var r1 = t1.GetAwaiter().GetResult();
+            var r2 = t2.GetAwaiter().GetResult();
+            Assert.AreSame(r1, r2, "加入者拿到的是首个调用方的结果");
         }
 
         [Test]
