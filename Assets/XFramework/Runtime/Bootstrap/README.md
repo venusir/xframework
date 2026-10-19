@@ -85,8 +85,9 @@ Runtime/Bootstrap/
 **`Shutdown` 不修改登记表。** 它只调各阶段的 `Shutdown`；阶段实例仍留在表里。同一会话内再 `RunAsync`
 会重跑同一批实例；启动失败后重试同样从头重跑。需要「重建」时先 `Bootstrap.Clear()` 再重新构造、登记。
 
-**同一会话只应有一个 `GameLauncher`。** `GameLauncher` 会 `DontDestroyOnLoad`；每个场景各挂一个会叠加
-登记表，任一实例销毁时的 `Shutdown` 会拆掉全局服务。
+**同一会话只应有一个 `GameLauncher`。** `GameLauncher` 会 `DontDestroyOnLoad`——**只对根 GameObject 生效**，
+请把启动器挂在根对象上；挂在子对象上时切场景会随父对象销毁并触发 `Shutdown`，拆掉全部全局服务。每个场景各挂
+一个会叠加登记表，任一实例销毁时的 `Shutdown` 会拆掉全局服务。
 
 ### 替换内置阶段
 

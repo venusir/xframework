@@ -27,7 +27,7 @@ namespace XFramework.XLock
         /// <summary>有订阅的主体数（加锁 / 解锁两张订阅表的键之并集）。</summary>
         public readonly int SubscribedSubjectCount;
 
-        /// <summary>**有订阅但没有销毁绑定**的主体数——不会自动退订；含 Global / 长寿命订阅，不一定都是孤儿（LOCK-004）。</summary>
+        /// <summary>**有订阅但没有销毁绑定**的主体数——不会自动退订；含 Global / 长寿命订阅，不一定都是孤儿。</summary>
         public readonly int UnboundSubscribedSubjectCount;
 
         internal LockStateSnapshot(int lockedSubjectCount, int lockCount, int unboundSubjectCount,

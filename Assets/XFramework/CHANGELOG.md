@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Lock 与 Bootstrap 的包内表述（2026-10-19，R3-LOCK-002/BST-002）**：Lock 的 XML/README 移除 R2 审计编号，
+  改为自足表述；`GameLauncher` 的 XML 与 README 写明「必须挂在根 GameObject 上」——`DontDestroyOnLoad` 只对
+  根对象生效，挂子对象时切场景会销毁并 `Shutdown` 拆掉全局服务。
 - **订正 Cinemachine 扩展包的兼容声明与门禁缺口（2026-10-19，R3-CIN-004/005/006/007/008）**：核心包版本基线改为
   「必须包含 Camera 模块」（`0.3.0` tag 早于 Camera）；删去「Brain 无公开完成回调」的过度表述（改为「无 await
   形态的完成回调」）；`OutputCamera` 改为「可能为 null、不保证等于目标」；扩展 README 登记核心门禁不覆盖本包。

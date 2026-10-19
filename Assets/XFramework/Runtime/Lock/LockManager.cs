@@ -926,8 +926,8 @@ namespace XFramework.XLock
         /// <para><b>聚合视角</b>：含 <see cref="Global"/> 层的锁——与 <see cref="IsLocked"/> 一致，故
         /// 「该主体是否被任何类型锁着」即<c>返回值 &gt; 0</c>（类型域是开放的 <c>int</c>，未锁定的类型无从枚举）。</para>
         /// <para><paramref name="buffer"/> 会先被清空；返回写入条数；**行序未定义**；同一类型若同时被主体与
-        /// 全局锁住只出现一次。成本 O((该主体类型数 + 全局类型数)²)——去重走 `buffer.Contains`，是线性查找
-        /// （LOCK-003）。</para>
+        /// 全局锁住只出现一次。成本 O((该主体类型数 + 全局类型数)²)——去重走 `buffer.Contains`，是线性查找，
+        /// 类型很多时成本会随之上升。</para>
         /// </summary>
         /// <param name="subject">锁主体；null 表示全局（与其余入口一致）。</param>
         /// <param name="buffer">调用方提供的缓冲，不为 null。</param>

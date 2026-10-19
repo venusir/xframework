@@ -14,6 +14,8 @@ namespace XFramework.XBootstrap
     /// <para><b>它仍是可选件，不是框架的必需入口。</b>不用它的话，在自己的启动流程里调
     /// <see cref="Bootstrap.RunAsync"/> 就行——每帧派发由 <c>UpdateManager</c> 注入的 PlayerLoop 完成，
     /// 与本组件无关，场景里没有它也照常运转。</para>
+    /// <para><b>必须挂在根 GameObject 上</b>：<c>DontDestroyOnLoad</c> 只对根对象生效；挂在子对象上时
+    /// 切场景会随父对象一起销毁并触发 <c>Shutdown</c>，拆掉全部全局服务（R3-BST-002）。</para>
     /// <para><b>本组件覆盖不到的两样</b>：① <c>LogOptions</c>——日志配置要在<b>任何场景加载之前</b>生效
     /// （<c>SubsystemRegistration</c> 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步；
     /// ② 服务实例（同上，它们本就是代码对象而非数据）。</para>
