@@ -20,10 +20,9 @@ namespace Venusy609.Xframework.Editor.Tests
     /// 在修复前<b>根本编译不过</b>（形参类型是 <c>MonoBehaviour</c>，CS1503）——不是断言失败，是程序集
     /// 编译失败。这是本模块最硬的一条证据：能力缺失到编译器就能判的程度。
     /// 实测：把这个 fixture 对着「形参还原成 <c>MonoBehaviour</c>」的旧签名编译，三处调用点全部 CS1503。</para>
-    /// <para><b>本 fixture 不覆盖 MonoBehaviour 分支</b>：实测 EditMode 下 <c>Object.DestroyImmediate</c>
-    /// <b>不会</b>触发 <c>MonoBehaviour.destroyCancellationToken</c>，该分支只能在 PlayMode 覆盖，本轮未新增
-    /// PlayMode fixture（它由 Message 侧同一份 <c>TryBindToDestroy</c> 承担，仓内目前无直接用例——已记入
-    /// README 的审计记录）。</para>
+    /// <para><b>PlayMode 分支</b>：<c>MonoBehaviour.destroyCancellationToken</c> 的实测覆盖在
+    /// <c>Tests/Runtime/Localization/LocalizationDestroyBindingTests</c>；Message 侧同一份
+    /// <c>TryBindToDestroy</c> 由 <c>Tests/Runtime/Message/DestroyTokenBindingTests</c> 覆盖。</para>
     /// </summary>
     class LocalizationSubscribeTests
     {

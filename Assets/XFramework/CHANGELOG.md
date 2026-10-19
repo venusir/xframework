@@ -332,6 +332,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Localization
 
+- **补 Localization 的五处零断言与陈旧注释（R3-LOC-007/008）**：新增 `ToString` 当前/非当前两态、MRU 顺序
+  与 LRU 淘汰、同实例重复 `SetInstance` 三条用例；订正 `LocalizationSubscribeTests` 中「仓内无 PlayMode 用例」
+  的陈旧注释（实际由 `LocalizationDestroyBindingTests` / `DestroyTokenBindingTests` 覆盖）。测试同时抓到
+  `LocalizationLanguageInfo.ToString` 当前语言分支多一个 `)` 的缺陷，已一并修正。
 - **坏路径模板与空键零告警（R3-LOC-004/006）**：`LanguageAssetPath` 缺 `{0}` 时语言被静默忽略，坏模板抛裸
   `FormatException`；语言 JSON 的空键入库后不可达。修法：缺占位符 Warning、坏模板包成带模块前缀的
   `InvalidOperationException`、空键 Warning 并跳过。回归：`LanguageAssetLoaderTests` 三例（改前均红/无告警）。

@@ -33,7 +33,9 @@ namespace XFramework.XLocalization
         public override string ToString()
         {
             string tag = IsCurrent ? "(当前)" : (IsFallback ? "(回退)" : string.Empty);
-            return $"{Language}{tag}{(tag.Length > 0 ? ", " : "(")}{EntryCount} 条)";
+            return tag.Length > 0
+                ? $"{Language}{tag}, {EntryCount} 条"
+                : $"{Language}({EntryCount} 条)";
         }
     }
 }

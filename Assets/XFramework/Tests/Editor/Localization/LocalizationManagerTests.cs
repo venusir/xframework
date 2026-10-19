@@ -45,6 +45,19 @@ namespace Venusy609.Xframework.Editor.Tests
         #region GetFormat × 命名占位符
 
         [Test]
+        public void SetInstance_SameInstanceTwice_StaysUsable()
+        {
+            var impl = new LocalizationManagerImpl();
+            LocalizationManager.SetInstance(impl);
+            LocalizationManager.SetInstance(impl); // 同实例重复注入不应留下第二份订阅
+
+            LocalizationManager.SetLanguageData("x", new Dictionary<string, string> { { "k", "v" } });
+            LocalizationManager.SetLanguage("x");
+
+            Assert.AreEqual("v", LocalizationManager.Get("k"));
+        }
+
+        [Test]
         public void GetFormat_UnregisteredNamedPlaceholder_RendersLiterally()
         {
             // README「全局占位符」一节的示例原文，一字未改

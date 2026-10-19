@@ -46,6 +46,45 @@ namespace XFramework.XLocalization.Tests
         }
 
         [Test]
+        public void LocalizationLanguageInfo_ToString_CurrentAndOther()
+        {
+            LocalizationManager.Initialize("zh-Hans", new Dictionary<string, string> { { "a", "1" } });
+            LocalizationManager.SetLanguageData("en", new Dictionary<string, string>
+            {
+                { "a", "1" }, { "b", "2" },
+            });
+
+            var buffer = new List<LocalizationLanguageInfo>();
+            LocalizationManager.CopyLoadedLanguages(buffer);
+
+            var current = buffer.Find(x => x.Language == "zh-Hans");
+            var other = buffer.Find(x => x.Language == "en");
+
+            Assert.AreEqual("zh-Hans(当前), 1 条", current.ToString(),
+                "当前语言格式：名字(当前), N 条（R3-LOC-001）");
+            Assert.AreEqual("en(2 条)", other.ToString(),
+                "非当前/回退语言格式：名字(N 条)");
+        }
+
+        [Test]
+        public void CopyLoadedLanguages_MostRecentlyUsedFirst_AndEvictsLru()
+        {
+            LocalizationManager.Initialize("a", new Dictionary<string, string> { { "k", "a" } });
+            LocalizationManager.SetLanguageData("b", new Dictionary<string, string> { { "k", "b" } });
+            LocalizationManager.SetLanguageData("c", new Dictionary<string, string> { { "k", "c" } });
+            LocalizationManager.SetLanguageData("d", new Dictionary<string, string> { { "k", "d" } });
+            LocalizationManager.SetLanguageData("b", new Dictionary<string, string> { { "k", "b2" } }); // touch b
+            LocalizationManager.SetLanguageData("e", new Dictionary<string, string> { { "k", "e" } }); // 淘汰 c
+
+            var buffer = new List<LocalizationLanguageInfo>();
+            LocalizationManager.CopyLoadedLanguages(buffer);
+
+            CollectionAssert.AreEqual(new[] { "e", "b", "d", "a" },
+                buffer.ConvertAll(x => x.Language),
+                "MRU 在前；最久未用的非当前语言（c）应被淘汰");
+        }
+
+        [Test]
         public void CopyLoadedLanguages_NotInitialized_ReturnsZeroAndClearsBuffer()
         {
             var buffer = new List<LocalizationLanguageInfo> { default };
