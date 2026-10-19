@@ -960,6 +960,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **补 UIBinder 公开绑定方法覆盖（2026-10-19，R3-UIB-012）**：`UIBinderTests` 五例（FillAmount / Slider / Toggle /
+  Active / Click），含「释放后不再更新」；TMP 相关方法与真实 Tip 帧循环仍不可测（未导入 TMP Essentials），
+  已在台账登记覆盖缺口。
 - **补默认面板工厂的直接构造覆盖（2026-10-19，R3-UIA-008/009）**：`AssetPanelFactoryTests` 四例（正路径、
   缺组件、实例化失败、回收），经 `AssetManager.SetInstance` 注入 `FakeAssetManager`；门面豁免注释补
   `IsLayerVisible` / `IsLayerInteractive`。
