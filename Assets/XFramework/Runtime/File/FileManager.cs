@@ -193,6 +193,8 @@ namespace XFramework.XFileManager
         /// <param name="domain">仅对该域加解密；为 <c>null</c> 时对所有域生效。</param>
         public static void SetCryptoProvider(ICryptoProvider cryptoProvider, FileDomain? domain = null)
         {
+            // Destroy 之后设置会被下一次 Initialize 悄悄采纳（R3-FILE-004）：与其余入口同锁。
+            ThrowIfDestroyed();
             _cryptoProvider = cryptoProvider;
             _cryptoDomain = cryptoProvider != null ? domain : null;
             RebuildProvider();
@@ -204,6 +206,7 @@ namespace XFramework.XFileManager
         /// <returns>当前加解密提供者，未设置时返回 <c>null</c>。</returns>
         public static ICryptoProvider GetCryptoProvider()
         {
+            ThrowIfDestroyed();
             return _cryptoProvider;
         }
 

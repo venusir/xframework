@@ -393,6 +393,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### File
 
+- **Destroy 后的 crypto 设置不查闩锁（R3-FILE-004）**：`SetCryptoProvider`/`GetCryptoProvider` 在销毁期间仍可读写，
+  下一次 `Initialize` 会悄悄采纳旧设置。修法：两入口补 `ThrowIfDestroyed`。回归：
+  `FileManagerCryptoTests.CryptoProvider_AfterDestroy_ThrowsObjectDisposed`。
 - **移动 Streaming 路径绕过归一与沙箱（R3-FILE-002）**：`GetStreamingUrl` 不经过 `GetPhysicalPath`，反斜杠不归一、
   `../` 可原样拼进 URL。修法：与桌面实现共用 `TryNormalizeRelativePath`，非法路径抛 `ArgumentException`。
   回归：`FileManagerSyncTests.MobileStreaming_RejectsTraversalPath`；Android/iOS 真机行为登记探针。

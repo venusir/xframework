@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -43,6 +44,16 @@ namespace XFramework.XFileManager.Tests
             // 还原成「零配置可用」，而不是把销毁闩锁留给后续 fixture——懒加载豁免只对「未初始化」生效，
             // 已销毁时 EnsureInitialized 直接抛，同进程混跑两个平台会让后面的 EditMode 用例吃到它
             FileManager.Initialize();
+        }
+
+        [Test]
+        public void CryptoProvider_AfterDestroy_ThrowsObjectDisposed()
+        {
+            FileManager.Destroy();
+
+            Assert.Throws<ObjectDisposedException>(() => FileManager.SetCryptoProvider(null));
+            Assert.Throws<ObjectDisposedException>(() => FileManager.GetCryptoProvider(),
+                "Destroy 后的加解密读写应与其余入口同锁（R3-FILE-004）");
         }
 
         [Test]

@@ -40,6 +40,9 @@ namespace XFramework.XFileManager.Tests
         [TearDown]
         public void TearDown()
         {
+            // 个别用例在 finally 里 Destroy 了门面（能力缺失降级路径）；先重新初始化再清 crypto，
+            // 否则会撞上 R3-FILE-004 的「Destroy 后禁止设置」闩锁。
+            FileManager.Initialize();
             FileManager.SetCryptoProvider(null);
             FileManager.Destroy();
 

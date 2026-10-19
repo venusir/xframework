@@ -44,3 +44,4 @@
 - 不做：**不新增 `MoveAsync` / `CopyAsync`**（2026-10-15）——Save 的「移动」= 复制 + 删源（刻意非原子，见 Save README）；同盘 `File.Move` 在 WebGL / Console 无可用物理路径，加了也没有消费者。原子替换语义已有 `FilePathUtility.ReplaceFileAtomically`（原子写走它）。无重开判据。
 - 已做：**补 `OSXServer` 平台分支**（2026-10-20 · R3-FILE-001，本轮修复）——macOS Server 构建落 default 抛 `PlatformNotSupportedException`，本可用 `DesktopFileProvider`；加 case。运行期需 macOS Server 构建实测（R3-PRB-04 登记 `未做`）。
 - 已做：**移动 Streaming 路径归一与沙箱**（2026-10-20 · R3-FILE-002，本轮修复）——`GetStreamingUrl` 绕过 `GetPhysicalPath`，反斜杠不归一、`../` 可原样拼进 URL；改为与桌面实现共用 `TryNormalizeRelativePath`，非法路径抛 ANE。回归 `FileManagerSyncTests.MobileStreaming_RejectsTraversalPath`；Android/iOS 真机行为登记探针 `未做`。
+- 已做：**Destroy 后的 crypto 设置闩锁**（2026-10-20 · R3-FILE-004，本轮修复）——`SetCryptoProvider`/`GetCryptoProvider` 不查 `_destroyed`，销毁期间的设置会被下一次 `Initialize` 悄悄采纳；两入口补 `ThrowIfDestroyed`。回归 `FileManagerCryptoTests.CryptoProvider_AfterDestroy_ThrowsObjectDisposed`。
