@@ -216,8 +216,8 @@ namespace XFramework.XMessage
 
         /// <summary>订阅指定类型的消息,附加订阅级过滤条件(返回 false 的消息不投递给该订阅)。</summary>
         /// <remarks>
-        /// 过滤与回调组合为订阅期一次性闭包:过滤条件抛异常时由事件流的异常隔离兜底
-        /// (记 Error 日志、本条不投递、订阅保留、其他订阅者不受影响)。
+        /// 过滤与回调组合为订阅期一次性闭包:过滤条件抛异常时**就地**记一条 <c>[Message]</c> Error、
+        /// 本条不投递、订阅保留、其他订阅者不受影响——不再依赖事件流的异常隔离兜底（R3-MSG-005）。
         /// </remarks>
         public IDisposable Subscribe<TMessage>(Predicate<TMessage> filter, Action<TMessage> handler)
         {

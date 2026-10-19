@@ -37,10 +37,10 @@ namespace XFramework.XMessage
         /// </summary>
         public int BufferedChannelCount { get; }
 
-        /// <summary>自上次 Clear/SetInstance 以来的发布次数(含键值发布与 PublishAsync)。</summary>
+        /// <summary>自上次 Clear 以来的发布次数(含键值发布与 PublishAsync)。</summary>
         public int PublishCount { get; }
 
-        /// <summary>自上次 Clear/SetInstance 以来的请求次数。</summary>
+        /// <summary>自上次 Clear 以来的请求次数。</summary>
         public int RequestCount { get; }
 
         /// <summary>当前请求处理器数量。</summary>

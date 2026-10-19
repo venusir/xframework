@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Message 的台账与 XML（2026-10-19，R3-MSG-001/002/005）**：`Modules/Message.md` 的 MSG-002 条目由
+  `未做` 转 `已做`（`4e8645b` 修 ODE、`04b2f33` 补 `IMessageSubscriber`）；补「只清缓存保订阅」`待裁` 条目；
+  `MessageBroker` 的过滤异常说明改为「就地记 `[Message]`」；`MessageBusStats` 删去已不存在的 `SetInstance`。
 - **订正 Localization 的样例与宽容口径（2026-10-19，R3-LOC-001/005 + LOC-004 文档面）**：`ToString` 样例改为
   实际输出 `zh-Hans(当前), 128 条`；JSON 原始控制字符列为第三种宽容；`LanguageAssetPath` 写明必须包含
   `{0}`（缺占位符语言被静默忽略，坏模板抛无前缀 `FormatException`）。
