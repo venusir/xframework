@@ -717,6 +717,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **R2 的示例修复只修了一半：裸字段不实现 `IConfigRow<TKey>.Id`，照抄 CS0535（R3-CONF-001，P0）**：R2 把
+  Json / ScriptableObject 示例从自动属性改成裸字段（修掉了运行期主键恒 0），但 `IConfigRow<TKey>` 的成员是
+  **属性** `TKey Id { get; }`，C# 字段不能实现接口属性——三处示例照抄即编译失败，比原缺陷更早暴露。
+  修法：三处示例统一为「字段承载序列化 + 显式接口实现 `int IConfigRow<int>.Id => Id;`」；README 的
+  「已知限制」把这条写成成文边界。验证：临时 `netstandard2.1` 编译探针（原样 CS0535，补显式实现后
+  0 error）；`JsonRowSerializationTests` / `ExplicitInterfaceRowTests` 已用同形钉住。
 - **README 行类型示例用自动属性，Json / ScriptableObject 路径主键恒 0（CONF-001，P0）**：三处示例把主键写成
   `public int Id { get; set; }`。Json 路径经 `JsonUtility`、SO 路径经 Unity 序列化，二者都**不序列化属性**——
   多行 JSON 撞 `Duplicate Id '0'` 加载失败，单行则静默产出键 0 的表（`.Get(1001)` 报 not found），

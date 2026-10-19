@@ -83,3 +83,5 @@ Runtime/Config/
 - 不做：**`IConfigTable.Data` 不改只读包装**（2026-10-18 · 裁定）——返回可变引用是「零反射注入路径」的代价；修改会使 `Count`/`GetAll`/`BuildIndex`（构造期快照）与 `Get`/`TryGet`/`Contains`（实时字典）脱钩，XML 与 README 已写明只读契约（CONF-011）。无重开判据。
 
 - 已做：**CONF-016 编译探针与文档**（2026-10-18 · 独立工程 dotnet build）——`PreloadTableAsync<T>("path", default)` 在 `ConfigFormat` / `IConfigLoader` 重载间 CS0121（探针复现）；XML 与 README 写明显式 `ConfigFormat.Json` 或强转，不加重载。
+
+- 已做：**行类型示例必须「字段 + 显式实现 `IConfigRow<TKey>.Id`」**（2026-10-19 · R3-CONF-001，本轮修复；临时 `netstandard2.1` 编译探针正/负）——R2 把示例从自动属性改成裸字段时只修了一半：`IConfigRow<TKey>.Id` 是属性，C# 字段不能实现接口属性，三处示例照抄即 `CS0535`。三处已统一为「字段承载序列化 + `int IConfigRow<int>.Id => Id;`」，「已知限制」同步成文。

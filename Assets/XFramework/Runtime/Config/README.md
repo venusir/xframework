@@ -27,6 +27,9 @@ public struct ItemRow : IConfigRow<int>
     public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     public string Name;
     public int Price;
+
+    // 字段不能实现接口属性：必须显式实现 IConfigRow<TKey>.Id 去读字段
+    int IConfigRow<int>.Id => Id;
 }
 
 // 2. 初始化 & 加载
@@ -308,6 +311,9 @@ public struct ItemRow : IConfigRow<int>
     public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     public string Name;
     public int Price;
+
+    // 字段不能实现接口属性：必须显式实现 IConfigRow<TKey>.Id 去读字段
+    int IConfigRow<int>.Id => Id;
 }
 
 // Json 加载
@@ -589,6 +595,9 @@ public enum ConfigFormat
   单行则静默产出键 0 的表（`.Get(1001)` 报 not found），SO 路径的 Inspector 里也无处填写。
   CSV 走反射写成员，属性可用，因此这个坑只在 Json / ScriptableObject 路径显形；
   `Tests/Editor/Config/JsonRowSerializationTests` 钉住了该事实。
+  **且必须显式实现 `IConfigRow<TKey>.Id`**：C# 字段不能实现接口属性，只写 `public int Id;` 会得到
+  `CS0535: 'ItemRow' does not implement interface member 'IConfigRow<int>.Id'`。正确形状是
+  「字段承载序列化 + `int IConfigRow<int>.Id => Id;` 兑现接口」（三键/复合键同理，见 `IConfigRow` 示例）。
 - **重复注册会静默覆盖**：`RegisterTable` / `RegisterGlobal` 对同一类型再注册直接替换，且**已发出去的
   旧 `ConfigTable<T>` 引用与新 `GetTable<T>()` 不是同一实例**（包装器缓存被丢弃）。
 - **`Unload<T>()` 在途时可能不生效**：在途加载完成后仍会注册数据（上节已写明）；更隐蔽的一半是——

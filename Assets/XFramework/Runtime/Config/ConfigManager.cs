@@ -29,6 +29,9 @@ namespace XFramework.XConfig
     ///     public int Id;  // 主键必须是字段：Json / ScriptableObject 不序列化属性
     ///     public string Name;
     ///     public int Price;
+    ///
+    ///     // 字段不能实现接口属性：必须显式实现 IConfigRow&lt;TKey&gt;.Id 去读字段
+    ///     int IConfigRow&lt;int&gt;.Id =&gt; Id;
     /// }
     /// 
     /// // 2. 初始化 &amp; 预加载
