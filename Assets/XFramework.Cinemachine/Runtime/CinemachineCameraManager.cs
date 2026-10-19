@@ -414,12 +414,13 @@ namespace XFramework.XCamera.Cinemachine
             ApplyPriorities(index);
             target.gameObject.SetActive(true);
 
-            // 已在混合且目标就是当前活动时，改优先级不会重启混合——短暂失活/激活强制重新入队。
-            // 副作用：vcam 的 PreviousStateIsValid 重置。
+            // 已在混合且目标就是当前活动时，改优先级不会重启混合——直接清掉当前 blend 强制完成它。
+            // 上游官方说明（CinemachineBrain.ActiveBlend）：把 ActiveBlend 设为 null 正是「强制完成混合」
+            // 的受支持入口。不要用短暂失活/激活的 hack：同步 off/on 后下一帧仍是同一目标，
+            // Brain 不会新建混合，原过渡会按原时长继续（R3-CIN-001）。
             if (_brain.IsBlending && ReferenceEquals(_brain.ActiveVirtualCamera, target))
             {
-                target.gameObject.SetActive(false);
-                target.gameObject.SetActive(true);
+                _brain.ActiveBlend = null;
             }
         }
 

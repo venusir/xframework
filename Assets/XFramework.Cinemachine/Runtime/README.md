@@ -55,8 +55,8 @@ Runtime/
 
 - 仅主线程；注册表、反查表与场景状态不是线程安全的。
 - `Activate`：目标 `Priority = int.MaxValue`、其余已注册 vcam `Priority = 0`；目标 GameObject 激活；
-  `brain.DefaultBlend = Cut`。**若 Brain 正在混合且目标已是当前活动相机**，短暂失活 / 激活目标 GameObject
-  强制重新入队，确保是 cut（副作用：该 vcam 的 `PreviousStateIsValid` 重置）。
+  `brain.DefaultBlend = Cut`。**若 Brain 正在混合且目标已是当前活动相机**，直接把
+  `brain.ActiveBlend = null` 强制完成当前混合（上游文档明说的受支持入口）。
 - `Deactivate`：目标 GameObject 失活；Brain 按优先级队列选下一个；回退使用的 `DefaultBlend` 是当前值。
 - `TransitionTo`：设置 `brain.DefaultBlend`（style / duration），调整优先级并激活目标；Brain 负责混合。
   `duration <= 0` 或 `Cut` 等价于 `Activate`。

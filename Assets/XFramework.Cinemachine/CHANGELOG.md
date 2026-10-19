@@ -4,6 +4,16 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`Activate` 在混合中途不能强制完成（R3-CIN-001）**：旧实现用短暂失活 / 激活 GameObject 试图重新入队，
+  但同步 off/on 后 Brain 仍视同一目标为活动相机，原过渡按原时长继续。修法：改用上游文档明说的
+  `CinemachineBrain.ActiveBlend = null`；补 PlayMode 用例（改前 `IsBlending` 恒 true）。
+- **槽位复用 ABA 无用例（R3-CIN-005）**：补 `DynamicHandle_AfterSlotReuse_OldHandleIsRejected`，
+  锁定「旧句柄按代际失配失效、不得操作到复用槽位的新相机」。
+
 ## [0.1.0] - 2026-10-17
 
 ### Added

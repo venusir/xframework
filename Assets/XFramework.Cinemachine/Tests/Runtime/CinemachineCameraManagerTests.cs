@@ -148,6 +148,31 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
         }
 
+        /// <summary>
+        /// 强制完成混合（R3-CIN-001）：从 A 过渡到 B 的中途再次 Activate("b")，必须立即结束混合，
+        /// 而不是让原先的过渡按剩余时长继续。上游官方入口是 <c>CinemachineBrain.ActiveBlend = null</c>。
+        /// </summary>
+        [Test]
+        public void Activate_DuringBlendToSameTarget_ForcesCutImmediately()
+        {
+            _manager.Activate("a");
+            Pump();
+
+            _manager.TransitionTo("b", 2f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+
+            Assert.IsTrue(_brain.IsBlending, "前提：应处于 A→B 的混合中");
+            Assert.AreSame(_vcamB, _brain.ActiveVirtualCamera);
+
+            _manager.Activate("b");
+            Pump();
+
+            Assert.IsFalse(_brain.IsBlending, "Activate 同一目标必须强制完成混合");
+            Assert.IsNull(_brain.ActiveBlend);
+            Assert.IsFalse(_manager.IsTransitioning);
+            Assert.AreEqual("b", _manager.ActiveHandle.NamedId);
+        }
+
         [Test]
         public void TransitionTo_UnknownId_LogsWarningAndNoOps()
         {
@@ -185,6 +210,44 @@ namespace XFramework.XCamera.Cinemachine.Tests
             finally
             {
                 UnityEngine.Object.DestroyImmediate(extraObject);
+            }
+        }
+
+        /// <summary>
+        /// 槽位复用的 ABA 防线（R3-CIN-005）：注销后同一槽位被新相机复用、代际递增，
+        /// 旧 <see cref="CameraHandle"/> 必须按代际失配失效，不能操作到新相机。
+        /// </summary>
+        [Test]
+        public void DynamicHandle_AfterSlotReuse_OldHandleIsRejected()
+        {
+            var objC = new GameObject("VcamC");
+            var vcamC = objC.AddComponent<CinemachineCamera>();
+            var objD = new GameObject("VcamD");
+            var vcamD = objD.AddComponent<CinemachineCamera>();
+
+            try
+            {
+                var oldHandle = _manager.Register(vcamC);
+                Assert.IsTrue(_manager.Unregister(oldHandle));
+
+                var newHandle = _manager.Register(vcamD); // 复用同一槽位
+                Assert.AreEqual(oldHandle.Id, newHandle.Id, "前提：槽位应被复用");
+                Assert.AreNotEqual(oldHandle.Generation, newHandle.Generation, "槽位复用必须递增代际");
+
+                Assert.IsFalse(_manager.IsActive(oldHandle), "旧句柄必须按代际失配失效");
+
+                LogAssert.Expect(LogType.Warning, new Regex("相机句柄无效或已注销.*"));
+                _manager.Activate(oldHandle);
+                Pump();
+
+                Assert.IsFalse(_manager.IsActive(oldHandle));
+                Assert.AreNotEqual(int.MaxValue, vcamD.Priority.Value,
+                    "旧句柄不得操作到复用槽位的新相机");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(objC);
+                UnityEngine.Object.DestroyImmediate(objD);
             }
         }
 

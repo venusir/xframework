@@ -51,7 +51,7 @@ Assets/XFramework.Cinemachine/
 ## 四、决策台账
 
 - 已做：**Cinemachine 3.1.7 一等实现以独立可选扩展包提供**（2026-10-17）——`CinemachineCameraManager` 用优先级做激活 / 反激活、`DefaultBlend` 做过渡；核心包保持零依赖。理由：2.x / 3.x API 不兼容，核心包一旦引用就必须锁一个主版本；采用率没有公开统计，不能假设所有消费者都用 Cinemachine。**扩展包是适配器，不是行为库**——跟随 / 震屏 / 缩放在 Cinemachine 里配置，本包只做注册与状态适配。
-- 已做：**`Activate` 在「正在混合且目标已是活动相机」时短暂失活 / 激活目标 GameObject**（2026-10-17 · 测试锁定）——Brain 的公开面没有「强制完成 / 重开混合」的入口；副作用是该 vcam 的 `PreviousStateIsValid` 重置，写进使用方 README。
+- 已推翻：**~~`Activate` 在「正在混合且目标已是活动相机」时短暂失活 / 激活目标 GameObject~~**（2026-10-17 · 原称「测试锁定」）——~~Brain 的公开面没有「强制完成 / 重开混合」的入口；副作用是该 vcam 的 `PreviousStateIsValid` 重置~~ 该前提失实：`CinemachineBrain.ActiveBlend = null` 是上游文档明说的「强制完成混合」入口；旧 hack 同步 off/on 后下一帧仍是同一目标，Brain 不会新建混合，原过渡按原时长继续，且当时没有对应用例。被 2026-10-19「R3-CIN-001：改用 `ActiveBlend = null` + 补改前必红用例」取代。
 - 已做：**改优先级后立即 `Prioritize()`**（2026-10-17 · `CinemachineCameraManagerTests` 改前必红：不调用时 `TransitionTo_BlendsAndCompletes` / `TransitionTo_ZeroDuration_Cuts` 失败，Brain 仍停在旧活动相机）。
 - 已做：**动态 vcam 句柄（`Register<T>` / `ActiveHandle` / 槽位表）**（2026-10-17 · 用户裁定主接口直扩）——命名 vcam 保持 string id；动态 vcam 随预制 `Register` / `Dispose`，不需要 authoring id。槽位下标 = `CameraHandle.Id`，代际递增防旧句柄误用；动态活动时 `ActiveHandle.NamedId` 为 `null`，用 `ActiveHandle`。
 - 已做：**合并 `ActiveCameraId` / `ActiveHandle`**（2026-10-17 · 用户裁定）——`CameraHandle` 增加 `NamedId`；`CinemachineCameraManager` 移除 `ActiveCameraId`；`CameraManager.ActiveCameraId` 直接读 `ActiveHandle.NamedId`（O(1)、零遍历）。命名槽位的 `NamedId` 即 vcam 的命名 id，动态槽位 null。
