@@ -570,6 +570,9 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   `InputSystem.onDeviceChange` 的静态回调表跨会话存活，只丢引用会让旧 provider 被钉住、设备消息逐会话
   叠加。复位对实现了内部解绑能力的 provider 调用 `-=`；**第三方 provider 若自己订阅了静态事件，门面
   探测不到**——需自行在会话边界退订。
+- **复合绑定的 Raw 读恒为默认值**（R3-INP-003）：WASD / 2DVector / 1DAxis / D-pad 这类复合绑定的
+  `ReadVector2Raw` / `ReadFloatRaw` 不合成子项，恒返回默认值；需要它们请用平滑读（`ReadVector2` /
+  `ReadFloat`）或自行读子项。平滑读会应用死区与归一化，二者不可互换。
 - **`playerId > 0` 的复合绑定只读第一个子项**（INP-010）：对 D-pad / 2DVector 这类复合绑定，
   按玩家读取会取到第一个子项（通常是 `ButtonControl`），`ReadVector2` 可能恒为零；`playerId == 0`
   则是 action 级全设备读取。需要逐玩家读取复合轴请自行组合各子项，或把动作拆成独立的 1D 轴。

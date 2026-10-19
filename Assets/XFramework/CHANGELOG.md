@@ -895,6 +895,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **补 Input 的复合绑定 Raw 读限制（2026-10-19，R3-INP-003）**：WASD / 2DVector / 1DAxis / D-pad 的
+  `ReadVector2Raw` / `ReadFloatRaw` 不合成子项、恒为默认值；需要它们请用平滑读或自行读子项。
 - **订正 Lock 与 Bootstrap 的包内表述（2026-10-19，R3-LOCK-002/BST-002）**：Lock 的 XML/README 移除 R2 审计编号，
   改为自足表述；`GameLauncher` 的 XML 与 README 写明「必须挂在根 GameObject 上」——`DontDestroyOnLoad` 只对
   根对象生效，挂子对象时切场景会销毁并 `Shutdown` 拆掉全局服务。
