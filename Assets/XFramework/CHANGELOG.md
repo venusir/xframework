@@ -895,6 +895,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正 Diagnostics 的契约句与恢复入口（2026-10-19，R3-DIAG-002/003）**：`Collect` 抛异常的渲染结果是
+  「错误提示 + 堆栈两行」（不是一条）；`Clear()` 抹掉框架页签且包外宿主无法恢复，XML 与已知限制写明；
+  删去「十个文件」固定计数。
 - **订正 File 的权限契约与计数（2026-10-19，R3-FILE-003/005）**：读失败契约并列
   `IOException` 与 `UnauthorizedAccessException`（后者不是前者的子类，桌面实现会抛）；删去
   `RunOnThreadPool` 的「11 处」固定计数。

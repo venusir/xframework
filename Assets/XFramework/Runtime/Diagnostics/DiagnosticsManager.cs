@@ -166,6 +166,9 @@ namespace XFramework.XDiagnostics
         /// <para>编辑器侧的框架页签可经内部登记入口恢复（<c>Editor/Diagnostics/FrameworkPanels</c> 的
         /// <c>Register</c>）——关闭域重载时 <c>[InitializeOnLoadMethod]</c> 不会重跑，
         /// 这是同一编辑器会话内唯一的恢复路径（DIAG-003）。</para>
+        /// <para><b>包外宿主无法恢复框架页签</b>：该入口在包内 Editor 程序集里是 internal，包外代码调不到；
+        /// 按「彻底重启用」调用后框架页签不会回来。需要它们时请在调用前自行保存并重登记，或不要调用
+        /// <c>Clear</c>（R3-DIAG-002）。</para>
         /// </summary>
         public static void Clear()
         {
