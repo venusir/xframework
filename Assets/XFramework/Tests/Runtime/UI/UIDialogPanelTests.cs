@@ -274,6 +274,50 @@ namespace XFramework.XUI.Tests
             await second;
         }
 
+        /// <summary>
+        /// 外部直接销毁面板时，遮罩持有必须被回收（R3-UIA-003）：绕过 CloseAsync 的销毁不会走
+        /// ReleaseMasksOwnedBy，旧实现会让遮罩永久驻留并挡住整层输入。
+        /// </summary>
+        [Test]
+        public async Task ExternallyDestroyedMaskOwner_ReleasesMask()
+        {
+            var panel = await UIManager.OpenAsync<FakeDialog>("PF_FakeDialog");
+            Assert.IsNotNull(panel);
+            UIManager.ShowMask(new UIMaskStyle(), panel);
+            Assert.IsTrue(FindMask().gameObject.activeSelf, "前提：遮罩已显示");
+
+            UnityEngine.Object.DestroyImmediate(panel.gameObject);
+            UIManager.Update(0f, 0f); // 帧剪枝
+
+            Assert.IsFalse(FindMask().gameObject.activeSelf, "外部销毁面板后遮罩应释放并隐藏");
+        }
+
+        /// <summary>捕获层同形：外部销毁目标后面板捕获层必须收起（R3-UIA-003）。</summary>
+        [Test]
+        public async Task ExternallyDestroyedPopup_ReleasesCatcher()
+        {
+            var anchor = new GameObject("PopupAnchor", typeof(RectTransform)).GetComponent<RectTransform>();
+            try
+            {
+                var panel = await UIManager.ShowPopupAsync<FakeDialog>(
+                    anchor, "PF_FakeDialog", closeOnClickOutside: true);
+                Assert.IsNotNull(panel);
+
+                var catcher = _root.transform.Find("UIManager_PopupCatcher");
+                Assert.IsNotNull(catcher);
+                Assert.IsTrue(catcher.gameObject.activeSelf, "前提：捕获层已显示");
+
+                UnityEngine.Object.DestroyImmediate(panel.gameObject);
+                UIManager.Update(0f, 0f);
+
+                Assert.IsFalse(catcher.gameObject.activeSelf, "外部销毁目标后捕获层应收起");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(anchor.gameObject);
+            }
+        }
+
         [Test]
         public async Task NonModal_ShowsNoMask()
         {

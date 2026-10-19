@@ -417,6 +417,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **绕过 `CloseAsync` 直接销毁面板时遮罩/捕获层持有不回收（R3-UIA-003）**：外部 `Destroy` 不走
+  `ReleaseMasksOwnedBy` / `ReleasePopupCatcherOf`；遮罩与全屏捕获层永久驻留。修法：帧剪枝发现栈空洞时
+  同步清理指向已销毁面板的遮罩/捕获持有，并在无持有者时隐藏。回归：
+  `UIDialogPanelTests.ExternallyDestroyedMaskOwner_ReleasesMask` / `ExternallyDestroyedPopup_ReleasesCatcher`
+  （改前均红）。
 - **重复打开面板时遮罩/捕获层按请求层排序（R3-UIA-002）**：`ShowDialogAsync` / `ShowPopupAsync` 推导遮罩 /
   捕获层时用本次请求的 `layer`；面板已存在时 `OpenAsync` 只是聚焦、不改它的 `Layer`，遮罩被放到错误的层。
   修法：改用 `panel.Layer`。回归：`UIDialogPanelTests.RepeatedOpen_DifferentLayer_MaskFollowsExistingPanelLayer`

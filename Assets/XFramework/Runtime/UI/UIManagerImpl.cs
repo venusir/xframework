@@ -2086,7 +2086,55 @@ namespace XFramework.XUI
             // 字典扫描只在真的剪到空洞时才做：本方法在每帧派发路径上（DriveTier 开头），
             // 稳态下必须保持零分配、零哈希查找。
             if (pruned)
+            {
                 PruneActivePanels();
+                PruneOverlayHolds();
+            }
+        }
+
+        /// <summary>
+        /// 外部直接销毁面板时，遮罩 / 捕获层的持有不会走 <c>CloseAsync</c> 的释放路径（R3-UIA-003）。
+        /// 在「栈里发现空洞」的那一帧同步剪掉这些持有：遮罩在无持有者时隐藏，捕获层在无目标时收起。
+        /// <para>只做 O(持有数) 的引用判空，不做分配；稳态下只在 <see cref="PruneStack"/> 真的剪到
+        /// 空洞时调用一次。</para>
+        /// </summary>
+        private void PruneOverlayHolds()
+        {
+            bool maskChanged = false;
+            for (int i = _maskEntries.Count - 1; i >= 0; i--)
+            {
+                // Unity 的 == 重载把已销毁对象判为 null
+                if (_maskEntries[i].Owner == null)
+                {
+                    _maskEntries.RemoveAt(i);
+                    maskChanged = true;
+                }
+            }
+
+            if (maskChanged && _maskEntries.Count == 0 && _maskInstance != null)
+                _maskInstance.SetActive(false);
+
+            bool catcherChanged = false;
+            for (int i = _popupCatcherTargets.Count - 1; i >= 0; i--)
+            {
+                if (_popupCatcherTargets[i] == null)
+                {
+                    _popupCatcherTargets.RemoveAt(i);
+                    catcherChanged = true;
+                }
+            }
+
+            if (!catcherChanged)
+                return;
+
+            if (_popupCatcherTargets.Count == 0)
+            {
+                if (_popupCatcher != null)
+                    _popupCatcher.SetActive(false);
+                return;
+            }
+
+            UpdatePopupCatcherSorting(_popupCatcherTargets[_popupCatcherTargets.Count - 1].Layer);
         }
 
         /// <summary>
