@@ -210,6 +210,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **六处失败路径新增日志（2026-10-20）**：Save 非 `Missing` 的加载失败记 `[Save]` Warning；UI 遮罩/捕获层点击
+  关闭的 `OnClose` 异常记 `[UIManager]` Error；Input 未知动作在**所有构建**下记一次 `[Input]` Warning（此前
+  仅 Editor）；UpdateManager 调度器不可用时的注册丢弃记一次 `[Update]` Warning；AudioManager.Destroy 隔离第三方
+  `Dispose` 异常并记 `[Audio]` Error；Bootstrap.Shutdown 读取 `Phase` 抛异常时记 `[Bootstrap]` Error 并按
+  `int.MinValue` 最后清理。日志量增加，既有条目的控制台语义不变。
 - **`AllPanelsClosedMessage` 只在真正全关时发布（R3-ADJ-13）**：此前 `CloseAllAsync` 无条件发布——
   控制器拦下关闭（面板仍开着）或本来就没有面板时也发，订阅者会误判 `OpenCount == 0`。现在只有
   「确实发起过关闭且结束时 `OpenCount == 0`」才发布一次。
@@ -1145,6 +1150,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+- **订正日志相关文档（2026-10-20）**：Save README 的依赖表与加载失败日志说明、UI README 的 `UIDefaultController`
+  实现描述、File README 的可选能力告警范围、Reactive README 的异常日志分类归属，均改为与代码一致；
+  `LogCategories` 的 `LogManager` / `XFramework` 分类注释同步订正。
 - **补 Timer 的 Clear 恢复路径用例（2026-10-20，R3-TMR-002）**：`UpdateManager.Clear()` 后 `CancelAll` + 重建的
   恢复路径此前零覆盖；新增 `TimerLifecycleTests.ClearThenCancelAllAndRecreate_RecoversScheduling`。
 - **修正 `AutoInit_DefaultAvailable` 的自证（2026-10-20，R3-SER-004）**：SetUp 已 `Initialize` 后再断言「已就绪」，

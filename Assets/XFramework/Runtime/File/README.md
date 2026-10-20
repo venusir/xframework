@@ -220,14 +220,15 @@ FileManager.Initialize(new XboxFileProvider());
 #endif
 ```
 
-3. **同时实现可选能力接口**——基类只实现 `IFileProvider`，下面几项缺失时对应能力会**静默降级**（只留一条告警日志）：
+3. **同时实现可选能力接口**——基类只实现 `IFileProvider`。下面几项缺失时对应能力会降级：
+   前两项**告警**后降级；后两项是基类的**静默兜底**（不告警），需要时自行重写：
 
 | 缺失项 | 后果 |
 | ------ | ---- |
 | 不实现 `IAtomicFileProvider` | `WriteAllBytesAtomicAsync` **降级为普通写并告警**：没有 `.tmp → 替换`、没有一代 `.bak`，写入中途崩溃会留下截断文件。**Save 模块的存档正依赖它** |
 | 不实现 `IDirectoryProvider` | `GetDirectoriesAsync` **告警并返回空数组**：玩家目录发现（`SaveManager.GetAllPlayerIdsAsync`）恒为空 |
-| 不重写 `GetFilesAsync` | 基类默认返回**空数组**（「Console 平台枚举文件需要平台 SDK 支持」）：**Save 的槽位枚举恒为空列表，启动恢复扫描也扫不到任何东西** |
-| 不重写 `CreateDirectory` | 基类是空实现，目录不会真的被创建 |
+| 不重写 `GetFilesAsync` | 基类默认返回**空数组**（「Console 平台枚举文件需要平台 SDK 支持」）：**Save 的槽位枚举恒为空列表，启动恢复扫描也扫不到任何东西**。静默兜底，无告警 |
+| 不重写 `CreateDirectory` | 基类是空实现，目录不会真的被创建。静默兜底，无告警 |
 
 > **抽象方法为什么是同步的？** 基类的异步方法就是把它们丢进 `UniTask.RunOnThreadPool` 的委托里（见「线程契约」）。所以派生类里**可以**阻塞等待平台 SDK——那发生在池线程上，不是主线程。但也正因如此，**实现方不得在委托内触碰 Unity API**；平台路径这类主线程资源请在进入委托前取好。
 >
