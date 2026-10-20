@@ -34,7 +34,7 @@ Runtime/Localization/
 - 已做：**审计轮未发现新的缺陷类**（2026-09-29 · 审计轮）——`ModuleAudit.md` 第三节无需新增。
 - 已做：**五处零断言与陈旧注释补齐**（2026-10-19 · R3-LOC-007/008，本轮补测试）——新增 `ToString` 两态、MRU 顺序与 LRU 淘汰、同实例 `SetInstance` 三条用例；订正 `LocalizationSubscribeTests` 的陈旧注释。测试抓到 `ToString` 当前语言分支多一个 `)` 的缺陷并修正。
 - 已做：**坏路径模板与空键告警**（2026-10-19 · R3-LOC-004/006，本轮修复）——`LanguageAssetPath` 缺 `{0}` 时语言被静默忽略、坏模板抛裸 `FormatException`；空键入库后不可达且零告警。修法：缺占位符 Warning、坏模板包成带模块前缀的 `InvalidOperationException`、空键 Warning 并跳过；回归 `LanguageAssetLoaderTests` 三例。
-- 已做：**格式说明里的 `{` 按字面处理**（2026-10-19 · R3-LOC-003，本轮修复）——`{0:0{0}` 这类非格式项被交给 `string.Format` 抛 `FormatException`；旧字面化只转义开头，内层 `{0}` 又被当成新格式项。修法：非格式项从 `{` 到下一个 `}` 整段按字面；回归 `GetFormat_FormatSpecWithBrace_RendersLiterally`（改前红）。IL2CPP 行为仍需真机探针（登记 `未做`）。
+- 已做：**格式说明里的 `{` 按字面处理**（2026-10-19 · R3-LOC-003，本轮修复）——`{0:0{0}` 这类非格式项被交给 `string.Format` 抛 `FormatException`；旧字面化只转义开头，内层 `{0}` 又被当成新格式项。修法：非格式项从 `{` 到下一个 `}` 整段按字面；回归 `GetFormat_FormatSpecWithBrace_RendersLiterally`（改前红）。IL2CPP 行为仍需真机探针（见本节末 `未做` 条）。
 - 已做：**Bootstrap 阶段二次执行保留所有权**（2026-10-19 · R3-LOC-002，本轮修复）——第二次 `ExecuteAsync` 时 `alreadyInitialized` 为真（正是本阶段建的），却把 `_initializedByThisStage` 覆写为 false；空数据分支也直接置 false，`Shutdown` 漏销毁。修法：所有权只在「本次确实创建」时置位、二次执行保留；回归 `LocalizationBootstrapStageTests.ExecuteAsync_Twice_ShutdownStillDestroysOwnManager`（改前红）。
 - 不做：**并发切换的「后完成者胜」要不要引入代次作废**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-03 裁定为不做）——当前语义可接受；代次作废会增加状态机复杂度，且无使用方需求。无重开判据。
 - 暂不做：**`SetLanguageData` 覆盖当前语言数据时要不要补一条事件面**（2026-09-29 · 审计轮；2026-10-19 R3-ADJ-04 裁定为暂不做）——覆盖当前语言是低频运维动作，新增事件会扩大公开面。重开判据：使用方运行期覆盖当前语言数据且绑定文本需自动刷新。
@@ -44,6 +44,7 @@ Runtime/Localization/
 - 暂不做：**`TextAsset` 重载仍保留双重重载**（2026-10-18 · 文档订正）——新增 `(string, TextAsset)` 重载使既有 `("en", null)` 变 CS0121（LOC-001）；本轮只文档声明「显式 `null` 需强转」，静态工厂改造留待公开 API 变更授权。重开判据：出现按旧写法调用并升级的使用方。
 - 已做：**在途 `SwitchLanguageAsync` 的代次守卫**（2026-10-18 · `ea8dbd1`）——门面加实例代次，loader 捕获发起时实例 + 代次，`await` 后先查代次再解析，过期则 Warning + 丢弃；`SetInstance` 传同一实例不自增（LOC-004）。
 - 已做：**空语言表统一为「空表 = 缺表」**（2026-10-18 · `999f6ee`）——引导阶段 Warning + 跳过（不置已初始化），异步加载器维持硬失败；显式 `Initialize` 仍按调用方数据安装（LOC-006）。
+- 未做：**IL2CPP 下的「格式说明含 `{`」行为真机探针**（2026-10-20 · 承接 R3-LOC-003）——字面化逻辑由回归 `GetFormat_FormatSpecWithBrace_RendersLiterally` 在 Mono 下锁定，IL2CPP 上 `string.Format` 的行为是否一致只有真机构建能回答。配方：IL2CPP 构建跑同款输入（如 `{0:0{0}`），核对输出与 EditMode 一致。
 
 ## 审计轮次
 
