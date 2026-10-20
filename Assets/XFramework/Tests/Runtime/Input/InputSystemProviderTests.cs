@@ -81,6 +81,42 @@ namespace XFramework.XInput.Tests
             provider.Dispose();
         }
 
+        [Test]
+        public void UnknownAction_WarnsOncePerName()
+        {
+            // 这条告警此前只在 #if UNITY_EDITOR 内；Release 里「输入没反应」会完全无从定位。
+            // 现在所有构建都告警，且按动作名去重（GetAction 在每帧读取路径上）。
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Keyboard>/space");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            int warnings = 0;
+
+            void OnLog(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Warning && condition.Contains("不存在于任何 ActionMap"))
+                    warnings++;
+            }
+
+            Application.logMessageReceived += OnLog;
+            try
+            {
+                provider.WasPressedThisFrame("Nope");   // 第一次：警告
+                provider.WasPressedThisFrame("Nope");   // 同名：去重
+                provider.IsPressed("Nope2");            // 换名：再警告
+                provider.Initialize(asset);             // 重新初始化：清空去重表
+                provider.WasPressedThisFrame("Nope");   // 旧名：再警告
+            }
+            finally
+            {
+                Application.logMessageReceived -= OnLog;
+            }
+
+            Assert.AreEqual(3, warnings,
+                "同一动作名只警告一次；换名再警告；重新 Initialize 会清空去重表");
+            provider.Dispose();
+        }
+
         #endregion
 
         #region C5 Action 缓存跨 Map 修复

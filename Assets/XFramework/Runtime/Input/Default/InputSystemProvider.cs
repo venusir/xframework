@@ -28,10 +28,8 @@ namespace XFramework.XInput.Default
         // 通用动作字典缓存：按需懒加载 Action 引用，避免每帧全量字符串查找
         private readonly Dictionary<string, InputAction> _actionCache = new Dictionary<string, InputAction>(32);
 
-        #if UNITY_EDITOR
-        // 已警告未命中的动作名(Editor 专用):GetAction 在每帧读取路径被调用,同一动作只警告一次防止刷屏
+        // 已警告未命中的动作名(所有构建):GetAction 在每帧读取路径被调用,同一动作只警告一次防止刷屏
         private readonly HashSet<string> _warnedActionNames = new HashSet<string>();
-        #endif
 
         // 多玩家:action 名 → 该 action 第一个 Gamepad 绑定的控件路径尾(如 "buttonSouth"、"leftStick");
         // 空串表示无 Gamepad 绑定(纯键鼠动作),避免每帧重复遍历绑定解析
@@ -101,6 +99,7 @@ namespace XFramework.XInput.Default
             _buttonPressStartTimes.Clear();
             _buttonReleasePending.Clear();
             _playerBindingPaths.Clear();
+            _warnedActionNames.Clear();
             _warnedAmbiguousActionNames.Clear();
 
             _actionAsset.Enable();
@@ -248,7 +247,7 @@ namespace XFramework.XInput.Default
         {
             // 预热缓存（INP-001）：本方法可能从未被 WasPressedThisFrame / IsPressed 等读取 API 访问过；
             // 计时遍历只覆盖 _actionCache，不预热就永远不计时。GetAction 对不存在的动作返回 null
-            //（Editor 下按既有策略告警一次），不影响下面的返回值。
+            //（所有构建下按动作名告警一次），不影响下面的返回值。
             GetAction(action);
 
             if (_buttonPressStartTimes.TryGetValue(action, out var startTime) && startTime > 0f)
@@ -751,6 +750,7 @@ namespace XFramework.XInput.Default
             _buttonPressStartTimes.Clear();
             _buttonReleasePending.Clear();
             _playerBindingPaths.Clear();
+            _warnedActionNames.Clear();
             _warnedAmbiguousActionNames.Clear();
 
             LogManager.Info(LogCategories.Input, "Disposed.");
@@ -927,14 +927,12 @@ namespace XFramework.XInput.Default
             {
                 _actionCache[actionName] = fallback;
             }
-            #if UNITY_EDITOR
             else if (_warnedActionNames.Add(actionName))
             {
                 LogManager.Warning(LogCategories.Input,
                     "action '{0}' 不存在于任何 ActionMap,请检查动作名拼写或资产配置(可用 InputManager.HasAction 校验)。",
                     actionName);
             }
-            #endif
             return fallback;
         }
 
