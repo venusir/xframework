@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -110,6 +111,19 @@ namespace XFramework.XAudio.Tests
             AudioManager.Destroy();
 
             Assert.IsTrue(fake.Disposed, "Destroy 必须 Dispose 注入的实例——它自持的宿主与播放源池要跟着释放");
+        }
+
+        [Test]
+        public void Destroy_DisposeThrows_IsIsolated()
+        {
+            var fake = new FakeAudioManager { ThrowOnDispose = true };
+            AudioManager.SetInstance(fake);
+
+            LogAssert.Expect(LogType.Error, new Regex("Destroy 时 Dispose 管理器实例抛出异常"));
+
+            Assert.DoesNotThrow(AudioManager.Destroy, "Destroy 会被 Application.quitting 调用，必须不抛");
+            Assert.IsFalse(AudioManager.IsInitialized, "异常不得让门面卡在半初始化态");
+            Assert.IsTrue(fake.Disposed);
         }
 
         #endregion
@@ -226,7 +240,15 @@ namespace XFramework.XAudio.Tests
         {
             internal bool Disposed { get; private set; }
 
-            public void Dispose() => Disposed = true;
+            /// <summary>置真时 Dispose 抛异常，用于验证门面的隔离（退出路径不能被第三方后端打断）。</summary>
+            internal bool ThrowOnDispose;
+
+            public void Dispose()
+            {
+                Disposed = true;
+                if (ThrowOnDispose)
+                    throw new InvalidOperationException("fake dispose boom");
+            }
 
             public AudioHandle Play(string location, AudioPlayOptions options = default) => default;
 

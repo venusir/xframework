@@ -98,7 +98,18 @@ namespace XFramework.XAudio
             var instance = _instance;
             _instance = null;
             _instanceInitialized = false;
-            instance?.Dispose();
+
+            // 门面状态已复位，Dispose 抛异常也不会让门面卡在半初始化态；它会被 Application.quitting
+            // 调用，必须不抛——第三方后端的清理异常只留一条 [Audio] Error。
+            try
+            {
+                instance?.Dispose();
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "Destroy 时 Dispose 管理器实例抛出异常，已隔离；门面状态已复位");
+            }
         }
 
         #endregion

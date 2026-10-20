@@ -276,6 +276,8 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 
 - `Destroy` 会被 `Application.quitting` 自动调用，**无需手动挂**。
 - 销毁后需重新 `Initialize` 或 `SetInstance`。
+- `Destroy` **隔离**第三方实现 `Dispose` 抛出的异常（记一条 `[Audio]` Error）：门面状态已先复位，
+  不会把退出流程或后续重新初始化卡住。
 - **销毁后旧句柄仍然安全**：`Stop` 与 `IsPlaying` 返回 `false` 而不抛——句柄的生命周期可以长于管理器。
 
 未初始化时：管理器范围的成员抛 `InvalidOperationException`（消息带 `[Audio]` 前缀与修复提示），
