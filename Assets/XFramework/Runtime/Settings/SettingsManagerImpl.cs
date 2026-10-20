@@ -658,8 +658,8 @@ namespace XFramework.XSettings
         /// <para><b>恒返回 <c>true</c>：</b>返回 <c>false</c> 会<b>取消退出</b>。保存失败绝不能翻译成
         /// false——让玩家关不掉游戏比丢一次设置严重得多，故异常吞住后仍然返回 true。</para>
         /// <para><b>可测性：</b>改 <c>internal</c> 使测试可直接调用。文档此前写「无法用 Test Runner
-        /// 覆盖」，那话只对 <c>wantsToQuit</c> <b>事件</b>成立（编辑器播放模式下不触发、返回值也被忽略），
-        /// 本处理函数本身与事件无关。</para>
+        /// 覆盖」，2026-10-20 的 R3-PRB-01 探针已订正该说法：编辑器内退出播放模式时事件<b>会</b>触发
+        /// （返回值被忽略），关闭编辑器时不触发；本处理函数本身仍与事件无关。</para>
         /// </summary>
         /// <returns>恒为 <c>true</c>（不取消退出）。</returns>
         internal bool OnWantsToQuit()

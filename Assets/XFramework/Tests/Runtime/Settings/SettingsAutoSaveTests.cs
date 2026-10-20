@@ -327,7 +327,8 @@ namespace XFramework.XSettings.Tests
 
             try
             {
-                // wantsToQuit 在编辑器播放模式下不触发（返回值也被忽略），但处理函数本身与事件无关
+                // 实测（2026-10-20，R3-PRB-01）：编辑器内退出播放模式时 wantsToQuit 会触发、返回值被忽略；
+                // 关闭编辑器时不触发。这里只验处理函数本身不抛异常，与事件无关
                 var shouldQuit = false;
                 Assert.DoesNotThrow(() => shouldQuit = manager.OnWantsToQuit(), "异常不该窜进退出流程");
 

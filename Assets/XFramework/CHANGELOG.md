@@ -2341,7 +2341,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 - **Settings `JsonFileStore` 同路径并发读写**：同步 `Save`（主线程，自动保存可触发）与在飞的 `SaveAsync`（同步后端走线程池）会争同一个 `.tmp`；更严重的是 `FilePathUtility.ReplaceFileAtomically` 的三步降级路径里存在「正式文件短暂不存在」的窗口，此时并发的 `Load` / `Exists` 会命中「主文件不存在 = 无持久化数据」这条**刻意设计**的分支，**无告警地**返回默认值——静默的错答案，不只是少一条日志。现加实例级锁，四个公开成员全部进入（只锁写入口不够，读取同样要在窗口之外）；参数检查留在锁外。残余限制是两个实例指向同一路径不在此列，已写入类文档与 README。同样无配套测试：并发缺陷无法确定性复现，冒烟用例的绿色结果不构成证据
 
-- **Settings 退出兜底改用 `Application.wantsToQuit`**：它在退出流程中比 `quitting` 更早触发，写盘更可能在被拆掉之前完成。两个事件在编辑器播放模式下都不触发、在 iOS / Android 上也都不保证触发，故文档写明它是「构建产物里的最后一道兜底」而非可靠机制——真正可靠的是 `AutoSave` 与 `SaveOnPause`。改动同时带来一条必须钉住的契约：`wantsToQuit` 是 `Func<bool>`，返回 `false` 会**取消退出**；处理函数恒返回 `true`，把「保存失败」翻译成 false 会让玩家关不掉游戏，那比丢一次设置严重得多
+- **Settings 退出兜底改用 `Application.wantsToQuit`**：它在退出流程中比 `quitting` 更早触发，写盘更可能在被拆掉之前完成。两个事件在编辑器播放模式下都不触发、在 iOS / Android 上也都不保证触发，故文档写明它是「构建产物里的最后一道兜底」而非可靠机制——真正可靠的是 `AutoSave` 与 `SaveOnPause`。改动同时带来一条必须钉住的契约：`wantsToQuit` 是 `Func<bool>`，返回 `false` 会**取消退出**；处理函数恒返回 `true`，把「保存失败」翻译成 false 会让玩家关不掉游戏，那比丢一次设置严重得多（**2026-10-20 实测订正**：Unity 6000.4.5f1 下，编辑器内退出播放模式时两个事件都会触发——`wantsToQuit` 先于 `quitting`，且 `wantsToQuit` 的返回值被忽略（返回 `false` 不取消退出）；关闭编辑器时两者都不触发。原文「编辑器播放模式下都不触发」不成立。R3-PRB-01。）
 
 - **Settings 注释与文档四处订正**：① `SettingsAsyncTests` 里「Observe 当前不立即回调」的注释与实现相反（实现就是立即回调，另外三个 fixture 明确断言这一点，该用例靠相对断言侥幸通过）；② `ISettingsManager<T>.Dispose` 宣称释放检查能避免「订阅返回一个永不回调的空句柄」，而释放**之前**已发出的句柄恰恰会变成这种句柄（`EventStream.OnCompleted` 只置标志、不清订阅），措辞收窄为两半都说清；③ `SaveAsyncCore` 的「`JsonUtility` 非线程安全」不成立——Unity 文档明确 `FromJson` 可在后台线程调用，而它自己的降级路径本来就在线程池上序列化；④ 新增两条已知限制：`T : class, new()` 约束正是让字段初始化器生效的前提（缺无参构造时 `FromJson` 会让所有字段落到类型默认值、初始化器一律不执行），以及迁移器与校验器在「同步后端 + `LoadAsync`」组合下会跑在非主线程
 

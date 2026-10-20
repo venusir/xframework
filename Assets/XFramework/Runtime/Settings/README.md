@@ -510,11 +510,13 @@ SettingsManager.Initialize<GameSettings>(store, null, new SettingsOptions
 只告警不抛的后端（如 `JsonFileStore`）不在此列，框架无从察觉，详见「已知限制」。
 
 > **`SaveOnQuit` 的两处局限**：它挂在 `Application.wantsToQuit`（比 `quitting` 更早触发，
-> 写盘更可能在被拆掉之前跑完），但该事件**在编辑器播放模式下不触发**（返回值也被忽略），
-> 且在 iOS / Android 上同样不保证触发——故只能在构建产物里确认，定位是「最后一道兜底」
-> 而非可靠机制；真正可靠的是 `AutoSave` 与 `SaveOnPause`。它也不覆盖移动端切后台后被系统
-> 杀死的场景——那里 `OnApplicationQuit` 根本不会触发，于是「退出时兜底」在这些设备上等于
-> 不存在，请用 `SaveOnPause`（下节）。
+> 写盘更可能在被拆掉之前跑完），但**编辑器内的触发时机与构建产物不同**：实测（Unity
+> 6000.4.5f1 · 2026-10-20）退出播放模式时两个事件**都会触发**（`wantsToQuit` 先），且其
+> 返回值被忽略——返回 `false` 不取消退出；关闭编辑器时两者都不触发。它在 iOS / Android 上
+> 同样不保证触发——故定位仍是「构建产物里的最后一道兜底」而非可靠机制；真正可靠的是
+> `AutoSave` 与 `SaveOnPause`。它也不覆盖移动端切后台后被系统杀死的场景——那里
+> `OnApplicationQuit` 根本不会触发，于是「退出时兜底」在这些设备上等于不存在，请用
+> `SaveOnPause`（下节）。
 >
 > **保存失败绝不会取消退出**：处理函数恒返回 `true`。把异常翻译成 `false` 会让玩家关不掉游戏，
 > 那是比丢一次设置严重得多的事故，故有用例专门钉住这一条。
