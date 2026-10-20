@@ -1,4 +1,5 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
@@ -38,6 +39,7 @@ namespace XFramework.XUI.Tests
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<FakePanelB>();
+            _factory.RegisterPanel<ThrowingOnClosePanel>();
             _factory.RegisterPanel<SizedFakePanel>(parent =>
             {
                 var go = new GameObject("SizedFakePanel", typeof(RectTransform));
@@ -251,6 +253,25 @@ namespace XFramework.XUI.Tests
             await UniTask.Yield();
 
             Assert.IsFalse(UIManager.IsOpen<FakePanel>(), "点捕获层应关掉它替谁挡的那个弹窗");
+        }
+
+        [Test]
+        public async Task CatcherClick_OnCloseThrows_IsolatedAndLogged()
+        {
+            await UIManager.ShowPopupAsync<ThrowingOnClosePanel>(
+                CreateAnchor(new Vector2(100f, 40f)), "PF_ThrowingPopup", closeOnClickOutside: true);
+
+            LogAssert.Expect(LogType.Error, new Regex("捕获层点击关闭弹窗"));
+            CatcherButton(FindCatcher()).onClick.Invoke();
+            await UniTask.Yield();
+            await UniTask.Yield();
+
+            Assert.IsFalse(UIManager.IsOpen<ThrowingOnClosePanel>(),
+                "OnClose 抛异常也必须完成关闭，不能把弹窗卡在半关闭态");
+
+            var catcher = FindCatcher();
+            Assert.IsTrue(catcher == null || !catcher.gameObject.activeSelf,
+                "弹窗关闭后捕获层必须收起");
         }
 
         [Test]

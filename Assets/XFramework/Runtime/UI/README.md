@@ -648,6 +648,7 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 - 支持设置透明度（alpha 0-1）
 - 支持点击关闭（clickToClose）—— 点击遮罩自动 Pop 栈顶面板
 - 遮罩位于独立层级（默认 Mask 层），不影响面板排序
+- 点击关闭是即发即忘：`OnClose` 抛出的异常会被隔离并记一条 `[UIManager]` Error，不会把面板卡在半关闭态
 
 样式由 `UIMaskStyle` 结构体描述（`ShowMask(maskLayer, alpha, clickToClose)` 的具名参数只是它的便捷写法）：
 
@@ -760,7 +761,7 @@ flowchart TB
 | **UIHudItem**             | View/  | HUD 元素基类。继承 UIViewBase，每帧跟随 3D 目标的屏幕坐标，目标丢失时自动触发回收，支持屏幕偏移。                                         |
 | **UIRootNode**            | View/  | 挂在场景 Canvas 上的 Mono。仅负责初始化/销毁 UIManager（销毁只在自己是当前根时发生）与提供层级参考值——每帧驱动已迁至 UpdateManager，它不再参与逐帧调度。 |
 | **IUIController**         | 控制层 | **调度控制接口**。五阶段生命周期拦截：打开前/后、关闭前/后、全部关闭后。                                                                  |
-| **UIDefaultController**   | 控制层 | 默认实现，全部放行。通过 Debug.Log 输出拦截日志。                                                                                         |
+| **UIDefaultController**   | 控制层 | 默认实现，全部放行。verbose 模式下通过 `LogManager.Info`（分类 `UIDefaultController`）输出拦截日志。                                      |
 | **PreconditionChain**     | 控制层 | **前提条件链**。在自定义 Controller 的 OnBeforeOpenAsync 中链式组合校验条件。                                                             |
 | **IViewModel**            | 数据层 | **ViewModel 接口**。`IDisposable` + `OnBound` / `OnUnbound` 两个生命周期钩子（不是标记型）。                                                              |
 | **ViewModelBase**         | 数据层 | ViewModel 抽象基类。封装 ReactiveProperty 的创建与订阅归口，生命周期为 OnBound / OnUnbound / Dispose（无 InitializeAsync）。              |
@@ -1092,7 +1093,8 @@ var choice = await menu.WaitResultAsync();
 - **摆位置之前会先强制跑一次布局**——拿到的是**当前内容**的尺寸，不是预制体里序列化的那个。
   池化复用的弹窗换了内容时，不跑这一下会摆在按旧尺寸算出的位置上
 - **可用区域取 `Screen.safeArea`**，弹窗不会摆进刘海/圆角区（桌面与编辑器上等于全屏，没有差别）
-- **点外部关闭默认开启**（`closeOnClickOutside: true`），它会挂一层全屏透明的捕获层替你挡输入并关闭弹窗
+- **点外部关闭默认开启**（`closeOnClickOutside: true`），它会挂一层全屏透明的捕获层替你挡输入并关闭弹窗；
+  捕获层点击同样是即发即忘，`OnClose` 抛出的异常会被隔离并记一条 `[UIManager]` Error
 - **返回面板而不是结果**——右键菜单往往每个条目各自行动、不需要回传；下拉框要结果就继承
   `UIDialogPanel<TResult>` 再 `WaitResultAsync()`，两种都能表达
 

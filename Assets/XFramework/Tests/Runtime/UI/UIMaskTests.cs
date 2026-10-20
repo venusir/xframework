@@ -34,6 +34,7 @@ namespace XFramework.XUI.Tests
             _factory = new FakePanelFactory();
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<FakePanelB>();
+            _factory.RegisterPanel<ThrowingOnClosePanel>();
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -236,6 +237,23 @@ namespace XFramework.XUI.Tests
             await UniTask.Yield();
 
             Assert.IsFalse(UIManager.IsOpen<FakePanelB>(), "点击遮罩应弹掉栈顶");
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "栈底面板应保持打开");
+        }
+
+        [Test]
+        public async Task ClickToClose_OnCloseThrows_IsolatedAndLogged()
+        {
+            await UIManager.OpenAsync<FakePanel>("ui/first");
+            await UIManager.PushAsync<ThrowingOnClosePanel>("ui/throwing");
+
+            UIManager.ShowMask(new UIMaskStyle(UILayers.Mask, Color.black, clickToClose: true));
+
+            LogAssert.Expect(LogType.Error, new Regex("遮罩点击关闭面板时抛出异常"));
+            FindMaskButton().onClick.Invoke();
+            await UniTask.Yield();
+
+            Assert.IsFalse(UIManager.IsOpen<ThrowingOnClosePanel>(),
+                "OnClose 抛异常也必须完成关闭，不能把面板卡在半关闭态");
             Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "栈底面板应保持打开");
         }
 

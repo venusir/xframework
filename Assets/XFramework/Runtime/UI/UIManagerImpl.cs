@@ -1190,7 +1190,28 @@ namespace XFramework.XUI
         {
             if (_maskClickToClose && CanGoBack)
             {
-                PopAsync().Forget();
+                PopFromMaskClickAsync().Forget();
+            }
+        }
+
+        /// <summary>
+        /// 遮罩点击的关闭隔离：<c>OnClose</c> 抛异常不得进入 <c>UniTaskScheduler</c> 变成一条
+        /// 没有 <c>[UIManager]</c> 前缀的日志；取消仍向上传播（由 <c>.Forget()</c> 吞掉）。
+        /// </summary>
+        private async UniTask PopFromMaskClickAsync()
+        {
+            try
+            {
+                await PopAsync();
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    "遮罩点击关闭面板时抛出异常，已隔离");
             }
         }
 
@@ -1329,7 +1350,29 @@ namespace XFramework.XUI
             var target = _popupCatcherTargets[_popupCatcherTargets.Count - 1];
 
             // 与遮罩的 OnMaskClicked 不同：那边是「Pop 栈顶」，这边是「关掉捕获层栈顶那个面板」。
-            CloseAsync(target).Forget();
+            CloseFromPopupCatcherAsync(target).Forget();
+        }
+
+        /// <summary>
+        /// 捕获层点击的关闭隔离：与 <see cref="PopFromMaskClickAsync"/> 同形——<c>OnClose</c> 抛异常
+        /// 记一条 <c>[UIManager]</c> Error，不让它静默落到 <c>UniTaskScheduler</c>。
+        /// </summary>
+        private async UniTask CloseFromPopupCatcherAsync(UIPanelBase target)
+        {
+            string typeName = target != null ? target.GetType().Name : "(null)";
+            try
+            {
+                await CloseAsync(target);
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    string.Format("捕获层点击关闭弹窗 {0} 时抛出异常，已隔离", typeName));
+            }
         }
 
         #endregion
