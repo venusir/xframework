@@ -11,6 +11,7 @@ using UnityEngine.TestTools;
 using XFramework.XData;
 using XFramework.XFileManager;
 using XFramework.XFileManager.Tests;
+using XFramework.XLog;
 using XFramework.XSerialize;
 
 namespace XFramework.XSave.Tests
@@ -45,6 +46,18 @@ namespace XFramework.XSave.Tests
             public object OnMigrate(object saveData, int fromVersion) => saveData;
             public void OnLoad(object data) { if (data is int i) Gold = i; }
             public void OnClear() => Gold = 0;
+        }
+
+        /// <summary>收集经过 <see cref="LogManager"/> 的正文，用于断言某条路径「没有记日志」。</summary>
+        private sealed class CollectingSink : ILogSink
+        {
+            public readonly List<string> Messages = new List<string>();
+
+            public void Write(in LogEntry entry) => Messages.Add(entry.Message);
+
+            public void Flush()
+            {
+            }
         }
 
         private TempFileProvider _fileProvider;
@@ -253,11 +266,31 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task TryLoadAsync_MissingSlot_LogsNoWarning()
+        {
+            // Missing 是「没有存档」的正常状态；加载失败日志只留给需要留证据的损坏/版本/应用失败
+            var sink = new CollectingSink();
+            LogManager.AddSink(sink);
+            try
+            {
+                await SaveManager.TryLoadAsync(7);
+            }
+            finally
+            {
+                LogManager.RemoveSink(sink);
+            }
+
+            Assert.IsFalse(sink.Messages.Exists(m => m.Contains("加载失败")),
+                "Missing 不应产生加载失败日志");
+        }
+
+        [Test]
         public async Task TryLoadAsync_CorruptedFile_ReportsCorruptWithoutThrowing()
         {
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save",
                 Encoding.UTF8.GetBytes("not a save"));
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             var result = await SaveManager.TryLoadAsync(1);
 
             Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status);
@@ -280,8 +313,20 @@ namespace XFramework.XSave.Tests
 
             wallet.Gold = 0;
             LogAssert.Expect(LogType.Warning, new Regex("已从备份恢复"));
-            var result = await SaveManager.TryLoadAsync(1);
+            var sink = new CollectingSink();
+            LogManager.AddSink(sink);
+            SaveLoadResult result;
+            try
+            {
+                result = await SaveManager.TryLoadAsync(1);
+            }
+            finally
+            {
+                LogManager.RemoveSink(sink);
+            }
 
+            Assert.IsFalse(sink.Messages.Exists(m => m.Contains("加载失败")),
+                "主文件坏但备份恢复成功属于正常路径，不应额外记加载失败");
             Assert.AreEqual(SaveLoadStatus.LoadedFromBackup, result.Status, "主文件损坏时应从备份恢复");
             Assert.IsTrue(result.IsSuccess, "从备份恢复属于成功");
             Assert.AreEqual(42, wallet.Gold, "应恢复备份里的内容");
@@ -301,6 +346,7 @@ namespace XFramework.XSave.Tests
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData,
                 "slot_1.save" + FilePathUtility.BackupFileSuffix, Encoding.UTF8.GetBytes("corrupted too"));
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             var result = await SaveManager.TryLoadAsync(1);
 
             Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status);
@@ -324,6 +370,7 @@ namespace XFramework.XSave.Tests
                 // Save 侧按失败数走「有 N 个数据块未能恢复」的回滚分支。
                 LogAssert.Expect(LogType.Error, new Regex("数据块 OnClear 抛出异常"));
                 LogAssert.Expect(LogType.Error, new Regex("正在回滚内存数据"));
+                LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
 
                 var result = await SaveManager.TryLoadAsync(1);
 
@@ -523,6 +570,7 @@ namespace XFramework.XSave.Tests
             await FileManager.WriteAllBytesAsync(
                 FileDomain.SaveData, "slot_1.save.bak", Encoding.UTF8.GetBytes("not a save file"));
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             var result = await SaveManager.TryLoadAsync(1);
 
             Assert.AreEqual(SaveLoadStatus.Corrupt, result.Status,
@@ -917,6 +965,7 @@ namespace XFramework.XSave.Tests
             SaveManager.SetCurrentVersion(3);
             wallet.Gold = 7;
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             var result = await SaveManager.TryLoadAsync(1);
 
             Assert.AreEqual(SaveLoadStatus.VersionTooNew, result.Status, "更高版本的存档应整份拒绝");
@@ -938,6 +987,7 @@ namespace XFramework.XSave.Tests
             DataManager.Initialize(new DataManagerImpl());
             DataManager.RegisterBlock(new WalletData());
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             var result = await SaveManager.TryLoadAsync(1);
 
             Assert.AreEqual(SaveLoadStatus.VersionTooNew, result.Status,
@@ -1112,6 +1162,7 @@ namespace XFramework.XSave.Tests
             tampered[payload.Length] = (byte)' ';
             await FileManager.WriteAllBytesAsync(FileDomain.SaveData, "slot_1.save", tampered);
 
+            LogAssert.Expect(LogType.Warning, new Regex("存档槽位 1 加载失败"));
             await AssertThrowsAsync<InvalidOperationException>(() => SaveManager.LoadAsync(1),
                 "载荷与侧车校验和不符时应拒绝加载");
         }
@@ -1917,5 +1968,6 @@ namespace XFramework.XSave.Tests
             }
             Assert.Fail(message ?? $"Expected {typeof(T).Name} to be thrown.");
         }
+
     }
 }

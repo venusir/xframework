@@ -74,6 +74,11 @@ Runtime/Save/
 
 `LoadAsync` 保留抛异常语义，两者共用同一实现。
 
+**加载失败会留日志**：`Missing` 是「没有存档」的正常状态，静默；其余失败（`Corrupt` / `VersionTooNew` /
+主备均不可用 / 校验和不符 / 快照无法应用）记一条 `[Save]` Warning，正文带槽位、状态与原因。主文件失败但
+备份恢复成功只保留「已从备份恢复」一条 Warning，**不重复**记加载失败——诊断时先看那条恢复警告，再看是否
+同时出现失败摘要。
+
 **不完整加载会被拒绝**：只要有数据块未能恢复，整次加载即判定为失败并回滚内存——「部分块没恢复」等价于内存里少了一半数据，报告成功是危险的。
 
 ### 版本门禁
@@ -263,7 +268,7 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - `XFramework.XFileManager` - 文件读写
 - `XFramework.XBootstrap` / `XFramework.XPipeline` - 引导阶段（仅 `SaveBootstrapStage.cs` 使用；不登记引导阶段的项目不需要它们）
 - `UniTask` - 异步操作
-- `UnityEngine` - 日志（`Debug.Log*`）
+- `XFramework.XLog` - 日志（`LogManager`，分类 `Save`）
 
 > **反向依赖：Data → Save（刻意，且是真实约束）**：`XData.DataSnapshot.CreateMeta()` 返回 `XSave.SaveMeta`
 > ——那是给第三方派生子类、填充自定义元数据字段的扩展点（见本文「自定义存档元数据」）。因此两模块之间

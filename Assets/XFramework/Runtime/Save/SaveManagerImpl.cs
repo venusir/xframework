@@ -384,16 +384,16 @@ namespace XFramework.XSave
                     // Data 模块内已有按块门禁，但它是「跳过该块」，结果是新版存档被半加载
                     // （一半新数据、一半空着），比干净地拒绝危险得多
                     if (outcome.SaveData.version > CurrentVersion)
-                        return new SaveLoadResult(SaveLoadStatus.VersionTooNew, null,
+                        return Failure(slot, SaveLoadStatus.VersionTooNew,
                             $"存档版本({outcome.SaveData.version})高于当前客户端支持的版本({CurrentVersion})，请先升级客户端");
 
                     // 块版本过新（DATA-011）：Data 会跳过该块并计入失败，Save 若照旧回滚会把整份
                     // 存档误报成 Corrupt。这里先按 blockName 对照当前块版本，命中即整份拒绝。
                     if (TryFindTooNewBlock(outcome.SaveData, out var tooNewMessage))
-                        return new SaveLoadResult(SaveLoadStatus.VersionTooNew, null, tooNewMessage);
+                        return Failure(slot, SaveLoadStatus.VersionTooNew, tooNewMessage);
 
                     if (!TryApplySnapshot(outcome.SaveData, out _, out var applyError))
-                        return new SaveLoadResult(SaveLoadStatus.Corrupt, null, $"快照无法完整应用到内存：{applyError}");
+                        return Failure(slot, SaveLoadStatus.Corrupt, $"快照无法完整应用到内存：{applyError}");
 
                     // 版本较低说明数据块的迁移链已在 ApplySnapshot 内跑过；迁移本身由 Data 模块负责，
                     // 这里只如实回报，便于调用方提示「存档已升级」
@@ -449,7 +449,7 @@ namespace XFramework.XSave
                     ? outcome.Message
                     : $"{outcome.Message}；一代备份亦不可用（{backupMessage}）";
 
-                return new SaveLoadResult(status, null, message);
+                return Failure(slot, status, message);
             }
             catch (OperationCanceledException)
             {
@@ -466,6 +466,24 @@ namespace XFramework.XSave
             {
                 ExitBusy();
             }
+        }
+
+        /// <summary>
+        /// 加载失败的统一出口：<see cref="SaveLoadStatus.Missing"/> 是正常状态（没有存档），静默；
+        /// 其余（损坏、版本过新、主备都不可用等）记一条 Warning——调用方通常只拿到状态与文本，
+        /// 日志是排查「为什么读不出来」的唯一现场。
+        /// <para><b>只在最终失败出口调用</b>：主文件失败但备份恢复成功是正常路径，已有
+        /// 「已从备份恢复」Warning；在读取层逐条记录会重复。</para>
+        /// </summary>
+        private static SaveLoadResult Failure(int slot, SaveLoadStatus status, string message)
+        {
+            if (status != SaveLoadStatus.Missing)
+            {
+                LogManager.Warning(LogCategories.Save,
+                    "存档槽位 {0} 加载失败（{1}）：{2}", slot, status, message);
+            }
+
+            return new SaveLoadResult(status, null, message);
         }
 
         /// <summary>
