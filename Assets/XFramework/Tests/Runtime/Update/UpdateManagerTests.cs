@@ -302,6 +302,45 @@ namespace XFramework.XUpdate.Tests
             Assert.AreEqual(1, node.UpdateCallCount, "重建后恢复派发");
         }
 
+        [Test]
+        public void Register_WhenSchedulerMissing_WarnsOncePerSession()
+        {
+            var node = new TestUpdateable();
+            var fixedNode = new FixedNode();
+
+            // 退出后调度器被置空：三个注册入口都该拒绝，但只留一条告警（按会话去重）
+            UpdateManager.OnQuitting();
+
+            int warnings = 0;
+
+            void OnLog(string condition, string stackTrace, LogType type)
+            {
+                if (type == LogType.Warning && condition.Contains("调度器不可用"))
+                    warnings++;
+            }
+
+            Application.logMessageReceived += OnLog;
+            try
+            {
+                UpdateManager.Register(node, order: 0);
+                UpdateManager.RegisterLate(node, order: 0);
+                UpdateManager.RegisterFixed(fixedNode, order: 0);
+
+                Assert.AreEqual(1, warnings, "三个注册入口共用一条按会话去重的告警");
+                Assert.AreEqual(0, UpdateManager.TotalCount, "调度器不可用时注册应被丢弃");
+
+                UpdateManager.AutoInit();
+                UpdateManager.OnQuitting();
+                UpdateManager.Register(node, order: 0);
+            }
+            finally
+            {
+                Application.logMessageReceived -= OnLog;
+            }
+
+            Assert.AreEqual(2, warnings, "AutoInit 必须复位去重闩锁，第二会话仍能告警");
+        }
+
         #endregion
 
         #region 暂停

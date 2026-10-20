@@ -581,9 +581,9 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   框架不做完整歧义解析，在**动作解析时按动作名**给出一次 Warning（指出胜出的 map）。请确保同一动作名
   只在一个已启用的 map 中定义。
 - **`Initialize` 早于 `UpdateManager` 就绪时帧驱动注册会失败**（INP-003）：调度器未建立（`Initialize`
-  早于 `UpdateManager.AutoInit`）或已清理（`OnQuitting` 之后）时 `UpdateManager.Register` 会静默丢弃。
-  现在会记一条 `[Input]` Warning 且不保留 ticker；在 `UpdateManager` 就绪后 `InputManager.Destroy()` +
-  `Initialize()` 即可恢复。
+  早于 `UpdateManager.AutoInit`）或已清理（`OnQuitting` 之后）时 `UpdateManager.Register` 会丢弃注册，
+  并记一条 `[Update]` Warning（按会话去重）。Input 门面另记一条 `[Input]` Warning 且不保留 ticker；
+  在 `UpdateManager` 就绪后 `InputManager.Destroy()` + `Initialize()` 即可恢复。
 - **`playerId > 0` 的读取按绑定的 `effectivePath`**（INP-009）：重绑定 / `LoadBindingOverrides` /
   `ResetBindingOverrides` / `ResetAllBindingOverrides` 会失效路径缓存，之后读到新控件。**直接对
   `InputAction` 调 `ApplyBindingOverride` 不经过本模块，缓存不会失效**——那之后再调一次上述任一入口，

@@ -328,6 +328,9 @@ Runtime/Update/
   `Clear` 时处于空闲（无定时器在计时）才会在下一次 `After` / `Every` 重新注册——若 `Clear` 时仍有定时器
   在计时，需先 `CancelAll` 再创建；**Audio / Input / Settings 有自记账，不会自愈**——需各自的
   `Destroy` + `Initialize`；Camera 在下一次生命周期事件恢复。详见各模块 README。
+- **调度器不可用时注册会被丢弃并告警一次**：`AutoInit` 之前或 `OnQuitting` 之后，三个注册入口都不会报错，
+  但对象不会收到 Tick。`UpdateManager` 按会话记一条 `[Update]` Warning（`AutoInit` 复位去重闩锁）；
+  重建后需重新注册。
 - **永不 tick 的调度器上跨时机操作无界缓冲（UPD-007）**：`timeScale = 0` 时 FixedUpdate 调度器不派发，
   跨时机的注册 / 注销会一直堆在 `_pendingOps` 里；当前仓内无实际风险，但没有上界。极长暂停后大量跨时机
   操作请留意。

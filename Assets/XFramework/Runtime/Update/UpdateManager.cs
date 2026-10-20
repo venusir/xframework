@@ -54,6 +54,9 @@ namespace XFramework.XUpdate
         /// </summary>
         private static UpdateScheduler[] _schedulers;
 
+        /// <summary>「调度器不可用导致注册被丢弃」是否已告警（按会话去重）；<see cref="AutoInit"/> 复位。</summary>
+        private static bool _schedulerUnavailableWarned;
+
         #endregion
 
         #region Auto Lifecycle
@@ -75,6 +78,10 @@ namespace XFramework.XUpdate
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void AutoInit()
         {
+            // 新会话的开始：上一会话的「调度器不可用」告警闩锁不能带过来，否则第二会话
+            // 即使再次遇到同样的注册丢弃也不会留下任何日志。
+            _schedulerUnavailableWarned = false;
+
             // 只在缺失时重建：第二次调用不能清掉已注册的对象——域重载模式下这一步紧跟在
             // InitializeOnLoadMethod 之后，无条件 new 会给已注册的静态服务（如 InputManager
             // 的帧驱动）换上一份空调度器，表现为「模块自己消失了」
@@ -393,6 +400,25 @@ namespace XFramework.XUpdate
             return _schedulers?[(int)timing];
         }
 
+        /// <summary>
+        /// 注册路径专用：调度器不可用时告警一次（按会话去重）并返回 null——「对象永不 Tick」
+        /// 否则完全无迹可寻。
+        /// <para>只发一次：注册可能在初始化 / 清理的竞态窗口里被反复调用，逐次告警会刷屏。</para>
+        /// </summary>
+        private static UpdateScheduler SchedulerForRegistration(UpdateTiming timing)
+        {
+            UpdateScheduler scheduler = _schedulers?[(int)timing];
+            if (scheduler == null && !_schedulerUnavailableWarned)
+            {
+                _schedulerUnavailableWarned = true;
+                LogManager.Warning(LogCategories.Update,
+                    "UpdateManager 调度器不可用（尚未初始化或已随退出清理），本次及后续注册将被丢弃，" +
+                    "直至 AutoInit 重建；请在调度器就绪后重新注册。");
+            }
+
+            return scheduler;
+        }
+
         #endregion
 
         #region Public API — Tick
@@ -545,7 +571,7 @@ namespace XFramework.XUpdate
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.Update)?.Register(node, order, initialTier, timeMode);
+            SchedulerForRegistration(UpdateTiming.Update)?.Register(node, order, initialTier, timeMode);
         }
 
         /// <summary>
@@ -573,7 +599,7 @@ namespace XFramework.XUpdate
             UpdateTimeMode timeMode = UpdateTimeMode.Scaled)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.LateUpdate)?.Register(node, order, initialTier, timeMode);
+            SchedulerForRegistration(UpdateTiming.LateUpdate)?.Register(node, order, initialTier, timeMode);
         }
 
         /// <summary>
@@ -597,7 +623,7 @@ namespace XFramework.XUpdate
         public static void RegisterFixed(IFixedUpdateable node, int order, UpdateTier initialTier = UpdateTier.Tier0)
         {
             if (node == null) return;
-            SchedulerOf(UpdateTiming.FixedUpdate)?.Register(node, order, initialTier);
+            SchedulerForRegistration(UpdateTiming.FixedUpdate)?.Register(node, order, initialTier);
         }
 
         /// <summary>
