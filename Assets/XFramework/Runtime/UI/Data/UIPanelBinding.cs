@@ -70,7 +70,7 @@ namespace XFramework.XUI.Data
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                    LogManager.Exception(LogCategories.UIPanelBinding, e,
                         "ViewModel.OnUnbound 抛出异常，已跳过并继续");
                 }
 
@@ -80,7 +80,7 @@ namespace XFramework.XUI.Data
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                    LogManager.Exception(LogCategories.UIPanelBinding, e,
                         "释放 ViewModel 时抛出异常，已跳过并继续");
                 }
 
@@ -95,7 +95,7 @@ namespace XFramework.XUI.Data
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("UIPanelBinding"), e,
+                    LogManager.Exception(LogCategories.UIPanelBinding, e,
                         "释放绑定时抛出异常，已跳过并继续");
                 }
             }
@@ -300,7 +300,7 @@ namespace XFramework.XUI.Data
         {
             if (_componentCache.ContainsKey(nodeName))
             {
-                LogManager.Warning(LogCategory.Get("UIPanelBinding"),
+                LogManager.Warning(LogCategories.UIPanelBinding,
                     "面板内存在重复的约定节点名 '{0}'，只绑定第一个；请保证约定节点名唯一。", nodeName);
                 return;
             }
@@ -315,7 +315,7 @@ namespace XFramework.XUI.Data
         private static void WarnConventionMismatch(string nodeName, string expectedComponent)
         {
 #if UNITY_EDITOR
-            LogManager.Warning(LogCategory.Get("UIPanelBinding"),
+            LogManager.Warning(LogCategories.UIPanelBinding,
                 "约定节点 '{0}' 未找到 {1} 组件，已跳过；请检查节点命名与组件类型是否匹配。",
                 nodeName, expectedComponent);
 #endif

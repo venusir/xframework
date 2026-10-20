@@ -120,6 +120,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   令牌取消即抛 `OperationCanceledException`，不再执行后续条件。条件内部是否响应取消由该条件自己的
   实现决定（链不把令牌注入条件，`Add` 的委托形状保持不变）。源兼容新增；公开 API 基线已同步。
 
+#### Log
+
+- **`LogCategories` 新增 `UIViewBase` / `ViewModelBase` 两个内置分类**（2026-10-20）：这两个分类此前由
+  `UIViewBase` / `ViewModelBase` 裸写 `LogCategory.Get("...")` 注册，绕过了内置分类表。现纳入表内并改为
+  句柄引用；`UIPanelBinding` 同文件里混用的 5 处裸字符串也统一为 `LogCategories.UIPanelBinding`。
+  **公开 API 源兼容新增，基线 +2 行**。
+
 #### 测试基础设施
 
 - **共享零分配尺子 `AllocationRuler`（测试侧）**：本环境 `GC.GetAllocatedBytesForCurrentThread()` 与

@@ -89,7 +89,7 @@ namespace XFramework.XUI.View
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("UIViewBase"), e,
+                    LogManager.Exception(LogCategories.UIViewBase, e,
                         "释放 Track 登记的订阅时抛出异常，已跳过并继续");
                 }
             }

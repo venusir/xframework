@@ -1039,8 +1039,10 @@ XFramework.XLog.LogCategories.UIPanelBase  ::  public static readonly XFramework
 XFramework.XLog.LogCategories.UIPanelBinding  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.UITipItem  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.UITipManager  ::  public static readonly XFramework.XLog.LogCategory
+XFramework.XLog.LogCategories.UIViewBase  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.Update  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.UpdateScheduler  ::  public static readonly XFramework.XLog.LogCategory
+XFramework.XLog.LogCategories.ViewModelBase  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.XFramework  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategories.YooAssetManager  ::  public static readonly XFramework.XLog.LogCategory
 XFramework.XLog.LogCategory  ::  public readonly struct : System.IEquatable<XFramework.XLog.LogCategory>

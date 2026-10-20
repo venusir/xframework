@@ -54,7 +54,7 @@ namespace XFramework.XUI.Data
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("ViewModelBase"), e,
+                    LogManager.Exception(LogCategories.ViewModelBase, e,
                         "释放 ViewModel 属性时抛出异常，已跳过并继续");
                 }
             }
@@ -68,7 +68,7 @@ namespace XFramework.XUI.Data
                 }
                 catch (Exception e)
                 {
-                    LogManager.Exception(LogCategory.Get("ViewModelBase"), e,
+                    LogManager.Exception(LogCategories.ViewModelBase, e,
                         "释放 ViewModel 订阅时抛出异常，已跳过并继续");
                 }
             }

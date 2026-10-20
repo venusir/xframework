@@ -19,12 +19,13 @@ namespace XFramework.XLog
     {
         #region 框架核心与 Editor 工具
 
-        /// <summary>Editor 工具（依赖安装器等）自身的日志。</summary>
+        /// <summary>框架级与 Editor 工具（依赖安装器、诊断面板等）自身的日志；<c>Runtime/Diagnostics</c> 也使用它。</summary>
         public static readonly LogCategory XFramework = LogCategory.Get("XFramework");
 
         /// <summary>
-        /// 日志模块自身的日志。本模块**只有一条**日志——<c>LogManager.Initialize</c> 注入非内置实现时
-        /// 提醒「Unity 全量捕获随之停用」（在替换<b>之前</b>经当前实现发出，故不可能递归、也不经过你注入的实现）。
+        /// 日志模块自身的日志。目前两处：<c>LogManager.Initialize</c> 注入非内置实现时提醒
+        /// 「Unity 全量捕获随之停用」（在替换<b>之前</b>经当前实现发出，故不可能递归、也不经过你注入的实现），
+        /// 以及内置实现的 <c>AddSink</c> 对同一实例重复登记的告警。
         /// </summary>
         public static readonly LogCategory LogManager = LogCategory.Get("LogManager");
 
@@ -125,6 +126,12 @@ namespace XFramework.XLog
 
         /// <summary>默认面板控制器。</summary>
         public static readonly LogCategory UIDefaultController = LogCategory.Get("UIDefaultController");
+
+        /// <summary>UI 视图抽象基类（<c>UIViewBase</c>）。</summary>
+        public static readonly LogCategory UIViewBase = LogCategory.Get("UIViewBase");
+
+        /// <summary>ViewModel 抽象基类（<c>ViewModelBase</c>）。</summary>
+        public static readonly LogCategory ViewModelBase = LogCategory.Get("ViewModelBase");
 
         /// <summary>面板基类。</summary>
         public static readonly LogCategory UIPanelBase = LogCategory.Get("UIPanelBase");

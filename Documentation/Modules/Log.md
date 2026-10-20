@@ -70,7 +70,7 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 | Save | `Save` | |
 | Asset | `AssetManager`、`YooAssetManager` | 适配层与门面分开是有意的（信息量更大） |
 | Settings | `SettingsManager` | 模块内统一 |
-| UI | `UIManager`、`UIHudManager`、`UIDefaultController`、`UIPanelBase`、`UIPanelBinding`、`UITipManager`、`UITipItem` | 七个标签七个分类 |
+| UI | `UIManager`、`UIHudManager`、`UIDefaultController`、`UIViewBase`、`ViewModelBase`、`UIPanelBase`、`UIPanelBinding`、`UITipManager`、`UITipItem` | 九个标签九个分类；`UIViewBase` / `ViewModelBase` 于 2026-10-20 从裸写 `LogCategory.Get` 纳入表内 |
 | Input | `Input` | |
 | Audio | `Audio` | |
 | Timer | `Timer` | |
@@ -82,14 +82,14 @@ Debug.LogWarning($"[Save] 跳过空存档文件: {path}")
 | File | `FileManager` | |
 | Event | `Event` | |
 | Serialize | `Serialize` | 回填时**无需**（`[XSerialize]` 那两处是异常消息前缀）；**2026-10-02 新增首条日志**（内置注册与使用方注册撞名时保留并告警），该 `[XSerialize]` 前缀仍只用于异常消息 |
-| LogManager | `LogManager` | **2026-10-02 新增**：Log 模块自身的**唯一一条**日志——注入非内置 `ILogManager` 时提醒「Unity 全量捕获随之停用」。它**在替换之前**经当前实现发出（那一刻必然是框架实现），故不可能递归；这是「LogManager 自身永不记日志」那条规则的**唯一例外**，理由写在 `Initialize` 的 XML 里 |
+| LogManager | `LogManager` | **2026-10-02 新增**：Log 模块自身的两处日志——注入非内置 `ILogManager` 时提醒「Unity 全量捕获随之停用」，以及内置实现 `AddSink` 对同一实例重复登记的告警。前者**在替换之前**经当前实现发出（那一刻必然是框架实现），故不可能递归；它们是「LogManager 自身永不记日志」那条规则的**两处例外**，理由写在 `Initialize` 的 XML 里 |
 | Reactive | — | **无需回填**：`[Reactive]` 的两处是 `ObjectDisposedException` 的消息前缀 |
-| *(Editor)* | `XFramework` | `Editor/XFrameworkDependencyInstaller.cs` 现有 9 处（7 处经 `LogManager`、2 处保持无前缀 `Debug.LogError`——全仓唯二违例），见「决策台账」 |
+| *(Editor)* | `XFramework` | `Editor/XFrameworkDependencyInstaller.cs` 现有 9 处（7 处经 `LogManager`、2 处保持无前缀 `Debug.LogError`——全仓唯二违例），见「决策台账」；`Runtime/Diagnostics` 也使用 `XFramework`（模块自身没有独立分类） |
 
 > **两类误收要记住**（回填时逐一核实过）：机械提取 `$"[标签]` 会把**异常消息**和**非日志字符串**
 > 一起收进来——`[AudioManager]` 是 GameObject 名、`[Slot:…]` 是 `SaveMeta.ToString()`、
 > `[XSerialize]` / `[Reactive]` / `[LanguageAssetLoader]` 是异常消息前缀。判定一个标签是否属于
-> 日志，必须看**调用点**（`Debug.Log*` 还是 `throw new …`），不能看字符串。分类表在回填时定稿为 31 条，此后 2026-10-02 又按需加过（Serialize 的首条日志、LogManager 自身的唯一一条）——`LogCategories` 是唯一真相，此处不记数。
+> 日志，必须看**调用点**（`Debug.Log*` 还是 `throw new …`），不能看字符串。分类表在回填时定稿为 31 条，此后 2026-10-02 又按需加过（Serialize 的首条日志、LogManager 自身的两处日志），2026-10-20 又补入 `UIViewBase` / `ViewModelBase`——`LogCategories` 是唯一真相，此处不记数。
 
 **边界**：其它模块 README 里的 `Debug.Log` 代码片段**不改**——判据是 README 自己的判据
 （「删掉它使用方会不会写错代码」），那些片段是示例业务代码在打日志，不是框架契约；教新 API 的地方
