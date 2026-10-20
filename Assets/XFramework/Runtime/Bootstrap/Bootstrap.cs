@@ -384,7 +384,9 @@ namespace XFramework.XBootstrap
         /// 而登记顺序是使用方自由给的。</para>
         /// <para>同相位内各阶段并行执行、本无严格先后，取登记逆序作为确定性次序。</para>
         /// <para>单个阶段抛异常不会阻断其余阶段的清理——清理路径上一个模块的问题
-        /// 不应导致别的模块泄漏。</para>
+        /// 不应导致别的模块泄漏。<see cref="IPhaseStage.Phase"/> 是使用方实现的属性，
+        /// 入口只读取一次并快照；getter 抛异常时记 Error，并按 <c>int.MinValue</c> 兜底
+        /// （相位降序清理中最后执行）。</para>
         /// </summary>
         public static void Shutdown()
         {
@@ -405,14 +407,32 @@ namespace XFramework.XBootstrap
             // 活引用上的索引遍历会越界或跳过其余阶段。
             var stages = new List<IBootstrapStage>(StageList);
 
-            // 收集 distinct 相位并升序排列(相位数量 = 模块数量级,非每帧路径;手写循环,零 LINQ)
-            var phases = new List<int>(stages.Count);
+            // Phase 是使用方实现的属性，读取可能抛异常。入口只读一次并存快照：
+            // 失败时按 int.MinValue 兜底（降序清理中最后执行），否则一个 getter 异常
+            // 会中止整个 Shutdown，其余阶段拿不到清理。
+            var stagePhases = new int[stages.Count];
             for (int i = 0; i < stages.Count; i++)
             {
-                int phase = stages[i].Phase;
-                if (!phases.Contains(phase))
+                try
                 {
-                    phases.Add(phase);
+                    stagePhases[i] = stages[i].Phase;
+                }
+                catch (Exception e)
+                {
+                    stagePhases[i] = int.MinValue;
+                    LogManager.Exception(LogCategories.Bootstrap, e,
+                        string.Format("读取阶段 {0} 的 Phase 抛出异常，已按最低优先级最后清理",
+                            stages[i].GetType().Name));
+                }
+            }
+
+            // 收集 distinct 相位并升序排列(相位数量 = 模块数量级,非每帧路径;手写循环,零 LINQ)
+            var phases = new List<int>(stages.Count);
+            for (int i = 0; i < stagePhases.Length; i++)
+            {
+                if (!phases.Contains(stagePhases[i]))
+                {
+                    phases.Add(stagePhases[i]);
                 }
             }
 
@@ -424,7 +444,7 @@ namespace XFramework.XBootstrap
                 int phase = phases[p];
                 for (int i = stages.Count - 1; i >= 0; i--)
                 {
-                    if (stages[i].Phase == phase)
+                    if (stagePhases[i] == phase)
                     {
                         ShutdownStage(stages[i]);
                     }

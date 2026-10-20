@@ -41,7 +41,22 @@ namespace Venusy609.Xframework.Editor.Tests
 
             public int ExecuteCount;
 
-            public int Phase => StagePhase;
+            /// <summary>置真时 Phase getter 抛异常，用于验证 Shutdown 入口的隔离。</summary>
+            public bool ThrowOnPhaseGet;
+
+            /// <summary>Phase getter 被读取的次数（验证 Shutdown 只快照一次）。</summary>
+            public int PhaseGetCount;
+
+            public int Phase
+            {
+                get
+                {
+                    PhaseGetCount++;
+                    if (ThrowOnPhaseGet)
+                        throw new InvalidOperationException($"{StageName} phase boom");
+                    return StagePhase;
+                }
+            }
 
             public string Name => StageName;
 
@@ -626,6 +641,28 @@ namespace Venusy609.Xframework.Editor.Tests
             Bootstrap.Shutdown();
 
             CollectionAssert.AreEqual(new[] { "p4", "p3", "p0" }, log, "清理序应为执行序的逆序（相位降序）");
+        }
+
+        [Test]
+        public void Shutdown_PhaseGetterThrows_IsolatedAndCleanedLast()
+        {
+            var log = new List<string>();
+            var bad = NewStage("bad", 0, log);
+            bad.ThrowOnPhaseGet = true;
+            bad.ShutdownLog = log;
+            var normal = NewStage("normal", 5, log);
+            normal.ShutdownLog = log;
+
+            Bootstrap.Register(bad);
+            Bootstrap.Register(normal);
+
+            LogAssert.Expect(LogType.Error, new Regex("读取阶段 .*Phase 抛出异常"));
+
+            Assert.DoesNotThrow(() => Bootstrap.Shutdown());
+
+            CollectionAssert.AreEqual(new[] { "normal", "bad" }, log,
+                "Phase 不可读的阶段按 int.MinValue 兜底，降序清理中最后执行");
+            Assert.AreEqual(1, bad.PhaseGetCount, "Phase 应在 Shutdown 入口只快照一次");
         }
 
         [Test]

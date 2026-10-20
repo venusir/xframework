@@ -66,9 +66,10 @@ Runtime/Bootstrap/
 - **`ExecuteAsync` 可能被重复执行**：失败后重试、或 `Shutdown` 后再次 `RunAsync`，都会重跑同一批阶段
   实例。要么让 `ExecuteAsync` 可重入（已初始化即早退，像内置阶段那样），要么在重建前 `Clear()` 并
   重新构造阶段。
-- **相位 / 名称 / 权重**：`Phase` 在登记后应保持稳定（`Shutdown` 按当前值计算清理顺序）；`Name` 会进入
-  日志与失败原因，给它一个可辨认的名字（通常 `GetType().Name`）；`Weight` 须为有限非负数，`0` 表示
-  该阶段不占进度。
+- **相位 / 名称 / 权重**：`Phase` 在登记后应保持稳定（`Shutdown` 在入口**快照一次**并按该值计算清理顺序）；
+  getter 抛异常会记一条 `[Bootstrap]` Error，该阶段按 `int.MinValue` 兜底最后清理，其余阶段照常清理。
+  `Name` 会进入日志与失败原因，给它一个可辨认的名字（通常 `GetType().Name`）；`Weight` 须为有限非负数，
+  `0` 表示该阶段不占进度。
 - **执行契约**（来自 Pipeline）：
   - 不要吞 `OperationCanceledException`——让它冒泡走取消终局；
   - 失败直接抛——`StageExecution` 会代你把描述写成异常消息并置 `Failed`；
