@@ -1,0 +1,5 @@
+{
+	"displayName": "XFramework 可玩示例",
+	"description": "零资产纵切：Bootstrap(Data→Save)、Data、Save、Message、Reactive、Timer、File、Log。导入后打开 Playable.unity 按 Play。",
+	"createSeparatePackage": false
+}

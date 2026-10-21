@@ -420,7 +420,12 @@ git commit -m "chore: 更新 XFramework 子模块"
 
 包内还带有 `Tests/`（框架自身的测试）。它**不会**在导入方编译——UPM 包的测试程序集只有在工程 manifest 的 `testables` 里列出该包时才参与编译，因此不必为它准备任何东西。若想在工程内运行框架自带的测试，在 `Packages/manifest.json` 里加上 `"testables": ["com.venusy609.xframework"]`。
 
-包内还带有**示例**（`Samples~/Example`：Reactive / Message / UI / Audio / Timer / Diagnostics 六个模块的用法演示）。目录名末尾的 `~` 是 UPM 约定——Unity 完全忽略它，所以示例**不会**自动混进你的工程；要取用就在 Package Manager 里选中 XFramework → **Samples** 页签 → Import。
+包内还带有两组**示例**：
+
+- `Samples~/Playable`：零资产的可玩纵切（Bootstrap → Data → Save → Message / Reactive / Timer / File / Log）。导入后打开 `Playable.unity` 按 Play 即可，不需要预制体或 YooAsset 采集配置。
+- `Samples~/Example`：Reactive / Message / UI / Audio / Timer / Diagnostics 六个模块的用法演示。
+
+目录名末尾的 `~` 是 UPM 约定——Unity 完全忽略它，所以示例**不会**自动混进你的工程；要取用就在 Package Manager 里选中 XFramework → **Samples** 页签 → Import。
 
 ---
 
