@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Unity.Profiling;
 using UnityEngine;
 using XFramework.XLog;
 using XFramework.XMessage.Internal;
@@ -29,6 +30,12 @@ namespace XFramework.XMessage
     internal sealed class MessageBroker : IMessageBroker
     {
         #region Private Fields
+
+        /// <summary>普通发布入口的 Profiler 标记。未启用 Profiler 时 <c>Auto</c> 只是一次比较。</summary>
+        private static readonly ProfilerMarker PublishMarker = new("XFramework.Message.Publish");
+
+        /// <summary>键值发布入口的 Profiler 标记（与普通发布分开，便于区分两条路径的开销）。</summary>
+        private static readonly ProfilerMarker PublishKeyedMarker = new("XFramework.Message.PublishKeyed");
 
         /// <summary>按消息类型缓存的通道(承载该类型的同步流与缓冲流)。</summary>
         private readonly Dictionary<Type, IMessageChannel> _channels = new();
@@ -92,44 +99,50 @@ namespace XFramework.XMessage
 
         public void Publish<TMessage>(TMessage message)
         {
-            AssertMainThread(nameof(Publish));
+            using (PublishMarker.Auto())
+            {
+                AssertMainThread(nameof(Publish));
 
-            Interlocked.Increment(ref _publishCount);
+                Interlocked.Increment(ref _publishCount);
 
-            var type = typeof(TMessage);
+                var type = typeof(TMessage);
 
-            // 执行过滤器管道（无过滤器时零分配）
-            if (!ApplyFilters(type, message))
-                return;
+                // 执行过滤器管道（无过滤器时零分配）
+                if (!ApplyFilters(type, message))
+                    return;
 
-            var channel = GetOrCreateChannel<TMessage>();
+                var channel = GetOrCreateChannel<TMessage>();
 
-            // 同步派发 + 缓冲写入整段禁止回收（MSG-001）
-            EmitSyncAndBuffer(channel, message);
+                // 同步派发 + 缓冲写入整段禁止回收（MSG-001）
+                EmitSyncAndBuffer(channel, message);
 
-            // 异步处理器排在同步投递之后,fire-and-forget 启动
-            DispatchAsyncFireAndForget(channel, message);
+                // 异步处理器排在同步投递之后,fire-and-forget 启动
+                DispatchAsyncFireAndForget(channel, message);
+            }
         }
 
         public void Publish<TKey, TMessage>(TKey key, TMessage message)
         {
-            AssertMainThread(nameof(Publish));
+            using (PublishKeyedMarker.Auto())
+            {
+                AssertMainThread(nameof(Publish));
 
-            Interlocked.Increment(ref _publishCount);
+                Interlocked.Increment(ref _publishCount);
 
-            var type = typeof(TMessage);
+                var type = typeof(TMessage);
 
-            // 执行过滤器管道
-            if (!ApplyFilters(type, message))
-                return;
+                // 执行过滤器管道
+                if (!ApplyFilters(type, message))
+                    return;
 
-            var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
+                var channel = GetOrCreateKeyedChannelStore<TKey, TMessage>().GetOrCreate(key);
 
-            // 同步派发 + 缓冲写入整段禁止回收（MSG-001，键值路径同形）
-            EmitSyncAndBuffer(channel, message);
+                // 同步派发 + 缓冲写入整段禁止回收（MSG-001，键值路径同形）
+                EmitSyncAndBuffer(channel, message);
 
-            // 异步处理器排在同步投递之后,fire-and-forget 启动
-            DispatchAsyncFireAndForget(channel, message);
+                // 异步处理器排在同步投递之后,fire-and-forget 启动
+                DispatchAsyncFireAndForget(channel, message);
+            }
         }
 
         /// <summary>

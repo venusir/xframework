@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using Unity.Profiling;
 using Cysharp.Threading.Tasks;
 using YooAsset;
 using XFramework.XLog;
@@ -18,6 +19,15 @@ namespace XFramework.XAsset
     /// </summary>
     class YooAssetManagerImpl
     {
+        /// <summary>
+        /// 资源加载入口的 Profiler 标记。只包住同步的 operation 创建段——真正的等待跨 <c>await</c>，
+        /// 把标记跨挂起保持会把 scope 绑到错误的线程上。
+        /// </summary>
+        private static readonly ProfilerMarker LoadMarker = new("XFramework.Asset.Load");
+
+        /// <summary>场景加载入口的 Profiler 标记（同样只覆盖同步的 operation 创建段）。</summary>
+        private static readonly ProfilerMarker SceneLoadMarker = new("XFramework.Asset.LoadScene");
+
         private readonly string _defaultPackageName;
         private readonly Dictionary<string, ResourcePackage> _packages = new Dictionary<string, ResourcePackage>(2);
         private readonly ISceneLoadSource _sceneLoadSource;
@@ -573,7 +583,11 @@ namespace XFramework.XAsset
             if (package == null)
                 return default;
 
-            var operation = package.LoadAssetAsync(location, priority);
+            AssetHandle operation;
+            using (LoadMarker.Auto())
+            {
+                operation = package.LoadAssetAsync(location, priority);
+            }
             await WaitOrReleaseAsync(new HandleBaseWait(operation), cancellationToken);
 
             if (operation.Status != EOperationStatus.Succeed)
@@ -608,7 +622,11 @@ namespace XFramework.XAsset
             // Destroy 之后复用同一实例时重新挂上 sceneUnloaded（AST-003 / SCN-003）
             EnsureSceneUnloadedSubscribed();
 
-            var operation = _sceneLoadSource.LoadScene(location, mode);
+            ISceneLoadOperation operation;
+            using (SceneLoadMarker.Auto())
+            {
+                operation = _sceneLoadSource.LoadScene(location, mode);
+            }
             if (operation == null) return default;
 
             try

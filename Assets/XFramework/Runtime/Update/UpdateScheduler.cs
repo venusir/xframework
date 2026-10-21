@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 using XFramework.XLog;
 
@@ -200,6 +201,9 @@ namespace XFramework.XUpdate
 
         #region Private Fields
 
+        /// <summary>一帧派发的 Profiler 标记。三套调度器共用同一个名字，便于合并观察总开销。</summary>
+        private static readonly ProfilerMarker TickMarker = new("XFramework.Update.Tick");
+
         /// <summary>
         /// 扁平化的桶数组。下标 = <see cref="BucketOf"/>(轴, Tier)，即「轴 × TierCount + Tier」。
         /// <para>两轴分开存储是为了让切片相位与节拍各自独立：暂停时逻辑轴不推进，
@@ -368,7 +372,10 @@ namespace XFramework.XUpdate
             _isIterating = true;
             try
             {
-                TickInternal(clock);
+                using (TickMarker.Auto())
+                {
+                    TickInternal(clock);
+                }
             }
             finally
             {

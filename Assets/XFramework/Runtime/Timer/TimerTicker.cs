@@ -1,4 +1,5 @@
 using System;
+using Unity.Profiling;
 using UnityEngine;
 using XFramework.XLog;
 using XFramework.XUpdate;
@@ -28,6 +29,9 @@ namespace XFramework.XTimer
     internal sealed class TimerTicker : IUpdateable
     {
         #region Private Fields
+
+        /// <summary>一次扫尾的 Profiler 标记；两条时间轴共用同一个名字，便于合并观察。</summary>
+        private static readonly ProfilerMarker SweepMarker = new("XFramework.Timer.Sweep");
 
         private readonly TimerCore _core;
         private readonly int _axis;
@@ -148,7 +152,11 @@ namespace XFramework.XTimer
             {
                 // ProcessImmediate 里的这一趟不是派发轮，不推进趟号：于是刚建好的槽位仍算「本趟出生」，
                 // 只参与最近截止的估计、不会当场触发（见 TimerTable.Sweep）
-                double min = _core.Sweep(_axis, deltaTime, advancePass: !_inImmediate);
+                double min;
+                using (SweepMarker.Auto())
+                {
+                    min = _core.Sweep(_axis, deltaTime, advancePass: !_inImmediate);
+                }
                 _tier = TimerCore.SelectTier(min);
             }
             catch (Exception e)

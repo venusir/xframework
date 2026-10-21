@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Unity.Profiling;
 using UnityEngine;
 using XFramework.XLog;
 using XFramework.XUpdate;
@@ -27,6 +28,9 @@ namespace XFramework.XAudio
         #endregion
 
         #region Private Fields
+
+        /// <summary>同步播放入口的 Profiler 标记（异步路径的实际耗时在加载，不在这里）。</summary>
+        private static readonly ProfilerMarker PlayMarker = new("XFramework.Audio.Play");
 
         private readonly AudioSourcePool _pool;
         private readonly AudioTicker _ticker;
@@ -149,18 +153,21 @@ namespace XFramework.XAudio
         /// <inheritdoc/>
         public AudioHandle Play(string location, AudioPlayOptions options = default)
         {
-            EnsureNotDisposed();
-            ValidateLocation(location);
+            using (PlayMarker.Auto())
+            {
+                EnsureNotDisposed();
+                ValidateLocation(location);
 
-            string channel = NormalizeChannel(options.Channel);
+                string channel = NormalizeChannel(options.Channel);
 
-            // 预占发生在发起加载之前：池满时一次 IO 都不会浪费
-            if (!_pool.TryReserve(channel, location, out int index, out AudioHandle handle))
-                return default;
+                // 预占发生在发起加载之前：池满时一次 IO 都不会浪费
+                if (!_pool.TryReserve(channel, location, out int index, out AudioHandle handle))
+                    return default;
 
-            EnsureTickerRegistered();
-            RunFireAndForget(index, handle.Generation, location, options);
-            return handle;
+                EnsureTickerRegistered();
+                RunFireAndForget(index, handle.Generation, location, options);
+                return handle;
+            }
         }
 
         /// <inheritdoc/>

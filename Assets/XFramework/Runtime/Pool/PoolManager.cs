@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Profiling;
 using UnityEngine;
 using XFramework.XLog;
 
@@ -29,6 +30,12 @@ namespace XFramework.XPool
     public static class PoolManager
     {
         #region Static — Global Singleton
+
+        /// <summary>取实例的 Profiler 标记（泛型入口共用，不随 <c>T</c> 复制）。</summary>
+        private static readonly ProfilerMarker GetMarker = new("XFramework.Pool.Get");
+
+        /// <summary>归还实例的 Profiler 标记（泛型入口共用，不随 <c>T</c> 复制）。</summary>
+        private static readonly ProfilerMarker ReturnMarker = new("XFramework.Pool.Return");
 
         private static readonly Dictionary<Type, object> _pools = new();
         private static readonly Dictionary<Type, object> _configs = new();
@@ -72,7 +79,10 @@ namespace XFramework.XPool
         /// <typeparam name="T">对象类型，需为引用类型且具有无参构造函数</typeparam>
         public static T Get<T>() where T : class, new()
         {
-            return GetPool<T>().Get();
+            using (GetMarker.Auto())
+            {
+                return GetPool<T>().Get();
+            }
         }
 
         /// <summary>
@@ -85,7 +95,10 @@ namespace XFramework.XPool
         /// <param name="generator">池空时的实例生成器（首次建池时生效）</param>
         public static T Get<T>(Func<T> generator) where T : class
         {
-            return GetOrCreatePoolCore(generator, true).Get();
+            using (GetMarker.Auto())
+            {
+                return GetOrCreatePoolCore(generator, true).Get();
+            }
         }
 
         /// <summary>
@@ -125,20 +138,23 @@ namespace XFramework.XPool
         /// <param name="item">要归还的实例</param>
         public static void Return<T>(T item) where T : class
         {
-            if (item == null) return;
-
-            if (_pools.TryGetValue(typeof(T), out var poolObj) && poolObj is IPool<T> pool)
+            using (ReturnMarker.Auto())
             {
-                pool.Return(item);
-                return;
-            }
+                if (item == null) return;
 
-            // 按编译期类型查不到池：改用运行时类型再试一次（池按类型定键，只认编译期类型就会把实例丢掉）
-            if (_pools.TryGetValue(item.GetType(), out var runtimePoolObj) && runtimePoolObj is IUntypedPool untypedPool)
-            {
-                untypedPool.ReturnUntyped(item);
+                if (_pools.TryGetValue(typeof(T), out var poolObj) && poolObj is IPool<T> pool)
+                {
+                    pool.Return(item);
+                    return;
+                }
+
+                // 按编译期类型查不到池：改用运行时类型再试一次（池按类型定键，只认编译期类型就会把实例丢掉）
+                if (_pools.TryGetValue(item.GetType(), out var runtimePoolObj) && runtimePoolObj is IUntypedPool untypedPool)
+                {
+                    untypedPool.ReturnUntyped(item);
+                }
+                // 仍未命中：静默忽略（可能从未调用 Get<T>）
             }
-            // 仍未命中：静默忽略（可能从未调用 Get<T>）
         }
 
         #endregion
