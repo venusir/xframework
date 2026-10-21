@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
     XFramework 文档通道自检：XML 文档注释的编译告警（按码统计，门禁码见「覆盖范围」）+ 资源 .meta 完整性
-    + 决策台账结构 + 模块 README 的文件树子集。
+    + 决策台账结构 + 模块 README 的文件树子集 + 示例代码编译。
 
 .DESCRIPTION
     **一、文档注释告警。** Unity 生成的 csproj 没有设置 DocumentationFile，因此**默认编译根本
@@ -70,8 +70,14 @@
     已无此类）。**解析失败记违规并明说「无法解析」，不静默通过。** **守不住**：哪个文件在干什么
     （对应关系）——那是评审的事。
 
+    **五、示例编译（`Samples~/`）。** 示例目录被 Unity 完全忽略，示例代码在仓内没有任何编译通道
+    （CONF-001 一类缺陷由此存活）。本脚本调用 `Tools/check-samples.ps1`：生成临时 csproj，把
+    `Samples~/**/*.cs` 编进包程序集与 Unity 托管程序集，要求 0 error。**前提与 dotnet 门禁相同**——
+    先让 Unity 导入一次本工程；前置缺失时脚本直接失败，不给假绿。
+
     **默认是诊断工具**：只报告数量、不判定通过/失败；加 `-Enforce` 才当门禁（**门禁码**的告警须为 0、
-    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规、模块 README 的文件树与磁盘一致）。
+    所有源文件都须参与编译、所有条目都须有 `.meta`、决策台账结构须合规、模块 README 的文件树与磁盘一致、
+    示例代码编译通过）。
 
 .PARAMETER Module
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
@@ -503,6 +509,23 @@ if ($Module) {
         $treeProblems | Select-Object -First 10 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
         if ($treeProblems.Count -gt 10) { Write-Host "      …共 $($treeProblems.Count) 处" -ForegroundColor Yellow }
     }
+    # 示例编译：Samples~ 不参与 Unity 编译，单独走一条临时 csproj（见 Tools/check-samples.ps1）。
+    $sampleProblems = @()
+    $sampleScript = Join-Path $PSScriptRoot "check-samples.ps1"
+    if (Test-Path $sampleScript) {
+        $sampleOutput = & pwsh -NoProfile -File $sampleScript 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  示例编译: 通过" -ForegroundColor DarkGray
+        } else {
+            Write-Host "  示例编译: 失败" -ForegroundColor Yellow
+            $sampleOutput | Select-Object -Last 20 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+            $sampleProblems += "示例代码编译失败（Samples~/ 下的 .cs 不参与 Unity 编译）"
+        }
+    } else {
+        Write-Host "  示例编译: 跳过（未找到 Tools/check-samples.ps1）" -ForegroundColor Yellow
+        $sampleProblems += "未找到 Tools/check-samples.ps1，示例编译未执行"
+    }
+
     Write-Host "  提示：CS1570 会遮蔽同一块注释里的其它告警（先清它，再看其余码的真实数量）。逐条查看用 -Module <名字>。" -ForegroundColor DarkGray
 }
 
@@ -526,6 +549,7 @@ if ($metaMissing.Count -gt 0) { $problems += "包内有 $($metaMissing.Count) �
 if ($missing.Count -gt 0) { $problems += "有 $($missing.Count) 个源文件未参与编译——检查结果残缺，此时报的「0 条」不可信" }
 if ($ledgerProblems.Count -gt 0) { $problems += "决策台账结构有 $($ledgerProblems.Count) 处不合规（每个模块要有台账、条目状态词要合法、文件表与 Runtime/ 双向相等）——规范见 Documentation/Modules/README.md" }
 if ($treeProblems.Count -gt 0) { $problems += "模块 README 的文件树有 $($treeProblems.Count) 处与磁盘不一致（漏收 / 残影）——每个模块目录下的 .cs 都要列进「## 模块结构」" }
+if ($sampleProblems.Count -gt 0) { $problems += ($sampleProblems -join "；") }
 
 if ($problems.Count -gt 0) {
     Write-Host ""
@@ -542,5 +566,5 @@ if ($diagLeft.Count -gt 0) {
     $leftParts = ($diagLeft | Group-Object Code | Sort-Object Name | ForEach-Object { "$($_.Name)×$($_.Count)" }) -join "、"
     Write-Host ("未纳门码（只诊断、不判失败）：{0}" -f $leftParts) -ForegroundColor DarkYellow
 }
-Write-Host ("文档门禁：通过（门禁码 0 条：{0}；所有源文件都参与了编译；决策台账 {1} 个模块 / {2} 条条目合规；README 文件树 {3} 个模块与磁盘一致）" -f ($GatedCodes -join " / "), $ledgerModules.Count, $ledgerEntries, $treeRestructured) -ForegroundColor Green
+Write-Host ("文档门禁：通过（门禁码 0 条：{0}；所有源文件都参与了编译；决策台账 {1} 个模块 / {2} 条条目合规；README 文件树 {3} 个模块与磁盘一致；示例代码编译通过）" -f ($GatedCodes -join " / "), $ledgerModules.Count, $ledgerEntries, $treeRestructured) -ForegroundColor Green
 exit 0

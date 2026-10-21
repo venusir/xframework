@@ -41,7 +41,7 @@
 |---|---|---|
 | 编译 | `dotnet build <csproj> --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` | 0 error |
 | 测试 | `pwsh -File Tools/run-tests.ps1 [-Filter <片段>] [-Platform PlayMode\|EditMode\|All]` | 全量双平台 **0 失败** |
-| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | **门禁码**（十一个 XML 文档告警码，清单见脚本头部「覆盖范围」）的包内告警 0、**所有源文件都参与编译**、所有条目都有 `.meta`、**决策台账结构合规**（每模块有 `## 决策台账`、条目状态词合法、`Modules/README.md` 文件表与 `Runtime/` 双向相等——规范见 `Documentation/Modules/README.md`；只守结构，不守内容属实）、**模块 README 的文件树与磁盘一致**（每个模块目录下的 `.cs` 都要列进「`## 模块结构`」——按 basename 比对，两个方向都抓） |
+| 文档 | `pwsh -File Tools/check-docs.ps1 -Enforce` | **门禁码**（十一个 XML 文档告警码，清单见脚本头部「覆盖范围」）的包内告警 0、**所有源文件都参与编译**、所有条目都有 `.meta`、**决策台账结构合规**（每模块有 `## 决策台账`、条目状态词合法、`Modules/README.md` 文件表与 `Runtime/` 双向相等——规范见 `Documentation/Modules/README.md`；只守结构，不守内容属实）、**模块 README 的文件树与磁盘一致**（每个模块目录下的 `.cs` 都要列进「`## 模块结构`」——按 basename 比对，两个方向都抓）、**示例代码编译通过**（`Samples~/` 不参与 Unity 编译，由 `Tools/check-samples.ps1` 生成临时 csproj 编一遍） |
 
 ### 两个易踩点
 
@@ -112,7 +112,7 @@
 | （无） | 按模块汇总包内 XML 文档告警（**按码分列**，十一个码与中文标签见脚本头部「覆盖范围」），并报告缺 `.meta` 的条目 |
 | `-Module <名字>` | 逐条列出某模块的告警（文件:行号 + 按码打标 + 文案） |
 | `-Project <csproj…>` | 默认检查包自身的两个程序集（Runtime 与 Editor） |
-| `-Enforce` | 门禁模式：**门禁码**告警须 0、所有源文件都参与编译、所有条目都有 `.meta`，任一不满足即失败（失败清单点名码） |
+| `-Enforce` | 门禁模式：**门禁码**告警须 0、所有源文件都参与编译、所有条目都有 `.meta`、决策台账与模块 README 文件树合规、**示例代码编译通过**，任一不满足即失败（失败清单点名码） |
 
 ### 性能基准套件
 
