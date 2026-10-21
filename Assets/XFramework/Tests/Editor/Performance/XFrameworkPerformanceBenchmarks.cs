@@ -11,7 +11,7 @@ namespace XFramework.Performance.Tests
 {
     /// <summary>
     /// 性能基准套件。**不属于门禁**：用 <see cref="ExplicitAttribute"/> 隔离，只在显式指定 fixture 时运行。
-    /// <para>只测量、不做零 GC 断言——本环境的分配尺子不可用（见 <c>Documentation/Workflow.md</c> §六）。</para>
+    /// <para>只测量、不做零 GC 断言——本环境的分配尺子不可用，它不产出吞吐 / 耗时基准。</para>
     /// <para>运行：<c>pwsh -File Tools/run-tests.ps1 -Fixture XFrameworkPerformanceBenchmarks -Platform EditMode</c>。</para>
     /// </summary>
     [TestFixture]
