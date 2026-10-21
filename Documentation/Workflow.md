@@ -189,6 +189,23 @@
   「脚本表达不了」的那部分正是它抓到的。配方原样保留，回归时按上面三步重跑（改设置 → 连跑两遍 → 改回），
   跑完核 `git status` 干净（该设置不留 diff）。
 
+## 七、发布与分发
+
+### 发布一个版本
+
+1. 按 `CHANGELOG.md` 顶部的版本建议改 `Assets/XFramework/package.json` 的 `version`，并把 `[Unreleased]` 落成带日期的版本小节。
+2. 跑两条门禁：`Tools/run-tests.ps1`（全量双平台 0 失败）与 `Tools/check-docs.ps1 -Enforce`（0 告警）。
+3. 在仓库根打与包版本一致的 tag（例如 `0.4.0`），**推送由人决定**（与提交授权同一条纪律）。
+4. 扩展包 `Assets/XFramework.Cinemachine` 用同一个 tag 发布（它单独安装、不随核心包发布）。
+
+### OpenUPM（待上架）
+
+- OpenUPM 只跟随**发布 tag**，不跟 `main`；仓库需公开（已满足，MIT）。
+- 提交入口：openupm.com → Add package → 仓库填 `https://github.com/venusir/xframework`，**包目录填 `Assets/XFramework`**（与 UPM 的 `?path=` 同一个目录）。
+- 上架后再补两处安装说明：根 README 与包 README 的 scoped registry 一行式安装。`package.json` 的 `dependencies` 是否可以改为注册表依赖（UniTask / YooAsset 均在 OpenUPM）**等上架后逐条核对包名与版本再做**，不预先声明。
+- 核对清单：OpenUPM 页面上的包名 / 版本 / 包目录 / license 与 `package.json` 逐字一致；用一次裸工程按 OpenUPM 的 scoped registry 安装，确认 `Library/ScriptAssemblies` 实际产出 `Venusy609.Xframework.dll`（看产出，不看退出码）。
+- **外部字段与流程会漂移**：以 OpenUPM 页面当时的字段为准；本文只记「要核对什么」，不抄写页面。
+
 ## 附：一个完整回合
 
 1. `dotnet build Venusy609.Xframework.Editor.Tests.csproj --artifacts-path "$env:TEMP\xfw-artifacts" -v q --nologo` → 0 error
