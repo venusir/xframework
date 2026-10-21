@@ -13,6 +13,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+#### Samples
+
+- **新增 `Samples~/Playable` 零资产可玩示例**（2026-10-21）：Bootstrap(Data→Save) + Data / Save / Message / Reactive / Timer / File / Log，IMGUI 演示壳；导入后打开 `Playable.unity` 按 Play 即可，不依赖 YooAsset 采集配置。Asset / UI / Audio 的模块级示例仍在 `Samples~/Example`。
+
+#### Performance
+
+- **新增性能基准套件**（2026-10-21）：`Tests/Editor/Performance/XFrameworkPerformanceBenchmarks.cs`，6 个 `[Explicit]` 基准（Message / ReactiveProperty / ReactiveList / Pool / Update 1000 节点 / Serializer 往返）；`com.unity.test-framework.performance` 仅测试依赖，运行时不依赖它。
+- **热路径新增 `ProfilerMarker`**（2026-10-21）：Message 发布、Update 派发、Timer 扫尾、Pool 取还、Asset 加载（同步 operation 创建段）、Audio 播放。未启用 Profiler 时开销可忽略，无公开 API 变更。
+
 #### Asset
 
 - **新增可选能力接口 `IAssetSceneLoader` 与场景句柄 `AssetSceneHandle`**：场景的加载 / 卸载从

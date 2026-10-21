@@ -114,6 +114,12 @@
 | `-Project <csproj…>` | 默认检查包自身的两个程序集（Runtime 与 Editor） |
 | `-Enforce` | 门禁模式：**门禁码**告警须 0、所有源文件都参与编译、所有条目都有 `.meta`、决策台账与模块 README 文件树合规、**示例代码编译通过**，任一不满足即失败（失败清单点名码） |
 
+### `Tools/check-samples.ps1`
+
+- 生成临时 csproj，把 `Samples~/**/*.cs` 编进包程序集与 Unity 托管程序集；`check-docs.ps1 -Enforce` 已自动调用（第六项）。
+- **前提与 dotnet 门禁相同**：先让 Unity 导入一次（生成 csproj 与 `Library/ScriptAssemblies`）。前置缺失时脚本直接失败，不给假绿。
+- 只守编译：场景 / 预制体的引用由人工验收或一次性探针覆盖。
+
 ### 性能基准套件
 
 - 运行：`pwsh -File Tools/run-tests.ps1 -Fixture XFrameworkPerformanceBenchmarks -Platform EditMode`
