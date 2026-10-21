@@ -114,6 +114,13 @@
 | `-Project <csproj…>` | 默认检查包自身的两个程序集（Runtime 与 Editor） |
 | `-Enforce` | 门禁模式：**门禁码**告警须 0、所有源文件都参与编译、所有条目都有 `.meta`，任一不满足即失败（失败清单点名码） |
 
+### 性能基准套件
+
+- 运行：`pwsh -File Tools/run-tests.ps1 -Fixture XFrameworkPerformanceBenchmarks -Platform EditMode`
+- 全套件标 `[Explicit]` + `[Category("Performance")]`，**不进入全量门禁**（全量里计为跳过）。
+- 结果在 `TestResults/run-*.xml` 的 `##performancetestresult2` 行（每个用例的 Median / SampleCount / 分布），路径随测试壳。
+- 只测量耗时，不做零 GC 断言——分配尺子在本环境不可用（见 §六）。
+
 ### 测试壳
 
 `<仓库名>.TestRun` 通过 junction 共享本仓库的 `Assets/Packages/ProjectSettings`，但拥有独立 `Library`。
