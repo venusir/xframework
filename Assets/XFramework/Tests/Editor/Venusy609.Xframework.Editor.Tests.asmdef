@@ -4,7 +4,8 @@
         "Venusy609.Xframework.Editor",
         "Venusy609.Xframework",
         "UniTask",
-        "YooAsset"
+        "YooAsset",
+        "Unity.PerformanceTesting"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"
