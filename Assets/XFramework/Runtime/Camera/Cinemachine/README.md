@@ -111,6 +111,7 @@ Runtime/Camera/Cinemachine/
 | `Register<T>(string, T)` / `Register<T>(T)` | 命名 / 动态注册，返回 `CameraHandle`（不激活、不动场景） |
 | `Unregister(CameraHandle)` | 恢复作者状态、移除槽位（不销毁 vcam） |
 | `OutputCamera` / `ActiveHandle` / `IsTransitioning` / `CameraCount` | 查询 |
+| `CopyCameras(List<CameraInfo>)` / `GetState()` | 逐相机 / 模块级诊断快照 |
 | `TryGetHandle(string, out CameraHandle)` | 按命名 id 查句柄 |
 | `Activate` / `Deactivate` / `TransitionTo` / `IsActive`（仅句柄） | 契约操作 |
 | `TransitionToAsync(handle, duration, style, ct)` | 过渡并等待完成，返回 `CameraTransitionResult` |
@@ -169,6 +170,8 @@ handle.Dispose(); // 门面已销毁也安全
 - 槽位表 + 线性扫描：活动 vcam → 句柄、vcam → 槽位、id → 槽位；不再维护反查字典，避免外部销毁 / 替换 /
   注销时的陈旧键分支。
 - `ComputeBoostPriority` 取已注册槽位的作者优先级与同通道未注册 vcam 的最大值 + 1，`int.MaxValue` 封顶。
+- `GetState` / `CopyCameras` 单次遍历槽位；计数含已销毁未注销；`TransitionProgress` 用 pending duration 与
+  `Brain.ActiveBlend.TimeInBlend` 计算，无额外分配。
 - 过渡由 `GetBlendOverride` 请求；`CameraUpdatedEvent` 在混合结束后清理 pending，`CameraActivatedEvent` /
   `CameraDeactivatedEvent` / `BlendFinishedEvent` 负责状态消息与等待者完成。
 - `CinemachineBlendDefinition.Styles` 映射核心包的 `CameraBlendStyle`；非法枚举值抛
@@ -198,6 +201,8 @@ handle.Dispose(); // 门面已销毁也安全
   通道，多个管理器 / 多个 Brain 时应按 `Handle` 过滤。事件反映 Brain 真实状态，不是命令回执。
 - **`TransitionToAsync` 取消只停止等待**：不中止过渡；Brain 被禁用 / 不更新时等待不会完成，用
   `CancellationToken` / 调用方超时兜底。
+- **诊断快照是复制时刻的状态**：`GetState` / `CopyCameras` 的计数含已销毁未注销的槽位（`IsAlive=false`）；
+  `TransitionProgress` 只在管理器过渡且 `Brain.ActiveBlend` 非空时有意义。
 - **动态 vcam 的 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`**：用 `ActiveHandle` /
   `IsActive(handle)`；`TryGetHandle` 只查命名 id。
 - **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` /

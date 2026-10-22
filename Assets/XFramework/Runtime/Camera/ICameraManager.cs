@@ -42,6 +42,16 @@ namespace XFramework.XCamera
         /// <summary>已注册相机数量（含已销毁但尚未注销的槽位）。</summary>
         int CameraCount { get; }
 
+        /// <summary>把逐相机诊断信息复制到调用方 buffer；返回写入数量。</summary>
+        /// <param name="buffer">目标 buffer；方法先清空它，再按槽位顺序写入。</param>
+        /// <returns>写入的相机数量（含已销毁但未注销的槽位，<see cref="CameraInfo.IsAlive"/> 为
+        /// <c>false</c>）。</returns>
+        /// <exception cref="System.ArgumentNullException"><paramref name="buffer"/> 为 <c>null</c>。</exception>
+        int CopyCameras(List<CameraInfo> buffer);
+
+        /// <summary>读取只读诊断快照（计数 / 活动 / 管理器过渡 / Brain 混合 / 输出相机）。</summary>
+        CameraStateSnapshot GetState();
+
         /// <summary>按命名 id 查找已注册相机句柄。</summary>
         /// <param name="cameraId">命名相机 id。</param>
         /// <param name="handle">找到时为句柄；否则为 <c>default</c>。</param>

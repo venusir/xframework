@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -66,6 +67,30 @@ namespace XFramework.XCamera
 
         /// <summary>已注册相机数量（含已销毁但尚未注销的槽位）；未初始化时为 <c>0</c>。</summary>
         public static int CameraCount => _impl != null ? _impl.CameraCount : 0;
+
+        /// <summary>把逐相机诊断信息复制到调用方 buffer；未初始化时清空并返回 0。</summary>
+        /// <param name="buffer">目标 buffer；方法先清空它。</param>
+        /// <returns>写入数量。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="buffer"/> 为 <c>null</c>。</exception>
+        public static int CopyCameras(List<CameraInfo> buffer)
+        {
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            if (_impl == null)
+            {
+                buffer.Clear();
+                return 0;
+            }
+
+            return _impl.CopyCameras(buffer);
+        }
+
+        /// <summary>读取只读诊断快照；未初始化时返回 <c>default</c>。</summary>
+        public static CameraStateSnapshot GetState()
+        {
+            return _impl != null ? _impl.GetState() : default;
+        }
 
         /// <summary>按命名 id 查找已注册相机句柄；未初始化或未知 id 返回 <c>false</c>。</summary>
         /// <param name="cameraId">命名相机 id。</param>

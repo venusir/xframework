@@ -56,8 +56,12 @@ namespace XFramework.Editor.Diagnostics.Panels
             Row(table, "Settings", SettingsManager.IsInitialized, $"{SettingsManager.RegisteredTypeCount} 个类型");
             Row(table, "Serialize", Serializer.IsInitialized, "-");
             Row(table, "Audio", AudioManager.IsInitialized, AudioManager.IsInitialized ? $"{AudioManager.ActiveVoiceCount} 路在播" : "-");
+            var cameraState = CameraManager.GetState();
             Row(table, "Camera", CameraManager.IsInitialized,
-                CameraManager.IsInitialized ? (CameraManager.ActiveCameraId ?? "无活动相机") : "-");
+                CameraManager.IsInitialized
+                    ? $"{cameraState.RegisteredCount} 台 / {(cameraState.ActiveCameraId ?? "无活动相机")}" +
+                      (cameraState.IsTransitioning ? " / 过渡中" : string.Empty)
+                    : "-");
             Row(table, "Update", UpdateManager.IsInitialized, $"{UpdateManager.TotalCount} 个节点");
             Row(table, "Log", LogManager.IsInitialized, $"{LogCategory.RegisteredCount} 个分类");
 

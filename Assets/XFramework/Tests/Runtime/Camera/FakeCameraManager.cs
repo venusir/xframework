@@ -19,6 +19,10 @@ namespace XFramework.XCamera.Tests
 
         public int CameraCount { get; set; }
 
+        public CameraStateSnapshot State { get; set; }
+
+        public List<CameraInfo> CopyResult { get; } = new List<CameraInfo>();
+
         public Dictionary<string, CameraHandle> NamedHandles { get; } =
             new Dictionary<string, CameraHandle>(StringComparer.Ordinal);
 
@@ -64,6 +68,18 @@ namespace XFramework.XCamera.Tests
         public bool TryGetHandle(string cameraId, out CameraHandle handle)
         {
             return NamedHandles.TryGetValue(cameraId, out handle);
+        }
+
+        public int CopyCameras(List<CameraInfo> buffer)
+        {
+            buffer.Clear();
+            buffer.AddRange(CopyResult);
+            return buffer.Count;
+        }
+
+        public CameraStateSnapshot GetState()
+        {
+            return State;
         }
 
         public CameraHandle Register<T>(string cameraId, T camera) where T : class

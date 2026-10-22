@@ -15,6 +15,8 @@ Runtime/Camera/
 ├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 同名转发 + 字符串便捷重载 + 探测型读宽容）
 ├── CameraBlendStyle.cs    # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
 ├── CameraTransitionResult.cs # 公开：Completed / Superseded / TargetUnregistered / ManagerDisposed
+├── CameraInfo.cs          # 公开：逐相机诊断项（句柄 / 活动 / 过渡目标 / 存活 / 命名）
+├── CameraStateSnapshot.cs # 公开：模块级诊断快照（计数 / 活动 / 过渡 / Brain 混合 / 输出相机）
 ├── Messages/
 │   ├── CameraActivatedMessage.cs      # 公开：incoming 相机激活
 │   ├── CameraDeactivatedMessage.cs    # 公开：已注册相机不再 live
@@ -24,7 +26,7 @@ Runtime/Camera/
 │   └── README.md                    # 使用向：接线、行为契约、已知限制、设计取舍
 └── README.md              # 使用说明
 
-Tests/Runtime/Camera/      # PlayMode：FakeCameraManager / CameraManagerTests / CameraFacadeCompletenessTests / CinemachineCameraManagerTests / CinemachineCameraEventTests / CinemachineCameraAsyncTests
+Tests/Runtime/Camera/      # PlayMode：FakeCameraManager / CameraManagerTests / CameraFacadeCompletenessTests / CinemachineCameraManagerTests / CinemachineCameraEventTests / CinemachineCameraAsyncTests / CameraDiagnosticsTests
 Tests/Editor/Camera/       # EditMode：CameraHandleTests（default / 相等性 / 便捷方法短路 / 未初始化宽容）
 Tests/Editor/Architecture/ModuleBoundaryTests.cs  # CinemachineTypes_StayInsideTheCinemachineBackend（类型只允许出现在 Camera/Cinemachine/）
 Runtime/Log/LogCategories.cs                     # CameraManager 分类
@@ -42,6 +44,7 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 已做：**相机状态事件与会话退订**（2026-10-22）——新增 `CameraActivatedMessage` / `CameraDeactivatedMessage` / `CameraBlendCompletedMessage`；Cinemachine 后端订阅 `CameraActivatedEvent` / `CameraDeactivatedEvent` / `BlendFinishedEvent` / `CameraUpdatedEvent`，按 `Origin` / mixer 过滤本 Brain 后经 `MessageManager` 发布；门面提供 `Subscribe`；内部 `ICameraManagerSessionReset` 让 `ResetForNewSession` 退订静态事件并恢复 `GetBlendOverride`，不碰场景对象。证据：`CinemachineCameraEventTests`（cut/blend 顺序、未注册 incoming、其他 Brain、Dispose/Unbind 后静默）与 `CameraManagerTests.ResetForNewSession_*`。
 - 已做：**`TransitionToAsync` 与完成结果**（2026-10-22）——新增 `CameraTransitionResult`（`Completed` / `Superseded` / `TargetUnregistered` / `ManagerDisposed`）；接口 / 门面 / `CameraHandle` 提供异步入口；Cinemachine 后端用共享 `UniTaskCompletionSource` 的 pending，cut 在 `CameraActivatedEvent` 完成、blend 在 `BlendFinishedEvent` 完成，`CameraUpdatedEvent` 兜底目标销毁；取消只停止等待，不中止过渡。证据：`CinemachineCameraAsyncTests` 十二例。
 - 已推翻：**~~`TransitionToAsync` 暂不做~~**（2026-10-17 · v1.1 候选）——~~v1 用 `IsTransitioning` + `UniTask.WaitUntil` 已能等待；异步入口要重新定义后端如何上报完成~~。被 2026-10-22 `TransitionToAsync` 实现取代：Cinemachine 的 `CameraActivatedEvent` / `BlendFinishedEvent` 足以给出完成信号，结果枚举区分完成 / 被取代 / 目标注销 / 管理器销毁。
+- 已做：**诊断快照**（2026-10-22）——新增 `CameraInfo` / `CameraStateSnapshot` 与 `CopyCameras` / `GetState`；计数含已销毁未注销槽位（`IsAlive` 可辨）；`IsTransitioning` / `TransitionTarget` / `TransitionProgress` 只描述管理器自有过渡，`IsBrainBlending` 暴露 Brain 真实混合；`OverviewDiagnosticPanel` 的 Camera 行改读 `GetState`。**不新增独立 Camera 页签**（旧「暂不做：Diagnostics 面板」仍成立）。证据：`CameraDiagnosticsTests` 六例。
 - 已做：**Cinemachine 3.1.7 后端硬合并进核心包**（2026-10-22 · 用户裁定）——`CinemachineCameraManager` 移入 `Runtime/Camera/Cinemachine/`，命名空间不变、程序集变为 `Venusy609.Xframework`；核心 asmdef 硬引用 `Unity.Cinemachine`；扩展包 / 独立 asmdef / `CinemachineDependencyTests` 删除。理由：Input System 先例、Unity 6000.3 最低版本 + Cinemachine 3 默认、自研相机后端非真实受众；门面 / 契约仍中立，由位置守卫守。**公开 API 基线 +1 类型（18 个成员），经用户确认**。证据与 3.x API 实测见 `Documentation/Cinemachine.md`。
 - 已推翻：**~~Cinemachine 支持以独立可选扩展包提供~~**（2026-10-17）——~~`com.venusy609.xframework.cinemachine`（单独 asmdef，依赖 Cinemachine 3.1.7），实现同一 `ICameraManager`；核心包零 Cinemachine 依赖。~~ 被 2026-10-22「Cinemachine 3.1.7 后端硬合并进核心包」取代（用户裁定）；原理由「避免 2.x / 2D / 自定义后端被版本锁排除」在 Unity 6000.3 + Cinemachine 3 默认下不再成立，且 Input System 早已是核心硬依赖。
 - 已做：**句柄化动态相机注册 / 激活**（2026-10-17）——`CameraHandle`（槽位 + 代际；`AudioHandle` 同形，`Generation = 0` 无效）+ `ICameraManager` 的 `Register<T>` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` + 门面转发 + 两个实现的槽位表。命名 string id 保留；动态相机随预制 `Register` / `Dispose`，不需要 authoring id。**主接口直扩**（用户裁定，非可选能力接口）；模块未发布、仓外无 `ICameraManager` 实现，扩展包同轮更新。

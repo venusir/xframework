@@ -242,6 +242,69 @@ namespace XFramework.XCamera.Cinemachine
         }
 
         /// <inheritdoc/>
+        public int CopyCameras(List<CameraInfo> buffer)
+        {
+            ThrowIfDisposed();
+            if (buffer == null)
+                throw new ArgumentNullException(nameof(buffer));
+
+            buffer.Clear();
+            var active = _brain != null ? _brain.ActiveVirtualCamera : null;
+
+            for (var i = 0; i < _slots.Count; i++)
+            {
+                var slot = _slots[i];
+                if (!slot.Used)
+                    continue;
+
+                var isActive = slot.Camera != null && active != null &&
+                               ReferenceEquals(active, slot.Camera);
+                var isTarget = _pending != null && _pending.SlotIndex == i;
+                buffer.Add(new CameraInfo(HandleOf(i), isActive, isTarget, slot.Camera != null));
+            }
+
+            return buffer.Count;
+        }
+
+        /// <inheritdoc/>
+        public CameraStateSnapshot GetState()
+        {
+            ThrowIfDisposed();
+
+            var registered = 0;
+            var named = 0;
+            var dynamic = 0;
+            for (var i = 0; i < _slots.Count; i++)
+            {
+                var slot = _slots[i];
+                if (!slot.Used)
+                    continue;
+
+                registered++;
+                if (slot.NamedId != null)
+                    named++;
+                else
+                    dynamic++;
+            }
+
+            var pending = _pending;
+            var isTransitioning = pending != null && pending.CountsAsTransition;
+            var transitionTarget = isTransitioning ? HandleOf(pending.SlotIndex) : default;
+
+            var progress = 0f;
+            if (isTransitioning && _brain != null && _brain.ActiveBlend != null && pending.Duration > 0f)
+                progress = Mathf.Clamp01(_brain.ActiveBlend.TimeInBlend / pending.Duration);
+
+            return new CameraStateSnapshot(
+                registered, named, dynamic,
+                ActiveHandle, transitionTarget,
+                isTransitioning,
+                _brain != null && _brain.IsBlending,
+                progress,
+                _brain != null ? _brain.OutputCamera : null);
+        }
+
+        /// <inheritdoc/>
         public bool TryGetHandle(string cameraId, out CameraHandle handle)
         {
             ThrowIfDisposed();

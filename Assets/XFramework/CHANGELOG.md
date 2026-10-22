@@ -88,6 +88,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   blend 在 `BlendFinishedEvent` 完成，`CameraUpdatedEvent` 兜底目标销毁；结果枚举区分
   `Completed` / `Superseded` / `TargetUnregistered` / `ManagerDisposed`。`CancellationToken` 只取消等待，
   不中止相机过渡。公开 API 基线新增枚举与异步成员（源兼容新增）。回归：`CinemachineCameraAsyncTests` 十二例。
+- **诊断快照**（2026-10-22）：新增 `CameraStateSnapshot` / `CameraInfo` 与接口 / 门面的 `GetState` /
+  `CopyCameras`；计数含已销毁未注销槽位（`IsAlive` 可辨）；`IsTransitioning` / `TransitionTarget` /
+  `TransitionProgress` 只描述管理器自有过渡，`IsBrainBlending` 暴露 Brain 真实混合。`OverviewDiagnosticPanel`
+  的 Camera 行改读 `GetState`；不新增独立页签。公开 API 基线新增两个值与四个方法（源兼容新增）。回归：
+  `CameraDiagnosticsTests` 六例。
 
 #### File
 
@@ -240,6 +245,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`CameraHandle.IsActive` 未初始化返回 false**：不再抛；命令仍抛。
 - **会话复位退订相机静态事件**：`CameraManager.ResetForNewSession` 在丢引用前让旧实现退订 `CinemachineCore` 的四个事件并恢复 `GetBlendOverride` 前值；不 Dispose、不访问场景对象。关闭域重载时旧管理器不再被静态事件钉住；退订异常只记 Warning。
 - **`TransitionToAsync` 的取消只停止等待**：`CancellationToken` 取消抛 `OperationCanceledException`，但不会中止相机过渡；要中断请用新的 `Activate` / `TransitionTo` / `Deactivate`。完成结果由 Brain 事件驱动，Brain 禁用 / 不更新时等待不会完成。
+- **诊断窗口的 Camera 行改读 `GetState`**：显示注册数量 / 活动 id / 是否过渡中；逐相机明细用 `CopyCameras`，不新增独立 Camera 页签。
 
 #### 破坏性变更迁移表（命名与签名）
 

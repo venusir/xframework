@@ -173,6 +173,42 @@ namespace XFramework.XCamera.Tests
             Assert.IsFalse(CameraManager.IsActive(new CameraHandle(0, 1)));
             Assert.IsFalse(CameraManager.Unregister(new CameraHandle(0, 1)));
             Assert.IsFalse(CameraManager.Unregister("main"));
+
+            var buffer = new List<CameraInfo>
+            {
+                new CameraInfo(new CameraHandle(1, 1), false, false, true),
+            };
+            Assert.AreEqual(0, CameraManager.CopyCameras(buffer));
+            Assert.IsEmpty(buffer, "未初始化时 CopyCameras 必须清空 buffer");
+            Assert.AreEqual(0, CameraManager.GetState().RegisteredCount);
+        }
+
+        [Test]
+        public void Forwarding_Diagnostics()
+        {
+            var handle = new CameraHandle(0, 1, "main");
+            var fake = new FakeCameraManager
+            {
+                State = new CameraStateSnapshot(
+                    1, 1, 0, handle, default, false, true, 0.5f, _camera),
+            };
+            fake.CopyResult.Add(new CameraInfo(handle, true, false, true));
+            CameraManager.Initialize(fake);
+
+            var buffer = new List<CameraInfo>();
+            var count = CameraManager.CopyCameras(buffer);
+
+            Assert.AreEqual(1, count);
+            Assert.AreEqual(handle, buffer[0].Handle);
+            Assert.IsTrue(buffer[0].IsActive);
+            Assert.IsTrue(buffer[0].IsAlive);
+
+            var state = CameraManager.GetState();
+            Assert.AreEqual(1, state.RegisteredCount);
+            Assert.AreEqual(handle, state.ActiveHandle);
+            Assert.IsTrue(state.IsBrainBlending);
+            Assert.AreEqual(0.5f, state.TransitionProgress);
+            Assert.AreSame(_camera, state.OutputCamera);
         }
 
         #endregion
@@ -326,6 +362,12 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual(handle, fake.LastAsyncHandle);
             Assert.AreEqual(0.5f, fake.LastAsyncDuration);
             Assert.AreEqual(CameraBlendStyle.Linear, fake.LastAsyncStyle);
+        }
+
+        [Test]
+        public void CopyCameras_Null_Throws()
+        {
+            Assert.Throws<ArgumentNullException>(() => CameraManager.CopyCameras(null));
         }
 
         [Test]

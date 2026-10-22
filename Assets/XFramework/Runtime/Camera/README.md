@@ -59,6 +59,8 @@ Runtime/Camera/
 ├── CameraManager.cs       # 公开：静态门面（转发 + 生命周期 + 会话复位 + 字符串便捷重载）
 ├── CameraBlendStyle.cs    # 公开：过渡样式枚举（后端中立）
 ├── CameraTransitionResult.cs # 公开：Completed / Superseded / TargetUnregistered / ManagerDisposed
+├── CameraInfo.cs          # 公开：逐相机诊断项（句柄 / 活动 / 过渡目标 / 存活 / 命名）
+├── CameraStateSnapshot.cs # 公开：模块级诊断快照（计数 / 活动 / 过渡 / Brain 混合 / 输出相机）
 ├── Messages/
 │   ├── CameraActivatedMessage.cs      # 公开：incoming 相机激活
 │   ├── CameraDeactivatedMessage.cs    # 公开：已注册相机不再 live
@@ -131,6 +133,8 @@ Runtime/Camera/
 | `ActiveCameraId`（门面便利） | = `ActiveHandle.NamedId`；动态活动或无活动为 `null` |
 | `IsTransitioning` | 本管理器发起的非 cut 过渡是否在途 |
 | `CameraCount` | 已注册槽位数量（含已销毁未注销） |
+| `CopyCameras(List<CameraInfo>)` | 逐相机诊断信息；先清空 buffer；未初始化时清空并返回 0 |
+| `GetState()` | 模块级只读诊断快照；未初始化时返回 `default` |
 | `TryGetHandle(string, out CameraHandle)` | 按命名 id 查句柄；未知 / 未初始化返回 `false` |
 | `Register<T>(string, T)` / `Register<T>(T)` | 命名 / 动态注册，返回句柄；不激活 |
 | `Unregister(CameraHandle)` / `Unregister(string)` | 注销；无效 / 未知返回 `false` |
@@ -179,6 +183,26 @@ using var sub = CameraManager.Subscribe((CameraActivatedMessage m) =>
   或绑定 `destroyCancellationToken`）。
 - `CinemachineCore` 的事件是静态 UnityEvent；管理器在 `Dispose` 与 `ResetForNewSession` 都会退订。第三方
   后端若想提供同等能力，应按上述消息类型直接 `MessageManager.Publish`（不发布不影响同步成员）。
+
+## 诊断快照
+
+`GetState()` 返回模块级只读快照，`CopyCameras(List<CameraInfo>)` 返回逐相机明细；两者都不在每帧路径上：
+
+```csharp
+var state = CameraManager.GetState(); // RegisteredCount / ActiveCameraId / IsTransitioning / IsBrainBlending ...
+var buffer = new List<CameraInfo>();
+CameraManager.CopyCameras(buffer);    // 先清空 buffer，再按槽位顺序写入
+```
+
+- `GetState()` 单次遍历、无额外分配；`CopyCameras` 在 buffer 容量足够时零分配（`List.Add` 的容量增长由调用方
+  预热）。
+- `RegisteredCount` / `NamedCount` / `DynamicCount` 都包含「已被外部销毁但尚未注销」的槽位；逐相机
+  `CameraInfo.IsAlive` 可辨认。
+- `IsTransitioning` / `TransitionTarget` / `TransitionProgress` 只描述**管理器自有**的非 cut 过渡；
+  `IsBrainBlending` 反映 Brain 真实混合（含 Timeline / 外部）。`TransitionProgress` 只在管理器过渡且
+  `Brain.ActiveBlend` 非空时有意义。
+- `OutputCamera` 可能为 `null`，不保证等于过渡目标。
+- 诊断窗口的概览行读取 `GetState()`；不新增独立 Camera 页签（需要逐相机明细时直接调用 `CopyCameras`）。
 
 ## 典型场景
 
@@ -299,7 +323,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - 管理器不在每帧路径上；Brain 自己按 `UpdateMethod` 推进混合。`CameraUpdatedEvent` 的处理在 Brain 更新末尾，
   只做指针比较与 pending 清理。
 - `GetBlendOverride` 每次混合创建时调用一次，只做引用比较。
-- `CameraCount` O(n)；`TryGetHandle` O(n)。
+- `CameraCount` / `TryGetHandle` / `GetState` O(n)；`CopyCameras` O(n)，buffer 预热后无额外分配。
 
 ## 已知限制
 
@@ -317,6 +341,8 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **异步完成由 Brain 事件驱动**：Brain 被禁用或不再推进时等待不会完成；用 `CancellationToken` / 调用方
   超时兜底。目标在完成前被注销 / 销毁返回 `TargetUnregistered`，被新请求 / 外部激活取代返回
   `Superseded`，管理器销毁返回 `ManagerDisposed`。
+- **诊断快照是复制时刻的状态**：`GetState` / `CopyCameras` 不作身份或实时查询；外部销毁但未注销的槽位
+  仍计入计数（`IsAlive=false`）。`TransitionProgress` 只在管理器过渡且 Brain 有 `ActiveBlend` 时有意义。
 - **同一台相机只能注册一次**：命名 + 动态、两个命名 id、两次不同 id 的动态注册都会抛 `ArgumentException`；
   先 `Unregister` 再换注册方式。
 - **管理器不销毁相机对象**：动态相机随预制 / 场景销毁；`Unregister` 只恢复状态并移除槽位。
@@ -371,7 +397,8 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 | 激活 / 反激活 / 切换 | Camera | 是 |
 | 过渡 / cut | Camera | 是（请求 duration / style） |
 | 当前活动相机 / 输出相机 | Camera | 是（`ActiveHandle` / `OutputCamera`；门面 `ActiveCameraId` 是便利） |
-| 注册表查询 | Camera | 是（`CameraCount` / `TryGetHandle`） |
+| 注册表查询 | Camera | 是（`CameraCount` / `TryGetHandle` / `GetState` / `CopyCameras`） |
+| 诊断快照（计数 / 逐相机） | Camera | 是（`GetState` / `CopyCameras`；无独立页签） |
 | 过渡状态 | Camera | 是（`IsTransitioning`，只含管理器自有过渡） |
 | 异步等待过渡完成 | Camera | 是（`TransitionToAsync`，返回结果枚举） |
 | 状态事件（激活 / 反激活 / 过渡完成） | Camera | 是（`MessageManager`，只对已注册相机发布） |
@@ -414,8 +441,8 @@ UI 根画布固定为 `ScreenSpaceOverlay`，不使用相机；HUD / Tip 的世�
 
 ### 与 Diagnostics / Bootstrap 的边界
 
-当前不提供独立 Diagnostics 页签与 `IBootstrapStage`：模块状态简单，诊断窗口的概览行读取活动相机 id；
-实现由调用方在组合根注入（或自行写一个引导阶段）。
+不提供独立 Diagnostics 页签与 `IBootstrapStage`：诊断窗口的概览行读取 `GetState()`，逐相机明细用
+`CopyCameras`；实现由调用方在组合根注入（或自行写一个引导阶段）。
 
 ## 设计原则
 
