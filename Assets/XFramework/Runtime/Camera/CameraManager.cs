@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XCamera.Messages;
 using XFramework.XLog;
@@ -251,6 +253,47 @@ namespace XFramework.XCamera
             }
 
             _impl.TransitionTo(handle, duration, style);
+        }
+
+        /// <summary>过渡到指定句柄的相机并等待完成。</summary>
+        /// <param name="handle">相机句柄。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果。</returns>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> TransitionToAsync(CameraHandle handle,
+            float duration, CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _impl.TransitionToAsync(handle, duration, style, cancellationToken);
+        }
+
+        /// <summary>过渡到指定命名相机并等待完成；未知 id 告警并返回
+        /// <see cref="CameraTransitionResult.TargetUnregistered"/>。</summary>
+        /// <param name="cameraId">命名相机 id。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> TransitionToAsync(string cameraId,
+            float duration, CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            if (!_impl.TryGetHandle(cameraId, out var handle))
+            {
+                WarnUnknownCameraId(cameraId);
+                return UniTask.FromResult(CameraTransitionResult.TargetUnregistered);
+            }
+
+            return _impl.TransitionToAsync(handle, duration, style, cancellationToken);
         }
 
         #endregion

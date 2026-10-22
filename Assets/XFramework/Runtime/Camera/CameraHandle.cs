@@ -1,4 +1,6 @@
 using System;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 
 namespace XFramework.XCamera
 {
@@ -107,6 +109,23 @@ namespace XFramework.XCamera
                 return;
 
             CameraManager.TransitionTo(this, duration, style);
+        }
+
+        /// <summary>过渡到这台相机并等待完成。<c>default</c> 句柄立即返回
+        /// <see cref="CameraTransitionResult.TargetUnregistered"/>。</summary>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果。</returns>
+        /// <exception cref="InvalidOperationException">门面尚未初始化（非 default 句柄）。</exception>
+        public UniTask<CameraTransitionResult> TransitionToAsync(float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            if (IsDefault)
+                return UniTask.FromResult(CameraTransitionResult.TargetUnregistered);
+
+            return CameraManager.TransitionToAsync(this, duration, style, cancellationToken);
         }
 
         /// <summary>这台相机是否为 Brain 当前活动（过渡期间 incoming 也算活动）。</summary>

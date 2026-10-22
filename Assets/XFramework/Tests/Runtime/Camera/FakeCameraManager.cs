@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace XFramework.XCamera.Tests
@@ -51,6 +53,14 @@ namespace XFramework.XCamera.Tests
 
         public CameraBlendStyle LastTransitionStyle { get; private set; }
 
+        public CameraTransitionResult AsyncResult { get; set; }
+
+        public CameraHandle LastAsyncHandle { get; private set; }
+
+        public float LastAsyncDuration { get; private set; }
+
+        public CameraBlendStyle LastAsyncStyle { get; private set; }
+
         public bool TryGetHandle(string cameraId, out CameraHandle handle)
         {
             return NamedHandles.TryGetValue(cameraId, out handle);
@@ -92,6 +102,16 @@ namespace XFramework.XCamera.Tests
             LastTransitionHandle = handle;
             LastTransitionDuration = duration;
             LastTransitionStyle = style;
+        }
+
+        public UniTask<CameraTransitionResult> TransitionToAsync(CameraHandle handle, float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            LastAsyncHandle = handle;
+            LastAsyncDuration = duration;
+            LastAsyncStyle = style;
+            return UniTask.FromResult(AsyncResult);
         }
 
         public bool IsActive(CameraHandle handle)

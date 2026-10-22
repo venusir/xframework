@@ -315,6 +315,7 @@ XFramework.XCamera.CameraHandle.IsDefault  ::  public bool IsDefault { get; }
 XFramework.XCamera.CameraHandle.NamedId  ::  public readonly string
 XFramework.XCamera.CameraHandle.ToString  ::  public override string()
 XFramework.XCamera.CameraHandle.TransitionTo  ::  public void(float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.CameraHandle.TransitionToAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.CameraHandle.Unregister  ::  public bool()
 XFramework.XCamera.CameraHandle.op_Equality  ::  public static bool(XFramework.XCamera.CameraHandle left, XFramework.XCamera.CameraHandle right)
 XFramework.XCamera.CameraHandle.op_Inequality  ::  public static bool(XFramework.XCamera.CameraHandle left, XFramework.XCamera.CameraHandle right)
@@ -340,9 +341,16 @@ XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable
 XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraDeactivatedMessage> handler)
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.CameraManager.TransitionToAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XCamera.CameraManager.TransitionToAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.CameraManager.TryGetHandle  ::  public static bool(string cameraId, out XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(string cameraId)
+XFramework.XCamera.CameraTransitionResult  ::  public enum : int
+XFramework.XCamera.CameraTransitionResult.Completed  ::  = 0
+XFramework.XCamera.CameraTransitionResult.ManagerDisposed  ::  = 3
+XFramework.XCamera.CameraTransitionResult.Superseded  ::  = 1
+XFramework.XCamera.CameraTransitionResult.TargetUnregistered  ::  = 2
 XFramework.XCamera.Cinemachine.CinemachineCameraManager  ::  public sealed class : System.IDisposable, XFramework.XCamera.ICameraManager, XFramework.XCamera.ICameraManagerSessionReset
 XFramework.XCamera.Cinemachine.CinemachineCameraManager#ctor  ::  public(Unity.Cinemachine.CinemachineBrain brain)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.Activate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)
@@ -356,6 +364,7 @@ XFramework.XCamera.Cinemachine.CinemachineCameraManager.OutputCamera  ::  public
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.Register  ::  public virtual XFramework.XCamera.CameraHandle(T camera)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.Register  ::  public virtual XFramework.XCamera.CameraHandle(string cameraId, T camera)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.TransitionTo  ::  public virtual void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.TransitionToAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.TryGetHandle  ::  public virtual bool(string cameraId, out XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.Unregister  ::  public virtual bool(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager  ::  public interface
@@ -369,6 +378,7 @@ XFramework.XCamera.ICameraManager.OutputCamera  ::  public UnityEngine.Camera Ou
 XFramework.XCamera.ICameraManager.Register  ::  public XFramework.XCamera.CameraHandle(T camera)
 XFramework.XCamera.ICameraManager.Register  ::  public XFramework.XCamera.CameraHandle(string cameraId, T camera)
 XFramework.XCamera.ICameraManager.TransitionTo  ::  public void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.ICameraManager.TransitionToAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.ICameraManager.TryGetHandle  ::  public bool(string cameraId, out XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager.Unregister  ::  public bool(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.Messages.CameraActivatedMessage  ::  public readonly struct

@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
 
 namespace XFramework.XCamera
@@ -95,6 +97,21 @@ namespace XFramework.XCamera
         /// 需要等待请用 <c>CameraManager.TransitionToAsync</c>。</remarks>
         void TransitionTo(CameraHandle handle, float duration,
             CameraBlendStyle style = CameraBlendStyle.EaseInOut);
+
+        /// <summary>过渡到指定相机并等待完成。</summary>
+        /// <param name="handle">相机句柄。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛
+        /// <see cref="System.ArgumentOutOfRangeException"/>。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡；取消抛
+        /// <see cref="System.OperationCanceledException"/>。</param>
+        /// <returns>完成结果；目标已活动且无混合时立即返回 <see cref="CameraTransitionResult.Completed"/>。</returns>
+        /// <remarks>无效 / <c>default</c> 句柄返回 <see cref="CameraTransitionResult.TargetUnregistered"/>（并告警）；
+        /// 被新命令 / 外部激活取代返回 <see cref="CameraTransitionResult.Superseded"/>；管理器销毁或会话复位返回
+        /// <see cref="CameraTransitionResult.ManagerDisposed"/>。</remarks>
+        UniTask<CameraTransitionResult> TransitionToAsync(CameraHandle handle, float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default);
 
         /// <summary>指定句柄的相机是否为 Brain 当前活动（过渡期间 incoming 也算活动）。</summary>
         /// <param name="handle">相机句柄。</param>

@@ -125,6 +125,15 @@ namespace XFramework.XCamera.Tests
             Assert.Throws<InvalidOperationException>(() => handle.Activate());
             Assert.Throws<InvalidOperationException>(() => handle.Deactivate());
             Assert.Throws<InvalidOperationException>(() => handle.TransitionTo(1f));
+            Assert.Throws<InvalidOperationException>(() => handle.TransitionToAsync(1f));
+        }
+
+        [Test]
+        public void DefaultTransitionToAsync_ReturnsTargetUnregistered()
+        {
+            var result = default(CameraHandle).TransitionToAsync(1f).GetAwaiter().GetResult();
+
+            Assert.AreEqual(CameraTransitionResult.TargetUnregistered, result);
         }
     }
 }

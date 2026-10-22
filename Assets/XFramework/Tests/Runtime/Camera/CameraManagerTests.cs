@@ -154,6 +154,8 @@ namespace XFramework.XCamera.Tests
             Assert.Throws<InvalidOperationException>(() => CameraManager.Activate(new CameraHandle(0, 1)));
             Assert.Throws<InvalidOperationException>(() => CameraManager.Deactivate("main"));
             Assert.Throws<InvalidOperationException>(() => CameraManager.TransitionTo("main", 1f));
+            Assert.Throws<InvalidOperationException>(
+                () => CameraManager.TransitionToAsync(new CameraHandle(0, 1), 1f));
             Assert.Throws<InvalidOperationException>(() => CameraManager.Register(_camera));
         }
 
@@ -307,6 +309,23 @@ namespace XFramework.XCamera.Tests
 
             fake.ActiveHandle = handle;
             Assert.IsTrue(CameraManager.IsActive(handle));
+        }
+
+        [Test]
+        public void Forwarding_TransitionToAsync()
+        {
+            var handle = new CameraHandle(0, 1, "battle");
+            var fake = new FakeCameraManager { AsyncResult = CameraTransitionResult.Completed };
+            fake.NamedHandles["battle"] = handle;
+            CameraManager.Initialize(fake);
+
+            var result = CameraManager.TransitionToAsync("battle", 0.5f, CameraBlendStyle.Linear)
+                .GetAwaiter().GetResult();
+
+            Assert.AreEqual(CameraTransitionResult.Completed, result);
+            Assert.AreEqual(handle, fake.LastAsyncHandle);
+            Assert.AreEqual(0.5f, fake.LastAsyncDuration);
+            Assert.AreEqual(CameraBlendStyle.Linear, fake.LastAsyncStyle);
         }
 
         [Test]

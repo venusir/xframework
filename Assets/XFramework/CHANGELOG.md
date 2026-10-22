@@ -83,6 +83,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `GetBlendOverride` 前值，**不访问场景对象**；退订异常只记 Warning。公开 API 基线新增三个消息类型与
   三个 `Subscribe` 重载（源兼容新增）。回归：`CinemachineCameraEventTests` 六例与
   `CameraManagerTests.ResetForNewSession_*`。
+- **`TransitionToAsync` 与 `CameraTransitionResult`**（2026-10-22）：接口 / 门面 / `CameraHandle` 新增异步过渡
+  入口；Cinemachine 后端用共享 `UniTaskCompletionSource` 的 pending，cut 在 `CameraActivatedEvent` 完成、
+  blend 在 `BlendFinishedEvent` 完成，`CameraUpdatedEvent` 兜底目标销毁；结果枚举区分
+  `Completed` / `Superseded` / `TargetUnregistered` / `ManagerDisposed`。`CancellationToken` 只取消等待，
+  不中止相机过渡。公开 API 基线新增枚举与异步成员（源兼容新增）。回归：`CinemachineCameraAsyncTests` 十二例。
 
 #### File
 
@@ -234,6 +239,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **重复注册改为抛错**：同一 id 不同实例、同一实例不同 id、已销毁对象、类型不符都抛 `ArgumentException`；同一 id 同一实例幂等。
 - **`CameraHandle.IsActive` 未初始化返回 false**：不再抛；命令仍抛。
 - **会话复位退订相机静态事件**：`CameraManager.ResetForNewSession` 在丢引用前让旧实现退订 `CinemachineCore` 的四个事件并恢复 `GetBlendOverride` 前值；不 Dispose、不访问场景对象。关闭域重载时旧管理器不再被静态事件钉住；退订异常只记 Warning。
+- **`TransitionToAsync` 的取消只停止等待**：`CancellationToken` 取消抛 `OperationCanceledException`，但不会中止相机过渡；要中断请用新的 `Activate` / `TransitionTo` / `Deactivate`。完成结果由 Brain 事件驱动，Brain 禁用 / 不更新时等待不会完成。
 
 #### 破坏性变更迁移表（命名与签名）
 

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Unity.Cinemachine;
 using UnityEngine;
 using XFramework.XCamera.Messages;
@@ -58,6 +60,7 @@ namespace XFramework.XCamera.Cinemachine
             public CameraBlendStyle Style;
             public CinemachineBlendDefinition Definition;
             public bool CountsAsTransition;
+            public UniTaskCompletionSource<CameraTransitionResult> Completion;
         }
 
         #endregion
@@ -172,7 +175,7 @@ namespace XFramework.XCamera.Cinemachine
                 return false;
 
             if (_pending != null && _pending.SlotIndex == index)
-                _pending = null;
+                CompletePending(CameraTransitionResult.TargetUnregistered);
 
             var slot = _slots[index];
             if (slot.Camera != null)
@@ -334,6 +337,72 @@ namespace XFramework.XCamera.Cinemachine
         }
 
         /// <inheritdoc/>
+        public UniTask<CameraTransitionResult> TransitionToAsync(CameraHandle handle, float duration,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            ThrowIfDisposed();
+
+            if (float.IsNaN(duration) || float.IsInfinity(duration))
+            {
+                throw new ArgumentOutOfRangeException(nameof(duration), duration,
+                    "[Camera] 过渡时长必须是有限值；NaN / ±∞ 会让过渡永不结束。");
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var index = Resolve(handle);
+            if (index < 0)
+            {
+                LogManager.Warning(LogCategories.CameraManager, "相机句柄无效或已注销: {0}", handle);
+                return UniTask.FromResult(CameraTransitionResult.TargetUnregistered);
+            }
+
+            var slot = _slots[index];
+            var target = slot.Camera;
+            if (target == null)
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机句柄 {0} 对应的相机已被外部销毁，过渡已忽略。", handle);
+                return UniTask.FromResult(CameraTransitionResult.TargetUnregistered);
+            }
+
+            if (_brain == null)
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "CinemachineBrain 已被外部销毁，过渡已忽略。");
+                return UniTask.FromResult(CameraTransitionResult.TargetUnregistered);
+            }
+
+            if (!_brain.IsBlending && ReferenceEquals(_brain.ActiveVirtualCamera, target))
+                return UniTask.FromResult(CameraTransitionResult.Completed);
+
+            if (duration <= CutThreshold || style == CameraBlendStyle.Cut)
+            {
+                var cutCompletion = new UniTaskCompletionSource<CameraTransitionResult>();
+                ActivateSlot(index, cutCompletion);
+                return cutCompletion.Task.AttachExternalCancellation(cancellationToken);
+            }
+
+            if (_pending != null &&
+                _pending.SlotIndex == index &&
+                _pending.Generation == slot.Generation &&
+                _pending.CountsAsTransition &&
+                _pending.Style == style &&
+                Mathf.Approximately(_pending.Duration, duration))
+            {
+                if (_pending.Completion == null)
+                    _pending.Completion = new UniTaskCompletionSource<CameraTransitionResult>();
+
+                return _pending.Completion.Task.AttachExternalCancellation(cancellationToken);
+            }
+
+            var completion = new UniTaskCompletionSource<CameraTransitionResult>();
+            TransitionToSlot(index, duration, style, completion);
+            return completion.Task.AttachExternalCancellation(cancellationToken);
+        }
+
+        /// <inheritdoc/>
         public bool IsActive(CameraHandle handle)
         {
             ThrowIfDisposed();
@@ -357,8 +426,8 @@ namespace XFramework.XCamera.Cinemachine
 
             _disposed = true;
             UnsubscribeEvents();
+            CompletePending(CameraTransitionResult.ManagerDisposed);
 
-            _pending = null;
             _boostedIndex = -1;
 
             for (var i = 0; i < _slots.Count; i++)
@@ -379,7 +448,7 @@ namespace XFramework.XCamera.Cinemachine
             // 会话边界：只退订静态事件并清引用，绝不访问场景对象（上一会话的 Brain / vcam 可能已销毁）。
             _detached = true;
             UnsubscribeEvents();
-            _pending = null;
+            CompletePending(CameraTransitionResult.ManagerDisposed);
             _boostedIndex = -1;
             _slots.Clear();
         }
@@ -388,12 +457,17 @@ namespace XFramework.XCamera.Cinemachine
 
         #region Activation / Transition
 
-        private void ActivateSlot(int index)
+        private void ActivateSlot(int index,
+            UniTaskCompletionSource<CameraTransitionResult> completion = null)
         {
             var target = _slots[index].Camera;
             if (target == null)
+            {
+                completion?.TrySetResult(CameraTransitionResult.TargetUnregistered);
                 return;
+            }
 
+            CompletePending(CameraTransitionResult.Superseded);
             WarnIfActiveIsUnregistered();
 
             // cut 也走 GetBlendOverride：给本次激活一个 Cut 定义，避免 Brain 用项目默认混合
@@ -408,6 +482,7 @@ namespace XFramework.XCamera.Cinemachine
                 Definition = new CinemachineBlendDefinition(
                     CinemachineBlendDefinition.Styles.Cut, 0f),
                 CountsAsTransition = false,
+                Completion = completion,
             };
 
             RestorePreviousBoosted(index);
@@ -420,22 +495,31 @@ namespace XFramework.XCamera.Cinemachine
                 _brain.ActiveBlend = null;
         }
 
-        private void TransitionToSlot(int index, float duration, CameraBlendStyle style)
+        private void TransitionToSlot(int index, float duration, CameraBlendStyle style,
+            UniTaskCompletionSource<CameraTransitionResult> completion = null)
         {
             var target = _slots[index].Camera;
             if (target == null)
+            {
+                completion?.TrySetResult(CameraTransitionResult.TargetUnregistered);
                 return;
+            }
 
             if (_brain == null)
             {
                 LogManager.Warning(LogCategories.CameraManager,
                     "CinemachineBrain 已被外部销毁，过渡已忽略。");
+                completion?.TrySetResult(CameraTransitionResult.TargetUnregistered);
                 return;
             }
 
             if (!_brain.IsBlending && ReferenceEquals(_brain.ActiveVirtualCamera, target))
+            {
+                completion?.TrySetResult(CameraTransitionResult.Completed);
                 return;
+            }
 
+            CompletePending(CameraTransitionResult.Superseded);
             WarnIfActiveIsUnregistered();
 
             _pending = new PendingTransition
@@ -447,6 +531,7 @@ namespace XFramework.XCamera.Cinemachine
                 Style = style,
                 Definition = new CinemachineBlendDefinition(Map(style), duration),
                 CountsAsTransition = true,
+                Completion = completion,
             };
 
             RestorePreviousBoosted(index);
@@ -458,7 +543,7 @@ namespace XFramework.XCamera.Cinemachine
             var slot = _slots[index];
 
             if (_pending != null && _pending.SlotIndex == index)
-                _pending = null;
+                CompletePending(CameraTransitionResult.Superseded);
 
             if (slot.Camera == null)
                 return;
@@ -643,9 +728,14 @@ namespace XFramework.XCamera.Cinemachine
             var incomingIndex = FindSlotByCamera(evt.IncomingCamera);
             var outgoingIndex = FindSlotByCamera(evt.OutgoingCamera);
 
-            // 新 incoming 不是本管理器的 pending 目标 → 本次过渡已被取代。
+            // 新 incoming 不是本管理器的 pending 目标 → 本次过渡已被取代；
+            // 若 pending 目标本身已被外部销毁，则按目标注销报告。
             if (_pending != null && incomingIndex != _pending.SlotIndex)
-                _pending = null;
+            {
+                CompletePending(_pending.Camera == null
+                    ? CameraTransitionResult.TargetUnregistered
+                    : CameraTransitionResult.Superseded);
+            }
 
             if (incomingIndex < 0)
                 return; // Timeline / 外来 vcam：不发布激活消息
@@ -655,7 +745,10 @@ namespace XFramework.XCamera.Cinemachine
             MessageManager.Publish(new CameraActivatedMessage(incoming, previous, evt.IsCut));
 
             if (evt.IsCut)
+            {
                 MessageManager.Publish(new CameraBlendCompletedMessage(incoming));
+                CompletePending(CameraTransitionResult.Completed);
+            }
         }
 
         private void OnCameraDeactivated(ICinemachineMixer mixer, ICinemachineCamera camera)
@@ -678,7 +771,7 @@ namespace XFramework.XCamera.Cinemachine
                 MessageManager.Publish(new CameraBlendCompletedMessage(HandleOf(index)));
 
             if (_pending != null && _pending.SlotIndex == index)
-                _pending = null;
+                CompletePending(CameraTransitionResult.Completed);
         }
 
         private void OnCameraUpdated(CinemachineBrain brain)
@@ -689,10 +782,36 @@ namespace XFramework.XCamera.Cinemachine
             if (!ReferenceEquals(brain, _brain))
                 return;
 
-            // cut 请求只对「下一次激活」有效：Brain 已经用 GetBlendOverride 取过定义，
-            // 这一帧结束时即可清掉，避免污染之后的混合。
-            if (!_pending.CountsAsTransition || _brain == null || !_brain.IsBlending)
-                _pending = null;
+            if (_pending.Camera == null)
+            {
+                CompletePending(CameraTransitionResult.TargetUnregistered);
+                return;
+            }
+
+            if (_brain == null)
+            {
+                CompletePending(CameraTransitionResult.TargetUnregistered);
+                return;
+            }
+
+            if (!_pending.CountsAsTransition)
+            {
+                // cut 请求只对「下一次激活」有效：Brain 已经用 GetBlendOverride 取过定义，
+                // 这一帧结束时即可清掉，避免污染之后的混合。
+                var active = _brain.ActiveVirtualCamera;
+                CompletePending(ReferenceEquals(active, _pending.Camera)
+                    ? CameraTransitionResult.Completed
+                    : CameraTransitionResult.Superseded);
+                return;
+            }
+
+            if (!_brain.IsBlending)
+            {
+                var active = _brain.ActiveVirtualCamera;
+                CompletePending(ReferenceEquals(active, _pending.Camera)
+                    ? CameraTransitionResult.Completed
+                    : CameraTransitionResult.Superseded);
+            }
         }
 
         private static CinemachineBlendDefinition.Styles Map(CameraBlendStyle style)
@@ -776,7 +895,7 @@ namespace XFramework.XCamera.Cinemachine
             var slot = _slots[index];
 
             if (_pending != null && _pending.SlotIndex == index)
-                _pending = null;
+                CompletePending(CameraTransitionResult.TargetUnregistered);
             if (_boostedIndex == index)
                 _boostedIndex = -1;
 
@@ -870,6 +989,16 @@ namespace XFramework.XCamera.Cinemachine
                     "Brain 的当前活动相机未在 CameraManager 注册（可能由 Timeline / 过场接管）；" +
                     "此时 Activate / TransitionTo 可能与过场冲突。");
             }
+        }
+
+        private void CompletePending(CameraTransitionResult result)
+        {
+            var pending = _pending;
+            if (pending == null)
+                return;
+
+            _pending = null;
+            pending.Completion?.TrySetResult(result);
         }
 
         private void ThrowIfDisposed()

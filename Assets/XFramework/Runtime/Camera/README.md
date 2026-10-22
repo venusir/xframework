@@ -58,6 +58,7 @@ Runtime/Camera/
 ├── CameraHandle.cs        # 公开：相机句柄（Id + Generation + NamedId；default 无效）
 ├── CameraManager.cs       # 公开：静态门面（转发 + 生命周期 + 会话复位 + 字符串便捷重载）
 ├── CameraBlendStyle.cs    # 公开：过渡样式枚举（后端中立）
+├── CameraTransitionResult.cs # 公开：Completed / Superseded / TargetUnregistered / ManagerDisposed
 ├── Messages/
 │   ├── CameraActivatedMessage.cs      # 公开：incoming 相机激活
 │   ├── CameraDeactivatedMessage.cs    # 公开：已注册相机不再 live
@@ -136,6 +137,7 @@ Runtime/Camera/
 | `Activate(string)` / `Activate(CameraHandle)` | 立即切换（cut） |
 | `Deactivate(string)` / `Deactivate(CameraHandle)` | 反激活；回退由后端定义 |
 | `TransitionTo(string \| CameraHandle, float, CameraBlendStyle)` | 过渡；`duration <= 0.0001` / `Cut` 等价于 cut |
+| `TransitionToAsync(string \| CameraHandle, float, CameraBlendStyle, CancellationToken)` | 过渡并等待完成；返回 `CameraTransitionResult`；取消只停止等待 |
 | `IsActive(string)` / `IsActive(CameraHandle)` | 是否为 Brain 当前活动（过渡 incoming 也算） |
 | `Subscribe(Action<CameraActivatedMessage / CameraDeactivatedMessage / CameraBlendCompletedMessage>)` | 订阅状态消息；不依赖门面初始化，返回退订句柄 |
 
@@ -197,8 +199,16 @@ CameraManager.Activate("cutscene");
 ```csharp
 using Cysharp.Threading.Tasks;
 
-await UniTask.WaitUntil(() => !CameraManager.IsTransitioning);
+var result = await CameraManager.TransitionToAsync(
+    "battle", 0.8f, CameraBlendStyle.EaseInOut);
+if (result != CameraTransitionResult.Completed)
+{
+    // Superseded / TargetUnregistered / ManagerDisposed
+}
 ```
+
+`TransitionToAsync` 返回 `CameraTransitionResult`；`CancellationToken` 只取消等待，**不中止**相机过渡。
+只需要“等到当前管理器过渡结束”时仍可用 `UniTask.WaitUntil(() => !CameraManager.IsTransitioning)`。
 
 ### 4. 场景加载后切相机
 
@@ -302,6 +312,11 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **事件只覆盖已注册相机**：未注册的 incoming 不发布 `CameraActivatedMessage`；订阅是全局
   `MessageManager` 通道，多个管理器 / 多个 Brain 时应按 `Handle` 过滤。事件只反映 Brain 的真实状态，
   不是命令回执——命令后可能要等 Brain 下一次更新才收到消息。
+- **`TransitionToAsync` 取消只停止等待**：`CancellationToken` 取消不会中止相机过渡；要中断过渡请用新的
+  `Activate` / `TransitionTo` / `Deactivate`。取消抛 `OperationCanceledException`。
+- **异步完成由 Brain 事件驱动**：Brain 被禁用或不再推进时等待不会完成；用 `CancellationToken` / 调用方
+  超时兜底。目标在完成前被注销 / 销毁返回 `TargetUnregistered`，被新请求 / 外部激活取代返回
+  `Superseded`，管理器销毁返回 `ManagerDisposed`。
 - **同一台相机只能注册一次**：命名 + 动态、两个命名 id、两次不同 id 的动态注册都会抛 `ArgumentException`；
   先 `Unregister` 再换注册方式。
 - **管理器不销毁相机对象**：动态相机随预制 / 场景销毁；`Unregister` 只恢复状态并移除槽位。
@@ -358,6 +373,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 | 当前活动相机 / 输出相机 | Camera | 是（`ActiveHandle` / `OutputCamera`；门面 `ActiveCameraId` 是便利） |
 | 注册表查询 | Camera | 是（`CameraCount` / `TryGetHandle`） |
 | 过渡状态 | Camera | 是（`IsTransitioning`，只含管理器自有过渡） |
+| 异步等待过渡完成 | Camera | 是（`TransitionToAsync`，返回结果枚举） |
 | 状态事件（激活 / 反激活 / 过渡完成） | Camera | 是（`MessageManager`，只对已注册相机发布） |
 | 跟随 / 瞄准 / 轨道 | Cinemachine | 否 |
 | 震屏 / 噪声 / Impulse | Cinemachine | 否 |

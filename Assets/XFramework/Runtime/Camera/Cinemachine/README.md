@@ -73,6 +73,10 @@ Runtime/Camera/Cinemachine/
 - **Dispose**：恢复仍存活槽位的作者状态、退订 `CameraUpdatedEvent`、恢复 `GetBlendOverride` 前值、清表。
 - **Timeline / 过场**：过场 vcam 不注册；若 Brain 的活动相机未注册，`Activate` / `TransitionTo` 会告警
   「可能与过场冲突」；`ActiveHandle` / `ActiveCameraId` 返回 `default` / `null`，`OutputCamera` 仍可读。
+- **异步过渡**：`TransitionToAsync` 登记共享 pending；cut 在 `CameraActivatedEvent` 完成，blend 在
+  `BlendFinishedEvent` 完成；目标注销 / 销毁 → `TargetUnregistered`，新命令 / 外部激活 → `Superseded`，
+  `Dispose` / 会话复位 → `ManagerDisposed`。相同请求共享同一个 TCS；不同 duration / style 取代旧请求。
+  `CancellationToken` 只取消等待，不中止过渡。
 
 ## 状态事件
 
@@ -109,6 +113,7 @@ Runtime/Camera/Cinemachine/
 | `OutputCamera` / `ActiveHandle` / `IsTransitioning` / `CameraCount` | 查询 |
 | `TryGetHandle(string, out CameraHandle)` | 按命名 id 查句柄 |
 | `Activate` / `Deactivate` / `TransitionTo` / `IsActive`（仅句柄） | 契约操作 |
+| `TransitionToAsync(handle, duration, style, ct)` | 过渡并等待完成，返回 `CameraTransitionResult` |
 | `Dispose()` | 恢复场景状态、退订静态事件、清表 |
 
 字符串操作在门面；后端只认句柄。
@@ -191,6 +196,8 @@ handle.Dispose(); // 门面已销毁也安全
 - **只支持 Cinemachine 3.x**（3.1.7 编写）；2.x 需要自己的实现。
 - **事件只对已注册 vcam 发布**：未注册 incoming 不发 `CameraActivatedMessage`；订阅是全局 `MessageManager`
   通道，多个管理器 / 多个 Brain 时应按 `Handle` 过滤。事件反映 Brain 真实状态，不是命令回执。
+- **`TransitionToAsync` 取消只停止等待**：不中止过渡；Brain 被禁用 / 不更新时等待不会完成，用
+  `CancellationToken` / 调用方超时兜底。
 - **动态 vcam 的 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`**：用 `ActiveHandle` /
   `IsActive(handle)`；`TryGetHandle` 只查命名 id。
 - **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` /
