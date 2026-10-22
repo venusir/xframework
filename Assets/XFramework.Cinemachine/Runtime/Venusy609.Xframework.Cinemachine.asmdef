@@ -1,9 +1,0 @@
-{
-    "name": "Venusy609.Xframework.Cinemachine",
-    "references": [
-        "Venusy609.Xframework",
-        "Unity.Cinemachine"
-    ],
-    "includePlatforms": [],
-    "excludePlatforms": []
-}

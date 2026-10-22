@@ -22,8 +22,9 @@ namespace XFramework.Architecture.Tests
     /// ——后者是本模块边界的**实质**:实现可以藏在 internal 里,但公开面不能漏出它;
     /// <see cref="UnityInputTypes_StayInsideTheDefaultNamespace"/> 守的是另一类边界——**可选包的 Unity 类型**
     /// 只能待在各自的 <c>Default</c> 命名空间里(插件中立承诺);
-    /// <see cref="CoreRuntime_DoesNotReferenceCinemachine"/> 守核心包的**零 Cinemachine 依赖**——Cinemachine
-    /// 支持在独立可选扩展包里,核心包引用它就会把所有消费者拖进版本锁。
+    /// <see cref="CinemachineTypes_StayInsideTheCinemachineBackend"/> 守 Camera 模块的后端中立——
+    /// Cinemachine 已是核心程序集的硬依赖(先例 Input System),但类型只允许出现在
+    /// <c>Runtime/Camera/Cinemachine/</c>,门面、契约与其它模块不得泄漏。
     /// </para>
     /// <para>
     /// 测试树整体不受此限:<c>InternalsVisibleTo</c> 是设计的一部分(见 Runtime/AssemblyInfo.cs)。
@@ -185,16 +186,19 @@ namespace XFramework.Architecture.Tests
 
         #endregion
 
-        #region 核心包不引用 Cinemachine
+        #region Cinemachine 类型只允许出现在 Cinemachine 后端目录
+
+        /// <summary>Cinemachine 后端目录（相对 <c>Runtime/</c>，正斜杠）。</summary>
+        private const string CinemachineBackendDir = "Camera/Cinemachine";
 
         /// <summary>
-        /// 核心 <c>Runtime/</c> 的代码不得出现 Cinemachine：Cinemachine 支持在独立可选扩展包
-        /// <c>com.venusy609.xframework.cinemachine</c> 里，核心包保持零 Cinemachine 依赖——否则所有消费者
-        /// 都会被拖进某个主版本（2.x / 3.x 的 API 不兼容）。
+        /// 核心 <c>Runtime/</c> 中，Cinemachine 类型只允许出现在 <c>Runtime/Camera/Cinemachine/</c>：
+        /// 门面、<c>ICameraManager</c> 契约、默认实现与其它模块保持后端中立，第三方替换后端时公开面不受影响。
+        /// <para>Cinemachine 已是核心 asmdef 的硬依赖（先例 Input System），版本锁只影响安装，不泄漏到公开面。</para>
         /// <para>剥注释后扫描；文档里提到 Cinemachine 不算引用。</para>
         /// </summary>
         [Test]
-        public void CoreRuntime_DoesNotReferenceCinemachine()
+        public void CinemachineTypes_StayInsideTheCinemachineBackend()
         {
             var packageRoot = Path.Combine(Application.dataPath, "XFramework");
             var runtimeRoot = Path.Combine(packageRoot, "Runtime");
@@ -203,13 +207,17 @@ namespace XFramework.Architecture.Tests
             var violations = new List<string>();
             foreach (var file in Directory.GetFiles(runtimeRoot, "*.cs", SearchOption.AllDirectories))
             {
+                var relative = Relative(runtimeRoot, file);
+                if (relative.StartsWith(CinemachineBackendDir + "/", StringComparison.Ordinal))
+                    continue;
+
                 if (ReadCodeOnly(file).IndexOf("Cinemachine", StringComparison.Ordinal) >= 0)
-                    violations.Add(Relative(runtimeRoot, file));
+                    violations.Add(relative);
             }
 
             Assert.IsEmpty(violations,
-                "核心 Runtime 不得引用 Cinemachine——Cinemachine 支持在独立可选扩展包 " +
-                "com.venusy609.xframework.cinemachine 中，核心包保持零 Cinemachine 依赖。违规:\n  " +
+                "Cinemachine 类型只允许出现在 Runtime/" + CinemachineBackendDir + "/ 内——" +
+                "门面、ICameraManager 契约、默认实现与其它模块必须保持后端中立。违规:\n  " +
                 string.Join("\n  ", violations));
         }
 

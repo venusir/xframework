@@ -45,6 +45,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **Cinemachine 3.1.7 后端并入核心包**（2026-10-22，用户裁定）：`CinemachineCameraManager`（命名空间
+  `XFramework.XCamera.Cinemachine`）从独立扩展包移入 `Runtime/Camera/Cinemachine/`，程序集由
+  `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`，命名空间与公开成员不变。核心 asmdef
+  硬引用 `Unity.Cinemachine`；`com.unity.cinemachine` 3.1.7 进入安装器清单 / 包 README 依赖表 / 开发
+  manifest 三处（与 Input System 同型，`package.json` 的 `dependencies` 仍留空）。相机示例移入
+  `Samples~/Cinemachine`。**公开 API 基线 +1 类型（18 个成员），经用户确认**。理由（Input System 先例、
+  Unity 6000.3 + Cinemachine 3 默认、自研相机后端非真实受众）与门面中立守卫见
+  `Runtime/Camera/Cinemachine/README.md` 的「设计取舍」。
 - **新增 `XCamera` 相机管理模块：后端中立的激活 / 反激活 / 过渡入口**（2026-10-17）：静态门面 `CameraManager` +
   `ICameraManager` + `UnityCameraManager` 默认实现 + `CameraBlendStyle`。查询面含 `OutputCamera`（当前输出相机，
   世界↔屏幕 / 射线直接用 `UnityEngine.Camera`）、`CameraIds`、`ActiveCameraId`、`IsTransitioning`。
@@ -216,6 +224,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `ICameraManager.ActiveCameraId` / `UnityCameraManager.ActiveCameraId` / `CinemachineCameraManager.ActiveCameraId` | `ICameraManager.ActiveHandle.NamedId`（或门面 `CameraManager.ActiveCameraId`） | 接口与实现上的 `ActiveCameraId` 移除——两者并行，`ActiveHandle` 是唯一活动查询；命名 id 由句柄携带（`NamedId`，动态为 `null`）。门面 `CameraManager.ActiveCameraId` 保留，直接读 `ActiveHandle.NamedId`（O(1)） |
 | `new CameraHandle(id, generation)` | `new CameraHandle(id, generation, namedId)` | 构造签名扩展：`namedId` 有默认值 `null`，**两参调用源兼容**（基线把签名变化记为「已变更」）。命名槽位填命名 id，动态槽位传 `null` |
 | `UpdateManager.ProcessImmediate(IUpdateable, float, float)` / `(IUpdateable, float, in UpdateClock)` | 同上，形参改为 `IUpdateLifecycle` | **形参放宽**：纯 `ILateUpdateable` / `IFixedUpdateable` 节点现在可达。传 `IUpdateable` 的既有调用源兼容（实参隐式上转），重新编译即可；已编译的第三方程序集需重编。跨时机语义见下一条行为变更 |
+| `com.venusy609.xframework.cinemachine`（manifest 条目）与对 `Venusy609.Xframework.Cinemachine` 程序集的引用 | 删除扩展包条目；确认 `"com.unity.cinemachine": "3.1.7"` 已在 manifest 中，继续使用 `XFramework.XCamera.Cinemachine` / `CinemachineCameraManager` | **扩展包已删除并并入核心包**；命名空间与类型名不变，但程序集由 `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`——引用旧程序集的已编译第三方程序集需重编。未列 `com.unity.cinemachine` 时核心 asmdef 解析不到引用，整体编译失败（与 Input System 同型） |
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
@@ -333,6 +342,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   自行退订自己的静态事件。
 - **`InputManager` 在会话开始时退订旧 provider 的设备事件**（INP-002，仅关闭域重载时可见）：复位只丢
   引用、不 Dispose，但默认 provider 不再被 `InputSystem.onDeviceChange` 钉住；第三方 provider 需自行退订。
+
+### Removed
+
+- **独立扩展包 `com.venusy609.xframework.cinemachine` 与 `Assets/XFramework.Cinemachine/`**（2026-10-22）：
+  Runtime 源码 / PlayMode 用例 / 示例 / 文档并入核心包；扩展 asmdef、`CinemachineDependencyTests` 与独立
+  `package.json` / `README.md` / `CHANGELOG.md` 删除。扩展包没有独立发布 tag（仅随仓库 `main` 可达）；
+  已按 Git URL / `file:` 装过它的工程按迁移表移除 manifest 条目。
 
 ### Fixed
 
@@ -897,6 +913,20 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   仍把假 null 的槽位当有效：关掉其它活相机、却不启用已销毁的目标，无告警且没有任何相机输出。修法：
   四处变更面（id/handle × `Activate` / `TransitionTo`）追加 `IsUsable` 校验，不可用即 Warning 并整体忽略。
   回归：`UnityCameraManagerTests` 三例（改前「其它活相机被关掉」断言红）。
+- **Cinemachine 后端的强制 cut 改用 `ActiveBlend = null`（R3-CIN-001，随并入转入本包）**：旧实现用短暂失活 /
+  激活 GameObject 试图重新入队，但同步 off/on 后 Brain 仍视同一目标为活动相机，原过渡按原时长继续。修法：
+  改用上游文档明说的 `CinemachineBrain.ActiveBlend = null`；PlayMode 用例锁定（改前 `IsBlending` 恒 true）。
+- **Cinemachine 后端补槽位复用 ABA 用例（R3-CIN-005）**：`DynamicHandle_AfterSlotReuse_OldHandleIsRejected`，
+  锁定「旧句柄按代际失配失效、不得操作到复用槽位的新相机」。
+- **Cinemachine 后端过渡时长补有限性校验（R3-CIN-002）**：NaN / ±∞ 此前直接交给
+  `CinemachineBlendDefinition`，与核心 `UnityCameraManager` 抛 `ArgumentOutOfRangeException` 的行为相反。
+  回归：`TransitionTo_NonFiniteDuration_Throws`（改前必红）。
+- **Cinemachine 后端外部销毁 vcam 后的变更面（R3-CIN-003）**：六处变更面（id/handle ×
+  Activate/Deactivate/TransitionTo）统一按假 null 检测：Warning 后整体忽略，并清掉反查表里的陈旧键。
+  回归：三组用例 + `DestroyedVcam_PrunesStaleReverseEntry`（改前必红）。
+- **兼容声明与门禁射程订正（R3-CIN-004/007/008，随并入落地）**：`OutputCamera` 不再承诺「与过渡目标一致」，
+  改为「可能为 null、不保证等于目标」；扩展包门禁缺口（R3-CIN-008）由并入结构性关闭——源码 / `.meta` /
+  README 文件树 / XML 文档 / 公开 API 基线 / 示例编译从此都在核心门禁射程内。
 
 #### UI
 

@@ -5,8 +5,8 @@
 `CinemachineCameraManager` 把 Cinemachine 的 vcam 优先级与 `CinemachineBrain` 混合接进核心包的
 `ICameraManager`：游戏代码只调 `CameraManager`，不直接依赖 Cinemachine 类型。
 
-**本包是适配器，不是行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline
-由 Cinemachine 提供并在 Cinemachine 里配置；本包只负责注册、优先级 / Brain 混合与状态查询。
+**本后端是适配器，不是行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline
+由 Cinemachine 提供并在 Cinemachine 里配置；本后端只负责注册、优先级 / Brain 混合与状态查询。
 
 **命名 / 动态双键**：常驻 vcam 用 string id；随预制创建 / 销毁的动态 vcam 用 `CameraHandle`（`Register<T>`）。
 **Timeline / 过场相机**由过场系统接管 Brain，不经过本管理器；Brain 的活动相机未注册时，激活 / 过渡会告警
@@ -17,7 +17,7 @@
 
 ## 快速使用
 
-包级安装（先核心包、后本包、Cinemachine 3.1.7）见同包的 `README.md`。接线：
+本后端随核心包发布，无需单独安装（核心 asmdef 已硬引用 `Unity.Cinemachine` 3.1.7）。接线：
 
 ```csharp
 using System.Collections.Generic;
@@ -45,9 +45,8 @@ CameraManager.Unregister(handle); // 或 handle.Dispose()
 ## 模块结构
 
 ```text
-Runtime/
-├── CinemachineCameraManager.cs      # 公开：ICameraManager 的 Cinemachine 3.x 实现
-├── Venusy609.Xframework.Cinemachine.asmdef  # 引用核心程序集与 Unity.Cinemachine
+Runtime/Camera/Cinemachine/
+├── CinemachineCameraManager.cs  # 公开：ICameraManager 的 Cinemachine 3.x 实现
 └── README.md
 ```
 
@@ -130,7 +129,7 @@ handle.Dispose(); // 门面已销毁也安全
 
 ## 自定义实现
 
-本包本身就是核心包 `ICameraManager` 的一个实现。要接别的后端（2.x、Timeline、自研相机系统）：
+本后端本身就是核心包 `ICameraManager` 的一个实现。要接别的后端（2.x、Timeline、自研相机系统）：
 
 - 实现 `ICameraManager`；注册在实现类自己的构造 / 注册方法里完成。
 - 义务：仅主线程；未知 id 告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`；
@@ -178,13 +177,15 @@ handle.Dispose(); // 门面已销毁也安全
 ## 设计取舍
 
 - **优先用 Brain 自己的能力**：管理器只切优先级与 `DefaultBlend`，不自己插值、不另建调度器。
-- **不替 Cinemachine 做行为**：跟随 / 震屏 / 缩放在 Cinemachine 里配置，本包只做优先级与混合的适配；
-  需要这些行为的项目装本包，但行为本身仍归 Cinemachine。
+- **不替 Cinemachine 做行为**：跟随 / 震屏 / 缩放在 Cinemachine 里配置，本后端只做优先级与混合的适配；
+  行为本身仍归 Cinemachine。
 - **不劫持 Brain 的 custom blends**：项目配置优先；管理器只写 `DefaultBlend`。
 - **动态 vcam 用 `CameraHandle` 而不是 string id**：随预制实例创建 / 销毁的 vcam 没有稳定 authoring id；
   句柄带代际，旧句柄自然失效。
 - **过场不接管**：Timeline 已经接管 Brain；管理器再插一手只会冲突。未注册活动相机告警是提醒，不是阻断。
-- **为什么在独立扩展包**：核心包保持零 Cinemachine 依赖，2.x / 2D / 自定义后端不被版本锁排除。
+- **为什么并入核心包**：Input System 先例（核心 asmdef 早已无条件引用它）、核心最低 Unity 6000.3 + Cinemachine 3
+  默认、自研相机后端不是真实受众；单包单程序集消除独立扩展包的安装顺序、版本错位与门禁缺口。
+  门面与契约仍保持后端中立，Cinemachine 类型只出现在本目录。
 
 ## 接口承诺到哪为止
 
@@ -195,16 +196,16 @@ handle.Dispose(); // 门面已销毁也安全
 
 ## 与相邻模块的关系
 
-- **核心 Camera**：本包实现 `ICameraManager`；门面、查询与取消语义在核心包。
+- **本模块根层的门面与契约**：本后端实现 `ICameraManager`；门面、查询与取消语义在模块根层。
 - **Update**：本包不注册 ticker；过渡由 Brain 的 `UpdateMethod` 驱动。
 - **Scene / UI**：不自动联动；场景切换后由调用方调 `CameraManager`。
 
 ## 设计原则
 
 - 只做「把 Cinemachine 接进 `ICameraManager`」这一件事；不做相机编排、不重写 Brain。
-- 版本与依赖归本包；核心包保持中立。
+- 作为核心包 `Runtime/Camera/Cinemachine/` 的内置后端；门面与契约保持后端中立。
 
 ## 依赖
 
-- `com.unity.cinemachine` **3.1.7**（Unity 注册表包；由本包 `package.json` 声明）。
-- 核心包 `com.venusy609.xframework`（需先安装；UPM 不支持 Git URL 依赖，由包级 README 的顺序兜底）。
+- `com.unity.cinemachine` **3.1.7**：核心 asmdef 的硬依赖（与 Input System 同型）；版本真值在安装器清单 /
+  包 README / 开发 manifest 三处，由 `DependencyDeclarationTests` 守卫。

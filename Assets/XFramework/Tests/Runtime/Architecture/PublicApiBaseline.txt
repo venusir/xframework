@@ -337,6 +337,25 @@ XFramework.XCamera.CameraManager.Register  ::  public static XFramework.XCamera.
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager  ::  public sealed class : System.IDisposable, XFramework.XCamera.ICameraManager
+XFramework.XCamera.Cinemachine.CinemachineCameraManager#ctor  ::  public(Unity.Cinemachine.CinemachineBrain brain, System.Collections.Generic.IReadOnlyDictionary<string, Unity.Cinemachine.CinemachineVirtualCameraBase> cameras)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Activate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Activate  ::  public virtual void(string cameraId)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.ActiveHandle  ::  public XFramework.XCamera.CameraHandle ActiveHandle { get; }
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.CameraIds  ::  public System.Collections.Generic.IReadOnlyCollection<string> CameraIds { get; }
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Deactivate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Deactivate  ::  public virtual void(string cameraId)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Dispose  ::  public virtual void()
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.IsActive  ::  public virtual bool(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.IsActive  ::  public virtual bool(string cameraId)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.IsTransitioning  ::  public bool IsTransitioning { get; }
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.OutputCamera  ::  public UnityEngine.Camera OutputCamera { get; }
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Register  ::  public virtual XFramework.XCamera.CameraHandle(T handle)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Register  ::  public void(string cameraId, Unity.Cinemachine.CinemachineVirtualCameraBase camera)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.TransitionTo  ::  public virtual void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.TransitionTo  ::  public virtual void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Unregister  ::  public bool(string cameraId)
+XFramework.XCamera.Cinemachine.CinemachineCameraManager.Unregister  ::  public virtual bool(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager  ::  public interface
 XFramework.XCamera.ICameraManager.Activate  ::  public void(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager.Activate  ::  public void(string cameraId)

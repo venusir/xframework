@@ -11,8 +11,7 @@ Target Group、Timeline 仍归 Cinemachine；投影、Near-Far、Culling Mask、
 
 **默认实现** `UnityCameraManager` 直接驱动 `UnityEngine.Camera`：一次一台活动相机，过渡插值位置 / 旋转 /
 FOV（正交为 `orthographicSize`）。它假设相机是静态的且投影模式一致；移动 / 跟随 / 震屏请用 Cinemachine。
-Cinemachine 的一等实现由**独立可选扩展包** `com.venusy609.xframework.cinemachine` 提供（单独安装，
-不随核心包发布）。
+Cinemachine 的一等实现 `CinemachineCameraManager` **内置于本模块的 `Cinemachine/` 子目录**，随核心包发布。
 
 **命名 / 动态双键**：常驻相机用 string id（构造 map）；随预制创建 / 销毁的动态相机用 `CameraHandle`
 （`Register<T>` 返回），不需要生成 id。Timeline / 过场相机**不经过本模块**——由过场系统接管 Brain。
@@ -50,8 +49,8 @@ CameraManager.Activate(handle);
 CameraManager.Unregister(handle); // 或 handle.Dispose()
 ```
 
-Cinemachine 3.x 项目：安装独立扩展包后，把上面的 `UnityCameraManager` 换成扩展包里的
-`CinemachineCameraManager`，其余调用不变。安装与接线见扩展包自己的 README。
+Cinemachine 3.x 项目：把上面的 `UnityCameraManager` 换成内置的
+`CinemachineCameraManager`，其余调用不变。接线与边界见 [`Cinemachine/README.md`](Cinemachine/README.md)。
 
 ## 模块结构
 
@@ -62,6 +61,9 @@ Runtime/Camera/
 ├── CameraManager.cs       # 公开：静态门面（转发 + 生命周期 + 会话复位）
 ├── UnityCameraManager.cs  # 公开：默认实现（槽位表 + 命名 / 动态双键 + 位姿/FOV 插值）
 ├── CameraBlendStyle.cs    # 公开：过渡样式枚举
+├── Cinemachine/
+│   ├── CinemachineCameraManager.cs  # 公开：ICameraManager 的 Cinemachine 3.x 实现
+│   └── README.md                    # Cinemachine 后端的用法与边界
 └── README.md
 ```
 
@@ -77,7 +79,7 @@ Runtime/Camera/
   `CameraManager.ActiveCameraId` 直接读它（O(1)）；动态相机活动时两者都为 `null`，请用
   `ActiveHandle` / `IsActive(handle)`。
 - `Register<T>(handle)` 注册动态相机并返回句柄；注册**不激活**，新相机初始关闭。`T` 由后端解释
-  （`UnityCameraManager` 要 `Camera`，Cinemachine 扩展要它的 vcam 基类）；类型不符抛 `ArgumentException`，
+  （`UnityCameraManager` 要 `Camera`，Cinemachine 后端要它的 vcam 基类）；类型不符抛 `ArgumentException`，
   `null` 抛 `ArgumentNullException`。
 - 句柄无效 / 已注销 / `default`：`Activate` / `Deactivate` / `TransitionTo` 告警并 no-op；`IsActive` 返回
   `false`；`Unregister` 返回 `false`。`CameraHandle.Generation == 0` 是保留给 `default` 的无效值。
@@ -86,7 +88,7 @@ Runtime/Camera/
 - 未知 id：`Activate` / `Deactivate` / `TransitionTo` 告警并 no-op，**不抛**；`null` id 抛 `ArgumentNullException`
   （`IsActive(null)` 返回 `false`）。
 - **Timeline / 过场**：随 CG 预制创建、由 Timeline / Cinemachine 接管 Brain 的过场相机**不经过本模块**。
-  过渡期间不要调用 `Activate` / `TransitionTo`；Cinemachine 扩展包会对「Brain 的活动相机未注册」告警；
+  过渡期间不要调用 `Activate` / `TransitionTo`；Cinemachine 后端会对「Brain 的活动相机未注册」告警；
   `CameraManager.ActiveCameraId` / `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`，
   `OutputCamera` / `IsTransitioning` 仍可用。
 - `Activate` = cut，并取消在途过渡；`TransitionTo` 期间再次调用从**当前视觉状态**重新开始；
@@ -112,7 +114,7 @@ Runtime/Camera/
   由实现类自己提供。
 - **默认实现**：`UnityCameraManager`，直接操作 `UnityEngine.Camera`，过渡用 `UpdateManager` 的
   LateUpdate 时机懒驱动。
-- **Cinemachine**：独立扩展包实现同一契约，不进入核心包。
+- **Cinemachine 后端**：`Runtime/Camera/Cinemachine/` 内置实现同一契约；门面与契约不出现 Cinemachine 类型。
 
 ## API 参考
 
@@ -150,9 +152,9 @@ Runtime/Camera/
 
 ### 2. Cinemachine 3.x 项目
 
-安装独立扩展包 `com.venusy609.xframework.cinemachine`，用 `CinemachineCameraManager` 注入门面。
-场景仍按 Cinemachine 的方式配置 Brain 与 vcam；游戏代码只调门面。**扩展包是适配器，不是行为库**——
-跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline 仍在 Cinemachine 里配置。
+用内置的 `CinemachineCameraManager` 注入门面。场景仍按 Cinemachine 的方式配置 Brain 与 vcam；
+游戏代码只调门面。**它是适配器，不是行为库**——跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly /
+Target Group / Timeline 仍在 Cinemachine 里配置。
 
 ### 3. 等待一次过渡完成
 
@@ -196,7 +198,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 ### 6. Timeline / 过场
 
 过场相机**不注册**到 `CameraManager`：Timeline 会接管 `CinemachineBrain`。过场期间不要调用 `Activate` /
-`TransitionTo`；过场结束后由过场系统 / 调用方恢复玩法相机。Cinemachine 扩展包会对「Brain 的活动相机未注册」
+`TransitionTo`；过场结束后由过场系统 / 调用方恢复玩法相机。Cinemachine 后端会对「Brain 的活动相机未注册」
 告警。
 
 ## 自定义实现
@@ -216,9 +218,9 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 
 ### 推荐第三方实现
 
-- **Cinemachine 3.x → `ICameraManager`**：官方独立扩展包 `com.venusy609.xframework.cinemachine`
-  （单独安装，不随核心包发布）。已知代价：只支持 Cinemachine 3.x；项目在 Brain 上配置的 custom blends
-  会覆盖扩展包请求的 style / duration；未注册 vcam 的优先级不受管理。
+- **Cinemachine 3.x → `ICameraManager`**：核心包内置 `CinemachineCameraManager`
+  （`Runtime/Camera/Cinemachine/`）。已知代价：只支持 Cinemachine 3.x；项目在 Brain 上配置的 custom blends
+  会覆盖后端请求的 style / duration；未注册 vcam 的优先级不受管理。
 
 ## 内部机制
 
@@ -264,7 +266,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **Timeline / 过场相机不经过本模块**：由过场系统接管 Brain；`CameraManager.ActiveCameraId` /
   `ActiveHandle` 对未注册的过场 vcam 返回 `null` / `default`（`OutputCamera` / `IsTransitioning` 仍可用）；
   过场期间不要调用
-  `Activate` / `TransitionTo`。Cinemachine 扩展包会对「Brain 的活动相机未注册」告警。
+  `Activate` / `TransitionTo`。Cinemachine 后端会对「Brain 的活动相机未注册」告警。
 - **同一台相机不要同时注册成命名与动态**：两个槽位会互相关闭（一次只有一台活动相机）。
 - **管理器不销毁相机对象**：动态相机随预制 / 场景销毁；`Unregister` 只移除槽位并关闭相机。
 - **默认实现只插值位置 / 旋转 / FOV（正交为 `orthographicSize`）**：不混合 culling mask、background、
@@ -273,11 +275,11 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **没有相机栈 / 历史**：不提供 push / pop / 返回上一相机；那会引出生命周期树，按项目自己决定。
 - **没有 UI 相机绑定**：UI 模块的根画布固定为 `ScreenSpaceOverlay`，不使用相机；需要 `ScreenSpaceCamera`
   的项目要自己换 UI 根，不在本模块射程。
-- **Cinemachine 支持是可选扩展包**：核心包不依赖它；扩展包只支持 Cinemachine 3.x，2.x 项目需要自己的
-  `ICameraManager` 实现。
+- **Cinemachine 支持内置于核心包**：`CinemachineCameraManager` 随核心包发布（核心 asmdef 硬引用
+  `Unity.Cinemachine` 3.1.7）；它只支持 Cinemachine 3.x，2.x 项目需要自己的 `ICameraManager` 实现。
 - **需要跟随 / 震屏 / 缩放等行为时**：核心本身不提供这些（见「接口承诺到哪为止」的能力归属）。三条路径：
-  - **Cinemachine 级需求**（3D 跟随 / 瞄准 / 震屏 / 碰撞 / 约束 / Dolly / Target Group / Timeline）→ 安装
-    `com.venusy609.xframework.cinemachine` 扩展包，并在 Cinemachine 里配置 vcam / Brain。**扩展包只把
+  - **Cinemachine 级需求**（3D 跟随 / 瞄准 / 震屏 / 碰撞 / 约束 / Dolly / Target Group / Timeline）→ 直接用
+    内置的 `CinemachineCameraManager`，并在 Cinemachine 里配置 vcam / Brain。**它只把
     Cinemachine 接进 `CameraManager`，行为本身由 Cinemachine 提供**。
   - **简单需求**（2D 跟随、基础震屏、FOV 缩放）→ 项目侧十几行脚本即可，不必装 Cinemachine：跟随用
     `UpdateManager.RegisterLate`（LateUpdate）+ `Vector3.SmoothDamp`；震屏 / 缩放计时用 `TimerManager`；
@@ -286,16 +288,18 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 - **未知 id 只告警不抛；被销毁的相机在注册表里表现为 `null`，`OutputCamera` 返回 `null`，但 `CameraIds`
   仍可能列出该 id，直到调用方 `Unregister`。
 - **`OutputCamera` 不能当作「有活动相机」的判据**（CAM-005）：核心接口只承诺「没有输出相机时可为 null」；
-  Cinemachine 适配器即使活动 vcam 未注册也返回 Brain 的输出相机（**可能为 null**——Brain 所在对象没有
+  Cinemachine 后端即使活动 vcam 未注册也返回 Brain 的输出相机（**可能为 null**——Brain 所在对象没有
   `Camera` 时）。判断活动状态请用
   `ActiveHandle` / `IsActive`。
-- **`Unregister` 只清管理器视图**（CAM-005）：Cinemachine 适配器下 Brain 仍可能继续使用该 vcam；
+- **`Unregister` 只清管理器视图**（CAM-005）：Cinemachine 后端下 Brain 仍可能继续使用该 vcam；
   需要真正停用请另行降优先级 / 停用 vcam。
 
 ## 设计取舍
 
-- **为什么后端中立、核心包不依赖 Cinemachine**：Cinemachine 2.x / 3.x 的 API 不兼容，核心包一旦引用就
-  必须锁一个主版本，会把 2D / 2.x / 自定义后端的项目挡在外面；接口 + 独立扩展包让版本锁只落在扩展包。
+- **为什么门面 / 契约保持中立、Cinemachine 只隔离在子目录**：核心 asmdef 已硬引用 Cinemachine 3.1.7
+  （Unity 6000.3 最低版本 + Cinemachine 3 默认 + Input System 先例），但游戏代码与第三方后端实现仍只面向
+  `ICameraManager`；`Runtime/Camera/` 根层的门面、接口与默认实现不得出现 Cinemachine 类型，版本锁的影响面
+  只剩「安装包」而不是「公开面」，由 `ModuleBoundaryTests.CinemachineTypes_StayInsideTheCinemachineBackend` 守卫。
 - **为什么命名注册留在实现类、动态注册进主接口**：命名相机是组合根 / 构造 map 的静态配置；动态相机随
   预制实例创建 / 销毁，必须经门面按句柄注册。句柄用 `CameraHandle`（槽位 + 代际）而不是 string id——
   实例没有稳定的 authoring id；`Register<T>` 的泛型只保留调用点的类型推断，后端仍做类型校验。
@@ -363,10 +367,10 @@ v1 不提供 Diagnostics 面板与 `IBootstrapStage`：模块状态简单，且 
 ## 设计原则
 
 - **正交**：只做相机状态与过渡，不碰相机行为、UI 与场景编排。
-- **后端中立**：核心包零 Cinemachine 依赖；Cinemachine 支持是可选扩展包。
+- **后端中立**：门面与契约不出现 Cinemachine 类型；Cinemachine 后端隔离在 `Cinemachine/` 子目录。
 - **不替项目定架构**：不提供相机栈、状态机、跟随策略或画面编排。
 
 ## 依赖
 
-本模块**无第三方依赖**（仅 `UnityEngine` 与框架内的 `XLog` / `XUpdate`）。Cinemachine 3.x 支持在独立
-可选扩展包 `com.venusy609.xframework.cinemachine` 中，核心包不引用它。
+本模块依赖 `Unity.Cinemachine` **3.1.7**（核心 asmdef 硬引用，与 Input System 同型；版本真值由安装器清单 /
+包 README / 开发 manifest 三处一致守卫），其余仅 `UnityEngine` 与框架内的 `XLog` / `XUpdate`。

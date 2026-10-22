@@ -2,7 +2,7 @@ namespace XFramework.XCamera
 {
     /// <summary>
     /// 相机过渡的曲线样式。
-    /// <para>这是<b>后端中立</b>的提示值：默认实现按它选择缓动函数，Cinemachine 扩展包将它映射到
+    /// <para>这是<b>后端中立</b>的提示值：默认实现按它选择缓动函数，Cinemachine 后端将它映射到
     /// Cinemachine 的混合样式。后端可以把它当作建议而不是强制契约——例如项目在 Brain 上配置了
     /// custom blends 时，Cinemachine 会以自己的配置为准。</para>
     /// </summary>

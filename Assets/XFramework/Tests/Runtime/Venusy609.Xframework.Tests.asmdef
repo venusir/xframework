@@ -5,7 +5,8 @@
         "UniTask",
         "Unity.InputSystem",
         "Unity.InputSystem.TestFramework",
-        "Unity.TextMeshPro"
+        "Unity.TextMeshPro",
+        "Unity.Cinemachine"
     ],
     "optionalUnityReferences": [
         "TestAssemblies"

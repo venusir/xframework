@@ -13,7 +13,7 @@ namespace XFramework.XCamera
     /// <para><b>一次只有一台活动相机</b>：<see cref="Activate(string)"/> / <see cref="TransitionTo(string, float, CameraBlendStyle)"/>
     /// 与它们的句柄重载会关闭其它已注册相机。它假设相机是静态的且投影模式一致，过渡只插值位置 / 旋转 / FOV
     ///（正交为 <c>orthographicSize</c>），不混合 culling mask / background / RenderTexture——移动、跟随、瞄准、
-    /// 震屏请用 Cinemachine 扩展包。</para>
+    /// 震屏请用 Cinemachine 后端（<see cref="Cinemachine.CinemachineCameraManager"/>）。</para>
     /// <para><b>调度</b>：过渡在第一次过渡时懒注册到 <see cref="UpdateManager"/> 的 LateUpdate 时机，完成即注销；
     /// 空闲时零调度成本。注册时使用 Scaled 时间轴——暂停会冻结过渡。</para>
     /// </summary>
