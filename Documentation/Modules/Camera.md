@@ -127,6 +127,19 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - **让 CameraManager 接管 Timeline 过场相机**（2026-10-17）：过场系统已经接管 Brain；管理器插一手会冲突。
 - **相机栈 / 状态机 / 跟随策略**：生命周期树与 GamePlay 编排，按项目定位否决。
 
+## 迁移指南
+
+2026-10-22 全面重整的编译器可见变更（旧写法 → 新写法 → 说明）以 `Assets/XFramework/CHANGELOG.md` 的
+「破坏性变更迁移表」为准。要点：
+
+- `new UnityCameraManager(dictionary)` → `new CinemachineCameraManager(brain)` + 逐台
+  `CameraManager.Register("id", vcam)`；该类型已删除。
+- `new CinemachineCameraManager(brain, dictionary)` → `(brain)` + 逐台 `Register`。
+- 接口上的 string 操作 / `CameraIds` 删除 → 门面 string 便捷重载，或 `TryGetHandle` + 句柄版。
+- 行为变化：探测型读宽容；`IsTransitioning` 只统计管理器自有非 cut 过渡；`TransitionTo` 经
+  `GetBlendOverride` 请求（不改 `DefaultBlend`）；重复注册冲突抛 `ArgumentException`；注销 / `Dispose`
+  恢复注册时捕获的作者状态；`TransitionToAsync` 取消只停止等待。
+
 ## 审计记忆
 
 - **`Camera` 与 `UnityEngine.Camera` 同名风险**：本模块没有 `Camera` 类型（门面是 `CameraManager`），因此没有 `SceneManager` 那种同名遮蔽问题；`OutputCamera` 返回的是 `UnityEngine.Camera`。

@@ -33,6 +33,9 @@ Assets/XFramework/Runtime/Camera/Cinemachine/
 └── README.md                    # 使用向：接线、行为契约、已知限制、设计取舍
 
 Assets/XFramework/Tests/Runtime/Camera/CinemachineCameraManagerTests.cs  # PlayMode（ManualUpdate 确定性）
+Assets/XFramework/Tests/Runtime/Camera/CinemachineCameraEventTests.cs    # PlayMode：事件顺序 / 过滤 / 退订
+Assets/XFramework/Tests/Runtime/Camera/CinemachineCameraAsyncTests.cs    # PlayMode：异步完成 / 取消 / 取代
+Assets/XFramework/Tests/Runtime/Camera/CameraDiagnosticsTests.cs         # PlayMode：GetState / CopyCameras
 Assets/XFramework/Samples~/Cinemachine/                                   # CameraSample.cs + .sample.json（不参与 Unity 编译）
 ```
 

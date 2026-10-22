@@ -1,5 +1,5 @@
 {
 	"displayName": "Cinemachine 相机示例",
-	"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，用 SwitchToNext 切换；需要 Cinemachine 3.x。",
+	"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，用 SwitchToNext / SwitchToNextAsync 切换；需要 Cinemachine 3.x。",
 	"createSeparatePackage": false
 }

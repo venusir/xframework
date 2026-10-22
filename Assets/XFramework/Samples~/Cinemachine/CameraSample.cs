@@ -1,3 +1,5 @@
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using Unity.Cinemachine;
 using UnityEngine;
 using XFramework.XCamera;
@@ -33,6 +35,15 @@ namespace XFramework.XCamera.Cinemachine.Samples
         {
             var next = CameraManager.IsActive("first") ? "second" : "first";
             CameraManager.TransitionTo(next, 0.8f, CameraBlendStyle.EaseInOut);
+        }
+
+        /// <summary>异步切到另一台相机；取消令牌只停止等待，不中止过渡。</summary>
+        public async UniTask<CameraTransitionResult> SwitchToNextAsync(
+            CancellationToken cancellationToken = default)
+        {
+            var next = CameraManager.IsActive("first") ? "second" : "first";
+            return await CameraManager.TransitionToAsync(
+                next, 0.8f, CameraBlendStyle.EaseInOut, cancellationToken);
         }
     }
 }
