@@ -263,6 +263,54 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void GetBlendOverride_ChainsPreviousDelegate_AndDisposeRestores()
+        {
+            _manager.Dispose();
+            CinemachineCore.GetBlendOverride = null;
+
+            var previousCalls = 0;
+            CinemachineCore.GetBlendOverrideDelegate previous =
+                (from, to, defaultBlend, owner) =>
+                {
+                    previousCalls++;
+                    return new CinemachineBlendDefinition(
+                        CinemachineBlendDefinition.Styles.EaseInOut, 3f);
+                };
+            CinemachineCore.GetBlendOverride = previous;
+
+            var manager = new CinemachineCameraManager(_brain);
+            try
+            {
+                var handleA = manager.Register("a", _vcamA);
+                manager.Register("b", _vcamB);
+
+                // 先让 A 成为活动相机（管理器 cut 会清掉 pending），再让外部优先级变化触发 A→B 混合。
+                manager.Activate(handleA);
+                Pump();
+
+                // 没有管理器 pending：外部优先级变化触发的混合应链式调用前一个 override。
+                _vcamB.Priority = 10;
+                _vcamB.Prioritize();
+                Pump(0.1f);
+
+                Assert.Greater(previousCalls, 0,
+                    "无 pending 时必须调用前一个 GetBlendOverride");
+                Assert.IsNotNull(_brain.ActiveBlend);
+                Assert.AreEqual(3f, _brain.ActiveBlend.Duration, 0.0001f,
+                    "前一个 override 的返回值应生效");
+
+                manager.Dispose();
+                Assert.AreEqual(previous, CinemachineCore.GetBlendOverride,
+                    "Dispose 时当前委托仍是自己，应恢复前值");
+            }
+            finally
+            {
+                manager.Dispose();
+                CinemachineCore.GetBlendOverride = null;
+            }
+        }
+
+        [Test]
         public void IsTransitioning_ExternalBlend_DoesNotSet()
         {
             _manager.Activate(_handleA);
@@ -570,6 +618,30 @@ namespace XFramework.XCamera.Cinemachine.Tests
 
                 Assert.AreEqual(5, extra.Priority.Value,
                     "Dispose 必须恢复注册时捕获的作者优先级");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(extra.gameObject);
+            }
+        }
+
+        [Test]
+        public void Unregister_ActiveCamera_RestoresAuthoredPriority()
+        {
+            var extra = CreateVcam("VcamC", 5);
+
+            try
+            {
+                var handle = _manager.Register("c", extra);
+                _manager.Activate(handle);
+                Pump();
+
+                Assert.Greater(extra.Priority.Value, 5);
+
+                Assert.IsTrue(_manager.Unregister(handle));
+                Assert.AreEqual(5, extra.Priority.Value,
+                    "Unregister 必须恢复注册时捕获的作者优先级");
+                Assert.IsFalse(_manager.TryGetHandle("c", out _));
             }
             finally
             {

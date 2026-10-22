@@ -90,6 +90,20 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void Initialize_Twice_DoesNotDisposeSecond()
+        {
+            var first = new FakeCameraManager();
+            var second = new FakeCameraManager();
+
+            CameraManager.Initialize(first);
+            LogAssert.Expect(LogType.Warning, new Regex("CameraManager\\.Initialize 被重复调用.*"));
+            CameraManager.Initialize(second);
+
+            Assert.IsFalse(second.Disposed,
+                "被拒绝的第二个实例仍归调用方所有，门面不得擅自 Dispose");
+        }
+
+        [Test]
         public void Destroy_DisposesIdisposableImplementation()
         {
             var fake = new FakeCameraManager();
@@ -284,6 +298,10 @@ namespace XFramework.XCamera.Tests
             LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
             CameraManager.TransitionTo("missing", 1f);
             Assert.IsTrue(fake.LastTransitionHandle.IsDefault);
+
+            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
+            var asyncResult = CameraManager.TransitionToAsync("missing", 1f).GetAwaiter().GetResult();
+            Assert.AreEqual(CameraTransitionResult.TargetUnregistered, asyncResult);
 
             Assert.IsFalse(CameraManager.Unregister("missing"));
         }

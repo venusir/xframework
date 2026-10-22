@@ -134,3 +134,19 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - **静态事件必须退订**：`CameraUpdatedEvent`（以及后续的 `CameraActivatedEvent` / `CameraDeactivatedEvent` / `BlendFinishedEvent`）是静态 UnityEvent；`Dispose` 与会话复位都必须 `RemoveListener`，否则关闭域重载时旧管理器被钉住。`CinemachineCore.ResetStaticsOnLoad` 并不重置全部事件。
 - **槽位线性扫描是有意取舍**：相机数量通常个位数，O(n) 换取 `_reverse` 在替换 / 注销 / 外部销毁时的全部陈旧键分支；不要为「O(1)」重新引入反查表而丢掉这些分支的测试。
 - **Cinemachine 后端在核心门禁射程内**（2026-10-22 起）：`check-docs` / `PublicApiBaseline` / `ReadmeTableTests` / 命名与边界扫描都覆盖 `Runtime/Camera/Cinemachine/`；原扩展包门禁缺口（R3-CIN-008）由并入结构性关闭。改动该子目录时按核心同一条门禁跑。
+
+## 实测记录
+
+- **2026-10-22 事件帧序**（`CinemachineCameraEventTests`，`ManualUpdate` 确定性）：cut A→B 为
+  `Deactivated(A)` → `Activated(B, IsCut=true)` → `Completed(B)`；blend A→B 为开始帧 `Activated(B)`、
+  完成帧 `Deactivated(A)` → `Completed(B)`。未注册 incoming 不发 `Activated`，旧注册相机仍发 `Deactivated`。
+- **2026-10-22 `CameraUpdatedEvent` 兜底**（`CinemachineCameraAsyncTests.TargetDestroyedBeforeActivation...`）：
+  目标在激活前被销毁时，`OnCameraActivated` 的 incoming 不再是 pending 目标；按 `_pending.Camera == null`
+  报 `TargetUnregistered`（改前误报 `Superseded`）。
+- **2026-10-22 `GetBlendOverride` 链**（`CinemachineCameraManagerTests.GetBlendOverride_ChainsPrevious...`）：
+  无 pending 时调用前值并采用其返回值；`Dispose` 时当前委托仍是自己则恢复前值。
+- **2026-10-22 异步取消**（`CinemachineCameraAsyncTests.Cancellation...`）：取消只停止等待，过渡继续并完成；
+  预取消不启动。
+- **仍未实测 / 需真实环境**：Timeline 混合是否经过 `GetBlendOverride`（当前只承诺“不受管理器控制”）；
+  `PrioritySettings.Enabled == false` 对动态 boost 的影响（源码显示 `Value` 返回 0）；Brain 禁用时
+  `CameraUpdatedEvent` 是否触发；关闭域重载连跑两遍（脚本表达不了，按惯例手工验收）。

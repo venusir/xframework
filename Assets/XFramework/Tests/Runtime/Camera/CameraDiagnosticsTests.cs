@@ -113,6 +113,32 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void GetState_ExternalBlend_ReportsBrainBlendingButNotManagerTransition()
+        {
+            _manager.Activate(_handleA);
+            Pump();
+
+            var externalObject = new GameObject("External");
+            var external = externalObject.AddComponent<CinemachineCamera>();
+            external.Priority = 10;
+
+            try
+            {
+                external.Prioritize();
+                Pump(0.1f);
+
+                var state = _manager.GetState();
+                Assert.IsTrue(state.IsBrainBlending, "Brain 的真实混合应被报告");
+                Assert.IsFalse(state.IsTransitioning, "外部混合不算管理器自有过渡");
+                Assert.IsTrue(state.TransitionTarget.IsDefault);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(externalObject);
+            }
+        }
+
+        [Test]
         public void GetState_NoCameras_ReturnsEmptyCounts()
         {
             var emptyObject = new GameObject("EmptyCamera");
