@@ -335,12 +335,15 @@ XFramework.XCamera.CameraManager.IsTransitioning  ::  public static bool IsTrans
 XFramework.XCamera.CameraManager.OutputCamera  ::  public static UnityEngine.Camera OutputCamera { get; }
 XFramework.XCamera.CameraManager.Register  ::  public static XFramework.XCamera.CameraHandle(T camera)
 XFramework.XCamera.CameraManager.Register  ::  public static XFramework.XCamera.CameraHandle(string cameraId, T camera)
+XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraActivatedMessage> handler)
+XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraBlendCompletedMessage> handler)
+XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraDeactivatedMessage> handler)
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.TransitionTo  ::  public static void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.TryGetHandle  ::  public static bool(string cameraId, out XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(string cameraId)
-XFramework.XCamera.Cinemachine.CinemachineCameraManager  ::  public sealed class : System.IDisposable, XFramework.XCamera.ICameraManager
+XFramework.XCamera.Cinemachine.CinemachineCameraManager  ::  public sealed class : System.IDisposable, XFramework.XCamera.ICameraManager, XFramework.XCamera.ICameraManagerSessionReset
 XFramework.XCamera.Cinemachine.CinemachineCameraManager#ctor  ::  public(Unity.Cinemachine.CinemachineBrain brain)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.Activate  ::  public virtual void(XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.Cinemachine.CinemachineCameraManager.ActiveHandle  ::  public XFramework.XCamera.CameraHandle ActiveHandle { get; }
@@ -368,6 +371,17 @@ XFramework.XCamera.ICameraManager.Register  ::  public XFramework.XCamera.Camera
 XFramework.XCamera.ICameraManager.TransitionTo  ::  public void(XFramework.XCamera.CameraHandle handle, float duration, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.ICameraManager.TryGetHandle  ::  public bool(string cameraId, out XFramework.XCamera.CameraHandle handle)
 XFramework.XCamera.ICameraManager.Unregister  ::  public bool(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Messages.CameraActivatedMessage  ::  public readonly struct
+XFramework.XCamera.Messages.CameraActivatedMessage#ctor  ::  public(XFramework.XCamera.CameraHandle handle, XFramework.XCamera.CameraHandle previousHandle, bool isCut)
+XFramework.XCamera.Messages.CameraActivatedMessage.Handle  ::  public readonly XFramework.XCamera.CameraHandle
+XFramework.XCamera.Messages.CameraActivatedMessage.IsCut  ::  public readonly bool
+XFramework.XCamera.Messages.CameraActivatedMessage.PreviousHandle  ::  public readonly XFramework.XCamera.CameraHandle
+XFramework.XCamera.Messages.CameraBlendCompletedMessage  ::  public readonly struct
+XFramework.XCamera.Messages.CameraBlendCompletedMessage#ctor  ::  public(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Messages.CameraBlendCompletedMessage.Handle  ::  public readonly XFramework.XCamera.CameraHandle
+XFramework.XCamera.Messages.CameraDeactivatedMessage  ::  public readonly struct
+XFramework.XCamera.Messages.CameraDeactivatedMessage#ctor  ::  public(XFramework.XCamera.CameraHandle handle)
+XFramework.XCamera.Messages.CameraDeactivatedMessage.Handle  ::  public readonly XFramework.XCamera.CameraHandle
 XFramework.XConfig.ConfigException  ::  public class : System.Exception
 XFramework.XConfig.ConfigException#ctor  ::  public(string message)
 XFramework.XConfig.ConfigException#ctor  ::  public(string message, System.Exception innerException)

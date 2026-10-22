@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using XFramework.XCamera.Messages;
+using XFramework.XMessage;
 
 namespace XFramework.XCamera.Tests
 {
@@ -108,6 +111,37 @@ namespace XFramework.XCamera.Tests
 
             Assert.IsFalse(CameraManager.IsInitialized);
             Assert.IsFalse(fake.Disposed);
+            Assert.AreEqual(1, fake.UnbindCount, "会话复位应让支持该能力的实现退订静态事件");
+        }
+
+        [Test]
+        public void ResetForNewSession_UnbindThrows_LogsWarningAndClears()
+        {
+            var fake = new FakeCameraManager { ThrowOnUnbind = true };
+            CameraManager.Initialize(fake);
+
+            LogAssert.Expect(LogType.Warning, new Regex("ResetForNewSession.*已忽略.*"));
+            Assert.DoesNotThrow(() => CameraManager.ResetForNewSession());
+
+            Assert.IsFalse(CameraManager.IsInitialized);
+            Assert.AreEqual(1, fake.UnbindCount);
+            Assert.IsFalse(fake.Disposed);
+        }
+
+        [Test]
+        public void Subscribe_WithoutInitialize_ForwardsMessages()
+        {
+            CameraManager.Destroy();
+            var received = new List<CameraActivatedMessage>();
+            using var subscription = CameraManager.Subscribe(
+                (CameraActivatedMessage message) => received.Add(message));
+
+            var handle = new CameraHandle(0, 1, "main");
+            MessageManager.Publish(new CameraActivatedMessage(handle, default, true));
+
+            Assert.AreEqual(1, received.Count);
+            Assert.AreEqual(handle, received[0].Handle);
+            Assert.IsTrue(received[0].IsCut);
         }
 
         [Test]

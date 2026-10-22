@@ -74,10 +74,30 @@ Runtime/Camera/Cinemachine/
 - **Timeline / 过场**：过场 vcam 不注册；若 Brain 的活动相机未注册，`Activate` / `TransitionTo` 会告警
   「可能与过场冲突」；`ActiveHandle` / `ActiveCameraId` 返回 `default` / `null`，`OutputCamera` 仍可读。
 
+## 状态事件
+
+后端订阅 `CinemachineCore` 的四个静态 UnityEvent，按 `Origin` / mixer 过滤本 Brain 后经 `MessageManager`
+发布：
+
+| Cinemachine 事件 | 发布消息 | 条件 |
+|---|---|---|
+| `CameraActivatedEvent` | `CameraActivatedMessage(handle, previous, IsCut)` | incoming 能解析到已注册槽位 |
+| `CameraActivatedEvent` + `IsCut` | 再发 `CameraBlendCompletedMessage(handle)` | 同上；cut 视为零时长完成 |
+| `CameraDeactivatedEvent` | `CameraDeactivatedMessage(handle)` | 被停 live 的相机仍能解析到注册槽位 |
+| `BlendFinishedEvent` | `CameraBlendCompletedMessage(handle)` | 完成的相机能解析到注册槽位 |
+| `CameraUpdatedEvent` | 不发消息 | 清理 pending / 检测目标销毁兜底 |
+
+- cut A→B：`Deactivated(A)` → `Activated(B, IsCut=true)` → `Completed(B)`。
+- blend A→B：开始帧 `Activated(B)`；完成帧 `Deactivated(A)` → `Completed(B)`。
+- 未注册 incoming 不发布 `Activated`，旧的已注册相机失去 live 时仍发布 `Deactivated`。
+- 其他 Brain 的事件按 `Origin` / mixer 过滤。
+- `Dispose` 与 `ICameraManagerSessionReset.UnbindSessionEvents` 都会 `RemoveListener`；关闭域重载时静态事件
+  跨会话存活，不退订会让旧管理器被钉住。
+
 ## 架构设计
 
 `CinemachineCameraManager` 是核心包 `ICameraManager` 的一个后端实现：它不驱动任何调度器，Brain 自己按
-`UpdateMethod` 混合；管理器只负责注册表、优先级、过渡请求与状态解析。
+`UpdateMethod` 混合；管理器只负责注册表、优先级、过渡请求、状态解析与事件转发。
 
 ## API 参考
 
@@ -144,7 +164,8 @@ handle.Dispose(); // 门面已销毁也安全
 - 槽位表 + 线性扫描：活动 vcam → 句柄、vcam → 槽位、id → 槽位；不再维护反查字典，避免外部销毁 / 替换 /
   注销时的陈旧键分支。
 - `ComputeBoostPriority` 取已注册槽位的作者优先级与同通道未注册 vcam 的最大值 + 1，`int.MaxValue` 封顶。
-- 过渡由 `GetBlendOverride` 请求；`CameraUpdatedEvent` 在混合结束后清理 pending。
+- 过渡由 `GetBlendOverride` 请求；`CameraUpdatedEvent` 在混合结束后清理 pending，`CameraActivatedEvent` /
+  `CameraDeactivatedEvent` / `BlendFinishedEvent` 负责状态消息与等待者完成。
 - `CinemachineBlendDefinition.Styles` 映射核心包的 `CameraBlendStyle`；非法枚举值抛
   `ArgumentOutOfRangeException`。
 
@@ -168,6 +189,8 @@ handle.Dispose(); // 门面已销毁也安全
 ## 已知限制
 
 - **只支持 Cinemachine 3.x**（3.1.7 编写）；2.x 需要自己的实现。
+- **事件只对已注册 vcam 发布**：未注册 incoming 不发 `CameraActivatedMessage`；订阅是全局 `MessageManager`
+  通道，多个管理器 / 多个 Brain 时应按 `Handle` 过滤。事件反映 Brain 真实状态，不是命令回执。
 - **动态 vcam 的 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`**：用 `ActiveHandle` /
   `IsActive(handle)`；`TryGetHandle` 只查命名 id。
 - **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` /

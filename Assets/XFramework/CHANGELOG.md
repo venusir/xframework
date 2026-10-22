@@ -75,6 +75,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   告警；`ActiveCameraId` / `ActiveHandle` 对未注册活动相机返回 null / default，`OutputCamera` / `IsTransitioning`
   仍可用。
 - **`LogCategories` 新增 `CameraManager`**（同上）。
+- **相机状态事件与会话退订**（2026-10-22）：新增 `CameraActivatedMessage` / `CameraDeactivatedMessage` /
+  `CameraBlendCompletedMessage`（`XFramework.XCamera.Messages`）；`CinemachineCameraManager` 订阅
+  `CinemachineCore` 的激活 / 反激活 / 混合完成 / 更新事件，按 `Origin` / mixer 过滤本 Brain 后经
+  `MessageManager` 发布；`CameraManager.Subscribe` 提供门面便利入口（不依赖门面初始化）。
+  `CameraManager.ResetForNewSession` 经内部 `ICameraManagerSessionReset` 让旧实现退订静态事件并恢复
+  `GetBlendOverride` 前值，**不访问场景对象**；退订异常只记 Warning。公开 API 基线新增三个消息类型与
+  三个 `Subscribe` 重载（源兼容新增）。回归：`CinemachineCameraEventTests` 六例与
+  `CameraManagerTests.ResetForNewSession_*`。
 
 #### File
 
@@ -225,6 +233,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **过渡改为 `GetBlendOverride` 请求**：`TransitionTo` 不再修改 `Brain.DefaultBlend`；本次 duration / style 通过全局 `CinemachineCore.GetBlendOverride` 生效，优先于项目 `CustomBlends`。该委托是全局单委托，一个进程建议一个管理器；项目也使用时以最后安装者为准。
 - **重复注册改为抛错**：同一 id 不同实例、同一实例不同 id、已销毁对象、类型不符都抛 `ArgumentException`；同一 id 同一实例幂等。
 - **`CameraHandle.IsActive` 未初始化返回 false**：不再抛；命令仍抛。
+- **会话复位退订相机静态事件**：`CameraManager.ResetForNewSession` 在丢引用前让旧实现退订 `CinemachineCore` 的四个事件并恢复 `GetBlendOverride` 前值；不 Dispose、不访问场景对象。关闭域重载时旧管理器不再被静态事件钉住；退订异常只记 Warning。
 
 #### 破坏性变更迁移表（命名与签名）
 

@@ -58,6 +58,10 @@ Runtime/Camera/
 ├── CameraHandle.cs        # 公开：相机句柄（Id + Generation + NamedId；default 无效）
 ├── CameraManager.cs       # 公开：静态门面（转发 + 生命周期 + 会话复位 + 字符串便捷重载）
 ├── CameraBlendStyle.cs    # 公开：过渡样式枚举（后端中立）
+├── Messages/
+│   ├── CameraActivatedMessage.cs      # 公开：incoming 相机激活
+│   ├── CameraDeactivatedMessage.cs    # 公开：已注册相机不再 live
+│   └── CameraBlendCompletedMessage.cs # 公开：blend 完成（cut 视为零时长完成）
 ├── Cinemachine/
 │   ├── CinemachineCameraManager.cs  # 公开：ICameraManager 的 Cinemachine 3.x 实现
 │   └── README.md                    # Cinemachine 后端的用法与边界
@@ -133,6 +137,7 @@ Runtime/Camera/
 | `Deactivate(string)` / `Deactivate(CameraHandle)` | 反激活；回退由后端定义 |
 | `TransitionTo(string \| CameraHandle, float, CameraBlendStyle)` | 过渡；`duration <= 0.0001` / `Cut` 等价于 cut |
 | `IsActive(string)` / `IsActive(CameraHandle)` | 是否为 Brain 当前活动（过渡 incoming 也算） |
+| `Subscribe(Action<CameraActivatedMessage / CameraDeactivatedMessage / CameraBlendCompletedMessage>)` | 订阅状态消息；不依赖门面初始化，返回退订句柄 |
 
 探测型读（`OutputCamera` / `ActiveHandle` / `ActiveCameraId` / `IsTransitioning` / `CameraCount` /
 `TryGetHandle` / `IsActive`）在门面未初始化时返回默认值；`Register` / `Activate` / `Deactivate` /
@@ -142,6 +147,36 @@ Runtime/Camera/
 `Unregister()` / `Dispose()`（= 注销，供 `using`）。`default` 句柄全部短路；非 default 命令在门面未初始化时
 仍抛，`IsActive()` 返回 `false`，`Unregister()` / `Dispose()` 返回 `false`（预制 `OnDestroy` 可能晚于管理器
 `Destroy`）。
+
+## 相机事件
+
+需要知道「Brain 真的把哪台相机变成了 live / 过渡何时完成」时，订阅消息而不是轮询：
+
+```csharp
+using XFramework.XCamera.Messages;
+
+using var sub = CameraManager.Subscribe((CameraActivatedMessage m) =>
+{
+    // m.Handle / m.PreviousHandle / m.IsCut
+});
+```
+
+| 消息 | 发布时机 | 条件 |
+|---|---|---|
+| `CameraActivatedMessage` | `CinemachineCore.CameraActivatedEvent`（混合开始帧） | incoming 能解析到已注册相机 |
+| `CameraDeactivatedMessage` | `CinemachineCore.CameraDeactivatedEvent` | 被停 live 的相机仍能解析到已注册槽位 |
+| `CameraBlendCompletedMessage` | `BlendFinishedEvent`；cut 在激活帧发布 | 完成的相机能解析到已注册槽位 |
+| `CameraActivatedMessage` + `IsCut` | 同帧再发 `CameraBlendCompletedMessage` | 同上；cut 视为零时长完成 |
+
+- cut A→B：`Deactivated(A)` → `Activated(B, IsCut=true)` → `Completed(B)`。
+- blend A→B：混合开始帧 `Activated(B)`；完成帧 `Deactivated(A)` → `Completed(B)`。混合期间 A 仍参与混合，
+  所以 `Deactivated(A)` 会晚于 `IsActive(A)` 变 `false`。
+- 未注册的 incoming（Timeline / 外来 vcam）**不发布** `Activated`；旧的已注册相机失去 live 时仍发布
+  `Deactivated`，消费方以 `ActiveHandle == default` 识别。
+- 事件经 `MessageManager` 发布，**不依赖相机门面是否初始化**；订阅生命周期由调用方管理（返回值 `Dispose`
+  或绑定 `destroyCancellationToken`）。
+- `CinemachineCore` 的事件是静态 UnityEvent；管理器在 `Dispose` 与 `ResetForNewSession` 都会退订。第三方
+  后端若想提供同等能力，应按上述消息类型直接 `MessageManager.Publish`（不发布不影响同步成员）。
 
 ## 典型场景
 
@@ -264,6 +299,9 @@ public sealed class DynamicCameraOwner : MonoBehaviour
   `TryGetHandle` 只查命名 id。
 - **Timeline / 过场相机不经过本模块**：由过场系统接管 Brain；`ActiveCameraId` / `ActiveHandle` 对未注册的
   过场 vcam 返回 `null` / `default`（`OutputCamera` 仍可读）；过场期间不要调用 `Activate` / `TransitionTo`。
+- **事件只覆盖已注册相机**：未注册的 incoming 不发布 `CameraActivatedMessage`；订阅是全局
+  `MessageManager` 通道，多个管理器 / 多个 Brain 时应按 `Handle` 过滤。事件只反映 Brain 的真实状态，
+  不是命令回执——命令后可能要等 Brain 下一次更新才收到消息。
 - **同一台相机只能注册一次**：命名 + 动态、两个命名 id、两次不同 id 的动态注册都会抛 `ArgumentException`；
   先 `Unregister` 再换注册方式。
 - **管理器不销毁相机对象**：动态相机随预制 / 场景销毁；`Unregister` 只恢复状态并移除槽位。
@@ -320,6 +358,7 @@ public sealed class DynamicCameraOwner : MonoBehaviour
 | 当前活动相机 / 输出相机 | Camera | 是（`ActiveHandle` / `OutputCamera`；门面 `ActiveCameraId` 是便利） |
 | 注册表查询 | Camera | 是（`CameraCount` / `TryGetHandle`） |
 | 过渡状态 | Camera | 是（`IsTransitioning`，只含管理器自有过渡） |
+| 状态事件（激活 / 反激活 / 过渡完成） | Camera | 是（`MessageManager`，只对已注册相机发布） |
 | 跟随 / 瞄准 / 轨道 | Cinemachine | 否 |
 | 震屏 / 噪声 / Impulse | Cinemachine | 否 |
 | 缩放 / FOV / Lens | Cinemachine Lens / Tween | 否 |
@@ -371,4 +410,4 @@ UI 根画布固定为 `ScreenSpaceOverlay`，不使用相机；HUD / Tip 的世�
 ## 依赖
 
 本模块依赖 `Unity.Cinemachine` **3.1.7**（核心 asmdef 硬引用，与 Input System 同型；版本真值由安装器清单 /
-包 README / 开发 manifest 三处一致守卫），其余仅 `UnityEngine` 与框架内的 `XLog`。
+包 README / 开发 manifest 三处一致守卫），其余仅 `UnityEngine` 与框架内的 `XLog` / `XMessage`（状态事件）。

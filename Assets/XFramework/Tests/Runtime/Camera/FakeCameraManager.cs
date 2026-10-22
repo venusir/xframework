@@ -7,7 +7,7 @@ namespace XFramework.XCamera.Tests
     /// <summary>
     /// <see cref="ICameraManager"/> 的测试替身：记录门面转发过来的调用，不碰场景。
     /// </summary>
-    internal sealed class FakeCameraManager : ICameraManager, IDisposable
+    internal sealed class FakeCameraManager : ICameraManager, ICameraManagerSessionReset, IDisposable
     {
         public Camera OutputCamera { get; set; }
 
@@ -24,6 +24,12 @@ namespace XFramework.XCamera.Tests
 
         /// <summary>为 true 时 Dispose 抛异常，用于验证门面的闩锁顺序（CAM-002）。</summary>
         public bool ThrowOnDispose { get; set; }
+
+        /// <summary>会话复位退订次数。</summary>
+        public int UnbindCount { get; private set; }
+
+        /// <summary>为 true 时 UnbindSessionEvents 抛异常，用于验证门面的异常隔离。</summary>
+        public bool ThrowOnUnbind { get; set; }
 
         public CameraHandle RegisterResult { get; set; }
 
@@ -98,6 +104,13 @@ namespace XFramework.XCamera.Tests
             Disposed = true;
             if (ThrowOnDispose)
                 throw new InvalidOperationException("dispose boom");
+        }
+
+        void ICameraManagerSessionReset.UnbindSessionEvents()
+        {
+            UnbindCount++;
+            if (ThrowOnUnbind)
+                throw new InvalidOperationException("unbind boom");
         }
     }
 }

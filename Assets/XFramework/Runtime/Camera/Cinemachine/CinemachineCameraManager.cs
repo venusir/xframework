@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
+using XFramework.XCamera.Messages;
 using XFramework.XLog;
+using XFramework.XMessage;
 
 namespace XFramework.XCamera.Cinemachine
 {
@@ -19,7 +21,7 @@ namespace XFramework.XCamera.Cinemachine
     /// <para><b>只支持 Cinemachine 3.x</b>（按 3.1.7 的 API 编写）：2.x 的类型名与字段名不同，需自己的
     /// <see cref="ICameraManager"/> 实现。</para>
     /// </summary>
-    public sealed class CinemachineCameraManager : ICameraManager, IDisposable
+    public sealed class CinemachineCameraManager : ICameraManager, ICameraManagerSessionReset, IDisposable
     {
         #region Constants
 
@@ -68,7 +70,9 @@ namespace XFramework.XCamera.Cinemachine
         private readonly CinemachineCore.GetBlendOverrideDelegate _blendOverrideDelegate;
         private PendingTransition _pending;
         private int _boostedIndex = -1;
+        private bool _eventsBound;
         private bool _disposed;
+        private bool _detached;
 
         #endregion
 
@@ -86,7 +90,7 @@ namespace XFramework.XCamera.Cinemachine
             _previousBlendOverride = CinemachineCore.GetBlendOverride;
             _blendOverrideDelegate = OverrideBlend;
             CinemachineCore.GetBlendOverride = _blendOverrideDelegate;
-            CinemachineCore.CameraUpdatedEvent.AddListener(OnCameraUpdated);
+            BindSessionEvents();
         }
 
         #endregion
@@ -214,7 +218,7 @@ namespace XFramework.XCamera.Cinemachine
         }
 
         /// <inheritdoc/>
-        public bool IsTransitioning => !_disposed && _pending != null && _pending.CountsAsTransition;
+        public bool IsTransitioning => !_disposed && !_detached && _pending != null && _pending.CountsAsTransition;
 
         /// <inheritdoc/>
         public int CameraCount
@@ -348,15 +352,11 @@ namespace XFramework.XCamera.Cinemachine
         /// <summary>恢复管理器改过的场景状态、退订静态事件、清空注册表；不销毁 Brain / vcam。</summary>
         public void Dispose()
         {
-            if (_disposed)
+            if (_disposed || _detached)
                 return;
 
             _disposed = true;
-
-            if (ReferenceEquals(CinemachineCore.GetBlendOverride, _blendOverrideDelegate))
-                CinemachineCore.GetBlendOverride = _previousBlendOverride;
-
-            CinemachineCore.CameraUpdatedEvent.RemoveListener(OnCameraUpdated);
+            UnsubscribeEvents();
 
             _pending = null;
             _boostedIndex = -1;
@@ -368,6 +368,19 @@ namespace XFramework.XCamera.Cinemachine
                     RestoreOwnedState(slot);
             }
 
+            _slots.Clear();
+        }
+
+        void ICameraManagerSessionReset.UnbindSessionEvents()
+        {
+            if (_disposed || _detached)
+                return;
+
+            // 会话边界：只退订静态事件并清引用，绝不访问场景对象（上一会话的 Brain / vcam 可能已销毁）。
+            _detached = true;
+            UnsubscribeEvents();
+            _pending = null;
+            _boostedIndex = -1;
             _slots.Clear();
         }
 
@@ -595,9 +608,82 @@ namespace XFramework.XCamera.Cinemachine
                 : defaultBlend;
         }
 
+        private void BindSessionEvents()
+        {
+            if (_eventsBound)
+                return;
+
+            _eventsBound = true;
+            CinemachineCore.CameraActivatedEvent.AddListener(OnCameraActivated);
+            CinemachineCore.CameraDeactivatedEvent.AddListener(OnCameraDeactivated);
+            CinemachineCore.BlendFinishedEvent.AddListener(OnBlendFinished);
+            CinemachineCore.CameraUpdatedEvent.AddListener(OnCameraUpdated);
+        }
+
+        private void UnsubscribeEvents()
+        {
+            if (!_eventsBound)
+                return;
+
+            _eventsBound = false;
+            CinemachineCore.CameraActivatedEvent.RemoveListener(OnCameraActivated);
+            CinemachineCore.CameraDeactivatedEvent.RemoveListener(OnCameraDeactivated);
+            CinemachineCore.BlendFinishedEvent.RemoveListener(OnBlendFinished);
+            CinemachineCore.CameraUpdatedEvent.RemoveListener(OnCameraUpdated);
+
+            if (ReferenceEquals(CinemachineCore.GetBlendOverride, _blendOverrideDelegate))
+                CinemachineCore.GetBlendOverride = _previousBlendOverride;
+        }
+
+        private void OnCameraActivated(ICinemachineCamera.ActivationEventParams evt)
+        {
+            if (_disposed || _detached || !ReferenceEquals(evt.Origin, _brain))
+                return;
+
+            var incomingIndex = FindSlotByCamera(evt.IncomingCamera);
+            var outgoingIndex = FindSlotByCamera(evt.OutgoingCamera);
+
+            // 新 incoming 不是本管理器的 pending 目标 → 本次过渡已被取代。
+            if (_pending != null && incomingIndex != _pending.SlotIndex)
+                _pending = null;
+
+            if (incomingIndex < 0)
+                return; // Timeline / 外来 vcam：不发布激活消息
+
+            var incoming = HandleOf(incomingIndex);
+            var previous = outgoingIndex >= 0 ? HandleOf(outgoingIndex) : default;
+            MessageManager.Publish(new CameraActivatedMessage(incoming, previous, evt.IsCut));
+
+            if (evt.IsCut)
+                MessageManager.Publish(new CameraBlendCompletedMessage(incoming));
+        }
+
+        private void OnCameraDeactivated(ICinemachineMixer mixer, ICinemachineCamera camera)
+        {
+            if (_disposed || _detached || !ReferenceEquals(mixer, _brain))
+                return;
+
+            var index = FindSlotByCamera(camera);
+            if (index >= 0)
+                MessageManager.Publish(new CameraDeactivatedMessage(HandleOf(index)));
+        }
+
+        private void OnBlendFinished(ICinemachineMixer mixer, ICinemachineCamera camera)
+        {
+            if (_disposed || _detached || !ReferenceEquals(mixer, _brain))
+                return;
+
+            var index = FindSlotByCamera(camera);
+            if (index >= 0)
+                MessageManager.Publish(new CameraBlendCompletedMessage(HandleOf(index)));
+
+            if (_pending != null && _pending.SlotIndex == index)
+                _pending = null;
+        }
+
         private void OnCameraUpdated(CinemachineBrain brain)
         {
-            if (_disposed || _pending == null)
+            if (_disposed || _detached || _pending == null)
                 return;
 
             if (!ReferenceEquals(brain, _brain))
@@ -788,7 +874,7 @@ namespace XFramework.XCamera.Cinemachine
 
         private void ThrowIfDisposed()
         {
-            if (_disposed)
+            if (_disposed || _detached)
                 throw new ObjectDisposedException(nameof(CinemachineCameraManager));
         }
 

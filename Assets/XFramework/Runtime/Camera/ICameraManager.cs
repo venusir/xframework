@@ -101,4 +101,15 @@ namespace XFramework.XCamera
         /// <returns>活动返回 <c>true</c>；无效 / <c>default</c> / 已销毁 / 未注册返回 <c>false</c>。</returns>
         bool IsActive(CameraHandle handle);
     }
+
+    /// <summary>
+    /// 会话复位能力：只退订静态事件并清引用，不 Dispose、不碰 Unity 场景对象。
+    /// <para>由门面在 <c>CameraManager.ResetForNewSession</c> 时探测调用；仅内置 Cinemachine 后端实现。
+    /// 关闭域重载时静态事件会跨会话存活，不显式退订会让旧管理器被钉住。</para>
+    /// </summary>
+    internal interface ICameraManagerSessionReset
+    {
+        /// <summary>退订静态事件、清空 pending 与槽位引用；不得访问 Unity 场景对象。</summary>
+        void UnbindSessionEvents();
+    }
 }

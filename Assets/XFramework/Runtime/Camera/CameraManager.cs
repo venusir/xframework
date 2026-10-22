@@ -1,6 +1,8 @@
 using System;
 using UnityEngine;
+using XFramework.XCamera.Messages;
 using XFramework.XLog;
+using XFramework.XMessage;
 
 namespace XFramework.XCamera
 {
@@ -253,6 +255,47 @@ namespace XFramework.XCamera
 
         #endregion
 
+        #region Public API — Events
+
+        /// <summary>订阅相机激活消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订；也可配合 <c>destroyCancellationToken</c> 使用。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        /// <remarks>事件经 <see cref="MessageManager"/> 发布，**不依赖相机门面是否初始化**；订阅生命周期由调用方管理。</remarks>
+        public static IDisposable Subscribe(Action<CameraActivatedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
+        }
+
+        /// <summary>订阅相机反激活消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        public static IDisposable Subscribe(Action<CameraDeactivatedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
+        }
+
+        /// <summary>订阅相机过渡完成消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        public static IDisposable Subscribe(Action<CameraBlendCompletedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
+        }
+
+        #endregion
+
         #region Lifecycle
 
         /// <summary>注入相机管理实现；门面取得所有权。</summary>
@@ -295,11 +338,27 @@ namespace XFramework.XCamera
         /// 会话开始时复位静态状态：只丢引用、不 Dispose。
         /// <para>关闭域重载时上一会话的静态字段会存活；门面在正常游戏流程里不会被
         /// <see cref="Destroy"/>，不复位会让第二会话的 <see cref="Initialize"/> 因重复而告警早退。</para>
+        /// <para>若旧实现支持 <see cref="ICameraManagerSessionReset"/>，先让它退订静态事件并清引用；
+        /// 该路径**不访问 Unity 场景对象**（上一会话的对象可能已销毁）。退订异常只记 Warning，不传播。</para>
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()
         {
+            var impl = _impl;
             _impl = null;
+
+            if (impl is ICameraManagerSessionReset reset)
+            {
+                try
+                {
+                    reset.UnbindSessionEvents();
+                }
+                catch (Exception exception)
+                {
+                    LogManager.Warning(LogCategories.CameraManager,
+                        "CameraManager.ResetForNewSession 退订旧实现时抛出异常，已忽略：{0}", exception);
+                }
+            }
         }
 
         #endregion
