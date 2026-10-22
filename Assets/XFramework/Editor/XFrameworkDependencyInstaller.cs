@@ -45,6 +45,10 @@ namespace Venusy609.Xframework.Editor
             // 核心程序集 asmdef 无条件引用 Unity.InputSystem；不列它，按本清单装完的工程
             // 会因程序集引用解析不到而整体编译失败（R3-INP-001）。
             { "com.unity.inputsystem", "1.19.0" },
+            // Camera 模块的 Cinemachine 后端随核心包提供，核心 asmdef 无条件引用
+            // Unity.Cinemachine；与 Input System 同型：不列它，按本清单装完的工程
+            // 会因程序集引用解析不到而整体编译失败。
+            { "com.unity.cinemachine", "3.1.7" },
         };
 
         private const string ManifestPath = "Packages/manifest.json";
