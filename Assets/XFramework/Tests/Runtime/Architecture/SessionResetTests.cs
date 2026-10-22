@@ -12,6 +12,7 @@ using XFramework.XAsset;
 using XFramework.XAsset.Tests;
 using XFramework.XBootstrap;
 using XFramework.XCamera;
+using XFramework.XCamera.Tests;
 using XFramework.XConfig;
 using XFramework.XData;
 using XFramework.XFileManager;
@@ -204,7 +205,7 @@ namespace XFramework.Architecture.Tests
         private async UniTask BootSessionAsync()
         {
             UIManager.Initialize(_uiRoot.transform);
-            CameraManager.Initialize(new UnityCameraManager(new Dictionary<string, Camera>()));
+            CameraManager.Initialize(new FakeCameraManager());
             ConfigManager.Initialize();
             LocalizationManager.Initialize("zh_Hans", new Dictionary<string, string>());
             FileManager.Initialize();

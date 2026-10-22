@@ -8,7 +8,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
 > `AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、`IAssetManager.LoadSceneAsync` 从主接口
-> 移入可选能力接口 `IAssetSceneLoader`。迁移见 `### Changed` 的「破坏性变更迁移表」与「行为变更」。
+> 移入可选能力接口 `IAssetSceneLoader`；`XCamera` 统一句柄重整（删除 `UnityCameraManager` 与接口上的
+> string 操作 / `CameraIds`）。迁移见 `### Changed` 的「破坏性变更迁移表」与「行为变更」。
 > 因含破坏性变更，**下次发版应为 `0.4.0`**。
 
 ### Added
@@ -214,6 +215,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `_sceneCapabilityWarned` / `_mainThreadViolationLogged`）——跨会话仍只报一次，换了会话就该重新提示。
   **重复 `Initialize()` 的语义没有变**：会话内的重复调用仍是「告警 + 忽略」。
 
+#### Camera
+
+- **统一句柄重整（2026-10-22，破坏性）**：删除 `UnityCameraManager`；`ICameraManager` 只保留句柄操作，命名 / 动态相机都经 `Register` 返回 `CameraHandle`；门面保留 string 便捷重载。迁移表见下。
+- **探测型读宽容**：`OutputCamera` / `ActiveHandle` / `ActiveCameraId` / `IsTransitioning` / `CameraCount` / `TryGetHandle` / `IsActive` 在门面未初始化时返回默认值；`Register` / `Activate` / `Deactivate` / `TransitionTo` 仍抛 `InvalidOperationException`。`CameraHandle` 非 default 命令仍抛，`IsActive` 返回 `false`，`Unregister` / `Dispose` 返回 `false`。
+- **`IsTransitioning` 只统计管理器自有的非 cut 过渡**：不再等于 `Brain.IsBlending`；Timeline / 外部混合不进入。等待管理器过渡仍可用 `UniTask.WaitUntil(() => !IsTransitioning)`；要观察 Brain 真实混合请直接读 Brain。
+- **激活策略改为动态 boost**：目标优先级提升到「场景内同通道最大 + 1」，只改目标；不再把所有已注册相机压成 0 / `SetActive(false)`。`Unregister` / `Dispose` 恢复注册时捕获的作者优先级 / GameObject / 组件启用状态。
+- **`Deactivate` 改为抑制优先级**：设置 `int.MinValue` 并让 Brain 重选；不保证停用（无其它候选时 Brain 可能继续输出）。
+- **过渡改为 `GetBlendOverride` 请求**：`TransitionTo` 不再修改 `Brain.DefaultBlend`；本次 duration / style 通过全局 `CinemachineCore.GetBlendOverride` 生效，优先于项目 `CustomBlends`。该委托是全局单委托，一个进程建议一个管理器；项目也使用时以最后安装者为准。
+- **重复注册改为抛错**：同一 id 不同实例、同一实例不同 id、已销毁对象、类型不符都抛 `ArgumentException`；同一 id 同一实例幂等。
+- **`CameraHandle.IsActive` 未初始化返回 false**：不再抛；命令仍抛。
+
 #### 破坏性变更迁移表（命名与签名）
 
 | 旧写法 | 新写法 | 说明 |
@@ -225,6 +237,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 | `new CameraHandle(id, generation)` | `new CameraHandle(id, generation, namedId)` | 构造签名扩展：`namedId` 有默认值 `null`，**两参调用源兼容**（基线把签名变化记为「已变更」）。命名槽位填命名 id，动态槽位传 `null` |
 | `UpdateManager.ProcessImmediate(IUpdateable, float, float)` / `(IUpdateable, float, in UpdateClock)` | 同上，形参改为 `IUpdateLifecycle` | **形参放宽**：纯 `ILateUpdateable` / `IFixedUpdateable` 节点现在可达。传 `IUpdateable` 的既有调用源兼容（实参隐式上转），重新编译即可；已编译的第三方程序集需重编。跨时机语义见下一条行为变更 |
 | `com.venusy609.xframework.cinemachine`（manifest 条目）与对 `Venusy609.Xframework.Cinemachine` 程序集的引用 | 删除扩展包条目；确认 `"com.unity.cinemachine": "3.1.7"` 已在 manifest 中，继续使用 `XFramework.XCamera.Cinemachine` / `CinemachineCameraManager` | **扩展包已删除并并入核心包**；命名空间与类型名不变，但程序集由 `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`——引用旧程序集的已编译第三方程序集需重编。未列 `com.unity.cinemachine` 时核心 asmdef 解析不到引用，整体编译失败（与 Input System 同型） |
+| `new UnityCameraManager(IReadOnlyDictionary<string, Camera>)` | `new CinemachineCameraManager(brain)` + `CameraManager.Register("id", vcam)` | **整个类型删除**（2026-10-22 相机模块全面重整）。无 Cinemachine 项目直接使用 `UnityEngine.Camera` 或实现 `ICameraManager` |
+| `new CinemachineCameraManager(brain, IReadOnlyDictionary<string, CinemachineVirtualCameraBase>)` | `new CinemachineCameraManager(brain)` + 逐台 `Register("id", vcam)` | 构造不再接收初始字典；命名 / 动态注册走同一条 `Register` 路径 |
+| `ICameraManager.Activate/Deactivate/TransitionTo/IsActive(string)` 与 `CinemachineCameraManager` 的同名 string 重载 | 门面 `CameraManager.Activate/Deactivate/TransitionTo/IsActive(string)`，或 `TryGetHandle(id, out handle)` 后调句柄版 | **接口只收句柄**；字符串解析收敛到门面，后端不再各自实现一套 string 操作 |
+| `CinemachineCameraManager.Register(string, CinemachineVirtualCameraBase)` / `Unregister(string)` | `Register<T>(string, T)` / `Unregister(CameraHandle)` | 命名注册进主接口；注销只收句柄（门面保留 `Unregister(string)` 便捷重载） |
+| `CameraManager.CameraIds` / `ICameraManager.CameraIds` | `CameraManager.CameraCount` + `TryGetHandle` | 实时字典键视图删除；逐相机枚举在后续诊断快照提交补 `CopyCameras`（本提交只提供计数与按 id 查句柄） |
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
@@ -896,6 +913,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `SessionResetTests.Update_ResetForNewSession_RestoresAutoDrive`。
 
 #### Camera
+
+> 2026-10-22 相机模块全面重整删除了 `UnityCameraManager` 与其 25 个 PlayMode 用例；以下 CAM-001/002/003 /
+> R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
+> `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
 - **被外部销毁的活动相机仍被视为活动（CAM-001）**：Unity 的假 null 让 `OutputCamera` 返回一个
   「非 null 但不可用」的引用，`ActiveHandle` / `IsActive` 继续报活，README 的「返回 null」不成立。

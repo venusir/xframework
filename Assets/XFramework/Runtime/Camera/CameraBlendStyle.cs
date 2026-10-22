@@ -2,9 +2,10 @@ namespace XFramework.XCamera
 {
     /// <summary>
     /// 相机过渡的曲线样式。
-    /// <para>这是<b>后端中立</b>的提示值：默认实现按它选择缓动函数，Cinemachine 后端将它映射到
-    /// Cinemachine 的混合样式。后端可以把它当作建议而不是强制契约——例如项目在 Brain 上配置了
-    /// custom blends 时，Cinemachine 会以自己的配置为准。</para>
+    /// <para>这是<b>后端中立</b>的请求值：Cinemachine 后端把它映射到
+    /// <c>CinemachineBlendDefinition.Styles</c>，并通过 <c>CinemachineCore.GetBlendOverride</c>
+    /// 让本次请求优先于项目的 <c>CustomBlends</c>。第三方后端可自行解释；无法表达的样式应按
+    /// cut 或最接近的曲线降级，并在其文档中写明。</para>
     /// </summary>
     public enum CameraBlendStyle
     {

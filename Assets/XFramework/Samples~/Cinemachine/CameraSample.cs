@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Unity.Cinemachine;
 using UnityEngine;
 using XFramework.XCamera;
@@ -17,14 +16,10 @@ namespace XFramework.XCamera.Cinemachine.Samples
 
         private void Awake()
         {
-            var manager = new CinemachineCameraManager(_brain,
-                new Dictionary<string, CinemachineVirtualCameraBase>
-                {
-                    ["first"] = _first,
-                    ["second"] = _second,
-                });
-
+            var manager = new CinemachineCameraManager(_brain);
             CameraManager.Initialize(manager);
+            CameraManager.Register("first", _first);
+            CameraManager.Register("second", _second);
             CameraManager.Activate("first");
         }
 

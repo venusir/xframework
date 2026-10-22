@@ -3,8 +3,9 @@ using System;
 namespace XFramework.XCamera
 {
     /// <summary>
-    /// 动态相机句柄。由 <see cref="CameraManager.Register{T}(T)"/>（或 <see cref="ICameraManager.Register{T}(T)"/>）
-    /// 返回，用于激活 / 反激活 / 过渡与注销；随预制一起创建、销毁的相机不需要 string id。
+    /// 相机句柄。命名相机与动态相机都经 <see cref="CameraManager.Register{T}(string, T)"/> /
+    /// <see cref="CameraManager.Register{T}(T)"/>（或 <see cref="ICameraManager"/> 同名成员）注册后取得；
+    /// 之后的激活 / 反激活 / 过渡 / 查询 / 注销都只收句柄。
     /// <para>支持 <c>using</c> 语法（<see cref="Dispose"/> 即注销），也可手动 <see cref="Unregister"/>。</para>
     /// <para>零 GC：不可变值类型，只存两个整型 + 一个命名 id 字符串引用；不存委托、不存实现对象；
     /// 复制不分配。</para>
@@ -19,7 +20,11 @@ namespace XFramework.XCamera
     /// <para><b>注销后的旧句柄</b>：实现应按「槽位 + 代际」双校验；槽位复用后代际递增，旧句柄自然失效——
     /// 激活 / 过渡 / 反激活告警 no-op，<see cref="IsActive"/> / <see cref="Unregister"/> 返回 <c>false</c>。</para>
     /// <para><b><see cref="NamedId"/></b>：命名相机的 string id；动态相机与 <c>default</c> 为 <c>null</c>。
-    /// <see cref="CameraManager.ActiveCameraId"/> 直接读它（O(1)），实现必须为命名槽位填上对应的 id。</para>
+    /// <c>CameraManager.ActiveCameraId</c> 直接读它（O(1)），实现必须为命名槽位填上对应的 id。</para>
+    /// <para><b>门面未初始化 / 已销毁时</b>：命令（<see cref="Activate"/> / <see cref="Deactivate"/> /
+    /// <see cref="TransitionTo"/>）仍抛 <see cref="InvalidOperationException"/>；<see cref="IsActive"/> 返回
+    /// <c>false</c>，<see cref="Unregister"/> / <see cref="Dispose"/> 返回 <c>false</c>——预制在 <c>OnDestroy</c>
+    /// 里清理时，门面可能已经先销毁。</para>
     /// </remarks>
     public readonly struct CameraHandle : IEquatable<CameraHandle>, IDisposable
     {
@@ -41,7 +46,7 @@ namespace XFramework.XCamera
         /// <summary>
         /// 命名相机的 string id；动态相机与 <c>default</c> 为 <c>null</c>。
         /// <para><b>不参与身份比较</b>（身份是 <see cref="Id"/> + <see cref="Generation"/>）：同一槽位 / 代际
-        /// 必然对同一个命名 id。它供 <see cref="CameraManager.ActiveCameraId"/> 直接读取。</para>
+        /// 必然对同一个命名 id。它供 <c>CameraManager.ActiveCameraId</c> 直接读取。</para>
         /// </summary>
         public readonly string NamedId;
 
@@ -52,7 +57,8 @@ namespace XFramework.XCamera
         /// <summary>
         /// 构造一个句柄。
         /// <para><b>本构造函数供 <see cref="ICameraManager"/> 实现方使用</b>，常规调用方不应直接调用——
-        /// 请用 <see cref="CameraManager.Register{T}(T)"/> 取得句柄。</para>
+        /// 请用 <see cref="CameraManager.Register{T}(string, T)"/> / <see cref="CameraManager.Register{T}(T)"/>
+        /// 取得句柄。</para>
         /// </summary>
         /// <param name="id">实现方自定的标识。</param>
         /// <param name="generation">代际号；有效句柄必须非 <c>0</c>。</param>
@@ -72,6 +78,7 @@ namespace XFramework.XCamera
         public bool IsDefault => Generation == 0;
 
         /// <summary>立即切换到这台相机（cut）。<c>default</c> 句柄为空操作。</summary>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
         public void Activate()
         {
             if (IsDefault)
@@ -81,6 +88,7 @@ namespace XFramework.XCamera
         }
 
         /// <summary>反激活这台相机。<c>default</c> 句柄为空操作。</summary>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
         public void Deactivate()
         {
             if (IsDefault)
@@ -90,8 +98,9 @@ namespace XFramework.XCamera
         }
 
         /// <summary>过渡到这台相机。<c>default</c> 句柄为空操作。</summary>
-        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0</c> 等价于 cut。</param>
+        /// <param name="duration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut。</param>
         /// <param name="style">过渡样式。</param>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
         public void TransitionTo(float duration, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
         {
             if (IsDefault)
@@ -100,10 +109,11 @@ namespace XFramework.XCamera
             CameraManager.TransitionTo(this, duration, style);
         }
 
-        /// <summary>这台相机是否为当前活动（过渡期间的目标也算活动）。</summary>
+        /// <summary>这台相机是否为 Brain 当前活动（过渡期间 incoming 也算活动）。</summary>
+        /// <returns><c>default</c> 句柄、门面未初始化 / 已销毁时返回 <c>false</c>。</returns>
         public bool IsActive()
         {
-            return !IsDefault && CameraManager.IsActive(this);
+            return !IsDefault && CameraManager.IsInitialized && CameraManager.IsActive(this);
         }
 
         /// <summary>注销这台相机；返回是否真的移除了一个已注册的相机。</summary>

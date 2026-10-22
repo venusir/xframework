@@ -8,9 +8,9 @@
 **本后端是适配器，不是行为库**：跟随 / 瞄准 / 震屏 / 缩放 / 碰撞 / 约束 / Dolly / Target Group / Timeline
 由 Cinemachine 提供并在 Cinemachine 里配置；本后端只负责注册、优先级 / Brain 混合与状态查询。
 
-**命名 / 动态双键**：常驻 vcam 用 string id；随预制创建 / 销毁的动态 vcam 用 `CameraHandle`（`Register<T>`）。
-**Timeline / 过场相机**由过场系统接管 Brain，不经过本管理器；Brain 的活动相机未注册时，激活 / 过渡会告警
-「可能与过场冲突」。
+**统一句柄**：命名 vcam 与随预制创建 / 销毁的动态 vcam 都经 `Register` 返回 `CameraHandle`；命名 id 在
+`CameraHandle.NamedId` 里（动态为 `null`）。**Timeline / 过场相机**由过场系统接管 Brain，不经过本管理器；
+Brain 的活动相机未注册时，激活 / 过渡会告警「可能与过场冲突」。
 
 **命名空间**：`XFramework.XCamera.Cinemachine`。**只支持 Cinemachine 3.x**（按 3.1.7 编写）；2.x 的类型名与
 字段名不同，需要自己的 `ICameraManager` 实现。
@@ -20,22 +20,19 @@
 本后端随核心包发布，无需单独安装（核心 asmdef 已硬引用 `Unity.Cinemachine` 3.1.7）。接线：
 
 ```csharp
-using System.Collections.Generic;
 using Unity.Cinemachine;
 using XFramework.XCamera;
 using XFramework.XCamera.Cinemachine;
 
-var manager = new CinemachineCameraManager(brain, new Dictionary<string, CinemachineVirtualCameraBase>
-{
-    ["main"] = mainVcam,
-    ["battle"] = battleVcam,
-});
+var manager = new CinemachineCameraManager(brain);
 CameraManager.Initialize(manager);
+CameraManager.Register("main", mainVcam);
+CameraManager.Register("battle", battleVcam);
 
 CameraManager.Activate("main");
 CameraManager.TransitionTo("battle", 0.8f, CameraBlendStyle.EaseInOut);
 
-// 动态 vcam（随预制创建 / 销毁）：用句柄，不生成 string id
+// 动态 vcam（随预制创建 / 销毁）：注册拿句柄，不生成 string id
 var handle = CameraManager.Register(dynamicVcam);
 CameraManager.Activate(handle);
 // 预制销毁时
@@ -52,45 +49,49 @@ Runtime/Camera/Cinemachine/
 
 ## 行为契约
 
-- 仅主线程；注册表、反查表与场景状态不是线程安全的。
-- `Activate`：目标 `Priority = int.MaxValue`、其余已注册 vcam `Priority = 0`；目标 GameObject 激活；
-  `brain.DefaultBlend = Cut`。**若 Brain 正在混合且目标已是当前活动相机**，直接把
-  `brain.ActiveBlend = null` 强制完成当前混合（上游文档明说的受支持入口）。
-- `Deactivate`：目标 GameObject 失活；Brain 按优先级队列选下一个；回退使用的 `DefaultBlend` 是当前值。
-- `TransitionTo`：设置 `brain.DefaultBlend`（style / duration），调整优先级并激活目标；Brain 负责混合。
-  `duration <= 0` 或 `Cut` 等价于 `Activate`。
-- **命名 / 动态双键**：常驻 vcam 用 string id；动态 vcam 用 `CameraHandle`（`Register<T>` 返回）。
-  `ActiveHandle` 对命名与动态都有效；动态 vcam 活动时 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId`
-  为 `null`；`CameraIds` 只列命名 vcam。
-- `Register<T>(vcam)` 注册动态 vcam（**不激活**、不改场景）；类型不符抛 `ArgumentException`，`null` 抛
-  `ArgumentNullException`；`Unregister(handle)` 只更新注册表与反查表，不改变场景。
-- 无效 / 已注销 / `default` 句柄：激活 / 过渡 / 反激活告警并 no-op；`IsActive` 返回 `false`；
-  `Unregister` 返回 `false`。
-- 未知 id：告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`。
-- `ActiveHandle` = `brain.ActiveVirtualCamera` 反查槽位句柄（`NamedId` 即命名 id，动态为 `null`）；
-  `CameraManager.ActiveCameraId` 是门面便利（= `ActiveHandle.NamedId`）；`IsTransitioning` =
-  `brain.IsBlending`；`OutputCamera` = `brain.OutputCamera`；`CameraIds` = 命名注册表键视图。
-- `Register` / `Unregister` 只更新注册表与反查表，不改变场景；替换 / 注销活动相机前请先 `Deactivate`。
-- **Timeline / 过场**：过场相机不注册；若 Brain 的活动相机未注册（Timeline / 外来 vcam），
-  `Activate` / `TransitionTo`（非 cut）会告警「可能与过场冲突」。`CameraManager.ActiveCameraId` /
-  `ActiveHandle` 对这种未注册活动相机返回 `null` / `default`；`OutputCamera` / `IsTransitioning` 仍可用。
+- 仅主线程；注册表与场景状态不是线程安全的。
+- **注册统一**：`Register(string, vcam)` 与 `Register(vcam)` 都返回句柄；注册不激活、不改场景。同一 id 同一
+  实例幂等；id 冲突 / 实例已注册为另一 id / 已销毁对象 / 类型不符抛 `ArgumentException`。
+- **激活**：目标优先级提升到「场景内同通道最大优先级 + 1」（包含未注册 vcam），只改目标；切换时恢复上一个
+  目标由管理器改过的优先级 / GameObject / 组件启用状态。目标 GameObject / 组件在需要时由管理器启用，并在
+  注销 / Dispose 时恢复。
+- **cut**：`Activate` 与 `duration <= 0.0001` / `Cut` 的 `TransitionTo` 通过 `GetBlendOverride` 返回
+  `Styles.Cut`；若目标已在混合中，直接把 `brain.ActiveBlend = null` 强制完成当前混合（R3-CIN-001）。
+- **过渡**：非 cut 请求写入 `PendingTransition`，`CinemachineCore.GetBlendOverride` 在 Brain 创建混合时返回
+  请求的 `CinemachineBlendDefinition`；**不修改** `Brain.DefaultBlend`。项目 `CustomBlends` 先于
+  `GetBlendOverride` 求值，因此本次管理器请求优先。
+- `GetBlendOverride` 是全局单委托：构造时保存前值并安装自己，`Dispose` 时仅当当前委托仍是自己才恢复前值；
+  一个进程建议只创建一个相机管理器。
+- `Deactivate`：抑制该 vcam 优先级（`int.MinValue`）并让 Brain 重选；若管理器曾启用 GameObject 且原状态
+  关闭，则恢复关闭。不发布状态事件；没有其它候选时 Brain 可能继续输出它。
+- **`ActiveHandle`** 读 `brain.ActiveVirtualCamera` 并按槽位解析；过渡期间是 incoming；未注册 / 已销毁 /
+  无活动为 `default`。`OutputCamera` = `brain.OutputCamera`，可能为 null、不保证等于目标。
+- **`IsTransitioning`** 只表示本管理器发起的非 cut 过渡；`CameraUpdatedEvent` 在混合结束后清理 pending。
+  Brain 自己的 `IsBlending`（含 Timeline / 外部混合）不进入该属性。
+- **注销**：恢复作者优先级 / 启用状态，必要时强制完成在途混合，移除槽位；**不销毁 vcam**。若作者优先级仍最高，
+  Brain 可能继续输出它，此时 `ActiveHandle` 为 `default`；下一次 `Activate` 会以「场景最大 + 1」压过它。
+- **Dispose**：恢复仍存活槽位的作者状态、退订 `CameraUpdatedEvent`、恢复 `GetBlendOverride` 前值、清表。
+- **Timeline / 过场**：过场 vcam 不注册；若 Brain 的活动相机未注册，`Activate` / `TransitionTo` 会告警
+  「可能与过场冲突」；`ActiveHandle` / `ActiveCameraId` 返回 `default` / `null`，`OutputCamera` 仍可读。
 
 ## 架构设计
 
 `CinemachineCameraManager` 是核心包 `ICameraManager` 的一个后端实现：它不驱动任何调度器，Brain 自己按
-`UpdateMethod` 混合；管理器只负责优先级、默认混合与状态反查。
+`UpdateMethod` 混合；管理器只负责注册表、优先级、过渡请求与状态解析。
 
 ## API 参考
 
 | 成员 | 行为 |
 |---|---|
-| `CinemachineCameraManager(CinemachineBrain, IReadOnlyDictionary<string, CinemachineVirtualCameraBase>)` | 构造；复制命名注册表 |
-| `Register(string, CinemachineVirtualCameraBase)` | 命名注册 / 替换（不动场景） |
-| `Register<T>(T)` | 动态注册，返回 `CameraHandle`（不激活、不动场景） |
-| `Unregister(string)` / `Unregister(CameraHandle)` | 注销（不动场景） |
-| `OutputCamera` / `CameraIds` / `ActiveHandle`（`NamedId`）/ `IsTransitioning` | 查询（命名 id 走 `CameraManager.ActiveCameraId`） |
-| `Activate` / `Deactivate` / `TransitionTo` / `IsActive`（string 与 `CameraHandle` 重载） | 契约操作 |
-| `Dispose()` | 清空注册表与反查表；不改变场景 |
+| `CinemachineCameraManager(CinemachineBrain)` | 构造；安装 `GetBlendOverride`、订阅 `CameraUpdatedEvent` |
+| `Register<T>(string, T)` / `Register<T>(T)` | 命名 / 动态注册，返回 `CameraHandle`（不激活、不动场景） |
+| `Unregister(CameraHandle)` | 恢复作者状态、移除槽位（不销毁 vcam） |
+| `OutputCamera` / `ActiveHandle` / `IsTransitioning` / `CameraCount` | 查询 |
+| `TryGetHandle(string, out CameraHandle)` | 按命名 id 查句柄 |
+| `Activate` / `Deactivate` / `TransitionTo` / `IsActive`（仅句柄） | 契约操作 |
+| `Dispose()` | 恢复场景状态、退订静态事件、清表 |
+
+字符串操作在门面；后端只认句柄。
 
 ## 典型场景
 
@@ -131,23 +132,28 @@ handle.Dispose(); // 门面已销毁也安全
 
 本后端本身就是核心包 `ICameraManager` 的一个实现。要接别的后端（2.x、Timeline、自研相机系统）：
 
-- 实现 `ICameraManager`；注册在实现类自己的构造 / 注册方法里完成。
-- 义务：仅主线程；未知 id 告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`；
+- 实现 `ICameraManager`；命名 / 动态注册都返回 `CameraHandle`。
+- 义务：仅主线程；未知 id / 无效句柄告警并 no-op，不抛；`null` id 抛 `ArgumentNullException`；
   `ActiveHandle`（`NamedId` 为命名 id）/ `IsTransitioning`；**`OutputCamera` 可能为 `null`、不保证等于
-  过渡目标**（Brain 的输出相机可为过渡源）；`Activate` 取消在途过渡（R3-CIN-007）。
+  过渡目标**；`Activate` 取消在途过渡。
 - 义务与边界的完整说明在核心包 `Runtime/Camera/README.md` 的「自定义实现」与「行为契约」。
 
 ## 内部机制
 
-- 激活由 vcam 的 `Priority`（`PrioritySettings`，隐式 int 赋值会同时置 `Enabled`）与 Brain 的优先级队列决定。
-- 过渡由 `brain.DefaultBlend` 决定；`CinemachineBlendDefinition.Styles` 映射核心包的 `CameraBlendStyle`。
-- `Deactivate` / 活动变化由 Brain 的重选逻辑处理；管理器只读 `ActiveVirtualCamera` / `IsBlending`。
+- 激活由 vcam 的 `Priority`（`PrioritySettings`，隐式 int 赋值会置 `Enabled`）与 Brain 的优先级队列决定。
+- 槽位表 + 线性扫描：活动 vcam → 句柄、vcam → 槽位、id → 槽位；不再维护反查字典，避免外部销毁 / 替换 /
+  注销时的陈旧键分支。
+- `ComputeBoostPriority` 取已注册槽位的作者优先级与同通道未注册 vcam 的最大值 + 1，`int.MaxValue` 封顶。
+- 过渡由 `GetBlendOverride` 请求；`CameraUpdatedEvent` 在混合结束后清理 pending。
+- `CinemachineBlendDefinition.Styles` 映射核心包的 `CameraBlendStyle`；非法枚举值抛
+  `ArgumentOutOfRangeException`。
 
 ## 生命周期与清理
 
-- 管理器不拥有 Brain / vcam；`Dispose` 只清空注册表与反查表。
+- 管理器不拥有 Brain / vcam；`Dispose` 恢复管理器改过的优先级 / 启用状态、退订静态事件、清空注册表。
 - `CameraManager.Destroy` 会调用本实现的 `Dispose`（它实现了 `IDisposable`）。
-- 场景卸载前无需特殊处理；下次会话重新构造即可。
+- `CameraManager.Initialize` 重复注入时，被拒绝的第二个实例**不会被释放**：本后端在构造时订阅静态事件，
+  调用方必须自行 `Dispose` 被拒绝的实例。
 
 ## 线程契约
 
@@ -155,43 +161,48 @@ handle.Dispose(); // 门面已销毁也安全
 
 ## 性能代价
 
-- `Activate` / `TransitionTo` 遍历注册表设置优先级（vcam 数量通常个位数），O(n)，无分配。
-- 每帧成本归 Brain（优先级队列 + 混合），本管理器不在每帧路径上。
-- `CameraIds` 返回字典键视图，不复制。
+- 激活 / 过渡 / 注册查询遍历槽位（vcam 数量通常个位数），O(n)，无分配。
+- 每帧成本归 Brain（优先级队列 + 混合）；本管理器只在 `CameraUpdatedEvent` 里做一次引用比较。
+- `GetBlendOverride` 每次混合创建时调用一次，只做引用比较。
 
 ## 已知限制
 
 - **只支持 Cinemachine 3.x**（3.1.7 编写）；2.x 需要自己的实现。
 - **动态 vcam 的 `ActiveHandle.NamedId` / `CameraManager.ActiveCameraId` 为 `null`**：用 `ActiveHandle` /
-  `IsActive(handle)`；`CameraIds` 只列命名 vcam。
-- **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` / `TransitionTo`
-  会告警「可能与过场冲突」，`CameraManager.ActiveCameraId` / `ActiveHandle` 返回 `null` / `default`（`OutputCamera` /
-  `IsTransitioning` 仍可用）。
-- **`Unregister` 不改变场景**：动态 vcam 的 GameObject 由预制 / 场景销毁；`Unregister` 只移除槽位与反查表。
-- **`brain.CustomBlends` 会覆盖** `TransitionTo` 请求的 style / duration；本包不强行清空项目配置。
-- **未注册 vcam 的优先级不受管理**；不要让它们用高于管理器的优先级。
-- **`Activate` 的强制 cut 会短暂失活 / 激活目标 GameObject**，重置该 vcam 的 `PreviousStateIsValid`。
-- **`Deactivate` 的回退**由 Brain 决定，使用的 `DefaultBlend` 是当前值。
-- 过渡到「已是活动相机」时不重启当前混合（Brain 的公开面没有强制完成 / 重开混合的入口）。
+  `IsActive(handle)`；`TryGetHandle` 只查命名 id。
+- **Timeline / 过场不接管**：过场 vcam 不注册；Brain 被未注册的过场 vcam 控制时，`Activate` /
+  `TransitionTo` 会告警「可能与过场冲突」，`ActiveCameraId` / `ActiveHandle` 返回 `null` / `default`
+  （`OutputCamera` 仍可读）。
+- **`GetBlendOverride` 是全局单委托**：一个进程建议只创建一个相机管理器；项目若也使用它，以最后安装者为
+  准；管理器 `Dispose` 只在当前委托仍是自己时恢复前值。
+- **Timeline 混合不经过 `GetBlendOverride`**：管理器请求的 duration / style 对 Timeline 无效。
+- **`Deactivate` 不保证停用**：它只抑制优先级；没有其它候选时 Brain 可能继续输出该 vcam。
+- **注销活动 vcam 后可能仍在输出**：恢复作者优先级后若它仍是场景最高，Brain 会继续用它；`ActiveHandle`
+  为 `default`，下一次 `Activate` 会压过它。
+- **未注册 vcam 的优先级不受管理**：管理器会把目标提升到它之上，但不会改写它的值。
+- **`Activate` 的强制 cut** 通过 `GetBlendOverride` + `ActiveBlend = null` 完成；若项目额外安装了自己的
+  override，以最后安装者为准。
 
 ## 设计取舍
 
-- **优先用 Brain 自己的能力**：管理器只切优先级与 `DefaultBlend`，不自己插值、不另建调度器。
+- **优先用 Brain 自己的能力**：管理器只切优先级与请求混合，不自己插值、不另建调度器。
+- **用 `GetBlendOverride` 而不是粘滞改 `DefaultBlend`**：请求只作用于本次混合，不污染后续过渡；代价是全局单
+  委托。
 - **不替 Cinemachine 做行为**：跟随 / 震屏 / 缩放在 Cinemachine 里配置，本后端只做优先级与混合的适配；
   行为本身仍归 Cinemachine。
-- **不劫持 Brain 的 custom blends**：项目配置优先；管理器只写 `DefaultBlend`。
 - **动态 vcam 用 `CameraHandle` 而不是 string id**：随预制实例创建 / 销毁的 vcam 没有稳定 authoring id；
   句柄带代际，旧句柄自然失效。
 - **过场不接管**：Timeline 已经接管 Brain；管理器再插一手只会冲突。未注册活动相机告警是提醒，不是阻断。
-- **为什么并入核心包**：Input System 先例（核心 asmdef 早已无条件引用它）、核心最低 Unity 6000.3 + Cinemachine 3
-  默认、自研相机后端不是真实受众；单包单程序集消除独立扩展包的安装顺序、版本错位与门禁缺口。
+- **为什么并入核心包**：Input System 先例（核心 asmdef 早已无条件引用它）、核心最低 Unity 6000.3 +
+  Cinemachine 3 默认、自研相机后端不是真实受众；单包单程序集消除独立扩展包的安装顺序、版本错位与门禁缺口。
   门面与契约仍保持后端中立，Cinemachine 类型只出现在本目录。
 
 ## 接口承诺到哪为止
 
-- 核心包承诺的 `ActiveHandle`（`NamedId`）/ `IsTransitioning` / `OutputCamera` 语义在这里成立；过渡曲线、回退与
-  中断的细节由 Cinemachine Brain 决定。
-- `TransitionTo` 请求的 style / duration 是**建议**：`CustomBlends` 命中时会以项目配置为准。
+- 核心包承诺的 `ActiveHandle`（`NamedId`）/ `IsTransitioning` / `OutputCamera` 语义在这里成立；过渡曲线、
+  回退与中断的细节由 Cinemachine Brain 决定。
+- `TransitionTo` 请求的 style / duration 通过 `GetBlendOverride` 优先于 `CustomBlends`；Timeline 混合不受
+  控制。
 - 不承诺「过渡到已是活动相机会重启混合」。
 
 ## 与相邻模块的关系

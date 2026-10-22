@@ -11,11 +11,14 @@ namespace XFramework.XCamera.Tests
     {
         public Camera OutputCamera { get; set; }
 
-        public IReadOnlyCollection<string> CameraIds { get; set; } = Array.Empty<string>();
-
         public CameraHandle ActiveHandle { get; set; }
 
         public bool IsTransitioning { get; set; }
+
+        public int CameraCount { get; set; }
+
+        public Dictionary<string, CameraHandle> NamedHandles { get; } =
+            new Dictionary<string, CameraHandle>(StringComparer.Ordinal);
 
         public bool Disposed { get; private set; }
 
@@ -28,17 +31,9 @@ namespace XFramework.XCamera.Tests
 
         public object LastRegistered { get; private set; }
 
+        public string LastRegisteredId { get; private set; }
+
         public CameraHandle LastUnregistered { get; private set; }
-
-        public string LastActivated { get; private set; }
-
-        public string LastDeactivated { get; private set; }
-
-        public string LastTransitionTarget { get; private set; }
-
-        public float LastTransitionDuration { get; private set; }
-
-        public CameraBlendStyle LastTransitionStyle { get; private set; }
 
         public CameraHandle LastActivatedHandle { get; private set; }
 
@@ -46,33 +41,26 @@ namespace XFramework.XCamera.Tests
 
         public CameraHandle LastTransitionHandle { get; private set; }
 
-        public void Activate(string cameraId)
+        public float LastTransitionDuration { get; private set; }
+
+        public CameraBlendStyle LastTransitionStyle { get; private set; }
+
+        public bool TryGetHandle(string cameraId, out CameraHandle handle)
         {
-            LastActivated = cameraId;
+            return NamedHandles.TryGetValue(cameraId, out handle);
         }
 
-        public void Deactivate(string cameraId)
+        public CameraHandle Register<T>(string cameraId, T camera) where T : class
         {
-            LastDeactivated = cameraId;
+            LastRegisteredId = cameraId;
+            LastRegistered = camera;
+            return RegisterResult;
         }
 
-        public void TransitionTo(string cameraId, float duration,
-            CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        public CameraHandle Register<T>(T camera) where T : class
         {
-            LastTransitionTarget = cameraId;
-            LastTransitionDuration = duration;
-            LastTransitionStyle = style;
-        }
-
-        public bool IsActive(string cameraId)
-        {
-            return cameraId != null &&
-                   string.Equals(ActiveHandle.NamedId, cameraId, StringComparison.Ordinal);
-        }
-
-        public CameraHandle Register<T>(T handle) where T : class
-        {
-            LastRegistered = handle;
+            LastRegisteredId = null;
+            LastRegistered = camera;
             return RegisterResult;
         }
 
@@ -96,6 +84,8 @@ namespace XFramework.XCamera.Tests
             CameraBlendStyle style = CameraBlendStyle.EaseInOut)
         {
             LastTransitionHandle = handle;
+            LastTransitionDuration = duration;
+            LastTransitionStyle = style;
         }
 
         public bool IsActive(CameraHandle handle)

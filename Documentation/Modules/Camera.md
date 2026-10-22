@@ -10,29 +10,30 @@
 
 ```
 Runtime/Camera/
-├── ICameraManager.cs      # 公开：后端契约（命名 id / 动态句柄双键；查询、字符串与句柄操作）
-├── CameraHandle.cs        # 公开：动态相机句柄（Id + Generation；Generation=0 是 default 保留值；便捷方法）
-├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 接口同名转发）
-├── UnityCameraManager.cs  # 公开：默认实现（槽位表 + 命名/动态双键 + 位姿/FOV 插值 + 懒注册 LateUpdate ticker）
+├── ICameraManager.cs      # 公开：后端契约（统一句柄注册 / 激活 / 反激活 / 过渡 / 查询）
+├── CameraHandle.cs        # 公开：相机句柄（Id + Generation + NamedId；Generation=0 是 default 保留值）
+├── CameraManager.cs       # 公开：静态门面（Initialize / Destroy / ResetForNewSession + 同名转发 + 字符串便捷重载 + 探测型读宽容）
 ├── CameraBlendStyle.cs    # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
 ├── Cinemachine/
-│   ├── CinemachineCameraManager.cs  # 公开：ICameraManager 的 Cinemachine 3.x 实现（槽位表 + 命名/动态双键）
+│   ├── CinemachineCameraManager.cs  # 公开：唯一内置后端（槽位表 + 动态 boost/恢复 + GetBlendOverride）
 │   └── README.md                    # 使用向：接线、行为契约、已知限制、设计取舍
 └── README.md              # 使用说明
 
-Tests/Runtime/Camera/      # PlayMode：FakeCameraManager / CameraManagerTests / CameraFacadeCompletenessTests / UnityCameraManagerTests / CinemachineCameraManagerTests
-Tests/Editor/Camera/       # EditMode：CameraHandleTests（default / 相等性 / 便捷方法短路）
+Tests/Runtime/Camera/      # PlayMode：FakeCameraManager / CameraManagerTests / CameraFacadeCompletenessTests / CinemachineCameraManagerTests
+Tests/Editor/Camera/       # EditMode：CameraHandleTests（default / 相等性 / 便捷方法短路 / 未初始化宽容）
 Tests/Editor/Architecture/ModuleBoundaryTests.cs  # CinemachineTypes_StayInsideTheCinemachineBackend（类型只允许出现在 Camera/Cinemachine/）
 Runtime/Log/LogCategories.cs                     # CameraManager 分类
 ```
 
-**Cinemachine 后端在本模块的子目录**：`Runtime/Camera/Cinemachine/` 随核心包发布，核心 asmdef 硬引用 `Unity.Cinemachine` 3.1.7（与 Input System 同型）。门面、`ICameraManager` 契约、默认实现与其它模块保持后端中立，不得出现 Cinemachine 类型，由 `ModuleBoundaryTests.CinemachineTypes_StayInsideTheCinemachineBackend` 机械守卫；实现只见于该子目录。原独立扩展包 `com.venusy609.xframework.cinemachine` 已于 2026-10-22 删除。
+**Cinemachine 后端在本模块的子目录**：`Runtime/Camera/Cinemachine/` 随核心包发布，核心 asmdef 硬引用 `Unity.Cinemachine` 3.1.7（与 Input System 同型）。门面、`ICameraManager` 契约与其它模块保持后端中立，不得出现 Cinemachine 类型；Cinemachine 类型只允许出现在该子目录，由 `ModuleBoundaryTests.CinemachineTypes_StayInsideTheCinemachineBackend` 机械守卫。原独立扩展包 `com.venusy609.xframework.cinemachine` 已于 2026-10-22 删除；手写 `UnityCameraManager` 同日删除，Cinemachine 后端成为唯一内置实现。
 
 **模块无自动初始化**：没有 `[RuntimeInitializeOnLoadMethod]` 自初始化；只有会话复位钩子（`SubsystemRegistration`），已登记进 `AutoInitTests` 族清单。
 
 ## 决策台账
 
 - 已做：**v1 功能面建成**（2026-10-17）——`ICameraManager` 初始成员（`OutputCamera` / `CameraIds` / `ActiveCameraId` / `IsTransitioning` / `Activate` / `Deactivate` / `TransitionTo` / `IsActive`）；`CameraManager` 门面（生命周期 / 同名转发 / 会话复位 / 门面完备性测试）；`UnityCameraManager` 默认实现（一次一台活动相机、位姿 / FOV 插值、懒注册 LateUpdate ticker、取消 / 重开语义）；使用方 README 与包 README 四表同步。逐条证据在 `CHANGELOG`。
+- 已做：**相机模块全面重整——Cinemachine 唯一内置后端、统一句柄、请求式过渡**（2026-10-22 · 用户裁定）——删除 `UnityCameraManager`；命名 / 动态相机统一经 `Register` 返回 `CameraHandle`，接口只收句柄；`CinemachineCameraManager` 用动态 boost + 作者状态恢复 + `CinemachineCore.GetBlendOverride` 请求 duration / style（**不改 `DefaultBlend`**），槽位表线性扫描取代 `_reverse`；门面探测型读宽容（`OutputCamera` / `ActiveHandle` / `ActiveCameraId` / `IsTransitioning` / `CameraCount` / `TryGetHandle` / `IsActive`），变更命令仍抛；`ICameraManager` 删除 string 操作与 `CameraIds`，新增 `CameraCount` / `TryGetHandle` / 命名 `Register`。证据：相机重整提交与 `PublicApiBaseline` diff。重开判据：无（用户明确要求全面重整）。
+- 已推翻：**~~`UnityCameraManager` 作为核心默认实现~~**（2026-10-17）——~~核心包提供后端中立统一入口 + Unity 默认实现（手写位姿 / FOV 插值），Cinemachine 3.1.7 放独立扩展包~~。被 2026-10-22「Cinemachine 唯一内置后端」取代：Cinemachine 已是核心 asmdef 硬依赖，手写插值与 Brain 混合重复，且制造 `Deactivate` / `Unregister` / `IsTransitioning` 语义分叉；无 Cinemachine 项目直接用 Unity Camera API 或实现 `ICameraManager`。
 - 已做：**Cinemachine 3.1.7 后端硬合并进核心包**（2026-10-22 · 用户裁定）——`CinemachineCameraManager` 移入 `Runtime/Camera/Cinemachine/`，命名空间不变、程序集变为 `Venusy609.Xframework`；核心 asmdef 硬引用 `Unity.Cinemachine`；扩展包 / 独立 asmdef / `CinemachineDependencyTests` 删除。理由：Input System 先例、Unity 6000.3 最低版本 + Cinemachine 3 默认、自研相机后端非真实受众；门面 / 契约仍中立，由位置守卫守。**公开 API 基线 +1 类型（18 个成员），经用户确认**。证据与 3.x API 实测见 `Documentation/Cinemachine.md`。
 - 已推翻：**~~Cinemachine 支持以独立可选扩展包提供~~**（2026-10-17）——~~`com.venusy609.xframework.cinemachine`（单独 asmdef，依赖 Cinemachine 3.1.7），实现同一 `ICameraManager`；核心包零 Cinemachine 依赖。~~ 被 2026-10-22「Cinemachine 3.1.7 后端硬合并进核心包」取代（用户裁定）；原理由「避免 2.x / 2D / 自定义后端被版本锁排除」在 Unity 6000.3 + Cinemachine 3 默认下不再成立，且 Input System 早已是核心硬依赖。
 - 已做：**句柄化动态相机注册 / 激活**（2026-10-17）——`CameraHandle`（槽位 + 代际；`AudioHandle` 同形，`Generation = 0` 无效）+ `ICameraManager` 的 `Register<T>` / `Unregister(handle)` / `ActiveHandle` / 句柄版 `Activate` / `Deactivate` / `TransitionTo` / `IsActive` + 门面转发 + 两个实现的槽位表。命名 string id 保留；动态相机随预制 `Register` / `Dispose`，不需要 authoring id。**主接口直扩**（用户裁定，非可选能力接口）；模块未发布、仓外无 `ICameraManager` 实现，扩展包同轮更新。
@@ -87,6 +88,25 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 `NamedId`（命名 id；动态 / `default` 为 null），接口 / 实现移除 `ActiveCameraId`，`CameraManager.ActiveCameraId`
 直接读 `ActiveHandle.NamedId`（O(1)、零遍历）。`CameraHandleTests` 补 `NamedId` 用例；基线 / 文档 / CHANGELOG 同步。
 
+### 2026-10-22：全面重整（Cinemachine 唯一后端）
+
+用户认为 `CameraManager.cs` 与整个模块实现不好，要求结合第三方实现重整。第三方对照结论：主流相机管理器
+（Unity Open Project Chop Chop、CineMachine-Manager 等）几乎清一色是「Cinemachine 薄适配 + 命名 / 优先级
+切换」，不自己实现 blend。已核对 Cinemachine 3.1.7 源码：
+
+- `CinemachineBlenderSettings.LookupBlend` 先查 `CustomBlends`，最后调用 `CinemachineCore.GetBlendOverride`；
+  管理器可用后者让本次请求优先，而不必粘滞修改 `DefaultBlend`。
+- `GetBlendOverrideDelegate` 签名 `(ICinemachineCamera from, ICinemachineCamera to,
+  CinemachineBlendDefinition defaultBlend, UnityEngine.Object owner)`；它是**全局单委托**。
+- `CameraActivatedEvent` / `CameraDeactivatedEvent` / `BlendFinishedEvent` / `CameraUpdatedEvent` 都是
+  UnityEvent；`CameraUpdatedEvent` 在 Brain 更新末尾触发，可用来清理 pending（完整状态事件在后续提交补）。
+- `PrioritySettings.Value` 在 `Enabled == false` 时返回 0；`CinemachineCore.GetVirtualCamera(i)` 返回
+  `CinemachineVirtualCameraBase`，可直接读 `Priority`。
+
+裁定：删除 `UnityCameraManager`；命名 / 动态统一句柄；目标 boost 到「场景内同通道最大 + 1」并恢复作者状态；
+`GetBlendOverride` 请求 duration / style；`IsTransitioning` 只统计管理器自有的非 cut 过渡；门面探测型读宽容。
+后续提交再补状态事件、`TransitionToAsync` 与诊断快照。
+
 ### 已否决形状
 
 - **核心包直接引用 Cinemachine**（2026-10-17 评估中一度考虑）：当时以「会让所有消费者被迫安装并锁一个主版本」为由改为扩展包；**2026-10-22 已推翻**——Input System 先例、Unity 6000.3 + Cinemachine 3 默认，硬合并落地（门面 / 契约仍中立）。
@@ -99,5 +119,7 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 ## 审计记忆
 
 - **`Camera` 与 `UnityEngine.Camera` 同名风险**：本模块没有 `Camera` 类型（门面是 `CameraManager`），因此没有 `SceneManager` 那种同名遮蔽问题；`OutputCamera` 返回的是 `UnityEngine.Camera`。
-- **懒注册 ticker 的代价**：过渡起步必须是下一帧；若改成常驻 Tier7，档位桶会让起步延迟最多 2.1 秒（已写进使用方 README 的「内部机制」）。
+- **`GetBlendOverride` 是全局单委托**：管理器构造时保存前值并安装自己，`Dispose` 时仅当当前委托仍是自己才恢复前值；项目若也使用它，以最后安装者为准。一个进程建议只创建一个相机管理器；测试 fixture 必须在 `SetUp` / `TearDown` 把 `CinemachineCore.GetBlendOverride` 置回 `null`。
+- **静态事件必须退订**：`CameraUpdatedEvent`（以及后续的 `CameraActivatedEvent` / `CameraDeactivatedEvent` / `BlendFinishedEvent`）是静态 UnityEvent；`Dispose` 与会话复位都必须 `RemoveListener`，否则关闭域重载时旧管理器被钉住。`CinemachineCore.ResetStaticsOnLoad` 并不重置全部事件。
+- **槽位线性扫描是有意取舍**：相机数量通常个位数，O(n) 换取 `_reverse` 在替换 / 注销 / 外部销毁时的全部陈旧键分支；不要为「O(1)」重新引入反查表而丢掉这些分支的测试。
 - **Cinemachine 后端在核心门禁射程内**（2026-10-22 起）：`check-docs` / `PublicApiBaseline` / `ReadmeTableTests` / 命名与边界扫描都覆盖 `Runtime/Camera/Cinemachine/`；原扩展包门禁缺口（R3-CIN-008）由并入结构性关闭。改动该子目录时按核心同一条门禁跑。

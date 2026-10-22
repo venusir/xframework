@@ -1,3 +1,4 @@
+using System;
 using NUnit.Framework;
 
 namespace XFramework.XCamera.Tests
@@ -96,6 +97,34 @@ namespace XFramework.XCamera.Tests
 
             StringAssert.Contains("3", text);
             StringAssert.Contains("2", text);
+        }
+
+        [Test]
+        public void NonDefault_IsActive_WhenFacadeNotInitialized_ReturnsFalse()
+        {
+            CameraManager.Destroy();
+
+            Assert.IsFalse(new CameraHandle(3, 2).IsActive(),
+                "门面未初始化时 IsActive 是探测型读，必须返回 false 而不是抛");
+        }
+
+        [Test]
+        public void NonDefault_Unregister_WhenFacadeNotInitialized_ReturnsFalse()
+        {
+            CameraManager.Destroy();
+
+            Assert.IsFalse(new CameraHandle(3, 2).Unregister());
+        }
+
+        [Test]
+        public void NonDefault_Commands_WhenFacadeNotInitialized_Throw()
+        {
+            CameraManager.Destroy();
+            var handle = new CameraHandle(3, 2);
+
+            Assert.Throws<InvalidOperationException>(() => handle.Activate());
+            Assert.Throws<InvalidOperationException>(() => handle.Deactivate());
+            Assert.Throws<InvalidOperationException>(() => handle.TransitionTo(1f));
         }
     }
 }
