@@ -5,7 +5,7 @@
 - 本项目是 Unity 游戏框架(内嵌 UPM 包 `com.venusy609.xframework`),以插件形式供其他游戏项目引入,不包含具体游戏内容
 - Unity 版本:6000.4.5f1(开发环境);package.json 最低要求 `6000.3`
 - API 兼容级别:.NET Standard 2.1;序列化模式:Force Text
-- Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、TextMeshPro、Input System。Cinemachine 支持由独立可选扩展包 `com.venusy609.xframework.cinemachine` 提供(独立 asmdef,依赖 Cinemachine 3.1.7),核心包不引用它
+- Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、TextMeshPro、Input System、Cinemachine(3.1.7)。Cinemachine 3.x 后端 `CinemachineCameraManager` 已并入核心包(`Runtime/Camera/Cinemachine/`,命名空间 `XFramework.XCamera.Cinemachine`,程序集 `Venusy609.Xframework`);不再有独立扩展包
 - **不预设 GamePlay 架构:** 框架只提供正交的基础设施与编排原语,不为使用方决定实体模型、生命周期树、时间模型或状态管理方式。任何「使用方必须按某种架构组织游戏逻辑」的设计都不属于本框架
 
 ## 总体原则
@@ -39,7 +39,7 @@
 - **更新调度约定(Update):** 档位语义是**时长**而非帧数——第 k 档 = 2^k 个节拍格(变步长轴按 60Hz 基准计,固定步轴 = 2^k 个固定步),第 0 档为每帧。增删档位只需改 `UpdateTier` 的枚举成员,桶数组尺寸与钳制上限随 `UpdateTier.Max` 推导。**调度器不得直接读 `UnityEngine.Time`**:时间源由驱动方经 `UpdateClock` 成对传入以保持纯函数——单测精确驱动与确定性回放都依赖这一点(注册/启用的定锚同理,不得去猜时刻)
 - **新模块清单:** `Runtime/<模块>/` 目录 + 命名空间 `XFramework.X<模块>` + 中文 README.md(使用方向;维护向记录按需写入 `Documentation/Modules/<模块>.md`,见「文档分层」);示例放 `Samples~/<名字>/`(Unity **完全忽略**该目录,经 Package Manager 的 Samples 页签导入;代价是示例**不参与编译**——示例只许使用公开 API,改公开面时手工核对示例);测试放 `Tests/Editor|Runtime/` 的模块子目录——**测试 asmdef 每个 Tests 根一个,不按模块新建**(`optionalUnityReferences: TestAssemblies`),新模块只需在对应根下建子目录
 - **模块边界:** 生产代码不得引用其它模块的 `Internal` 命名空间——Runtime 全树共用一个 asmdef,`internal` 不构成编译边界,这条只能靠约定与自查(见 `Tests/Editor/Architecture/ModuleBoundaryTests`)。跨模块共享的基础设施必须抽为独立模块并给公开面(先例:`XFramework.XEvent` ← Message/Reactive/Input/Settings;`XFramework.XPipeline` ← Bootstrap);测试与 Editor 工具经 `InternalsVisibleTo` 不受此限
-- **可选包的 Unity 类型不得出各自的 `Default` 命名空间:** Unity Input System 的类型(`InputActionAsset` 等)只允许出现在 `Runtime/Input/Default/`——门面与 `IInputProvider` 保持插件中立,第三方(如 Rewired)整体替换后端时公开面不受影响;别的模块要提供「Inspector 里配输入」的入口,就用该命名空间下的框架类型(先例:`InputSystemOptions` / `InputSystemOptionsAsset`)。**判据是「可选包」而非「Unity 类型」**:`Transform` / `TextAsset` 这类 `UnityEngine` 核心类型不受此限(每个项目都有)。机械守卫:`ModuleBoundaryTests.UnityInputTypes_StayInsideTheDefaultNamespace`(源码扫描);核心包的 Cinemachine 类型同样零容忍——`ModuleBoundaryTests.CoreRuntime_DoesNotReferenceCinemachine`(源码扫描),Cinemachine 实现放独立可选扩展包 `com.venusy609.xframework.cinemachine`,核心包不引用它
+- **可选包的 Unity 类型不得出各自的 `Default` 命名空间:** Unity Input System 的类型(`InputActionAsset` 等)只允许出现在 `Runtime/Input/Default/`——门面与 `IInputProvider` 保持插件中立,第三方(如 Rewired)整体替换后端时公开面不受影响;别的模块要提供「Inspector 里配输入」的入口,就用该命名空间下的框架类型(先例:`InputSystemOptions` / `InputSystemOptionsAsset`)。**判据是「可选包」而非「Unity 类型」**:`Transform` / `TextAsset` 这类 `UnityEngine` 核心类型不受此限(每个项目都有)。机械守卫:`ModuleBoundaryTests.UnityInputTypes_StayInsideTheDefaultNamespace`(源码扫描)。**Cinemachine 类型只允许出现在 `Runtime/Camera/Cinemachine/`:** 核心 asmdef 硬引用 `Unity.Cinemachine`(先例 Input System),但门面 `CameraManager` / 契约 `ICameraManager` / 默认实现 `UnityCameraManager` 与其它模块不得出现 Cinemachine 类型;机械守卫 `ModuleBoundaryTests.CinemachineTypes_StayInsideTheCinemachineBackend`(源码扫描)
 
 ## 编码规范
 
@@ -86,7 +86,7 @@
   - UPM 包 → `Packages/manifest.json`(Git URL 或注册表版本号)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
 - **依赖版本只有一份真相:** 第三方依赖的版本/URL 以 `Assets/XFramework/README.md` 的「第三方依赖」表为准;`Editor/XFrameworkDependencyInstaller.cs` 的清单与 `Packages/manifest.json` 必须与之逐字一致,Git URL 必须钉 `#tag`(`?path=` 写在 `#` 之前)。三者由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫——不钉修订时消费方会取上游默认分支,Asset 模块直接编译不过(实测 51 处 `CS0246/CS0234`)
-- **扩展包的依赖是它自己的真相:** `Assets/XFramework.Cinemachine/package.json` 的 Cinemachine 版本、扩展 README、开发 `Packages/manifest.json` 三处一致,由扩展包的 `CinemachineDependencyTests` 守;核心 README / 安装器**不含** Cinemachine(开发 manifest 的 3.1.7 只服务扩展包编译 / 测试,核心 `DependencyDeclarationTests` 不把它当核心依赖)。扩展包不声明核心依赖(UPM 不支持 Git URL 依赖),由 README 的安装顺序与 asmdef 引用兜底
+- **Cinemachine 依赖按 Input System 先例处理:** 核心 asmdef 无条件引用 `Unity.Cinemachine`;`com.unity.cinemachine` 3.1.7 必须写进 `Editor/XFrameworkDependencyInstaller.cs` 的 `RequiredUPMDependencies`、`Assets/XFramework/README.md` 的「第三方依赖」表/JSON 块与 `Packages/manifest.json` 三处并逐字一致,由 `Tests/Editor/Architecture/DependencyDeclarationTests` 守。核心 `package.json` 的 `dependencies` 仍留空(与 Input System 同型);不列它会整体编译失败(与 R3-INP-001 同型)。原独立扩展包 `com.venusy609.xframework.cinemachine` 已删除,不再有扩展侧依赖真相
 
 ## 文档分层
 
@@ -104,7 +104,7 @@
 | `Documentation/AuditRound3.md` | 维护者(执行本轮修复时)+ 下一轮审计者 | 第三轮全面审计的**点快照**:范围与方法、R2 修复复核、P0/P1/P2 发现、跨模块主题、逐模块 18 类判据留痕、14 条待裁裁定建议、分步实施计划与探针轨。**只记录本轮发现与计划**;长期结论仍按收件人分流到模块 README 与决策台账,本文件不复制它们、不随开发增长更新 |
 | `Documentation/Luban.md` | 维护者(接第三方配置表工具时) | 接入配方:框架侧契约、工具链步骤、已核对事实与版本漂移点。**随第三方工具版本漂移的内容只在这里,不进包** |
 | `Documentation/CI.md` | 维护者(排期与重开 CI 时) | CI 的成本要点(Unity 许可形态 / runner / 与测试壳关系,外部事实标核对状态)与裁定:暂不接入 + 三条重开判据。**随外部平台政策漂移的内容只在这里,不进包** |
-| `Documentation/Cinemachine.md` | 维护者(升级 Cinemachine / 审计扩展包时) | 扩展包 `com.venusy609.xframework.cinemachine` 的版本、3.x API 实测事实、升级与漂移点。**随 Cinemachine 版本漂移的内容只在这里,不进核心包** |
+| `Documentation/Cinemachine.md` | 维护者(升级 Cinemachine / 审计相机后端时) | Cinemachine 3.1.7 后端的版本、3.x API 实测事实、升级与漂移点;后端已并入核心包 `Runtime/Camera/Cinemachine/`。**随 Cinemachine 版本漂移的内容只在这里,不进包** |
 | `Assets/XFramework/CHANGELOG.md` | 双方 | 变更流水:改了什么、为什么、根因与实测证据 |
 
 - **README 的判据:** 把这段删掉,使用方会不会写错代码或误判行为?会 → 留在 README。`已知限制` / `接口承诺` / `线程契约` 即使语感像开发记录,**不得**搬走

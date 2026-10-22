@@ -202,7 +202,7 @@
 1. 按 `CHANGELOG.md` 顶部的版本建议改 `Assets/XFramework/package.json` 的 `version`，并把 `[Unreleased]` 落成带日期的版本小节。
 2. 跑两条门禁：`Tools/run-tests.ps1`（全量双平台 0 失败）与 `Tools/check-docs.ps1 -Enforce`（0 告警）。
 3. 在仓库根打与包版本一致的 tag（例如 `0.4.0`），**推送由人决定**（与提交授权同一条纪律）。
-4. 扩展包 `Assets/XFramework.Cinemachine` 用同一个 tag 发布（它单独安装、不随核心包发布）。
+4. 不再有独立扩展包:Cinemachine 后端随核心包发布(`Runtime/Camera/Cinemachine/`,2026-10-22 并入)。
 
 ### OpenUPM（待上架）
 
