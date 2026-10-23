@@ -607,6 +607,23 @@ namespace XFramework.XCamera
         private void OnBackendDeactivated(string cameraId)
         {
             MessageManager.Publish(new CameraDeactivatedMessage(cameraId));
+
+            if (cameraId == null)
+                return;
+
+            var wasTop = _stack.Count > 0 &&
+                         string.Equals(_stack[_stack.Count - 1], cameraId, StringComparison.Ordinal);
+            var removed = _stack.RemoveAll(id =>
+                string.Equals(id, cameraId, StringComparison.Ordinal) && !IsAlive(id));
+
+            if (removed == 0 || !wasTop || _issuing)
+                return;
+            if (_backend.TransitionTargetId != null)
+                return;
+
+            var top = TopAliveId();
+            if (top != null)
+                _backend.Activate(top, 0f, CameraBlendStyle.Cut);
         }
 
         private void OnBackendBlendCompleted(string cameraId)

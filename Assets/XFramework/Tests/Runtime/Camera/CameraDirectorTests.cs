@@ -271,6 +271,26 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void Deactivated_DeadTop_IsPrunedAndFallsBack()
+        {
+            _director.Register("a", _camera);
+            _director.Register("b", _camera2);
+            _director.SwitchTo("a", 0f, CameraBlendStyle.Cut);
+            _director.Push("b", 0f, CameraBlendStyle.Cut);
+            var count = _backend.ActivateCount;
+
+            UnityEngine.Object.DestroyImmediate(_cameraObject2);
+            _backend.RaiseDeactivated("b");
+
+            Assert.AreEqual(1, _director.StackDepth,
+                "已销毁的栈顶应在反激活事件后被剪除");
+            Assert.AreEqual("a", _director.BaseCameraId);
+            Assert.AreEqual(count + 1, _backend.ActivateCount,
+                "剪除栈顶后应回到新栈顶");
+            Assert.AreEqual("a", _backend.LastActivatedId);
+        }
+
+        [Test]
         public void DeadCamera_IsTreatedAsUnavailable()
         {
             var deadObject = new GameObject("DirectorDead", typeof(Camera));
