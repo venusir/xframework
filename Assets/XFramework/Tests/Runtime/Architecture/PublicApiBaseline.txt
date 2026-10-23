@@ -337,6 +337,10 @@ XFramework.XCamera.CameraManager.Push  ::  public static void(string cameraId, f
 XFramework.XCamera.CameraManager.PushAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.CameraManager.Register  ::  public static string(UnityEngine.Object camera)
 XFramework.XCamera.CameraManager.Register  ::  public static string(string cameraId, UnityEngine.Object camera)
+XFramework.XCamera.CameraManager.SetFieldOfView  ::  public static void(string cameraId, float fieldOfView)
+XFramework.XCamera.CameraManager.SetFollow  ::  public static void(string cameraId, UnityEngine.Transform follow)
+XFramework.XCamera.CameraManager.SetLookAt  ::  public static void(string cameraId, UnityEngine.Transform lookAt)
+XFramework.XCamera.CameraManager.Shake  ::  public static void(float strength, float duration = 0.2f)
 XFramework.XCamera.CameraManager.StackDepth  ::  public static int StackDepth { get; }
 XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraActivatedMessage> handler)
 XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraBlendCompletedMessage> handler)
@@ -385,6 +389,10 @@ XFramework.XCamera.Cinemachine.CinemachineCameraBackend.NamedCount  ::  public i
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.OutputCamera  ::  public UnityEngine.Camera OutputCamera { get; }
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Register  ::  public virtual bool(string cameraId, object camera, bool isGenerated)
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.RequestSettled  ::  public event System.Action<string, XFramework.XCamera.CameraTransitionResult>
+XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetFieldOfView  ::  public virtual void(string cameraId, float fieldOfView)
+XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetFollow  ::  public virtual void(string cameraId, UnityEngine.Transform follow)
+XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetLookAt  ::  public virtual void(string cameraId, UnityEngine.Transform lookAt)
+XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Shake  ::  public virtual void(float strength, float duration)
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TransitionProgress  ::  public float TransitionProgress { get; }
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TransitionTargetId  ::  public string TransitionTargetId { get; }
 XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TryGetCamera  ::  public virtual bool(string cameraId, out object camera)
@@ -414,6 +422,10 @@ XFramework.XCamera.ICameraBackend.NamedCount  ::  public int NamedCount { get; }
 XFramework.XCamera.ICameraBackend.OutputCamera  ::  public UnityEngine.Camera OutputCamera { get; }
 XFramework.XCamera.ICameraBackend.Register  ::  public bool(string cameraId, object camera, bool isGenerated)
 XFramework.XCamera.ICameraBackend.RequestSettled  ::  public event System.Action<string, XFramework.XCamera.CameraTransitionResult>
+XFramework.XCamera.ICameraBackend.SetFieldOfView  ::  public void(string cameraId, float fieldOfView)
+XFramework.XCamera.ICameraBackend.SetFollow  ::  public void(string cameraId, UnityEngine.Transform follow)
+XFramework.XCamera.ICameraBackend.SetLookAt  ::  public void(string cameraId, UnityEngine.Transform lookAt)
+XFramework.XCamera.ICameraBackend.Shake  ::  public void(float strength, float duration)
 XFramework.XCamera.ICameraBackend.TransitionProgress  ::  public float TransitionProgress { get; }
 XFramework.XCamera.ICameraBackend.TransitionTargetId  ::  public string TransitionTargetId { get; }
 XFramework.XCamera.ICameraBackend.TryGetCamera  ::  public bool(string cameraId, out object camera)

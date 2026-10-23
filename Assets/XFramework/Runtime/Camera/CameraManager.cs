@@ -314,6 +314,70 @@ namespace XFramework.XCamera
 
         #endregion
 
+        #region Public API — Bindings
+
+        /// <summary>设置相机的跟随目标；<paramref name="follow"/> 为 <c>null</c> 时清除本地覆盖。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="follow">跟随目标；可为 <c>null</c>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。跟随行为本身仍由后端（内置后端为 Cinemachine）执行。</remarks>
+        public static void SetFollow(string cameraId, Transform follow)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            _director.SetFollow(cameraId, follow);
+        }
+
+        /// <summary>设置相机的瞄准目标；<paramref name="lookAt"/> 为 <c>null</c> 时清除本地覆盖。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="lookAt">瞄准目标；可为 <c>null</c>。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。</remarks>
+        public static void SetLookAt(string cameraId, Transform lookAt)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            _director.SetLookAt(cameraId, lookAt);
+        }
+
+        /// <summary>设置相机的视场角（立即生效）。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="fieldOfView">视场角；必须为有限正数。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="fieldOfView"/> 非有限或 <c>&lt;= 0</c>。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>分组相机（如 ClearShot）没有 Lens，告警并 no-op；高级需求走
+        /// <see cref="TryGetCamera{T}"/> 取 Lens。</remarks>
+        public static void SetFieldOfView(string cameraId, float fieldOfView)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            _director.SetFieldOfView(cameraId, fieldOfView);
+        }
+
+        /// <summary>触发一次震屏。</summary>
+        /// <param name="strength">强度；必须为有限正数（1 为常规强度）。</param>
+        /// <param name="duration">时长（秒）；必须为有限正数。</param>
+        /// <exception cref="ArgumentOutOfRangeException">参数非有限或 <c>&lt;= 0</c>。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>活动相机需要带 <c>CinemachineImpulseListener</c>；缺失时只告警一次、不自动添加。
+        /// 无活动相机 / 输出驱动已销毁时告警并 no-op。</remarks>
+        public static void Shake(float strength, float duration = 0.2f)
+        {
+            EnsureInitialized();
+            _director.Shake(strength, duration);
+        }
+
+        #endregion
+
         #region Public API — Events
 
         /// <summary>订阅相机激活消息；返回退订句柄。</summary>

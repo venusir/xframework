@@ -247,6 +247,35 @@ namespace XFramework.XCamera
             _backend.ClearActive();
         }
 
+        internal void SetFollow(string cameraId, Transform follow)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            _backend.SetFollow(cameraId, follow);
+        }
+
+        internal void SetLookAt(string cameraId, Transform lookAt)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            _backend.SetLookAt(cameraId, lookAt);
+        }
+
+        internal void SetFieldOfView(string cameraId, float fieldOfView)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            _backend.SetFieldOfView(cameraId, fieldOfView);
+        }
+
+        internal void Shake(float strength, float duration)
+        {
+            _backend.Shake(strength, duration);
+        }
+
         #endregion
 
         #region Async Playback

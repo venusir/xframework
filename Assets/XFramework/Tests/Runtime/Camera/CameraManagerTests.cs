@@ -461,6 +461,70 @@ namespace XFramework.XCamera.Tests
 
         #endregion
 
+        #region Bindings
+
+        [Test]
+        public void SetFollowAndLookAt_Forward()
+        {
+            var fake = Initialize();
+            var target = _cameraObject.transform;
+
+            CameraManager.SetFollow("a", target);
+            CameraManager.SetLookAt("a", target);
+
+            Assert.AreEqual("a", fake.LastFollowId);
+            Assert.AreSame(target, fake.LastFollow);
+            Assert.AreEqual("a", fake.LastLookAtId);
+            Assert.AreSame(target, fake.LastLookAt);
+
+            CameraManager.SetFollow("a", null);
+            Assert.IsNull(fake.LastFollow);
+        }
+
+        [Test]
+        public void SetFieldOfView_Forwards()
+        {
+            var fake = Initialize();
+
+            CameraManager.SetFieldOfView("a", 45f);
+
+            Assert.AreEqual("a", fake.LastFieldOfViewId);
+            Assert.AreEqual(45f, fake.LastFieldOfView, 0.0001f);
+        }
+
+        [Test]
+        public void Shake_Forwards()
+        {
+            var fake = Initialize();
+
+            CameraManager.Shake(0.5f, 0.3f);
+
+            Assert.AreEqual(1, fake.ShakeCount);
+            Assert.AreEqual(0.5f, fake.LastShakeStrength, 0.0001f);
+            Assert.AreEqual(0.3f, fake.LastShakeDuration, 0.0001f);
+        }
+
+        [Test]
+        public void Bindings_WhenNotInitialized_Throw()
+        {
+            Assert.Throws<InvalidOperationException>(() => CameraManager.SetFollow("a", null));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.SetLookAt("a", null));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.SetFieldOfView("a", 45f));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Shake(0.5f));
+        }
+
+        [Test]
+        public void Bindings_NullId_Throw()
+        {
+            Initialize();
+
+            Assert.Throws<ArgumentNullException>(() => CameraManager.SetFollow(null, null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.SetLookAt(null, null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.SetFieldOfView(null, 45f));
+        }
+
+        #endregion
+
         #region Escape hatch / diagnostics
 
         [Test]

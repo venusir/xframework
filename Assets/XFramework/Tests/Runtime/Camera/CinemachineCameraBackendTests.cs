@@ -267,6 +267,140 @@ namespace XFramework.XCamera.Cinemachine.Tests
 
         #endregion
 
+        #region Bindings
+
+        [Test]
+        public void SetFollowAndLookAt_UpdateTargets()
+        {
+            var targetObject = new GameObject("Target");
+            try
+            {
+                var target = targetObject.transform;
+
+                _backend.SetFollow("a", target);
+                _backend.SetLookAt("a", target);
+
+                Assert.AreSame(target, _vcamA.Follow);
+                Assert.AreSame(target, _vcamA.LookAt);
+
+                _backend.SetFollow("a", null);
+                Assert.IsNull(_vcamA.Follow);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(targetObject);
+            }
+        }
+
+        [Test]
+        public void SetFieldOfView_UpdatesLensAndOutput()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            _backend.SetFieldOfView("a", 45f);
+            Assert.AreEqual(45f, _vcamA.Lens.FieldOfView, 0.001f);
+
+            Pump();
+            Assert.AreEqual(45f, _camera.fieldOfView, 0.1f,
+                "活动相机的 Lens 应被输出到 Unity Camera");
+        }
+
+        [Test]
+        public void SetFieldOfView_Group_WarnsAndNoOps()
+        {
+            var parentObject = new GameObject("Group");
+            var childObject = new GameObject("GroupChild");
+            try
+            {
+                childObject.transform.SetParent(parentObject.transform);
+                childObject.AddComponent<CinemachineCamera>();
+                var clearShot = parentObject.AddComponent<CinemachineClearShot>();
+                _backend.Register("group", clearShot, false);
+
+                LogAssert.Expect(LogType.Warning, new Regex("分组相机没有 Lens.*"));
+                Assert.DoesNotThrow(() => _backend.SetFieldOfView("group", 40f));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parentObject);
+            }
+        }
+
+        [Test]
+        public void SetFieldOfView_Invalid_Throws()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => _backend.SetFieldOfView("a", float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => _backend.SetFieldOfView("a", 0f));
+        }
+
+        [Test]
+        public void Bindings_UnknownOrDead_WarnAndNoOps()
+        {
+            var targetObject = new GameObject("Target");
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("未知相机 id: missing.*"));
+                _backend.SetFollow("missing", targetObject.transform);
+
+                var deadObject = new GameObject("Dead", typeof(CinemachineCamera));
+                var dead = deadObject.GetComponent<CinemachineCamera>();
+                _backend.Register("dead", dead, false);
+                UnityEngine.Object.DestroyImmediate(deadObject);
+
+                LogAssert.Expect(LogType.Warning, new Regex("已被外部销毁.*SetLookAt.*"));
+                _backend.SetLookAt("dead", targetObject.transform);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(targetObject);
+            }
+        }
+
+        [Test]
+        public void Shake_CreatesSourceAndSetsDuration()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            LogAssert.Expect(LogType.Warning, new Regex("缺少 CinemachineImpulseListener.*"));
+            _backend.Shake(0.5f, 0.3f);
+
+            var source = _cameraObject.GetComponent<CinemachineImpulseSource>();
+            Assert.IsNotNull(source, "震屏应在输出对象上惰性创建 ImpulseSource");
+            Assert.AreEqual(0.3f, source.ImpulseDefinition.ImpulseDuration, 0.0001f);
+
+            _backend.Shake(0.6f, 0.4f);
+            Assert.AreEqual(0.4f, source.ImpulseDefinition.ImpulseDuration, 0.0001f,
+                "连续震屏以最后一次调用的时长为准");
+        }
+
+        [Test]
+        public void Shake_WithListener_DoesNotWarn()
+        {
+            _vcamAObject.AddComponent<CinemachineImpulseListener>();
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            _backend.Shake(0.5f, 0.2f);
+
+            LogAssert.NoUnexpectedReceived();
+            Assert.IsNotNull(_cameraObject.GetComponent<CinemachineImpulseSource>());
+        }
+
+        [Test]
+        public void Shake_InvalidArguments_Throws()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(() => _backend.Shake(float.NaN, 0.2f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _backend.Shake(0f, 0.2f));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _backend.Shake(0.5f, float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(() => _backend.Shake(0.5f, 0f));
+        }
+
+        #endregion
+
         #region Registry
 
         [Test]

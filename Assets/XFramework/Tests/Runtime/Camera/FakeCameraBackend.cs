@@ -63,6 +63,24 @@ namespace XFramework.XCamera.Tests
 
         public int ClearActiveCount { get; private set; }
 
+        public string LastFollowId { get; private set; }
+
+        public Transform LastFollow { get; private set; }
+
+        public string LastLookAtId { get; private set; }
+
+        public Transform LastLookAt { get; private set; }
+
+        public string LastFieldOfViewId { get; private set; }
+
+        public float LastFieldOfView { get; private set; }
+
+        public int ShakeCount { get; private set; }
+
+        public float LastShakeStrength { get; private set; }
+
+        public float LastShakeDuration { get; private set; }
+
         public IReadOnlyList<string> RegisteredIds => _order;
 
         /// <summary>为 true 时 <see cref="Activate"/> 立即把目标记为活动（同步测试用）；
@@ -197,6 +215,31 @@ namespace XFramework.XCamera.Tests
             TransitionTargetId = null;
             IsTransitioning = false;
             TransitionProgress = 0f;
+        }
+
+        public void SetFollow(string cameraId, Transform follow)
+        {
+            LastFollowId = cameraId;
+            LastFollow = follow;
+        }
+
+        public void SetLookAt(string cameraId, Transform lookAt)
+        {
+            LastLookAtId = cameraId;
+            LastLookAt = lookAt;
+        }
+
+        public void SetFieldOfView(string cameraId, float fieldOfView)
+        {
+            LastFieldOfViewId = cameraId;
+            LastFieldOfView = fieldOfView;
+        }
+
+        public void Shake(float strength, float duration)
+        {
+            ShakeCount++;
+            LastShakeStrength = strength;
+            LastShakeDuration = duration;
         }
 
         public void Dispose()

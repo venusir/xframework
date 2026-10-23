@@ -89,6 +89,32 @@ namespace XFramework.XCamera
         /// <remarks>不销毁相机、不保证输出驱动停止输出某一台相机。</remarks>
         void ClearActive();
 
+        /// <summary>设置相机的跟随目标；<c>null</c> 清除本地覆盖。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="follow">跟随目标。</param>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。</remarks>
+        void SetFollow(string cameraId, Transform follow);
+
+        /// <summary>设置相机的瞄准目标；<c>null</c> 清除本地覆盖。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="lookAt">瞄准目标。</param>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。</remarks>
+        void SetLookAt(string cameraId, Transform lookAt);
+
+        /// <summary>设置相机的视场角（立即生效）。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="fieldOfView">视场角；必须为有限正数。</param>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="fieldOfView"/> 非有限或 <c>&lt;= 0</c>。</exception>
+        /// <remarks>不支持视场角的后端 / 相机（如分组相机）告警并 no-op。</remarks>
+        void SetFieldOfView(string cameraId, float fieldOfView);
+
+        /// <summary>触发一次震屏。</summary>
+        /// <param name="strength">强度；必须为有限正数（1 为常规强度）。</param>
+        /// <param name="duration">时长（秒）；必须为有限正数。</param>
+        /// <exception cref="ArgumentOutOfRangeException">参数非有限或 <c>&lt;= 0</c>。</exception>
+        /// <remarks>无活动相机 / 输出驱动已销毁时告警并 no-op。</remarks>
+        void Shake(float strength, float duration);
+
         /// <summary>输出驱动的 incoming 切换时触发（混合开始帧；cut 同帧）。</summary>
         /// <remarks>未注册 / 外部 incoming 的 id 为 <c>null</c>。</remarks>
         event Action<CameraBackendActivation> Activated;

@@ -68,6 +68,8 @@ namespace XFramework.XCamera.Cinemachine
         private Request _request;
         private Slot _boostedSlot;
         private string _lastActiveCameraId;
+        private CinemachineImpulse _impulse;
+        private bool _warnedFieldOfViewGroup;
         private bool _eventsBound;
         private bool _disposed;
         private bool _detached;
@@ -408,6 +410,81 @@ namespace XFramework.XCamera.Cinemachine
 
         #endregion
 
+        #region ICameraBackend — Bindings
+
+        /// <inheritdoc/>
+        public void SetFollow(string cameraId, Transform follow)
+        {
+            ThrowIfDisposed();
+
+            var slot = GetLiveSlot(cameraId, "SetFollow");
+            if (slot != null)
+                slot.Camera.Follow = follow;
+        }
+
+        /// <inheritdoc/>
+        public void SetLookAt(string cameraId, Transform lookAt)
+        {
+            ThrowIfDisposed();
+
+            var slot = GetLiveSlot(cameraId, "SetLookAt");
+            if (slot != null)
+                slot.Camera.LookAt = lookAt;
+        }
+
+        /// <inheritdoc/>
+        public void SetFieldOfView(string cameraId, float fieldOfView)
+        {
+            ThrowIfDisposed();
+
+            if (float.IsNaN(fieldOfView) || float.IsInfinity(fieldOfView) || fieldOfView <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(fieldOfView), fieldOfView,
+                    "[Camera] 视场角必须是有限正数。");
+            }
+
+            var slot = GetLiveSlot(cameraId, "SetFieldOfView");
+            if (slot == null)
+                return;
+
+            if (slot.Camera is CinemachineCamera camera)
+            {
+                camera.Lens.FieldOfView = fieldOfView;
+                return;
+            }
+
+            if (!_warnedFieldOfViewGroup)
+            {
+                _warnedFieldOfViewGroup = true;
+                LogManager.Warning(LogCategories.CameraManager,
+                    "[Camera] 相机 id {0} 不是 CinemachineCamera（分组相机没有 Lens），" +
+                    "SetFieldOfView 已忽略；请用 TryGetCamera 取 Lens。", cameraId);
+            }
+        }
+
+        /// <inheritdoc/>
+        public void Shake(float strength, float duration)
+        {
+            ThrowIfDisposed();
+
+            if (float.IsNaN(strength) || float.IsInfinity(strength) || strength <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(strength), strength,
+                    "[Camera] 震屏强度必须是有限正数。");
+            }
+
+            if (float.IsNaN(duration) || float.IsInfinity(duration) || duration <= 0f)
+            {
+                throw new ArgumentOutOfRangeException(nameof(duration), duration,
+                    "[Camera] 震屏时长必须是有限正数。");
+            }
+
+            _impulse ??= new CinemachineImpulse();
+            _impulse.Shake(_brain, strength, duration);
+        }
+
+        #endregion
+
         #region ICameraBackend — Events
 
         /// <inheritdoc/>
@@ -436,6 +513,8 @@ namespace XFramework.XCamera.Cinemachine
             UnsubscribeEvents();
             SettleRequest(CameraTransitionResult.ManagerDisposed);
 
+            _impulse?.Dispose();
+            _impulse = null;
             _boostedSlot = null;
             for (var i = 0; i < _slots.Count; i++)
             {
@@ -796,6 +875,27 @@ namespace XFramework.XCamera.Cinemachine
         #endregion
 
         #region Internal — Registry
+
+        private Slot GetLiveSlot(string cameraId, string action)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            if (!_byId.TryGetValue(cameraId, out var slot))
+            {
+                LogManager.Warning(LogCategories.CameraManager, "未知相机 id: {0}", cameraId);
+                return null;
+            }
+
+            if (slot.Camera == null)
+            {
+                LogManager.Warning(LogCategories.CameraManager,
+                    "相机 id {0} 对应的相机已被外部销毁，{1} 已忽略。", cameraId, action);
+                return null;
+            }
+
+            return slot;
+        }
 
         private Slot FindSlotByCamera(CinemachineVirtualCameraBase camera)
         {
