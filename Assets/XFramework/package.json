@@ -38,7 +38,7 @@
 		},
 		{
 			"displayName": "Cinemachine 相机示例",
-			"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，用 SwitchToNext 在相机间过渡切换；核心包已内置 Cinemachine 3.x 后端。",
+			"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；核心包已内置 Cinemachine 3.x 后端。",
 			"path": "Samples~/Cinemachine"
 		}
 	],

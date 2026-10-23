@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
 > `AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、`IAssetManager.LoadSceneAsync` 从主接口
-> 移入可选能力接口 `IAssetSceneLoader`；`XCamera` 统一句柄重整（删除 `UnityCameraManager` 与接口上的
-> string 操作 / `CameraIds`）。迁移见 `### Changed` 的「破坏性变更迁移表」与「行为变更」。
+> 移入可选能力接口 `IAssetSceneLoader`；`XCamera` **从零重设计**（string id + 相机栈 + 中立主面 + 原生逃生舱；
+> 删除 `ICameraManager` / `CameraHandle` / `CinemachineCameraManager` 与旧消息载荷）。迁移见 `### Changed` 的
+> 「破坏性变更迁移表」与「行为变更」。
 > 因含破坏性变更，**下次发版应为 `0.4.0`**。
 
 ### Added
@@ -46,6 +47,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **XCamera 从零重设计：string id + 相机栈 + 中立主面 + 原生逃生舱**（2026-10-23，用户裁定；`58a9b62` /
+  `ebe10d7` / `849f199` / `6f99584` / `04661ea`）：门面改为 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`，
+  四个 `UniTask<CameraTransitionResult>` 异步动词，`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake`，
+  以及 `ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `OutputCamera` / `IsBlending` /
+  `IsExternallyControlled` / `GetState` / `CopyCameras` 查询。公开 `ICameraBackend` 为原语契约，内部
+  `CameraDirector` 负责栈 / pending / 消息 / 快照；门面与契约不出现 Cinemachine 类型，`TryGetCamera<T>` 是显式逃生舱。
+  动态相机 `Register(vcam)` 得 `@auto/N`；`CinemachineCameraRegistration` 负责预制体自注册（OnEnable / Start、
+  OnDestroy 注销、池化幂等）。`CinemachineCameraBackend` 保持 boost + 作者状态恢复与 `GetBlendOverride`；
+  外部 incoming 的消息 id 为 `null`；外部接管保持 boost；`RequestSettled` 每个请求恰好一次。公开面全量重写：
+  破坏性变更见下；回归 `CameraManagerTests` / `CameraDirectorTests` / `CinemachineCameraBackendTests` /
+  `CinemachineCameraRegistrationTests` / `CinemachineCameraEventTests` / `CinemachineCameraAsyncTests` /
+  `CameraDiagnosticsTests`。**本条目取代下方 2026-10-22 / 2026-10-17 的相机条目；旧条目保留为变更史。**
 - **Cinemachine 3.1.7 后端并入核心包**（2026-10-22，用户裁定）：`CinemachineCameraManager`（命名空间
   `XFramework.XCamera.Cinemachine`）从独立扩展包移入 `Runtime/Camera/Cinemachine/`，程序集由
   `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`，命名空间与公开成员不变。核心 asmdef
@@ -235,7 +248,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
-- **统一句柄重整（2026-10-22，破坏性）**：删除 `UnityCameraManager`；`ICameraManager` 只保留句柄操作，命名 / 动态相机都经 `Register` 返回 `CameraHandle`；门面保留 string 便捷重载。迁移表见下。
+- **公开面从零重设计（2026-10-23，破坏性）**：`ICameraManager` / `CameraHandle` / `CinemachineCameraManager` 删除；
+  `ICameraBackend`（原语）+ `CameraDirector`（internal）+ `CinemachineCameraBackend`（内置）取代。所有入口改用
+  `string` id；`Register<T>` 改为 `Register(UnityEngine.Object)`；动态 id 为 `@auto/N`。四个 async 与
+  `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 新增。迁移表见下。
+- **行为变更（2026-10-23）**：外部 / 未注册 incoming 的消息 id 为 `null`（不再静默）；`RequestSettled` 每请求恰好
+  一次，异步完成由它驱动；同步命令 / 外部接管 supersede pending；外部接管保持栈顶 boost；`TargetUnregistered`
+  改名 `CameraNotFound`；计数含已销毁未注销槽位。
+- **探测型读与命令（2026-10-23）**：`ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` /
+  `OutputCamera` / `IsBlending` / `IsExternallyControlled` / `CameraCount` / `GetState` / `CopyCameras` /
+  `TryGetCamera<T>` 未初始化时返回默认值；`Unregister` 返回 `false`；`Register` / `SwitchTo` / `Push` / `Pop` /
+  `PopAll` / `Clear` / 绑定 / `Shake` 抛 `InvalidOperationException`。
+- **预制体自注册组件（2026-10-23）**：`CinemachineCameraRegistration` 在 OnEnable / Start 注册、OnDestroy 注销；
+  池化禁用不注销；同一预制体多实例各得独立 `@auto/N`；未初始化时告警并允许稍后显式 `Register()`。
+
+> **以下 2026-10-22 条目描述的是已被 2026-10-23 取代的中间形状**，保留为变更史；当前 API 见上方 2026-10-23 条与迁移表。
+
+- **统一句柄重整（2026-10-22，破坏性·已被取代）**：删除 `UnityCameraManager`；`ICameraManager` 只保留句柄操作，命名 / 动态相机都经 `Register` 返回 `CameraHandle`；门面保留 string 便捷重载。迁移表见下。
 - **探测型读宽容**：`OutputCamera` / `ActiveHandle` / `ActiveCameraId` / `IsTransitioning` / `CameraCount` / `TryGetHandle` / `IsActive` 在门面未初始化时返回默认值；`Register` / `Activate` / `Deactivate` / `TransitionTo` 仍抛 `InvalidOperationException`。`CameraHandle` 非 default 命令仍抛，`IsActive` 返回 `false`，`Unregister` / `Dispose` 返回 `false`。
 - **`IsTransitioning` 只统计管理器自有的非 cut 过渡**：不再等于 `Brain.IsBlending`；Timeline / 外部混合不进入。等待管理器过渡仍可用 `UniTask.WaitUntil(() => !IsTransitioning)`；要观察 Brain 真实混合请直接读 Brain。
 - **激活策略改为动态 boost**：目标优先级提升到「场景内同通道最大 + 1」，只改目标；不再把所有已注册相机压成 0 / `SetActive(false)`。`Unregister` / `Dispose` 恢复注册时捕获的作者优先级 / GameObject / 组件启用状态。
@@ -249,20 +278,35 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 破坏性变更迁移表（命名与签名）
 
+> **相机行以 2026-10-23 一组为准**；标「2026-10-22 中间形状」的行只解释上一轮重整，0.3.0 升级者不需要经过它们。
+
 | 旧写法 | 新写法 | 说明 |
 | --- | --- | --- |
 | `AssetManager.LoadSceneAsync(loc, additive: true, progress, ct)` | `AssetManager.LoadSceneAsync(loc, LoadSceneMode.Additive, progress, ct)` | **编译器逐处报错**。返回类型由 `Scene` 改为 `AssetSceneHandle`，`bool additive` 改为 `LoadSceneMode mode`；失败判据随之由 `scene.IsValid()` 改为 `handle.IsDefault` |
 | `IAssetManager.LoadSceneAsync(...)` | `IAssetSceneLoader.LoadSceneAsync(...)` | **整条从主接口移出**，改由可选能力接口承载（同 `IAssetPoolController` 的形态）。第三方自定义 `IAssetManager` 实现**不必**再实现它；要提供场景能力的实现改挂 `IAssetSceneLoader`，门面用 `is` 探测 |
 | `handle.Status == YooAsset.EOperationStatus.Succeed` | `handle.Status == AssetOperationStatus.Succeed` | **编译器逐处报错**（返回类型变更，且不再需要 `using YooAsset`）。四个句柄 `AssetHandle<T>` / `RawFileHandle` / `SubAssetsHandle` / `AssetDownloaderHandle` 同改，四个成员与上游**一一对应**（`None` / `Processing` / `Succeed` / `Failed`），语义与取值时机完全不变。理由：公开面不再绑在上游的类型上（YooAsset 3.x 曾把一批类型移进默认不编译的兼容层，透出上游枚举会让本包的公开面被动破坏） |
-| `ICameraManager.ActiveCameraId` / `UnityCameraManager.ActiveCameraId` / `CinemachineCameraManager.ActiveCameraId` | `ICameraManager.ActiveHandle.NamedId`（或门面 `CameraManager.ActiveCameraId`） | 接口与实现上的 `ActiveCameraId` 移除——两者并行，`ActiveHandle` 是唯一活动查询；命名 id 由句柄携带（`NamedId`，动态为 `null`）。门面 `CameraManager.ActiveCameraId` 保留，直接读 `ActiveHandle.NamedId`（O(1)） |
-| `new CameraHandle(id, generation)` | `new CameraHandle(id, generation, namedId)` | 构造签名扩展：`namedId` 有默认值 `null`，**两参调用源兼容**（基线把签名变化记为「已变更」）。命名槽位填命名 id，动态槽位传 `null` |
+| `ICameraManager` / `CameraManager.Initialize(ICameraManager)` | `ICameraBackend` / `CameraManager.Initialize(ICameraBackend)` | **整条契约换形**：后端只给原语（注册 / 激活 / 清空 / 绑定 / 查询 / 事件），栈 / 异步 / 消息由内部导演层负责。第三方实现需重写，不再有 `CameraHandle` |
+| `CameraHandle` / `TryGetHandle` / `ActiveHandle` / `IsActive` | `string` id / `TryGetCamera<T>` / `ActiveCameraId` / `IsExternallyControlled` | **句柄删除**：显式 id 由调用方给出，动态相机 `Register(vcam)` 得 `@auto/N`；`TryGetCamera<T>` 取回后端相机 |
+| `CinemachineCameraManager` | `CinemachineCameraBackend` | 命名空间 `XFramework.XCamera.Cinemachine` 不变；构造仍为 `(CinemachineBrain)`；`Register` 改收 `UnityEngine.Object` |
+| `CameraManager.Activate(id/handle)` / `TransitionTo(...)` | `CameraManager.SwitchTo(id, duration, style)` | `SwitchTo` 设定基础相机并清空覆盖；切到同一请求栈顶时 no-op |
+| `CameraManager.Deactivate(id/handle)` | `CameraManager.Pop()` / `Clear()` | `Pop` 返回上一层覆盖；`Clear` 释放全部请求 |
+| `CameraManager.TransitionToAsync(...)` | `CameraManager.SwitchToAsync` / `PushAsync` / `PopAsync` / `PopAllAsync` | 四个异步动词；结果 `TargetUnregistered` → `CameraNotFound` |
+| `Register<T>(string, T)` / `Register<T>(T)` | `Register(string, UnityEngine.Object)` / `Register(UnityEngine.Object)` | 泛型只约束 `class`、无真实类型约束；改用 Unity 核心类型，后端再校验相机类型 |
+| `CameraActivatedMessage.Handle` / `.PreviousHandle` | `.CameraId` / `.PreviousCameraId` | 外部 / 未注册端为 `null`；`IsExternal` 属性可直接判断 |
+| `CameraDeactivatedMessage.Handle` / `CameraBlendCompletedMessage.Handle` | `.CameraId` | 同上；cut 在激活时补发零时长完成 |
+| `CameraStateSnapshot.ActiveHandle` / `.TransitionTarget` | `.ActiveCameraId` / `.TransitionTargetId` | 另新增 `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `IsExternallyControlled` |
+| `CameraInfo.Handle` / `.IsNamed` | `.CameraId` / `.IsGenerated` | 另新增 `IsBase` / `IsInStack` |
+| `CameraTransitionResult.TargetUnregistered` | `CameraTransitionResult.CameraNotFound` | 目标 id 未知 / 已注销 / 相机已销毁统一为该结果 |
+| `CameraManager.IsTransitioning` | `CameraManager.GetState().IsTransitioning`（或 `IsBlending`） | 门面不再直接暴露管理器过渡；`IsBlending` 是输出驱动真实混合 |
+| `ICameraManager.ActiveCameraId` / `UnityCameraManager.ActiveCameraId` / `CinemachineCameraManager.ActiveCameraId`（**2026-10-22 中间形状**） | `ICameraManager.ActiveHandle.NamedId`（或门面 `CameraManager.ActiveCameraId`） | 接口与实现上的 `ActiveCameraId` 移除——两者并行，`ActiveHandle` 是唯一活动查询；命名 id 由句柄携带（`NamedId`，动态为 `null`）。门面 `CameraManager.ActiveCameraId` 保留，直接读 `ActiveHandle.NamedId`（O(1)） |
+| `new CameraHandle(id, generation)`（2026-10-22 中间形状） | `new CameraHandle(id, generation, namedId)` | 构造签名扩展：`namedId` 有默认值 `null`，**两参调用源兼容**（基线把签名变化记为「已变更」）。命名槽位填命名 id，动态槽位传 `null` |
 | `UpdateManager.ProcessImmediate(IUpdateable, float, float)` / `(IUpdateable, float, in UpdateClock)` | 同上，形参改为 `IUpdateLifecycle` | **形参放宽**：纯 `ILateUpdateable` / `IFixedUpdateable` 节点现在可达。传 `IUpdateable` 的既有调用源兼容（实参隐式上转），重新编译即可；已编译的第三方程序集需重编。跨时机语义见下一条行为变更 |
-| `com.venusy609.xframework.cinemachine`（manifest 条目）与对 `Venusy609.Xframework.Cinemachine` 程序集的引用 | 删除扩展包条目；确认 `"com.unity.cinemachine": "3.1.7"` 已在 manifest 中，继续使用 `XFramework.XCamera.Cinemachine` / `CinemachineCameraManager` | **扩展包已删除并并入核心包**；命名空间与类型名不变，但程序集由 `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`——引用旧程序集的已编译第三方程序集需重编。未列 `com.unity.cinemachine` 时核心 asmdef 解析不到引用，整体编译失败（与 Input System 同型） |
-| `new UnityCameraManager(IReadOnlyDictionary<string, Camera>)` | `new CinemachineCameraManager(brain)` + `CameraManager.Register("id", vcam)` | **整个类型删除**（2026-10-22 相机模块全面重整）。无 Cinemachine 项目直接使用 `UnityEngine.Camera` 或实现 `ICameraManager` |
-| `new CinemachineCameraManager(brain, IReadOnlyDictionary<string, CinemachineVirtualCameraBase>)` | `new CinemachineCameraManager(brain)` + 逐台 `Register("id", vcam)` | 构造不再接收初始字典；命名 / 动态注册走同一条 `Register` 路径 |
-| `ICameraManager.Activate/Deactivate/TransitionTo/IsActive(string)` 与 `CinemachineCameraManager` 的同名 string 重载 | 门面 `CameraManager.Activate/Deactivate/TransitionTo/IsActive(string)`，或 `TryGetHandle(id, out handle)` 后调句柄版 | **接口只收句柄**；字符串解析收敛到门面，后端不再各自实现一套 string 操作 |
-| `CinemachineCameraManager.Register(string, CinemachineVirtualCameraBase)` / `Unregister(string)` | `Register<T>(string, T)` / `Unregister(CameraHandle)` | 命名注册进主接口；注销只收句柄（门面保留 `Unregister(string)` 便捷重载） |
-| `CameraManager.CameraIds` / `ICameraManager.CameraIds` | `CameraManager.CameraCount` + `TryGetHandle` | 实时字典键视图删除；逐相机枚举在后续诊断快照提交补 `CopyCameras`（本提交只提供计数与按 id 查句柄） |
+| `com.venusy609.xframework.cinemachine`（manifest 条目）与对 `Venusy609.Xframework.Cinemachine` 程序集的引用（2026-10-22 中间形状） | 删除扩展包条目；确认 `"com.unity.cinemachine": "3.1.7"` 已在 manifest 中，继续使用 `XFramework.XCamera.Cinemachine` / `CinemachineCameraManager` | **扩展包已删除并并入核心包**；命名空间与类型名不变，但程序集由 `Venusy609.Xframework.Cinemachine` 变为 `Venusy609.Xframework`——引用旧程序集的已编译第三方程序集需重编。未列 `com.unity.cinemachine` 时核心 asmdef 解析不到引用，整体编译失败（与 Input System 同型） |
+| `new UnityCameraManager(IReadOnlyDictionary<string, Camera>)`（2026-10-22 中间形状） | `new CinemachineCameraManager(brain)` + `CameraManager.Register("id", vcam)` | **整个类型删除**（2026-10-22 相机模块全面重整）。无 Cinemachine 项目直接使用 `UnityEngine.Camera` 或实现 `ICameraManager` |
+| `new CinemachineCameraManager(brain, IReadOnlyDictionary<string, CinemachineVirtualCameraBase>)`（2026-10-22 中间形状） | `new CinemachineCameraManager(brain)` + 逐台 `Register("id", vcam)` | 构造不再接收初始字典；命名 / 动态注册走同一条 `Register` 路径 |
+| `ICameraManager.Activate/Deactivate/TransitionTo/IsActive(string)` 与 `CinemachineCameraManager` 的同名 string 重载（2026-10-22 中间形状） | 门面 `CameraManager.Activate/Deactivate/TransitionTo/IsActive(string)`，或 `TryGetHandle(id, out handle)` 后调句柄版 | **接口只收句柄**；字符串解析收敛到门面，后端不再各自实现一套 string 操作 |
+| `CinemachineCameraManager.Register(string, CinemachineVirtualCameraBase)` / `Unregister(string)`（2026-10-22 中间形状） | `Register<T>(string, T)` / `Unregister(CameraHandle)` | 命名注册进主接口；注销只收句柄（门面保留 `Unregister(string)` 便捷重载） |
+| `CameraManager.CameraIds` / `ICameraManager.CameraIds`（2026-10-22 中间形状） | `CameraManager.CameraCount` + `TryGetHandle` | 实时字典键视图删除；逐相机枚举在后续诊断快照提交补 `CopyCameras`（本提交只提供计数与按 id 查句柄） |
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
@@ -383,6 +427,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Removed
 
+- **XCamera 旧公开面**（2026-10-23）：删除 `ICameraManager` / `CameraHandle` / `CinemachineCameraManager`、
+  三种旧消息载荷、`CameraStateSnapshot` / `CameraInfo` 的旧字段，以及 `CameraFacadeCompletenessTests` 与
+  `Tests/Editor/Camera/CameraHandleTests.cs`（相机测试全部迁入 PlayMode）。当前形状与迁移见上方 2026-10-23 条。
 - **独立扩展包 `com.venusy609.xframework.cinemachine` 与 `Assets/XFramework.Cinemachine/`**（2026-10-22）：
   Runtime 源码 / PlayMode 用例 / 示例 / 文档并入核心包；扩展 asmdef、`CinemachineDependencyTests` 与独立
   `package.json` / `README.md` / `CHANGELOG.md` 删除。扩展包没有独立发布 tag（仅随仓库 `main` 可达）；
