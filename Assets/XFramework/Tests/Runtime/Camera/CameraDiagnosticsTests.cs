@@ -1,13 +1,13 @@
-using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using Unity.Cinemachine;
 using UnityEngine;
+using XFramework.XCamera.Cinemachine;
 
-namespace XFramework.XCamera.Cinemachine.Tests
+namespace XFramework.XCamera.Tests
 {
     /// <summary>
-    /// 诊断快照：<c>GetState()</c> 与 <c>CopyCameras()</c> 的计数 / 活动 / 过渡 / 存活信息。
+    /// 诊断快照：计数 / 栈 / 活动 / 过渡 / 外部接管，以及 <c>CopyCameras</c> 的标志。
     /// </summary>
     [TestFixture]
     public class CameraDiagnosticsTests
@@ -21,9 +21,6 @@ namespace XFramework.XCamera.Cinemachine.Tests
         private GameObject _vcamBObject;
         private CinemachineCamera _vcamA;
         private CinemachineCamera _vcamB;
-        private CinemachineCameraManager _manager;
-        private CameraHandle _handleA;
-        private CameraHandle _handleB;
         private int _frame;
 
         [SetUp]
@@ -42,16 +39,15 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _vcamBObject = new GameObject("VcamB");
             _vcamB = _vcamBObject.AddComponent<CinemachineCamera>();
 
-            _manager = new CinemachineCameraManager(_brain);
-            _handleA = _manager.Register("a", _vcamA);
-            _handleB = _manager.Register("b", _vcamB);
+            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Register("a", _vcamA);
+            CameraManager.Register("b", _vcamB);
             _frame = 0;
         }
 
         [TearDown]
         public void TearDown()
         {
-            _manager?.Dispose();
             CameraManager.Destroy();
             CinemachineCore.GetBlendOverride = null;
 
@@ -68,69 +64,80 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _brain.ManualUpdate(_frame++, delta);
         }
 
-        private static CameraInfo Find(List<CameraInfo> buffer, CameraHandle handle)
-        {
-            for (var i = 0; i < buffer.Count; i++)
-            {
-                if (buffer[i].Handle == handle)
-                    return buffer[i];
-            }
-
-            Assert.Fail("buffer 中找不到句柄 " + handle);
-            return default;
-        }
-
         #endregion
 
         #region GetState
 
         [Test]
-        public void GetState_CountsAndActiveAndTransition()
+        public void GetState_CountsBaseActiveAndStack()
         {
-            _manager.Activate(_handleA);
+            CameraManager.SwitchTo("a");
             Pump();
 
-            var idle = _manager.GetState();
-            Assert.AreEqual(2, idle.RegisteredCount);
-            Assert.AreEqual(2, idle.NamedCount);
-            Assert.AreEqual(0, idle.DynamicCount);
-            Assert.AreEqual(_handleA, idle.ActiveHandle);
-            Assert.AreEqual("a", idle.ActiveCameraId);
-            Assert.IsFalse(idle.IsTransitioning);
-            Assert.IsFalse(idle.IsBrainBlending);
-            Assert.AreEqual(0f, idle.TransitionProgress);
-            Assert.AreSame(_camera, idle.OutputCamera);
+            var state = CameraManager.GetState();
 
-            _manager.TransitionTo(_handleB, 0.2f, CameraBlendStyle.Linear);
-            Pump(0.1f);
-
-            var blending = _manager.GetState();
-            Assert.IsTrue(blending.IsTransitioning);
-            Assert.IsTrue(blending.IsBrainBlending);
-            Assert.AreEqual(_handleB, blending.TransitionTarget);
-            Assert.Greater(blending.TransitionProgress, 0f);
-            Assert.LessOrEqual(blending.TransitionProgress, 1f);
+            Assert.AreEqual(2, state.RegisteredCount);
+            Assert.AreEqual(2, state.NamedCount);
+            Assert.AreEqual(0, state.GeneratedCount);
+            Assert.AreEqual("a", state.BaseCameraId);
+            Assert.AreEqual("a", state.ActiveCameraId);
+            Assert.IsTrue(state.HasActiveCamera);
+            Assert.AreEqual(1, state.StackDepth);
+            Assert.IsFalse(state.IsTransitioning);
+            Assert.IsNull(state.TransitionTargetId);
+            Assert.IsFalse(state.IsBrainBlending);
+            Assert.IsFalse(state.IsExternallyControlled);
+            Assert.AreSame(_camera, state.OutputCamera);
         }
 
         [Test]
-        public void GetState_ExternalBlend_ReportsBrainBlendingButNotManagerTransition()
+        public void GetState_ReportsManagerTransitionAndProgress()
         {
-            _manager.Activate(_handleA);
+            CameraManager.SwitchTo("a");
             Pump();
 
-            var externalObject = new GameObject("External");
-            var external = externalObject.AddComponent<CinemachineCamera>();
-            external.Priority = 10;
+            CameraManager.Push("b", 0.4f, CameraBlendStyle.Linear);
+            Pump(0.2f);
 
+            var state = CameraManager.GetState();
+            Assert.IsTrue(state.IsTransitioning);
+            Assert.AreEqual("b", state.TransitionTargetId);
+            Assert.IsTrue(state.IsBrainBlending);
+            Assert.Greater(state.TransitionProgress, 0f);
+            Assert.Less(state.TransitionProgress, 1f);
+            Assert.AreEqual("b", state.ActiveCameraId);
+            Assert.AreEqual(2, state.StackDepth);
+            Assert.AreEqual("a", state.BaseCameraId);
+
+            for (var i = 0; i < 8 && CameraManager.GetState().IsTransitioning; i++)
+                Pump(0.05f);
+
+            state = CameraManager.GetState();
+            Assert.IsFalse(state.IsTransitioning);
+            Assert.IsNull(state.TransitionTargetId);
+            Assert.AreEqual("b", state.ActiveCameraId);
+        }
+
+        [Test]
+        public void GetState_ExternalBlend_ReportsBrainBlendingNotManagerTransition()
+        {
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            var externalObject = new GameObject("External", typeof(CinemachineCamera));
+            var external = externalObject.GetComponent<CinemachineCamera>();
+            external.Priority = 100;
             try
             {
-                external.Prioritize();
                 Pump(0.1f);
 
-                var state = _manager.GetState();
-                Assert.IsTrue(state.IsBrainBlending, "Brain 的真实混合应被报告");
-                Assert.IsFalse(state.IsTransitioning, "外部混合不算管理器自有过渡");
-                Assert.IsTrue(state.TransitionTarget.IsDefault);
+                var state = CameraManager.GetState();
+                Assert.IsTrue(state.IsBrainBlending, "Brain 的真实混合应可见");
+                Assert.IsFalse(state.IsTransitioning, "管理器过渡只统计本管理器发起的请求");
+                Assert.IsNull(state.ActiveCameraId, "外部未注册相机没有 id");
+                Assert.IsTrue(state.HasActiveCamera);
+                Assert.IsTrue(state.IsExternallyControlled,
+                    "活动相机不是栈顶且无在途请求 → 外部接管");
             }
             finally
             {
@@ -139,29 +146,20 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
-        public void GetState_NoCameras_ReturnsEmptyCounts()
+        public void GetState_EmptyBackend_ReturnsEmptyCounts()
         {
-            var emptyObject = new GameObject("EmptyCamera");
-            var emptyBrain = emptyObject.AddComponent<CinemachineBrain>();
-            emptyBrain.UpdateMethod = CinemachineBrain.UpdateMethods.ManualUpdate;
+            CameraManager.Destroy();
+            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
 
-            var empty = new CinemachineCameraManager(emptyBrain);
-            try
-            {
-                var state = empty.GetState();
+            var state = CameraManager.GetState();
 
-                Assert.AreEqual(0, state.RegisteredCount);
-                Assert.AreEqual(0, state.NamedCount);
-                Assert.AreEqual(0, state.DynamicCount);
-                Assert.IsTrue(state.ActiveHandle.IsDefault);
-                Assert.IsFalse(state.IsTransitioning);
-                Assert.IsFalse(state.IsBrainBlending);
-            }
-            finally
-            {
-                empty.Dispose();
-                UnityEngine.Object.DestroyImmediate(emptyObject);
-            }
+            Assert.AreEqual(0, state.RegisteredCount);
+            Assert.AreEqual(0, state.NamedCount);
+            Assert.AreEqual(0, state.GeneratedCount);
+            Assert.IsNull(state.BaseCameraId);
+            Assert.IsNull(state.ActiveCameraId);
+            Assert.AreEqual(0, state.StackDepth);
+            Assert.IsFalse(state.IsExternallyControlled);
         }
 
         #endregion
@@ -169,101 +167,81 @@ namespace XFramework.XCamera.Cinemachine.Tests
         #region CopyCameras
 
         [Test]
-        public void CopyCameras_ClearsBufferAndIncludesNamedDynamic()
+        public void CopyCameras_ClearsBufferAndFlagsStack()
         {
-            _manager.Activate(_handleA);
+            CameraManager.SwitchTo("a");
+            Pump();
+            CameraManager.Push("b");
             Pump();
 
-            var extraObject = new GameObject("VcamC");
-            var extra = extraObject.AddComponent<CinemachineCamera>();
+            var buffer = new List<CameraInfo> { default, default, default };
+            Assert.AreEqual(2, CameraManager.CopyCameras(buffer));
+            Assert.AreEqual(2, buffer.Count);
+
+            var a = buffer[0];
+            Assert.AreEqual("a", a.CameraId);
+            Assert.IsTrue(a.IsBase);
+            Assert.IsTrue(a.IsInStack);
+            Assert.IsFalse(a.IsActive);
+            Assert.IsFalse(a.IsTransitionTarget);
+            Assert.IsTrue(a.IsAlive);
+            Assert.IsFalse(a.IsGenerated);
+
+            var b = buffer[1];
+            Assert.AreEqual("b", b.CameraId);
+            Assert.IsFalse(b.IsBase);
+            Assert.IsTrue(b.IsInStack);
+            Assert.IsTrue(b.IsActive);
+            Assert.IsTrue(b.IsAlive);
+        }
+
+        [Test]
+        public void CopyCameras_GeneratedCameraIsFlagged()
+        {
+            var dynamicObject = new GameObject("Dynamic", typeof(CinemachineCamera));
             try
             {
-                var handleC = _manager.Register(extra);
-                var buffer = new List<CameraInfo>
-                {
-                    new CameraInfo(new CameraHandle(99, 1), false, false, true),
-                };
-
-                var count = _manager.CopyCameras(buffer);
-
-                Assert.AreEqual(3, count);
-                Assert.AreEqual(3, buffer.Count, "CopyCameras 必须先清空 buffer");
-
-                var a = Find(buffer, _handleA);
-                Assert.IsTrue(a.IsNamed);
-                Assert.IsTrue(a.IsAlive);
-                Assert.IsTrue(a.IsActive);
-
-                var b = Find(buffer, _handleB);
-                Assert.IsTrue(b.IsNamed);
-                Assert.IsTrue(b.IsAlive);
-                Assert.IsFalse(b.IsActive);
-
-                var c = Find(buffer, handleC);
-                Assert.IsFalse(c.IsNamed);
-                Assert.IsTrue(c.IsAlive);
-
-                UnityEngine.Object.DestroyImmediate(extraObject);
-
-                var deadCount = _manager.CopyCameras(buffer);
-                Assert.AreEqual(3, deadCount, "外部销毁的槽位仍占位，直到 Unregister");
-                Assert.IsFalse(Find(buffer, handleC).IsAlive);
-                Assert.IsFalse(Find(buffer, handleC).IsNamed);
-            }
-            finally
-            {
-                if (extraObject != null)
-                    UnityEngine.Object.DestroyImmediate(extraObject);
-            }
-        }
-
-        [Test]
-        public void CopyCameras_TransitionTarget_IsFlagged()
-        {
-            _manager.Activate(_handleA);
-            Pump();
-            _manager.TransitionTo(_handleB, 0.2f, CameraBlendStyle.Linear);
-            Pump(0.1f);
-
-            var buffer = new List<CameraInfo>();
-            _manager.CopyCameras(buffer);
-
-            Assert.IsTrue(Find(buffer, _handleB).IsTransitionTarget);
-            Assert.IsFalse(Find(buffer, _handleA).IsTransitionTarget);
-        }
-
-        [Test]
-        public void CopyCameras_NullBuffer_Throws()
-        {
-            Assert.Throws<ArgumentNullException>(() => _manager.CopyCameras(null));
-        }
-
-        #endregion
-
-        #region Facade
-
-        [Test]
-        public void Facade_GetStateAndCopyCameras_Forward()
-        {
-            CameraManager.Initialize(_manager);
-            try
-            {
-                _manager.Activate(_handleA);
-                Pump();
-
-                var state = CameraManager.GetState();
-                Assert.AreEqual(2, state.RegisteredCount);
-                Assert.AreEqual(_handleA, state.ActiveHandle);
+                var dynamicCamera = dynamicObject.GetComponent<CinemachineCamera>();
+                var id = CameraManager.Register(dynamicCamera);
 
                 var buffer = new List<CameraInfo>();
-                Assert.AreEqual(2, CameraManager.CopyCameras(buffer));
-                Assert.AreEqual(2, buffer.Count);
+                CameraManager.CopyCameras(buffer);
+
+                var info = buffer.Find(item => item.CameraId == id);
+                Assert.IsTrue(info.IsGenerated);
+                Assert.IsTrue(info.IsAlive);
             }
             finally
             {
-                CameraManager.Destroy();
-                // 门面 Destroy 已 Dispose 管理器；TearDown 的第二次 Dispose 幂等。
+                UnityEngine.Object.DestroyImmediate(dynamicObject);
             }
+        }
+
+        [Test]
+        public void CopyCameras_DeadSlot_IsNotAlive()
+        {
+            var deadObject = new GameObject("Dead", typeof(CinemachineCamera));
+            var dead = deadObject.GetComponent<CinemachineCamera>();
+            CameraManager.Register("dead", dead);
+            UnityEngine.Object.DestroyImmediate(deadObject);
+
+            var buffer = new List<CameraInfo>();
+            CameraManager.CopyCameras(buffer);
+
+            var info = buffer.Find(item => item.CameraId == "dead");
+            Assert.IsFalse(info.IsAlive);
+            Assert.AreEqual(3, buffer.Count, "已销毁但未注销的槽位仍计入");
+        }
+
+        [Test]
+        public void CopyCameras_Uninitialized_ClearsBuffer()
+        {
+            CameraManager.Destroy();
+            var buffer = new List<CameraInfo> { default };
+
+            Assert.AreEqual(0, CameraManager.CopyCameras(buffer));
+            Assert.IsEmpty(buffer);
+            Assert.AreEqual(0, CameraManager.GetState().RegisteredCount);
         }
 
         #endregion

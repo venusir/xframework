@@ -205,7 +205,7 @@ namespace XFramework.Architecture.Tests
         private async UniTask BootSessionAsync()
         {
             UIManager.Initialize(_uiRoot.transform);
-            CameraManager.Initialize(new FakeCameraManager());
+            CameraManager.Initialize(new FakeCameraBackend());
             ConfigManager.Initialize();
             LocalizationManager.Initialize("zh_Hans", new Dictionary<string, string>());
             FileManager.Initialize();

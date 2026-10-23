@@ -4,8 +4,6 @@ using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
-using XFramework.XCamera.Messages;
-using XFramework.XMessage;
 
 namespace XFramework.XCamera.Tests
 {
@@ -19,6 +17,8 @@ namespace XFramework.XCamera.Tests
 
         private GameObject _cameraObject;
         private Camera _camera;
+        private GameObject _cameraObject2;
+        private Camera _camera2;
 
         [SetUp]
         public void SetUp()
@@ -26,6 +26,8 @@ namespace XFramework.XCamera.Tests
             CameraManager.Destroy();
             _cameraObject = new GameObject("CameraManagerTests_Camera", typeof(Camera));
             _camera = _cameraObject.GetComponent<Camera>();
+            _cameraObject2 = new GameObject("CameraManagerTests_Camera2", typeof(Camera));
+            _camera2 = _cameraObject2.GetComponent<Camera>();
         }
 
         [TearDown]
@@ -34,6 +36,15 @@ namespace XFramework.XCamera.Tests
             CameraManager.Destroy();
             if (_cameraObject != null)
                 UnityEngine.Object.DestroyImmediate(_cameraObject);
+            if (_cameraObject2 != null)
+                UnityEngine.Object.DestroyImmediate(_cameraObject2);
+        }
+
+        private FakeCameraBackend Initialize()
+        {
+            var fake = new FakeCameraBackend();
+            CameraManager.Initialize(fake);
+            return fake;
         }
 
         #endregion
@@ -45,7 +56,7 @@ namespace XFramework.XCamera.Tests
         {
             Assert.IsFalse(CameraManager.IsInitialized);
 
-            CameraManager.Initialize(new FakeCameraManager());
+            CameraManager.Initialize(new FakeCameraBackend());
             Assert.IsTrue(CameraManager.IsInitialized);
 
             CameraManager.Destroy();
@@ -61,14 +72,14 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void Destroy_DisposeThrows_StillClearsInstance()
         {
-            var throwing = new FakeCameraManager { ThrowOnDispose = true };
+            var throwing = new FakeCameraBackend { ThrowOnDispose = true };
             CameraManager.Initialize(throwing);
 
             Assert.Throws<InvalidOperationException>(() => CameraManager.Destroy());
             Assert.IsFalse(CameraManager.IsInitialized,
                 "Dispose 抛出也必须清掉实例，否则留下永久闩锁（CAM-002）");
 
-            var next = new FakeCameraManager();
+            var next = new FakeCameraBackend();
             Assert.DoesNotThrow(() => CameraManager.Initialize(next),
                 "旧实例 Dispose 失败不得阻止下一次 Initialize");
             Assert.IsTrue(CameraManager.IsInitialized);
@@ -77,14 +88,14 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void Initialize_Twice_LogsWarningAndKeepsFirst()
         {
-            var first = new FakeCameraManager();
-            var second = new FakeCameraManager();
+            var first = new FakeCameraBackend();
+            var second = new FakeCameraBackend();
 
             CameraManager.Initialize(first);
             LogAssert.Expect(LogType.Warning, new Regex("CameraManager\\.Initialize 被重复调用.*"));
             CameraManager.Initialize(second);
 
-            CameraManager.Register(_camera);
+            CameraManager.Register("a", _camera);
             Assert.AreSame(_camera, first.LastRegistered);
             Assert.IsNull(second.LastRegistered);
         }
@@ -92,8 +103,8 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void Initialize_Twice_DoesNotDisposeSecond()
         {
-            var first = new FakeCameraManager();
-            var second = new FakeCameraManager();
+            var first = new FakeCameraBackend();
+            var second = new FakeCameraBackend();
 
             CameraManager.Initialize(first);
             LogAssert.Expect(LogType.Warning, new Regex("CameraManager\\.Initialize 被重复调用.*"));
@@ -106,8 +117,7 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void Destroy_DisposesIdisposableImplementation()
         {
-            var fake = new FakeCameraManager();
-            CameraManager.Initialize(fake);
+            var fake = Initialize();
 
             CameraManager.Destroy();
 
@@ -118,8 +128,7 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void ResetForNewSession_ClearsWithoutDisposing()
         {
-            var fake = new FakeCameraManager();
-            CameraManager.Initialize(fake);
+            var fake = Initialize();
 
             CameraManager.ResetForNewSession();
 
@@ -131,255 +140,65 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void ResetForNewSession_UnbindThrows_LogsWarningAndClears()
         {
-            var fake = new FakeCameraManager { ThrowOnUnbind = true };
+            var fake = new FakeCameraBackend { ThrowOnUnbind = true };
             CameraManager.Initialize(fake);
 
             LogAssert.Expect(LogType.Warning, new Regex("ResetForNewSession.*已忽略.*"));
             Assert.DoesNotThrow(() => CameraManager.ResetForNewSession());
 
             Assert.IsFalse(CameraManager.IsInitialized);
-            Assert.AreEqual(1, fake.UnbindCount);
             Assert.IsFalse(fake.Disposed);
         }
 
+        #endregion
+
+        #region Probes / uninitialized
+
         [Test]
-        public void Subscribe_WithoutInitialize_ForwardsMessages()
+        public void Probes_WhenNotInitialized_ReturnDefaults()
         {
-            CameraManager.Destroy();
-            var received = new List<CameraActivatedMessage>();
-            using var subscription = CameraManager.Subscribe(
-                (CameraActivatedMessage message) => received.Add(message));
+            Assert.IsNull(CameraManager.ActiveCameraId);
+            Assert.IsNull(CameraManager.BaseCameraId);
+            Assert.AreEqual(0, CameraManager.StackDepth);
+            Assert.IsFalse(CameraManager.HasActiveCamera);
+            Assert.IsNull(CameraManager.OutputCamera);
+            Assert.IsFalse(CameraManager.IsBlending);
+            Assert.IsFalse(CameraManager.IsExternallyControlled);
+            Assert.AreEqual(0, CameraManager.CameraCount);
+            Assert.AreEqual(0, CameraManager.GetState().RegisteredCount);
 
-            var handle = new CameraHandle(0, 1, "main");
-            MessageManager.Publish(new CameraActivatedMessage(handle, default, true));
+            var buffer = new List<CameraInfo> { default };
+            Assert.AreEqual(0, CameraManager.CopyCameras(buffer));
+            Assert.IsEmpty(buffer);
 
-            Assert.AreEqual(1, received.Count);
-            Assert.AreEqual(handle, received[0].Handle);
-            Assert.IsTrue(received[0].IsCut);
+            Assert.IsFalse(CameraManager.TryGetCamera("a", out Camera camera));
+            Assert.IsNull(camera);
+            Assert.IsFalse(CameraManager.Unregister("a"));
         }
 
         [Test]
         public void Commands_WhenNotInitialized_ThrowWithRepairHint()
         {
-            var exception = Assert.Throws<InvalidOperationException>(() => CameraManager.Activate("main"));
+            var exception = Assert.Throws<InvalidOperationException>(() => CameraManager.SwitchTo("a"));
             StringAssert.Contains("[CameraManager]", exception.Message);
             StringAssert.Contains("Initialize", exception.Message);
 
-            Assert.Throws<InvalidOperationException>(() => CameraManager.Activate(new CameraHandle(0, 1)));
-            Assert.Throws<InvalidOperationException>(() => CameraManager.Deactivate("main"));
-            Assert.Throws<InvalidOperationException>(() => CameraManager.TransitionTo("main", 1f));
-            Assert.Throws<InvalidOperationException>(
-                () => CameraManager.TransitionToAsync(new CameraHandle(0, 1), 1f));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Push("a"));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Pop());
+            Assert.Throws<InvalidOperationException>(() => CameraManager.PopAll());
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Clear());
+            Assert.Throws<InvalidOperationException>(() => CameraManager.Register("a", _camera));
             Assert.Throws<InvalidOperationException>(() => CameraManager.Register(_camera));
         }
 
         [Test]
-        public void Probes_WhenNotInitialized_ReturnDefaults()
+        public void StringEntryPoints_Null_Throw()
         {
-            Assert.IsNull(CameraManager.OutputCamera);
-            Assert.IsTrue(CameraManager.ActiveHandle.IsDefault);
-            Assert.IsNull(CameraManager.ActiveCameraId);
-            Assert.IsFalse(CameraManager.IsTransitioning);
-            Assert.AreEqual(0, CameraManager.CameraCount);
-            Assert.IsFalse(CameraManager.TryGetHandle("main", out var handle));
-            Assert.IsTrue(handle.IsDefault);
-            Assert.IsFalse(CameraManager.IsActive("main"));
-            Assert.IsFalse(CameraManager.IsActive(new CameraHandle(0, 1)));
-            Assert.IsFalse(CameraManager.Unregister(new CameraHandle(0, 1)));
-            Assert.IsFalse(CameraManager.Unregister("main"));
-
-            var buffer = new List<CameraInfo>
-            {
-                new CameraInfo(new CameraHandle(1, 1), false, false, true),
-            };
-            Assert.AreEqual(0, CameraManager.CopyCameras(buffer));
-            Assert.IsEmpty(buffer, "未初始化时 CopyCameras 必须清空 buffer");
-            Assert.AreEqual(0, CameraManager.GetState().RegisteredCount);
-        }
-
-        [Test]
-        public void Forwarding_Diagnostics()
-        {
-            var handle = new CameraHandle(0, 1, "main");
-            var fake = new FakeCameraManager
-            {
-                State = new CameraStateSnapshot(
-                    1, 1, 0, handle, default, false, true, 0.5f, _camera),
-            };
-            fake.CopyResult.Add(new CameraInfo(handle, true, false, true));
-            CameraManager.Initialize(fake);
-
-            var buffer = new List<CameraInfo>();
-            var count = CameraManager.CopyCameras(buffer);
-
-            Assert.AreEqual(1, count);
-            Assert.AreEqual(handle, buffer[0].Handle);
-            Assert.IsTrue(buffer[0].IsActive);
-            Assert.IsTrue(buffer[0].IsAlive);
-
-            var state = CameraManager.GetState();
-            Assert.AreEqual(1, state.RegisteredCount);
-            Assert.AreEqual(handle, state.ActiveHandle);
-            Assert.IsTrue(state.IsBrainBlending);
-            Assert.AreEqual(0.5f, state.TransitionProgress);
-            Assert.AreSame(_camera, state.OutputCamera);
-        }
-
-        #endregion
-
-        #region Forwarding
-
-        [Test]
-        public void Forwarding_Queries()
-        {
-            var handle = new CameraHandle(0, 1, "main");
-            var fake = new FakeCameraManager
-            {
-                OutputCamera = _camera,
-                ActiveHandle = handle,
-                IsTransitioning = true,
-                CameraCount = 2,
-            };
-            fake.NamedHandles["main"] = handle;
-            CameraManager.Initialize(fake);
-
-            Assert.AreSame(_camera, CameraManager.OutputCamera);
-            Assert.AreEqual(handle, CameraManager.ActiveHandle);
-            Assert.AreEqual("main", CameraManager.ActiveCameraId);
-            Assert.IsTrue(CameraManager.IsTransitioning);
-            Assert.AreEqual(2, CameraManager.CameraCount);
-
-            Assert.IsTrue(CameraManager.TryGetHandle("main", out var resolved));
-            Assert.AreEqual(handle, resolved);
-            Assert.IsFalse(CameraManager.TryGetHandle("battle", out _));
-
-            Assert.IsTrue(CameraManager.IsActive("main"));
-            Assert.IsFalse(CameraManager.IsActive("battle"));
-            Assert.IsFalse(CameraManager.IsActive((string)null));
-            Assert.IsTrue(CameraManager.IsActive(handle));
-        }
-
-        [Test]
-        public void Forwarding_Commands()
-        {
-            var battle = new CameraHandle(0, 1, "battle");
-            var cutscene = new CameraHandle(1, 1, "cutscene");
-            var fake = new FakeCameraManager();
-            fake.NamedHandles["battle"] = battle;
-            fake.NamedHandles["cutscene"] = cutscene;
-            CameraManager.Initialize(fake);
-
-            CameraManager.Activate("battle");
-            Assert.AreEqual(battle, fake.LastActivatedHandle);
-
-            CameraManager.Deactivate("battle");
-            Assert.AreEqual(battle, fake.LastDeactivatedHandle);
-
-            CameraManager.TransitionTo("cutscene", 0.5f, CameraBlendStyle.Linear);
-            Assert.AreEqual(cutscene, fake.LastTransitionHandle);
-            Assert.AreEqual(0.5f, fake.LastTransitionDuration);
-            Assert.AreEqual(CameraBlendStyle.Linear, fake.LastTransitionStyle);
-        }
-
-        [Test]
-        public void StringCommands_UnknownId_WarnAndNoOp()
-        {
-            var fake = new FakeCameraManager();
-            CameraManager.Initialize(fake);
-
-            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
-            CameraManager.Activate("missing");
-            Assert.IsTrue(fake.LastActivatedHandle.IsDefault);
-
-            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
-            CameraManager.Deactivate("missing");
-            Assert.IsTrue(fake.LastDeactivatedHandle.IsDefault);
-
-            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
-            CameraManager.TransitionTo("missing", 1f);
-            Assert.IsTrue(fake.LastTransitionHandle.IsDefault);
-
-            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id.*"));
-            var asyncResult = CameraManager.TransitionToAsync("missing", 1f).GetAwaiter().GetResult();
-            Assert.AreEqual(CameraTransitionResult.TargetUnregistered, asyncResult);
-
-            Assert.IsFalse(CameraManager.Unregister("missing"));
-        }
-
-        [Test]
-        public void Forwarding_Register()
-        {
-            var expected = new CameraHandle(0, 1, "main");
-            var fake = new FakeCameraManager { RegisterResult = expected };
-            CameraManager.Initialize(fake);
-
-            var named = CameraManager.Register("main", _camera);
-            Assert.AreEqual(expected, named);
-            Assert.AreEqual("main", fake.LastRegisteredId);
-            Assert.AreSame(_camera, fake.LastRegistered);
-
-            var dynamicHandle = CameraManager.Register(_camera);
-            Assert.AreEqual(expected, dynamicHandle);
-            Assert.IsNull(fake.LastRegisteredId);
-            Assert.AreSame(_camera, fake.LastRegistered);
-        }
-
-        [Test]
-        public void Forwarding_Unregister()
-        {
-            var handle = new CameraHandle(1, 2, "main");
-            var fake = new FakeCameraManager { UnregisterResult = false };
-            fake.NamedHandles["main"] = handle;
-            CameraManager.Initialize(fake);
-
-            Assert.IsFalse(CameraManager.Unregister(handle));
-            Assert.AreEqual(handle, fake.LastUnregistered);
-
-            Assert.IsFalse(CameraManager.Unregister("main"));
-            Assert.AreEqual(handle, fake.LastUnregistered);
-        }
-
-        [Test]
-        public void Unregister_WhenNotInitialized_ReturnsFalse()
-        {
-            Assert.IsFalse(CameraManager.Unregister(new CameraHandle(0, 1)));
-        }
-
-        [Test]
-        public void Forwarding_HandleCommands()
-        {
-            var fake = new FakeCameraManager();
-            CameraManager.Initialize(fake);
-            var handle = new CameraHandle(4, 2);
-
-            CameraManager.Activate(handle);
-            Assert.AreEqual(handle, fake.LastActivatedHandle);
-
-            CameraManager.Deactivate(handle);
-            Assert.AreEqual(handle, fake.LastDeactivatedHandle);
-
-            CameraManager.TransitionTo(handle, 0.5f, CameraBlendStyle.Linear);
-            Assert.AreEqual(handle, fake.LastTransitionHandle);
-
-            fake.ActiveHandle = handle;
-            Assert.IsTrue(CameraManager.IsActive(handle));
-        }
-
-        [Test]
-        public void Forwarding_TransitionToAsync()
-        {
-            var handle = new CameraHandle(0, 1, "battle");
-            var fake = new FakeCameraManager { AsyncResult = CameraTransitionResult.Completed };
-            fake.NamedHandles["battle"] = handle;
-            CameraManager.Initialize(fake);
-
-            var result = CameraManager.TransitionToAsync("battle", 0.5f, CameraBlendStyle.Linear)
-                .GetAwaiter().GetResult();
-
-            Assert.AreEqual(CameraTransitionResult.Completed, result);
-            Assert.AreEqual(handle, fake.LastAsyncHandle);
-            Assert.AreEqual(0.5f, fake.LastAsyncDuration);
-            Assert.AreEqual(CameraBlendStyle.Linear, fake.LastAsyncStyle);
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Register(null, _camera));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Unregister(null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.SwitchTo(null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Push(null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.TryGetCamera<Camera>(null, out _));
         }
 
         [Test]
@@ -388,36 +207,337 @@ namespace XFramework.XCamera.Tests
             Assert.Throws<ArgumentNullException>(() => CameraManager.CopyCameras(null));
         }
 
-        [Test]
-        public void Register_Null_Throws()
-        {
-            CameraManager.Initialize(new FakeCameraManager());
+        #endregion
 
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Register<Camera>(null));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Register("main", (Camera)null));
+        #region Registry
+
+        [Test]
+        public void Register_ForwardsIdAndCamera()
+        {
+            var fake = Initialize();
+
+            var id = CameraManager.Register("a", _camera);
+
+            Assert.AreEqual("a", id);
+            Assert.AreEqual("a", fake.LastRegisteredId);
+            Assert.AreSame(_camera, fake.LastRegistered);
+            Assert.IsFalse(fake.LastRegisteredIsGenerated);
+        }
+
+        [Test]
+        public void Register_Generated_ReturnsAutoId()
+        {
+            var fake = Initialize();
+
+            var first = CameraManager.Register(_camera);
+            var second = CameraManager.Register(_camera2);
+
+            StringAssert.StartsWith("@auto/", first);
+            StringAssert.StartsWith("@auto/", second);
+            Assert.AreNotEqual(first, second);
+            Assert.IsTrue(fake.LastRegisteredIsGenerated);
+        }
+
+        [Test]
+        public void Register_NullCamera_Throws()
+        {
+            Initialize();
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Register("a", null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.Register(null));
         }
 
         [Test]
         public void Register_DestroyedCamera_Throws()
         {
-            CameraManager.Initialize(new FakeCameraManager());
-            var temp = new GameObject("DestroyedCamera", typeof(Camera));
-            var camera = temp.GetComponent<Camera>();
-            UnityEngine.Object.DestroyImmediate(temp);
+            Initialize();
+            var obj = new GameObject("Destroyed", typeof(Camera));
+            var camera = obj.GetComponent<Camera>();
+            UnityEngine.Object.DestroyImmediate(obj);
 
-            Assert.Throws<ArgumentException>(() => CameraManager.Register("main", camera));
+            Assert.Throws<ArgumentException>(() => CameraManager.Register("a", camera));
         }
 
         [Test]
-        public void StringEntryPoints_Null_Throw()
+        public void Register_EmptyOrReservedId_Throws()
         {
-            CameraManager.Initialize(new FakeCameraManager());
+            Initialize();
 
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Activate((string)null));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Deactivate((string)null));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.TransitionTo((string)null, 1f));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Unregister((string)null));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.TryGetHandle(null, out _));
+            Assert.Throws<ArgumentException>(() => CameraManager.Register("", _camera));
+            Assert.Throws<ArgumentException>(() => CameraManager.Register("   ", _camera));
+            Assert.Throws<ArgumentException>(() => CameraManager.Register("@auto/1", _camera));
+        }
+
+        [Test]
+        public void Unregister_Forwards()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+
+            Assert.IsTrue(CameraManager.Unregister("a"));
+            Assert.AreEqual("a", fake.LastUnregisteredId);
+            Assert.IsFalse(CameraManager.Unregister("unknown"));
+        }
+
+        #endregion
+
+        #region Playback
+
+        [Test]
+        public void SwitchTo_ForwardsTransition()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+
+            CameraManager.SwitchTo("a", 0.3f, CameraBlendStyle.Linear);
+
+            Assert.AreEqual("a", fake.LastActivatedId);
+            Assert.AreEqual(0.3f, fake.LastActivateDuration, 0.0001f);
+            Assert.AreEqual(CameraBlendStyle.Linear, fake.LastActivateStyle);
+            Assert.AreEqual("a", CameraManager.BaseCameraId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void SwitchTo_SameTarget_IsNoOp()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+
+            CameraManager.SwitchTo("a");
+            Assert.AreEqual(1, fake.ActivateCount);
+
+            CameraManager.SwitchTo("a");
+            Assert.AreEqual(1, fake.ActivateCount, "目标已是请求栈顶且活动时不应重复激活");
+        }
+
+        [Test]
+        public void Push_AppendsAndPopReturnsToPrevious()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b", 0.2f);
+
+            Assert.AreEqual("b", fake.LastActivatedId);
+            Assert.AreEqual(2, CameraManager.StackDepth);
+            Assert.AreEqual("a", CameraManager.BaseCameraId);
+
+            CameraManager.Pop(0.25f);
+
+            Assert.AreEqual("a", fake.LastActivatedId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void Push_SameTop_IsNoOp()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.SwitchTo("a");
+
+            CameraManager.Push("a");
+
+            Assert.AreEqual(1, fake.ActivateCount);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void Pop_WithOnlyBase_LogsWarningAndNoOps()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.SwitchTo("a");
+
+            LogAssert.Expect(LogType.Warning, new Regex("没有可弹出的覆盖层.*"));
+            CameraManager.Pop();
+
+            Assert.AreEqual(1, fake.ActivateCount);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void PopAll_ReturnsToBase()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b");
+
+            CameraManager.PopAll(0.4f);
+
+            Assert.AreEqual("a", fake.LastActivatedId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+            Assert.AreEqual("a", CameraManager.BaseCameraId);
+        }
+
+        [Test]
+        public void Clear_EmptiesStackAndBackend()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b");
+
+            CameraManager.Clear();
+
+            Assert.AreEqual(0, CameraManager.StackDepth);
+            Assert.IsNull(CameraManager.BaseCameraId);
+            Assert.AreEqual(1, fake.ClearActiveCount);
+        }
+
+        [Test]
+        public void Unregister_Top_ReturnsToNewTop()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b");
+
+            CameraManager.Unregister("b");
+
+            Assert.AreEqual("a", fake.LastActivatedId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void Unregister_Middle_DoesNotChangeActive()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            var thirdObject = new GameObject("Camera3", typeof(Camera));
+            var third = thirdObject.GetComponent<Camera>();
+            try
+            {
+                CameraManager.Register("c", third);
+                CameraManager.SwitchTo("a");
+                CameraManager.Push("b");
+                CameraManager.Push("c");
+                var countBefore = fake.ActivateCount;
+
+                CameraManager.Unregister("b");
+
+                Assert.AreEqual(countBefore, fake.ActivateCount, "移除中间层不改变当前激活");
+                Assert.AreEqual(2, CameraManager.StackDepth);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(thirdObject);
+            }
+        }
+
+        [Test]
+        public void UnknownId_SwitchTo_LogsWarningAndNoOps()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.SwitchTo("a");
+            var count = fake.ActivateCount;
+
+            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id: missing.*"));
+            CameraManager.SwitchTo("missing");
+
+            Assert.AreEqual(count, fake.ActivateCount);
+        }
+
+        [Test]
+        public void NonFiniteDuration_Throws()
+        {
+            Initialize();
+            CameraManager.Register("a", _camera);
+
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => CameraManager.SwitchTo("a", float.NaN));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => CameraManager.SwitchTo("a", float.PositiveInfinity));
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => CameraManager.Pop(float.NaN));
+        }
+
+        #endregion
+
+        #region Escape hatch / diagnostics
+
+        [Test]
+        public void TryGetCamera_TypeMatches()
+        {
+            Initialize();
+            CameraManager.Register("a", _camera);
+
+            Assert.IsTrue(CameraManager.TryGetCamera("a", out Camera found));
+            Assert.AreSame(_camera, found);
+            Assert.IsFalse(CameraManager.TryGetCamera("a", out Transform _),
+                "类型不匹配应返回 false");
+            Assert.IsFalse(CameraManager.TryGetCamera("unknown", out Camera _));
+        }
+
+        [Test]
+        public void GetState_ComposesStackAndBackend()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b");
+
+            var state = CameraManager.GetState();
+
+            Assert.AreEqual(2, state.RegisteredCount);
+            Assert.AreEqual(2, state.NamedCount);
+            Assert.AreEqual(0, state.GeneratedCount);
+            Assert.AreEqual("a", state.BaseCameraId);
+            Assert.AreEqual("b", state.ActiveCameraId);
+            Assert.AreEqual(2, state.StackDepth);
+            Assert.IsFalse(state.IsTransitioning);
+            Assert.IsFalse(state.IsExternallyControlled);
+        }
+
+        [Test]
+        public void IsExternallyControlled_WhenActiveIsNotTop()
+        {
+            var fake = Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.SwitchTo("a");
+
+            fake.ActiveCameraId = "external";
+            fake.HasActiveCamera = true;
+            Assert.IsTrue(CameraManager.IsExternallyControlled);
+
+            fake.TransitionTargetId = "a";
+            Assert.IsFalse(CameraManager.IsExternallyControlled,
+                "有在途请求时不应报告外部接管");
+        }
+
+        [Test]
+        public void CopyCameras_FlagsBaseStackAndActive()
+        {
+            Initialize();
+            CameraManager.Register("a", _camera);
+            CameraManager.Register("b", _camera2);
+            CameraManager.SwitchTo("a");
+            CameraManager.Push("b");
+
+            var buffer = new List<CameraInfo>();
+            Assert.AreEqual(2, CameraManager.CopyCameras(buffer));
+
+            var a = buffer[0];
+            Assert.AreEqual("a", a.CameraId);
+            Assert.IsTrue(a.IsBase);
+            Assert.IsTrue(a.IsInStack);
+            Assert.IsFalse(a.IsActive);
+            Assert.IsTrue(a.IsAlive);
+
+            var b = buffer[1];
+            Assert.AreEqual("b", b.CameraId);
+            Assert.IsFalse(b.IsBase);
+            Assert.IsTrue(b.IsInStack);
+            Assert.IsTrue(b.IsActive);
+            Assert.IsFalse(b.IsGenerated);
         }
 
         #endregion
