@@ -11,7 +11,7 @@
 ```
 Runtime/Camera/
 ├── CameraManager.cs              # 公开：静态门面（生命周期 / 注册 / 栈 / 异步 / 绑定 / 查询 / 事件）
-├── ICameraBackend.cs             # 公开：后端契约、CameraBackendActivation、ICameraBackendSessionReset
+├── ICameraBackend.cs             # internal：后端契约、CameraBackendActivation、ICameraBackendSessionReset
 ├── CameraDirector.cs             # internal：id 生成 / 栈 / pending / 消息发布 / 快照组装 / 外部接管判定
 ├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
 ├── CameraTransitionResult.cs     # 公开：Completed / Superseded / CameraNotFound / ManagerDisposed
@@ -22,7 +22,7 @@ Runtime/Camera/
 │   ├── CameraDeactivatedMessage.cs    # 公开：相机不再 live
 │   └── CameraBlendCompletedMessage.cs # 公开：blend 完成 / cut 零时长完成
 ├── Cinemachine/
-│   ├── CinemachineCameraBackend.cs        # 公开：唯一内置后端
+│   ├── CinemachineCameraBackend.cs        # internal：唯一内置后端
 │   ├── CinemachineCameraRegistration.cs   # 公开：预制体 / 动态相机自注册组件
 │   ├── CinemachineImpulse.cs              # internal：震屏辅助（惰性 source / listener 探测）
 │   └── README.md                          # 使用向：接线、行为、已知限制、设计取舍
@@ -36,10 +36,11 @@ Tests/Editor/Architecture/ModuleBoundaryTests.cs  # Cinemachine 类型只允许�
 Runtime/Log/LogCategories.cs                     # CameraManager 分类
 ```
 
-**边界**：Cinemachine 已是核心 asmdef 的硬依赖（与 Input System 同型），但类型只允许出现在
-`Runtime/Camera/Cinemachine/`；门面、`ICameraBackend`、导演层、消息与其它模块保持中立，由
-`ModuleBoundaryTests.CinemachineTypes_StayInsideTheCinemachineBackend` 剥注释后扫描守。**中立文件的代码与字符串字面量
-也不得出现 `Cinemachine` 字样**——所有专有告警留在子目录。
+**边界**：Cinemachine 已是核心 asmdef 的硬依赖（与 Input System 同型），类型只允许出现在 `Runtime/Camera/`
+（相机模块可原生使用），其它模块仍不得引用；由 `ModuleBoundaryTests.CinemachineTypes_StayInsideTheCameraModule`
+剥注释后扫描守。**gameplay 面仍只使用 string id / 中立类型**；CM 类型只在初始化（`Initialize`）、注册
+（`Register`）与高级访问（`TryGetCamera` / `ActiveCamera`）出现。其它模块的代码与字符串字面量不得出现
+`Cinemachine` 字样。
 
 **模块无自动初始化**：没有 `[RuntimeInitializeOnLoadMethod]` 自初始化；只有会话复位钩子
 （`SubsystemRegistration`），已登记进 `AutoInitTests` 族清单。
@@ -55,7 +56,8 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 已推翻：**~~不做跟随 / 瞄准 / 震屏 / 缩放~~**（2026-10-17 · 立项裁定）——~~Cinemachine 的行为编排；框架内建只会与它竞争~~。被 2026-10-23「薄绑定」取代：`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 只转发到后端，不重写行为。
 - 已推翻：**~~事件只对已注册相机发布~~**（2026-10-22）——~~未注册 incoming 不发布激活消息~~。被 2026-10-23「外部 id 为 null」取代：HUD / 音频 / 诊断需要知道外部接管；订阅方按 id 过滤。
 - 已推翻：**~~不做 string id 的动态注册~~**（2026-10-17 · 立项裁定）——~~动态实例没有稳定 authoring id~~。被 2026-10-23「`@auto/N` + `CinemachineCameraRegistration`」取代：生成 id 按实例唯一，组件负责 OnEnable / OnDestroy 生命周期。
-- 已做：**后端中立契约 + 内部导演 + 公开逃生口**（2026-10-23 · `58a9b62`）——`ICameraBackend` 只给原语，`CameraDirector` 管栈 / pending / 消息 / 快照，`TryGetCamera<T>` 提供原生逃生舱；门面不出现 Cinemachine 类型。
+- 已推翻：**~~后端中立契约 + 内部导演 + 公开逃生口~~**（2026-10-23 · `58a9b62`）——~~`ICameraBackend` 公开、`TryGetCamera<T>` 泛型、门面不出现 Cinemachine 类型~~。被 2026-10-23「组合根 / 高级访问原生化 + 后端 internal」取代：公开可替换后端无真实受众；gameplay 面仍保持 id / 中立类型，CM 类型只出现在初始化 / 注册 / 高级访问。
+- 已做：**组合根 / 高级访问原生化 + 后端 internal + gameplay 保持 id**（2026-10-23 · `e6d56db`）——`Initialize(CinemachineBrain)`；`Register` / `TryGetCamera` / `ActiveCamera` 使用 `CinemachineVirtualCameraBase`；`ICameraBackend` / `CameraBackendActivation` / `ICameraBackendSessionReset` / `CinemachineCameraBackend` 收为 internal；`CameraBlendStyle`、消息、`CameraInfo` / `CameraStateSnapshot` 保持 id；`ModuleBoundaryTests` 射程放宽为 `Runtime/Camera/`。证据：`CameraManagerTests` / `CameraDirectorTests` / `CinemachineCamera*Tests`；公开 API 基线 -65 / +5。
 - 已做：**请求结算事件 `RequestSettled`**（2026-10-23 · `849f199`）——每个请求恰好一次；异步等待不依赖轮询，关闭「目标激活前销毁」「已是活动相机的 cut」导致的 await 悬挂。
 - 已做：**预制体自注册组件**（2026-10-23 · `ebe10d7`）——`CinemachineCameraRegistration`：OnEnable 注册 / Start 重试 / OnDestroy 注销 / 池化幂等 / 未初始化告警后显式 `Register()`。
 - 不做：**自动添加 `CinemachineImpulseListener`**（2026-10-23 · `6f99584`）——运行时静默改场景会掩盖配置问题；缺失只告警一次。重开判据：真实项目反馈震屏静默失效且无法通过文档解决。
@@ -94,6 +96,20 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
 - `RequestSettled` 单一结算源；外部 incoming 的 id 为 `null`；外部接管保持 boost。
 - 删除 `CameraHandle` / `ICameraManager` / 旧消息 / `CameraFacadeCompletenessTests` / EditMode 相机测试。
 
+### 2026-10-23（第二轮）：组合根 / 高级访问原生化
+
+第一轮落地后继续讨论「公开可替换后端是否有意义」与「cameraId 是否还需要」：
+
+- 公开可替换后端无真实受众（CM 硬依赖、仓外零实现）；`ICameraBackend` / `CameraBackendActivation` /
+  `ICameraBackendSessionReset` / `CinemachineCameraBackend` 收为 internal，保留 `CameraDirector` + `FakeCameraBackend`
+  作测试缝。
+- `cameraId` 保留为 **gameplay 面的身份**：切 / 压 / 弹 / 跟随 / 震屏 / 查询 / 订阅只认 id 与中立类型，
+  不必在满代码里 `using Unity.Cinemachine`。CM 类型只出现在 `Initialize(CinemachineBrain)`、`Register(..., vcam)`、
+  `TryGetCamera(..., out vcam)`、`ActiveCamera`。
+- 为保持 gameplay 面 CM-free，`SwitchTo` 等继续收 `CameraBlendStyle`，消息 / 快照继续只带 id；没有把
+  `CinemachineBlendDefinition` 带进常用动词。
+- `ModuleBoundaryTests` 射程从 `Runtime/Camera/Cinemachine/` 放宽为 `Runtime/Camera/`；其它模块仍不得引用 CM。
+
 ### 已否决形状
 
 - **核心包直接引用 Cinemachine（2026-10-17 评估中一度考虑）**：当时以「锁主版本」为由改为扩展包；2026-10-22 硬合并。
@@ -107,12 +123,14 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
 
 2026-10-23 重设计的编译器可见变更以 `Assets/XFramework/CHANGELOG.md` 的「破坏性变更迁移表」为准。要点：
 
-- `ICameraManager` → `ICameraBackend`（原语化）；`Initialize(ICameraManager)` → `Initialize(ICameraBackend)`。
-- `CameraHandle` 删除 → 所有入口改用 `string` id；`Register<T>(T)` 返回 `@auto/N`。
-- `CinemachineCameraManager` → `CinemachineCameraBackend`（命名空间不变）。
+- `ICameraManager` → `CameraManager.Initialize(CinemachineBrain)` + `Register(..., CinemachineVirtualCameraBase)`；
+  `ICameraBackend` 不再公开（internal 实现细节）。
+- `CameraHandle` 删除 → 所有 gameplay 入口改用 `string` id；`Register(CinemachineVirtualCameraBase)` 返回 `@auto/N`。
+- `CinemachineCameraManager` → internal `CinemachineCameraBackend`（无公开类型）。
 - `Activate` / `TransitionTo` → `SwitchTo`；`Deactivate` → `Pop` / `Clear`；`TransitionToAsync` → `SwitchToAsync`。
-- `TryGetHandle` → `TryGetCamera<T>`；`IsActive` 删除（用 `ActiveCameraId` / `IsExternallyControlled`）。
-- 消息载荷 `CameraHandle` → `CameraId`（外部为 `null`）；`CameraStateSnapshot` / `CameraInfo` 字段重排。
+- `TryGetHandle` / `TryGetCamera<T>` → `TryGetCamera(..., out CinemachineVirtualCameraBase)`；新增 `ActiveCamera`；
+  `IsActive` 删除（用 `ActiveCameraId` / `IsExternallyControlled`）。
+- 消息载荷 `CameraHandle` → `CameraId`（外部为 `null`）；`CameraStateSnapshot` / `CameraInfo` 字段重排后保持 id。
 - `TargetUnregistered` → `CameraNotFound`。
 - 行为变化：同步命令 supersede pending；外部接管事件 id 为 null；外部接管保持 boost；计数含已销毁未注销槽位。
 
@@ -128,7 +146,12 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
 - **ClearShot 的 `ParentCamera` 缓存**：子相机 `OnEnable` 时缓存父相机；测试 / 运行时创建必须**先建父、再建子**，
   否则 `ParentCamera` 可能为 null。
 - **`PrioritySettings.Enabled == false` 时 `Value` 为 0**：boost / 恢复必须整体赋值 `PrioritySettings`。
-- **中立文件不得出现 `Cinemachine` 字样（代码与字符串）**：守卫剥注释后扫描；专有告警只在子目录。
+- **CM 类型只允许在 `Runtime/Camera/`**：守卫 `CinemachineTypes_StayInsideTheCameraModule` 剥注释后扫描；其它模块
+  不得出现。模块内 `CameraManager.cs` / `CameraDirector.cs` / `ICameraBackend.cs` 可用 CM；`CameraInfo` / 消息 /
+  `CameraBlendStyle` 仍保持中立。
+- **公开面的 CM 类型只允许在 4 个入口**：`Initialize(CinemachineBrain)`、`Register(..., vcam)`、
+  `TryGetCamera(..., out vcam)`、`ActiveCamera`。gameplay 动词 / 消息 / 快照只用 id + 中立类型；新增成员时先判断
+  它属于哪一面，别把 `CinemachineBlendDefinition` 之类带进常用动词。
 - **`@auto/` 是保留前缀**：显式 id 以它开头直接抛；生成 id 不透明、不持久化。
 - **`CameraStateSnapshot` 不叫 `CameraState`**：避免与 `Unity.Cinemachine.CameraState` 撞名。
 - **没有 ticker**：模块不在 `UpdateManager` 注册任何节点；过渡由 Brain 推进。

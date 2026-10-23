@@ -116,7 +116,8 @@
 - 未做：**依赖清单从 asmdef 反查**（2026-10-19 · 第三轮审计 R3-INP-001）——`DependencyDeclarationTests` 只能证明「清单里的每项都一致」，不能证明「程序集引用的每项都在清单里」；`Unity.InputSystem` 漏列即由此存活。本轮只把 Input System 补进三处真相。重开判据：实施后关闭（出现可接受的反查映射方式）。
 - 已做：**Cinemachine 后端纳入核心文档/编译门禁**（2026-10-22 · 并入核心包，关闭 R3-CIN-008）——扩展包删除、源码移入 `Runtime/Camera/Cinemachine/`，其源码 / `.meta` / README 文件树 / XML 文档 / 公开 API 基线 / 示例编译从此都在核心 `check-docs -Enforce` 与测试射程内；原「未做：扩展包纳入独立门禁」由并入结构性关闭。
 - 已做：**相机模块全面重整（Cinemachine 唯一内置后端 / 统一句柄 / GetBlendOverride）**（2026-10-22 · 用户裁定）——删除 `UnityCameraManager`；命名 / 动态相机统一经 `Register` 返回 `CameraHandle`，接口只收句柄，字符串只是门面糖；目标动态 boost 到「场景内同通道最大 + 1」并恢复作者状态；过渡走 `CinemachineCore.GetBlendOverride` 请求 duration / style（不改 `DefaultBlend`）；`IsTransitioning` 只统计管理器自有非 cut 过渡；门面探测型读宽容。详见 `Modules/Camera.md` 与 `Cinemachine.md`。**该形状已于 2026-10-23 被下方从零重设计取代。**
-- 已做：**相机模块从零重设计：string id + 相机栈 + 中立主面 + 原生逃生舱**（2026-10-23 · 用户裁定；`58a9b62` / `ebe10d7` / `849f199` / `6f99584` / `04661ea`）——删除 2026-10-22 的 `ICameraManager` / `CameraHandle` / `CinemachineCameraManager`；门面改为 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` + 四个 async + `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake`；公开 `ICameraBackend` 原语 + internal `CameraDirector`；动态 id `@auto/N` + `CinemachineCameraRegistration`；外部 incoming 消息 id 为 `null`、`RequestSettled` 每请求一次。详见 `Modules/Camera.md` 与 `Cinemachine.md`。
+- 已做：**相机模块从零重设计：string id + 相机栈 + 中立主面 + 原生逃生舱**（2026-10-23 · 用户裁定；`58a9b62` / `ebe10d7` / `849f199` / `6f99584` / `04661ea`）——删除 2026-10-22 的 `ICameraManager` / `CameraHandle` / `CinemachineCameraManager`；门面改为 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` + 四个 async + `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake`；公开 `ICameraBackend` 原语 + internal `CameraDirector`；动态 id `@auto/N` + `CinemachineCameraRegistration`；外部 incoming 消息 id 为 `null`、`RequestSettled` 每请求一次。**该条的公开后端契约已于同日第二轮收为 internal（见下条）。** 详见 `Modules/Camera.md` 与 `Cinemachine.md`。
+- 已做：**相机主面混合边界：gameplay id + 组合根 / 高级访问 Cinemachine + 后端 internal**（2026-10-23 · `e6d56db`）——`Initialize(CinemachineBrain)`、`Register(..., CinemachineVirtualCameraBase)`、`TryGetCamera(..., out vcam)`、`ActiveCamera` 使用 CM 类型；`ICameraBackend` / `CameraBackendActivation` / `ICameraBackendSessionReset` / `CinemachineCameraBackend` 收为 internal；gameplay 动词 / `CameraBlendStyle` / 消息 / 快照保持 string id 与中立类型；`ModuleBoundaryTests` 射程放宽为 `Runtime/Camera/`。理由：公开可替换后端无真实受众；保留 id 是为了让 gameplay 代码不出现 `using Unity.Cinemachine`。
 - 不做：**不引入反射式自动会话复位**（2026-10-18 · 裁定）——与仓内「显式登记、零反射」取向一致；会话复位族继续显式登记（`AutoInitTests.Registry`）。无重开判据。
 - 待裁：**最低 Unity 版本是否下调至 2022.3 LTS**（2026-10-21 · 静态扫描完成，探针未跑）——`package.json` 当前 `unity` 为 `6000.3`，2022.3 的在产项目无法安装。**静态事实**：Runtime 无 Unity 6 专属 API（`Awaitable` 零命中；`Time.timeAsDouble` / `FindAnyObjectByType` 均在 2022.3 射程内；无 `Rigidbody.linearVelocity` 一类改名）；四个依赖的最低版本均 ≤ 2022.3（Input System 1.19.0 恰好要求 2022.3）。**结构性差异**：TMP——Unity 6 由 UGUI 2.0 内置，2022.3 需另装 `com.unity.textmeshpro` 3.0.x，README 依赖表 / 安装器需要版本分支。**下一步（重开判据）**：装 `2022.3.62f3`，建裸探针工程按 README 装依赖、`file:` 引入本包，编译 Runtime + Editor 并跑全量；全部通过才改 `package.json` 的 `unity` 并同步 README / 安装器 / CHANGELOG。本机当前只有 `6000.4.5f1`，探针未执行——**不据静态扫描宣称兼容**。
 
@@ -140,7 +141,7 @@
 | 网络同步框架 | **维持** | 与本文的「Network 基础层」条（暂不做）**不是同一件事**：否决的是**同步模型**（GamePlay 本体），**暂不做**的是**请求 / 重试 / 超时 / 主线程回调**（基础设施）。两者不要折叠 |
 | 统一框架 Profile | **维持** | 三条重开判据逐条对照：①「只装编译期决定不了且与 Asset 引导无关的值」——该轮探索未发现这样的值；②「不替代模块 Options」——未满足；③「先回答引导顺序」——**2026-10-02 已满足，但原文已明写这不构成重开理由**（第二条判据排除的正是「中心化」这个形状） |
 | 把模块内部策略接口化 | **维持** | 该轮新增一条**支持**该判据的实例：遮罩缺 `GraphicRaycaster` 是**缺陷**而非「模块不变量」，补上它不需要接口化任何东西——「不变量」与「漏做」的区分标准（本文的「把模块内部策略接口化」条，即「三档判据」的出处）经受住了一次实战检验 |
-| 相机管理 | **推翻（改立项）** | 2026-10-17 用户给出真实场景「用 Cinemachine，但要统一入口」；一手核对 Cinemachine 3.1.7 源码（vcam 优先级 + Brain 混合）确认编排已由它覆盖。结论改为「核心包提供后端中立统一入口 + Unity 默认实现；Cinemachine 3.1.7 放独立可选扩展包，不硬依赖」；**2026-10-22 再改为硬合并并删除 Unity 默认实现 / 统一句柄**（Input System 先例 / Unity 6000.3 + CM3 默认 / 自研后端非真实受众）；**2026-10-23 从零重设计为 string id + 相机栈 + 中立主面 + 原生逃生舱**（见本账同名条），见「Cinemachine 3.1.7 后端硬合并进核心包」「相机模块全面重整」与「相机模块从零重设计」条 |
+| 相机管理 | **推翻（改立项）** | 2026-10-17 用户给出真实场景「用 Cinemachine，但要统一入口」；一手核对 Cinemachine 3.1.7 源码（vcam 优先级 + Brain 混合）确认编排已由它覆盖。结论改为「核心包提供后端中立统一入口 + Unity 默认实现；Cinemachine 3.1.7 放独立可选扩展包，不硬依赖」；**2026-10-22 再改为硬合并并删除 Unity 默认实现 / 统一句柄**（Input System 先例 / Unity 6000.3 + CM3 默认 / 自研后端非真实受众）；**2026-10-23 从零重设计为 string id + 相机栈，并同日收敛为 gameplay id / 中立类型 + 组合根 / 高级访问 CM + 后端 internal**（见本账「相机模块从零重设计」与「相机主面混合边界」条），见「Cinemachine 3.1.7 后端硬合并进核心包」「相机模块全面重整」条 |
 
 **另有一条该轮明确「不是重开理由」的**：本文的「App 生命周期」条维持「暂不做」。它的升级判据是**可判定的**（想接 `OnApplicationPause` 的地方达到 2~3 处，或有真实使用方提出）——该轮探索**未发现**新的消费者（仍是 `Settings` 自持宿主那一处）。**判据未触发，不做。**
 
@@ -178,7 +179,7 @@
 | 新手引导 | 少数且多标注「不完善」 | ❌ | **刻意不做**（本账不做组） |
 | 画质 / 性能档位 | 少数 | ❌（`Settings` 的 POCO + Validator + 默认值工厂已给正解范式） | **已否决**，见本账「画质 / 性能档位」条 |
 | GM 命令台 | 少数 | ❌（诊断窗口给了「Editor 工具 + Runtime 数据契约」那一半；另一半——文本输入 / 解析 / 权限——仓内没有原语） | **裁定「暂不做 + 可判定判据」**，见本账「GM / 调试命令台」条 |
-| 相机管理 | 少（多交给 Cinemachine） | ✅ Camera（核心接口 + Cinemachine 唯一内置后端；string id + 相机栈 + 中立主面 + 原生逃生舱） | — |
+| 相机管理 | 少（多交给 Cinemachine） | ✅ Camera（Cinemachine 唯一内置后端 + internal 后端契约；string id + 相机栈；gameplay 中立 / 组合根原生） | — |
 | 埋点 / 统计上报 | 少（多属项目侧） | ❌（`ILogSink` 已给框架侧那一半） | **已半解决**（不单独立项），见本账「埋点 / 统计上报」条 |
 | 远程配置下发 | 少（属后端） | ❌ | **已否决**，见本账「远程配置下发」条 |
 | 崩溃上报 | 少（属渠道） | ❌（Log 的 JSONL 是框架侧那一半） | **已否决**，见本账「崩溃上报」条 |

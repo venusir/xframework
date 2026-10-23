@@ -19,7 +19,7 @@ namespace XFramework.XCamera.Cinemachine.Samples
 
         private void Awake()
         {
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
             CameraManager.Register("first", _first);
             CameraManager.Register("second", _second);
             CameraManager.SwitchTo("first");
@@ -67,8 +67,8 @@ namespace XFramework.XCamera.Cinemachine.Samples
             CameraManager.Shake(0.4f);
         }
 
-        /// <summary>原生逃生舱：需要配置 Lens / Aim / Confiner 时取回 vcam 本身。</summary>
-        public bool TryGetSecond(out CinemachineCamera camera)
+        /// <summary>高级访问：需要配置 Lens / Aim / Confiner 时取回 vcam 本身。</summary>
+        public bool TryGetSecond(out CinemachineVirtualCameraBase camera)
         {
             return CameraManager.TryGetCamera("second", out camera);
         }

@@ -139,7 +139,7 @@ await Bootstrap.RunAsync();
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 | **场景管理**     | `SceneManager` 加载返回**可卸载句柄**（成对释放，`Dispose` 即发即忘）；失败返回无效句柄不抛；`SceneLoadOptions` 管模式 / 叠加后激活 / 切完回收。**只做原语**——不做场景栈、不内建加载界面、不预设场景间传参 |
-| **相机管理**     | `CameraManager` 以 string id + 相机栈提供 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`；四个 `UniTask` 异步动词；`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 薄绑定；Cinemachine 3.x 唯一内置后端 `CinemachineCameraBackend`；`CinemachineCameraRegistration` 预制体自注册；状态消息经 `MessageManager`；`GetState` / `CopyCameras` 诊断快照。主面不出现 Cinemachine 类型，`TryGetCamera<T>` 是逃生舱 |
+| **相机管理**     | `CameraManager` 以 string id + 相机栈提供 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`；四个 `UniTask` 异步动词；`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 薄绑定；`CinemachineCameraRegistration` 预制体自注册；状态消息经 `MessageManager`；`GetState` / `CopyCameras` 诊断快照。gameplay 面只使用 string id / 中立类型；组合根与高级访问使用 `CinemachineBrain` / `CinemachineVirtualCameraBase`；后端实现 internal，无公开可替换契约 |
 
 > 上表列的是**功能亮点**，不是模块全集：Asset / Save / Data / Settings / Localization / File / Serialize / Diagnostics 八个模块见下方「模块索引」与各自的 README。
 
@@ -182,7 +182,7 @@ await Bootstrap.RunAsync();
 | **Diagnostics** | 无——注册表是纯静态服务，没有后端可换；要换的是**页签**（`IDiagnosticPanel` 登记）与**渲染**（`IDiagnosticPanelView` 自绘） | `DiagnosticsManager.Register` / 实现 `IDiagnosticPanelView`（[实现方入口](Runtime/Diagnostics/README.md#自定义实现)） |
 | **Asset** | `IAssetManager`（两个能力接口 `IAssetPoolController` / `IAssetSceneLoader` 均由门面探测） | `SetInstance(IAssetManager)`（[实现方入口](Runtime/Asset/README.md#自定义实现)） |
 | **Scene** | **无** | 代码原话：「门面无状态，后端就是 `IAssetSceneLoader` 能力接口——本仓『有接口』的分界线是『是否存在可替换的后端』，而那里已经有接口了」（同 Timer 的取舍） |
-| **Camera** | `ICameraBackend` | `Initialize(ICameraBackend)`；唯一内置 `CinemachineCameraBackend`（`Runtime/Camera/Cinemachine/`）；第三方可实现 `ICameraBackend`（[实现方入口](Runtime/Camera/README.md#自定义实现)） |
+| **Camera** | 无 | Cinemachine 3.x 直连：`CameraManager.Initialize(CinemachineBrain)`；gameplay 面只用 string id / 中立类型；后端实现 internal，替换后端等于替换模块 |
 | **Audio** | `IAudioManager` | `SetInstance(IAudioManager)`（[实现方入口](Runtime/Audio/README.md#自定义实现)） |
 | **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)`（[实现方入口](Runtime/Save/README.md#自定义实现)） |
 | **File** | `IFileProvider`（可选能力 `IAtomicFileProvider` / `IDirectoryProvider`）；`ICryptoProvider` 按域接线 | `Initialize(provider)`——**一次性**，换它必须先 `Destroy()`；`SetCryptoProvider` 可随时调（[实现方入口](Runtime/File/README.md#自定义实现)） |

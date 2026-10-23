@@ -3,8 +3,9 @@
 ## 概述
 
 `XFramework.XCamera` 提供「切到哪台相机 / 临时覆盖 / 返回 / 跟随谁 / 震一下 / 当前输出相机是谁」的统一入口。
-游戏代码不必直接依赖 Cinemachine 的 vcam 与 Brain 类型；默认后端是 Cinemachine 3.x（`XFramework.XCamera.Cinemachine`），
-但门面、契约、消息与状态类型保持后端中立。
+gameplay 动词（切 / 压 / 弹 / 跟随 / 震屏 / 查询 / 订阅）只使用 string id 与中立类型，不必在满代码里
+`using Unity.Cinemachine`；Cinemachine 类型只出现在初始化、注册与高级访问。默认后端是 Cinemachine 3.x
+（`XFramework.XCamera.Cinemachine`），且是唯一内置后端。
 
 命名空间：`XFramework.XCamera`（消息在 `XFramework.XCamera.Messages`，内置后端在 `XFramework.XCamera.Cinemachine`）。
 
@@ -29,7 +30,7 @@ public sealed class CameraBootstrap : MonoBehaviour
 
     private void Awake()
     {
-        CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+        CameraManager.Initialize(_brain);
 
         CameraManager.Register("gameplay", _gameplay);
         CameraManager.Register("aim", _aim);
@@ -51,14 +52,16 @@ public sealed class CameraBootstrap : MonoBehaviour
 - 显式 id 由调用方给出；动态相机用 `CameraManager.Register(vcam)` 拿一个运行时生成的 `@auto/N` id。
 - `SwitchTo` 设定基础相机；`Push` 压入临时覆盖；`Pop` / `PopAll` 返回。
 - `Initialize` 取后端所有权，`Destroy` 释放；关闭域重载时会话复位只丢引用、不 Dispose。
-- 需要直接配置 Lens / Aim / Confiner 时用 `CameraManager.TryGetCamera("gameplay", out CinemachineCamera cam)`。
+- 需要直接配置 Lens / Aim / Confiner 时用
+  `CameraManager.TryGetCamera("gameplay", out CinemachineVirtualCameraBase cam)` 或 `CameraManager.ActiveCamera`；
+  这些是高级访问，gameplay 代码通常不需要。
 
 ## 模块结构
 
 ```
 Runtime/Camera/
 ├── CameraManager.cs              # 公开：静态门面（生命周期 / 注册 / 栈 / 异步 / 绑定 / 查询 / 事件）
-├── ICameraBackend.cs             # 公开：后端契约 + CameraBackendActivation + 会话复位能力接口
+├── ICameraBackend.cs             # internal：后端契约 + CameraBackendActivation + 会话复位能力接口
 ├── CameraDirector.cs             # internal：id 生成 / 栈 / pending / 消息发布 / 快照组装
 ├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
 ├── CameraTransitionResult.cs     # 公开：Completed / Superseded / CameraNotFound / ManagerDisposed
@@ -69,7 +72,7 @@ Runtime/Camera/
 │   ├── CameraDeactivatedMessage.cs
 │   └── CameraBlendCompletedMessage.cs
 ├── Cinemachine/
-│   ├── CinemachineCameraBackend.cs        # 公开：内置 Cinemachine 3.x 后端
+│   ├── CinemachineCameraBackend.cs        # internal：内置 Cinemachine 3.x 后端
 │   ├── CinemachineCameraRegistration.cs   # 公开：预制体 / 动态相机自注册组件
 │   ├── CinemachineImpulse.cs              # internal：震屏辅助
 │   └── README.md
@@ -126,7 +129,7 @@ Runtime/Camera/
 ### 探测型读与命令
 
 - 未初始化时：`ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `OutputCamera` /
-  `IsBlending` / `IsExternallyControlled` / `CameraCount` / `GetState` / `CopyCameras` / `TryGetCamera<T>`
+  `IsBlending` / `IsExternallyControlled` / `CameraCount` / `GetState` / `CopyCameras` / `TryGetCamera`
   返回默认值；`Unregister` 返回 `false`。
 - 注册与变更命令（`Register` / `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` / 绑定 / `Shake`）在未初始化时抛
   `InvalidOperationException`，消息带 `[CameraManager]` 前缀与修复提示。
@@ -145,29 +148,29 @@ Runtime/Camera/
 ```
 CameraManager（静态门面：生命周期 / 参数校验 / 宽容读 / Subscribe）
    └─ CameraDirector（internal：id 生成 / 栈 / pending / 消息 / 快照 / 外部接管判定）
-        └─ ICameraBackend（公开原语：注册 / 激活 / 清空 / 绑定 / 查询 / 事件）
-             └─ CinemachineCameraBackend（内置：槽位 / 优先级 boost+restore / GetBlendOverride / 静态事件）
+        └─ ICameraBackend（internal 原语：注册 / 激活 / 清空 / 绑定 / 查询 / 事件）
+             └─ CinemachineCameraBackend（internal：槽位 / 优先级 boost+restore / GetBlendOverride / 静态事件）
 ```
 
 - 注册表真相在后端；导演层只持有 id 栈与异步 pending。
 - 优先级与混合请求在后端；导演层只决定「目标 id」。
 - 消息由导演层转发到 `MessageManager`；外部 incoming 的 id 为 `null`。
-- 门面与后端之间只通过 id / 原语交互，主面不出现 Cinemachine 类型。
+- gameplay 面只通过 id / 中立类型交互；Cinemachine 类型只出现在初始化、注册与高级访问。
 
 ## API 参考
 
 | 分组 | 入口 | 说明 |
 |---|---|---|
-| 生命周期 | `Initialize(ICameraBackend)` / `Destroy()` / `IsInitialized` | 门面取得后端所有权；重复注入告警并保留第一个 |
-| 注册 | `Register(string, Object)` / `Register(Object)` / `Unregister(string)` | 显式 id 或生成 `@auto/N`；注册不激活 |
-| 逃生舱 | `TryGetCamera<T>(string, out T)` | 高级代码取回后端相机（如 `CinemachineCamera`） |
+| 生命周期 | `Initialize(CinemachineBrain)` / `Destroy()` / `IsInitialized` | 门面创建并拥有内部后端；重复注入告警并保留第一个 |
+| 注册 | `Register(string, CinemachineVirtualCameraBase)` / `Register(CinemachineVirtualCameraBase)` / `Unregister(string)` | 显式 id 或生成 `@auto/N`；注册不激活 |
+| 高级访问 | `TryGetCamera(string, out CinemachineVirtualCameraBase)` / `ActiveCamera` | 取回 vcam 以配置 Lens / Aim / Confiner；gameplay 代码通常不需要 |
 | 播放 | `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` | 基础相机 + 覆盖栈；参数为 `blendDuration` 与 `CameraBlendStyle` |
 | 异步 | `SwitchToAsync` / `PushAsync` / `PopAsync` / `PopAllAsync` | 返回 `UniTask<CameraTransitionResult>`；取消只停等待 |
 | 绑定 | `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` | 薄绑定；行为仍由后端执行 |
 | 查询 | `ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `OutputCamera` / `IsBlending` / `IsExternallyControlled` / `GetState()` / `CopyCameras(List<CameraInfo>)` | 探测型读；`GetState` 单次、无额外分配 |
 | 事件 | `Subscribe(Action<CameraActivatedMessage>)` 等三种 | 经 `MessageManager`；不依赖初始化 |
 
-值类型：`CameraBlendStyle`、`CameraTransitionResult`、`CameraInfo`、`CameraStateSnapshot`、`CameraBackendActivation`。
+值类型：`CameraBlendStyle`、`CameraTransitionResult`、`CameraInfo`、`CameraStateSnapshot`。
 `CameraStateSnapshot` 刻意不叫 `CameraState`——使用方同时 `using Unity.Cinemachine` 时会与 `Unity.Cinemachine.CameraState` 撞名。
 
 ## 典型场景
@@ -225,21 +228,6 @@ if (camera != null)
 
 `OutputCamera` 可能为 `null`，且过渡期间不保证等于目标；不要用它判断「是否有已注册的活动相机」。
 
-## 自定义实现
-
-实现 `ICameraBackend` 即可替换后端，并经 `CameraManager.Initialize(backend)` 注入：
-
-- `Register` / `Unregister` / `IsRegistered` / `TryGetCamera` / `CopyCameraIds`：id 与存活语义。已销毁相机仍算已注册，
-  但 `TryGetCamera` 返回 `false`。
-- `Activate` / `ClearActive`：把目标提升为本后端的活动相机并恢复作者状态；未知 / 已销毁告警 no-op。
-- `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake`：薄绑定；不支持时告警 no-op。
-- 事件：`Activated` / `Deactivated` / `BlendCompleted` 覆盖输出驱动的真实切换（外部 / 未注册 id 传 `null`）；
-  `RequestSettled` **每个请求恰好一次**，异步等待完全依赖它。
-- `IDisposable`：恢复改写的场景状态；`ICameraBackendSessionReset`：只退订静态事件、不碰场景对象。
-- 全部成员仅在主线程调用；门面与导演层不假设后端类型。
-
-`ICameraBackend` 是高级替换面；日常游戏代码不需要实现它。
-
 ## 内部机制
 
 - **优先级**：内置后端记录每台注册相机被改写前的 `PrioritySettings` / GameObject / 组件启用状态；只 boost 目标，
@@ -251,7 +239,7 @@ if (camera != null)
 
 ## 生命周期与清理
 
-- 组合根调用一次 `CameraManager.Initialize(new CinemachineCameraBackend(brain))`；`Destroy` 释放后端并恢复场景状态。
+- 组合根调用一次 `CameraManager.Initialize(brain)`；`Destroy` 释放内部后端并恢复场景状态（不销毁 Brain）。
 - 关闭域重载时，`ResetForNewSession` 只丢引用、不 Dispose；后端 `UnbindSessionEvents` 退订静态事件。
 - 动态相机：用 `CinemachineCameraRegistration` 或在生成 / 销毁处显式 `Register` / `Unregister`。
 - 预制体只应携带 vcam；自带 `CinemachineBrain` 的相机预制体属于多 Brain / 独立输出，不在本模块射程。
@@ -287,7 +275,8 @@ if (camera != null)
   自建 `ImpulseSource` 挂在输出对象上，复用的既有 source 不销毁。
 - **`SetFieldOfView` 只对 `CinemachineCamera` 有效**：分组相机没有 Lens，告警一次并 no-op。
 - **动态 id 不透明**：不要解析 / 持久化 `@auto/N`；显式 id 不得以该前缀开头。
-- **无 Cinemachine 之外的内置后端**：需要直接驱动 `UnityEngine.Camera` 的项目请实现 `ICameraBackend`，或直接用 Unity API。
+- **没有公开的后端契约**：Cinemachine 是唯一内置后端；替换后端等于替换模块。需要直接驱动
+  `UnityEngine.Camera` 的项目请直接用 Unity API。
 - **无 UI 相机绑定**：UI 根固定 `ScreenSpaceOverlay`；`ScreenSpaceCamera` / RenderTexture 是项目结构。
 - **没有过场 / 演出编排**：Timeline、镜头序列、过场状态机不在本模块。
 
@@ -297,8 +286,9 @@ if (camera != null)
   但运行时生成的 `@auto/N` 已经唯一，句柄的代际语义只在「槽位复用」时有用，而注销 / 重注册的窗口由单 pending 覆盖。
 - **为什么做相机栈**：游戏真实需求是「临时覆盖再返回」（开镜、对话、Boss 演出）；把返回逻辑留给每个项目
   重复实现，正是本模块要收敛的部分。栈只持有 id，不引入生命周期树。
-- **为什么主面中立、另给逃生舱**：Cinemachine 是硬依赖，但公开面跟着它的大版本改名会让每个使用方编译破坏；
-  `TryGetCamera<T>` 让需要 Lens / Aim / Confiner 的代码显式进入后端类型，日常调用不被迫 `using Unity.Cinemachine`。
+- **为什么 gameplay 面用 id、组合根用 CM 类型**：id 让切 / 压 / 弹 / 跟随 / 震屏 / 订阅不碰
+  `Unity.Cinemachine`；初始化 / 注册 / 高级访问（`TryGetCamera` / `ActiveCamera`）用 CM 原生类型，换取编译期安全。
+  代价是公开面绑定 Cinemachine 3.x——CM 大版本改名按框架大版本升级处理。
 - **为什么用 `GetBlendOverride` 而不是改 `DefaultBlend`**：后者会污染之后所有未命中 `CustomBlends` 的过渡；
   前者把 duration / style 限定在本次请求。
 - **为什么外部接管保持 boost**：过场释放后要能自然回到游戏相机；恢复作者优先级会让栈顶在与其它相机的竞争中输掉。

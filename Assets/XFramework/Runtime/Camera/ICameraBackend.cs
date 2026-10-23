@@ -8,7 +8,7 @@ namespace XFramework.XCamera
     /// <summary>
     /// 相机后端契约：只提供「注册 / 激活 / 清空 / 查询」等原语，栈、异步与消息由门面侧的统一导演层负责。
     /// <para><b>这不是游戏代码的日常入口</b>：游戏代码使用 <see cref="CameraManager"/> 与
-    /// <see cref="CameraManager.TryGetCamera{T}"/>。只有实现新的相机后端时才需要本接口。</para>
+    /// <see cref="CameraManager.TryGetCamera"/>。本接口是 internal 实现 / 测试缝。</para>
     /// <para><b>身份</b>：相机以字符串 id 标识；显式 id 由调用方给出，动态相机的 id 由导演层生成并以
     /// <c>@auto/</c> 开头。实现不得解析或改写 id。</para>
     /// <para><b>线程</b>：全部成员仅在主线程调用。</para>

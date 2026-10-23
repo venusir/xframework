@@ -21,12 +21,12 @@ namespace XFramework.XCamera
     /// 避免 CM 引用扩散到 gameplay 代码。</para>
     /// <para><b>相机栈</b>：<see cref="SwitchTo"/> 设定基础相机并清空覆盖；<see cref="Push"/> 压入临时覆盖；
     /// <see cref="Pop"/> 返回上一层；<see cref="PopAll"/> 回到基础；<see cref="Clear"/> 释放全部请求。</para>
-    /// <para><b>唯一身份</b>：显式 id 由调用方给出；动态相机经 <see cref="Register(UnityEngine.Object)"/>
+    /// <para><b>唯一身份</b>：显式 id 由调用方给出；动态相机经 <see cref="Register(CinemachineVirtualCameraBase)"/>
     /// 获得运行时生成的 <c>@auto/N</c> id。</para>
     /// <para><b>探测型读宽容</b>：<see cref="ActiveCameraId"/> / <see cref="BaseCameraId"/> /
     /// <see cref="StackDepth"/> / <see cref="HasActiveCamera"/> / <see cref="OutputCamera"/> /
     /// <see cref="IsBlending"/> / <see cref="IsExternallyControlled"/> / <see cref="CameraCount"/> /
-    /// <see cref="GetState"/> / <see cref="CopyCameras"/> / <see cref="TryGetCamera{T}"/> 在未初始化时返回默认值；
+    /// <see cref="GetState"/> / <see cref="CopyCameras"/> / <see cref="TryGetCamera"/> 在未初始化时返回默认值；
     /// 注册与变更命令仍抛 <see cref="InvalidOperationException"/>。</para>
     /// <para><b>所有权</b>：<see cref="Initialize"/> 后门面拥有内部后端，<see cref="Destroy"/> 会释放它，
     /// 但不销毁 Brain。<see cref="ResetForNewSession"/> 只丢引用、不 Dispose。</para>
@@ -361,7 +361,7 @@ namespace XFramework.XCamera
         /// <exception cref="ArgumentOutOfRangeException"><paramref name="fieldOfView"/> 非有限或 <c>&lt;= 0</c>。</exception>
         /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
         /// <remarks>分组相机（如 ClearShot）没有 Lens，告警并 no-op；高级需求走
-        /// <see cref="TryGetCamera{T}"/> 取 Lens。</remarks>
+        /// <see cref="TryGetCamera"/> 取 Lens。</remarks>
         public static void SetFieldOfView(string cameraId, float fieldOfView)
         {
             if (cameraId == null)

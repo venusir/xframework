@@ -1,9 +1,10 @@
 # Cinemachine 后端
 
-`XFramework.XCamera.Cinemachine` 是 `ICameraBackend` 的 Cinemachine 3.x 适配器。它**只做适配**：
-用 vcam 优先级做激活、用 Brain 的混合做过渡；跟随 / 瞄准 / Noise / Confiner / Dolly / Timeline 仍由 Cinemachine 执行。
+`XFramework.XCamera.Cinemachine` 是 `CameraManager` 的 Cinemachine 3.x 内部适配器（`CinemachineCameraBackend`
+是 internal 实现）。它**只做适配**：用 vcam 优先级做激活、用 Brain 的混合做过渡；跟随 / 瞄准 / Noise / Confiner /
+Dolly / Timeline 仍由 Cinemachine 执行。
 
-只支持 Cinemachine 3.x（按 3.1.7 的 API 编写）；2.x 的类型名与字段名不同，需要自己的 `ICameraBackend` 实现。
+只支持 Cinemachine 3.x（按 3.1.7 的 API 编写）；2.x 不在支持范围，也没有公开的后端契约可替换。
 
 ## 快速接线
 
@@ -12,8 +13,7 @@ using Unity.Cinemachine;
 using XFramework.XCamera;
 using XFramework.XCamera.Cinemachine;
 
-var backend = new CinemachineCameraBackend(brain);
-CameraManager.Initialize(backend);
+CameraManager.Initialize(brain);
 
 CameraManager.Register("gameplay", gameplayCam);
 CameraManager.Register("aim", aimCam);
@@ -22,7 +22,7 @@ CameraManager.SwitchTo("gameplay");
 
 - 一个进程建议只创建一个后端 / 一个 `CameraManager`：`CinemachineCore.GetBlendOverride` 是全局单委托。
 - 构造后端会订阅四个静态 `CinemachineCore` 事件并安装 override；`Dispose` / 会话复位负责退订与恢复。
-- 被 `CameraManager.Initialize` 拒绝的第二个后端仍归调用方所有，必须自行 `Dispose`。
+- 重复 `CameraManager.Initialize(brain)` 告警并保留第一个；不会创建第二个后端。
 
 ## 注册与 id
 
