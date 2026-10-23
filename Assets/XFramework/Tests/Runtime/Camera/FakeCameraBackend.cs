@@ -65,6 +65,38 @@ namespace XFramework.XCamera.Tests
 
         public IReadOnlyList<string> RegisteredIds => _order;
 
+        /// <summary>为 true 时 <see cref="Activate"/> 立即把目标记为活动（同步测试用）；
+        /// 为 false 时只记在途目标，等待测试手动 <see cref="RaiseRequestSettled"/>。</summary>
+        public bool AutoCompleteActivation { get; set; } = true;
+
+        public event Action<CameraBackendActivation> Activated;
+
+        public event Action<string> Deactivated;
+
+        public event Action<string> BlendCompleted;
+
+        public event Action<string, CameraTransitionResult> RequestSettled;
+
+        public void RaiseActivated(string incomingCameraId, string outgoingCameraId, bool isCut)
+        {
+            Activated?.Invoke(new CameraBackendActivation(incomingCameraId, outgoingCameraId, isCut));
+        }
+
+        public void RaiseDeactivated(string cameraId)
+        {
+            Deactivated?.Invoke(cameraId);
+        }
+
+        public void RaiseBlendCompleted(string cameraId)
+        {
+            BlendCompleted?.Invoke(cameraId);
+        }
+
+        public void RaiseRequestSettled(string cameraId, CameraTransitionResult result)
+        {
+            RequestSettled?.Invoke(cameraId, result);
+        }
+
         public bool Register(string cameraId, object camera, bool isGenerated)
         {
             LastRegisteredId = cameraId;
@@ -142,9 +174,18 @@ namespace XFramework.XCamera.Tests
 
             if (cameraId != null && _cameras.ContainsKey(cameraId))
             {
-                ActiveCameraId = cameraId;
-                HasActiveCamera = true;
-                TransitionTargetId = null;
+                if (AutoCompleteActivation)
+                {
+                    ActiveCameraId = cameraId;
+                    HasActiveCamera = true;
+                    TransitionTargetId = null;
+                    IsTransitioning = false;
+                }
+                else
+                {
+                    TransitionTargetId = cameraId;
+                    IsTransitioning = duration > 0.0001f && style != CameraBlendStyle.Cut;
+                }
             }
         }
 

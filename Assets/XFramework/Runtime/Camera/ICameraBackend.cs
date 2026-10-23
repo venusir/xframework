@@ -88,6 +88,47 @@ namespace XFramework.XCamera
         /// <summary>清空本管理器的激活请求并恢复它改写的优先级；输出驱动自行重新选择。</summary>
         /// <remarks>不销毁相机、不保证输出驱动停止输出某一台相机。</remarks>
         void ClearActive();
+
+        /// <summary>输出驱动的 incoming 切换时触发（混合开始帧；cut 同帧）。</summary>
+        /// <remarks>未注册 / 外部 incoming 的 id 为 <c>null</c>。</remarks>
+        event Action<CameraBackendActivation> Activated;
+
+        /// <summary>相机不再 live 时触发（混合结束时才触发）；未注册 / 外部相机的 id 为 <c>null</c>。</summary>
+        event Action<string> Deactivated;
+
+        /// <summary>相机完成 blend-in 或作为 cut 被激活时触发；未注册 / 外部相机的 id 为 <c>null</c>。</summary>
+        event Action<string> BlendCompleted;
+
+        /// <summary>一次激活请求结算时触发（每个请求恰好一次）。</summary>
+        /// <remarks>第一个参数为请求目标 id；第二个参数为结算结果。同步命令没有等待者时也会触发。</remarks>
+        event Action<string, CameraTransitionResult> RequestSettled;
+    }
+
+    /// <summary>
+    /// 一次激活事件的载荷：incoming / outgoing 的 id 与是否 cut。
+    /// <para>id 为 <c>null</c> 表示该端是外部 / 未注册相机。</para>
+    /// </summary>
+    public readonly struct CameraBackendActivation
+    {
+        /// <summary>incoming 相机 id；外部 / 未注册为 <c>null</c>。</summary>
+        public readonly string IncomingCameraId;
+
+        /// <summary>outgoing 相机 id；无 outgoing 或未注册为 <c>null</c>。</summary>
+        public readonly string OutgoingCameraId;
+
+        /// <summary>本次切换是否为 cut。</summary>
+        public readonly bool IsCut;
+
+        /// <summary>构造载荷。</summary>
+        /// <param name="incomingCameraId">incoming 相机 id。</param>
+        /// <param name="outgoingCameraId">outgoing 相机 id。</param>
+        /// <param name="isCut">是否为 cut。</param>
+        public CameraBackendActivation(string incomingCameraId, string outgoingCameraId, bool isCut)
+        {
+            IncomingCameraId = incomingCameraId;
+            OutgoingCameraId = outgoingCameraId;
+            IsCut = isCut;
+        }
     }
 
     /// <summary>

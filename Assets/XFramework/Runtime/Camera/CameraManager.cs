@@ -1,7 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XCamera.Messages;
 using XFramework.XLog;
+using XFramework.XMessage;
 
 namespace XFramework.XCamera
 {
@@ -236,6 +240,118 @@ namespace XFramework.XCamera
         {
             EnsureInitialized();
             _director.Clear();
+        }
+
+        /// <summary>切换到指定相机并等待完成。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> SwitchToAsync(string cameraId,
+            float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            return _director.SwitchToAsync(cameraId, blendDuration, style, cancellationToken);
+        }
+
+        /// <summary>压入覆盖层并等待完成。</summary>
+        /// <param name="cameraId">相机 id。</param>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> PushAsync(string cameraId,
+            float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            if (cameraId == null)
+                throw new ArgumentNullException(nameof(cameraId));
+
+            EnsureInitialized();
+            return _director.PushAsync(cameraId, blendDuration, style, cancellationToken);
+        }
+
+        /// <summary>弹出栈顶覆盖层并等待回到上一层。</summary>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果；只有基础相机时立即 <see cref="CameraTransitionResult.Completed"/>。</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> PopAsync(float blendDuration = 0f,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _director.PopAsync(blendDuration, style, cancellationToken);
+        }
+
+        /// <summary>清空覆盖层并等待回到基础相机。</summary>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <param name="cancellationToken">只取消等待，不中止相机过渡。</param>
+        /// <returns>完成结果；没有覆盖层时立即 <see cref="CameraTransitionResult.Completed"/>。</returns>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        public static UniTask<CameraTransitionResult> PopAllAsync(float blendDuration = 0f,
+            CameraBlendStyle style = CameraBlendStyle.EaseInOut,
+            CancellationToken cancellationToken = default)
+        {
+            EnsureInitialized();
+            return _director.PopAllAsync(blendDuration, style, cancellationToken);
+        }
+
+        #endregion
+
+        #region Public API — Events
+
+        /// <summary>订阅相机激活消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订；也可配合 <c>destroyCancellationToken</c> 使用。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        /// <remarks>事件经 <see cref="MessageManager"/> 发布，**不依赖相机门面是否初始化**；订阅生命周期由调用方管理。
+        /// 外部 / 未注册相机的 <c>CameraId</c> 为 <c>null</c>。</remarks>
+        public static IDisposable Subscribe(Action<CameraActivatedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
+        }
+
+        /// <summary>订阅相机反激活消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        public static IDisposable Subscribe(Action<CameraDeactivatedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
+        }
+
+        /// <summary>订阅相机过渡完成消息；返回退订句柄。</summary>
+        /// <param name="handler">消息处理器。</param>
+        /// <returns>释放即退订。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
+        public static IDisposable Subscribe(Action<CameraBlendCompletedMessage> handler)
+        {
+            if (handler == null)
+                throw new ArgumentNullException(nameof(handler));
+
+            return MessageManager.Subscribe(handler);
         }
 
         #endregion

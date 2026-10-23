@@ -67,6 +67,7 @@ namespace XFramework.XCamera.Cinemachine
         private readonly CinemachineCore.GetBlendOverrideDelegate _blendOverrideDelegate;
         private Request _request;
         private Slot _boostedSlot;
+        private string _lastActiveCameraId;
         private bool _eventsBound;
         private bool _disposed;
         private bool _detached;
@@ -407,6 +408,22 @@ namespace XFramework.XCamera.Cinemachine
 
         #endregion
 
+        #region ICameraBackend — Events
+
+        /// <inheritdoc/>
+        public event Action<CameraBackendActivation> Activated;
+
+        /// <inheritdoc/>
+        public event Action<string> Deactivated;
+
+        /// <inheritdoc/>
+        public event Action<string> BlendCompleted;
+
+        /// <inheritdoc/>
+        public event Action<string, CameraTransitionResult> RequestSettled;
+
+        #endregion
+
         #region IDisposable / Session Reset
 
         /// <summary>恢复管理器改过的场景状态、退订静态事件、清空注册表；不销毁 Brain / vcam。</summary>
@@ -687,32 +704,47 @@ namespace XFramework.XCamera.Cinemachine
             if (_disposed || _detached || !ReferenceEquals(evt.Origin, _brain))
                 return;
 
-            if (_request == null)
-                return;
+            var incomingId = ResolveCameraId(evt.IncomingCamera);
+            // blend 开始帧的 OutgoingCamera 可能是 NestedBlendSource（不是原 vcam），
+            // 用最近一次 incoming 的 id 兜底，保证消息里的 PreviousCameraId 有意义。
+            var outgoingId = ResolveCameraId(evt.OutgoingCamera) ?? _lastActiveCameraId;
+            CameraTransitionResult? settlement = null;
 
-            var incomingIsTarget = ReferenceEquals(evt.IncomingCamera, _request.Target.Camera);
-            if (!incomingIsTarget)
+            if (_request != null && !ReferenceEquals(evt.IncomingCamera, _request.Target.Camera))
             {
-                SettleRequest(_request.Target.Camera == null
+                settlement = _request.Target.Camera == null
                     ? CameraTransitionResult.CameraNotFound
-                    : CameraTransitionResult.Superseded);
-                return;
+                    : CameraTransitionResult.Superseded;
+            }
+            else if (_request != null && evt.IsCut)
+            {
+                settlement = CameraTransitionResult.Completed;
             }
 
+            Activated?.Invoke(new CameraBackendActivation(incomingId, outgoingId, evt.IsCut));
             if (evt.IsCut)
-                SettleRequest(CameraTransitionResult.Completed);
+                BlendCompleted?.Invoke(incomingId);
+
+            _lastActiveCameraId = incomingId;
+
+            if (settlement.HasValue)
+                SettleRequest(settlement.Value);
         }
 
         private void OnCameraDeactivated(ICinemachineMixer mixer, ICinemachineCamera camera)
         {
-            // 反激活不单独结算请求：目标被外部销毁由 CameraUpdatedEvent 兜底，
-            // 正常完成由 BlendFinishedEvent / CameraActivatedEvent 结算。
+            if (_disposed || _detached || !ReferenceEquals(mixer, _brain))
+                return;
+
+            Deactivated?.Invoke(ResolveCameraId(camera));
         }
 
         private void OnBlendFinished(ICinemachineMixer mixer, ICinemachineCamera camera)
         {
             if (_disposed || _detached || !ReferenceEquals(mixer, _brain))
                 return;
+
+            BlendCompleted?.Invoke(ResolveCameraId(camera));
 
             if (_request != null && ReferenceEquals(camera, _request.Target.Camera))
                 SettleRequest(CameraTransitionResult.Completed);
@@ -756,7 +788,9 @@ namespace XFramework.XCamera.Cinemachine
                 return;
 
             _request = null;
-            // 事件与异步结算在后续提交接线；这里只维护请求生命周期。
+
+            if (!_disposed && !_detached)
+                RequestSettled?.Invoke(request.Target.CameraId, result);
         }
 
         #endregion
@@ -807,6 +841,8 @@ namespace XFramework.XCamera.Cinemachine
                 SettleRequest(CameraTransitionResult.CameraNotFound);
             if (ReferenceEquals(_boostedSlot, slot))
                 _boostedSlot = null;
+            if (string.Equals(_lastActiveCameraId, slot.CameraId, StringComparison.Ordinal))
+                _lastActiveCameraId = null;
 
             _slots.Remove(slot);
             _byId.Remove(slot.CameraId);
