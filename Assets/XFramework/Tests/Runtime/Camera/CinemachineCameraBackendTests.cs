@@ -252,6 +252,71 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void ExternalTakeover_KeepsManagerBoost_AndResumesAfterRelease()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+            var boosted = _vcamA.Priority.Value;
+            Assert.Greater(boosted, 0);
+
+            var externalObject = new GameObject("External", typeof(CinemachineCamera));
+            var external = externalObject.GetComponent<CinemachineCamera>();
+            external.Priority = boosted + 100;
+            try
+            {
+                Pump(0.1f);
+                Assert.AreSame(external, _brain.ActiveVirtualCamera,
+                    "前提：外部高优先级相机接管");
+                Assert.AreEqual(boosted, _vcamA.Priority.Value,
+                    "外部接管时保持管理器的 boost，过场结束后才能回到游戏相机");
+
+                UnityEngine.Object.DestroyImmediate(externalObject);
+                Pump(0.1f);
+
+                Assert.AreEqual("a", _backend.ActiveCameraId,
+                    "过场释放后应回到已 boost 的栈顶");
+            }
+            finally
+            {
+                if (externalObject != null)
+                    UnityEngine.Object.DestroyImmediate(externalObject);
+            }
+        }
+
+        [Test]
+        public void ActiveCameraId_ResolvesClearShotChildToRegisteredParent()
+        {
+            var parentObject = new GameObject("Group");
+            var childObject = new GameObject("GroupChild");
+            try
+            {
+                // 先建父相机、再建子相机：子相机 OnEnable 时才能缓存到 ParentCamera。
+                var clearShot = parentObject.AddComponent<CinemachineClearShot>();
+                childObject.transform.SetParent(parentObject.transform);
+                var child = childObject.AddComponent<CinemachineCamera>();
+                _backend.Register("group", clearShot, false);
+
+                var overrideId = _brain.SetCameraOverride(-1, 100, null, child, 1f, 0f);
+                try
+                {
+                    Pump();
+
+                    Assert.AreEqual("group", _backend.ActiveCameraId,
+                        "分组相机的活动子相机应向上解析到已注册的父相机 id");
+                    Assert.IsTrue(_backend.HasActiveCamera);
+                }
+                finally
+                {
+                    _brain.ReleaseCameraOverride(overrideId);
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parentObject);
+            }
+        }
+
+        [Test]
         public void ClearActive_RestoresAuthoredPriority()
         {
             _backend.Activate("a", 0f, CameraBlendStyle.Cut);
@@ -375,6 +440,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _backend.Shake(0.6f, 0.4f);
             Assert.AreEqual(0.4f, source.ImpulseDefinition.ImpulseDuration, 0.0001f,
                 "连续震屏以最后一次调用的时长为准");
+            LogAssert.NoUnexpectedReceived();
         }
 
         [Test]
