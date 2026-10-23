@@ -20,7 +20,7 @@ namespace XFramework.XCamera.Cinemachine
     /// <para><b>只支持 Cinemachine 3.x</b>（按 3.1.7 的 API 编写）：2.x 的类型名与字段名不同，需自己的
     /// <see cref="ICameraBackend"/> 实现。</para>
     /// </summary>
-    public sealed class CinemachineCameraBackend : ICameraBackend, ICameraBackendSessionReset, IDisposable
+    internal sealed class CinemachineCameraBackend : ICameraBackend, ICameraBackendSessionReset, IDisposable
     {
         #region Constants
 
@@ -113,6 +113,25 @@ namespace XFramework.XCamera.Cinemachine
                     return null;
 
                 return ResolveCameraId(active);
+            }
+        }
+
+        /// <inheritdoc/>
+        public CinemachineVirtualCameraBase ActiveCamera
+        {
+            get
+            {
+                ThrowIfDisposed();
+                if (_brain == null)
+                    return null;
+
+                var active = _brain.ActiveVirtualCamera;
+                if (active == null)
+                    return null;
+                if (active is UnityEngine.Object unityObject && unityObject == null)
+                    return null;
+
+                return active as CinemachineVirtualCameraBase;
             }
         }
 

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -16,19 +17,19 @@ namespace XFramework.XCamera.Tests
         #region Fixture
 
         private GameObject _cameraObject;
-        private Camera _camera;
+        private CinemachineCamera _camera;
         private GameObject _cameraObject2;
-        private Camera _camera2;
+        private CinemachineCamera _camera2;
         private FakeCameraBackend _backend;
         private CameraDirector _director;
 
         [SetUp]
         public void SetUp()
         {
-            _cameraObject = new GameObject("DirectorCameraA", typeof(Camera));
-            _camera = _cameraObject.GetComponent<Camera>();
-            _cameraObject2 = new GameObject("DirectorCameraB", typeof(Camera));
-            _camera2 = _cameraObject2.GetComponent<Camera>();
+            _cameraObject = new GameObject("DirectorCameraA");
+            _camera = _cameraObject.AddComponent<CinemachineCamera>();
+            _cameraObject2 = new GameObject("DirectorCameraB");
+            _camera2 = _cameraObject2.AddComponent<CinemachineCamera>();
 
             _backend = new FakeCameraBackend();
             _director = new CameraDirector(_backend);
@@ -58,10 +59,10 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual("@auto/1", first);
             Assert.IsTrue(_backend.LastRegisteredIsGenerated);
 
-            var thirdObject = new GameObject("DirectorCameraC", typeof(Camera));
+            var thirdObject = new GameObject("DirectorCameraC");
             try
             {
-                var second = _director.Register(thirdObject.GetComponent<Camera>());
+                var second = _director.Register(thirdObject.AddComponent<CinemachineCamera>());
                 Assert.AreEqual("@auto/2", second);
                 Assert.AreNotEqual(first, second);
             }
@@ -85,11 +86,11 @@ namespace XFramework.XCamera.Tests
         {
             _director.Register("a", _camera);
 
-            Assert.IsTrue(_director.TryGetCamera("a", out Camera found));
+            Assert.IsTrue(_director.TryGetCamera("a", out CinemachineVirtualCameraBase found));
             Assert.AreSame(_camera, found);
-            Assert.IsFalse(_director.TryGetCamera("a", out Transform _));
-            Assert.IsFalse(_director.TryGetCamera("unknown", out Camera _));
-            Assert.Throws<ArgumentNullException>(() => _director.TryGetCamera<Camera>(null, out _));
+            Assert.IsFalse(_director.TryGetCamera("unknown", out CinemachineVirtualCameraBase _));
+            Assert.Throws<ArgumentNullException>(
+                () => _director.TryGetCamera(null, out CinemachineVirtualCameraBase _));
         }
 
         #endregion
@@ -244,10 +245,10 @@ namespace XFramework.XCamera.Tests
         {
             _director.Register("a", _camera);
             _director.Register("b", _camera2);
-            var thirdObject = new GameObject("DirectorCameraC", typeof(Camera));
+            var thirdObject = new GameObject("DirectorCameraC");
             try
             {
-                _director.Register("c", thirdObject.GetComponent<Camera>());
+                _director.Register("c", thirdObject.AddComponent<CinemachineCamera>());
                 _director.SwitchTo("a", 0f, CameraBlendStyle.Cut);
                 _director.Push("b", 0f, CameraBlendStyle.Cut);
                 _director.Push("c", 0f, CameraBlendStyle.Cut);
@@ -293,8 +294,8 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void DeadCamera_IsTreatedAsUnavailable()
         {
-            var deadObject = new GameObject("DirectorDead", typeof(Camera));
-            var deadCamera = deadObject.GetComponent<Camera>();
+            var deadObject = new GameObject("DirectorDead");
+            var deadCamera = deadObject.AddComponent<CinemachineCamera>();
             _director.Register("dead", deadCamera);
             UnityEngine.Object.DestroyImmediate(deadObject);
 

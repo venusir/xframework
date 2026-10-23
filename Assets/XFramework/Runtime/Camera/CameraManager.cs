@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Unity.Cinemachine;
 using UnityEngine;
+using XFramework.XCamera.Cinemachine;
 using XFramework.XCamera.Messages;
 using XFramework.XLog;
 using XFramework.XMessage;
@@ -14,6 +16,9 @@ namespace XFramework.XCamera
     /// <para><b>为什么需要它</b>：游戏代码需要「切到哪台相机 / 临时覆盖 / 返回 / 当前输出相机是谁」，
     /// 但不该被后端的注册表、优先级与混合细节淹没。门面把这件事收敛成基础相机 + 覆盖栈；
     /// 跟随 / 瞄准 / 震屏等行为仍由具体后端（内置后端为 Cinemachine）执行。</para>
+    /// <para><b>边界</b>：gameplay 动词（切 / 压 / 弹 / 跟随 / 震屏 / 查询 / 订阅）只使用 string id 与中立类型；
+    /// Cinemachine 类型只出现在初始化、注册与高级访问（<see cref="TryGetCamera"/> / <see cref="ActiveCamera"/>），
+    /// 避免 CM 引用扩散到 gameplay 代码。</para>
     /// <para><b>相机栈</b>：<see cref="SwitchTo"/> 设定基础相机并清空覆盖；<see cref="Push"/> 压入临时覆盖；
     /// <see cref="Pop"/> 返回上一层；<see cref="PopAll"/> 回到基础；<see cref="Clear"/> 释放全部请求。</para>
     /// <para><b>唯一身份</b>：显式 id 由调用方给出；动态相机经 <see cref="Register(UnityEngine.Object)"/>
@@ -23,12 +28,11 @@ namespace XFramework.XCamera
     /// <see cref="IsBlending"/> / <see cref="IsExternallyControlled"/> / <see cref="CameraCount"/> /
     /// <see cref="GetState"/> / <see cref="CopyCameras"/> / <see cref="TryGetCamera{T}"/> 在未初始化时返回默认值；
     /// 注册与变更命令仍抛 <see cref="InvalidOperationException"/>。</para>
-    /// <para><b>所有权</b>：<see cref="Initialize"/> 后门面拥有后端，<see cref="Destroy"/> 会释放它。
-    /// <see cref="ResetForNewSession"/> 只丢引用、不 Dispose。</para>
+    /// <para><b>所有权</b>：<see cref="Initialize"/> 后门面拥有内部后端，<see cref="Destroy"/> 会释放它，
+    /// 但不销毁 Brain。<see cref="ResetForNewSession"/> 只丢引用、不 Dispose。</para>
     /// <example>
     /// <code>
-    /// var backend = new CinemachineCameraBackend(brain);
-    /// CameraManager.Initialize(backend);
+    /// CameraManager.Initialize(brain);
     /// CameraManager.Register("gameplay", gameplayCam);
     /// CameraManager.Register("aim", aimCam);
     /// CameraManager.SwitchTo("gameplay");
@@ -54,6 +58,11 @@ namespace XFramework.XCamera
         /// <summary>当前活动相机 id；无活动或活动相机未注册时为 <c>null</c>。</summary>
         /// <remarks>读输出驱动的真实状态，请求后可能晚一次更新才可见；分组相机的活动子相机会解析到父相机 id。</remarks>
         public static string ActiveCameraId => _director != null ? _director.ActiveCameraId : null;
+
+        /// <summary>当前活动 vcam；无活动或活动相机不是 vcam 时为 <c>null</c>。</summary>
+        /// <remarks>高级访问用。gameplay 代码通常只需要 <see cref="ActiveCameraId"/> 与
+        /// <see cref="OutputCamera"/>；需要 Lens / Aim / Confiner 时再用本属性或 <see cref="TryGetCamera"/>。</remarks>
+        public static CinemachineVirtualCameraBase ActiveCamera => _director?.ActiveCamera;
 
         /// <summary>相机栈的基础相机 id；栈空时为 <c>null</c>。</summary>
         public static string BaseCameraId => _director != null ? _director.BaseCameraId : null;
@@ -103,13 +112,12 @@ namespace XFramework.XCamera
             return _director.CopyCameras(buffer);
         }
 
-        /// <summary>取回已注册的后端相机对象（高级逃生舱）；未初始化 / 未知 id / 已销毁返回 <c>false</c>。</summary>
-        /// <typeparam name="T">调用方期望取回的类型，如内置后端的 <c>CinemachineCamera</c>。</typeparam>
+        /// <summary>按 id 取回 vcam（高级访问）；未初始化 / 未知 id / 已销毁返回 <c>false</c>。</summary>
         /// <param name="cameraId">相机 id。</param>
-        /// <param name="camera">找到且类型匹配时为相机对象；否则为 <c>null</c>。</param>
+        /// <param name="camera">找到时为 vcam；否则为 <c>null</c>。</param>
         /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
-        /// <remarks>用于需要直接配置 Lens / Aim / Confiner 等后端专有能力的高级代码；日常游戏逻辑请用门面动词。</remarks>
-        public static bool TryGetCamera<T>(string cameraId, out T camera) where T : class
+        /// <remarks>用于需要直接配置 Lens / Aim / Confiner 等 Cinemachine 能力的高级代码；日常游戏逻辑请用门面动词。</remarks>
+        public static bool TryGetCamera(string cameraId, out CinemachineVirtualCameraBase camera)
         {
             if (cameraId == null)
                 throw new ArgumentNullException(nameof(cameraId));
@@ -129,12 +137,12 @@ namespace XFramework.XCamera
 
         /// <summary>注册一台命名相机，返回 id；注册不激活、不改变场景状态。</summary>
         /// <param name="cameraId">显式 id；不得为空、全空白或以 <c>@auto/</c> 开头。</param>
-        /// <param name="camera">后端相机对象。</param>
+        /// <param name="camera">vcam。</param>
         /// <returns>相机 id。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 或 <paramref name="camera"/> 为 <c>null</c>。</exception>
-        /// <exception cref="ArgumentException">相机对象已销毁、id 已占用、相机已注册为另一 id，或后端不接受该类型。</exception>
+        /// <exception cref="ArgumentException">相机对象已销毁、id 已占用，或相机已注册为另一 id。</exception>
         /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
-        public static string Register(string cameraId, UnityEngine.Object camera)
+        public static string Register(string cameraId, CinemachineVirtualCameraBase camera)
         {
             if (cameraId == null)
                 throw new ArgumentNullException(nameof(cameraId));
@@ -145,12 +153,12 @@ namespace XFramework.XCamera
         }
 
         /// <summary>注册一台动态相机，返回运行时生成的 id；注册不激活、不改变场景状态。</summary>
-        /// <param name="camera">后端相机对象。</param>
+        /// <param name="camera">vcam。</param>
         /// <returns>生成的 <c>@auto/N</c> id。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="camera"/> 为 <c>null</c>。</exception>
-        /// <exception cref="ArgumentException">相机对象已销毁、相机已注册为另一 id，或后端不接受该类型。</exception>
+        /// <exception cref="ArgumentException">相机对象已销毁，或相机已注册为另一 id。</exception>
         /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
-        public static string Register(UnityEngine.Object camera)
+        public static string Register(CinemachineVirtualCameraBase camera)
         {
             ValidateCameraArgument(camera, nameof(camera));
             EnsureInitialized();
@@ -422,22 +430,27 @@ namespace XFramework.XCamera
 
         #region Lifecycle
 
-        /// <summary>注入相机后端；门面取得所有权。</summary>
-        /// <param name="backend">相机后端。</param>
-        /// <exception cref="ArgumentNullException"><paramref name="backend"/> 为 <c>null</c>。</exception>
-        /// <remarks>重复调用告警并保留第一个后端；<b>被拒绝的第二个实例仍归调用方所有</b>，请自行释放
-        /// （内置后端在构造时订阅静态事件，未释放会泄漏监听器）。</remarks>
-        public static void Initialize(ICameraBackend backend)
+        /// <summary>用输出驱动初始化门面；门面创建并取得内置后端的所有权。</summary>
+        /// <param name="brain">场景里控制 Unity Camera 的 Brain。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="brain"/> 为 <c>null</c>。</exception>
+        /// <remarks>重复调用告警并保留第一个后端；Brain 不被销毁，内置后端在 <see cref="Destroy"/> 时释放。</remarks>
+        public static void Initialize(CinemachineBrain brain)
+        {
+            if (brain == null)
+                throw new ArgumentNullException(nameof(brain));
+            if (RejectDuplicateInitialize())
+                return;
+
+            _director = new CameraDirector(new CinemachineCameraBackend(brain));
+        }
+
+        /// <summary>测试注入内部后端；不参与公开 API。</summary>
+        internal static void InitializeForTests(ICameraBackend backend)
         {
             if (backend == null)
                 throw new ArgumentNullException(nameof(backend));
-
-            if (_director != null)
-            {
-                LogManager.Warning(LogCategories.CameraManager,
-                    "CameraManager.Initialize 被重复调用，忽略重复注入；传入的实例未被接管，请自行释放。");
+            if (RejectDuplicateInitialize())
                 return;
-            }
 
             _director = new CameraDirector(backend);
         }
@@ -475,6 +488,16 @@ namespace XFramework.XCamera
 
         #region Internal
 
+        private static bool RejectDuplicateInitialize()
+        {
+            if (_director == null)
+                return false;
+
+            LogManager.Warning(LogCategories.CameraManager,
+                "CameraManager.Initialize 被重复调用，忽略重复注入；传入的 Brain / 后端未被接管。");
+            return true;
+        }
+
         private static void EnsureInitialized()
         {
             if (_director == null)
@@ -484,7 +507,7 @@ namespace XFramework.XCamera
             }
         }
 
-        private static void ValidateCameraArgument(UnityEngine.Object camera, string paramName)
+        private static void ValidateCameraArgument(CinemachineVirtualCameraBase camera, string paramName)
         {
             if (ReferenceEquals(camera, null))
                 throw new ArgumentNullException(paramName);

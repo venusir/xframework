@@ -43,7 +43,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _vcamBObject = new GameObject("VcamB");
             _vcamB = _vcamBObject.AddComponent<CinemachineCamera>();
 
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
             CameraManager.Register("a", _vcamA);
             CameraManager.Register("b", _vcamB);
             _frame = 0;

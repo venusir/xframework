@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
+using Unity.Cinemachine;
 using UnityEngine;
 using UnityEngine.TestTools;
 
@@ -16,18 +17,18 @@ namespace XFramework.XCamera.Tests
         #region Fixture
 
         private GameObject _cameraObject;
-        private Camera _camera;
+        private CinemachineCamera _camera;
         private GameObject _cameraObject2;
-        private Camera _camera2;
+        private CinemachineCamera _camera2;
 
         [SetUp]
         public void SetUp()
         {
             CameraManager.Destroy();
-            _cameraObject = new GameObject("CameraManagerTests_Camera", typeof(Camera));
-            _camera = _cameraObject.GetComponent<Camera>();
-            _cameraObject2 = new GameObject("CameraManagerTests_Camera2", typeof(Camera));
-            _camera2 = _cameraObject2.GetComponent<Camera>();
+            _cameraObject = new GameObject("CameraManagerTests_Camera");
+            _camera = _cameraObject.AddComponent<CinemachineCamera>();
+            _cameraObject2 = new GameObject("CameraManagerTests_Camera2");
+            _camera2 = _cameraObject2.AddComponent<CinemachineCamera>();
         }
 
         [TearDown]
@@ -43,7 +44,7 @@ namespace XFramework.XCamera.Tests
         private FakeCameraBackend Initialize()
         {
             var fake = new FakeCameraBackend();
-            CameraManager.Initialize(fake);
+            CameraManager.InitializeForTests(fake);
             return fake;
         }
 
@@ -56,7 +57,7 @@ namespace XFramework.XCamera.Tests
         {
             Assert.IsFalse(CameraManager.IsInitialized);
 
-            CameraManager.Initialize(new FakeCameraBackend());
+            CameraManager.InitializeForTests(new FakeCameraBackend());
             Assert.IsTrue(CameraManager.IsInitialized);
 
             CameraManager.Destroy();
@@ -66,21 +67,22 @@ namespace XFramework.XCamera.Tests
         [Test]
         public void Initialize_Null_Throws()
         {
-            Assert.Throws<ArgumentNullException>(() => CameraManager.Initialize(null));
+            Assert.Throws<ArgumentNullException>(
+                () => CameraManager.Initialize((CinemachineBrain)null));
         }
 
         [Test]
         public void Destroy_DisposeThrows_StillClearsInstance()
         {
             var throwing = new FakeCameraBackend { ThrowOnDispose = true };
-            CameraManager.Initialize(throwing);
+            CameraManager.InitializeForTests(throwing);
 
             Assert.Throws<InvalidOperationException>(() => CameraManager.Destroy());
             Assert.IsFalse(CameraManager.IsInitialized,
                 "Dispose 抛出也必须清掉实例，否则留下永久闩锁（CAM-002）");
 
             var next = new FakeCameraBackend();
-            Assert.DoesNotThrow(() => CameraManager.Initialize(next),
+            Assert.DoesNotThrow(() => CameraManager.InitializeForTests(next),
                 "旧实例 Dispose 失败不得阻止下一次 Initialize");
             Assert.IsTrue(CameraManager.IsInitialized);
         }
@@ -91,9 +93,9 @@ namespace XFramework.XCamera.Tests
             var first = new FakeCameraBackend();
             var second = new FakeCameraBackend();
 
-            CameraManager.Initialize(first);
+            CameraManager.InitializeForTests(first);
             LogAssert.Expect(LogType.Warning, new Regex("CameraManager\\.Initialize 被重复调用.*"));
-            CameraManager.Initialize(second);
+            CameraManager.InitializeForTests(second);
 
             CameraManager.Register("a", _camera);
             Assert.AreSame(_camera, first.LastRegistered);
@@ -106,9 +108,9 @@ namespace XFramework.XCamera.Tests
             var first = new FakeCameraBackend();
             var second = new FakeCameraBackend();
 
-            CameraManager.Initialize(first);
+            CameraManager.InitializeForTests(first);
             LogAssert.Expect(LogType.Warning, new Regex("CameraManager\\.Initialize 被重复调用.*"));
-            CameraManager.Initialize(second);
+            CameraManager.InitializeForTests(second);
 
             Assert.IsFalse(second.Disposed,
                 "被拒绝的第二个实例仍归调用方所有，门面不得擅自 Dispose");
@@ -141,7 +143,7 @@ namespace XFramework.XCamera.Tests
         public void ResetForNewSession_UnbindThrows_LogsWarningAndClears()
         {
             var fake = new FakeCameraBackend { ThrowOnUnbind = true };
-            CameraManager.Initialize(fake);
+            CameraManager.InitializeForTests(fake);
 
             LogAssert.Expect(LogType.Warning, new Regex("ResetForNewSession.*已忽略.*"));
             Assert.DoesNotThrow(() => CameraManager.ResetForNewSession());
@@ -171,7 +173,7 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual(0, CameraManager.CopyCameras(buffer));
             Assert.IsEmpty(buffer);
 
-            Assert.IsFalse(CameraManager.TryGetCamera("a", out Camera camera));
+            Assert.IsFalse(CameraManager.TryGetCamera("a", out CinemachineVirtualCameraBase camera));
             Assert.IsNull(camera);
             Assert.IsFalse(CameraManager.Unregister("a"));
         }
@@ -198,7 +200,8 @@ namespace XFramework.XCamera.Tests
             Assert.Throws<ArgumentNullException>(() => CameraManager.Unregister(null));
             Assert.Throws<ArgumentNullException>(() => CameraManager.SwitchTo(null));
             Assert.Throws<ArgumentNullException>(() => CameraManager.Push(null));
-            Assert.Throws<ArgumentNullException>(() => CameraManager.TryGetCamera<Camera>(null, out _));
+            Assert.Throws<ArgumentNullException>(
+                () => CameraManager.TryGetCamera(null, out CinemachineVirtualCameraBase _));
         }
 
         [Test]
@@ -250,8 +253,8 @@ namespace XFramework.XCamera.Tests
         public void Register_DestroyedCamera_Throws()
         {
             Initialize();
-            var obj = new GameObject("Destroyed", typeof(Camera));
-            var camera = obj.GetComponent<Camera>();
+            var obj = new GameObject("Destroyed");
+            var camera = obj.AddComponent<CinemachineCamera>();
             UnityEngine.Object.DestroyImmediate(obj);
 
             Assert.Throws<ArgumentException>(() => CameraManager.Register("a", camera));
@@ -295,6 +298,7 @@ namespace XFramework.XCamera.Tests
             Assert.AreEqual(CameraBlendStyle.Linear, fake.LastActivateStyle);
             Assert.AreEqual("a", CameraManager.BaseCameraId);
             Assert.AreEqual(1, CameraManager.StackDepth);
+            Assert.AreSame(_camera, CameraManager.ActiveCamera);
         }
 
         [Test]
@@ -410,8 +414,8 @@ namespace XFramework.XCamera.Tests
             var fake = Initialize();
             CameraManager.Register("a", _camera);
             CameraManager.Register("b", _camera2);
-            var thirdObject = new GameObject("Camera3", typeof(Camera));
-            var third = thirdObject.GetComponent<Camera>();
+            var thirdObject = new GameObject("Camera3");
+            var third = thirdObject.AddComponent<CinemachineCamera>();
             try
             {
                 CameraManager.Register("c", third);
@@ -533,11 +537,9 @@ namespace XFramework.XCamera.Tests
             Initialize();
             CameraManager.Register("a", _camera);
 
-            Assert.IsTrue(CameraManager.TryGetCamera("a", out Camera found));
+            Assert.IsTrue(CameraManager.TryGetCamera("a", out CinemachineVirtualCameraBase found));
             Assert.AreSame(_camera, found);
-            Assert.IsFalse(CameraManager.TryGetCamera("a", out Transform _),
-                "类型不匹配应返回 false");
-            Assert.IsFalse(CameraManager.TryGetCamera("unknown", out Camera _));
+            Assert.IsFalse(CameraManager.TryGetCamera("unknown", out CinemachineVirtualCameraBase _));
         }
 
         [Test]

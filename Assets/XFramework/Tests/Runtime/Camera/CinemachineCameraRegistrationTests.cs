@@ -33,7 +33,7 @@ namespace XFramework.XCamera.Cinemachine.Tests
             _brain = _cameraObject.AddComponent<CinemachineBrain>();
             _brain.UpdateMethod = CinemachineBrain.UpdateMethods.ManualUpdate;
 
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
             _frame = 0;
         }
 
@@ -85,7 +85,8 @@ namespace XFramework.XCamera.Cinemachine.Tests
             StringAssert.StartsWith("@auto/", registration.CameraId);
             Assert.IsTrue(registration.IsRegistered);
 
-            Assert.IsTrue(CameraManager.TryGetCamera(registration.CameraId, out CinemachineCamera found));
+            Assert.IsTrue(CameraManager.TryGetCamera(
+                registration.CameraId, out CinemachineVirtualCameraBase found));
             Assert.AreSame(vcam, found);
         }
 
@@ -167,12 +168,12 @@ namespace XFramework.XCamera.Cinemachine.Tests
 
             Assert.IsNull(registration.CameraId);
 
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
             var id = registration.Register();
 
             Assert.IsNotNull(id);
             Assert.IsTrue(registration.IsRegistered);
-            Assert.IsTrue(CameraManager.TryGetCamera(id, out CinemachineCamera found));
+            Assert.IsTrue(CameraManager.TryGetCamera(id, out CinemachineVirtualCameraBase found));
             Assert.AreSame(vcam, found);
         }
 

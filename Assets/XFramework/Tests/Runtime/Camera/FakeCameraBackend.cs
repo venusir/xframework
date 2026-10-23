@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Cinemachine;
 using UnityEngine;
 
 namespace XFramework.XCamera.Tests
@@ -16,6 +17,8 @@ namespace XFramework.XCamera.Tests
         private readonly HashSet<string> _generated = new HashSet<string>(StringComparer.Ordinal);
 
         public string ActiveCameraId { get; set; }
+
+        public CinemachineVirtualCameraBase ActiveCamera { get; set; }
 
         public bool HasActiveCamera { get; set; }
 
@@ -195,6 +198,7 @@ namespace XFramework.XCamera.Tests
                 if (AutoCompleteActivation)
                 {
                     ActiveCameraId = cameraId;
+                    ActiveCamera = _cameras[cameraId] as CinemachineVirtualCameraBase;
                     HasActiveCamera = true;
                     TransitionTargetId = null;
                     IsTransitioning = false;
@@ -211,6 +215,7 @@ namespace XFramework.XCamera.Tests
         {
             ClearActiveCount++;
             ActiveCameraId = null;
+            ActiveCamera = null;
             HasActiveCamera = false;
             TransitionTargetId = null;
             IsTransitioning = false;

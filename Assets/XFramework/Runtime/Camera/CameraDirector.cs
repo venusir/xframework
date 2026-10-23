@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using Unity.Cinemachine;
 using UnityEngine;
 using XFramework.XCamera.Messages;
 using XFramework.XLog;
@@ -69,14 +70,14 @@ namespace XFramework.XCamera
 
         #region Registry
 
-        internal string Register(string cameraId, UnityEngine.Object camera)
+        internal string Register(string cameraId, CinemachineVirtualCameraBase camera)
         {
             ValidateCameraId(cameraId);
             _backend.Register(cameraId, camera, false);
             return cameraId;
         }
 
-        internal string Register(UnityEngine.Object camera)
+        internal string Register(CinemachineVirtualCameraBase camera)
         {
             var cameraId = AutoIdPrefix + _nextGeneratedId.ToString(CultureInfo.InvariantCulture);
             _nextGeneratedId++;
@@ -106,15 +107,16 @@ namespace XFramework.XCamera
             return true;
         }
 
-        internal bool TryGetCamera<T>(string cameraId, out T camera) where T : class
+        internal bool TryGetCamera(string cameraId, out CinemachineVirtualCameraBase camera)
         {
             if (cameraId == null)
                 throw new ArgumentNullException(nameof(cameraId));
 
-            if (_backend.TryGetCamera(cameraId, out var value))
+            if (_backend.TryGetCamera(cameraId, out var value) &&
+                value is CinemachineVirtualCameraBase vcam)
             {
-                camera = value as T;
-                return camera != null;
+                camera = vcam;
+                return true;
             }
 
             camera = null;
@@ -429,6 +431,8 @@ namespace XFramework.XCamera
         #region Queries
 
         internal string ActiveCameraId => _backend.ActiveCameraId;
+
+        internal CinemachineVirtualCameraBase ActiveCamera => _backend.ActiveCamera;
 
         internal string BaseCameraId => BaseAliveId();
 

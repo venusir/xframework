@@ -39,7 +39,7 @@ namespace XFramework.XCamera.Tests
             _vcamBObject = new GameObject("VcamB");
             _vcamB = _vcamBObject.AddComponent<CinemachineCamera>();
 
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
             CameraManager.Register("a", _vcamA);
             CameraManager.Register("b", _vcamB);
             _frame = 0;
@@ -149,7 +149,7 @@ namespace XFramework.XCamera.Tests
         public void GetState_EmptyBackend_ReturnsEmptyCounts()
         {
             CameraManager.Destroy();
-            CameraManager.Initialize(new CinemachineCameraBackend(_brain));
+            CameraManager.Initialize(_brain);
 
             var state = CameraManager.GetState();
 

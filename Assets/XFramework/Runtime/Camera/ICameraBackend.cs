@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Unity.Cinemachine;
 using UnityEngine;
 
 namespace XFramework.XCamera
@@ -14,11 +15,14 @@ namespace XFramework.XCamera
     /// <para><b>失败语义</b>：未知 id / 已销毁相机由实现告警并 no-op；<c>null</c> id 抛
     /// <see cref="ArgumentNullException"/>。注册冲突、类型不符、已销毁对象抛 <see cref="ArgumentException"/>。</para>
     /// </summary>
-    public interface ICameraBackend : IDisposable
+    internal interface ICameraBackend : IDisposable
     {
         /// <summary>Brain / 输出驱动当前活动相机解析后的 id；无活动或活动相机未注册时为 <c>null</c>。
         /// 分组相机（如 ClearShot）的活动子相机应向上解析到已注册的父相机 id。</summary>
         string ActiveCameraId { get; }
+
+        /// <summary>Brain / 输出驱动当前活动相机；无活动 / 非 vcam 时为 <c>null</c>。</summary>
+        CinemachineVirtualCameraBase ActiveCamera { get; }
 
         /// <summary>输出驱动当前是否有活动相机（即使它未注册）。</summary>
         bool HasActiveCamera { get; }
@@ -134,7 +138,7 @@ namespace XFramework.XCamera
     /// 一次激活事件的载荷：incoming / outgoing 的 id 与是否 cut。
     /// <para>id 为 <c>null</c> 表示该端是外部 / 未注册相机。</para>
     /// </summary>
-    public readonly struct CameraBackendActivation
+    internal readonly struct CameraBackendActivation
     {
         /// <summary>incoming 相机 id；外部 / 未注册为 <c>null</c>。</summary>
         public readonly string IncomingCameraId;
@@ -161,7 +165,7 @@ namespace XFramework.XCamera
     /// 会话复位可选能力：只退订静态事件并清引用，不 Dispose、不碰 Unity 场景对象。
     /// <para>由门面在会话复位时探测调用。关闭域重载时静态订阅会跨会话存活，不显式退订会让旧后端被钉住。</para>
     /// </summary>
-    public interface ICameraBackendSessionReset
+    internal interface ICameraBackendSessionReset
     {
         /// <summary>退订静态事件并清空内部引用；不得访问 Unity 场景对象。</summary>
         void UnbindSessionEvents();

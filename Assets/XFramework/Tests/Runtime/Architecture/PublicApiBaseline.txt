@@ -294,11 +294,6 @@ XFramework.XBootstrap.GameLauncher#ctor  ::  protected()
 XFramework.XBootstrap.GameLauncher.ConfigureStages  ::  protected abstract void()
 XFramework.XBootstrap.IBootstrapStage  ::  public interface : XFramework.XPipeline.IPhaseStage
 XFramework.XBootstrap.IBootstrapStage.Shutdown  ::  public void()
-XFramework.XCamera.CameraBackendActivation  ::  public readonly struct
-XFramework.XCamera.CameraBackendActivation#ctor  ::  public(string incomingCameraId, string outgoingCameraId, bool isCut)
-XFramework.XCamera.CameraBackendActivation.IncomingCameraId  ::  public readonly string
-XFramework.XCamera.CameraBackendActivation.IsCut  ::  public readonly bool
-XFramework.XCamera.CameraBackendActivation.OutgoingCameraId  ::  public readonly string
 XFramework.XCamera.CameraBlendStyle  ::  public enum : int
 XFramework.XCamera.CameraBlendStyle.Cut  ::  = 0
 XFramework.XCamera.CameraBlendStyle.EaseIn  ::  = 2
@@ -316,6 +311,7 @@ XFramework.XCamera.CameraInfo.IsInStack  ::  public readonly bool
 XFramework.XCamera.CameraInfo.IsTransitionTarget  ::  public readonly bool
 XFramework.XCamera.CameraInfo.ToString  ::  public override string()
 XFramework.XCamera.CameraManager  ::  public static class
+XFramework.XCamera.CameraManager.ActiveCamera  ::  public static Unity.Cinemachine.CinemachineVirtualCameraBase ActiveCamera { get; }
 XFramework.XCamera.CameraManager.ActiveCameraId  ::  public static string ActiveCameraId { get; }
 XFramework.XCamera.CameraManager.BaseCameraId  ::  public static string BaseCameraId { get; }
 XFramework.XCamera.CameraManager.CameraCount  ::  public static int CameraCount { get; }
@@ -324,7 +320,7 @@ XFramework.XCamera.CameraManager.CopyCameras  ::  public static int(System.Colle
 XFramework.XCamera.CameraManager.Destroy  ::  public static void()
 XFramework.XCamera.CameraManager.GetState  ::  public static XFramework.XCamera.CameraStateSnapshot()
 XFramework.XCamera.CameraManager.HasActiveCamera  ::  public static bool HasActiveCamera { get; }
-XFramework.XCamera.CameraManager.Initialize  ::  public static void(XFramework.XCamera.ICameraBackend backend)
+XFramework.XCamera.CameraManager.Initialize  ::  public static void(Unity.Cinemachine.CinemachineBrain brain)
 XFramework.XCamera.CameraManager.IsBlending  ::  public static bool IsBlending { get; }
 XFramework.XCamera.CameraManager.IsExternallyControlled  ::  public static bool IsExternallyControlled { get; }
 XFramework.XCamera.CameraManager.IsInitialized  ::  public static bool IsInitialized { get; }
@@ -335,8 +331,8 @@ XFramework.XCamera.CameraManager.PopAllAsync  ::  public static Cysharp.Threadin
 XFramework.XCamera.CameraManager.PopAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.CameraManager.Push  ::  public static void(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.PushAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
-XFramework.XCamera.CameraManager.Register  ::  public static string(UnityEngine.Object camera)
-XFramework.XCamera.CameraManager.Register  ::  public static string(string cameraId, UnityEngine.Object camera)
+XFramework.XCamera.CameraManager.Register  ::  public static string(Unity.Cinemachine.CinemachineVirtualCameraBase camera)
+XFramework.XCamera.CameraManager.Register  ::  public static string(string cameraId, Unity.Cinemachine.CinemachineVirtualCameraBase camera)
 XFramework.XCamera.CameraManager.SetFieldOfView  ::  public static void(string cameraId, float fieldOfView)
 XFramework.XCamera.CameraManager.SetFollow  ::  public static void(string cameraId, UnityEngine.Transform follow)
 XFramework.XCamera.CameraManager.SetLookAt  ::  public static void(string cameraId, UnityEngine.Transform lookAt)
@@ -347,7 +343,7 @@ XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable
 XFramework.XCamera.CameraManager.Subscribe  ::  public static System.IDisposable(System.Action<XFramework.XCamera.Messages.CameraDeactivatedMessage> handler)
 XFramework.XCamera.CameraManager.SwitchTo  ::  public static void(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.SwitchToAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
-XFramework.XCamera.CameraManager.TryGetCamera  ::  public static bool(string cameraId, out T camera)
+XFramework.XCamera.CameraManager.TryGetCamera  ::  public static bool(string cameraId, out Unity.Cinemachine.CinemachineVirtualCameraBase camera)
 XFramework.XCamera.CameraManager.Unregister  ::  public static bool(string cameraId)
 XFramework.XCamera.CameraStateSnapshot  ::  public readonly struct
 XFramework.XCamera.CameraStateSnapshot#ctor  ::  public(int registeredCount, int namedCount, int generatedCount, string baseCameraId, string activeCameraId, bool hasActiveCamera, int stackDepth, bool isTransitioning, string transitionTargetId, bool isBrainBlending, float transitionProgress, bool isExternallyControlled, UnityEngine.Camera outputCamera)
@@ -369,34 +365,6 @@ XFramework.XCamera.CameraTransitionResult.CameraNotFound  ::  = 2
 XFramework.XCamera.CameraTransitionResult.Completed  ::  = 0
 XFramework.XCamera.CameraTransitionResult.ManagerDisposed  ::  = 3
 XFramework.XCamera.CameraTransitionResult.Superseded  ::  = 1
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend  ::  public sealed class : XFramework.XCamera.ICameraBackend, XFramework.XCamera.ICameraBackendSessionReset
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend#ctor  ::  public(Unity.Cinemachine.CinemachineBrain brain)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Activate  ::  public virtual void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Activated  ::  public event System.Action<XFramework.XCamera.CameraBackendActivation>
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.ActiveCameraId  ::  public string ActiveCameraId { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.BlendCompleted  ::  public event System.Action<string>
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.CameraCount  ::  public int CameraCount { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.ClearActive  ::  public virtual void()
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.CopyCameraIds  ::  public virtual int(System.Collections.Generic.List<string> buffer)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Deactivated  ::  public event System.Action<string>
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Dispose  ::  public virtual void()
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.GeneratedCount  ::  public int GeneratedCount { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.HasActiveCamera  ::  public bool HasActiveCamera { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.IsBlending  ::  public bool IsBlending { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.IsRegistered  ::  public virtual bool(string cameraId)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.IsTransitioning  ::  public bool IsTransitioning { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.NamedCount  ::  public int NamedCount { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.OutputCamera  ::  public UnityEngine.Camera OutputCamera { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Register  ::  public virtual bool(string cameraId, object camera, bool isGenerated)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.RequestSettled  ::  public event System.Action<string, XFramework.XCamera.CameraTransitionResult>
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetFieldOfView  ::  public virtual void(string cameraId, float fieldOfView)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetFollow  ::  public virtual void(string cameraId, UnityEngine.Transform follow)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.SetLookAt  ::  public virtual void(string cameraId, UnityEngine.Transform lookAt)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Shake  ::  public virtual void(float strength, float duration)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TransitionProgress  ::  public float TransitionProgress { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TransitionTargetId  ::  public string TransitionTargetId { get; }
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.TryGetCamera  ::  public virtual bool(string cameraId, out object camera)
-XFramework.XCamera.Cinemachine.CinemachineCameraBackend.Unregister  ::  public virtual bool(string cameraId)
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration  ::  public sealed class : UnityEngine.MonoBehaviour
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration#ctor  ::  public()
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Camera  ::  public Unity.Cinemachine.CinemachineVirtualCameraBase Camera { get; }
@@ -404,34 +372,6 @@ XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.CameraId  ::  publi
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.IsRegistered  ::  public bool IsRegistered { get; }
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Register  ::  public string()
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Unregister  ::  public void()
-XFramework.XCamera.ICameraBackend  ::  public interface : System.IDisposable
-XFramework.XCamera.ICameraBackend.Activate  ::  public void(string cameraId, float duration, XFramework.XCamera.CameraBlendStyle style)
-XFramework.XCamera.ICameraBackend.Activated  ::  public event System.Action<XFramework.XCamera.CameraBackendActivation>
-XFramework.XCamera.ICameraBackend.ActiveCameraId  ::  public string ActiveCameraId { get; }
-XFramework.XCamera.ICameraBackend.BlendCompleted  ::  public event System.Action<string>
-XFramework.XCamera.ICameraBackend.CameraCount  ::  public int CameraCount { get; }
-XFramework.XCamera.ICameraBackend.ClearActive  ::  public void()
-XFramework.XCamera.ICameraBackend.CopyCameraIds  ::  public int(System.Collections.Generic.List<string> buffer)
-XFramework.XCamera.ICameraBackend.Deactivated  ::  public event System.Action<string>
-XFramework.XCamera.ICameraBackend.GeneratedCount  ::  public int GeneratedCount { get; }
-XFramework.XCamera.ICameraBackend.HasActiveCamera  ::  public bool HasActiveCamera { get; }
-XFramework.XCamera.ICameraBackend.IsBlending  ::  public bool IsBlending { get; }
-XFramework.XCamera.ICameraBackend.IsRegistered  ::  public bool(string cameraId)
-XFramework.XCamera.ICameraBackend.IsTransitioning  ::  public bool IsTransitioning { get; }
-XFramework.XCamera.ICameraBackend.NamedCount  ::  public int NamedCount { get; }
-XFramework.XCamera.ICameraBackend.OutputCamera  ::  public UnityEngine.Camera OutputCamera { get; }
-XFramework.XCamera.ICameraBackend.Register  ::  public bool(string cameraId, object camera, bool isGenerated)
-XFramework.XCamera.ICameraBackend.RequestSettled  ::  public event System.Action<string, XFramework.XCamera.CameraTransitionResult>
-XFramework.XCamera.ICameraBackend.SetFieldOfView  ::  public void(string cameraId, float fieldOfView)
-XFramework.XCamera.ICameraBackend.SetFollow  ::  public void(string cameraId, UnityEngine.Transform follow)
-XFramework.XCamera.ICameraBackend.SetLookAt  ::  public void(string cameraId, UnityEngine.Transform lookAt)
-XFramework.XCamera.ICameraBackend.Shake  ::  public void(float strength, float duration)
-XFramework.XCamera.ICameraBackend.TransitionProgress  ::  public float TransitionProgress { get; }
-XFramework.XCamera.ICameraBackend.TransitionTargetId  ::  public string TransitionTargetId { get; }
-XFramework.XCamera.ICameraBackend.TryGetCamera  ::  public bool(string cameraId, out object camera)
-XFramework.XCamera.ICameraBackend.Unregister  ::  public bool(string cameraId)
-XFramework.XCamera.ICameraBackendSessionReset  ::  public interface
-XFramework.XCamera.ICameraBackendSessionReset.UnbindSessionEvents  ::  public void()
 XFramework.XCamera.Messages.CameraActivatedMessage  ::  public readonly struct
 XFramework.XCamera.Messages.CameraActivatedMessage#ctor  ::  public(string cameraId, string previousCameraId, bool isCut)
 XFramework.XCamera.Messages.CameraActivatedMessage.CameraId  ::  public readonly string
