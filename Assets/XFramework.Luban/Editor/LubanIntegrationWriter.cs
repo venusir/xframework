@@ -40,11 +40,19 @@ namespace XFramework.XConfig.Luban.Editor
             var previous = ReadManifest(root);
             var result = new LubanIntegrationWriteResult();
             var currentFiles = new HashSet<string>(StringComparer.Ordinal);
+            var toWrite = new List<(string Relative, string FullPath, string Content)>();
 
+            // 第一遍只做校验：归一化、路径包含、覆盖保护与归一化重名。
+            // 任何拒绝都必须发生在写盘之前，否则会留下半套新文件 + 旧 manifest。
             foreach (var pair in files)
             {
                 string relative = NormalizeRelative(pair.Key);
-                currentFiles.Add(relative);
+                if (!currentFiles.Add(relative))
+                {
+                    throw new LubanGenerationException(
+                        "接入代码文件路径归一化后重复：" + relative);
+                }
+
                 string fullPath = ResolveUnder(root, relative);
 
                 if (File.Exists(fullPath))
@@ -63,8 +71,13 @@ namespace XFramework.XConfig.Luban.Editor
                     }
                 }
 
-                WriteAtomically(fullPath, pair.Value);
-                result.Written.Add(relative);
+                toWrite.Add((relative, fullPath, pair.Value));
+            }
+
+            foreach (var item in toWrite)
+            {
+                WriteAtomically(item.FullPath, item.Content);
+                result.Written.Add(item.Relative);
             }
 
             foreach (var oldFile in previous.Files)
