@@ -260,6 +260,114 @@ namespace XFramework.XConfig.Luban.Tests
             Assert.That(progress.Reports[progress.Reports.Count - 1].Progress, Is.EqualTo(1f));
         }
 
+        [Test]
+        public async Task InitializeAsync_ConcurrentCalls_LoadAndRegisterOnce()
+        {
+            var provider = new FakeLubanProvider { GateLoads = true };
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            var adapter = new FakeLubanAdapter();
+
+            var first = LubanConfig.InitializeForTestsAsync(adapter, provider);
+            var second = LubanConfig.InitializeForTestsAsync(adapter, provider);
+            int pending = provider.PendingLoadCount;
+
+            provider.ReleaseLoads();
+            await first;
+            await second;
+
+            Assert.That(pending, Is.EqualTo(1));
+            Assert.That(provider.LoadCalls, Is.EqualTo(1));
+            Assert.That(adapter.CreateCalls, Is.EqualTo(1));
+            Assert.That(adapter.RegisterCalls, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task Destroy_DuringLoad_DoesNotRegister()
+        {
+            var provider = new FakeLubanProvider { GateLoads = true };
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            var adapter = new FakeLubanAdapter();
+
+            var task = LubanConfig.InitializeForTestsAsync(adapter, provider);
+            Assert.That(provider.PendingLoadCount, Is.EqualTo(1));
+
+            LubanConfig.Destroy();
+            provider.ReleaseLoads();
+
+            bool canceled = false;
+            try
+            {
+                await task;
+            }
+            catch (OperationCanceledException)
+            {
+                canceled = true;
+            }
+
+            Assert.That(canceled, Is.True);
+            Assert.That(adapter.RegisterCalls, Is.EqualTo(0));
+            Assert.That(LubanConfig.IsInitialized, Is.False);
+        }
+
+        [Test]
+        public async Task DestroyDuringLoad_Reinitialize_OldGenerationDoesNotPollute()
+        {
+            var oldProvider = new FakeLubanProvider { GateLoads = true };
+            oldProvider.Data["demo_tbitem"] = new byte[] { 1 };
+            var oldAdapter = new FakeLubanAdapter();
+
+            var oldTask = LubanConfig.InitializeForTestsAsync(oldAdapter, oldProvider);
+            Assert.That(oldProvider.PendingLoadCount, Is.EqualTo(1));
+
+            LubanConfig.Destroy();
+
+            var newProvider = new FakeLubanProvider();
+            newProvider.Data["demo_tbitem"] = new byte[] { 2 };
+            var newAdapter = new FakeLubanAdapter();
+            await LubanConfig.InitializeForTestsAsync(newAdapter, newProvider);
+
+            oldProvider.ReleaseLoads();
+
+            bool canceled = false;
+            try
+            {
+                await oldTask;
+            }
+            catch (OperationCanceledException)
+            {
+                canceled = true;
+            }
+
+            Assert.That(canceled, Is.True);
+            Assert.That(oldAdapter.RegisterCalls, Is.EqualTo(0));
+            Assert.That(newAdapter.RegisterCalls, Is.EqualTo(1));
+            Assert.That(LubanConfig.GetTables<FakeTables>(), Is.SameAs(newAdapter.LastTables));
+        }
+
+        [Test]
+        public async Task InitializeAsync_RegistrationCancellation_RollsBack()
+        {
+            var provider = new FakeLubanProvider();
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            var adapter = new FakeLubanAdapter
+            {
+                RegisterHandler = _ => throw new OperationCanceledException(),
+            };
+
+            try
+            {
+                await LubanConfig.InitializeForTestsAsync(adapter, provider);
+                Assert.Fail("Expected OperationCanceledException.");
+            }
+            catch (OperationCanceledException)
+            {
+                // expected
+            }
+
+            Assert.That(adapter.UnregisterCalls, Is.EqualTo(1));
+            Assert.That(LubanConfig.IsInitialized, Is.False);
+        }
+
         private static async Task AssertLubanExceptionAsync(Func<Cysharp.Threading.Tasks.UniTask> action)
         {
             try

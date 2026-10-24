@@ -63,15 +63,45 @@ namespace XFramework.XConfig.Luban.Tests
     /// </summary>
     internal sealed class FakeLubanProvider : ILubanDataProvider
     {
+        private readonly List<UniTaskCompletionSource> _gates = new();
+
         public Dictionary<string, byte[]> Data { get; } = new(StringComparer.Ordinal);
 
         public Exception LoadException { get; set; }
 
         public bool ThrowCancellation { get; set; }
 
+        public bool GateLoads { get; set; }
+
         public int LoadCalls { get; private set; }
 
+        public int PendingLoadCount
+        {
+            get
+            {
+                lock (_gates)
+                {
+                    return _gates.Count;
+                }
+            }
+        }
+
         public IReadOnlyList<LubanTableFile> LastFiles { get; private set; }
+
+        public void ReleaseLoads()
+        {
+            UniTaskCompletionSource[] gates;
+            lock (_gates)
+            {
+                gates = _gates.ToArray();
+                _gates.Clear();
+            }
+
+            for (int i = 0; i < gates.Length; i++)
+            {
+                gates[i].TrySetResult();
+            }
+        }
 
         public async UniTask<Dictionary<string, byte[]>> LoadAsync(
             IReadOnlyList<LubanTableFile> files,
@@ -92,7 +122,34 @@ namespace XFramework.XConfig.Luban.Tests
                 throw LoadException;
             }
 
-            await UniTask.Yield();
+            if (GateLoads)
+            {
+                var gate = new UniTaskCompletionSource();
+                lock (_gates)
+                {
+                    _gates.Add(gate);
+                }
+
+                try
+                {
+                    using (cancellationToken.Register(
+                               () => gate.TrySetCanceled(cancellationToken)))
+                    {
+                        await gate.Task;
+                    }
+                }
+                finally
+                {
+                    lock (_gates)
+                    {
+                        _gates.Remove(gate);
+                    }
+                }
+            }
+            else
+            {
+                await UniTask.Yield();
+            }
 
             var result = new Dictionary<string, byte[]>(StringComparer.Ordinal);
             for (int i = 0; i < files.Count; i++)

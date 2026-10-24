@@ -16,10 +16,29 @@ namespace XFramework.XConfig.Luban
     {
         #region Private Fields
 
+        private const string InvalidatedMessage =
+            "[LubanConfig] 初始化在完成前被 Destroy()/ResetForNewSession() 作废，结果已丢弃。请重新调用 InitializeAsync()。";
+
         private readonly ILubanDataProvider _provider;
+        private readonly List<InitWaiter> _initWaiters = new();
         private ILubanConfigAdapter _adapter;
         private object _tables;
         private bool _initialized;
+        private int _generation;
+        private bool _isInitializing;
+        private CancellationTokenSource _inflightCts;
+
+        private readonly struct InitWaiter
+        {
+            internal readonly int Generation;
+            internal readonly UniTaskCompletionSource Completion;
+
+            internal InitWaiter(int generation, UniTaskCompletionSource completion)
+            {
+                Generation = generation;
+                Completion = completion;
+            }
+        }
 
         #endregion
 
@@ -35,6 +54,8 @@ namespace XFramework.XConfig.Luban
         #region Properties
 
         internal bool IsInitialized => _initialized;
+
+        internal bool IsInitializing => _isInitializing;
 
         internal object Tables
         {
@@ -65,7 +86,48 @@ namespace XFramework.XConfig.Luban
                 return;
             }
 
-            options ??= new LubanOptions();
+            if (_isInitializing)
+            {
+                await AwaitInitBroadcast(cancellationToken);
+                return;
+            }
+
+            int generation = _generation;
+            _isInitializing = true;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            _inflightCts = cts;
+
+            Exception error = null;
+            try
+            {
+                await InitializeCoreAsync(
+                    adapter, options ?? new LubanOptions(), progress, cts.Token, generation);
+            }
+            catch (Exception ex)
+            {
+                error = ex;
+                throw;
+            }
+            finally
+            {
+                _isInitializing = false;
+                if (ReferenceEquals(_inflightCts, cts))
+                {
+                    _inflightCts = null;
+                }
+
+                BroadcastInitResult(generation, error);
+                cts.Dispose();
+            }
+        }
+
+        private async UniTask InitializeCoreAsync(
+            ILubanConfigAdapter adapter,
+            LubanOptions options,
+            IProgress<LubanInitReport> progress,
+            CancellationToken cancellationToken,
+            int generation)
+        {
             var files = BuildFiles(adapter, options);
 
             progress?.Report(new LubanInitReport(0.01f, "Loading Luban data..."));
@@ -88,6 +150,7 @@ namespace XFramework.XConfig.Luban
                 throw new LubanConfigException("[LubanConfig] Failed to load Luban data files.", ex);
             }
 
+            ThrowIfInvalidated(generation, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
 
             if (bytes == null)
@@ -125,12 +188,15 @@ namespace XFramework.XConfig.Luban
                 throw new LubanConfigException("[LubanConfig] Failed to create Luban tables.", ex);
             }
 
+            ThrowIfInvalidated(generation, cancellationToken);
+
             if (tables == null)
             {
                 throw new LubanConfigException("[LubanConfig] Adapter CreateTables returned null.");
             }
 
             EnsureConfigManagerInitialized();
+            ThrowIfInvalidated(generation, cancellationToken);
 
             try
             {
@@ -138,6 +204,7 @@ namespace XFramework.XConfig.Luban
             }
             catch (OperationCanceledException)
             {
+                TryUnregister(adapter);
                 throw;
             }
             catch (LubanConfigException)
@@ -152,6 +219,12 @@ namespace XFramework.XConfig.Luban
                     "[LubanConfig] Failed to register Luban tables into ConfigManager.", ex);
             }
 
+            if (generation != _generation)
+            {
+                TryUnregister(adapter);
+                throw new OperationCanceledException(InvalidatedMessage, cancellationToken);
+            }
+
             _adapter = adapter;
             _tables = tables;
             _initialized = true;
@@ -161,6 +234,8 @@ namespace XFramework.XConfig.Luban
 
         internal void Destroy()
         {
+            InvalidateInflight();
+
             if (_initialized && _adapter != null)
             {
                 if (ConfigManager.IsInitialized)
@@ -192,6 +267,8 @@ namespace XFramework.XConfig.Luban
         /// </summary>
         internal void ResetForNewSession()
         {
+            InvalidateInflight();
+
             _adapter = null;
             _tables = null;
             _initialized = false;
@@ -229,6 +306,110 @@ namespace XFramework.XConfig.Luban
         #endregion
 
         #region Internal
+
+        private async UniTask AwaitInitBroadcast(CancellationToken cancellationToken)
+        {
+            var completion = new UniTaskCompletionSource();
+            var waiter = new InitWaiter(_generation, completion);
+            lock (_initWaiters)
+            {
+                _initWaiters.Add(waiter);
+            }
+
+            try
+            {
+                using (cancellationToken.Register(
+                           () => completion.TrySetCanceled(cancellationToken)))
+                {
+                    await completion.Task;
+                }
+            }
+            finally
+            {
+                lock (_initWaiters)
+                {
+                    _initWaiters.Remove(waiter);
+                }
+            }
+        }
+
+        private void BroadcastInitResult(int generation, Exception error)
+        {
+            List<InitWaiter> waiters = null;
+            lock (_initWaiters)
+            {
+                for (int i = _initWaiters.Count - 1; i >= 0; i--)
+                {
+                    if (_initWaiters[i].Generation != generation)
+                    {
+                        continue;
+                    }
+
+                    waiters ??= new List<InitWaiter>();
+                    waiters.Add(_initWaiters[i]);
+                    _initWaiters.RemoveAt(i);
+                }
+            }
+
+            if (waiters == null)
+            {
+                return;
+            }
+
+            for (int i = 0; i < waiters.Count; i++)
+            {
+                if (error == null)
+                {
+                    waiters[i].Completion.TrySetResult();
+                }
+                else
+                {
+                    waiters[i].Completion.TrySetException(error);
+                }
+            }
+        }
+
+        private void InvalidateInflight()
+        {
+            int oldGeneration = _generation;
+            _generation++;
+            _inflightCts?.Cancel();
+
+            List<InitWaiter> waiters = null;
+            lock (_initWaiters)
+            {
+                for (int i = _initWaiters.Count - 1; i >= 0; i--)
+                {
+                    if (_initWaiters[i].Generation != oldGeneration)
+                    {
+                        continue;
+                    }
+
+                    waiters ??= new List<InitWaiter>();
+                    waiters.Add(_initWaiters[i]);
+                    _initWaiters.RemoveAt(i);
+                }
+            }
+
+            if (waiters == null)
+            {
+                return;
+            }
+
+            var exception = new OperationCanceledException(InvalidatedMessage);
+            for (int i = 0; i < waiters.Count; i++)
+            {
+                waiters[i].Completion.TrySetException(exception);
+            }
+        }
+
+        private void ThrowIfInvalidated(int generation, CancellationToken cancellationToken)
+        {
+            if (generation != _generation)
+            {
+                throw new OperationCanceledException(InvalidatedMessage, cancellationToken);
+            }
+        }
 
         private static List<LubanTableFile> BuildFiles(
             ILubanConfigAdapter adapter,
