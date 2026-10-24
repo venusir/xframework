@@ -70,7 +70,7 @@ namespace XFramework.XConfig.Luban.Editor
                 return;
             }
 
-            RunIntegration(settings, Directory.GetCurrentDirectory(), write: true);
+            RunIntegration(settings, GetProjectRoot(), write: true);
         }
 
         [MenuItem(ValidateMenu, priority = 102)]
@@ -84,7 +84,7 @@ namespace XFramework.XConfig.Luban.Editor
                 return;
             }
 
-            RunIntegration(settings, Directory.GetCurrentDirectory(), write: false);
+            RunIntegration(settings, GetProjectRoot(), write: false);
         }
 
         [MenuItem(SettingsMenu, priority = 120)]
@@ -97,7 +97,7 @@ namespace XFramework.XConfig.Luban.Editor
             LubanGeneratorSettings settings,
             out string projectRoot)
         {
-            projectRoot = Directory.GetCurrentDirectory();
+            projectRoot = GetProjectRoot();
             var errors = LubanSettingsValidator.Validate(settings, projectRoot);
             if (errors.Count > 0)
             {
@@ -138,11 +138,33 @@ namespace XFramework.XConfig.Luban.Editor
                     : Path.Combine(projectRoot, path));
         }
 
+        internal static string GetProjectRoot()
+        {
+            return Path.GetDirectoryName(Application.dataPath);
+        }
+
+        internal static void ShowDialog(string title, string message)
+        {
+            if (Application.isBatchMode)
+            {
+                Debug.LogWarning("[Luban] " + title + Environment.NewLine + message);
+                return;
+            }
+
+            EditorUtility.DisplayDialog("XFramework Luban", title + "\n\n" + message, "OK");
+        }
+
+        internal static string DescribeTimeout(int milliseconds)
+        {
+            int seconds = Math.Max(1, milliseconds / 1000);
+            return "Luban 运行超时（" + seconds + " 秒）并被终止。";
+        }
+
         internal static void ShowErrors(string title, IEnumerable<string> errors)
         {
             string message = string.Join("\n", errors);
             Debug.LogError("[Luban] " + title + Environment.NewLine + message);
-            EditorUtility.DisplayDialog("XFramework Luban", title + "\n\n" + message, "OK");
+            ShowDialog(title, message);
         }
 
         internal static void RunIntegration(
@@ -164,13 +186,13 @@ namespace XFramework.XConfig.Luban.Editor
 
             string summary = LubanIntegrationGenerator.BuildSummary(result, write);
             Debug.Log("[Luban] " + summary.Replace("\n", Environment.NewLine));
-            EditorUtility.DisplayDialog("XFramework Luban", summary, "OK");
+            ShowDialog("XFramework Luban", summary);
         }
 
         private static void ShowProcessFailure(LubanProcessResult result)
         {
             string reason = result.TimedOut
-                ? "Luban 运行超时（5 分钟）并被终止。"
+                ? DescribeTimeout(LubanProcessRunner.DefaultTimeoutMilliseconds)
                 : "Luban 退出码：" + result.ExitCode;
 
             string output = Tail(result.StandardError, 4000);
@@ -187,7 +209,7 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             Debug.LogError("[Luban] " + message);
-            EditorUtility.DisplayDialog("XFramework Luban", message, "OK");
+            ShowDialog("XFramework Luban", message);
         }
 
         private static string Tail(string value, int maxLength)

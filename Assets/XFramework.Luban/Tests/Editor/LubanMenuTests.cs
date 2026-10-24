@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -31,7 +33,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         [TearDown]
         public void TearDown()
         {
-            Object.DestroyImmediate(_settings);
+            UnityEngine.Object.DestroyImmediate(_settings);
         }
 
         [Test]
@@ -41,6 +43,48 @@ namespace XFramework.XConfig.Luban.Editor.Tests
 
             Assert.DoesNotThrow(() => LubanMenu.ValidateForRun(_settings, out _));
             Assert.That(LubanMenu.ValidateForRun(_settings, out _), Is.Not.Empty);
+        }
+
+        [Test]
+        public void ValidateForRun_UsesProjectRoot_NotCurrentDirectory()
+        {
+            string tempRoot = Path.Combine(
+                Path.GetTempPath(), "xfw-luban-a5-" + Guid.NewGuid().ToString("N"));
+            string oldCurrentDirectory = Directory.GetCurrentDirectory();
+            Directory.CreateDirectory(tempRoot);
+            try
+            {
+                string dll = Path.Combine(tempRoot, "Luban.dll");
+                string conf = Path.Combine(tempRoot, "luban.conf");
+                File.WriteAllText(dll, string.Empty);
+                File.WriteAllText(conf, string.Empty);
+                _settings.LubanDllPath = dll;
+                _settings.ConfPath = conf;
+
+                Directory.SetCurrentDirectory(tempRoot);
+                var errors = LubanMenu.ValidateForRun(_settings, out string projectRoot);
+
+                Assert.That(errors, Is.Empty);
+                Assert.That(projectRoot, Is.EqualTo(Path.GetDirectoryName(Application.dataPath)));
+            }
+            finally
+            {
+                Directory.SetCurrentDirectory(oldCurrentDirectory);
+                Directory.Delete(tempRoot, true);
+            }
+        }
+
+        [Test]
+        public void DescribeTimeout_UsesGivenMilliseconds()
+        {
+            Assert.That(LubanMenu.DescribeTimeout(90000), Does.Contain("90 秒"));
+        }
+
+        [Test]
+        public void ShowDialog_InBatchMode_DoesNotThrow()
+        {
+            Assert.That(Application.isBatchMode, Is.True);
+            Assert.DoesNotThrow(() => LubanMenu.ShowDialog("标题", "消息"));
         }
     }
 }
