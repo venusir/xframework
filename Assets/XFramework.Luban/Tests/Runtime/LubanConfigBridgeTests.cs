@@ -84,8 +84,11 @@ namespace XFramework.XConfig.Luban.Tests
                 new FakeRow(1),
             };
 
-            Assert.Throws<ArgumentException>(
+            var exception = Assert.Throws<ArgumentException>(
                 () => LubanConfigBridge.RegisterTable<FakeRow, int>(rows, row => row.Id));
+
+            Assert.That(exception.Message, Does.Contain(nameof(FakeRow)));
+            Assert.That(exception.Message, Does.Contain("1"));
         }
 
         [Test]

@@ -67,7 +67,17 @@ namespace XFramework.XConfig.Luban
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
-                dictionary.Add(keySelector(row), row);
+                var key = keySelector(row);
+                try
+                {
+                    dictionary.Add(key, row);
+                }
+                catch (ArgumentException ex)
+                {
+                    throw new ArgumentException(
+                        "[LubanConfig] Table for row type '" + typeof(T).FullName +
+                        "' contains a duplicate key '" + key + "'.", ex);
+                }
             }
 
             ConfigManager.RegisterTable(new ConfigTable<T>(dictionary));
