@@ -77,6 +77,8 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
 
 - `OnEnable` 在管理器已初始化时注册；`Start` 重试一次；仍未初始化则告警，调用方可稍后显式 `Register()`。
 - `OnDestroy` 自动 `Unregister`；池化禁用不注销，重新启用幂等复用同一 id。
+- `SwitchTo` / `Push`：先确保注册（幂等；管理器晚于 `OnEnable` 初始化时补注册）再激活；切基座 / 压栈各一个方法。
+- 裸 vcam（不挂组件）用门面的 `CameraManager.RegisterAndSwitchTo` / `RegisterAndPush`；组件相机用本组件的同名方法，避免重复注册。
 - 同一预制体多实例各得 `@auto/N`；ClearShot 只给父相机挂组件。
 - 组件只应挂在 vcam 上；自带 `CinemachineBrain` 的相机预制体属于多 Brain / 独立输出，不在本后端射程。
 
@@ -109,3 +111,4 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
 - **为什么外部接管保持 boost**：恢复作者优先级会让过场结束后的游戏相机在与其它相机的竞争中输掉。
 - **为什么不自动加 `CinemachineImpulseListener`**：运行时静默改场景会掩盖配置问题；告警一次让使用方自己决定。
 - **为什么 `Shake` 用 `ControlledObject`**：`OutputCamera` 可能为 null，`ControlledObject` 才是 Brain 驱动的对象。
+- **为什么一步激活有两个入口**：组件持有 `@auto/N` 与 `OnDestroy` 注销的生命周期，`SwitchTo` / `Push` 必须走组件才能复用该 id 并支持晚初始化补注册；裸 vcam 没有组件，门面 `RegisterAnd...` 负责生成 id 并返回。门面若再加 `SwitchTo(vcam)` / `Push(vcam)` 重载，`SwitchTo(null)` 会产生二义，且已注册相机会与组件的所有权冲突。

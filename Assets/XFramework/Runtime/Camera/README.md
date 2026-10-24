@@ -163,12 +163,16 @@ CameraManager（静态门面：生命周期 / 参数校验 / 宽容读 / Subscri
 |---|---|---|
 | 生命周期 | `Initialize(CinemachineBrain)` / `Destroy()` / `IsInitialized` | 门面创建并拥有内部后端；重复注入告警并保留第一个 |
 | 注册 | `Register(string, CinemachineVirtualCameraBase)` / `Register(CinemachineVirtualCameraBase)` / `Unregister(string)` | 显式 id 或生成 `@auto/N`；注册不激活 |
+| 注册并激活 | `RegisterAndSwitchTo(CinemachineVirtualCameraBase, ...)` / `RegisterAndPush(...)` | 裸 vcam：生成 `@auto/N`、注册并立即切基座 / 压栈；返回 id |
 | 高级访问 | `TryGetCamera(string, out CinemachineVirtualCameraBase)` / `ActiveCamera` | 取回 vcam 以配置 Lens / Aim / Confiner；gameplay 代码通常不需要 |
 | 播放 | `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` | 基础相机 + 覆盖栈；参数为 `blendDuration` 与 `CameraBlendStyle` |
 | 异步 | `SwitchToAsync` / `PushAsync` / `PopAsync` / `PopAllAsync` | 返回 `UniTask<CameraTransitionResult>`；取消只停等待 |
 | 绑定 | `SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` | 薄绑定；行为仍由后端执行 |
 | 查询 | `ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `OutputCamera` / `IsBlending` / `IsExternallyControlled` / `GetState()` / `CopyCameras(List<CameraInfo>)` | 探测型读；`GetState` 单次、无额外分配 |
 | 事件 | `Subscribe(Action<CameraActivatedMessage>)` 等三种 | 经 `MessageManager`；不依赖初始化 |
+
+`CinemachineCameraRegistration.SwitchTo` / `Push` 是预制体组件路径的一步激活（先确保注册再激活）；
+门面 `RegisterAnd...` 不接收已注册相机，按 `Register` 契约抛 `ArgumentException`。
 
 值类型：`CameraBlendStyle`、`CameraTransitionResult`、`CameraInfo`、`CameraStateSnapshot`。
 `CameraStateSnapshot` 刻意不叫 `CameraState`——使用方同时 `using Unity.Cinemachine` 时会与 `Unity.Cinemachine.CameraState` 撞名。
@@ -200,13 +204,30 @@ CameraManager.Pop(0.8f);
 ```csharp
 var instance = Instantiate(vehiclePrefab);
 var registration = instance.GetComponentInChildren<CinemachineCameraRegistration>();
-CameraManager.Push(registration.CameraId, 0.5f);
+registration.Push(0.5f);   // 一步：确保注册 + 压栈激活；切基座用 SwitchTo
 
 // 销毁实例时组件自动 Unregister，栈回到上一个相机
 ```
 
-同一预制体实例化多次会各自得到独立的 `@auto/N`，不会互相顶替。池化对象禁用不注销、销毁才注销；
-若返回池前要求它离开栈，显式 `Unregister()` 或先 `Pop()`。
+`SwitchTo` / `Push` 先确保注册（幂等）；管理器晚于 `OnEnable` 初始化时也能补注册。同一预制体实例化多次
+会各自得到独立的 `@auto/N`，不会互相顶替。池化对象禁用不注销、销毁才注销；若返回池前要求它离开栈，
+显式 `Unregister()` 或先 `Pop()`。
+
+### 自持有裸 vcam
+
+不挂 `CinemachineCameraRegistration` 时，门面可以直接完成「注册 + 激活」，并返回生成的 `@auto/N`：
+
+```csharp
+var vcam = new GameObject("BossCam").AddComponent<CinemachineCamera>();
+var id = CameraManager.RegisterAndPush(vcam, 0.5f); // 或 RegisterAndSwitchTo
+
+// 结束时自行注销并销毁
+CameraManager.Unregister(id);
+Destroy(vcam.gameObject);
+```
+
+门面的 `RegisterAnd...` 面向尚未注册的相机；已注册的相机请用 `SwitchTo(id)` / `Push(id)`，带组件的相机
+请用组件上的同名方法——门面方法不会静默复用已有 id，会按 `Register` 契约抛 `ArgumentException`。
 
 ### 重定向与震屏
 

@@ -139,7 +139,7 @@ await Bootstrap.RunAsync();
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 | **场景管理**     | `SceneManager` 加载返回**可卸载句柄**（成对释放，`Dispose` 即发即忘）；失败返回无效句柄不抛；`SceneLoadOptions` 管模式 / 叠加后激活 / 切完回收。**只做原语**——不做场景栈、不内建加载界面、不预设场景间传参 |
-| **相机管理**     | `CameraManager` 以 string id + 相机栈提供 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`；四个 `UniTask` 异步动词；`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 薄绑定；`CinemachineCameraRegistration` 预制体自注册；状态消息经 `MessageManager`；`GetState` / `CopyCameras` 诊断快照。gameplay 面只使用 string id / 中立类型；组合根与高级访问使用 `CinemachineBrain` / `CinemachineVirtualCameraBase`；后端实现 internal，无公开可替换契约 |
+| **相机管理**     | `CameraManager` 以 string id + 相机栈提供 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`；四个 `UniTask` 异步动词；`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake` 薄绑定；`CinemachineCameraRegistration` 预制体自注册与 `SwitchTo` / `Push` 一步激活；`RegisterAndSwitchTo` / `RegisterAndPush` 为裸 vcam 一步注册并激活（返回 id）；状态消息经 `MessageManager`；`GetState` / `CopyCameras` 诊断快照。gameplay 面只使用 string id / 中立类型；组合根与高级访问使用 `CinemachineBrain` / `CinemachineVirtualCameraBase`；后端实现 internal，无公开可替换契约 |
 
 > 上表列的是**功能亮点**，不是模块全集：Asset / Save / Data / Settings / Localization / File / Serialize / Diagnostics 八个模块见下方「模块索引」与各自的 README。
 
