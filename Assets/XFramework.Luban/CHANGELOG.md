@@ -19,6 +19,23 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - 测试：门面/桥接/写盘/解析器/发射器/校验用例；真实 Luban 5.1.0 生成物的 ConfigManager 端到端用例；
   示例产物防腐测试。
 
+### Fixed
+
+- 设置校验：允许 `Luban.dll` / `luban.conf` 使用绝对路径（LUB-01）；受保护目录精确等于包根也会被拒（LUB-02）；
+  code/data 与工具输入目录的重叠检查（LUB-05）；路径解析失败返回可读错误（LUB-16）；
+  工具链以项目根定位、batchmode 不弹窗、超时文案跟随常量（LUB-14）。
+- 运行时生命周期：并发初始化共享同一次加载/构造/注册，Destroy 或会话复位取消在途且不注册（LUB-03）；
+  引导阶段只清理自己初始化的状态（LUB-06）；加载失败保留内层可操作消息（LUB-12）；
+  Editor-only 主线程入口守卫（LUB-13）。
+- 写盘与生成：写盘先全量 preflight、拒绝时不留半套文件（LUB-08）；stale 生成文件连同 `.meta` 清理（LUB-07）；
+  行接口文件名碰撞检测（LUB-09）；loader 类型与数据文件校验（LUB-10）；JSON loader 剥离 UTF-8 BOM（LUB-11）；
+  索引表重复键消息带行类型与键（LUB-17）；双平台 asmdef 不再误报（LUB-15）。
+- 测试：默认 AssetManager 加载后端的映射/错误覆盖（LUB-04）；消费方 PackageCache 路径定位（LUB-22）；
+  两份生成夹具同步守卫（LUB-24）；golden-file 比对（LUB-23）；ConfigChanged 逐表契约锁定（LUB-28）。
+- 文档与仓库：README 补 `## 概述`、文件树与已知限制；异常/数据根/Unload 文档按实际行为修正；
+  `package.json` 补 `licensesUrl`；`.gitattributes` 显式标注 `*.bytes` 为二进制、`*.xml` /
+  `luban.conf` / `.luban-integration-manifest` 为文本。
+
 ### Verified
 
 - Luban 5.1.0（`Luban.7z` SHA256 `BAC9A1B8D69CFEAA7EF1D8C67B34A007324D1CD158E0B14294521B3879BA5213`）
