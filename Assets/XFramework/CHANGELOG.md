@@ -1013,6 +1013,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **boost 的「同通道最大优先级」只对未注册 vcam 生效（2026-10-24）**：已注册槽位循环没有 `IsValidChannel`
+  过滤，异通道相机的作者优先级会把目标 boost 抬高（100 → 101），违背 README 的「同通道」承诺。修法：槽位
+  循环补 `_brain.IsValidChannel` 过滤。同时明确：异通道相机可注册，但不会被本 Brain 选中。
+  回归：`Activate_IgnoresRegisteredCamerasOnOtherChannels`（改前红）。
+- **无活动相机时 `Shake` 会先创建 `ImpulseSource`（2026-10-24）**：`EnsureSource` 在活动相机检查之前，
+  「告警并 no-op」实际已经往输出对象上加了组件。修法：先查活动相机再惰性建 source。
+  回归：`Shake_WithoutActiveCamera_DoesNotCreateSource`（改前红）。
 - **注销任意相机会截断在途混合（2026-10-24）**：`Unregister` 在 `Brain.IsBlending` 时无条件
   `ActiveBlend = null`，注销一台无关相机也会把别人正在进行的过渡强制完成，`PushAsync` 提前拿到
   `Completed`、请求时长不生效。修法：只在被注销的正是当前请求目标时才强制完成混合。回归：

@@ -231,6 +231,33 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void Activate_IgnoresRegisteredCamerasOnOtherChannels()
+        {
+            _brain.ChannelMask = OutputChannels.Default;
+
+            var otherObject = new GameObject("OtherChannelVcam");
+            try
+            {
+                var other = otherObject.AddComponent<CinemachineCamera>();
+                other.OutputChannel = OutputChannels.Channel01;
+                other.Priority = 100;
+                _backend.Register("other", other, false);
+
+                _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+                Pump();
+
+                Assert.AreEqual(1, _vcamA.Priority.Value,
+                    "异通道已注册相机不应计入同通道最大优先级");
+                Assert.AreEqual(100, other.Priority.Value,
+                    "只 boost 目标，不应改写异通道相机的作者优先级");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(otherObject);
+            }
+        }
+
+        [Test]
         public void Transition_DoesNotModifyBrainDefaultBlend()
         {
             var before = _brain.DefaultBlend;
@@ -583,6 +610,16 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.AreEqual(0.4f, source.ImpulseDefinition.ImpulseDuration, 0.0001f,
                 "连续震屏以最后一次调用的时长为准");
             LogAssert.NoUnexpectedReceived();
+        }
+
+        [Test]
+        public void Shake_WithoutActiveCamera_DoesNotCreateSource()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("当前没有活动相机.*"));
+            Assert.DoesNotThrow(() => _backend.Shake(0.5f, 0.2f));
+
+            Assert.IsNull(_cameraObject.GetComponent<CinemachineImpulseSource>(),
+                "无活动相机时不应往输出对象上添加 ImpulseSource");
         }
 
         [Test]

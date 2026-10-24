@@ -26,9 +26,6 @@ namespace XFramework.XCamera.Cinemachine
                 return;
             }
 
-            if (!EnsureSource(brain))
-                return;
-
             var active = brain.ActiveVirtualCamera;
             if (active == null)
             {
@@ -36,6 +33,9 @@ namespace XFramework.XCamera.Cinemachine
                     "当前没有活动相机，震屏已忽略。");
                 return;
             }
+
+            if (!EnsureSource(brain))
+                return;
 
             var vcam = active as CinemachineVirtualCameraBase;
             if (vcam is CinemachineCameraManagerBase manager &&

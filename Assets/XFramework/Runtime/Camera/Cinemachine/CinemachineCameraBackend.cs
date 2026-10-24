@@ -765,6 +765,10 @@ namespace XFramework.XCamera.Cinemachine
                 if (slot.Camera == null)
                     continue;
 
+                // 与下面的未注册补扫同一口径：只统计当前 Brain 通道内的相机。
+                if (_brain != null && !_brain.IsValidChannel(slot.Camera))
+                    continue;
+
                 var priority = slot.PriorityOwned ? slot.OriginalPriority.Value : slot.Camera.Priority.Value;
                 if (priority > max)
                     max = priority;

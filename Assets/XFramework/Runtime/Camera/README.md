@@ -290,6 +290,8 @@ if (camera != null)
 - **`IsBlending` 含外部混合**；`GetState().IsTransitioning` 只统计本管理器发起的非 cut 过渡。
 - **计数含已销毁未注销槽位**；用 `CameraInfo.IsAlive` 区分。
 - **外部事件 id 为 `null`**；订阅是全局通道，多 Brain 需按 id 过滤。
+- **异通道相机可注册但不生效**：`OutputChannel` 不在 Brain 的 `ChannelMask` 内时，`Activate` 不会产生输出，
+  也不计入「同通道最大优先级」。
 - **异步完成由事件驱动**：输出驱动被禁用 / 不再推进时等待不会完成；取消只停止等待。
 - **`GetBlendOverride` 是全局单委托**：一个进程建议只创建一个 `CameraManager`；项目若也使用它，以最后安装者为准。
 - **`Clear` / `Unregister` 不保证停止输出**：恢复作者状态后，若该相机作者优先级仍最高，输出驱动可能继续用它。

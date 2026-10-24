@@ -34,7 +34,8 @@ CameraManager.SwitchTo("gameplay");
 
 ## 激活与优先级
 
-- `Activate` 把目标提升到「同通道场景最大优先级 + 1」：已注册相机按作者优先级计入，未注册 vcam 只读取、不改写。
+- `Activate` 把目标提升到「同通道场景最大优先级 + 1」：同通道的已注册相机按作者优先级计入
+  （异通道不计入），未注册 vcam 只读取、不改写。
 - 只改目标；切换 / 弹出 / 注销 / Dispose 时恢复目标**首次 boost 前**的 `PrioritySettings` 与
   GameObject / 组件启用状态（注册之后作者再改，按最新值恢复）。boost 期间管理器持有这三个字段，
   作者在持有期的改动会在切走时被恢复覆盖。
@@ -74,7 +75,7 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
   写 `ImpulseDefinition.ImpulseDuration` 后 `GenerateImpulseWithForce`。
   - 活动相机（分组的活动子相机）必须带 `CinemachineImpulseListener`；缺失时只告警一次，**不自动添加**。
   - 连续调用以最后一次 duration 为准；后端自建的 source 在 `Dispose` 时销毁，复用的既有 source 不销毁。
-  - 无活动相机 / Brain 已销毁时告警并 no-op。
+  - 无活动相机 / Brain 已销毁时告警并 no-op；无活动相机时也不会创建 `CinemachineImpulseSource`。
 
 ## 预制体自注册组件
 
@@ -107,6 +108,8 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
 - 外部接管时保持 boost 会让栈顶在优先级上压住未注册相机；这是为「过场结束后回到游戏相机」有意选择的。
 - `ClearActive` / `Unregister` 不保证 Brain 停止输出某台相机。
 - 没有分屏 / 多 Brain 路由；`OutputChannel` 与 Brain 的 `ChannelMask` 仍由 Cinemachine 配置。
+  异通道相机可以注册，但不会被本 Brain 选中——`Activate` 它不会产生输出。
+- 无活动相机时 `Shake` 只告警，不创建 `CinemachineImpulseSource`。
 
 ## 设计取舍
 
