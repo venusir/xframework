@@ -38,7 +38,7 @@ namespace XFramework.XConfig.Luban.Editor
             "Assets/XFramework.Luban/",
         };
 
-        internal static List<string> Validate(LubanGeneratorSettings settings)
+        internal static List<string> Validate(LubanGeneratorSettings settings, string projectRoot = null)
         {
             var errors = new List<string>();
             if (settings == null)
@@ -67,14 +67,14 @@ namespace XFramework.XConfig.Luban.Editor
                 errors.Add("CodeTarget 与 DataTarget 不配套：cs-bin ↔ bin，cs-simple-json ↔ json。");
             }
 
-            ValidateProjectPath(settings.ConfPath, "luban.conf 路径", requireAssets: false, errors);
+            ValidateProjectPath(settings.ConfPath, "luban.conf 路径", requireAssets: false, errors: errors, allowAbsolute: true);
             ValidateProjectPath(settings.CodeOutputDir, "代码输出目录", requireAssets: true, errors);
             ValidateProjectPath(settings.DataOutputDir, "数据输出目录", requireAssets: true, errors);
             ValidateProjectPath(settings.IntegrationOutputDir, "接入代码输出目录", requireAssets: true, errors);
 
             if (!string.IsNullOrEmpty(settings.LubanDllPath))
             {
-                ValidateProjectPath(settings.LubanDllPath, "Luban.dll 路径", requireAssets: false, errors);
+                ValidateProjectPath(settings.LubanDllPath, "Luban.dll 路径", requireAssets: false, errors: errors, allowAbsolute: true);
             }
 
             if (IsNonEmpty(settings.CodeOutputDir) &&
@@ -173,7 +173,8 @@ namespace XFramework.XConfig.Luban.Editor
             string path,
             string name,
             bool requireAssets,
-            List<string> errors)
+            List<string> errors,
+            bool allowAbsolute = false)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
@@ -184,7 +185,13 @@ namespace XFramework.XConfig.Luban.Editor
 
             if (Path.IsPathRooted(normalized))
             {
-                errors.Add(name + " 必须是项目相对路径，不能是绝对路径。");
+                if (!allowAbsolute)
+                {
+                    errors.Add(name + " 必须是项目相对路径，不能是绝对路径。");
+                }
+
+                // 绝对路径既不适用受保护前缀，也不要求位于 Assets/ 下；
+                // 与输出目录的重叠由 Validate 的全路径比较兜住。
                 return;
             }
 

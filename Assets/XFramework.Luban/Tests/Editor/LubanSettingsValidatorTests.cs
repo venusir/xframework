@@ -1,3 +1,4 @@
+using System.IO;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -80,6 +81,23 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         public void Validate_MismatchedTargets_ReportsError()
         {
             _settings.DataTarget = LubanDataTarget.Json;
+
+            Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_AbsoluteDllAndConf_NoErrors()
+        {
+            _settings.LubanDllPath = Path.Combine(Path.GetTempPath(), "Luban", "Luban.dll");
+            _settings.ConfPath = Path.Combine(Path.GetTempPath(), "Luban", "luban.conf");
+
+            Assert.That(LubanSettingsValidator.Validate(_settings), Is.Empty);
+        }
+
+        [Test]
+        public void Validate_AbsoluteOutputDir_StillRejected()
+        {
+            _settings.CodeOutputDir = Path.Combine(Path.GetTempPath(), "Generated", "LubanCode");
 
             Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
         }
