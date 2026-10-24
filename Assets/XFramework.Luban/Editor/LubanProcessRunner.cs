@@ -1,6 +1,5 @@
 using System;
 using System.Diagnostics;
-using System.Text;
 using System.Threading;
 
 namespace XFramework.XConfig.Luban.Editor
@@ -55,8 +54,8 @@ namespace XFramework.XConfig.Luban.Editor
                 RedirectStandardError = true,
             };
 
-            var output = new StringBuilder();
-            var error = new StringBuilder();
+            var output = new LubanProcessOutputBuffer();
+            var error = new LubanProcessOutputBuffer();
             using var outputDone = new ManualResetEventSlim(false);
             using var errorDone = new ManualResetEventSlim(false);
             using var process = new Process { StartInfo = startInfo };
@@ -69,10 +68,7 @@ namespace XFramework.XConfig.Luban.Editor
                 }
                 else
                 {
-                    lock (output)
-                    {
-                        output.AppendLine(args.Data);
-                    }
+                    output.AppendLine(args.Data);
                 }
             };
             process.ErrorDataReceived += (_, args) =>
@@ -83,10 +79,7 @@ namespace XFramework.XConfig.Luban.Editor
                 }
                 else
                 {
-                    lock (error)
-                    {
-                        error.AppendLine(args.Data);
-                    }
+                    error.AppendLine(args.Data);
                 }
             };
 
@@ -119,17 +112,8 @@ namespace XFramework.XConfig.Luban.Editor
                 outputDone.Wait(2000);
                 errorDone.Wait(2000);
 
-                string standardOutput;
-                string standardError;
-                lock (output)
-                {
-                    standardOutput = output.ToString();
-                }
-
-                lock (error)
-                {
-                    standardError = error.ToString();
-                }
+                string standardOutput = output.ToString();
+                string standardError = error.ToString();
 
                 return new LubanProcessResult(
                     exited ? process.ExitCode : -1,
@@ -139,17 +123,8 @@ namespace XFramework.XConfig.Luban.Editor
             }
             catch (Exception ex)
             {
-                string standardOutput;
-                string standardError;
-                lock (output)
-                {
-                    standardOutput = output.ToString();
-                }
-
-                lock (error)
-                {
-                    standardError = error.ToString();
-                }
+                string standardOutput = output.ToString();
+                string standardError = error.ToString();
 
                 return new LubanProcessResult(
                     -1,
