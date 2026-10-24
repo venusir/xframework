@@ -22,6 +22,21 @@ namespace XFramework.XConfig.Luban.Editor
     }
 
     /// <summary>
+    /// 生成的 <c>Tables</c> 构造函数所用的 loader 类型。
+    /// </summary>
+    internal enum LubanLoaderKind
+    {
+        /// <summary>未识别（升级容忍，不当错误）。</summary>
+        Unknown = 0,
+
+        /// <summary><c>cs-bin</c>：<c>Func&lt;string, ByteBuf&gt;</c>。</summary>
+        ByteBuf = 1,
+
+        /// <summary><c>cs-simple-json</c>：<c>Func&lt;string, JSONNode&gt;</c>。</summary>
+        JsonNode = 2,
+    }
+
+    /// <summary>
     /// 从生成的表类中解析出的一张表。
     /// </summary>
     internal sealed class LubanGeneratedTable
@@ -48,6 +63,7 @@ namespace XFramework.XConfig.Luban.Editor
         internal string TablesNamespace;
         internal string TablesClassName;
         internal string TablesFullName;
+        internal LubanLoaderKind LoaderKind;
         internal List<LubanGeneratedTable> Tables = new();
     }
 

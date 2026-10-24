@@ -48,7 +48,8 @@ namespace XFramework.XConfig.Luban.Editor
                 var model = LubanCodeParser.Parse(codeDir, settings.TablesClassName);
                 result.Model = model;
 
-                var errors = LubanProjectValidator.ValidateForIntegration(settings, model, projectRoot);
+                var errors = LubanProjectValidator.ValidateForIntegration(
+                    settings, model, projectRoot, result.Warnings);
                 if (errors.Count > 0)
                 {
                     result.Errors.AddRange(errors);

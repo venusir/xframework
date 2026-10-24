@@ -23,6 +23,10 @@ namespace XFramework.XConfig.Luban.Editor
             @"(?<prop>\w+)\s*=\s*new\s+(?<type>[\w\.]+)\s*\(\s*loader\(\s*""(?<output>[^""]+)""\s*\)\s*\)",
             RegexOptions.Compiled);
 
+        private static readonly Regex TablesLoaderTypeRegex = new(
+            @"Func\s*<\s*string\s*,\s*(?<loader>[\w\.]+)\s*>\s+loader\b",
+            RegexOptions.Compiled);
+
         private static readonly Regex DictionaryFieldRegex = new(
             @"\bDictionary<(?<args>.+?)>\s+(?<name>_dataMap\w*)\s*;",
             RegexOptions.Compiled);
@@ -84,6 +88,7 @@ namespace XFramework.XConfig.Luban.Editor
                 TablesNamespace = tablesType.Namespace,
                 TablesClassName = tablesType.SimpleName,
                 TablesFullName = tablesType.FullName,
+                LoaderKind = DetectLoaderKind(tablesType.Text),
             };
 
             var matches = LoaderRegex.Matches(tablesType.Text);
@@ -107,6 +112,25 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             return model;
+        }
+
+        private static LubanLoaderKind DetectLoaderKind(string tablesText)
+        {
+            var match = TablesLoaderTypeRegex.Match(tablesText);
+            if (!match.Success)
+            {
+                return LubanLoaderKind.Unknown;
+            }
+
+            string loader = match.Groups["loader"].Value;
+            int dot = loader.LastIndexOf('.');
+            string simple = dot >= 0 ? loader.Substring(dot + 1) : loader;
+            return simple switch
+            {
+                "ByteBuf" => LubanLoaderKind.ByteBuf,
+                "JSONNode" => LubanLoaderKind.JsonNode,
+                _ => LubanLoaderKind.Unknown,
+            };
         }
 
         private static List<TypeInfo> BuildTypeIndex(string[] files)

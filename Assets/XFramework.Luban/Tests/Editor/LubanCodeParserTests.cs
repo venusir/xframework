@@ -17,6 +17,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             var model = LubanCodeParser.Parse(
                 Path.Combine(LubanTestPaths.FixturesRoot, "Bin"), "Tables");
 
+            Assert.That(model.LoaderKind, Is.EqualTo(LubanLoaderKind.ByteBuf));
             AssertModel(model);
         }
 
@@ -26,6 +27,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             var model = LubanCodeParser.Parse(
                 Path.Combine(LubanTestPaths.FixturesRoot, "Json"), "Tables");
 
+            Assert.That(model.LoaderKind, Is.EqualTo(LubanLoaderKind.JsonNode));
             AssertModel(model);
         }
 

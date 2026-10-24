@@ -116,11 +116,83 @@ namespace XFramework.XConfig.Luban.Editor
         internal static List<string> ValidateForIntegration(
             LubanGeneratorSettings settings,
             LubanGeneratedModel model,
-            string projectRoot)
+            string projectRoot,
+            List<string> warnings = null)
         {
             var errors = ValidateModel(model);
             errors.AddRange(ValidateAsmdefScope(settings, projectRoot));
+            errors.AddRange(ValidateLoaderAndData(settings, model, projectRoot, warnings));
             return errors;
+        }
+
+        private static List<string> ValidateLoaderAndData(
+            LubanGeneratorSettings settings,
+            LubanGeneratedModel model,
+            string projectRoot,
+            List<string> warnings)
+        {
+            var errors = new List<string>();
+            if (settings == null)
+            {
+                return errors;
+            }
+
+            LubanLoaderKind expected = settings.CodeTarget == LubanCodeTarget.CsBin
+                ? LubanLoaderKind.ByteBuf
+                : LubanLoaderKind.JsonNode;
+            if (model.LoaderKind != LubanLoaderKind.Unknown && model.LoaderKind != expected)
+            {
+                errors.Add(
+                    "CodeTarget 与生成代码的 loader 类型不匹配：CodeTarget=" +
+                    (settings.CodeTarget == LubanCodeTarget.CsBin ? "cs-bin" : "cs-simple-json") +
+                    "，Tables 的 loader 是 '" + LoaderName(model.LoaderKind) +
+                    "'。请重新生成代码或修改 CodeTarget。");
+            }
+
+            if (string.IsNullOrWhiteSpace(settings.DataOutputDir))
+            {
+                return errors;
+            }
+
+            string dataDir;
+            try
+            {
+                dataDir = ResolvePath(settings.DataOutputDir, projectRoot);
+            }
+            catch (Exception ex)
+            {
+                errors.Add("数据输出目录路径无效：" + ex.Message);
+                return errors;
+            }
+
+            if (!Directory.Exists(dataDir))
+            {
+                warnings?.Add("数据输出目录不存在，跳过数据文件校验：" + dataDir);
+                return errors;
+            }
+
+            string extension = settings.DataTarget == LubanDataTarget.Bin ? ".bytes" : ".json";
+            for (int i = 0; i < model.Tables.Count; i++)
+            {
+                var table = model.Tables[i];
+                string path = Path.Combine(dataDir, table.OutputDataName + extension);
+                if (!File.Exists(path))
+                {
+                    errors.Add("表 '" + table.PropertyName + "' 的数据文件不存在：" + path);
+                }
+            }
+
+            return errors;
+        }
+
+        private static string LoaderName(LubanLoaderKind kind)
+        {
+            return kind switch
+            {
+                LubanLoaderKind.ByteBuf => "ByteBuf",
+                LubanLoaderKind.JsonNode => "JSONNode",
+                _ => "Unknown",
+            };
         }
 
         private static string FindNearestAsmdef(
