@@ -79,7 +79,8 @@ param(
     [string]$UnityPath = "",
     [switch]$UseRepo,
     [switch]$Setup,
-    [switch]$UpdateApiBaseline
+    [switch]$UpdateApiBaseline,
+    [switch]$UpdateLubanGolden
 )
 
 $ErrorActionPreference = "Stop"
@@ -115,6 +116,23 @@ if ($UpdateApiBaseline) {
     $Filter = "\.PublicApiBaselineTests\."
     $env:XFW_UPDATE_API_BASELINE = "1"
     Write-Warning "API 基线更新模式：将重写 PublicApiBaseline.txt，并**按设计判为失败**——请读它打印的差异。"
+}
+
+# ---------- Luban golden 更新模式 ----------
+#
+# 与 -UpdateApiBaseline 同纪律：写盘后有意失败，绿灯由不带开关的重跑给出。
+# golden 用例在 Tests/Editor，故显式把平台钉在 EditMode（-Filter 的默认平台收窄是 PlayMode）。
+if ($UpdateLubanGolden) {
+    if ($UpdateApiBaseline) {
+        Write-Error "-UpdateLubanGolden 与 -UpdateApiBaseline 互斥。"
+    }
+    if ($Filter) {
+        Write-Error "-UpdateLubanGolden 与 -Filter/-Fixture 互斥：更新模式只跑 golden fixture 本身。"
+    }
+    $Filter = "\.LubanGoldenFileTests\."
+    $Platform = "EditMode"
+    $env:XFW_UPDATE_LUBAN_GOLDEN = "1"
+    Write-Warning "Luban golden 更新模式：将重写签入的接入代码夹具，并**按设计判为失败**——请审阅 git diff。"
 }
 
 # ---------- 定位仓库与 Unity ----------
