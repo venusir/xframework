@@ -4,7 +4,8 @@
     "references": [
         "Venusy609.Xframework",
         "Venusy609.Xframework.Luban",
-        "UniTask"
+        "UniTask",
+        "Luban.Runtime"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
