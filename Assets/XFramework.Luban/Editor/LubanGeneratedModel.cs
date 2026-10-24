@@ -42,7 +42,6 @@ namespace XFramework.XConfig.Luban.Editor
     internal sealed class LubanGeneratedTable
     {
         internal string PropertyName;
-        internal string TableTypeFullName;
         internal string OutputDataName;
         internal LubanTableShape Shape;
         internal string RowTypeFullName;

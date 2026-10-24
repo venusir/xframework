@@ -265,7 +265,6 @@ namespace XFramework.XConfig.Luban.Editor
             var table = new LubanGeneratedTable
             {
                 PropertyName = property,
-                TableTypeFullName = tableType.FullName,
                 OutputDataName = output,
             };
 
