@@ -185,7 +185,7 @@ public partial class Item : XFramework.XConfig.IConfigRow<int>
 
 - 这样接完之后 `typeof(Item)` 确实实现 `IConfigRow<int>`，`ConfigTypeHelper` 的接口扫描取得到 `TKey`。
 - **框架其实从不读 `Id` 成员**（`ConfigTypeHelper` 只读接口的泛型参数，`ConfigTable` 的字典校验也只比类型）。所以显式实现完全够用，不存在「框架读不到」的问题。
-- **但反射代码要小心**：显式实现在**具体类型**上不可见——`typeof(Item).GetProperty("Id")` 返回 **null**；必须从**接口**上取，`typeof(IConfigRow<int>).GetProperty("Id").GetValue(row)` 才能读到值。包内 README 的反射批注册示例正是后者，是对的。
+- **但反射代码要小心**：显式实现在**具体类型**上不可见——`typeof(Item).GetProperty("Id")` 返回 **null**；必须从**接口**上取，`typeof(IConfigRow<int>).GetProperty("Id").GetValue(row)` 才能读到值。当前包内 README 只推荐使用扩展包生成的行接口实现，不提供反射批注册示例；若要走反射批注册，上述「从接口取 Id」的判据必须自己处理对。
 - **复合键（多键表）**：`TKey` 用 `ValueTuple`，且**元组元素名必须与接口声明逐字一致**——写 `IConfigRow<(int skillId, int level)>` 却用 `(int, int) IConfigRow<(int, int)>.Id` 会 **CS0540**（这条是探针第一次编译就撞出来的）。
 
 **2026-10-24：行接口实现可由扩展包生成。** `LubanCodeParser` 解析生成代码，`LubanIntegrationEmitter` 生成 `partial` 行接口实现；
@@ -255,7 +255,7 @@ public V this[K key];
 
 | 写法 | 漂移面 | 评价 |
 | --- | --- | --- |
-| **手写一个小 helper + 逐表调用** | 无 | **推荐**。约 3 行，见下 |
+| **手写一个小 helper + 逐表调用** | 无 | **回退路径**（扩展包生成的适配器是首选）。约 3 行，见下 |
 | 覆盖 `tables.sbn` 让生成期产出 `RegisterAll` | 整个 `tables.sbn`（含入口构造与 `ResolveRef` 接线，是 Luban 各版本改动最频繁的部分） | 不划算——为省「每表一行」把最易变的部分纳入你的维护面 |
 | 反射批注册（遍历 `Tb*` 属性） | 无，但依赖属性命名约定 | 表特别多时可用；代价是反射，且 §3.2 那条「从接口取 Id」的坑必须处理对 |
 
