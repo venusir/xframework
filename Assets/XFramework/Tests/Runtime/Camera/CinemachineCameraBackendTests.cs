@@ -330,6 +330,54 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.IsNull(_backend.TransitionTargetId);
         }
 
+        [Test]
+        public void SwitchAway_RestoresPriorityChangedAfterRegister()
+        {
+            _vcamA.Priority = 5;
+
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+            Assert.Greater(_vcamA.Priority.Value, 5);
+
+            _backend.Activate("b", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            Assert.AreEqual(5, _vcamA.Priority.Value,
+                "切走后应恢复作者在注册之后设置的新优先级，而不是注册时抓的旧值");
+        }
+
+        [Test]
+        public void SwitchAway_RestoresGameObjectDisabledAfterRegister()
+        {
+            _vcamAObject.SetActive(false);
+
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+            Assert.IsTrue(_vcamAObject.activeSelf, "boost 应重新启用目标 GameObject");
+
+            _backend.Activate("b", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            Assert.IsFalse(_vcamAObject.activeSelf,
+                "切走后应恢复作者在注册之后设置的禁用状态，而不是注册时抓的旧值");
+        }
+
+        [Test]
+        public void SwitchAway_RestoresComponentDisabledAfterRegister()
+        {
+            _vcamA.enabled = false;
+
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+            Assert.IsTrue(_vcamA.enabled, "boost 应重新启用目标组件");
+
+            _backend.Activate("b", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            Assert.IsFalse(_vcamA.enabled,
+                "切走后应恢复作者在注册之后设置的组件禁用状态，而不是注册时抓的旧值");
+        }
+
         #endregion
 
         #region Bindings

@@ -1007,6 +1007,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **作者状态快照取在注册时点，切走时覆盖注册后的改动（2026-10-24）**：文档承诺恢复「被改写前」的
+  `PrioritySettings` / GameObject / 组件启用状态，实现却在 `Register` 抓一次。注册后作者把优先级从 5 改成 20，
+  切走时会被恢复成 5；注册后手动禁用的 GameObject / 组件会被重新启用。修法：三个快照字段移到 `Boost`
+  首次改写前抓取，并按 ownership 标志避免二次 boost 把上一次的 boost 值当成作者值。
+  回归：`SwitchAway_RestoresPriorityChangedAfterRegister` /
+  `SwitchAway_RestoresGameObjectDisabledAfterRegister` / `SwitchAway_RestoresComponentDisabledAfterRegister`
+  （改前三红）。
 - **未初始化提示指向已 internal 的 `ICameraBackend`（2026-10-24）**：`CameraManager` 的未初始化异常教用户
   调用 `CameraManager.Initialize(ICameraBackend)`，而该重载已随 2026-10-23 重设计收为 internal（公开面只有
   `Initialize(CinemachineBrain)`），照抄提示编译不过。改为指向公开重载。同轮清掉

@@ -298,9 +298,6 @@ namespace XFramework.XCamera.Cinemachine
                 CameraId = cameraId,
                 IsGenerated = isGenerated,
                 Camera = vcam,
-                OriginalPriority = vcam.Priority,
-                OriginalActiveSelf = vcam.gameObject.activeSelf,
-                OriginalEnabled = vcam.enabled,
             };
 
             _slots.Add(slot);
@@ -656,6 +653,17 @@ namespace XFramework.XCamera.Cinemachine
             var target = slot.Camera;
             if (target == null)
                 return;
+
+            // 作者状态必须在「首次改写前」抓取，而不是注册时：注册后作者仍可能改优先级 / 启停。
+            // 只在尚未接管时抓，避免同一目标二次 boost 时把上一次的 boost 值当成作者值。
+            if (!slot.PriorityOwned)
+                slot.OriginalPriority = target.Priority;
+
+            if (!target.gameObject.activeSelf && !slot.GameObjectEnabledByManager)
+                slot.OriginalActiveSelf = target.gameObject.activeSelf;
+
+            if (!target.enabled && !slot.ComponentEnabledByManager)
+                slot.OriginalEnabled = target.enabled;
 
             if (!target.gameObject.activeSelf)
             {

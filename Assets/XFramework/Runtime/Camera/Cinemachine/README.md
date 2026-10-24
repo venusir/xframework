@@ -35,7 +35,9 @@ CameraManager.SwitchTo("gameplay");
 ## 激活与优先级
 
 - `Activate` 把目标提升到「同通道场景最大优先级 + 1」：已注册相机按作者优先级计入，未注册 vcam 只读取、不改写。
-- 只改目标；切换 / 弹出 / 注销 / Dispose 时恢复目标被改写前的 `PrioritySettings` 与 GameObject / 组件启用状态。
+- 只改目标；切换 / 弹出 / 注销 / Dispose 时恢复目标**首次 boost 前**的 `PrioritySettings` 与
+  GameObject / 组件启用状态（注册之后作者再改，按最新值恢复）。boost 期间管理器持有这三个字段，
+  作者在持有期的改动会在切走时被恢复覆盖。
 - 优先级并列时 Cinemachine 取最新 `ActivationId`；`PrioritySettings.Enabled == false` 时 `Value` 为 0。
 - `ClearActive` 恢复 boost 并让 Brain 重选；**不保证** Brain 停止输出原相机（作者优先级仍最高时可能继续）。
 

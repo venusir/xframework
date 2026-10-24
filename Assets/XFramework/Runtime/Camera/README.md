@@ -251,8 +251,9 @@ if (camera != null)
 
 ## 内部机制
 
-- **优先级**：内置后端记录每台注册相机被改写前的 `PrioritySettings` / GameObject / 组件启用状态；只 boost 目标，
-  不把其它相机压成 0；切换 / 弹出 / 注销 / Dispose 时恢复。
+- **优先级**：内置后端在**首次 boost 前**记录目标被改写前的 `PrioritySettings` / GameObject / 组件启用状态
+  （注册之后作者再改，按最新值恢复）；只 boost 目标，不把其它相机压成 0；切换 / 弹出 / 注销 / Dispose 时恢复。
+  boost 期间管理器持有这三个字段，作者在持有期的改动会在切走时被恢复覆盖。
 - **混合请求**：`GetBlendOverride` 只对 `owner == brain` 且 `to == 请求目标` 生效；无请求时链回前一个委托。
 - **请求结算**：cut 在激活事件结算；blend 在完成事件结算；`CameraUpdatedEvent` 兜底目标销毁与「已是活动相机的 cut」。
 - **外部接管**：外部 incoming 让后端结算 `Superseded`，但不恢复 boost；`IsExternallyControlled` 由导演层按栈顶判定。
