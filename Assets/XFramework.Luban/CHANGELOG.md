@@ -18,6 +18,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - `Samples~/Luban`：最小可运行示例（JSON target），含 schema、生成物、数据与示例脚本。
 - 测试：门面/桥接/写盘/解析器/发射器/校验用例；真实 Luban 5.1.0 生成物的 ConfigManager 端到端用例；
   示例产物防腐测试。
+- 包内守卫：README 结构与文件树、`.meta` 完整性、包边界、`AutoInit` 族清单、Runtime 公开 API 基线、
+  依赖声明；Luban 示例编译纳入 `check-docs.ps1`（LUB-21/25/27）。
 
 ### Fixed
 

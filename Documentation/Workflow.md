@@ -205,10 +205,7 @@
 4. Cinemachine 后端随核心包发布（`Runtime/Camera/Cinemachine/`，2026-10-22 并入）；Luban 工具链是同级可选包
    `Assets/XFramework.Luban/`，不随核心包发布。
 
-**同级可选包**：`Assets/XFramework.Luban/` 不在核心六道门禁的射程内（`check-docs.ps1` /
-`PublicApiBaselineTests` / README 守卫只扫 `Assets/XFramework`）。它的测试随全量 `run-tests.ps1` 运行；
-`.meta`、README 与公开面靠自建测试与评审。发布时与核心包共用同一个仓库 tag，安装 URL 用
-`?path=Assets/XFramework.Luban`。
+**同级可选包**：`Assets/XFramework.Luban/` 不在核心六道门禁的射程内（`check-docs.ps1` 的 XML 文档/源码参与/`Runtime/` 模块树/`Assets/XFramework` 的 `.meta` 扫描、`PublicApiBaselineTests`、核心 README 守卫只扫 `Assets/XFramework`）。它的测试随全量 `run-tests.ps1` 运行；包内自设守卫覆盖 README 结构/文件树、`.meta` 完整性、包边界（`Documentation/` 引用）、`AutoInit` 族清单、Runtime 公开 API 基线（`-UpdateLubanApiBaseline`）与依赖声明。示例由 `check-docs.ps1 -Enforce` 经 `check-samples.ps1 -SamplesRoot Assets/XFramework.Luban/Samples~` 编译。发布时与核心包共用同一个仓库 tag，安装 URL 用 `?path=Assets/XFramework.Luban`。
 
 ### OpenUPM（待上架）
 

@@ -3,6 +3,7 @@
 ## 项目定位
 
 - 本项目是 Unity 游戏框架(内嵌 UPM 包 `com.venusy609.xframework`),以插件形式供其他游戏项目引入,不包含具体游戏内容
+- 可选扩展包 `Assets/XFramework.Luban/`(`com.venusy609.xframework.luban`)与核心包并列分发:核心包**不内建** Luban 适配层,扩展包在使用方项目里提供 Editor 导表、生成式行接口实现(`IConfigRow<TKey>`)与适配器,运行时以 `object` 持有 `Tables`、不引用 Luban 程序集。它**不在核心六道门禁的射程内**(核心门禁只扫 `Assets/XFramework`),但全量 `run-tests.ps1` 会运行它自己的 Runtime/Editor 测试;包内另设自己的守卫(README 结构/文件树、`.meta` 完整性、包边界、`AutoInit` 族清单、Runtime 公开 API 基线、依赖声明),`check-docs.ps1` 已把 `Assets/XFramework.Luban/Samples~` 纳入示例编译
 - Unity 版本:6000.4.5f1(开发环境);package.json 最低要求 `6000.3`
 - API 兼容级别:.NET Standard 2.1;序列化模式:Force Text
 - Runtime 全部代码属于单一 asmdef `Venusy609.Xframework`,外部依赖:UniTask、YooAsset、TextMeshPro、Input System、Cinemachine(3.1.7)。Cinemachine 3.x 后端 `CinemachineCameraBackend` 已并入核心包(`Runtime/Camera/Cinemachine/`,命名空间 `XFramework.XCamera.Cinemachine`,程序集 `Venusy609.Xframework`)并是**唯一内置相机后端**(实现 internal);门面 `CameraManager` 的 gameplay 面以 string id + 相机栈对外,初始化 / 注册 / 高级访问使用 Cinemachine 类型(`Initialize(CinemachineBrain)` / `Register(..., CinemachineVirtualCameraBase)` / `TryGetCamera` / `ActiveCamera`);手写 `UnityCameraManager` 已删除,不再有独立扩展包
@@ -86,6 +87,7 @@
   - UPM 包 → `Packages/manifest.json`(Git URL 或注册表版本号)
 - 新增依赖必须同步更新 Assets/XFramework/README.md,引导第三方手动安装(安装顺序:先依赖,后 XFramework)
 - **依赖版本只有一份真相:** 第三方依赖的版本/URL 以 `Assets/XFramework/README.md` 的「第三方依赖」表为准;`Editor/XFrameworkDependencyInstaller.cs` 的清单与 `Packages/manifest.json` 必须与之逐字一致,Git URL 必须钉 `#tag`(`?path=` 写在 `#` 之前)。三者由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫——不钉修订时消费方会取上游默认分支,Asset 模块直接编译不过(实测 51 处 `CS0246/CS0234`)
+- **扩展包的依赖真相在扩展包侧:** `Assets/XFramework.Luban/README.md` 的「依赖」表与 `Packages/manifest.json` 的 `com.code-philosophy.luban` 版本/URL 必须逐字一致(钉 `#v1.2.0`),由扩展包的 `LubanDependencyDeclarationTests` 守卫。核心的「第三方依赖」表与 `Editor/XFrameworkDependencyInstaller.cs` 不登记它(核心包不依赖 Luban);本仓 `Packages/manifest.json` 为编译/测试扩展包而列出它。扩展包 `package.json` 的 `dependencies` 仍留空(UPM 不支持 Git URL)
 - **Cinemachine 依赖按 Input System 先例处理:** 核心 asmdef 无条件引用 `Unity.Cinemachine`;`com.unity.cinemachine` 3.1.7 必须写进 `Editor/XFrameworkDependencyInstaller.cs` 的 `RequiredUPMDependencies`、`Assets/XFramework/README.md` 的「第三方依赖」表/JSON 块与 `Packages/manifest.json` 三处并逐字一致,由 `Tests/Editor/Architecture/DependencyDeclarationTests` 守。核心 `package.json` 的 `dependencies` 仍留空(与 Input System 同型);不列它会整体编译失败(与 R3-INP-001 同型)。原独立扩展包 `com.venusy609.xframework.cinemachine` 已删除,不再有扩展侧依赖真相
 
 ## 文档分层

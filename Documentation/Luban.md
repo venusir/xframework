@@ -501,6 +501,8 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 - **批次 D 测试/文档**（LUB-04 / 18 / 19 / 20 / 22 / 23 / 24 / 28）：`test(Luban): 覆盖默认 AssetManager 加载路径的错误分支`；`test(Luban): golden-file 比对生成物与夹具`；`docs(Luban): 同步 README 文件树、概述与已知限制`；`test(Luban): 修正消费方包路径定位`。
 - **批次 E 门禁/治理**（LUB-21 / 25 / 26 / 27，需单独批准）：`chore(Luban): 示例编译纳入 check-samples`；`test(Luban): 扩展包 README/公开面/边界/AutoInit 守卫`；`docs(Luban): 登记扩展包到 CLAUDE.md/Workflow/Ledger`；`chore(release): 为扩展包打 tag`（用户执行，不自动推送）。
 
+> **实施状态（2026-10-25）**：批次 A–F（含 F1–F3 门禁与 F4 登记）已落地；详细变更见扩展包 `CHANGELOG.md` 与提交历史。打 tag 仍是用户动作。
+
 **定向测试注意**：`run-tests.ps1 -Filter` 未显式 `-Platform EditMode` 时只跑 PlayMode，`Tests/Editor/` 下的用例会假绿；看 Editor 侧必须显式指定平台。
 
 ### 7.8 不做 / 暂不做（结论）
