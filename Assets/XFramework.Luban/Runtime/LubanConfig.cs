@@ -11,7 +11,8 @@ namespace XFramework.XConfig.Luban
     /// <see cref="ConfigManager"/>。
     /// <para>与核心门面一致：未初始化访问抛 <see cref="InvalidOperationException"/>，
     /// 重复初始化告警并忽略，会话复位在 <c>SubsystemRegistration</c> 档。</para>
-    /// <para>所有成员必须在主线程调用。</para>
+    /// <para>所有成员必须在主线程调用；Editor 下入口会断言并首错记一次 Error，
+    /// Release 构建无运行时开销。</para>
     /// </summary>
     public static class LubanConfig
     {
@@ -77,6 +78,8 @@ namespace XFramework.XConfig.Luban
 
         /// <summary>
         /// 丢弃门面状态并卸载本扩展注册过的表。
+        /// <para>若初始化在途，会先以 <see cref="OperationCanceledException"/> 作废它，
+        /// 在途任务不会注册任何表。</para>
         /// <para>若 <see cref="ConfigManager"/> 已被销毁，则跳过卸载并记 Warning。
         /// <b>不会</b>销毁 ConfigManager（所有权始终归使用方）。</para>
         /// </summary>

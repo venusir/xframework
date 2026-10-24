@@ -54,7 +54,7 @@ namespace XFramework.XConfig.Luban
         /// <param name="rows">Luban 表对象的 DataList。</param>
         /// <param name="keySelector">从行取主键。</param>
         /// <exception cref="ArgumentNullException">任一参数为 null。</exception>
-        /// <exception cref="ArgumentException">主键重复。</exception>
+        /// <exception cref="ArgumentException">主键重复；消息带行类型与重复键。</exception>
         public static void RegisterTable<T, TKey>(IReadOnlyList<T> rows, Func<T, TKey> keySelector)
             where T : IConfigRow<TKey>
         {
@@ -99,6 +99,8 @@ namespace XFramework.XConfig.Luban
 
         /// <summary>
         /// 从 <see cref="ConfigManager"/> 卸载指定类型；ConfigManager 未初始化时安全空转。
+        /// <para>即使该类型从未加载，也会触发一次 <see cref="ConfigManager.ConfigChanged"/>
+        /// （核心 <c>ConfigManager.Unload</c> 的既有语义）。</para>
         /// </summary>
         /// <typeparam name="T">行类型或 Global 类型。</typeparam>
         public static void Unload<T>()
