@@ -150,6 +150,24 @@ namespace XFramework.XConfig.Luban.Tests
         }
 
         [Test]
+        public async Task InitializeAsync_ProviderFailure_MessagePreservesInner()
+        {
+            var inner = new InvalidOperationException("AssetManager 尚未初始化，请先调用 InitializeAsync");
+            var provider = new FakeLubanProvider { LoadException = inner };
+
+            try
+            {
+                await LubanConfig.InitializeForTestsAsync(new FakeLubanAdapter(), provider);
+                Assert.Fail("Expected LubanConfigException.");
+            }
+            catch (LubanConfigException ex)
+            {
+                Assert.That(ex.Message, Does.Contain(inner.Message));
+                Assert.That(ex.InnerException, Is.SameAs(inner));
+            }
+        }
+
+        [Test]
         public async Task InitializeAsync_Cancellation_Propagates()
         {
             var provider = new FakeLubanProvider { ThrowCancellation = true };

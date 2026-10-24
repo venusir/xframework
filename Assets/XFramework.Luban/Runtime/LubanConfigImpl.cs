@@ -147,7 +147,8 @@ namespace XFramework.XConfig.Luban
             }
             catch (Exception ex)
             {
-                throw new LubanConfigException("[LubanConfig] Failed to load Luban data files.", ex);
+                throw new LubanConfigException(
+                    "[LubanConfig] Failed to load Luban data files: " + ex.Message, ex);
             }
 
             ThrowIfInvalidated(generation, cancellationToken);
