@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 
 namespace XFramework.XConfig.Luban.Editor
 {
@@ -9,6 +10,23 @@ namespace XFramework.XConfig.Luban.Editor
     /// </summary>
     internal static class LubanSettingsValidator
     {
+        private static readonly Regex IdentifierRegex =
+            new(@"^[A-Za-z_]\w*$", RegexOptions.Compiled);
+
+        private static readonly HashSet<string> Keywords = new(StringComparer.Ordinal)
+        {
+            "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+            "checked", "class", "const", "continue", "decimal", "default", "delegate",
+            "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+            "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+            "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+            "new", "null", "object", "operator", "out", "override", "params", "private",
+            "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+            "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+            "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+            "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+        };
+
         private static readonly string[] ForbiddenPrefixes =
         {
             "Packages/",
@@ -33,11 +51,16 @@ namespace XFramework.XConfig.Luban.Editor
             Require(settings.LubanDllPath, "Luban.dll 路径", errors);
             Require(settings.ConfPath, "luban.conf 路径", errors);
             Require(settings.TargetName, "target 名", errors);
+            Require(settings.TablesClassName, "Tables 类名", errors);
             Require(settings.CodeOutputDir, "代码输出目录", errors);
             Require(settings.DataOutputDir, "数据输出目录", errors);
             Require(settings.GlueOutputDir, "胶水输出目录", errors);
             Require(settings.AdapterNamespace, "适配器命名空间", errors);
             Require(settings.AdapterClassName, "适配器类名", errors);
+
+            ValidateIdentifier(settings.TablesClassName, "Tables 类名", errors);
+            ValidateIdentifier(settings.AdapterClassName, "适配器类名", errors);
+            ValidateNamespace(settings.AdapterNamespace, "适配器命名空间", errors);
 
             if (!IsPaired(settings.CodeTarget, settings.DataTarget))
             {
@@ -113,6 +136,36 @@ namespace XFramework.XConfig.Luban.Editor
             if (string.IsNullOrWhiteSpace(value))
             {
                 errors.Add(name + " 不能为空。");
+            }
+        }
+
+        private static void ValidateIdentifier(string value, string name, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            if (!IdentifierRegex.IsMatch(value))
+            {
+                errors.Add(name + " 不是合法的 C# 标识符。");
+            }
+            else if (Keywords.Contains(value))
+            {
+                errors.Add(name + " 不能是 C# 关键字。");
+            }
+        }
+
+        private static void ValidateNamespace(string value, string name, List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return;
+            }
+
+            foreach (var segment in value.Split('.'))
+            {
+                ValidateIdentifier(segment, name, errors);
             }
         }
 

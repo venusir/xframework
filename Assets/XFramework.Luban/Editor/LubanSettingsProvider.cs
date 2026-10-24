@@ -48,6 +48,7 @@ namespace XFramework.XConfig.Luban.Editor
             EditorGUILayout.LabelField("Luban 工程", EditorStyles.boldLabel);
             Draw("ConfPath", "luban.conf 路径（项目相对或绝对）");
             Draw("TargetName", "Target 名");
+            Draw("TablesClassName", "Tables 类名");
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("输出目录（项目相对，必须在 Assets/ 下）", EditorStyles.boldLabel);

@@ -13,6 +13,8 @@ namespace XFramework.XConfig.Luban.Editor
     {
         internal const string MenuRoot = "XFramework/Luban/";
         internal const string GenerateMenu = MenuRoot + "生成配置表";
+        internal const string RefreshGlueMenu = MenuRoot + "仅刷新胶水";
+        internal const string ValidateMenu = MenuRoot + "校验接入";
         internal const string SettingsMenu = MenuRoot + "设置...";
 
         [MenuItem(GenerateMenu, priority = 100)]
@@ -54,12 +56,35 @@ namespace XFramework.XConfig.Luban.Editor
 
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             Debug.Log("[Luban] Generation finished." + Environment.NewLine + result.StandardOutput);
+            RunGlue(settings, projectRoot, write: true);
+        }
 
-            EditorUtility.DisplayDialog(
-                "XFramework Luban",
-                "导表完成。代码与数据已生成到设置中的目录。\n\n" +
-                "下一步：执行「仅刷新胶水」生成接缝与适配器（或使用一键流程）。",
-                "OK");
+        [MenuItem(RefreshGlueMenu, priority = 101)]
+        private static void RefreshGlue()
+        {
+            var settings = LubanGeneratorSettings.instance;
+            var errors = LubanSettingsValidator.Validate(settings);
+            if (errors.Count > 0)
+            {
+                ShowErrors("设置不完整", errors);
+                return;
+            }
+
+            RunGlue(settings, Directory.GetCurrentDirectory(), write: true);
+        }
+
+        [MenuItem(ValidateMenu, priority = 102)]
+        private static void Validate()
+        {
+            var settings = LubanGeneratorSettings.instance;
+            var errors = LubanSettingsValidator.Validate(settings);
+            if (errors.Count > 0)
+            {
+                ShowErrors("设置不完整", errors);
+                return;
+            }
+
+            RunGlue(settings, Directory.GetCurrentDirectory(), write: false);
         }
 
         [MenuItem(SettingsMenu, priority = 120)]
@@ -107,6 +132,28 @@ namespace XFramework.XConfig.Luban.Editor
             string message = string.Join("\n", errors);
             Debug.LogError("[Luban] " + title + Environment.NewLine + message);
             EditorUtility.DisplayDialog("XFramework Luban", title + "\n\n" + message, "OK");
+        }
+
+        internal static void RunGlue(
+            LubanGeneratorSettings settings,
+            string projectRoot,
+            bool write)
+        {
+            var result = LubanGlueGenerator.Generate(settings, projectRoot, write);
+            if (!result.Succeeded)
+            {
+                ShowErrors(write ? "胶水生成失败" : "接入校验失败", result.Errors);
+                return;
+            }
+
+            if (write)
+            {
+                AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+            }
+
+            string summary = LubanGlueGenerator.BuildSummary(result, write);
+            Debug.Log("[Luban] " + summary.Replace("\n", Environment.NewLine));
+            EditorUtility.DisplayDialog("XFramework Luban", summary, "OK");
         }
 
         private static void ShowProcessFailure(LubanProcessResult result)

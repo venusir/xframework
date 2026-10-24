@@ -21,6 +21,9 @@ namespace XFramework.XConfig.Luban.Editor
         /// <summary>Luban target 名（如 <c>client</c> / <c>all</c>）。</summary>
         public string TargetName = "client";
 
+        /// <summary>Luban 生成的整包入口类名（默认 <c>Tables</c>）。</summary>
+        public string TablesClassName = "Tables";
+
         /// <summary>Luban 生成的 C# 代码目录（必须在 Assets/ 下）。</summary>
         public string CodeOutputDir = "";
 
