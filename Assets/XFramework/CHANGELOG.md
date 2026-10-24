@@ -1013,6 +1013,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **注销任意相机会截断在途混合（2026-10-24）**：`Unregister` 在 `Brain.IsBlending` 时无条件
+  `ActiveBlend = null`，注销一台无关相机也会把别人正在进行的过渡强制完成，`PushAsync` 提前拿到
+  `Completed`、请求时长不生效。修法：只在被注销的正是当前请求目标时才强制完成混合。回归：
+  `Unregister_UnrelatedCamera_DoesNotCompletePushEarly`（改前红）。
 - **死栈顶被剪除后一次 `Pop` 会多弹一层（2026-10-24）**：栈 `[A, B, C(已销毁)]` 时 `Pop` 先剪掉 C，再
   `RemoveAt` 删掉存活的 B，一次 Pop 回到 A；异步 `PopAsync` 同样。这与「死顶由 Deactivated 事件处理」时
   只激活新栈顶 B、不弹 B 的自动路径不一致。修法：剪除死栈顶后视为该层已经离开，只激活新栈顶、不再弹下一层；

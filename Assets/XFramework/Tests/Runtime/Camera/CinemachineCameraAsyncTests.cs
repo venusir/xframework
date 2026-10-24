@@ -1,6 +1,7 @@
 using System;
 using System.Text.RegularExpressions;
 using System.Threading;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using Unity.Cinemachine;
 using UnityEngine;
@@ -138,6 +139,39 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.AreEqual(CameraTransitionResult.Completed, pop.GetAwaiter().GetResult());
             Assert.AreEqual(1, CameraManager.StackDepth);
             Assert.AreEqual("a", CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void Unregister_UnrelatedCamera_DoesNotCompletePushEarly()
+        {
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            var push = CameraManager.PushAsync("b", 0.4f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+            Assert.IsTrue(CameraManager.IsBlending, "前提：应处于 A→B 的混合中");
+
+            var thirdObject = new GameObject("VcamC");
+            try
+            {
+                var third = thirdObject.AddComponent<CinemachineCamera>();
+                var id = CameraManager.Register(third);
+                CameraManager.Unregister(id);
+
+                Pump(0.1f);
+
+                Assert.IsTrue(CameraManager.IsBlending, "注销无关相机不应截断在途混合");
+                Assert.IsFalse(push.Status.IsCompleted(), "等待不应提前完成");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(thirdObject);
+            }
+
+            PumpUntilSettled();
+
+            Assert.AreEqual(CameraTransitionResult.Completed, push.GetAwaiter().GetResult());
+            Assert.AreEqual("b", CameraManager.ActiveCameraId);
         }
 
         [Test]

@@ -47,6 +47,7 @@ CameraManager.SwitchTo("gameplay");
 - 非 cut 通过 `GetBlendOverride` 返回本次的 `CinemachineBlendDefinition`；**不修改** `DefaultBlend`。
 - override 只在 `owner == brain` 且 `to == 请求目标` 时生效；无请求时链回构造时保存的前一个委托。
 - cut 用 `Brain.ActiveBlend = null` 强制完成在途混合（上游支持的强制完成入口）。
+- `Unregister` 只在被注销的正是当前请求目标时才强制完成在途混合；注销无关相机不影响别人的过渡。
 - 项目 `CustomBlends` 先于 `GetBlendOverride` 求值，因此本次请求优先；Timeline 混合不经过该入口，不承诺控制。
 - ClearShot 等分组相机的**内部子混合**通常以分组为 owner，本后端的请求不保证作用于它。
 

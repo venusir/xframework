@@ -315,13 +315,15 @@ namespace XFramework.XCamera.Cinemachine
             if (!_byId.TryGetValue(cameraId, out var slot))
                 return false;
 
-            if (_request != null && ReferenceEquals(_request.Target, slot))
+            var wasRequestTarget = _request != null && ReferenceEquals(_request.Target, slot);
+            if (wasRequestTarget)
                 SettleRequest(CameraTransitionResult.CameraNotFound);
 
             if (slot.Camera != null)
                 RestoreOwnedState(slot);
 
-            if (_brain != null && _brain.IsBlending)
+            // 只在放弃本次请求的目标时强制完成混合；注销无关相机不应截断别人的在途过渡。
+            if (wasRequestTarget && _brain != null && _brain.IsBlending)
                 _brain.ActiveBlend = null;
 
             ReleaseSlot(slot);

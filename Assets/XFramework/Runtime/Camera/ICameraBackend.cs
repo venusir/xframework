@@ -63,6 +63,8 @@ namespace XFramework.XCamera
         /// <summary>注销一台相机；不销毁相机对象。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <returns>确实移除了才返回 <c>true</c>；未知 id 返回 <c>false</c>。</returns>
+        /// <remarks>恢复它被管理器改写的作者状态。只有被注销的正是当前在途请求的目标时才结算该请求并强制
+        /// 完成混合；注销其它相机不影响在途过渡。</remarks>
         bool Unregister(string cameraId);
 
         /// <summary>id 是否在注册表中（相机已销毁但尚未注销时仍为 <c>true</c>）。</summary>
