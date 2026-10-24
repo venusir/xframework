@@ -1,8 +1,10 @@
 using System;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XBootstrap;
 using XFramework.XConfig;
 using XFramework.XConfig.Luban;
+using XFramework.XPipeline;
 
 namespace XFramework.XConfig.Luban.Tests
 {
@@ -15,6 +17,7 @@ namespace XFramework.XConfig.Luban.Tests
         [SetUp]
         public void SetUp()
         {
+            LubanConfig.DataProviderFactory = null;
             LubanConfig.Destroy();
             ConfigManager.Destroy();
         }
@@ -22,6 +25,7 @@ namespace XFramework.XConfig.Luban.Tests
         [TearDown]
         public void TearDown()
         {
+            LubanConfig.DataProviderFactory = null;
             LubanConfig.Destroy();
             ConfigManager.Destroy();
         }
@@ -57,6 +61,70 @@ namespace XFramework.XConfig.Luban.Tests
 
             Assert.DoesNotThrow(stage.Shutdown);
             Assert.That(LubanConfig.IsInitialized, Is.False);
+        }
+
+        [Test]
+        public async Task Execute_AfterExternalInitialize_ShutdownKeepsState()
+        {
+            var provider = new FakeLubanProvider();
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            await LubanConfig.InitializeForTestsAsync(new FakeLubanAdapter(), provider);
+
+            var stage = new LubanBootstrapStage(new FakeLubanAdapter());
+            var context = new PipelineStageContext();
+
+            await stage.ExecuteAsync(context, default);
+
+            Assert.That(context.State, Is.EqualTo(PipelineStageState.Completed));
+            stage.Shutdown();
+            Assert.That(LubanConfig.IsInitialized, Is.True);
+        }
+
+        [Test]
+        public async Task StageInitialized_ShutdownDestroys()
+        {
+            var provider = new FakeLubanProvider();
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            LubanConfig.DataProviderFactory = () => provider;
+            var adapter = new FakeLubanAdapter();
+            var stage = new LubanBootstrapStage(adapter);
+            var context = new PipelineStageContext();
+
+            await stage.ExecuteAsync(context, default);
+
+            Assert.That(LubanConfig.IsInitialized, Is.True);
+            stage.Shutdown();
+            Assert.That(LubanConfig.IsInitialized, Is.False);
+            Assert.That(adapter.UnregisterCalls, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task StageInitFails_ShutdownDoesNotDestroyManualInit()
+        {
+            LubanConfig.DataProviderFactory = () => new FakeLubanProvider
+            {
+                LoadException = new InvalidOperationException("boom"),
+            };
+            var stage = new LubanBootstrapStage(new FakeLubanAdapter());
+            var context = new PipelineStageContext();
+
+            try
+            {
+                await stage.ExecuteAsync(context, default);
+                Assert.Fail("Expected initialization failure.");
+            }
+            catch (Exception)
+            {
+                // expected
+            }
+
+            var provider = new FakeLubanProvider();
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            await LubanConfig.InitializeForTestsAsync(new FakeLubanAdapter(), provider);
+
+            stage.Shutdown();
+
+            Assert.That(LubanConfig.IsInitialized, Is.True);
         }
     }
 }

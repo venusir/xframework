@@ -19,6 +19,7 @@ namespace XFramework.XConfig.Luban
         private readonly ILubanConfigAdapter _adapter;
         private readonly LubanOptions _options;
         private readonly int _phase;
+        private bool _initializedByThisStage;
 
         #endregion
 
@@ -59,16 +60,43 @@ namespace XFramework.XConfig.Luban
             PipelineStageContext context,
             CancellationToken cancellationToken)
         {
+            if (LubanConfig.IsInitialized)
+            {
+                context.SetState(PipelineStageState.Completed);
+                return;
+            }
+
             context.SetDescription("Loading Luban configs...");
-            await LubanConfig.InitializeAsync(
-                _adapter, _options, new PipelineProgressRelay(context), cancellationToken);
+
+            // 标记在 await 之前：Shutdown 可能在初始化在途时到来，此时本阶段确实接管了这次初始化。
+            // 失败路径必须复位，否则初始化失败后使用方手动注入的状态会在 Shutdown 时被销毁。
+            _initializedByThisStage = true;
+            try
+            {
+                await LubanConfig.InitializeAsync(
+                    _adapter, _options, new PipelineProgressRelay(context), cancellationToken);
+            }
+            catch
+            {
+                _initializedByThisStage = false;
+                throw;
+            }
+
             context.SetProgress(1f);
             context.SetState(PipelineStageState.Completed);
         }
 
-        /// <inheritdoc />
+        /// <summary>
+        /// 反向清理：只销毁本阶段自己初始化的那份。幂等。
+        /// </summary>
         public void Shutdown()
         {
+            if (!_initializedByThisStage)
+            {
+                return;
+            }
+
+            _initializedByThisStage = false;
             LubanConfig.Destroy();
         }
 

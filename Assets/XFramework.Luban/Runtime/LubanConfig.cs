@@ -63,7 +63,8 @@ namespace XFramework.XConfig.Luban
             if (adapter == null)
                 throw new ArgumentNullException(nameof(adapter));
 
-            _impl ??= new LubanConfigImpl(new AssetLubanDataProvider());
+            _impl ??= new LubanConfigImpl(
+                DataProviderFactory != null ? DataProviderFactory() : new AssetLubanDataProvider());
             return _impl.InitializeAsync(adapter, options, progress, cancellationToken);
         }
 
@@ -113,6 +114,11 @@ namespace XFramework.XConfig.Luban
         #region Internal
 
         /// <summary>
+        /// 测试专用：注入门面默认 provider 的工厂。生产路径保持 null。
+        /// </summary>
+        internal static Func<ILubanDataProvider> DataProviderFactory;
+
+        /// <summary>
         /// 测试专用：注入 fake 数据后端。不改变公开门面的生产路径。
         /// </summary>
         internal static UniTask InitializeForTestsAsync(
@@ -143,6 +149,7 @@ namespace XFramework.XConfig.Luban
         {
             _impl?.ResetForNewSession();
             _impl = null;
+            DataProviderFactory = null;
         }
 
         private static LubanConfigImpl EnsureInitialized()
