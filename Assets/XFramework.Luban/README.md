@@ -1,5 +1,7 @@
 # XFramework Luban
 
+## 概述
+
 XFramework 的**可选** Luban 配置扩展：Editor 一键导表、生成式行接口实现与强类型适配器、运行时经
 `AssetManager` 加载并把表注册进 `ConfigManager`。
 
@@ -103,6 +105,7 @@ var spawnPoints = tables.TbSpawnPoint.DataList;
 ```text
 Assets/XFramework.Luban/
 ├── Runtime/
+│   ├── AssemblyInfo.cs              InternalsVisibleTo（测试程序集）
 │   ├── ILubanConfigAdapter.cs       生成适配器契约
 │   ├── LubanOptions.cs              数据根路径 / 加载方式 / location 解析
 │   ├── LubanDataLoadMode.cs         TextAsset / RawFile
@@ -113,8 +116,12 @@ Assets/XFramework.Luban/
 │   ├── LubanBootstrapStage.cs       引导阶段（Phase 默认 90，可覆盖）
 │   ├── LubanConfigImpl.cs           internal：加载 → 构造 → 注册
 │   ├── ILubanDataProvider.cs        internal：数据后端契约
-│   └── AssetLubanDataProvider.cs    internal：AssetManager 后端
+│   ├── AssetLubanDataProvider.cs    internal：AssetManager 后端
+│   ├── ILubanAssetSource.cs         internal：默认加载后端接缝
+│   ├── AssetManagerLubanAssetSource.cs internal：接缝的 AssetManager 实现
+│   └── LubanLog.cs                  internal：日志分类
 ├── Editor/
+│   ├── AssemblyInfo.cs              InternalsVisibleTo（Editor 测试程序集）
 │   ├── LubanGeneratorSettings.cs    ProjectSettings 设置
 │   ├── LubanSettingsProvider.cs     Project Settings 页面
 │   ├── LubanCodeTarget.cs           代码/数据目标枚举
@@ -301,19 +308,24 @@ await LubanConfig.InitializeAsync(adapter, new LubanOptions
 
 ## 已知限制
 
-- **只支持 Luban 5.1.0 的 `cs-bin` / `cs-simple-json` 输出**；其它 target（`cs-newtonsoft-json`、
-  `cs-editor-json` 等）与其它版本需要重新验证生成物形状；
+- **只支持 Luban 5.1.0 的 `cs-bin` / `cs-simple-json` 输出**；`cs-newtonsoft-json`、`cs-editor-json`、
+  `cs-dotnet-json` 明确不支持，其它版本/ target 需要重新验证生成物形状；
+- **生成的 JSON 适配器硬编码 `Luban.SimpleJSON`**；官方运行时若把命名空间改为 `Luban.SimpleJson`
+  （较新版本已变），升级后会编译失败（响亮），届时需重新生成/适配；
+- **v1 全量加载 `bin` / `json`**，不支持 `bin-offset`、分片或懒加载；重开判据=真实使用方出现启动卡顿
+  或大表内存压力；
 - **纯列表表不进入 `ConfigManager`**（无主键）；
 - **单行表行类型必须是 class**；struct 无法 `RegisterGlobal`；
 - **多个独立索引的 list 表不支持**；请用联合索引（`index="a+b"`）；
 - **行接口实现与生成代码必须在同一 asmdef**，且该 asmdef 必须直接引用核心包、本包与 `Luban.Runtime`；
-- **主线程同步解析**；大表会卡启动帧；
+- **主线程同步解析**；大表会卡启动帧；主线程契约的入口断言只在 Editor 下启用，Release 无运行时开销；
+- **`LubanOptions.DataRoot` 原样拼接**，不归一化反斜杠、首斜杠或空白；需要特殊路径时用 `LocationResolver`；
 - **不支持热重载 / 多 schema 并行挂载**；一次一个适配器；
 - **不要与同类型的 `Preload` 混用**：注册会覆盖同类型的既有数据，并触发 `ConfigChanged`；
 - **Editor 工具会调用外部 `dotnet`**，需要 `.NET 8+` 与可用的 Luban.dll；超时 5 分钟；
 - **示例使用 EditorSimulate**，需要 YooAsset collector，Player 构建不适用；
 - **核心包的六道门禁不覆盖本包**（它们只扫 `Assets/XFramework`）；本包自带 Runtime/Editor 测试，
-  文档与 `.meta` 靠自检与评审。
+  README 结构与文件树由包内 `LubanReadmeTests` 守卫，`.meta` 完整性与公开面由包内守卫与评审覆盖。
 
 ## 设计取舍
 
