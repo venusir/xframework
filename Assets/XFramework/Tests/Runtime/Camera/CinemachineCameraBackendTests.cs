@@ -406,6 +406,82 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void SetLookAt_Null_FallsBackToFollowTarget()
+        {
+            var targetObject = new GameObject("Target");
+            try
+            {
+                var target = targetObject.transform;
+
+                _backend.SetFollow("a", target);
+                _backend.SetLookAt("a", target);
+                _backend.SetLookAt("a", null);
+
+                Assert.IsFalse(_vcamA.Target.CustomLookAtTarget,
+                    "null 应清除本地瞄准覆盖，而不是留下一个空的本地覆盖");
+                Assert.AreSame(target, _vcamA.LookAt,
+                    "清除瞄准覆盖后应回退到跟随目标");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(targetObject);
+            }
+        }
+
+        [Test]
+        public void SetLookAt_Null_OnGroup_FallsBackToDefaultTrackingTarget()
+        {
+            var parentObject = new GameObject("Group");
+            var childObject = new GameObject("GroupChild");
+            var targetObject = new GameObject("Target");
+            try
+            {
+                childObject.transform.SetParent(parentObject.transform);
+                childObject.AddComponent<CinemachineCamera>();
+                var clearShot = parentObject.AddComponent<CinemachineClearShot>();
+                _backend.Register("group", clearShot, false);
+
+                var target = targetObject.transform;
+                _backend.SetFollow("group", target);
+                Assert.AreSame(target, clearShot.LookAt);
+
+                _backend.SetLookAt("group", null);
+
+                Assert.IsFalse(clearShot.DefaultTarget.Target.CustomLookAtTarget);
+                Assert.AreSame(target, clearShot.LookAt,
+                    "分组相机清除瞄准覆盖后应回退到默认目标的跟随目标");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(targetObject);
+                UnityEngine.Object.DestroyImmediate(parentObject);
+            }
+        }
+
+        [Test]
+        public void SetFollow_Null_OnGroup_DoesNotEnableDefaultTarget()
+        {
+            var parentObject = new GameObject("Group");
+            var childObject = new GameObject("GroupChild");
+            try
+            {
+                childObject.transform.SetParent(parentObject.transform);
+                childObject.AddComponent<CinemachineCamera>();
+                var clearShot = parentObject.AddComponent<CinemachineClearShot>();
+                _backend.Register("group", clearShot, false);
+
+                _backend.SetFollow("group", null);
+
+                Assert.IsFalse(clearShot.DefaultTarget.Enabled,
+                    "清除跟随目标不应顺带启用分组相机的默认目标");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(parentObject);
+            }
+        }
+
+        [Test]
         public void SetFieldOfView_UpdatesLensAndOutput()
         {
             _backend.Activate("a", 0f, CameraBlendStyle.Cut);

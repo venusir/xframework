@@ -93,16 +93,19 @@ namespace XFramework.XCamera
         /// <remarks>不销毁相机、不保证输出驱动停止输出某一台相机。</remarks>
         void ClearActive();
 
-        /// <summary>设置相机的跟随目标；<c>null</c> 清除本地覆盖。</summary>
+        /// <summary>设置相机的跟随目标；<c>null</c> 清除跟随目标。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <param name="follow">跟随目标。</param>
-        /// <remarks>未知 id / 已销毁相机告警并 no-op。</remarks>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。分组相机写 <c>DefaultTarget.Target.TrackingTarget</c>，
+        /// 不改变 <c>DefaultTarget.Enabled</c>。</remarks>
         void SetFollow(string cameraId, Transform follow);
 
-        /// <summary>设置相机的瞄准目标；<c>null</c> 清除本地覆盖。</summary>
+        /// <summary>设置相机的瞄准目标；<c>null</c> 清除本地覆盖并回退到默认瞄准目标。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <param name="lookAt">瞄准目标。</param>
-        /// <remarks>未知 id / 已销毁相机告警并 no-op。</remarks>
+        /// <remarks>未知 id / 已销毁相机告警并 no-op。内置后端对 <c>CinemachineCamera</c> 复位
+        /// <c>Target.CustomLookAtTarget</c>（回退到跟随目标），对分组相机复位 <c>DefaultTarget.Target</c>
+        /// 的同名字段（不改变 <c>DefaultTarget.Enabled</c>）。</remarks>
         void SetLookAt(string cameraId, Transform lookAt);
 
         /// <summary>设置相机的视场角（立即生效）。</summary>

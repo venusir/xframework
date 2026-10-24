@@ -65,7 +65,9 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
 ## 绑定
 
 - `SetFollow` / `SetLookAt` 写 `CinemachineVirtualCameraBase.Follow/LookAt`；基类是抽象属性，ClearShot / MixingCamera
-  同样有效。设 `LookAt` 会置 `CustomLookAtTarget`；`null` 清除本地覆盖。
+  同样有效。设 `LookAt` 会置 `CustomLookAtTarget`；`null` 直接复位该标志并清空 `LookAtTarget`
+  （回退到 `TrackingTarget` / 分组默认目标），**不走 setter**——setter 会留下一个空的本地覆盖。
+  分组相机的 `DefaultTarget.Enabled` 保持不变；`SetFollow(null)` 在分组相机上直接写 `TrackingTarget`，同样不启用默认目标。
 - `SetFieldOfView` 只对 `CinemachineCamera` 写 `Lens.FieldOfView`；分组相机没有 Lens，告警一次并 no-op。
 - `Shake` 在 `Brain.ControlledObject`（默认 Brain 自身）上惰性取 / 建 `CinemachineImpulseSource`，
   写 `ImpulseDefinition.ImpulseDuration` 后 `GenerateImpulseWithForce`。

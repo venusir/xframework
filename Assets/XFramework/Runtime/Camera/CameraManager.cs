@@ -364,7 +364,7 @@ namespace XFramework.XCamera
 
         #region Public API — Bindings
 
-        /// <summary>设置相机的跟随目标；<paramref name="follow"/> 为 <c>null</c> 时清除本地覆盖。</summary>
+        /// <summary>设置相机的跟随目标；<paramref name="follow"/> 为 <c>null</c> 时清除跟随目标。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <param name="follow">跟随目标；可为 <c>null</c>。</param>
         /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>
@@ -379,7 +379,7 @@ namespace XFramework.XCamera
             _director.SetFollow(cameraId, follow);
         }
 
-        /// <summary>设置相机的瞄准目标；<paramref name="lookAt"/> 为 <c>null</c> 时清除本地覆盖。</summary>
+        /// <summary>设置相机的瞄准目标；<paramref name="lookAt"/> 为 <c>null</c> 时清除本地覆盖并回退到默认瞄准目标。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <param name="lookAt">瞄准目标；可为 <c>null</c>。</param>
         /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 为 <c>null</c>。</exception>

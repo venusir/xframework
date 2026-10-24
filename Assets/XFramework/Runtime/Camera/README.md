@@ -233,7 +233,7 @@ Destroy(vcam.gameObject);
 
 ```csharp
 CameraManager.SetFollow("gameplay", player);
-CameraManager.SetLookAt("gameplay", lockTarget); // null 清除
+CameraManager.SetLookAt("gameplay", lockTarget); // null 清除本地覆盖并回退到跟随目标
 CameraManager.Shake(0.4f, 0.2f);
 ```
 

@@ -434,8 +434,23 @@ namespace XFramework.XCamera.Cinemachine
             ThrowIfDisposed();
 
             var slot = GetLiveSlot(cameraId, "SetFollow");
-            if (slot != null)
+            if (slot == null)
+                return;
+
+            if (follow != null)
+            {
                 slot.Camera.Follow = follow;
+                return;
+            }
+
+            // 分组相机的 Follow setter 会顺带把 DefaultTarget.Enabled 置 true；清除目标不应改变该状态。
+            if (slot.Camera is CinemachineCameraManagerBase manager)
+            {
+                manager.DefaultTarget.Target.TrackingTarget = null;
+                return;
+            }
+
+            slot.Camera.Follow = null;
         }
 
         /// <inheritdoc/>
@@ -444,8 +459,32 @@ namespace XFramework.XCamera.Cinemachine
             ThrowIfDisposed();
 
             var slot = GetLiveSlot(cameraId, "SetLookAt");
-            if (slot != null)
+            if (slot == null)
+                return;
+
+            if (lookAt != null)
+            {
                 slot.Camera.LookAt = lookAt;
+                return;
+            }
+
+            // CM 的 LookAt setter 会留下一个空的本地覆盖（CustomLookAtTarget = true），此后不再回退到
+            // TrackingTarget；「清除本地覆盖」必须直接写字段，不能走 setter。
+            if (slot.Camera is CinemachineCamera camera)
+            {
+                camera.Target.CustomLookAtTarget = false;
+                camera.Target.LookAtTarget = null;
+                return;
+            }
+
+            if (slot.Camera is CinemachineCameraManagerBase manager)
+            {
+                manager.DefaultTarget.Target.CustomLookAtTarget = false;
+                manager.DefaultTarget.Target.LookAtTarget = null;
+                return;
+            }
+
+            slot.Camera.LookAt = null;
         }
 
         /// <inheritdoc/>

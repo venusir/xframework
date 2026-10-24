@@ -255,6 +255,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **`SetLookAt(id, null)` 改为真正清除本地覆盖（2026-10-24，行为变更）**：此前直接写 `LookAt = null`，CM 的
+  setter 会留下 `CustomLookAtTarget = true` + 空目标，相机从此不再回退到跟随目标（文档却说「清除本地覆盖」）。
+  现在 `CinemachineCamera` 复位 `Target.CustomLookAtTarget`，分组相机复位 `DefaultTarget.Target` 的同一标志；
+  `DefaultTarget.Enabled` 保持不变。`SetFollow(id, null)` 对分组相机改走直接写字段，不再顺带启用默认目标。
+  回归：`SetLookAt_Null_FallsBackToFollowTarget` / `SetLookAt_Null_OnGroup_FallsBackToDefaultTrackingTarget` /
+  `SetFollow_Null_OnGroup_DoesNotEnableDefaultTarget`（改前三红）。
 - **公开面从零重设计（2026-10-23，破坏性）**：`ICameraManager` / `CameraHandle` / `CinemachineCameraManager` 删除；
   `ICameraBackend`（原语）+ `CameraDirector`（internal）+ `CinemachineCameraBackend`（内置）取代。所有入口改用
   `string` id；`Register<T>` 改为 `Register(UnityEngine.Object)`；动态 id 为 `@auto/N`。四个 async 与
