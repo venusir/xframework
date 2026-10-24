@@ -161,6 +161,13 @@ Assets/XFramework.Luban/
 7. 门面持有 `object Tables`，`IsInitialized = true`。
 
 - 重复 `InitializeAsync` 告警并忽略。
+- 并发 `InitializeAsync` 共享同一次初始化：首个调用者的 `options` / `progress` / `cancellationToken` 生效；
+  `Destroy()` 或会话复位会以 `OperationCanceledException` 作废在途初始化，且不会注册任何表。
+- 注册阶段 `ConfigManager.ConfigChanged` **逐表触发**；事件发生时 `LubanConfig.IsInitialized` 仍为 `false`，
+  在事件里查 `LubanConfig.Tables` 会抛 `InvalidOperationException`。需要整包完成请 await `InitializeAsync`
+  或检查 `IsInitialized`。
+- `LubanConfigBridge.Unload<T>()` 即使 `T` 未加载也会触发 `ConfigChanged`（核心 `ConfigManager` 的既有语义）。
+- 主线程契约在 Editor 下由入口断言（首错记一次 Error）；Release 构建无运行时开销。
 - 注册失败会尽力 `UnregisterFromConfigManager()` 回滚，再抛 `LubanConfigException`。
 - `Destroy()` 在 `ConfigManager` 仍初始化时卸载本扩展注册的表；若 `ConfigManager` 已被销毁则跳过并告警。
 - 取消只中断本次等待；已完成的加载/注册不回滚。

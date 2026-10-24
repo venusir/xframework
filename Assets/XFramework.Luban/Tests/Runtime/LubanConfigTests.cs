@@ -386,6 +386,48 @@ namespace XFramework.XConfig.Luban.Tests
             Assert.That(LubanConfig.IsInitialized, Is.False);
         }
 
+        [Test]
+        public async Task ConfigChanged_FiresPerTable_BeforeIsInitialized()
+        {
+            ConfigManager.Destroy();
+            ConfigManager.Initialize();
+
+            var adapter = new FakeLubanAdapter
+            {
+                RegisterHandler = _ =>
+                {
+                    LubanConfigBridge.RegisterTable(new Dictionary<int, FakeRow>
+                    {
+                        { 1, new FakeRow(1) },
+                    });
+                    LubanConfigBridge.RegisterGlobal(new FakeGlobal { Name = "g" });
+                },
+            };
+            var provider = new FakeLubanProvider();
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+
+            var events = new List<Type>();
+            var initializedDuringEvents = new List<bool>();
+            Action<Type> handler = type =>
+            {
+                events.Add(type);
+                initializedDuringEvents.Add(LubanConfig.IsInitialized);
+            };
+            ConfigManager.ConfigChanged += handler;
+            try
+            {
+                await LubanConfig.InitializeForTestsAsync(adapter, provider);
+            }
+            finally
+            {
+                ConfigManager.ConfigChanged -= handler;
+            }
+
+            Assert.That(events, Is.EquivalentTo(new[] { typeof(FakeRow), typeof(FakeGlobal) }));
+            Assert.That(initializedDuringEvents, Is.All.False);
+            Assert.That(LubanConfig.IsInitialized, Is.True);
+        }
+
         private static async Task AssertLubanExceptionAsync(Func<Cysharp.Threading.Tasks.UniTask> action)
         {
             try
