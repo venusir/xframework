@@ -6,10 +6,10 @@ using UnityEngine;
 namespace XFramework.XConfig.Luban.Editor.Tests
 {
     /// <summary>
-    /// 接缝/适配器文本生成用例（基于真实 5.1.0 Bin fixtures）。
+    /// 行接口实现/适配器文本生成用例（基于真实 5.1.0 Bin fixtures）。
     /// </summary>
     [TestFixture]
-    public sealed class LubanGlueEmitterTests
+    public sealed class LubanIntegrationEmitterTests
     {
         private LubanGeneratedModel _model;
         private LubanGeneratorSettings _settings;
@@ -24,7 +24,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             _settings.DataTarget = LubanDataTarget.Bin;
             _settings.AdapterNamespace = "XFramework.XConfig.Luban.Generated";
             _settings.AdapterClassName = "GeneratedLubanConfigAdapter";
-            _settings.GenerateSeams = true;
+            _settings.GenerateRowInterfaces = true;
         }
 
         [TearDown]
@@ -34,21 +34,21 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
-        public void EmitSeams_OnlyKeyedTables()
+        public void EmitRowInterfaces_OnlyKeyedTables()
         {
-            var files = LubanGlueEmitter.Emit(_model, _settings);
+            var files = LubanIntegrationEmitter.Emit(_model, _settings);
 
-            Assert.That(files.ContainsKey("Seams/cfg_demo_Item.g.cs"), Is.True);
-            Assert.That(files.ContainsKey("Seams/cfg_demo_Monster.g.cs"), Is.True);
-            Assert.That(files.ContainsKey("Seams/cfg_demo_SkillLevel.g.cs"), Is.True);
-            Assert.That(files.ContainsKey("Seams/cfg_demo_Global.g.cs"), Is.False);
-            Assert.That(files.ContainsKey("Seams/cfg_demo_SpawnPoint.g.cs"), Is.False);
+            Assert.That(files.ContainsKey("RowInterfaces/cfg_demo_Item.g.cs"), Is.True);
+            Assert.That(files.ContainsKey("RowInterfaces/cfg_demo_Monster.g.cs"), Is.True);
+            Assert.That(files.ContainsKey("RowInterfaces/cfg_demo_SkillLevel.g.cs"), Is.True);
+            Assert.That(files.ContainsKey("RowInterfaces/cfg_demo_Global.g.cs"), Is.False);
+            Assert.That(files.ContainsKey("RowInterfaces/cfg_demo_SpawnPoint.g.cs"), Is.False);
 
-            string item = files["Seams/cfg_demo_Item.g.cs"];
+            string item = files["RowInterfaces/cfg_demo_Item.g.cs"];
             Assert.That(item, Does.Contain("partial class Item : global::XFramework.XConfig.IConfigRow<int>"));
             Assert.That(item, Does.Contain("=> Id;"));
 
-            string skill = files["Seams/cfg_demo_SkillLevel.g.cs"];
+            string skill = files["RowInterfaces/cfg_demo_SkillLevel.g.cs"];
             Assert.That(skill, Does.Contain("IConfigRow<(int, int)>"));
             Assert.That(skill, Does.Contain("=> (SkillId, Level);"));
         }
@@ -56,7 +56,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         [Test]
         public void EmitAdapter_Bin_ContainsExpectedRegistration()
         {
-            string adapter = LubanGlueEmitter.EmitAdapter(_model, _settings);
+            string adapter = LubanIntegrationEmitter.EmitAdapter(_model, _settings);
 
             Assert.That(adapter, Does.Contain("public sealed class GeneratedLubanConfigAdapter"));
             Assert.That(adapter, Does.Contain("DataFileExtension => \".bytes\""));
@@ -79,7 +79,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             _settings.CodeTarget = LubanCodeTarget.CsSimpleJson;
             _settings.DataTarget = LubanDataTarget.Json;
 
-            string adapter = LubanGlueEmitter.EmitAdapter(_model, _settings);
+            string adapter = LubanIntegrationEmitter.EmitAdapter(_model, _settings);
 
             Assert.That(adapter, Does.Contain("DataFileExtension => \".json\""));
             Assert.That(adapter, Does.Contain(
@@ -90,8 +90,8 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         [Test]
         public void Emit_IsDeterministic()
         {
-            var first = LubanGlueEmitter.Emit(_model, _settings);
-            var second = LubanGlueEmitter.Emit(_model, _settings);
+            var first = LubanIntegrationEmitter.Emit(_model, _settings);
+            var second = LubanIntegrationEmitter.Emit(_model, _settings);
 
             Assert.That(second.Count, Is.EqualTo(first.Count));
             foreach (var pair in first)
@@ -102,11 +102,11 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
-        public void Emit_GenerateSeamsFalse_OnlyAdapter()
+        public void Emit_GenerateRowInterfacesFalse_OnlyAdapter()
         {
-            _settings.GenerateSeams = false;
+            _settings.GenerateRowInterfaces = false;
 
-            var files = LubanGlueEmitter.Emit(_model, _settings);
+            var files = LubanIntegrationEmitter.Emit(_model, _settings);
 
             Assert.That(files.Count, Is.EqualTo(1));
             Assert.That(files.ContainsKey("Adapter/GeneratedLubanConfigAdapter.g.cs"), Is.True);

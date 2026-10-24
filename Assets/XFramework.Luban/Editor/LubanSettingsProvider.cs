@@ -54,7 +54,7 @@ namespace XFramework.XConfig.Luban.Editor
             EditorGUILayout.LabelField("输出目录（项目相对，必须在 Assets/ 下）", EditorStyles.boldLabel);
             Draw("CodeOutputDir", "代码输出目录");
             Draw("DataOutputDir", "数据输出目录");
-            Draw("GlueOutputDir", "接缝与适配器目录");
+            Draw("IntegrationOutputDir", "接入代码目录");
 
             EditorGUILayout.Space();
             EditorGUILayout.LabelField("生成目标", EditorStyles.boldLabel);
@@ -65,7 +65,7 @@ namespace XFramework.XConfig.Luban.Editor
             EditorGUILayout.LabelField("适配器", EditorStyles.boldLabel);
             Draw("AdapterNamespace", "命名空间");
             Draw("AdapterClassName", "类名");
-            Draw("GenerateSeams", "生成 IConfigRow 接缝");
+            Draw("GenerateRowInterfaces", "生成行接口实现（IConfigRow）");
             Draw("ExtraArguments", "附加参数（原样追加）");
 
             if (_serialized.ApplyModifiedProperties())
@@ -75,11 +75,11 @@ namespace XFramework.XConfig.Luban.Editor
 
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(
-                "接缝与适配器必须与 Luban 生成的代码处于同一个 asmdef 作用域；" +
+                "行接口实现与适配器必须与 Luban 生成的代码处于同一个 asmdef 作用域；" +
                 "该 asmdef 需直接引用 Venusy609.Xframework、Venusy609.Xframework.Luban 与 Luban.Runtime。",
                 MessageType.Info);
 
-            if (GUILayout.Button("生成配置表（运行 Luban + 刷新胶水）"))
+            if (GUILayout.Button("生成配置表（运行 Luban + 重新生成接入代码）"))
             {
                 EditorApplication.ExecuteMenuItem(LubanMenu.GenerateMenu);
             }

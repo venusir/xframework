@@ -4,7 +4,7 @@ using UnityEngine;
 namespace XFramework.XConfig.Luban.Editor
 {
     /// <summary>
-    /// Luban 导表与胶水生成的项目级设置。存放在 <c>ProjectSettings/</c>，
+    /// Luban 导表与接入代码生成的项目级设置。存放在 <c>ProjectSettings/</c>，
     /// 不写入 UPM 包目录（包在消费方是只读的）。
     /// </summary>
     public sealed class LubanGeneratorSettings : ScriptableSingleton<LubanGeneratorSettings>
@@ -30,8 +30,8 @@ namespace XFramework.XConfig.Luban.Editor
         /// <summary>Luban 生成的数据目录（必须在 Assets/ 下）。</summary>
         public string DataOutputDir = "";
 
-        /// <summary>接缝与适配器目录（必须在 Assets/ 下，且与本设置不重叠）。</summary>
-        public string GlueOutputDir = "";
+        /// <summary>接入代码目录（必须在 Assets/ 下，且与本设置不重叠）。</summary>
+        public string IntegrationOutputDir = "";
 
         /// <summary>代码目标；必须与 <see cref="DataTarget"/> 配套。</summary>
         public LubanCodeTarget CodeTarget = LubanCodeTarget.CsBin;
@@ -48,8 +48,8 @@ namespace XFramework.XConfig.Luban.Editor
         /// <summary>附加到 Luban 命令行的原始参数（由使用方自行保证引号正确）。</summary>
         public string ExtraArguments = "";
 
-        /// <summary>是否生成 <c>IConfigRow&lt;TKey&gt;</c> 接缝；关闭时由使用方手写。</summary>
-        public bool GenerateSeams = true;
+        /// <summary>是否生成 <c>IConfigRow&lt;TKey&gt;</c> 行接口实现；关闭时由使用方手写。</summary>
+        public bool GenerateRowInterfaces = true;
 
         /// <summary>
         /// 保存到 <c>ProjectSettings/</c>。<c>ScriptableSingleton.Save</c> 是 protected，故在此包装。

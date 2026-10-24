@@ -8,7 +8,7 @@ namespace XFramework.XConfig.Luban
     /// 生成适配器调用的注册桥接：把 Luban 已反序列化的表转成 <see cref="ConfigTable{T}"/>
     /// 并注册进 <see cref="ConfigManager"/>。
     /// <para>本类不引用任何 Luban 类型；行类型必须实现 <see cref="IConfigRow{TKey}"/>
-    /// （由 Editor 工具生成的接缝保证，编译期检查）。</para>
+    /// （由 Editor 工具生成的行接口实现保证，编译期检查）。</para>
     /// </summary>
     public static class LubanConfigBridge
     {

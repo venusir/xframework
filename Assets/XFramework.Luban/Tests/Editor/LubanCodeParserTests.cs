@@ -36,7 +36,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             try
             {
                 File.WriteAllText(Path.Combine(dir, "Foo.cs"), "public class Foo { }");
-                Assert.Throws<LubanGlueException>(
+                Assert.Throws<LubanGenerationException>(
                     () => LubanCodeParser.Parse(dir, "Tables"));
             }
             finally
@@ -87,7 +87,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
                     "}\n" +
                     "}\n");
 
-                var ex = Assert.Throws<LubanGlueException>(
+                var ex = Assert.Throws<LubanGenerationException>(
                     () => LubanCodeParser.Parse(dir, "Tables"));
                 Assert.That(ex.Message, Does.Contain("多个独立索引"));
             }

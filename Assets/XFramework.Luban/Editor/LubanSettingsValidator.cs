@@ -54,7 +54,7 @@ namespace XFramework.XConfig.Luban.Editor
             Require(settings.TablesClassName, "Tables 类名", errors);
             Require(settings.CodeOutputDir, "代码输出目录", errors);
             Require(settings.DataOutputDir, "数据输出目录", errors);
-            Require(settings.GlueOutputDir, "胶水输出目录", errors);
+            Require(settings.IntegrationOutputDir, "接入代码输出目录", errors);
             Require(settings.AdapterNamespace, "适配器命名空间", errors);
             Require(settings.AdapterClassName, "适配器类名", errors);
 
@@ -70,7 +70,7 @@ namespace XFramework.XConfig.Luban.Editor
             ValidateProjectPath(settings.ConfPath, "luban.conf 路径", requireAssets: false, errors);
             ValidateProjectPath(settings.CodeOutputDir, "代码输出目录", requireAssets: true, errors);
             ValidateProjectPath(settings.DataOutputDir, "数据输出目录", requireAssets: true, errors);
-            ValidateProjectPath(settings.GlueOutputDir, "胶水输出目录", requireAssets: true, errors);
+            ValidateProjectPath(settings.IntegrationOutputDir, "接入代码输出目录", requireAssets: true, errors);
 
             if (!string.IsNullOrEmpty(settings.LubanDllPath))
             {
@@ -79,31 +79,31 @@ namespace XFramework.XConfig.Luban.Editor
 
             if (IsNonEmpty(settings.CodeOutputDir) &&
                 IsNonEmpty(settings.DataOutputDir) &&
-                IsNonEmpty(settings.GlueOutputDir))
+                IsNonEmpty(settings.IntegrationOutputDir))
             {
                 string code = Normalize(settings.CodeOutputDir);
                 string data = Normalize(settings.DataOutputDir);
-                string glue = Normalize(settings.GlueOutputDir);
+                string integration = Normalize(settings.IntegrationOutputDir);
 
-                if (IsSubPath(glue, code))
+                if (IsSubPath(integration, code))
                 {
-                    errors.Add("胶水输出目录不能位于代码输出目录内（Luban 会清理代码输出目录）。");
+                    errors.Add("接入代码输出目录不能位于代码输出目录内（Luban 会清理代码输出目录）。");
                 }
 
-                if (IsSubPath(glue, data))
+                if (IsSubPath(integration, data))
                 {
-                    errors.Add("胶水输出目录不能位于数据输出目录内（Luban 会清理数据输出目录）。");
+                    errors.Add("接入代码输出目录不能位于数据输出目录内（Luban 会清理数据输出目录）。");
                 }
 
-                if (IsSubPath(code, glue) || IsSubPath(data, glue))
+                if (IsSubPath(code, integration) || IsSubPath(data, integration))
                 {
-                    errors.Add("代码/数据输出目录不能位于胶水输出目录内。");
+                    errors.Add("代码/数据输出目录不能位于接入代码输出目录内。");
                 }
 
-                if (string.Equals(code, glue, StringComparison.OrdinalIgnoreCase) ||
-                    string.Equals(data, glue, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(code, integration, StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(data, integration, StringComparison.OrdinalIgnoreCase))
                 {
-                    errors.Add("代码/数据输出目录不能与胶水输出目录相同。");
+                    errors.Add("代码/数据输出目录不能与接入代码输出目录相同。");
                 }
             }
 

@@ -7,13 +7,13 @@ using UnityEngine;
 namespace XFramework.XConfig.Luban.Editor
 {
     /// <summary>
-    /// Luban 导表与胶水生成的菜单入口。
+    /// Luban 导表与接入代码生成的菜单入口。
     /// </summary>
     internal static class LubanMenu
     {
         internal const string MenuRoot = "XFramework/Luban/";
         internal const string GenerateMenu = MenuRoot + "生成配置表";
-        internal const string RefreshGlueMenu = MenuRoot + "仅刷新胶水";
+        internal const string RefreshIntegrationMenu = MenuRoot + "仅重新生成接入代码";
         internal const string ValidateMenu = MenuRoot + "校验接入";
         internal const string SettingsMenu = MenuRoot + "设置...";
 
@@ -56,11 +56,11 @@ namespace XFramework.XConfig.Luban.Editor
 
             AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             Debug.Log("[Luban] Generation finished." + Environment.NewLine + result.StandardOutput);
-            RunGlue(settings, projectRoot, write: true);
+            RunIntegration(settings, projectRoot, write: true);
         }
 
-        [MenuItem(RefreshGlueMenu, priority = 101)]
-        private static void RefreshGlue()
+        [MenuItem(RefreshIntegrationMenu, priority = 101)]
+        private static void RefreshIntegration()
         {
             var settings = LubanGeneratorSettings.instance;
             var errors = LubanSettingsValidator.Validate(settings);
@@ -70,7 +70,7 @@ namespace XFramework.XConfig.Luban.Editor
                 return;
             }
 
-            RunGlue(settings, Directory.GetCurrentDirectory(), write: true);
+            RunIntegration(settings, Directory.GetCurrentDirectory(), write: true);
         }
 
         [MenuItem(ValidateMenu, priority = 102)]
@@ -84,7 +84,7 @@ namespace XFramework.XConfig.Luban.Editor
                 return;
             }
 
-            RunGlue(settings, Directory.GetCurrentDirectory(), write: false);
+            RunIntegration(settings, Directory.GetCurrentDirectory(), write: false);
         }
 
         [MenuItem(SettingsMenu, priority = 120)]
@@ -134,15 +134,15 @@ namespace XFramework.XConfig.Luban.Editor
             EditorUtility.DisplayDialog("XFramework Luban", title + "\n\n" + message, "OK");
         }
 
-        internal static void RunGlue(
+        internal static void RunIntegration(
             LubanGeneratorSettings settings,
             string projectRoot,
             bool write)
         {
-            var result = LubanGlueGenerator.Generate(settings, projectRoot, write);
+            var result = LubanIntegrationGenerator.Generate(settings, projectRoot, write);
             if (!result.Succeeded)
             {
-                ShowErrors(write ? "胶水生成失败" : "接入校验失败", result.Errors);
+                ShowErrors(write ? "接入代码生成失败" : "接入校验失败", result.Errors);
                 return;
             }
 
@@ -151,7 +151,7 @@ namespace XFramework.XConfig.Luban.Editor
                 AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
             }
 
-            string summary = LubanGlueGenerator.BuildSummary(result, write);
+            string summary = LubanIntegrationGenerator.BuildSummary(result, write);
             Debug.Log("[Luban] " + summary.Replace("\n", Environment.NewLine));
             EditorUtility.DisplayDialog("XFramework Luban", summary, "OK");
         }

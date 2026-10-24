@@ -22,7 +22,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             _settings.TargetName = "client";
             _settings.CodeOutputDir = "Assets/Generated/LubanCode";
             _settings.DataOutputDir = "Assets/Generated/LubanData";
-            _settings.GlueOutputDir = "Assets/Generated/LubanGlue";
+            _settings.IntegrationOutputDir = "Assets/Generated/LubanIntegration";
             _settings.CodeTarget = LubanCodeTarget.CsBin;
             _settings.DataTarget = LubanDataTarget.Bin;
         }

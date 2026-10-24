@@ -7,7 +7,7 @@ using XFramework.XConfig.Luban.Tests.Generated;
 namespace XFramework.XConfig.Luban.Tests
 {
     /// <summary>
-    /// 真实 Luban 5.1.0 生成物 + 生成式接缝/适配器 + ConfigManager 全链路用例。
+    /// 真实 Luban 5.1.0 生成物 + 生成式行接口实现/适配器 + ConfigManager 全链路用例。
     /// 数据经 fake provider 从磁盘读入，绕开 YooAsset。
     /// </summary>
     [TestFixture]

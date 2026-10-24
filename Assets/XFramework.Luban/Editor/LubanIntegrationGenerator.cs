@@ -5,9 +5,9 @@ using System.IO;
 namespace XFramework.XConfig.Luban.Editor
 {
     /// <summary>
-    /// 胶水生成结果。
+    /// 接入代码生成结果。
     /// </summary>
-    internal sealed class LubanGlueResult
+    internal sealed class LubanIntegrationResult
     {
         internal bool Succeeded;
         internal LubanGeneratedModel Model;
@@ -18,16 +18,16 @@ namespace XFramework.XConfig.Luban.Editor
     }
 
     /// <summary>
-    /// 解析 → 校验 → 生成接缝/适配器 → 写盘（或只校验）。
+    /// 解析 → 校验 → 生成行接口实现/适配器 → 写盘（或只校验）。
     /// </summary>
-    internal static class LubanGlueGenerator
+    internal static class LubanIntegrationGenerator
     {
-        internal static LubanGlueResult Generate(
+        internal static LubanIntegrationResult Generate(
             LubanGeneratorSettings settings,
             string projectRoot,
             bool write)
         {
-            var result = new LubanGlueResult();
+            var result = new LubanIntegrationResult();
 
             var settingsErrors = LubanSettingsValidator.Validate(settings);
             if (settingsErrors.Count > 0)
@@ -48,20 +48,20 @@ namespace XFramework.XConfig.Luban.Editor
                 var model = LubanCodeParser.Parse(codeDir, settings.TablesClassName);
                 result.Model = model;
 
-                var errors = LubanProjectValidator.ValidateForGlue(settings, model, projectRoot);
+                var errors = LubanProjectValidator.ValidateForIntegration(settings, model, projectRoot);
                 if (errors.Count > 0)
                 {
                     result.Errors.AddRange(errors);
                     return result;
                 }
 
-                if (!settings.GenerateSeams)
+                if (!settings.GenerateRowInterfaces)
                 {
                     result.Warnings.Add(
-                        "GenerateSeams=false：请确认与生成代码同程序集的手写接缝已存在。");
+                        "GenerateRowInterfaces=false：请确认与生成代码同程序集的手写行接口实现已存在。");
                 }
 
-                var files = LubanGlueEmitter.Emit(model, settings);
+                var files = LubanIntegrationEmitter.Emit(model, settings);
                 var keys = new List<string>(files.Keys);
                 keys.Sort(StringComparer.Ordinal);
                 result.Files.AddRange(keys);
@@ -69,8 +69,8 @@ namespace XFramework.XConfig.Luban.Editor
 
                 if (write)
                 {
-                    LubanGlueWriter.Write(
-                        ResolvePath(settings.GlueOutputDir, projectRoot),
+                    LubanIntegrationWriter.Write(
+                        ResolvePath(settings.IntegrationOutputDir, projectRoot),
                         files,
                         BuildTableLines(model));
                 }
@@ -85,7 +85,7 @@ namespace XFramework.XConfig.Luban.Editor
             }
         }
 
-        internal static string BuildSummary(LubanGlueResult result, bool write)
+        internal static string BuildSummary(LubanIntegrationResult result, bool write)
         {
             if (!result.Succeeded)
             {

@@ -21,7 +21,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             _settings.TargetName = "client";
             _settings.CodeOutputDir = "Assets/Generated/LubanCode";
             _settings.DataOutputDir = "Assets/Generated/LubanData";
-            _settings.GlueOutputDir = "Assets/Generated/LubanGlue";
+            _settings.IntegrationOutputDir = "Assets/Generated/LubanIntegration";
             _settings.CodeTarget = LubanCodeTarget.CsBin;
             _settings.DataTarget = LubanDataTarget.Bin;
             _settings.AdapterNamespace = "XFramework.XConfig.Luban.Generated";
@@ -55,7 +55,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         {
             _settings.CodeOutputDir = "Packages/Generated";
             _settings.DataOutputDir = "Assets/XFramework/Data";
-            _settings.GlueOutputDir = "../Glue";
+            _settings.IntegrationOutputDir = "../Integration";
 
             Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
         }
@@ -69,9 +69,9 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
-        public void Validate_GlueInsideCodeOutput_ReportsError()
+        public void Validate_IntegrationInsideCodeOutput_ReportsError()
         {
-            _settings.GlueOutputDir = "Assets/Generated/LubanCode/Glue";
+            _settings.IntegrationOutputDir = "Assets/Generated/LubanCode/Integration";
 
             Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
         }

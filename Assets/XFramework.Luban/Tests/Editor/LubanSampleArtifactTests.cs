@@ -34,18 +34,18 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
-        public void SampleGlue_FilesExist()
+        public void SampleIntegration_FilesExist()
         {
-            string glueDir = Path.Combine(
-                LubanTestPaths.PackageRoot, "Samples~", "Luban", "Generated", "Glue");
+            string integrationDir = Path.Combine(
+                LubanTestPaths.PackageRoot, "Samples~", "Luban", "Generated", "Integration");
 
-            string adapter = Path.Combine(glueDir, "Adapter", "LubanSampleConfigAdapter.g.cs");
-            string seam = Path.Combine(glueDir, "Seams", "cfg_demo_Item.g.cs");
+            string adapter = Path.Combine(integrationDir, "Adapter", "LubanSampleConfigAdapter.g.cs");
+            string rowInterface = Path.Combine(integrationDir, "RowInterfaces", "cfg_demo_Item.g.cs");
 
             Assert.That(File.Exists(adapter), Is.True);
             Assert.That(File.ReadAllText(adapter), Does.Contain("LubanSampleConfigAdapter"));
             Assert.That(File.ReadAllText(adapter), Does.Contain("DataFileExtension => \".json\""));
-            Assert.That(File.Exists(seam), Is.True);
+            Assert.That(File.Exists(rowInterface), Is.True);
         }
 
         private static LubanGeneratedTable Find(LubanGeneratedModel model, string property)

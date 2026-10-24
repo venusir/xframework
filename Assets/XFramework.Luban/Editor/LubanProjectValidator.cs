@@ -7,7 +7,7 @@ using UnityEngine;
 namespace XFramework.XConfig.Luban.Editor
 {
     /// <summary>
-    /// 胶水落盘前的结构校验：行类型唯一性、单行表 class、接缝与生成代码同 asmdef、引用完整。
+    /// 接入代码落盘前的结构校验：行类型唯一性、单行表 class、行接口实现与生成代码同 asmdef、引用完整。
     /// </summary>
     internal static class LubanProjectValidator
     {
@@ -69,17 +69,17 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             string codeDir = ResolvePath(settings.CodeOutputDir, projectRoot);
-            string glueDir = ResolvePath(settings.GlueOutputDir, projectRoot);
+            string integrationDir = ResolvePath(settings.IntegrationOutputDir, projectRoot);
 
             string codeAsmdef = FindNearestAsmdef(codeDir, projectRoot, errors);
-            string glueAsmdef = FindNearestAsmdef(glueDir, projectRoot, errors);
+            string integrationAsmdef = FindNearestAsmdef(integrationDir, projectRoot, errors);
 
-            if (!string.Equals(codeAsmdef, glueAsmdef, PathComparison))
+            if (!string.Equals(codeAsmdef, integrationAsmdef, PathComparison))
             {
                 errors.Add(
-                    "接缝与 Luban 生成代码必须处于同一个 asmdef 作用域：" +
+                    "行接口实现与 Luban 生成代码必须处于同一个 asmdef 作用域：" +
                     "代码目录=" + (codeAsmdef ?? "Assembly-CSharp") +
-                    "，胶水目录=" + (glueAsmdef ?? "Assembly-CSharp") + "。");
+                    "，接入代码目录=" + (integrationAsmdef ?? "Assembly-CSharp") + "。");
                 return errors;
             }
 
@@ -113,7 +113,7 @@ namespace XFramework.XConfig.Luban.Editor
             return errors;
         }
 
-        internal static List<string> ValidateForGlue(
+        internal static List<string> ValidateForIntegration(
             LubanGeneratorSettings settings,
             LubanGeneratedModel model,
             string projectRoot)

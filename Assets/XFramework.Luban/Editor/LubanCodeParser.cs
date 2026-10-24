@@ -56,7 +56,7 @@ namespace XFramework.XConfig.Luban.Editor
 
             if (!Directory.Exists(codeDir))
             {
-                throw new LubanGlueException("代码输出目录不存在：" + codeDir);
+                throw new LubanGenerationException("代码输出目录不存在：" + codeDir);
             }
 
             if (string.IsNullOrWhiteSpace(tablesClassName))
@@ -68,14 +68,14 @@ namespace XFramework.XConfig.Luban.Editor
             Array.Sort(files, StringComparer.Ordinal);
             if (files.Length == 0)
             {
-                throw new LubanGlueException("代码输出目录下没有 .cs 文件：" + codeDir);
+                throw new LubanGenerationException("代码输出目录下没有 .cs 文件：" + codeDir);
             }
 
             var types = BuildTypeIndex(files);
             TypeInfo tablesType = FindUniqueType(types, tablesClassName);
             if (tablesType == null)
             {
-                throw new LubanGlueException(
+                throw new LubanGenerationException(
                     "未找到 Luban 生成的 Tables 类 '" + tablesClassName + "'（目录：" + codeDir + "）。");
             }
 
@@ -150,7 +150,7 @@ namespace XFramework.XConfig.Luban.Editor
 
                 if (found != null)
                 {
-                    throw new LubanGlueException(
+                    throw new LubanGenerationException(
                         "类型名 '" + simpleName + "' 在生成代码中出现多次：\n" +
                         found.FilePath + "\n" + types[i].FilePath);
                 }
@@ -350,8 +350,8 @@ namespace XFramework.XConfig.Luban.Editor
             if (!IsSimpleKeyExpression(idExpression))
             {
                 throw Error(tableType.FilePath, tableType.Text, addMatch.Index,
-                    "键表达式 '" + keyExpression + "' 不是简单的字段访问/元组，无法自动生成接缝；" +
-                    "请手写 partial 接缝并设置 GenerateSeams=false。");
+                    "键表达式 '" + keyExpression + "' 不是简单的字段访问/元组，无法自动生成行接口实现；" +
+                    "请手写 partial 实现并设置 GenerateRowInterfaces=false。");
             }
 
             table.IdExpression = idExpression;
@@ -415,7 +415,7 @@ namespace XFramework.XConfig.Luban.Editor
             return SimpleIdentifierRegex.IsMatch(expression) || SimpleTupleRegex.IsMatch(expression);
         }
 
-        private static LubanGlueException Error(string file, string text, int index, string message)
+        private static LubanGenerationException Error(string file, string text, int index, string message)
         {
             int line = 1;
             int limit = Math.Min(index, text.Length);
@@ -427,7 +427,7 @@ namespace XFramework.XConfig.Luban.Editor
                 }
             }
 
-            return new LubanGlueException(file + ":" + line + ": " + message);
+            return new LubanGenerationException(file + ":" + line + ": " + message);
         }
 
         private sealed class TypeInfo

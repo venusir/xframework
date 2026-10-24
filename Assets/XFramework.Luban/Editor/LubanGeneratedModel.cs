@@ -52,11 +52,11 @@ namespace XFramework.XConfig.Luban.Editor
     }
 
     /// <summary>
-    /// 解析 / 生成胶水时的可读错误。
+    /// 解析 / 生成接入代码时的可读错误。
     /// </summary>
-    internal sealed class LubanGlueException : Exception
+    internal sealed class LubanGenerationException : Exception
     {
-        internal LubanGlueException(string message)
+        internal LubanGenerationException(string message)
             : base(message)
         {
         }

@@ -115,13 +115,13 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             try
             {
                 string codeDir = Path.Combine(root, "Assets", "Gen", "Code");
-                string glueDir = Path.Combine(root, "Assets", "Gen", "Glue");
+                string integrationDir = Path.Combine(root, "Assets", "Gen", "Integration");
                 Directory.CreateDirectory(codeDir);
-                Directory.CreateDirectory(glueDir);
+                Directory.CreateDirectory(integrationDir);
                 File.WriteAllText(Path.Combine(codeDir, "Code.asmdef"),
                     "{\"name\":\"Code\",\"references\":[]}");
-                File.WriteAllText(Path.Combine(glueDir, "Glue.asmdef"),
-                    "{\"name\":\"Glue\",\"references\":[]}");
+                File.WriteAllText(Path.Combine(integrationDir, "Integration.asmdef"),
+                    "{\"name\":\"Integration\",\"references\":[]}");
 
                 Assert.That(LubanProjectValidator.ValidateAsmdefScope(_settings, root), Is.Not.Empty);
             }
@@ -136,9 +136,9 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             string root = Path.Combine(
                 Path.GetTempPath(), "xfw-luban-asmdef-" + Guid.NewGuid().ToString("N"));
             string codeDir = Path.Combine(root, "Assets", "Gen", "Code");
-            string glueDir = Path.Combine(root, "Assets", "Gen", "Glue");
+            string integrationDir = Path.Combine(root, "Assets", "Gen", "Integration");
             Directory.CreateDirectory(codeDir);
-            Directory.CreateDirectory(glueDir);
+            Directory.CreateDirectory(integrationDir);
 
             if (asmdefContent != null)
             {
@@ -147,7 +147,7 @@ namespace XFramework.XConfig.Luban.Editor.Tests
 
             _settings.CodeOutputDir = "Assets/Gen/Code";
             _settings.DataOutputDir = "Assets/Gen/Data";
-            _settings.GlueOutputDir = "Assets/Gen/Glue";
+            _settings.IntegrationOutputDir = "Assets/Gen/Integration";
             return root;
         }
 
