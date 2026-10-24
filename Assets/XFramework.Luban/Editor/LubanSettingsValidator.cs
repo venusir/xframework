@@ -206,7 +206,8 @@ namespace XFramework.XConfig.Luban.Editor
 
             foreach (var prefix in ForbiddenPrefixes)
             {
-                if (normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(normalized, prefix.TrimEnd('/'), StringComparison.OrdinalIgnoreCase) ||
+                    normalized.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
                 {
                     errors.Add(name + " 不能位于受保护目录 '" + prefix + "' 下。");
                     return;

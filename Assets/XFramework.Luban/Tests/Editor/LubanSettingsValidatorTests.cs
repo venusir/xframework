@@ -70,6 +70,22 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void Validate_CodeOutputExactlyAtProtectedRoot_ReportsError()
+        {
+            _settings.CodeOutputDir = "Assets/XFramework";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_IntegrationOutputExactlyAtProtectedRoot_ReportsError()
+        {
+            _settings.IntegrationOutputDir = "Assets/XFramework.Luban";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings), Is.Not.Empty);
+        }
+
+        [Test]
         public void Validate_IntegrationInsideCodeOutput_ReportsError()
         {
             _settings.IntegrationOutputDir = "Assets/Generated/LubanCode/Integration";
