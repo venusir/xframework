@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XLog;
 
 namespace XFramework.XConfig.Luban
 {
@@ -17,6 +18,10 @@ namespace XFramework.XConfig.Luban
         #region Private Fields
 
         private static LubanConfigImpl _impl;
+
+#if UNITY_EDITOR
+        private static bool _mainThreadViolationLogged;
+#endif
 
         #endregion
 
@@ -60,6 +65,8 @@ namespace XFramework.XConfig.Luban
             IProgress<LubanInitReport> progress = null,
             CancellationToken cancellationToken = default)
         {
+            AssertMainThread(nameof(InitializeAsync));
+
             if (adapter == null)
                 throw new ArgumentNullException(nameof(adapter));
 
@@ -75,6 +82,8 @@ namespace XFramework.XConfig.Luban
         /// </summary>
         public static void Destroy()
         {
+            AssertMainThread(nameof(Destroy));
+
             _impl?.Destroy();
             _impl = null;
         }
@@ -128,6 +137,8 @@ namespace XFramework.XConfig.Luban
             IProgress<LubanInitReport> progress = null,
             CancellationToken cancellationToken = default)
         {
+            AssertMainThread(nameof(InitializeForTestsAsync));
+
             if (adapter == null)
                 throw new ArgumentNullException(nameof(adapter));
             if (provider == null)
@@ -147,9 +158,29 @@ namespace XFramework.XConfig.Luban
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()
         {
+            AssertMainThread(nameof(ResetForNewSession));
+
             _impl?.ResetForNewSession();
             _impl = null;
             DataProviderFactory = null;
+
+#if UNITY_EDITOR
+            _mainThreadViolationLogged = false;
+#endif
+        }
+
+        private static void AssertMainThread(string api)
+        {
+#if UNITY_EDITOR
+            if (_mainThreadViolationLogged || PlayerLoopHelper.IsMainThread)
+            {
+                return;
+            }
+
+            _mainThreadViolationLogged = true;
+            LogManager.Error(LubanLog.Category,
+                "[LubanConfig] {0} 必须在 Unity 主线程调用。", api);
+#endif
         }
 
         private static LubanConfigImpl EnsureInitialized()
