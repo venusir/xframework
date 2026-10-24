@@ -165,6 +165,46 @@ namespace XFramework.XCamera
             return _director.Register(camera);
         }
 
+        /// <summary>注册一台动态相机并立即切换到它（设定为基础相机并清空覆盖栈）；返回生成的 id。</summary>
+        /// <param name="camera">vcam。</param>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <returns>运行时生成的 <c>@auto/N</c> id；可用它调用 <see cref="Unregister"/>。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="camera"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentException">相机对象已销毁，或相机已注册为另一 id。</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>等价于 <see cref="Register(CinemachineVirtualCameraBase)"/> 后紧跟 <see cref="SwitchTo"/>。
+        /// 已注册的相机请直接调用 <see cref="SwitchTo"/>，或使用 <see cref="CinemachineCameraRegistration"/> 上的同名方法；
+        /// 本方法不会静默复用已有 id。</remarks>
+        public static string RegisterAndSwitchTo(CinemachineVirtualCameraBase camera,
+            float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            ValidateCameraArgument(camera, nameof(camera));
+            EnsureInitialized();
+            return _director.RegisterAndSwitchTo(camera, blendDuration, style);
+        }
+
+        /// <summary>注册一台动态相机并立即压入为临时覆盖层；返回生成的 id。</summary>
+        /// <param name="camera">vcam。</param>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <returns>运行时生成的 <c>@auto/N</c> id；可用它调用 <see cref="Unregister"/>。</returns>
+        /// <exception cref="ArgumentNullException"><paramref name="camera"/> 为 <c>null</c>。</exception>
+        /// <exception cref="ArgumentException">相机对象已销毁，或相机已注册为另一 id。</exception>
+        /// <exception cref="ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>等价于 <see cref="Register(CinemachineVirtualCameraBase)"/> 后紧跟 <see cref="Push"/>。
+        /// 已注册的相机请直接调用 <see cref="Push"/>，或使用 <see cref="CinemachineCameraRegistration"/> 上的同名方法；
+        /// 本方法不会静默复用已有 id。目标成为栈顶后可用 <see cref="Pop"/> 返回。</remarks>
+        public static string RegisterAndPush(CinemachineVirtualCameraBase camera,
+            float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            ValidateCameraArgument(camera, nameof(camera));
+            EnsureInitialized();
+            return _director.RegisterAndPush(camera, blendDuration, style);
+        }
+
         /// <summary>注销一台相机；不销毁相机对象。</summary>
         /// <param name="cameraId">相机 id。</param>
         /// <returns>确实移除了才返回 <c>true</c>；未初始化 / 未知 id 返回 <c>false</c>。</returns>

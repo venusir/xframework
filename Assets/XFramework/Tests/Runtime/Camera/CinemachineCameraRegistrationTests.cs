@@ -210,5 +210,147 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         #endregion
+
+        #region Playback
+
+        [Test]
+        public void SwitchTo_RegistersAndActivatesAsBase()
+        {
+            var baseVcam = CreateVcam("Base", false);
+            CameraManager.Register("base", baseVcam);
+            CameraManager.SwitchTo("base");
+            Pump();
+
+            var dynamicVcam = CreateVcam("Dynamic", true);
+            var registration = dynamicVcam.GetComponent<CinemachineCameraRegistration>();
+
+            registration.SwitchTo();
+
+            Assert.AreEqual(registration.CameraId, CameraManager.BaseCameraId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+
+            Pump();
+            Assert.AreEqual(registration.CameraId, CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void Push_RegistersAndActivatesAsOverlay_ThenPopReturns()
+        {
+            var baseVcam = CreateVcam("Base", false);
+            CameraManager.Register("base", baseVcam);
+            CameraManager.SwitchTo("base");
+            Pump();
+
+            var dynamicVcam = CreateVcam("Dynamic", true);
+            var registration = dynamicVcam.GetComponent<CinemachineCameraRegistration>();
+            var id = registration.CameraId;
+
+            registration.Push();
+
+            Assert.AreEqual(2, CameraManager.StackDepth);
+
+            Pump();
+            Assert.AreEqual(id, CameraManager.ActiveCameraId);
+
+            CameraManager.Pop();
+            Pump();
+            Assert.AreEqual("base", CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void Push_WhenManagerInitializedLater_RegistersOnDemand()
+        {
+            CameraManager.Destroy();
+
+            var lateVcam = CreateVcam("Late", false);
+            var registration = lateVcam.gameObject.AddComponent<CinemachineCameraRegistration>();
+            Assert.IsNull(registration.CameraId);
+
+            CameraManager.Initialize(_brain);
+            registration.Push();
+
+            Assert.IsNotNull(registration.CameraId);
+            Assert.IsTrue(registration.IsRegistered);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+
+            Pump();
+            Assert.AreEqual(registration.CameraId, CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void Push_ReusesExistingId()
+        {
+            var vcam = CreateVcam("Reuse", true);
+            var registration = vcam.GetComponent<CinemachineCameraRegistration>();
+            var id = registration.CameraId;
+            var count = CameraManager.CameraCount;
+
+            registration.Push();
+            registration.Push();
+
+            Assert.AreEqual(id, registration.CameraId);
+            Assert.AreEqual(count, CameraManager.CameraCount);
+        }
+
+        [Test]
+        public void RegisterAndSwitchTo_BareVcam_RegistersAndActivates()
+        {
+            var baseVcam = CreateVcam("Base", false);
+            CameraManager.Register("base", baseVcam);
+            CameraManager.SwitchTo("base");
+            Pump();
+
+            var bareVcam = CreateVcam("Bare", false);
+
+            var id = CameraManager.RegisterAndSwitchTo(bareVcam);
+
+            StringAssert.StartsWith("@auto/", id);
+            Assert.AreEqual(id, CameraManager.BaseCameraId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+
+            Pump();
+            Assert.AreEqual(id, CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void RegisterAndPush_BareVcam_RegistersAndActivates()
+        {
+            var baseVcam = CreateVcam("Base", false);
+            CameraManager.Register("base", baseVcam);
+            CameraManager.SwitchTo("base");
+            Pump();
+
+            var bareVcam = CreateVcam("Bare", false);
+
+            var id = CameraManager.RegisterAndPush(bareVcam);
+
+            Assert.AreEqual(2, CameraManager.StackDepth);
+
+            Pump();
+            Assert.AreEqual(id, CameraManager.ActiveCameraId);
+
+            CameraManager.Pop();
+            Pump();
+            Assert.AreEqual("base", CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void RegisterAndPush_AlreadyRegisteredByComponent_Throws()
+        {
+            var vcam = CreateVcam("Registered", true);
+            var registration = vcam.GetComponent<CinemachineCameraRegistration>();
+            var id = registration.CameraId;
+            var count = CameraManager.CameraCount;
+            var depth = CameraManager.StackDepth;
+
+            Assert.Throws<System.ArgumentException>(
+                () => CameraManager.RegisterAndPush(vcam));
+
+            Assert.AreEqual(id, registration.CameraId);
+            Assert.AreEqual(count, CameraManager.CameraCount);
+            Assert.AreEqual(depth, CameraManager.StackDepth);
+        }
+
+        #endregion
     }
 }

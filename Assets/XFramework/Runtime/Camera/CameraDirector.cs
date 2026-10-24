@@ -85,6 +85,24 @@ namespace XFramework.XCamera
             return cameraId;
         }
 
+        internal string RegisterAndSwitchTo(CinemachineVirtualCameraBase camera, float duration,
+            CameraBlendStyle style)
+        {
+            ValidateDuration(duration);
+            var cameraId = Register(camera);
+            SwitchTo(cameraId, duration, style);
+            return cameraId;
+        }
+
+        internal string RegisterAndPush(CinemachineVirtualCameraBase camera, float duration,
+            CameraBlendStyle style)
+        {
+            ValidateDuration(duration);
+            var cameraId = Register(camera);
+            Push(cameraId, duration, style);
+            return cameraId;
+        }
+
         internal bool Unregister(string cameraId)
         {
             if (cameraId == null)

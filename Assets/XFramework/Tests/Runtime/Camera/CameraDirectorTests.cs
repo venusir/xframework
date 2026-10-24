@@ -95,6 +95,51 @@ namespace XFramework.XCamera.Tests
 
         #endregion
 
+        #region Register & activate
+
+        [Test]
+        public void RegisterAndSwitchTo_RegistersGeneratedIdThenActivates()
+        {
+            var id = _director.RegisterAndSwitchTo(_camera, 0f, CameraBlendStyle.Cut);
+
+            Assert.AreEqual("@auto/1", id);
+            Assert.AreEqual(id, _backend.LastRegisteredId);
+            Assert.IsTrue(_backend.LastRegisteredIsGenerated);
+            Assert.AreSame(_camera, _backend.LastRegistered);
+            Assert.AreEqual(id, _backend.LastActivatedId);
+            Assert.AreEqual(1, _backend.ActivateCount);
+            Assert.AreEqual(id, _director.BaseCameraId);
+            Assert.AreEqual(1, _director.StackDepth);
+        }
+
+        [Test]
+        public void RegisterAndPush_RegistersGeneratedIdThenActivates()
+        {
+            var id = _director.RegisterAndPush(_camera, 0.3f, CameraBlendStyle.Linear);
+
+            Assert.AreEqual("@auto/1", id);
+            Assert.IsTrue(_backend.LastRegisteredIsGenerated);
+            Assert.AreEqual(id, _backend.LastActivatedId);
+            Assert.AreEqual(0.3f, _backend.LastActivateDuration, 0.0001f);
+            Assert.AreEqual(CameraBlendStyle.Linear, _backend.LastActivateStyle);
+            Assert.AreEqual(1, _backend.ActivateCount);
+            Assert.AreEqual(id, _director.BaseCameraId, "空栈 Push 成为基础相机");
+            Assert.AreEqual(1, _director.StackDepth);
+        }
+
+        [Test]
+        public void RegisterAndSwitchTo_InvalidDuration_DoesNotRegisterOrActivate()
+        {
+            Assert.Throws<ArgumentOutOfRangeException>(
+                () => _director.RegisterAndSwitchTo(_camera, float.NaN, CameraBlendStyle.Cut));
+
+            Assert.AreEqual(0, _backend.CameraCount);
+            Assert.AreEqual(0, _backend.ActivateCount);
+            Assert.AreEqual(0, _director.StackDepth);
+        }
+
+        #endregion
+
         #region Stack
 
         [Test]

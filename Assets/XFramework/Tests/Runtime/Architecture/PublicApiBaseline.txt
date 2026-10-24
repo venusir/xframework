@@ -333,6 +333,8 @@ XFramework.XCamera.CameraManager.Push  ::  public static void(string cameraId, f
 XFramework.XCamera.CameraManager.PushAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XCamera.CameraTransitionResult>(string cameraId, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XCamera.CameraManager.Register  ::  public static string(Unity.Cinemachine.CinemachineVirtualCameraBase camera)
 XFramework.XCamera.CameraManager.Register  ::  public static string(string cameraId, Unity.Cinemachine.CinemachineVirtualCameraBase camera)
+XFramework.XCamera.CameraManager.RegisterAndPush  ::  public static string(Unity.Cinemachine.CinemachineVirtualCameraBase camera, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
+XFramework.XCamera.CameraManager.RegisterAndSwitchTo  ::  public static string(Unity.Cinemachine.CinemachineVirtualCameraBase camera, float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.CameraManager.SetFieldOfView  ::  public static void(string cameraId, float fieldOfView)
 XFramework.XCamera.CameraManager.SetFollow  ::  public static void(string cameraId, UnityEngine.Transform follow)
 XFramework.XCamera.CameraManager.SetLookAt  ::  public static void(string cameraId, UnityEngine.Transform lookAt)
@@ -370,7 +372,9 @@ XFramework.XCamera.Cinemachine.CinemachineCameraRegistration#ctor  ::  public()
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Camera  ::  public Unity.Cinemachine.CinemachineVirtualCameraBase Camera { get; }
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.CameraId  ::  public string CameraId { get; internal set; }
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.IsRegistered  ::  public bool IsRegistered { get; }
+XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Push  ::  public void(float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Register  ::  public string()
+XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.SwitchTo  ::  public void(float blendDuration = 0f, XFramework.XCamera.CameraBlendStyle style = EaseInOut)
 XFramework.XCamera.Cinemachine.CinemachineCameraRegistration.Unregister  ::  public void()
 XFramework.XCamera.Messages.CameraActivatedMessage  ::  public readonly struct
 XFramework.XCamera.Messages.CameraActivatedMessage#ctor  ::  public(string cameraId, string previousCameraId, bool isCut)

@@ -191,6 +191,8 @@ namespace XFramework.XCamera.Tests
             Assert.Throws<InvalidOperationException>(() => CameraManager.Clear());
             Assert.Throws<InvalidOperationException>(() => CameraManager.Register("a", _camera));
             Assert.Throws<InvalidOperationException>(() => CameraManager.Register(_camera));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.RegisterAndSwitchTo(_camera));
+            Assert.Throws<InvalidOperationException>(() => CameraManager.RegisterAndPush(_camera));
         }
 
         [Test]
@@ -279,6 +281,54 @@ namespace XFramework.XCamera.Tests
             Assert.IsTrue(CameraManager.Unregister("a"));
             Assert.AreEqual("a", fake.LastUnregisteredId);
             Assert.IsFalse(CameraManager.Unregister("unknown"));
+        }
+
+        [Test]
+        public void RegisterAndSwitchTo_ForwardsAndReturnsGeneratedId()
+        {
+            var fake = Initialize();
+
+            var id = CameraManager.RegisterAndSwitchTo(_camera);
+
+            StringAssert.StartsWith("@auto/", id);
+            Assert.IsTrue(fake.LastRegisteredIsGenerated);
+            Assert.AreSame(_camera, fake.LastRegistered);
+            Assert.AreEqual(id, fake.LastActivatedId);
+            Assert.AreEqual(id, CameraManager.BaseCameraId);
+            Assert.AreEqual(1, CameraManager.StackDepth);
+        }
+
+        [Test]
+        public void RegisterAndPush_ForwardsAndReturnsGeneratedId()
+        {
+            var fake = Initialize();
+            CameraManager.Register("base", _camera);
+            CameraManager.SwitchTo("base");
+
+            var id = CameraManager.RegisterAndPush(_camera2);
+
+            StringAssert.StartsWith("@auto/", id);
+            Assert.AreEqual(id, fake.LastActivatedId);
+            Assert.AreEqual(2, CameraManager.StackDepth);
+
+            CameraManager.Pop();
+            Assert.AreEqual("base", CameraManager.BaseCameraId);
+        }
+
+        [Test]
+        public void RegisterAndActivate_NullOrDestroyedCamera_Throws()
+        {
+            Initialize();
+
+            Assert.Throws<ArgumentNullException>(() => CameraManager.RegisterAndSwitchTo(null));
+            Assert.Throws<ArgumentNullException>(() => CameraManager.RegisterAndPush(null));
+
+            var obj = new GameObject("DestroyedForRegisterAndActivate");
+            var camera = obj.AddComponent<CinemachineCamera>();
+            UnityEngine.Object.DestroyImmediate(obj);
+
+            Assert.Throws<ArgumentException>(() => CameraManager.RegisterAndSwitchTo(camera));
+            Assert.Throws<ArgumentException>(() => CameraManager.RegisterAndPush(camera));
         }
 
         #endregion

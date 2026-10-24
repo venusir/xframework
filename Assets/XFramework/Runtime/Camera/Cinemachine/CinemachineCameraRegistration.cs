@@ -92,6 +92,33 @@ namespace XFramework.XCamera.Cinemachine
             CameraId = null;
         }
 
+        /// <summary>确保本相机已注册，然后切换到它（设定为基础相机并清空覆盖栈）。</summary>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <exception cref="System.InvalidOperationException">找不到 vcam，或管理器尚未初始化。</exception>
+        /// <exception cref="System.ArgumentException">同一相机已注册为另一 id。</exception>
+        /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <remarks>已注册时幂等复用现有 id；未注册（例如管理器晚于 <c>OnEnable</c> 初始化）时先注册再激活。
+        /// 激活是请求，<see cref="CameraManager.ActiveCameraId"/> 可能晚一次输出驱动更新才可见。</remarks>
+        public void SwitchTo(float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            CameraManager.SwitchTo(Register(), blendDuration, style);
+        }
+
+        /// <summary>确保本相机已注册，然后压入为临时覆盖层（之后可用 <see cref="CameraManager.Pop"/> 返回）。</summary>
+        /// <param name="blendDuration">过渡时长（秒）；<c>&lt;= 0.0001</c> 等价于 cut；NaN / ±∞ 抛异常。</param>
+        /// <param name="style">过渡样式。</param>
+        /// <exception cref="System.InvalidOperationException">找不到 vcam，或管理器尚未初始化。</exception>
+        /// <exception cref="System.ArgumentException">同一相机已注册为另一 id。</exception>
+        /// <exception cref="System.ArgumentOutOfRangeException"><paramref name="blendDuration"/> 非有限值。</exception>
+        /// <remarks>已注册时幂等复用现有 id；未注册（例如管理器晚于 <c>OnEnable</c> 初始化）时先注册再激活。
+        /// 销毁实例时组件自动注销并回落到上一栈顶；激活是请求，<see cref="CameraManager.ActiveCameraId"/>
+        /// 可能晚一次输出驱动更新才可见。</remarks>
+        public void Push(float blendDuration = 0f, CameraBlendStyle style = CameraBlendStyle.EaseInOut)
+        {
+            CameraManager.Push(Register(), blendDuration, style);
+        }
+
         #endregion
 
         #region Unity Lifecycle

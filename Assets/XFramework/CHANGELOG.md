@@ -47,6 +47,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **一步注册并激活（裸 vcam 与自注册组件）**（2026-10-24）：`CameraManager.RegisterAndSwitchTo` /
+  `RegisterAndPush` 面向自持有裸 vcam 的调用方——生成 `@auto/N` 注册后立即切基座 / 压栈，返回 id 供
+  `Unregister`；`CinemachineCameraRegistration.SwitchTo` / `Push` 面向预制体自注册组件——先确保注册
+  （幂等，支持管理器晚于 `OnEnable` 初始化）再激活。门面合并方法在相机已注册时按 `Register` 契约抛
+  `ArgumentException`（请改用 `SwitchTo(id)` / `Push(id)` 或组件方法）。**公开 API 源兼容新增，基线 +4 行**。
 - **XCamera 从零重设计：string id + 相机栈 + 中立主面 + 原生逃生舱**（2026-10-23，用户裁定；`58a9b62` /
   `ebe10d7` / `849f199` / `6f99584` / `04661ea`）：门面改为 `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear`，
   四个 `UniTask<CameraTransitionResult>` 异步动词，`SetFollow` / `SetLookAt` / `SetFieldOfView` / `Shake`，
