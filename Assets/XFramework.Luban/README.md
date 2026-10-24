@@ -128,6 +128,7 @@ Assets/XFramework.Luban/
 │   ├── LubanSettingsValidator.cs    结构校验
 │   ├── LubanCommandBuilder.cs       命令行构建（纯函数）
 │   ├── LubanProcessRunner.cs        子进程执行（超时/捕获输出）
+│   ├── LubanProcessOutputBuffer.cs  有上限的进程输出缓冲
 │   ├── LubanCodeParser.cs           解析 Luban 生成代码
 │   ├── LubanGeneratedModel.cs       解析模型
 │   ├── LubanIntegrationEmitter.cs   行接口实现/适配器文本
