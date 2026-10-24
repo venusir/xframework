@@ -510,16 +510,23 @@ if ($Module) {
         if ($treeProblems.Count -gt 10) { Write-Host "      …共 $($treeProblems.Count) 处" -ForegroundColor Yellow }
     }
     # 示例编译：Samples~ 不参与 Unity 编译，单独走一条临时 csproj（见 Tools/check-samples.ps1）。
+    # 两个样例根都要编：核心包与同级可选包 XFramework.Luban。
     $sampleProblems = @()
     $sampleScript = Join-Path $PSScriptRoot "check-samples.ps1"
+    $sampleRoots = @(
+        "Assets/XFramework/Samples~",
+        "Assets/XFramework.Luban/Samples~"
+    )
     if (Test-Path $sampleScript) {
-        $sampleOutput = & pwsh -NoProfile -File $sampleScript 2>&1
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "  示例编译: 通过" -ForegroundColor DarkGray
-        } else {
-            Write-Host "  示例编译: 失败" -ForegroundColor Yellow
-            $sampleOutput | Select-Object -Last 20 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
-            $sampleProblems += "示例代码编译失败（Samples~/ 下的 .cs 不参与 Unity 编译）"
+        foreach ($samplesRoot in $sampleRoots) {
+            $sampleOutput = & pwsh -NoProfile -File $sampleScript -SamplesRoot $samplesRoot 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host ("  示例编译[{0}]: 通过" -f $samplesRoot) -ForegroundColor DarkGray
+            } else {
+                Write-Host ("  示例编译[{0}]: 失败" -f $samplesRoot) -ForegroundColor Yellow
+                $sampleOutput | Select-Object -Last 20 | ForEach-Object { Write-Host "      $_" -ForegroundColor Yellow }
+                $sampleProblems += ("示例代码编译失败：{0}" -f $samplesRoot)
+            }
         }
     } else {
         Write-Host "  示例编译: 跳过（未找到 Tools/check-samples.ps1）" -ForegroundColor Yellow
