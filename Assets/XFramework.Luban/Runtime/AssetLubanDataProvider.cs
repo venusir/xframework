@@ -2,8 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
-using UnityEngine;
-using XFramework.XAsset;
 
 namespace XFramework.XConfig.Luban
 {
@@ -12,6 +10,18 @@ namespace XFramework.XConfig.Luban
     /// </summary>
     internal sealed class AssetLubanDataProvider : ILubanDataProvider
     {
+        private readonly ILubanAssetSource _source;
+
+        internal AssetLubanDataProvider()
+            : this(new AssetManagerLubanAssetSource())
+        {
+        }
+
+        internal AssetLubanDataProvider(ILubanAssetSource source)
+        {
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+        }
+
         /// <inheritdoc />
         public async UniTask<Dictionary<string, byte[]>> LoadAsync(
             IReadOnlyList<LubanTableFile> files,
@@ -25,13 +35,6 @@ namespace XFramework.XConfig.Luban
             if (files.Count == 0)
                 return new Dictionary<string, byte[]>(StringComparer.Ordinal);
 
-            if (!AssetManager.IsInitialized)
-            {
-                throw new InvalidOperationException(
-                    "[LubanConfig] AssetManager 尚未初始化。请先调用 AssetManager.InitializeAsync() " +
-                    "（或登记 AssetBootstrapStage）后再初始化 Luban 配置。");
-            }
-
             switch (loadMode)
             {
                 case LubanDataLoadMode.TextAsset:
@@ -44,7 +47,7 @@ namespace XFramework.XConfig.Luban
             }
         }
 
-        private static async UniTask<Dictionary<string, byte[]>> LoadTextAssetsAsync(
+        private async UniTask<Dictionary<string, byte[]>> LoadTextAssetsAsync(
             IReadOnlyList<LubanTableFile> files,
             IProgress<LubanInitReport> progress,
             CancellationToken cancellationToken)
@@ -55,7 +58,7 @@ namespace XFramework.XConfig.Luban
                 locations[i] = files[i].Location;
             }
 
-            var handles = await AssetManager.LoadAllAsync<TextAsset>(locations, cancellationToken);
+            var handles = await _source.LoadTextAssetsAsync(locations, cancellationToken);
             var result = new Dictionary<string, byte[]>(files.Count, StringComparer.Ordinal);
 
             try
@@ -63,14 +66,14 @@ namespace XFramework.XConfig.Luban
                 for (int i = 0; i < files.Count; i++)
                 {
                     var handle = handles[i];
-                    if (!handle.IsValid || handle.Asset == null)
+                    if (handle == null || !handle.IsValid || handle.Bytes == null)
                     {
                         throw new LubanConfigException(
                             "[LubanConfig] Failed to load table '" + files[i].TableName +
-                            "' at '" + files[i].Location + "': " + DescribeError(handle.LastError));
+                            "' at '" + files[i].Location + "': " + DescribeError(handle?.LastError));
                     }
 
-                    result[files[i].TableName] = handle.Asset.bytes;
+                    result[files[i].TableName] = handle.Bytes;
                     Report(progress, files, i);
                 }
             }
@@ -78,17 +81,14 @@ namespace XFramework.XConfig.Luban
             {
                 for (int i = 0; i < handles.Length; i++)
                 {
-                    if (handles[i].IsValid)
-                    {
-                        handles[i].Dispose();
-                    }
+                    handles[i]?.Dispose();
                 }
             }
 
             return result;
         }
 
-        private static async UniTask<Dictionary<string, byte[]>> LoadRawFilesAsync(
+        private async UniTask<Dictionary<string, byte[]>> LoadRawFilesAsync(
             IReadOnlyList<LubanTableFile> files,
             IProgress<LubanInitReport> progress,
             CancellationToken cancellationToken)
@@ -99,17 +99,17 @@ namespace XFramework.XConfig.Luban
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                using (var handle = await AssetManager.LoadRawFileAsync(
+                using (var handle = await _source.LoadRawFileAsync(
                            files[i].Location, cancellationToken))
                 {
-                    if (!handle.IsValid)
+                    if (handle == null || !handle.IsValid)
                     {
                         throw new LubanConfigException(
                             "[LubanConfig] Failed to load raw file for table '" + files[i].TableName +
-                            "' at '" + files[i].Location + "': " + DescribeError(handle.LastError));
+                            "' at '" + files[i].Location + "': " + DescribeError(handle?.LastError));
                     }
 
-                    var data = handle.GetRawFileData();
+                    var data = handle.GetData();
                     if (data == null)
                     {
                         throw new LubanConfigException(
