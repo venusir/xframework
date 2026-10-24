@@ -88,6 +88,42 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void Emit_RowInterfaceNameCollision_Throws()
+        {
+            var model = new LubanGeneratedModel();
+            model.Tables.Add(new LubanGeneratedTable
+            {
+                PropertyName = "TbA",
+                Shape = LubanTableShape.Map,
+                OutputDataName = "tb_a",
+                RowTypeFullName = "cfg.a_b.C",
+                RowNamespace = "cfg.a_b",
+                RowTypeName = "C",
+                RowIsClass = true,
+                KeyTypeText = "int",
+                IdExpression = "Id",
+            });
+            model.Tables.Add(new LubanGeneratedTable
+            {
+                PropertyName = "TbB",
+                Shape = LubanTableShape.Map,
+                OutputDataName = "tb_b",
+                RowTypeFullName = "cfg.a.b_C",
+                RowNamespace = "cfg.a.b",
+                RowTypeName = "b_C",
+                RowIsClass = true,
+                KeyTypeText = "int",
+                IdExpression = "Id",
+            });
+
+            var exception = Assert.Throws<LubanGenerationException>(
+                () => LubanIntegrationEmitter.Emit(model, _settings));
+
+            Assert.That(exception.Message, Does.Contain("cfg.a_b.C"));
+            Assert.That(exception.Message, Does.Contain("cfg.a.b_C"));
+        }
+
+        [Test]
         public void Emit_IsDeterministic()
         {
             var first = LubanIntegrationEmitter.Emit(_model, _settings);

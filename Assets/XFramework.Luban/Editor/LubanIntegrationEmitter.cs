@@ -20,7 +20,7 @@ namespace XFramework.XConfig.Luban.Editor
 
             if (settings.GenerateRowInterfaces)
             {
-                var emitted = new HashSet<string>(StringComparer.Ordinal);
+                var rowInterfaceFiles = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
                 foreach (var table in model.Tables)
                 {
@@ -30,12 +30,22 @@ namespace XFramework.XConfig.Luban.Editor
                         continue;
                     }
 
-                    if (!emitted.Add(table.RowTypeFullName))
+                    string relative = "RowInterfaces/" + Sanitize(table.RowTypeFullName) + ".g.cs";
+                    if (rowInterfaceFiles.TryGetValue(relative, out string existingRowType))
                     {
+                        if (!string.Equals(existingRowType, table.RowTypeFullName, StringComparison.Ordinal))
+                        {
+                            throw new LubanGenerationException(
+                                "行接口实现文件名冲突：'" + existingRowType + "' 与 '" +
+                                table.RowTypeFullName + "' 都映射到 '" + relative +
+                                "'。请重命名行类型，或关闭自动生成行接口实现后手写。");
+                        }
+
                         continue;
                     }
 
-                    files["RowInterfaces/" + Sanitize(table.RowTypeFullName) + ".g.cs"] = EmitRowInterface(table);
+                    rowInterfaceFiles.Add(relative, table.RowTypeFullName);
+                    files[relative] = EmitRowInterface(table);
                 }
             }
 
