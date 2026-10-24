@@ -1,0 +1,22 @@
+<module name="demo">
+
+    <bean name="Item">
+        <var name="id" type="int"/>
+        <var name="name" type="string"/>
+        <var name="price" type="int"/>
+    </bean>
+    <table name="TbItem" value="Item" index="id" input="*@item_tbitem.json"/>
+
+    <bean name="Global">
+        <var name="version" type="string"/>
+        <var name="start_gold" type="int"/>
+    </bean>
+    <table name="TbGlobal" value="Global" mode="one" input="common_tbglobal.json"/>
+
+    <bean name="SpawnPoint">
+        <var name="x" type="float"/>
+        <var name="y" type="float"/>
+    </bean>
+    <table name="TbSpawnPoint" value="SpawnPoint" mode="list" input="*@test_tbspawnpoint.json"/>
+
+</module>

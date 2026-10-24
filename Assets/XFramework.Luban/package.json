@@ -18,5 +18,12 @@
 	"license": "MIT",
 	"documentationUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.Luban/README.md",
 	"changelogUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.Luban/CHANGELOG.md",
+	"samples": [
+		{
+			"displayName": "Luban 配置示例",
+			"description": "最小 Luban 配置链路：schema + 生成代码 + 接缝/适配器 + 运行时经 AssetManager 加载并注册进 ConfigManager。",
+			"path": "Samples~/Luban"
+		}
+	],
 	"dependencies": {}
 }
