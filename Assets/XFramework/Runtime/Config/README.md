@@ -385,7 +385,7 @@ var row = items.Get(1001);
 3. **注入不是 `Preload` 的等价物，也不是零成本**：逐条见「已知限制」。
 
 > **使用 Luban 时可以先看可选扩展包。** `com.venusy609.xframework.luban` 会在导表后生成
-> `IConfigRow<TKey>` 接缝与强类型适配器，并处理 map / 单行 / 带索引 list / 纯列表四种形状；
+> `IConfigRow<TKey>` 行接口实现与强类型适配器，并处理 map / 单行 / 带索引 list / 纯列表四种形状；
 > 核心包不依赖它。不使用扩展包时，按下面的方式三手写。
 
 > **`Register` 与 `Preload` 的约束不同。** `Preload*Async` 要求 `new()`（`where T : IConfigRow, new()`），`RegisterTable` **不要求**——所以只有带参构造的行类型**可以注册，但不能 Preload**。

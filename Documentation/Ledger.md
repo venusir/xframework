@@ -46,7 +46,7 @@
 
   **配方现在不写**：本仓从未接入过 HybridCLR，配方里每一步都**未实测**——写了就是臆测。`Luban.md` 的配方是**接完才写的**，每条事实都带核对状态标记；`FairyGUI.md` 同理。
 
-- 已做：**Luban 独立扩展包 `com.venusy609.xframework.luban`**（2026-10-24 · 提交 `6946105e` / `0184e632`；真实 5.1.0 生成物端到端用例 `LubanEndToEndTests`）——核心包零改动、零依赖；扩展包用「生成式 `IConfigRow<TKey>` 接缝 + 强类型适配器」把 map / 单行 / 带索引 list 注册进 `ConfigManager`，纯列表跳过；运行时不引用 Luban 程序集。无重开判据。
+- 已做：**Luban 独立扩展包 `com.venusy609.xframework.luban`**（2026-10-24 · 提交 `6946105e` / `0184e632`；真实 5.1.0 生成物端到端用例 `LubanEndToEndTests`）——核心包零改动、零依赖；扩展包用「生成式 `IConfigRow<TKey>` 行接口实现 + 强类型适配器」把 map / 单行 / 带索引 list 注册进 `ConfigManager`，纯列表跳过；运行时不引用 Luban 程序集。无重开判据。
 
 - 已推翻：**~~不做 Editor 一键导表 / 不建 `Tools/luban`~~**（原判 2026-10-10 · `Documentation/Luban.md` §五）——原否决理由是「把 Luban 安装位置、schema、输出目录固化进框架」；扩展包把全部路径放进使用方项目内的 `ProjectSettings` 设置，理由不再成立。取代者：〈Luban 独立扩展包〉（2026-10-24）。核心仓仍不建 `Tools/luban/`。
 

@@ -3,7 +3,7 @@
 	"displayName": "XFramework Luban",
 	"version": "0.1.0",
 	"unity": "6000.3",
-	"description": "XFramework 的可选 Luban 配置扩展：Editor 一键导表、生成式接缝与强类型适配器、运行时经 AssetManager 加载并把 map / 单行 / 带索引表注册进 ConfigManager。核心包零改动、零 Luban 依赖。",
+	"description": "XFramework 的可选 Luban 配置扩展：Editor 一键导表、生成式行接口实现与强类型适配器、运行时经 AssetManager 加载并把 map / 单行 / 带索引表注册进 ConfigManager。核心包零改动、零 Luban 依赖。",
 	"keywords": [
 		"framework",
 		"config",
@@ -21,7 +21,7 @@
 	"samples": [
 		{
 			"displayName": "Luban 配置示例",
-			"description": "最小 Luban 配置链路：schema + 生成代码 + 接缝/适配器 + 运行时经 AssetManager 加载并注册进 ConfigManager。",
+			"description": "最小 Luban 配置链路：schema + 生成代码 + 行接口实现/适配器 + 运行时经 AssetManager 加载并注册进 ConfigManager。",
 			"path": "Samples~/Luban"
 		}
 	],

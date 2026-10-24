@@ -12,8 +12,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - 新增独立可选扩展包 `com.venusy609.xframework.luban`：核心包零改动、零 Luban 依赖。
 - Runtime：`LubanConfig` 静态门面、`LubanOptions`、`LubanConfigBridge`、`LubanBootstrapStage`、
   `AssetLubanDataProvider`（TextAsset / RawFile）、会话复位、注册失败回滚。
-- Editor：ProjectSettings 设置页、`dotnet Luban.dll` 一键导表、生成式 `IConfigRow<TKey>` 接缝与
-  强类型适配器、`.luban-glue-manifest`、同 asmdef / 引用校验。
+- Editor：ProjectSettings 设置页、`dotnet Luban.dll` 一键导表、生成式 `IConfigRow<TKey>` 行接口实现与
+  强类型适配器、`.luban-integration-manifest`、同 asmdef / 引用校验。
 - 支持四种表形状：map、单行、带索引 list（单索引与 `ValueTuple` 联合索引）、纯列表（跳过注册）。
 - `Samples~/Luban`：最小可运行示例（JSON target），含 schema、生成物、数据与示例脚本。
 - 测试：门面/桥接/写盘/解析器/发射器/校验用例；真实 Luban 5.1.0 生成物的 ConfigManager 端到端用例；

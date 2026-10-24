@@ -1,6 +1,6 @@
 # Luban 配置示例
 
-最小可运行示例：Luban schema + 生成代码 + 生成式接缝/适配器 + 运行时经 `AssetManager` 加载，
+最小可运行示例：Luban schema + 生成代码 + 生成式行接口实现/适配器 + 运行时经 `AssetManager` 加载，
 并把 map 表与单行表注册进 `ConfigManager`，同时保留纯列表表的强类型 `DataList` 访问。
 
 ## 目录
@@ -9,7 +9,7 @@
 |---|---|
 | `LubanProject/` | Luban 工程：`luban.conf`、`Defines/`、`Datas/` 源数据、`gen.ps1` / `gen.sh` |
 | `Generated/Code/` | Luban 生成的 C# 代码（`cs-simple-json`） |
-| `Generated/Glue/` | 本扩展生成的 `IConfigRow` 接缝与强类型适配器 |
+| `Generated/Integration/` | 本扩展生成的行接口实现与强类型适配器 |
 | `Data/` | Luban 生成的数据（`json`） |
 | `Scripts/LubanSample.cs` | 示例入口 |
 
@@ -45,7 +45,7 @@
 正常流程用 Editor 菜单：
 
 1. `XFramework/Luban/设置...`，把 Luban.dll、`LubanProject/luban.conf`、
-   代码目录 `Generated/Code`、数据目录 `Data`、胶水目录 `Generated/Glue` 填好；
+   代码目录 `Generated/Code`、数据目录 `Data`、接入代码目录 `Generated/Integration` 填好；
 2. `XFramework/Luban/生成配置表`。
 
 手动回退：`LubanProject/gen.ps1 -LubanDll <path>` 或 `LUBAN_DLL=<path> LubanProject/gen.sh`。

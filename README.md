@@ -57,7 +57,7 @@ Luban 运行时 `com.code-philosophy.luban` 用 Git URL 安装并钉 `v1.2.0`：
 https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 ```
 
-扩展包提供 Editor 一键导表、生成式 `IConfigRow<TKey>` 接缝与强类型适配器，并把 map / 单行 / 带索引表
+扩展包提供 Editor 一键导表、生成式 `IConfigRow<TKey>` 行接口实现与强类型适配器，并把 map / 单行 / 带索引表
 注册进 `ConfigManager`；细节见[扩展包 README](Assets/XFramework.Luban/README.md)。核心包仍不内建、不依赖 Luban。
 
 ## 开发这个仓库

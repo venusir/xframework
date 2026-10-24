@@ -4,7 +4,7 @@
 > **使用方契约**在 `Assets/XFramework/Runtime/Config/README.md` 的「方式三」——本文件不复述它，只补它**刻意不写**的部分：随 Luban 版本漂移的那些。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。需要时整篇转发给使用方。
 >
-> **2026-10-24 更新**：独立可选扩展包 `Assets/XFramework.Luban/` 已落地（Editor 导表 + 生成式接缝/适配器 +
+> **2026-10-24 更新**：独立可选扩展包 `Assets/XFramework.Luban/` 已落地（Editor 导表 + 生成式行接口实现/适配器 +
 > 运行时加载/注册）。本文件保留**维护向事实与版本漂移点**；使用方向见扩展包 README。核心包仍不内建适配层。
 
 ## 〇、核对状态（先读这一节）
@@ -44,7 +44,7 @@
 这条边界的具体收益：本文件**可以被 Luban 版本演化淘汰**（整篇重写即可），而包内那份契约不会。
 
 > **2026-10-24 补充：可选扩展包。** 上述「框架侧不代劳」的边界不变；独立扩展包
-> `Assets/XFramework.Luban/` 在**使用方项目**里生成接缝与适配器，核心包仍零依赖、零改动。
+> `Assets/XFramework.Luban/` 在**使用方项目**里生成行接口实现与适配器，核心包仍零依赖、零改动。
 > 扩展包本身也不引用 Luban 程序集：Luban 类型只出现在使用方的生成代码与生成适配器里。
 
 ---
@@ -118,7 +118,7 @@ dotnet <LUBAN>\Luban.dll -t all -c cs-simple-json  -d json --conf <CONF_DIR> -x 
 ```
 
 > **2026-10-24 已实跑**：把 `-t all` 换成工程里的 target（如 `client`）即可；两种 target 均成功。
-> 日常用扩展包的 `XFramework/Luban/生成配置表` 菜单会调用同样的命令并继续生成接缝/适配器；
+> 日常用扩展包的 `XFramework/Luban/生成配置表` 菜单会调用同样的命令并继续生成行接口实现/适配器；
 > 手工命令只作为回退。
 
 `[一手核对]` 5.1.0 里 C# 侧的 codeTarget 有：`cs-bin`、`cs-simple-json`、`cs-newtonsoft-json`（另有 `cs-dotnet-json`、`cs-editor-json`、`cs_pb` 的模板目录）。**codeTarget 要与 dataTarget 配套**（选 `cs-bin` 就配 `-d bin`）。
@@ -138,12 +138,12 @@ dotnet <LUBAN>\Luban.dll -t all -c cs-simple-json  -d json --conf <CONF_DIR> -x 
 
 框架只对 schema 提**两条要求**，其余随意：
 
-- 要注册成 Table 的表，其 bean 必须有一个主键字段（默认取名为 `id`，生成后成为 C# 侧的 `Id`）——§三 的接缝靠它。
+- 要注册成 Table 的表，其 bean 必须有一个主键字段（默认取名为 `id`，生成后成为 C# 侧的 `Id`）——§三 的行接口实现靠它。
 - 表模式决定接到哪个 API：有主键的 map 表 → `RegisterTable`；单行表（`Data`）→ `RegisterGlobal<T>`（要求 `T : class`）；纯列表表没有主键，接不进来。
 
 ---
 
-## 三、让生成的行类实现 `IConfigRow<TKey>`（接缝）
+## 三、让生成的行类实现 `IConfigRow<TKey>`（行接口实现）
 
 这是整条链路上唯一需要你写代码的地方。
 
@@ -170,10 +170,10 @@ public {{class_modifier __bean}} partial class {{__name}} : {{if parent_def_type
 1. 行类是 **`partial`** —— 你可以另写一个 partial 部分补接口，不必碰生成代码。
 2. 主键是 **`public readonly` 字段**，不是属性 —— 而 `IConfigRow<TKey>` 要的是 `TKey Id { get; }`。**字段不实现接口属性**，且 `Id` 这个名字已被生成的字段占用，再声明同名属性会 **CS0102**。
 
-### 3.2 所以接缝只能写成显式接口实现 `[探针实测]`
+### 3.2 所以行接口文件只能写成显式接口实现 `[探针实测]`
 
 ```csharp
-// 你写的接缝文件（每张表一小段）
+// 你写的行接口文件（每张表一小段）
 public partial class Item : XFramework.XConfig.IConfigRow<int>
 {
     // 显式接口实现：与生成的 readonly 字段 Id 同名不冲突
@@ -188,8 +188,8 @@ public partial class Item : XFramework.XConfig.IConfigRow<int>
 - **但反射代码要小心**：显式实现在**具体类型**上不可见——`typeof(Item).GetProperty("Id")` 返回 **null**；必须从**接口**上取，`typeof(IConfigRow<int>).GetProperty("Id").GetValue(row)` 才能读到值。包内 README 的反射批注册示例正是后者，是对的。
 - **复合键（多键表）**：`TKey` 用 `ValueTuple`，且**元组元素名必须与接口声明逐字一致**——写 `IConfigRow<(int skillId, int level)>` 却用 `(int, int) IConfigRow<(int, int)>.Id` 会 **CS0540**（这条是探针第一次编译就撞出来的）。
 
-**2026-10-24：接缝可由扩展包生成。** `LubanCodeParser` 解析生成代码，`LubanGlueEmitter` 生成 `partial` 接缝；
-接缝与生成代码必须处于**同一个 asmdef**（partial 类型不能跨程序集合并），扩展包会先校验。下面的手写接缝仍是回退路径。
+**2026-10-24：行接口实现可由扩展包生成。** `LubanCodeParser` 解析生成代码，`LubanIntegrationEmitter` 生成 `partial` 行接口实现；
+行接口实现与生成代码必须处于**同一个 asmdef**（partial 类型不能跨程序集合并），扩展包会先校验。下面的手写行接口文件仍是回退路径。
 
 **实测的四种表形状**（扩展包按此生成注册代码）：
 
@@ -202,7 +202,7 @@ public partial class Item : XFramework.XConfig.IConfigRow<int>
 
 多索引（`index="a,b,c"`）没有单一主键，扩展包生成期报错；联合索引（`index="a+b"`）的键是 `ValueTuple`，可注册。
 
-**若主键字段不叫 `Id`**（比如列名是 `item_id` → 字段 `ItemId`），接缝可以写成普通的隐式实现 `public int Id => ItemId;`，比上面更简单。
+**若主键字段不叫 `Id`**（比如列名是 `item_id` → 字段 `ItemId`），行接口文件可以写成普通的隐式实现 `public int Id => ItemId;`，比上面更简单。
 
 > **这套写法有机械守卫**：`Assets/XFramework/Tests/Editor/Config/ExplicitInterfaceRowTests.cs`（复刻生成物的形状——`partial` + `readonly` 字段 + 只有带参构造——并锁住主键从接口泛型实参取、值经接口的 `PropertyInfo` 读得到、键类型不符仍早失败）。该文件做过红证：把 `ConfigTypeHelper.ExtractKeyType` 临时改成「从具体类型取 `Id` 属性」后，6 例中 5 例当场变红，而既有用例全绿。改动本文件里的建议时，那条守卫会先响。
 
@@ -210,14 +210,14 @@ public partial class Item : XFramework.XConfig.IConfigRow<int>
 
 走 `--customTemplateDir`（复数，可给多个）覆盖 `bean.sbn`。**不推荐**，两条理由：
 
-- **模板拿不到所属表的主键类型**。`bean.sbn` 的作用域里只有 `__bean`（其字段是 `export_fields` / `id` 等），拿不到「这张表的 key 是什么类型」。于是 `TKey` 只能在模板里写死成项目约定的类型——**多键表与非 int 主键就覆盖不了**，而这恰恰是接缝文件天然支持的。
+- **模板拿不到所属表的主键类型**。`bean.sbn` 的作用域里只有 `__bean`（其字段是 `export_fields` / `id` 等），拿不到「这张表的 key 是什么类型」。于是 `TKey` 只能在模板里写死成项目约定的类型——**多键表与非 int 主键就覆盖不了**，而这恰恰是行接口文件天然支持的。
 - **覆盖整文件会静默丢掉新版本逻辑**。Luban 升级时若改了 `bean.sbn`，你的整文件副本不会报错，只会安静地少生成东西。
 
 真要走这条路，纪律是「在你自己版本的 `bean.sbn` 里找锚点、做最小编辑」（例如在两处类声明后追加 `, global::XFramework.XConfig.IConfigRow<int>`），让它在上游重构时**响亮地失败**而不是静默过期。改模板时加 `--disable_cache` 关闭模板缓存。
 
 ---
 
-## 四、注册胶水
+## 四、注册接入代码
 
 ### 4.1 取数据的方式决定成本
 
@@ -251,7 +251,7 @@ public V this[K key];
 ### 4.2 三种写法，推荐第一种
 
 **2026-10-24 起首选扩展包生成的适配器**：它按四种形状逐表调用 `LubanConfigBridge.RegisterTable/RegisterGlobal`，
-并生成接缝；手写 helper 仍是回退路径。下面的漂移面评价对两者都成立。
+并生成行接口实现；手写 helper 仍是回退路径。下面的漂移面评价对两者都成立。
 
 | 写法 | 漂移面 | 评价 |
 | --- | --- | --- |
@@ -277,7 +277,7 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 
 **核心仓不建脚本的理由（仍然成立）**：
 
-- 接缝是普通 C#，没有「模板文件」这种产物要放；
+- 行接口实现是普通 C#，没有「模板文件」这种产物要放；
 - 生成命令行只有两行，而 `<LUBAN>` / `<CONF_DIR>` / 输出目录**逐项目不同**，写死一份脚本只会腐化；
 - 本仓没有 CI，脚本不会被任何东西执行到——留一个「永远没人跑」的脚本，比不写更糟。
 
@@ -295,10 +295,10 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 
 - 安装：核心包 → `com.code-philosophy.luban`（`luban_unity` v1.2.0）→ `Assets/XFramework.Luban`；
 - 设置：Project Settings → XFramework Luban；
-- 生成：`XFramework/Luban/生成配置表`（运行 Luban + 生成接缝/适配器），或 `仅刷新胶水` / `校验接入`；
+- 生成：`XFramework/Luban/生成配置表`（运行 Luban + 生成行接口实现/适配器），或 `仅重新生成接入代码` / `校验接入`；
 - 启动：`Bootstrap.Register(new LubanBootstrapStage(new GeneratedLubanConfigAdapter()))`，或
   `await LubanConfig.InitializeAsync(adapter, new LubanOptions { DataRoot = "configs" })`；
-- 生成物：`ILubanConfigAdapter` 实现、`IConfigRow<TKey>` 接缝、`.luban-glue-manifest`；
+- 生成物：`ILubanConfigAdapter` 实现、`IConfigRow<TKey>` 行接口实现、`.luban-integration-manifest`；
 - 运行时：扩展包不引用 Luban 程序集；`Tables` 以 `object` 持有，强类型访问经 `LubanConfig.GetTables<T>()`；
 - 四种形状与跳过规则见 §3.2 / §4.2；纯列表表不注册是唯一无法打通的形状；
 - 版本事实：5.1.0 + `cs-bin` / `cs-simple-json` 已实测；其它版本/target 需重跑 fixtures 与端到端用例。
