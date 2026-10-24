@@ -13,7 +13,7 @@ Runtime/Camera/
 ├── CameraManager.cs              # 公开：静态门面（生命周期 / 注册 / 栈 / 异步 / 绑定 / 查询 / 事件）
 ├── ICameraBackend.cs             # internal：后端契约、CameraBackendActivation、ICameraBackendSessionReset
 ├── CameraDirector.cs             # internal：id 生成 / 栈 / pending / 消息发布 / 快照组装 / 外部接管判定
-├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
+├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear / HardIn / HardOut
 ├── CameraTransitionResult.cs     # 公开：Completed / Superseded / CameraNotFound / ManagerDisposed
 ├── CameraInfo.cs                 # 公开：逐相机诊断项（id / 生成 / 栈 / 活动 / 过渡目标 / 存活）
 ├── CameraStateSnapshot.cs        # 公开：模块级诊断快照
@@ -70,6 +70,11 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 暂不做：**独立 Camera 诊断页签**（2026-10-17 · v1.1 候选）——概览页的 Camera 行已读 `GetState()`；没有「排查相机状态需要独立页签」的真实使用方。重开判据：出现该需求。
 - 暂不做：**`IBootstrapStage` / `DefaultGameLauncher` 相机字段**（2026-10-17 · v1.1 候选）——后端由组合根注入；`DefaultGameLauncher` 没有可序列化的相机注册表。重开判据：出现「启动引导必须负责相机初始化」的真实使用方。
 - 已做：**Cinemachine 3.1.7 后端硬合并进核心包**（2026-10-22 · 用户裁定）——扩展包 / 独立 asmdef 删除；核心 asmdef 硬引用 `Unity.Cinemachine`；类型在 2026-10-23 重命名为 `CinemachineCameraBackend`，位置与门禁不变。证据：`Documentation/Cinemachine.md`、`DependencyDeclarationTests`、`ModuleBoundaryTests`。
+- 已做：**2026-10-24 重新审计与 P1/P2 修复**（2026-10-24）——修：未初始化提示指向 internal API、作者状态快照时点、`SetLookAt(null)` 语义、强制 cut 回归、死栈顶 Pop、注销截断混合、同通道 boost 过滤、震屏早建 source；补 `HardIn` / `HardOut`（公开 API 源兼容 +2）。证据：`CinemachineCameraBackendTests` / `CameraDirectorTests` / `CinemachineCameraAsyncTests` / `CameraDiagnosticsTests`；清单见「审计记忆」与 CHANGELOG。
+- 不做：**Unreal 式 Camera Modifier 栈（FOV / 后期 / 跟随的临时叠加与自动恢复）**（2026-10-24）——本模块只做薄绑定；行为叠加走 Cinemachine 组件。无重开判据。
+- 暂不做：**自定义 `AnimationCurve` 混合 / 震屏通道·位置·多源 / `SetFieldOfView` 补间 / `TopCameraId` / `Clear(resetBrainState)` / 消息带 Brain token / `GetCustomBlender` 接管**（2026-10-24）——当前无真实使用方。重开判据：出现对应需求。
+- 暂不做：**timeScale 策略（`CutWhenPaused` / `Unscaled` / 看门狗超时）**（2026-10-24）——先只写文档；需要新的 options / 重载，且 `Unscaled` 要临时改 `Brain.IgnoreTimeScale`（全局状态保存/恢复）。重开判据：真实项目在暂停菜单里 `await` 相机过渡。
+- 待裁：**`Rebind(CinemachineBrain)` / `Initialize(brain, replaceExisting)`（跨场景 Brain 重绑）、多 Brain 检测告警、`GetBlendOverride` 被他人覆盖的检测、主线程断言第四份、`IsInitialized` 随 Brain 销毁降级（`HasOutputDriver`）、boost 期间作者改优先级的「比较-恢复」**（2026-10-24）。
 
 ## 沿革与已否决形状
 
@@ -157,6 +162,23 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
 - **`@auto/` 是保留前缀**：显式 id 以它开头直接抛；生成 id 不透明、不持久化。
 - **`CameraStateSnapshot` 不叫 `CameraState`**：避免与 `Unity.Cinemachine.CameraState` 撞名。
 - **没有 ticker**：模块不在 `UpdateManager` 注册任何节点；过渡由 Brain 推进。
+- **作者状态快照在首次 boost 前抓**：`Register` 时抓会在作者注册后改状态时恢复旧值；`Boost` 内按
+  `PriorityOwned` / `GameObjectEnabledByManager` / `ComponentEnabledByManager` 守卫，二次 boost 不得重抓。
+- **`SetLookAt(null)` 不能走 CM setter**：setter 会置 `CustomLookAtTarget = true` 并留下空目标，相机从此
+  不回退 `TrackingTarget`；必须直接写 `CinemachineCamera.Target` / 分组 `DefaultTarget.Target`。
+  `SetFollow(null)` 对分组相机同理（setter 会置 `DefaultTarget.Enabled = true`）。
+- **`ActiveBlend = null` 的归属**：cut 与本管理器放弃请求目标时才用；`Unregister` 只有目标是当前请求时
+  才强制完成混合，否则会截断别人的过渡。
+- **死栈顶的 `Pop` 语义**：剪除死栈顶后视为该层已经离开，只切到新栈顶；不要继续弹存活层（与
+  `OnBackendDeactivated` 的回退对齐）。
+- **`CinemachineBrain` 的时间**：默认 `Time.deltaTime`，`timeScale = 0` 时混合停摆、异步等待不完成；
+  `IgnoreTimeScale` / `UniformDeltaTimeOverride` 是绕法。震屏的 `CinemachineImpulseManager.IgnoreTimeScale`
+  是独立开关。
+- **`ChannelMask` 默认全通**：异通道相机可注册但不会被本 Brain 选中，也不计入 boost 的最大值。
+- **`ActiveVirtualCamera` 优先 `CinemachineCore.SoloCamera`**：Solo 期间 `ActiveCameraId` 与
+  `OutputCamera` / `IsBlending` 会分叉。
+- **`BaseCameraId` 与 `CameraInfo.IsBase` 语义不同**：前者是第一个存活栈项，后者是栈底下标 0（可能是死槽）。
+- **`RequestSettled` 在 `Dispose` / 会话复位不通知**：导演层先自行结算 pending，避免二次结算。
 
 ## 实测记录
 
@@ -172,5 +194,22 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
   栈顶 boost 保持；释放后回到栈顶。
 - **2026-10-23 绑定**：`SetFieldOfView` 写 Lens 并经 Brain 输出到 Unity Camera；`SetFollow` / `SetLookAt` 往返；
   `Shake` 在 `ControlledObject` 建 source、设 duration、缺 Listener 只告警一次。
+- **2026-10-24 审计回归**（PlayMode，均先跑红再加修法）：
+  `SwitchAway_RestoresPriorityChangedAfterRegister` / `..._RestoresGameObjectDisabledAfterRegister` /
+  `..._RestoresComponentDisabledAfterRegister`（改前三红）；`SetLookAt_Null_FallsBackToFollowTarget` /
+  `SetLookAt_Null_OnGroup_FallsBackToDefaultTrackingTarget` / `SetFollow_Null_OnGroup_DoesNotEnableDefaultTarget`
+  （改前三红）；`Activate_DuringBlendToSameTarget_ForcesCutImmediately`（负向注入注释掉 `ActiveBlend = null` 即红）；
+  `Pop_DeadTop_DoesNotPopNextLiveLayer` / `PopAsync_DeadTop_DoesNotPopNextLiveLayer`（改前双红）；
+  `Unregister_UnrelatedCamera_DoesNotCompletePushEarly`（改前红）；
+  `Activate_IgnoresRegisteredCamerasOnOtherChannels`（改前 101、改后 1）；
+  `Shake_WithoutActiveCamera_DoesNotCreateSource`（改前红）。
+- **2026-10-24 第三方对照**（Cinemachine 3.1.7 源码 + 官方文档 + GitHub 样本）：Cinemachine 无 gameplay 相机栈
+  （`ICameraOverrideStack` 面向 Timeline）；UE classic 是单 ViewTarget + CameraModifier，UE 5.5+ Gameplay Camera
+  System 的实验性 Blend Stack 才有 push/自动 pop；URP 是渲染栈；Godot 每 viewport 单 current；社区未发现成熟的
+  「Cinemachine 相机栈管理器」（`RolandKaechele/CameraManager` 有 Set/Push/Pop 但驱动 Unity Camera profile、
+  不等待混合）。来源：Unity Cinemachine 3.1 manual（Brain / Camera control / Manager cameras / Blends /
+  Multiple cameras / Impulse / Timeline）、UE `APlayerCameraManager` / `CameraModifier` / Gameplay Camera System、
+  Godot `Camera2D/3D`、GitHub `RolandKaechele/CameraManager` / `TD-but/CinemachineManager` /
+  `DevJamaly/CineMachine-Manager` / `ewersp/CameraShake`。
 - **仍未实测 / 需真实环境**：真实 `PlayableDirector` 的 Timeline 接管与释放；关闭域重载连跑两遍（手工验收）；
   IL2CPP 构建；Cinemachine 2.x（不支持）；多 Brain / 分屏（明确不做）。

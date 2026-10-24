@@ -70,19 +70,22 @@ Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + .sample.json（�
 |---|---|
 | 命名空间 / 程序集 | `Unity.Cinemachine`（2.x 是 `Cinemachine`）；asmdef 引用名 `Unity.Cinemachine` |
 | vcam 类型 | `CinemachineCamera : CinemachineVirtualCameraBase`；ClearShot / MixingCamera 派生自 `CinemachineCameraManagerBase` |
-| 目标设置 | `CinemachineVirtualCameraBase` 声明**抽象** `Follow` / `LookAt`；`CinemachineCamera` 写 `Target.TrackingTarget` / `LookAtTarget`（设 `LookAt` 置 `CustomLookAtTarget`）；分组相机同样可设 |
+| 目标设置 | `CinemachineVirtualCameraBase` 声明**抽象** `Follow` / `LookAt`；`CinemachineCamera` 写 `Target.TrackingTarget` / `LookAtTarget`（设 `LookAt` **无条件**置 `CustomLookAtTarget = true`，传 `null` 也一样——之后不再回退 `TrackingTarget`）；分组相机的 setter 还会置 `DefaultTarget.Enabled = true` |
 | Lens | `CinemachineCamera.Lens` 是公开 `LensSettings` 字段；只有 `CinemachineCamera` 有（分组相机没有） |
 | `Priority` | `CinemachineVirtualCameraBase.Priority` 是 `PrioritySettings`（`Enabled` + `Value`，隐式 int 赋值会置 `Enabled = true`），不在 `ICinemachineCamera` 上；`Value` 在 `Enabled == false` 时返回 0 |
 | 队列刷新 | 改 `Priority` 后必须调用 `Prioritize()`；优先级并列时取最新 `ActivationId` |
-| 混合配置 | `CinemachineBrain.DefaultBlend` 与 `CustomBlends`；样式枚举 `CinemachineBlendDefinition.Styles`；`CinemachineBlenderSettings.LookupBlend` 先 `CustomBlends`，最后调 `CinemachineCore.GetBlendOverride` |
+| 混合配置 | `CinemachineBrain.DefaultBlend` 与 `CustomBlends`（按**相机名字**匹配）；样式枚举 `CinemachineBlendDefinition.Styles` 共 8 种（`Cut` / `EaseInOut` / `EaseIn` / `EaseOut` / `HardIn` / `HardOut` / `Linear` / `Custom`）；`CinemachineBlenderSettings.LookupBlend` 先 `CustomBlends`，最后调 `CinemachineCore.GetBlendOverride` |
+| 标准曲线 | `HardIn` 标准曲线 = `t³`（前段平缓、末段陡峭）；`HardOut` = `1-(1-t)³`；两者由 `AnimationCurve` 切线实现（0 / 3） |
 | `GetBlendOverride` | `(ICinemachineCamera from, ICinemachineCamera to, CinemachineBlendDefinition defaultBlend, UnityEngine.Object owner)`；**全局单委托**；本后端只在 `owner == brain` 且 `to == 请求目标` 时生效 |
-| 状态查询 | `CinemachineBrain.ActiveVirtualCamera`（混合中为 incoming）/ `IsBlending` / `ActiveBlend` / `OutputCamera` / `ControlledObject`；`ActiveBlend = null` 是官方支持的强制完成入口 |
+| 状态查询 | `CinemachineBrain.ActiveVirtualCamera`（混合中为 incoming；**先取 `CinemachineCore.SoloCamera`**）/ `IsBlending` / `ActiveBlend` / `OutputCamera` / `ControlledObject`；`ActiveBlend = null` 走 `SetRootBlend(null)`，把根 blend 的 `Duration` 置 0、下一次更新完成 |
+| 时间推进 | `CinemachineBrain.GetEffectiveDeltaTime` 默认用 `Time.deltaTime`；`IgnoreTimeScale = true` 才用 unscaled；`CinemachineCore.UniformDeltaTimeOverride >= 0` 可显式给 delta；`timeScale = 0` 时混合不推进 |
+| 通道 | `CinemachineBrain.ChannelMask` 默认 `(OutputChannels)(-1)`（全部通道）；`IsValidChannel` 按位与判定；异通道 vcam 不进本 Brain 的候选集 |
 | 静态事件 | `CameraActivatedEvent`（含 `Origin` / `OutgoingCamera` / `IncomingCamera` / `IsCut`）、`CameraDeactivatedEvent`、`BlendFinishedEvent`、`CameraUpdatedEvent`；均为静态，必须显式退订 |
 | cut 完成 | `BlendFinishedEvent` **不对 cut 触发**；cut 必须在激活事件补发零时长完成 |
 | 反激活时序 | `CameraDeactivatedEvent` 在混合结束后才触发 |
 | 外部 incoming 的 outgoing | 混合开始帧的 `OutgoingCamera` 可能是 `NestedBlendSource` 而不是原 vcam；本后端用「最近一次 incoming id」兜底消息里的 previous id |
 | 分组解析 | `CinemachineVirtualCameraBase.ParentCamera` 返回父 mixer；子相机 `OnEnable` 时缓存，运行时创建必须**先建父、再建子** |
-| Timeline | Timeline 用 `SetCameraOverride` 压过 vcam 优先级；`BlendCreatedEvent` 不对 Timeline 混合发送 |
+| Timeline | Timeline 用 `SetCameraOverride` 压过 vcam 优先级；`BlendCreatedEvent` 不对 Timeline 混合发送；Timeline 重叠 Shot 的 blend **不经过** `GetBlendOverride`（官方文档） |
 | Impulse | `CinemachineImpulseSource.GenerateImpulseWithForce(float)`；`ImpulseDefinition.ImpulseDuration` 可写；活动相机需带 `CinemachineImpulseListener` 才生效；source 挂在 `Brain.ControlledObject` 上 |
 | 手动驱动 | `CinemachineBrain.UpdateMethod = CinemachineBrain.UpdateMethods.ManualUpdate` + `ManualUpdate(int currentFrame, float deltaTime)`；测试用它做确定性推进 |
 | 空 pipeline | `CinemachineCamera` 不要求 body / aim 组件；空 pipeline 是合法的被动相机 |
@@ -122,7 +125,9 @@ Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + .sample.json（�
 - 不做：**清空 `brain.CustomBlends`**（2026-10-17）——项目配置优先；本次请求经 `GetBlendOverride` 覆盖，不清空资产。无重开判据。
 - 不做：**接管 Timeline 过场相机**（2026-10-17）——Timeline 已接管 Brain；过场用未注册专用 vcam。无重开判据。
 - 已做：**`OutputCamera` null 语义与 `Unregister` 活动状态**（2026-10-18 · CAM-005；2026-10-19 R3-CAM-003 结案）
-  ——核心契约窄化为「可能为 null、不保证等于目标」；后端直接转发 Brain 输出相机，`Unregister` 不改场景状态。
+  ——核心契约窄化为「可能为 null、不保证等于目标」；后端直接转发 Brain 输出相机。
+  **2026-10-24 订正**：`Unregister` 会恢复 boost 改写的作者优先级 / 启停状态（不销毁对象），且只有被注销的
+  正是当前请求目标时才强制完成在途混合。
 - 已做：**外部销毁 vcam 的变更面统一告警 no-op**（2026-10-20 · R3-CIN-003）——假 null 检测 → Warning 后忽略。
 - 已做：**过渡时长有限性校验与核心同形**（2026-10-20 · R3-CIN-002/CAM-001）——NaN / ±∞ 抛 `ArgumentOutOfRangeException`。
 
@@ -140,22 +145,28 @@ Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + .sample.json（�
 2. `CinemachineCore.GetBlendOverride` 的委托签名与 `LookupBlend` 顺序；`owner` 过滤。
 3. `CinemachineBrain.ActiveVirtualCamera` / `IsBlending` / `ActiveBlend` / `OutputCamera` / `ControlledObject` / `ManualUpdate`。
 4. `CinemachineCore` 四个静态事件的触发时机；尤其 cut 没有 `BlendFinishedEvent`、反激活在混合结束。
-5. `CinemachineVirtualCameraBase.Follow` / `LookAt` 抽象属性与 `CinemachineCamera.Lens`。
-6. `CinemachineImpulseSource` / `CinemachineImpulseListener` / `ImpulseDefinition.ImpulseDuration`。
-7. `CinemachineBrain.SetCameraOverride` / `ReleaseCameraOverride`（Timeline 与测试）。
-8. 升级后跑 `run-tests.ps1 -Filter Cinemachine -Platform All`；`DependencyDeclarationTests` 会因版本三处不一致而红。
+5. `CinemachineVirtualCameraBase.Follow` / `LookAt` 抽象属性与 `CinemachineCamera.Lens`；`LookAt` setter 的
+   `CustomLookAtTarget` 行为（`null` 不回退）与分组相机的 `DefaultTarget.Enabled` 副作用。
+6. `CinemachineBrain.IgnoreTimeScale` / `GetEffectiveDeltaTime` / `ChannelMask`（默认全通）与
+   `CinemachineCore.SoloCamera` 对 `ActiveVirtualCamera` 的优先级。
+7. `CinemachineImpulseSource` / `CinemachineImpulseListener` / `ImpulseDefinition.ImpulseDuration`。
+8. `CinemachineBrain.SetCameraOverride` / `ReleaseCameraOverride`（Timeline 与测试）。
+9. 升级后跑 `run-tests.ps1 -Filter Cinemachine -Platform All`；`DependencyDeclarationTests` 会因版本三处不一致而红。
 
 ## 八、测试射程
 
-- `CinemachineCameraBackendTests`（PlayMode）：注册冲突 / 幂等 / 错误类型 / 已销毁；boost 高于未注册同通道相机；
-  作者状态恢复；cut 强制完成；duration / style 经 override；`DefaultBlend` 不变；外部接管保持 boost 并恢复；
-  ClearShot 父 id 解析；Follow / LookAt / FOV / Shake；其他 Brain 过滤；Dispose / 会话复位。用
-  `ManualUpdate` 确定性推进，每个 fixture 复位 `CinemachineCore.GetBlendOverride`。
+- `CinemachineCameraBackendTests`（PlayMode）：注册冲突 / 幂等 / 错误类型 / 已销毁；boost 公式（= 同通道最大
+  作者优先级 + 1）与异通道过滤；作者状态在**首次 boost 前**恢复（优先级 / GameObject / 组件，含注册后修改）；
+  cut 强制完成（混合中对同一目标 cut，负向注入验证）；duration / style 经 override（含 `HardIn` / `HardOut` 曲线）；
+  `DefaultBlend` 不变；外部接管保持 boost 并恢复；ClearShot 父 id 解析；Follow / LookAt（含 `null` 回退）/ FOV /
+  Shake（含无活动相机不建 source）；其他 Brain 过滤；Dispose / 会话复位。用 `ManualUpdate` 确定性推进，
+  每个 fixture 复位 `CinemachineCore.GetBlendOverride`。
 - `CinemachineCameraRegistrationTests`（PlayMode）：OnEnable 注册 / 两实例不同 id / OnDestroy 栈回退 / 池化幂等 /
   未初始化告警后显式注册 / ClearShot 只注册父相机 / 管理器先销毁时安全。
 - `CinemachineCameraEventTests`（PlayMode）：cut / blend 消息顺序、外部 null id、其他 Brain 过滤、Dispose / 会话复位静默。
 - `CinemachineCameraAsyncTests`（PlayMode）：blend / cut 完成、同请求 join、同步命令 / 外部接管 supersede、
-  注销 / 激活前销毁 `CameraNotFound`、Destroy / 会话复位 `ManagerDisposed`、取消只停等待、预取消、非有限时长。
+  注销 / 激活前销毁 `CameraNotFound`（`SwitchToAsync` 与 `PushAsync` 各一条）、Destroy / 会话复位
+  `ManagerDisposed`（同）、取消只停等待（同）、预取消、非有限时长、注销无关相机不截断在途混合。
 - `CameraDiagnosticsTests`（PlayMode）：`GetState` 计数 / 活动 / 过渡 / 外部标志、`CopyCameras` 标志与清理。
 - **公开 API 已入核心基线**：`CameraManager` 的 4 个 CM 入口（`Initialize` / `Register` / `TryGetCamera` /
   `ActiveCamera`）与 `CinemachineCameraRegistration` 由 `PublicApiBaselineTests` 锁定；`CinemachineCameraBackend` /
