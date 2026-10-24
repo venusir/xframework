@@ -70,16 +70,30 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             bool windows = Path.DirectorySeparatorChar == '\\';
-            string dotnet = ResolveTool(settings.DotnetPath, projectRoot);
-            string lubanDll = ResolvePath(settings.LubanDllPath, projectRoot);
-            string conf = ResolvePath(settings.ConfPath, projectRoot);
-            string codeDir = ResolvePath(settings.CodeOutputDir, projectRoot);
-            string dataDir = ResolvePath(settings.DataOutputDir, projectRoot);
-
-            string workingDirectory = Path.GetDirectoryName(conf);
-            if (string.IsNullOrEmpty(workingDirectory))
+            string dotnet;
+            string lubanDll;
+            string conf;
+            string codeDir;
+            string dataDir;
+            string workingDirectory;
+            try
             {
-                workingDirectory = projectRoot;
+                dotnet = ResolveTool(settings.DotnetPath, projectRoot);
+                lubanDll = ResolvePath(settings.LubanDllPath, projectRoot);
+                conf = ResolvePath(settings.ConfPath, projectRoot);
+                codeDir = ResolvePath(settings.CodeOutputDir, projectRoot);
+                dataDir = ResolvePath(settings.DataOutputDir, projectRoot);
+
+                workingDirectory = Path.GetDirectoryName(conf);
+                if (string.IsNullOrEmpty(workingDirectory))
+                {
+                    workingDirectory = projectRoot;
+                }
+            }
+            catch (Exception ex)
+            {
+                error = "路径解析失败：" + ex.Message;
+                return false;
             }
 
             var arguments = new StringBuilder();

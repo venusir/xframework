@@ -90,6 +90,20 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void TryBuild_InvalidPathFormat_ReturnsErrorInsteadOfThrowing()
+        {
+            _settings.CodeOutputDir = "Assets/Gen\0Bad";
+
+            bool built = false;
+            string error = null;
+            Assert.DoesNotThrow(() => built = LubanCommandBuilder.TryBuild(
+                _settings, Path.GetTempPath(), out _, out error));
+
+            Assert.That(built, Is.False);
+            Assert.That(error, Is.Not.Null.And.Not.Empty);
+        }
+
+        [Test]
         public void Quote_WindowsAndUnix_Rules()
         {
             Assert.That(LubanCommandBuilder.Quote("plain", true), Is.EqualTo("plain"));

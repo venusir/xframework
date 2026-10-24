@@ -104,13 +104,24 @@ namespace XFramework.XConfig.Luban.Editor
                 return errors;
             }
 
-            string lubanDll = ResolveProjectPath(settings.LubanDllPath, projectRoot);
+            string lubanDll;
+            string conf;
+            try
+            {
+                lubanDll = ResolveProjectPath(settings.LubanDllPath, projectRoot);
+                conf = ResolveProjectPath(settings.ConfPath, projectRoot);
+            }
+            catch (Exception ex)
+            {
+                errors.Add("路径解析失败：" + ex.Message);
+                return errors;
+            }
+
             if (!File.Exists(lubanDll))
             {
                 errors.Add("Luban.dll 不存在：" + lubanDll);
             }
 
-            string conf = ResolveProjectPath(settings.ConfPath, projectRoot);
             if (!File.Exists(conf))
             {
                 errors.Add("luban.conf 不存在：" + conf);

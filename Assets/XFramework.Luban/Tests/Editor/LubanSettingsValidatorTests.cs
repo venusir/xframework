@@ -150,6 +150,15 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void Validate_InvalidPathFormat_ReportsErrorInsteadOfThrowing()
+        {
+            _settings.LubanDllPath = "Tools/Luban\0Bad/Luban.dll";
+
+            Assert.DoesNotThrow(() => LubanSettingsValidator.Validate(_settings, Path.GetTempPath()));
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
         public void Validate_AbsoluteDllAndConf_NoErrors()
         {
             _settings.LubanDllPath = Path.Combine(Path.GetTempPath(), "Luban", "Luban.dll");

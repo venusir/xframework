@@ -36,15 +36,15 @@ namespace XFramework.XConfig.Luban.Editor
                 return result;
             }
 
-            string codeDir = ResolvePath(settings.CodeOutputDir, projectRoot);
-            if (!Directory.Exists(codeDir))
-            {
-                result.Errors.Add("代码输出目录不存在：" + codeDir);
-                return result;
-            }
-
             try
             {
+                string codeDir = ResolvePath(settings.CodeOutputDir, projectRoot);
+                if (!Directory.Exists(codeDir))
+                {
+                    result.Errors.Add("代码输出目录不存在：" + codeDir);
+                    return result;
+                }
+
                 var model = LubanCodeParser.Parse(codeDir, settings.TablesClassName);
                 result.Model = model;
 

@@ -226,7 +226,18 @@ namespace XFramework.XConfig.Luban.Editor
 
             string normalized = Normalize(path);
 
-            if (Path.IsPathRooted(normalized))
+            bool rooted;
+            try
+            {
+                rooted = Path.IsPathRooted(normalized);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(name + " 路径格式无效：" + ex.Message);
+                return;
+            }
+
+            if (rooted)
             {
                 if (!allowAbsolute)
                 {
@@ -283,15 +294,37 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             // 裸工具名（如 dotnet）不是文件路径，不参与重叠检查。
-            if (!Path.IsPathRooted(toolPath) &&
+            bool rooted;
+            try
+            {
+                rooted = Path.IsPathRooted(toolPath);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(toolName + " 路径格式无效：" + ex.Message);
+                return;
+            }
+
+            if (!rooted &&
                 toolPath.IndexOf('/') < 0 &&
                 toolPath.IndexOf('\\') < 0)
             {
                 return;
             }
 
-            string tool = ToComparisonPath(toolPath, projectRoot);
-            string output = ToComparisonPath(outputDir, projectRoot);
+            string tool;
+            string output;
+            try
+            {
+                tool = ToComparisonPath(toolPath, projectRoot);
+                output = ToComparisonPath(outputDir, projectRoot);
+            }
+            catch (Exception ex)
+            {
+                errors.Add(toolName + " 或" + outputName + " 路径格式无效：" + ex.Message);
+                return;
+            }
+
             if (IsSameOrSubPath(tool, output))
             {
                 errors.Add(toolName + " 不能位于" + outputName + "内（Luban 会清理" + outputName + "）。");
