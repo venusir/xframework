@@ -109,6 +109,69 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void ValidateAsmdefScope_DualPlatform_NoErrors()
+        {
+            string root = CreateTempProject(
+                "{\"name\":\"Game\",\"references\":[" +
+                "\"Venusy609.Xframework\",\"Venusy609.Xframework.Luban\",\"Luban.Runtime\"]," +
+                "\"includePlatforms\":[\"Editor\",\"StandaloneWindows64\"]}");
+
+            try
+            {
+                Assert.That(
+                    LubanProjectValidator.ValidateAsmdefScope(_settings, root), Is.Empty);
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
+        public void ValidateAsmdefScope_ExcludePlatforms_Warns()
+        {
+            string root = CreateTempProject(
+                "{\"name\":\"Game\",\"references\":[" +
+                "\"Venusy609.Xframework\",\"Venusy609.Xframework.Luban\",\"Luban.Runtime\"]," +
+                "\"includePlatforms\":[],\"excludePlatforms\":[\"StandaloneWindows64\"]}");
+
+            try
+            {
+                var warnings = new List<string>();
+                var errors = LubanProjectValidator.ValidateAsmdefScope(_settings, root, warnings);
+
+                Assert.That(errors, Is.Empty);
+                Assert.That(warnings, Has.Some.Contains("excludePlatforms"));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
+        public void ValidateAsmdefScope_DefineConstraints_Warns()
+        {
+            string root = CreateTempProject(
+                "{\"name\":\"Game\",\"references\":[" +
+                "\"Venusy609.Xframework\",\"Venusy609.Xframework.Luban\",\"Luban.Runtime\"]," +
+                "\"includePlatforms\":[],\"defineConstraints\":[\"DEV_BUILD\"]}");
+
+            try
+            {
+                var warnings = new List<string>();
+                var errors = LubanProjectValidator.ValidateAsmdefScope(_settings, root, warnings);
+
+                Assert.That(errors, Is.Empty);
+                Assert.That(warnings, Has.Some.Contains("defineConstraints"));
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
+        [Test]
         public void ValidateAsmdefScope_DifferentAsmdefs_ReportsError()
         {
             string root = CreateTempProject(null);

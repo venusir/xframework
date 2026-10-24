@@ -59,7 +59,8 @@ namespace XFramework.XConfig.Luban.Editor
 
         internal static List<string> ValidateAsmdefScope(
             LubanGeneratorSettings settings,
-            string projectRoot)
+            string projectRoot,
+            List<string> warnings = null)
         {
             var errors = new List<string>();
             if (settings == null)
@@ -94,10 +95,38 @@ namespace XFramework.XConfig.Luban.Editor
                 return errors;
             }
 
-            if (info.includePlatforms != null && Array.IndexOf(info.includePlatforms, "Editor") >= 0)
+            if (info.includePlatforms != null && info.includePlatforms.Length > 0)
             {
-                errors.Add("生成代码所在 asmdef '" + info.name +
-                           "' 是 Editor-only；Luban 配置必须在运行时可用。");
+                bool editorOnly = true;
+                for (int i = 0; i < info.includePlatforms.Length; i++)
+                {
+                    if (!string.Equals(info.includePlatforms[i], "Editor", StringComparison.Ordinal))
+                    {
+                        editorOnly = false;
+                        break;
+                    }
+                }
+
+                if (editorOnly)
+                {
+                    errors.Add("生成代码所在 asmdef '" + info.name +
+                               "' 是 Editor-only；Luban 配置必须在运行时可用。");
+                }
+            }
+
+            string asmdefName = info.name ?? codeAsmdef;
+            if (info.excludePlatforms != null && info.excludePlatforms.Length > 0)
+            {
+                warnings?.Add("asmdef '" + asmdefName + "' 的 excludePlatforms 非空（" +
+                              string.Join(", ", info.excludePlatforms) +
+                              "）；请确认运行时仍编译生成代码。");
+            }
+
+            if (info.defineConstraints != null && info.defineConstraints.Length > 0)
+            {
+                warnings?.Add("asmdef '" + asmdefName + "' 带 defineConstraints（" +
+                              string.Join(", ", info.defineConstraints) +
+                              "）；运行时未定义这些符号时生成代码不会编译。");
             }
 
             var references = ResolveReferences(info, errors);
@@ -120,7 +149,7 @@ namespace XFramework.XConfig.Luban.Editor
             List<string> warnings = null)
         {
             var errors = ValidateModel(model);
-            errors.AddRange(ValidateAsmdefScope(settings, projectRoot));
+            errors.AddRange(ValidateAsmdefScope(settings, projectRoot, warnings));
             errors.AddRange(ValidateLoaderAndData(settings, model, projectRoot, warnings));
             return errors;
         }
@@ -330,6 +359,8 @@ namespace XFramework.XConfig.Luban.Editor
             public string name;
             public string[] references;
             public string[] includePlatforms;
+            public string[] excludePlatforms;
+            public string[] defineConstraints;
         }
     }
 }
