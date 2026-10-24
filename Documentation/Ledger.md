@@ -52,7 +52,7 @@
 
 - 未做：**Luban 表解析仍主线程**（2026-10-24）——`Tables` 构造是同步 CPU 工作，v1 不做线程池解析；大表会造成启动停顿。重开判据：真实使用方出现超阈值卡顿。
 
-- 已做：**Luban 扩展包 2026-10-24 审计修复**（2026-10-25）——按 `Documentation/Luban.md` §七的批次 A–F 落地 6 项 P1 与 22 项 P2，并补扩展包侧守卫（README/文件树、`.meta`、包边界、`AutoInit`、Runtime 公开 API 基线、依赖声明）与示例编译通道；LUB-07 的 stale `.meta` 清理按「旧 manifest + auto-generated 头」窄规则实施；无公开 API 签名变更。
+- 已做：**Luban 扩展包 2026-10-24 审计修复**（2026-10-25）——按 `Documentation/Luban.md` §七的批次 A–F 落地 6 项 P1 与 22 项 P2 中的 21 项（LUB-26 发布 tag 见下条「未做」），并补扩展包侧守卫（README/文件树、`.meta`、包边界、`AutoInit`、Runtime 公开 API 基线、依赖声明）与示例编译通道；LUB-07 的 stale `.meta` 清理按「旧 manifest + auto-generated 头」窄规则实施；无公开 API 签名变更。
 
 - 未做：**Luban 扩展包发布 tag**（2026-10-24）——扩展包版本 0.1.0 尚未打 tag，README 的安装 URL 目前只能写 `<发布 tag>` 占位。重开判据：用户决定版本号并打 tag（不自动推送）。
 
