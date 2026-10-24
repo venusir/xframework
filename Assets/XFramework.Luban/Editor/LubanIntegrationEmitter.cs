@@ -94,8 +94,7 @@ namespace XFramework.XConfig.Luban.Editor
             if (json)
             {
                 Line(builder, inner + "    => new global::" + model.TablesFullName +
-                             "(name => global::Luban.SimpleJSON.JSON.Parse(" +
-                             "global::System.Text.Encoding.UTF8.GetString(loadBytes(name))));");
+                             "(name => global::Luban.SimpleJSON.JSON.Parse(DecodeJson(loadBytes, name)));");
             }
             else
             {
@@ -104,6 +103,16 @@ namespace XFramework.XConfig.Luban.Editor
             }
 
             builder.Append('\n');
+
+            if (json)
+            {
+                Line(builder, inner + "private static string DecodeJson(global::System.Func<string, byte[]> loadBytes, string name)");
+                Line(builder, inner + "{");
+                Line(builder, inner + "    string text = global::System.Text.Encoding.UTF8.GetString(loadBytes(name));");
+                Line(builder, inner + "    return text.Length > 0 && text[0] == '\\uFEFF' ? text.Substring(1) : text;");
+                Line(builder, inner + "}");
+                builder.Append('\n');
+            }
 
             Line(builder, inner + "public void RegisterToConfigManager(object tables)");
             Line(builder, inner + "{");

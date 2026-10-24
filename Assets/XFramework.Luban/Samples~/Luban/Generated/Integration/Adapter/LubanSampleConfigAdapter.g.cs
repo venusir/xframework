@@ -14,7 +14,13 @@ namespace XFramework.Luban.Sample.Generated
         };
 
         public object CreateTables(global::System.Func<string, byte[]> loadBytes)
-            => new global::cfg.Tables(name => global::Luban.SimpleJSON.JSON.Parse(global::System.Text.Encoding.UTF8.GetString(loadBytes(name))));
+            => new global::cfg.Tables(name => global::Luban.SimpleJSON.JSON.Parse(DecodeJson(loadBytes, name)));
+
+        private static string DecodeJson(global::System.Func<string, byte[]> loadBytes, string name)
+        {
+            string text = global::System.Text.Encoding.UTF8.GetString(loadBytes(name));
+            return text.Length > 0 && text[0] == '\uFEFF' ? text.Substring(1) : text;
+        }
 
         public void RegisterToConfigManager(object tables)
         {

@@ -83,8 +83,8 @@ namespace XFramework.XConfig.Luban.Editor.Tests
 
             Assert.That(adapter, Does.Contain("DataFileExtension => \".json\""));
             Assert.That(adapter, Does.Contain(
-                "global::Luban.SimpleJSON.JSON.Parse(" +
-                "global::System.Text.Encoding.UTF8.GetString(loadBytes(name)))"));
+                "JSON.Parse(DecodeJson(loadBytes, name))"));
+            Assert.That(adapter, Does.Contain("text[0] == '\\uFEFF'"));
         }
 
         [Test]
