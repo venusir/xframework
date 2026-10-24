@@ -543,7 +543,7 @@ namespace XFramework.XCamera
             if (_director == null)
             {
                 throw new InvalidOperationException(
-                    "[CameraManager] CameraManager 尚未初始化。请先调用 CameraManager.Initialize(ICameraBackend) 完成初始化。");
+                    "[CameraManager] CameraManager 尚未初始化。请先调用 CameraManager.Initialize(CinemachineBrain) 完成初始化。");
             }
         }
 

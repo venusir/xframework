@@ -167,7 +167,7 @@ namespace XFramework.XCamera.Cinemachine
                 if (verbose)
                 {
                     WarnOnce(ref _warnedMissingManager,
-                        "[Camera] CinemachineCameraRegistration 无法自动注册：CameraManager 尚未初始化；" +
+                        "CinemachineCameraRegistration 无法自动注册：CameraManager 尚未初始化；" +
                         "请先初始化相机后端，或稍后显式调用 Register()。");
                 }
 
@@ -183,7 +183,7 @@ namespace XFramework.XCamera.Cinemachine
                                                      exception is System.InvalidOperationException)
             {
                 WarnOnce(ref _warnedRegisterFailure,
-                    "[Camera] CinemachineCameraRegistration 自动注册失败，可稍后显式调用 Register()：" +
+                    "CinemachineCameraRegistration 自动注册失败，可稍后显式调用 Register()：" +
                     exception.Message);
                 return false;
             }

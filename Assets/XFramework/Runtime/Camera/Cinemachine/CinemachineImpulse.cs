@@ -22,7 +22,7 @@ namespace XFramework.XCamera.Cinemachine
             if (brain == null)
             {
                 LogManager.Warning(LogCategories.CameraManager,
-                    "[Camera] 输出驱动已销毁，震屏已忽略。");
+                    "输出驱动已销毁，震屏已忽略。");
                 return;
             }
 
@@ -33,7 +33,7 @@ namespace XFramework.XCamera.Cinemachine
             if (active == null)
             {
                 LogManager.Warning(LogCategories.CameraManager,
-                    "[Camera] 当前没有活动相机，震屏已忽略。");
+                    "当前没有活动相机，震屏已忽略。");
                 return;
             }
 
@@ -50,7 +50,7 @@ namespace XFramework.XCamera.Cinemachine
                 {
                     _warnedMissingListener = true;
                     LogManager.Warning(LogCategories.CameraManager,
-                        "[Camera] 活动相机缺少 CinemachineImpulseListener，震屏不会生效；" +
+                        "活动相机缺少 CinemachineImpulseListener，震屏不会生效；" +
                         "请把该组件加到活动相机的 vcam 上。");
                 }
             }

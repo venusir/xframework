@@ -476,7 +476,7 @@ namespace XFramework.XCamera.Cinemachine
             {
                 _warnedFieldOfViewGroup = true;
                 LogManager.Warning(LogCategories.CameraManager,
-                    "[Camera] 相机 id {0} 不是 CinemachineCamera（分组相机没有 Lens），" +
+                    "相机 id {0} 不是 CinemachineCamera（分组相机没有 Lens），" +
                     "SetFieldOfView 已忽略；请用 TryGetCamera 取 Lens。", cameraId);
             }
         }

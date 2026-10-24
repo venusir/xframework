@@ -1007,6 +1007,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **未初始化提示指向已 internal 的 `ICameraBackend`（2026-10-24）**：`CameraManager` 的未初始化异常教用户
+  调用 `CameraManager.Initialize(ICameraBackend)`，而该重载已随 2026-10-23 重设计收为 internal（公开面只有
+  `Initialize(CinemachineBrain)`），照抄提示编译不过。改为指向公开重载。同轮清掉
+  `CinemachineCameraBackend` / `CinemachineImpulse` / `CinemachineCameraRegistration` 六处日志正文里的
+  `[Camera]` 前缀——分类渲染层已输出 `[CameraManager]`，原样会重复。
+  回归：`CameraManagerTests.Commands_WhenNotInitialized_ThrowWithRepairHint`。
 - **被外部销毁的活动相机仍被视为活动（CAM-001）**：Unity 的假 null 让 `OutputCamera` 返回一个
   「非 null 但不可用」的引用，`ActiveHandle` / `IsActive` 继续报活，README 的「返回 null」不成立。
   修法：查询面统一经 `IsUsable`（`Used && Camera != null`）判定；被销毁的活动相机按 null / default /
