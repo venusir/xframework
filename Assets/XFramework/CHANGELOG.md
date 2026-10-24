@@ -1346,6 +1346,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Documentation
 
+#### Config
+
+- **订正 Config README 的 Luban 事实（2026-10-24）**：Luban 5.x 每张表一个数据文件、`Tables(loader)` 是整包同步入口（不是「一文件多表」、也不是 `new GameTables(bytes)`）；补记 map / 单行 / 纯列表 / 带索引 list 四种形状，并把反射批注册示例收窄为形状说明。另注明可选扩展包 `com.venusy609.xframework.luban` 提供生成式适配；核心包仍不内建、不依赖 Luban。无 API 变更。
+
 - **订正日志相关文档（2026-10-20）**：Save README 的依赖表与加载失败日志说明、UI README 的 `UIDefaultController`
   实现描述、File README 的可选能力告警范围、Reactive README 的异常日志分类归属，均改为与代码一致；
   `LogCategories` 的 `LogManager` / `XFramework` 分类注释同步订正。

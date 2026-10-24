@@ -22,7 +22,7 @@
 四份**随外部漂移**的维护向文档不在台账体系里、在此登记为指针：
 
 - `Documentation/CI.md`——CI 的成本要点与裁定（暂不接入 + 三条重开判据）；
-- `Documentation/Luban.md`——配置表工具接入配方（已核对事实与版本漂移点）；
+- `Documentation/Luban.md`——配置表工具接入配方（已核对事实与版本漂移点；2026-10-24 起记录扩展包工作流与端到端探针结论）；
 - `Documentation/FairyGUI.md`——第三方 UI 方案评估（不接成后端 / 不做平级包 + 重开判据）；
 - `Documentation/Cinemachine.md`——Cinemachine 3.1.7 后端的版本 / 3.x API 实测 / 升级与漂移点（已并入核心包 `Runtime/Camera/Cinemachine/`，核心 asmdef 硬引用 Cinemachine）。
 
@@ -45,6 +45,12 @@
   **形态（若接入）**：`Documentation/HybridCLR.md`——镜像 `Luban.md` 的形状（〇 核对状态 → 一 结论 / 边界 → 二~四 步骤 / 接缝 → 末节 边界与重开判据），**不随包发布**。届时配方要回答的大概是这两件（**预期，未验证**）：**AOT 泛型**（本框架重度使用泛型——`Message<T>` / `EventStream<T>` / `ReactiveProperty<T>` / `Pool<T>`——热更侧调用会不会撞 AOT 泛型缺失）与**上载器接在哪一相位**（`BootstrapPhases`）。
 
   **配方现在不写**：本仓从未接入过 HybridCLR，配方里每一步都**未实测**——写了就是臆测。`Luban.md` 的配方是**接完才写的**，每条事实都带核对状态标记；`FairyGUI.md` 同理。
+
+- 已做：**Luban 独立扩展包 `com.venusy609.xframework.luban`**（2026-10-24 · 提交 `6946105e` / `0184e632`；真实 5.1.0 生成物端到端用例 `LubanEndToEndTests`）——核心包零改动、零依赖；扩展包用「生成式 `IConfigRow<TKey>` 接缝 + 强类型适配器」把 map / 单行 / 带索引 list 注册进 `ConfigManager`，纯列表跳过；运行时不引用 Luban 程序集。无重开判据。
+
+- 已推翻：**~~不做 Editor 一键导表 / 不建 `Tools/luban`~~**（原判 2026-10-10 · `Documentation/Luban.md` §五）——原否决理由是「把 Luban 安装位置、schema、输出目录固化进框架」；扩展包把全部路径放进使用方项目内的 `ProjectSettings` 设置，理由不再成立。取代者：〈Luban 独立扩展包〉（2026-10-24）。核心仓仍不建 `Tools/luban/`。
+
+- 未做：**Luban 表解析仍主线程**（2026-10-24）——`Tables` 构造是同步 CPU 工作，v1 不做线程池解析；大表会造成启动停顿。重开判据：真实使用方出现超阈值卡顿。
 
 - 暂不做：**GM / 调试命令台**（2026-10-13 · 用户确认）——命令集 / 权限 / 发布形态（仅 Editor，还是真机也要——后者是渠道与安全问题）全是项目的；没有使用方时「解析器支持什么语法」是猜的。重开判据：① 有真实使用方提出该需求，并给出其**命令集形态**（命令从哪来：显式注册 / 反射扫描 / 配置表？参数怎么传？）与**运行场景**（仅 Editor，还是真机也要）；② 届时形状从**诊断窗口那一半**起步（Editor 工具 + Runtime 数据契约），不重造。
 
@@ -164,7 +170,7 @@
 | UI 管理 | 人人都有 | ✅ UI（含导航栈 / HUD / Tip / 对话框） | — |
 | 事件 / 消息 | 人人都有 | ✅ Message + Event + Reactive | — |
 | 对象池 | 人人都有 | ✅ Pool（对象 + 集合四件套） | — |
-| 配置表 | 人人都有 | ✅ Config（+ Luban 接入配方） | — |
+| 配置表 | 人人都有 | ✅ Config + 可选 Luban 扩展包 | — |
 | 本地化 | 多数有 | ✅ Localization | — |
 | 音频 | 多数有 | ✅ Audio | — |
 | 存档 | 多数有 | ✅ Save + Data + Settings | — |

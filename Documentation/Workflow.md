@@ -202,7 +202,13 @@
 1. 按 `CHANGELOG.md` 顶部的版本建议改 `Assets/XFramework/package.json` 的 `version`，并把 `[Unreleased]` 落成带日期的版本小节。
 2. 跑两条门禁：`Tools/run-tests.ps1`（全量双平台 0 失败）与 `Tools/check-docs.ps1 -Enforce`（0 告警）。
 3. 在仓库根打与包版本一致的 tag（例如 `0.4.0`），**推送由人决定**（与提交授权同一条纪律）。
-4. 不再有独立扩展包:Cinemachine 后端随核心包发布(`Runtime/Camera/Cinemachine/`,2026-10-22 并入)。
+4. Cinemachine 后端随核心包发布（`Runtime/Camera/Cinemachine/`，2026-10-22 并入）；Luban 工具链是同级可选包
+   `Assets/XFramework.Luban/`，不随核心包发布。
+
+**同级可选包**：`Assets/XFramework.Luban/` 不在核心六道门禁的射程内（`check-docs.ps1` /
+`PublicApiBaselineTests` / README 守卫只扫 `Assets/XFramework`）。它的测试随全量 `run-tests.ps1` 运行；
+`.meta`、README 与公开面靠自建测试与评审。发布时与核心包共用同一个仓库 tag，安装 URL 用
+`?path=Assets/XFramework.Luban`。
 
 ### OpenUPM（待上架）
 

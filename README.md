@@ -19,7 +19,8 @@ Unity 的模块化基础设施框架：一组彼此正交、可单独取用的�
 一句话：**它只做地基，并把边界写进每个模块的 README**（「已知限制」与「设计取舍」两节）。如果你要的是「下载下来就是一款游戏」，它不是最短路径。
 
 > **包本体在 [`Assets/XFramework/`](Assets/XFramework/)。** Cinemachine 3.x 的相机后端已内置在 Camera 模块
-> （`Runtime/Camera/Cinemachine/`），不再有独立扩展包。
+> （`Runtime/Camera/Cinemachine/`）；另有一个**可选**的 Luban 配置扩展包在
+> [`Assets/XFramework.Luban/`](Assets/XFramework.Luban/)，核心包不依赖它、不用 Luban 的项目无需安装。
 > 仓库根是一个**完整的 Unity 开发工程**（`ProjectSettings/`、场景、测试与构建工具都在这里），UPM 包只是它的一个子目录——
 > 这就是下面引入方式必须带 `?path=` 的原因。
 
@@ -41,6 +42,23 @@ https://github.com/venusir/xframework.git?path=Assets/XFramework#<发布 tag>
 Camera 模块的 Cinemachine 后端随核心包发布；`com.unity.cinemachine` 3.1.7 是核心 asmdef 的硬依赖，
 按[包 README 的第三方依赖](Assets/XFramework/README.md#第三方依赖)安装（与 Input System 同型，核心包的
 `package.json` 仍不声明依赖）。
+
+### 可选：Luban 配置扩展
+
+安装顺序：核心包 → Luban 官方 Unity 运行时 → 本扩展包。
+
+```
+https://github.com/venusir/xframework.git?path=Assets/XFramework.Luban#<发布 tag>
+```
+
+Luban 运行时 `com.code-philosophy.luban` 用 Git URL 安装并钉 `v1.2.0`：
+
+```
+https://github.com/focus-creative-games/luban_unity.git#v1.2.0
+```
+
+扩展包提供 Editor 一键导表、生成式 `IConfigRow<TKey>` 接缝与强类型适配器，并把 map / 单行 / 带索引表
+注册进 `ConfigManager`；细节见[扩展包 README](Assets/XFramework.Luban/README.md)。核心包仍不内建、不依赖 Luban。
 
 ## 开发这个仓库
 

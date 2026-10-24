@@ -293,7 +293,7 @@ public interface IConfigLoader
 | ---------- | ------------------------------------------- | ----------------------------------------------------------------- |
 | **方式一** | `PreloadTableAsync<T>(path, ConfigFormat)`  | 内置格式（Json / ScriptableObject / CSV），框架负责 IO + 反序列化 |
 | **方式二** | `PreloadTableAsync<T>(path, IConfigLoader)` | 自定义一文件一表格式（protobuf、MessagePack 等）                  |
-| **方式三** | `RegisterTable<T>(ConfigTable<T>)`          | 一文件多表（Luban）或第三方已在外部完成反序列化                   |
+| **方式三** | `RegisterTable<T>(ConfigTable<T>)`          | Luban 等整包工具（每表一数据文件）或第三方已在外部完成反序列化   |
 
 方式一和方式二由框架控制异步加载流程，方式三由第三方完全控制反序列化时机。
 
@@ -370,11 +370,11 @@ var items = await ConfigManager.PreloadTableAsync<ItemRow>("config/items.pb", pr
 var row = items.Get(1001);
 ```
 
-> **注意：** 此方式不适合 Luban 等一文件多表格式。同一份二进制文件被多次 Preload（不同 T）会导致重复 IO 和重复反序列化。请改用方式三。
+> **注意：** 此方式不适合 Luban 这类整包入口。Luban 5.x 每张表一个数据文件，但 `Tables` 是一次构造全部表的整包入口，没有「单表 loader」；为每张表单独 Preload 会反复构造整包。请改用方式三（或可选的 Luban 扩展包）。
 
 ---
 
-#### 方式三：Register 直接注入（多表 / 已反序列化数据）
+#### 方式三：Register 直接注入（整包多表 / 已反序列化数据）
 
 第三方自行完成 IO 和反序列化，直接将数据注入 `ConfigManager`。框架不参与加载过程，仅管理缓存与提供统一查询接口。
 
@@ -384,17 +384,20 @@ var row = items.Get(1001);
 2. **IO 走框架的异步通道，而生成代码的加载入口往往是同步委托。** 正确顺序是：先用 `AssetManager` / `FileManager` 把字节读全，再让同步委托只从内存里取——不要在同步委托里做 IO。
 3. **注入不是 `Preload` 的等价物，也不是零成本**：逐条见「已知限制」。
 
+> **使用 Luban 时可以先看可选扩展包。** `com.venusy609.xframework.luban` 会在导表后生成
+> `IConfigRow<TKey>` 接缝与强类型适配器，并处理 map / 单行 / 带索引 list / 纯列表四种形状；
+> 核心包不依赖它。不使用扩展包时，按下面的方式三手写。
+
 > **`Register` 与 `Preload` 的约束不同。** `Preload*Async` 要求 `new()`（`where T : IConfigRow, new()`），`RegisterTable` **不要求**——所以只有带参构造的行类型**可以注册，但不能 Preload**。
 
-**典型场景：Luban（一文件多表）**
+**典型场景：Luban（每表一数据文件、整包 `Tables`）**
 
 ```csharp
 // 需要 using System.Linq;、using System.Collections.Generic;、using XFramework.XConfig;
 
-// ① Luban 侧：一次 IO、一次反序列化。
-//    这一段的形态随 Luban 版本与其代码目标（cs-bin / cs-simple-json / …）变化，以 Luban 文档为准。
-var bytes  = await LoadConfigBytesAsync();   // 经 AssetManager / FileManager 读进内存
-var tables = new GameTables(/* 用 bytes 构造；具体形态见 Luban 文档 */);
+// ① Luban 侧：先把全部数据文件读进内存，再让生成的整包入口按表名从内存取字节。
+//    具体构造形态随 Luban 版本与代码目标（cs-bin / cs-simple-json / …）变化，以 Luban 文档为准。
+var tables = /* 由 Luban 生成的整包入口；loader 只从内存字典取字节 */;
 
 // ② 框架侧：逐表投影 + 注册。这一段与 Luban 版本无关，照抄即可。
 static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
@@ -423,46 +426,12 @@ var cfg = ConfigManager.GetGlobal<GameGlobalCfg>();
 
 **反射批注册（非泛型重载）：**
 
-> **与前提一同一条约束**：下面这段同样要求行类型实现 `IConfigRow<TKey>`——它正是从该接口取主键类型的。另外「取行集合」那句也要按你的生成结果改。
+`RegisterTable(Type, IConfigTable)` 是为「运行时按类型遍历」准备的入口，但它同样要求行类型实现
+`IConfigRow<TKey>`。Luban 5.x 的表有四种形状：map（`DataMap`）、单行（`Data`）、带索引 list
+（私有字典 + `DataList`）、纯列表（只有 `DataList`，无主键）。按 `Tb*` 前缀反射时必须逐形状处理；
+纯列表表没有主键，接不进来是应当的。
 
-```csharp
-// 需要 using System;（Activator）、using System.Collections;、using System.Collections.Generic;、using System.Linq;
-// 动态遍历 Luban Tables 的 Tb 属性自注册。
-// 示意：「取行集合」按你的生成结果改；字典以「行列表 + 主键成员」的通用方式构建
-foreach (var prop in typeof(GameTables).GetProperties())
-{
-    if (!prop.Name.StartsWith("Tb"))
-        continue;
-
-    var dataList = prop.GetValue(tables);              // 行列表，如 List<ItemRow>
-    var rowType = dataList.GetType().GetGenericArguments()[0];
-    var dict = BuildKeyDictionary(rowType, dataList);  // 构建 Dictionary<TKey, T>
-
-    // 反射构造 ConfigTable<T>（构造函数接收 IDictionary），以 IConfigTable 传入非泛型重载
-    var table = (IConfigTable)Activator.CreateInstance(
-        typeof(ConfigTable<>).MakeGenericType(rowType), dict);
-    ConfigManager.RegisterTable(rowType, table);
-}
-
-// 从行类型实现的 IConfigRow<TKey> 提取主键类型，按主键成员构建 Dictionary<TKey, T>
-private static IDictionary BuildKeyDictionary(Type rowType, object dataList)
-{
-    var keyType = rowType.GetInterfaces()
-        .First(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IConfigRow<>))
-        .GetGenericArguments()[0];
-
-    // 注意：必须从「接口」上取 Id，不能从行类型上取（rowType.GetProperty("Id")）。
-    // 若行类型是用「显式接口实现」满足该接口的（生成代码已占用了 Id 这个成员名时只能这么做），
-    // 那么 typeof(行类型).GetProperty("Id") 会返回 null，而接口上的 PropertyInfo 仍能正常读到值。
-    var idProp = typeof(IConfigRow<>).MakeGenericType(keyType).GetProperty("Id");
-
-    var dict = (IDictionary)Activator.CreateInstance(
-        typeof(Dictionary<,>).MakeGenericType(keyType, rowType));
-    foreach (var row in (IEnumerable)dataList)
-        dict.Add(idProp.GetValue(row), row);
-    return dict;
-}
-```
+推荐直接用可选的 Luban 扩展包（生成式适配器已处理四种形状），或按上面的方式三手写。
 
 ---
 
