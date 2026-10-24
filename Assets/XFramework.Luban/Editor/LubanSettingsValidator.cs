@@ -107,6 +107,44 @@ namespace XFramework.XConfig.Luban.Editor
                 }
             }
 
+            if (IsNonEmpty(settings.CodeOutputDir) && IsNonEmpty(settings.DataOutputDir))
+            {
+                string code = Normalize(settings.CodeOutputDir);
+                string data = Normalize(settings.DataOutputDir);
+
+                if (string.Equals(code, data, StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add("代码输出目录不能与数据输出目录相同。");
+                }
+                else if (IsSubPath(code, data))
+                {
+                    errors.Add("代码输出目录不能位于数据输出目录内（Luban 会清理数据输出目录）。");
+                }
+                else if (IsSubPath(data, code))
+                {
+                    errors.Add("数据输出目录不能位于代码输出目录内（Luban 会清理代码输出目录）。");
+                }
+            }
+
+            ValidateToolInputOverlap(
+                settings.LubanDllPath, "Luban.dll 路径",
+                settings.CodeOutputDir, "代码输出目录", projectRoot, errors);
+            ValidateToolInputOverlap(
+                settings.LubanDllPath, "Luban.dll 路径",
+                settings.DataOutputDir, "数据输出目录", projectRoot, errors);
+            ValidateToolInputOverlap(
+                settings.ConfPath, "luban.conf 路径",
+                settings.CodeOutputDir, "代码输出目录", projectRoot, errors);
+            ValidateToolInputOverlap(
+                settings.ConfPath, "luban.conf 路径",
+                settings.DataOutputDir, "数据输出目录", projectRoot, errors);
+            ValidateToolInputOverlap(
+                settings.DotnetPath, "dotnet 路径",
+                settings.CodeOutputDir, "代码输出目录", projectRoot, errors);
+            ValidateToolInputOverlap(
+                settings.DotnetPath, "dotnet 路径",
+                settings.DataOutputDir, "数据输出目录", projectRoot, errors);
+
             return errors;
         }
 
@@ -123,6 +161,11 @@ namespace XFramework.XConfig.Luban.Editor
         internal static string Normalize(string path)
         {
             string normalized = path.Replace('\\', '/').Trim();
+            while (normalized.Contains("//"))
+            {
+                normalized = normalized.Replace("//", "/");
+            }
+
             while (normalized.StartsWith("./", StringComparison.Ordinal))
             {
                 normalized = normalized.Substring(2);
@@ -224,6 +267,62 @@ namespace XFramework.XConfig.Luban.Editor
         private static bool IsNonEmpty(string value)
         {
             return !string.IsNullOrWhiteSpace(value);
+        }
+
+        private static void ValidateToolInputOverlap(
+            string toolPath,
+            string toolName,
+            string outputDir,
+            string outputName,
+            string projectRoot,
+            List<string> errors)
+        {
+            if (string.IsNullOrWhiteSpace(toolPath) || string.IsNullOrWhiteSpace(outputDir))
+            {
+                return;
+            }
+
+            // 裸工具名（如 dotnet）不是文件路径，不参与重叠检查。
+            if (!Path.IsPathRooted(toolPath) &&
+                toolPath.IndexOf('/') < 0 &&
+                toolPath.IndexOf('\\') < 0)
+            {
+                return;
+            }
+
+            string tool = ToComparisonPath(toolPath, projectRoot);
+            string output = ToComparisonPath(outputDir, projectRoot);
+            if (IsSameOrSubPath(tool, output))
+            {
+                errors.Add(toolName + " 不能位于" + outputName + "内（Luban 会清理" + outputName + "）。");
+            }
+        }
+
+        private static string ToComparisonPath(string path, string projectRoot)
+        {
+            string normalized = Normalize(path);
+            if (Path.IsPathRooted(normalized))
+            {
+                return NormalizeAbsolute(Path.GetFullPath(normalized));
+            }
+
+            if (!string.IsNullOrWhiteSpace(projectRoot))
+            {
+                return NormalizeAbsolute(Path.GetFullPath(Path.Combine(projectRoot, normalized)));
+            }
+
+            return normalized;
+        }
+
+        private static string NormalizeAbsolute(string path)
+        {
+            return path.Replace('\\', '/').TrimEnd('/');
+        }
+
+        private static bool IsSameOrSubPath(string candidate, string parent)
+        {
+            return string.Equals(candidate, parent, StringComparison.OrdinalIgnoreCase) ||
+                   IsSubPath(candidate, parent);
         }
 
         private static bool IsSubPath(string candidate, string parent)

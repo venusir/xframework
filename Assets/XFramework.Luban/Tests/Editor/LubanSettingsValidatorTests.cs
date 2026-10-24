@@ -94,6 +94,54 @@ namespace XFramework.XConfig.Luban.Editor.Tests
         }
 
         [Test]
+        public void Validate_CodeAndDataOutputSame_ReportsError()
+        {
+            _settings.DataOutputDir = _settings.CodeOutputDir;
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_CodeInsideDataOutput_ReportsError()
+        {
+            _settings.CodeOutputDir = "Assets/Generated/LubanData/Code";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_DataInsideCodeOutput_ReportsError()
+        {
+            _settings.DataOutputDir = "Assets/Generated/LubanCode/Data";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_LubanDllInsideCodeOutput_ReportsError()
+        {
+            _settings.LubanDllPath = "Assets/Generated/LubanCode/Luban.dll";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_ConfInsideDataOutput_ReportsError()
+        {
+            _settings.ConfPath = "Assets/Generated/LubanData/luban.conf";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
+        public void Validate_DotnetPathInsideDataOutput_ReportsError()
+        {
+            _settings.DotnetPath = "Assets/Generated/LubanData/dotnet.exe";
+
+            Assert.That(LubanSettingsValidator.Validate(_settings, Path.GetTempPath()), Is.Not.Empty);
+        }
+
+        [Test]
         public void Validate_MismatchedTargets_ReportsError()
         {
             _settings.DataTarget = LubanDataTarget.Json;

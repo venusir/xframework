@@ -98,7 +98,7 @@ namespace XFramework.XConfig.Luban.Editor
             out string projectRoot)
         {
             projectRoot = Directory.GetCurrentDirectory();
-            var errors = LubanSettingsValidator.Validate(settings);
+            var errors = LubanSettingsValidator.Validate(settings, projectRoot);
             if (errors.Count > 0)
             {
                 return errors;

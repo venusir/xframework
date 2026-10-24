@@ -29,7 +29,7 @@ namespace XFramework.XConfig.Luban.Editor
         {
             var result = new LubanIntegrationResult();
 
-            var settingsErrors = LubanSettingsValidator.Validate(settings);
+            var settingsErrors = LubanSettingsValidator.Validate(settings, projectRoot);
             if (settingsErrors.Count > 0)
             {
                 result.Errors.AddRange(settingsErrors);
