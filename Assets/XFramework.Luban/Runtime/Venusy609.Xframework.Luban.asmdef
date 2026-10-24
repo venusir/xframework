@@ -1,0 +1,17 @@
+{
+    "name": "Venusy609.Xframework.Luban",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

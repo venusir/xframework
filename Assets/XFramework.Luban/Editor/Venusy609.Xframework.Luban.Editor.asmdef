@@ -1,0 +1,20 @@
+{
+    "name": "Venusy609.Xframework.Luban.Editor",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.Luban",
+        "UniTask"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

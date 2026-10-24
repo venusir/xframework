@@ -1,0 +1,24 @@
+{
+    "name": "Venusy609.Xframework.Luban.Editor.Tests",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.Luban",
+        "Venusy609.Xframework.Luban.Editor",
+        "UniTask"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
