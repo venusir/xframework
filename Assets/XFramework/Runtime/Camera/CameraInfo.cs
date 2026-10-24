@@ -14,7 +14,8 @@ namespace XFramework.XCamera
         /// <summary>是否为运行时生成的动态 id（<c>@auto/N</c>）。</summary>
         public readonly bool IsGenerated;
 
-        /// <summary>是否为相机栈的基础相机（<c>SwitchTo</c> 设定）。</summary>
+        /// <summary>是否为栈底下标 0 的槽位（<c>SwitchTo</c> 设定）；该槽位可能已被外部销毁。</summary>
+        /// <remarks>与 <c>CameraManager.BaseCameraId</c> 不同：后者取栈底起第一台<b>存活</b>相机。</remarks>
         public readonly bool IsBase;
 
         /// <summary>是否位于相机栈中（基础或覆盖层）。</summary>

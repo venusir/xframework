@@ -26,8 +26,9 @@ namespace XFramework.XCamera
     /// <para><b>探测型读宽容</b>：<see cref="ActiveCameraId"/> / <see cref="BaseCameraId"/> /
     /// <see cref="StackDepth"/> / <see cref="HasActiveCamera"/> / <see cref="OutputCamera"/> /
     /// <see cref="IsBlending"/> / <see cref="IsExternallyControlled"/> / <see cref="CameraCount"/> /
-    /// <see cref="GetState"/> / <see cref="CopyCameras"/> / <see cref="TryGetCamera"/> 在未初始化时返回默认值；
-    /// 注册与变更命令仍抛 <see cref="InvalidOperationException"/>。</para>
+    /// <see cref="GetState"/> / <see cref="CopyCameras"/> / <see cref="TryGetCamera"/> / <see cref="ActiveCamera"/>
+    /// 在未初始化时返回默认值；<see cref="IsInitialized"/> 随时可用。注册与变更命令仍抛
+    /// <see cref="InvalidOperationException"/>。</para>
     /// <para><b>所有权</b>：<see cref="Initialize"/> 后门面拥有内部后端，<see cref="Destroy"/> 会释放它，
     /// 但不销毁 Brain。<see cref="ResetForNewSession"/> 只丢引用、不 Dispose。</para>
     /// <example>
@@ -64,7 +65,8 @@ namespace XFramework.XCamera
         /// <see cref="OutputCamera"/>；需要 Lens / Aim / Confiner 时再用本属性或 <see cref="TryGetCamera"/>。</remarks>
         public static CinemachineVirtualCameraBase ActiveCamera => _director?.ActiveCamera;
 
-        /// <summary>相机栈的基础相机 id；栈空时为 <c>null</c>。</summary>
+        /// <summary>相机栈的基础相机 id（栈底起第一台存活相机）；栈空或全部项已销毁时为 <c>null</c>。</summary>
+        /// <remarks>与 <see cref="CameraInfo.IsBase"/> 不同：后者是「栈底下标 0」的身份标记，可能是已销毁槽位。</remarks>
         public static string BaseCameraId => _director != null ? _director.BaseCameraId : null;
 
         /// <summary>相机栈深度（含基础相机）；未初始化时为 0。</summary>
@@ -140,7 +142,8 @@ namespace XFramework.XCamera
         /// <param name="camera">vcam。</param>
         /// <returns>相机 id。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="cameraId"/> 或 <paramref name="camera"/> 为 <c>null</c>。</exception>
-        /// <exception cref="ArgumentException">相机对象已销毁、id 已占用，或相机已注册为另一 id。</exception>
+        /// <exception cref="ArgumentException">id 为空 / 全空白 / 以保留前缀开头，相机对象已销毁、
+        /// id 已占用，或相机已注册为另一 id。</exception>
         /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
         public static string Register(string cameraId, CinemachineVirtualCameraBase camera)
         {
@@ -432,7 +435,8 @@ namespace XFramework.XCamera
         /// <param name="handler">消息处理器。</param>
         /// <returns>释放即退订；也可配合 <c>destroyCancellationToken</c> 使用。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
-        /// <remarks>事件经 <see cref="MessageManager"/> 发布，**不依赖相机门面是否初始化**；订阅生命周期由调用方管理。
+        /// <remarks>事件经 <see cref="MessageManager"/> 发布，<b>不依赖相机门面是否初始化</b>；订阅生命周期由调用方管理，
+        /// 可把返回的句柄加入 <c>DisposableBag</c> 随对象销毁批量释放。
         /// 外部 / 未注册相机的 <c>CameraId</c> 为 <c>null</c>。</remarks>
         public static IDisposable Subscribe(Action<CameraActivatedMessage> handler)
         {
@@ -514,7 +518,7 @@ namespace XFramework.XCamera
         /// <para>关闭域重载时上一会话的静态字段会存活；门面在正常游戏流程里不会被
         /// <see cref="Destroy"/>，不复位会让第二会话的 <see cref="Initialize"/> 因重复而告警早退。</para>
         /// <para>若旧后端支持 <see cref="ICameraBackendSessionReset"/>，先让它退订静态事件并清引用；
-        /// 该路径**不访问 Unity 场景对象**（上一会话的对象可能已销毁）。退订异常只记 Warning，不传播。</para>
+        /// 该路径<b>不访问 Unity 场景对象</b>（上一会话的对象可能已销毁）。退订异常只记 Warning，不传播。</para>
         /// </summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         internal static void ResetForNewSession()

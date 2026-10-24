@@ -18,7 +18,8 @@ namespace XFramework.XCamera
         /// <summary>生成 id 相机数量（含已销毁未注销的槽位）。</summary>
         public readonly int GeneratedCount;
 
-        /// <summary>相机栈的基础相机 id；栈空或基础相机已销毁时为 <c>null</c>。</summary>
+        /// <summary>相机栈的基础相机 id（栈底起第一台存活相机）；栈空或全部项已销毁时为 <c>null</c>。</summary>
+        /// <remarks>与 <see cref="CameraInfo.IsBase"/> 不同：后者是「栈底下标 0」的身份标记，可能是已销毁槽位。</remarks>
         public readonly string BaseCameraId;
 
         /// <summary>当前活动相机 id；无活动或活动相机未注册时为 <c>null</c>。</summary>

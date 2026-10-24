@@ -261,6 +261,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `DefaultTarget.Enabled` 保持不变。`SetFollow(id, null)` 对分组相机改走直接写字段，不再顺带启用默认目标。
   回归：`SetLookAt_Null_FallsBackToFollowTarget` / `SetLookAt_Null_OnGroup_FallsBackToDefaultTrackingTarget` /
   `SetFollow_Null_OnGroup_DoesNotEnableDefaultTarget`（改前三红）。
+- **文档订正：已知限制与行为契约（2026-10-24）**：补 `Time.timeScale = 0` 混合停摆（Brain 默认用
+  `Time.deltaTime`）、Brain 销毁后 `IsInitialized` 仍为 true、`Clear` 后 `Push` 没有可返回基座、
+  `BaseCameraId`（第一个存活栈项）与 `CameraInfo.IsBase`（栈底下标 0）的语义分叉、`int.MaxValue` 优先级饱和、
+  `CinemachineCore.SoloCamera` 对查询的影响；`SetFieldOfView` 注明「立即生效、不是自动恢复的 Modifier」；
+  `CameraManager` 的 XML 补齐 `Register` 异常列表、探测清单与 `Subscribe` 的 `DisposableBag` 用法。
 - **公开面从零重设计（2026-10-23，破坏性）**：`ICameraManager` / `CameraHandle` / `CinemachineCameraManager` 删除；
   `ICameraBackend`（原语）+ `CameraDirector`（internal）+ `CinemachineCameraBackend`（内置）取代。所有入口改用
   `string` id；`Register<T>` 改为 `Register(UnityEngine.Object)`；动态 id 为 `@auto/N`。四个 async 与

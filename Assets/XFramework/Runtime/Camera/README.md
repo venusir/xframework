@@ -97,8 +97,12 @@ Runtime/Camera/
 - `Pop()`：弹出栈顶覆盖并回到上一层；只有基础相机时告警 no-op。
 - `PopAll()`：清空全部覆盖，回到基础相机。
 - `Clear()`：清空栈并释放本管理器的激活请求；输出驱动自行重选，**不保证**停止输出某台相机。
-- `Unregister(id)` 会把 id 从栈中移除；若移除的是栈顶，切到新栈顶（无则清空）。中间层移除不改变当前激活。
+  **`Clear()` 后栈是空的**：直接 `Push(id)` 会让该 id 成为新的「基础」（`Pop` 无法返回）；需要可返回的基座，
+  请先 `SwitchTo` 建立基础。
+- `Unregister(id)` 会把 id 从栈中移除；若移除的是栈顶，切到新栈顶（无则清空）。移除基础相机时下一项自动
+  成为基础；中间层移除不改变当前激活。
 - 后端报告某台相机 `Deactivated` 而它已销毁时，导演层会剪除死栈项，并在需要时切到新栈顶。
+  `Pop()` 也会先剪除已销毁的栈顶：该层视为**已经离开**，只切到新栈顶，不再弹掉存活的下一层。
 
 ### 过渡
 
@@ -120,7 +124,8 @@ Runtime/Camera/
 ### 事件
 
 - `CameraManager.Subscribe` 三种消息：激活 / 反激活 / 过渡完成。订阅经 `MessageManager`，
-  **不依赖相机门面是否初始化**，返回的句柄释放即退订。
+  **不依赖相机门面是否初始化**，返回的句柄释放即退订；需要随对象生命周期批量释放时，用
+  `DisposableBag`（`.AddTo(bag)`）收口。
 - 外部 / 未注册相机的 `CameraId` 为 `null`（`IsExternal == true`）。
 - 时序：cut = `Deactivated → Activated(IsCut=true) → BlendCompleted`；blend = 开始帧 `Activated`、
   结束帧 `Deactivated → BlendCompleted`。cut 的完成消息与旧行为一致（零时长语义）。
@@ -131,9 +136,18 @@ Runtime/Camera/
 - 未初始化时：`ActiveCameraId` / `BaseCameraId` / `StackDepth` / `HasActiveCamera` / `OutputCamera` /
   `IsBlending` / `IsExternallyControlled` / `CameraCount` / `GetState` / `CopyCameras` / `TryGetCamera`
   返回默认值；`Unregister` 返回 `false`。
-- 注册与变更命令（`Register` / `SwitchTo` / `Push` / `Pop` / `PopAll` / `Clear` / 绑定 / `Shake`）在未初始化时抛
-  `InvalidOperationException`，消息带 `[CameraManager]` 前缀与修复提示。
+- 注册与变更命令（`Register` / `RegisterAndSwitchTo` / `RegisterAndPush` / `SwitchTo` / `Push` / `Pop` /
+  `PopAll` / `Clear` / 绑定 / `Shake`）在未初始化时抛 `InvalidOperationException`，消息带 `[CameraManager]`
+  前缀与修复提示。
 - 未知 id / 已销毁相机的同步命令告警并 no-op；异步返回 `CameraNotFound`。
+
+### 绑定
+
+- `SetFollow(id, target)` / `SetLookAt(id, target)` 直接写 vcam 的目标；`SetLookAt(id, null)` **清除本地覆盖**
+  并回退到默认瞄准目标（`CinemachineCamera` 为跟随目标，分组相机为默认目标）；`SetFollow(id, null)` 清空
+  跟随目标，不会顺带启用分组相机的默认目标。
+- `SetFieldOfView` 立即写 Lens；它不是「临时修改后自动恢复」的 Modifier，需要恢复请自行保存原值。
+- `Shake` 是薄绑定：强度 / 时长由调用方给，通道 / 位置 / 多源等 Impulse 能力请直接用 Cinemachine 组件。
 
 ### 外部接管与优先级
 
@@ -274,7 +288,8 @@ if (camera != null)
 ## 性能代价
 
 - 模块**不注册 ticker**，没有每帧开销；过渡由后端的输出驱动推进。
-- 注册 / 切换为 O(栈深) 与 O(注册数) 的小规模操作；动态 id 生成只分配一次字符串。
+- 注册 / 切换为小规模操作：栈操作为 O(栈深)；一次激活的 boost 计算为 O(槽位 + 场景 vcam × 槽位)，
+  活动相机 id 解析最坏为 32 × 槽位。动态 id 生成只分配一次字符串。
 - `GetState` 单次组装；`CopyCameras` 在 buffer 容量足够时零分配（内部 id buffer 复用）。
 - 异步等待每次请求一个 `UniTaskCompletionSource`；没有请求时无分配。
 - `Shake` 的 `ImpulseSource` 惰性创建一次；`GetBlendOverride` 是全局单委托。
@@ -287,8 +302,19 @@ if (camera != null)
 - **ClearShot / 分组相机**：只注册父相机；活动子相机解析为父 id；分组**内部子混合**不受本次 duration / style 控制。
 - **`OutputCamera` 可能为 `null`**，且不保证等于过渡目标；不能当作「有活动相机」的判据。
 - **`ActiveCameraId` 可能晚一次输出驱动更新才可见**；请求后不要假设同步可读。
+- **`Time.timeScale = 0` 时混合不推进**：Brain 默认用 `Time.deltaTime` 推进过渡，暂停菜单里 `await`
+  相机过渡不会完成。可把 Brain 的 `IgnoreTimeScale` 设为 true 或用 `CinemachineCore.UniformDeltaTimeOverride`；
+  震屏的 `CinemachineImpulseManager.IgnoreTimeScale` 是另一个独立开关。
+- **Brain 被销毁后门面仍视为已初始化**：查询返回默认值、变更告警 no-op；请自行 `Destroy()` 后重新
+  `Initialize(新 Brain)`。
+- **`BaseCameraId` 与 `CameraInfo.IsBase` 回答不同问题**：前者是「第一个存活栈项」，后者是「栈底下标 0」
+  （可能是已销毁槽位）；基础相机被外部销毁且未剪除时两者会分叉。
 - **`IsBlending` 含外部混合**；`GetState().IsTransitioning` 只统计本管理器发起的非 cut 过渡。
 - **计数含已销毁未注销槽位**；用 `CameraInfo.IsAlive` 区分。
+- **`CinemachineCore.SoloCamera` 会影响查询**：Solo 期间 `ActiveCameraId` 报 Solo 相机，而 `OutputCamera` /
+  `IsBlending` 仍反映 Brain 的混合。
+- **作者优先级为 `int.MaxValue` 时 boost 饱和**：无法再 +1，优先级并列时 Cinemachine 按最新 `ActivationId`
+  取相机，可能压不过后启用的同值相机。
 - **外部事件 id 为 `null`**；订阅是全局通道，多 Brain 需按 id 过滤。
 - **异通道相机可注册但不生效**：`OutputChannel` 不在 Brain 的 `ChannelMask` 内时，`Activate` 不会产生输出，
   也不计入「同通道最大优先级」。

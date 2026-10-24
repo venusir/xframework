@@ -135,7 +135,8 @@ namespace XFramework.XCamera
         event Action<string> BlendCompleted;
 
         /// <summary>一次激活请求结算时触发（每个请求恰好一次）。</summary>
-        /// <remarks>第一个参数为请求目标 id；第二个参数为结算结果。同步命令没有等待者时也会触发。</remarks>
+        /// <remarks>第一个参数为请求目标 id；第二个参数为结算结果。同步命令没有等待者时也会触发。
+        /// <c>Dispose</c> / 会话复位路径不再通知（导演层先自行结算 pending）。</remarks>
         event Action<string, CameraTransitionResult> RequestSettled;
     }
 

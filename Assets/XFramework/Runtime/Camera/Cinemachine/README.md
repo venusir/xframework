@@ -60,7 +60,7 @@ CameraManager.SwitchTo("gameplay");
 | `CameraDeactivatedEvent` | 发布 `Deactivated`（未注册相机为 `null`）；混合结束后才由 Cinemachine 触发 |
 | `BlendFinishedEvent` | 发布 `BlendCompleted`；请求目标匹配时结算 `Completed` |
 | `CameraUpdatedEvent` | 兜底：目标销毁 → `CameraNotFound`；已是活动相机的 cut → `Completed` / `Superseded` |
-| `RequestSettled` | 每个请求恰好一次；导演层的异步等待只依赖它 |
+| `RequestSettled` | 每个请求恰好一次；导演层的异步等待只依赖它。`Dispose` / 会话复位路径不再通知（导演层先自行结算 pending） |
 
 cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发；这是消息与异步都依赖的时序。
 
@@ -102,6 +102,8 @@ cut 没有 `BlendFinishedEvent`，所以零时长完成必须在激活时补发�
 - 只支持 Cinemachine 3.x；升级 3.x 大版本时按模块维护记录里的检查清单复核 API。
 - `GetBlendOverride` 是全局单委托：项目若也使用它，以最后安装者为准；一个进程建议只创建一个后端。
 - `ActiveVirtualCamera` 在 Brain 首次更新前为 `null`：`ActiveCameraId` 可能晚一次更新才可见。
+- Brain 默认用 `Time.deltaTime` 推进混合（`IgnoreTimeScale = true` 才用 unscaled）；`timeScale = 0` 时
+  过渡停摆，异步等待不会完成。
 - `OutputCamera` 可能为 `null`；`ControlledObject` 才是输出对象。
 - ClearShot 内部子混合不受本次 `duration` / `style` 控制；分组相机没有 Lens。
 - 震屏需要 Listener；缺失只告警一次。
