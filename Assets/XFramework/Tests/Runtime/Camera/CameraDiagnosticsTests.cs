@@ -91,6 +91,32 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void FacadeProbes_ReflectRealBackend()
+        {
+            Assert.IsFalse(CameraManager.HasActiveCamera);
+            Assert.IsFalse(CameraManager.IsBlending);
+            Assert.IsNull(CameraManager.ActiveCamera);
+            Assert.AreSame(_camera, CameraManager.OutputCamera,
+                "Brain 的 OutputCamera 在 Awake 就已解析");
+
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            Assert.IsTrue(CameraManager.HasActiveCamera);
+            Assert.IsFalse(CameraManager.IsBlending);
+            Assert.AreSame(_vcamA, CameraManager.ActiveCamera);
+            Assert.AreSame(_camera, CameraManager.OutputCamera);
+
+            CameraManager.Push("b", 0.4f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+
+            Assert.IsTrue(CameraManager.IsBlending);
+            Assert.AreSame(_vcamB, CameraManager.ActiveCamera,
+                "混合期间活动相机是 incoming");
+            Assert.AreSame(_camera, CameraManager.OutputCamera);
+        }
+
+        [Test]
         public void GetState_ReportsManagerTransitionAndProgress()
         {
             CameraManager.SwitchTo("a");

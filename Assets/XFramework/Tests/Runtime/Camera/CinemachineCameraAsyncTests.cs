@@ -350,6 +350,32 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.AreEqual(CameraTransitionResult.CameraNotFound, task.GetAwaiter().GetResult());
         }
 
+        [Test]
+        public void PushAsync_UnknownId_ReturnsCameraNotFound()
+        {
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            LogAssert.Expect(LogType.Warning, new Regex("未知相机 id: missing.*"));
+            var task = CameraManager.PushAsync("missing", 1f);
+
+            Assert.AreEqual(CameraTransitionResult.CameraNotFound, task.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void PushAsync_Destroy_ReturnsManagerDisposed()
+        {
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            var task = CameraManager.PushAsync("b", 2f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+
+            CameraManager.Destroy();
+
+            Assert.AreEqual(CameraTransitionResult.ManagerDisposed, task.GetAwaiter().GetResult());
+        }
+
         #endregion
 
         #region Cancellation / validation
@@ -370,6 +396,24 @@ namespace XFramework.XCamera.Cinemachine.Tests
             PumpUntilSettled();
             Assert.IsFalse(CameraManager.GetState().IsTransitioning, "取消等待不应中止相机过渡");
             Assert.AreEqual("b", CameraManager.ActiveCameraId);
+        }
+
+        [Test]
+        public void PushAsync_Cancellation_OnlyStopsWaiting()
+        {
+            CameraManager.SwitchTo("a");
+            Pump();
+
+            using var source = new CancellationTokenSource();
+            var task = CameraManager.PushAsync("b", 0.3f, CameraBlendStyle.Linear, source.Token);
+            Pump(0.1f);
+            source.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() => task.GetAwaiter().GetResult());
+
+            PumpUntilSettled();
+            Assert.AreEqual("b", CameraManager.ActiveCameraId, "取消等待不应中止相机过渡");
+            Assert.AreEqual(2, CameraManager.StackDepth);
         }
 
         [Test]

@@ -83,6 +83,8 @@ namespace XFramework.XCamera.Cinemachine.Tests
         [Test]
         public void Activate_MakesTargetActive()
         {
+            _vcamB.Priority = 5;
+
             _backend.Activate("a", 0f, CameraBlendStyle.Cut);
             Pump();
 
@@ -91,7 +93,9 @@ namespace XFramework.XCamera.Cinemachine.Tests
             Assert.AreSame(_camera, _backend.OutputCamera);
             Assert.IsFalse(_backend.IsTransitioning);
             Assert.IsNull(_backend.TransitionTargetId);
-            Assert.Greater(_vcamA.Priority.Value, _vcamB.Priority.Value,
+            Assert.AreEqual(6, _vcamA.Priority.Value,
+                "boost = 同通道已注册相机的最大作者优先级 + 1");
+            Assert.AreEqual(5, _vcamB.Priority.Value,
                 "激活只提升目标，不把其它相机压成 0");
         }
 
