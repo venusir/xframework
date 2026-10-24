@@ -204,7 +204,24 @@ namespace XFramework.XCamera
         internal void Pop(float duration, CameraBlendStyle style)
         {
             ValidateDuration(duration);
+            var countBeforePrune = _stack.Count;
             PruneDeadTops();
+
+            if (_stack.Count < countBeforePrune)
+            {
+                // 栈顶已被外部销毁：该层「已经离开」，只需确保新栈顶在输出，
+                // 不能再弹掉存活的下一层（与 OnBackendDeactivated 的回退语义对齐）。
+                var newTop = TopAliveId();
+                if (newTop != null)
+                {
+                    if (!_issuing)
+                        SettlePending(CameraTransitionResult.Superseded);
+
+                    _backend.Activate(newTop, 0f, CameraBlendStyle.Cut);
+                }
+
+                return;
+            }
 
             if (_stack.Count <= 1)
             {
@@ -381,6 +398,20 @@ namespace XFramework.XCamera
         {
             ValidateDuration(duration);
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (_stack.Count > 0 && !IsAlive(_stack[_stack.Count - 1]))
+            {
+                // 死栈顶已经离开：剪除后切到新栈顶，立即完成（没有可等待的过渡请求）。
+                // 与 OnBackendDeactivated / Pop 的回退语义对齐，不再弹掉存活的下一层。
+                SettlePending(CameraTransitionResult.Superseded);
+                _stack.RemoveAll(id => !IsAlive(id));
+
+                var newTop = TopAliveId();
+                if (newTop != null)
+                    _backend.Activate(newTop, 0f, CameraBlendStyle.Cut);
+
+                return UniTask.FromResult(CameraTransitionResult.Completed);
+            }
 
             _stack.RemoveAll(id => !IsAlive(id));
             if (_stack.Count <= 1)

@@ -1013,6 +1013,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **死栈顶被剪除后一次 `Pop` 会多弹一层（2026-10-24）**：栈 `[A, B, C(已销毁)]` 时 `Pop` 先剪掉 C，再
+  `RemoveAt` 删掉存活的 B，一次 Pop 回到 A；异步 `PopAsync` 同样。这与「死顶由 Deactivated 事件处理」时
+  只激活新栈顶 B、不弹 B 的自动路径不一致。修法：剪除死栈顶后视为该层已经离开，只激活新栈顶、不再弹下一层；
+  `PopAsync` 在顶已死时直接 `Completed`。回归：`Pop_DeadTop_DoesNotPopNextLiveLayer` /
+  `PopAsync_DeadTop_DoesNotPopNextLiveLayer`（改前双红）。
+- **补回强制 cut 回归用例（2026-10-24）**：`58a9b62` 重设计删除的
+  `Activate_DuringBlendToSameTarget_ForcesCutImmediately` 以等价形式恢复——A→B 混合中对 B 做 cut，
+  断言 `IsBlending == false`。负向注入确认：注释掉 `_brain.ActiveBlend = null` 即红。
 - **作者状态快照取在注册时点，切走时覆盖注册后的改动（2026-10-24）**：文档承诺恢复「被改写前」的
   `PrioritySettings` / GameObject / 组件启用状态，实现却在 `Register` 抓一次。注册后作者把优先级从 5 改成 20，
   切走时会被恢复成 5；注册后手动禁用的 GameObject / 组件会被重新启用。修法：三个快照字段移到 `Boost`

@@ -217,6 +217,66 @@ namespace XFramework.XCamera.Tests
         }
 
         [Test]
+        public void Pop_DeadTop_DoesNotPopNextLiveLayer()
+        {
+            var thirdObject = new GameObject("DirectorCameraC");
+            try
+            {
+                var third = thirdObject.AddComponent<CinemachineCamera>();
+                _director.Register("a", _camera);
+                _director.Register("b", _camera2);
+                _director.Register("c", third);
+                _director.SwitchTo("a", 0f, CameraBlendStyle.Cut);
+                _director.Push("b", 0f, CameraBlendStyle.Cut);
+                _director.Push("c", 0f, CameraBlendStyle.Cut);
+
+                UnityEngine.Object.DestroyImmediate(thirdObject);
+
+                _director.Pop(0f, CameraBlendStyle.Cut);
+
+                Assert.AreEqual(2, _director.StackDepth,
+                    "死栈顶已经离开，Pop 不应再弹掉存活的下一层");
+                Assert.AreEqual("b", _director.ActiveCameraId);
+            }
+            finally
+            {
+                if (thirdObject != null)
+                    UnityEngine.Object.DestroyImmediate(thirdObject);
+            }
+        }
+
+        [Test]
+        public void PopAsync_DeadTop_DoesNotPopNextLiveLayer()
+        {
+            var thirdObject = new GameObject("DirectorCameraC");
+            try
+            {
+                var third = thirdObject.AddComponent<CinemachineCamera>();
+                _director.Register("a", _camera);
+                _director.Register("b", _camera2);
+                _director.Register("c", third);
+                _director.SwitchTo("a", 0f, CameraBlendStyle.Cut);
+                _director.Push("b", 0f, CameraBlendStyle.Cut);
+                _director.Push("c", 0f, CameraBlendStyle.Cut);
+
+                UnityEngine.Object.DestroyImmediate(thirdObject);
+
+                var result = _director.PopAsync(0f, CameraBlendStyle.Cut, default)
+                    .GetAwaiter().GetResult();
+
+                Assert.AreEqual(CameraTransitionResult.Completed, result);
+                Assert.AreEqual(2, _director.StackDepth,
+                    "死栈顶已经离开，PopAsync 不应再弹掉存活的下一层");
+                Assert.AreEqual("b", _director.ActiveCameraId);
+            }
+            finally
+            {
+                if (thirdObject != null)
+                    UnityEngine.Object.DestroyImmediate(thirdObject);
+            }
+        }
+
+        [Test]
         public void Clear_EmptiesStack()
         {
             _director.Register("a", _camera);

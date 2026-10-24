@@ -204,6 +204,24 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void Activate_DuringBlendToSameTarget_ForcesCutImmediately()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            _backend.Activate("b", 1f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+            Assert.IsTrue(_brain.IsBlending, "前提：应处于 A→B 的混合中");
+
+            _backend.Activate("b", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            Assert.IsFalse(_brain.IsBlending, "对同一目标 cut 应立即强制完成在途混合");
+            Assert.AreEqual("b", _backend.ActiveCameraId);
+            Assert.IsNull(_backend.TransitionTargetId);
+        }
+
+        [Test]
         public void Activate_NonFiniteDuration_Throws()
         {
             Assert.Throws<ArgumentOutOfRangeException>(
