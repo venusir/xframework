@@ -2,9 +2,7 @@
     "name": "Venusy609.Xframework.Luban.Editor",
     "rootNamespace": "",
     "references": [
-        "Venusy609.Xframework",
-        "Venusy609.Xframework.Luban",
-        "UniTask"
+        "Venusy609.Xframework.Luban"
     ],
     "includePlatforms": [
         "Editor"
