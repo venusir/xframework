@@ -80,7 +80,8 @@ param(
     [switch]$UseRepo,
     [switch]$Setup,
     [switch]$UpdateApiBaseline,
-    [switch]$UpdateLubanGolden
+    [switch]$UpdateLubanGolden,
+    [switch]$UpdateLubanApiBaseline
 )
 
 $ErrorActionPreference = "Stop"
@@ -126,6 +127,9 @@ if ($UpdateLubanGolden) {
     if ($UpdateApiBaseline) {
         Write-Error "-UpdateLubanGolden 与 -UpdateApiBaseline 互斥。"
     }
+    if ($UpdateLubanApiBaseline) {
+        Write-Error "-UpdateLubanGolden 与 -UpdateLubanApiBaseline 互斥。"
+    }
     if ($Filter) {
         Write-Error "-UpdateLubanGolden 与 -Filter/-Fixture 互斥：更新模式只跑 golden fixture 本身。"
     }
@@ -133,6 +137,22 @@ if ($UpdateLubanGolden) {
     $Platform = "EditMode"
     $env:XFW_UPDATE_LUBAN_GOLDEN = "1"
     Write-Warning "Luban golden 更新模式：将重写签入的接入代码夹具，并**按设计判为失败**——请审阅 git diff。"
+}
+
+# ---------- Luban 公开 API 基线更新模式 ----------
+#
+# 与核心 -UpdateApiBaseline 同纪律：写盘后有意失败，绿灯由不带开关的重跑给出。
+if ($UpdateLubanApiBaseline) {
+    if ($UpdateApiBaseline -or $UpdateLubanGolden) {
+        Write-Error "-UpdateLubanApiBaseline 与其它更新开关互斥。"
+    }
+    if ($Filter) {
+        Write-Error "-UpdateLubanApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑基线 fixture 本身。"
+    }
+    $Filter = "\.LubanPublicApiBaselineTests\."
+    $Platform = "PlayMode"
+    $env:XFW_UPDATE_LUBAN_API_BASELINE = "1"
+    Write-Warning "Luban 公开 API 基线更新模式：将重写 LubanPublicApiBaseline.txt，并**按设计判为失败**——请审阅。"
 }
 
 # ---------- 定位仓库与 Unity ----------

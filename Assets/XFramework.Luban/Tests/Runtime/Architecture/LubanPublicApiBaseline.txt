@@ -1,0 +1,48 @@
+# XFramework Luban Runtime 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/LubanPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateLubanApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
+#
+# 射程：Runtime 程序集 Venusy609.Xframework.Luban（公开类型与 public 成员）。
+# Editor 程序集 Venusy609.Xframework.Luban.Editor 不在射程内。
+XFramework.XConfig.Luban.ILubanConfigAdapter  ::  object CreateTables(System.Func<string, byte[]> loadBytes)
+XFramework.XConfig.Luban.ILubanConfigAdapter  ::  public interface
+XFramework.XConfig.Luban.ILubanConfigAdapter  ::  void RegisterToConfigManager(object tables)
+XFramework.XConfig.Luban.ILubanConfigAdapter  ::  void UnregisterFromConfigManager()
+XFramework.XConfig.Luban.ILubanConfigAdapter.DataFileExtension  ::  string { get; }
+XFramework.XConfig.Luban.ILubanConfigAdapter.TableNames  ::  System.Collections.Generic.IReadOnlyList<string> { get; }
+XFramework.XConfig.Luban.LubanBootstrapStage  ::  .ctor(XFramework.XConfig.Luban.ILubanConfigAdapter adapter, XFramework.XConfig.Luban.LubanOptions options = null, int phase = 90)
+XFramework.XConfig.Luban.LubanBootstrapStage  ::  Cysharp.Threading.Tasks.UniTask ExecuteAsync(XFramework.XPipeline.PipelineStageContext context, System.Threading.CancellationToken cancellationToken)
+XFramework.XConfig.Luban.LubanBootstrapStage  ::  public sealed class : XFramework.XBootstrap.IBootstrapStage
+XFramework.XConfig.Luban.LubanBootstrapStage  ::  void Shutdown()
+XFramework.XConfig.Luban.LubanBootstrapStage.Name  ::  string { get; }
+XFramework.XConfig.Luban.LubanBootstrapStage.Phase  ::  int { get; }
+XFramework.XConfig.Luban.LubanBootstrapStage.Weight  ::  float { get; }
+XFramework.XConfig.Luban.LubanConfig  ::  public static class
+XFramework.XConfig.Luban.LubanConfig  ::  static Cysharp.Threading.Tasks.UniTask InitializeAsync(XFramework.XConfig.Luban.ILubanConfigAdapter adapter, XFramework.XConfig.Luban.LubanOptions options = null, System.IProgress<XFramework.XConfig.Luban.LubanInitReport> progress = null, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XConfig.Luban.LubanConfig  ::  static T GetTables<T>() where T : class
+XFramework.XConfig.Luban.LubanConfig  ::  static bool TryGetTables<T>(out T tables) where T : class
+XFramework.XConfig.Luban.LubanConfig  ::  static void Destroy()
+XFramework.XConfig.Luban.LubanConfig.IsInitialized  ::  static bool { get; }
+XFramework.XConfig.Luban.LubanConfig.Tables  ::  static object { get; }
+XFramework.XConfig.Luban.LubanConfigBridge  ::  public static class
+XFramework.XConfig.Luban.LubanConfigBridge  ::  static void RegisterGlobal<T>(T config) where T : class
+XFramework.XConfig.Luban.LubanConfigBridge  ::  static void RegisterTable<T, TKey>(System.Collections.Generic.IReadOnlyDictionary<TKey, T> dataMap) where T : XFramework.XConfig.IConfigRow<TKey>
+XFramework.XConfig.Luban.LubanConfigBridge  ::  static void RegisterTable<T, TKey>(System.Collections.Generic.IReadOnlyList<T> rows, System.Func<T, TKey> keySelector) where T : XFramework.XConfig.IConfigRow<TKey>
+XFramework.XConfig.Luban.LubanConfigBridge  ::  static void Unload<T>()
+XFramework.XConfig.Luban.LubanConfigException  ::  .ctor(string message)
+XFramework.XConfig.Luban.LubanConfigException  ::  .ctor(string message, System.Exception innerException)
+XFramework.XConfig.Luban.LubanConfigException  ::  public sealed class : System.Exception
+XFramework.XConfig.Luban.LubanDataLoadMode  ::  public enum : int
+XFramework.XConfig.Luban.LubanDataLoadMode.RawFile  ::  = 1
+XFramework.XConfig.Luban.LubanDataLoadMode.TextAsset  ::  = 0
+XFramework.XConfig.Luban.LubanInitReport  ::  .ctor(float progress, string description)
+XFramework.XConfig.Luban.LubanInitReport  ::  public readonly struct
+XFramework.XConfig.Luban.LubanInitReport.Description  ::  string { get; }
+XFramework.XConfig.Luban.LubanInitReport.Progress  ::  float { get; }
+XFramework.XConfig.Luban.LubanOptions  ::  .ctor()
+XFramework.XConfig.Luban.LubanOptions  ::  public sealed class
+XFramework.XConfig.Luban.LubanOptions.DataRoot  ::  string { get; set; }
+XFramework.XConfig.Luban.LubanOptions.LoadMode  ::  XFramework.XConfig.Luban.LubanDataLoadMode { get; set; }
+XFramework.XConfig.Luban.LubanOptions.LocationResolver  ::  System.Func<string, string> { get; set; }
