@@ -63,7 +63,7 @@ Runtime/Camera/
 ├── CameraManager.cs              # 公开：静态门面（生命周期 / 注册 / 栈 / 异步 / 绑定 / 查询 / 事件）
 ├── ICameraBackend.cs             # internal：后端契约 + CameraBackendActivation + 会话复位能力接口
 ├── CameraDirector.cs             # internal：id 生成 / 栈 / pending / 消息发布 / 快照组装
-├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear
+├── CameraBlendStyle.cs           # 公开：Cut / EaseInOut / EaseIn / EaseOut / Linear / HardIn / HardOut
 ├── CameraTransitionResult.cs     # 公开：Completed / Superseded / CameraNotFound / ManagerDisposed
 ├── CameraInfo.cs                 # 公开：逐相机诊断项
 ├── CameraStateSnapshot.cs        # 公开：模块级诊断快照

@@ -23,5 +23,11 @@ namespace XFramework.XCamera
 
         /// <summary>线性插值。</summary>
         Linear,
+
+        /// <summary>从 outgoing 平滑离开、末段硬切入 incoming（曲线前段平缓、末段陡峭）。</summary>
+        HardIn,
+
+        /// <summary>从 outgoing 硬切离开、末段平滑进入 incoming（曲线前段陡峭、末段平缓）。</summary>
+        HardOut,
     }
 }

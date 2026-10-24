@@ -299,6 +299,8 @@ XFramework.XCamera.CameraBlendStyle.Cut  ::  = 0
 XFramework.XCamera.CameraBlendStyle.EaseIn  ::  = 2
 XFramework.XCamera.CameraBlendStyle.EaseInOut  ::  = 1
 XFramework.XCamera.CameraBlendStyle.EaseOut  ::  = 3
+XFramework.XCamera.CameraBlendStyle.HardIn  ::  = 5
+XFramework.XCamera.CameraBlendStyle.HardOut  ::  = 6
 XFramework.XCamera.CameraBlendStyle.Linear  ::  = 4
 XFramework.XCamera.CameraInfo  ::  public readonly struct
 XFramework.XCamera.CameraInfo#ctor  ::  public(string cameraId, bool isGenerated, bool isBase, bool isInStack, bool isActive, bool isTransitionTarget, bool isAlive)

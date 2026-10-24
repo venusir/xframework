@@ -262,6 +262,34 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void Activate_HardIn_MapsToCinemachineCurve()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            _backend.Activate("b", 1f, CameraBlendStyle.HardIn);
+            Pump(0.1f);
+
+            Assert.IsNotNull(_brain.ActiveBlend);
+            Assert.AreEqual(0.125f, _brain.ActiveBlend.BlendCurve.Evaluate(0.5f), 0.01f,
+                "HardIn 曲线应前段平缓、末段陡峭");
+        }
+
+        [Test]
+        public void Activate_HardOut_MapsToCinemachineCurve()
+        {
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+
+            _backend.Activate("b", 1f, CameraBlendStyle.HardOut);
+            Pump(0.1f);
+
+            Assert.IsNotNull(_brain.ActiveBlend);
+            Assert.AreEqual(0.875f, _brain.ActiveBlend.BlendCurve.Evaluate(0.5f), 0.01f,
+                "HardOut 曲线应前段陡峭、末段平缓");
+        }
+
+        [Test]
         public void Transition_DoesNotModifyBrainDefaultBlend()
         {
             var before = _brain.DefaultBlend;

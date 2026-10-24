@@ -1055,6 +1055,10 @@ namespace XFramework.XCamera.Cinemachine
                     return CinemachineBlendDefinition.Styles.EaseOut;
                 case CameraBlendStyle.Linear:
                     return CinemachineBlendDefinition.Styles.Linear;
+                case CameraBlendStyle.HardIn:
+                    return CinemachineBlendDefinition.Styles.HardIn;
+                case CameraBlendStyle.HardOut:
+                    return CinemachineBlendDefinition.Styles.HardOut;
                 case CameraBlendStyle.EaseInOut:
                     return CinemachineBlendDefinition.Styles.EaseInOut;
                 default:

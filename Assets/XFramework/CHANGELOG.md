@@ -47,6 +47,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **新增 `HardIn` / `HardOut` 混合样式**（2026-10-24）：`CameraBlendStyle` 追加两个成员（追加在末尾，
+  既有数值不变），映射到 Cinemachine 的 `HardIn` / `HardOut` 曲线（前段平缓、末段陡峭 / 反之）。
+  源兼容新增，**公开 API 基线 +2 行**。回归：`Activate_HardIn_MapsToCinemachineCurve` /
+  `Activate_HardOut_MapsToCinemachineCurve`。
 - **一步注册并激活（裸 vcam 与自注册组件）**（2026-10-24）：`CameraManager.RegisterAndSwitchTo` /
   `RegisterAndPush` 面向自持有裸 vcam 的调用方——生成 `@auto/N` 注册后立即切基座 / 压栈，返回 id 供
   `Unregister`；`CinemachineCameraRegistration.SwitchTo` / `Push` 面向预制体自注册组件——先确保注册
