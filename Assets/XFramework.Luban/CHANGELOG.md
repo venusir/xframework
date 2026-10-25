@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **默认资产源的 TextAsset/RawFile 成功映射补覆盖（R4-LBN-002）**：`AssetManagerLubanAssetSource` 的映射
+  此前只经 fake `ILubanAssetSource` 间接覆盖，生产默认路径一旦映射错现有测试全绿。修法：抽出 internal
+  纯映射缝 `MapTextAssets` / `MapRawFile`（入参 `LubanTextSlice` / `LubanRawSlice`，不含 YooAsset 类型），
+  生产路径把真实句柄投影后调用；测试覆盖有效 / 无效 / Asset=null 与 Raw 有效 / 无效。真实句柄的获取与
+  释放仍由 2026-10-25 EditorSimulate 探针背书（R4-PRB-07）。
 - **provider 级加载失败的消息缺表名/location（R4-LBN-006）**：`ILubanDataProvider.LoadAsync` 整批失败
   （如 AssetManager 未初始化）时，外层只包了「Failed to load Luban data files: {inner}」，与 README
   「消息带表名与 location」的承诺不符；逐表失败路径本来已带。修法：外层消息追加首个表名与 location

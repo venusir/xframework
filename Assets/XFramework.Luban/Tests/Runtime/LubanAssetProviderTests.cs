@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
+using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XConfig;
 using XFramework.XConfig.Luban;
@@ -30,6 +31,48 @@ namespace XFramework.XConfig.Luban.Tests
             LubanConfig.Destroy();
             ConfigManager.Destroy();
             AssetManager.Destroy();
+        }
+
+        [Test]
+        public void MapTextAssets_CoversValidInvalidAndMissingAsset()
+        {
+            // R4-LBN-002：真实 AssetHandle 只能由 YooAsset 句柄构造，成功映射此前零直接覆盖。
+            var text = new TextAsset("abc");
+            try
+            {
+                var results = AssetManagerLubanAssetSource.MapTextAssets(
+                    new[]
+                    {
+                        new AssetManagerLubanAssetSource.LubanTextSlice(true, text, null),
+                        new AssetManagerLubanAssetSource.LubanTextSlice(false, null, "404"),
+                        new AssetManagerLubanAssetSource.LubanTextSlice(true, null, null),
+                    });
+
+                Assert.That(results[0].IsValid, Is.True);
+                Assert.That(System.Text.Encoding.UTF8.GetString(results[0].Bytes), Is.EqualTo("abc"));
+                Assert.That(results[1].IsValid, Is.False);
+                Assert.That(results[1].LastError, Is.EqualTo("404"));
+                Assert.That(results[2].IsValid, Is.True);
+                Assert.That(results[2].Bytes, Is.Null, "有效但 Asset 为 null 时不上报字节");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(text);
+            }
+        }
+
+        [Test]
+        public void MapRawFile_CoversValidAndInvalid()
+        {
+            var valid = AssetManagerLubanAssetSource.MapRawFile(
+                new AssetManagerLubanAssetSource.LubanRawSlice(true, new byte[] { 1, 2 }, null));
+            var invalid = AssetManagerLubanAssetSource.MapRawFile(
+                new AssetManagerLubanAssetSource.LubanRawSlice(false, null, "missing"));
+
+            Assert.That(valid.IsValid, Is.True);
+            Assert.That(valid.GetData(), Is.EqualTo(new byte[] { 1, 2 }));
+            Assert.That(invalid.IsValid, Is.False);
+            Assert.That(invalid.LastError, Is.EqualTo("missing"));
         }
 
         [Test]

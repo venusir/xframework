@@ -22,15 +22,15 @@ namespace XFramework.XConfig.Luban
         {
             EnsureInitialized();
             var handles = await AssetManager.LoadAllAsync<TextAsset>(locations, cancellationToken);
-            var results = new ILubanTextAssetHandle[handles.Length];
+            var slices = new LubanTextSlice[handles.Length];
             try
             {
                 for (int i = 0; i < handles.Length; i++)
                 {
                     var handle = handles[i];
-                    results[i] = new TextAssetResult(
+                    slices[i] = new LubanTextSlice(
                         handle.IsValid,
-                        handle.IsValid && handle.Asset != null ? handle.Asset.bytes : null,
+                        handle.IsValid ? handle.Asset : null,
                         handle.LastError);
                 }
             }
@@ -45,7 +45,7 @@ namespace XFramework.XConfig.Luban
                 }
             }
 
-            return results;
+            return MapTextAssets(slices);
         }
 
         /// <inheritdoc />
@@ -56,11 +56,41 @@ namespace XFramework.XConfig.Luban
             EnsureInitialized();
             using (var handle = await AssetManager.LoadRawFileAsync(location, cancellationToken))
             {
-                return new RawFileResult(
+                var slice = new LubanRawSlice(
                     handle.IsValid,
                     handle.IsValid ? handle.GetRawFileData() : null,
                     handle.LastError);
+                return MapRawFile(slice);
             }
+        }
+
+        /// <summary>
+        /// 纯映射：把 TextAsset 切片映射成 <see cref="ILubanTextAssetHandle"/>（R4-LBN-002 测试缝）。
+        /// <para>真实 <see cref="AssetHandle{T}"/> 只能由 YooAsset 句柄构造，测试进程造不出「有效句柄 +
+        /// 成功字节」；把映射逻辑抽到这里后，成功/无效/Asset=null 三态都能直接覆盖。句柄的获取与释放
+        /// 仍由真实 YooAsset 探针背书。</para>
+        /// </summary>
+        internal static ILubanTextAssetHandle[] MapTextAssets(IReadOnlyList<LubanTextSlice> slices)
+        {
+            var results = new ILubanTextAssetHandle[slices.Count];
+            for (int i = 0; i < slices.Count; i++)
+            {
+                var slice = slices[i];
+                results[i] = new TextAssetResult(
+                    slice.IsValid,
+                    slice.IsValid && slice.Asset != null ? slice.Asset.bytes : null,
+                    slice.LastError);
+            }
+            return results;
+        }
+
+        /// <summary>纯映射：RawFile 切片 → <see cref="ILubanRawFileHandle"/>（R4-LBN-002 测试缝）。</summary>
+        internal static ILubanRawFileHandle MapRawFile(LubanRawSlice slice)
+        {
+            return new RawFileResult(
+                slice.IsValid,
+                slice.IsValid ? slice.Data : null,
+                slice.LastError);
         }
 
         private static void EnsureInitialized()
@@ -118,6 +148,36 @@ namespace XFramework.XConfig.Luban
 
             public void Dispose()
             {
+            }
+        }
+
+        /// <summary>TextAsset 句柄的纯映射输入（R4-LBN-002 测试缝）。</summary>
+        internal readonly struct LubanTextSlice
+        {
+            internal readonly bool IsValid;
+            internal readonly TextAsset Asset;
+            internal readonly string LastError;
+
+            internal LubanTextSlice(bool isValid, TextAsset asset, string lastError)
+            {
+                IsValid = isValid;
+                Asset = asset;
+                LastError = lastError;
+            }
+        }
+
+        /// <summary>RawFile 句柄的纯映射输入（R4-LBN-002 测试缝）。</summary>
+        internal readonly struct LubanRawSlice
+        {
+            internal readonly bool IsValid;
+            internal readonly byte[] Data;
+            internal readonly string LastError;
+
+            internal LubanRawSlice(bool isValid, byte[] data, string lastError)
+            {
+                IsValid = isValid;
+                Data = data;
+                LastError = lastError;
             }
         }
     }
