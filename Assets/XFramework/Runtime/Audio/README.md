@@ -210,6 +210,9 @@ AudioManager.Resume();
 - **怎么接线**：`AudioManager.SetInstance(impl)`；若之前已 `Initialize`，先 `Destroy()`。
 - **要守什么**：有效句柄的 `Generation` 必须非 `0`，`default(AudioHandle)` 必须视为无效；`SetInstance` 不会 Dispose 先前持有的实例（见下）。
 
+框架**不随包提供** Wwise / FMOD 的官方适配器；需要时由项目按上面的三条自行实现，中间件专属能力
+（RTPC / 事件参数 / bank / 3D 发射器等）留在项目侧。
+
 ### 推荐第三方实现：Wwise / FMOD
 
 使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
