@@ -147,8 +147,13 @@ namespace XFramework.XConfig.Luban
             }
             catch (Exception ex)
             {
+                // R4-LBN-006：provider 级失败（如 AssetManager 未初始化）也要带出首个表名/location，
+                // 否则使用方只看到「Failed to load Luban data files」而不知道查哪张表。
+                string context = files.Count > 0
+                    ? $" (first table '{files[0].TableName}' at '{files[0].Location}')"
+                    : string.Empty;
                 throw new LubanConfigException(
-                    "[LubanConfig] Failed to load Luban data files: " + ex.Message, ex);
+                    "[LubanConfig] Failed to load Luban data files" + context + ": " + ex.Message, ex);
             }
 
             ThrowIfInvalidated(generation, cancellationToken);

@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **provider 级加载失败的消息缺表名/location（R4-LBN-006）**：`ILubanDataProvider.LoadAsync` 整批失败
+  （如 AssetManager 未初始化）时，外层只包了「Failed to load Luban data files: {inner}」，与 README
+  「消息带表名与 location」的承诺不符；逐表失败路径本来已带。修法：外层消息追加首个表名与 location
+  （`first table 'X' at 'Y'`），内层异常原样保留。回归：
+  `LubanConfigTests.InitializeAsync_ProviderLevelFailure_MessageIncludesFirstTableAndLocation`（改前缺表名）。
 - **引导阶段把「加入在途」误记为「本次创建」（R4-LBN-005）**：`_initializedByThisStage` 在 await 之前
   无条件置真；另一调用方已在途初始化时，阶段只是加入同一次初始化，成功后却被记为所有者，
   `Shutdown` 会 `Destroy` 别人的状态。修法：`LubanConfig` 增 internal `IsInitializing` / `CurrentImpl`；

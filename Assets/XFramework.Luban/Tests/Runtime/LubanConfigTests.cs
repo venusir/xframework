@@ -150,6 +150,29 @@ namespace XFramework.XConfig.Luban.Tests
         }
 
         [Test]
+        public async Task InitializeAsync_ProviderLevelFailure_MessageIncludesFirstTableAndLocation()
+        {
+            // R4-LBN-006：provider 级失败（整批加载抛异常）此前只带内层消息，没有表名/location。
+            var inner = new InvalidOperationException("AssetManager 尚未初始化");
+            var provider = new FakeLubanProvider { LoadException = inner };
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            var adapter = new FakeLubanAdapter();
+
+            try
+            {
+                await LubanConfig.InitializeForTestsAsync(adapter, provider);
+                Assert.Fail("Expected LubanConfigException.");
+            }
+            catch (LubanConfigException ex)
+            {
+                Assert.That(provider.LastFiles, Is.Not.Empty);
+                StringAssert.Contains(provider.LastFiles[0].TableName, ex.Message);
+                StringAssert.Contains(provider.LastFiles[0].Location, ex.Message);
+                Assert.That(ex.InnerException, Is.SameAs(inner));
+            }
+        }
+
+        [Test]
         public async Task InitializeAsync_ProviderFailure_MessagePreservesInner()
         {
             var inner = new InvalidOperationException("AssetManager 尚未初始化，请先调用 InitializeAsync");
