@@ -104,9 +104,9 @@
 | `-TimeoutSeconds` | 可选超时（秒，默认 0 = 不启用）。Unity 进程超时即终止，按「超时」单独报错并以**退出码 3** 结束——与用例失败（1）、无结果文件 / 编译错误（2）区分开。默认路径仍走 `Start-Process -Wait`，行为不变 |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
-| `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`（Runtime）与 `EditorPublicApiBaseline.txt`（Editor，同一开关覆盖两组）。自带过滤器（只跑两条基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
+| `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`（Runtime）与 `EditorPublicApiBaseline.txt`（Editor，同一开关覆盖两组）。自带过滤器（只跑两条基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。**只改基线 header 时不会重写**（比较的是行集合，见 §六）——删掉基线文件后重跑一次「首次生成」路径。见 §六 |
 | `-UpdateLubanGolden` | Luban 扩展包的 golden-file 更新模式：重写生成夹具，**写完按设计判失败**；绿灯由不带开关的重跑给出。与 `-Filter`/`-Fixture` 及另外两个更新开关互斥 |
-| `-UpdateLubanApiBaseline` | Luban 扩展包的 Runtime / Editor 公开 API 基线更新模式（同一开关覆盖两组）；纪律同上（写盘后判失败） |
+| `-UpdateLubanApiBaseline` | Luban 扩展包的 Runtime / Editor 公开 API 基线更新模式（同一开关覆盖两组）；纪律同上（写盘后判失败；只改 header 时同样不会重写） |
 
 ### `Tools/check-docs.ps1`
 
