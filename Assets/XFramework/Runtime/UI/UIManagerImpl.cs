@@ -2241,8 +2241,12 @@ namespace XFramework.XUI
             bool maskChanged = false;
             for (int i = _maskEntries.Count - 1; i >= 0; i--)
             {
-                // Unity 的 == 重载把已销毁对象判为 null
-                if (_maskEntries[i].Owner == null)
+                // 区分两种 null（R4-UIB-001）：
+                // - ReferenceEquals(null)：ShowMask(owner: null) 的公开默认路径——没有持有者，
+                //   只能由句柄 Dispose / HideMask 释放，不能被无关面板的剪枝误删；
+                // - 非引用 null 但 Unity == null：owner 被外部销毁（伪 null）——必须剪掉。
+                UIPanelBase owner = _maskEntries[i].Owner;
+                if (!ReferenceEquals(owner, null) && owner == null)
                 {
                     _maskEntries.RemoveAt(i);
                     maskChanged = true;

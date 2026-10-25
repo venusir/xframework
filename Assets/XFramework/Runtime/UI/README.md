@@ -661,6 +661,10 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 需要一份默认样式时显式写 `UIMaskStyle.Default`。
 
 > **重复 `ShowMask` 的样式以最后一次调用为准**（UI-C-004）：遮罩是单实例引用计数句柄，重复调用不会叠加实例，只会更新当前样式（颜色 / 层级 / 点击关闭）；`HideMask` 释放最后一层引用时才隐藏。此前的说明只在源码注释与 CHANGELOG，现补进使用方文档。
+>
+> **无 owner 的遮罩不会被无关面板的销毁误删**（R4-UIB-001）：`ShowMask()` 省略 `owner` 时，遮罩没有
+> 持有者面板，只能由句柄 `Dispose()` 或 `HideMask` 释放；其它面板被外部 `Destroy` 触发的帧剪枝不会清掉它。
+> 绑定 `owner` 的遮罩仍会在 owner 被外部销毁后自动释放。
 
 > 遮罩**显示中**想改「点击是否关闭」，用 `UIManager.SetMaskClickToClose(bool)`；遮罩未显示时调用会告警（无对象可改）。
 

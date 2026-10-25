@@ -55,6 +55,28 @@ namespace XFramework.XUI.Tests
 
         #region 引用计数
 
+        /// <summary>
+        /// 无 owner 的遮罩（公开默认路径）不得被无关面板的外部销毁剪枝误删（R4-UIB-001）。
+        /// </summary>
+        [Test]
+        public async Task ShowMask_WithoutOwner_SurvivesUnrelatedPanelDestroyed()
+        {
+            var handle = UIManager.ShowMask();
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/unrelated");
+
+            Assert.IsNotNull(panel, "前提：无关面板已打开");
+            Assert.IsTrue(handle.IsValid, "前提：遮罩句柄有效");
+
+            UnityEngine.Object.DestroyImmediate(panel.gameObject);
+            UIManager.Update(0f, 0f); // 帧剪枝
+
+            Assert.IsTrue(UIManager.IsMaskShowing, "无 owner 的遮罩不应被无关面板的剪枝清掉");
+            Assert.IsTrue(handle.IsValid, "无 owner 的遮罩句柄应仍有效");
+            Assert.AreEqual(1, UIManager.GetState().MaskRefCount, "遮罩引用计数应仍为 1");
+
+            handle.Dispose();
+        }
+
         [Test]
         public void ShowMask_IsShowingUntilReleased()
         {

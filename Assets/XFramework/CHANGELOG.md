@@ -757,6 +757,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   「键仍指向本 entry 才移除」，避免旧 finally 误删新登记。回归：
   `UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` /
   `..._ReinitializedPanelStaysOpen`（改前双红）。
+- **无 owner 遮罩被无关面板的剪枝误删（R4-UIB-001）**：`ShowMask()` 的 `owner` 默认 `null`，而
+  `PruneOverlayHolds` 用 `Owner == null` 判失效——任意面板被外部销毁触发剪枝时，无持有者的遮罩会被
+  当成「owner 已销毁」清掉，`IsMaskShowing` 变 false、句柄失效。修法：`ReferenceEquals(Owner, null)` 的
+  条目保留，仅 `!ReferenceEquals(Owner, null) && Owner == null`（Unity 伪 null）才剪。回归：
+  `UIMaskTests.ShowMask_WithoutOwner_SurvivesUnrelatedPanelDestroyed`（改前红）；
+  `UIDialogPanelTests.ExternallyDestroyedMaskOwner_ReleasesMask` 保持绿。
 - **约定绑定节点类型不匹配/重名无告警（R3-UIB-009/013）**：`img_` 挂在没有 `Image` 的节点上静默跳过
   （与 README「未找到会告警」相反）；面板内同名约定节点后者覆盖前者、先出现的永久未绑。修法：编辑器下
   类型不匹配告警；同名节点只保留第一个并告警。回归：`UIPanelBindingConventionTests` 两例（改前均红）。
