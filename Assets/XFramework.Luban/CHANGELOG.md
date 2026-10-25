@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **ProcessRunner 的进程控制与编码补覆盖（R4-LBN-003/015）**：`Run` 的超时、`Kill`、退出码、
+  stdout/stderr 截断与编码此前零直接覆盖（`LubanProcessRunnerTests` 只测输出缓冲）。补成功 / 非零 /
+  超时 / 大输出 / 中文五类用例（用当前平台 shell 构造可控子进程）；`StandardOutputEncoding` /
+  `StandardErrorEncoding` 显式设为 UTF-8。
 - **默认资产源的 TextAsset/RawFile 成功映射补覆盖（R4-LBN-002）**：`AssetManagerLubanAssetSource` 的映射
   此前只经 fake `ILubanAssetSource` 间接覆盖，生产默认路径一旦映射错现有测试全绿。修法：抽出 internal
   纯映射缝 `MapTextAssets` / `MapRawFile`（入参 `LubanTextSlice` / `LubanRawSlice`，不含 YooAsset 类型），

@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Text;
 using System.Threading;
 
 namespace XFramework.XConfig.Luban.Editor
@@ -52,6 +53,8 @@ namespace XFramework.XConfig.Luban.Editor
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8,
             };
 
             var output = new LubanProcessOutputBuffer();
