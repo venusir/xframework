@@ -586,7 +586,8 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 14. **会话复位只丢引用、不 Dispose，但会退订旧实例的引擎事件**（AST-008 / R3-AST-002）：关闭域重载时
     上一会话的 `AssetManagerImpl` 会存活，静态事件会把它钉住并继续回调；`ResetForNewSession` 在丢引用前
     调用内部退订入口（`DetachSessionSubscriptions`：`Application.lowMemory` 与适配器的
-    `SceneManager.sceneUnloaded`，均幂等、不 Dispose）。**第三方 `IAssetManager` 实现若有自己的静态事件
+    `SceneManager.sceneUnloaded`，均幂等、不 Dispose）。**在途创建、尚未提交为门面实例的 impl 同样退订**
+    （R4-AST-006）；`Destroy` 也做同一处理。**第三方 `IAssetManager` 实现若有自己的静态事件
     订阅，框架探测不到**——需自行在会话边界退订。
 15. **只支持 Offline / Host / EditorSimulate 三种运行模式**：YooAsset 的 `WebPlayMode` 与 `CustomPlayMode`
     未映射。`WebPlayMode` 是 WebGL 平台**唯一**可用模式（上游对其他模式直接抛异常），因此**本模块的资源管线

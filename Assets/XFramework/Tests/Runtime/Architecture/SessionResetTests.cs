@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -535,6 +536,27 @@ namespace XFramework.Architecture.Tests
 
             Assert.IsFalse(impl.IsLowMemoryHandlerAttached,
                 "会话复位必须退订旧实例的 Application.lowMemory——只丢引用会让静态事件把旧实例钉住");
+        }
+
+        [Test]
+        public void Asset_ResetDetachesLowMemoryHandlerFromInFlightCreatingImpl()
+        {
+            // R4-AST-006：InitializeAsync 在途、尚未提交为 _instance 的 impl 构造时已订阅 sceneUnloaded；
+            // 复位只对 _instance 退订会漏掉它。
+            AssetManager.Destroy();
+            var impl = new AssetManagerImpl();
+            impl.AttachLowMemoryHandler();
+
+            var field = typeof(AssetManager).GetField(
+                "_creatingImpl", BindingFlags.Static | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, "_creatingImpl 字段不存在");
+            field.SetValue(null, impl);
+
+            SimulateNewSession();
+
+            Assert.IsFalse(impl.IsLowMemoryHandlerAttached,
+                "在途创建中的 impl 也必须退订 Application.lowMemory（R4-AST-006）");
+            Assert.IsNull(field.GetValue(null), "复位后应清空在途引用");
         }
 
         [Test]

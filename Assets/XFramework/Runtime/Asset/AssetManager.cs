@@ -22,6 +22,13 @@ namespace XFramework.XAsset
         private static bool _instanceInitialized;
 
         /// <summary>
+        /// 正在创建、尚未提交为 <see cref="_instance"/> 的实现（R4-AST-006）。
+        /// <para>它在构造时就订阅了 <c>SceneManager.sceneUnloaded</c>；关闭域重载时若初始化未恢复，
+        /// 只对 <see cref="_instance"/> 退订会漏掉它。会话复位据此一并退订。</para>
+        /// </summary>
+        private static IAssetManager _creatingImpl;
+
+        /// <summary>
         /// 当前 <see cref="_instance"/> 是否由框架自己创建（<see cref="InitializeAsyncCore"/> 成功路径）。
         /// <para><see cref="SetInstance"/> 换出旧实例时据此决定「处置」还是「只退订」：框架创建的实例
         /// 调用方拿不到引用，必须由框架 Dispose；注入实例的生命周期归调用方，只断开静态事件
@@ -194,27 +201,36 @@ namespace XFramework.XAsset
         private static async UniTask InitializeAsyncCore(int generation, IProgress<AssetInitReport> progress, AssetInitOptions options, CancellationToken cancellationToken)
         {
             var impl = ImplFactory?.Invoke() ?? new AssetManagerImpl();
+            _creatingImpl = impl;
             try
             {
-                await impl.InitializeAsync(options, progress, cancellationToken);
-            }
-            catch
-            {
-                // 初始化失败：释放半初始化状态，不让 _instance 占用，允许重试
-                impl.Dispose();
-                throw;
-            }
+                try
+                {
+                    await impl.InitializeAsync(options, progress, cancellationToken);
+                }
+                catch
+                {
+                    // 初始化失败：释放半初始化状态，不让 _instance 占用，允许重试
+                    impl.Dispose();
+                    throw;
+                }
 
-            // Destroy()/SetInstance() 与初始化并发时，丢弃在途结果并告知调用方，防止销毁后实例"复活"
-            if (generation != _initGeneration)
-            {
-                impl.Dispose();
-                throw new InvalidOperationException(InitInvalidatedMessage);
-            }
+                // Destroy()/SetInstance() 与初始化并发时，丢弃在途结果并告知调用方，防止销毁后实例"复活"
+                if (generation != _initGeneration)
+                {
+                    impl.Dispose();
+                    throw new InvalidOperationException(InitInvalidatedMessage);
+                }
 
-            _instance = impl;
-            _instanceInitialized = true;
-            _instanceOwnedByFramework = true;
+                _instance = impl;
+                _instanceInitialized = true;
+                _instanceOwnedByFramework = true;
+            }
+            finally
+            {
+                if (ReferenceEquals(_creatingImpl, impl))
+                    _creatingImpl = null;
+            }
         }
 
         /// <inheritdoc cref="IAssetManager.InitializePackageAsync(AssetInitOptions, IProgress{AssetInitReport}, CancellationToken)"/>
@@ -295,6 +311,11 @@ namespace XFramework.XAsset
             _instanceInitialized = false;
             _instanceOwnedByFramework = false;
 
+            // 在途创建的 impl 也订阅了静态事件（R4-AST-006）：销毁时一并退订并丢引用。
+            if (_creatingImpl is AssetManagerImpl creating)
+                creating.DetachSessionSubscriptions();
+            _creatingImpl = null;
+
             // 作废在途初始化任务：结果丢弃、加入者一并了结，可立即重新初始化
             InvalidateInflightInit();
             _initializeTask = default;
@@ -321,6 +342,11 @@ namespace XFramework.XAsset
             // AST-008 / R3-AST-002：实例订阅了 Application.lowMemory，适配器订阅了
             // SceneManager.sceneUnloaded——只丢引用会让静态事件把旧实例钉住，关闭域重载时整只实例
             // 跨会话存活并继续回调上一会话的对象。
+            // R4-AST-006：在途、尚未提交为 _instance 的 impl 构造时也已订阅 sceneUnloaded；一并退订。
+            if (_creatingImpl is AssetManagerImpl creating)
+                creating.DetachSessionSubscriptions();
+            _creatingImpl = null;
+
             if (_instance is AssetManagerImpl impl)
                 impl.DetachSessionSubscriptions();
 

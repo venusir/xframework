@@ -497,6 +497,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **会话复位漏掉在途创建的 impl（R4-AST-006）**：`ResetForNewSession` 只对已提交为 `_instance` 的
+  `AssetManagerImpl` 退订；`InitializeAsync` 在途的 impl 构造时已订阅 `SceneManager.sceneUnloaded`，
+  关闭域重载时拿不到退订，被静态事件钉住跨会话存活。修法：门面记录 `_creatingImpl`（起始赋值、结束清空），
+  复位与 `Destroy` 一并 `DetachSessionSubscriptions`。回归：
+  `SessionResetTests.Asset_ResetDetachesLowMemoryHandlerFromInFlightCreatingImpl`（改前红）。
 - **下载最终进度补发未隔离订阅者异常（R4-AST-005）**：`DownloadAssetsAsync` 在 `WaitAsync` 后直接
   `progress?.Invoke(...)`；回调抛异常会让已经成功的下载以异常收场（其他进度事件已逐订阅者隔离）。
   修法：最终补发也走 `AssetDownloaderHandle.InvokeIsolated`。同时把 `GetInvocationList()` 的
