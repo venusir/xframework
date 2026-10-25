@@ -561,6 +561,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **在途参数不一致只按 loader 类型比较（R4-CONF-006）**：`WarnIfInFlightMismatch` 只比较
+  `"Loader:" + GetType().Name`，同一 Loader 类型的两个不同实例（可能带不同状态）会被静默当作同一请求、
+  复用首个结果。修法：`InFlightLoad` 记录首个 loader 实例，加入者按 `ReferenceEquals` 比较；实例不同时
+  Warning 消息标注「同类型但不同 loader 实例」。回归：
+  `ConfigManagerImplTests.PreloadTableAsync_SameTypeDifferentLoaderInstance_WarnsAndSharesFirst`（改前无告警）。
 - **SO Table 资产往返端到端覆盖（R4-CONF-003）**：新增 EditMode 用例
   `ScriptableObjectAssetRoundTripTests.SavedAsset_LoadsBackWithItemsAndBuildsTable`——`CreateInstance` →
   `SerializedObject` 写 `Items` → `CreateAsset/SaveAssets` → `LoadAssetAtPath` → `BuildTable`。

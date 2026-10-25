@@ -218,7 +218,7 @@ namespace XFramework.XConfig
             // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue((type, InFlightKind.Table), out var load))
             {
-                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
+                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name, loader);
                 await AwaitInFlight(load);
                 return GetTableResult<T>(type, load);
             }
@@ -231,6 +231,7 @@ namespace XFramework.XConfig
             {
                 Task = task, Kind = InFlightKind.Table,
                 AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
+                Loader = loader,
             };
             _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
@@ -317,7 +318,7 @@ namespace XFramework.XConfig
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue((type, InFlightKind.Global), out var load))
             {
-                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
+                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name, loader);
                 await AwaitInFlight(load);
                 return;
             }
@@ -330,6 +331,7 @@ namespace XFramework.XConfig
             {
                 Task = task, Kind = InFlightKind.Global,
                 AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
+                Loader = loader,
             };
             _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
@@ -783,6 +785,9 @@ namespace XFramework.XConfig
             public string AssetPath;
             public string RequestKind;
 
+            /// <summary>首个调用方的 loader 实例（仅 Loader 重载有值；R4-CONF-006 比较实例而非只比类型）。</summary>
+            public IConfigLoader Loader;
+
             /// <summary>加入者的完成信号（创建者完成时广播 TrySetResult/TrySetException）。</summary>
             public List<UniTaskCompletionSource> Waiters = new();
         }
@@ -803,21 +808,25 @@ namespace XFramework.XConfig
         /// <para>加入者拿到的是首个调用方的结果——参数不同意味着它请求的东西没有被加载；
         /// 此前完全静默，使用方只会看到「加载过了但数据不对」。</para>
         /// </summary>
-        private static void WarnIfInFlightMismatch(Type type, InFlightLoad load, string assetPath, string requestKind)
+        private static void WarnIfInFlightMismatch(
+            Type type, InFlightLoad load, string assetPath, string requestKind, IConfigLoader loader = null)
         {
             if (load.AssetPath == null && load.RequestKind == null)
                 return; // 非本模块创建的条目（防御）
 
             bool pathDiffers = !string.Equals(load.AssetPath, assetPath, StringComparison.Ordinal);
             bool kindDiffers = !string.Equals(load.RequestKind, requestKind, StringComparison.Ordinal);
-            if (!pathDiffers && !kindDiffers)
+            // R4-CONF-006：同一 Loader 类型的不同实例可能带不同状态，只比类型名会静默复用首个结果。
+            bool loaderDiffers = loader != null && load.Loader != null && !ReferenceEquals(load.Loader, loader);
+            if (!pathDiffers && !kindDiffers && !loaderDiffers)
                 return;
 
             LogManager.Warning(LogCategories.Config,
                 "配置 '{0}' 的在途加载参数不一致：首个 {1}，第二个调用方 {2}——将复用首个调用方的结果。",
                 type.Name,
                 load.RequestKind + " @ " + load.AssetPath,
-                requestKind + " @ " + assetPath);
+                requestKind + " @ " + assetPath +
+                (loaderDiffers ? "（同类型但不同 loader 实例）" : string.Empty));
         }
 
         private static async UniTask AwaitInFlight(InFlightLoad load)

@@ -111,6 +111,29 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreSame(r1, r2, "加入者拿到的是首个调用方的结果");
         }
 
+        [Test]
+        public void PreloadTableAsync_SameTypeDifferentLoaderInstance_WarnsAndSharesFirst()
+        {
+            // R4-CONF-006：同一 Loader 类型的两个实例可能带不同状态；只按类型比较会静默复用首个结果。
+            var impl = new ConfigManagerImpl();
+            var firstLoader = new FakeConfigLoader();
+            var secondLoader = new FakeConfigLoader();
+            var tcs = new UniTaskCompletionSource<ConfigTable<TestItemRow>>();
+            firstLoader.SetTableTask(tcs.Task);
+
+            var t1 = impl.PreloadTableAsync<TestItemRow>("config/items", firstLoader);
+
+            LogAssert.Expect(LogType.Warning, new Regex("同类型但不同 loader 实例"));
+            var t2 = impl.PreloadTableAsync<TestItemRow>("config/items", secondLoader);
+
+            Assert.AreEqual(0, secondLoader.LoadTableCallCount, "不同 loader 实例仍复用首个在途结果");
+            tcs.TrySetResult(MakeTable());
+
+            var r1 = t1.GetAwaiter().GetResult();
+            var r2 = t2.GetAwaiter().GetResult();
+            Assert.AreSame(r1, r2);
+        }
+
         /// <summary>同时实现两个不同主键的 IConfigRow（R3-CONF-010 多接口告警用）。</summary>
         private sealed class MultiKeyRow : IConfigRow<int>, IConfigRow<string>
         {
