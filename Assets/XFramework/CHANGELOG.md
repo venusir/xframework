@@ -530,6 +530,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **同类型 Table 与 Global 的在途登记互相覆盖，第三个调用方重复加载（R4-CONF-005）**：`_inFlightLoads`
+  按 `Type` 单槽存放，Table 在途时启动同类型 Global 会替换槽位；此时第三个同身份（Table）调用方看不到
+  先前的 Table 在途项，会再启动一次加载（旧任务仍能唤醒自己的等待者）。修法：键改 `(Type, Kind)`，
+  Table / Global 各占一槽；`Unload<T>` 查两个身份；`InFlightLoadCount` 按「类型 + 身份」计数。
+  回归：`ConfigManagerImplTests.PreloadTableAsync_ThirdCallerJoinsAfterCrossIdentityInFlight_LoadsOnce`
+  （改前在途数为 1、Table 加载 2 次）。
 - **类型不符的配置资源未释放句柄，错误消息也不区分病因（R4-CONF-002）**：`ConfigTextLoader` /
   `ScriptableObjectLoader` 的 `handle.Asset == null` 检查在 `try/finally` **之前**——YooAsset 句柄有效但
   `GetAssetObject<T>` 返回 null（地址指向了别的资源类型）时抛异常却不 `Dispose`，provider/bundle 引用

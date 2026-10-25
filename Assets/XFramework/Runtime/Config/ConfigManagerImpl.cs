@@ -42,7 +42,7 @@ namespace XFramework.XConfig
         /// 进行中的加载任务共享句柄。key: 类型（Table 行类型或 Global 配置类型）, value: 首次启动的加载任务。
         /// <para>仅存进行中任务，完成后在 finally 中移除；并发调用共享同一任务，失败后允许重试。</para>
         /// </summary>
-        private readonly Dictionary<Type, InFlightLoad> _inFlightLoads = new();
+        private readonly Dictionary<(Type Type, InFlightKind Kind), InFlightLoad> _inFlightLoads = new();
 
         /// <summary>
         /// Loader 实例缓存，按 <see cref="ConfigFormat"/> 索引。
@@ -105,7 +105,7 @@ namespace XFramework.XConfig
 
             // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载——
             // 同一 CLR 类型还可能以 Global 身份在途，跨身份加入会读到另一本字典（CONF-009）。
-            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
+            if (_inFlightLoads.TryGetValue((type, InFlightKind.Table), out var load))
             {
                 WarnIfInFlightMismatch(type, load, assetPath, "ConfigFormat:" + format);
                 await AwaitInFlight(load);
@@ -122,7 +122,7 @@ namespace XFramework.XConfig
                 Task = task, Kind = InFlightKind.Table,
                 AssetPath = assetPath, RequestKind = "ConfigFormat:" + format,
             };
-            _inFlightLoads[type] = inFlight;
+            _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
             {
                 // 携带结果：等待者醒来后不得重读 _tables[type]（先醒者可能已 Unload，CONF-010）
@@ -159,7 +159,7 @@ namespace XFramework.XConfig
             }
 
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
-            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
+            if (_inFlightLoads.TryGetValue((type, InFlightKind.Global), out var load))
             {
                 WarnIfInFlightMismatch(type, load, assetPath, "ConfigFormat:" + format);
                 await AwaitInFlight(load);
@@ -176,7 +176,7 @@ namespace XFramework.XConfig
                 Task = task, Kind = InFlightKind.Global,
                 AssetPath = assetPath, RequestKind = "ConfigFormat:" + format,
             };
-            _inFlightLoads[type] = inFlight;
+            _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
             {
                 await task;
@@ -216,7 +216,7 @@ namespace XFramework.XConfig
                 throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
 
             // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
-            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
+            if (_inFlightLoads.TryGetValue((type, InFlightKind.Table), out var load))
             {
                 WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
                 await AwaitInFlight(load);
@@ -232,7 +232,7 @@ namespace XFramework.XConfig
                 Task = task, Kind = InFlightKind.Table,
                 AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
             };
-            _inFlightLoads[type] = inFlight;
+            _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
             {
                 // 携带结果：等待者醒来后不得重读 _tables[type]（先醒者可能已 Unload，CONF-010）
@@ -315,7 +315,7 @@ namespace XFramework.XConfig
                 throw new ConfigException($"loader cannot be null when preloading Global config '{type.Name}'.");
 
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
-            if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
+            if (_inFlightLoads.TryGetValue((type, InFlightKind.Global), out var load))
             {
                 WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
                 await AwaitInFlight(load);
@@ -331,7 +331,7 @@ namespace XFramework.XConfig
                 Task = task, Kind = InFlightKind.Global,
                 AssetPath = assetPath, RequestKind = "Loader:" + loader.GetType().Name,
             };
-            _inFlightLoads[type] = inFlight;
+            _inFlightLoads[(type, inFlight.Kind)] = inFlight;
             try
             {
                 await task;
@@ -429,7 +429,7 @@ namespace XFramework.XConfig
                     return;
 
                 // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
-                if (_inFlightLoads.TryGetValue(entry.RowType, out var load) && load.Kind == InFlightKind.Table)
+                if (_inFlightLoads.TryGetValue((entry.RowType, InFlightKind.Table), out var load))
                 {
                     WarnIfInFlightMismatch(entry.RowType, load, entry.AssetPath, "Manifest");
                     await AwaitInFlight(load);
@@ -442,7 +442,7 @@ namespace XFramework.XConfig
                     Task = task, Kind = InFlightKind.Table,
                     AssetPath = entry.AssetPath, RequestKind = "Manifest",
                 };
-                _inFlightLoads[entry.RowType] = inFlight;
+                _inFlightLoads[(entry.RowType, inFlight.Kind)] = inFlight;
                 try
                 {
                     // 携带结果供跨入口加入者使用（CONF-010）
@@ -465,7 +465,7 @@ namespace XFramework.XConfig
                     return;
 
                 // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
-                if (_inFlightLoads.TryGetValue(entry.RowType, out var load) && load.Kind == InFlightKind.Global)
+                if (_inFlightLoads.TryGetValue((entry.RowType, InFlightKind.Global), out var load))
                 {
                     await AwaitInFlight(load);
                     return;
@@ -473,7 +473,7 @@ namespace XFramework.XConfig
 
                 var task = LoadManifestGlobalCoreAsync(entry);
                 var inFlight = new InFlightLoad { Task = task, Kind = InFlightKind.Global };
-                _inFlightLoads[entry.RowType] = inFlight;
+                _inFlightLoads[(entry.RowType, inFlight.Kind)] = inFlight;
                 try
                 {
                     await task;
@@ -700,7 +700,8 @@ namespace XFramework.XConfig
         public void Unload<T>()
         {
             var type = typeof(T);
-            if (_inFlightLoads.ContainsKey(type))
+            if (_inFlightLoads.ContainsKey((type, InFlightKind.Table)) ||
+                _inFlightLoads.ContainsKey((type, InFlightKind.Global)))
                 LogManager.Warning(LogCategories.Config,
                     "Unloading '{0}' while a load is in progress; " +
                     "the in-flight load will still complete and register the data.",
@@ -769,7 +770,7 @@ namespace XFramework.XConfig
             /// <summary>实际加载任务（仅创建者 await）。</summary>
             public UniTask Task;
 
-            /// <summary>加载身份。同一字典按 Type 单键存放，加入者必须身份一致（CONF-009）。</summary>
+            /// <summary>加载身份。在途表按 (Type, Kind) 分槽，Table 与 Global 各自独立（CONF-009 / R4-CONF-005）。</summary>
             public InFlightKind Kind;
 
             /// <summary>加载结果（Table 的身份持有 <see cref="IConfigTable"/> 对象），供等待者直接返回。</summary>
@@ -830,13 +831,14 @@ namespace XFramework.XConfig
         /// 创建者完成时广播结果给所有加入者并清理登记。
         /// <para><b>先移除、后广播</b>：广播同步执行续体，续体重入 <c>Unload&lt;T&gt;()</c> /
         /// <c>Preload*</c> 时不应再看到这条已完成的任务（CONF-010）。
-        /// 仅当字典登记仍指向本次加载时移除——跨身份加载会替换登记项（CONF-009），
-        /// 但被替换的旧任务仍必须唤醒自己的等待者，因此广播无条件执行。</para>
+        /// 仅当 (类型, 身份) 槽位仍指向本次加载时移除——同类型另一身份的在途项不共享槽位
+        /// （R4-CONF-005），广播无条件执行。</para>
         /// </summary>
         private void CompleteInFlight(Type type, InFlightLoad load)
         {
-            if (_inFlightLoads.TryGetValue(type, out var current) && ReferenceEquals(current, load))
-                _inFlightLoads.Remove(type);
+            var key = (type, load.Kind);
+            if (_inFlightLoads.TryGetValue(key, out var current) && ReferenceEquals(current, load))
+                _inFlightLoads.Remove(key);
 
             if (load.Exception != null)
             {
@@ -880,7 +882,7 @@ namespace XFramework.XConfig
 
         #region Diagnostics — 回读
 
-        /// <summary>进行中的加载任务数（并发调用共享同一个任务）。诊断回读用。</summary>
+        /// <summary>进行中的加载任务数（按「类型 + 身份」计；同一 CLR 类型的 Table 与 Global 可各计一条）。诊断回读用。</summary>
         internal int InFlightLoadCount => _inFlightLoads.Count;
 
         /// <summary>

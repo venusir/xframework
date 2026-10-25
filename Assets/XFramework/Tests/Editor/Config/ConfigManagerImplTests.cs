@@ -361,6 +361,37 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void PreloadTableAsync_ThirdCallerJoinsAfterCrossIdentityInFlight_LoadsOnce()
+        {
+            // R4-CONF-005：在途登记按 Type 单槽时，同类型 Global 会覆盖 Table 的登记；
+            // 第三个 Table 调用看不到先前的 Table 在途项，会重复加载。
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+
+            var tableTcs = new UniTaskCompletionSource<ConfigTable<HybridRow>>();
+            fake.SetTableTask(tableTcs.Task);
+            var t1 = impl.PreloadTableAsync<HybridRow>("config/t", fake);
+
+            var globalTcs = new UniTaskCompletionSource<HybridRow>();
+            fake.SetGlobalTask(globalTcs.Task);
+            var globalTask = impl.PreloadGlobalAsync<HybridRow>("config/g", fake);
+
+            Assert.AreEqual(2, impl.InFlightLoadCount, "Table 与 Global 各自占一条在途");
+
+            var t3 = impl.PreloadTableAsync<HybridRow>("config/t", fake);
+            Assert.AreEqual(1, fake.LoadTableCallCount, "第三个同身份调用方应加入首个 Table 在途，而不是重新加载");
+
+            tableTcs.TrySetResult(MakeHybridTable());
+            var r1 = t1.GetAwaiter().GetResult();
+            var r3 = t3.GetAwaiter().GetResult();
+            Assert.AreSame(r1, r3, "第三个调用方拿到首个 Table 的结果");
+
+            globalTcs.TrySetResult(new HybridRow { Id = 9 });
+            globalTask.GetAwaiter().GetResult();
+            Assert.IsTrue(impl.IsLoaded<HybridRow>());
+        }
+
+        [Test]
         public void PreloadTableAsync_WaiterUnloadsDuringBroadcast_OtherWaitersStillGetTable()
         {
             // CONF-010：广播同步执行续体。先醒的等待者重入 Unload<T>() 后，

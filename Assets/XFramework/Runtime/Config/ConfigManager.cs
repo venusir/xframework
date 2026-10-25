@@ -144,7 +144,7 @@ namespace XFramework.XConfig
         // （与 LogManager 的回读族同一形状。）
 
         /// <summary>
-        /// 进行中的加载任务数（并发调用共享同一个任务）。
+        /// 进行中的加载任务数（按「类型 + 身份」计；同一 CLR 类型的 Table 与 Global 可各计一条）。
         /// <b>只对内置实现成立</b>：注入自定义 <see cref="IConfigManager"/> 时恒为 0。
         /// </summary>
         public static int InFlightLoadCount

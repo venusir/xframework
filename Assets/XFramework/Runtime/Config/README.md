@@ -228,7 +228,7 @@ ConfigManifest  (批量加载清单)
 
 | 方法 | 说明 |
 | ---- | ---- |
-| `InFlightLoadCount` | 进行中的加载任务数（并发调用共享同一任务） |
+| `InFlightLoadCount` | 进行中的加载任务数（按「类型 + 身份」计；同一类型的 Table 与 Global 可各计一条） |
 | `CopyLoaded(List<ConfigLoadedInfo>)` | 已加载的表 / 全局配置清单（类型、种类、条目数、资源路径），回答「这个项目加载了哪些配置」 |
 
 > 两者**只对内置实现成立**：`SetInstance` 注入自定义 `IConfigManager` 后一律返回空/0——那类实现不提供回读。它们**刻意不进 `IConfigManager`**（给主接口加成员会让所有实现者编译不过）。
