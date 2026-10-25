@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
-using XFramework.XAsset;
 using XFramework.XLog;
 
 namespace XFramework.XConfig.Luban
