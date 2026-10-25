@@ -1,8 +1,9 @@
-# FMOD —— 评估与 `IAudioProvider` 适配器设计（设计稿，未实现）
+# FMOD —— 评估与 `IAudioProvider` 适配器设计（核心 provider 已实现；FMOD 包未实现）
 
 > **收件人**：框架维护者（实现或审计 FMOD 适配器时）。**不是**随包发布的使用文档。
-> **状态**：**设计稿，未写代码**。用户 2026-10-25 选择「核心加 `IAudioProvider` 播放引擎缝」；
-> `Assets/XFramework.Fmod/` **尚未实现**。落地前以 `Documentation/AudioProvider.md` 与
+> **状态**：**核心 `IAudioProvider` 已于 2026-10-25 实现**（见 `Documentation/AudioProvider.md`）；
+> **`Assets/XFramework.Fmod/` 尚未实现**。FMOD SDK 接入方式（官方 `.unitypackage` 导入命令 /
+> 本地标记包 / UPM）**待后续单独讨论**。落地前以 `Documentation/AudioProvider.md` 与
 > `Documentation/Modules/Audio.md` 的台账为准。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
@@ -25,11 +26,11 @@
 
 用户 2026-10-25 的裁定：
 
-- **核心新增公开 `IAudioProvider`**（设计见 `Documentation/AudioProvider.md`）；
+- **核心已实现公开 `IAudioProvider`**（见 `Documentation/AudioProvider.md`）；
 - **FMOD 适配器只实现播放原语**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
 - **FMOD 分包拆成两个程序集**：FMOD-free 的 provider 逻辑（始终编译、可测）+ 条件集成程序集
   （引用 `FMODUnity`，用 `versionDefines` + `defineConstraints` 门控）；
-- **本次只出设计文档**；实现待 FMOD UPM 包就绪（`Documentation/FmodUPM.md`）后另开。
+- **FMOD 分包未实现**；SDK 接入方式待后续讨论，不能把「FMOD UPM 包」当成已定前提。
 
 三条理由：
 
@@ -185,10 +186,10 @@ FmodAudio.Install(new FmodAudioOptions
 
 ## 五、分发、许可与门禁
 
-- **FMOD 集成不是官方 UPM 源**：按 `Documentation/FmodUPM.md` 在第一个工程打成
-  `com.firelight.fmod-for-unity`，上传**私有** GitHub 仓库；SDK 不入本仓。
-- **本仓消费**：本地 `Packages/com.firelight.fmod-for-unity/`（gitignored）或本地 `file:`；
-  **不提交**私有 URL、manifest、`packages-lock.json` 的本地改动。
+- **FMOD 集成不是官方 UPM 源**：SDK 接入方式（官方 `.unitypackage` 导入命令 / 本地标记包 /
+  UPM / 私有仓库）**待后续单独讨论**；SDK 不入本仓。
+- **本仓消费（待定）**：无论最终选哪种，都**不提交** SDK、`.unitypackage`、本地 manifest /
+  `packages-lock.json` 的改动；干净克隆必须能在无 SDK 时跳过集成程序集。
 - **扩展包不在核心六道门禁射程**：核心 `check-docs` 只扫 `Assets/XFramework`；扩展自设 PlayMode
   守卫；XML 文档告警不覆盖扩展（同 Luban 的已知缺口）。
 - **干净克隆验证**：无 FMOD 包时 provider 程序集与守卫仍编译/运行，Integration 程序集与测试跳过；
@@ -196,13 +197,13 @@ FmodAudio.Install(new FmodAudioOptions
 
 ---
 
-## 六、实现顺序与验证（未执行，待用户批准后另开）
+## 六、实现顺序与验证（核心已完成；FMOD 包未执行）
 
-1. 核心 `IAudioProvider` + 内置 `AudioSourceProvider` 拆分（行为不变）；全量 Audio 回归。
-2. `AudioManager.SetProvider` + `TryGetProviderHandle`（待裁）+ fake provider 测试。
-3. 扩展包 FMOD-free provider + fake backend 测试 + 守卫。
-4. Integration 程序集 + 真实 bank 冒烟（`XFW_FMOD_BANK` / `XFW_FMOD_EVENT`）。
-5. 文档/台账同步（把本文件从「设计稿」改为「已实现」）。
+1. ✅ 核心 `IAudioProvider` + 内置 `AudioSourceProvider` 拆分（行为不变）；Audio 167/167。
+2. ✅ `AudioManager.SetProvider` + `TryGetProviderHandle` + fake provider 测试。
+3. ⬜ 扩展包 FMOD-free provider + fake backend 测试 + 守卫。
+4. ⬜ Integration 程序集 + 真实 bank 冒烟（`XFW_FMOD_BANK` / `XFW_FMOD_EVENT`）。
+5. ⬜ SDK 接入方式定稿与文档/台账同步（把本文件从「设计稿」改为「已实现」）。
 
 每个阶段的门禁：`run-tests.ps1` 全量 + `check-docs.ps1 -Enforce`；扩展包在有无 FMOD 两种环境各跑一次。
 
@@ -228,7 +229,7 @@ FmodAudio.Install(new FmodAudioOptions
   资源生命周期单语义），无重开判据。
 - **框架音量 → 项目 AudioMixer 路由仍不内建**：R3-AUD-001 已实测 `outputAudioMixerGroup` 恒 null；
   B 之后要路由只能实现自定义 provider。
-- **`IAudioProvider` 不再是「暂不做」**：2026-10-25 用户裁定改为设计；实现状态 `未做`，
-  设计见 `Documentation/AudioProvider.md`。
+- **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地（公开 API 源兼容新增）；
+  FMOD 扩展仍未实现。设计见 `Documentation/AudioProvider.md`。
 - **`IAudioManager` / `SetInstance` 不删除**：B 是推荐的中间件路径，不是唯一替换路径。
-- **FMOD SDK 不入本仓**：分包依赖 `Documentation/FmodUPM.md` 的私有 UPM 包；核心包不声明 FMOD 依赖。
+- **FMOD SDK 不入本仓**：分包依赖的 FMOD SDK 接入方式待后续讨论；核心包不声明 FMOD 依赖。

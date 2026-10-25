@@ -1,7 +1,7 @@
-# Wwise —— 评估与 `IAudioProvider` 适配器设计（设计稿，未实现）
+# Wwise —— 评估与 `IAudioProvider` 适配器设计（核心 provider 已实现；Wwise 未实现）
 
 > **收件人**：框架维护者（未来实现或审计 Wwise 适配器时）。**不是**随包发布的使用文档。
-> **状态**：**设计稿，未写代码**。用户 2026-10-25 选择的 B 方案是「核心新增 `IAudioProvider`」；
+> **状态**：用户 2026-10-25 选择的 B 方案「核心新增 `IAudioProvider`」**已实现核心**；
 > Wwise 适配器**仍未实现**，本文件只记录它将来如何落在这条缝上。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
@@ -20,9 +20,9 @@
 
 ---
 
-## 一、结论：缝已设计，Wwise 适配器仍暂不做
+## 一、结论：缝已实现，Wwise 适配器仍暂不做
 
-用户 2026-10-25 裁定 B：核心新增公开 `IAudioProvider` 播放引擎缝（设计见
+用户 2026-10-25 裁定 B：核心已实现公开 `IAudioProvider` 播放引擎缝（见
 `Documentation/AudioProvider.md`）。对 Wwise 的含义：
 
 - **将来 Wwise 适配器只实现 `IAudioProvider`**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
@@ -129,7 +129,7 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 三条**都**成立才值得实现 Wwise 适配器：
 
 1. **有真实 Wwise 项目**，且 Wwise SDK 可在本仓或 CI 编译验证；
-2. provider 缝已由 FMOD 实现验证（当前是设计稿）；
+2. provider 缝已实现（核心）；FMOD 适配器仍待后续，不作为 Wwise 的前置；
 3. 至少一个 Wwise 适配器在真实项目跑通：真实 bank、Event 回调、3D emitter、至少一个目标平台真机。
 
 验证方式（将来执行）：一次性探针工程 → Launcher 集成 Wwise → 最小 provider → 跑 bank / Event /
@@ -155,5 +155,5 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 
 - **`Play(AudioClip)` 不再论证**：`Documentation/Modules/Audio.md:59` 已否决，无重开判据。
 - **框架音量 → 项目 Mixer 路由不再论证**：R3-AUD-001 已实测；要路由只能自定义 provider。
-- **`IAudioProvider` 不再「暂不做」**：2026-10-25 用户裁定改为设计；Wwise 适配器仍 `暂不做`。
+- **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地；Wwise 适配器仍 `暂不做`。
 - **不把 Wwise 类型带进核心公开面**：`location` 是唯一资源标识；`AudioProviderHandle` 只存两个整数。

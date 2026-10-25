@@ -9,9 +9,17 @@
 
 ```
 Runtime/Audio/
-├── IAudioManager.cs          # 公开接口 = 后端整体替换点（不含任何 Unity 内置音频类型）
-├── AudioManager.cs           # 静态门面（扁平 + #region 分区） + AutoInit
-├── AudioManagerImpl.cs       # 默认实现：槽位/通道/音量/暂停/加载编排
+├── IAudioManager.cs          # 公开：整体替换管理器的接口（不含任何 Unity 内置音频类型）
+├── IAudioProvider.cs         # 公开：播放引擎缝（核心保留语义，provider 只做播放原语）
+├── AudioProviderHandle.cs    # 公开：provider 句柄（readonly struct，字段公开）
+├── AudioProviderPlaybackState.cs # 公开：Poll 的返回值
+├── AudioPlaybackRequest.cs   # 公开：核心交给 provider 的最终参数（internal 构造）
+├── AudioManager.cs           # 静态门面（扁平 + #region 分区） + AutoInit + SetProvider
+├── AudioManagerImpl.cs       # 语义层：通道/音量/暂停/计数/诊断/句柄编排/ticker（internal）
+├── AudioManagedVoice.cs      # 核心槽位记录 + AudioManagedVoiceState（internal）
+├── AudioSourceProvider.cs    # 内置播放引擎：加载/暂停/回收判据（internal）
+├── AudioSourcePool.cs        # 内置引擎的宿主与槽位池（internal）
+├── AudioVoice.cs             # 内置引擎的槽位记录 + AudioVoiceState（internal）
 ├── AudioHandle.cs            # 播放句柄（readonly struct，字段公开且对门面不透明）
 ├── AudioPlayOptions.cs       # 单次播放参数（六个字段全部后端中立）
 ├── AudioChannels.cs          # 推荐通道常量（不是枚举，见 README 设计取舍）
@@ -19,12 +27,10 @@ Runtime/Audio/
 ├── AudioChannelInfo.cs       # 诊断回读载荷：CopyChannels 的列表元素（2026-10-16 补录——它一直是公开面，此前漏在本树之外）
 ├── AudioChannelState.cs      # 一个通道的音量状态（internal，惰性创建）
 ├── AudioInitOptions.cs       # 初始化选项
-├── AudioVoice.cs             # 槽位记录 + AudioVoiceState 状态机（internal）
-├── AudioSourcePool.cs        # 宿主与槽位、回收扫尾、池耗尽策略（internal）
 ├── AudioHost.cs              # 隐藏宿主 MonoBehaviour（internal，纯挂载点）
 ├── AudioTicker.cs            # IUpdateable：Tier1 + Unscaled 的回收驱动（internal）
 ├── AudioClipLease.cs         # 资源租约：本体 + 释放动作（internal）
-├── IAudioClipLoader.cs       # 加载缝（internal，测试缝而非第二个后端替换点）
+├── IAudioClipLoader.cs       # 内置引擎的加载缝（internal，测试缝）
 ├── AudioClipLoader.cs        # 默认加载缝：经 XAsset 加载（internal）
 └── README.md                 # 使用说明
 
@@ -53,20 +59,20 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - 未做：**切后台自动暂停**（2026-10-01 · v2 候选）——需「谁暂停的」状态机 + iOS/Android 真机实测（见使用方 README 设计取舍）。
 - 未做：**借用项目提供的 `AudioSource`**（2026-10-01 · v2 候选）——音量归属 / `Stop` 语义 / 源销毁失效 / 借用期冲突四条语义，可独立提交。
 - 不做：**ducking（音效压低 BGM）**（2026-10-01 · v2 候选）——混音设计理念，项目间差异大；Mixer 侧才是它的家。无重开判据。
-- 暂不做：**框架音量 → 项目 Mixer 的驱动接口**（2026-10-01 · v2 候选）——先观察是否真有需求；~~现在给的是「框架音量留 1.0、Mixer 独占控制」~~（2026-10-19 订正：该理由不成立——框架动态声源的 `outputAudioMixerGroup` 恒 `null`，声音进不了项目 Mixer，`AudioMixer.SetFloat` 静默无效；结论不变：要接入项目 Mixer 只能整体替换 `IAudioManager`，公开面不新增路由入口。R3-AUD-001）。重开判据：出现真实需求，且接受新增「不暴露 Unity 类型的路由扩展点」。
+- 暂不做：**框架音量 → 项目 Mixer 的驱动接口**（2026-10-01 · v2 候选）——先观察是否真有需求；~~现在给的是「框架音量留 1.0、Mixer 独占控制」~~（2026-10-19 订正：该理由不成立——框架动态声源的 `outputAudioMixerGroup` 恒 `null`，声音进不了项目 Mixer，`AudioMixer.SetFloat` 静默无效；结论不变：内置实现不提供路由入口；2026-10-25 起也可自定义 `IAudioProvider` 接管输出（框架仍不新增路由入口）。R3-AUD-001）。重开判据：出现真实需求，且接受新增「不暴露 Unity 类型的路由扩展点」。
 - 暂不做：**`AudioBootstrapStage` / `AudioSettingsBridge<T>` / `AudioHandle.State` / 通道级上限 / `DumpState` 这批便利面**（2026-10-01 · v2 候选）——等真实反馈；`DumpState` 的诊断面形状另见下方 `待裁` 条。重开判据：出现真实使用反馈。
 - 不做：**跟随 Transform 的 3D 发射器**（2026-10-01 · v2 候选）——本质是项目侧 MonoBehaviour。无重开判据。
 - 不做：**不提供 `Play(AudioClip, ...)` 重载**（2026-10-01 · v1 评估）——它会同时毁掉两件事：`IAudioManager` 的后端中立性（Wwise 的事件 / FMOD 的 `EventInstance` 都没有 `AudioClip`），以及「资源生命周期只有一套语义」；「回不到 Inspector 直引」这条代价已写进 README 的已知限制。无重开判据。
-- 已推翻：**~~不提供 `IAudioProvider` 分层引擎缝~~**（2026-10-01 · v1 评估）——本仓「后端可换」有两种形态，分界线是「替换轴只有一条且贯穿全模块 → 整体替换」（Input 换 Rewired / Save / Asset / Localization / Config / UI）vs「替换轴按平台或能力切分、需组合多个实现 → 分层 Provider 缝」（**全仓只有 File**）；Audio 属前者。**不盲做的理由是拿不到 Wwise/FMOD 的 API 形状**：Wwise 的播放单元是 Event + EventInstance、音量是 RTPC、3D 发射器要挂 GameObject，FMOD 是 `EventInstance`——与「clip + volume + transform.position」都不同构，凭记忆猜出来的缝大概率是谁都不合身的最小公约数。重开判据：手上有真实中间件项目（有 Wwise/FMOD 的 API 参考即可设计）。被 2026-10-25 用户裁定「`IAudioProvider` 播放引擎缝（设计就绪，待实现）」取代——用户已有真实 FMOD Studio 工程与 bank，重开判据触发；设计见 `Documentation/AudioProvider.md`。
-- 未做：**`IAudioProvider` 播放引擎缝（设计就绪，待实现）**（2026-10-25 · 用户裁定 B）——核心保留通道 / 三档音量 / 暂停闸门 / 计数 / 归一化 / 诊断；provider 只做 Play / Stop / Release / SetPaused / SetVolume / Poll 六个原语；`AudioManager.SetProvider` 注入。设计稿见 `Documentation/AudioProvider.md`（含容量归属、`Poll` 状态机、Loop、加载中 Stop 取消、通道创建副作用、测试迁移与待裁项）；FMOD 分包形状见 `Documentation/FMOD.md`。实现前提：FMOD UPM 包就绪（`Documentation/FmodUPM.md`）+ 公开 API 基线确认。
+- 已推翻：**~~不提供 `IAudioProvider` 分层引擎缝~~**（2026-10-01 · v1 评估）——本仓「后端可换」有两种形态，分界线是「替换轴只有一条且贯穿全模块 → 整体替换」（Input 换 Rewired / Save / Asset / Localization / Config / UI）vs「替换轴按平台或能力切分、需组合多个实现 → 分层 Provider 缝」（**全仓只有 File**）；Audio 属前者。**不盲做的理由是拿不到 Wwise/FMOD 的 API 形状**：Wwise 的播放单元是 Event + EventInstance、音量是 RTPC、3D 发射器要挂 GameObject，FMOD 是 `EventInstance`——与「clip + volume + transform.position」都不同构，凭记忆猜出来的缝大概率是谁都不合身的最小公约数。重开判据：手上有真实中间件项目（有 Wwise/FMOD 的 API 参考即可设计）。被 2026-10-25 用户裁定「`IAudioProvider` 播放引擎缝（已实现）」取代——用户已有真实 FMOD Studio 工程与 bank，重开判据触发；设计见 `Documentation/AudioProvider.md`。
+- 已做：**`IAudioProvider` 播放引擎缝**（2026-10-25 · 用户裁定 B，本期实现）——核心保留通道 / 三档音量 / 暂停闸门 / 计数 / 归一化 / 诊断；provider 只做 PlayAsync / Stop / Release / SetPaused / SetVolume / Poll 六个原语；`AudioManager.SetProvider` 注入、`TryGetProviderHandle` 取 provider 句柄。公开 API：`IAudioProvider` / `AudioProviderPlaybackState` / `AudioProviderHandle` / `AudioPlaybackRequest`（源兼容新增，基线 +33）。内置 `AudioSourceProvider` 承接原池/加载/`AudioListener.pause`/`Starting` 超时；`AudioManagerImpl` 语义层保留。回归：`AudioProviderSeamTests` + 现有 13 个 Audio fixture（全量 PlayMode 167/167）。设计见 `Documentation/AudioProvider.md`。
 - 已推翻：**~~官方 FMOD / Wwise 适配器扩展包~~**（2026-10-25 · 用户评估）——原理由：可行的接缝是整体替换 `IAudioManager`（`SetInstance`），核心零改动；但不建官方包：两家的 Unity 集成不是官方 UPM 源、SDK 不可再分发、本仓无法编译/测试/进六道门禁；且 `IAudioManager` 只能表达 6 个播放参数 + 三档音量，中间件的 RTPC / 事件参数 / bank / 3D 发射器等仍需项目侧直接用 SDK。被 2026-10-25「FMOD 适配器分包（未做）」与「Wwise 适配器分包（暂不做）」取代——B 方案下不再重写 `IAudioManager`，改用 provider 缝。
-- 未做：**FMOD 适配器分包**（2026-10-25 · B 方案下的分包设计）——`Assets/XFramework.Fmod/`：FMOD-free provider 程序集（始终编译、fake backend 测试）+ 条件集成程序集（`FMODUnity` + `versionDefines`/`defineConstraints`）；用户入口 `FmodAudio.Install`。依赖 `Documentation/FmodUPM.md` 的私有 UPM 包；核心不声明 FMOD 依赖。设计与限制见 `Documentation/FMOD.md`。**未实现。**
-- 暂不做：**Wwise 适配器分包**（2026-10-25）——provider 缝已设计（`Documentation/Wwise.md`），但无真实 Wwise 项目 / SDK 可编译验证；Wwise 的 PlayingID / 回调 / 3D emitter 与 FMOD 差异大，不在没有真实 API 时盲做。重开判据：真实 Wwise 项目 + SDK 可编译验证 + FMOD provider 已落地验证。
-- 暂不做：**不把 `IAudioClipLoader` 提升为公开面**（2026-10-01 · v1 评估；2026-10-25 订正理由）——公开缝是 `IAudioProvider`（见上方 `未做` 条）；loader 仍是内置 provider 的 internal 加载/测试缝，不构成第二个后端替换点。先观察是否真有「只换资源来源、不换播放引擎」的需求。重开判据：出现「只换资源来源、不换播放引擎」的真实需求。
+- 未做：**FMOD 适配器分包**（2026-10-25 · B 方案下的分包设计）——`Assets/XFramework.Fmod/`：FMOD-free provider 程序集（始终编译、fake backend 测试）+ 条件集成程序集（`FMODUnity` + `defineConstraints`）；用户入口 `FmodAudio.Install`。**SDK 接入方式（官方 `.unitypackage` 导入命令 / 本地标记包 / UPM）待后续单独讨论**；本期未实现；核心不声明 FMOD 依赖。设计与限制见 `Documentation/FMOD.md`。
+- 暂不做：**Wwise 适配器分包**（2026-10-25）——provider 缝已实现（`Documentation/Wwise.md`），但无真实 Wwise 项目 / SDK 可编译验证；Wwise 的 PlayingID / 回调 / 3D emitter 与 FMOD 差异大，不在没有真实 API 时盲做。重开判据：真实 Wwise 项目 + SDK 可编译验证。
+- 暂不做：**不把 `IAudioClipLoader` 提升为公开面**（2026-10-01 · v1 评估；2026-10-25 订正理由）——公开缝是 `IAudioProvider`（见上方 `已做` 条）；loader 仍是内置 provider 的 internal 加载/测试缝，不构成第二个后端替换点。先观察是否真有「只换资源来源、不换播放引擎」的需求。重开判据：出现「只换资源来源、不换播放引擎」的真实需求。
 - 已推翻：**~~不做只读的通道状态快照~~**（2026-10-01 · v1 评估）——原理由「`GetChannelVolume` / `IsChannelMuted` 已覆盖查询需求」**已被 2026-10-02 的 `CopyChannels` 推翻**：诊断回读面已落地（通道名 / 音量 / 静音 / 在播路数），只剩逐 voice 明细未做（见下方条目）。
 - 不做：**框架内建「语音随语言切换」缺席**（2026-10-01 · v1 评估）——那要发明一套「语言 → 语音资源路径」的约定，而 `XLocalization` 本身只有语言表模板、没有「按 key 取资源路径」的概念；且「切语言时当前台词停在半句还是重播」是 GamePlay 时序决定。README 只给订阅 `LanguageChangedMessage` 的做法。无重开判据。
 - 不做：**`Play` 与 `PlayAsync` 的句柄契约不对称**（2026-10-01 · v1 记录；2026-10-19 R3-ADJ-02 裁定为不做）——前者在预占槽位时就返回、加载失败只让句柄失效；后者在加载完成后才返回、失败返回 `default`。两条契约各自自洽、也已写进 README 的对照表，统一会改变 `Play` 的「预占即返回」时序。无重开判据。
-- 未做：**`AudioSourcePool.StartingTimeoutTicks = 60`（约 2 秒）是自定值，真机未验证**（2026-10-01 · v1 记录）——兜底的是「某平台 `Play()` 之后 `isPlaying` 永不变真」这种情形；本仓只实测了批处理模式下的桌面行为，**真机（尤其移动端）未验证**。
+- 未做：**`AudioManagerImpl.StartingTimeoutTicks = 60`（约 2 秒）是自定值，真机未验证**（2026-10-01 · v1 记录；2026-10-25 常量随 provider 拆分迁到核心）——兜底的是「某平台 `Play()` 之后 `isPlaying` 永不变真」这种情形；本仓只实测了批处理模式下的桌面行为，**真机（尤其移动端）未验证**。
 - 未做：**`TryReserve` 的线性扫描**（2026-10-01 · v1 记录）——O(槽位数)，`MaxVoices` 默认 32；若将来允许把上限调到很大，需要换空闲链表。
 - 未做：**门面没有逐 voice 明细回读**（2026-10-01 · v1 记录；2026-10-17 第二轮审计刷新）——`CopyChannels` 已提供通道级回读（见上方「已推翻」条）；剩余的是逐 voice 明细，会泄漏 internal 结构，形状未定。重开判据：出现需要逐 voice 诊断的真实使用方。
 
