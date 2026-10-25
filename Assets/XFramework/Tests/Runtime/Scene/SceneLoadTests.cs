@@ -180,6 +180,21 @@ namespace XFramework.XScene.Tests
         }
 
         [Test]
+        public async Task LoadSceneAsync_ActivateWithInvalidScene_WarnsWithLocationAndReturnsHandle()
+        {
+            // R4-SCN-001：自定义 loader 可以返回「非 default 句柄 + 无效 Scene」；
+            // 告警不得去读 default(Scene).name（可能抛 ArgumentException），也不得吞掉句柄。
+            _fake.SceneLoadResult = new AssetSceneHandle(1, default);
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape(Location)));
+
+            var handle = await SceneManager.LoadSceneAsync(Location,
+                new SceneLoadOptions(LoadSceneMode.Additive, activateAfterLoad: true));
+
+            Assert.IsFalse(handle.IsDefault, "激活失败不应让已加载的句柄丢失");
+        }
+
+        [Test]
         public async Task LoadSceneAsync_WithoutActivateAfterLoad_KeepsActiveScene()
         {
             var scene = UnitySceneManager.CreateScene("SceneLoadTests_Additive");

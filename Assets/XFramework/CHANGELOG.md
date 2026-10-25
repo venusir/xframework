@@ -960,6 +960,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Scene
 
+- **激活失败告警直接读 `handle.Scene.name`，无效 Scene 时消息为空/可能抛（R4-SCN-001）**：自定义
+  `IAssetSceneLoader` 可以返回「非 default 句柄 + 无效 Scene」（`AssetSceneHandle` 只校验 `Id != 0`），
+  `SetActiveScene` 安全返回 false，但告警字符串没有同样的守卫——`default(Scene).name` 不受契约保护，
+  实测本机返回空串（告警里看不出是哪个场景），换版本/平台可能抛。修法：先判 `IsValid() && isLoaded`，
+  失败时用请求的 location 代替 `Scene.name`；句柄照常返回。回归：
+  `SceneLoadTests.LoadSceneAsync_ActivateWithInvalidScene_WarnsWithLocationAndReturnsHandle`
+  （改前告警不含 location）。
 - **加载成功后的回收段受调用方令牌约束，取消丢句柄（SCN-001）**：加载成功 → 进入跨帧回收 → 令牌取消 →
   OCE 抛出、`return handle` 不可达；Additive 场景留在 Hierarchy 且外部无卸载凭据，Single 模式调用方误以为
   加载失败。修法：回收调用改用 `CancellationToken.None`，XML/README 写明「加载成功后的回收阶段不响应取消」。

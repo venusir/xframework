@@ -64,9 +64,13 @@ namespace XFramework.XScene
                 if (!SetActiveScene(handle.Scene))
                 {
                     // 激活失败不可观测会让「新实例挂错场景」难以排查（SCN-004）。
+                    // 自定义 loader 可能返回「非 default 句柄 + 无效 Scene」：此时不读
+                    // Scene.name（default(Scene).name 不受契约保护），改用请求 location（R4-SCN-001）。
+                    var scene = handle.Scene;
+                    string sceneLabel = scene.IsValid() && scene.isLoaded ? scene.name : location;
                     LogManager.Warning(LogCategories.SceneManager,
                         "场景 '{0}' 加载成功但无法设为激活场景（引擎拒绝）；新实例仍挂在原激活场景下。",
-                        handle.Scene.name);
+                        sceneLabel);
                 }
             }
 
