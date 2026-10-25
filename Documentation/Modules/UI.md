@@ -179,4 +179,7 @@ README 只留使用方要知道的边界（「面板资源不会自动卸载」�
 > 「面板资源真释放」那条的**边界**——需显式调 `UnloadPanelAssetAsync`、没有按 LRU 自动卸载——是使用方要知道的，留在 README 的 `## 已知限制`，此处不复述。
 - 已做：**重复 `ShowDialogAsync` 重置结果通道**（2026-10-18 · `a6b405f`）——对已打开对话框再次调用会重置结果通道，不再立即返回上一轮旧结果（UI-B-013）。
 - 已做：**`PreconditionChain.ExecuteAsync(CancellationToken)` 重载**（2026-10-18 · `f66eca7`）——只在**条件之间**检查取消（令牌取消即抛 OCE），条件内部是否响应由实现决定；链不把令牌注入条件，`Add` 的委托形状保持不变（UI-C-007）。
+- 已做：**Dispose 后在途打开不再补跑 OnClose**（2026-10-25 · `616d64d8`，R4-UIA-001）——`Dispose` 经 `RecyclePanel` 回池后，在途 `OpenAsync` 续体仍走 `DoCloseAsync + RollbackPanel`；池化实例被重新 `Initialize` 复用时会关闭新面板。修法：`UIViewBase` 增加单调递增 `RecycleGeneration`，续体在 `!IsInitialized` 分支与 catch 回滚前比对；`SettleOpening` 改为「键仍指向本 entry 才移除」。回归 `UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` / `..._ReinitializedPanelStaysOpen`（改前双红）。
+- 已做：**无 owner 遮罩不被剪枝误删**（2026-10-25 · `28116446`，R4-UIB-001）——`PruneOverlayHolds` 用 `Owner == null` 判失效，而 `ShowMask()` 默认 owner 为 null；任意面板被外部销毁触发剪枝就会误删。修法：保留 `ReferenceEquals(Owner, null)` 的条目，仅 Unity 伪 null（owner 已销毁）才剪。回归 `UIMaskTests.ShowMask_WithoutOwner_SurvivesUnrelatedPanelDestroyed`（改前红）。
+- 已做：**HUD 同 target 并发附着合并与孤儿清理**（2026-10-25 · `5559dc2b`，R4-UIB-002）——`AttachAsync` 只在实例化前查 `_hudMap`，并发请求各实例化一次、后完成者覆盖 map、先完成者成为孤儿。修法：按 target 单槽在途表（相同请求加入、不同请求串行重试）；`DetachAll` 结算在途并清 `_activeHudList` 孤儿；`RecycleHud` 认领守卫。回归 `UIHudManagerTests.ShowHudAsync_SameTargetConcurrent_InstantiatesOnce` / `CloseAllAsync_AfterConcurrentAttach_LeavesNoActiveHud`（改前 2 次实例化 / 残留 1 个）。
 
