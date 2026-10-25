@@ -139,7 +139,7 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
   `IsActive` 删除（用 `ActiveCameraId` / `IsExternallyControlled`）。
 - 消息载荷 `CameraHandle` → `CameraId`（外部为 `null`）；`CameraStateSnapshot` / `CameraInfo` 字段重排后保持 id。
 - `TargetUnregistered` → `CameraNotFound`。
-- 行为变化：同步命令 supersede pending；外部接管事件 id 为 null；外部接管保持 boost；计数含已销毁未注销槽位。
+- 行为变化：同步命令 supersede pending；外部接管事件 id 为 null；已注册但被外部销毁的相机事件 id 仍解析为自己的 id（R4-CAM-005）；外部接管保持 boost；计数含已销毁未注销槽位。
 
 ## 审计记忆
 

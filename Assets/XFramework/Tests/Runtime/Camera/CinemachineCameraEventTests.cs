@@ -182,6 +182,22 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void DestroyedRegisteredActiveCamera_DeactivatedCarriesItsId()
+        {
+            // R4-CAM-005：已注册相机被外部销毁后，事件 id 不得退化成 null（那会被当成外部相机）。
+            CameraManager.SwitchTo("a");
+            Pump();
+            _events.Clear();
+
+            UnityEngine.Object.DestroyImmediate(_vcamAObject);
+            _vcamAObject = null;
+            Pump();
+
+            CollectionAssert.Contains(_events, "deactivated:a",
+                "已销毁的已注册相机，Deactivated 事件仍应带自己的 id");
+        }
+
+        [Test]
         public void OtherBrain_DoesNotPublish()
         {
             var otherCameraObject = new GameObject("OtherCamera");

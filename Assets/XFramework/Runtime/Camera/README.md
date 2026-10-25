@@ -321,7 +321,7 @@ if (camera != null)
   `IsBlending` 仍反映 Brain 的混合。
 - **作者优先级为 `int.MaxValue` 时 boost 饱和**：无法再 +1，优先级并列时 Cinemachine 按最新 `ActivationId`
   取相机，可能压不过后启用的同值相机。
-- **外部事件 id 为 `null`**；订阅是全局通道，多 Brain 需按 id 过滤。
+- **外部事件 id 为 `null`**；已注册但被外部销毁的相机仍解析出自己的 id（`Deactivated` / `BlendCompleted` 不退化为外部相机，R4-CAM-005）。订阅是全局通道，多 Brain 需按 id 过滤。
 - **异通道相机可注册但不生效**：`OutputChannel` 不在 Brain 的 `ChannelMask` 内时，`Activate` 不会产生输出，
   也不计入「同通道最大优先级」。
 - **异步完成由事件驱动**：输出驱动被禁用 / 不再推进时等待不会完成；取消只停止等待。

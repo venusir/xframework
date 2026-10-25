@@ -976,10 +976,15 @@ namespace XFramework.XCamera.Cinemachine
 
         private Slot FindSlotByCamera(CinemachineVirtualCameraBase camera)
         {
+            // Unity 伪 null（已销毁）不能当「不匹配」：已注册相机被外部销毁后，事件仍需解析出
+            // 自己的 id，否则会被当成外部相机（id = null，R4-CAM-005）。
+            if (ReferenceEquals(camera, null))
+                return null;
+
             for (var i = 0; i < _slots.Count; i++)
             {
                 var slot = _slots[i];
-                if (slot.Camera != null && ReferenceEquals(slot.Camera, camera))
+                if (ReferenceEquals(slot.Camera, camera))
                     return slot;
             }
 
@@ -991,11 +996,17 @@ namespace XFramework.XCamera.Cinemachine
             var vcam = camera as CinemachineVirtualCameraBase;
 
             // 分组相机（ClearShot / MixingCamera）的活动子相机向上解析到已注册的父相机。
-            for (var depth = 0; vcam != null && depth < 32; depth++)
+            // 条件用 ReferenceEquals：vcam 可能是已销毁的 Unity 对象（伪 null），
+            // `vcam != null` 会直接跳过、连已注册的槽位都匹配不到。
+            for (var depth = 0; !ReferenceEquals(vcam, null) && depth < 32; depth++)
             {
                 var slot = FindSlotByCamera(vcam);
                 if (slot != null)
                     return slot.CameraId;
+
+                // 未注册且已销毁：读 ParentCamera 会抛 MissingReference，就此结束解析。
+                if (vcam == null)
+                    break;
 
                 vcam = vcam.ParentCamera as CinemachineVirtualCameraBase;
             }

@@ -1104,6 +1104,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **已注册但被外部销毁的相机，事件 id 退化为 null（R4-CAM-005）**：`FindSlotByCamera` 先判
+  `slot.Camera != null`（Unity 伪 null），已销毁槽位永远匹配不到；`OnCameraDeactivated` /
+  `OnBlendFinished` 经 `ResolveCameraId` 得 `null`，被当成「外部相机」发布。修法：匹配改用
+  `ReferenceEquals`（先排除真 null），`ResolveCameraId` 的向上遍历也改用 `ReferenceEquals`，
+  未注册且已销毁时提前 `break`（避免访问 `ParentCamera` 抛 MissingReference）。
+  `IsRegistered` / `CameraCount` 的「计数含死槽」语义不变。回归：
+  `CinemachineCameraEventTests.DestroyedRegisteredActiveCamera_DeactivatedCarriesItsId`（改前 `deactivated:null`）。
 - **外部 override 下 `SwitchTo` 已活动目标不接管 boost（R4-CAM-002）**：Timeline `SetCameraOverride`
   把已注册的 B 设为活动相机、而管理器此前 boost 的是 A 时，`SwitchTo("b", …)` 走
   「已活动且未混合」早退分支直接结算 `Completed`，不恢复 A、不 boost B；释放 override 后输出回到
