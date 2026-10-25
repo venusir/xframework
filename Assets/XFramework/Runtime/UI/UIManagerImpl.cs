@@ -884,11 +884,13 @@ namespace XFramework.XUI
 
             // 事件面与查询面一致（R3-ADJ-13）：只有「确实发起过关闭且最终一个面板都不剩」才发布。
             // 控制器拦下关闭（面板仍在）或本来就没有面板时发布，会让订阅者误判 OpenCount == 0。
-            if (toClose.Count > 0 && OpenCount == 0)
+            // 控制器回调使用同一门控（R4-UIB-003）：两套「全部关闭」语义不能各说一套。
+            bool allClosed = toClose.Count > 0 && OpenCount == 0;
+            if (allClosed)
+            {
                 MessageManager.Publish(new AllPanelsClosedMessage());
-
-            // ★ Controller 拦截点：全部关闭后回调
-            await _controller.OnAllPanelsClosedAsync(cancellationToken);
+                await _controller.OnAllPanelsClosedAsync(cancellationToken);
+            }
         }
 
         #endregion

@@ -261,6 +261,8 @@ namespace XFramework.XUI.Tests
         [Test]
         public async Task CloseAllAsync_NoPanels_DoesNotPublishAllPanelsClosed()
         {
+            var controller = new BlockingController();
+            UIManager.SetController(controller);
             int closed = 0;
             var sub = MessageManager.Subscribe<AllPanelsClosedMessage>(_ => closed++);
 
@@ -268,7 +270,21 @@ namespace XFramework.XUI.Tests
 
             Assert.AreEqual(0, UIManager.OpenCount);
             Assert.AreEqual(0, closed, "没有面板时不应发布 AllPanelsClosedMessage");
+            Assert.AreEqual(0, controller.AllClosedCount, "没有面板时不应回调 OnAllPanelsClosedAsync（R4-UIB-003）");
             sub.Dispose();
+        }
+
+        [Test]
+        public async Task CloseAllAsync_WithPanels_CallsControllerAllClosedOnce()
+        {
+            await UIManager.OpenAsync<FakePanel>("ui/a");
+            var controller = new BlockingController();
+            UIManager.SetController(controller);
+
+            await UIManager.CloseAllAsync();
+
+            Assert.AreEqual(0, UIManager.OpenCount);
+            Assert.AreEqual(1, controller.AllClosedCount);
         }
 
         /// <summary>
@@ -278,7 +294,8 @@ namespace XFramework.XUI.Tests
         public async Task CloseAllAsync_ControllerBlocksClose_DoesNotPublishAllPanelsClosed()
         {
             await UIManager.OpenAsync<FakePanel>("ui/blocked-close");
-            UIManager.SetController(new BlockingController { BlockClose = true });
+            var controller = new BlockingController { BlockClose = true };
+            UIManager.SetController(controller);
 
             int closed = 0;
             var sub = MessageManager.Subscribe<AllPanelsClosedMessage>(_ => closed++);
@@ -287,6 +304,8 @@ namespace XFramework.XUI.Tests
 
             Assert.AreEqual(1, UIManager.OpenCount, "控制器拦下后面板应仍然打开");
             Assert.AreEqual(0, closed, "还有面板开着时不应发布 AllPanelsClosedMessage");
+            Assert.AreEqual(0, controller.AllClosedCount,
+                "还有面板开着时不应回调 OnAllPanelsClosedAsync（R4-UIB-003）");
             sub.Dispose();
         }
 

@@ -503,7 +503,8 @@ var token3 = MessageManager.Subscribe<AllPanelsClosedMessage>(_ =>
 ```
 
 > `AllPanelsClosedMessage` 只在 `CloseAllAsync` **确实发起过关闭**、且结束时 `OpenCount == 0` 时发布一次；
-> 控制器拦下关闭（面板仍开着）或本来就没有面板时不发布（R3-ADJ-13）。
+> 控制器拦下关闭（面板仍开着）或本来就没有面板时不发布（R3-ADJ-13）。控制器回调
+> `OnAllPanelsClosedAsync` 使用**同一门控**（R4-UIB-003）。
 
 // 取消订阅（避免内存泄漏）：订阅句柄本身即 IDisposable
 token1.Dispose();

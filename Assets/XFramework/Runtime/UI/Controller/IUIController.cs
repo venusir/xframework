@@ -69,7 +69,10 @@ namespace XFramework.XUI.Controller
         #region All Closed
 
         /// <summary>
-        /// 所有面板关闭后调用（CloseAllAsync 之后）。
+        /// 所有面板关闭后调用（<see cref="IUIManager.CloseAllAsync"/> 之后）。
+        /// <para><b>门控与 <see cref="Data.AllPanelsClosedMessage"/> 一致</b>：只有本次确实发起过关闭、
+        /// 且结束时 <c>OpenCount == 0</c> 才调用。没有面板、或控制器在 <see cref="OnBeforeCloseAsync"/>
+        /// 拦下全部关闭时都不调用（R4-UIB-003）。</para>
         /// </summary>
         /// <param name="cancellationToken">调用方的取消令牌。</param>
         UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default);

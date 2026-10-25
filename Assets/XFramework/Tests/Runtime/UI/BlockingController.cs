@@ -29,6 +29,9 @@ namespace XFramework.XUI.Tests
         /// <summary>关闭后回调被调用的次数。</summary>
         public int AfterCloseCount { get; private set; }
 
+        /// <summary>「全部关闭」回调被调用的次数（R4-UIB-003 门控断言用）。</summary>
+        public int AllClosedCount { get; private set; }
+
         public UniTask<bool> OnBeforeOpenAsync(Type panelType, string assetPath, int layer, object userData,
             CancellationToken cancellationToken = default)
         {
@@ -57,6 +60,7 @@ namespace XFramework.XUI.Tests
 
         public UniTask OnAllPanelsClosedAsync(CancellationToken cancellationToken = default)
         {
+            AllClosedCount++;
             return UniTask.CompletedTask;
         }
     }
