@@ -114,6 +114,54 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
+        public void SetTipProvider_OldDetachAllThrows_NewProviderStillInstalled()
+        {
+            // R4-UIB-004：换绑时旧 provider 的 DetachAll 异常此前会在赋值新引用之前抛出，
+            // 管理器停在旧实现上。
+            var old = new CountingTipProvider { ThrowOnDetachAll = true };
+            UIManager.SetTipProvider(old);
+            var fresh = new CountingTipProvider();
+
+            LogAssert.Expect(LogType.Error, new Regex("Tip provider.DetachAll 抛出异常"));
+            UIManager.SetTipProvider(fresh);
+
+            UIManager.ShowTipAsync("x").GetAwaiter().GetResult();
+            Assert.AreEqual(1, fresh.ShowTipCallCount, "旧 provider 的异常不得阻断换绑");
+
+            // TearDown 的 Destroy 会再调一次 DetachAll
+            old.ThrowOnDetachAll = false;
+        }
+
+        [Test]
+        public void SetHudProvider_OldDetachAllThrows_NewProviderStillInstalled()
+        {
+            var old = new FaultyHudProvider { ThrowOnDetachAll = true };
+            UIManager.SetHudProvider(old);
+            var fresh = new FaultyHudProvider();
+
+            LogAssert.Expect(LogType.Error, new Regex("HUD provider.DetachAll 抛出异常"));
+            UIManager.SetHudProvider(fresh);
+
+            UIManager.Update(0.016f, 0f);
+            Assert.AreEqual(1, fresh.UpdateCount, "旧 provider 的异常不得阻断换绑");
+
+            old.ThrowOnDetachAll = false;
+        }
+
+        [Test]
+        public void HideHud_ProviderDetachThrows_IsIsolated()
+        {
+            var hud = new FaultyHudProvider { ThrowOnDetach = true };
+            UIManager.SetHudProvider(hud);
+
+            LogAssert.Expect(LogType.Error, new Regex("HUD provider.Detach 抛出异常"));
+            Assert.DoesNotThrow(() => UIManager.HideHud(null));
+            Assert.AreEqual(1, hud.DetachCount);
+
+            hud.ThrowOnDetach = false;
+        }
+
+        [Test]
         public async Task CloseAllAsync_DetachesHudAndTips()
         {
             await UIManager.CloseAllAsync();

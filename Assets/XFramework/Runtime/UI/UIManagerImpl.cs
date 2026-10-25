@@ -249,9 +249,9 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public void SetTipProvider(IUITipProvider provider)
         {
-            // 换 provider 前先回收旧的：否则它手上的在播 Tip 会留在场景里无人认领
-            if (_tipProvider != null && !ReferenceEquals(_tipProvider, provider))
-                _tipProvider.DetachAll();
+            // 先落新引用、最后回收旧 provider（R4-UIB-004）：旧实现的 DetachAll 抛异常时，
+            // 管理器不能停在旧引用上。回收走 SafeDetachAll，异常记 Error 后继续。
+            var previous = _tipProvider;
 
             if (provider == null)
             {
@@ -276,6 +276,9 @@ namespace XFramework.XUI
 
             // 阻尼标记随 provider 一起换：新实现值得一条新的线索，旧实现的异常不再重复记
             _tipProviderFaultLogged = false;
+
+            if (previous != null && !ReferenceEquals(previous, _tipProvider))
+                SafeDetachAll(previous);
         }
 
         /// <summary>
@@ -306,15 +309,23 @@ namespace XFramework.XUI
         /// <inheritdoc/>
         public void HideHud(Transform target)
         {
-            _hudProvider?.Detach(target);
+            // 第三方 provider 的 Detach 异常不得从同步 API 外泄（R4-UIB-004）
+            try
+            {
+                _hudProvider?.Detach(target);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.UIManager, e,
+                    "HUD provider.Detach 抛出异常，已隔离并继续。");
+            }
         }
 
         /// <inheritdoc/>
         public void SetHudProvider(IUIHudProvider provider)
         {
-            // 同上：换 provider 前先回收，避免旧 provider 的 HUD 成为孤儿
-            if (_hudProvider != null && !ReferenceEquals(_hudProvider, provider))
-                _hudProvider.DetachAll();
+            // 同 SetTipProvider：先落新引用，再隔离旧 provider 的回收异常（R4-UIB-004）
+            var previous = _hudProvider;
 
             if (provider == null)
             {
@@ -335,6 +346,9 @@ namespace XFramework.XUI
 
             // 同 SetTipProvider：阻尼标记随 provider 一起换
             _hudProviderFaultLogged = false;
+
+            if (previous != null && !ReferenceEquals(previous, _hudProvider))
+                SafeDetachAll(previous);
         }
 
         #endregion

@@ -814,6 +814,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **provider 换绑与 `HideHud` 的异常未隔离（R4-UIB-004）**：`SetTipProvider` / `SetHudProvider` 先对旧
+  provider 调 `DetachAll` 再赋值新引用——旧实现抛异常时新 provider 根本装不上，管理器停在旧实现上；
+  `HideHud` 直接调第三方 `Detach`，异常从同步 API 外泄。修法：先落新引用（含同引用早退），再经
+  `SafeDetachAll` 隔离回收旧 provider；`HideHud` 的 `Detach` 包 try/catch 记 Error。回归：
+  `UIAsyncTokenTests.SetTipProvider_OldDetachAllThrows_NewProviderStillInstalled` /
+  `SetHudProvider_OldDetachAllThrows_NewProviderStillInstalled` / `HideHud_ProviderDetachThrows_IsIsolated`
+  （改前三红）。
 - **层交互状态在「先设交互、后建容器」时不落到新容器（R4-UIA-005，实测口径订正）**：审计假设层隐藏时
   面板全 inactive、`SetLayerInteractive` 的 `GetComponentsInChildren` 拿不到面板 raycaster；实测
   Unity 6000.4.5f1 下该 API 对「父节点 inactive、子节点 activeSelf」仍返回子节点，面板侧本来就落得下去

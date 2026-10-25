@@ -28,6 +28,12 @@ namespace XFramework.XUI.Tests
         /// <summary>置 true 时 <c>DetachAll</c> 抛异常（R3-UIA-004 的隔离用例）。</summary>
         public bool ThrowOnDetachAll { get; set; }
 
+        /// <summary>置 true 时 <c>Detach</c> 抛异常（R4-UIB-004 的隔离用例）。</summary>
+        public bool ThrowOnDetach { get; set; }
+
+        /// <summary>被要求 detach 的次数。</summary>
+        public int DetachCount { get; private set; }
+
         public void Update(float deltaTime, float time)
         {
             UpdateCount++;
@@ -57,7 +63,12 @@ namespace XFramework.XUI.Tests
             => throw new NotSupportedException("[FaultyHudProvider] 本替身不实现 AttachAsync");
 
         public void Detach(Transform target)
-            => throw new NotSupportedException("[FaultyHudProvider] 本替身不实现 Detach");
+        {
+            DetachCount++;
+
+            if (ThrowOnDetach)
+                throw new InvalidOperationException("[FaultyHudProvider] 故意在 Detach 里抛异常");
+        }
     }
 
     /// <summary>
@@ -75,6 +86,12 @@ namespace XFramework.XUI.Tests
         /// <summary>置 true 时 <c>Update</c> 抛异常。</summary>
         public bool ThrowOnUpdate { get; set; }
 
+        /// <summary>置 true 时 <c>DetachAll</c> 抛异常（R4-UIB-004 的隔离用例）。</summary>
+        public bool ThrowOnDetachAll { get; set; }
+
+        /// <summary>被要求显示 Tip 的次数。</summary>
+        public int ShowTipCallCount { get; private set; }
+
         public void Update(float deltaTime, float time)
         {
             UpdateCount++;
@@ -86,6 +103,9 @@ namespace XFramework.XUI.Tests
         public void DetachAll()
         {
             DetachAllCount++;
+
+            if (ThrowOnDetachAll)
+                throw new InvalidOperationException("[CountingTipProvider] 故意在 DetachAll 里抛异常");
         }
 
         public int UIRootSetCount { get; private set; }
@@ -97,6 +117,9 @@ namespace XFramework.XUI.Tests
 
         public UniTask ShowTipAsync(string text, TipConfig config = default,
             CancellationToken cancellationToken = default)
-            => throw new NotSupportedException("[CountingTipProvider] 本替身不实现 ShowTipAsync");
+        {
+            ShowTipCallCount++;
+            return UniTask.CompletedTask;
+        }
     }
 }

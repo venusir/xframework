@@ -1183,7 +1183,7 @@ popupRect.position = new Vector3(pos.x, pos.y, 0f);
 
 - **实现哪个契约**：`IUIManager`（整体替换，经 `SetInstance`）；`IUIController`（开 / 关拦截，经 `SetController` 或 `Initialize(uiRoot, controller)`）；`IUIHudProvider` / `IUITipProvider`（可选能力，经 `SetHudProvider` / `SetTipProvider` 替换）。
 - **怎么接线**：`UIManager.SetInstance(manager)`；控制器见「快速使用」2，实例所有权与注入顺序见「快速使用」12。
-- **provider 的 `SetUIRoot`**：初始化时与初始化之后注入（`SetTipProvider` / `SetHudProvider`）都会调用一次——注入的实现可以直接使用 `uiRoot`，不必自己去读 `UIManager.UIRoot`（R3-ADJ-12）。
+- **provider 的 `SetUIRoot`**：初始化时与初始化之后注入（`SetTipProvider` / `SetHudProvider`）都会调用一次——注入的实现可以直接使用 `uiRoot`，不必自己去读 `UIManager.UIRoot`（R3-ADJ-12）。换绑时先落新引用、再经 `SafeDetachAll` 回收旧 provider：旧的 `DetachAll` 抛异常会被隔离并记 Error，不会让管理器停在旧实现上；`HideHud` 的 `Detach` 同样隔离（R4-UIB-004）。
 - **要守什么**：`SetController` 只对 `UIManagerImpl` 生效；注入实现退化为「只有每帧档」，`Destroy()` 会连注入实例一起销毁（见「快速使用」12）；`IUIManager` 新增成员必须同步门面转发（见「架构设计」的「扩展清单」）；排序与分层方案不可单独替换，换方案等于整体替换 `IUIManager`（见「已知限制」）；**重写 `OnPoolRecycle` 必须调用 `base.OnPoolRecycle()`**——基类在该钩子里释放 `Track` 登记的订阅、解绑 ViewModel、复位打开/焦点/暂停与 Canvas 排序，不调 base 会全部跳过（R3-UIB-004）。回池钩子抛异常会被隔离并记 Error：不阻断 `PanelClosedMessage` / `OnAfterCloseAsync`，HUD 侧也不会逃逸 fire-and-forget 或替换原始 OnOpen 异常（R4-UIA-002）。
 
 ## 内部机制
