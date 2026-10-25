@@ -308,7 +308,9 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 ## 七、审计记录（2026-10-24）
 
 > 本节是 **2026-10-24 的单轮审计点快照**，不是使用说明；长期结论仍按收件人分流到包 README 与决策台账。
-> 审计对象：`Assets/XFramework.Luban/`（Runtime 13 个 `.cs`、Editor 14 个、Tests、Samples~）。
+> 审计对象：`Assets/XFramework.Luban/`（**审计时** Runtime 13 个 `.cs`、Editor 14 个；2026-10-25 当前为
+> Runtime 15 / Editor 15——差额含 `AssemblyInfo.cs`、`AssetManagerLubanAssetSource.cs` 与
+> `LubanProcessOutputBuffer.cs`；本行保留审计时口径，R4-LBN-014）。Tests、Samples~ 同上。
 > 方法：按 `Documentation/ModuleAudit.md` 的 A–F 判据逐类扫；只读探针 `git ls-files --eol` / `git tag` / `diff -rq` / `.meta` 完整性；Luban 官方与第三方资料对照。
 > **本轮没有运行 Unity 测试**：下文所有「改前会红」都是源码阅读推导，实施时必须补红证。状态标记：`[读码]` 源码阅读；`[实测]` 本轮只读命令；`[网读]` 官方/第三方页面；`[未验证]` 无本地证据。
 
