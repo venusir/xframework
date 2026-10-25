@@ -6,12 +6,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-25
+
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
 > `AssetManager.LoadSceneAsync` 改形（改为返回可卸载的句柄）、`IAssetManager.LoadSceneAsync` 从主接口
 > 移入可选能力接口 `IAssetSceneLoader`；`XCamera` **从零重设计**（string id + 相机栈；gameplay 面保持 id / 中立类型，
 > 组合根与高级访问使用 Cinemachine 类型，后端契约 internal；删除 `ICameraManager` / `CameraHandle` /
 > `CinemachineCameraManager` 与旧消息载荷）。迁移见 `### Changed` 的「破坏性变更迁移表」与「行为变更」。
-> 因含破坏性变更，**下次发版应为 `0.4.0`**。
+> 本版即 `0.4.0`；`0.3.0` 从未分发，升级者只需按下面的迁移表与行为变更节核对。
 
 ### Added
 

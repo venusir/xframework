@@ -372,9 +372,12 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 
 > **包自身不钉修订（跟随 `main`），与「第三方依赖必须钉 `#tag`」形成有意的不对称**：XFramework 是本仓库
 > 自己发布的包，跟随 `main` 才能拿到后续修复；第三方依赖钉 tag 是为了避免上游默认分支漂移。需要稳定版本时，
-> 把 URL 改成钉 `0.3.0`：`https://github.com/venusir/xframework.git?path=Assets/XFramework#0.3.0`
-> （**`?path=` 必须在 `#` 之前**）。注意 `0.3.0` 早于 Camera / Scene 等模块，且 `AssetPlayMode` 的整数值与
-> 当前不同（见 CHANGELOG 的行为变更节）。
+> 把 URL 改成钉 `0.4.0`：`https://github.com/venusir/xframework.git?path=Assets/XFramework#0.4.0`
+> （**`?path=` 必须在 `#` 之前**）。
+>
+> **从 `0.3.0` 升级**：`0.3.0` 早于 Camera / Scene 等模块，且 `AssetPlayMode` 的整数值与 `0.4.0` 不同；
+> 请按 CHANGELOG 的「破坏性变更迁移表」与「行为变更（编译器抓不到）」逐条核对。`0.3.0` 从未分发，
+> 迁移表里标「中间形状」的行无需经过。
 
 这种方式把包拉进 `Library/PackageCache`，是**只读**的：改了不会保留，也无法提交回仓库。只需要用框架、不改框架代码时选它。
 
