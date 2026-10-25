@@ -186,6 +186,10 @@ ConfigManifest  (批量加载清单)
 > `table.Data` 非 null，且其 `Dictionary<TKey, T>` 的键/值类型与 `rowType` 声明一致——
 > 不匹配在**注册期**抛 `ConfigException`（与 `ConfigTable<T>` 构造函数的判据相同），
 > 不会等到查询时才在包装器构造处失败。
+>
+> **隐式前提：字典键 == 行 `Id`**：`ConfigTable<T>` 只校验键/值**类型**，不校验键与
+> `IConfigRow<TKey>.Id` 是否一致。第三方构造字典时请用行自身的 `Id` 作键；两者分叉会得到
+> 「注册成功、`Get(row.Id)` 查不到」的表（R4-CONF-004）。内置 loader 与 Luban 桥同源，满足该前提。
 
 ### Query — Table
 

@@ -11,6 +11,9 @@ namespace XFramework.XConfig
     /// <para>包装器不复制注入的字典、也不写入它；查询直接落在字典上（`GetAll` 是构造期快照）。</para>
     /// <para>TKey 隐藏在类型内部，通过 .Get(key) / .TryGet(key) 查询时由实参自动推断主键类型。</para>
     /// <para>主键类型在构造时从 <see cref="IConfigRow{TKey}"/> 提取并缓存，查询时按实参类型与缓存比对，不匹配时报错（错误信息含真实键类型）。</para>
+    /// <para><b>隐式前提：字典键 == 行 Id</b>——构造只校验键/值的<em>类型</em>，不校验键与行自身
+    /// <c>IConfigRow&lt;TKey&gt;.Id</c> 是否一致；第三方构造字典时请用行自身的 Id 作键，
+    /// 否则会出现「注册成功、<c>Get(row.Id)</c> 查不到」（R4-CONF-004）。</para>
     /// <para>建议缓存此包装器以复用后续查询，避免每次查字典。</para>
     /// </summary>
     /// <typeparam name="T">配置行类型，需实现 <see cref="IConfigRow"/>。</typeparam>
