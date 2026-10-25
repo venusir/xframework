@@ -18,6 +18,14 @@ namespace XFramework.XConfig.Luban.Tests
         [Test]
         public void ReadmeDependencyUrl_MatchesManifest()
         {
+            // 仓内治理守卫：消费方的 manifest 可以安装不同版本的 com.code-philosophy.luban，
+            // 在 PackageCache/embedded 布局下拿消费方 manifest 比对只会误红。
+            if (!Directory.Exists(Path.Combine(Application.dataPath, "XFramework.Luban")))
+            {
+                Assert.Ignore(
+                    "依赖声明守卫只在本仓运行；消费方 manifest 的 Luban 版本可不同于包 README。");
+            }
+
             string packageRoot = LubanRuntimeTestPaths.PackageRoot;
             string readme = File.ReadAllText(Path.Combine(packageRoot, "README.md"));
             string projectRoot = FindProjectRoot();
