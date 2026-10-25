@@ -867,6 +867,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **`img_` 源类型不匹配时完全静默（R4-UIB-005）**：R3-UIB-009 只补了「组件缺失」告警；组件存在但源值不是
+  `Sprite` / `Color` / `float` 时无条件 `return`，README 却承诺「类型不匹配会在编辑器打告警」。
+  修法：三个分支都不匹配时 `#if UNITY_EDITOR` 打一条 Warning（带属性名与源类型），Release 零开销。
+  回归：`UIPanelBindingConventionTests.ImgNodeWithUnsupportedSourceType_Warns`（改前无告警）。
 - **UI 两条假 OnResume 守卫与 Dispose provider 隔离的直接覆盖（R4-UIA-006）**：补
   `PopToAsync` 目标已是栈顶、`PopToRootAsync` 栈深 ≤ 1 两条假 `OnResume` 守卫用例，以及 `Destroy` 时
   一个 provider 的 `DetachAll` 抛异常不阻断另一个的用例（此前只有 `CloseAllAsync` 有同型覆盖）。

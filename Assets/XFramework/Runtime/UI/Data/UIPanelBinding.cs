@@ -179,6 +179,15 @@ namespace XFramework.XUI.Data
                 {
                     RegisterBinding(fillProp, val => img.fillAmount = val);
                 }
+#if UNITY_EDITOR
+                else
+                {
+                    // R4-UIB-005：组件存在但源类型不支持时此前完全静默，README 却承诺会告警。
+                    LogManager.Warning(LogCategories.UIPanelBinding,
+                        "约定绑定 '{0}' 的源类型 {1} 不受支持（img_ 仅支持 Sprite / Color / float）；绑定被忽略。",
+                        imgKey, source.GetType().Name);
+                }
+#endif
                 return;
             }
 

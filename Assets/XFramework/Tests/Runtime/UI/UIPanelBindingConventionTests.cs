@@ -46,6 +46,22 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
+        public void ImgNodeWithUnsupportedSourceType_Warns()
+        {
+            // R4-UIB-005：组件存在但源值类型不受支持时此前完全静默。
+            var child = new GameObject("img_icon", typeof(RectTransform));
+            child.transform.SetParent(_root.transform, false);
+            child.AddComponent<Image>();
+
+            var binding = CreateBinding();
+            binding.CacheComponents(_root.transform);
+            var source = new ReactiveProperty<int>(1);
+
+            LogAssert.Expect(LogType.Warning, new Regex("不受支持"));
+            binding.BindByConvention("icon", source);
+        }
+
+        [Test]
         public void DuplicateConventionNode_WarnsAndKeepsFirst()
         {
             var first = new GameObject("txt_title", typeof(RectTransform));

@@ -221,7 +221,7 @@ public class SettingsPanel : UIPanelBase
 | `tgl_{属性名}`      | `Toggle`                               | `isOn`        | `IReactiveProperty<bool>`             |
 
 - **查找顺序即优先级**：`txt_` → `img_` → `sld_` → `tgl_`，命中即返回。同一属性名若存在多种前缀的节点，靠前的那种生效。
-- **类型不匹配等于没绑**：`sld_` 只认 `float`、`tgl_` 只认 `bool`——给 `sld_` 配 `IReactiveProperty<int>` 绑不上（`int` 与 `float` 之间没有隐式接口转换）。此时只在**编辑器**里打一条「未找到」告警，Release 下完全静默。
+- **类型不匹配等于没绑**：`img_` 只认 `IReactiveProperty<Sprite>` / `<Color>` / `<float>`，`sld_` 只认 `float`、`tgl_` 只认 `bool`——给 `sld_` 配 `IReactiveProperty<int>` 绑不上（`int` 与 `float` 之间没有隐式接口转换）。此时只在**编辑器**里打一条告警（`img_` 是「源类型不受支持」，其余走「未找到」），Release 下完全静默。
 - **按钮走另一条路**：`btn_{名字}` → `Button.onClick`，经 `Binding.BindClick("名字", 回调)` 绑定。按钮不是「值的来源」，故不在上表。
 - **组件在绑定前必须就位**：缓存是 `BindViewModel` / `Binding.Bind` 时一次性建立的，运行时新加的子节点不在缓存里，需重新 `CacheComponents`。
 - **不覆盖 `TMP_Text` / `TMP_InputField`**：想要 TMP、输入框或格式化，用 3.5 的精确式绑定（`BindToText` 收 `TMP_Text`）。
