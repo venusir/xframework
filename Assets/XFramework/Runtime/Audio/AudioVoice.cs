@@ -41,6 +41,13 @@ namespace XFramework.XAudio
         internal AudioSource Source;
 
         /// <summary>
+        /// 承载 <see cref="Source"/> 的槽位 GameObject。
+        /// <para>外部销毁宿主或播放源后，<see cref="Source"/> 会变成 Unity 伪 null；保留这个引用让
+        /// <c>TryReserve</c> 能在原下标重建（R4-AUD-001）。它同样可能变成伪 null（宿主整体销毁）。</para>
+        /// </summary>
+        internal GameObject SlotObject;
+
+        /// <summary>
         /// 代际号。每次被预占时递增（跳过 <c>0</c>），使上一个持有者的句柄失效。
         /// <para>这是「槽位复用后旧句柄不会误停新声音」的唯一保证。</para>
         /// </summary>

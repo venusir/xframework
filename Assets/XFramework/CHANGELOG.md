@@ -672,6 +672,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Audio
 
+- **Free 槽的坏源永久毒化播放（R4-AUD-001）**：外部销毁宿主/播放源后，活跃槽被 `Sweep` 回收成 Free，
+  但 `AudioVoice.Source` 仍是 Unity 伪 null；`TryReserve` 恒取第一个 Free 槽且不重建，下一次播放加载完
+  clip 后在 `Source == null` 判定处再次释放并返回 default——该槽继续是最小下标 Free，健康槽位永远
+  轮不到。修法：`AudioVoice` 记槽位 GameObject；`TryReserve` 命中坏源时在原下标重建（只销毁组件则补
+  `AudioSource`，整个宿主没了则按原名重建 `Voice {n}`，保留旧代际后递增）。回归：
+  `AudioPoolTests.ExternallyDestroyedHost_NextPlayRebuildsSlotAndSucceeds` /
+  `ExternallyDestroyedSource_NextPlayRebuildsSource`（改前第二次播放取不到播放源）。
 - **音量刷新假 null、Sweep 的 break 过早注销（R3-AUD-002/003）**：外部销毁的播放源上写 `volume` 会抛
   MissingReference；`Sweep` 的 `break` 让后面槽位不计入 active、其余死槽位轮不到。修法：刷新时跳过
   `Source == null`；`break` 改 `continue`。

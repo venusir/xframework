@@ -331,6 +331,57 @@ namespace XFramework.XAudio.Tests
                 "被外部销毁的播放源必须在 Sweep 中收尾回收（AUD-003）");
         }
 
+        /// <summary>
+        /// 宿主被外部整体销毁后，下一次播放不得永久命中坏源 Free 槽（R4-AUD-001）。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ExternallyDestroyedHost_NextPlayRebuildsSlotAndSucceeds()
+        {
+            var first = AudioManager.Play("audio/a");
+            Assert.IsFalse(first.IsDefault, "前提：已起播");
+            var host = FindHosts()[0];
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[Audio] 播放源已被外部销毁")));
+            UnityEngine.Object.DestroyImmediate(host.gameObject);
+
+            yield return new WaitForSecondsRealtime(0.2f);
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount, "前提：旧槽位已被 Sweep 回收");
+
+            var second = AudioManager.Play("audio/b");
+
+            Assert.IsFalse(second.IsDefault, "宿主外部销毁后下一次播放应重建槽位并成功起播");
+            Assert.AreEqual(first.Id, second.Id, "应在原槽位下标重建，不新增槽位");
+            Assert.IsNotNull(AudioTestKit.FindSourceFor(second), "重建后应能找到播放源");
+        }
+
+        /// <summary>
+        /// 只销毁 <c>AudioSource</c> 组件时，下一次播放应在同一槽位补回组件（R4-AUD-001）。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ExternallyDestroyedSource_NextPlayRebuildsSource()
+        {
+            var first = AudioManager.Play("audio/a");
+            Assert.IsFalse(first.IsDefault, "前提：已起播");
+            var source = AudioTestKit.FindSourceFor(first);
+            Assert.IsNotNull(source, "前提：能找到播放源");
+
+            LogAssert.Expect(LogType.Warning,
+                new Regex(Regex.Escape("[Audio] 播放源已被外部销毁")));
+            UnityEngine.Object.DestroyImmediate(source);
+
+            yield return new WaitForSecondsRealtime(0.2f);
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount, "前提：旧槽位已被 Sweep 回收");
+
+            var second = AudioManager.Play("audio/b");
+
+            Assert.IsFalse(second.IsDefault, "只销毁 AudioSource 组件后下一次播放应补回组件");
+            Assert.AreEqual(first.Id, second.Id, "应在原槽位下标重建");
+            Assert.IsNotNull(AudioTestKit.FindSourceFor(second), "重建后应能找到播放源");
+        }
+
         #endregion
 
         #region Helpers

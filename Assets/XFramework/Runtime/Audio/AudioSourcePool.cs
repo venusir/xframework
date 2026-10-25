@@ -119,6 +119,15 @@ namespace XFramework.XAudio
             }
 
             var voice = _slots[free];
+
+            // 外部销毁宿主/播放源后，Free 槽可能留着 Unity 伪 null 的 Source；不重建就会让
+            // 每一次播放都命中同一个坏槽并失败，健康槽位永远轮不到（R4-AUD-001）。
+            if (voice.Source == null)
+            {
+                voice = RebuildVoice(voice, free);
+                _slots[free] = voice;
+            }
+
             voice.Generation = NextGeneration(voice.Generation);
             voice.State = AudioVoiceState.Loading;
             voice.Channel = channel;
@@ -325,7 +334,33 @@ namespace XFramework.XAudio
             var source = go.AddComponent<AudioSource>();
             source.playOnAwake = false;
 
-            return new AudioVoice { Source = source };
+            return new AudioVoice { Source = source, SlotObject = go };
+        }
+
+        /// <summary>
+        /// 在原下标重建坏掉的槽位（R4-AUD-001）。
+        /// <para>两种外部销毁：只销毁 <see cref="AudioSource"/> 组件时复用槽位对象补组件；
+        /// 宿主整体销毁时旧槽位对象已不在，按原名新建并保留旧代际（随后由 <see cref="TryReserve"/> 递增，
+        /// 旧句柄仍然失效）。不放 <see cref="Release"/> / <see cref="Invalidate"/>：退出路径不创建对象。</para>
+        /// </summary>
+        private AudioVoice RebuildVoice(AudioVoice voice, int index)
+        {
+            EnsureHost();
+
+            if (voice.SlotObject != null)
+            {
+                var source = voice.SlotObject.GetComponent<AudioSource>();
+                if (source == null)
+                    source = voice.SlotObject.AddComponent<AudioSource>();
+
+                source.playOnAwake = false;
+                voice.Source = source;
+                return voice;
+            }
+
+            var rebuilt = CreateVoice(index);
+            rebuilt.Generation = voice.Generation;
+            return rebuilt;
         }
 
         /// <summary>池耗尽告警：同一段耗尽期只记一条，免得一帧几十个音效把控制台刷爆。</summary>
