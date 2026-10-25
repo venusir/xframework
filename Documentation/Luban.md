@@ -523,6 +523,7 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 - **IL2CPP / Android / iOS**：未验证。
 - **消费方 UPM 布局**：`[探针实测]` 2026-10-25 在裸消费方工程验证：核心包与扩展包经本地 bare Git URL 装入 `Library/PackageCache`，`testables` 下列出的两个测试程序集实际产出；EditMode 76/76，PlayMode 65 通过 + 1 跳过（`LubanDependencyDeclarationTests` 按设计只在仓内运行）、0 失败。
 - **官方与第三方资料为 `[网读]`**，不是本地可复现的一手事实；本文件 §〇 的 `[一手核对]` / `[探针实测]` 仍以其自身标记为准。
+- **未做：Linux Editor 大小写敏感路径 / 非项目根 cwd（R4-PRB-09，2026-10-25）**——路径比较全平台 `OrdinalIgnoreCase`，且 `File.Exists(path)` 的路径来自 `AssetDatabase.GUIDToAssetPath`（依赖 Editor 当前工作目录）。需 Linux Editor 探针：用大小写不同的两条路径 + 从非项目根目录启动 Editor，核对 `LubanSettingsValidator` / `LubanProjectValidator` 的比较策略与 GUID 解析。配方见 `AuditRound4.md` §11.2。
 
 ### 7.10 R4 修复记录（2026-10-25）
 
@@ -533,3 +534,5 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 - 已做：**provider 级错误带表名/location**（2026-10-25 · `24c52774`，R4-LBN-006，本轮修复）——整批加载失败时外层消息追加首个表名/location；逐表失败路径原本已带。
 - 已做：**加入在途时 adapter 不一致告警**（2026-10-25 · `804e9bb3`，R4-LBN-010，本轮修复）——记录在途 adapter，加入者实例不同时 Warning；首个 adapter 仍生效。
 - 已做：**删除未使用 using**（2026-10-25 · `a24166a9`，R4-LBN-017，本轮清理）——`LubanConfigImpl.cs` 的 `XFramework.XAsset`。
+- 已做：**Editor 程序集公开 API 基线**（2026-10-25 · `075c6109`，R4-ADJ-02 / R4-LBN-013，本轮补齐）——`LubanEditorPublicApiBaselineTests` + `LubanEditorPublicApiBaseline.txt`，与 Runtime 基线共用 `LubanPublicApiSnapshot` / `LubanPublicApiBaselineCheck`；`-UpdateLubanApiBaseline` 同一开关覆盖两组。Editor 面不承诺语义化版本，基线只保证「变了会被看见」。
+- 已做：**接入代码写盘 prepare→commit→rollback**（2026-10-25 · `5c839bb0`，R4-ADJ-06 / R4-LBN-008，本轮修复）——全部内容先落隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，manifest 最后提交；任一步失败逆序回滚。回归 `LubanIntegrationWriterTests.Write_TargetIsDirectory_RejectedBeforeAnyWrite` / `Write_ManifestCommitFails_RollsBackNewAndReplacedFiles`（改前抛裸 `IOException` 且留半套文件）。边界：只覆盖进程内失败，崩溃 / 断电不自动恢复。

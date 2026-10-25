@@ -78,6 +78,10 @@
 | [Settings](Settings.md) | [Timer](Timer.md) | [UI](UI.md) |
 | [Update](Update.md) | [Diagnostics](Diagnostics.md) | [Camera](Camera.md) |
 
+## 可选扩展包
+
+- 暂不做：**为 Luban 扩展包新建 `Modules/Luban.md`**（2026-10-25 · R4-ADJ-01）——`Assets/XFramework.Luban/` 不在核心模块集（模块集来自 `Assets/XFramework/Runtime/` 的直接子目录），其维护向记录与决策台账继续留在 `Documentation/Luban.md` §7.8（不做 / 暂不做）与 §7.10（修复记录）；新建会撞本文件表与 `check-docs` 的模块集。重开判据：Luban 需要与核心模块同构的台账门禁时。
+
 ## 模板
 
 ````markdown

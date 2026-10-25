@@ -56,7 +56,7 @@
 
 - 未做：**Luban 扩展包发布 tag**（2026-10-24）——扩展包版本 0.1.0 尚未打 tag，README 的安装 URL 目前只能写 `<发布 tag>` 占位。重开判据：用户决定版本号并打 tag（不自动推送）。
 
-- 暂不做：**把扩展包纳入 check-docs 的 XML 文档/`.meta` 门禁**（2026-10-24）——`check-docs.ps1` 的路径过滤硬绑 `Assets/XFramework`，扩展包改用包内自设守卫；XML 文档告警仍靠评审。重开判据：扩展包出现文档漂移事故，或 `check-docs.ps1` 的扫描根泛化为可配置。
+- 暂不做：**把扩展包纳入 check-docs 的 XML 文档/`.meta` 门禁**（2026-10-24）——`check-docs.ps1` 的路径过滤硬绑 `Assets/XFramework`，扩展包改用包内自设守卫；XML 文档告警仍靠评审。重开判据：扩展包出现文档漂移事故，或 `check-docs.ps1` 的扫描根泛化为可配置。（2026-10-25 R4-ADJ-03 复核：判据未触发，维持；第六项示例编译仍覆盖 Luban `Samples~`。）
 
 - 暂不做：**GM / 调试命令台**（2026-10-13 · 用户确认）——命令集 / 权限 / 发布形态（仅 Editor，还是真机也要——后者是渠道与安全问题）全是项目的；没有使用方时「解析器支持什么语法」是猜的。重开判据：① 有真实使用方提出该需求，并给出其**命令集形态**（命令从哪来：显式注册 / 反射扫描 / 配置表？参数怎么传？）与**运行场景**（仅 Editor，还是真机也要）；② 届时形状从**诊断窗口那一半**起步（Editor 工具 + Runtime 数据契约），不重造。
 
@@ -132,6 +132,11 @@
 - 已做：**相机主面混合边界：gameplay id + 组合根 / 高级访问 Cinemachine + 后端 internal**（2026-10-23 · `e6d56db`）——`Initialize(CinemachineBrain)`、`Register(..., CinemachineVirtualCameraBase)`、`TryGetCamera(..., out vcam)`、`ActiveCamera` 使用 CM 类型；`ICameraBackend` / `CameraBackendActivation` / `ICameraBackendSessionReset` / `CinemachineCameraBackend` 收为 internal；gameplay 动词 / `CameraBlendStyle` / 消息 / 快照保持 string id 与中立类型；`ModuleBoundaryTests` 射程放宽为 `Runtime/Camera/`。理由：公开可替换后端无真实受众；保留 id 是为了让 gameplay 代码不出现 `using Unity.Cinemachine`。
 - 不做：**不引入反射式自动会话复位**（2026-10-18 · 裁定）——与仓内「显式登记、零反射」取向一致；会话复位族继续显式登记（`AutoInitTests.Registry`）。无重开判据。
 - 待裁：**最低 Unity 版本是否下调至 2022.3 LTS**（2026-10-21 · 静态扫描完成，探针未跑）——`package.json` 当前 `unity` 为 `6000.3`，2022.3 的在产项目无法安装。**静态事实**：Runtime 无 Unity 6 专属 API（`Awaitable` 零命中；`Time.timeAsDouble` / `FindAnyObjectByType` 均在 2022.3 射程内；无 `Rigidbody.linearVelocity` 一类改名）；四个依赖的最低版本均 ≤ 2022.3（Input System 1.19.0 恰好要求 2022.3）。**结构性差异**：TMP——Unity 6 由 UGUI 2.0 内置，2022.3 需另装 `com.unity.textmeshpro` 3.0.x，README 依赖表 / 安装器需要版本分支。**下一步（重开判据）**：装 `2022.3.62f3`，建裸探针工程按 README 装依赖、`file:` 引入本包，编译 Runtime + Editor 并跑全量；全部通过才改 `package.json` 的 `unity` 并同步 README / 安装器 / CHANGELOG。本机当前只有 `6000.4.5f1`，探针未执行——**不据静态扫描宣称兼容**。
+- 暂不做：**为 Luban 扩展包新建 `Documentation/Modules/Luban.md`**（2026-10-25 · R4-ADJ-01）——`Assets/XFramework.Luban/` 不在核心模块集（模块集来自 `Assets/XFramework/Runtime/` 的直接子目录），其维护向记录与决策台账继续留在 `Documentation/Luban.md` §7.8（不做 / 暂不做）与 §7.10（修复记录）；新建会撞 `check-docs` 的模块集与 `Modules/README.md` 文件表。重开判据：Luban 需要与核心模块同构的台账门禁时。
+- 已做：**两个包的 Editor 程序集公开 API 基线**（2026-10-25 · R4-ADJ-02 / R4-ENG-006 / R4-LBN-013；`2a8cd17f` / `075c6109`）——核心与 Luban 的 Editor fixture 放在既有 Runtime 测试程序集里、`#if UNITY_EDITOR` 门控，运行时按名取编辑器程序集（不经编译期引用）；渲染器与差异 / 更新 / 报告逻辑抽成共享 internal helper；`-UpdateApiBaseline` / `-UpdateLubanApiBaseline` 同时更新 Runtime 与 Editor 两份基线（写盘后按设计判失败）。边界：Editor 面不承诺语义化版本，基线只保证「变了会被看见」。
+- 未做：**0.4.0 发布 tag 与推送、Luban 0.1.0 tag**（2026-10-25 · R4-ADJ-04）——`[Unreleased]` 已切为 `[0.4.0] - 2026-10-25`、核心 `package.json` 已 bump 0.4.0、核心 README 安装示例已改钉 0.4.0、Luban README 已写明与核心 0.4.0 配套；`git tag 0.4.0`（以及 Luban README 的 `<tag>` 替换）是用户动作，不自动推送。
+- 已做：**`run-tests.ps1` 可选超时**（2026-10-25 · R4-ADJ-05 / R4-ENG-005；`22c7ef65`）——新增 `-TimeoutSeconds`（默认 0 = 不启用）；超时终止 Unity 并以退出码 3 结束，与测试失败（1）/ 无结果文件（2）分开报；默认路径仍走 `Start-Process -Wait`，行为不变。
+- 已做：**Luban 接入代码写盘 prepare→commit→rollback**（2026-10-25 · R4-ADJ-06 / R4-LBN-008；`5c839bb0`）——全部内容先写进隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，manifest 最后提交；任一步失败逆序回滚并抛带可操作消息的 `LubanGenerationException`。边界：只覆盖进程内可捕获的失败，崩溃 / 断电不自动恢复（备份留在隐藏暂存目录）。
 
 ## 四、复核记录
 
@@ -168,6 +173,10 @@
 > **2026-10-25 第四轮全面审计的判据复核**：R3 §12.1 的七条逐条复核——Network / 代码热更 / GM 命令台 / App 生命周期四条 `暂不做` 判据未触发，维持；性能基准套件与示例覆盖面已建成（2026-10-21），转 `已做`；包自身 Git URL 说明已落地（R3-ADJ-14），维持 `已做`。新增裁定建议 11 条（R4-ADJ-01..11，见 `AuditRound4.md` §9）；本轮 71 条新发现（0 P0 / 3 P1 / 51 P2 / 17 P3），3 条 UI P1 与 1 条 Config 修复回归进批次 0；0.4.0 发版与 Luban 0.1.0 tag 仍未做（R4-ADJ-04）。逐条依据见 `AuditRound4.md` §12.1。
 >
 > **2026-10-25 第四轮探针轨（批次 5）**：R4-PRB-12（0.3.0→0.4.0 迁移表编译探针）已执行——临时 netstandard2.1 工程编译迁移表右列新写法 **0 error**；负向控制（已删类型 / 成员 / 旧消息字段 / `bool` 场景模式）报 `CS0246 / CS0117 / CS1061 / CS1503`，确认探针有判别力（细节见 `Modules/Camera.md` 实测记录）。R4-PRB-18 已落成 `SerializerTests` 三条固定用例（见 `Modules/Serialize.md`）。
+>
+> **2026-10-25 第四轮批次 4 裁定落盘**：R4-ADJ-01 `暂不做`（落本文件 §三与 `Modules/README.md`）；ADJ-02 `已做`；ADJ-03 复核判据未触发、维持 `暂不做`；ADJ-04 `未做`（版本小节 / 元数据已就绪，tag 是用户动作）；ADJ-05 / ADJ-06 `已做`；ADJ-11 `未做`（落 `Modules/Save.md` 原条目，不另建）。ADJ-07（`UISorting` 进行为变更表）由 `acf0e0e6` 关闭，ADJ-08 / ADJ-09（Luban 措辞与主线程断言射程）由 `a05decb8` 关闭，ADJ-10（`ConfigTable` 键==Id 契约）由 `e74ad9fe` 关闭——均属批次 2 的文档修复，不另造条目。
+>
+> **2026-10-25 第四轮探针轨状态汇总**：批次 0–3 的回归用例已覆盖 PRB-01 / 02 / 04–08 / 10 / 11 / 13–17（对应 fixture 见各模块台账的「回归」条目）；PRB-12 / PRB-18 本批执行（见上）；仍 `未做`：PRB-03（真 YooAsset「有效句柄 + 类型不符」的 RefCount，见 `Modules/Config.md`）、PRB-09（Linux Editor 大小写 / cwd，见 `Documentation/Luban.md` §7.9）；关闭域重载连跑两遍、真 YooAsset 场景卸载序、真机 / IL2CPP 仍为手工 / 环境项（本轮未复跑）。
 
 ## 五、同类框架对照（快照）
 
