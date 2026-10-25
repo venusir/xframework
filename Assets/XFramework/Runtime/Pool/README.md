@@ -8,7 +8,9 @@ XPool 是一个**零 GC 分配**的泛型对象池系统，用于复用频繁创
 - **零配置开箱即用**：首次 `Get<T>()` 时自动创建池，无需初始化。
 - **惰性预热**：支持 `Configure<T>(config)` 预创建实例，减少运行时分配。
 - **委托回调**：`OnRent` / `OnReturn` / `OnDestroy` 回调，也可通过 `IPoolable` / `IPoolDiscardable` 接口实现。
-- **池满丢弃回调**：闲置达到 `MaxSize` 后归还的实例会被丢弃，此时触发 `onDestroy` / `IPoolDiscardable.OnDiscard()`，用于确定性释放资源。
+- **丢弃回调**：实例不会再被复用时触发 `onDestroy` / `IPoolDiscardable.OnDiscard()`，用于确定性释放资源。
+  触发点有二：**池满时归还**、**租出回调抛异常**（实例不再归还池）。两处都隔离回调自身的异常（记 Error，
+  不改变 `Return` / `Get` 的异常语义）。
 - **Editor 调试**：检测重复归还、租借不匹配等错误，Release 构建零开销。
 - **线程不安全**：与 `UnityEngine.Pool` 相同，只能在主线程使用；确需跨线程请在调用侧自行加锁。
 - **与 AssetManager 解耦**：AssetManager 内部继续管理 GameObject/Prefab 池，PoolManager 只管纯 C# 对象。
@@ -101,6 +103,7 @@ Runtime/Pool/
 闲置实例达到 `MaxSize` 后，归还的实例不再入池而是交给 GC，此时触发丢弃回调。两点需要注意：
 
 - 归还回调（`onReturn` / `IPoolable.OnReturn()`）**先于**容量判断触发，所以被丢弃的实例会先收到归还回调（清理状态）、再收到丢弃回调（释放资源）。
+- 丢弃回调有**两个触发点**：池满归还、租出回调抛异常（实例不再归还池）。两处都隔离回调自身的异常——租出失败路径记 Error 后重抛原始异常；`Return` 满池路径记 Error 后正常返回（R4-POOL-001）。
 - `Clear()` / `ClearAll()` **不触发**丢弃回调——它们清的是闲置实例，且 `ClearAll` 会在应用退出时自动调用，此时跑用户回调容易碰到已销毁的 Unity 对象。
 
 `PooledObject<T>` 的 `Dispose()` 幂等（重复 `using` 或手动调用不会重复归还），但只对同一个存储位置成立：`var h2 = h; h.Dispose(); h2.Dispose();` 这类复制出去的副本仍会归还两次。

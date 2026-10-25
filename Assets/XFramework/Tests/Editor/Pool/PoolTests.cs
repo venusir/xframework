@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -38,6 +39,13 @@ namespace Venusy609.Xframework.Editor.Tests
             public int DiscardCount;
 
             void IPoolDiscardable.OnDiscard() => DiscardCount++;
+        }
+
+        /// <summary>丢弃回调抛异常的类型（R4-POOL-001 的 Return 满池路径）。</summary>
+        private sealed class ThrowingDiscardItem : IPoolDiscardable
+        {
+            public void OnDiscard() =>
+                throw new InvalidOperationException("[ThrowingDiscardItem] 故意在 OnDiscard 里抛异常");
         }
 
         /// <summary>重写相等语义的类型：不同实例可能逻辑相等（<see cref="Id"/> 相同）。</summary>
@@ -411,6 +419,22 @@ namespace Venusy609.Xframework.Editor.Tests
 
             Assert.That(delegateCalls, Is.EqualTo(1), "委托应触发");
             Assert.That(b.DiscardCount, Is.EqualTo(0), "存在委托时接口 OnDiscard 不应触发");
+        }
+
+        [Test]
+        public void Return_WhenPoolFull_DiscardCallbackThrows_IsIsolated()
+        {
+            // R4-POOL-001：租出失败路径已经隔离丢弃回调；Return 满池路径此前直接外抛。
+            var pool = new Pool<ThrowingDiscardItem>(
+                () => new ThrowingDiscardItem(), new PoolConfig { MaxSize = 1 });
+            var a = pool.Get();
+            var b = pool.Get();
+            pool.Return(a);
+
+            LogAssert.Expect(LogType.Error, new Regex("池满丢弃回调抛出异常"));
+
+            Assert.DoesNotThrow(() => pool.Return(b));
+            Assert.That(pool.CountActive, Is.EqualTo(0));
         }
 
         [Test]

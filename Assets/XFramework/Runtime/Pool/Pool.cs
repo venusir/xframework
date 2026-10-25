@@ -79,8 +79,9 @@ namespace XFramework.XPool
         /// （无预热、不限容量、Editor 下启用重复归还检测）</param>
         /// <param name="onRent">取出时的委托回调（可选，优先于 <see cref="IPoolable.OnRent"/>）</param>
         /// <param name="onReturn">归还时的委托回调（可选，优先于 <see cref="IPoolable.OnReturn"/>）</param>
-        /// <param name="onDestroy">实例因池满被丢弃时的委托回调（可选，优先于 <see cref="IPoolDiscardable.OnDiscard"/>）。
-        /// 归还回调仍会先触发——它负责「清理状态」，丢弃回调负责「释放资源」</param>
+        /// <param name="onDestroy">实例被丢弃时的委托回调（可选，优先于 <see cref="IPoolDiscardable.OnDiscard"/>）。
+        /// 触发点有二：池满时归还、租出回调抛异常；两者都先走归还/失败清理。回调自身抛异常只记 Error
+        /// （不改变 <see cref="Return"/> / <see cref="Get"/> 的异常语义，R4-POOL-001）</param>
         public Pool(
             Func<T> generator,
             PoolConfig? config = null,
@@ -231,11 +232,21 @@ namespace XFramework.XPool
             }
             else
             {
-                // 超出容量：实例不会再有被复用的机会，交给丢弃回调释放资源（委托优先，其次接口）
-                if (_onDestroy != null)
-                    _onDestroy(item);
-                else if (item is IPoolDiscardable discardable)
-                    discardable.OnDiscard();
+                // 超出容量：实例不会再有被复用的机会，交给丢弃回调释放资源（委托优先，其次接口）。
+                // R4-POOL-001：与租出失败路径同形隔离——丢弃回调抛异常不得冒泡给 Return 调用方
+                //（此刻实例已丢弃、计数已减，抛出只会让调用方误以为归还失败）。
+                try
+                {
+                    if (_onDestroy != null)
+                        _onDestroy(item);
+                    else if (item is IPoolDiscardable discardable)
+                        discardable.OnDiscard();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(PoolLogCategory<T>.Value, e,
+                        "池满丢弃回调抛出异常，已隔离。");
+                }
             }
         }
 

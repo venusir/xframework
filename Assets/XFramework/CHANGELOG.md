@@ -661,6 +661,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Pool
 
+- **`Return` 满池丢弃回调异常外抛（R4-POOL-001）**：租出失败路径已隔离丢弃回调，`Return` 满池路径却
+  直接调用——此刻实例已丢弃、`CountActive` 已减，异常只会让调用方误以为归还失败。修法：同一 try/catch
+  隔离并记 Error；XML/README 写明丢弃回调的两个触发点。回归：
+  `PoolTests.Return_WhenPoolFull_DiscardCallbackThrows_IsIsolated`（改前异常外抛）。
 - **租出回调异常时实例静默丢弃、不走丢弃回调（R3-POOL-001）**：`Get` 账本已回滚，但实例不再入栈、  也不走 `onDestroy` / `IPoolDiscardable.OnDiscard`，资源泄漏且无日志。修法：失败分支调用丢弃回调
   （自身异常只记 Error）并 Warning。回归：`PoolTests.Get_RentCallbackThrows_InvokesDiscardCallback`。
 
