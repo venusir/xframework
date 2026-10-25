@@ -151,6 +151,21 @@ namespace XFramework.XDiagnostics.Tests
         }
 
         [Test]
+        public void Table_EmptyTrailingColumn_HeaderAndSeparatorAgree()
+        {
+            // R4-DIAG-002：表头行会裁掉尾部空列，但分隔线仍按声明列数画——宽度不一致。
+            var report = new DiagnosticReport();
+            var table = report.BeginTable("t", "A", string.Empty);
+            table.AddRow("1");
+
+            var lines = DiagnosticReportFormatter.ToText(report).Split('\n');
+
+            Assert.AreEqual("A", lines[1]);
+            Assert.AreEqual("-", lines[2], "表头已裁掉空尾列，分隔线不得仍按声明列数画");
+            Assert.AreEqual("1", lines[3]);
+        }
+
+        [Test]
         public void Table_CellNewline_ReplacedBySpace()
         {
             var report = new DiagnosticReport();

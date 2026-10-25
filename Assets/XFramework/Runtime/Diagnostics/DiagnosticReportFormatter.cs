@@ -122,6 +122,12 @@ namespace XFramework.XDiagnostics
             for (int c = 0; c < columns; c++)
                 widths[c] = CellWidth(table.Columns[c]);
 
+            // 尾部「表头与所有数据都为空」的列整体不输出（R4-DIAG-002）：表头行不参与逐行裁剪，
+            // 但分隔线必须与它用同一个 lastColumn，否则表头被裁、分隔线仍按声明列数画，宽度对不上。
+            int lastColumn = columns - 1;
+            while (lastColumn > 0 && IsColumnEmpty(table, lastColumn))
+                lastColumn--;
+
             var cells = new string[columns];
             for (int r = 0; r < table.RowCount; r++)
             {
@@ -135,10 +141,10 @@ namespace XFramework.XDiagnostics
 
             for (int c = 0; c < columns; c++)
                 cells[c] = table.Columns[c];
-            AppendRow(builder, cells, widths, columns);
+            AppendRow(builder, cells, widths, lastColumn, trimTrailingEmptyColumns: false);
 
             builder.Append(NewLine);
-            for (int c = 0; c < columns; c++)
+            for (int c = 0; c <= lastColumn; c++)
             {
                 if (c > 0)
                     builder.Append("-+-");
@@ -150,17 +156,35 @@ namespace XFramework.XDiagnostics
                 builder.Append(NewLine);
                 for (int c = 0; c < columns; c++)
                     cells[c] = table.GetCell(r, c);
-                AppendRow(builder, cells, widths, columns);
+                AppendRow(builder, cells, widths, lastColumn, trimTrailingEmptyColumns: true);
             }
         }
 
-        private static void AppendRow(StringBuilder builder, string[] cells, int[] widths, int columns)
+        private static bool IsColumnEmpty(DiagnosticTable table, int column)
         {
-            // 行尾空白会污染复制出去的内容：从最后一个非空格子之后就不再输出分隔与补白。
-            // 列是左对齐的，截掉尾部空列不影响其余列的对位。
-            int last = columns - 1;
-            while (last > 0 && string.IsNullOrEmpty(SingleLine(cells[last])))
-                last--;
+            if (!string.IsNullOrEmpty(SingleLine(table.Columns[column])))
+                return false;
+
+            for (int r = 0; r < table.RowCount; r++)
+            {
+                if (!string.IsNullOrEmpty(SingleLine(table.GetCell(r, column))))
+                    return false;
+            }
+
+            return true;
+        }
+
+        private static void AppendRow(StringBuilder builder, string[] cells, int[] widths,
+            int lastColumn, bool trimTrailingEmptyColumns)
+        {
+            // 数据行：行尾空白会污染复制出去的内容，从最后一个非空格子之后就不再输出分隔与补白。
+            // 表头行不裁（由 lastColumn 统一处理），否则空尾列会被裁掉而分隔线仍按它画。
+            int last = lastColumn;
+            if (trimTrailingEmptyColumns)
+            {
+                while (last > 0 && string.IsNullOrEmpty(SingleLine(cells[last])))
+                    last--;
+            }
 
             for (int c = 0; c <= last; c++)
             {

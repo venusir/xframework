@@ -779,6 +779,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Diagnostics
 
+- **空尾列表头与分隔线宽度不一致（R4-DIAG-002）**：表头行 `AppendRow` 会裁掉尾部空列，但分隔线仍按
+  声明列数绘制——表头含空尾列时两条线长度对不上。修法：统一计算 `lastColumn`（表头与所有数据都为空的
+  尾列整体不输出），表头与分隔线共用它；数据行仍逐行去尾空白。回归：
+  `DiagnosticReportFormatterTests.Table_EmptyTrailingColumn_HeaderAndSeparatorAgree`（改前 `--+-` vs `-`）。
 - **`Register` 的 `Order` 读取无异常隔离（R4-DIAG-001）**：`Title` 已有 `SafeTitle`，插入排序却仍裸读
   第三方 `Order` getter——新页签的 getter 抛异常会让登记整体失败；已登记页签的 getter 变坏会让**其他**
   页签也登记失败。修法：新增 `SafeOrder`（异常记 Error、按 `int.MaxValue` 排在末尾），新页签只读一次、
