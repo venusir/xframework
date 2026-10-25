@@ -75,5 +75,10 @@ namespace XFramework.XConfig.Luban.Editor
             : base(message)
         {
         }
+
+        internal LubanGenerationException(string message, Exception innerException)
+            : base(message, innerException)
+        {
+        }
     }
 }

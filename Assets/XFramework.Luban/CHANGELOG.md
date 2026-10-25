@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **接入代码写盘中途失败会留下半套文件（R4-LBN-008 / R4-ADJ-06）**：原先逐个文件写盘（写 tmp → 删旧 →
+  move），中途失败会留下半套新文件 + 旧 manifest，且「删旧与 move 之间」崩溃会丢目标文件。修法：全部内容
+  先写进输出目录下的隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，
+  manifest 最后提交；任一步失败按逆序回滚（恢复备份、删除新建、清暂存）并抛带可操作消息的
+  `LubanGenerationException`。回归：`LubanIntegrationWriterTests.Write_TargetIsDirectory_RejectedBeforeAnyWrite` /
+  `Write_ManifestCommitFails_RollsBackNewAndReplacedFiles`（改前抛裸 `IOException` 且留下半套文件）。
+  **边界**：只覆盖进程内可捕获的失败；进程崩溃 / 断电不自动恢复，备份留在隐藏暂存目录。
 - **加入在途初始化时 adapter 不同被静默忽略（R4-LBN-010）**：并发 `InitializeAsync` 共享首个调用方的
   结果，但第二个调用方的 `adapter` 不同时没有任何提示——使用方以为注册的是自己的那套表。修法：记录
   在途 adapter，加入者实例不同时 Warning（首个 adapter 仍然生效）。回归：
