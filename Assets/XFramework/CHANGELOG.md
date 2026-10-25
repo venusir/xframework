@@ -1104,6 +1104,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **外部 override 下 `SwitchTo` 已活动目标不接管 boost（R4-CAM-002）**：Timeline `SetCameraOverride`
+  把已注册的 B 设为活动相机、而管理器此前 boost 的是 A 时，`SwitchTo("b", …)` 走
+  「已活动且未混合」早退分支直接结算 `Completed`，不恢复 A、不 boost B；释放 override 后输出回到
+  仍被 boost 的 A，而栈顶是 B。修法：早退分支先 `RestorePreviousBoosted + Boost` 再结算（对同一目标
+  幂等）；`CameraDirector` 的「目标已是栈顶且未混合」no-op 保持不变。回归：
+  `CinemachineCameraBackendTests.Activate_WhileExternalOverrideMakesTargetActive_TakesBoostOwnership`
+  （改前 A 仍为 boost 值）。
 - **boost 的「同通道最大优先级」只对未注册 vcam 生效（2026-10-24）**：已注册槽位循环没有 `IsValidChannel`
   过滤，异通道相机的作者优先级会把目标 boost 抬高（100 → 101），违背 README 的「同通道」承诺。修法：槽位
   循环补 `_brain.IsValidChannel` 过滤。同时明确：异通道相机可注册，但不会被本 Brain 选中。

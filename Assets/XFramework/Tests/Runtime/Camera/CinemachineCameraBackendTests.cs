@@ -208,6 +208,38 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void Activate_WhileExternalOverrideMakesTargetActive_TakesBoostOwnership()
+        {
+            // R4-CAM-002：外部 override 让 B 成为活动相机时，管理器显式 SwitchTo("b") 会走
+            // 「已活动且未混合」早退分支；此时必须把 boost 归属切到 B，否则释放 override 后
+            // 输出回到仍被 boost 的 A。
+            var aAuthor = _vcamA.Priority.Value;
+            _backend.Activate("a", 0f, CameraBlendStyle.Cut);
+            Pump();
+            Assert.Greater(_vcamA.Priority.Value, aAuthor, "前提：A 已被 boost");
+
+            var overrideId = _brain.SetCameraOverride(-1, 100, null, _vcamB, 1f, 0f);
+            try
+            {
+                Pump();
+                Assert.AreSame(_vcamB, _brain.ActiveVirtualCamera, "前提：外部 override 使 B 成为活动相机");
+
+                _backend.Activate("b", 0.5f, CameraBlendStyle.Linear);
+
+                Assert.IsFalse(_backend.IsTransitioning, "已活动且未混合时应立即完成");
+                Assert.AreEqual(aAuthor, _vcamA.Priority.Value, "A 应恢复作者优先级");
+                Assert.Greater(_vcamB.Priority.Value, _vcamA.Priority.Value, "B 应接管 boost");
+            }
+            finally
+            {
+                _brain.ReleaseCameraOverride(overrideId);
+            }
+
+            Pump(0.1f);
+            Assert.AreEqual("b", _backend.ActiveCameraId, "释放外部 override 后输出应仍是 B");
+        }
+
+        [Test]
         public void Activate_DuringBlendToSameTarget_ForcesCutImmediately()
         {
             _backend.Activate("a", 0f, CameraBlendStyle.Cut);

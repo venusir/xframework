@@ -648,6 +648,11 @@ namespace XFramework.XCamera.Cinemachine
 
             if (!_brain.IsBlending && ReferenceEquals(_brain.ActiveVirtualCamera, target))
             {
+                // 外部 override（如 Timeline SetCameraOverride）可能已把目标设为活动相机。
+                // 此时管理器显式 SwitchTo 必须接管 boost 归属：否则释放 override 后输出会回到
+                // 仍被 boost 的旧游戏相机（R4-CAM-002）。Boost 对同一目标幂等。
+                RestorePreviousBoosted(slot);
+                Boost(slot);
                 SettleRequest(CameraTransitionResult.Completed);
                 return;
             }

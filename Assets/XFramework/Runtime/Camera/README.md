@@ -274,6 +274,9 @@ if (camera != null)
 - **混合请求**：`GetBlendOverride` 只对 `owner == brain` 且 `to == 请求目标` 生效；无请求时链回前一个委托。
 - **请求结算**：cut 在激活事件结算；blend 在完成事件结算；`CameraUpdatedEvent` 兜底目标销毁与「已是活动相机的 cut」。
 - **外部接管**：外部 incoming 让后端结算 `Superseded`，但不恢复 boost；`IsExternallyControlled` 由导演层按栈顶判定。
+  **例外**：外部 override 把已注册目标设为活动相机时，管理器显式 `SwitchTo` / `Push` 到该目标会接管 boost
+  归属（恢复旧游戏相机的作者优先级并 boost 目标），释放 override 后输出停留在该目标（R4-CAM-002）。
+  `CameraDirector` 在「目标已是栈顶且未混合」时仍按 no-op 返回，不调用后端。
 - **快照**：`GetState` 直接从后端属性组装；`CopyCameras` 复用内部 id buffer，调用方 buffer 容量足够时不再分配。
 
 ## 生命周期与清理
