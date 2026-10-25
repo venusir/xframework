@@ -104,6 +104,8 @@
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
 | `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`。自带过滤器（只跑基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
+| `-UpdateLubanGolden` | Luban 扩展包的 golden-file 更新模式：重写生成夹具，**写完按设计判失败**；绿灯由不带开关的重跑给出。与 `-Filter`/`-Fixture` 及另外两个更新开关互斥 |
+| `-UpdateLubanApiBaseline` | Luban 扩展包的 Runtime 公开 API 基线更新模式；纪律同上（写盘后判失败） |
 
 ### `Tools/check-docs.ps1`
 

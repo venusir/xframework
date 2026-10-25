@@ -17,8 +17,8 @@ namespace XFramework.Architecture.Tests
     /// 只跑 PlayMode；放 <c>Tests/Editor/</c> 会被最常见的开发回路静默跳过（与 <c>AutoInitTests</c> /
     /// <c>NamingConventionTests</c> 同一条教训）。</para>
     /// <para><b>为什么不查 Editor 程序集</b>：Runtime 测试程序集不引用它（asmdef 实测），看不到就查不了；
-    /// 要查必须另写一个 EditMode fixture。本轮范围裁定为「只查 Runtime」——它占公开面的 99%
-    /// （222 个公开类型 / 1961 行 vs Editor 的 5 类型 / 10 成员）。</para>
+    /// 要查必须另写一个 EditMode fixture。本轮范围裁定为「只查 Runtime」——它占公开面的绝大部分
+    /// （具体类型/成员数以 <c>PublicApiBaseline.txt</c> 为准；不在此写固定数，避免每次公开面增长都要改注释）。</para>
     /// <para><b>为什么基线可以被反写、以及反写的入口只有一个</b>：这是本仓首次出现「测试在显式开关下
     /// 写仓库文件」。开关是环境变量 <c>XFW_UPDATE_API_BASELINE</c>（只认 <c>"1"</c>），只由
     /// <c>pwsh -File Tools/run-tests.ps1 -UpdateApiBaseline</c> 设置；更新模式**写完后一律判失败**并打印
