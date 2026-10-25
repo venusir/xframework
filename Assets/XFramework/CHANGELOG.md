@@ -1443,6 +1443,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Localization
 
+- **替换值里的花括号被 `string.Format` 二次解释（R4-LOC-001）**：先 `ReplacePlaceholders` 再
+  `NormalizeBracesForFormat`；占位符值本身含合法格式项（如 `{0}`）时会被 `GetFormat` 的参数再次填掉，
+  参数不足还可能抛 `FormatException`。修法：`GetFormat` 路径把替换值里的 `{` / `}` 转义为 `{{` / `}}`，
+  `NormalizeBracesForFormat` 原样放行，最终按字面输出；`Get` 不经过格式化，不转义。回归：
+  `LocalizationManagerTests.GetFormat_PlaceholderValueWithCompositeItem_RendersLiterally`（改前输出 `值 X 结束`）。
 - **`Destroy` 无 try/finally、在途语言加载经静态门面写回（LOC-004/005）**：第三方 `Dispose` 抛异常后
   `_instanceInitialized` 仍为 true——`Initialize` 永久早退、调用打到半销毁实例，并中断 `Bootstrap.Shutdown`
   的逆序清理；`SwitchLanguageAsync` 的续体在 `await` 后经静态门面写入，加载期间 `SetInstance` 会把旧配置

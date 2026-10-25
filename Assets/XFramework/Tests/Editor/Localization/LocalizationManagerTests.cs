@@ -93,6 +93,19 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void GetFormat_PlaceholderValueWithCompositeItem_RendersLiterally()
+        {
+            // R4-LOC-001：替换值里的合法复合格式项（"{0}"）此前被 string.Format 二次解释。
+            UseTable(("k", "值 {V} 结束"));
+            LocalizationManager.SetPlaceholder("V", "{0}");
+
+            Assert.AreEqual("值 {0} 结束", LocalizationManager.GetFormat("k", "X"),
+                "替换值里的花括号应按字面输出，不得再被格式项解释");
+            Assert.AreEqual("值 {0} 结束", LocalizationManager.Get("k"),
+                "Get 不经过 string.Format，也不应输出双层花括号");
+        }
+
+        [Test]
         public void GetFormat_MixedNamedAndPositional_SubstitutesBoth()
         {
             // README 示例想表达的写法：可变值走 {0}，全局值走 {Name}

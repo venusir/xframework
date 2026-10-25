@@ -159,12 +159,15 @@ namespace XFramework.XLocalization
         public string Get(string key)
         {
             // 查找逻辑只有 GetRaw 一份，占位符替换是这条路径唯一的差别
-            return ReplacePlaceholders(GetRaw(key));
+            //（Get 不交给 string.Format，替换值里的花括号按字面输出，不转义）
+            return ReplacePlaceholders(GetRaw(key), escapeBracesForFormat: false);
         }
 
         public string GetFormat(string key, params object[] args)
         {
-            var raw = ReplacePlaceholders(GetRaw(key));
+            // R4-LOC-001：GetFormat 会再走 string.Format，替换值里的花括号必须先转义，
+            // 否则替换值里的 "{0}" 会被当作本层的格式项二次解释。
+            var raw = ReplacePlaceholders(GetRaw(key), escapeBracesForFormat: true);
             return string.Format(NormalizeBracesForFormat(raw), args);
         }
 
@@ -343,7 +346,7 @@ namespace XFramework.XLocalization
         /// 先查字面量，再查表项；都没有则保持原样。</para>
         /// <para><b>单趟、不递归</b>：替换进去的值不会被二次扫描，值里再含 <c>{Other}</c> 只按字面输出。</para>
         /// </summary>
-        private string ReplacePlaceholders(string text)
+        private string ReplacePlaceholders(string text, bool escapeBracesForFormat)
         {
             // 两张表都空才走快路径——注册了键值绑定却不扫描，是这条早退最容易出的错
             var noLiterals = _placeholders == null || _placeholders.Count == 0;
@@ -389,12 +392,12 @@ namespace XFramework.XLocalization
                 var placeholderKey = span.Slice(scanPos, closeIdx).ToString();
                 if (_placeholders != null && _placeholders.TryGetValue(placeholderKey, out var replacement))
                 {
-                    sb.Append(replacement);
+                    AppendReplacement(sb, replacement, escapeBracesForFormat);
                 }
                 else if (_placeholderKeys != null && _placeholderKeys.TryGetValue(placeholderKey, out var localizationKey))
                 {
                     // 在替换的当下解析，所以语言切了它也跟着变；GetRaw 的缺键行为（返回键本身）就是这里的规则
-                    sb.Append(GetRaw(localizationKey));
+                    AppendReplacement(sb, GetRaw(localizationKey), escapeBracesForFormat);
                 }
                 else
                 {
@@ -408,6 +411,31 @@ namespace XFramework.XLocalization
             }
 
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// 追加替换值；<paramref name="escapeBracesForFormat"/> 为 true 时把值里的花括号转义为
+        /// <c>{{</c> / <c>}}</c>，供随后交给 <c>string.Format</c> 的路径使用（R4-LOC-001）。
+        /// </summary>
+        private static void AppendReplacement(
+            System.Text.StringBuilder sb, string value, bool escapeBracesForFormat)
+        {
+            if (!escapeBracesForFormat || string.IsNullOrEmpty(value))
+            {
+                sb.Append(value);
+                return;
+            }
+
+            for (int i = 0; i < value.Length; i++)
+            {
+                char c = value[i];
+                if (c == '{')
+                    sb.Append("{{");
+                else if (c == '}')
+                    sb.Append("}}");
+                else
+                    sb.Append(c);
+            }
         }
 
         /// <summary>
