@@ -126,7 +126,13 @@ namespace XFramework.XPipeline
             if (!_aggregator.AnyFailed && cancellationToken.IsCancellationRequested)
                 throw new OperationCanceledException(cancellationToken);
 
-            // 成功:正常返回,由管线契约兜底补置 Completed
+            if (!_aggregator.AnyFailed)
+            {
+                // 成功:显式写终态（R4-PIPE-001）。StageExecution 的契约兜底在 finally 之后，
+                // 而 finally 会先清 Owner；嵌套容器的完成/进度写入就再也通知不到父聚合器。
+                _stageCtx.SetProgress(1f);
+                _stageCtx.SetState(PipelineStageState.Completed);
+            }
 
             // 迟写防护由 finally 统一执行（R3-PIPE-003）
             }

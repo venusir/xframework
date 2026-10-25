@@ -678,6 +678,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Pipeline
 
+- **容器成功返回不写终态，嵌套聚合收不到完成（R4-PIPE-001）**：`ParallelStage` / `SequenceStage` 成功路径
+  依赖 `StageExecution` 的契约兜底，而兜底在容器 `finally` 清 `Owner` 之后——嵌套容器的最终完成/进度
+  写入通知不到父 `StageAggregator`。修法：成功分支在 `finally` 前显式 `SetProgress(1f)` +
+  `SetState(Completed)`；失败/取消分支状态不变（失败已在 finally 前写入，取消抛 OCE）。
+  回归：`ParallelStageTests.Execute_Success_WritesCompletedTerminal` /
+  `SequenceStageTests.Execute_Success_WritesCompletedTerminal`（改前容器上下文停在 Pending）。
 - **沉降后仍钉住上一轮管线（R3-PIPE-004）**：容器 `_stageCtx.Owner` 指向 `PipelineImpl`，长寿命容器跨管线
   复用时钉住管线与订阅者闭包。修法：`finally` 里把 `Owner` 置 null（上下文本身保留给诊断/测试）。回归：
   两容器各一例。

@@ -443,6 +443,19 @@ namespace Venusy609.Xframework.Editor.Tests
                 "null 名称应抛参数异常(与 BuildPhaseGroups 对 nameFormat 的防御一致)");
         }
 
+        [Test]
+        public void Execute_Success_WritesCompletedTerminal()
+        {
+            // R4-PIPE-001：容器成功返回时必须自己写终态（见 SequenceStageTests 同名用例）。
+            var stage = new ParallelStage(new IPipelineStage[] { new FakeStage { Name = "leaf" } }, "Par");
+            var context = new PipelineStageContext { Name = "Par", Weight = 1f };
+
+            stage.ExecuteAsync(context, default).GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Completed, context.State);
+            Assert.AreEqual(1f, context.Progress, 0.001f);
+        }
+
         #endregion
 
         /// <summary>

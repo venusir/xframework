@@ -454,6 +454,20 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(1, c.ExecuteCount, "并行组沉降后 c 才执行");
         }
 
+        [Test]
+        public void Execute_Success_WritesCompletedTerminal()
+        {
+            // R4-PIPE-001：容器成功返回时必须自己写终态——StageExecution 的契约兜底在 finally 之后，
+            // 而 finally 会先清 Owner，嵌套容器的完成写入通知不到父聚合器。
+            var stage = new SequenceStage(new IPipelineStage[] { new FakeStage { Name = "leaf" } }, "Seq");
+            var context = new PipelineStageContext { Name = "Seq", Weight = 1f };
+
+            stage.ExecuteAsync(context, default).GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Completed, context.State);
+            Assert.AreEqual(1f, context.Progress, 0.001f);
+        }
+
         #endregion
 
         /// <summary>
