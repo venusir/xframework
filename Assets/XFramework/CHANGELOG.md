@@ -244,9 +244,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Changed
 
-- **（公开常量值变更）`UISorting.MaxIndexInLayer` 由 31 改为 30**：遮罩独占层内第 31 位，面板序号
-  上限随之降为 30；同层第 31 个及以后的面板会被钳到 30（UI-C-002）。`PanelOrder` / `MaskOrder`
-  现在也会钳制越界 layer（UI-C-003）。公开 API 基线已同步。
 - **（行为变更）会话开始时静态状态被复位**：框架在 `RuntimeInitializeOnLoadMethod` 的 `SubsystemRegistration`
   档复位六个门面（Input / UI / Asset / Config / Localization / File）、`Bootstrap` 的静态登记表与
   `InstanceTracker` 的活跃计数——**只丢引用、不调 `Dispose`**（上一会话的实例可能握着已随域销毁的 Unity 对象），
@@ -362,6 +359,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### 行为变更（编译器抓不到，升级前请自己核对）
 
+- **`UISorting.MaxIndexInLayer` 由 31 改为 30（公开常量值变更）**：遮罩独占层内第 31 位，面板序号
+  上限随之降为 30；**同层第 31 个及以后的面板会被钳到 30**（UI-C-002）。`PanelOrder` / `MaskOrder`
+  现在也会钳制越界 layer（UI-C-003）。公开 API 基线已同步。
 - **六处失败路径新增日志（2026-10-20）**：Save 非 `Missing` 的加载失败记 `[Save]` Warning；UI 遮罩/捕获层点击
   关闭的 `OnClose` 异常记 `[UIManager]` Error；Input 未知动作在**所有构建**下记一次 `[Input]` Warning（此前
   仅 Editor）；UpdateManager 调度器不可用时的注册丢弃记一次 `[Update]` Warning；AudioManager.Destroy 隔离第三方
