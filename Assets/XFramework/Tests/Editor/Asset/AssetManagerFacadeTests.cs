@@ -691,6 +691,54 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void SetInstance_AfterFrameworkInitialize_DisposesPreviousInstance()
+        {
+            // R4-AST-001：InitializeAsync 创建的实例调用方拿不到引用，换出时必须由框架 Dispose，
+            // 否则旧实例被 lowMemory / sceneUnloaded 静态事件钉住并继续清共享包。
+            AssetManager.Destroy();
+            var first = new FakeAssetManager();
+            AssetManager.ImplFactory = () => first;
+            AssetManager.InitializeAsync().GetAwaiter().GetResult();
+
+            var second = new FakeAssetManager();
+            AssetManager.SetInstance(second);
+
+            Assert.IsTrue(first.Disposed, "框架创建的旧实例在换出时应 Dispose");
+            Assert.IsFalse(second.Disposed, "新注入实例的生命周期归调用方");
+        }
+
+        [Test]
+        public void SetInstance_AfterInjectedRealImpl_DetachesWithoutDispose()
+        {
+            // 注入的 AssetManagerImpl 归调用方所有：只退订静态事件，不 Dispose。
+            AssetManager.Destroy();
+            var impl = new AssetManagerImpl();
+            impl.AttachLowMemoryHandler();
+            Assert.IsTrue(impl.IsLowMemoryHandlerAttached);
+            AssetManager.SetInstance(impl);
+
+            AssetManager.SetInstance(new FakeAssetManager());
+
+            Assert.IsFalse(impl.IsLowMemoryHandlerAttached, "注入实例换出时应退订静态事件");
+            var disposedField = typeof(AssetManagerImpl)
+                .GetField("_disposed", BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(disposedField);
+            Assert.IsFalse((bool)disposedField.GetValue(impl), "注入实例的生命周期归调用方，不得 Dispose");
+        }
+
+        [Test]
+        public void SetInstance_SameReference_DoesNotDispose()
+        {
+            AssetManager.Destroy();
+            var impl = new FakeAssetManager();
+            AssetManager.SetInstance(impl);
+
+            AssetManager.SetInstance(impl);
+
+            Assert.IsFalse(impl.Disposed, "同一引用重复注入不得处置实例");
+        }
+
+        [Test]
         public void SetInstance_DuringInflightInit_InvalidatesIt()
         {
             AssetManager.Destroy();

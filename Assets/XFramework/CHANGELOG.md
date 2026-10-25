@@ -489,6 +489,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **`SetInstance` 换出旧实例不处置，旧实例被静态事件钉住（R4-AST-001）**：`SetInstance` 只替换引用，
+  前一实例既不 `Dispose` 也不退订——`InitializeAsync` 创建的实例调用方拿不到引用（「自行处置」实际不可行），
+  其 `Application.lowMemory` / `SceneManager.sceneUnloaded` 订阅仍存活，低内存时继续对共享的 YooAsset 包
+  清池/整包卸载。修法：记录 `_instanceOwnedByFramework`；框架创建的旧实例（含 `ImplFactory` 返回的替身）
+  先退订再 `Dispose`，注入的 `AssetManagerImpl` 只退订（生命周期归调用方），第三方实现不动；同一引用
+  只作废在途初始化、不处置。回归：`AssetManagerFacadeTests.SetInstance_AfterFrameworkInitialize_DisposesPreviousInstance` /
+  `SetInstance_AfterInjectedRealImpl_DetachesWithoutDispose` / `SetInstance_SameReference_DoesNotDispose`
+  （前两条改前红）。
 - **会话复位未拆 `SceneManager.sceneUnloaded` 订阅（R3-AST-002，回归）**：`AssetManager.ResetForNewSession`
   只退订了 `Application.lowMemory`；YooAsset 适配器的 `sceneUnloaded` 实例订阅跨会话存活，旧实例被静态事件
   钉住并继续回调。修法：适配器抽出幂等 `DetachSceneUnloadedHandler`，门面经

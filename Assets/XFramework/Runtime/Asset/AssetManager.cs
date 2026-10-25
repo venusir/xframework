@@ -21,6 +21,14 @@ namespace XFramework.XAsset
         private static IAssetManager _instance;
         private static bool _instanceInitialized;
 
+        /// <summary>
+        /// 当前 <see cref="_instance"/> 是否由框架自己创建（<see cref="InitializeAsyncCore"/> 成功路径）。
+        /// <para><see cref="SetInstance"/> 换出旧实例时据此决定「处置」还是「只退订」：框架创建的实例
+        /// 调用方拿不到引用，必须由框架 Dispose；注入实例的生命周期归调用方，只断开静态事件
+        /// （R4-AST-001）。</para>
+        /// </summary>
+        private static bool _instanceOwnedByFramework;
+
         /// <summary>进行中的初始化任务。并发调用共享同一任务，避免重复创建实例；完成后清空，允许失败重试与 Destroy 后重建。</summary>
         private static UniTask _initializeTask;
 
@@ -194,6 +202,7 @@ namespace XFramework.XAsset
 
             _instance = impl;
             _instanceInitialized = true;
+            _instanceOwnedByFramework = true;
         }
 
         /// <inheritdoc cref="IAssetManager.InitializePackageAsync(AssetInitOptions, IProgress{AssetInitReport}, CancellationToken)"/>
@@ -206,19 +215,54 @@ namespace XFramework.XAsset
         /// <summary>
         /// 设置外部已创建的实例作为全局管理器。
         /// <para>适用于依赖注入或单元测试场景。在途初始化会一并作废（见 <see cref="InitializeAsync"/>）。</para>
-        /// <para><b>不释放原实例</b>：与 <see cref="Destroy"/> 不同，本方法只替换引用——重复调用会静默丢弃
-        /// 前一个实例，需要释放请先自行处置。</para>
+        /// <para><b>旧实例的处置</b>：由框架 <see cref="InitializeAsync"/> 创建的实例会被退订并 Dispose；
+        /// 通过本方法注入的 <see cref="AssetManagerImpl"/> 只退订静态事件、不 Dispose（生命周期归调用方）；
+        /// 第三方 <see cref="IAssetManager"/> 实现不做任何处置。同一引用重复注入是 no-op（只作废在途初始化）。</para>
         /// </summary>
         public static void SetInstance(IAssetManager manager)
         {
             AssertMainThread(nameof(SetInstance));
 
-            _instance = manager ?? throw new ArgumentNullException(nameof(manager));
+            if (manager == null)
+                throw new ArgumentNullException(nameof(manager));
+
+            var previous = _instance;
+            bool previousOwned = _instanceOwnedByFramework;
+
+            if (ReferenceEquals(previous, manager))
+            {
+                // 同一引用：不处置自己刚注入的实例；在途初始化仍按原语义作废
+                InvalidateInflightInit();
+                _initializeTask = default;
+                return;
+            }
+
+            _instance = manager;
             _instanceInitialized = true;
+            _instanceOwnedByFramework = false;
 
             // 作废在途初始化：注入实例优先，在途任务结果（及它的加入者）不得覆盖
             InvalidateInflightInit();
             _initializeTask = default;
+
+            if (previous != null)
+            {
+                try
+                {
+                    if (previous is AssetManagerImpl previousImpl)
+                        previousImpl.DetachSessionSubscriptions();
+
+                    if (previousOwned)
+                        previous.Dispose();
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.AssetManager, e,
+                        previousOwned
+                            ? "替换 AssetManager 实例时销毁旧实例失败，已隔离并继续。"
+                            : "替换 AssetManager 实例时退订旧实例失败，已隔离并继续。");
+                }
+            }
         }
 
         /// <summary>
@@ -237,6 +281,7 @@ namespace XFramework.XAsset
                 _instance = null;
             }
             _instanceInitialized = false;
+            _instanceOwnedByFramework = false;
 
             // 作废在途初始化任务：结果丢弃、加入者一并了结，可立即重新初始化
             InvalidateInflightInit();
@@ -269,6 +314,7 @@ namespace XFramework.XAsset
 
             _instance = null;
             _instanceInitialized = false;
+            _instanceOwnedByFramework = false;
             ImplFactory = null;
 
             InvalidateInflightInit();

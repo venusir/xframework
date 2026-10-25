@@ -334,6 +334,7 @@ Runtime/Asset/
 
 - `AssetManager` 与 `IAssetManager` 是对外唯一公开层；`AssetManagerImpl` / `YooAssetManagerImpl` 为 internal，第三方不直接使用
 - 替换底层实现：实现 `IAssetManager` 后通过 `AssetManager.SetInstance(...)` 注入（也用于单元测试）
+- `SetInstance` 换出旧实例时：框架 `InitializeAsync` 创建的实例会被退订并 `Dispose`；通过 `SetInstance` 注入的 `AssetManagerImpl` 只退订静态事件（生命周期归调用方）；第三方 `IAssetManager` 实现不做任何处置。同一引用重复注入是 no-op（只作废在途初始化）。
 
 ## API 参考
 
@@ -345,7 +346,7 @@ Runtime/Asset/
 | --- | --- |
 | `InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略；并发调用共享同一初始化任务 |
 | `InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, ct)` | 追加初始化额外资源包（多包场景），需先完成默认包初始化 |
-| `SetInstance(IAssetManager manager)` | 注入自定义实现（替换底层 / 单元测试） |
+| `SetInstance(IAssetManager manager)` | 注入自定义实现（替换底层 / 单元测试）。换出旧实例时按所有权处置：框架创建 → 退订并 `Dispose`；注入的 `AssetManagerImpl` → 只退订；第三方实现 → 不动 |
 | `Destroy()` | 销毁全局管理器，释放全部资源 |
 | `IsInitialized` | 是否已初始化 |
 | `AssetInitOptions.AutoReclaimOnLowMemory = true` | 初始化选项字段：低内存自动回收开关（监听 `Application.lowMemory`，默认开启） |
