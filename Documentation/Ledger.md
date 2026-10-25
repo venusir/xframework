@@ -19,12 +19,14 @@
 
 模块清单与链接的唯一维护处是 `Documentation/Modules/README.md` 的文件表——本文**不复制那份清单**（同一份名单三处维护就是漂移的起点）。每个模块文件的「决策台账」节是该模块条目的唯一落点；`Tools/check-docs.ps1 -Enforce` 会核「每个模块都有台账」与「文件表与 `Runtime/` 子目录双向相等」。
 
-四份**随外部漂移**的维护向文档不在台账体系里、在此登记为指针：
+六份**随外部漂移**的维护向文档不在台账体系里、在此登记为指针：
 
 - `Documentation/CI.md`——CI 的成本要点与裁定（暂不接入 + 三条重开判据）；
 - `Documentation/Luban.md`——配置表工具接入配方（已核对事实与版本漂移点；2026-10-24 起记录扩展包工作流与端到端探针结论）；
 - `Documentation/FairyGUI.md`——第三方 UI 方案评估（不接成后端 / 不做平级包 + 重开判据）；
-- `Documentation/Cinemachine.md`——Cinemachine 3.1.7 后端的版本 / 3.x API 实测 / 升级与漂移点（已并入核心包 `Runtime/Camera/Cinemachine/`，核心 asmdef 硬引用 Cinemachine）。
+- `Documentation/Cinemachine.md`——Cinemachine 3.1.7 后端的版本 / 3.x API 实测 / 升级与漂移点（已并入核心包 `Runtime/Camera/Cinemachine/`，核心 asmdef 硬引用 Cinemachine）；
+- `Documentation/FMOD.md`——FMOD 集成形态、与 `IAudioManager` 的映射、适配器设计、UPM / 许可与门禁事实、重开判据；
+- `Documentation/Wwise.md`——Wwise 同上（Launcher 安装、许可限制、PlayingID / 回调与 bank 模型）。
 
 ## 三、框架级决策
 
