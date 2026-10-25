@@ -39,6 +39,7 @@ Runtime/Config/
 ├── ScriptableObjectLoader.cs # 内置：ScriptableObject（经 AssetManager）
 ├── ConfigLoadHelper.cs       # 加载调度助手（并发共享同一任务）
 ├── ConfigTextLoader.cs       # 文本类格式的公共读入段
+├── ConfigAssetLease.cs       # 配置资源句柄视图（测试缝；生产实现包住 AssetHandle<T>）
 ├── ConfigTypeHelper.cs       # 主键类型推导（reflection 边界，结果缓存）
 ├── ConfigFormat.cs           # 内置格式枚举（Json / ScriptableObject / Csv）
 ├── ConfigLoadKind.cs         # 已加载条目种类（Table / Global）

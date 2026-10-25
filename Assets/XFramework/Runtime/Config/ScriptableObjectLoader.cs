@@ -16,19 +16,32 @@ namespace XFramework.XConfig
     /// </summary>
     internal sealed class ScriptableObjectLoader : IConfigLoader
     {
+        private readonly Func<string, UniTask<IConfigAssetLease<ScriptableObject>>> _leaseLoader;
+
+        /// <summary>生产路径：经 <see cref="AssetManager"/> 加载。</summary>
+        internal ScriptableObjectLoader()
+        {
+        }
+
+        /// <summary>测试缝：注入句柄视图（见 <see cref="IConfigAssetLease{T}"/>）。</summary>
+        internal ScriptableObjectLoader(Func<string, UniTask<IConfigAssetLease<ScriptableObject>>> leaseLoader)
+        {
+            _leaseLoader = leaseLoader;
+        }
+
         #region IConfigLoader
 
         async UniTask<ConfigTable<T>> IConfigLoader.LoadTableAsync<T, TKey>(string assetPath)
         {
             // 按最宽类型加载再自检：直接按 ScriptableObjectTable<T,TKey> 加载时，普通 SO 会
             // 在 AssetManager 侧表现为「资源不存在/类型不匹配」，错误消息把排查方向带偏（R3-CONF-002）。
-            var asset = await LoadSOAsync<ScriptableObject>(assetPath);
+            var asset = await LoadSOAsync(assetPath);
             return BuildTable<T, TKey>(asset, assetPath);
         }
 
         async UniTask<T> IConfigLoader.LoadGlobalAsync<T>(string assetPath)
         {
-            var obj = await LoadSOAsync<ScriptableObject>(assetPath);
+            var obj = await LoadSOAsync(assetPath);
             if (obj is T config)
                 return config;
             throw new ConfigException(
@@ -67,22 +80,21 @@ namespace XFramework.XConfig
             return new ConfigTable<T>(dict);
         }
 
-        private static async UniTask<T> LoadSOAsync<T>(string assetPath) where T : UnityEngine.Object
+        private async UniTask<ScriptableObject> LoadSOAsync(string assetPath)
         {
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException("Asset path cannot be null or empty.");
 
-            var handle = await AssetManager.LoadAsync<T>(assetPath);
-            if (handle.Asset == null)
-                throw new ConfigException(
-                    $"Failed to load SO asset '{assetPath}' for type '{typeof(T).Name}'. Ensure AssetManager is initialized and the asset exists.");
-            try
+            var lease = _leaseLoader != null
+                ? await _leaseLoader(assetPath)
+                : new AssetHandleLease<ScriptableObject>(await AssetManager.LoadAsync<ScriptableObject>(assetPath));
+
+            using (lease)
             {
-                return handle.Asset;
-            }
-            finally
-            {
-                handle.Dispose();
+                if (lease.Asset == null)
+                    throw ConfigAssetError.Missing("SO", nameof(ScriptableObject), lease, assetPath);
+
+                return lease.Asset;
             }
         }
 

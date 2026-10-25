@@ -530,6 +530,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **类型不符的配置资源未释放句柄，错误消息也不区分病因（R4-CONF-002）**：`ConfigTextLoader` /
+  `ScriptableObjectLoader` 的 `handle.Asset == null` 检查在 `try/finally` **之前**——YooAsset 句柄有效但
+  `GetAssetObject<T>` 返回 null（地址指向了别的资源类型）时抛异常却不 `Dispose`，provider/bundle 引用
+  永久驻留；消息也把「资源不存在」与「类型不符」混为一谈。修法：判空移入 `try`，由 `finally` 统一释放；
+  按句柄 `Status` / `LastError` 分三路归因（加载失败 / 类型不符 / 未初始化或未完成），消息带 location。
+  内部新增 `IConfigAssetLease<T>` 句柄视图作为测试缝（生产实现包住 `AssetHandle<T>`，零公开面变更）。
+  回归：`ConfigAssetLoaderTests` 五例（类型不符释放一次、失败态、未开始态、成功路径、SO 类型不符）；
+  真 YooAsset 的 RefCount 仍由 R4-PRB-03 探针背书。
 - **在途分支的 null loader 先于校验被解引用（R4-CONF-001，回归）**：`PreloadTableAsync<T>(path, loader)`
   的在途分支先拼 `"Loader:" + loader.GetType().Name`，`loader == null` 的校验在其后——第二个调用传 null
   loader 且已有 Table 在途时抛裸 NRE，而不是 XML 承诺的 `ConfigException`；Global 版用 `?.` 静默加入在途
