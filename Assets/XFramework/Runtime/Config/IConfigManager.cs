@@ -44,7 +44,8 @@ namespace XFramework.XConfig
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="loader">自定义配置加载器。</param>
         /// <returns>可缓存的 <see cref="ConfigTable{T}"/> 只读包装器。</returns>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回缓存（保留既有语义）。</exception>
         UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
             where T : IConfigRow, new();
 
@@ -55,7 +56,8 @@ namespace XFramework.XConfig
         /// <typeparam name="T">配置类型，必须为 class 并有无参构造函数。</typeparam>
         /// <param name="assetPath">配置资源路径。</param>
         /// <param name="loader">自定义配置加载器。</param>
-        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、assetPath 为空或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回（保留既有语义）。</exception>
         UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader)
             where T : class, new();
 

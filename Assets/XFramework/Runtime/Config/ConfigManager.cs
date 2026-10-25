@@ -229,7 +229,8 @@ namespace XFramework.XConfig
         /// <param name="loader">自定义加载器实例。</param>
         /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
         /// <returns>Table 包装器实例。</returns>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回缓存（保留既有语义）。</exception>
         public static async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
             where T : IConfigRow, new()
         {
@@ -245,7 +246,8 @@ namespace XFramework.XConfig
         /// <param name="assetPath">资源路径（由 Loader 自行解析），首次加载时必填。</param>
         /// <param name="loader">自定义加载器实例。</param>
         /// <param name="cancellationToken">取消令牌（可选）。取消仅中断当前等待；底层加载仍会完成并注册数据。</param>
-        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、assetPath 为空或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回（保留既有语义）。</exception>
         public static async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader, CancellationToken cancellationToken = default)
             where T : class, new()
         {

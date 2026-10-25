@@ -159,6 +159,9 @@ ConfigManifest  (批量加载清单)
 > **`default` 字面量不能直接当第二个实参**（CONF-016）：`PreloadTableAsync<T>(path, default)` 与
 > `PreloadGlobalAsync<T>(path, default)` 都会在 `ConfigFormat` / `IConfigLoader` 两个重载间二义（CS0121）。
 > 省略格式请写 `ConfigFormat.Json`，或显式强转 `(ConfigFormat)default` / `(IConfigLoader)loader`。
+>
+> **`loader` 为 null 的校验在首次加载路径**（含已有在途）：抛 `ConfigException`（R4-CONF-001）。
+> 已加载后传 null 仍返回缓存，不会被当成非法请求。
 
 > 以上方法均支持可选 `CancellationToken` 参数（取消语义见「典型场景」的「CancellationToken 取消」）。
 

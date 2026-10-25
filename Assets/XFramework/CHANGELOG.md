@@ -530,6 +530,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **在途分支的 null loader 先于校验被解引用（R4-CONF-001，回归）**：`PreloadTableAsync<T>(path, loader)`
+  的在途分支先拼 `"Loader:" + loader.GetType().Name`，`loader == null` 的校验在其后——第二个调用传 null
+  loader 且已有 Table 在途时抛裸 NRE，而不是 XML 承诺的 `ConfigException`；Global 版用 `?.` 静默加入在途
+  等待。修法：两个重载都在「已加载早退」之后、「在途分支」之前校验 null；Global 的 `?.` 改为 `.`。
+  保留「已加载后传 null 仍返回缓存」的既有语义。回归：
+  `ConfigManagerImplTests.PreloadTableAsync_NullLoaderWhileTableInFlight_ThrowsConfigException` /
+  `PreloadGlobalAsync_NullLoaderWhileGlobalInFlight_ThrowsConfigException`（改前分别 NRE / pending）。
 - **多 `IConfigRow<>` 实现静默取第一个、基类回退循环是死代码（R3-CONF-010）**：`ConfigTypeHelper` 按接口
   枚举顺序取第一个主键且无告警；`GetInterfaces()` 已含继承接口，基类回退循环不可达。修法：删除死代码；
   多接口实现时打 Warning（仍取第一个，行为不变）。回归：

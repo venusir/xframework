@@ -195,7 +195,8 @@ namespace XFramework.XConfig
         /// <summary>
         /// 使用自定义 Loader 预加载 Table 配置。
         /// </summary>
-        /// <exception cref="ConfigException">loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、类型未实现 IConfigRow&lt;&gt; 或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回缓存（保留既有语义）。</exception>
         public async UniTask<ConfigTable<T>> PreloadTableAsync<T>(string assetPath, IConfigLoader loader)
             where T : IConfigRow, new()
         {
@@ -209,6 +210,11 @@ namespace XFramework.XConfig
                 return GetOrCreateWrapper<T>(type, existingDict);
             }
 
+            // 先校验 null（R4-CONF-001）：在途分支要用 loader.GetType() 拼告警，null 会变成 NRE。
+            // 已加载早退保留「返回缓存」语义，不因 null loader 扩大行为变更。
+            if (loader == null)
+                throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
+
             // 并发调用共享同一进行中的任务；只加入同身份（Table）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Table)
             {
@@ -217,8 +223,6 @@ namespace XFramework.XConfig
                 return GetTableResult<T>(type, load);
             }
 
-            if (loader == null)
-                throw new ConfigException($"loader cannot be null when preloading Table '{type.Name}'.");
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException($"assetPath must be provided when preloading Table '{type.Name}'.");
 
@@ -290,7 +294,8 @@ namespace XFramework.XConfig
         /// <summary>
         /// 使用自定义 Loader 预加载 Global 配置。
         /// </summary>
-        /// <exception cref="ConfigException">loader 为 null、assetPath 为空或加载失败时抛出。</exception>
+        /// <exception cref="ConfigException">首次加载时 loader 为 null、assetPath 为空或加载失败时抛出。
+        /// 已加载后传入 null loader 仍返回（保留既有语义）。</exception>
         public async UniTask PreloadGlobalAsync<T>(string assetPath, IConfigLoader loader)
             where T : class, new()
         {
@@ -304,16 +309,19 @@ namespace XFramework.XConfig
                 return;
             }
 
+            // 先校验 null（R4-CONF-001）：Global 在途分支此前用 ?. 静默加入，违背 XML 的
+            // 「loader 为 null 抛 ConfigException」。已加载早退保留「返回缓存」语义。
+            if (loader == null)
+                throw new ConfigException($"loader cannot be null when preloading Global config '{type.Name}'.");
+
             // 并发调用共享同一进行中的任务；只加入同身份（Global）的加载（CONF-009）
             if (_inFlightLoads.TryGetValue(type, out var load) && load.Kind == InFlightKind.Global)
             {
-                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader?.GetType().Name);
+                WarnIfInFlightMismatch(type, load, assetPath, "Loader:" + loader.GetType().Name);
                 await AwaitInFlight(load);
                 return;
             }
 
-            if (loader == null)
-                throw new ConfigException($"loader cannot be null when preloading Global config '{type.Name}'.");
             if (string.IsNullOrEmpty(assetPath))
                 throw new ConfigException($"assetPath must be provided when preloading Global config '{type.Name}'.");
 

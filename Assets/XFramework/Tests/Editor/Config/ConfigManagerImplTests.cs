@@ -175,6 +175,58 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(42, impl.GetGlobal<TestGlobalConfig>().Value);
         }
 
+        /// <summary>
+        /// 在途 Table 加载期间传入 null loader：应抛 ConfigException，而不是在拼接告警时 NRE（R4-CONF-001）。
+        /// </summary>
+        [Test]
+        public void PreloadTableAsync_NullLoaderWhileTableInFlight_ThrowsConfigException()
+        {
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+            var tcs = new UniTaskCompletionSource<ConfigTable<TestItemRow>>();
+            fake.SetTableTask(tcs.Task);
+
+            var first = impl.PreloadTableAsync<TestItemRow>("config/items", fake);
+            var second = impl.PreloadTableAsync<TestItemRow>("config/items", (IConfigLoader)null);
+
+            var ex = Assert.Throws<ConfigException>(() => second.GetAwaiter().GetResult());
+            StringAssert.Contains("loader cannot be null", ex.Message);
+            Assert.AreEqual(1, fake.LoadTableCallCount, "非法请求不得进入第二次加载");
+
+            tcs.TrySetResult(MakeTable());
+            first.GetAwaiter().GetResult();
+        }
+
+        /// <summary>
+        /// 在途 Global 加载期间传入 null loader：应立即失败，而不是静默加入在途等待（R4-CONF-001）。
+        /// </summary>
+        [Test]
+        public void PreloadGlobalAsync_NullLoaderWhileGlobalInFlight_ThrowsConfigException()
+        {
+            var impl = new ConfigManagerImpl();
+            var fake = new FakeConfigLoader();
+            var tcs = new UniTaskCompletionSource<TestGlobalConfig>();
+            fake.SetGlobalTask(tcs.Task);
+
+            var first = impl.PreloadGlobalAsync<TestGlobalConfig>("config/game", fake);
+            try
+            {
+                var second = impl.PreloadGlobalAsync<TestGlobalConfig>(
+                    "config/game", (IConfigLoader)null);
+
+                Assert.IsTrue(second.Status.IsFaulted(),
+                    "null loader 应立即失败，而不是加入在途等待");
+                var ex = Assert.Throws<ConfigException>(() => second.GetAwaiter().GetResult());
+                StringAssert.Contains("loader cannot be null", ex.Message);
+                Assert.AreEqual(1, fake.LoadGlobalCallCount, "非法请求不得进入第二次加载");
+            }
+            finally
+            {
+                tcs.TrySetResult(new TestGlobalConfig { Value = 42 });
+                first.GetAwaiter().GetResult();
+            }
+        }
+
         [Test]
         public void PreloadGlobalAsync_LoaderReturnsNull_ThrowsAndDoesNotMarkLoaded()
         {
