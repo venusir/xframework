@@ -45,6 +45,11 @@
     「0 失败」，光看失败数发现不了。基线按 Platform 分开记在 TestResults/last-count-<Platform>.txt；
     确实有意删掉一批用例时，删掉该文件即可重置基线（下次跑就是新基线）。
 
+.PARAMETER TimeoutSeconds
+    可选超时（秒，默认 0 = 不启用）。Unity 进程超过该时长仍未结束即终止，按「超时」单独报错
+    并以退出码 3 结束——与用例失败（1）、无结果文件 / 编译错误（2）区分开。
+    默认路径仍走 `Start-Process -Wait`（它连子进程一起等），行为与未加本参数时一致。
+
 .PARAMETER UnityPath
     显式指定 Unity.exe。留空则按 ProjectSettings/ProjectVersion.txt 的版本自动探测。
 
@@ -56,9 +61,9 @@
 
 .PARAMETER UpdateApiBaseline
     公开 API 基线的**更新模式**：设环境变量 XFW_UPDATE_API_BASELINE=1 后跑基线 fixture，
-    测试会把 Runtime 程序集当前的公开面重写进
-    Assets/XFramework/Tests/Runtime/Architecture/PublicApiBaseline.txt。
-    自带过滤器（只跑 PublicApiBaselineTests，故未显式指定平台时只跑 PlayMode）；与 -Filter/-Fixture 互斥。
+    测试会把 Runtime 与 Editor 程序集当前的公开面分别重写进
+    Assets/XFramework/Tests/Runtime/Architecture/PublicApiBaseline.txt 与 EditorPublicApiBaseline.txt。
+    自带过滤器（只跑两条基线 fixture，故未显式指定平台时只跑 PlayMode）；与 -Filter/-Fixture 互斥。
     **本次运行按设计判为失败**（写盘后打印相对旧基线的差异摘要，逼人看一眼）；
     绿灯由随后一次不带本开关的重跑给出。这是本仓唯一一个「在显式开关下反写仓库文件」的入口——
     写完务必把它与它的 .meta 一起提交（见 Documentation/Workflow.md §六）。
@@ -76,6 +81,8 @@ param(
     [ValidateSet("PlayMode", "EditMode", "All")]
     [string]$Platform = "All",
     [int]$ShrinkTolerance = 5,
+    [ValidateRange(0, 86400)]
+    [int]$TimeoutSeconds = 0,
     [string]$UnityPath = "",
     [switch]$UseRepo,
     [switch]$Setup,
@@ -273,8 +280,34 @@ foreach ($currentPlatform in $platforms) {
 
     Write-Host "开始运行..." -ForegroundColor Cyan
     $sw = [Diagnostics.Stopwatch]::StartNew()
-    $proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru -Wait
+
+    # 默认路径仍用 -Wait：它连子进程一起等，行为与未加 -TimeoutSeconds 时逐字一致。
+    # 超时路径必须 -PassThru 后自己等，否则拿不到「还在跑」这个状态。
+    $timedOut = $false
+    if ($TimeoutSeconds -gt 0) {
+        $proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru
+        $timedOut = -not $proc.WaitForExit($TimeoutSeconds * 1000)
+        if ($timedOut) {
+            Write-Host "超时（${TimeoutSeconds}s）：终止 Unity 进程（PID $($proc.Id)）" -ForegroundColor Red
+            try { $proc.Kill() } catch { Write-Warning "终止失败：$($_.Exception.Message)" }
+            if (-not $proc.WaitForExit(10000)) {
+                Write-Warning "终止后 10s 内进程仍未退出（PID $($proc.Id) 可能仍存活）。"
+            }
+        }
+    } else {
+        $proc = Start-Process -FilePath $UnityPath -ArgumentList $unityArgs -NoNewWindow -PassThru -Wait
+    }
+
     $sw.Stop()
+
+    if ($timedOut) {
+        Write-Host ""
+        Write-Host "超时失败：Unity 在 ${TimeoutSeconds}s 内未结束，已终止。这不是「用例失败」，也不是「编译错误」。" -ForegroundColor Red
+        Write-Host "  日志：$logFile"
+        Write-Host "  常见原因：冷导入 / 编译等待超过阈值，或测试挂死。确认后调大 -TimeoutSeconds，或省略该开关（默认不超时）。" -ForegroundColor Yellow
+        exit 3
+    }
+
     Write-Host "退出码 $($proc.ExitCode)，耗时 $([math]::Round($sw.Elapsed.TotalSeconds,1))s"
 
     # ---------- 解析结果 ----------

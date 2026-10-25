@@ -101,6 +101,7 @@
 | `-Fixture <类名>` | 按 fixture 精确匹配（内部生成 `\.<类名>\.`）；与 `-Filter` 互斥 |
 | `-Platform` | `All`（默认）/ `PlayMode` / `EditMode`；带 `-Filter` 且未显式指定时只跑 `PlayMode` |
 | `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」）。**全量跑 0 用例直接判失败**（2026-10-14 补：缩到 0 恰好绕过上面那条告警，而它对使用者的呈现与真绿一模一样——详见 `Documentation/Ledger.md` 的「`Tests~` / 把测试移出包目录」条） |
+| `-TimeoutSeconds` | 可选超时（秒，默认 0 = 不启用）。Unity 进程超时即终止，按「超时」单独报错并以**退出码 3** 结束——与用例失败（1）、无结果文件 / 编译错误（2）区分开。默认路径仍走 `Start-Process -Wait`，行为不变 |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
 | `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`（Runtime）与 `EditorPublicApiBaseline.txt`（Editor，同一开关覆盖两组）。自带过滤器（只跑两条基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
