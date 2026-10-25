@@ -5,7 +5,8 @@ namespace XFramework.XAudio
 {
     /// <summary>
     /// 音频资源的加载缝：默认实现走 <c>XAsset</c>，测试注入假实现以便控制加载时序与失败。
-    /// <para><b>它是测试缝，不是第二个后端替换点。</b>后端整体替换走 <see cref="IAudioManager"/>
+    /// <para><b>它是测试缝，不是第二个后端替换点。</b>中间件替换走 <see cref="IAudioProvider"/>，
+    /// 整体替换管理器走 <see cref="IAudioManager"/>
     /// （同 <c>XInput</c> 换 Rewired 的形态）；本接口刻意保持 <c>internal</c>，避免出现「只换资源来源、
     /// 不换播放引擎」这条不完整、也无人验证的中间道路。</para>
     /// <para><b>契约</b>：失败返回 <see cref="AudioClipLease.IsValid"/> 为 <c>false</c> 的租约而不抛

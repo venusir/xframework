@@ -135,7 +135,7 @@ await Bootstrap.RunAsync();
 | **响应式属性 / 集合** | `ReactiveProperty<T>` 状态同步：订阅即回调当前值、相同值去重，支持 `Select` 派生与 UI 绑定；`ReactiveList<T>` / `ReactiveDictionary<TKey,TValue>` 集合变更通知（单流零 GC 载荷、整表操作发一条 `Reset`、订阅不回调当前值） |
 | **事件流**       | `EventStream<T>` 订阅句柄 + 异常隔离 + 重放缓存；是 Message 与 Reactive 的共同底层，也可单独取用 |
 | **输入抽象**     | `InputManager` 纯字符串 API（按下/按住/长按/轴值）+ 多设备检测 + 零 GC 热路径；默认提供者基于 Unity Input System，可整体替换（如 Rewired），资源加载方式自选 |
-| **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，可整体替换实现以接 Wwise / FMOD |
+| **音频播放**     | `AudioManager` 字符串通道 + 三档音量相乘、location 异步加载、代际安全句柄、池化播放源与自动回收；公开面不含 Unity 音频类型，推荐实现 `IAudioProvider`（播放引擎缝）接 Wwise / FMOD，`IAudioManager` 仍是整体替换点 |
 | **定时器**       | `TimerManager` 一次性延时与固定间隔，返回可查询剩余量、可重开、零分配的句柄；不漂移、跳拍不补发；按最近的截止自动升降 Update 档位（60 秒的定时器每 2.1 秒才被扫一次）；暂停与时间缩放完全转接自 Update 的双时间轴 |
 | **日志**         | `LogManager` 六档分级 + 分类过滤（`[模块]` 前缀由分类渲染，不再手抄）+ 模板化调用（未启用不格式化、零分配）；控制台文本与迁移前逐字一致；每条日志一行 JSONL 落盘，并把引擎 / 第三方 / 未捕获异常收进同一条时间线供 AI 分析 |
 | **场景管理**     | `SceneManager` 加载返回**可卸载句柄**（成对释放，`Dispose` 即发即忘）；失败返回无效句柄不抛；`SceneLoadOptions` 管模式 / 叠加后激活 / 切完回收。**只做原语**——不做场景栈、不内建加载界面、不预设场景间传参 |
@@ -183,7 +183,7 @@ await Bootstrap.RunAsync();
 | **Asset** | `IAssetManager`（两个能力接口 `IAssetPoolController` / `IAssetSceneLoader` 均由门面探测） | `SetInstance(IAssetManager)`（[实现方入口](Runtime/Asset/README.md#自定义实现)） |
 | **Scene** | **无** | 代码原话：「门面无状态，后端就是 `IAssetSceneLoader` 能力接口——本仓『有接口』的分界线是『是否存在可替换的后端』，而那里已经有接口了」（同 Timer 的取舍） |
 | **Camera** | 无 | Cinemachine 3.x 直连：`CameraManager.Initialize(CinemachineBrain)`；gameplay 面只用 string id / 中立类型；后端实现 internal，替换后端等于替换模块 |
-| **Audio** | `IAudioManager` | `SetInstance(IAudioManager)`（[实现方入口](Runtime/Audio/README.md#自定义实现)） |
+| **Audio** | `IAudioManager`（整体）或 `IAudioProvider`（播放引擎，推荐） | `SetInstance(IAudioManager)` / `SetProvider(IAudioProvider)`；`TryGetProviderHandle` 取 provider 句柄（[实现方入口](Runtime/Audio/README.md#自定义实现)） |
 | **Save** | `ISaveManager`（工厂委托 `SaveManagerFactory`） | `Initialize(factory, options)`（[实现方入口](Runtime/Save/README.md#自定义实现)） |
 | **File** | `IFileProvider`（可选能力 `IAtomicFileProvider` / `IDirectoryProvider`）；`ICryptoProvider` 按域接线 | `Initialize(provider)`——**一次性**，换它必须先 `Destroy()`；`SetCryptoProvider` 可随时调（[实现方入口](Runtime/File/README.md#自定义实现)） |
 | **Settings** | `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（**按类型**注入；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点） | 三个 `Initialize<T>` 重载 / `SetStore<T>` / `SetMigrator<T>` / `SetValidator<T>`（[实现方入口](Runtime/Settings/README.md#自定义实现)） |
@@ -214,7 +214,7 @@ await Bootstrap.RunAsync();
 | **Asset** | `AssetInitOptions` 5 字段（主包名 / PlayMode / 远端服务 / 解密服务 / 低内存回收；**`DefaultGameLauncher` 字段面覆盖第 1、2、4 项**，两个服务走覆写）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
 | **Scene** | 每次加载的 `SceneLoadOptions` 3 字段（模式 / 叠加后激活 / 切完回收）——**模块无 options、无注入点** | 每次加载时 |
 | **Camera** | 无 options；每次过渡的 `duration` / `CameraBlendStyle`；相机注册在运行时经 `CameraManager.Register`（显式 id 或 `@auto/N`）；预制体可用 `CinemachineCameraRegistration` | 调用时 |
-| **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `SetChannelMuted` / `RegisterChannel` / `Pause` / `Resume`；每次播放 `AudioPlayOptions` 6 字段、`RegisterChannel` 用 `AudioChannelConfig` 2 字段；`AudioChannels` 推荐通道名（`"master"` 是保留名） | 初始化时快照；运行时项立即扫活跃播放源 |
+| **Audio** | `AudioInitOptions` 4 字段；`IAudioManager` 整体替换或 `IAudioProvider` 播放引擎替换（`SetProvider`，推荐）；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `SetChannelMuted` / `RegisterChannel` / `Pause` / `Resume`；每次播放 `AudioPlayOptions` 6 字段、`RegisterChannel` 用 `AudioChannelConfig` 2 字段；`AudioChannels` 推荐通道名（`"master"` 是保留名） | `SetProvider` 立即生效；初始化时快照；运行时项立即扫活跃播放源 |
 | **Settings** | `SettingsOptions` 5 字段；**按类型**注入 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（均可运行时替换；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点）；`defaultFactory` 决定持久层无数据时的默认值 | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
 | **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `UIBootstrapStage` / `DefaultGameLauncher` 字段面填 UI 根）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
 | **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / `DefaultGameLauncher` 字段面指向一份 `InputSystemOptionsAsset`）；**换后端**：`Initialize(IInputProvider)` 或 `InputBootstrapStage(IInputProvider)`（`SetProvider` 不注册帧驱动）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |

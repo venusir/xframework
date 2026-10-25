@@ -66,8 +66,8 @@ namespace XFramework.XAudio
         }
 
         /// <summary>
-        /// 注入自定义 <see cref="IAudioManager"/> 实现（用于测试、依赖注入，或用 Wwise / FMOD 等音频中间件
-        /// 整体替换底层播放引擎）。
+        /// 注入自定义 <see cref="IAudioManager"/> 实现（用于测试、依赖注入，或连通道/音量/暂停/计数一起
+        /// 整体替换管理器）。<b>音频中间件推荐改用 <see cref="IAudioProvider"/> + <see cref="SetProvider"/>。</b>
         /// <para><b>本方法不会 Dispose 先前持有的实例</b>（与 <c>LocalizationManager.SetInstance</c> 同一取舍）：
         /// 若之前已 <see cref="Initialize"/>，请先 <see cref="Destroy"/> 再注入，否则旧实现自持的资源不会释放。</para>
         /// <para>框架以强引用持有注入的实例，其生命周期由调用方管理；<see cref="Destroy"/> 会调用它的
@@ -81,6 +81,28 @@ namespace XFramework.XAudio
                 throw new ArgumentNullException(nameof(instance));
 
             _instance = instance;
+            _instanceInitialized = true;
+        }
+
+        /// <summary>
+        /// 注入自定义 <see cref="IAudioProvider"/> 播放引擎。
+        /// <para><b>这是中间件（FMOD / Wwise 等）的推荐路径</b>：通道、三档音量、暂停闸门、计数与诊断
+        /// 仍由框架的语义层负责，provider 只实现播放原语。</para>
+        /// <para><b>本方法会先 Dispose 旧实例</b>（含其 provider），与 <see cref="SetInstance"/> 的
+        /// 「不 Dispose 旧实例」不同——provider 由框架持有，不 Dispose 会泄漏。</para>
+        /// <para>注入后 <see cref="Initialize"/> 按重复初始化处理（告警并忽略）。</para>
+        /// </summary>
+        /// <param name="provider">播放引擎实现，不可为 null。</param>
+        /// <param name="options">核心语义层选项；为 <c>null</c> 时使用默认值。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="provider"/> 为 null 时抛出。</exception>
+        public static void SetProvider(IAudioProvider provider, AudioInitOptions options = null)
+        {
+            if (provider == null)
+                throw new ArgumentNullException(nameof(provider));
+
+            Destroy();
+
+            _instance = new AudioManagerImpl(provider, options);
             _instanceInitialized = true;
         }
 
@@ -351,7 +373,8 @@ namespace XFramework.XAudio
         /// <summary>
         /// 把已创建的通道写入缓冲区（先清空），返回条数。
         /// <para>回答「声音听不见」的第一问：哪些通道被用过、各自音量与静音、各有多少路在播。</para>
-        /// <para><b>只对内置实现成立</b>：注入自定义 <see cref="IAudioManager"/> 时返回 0（缓冲区被清空）
+        /// <para><b>对框架语义层成立</b>：内置实现与 <see cref="SetProvider"/> 路径都可用；
+        /// 经 <see cref="SetInstance"/> 注入的非 <see cref="AudioManagerImpl"/> 实现返回 0（缓冲区被清空）
         /// ——那类实现不提供通道表回读。</para>
         /// <para><b>诊断接口</b>：低频调用，允许分配；顺序未定义。不要放进每帧路径。</para>
         /// </summary>
@@ -370,6 +393,23 @@ namespace XFramework.XAudio
             return 0;
         }
 
+        /// <summary>
+        /// 取核心句柄对应的 provider 句柄（用于中间件逐次播放控制与测试映射）。
+        /// <para><b>探测型成员</b>：未初始化、已销毁、<c>default</c>、过期或仍在加载的句柄返回
+        /// <c>false</c> 而不抛。经 <see cref="SetInstance"/> 注入的非 <see cref="AudioManagerImpl"/>
+        /// 实现同样返回 <c>false</c>。</para>
+        /// <para>provider 句柄由 <see cref="IAudioProvider"/> 实现自行编码，框架不解释。</para>
+        /// </summary>
+        /// <param name="handle">核心播放句柄。</param>
+        /// <param name="providerHandle">对应的 provider 句柄；失败时为 default。</param>
+        /// <returns>成功时返回 <c>true</c>。</returns>
+        public static bool TryGetProviderHandle(AudioHandle handle, out AudioProviderHandle providerHandle)
+        {
+            providerHandle = default;
+            return _instance is AudioManagerImpl impl &&
+                   impl.TryGetProviderHandle(handle, out providerHandle);
+        }
+
         /// <summary>某个通道下当前活跃的播放数量。未声明的通道返回 <c>0</c>。</summary>
         /// <param name="channel">通道名；<c>null</c>/空归一化为 <see cref="AudioChannels.Default"/>。</param>
         /// <exception cref="InvalidOperationException">未初始化时抛出。</exception>
@@ -383,18 +423,22 @@ namespace XFramework.XAudio
 
         #region Internal
 
+        /// <summary>测试用：当前门面持有的管理器实例；未初始化时为 <c>null</c>。</summary>
+        internal static IAudioManager CurrentManagerForTests => _instance;
+
         /// <summary>
         /// 未初始化时抛 <see cref="InvalidOperationException"/>，消息带 <c>[Audio]</c> 前缀与修复提示。
-        /// <para><b>探测型成员不走这里</b>（<see cref="Stop"/>、<see cref="IsPlaying"/>）——句柄的生命周期
-        /// 可以长于管理器，它们必须安全返回 <c>false</c>。</para>
+        /// <para><b>探测型成员不走这里</b>（<see cref="Stop"/>、<see cref="IsPlaying"/>、
+        /// <see cref="TryGetProviderHandle"/>）——句柄的生命周期可以长于管理器，它们必须安全返回
+        /// <c>false</c>。</para>
         /// </summary>
         private static void EnsureInitialized()
         {
             if (!_instanceInitialized || _instance == null)
             {
                 throw new InvalidOperationException(
-                    "[Audio] 音频管理器尚未初始化。请先调用 AudioManager.Initialize() 或 " +
-                    "AudioManager.SetInstance(...) 完成初始化。");
+                    "[Audio] 音频管理器尚未初始化。请先调用 AudioManager.Initialize()、" +
+                    "AudioManager.SetInstance(...) 或 AudioManager.SetProvider(...) 完成初始化。");
             }
         }
 

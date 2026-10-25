@@ -6,34 +6,20 @@ using XFramework.XLog;
 namespace XFramework.XAudio
 {
     /// <summary>
-    /// 播放源池：管理隐藏宿主、槽位分配与回收、以及播完后的扫尾判定。
-    /// <para><b>不依赖 <c>PoolManager</c></b>：那套池只服务纯 C# 对象，不涉及 GameObject 与资源引用
-    /// （预设体的池在 <c>XAsset</c> 侧）。本池是第三套，自持。</para>
-    /// <para><b>唯一并发策略是容量上限</b>：取不到空闲槽位时返回 <c>false</c>，由调用方退化成
-    /// 「返回默认句柄 + 记一条限流告警」。框架不做优先级抢占。</para>
+    /// 内置播放引擎的宿主与槽位池。
+    /// <para><b>它只服务 <see cref="AudioSourceProvider"/></b>：容量由核心的槽位表决定，这里只按同一
+    /// <c>MaxVoices</c> 建 GameObject；池满返回 false，核心按播放失败处理。</para>
+    /// <para>回收判据（<c>AudioListener.pause</c>、死源、起播超时）在 provider 的 <c>Poll</c> 里，
+    /// 池本身不再扫尾。</para>
     /// </summary>
     internal sealed class AudioSourcePool
     {
-        #region Constants
-
-        /// <summary>
-        /// <see cref="AudioVoiceState.Starting"/> 的扫描次数上限。
-        /// <para>按 <c>Tier1</c> 约 33ms 一拍，60 拍约 2 秒。兜底的是「某个平台上 <c>Play()</c> 之后
-        /// <c>isPlaying</c> 永不变真」这种情形——没有它，那个槽位会永久泄漏。</para>
-        /// </summary>
-        private const int StartingTimeoutTicks = 60;
-
-        #endregion
-
         #region Private Fields
 
         private readonly List<AudioVoice> _slots = new List<AudioVoice>();
         private readonly int _maxVoices;
 
         private AudioHost _host;
-
-        /// <summary>本轮「播放源耗尽」是否已告警过。任一次释放即复位，使下一次耗尽能再提醒一次。</summary>
-        private bool _exhaustionWarned;
 
         #endregion
 
@@ -53,43 +39,25 @@ namespace XFramework.XAudio
 
         internal AudioVoice GetSlot(int index) => _slots[index];
 
-        /// <summary>当前活跃槽位数（非 <see cref="AudioVoiceState.Free"/>，含加载中）。</summary>
-        internal int CountActive()
-        {
-            int active = 0;
-            for (int i = 0; i < _slots.Count; i++)
-            {
-                if (_slots[i].State != AudioVoiceState.Free)
-                    active++;
-            }
-
-            return active;
-        }
-
         /// <summary>
         /// 一次性建满宿主与全部槽位（<see cref="AudioInitOptions.PrewarmVoices"/>）。
-        /// <para>与惰性路径<b>共用</b> <see cref="CreateVoice"/>，槽位形状完全一致——区别只在时机：
-        /// 预热把「首次播放时创建 N 个对象」的开销提前到初始化，避开第一声的卡顿。</para>
         /// </summary>
         internal void Prewarm()
         {
             EnsureHost();
 
             while (_slots.Count < _maxVoices)
-            {
                 _slots.Add(CreateVoice(_slots.Count));
-            }
         }
 
         /// <summary>
-        /// 预占一个槽位。失败即「播放源已耗尽」，调用方应退化成返回默认句柄。
+        /// 预占一个 provider 槽位。失败即「播放源已耗尽」，调用方退化成返回默认句柄。
         /// <para>预占发生在<b>发起加载之前</b>：池满时一次 IO 都不会浪费。</para>
         /// </summary>
-        /// <param name="channel">已归一化并校验过的通道名。</param>
         /// <param name="location">资源地址，仅作诊断记录。</param>
         /// <param name="index">预占到的槽位下标。</param>
-        /// <param name="handle">本次播放的句柄。</param>
-        internal bool TryReserve(string channel, string location, out int index, out AudioHandle handle)
+        /// <param name="handle">本次播放的 provider 句柄。</param>
+        internal bool TryReserve(string location, out int index, out AudioProviderHandle handle)
         {
             index = -1;
             handle = default;
@@ -109,10 +77,7 @@ namespace XFramework.XAudio
             if (free < 0)
             {
                 if (_slots.Count >= _maxVoices)
-                {
-                    WarnExhaustedOnce();
                     return false;
-                }
 
                 free = _slots.Count;
                 _slots.Add(CreateVoice(free));
@@ -130,15 +95,12 @@ namespace XFramework.XAudio
 
             voice.Generation = NextGeneration(voice.Generation);
             voice.State = AudioVoiceState.Loading;
-            voice.Channel = channel;
             voice.Location = location;
             voice.Loop = false;
-            voice.VolumeScale = 1f;
-            voice.StartingTicks = 0;
             voice.ClipLease = default;
 
             index = free;
-            handle = new AudioHandle(free, voice.Generation);
+            handle = new AudioProviderHandle(free, voice.Generation);
             return true;
         }
 
@@ -158,10 +120,13 @@ namespace XFramework.XAudio
         /// <summary>
         /// 释放一个槽位：停播、清 clip、释放资源句柄、置空闲。
         /// <para>代际<b>不在这里</b>递增——置空闲已足够让同代句柄失效（<see cref="IsCurrent"/> 会因
-        /// <see cref="AudioVoiceState.Free"/> 返回 false）；下一次预占时才递增，从而挡住跨代的旧句柄。</para>
+        /// <see cref="AudioVoiceState.Free"/> 返回 false）；下一次预占时才递增。</para>
         /// </summary>
         internal void Release(int index)
         {
+            if (index < 0 || index >= _slots.Count)
+                return;
+
             var voice = _slots[index];
 
             if (voice.Source != null)
@@ -173,119 +138,9 @@ namespace XFramework.XAudio
             DisposeClipLease(voice);
 
             voice.State = AudioVoiceState.Free;
-            voice.Channel = null;
             voice.Location = null;
             voice.Loop = false;
-            voice.VolumeScale = 1f;
-            voice.StartingTicks = 0;
-
-            _exhaustionWarned = false;
-        }
-
-        /// <summary>
-        /// 作废一个仍在加载中的槽位。
-        /// <para><b>不动 <see cref="AudioVoice.ClipLease"/></b>：此时它还是 <c>default</c>；若加载已经完成、
-        /// 租约正握在续体手里，那由续体的竞态检查负责释放——释放点必须恰好一次。</para>
-        /// </summary>
-        internal void Invalidate(int index)
-        {
-            var voice = _slots[index];
-            voice.Generation = NextGeneration(voice.Generation);
-            voice.State = AudioVoiceState.Free;
-            voice.Channel = null;
-            voice.Location = null;
-            voice.Loop = false;
-            voice.VolumeScale = 1f;
-            voice.StartingTicks = 0;
-
-            _exhaustionWarned = false;
-        }
-
-        /// <summary>
-        /// 扫一遍槽位，回收播完的。返回是否仍有活跃槽位（false 时调用方应注销 ticker）。
-        /// <para><b>判据是自持状态机而非只看 <c>isPlaying</c></b>：实测表明 <c>AudioSource.Pause()</c> 与
-        /// 全局 <c>AudioListener.pause</c> 之后 <c>isPlaying</c> 都会变 <c>false</c>，只看它会把暂停中的
-        /// 播放当场回收（AUD-013）。</para>
-        /// </summary>
-        internal bool Sweep()
-        {
-            int active = 0;
-
-            for (int i = 0; i < _slots.Count; i++)
-            {
-                var voice = _slots[i];
-
-                // 被外部销毁的播放源是 Unity 假 null；继续读 isPlaying 会抛 MissingReference，
-                // 让整个 Sweep 中断并留下永久占用的槽位（AUD-003）。
-                if (voice.State != AudioVoiceState.Free &&
-                    voice.State != AudioVoiceState.Loading &&
-                    voice.Source == null)
-                {
-                    LogManager.Warning(LogCategories.Audio,
-                        "播放源已被外部销毁，回收槽位：'{0}'。", voice.Location);
-                    Release(i);
-                    // continue 而不是 break（R3-AUD-003）：break 会提前结束整趟扫尾，
-                    // 后面的活跃槽位不计入 active，ticker 被过早注销、其余死槽位也永远轮不到。
-                    continue;
-                }
-
-                switch (voice.State)
-                {
-                    case AudioVoiceState.Free:
-                        break;
-
-                    case AudioVoiceState.Loading:
-                        // 加载中绝不动它——续体负责收尾
-                        active++;
-                        break;
-
-                    case AudioVoiceState.Starting:
-                        if (voice.Source.isPlaying)
-                        {
-                            voice.State = AudioVoiceState.Playing;
-                            active++;
-                        }
-                        else if (AudioListener.pause)
-                        {
-                            // AUD-013：全局暂停期间 isPlaying 为 false 是暂停而非超时——
-                            // 不累计超时拍，否则暂停足够久会把新起的音效强制回收。
-                            active++;
-                        }
-                        else if (++voice.StartingTicks > StartingTimeoutTicks)
-                        {
-                            LogManager.Warning(LogCategories.Audio,
-                                "播放源起播超时（'{0}'）：连续 {1} 拍从未观察到 isPlaying 变真，槽位被强制回收。" +
-                                "这通常意味着该平台的 AudioSource 在 Play() 后不会报告 isPlaying。",
-                                voice.Location, StartingTimeoutTicks);
-                            Release(i);
-                        }
-                        else
-                        {
-                            active++;
-                        }
-
-                        break;
-
-                    case AudioVoiceState.Paused:
-                        // 暂停中的播放绝不被回收：Pause() 之后 isPlaying 就是 false，只看它会把暂停中的
-                        // 播放当场回收掉（这正是本状态存在的理由）
-                        active++;
-                        break;
-
-                    case AudioVoiceState.Playing:
-                        // 循环的播放永不被自动回收——必须显式 Stop
-                        // AUD-013：全局暂停（AudioListener.pause）期间 isPlaying 同样变 false，
-                        // 但播放本身没有结束；此时回收会把暂停中的一次性音效当成「播完」。
-                        if (voice.Loop || voice.Source.isPlaying || AudioListener.pause)
-                            active++;
-                        else
-                            Release(i);
-
-                        break;
-                }
-            }
-
-            return active > 0;
+            voice.ClipLease = default;
         }
 
         /// <summary>释放全部槽位与宿主。</summary>
@@ -295,7 +150,6 @@ namespace XFramework.XAudio
                 Release(i);
 
             _slots.Clear();
-            _exhaustionWarned = false;
 
             if (_host != null)
             {
@@ -308,7 +162,7 @@ namespace XFramework.XAudio
 
         #region Private
 
-        /// <summary>代际递增并跳过 <c>0</c>——<c>0</c> 是 <c>default(AudioHandle)</c> 的保留值。</summary>
+        /// <summary>代际递增并跳过 <c>0</c>——<c>0</c> 是 <c>default(AudioProviderHandle)</c> 的保留值。</summary>
         private static int NextGeneration(int current)
         {
             int next = current + 1;
@@ -340,8 +194,7 @@ namespace XFramework.XAudio
         /// <summary>
         /// 在原下标重建坏掉的槽位（R4-AUD-001）。
         /// <para>两种外部销毁：只销毁 <see cref="AudioSource"/> 组件时复用槽位对象补组件；
-        /// 宿主整体销毁时旧槽位对象已不在，按原名新建并保留旧代际（随后由 <see cref="TryReserve"/> 递增，
-        /// 旧句柄仍然失效）。不放 <see cref="Release"/> / <see cref="Invalidate"/>：退出路径不创建对象。</para>
+        /// 宿主整体销毁时旧槽位对象已不在，按原名新建并保留旧代际（随后由 <see cref="TryReserve"/> 递增）。</para>
         /// </summary>
         private AudioVoice RebuildVoice(AudioVoice voice, int index)
         {
@@ -363,19 +216,6 @@ namespace XFramework.XAudio
             return rebuilt;
         }
 
-        /// <summary>池耗尽告警：同一段耗尽期只记一条，免得一帧几十个音效把控制台刷爆。</summary>
-        private void WarnExhaustedOnce()
-        {
-            if (_exhaustionWarned)
-                return;
-
-            _exhaustionWarned = true;
-            LogManager.Warning(LogCategories.Audio,
-                "播放源已耗尽（MaxVoices={0}），本次播放被丢弃。" +
-                "调大 AudioInitOptions.MaxVoices，或缩短同时播放的音效数量。",
-                _maxVoices);
-        }
-
         /// <summary>
         /// 释放资源句柄。
         /// <para>用 try/catch 包住：<c>Dispose</c> 可能由 <c>Application.quitting</c> 触发，而处理器顺序
@@ -391,10 +231,8 @@ namespace XFramework.XAudio
             catch (Exception e)
             {
                 LogManager.Exception(LogCategories.Audio, e,
-                    string.Format("释放音频资源租约时发生异常（'{0}'）", voice.Location));
+                    "释放音频资源租约时发生异常（槽位资源）");
             }
-
-            voice.ClipLease = default;
         }
 
         #endregion

@@ -6,9 +6,10 @@ namespace XFramework.XAudio
 {
     /// <summary>
     /// 音频管理器接口。由 <see cref="AudioManager"/> 门面持有，所有公开调用转发到这里。
-    /// <para><b>本接口是后端替换点</b>：第三方若要把底层播放引擎整体换成 Wwise / FMOD 等音频中间件，
-    /// 实现本接口后经 <see cref="AudioManager.SetInstance"/> 注入即可——形态与 <c>XInput</c> 换 Rewired 一致
-    /// （整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。</para>
+    /// <para><b>本接口是整体替换管理器的接口</b>：音频中间件（Wwise / FMOD）推荐实现
+    /// <see cref="IAudioProvider"/> 并经 <see cref="AudioManager.SetProvider"/> 注入——通道、三档音量、
+    /// 暂停闸门、计数与诊断仍由框架保留。只有要连这些语义一起替换时，才实现本接口并经
+    /// <see cref="AudioManager.SetInstance"/> 注入（形态与 <c>XInput</c> 换 Rewired 一致）。</para>
     /// <para><b>接口是后端中立的</b>：不出现任何 Unity 内置音频类型（没有 <c>AudioClip</c>、没有
     /// <c>AudioMixerGroup</c>、没有 <c>AudioSource.priority</c>）。资源一律以 <b>location 字符串</b>标识，
     /// 中间件实现可以直接把它解释成自己的事件名。</para>

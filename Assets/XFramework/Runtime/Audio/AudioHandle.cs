@@ -11,7 +11,8 @@ namespace XFramework.XAudio
     /// <see cref="Dispose"/> 或 <see cref="Stop"/> 才会。</para>
     /// </summary>
     /// <remarks>
-    /// <para><b>为什么字段是公开的</b>：本模块的后端替换点是整体替换 <see cref="IAudioManager"/>
+    /// <para><b>为什么字段是公开的</b>：本模块的中间件路径是 <see cref="IAudioProvider"/>；整体替换管理器
+    /// （<see cref="IAudioManager"/>）时也需要实现方自带句柄编码
     /// （同 <c>XInput</c> 换 Rewired 的形态）。第三方实现必须能<b>造出</b>句柄、也必须能<b>读回</b>
     /// 自己编码进去的值，因此两个字段必须是公开面。<c>LockHandle</c> 的构造函数之所以是 <c>internal</c>，
     /// 是因为只有 <c>LockManager</c> 造句柄——那条理由在这里不成立，照抄会把整体替换这条路堵死。</para>

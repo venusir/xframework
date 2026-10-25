@@ -75,6 +75,7 @@ namespace XFramework.XAudio.Tests
         {
             Assert.IsNotNull(typeof(AudioManager).GetMethod("Initialize", PublicStatic));
             Assert.IsNotNull(typeof(AudioManager).GetMethod("SetInstance", PublicStatic));
+            Assert.IsNotNull(typeof(AudioManager).GetMethod("SetProvider", PublicStatic));
             Assert.IsNotNull(typeof(AudioManager).GetMethod("Destroy", PublicStatic));
         }
 

@@ -27,35 +27,22 @@ namespace XFramework.XAudio.Tests
         }
 
         /// <summary>
-        /// 取某个句柄对应的播放源，用来直接断言写到 <c>AudioSource.volume</c> 上的实际值。
+        /// 取某个核心句柄对应的播放源，用来直接断言写到 <c>AudioSource.volume</c> 上的实际值。
         /// <para><b>刻意不经引擎的音量语义</b>（<c>AudioListener.volume</c>、Mixer 总线等）：框架的承诺就是
         /// 「写进播放源的值是多少」，直接读它才能把承诺钉住。</para>
-        /// <para>槽位 GameObject 的命名（<c>"Voice {id}"</c>）是内部实现细节，本工具是唯一依赖它的地方；
-        /// 查找时优先取正在播放的那个，避免撞上仍在等待延迟销毁的旧宿主。</para>
+        /// <para>核心句柄与 provider 句柄的编码不同，必须经
+        /// <see cref="AudioManager.TryGetProviderHandle"/> 映射，不能假设两者下标相同。</para>
         /// </summary>
         internal static AudioSource FindSourceFor(AudioHandle handle)
         {
-            var hosts = UnityEngine.Object.FindObjectsByType<AudioHost>(FindObjectsInactive.Include);
-            AudioSource fallback = null;
-
-            for (int i = 0; i < hosts.Length; i++)
+            if (AudioManager.CurrentManagerForTests is AudioManagerImpl impl &&
+                impl.TryGetProviderHandle(handle, out AudioProviderHandle providerHandle) &&
+                impl.Provider is AudioSourceProvider provider)
             {
-                var child = hosts[i].transform.Find($"Voice {handle.Id}");
-                if (child == null)
-                    continue;
-
-                var source = child.GetComponent<AudioSource>();
-                if (source == null)
-                    continue;
-
-                if (source.isPlaying)
-                    return source;
-
-                if (fallback == null)
-                    fallback = source;
+                return provider.GetSource(providerHandle);
             }
 
-            return fallback;
+            return null;
         }
 
         /// <summary>直接读句柄对应播放源的当前音量；找不到播放源时断言失败。</summary>

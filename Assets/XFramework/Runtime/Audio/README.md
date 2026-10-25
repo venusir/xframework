@@ -50,20 +50,26 @@ AudioManager.Initialize(new AudioInitOptions
 
 ```text
 Runtime/Audio/
-├── IAudioManager.cs          # 公开接口 = 后端整体替换点（不含任何 Unity 内置音频类型）
-├── AudioManager.cs           # 静态门面（扁平 + #region 分区）+ AutoInit
-├── AudioManagerImpl.cs       # 默认实现：槽位 / 通道 / 音量 / 暂停 / 加载编排
-├── AudioHandle.cs            # 播放句柄（readonly struct，字段公开且对门面不透明）
-├── AudioPlayOptions.cs       # 单次播放参数（六个字段全部后端中立）
-├── AudioChannels.cs          # 推荐通道常量（不是枚举，见「设计取舍」）
-├── AudioChannelConfig.cs     # RegisterChannel 的配置（Volume / Muted）
-├── AudioChannelInfo.cs       # 诊断回读载荷：CopyChannels 的列表元素
-├── AudioInitOptions.cs       # 初始化选项
-├── IAudioClipLoader.cs       # internal：加载缝（测试缝，不是第二个后端替换点）
+├── IAudioManager.cs          # 公开：整体替换管理器的接口（推荐的中间件路径是 IAudioProvider）
+├── IAudioProvider.cs         # 公开：播放引擎缝（核心保留语义，provider 只做播放原语）
+├── AudioProviderHandle.cs    # 公开：provider 句柄（readonly struct，字段公开）
+├── AudioProviderPlaybackState.cs # 公开：Poll 的返回值
+├── AudioPlaybackRequest.cs   # 公开：核心交给 provider 的最终参数（internal 构造）
+├── AudioManager.cs           # 静态门面（扁平 + #region 分区）+ AutoInit + SetProvider
+├── AudioManagerImpl.cs       # internal：语义层（通道 / 音量 / 暂停 / 计数 / 诊断 / ticker）
+├── AudioManagedVoice.cs      # internal：核心槽位记录 + AudioManagedVoiceState
+├── AudioSourceProvider.cs    # internal：内置播放引擎（加载 / 暂停 / 回收判据）
+├── AudioSourcePool.cs        # internal：内置引擎的宿主与槽位池
+├── AudioVoice.cs             # internal：内置引擎的槽位记录 + AudioVoiceState
+├── AudioHandle.cs            # 公开：播放句柄（readonly struct，字段公开且对门面不透明）
+├── AudioPlayOptions.cs       # 公开：单次播放参数（六个字段全部后端中立）
+├── AudioChannels.cs          # 公开：推荐通道常量（不是枚举，见「设计取舍」）
+├── AudioChannelConfig.cs     # 公开：RegisterChannel 的配置（Volume / Muted）
+├── AudioChannelInfo.cs       # 公开：诊断回读载荷：CopyChannels 的列表元素
+├── AudioInitOptions.cs       # 公开：初始化选项
+├── IAudioClipLoader.cs       # internal：内置引擎的加载缝（测试缝）
 ├── AudioClipLoader.cs        # internal：默认加载缝，经 XAsset 加载
 ├── AudioChannelState.cs      # internal：一个通道的音量状态（惰性创建）
-├── AudioVoice.cs             # internal：槽位记录 + AudioVoiceState 状态机
-├── AudioSourcePool.cs        # internal：宿主与槽位、回收扫尾、池耗尽策略
 ├── AudioHost.cs              # internal：隐藏宿主 MonoBehaviour（纯挂载点）
 ├── AudioTicker.cs            # internal：IUpdateable，Tier1 + Unscaled 的回收驱动
 └── AudioClipLease.cs         # internal：资源租约（本体 + 释放动作）
@@ -204,37 +210,42 @@ AudioManager.Resume();
 
 ## 自定义实现
 
-本模块的实现方入口：用音频中间件整体替换后端。
+本模块有两条实现方入口，**优先第一条**：
 
-- **实现哪个契约**：`IAudioManager`（公开面不含任何 Unity 音频类型，中间件可实现）。
-- **怎么接线**：`AudioManager.SetInstance(impl)`；若之前已 `Initialize`，先 `Destroy()`。
-- **要守什么**：有效句柄的 `Generation` 必须非 `0`，`default(AudioHandle)` 必须视为无效；`SetInstance` 不会 Dispose 先前持有的实例（见下）。
+### 1. 播放引擎（推荐）：`IAudioProvider`
 
-框架**不随包提供** Wwise / FMOD 的官方适配器；需要时由项目按上面的三条自行实现，中间件专属能力
-（RTPC / 事件参数 / bank / 3D 发射器等）留在项目侧。
-
-### 推荐第三方实现：Wwise / FMOD
-
-使用 Wwise / FMOD 等音频中间件的项目，实现 `IAudioManager` 后注入即可——中间件实现可以把
-`location` 直接解释成自己的事件名：
+- **实现哪个契约**：`IAudioProvider`。核心保留通道、三档音量、暂停闸门、计数、参数归一化与诊断；
+  实现方只做播放原语（`PlayAsync` / `Stop` / `Release` / `SetPaused` / `SetVolume` / `Poll`）。
+- **怎么接线**：`AudioManager.SetProvider(provider, options)`。它会先 Dispose 旧实例，再注入新的。
+- **要守什么**：`AudioPlaybackRequest.Volume` 是核心算好的最终值，不得再乘；`request.ValidityToken`
+  在 `start()` 前检查（已取消则释放并返回 default，不抛）；`Poll` 是纯查询，由核心 ticker 每拍调用；
+  provider 句柄的有效代际必须非 `0`，`default(AudioProviderHandle)` 必须无效。
+- **中间件能力**：RTPC / 事件参数 / bank / snapshot 等留在项目侧；需要逐次控制时可用
+  `AudioManager.TryGetProviderHandle` 取回 provider 句柄。
 
 ```csharp
-AudioManager.SetInstance(new MyWwiseAudioManager());
+AudioManager.SetProvider(new MyWwiseAudioProvider());
 ```
 
-这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
-`AudioHandle` 的两个字段是公开的且对门面不透明，实现方可以按自己的需要编码（有效句柄的
-`Generation` 必须非 `0`，`default(AudioHandle)` 必须被视为无效）。
+### 2. 整体替换管理器（逃生口）：`IAudioManager`
 
-**注意**：`SetInstance` **不会** Dispose 先前持有的实例。若之前已 `Initialize`，请先 `Destroy`。
+整套底层引擎被替换时，也可以直接实现 `IAudioManager` 并经 `AudioManager.SetInstance(impl)` 注入。
+`SetInstance` **不会** Dispose 先前持有的实例；若之前已 `Initialize`，先 `Destroy()`。
+`AudioHandle` 的两个字段公开且对门面不透明，实现方可自行编码（有效句柄的 `Generation` 必须非 `0`，
+`default(AudioHandle)` 必须无效）。
+
+这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
+
+框架**不随包提供** Wwise / FMOD 的官方适配器；需要时由项目按上面的路径自行实现，中间件专属能力
+（RTPC / 事件参数 / bank / 3D 发射器等）留在项目侧。
 
 ## 内部机制
 
 ### 播放源池与隐藏宿主
 
-首次播放时惰性创建宿主 `[AudioManager] Audio Host`（`DontDestroyOnLoad`，BGM 因此能跨场景连续），
-每个播放占用一个子 GameObject（命名 `Voice {index}`）+ `AudioSource`。播放源的 `AudioSource` 与 `Transform` 在创建时缓存，
-运行期没有任何 `GetComponent`。
+内置 provider（`AudioSourceProvider`）首次播放时惰性创建宿主 `[AudioManager] Audio Host`
+（`DontDestroyOnLoad`，BGM 因此能跨场景连续），每个播放占用一个子 GameObject（命名 `Voice {index}`）+
+`AudioSource`。播放源的 `AudioSource` 与 `Transform` 在创建时缓存，运行期没有任何 `GetComponent`。
 
 > **这两个名字是内部字面量、不可配置**：宿主会出现在 Hierarchy 里、播放源会出现在性能分析器里，
 > 知道它们是为了认出「这是框架建的」——别拿这两个名字做自己的对象命名。
@@ -258,21 +269,23 @@ AudioManager.SetInstance(new MyWwiseAudioManager());
 ### 一次播放的完整生命周期
 
 ```
-预占槽位 → 加载（location → AudioClip） → 校验代际 → 写参数 → Play()
-   → 播放中（槽位持有资源租约：既是释放凭据也是保活凭据）
+核心预占槽位 → provider 加载（location → AudioClip）→ 校验代际 → 写参数 → Play()
+   → 播放中（provider 槽位持有资源租约：既是释放凭据也是保活凭据）
    → 停止 / 播完 / 销毁 → 归还槽位 + 归还租约
 ```
 
-资源租约的释放点是**恰好一次**：`Stop` 时若仍在加载，只作废槽位，由加载续体负责归还已经拿到的租约。
+资源租约的释放点是**恰好一次**：`Stop` 时若仍在加载，核心作废槽位并取消有效性令牌；provider 加载
+完成后检查令牌、归还租约，不会再 `start()`。
 
 ### 播完回收
 
-内部 ticker 挂在 `UpdateManager` 上，`Tier1`（约 33ms）、时间轴 `Unscaled`。**只在确实有活跃播放时注册**，
-最后一个播放结束时注销——闲置时零帧开销。
+核心内部 ticker 挂在 `UpdateManager` 上，`Tier1`（约 33ms）、时间轴 `Unscaled`。**只在确实有活跃播放时
+注册**，最后一个播放结束时注销——闲置时零帧开销。每拍对活跃 voice 调一次 `IAudioProvider.Poll`。
 
-回收判据是**框架自己的状态机**，不是只看 `AudioSource.isPlaying`：因为 `Pause()` 之后 `isPlaying` 就是
-`false`，只看它会**把暂停中的播放当场回收掉**。全局 `AudioListener.pause` 同样如此（探针实测）：暂停
-期间在播的一次性音效与 `Starting` 中的音效都不会被回收或计入超时；恢复后继续按正常判据收尾（AUD-013）。
+回收判据是**核心自己的状态机 + provider 的 `Poll`**，不是只看 `AudioSource.isPlaying`：因为 `Pause()`
+之后 `isPlaying` 就是 `false`，只看它会**把暂停中的播放当场回收掉**。全局 `AudioListener.pause` 同样
+如此（探针实测）：内置 provider 返回 `Paused`，核心保留槽位、不计起播超时；恢复后继续按正常判据收尾
+（AUD-013）。
 
 ## 生命周期与清理
 
@@ -281,17 +294,17 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 ```
 
 - `Destroy` 会被 `Application.quitting` 自动调用，**无需手动挂**。
-- 销毁后需重新 `Initialize` 或 `SetInstance`。
+- 销毁后需重新 `Initialize` / `SetInstance` / `SetProvider`。
 - `Destroy` **隔离**第三方实现 `Dispose` 抛出的异常（记一条 `[Audio]` Error）：门面状态已先复位，
   不会把退出流程或后续重新初始化卡住。
 - **销毁后旧句柄仍然安全**：`Stop` 与 `IsPlaying` 返回 `false` 而不抛——句柄的生命周期可以长于管理器。
 
 未初始化时：管理器范围的成员抛 `InvalidOperationException`（消息带 `[Audio]` 前缀与修复提示），
-**探测型成员**（`Stop` / `IsPlaying`）返回 `false` 不抛。
+**探测型成员**（`Stop` / `IsPlaying` / `TryGetProviderHandle`）返回 `false` 不抛。
 
 | 成员 | 未初始化 / 已销毁时 |
 | ---- | ---- |
-| `Stop` / `IsPlaying` | 安全返回 `false`（探测型豁免） |
+| `Stop` / `IsPlaying` / `TryGetProviderHandle` | 安全返回 `false`（探测型豁免） |
 | `CopyChannels`（诊断回读） | 清空缓冲并返回 `0`，不抛（与 Asset 的诊断回读同一宽容口径；AUD-006） |
 | 其余全部（`Play` / `PlayAsync` / `StopAll` / 音量 / 查询计数） | 抛 `InvalidOperationException` |
 
@@ -307,9 +320,9 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
   直接引用的用法用不了——不过这是本框架的一贯立场（UI 的面板同样必须走 location）。建议在加载画面用
   `AssetManager.PreloadAllAsync` 预热常用音效。
 - **没有同步播放路径。** 只有异步加载；`Play` 是「立即返回 + 后台加载」，不是同步加载。
-- **框架声源不接入项目的 AudioMixer 总线**：动态创建的播放源 `outputAudioMixerGroup` 恒为
-  `null`，`AudioMixer.SetFloat` 对框架声音无效。要接入项目自己的总线/效果链需整体替换
-  `IAudioManager` / 自定义后端（见「自定义实现」）。
+- **框架声源不接入项目的 AudioMixer 总线**：内置 provider 动态创建的播放源 `outputAudioMixerGroup`
+  恒为 `null`，`AudioMixer.SetFloat` 对框架声音无效。要接入项目自己的总线/效果链需自定义
+  `IAudioProvider`（或整体替换 `IAudioManager`，见「自定义实现」）。
 - **3D 播放源是定点的**，不跟随移动物体（见「与相邻模块的关系」的「与音频中间件的边界」）。
 - **切后台不会自动暂停。** 本模块不接 `OnApplicationPause`——「是谁暂停的、谁来恢复」必须由项目掌握
   （玩家本来就在暂停菜单里切后台时，回到前台不能替他 `Resume`）。需要的话由项目在自己的生命周期回调里
@@ -322,11 +335,13 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 - **没有优先级抢占**，只有全局的 `MaxVoices` 上限；也没有按通道的独立上限。
 - **`AudioManager.Pause()` 不碰 `AudioListener.pause`**——那是项目的全局开关。项目用它暂停时，框架的
   播放会被连带暂停（这是期望行为）。
-- **不要直接 `Dispose` 门面持有的管理器实例**：经 `SetInstance` 注入后由调用方持有生命周期，但门面
-  不会感知你自行 `Dispose`——后续调用会打到已释放实例、门面卡死。销毁请走 `AudioManager.Destroy()`
-  （它先丢引用、再 `Dispose`，之后可重新 `Initialize` / `SetInstance`）。
+- **不要直接 `Dispose` 门面持有的管理器 / provider 实例**：经 `SetInstance` 注入的管理器由调用方持有
+  生命周期，经 `SetProvider` 注入的 provider 由框架持有；门面不会感知你自行 `Dispose`——后续调用会
+  打到已释放实例、门面卡死。销毁请走 `AudioManager.Destroy()`（它先丢引用、再 `Dispose`，之后可重新
+  `Initialize` / `SetInstance` / `SetProvider`）。
 - **3D 空间参数不可配置**：框架只写 `spatialBlend` 与 `position`，不暴露衰减曲线（rolloff）、
-  min/max distance、spread、doppler 等；需要这些时整体替换 `IAudioManager`。
+  min/max distance、spread、doppler 等；需要这些时自定义 `IAudioProvider`（或整体替换
+  `IAudioManager`）。
 
 ## 设计取舍
 
@@ -339,6 +354,13 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿
 - **一条路径 = 一套句柄生命周期**：只走 location 之后，资源句柄的持有/释放只剩一种语义。原设计里
   「调用方在播放期间释放自己持有的资源句柄 → 声音静默中断」这个坑随之消失——那本来只能靠文档挡。
 - 代价是回不到 Inspector 直引的用法（见「已知限制」第一条）。
+
+### 为什么再拆一层 `IAudioProvider`
+
+中间件适配器若整体实现 `IAudioManager`，会把通道、三档音量、暂停闸门、计数、归一化重写一遍
+（约 200–300 行），且 `CopyChannels` 在中间件路径上恒空。`IAudioProvider` 把「实际播放」下沉，
+核心保留全部语义与诊断；代价是核心多一个公开接口与一次内部拆分。整体实现 `IAudioManager` 仍是
+保留的逃生口（见「自定义实现」）。
 
 ### 为什么通道是字符串而不是枚举
 
@@ -397,14 +419,14 @@ BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
 ### 与音频中间件的边界
 
 本模块的公开面**不含任何 Unity 内置音频类型**（没有 `AudioClip`、没有 `AudioMixerGroup`、没有
-`AudioSource.priority`）。整体替换后端的写法见「自定义实现」；其余边界如下：
+`AudioSource.priority`）。自定义播放引擎 / 整体替换的写法见「自定义实现」；其余边界如下：
 
 #### 用项目自己的 AudioMixer
 
 **当前不支持**：框架动态创建的播放源没有设置 `outputAudioMixerGroup`（恒为 `null`），声音不会进入
 项目 Mixer 的总线/效果链——`AudioMixer.SetFloat` 对框架声音**静默无效**。公开面也没有设置输出组 /
-路由的入口。要让框架声音进入项目自己的 Mixer，只能整体替换 `IAudioManager`（自定义后端，见
-「自定义实现」）；目前没有「不暴露 Unity 类型的路由扩展点」这一形态。
+路由的入口。要让框架声音进入项目自己的 Mixer，只能自定义 `IAudioProvider`（或整体替换
+`IAudioManager`，见「自定义实现」）；核心公开面没有「不暴露 Unity 类型的路由扩展点」这一形态。
 
 #### 关于「跟随移动物体的 3D 发射器」
 
@@ -424,7 +446,7 @@ Transform 的宿主对象，那是项目侧的 MonoBehaviour——框架不去�
 | 依赖 | 用途 | 必需 |
 | ---- | ---- | ---- |
 | **UniTask** | 异步播放与加载 | 是 |
-| **YooAsset**（经 `XAsset`） | 资源加载 | 是（除非整体替换 `IAudioManager`） |
+| **YooAsset**（经 `XAsset`） | 资源加载 | 是（除非自定义 provider / 整体替换 `IAudioManager`） |
 | `com.unity.modules.audio` | Unity 内置音频 | 是（Unity 自带模块，无需安装） |
 
 **不依赖** Settings / Localization / Config / UI 中任何一个。

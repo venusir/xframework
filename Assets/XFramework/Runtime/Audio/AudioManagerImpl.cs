@@ -10,9 +10,11 @@ using XFramework.XUpdate;
 namespace XFramework.XAudio
 {
     /// <summary>
-    /// <see cref="IAudioManager"/> 的默认实现：自持一个隐藏宿主，池化 <c>AudioSource</c> 承载播放。
-    /// <para><b>资源只走 location</b>：本实现经 <see cref="IAudioClipLoader"/> 从 <c>XAsset</c> 加载，
-    /// 播放期间槽位持有资源句柄——它同时是释放凭据与保活凭据，释放点必须恰好一次。</para>
+    /// 音频语义层：通道、三档音量、暂停闸门、计数、归一化、核心句柄与诊断。
+    /// <para><b>实际播放委托给 <see cref="IAudioProvider"/></b>；内置实现是 <see cref="AudioSourceProvider"/>。
+    /// 本类不再直接接触 <c>AudioSource</c>/<c>AudioClip</c>。</para>
+    /// <para>第三方中间件推荐实现 <see cref="IAudioProvider"/> 并经 <see cref="AudioManager.SetProvider"/>
+    /// 注入；整体替换本类（<see cref="IAudioManager"/>）仍是保留的逃生口。</para>
     /// </summary>
     internal sealed class AudioManagerImpl : IAudioManager
     {
@@ -20,10 +22,12 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 保留通道名。<c>"master"</c> 不是通道——总音量由 <see cref="MasterVolume"/> /
-        /// <see cref="MasterMuted"/> 表达。把它当通道用会抛 <see cref="ArgumentException"/>，
-        /// 免得出现「看起来能控总音量、实际只控了一个没人收听的通道」这种静默坑。
+        /// <see cref="MasterMuted"/> 表达。把它当通道用会抛 <see cref="ArgumentException"/>。
         /// </summary>
         internal const string ReservedMasterChannel = "master";
+
+        /// <summary>Starting 状态的兜底拍数（Tier1 × 60 ≈ 2 秒）。</summary>
+        internal const int StartingTimeoutTicks = 60;
 
         #endregion
 
@@ -32,9 +36,10 @@ namespace XFramework.XAudio
         /// <summary>同步播放入口的 Profiler 标记（异步路径的实际耗时在加载，不在这里）。</summary>
         private static readonly ProfilerMarker PlayMarker = new("XFramework.Audio.Play");
 
-        private readonly AudioSourcePool _pool;
+        private readonly IAudioProvider _provider;
+        private readonly AudioManagedVoice[] _voices;
+        private readonly int _maxVoices;
         private readonly AudioTicker _ticker;
-        private readonly IAudioClipLoader _clipLoader;
 
         /// <summary>
         /// 实例级生命周期令牌。<see cref="Dispose"/> 取消它，从而中断全部在途加载。
@@ -46,8 +51,7 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 通道状态表。惰性创建：只有被<b>写入</b>过的通道才会进表。
-        /// <para>用 <see cref="StringComparer.Ordinal"/>：通道名区分大小写，这是公开承诺的一部分
-        /// （<c>"BGM"</c> 与 <c>"bgm"</c> 是两个通道）。</para>
+        /// <para>用 <see cref="StringComparer.Ordinal"/>：通道名区分大小写，这是公开承诺的一部分。</para>
         /// </summary>
         private readonly Dictionary<string, AudioChannelState> _channels =
             new Dictionary<string, AudioChannelState>(StringComparer.Ordinal);
@@ -58,30 +62,38 @@ namespace XFramework.XAudio
 
         private bool _tickerRegistered;
         private bool _disposed;
+        private bool _exhaustionWarned;
 
         #endregion
 
         #region Constructors
 
         internal AudioManagerImpl(AudioInitOptions options)
-            : this(options, null)
+            : this(new AudioSourceProvider(options), options)
         {
         }
 
         /// <summary>测试用的构造重载：注入假的加载缝以控制加载时序与失败。</summary>
         internal AudioManagerImpl(AudioInitOptions options, IAudioClipLoader clipLoader)
+            : this(new AudioSourceProvider(options, clipLoader), options)
         {
+        }
+
+        /// <summary>注入自定义播放引擎。</summary>
+        internal AudioManagerImpl(IAudioProvider provider, AudioInitOptions options)
+        {
+            _provider = provider ?? throw new ArgumentNullException(nameof(provider));
             Options = options ?? new AudioInitOptions();
-            _clipLoader = clipLoader ?? new AudioClipLoader();
-            _pool = new AudioSourcePool(Options.MaxVoices);
+
+            _maxVoices = Options.MaxVoices < 1 ? 1 : Options.MaxVoices;
+            _voices = new AudioManagedVoice[_maxVoices];
+            for (int i = 0; i < _voices.Length; i++)
+                _voices[i] = new AudioManagedVoice { State = AudioManagedVoiceState.Free };
+
             _ticker = new AudioTicker(this);
 
             _masterVolume = Mathf.Clamp01(Options.MasterVolume);
             _masterMuted = Options.MasterMuted;
-
-            // 预热是显式选择：不开时连宿主都不建（「从不播放的项目一个 GameObject 都不该建」有用例钉着）
-            if (Options.PrewarmVoices)
-                _pool.Prewarm();
         }
 
         #endregion
@@ -89,27 +101,128 @@ namespace XFramework.XAudio
         #region Internal
 
         /// <summary>
-        /// 本次初始化使用的选项。原样保存、<b>未归一化</b>——归一化发生在各自的使用点
-        /// （如 <see cref="AudioInitOptions.MaxVoices"/> 在建池时钳到下限 1）。
+        /// 本次初始化使用的选项。原样保存、<b>未归一化</b>——归一化发生在各自的使用点。
         /// </summary>
         internal AudioInitOptions Options { get; }
 
-        /// <summary>
-        /// 供 <see cref="AudioTicker"/> 每拍调用：回收播完的槽位，全部回收完时注销 ticker。
-        /// </summary>
+        /// <summary>当前播放引擎（测试与诊断用）。</summary>
+        internal IAudioProvider Provider => _provider;
+
+        /// <summary>供 <see cref="AudioTicker"/> 每拍调用：回收播完的槽位，全部回收完时注销 ticker。</summary>
         internal void SweepVoices()
         {
             if (_disposed)
                 return;
 
-            if (!_pool.Sweep())
+            int active = 0;
+
+            for (int i = 0; i < _voices.Length; i++)
+            {
+                var voice = _voices[i];
+
+                switch (voice.State)
+                {
+                    case AudioManagedVoiceState.Free:
+                        break;
+
+                    case AudioManagedVoiceState.Loading:
+                    case AudioManagedVoiceState.Paused:
+                        active++;
+                        break;
+
+                    case AudioManagedVoiceState.Starting:
+                    case AudioManagedVoiceState.Playing:
+                        if (_paused)
+                        {
+                            active++;
+                            break;
+                        }
+
+                        AudioProviderPlaybackState polled;
+                        try
+                        {
+                            polled = _provider.Poll(voice.ProviderHandle);
+                        }
+                        catch (Exception e)
+                        {
+                            LogManager.Exception(LogCategories.Audio, e,
+                                "轮询音频播放状态时发生异常，回收槽位");
+                            ReleaseVoice(voice);
+                            break;
+                        }
+
+                        switch (polled)
+                        {
+                            case AudioProviderPlaybackState.Invalid:
+                            case AudioProviderPlaybackState.Stopped:
+                                ReleaseVoice(voice);
+                                break;
+
+                            case AudioProviderPlaybackState.Paused:
+                                active++;
+                                break;
+
+                            case AudioProviderPlaybackState.Starting:
+                                if (voice.State == AudioManagedVoiceState.Starting)
+                                {
+                                    voice.StartingTicks++;
+                                    if (voice.StartingTicks > StartingTimeoutTicks)
+                                    {
+                                        LogManager.Warning(LogCategories.Audio,
+                                            "播放源起播超时（'{0}'）：连续 {1} 拍从未观察到 isPlaying 变真，" +
+                                            "槽位被强制回收。这通常意味着该平台的 AudioSource 在 Play() 后" +
+                                            "不会报告 isPlaying。",
+                                            voice.Location, StartingTimeoutTicks);
+                                        ReleaseVoice(voice);
+                                        break;
+                                    }
+                                }
+
+                                active++;
+                                break;
+
+                            case AudioProviderPlaybackState.Playing:
+                                if (voice.State == AudioManagedVoiceState.Starting)
+                                {
+                                    voice.State = AudioManagedVoiceState.Playing;
+                                    voice.StartingTicks = 0;
+                                }
+
+                                active++;
+                                break;
+                        }
+
+                        break;
+                }
+            }
+
+            if (active == 0)
                 UnregisterTicker();
         }
 
         /// <summary>
+        /// 取核心句柄对应的 provider 句柄。探测型：未初始化/已销毁/default/过期/Loading 返回 false。
+        /// </summary>
+        internal bool TryGetProviderHandle(AudioHandle handle, out AudioProviderHandle providerHandle)
+        {
+            providerHandle = default;
+
+            if (_disposed || !IsCurrent(handle))
+                return false;
+
+            var voice = _voices[handle.Id];
+            if (voice.State == AudioManagedVoiceState.Loading ||
+                voice.State == AudioManagedVoiceState.Free)
+            {
+                return false;
+            }
+
+            providerHandle = voice.ProviderHandle;
+            return !providerHandle.IsDefault;
+        }
+
+        /// <summary>
         /// 通道名归一化与保留名校验。
-        /// <para><c>null</c>/空 → <see cref="AudioChannels.Default"/>（照 <c>LockManager</c> 的
-        /// <c>null → Global</c> 的手感）；<c>"master"</c> → 抛。</para>
         /// </summary>
         internal static string NormalizeChannel(string channel)
         {
@@ -130,10 +243,7 @@ namespace XFramework.XAudio
 
         #region Lifecycle
 
-        /// <summary>
-        /// 释放本实现持有的全部资源：取消在途加载、注销 ticker、停播并销毁全部槽位与宿主。
-        /// <para>幂等；在 <c>Application.quitting</c> 上也会被触发。</para>
-        /// </summary>
+        /// <inheritdoc/>
         public void Dispose()
         {
             if (_disposed)
@@ -143,7 +253,20 @@ namespace XFramework.XAudio
 
             _lifetimeCts.Cancel();
             UnregisterTicker();
-            _pool.Dispose();
+
+            for (int i = 0; i < _voices.Length; i++)
+            {
+                var voice = _voices[i];
+                voice.ValidityCts?.Cancel();
+                voice.State = AudioManagedVoiceState.Free;
+                voice.ProviderHandle = default;
+                voice.Channel = null;
+                voice.Location = null;
+                voice.VolumeScale = 1f;
+                voice.StartingTicks = 0;
+            }
+
+            _provider.Dispose();
         }
 
         #endregion
@@ -159,9 +282,10 @@ namespace XFramework.XAudio
                 ValidateLocation(location);
 
                 string channel = NormalizeChannel(options.Channel);
+                float volumeScale = NormalizeVolumeScale(options.VolumeScale);
 
                 // 预占发生在发起加载之前：池满时一次 IO 都不会浪费
-                if (!_pool.TryReserve(channel, location, out int index, out AudioHandle handle))
+                if (!TryReserveVoice(channel, location, volumeScale, out int index, out AudioHandle handle))
                     return default;
 
                 EnsureTickerRegistered();
@@ -178,8 +302,9 @@ namespace XFramework.XAudio
             ValidateLocation(location);
 
             string channel = NormalizeChannel(options.Channel);
+            float volumeScale = NormalizeVolumeScale(options.VolumeScale);
 
-            if (!_pool.TryReserve(channel, location, out int index, out AudioHandle handle))
+            if (!TryReserveVoice(channel, location, volumeScale, out int index, out AudioHandle handle))
                 return UniTask.FromResult(default(AudioHandle));
 
             EnsureTickerRegistered();
@@ -187,16 +312,25 @@ namespace XFramework.XAudio
         }
 
         /// <summary>
-        /// 播放的公共内核：加载 → 竞态检查 → 起播。两条公开路径共用它，差别只在
-        /// 「谁在什么时候拿到句柄」。
+        /// 播放的公共内核：构造最终请求 → 委托 provider → 记录 provider 句柄并同步当前暂停/音量。
         /// </summary>
         private async UniTask<AudioHandle> PlayCoreAsync(int index, int generation, string location,
             AudioPlayOptions options, CancellationToken cancellationToken)
         {
-            // 同步取令牌：本方法在首个 await 之前是同步执行的，此后 Dispose 才能安全地取消它
             CancellationToken lifetime = _lifetimeCts.Token;
+            var voice = _voices[index];
+            CancellationToken validity = voice.ValidityCts.Token;
 
-            AudioClipLease clipLease = default;
+            var request = new AudioPlaybackRequest(
+                options.Loop,
+                NormalizePitch(options.Pitch),
+                Mathf.Clamp01(options.SpatialBlend),
+                options.Position,
+                ComputeVolumeNoCreate(voice.Channel, voice.VolumeScale),
+                _paused,
+                validity);
+
+            AudioProviderHandle providerHandle = default;
             CancellationTokenSource linked = null;
 
             try
@@ -204,25 +338,35 @@ namespace XFramework.XAudio
                 if (cancellationToken.CanBeCanceled)
                 {
                     linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime);
-                    clipLease = await _clipLoader.LoadAsync(location, linked.Token);
+                    providerHandle = await _provider.PlayAsync(location, request, linked.Token);
                 }
                 else
                 {
-                    clipLease = await _clipLoader.LoadAsync(location, lifetime);
+                    providerHandle = await _provider.PlayAsync(location, request, lifetime);
                 }
             }
             catch (OperationCanceledException)
             {
-                // 收尾：把预占的槽位还回去，且不吞掉取消异常
-                InvalidateReservation(index, generation);
-                throw;
+                bool callerCancelled = cancellationToken.IsCancellationRequested ||
+                                       _lifetimeCts.IsCancellationRequested;
+
+                if (IsCurrent(index, generation))
+                    FreeVoice(voice);
+
+                if (callerCancelled)
+                    throw;
+
+                // 内部 Stop/StopAll 作废：返回 default，而不是把取消抛给调用方
+                return default;
             }
             catch (Exception e)
             {
-                // 加载缝的契约是「失败返回 default 而不抛」，真抛了说明是未预期异常
                 LogManager.Exception(LogCategories.Audio, e,
-                    string.Format("加载音频资源 '{0}' 时发生未预期异常", location));
-                InvalidateReservation(index, generation);
+                    string.Format("播放 '{0}' 时发生未预期异常", location));
+
+                if (IsCurrent(index, generation))
+                    FreeVoice(voice);
+
                 return default;
             }
             finally
@@ -230,60 +374,62 @@ namespace XFramework.XAudio
                 linked?.Dispose();
             }
 
-            if (!_pool.IsCurrent(index, generation))
+            if (!IsCurrent(index, generation))
             {
-                // 期间被 Stop / StopAll / Destroy 作废：释放已加载的资源后静默退出
-                SafeDisposeLease(clipLease, location);
+                // 期间被 Stop / StopAll / Destroy 作废：provider 已返回的句柄必须收掉
+                SafeStopAndRelease(providerHandle);
                 return default;
             }
 
-            if (!clipLease.IsValid)
+            if (providerHandle.IsDefault)
             {
-                SafeDisposeLease(clipLease, location);
-                _pool.Release(index);
-                LogManager.Warning(LogCategories.Audio,
-                    "播放失败，clip 加载未成功：'{0}'（底层错误见上一条 YooAsset 日志）。", location);
+                FreeVoice(voice);
                 return default;
             }
 
-            var voice = _pool.GetSlot(index);
-
-            // 播放源可能被外部销毁（Unity 假 null）；继续下去会在 ConfigureSource 处抛 MissingReference，
-            // 留下永久 Loading 且持有租约的槽位（AUD-003）。
-            if (voice.Source == null)
-            {
-                SafeDisposeLease(clipLease, location);
-                _pool.Release(index);
-                LogManager.Warning(LogCategories.Audio,
-                    "播放源已被外部销毁，无法起播：'{0}'。", location);
-                return default;
-            }
-
-            voice.ClipLease = clipLease;
-            voice.Loop = options.Loop;
-            voice.VolumeScale = NormalizeVolumeScale(options.VolumeScale);
-            ConfigureSource(voice.Source, clipLease.Clip, options);
-            ApplyVoiceVolume(voice);
-            voice.Source.Play();
+            voice.ProviderHandle = providerHandle;
+            voice.State = AudioManagedVoiceState.Starting;
             voice.StartingTicks = 0;
 
-            // 管理器处于暂停态时，新起的播放也立即进入暂停——Pause 是管理器级闸门，
-            // 不是「把此刻在播的那些冻住」。否则「暂停期间新起的声音照放、Resume 后不受管」自相矛盾。
+            // 起播后无条件同步当前暂停态与音量：加载窗口内两者都可能变过
+            bool pausedApplied;
+            try
+            {
+                pausedApplied = _provider.SetPaused(providerHandle, _paused);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e, "同步音频暂停态时发生异常");
+                ReleaseVoice(voice);
+                return default;
+            }
+
+            if (!pausedApplied)
+            {
+                ReleaseVoice(voice);
+                return default;
+            }
+
             if (_paused)
+                voice.State = AudioManagedVoiceState.Paused;
+
+            float volume = ComputeVoiceVolume(voice);
+            bool volumeApplied;
+            try
             {
-                voice.Source.Pause();
-                voice.State = AudioVoiceState.Paused;
+                volumeApplied = _provider.SetVolume(providerHandle, volume);
             }
-            else if (voice.Source.isPlaying)
+            catch (Exception e)
             {
-                // P-06 实测：Play() 之后同步读一次 isPlaying。短于一个扫尾节拍的 one-shot
-                // 在下一次 Sweep 时已经播完——只看下一拍的 isPlaying 会把它误判为「从未起播」，
-                // 卡在 Starting 到 60 拍超时（AUD-001）。
-                voice.State = AudioVoiceState.Playing;
+                LogManager.Exception(LogCategories.Audio, e, "同步音频音量时发生异常");
+                ReleaseVoice(voice);
+                return default;
             }
-            else
+
+            if (!volumeApplied)
             {
-                voice.State = AudioVoiceState.Starting;
+                ReleaseVoice(voice);
+                return default;
             }
 
             return new AudioHandle(index, generation);
@@ -322,21 +468,10 @@ namespace XFramework.XAudio
         /// <inheritdoc/>
         public bool Stop(AudioHandle handle)
         {
-            if (!_pool.IsCurrent(handle.Id, handle.Generation))
+            if (!IsCurrent(handle))
                 return false;
 
-            var voice = _pool.GetSlot(handle.Id);
-
-            if (voice.State == AudioVoiceState.Loading)
-            {
-                // 加载中：只作废槽位。已加载的句柄由加载续体的竞态检查负责释放——释放点恰好一次
-                _pool.Invalidate(handle.Id);
-            }
-            else
-            {
-                _pool.Release(handle.Id);
-            }
-
+            StopVoice(handle.Id);
             return true;
         }
 
@@ -348,22 +483,20 @@ namespace XFramework.XAudio
             string filter = channel == null ? null : NormalizeChannel(channel);
             int stopped = 0;
 
-            // 槽位只置空闲、不移动下标，故边遍历边释放是安全的
-            for (int i = 0; i < _pool.SlotCount; i++)
+            for (int i = 0; i < _voices.Length; i++)
             {
-                var voice = _pool.GetSlot(i);
+                var voice = _voices[i];
 
-                if (voice.State == AudioVoiceState.Free)
+                if (voice.State == AudioManagedVoiceState.Free)
                     continue;
 
-                if (filter != null && !string.Equals(voice.Channel, filter, StringComparison.Ordinal))
+                if (filter != null &&
+                    !string.Equals(voice.Channel, filter, StringComparison.Ordinal))
+                {
                     continue;
+                }
 
-                if (voice.State == AudioVoiceState.Loading)
-                    _pool.Invalidate(i);
-                else
-                    _pool.Release(i);
-
+                StopVoice(i);
                 stopped++;
             }
 
@@ -380,23 +513,34 @@ namespace XFramework.XAudio
 
             _paused = true;
 
-            for (int i = 0; i < _pool.SlotCount; i++)
+            for (int i = 0; i < _voices.Length; i++)
             {
-                var voice = _pool.GetSlot(i);
+                var voice = _voices[i];
 
-                if (voice.State != AudioVoiceState.Starting && voice.State != AudioVoiceState.Playing)
-                    continue;   // 空闲与加载中的槽位不动：前者没什么可暂停，后者会在起播时就进入暂停
-
-                if (voice.Source == null)
+                if (voice.State != AudioManagedVoiceState.Starting &&
+                    voice.State != AudioManagedVoiceState.Playing)
                 {
-                    LogManager.Warning(LogCategories.Audio,
-                        "播放源已被外部销毁，暂停时回收槽位：'{0}'。", voice.Location);
-                    _pool.Release(i);
+                    continue;   // 空闲/加载/已暂停不动：加载中的续体起播后会补暂停
+                }
+
+                bool applied;
+                try
+                {
+                    applied = _provider.SetPaused(voice.ProviderHandle, true);
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Audio, e, "暂停音频播放时发生异常");
+                    applied = false;
+                }
+
+                if (!applied)
+                {
+                    ReleaseVoice(voice);
                     continue;
                 }
 
-                voice.Source.Pause();
-                voice.State = AudioVoiceState.Paused;
+                voice.State = AudioManagedVoiceState.Paused;
             }
         }
 
@@ -410,26 +554,31 @@ namespace XFramework.XAudio
 
             _paused = false;
 
-            for (int i = 0; i < _pool.SlotCount; i++)
+            for (int i = 0; i < _voices.Length; i++)
             {
-                var voice = _pool.GetSlot(i);
+                var voice = _voices[i];
 
-                if (voice.State != AudioVoiceState.Paused)
+                if (voice.State != AudioManagedVoiceState.Paused)
                     continue;
 
-                if (voice.Source == null)
+                bool applied;
+                try
                 {
-                    LogManager.Warning(LogCategories.Audio,
-                        "播放源已被外部销毁，恢复时回收槽位：'{0}'。", voice.Location);
-                    _pool.Release(i);
+                    applied = _provider.SetPaused(voice.ProviderHandle, false);
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Audio, e, "恢复音频播放时发生异常");
+                    applied = false;
+                }
+
+                if (!applied)
+                {
+                    ReleaseVoice(voice);
                     continue;
                 }
 
-                voice.Source.UnPause();
-
-                // 回到 Starting 而不是直接 Playing：由 ticker 下一拍确认 isPlaying 真的回来了，
-                // 与起播路径同形。若某个平台上 UnPause 不生效，超时兜底仍然管用。
-                voice.State = AudioVoiceState.Starting;
+                voice.State = AudioManagedVoiceState.Starting;
                 voice.StartingTicks = 0;
             }
         }
@@ -531,27 +680,34 @@ namespace XFramework.XAudio
         /// <inheritdoc/>
         public bool IsPlaying(AudioHandle handle)
         {
-            if (!_pool.IsCurrent(handle.Id, handle.Generation))
+            if (!IsCurrent(handle))
                 return false;
 
-            var state = _pool.GetSlot(handle.Id).State;
+            var state = _voices[handle.Id].State;
 
-            // 加载中的播放不算「在播」——这与 PlayAsync 的「句柄返回时必定已加载成功」互为表里。
-            // 暂停中的算：它不是被停掉，只是暂时不出声；Stop 与音量变更对它照常有效。
-            return state == AudioVoiceState.Starting
-                || state == AudioVoiceState.Playing
-                || state == AudioVoiceState.Paused;
+            // 加载中的播放不算「在播」；暂停中的算。
+            return state == AudioManagedVoiceState.Starting
+                || state == AudioManagedVoiceState.Playing
+                || state == AudioManagedVoiceState.Paused;
         }
 
         /// <inheritdoc/>
-        public int ActiveVoiceCount => _pool.CountActive();
+        public int ActiveVoiceCount
+        {
+            get
+            {
+                int active = 0;
+                for (int i = 0; i < _voices.Length; i++)
+                {
+                    if (_voices[i].State != AudioManagedVoiceState.Free)
+                        active++;
+                }
 
-        /// <inheritdoc/>
-        /// <summary>
-        /// 把已创建的通道写入缓冲区（先清空），返回条数。诊断回读用。
-        /// <para>只列已创建的通道——通道在第一次被写入时惰性建（播放、音量/静音设置、RegisterChannel），
-        /// 查询类成员不建状态。</para>
-        /// </summary>
+                return active;
+            }
+        }
+
+        /// <summary>把已创建的通道写入缓冲区（先清空），返回条数。诊断回读用。</summary>
         internal int CopyChannels(List<AudioChannelInfo> buffer)
         {
             if (buffer == null)
@@ -561,22 +717,24 @@ namespace XFramework.XAudio
             foreach (KeyValuePair<string, AudioChannelState> pair in _channels)
             {
                 AudioChannelState state = pair.Value;
-                buffer.Add(new AudioChannelInfo(pair.Key, state.Volume, state.Muted, GetActiveVoiceCount(pair.Key)));
+                buffer.Add(new AudioChannelInfo(pair.Key, state.Volume, state.Muted,
+                    GetActiveVoiceCount(pair.Key)));
             }
 
             return buffer.Count;
         }
 
+        /// <inheritdoc/>
         public int GetActiveVoiceCount(string channel)
         {
             string filter = NormalizeChannel(channel);
             int count = 0;
 
-            for (int i = 0; i < _pool.SlotCount; i++)
+            for (int i = 0; i < _voices.Length; i++)
             {
-                var voice = _pool.GetSlot(i);
+                var voice = _voices[i];
 
-                if (voice.State != AudioVoiceState.Free &&
+                if (voice.State != AudioManagedVoiceState.Free &&
                     string.Equals(voice.Channel, filter, StringComparison.Ordinal))
                 {
                     count++;
@@ -590,51 +748,141 @@ namespace XFramework.XAudio
 
         #region Private
 
-        /// <summary>把预占的槽位还回去——只在它仍是当初那一代时才动。</summary>
-        private void InvalidateReservation(int index, int generation)
+        private bool TryReserveVoice(string channel, string location, float volumeScale,
+            out int index, out AudioHandle handle)
         {
-            if (_pool.IsCurrent(index, generation))
-                _pool.Invalidate(index);
+            index = -1;
+            handle = default;
+
+            int free = -1;
+            for (int i = 0; i < _voices.Length; i++)
+            {
+                if (_voices[i].State == AudioManagedVoiceState.Free)
+                {
+                    free = i;
+                    break;
+                }
+            }
+
+            if (free < 0)
+            {
+                WarnExhaustedOnce();
+                return false;
+            }
+
+            var voice = _voices[free];
+            voice.Generation = NextGeneration(voice.Generation);
+            voice.State = AudioManagedVoiceState.Loading;
+            voice.ProviderHandle = default;
+            voice.Channel = channel;
+            voice.Location = location;
+            voice.VolumeScale = volumeScale;
+            voice.StartingTicks = 0;
+            voice.ValidityCts = new CancellationTokenSource();
+
+            index = free;
+            handle = new AudioHandle(free, voice.Generation);
+            return true;
         }
 
-        /// <summary>把公开参数写进播放源。音量不在这里——见 <see cref="ApplyVoiceVolume"/>。</summary>
-        private static void ConfigureSource(AudioSource source, AudioClip clip, AudioPlayOptions options)
+        private bool IsCurrent(AudioHandle handle) => IsCurrent(handle.Id, handle.Generation);
+
+        private bool IsCurrent(int index, int generation)
         {
-            source.clip = clip;
-            source.loop = options.Loop;
+            if (generation == 0 || index < 0 || index >= _voices.Length)
+                return false;
 
-            // 归一化：非正值一律按 1 处理，使 default(AudioPlayOptions) 等价于「原速原音量」
-            source.pitch = options.Pitch > 0f ? options.Pitch : 1f;
-
-            float blend = options.SpatialBlend;
-            if (blend < 0f)
-                blend = 0f;
-            else if (blend > 1f)
-                blend = 1f;
-
-            source.spatialBlend = blend;
-
-            if (blend > 0f)
-                source.transform.position = options.Position;
+            var voice = _voices[index];
+            return voice.Generation == generation && voice.State != AudioManagedVoiceState.Free;
         }
 
-        /// <summary>
-        /// 单次播放的音量缩放归一化：非正值一律按 <c>1</c> 处理。
-        /// <para>这是让 <c>default(AudioPlayOptions)</c> 安全的关键——它的 <c>VolumeScale</c> 是 <c>0</c>，
-        /// 不归一化的话「忘了写 options」会得到一个完全静音的声音，比报错更难查。</para>
-        /// <para>刻意<b>不</b>在这里钳上限：放大由三档相乘后的最终钳制统一处理（见
-        /// <see cref="ComputeVoiceVolume"/>），这样「用缩放的相对关系」不会被提前压平。</para>
-        /// </summary>
-        private static float NormalizeVolumeScale(float volumeScale)
-            => volumeScale > 0f ? volumeScale : 1f;
+        private void StopVoice(int index)
+        {
+            var voice = _voices[index];
 
-        /// <summary>
-        /// 一次播放的实际音量：主音量 × 通道音量 × 单次缩放，任一档静音即为 <c>0</c>，
-        /// 最后钳到 <c>[0, 1]</c> 再写进播放源。
-        /// <para><b>框架自己钳制</b>而不依赖引擎：实测表明 <c>AudioSource.volume</c> 的 setter 确实会把值钳到
-        /// <c>[0, 1]</c>，但公开承诺不该押在引擎行为上（换个平台或版本就可能变）。</para>
-        /// </summary>
-        private float ComputeVoiceVolume(AudioVoice voice)
+            if (voice.State == AudioManagedVoiceState.Loading)
+            {
+                // 取消有效性令牌：provider 加载完成后不会 start，由它归还租约
+                try
+                {
+                    voice.ValidityCts?.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // 已在别处释放：无妨
+                }
+
+                FreeVoice(voice);
+                return;
+            }
+
+            SafeStopAndRelease(voice.ProviderHandle);
+            FreeVoice(voice);
+        }
+
+        private static int NextGeneration(int current)
+        {
+            int next = current + 1;
+            return next == 0 ? 1 : next;
+        }
+
+        private void WarnExhaustedOnce()
+        {
+            if (_exhaustionWarned)
+                return;
+
+            _exhaustionWarned = true;
+            LogManager.Warning(LogCategories.Audio,
+                "播放源已耗尽（MaxVoices={0}），本次播放被丢弃。" +
+                "调大 AudioInitOptions.MaxVoices，或缩短同时播放的音效数量。",
+                _maxVoices);
+        }
+
+        private void SafeStopAndRelease(AudioProviderHandle providerHandle)
+        {
+            if (providerHandle.IsDefault)
+                return;
+
+            try
+            {
+                _provider.Stop(providerHandle);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e, "停止音频播放时发生异常");
+            }
+
+            try
+            {
+                _provider.Release(providerHandle);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e, "释放音频播放时发生异常");
+            }
+        }
+
+        private void ReleaseVoice(AudioManagedVoice voice)
+        {
+            if (!voice.ProviderHandle.IsDefault)
+                SafeStopAndRelease(voice.ProviderHandle);
+
+            FreeVoice(voice);
+        }
+
+        private void FreeVoice(AudioManagedVoice voice)
+        {
+            voice.State = AudioManagedVoiceState.Free;
+            voice.ProviderHandle = default;
+            voice.Channel = null;
+            voice.Location = null;
+            voice.VolumeScale = 1f;
+            voice.StartingTicks = 0;
+            voice.ValidityCts = null;
+            _exhaustionWarned = false;
+        }
+
+        private float ComputeVoiceVolume(AudioManagedVoice voice)
         {
             if (_masterMuted)
                 return 0f;
@@ -646,31 +894,36 @@ namespace XFramework.XAudio
             return Mathf.Clamp01(_masterVolume * channel.Volume * voice.VolumeScale);
         }
 
-        /// <summary>把当前音量写进某个播放源。播完/空闲的槽位调用它是无害的空写。</summary>
-        private void ApplyVoiceVolume(AudioVoice voice)
+        /// <summary>
+        /// 发起播放时的音量：用<b>不建状态</b>的通道读取。否则一次加载失败的播放会
+        /// 在 <c>CopyChannels</c> 里多出一行没有播放过的通道。
+        /// </summary>
+        private float ComputeVolumeNoCreate(string channel, float volumeScale)
         {
-            voice.Source.volume = ComputeVoiceVolume(voice);
+            if (_masterMuted)
+                return 0f;
+
+            if (_channels.TryGetValue(channel, out var state) && state.Muted)
+                return 0f;
+
+            float channelVolume = state?.Volume ?? 1f;
+            return Mathf.Clamp01(_masterVolume * channelVolume * volumeScale);
         }
 
         /// <summary>
-        /// 音量变更后重算<b>正在播放</b>的声音。
-        /// <para>事件式而非逐帧：只在变更发生时扫一遍槽位（O(池容量)、无分配）。槽位表本身就是活跃播放的
-        /// 注册表，不另维护一张「谁在播」的表——那会多出一处可能不同步的状态。</para>
+        /// 音量变更后重算正在播放的声音。事件式而非逐帧：只在变更发生时扫一遍槽位。
         /// </summary>
-        /// <param name="channelFilter">只重算该通道；<c>null</c> 表示全部（主音量变更走这条）。</param>
         private void RefreshVolumes(string channelFilter)
         {
-            for (int i = 0; i < _pool.SlotCount; i++)
+            for (int i = 0; i < _voices.Length; i++)
             {
-                var voice = _pool.GetSlot(i);
+                var voice = _voices[i];
 
-                if (voice.State == AudioVoiceState.Free)
+                if (voice.State == AudioManagedVoiceState.Free ||
+                    voice.State == AudioManagedVoiceState.Loading)
+                {
                     continue;
-
-                // 外部销毁的播放源是 Unity 假 null（R3-AUD-002）：写 volume 会抛 MissingReference，
-                // 音量刷新不该被一个死槽位打断——交给下一次 Sweep 回收。
-                if (voice.Source == null)
-                    continue;
+                }
 
                 if (channelFilter != null &&
                     !string.Equals(voice.Channel, channelFilter, StringComparison.Ordinal))
@@ -678,11 +931,23 @@ namespace XFramework.XAudio
                     continue;
                 }
 
-                ApplyVoiceVolume(voice);
+                bool applied;
+                try
+                {
+                    applied = _provider.SetVolume(voice.ProviderHandle, ComputeVoiceVolume(voice));
+                }
+                catch (Exception e)
+                {
+                    LogManager.Exception(LogCategories.Audio, e, "刷新音频音量时发生异常");
+                    applied = false;
+                }
+
+                if (!applied)
+                    ReleaseVoice(voice);
             }
         }
 
-        /// <summary>取通道状态，不存在则按默认值建一个。<b>只有写入路径会走到这里</b>——查询不建状态。</summary>
+        /// <summary>取通道状态，不存在则按默认值建一个。<b>只有写入路径会走到这里</b>。</summary>
         private AudioChannelState GetOrCreateChannel(string channel)
         {
             if (_channels.TryGetValue(channel, out var state))
@@ -693,24 +958,11 @@ namespace XFramework.XAudio
             return state;
         }
 
-        /// <summary>
-        /// 释放一个由加载路径拿到、但没能交到槽位手上的资源租约。
-        /// <para>用 try/catch 包住：<c>Dispose</c> 可能由 <c>Application.quitting</c> 触发，而处理器顺序
-        /// 不保证 <c>XAsset</c> 的包还没销毁——那时释放会抛。退出路径上不该再炸一次。</para>
-        /// </summary>
-        private static void SafeDisposeLease(AudioClipLease lease, string location)
-        {            // 不能按 IsValid 早退（AUD-004）：加载成功但 location 指向非 AudioClip 时，租约没有资源本体，
-            // 却仍持有底层 YooAsset 句柄的释放动作——跳过它就是引用计数无界增长。
-            try
-            {
-                lease.Dispose();
-            }
-            catch (Exception e)
-            {
-                LogManager.Exception(LogCategories.Audio, e,
-                    string.Format("释放音频资源租约时发生异常（'{0}'）", location));
-            }
-        }
+        private static float NormalizeVolumeScale(float volumeScale)
+            => volumeScale > 0f ? volumeScale : 1f;
+
+        private static float NormalizePitch(float pitch)
+            => pitch > 0f ? pitch : 1f;
 
         private static void ValidateLocation(string location)
         {
@@ -726,7 +978,8 @@ namespace XFramework.XAudio
             if (_disposed)
             {
                 throw new InvalidOperationException(
-                    "[Audio] 本实例已销毁。请重新调用 AudioManager.Initialize() 或 AudioManager.SetInstance(...)。");
+                    "[Audio] 本实例已销毁。请重新调用 AudioManager.Initialize()、" +
+                    "AudioManager.SetInstance(...) 或 AudioManager.SetProvider(...)。");
             }
         }
 

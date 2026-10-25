@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+#### Audio
+
+- **新增 `IAudioProvider` 播放引擎缝**（2026-10-25）：核心保留通道 / 三档音量 / 暂停闸门 / 计数 / 归一化 / 诊断，
+  provider 只实现播放原语。源兼容新增：`IAudioProvider`、`AudioProviderPlaybackState`、`AudioProviderHandle`、
+  `AudioPlaybackRequest`、`AudioManager.SetProvider(IAudioProvider, AudioInitOptions)`、
+  `AudioManager.TryGetProviderHandle(AudioHandle, out AudioProviderHandle)`。内置 `AudioSourceProvider`
+  承接原池/加载/回收判据，现有行为不变；公开 API 基线已同步，无破坏性变更。
+
 ## [0.4.0] - 2026-10-25
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；

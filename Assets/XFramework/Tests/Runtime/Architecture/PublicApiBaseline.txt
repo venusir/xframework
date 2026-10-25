@@ -240,8 +240,10 @@ XFramework.XAudio.AudioManager.Resume  ::  public static void()
 XFramework.XAudio.AudioManager.SetChannelMuted  ::  public static void(string channel, bool muted)
 XFramework.XAudio.AudioManager.SetChannelVolume  ::  public static void(string channel, float volume)
 XFramework.XAudio.AudioManager.SetInstance  ::  public static void(XFramework.XAudio.IAudioManager instance)
+XFramework.XAudio.AudioManager.SetProvider  ::  public static void(XFramework.XAudio.IAudioProvider provider, XFramework.XAudio.AudioInitOptions options = null)
 XFramework.XAudio.AudioManager.Stop  ::  public static bool(XFramework.XAudio.AudioHandle handle)
 XFramework.XAudio.AudioManager.StopAll  ::  public static int(string channel = null)
+XFramework.XAudio.AudioManager.TryGetProviderHandle  ::  public static bool(XFramework.XAudio.AudioHandle handle, out XFramework.XAudio.AudioProviderHandle providerHandle)
 XFramework.XAudio.AudioPlayOptions  ::  public readonly struct
 XFramework.XAudio.AudioPlayOptions#ctor  ::  public(string channel = null, float volumeScale = 1f, bool loop = false, float pitch = 1f, float spatialBlend = 0f, UnityEngine.Vector3 position = default)
 XFramework.XAudio.AudioPlayOptions.Channel  ::  public readonly string
@@ -251,6 +253,30 @@ XFramework.XAudio.AudioPlayOptions.Pitch  ::  public readonly float
 XFramework.XAudio.AudioPlayOptions.Position  ::  public readonly UnityEngine.Vector3
 XFramework.XAudio.AudioPlayOptions.SpatialBlend  ::  public readonly float
 XFramework.XAudio.AudioPlayOptions.VolumeScale  ::  public readonly float
+XFramework.XAudio.AudioPlaybackRequest  ::  public readonly struct
+XFramework.XAudio.AudioPlaybackRequest.Loop  ::  public readonly bool
+XFramework.XAudio.AudioPlaybackRequest.Paused  ::  public readonly bool
+XFramework.XAudio.AudioPlaybackRequest.Pitch  ::  public readonly float
+XFramework.XAudio.AudioPlaybackRequest.Position  ::  public readonly UnityEngine.Vector3
+XFramework.XAudio.AudioPlaybackRequest.SpatialBlend  ::  public readonly float
+XFramework.XAudio.AudioPlaybackRequest.ValidityToken  ::  public readonly System.Threading.CancellationToken
+XFramework.XAudio.AudioPlaybackRequest.Volume  ::  public readonly float
+XFramework.XAudio.AudioProviderHandle  ::  public readonly struct : System.IEquatable<XFramework.XAudio.AudioProviderHandle>
+XFramework.XAudio.AudioProviderHandle#ctor  ::  public(int id, int generation)
+XFramework.XAudio.AudioProviderHandle.Equals  ::  public override bool(object obj)
+XFramework.XAudio.AudioProviderHandle.Equals  ::  public virtual bool(XFramework.XAudio.AudioProviderHandle other)
+XFramework.XAudio.AudioProviderHandle.Generation  ::  public readonly int
+XFramework.XAudio.AudioProviderHandle.GetHashCode  ::  public override int()
+XFramework.XAudio.AudioProviderHandle.Id  ::  public readonly int
+XFramework.XAudio.AudioProviderHandle.IsDefault  ::  public bool IsDefault { get; }
+XFramework.XAudio.AudioProviderHandle.op_Equality  ::  public static bool(XFramework.XAudio.AudioProviderHandle left, XFramework.XAudio.AudioProviderHandle right)
+XFramework.XAudio.AudioProviderHandle.op_Inequality  ::  public static bool(XFramework.XAudio.AudioProviderHandle left, XFramework.XAudio.AudioProviderHandle right)
+XFramework.XAudio.AudioProviderPlaybackState  ::  public enum : int
+XFramework.XAudio.AudioProviderPlaybackState.Invalid  ::  = 0
+XFramework.XAudio.AudioProviderPlaybackState.Paused  ::  = 3
+XFramework.XAudio.AudioProviderPlaybackState.Playing  ::  = 2
+XFramework.XAudio.AudioProviderPlaybackState.Starting  ::  = 1
+XFramework.XAudio.AudioProviderPlaybackState.Stopped  ::  = 4
 XFramework.XAudio.IAudioManager  ::  public interface : System.IDisposable
 XFramework.XAudio.IAudioManager.ActiveVoiceCount  ::  public int ActiveVoiceCount { get; }
 XFramework.XAudio.IAudioManager.GetActiveVoiceCount  ::  public int(string channel)
@@ -269,6 +295,13 @@ XFramework.XAudio.IAudioManager.SetChannelMuted  ::  public void(string channel,
 XFramework.XAudio.IAudioManager.SetChannelVolume  ::  public void(string channel, float volume)
 XFramework.XAudio.IAudioManager.Stop  ::  public bool(XFramework.XAudio.AudioHandle handle)
 XFramework.XAudio.IAudioManager.StopAll  ::  public int(string channel = null)
+XFramework.XAudio.IAudioProvider  ::  public interface : System.IDisposable
+XFramework.XAudio.IAudioProvider.PlayAsync  ::  public Cysharp.Threading.Tasks.UniTask<XFramework.XAudio.AudioProviderHandle>(string location, XFramework.XAudio.AudioPlaybackRequest request, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XAudio.IAudioProvider.Poll  ::  public XFramework.XAudio.AudioProviderPlaybackState(XFramework.XAudio.AudioProviderHandle handle)
+XFramework.XAudio.IAudioProvider.Release  ::  public void(XFramework.XAudio.AudioProviderHandle handle)
+XFramework.XAudio.IAudioProvider.SetPaused  ::  public bool(XFramework.XAudio.AudioProviderHandle handle, bool paused)
+XFramework.XAudio.IAudioProvider.SetVolume  ::  public bool(XFramework.XAudio.AudioProviderHandle handle, float volume)
+XFramework.XAudio.IAudioProvider.Stop  ::  public bool(XFramework.XAudio.AudioProviderHandle handle)
 XFramework.XBootstrap.Bootstrap  ::  public static class
 XFramework.XBootstrap.Bootstrap.Clear  ::  public static void()
 XFramework.XBootstrap.Bootstrap.Register  ::  public static void(XFramework.XBootstrap.IBootstrapStage stage)
