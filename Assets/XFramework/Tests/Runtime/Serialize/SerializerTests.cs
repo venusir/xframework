@@ -91,6 +91,45 @@ namespace XFramework.XSerialize.Tests
 
         #endregion
 
+        #region 会话复位（R4-PRB-18）
+
+        [Test]
+        public void ResetForNewSession_ClearsCustomFormatRegisteredBeforeHook()
+        {
+            Serializer.Register(new FakeSerializer("pre-session"));
+
+            Serializer.ResetForNewSession();
+
+            Assert.IsFalse(Serializer.TryGet("pre-session", out _),
+                "ResetForNewSession 之前的注册会被清掉（README / XML 已写明）");
+        }
+
+        [Test]
+        public void ResetForNewSession_RestoresBuiltinsImmediately()
+        {
+            Serializer.Shutdown();
+
+            Serializer.ResetForNewSession();
+
+            Assert.AreEqual("json", Serializer.Get("json").Format);
+            Assert.AreEqual("json-utility", Serializer.Get("json-utility").Format);
+            Assert.IsNotNull(Serializer.Default);
+        }
+
+        [Test]
+        public void ResetForNewSession_ClearsUserOverrideOfBuiltinFormat()
+        {
+            Serializer.Register(new FakeSerializer("json"));
+
+            Serializer.ResetForNewSession();
+
+            Assert.IsFalse(Serializer.Get("json") is FakeSerializer,
+                "会话复位后同名内置覆盖也被清掉，内置实现恢复");
+            Assert.AreEqual("json", Serializer.Default.Format);
+        }
+
+        #endregion
+
         #region 失败面（SER-005）
 
         [Test]
