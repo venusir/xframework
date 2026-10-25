@@ -51,7 +51,12 @@ namespace XFramework.XAudio
         /// <summary><see cref="AudioManagedVoiceState.Starting"/> 期间的累计扫描次数。</summary>
         internal int StartingTicks;
 
-        /// <summary>核心槽位有效性令牌源；Stop/StopAll 取消它，provider 在起播前检查。</summary>
+        /// <summary>
+        /// 核心槽位有效性令牌源；<c>Stop</c>/<c>StopAll</c> 在加载中取消它，provider 在起播前检查。
+        /// <para><b>正常结束不取消、也不置空</b>：槽位再次被预占时，未取消的令牌源直接复用
+        /// （避免每次播放分配一条 <see cref="CancellationTokenSource"/>）；只有加载中被作废的那条
+        /// 才会在下一次预占时被换新。</para>
+        /// </summary>
         internal CancellationTokenSource ValidityCts;
     }
 }

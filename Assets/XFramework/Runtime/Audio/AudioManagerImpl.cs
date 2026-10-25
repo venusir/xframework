@@ -764,7 +764,11 @@ namespace XFramework.XAudio
             voice.Location = location;
             voice.VolumeScale = volumeScale;
             voice.StartingTicks = 0;
-            voice.ValidityCts = new CancellationTokenSource();
+
+            // 复用未取消的有效性令牌源：每次播放新建一条 CTS 是纯分配（同一槽位连续播放时尤其明显）。
+            // 加载中被 Stop/StopAll 取消过的那条已经作废，必须换新，否则新播放一开始就是作废的。
+            if (voice.ValidityCts == null || voice.ValidityCts.IsCancellationRequested)
+                voice.ValidityCts = new CancellationTokenSource();
 
             index = free;
             handle = new AudioHandle(free, voice.Generation);
@@ -967,7 +971,9 @@ namespace XFramework.XAudio
             voice.Location = null;
             voice.VolumeScale = 1f;
             voice.StartingTicks = 0;
-            voice.ValidityCts = null;
+
+            // 刻意不置空 ValidityCts：正常结束不取消它，下一次预占可复用（见 TryReserveVoice）。
+            // 只有加载中被 Stop/StopAll 取消过的那条会因 IsCancellationRequested 被换新。
             _exhaustionWarned = false;
         }
 

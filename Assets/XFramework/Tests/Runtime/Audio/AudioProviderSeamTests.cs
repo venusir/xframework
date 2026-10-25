@@ -629,6 +629,48 @@ namespace XFramework.XAudio.Tests
         }
 
         /// <summary>
+        /// 正常结束的槽位复用时复用同一条未取消的有效性令牌源——每次 <c>Play</c> 新建一条 CTS
+        /// 是纯分配，同一槽位连续播放时尤其明显。
+        /// </summary>
+        [Test]
+        public void ReusedSlot_ReusesValidityToken_WhenNotCancelled()
+        {
+            var first = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            AudioManager.Stop(first);
+            AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
+
+            Assert.AreEqual(2, _fake.Plays.Count);
+            var firstToken = _fake.Plays[0].Request.ValidityToken;
+            var secondToken = _fake.Plays[1].Request.ValidityToken;
+
+            Assert.IsFalse(firstToken.IsCancellationRequested, "前提：正常结束不作废有效性令牌");
+            Assert.AreEqual(firstToken, secondToken, "复用槽位时应复用未取消的有效性令牌源");
+        }
+
+        /// <summary>
+        /// 加载中被 <c>Stop</c> 的令牌已经取消，不能被下一次预占复用——否则新播放一开始就是作废的。
+        /// </summary>
+        [Test]
+        public async Task CancelledValidityToken_IsReplacedOnNextReservation()
+        {
+            _fake.DelayNext = true;
+            var first = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            var cancelledToken = _fake.LastRequest.ValidityToken;
+
+            AudioManager.Stop(first);
+            Assert.IsTrue(cancelledToken.IsCancellationRequested, "前提：加载中被 Stop 的令牌已取消");
+
+            _fake.CompletePendingPlay();
+            await UniTask.DelayFrame(1);
+
+            AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
+            var nextToken = _fake.LastRequest.ValidityToken;
+
+            Assert.AreNotEqual(cancelledToken, nextToken, "已取消的令牌不得复用");
+            Assert.IsFalse(nextToken.IsCancellationRequested);
+        }
+
+        /// <summary>
         /// 自定义 provider 的容量小于核心 <c>MaxVoices</c>：核心按播放失败回收自己的槽位，
         /// 不留下「句柄还在、声音没有」的僵尸（C4）。
         /// </summary>
