@@ -349,7 +349,7 @@ Runtime/Asset/
 | `InitializeAsync(AssetInitOptions options = null, IProgress<AssetInitReport> progress = null, ct)` | 初始化默认包。`options` 为 null 时使用默认配置（默认包 + 离线模式）。重复调用 LogWarning 忽略；并发调用共享同一初始化任务 |
 | `InitializePackageAsync(AssetInitOptions options, IProgress<AssetInitReport> progress = null, ct)` | 追加初始化额外资源包（多包场景），需先完成默认包初始化 |
 | `SetInstance(IAssetManager manager)` | 注入自定义实现（替换底层 / 单元测试）。换出旧实例时按所有权处置：框架创建 → 退订并 `Dispose`；注入的 `AssetManagerImpl` → 只退订；第三方实现 → 不动 |
-| `Destroy()` | 销毁全局管理器，释放全部资源 |
+| `Destroy()` | 销毁全局管理器，释放托管实例与包引用表；**不卸载** YooAsset 侧的包与已加载资源（见「接口承诺」第 3 条） |
 | `IsInitialized` | 是否已初始化 |
 | `AssetInitOptions.AutoReclaimOnLowMemory = true` | 初始化选项字段：低内存自动回收开关（监听 `Application.lowMemory`，默认开启） |
 | `AssetInitOptions.PlayMode` | 初始化选项字段：运行模式 `Offline`（默认）/ `Host` / `EditorSimulate`（仅编辑器，见「快速使用」第 1 节） |
@@ -615,7 +615,7 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
    要真正回收内存请用 `UnloadUnusedAssetsAsync`（配合 `ClearPool` 清掉闲置实例）。
 4. **`PreloadAllAsync` 不占引用计数**，只把内容拉进缓存；需要持有请用 `LoadAllAsync`（其句柄必须逐项释放）。
 5. **运行模式的承诺面**：非 WebGL 的 Player 构建承诺 `Offline` / `Host`；编辑器内额外承诺 `EditorSimulate`；
-   `WebPlayMode` / `CustomPlayMode` 不在承诺面内（见「已知限制」第 14 条）。
+   `WebPlayMode` / `CustomPlayMode` 不在承诺面内（见「已知限制」第 15 条）。
 
 ## 与相邻模块的关系
 
