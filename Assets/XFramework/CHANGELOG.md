@@ -497,6 +497,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **缺组件实例的日志/文档写成「销毁」（R4-AST-004）**：`InstantiateAsync<T>` 缺组件时日志写
+  "Destroying instance to prevent resource leak"，README 也写「销毁实例」；实际 `DestroyInstance` 在池未满时
+  回池复用。修法：日志改为 "Returning instance to the pool for reuse."，README 同步为「回池等待复用」。
+  纯文案订正，无行为变更。
 - **三个热更入口对「包存在但初始化失败」没有守卫（R4-AST-003）**：`RequestPackageVersionAsync` /
   `UpdatePackageManifestAsync` / `PreDownloadContentAsync` 只检查包是否存在；包在
   `InitializePackageAsync` 中失败后仍留在缓存里，调用会落到上游 `DebugCheckInitialize`——

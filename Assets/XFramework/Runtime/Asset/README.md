@@ -364,7 +364,7 @@ Runtime/Asset/
 | `LoadAsync<T>(string location, int priority, ct)` | 带优先级加载（数值越大越先加载） |
 | `InstantiateAsync(string location, Transform parent = null, ct)` | 加载并实例化，自动走对象池，引用生命周期自动管理 |
 | `InstantiateAsync(string location, Vector3 pos, Quaternion rot, Transform parent = null, ct)` | 指定位置/旋转实例化 |
-| `InstantiateAsync<T>(...（同上两重载）)` | 实例化并直接取组件；预制体缺该组件时销毁实例并返回 null |
+| `InstantiateAsync<T>(...（同上两重载）)` | 实例化并直接取组件；预制体缺该组件时**回池等待复用**并返回 null（`DestroyInstance` 在池未满时不销毁） |
 | `LoadSceneAsync(string location, LoadSceneMode mode = LoadSceneMode.Single, Action<float> progress = null, ct)` | 加载场景（单/叠加），返回**可卸载的句柄** `AssetSceneHandle`；失败返回无效句柄（用 `IsDefault` 校验）。能力接口 `IAssetSceneLoader` 的后端转发（形态同 `ClearPool`） |
 | `UnloadSceneAsync(AssetSceneHandle handle, ct)` | 卸载句柄对应的场景；失败（句柄失效 / 场景已不在场 / 它是当前唯一场景 / 能力缺失 / 门面未初始化）返回 `false` **而不抛** |
 | `ClearPool(string location)` | 销毁该地址的**闲置实例池**（实例池，不是 YooAsset 资源池），返回实际销毁数；没有池返回 0。要真正回收内存请配合 `UnloadUnusedAssetsAsync` |

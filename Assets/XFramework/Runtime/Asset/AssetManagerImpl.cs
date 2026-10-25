@@ -259,7 +259,7 @@ namespace XFramework.XAsset
             if (component == null)
             {
                 LogManager.Warning(LogCategories.AssetManager,
-                    "Prefab at '{0}' lacks component {1}. Destroying instance to prevent resource leak.",
+                    "Prefab at '{0}' lacks component {1}. Returning instance to the pool for reuse.",
                     location, typeof(T).Name);
                 DestroyInstance(go);
                 return null;
@@ -276,7 +276,7 @@ namespace XFramework.XAsset
             if (component == null)
             {
                 LogManager.Warning(LogCategories.AssetManager,
-                    "Prefab at '{0}' lacks component {1}. Destroying instance to prevent resource leak.",
+                    "Prefab at '{0}' lacks component {1}. Returning instance to the pool for reuse.",
                     location, typeof(T).Name);
                 DestroyInstance(go);
                 return null;
