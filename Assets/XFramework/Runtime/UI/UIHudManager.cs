@@ -542,6 +542,13 @@ namespace XFramework.XUI
                 hud.UpdateFaulted = false;
                 hud.OnPoolRecycle();
             }
+            catch (Exception e)
+            {
+                // 回池钩子是用户可覆写点（R4-UIA-002）：异常不得逃逸 fire-and-forget 的
+                // Detach 续体，也不得替换 Attach 失败路径的原始 OnOpen 异常。
+                LogManager.Exception(LogCategories.UIHudManager, e,
+                    "HUD 回池钩子抛异常，已隔离并继续回收。");
+            }
             finally
             {
                 if (hud.gameObject != null)

@@ -1,7 +1,10 @@
 using System;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XMessage;
 using XFramework.XUI.Data;
 using XFramework.XUI.View;
 using XFramework.XUpdate;
@@ -34,6 +37,7 @@ namespace XFramework.XUI.Tests
             _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<FakePanelB>();
             _factory.RegisterPanel<ThrowingOnClosePanel>();
+            _factory.RegisterPanel<ThrowingOnPoolRecyclePanel>();
 
             UIManager.PanelFactoryFactory = () => _factory;
             UIManager.Initialize(_root.transform);
@@ -73,6 +77,35 @@ namespace XFramework.XUI.Tests
             Assert.IsFalse(UIManager.IsAnyOpen);
             Assert.AreEqual(1, _factory.ReleaseCount, "OnClose 抛异常也必须回池，否则实例永远留在场景里");
             Assert.AreEqual(1, _factory.PooledCount, "回池后应能被下次打开复用");
+        }
+
+        [Test]
+        public async Task CloseAsync_OnPoolRecycleThrows_StillPublishesClosedAndCallsAfterClose()
+        {
+            // R4-UIA-002：回池钩子异常此前会从 RecyclePanel 外抛，打断关闭路径的 finally——
+            // PanelClosedMessage 不发、OnAfterCloseAsync 不调。
+            var controller = new BlockingController();
+            UIManager.SetController(controller);
+            int closed = 0;
+            var sub = MessageManager.Subscribe<PanelClosedMessage>(_ => closed++);
+
+            try
+            {
+                await UIManager.OpenAsync<ThrowingOnPoolRecyclePanel>("ui/recycle-boom");
+
+                LogAssert.Expect(LogType.Error, new Regex("回池钩子"));
+
+                await UIManager.CloseAsync<ThrowingOnPoolRecyclePanel>();
+
+                Assert.AreEqual(1, closed, "回池钩子抛异常不得跳过 PanelClosedMessage");
+                Assert.AreEqual(1, controller.AfterCloseCount, "回池钩子抛异常不得跳过 OnAfterCloseAsync");
+                Assert.AreEqual(1, _factory.ReleaseCount, "实例仍应交还工厂");
+                Assert.IsFalse(UIManager.IsOpen<ThrowingOnPoolRecyclePanel>());
+            }
+            finally
+            {
+                sub.Dispose();
+            }
         }
 
         #endregion

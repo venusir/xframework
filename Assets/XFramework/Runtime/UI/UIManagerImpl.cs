@@ -2086,6 +2086,14 @@ namespace XFramework.XUI
             {
                 panel.OnPoolRecycle();
             }
+            catch (Exception e)
+            {
+                // 回池钩子是用户可覆写点（R4-UIA-002）：异常不得打断关闭收尾——
+                // PanelClosedMessage 与 OnAfterCloseAsync 都在这之后，抛出去会让订阅方
+                // 永远等不到「已关闭」。钩子自己的资源清理由 finally 继续兜住。
+                LogManager.Exception(LogCategories.UIManager, e,
+                    "面板回池钩子抛异常，已隔离并继续收尾。");
+            }
             finally
             {
                 // 停更标记随回池复位：面板是池化复用的，不复位会让它下次打开时带着上一轮的

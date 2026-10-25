@@ -185,6 +185,19 @@ namespace XFramework.XUI.Tests
     }
 
     /// <summary>
+    /// 在 <c>OnPoolRecycle</c> 里抛异常的面板，用于验证回池钩子异常不阻断关闭收尾（R4-UIA-002）。
+    /// </summary>
+    public class ThrowingOnPoolRecyclePanel : FakePanel
+    {
+        protected internal override void OnPoolRecycle()
+        {
+            base.OnPoolRecycle();
+            throw new System.InvalidOperationException(
+                "[ThrowingOnPoolRecyclePanel] 故意在 OnPoolRecycle 里抛异常");
+        }
+    }
+
+    /// <summary>
     /// 记录每次 <c>OnUpdate</c> 收到的实测参数，用于验证派发方给出的 <c>deltaTime</c>/<c>time</c>。
     /// </summary>
     public class UpdateRecordingPanel : FakePanel

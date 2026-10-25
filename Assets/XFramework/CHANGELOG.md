@@ -811,6 +811,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **回池钩子抛异常打断关闭收尾（R4-UIA-002）**：`RecyclePanel` 的 `OnPoolRecycle` 异常会先走 `finally`
+  再向外抛，关闭路径的 `PanelClosedMessage` 与 `OnAfterCloseAsync` 整段跳过；`UIHudManager.RecycleHud`
+  同形——`Detach` 的 fire-and-forget 续体会逃逸，`DiscardHud` 路径还会用回池异常替换原始 OnOpen 异常。
+  修法：两处 `OnPoolRecycle` 包 try/catch，记 Error 后继续；`finally` 的资源回收/计数复位不变。
+  回归：`UIPanelPoolLifecycleTests.CloseAsync_OnPoolRecycleThrows_StillPublishesClosedAndCallsAfterClose` /
+  `UIHudManagerTests.ShowHudAsync_OnOpenAndPoolRecycleThrow_PreservesOnOpenException`（改前分别不发消息、
+  OnOpen 异常被替换）。
 - **Dispose × 在途打开：续体在回池后仍执行 `OnClose`（R4-UIA-001）**：`Dispose` 经 `RecyclePanel` 回池并清
   `_activePanels` 后，在途 `OpenAsync` 续体仍走 `DoCloseAsync + RollbackPanel`。面板被重新 `Initialize` 后
   复用同一池化实例时，旧续体会关闭/回滚新面板。修法：`UIViewBase` 增加单调递增的 `RecycleGeneration`，

@@ -29,6 +29,7 @@ namespace XFramework.XUI.Tests
         private const string UpdateThrowingPath = "ui/hud/update-throw";
         private const string CountingPath = "ui/hud/counting";
         private const string ReentrantPath = "ui/hud/reentrant";
+        private const string DoubleThrowPath = "ui/hud/double-throw";
 
         #endregion
 
@@ -55,6 +56,7 @@ namespace XFramework.XUI.Tests
             _assets.RegisterPrefab<UpdateThrowingHudItem>(UpdateThrowingPath);
             _assets.RegisterPrefab<CountingHudItem>(CountingPath);
             _assets.RegisterPrefab<ReentrantHudItem>(ReentrantPath);
+            _assets.RegisterPrefab<ThrowingOpenAndRecycleHudItem>(DoubleThrowPath);
             AssetManager.SetInstance(_assets);
 
             _root = new GameObject("UIRoot_HudTest", typeof(RectTransform));
@@ -98,6 +100,20 @@ namespace XFramework.XUI.Tests
 
             Assert.AreEqual(1, _assets.DestroyCount,
                 "打开失败也必须把实例还回资源层——否则它既不在映射里也不在池里");
+        }
+
+        [Test]
+        public void ShowHudAsync_OnOpenAndPoolRecycleThrow_PreservesOnOpenException()
+        {
+            // R4-UIA-002：DiscardHud → RecycleHud 的回池钩子异常此前会替换掉 Attach 的原始 OnOpen 异常。
+            LogAssert.Expect(LogType.Error, new Regex("HUD 回池钩子抛异常"));
+
+            var ex = Assert.ThrowsAsync<InvalidOperationException>(
+                async () => await UIManager.ShowHudAsync<ThrowingOpenAndRecycleHudItem>(
+                    _target.transform, DoubleThrowPath));
+
+            StringAssert.Contains("OnOpen", ex.Message, "原始 OnOpen 异常不得被回池钩子异常替换");
+            Assert.AreEqual(1, _assets.DestroyCount, "实例仍应还回资源层");
         }
 
         #endregion
@@ -380,6 +396,23 @@ namespace XFramework.XUI.Tests
         protected override UniTask OnOpenImpl(object userData)
         {
             throw new InvalidOperationException("[ThrowingHudItem] 故意在 OnOpen 里抛异常");
+        }
+    }
+
+    /// <summary>
+    /// OnOpen 与 OnPoolRecycle 都抛异常的 HUD：验证回池钩子异常不覆盖原始 OnOpen 异常（R4-UIA-002）。
+    /// </summary>
+    public class ThrowingOpenAndRecycleHudItem : UIHudItem
+    {
+        protected override UniTask OnOpenImpl(object userData)
+        {
+            throw new InvalidOperationException("[ThrowingOpenAndRecycleHudItem] 故意在 OnOpen 里抛异常");
+        }
+
+        protected internal override void OnPoolRecycle()
+        {
+            base.OnPoolRecycle();
+            throw new InvalidOperationException("[ThrowingOpenAndRecycleHudItem] 故意在 OnPoolRecycle 里抛异常");
         }
     }
 
