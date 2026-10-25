@@ -460,8 +460,8 @@ public class MainMenuPanel : UIPanelBase
 ```csharp
 using XFramework.XUI.Data;
 
-// 绑定后语言切换时自动刷新；返回的 IDisposable 交给 UIViewBase.Track(...)（或在
-// UIPanelBinding.RegisterBinding 里登记）统一释放——不要直接操作私有字段
+// 绑定后语言切换时自动刷新；在面板 / HUD 下直接调用即可——方法已把返回的句柄交给
+// 当前 UIViewBase 的 Track 统一释放。无宿主（普通 MonoBehaviour）时自行 Dispose 返回值。
 titleText.BindToLocalizedText("ui_main_title");
 ```
 
@@ -500,17 +500,16 @@ var token3 = MessageManager.Subscribe<AllPanelsClosedMessage>(_ =>
 {
     Debug.Log("All panels closed.");
 });
-```
-
-> `AllPanelsClosedMessage` 只在 `CloseAllAsync` **确实发起过关闭**、且结束时 `OpenCount == 0` 时发布一次；
-> 控制器拦下关闭（面板仍开着）或本来就没有面板时不发布（R3-ADJ-13）。控制器回调
-> `OnAllPanelsClosedAsync` 使用**同一门控**（R4-UIB-003）。
 
 // 取消订阅（避免内存泄漏）：订阅句柄本身即 IDisposable
 token1.Dispose();
 token2.Dispose();
 token3.Dispose();
 ```
+
+> `AllPanelsClosedMessage` 只在 `CloseAllAsync` **确实发起过关闭**、且结束时 `OpenCount == 0` 时发布一次；
+> 控制器拦下关闭（面板仍开着）或本来就没有面板时不发布（R3-ADJ-13）。控制器回调
+> `OnAllPanelsClosedAsync` 使用**同一门控**（R4-UIB-003）。
 
 > 静态 API 不自动绑定生命周期，句柄需在使用方销毁时 `Dispose`；若订阅方实现 `IMessageSubscriber`，改用 `this.Subscribe(...)` 即可自动绑定销毁时机（MonoBehaviour 或 `IDestroyCancellationToken`）。
 >
@@ -601,7 +600,7 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 
 | 带 | 取值 | 常量 | 说明 |
 | --- | --- | --- | --- |
-| 面板层 | `layer × LayerStride + 层内序号` | `LayerStride = 32` · `MaxIndexInLayer = 31` · `MaxPanelLayer = 899` | 层上限 899、每层最多 31 个面板，超出会告警并钳制 |
+| 面板层 | `layer × LayerStride + 层内序号` | `LayerStride = 32` · `MaxIndexInLayer = 30` · `MaxPanelLayer = 899` | 层上限 899、每层最多 30 个面板（第 31 位留给遮罩），超出会告警并钳制 |
 | 遮罩 | `maskLayer × LayerStride + MaskIndex` | `MaskIndex = 31` | 取该层末位：挡住该层及以下、被更高层盖住 |
 | HUD | `30000` | `HudOrder` | 高于全部面板层 |
 | Tip | `31000` | `TipOrder` | 高于 HUD |
@@ -619,7 +618,7 @@ Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 > 所有取值一律经 `UISorting` 推导，`UISortingTests.EveryBandValue_SurvivesCanvasRoundTrip`
 > 会拦住任何越界的新取值。
 
-**层内序号 = 显示栈中的相对次序**：面板每次入栈/出栈后整体重排，于是排序与显示栈是同一份真相，不存在「计数器用久了溢出到邻层区间」的问题。
+**层内序号 = 显示栈中的相对次序**：面板打开 / 置顶时由 `RestampSortingOrders` 按显示栈重排；关闭只摘栈、不重排，序号可能留下空洞，但相对次序不变——排序与显示栈仍是同一份真相，不存在「计数器用久了溢出到邻层区间」的问题。
 
 ### 显示栈与导航
 
@@ -1339,9 +1338,9 @@ UIManager.ClearPreloads();
   `UpdateManager` 的逻辑时间轴上。门面没有时间轴开关，逃生口与注意事项见「面板驱动更新」一节的警告框。
 - **手动 `UIManager.Update` 只驱动每帧档（Tier0）与 HUD**：分档面板（Tier1–7）由各自的档位驱动器驱动，
   手动入口不覆盖它们；`Time.timeScale = 0` 时靠手动调用救不了分档面板。完整恢复路径见上一条与
-  UIA-002 的 `Initialize` 重注册（`SetInstance` 不重接驱动器）。
-- **面板的排序与分层方案不可替换**：`UISorting` 是静态类，每次打开 / 关闭 / 置顶都会由 `RestampSortingOrders`
-  按显示栈重排全部面板。`UILayers` 的五个值是**建议值**（你可以给自己的层号），但排序空间的形状
+  UIA-002 的 `Initialize` 重注册（**`Initialize` 与 `SetInstance` 都会重接每帧与现存分档驱动器**）。
+- **面板的排序与分层方案不可替换**：`UISorting` 是静态类，面板**打开 / 置顶**时由 `RestampSortingOrders`
+  按显示栈重排（关闭只摘栈、序号可能留空洞）；`UILayers` 的五个值是**建议值**（你可以给自己的层号），但排序空间的形状
   （层步长 32、每层 30 个面板序号（遮罩占第 31 个）、层号上限 899）是**模块不变量**——它与遮罩排序、栈重排、回池复位共同依赖，
   要换排序方案等于整体替换 `IUIManager`。
   （**顺带澄清一件不会发生的事**：层容器名 `Layer_{层号}` 与 HUD / Tip 容器的 `Layer_HUD` / `Layer_Tip`
