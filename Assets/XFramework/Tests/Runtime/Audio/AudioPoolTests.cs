@@ -1,6 +1,8 @@
 using System;
 using System.Collections;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -135,6 +137,74 @@ namespace XFramework.XAudio.Tests
             var b = AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
 
             Assert.AreNotEqual(a.Id, b.Id, "同时播放的两个声音必须各占一个槽位");
+        }
+
+        #endregion
+
+        #region 加载中停止后立即重播（P1-1）
+
+        /// <summary>
+        /// 加载中 <c>Stop</c> 必须<b>立即</b>归还 provider 池槽，否则紧接着的重播会撞上池满窗口：
+        /// 核心槽位已释放，provider 的 Loading 槽却还占着，重播拿到一个必然失效的预占句柄。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator StopWhileLoading_ImmediateReplay_StartsTheNewPlayback()
+        {
+            AudioManager.Destroy();
+
+            var loader = new FakeAudioClipLoader { Clip = _clip, DelayFrames = 3 };
+            AudioManager.SetInstance(new AudioManagerImpl(new AudioInitOptions { MaxVoices = 1 }, loader));
+
+            var first = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            Assert.IsFalse(first.IsDefault, "前提：首个播放已预占槽位");
+            Assert.AreEqual(1, loader.LoadCount, "前提：加载已发起且未完成");
+            Assert.AreEqual(0, loader.IssuedLeases);
+
+            Assert.IsTrue(AudioManager.Stop(first), "加载中的播放也应能被停下");
+
+            var second = AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
+            Assert.IsFalse(second.IsDefault, "Stop 后立即重播不得撞上 provider 的容量窗口");
+
+            yield return null;
+            yield return null;
+            yield return null;
+            yield return null;   // 越过两个加载窗口，让晚到的续体也跑完
+
+            Assert.IsTrue(AudioManager.IsPlaying(second), "第二个播放应已起播");
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "只应有第二个播放活着");
+            Assert.AreEqual(1, loader.OutstandingLeases, "此时只该持有第二个播放的租约");
+
+            AudioManager.Stop(second);
+
+            Assert.AreEqual(0, loader.OutstandingLeases, "两个租约都必须归还，且都不能重复释放");
+        }
+
+        /// <summary>
+        /// 同样的窗口走 <see cref="AudioManager.PlayAsync"/>：Stop 之后的重播必须等到加载完成并返回有效句柄，
+        /// 而不是 default。
+        /// </summary>
+        [Test]
+        public async Task StopWhileLoading_ImmediatePlayAsync_ReturnsValidHandle()
+        {
+            AudioManager.Destroy();
+
+            var loader = new FakeAudioClipLoader { Clip = _clip, DelayFrames = 3 };
+            AudioManager.SetInstance(new AudioManagerImpl(new AudioInitOptions { MaxVoices = 1 }, loader));
+
+            var first = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            Assert.IsTrue(AudioManager.Stop(first), "前提：加载中的播放已停下");
+
+            var secondTask = AudioManager.PlayAsync("audio/b", new AudioPlayOptions(loop: true));
+
+            await UniTask.DelayFrame(4);
+
+            var second = await secondTask;
+
+            Assert.IsFalse(second.IsDefault, "重播必须拿到有效句柄，而不是被 provider 容量窗口丢弃");
+            Assert.IsTrue(AudioManager.IsPlaying(second));
+
+            AudioManager.Stop(second);
+            Assert.AreEqual(0, loader.OutstandingLeases);
         }
 
         #endregion

@@ -21,6 +21,9 @@ namespace XFramework.XAudio
 
         private AudioHost _host;
 
+        /// <summary>本轮「播放源耗尽」是否已告警过。任一次释放即复位，使下一次耗尽能再提醒一次。</summary>
+        private bool _exhaustionWarned;
+
         #endregion
 
         #region Constructors
@@ -77,7 +80,10 @@ namespace XFramework.XAudio
             if (free < 0)
             {
                 if (_slots.Count >= _maxVoices)
+                {
+                    WarnExhaustedOnce();
                     return false;
+                }
 
                 free = _slots.Count;
                 _slots.Add(CreateVoice(free));
@@ -141,6 +147,24 @@ namespace XFramework.XAudio
             voice.Location = null;
             voice.Loop = false;
             voice.ClipLease = default;
+            _exhaustionWarned = false;
+        }
+
+        /// <summary>
+        /// 作废一个仍在加载中的槽位（核心槽位被 <c>Stop</c>/<c>StopAll</c> 取消）。
+        /// <para><b>立即归还池槽</b>：否则 <c>Stop</c> 之后紧接着的重播会撞上「池满」窗口，拿到一个
+        /// 必然失效的预占句柄（P1-1）。</para>
+        /// <para><b>不动租约</b>：此时租约还在 provider <c>PlayAsync</c> 的局部变量里（槽位只在起播
+        /// 全部成功后才附着租约），由该调用的 <c>ReleaseReservation</c> 释放——释放点必须恰好一次。</para>
+        /// <para><b>代际递增</b>：晚到的加载续体靠它发现「槽位已不是自己那一代」，从而不再碰池槽。</para>
+        /// </summary>
+        internal void Invalidate(int index, int generation)
+        {
+            if (!IsCurrent(index, generation))
+                return;
+
+            Release(index);
+            _slots[index].Generation = NextGeneration(_slots[index].Generation);
         }
 
         /// <summary>释放全部槽位与宿主。</summary>
@@ -150,6 +174,7 @@ namespace XFramework.XAudio
                 Release(i);
 
             _slots.Clear();
+            _exhaustionWarned = false;
 
             if (_host != null)
             {
@@ -214,6 +239,19 @@ namespace XFramework.XAudio
             var rebuilt = CreateVoice(index);
             rebuilt.Generation = voice.Generation;
             return rebuilt;
+        }
+
+        /// <summary>池耗尽告警：同一段耗尽期只记一条，免得一帧几十个音效把控制台刷爆。</summary>
+        private void WarnExhaustedOnce()
+        {
+            if (_exhaustionWarned)
+                return;
+
+            _exhaustionWarned = true;
+            LogManager.Warning(LogCategories.Audio,
+                "播放源已耗尽（MaxVoices={0}），本次播放被丢弃。" +
+                "调大 AudioInitOptions.MaxVoices，或缩短同时播放的音效数量。",
+                _maxVoices);
         }
 
         /// <summary>

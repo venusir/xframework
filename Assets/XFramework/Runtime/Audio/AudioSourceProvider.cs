@@ -60,95 +60,126 @@ namespace XFramework.XAudio
 
             AudioClipLease lease = default;
 
+            // 核心槽位被 Stop/StopAll 作废时立即归还池槽：等到加载完成再归还的话，
+            // 紧接其后的重播会撞上「池满」窗口，拿到必然失效的预占句柄（P1-1）。
+            CancellationTokenRegistration validityRegistration = default;
+
             try
             {
-                lease = await _clipLoader.LoadAsync(location, cancellationToken);
-            }
-            catch (OperationCanceledException)
-            {
-                // 调用方/生命周期取消：释放预占槽位，不吞取消
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                throw;
-            }
-            catch (Exception e)
-            {
-                // 加载缝的契约是「失败返回 default 而不抛」，真抛了说明是未预期异常
-                LogManager.Exception(LogCategories.Audio, e,
-                    string.Format("加载音频资源 '{0}' 时发生未预期异常", location));
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                return default;
-            }
+                if (request.ValidityToken.CanBeCanceled)
+                {
+                    int reservedIndex = index;
+                    int reservedGeneration = handle.Generation;
+                    validityRegistration = request.ValidityToken.Register(
+                        () => _pool.Invalidate(reservedIndex, reservedGeneration));
+                }
 
-            if (cancellationToken.IsCancellationRequested)
-            {
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
+                // 令牌在注册前就已取消：回调已同步执行并作废槽位，不必再发起加载
+                if (request.ValidityToken.IsCancellationRequested)
+                {
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    return default;
+                }
 
-            // 核心槽位在加载期间被 Stop/StopAll 作废：归还租约，不 start，也不抛 OCE
-            if (request.ValidityToken.IsCancellationRequested)
-            {
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                return default;
-            }
+                try
+                {
+                    lease = await _clipLoader.LoadAsync(location, cancellationToken);
+                }
+                catch (OperationCanceledException)
+                {
+                    // 调用方/生命周期取消：释放预占槽位，不吞取消
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    throw;
+                }
+                catch (Exception e)
+                {
+                    // 加载缝的契约是「失败返回 default 而不抛」，真抛了说明是未预期异常
+                    LogManager.Exception(LogCategories.Audio, e,
+                        string.Format("加载音频资源 '{0}' 时发生未预期异常", location));
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    return default;
+                }
 
-            if (!_pool.IsCurrent(index, handle.Generation))
-            {
-                SafeDisposeLease(lease, location);
-                return default;
-            }
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
 
-            if (!lease.IsValid)
-            {
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                LogManager.Warning(LogCategories.Audio,
-                    "播放失败，clip 加载未成功：'{0}'（底层错误见上一条 YooAsset 日志）。", location);
-                return default;
-            }
+                // 核心槽位在加载期间被 Stop/StopAll 作废：归还租约，不 start，也不抛 OCE。
+                // 代际检查同时挡住「作废后池槽已被新播放复用」的晚到续体——那时绝不碰池槽（P1-2）。
+                if (request.ValidityToken.IsCancellationRequested ||
+                    !_pool.IsCurrent(index, handle.Generation))
+                {
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    return default;
+                }
 
-            var voice = _pool.GetSlot(index);
+                if (!lease.IsValid)
+                {
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    LogManager.Warning(LogCategories.Audio,
+                        "播放失败，clip 加载未成功：'{0}'（底层错误见上一条 YooAsset 日志）。", location);
+                    return default;
+                }
 
-            // 播放源可能被外部销毁（Unity 假 null）；继续下去会在 ConfigureSource 处抛 MissingReference，
-            // 留下永久 Loading 且持有租约的槽位（AUD-003）。
-            if (voice.Source == null)
-            {
-                SafeDisposeLease(lease, location);
-                _pool.Release(index);
-                LogManager.Warning(LogCategories.Audio,
-                    "播放源已被外部销毁，无法起播：'{0}'。", location);
-                return default;
-            }
+                var voice = _pool.GetSlot(index);
 
-            voice.ClipLease = lease;
-            voice.Loop = request.Loop;
-            ConfigureSource(voice.Source, lease.Clip, request);
-            voice.Source.volume = request.Volume;
-            voice.Source.Play();
+                // 播放源可能被外部销毁（Unity 假 null）；继续下去会在 ConfigureSource 处抛 MissingReference，
+                // 留下永久 Loading 且持有租约的槽位（AUD-003）。
+                if (voice.Source == null)
+                {
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    LogManager.Warning(LogCategories.Audio,
+                        "播放源已被外部销毁，无法起播：'{0}'。", location);
+                    return default;
+                }
 
-            // 管理器处于暂停态时，新起的播放也立即进入暂停——Pause 是管理器级闸门。
-            if (request.Paused)
-            {
-                voice.Source.Pause();
-                voice.State = AudioVoiceState.Paused;
-            }
-            else if (voice.Source.isPlaying)
-            {
-                // P-06 实测：Play() 之后同步读一次 isPlaying。短于一个扫尾节拍的 one-shot
-                // 在下一次 Poll 时已经播完——只看下一拍的 isPlaying 会把它误判为「从未起播」，
-                // 卡在 Starting 到 60 拍超时（AUD-001）。
-                voice.State = AudioVoiceState.Playing;
-            }
-            else
-            {
-                voice.State = AudioVoiceState.Starting;
-            }
+                try
+                {
+                    voice.Loop = request.Loop;
+                    ConfigureSource(voice.Source, lease.Clip, request);
+                    voice.Source.volume = request.Volume;
+                    voice.Source.Play();
 
-            return handle;
+                    // 管理器处于暂停态时，新起的播放也立即进入暂停——Pause 是管理器级闸门。
+                    if (request.Paused)
+                    {
+                        voice.Source.Pause();
+                        voice.State = AudioVoiceState.Paused;
+                    }
+                    else if (voice.Source.isPlaying)
+                    {
+                        // P-06 实测：Play() 之后同步读一次 isPlaying。短于一个扫尾节拍的 one-shot
+                        // 在下一次 Poll 时已经播完——只看下一拍的 isPlaying 会把它误判为「从未起播」，
+                        // 卡在 Starting 到 60 拍超时（AUD-001）。
+                        voice.State = AudioVoiceState.Playing;
+                    }
+                    else
+                    {
+                        voice.State = AudioVoiceState.Starting;
+                    }
+
+                    // 租约只在起播全部成功后交给槽位：此前任何失败/取消都由本地释放，
+                    // 保证「释放点恰好一次」。
+                    voice.ClipLease = lease;
+                }
+                catch (Exception e)
+                {
+                    // 起播段异常（被销毁的播放源、异常插件等）：不清理会留下永久 Loading、
+                    // 永远持有租约的槽位。
+                    LogManager.Exception(LogCategories.Audio, e,
+                        string.Format("播放 '{0}' 时发生未预期异常", location));
+                    ReleaseReservation(index, handle.Generation, lease, location);
+                    return default;
+                }
+
+                return handle;
+            }
+            finally
+            {
+                validityRegistration.Dispose();
+            }
         }
 
         /// <inheritdoc/>
@@ -308,6 +339,20 @@ namespace XFramework.XAudio
 
             if (request.SpatialBlend > 0f)
                 source.transform.position = request.Position;
+        }
+
+        /// <summary>
+        /// 归还一次未成功起播的预占：释放本地租约，并在池槽仍属于本次预占时归还它。
+        /// <para><b>先查代际再碰池槽</b>：失效令牌的回调会立即 <see cref="AudioSourcePool.Invalidate"/>
+        /// 归还池槽，新播放可能已经复用同一下标；晚到的续体若无条件 <c>Release</c> 会把新播放杀掉（P1-2）。
+        /// 此时只归还自己手里的租约——它的释放点仍在本次调用里，恰好一次。</para>
+        /// </summary>
+        private void ReleaseReservation(int index, int generation, AudioClipLease lease, string location)
+        {
+            SafeDisposeLease(lease, location);
+
+            if (_pool.IsCurrent(index, generation))
+                _pool.Release(index);
         }
 
         /// <summary>
