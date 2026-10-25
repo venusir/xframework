@@ -561,6 +561,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Config
 
+- **SO Table 资产往返端到端覆盖（R4-CONF-003）**：新增 EditMode 用例
+  `ScriptableObjectAssetRoundTripTests.SavedAsset_LoadsBackWithItemsAndBuildsTable`——`CreateInstance` →
+  `SerializedObject` 写 `Items` → `CreateAsset/SaveAssets` → `LoadAssetAtPath` → `BuildTable`。
+  此前 `ScriptableObjectTableTests` 只经反射写 backing field，从未经过 Unity 资产保存/重载。实测本机
+  6000.4.5f1 下泛型基类的 `[field: SerializeField] List<TRow>` 往返正常；序列化路径是
+  `<Items>k__BackingField`（`FindProperty("Items")` 取不到，用例两者都试）。
 - **同类型 Table 与 Global 的在途登记互相覆盖，第三个调用方重复加载（R4-CONF-005）**：`_inFlightLoads`
   按 `Type` 单槽存放，Table 在途时启动同类型 Global 会替换槽位；此时第三个同身份（Table）调用方看不到
   先前的 Table 在途项，会再启动一次加载（旧任务仍能唤醒自己的等待者）。修法：键改 `(Type, Kind)`，
