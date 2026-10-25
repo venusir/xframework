@@ -161,6 +161,7 @@ namespace XFramework.XCamera
         /// <exception cref="ArgumentNullException"><paramref name="camera"/> 为 <c>null</c>。</exception>
         /// <exception cref="ArgumentException">相机对象已销毁，或相机已注册为另一 id。</exception>
         /// <exception cref="InvalidOperationException">门面尚未初始化。</exception>
+        /// <remarks>传 <c>null</c> 会抛 <see cref="ArgumentNullException"/>（R4-CAM-004）。</remarks>
         public static string Register(CinemachineVirtualCameraBase camera)
         {
             ValidateCameraArgument(camera, nameof(camera));
@@ -433,7 +434,7 @@ namespace XFramework.XCamera
 
         /// <summary>订阅相机激活消息；返回退订句柄。</summary>
         /// <param name="handler">消息处理器。</param>
-        /// <returns>释放即退订；也可配合 <c>destroyCancellationToken</c> 使用。</returns>
+        /// <returns>释放即退订；可把句柄加入 <c>DisposableBag</c> 随对象批量释放。</returns>
         /// <exception cref="ArgumentNullException"><paramref name="handler"/> 为 <c>null</c>。</exception>
         /// <remarks>事件经 <see cref="MessageManager"/> 发布，<b>不依赖相机门面是否初始化</b>；订阅生命周期由调用方管理，
         /// 可把返回的句柄加入 <c>DisposableBag</c> 随对象销毁批量释放。

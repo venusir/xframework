@@ -1196,6 +1196,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 > R3-CAM-002 的契约已迁移到 `CinemachineCameraManagerTests`（外部销毁 / 注销 / 非有限时长）与
 > `CameraManagerTests`（Destroy / 重复注入 / 探测型读）。原用例名保留在本节作为历史记录。
 
+- **`Subscribe` 的 `destroyCancellationToken` 说法与重载示例（R4-CAM-003/004）**：`Subscribe(Action<…>)`
+  的 XML 写着「可配合 `destroyCancellationToken` 使用」，但仓内没有任何 token 订阅重载——删除该半句；
+  README 补「无类型 lambda 会在三个 `Subscribe` 重载间 CS0121，请显式写消息类型」的提示；`Register(vcam)`
+  的 XML 写明传 null 抛 `ArgumentNullException`。文档订正，无行为变更。
 - **已注册但被外部销毁的相机，事件 id 退化为 null（R4-CAM-005）**：`FindSlotByCamera` 先判
   `slot.Camera != null`（Unity 伪 null），已销毁槽位永远匹配不到；`OnCameraDeactivated` /
   `OnBlendFinished` 经 `ResolveCameraId` 得 `null`，被当成「外部相机」发布。修法：匹配改用

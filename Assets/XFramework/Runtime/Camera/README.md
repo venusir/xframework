@@ -125,7 +125,8 @@ Runtime/Camera/
 
 - `CameraManager.Subscribe` 三种消息：激活 / 反激活 / 过渡完成。订阅经 `MessageManager`，
   **不依赖相机门面是否初始化**，返回的句柄释放即退订；需要随对象生命周期批量释放时，用
-  `DisposableBag`（`.AddTo(bag)`）收口。
+  `DisposableBag`（`.AddTo(bag)`）收口。**无类型 lambda（`Subscribe(m => ...)`）会在三个重载间 CS0121**，
+  请显式写消息类型：`Subscribe((CameraActivatedMessage m) => ...)`（R4-CAM-004）。
 - 外部 / 未注册相机的 `CameraId` 为 `null`（`IsExternal == true`）。
 - 时序：cut = `Deactivated → Activated(IsCut=true) → BlendCompleted`；blend = 开始帧 `Activated`、
   结束帧 `Deactivated → BlendCompleted`。cut 的完成消息与旧行为一致（零时长语义）。
