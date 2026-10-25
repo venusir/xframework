@@ -1576,7 +1576,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   不再引用私有字段。
 - **订正 Update 的 Clear 恢复指引与 ProcessImmediate 边界（2026-10-19，R3-UPD-001/002/003/004）**：Timer 只有在
   `Clear` 时处于空闲才会在下一次 `After` / `Every` 重新注册（有定时器在计时时需先 `CancelAll`）；UI 的
-  `SetInstance` 不重接驱动器；`ProcessImmediate` 对已禁用/缓冲中的节点静默 no-op；`FlushPending` 注释改为
+  `Initialize` 与 `SetInstance` **都会**重接驱动器（原文「`SetInstance` 不重接」有误，R4-UPD-001 订正）；
+  `ProcessImmediate` 对已禁用/缓冲中的节点静默 no-op；`FlushPending` 注释改为
   「`Clear` 作为缓冲操作排队」；删去「四个消费方」固定计数。
 - **归档第三轮审计的 14 条待裁与框架级结论（2026-10-19）**：`Modules/Asset/Audio/Localization/Log/Settings/Timer/UI.md`
   的待裁条目按 R3-ADJ-01..14 落定（`不做` / `暂不做` / `未做` / `已做`）；`Ledger.md` 补「公开枚举整数值纳入

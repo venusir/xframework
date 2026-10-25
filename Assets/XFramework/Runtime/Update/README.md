@@ -324,7 +324,8 @@ Runtime/Update/
 ## 已知限制
 
 - **`Clear()` 的连带影响（UPD-001）**：它摘掉调度器里的**所有**节点，包括 UI / Timer / Audio / Input / Settings
-  等模块的驱动器。恢复入口各不相同：UI 重进 `Initialize`（`SetInstance` 不重接驱动器）；Timer 只有在
+  等模块的驱动器。恢复入口各不相同：UI 重进 `Initialize` 或 `SetInstance`（两者都会重接每帧与现存分档驱动器）；
+  Timer 只有在
   `Clear` 时处于空闲（无定时器在计时）才会在下一次 `After` / `Every` 重新注册——若 `Clear` 时仍有定时器
   在计时，需先 `CancelAll` 再创建；**Audio / Input / Settings 有自记账，不会自愈**——需各自的
   `Destroy` + `Initialize`；Camera 在下一次生命周期事件恢复。详见各模块 README。
