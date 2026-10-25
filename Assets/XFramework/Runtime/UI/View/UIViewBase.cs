@@ -43,6 +43,33 @@ namespace XFramework.XUI.View
 
         #endregion
 
+        #region Pool Claim
+
+        /// <summary>
+        /// 本视图是否已被回池（认领标记）。
+        /// <para><c>Dispose</c> 的批量回池与在途打开续体的回滚共用同一个回池出口；
+        /// 没有这个标记，同一实例会被执行两次 <c>OnPoolRecycle</c> / 结果兜底。</para>
+        /// </summary>
+        internal bool IsRecycled { get; private set; }
+
+        /// <summary>
+        /// 回池次数。池化实例会被复用，<see cref="IsRecycled"/> 会被 <see cref="MarkReopened"/> 清掉；
+        /// 在途续体靠这个单调递增值识别「我持有的实例已经被回收并可能被重新打开」（ABA 防线）。
+        /// </summary>
+        internal int RecycleGeneration { get; private set; }
+
+        /// <summary>标记已回池；重复回池由调用方据此跳过。世代只在这里递增。</summary>
+        internal void MarkRecycled()
+        {
+            IsRecycled = true;
+            RecycleGeneration++;
+        }
+
+        /// <summary>视图重新入册时清除回池标记；<b>不</b>重置世代。</summary>
+        internal void MarkReopened() => IsRecycled = false;
+
+        #endregion
+
         #region Public API — Lifetime-bound Subscriptions
 
         /// <summary>

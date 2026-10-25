@@ -1338,6 +1338,9 @@ UIManager.ClearPreloads();
   要换排序方案等于整体替换 `IUIManager`。
   （**顺带澄清一件不会发生的事**：层容器名 `Layer_{层号}` 与 HUD / Tip 容器的 `Layer_HUD` / `Layer_Tip`
   **不可能撞名**——层号是 `int`，`Layer_{int}` 永远拼不出字符串层名。写在这里，免得下一轮审计把它当新问题。）
+- **`Dispose` 不补跑 `OnClose`**：管理器的 `Dispose` 是同步回池，清理契约是 `OnPoolRecycle`；
+  在途打开的续体若发现面板已被回池/复用，只放弃本次打开，不会再对同一实例调用 `OnClose`
+  （R4-UIA-001）。把清理逻辑放在 `OnPoolRecycle` 里，不要只放在 `OnClose`。
 - **外部调用 `UpdateManager.Clear()` 会摘掉 UI 的驱动器**：它是公开 API，UI 无从感知，只有下一次
   `UIManager.Initialize` 才会重新注册——它会把**每帧驱动器与已有的全部分档驱动器**一起接回去；
   `SetInstance` **不会**重接驱动器（UIA-002 / R3-UIA-010）。若你的重置流程里调了它，请在同一流程里重新进入

@@ -620,6 +620,7 @@ namespace XFramework.XUI
             UIPanelBase pending = null;
             UIPanelBase opened = null;
             bool committed = false;
+            int pendingRecycleGeneration = 0;
 
             try
             {
@@ -654,11 +655,20 @@ namespace XFramework.XUI
 
                 // 从这里起实例已存在，任何失败都必须把它还回池子
                 pending = panel;
+                pendingRecycleGeneration = panel.RecycleGeneration;
 
                 // 等待期间管理器被销毁：不要把实例注册进一个已经拆掉的管理器——它会留在场景里，
-                // 而没有任何集合或调用方还记得它
+                // 而没有任何集合或调用方还记得它。
+                // 若实例已被 Dispose 回池（世代变化），它可能已属于新管理器/被复用，绝不能再碰。
                 if (!IsInitialized)
                 {
+                    if (panel.RecycleGeneration != pendingRecycleGeneration)
+                    {
+                        pending = null;
+                        WarnOpenAbandoned(type);
+                        return null;
+                    }
+
                     RollbackPanel(panel);
                     pending = null;
                     WarnOpenAbandoned(type);
@@ -676,8 +686,18 @@ namespace XFramework.XUI
 
                 // 面板开起来了，但它属于一个已被拆掉的管理器。先按关闭路径把它收干净——
                 // 只回池不关闭的话，它会以「已打开」的活跃状态留在场景里持续渲染，谁也管不着。
+                // 若 Dispose 已经把它回池/复用（世代变化），关闭与回滚都必须跳过：它不再归本次打开所有。
+                // 世代变化只来自 RecyclePanel，而 RecyclePanel 的调用点在此之前都已摘账
+                // （关闭路径先 Remove、Dispose 事后 Clear），因此跳过 RollbackPanel 不会留下 _stack/_factory 残留。
                 if (!IsInitialized)
                 {
+                    if (panel.RecycleGeneration != pendingRecycleGeneration)
+                    {
+                        pending = null;
+                        WarnOpenAbandoned(type);
+                        return null;
+                    }
+
                     await panel.DoCloseAsync(immediate: true);
                     RollbackPanel(panel);
                     pending = null;
@@ -709,19 +729,29 @@ namespace XFramework.XUI
             {
                 if (!committed && pending != null)
                 {
-                    // 先置空再回滚（R3-UIA-006）：回滚自身抛异常时不得二次回滚；
-                    // 回滚异常只记日志，不覆盖正在传播的原始异常。
-                    UIPanelBase toRollback = pending;
-                    pending = null;
-                    try
+                    // 实例已被本次打开之外的路径回池/复用（世代变化）：不能再回滚，否则会
+                    // 摘掉新管理器的账或二次回收池化实例。这里只放弃本地引用，保留原始异常。
+                    // 该路径不调 WarnOpenAbandoned——那条文案只适用于「管理器已销毁」。
+                    if (pending.RecycleGeneration != pendingRecycleGeneration)
                     {
-                        RollbackPanel(toRollback);
+                        pending = null;
                     }
-                    catch (Exception e)
+                    else
                     {
-                        LogManager.Exception(LogCategories.UIManager, e,
-                            string.Format("回滚面板 {0} 时抛出异常，已跳过（保留原始异常）",
-                                toRollback != null ? toRollback.GetType().Name : "(null)"));
+                        // 先置空再回滚（R3-UIA-006）：回滚自身抛异常时不得二次回滚；
+                        // 回滚异常只记日志，不覆盖正在传播的原始异常。
+                        UIPanelBase toRollback = pending;
+                        pending = null;
+                        try
+                        {
+                            RollbackPanel(toRollback);
+                        }
+                        catch (Exception e)
+                        {
+                            LogManager.Exception(LogCategories.UIManager, e,
+                                string.Format("回滚面板 {0} 时抛出异常，已跳过（保留原始异常）",
+                                    toRollback != null ? toRollback.GetType().Name : "(null)"));
+                        }
                     }
                 }
 
@@ -1860,7 +1890,14 @@ namespace XFramework.XUI
         /// <param name="opened">打开成功的面板；失败或未提交时为 null，加入者据此拿到 null。</param>
         private void SettleOpening(Type type, InFlightOpen entry, UIPanelBase opened)
         {
-            _opening.Remove((type, entry.AssetPath));
+            // 只删「仍指向本次 entry」的登记：Dispose 已 _opening.Clear() 后，重开同一
+            // (type, assetPath) 会登记新 entry；旧打开的 finally 无条件 Remove 会误删新记录，
+            // 让去重失效或让新加入者永远等不到结算。
+            if (_opening.TryGetValue((type, entry.AssetPath), out var current) &&
+                ReferenceEquals(current, entry))
+            {
+                _opening.Remove((type, entry.AssetPath));
+            }
 
             if (entry.Joiners == null)
                 return;

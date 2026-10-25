@@ -88,19 +88,6 @@ namespace XFramework.XUI.View
         public bool IsPaused { get; private set; }
 
         /// <summary>
-        /// 本面板是否已被管理器回池（认领标记，R3-UIA-007）。
-        /// <para><c>Dispose</c> 的批量回池与在途打开续体的回滚共用 <c>RecyclePanel</c> 出口；
-        /// 没有这个标记，同一面板会被执行两次 <c>OnPoolRecycle</c> / 对话框结果兜底。</para>
-        /// </summary>
-        internal bool IsRecycled { get; private set; }
-
-        /// <summary>标记已回池；重复回池由调用方据此跳过。</summary>
-        internal void MarkRecycled() => IsRecycled = true;
-
-        /// <summary>面板重新入册时清除回池标记。</summary>
-        internal void MarkReopened() => IsRecycled = false;
-
-        /// <summary>
         /// 面板的每帧更新是否已因异常停更。
         /// <para>这是<strong>更新维度</strong>的第三种状态（正常 / 暂停 / 停更）：<see cref="UIViewBase.OnUpdate"/>
         /// 抛出异常后由 <c>UIManagerImpl</c> 置位，此后不再驱动本面板，直到它回池（下次打开自动复位）。</para>

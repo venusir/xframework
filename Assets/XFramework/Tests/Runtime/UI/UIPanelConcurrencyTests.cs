@@ -274,6 +274,84 @@ namespace XFramework.XUI.Tests
         }
 
         /// <summary>
+        /// Dispose 已把在途打开的面板回池后，续体不得再对它执行 OnClose（R4-UIA-001）。
+        /// <para>回池契约是 OnPoolRecycle；OnClose 只属于关闭路径。</para>
+        /// </summary>
+        [Test]
+        public async Task Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle()
+        {
+            GatedOnOpenPanel.Gate = new UniTaskCompletionSource();
+            try
+            {
+                var open = UIManager.OpenAsync<GatedOnOpenPanel>("ui/gated").Preserve();
+                await UniTask.Yield();
+
+                var panel = UIManager.GetPanel<GatedOnOpenPanel>();
+                Assert.IsNotNull(panel, "前提：面板已注册、OnOpen 在途");
+
+                UIManager.Destroy();
+                GatedOnOpenPanel.Gate.TrySetResult();
+                var result = await open;
+
+                Assert.IsNull(result, "管理器已销毁，打开应放弃");
+                Assert.IsFalse(panel.Logged("OnClose"), "Dispose 已回池后不得再跑 OnClose");
+                Assert.AreEqual(1, panel.PoolRecycleCount, "回池只应发生一次");
+                Assert.AreEqual(1, _factory.ReleaseCount, "工厂回收只应发生一次");
+            }
+            finally
+            {
+                GatedOnOpenPanel.Gate = null;
+            }
+        }
+
+        /// <summary>
+        /// Dispose 后重新 Initialize 并复用同一池化实例时，旧打开的续体不得关闭新面板（R4-UIA-001 的 ABA）。
+        /// </summary>
+        [Test]
+        public async Task Dispose_DuringInFlightOpen_ReinitializedPanelStaysOpen()
+        {
+            var oldGate = new UniTaskCompletionSource();
+            GatedOnOpenPanel.Gate = oldGate;
+            try
+            {
+                var oldOpen = UIManager.OpenAsync<GatedOnOpenPanel>("ui/gated").Preserve();
+                await UniTask.Yield();
+
+                var oldPanel = UIManager.GetPanel<GatedOnOpenPanel>();
+                Assert.IsNotNull(oldPanel, "前提：旧打开已注册、OnOpen 在途");
+
+                UIManager.Destroy();
+
+                // 新一次打开用新的闸门；池化实例会被复用
+                GatedOnOpenPanel.Gate = new UniTaskCompletionSource();
+                UIManager.PanelFactoryFactory = () => _factory;
+                UIManager.Initialize(_root.transform);
+                var newOpen = UIManager.OpenAsync<GatedOnOpenPanel>("ui/gated").Preserve();
+                await UniTask.Yield();
+                GatedOnOpenPanel.Gate.TrySetResult();
+                var newPanel = await newOpen;
+
+                Assert.IsNotNull(newPanel, "重新初始化后同地址应能打开");
+                Assert.IsTrue(newPanel.IsOpen, "前提：新面板已打开");
+
+                // 放行旧续体：它不得关闭/回滚复用后的新面板
+                oldGate.TrySetResult();
+                var oldResult = await oldOpen;
+
+                Assert.IsNull(oldResult, "旧打开属于已销毁的管理器，应返回 null");
+                Assert.AreSame(oldPanel, newPanel, "前提：池化实例被复用");
+                Assert.IsTrue(newPanel.IsOpen, "旧续体不得关闭复用后的新面板");
+                Assert.AreEqual(1, UIManager.GetState().OpenCount, "新管理器只应有一个打开的面板");
+                Assert.AreEqual(1, UIManager.Panels.Count, "新管理器只应有一个打开的面板");
+                Assert.AreEqual(1, newPanel.PoolRecycleCount, "只有 Dispose 的一次回池");
+            }
+            finally
+            {
+                GatedOnOpenPanel.Gate = null;
+            }
+        }
+
+        /// <summary>
         /// 回滚自身抛异常时，原始打开异常不得被覆盖，也不得二次回滚（R3-UIA-006）。
         /// </summary>
         [Test]

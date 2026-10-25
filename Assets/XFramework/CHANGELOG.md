@@ -257,6 +257,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `_sceneCapabilityWarned` / `_mainThreadViolationLogged`）——跨会话仍只报一次，换了会话就该重新提示。
   **重复 `Initialize()` 的语义没有变**：会话内的重复调用仍是「告警 + 忽略」。
 
+#### UI
+
+- **（行为变更）`Dispose` 后不再为在途打开补跑 `OnClose`（R4-UIA-001）**：管理器 `Dispose` 是同步回池，
+  清理契约是 `OnPoolRecycle`；在途打开的续体若发现面板已被回池/复用（回池世代变化），只放弃本次打开，
+  不再调用 `DoCloseAsync`。此前续体会在回池之后对同一实例执行 `OnClose`，池化实例被重新打开时甚至会把
+  新面板关掉。回归：`UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` /
+  `..._ReinitializedPanelStaysOpen`。
+
 #### Camera
 
 - **`SetLookAt(id, null)` 改为真正清除本地覆盖（2026-10-24，行为变更）**：此前直接写 `LookAt = null`，CM 的
@@ -742,6 +750,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **Dispose × 在途打开：续体在回池后仍执行 `OnClose`（R4-UIA-001）**：`Dispose` 经 `RecyclePanel` 回池并清
+  `_activePanels` 后，在途 `OpenAsync` 续体仍走 `DoCloseAsync + RollbackPanel`。面板被重新 `Initialize` 后
+  复用同一池化实例时，旧续体会关闭/回滚新面板。修法：`UIViewBase` 增加单调递增的 `RecycleGeneration`，
+  续体在 `!IsInitialized` 分支与 catch 回滚前比对；世代变化则只放弃本地引用。`SettleOpening` 同时改为
+  「键仍指向本 entry 才移除」，避免旧 finally 误删新登记。回归：
+  `UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` /
+  `..._ReinitializedPanelStaysOpen`（改前双红）。
 - **约定绑定节点类型不匹配/重名无告警（R3-UIB-009/013）**：`img_` 挂在没有 `Image` 的节点上静默跳过
   （与 README「未找到会告警」相反）；面板内同名约定节点后者覆盖前者、先出现的永久未绑。修法：编辑器下
   类型不匹配告警；同名节点只保留第一个并告警。回归：`UIPanelBindingConventionTests` 两例（改前均红）。
