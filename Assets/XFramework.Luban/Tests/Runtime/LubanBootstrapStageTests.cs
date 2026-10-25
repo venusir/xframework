@@ -99,6 +99,29 @@ namespace XFramework.XConfig.Luban.Tests
         }
 
         [Test]
+        public async Task JoinedInflight_ShutdownDoesNotDestroyExternalInit()
+        {
+            // R4-LBN-005：另一调用方已在途初始化时，阶段只是加入；Shutdown 不得销毁别人的状态。
+            var provider = new FakeLubanProvider { GateLoads = true };
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            LubanConfig.DataProviderFactory = () => provider;
+            var adapter = new FakeLubanAdapter();
+
+            var external = LubanConfig.InitializeAsync(adapter);
+            var stage = new LubanBootstrapStage(new FakeLubanAdapter());
+            var joined = stage.ExecuteAsync(new PipelineStageContext(), default);
+
+            provider.ReleaseLoads();
+            await external;
+            await joined;
+
+            Assert.That(LubanConfig.IsInitialized, Is.True);
+            stage.Shutdown();
+            Assert.That(LubanConfig.IsInitialized, Is.True, "阶段只是加入在途初始化，Shutdown 不得销毁");
+            Assert.That(adapter.UnregisterCalls, Is.EqualTo(0));
+        }
+
+        [Test]
         public async Task StageInitFails_ShutdownDoesNotDestroyManualInit()
         {
             LubanConfig.DataProviderFactory = () => new FakeLubanProvider

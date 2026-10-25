@@ -5,6 +5,17 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **引导阶段把「加入在途」误记为「本次创建」（R4-LBN-005）**：`_initializedByThisStage` 在 await 之前
+  无条件置真；另一调用方已在途初始化时，阶段只是加入同一次初始化，成功后却被记为所有者，
+  `Shutdown` 会 `Destroy` 别人的状态。修法：`LubanConfig` 增 internal `IsInitializing` / `CurrentImpl`；
+  阶段在调用前同步判定「本次创建」，捕获自己创建的实现实例，`Shutdown` 仅在「自有且当前实例未变」
+  时销毁。`Destroy` 后外部重建也不会被误销毁。回归：
+  `LubanBootstrapStageTests.JoinedInflight_ShutdownDoesNotDestroyExternalInit`（改前红）。
+
 ## [0.1.0] - 2026-10-24
 
 ### Added

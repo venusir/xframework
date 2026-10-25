@@ -21,6 +21,9 @@ namespace XFramework.XConfig.Luban
         private readonly int _phase;
         private bool _initializedByThisStage;
 
+        /// <summary>本阶段发起初始化时创建的实现实例；Shutdown 用它比对身份（R4-LBN-005）。</summary>
+        private LubanConfigImpl _ownedImpl;
+
         #endregion
 
         #region Construction
@@ -68,13 +71,22 @@ namespace XFramework.XConfig.Luban
 
             context.SetDescription("Loading Luban configs...");
 
-            // 标记在 await 之前：Shutdown 可能在初始化在途时到来，此时本阶段确实接管了这次初始化。
+            // 所有权在 await 之前判定：另一调用方已在途时本阶段只是加入，不得把自己记为所有者
+            // （R4-LBN-005）。标记仍在 await 之前——Shutdown 可能在初始化在途时到来，此时本阶段
+            // 确实接管了这次初始化，必须由它作废在途任务。
             // 失败路径必须复位，否则初始化失败后使用方手动注入的状态会在 Shutdown 时被销毁。
-            _initializedByThisStage = true;
+            bool ownsInit = !LubanConfig.IsInitializing;
+            _initializedByThisStage = ownsInit;
             try
             {
-                await LubanConfig.InitializeAsync(
+                var task = LubanConfig.InitializeAsync(
                     _adapter, _options, new PipelineProgressRelay(context), cancellationToken);
+
+                // InitializeAsync 在首个 await 之前已创建/复用 _impl；此刻捕获到的就是本次要用的实例。
+                if (ownsInit)
+                    _ownedImpl = LubanConfig.CurrentImpl;
+
+                await task;
             }
             catch
             {
@@ -88,6 +100,8 @@ namespace XFramework.XConfig.Luban
 
         /// <summary>
         /// 反向清理：只销毁本阶段自己初始化的那份。幂等。
+        /// <para>仅加入别人在途初始化时标记为 false；本阶段发起后外部又 <c>Destroy</c> 并重建时，
+        /// 当前实例与 <see cref="_ownedImpl"/> 不同，也不再销毁（R4-LBN-005）。</para>
         /// </summary>
         public void Shutdown()
         {
@@ -97,6 +111,13 @@ namespace XFramework.XConfig.Luban
             }
 
             _initializedByThisStage = false;
+            var owned = _ownedImpl;
+            _ownedImpl = null;
+
+            var current = LubanConfig.CurrentImpl;
+            if (current != null && !ReferenceEquals(current, owned))
+                return;
+
             LubanConfig.Destroy();
         }
 

@@ -34,6 +34,17 @@ namespace XFramework.XConfig.Luban
         public static bool IsInitialized => _impl != null && _impl.IsInitialized;
 
         /// <summary>
+        /// 是否有初始化任务在途（引导阶段所有权判定用，R4-LBN-005）。
+        /// <para>与 <see cref="InitializeAsync"/> 的并发共享同一判据；主线程单线程模型下「查后即调」无竞态。</para>
+        /// </summary>
+        internal static bool IsInitializing => _impl != null && _impl.IsInitializing;
+
+        /// <summary>
+        /// 当前实现实例（引导阶段在 Shutdown 时比对身份，防止外部 Destroy 后重建被误销毁）。
+        /// </summary>
+        internal static LubanConfigImpl CurrentImpl => _impl;
+
+        /// <summary>
         /// 已构造的整包 <c>Tables</c> 实例（保持为 <see cref="object"/>，包不引用 Luban 程序集）。
         /// <para>未初始化时抛 <see cref="InvalidOperationException"/>。</para>
         /// </summary>
