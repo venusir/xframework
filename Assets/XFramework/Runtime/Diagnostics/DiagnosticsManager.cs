@@ -87,10 +87,11 @@ namespace XFramework.XDiagnostics
                 }
             }
 
+            int order = SafeOrder(panel);
             int index = _panels.Count;
             for (int i = 0; i < _panels.Count; i++)
             {
-                if (_panels[i].Order > panel.Order)
+                if (SafeOrder(_panels[i]) > order)
                 {
                     index = i;
                     break;
@@ -190,6 +191,25 @@ namespace XFramework.XDiagnostics
                 LogManager.Exception(LogCategories.XFramework, e,
                     "读取诊断页签 Title 抛出异常，已使用类型名代替。");
                 return "(" + panel.GetType().Name + ")";
+            }
+        }
+
+        /// <summary>
+        /// 读取页签排序号的兜底（R4-DIAG-001）：第三方 getter 可能抛异常，登记与插入排序
+        /// 不能因此整体失败——与 <see cref="SafeTitle"/> 对称。兜底 <see cref="int.MaxValue"/>
+        /// 让坏页签排在末尾，不挤占框架页签的位置。
+        /// </summary>
+        private static int SafeOrder(IDiagnosticPanel panel)
+        {
+            try
+            {
+                return panel.Order;
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.XFramework, e,
+                    "读取诊断页签 Order 抛出异常，已按 int.MaxValue 排在末尾。");
+                return int.MaxValue;
             }
         }
 

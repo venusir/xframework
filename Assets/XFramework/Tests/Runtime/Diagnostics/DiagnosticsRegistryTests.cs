@@ -63,6 +63,30 @@ namespace XFramework.XDiagnostics.Tests
             public void Collect(IDiagnosticReport report) { }
         }
 
+        /// <summary>Order 的 getter 抛异常（R4-DIAG-001）。</summary>
+        private sealed class ThrowingOrderPanel : IDiagnosticPanel
+        {
+            public string Title => "ThrowingOrder";
+
+            public int Order => throw new InvalidOperationException("Order getter 坏了");
+
+            public void Collect(IDiagnosticReport report) { }
+        }
+
+        /// <summary>登记后可由测试把 Order getter 弄坏（R4-DIAG-001 第二条路径）。</summary>
+        private sealed class BreakableOrderPanel : IDiagnosticPanel
+        {
+            public bool Broken;
+
+            public string Title => "Breakable";
+
+            public int Order => Broken
+                ? throw new InvalidOperationException("Order getter 坏了")
+                : 0;
+
+            public void Collect(IDiagnosticReport report) { }
+        }
+
         #endregion
 
         #region Setup / Teardown
@@ -165,6 +189,37 @@ namespace XFramework.XDiagnostics.Tests
             Assert.AreEqual(2, DiagnosticsManager.PanelCount);
             Assert.IsTrue(DiagnosticsManager.IsRegistered(first));
             Assert.IsTrue(DiagnosticsManager.IsRegistered(second));
+        }
+
+        [Test]
+        public void Register_OrderGetterThrows_StillRegistersAtEnd()
+        {
+            DiagnosticsManager.Register(new FakePanel("Normal", 0));
+            var broken = new ThrowingOrderPanel();
+
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Order 抛出异常"));
+
+            DiagnosticsManager.Register(broken);
+
+            var buffer = new List<IDiagnosticPanel>();
+            DiagnosticsManager.CopyPanels(buffer);
+            Assert.AreEqual(2, buffer.Count);
+            Assert.AreSame(broken, buffer[1], "坏 Order 应兜底排到末尾（int.MaxValue）");
+        }
+
+        [Test]
+        public void Register_ExistingPanelOrderThrows_DoesNotBlockNewPanel()
+        {
+            var broken = new BreakableOrderPanel();
+            DiagnosticsManager.Register(broken);
+            broken.Broken = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("读取诊断页签 Order 抛出异常"));
+            var added = new FakePanel("New", 10);
+            DiagnosticsManager.Register(added);
+
+            Assert.AreEqual(2, DiagnosticsManager.PanelCount);
+            Assert.IsTrue(DiagnosticsManager.IsRegistered(added), "已登记页签的坏 Order 不得阻断新页签登记");
         }
 
         #endregion

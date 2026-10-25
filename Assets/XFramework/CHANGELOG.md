@@ -727,6 +727,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Diagnostics
 
+- **`Register` 的 `Order` 读取无异常隔离（R4-DIAG-001）**：`Title` 已有 `SafeTitle`，插入排序却仍裸读
+  第三方 `Order` getter——新页签的 getter 抛异常会让登记整体失败；已登记页签的 getter 变坏会让**其他**
+  页签也登记失败。修法：新增 `SafeOrder`（异常记 Error、按 `int.MaxValue` 排在末尾），新页签只读一次、
+  排序扫描内的每个已登记页签也经它。回归：
+  `DiagnosticsRegistryTests.Register_OrderGetterThrows_StillRegistersAtEnd` /
+  `Register_ExistingPanelOrderThrows_DoesNotBlockNewPanel`（改前双红）。
 - **注册表变空后报告与「复制」停在旧页签（DIAG-002）**：`DiagnosticsWindowModel.Tick` 在 `!HasPanels`
   时直接返回，`_report` 与 `Failed` 不清理，复制按钮仍输出上一个页签的陈旧内容。修法：变空时清空报告、
   复位失败标记，并在「本来有页签、这一次变空」时返回 `true` 请求一次重绘（空窗口的后续 Tick 仍返回

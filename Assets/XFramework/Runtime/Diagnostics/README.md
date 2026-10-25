@@ -91,7 +91,7 @@ Runtime/Diagnostics/
 
 - **按实例去重**：同一实例重复登记被静默忽略（记一条 Warning）。**幂等只覆盖同一实例**——不同实例即使标题相同也会各占一个页签；关闭域重载时用 `new` 登记会每进一次播放多出一个同名页签，请用静态只读实例或退出时 `Unregister`（DIAG-001）。
 - **标题可以重复**：不同实例用同一个 `Title` 时两个都保留，记一条 Warning——标题由各实现自己决定，框架不替调用方裁定。
-- **排序**：`Order` 升序，同值按注册先后（稳定）。`DiagnosticOrders.Framework = 0`、`DiagnosticOrders.User = 1000` 是建议值，不是约束。
+- **排序**：`Order` 升序，同值按注册先后（稳定）。`DiagnosticOrders.Framework = 0`、`DiagnosticOrders.User = 1000` 是建议值，不是约束。`Title` / `Order` 的 getter 抛异常时登记不会失败：`Title` 用类型名兜底，`Order` 按 `int.MaxValue` 排在末尾，各记一条 Error（R4-DIAG-001）。
 - `Title` 为 null 或空白会在登记时抛 `ArgumentException`；`panel` 为 null 抛 `ArgumentNullException`。
 
 ### 生命周期：域重载与关闭域重载

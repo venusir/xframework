@@ -26,6 +26,8 @@ namespace XFramework.XDiagnostics
 
         /// <summary>
         /// 展示顺序，升序；同值按注册先后（稳定）。<see cref="DiagnosticOrders"/> 给出了建议取值带。
+        /// <para>getter 抛异常时登记不会失败：按 <see cref="int.MaxValue"/> 兜底排在末尾并记录 Error
+        /// （R4-DIAG-001）。</para>
         /// </summary>
         int Order { get; }
 
