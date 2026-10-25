@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
+using UnityEngine.UI;
 using XFramework.XUpdate;
 
 namespace XFramework.XUI.Tests
@@ -176,6 +177,53 @@ namespace XFramework.XUI.Tests
 
             UIManager.SetLayerVisibility(UILayers.Default, true);
             Assert.IsTrue(container.gameObject.activeSelf);
+        }
+
+        [Test]
+        public async Task SetLayerVisibility_Restore_ReplaysDisabledInteractivity()
+        {
+            // R4-UIA-005：层隐藏时容器 inactive，GetComponentsInChildren 默认拿不到子节点的
+            // raycaster——此时 SetLayerInteractive(false) 只记住期望值，恢复可见后必须重放。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+
+            UIManager.SetLayerVisibility(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, false);
+            UIManager.SetLayerVisibility(UILayers.Default, true);
+
+            Assert.IsFalse(panel.Raycaster.enabled,
+                "层隐藏期间禁用的交互，恢复可见后必须重放");
+        }
+
+        [Test]
+        public async Task SetLayerInteractive_EnabledWhileHidden_ReplaysOnRestore()
+        {
+            // 反方向：隐藏期间恢复交互也不能被吞掉（否则查询说可交互、实际仍不可交互）。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Default);
+
+            UIManager.SetLayerInteractive(UILayers.Default, false);
+            UIManager.SetLayerVisibility(UILayers.Default, false);
+            UIManager.SetLayerInteractive(UILayers.Default, true);
+            UIManager.SetLayerVisibility(UILayers.Default, true);
+
+            Assert.IsTrue(panel.Raycaster.enabled,
+                "层隐藏期间恢复的交互，恢复可见后必须生效");
+        }
+
+        [Test]
+        public async Task SetLayerInteractive_BeforeContainerExists_AppliesToNewContainer()
+        {
+            // R4-UIA-005 的实测落点：面板自身的射线由 ApplyLayerInteractivity 补上，
+            // 但新建的层容器自带 GraphicRaycaster 没有落 _layerInteractive。
+            UIManager.SetLayerInteractive(UILayers.Popup, false);
+
+            await UIManager.OpenAsync<FakePanel>("ui/a", UILayers.Popup);
+
+            var container = _root.transform.Find($"Layer_{UILayers.Popup}");
+            Assert.IsNotNull(container);
+            var raycaster = container.GetComponent<GraphicRaycaster>();
+            Assert.IsNotNull(raycaster, "层容器应自带 GraphicRaycaster");
+            Assert.IsFalse(raycaster.enabled,
+                "新建层容器应落到已记录的交互状态（查询说禁用，容器就不该可交互）");
         }
 
         /// <summary>

@@ -594,7 +594,7 @@ Top (300)        — 顶层（Toast、加载提示、系统消息）
 Mask (500)       — 模态遮罩层（ShowMask 的默认值）
 ```
 
-层的整体开关可以**读回**：`UIManager.IsLayerVisible(layer)` / `UIManager.IsLayerInteractive(layer)`。它们读的是 `SetLayerVisibility` / `SetLayerInteractive` 记录下来的期望值，**不去查场景里的容器**——层容器还不存在（该层还没开过面板）时同样有答案；未被显式设置过的层一律答 `true`。这两个成员面向诊断与巡检（诊断窗口的 UI 页签在用），不是每帧路径。
+层的整体开关可以**读回**：`UIManager.IsLayerVisible(layer)` / `UIManager.IsLayerInteractive(layer)`。它们读的是 `SetLayerVisibility` / `SetLayerInteractive` 记录下来的期望值，**不去查场景里的容器**——层容器还不存在（该层还没开过面板）时同样有答案；未被显式设置过的层一律答 `true`。这两个成员面向诊断与巡检（诊断窗口的 UI 页签在用），不是每帧路径。新建层容器会按记录值初始化容器自身的 `GraphicRaycaster`；层恢复可见时也会重放一次交互状态（R4-UIA-005）。
 
 **排序空间**由 `UISorting` 单点定义，**不要在别处硬编码 `sortingOrder`**：
 

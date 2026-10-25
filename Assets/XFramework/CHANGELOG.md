@@ -811,6 +811,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **层交互状态在「先设交互、后建容器」时不落到新容器（R4-UIA-005，实测口径订正）**：审计假设层隐藏时
+  面板全 inactive、`SetLayerInteractive` 的 `GetComponentsInChildren` 拿不到面板 raycaster；实测
+  Unity 6000.4.5f1 下该 API 对「父节点 inactive、子节点 activeSelf」仍返回子节点，面板侧本来就落得下去
+  （两条显隐/交互组合用例在改前即绿）。真实缺口是新建层容器自带的 `GraphicRaycaster` 没有落
+  `_layerInteractive`，且可见性恢复没有统一入口。修法：抽出 `ApplyLayerInteractivityToContainer`，
+  `SetLayerInteractive` 与 `SetLayerVisibility(true)` 共用；新建容器按 `IsLayerInteractive` 初始化。
+  回归：`UILayerApiTests.SetLayerInteractive_BeforeContainerExists_AppliesToNewContainer`（改前红）；
+  `SetLayerVisibility_Restore_ReplaysDisabledInteractivity` / `SetLayerInteractive_EnabledWhileHidden_ReplaysOnRestore`
+  为现状守卫。
 - **回池钩子抛异常打断关闭收尾（R4-UIA-002）**：`RecyclePanel` 的 `OnPoolRecycle` 异常会先走 `finally`
   再向外抛，关闭路径的 `PanelClosedMessage` 与 `OnAfterCloseAsync` 整段跳过；`UIHudManager.RecycleHud`
   同形——`Detach` 的 fire-and-forget 续体会逃逸，`DiscardHud` 路径还会用回池异常替换原始 OnOpen 异常。

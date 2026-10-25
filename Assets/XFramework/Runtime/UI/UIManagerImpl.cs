@@ -1502,6 +1502,12 @@ namespace XFramework.XUI
             var container = GetLayerContainer(layer);
             if (container != null)
                 container.gameObject.SetActive(visible);
+
+            // 恢复可见时重放交互状态（R4-UIA-005）：当前 Unity 版本的 GetComponentsInChildren
+            // 对「父节点 inactive、子节点 activeSelf」仍会返回子节点，面板侧本来就落得下去；
+            // 但容器自身的 raycaster 与未来行为差异都靠这一句兜住，避免「查询说禁用、实际可交互」。
+            if (visible)
+                ApplyLayerInteractivityToContainer(layer);
         }
 
         public void SetLayerInteractive(int layer, bool interactive)
@@ -1511,9 +1517,21 @@ namespace XFramework.XUI
             // 记住期望值：层被整体禁用后，后续的焦点变化与打开都不该把它撤销
             _layerInteractive[layer] = interactive;
 
+            ApplyLayerInteractivityToContainer(layer);
+        }
+
+        /// <summary>
+        /// 把当前层的交互状态落到容器与已开面板的 raycaster 上。
+        /// <para>容器可能尚未创建（层未开过面板），此时只记录期望值；新建容器在
+        /// <see cref="GetOrCreateLayerContainer"/> 里补落。</para>
+        /// </summary>
+        private void ApplyLayerInteractivityToContainer(int layer)
+        {
             var container = GetLayerContainer(layer);
             if (container == null)
                 return;
+
+            bool interactive = IsLayerInteractive(layer);
 
             // 池化重载填充，避免 GetComponentsInChildren 每次分配一个数组
             using (ListPool<UnityEngine.UI.GraphicRaycaster>.GetPooled(out var raycasters))
@@ -1825,11 +1843,14 @@ namespace XFramework.XUI
             var canvas = go.AddComponent<Canvas>();
             canvas.overrideSorting = true;
             canvas.sortingOrder = UISorting.PanelOrder(layer, 0);
-            go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
+            var raycaster = go.AddComponent<UnityEngine.UI.GraphicRaycaster>();
 
             // 容器可能是「先被隐藏、之后才建出来」的：建好就立刻落到期望的显隐状态上
             if (!IsLayerVisible(layer))
                 go.SetActive(false);
+
+            // 同理，先 SetLayerInteractive 后建容器的序列也要落下去（R4-UIA-005）
+            raycaster.enabled = IsLayerInteractive(layer);
 
             return go.transform;
         }
