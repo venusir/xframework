@@ -43,5 +43,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - Luban 5.1.0（`Luban.7z` SHA256 `BAC9A1B8D69CFEAA7EF1D8C67B34A007324D1CD158E0B14294521B3879BA5213`）
   端到端导表：`cs-bin + bin`、`cs-simple-json + json` 均成功；
 - 生成物与官方 Unity 运行时 `com.code-philosophy.luban` v1.2.0 兼容（两种 target 均编译并运行通过）；
+- 2026-10-25 裸消费方探针：核心包与扩展包经本地 bare Git URL 装入 `Library/PackageCache`，
+  `testables` 下两个测试程序集实际产出；EditMode 76/76、PlayMode 65 通过 + 1 跳过（仓内守卫）、0 失败；
+- 2026-10-25 真实 YooAsset `EditorSimulate`：示例的 TextAsset 与 RawFile 两条加载路径均跑通
+  （RawFile 用独立 `RawPackage` + `PackRawFile`），`Tables` 注册与 `ConfigManager` 查询成功；
 - `Tables` 在 `namespace cfg`；数据每表一文件；`DataMap` 运行期是 `Dictionary<TKey,T>`；
   带索引 list 表无公开 `DataMap`，已通过 `DataList` + 键表达式重建验证。

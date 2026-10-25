@@ -517,7 +517,7 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 ### 7.9 开放项 / 未验证
 
 - **Luban 是否真的清理输出目录**：校验器注释如此声称，本轮未跑探针；LUB-02 / LUB-05 的严重度依赖该事实，建议实施前跑一次哨兵探针。
-- **真实 YooAsset 的 TextAsset/RawFile 加载**：未在 EditorSimulate / 真机跑；LUB-04 的成功路径仍属未验证。
+- **真实 YooAsset 的 TextAsset/RawFile 加载**：`[探针实测]` 2026-10-25 已在裸消费方工程用 EditorSimulate 跑通两条路径（示例 Data + 自定义 collector 地址规则 `configs/<表名>.json`；RawFile 用独立 `RawPackage` + `PackRawFile`），`Tables` 注册与 `ConfigManager` 查询均成功。真机 / IL2CPP 仍未验证。
 - **IL2CPP / Android / iOS**：未验证。
-- **消费方 UPM 布局**：未在裸消费方工程里跑 Luban 测试；LUB-22 为读码结论。
+- **消费方 UPM 布局**：`[探针实测]` 2026-10-25 在裸消费方工程验证：核心包与扩展包经本地 bare Git URL 装入 `Library/PackageCache`，`testables` 下列出的两个测试程序集实际产出；EditMode 76/76，PlayMode 65 通过 + 1 跳过（`LubanDependencyDeclarationTests` 按设计只在仓内运行）、0 失败。
 - **官方与第三方资料为 `[网读]`**，不是本地可复现的一手事实；本文件 §〇 的 `[一手核对]` / `[探针实测]` 仍以其自身标记为准。
