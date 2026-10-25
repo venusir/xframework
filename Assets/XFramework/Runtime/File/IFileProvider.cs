@@ -15,7 +15,9 @@ namespace XFramework.XFileManager
     /// <item>IO 失败（磁盘、网络错误等）→ 抛 <see cref="System.IO.IOException"/></item>
     /// <item><b>权限不足</b> → 桌面实现抛 <see cref="System.UnauthorizedAccessException"/>（它不是
     /// <see cref="System.IO.IOException"/> 的子类，调用方必须两者都接；R3-FILE-003）</item>
-    /// <item>参数非法（<c>null</c>、路径穿越等）→ 抛 <see cref="System.ArgumentNullException"/> / <see cref="System.ArgumentException"/></item>
+    /// <item><b>参数非法</b>（路径穿越 <c>..</c>、盘符、UNC 前导等）→ 抛 <see cref="System.ArgumentException"/>；
+    /// <b><c>null</c> / 空串合法</b>，表示域根目录，不抛（与 <see cref="FilePathUtility.TryNormalizeRelativePath"/>
+    /// 同口径；R4-FILE-001）</item>
     /// </list>
     /// </remarks>
     public interface IFileProvider

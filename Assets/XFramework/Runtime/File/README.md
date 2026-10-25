@@ -94,7 +94,7 @@ Runtime/File/
 | 文件不存在 | 读方法返回 `null`（非异常；移动端 Streaming 域 404 同样视为不存在） |
 | IO 失败  | 抛 `IOException`（磁盘、网络错误等）                               |
 | 权限不足  | 桌面实现抛 `UnauthorizedAccessException`（**不是 `IOException` 的子类**，调用方必须两者都接） |
-| 参数非法 | 抛 `ArgumentNullException` / `ArgumentException`                    |
+| 参数非法 | 抛 `ArgumentException`（路径穿越 `..`、盘符、UNC 前导等）；**`null` / 空串合法 = 域根目录**，不抛（R4-FILE-001） |
 
 ### 原子写入
 
