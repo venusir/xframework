@@ -1200,6 +1200,29 @@ namespace XFramework.XSave.Tests
         }
 
         [Test]
+        public async Task DeleteSlotAsync_BackupOnly_DeletesAndDoesNotRecover()
+        {
+            await SaveManager.SaveAsync(1);
+            await SaveManager.SaveAsync(1);   // 第二次覆盖产生一代 .bak
+            FileManager.Delete(FileDomain.SaveData, "slot_1.save");
+
+            Assert.IsTrue(await SaveManager.SlotExistsAsync(1), "前置：仅备份槽位查询为存在");
+
+            var deleted = await SaveManager.DeleteSlotAsync(1);
+
+            Assert.IsTrue(deleted, "仅备份槽位也应删除成功（R4-SAVE-002）");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData,
+                "slot_1.save" + FilePathUtility.BackupFileSuffix), "备份应一并清除");
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, SidecarPath + ".bak"), "侧车备份应清除");
+
+            await SaveManager.RecoverAsync();
+
+            Assert.IsFalse(FileManager.Exists(FileDomain.SaveData, "slot_1.save"),
+                "恢复扫描不得复活已删除的槽位");
+            Assert.IsFalse(await SaveManager.SlotExistsAsync(1));
+        }
+
+        [Test]
         public async Task DeleteSlotAsync_RemovesSidecarBackupAndTemp()
         {
             await SaveManager.SaveAsync(1);

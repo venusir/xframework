@@ -185,10 +185,12 @@ namespace XFramework.XSave
 
         /// <summary>
         /// 删除指定槽位的存档。
+        /// <para>「存在」同时看载荷与一代备份：只剩 <c>.bak</c> 的槽位同样可删，删除后恢复扫描不会把它复活
+        /// （R4-SAVE-002）。</para>
         /// </summary>
         /// <param name="slot">槽位号。</param>
         /// <param name="cancellationToken">取消令牌。</param>
-        /// <returns>确实删除了存档返回 <c>true</c>；槽位本就不存在返回 <c>false</c>。</returns>
+        /// <returns>确实删除了存档返回 <c>true</c>；载荷与备份都不存在返回 <c>false</c>。</returns>
         UniTask<bool> DeleteSlotAsync(int slot, CancellationToken cancellationToken = default);
 
         /// <summary>

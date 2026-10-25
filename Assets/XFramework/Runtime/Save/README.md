@@ -101,7 +101,7 @@ Runtime/Save/
 | `LoadAsync(int slot)`                                                             | 加载存档；失败抛异常                             |
 | `TryLoadAsync(int slot)`                                                          | 加载存档；失败以 `SaveLoadResult` 状态回报       |
 | `GetSlotMetasAsync()` / `GetSlotMetaAsync(int slot)`                              | 槽位元数据列表 / 单个槽位元数据                  |
-| `DeleteSlotAsync(int slot)`                                                       | 删除指定槽位，返回是否确有删除                   |
+| `DeleteSlotAsync(int slot)`                                                       | 删除指定槽位，返回是否确有删除（载荷或一代备份存在即算；含仅备份槽位） |
 | `DeleteAllSlotsAsync()`                                                           | 删除当前玩家上下文下的全部槽位，返回删除数量     |
 | `SlotExistsAsync(int slot)`                                                       | 检查槽位是否存在（谓词语义，非法槽位返回 false） |
 | `CopySlotAsync(int from, int to, bool overwrite)` / `MoveSlotAsync(...)`          | 槽位复制 / 移动                                  |

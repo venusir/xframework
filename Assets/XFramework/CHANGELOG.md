@@ -688,6 +688,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Save
 
+- **单槽删除只认载荷，不认备份（R4-SAVE-002）**：`DeleteSlotAsync` 只查 `slotPath`；只剩 `.bak` 的槽位在
+  `SlotExistsAsync` / `GetSlotMetaAsync` 里算「存在/可恢复」，单槽删除却返回 `false` 并留下 `.bak/.meta`，
+  下次恢复扫描把槽位复活。修法：存在性判定与 `SlotExistsAsync` 同口径（载荷 || 一代备份），命中后走
+  `DeleteSlotFilesAsync` 清全套。回归：`SaveManagerImplTests.DeleteSlotAsync_BackupOnly_DeletesAndDoesNotRecover`
+  （改前返回 false、恢复扫描复活）。
 - **恢复扫描不清 `.meta.tmp`（R3-SAVE-005）**：载荷存在时只清载荷 `.tmp`，侧车自己的 `.tmp` 永久残留。
   修法：同分支一并清 `metaPath + .tmp`。回归：`SaveManagerImplTests.RecoverAsync_PayloadPresent_ClearsMetaTemp`。
 - **缺失+备份损坏报 Missing、元数据查询无异常隔离（R3-SAVE-002/003）**：主文件缺失且备份损坏时按

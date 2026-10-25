@@ -701,7 +701,11 @@ namespace XFramework.XSave
             EnterBusy();
             try
             {
-                var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken);
+                // 「存在」与 SlotExistsAsync 同口径：只剩一代备份的槽位也算存在（R4-SAVE-002）。
+                // 只判载荷会让「仅备份」槽位返回 false 并留下 .bak，下次恢复扫描把它复活。
+                var exists = await FileManager.ExistsAsync(SaveDomain, slotPath, cancellationToken) ||
+                             await FileManager.ExistsAsync(
+                                 SaveDomain, slotPath + FilePathUtility.BackupFileSuffix, cancellationToken);
                 await ReturnToMainThread(cancellationToken);
 
                 if (!exists)
