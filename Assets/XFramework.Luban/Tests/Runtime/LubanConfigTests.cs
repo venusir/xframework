@@ -1,7 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
 using XFramework.XConfig;
 using XFramework.XConfig.Luban;
 
@@ -320,6 +323,28 @@ namespace XFramework.XConfig.Luban.Tests
             Assert.That(provider.LoadCalls, Is.EqualTo(1));
             Assert.That(adapter.CreateCalls, Is.EqualTo(1));
             Assert.That(adapter.RegisterCalls, Is.EqualTo(1));
+        }
+
+        [Test]
+        public async Task InitializeAsync_JoiningDifferentAdapter_Warns()
+        {
+            // R4-LBN-010：加入者的 adapter 不同时此前静默忽略，使用方以为注册的是自己的那套表。
+            var provider = new FakeLubanProvider { GateLoads = true };
+            provider.Data["demo_tbitem"] = new byte[] { 1 };
+            var firstAdapter = new FakeLubanAdapter();
+            var secondAdapter = new FakeLubanAdapter();
+
+            var first = LubanConfig.InitializeForTestsAsync(firstAdapter, provider);
+
+            LogAssert.Expect(LogType.Warning, new Regex("different adapter"));
+            var second = LubanConfig.InitializeForTestsAsync(secondAdapter, provider);
+
+            provider.ReleaseLoads();
+            await first;
+            await second;
+
+            Assert.That(firstAdapter.CreateCalls, Is.EqualTo(1));
+            Assert.That(secondAdapter.CreateCalls, Is.EqualTo(0), "加入者的 adapter 不生效");
         }
 
         [Test]

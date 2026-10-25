@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **加入在途初始化时 adapter 不同被静默忽略（R4-LBN-010）**：并发 `InitializeAsync` 共享首个调用方的
+  结果，但第二个调用方的 `adapter` 不同时没有任何提示——使用方以为注册的是自己的那套表。修法：记录
+  在途 adapter，加入者实例不同时 Warning（首个 adapter 仍然生效）。回归：
+  `LubanConfigTests.InitializeAsync_JoiningDifferentAdapter_Warns`（改前无告警）。
 - **Generator(write:true) 缺端到端覆盖（R4-LBN-004）**：此前所有用例 `write:false`，Writer/Emitter
   各自独立测，没有「解析 → 校验 → 发射 → 写盘」组合。补
   `LubanIntegrationGeneratorTests.Generate_WriteTrue_EmitsAllFilesAndManifest`：临时目录里为 fixture 的

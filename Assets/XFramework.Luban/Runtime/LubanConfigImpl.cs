@@ -28,6 +28,9 @@ namespace XFramework.XConfig.Luban
         private bool _isInitializing;
         private CancellationTokenSource _inflightCts;
 
+        /// <summary>在途初始化的首个调用方 adapter（R4-LBN-010：加入者 adapter 不同时告警）。</summary>
+        private ILubanConfigAdapter _inflightAdapter;
+
         private readonly struct InitWaiter
         {
             internal readonly int Generation;
@@ -88,12 +91,23 @@ namespace XFramework.XConfig.Luban
 
             if (_isInitializing)
             {
+                // R4-LBN-010：首个调用方的 adapter 生效；加入者的 adapter 被静默忽略会让
+                // 「注册了哪套表」与它以为的不同。
+                if (_inflightAdapter != null && !ReferenceEquals(_inflightAdapter, adapter))
+                {
+                    LogManager.Warning(LubanLog.Category,
+                        "InitializeAsync joined an in-flight initialization with a different adapter instance; " +
+                        "the first caller's adapter will be used ({0} instead of {1}).",
+                        _inflightAdapter.GetType().Name, adapter.GetType().Name);
+                }
+
                 await AwaitInitBroadcast(cancellationToken);
                 return;
             }
 
             int generation = _generation;
             _isInitializing = true;
+            _inflightAdapter = adapter;
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             _inflightCts = cts;
 
@@ -111,6 +125,10 @@ namespace XFramework.XConfig.Luban
             finally
             {
                 _isInitializing = false;
+                if (ReferenceEquals(_inflightAdapter, adapter))
+                {
+                    _inflightAdapter = null;
+                }
                 if (ReferenceEquals(_inflightCts, cts))
                 {
                     _inflightCts = null;
