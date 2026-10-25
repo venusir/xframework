@@ -45,6 +45,7 @@ Runtime/Localization/
 - 已做：**在途 `SwitchLanguageAsync` 的代次守卫**（2026-10-18 · `ea8dbd1`）——门面加实例代次，loader 捕获发起时实例 + 代次，`await` 后先查代次再解析，过期则 Warning + 丢弃；`SetInstance` 传同一实例不自增（LOC-004）。
 - 已做：**空语言表统一为「空表 = 缺表」**（2026-10-18 · `999f6ee`）——引导阶段 Warning + 跳过（不置已初始化），异步加载器维持硬失败；显式 `Initialize` 仍按调用方数据安装（LOC-006）。
 - 未做：**IL2CPP 下的「格式说明含 `{`」行为真机探针**（2026-10-20 · 承接 R3-LOC-003）——字面化逻辑由回归 `GetFormat_FormatSpecWithBrace_RendersLiterally` 在 Mono 下锁定，IL2CPP 上 `string.Format` 的行为是否一致只有真机构建能回答。配方：IL2CPP 构建跑同款输入（如 `{0:0{0}`），核对输出与 EditMode 一致。
+- 已做：**替换值中的花括号按字面输出**（2026-10-25 · `0fb50617`，R4-LOC-001，本轮修复）——`GetFormat` 路径对替换值里的 `{`/`}` 转义为 `{{`/`}}`，值里的 `{0}` 不再被二次解释；`Get` 不经过格式化、不转义。回归 `LocalizationManagerTests.GetFormat_PlaceholderValueWithCompositeItem_RendersLiterally`（改前输出 `值 X 结束`）。
 
 ## 审计轮次
 

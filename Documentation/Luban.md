@@ -527,3 +527,9 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 ### 7.10 R4 修复记录（2026-10-25）
 
 - 已做：**引导阶段区分「本次创建」与「加入在途」**（2026-10-25 · `19870f43`，R4-LBN-005，本轮修复）——`_initializedByThisStage` 原在 await 前无条件置真，另一调用方在途时阶段只是加入、成功后却被记为所有者，`Shutdown` 会销毁别人的状态。修法：`LubanConfig` 增 internal `IsInitializing` / `CurrentImpl`；阶段在调用前同步判定所有权、捕获自己创建的 impl，`Shutdown` 仅在「自有且当前实例未变」时销毁。回归 `LubanBootstrapStageTests.JoinedInflight_ShutdownDoesNotDestroyExternalInit`（改前红）。
+- 已做：**默认资产源的 TextAsset/RawFile 成功映射补覆盖**（2026-10-25 · `54d82535`，R4-LBN-002，本轮补测试）——抽出 internal 纯映射缝 `MapTextAssets` / `MapRawFile`（`LubanTextSlice` / `LubanRawSlice`，不含 YooAsset 类型），生产路径投影真实句柄后调用；测试覆盖有效/无效/Asset=null。真实句柄获取/释放仍由 EditorSimulate 探针背书（R4-PRB-07）。
+- 已做：**ProcessRunner 覆盖与显式 UTF-8**（2026-10-25 · `8ea4a122`，R4-LBN-003/015，本轮补测试）——补成功/非零/超时/大输出/中文五类子进程用例；`StandardOutputEncoding` / `StandardErrorEncoding` 设为 UTF-8。
+- 已做：**Generator(write:true) 端到端**（2026-10-25 · `eb8cef8f`，R4-LBN-004，本轮补测试）——临时目录「解析 → 校验 → 发射 → 写盘」，断言适配器、manifest 与 `result.Files` 全部落盘。
+- 已做：**provider 级错误带表名/location**（2026-10-25 · `24c52774`，R4-LBN-006，本轮修复）——整批加载失败时外层消息追加首个表名/location；逐表失败路径原本已带。
+- 已做：**加入在途时 adapter 不一致告警**（2026-10-25 · `804e9bb3`，R4-LBN-010，本轮修复）——记录在途 adapter，加入者实例不同时 Warning；首个 adapter 仍生效。
+- 已做：**删除未使用 using**（2026-10-25 · `a24166a9`，R4-LBN-017，本轮清理）——`LubanConfigImpl.cs` 的 `XFramework.XAsset`。

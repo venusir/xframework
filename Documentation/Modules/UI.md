@@ -186,4 +186,6 @@ README 只留使用方要知道的边界（「面板资源不会自动卸载」�
 - 已做：**层交互状态落到新建容器并在可见性恢复时重放**（2026-10-25 · `33241796`，R4-UIA-005，**实测口径订正**）——审计假设的「层隐藏时 `GetComponentsInChildren` 拿不到面板 raycaster」在 6000.4.5f1 下不成立（父节点 inactive、子节点 activeSelf 仍会返回）；真实缺口是新建层容器自带的 `GraphicRaycaster` 没落 `_layerInteractive`。修法：抽出 `ApplyLayerInteractivityToContainer`，`SetLayerInteractive` 与 `SetLayerVisibility(true)` 共用；新建容器按记录值初始化。回归 `SetLayerInteractive_BeforeContainerExists_AppliesToNewContainer`（改前红）；两条显隐/交互组合用例为现状守卫。
 - 已做：**控制器全关回调与消息同门控**（2026-10-25 · `7da3624b`，R4-UIB-003，行为变更）——`OnAllPanelsClosedAsync` 只在「确实发起过关闭且结束时 `OpenCount == 0`」时调用，与 `AllPanelsClosedMessage` 一致。回归 `UIPanelSelfCloseTests.CloseAllAsync_NoPanels_*` / `CloseAllAsync_ControllerBlocksClose_*`（改前控制器被无条件回调）。
 - 已做：**provider 换绑 / `HideHud` 异常隔离**（2026-10-25 · `9d77ac62`，R4-UIB-004）——先落新引用再 `SafeDetachAll` 回收旧 provider；`HideHud` 的 `Detach` 包 try/catch。回归 `UIAsyncTokenTests` 三例（改前换绑被旧 provider 异常阻断 / `HideHud` 外泄）。
+- 已做：**UI 补两条假 OnResume 守卫与 Dispose 隔离覆盖**（2026-10-25 · `e33a6d84`，R4-UIA-006，本轮补测试）——`PopToAsync` 目标已栈顶 / `PopToRootAsync` 栈深 ≤1；`Destroy` 时一个 provider 的 `DetachAll` 异常不阻断另一个。
+- 已做：**`img_` 源类型不匹配编辑器告警**（2026-10-25 · `e7d519cc`，R4-UIB-005）——三个分支都不匹配时 `#if UNITY_EDITOR` 打 Warning（带属性名/源类型），Release 零开销。回归 `UIPanelBindingConventionTests.ImgNodeWithUnsupportedSourceType_Warns`（改前静默）。
 

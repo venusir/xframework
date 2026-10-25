@@ -100,6 +100,9 @@ Runtime/Asset/
 - 已做：**`SetInstance` 按所有权处置旧实例**（2026-10-25 · `140f2b1f`，R4-AST-001，本轮修复）——框架 `InitializeAsync` 创建的旧实例退订并 Dispose；注入的 `AssetManagerImpl` 只退订；第三方实现不动；同引用只作废在途。回归 `AssetManagerFacadeTests` 三例（改前旧框架实例未处置 / 注入实例未退订）。
 - 已做：**`AssetBootstrapStage` 按「本次创建 + 代际未变」清理**（2026-10-25 · `6645fbad`，R4-AST-002，本轮修复）——另一调用方在途时阶段只加入、不拥有；使用方 `SetInstance` 换代际后 Shutdown 不销毁。回归 `BootstrapStageTests` 两例（改前双红）。
 - 已做：**三个热更入口校验包初始化状态**（2026-10-25 · `3b7e2e7a`，R4-AST-003，本轮修复）——`InitializeStatus != Succeed` 抛带包名 `InvalidOperationException`，不再落到上游裸异常/潜在 NRE。回归 `YooAssetPackageStateTests` 三例（改前均抛裸 `Exception`）。
+- 已做：**缺组件实例的日志/文档改为回池**（2026-10-25 · `c259a5e1`，R4-AST-004，本轮文案订正）——`InstantiateAsync<T>` 缺组件时 `DestroyInstance` 池未满会回池，日志与 README 从「销毁」改为「回池等待复用」。
+- 已做：**下载最终进度走隔离**（2026-10-25 · `98294b1a`，R4-AST-005，本轮修复）——`DownloadAssetsAsync` 的最终补发也经 `InvokeIsolated`；`GetInvocationList` 的每次事件分配写入 README 性能代价。
+- 已做：**会话复位覆盖在途创建的 impl**（2026-10-25 · `2719c4f2`，R4-AST-006，本轮修复）——门面记录 `_creatingImpl`，`ResetForNewSession` / `Destroy` 一并 `DetachSessionSubscriptions`。回归 `SessionResetTests.Asset_ResetDetachesLowMemoryHandlerFromInFlightCreatingImpl`（改前红）。
 
 ## 审计轮次
 

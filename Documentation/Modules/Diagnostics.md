@@ -54,4 +54,5 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - 已做：**`Clear()` 抹框架页签且包外无恢复入口已成文**（2026-10-19 · R3-DIAG-002，文档订正）——`Clear` 的 XML 写明「包外宿主无法恢复框架页签，需要时自行保存并重登记或不要调用」；**不新增公开恢复 API**（无使用方，公开面新增须单独确认）。
 - 已做：**`IDiagnosticPanel` 错误提示契约句与 README 计数订正**（2026-10-19 · R3-DIAG-003，文档订正）——「只显示一条错误提示」实际写提示 + 堆栈两条；README 的「十个文件」固定计数已删。
 - 已做：**`Order` getter 异常隔离**（2026-10-25 · `04ac1cbb`，R4-DIAG-001，本轮修复）——新增 `SafeOrder`（异常记 Error、按 `int.MaxValue` 排末尾），新页签与排序扫描都经它；`Title` / `Order` 两条隔离策略对齐。回归 `DiagnosticsRegistryTests` 两例（改前 Register 抛异常）。
+- 已做：**表头与分隔线共用尾部空列口径**（2026-10-25 · `aa10bb1b`，R4-DIAG-002，本轮修复）——表头行此前裁掉空尾列而分隔线仍按声明列数画；统一计算 `lastColumn`，表头/分隔线共用，数据行仍逐行去尾空白。回归 `DiagnosticReportFormatterTests.Table_EmptyTrailingColumn_HeaderAndSeparatorAgree`（改前 `--+-`）。
 

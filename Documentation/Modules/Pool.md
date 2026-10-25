@@ -59,4 +59,5 @@ Runtime/Pool/
 - 已做：**池的静态状态补 `ResetForNewSession`**（2026-10-17 · `e6166c1`，POOL-002）——`SubsystemRegistration` 清空 `_pools`/`_configs`（只丢引用不 Dispose），`CollectionPoolManager` 重建四个集合池的内部池；已登记 `AutoInitTests` 族清单。用户裁定：框架静态态复位，不保留跨会话池。
 - 不做：**`CollectionPoolManager.Register` 不收窄为 internal**（2026-10-18 · 裁定）——保持公开（集合池静态构造要用），XML/README 明示「仅供集合池静态构造、不要手动使用」（POOL-010）。无重开判据。
 - 已做：**租出回调异常时补调丢弃回调**（2026-10-20 · R3-POOL-001，本轮修复）——`Get` 的租出回调抛出后实例不再归还池、也不走 `onDestroy`/`IPoolDiscardable.OnDiscard`，资源静默泄漏。修法：失败分支调用丢弃回调（自身异常只记 Error）并 Warning；回归 `PoolTests.Get_RentCallbackThrows_InvokesDiscardCallback`。
+- 已做：**`Return` 满池丢弃回调异常隔离**（2026-10-25 · `9a72a70b`，R4-POOL-001，本轮修复）——与租出失败路径同形 try/catch 记 Error；XML/README 写明丢弃回调的两个触发点。回归 `PoolTests.Return_WhenPoolFull_DiscardCallbackThrows_IsIsolated`（改前异常外抛）。
 

@@ -78,6 +78,7 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 已做：**同一目标中途 cut 的事件例外文档化**（2026-10-25 · `abb7055c`，R4-CAM-001，本轮文档化）——A→B 混合途中再 cut 到同一 B 时 CM 不发 `Activated`；README/本文件写明明细，`CinemachineCameraEventTests.SameTargetCut_DuringBlend_*` 钉住现状。不补发事件（属行为变更，留待单独裁定）。
 - 已做：**外部 override 下 `SwitchTo` 接管 boost 归属**（2026-10-25 · `c70dcc17`，R4-CAM-002，本轮修复）——早退分支先 `RestorePreviousBoosted + Boost` 再结算；`CameraDirector` 的栈顶 no-op 不变。回归 `Activate_WhileExternalOverrideMakesTargetActive_TakesBoostOwnership`（改前 A 仍为 boost 值）。
 - 已做：**已销毁注册相机事件 id 稳定**（2026-10-25 · `d78031b9`，R4-CAM-005，本轮修复）——`FindSlotByCamera` / `ResolveCameraId` 改用 `ReferenceEquals`，事件不再退化为 `null`（外部相机）；`IsRegistered` / `CameraCount` 的死槽计数语义不变。回归 `DestroyedRegisteredActiveCamera_DeactivatedCarriesItsId`（改前 `deactivated:null`）。
+- 已做：**`Subscribe` 令牌说法与重载示例订正**（2026-10-25 · `27cca1bd`，R4-CAM-003/004，本轮文档订正）——删除不存在的 `destroyCancellationToken` 订阅用法；README 写明无类型 lambda 在三个重载间 CS0121；`Register(vcam)` 的 XML 写明 null 抛 `ArgumentNullException`。
 
 ## 沿革与已否决形状
 

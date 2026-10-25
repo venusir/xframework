@@ -66,3 +66,4 @@ Runtime/Pipeline/
 - 已做：**容器元素 null 校验**（2026-10-20 · R3-PIPE-001，本轮修复）——`ParallelStage`/`SequenceStage` 构造只校验列表 null/空，元素 null 在读 `Weight` 时抛裸 NRE；改为与 `AddStage(null)` 同形抛 `ArgumentNullException`。回归两例。
 - 已做：**非有限超时与取消路径沉降**（2026-10-20 · R3-PIPE-002/003，本轮修复）——`+∞` 超时会让 `TimeSpan.FromSeconds` 溢出；容器取消路径 `throw OCE` 跳过 `_aggregator.Settle()`。修法：入口把 ±∞/NaN 归一为「不启用」；`Settle` 移入 `finally`。回归 `PositiveInfinityTimeout_IsTreatedAsDisabled`。
 - 已做：**沉降后解除 Owner 引用**（2026-10-20 · R3-PIPE-004，本轮修复）——容器 `_stageCtx.Owner` 指向上一轮 `PipelineImpl`，长寿命容器跨管线复用时钉住管线与订阅者闭包。修法：`finally` 里把 `Owner` 置 null，上下文本身保留给诊断/测试读取；回归两容器各一例。
+- 已做：**容器成功返回时显式写终态**（2026-10-25 · `2511c2c0`，R4-PIPE-001，本轮修复）——原先依赖 `StageExecution` 的契约兜底，而兜底在容器 `finally` 清 `Owner` 之后，嵌套聚合收不到最终完成/进度。修法：成功分支在 finally 前 `SetProgress(1f)` + `SetState(Completed)`。回归：两容器 `Execute_Success_WritesCompletedTerminal`（改前上下文停在 Pending）。
