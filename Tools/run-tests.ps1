@@ -149,10 +149,10 @@ if ($UpdateLubanApiBaseline) {
     if ($Filter) {
         Write-Error "-UpdateLubanApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑基线 fixture 本身。"
     }
-    $Filter = "\.LubanPublicApiBaselineTests\."
+    $Filter = "\.(LubanPublicApiBaselineTests|LubanEditorPublicApiBaselineTests)\."
     $Platform = "PlayMode"
     $env:XFW_UPDATE_LUBAN_API_BASELINE = "1"
-    Write-Warning "Luban 公开 API 基线更新模式：将重写 LubanPublicApiBaseline.txt，并**按设计判为失败**——请审阅。"
+    Write-Warning "Luban 公开 API 基线更新模式：将重写 LubanPublicApiBaseline.txt 与 LubanEditorPublicApiBaseline.txt，并**按设计判为失败**——请审阅。"
 }
 
 # ---------- 定位仓库与 Unity ----------

@@ -5,7 +5,7 @@
 # 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
 #
 # 射程：Runtime 程序集 Venusy609.Xframework.Luban（公开类型与 public 成员）。
-# Editor 程序集 Venusy609.Xframework.Luban.Editor 不在射程内。
+# Editor 程序集 Venusy609.Xframework.Luban.Editor 另见同目录的 LubanEditorPublicApiBaseline.txt。
 XFramework.XConfig.Luban.ILubanConfigAdapter  ::  object CreateTables(System.Func<string, byte[]> loadBytes)
 XFramework.XConfig.Luban.ILubanConfigAdapter  ::  public interface
 XFramework.XConfig.Luban.ILubanConfigAdapter  ::  void RegisterToConfigManager(object tables)

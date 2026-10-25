@@ -346,6 +346,8 @@ await LubanConfig.InitializeAsync(adapter, new LubanOptions
 
 - 本包公开 API（`ILubanConfigAdapter`、`LubanOptions`、`LubanConfig`、`LubanConfigBridge`、
   `LubanBootstrapStage`、`LubanConfigException`、`LubanDataLoadMode`、`LubanInitReport`）按语义化版本承诺；
+- **Editor 程序集**（`LubanGeneratorSettings` / `LubanCodeTarget` / `LubanDataTarget`）另有公开 API 基线
+  守卫：变化会被测试发现并经人审，但**不承诺语义化版本**（Editor 面不是运行时契约）；
 - **生成代码的形状、`Tables` 的构造函数、`DataMap`/`Data`/`DataList` 的公开面属于 Luban**，
   本包只承诺「对 5.1.0 已验证」；升级 Luban 需重跑生成器与测试；
 - `.luban-integration-manifest` 与生成文件布局是内部实现，不作为对外契约。

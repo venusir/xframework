@@ -1,0 +1,30 @@
+# XFramework Luban Editor 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/LubanEditorPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateLubanApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
+#
+# 射程：Editor 程序集 Venusy609.Xframework.Luban.Editor（只反映编辑器编译产物）。
+# Runtime 程序集 Venusy609.Xframework.Luban 另见同目录的 LubanPublicApiBaseline.txt。
+XFramework.XConfig.Luban.Editor.LubanCodeTarget  ::  public enum : int
+XFramework.XConfig.Luban.Editor.LubanCodeTarget.CsBin  ::  = 0
+XFramework.XConfig.Luban.Editor.LubanCodeTarget.CsSimpleJson  ::  = 1
+XFramework.XConfig.Luban.Editor.LubanDataTarget  ::  public enum : int
+XFramework.XConfig.Luban.Editor.LubanDataTarget.Bin  ::  = 0
+XFramework.XConfig.Luban.Editor.LubanDataTarget.Json  ::  = 1
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings  ::  .ctor()
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings  ::  public sealed class : UnityEditor.ScriptableSingleton<XFramework.XConfig.Luban.Editor.LubanGeneratorSettings>
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.AdapterClassName  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.AdapterNamespace  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.CodeOutputDir  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.CodeTarget  ::  XFramework.XConfig.Luban.Editor.LubanCodeTarget
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.ConfPath  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.DataOutputDir  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.DataTarget  ::  XFramework.XConfig.Luban.Editor.LubanDataTarget
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.DotnetPath  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.ExtraArguments  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.GenerateRowInterfaces  ::  bool
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.IntegrationOutputDir  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.LubanDllPath  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.TablesClassName  ::  string
+XFramework.XConfig.Luban.Editor.LubanGeneratorSettings.TargetName  ::  string
