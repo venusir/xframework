@@ -114,9 +114,9 @@ if ($UpdateApiBaseline) {
     if ($Filter) {
         Write-Error "-UpdateApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑 API 基线 fixture 本身，不要再给过滤器。"
     }
-    $Filter = "\.PublicApiBaselineTests\."
+    $Filter = "\.(PublicApiBaselineTests|EditorPublicApiBaselineTests)\."
     $env:XFW_UPDATE_API_BASELINE = "1"
-    Write-Warning "API 基线更新模式：将重写 PublicApiBaseline.txt，并**按设计判为失败**——请读它打印的差异。"
+    Write-Warning "API 基线更新模式：将重写 PublicApiBaseline.txt 与 EditorPublicApiBaseline.txt，并**按设计判为失败**——请读它打印的差异。"
 }
 
 # ---------- Luban golden 更新模式 ----------

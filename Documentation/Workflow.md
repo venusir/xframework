@@ -103,7 +103,7 @@
 | `-ShrinkTolerance` | 全量跑时，用例总数比上次下降超过它就告警（发现「测试集静默缩水」）。**全量跑 0 用例直接判失败**（2026-10-14 补：缩到 0 恰好绕过上面那条告警，而它对使用者的呈现与真绿一模一样——详见 `Documentation/Ledger.md` 的「`Tests~` / 把测试移出包目录」条） |
 | `-UnityPath` | 留空则按 `ProjectSettings/ProjectVersion.txt` 自动探测 |
 | `-UseRepo` / `-Setup` | 强制在仓库本体跑（需先关编辑器）/ 创建测试壳后退出 |
-| `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`。自带过滤器（只跑基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
+| `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`（Runtime）与 `EditorPublicApiBaseline.txt`（Editor，同一开关覆盖两组）。自带过滤器（只跑两条基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。见 §六 |
 | `-UpdateLubanGolden` | Luban 扩展包的 golden-file 更新模式：重写生成夹具，**写完按设计判失败**；绿灯由不带开关的重跑给出。与 `-Filter`/`-Fixture` 及另外两个更新开关互斥 |
 | `-UpdateLubanApiBaseline` | Luban 扩展包的 Runtime 公开 API 基线更新模式；纪律同上（写盘后判失败） |
 

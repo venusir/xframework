@@ -1,0 +1,28 @@
+# XFramework Editor 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/EditorPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行——行尾漂移不算变化；其余任何一行的增删都是公开面变化。
+#
+# 本文件任何非注释行变化都意味着 Editor 公开 API 变化，按顺序处置：
+#   1) 公开 API 变更 / 破坏性变更：按 CLAUDE.md「提交拆分与授权」单独请用户确认；
+#   2) 破坏性变更：在 Assets/XFramework/CHANGELOG.md 的「破坏性变更迁移表」补一行（旧写法 → 新写法 → 说明）；
+#   3) 更新基线（-UpdateApiBaseline），随后不带开关重跑一次取绿灯；本文件与其 .meta 必须一起提交。
+#
+# 射程：Editor 程序集 Venusy609.Xframework.Editor（只反映编辑器编译产物）。
+# Runtime 程序集 Venusy609.Xframework 另见同目录的 PublicApiBaseline.txt。
+Venusy609.Xframework.Editor.XFrameworkDependencyInstaller  ::  public static class
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer  ::  public static class
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.Draw  ::  public static void(ref XFramework.XDiagnostics.DiagnosticItem item)
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.DrawKeyValue  ::  public static void(string label, string value)
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.DrawNotice  ::  public static void(XFramework.XDiagnostics.DiagnosticLevel level, string text)
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.DrawSection  ::  public static void(string title)
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.DrawTable  ::  public static void(XFramework.XDiagnostics.DiagnosticTable table)
+XFramework.Editor.Diagnostics.DiagnosticItemDrawer.DrawText  ::  public static void(string text)
+XFramework.Editor.Diagnostics.DiagnosticReportView  ::  public sealed class
+XFramework.Editor.Diagnostics.DiagnosticReportView#ctor  ::  public()
+XFramework.Editor.Diagnostics.DiagnosticReportView.Draw  ::  public void(XFramework.XDiagnostics.DiagnosticReport report)
+XFramework.Editor.Diagnostics.DiagnosticsWindow  ::  public sealed class : UnityEditor.EditorWindow
+XFramework.Editor.Diagnostics.DiagnosticsWindow#ctor  ::  public()
+XFramework.Editor.Diagnostics.IDiagnosticPanelView  ::  public interface
+XFramework.Editor.Diagnostics.IDiagnosticPanelView.Draw  ::  public void(XFramework.XDiagnostics.DiagnosticReport report)

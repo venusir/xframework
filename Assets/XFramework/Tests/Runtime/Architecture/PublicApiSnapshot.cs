@@ -48,7 +48,7 @@ namespace XFramework.Architecture.Tests
             "#   3) 更新基线（-UpdateApiBaseline），随后不带开关重跑一次取绿灯；本文件与其 .meta 必须一起提交。\n" +
             "#\n" +
             "# 射程：Runtime 程序集 Venusy609.Xframework（含非 sealed 类上的 protected 扩展点）。\n" +
-            "# Editor 程序集 Venusy609.Xframework.Editor 不在射程内（Runtime 测试程序集看不到它，要查得另写 EditMode fixture）。\n";
+            "# Editor 程序集 Venusy609.Xframework.Editor 另见同目录的 EditorPublicApiBaseline.txt。\n";
 
         /// <summary>基础类型别名表——只为可读性；其余一律全限定名，不留 using 歧义。</summary>
         private static readonly Dictionary<Type, string> Aliases = new Dictionary<Type, string>
@@ -89,9 +89,12 @@ namespace XFramework.Architecture.Tests
         }
 
         /// <summary>渲染成完整的基线文本（头部 + 行，`\n` 行尾）。</summary>
-        internal static string Render(Assembly assembly)
+        internal static string Render(Assembly assembly) => Render(assembly, Header);
+
+        /// <summary>按指定头部渲染基线文本——Runtime 与 Editor 两条基线共用同一个渲染器。</summary>
+        internal static string Render(Assembly assembly, string header)
         {
-            var sb = new StringBuilder(Header);
+            var sb = new StringBuilder(header);
             foreach (var line in Capture(assembly))
                 sb.Append(line).Append('\n');
             return sb.ToString();
