@@ -97,6 +97,9 @@ Runtime/Asset/
 - 不做：**EditorSimulate 在非编辑器平台静默降级为 Offline**（2026-10-18 · 实现裁定）——静默降级会让「模拟模式误打进包」永远不被发现；初始化失败必须显式可见。无重开判据。
 - 暂不做：**缓存 SimulateBuild 产物**（2026-10-18 · 上游行为核对）——YooAsset 每次调用都会重跑模拟构建；框架加缓存会引入失效判定与包复用语义冲突。重开判据：实测模拟构建成为进入播放的显著瓶颈。
 - 已做：**`DefaultGameLauncher` 的 Host 模式提示补 `RemoteServices` 前置**（2026-10-19 · R3-AST-009）——Inspector 提供 Host 但没有 `RemoteServices` 注入点，选 Host 必在启动抛 `ArgumentException`；字段 tooltip 已写明「需在引导代码里注入」。
+- 已做：**`SetInstance` 按所有权处置旧实例**（2026-10-25 · `140f2b1f`，R4-AST-001，本轮修复）——框架 `InitializeAsync` 创建的旧实例退订并 Dispose；注入的 `AssetManagerImpl` 只退订；第三方实现不动；同引用只作废在途。回归 `AssetManagerFacadeTests` 三例（改前旧框架实例未处置 / 注入实例未退订）。
+- 已做：**`AssetBootstrapStage` 按「本次创建 + 代际未变」清理**（2026-10-25 · `6645fbad`，R4-AST-002，本轮修复）——另一调用方在途时阶段只加入、不拥有；使用方 `SetInstance` 换代际后 Shutdown 不销毁。回归 `BootstrapStageTests` 两例（改前双红）。
+- 已做：**三个热更入口校验包初始化状态**（2026-10-25 · `3b7e2e7a`，R4-AST-003，本轮修复）——`InitializeStatus != Succeed` 抛带包名 `InvalidOperationException`，不再落到上游裸异常/潜在 NRE。回归 `YooAssetPackageStateTests` 三例（改前均抛裸 `Exception`）。
 
 ## 审计轮次
 

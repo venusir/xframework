@@ -521,3 +521,7 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 - **IL2CPP / Android / iOS**：未验证。
 - **消费方 UPM 布局**：`[探针实测]` 2026-10-25 在裸消费方工程验证：核心包与扩展包经本地 bare Git URL 装入 `Library/PackageCache`，`testables` 下列出的两个测试程序集实际产出；EditMode 76/76，PlayMode 65 通过 + 1 跳过（`LubanDependencyDeclarationTests` 按设计只在仓内运行）、0 失败。
 - **官方与第三方资料为 `[网读]`**，不是本地可复现的一手事实；本文件 §〇 的 `[一手核对]` / `[探针实测]` 仍以其自身标记为准。
+
+### 7.10 R4 修复记录（2026-10-25）
+
+- 已做：**引导阶段区分「本次创建」与「加入在途」**（2026-10-25 · `19870f43`，R4-LBN-005，本轮修复）——`_initializedByThisStage` 原在 await 前无条件置真，另一调用方在途时阶段只是加入、成功后却被记为所有者，`Shutdown` 会销毁别人的状态。修法：`LubanConfig` 增 internal `IsInitializing` / `CurrentImpl`；阶段在调用前同步判定所有权、捕获自己创建的 impl，`Shutdown` 仅在「自有且当前实例未变」时销毁。回归 `LubanBootstrapStageTests.JoinedInflight_ShutdownDoesNotDestroyExternalInit`（改前红）。

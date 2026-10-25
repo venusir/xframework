@@ -50,3 +50,4 @@ Runtime/Settings/
 
 
 - 已做：**SET-015 编译/运行探针与修复提示**（2026-10-18 · 独立工程 dotnet build + `SettingsManagerFacadeTests.Ref_FieldTypeMismatch_ThrowsWithRepairHint`）——`Initialize<T>(null)` 在 `(string, Func<T>, SettingsOptions)` 与 `(Func<T>, SettingsOptions)` 之间 CS0121（探针复现），XML 与 README 写明用命名实参或显式强转；`Ref<T,TField>` 字段类型不匹配时原抛 BCL 裸 `ArgumentException`，已包装为 `[SettingsManager]` 前缀 + 修复提示，不改签名。
+- 已做：**加密读侧解析切回主线程**（2026-10-25 · `c95b784d`，R4-SET-001，本轮修复）——内层同步时整段 `Load<T>` 在池线程（含 `JsonUtility.FromJson`），与 README 示例相反。修法：拆出 `DecryptToJson`（池线程 IO + 解密）与主线程解析；内层异步也显式 `SwitchToMainThread`，切回后解析前检查取消。回归 `EncryptedSettingsStoreTests.LoadAsync_SyncInner_DecryptsOnPoolAndParsesOnMainThread`（改前 `OnAfterDeserialize` 在池线程）。

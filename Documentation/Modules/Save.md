@@ -48,3 +48,4 @@ Runtime/Save/
 
 
 - 不做：**不为 `GetSlotMetasAsync(default)` 补显式重载/文档提示**（2026-10-18 · 独立工程 dotnet build 探针）——单实参 `default` 字面量正确绑定到 `(CancellationToken)` 重载（可选参数的 `(IProgress<SaveReport>, CancellationToken)` 候选被排除），未产生 CS0121；审计推断不成立。无重开判据。
+- 已做：**单槽删除认备份**（2026-10-25 · `e1afbd1b`，R4-SAVE-002，本轮修复）——`DeleteSlotAsync` 只查载荷，只剩 `.bak` 的槽位返回 false 且恢复扫描会复活。修法：存在性改 `payload || backup`，命中后走 `DeleteSlotFilesAsync` 清全套。回归 `SaveManagerImplTests.DeleteSlotAsync_BackupOnly_DeletesAndDoesNotRecover`（改前返回 false、恢复扫描复活）。

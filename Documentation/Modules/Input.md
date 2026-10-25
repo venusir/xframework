@@ -60,6 +60,8 @@ Runtime/Input/
 - 已做：**会话复位退订旧 provider 的 `InputSystem.onDeviceChange`**（2026-10-18 · `0a079d3`）——内部能力接口 + 幂等 `Attach/DetachDeviceChanges`，门面在丢引用前退订（只 `-=`、不 Dispose）；第三方 provider 需自行退订，README 已写明（INP-002）。
 - 已做：**同名动作跨已启用 map 加歧义 Warning**（2026-10-18 · `28fc37a`）——`GetAction` 命中后扫描其余已启用 map，按动作名 Warning 一次并指出胜出 map；解析仍按资产顺序，完整歧义解析不做（INP-014）。
 
+- 已做：**长按时长按 (action, playerId) 分键**（2026-10-25 · `d6a2b530`，R4-INP-001，本轮修复）——原两张表只按 action 名建键、Tick 只取 0 号 action 级边沿，`playerId > 0` 永远拿到 0 号的时长。修法：键改 `(action, playerId)`；`_durationRequests` 记录请求过的 pair，Tick 第二趟对 `playerId > 0` 读该玩家手柄控件边沿；三处清理点同步。回归 `InputSystemProviderTests.GetButtonPressDuration_IsPerPlayer`（改前 2P 拿到 1P 的时长）。
+
 ## 会话级复位：复现配方与实测结论（2026-10-01）
 
 **结论：机制已实测复现，不再是推理。** 且在**单个播放会话内**即可确定性重现——不依赖编辑器是否关闭域重载。

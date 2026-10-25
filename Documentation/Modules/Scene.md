@@ -91,6 +91,8 @@ Tests/Editor/Scene/              # EditMode：SceneLoadOptionsTests（纯结构�
 
 > 本节无 `未做` 条目——v1.1 三个候选经复核都是「条件触发才做」，故状态为 `暂不做`。
 
+- 已做：**激活失败告警守卫无效 Scene**（2026-10-25 · `2852de39`，R4-SCN-001，本轮修复）——自定义 loader 返回「非 default 句柄 + 无效 Scene」时，告警不再读 `Scene.name`，改用请求 location；句柄照常返回。回归 `SceneLoadTests.LoadSceneAsync_ActivateWithInvalidScene_WarnsWithLocationAndReturnsHandle`（改前告警不含 location）。
+
 ## 审计轮次
 
 ### 实施轮（2026-10-13）

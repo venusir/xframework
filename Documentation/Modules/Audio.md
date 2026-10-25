@@ -66,6 +66,8 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - 未做：**`TryReserve` 的线性扫描**（2026-10-01 · v1 记录）——O(槽位数)，`MaxVoices` 默认 32；若将来允许把上限调到很大，需要换空闲链表。
 - 未做：**门面没有逐 voice 明细回读**（2026-10-01 · v1 记录；2026-10-17 第二轮审计刷新）——`CopyChannels` 已提供通道级回读（见上方「已推翻」条）；剩余的是逐 voice 明细，会泄漏 internal 结构，形状未定。重开判据：出现需要逐 voice 诊断的真实使用方。
 
+- 已做：**Free 槽坏源在原下标重建**（2026-10-25 · `b9b3a67f`，R4-AUD-001，本轮修复）——外部销毁宿主/播放源后 `Source` 为 Unity 伪 null，`TryReserve` 恒取该 Free 槽且不重建，每次播放都失败。修法：`AudioVoice` 记槽位 GameObject；命中坏源时补 `AudioSource` 或按原名重建 `Voice {n}`，保留旧代际后递增。回归 `AudioPoolTests.ExternallyDestroyedHost_NextPlayRebuildsSlotAndSucceeds` / `ExternallyDestroyedSource_NextPlayRebuildsSource`（改前第二次播放取不到播放源）。
+
 ## 与其它模块的边界（下一轮审计时先看这里）
 
 - **对 `XAsset` 的接触只有两处**：`AudioClipLease.cs` 与 `AudioClipLoader.cs`。审计时若发现第三处，那是边界泄漏。

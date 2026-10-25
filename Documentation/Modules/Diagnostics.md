@@ -53,4 +53,5 @@ Tests/Editor/Diagnostics/     列宽分配纯函数、窗口内核
 - 已做：**`Register` 的标题读取异常隔离**（2026-10-20 · R3-DIAG-001，本轮修复）——坏 getter 会让登记整体抛出，幂等判定与冲突扫描一并失效，与渲染侧 `SafeTitle` 不对称。修法：登记侧新增私有 `SafeTitle`（异常记 Error、以「(类型名)」兜底），两处读取都经它；回归 `DiagnosticsRegistryTests` 两例（改前 getter 异常外泄）。
 - 已做：**`Clear()` 抹框架页签且包外无恢复入口已成文**（2026-10-19 · R3-DIAG-002，文档订正）——`Clear` 的 XML 写明「包外宿主无法恢复框架页签，需要时自行保存并重登记或不要调用」；**不新增公开恢复 API**（无使用方，公开面新增须单独确认）。
 - 已做：**`IDiagnosticPanel` 错误提示契约句与 README 计数订正**（2026-10-19 · R3-DIAG-003，文档订正）——「只显示一条错误提示」实际写提示 + 堆栈两条；README 的「十个文件」固定计数已删。
+- 已做：**`Order` getter 异常隔离**（2026-10-25 · `04ac1cbb`，R4-DIAG-001，本轮修复）——新增 `SafeOrder`（异常记 Error、按 `int.MaxValue` 排末尾），新页签与排序扫描都经它；`Title` / `Order` 两条隔离策略对齐。回归 `DiagnosticsRegistryTests` 两例（改前 Register 抛异常）。
 

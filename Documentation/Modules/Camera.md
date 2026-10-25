@@ -75,6 +75,9 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 暂不做：**自定义 `AnimationCurve` 混合 / 震屏通道·位置·多源 / `SetFieldOfView` 补间 / `TopCameraId` / `Clear(resetBrainState)` / 消息带 Brain token / `GetCustomBlender` 接管**（2026-10-24）——当前无真实使用方。重开判据：出现对应需求。
 - 暂不做：**timeScale 策略（`CutWhenPaused` / `Unscaled` / 看门狗超时）**（2026-10-24）——先只写文档；需要新的 options / 重载，且 `Unscaled` 要临时改 `Brain.IgnoreTimeScale`（全局状态保存/恢复）。重开判据：真实项目在暂停菜单里 `await` 相机过渡。
 - 待裁：**`Rebind(CinemachineBrain)` / `Initialize(brain, replaceExisting)`（跨场景 Brain 重绑）、多 Brain 检测告警、`GetBlendOverride` 被他人覆盖的检测、主线程断言第四份、`IsInitialized` 随 Brain 销毁降级（`HasOutputDriver`）、boost 期间作者改优先级的「比较-恢复」**（2026-10-24）。
+- 已做：**同一目标中途 cut 的事件例外文档化**（2026-10-25 · `abb7055c`，R4-CAM-001，本轮文档化）——A→B 混合途中再 cut 到同一 B 时 CM 不发 `Activated`；README/本文件写明明细，`CinemachineCameraEventTests.SameTargetCut_DuringBlend_*` 钉住现状。不补发事件（属行为变更，留待单独裁定）。
+- 已做：**外部 override 下 `SwitchTo` 接管 boost 归属**（2026-10-25 · `c70dcc17`，R4-CAM-002，本轮修复）——早退分支先 `RestorePreviousBoosted + Boost` 再结算；`CameraDirector` 的栈顶 no-op 不变。回归 `Activate_WhileExternalOverrideMakesTargetActive_TakesBoostOwnership`（改前 A 仍为 boost 值）。
+- 已做：**已销毁注册相机事件 id 稳定**（2026-10-25 · `d78031b9`，R4-CAM-005，本轮修复）——`FindSlotByCamera` / `ResolveCameraId` 改用 `ReferenceEquals`，事件不再退化为 `null`（外部相机）；`IsRegistered` / `CameraCount` 的死槽计数语义不变。回归 `DestroyedRegisteredActiveCamera_DeactivatedCarriesItsId`（改前 `deactivated:null`）。
 
 ## 沿革与已否决形状
 
