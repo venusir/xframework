@@ -71,7 +71,7 @@ Runtime/Serialize/
 本模块的实现方入口：实现并注册序列化器。
 
 - **实现哪个契约**：`ISerializer`（`Format` 字符串 + 同步的 `Serialize` / `Deserialize`）。
-- **怎么接线**：`Serializer.Register(serializer)` / `Unregister(format)`；替换内置格式时直接 `Register` 同名实现即可覆盖（后注册者胜），初始化之前注册则会被 `Initialize` 保留并打一条告警。
+- **怎么接线**：`Serializer.Register(serializer)` / `Unregister(format)`；替换内置格式时直接 `Register` 同名实现即可覆盖（后注册者胜），初始化之前注册则会被 `Initialize` 保留并打一条告警。**但会话复位会清掉更早的注册**：`SubsystemRegistration` 档的 `ResetForNewSession` 先 `Shutdown` 再 `Initialize`，在它之前完成的注册（静态初始化、更早的 `SubsystemRegistration` 回调、上一会话）不会保留、也不会出现那条告警（R4-SER-001）。
 - **要守什么**：格式名是跨模块契约（`DataSnapshot.defaultFormat` / `DataBlockSnapshot.format` 用它）；替换 `"json"` 是全局动作；未注册的格式 `Get` 抛 `KeyNotFoundException`，`Default` 在 `json` 未注册时抛 `InvalidOperationException`（见「已知限制」）。
 
 实现 `ISerializer`，然后注册：
@@ -83,6 +83,8 @@ Serializer.Register(new MyMessagePackSerializer());
 > **替换内置格式**（如用自定义实现接管 `"json"`）：初始化**之后**直接 `Register` 同名实现即可覆盖（后注册者胜）；
 > 初始化**之前**注册则 `Initialize` 会保留你的并打一条 `[Serialize]` 告警、不再静默覆盖。两种时机都可用，
 > 区别只是初始化之前注册会多一条告警。
+> **例外**：`ResetForNewSession`（`SubsystemRegistration`）先 `Shutdown` 再 `Initialize`——在它之前完成的注册
+> 会被清掉，且没有告警；需要跨会话保留请在复位之后重新注册（R4-SER-001）。
 > 想恢复内置实现请 `Unregister("json")` 后重新 `Register(new NewtonsoftSerializer())`。
 > （`Register` 本身的「同名覆盖」不变——那是显式动作。）
 
