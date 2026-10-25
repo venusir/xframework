@@ -30,6 +30,7 @@ namespace XFramework.XUI.Tests
             _root = new GameObject("UIRoot_PauseTest", typeof(RectTransform));
 
             _factory = new FakePanelFactory();
+            _factory.RegisterPanel<FakePanel>();
             _factory.RegisterPanel<UpdateRecordingPanel>();
             _factory.RegisterPanel<FakePanelB>();
 
@@ -132,6 +133,30 @@ namespace XFramework.XUI.Tests
                 "已聚焦的面板重开不应补发 OnFocus（R3-UIA-005）");
             Assert.IsFalse(panel.Logged("OnResume"),
                 "未暂停的面板重开不应补发 OnResume（R3-UIA-005）");
+        }
+
+        [Test]
+        public async Task PopToAsync_TargetAlreadyTop_DoesNotEmitFakeResume()
+        {
+            // R4-UIA-006：目标已是栈顶时 PopTo 不得补发一次假的 OnResume。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a");
+
+            await UIManager.PopToAsync<FakePanel>();
+
+            Assert.IsFalse(panel.Logged("OnResume"), "目标已是栈顶时不得补发 OnResume");
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "面板应保持打开");
+        }
+
+        [Test]
+        public async Task PopToRootAsync_SinglePanel_DoesNotEmitFakeResume()
+        {
+            // R4-UIA-006：栈深 ≤ 1 时 PopToRoot 不得补发一次假的 OnResume。
+            var panel = await UIManager.OpenAsync<FakePanel>("ui/a");
+
+            await UIManager.PopToRootAsync();
+
+            Assert.IsFalse(panel.Logged("OnResume"), "栈深 ≤ 1 时不得补发 OnResume");
+            Assert.IsTrue(UIManager.IsOpen<FakePanel>(), "唯一的面板应保留");
         }
 
         #endregion

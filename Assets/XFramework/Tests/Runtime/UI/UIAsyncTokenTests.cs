@@ -162,6 +162,25 @@ namespace XFramework.XUI.Tests
         }
 
         [Test]
+        public void Destroy_OneProviderDetachAllThrows_OtherStillDetached()
+        {
+            // R4-UIA-006：R3-UIA-004 的 Dispose 隔离此前无直接用例。
+            var hud = new FaultyHudProvider { ThrowOnDetachAll = true };
+            var tip = new CountingTipProvider();
+            UIManager.SetHudProvider(hud);
+            UIManager.SetTipProvider(tip);
+
+            LogAssert.Expect(LogType.Error, new Regex("HUD provider.DetachAll 抛出异常"));
+
+            UIManager.Destroy();
+
+            Assert.AreEqual(1, hud.DetachAllCount);
+            Assert.AreEqual(1, tip.DetachAllCount, "一个 provider 的异常不得阻断另一个的回收");
+
+            hud.ThrowOnDetachAll = false;
+        }
+
+        [Test]
         public async Task CloseAllAsync_DetachesHudAndTips()
         {
             await UIManager.CloseAllAsync();

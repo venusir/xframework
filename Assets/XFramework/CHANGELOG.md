@@ -867,6 +867,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
+- **UI 两条假 OnResume 守卫与 Dispose provider 隔离的直接覆盖（R4-UIA-006）**：补
+  `PopToAsync` 目标已是栈顶、`PopToRootAsync` 栈深 ≤ 1 两条假 `OnResume` 守卫用例，以及 `Destroy` 时
+  一个 provider 的 `DetachAll` 抛异常不阻断另一个的用例（此前只有 `CloseAllAsync` 有同型覆盖）。
+  测试补齐，无行为变更。
 - **provider 换绑与 `HideHud` 的异常未隔离（R4-UIB-004）**：`SetTipProvider` / `SetHudProvider` 先对旧
   provider 调 `DetachAll` 再赋值新引用——旧实现抛异常时新 provider 根本装不上，管理器停在旧实现上；
   `HideHud` 直接调第三方 `Detach`，异常从同步 API 外泄。修法：先落新引用（含同引用早退），再经
