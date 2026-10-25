@@ -540,6 +540,9 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 - 对象池复用实例，减少 `Instantiate`/`Destroy` 开销；回池实例取出无需重新加载
 - `GetPoolStatus` 的活跃计数由 `OnEnable`/`OnDisable` 统计，无每帧轮询
 - 加载族路径无每帧闭包分配（`PreloadAllAsync` 的进度聚合闭包仅在启动期一次性调用）
+- **下载器事件逐订阅者隔离的分配代价**：`AssetDownloaderHandle.InvokeIsolated` 每次事件调用
+  `GetInvocationList()` 分配一个 `Delegate[]`（R3-AST-006 的修复代价）；下载进度事件频率较高时是可观测的
+  GC 源。单订阅者也没有零分配快路径——`Delegate` 无法在不枚举调用列表的情况下区分多播（R4-AST-005）。
 - **同步 API 的代价**：`LoadSync`/`InstantiateSync` 阻塞调用线程；远端未下载时可能长时间卡住，运行时高频路径禁用
 
 ## 已知限制

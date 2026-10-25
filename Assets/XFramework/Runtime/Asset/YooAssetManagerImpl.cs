@@ -369,8 +369,10 @@ namespace XFramework.XAsset
                 handle.Begin();
 
                 bool success = await handle.WaitAsync(cancellationToken);
-                // 下载器结束时可能不触发最终进度回调（如无待下载内容），补发一次最终值
-                progress?.Invoke(success ? 1f : handle.Progress);
+                // 下载器结束时可能不触发最终进度回调（如无待下载内容），补发一次最终值。
+                // 与其他进度事件同样逐订阅者隔离（R4-AST-005）：回调抛异常不得让已成功的下载以异常收场。
+                AssetDownloaderHandle.InvokeIsolated(
+                    progress, success ? 1f : handle.Progress, "ProgressChanged");
                 return success;
             }
             finally

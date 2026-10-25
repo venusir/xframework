@@ -497,6 +497,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **下载最终进度补发未隔离订阅者异常（R4-AST-005）**：`DownloadAssetsAsync` 在 `WaitAsync` 后直接
+  `progress?.Invoke(...)`；回调抛异常会让已经成功的下载以异常收场（其他进度事件已逐订阅者隔离）。
+  修法：最终补发也走 `AssetDownloaderHandle.InvokeIsolated`。同时把 `GetInvocationList()` 的
+  每次事件分配写入 README 性能代价（单订阅者也无零分配快路径）。无行为变更（正常回调路径不变）。
 - **缺组件实例的日志/文档写成「销毁」（R4-AST-004）**：`InstantiateAsync<T>` 缺组件时日志写
   "Destroying instance to prevent resource leak"，README 也写「销毁实例」；实际 `DestroyInstance` 在池未满时
   回池复用。修法：日志改为 "Returning instance to the pool for reuse."，README 同步为「回池等待复用」。
