@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **Generator(write:true) 缺端到端覆盖（R4-LBN-004）**：此前所有用例 `write:false`，Writer/Emitter
+  各自独立测，没有「解析 → 校验 → 发射 → 写盘」组合。补
+  `LubanIntegrationGeneratorTests.Generate_WriteTrue_EmitsAllFilesAndManifest`：临时目录里为 fixture 的
+  每张 `Tb*` 表补数据文件，断言适配器、manifest 与 `result.Files` 全部落盘。
 - **ProcessRunner 的进程控制与编码补覆盖（R4-LBN-003/015）**：`Run` 的超时、`Kill`、退出码、
   stdout/stderr 截断与编码此前零直接覆盖（`LubanProcessRunnerTests` 只测输出缓冲）。补成功 / 非零 /
   超时 / 大输出 / 中文五类用例（用当前平台 shell 构造可控子进程）；`StandardOutputEncoding` /

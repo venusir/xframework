@@ -134,6 +134,52 @@ namespace XFramework.XConfig.Luban.Editor.Tests
             }
         }
 
+        [Test]
+        public void Generate_WriteTrue_EmitsAllFilesAndManifest()
+        {
+            // R4-LBN-004：此前所有用例 write:false，Writer/Emitter 各自独立测，没有「解析 → 校验 →
+            // 发射 → 写盘」的端到端覆盖。
+            string root = CreateProject();
+            try
+            {
+                CopyCodeFixture("Bin", root);
+                string dataDir = Path.Combine(root, "Assets", "Gen", "Data");
+                Directory.CreateDirectory(dataDir);
+                // 为 fixture 里的每张 Tb* 表补一个数据文件（写盘校验要求全部存在）
+                string[] tableFiles = Directory.GetFiles(
+                    Path.Combine(root, "Assets", "Gen", "Code"), "Tb*.cs", SearchOption.AllDirectories);
+                Assert.That(tableFiles, Is.Not.Empty, "fixture 应包含 Tb* 表");
+                for (int i = 0; i < tableFiles.Length; i++)
+                {
+                    string table = Path.GetFileNameWithoutExtension(tableFiles[i]).ToLowerInvariant();
+                    File.WriteAllBytes(Path.Combine(dataDir, "demo_" + table + ".bytes"), new byte[] { 1 });
+                }
+
+                var result = LubanIntegrationGenerator.Generate(_settings, root, write: true);
+
+                Assert.That(result.Succeeded, Is.True, string.Join("\n", result.Errors));
+                Assert.That(result.Files, Is.Not.Empty);
+
+                string integration = Path.Combine(root, "Assets", "Gen", "Integration");
+                Assert.That(Directory.Exists(integration), Is.True, "接入代码目录应被创建");
+                Assert.That(File.Exists(Path.Combine(integration, result.AdapterPath)), Is.True,
+                    "适配器应写盘");
+                Assert.That(File.Exists(Path.Combine(
+                        integration, LubanIntegrationWriter.ManifestFileName)), Is.True,
+                    "manifest 应写盘");
+
+                for (int i = 0; i < result.Files.Count; i++)
+                {
+                    Assert.That(File.Exists(Path.Combine(integration, result.Files[i])), Is.True,
+                        "声明的生成文件必须实际落盘：" + result.Files[i]);
+                }
+            }
+            finally
+            {
+                Directory.Delete(root, true);
+            }
+        }
+
         private static string CreateProject()
         {
             string root = Path.Combine(
