@@ -62,6 +62,18 @@ namespace XFramework.XAsset
         public static bool IsInitialized => _instanceInitialized && _instance != null;
 
         /// <summary>
+        /// 是否有初始化任务仍在途（测试缝 / 引导阶段所有权判定）。
+        /// <para>与 <see cref="InitializeAsync"/> 的并发共享同一判据；主线程单线程模型下「查后即调」无竞态。</para>
+        /// </summary>
+        internal static bool IsInitializing => _initializeTask.Status == UniTaskStatus.Pending;
+
+        /// <summary>
+        /// 当前初始化代际号。引导阶段在初始化前捕获、<c>Shutdown</c> 时比对：代际变化说明使用方
+        /// 已 <see cref="Destroy"/> 或 <see cref="SetInstance"/>，阶段不得再销毁当前实例（R4-AST-002）。
+        /// </summary>
+        internal static int CurrentInitGeneration => _initGeneration;
+
+        /// <summary>
         /// 初始化全局资源管理器（默认包）。
         /// <para>并发调用共享同一进行中的初始化任务；<b>options、progress 与取消令牌一律取首个调用者</b>，
         /// 其余调用者的这三项不参与该任务（不告警）。</para>

@@ -489,6 +489,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **`AssetBootstrapStage` 只凭一个标志判断所有权，会销毁使用方换入/别人在途初始化的实例（R4-AST-002）**：
+  `_initializedByThisStage` 在 await 之前无条件置真，不校验「本次是否由本阶段发起」，也不校验当前实例
+  是否仍是自己初始化出来的那一份——使用方 `SetInstance(custom)` 后 `Bootstrap.Shutdown()` 仍会
+  `Destroy()` 掉 custom；另一调用方的手动初始化在途时，阶段只是加入也会在 Shutdown 时销毁别人的状态。
+  修法：`AssetManager` 增 internal `IsInitializing` / `CurrentInitGeneration`；阶段在调用前同步判定
+  「本次创建」并在 Shutdown 比对代际号，只在「本次创建且代际未变」时销毁。回归：
+  `BootstrapStageTests.AssetBootstrapStage_InitializedByStage_ThenSetInstance_ShutdownDoesNotDestroyCustom` /
+  `AssetBootstrapStage_JoinedInflight_ShutdownDoesNotDestroyExternalInit`（改前双红）。
 - **`SetInstance` 换出旧实例不处置，旧实例被静态事件钉住（R4-AST-001）**：`SetInstance` 只替换引用，
   前一实例既不 `Dispose` 也不退订——`InitializeAsync` 创建的实例调用方拿不到引用（「自行处置」实际不可行），
   其 `Application.lowMemory` / `SceneManager.sceneUnloaded` 订阅仍存活，低内存时继续对共享的 YooAsset 包

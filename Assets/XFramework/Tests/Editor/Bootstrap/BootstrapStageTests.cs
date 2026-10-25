@@ -192,6 +192,62 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void AssetBootstrapStage_InitializedByStage_ThenSetInstance_ShutdownDoesNotDestroyCustom()
+        {
+            // R4-AST-002：阶段初始化成功后使用方换入自定义实例，Shutdown 不得销毁它。
+            AssetManager.Destroy();
+            AssetManager.ImplFactory = () => new FakeAssetManager();
+            try
+            {
+                var stage = new AssetBootstrapStage();
+                stage.ExecuteAsync(new PipelineStageContext(), default).GetAwaiter().GetResult();
+
+                var custom = new FakeAssetManager();
+                AssetManager.SetInstance(custom);
+
+                stage.Shutdown();
+
+                Assert.IsTrue(AssetManager.IsInitialized, "使用方换入的实例不得被阶段销毁");
+                Assert.IsFalse(custom.Disposed);
+            }
+            finally
+            {
+                AssetManager.ImplFactory = null;
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
+        public void AssetBootstrapStage_JoinedInflight_ShutdownDoesNotDestroyExternalInit()
+        {
+            // R4-AST-002：另一调用方已在途初始化时，本阶段只是加入，Shutdown 不得销毁。
+            AssetManager.Destroy();
+            var tcs = new UniTaskCompletionSource();
+            var fake = new FakeAssetManager { InitTask = tcs.Task };
+            AssetManager.ImplFactory = () => fake;
+            try
+            {
+                var manual = AssetManager.InitializeAsync();
+                var stage = new AssetBootstrapStage();
+                var stageTask = stage.ExecuteAsync(new PipelineStageContext(), default);
+
+                tcs.TrySetResult();
+                manual.GetAwaiter().GetResult();
+                stageTask.GetAwaiter().GetResult();
+
+                stage.Shutdown();
+
+                Assert.IsTrue(AssetManager.IsInitialized, "阶段只是加入在途初始化，Shutdown 不得销毁别人的实例");
+                Assert.IsFalse(fake.Disposed);
+            }
+            finally
+            {
+                AssetManager.ImplFactory = null;
+                AssetManager.Destroy();
+            }
+        }
+
+        [Test]
         public void AssetBootstrapStage_InitFails_ShutdownDoesNotDestroyLaterManualInit()
         {
             AssetManager.Destroy();

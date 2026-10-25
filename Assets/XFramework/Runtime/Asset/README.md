@@ -36,6 +36,8 @@ AssetManager.SetInstance(myAssetManager);
 
 > 初始化配置：`AssetInitOptions.AutoReclaimOnLowMemory`（默认 true）监听 `Application.lowMemory`，自动释放对象池闲置实例并卸载未使用资源；需自管回收策略的项目可置为 false。
 >
+> **`AssetBootstrapStage` 的所有权**：阶段只清理**自己发起**的初始化——已初始化早退、仅加入别人的在途初始化、以及启动后使用方 `SetInstance` 换入的实例，`Shutdown` 都不会销毁（R4-AST-002）。
+>
 > **加密资源**：`AssetInitOptions.DecryptionServices`（实现 `IAssetDecryptionServices`，与打包侧的加密方式对应）——
 > Offline 与 Host 两种模式都会接线，单机 / 热更模式同样能读加密资源；不传即不加密（默认）。
 >
