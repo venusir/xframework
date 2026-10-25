@@ -98,6 +98,8 @@ namespace XFramework.XInput
         /// 获取指定动作被持续按下的时长（秒）。
         /// <para><b>保证</b>：时长累计不依赖先调用 <c>WasPressedThisFrame</c> / <c>IsPressed</c> 等读取 API——
         /// 本方法自己预热动作缓存，只调它（如蓄力条）的调用方同样能拿到时长（INP-001）。</para>
+        /// <para><b>按玩家独立计时</b>（R4-INP-001）：<c>playerId == 0</c> 沿用 action 级全设备语义；
+        /// <c>playerId &gt; 0</c> 读该玩家手柄控件边沿。</para>
         /// </summary>
         /// <param name="action">动作名称</param>
         /// <param name="playerId">玩家 ID，默认 0</param>

@@ -576,6 +576,62 @@ namespace XFramework.XInput.Tests
             provider.Dispose();
         }
 
+        /// <summary>
+        /// 长按时长必须按玩家分开计（R4-INP-001）：此前两张计时表只按 action 名建键，
+        /// playerId &gt; 0 的读取永远拿到 0 号玩家的时长。
+        /// </summary>
+        [UnityTest]
+        public IEnumerator GetButtonPressDuration_IsPerPlayer()
+        {
+            var gamepadA = InputSystem.AddDevice<Gamepad>();
+            var gamepadB = InputSystem.AddDevice<Gamepad>();
+            var asset = CreateSingleActionAsset("Jump", InputActionType.Button, "<Gamepad>/buttonSouth");
+            var provider = new InputSystemProvider();
+            provider.Initialize(asset);
+
+            // 预热两对（本方法自己负责把 pair 放进计时集合）
+            provider.GetButtonPressDuration("Jump", 0);
+            provider.GetButtonPressDuration("Jump", 1);
+
+            // 让 Time.unscaledTime 离开 0：计时以 0 作为「未按下」哨兵
+            yield return new WaitForSecondsRealtime(0.05f);
+
+            // 1P = 手柄 A 按住，2P = 手柄 B 未按
+            Set(gamepadA.buttonSouth, 1f);
+            InputSystem.Update();
+            Assert.IsTrue(provider.WasPressedThisFrame("Jump", 0), "前置：1P 的动作级按下应可见");
+            provider.Tick();
+            yield return null;
+
+            Assert.Greater(provider.GetButtonPressDuration("Jump", 0), 0f, "1P 按住应计时");
+            Assert.AreEqual(0f, provider.GetButtonPressDuration("Jump", 1),
+                "2P 未按，不得复用 1P 的计时（R4-INP-001）");
+
+            Set(gamepadA.buttonSouth, 0f);
+            InputSystem.Update();
+            provider.Tick();
+            yield return null;
+
+            // 2P = 手柄 B 按住；保持 A 为 current，使 1P/2P 映射不变
+            Set(gamepadB.buttonSouth, 1f);
+            InputSystem.Update();
+            gamepadA.MakeCurrent();
+            provider.Tick();
+            yield return null;
+
+            Assert.Greater(provider.GetButtonPressDuration("Jump", 1), 0f, "2P 按住应有独立计时");
+
+            Set(gamepadB.buttonSouth, 0f);
+            InputSystem.Update();
+            gamepadA.MakeCurrent();
+            provider.Tick();
+            yield return null;
+
+            Assert.AreEqual(0f, provider.GetButtonPressDuration("Jump", 1), "释放后 2P 计时清零");
+
+            provider.Dispose();
+        }
+
         #endregion
     }
 }

@@ -601,6 +601,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Input
 
+- **长按时长忽略 `playerId`（R4-INP-001）**：两张计时表只按 action 名建键，Tick 也只取 0 号玩家的
+  action 级边沿——`GetButtonPressDuration(action, playerId > 0)` 永远返回 0 号玩家的时长（或 0），
+  与其余读取 API 的逐玩家口径不一致。修法：键改 `(action, playerId)`；新增 `_durationRequests`
+  记录被请求过的 pair，Tick 第一趟保持 0 号 action 级语义、第二趟对 `playerId > 0` 读该玩家手柄控件
+  边沿；`Initialize` / `InvalidateCaches` / `Dispose` 一并清理。回归：
+  `InputSystemProviderTests.GetButtonPressDuration_IsPerPlayer`（改前 2P 拿到 1P 的时长）。
 - **`BindToContext` 丢弃合并句柄，登记钉在 CTS 上（R3-INP-006）**：11 个 `Observe*` 只返回原订阅，手动 Dispose
   不会撤销销毁令牌登记，登记一直累积到所有者销毁。修法：`BindToContext` 返回
   `MessageManager.TryBindToDestroy` 的合并句柄，11 个 `Observe*` 转发它。
