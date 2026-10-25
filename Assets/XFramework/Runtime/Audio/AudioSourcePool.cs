@@ -9,8 +9,8 @@ namespace XFramework.XAudio
     /// 内置播放引擎的宿主与槽位池。
     /// <para><b>它只服务 <see cref="AudioSourceProvider"/></b>：容量由核心的槽位表决定，这里只按同一
     /// <c>MaxVoices</c> 建 GameObject；池满返回 false，核心按播放失败处理。</para>
-    /// <para>回收判据（<c>AudioListener.pause</c>、死源、起播超时）在 provider 的 <c>Poll</c> 里，
-    /// 池本身不再扫尾。</para>
+    /// <para><b>回收判据（<c>AudioListener.pause</c>、死源）在 provider 的 <c>Poll</c> 里</b>；
+    /// <c>Starting</c> 超时由核心 <see cref="AudioManagerImpl"/> 的 ticker 负责。池本身不再扫尾。</para>
     /// </summary>
     internal sealed class AudioSourcePool
     {

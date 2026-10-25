@@ -1,7 +1,7 @@
 # AudioProvider —— `IAudioProvider` 播放引擎缝（核心已实现；FMOD/Wwise 扩展后续）
 
 > **收件人**：框架维护者（实现或审计 Audio 播放引擎缝时）。**不是**使用文档。
-> **状态**：**核心于 2026-10-25 实现**（`IAudioProvider` / 内置 `AudioSourceProvider` /
+> **状态**：**核心于 2026-10-25 实现并完成复审修复**（`IAudioProvider` / 内置 `AudioSourceProvider` /
 > `AudioManager.SetProvider` / `TryGetProviderHandle`）；**FMOD 扩展包、FMOD SDK 接入方式与
 > Wwise 适配器仍未实现**，后续单独讨论。本文件保留设计取舍与扩展蓝图。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
@@ -16,9 +16,9 @@
 | `[设计稿]` | FMOD/Wwise 扩展的候选形状，**尚未编译、尚未跑测试** |
 | `[待裁]` | 需要用户拍板的取舍；本文件给推荐但不冒充已定 |
 
-**核对基准**：2026-10-25 实现后的 `Assets/XFramework/Runtime/Audio/` 与
-`Assets/XFramework/Tests/Runtime/Audio/`。核心 Audio 测试全绿（含新增 `AudioProviderSeamTests`）；
-FMOD/Wwise 扩展仍未实现。
+**核对基准**：2026-10-25 实现并复审修复后的 `Assets/XFramework/Runtime/Audio/` 与
+`Assets/XFramework/Tests/Runtime/Audio/`。核心 Audio 定向测试全绿（含 `AudioProviderSeamTests`），
+全量双平台 0 失败（见 §七）；FMOD/Wwise 扩展仍未实现。
 
 ---
 
@@ -117,12 +117,15 @@ public static class AudioManager
   调用方 `cancellationToken` 取消抛 `OperationCanceledException`，且不得泄漏已加载资源/实例。
 - **两个取消来源分开**：`cancellationToken` 是调用方/生命周期取消（OCE）；
   `request.ValidityToken` 是核心槽位有效性令牌（`Stop`/`StopAll` 作废时取消）。provider 必须在
-  `start()` 前检查后者；已取消则释放并返回 default，**不要抛 OCE**。
+  `start()` 前检查后者；已取消则释放并返回 default，**不要抛 OCE**。**取消时必须立即归还实现自己
+  持有的预占槽位（不能等加载完成）**，否则 `Stop` 后立即重播会撞上 provider 的容量窗口（P1-1）。
 - **`Stop` 只停播**；**`Release` 负责释放**（停播、释放实例/租约）且幂等。核心在用户 `Stop` 时
   调 `Stop + Release`；ticker 回收与「加载完成但核心槽位已失效」只调 `Release`。
 - **`SetPaused` / `SetVolume` 返回 false 表示声音已消失**（播放源被外部销毁、句柄失效），
   核心据此回收槽位；返回 true 表示已应用。
-- **`Poll` 是纯查询**：不推进超时、不修改状态；只由核心 ticker 每拍对活跃 voice 调用一次。
+- **`Poll` 是纯查询**：不推进超时、不修改状态；由核心 ticker 每拍调用——`Starting` / `Playing` 在
+  管理器未暂停时 poll，`Paused` 槽位始终 poll（回收外部销毁的播放源）；`Loading` 还没有 provider
+  句柄，不 poll。
   状态含义见 §四。
 - **`Dispose` 幂等**：取消在途 `PlayAsync`、释放全部实例与租约；核心在 `AudioManagerImpl.Dispose`
   里调用并隔离异常。
@@ -138,7 +141,7 @@ public static class AudioManager
 - `Initialize(options)` 仍构造内置 `AudioSourceProvider`；`SetProvider` 之后 `Initialize`
   按现有规则告警并忽略。
 
-### `TryGetProviderHandle`（建议纳入，待裁）
+### `TryGetProviderHandle`（已实现公开）
 
 - 目的：让中间件扩展的**逐次播放能力**（FMOD 事件参数/RTPC、Wwise RTPC/switch）有用户可达入口；
   同时让测试不再依赖内部反射。
@@ -160,11 +163,11 @@ public static class AudioManager
 | 活跃计数、按通道计数、`CopyChannels` | 核心 | `AudioManagerImpl.ActiveVoiceCount` / `GetActiveVoiceCount` / `CopyChannels` |
 | 核心句柄 `AudioHandle` 的槽位/代际/校验 | 核心 | `AudioManagerImpl.TryReserveVoice` / `IsCurrent` / `NextGeneration` |
 | `MaxVoices` 与耗尽告警、`Play` 的同步预占 | **核心** | `AudioManagerImpl.TryReserveVoice` / `WarnExhaustedOnce` |
-| 加载、`AudioSource` 配置、播完回收、`Starting` 超时 | 内置 provider + 核心 ticker | `AudioSourceProvider.PlayAsync` + `AudioManagerImpl.SweepVoices` |
+| 加载、`AudioSource` 配置、播完回收、`Starting` 超时 | 内置 provider（加载 / 配置 / 实际播放）+ 核心 ticker（`Starting` 超时与回收判断） | `AudioSourceProvider.PlayAsync` + `AudioManagerImpl.SweepVoices` |
 | `AudioListener.pause`、死源检测 | 内置 provider | `AudioSourceProvider.Poll` |
 | `PrewarmVoices`、宿主/槽位 GameObject | 内置 provider | `AudioSourceProvider` 构造 + `AudioSourcePool` |
 
-A 方案会让每个中间件适配器重写第一、二、三、四、五行；B 只把最后三行下沉。这就是选 B 的理由。
+A 方案会让每个中间件适配器重写第一至六行（核心语义）；B 只把最后三行下沉。这就是选 B 的理由。
 
 ---
 
@@ -179,7 +182,8 @@ A 方案会让每个中间件适配器重写第一、二、三、四、五行；
 - `AudioProviderHandle ProviderHandle`（Loading 时是 default）
 - `Channel` / `Location` / `VolumeScale`
 - `StartingTicks`（仅 `Starting` 用，60 拍超时）
-- `ValidityCts`：核心槽位有效性令牌源；`Stop`/`StopAll` 取消它，provider 在 `start()` 前检查
+- `ValidityCts`：核心槽位有效性令牌源；`Stop`/`StopAll` 取消它，provider 在 `start()` 前检查。
+  正常结束**不取消**，下一次预占复用它（避免每次播放分配一条 CTS）；只有加载中被作废的那条会换新。
 
 **核心状态机不再与 provider 槽位状态共用同一个枚举**。provider 侧的 `AudioVoice` 只保留
 provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` / `Location` / `Loop` /
@@ -192,9 +196,12 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 | 核心状态 | 动作 |
 | --- | --- |
 | `Loading` | 不 poll；保留 ticker（加载续体负责收尾） |
-| `Paused` | 不 poll；保留（管理器暂停期间不回收） |
+| `Paused` | `Poll`：`Invalid`/`Stopped` → `Release` 回收（外部销毁的播放源不会自己变回来）；`Paused` → 保留 |
 | `Starting` | `Poll`：`Invalid`/`Stopped` → `Release` 回收；`Playing` → 转 `Playing`；`Paused` → 保留、**不计超时**；`Starting` → `++StartingTicks`，超过 60 拍记「起播超时」并 `Release` |
-| `Playing` | `Poll`：`Invalid`/`Stopped` → `Release`；`Starting`/`Playing`/`Paused` → 保留（`Loop` 由 provider 报告为 `Playing`） |
+| `Playing` | `Poll`：`Invalid`/`Stopped` → `Release`；`Starting` → 回退为 `Starting` 并重新累计超时（不这么做会永久停在起始态）；`Playing`/`Paused` → 保留（`Loop` 由 provider 报告为 `Playing`） |
+
+- **未知状态兜底**：`Poll` 返回枚举外的值记一条告警并 `Release`——漏掉它会让唯一 voice 既不计入
+  `active` 又不被回收，ticker 被注销、槽位永久卡死。
 
 - **死源**：内置 provider 的 `Poll` 对 Unity 假 null 记原有告警
   「播放源已被外部销毁」并返回 `Invalid`；核心立即回收（保持 `AudioPoolTests` 的 0.2s 断言）。
@@ -212,8 +219,9 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 
 - 核心槽位表容量 = `Math.Max(1, options.MaxVoices)`；`Play` 在发起加载前同步预占，池满立即
   `default(AudioHandle)` 并记一次限流告警（同一段耗尽期只告警一次）。
-- 内置 provider 的池只按同一 `MaxVoices` 建 GameObject；provider 容量失败（理论上不会发生）
-  按「播放失败」处理，核心回收预占。
+- 内置 provider 的池只按同一 `MaxVoices` 建 GameObject；provider 容量失败按「播放失败」处理，
+  核心回收预占。**自定义 provider 的容量必须至少支持与核心 `MaxVoices` 同等的并发**，否则
+  `Play` 会返回一个立即失效的预占句柄（`PlayAsync` 返回 default）。
 - 这样 `Play_WhenPoolExhausted_ReturnsDefaultHandleAndWarns` 与「池满时一次 IO 都不浪费」保持。
 
 ### 4.4 加载中 Stop 与取消（P0，已实现）
@@ -222,10 +230,15 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 
 - 核心为每个 Loading voice 持 `ValidityCts`；`Stop`/`StopAll` 取消它，但**不取消加载令牌**；
 - provider 加载完成后检查 `request.ValidityToken`：已取消则归还租约、不 `start()`、返回 default；
+- **validity 取消时必须立即归还实现自己持有的预占槽位（不能等加载完成）**：否则核心槽位已释放、
+  provider 槽还占着，`Stop` 之后紧接着的重播会撞上 provider 容量窗口，拿到必然失效的预占句柄
+  （P1-1）。内置 provider 在预占后注册 validity 取消回调，回调里 `AudioSourcePool.Invalidate`
+  立即归还池槽；晚到的加载续体按代际检查，只归还自己手里的租约，不碰可能已被复用的池槽（P1-2）；
 - 因此 `PlayAsync` 在 Stop 期间返回 `default(AudioHandle)`，**不抛 OCE**；调用方
   `cancellationToken` / `Destroy` 取消仍抛 `OperationCanceledException`；
-- 加载继续跑完再归还租约——与现有 `Stop_WhileLoading_LeaseIsReturnedExactlyOnce` 的
-  「租约释放点恰好一次」契约一致，且不会在 Stop 后出声。
+- 租约本身仍随加载跑完再归还（或由晚到续体在取消分支归还）——与现有
+  `Stop_WhileLoading_LeaseIsReturnedExactlyOnce` 的「租约释放点恰好一次」契约一致，且不会在
+  Stop 后出声。
 
 历史备选（未采用）是「取消加载 + 按令牌来源分流返回值」；它也能不出声，但会改变加载替身的
 取消路径，收益只是提前结束 IO。
@@ -270,9 +283,9 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 - 新增 `AudioManagerImpl(IAudioProvider provider, AudioInitOptions options)` 供 fake provider 测试；
 - `AudioTestKit` 经 `AudioManager.CurrentManagerForTests` + internal `TryGetProviderHandle` 映射，
   再加 `AudioSourceProvider.GetSource(AudioProviderHandle)`；**不靠「核心槽位下标 == provider 槽位下标」**；
-- `FakeAudioProvider` + `AudioProviderSeamTests` 覆盖核心语义：预占即返回、providers 失败/抛异常、
+- `FakeAudioProvider` + `AudioProviderSeamTests` 覆盖核心语义：预占即返回、provider 失败/抛异常、
   音量/暂停、自然结束回收、`CopyChannels`、`SetProvider` 替换与 `TryGetProviderHandle`；
-- 现有 13 个 Audio fixture 已全部通过（167/167）；无需改 setup 的隐式实例依赖。
+- 现有 Audio fixture 与新增 seam fixture 全绿；无需改 setup 的隐式实例依赖。
 
 ---
 
@@ -286,8 +299,8 @@ UPM）尚未决定，后续单独讨论**；下列是程序集拆分建议，不
     `FmodAudioOptions` public、`IFmodEventBackend` internal）+ fake backend 测试；**始终编译**，
     干净克隆也能测 provider 逻辑；
   - `Venusy609.Xframework.Fmod.Unity`：条件程序集，引用 `FMODUnity`，放 `FmodEventBackend`
-    与 `FmodAudio.Install`；用 `versionDefines`（`com.firelight.fmod-for-unity`）+ `defineConstraints`
-    （`XFRAMEWORK_FMOD`）条件编译。
+    与 `FmodAudio.Install`；用 `versionDefines`（`com.firelight.fmod-for-unity`，**仅当最终选择该
+    UPM 路径时**，包名以实际安装的 SDK 为准）+ `defineConstraints`（`XFRAMEWORK_FMOD`）条件编译。
 - **两个程序集各自带 `versionDefines`/`defineConstraints`**（Unity 的 versionDefines 符号按程序集）。
 - **守卫放 PlayMode 的 `Tests/Runtime/Architecture`**，不引用条件程序集/FMOD；本仓 `-Filter`
   未指定平台时只跑 PlayMode，Editor 守卫会被静默跳过。
@@ -301,9 +314,9 @@ UPM）尚未决定，后续单独讨论**；下列是程序集拆分建议，不
 
 核心（已执行）：
 
-- `Tools/run-tests.ps1 -Filter Audio`：167/167（含 `AudioProviderSeamTests`）；
+- `Tools/run-tests.ps1 -Filter Audio`：Audio 定向全绿（含 `AudioProviderSeamTests`）；
 - `-UpdateApiBaseline`：Runtime +33（源兼容，0 破坏性）；
-- `Tools/check-docs.ps1 -Enforce` 与全量待阶段收尾。
+- `Tools/check-docs.ps1 -Enforce` 通过；全量双平台（PlayMode / EditMode）0 失败。
 
 扩展包：
 
@@ -316,7 +329,7 @@ UPM）尚未决定，后续单独讨论**；下列是程序集拆分建议，不
 
 ---
 
-## 八、待裁 / 已定
+## 八、已定 / 待裁（扩展）
 
 1. **`AudioManager.TryGetProviderHandle` 是否公开**：**已实现公开**。它是 FMOD/Wwise 逐次事件控制与
    测试映射的入口。
@@ -334,8 +347,9 @@ UPM）尚未决定，后续单独讨论**；下列是程序集拆分建议，不
 6. **Wwise 范围**：本次只设计 provider 缝与 Wwise 映射；Wwise 适配器仍 `暂不做`。重开判据：
    真实 Wwise 项目 + SDK 可编译验证。
 7. **FMOD 本地包与 `packages-lock.json`**：**推荐** FMOD 包放 `Packages/com.firelight.fmod-for-unity/`
-   并 gitignore；若 Unity 把它写进 `packages-lock.json`，**不提交** lock/manifest 的本地改动；
-   干净克隆验证 `run-tests` 不因缺包失败。若 lock 无法避免，改用仓外 `file:` 依赖（同样不提交）。
+   （**仅当最终选择该本地包路径时**）并 gitignore；若 Unity 把它写进 `packages-lock.json`，**不提交**
+   lock/manifest 的本地改动；干净克隆验证 `run-tests` 不因缺包失败。若 lock 无法避免，改用仓外
+   `file:` 依赖（同样不提交）。
 8. **`FmodAudioProvider` 可见性**：**推荐 internal**，用户经 `FmodAudio.Install`；公开面只留
    `FmodAudio` + `FmodAudioOptions`。
 9. **守卫位置**：**推荐 PlayMode 的 `Tests/Runtime/Architecture`**（理由见 §六），不做纯 Editor 守卫。
@@ -346,8 +360,8 @@ UPM）尚未决定，后续单独讨论**；下列是程序集拆分建议，不
 
 ## 九、与既有结论的关系（下一轮别重提）
 
-- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md:59` 已否决（后端中立性 +
-  资源生命周期单语义），无重开判据。
+- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md` 的「不做：不提供
+  `Play(AudioClip, ...)` 重载」条目已否决（后端中立性 + 资源生命周期单语义），无重开判据。
 - **框架音量 → 项目 AudioMixer 路由仍不内建**：R3-AUD-001 已实测 `outputAudioMixerGroup` 恒 null；
   B 之后如果项目要路由，只能实现自定义 provider（内置 provider 不提供路由扩展点）。
 - **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地（公开 API 源兼容新增）；

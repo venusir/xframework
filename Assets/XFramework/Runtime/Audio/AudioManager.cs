@@ -13,8 +13,9 @@ namespace XFramework.XAudio
     /// <para>使用前需调用 <see cref="Initialize"/> 或 <see cref="SetInstance"/>。</para>
     /// <para><b>资源一律以 location 字符串标识</b>，经 <c>XAsset</c> 异步加载——本模块不提供直接传
     /// <c>AudioClip</c> 的重载。这带来两点：界面上的公开面<b>不含任何 Unity 内置音频类型</b>，第三方可以把
-    /// 整套底层换掉（见 <see cref="IAudioManager"/>）；以及每次播放的资源生命周期只有一套语义，
-    /// 调用方不会因为「自己释放了资源」而让声音静默中断。</para>
+    /// 整套底层换掉——推荐实现 <see cref="IAudioProvider"/> 并经 <see cref="SetProvider"/> 注入
+    /// （保留框架的通道/音量/暂停/计数语义），整体替换管理器见 <see cref="IAudioManager"/>；
+    /// 以及每次播放的资源生命周期只有一套语义，调用方不会因为「自己释放了资源」而让声音静默中断。</para>
     /// </summary>
     /// <example>
     /// <code>
@@ -47,7 +48,8 @@ namespace XFramework.XAudio
         public static bool IsInitialized => _instanceInitialized && _instance != null;
 
         /// <summary>
-        /// 初始化音频管理器，创建默认实现（<see cref="AudioManagerImpl"/>）。
+        /// 初始化音频管理器，创建默认实现（<see cref="AudioManagerImpl"/>）与内置播放引擎
+        /// <c>AudioSourceProvider</c>。
         /// <para>零配置即可用：不传 <paramref name="options"/> 时同时播放上限为 32、主音量为满、播放源惰性创建，
         /// 从不播放的项目不会产生任何 GameObject。</para>
         /// <para>重复调用会被忽略并记一条 <c>[Audio]</c> 告警。</para>
@@ -89,7 +91,11 @@ namespace XFramework.XAudio
         /// <para><b>这是中间件（FMOD / Wwise 等）的推荐路径</b>：通道、三档音量、暂停闸门、计数与诊断
         /// 仍由框架的语义层负责，provider 只实现播放原语。</para>
         /// <para><b>本方法会先 Dispose 旧实例</b>（含其 provider），与 <see cref="SetInstance"/> 的
-        /// 「不 Dispose 旧实例」不同——provider 由框架持有，不 Dispose 会泄漏。</para>
+        /// 「不 Dispose 旧实例」不同——provider 由框架持有，不 Dispose 会泄漏。provider 实例一旦被
+        /// Dispose 就不可复用；把当前实例再传一次会抛 <see cref="InvalidOperationException"/>。</para>
+        /// <para><b><paramref name="options"/> 只作用于核心语义层</b>：<c>MaxVoices</c> 是核心槽位上限
+        /// （自定义 provider 的容量必须至少支持同等并发）；<c>PrewarmVoices</c> 只对内置 provider 有意义，
+        /// 对自定义 provider 无效。</para>
         /// <para>注入后 <see cref="Initialize"/> 按重复初始化处理（告警并忽略）。</para>
         /// </summary>
         /// <param name="provider">播放引擎实现，不可为 null。</param>
@@ -119,8 +125,9 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 丢弃门面持有的 <see cref="IAudioManager"/> 实例，并调用它的 <see cref="IDisposable.Dispose"/>。
-        /// <para>销毁会停止全部播放并释放自持的宿主与播放源池；此后需重新 <see cref="Initialize"/> 或
-        /// <see cref="SetInstance"/> 才能使用。</para>
+        /// <para>销毁会停止全部播放并释放全部播放资源；内置 provider 的隐藏宿主与播放源池随之销毁。
+        /// 此后需重新 <see cref="Initialize"/>、<see cref="SetInstance"/> 或 <see cref="SetProvider"/>
+        /// 才能使用。</para>
         /// <para><b>销毁后旧句柄仍然安全</b>：<see cref="Stop"/> 与 <see cref="IsPlaying"/> 会返回 <c>false</c>
         /// 而不是抛异常——它们的生命周期可以长于管理器。</para>
         /// <para>本方法也会被 <c>Application.quitting</c> 调用（见 <see cref="AutoInit"/>），且在未初始化时

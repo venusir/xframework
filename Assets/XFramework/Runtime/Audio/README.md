@@ -39,12 +39,15 @@ bgm.Stop();
 ```csharp
 AudioManager.Initialize(new AudioInitOptions
 {
-    MaxVoices = 32,      // 同时播放上限（= 播放源池容量）
+    MaxVoices = 32,      // 同时播放上限（核心槽位上限；内置 provider 按同值建池）
     MasterVolume = 1f,
     MasterMuted = false,
-    PrewarmVoices = false,   // true 则在初始化时一次性建满播放源
+    PrewarmVoices = false,   // true 则在初始化时一次性建满播放源（只对内置 provider 有意义）
 });
 ```
+
+`PrewarmVoices` 只影响内置 provider；`SetProvider` 注入自定义 provider 时它无效。`MaxVoices` 始终是
+核心槽位上限，自定义 provider 的容量必须至少支持同等并发。
 
 ## 模块结构
 
@@ -128,7 +131,7 @@ Runtime/Audio/
 | `bool IsPlaying(AudioHandle handle)` | **探测型**。加载中的不算「在播」，**暂停中的算** |
 | `int ActiveVoiceCount { get; }` | 活跃播放数，**含加载中与已暂停的**（它们都实打实占着播放源） |
 | `int GetActiveVoiceCount(string channel)` | 按通道计数 |
-| `int CopyChannels(List<AudioChannelInfo>)` | 已创建通道的明细（名称 / 音量 / 静音 / 在播路数）。**只列已创建的通道**——通道在第一次被写入时惰性创建（播放、`SetChannelVolume` / `SetChannelMuted` / `RegisterChannel`）；查询类成员不创建。只对内置实现成立，诊断用 |
+| `int CopyChannels(List<AudioChannelInfo>)` | 已创建通道的明细（名称 / 音量 / 静音 / 在播路数）。**只列已创建的通道**——通道在第一次被写入时惰性创建（播放、`SetChannelVolume` / `SetChannelMuted` / `RegisterChannel`）；查询类成员不创建。**对框架语义层成立**：内置实现与 `SetProvider` 路径都可用；`SetInstance` 注入的非 `AudioManagerImpl` 实现返回 `0`。诊断用 |
 
 ### 值类型
 
@@ -178,7 +181,8 @@ _bgm = await AudioManager.PlayAsync("audio/bgm_main",
 _bgm.Stop();
 ```
 
-**循环播放永不被自动回收**，必须显式 `Stop`。
+**内置 provider 下循环播放永不被自动回收**，必须显式 `Stop`。核心本身不特判 `Loop`：自定义 provider
+对循环播放报告 `Stopped` 时照常回收。
 
 ### C. 定点 3D 音效
 
@@ -216,10 +220,13 @@ AudioManager.Resume();
 
 - **实现哪个契约**：`IAudioProvider`。核心保留通道、三档音量、暂停闸门、计数、参数归一化与诊断；
   实现方只做播放原语（`PlayAsync` / `Stop` / `Release` / `SetPaused` / `SetVolume` / `Poll`）。
-- **怎么接线**：`AudioManager.SetProvider(provider, options)`。它会先 Dispose 旧实例，再注入新的。
+- **怎么接线**：`AudioManager.SetProvider(provider, options)`。它会先 Dispose 旧实例，再注入新的；
+  同一实例再传一次会抛 `InvalidOperationException`，provider 被 Dispose 后不可复用。
 - **要守什么**：`AudioPlaybackRequest.Volume` 是核心算好的最终值，不得再乘；`request.ValidityToken`
-  在 `start()` 前检查（已取消则释放并返回 default，不抛）；`Poll` 是纯查询，由核心 ticker 每拍调用；
-  provider 句柄的有效代际必须非 `0`，`default(AudioProviderHandle)` 必须无效。
+  在 `start()` 前检查（已取消则释放并返回 default，不抛），**取消时必须立即归还自己持有的预占槽位**
+  （不能等加载完成，否则 `Stop` 后立即重播会撞上容量窗口）；`Poll` 是纯查询，由核心 ticker 按状态调用；
+  provider 句柄的有效代际必须非 `0`，`default(AudioProviderHandle)` 必须无效；`Dispose` 幂等，
+  必须取消在途 `PlayAsync` 并释放全部实例与租约。
 - **中间件能力**：RTPC / 事件参数 / bank / snapshot 等留在项目侧；需要逐次控制时可用
   `AudioManager.TryGetProviderHandle` 取回 provider 句柄。
 
@@ -245,7 +252,7 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
 
 内置 provider（`AudioSourceProvider`）首次播放时惰性创建宿主 `[AudioManager] Audio Host`
 （`DontDestroyOnLoad`，BGM 因此能跨场景连续），每个播放占用一个子 GameObject（命名 `Voice {index}`）+
-`AudioSource`。播放源的 `AudioSource` 与 `Transform` 在创建时缓存，运行期没有任何 `GetComponent`。
+`AudioSource`。`AudioSource` 与槽位 GameObject 在创建时缓存，运行期没有任何 `GetComponent`。
 
 > **这两个名字是内部字面量、不可配置**：宿主会出现在 Hierarchy 里、播放源会出现在性能分析器里，
 > 知道它们是为了认出「这是框架建的」——别拿这两个名字做自己的对象命名。
@@ -254,8 +261,10 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
 > 则重建同名 `Voice {n}` 节点），不会永久命中坏源槽；旧句柄仍因代际递增而失效（R4-AUD-001）。
 
 `MaxVoices` 是**唯一的并发策略**：取不到空闲槽位时返回 `default(AudioHandle)` 并记一条限流告警
-（同一段耗尽期只告警一次，释放任一槽位后重新允许告警）。**框架不做优先级抢占**——抢占必须先回答
-「抢谁」，那是替使用方决定混音策略。
+（同一段耗尽期只告警一次，释放任一槽位后重新允许告警）。它是**核心槽位上限**；内置 provider 用同一
+数值建播放源池，**自定义 provider 的容量必须至少支持同等并发**（否则走到「provider 开始失败」那条
+路径，`Play` 的预占句柄会立即失效）。**框架不做优先级抢占**——抢占必须先回答「抢谁」，那是替使用方
+决定混音策略。
 
 ### 句柄的代际
 
@@ -274,13 +283,15 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
    → 停止 / 播完 / 销毁 → 归还槽位 + 归还租约
 ```
 
-资源租约的释放点是**恰好一次**：`Stop` 时若仍在加载，核心作废槽位并取消有效性令牌；provider 加载
-完成后检查令牌、归还租约，不会再 `start()`。
+资源租约的释放点是**恰好一次**：`Stop` 时若仍在加载，核心作废槽位并取消有效性令牌；provider **必须
+立即归还自己持有的预占槽位**（不能等加载完成，否则 Stop 后立即重播会撞上 provider 的容量窗口），
+加载完成后检查令牌、归还租约，不会再 `start()`。
 
 ### 播完回收
 
 核心内部 ticker 挂在 `UpdateManager` 上，`Tier1`（约 33ms）、时间轴 `Unscaled`。**只在确实有活跃播放时
-注册**，最后一个播放结束时注销——闲置时零帧开销。每拍对活跃 voice 调一次 `IAudioProvider.Poll`。
+注册**，最后一个播放结束时注销——闲置时零帧开销。每拍对 `Starting` / `Playing` / `Paused` 调一次
+`IAudioProvider.Poll`；`Loading` 还没有 provider 句柄，不 poll。
 
 回收判据是**核心自己的状态机 + provider 的 `Poll`**，不是只看 `AudioSource.isPlaying`：因为 `Pause()`
 之后 `isPlaying` 就是 `false`，只看它会**把暂停中的播放当场回收掉**。全局 `AudioListener.pause` 同样
@@ -290,7 +301,7 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
 ## 生命周期与清理
 
 ```csharp
-AudioManager.Destroy();   // 停止全部播放、归还全部资源、销毁宿主
+AudioManager.Destroy();   // 停止全部播放、归还全部资源（内置 provider 还会销毁宿主）
 ```
 
 - `Destroy` 会被 `Application.quitting` 自动调用，**无需手动挂**。

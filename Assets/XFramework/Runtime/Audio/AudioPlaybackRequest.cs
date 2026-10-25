@@ -33,8 +33,8 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 核心槽位有效性令牌。<b>在 <c>start()</c> 之前检查</b>；已取消说明核心槽位已被
-        /// <c>Stop</c>/<c>StopAll</c> 作废，实现应释放已加载资源并返回 <c>default</c>，
-        /// 而不是抛 <see cref="System.OperationCanceledException"/>。
+        /// <c>Stop</c>/<c>StopAll</c> 作废，实现应释放已加载资源、<b>立即归还自己持有的预占槽位</b>，
+        /// 并返回 <c>default</c>，而不是抛 <see cref="System.OperationCanceledException"/>。
         /// </summary>
         public readonly CancellationToken ValidityToken;
 

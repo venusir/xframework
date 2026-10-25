@@ -10,6 +10,8 @@ namespace XFramework.XAudio
     /// <para><b>推荐第三方中间件实现本接口</b>，而不是整体实现 <see cref="IAudioManager"/>：
     /// 前者不必重写框架语义，后者是整体替换管理器的逃生口。</para>
     /// <para><b>线程</b>：全部成员限主线程调用。</para>
+    /// <para><b><see cref="IDisposable.Dispose"/></b>：幂等；必须取消在途 <see cref="PlayAsync"/>、
+    /// 释放全部实例与租约。核心在管理器销毁时调用它并隔离异常。</para>
     /// </summary>
     public interface IAudioProvider : IDisposable
     {
@@ -21,7 +23,9 @@ namespace XFramework.XAudio
         /// <para><b>两个取消来源要分开</b>：<paramref name="cancellationToken"/> 是调用方/生命周期取消；
         /// <see cref="AudioPlaybackRequest.ValidityToken"/> 是核心槽位有效性令牌。后者在
         /// <c>Stop</c>/<c>StopAll</c> 作废槽位时取消；实现必须在 <c>start()</c> 之前检查它，
-        /// 已取消则释放并返回 default（不要抛 <see cref="OperationCanceledException"/>）。</para>
+        /// 已取消则释放并返回 default（不要抛 <see cref="OperationCanceledException"/>）。
+        /// <b>validity 取消时必须立即归还实现自己持有的预占槽位，不能等加载完成</b>——否则核心
+        /// <c>Stop</c> 后立即重播会撞上 provider 的容量窗口，拿到必然失效的预占句柄。</para>
         /// <para><see cref="AudioPlaybackRequest.Volume"/> 是核心算好的最终音量，
         /// 实现<b>不得</b>再乘主音量 / 通道音量 / <c>VolumeScale</c>。</para>
         /// </summary>
@@ -65,7 +69,9 @@ namespace XFramework.XAudio
         bool SetVolume(AudioProviderHandle handle, float volume);
 
         /// <summary>
-        /// 查询播放状态。<b>纯查询</b>：不推进超时、不修改状态；由核心 ticker 每拍对活跃 voice 调用一次。
+        /// 查询播放状态。<b>纯查询</b>：不推进超时、不修改状态。
+        /// <para>由核心 ticker 每拍调用：<c>Starting</c> / <c>Playing</c> 在管理器未暂停时 poll，
+        /// <c>Paused</c> 槽位始终 poll（回收外部销毁的播放源）；<c>Loading</c> 还没有 provider 句柄，不 poll。</para>
         /// </summary>
         /// <param name="handle">provider 句柄。</param>
         /// <returns>当前播放状态。</returns>

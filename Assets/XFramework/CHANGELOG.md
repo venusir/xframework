@@ -6,16 +6,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
-### Added
-
-#### Audio
-
-- **新增 `IAudioProvider` 播放引擎缝**（2026-10-25）：核心保留通道 / 三档音量 / 暂停闸门 / 计数 / 归一化 / 诊断，
-  provider 只实现播放原语。源兼容新增：`IAudioProvider`、`AudioProviderPlaybackState`、`AudioProviderHandle`、
-  `AudioPlaybackRequest`、`AudioManager.SetProvider(IAudioProvider, AudioInitOptions)`、
-  `AudioManager.TryGetProviderHandle(AudioHandle, out AudioProviderHandle)`。内置 `AudioSourceProvider`
-  承接原池/加载/回收判据，现有行为不变；公开 API 基线已同步，无破坏性变更。
-
 ## [0.4.0] - 2026-10-25
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
@@ -253,6 +243,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **`AudioHandle` 实现 `IEquatable<AudioHandle>` 与相等运算符（R3-AUD-004）**：按 Id / Generation 比较，
   可直接作字典键 / `HashSet` 元素；代际是身份的一部分，槽位复用后旧句柄与新句柄不等（ABA 防线）。
   **源兼容新增**；公开 API 基线已同步。回归：`AudioHandleTests.Handles_CompareByIdAndGeneration`。
+- **新增 `IAudioProvider` 播放引擎缝**（2026-10-25）：核心保留通道 / 三档音量 / 暂停闸门 / 计数 / 归一化 /
+  诊断，provider 只实现播放原语。源兼容新增：`IAudioProvider`、`AudioProviderPlaybackState`、
+  `AudioProviderHandle`、`AudioPlaybackRequest`、`AudioManager.SetProvider(IAudioProvider, AudioInitOptions)`、
+  `AudioManager.TryGetProviderHandle(AudioHandle, out AudioProviderHandle)`。内置 `AudioSourceProvider`
+  承接原池 / 加载 / 回收判据，现有行为不变；公开 API 基线已同步，无破坏性变更。**同轮复审修复**：
+  加载中 `Stop` 后立即重播不再撞上 provider 容量窗口（有效性令牌取消时立即归还池槽，晚到的加载续体
+  按代际保护，不误杀已复用槽位的新播放）；起播段异常、取消回调异常与未知 `Poll` 状态全部隔离并回收；
+  暂停中的死源照常回收；调用方取消在 provider 返回后仍抛 OCE；`SetProvider` 传当前实例显式抛
+  `InvalidOperationException`。
 
 ### Changed
 

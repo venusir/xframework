@@ -27,7 +27,8 @@
 
 - **将来 Wwise 适配器只实现 `IAudioProvider`**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
 - **Wwise 适配器现在仍不做**：没有真实 Wwise 项目落地、没有 SDK 可编译验证；
-- **本次只出设计文档**；FMOD 是第一个 provider 实现，Wwise 等真实项目再开。
+- **本次只出设计文档**；核心缝与内置 `AudioSourceProvider` 作参照已实现，FMOD 适配器仍未实现，
+  Wwise 等真实项目再开。
 
 Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 
@@ -36,8 +37,9 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 3. **音量通常走 RTPC / bus**，没有「逐实例音量」的统一入口；
 4. 集成源码头部明确限制再分发（见 §五）。
 
-这正是 `Documentation/Modules/Audio.md:60` 原来说「凭记忆猜缝大概率是谁都不合身的最小公约数」
-的原因；现在有了 FMOD 的真实实现作参照，Wwise 仍要等真实 API 落地再设计细节。
+这正是 `Documentation/Modules/Audio.md` 的「已推翻：不提供 `IAudioProvider` 分层引擎缝」条目
+原来说「凭记忆猜缝大概率是谁都不合身的最小公约数」的原因；现在有了核心缝 + 内置
+`AudioSourceProvider` 作参照（FMOD 适配器仍未实现），Wwise 仍要等真实 API 落地再设计细节。
 
 ---
 
@@ -50,7 +52,7 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 | Event（名字 / id） | `location` 字符串 | provider 解释成 Event 名 |
 | `PlayingID`（`uint`） | provider 槽位表 + `AudioProviderHandle` | `uint` 不塞进 `int`；句柄存槽位索引 + 代际 |
 | 注册的 GameObject（emitter） | provider 自建隐藏宿主 | 每槽位/通道一个 emitter；`DontDestroyOnLoad` |
-| RTPC / switch / state | 核心不表达 | 走扩展自己的 API + `TryGetProviderHandle`（待裁） |
+| RTPC / switch / state | 核心不表达 | 走扩展自己的 API + `TryGetProviderHandle`（已实现公开） |
 | bank | provider 构造时加载 | `WwiseAudioOptions.Banks` / `OwnsBanks`（候选） |
 | `AK_EndOfEvent` 回调 | provider 槽位回收 | `Poll` 读槽位表，不直接查引擎 |
 | bus / snapshot | 核心通道 | v1 用逐 emitter 音量/RTPC 近似三档相乘；snapshot 不在门面里 |
@@ -87,7 +89,7 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 | 核心改动 | 零 | 公开 API + `AudioManagerImpl` 拆分（见 `AudioProvider.md`） |
 | 适配器工作量 | 重写通道/音量/暂停/计数/归一化/句柄 | 只做 Wwise 事件原语 |
 | 诊断 `CopyChannels` | 注入后恒空 | 可用 |
-| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在外，但 `TryGetProviderHandle` 可做逐次控制（待裁） |
+| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在外，但 `TryGetProviderHandle` 可做逐次控制（已实现公开） |
 | 本仓验证 | 无 SDK 不能编译/测试 | 可仿 FMOD 拆成 Wwise-free provider + 条件集成程序集 |
 
 B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录映射与风险。
@@ -153,7 +155,8 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 
 ## 八、与既有结论的关系（下一轮别重提）
 
-- **`Play(AudioClip)` 不再论证**：`Documentation/Modules/Audio.md:59` 已否决，无重开判据。
+- **`Play(AudioClip)` 不再论证**：`Documentation/Modules/Audio.md` 的「不做：不提供
+  `Play(AudioClip, ...)` 重载」条目已否决，无重开判据。
 - **框架音量 → 项目 Mixer 路由不再论证**：R3-AUD-001 已实测；要路由只能自定义 provider。
 - **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地；Wwise 适配器仍 `暂不做`。
 - **不把 Wwise 类型带进核心公开面**：`location` 是唯一资源标识；`AudioProviderHandle` 只存两个整数。

@@ -51,7 +51,7 @@
 | --- | --- | --- |
 | Studio event（`event:/...`） | `location` 字符串 | provider 把 `location` 解释成事件路径 |
 | `EventInstance` | provider 槽位表 + `AudioProviderHandle` | 句柄存槽位索引 + 代际，不把 `EventInstance` 塞进 `int` |
-| event 参数 / RTPC | 核心不表达 | 走扩展自己的 API + `AudioManager.TryGetProviderHandle`（待裁） |
+| event 参数 / RTPC | 核心不表达 | 走扩展自己的 API + `AudioManager.TryGetProviderHandle`（已实现公开） |
 | bus | 核心通道 | v1 用**逐实例音量**实现三档相乘；不改 FMOD master bus |
 | bank | provider 构造时加载 | `FmodAudioOptions.Banks` / `OwnsBanks` |
 | `set3DAttributes` | `AudioPlaybackRequest.Position` | 只在 `SpatialBlend > 0` 时写一次；衰减由事件编排 |
@@ -97,7 +97,7 @@ B 解决了 A 的两个缺口：
 | 核心改动 | 零 | 公开 API + `AudioManagerImpl` 拆分（设计见 `AudioProvider.md`） |
 | 适配器工作量 | 重写通道/三档音量/暂停/计数/归一化/句柄 | 只做 FMOD 事件原语 |
 | 诊断 `CopyChannels` | 注入后恒空 | 可用 |
-| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在扩展外，但 `TryGetProviderHandle` 可做逐次控制（待裁） |
+| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在扩展外，但 `TryGetProviderHandle` 可做逐次控制（已实现公开） |
 | 本仓验证 | 无 SDK 不能编译/测试 | FMOD-free provider 始终可测；真实后端条件编译 |
 | 维护 | 两套适配器各自重写语义 | 语义只在核心 |
 
@@ -120,6 +120,7 @@ Assets/XFramework.Fmod/
 ├── Runtime/Integration/
 │   ├── Venusy609.Xframework.Fmod.Unity.asmdef    # 条件：refs provider + FMODUnity
 │   │                                             # versionDefines: com.firelight.fmod-for-unity → XFRAMEWORK_FMOD
+│   │                                             # （仅当最终选择该 UPM 路径时；包名以实际 SDK 为准）
 │   │                                             # defineConstraints: ["XFRAMEWORK_FMOD"]
 │   ├── FmodEventBackend.cs                       # internal：RuntimeManager / EventInstance
 │   └── FmodAudio.cs                              # public：Install(options)
@@ -199,7 +200,7 @@ FmodAudio.Install(new FmodAudioOptions
 
 ## 六、实现顺序与验证（核心已完成；FMOD 包未执行）
 
-1. ✅ 核心 `IAudioProvider` + 内置 `AudioSourceProvider` 拆分（行为不变）；Audio 167/167。
+1. ✅ 核心 `IAudioProvider` + 内置 `AudioSourceProvider` 拆分（行为不变）；Audio 定向全绿。
 2. ✅ `AudioManager.SetProvider` + `TryGetProviderHandle` + fake provider 测试。
 3. ⬜ 扩展包 FMOD-free provider + fake backend 测试 + 守卫。
 4. ⬜ Integration 程序集 + 真实 bank 冒烟（`XFW_FMOD_BANK` / `XFW_FMOD_EVENT`）。
@@ -225,8 +226,8 @@ FmodAudio.Install(new FmodAudioOptions
 
 ## 八、与既有结论的关系（下一轮别重提）
 
-- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md:59` 已否决（后端中立性 +
-  资源生命周期单语义），无重开判据。
+- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md` 的「不做：不提供
+  `Play(AudioClip, ...)` 重载」条目已否决（后端中立性 + 资源生命周期单语义），无重开判据。
 - **框架音量 → 项目 AudioMixer 路由仍不内建**：R3-AUD-001 已实测 `outputAudioMixerGroup` 恒 null；
   B 之后要路由只能实现自定义 provider。
 - **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地（公开 API 源兼容新增）；
