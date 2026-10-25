@@ -120,6 +120,33 @@ namespace XFramework.XAsset
         }
 
         /// <summary>
+        /// 获取**已初始化成功**的资源包；包存在但状态不是 <see cref="EOperationStatus.Succeed"/> 时
+        /// 抛带包名的 <see cref="InvalidOperationException"/>（R4-AST-003）。
+        /// <para>上游三个热更 API 会先 <c>DebugCheckInitialize</c>：Editor/DEBUG 下抛裸
+        /// <see cref="Exception"/>，Player 下检查被编译掉、可能直接 NRE。门面统一成自己的异常类型，
+        /// 让「包存在但初始化失败」不再表现为上游异常。</para>
+        /// </summary>
+        /// <param name="packageName">包名；null/空白用默认包。</param>
+        /// <param name="operation">调用方操作名，用于错误消息。</param>
+        /// <returns>已初始化的包；包不存在时返回 null（保持既有「未找到返回 null」语义）。</returns>
+        private ResourcePackage GetInitializedPackage(string packageName, string operation)
+        {
+            var package = GetPackage(packageName);
+            if (package == null)
+                return null;
+
+            if (package.InitializeStatus != EOperationStatus.Succeed)
+            {
+                throw new InvalidOperationException(
+                    $"[AssetManager] Package '{package.PackageName}' is not initialized successfully " +
+                    $"(status {package.InitializeStatus}); cannot {operation}. " +
+                    "Call InitializePackageAsync first or check the initialization logs.");
+            }
+
+            return package;
+        }
+
+        /// <summary>
         /// 初始化资源包（默认包与额外包共用此链路）。
         /// <para>包复用语义：包已初始化成功时跳过 InitializeAsync，直接刷新版本与清单
         /// （支持 AssetManager.Destroy() 后重新初始化）；初始化失败时重新初始化。</para>
@@ -251,7 +278,7 @@ namespace XFramework.XAsset
         /// </summary>
         public async UniTask<string> RequestPackageVersionAsync(string packageName = null, CancellationToken cancellationToken = default)
         {
-            var package = GetPackage(packageName);
+            var package = GetInitializedPackage(packageName, "request the package version");
             if (package == null) return null;
 
             var operation = package.RequestPackageVersionAsync();
@@ -271,7 +298,7 @@ namespace XFramework.XAsset
             if (string.IsNullOrEmpty(packageVersion))
                 throw new ArgumentException("[AssetManager] packageVersion is null or empty.", nameof(packageVersion));
 
-            var package = GetPackage(packageName);
+            var package = GetInitializedPackage(packageName, "update the package manifest");
             if (package == null) return;
 
             var operation = package.UpdatePackageManifestAsync(packageVersion);
@@ -289,7 +316,7 @@ namespace XFramework.XAsset
             if (string.IsNullOrEmpty(packageVersion))
                 throw new ArgumentException("[AssetManager] packageVersion is null or empty.", nameof(packageVersion));
 
-            var package = GetPackage(packageName);
+            var package = GetInitializedPackage(packageName, "pre-download content manifest");
             if (package == null) return;
 
             var operation = package.PreDownloadContentAsync(packageVersion);

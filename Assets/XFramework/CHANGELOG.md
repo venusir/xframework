@@ -489,6 +489,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Asset
 
+- **三个热更入口对「包存在但初始化失败」没有守卫（R4-AST-003）**：`RequestPackageVersionAsync` /
+  `UpdatePackageManifestAsync` / `PreDownloadContentAsync` 只检查包是否存在；包在
+  `InitializePackageAsync` 中失败后仍留在缓存里，调用会落到上游 `DebugCheckInitialize`——
+  Editor/DEBUG 下抛裸 `Exception`（与 XML 承诺的 `InvalidOperationException` 不符），Player 下检查被
+  编译掉、可能 NRE。修法：三入口统一经 `GetInitializedPackage` 校验 `InitializeStatus`，非 `Succeed`
+  抛带包名/状态/修复提示的 `InvalidOperationException`；包不存在仍返回 null/no-op。回归：
+  `YooAssetPackageStateTests` 三例（改前均抛裸 `Exception`）。
 - **`AssetBootstrapStage` 只凭一个标志判断所有权，会销毁使用方换入/别人在途初始化的实例（R4-AST-002）**：
   `_initializedByThisStage` 在 await 之前无条件置真，不校验「本次是否由本阶段发起」，也不校验当前实例
   是否仍是自己初始化出来的那一份——使用方 `SetInstance(custom)` 后 `Bootstrap.Shutdown()` 仍会
