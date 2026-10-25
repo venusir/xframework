@@ -294,6 +294,76 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(2, hud.CameraLookupCount, "超过 1 秒后应重试一次");
         }
 
+        /// <summary>
+        /// 同 target 完全相同的并发 Attach 必须合并为一次实例化（R4-UIB-002）。
+        /// </summary>
+        [Test]
+        public async Task ShowHudAsync_SameTargetConcurrent_InstantiatesOnce()
+        {
+            _assets.Gate = new UniTaskCompletionSource();
+            try
+            {
+                var first = UIManager.ShowHudAsync<HudStubItem>(_target.transform, StubPath);
+                var second = UIManager.ShowHudAsync<HudStubItem>(_target.transform, StubPath);
+
+                await UniTask.Yield();
+                _assets.Gate.TrySetResult();
+                var firstHud = await first;
+                var secondHud = await second;
+
+                Assert.AreEqual(1, _assets.InstantiateCount, "同 target 同请求应只实例化一次");
+                Assert.IsNotNull(firstHud);
+                Assert.AreSame(firstHud, secondHud, "并发调用方应拿到同一个 HUD 实例");
+                Assert.AreEqual(1, CountActiveHudChildren(), "Layer_HUD 下应只有一个活跃 HUD");
+            }
+            finally
+            {
+                _assets.Gate = null;
+            }
+        }
+
+        /// <summary>
+        /// 并发 Attach 后 CloseAllAsync 必须把全部 HUD（含不在映射里的孤儿）清掉（R4-UIB-002）。
+        /// </summary>
+        [Test]
+        public async Task CloseAllAsync_AfterConcurrentAttach_LeavesNoActiveHud()
+        {
+            _assets.Gate = new UniTaskCompletionSource();
+            try
+            {
+                var first = UIManager.ShowHudAsync<HudStubItem>(_target.transform, StubPath);
+                var second = UIManager.ShowHudAsync<HudStubItem>(_target.transform, StubPath);
+
+                await UniTask.Yield();
+                _assets.Gate.TrySetResult();
+                await first;
+                await second;
+
+                await UIManager.CloseAllAsync();
+
+                Assert.AreEqual(0, CountActiveHudChildren(), "CloseAllAsync 后 Layer_HUD 不应残留活跃实例");
+            }
+            finally
+            {
+                _assets.Gate = null;
+            }
+        }
+
+        private int CountActiveHudChildren()
+        {
+            var container = _root.transform.Find("Layer_HUD");
+            if (container == null)
+                return 0;
+
+            int count = 0;
+            for (int i = 0; i < container.childCount; i++)
+            {
+                if (container.GetChild(i).gameObject.activeSelf)
+                    count++;
+            }
+            return count;
+        }
+
         #endregion
     }
 

@@ -827,6 +827,9 @@ UIManager.ShowHudAsync<T>(target, assetPath, offset)  →  静态外观
 - `UIHudManagerImpl` 是 `IUIHudProvider` 的默认实现（可用 `UIManager.SetHudProvider` 替换），在 UIRoot 下自动创建 `Layer_HUD` 独立 Canvas（sortingOrder = 30000），确保 HUD 始终在所有面板之上
 - `UIHudItem` 继承自 `UIViewBase`，与面板共享 `OnUpdate` 集中驱动机制
 - 一个 3D 目标同时只能绑定一个 HUD，重复调用 `ShowHudAsync` 会自动替换旧 HUD
+- **同 target + 同 HUD 类型 + 同地址的并发 `ShowHudAsync` 合并为一次实例化**（R4-UIB-002）：
+  两个调用方拿到同一个实例；同 target 的不同 HUD 请求串行化（等前一次结束后重试），不会并发实例化后
+  互相覆盖。`CloseAllAsync` / `DetachAll` 会同时清理不在映射里的孤儿 HUD。
 
 ### 快速使用
 

@@ -67,6 +67,23 @@ namespace XFramework.XUI
         /// </summary>
         private int _detachGeneration;
 
+        /// <summary>
+        /// 按 target 的单槽在途表（R4-UIB-002）。完全相同请求的后来者加入同一次 Attach；
+        /// 同 target 的不同 HUD 请求等当前在途结束后重试，避免并发实例化后先后写 map 产生孤儿。
+        /// <para>键用实例 ID，避免已销毁 Transform 的 Unity 伪 null 干扰字典哈希。</para>
+        /// </summary>
+        private readonly Dictionary<int, InFlightAttach> _inFlightAttach
+            = new Dictionary<int, InFlightAttach>(8);
+
+        private sealed class InFlightAttach
+        {
+            public int TargetId;
+            public Transform Target;
+            public Type HudType;
+            public string AssetPath;
+            public List<UniTaskCompletionSource<UIHudItem>> Joiners;
+        }
+
         #endregion
 
         #region Properties
@@ -111,6 +128,27 @@ namespace XFramework.XUI
             if (!EnsureContainer())
                 return null;
 
+            int targetId = target.GetInstanceID();
+
+            // 同 target 的单槽在途：完全相同请求加入；不同请求等当前在途结束后重试。
+            while (true)
+            {
+                if (_inFlightAttach.TryGetValue(targetId, out var inFlight))
+                {
+                    if (inFlight.HudType == typeof(T) &&
+                        string.Equals(inFlight.AssetPath, assetPath, StringComparison.Ordinal))
+                    {
+                        var joined = await JoinAttachAsync(inFlight, cancellationToken);
+                        return joined as T;
+                    }
+
+                    await WaitAttachAsync(inFlight, cancellationToken);
+                    continue;
+                }
+
+                break;
+            }
+
             // 同一目标已有 HUD → 先 Detach
             if (_hudMap.TryGetValue(target, out var existing))
             {
@@ -120,6 +158,38 @@ namespace XFramework.XUI
             // 记下进入时的世代：实例化与打开期间若发生过 DetachAll，回来的实例就属于上一世代
             int generation = _detachGeneration;
 
+            var entry = new InFlightAttach
+            {
+                TargetId = targetId,
+                Target = target,
+                HudType = typeof(T),
+                AssetPath = assetPath,
+            };
+            _inFlightAttach[targetId] = entry;
+
+            UIHudItem result = null;
+            try
+            {
+                result = await AttachCoreAsync<T>(
+                    target, assetPath, offset, cancellationToken, generation);
+                return result as T;
+            }
+            finally
+            {
+                SettleAttach(targetId, entry, result);
+            }
+        }
+
+        /// <summary>
+        /// 实际执行一次 Attach：实例化 → 配置 → 打开 → 世代复检 → 注册映射。
+        /// </summary>
+        private async UniTask<UIHudItem> AttachCoreAsync<T>(
+            Transform target,
+            string assetPath,
+            Vector2? offset,
+            CancellationToken cancellationToken,
+            int generation) where T : UIHudItem
+        {
             // 实例化 HUD（AssetManager 内部管理对象池）
             var go = await AssetManager.InstantiateAsync(assetPath, _hudContainer, cancellationToken);
             if (go == null)
@@ -137,6 +207,10 @@ namespace XFramework.XUI
                 AssetManager.DestroyInstance(go);
                 return null;
             }
+
+            // 池化实例重新入册：必须在任何可能回收的路径之前复位认领标记，
+            // 否则 OnOpen 失败时的 DiscardHud → RecycleHud 会被上一轮的 IsRecycled 挡掉。
+            hud.MarkReopened();
 
             // 配置 HUD
             go.name = $"HUD_{typeof(T).Name}_{target.name}";
@@ -165,11 +239,63 @@ namespace XFramework.XUI
                 return null;
             }
 
+            // 注册前复检：不同请求串行化后旧实例仍可能留在 map（防御旧状态/第三方 provider 竞态）
+            if (_hudMap.TryGetValue(target, out var existing))
+            {
+                DetachInternal(existing, target);
+            }
+
             // 注册映射
             _hudMap[target] = hud;
             _activeHudList.Add(hud);
 
             return hud;
+        }
+
+        /// <summary>加入一次完全相同的在途 Attach；取消时摘掉自己的等待源。</summary>
+        private static async UniTask<UIHudItem> JoinAttachAsync(
+            InFlightAttach entry, CancellationToken cancellationToken)
+        {
+            var tcs = new UniTaskCompletionSource<UIHudItem>();
+            if (entry.Joiners == null)
+                entry.Joiners = new List<UniTaskCompletionSource<UIHudItem>>(2);
+
+            entry.Joiners.Add(tcs);
+            try
+            {
+                return await tcs.Task.AttachExternalCancellation(cancellationToken);
+            }
+            finally
+            {
+                entry.Joiners?.Remove(tcs);
+            }
+        }
+
+        /// <summary>等待一次不同请求的在途 Attach 结束（结果忽略），随后由调用方重试。</summary>
+        private static async UniTask WaitAttachAsync(
+            InFlightAttach entry, CancellationToken cancellationToken)
+        {
+            await JoinAttachAsync(entry, cancellationToken);
+        }
+
+        /// <summary>结束一次在途 Attach：按 entry 身份摘账并广播结果（失败/取消为 null）。</summary>
+        private void SettleAttach(int targetId, InFlightAttach entry, UIHudItem result)
+        {
+            // 只删「仍指向本次 entry」的登记：DetachAll 清表后新 Attach 会建新 entry，
+            // 旧创建者的 finally 无条件 Remove 会误删新记录。
+            if (_inFlightAttach.TryGetValue(targetId, out var current) &&
+                ReferenceEquals(current, entry))
+            {
+                _inFlightAttach.Remove(targetId);
+            }
+
+            if (entry.Joiners == null)
+                return;
+
+            for (int i = 0; i < entry.Joiners.Count; i++)
+                entry.Joiners[i].TrySetResult(result);
+
+            entry.Joiners = null;
         }
 
         /// <inheritdoc/>
@@ -191,6 +317,23 @@ namespace XFramework.XUI
             // 决定（Dispose 之后没人会再调 AttachAsync），故此处置位不影响后续正常使用。
             _detachGeneration++;
 
+            // 在途项必须在这里结算：否则加入者会等一个永不再完成的 TCS。
+            if (_inFlightAttach.Count > 0)
+            {
+                var pending = new List<InFlightAttach>(_inFlightAttach.Values);
+                _inFlightAttach.Clear();
+                for (int i = 0; i < pending.Count; i++)
+                {
+                    var joiners = pending[i].Joiners;
+                    if (joiners == null)
+                        continue;
+
+                    for (int j = 0; j < joiners.Count; j++)
+                        joiners[j].TrySetResult(null);
+                    pending[i].Joiners = null;
+                }
+            }
+
             // 收集所有条目（避免遍历中修改字典）
             var entries = new List<(UIHudItem hud, Transform target)>();
             foreach (var kv in _hudMap)
@@ -198,10 +341,39 @@ namespace XFramework.XUI
                 entries.Add((kv.Value, kv.Key));
             }
 
-            foreach (var entry in entries)
+            for (int i = 0; i < entries.Count; i++)
             {
-                DetachInternal(entry.hud, entry.target);
+                DetachInternal(entries[i].hud, entries[i].target);
             }
+
+            // 清掉不在映射里的孤儿（R4-UIB-002）：并发 Attach 的覆盖、或映射死条目都可能留下
+            // 只存在于 _activeHudList 的实例；只遍历 map 会让它继续每帧被驱动。
+            if (_activeHudList.Count == 0)
+                return;
+
+            var orphans = new List<UIHudItem>(_activeHudList);
+            for (int i = 0; i < orphans.Count; i++)
+            {
+                var hud = orphans[i];
+                if (hud == null)
+                {
+                    _activeHudList.Remove(hud);
+                    continue;
+                }
+
+                if (!IsInHudMap(hud))
+                    DetachInternal(hud, hud.FollowTarget);
+            }
+        }
+
+        private bool IsInHudMap(UIHudItem hud)
+        {
+            foreach (var kv in _hudMap)
+            {
+                if (ReferenceEquals(kv.Value, hud))
+                    return true;
+            }
+            return false;
         }
 
         /// <inheritdoc/>
@@ -358,16 +530,24 @@ namespace XFramework.XUI
         /// </summary>
         private static void RecycleHud(UIHudItem hud)
         {
-            if (hud == null)
+            // 认领守卫（R4-UIB-002）：Detach 的续体、Discard 与 DetachAll 的孤儿清理可能先后
+            // 到达同一实例；只有第一次执行 OnPoolRecycle / DestroyInstance。
+            if (hud == null || hud.IsRecycled)
                 return;
 
-            // 回池复位停更标记：池化实例不得把「OnUpdate 抛过异常」带进下一次使用
-            hud.UpdateFaulted = false;
-            hud.OnPoolRecycle();
-
-            if (hud.gameObject != null)
+            hud.MarkRecycled();
+            try
             {
-                AssetManager.DestroyInstance(hud.gameObject);
+                // 回池复位停更标记：池化实例不得把「OnUpdate 抛过异常」带进下一次使用
+                hud.UpdateFaulted = false;
+                hud.OnPoolRecycle();
+            }
+            finally
+            {
+                if (hud.gameObject != null)
+                {
+                    AssetManager.DestroyInstance(hud.gameObject);
+                }
             }
         }
 

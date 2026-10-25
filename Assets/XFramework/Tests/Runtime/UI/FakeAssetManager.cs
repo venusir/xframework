@@ -45,6 +45,12 @@ namespace XFramework.XUI.Tests
         /// <summary>置 true 后 InstantiateAsync 直接返回 null，用于覆盖「加载失败」分支。</summary>
         public bool FailInstantiate { get; set; }
 
+        /// <summary>
+        /// 非 null 时 InstantiateAsync 会等待它完成（R4-UIB-002 的并发窗口）。
+        /// <para>默认 null，保持原有同步完成时序。</para>
+        /// </summary>
+        public UniTaskCompletionSource Gate { get; set; }
+
         /// <summary>登记某个地址应当挂上什么组件（可多个，按顺序添加）。</summary>
         public void RegisterPrefab(string location, params Type[] componentTypes)
             => _componentsByLocation[location] = componentTypes;
@@ -70,16 +76,24 @@ namespace XFramework.XUI.Tests
         #region Implemented — 实例化与回收
 
         /// <inheritdoc/>
-        public UniTask<GameObject> InstantiateAsync(string location, Transform parent = null,
+        public async UniTask<GameObject> InstantiateAsync(string location, Transform parent = null,
             CancellationToken cancellationToken = default)
-            => UniTask.FromResult(CreateInstance(location, parent));
+        {
+            if (Gate != null)
+                await Gate.Task;
+
+            return CreateInstance(location, parent);
+        }
 
         /// <inheritdoc/>
-        public UniTask<T> InstantiateAsync<T>(string location, Transform parent = null,
+        public async UniTask<T> InstantiateAsync<T>(string location, Transform parent = null,
             CancellationToken cancellationToken = default) where T : Component
         {
+            if (Gate != null)
+                await Gate.Task;
+
             var go = CreateInstance(location, parent);
-            return UniTask.FromResult(go == null ? null : go.GetComponent<T>());
+            return go == null ? null : go.GetComponent<T>();
         }
 
         /// <inheritdoc/>

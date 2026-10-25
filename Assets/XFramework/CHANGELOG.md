@@ -264,6 +264,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   不再调用 `DoCloseAsync`。此前续体会在回池之后对同一实例执行 `OnClose`，池化实例被重新打开时甚至会把
   新面板关掉。回归：`UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` /
   `..._ReinitializedPanelStaysOpen`。
+- **（行为变更）同 target 的并发 HUD Attach 合并、CloseAll 清理孤儿（R4-UIB-002）**：同 target + 同 HUD
+  类型 + 同地址的并发 `ShowHudAsync` 现在共享同一次实例化，两个调用方拿到**同一实例**；同 target 的不同
+  HUD 请求串行化（等前一次结束后重试），不再并发实例化后互相覆盖。`CloseAllAsync` / `DetachAll` 会同时
+  清理 `_activeHudList` 中不在映射里的孤儿。此前后完成者覆盖 `_hudMap`，先完成者成为永不回收的常驻 HUD。
+  回归：`UIHudManagerTests.ShowHudAsync_SameTargetConcurrent_InstantiatesOnce` /
+  `CloseAllAsync_AfterConcurrentAttach_LeavesNoActiveHud`（改前分别实例化 2 次、CloseAll 后残留 1 个）。
 
 #### Camera
 
@@ -763,6 +769,12 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   条目保留，仅 `!ReferenceEquals(Owner, null) && Owner == null`（Unity 伪 null）才剪。回归：
   `UIMaskTests.ShowMask_WithoutOwner_SurvivesUnrelatedPanelDestroyed`（改前红）；
   `UIDialogPanelTests.ExternallyDestroyedMaskOwner_ReleasesMask` 保持绿。
+- **同 target 并发 Attach 产生孤儿 HUD、DetachAll 清不掉（R4-UIB-002）**：`AttachAsync` 只在实例化前
+  查一次 `_hudMap`，两个并发请求各实例化一次；后完成者覆盖 map，先完成者只留在 `_activeHudList` 里，
+  `HideHud` / `DetachAll` / `CloseAllAsync` 都碰不到它。修法：按 target 建单槽在途表（完全相同请求加入、
+  不同请求串行重试），`DetachAll` 结算在途等待者并清 `_activeHudList` 孤儿，`RecycleHud` 加实例认领守卫。
+  回归：`ShowHudAsync_SameTargetConcurrent_InstantiatesOnce` / `CloseAllAsync_AfterConcurrentAttach_LeavesNoActiveHud`
+  （改前分别实例化 2 次、CloseAll 后残留 1 个）。
 - **约定绑定节点类型不匹配/重名无告警（R3-UIB-009/013）**：`img_` 挂在没有 `Image` 的节点上静默跳过
   （与 README「未找到会告警」相反）；面板内同名约定节点后者覆盖前者、先出现的永久未绑。修法：编辑器下
   类型不匹配告警；同名节点只保留第一个并告警。回归：`UIPanelBindingConventionTests` 两例（改前均红）。
