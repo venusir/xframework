@@ -719,6 +719,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Settings
 
+- **加密读侧把 `JsonUtility` 留在池线程（R4-SET-001）**：内层同步时 `LoadAsync` 把整段 `Load<T>`
+  （含 `_inner.Load`、解密、`JsonUtility.FromJson`）丢到线程池，与 README 示例「解析前切回主线程」
+  相反；写侧 R3-SET-001 已改成「调用线程序列化、池线程只做 IO」，读侧没有对称处理。修法：拆出
+  `DecryptToJson`（池线程：IO + Base64 + 解密）与主线程解析；内层异步时也显式 `SwitchToMainThread`
+  后再解析，切回后、解析前检查取消。回归：
+  `EncryptedSettingsStoreTests.LoadAsync_SyncInner_DecryptsOnPoolAndParsesOnMainThread`
+  （改前 `OnAfterDeserialize` 在池线程）。
 - **PauseNotifier 代际、目录创建与静默回默认（R3-SET-004/005/006）**：`SettingsPauseNotifier` 的引用计数无代际，
   会话复位后旧管理器的 `Release` 会扣减新会话计数；`JsonFileStore.Save` 的目录创建与 `ToJson` 在 try 之外，
   失败直接外抛；加密装饰器对「文件存在但不是密文外壳」静默回默认。修法：代际 token（`Acquire` 返回、

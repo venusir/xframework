@@ -51,10 +51,12 @@ namespace XFramework.XSettings.Tests
             public byte[] Decrypt(byte[] cipherData) => null;
         }
 
-        /// <summary>记录 Encrypt 所在线程的提供者（R3-SET-001 的调用线程断言）。</summary>
+        /// <summary>记录 Encrypt / Decrypt 所在线程的提供者（R3-SET-001 / R4-SET-001 的线程断言）。</summary>
         private sealed class ThreadRecordingCryptoProvider : ICryptoProvider
         {
             public int EncryptThreadId { get; private set; }
+
+            public int DecryptThreadId { get; private set; } = -1;
 
             public byte[] Encrypt(byte[] plainData)
             {
@@ -62,7 +64,31 @@ namespace XFramework.XSettings.Tests
                 return plainData;
             }
 
-            public byte[] Decrypt(byte[] cipherData) => cipherData;
+            public byte[] Decrypt(byte[] cipherData)
+            {
+                DecryptThreadId = Thread.CurrentThread.ManagedThreadId;
+                return cipherData;
+            }
+        }
+
+        /// <summary>
+        /// 记录 <c>JsonUtility</c> 反序列化线程的设置类型（R4-SET-001）。
+        /// <para><see cref="JsonUtility.FromJson{T}"/> 会调用 <see cref="ISerializationCallbackReceiver.OnAfterDeserialize"/>，
+        /// 因此无需给生产代码加测试钩子。</para>
+        /// </summary>
+        [Serializable]
+        private sealed class ThreadRecordingSettings : ISerializationCallbackReceiver
+        {
+            public static int LastDeserializeThreadId = -1;
+
+            public float MasterVolume = 1f;
+
+            public void OnBeforeSerialize() { }
+
+            public void OnAfterDeserialize()
+            {
+                LastDeserializeThreadId = Thread.CurrentThread.ManagedThreadId;
+            }
         }
 
         /// <summary>「文件存在但读出来不是密文外壳」的假存储（R3-SET-006）。</summary>
@@ -134,6 +160,26 @@ namespace XFramework.XSettings.Tests
 
             Assert.AreEqual(callerThread, crypto.EncryptThreadId,
                 "加密（连同序列化）必须在调用线程完成");
+        }
+
+        [Test]
+        public async Task LoadAsync_SyncInner_DecryptsOnPoolAndParsesOnMainThread()
+        {
+            // R4-SET-001：内层同步时读侧把整段 Load<T>（含 JsonUtility.FromJson）丢到线程池，
+            // 与 README「JsonUtility 解析前切回主线程」相反。修法：池线程只做 IO/解密，解析切回主线程。
+            var crypto = new ThreadRecordingCryptoProvider();
+            var store = new EncryptedSettingsStore(new MemoryStore(), crypto);
+            await store.SaveAsync(new ThreadRecordingSettings { MasterVolume = 0.5f });
+
+            ThreadRecordingSettings.LastDeserializeThreadId = -1;
+            int mainThread = Thread.CurrentThread.ManagedThreadId;
+
+            var loaded = await store.LoadAsync<ThreadRecordingSettings>();
+
+            Assert.AreEqual(0.5f, loaded.MasterVolume, 0.001f);
+            Assert.AreNotEqual(mainThread, crypto.DecryptThreadId, "解密仍在池线程完成（与写侧对称）");
+            Assert.AreEqual(mainThread, ThreadRecordingSettings.LastDeserializeThreadId,
+                "JsonUtility 解析必须切回主线程（R4-SET-001）");
         }
 
         [Test]

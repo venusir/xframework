@@ -88,7 +88,8 @@ namespace XFramework.XSettings
         /// <inheritdoc />
         public T Load<T>() where T : class, new()
         {
-            return FromCipherBlob<T>(_inner.Load<SettingsCipherBlob>(), _inner.Exists());
+            var json = DecryptToJson(_inner.Load<SettingsCipherBlob>(), _inner.Exists());
+            return json == null ? new T() : (FromJsonOrDefault<T>(json) ?? new T());
         }
 
         #endregion
@@ -111,7 +112,7 @@ namespace XFramework.XSettings
             if (_inner is IAsyncSettingsStore asyncStore)
                 return LoadEncryptedAsync<T>(asyncStore, cancellationToken);
 
-            return UniTask.RunOnThreadPool(Load<T>, configureAwait: true, cancellationToken);
+            return LoadEncryptedSyncInnerAsync<T>(cancellationToken);
         }
 
         /// <inheritdoc />
@@ -135,14 +136,40 @@ namespace XFramework.XSettings
         }
 
         /// <summary>
-        /// 内层异步时读回密文并在当前线程解密——与同步 <see cref="Load{T}"/> 同一段回退语义。
+        /// 内层同步时：池线程只做 IO 与解密，<c>JsonUtility</c> 解析切回主线程（R4-SET-001）。
+        /// </summary>
+        private async UniTask<T> LoadEncryptedSyncInnerAsync<T>(CancellationToken cancellationToken)
+            where T : class, new()
+        {
+            var json = await UniTask.RunOnThreadPool(() =>
+            {
+                var blob = _inner.Load<SettingsCipherBlob>();
+                bool exists = _inner.Exists();
+                return DecryptToJson(blob, exists);
+            }, configureAwait: true, cancellationToken);
+
+            await UniTask.SwitchToMainThread(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return json == null ? new T() : (FromJsonOrDefault<T>(json) ?? new T());
+        }
+
+        /// <summary>
+        /// 内层异步时读回密文并在主线程解析。
+        /// <para><b>显式切回主线程</b>：内层接口不承诺恢复调用线程；自定义异步后端可能在池线程完成，
+        /// 不能只依赖 <c>await</c> 的上下文（R4-SET-001）。</para>
         /// </summary>
         private async UniTask<T> LoadEncryptedAsync<T>(IAsyncSettingsStore asyncStore,
             CancellationToken cancellationToken) where T : class, new()
         {
             var blob = await asyncStore.LoadAsync<SettingsCipherBlob>(cancellationToken);
             bool exists = await asyncStore.ExistsAsync(cancellationToken);
-            return FromCipherBlob<T>(blob, exists);
+            var json = DecryptToJson(blob, exists);
+
+            await UniTask.SwitchToMainThread(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+
+            return json == null ? new T() : (FromJsonOrDefault<T>(json) ?? new T());
         }
 
         #endregion
@@ -159,12 +186,14 @@ namespace XFramework.XSettings
         }
 
         /// <summary>
-        /// 密文外壳 → 设置对象（同步 / 异步两条读路径共用）。
-        /// <para>无数据 / Base64 非法 / 解密失败 / 解析失败一律告警回退默认值——与同步行为逐字一致。</para>
+        /// 密文外壳 → 明文 JSON（同步 / 异步两条读路径共用）。
+        /// <para>无数据 / Base64 非法 / 解密失败一律告警并返回 <c>null</c>（调用方回退默认值）——
+        /// 与同步行为逐字一致。解析（<see cref="JsonUtility"/>）不在这里做：读侧要求它发生在主线程
+        /// （R4-SET-001）。</para>
         /// </summary>
         /// <param name="blob">内层读回的密文外壳。</param>
         /// <param name="fileExists">内层文件是否存在：用于区分「从未写过」与「写了但不是密文外壳」（R3-SET-006）。</param>
-        private T FromCipherBlob<T>(SettingsCipherBlob blob, bool fileExists) where T : class, new()
+        private string DecryptToJson(SettingsCipherBlob blob, bool fileExists)
         {
             // 内层无数据时按其契约返回 new SettingsCipherBlob(),此时 Data 为 null
             if (blob == null || string.IsNullOrEmpty(blob.Data))
@@ -175,7 +204,7 @@ namespace XFramework.XSettings
                         "设置文件存在但不是密文外壳（SettingsCipherBlob.Data 为空），已回退默认值；" +
                         "文件可能来自未加密写入或格式不符。");
                 }
-                return new T();
+                return null;
             }
 
             byte[] plain;
@@ -187,7 +216,7 @@ namespace XFramework.XSettings
             {
                 LogManager.Exception(LogLevel.Warning, LogCategories.SettingsManager, ex,
                     "设置密文不是合法的 Base64，已回退默认值");
-                return new T();
+                return null;
             }
 
             if (plain == null)
@@ -196,10 +225,10 @@ namespace XFramework.XSettings
                 LogManager.Warning(LogCategories.SettingsManager,
                     "设置密文解密失败（ICryptoProvider.Decrypt 返回 null），已回退默认值。" +
                     "最常见的原因是密钥已更换——换密钥等于换加密方案，旧文件无法还原。");
-                return new T();
+                return null;
             }
 
-            return FromJsonOrDefault<T>(Encoding.UTF8.GetString(plain)) ?? new T();
+            return Encoding.UTF8.GetString(plain);
         }
 
         /// <summary>

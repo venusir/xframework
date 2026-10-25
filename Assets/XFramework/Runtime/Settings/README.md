@@ -606,6 +606,9 @@ SettingsManager.Initialize<GameSettings>(new EncryptedSettingsStore(
 - **存储后端那一层相反**：`JsonFileStore` 的成员**可被任意线程调用**（同一实例上的读写由内部锁串行化，
   同步 `Save` 与在飞的 `SaveAsync` 会同时出现）。所以「主线程」这条约束的射程是**句柄与管理器**，
   不是后端实现——自建后端时按它自己的并发模型写。
+- **`EncryptedSettingsStore` 的读侧解析在主线程**：内层同步时池线程只做 IO 与解密，`JsonUtility.FromJson`
+  切回主线程执行；内层异步时也显式切回（自定义异步后端可能在池线程完成，不能只依赖 `await` 的上下文）。
+  写侧维持「序列化/加密在调用线程」（R3-SET-001 / R4-SET-001）。
 
 ## 性能代价
 
