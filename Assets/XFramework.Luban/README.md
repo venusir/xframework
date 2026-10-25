@@ -53,7 +53,7 @@ XFramework 的**可选** Luban 配置扩展：Editor 一键导表、生成式行
 | 代码目标 / 数据目标 | `cs-bin + bin` 或 `cs-simple-json + json`，必须配套 |
 | 适配器命名空间 / 类名 | 生成代码的落点 |
 | 生成行接口实现（IConfigRow） | 默认开启；关闭时由你手写 |
-| 附加参数 | 原样追加到 Luban 命令行 |
+| 附加参数 | 去掉首尾空白后追加到 Luban 命令行 |
 
 ### 3. 生成
 
@@ -175,11 +175,13 @@ Assets/XFramework.Luban/
   在事件里查 `LubanConfig.Tables` 会抛 `InvalidOperationException`。需要整包完成请 await `InitializeAsync`
   或检查 `IsInitialized`。
 - `LubanConfigBridge.Unload<T>()` 即使 `T` 未加载也会触发 `ConfigChanged`（核心 `ConfigManager` 的既有语义）。
-- 主线程契约在 Editor 下由入口断言（首错记一次 Error）；Release 构建无运行时开销。
+- 主线程契约：`InitializeAsync` / `Destroy` 等**写入口**在 Editor 下断言（首错记一次 Error）；查询面
+  （`Tables` / `GetTables` / `TryGetTables` / `IsInitialized`）不设入口断言，仍要求调用方在主线程使用。
+  Release 构建无运行时开销。
 - 注册失败会尽力 `UnregisterFromConfigManager()` 回滚，再抛 `LubanConfigException`。
 - `Destroy()` 在 `ConfigManager` 仍初始化时卸载本扩展注册的表；若 `ConfigManager` 已被销毁则跳过并告警。
 - 取消只中断本次等待；已完成的加载/注册不回滚。
-- 所有公开 API 必须在主线程调用。
+- 所有公开 API 必须在主线程调用；Editor 下的入口断言只覆盖写入口（见上）。
 
 ### 错误
 
@@ -302,6 +304,8 @@ await LubanConfig.InitializeAsync(adapter, new LubanOptions
 ## 性能代价
 
 - `DataMap` 运行期是 `Dictionary<TKey,T>` 时零拷贝；`ReadOnlyDictionary` 等会复制一份并记 Info；
+- **零拷贝共享调用方字典**：`Dictionary<TKey,T>` 注册后不要修改同一个字典——本包不监听它的变化，
+  `ConfigChanged` 也不会触发（R4-LBN-016）；
 - `ConfigTable<T>` 构造还会快照一份 `T[]`（`GetAll()` 的返回值），因此内存约为
   「Luban 原始字典 + 行数组」；零拷贝只省字典这一份；
 - 复制路径使用默认相等比较器，自定义 comparer 不保留；
@@ -320,12 +324,13 @@ await LubanConfig.InitializeAsync(adapter, new LubanOptions
 - **多个独立索引的 list 表不支持**；请用联合索引（`index="a+b"`）；
 - **行接口实现与生成代码必须在同一 asmdef**，且该 asmdef 必须直接引用核心包、本包与 `Luban.Runtime`；
 - **主线程同步解析**；大表会卡启动帧；主线程契约的入口断言只在 Editor 下启用，Release 无运行时开销；
-- **`LubanOptions.DataRoot` 原样拼接**，不归一化反斜杠、首斜杠或空白；需要特殊路径时用 `LocationResolver`；
+- **`LubanOptions.DataRoot` 只去掉尾部 `/`**，不归一化反斜杠、首斜杠或空白；需要特殊路径时用 `LocationResolver`；
 - **不支持热重载 / 多 schema 并行挂载**；一次一个适配器；
 - **不要与同类型的 `Preload` 混用**：注册会覆盖同类型的既有数据，并触发 `ConfigChanged`；
 - **Editor 工具会调用外部 `dotnet`**，需要 `.NET 8+` 与可用的 Luban.dll；超时 5 分钟；
 - **示例使用 EditorSimulate**，需要 YooAsset collector，Player 构建不适用；
-- **核心包的六道门禁不覆盖本包**（它们只扫 `Assets/XFramework`）；本包自带 Runtime/Editor 测试，
+- **核心包的六道门禁中只有第六项（示例编译）覆盖本包**（XML 文档告警、源文件参与编译、`.meta`、决策台账、
+  README 文件树均只扫 `Assets/XFramework`）；本包自带 Runtime/Editor 测试，
   README 结构与文件树由包内 `LubanReadmeTests` 守卫，`.meta` 完整性与公开面由包内守卫与评审覆盖。
 
 ## 设计取舍
@@ -340,7 +345,7 @@ await LubanConfig.InitializeAsync(adapter, new LubanOptions
 ## 接口承诺到哪为止
 
 - 本包公开 API（`ILubanConfigAdapter`、`LubanOptions`、`LubanConfig`、`LubanConfigBridge`、
-  `LubanBootstrapStage`、`LubanConfigException`）按语义化版本承诺；
+  `LubanBootstrapStage`、`LubanConfigException`、`LubanDataLoadMode`、`LubanInitReport`）按语义化版本承诺；
 - **生成代码的形状、`Tables` 的构造函数、`DataMap`/`Data`/`DataList` 的公开面属于 Luban**，
   本包只承诺「对 5.1.0 已验证」；升级 Luban 需重跑生成器与测试；
 - `.luban-integration-manifest` 与生成文件布局是内部实现，不作为对外契约。
