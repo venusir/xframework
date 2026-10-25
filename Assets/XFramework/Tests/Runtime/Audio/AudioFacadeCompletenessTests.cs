@@ -80,6 +80,18 @@ namespace XFramework.XAudio.Tests
         }
 
         /// <summary>
+        /// <see cref="AudioManager.SetProvider"/> 与 <see cref="AudioManager.TryGetProviderHandle"/> 不在
+        /// <see cref="IAudioManager"/> 上，上面的覆盖断言管不到——删掉任一个都会让「自定义播放引擎」
+        /// 在门面上不可达。
+        /// </summary>
+        [Test]
+        public void Facade_KeepsProviderMembers()
+        {
+            Assert.IsNotNull(typeof(AudioManager).GetMethod("SetProvider", PublicStatic));
+            Assert.IsNotNull(typeof(AudioManager).GetMethod("TryGetProviderHandle", PublicStatic));
+        }
+
+        /// <summary>
         /// 门面不得暴露实例属性。
         /// <para>一旦暴露，<see cref="IAudioManager"/> 成员的增加会自动成为公开 API，跳过评审。</para>
         /// </summary>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading;
 using Cysharp.Threading.Tasks;
@@ -124,6 +125,22 @@ namespace XFramework.XAudio.Tests
             Assert.DoesNotThrow(AudioManager.Destroy, "Destroy 会被 Application.quitting 调用，必须不抛");
             Assert.IsFalse(AudioManager.IsInitialized, "异常不得让门面卡在半初始化态");
             Assert.IsTrue(fake.Disposed);
+        }
+
+        /// <summary>
+        /// 经 <see cref="AudioManager.SetInstance"/> 注入的非 <see cref="AudioManagerImpl"/> 实现不提供
+        /// 通道表回读与 provider 句柄映射：诊断回读清空缓冲返回 <c>0</c>，探测返回 <c>false</c>，都不抛。
+        /// </summary>
+        [Test]
+        public void SetInstance_CustomManager_CopyChannelsZeroAndTryGetFalse()
+        {
+            AudioManager.SetInstance(new FakeAudioManager());
+            var buffer = new List<AudioChannelInfo> { new AudioChannelInfo("stale", 1f, false, 7) };
+
+            Assert.AreEqual(0, AudioManager.CopyChannels(buffer));
+            Assert.IsEmpty(buffer, "自定义管理器路径必须清空缓冲，不能把调用方传进来的旧内容当成结果");
+
+            Assert.IsFalse(AudioManager.TryGetProviderHandle(new AudioHandle(0, 1), out _));
         }
 
         #endregion

@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
@@ -57,6 +59,20 @@ namespace XFramework.XAudio.Tests
 
             Assert.IsTrue(_fake.Disposed, "SetProvider 必须先 Dispose 旧实例（provider 由框架持有）");
             Assert.IsFalse(next.Disposed);
+        }
+
+        /// <summary>
+        /// 同一实例再传一次会先被 <c>Destroy</c> 提前 Dispose，再装回去就是个已释放的实例。
+        /// 这是非法用法，必须显式抛，且抛出前不得动当前实例。
+        /// </summary>
+        [Test]
+        public void SetProvider_SameProvider_ThrowsAndKeepsTheCurrentInstance()
+        {
+            var ex = Assert.Throws<InvalidOperationException>(() => AudioManager.SetProvider(_fake));
+
+            StringAssert.Contains("[Audio]", ex.Message);
+            Assert.IsFalse(_fake.Disposed, "抛异常发生在 Destroy 之前，当前实例必须完好");
+            Assert.IsTrue(AudioManager.IsInitialized);
         }
 
         [Test]
@@ -290,13 +306,357 @@ namespace XFramework.XAudio.Tests
             Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
         }
 
+        [Test]
+        public void ProviderStopAndReleaseThrow_AreIsolatedAndReclaimed()
+        {
+            var handle = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            _fake.ThrowOnStop = true;
+            _fake.ThrowOnRelease = true;
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[Audio] 停止音频播放时发生异常")));
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[Audio] 释放音频播放时发生异常")));
+
+            Assert.IsTrue(AudioManager.Stop(handle), "provider 抛异常也不能让 Stop 抛出去");
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+        }
+
+        [Test]
+        public void ProviderDisposeThrow_IsIsolatedByFacade()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            _fake.ThrowOnDispose = true;
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[Audio] Destroy 时 Dispose 管理器实例抛出异常")));
+
+            Assert.DoesNotThrow(() => AudioManager.Destroy());
+            Assert.IsFalse(AudioManager.IsInitialized, "异常不得让门面卡在半初始化态");
+        }
+
+        /// <summary>
+        /// provider 在 validity 令牌上注册的取消回调抛异常时，<c>Stop</c> 仍须完成槽位回收；
+        /// 否则一次回调异常会把整个槽位表卡在 Loading（C1）。
+        /// </summary>
+        [Test]
+        public async Task CancelCallbackThrows_StopIsIsolated()
+        {
+            _fake.DelayNext = true;
+            _fake.ThrowOnValidityCancel = true;
+
+            var handle = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            Assert.IsFalse(handle.IsDefault, "前提：已预占核心槽位");
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[Audio] 停止加载中的音频时取消有效性令牌发生异常")));
+
+            Assert.IsTrue(AudioManager.Stop(handle), "取消回调抛异常后仍须回收槽位并返回 true");
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+
+            _fake.CompletePendingPlay();
+            await UniTask.DelayFrame(1);
+
+            Assert.AreEqual(0, _fake.LiveSlotCount);
+        }
+
+        /// <summary>
+        /// <c>Destroy</c> 路径同理：取消回调抛异常也不能跳过 <c>provider.Dispose</c>（C1）。
+        /// </summary>
+        [Test]
+        public async Task CancelCallbackThrows_DestroyIsIsolated()
+        {
+            _fake.DelayNext = true;
+            _fake.ThrowOnValidityCancel = true;
+
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+
+            LogAssert.Expect(LogType.Error, new Regex(Regex.Escape(
+                "[Audio] 销毁音频管理器时取消槽位有效性令牌发生异常")));
+
+            Assert.DoesNotThrow(() => AudioManager.Destroy());
+            Assert.IsTrue(_fake.Disposed, "取消回调抛异常后 provider.Dispose 仍必须执行");
+
+            _fake.CompletePendingPlay();
+            await UniTask.DelayFrame(1);
+        }
+
+        #endregion
+
+        #region 状态机兜底（C2/C3）
+
+        /// <summary>provider 一直报 Starting：60 拍后必须强制回收并告警，不能永久占槽。</summary>
+        [Test]
+        public void StartingTimeout_After60Polls_ReleasesAndLogs()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            var impl = (AudioManagerImpl)AudioManager.CurrentManagerForTests;
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape(
+                "[Audio] 播放源起播超时")));
+
+            for (int i = 0; i <= AudioManagerImpl.StartingTimeoutTicks; i++)
+                impl.SweepVoices();
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.GreaterOrEqual(_fake.PollCalls, AudioManagerImpl.StartingTimeoutTicks + 1);
+            Assert.AreEqual(1, _fake.ReleaseCalls, "超时回收必须把 provider 实例也释放掉");
+        }
+
+        /// <summary>未知 Poll 状态必须兜底回收：漏掉它会让唯一 voice 既不算活跃也不被回收（C3）。</summary>
+        [Test]
+        public void UnknownPollState_IsReclaimedAndWarns()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            _fake.PollOverride = (AudioProviderPlaybackState)99;
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape(
+                "[Audio] provider 返回了未知的播放状态（99）")));
+
+            ((AudioManagerImpl)AudioManager.CurrentManagerForTests).SweepVoices();
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(1, _fake.ReleaseCalls);
+        }
+
+        /// <summary>核心处于 Playing、provider 却回退报 Starting：必须重新累计超时并最终回收（C3）。</summary>
+        [Test]
+        public void PlayingThenStarting_TimesOutAndReleases()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            var impl = (AudioManagerImpl)AudioManager.CurrentManagerForTests;
+            var slot = _fake.Find(_fake.LastSuccessHandle);
+
+            slot.State = AudioProviderPlaybackState.Playing;
+            impl.SweepVoices();
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "前提：核心已观察到 Playing");
+
+            slot.State = AudioProviderPlaybackState.Starting;
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape(
+                "[Audio] 播放源起播超时")));
+
+            for (int i = 0; i <= AudioManagerImpl.StartingTimeoutTicks; i++)
+                impl.SweepVoices();
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+        }
+
+        /// <summary>管理器暂停期间也要 poll：外部销毁的播放源不会自己变回来（C2）。</summary>
+        [Test]
+        public void PausedVoice_ProviderReportsInvalid_IsReclaimed()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            AudioManager.Pause();
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "前提：暂停中的播放仍占槽");
+
+            _fake.End(_fake.LastSuccessHandle);
+
+            ((AudioManagerImpl)AudioManager.CurrentManagerForTests).SweepVoices();
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount, "暂停期间的死源必须被回收");
+            Assert.AreEqual(1, _fake.ReleaseCalls);
+        }
+
+        [Test]
+        public void SetPausedFalse_Reclaims()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            _fake.RejectSetPaused = true;
+
+            AudioManager.Pause();
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(1, _fake.ReleaseCalls);
+        }
+
+        [Test]
+        public void SetVolumeFalse_Reclaims()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            _fake.RejectSetVolume = true;
+
+            AudioManager.MasterVolume = 0.5f;
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(1, _fake.ReleaseCalls);
+        }
+
+        #endregion
+
+        #region 加载窗口（provider 延迟返回）
+
+        [Test]
+        public async Task StopAllWhilePlayAsyncLoading_ReturnsDefault()
+        {
+            _fake.DelayNext = true;
+            var task = AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true));
+            Assert.IsTrue(_fake.HasPendingPlay);
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "加载中的播放也算活跃");
+
+            Assert.AreEqual(1, AudioManager.StopAll());
+
+            _fake.CompletePendingPlay();
+            var handle = await task;
+
+            Assert.IsTrue(handle.IsDefault, "加载中 StopAll 后 PlayAsync 应返回 default，而不是抛 OCE");
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(0, _fake.LiveSlotCount);
+        }
+
+        [Test]
+        public async Task PauseAndVolume_WhileProviderLoading_AppliedAfterStart()
+        {
+            _fake.DelayNext = true;
+            var task = AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true));
+
+            AudioManager.Pause();
+            AudioManager.MasterVolume = 0.5f;
+
+            _fake.CompletePendingPlay();
+            var handle = await task;
+
+            Assert.IsFalse(handle.IsDefault);
+            Assert.IsTrue(AudioManager.IsPaused);
+            Assert.IsTrue(AudioManager.IsPlaying(handle), "暂停中的播放仍算在播");
+
+            var slot = _fake.Find(_fake.LastSuccessHandle);
+            Assert.IsNotNull(slot);
+            Assert.IsTrue(slot.Paused, "加载窗口内发生的管理器暂停必须在起播后补上");
+            Assert.AreEqual(0.5f, slot.Volume, 0.001f, "加载窗口内发生的音量变更必须在起播后生效");
+        }
+
+        [Test]
+        public async Task CallerCancelledWhileProviderLoading_ThrowsAndReleases()
+        {
+            _fake.DelayNext = true;
+            var cts = new CancellationTokenSource();
+            var task = AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true), cts.Token);
+
+            cts.Cancel();
+            _fake.CompletePendingPlay();
+
+            await AudioTestKit.AssertThrowsAsync<OperationCanceledException>(async () => await task,
+                "调用方在加载窗口内取消时 PlayAsync 必须抛 OCE");
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(0, _fake.LiveSlotCount);
+        }
+
+        /// <summary>
+        /// provider 忽略调用方令牌并返回句柄：核心必须在返回后补检查，收掉已起播的实例并抛 OCE（C5）。
+        /// </summary>
+        [Test]
+        public async Task CallerCancelled_ProviderIgnoresToken_StillThrowsAndReleases()
+        {
+            _fake.DelayNext = true;
+            _fake.IgnoreCancellation = true;
+            var cts = new CancellationTokenSource();
+            var task = AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true), cts.Token);
+
+            cts.Cancel();
+            _fake.CompletePendingPlay();
+
+            await AudioTestKit.AssertThrowsAsync<OperationCanceledException>(async () => await task,
+                "provider 忽略令牌不代表 PlayAsync 可以不抛");
+
+            Assert.AreEqual(1, _fake.StopCalls, "provider 已交出的实例必须被收掉");
+            Assert.AreEqual(1, _fake.ReleaseCalls);
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+        }
+
+        /// <summary>provider 忽略令牌且返回 default：核心仍须抛 OCE，而不是静默返回 default（C5）。</summary>
+        [Test]
+        public async Task CallerCancelled_ProviderIgnoresTokenReturnsDefault_StillThrows()
+        {
+            _fake.DelayNext = true;
+            _fake.IgnoreCancellation = true;
+            _fake.FailNext = true;
+            var cts = new CancellationTokenSource();
+            var task = AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true), cts.Token);
+
+            cts.Cancel();
+            _fake.CompletePendingPlay();
+
+            await AudioTestKit.AssertThrowsAsync<OperationCanceledException>(async () => await task,
+                "返回 default 也不能把已取消的 PlayAsync 变成静默成功");
+
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+            Assert.AreEqual(0, _fake.StopCalls);
+        }
+
+        #endregion
+
+        #region 容量与整体流程
+
+        [Test]
+        public void MaxVoices_WithCustomProvider_ReturnsDefaultAndWarns()
+        {
+            for (int i = 0; i < 4; i++)
+            {
+                Assert.IsFalse(AudioManager.Play($"audio/{i}", new AudioPlayOptions(loop: true)).IsDefault,
+                    $"前提：第 {i + 1} 个播放应预占到槽位");
+            }
+
+            LogAssert.Expect(LogType.Warning, new Regex(Regex.Escape("[Audio] 播放源已耗尽")));
+
+            Assert.IsTrue(AudioManager.Play("audio/x", new AudioPlayOptions(loop: true)).IsDefault);
+            Assert.AreEqual(4, AudioManager.ActiveVoiceCount);
+        }
+
+        [Test]
+        public void StopAll_WithCustomProvider_StopsAll()
+        {
+            AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
+
+            Assert.AreEqual(2, AudioManager.StopAll());
+
+            Assert.AreEqual(2, _fake.StopCalls);
+            Assert.AreEqual(2, _fake.ReleaseCalls);
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
+        }
+
+        [Test]
+        public async Task PlayAsync_WhenProviderSucceeds_ReturnsHandle()
+        {
+            var handle = await AudioManager.PlayAsync("audio/a", new AudioPlayOptions(loop: true));
+
+            Assert.IsFalse(handle.IsDefault);
+            Assert.IsTrue(AudioManager.IsPlaying(handle));
+            Assert.IsTrue(AudioManager.TryGetProviderHandle(handle, out AudioProviderHandle providerHandle));
+            Assert.IsNotNull(_fake.Find(providerHandle));
+        }
+
+        /// <summary>
+        /// 自定义 provider 的容量小于核心 <c>MaxVoices</c>：核心按播放失败回收自己的槽位，
+        /// 不留下「句柄还在、声音没有」的僵尸（C4）。
+        /// </summary>
+        [Test]
+        public async Task CustomProviderSmallerCapacity_PlayFailsSafely()
+        {
+            _fake.MaxConcurrent = 1;
+
+            var first = AudioManager.Play("audio/a", new AudioPlayOptions(loop: true));
+            Assert.IsFalse(first.IsDefault);
+            Assert.IsTrue(AudioManager.IsPlaying(first));
+
+            var second = AudioManager.Play("audio/b", new AudioPlayOptions(loop: true));
+            Assert.IsFalse(second.IsDefault, "Play 的契约是预占即返回，失败发生在返回之后");
+            Assert.IsFalse(AudioManager.IsPlaying(second));
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount, "核心槽位必须随 provider 失败回收");
+
+            var third = await AudioManager.PlayAsync("audio/c", new AudioPlayOptions(loop: true));
+            Assert.IsTrue(third.IsDefault);
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount);
+        }
+
         #endregion
 
         #region Helpers
 
-        /// <summary>最近一次成功播放的 provider 句柄（FakeAudioProvider 的 Id 从 0 递增、代际恒 1）。</summary>
-        private AudioProviderHandle FindProviderHandle()
-            => new AudioProviderHandle(_fake.Plays.Count - 1, 1);
+        /// <summary>最近一次成功播放的 provider 句柄（由替身记录，失败请求不会污染它）。</summary>
+        private AudioProviderHandle FindProviderHandle() => _fake.LastSuccessHandle;
 
         #endregion
     }

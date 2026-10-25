@@ -95,10 +95,21 @@ namespace XFramework.XAudio
         /// <param name="provider">播放引擎实现，不可为 null。</param>
         /// <param name="options">核心语义层选项；为 <c>null</c> 时使用默认值。</param>
         /// <exception cref="ArgumentNullException"><paramref name="provider"/> 为 null 时抛出。</exception>
+        /// <exception cref="InvalidOperationException"><paramref name="provider"/> 已是当前实例时抛出
+        /// ——本方法会先 Dispose 旧实例，同一实例传进来会被提前销毁。</exception>
         public static void SetProvider(IAudioProvider provider, AudioInitOptions options = null)
         {
             if (provider == null)
                 throw new ArgumentNullException(nameof(provider));
+
+            // 同一实例会被下面这行 Destroy 提前 Dispose，再装回去就是个已释放的实例。
+            // 这是非法用法，显式抛异常比让它以「看起来能用」的状态存在更安全（C6）。
+            if (_instance is AudioManagerImpl current && ReferenceEquals(current.Provider, provider))
+            {
+                throw new InvalidOperationException(
+                    "[Audio] 传入的 provider 已经是当前实例。SetProvider 会先 Dispose 旧实例，" +
+                    "传同一实例会把它提前销毁；请传入新的 provider 实例，或先 AudioManager.Destroy()。");
+            }
 
             Destroy();
 

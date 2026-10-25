@@ -12,15 +12,15 @@ namespace XFramework.XAudio
         Invalid = 0,
 
         /// <summary>已起播，但尚未观察到真正在播。</summary>
-        Starting,
+        Starting = 1,
 
         /// <summary>正在播放。</summary>
-        Playing,
+        Playing = 2,
 
         /// <summary>引擎侧暂停（内置 provider 的 <c>AudioListener.pause</c>）；核心保留槽位、不计起播超时。</summary>
-        Paused,
+        Paused = 3,
 
         /// <summary>自然结束。</summary>
-        Stopped,
+        Stopped = 4,
     }
 }

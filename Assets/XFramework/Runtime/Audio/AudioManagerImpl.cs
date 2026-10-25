@@ -108,7 +108,9 @@ namespace XFramework.XAudio
         /// <summary>当前播放引擎（测试与诊断用）。</summary>
         internal IAudioProvider Provider => _provider;
 
-        /// <summary>供 <see cref="AudioTicker"/> 每拍调用：回收播完的槽位，全部回收完时注销 ticker。</summary>
+        /// <summary>
+        /// 供 <see cref="AudioTicker"/> 每拍调用：回收播完的槽位，全部回收完时注销 ticker。
+        /// </summary>
         internal void SweepVoices()
         {
             if (_disposed)
@@ -126,8 +128,14 @@ namespace XFramework.XAudio
                         break;
 
                     case AudioManagedVoiceState.Loading:
-                    case AudioManagedVoiceState.Paused:
+                        // 加载中不 poll：provider 还没有交出句柄，续体负责收尾
                         active++;
+                        break;
+
+                    case AudioManagedVoiceState.Paused:
+                        // 暂停中的播放也要 poll：外部销毁的播放源不会自己变回来，
+                        // 不查就永远占着槽位（C2）。
+                        PollVoice(voice, ref active);
                         break;
 
                     case AudioManagedVoiceState.Starting:
@@ -138,60 +146,7 @@ namespace XFramework.XAudio
                             break;
                         }
 
-                        AudioProviderPlaybackState polled;
-                        try
-                        {
-                            polled = _provider.Poll(voice.ProviderHandle);
-                        }
-                        catch (Exception e)
-                        {
-                            LogManager.Exception(LogCategories.Audio, e,
-                                "轮询音频播放状态时发生异常，回收槽位");
-                            ReleaseVoice(voice);
-                            break;
-                        }
-
-                        switch (polled)
-                        {
-                            case AudioProviderPlaybackState.Invalid:
-                            case AudioProviderPlaybackState.Stopped:
-                                ReleaseVoice(voice);
-                                break;
-
-                            case AudioProviderPlaybackState.Paused:
-                                active++;
-                                break;
-
-                            case AudioProviderPlaybackState.Starting:
-                                if (voice.State == AudioManagedVoiceState.Starting)
-                                {
-                                    voice.StartingTicks++;
-                                    if (voice.StartingTicks > StartingTimeoutTicks)
-                                    {
-                                        LogManager.Warning(LogCategories.Audio,
-                                            "播放源起播超时（'{0}'）：连续 {1} 拍从未观察到 isPlaying 变真，" +
-                                            "槽位被强制回收。这通常意味着该平台的 AudioSource 在 Play() 后" +
-                                            "不会报告 isPlaying。",
-                                            voice.Location, StartingTimeoutTicks);
-                                        ReleaseVoice(voice);
-                                        break;
-                                    }
-                                }
-
-                                active++;
-                                break;
-
-                            case AudioProviderPlaybackState.Playing:
-                                if (voice.State == AudioManagedVoiceState.Starting)
-                                {
-                                    voice.State = AudioManagedVoiceState.Playing;
-                                    voice.StartingTicks = 0;
-                                }
-
-                                active++;
-                                break;
-                        }
-
+                        PollVoice(voice, ref active);
                         break;
                 }
             }
@@ -251,22 +206,39 @@ namespace XFramework.XAudio
 
             _disposed = true;
 
-            _lifetimeCts.Cancel();
-            UnregisterTicker();
-
-            for (int i = 0; i < _voices.Length; i++)
+            // 取消回调由第三方 provider 注册，可能抛异常；生命周期令牌的取消不能因此中断，
+            // 否则后面的 provider.Dispose 与槽位清理都会被跳过（C1）。
+            try
             {
-                var voice = _voices[i];
-                voice.ValidityCts?.Cancel();
-                voice.State = AudioManagedVoiceState.Free;
-                voice.ProviderHandle = default;
-                voice.Channel = null;
-                voice.Location = null;
-                voice.VolumeScale = 1f;
-                voice.StartingTicks = 0;
+                _lifetimeCts.Cancel();
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "销毁音频管理器时取消生命周期令牌发生异常");
             }
 
-            _provider.Dispose();
+            UnregisterTicker();
+
+            try
+            {
+                for (int i = 0; i < _voices.Length; i++)
+                {
+                    var voice = _voices[i];
+                    CancelValidity(voice, "销毁音频管理器时取消槽位有效性令牌发生异常");
+                    voice.State = AudioManagedVoiceState.Free;
+                    voice.ProviderHandle = default;
+                    voice.Channel = null;
+                    voice.Location = null;
+                    voice.VolumeScale = 1f;
+                    voice.StartingTicks = 0;
+                }
+            }
+            finally
+            {
+                // provider 由框架持有，必须无条件 Dispose——即使上面的清理路径出了意外（C1）。
+                _provider.Dispose();
+            }
         }
 
         #endregion
@@ -372,6 +344,20 @@ namespace XFramework.XAudio
             finally
             {
                 linked?.Dispose();
+            }
+
+            // provider 可能忽略调用方令牌并返回句柄（或 default）：返回后必须再检查一次。
+            // 否则「已取消的 PlayAsync」可能起播一个声音并把有效句柄交给调用方（C5）。
+            if (cancellationToken.IsCancellationRequested)
+            {
+                DiscardPlayback(index, generation, providerHandle);
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (_lifetimeCts.IsCancellationRequested)
+            {
+                DiscardPlayback(index, generation, providerHandle);
+                _lifetimeCts.Token.ThrowIfCancellationRequested();
             }
 
             if (!IsCurrent(index, generation))
@@ -802,16 +788,8 @@ namespace XFramework.XAudio
 
             if (voice.State == AudioManagedVoiceState.Loading)
             {
-                // 取消有效性令牌：provider 加载完成后不会 start，由它归还租约
-                try
-                {
-                    voice.ValidityCts?.Cancel();
-                }
-                catch (ObjectDisposedException)
-                {
-                    // 已在别处释放：无妨
-                }
-
+                // 取消有效性令牌：provider 加载完成后不会 start，并立即归还自己的池槽
+                CancelValidity(voice, "停止加载中的音频时取消有效性令牌发生异常");
                 FreeVoice(voice);
                 return;
             }
@@ -820,10 +798,108 @@ namespace XFramework.XAudio
             FreeVoice(voice);
         }
 
+        /// <summary>
+        /// 取消槽位有效性令牌，并隔离第三方 provider 注册的取消回调异常。
+        /// <para><c>CancellationTokenSource.Cancel()</c> 会同步执行全部回调，任一回调抛异常都会
+        /// 抛给调用方；不隔离的话 <c>Stop</c>/<c>StopAll</c>/<c>Dispose</c> 会跳过后续的槽位回收（C1）。</para>
+        /// </summary>
+        private static void CancelValidity(AudioManagedVoice voice, string message)
+        {
+            try
+            {
+                voice.ValidityCts?.Cancel();
+            }
+            catch (ObjectDisposedException)
+            {
+                // 已在别处释放：无妨
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e, message);
+            }
+        }
+
         private static int NextGeneration(int current)
         {
             int next = current + 1;
             return next == 0 ? 1 : next;
+        }
+
+        /// <summary>
+        /// 轮询一个已拿到 provider 句柄的槽位，并按结果迁移或回收。
+        /// <para>未知状态必须兜底回收（C3）：内层 switch 漏掉一个值会让唯一 voice 既不计入
+        /// <c>active</c> 又不被回收——ticker 被注销、槽位永久卡死。</para>
+        /// </summary>
+        private void PollVoice(AudioManagedVoice voice, ref int active)
+        {
+            AudioProviderPlaybackState polled;
+            try
+            {
+                polled = _provider.Poll(voice.ProviderHandle);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "轮询音频播放状态时发生异常，回收槽位");
+                ReleaseVoice(voice);
+                return;
+            }
+
+            switch (polled)
+            {
+                case AudioProviderPlaybackState.Invalid:
+                case AudioProviderPlaybackState.Stopped:
+                    ReleaseVoice(voice);
+                    break;
+
+                case AudioProviderPlaybackState.Paused:
+                    active++;
+                    break;
+
+                case AudioProviderPlaybackState.Starting:
+                    if (voice.State == AudioManagedVoiceState.Playing)
+                    {
+                        // provider 从 Playing 回退到 Starting（恢复后的状态机重新观察）：
+                        // 按新的起点重新累计超时，否则它会永远停在起始态（C3）。
+                        voice.State = AudioManagedVoiceState.Starting;
+                        voice.StartingTicks = 0;
+                    }
+
+                    if (voice.State == AudioManagedVoiceState.Starting)
+                    {
+                        voice.StartingTicks++;
+                        if (voice.StartingTicks > StartingTimeoutTicks)
+                        {
+                            LogManager.Warning(LogCategories.Audio,
+                                "播放源起播超时（'{0}'）：连续 {1} 拍从未观察到 isPlaying 变真，" +
+                                "槽位被强制回收。这通常意味着该平台的 AudioSource 在 Play() 后" +
+                                "不会报告 isPlaying。",
+                                voice.Location, StartingTimeoutTicks);
+                            ReleaseVoice(voice);
+                            return;
+                        }
+                    }
+
+                    active++;
+                    break;
+
+                case AudioProviderPlaybackState.Playing:
+                    if (voice.State == AudioManagedVoiceState.Starting)
+                    {
+                        voice.State = AudioManagedVoiceState.Playing;
+                        voice.StartingTicks = 0;
+                    }
+
+                    active++;
+                    break;
+
+                default:
+                    LogManager.Warning(LogCategories.Audio,
+                        "provider 返回了未知的播放状态（{0}），回收槽位：'{1}'。",
+                        (int)polled, voice.Location);
+                    ReleaseVoice(voice);
+                    break;
+            }
         }
 
         private void WarnExhaustedOnce()
@@ -860,6 +936,19 @@ namespace XFramework.XAudio
             {
                 LogManager.Exception(LogCategories.Audio, e, "释放音频播放时发生异常");
             }
+        }
+
+        /// <summary>
+        /// 收掉一次已经不该存在的 provider 播放，并在核心槽位仍属于本次预占时回收它。
+        /// <para>晚到的 provider 返回值可能属于一个已被 <c>Stop</c>/<c>StopAll</c> 回收、甚至
+        /// 已被下一次播放复用的槽位——此时只收 provider 句柄，绝不能 <c>FreeVoice</c> 别人的槽位。</para>
+        /// </summary>
+        private void DiscardPlayback(int index, int generation, AudioProviderHandle providerHandle)
+        {
+            SafeStopAndRelease(providerHandle);
+
+            if (IsCurrent(index, generation))
+                FreeVoice(_voices[index]);
         }
 
         private void ReleaseVoice(AudioManagedVoice voice)
