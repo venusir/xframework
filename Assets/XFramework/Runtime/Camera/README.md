@@ -129,6 +129,9 @@ Runtime/Camera/
 - 外部 / 未注册相机的 `CameraId` 为 `null`（`IsExternal == true`）。
 - 时序：cut = `Deactivated → Activated(IsCut=true) → BlendCompleted`；blend = 开始帧 `Activated`、
   结束帧 `Deactivated → BlendCompleted`。cut 的完成消息与旧行为一致（零时长语义）。
+  **例外**：A→B 混合途中再 cut 到**同一目标 B** 时，Cinemachine 不发 `CameraActivated`（incoming 与
+  outgoing 相同），只发 `Deactivated(A)` + `BlendCompleted(B)`——订阅方不能假设每次切换都有一条
+  `Activated`。回归 `CinemachineCameraEventTests.SameTargetCut_DuringBlend_PublishesDeactivatedAndCompletedWithoutActivated`。
 - 订阅是全局通道；多 Brain / 多管理器场景请按 `CameraId` 过滤。
 
 ### 探测型读与命令

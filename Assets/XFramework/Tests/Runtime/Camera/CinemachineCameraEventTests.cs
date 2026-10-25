@@ -142,6 +142,29 @@ namespace XFramework.XCamera.Cinemachine.Tests
         }
 
         [Test]
+        public void SameTargetCut_DuringBlend_PublishesDeactivatedAndCompletedWithoutActivated()
+        {
+            // README 写明的事件例外（R4-CAM-001）：A→B 混合途中再 cut 到同一目标 B 时，
+            // Cinemachine 不发 CameraActivated（incoming == outgoing），只发 Deactivated(A) +
+            // BlendFinished(B)。本用例钉住现状，防止文档与行为再次分叉。
+            CameraManager.SwitchTo("a");
+            Pump();
+            CameraManager.SwitchTo("b", 0.2f, CameraBlendStyle.Linear);
+            Pump(0.1f);
+            _events.Clear();
+
+            CameraManager.SwitchTo("b");
+            Pump();
+            for (var i = 0; i < 8 && CameraManager.GetState().IsTransitioning; i++)
+                Pump(0.05f);
+
+            CollectionAssert.AreEqual(
+                new[] { "deactivated:a", "completed:b" },
+                _events,
+                "同一目标中途 cut 不发 Activated；cut 经 BlendFinished 结算");
+        }
+
+        [Test]
         public void ExternalIncoming_PublishesNullId()
         {
             CameraManager.SwitchTo("a");

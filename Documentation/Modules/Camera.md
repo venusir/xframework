@@ -184,6 +184,9 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
 
 - **2026-10-23 事件帧序**（`CinemachineCameraEventTests`，`ManualUpdate`）：cut = `Deactivated → Activated(IsCut=true) → BlendCompleted`；
   blend = 开始帧 `Activated`、结束帧 `Deactivated → BlendCompleted`；外部 incoming 的 id 为 `null`，旧注册相机仍发 `Deactivated`。
+  **例外（R4-CAM-001）**：A→B 混合途中再 cut 到同一目标 B 时 Cinemachine 不发 `CameraActivated`，只有
+  `Deactivated(A) → BlendCompleted(B)`；`CinemachineCameraEventTests.SameTargetCut_DuringBlend_PublishesDeactivatedAndCompletedWithoutActivated`
+  钉住现状。
 - **2026-10-23 异步**（`CinemachineCameraAsyncTests`）：blend / cut 完成、同请求 join、同步命令 / 外部接管 supersede、
   注销 / 激活前销毁 → `CameraNotFound`、Destroy / 会话复位 → `ManagerDisposed`、取消只停等待、预取消不启动。
 - **2026-10-23 预制体注册**（`CinemachineCameraRegistrationTests`）：OnEnable 注册；两个实例 id 不同；OnDestroy 后栈回退；

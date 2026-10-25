@@ -273,6 +273,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### Camera
 
+- **文档订正：同一目标中途 cut 的事件例外（R4-CAM-001）**：README 的时序承诺只写了
+  `Deactivated → Activated(IsCut=true) → BlendCompleted`，但 A→B 混合途中再 cut 到同一目标 B 时
+  Cinemachine 不发 `CameraActivated`（incoming 与 outgoing 相同），只有 `Deactivated(A)` +
+  `BlendCompleted(B)`。本次只补文档与回归用例，不改事件面（补发 `Activated` 属行为变更，需单独裁定）。
+  回归：`CinemachineCameraEventTests.SameTargetCut_DuringBlend_PublishesDeactivatedAndCompletedWithoutActivated`。
 - **`SetLookAt(id, null)` 改为真正清除本地覆盖（2026-10-24，行为变更）**：此前直接写 `LookAt = null`，CM 的
   setter 会留下 `CustomLookAtTarget = true` + 空目标，相机从此不再回退到跟随目标（文档却说「清除本地覆盖」）。
   现在 `CinemachineCamera` 复位 `Target.CustomLookAtTarget`，分组相机复位 `DefaultTarget.Target` 的同一标志；
