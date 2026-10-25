@@ -220,3 +220,11 @@ Chop Chop / CineMachine-Manager / Nuclex）的结论：**没有一家提供相�
   `DevJamaly/CineMachine-Manager` / `ewersp/CameraShake`。
 - **仍未实测 / 需真实环境**：真实 `PlayableDirector` 的 Timeline 接管与释放；关闭域重载连跑两遍（手工验收）；
   IL2CPP 构建；Cinemachine 2.x（不支持）；多 Brain / 分屏（明确不做）。
+- **2026-10-25 0.3.0→0.4.0 迁移表编译探针（R4-PRB-12）**：临时 netstandard2.1 工程（引用 `Library/ScriptAssemblies`
+  与包 csproj 的 Unity 引用）编译迁移表**新写法**——Camera 初始化 / 注册 / 切换 / 栈 / 四个异步 / 探测读 / 快照 /
+  消息载荷 / `Register((CinemachineVirtualCameraBase)null)` / 显式类型 lambda，`AssetSceneHandle` + `LoadSceneMode`、
+  `AssetOperationStatus`、`UpdateManager.ProcessImmediate(IUpdateLifecycle, ...)`：**0 error**。负向控制
+  （`ICameraManager` / `CameraHandle` / `UnityCameraManager` / `CinemachineCameraManager` / `CameraManager.Activate` /
+  `TransitionToAsync` / `CameraIds` / `ActiveHandle` / 消息 `.Handle` / `LoadSceneAsync(..., bool)`）报
+  `CS0246 / CS0117 / CS1061 / CS1503`——探针有判别力。探针不入库（一次性临时工程）；覆盖边界＝只验证右列形状可编译，
+  不验证运行时语义。
