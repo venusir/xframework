@@ -116,6 +116,22 @@ Runtime/Audio/
 | `int StopAll(string channel = null)` | `channel` 为 `null` 即全部通道。返回实际停止数 |
 | `void Pause()` / `void Resume()` / `bool IsPaused` | 见「典型场景 E」与「设计取舍」 |
 
+### Provider 中立控制面（参数 / bank / bus / snapshot / 3D）
+
+| 成员 | 说明 |
+| ---- | ---- |
+| `bool SetParameter(AudioHandle, string, float)` / `(AudioHandle, string, string)` | 逐次事件参数（数值/标签）。**探测型**；内置 provider 不支持；加载窗口内可能返回 `false`，起播前参数请用 `AudioPlayOptions.InitialParameters` |
+| `bool SetGlobalParameter(string, float/string)` | 全局参数。探测型；内置 provider 不支持 |
+| `bool LoadBank(string, bool loadSamples = false)` / `UnloadBank(string)` / `IsBankLoaded(string)` | provider 定义的 bank；探测型；内置 provider 不支持；加载可能同步阻塞 |
+| `bool SetBusVolume(string, float)` / `SetBusMuted(string, bool)` / `SetBusPaused(string, bool)` | provider 定义的 bus；探测型；内置 provider 不支持；`SetBusVolume` **原样透传、不做核心钳制** |
+| `bool StartSnapshot(string)` / `StopSnapshot(string)` | provider 定义的 snapshot；探测型；内置 provider 不支持 |
+| `bool SetPosition(AudioHandle, Vector3)` | 更新逐次 3D 世界坐标；内置 provider 支持（写 `AudioSource.transform.position`），2D 播放也写入但不产生空间化效果 |
+
+这些方法由 provider 的可选能力决定；当前只有官方 FMOD 扩展的 provider 实现全部能力（FMOD-free 层已实现，
+真实集成待 Phase 2）。内置 `AudioSourceProvider` 只实现 `SetPosition`。`SetInstance` 注入的自定义管理器
+与第三方 `IAudioProvider` 不参与这些方法，统一返回 `false`；名称参数为 null/空白时抛 `ArgumentException`。
+框架三档音量与 provider 的 bus/snapshot 音量是两层，注意不要对同一声音重复控制。
+
 ### 音量
 
 实际音量 = **主音量 × 通道音量 × 单次播放的 VolumeScale**，任一档静音即为 `0`，最后钳到 `[0, 1]`。
@@ -191,14 +207,18 @@ _bgm.Stop();
 **内置 provider 下循环播放永不被自动回收**，必须显式 `Stop`。核心本身不特判 `Loop`：自定义 provider
 对循环播放报告 `Stopped` 时照常回收。
 
-### C. 定点 3D 音效
+### C. 3D 音效
 
 ```csharp
-AudioManager.Play("audio/sfx_explosion", new AudioPlayOptions(
+var handle = await AudioManager.PlayAsync("audio/sfx_explosion", new AudioPlayOptions(
     AudioChannels.SE, spatialBlend: 1f, position: hitPoint));
+
+// 移动时手动更新位置（框架不自动跟随 Transform）
+AudioManager.SetPosition(handle, newPosition);
 ```
 
-`spatialBlend > 0` 时位置才写进播放源。
+`spatialBlend > 0` 时起播位置才写进播放源；`SetPosition` 可更新活跃播放的位置（2D 播放也会写入，
+但没有空间化效果）。
 
 ### D. 设置面板
 
@@ -234,8 +254,9 @@ AudioManager.Resume();
   （不能等加载完成，否则 `Stop` 后立即重播会撞上容量窗口）；`Poll` 是纯查询，由核心 ticker 按状态调用；
   provider 句柄的有效代际必须非 `0`，`default(AudioProviderHandle)` 必须无效；`Dispose` 幂等，
   必须取消在途 `PlayAsync` 并释放全部实例与租约。
-- **中间件能力**：RTPC / 事件参数 / bank / snapshot 等留在项目侧；需要逐次控制时可用
-  `AudioManager.TryGetProviderHandle` 取回 provider 句柄。
+- **中间件能力**：核心另有 provider 中立控制面（参数/RTPC、bank、bus、snapshot、逐次 3D），由
+  **官方扩展**通过 core internal 能力接口实现（`InternalsVisibleTo`，不是第三方公开契约）。第三方自定义
+  provider 仍可用 `AudioManager.TryGetProviderHandle` 取回 provider 句柄自行处理逐次控制。
 
 ```csharp
 AudioManager.SetProvider(new MyWwiseAudioProvider());
@@ -250,8 +271,10 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
 
 这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
 
-框架**不随包提供** Wwise / FMOD 的官方适配器；需要时由项目按上面的路径自行实现，中间件专属能力
-（RTPC / 事件参数 / bank / 3D 发射器等）留在项目侧。
+**核心包不随包提供** Wwise / FMOD 的官方适配器；FMOD 有一个独立的可选扩展包
+`com.venusy609.xframework.fmod`（Phase 1 为 FMOD-free 层，真实集成待 Phase 2），Wwise 仍需项目自行实现。
+第三方 provider 的高级能力（参数/bank/bus/snapshot）目前只对官方扩展开放；自定义 provider 可用
+`TryGetProviderHandle` 自行处理。
 
 ## 内部机制
 
@@ -323,6 +346,7 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源（内置 pr
 | 成员 | 未初始化 / 已销毁时 |
 | ---- | ---- |
 | `Stop` / `IsPlaying` / `TryGetProviderHandle` | 安全返回 `false`（探测型豁免） |
+| `SetParameter` / `SetGlobalParameter` / `LoadBank` / `UnloadBank` / `IsBankLoaded` / `SetBusVolume` / `SetBusMuted` / `SetBusPaused` / `StartSnapshot` / `StopSnapshot` / `SetPosition` | 安全返回 `false`（探测型豁免；名称参数仍先校验并抛 `ArgumentException`） |
 | `CopyChannels`（诊断回读） | 清空缓冲并返回 `0`，不抛（与 Asset 的诊断回读同一宽容口径；AUD-006） |
 | 其余全部（`Play` / `PlayAsync` / `StopAll` / 音量 / 查询计数） | 抛 `InvalidOperationException` |
 
@@ -341,7 +365,11 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源（内置 pr
 - **框架声源不接入项目的 AudioMixer 总线**：内置 provider 动态创建的播放源 `outputAudioMixerGroup`
   恒为 `null`，`AudioMixer.SetFloat` 对框架声音无效。要接入项目自己的总线/效果链需自定义
   `IAudioProvider`（或整体替换 `IAudioManager`，见「自定义实现」）。
-- **3D 播放源是定点的**，不跟随移动物体（见「与相邻模块的关系」的「与音频中间件的边界」）。
+- **3D 播放源不会自动跟随移动物体**：起播位置由 `AudioPlayOptions.Position` 写入一次，之后可用
+  `AudioManager.SetPosition(handle, position)` 手动更新；要自动跟随仍需项目侧每帧写 Transform 的宿主
+  （见「与相邻模块的关系」的「与音频中间件的边界」）。
+- **内置 provider 只实现 `SetPosition`**：参数/bank/bus/snapshot 控制方法在内置 provider 下返回 `false`；
+  这些能力由可选 FMOD 扩展的 provider 实现（当前 FMOD-free 层，真实集成待 Phase 2）。
 - **切后台不会自动暂停。** 本模块不接 `OnApplicationPause`——「是谁暂停的、谁来恢复」必须由项目掌握
   （玩家本来就在暂停菜单里切后台时，回到前台不能替他 `Resume`）。需要的话由项目在自己的生命周期回调里
   调 `Pause()` / `Resume()`。
@@ -357,9 +385,9 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源（内置 pr
   生命周期，经 `SetProvider` 注入的 provider 由框架持有；门面不会感知你自行 `Dispose`——后续调用会
   打到已释放实例、门面卡死。销毁请走 `AudioManager.Destroy()`（它先丢引用、再 `Dispose`，之后可重新
   `Initialize` / `SetInstance` / `SetProvider`）。
-- **3D 空间参数不可配置**：框架只写 `spatialBlend` 与 `position`，不暴露衰减曲线（rolloff）、
-  min/max distance、spread、doppler 等；需要这些时自定义 `IAudioProvider`（或整体替换
-  `IAudioManager`）。
+- **3D 空间参数不可配置**：框架只写 `spatialBlend` 与位置（起播时 `Position`，运行时可用
+  `SetPosition` 更新），不暴露衰减曲线（rolloff）、min/max distance、spread、doppler 等；需要这些时
+  自定义 `IAudioProvider`（或整体替换 `IAudioManager`）。
 
 ## 设计取舍
 
@@ -448,8 +476,9 @@ BgmVolume.Subscribe(v => AudioManager.SetChannelVolume(AudioChannels.Bgm, v));
 
 #### 关于「跟随移动物体的 3D 发射器」
 
-本模块的播放源是**定点**的：`spatialBlend > 0` 时只写一次位置，不跟随。跟随需要一个每帧写
-Transform 的宿主对象，那是项目侧的 MonoBehaviour——框架不去追 Transform。
+本模块不会**自动跟随**移动物体：`spatialBlend > 0` 时在起播时写一次位置，之后可由项目调用
+`AudioManager.SetPosition(handle, position)` 手动更新。自动跟随需要一个每帧写 Transform 的宿主对象，
+那是项目侧的 MonoBehaviour——框架不去追 Transform。
 
 ## 设计原则
 

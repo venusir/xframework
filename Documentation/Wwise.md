@@ -1,8 +1,9 @@
-# Wwise —— 评估与 `IAudioProvider` 适配器设计（核心 provider 已实现；Wwise 未实现）
+# Wwise —— 评估与 `IAudioProvider` 适配器设计（核心 provider 与中立控制面已实现；Wwise 未实现）
 
 > **收件人**：框架维护者（未来实现或审计 Wwise 适配器时）。**不是**随包发布的使用文档。
 > **状态**：用户 2026-10-25 选择的 B 方案「核心新增 `IAudioProvider`」**已实现核心**；
-> Wwise 适配器**仍未实现**，本文件只记录它将来如何落在这条缝上。
+> 2026-10-26 核心又新增 provider 中立控制面（参数/RTPC、bank、bus、snapshot、逐次 3D），FMOD 的
+> FMOD-free 扩展已落地。Wwise 适配器**仍未实现**，本文件只记录它将来如何落在这条缝上。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
@@ -27,8 +28,12 @@
 
 - **将来 Wwise 适配器只实现 `IAudioProvider`**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
 - **Wwise 适配器现在仍不做**：没有真实 Wwise 项目落地、没有 SDK 可编译验证；
-- **本次只出设计文档**；核心缝与内置 `AudioSourceProvider` 作参照已实现，FMOD 适配器仍未实现，
-  Wwise 等真实项目再开。
+- **本次只出设计文档**；核心缝与内置 `AudioSourceProvider` 作参照已实现，FMOD 的 FMOD-free provider
+  层也已实现（真实 FMOD 集成待 SDK），Wwise 等真实项目再开；
+- **核心中立控制面可映射但未验证**：`AudioManager.SetParameter` / `SetGlobalParameter` / `LoadBank` /
+  `SetBusVolume` / `StartSnapshot` / `SetPosition` 对 Wwise 的 RTPC/switch/state、bank、bus、state 的映射
+  尚未设计；provider 能力接口目前是 core internal 且只经 `InternalsVisibleTo` 给官方 FMOD 扩展，
+  Wwise 若复用需另行裁定可见性。
 
 Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 
@@ -39,7 +44,8 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 
 这正是 `Documentation/Modules/Audio.md` 的「已推翻：不提供 `IAudioProvider` 分层引擎缝」条目
 原来说「凭记忆猜缝大概率是谁都不合身的最小公约数」的原因；现在有了核心缝 + 内置
-`AudioSourceProvider` 作参照（FMOD 适配器仍未实现），Wwise 仍要等真实 API 落地再设计细节。
+`AudioSourceProvider` 作参照（FMOD 的 FMOD-free provider 层也已实现，真实集成待 SDK），Wwise 仍要等
+真实 API 落地再设计细节。
 
 ---
 
@@ -52,10 +58,10 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 | Event（名字 / id） | `location` 字符串 | provider 解释成 Event 名 |
 | `PlayingID`（`uint`） | provider 槽位表 + `AudioProviderHandle` | `uint` 不塞进 `int`；句柄存槽位索引 + 代际 |
 | 注册的 GameObject（emitter） | provider 自建隐藏宿主 | 每槽位/通道一个 emitter；`DontDestroyOnLoad` |
-| RTPC / switch / state | 核心不表达 | 走扩展自己的 API + `TryGetProviderHandle`（已实现公开） |
-| bank | provider 构造时加载 | `WwiseAudioOptions.Banks` / `OwnsBanks`（候选） |
+| RTPC / switch / state | `AudioManager.SetParameter` / `SetGlobalParameter`（核心中立参数；标签形式可映射 switch/state） | Wwise 映射未验证；能力接口当前 internal 且只给官方 FMOD 扩展 |
+| bank | `AudioManager.LoadBank` / `UnloadBank` / `IsBankLoaded`（provider 实现） | Wwise bank 模型未验证；`OwnsBanks` 候选 |
 | `AK_EndOfEvent` 回调 | provider 槽位回收 | `Poll` 读槽位表，不直接查引擎 |
-| bus / snapshot | 核心通道 | v1 用逐 emitter 音量/RTPC 近似三档相乘；snapshot 不在门面里 |
+| bus / snapshot | `AudioManager.SetBusVolume` / `SetBusMuted` / `SetBusPaused`、`StartSnapshot` / `StopSnapshot`（provider 实现） | Wwise 的 bus 与 state 映射未验证；v1 仍可用逐 emitter 音量/RTPC 近似三档相乘 |
 
 ### 2.2 `IAudioProvider` 映射（Wwise 侧）
 
@@ -89,7 +95,7 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 | 核心改动 | 零 | 公开 API + `AudioManagerImpl` 拆分（见 `AudioProvider.md`） |
 | 适配器工作量 | 重写通道/音量/暂停/计数/归一化/句柄 | 只做 Wwise 事件原语 |
 | 诊断 `CopyChannels` | 注入后恒空 | 可用 |
-| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在外，但 `TryGetProviderHandle` 可做逐次控制（已实现公开） |
+| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 核心已有中立控制面（参数/bank/bus/snapshot/3D）；Wwise 映射未验证，能力接口可见性需另行裁定 |
 | 本仓验证 | 无 SDK 不能编译/测试 | 可仿 FMOD 拆成 Wwise-free provider + 条件集成程序集 |
 
 B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录映射与风险。
@@ -103,13 +109,14 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 - `Venusy609.Xframework.Wwise`：Wwise-free 的 provider 逻辑 + options + `IWwiseEventBackend`
   内部缝 + fake backend 测试；始终编译；
 - `Venusy609.Xframework.Wwise.Unity`：条件程序集，引用 Wwise 集成程序集（实际 asmdef 名以安装
-  版本为准），放真实 backend 与 `WwiseAudio.Install`；用条件编译/define 门控；
+  版本为准），放真实 backend 与自动安装；用条件编译/define 门控；
 - 守卫放 PlayMode 的 `Tests/Runtime/Architecture`，不引用 Wwise 程序集；
-- 用户入口 `WwiseAudio.Install(WwiseAudioOptions, AudioInitOptions = null)` → `AudioManager.SetProvider`；
-- `WwiseAudioProvider` internal，`WwiseAudioOptions` public。
+- **不提供 `WwiseAudio.Install` 公开入口**：沿用 FMOD 2026-10-26 的裁定，第三方控制只经
+  `AudioManager`；配置资产与自动安装在真实 Wwise 项目落地时再设计（候选 `WwiseAudioSettings`）；
+- `WwiseAudioProvider` / backend 缝 internal；配置资产是唯一公开类型（若需要）。
 
-`WwiseAudioOptions` 候选：`EventNamePrefix`、`ChannelToBus`、`MasterBusName`、`Banks`、`OwnsBanks`、
-`EmitterRoot`（最终字段以真实 API 为准）。
+配置资产候选：`EventNamePrefix`、`ChannelToBus`、`MasterBusName`、`Banks`、`OwnsBanks`、`EmitterRoot`
+（最终字段以真实 API 为准）。
 
 ---
 
@@ -131,7 +138,8 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 三条**都**成立才值得实现 Wwise 适配器：
 
 1. **有真实 Wwise 项目**，且 Wwise SDK 可在本仓或 CI 编译验证；
-2. provider 缝已实现（核心）；FMOD 适配器仍待后续，不作为 Wwise 的前置；
+2. provider 缝已实现（核心）；FMOD 的 FMOD-free provider 层也已实现（真实集成待 SDK），不作为
+   Wwise 的前置；
 3. 至少一个 Wwise 适配器在真实项目跑通：真实 bank、Event 回调、3D emitter、至少一个目标平台真机。
 
 验证方式（将来执行）：一次性探针工程 → Launcher 集成 Wwise → 最小 provider → 跑 bank / Event /

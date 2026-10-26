@@ -107,6 +107,7 @@
 | `-UpdateApiBaseline` | **公开 API 基线的更新模式**：重写 `Tests/Runtime/Architecture/PublicApiBaseline.txt`（Runtime）与 `EditorPublicApiBaseline.txt`（Editor，同一开关覆盖两组）。自带过滤器（只跑两条基线 fixture）、与 `-Filter`/`-Fixture` 互斥；**写完按设计判失败**并打印差异，绿灯由随后一次不带开关的重跑给出。**只改基线 header 时不会重写**（比较的是行集合，见 §六）——删掉基线文件后重跑一次「首次生成」路径。见 §六 |
 | `-UpdateLubanGolden` | Luban 扩展包的 golden-file 更新模式：重写生成夹具，**写完按设计判失败**；绿灯由不带开关的重跑给出。与 `-Filter`/`-Fixture` 及另外两个更新开关互斥 |
 | `-UpdateLubanApiBaseline` | Luban 扩展包的 Runtime / Editor 公开 API 基线更新模式（同一开关覆盖两组）；纪律同上（写盘后判失败；只改 header 时同样不会重写） |
+| `-UpdateFmodApiBaseline` | FMOD 扩展包的 Runtime 公开 API 基线更新模式；纪律同上（写盘后判失败；只改 header 时同样不会重写） |
 
 ### `Tools/check-docs.ps1`
 
@@ -209,6 +210,8 @@
    `Assets/XFramework.Luban/`，不随核心包发布。
 
 **同级可选包**：`Assets/XFramework.Luban/` 不在核心六道门禁的射程内（`check-docs.ps1` 的 XML 文档/源码参与/`Runtime/` 模块树/`Assets/XFramework` 的 `.meta` 扫描、`PublicApiBaselineTests`、核心 README 守卫只扫 `Assets/XFramework`）。它的测试随全量 `run-tests.ps1` 运行；包内自设守卫覆盖 README 结构/文件树、`.meta` 完整性、包边界（`Documentation/` 引用）、`AutoInit` 族清单、Runtime / Editor 公开 API 基线（`-UpdateLubanApiBaseline`）与依赖声明。示例由 `check-docs.ps1 -Enforce` 经 `check-samples.ps1 -SamplesRoot Assets/XFramework.Luban/Samples~` 编译。发布时与核心包共用同一个仓库 tag，安装 URL 用 `?path=Assets/XFramework.Luban`。
+
+`Assets/XFramework.Fmod/` 同样是同级可选包，但当前是 **Phase 1 FMOD-free 层**（provider/配置资产/测试/守卫；真实 FMOD 集成待 SDK）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、Runtime 公开 API 基线（`-UpdateFmodApiBaseline`）与「仓库不提交能触发自动安装的 settings 资产」。没有 `Samples~`（无 SDK 时不可编译）；FMOD SDK 版本/安装方式以 `Assets/XFramework.Fmod/README.md` 为唯一真相，不提交 SDK / manifest / lock 本地改动。
 
 ### OpenUPM（待上架）
 

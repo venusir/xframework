@@ -46,8 +46,9 @@ namespace XFramework.XAudio
 
         /// <summary>
         /// 3D 播放的世界坐标位置。仅在 <see cref="SpatialBlend"/> 大于 <c>0</c> 时有意义。
-        /// <para>框架自持的播放源是<b>定点</b>的：本框架不提供「跟随移动物体」的 3D 发射器
-        /// （那需要一个每帧写 Transform 的宿主，属项目侧 MonoBehaviour）。</para>
+        /// <para>框架自持的播放源<b>不会自动跟随</b>移动物体（那需要每帧写 Transform 的宿主，属项目侧
+        /// MonoBehaviour）；起播后可用 <see cref="AudioManager.SetPosition(AudioHandle, UnityEngine.Vector3)"/>
+        /// 手动更新位置。</para>
         /// </summary>
         public readonly Vector3 Position;
 

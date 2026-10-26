@@ -1,236 +1,226 @@
-# FMOD —— 评估与 `IAudioProvider` 适配器设计（核心 provider 已实现；FMOD 包未实现）
+# FMOD —— 扩展包设计与实施状态（Phase 1 FMOD-free 已实现；Phase 2 集成待 SDK）
 
-> **收件人**：框架维护者（实现或审计 FMOD 适配器时）。**不是**随包发布的使用文档。
-> **状态**：**核心 `IAudioProvider` 已于 2026-10-25 实现**（见 `Documentation/AudioProvider.md`）；
-> **`Assets/XFramework.Fmod/` 尚未实现**。FMOD SDK 接入方式（官方 `.unitypackage` 导入命令 /
-> 本地标记包 / UPM）**待后续单独讨论**。落地前以 `Documentation/AudioProvider.md` 与
-> `Documentation/Modules/Audio.md` 的台账为准。
+> **收件人**：框架维护者（实现或审计 FMOD 扩展时）。**不是**随包发布的使用文档。
+> **状态**：核心 provider 中立控制面与 `Assets/XFramework.Fmod` 的 FMOD-free 层已于 2026-10-26 实现；
+> 真实 FMOD 集成程序集（条件编译 + `FMODUnity` + 自动安装）**尚未实现**，需要 FMOD 2.04 Asset Store UPM
+> 与 SDK 探针。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
 
 | 标记 | 含义 |
 | --- | --- |
-| `[官方文档]` | FMOD 官方用户指南 / 官方问答的表述；本次经搜索结果摘要核对，官方页面为动态渲染、未能直接抓取正文 |
-| `[本仓核对]` | 读本仓文件得出 |
-| `[二手资料]` | 社区仓库 / 问答 / 教程 |
-| `[设计稿]` | 本文件提出的候选形状，**未编译、未跑测试** |
-| `[未实测]` | 只有文档或推理支撑 |
+| `[已实现]` | 本仓已落地并有测试/门禁 |
+| `[已实测]` | 有真实 SDK / 探针输出支撑 |
+| `[设计稿]` | 候选形状，未编译、未跑测试 |
+| `[未实测]` | 只有官方文档或推理支撑 |
 
-**核对基准**：FMOD for Unity 2.03；手动 UPM 化的事实来自 FMOD Q&A（2.02.20+）。
-**本机未安装 FMOD SDK，没有跑过任何探针。** API 名称用于设计对照，落实现前必须按实际安装版本复核。
-
----
-
-## 一、结论：FMOD 适配器只实现 `IAudioProvider`
-
-用户 2026-10-25 的裁定：
-
-- **核心已实现公开 `IAudioProvider`**（见 `Documentation/AudioProvider.md`）；
-- **FMOD 适配器只实现播放原语**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
-- **FMOD 分包拆成两个程序集**：FMOD-free 的 provider 逻辑（始终编译、可测）+ 条件集成程序集
-  （引用 `FMODUnity`，用 `versionDefines` + `defineConstraints` 门控）；
-- **FMOD 分包未实现**；SDK 接入方式待后续讨论，不能把「FMOD UPM 包」当成已定前提。
-
-三条理由：
-
-1. **A 的重复语义有边界但真实**：整体实现 `IAudioManager` 会重写约 200–300 行通道/音量/暂停/计数；
-   B 让这些留在核心，适配器只做 FMOD 事件实例的起播/停止/暂停/音量/状态。
-2. **B 解决诊断缺口**：`SetProvider` 构造的仍是 `AudioManagerImpl`，`CopyChannels` 可用；
-   A 的中间件路径会因 `AudioManagerImpl` 类型探测而恒空。
-3. **分包必须可条件编译**：FMOD SDK 不可随仓库分发；FMOD-free provider + 条件集成程序集让
-   干净克隆仍能编译、能测 provider 逻辑，只有真实后端被 `XFRAMEWORK_FMOD` 门控。
+**核对基准**：FMOD for Unity 2.04（Asset Store UPM；2.04 为 UPM-only，2.03 仍可手动 UPM 化）。
+**本机未安装 FMOD SDK，Phase 2 的真实 API 签名、包名、程序集名与初始化档位均未实测。**
 
 ---
 
-## 二、对象模型与 provider 映射 `[设计稿]`
+## 一、结论：公开控制面只有 `AudioManager`
 
-### 2.1 对照表
+用户 2026-10-26 裁定：
+
+- **第三方控制音效只经 `AudioManager`**；不提供 `FmodAudio.Install` / `FmodAudioOptions` / 公开 FMOD 门面。
+- 核心新增 provider 中立的控制面：参数（起播前/运行中/全局）、bank、bus、snapshot、逐次 3D 位置。
+- provider 侧的可选能力接口（`IAudioParameterProvider` / `IAudioBankProvider` / `IAudioBusProvider` /
+  `IAudioSnapshotProvider` / `IAudioSpatialProvider`）为 **core internal**，经 `InternalsVisibleTo` 提供给
+  扩展程序集；它们是**官方扩展能力**，不是第三方可自由实现的公开契约。
+- 扩展包只公开 `FmodAudioSettings` 配置资产；provider/backend/options 全部 internal。
+- 扩展包在 `Resources` 中检测到 `FmodAudioSettings` 时自动安装 provider（Phase 2）；失败不留半初始化门面。
+- SDK 目标为 **FMOD 2.04 Asset Store UPM**；SDK 不入仓，不提交 manifest/lock 的本地改动。
+
+**为什么不是旧的 `FmodAudio.Install` 方案**：那是第二套公开门面，第三方要学两套 API，且内置 provider 与
+FMOD provider 的控制面会分叉。现在控制语义只在 `AudioManager`，扩展只是后端。
+
+---
+
+## 二、公开面（`[已实现]`）
+
+### 2.1 核心公开新增
+
+- `AudioParameter`：`Name` / `Value`（数值）/ `Label`（标签）/ `IsLabel`；构造校验名称/标签非空白。
+- `AudioPlayOptions.InitialParameters`：起播前参数；核心在 `Play`/`PlayAsync` 预占槽位前校验并复制快照，
+  非法项抛 `ArgumentException`，调用方之后改原数组不影响本次播放；内置 provider 忽略。
+- `AudioPlaybackRequest.InitialParameters`：核心传给 provider 的快照（provider 只读）。
+- `AudioManager`：
+  - `SetParameter(AudioHandle, string, float/string)`、`SetGlobalParameter(string, float/string)`
+  - `LoadBank(string, bool loadSamples = false)`、`UnloadBank(string)`、`IsBankLoaded(string)`
+  - `SetBusVolume(string, float)`、`SetBusMuted(string, bool)`、`SetBusPaused(string, bool)`
+  - `StartSnapshot(string)`、`StopSnapshot(string)`
+  - `SetPosition(AudioHandle, Vector3)`
+- 所有控制方法为**探测型**：未初始化/已销毁/default/过期/Loading 句柄/provider 未实现/
+  `SetInstance` 自定义管理器 → `false`，不抛、不记 Warning；名称参数 null/空白 → `ArgumentException`
+  （参数校验先于能力探测）；provider 异常隔离并记 `[Audio]` 日志。
+- `SetBusVolume` 原样透传、不做核心钳制（FMOD 允许 >1 的线性增益）。
+- 内置 `AudioSourceProvider` 实现 `SetPosition`（写 `AudioSource.transform.position`），其余控制能力返回
+  `false`；`IAudioProvider` / `IAudioManager` 不新增成员。
+
+### 2.2 扩展包公开新增
+
+- 仅 `FmodAudioSettings`（`ScriptableObject` 配置资产，`[CreateAssetMenu]`）。除编译器生成的 public 构造函数
+  外没有 public 成员；字段用 `[SerializeField] private`，internal 属性供集成/测试读取。
+- `FmodAudioProvider` / `IFmodEventBackend` / `FmodProviderOptions` / `FmodEventSlotTable` 全部 internal。
+
+### 2.3 核心 internal 能力接口
+
+```csharp
+internal interface IAudioParameterProvider { bool TrySetParameter(AudioProviderHandle, AudioParameter); bool TrySetGlobalParameter(AudioParameter); }
+internal interface IAudioBankProvider { bool TryLoadBank(string, bool); bool TryUnloadBank(string); bool IsBankLoaded(string); }
+internal interface IAudioBusProvider { bool TrySetBusVolume(string, float); bool TrySetBusMuted(string, bool); bool TrySetBusPaused(string, bool); }
+internal interface IAudioSnapshotProvider { bool TryStartSnapshot(string); bool TryStopSnapshot(string); }
+internal interface IAudioSpatialProvider { bool TrySetPosition(AudioProviderHandle, Vector3); }
+```
+
+`AudioManagerImpl` 探测 `_provider is IXxx` 并转发；`AudioManager` 门面探测 `_instance is AudioManagerImpl`。
+代价：core 硬编码扩展程序集名，扩展包必须与 core 同版本配对；第三方 provider 暂时无法实现这些能力
+（台账记 `暂不做`，重开判据：出现真实第三方 provider 需要参数/bank/bus/snapshot）。
+
+---
+
+## 三、对象模型与 provider 映射（`[已实现]` / `[设计稿]`）
 
 | FMOD | 核心 / provider | 说明 |
 | --- | --- | --- |
-| Studio event（`event:/...`） | `location` 字符串 | provider 把 `location` 解释成事件路径 |
-| `EventInstance` | provider 槽位表 + `AudioProviderHandle` | 句柄存槽位索引 + 代际，不把 `EventInstance` 塞进 `int` |
-| event 参数 / RTPC | 核心不表达 | 走扩展自己的 API + `AudioManager.TryGetProviderHandle`（已实现公开） |
-| bus | 核心通道 | v1 用**逐实例音量**实现三档相乘；不改 FMOD master bus |
-| bank | provider 构造时加载 | `FmodAudioOptions.Banks` / `OwnsBanks` |
-| `set3DAttributes` | `AudioPlaybackRequest.Position` | 只在 `SpatialBlend > 0` 时写一次；衰减由事件编排 |
-| 事件内建的循环 | `AudioPlaybackRequest.Loop` 不生效 | 以 Studio 事件编排为准；provider 的 `Poll` 报告真实状态 |
+| Studio event（`event:/...`） | `AudioManager.Play` 的 `location` | provider 补 `FmodAudioSettings.EventPathPrefix`（默认 `event:/`，已带则不重复） |
+| `EventInstance` | provider 槽位表 + `AudioProviderHandle` | 句柄存槽位下标 + 代际，不把 `EventInstance` 塞进 `int` |
+| event 参数 / RTPC | `AudioManager.SetParameter` + `InitialParameters` | 起播前由 provider 在 `start()` 前应用；运行中经 internal 能力接口 |
+| global parameter | `AudioManager.SetGlobalParameter` | 无句柄 |
+| bus | `AudioManager.SetBusVolume/SetBusMuted/SetBusPaused` | 路径如 `bus:/SFX`；核心原样透传 |
+| snapshot | `AudioManager.StartSnapshot/StopSnapshot` | 路径如 `snapshot:/Pause`；停止用 ALLOWFADEOUT（Phase 2） |
+| bank | `AudioManager.LoadBank/UnloadBank/IsBankLoaded` | 同步加载；大 bank 会阻塞 |
+| `set3DAttributes` | `AudioPlayOptions.Position` + `AudioManager.SetPosition` | 起播写一次，之后手动更新；不自动跟随 Transform |
+| 事件内建循环 | `AudioPlayOptions.Loop` 不生效 | 以 Studio 事件编排为准；`Poll` 报告真实状态 |
 
-### 2.2 `IAudioProvider` 映射（FMOD 侧）
+### 3.1 provider 原语映射
 
-| provider 成员 | FMOD 实现 |
+| provider 成员 | FMOD 实现（Phase 2 目标） |
 | --- | --- |
-| `PlayAsync(location, request, ct)` | 解析事件路径 → `RuntimeManager.CreateInstance` → 写 volume/pitch/3D → `start()`；失败返回 default 并记日志；`request.Paused` 则 `setPaused(true)` |
+| `PlayAsync(location, request, ct)` | 解析事件路径 → `RuntimeManager.CreateInstance` → 应用起播前参数 → volume/pitch/3D → `start()`；失败释放并返回 default |
 | `Stop(handle)` | `EventInstance.stop(...)`；返回是否真的停掉 |
 | `Release(handle)` | 停播（若需要）→ `release()` → 归还槽位、递增代际；幂等 |
 | `SetPaused(handle, paused)` | `setPaused`；句柄失效返回 false |
 | `SetVolume(handle, volume)` | `setVolume`（最终音量，核心已算好） |
 | `Poll(handle)` | `isValid` / `getPlaybackState` / `getPaused` → `Invalid` / `Starting` / `Playing` / `Paused` / `Stopped` |
 
-`Poll` 是纯查询（不推进超时）；`Starting` 超时、循环回收、死源回收由核心 ticker 决定（见
-`Documentation/AudioProvider.md` §四）。FMOD 的 one-shot + `Loop=true` 播完后 `Poll` 返回
-`Stopped`，核心正常回收，不会因核心的 `Loop` 特判而永久占槽。
-
-### 2.3 核心侧硬缺口（B 之后）
-
-B 解决了 A 的两个缺口：
-
-- `CopyChannels` 在 `SetProvider` 路径可用（语义层仍是 `AudioManagerImpl`）；
-- `AudioChannelInfo` 的 internal 构造不再是问题（核心构造）。
-
-仍存在的：
-
-1. `AudioListener.pause` / `AudioListener.volume` 对 FMOD 后端不自动生效；项目暂停走
-   `AudioManager.Pause()`，全局 `AudioListener.pause` 不是 FMOD 的契约；
-2. 逐实例音量与 FMOD bus/snapshot 可能双重相乘；v1 明确「框架音量走逐实例，项目不要再对同一
-   声音用 bus 音量重复控制」；
-3. `Loop` / `Pitch` / 3D 衰减由 Studio 事件编排决定，`AudioPlayOptions` 只能近似；
-4. `FmodAudioOptions` 的 bank 加载是同步的；大 bank 会卡启动（后续可评估异步）。
+`Poll` 是纯查询（不推进超时）；`Starting` 超时、循环回收、死源回收由核心 ticker 决定。FMOD one-shot +
+`Loop=true` 播完后 `Poll` 返回 `Stopped`，核心正常回收。
 
 ---
 
-## 三、A 与 B 的对比（结论：B）
-
-| 维度 | A：实现 `IAudioManager` | B：实现 `IAudioProvider` |
-| --- | --- | --- |
-| 核心改动 | 零 | 公开 API + `AudioManagerImpl` 拆分（设计见 `AudioProvider.md`） |
-| 适配器工作量 | 重写通道/三档音量/暂停/计数/归一化/句柄 | 只做 FMOD 事件原语 |
-| 诊断 `CopyChannels` | 注入后恒空 | 可用 |
-| 中间件专属能力 | 只能在 `IAudioManager` 外另开 API | 同样在扩展外，但 `TryGetProviderHandle` 可做逐次控制（已实现公开） |
-| 本仓验证 | 无 SDK 不能编译/测试 | FMOD-free provider 始终可测；真实后端条件编译 |
-| 维护 | 两套适配器各自重写语义 | 语义只在核心 |
-
----
-
-## 四、分包设计（`Assets/XFramework.Fmod/`，设计稿）
-
-### 4.1 程序集拆分
+## 四、分包设计（`[已实现]` Phase 1；`[设计稿]` Phase 2）
 
 ```text
 Assets/XFramework.Fmod/
 ├── package.json / README.md / CHANGELOG.md / LICENSE.md
 ├── Runtime/
-│   ├── Venusy609.Xframework.Fmod.asmdef          # FMOD-free：refs 核心 + UniTask
-│   ├── FmodAudioProvider.cs                      # internal sealed : IAudioProvider
-│   ├── FmodAudioOptions.cs                       # public：EventPathPrefix / Banks / OwnsBanks
-│   ├── IFmodEventBackend.cs                      # internal：provider 与真后端之间的缝
-│   ├── FmodVoiceSlot.cs                          # internal 槽位表
-│   └── AssemblyInfo.cs                           # InternalsVisibleTo 集成/测试
-├── Runtime/Integration/
-│   ├── Venusy609.Xframework.Fmod.Unity.asmdef    # 条件：refs provider + FMODUnity
-│   │                                             # versionDefines: com.firelight.fmod-for-unity → XFRAMEWORK_FMOD
-│   │                                             # （仅当最终选择该 UPM 路径时；包名以实际 SDK 为准）
-│   │                                             # defineConstraints: ["XFRAMEWORK_FMOD"]
-│   ├── FmodEventBackend.cs                       # internal：RuntimeManager / EventInstance
-│   └── FmodAudio.cs                              # public：Install(options)
-├── Tests/Runtime/
-│   ├── Venusy609.Xframework.Fmod.Tests.asmdef    # provider + fake backend；始终编译
-│   ├── FmodAudioProviderTests.cs
-│   └── FakeFmodEventBackend.cs
-├── Tests/Runtime/Integration/
-│   ├── Venusy609.Xframework.Fmod.Unity.Tests.asmdef  # 条件
-│   └── FmodIntegrationTests.cs                       # env 驱动，缺省 Ignore
-└── Tests/Runtime/Architecture/
-    ├── Venusy609.Xframework.Fmod.Guards.asmdef   # 始终编译，PlayMode，不引用 FMOD
-    ├── FmodReadmeTests.cs
-    ├── FmodMetaFileTests.cs
-    ├── FmodPackageBoundaryTests.cs
-    ├── FmodConditionalAssemblyTests.cs
-    └── FmodPackageContractTests.cs
+│   ├── Venusy609.Xframework.Fmod.asmdef      # 核心 + UniTask；不引用 FMOD
+│   ├── AssemblyInfo.cs                       # IVT 集成/测试
+│   ├── FmodAudioSettings.cs                  # public：唯一公开类型，配置资产
+│   ├── FmodProviderOptions.cs                # internal：settings 快照
+│   ├── IFmodEventBackend.cs                  # internal：int 句柄的 FMOD-free 缝
+│   ├── FmodEventSlotTable.cs                 # internal：index + generation 槽位表
+│   └── FmodAudioProvider.cs                  # internal：IAudioProvider + 五个能力接口
+└── Tests/Runtime/                            # provider/设置/桥接 + Architecture 守卫
 ```
 
-### 4.2 条件程序集与守卫
-
-- **Runtime 与 Runtime/Integration 都要各自的 `versionDefines` + `defineConstraints`**：Unity 的
-  versionDefines 符号按程序集，不跨 asmdef 传递。
-- `versionDefines.expression` 先用 `"0.0.0"`，在第一个工程实测是否匹配；不匹配改用
-  `"[0.0.0,999.999.999]"` 或实际版本。
-- **FMOD-free 的 provider 程序集不引用 `FMODUnity`**：干净克隆也能编译、能跑 fake backend 测试；
-  只有 Integration 程序集引用 FMOD。
-- **守卫放 PlayMode 的 `Tests/Runtime/Architecture`**，不引用条件程序集/FMOD；本仓 `-Filter`
-  未指定平台时只跑 PlayMode，Editor 守卫会被静默跳过。
-- 守卫至少覆盖：README 必答节 + 文件树、`.meta`、包边界（不得出现 `Documentation/`）、
-  `package.json` 名称/版本/依赖（不得把 FMOD 写进 dependencies）、条件 asmdef 的
-  `versionDefines`/`defineConstraints` 一致性、`FmodAudioOptions` 公开面形状。
-- 条件程序集的悬空引用必须先用最小 asmdef 探针验证（见 `AudioProvider.md` §七）。
-
-### 4.3 用户入口
-
-```csharp
-// 设计稿，未实现
-FmodAudio.Install(new FmodAudioOptions
-{
-    EventPathPrefix = "event:/",
-    Banks = new[] { "Master" },
-    OwnsBanks = true,
-});
-```
-
-- `FmodAudio.Install(FmodAudioOptions fmodOptions, AudioInitOptions audioOptions = null)`：
-  构造 real backend + `FmodAudioProvider` → `AudioManager.SetProvider(provider, audioOptions)`；
-  `SetProvider` 会先 Dispose 旧实例。
-- `FmodAudioProvider` **internal**；用户只经 `FmodAudio.Install`；`FmodAudioOptions` public。
-- `Install` 失败（bank 加载失败、事件后端不可用）不得留下半初始化门面：先构造成功再 `SetProvider`。
-
-### 4.4 限制（写进扩展 README）
-
-- `AudioPlayOptions.Loop` 不生效；循环由 Studio 事件编排决定。
-- `AudioPlayOptions.SpatialBlend`/`Position` 只写一次 3D 属性；衰减/遮挡由事件编排。
-- 主/通道音量按**逐实例音量**实现；不改 FMOD master bus，避免与项目 bus 控制双重相乘。
-- `AudioListener.pause` / `AudioListener.volume` 不作用于 FMOD；项目暂停走 `AudioManager.Pause()`。
-- bank 在 `Install` 时同步加载；大 bank 会卡启动。
-- `CopyChannels` 可用（核心语义层），但 FMOD 专属诊断（RTPC/bus/snapshot）需扩展自己的 API。
-- `AudioPlayOptions.VolumeScale <= 0` 等归一化仍由核心做；provider 不得再乘。
+- **FMOD-free provider 程序集始终编译**：干净克隆（无 FMOD）也能测 provider 与守卫。
+- **Phase 2 集成程序集**：`Runtime/Integration/Venusy609.Xframework.Fmod.Unity.asmdef`，引用 `FMODUnity`，
+  用 `versionDefines`（实际 UPM 包名 + `XFRAMEWORK_FMOD`）+ `defineConstraints` 条件编译；真实
+  `FmodEventBackend` 与自动安装放这里。
+- **条件 asmdef 的悬空引用必须先做最小探针**：没有 FMOD 时 `defineConstraints` 排除后不得报 missing
+  assembly；若报错，回退到「Editor 生成集成源码到消费方 Assets」方案。这是 Phase 2 最大不确定性。
+- 包内守卫：README 结构/文件树、`.meta`、包边界、包契约、依赖声明、AutoInit 族、Runtime 公开 API 基线
+  （`FmodAudioSettings` + public 构造函数）；`run-tests.ps1 -UpdateFmodApiBaseline` 更新基线。
+- 扩展包 XML 文档不在核心 `check-docs` 射程，质量靠评审（已知缺口，与 Luban 同型）。
 
 ---
 
-## 五、分发、许可与门禁
+## 五、自动安装与配置资产（`[设计稿]` Phase 2）
 
-- **FMOD 集成不是官方 UPM 源**：SDK 接入方式（官方 `.unitypackage` 导入命令 / 本地标记包 /
-  UPM / 私有仓库）**待后续单独讨论**；SDK 不入本仓。
-- **本仓消费（待定）**：无论最终选哪种，都**不提交** SDK、`.unitypackage`、本地 manifest /
-  `packages-lock.json` 的改动；干净克隆必须能在无 SDK 时跳过集成程序集。
-- **扩展包不在核心六道门禁射程**：核心 `check-docs` 只扫 `Assets/XFramework`；扩展自设 PlayMode
-  守卫；XML 文档告警不覆盖扩展（同 Luban 的已知缺口）。
-- **干净克隆验证**：无 FMOD 包时 provider 程序集与守卫仍编译/运行，Integration 程序集与测试跳过；
-  有 FMOD 时 Integration 编译并跑集成测试。
-
----
-
-## 六、实现顺序与验证（核心已完成；FMOD 包未执行）
-
-1. ✅ 核心 `IAudioProvider` + 内置 `AudioSourceProvider` 拆分（行为不变）；Audio 定向全绿。
-2. ✅ `AudioManager.SetProvider` + `TryGetProviderHandle` + fake provider 测试。
-3. ⬜ 扩展包 FMOD-free provider + fake backend 测试 + 守卫。
-4. ⬜ Integration 程序集 + 真实 bank 冒烟（`XFW_FMOD_BANK` / `XFW_FMOD_EVENT`）。
-5. ⬜ SDK 接入方式定稿与文档/台账同步（把本文件从「设计稿」改为「已实现」）。
-
-每个阶段的门禁：`run-tests.ps1` 全量 + `check-docs.ps1 -Enforce`；扩展包在有无 FMOD 两种环境各跑一次。
+- `FmodAudioSettings` 放在任意 `Resources` 目录；`Enabled` 为 false 或无资产 → 不安装。
+- 自动安装档位**先用探针确认 FMOD RuntimeManager 初始化时机**，不要直接写死 `AfterAssembliesLoaded`
+  （它可能早于 RTM 初始化）；按探针选 `AfterAssembliesLoaded` / `BeforeSceneLoad` / `AfterSceneLoad`，
+  必要时显式调用 RTM 初始化入口。
+- `XFW_DISABLE_FMOD_AUTOINSTALL=1` → 直接返回（测试/消费方逃生口；`run-tests.ps1` 启动 Unity 前设置）。
+- `AudioManager.IsInitialized` 为 true → 记 Warning 并返回，**不覆盖项目已显式注入的管理器/provider**。
+- 构造 backend/provider（加载 banks）全部成功后 `AudioManager.SetProvider(provider, options)`；失败先清理
+  本次新加载的 bank 与半成品、记 Error，不留半初始化门面。
+- `OwnsBanks` 只卸载 provider 自己成功加载、且加载前未加载的 bank；项目预加载的 bank 永不卸载。
+- 配置资产在启动时读一次并快照；之后修改资产不生效。
+- 有资产且未初始化时安装 provider；项目若仍调用 `AudioManager.Initialize()` 会得到现有「重复初始化」
+  Warning（无害，但 README 明确不要调用）。
 
 ---
 
-## 七、已核对事实与漂移点
+## 六、限制（写进扩展 README 与核心 Audio README）
+
+- 实际听到 ≈ 核心三档乘积（`MasterVolume × ChannelVolume × VolumeScale`）× FMOD 事件音量 × FMOD bus
+  音量 × snapshot 影响；核心不知道 bus/snapshot 状态。建议二选一：用核心三档则 bus 保持 0 dB；用
+  bus/snapshot 则核心三档保持 1。
+- `AudioManager.Pause()` 只暂停活跃 voice，不暂停 bus/snapshot；`AudioListener.pause` / `AudioListener.volume`
+  不作用于 FMOD。
+- bank 在 `LoadBank` 时同步加载；大 bank 会卡主线程。
+- `AudioOptions.Loop` 不生效；`Pitch` / `SpatialBlend` 只能近似；3D 衰减/遮挡由 Studio 事件编排。
+- `AudioManager.Play` 返回时可能仍在 Loading：`SetParameter` / `SetPosition` 可能返回 false；起播前参数用
+  `InitialParameters`，需要立即逐次控制用 `PlayAsync`。
+- 无逐 voice 暂停/音量、无事件回调、无普通事件 stop fade、无 Wwise。
+- 扩展包 Phase 1 不能实际播放 FMOD；根 README 只写「开发中」。
+
+---
+
+## 七、测试与门禁（Phase 1 已执行）
+
+- 核心：`run-tests.ps1 -Filter Audio` 全绿（247 通过）；公开 API 基线更新并重跑绿灯；
+  `check-docs.ps1 -Enforce` 通过。
+- 扩展：`run-tests.ps1 -Filter Fmod` 全绿（50 通过，含 provider/设置/桥接与包内守卫）；
+  `-UpdateFmodApiBaseline` 生成基线后重跑绿灯。
+- 守卫覆盖：README 必答节/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、公开 API 基线、
+  仓库不提交 `FmodAudioSettings.asset`。
+- Phase 2 待执行：
+  - 条件 asmdef 探针（无 FMOD 不报 missing assembly；有 FMOD 宏自动定义、集成程序集编译）。
+  - 真实 bank/event 冒烟（`XFW_FMOD_BANK` / `XFW_FMOD_EVENT`，缺省 `Assert.Ignore`）。
+  - 覆盖 Play/Stop、起播前参数、运行中参数、SetPosition、bus、snapshot、bank、双前缀、`OwnsBanks`。
+  - 干净克隆 + 有 FMOD 两种环境跑全量；`git status` 核对 `.meta` / manifest / lock 未误提交。
+
+---
+
+## 八、SDK、版本与漂移点
 
 | 事实 | 状态 | 漂移点 |
 | --- | --- | --- |
-| FMOD for Unity 2.03 官方支持 Unity 2021.3 / 2022.3 / 6.0 / 6.3 | `[官方文档]` | 版本矩阵随发布变化 |
-| 官方安装 = Asset Store / `.unitypackage` + Setup Wizard | `[官方文档]` | 可能新增官方 UPM 源 |
-| 2.02.20+ 可手动 UPM 化；保留 `FMOD.meta` GUID | `[二手资料]` | 上游后续版本可能改变目录定位 |
-| 集成 asmdef 名 `FMODUnity` | `[二手资料]` | 以实际安装版本为准 |
-| `RuntimeManager.CreateInstance` / `EventInstance.start/stop/setPaused/setVolume/setPitch/set3DAttributes/getPlaybackState` | `[官方文档/二手资料，未实测]` | 2.02 / 2.03 签名可能微调 |
-| bus：`RuntimeManager.GetBus`；bank：`LoadBank` / `HasBankLoaded` | `[官方文档/二手资料，未实测]` | 同上 |
+| FMOD for Unity 2.04 为 Asset Store UPM-only；2.03 仍可 `.unitypackage` / 手动 UPM 化 | `[官方文档]` | 上游发布渠道可能变化 |
+| 手动 UPM 化的包名历史为 `com.firelight.fmod-for-unity` | `[二手资料]` | 2.04 Asset Store 包名需读实际 `package.json` |
+| 集成程序集名 `FMODUnity` | `[二手资料/未实测]` | 以实际安装版本为准 |
+| 官方支持 Unity 6.0 / 6.3 LTS 等矩阵 | `[官方文档]` | 本项目 6000.4.5f1 需实测兼容性 |
+| `RuntimeManager.CreateInstance` / `EventInstance.start/stop/release/setPaused/setVolume/setPitch/set3DAttributes/setParameterByName(WithLabel)/getPlaybackState/getPaused/isValid` | `[官方文档/未实测]` | 2.04 签名可能微调，Phase 2 编译验证 |
+| bank：`RuntimeManager.LoadBank` / `UnloadBank` / `HasBankLoaded`；bus：`RuntimeManager.GetBus` + `setVolume/setMute/setPaused`；snapshot：`CreateInstance("snapshot:/...")` + `start` / `stop(ALLOWFADEOUT)` / `release` | `[官方文档/二手资料/未实测]` | 同上 |
 | 事件循环由 Studio 编排，`AudioPlayOptions.Loop` 不能强制 | `[未实测]` | 需真实事件验证 |
+
+**SDK 分发**：不提交 SDK、`.unitypackage`、本地 manifest / `packages-lock.json` 改动；干净克隆必须能在
+无 SDK 时跳过集成程序集。扩展包 README 是 FMOD 版本/安装方式的唯一真相（核心包不声明 FMOD 依赖）。
 
 ---
 
-## 八、与既有结论的关系（下一轮别重提）
+## 九、实施状态
 
-- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md` 的「不做：不提供
-  `Play(AudioClip, ...)` 重载」条目已否决（后端中立性 + 资源生命周期单语义），无重开判据。
-- **框架音量 → 项目 AudioMixer 路由仍不内建**：R3-AUD-001 已实测 `outputAudioMixerGroup` 恒 null；
-  B 之后要路由只能实现自定义 provider。
-- **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地（公开 API 源兼容新增）；
-  FMOD 扩展仍未实现。设计见 `Documentation/AudioProvider.md`。
-- **`IAudioManager` / `SetInstance` 不删除**：B 是推荐的中间件路径，不是唯一替换路径。
-- **FMOD SDK 不入本仓**：分包依赖的 FMOD SDK 接入方式待后续讨论；核心包不声明 FMOD 依赖。
+- **Phase 1（2026-10-26，已完成）**：核心中立控制面 + FMOD-free provider + `FmodAudioSettings` + fake
+  backend 测试 + `AudioManager` 桥接 + 包内守卫 + 公开 API 基线。当前不可实际播放 FMOD。
+- **Phase 2（待 SDK）**：条件集成程序集 + 真实 `FmodEventBackend` + 自动安装 + 真实 bank/event 冒烟 +
+  文档状态从「Phase 1」改为「已实现」。需要用户提供 FMOD 2.04 Asset Store UPM 环境。
+
+---
+
+## 十、与既有结论的关系（下一轮别重提）
+
+- **旧的 `FmodAudio.Install` / `FmodAudioOptions` 公开门面已废弃**：被 2026-10-26「只经 AudioManager +
+  自动安装 + 配置资产」取代。
+- **`Play(AudioClip)` 仍不提供**：`Documentation/Modules/Audio.md` 的「不做」条目无重开判据。
+- **框架音量 → 项目 AudioMixer 路由仍不内建**：要路由只能自定义 `IAudioProvider` 或整体替换
+  `IAudioManager`。
+- **Wwise 仍 `暂不做`**：核心已有中立控制面，但 Wwise 的 RTPC/PlayingID/回调/3D emitter 映射未验证；
+  重开判据是真实 Wwise 项目 + SDK 可编译验证（见 `Documentation/Wwise.md`）。
+- **核心包不声明 FMOD 依赖**；扩展包 `package.json.dependencies` 为空。

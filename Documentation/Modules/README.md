@@ -81,6 +81,7 @@
 ## 可选扩展包
 
 - 暂不做：**为 Luban 扩展包新建 `Modules/Luban.md`**（2026-10-25 · R4-ADJ-01）——`Assets/XFramework.Luban/` 不在核心模块集（模块集来自 `Assets/XFramework/Runtime/` 的直接子目录），其维护向记录与决策台账继续留在 `Documentation/Luban.md` §7.8（不做 / 暂不做）与 §7.10（修复记录）；新建会撞本文件表与 `check-docs` 的模块集。重开判据：Luban 需要与核心模块同构的台账门禁时。
+- 暂不做：**为 FMOD 扩展包新建 `Modules/Fmod.md`**（2026-10-26）——`Assets/XFramework.Fmod/` 不对称地不在核心模块集；维护向记录、Phase 1/2 状态、SDK 漂移点与决策继续留在 `Documentation/FMOD.md`，核心 Audio 的台账在 `Modules/Audio.md`。重开判据：FMOD 扩展需要与核心模块同构的台账门禁时。
 
 ## 模板
 
