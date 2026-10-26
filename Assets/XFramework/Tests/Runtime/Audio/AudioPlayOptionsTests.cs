@@ -56,6 +56,7 @@ namespace XFramework.XAudio.Tests
             Assert.AreEqual(1f, options.Pitch, 0.001f);
             Assert.AreEqual(0f, options.SpatialBlend, 0.001f);
             Assert.AreEqual(Vector3.zero, options.Position);
+            Assert.IsNull(options.InitialParameters);
         }
 
         /// <summary>
@@ -72,6 +73,7 @@ namespace XFramework.XAudio.Tests
             Assert.IsFalse(raw.Loop);
             Assert.AreEqual(0f, raw.Pitch, 0.001f);
             Assert.AreEqual(0f, raw.SpatialBlend, 0.001f);
+            Assert.IsNull(raw.InitialParameters);
         }
 
         #endregion
@@ -171,6 +173,67 @@ namespace XFramework.XAudio.Tests
                 new AudioPlayOptions(spatialBlend: 0f, position: new Vector3(100f, 0f, 0f), loop: true));
 
             Assert.AreEqual(Vector3.zero, AudioTestKit.FindSourceFor(handle).transform.position);
+        }
+
+        #endregion
+
+        #region 起播前参数
+
+        [Test]
+        public void InitialParameters_NullOrEmpty_NormalizeToNull()
+        {
+            Assert.IsNull(AudioManagerImpl.SnapshotInitialParameters(null));
+            Assert.IsNull(AudioManagerImpl.SnapshotInitialParameters(new AudioParameter[0]));
+        }
+
+        [Test]
+        public void InitialParameters_AreCopied()
+        {
+            var source = new[] { new AudioParameter("Health", 0.5f) };
+            var snapshot = AudioManagerImpl.SnapshotInitialParameters(source);
+
+            Assert.AreNotSame(source, snapshot);
+            Assert.AreEqual(1, snapshot.Length);
+            Assert.AreEqual("Health", snapshot[0].Name);
+            Assert.AreEqual(0.5f, snapshot[0].Value, 0.001f);
+
+            source[0] = new AudioParameter("Health", 1f);
+            Assert.AreEqual(0.5f, snapshot[0].Value, 0.001f,
+                "核心快照不得受调用方后续修改影响");
+        }
+
+        [Test]
+        public void InitialParameters_DefaultElement_ThrowsBeforeReserving()
+        {
+            var options = new AudioPlayOptions(initialParameters: new[] { default(AudioParameter) });
+
+            Assert.Throws<System.ArgumentException>(() => AudioManager.Play("audio/a", options));
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount, "非法参数必须在预占前被拒绝");
+        }
+
+        [Test]
+        public void InitialParameters_ValidElement_IsIgnoredByBuiltInProvider()
+        {
+            var options = new AudioPlayOptions(
+                initialParameters: new[] { new AudioParameter("Health", 0.5f) });
+
+            var handle = AudioManager.Play("audio/a", options);
+
+            Assert.IsFalse(handle.IsDefault);
+            Assert.IsNotNull(AudioTestKit.FindSourceFor(handle));
+            Assert.AreEqual(1, AudioManager.ActiveVoiceCount);
+        }
+
+        [Test]
+        public void InitialParameters_PlayAsync_RejectsInvalidElementSynchronously()
+        {
+            var options = new AudioPlayOptions(initialParameters: new[] { default(AudioParameter) });
+
+            Assert.Throws<System.ArgumentException>(() =>
+            {
+                AudioManager.PlayAsync("audio/a", options);
+            });
+            Assert.AreEqual(0, AudioManager.ActiveVoiceCount);
         }
 
         #endregion

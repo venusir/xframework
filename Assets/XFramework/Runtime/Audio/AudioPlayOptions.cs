@@ -3,7 +3,7 @@ using UnityEngine;
 namespace XFramework.XAudio
 {
     /// <summary>
-    /// 单次播放的参数。不可变值类型，零 GC。
+    /// 单次播放的参数。不可变值类型；不带 <see cref="InitialParameters"/> 时零 GC。
     /// <para><b>参数归一化</b>：为了让省略写法安全，实现会把「未设置」的字段归一化为合理的默认值——
     /// <see cref="VolumeScale"/> 与 <see cref="Pitch"/> 小于等于 <c>0</c> 一律按 <c>1</c> 处理，
     /// <see cref="SpatialBlend"/> 钳到 <c>[0, 1]</c>，<see cref="Channel"/> 为 <c>null</c>/空一律按
@@ -51,6 +51,16 @@ namespace XFramework.XAudio
         /// </summary>
         public readonly Vector3 Position;
 
+        /// <summary>
+        /// 起播前应用的 provider 中立参数；<c>null</c> 或空数组表示不应用。
+        /// <para><b>内置 provider 忽略它</b>；中间件 provider 应在事件 <c>start()</c> 之前应用。
+        /// 核心在 <see cref="AudioManager.Play(string, AudioPlayOptions)"/> /
+        /// <see cref="AudioManager.PlayAsync(string, AudioPlayOptions, System.Threading.CancellationToken)"/>
+        /// 入口校验并复制数组，调用方之后修改原数组不影响本次播放。</para>
+        /// <para><b>分配代价</b>：数组非空时，这是本次播放唯一一次额外分配；无参播放仍为零 GC。</para>
+        /// </summary>
+        public readonly AudioParameter[] InitialParameters;
+
         #endregion
 
         #region Constructors
@@ -64,8 +74,13 @@ namespace XFramework.XAudio
         /// <param name="pitch">速度与音高；<c>&lt;= 0</c> 按 <c>1</c> 处理。</param>
         /// <param name="spatialBlend">2D/3D 混合，钳到 <c>[0, 1]</c>。</param>
         /// <param name="position">3D 播放位置。</param>
+        /// <param name="initialParameters">起播前参数；<c>null</c>/空数组表示不应用。数组元素非法时
+        /// <see cref="AudioManager.Play(string, AudioPlayOptions)"/> /
+        /// <see cref="AudioManager.PlayAsync(string, AudioPlayOptions, System.Threading.CancellationToken)"/>
+        /// 会抛 <see cref="System.ArgumentException"/>。</param>
         public AudioPlayOptions(string channel = null, float volumeScale = 1f, bool loop = false,
-            float pitch = 1f, float spatialBlend = 0f, Vector3 position = default)
+            float pitch = 1f, float spatialBlend = 0f, Vector3 position = default,
+            AudioParameter[] initialParameters = null)
         {
             Channel = channel;
             VolumeScale = volumeScale;
@@ -73,6 +88,7 @@ namespace XFramework.XAudio
             Pitch = pitch;
             SpatialBlend = spatialBlend;
             Position = position;
+            InitialParameters = initialParameters;
         }
 
         #endregion
@@ -80,7 +96,8 @@ namespace XFramework.XAudio
         #region Static
 
         /// <summary>
-        /// 默认参数：2D、原音量、原速、不循环、走 <see cref="AudioChannels.Default"/> 通道。
+        /// 默认参数：2D、原音量、原速、不循环、走 <see cref="AudioChannels.Default"/> 通道、
+        /// 无起播前参数。
         /// <para>与 <c>default(AudioPlayOptions)</c> 在归一化后等价——本属性只是让意图更显式。</para>
         /// </summary>
         /// <remarks>

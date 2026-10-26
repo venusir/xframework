@@ -244,16 +244,25 @@ XFramework.XAudio.AudioManager.SetProvider  ::  public static void(XFramework.XA
 XFramework.XAudio.AudioManager.Stop  ::  public static bool(XFramework.XAudio.AudioHandle handle)
 XFramework.XAudio.AudioManager.StopAll  ::  public static int(string channel = null)
 XFramework.XAudio.AudioManager.TryGetProviderHandle  ::  public static bool(XFramework.XAudio.AudioHandle handle, out XFramework.XAudio.AudioProviderHandle providerHandle)
+XFramework.XAudio.AudioParameter  ::  public readonly struct
+XFramework.XAudio.AudioParameter#ctor  ::  public(string name, float value)
+XFramework.XAudio.AudioParameter#ctor  ::  public(string name, string label)
+XFramework.XAudio.AudioParameter.IsLabel  ::  public bool IsLabel { get; }
+XFramework.XAudio.AudioParameter.Label  ::  public readonly string
+XFramework.XAudio.AudioParameter.Name  ::  public readonly string
+XFramework.XAudio.AudioParameter.Value  ::  public readonly float
 XFramework.XAudio.AudioPlayOptions  ::  public readonly struct
-XFramework.XAudio.AudioPlayOptions#ctor  ::  public(string channel = null, float volumeScale = 1f, bool loop = false, float pitch = 1f, float spatialBlend = 0f, UnityEngine.Vector3 position = default)
+XFramework.XAudio.AudioPlayOptions#ctor  ::  public(string channel = null, float volumeScale = 1f, bool loop = false, float pitch = 1f, float spatialBlend = 0f, UnityEngine.Vector3 position = default, XFramework.XAudio.AudioParameter[] initialParameters = null)
 XFramework.XAudio.AudioPlayOptions.Channel  ::  public readonly string
 XFramework.XAudio.AudioPlayOptions.Default  ::  public static XFramework.XAudio.AudioPlayOptions Default { get; }
+XFramework.XAudio.AudioPlayOptions.InitialParameters  ::  public readonly XFramework.XAudio.AudioParameter[]
 XFramework.XAudio.AudioPlayOptions.Loop  ::  public readonly bool
 XFramework.XAudio.AudioPlayOptions.Pitch  ::  public readonly float
 XFramework.XAudio.AudioPlayOptions.Position  ::  public readonly UnityEngine.Vector3
 XFramework.XAudio.AudioPlayOptions.SpatialBlend  ::  public readonly float
 XFramework.XAudio.AudioPlayOptions.VolumeScale  ::  public readonly float
 XFramework.XAudio.AudioPlaybackRequest  ::  public readonly struct
+XFramework.XAudio.AudioPlaybackRequest.InitialParameters  ::  public readonly XFramework.XAudio.AudioParameter[]
 XFramework.XAudio.AudioPlaybackRequest.Loop  ::  public readonly bool
 XFramework.XAudio.AudioPlaybackRequest.Paused  ::  public readonly bool
 XFramework.XAudio.AudioPlaybackRequest.Pitch  ::  public readonly float

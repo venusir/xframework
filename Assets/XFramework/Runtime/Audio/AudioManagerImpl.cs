@@ -255,13 +255,14 @@ namespace XFramework.XAudio
 
                 string channel = NormalizeChannel(options.Channel);
                 float volumeScale = NormalizeVolumeScale(options.VolumeScale);
+                AudioParameter[] initialParameters = SnapshotInitialParameters(options.InitialParameters);
 
                 // 预占发生在发起加载之前：池满时一次 IO 都不会浪费
                 if (!TryReserveVoice(channel, location, volumeScale, out int index, out AudioHandle handle))
                     return default;
 
                 EnsureTickerRegistered();
-                RunFireAndForget(index, handle.Generation, location, options);
+                RunFireAndForget(index, handle.Generation, location, options, initialParameters);
                 return handle;
             }
         }
@@ -275,19 +276,21 @@ namespace XFramework.XAudio
 
             string channel = NormalizeChannel(options.Channel);
             float volumeScale = NormalizeVolumeScale(options.VolumeScale);
+            AudioParameter[] initialParameters = SnapshotInitialParameters(options.InitialParameters);
 
             if (!TryReserveVoice(channel, location, volumeScale, out int index, out AudioHandle handle))
                 return UniTask.FromResult(default(AudioHandle));
 
             EnsureTickerRegistered();
-            return PlayCoreAsync(index, handle.Generation, location, options, cancellationToken);
+            return PlayCoreAsync(index, handle.Generation, location, options, initialParameters,
+                cancellationToken);
         }
 
         /// <summary>
         /// 播放的公共内核：构造最终请求 → 委托 provider → 记录 provider 句柄并同步当前暂停/音量。
         /// </summary>
         private async UniTask<AudioHandle> PlayCoreAsync(int index, int generation, string location,
-            AudioPlayOptions options, CancellationToken cancellationToken)
+            AudioPlayOptions options, AudioParameter[] initialParameters, CancellationToken cancellationToken)
         {
             CancellationToken lifetime = _lifetimeCts.Token;
             var voice = _voices[index];
@@ -300,7 +303,8 @@ namespace XFramework.XAudio
                 options.Position,
                 ComputeVolumeNoCreate(voice.Channel, voice.VolumeScale),
                 _paused,
-                validity);
+                validity,
+                initialParameters);
 
             AudioProviderHandle providerHandle = default;
             CancellationTokenSource linked = null;
@@ -426,15 +430,17 @@ namespace XFramework.XAudio
         /// <para><b>不能裸 <c>.Forget()</c></b>：异步段的异常会落到 <c>UniTaskScheduler</c>，记成没有
         /// 模块前缀的日志。这里包一层 try/catch，取消静默、其余记 <c>[Audio]</c> 错误。</para>
         /// </summary>
-        private void RunFireAndForget(int index, int generation, string location, AudioPlayOptions options)
-            => RunFireAndForgetAsync(index, generation, location, options).Forget();
+        private void RunFireAndForget(int index, int generation, string location, AudioPlayOptions options,
+            AudioParameter[] initialParameters)
+            => RunFireAndForgetAsync(index, generation, location, options, initialParameters).Forget();
 
         private async UniTaskVoid RunFireAndForgetAsync(int index, int generation, string location,
-            AudioPlayOptions options)
+            AudioPlayOptions options, AudioParameter[] initialParameters)
         {
             try
             {
-                await PlayCoreAsync(index, generation, location, options, CancellationToken.None);
+                await PlayCoreAsync(index, generation, location, options, initialParameters,
+                    CancellationToken.None);
             }
             catch (OperationCanceledException)
             {
@@ -1066,6 +1072,40 @@ namespace XFramework.XAudio
                 throw new ArgumentException(
                     "[Audio] location 不能为 null 或空白。请传入 XAsset 能解析的资源地址。", nameof(location));
             }
+        }
+
+        /// <summary>
+        /// 校验并复制起播前参数：<c>null</c>/空数组归一为 <c>null</c>，非空时复制成核心拥有的快照。
+        /// <para>校验发生在预占槽位之前：非法参数不会触发加载、也不会占用槽位。复制让调用方在
+        /// <c>Play</c>/<c>PlayAsync</c> 返回后修改原数组不影响本次播放。</para>
+        /// </summary>
+        internal static AudioParameter[] SnapshotInitialParameters(AudioParameter[] parameters)
+        {
+            if (parameters == null || parameters.Length == 0)
+                return null;
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                var parameter = parameters[i];
+
+                if (string.IsNullOrWhiteSpace(parameter.Name))
+                {
+                    throw new ArgumentException(
+                        $"[Audio] InitialParameters[{i}] 缺少有效的 Name。",
+                        nameof(AudioPlayOptions.InitialParameters));
+                }
+
+                if (parameter.IsLabel && string.IsNullOrWhiteSpace(parameter.Label))
+                {
+                    throw new ArgumentException(
+                        $"[Audio] InitialParameters[{i}] 的 Label 为空。",
+                        nameof(AudioPlayOptions.InitialParameters));
+                }
+            }
+
+            var copy = new AudioParameter[parameters.Length];
+            Array.Copy(parameters, copy, parameters.Length);
+            return copy;
         }
 
         private void EnsureNotDisposed()

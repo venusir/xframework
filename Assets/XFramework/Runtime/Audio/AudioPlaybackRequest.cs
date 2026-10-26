@@ -38,6 +38,13 @@ namespace XFramework.XAudio
         /// </summary>
         public readonly CancellationToken ValidityToken;
 
+        /// <summary>
+        /// 起播前参数快照；<c>null</c> 表示不应用。
+        /// <para><b>由核心校验并复制</b>，provider 只读、不得修改；数组内容在本次播放期间保持不变。
+        /// 内置 provider 忽略它，中间件 provider 应在事件 <c>start()</c> 之前应用。</para>
+        /// </summary>
+        public readonly AudioParameter[] InitialParameters;
+
         #endregion
 
         #region Constructors
@@ -49,7 +56,8 @@ namespace XFramework.XAudio
             Vector3 position,
             float volume,
             bool paused,
-            CancellationToken validityToken)
+            CancellationToken validityToken,
+            AudioParameter[] initialParameters)
         {
             Loop = loop;
             Pitch = pitch;
@@ -58,6 +66,7 @@ namespace XFramework.XAudio
             Volume = volume;
             Paused = paused;
             ValidityToken = validityToken;
+            InitialParameters = initialParameters;
         }
 
         #endregion

@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+
+#### Audio
+
+- **起播前参数：`AudioParameter` 与 `AudioPlayOptions.InitialParameters`**（2026-10-26）：
+  新增 provider 中立的 `AudioParameter`（数值 `Value` / 标签 `Label`，构造时校验名称与标签非空白）；
+  `AudioPlayOptions` 增加 `InitialParameters` 与构造函数末尾的可选参。核心在 `AudioManager.Play` /
+  `PlayAsync` 的预占槽位之前校验并复制成快照，非法项抛 `ArgumentException` 且不预占/不加载；
+  调用方之后修改原数组不影响本次播放。内置 `AudioSourceProvider` 忽略起播前参数，中间件 provider
+  应在事件 `start()` 前应用。**源兼容新增，但公开 API 基线的 `AudioPlayOptions` 构造函数行从
+  6 参变 7 参**；API 基线已更新，无破坏性源码变更。
+
 ## [0.4.0] - 2026-10-25
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；

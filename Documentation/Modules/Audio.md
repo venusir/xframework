@@ -21,7 +21,8 @@ Runtime/Audio/
 ├── AudioSourcePool.cs        # 内置引擎的宿主与槽位池（internal）
 ├── AudioVoice.cs             # 内置引擎的槽位记录 + AudioVoiceState（internal）
 ├── AudioHandle.cs            # 播放句柄（readonly struct，字段公开且对门面不透明）
-├── AudioPlayOptions.cs       # 单次播放参数（六个字段全部后端中立）
+├── AudioParameter.cs         # provider 中立参数（数值 / 标签），起播前与运行中参数的数据载体
+├── AudioPlayOptions.cs       # 单次播放参数（六个既有字段 + InitialParameters 起播前参数）
 ├── AudioChannels.cs          # 推荐通道常量（不是枚举，见 README 设计取舍）
 ├── AudioChannelConfig.cs     # RegisterChannel 的配置（Volume / Muted）
 ├── AudioChannelInfo.cs       # 诊断回读载荷：CopyChannels 的列表元素（2026-10-16 补录——它一直是公开面，此前漏在本树之外）

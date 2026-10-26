@@ -90,6 +90,30 @@ namespace XFramework.XAudio.Tests
         }
 
         [Test]
+        public void Play_ForwardsInitialParametersSnapshot()
+        {
+            var source = new[]
+            {
+                new AudioParameter("Health", 0.5f),
+                new AudioParameter("Surface", "Grass"),
+            };
+
+            AudioManager.Play("audio/a", new AudioPlayOptions(initialParameters: source));
+
+            var request = _fake.LastRequest;
+            Assert.IsNotNull(request.InitialParameters);
+            Assert.AreEqual(2, request.InitialParameters.Length);
+            Assert.AreEqual("Health", request.InitialParameters[0].Name);
+            Assert.AreEqual(0.5f, request.InitialParameters[0].Value, 0.001f);
+            Assert.AreEqual("Grass", request.InitialParameters[1].Label);
+            Assert.AreNotSame(source, request.InitialParameters, "核心必须复制参数数组");
+
+            source[0] = new AudioParameter("Health", 1f);
+            Assert.AreEqual(0.5f, request.InitialParameters[0].Value, 0.001f,
+                "provider 持有的快照不得受调用方后续修改影响");
+        }
+
+        [Test]
         public void Play_NormalizesRequestBeforeCallingProvider()
         {
             AudioManager.Play("audio/a", new AudioPlayOptions(

@@ -65,7 +65,8 @@ Runtime/Audio/
 ├── AudioSourcePool.cs        # internal：内置引擎的宿主与槽位池
 ├── AudioVoice.cs             # internal：内置引擎的槽位记录 + AudioVoiceState
 ├── AudioHandle.cs            # 公开：播放句柄（readonly struct，字段公开且对门面不透明）
-├── AudioPlayOptions.cs       # 公开：单次播放参数（六个字段全部后端中立）
+├── AudioParameter.cs         # 公开：provider 中立参数（数值 / 标签），用于起播前与运行中参数
+├── AudioPlayOptions.cs       # 公开：单次播放参数（六个既有字段 + InitialParameters 起播前参数）
 ├── AudioChannels.cs          # 公开：推荐通道常量（不是枚举，见「设计取舍」）
 ├── AudioChannelConfig.cs     # 公开：RegisterChannel 的配置（Volume / Muted）
 ├── AudioChannelInfo.cs       # 公开：诊断回读载荷：CopyChannels 的列表元素
@@ -138,7 +139,8 @@ Runtime/Audio/
 | 类型 | 说明 |
 | ---- | ---- |
 | `AudioHandle` | 播放句柄。`readonly struct`、零 GC、可自由复制。`IsDefault` / `Stop()` / `Dispose()` |
-| `AudioPlayOptions` | 播放参数：`Channel` / `VolumeScale` / `Loop` / `Pitch` / `SpatialBlend` / `Position` |
+| `AudioPlayOptions` | 播放参数：`Channel` / `VolumeScale` / `Loop` / `Pitch` / `SpatialBlend` / `Position` / `InitialParameters`（起播前参数；核心校验并快照复制，内置 provider 忽略） |
+| `AudioParameter` | provider 中立参数：`Name` + `Value`（数值）或 `Label`（标签）；`IsLabel`。构造时校验名称/标签非空白 |
 | `AudioChannels` | 推荐通道常量：`Default`("default") / `Bgm`("bgm") / `SE`("se") / `Voice`("voice") / `UI`("ui") |
 | `AudioChannelConfig` | `RegisterChannel` 的配置：`Volume`（默认 `1`，线性值；**`RegisterChannel` 快照时**钳到 `[0,1]`）/ `Muted`（默认 `false`）。**调用时读取一次并快照**，之后改这个实例不影响已注册的通道；**通道也可以不声明**——未声明的通道首次使用时按同样的默认值惰性建状态 |
 | `AudioInitOptions` | 初始化选项：`MaxVoices` / `MasterVolume` / `MasterMuted` / `PrewarmVoices` |
