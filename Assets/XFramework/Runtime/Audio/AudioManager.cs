@@ -439,10 +439,108 @@ namespace XFramework.XAudio
 
         #endregion
 
+        #region Public API — Provider Control
+
+        /// <summary>
+        /// 写入一次逐次播放参数（事件参数 / RTPC）。
+        /// <para><b>探测型成员</b>：未初始化、已销毁、<c>default</c>/过期/<c>Loading</c> 句柄、provider
+        /// 未实现该能力，或经 <see cref="SetInstance"/> 注入的自定义管理器时返回 <c>false</c>，不抛。
+        /// 音频加载窗口内也可能返回 <c>false</c>；需要起播前参数请用
+        /// <see cref="AudioPlayOptions.InitialParameters"/>，需要句柄一拿到就可用请用
+        /// <see cref="PlayAsync"/>。</para>
+        /// <para>内置 provider 不支持；可选音频中间件扩展可支持。</para>
+        /// </summary>
+        /// <param name="handle">播放句柄。</param>
+        /// <param name="name">参数名，不能为 <c>null</c>/空白。</param>
+        /// <param name="value">参数值。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool SetParameter(AudioHandle handle, string name, float value)
+        {
+            ValidateControlName(name, nameof(name));
+            return _instance is AudioManagerImpl impl &&
+                   impl.TrySetParameter(handle, new AudioParameter(name, value));
+        }
+
+        /// <summary>
+        /// 写入一次逐次播放参数（标签形式）。
+        /// <para>探测语义同 <see cref="SetParameter(AudioHandle, string, float)"/>。</para>
+        /// </summary>
+        /// <param name="handle">播放句柄。</param>
+        /// <param name="name">参数名，不能为 <c>null</c>/空白。</param>
+        /// <param name="label">标签值，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> 或 <paramref name="label"/> 为
+        /// <c>null</c>/空白时抛出。</exception>
+        public static bool SetParameter(AudioHandle handle, string name, string label)
+        {
+            ValidateControlName(name, nameof(name));
+            ValidateControlName(label, nameof(label));
+            return _instance is AudioManagerImpl impl &&
+                   impl.TrySetParameter(handle, new AudioParameter(name, label));
+        }
+
+        /// <summary>
+        /// 写入一个全局参数（不绑定具体播放）。
+        /// <para>探测语义同 <see cref="SetParameter(AudioHandle, string, float)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="name">参数名，不能为 <c>null</c>/空白。</param>
+        /// <param name="value">参数值。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool SetGlobalParameter(string name, float value)
+        {
+            ValidateControlName(name, nameof(name));
+            return _instance is AudioManagerImpl impl &&
+                   impl.TrySetGlobalParameter(new AudioParameter(name, value));
+        }
+
+        /// <summary>
+        /// 写入一个全局参数（标签形式）。
+        /// <para>探测语义同 <see cref="SetParameter(AudioHandle, string, float)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="name">参数名，不能为 <c>null</c>/空白。</param>
+        /// <param name="label">标签值，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="name"/> 或 <paramref name="label"/> 为
+        /// <c>null</c>/空白时抛出。</exception>
+        public static bool SetGlobalParameter(string name, string label)
+        {
+            ValidateControlName(name, nameof(name));
+            ValidateControlName(label, nameof(label));
+            return _instance is AudioManagerImpl impl &&
+                   impl.TrySetGlobalParameter(new AudioParameter(name, label));
+        }
+
+        /// <summary>
+        /// 更新一次播放的 3D 世界坐标。
+        /// <para>内置 provider 支持（写 <c>AudioSource.transform.position</c>）；provider 未实现该能力时
+        /// 返回 <c>false</c>。纯 2D 播放也会成功写入位置，但不会产生空间化效果。加载窗口内可能返回
+        /// <c>false</c>；起播位置请用 <see cref="AudioPlayOptions.Position"/>。</para>
+        /// </summary>
+        /// <param name="handle">播放句柄。</param>
+        /// <param name="position">世界坐标。</param>
+        /// <returns>是否已应用。</returns>
+        public static bool SetPosition(AudioHandle handle, Vector3 position)
+        {
+            return _instance is AudioManagerImpl impl && impl.TrySetPosition(handle, position);
+        }
+
+        #endregion
+
         #region Internal
 
         /// <summary>测试用：当前门面持有的管理器实例；未初始化时为 <c>null</c>。</summary>
         internal static IAudioManager CurrentManagerForTests => _instance;
+
+        /// <summary>
+        /// 控制面名称参数的统一校验：<c>null</c>/空白是调用方编程错误，先于能力探测抛出。
+        /// </summary>
+        private static void ValidateControlName(string value, string paramName)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+                throw new ArgumentException("[Audio] 名称不能为 null 或空白。", paramName);
+        }
 
         /// <summary>
         /// 未初始化时抛 <see cref="InvalidOperationException"/>，消息带 <c>[Audio]</c> 前缀与修复提示。

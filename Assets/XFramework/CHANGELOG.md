@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   调用方之后修改原数组不影响本次播放。内置 `AudioSourceProvider` 忽略起播前参数，中间件 provider
   应在事件 `start()` 前应用。**源兼容新增，但公开 API 基线的 `AudioPlayOptions` 构造函数行从
   6 参变 7 参**；API 基线已更新，无破坏性源码变更。
+- **`AudioManager` provider 中立控制面：逐次参数与 3D 位置**（2026-10-26）：新增
+  `SetParameter(AudioHandle, string, float/string)`、`SetGlobalParameter(string, float/string)`、
+  `SetPosition(AudioHandle, Vector3)`。provider 侧通过 core internal 的 `IAudioParameterProvider` /
+  `IAudioSpatialProvider` 实现；内置 `AudioSourceProvider` 支持 `SetPosition`（写
+  `AudioSource.transform.position`），参数能力一律返回 `false`。全部方法为探测型：未初始化/已销毁/
+  无效句柄/provider 未实现/`SetInstance` 自定义管理器返回 `false`；名称空白抛 `ArgumentException`；
+  provider 异常隔离并记 `[Audio]` 日志。源兼容新增；公开 API 基线已更新。
 
 ## [0.4.0] - 2026-10-25
 

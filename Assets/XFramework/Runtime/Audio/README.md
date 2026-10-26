@@ -55,6 +55,8 @@ AudioManager.Initialize(new AudioInitOptions
 Runtime/Audio/
 ├── IAudioManager.cs          # 公开：整体替换管理器的接口（推荐的中间件路径是 IAudioProvider）
 ├── IAudioProvider.cs         # 公开：播放引擎缝（核心保留语义，provider 只做播放原语）
+├── IAudioParameterProvider.cs # internal：逐次参数能力接口（官方扩展能力，IVT）
+├── IAudioSpatialProvider.cs  # internal：逐次 3D 位置能力接口（官方扩展能力，IVT）
 ├── AudioProviderHandle.cs    # 公开：provider 句柄（readonly struct，字段公开）
 ├── AudioProviderPlaybackState.cs # 公开：Poll 的返回值
 ├── AudioPlaybackRequest.cs   # 公开：核心交给 provider 的最终参数（internal 构造）

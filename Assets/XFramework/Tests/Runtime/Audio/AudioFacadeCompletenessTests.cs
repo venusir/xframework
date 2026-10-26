@@ -92,6 +92,25 @@ namespace XFramework.XAudio.Tests
         }
 
         /// <summary>
+        /// provider 中立控制面不在 <see cref="IAudioManager"/> 上，上面的覆盖断言管不到；这里按名字钉住，
+        /// 防止它们从门面消失。
+        /// </summary>
+        [Test]
+        public void Facade_KeepsAdvancedControlMembers()
+        {
+            var missing = new List<string>();
+            foreach (var name in new[] { "SetParameter", "SetGlobalParameter", "SetPosition" })
+            {
+                if (!FacadeNames.Contains(name))
+                    missing.Add(name);
+            }
+
+            Assert.IsEmpty(missing,
+                "以下 provider 中立控制成员在 AudioManager 上找不到 public static 方法：\n  " +
+                string.Join("\n  ", missing));
+        }
+
+        /// <summary>
         /// 门面不得暴露实例属性。
         /// <para>一旦暴露，<see cref="IAudioManager"/> 成员的增加会自动成为公开 API，跳过评审。</para>
         /// </summary>

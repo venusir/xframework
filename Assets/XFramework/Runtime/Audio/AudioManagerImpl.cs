@@ -177,6 +177,72 @@ namespace XFramework.XAudio
         }
 
         /// <summary>
+        /// 转发逐次播放参数。探测型：句柄无效、provider 未实现能力或已销毁时返回 false。
+        /// </summary>
+        internal bool TrySetParameter(AudioHandle handle, AudioParameter parameter)
+        {
+            if (_disposed || !TryGetProviderHandle(handle, out AudioProviderHandle providerHandle))
+                return false;
+
+            if (!(_provider is IAudioParameterProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetParameter(providerHandle, parameter);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "设置音频播放参数时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 转发全局参数。探测型：provider 未实现能力或已销毁时返回 false。
+        /// </summary>
+        internal bool TrySetGlobalParameter(AudioParameter parameter)
+        {
+            if (_disposed || !(_provider is IAudioParameterProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetGlobalParameter(parameter);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "设置全局音频参数时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 转发逐次 3D 位置。探测型：句柄无效、provider 未实现能力或已销毁时返回 false。
+        /// </summary>
+        internal bool TrySetPosition(AudioHandle handle, Vector3 position)
+        {
+            if (_disposed || !TryGetProviderHandle(handle, out AudioProviderHandle providerHandle))
+                return false;
+
+            if (!(_provider is IAudioSpatialProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetPosition(providerHandle, position);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "更新音频 3D 位置时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 通道名归一化与保留名校验。
         /// </summary>
         internal static string NormalizeChannel(string channel)

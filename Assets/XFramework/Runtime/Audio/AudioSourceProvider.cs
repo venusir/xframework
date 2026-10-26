@@ -11,7 +11,7 @@ namespace XFramework.XAudio
     /// <para>核心语义层（<see cref="AudioManagerImpl"/>）保留通道、三档音量、暂停闸门、计数与诊断；
     /// 本类只做播放原语。它是 internal 的实现细节，不是公开替换点。</para>
     /// </summary>
-    internal sealed class AudioSourceProvider : IAudioProvider
+    internal sealed class AudioSourceProvider : IAudioProvider, IAudioSpatialProvider
     {
         #region Private Fields
 
@@ -315,6 +315,17 @@ namespace XFramework.XAudio
                 return null;
 
             return _pool.GetSlot(handle.Id).Source;
+        }
+
+        /// <inheritdoc/>
+        bool IAudioSpatialProvider.TrySetPosition(AudioProviderHandle handle, Vector3 position)
+        {
+            var source = GetSource(handle);
+            if (source == null)
+                return false;
+
+            source.transform.position = position;
+            return true;
         }
 
         #endregion

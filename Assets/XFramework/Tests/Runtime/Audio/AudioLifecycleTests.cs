@@ -143,6 +143,29 @@ namespace XFramework.XAudio.Tests
             Assert.IsFalse(AudioManager.TryGetProviderHandle(new AudioHandle(0, 1), out _));
         }
 
+        /// <summary>
+        /// 自定义管理器不参与 provider 中立控制面：能力方法一律 false，名称参数仍先抛。
+        /// </summary>
+        [Test]
+        public void SetInstance_CustomManager_ProviderControlReturnsFalse()
+        {
+            AudioManager.SetInstance(new FakeAudioManager());
+
+            Assert.IsFalse(AudioManager.SetParameter(default, "Health", 1f));
+            Assert.IsFalse(AudioManager.SetParameter(default, "Surface", "Grass"));
+            Assert.IsFalse(AudioManager.SetGlobalParameter("Weather", 1f));
+            Assert.IsFalse(AudioManager.SetGlobalParameter("Weather", "Rain"));
+            Assert.IsFalse(AudioManager.SetPosition(default, Vector3.zero));
+        }
+
+        [Test]
+        public void SetInstance_CustomManager_InvalidControlNameStillThrows()
+        {
+            AudioManager.SetInstance(new FakeAudioManager());
+
+            Assert.Throws<ArgumentException>(() => AudioManager.SetParameter(default, null, 1f));
+        }
+
         #endregion
 
         #region 未初始化时的成员语义
