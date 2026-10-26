@@ -88,7 +88,8 @@ param(
     [switch]$Setup,
     [switch]$UpdateApiBaseline,
     [switch]$UpdateLubanGolden,
-    [switch]$UpdateLubanApiBaseline
+    [switch]$UpdateLubanApiBaseline,
+    [switch]$UpdateFmodApiBaseline
 )
 
 $ErrorActionPreference = "Stop"
@@ -118,6 +119,9 @@ if ($Fixture) {
 # 位置是硬要求：必须在 -Fixture 语法糖之后（否则上面的互斥检查看不到 $Filter），
 # 也必须在平台选择之前（靠 $Filter 非空把默认平台收窄成 PlayMode）。
 if ($UpdateApiBaseline) {
+    if ($UpdateLubanGolden -or $UpdateLubanApiBaseline -or $UpdateFmodApiBaseline) {
+        Write-Error "-UpdateApiBaseline 与其它更新开关互斥。"
+    }
     if ($Filter) {
         Write-Error "-UpdateApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑 API 基线 fixture 本身，不要再给过滤器。"
     }
@@ -134,8 +138,8 @@ if ($UpdateLubanGolden) {
     if ($UpdateApiBaseline) {
         Write-Error "-UpdateLubanGolden 与 -UpdateApiBaseline 互斥。"
     }
-    if ($UpdateLubanApiBaseline) {
-        Write-Error "-UpdateLubanGolden 与 -UpdateLubanApiBaseline 互斥。"
+    if ($UpdateLubanApiBaseline -or $UpdateFmodApiBaseline) {
+        Write-Error "-UpdateLubanGolden 与其它更新开关互斥。"
     }
     if ($Filter) {
         Write-Error "-UpdateLubanGolden 与 -Filter/-Fixture 互斥：更新模式只跑 golden fixture 本身。"
@@ -150,7 +154,7 @@ if ($UpdateLubanGolden) {
 #
 # 与核心 -UpdateApiBaseline 同纪律：写盘后有意失败，绿灯由不带开关的重跑给出。
 if ($UpdateLubanApiBaseline) {
-    if ($UpdateApiBaseline -or $UpdateLubanGolden) {
+    if ($UpdateApiBaseline -or $UpdateLubanGolden -or $UpdateFmodApiBaseline) {
         Write-Error "-UpdateLubanApiBaseline 与其它更新开关互斥。"
     }
     if ($Filter) {
@@ -160,6 +164,22 @@ if ($UpdateLubanApiBaseline) {
     $Platform = "PlayMode"
     $env:XFW_UPDATE_LUBAN_API_BASELINE = "1"
     Write-Warning "Luban 公开 API 基线更新模式：将重写 LubanPublicApiBaseline.txt 与 LubanEditorPublicApiBaseline.txt，并**按设计判为失败**——请审阅。"
+}
+
+# ---------- Fmod 公开 API 基线更新模式 ----------
+#
+# 与核心 -UpdateApiBaseline 同纪律：写盘后有意失败，绿灯由不带开关的重跑给出。
+if ($UpdateFmodApiBaseline) {
+    if ($UpdateApiBaseline -or $UpdateLubanGolden -or $UpdateLubanApiBaseline) {
+        Write-Error "-UpdateFmodApiBaseline 与其它更新开关互斥。"
+    }
+    if ($Filter) {
+        Write-Error "-UpdateFmodApiBaseline 与 -Filter/-Fixture 互斥：更新模式只跑基线 fixture 本身。"
+    }
+    $Filter = "\.FmodPublicApiBaselineTests\."
+    $Platform = "PlayMode"
+    $env:XFW_UPDATE_FMOD_API_BASELINE = "1"
+    Write-Warning "Fmod 公开 API 基线更新模式：将重写 FmodPublicApiBaseline.txt，并**按设计判为失败**——请审阅。"
 }
 
 # ---------- 定位仓库与 Unity ----------

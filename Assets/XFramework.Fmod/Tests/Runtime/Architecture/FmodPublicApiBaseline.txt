@@ -1,0 +1,9 @@
+# XFramework Fmod Runtime 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/FmodPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateFmodApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
+#
+# 射程：Runtime 程序集 Venusy609.Xframework.Fmod（公开类型与 public 成员）。
+XFramework.XAudio.Fmod.FmodAudioSettings  ::  .ctor()
+XFramework.XAudio.Fmod.FmodAudioSettings  ::  public sealed class : UnityEngine.ScriptableObject

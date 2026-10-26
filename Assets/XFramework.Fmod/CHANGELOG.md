@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   全局参数、bank、bus、snapshot、3D 位置控制面可经 fake backend 端到端验证。
 - **测试**：fake backend、provider 播放/失败/容量/代际/Dispose/能力接口用例、settings 默认值与
   归一化、`AudioManager` 桥接。
+- **包内守卫**：README 结构/文件树、`.meta` 完整性、包边界、包契约、依赖声明、AutoInit 族、
+  公开 API 基线（`FmodAudioSettings` 及其构造函数）；`run-tests.ps1` 新增
+  `-UpdateFmodApiBaseline`（写盘后按设计判失败）。
 
 ### Not verified
 
