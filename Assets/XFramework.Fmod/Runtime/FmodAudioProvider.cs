@@ -15,7 +15,8 @@ namespace XFramework.XAudio.Fmod
     /// <c>int</c>。</para>
     /// <para><b>线程</b>：全部成员限主线程调用。</para>
     /// </summary>
-    internal sealed class FmodAudioProvider : IAudioProvider
+    internal sealed class FmodAudioProvider : IAudioProvider, IAudioParameterProvider, IAudioBankProvider,
+        IAudioBusProvider, IAudioSnapshotProvider, IAudioSpatialProvider
     {
         #region Private Fields
 
@@ -254,6 +255,186 @@ namespace XFramework.XAudio.Fmod
             catch (Exception e)
             {
                 LogException(e, "Dispose");
+            }
+        }
+
+        #endregion
+
+        #region 能力接口
+
+        bool IAudioParameterProvider.TrySetParameter(AudioProviderHandle handle, AudioParameter parameter)
+        {
+            if (_disposed || !_slots.TryGet(handle, out _, out int backendId))
+                return false;
+
+            try
+            {
+                return _backend.SetParameter(backendId, parameter);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "SetParameter");
+                return false;
+            }
+        }
+
+        bool IAudioParameterProvider.TrySetGlobalParameter(AudioParameter parameter)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.SetGlobalParameter(parameter);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "SetGlobalParameter");
+                return false;
+            }
+        }
+
+        bool IAudioBankProvider.TryLoadBank(string bank, bool loadSamples)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.LoadBank(bank, loadSamples);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "LoadBank");
+                return false;
+            }
+        }
+
+        bool IAudioBankProvider.TryUnloadBank(string bank)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.UnloadBank(bank);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "UnloadBank");
+                return false;
+            }
+        }
+
+        bool IAudioBankProvider.IsBankLoaded(string bank)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.IsBankLoaded(bank);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "IsBankLoaded");
+                return false;
+            }
+        }
+
+        bool IAudioBusProvider.TrySetBusVolume(string bus, float volume)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.SetBusVolume(bus, volume);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "SetBusVolume");
+                return false;
+            }
+        }
+
+        bool IAudioBusProvider.TrySetBusMuted(string bus, bool muted)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.SetBusMuted(bus, muted);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "SetBusMuted");
+                return false;
+            }
+        }
+
+        bool IAudioBusProvider.TrySetBusPaused(string bus, bool paused)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.SetBusPaused(bus, paused);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "SetBusPaused");
+                return false;
+            }
+        }
+
+        bool IAudioSnapshotProvider.TryStartSnapshot(string snapshot)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.StartSnapshot(snapshot);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "StartSnapshot");
+                return false;
+            }
+        }
+
+        bool IAudioSnapshotProvider.TryStopSnapshot(string snapshot)
+        {
+            if (_disposed)
+                return false;
+
+            try
+            {
+                return _backend.StopSnapshot(snapshot);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "StopSnapshot");
+                return false;
+            }
+        }
+
+        bool IAudioSpatialProvider.TrySetPosition(AudioProviderHandle handle, Vector3 position)
+        {
+            if (_disposed || !_slots.TryGet(handle, out _, out int backendId))
+                return false;
+
+            try
+            {
+                return _backend.Set3DAttributes(backendId, position);
+            }
+            catch (Exception e)
+            {
+                LogException(e, "Set3DAttributes");
+                return false;
             }
         }
 

@@ -13,7 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Banks` / `LoadBankSamples` / `OwnsBanks` / `MaxVoices` / `MasterVolume` / `MasterMuted`）、
   `FmodProviderOptions`、`IFmodEventBackend`（internal 缝）、`FmodEventSlotTable`（index + generation）
   与 `FmodAudioProvider`（`IAudioProvider` 的播放原语）。
-- **测试**：fake backend、provider 播放/失败/容量/代际/Dispose 用例、settings 默认值与归一化。
+- **provider 能力接口**：实现 core internal 的 `IAudioParameterProvider` / `IAudioBankProvider` /
+  `IAudioBusProvider` / `IAudioSnapshotProvider` / `IAudioSpatialProvider`。`AudioManager` 的逐次参数、
+  全局参数、bank、bus、snapshot、3D 位置控制面可经 fake backend 端到端验证。
+- **测试**：fake backend、provider 播放/失败/容量/代际/Dispose/能力接口用例、settings 默认值与
+  归一化、`AudioManager` 桥接。
 
 ### Not verified
 

@@ -354,6 +354,102 @@ namespace XFramework.XAudio.Fmod.Tests
 
         #endregion
 
+        #region 能力接口
+
+        [Test]
+        public async Task Capabilities_ParameterGlobalAndPosition_Forward()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            var parameters = (IAudioParameterProvider)_provider;
+            var spatial = (IAudioSpatialProvider)_provider;
+            var position = new Vector3(2f, 1f, -3f);
+
+            Assert.IsTrue(parameters.TrySetParameter(handle, new AudioParameter("Health", 0.5f)));
+            Assert.IsTrue(parameters.TrySetGlobalParameter(new AudioParameter("Weather", "Rain")));
+            Assert.IsTrue(spatial.TrySetPosition(handle, position));
+
+            Assert.AreEqual(1, _backend.Parameters.Count);
+            Assert.AreEqual("Health", _backend.Parameters[0].Name);
+            Assert.AreEqual(1, _backend.GlobalParameters.Count);
+            Assert.AreEqual("Rain", _backend.GlobalParameters[0].Label);
+            Assert.AreEqual(1, _backend.Set3DAttributesCalls);
+            Assert.AreEqual(position, _backend.LastPosition);
+        }
+
+        [Test]
+        public async Task Capabilities_BankBusSnapshot_Forward()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            var bank = (IAudioBankProvider)_provider;
+            var bus = (IAudioBusProvider)_provider;
+            var snapshot = (IAudioSnapshotProvider)_provider;
+
+            Assert.IsTrue(bank.TryLoadBank("Master", true));
+            Assert.IsTrue(bank.IsBankLoaded("Master"));
+            Assert.IsTrue(bank.TryUnloadBank("Master"));
+
+            Assert.IsTrue(bus.TrySetBusVolume("bus:/SFX", 1.5f));
+            Assert.IsTrue(bus.TrySetBusMuted("bus:/SFX", true));
+            Assert.IsTrue(bus.TrySetBusPaused("bus:/SFX", true));
+
+            Assert.IsTrue(snapshot.TryStartSnapshot("snapshot:/Pause"));
+            Assert.IsTrue(snapshot.TryStopSnapshot("snapshot:/Pause"));
+
+            Assert.AreEqual(1, _backend.BankLoads.Count);
+            Assert.IsTrue(_backend.BankLoads[0].LoadSamples);
+            Assert.AreEqual(1, _backend.BankUnloads.Count);
+            Assert.AreEqual(1.5f, _backend.BusVolumes[0].Volume, 0.001f);
+            Assert.AreEqual(1, _backend.BusMutes.Count);
+            Assert.AreEqual(1, _backend.BusPauses.Count);
+            Assert.AreEqual(1, _backend.StartedSnapshots.Count);
+            Assert.AreEqual(1, _backend.StoppedSnapshots.Count);
+
+            _provider.Release(handle);
+        }
+
+        [Test]
+        public async Task Capabilities_InvalidOrReleasedHandle_ReturnFalse()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            var parameters = (IAudioParameterProvider)_provider;
+            var spatial = (IAudioSpatialProvider)_provider;
+
+            Assert.IsFalse(parameters.TrySetParameter(default, new AudioParameter("Health", 1f)));
+            Assert.IsFalse(spatial.TrySetPosition(default, Vector3.one));
+
+            _provider.Release(handle);
+
+            Assert.IsFalse(parameters.TrySetParameter(handle, new AudioParameter("Health", 1f)));
+            Assert.IsFalse(spatial.TrySetPosition(handle, Vector3.one));
+        }
+
+        [Test]
+        public async Task Capabilities_AfterDispose_ReturnFalse()
+        {
+            await _provider.PlayAsync("event:/a", Request());
+            _provider.Dispose();
+
+            Assert.IsFalse(((IAudioParameterProvider)_provider)
+                .TrySetGlobalParameter(new AudioParameter("Weather", 1f)));
+            Assert.IsFalse(((IAudioBankProvider)_provider).TryLoadBank("Master", false));
+            Assert.IsFalse(((IAudioBusProvider)_provider).TrySetBusVolume("bus:/SFX", 1f));
+            Assert.IsFalse(((IAudioSnapshotProvider)_provider).TryStartSnapshot("snapshot:/Pause"));
+        }
+
+        [Test]
+        public async Task Capabilities_BackendThrows_AreIsolated()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            _backend.ThrowOnSetParameter = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("SetParameter 调用抛出异常"));
+
+            Assert.IsFalse(((IAudioParameterProvider)_provider)
+                .TrySetParameter(handle, new AudioParameter("Health", 1f)));
+        }
+
+        #endregion
+
         #region Dispose
 
         [Test]

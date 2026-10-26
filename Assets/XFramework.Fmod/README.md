@@ -51,7 +51,7 @@ Runtime/
 ├── FmodProviderOptions.cs             # internal：settings 快照
 ├── IFmodEventBackend.cs               # internal：FMOD-free backend 缝
 ├── FmodEventSlotTable.cs              # internal：index + generation 槽位表
-└── FmodAudioProvider.cs               # internal：IAudioProvider 实现
+└── FmodAudioProvider.cs               # internal：IAudioProvider + 五个能力接口实现
 ```
 
 `FmodAudioSettings` 字段：`Enabled`、`EventPathPrefix`、`Banks`、`LoadBankSamples`、`OwnsBanks`、
@@ -67,6 +67,8 @@ Runtime/
 - `SetBusVolume` 原样透传、不做核心钳制；框架三档音量与 FMOD bus 音量是两层。
 - 起播前参数由核心校验并复制；provider 在事件 `start()` 前应用。
 - 内置 provider 不支持参数/bank/bus/snapshot；`AudioSourceProvider` 支持 `SetPosition`。
+- **provider 已实现 core internal 的五个能力接口**（参数/bank/bus/snapshot/3D）；当前用 fake backend
+  验证 `AudioManager` 控制面到 provider 的端到端桥接。真实 FMOD backend 在 Phase 2。
 - 本包当前不产生运行时效果；自动安装与真实 backend 在 Phase 2。
 
 ## 线程契约
