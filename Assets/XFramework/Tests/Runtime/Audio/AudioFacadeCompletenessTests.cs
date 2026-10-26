@@ -99,7 +99,13 @@ namespace XFramework.XAudio.Tests
         public void Facade_KeepsAdvancedControlMembers()
         {
             var missing = new List<string>();
-            foreach (var name in new[] { "SetParameter", "SetGlobalParameter", "SetPosition" })
+            foreach (var name in new[]
+                     {
+                         "SetParameter", "SetGlobalParameter", "SetPosition",
+                         "LoadBank", "UnloadBank", "IsBankLoaded",
+                         "SetBusVolume", "SetBusMuted", "SetBusPaused",
+                         "StartSnapshot", "StopSnapshot",
+                     })
             {
                 if (!FacadeNames.Contains(name))
                     missing.Add(name);

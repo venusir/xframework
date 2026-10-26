@@ -242,6 +242,150 @@ namespace XFramework.XAudio
             }
         }
 
+        /// <summary>转发 bank 加载。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TryLoadBank(string bank, bool loadSamples)
+        {
+            if (_disposed || !(_provider is IAudioBankProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TryLoadBank(bank, loadSamples);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "加载音频 bank 时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 bank 卸载。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TryUnloadBank(string bank)
+        {
+            if (_disposed || !(_provider is IAudioBankProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TryUnloadBank(bank);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "卸载音频 bank 时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 bank 状态查询。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TryIsBankLoaded(string bank)
+        {
+            if (_disposed || !(_provider is IAudioBankProvider provider))
+                return false;
+
+            try
+            {
+                return provider.IsBankLoaded(bank);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "查询音频 bank 状态时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 bus 音量。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TrySetBusVolume(string bus, float volume)
+        {
+            if (_disposed || !(_provider is IAudioBusProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetBusVolume(bus, volume);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "设置音频 bus 音量时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 bus 静音。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TrySetBusMuted(string bus, bool muted)
+        {
+            if (_disposed || !(_provider is IAudioBusProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetBusMuted(bus, muted);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "设置音频 bus 静音时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 bus 暂停。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TrySetBusPaused(string bus, bool paused)
+        {
+            if (_disposed || !(_provider is IAudioBusProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TrySetBusPaused(bus, paused);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "设置音频 bus 暂停时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 snapshot 启动。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TryStartSnapshot(string snapshot)
+        {
+            if (_disposed || !(_provider is IAudioSnapshotProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TryStartSnapshot(snapshot);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "启动音频 snapshot 时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
+        /// <summary>转发 snapshot 停止。探测型：provider 未实现能力或已销毁时返回 false。</summary>
+        internal bool TryStopSnapshot(string snapshot)
+        {
+            if (_disposed || !(_provider is IAudioSnapshotProvider provider))
+                return false;
+
+            try
+            {
+                return provider.TryStopSnapshot(snapshot);
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Audio, e,
+                    "停止音频 snapshot 时 provider 抛出异常，已隔离");
+                return false;
+            }
+        }
+
         /// <summary>
         /// 通道名归一化与保留名校验。
         /// </summary>

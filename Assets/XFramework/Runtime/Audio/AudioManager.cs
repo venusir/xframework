@@ -526,6 +526,120 @@ namespace XFramework.XAudio
             return _instance is AudioManagerImpl impl && impl.TrySetPosition(handle, position);
         }
 
+        /// <summary>
+        /// 同步加载 provider 定义的 bank。
+        /// <para><b>探测型成员</b>：未初始化、已销毁、provider 未实现该能力，或经 <see cref="SetInstance"/>
+        /// 注入的自定义管理器时返回 <c>false</c>，不抛。内置 provider 不支持。加载可能阻塞主线程，
+        /// 大 bank 请延后或分帧。</para>
+        /// </summary>
+        /// <param name="bank">bank 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <param name="loadSamples">是否同时加载采样数据；语义由 provider 定义。</param>
+        /// <returns>是否已加载。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bank"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool LoadBank(string bank, bool loadSamples = false)
+        {
+            ValidateControlName(bank, nameof(bank));
+            return _instance is AudioManagerImpl impl && impl.TryLoadBank(bank, loadSamples);
+        }
+
+        /// <summary>
+        /// 卸载 provider 定义的 bank。
+        /// <para>探测语义同 <see cref="LoadBank(string, bool)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="bank">bank 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已卸载。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bank"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool UnloadBank(string bank)
+        {
+            ValidateControlName(bank, nameof(bank));
+            return _instance is AudioManagerImpl impl && impl.TryUnloadBank(bank);
+        }
+
+        /// <summary>
+        /// 查询 provider 定义的 bank 是否已加载。
+        /// <para>探测语义同 <see cref="LoadBank(string, bool)"/>；内置 provider 不支持（返回 <c>false</c>）。</para>
+        /// </summary>
+        /// <param name="bank">bank 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已加载。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bank"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool IsBankLoaded(string bank)
+        {
+            ValidateControlName(bank, nameof(bank));
+            return _instance is AudioManagerImpl impl && impl.TryIsBankLoaded(bank);
+        }
+
+        /// <summary>
+        /// 设置 provider 定义的 bus 音量。
+        /// <para><b>探测型成员</b>：未初始化、已销毁、provider 未实现该能力，或经 <see cref="SetInstance"/>
+        /// 注入的自定义管理器时返回 <c>false</c>，不抛。内置 provider 不支持。</para>
+        /// <para><b>核心原样透传，不做钳制</b>：provider 的合法范围由其自身定义（FMOD 允许大于 <c>1</c>
+        /// 的线性增益）。框架三档音量与 bus 音量是两层，注意不要对同一声音重复控制。</para>
+        /// </summary>
+        /// <param name="bus">bus 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <param name="volume">线性音量。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bus"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool SetBusVolume(string bus, float volume)
+        {
+            ValidateControlName(bus, nameof(bus));
+            return _instance is AudioManagerImpl impl && impl.TrySetBusVolume(bus, volume);
+        }
+
+        /// <summary>
+        /// 设置 provider 定义的 bus 静音。
+        /// <para>探测语义同 <see cref="SetBusVolume(string, float)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="bus">bus 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <param name="muted">是否静音。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bus"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool SetBusMuted(string bus, bool muted)
+        {
+            ValidateControlName(bus, nameof(bus));
+            return _instance is AudioManagerImpl impl && impl.TrySetBusMuted(bus, muted);
+        }
+
+        /// <summary>
+        /// 暂停或恢复 provider 定义的 bus。
+        /// <para>探测语义同 <see cref="SetBusVolume(string, float)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="bus">bus 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <param name="paused">是否暂停。</param>
+        /// <returns>是否已应用。</returns>
+        /// <exception cref="ArgumentException"><paramref name="bus"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool SetBusPaused(string bus, bool paused)
+        {
+            ValidateControlName(bus, nameof(bus));
+            return _instance is AudioManagerImpl impl && impl.TrySetBusPaused(bus, paused);
+        }
+
+        /// <summary>
+        /// 启动一个 provider 定义的 snapshot。
+        /// <para><b>探测型成员</b>：未初始化、已销毁、provider 未实现该能力，或经 <see cref="SetInstance"/>
+        /// 注入的自定义管理器时返回 <c>false</c>，不抛。内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="snapshot">snapshot 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已启动。</returns>
+        /// <exception cref="ArgumentException"><paramref name="snapshot"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool StartSnapshot(string snapshot)
+        {
+            ValidateControlName(snapshot, nameof(snapshot));
+            return _instance is AudioManagerImpl impl && impl.TryStartSnapshot(snapshot);
+        }
+
+        /// <summary>
+        /// 停止一个 provider 定义的 snapshot。
+        /// <para>探测语义同 <see cref="StartSnapshot(string)"/>；内置 provider 不支持。</para>
+        /// </summary>
+        /// <param name="snapshot">snapshot 名或 provider 定义的路径，不能为 <c>null</c>/空白。</param>
+        /// <returns>是否已停止。</returns>
+        /// <exception cref="ArgumentException"><paramref name="snapshot"/> 为 <c>null</c>/空白时抛出。</exception>
+        public static bool StopSnapshot(string snapshot)
+        {
+            ValidateControlName(snapshot, nameof(snapshot));
+            return _instance is AudioManagerImpl impl && impl.TryStopSnapshot(snapshot);
+        }
+
         #endregion
 
         #region Internal

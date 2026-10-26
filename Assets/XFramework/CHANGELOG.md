@@ -24,6 +24,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   `AudioSource.transform.position`），参数能力一律返回 `false`。全部方法为探测型：未初始化/已销毁/
   无效句柄/provider 未实现/`SetInstance` 自定义管理器返回 `false`；名称空白抛 `ArgumentException`；
   provider 异常隔离并记 `[Audio]` 日志。源兼容新增；公开 API 基线已更新。
+- **`AudioManager` provider 中立控制面：bank / bus / snapshot**（2026-10-26）：新增
+  `LoadBank(string, bool)` / `UnloadBank(string)` / `IsBankLoaded(string)`、
+  `SetBusVolume(string, float)` / `SetBusMuted(string, bool)` / `SetBusPaused(string, bool)`、
+  `StartSnapshot(string)` / `StopSnapshot(string)`。provider 侧通过 core internal 的
+  `IAudioBankProvider` / `IAudioBusProvider` / `IAudioSnapshotProvider` 实现；内置 provider 一律返回
+  `false`。全部为探测型：未初始化/已销毁/provider 未实现/`SetInstance` 自定义管理器返回 `false`；
+  名称空白抛 `ArgumentException`；provider 异常隔离。`SetBusVolume` 原样透传、不做核心钳制。
+  源兼容新增；公开 API 基线已更新。
 
 ## [0.4.0] - 2026-10-25
 

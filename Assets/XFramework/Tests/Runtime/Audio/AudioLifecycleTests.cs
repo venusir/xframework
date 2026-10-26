@@ -156,6 +156,14 @@ namespace XFramework.XAudio.Tests
             Assert.IsFalse(AudioManager.SetGlobalParameter("Weather", 1f));
             Assert.IsFalse(AudioManager.SetGlobalParameter("Weather", "Rain"));
             Assert.IsFalse(AudioManager.SetPosition(default, Vector3.zero));
+            Assert.IsFalse(AudioManager.LoadBank("Master"));
+            Assert.IsFalse(AudioManager.UnloadBank("Master"));
+            Assert.IsFalse(AudioManager.IsBankLoaded("Master"));
+            Assert.IsFalse(AudioManager.SetBusVolume("bus:/SFX", 1f));
+            Assert.IsFalse(AudioManager.SetBusMuted("bus:/SFX", true));
+            Assert.IsFalse(AudioManager.SetBusPaused("bus:/SFX", true));
+            Assert.IsFalse(AudioManager.StartSnapshot("snapshot:/Pause"));
+            Assert.IsFalse(AudioManager.StopSnapshot("snapshot:/Pause"));
         }
 
         [Test]

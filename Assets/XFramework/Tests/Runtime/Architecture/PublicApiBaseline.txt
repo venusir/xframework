@@ -226,10 +226,12 @@ XFramework.XAudio.AudioManager.Destroy  ::  public static void()
 XFramework.XAudio.AudioManager.GetActiveVoiceCount  ::  public static int(string channel)
 XFramework.XAudio.AudioManager.GetChannelVolume  ::  public static float(string channel)
 XFramework.XAudio.AudioManager.Initialize  ::  public static void(XFramework.XAudio.AudioInitOptions options = null)
+XFramework.XAudio.AudioManager.IsBankLoaded  ::  public static bool(string bank)
 XFramework.XAudio.AudioManager.IsChannelMuted  ::  public static bool(string channel)
 XFramework.XAudio.AudioManager.IsInitialized  ::  public static bool IsInitialized { get; }
 XFramework.XAudio.AudioManager.IsPaused  ::  public static bool IsPaused { get; }
 XFramework.XAudio.AudioManager.IsPlaying  ::  public static bool(XFramework.XAudio.AudioHandle handle)
+XFramework.XAudio.AudioManager.LoadBank  ::  public static bool(string bank, bool loadSamples = false)
 XFramework.XAudio.AudioManager.MasterMuted  ::  public static bool MasterMuted { get; set; }
 XFramework.XAudio.AudioManager.MasterVolume  ::  public static float MasterVolume { get; set; }
 XFramework.XAudio.AudioManager.Pause  ::  public static void()
@@ -237,6 +239,9 @@ XFramework.XAudio.AudioManager.Play  ::  public static XFramework.XAudio.AudioHa
 XFramework.XAudio.AudioManager.PlayAsync  ::  public static Cysharp.Threading.Tasks.UniTask<XFramework.XAudio.AudioHandle>(string location, XFramework.XAudio.AudioPlayOptions options = default, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XAudio.AudioManager.RegisterChannel  ::  public static void(string channel, XFramework.XAudio.AudioChannelConfig config)
 XFramework.XAudio.AudioManager.Resume  ::  public static void()
+XFramework.XAudio.AudioManager.SetBusMuted  ::  public static bool(string bus, bool muted)
+XFramework.XAudio.AudioManager.SetBusPaused  ::  public static bool(string bus, bool paused)
+XFramework.XAudio.AudioManager.SetBusVolume  ::  public static bool(string bus, float volume)
 XFramework.XAudio.AudioManager.SetChannelMuted  ::  public static void(string channel, bool muted)
 XFramework.XAudio.AudioManager.SetChannelVolume  ::  public static void(string channel, float volume)
 XFramework.XAudio.AudioManager.SetGlobalParameter  ::  public static bool(string name, float value)
@@ -246,9 +251,12 @@ XFramework.XAudio.AudioManager.SetParameter  ::  public static bool(XFramework.X
 XFramework.XAudio.AudioManager.SetParameter  ::  public static bool(XFramework.XAudio.AudioHandle handle, string name, string label)
 XFramework.XAudio.AudioManager.SetPosition  ::  public static bool(XFramework.XAudio.AudioHandle handle, UnityEngine.Vector3 position)
 XFramework.XAudio.AudioManager.SetProvider  ::  public static void(XFramework.XAudio.IAudioProvider provider, XFramework.XAudio.AudioInitOptions options = null)
+XFramework.XAudio.AudioManager.StartSnapshot  ::  public static bool(string snapshot)
 XFramework.XAudio.AudioManager.Stop  ::  public static bool(XFramework.XAudio.AudioHandle handle)
 XFramework.XAudio.AudioManager.StopAll  ::  public static int(string channel = null)
+XFramework.XAudio.AudioManager.StopSnapshot  ::  public static bool(string snapshot)
 XFramework.XAudio.AudioManager.TryGetProviderHandle  ::  public static bool(XFramework.XAudio.AudioHandle handle, out XFramework.XAudio.AudioProviderHandle providerHandle)
+XFramework.XAudio.AudioManager.UnloadBank  ::  public static bool(string bank)
 XFramework.XAudio.AudioParameter  ::  public readonly struct
 XFramework.XAudio.AudioParameter#ctor  ::  public(string name, float value)
 XFramework.XAudio.AudioParameter#ctor  ::  public(string name, string label)
