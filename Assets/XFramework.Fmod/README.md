@@ -15,7 +15,13 @@ XFramework 的可选 FMOD 音频扩展。目标形态是：第三方引入本包
 以下为目标形态（Phase 2 生效；当前阶段不会自动安装，也不会创建 FMOD 实例）：
 
 1. 安装核心包 `com.venusy609.xframework`。
-2. 通过 Unity Asset Store 安装 **FMOD for Unity 2.04**（UPM）。
+2. 安装 **FMOD for Unity 2.04**（本包不打包、不代装）：
+   - 官方 UPM 包名 **`com.fmod.fmod-for-unity.v204`**，版本 **`2.4.0`**。
+   - 渠道：Unity Asset Store（若可用）/ fmod.com 免费账号下载 / 本地 UPM 包。
+   - 本地 UPM：Package Manager → **+ → Add package from disk**，或在 `Packages/manifest.json` 加
+     `"com.fmod.fmod-for-unity.v204": "file:<本机路径>"`（开发期本地改动，不要提交）。
+   - 若实际包名不是 `com.fmod.fmod-for-unity.v204`，`versionDefines` 不会命中；需在 Player Settings 的
+     Scripting Define Symbols 加 `XFRAMEWORK_FMOD`，否则条件集成程序集被排除，只剩 FMOD-free 层。
 3. 运行 FMOD Setup Wizard，准备好 FMOD 工程与 bank。
 4. 在 `Assets/Resources/` 下创建 `FmodAudioSettings`（菜单 `Assets > Create > XFramework > FMOD Audio Settings`）。
 5. 不调用 `AudioManager.Initialize()`；扩展会在启动时检测配置资产并安装 provider。
@@ -108,7 +114,8 @@ Runtime/
 | --- | --- | --- |
 | `com.venusy609.xframework` | 核心包（同 tag） | 必需；提供 `AudioManager` 与核心能力接口 |
 | UniTask | 随核心包依赖安装 | provider 的异步签名 |
-| FMOD for Unity | 2.04（Asset Store UPM） | Phase 2 前置；不随本包分发 |
+| FMOD for Unity | 2.04（UPM；`com.fmod.fmod-for-unity.v204` / 2.4.0） | Phase 2 前置；不随本包分发 |
 
-本包 `package.json` 的 `dependencies` 为空：UPM 不支持 Git URL 依赖，FMOD 也不在公开 UPM 注册表。
-FMOD SDK 的许可与安装由消费方自行负责；本包不包含任何 FMOD 二进制或源代码。
+本包不包含 FMOD SDK，也不会自动安装 FMOD；`package.json` 的 `dependencies` 为空（UPM 不支持 Git URL
+依赖，FMOD 也不在公开 UPM 注册表）。FMOD SDK 的许可与安装由消费方自行负责；本包不包含任何 FMOD
+二进制或源代码。
