@@ -12,6 +12,20 @@ namespace XFramework.XAudio.Fmod.Tests
     public class FmodAutoInitTests
     {
         [Test]
+        public void IntegrationAutoInstall_HasRuntimeEntryAndEscapeHatch()
+        {
+            string source = FmodTestPaths.ReadText("Runtime/Integration/FmodAutoInstall.cs");
+            if (source == null)
+                Assert.Ignore("找不到 Integration/FmodAutoInstall.cs；跳过 AutoInit 源码守卫。");
+
+            StringAssert.Contains("RuntimeInitializeOnLoadMethod", source);
+            StringAssert.Contains("RuntimeInitializeLoadType.BeforeSceneLoad", source);
+            StringAssert.Contains("XFW_DISABLE_FMOD_AUTOINSTALL", source);
+            StringAssert.DoesNotContain("[InitializeOnLoadMethod", source,
+                "自动安装不应挂编辑器 InitializeOnLoadMethod；它只在运行时创建 FMOD 实例。");
+        }
+
+        [Test]
         public void ProviderAssembly_HasNoAutoInit()
         {
             var offenders = new List<string>();

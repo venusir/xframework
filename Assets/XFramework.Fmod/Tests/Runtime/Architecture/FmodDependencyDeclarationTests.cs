@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 
 namespace XFramework.XAudio.Fmod.Tests
@@ -52,6 +53,46 @@ namespace XFramework.XAudio.Fmod.Tests
 
             Assert.IsEmpty(violations,
                 "FMOD-free 层不得引用 FMODUnity：\n  " + string.Join("\n  ", violations));
+        }
+
+        [Test]
+        public void IntegrationAsmdef_IsConditionallyGated()
+        {
+            string asmdef = FmodTestPaths.ReadText(
+                "Runtime/Integration/Venusy609.Xframework.Fmod.Unity.asmdef");
+            if (asmdef == null)
+                Assert.Ignore("找不到 Integration asmdef；跳过条件门控守卫。");
+
+            StringAssert.Contains("\"FMODUnity\"", asmdef);
+            StringAssert.Contains("\"com.fmod.fmod-for-unity.v204\"", asmdef);
+            StringAssert.Contains("\"2.4.0\"", asmdef);
+            StringAssert.Contains("\"XFRAMEWORK_FMOD\"", asmdef);
+            StringAssert.Contains("\"defineConstraints\"", asmdef);
+        }
+
+        [Test]
+        public void IntegrationSources_AreInternalOnly()
+        {
+            string root = FmodTestPaths.PackageRoot;
+            if (root == null)
+                Assert.Ignore("找不到 XFramework.Fmod 包根；跳过 Integration 可见性守卫。");
+
+            string integration = Path.Combine(root, "Runtime", "Integration");
+            if (!Directory.Exists(integration))
+                Assert.Ignore("找不到 Runtime/Integration；跳过 Integration 可见性守卫。");
+
+            var violations = new List<string>();
+            foreach (string file in Directory.EnumerateFiles(
+                         integration, "*.cs", SearchOption.AllDirectories))
+            {
+                string text = File.ReadAllText(file);
+                if (Regex.IsMatch(text, @"\bpublic\s+(?:sealed\s+)?(?:class|struct|interface|enum)\b"))
+                    violations.Add(file);
+            }
+
+            Assert.IsEmpty(violations,
+                "Integration 程序集不得暴露公开类型（应全部 internal）：\n  " +
+                string.Join("\n  ", violations));
         }
 
         [Test]
