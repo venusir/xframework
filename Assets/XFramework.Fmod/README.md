@@ -58,7 +58,12 @@ Runtime/
 ├── IFmodEventBackend.cs               # internal：FMOD-free backend 缝
 ├── FmodEventSlotTable.cs              # internal：index + generation 槽位表
 ├── FmodAudioProvider.cs               # internal：IAudioProvider + 五个能力接口实现
-└── FmodInstaller.cs                   # internal：自动安装的 FMOD-free 逻辑（前置检查/bank/接线）
+├── FmodInstaller.cs                   # internal：自动安装的 FMOD-free 逻辑（前置检查/bank/接线）
+└── Integration/                       # 条件集成程序集（XFRAMEWORK_FMOD）
+    ├── Venusy609.Xframework.Fmod.Unity.asmdef  # 引用 FMODUnity；versionDefines 门控
+    ├── AssemblyInfo.cs                # IVT 给条件测试
+    ├── FmodEventBackend.cs            # internal：真实 FMOD 2.04 backend
+    └── FmodAutoInstall.cs             # internal：BeforeSceneLoad 自动安装入口
 ```
 
 `FmodAudioSettings` 字段：`Enabled`、`EventPathPrefix`、`Banks`、`LoadBankSamples`、`OwnsBanks`、

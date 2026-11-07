@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
@@ -32,13 +33,18 @@ namespace XFramework.XAudio.Fmod.Tests
 
             var violations = new List<string>();
             string runtime = Path.Combine(root, "Runtime");
+            string integration = Path.Combine(runtime, "Integration") + Path.DirectorySeparatorChar;
             foreach (string file in Directory.EnumerateFiles(runtime, "*", SearchOption.AllDirectories))
             {
-                if (!file.EndsWith(".cs", System.StringComparison.Ordinal) &&
-                    !file.EndsWith(".asmdef", System.StringComparison.Ordinal))
+                if (!file.EndsWith(".cs", StringComparison.Ordinal) &&
+                    !file.EndsWith(".asmdef", StringComparison.Ordinal))
                 {
                     continue;
                 }
+
+                // Integration/ 是条件集成程序集，允许引用 FMODUnity；由 IntegrationAsmdef 契约守卫。
+                if (file.StartsWith(integration, StringComparison.Ordinal))
+                    continue;
 
                 if (File.ReadAllText(file).Contains(ForbiddenTypePrefix))
                     violations.Add(file);

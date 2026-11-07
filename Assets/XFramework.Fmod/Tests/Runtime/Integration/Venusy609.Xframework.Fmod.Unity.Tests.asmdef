@@ -1,0 +1,30 @@
+{
+    "name": "Venusy609.Xframework.Fmod.Unity.Tests",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.Fmod",
+        "Venusy609.Xframework.Fmod.Unity",
+        "FMODUnity"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "XFRAMEWORK_FMOD"
+    ],
+    "versionDefines": [
+        {
+            "name": "com.fmod.fmod-for-unity.v204",
+            "expression": "2.4.0",
+            "define": "XFRAMEWORK_FMOD"
+        }
+    ],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}
