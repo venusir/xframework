@@ -192,12 +192,14 @@ Assets/XFramework.Fmod/
 
 | 事实 | 状态 | 漂移点 |
 | --- | --- | --- |
-| FMOD for Unity 2.04 为 Asset Store UPM-only；2.03 仍可 `.unitypackage` / 手动 UPM 化 | `[官方文档]` | 上游发布渠道可能变化 |
-| 手动 UPM 化的包名历史为 `com.firelight.fmod-for-unity` | `[二手资料]` | 2.04 Asset Store 包名需读实际 `package.json` |
-| 集成程序集名 `FMODUnity` | `[二手资料/未实测]` | 以实际安装版本为准 |
-| 官方支持 Unity 6.0 / 6.3 LTS 等矩阵 | `[官方文档]` | 本项目 6000.4.5f1 需实测兼容性 |
-| `RuntimeManager.CreateInstance` / `EventInstance.start/stop/release/setPaused/setVolume/setPitch/set3DAttributes/setParameterByName(WithLabel)/getPlaybackState/getPaused/isValid` | `[官方文档/未实测]` | 2.04 签名可能微调，Phase 2 编译验证 |
-| bank：`RuntimeManager.LoadBank` / `UnloadBank` / `HasBankLoaded`；bus：`RuntimeManager.GetBus` + `setVolume/setMute/setPaused`；snapshot：`CreateInstance("snapshot:/...")` + `start` / `stop(ALLOWFADEOUT)` / `release` | `[官方文档/二手资料/未实测]` | 同上 |
+| FMOD for Unity 2.04 为 UPM-only；官方多包商品含 2.03 / 2.04，2.04 子包名 `com.fmod.fmod-for-unity.v204`、版本 `2.4.0`、Unity 最低 `2022.3` | `[已实测]` | 上游可能改包名/版本 |
+| 2.04 可从 Asset Store、fmod.com 或本地 UPM 包（`file:`）安装；本仓实测用本地复制的 UPM 包 | `[已实测]` | 消费方渠道/地区限制 |
+| 集成程序集名 `FMODUnity` / `FMODUnityEditor` / `FMODUnityHaptics` / `FMODUnityResonance` / `FMODUnityResonanceEditor` | `[已实测]` | 以实际安装版本为准 |
+| `RuntimeUtils.PluginBasePath = "Packages/com.fmod.fmod-for-unity.v204"`；本地 `file:` 包也以该虚拟路径暴露 | `[已实测]` | 包名变化会影响 |
+| `FMODUnity.asmdef` 硬引用 `Unity.Timeline` / `Unity.Addressables` / `Unity.ResourceManager` / `Unity.RenderPipelines.Universal.Runtime`；**缺失引用被 Unity 从 csc 响应文件丢弃，不构成编译错误** | `[已实测]` | 若 FMOD 源码在 `#if` 外使用缺失类型才需补丁 |
+| `RuntimeManager.CreateInstance` / `EventInstance.start/stop/release/setPaused/setVolume/setPitch/set3DAttributes/setParameterByName(WithLabel)/getPlaybackState/getPaused/isValid` | `[已实测]` | 2.04.0 签名与预期一致 |
+| bank：`RuntimeManager.LoadBank` / `UnloadBank` / `HasBankLoaded`；bus：`RuntimeManager.GetBus` + `setVolume/setMute/setPaused`；snapshot：`CreateInstance("snapshot:/...")` + `start` / `stop(ALLOWFADEOUT)` / `release` | `[已实测]` | 同上 |
+| 2.04 设置资产生成在 `Assets/Resources/FMOD/FMODStudioSettings.asset`；首轮自动创建默认 settings，首轮 `RuntimeManager` 初始化会失败，第二轮才可用 | `[已实测]` | 需 Setup Wizard / 预置 settings |
 | 事件循环由 Studio 编排，`AudioPlayOptions.Loop` 不能强制 | `[未实测]` | 需真实事件验证 |
 
 **SDK 分发**：不提交 SDK、`.unitypackage`、本地 manifest / `packages-lock.json` 改动；干净克隆必须能在
@@ -205,16 +207,74 @@ Assets/XFramework.Fmod/
 
 ---
 
-## 九、实施状态
+## 九、Phase 2 前置探针结果（2026-11-07）
 
-- **Phase 1（2026-10-26，已完成）**：核心中立控制面 + FMOD-free provider + `FmodAudioSettings` + fake
-  backend 测试 + `AudioManager` 桥接 + 包内守卫 + 公开 API 基线。当前不可实际播放 FMOD。
-- **Phase 2（待 SDK）**：条件集成程序集 + 真实 `FmodEventBackend` + 自动安装 + 真实 bank/event 冒烟 +
-  文档状态从「Phase 1」改为「已实现」。需要用户提供 FMOD 2.04 Asset Store UPM 环境。
+本轮用 FMOD for Unity 2.04 本地 UPM 包（`com.fmod.fmod-for-unity.v204` / `2.4.0`）在测试壳上完成；
+未提交 SDK、manifest 或 `packages-lock.json` 改动。
+
+### 9.1 条件 asmdef 与悬空引用
+
+- `defineConstraints: ["XFRAMEWORK_FMOD"]` 不满足时，程序集被排除；日志只有
+  `... not valid. Loading of assembly skipped.`，没有编译错误。
+- 缺失的 asmdef 引用名（`Unity.Addressables`、`Unity.ResourceManager`、
+  `Unity.RenderPipelines.Universal.Runtime`、`Unity.XR.OpenXR`，以及完全虚构的名字）被 Unity
+  **从 csc 响应文件丢弃**；只有本仓已装的 `Unity.ScriptableBuildPipeline.Editor` 被保留。
+- 结论：条件集成 asmdef 引用 `FMODUnity` + `versionDefines` / `defineConstraints` 的设计，在无 FMOD
+  的干净克隆上是安全的；FMOD asmdef 的硬引用缺失不需要补丁，只要对应代码在 `#if` 里。
+
+### 9.2 `versionDefines`
+
+- 真实包名 `com.fmod.fmod-for-unity.v204` + expression `2.4.0` 命中：IntegrationProbe 的 csc
+  响应文件含 `-define:XFRAMEWORK_FMOD` 与 `-r:FMODUnity.ref.dll`，程序集编译成功。
+- 临时移除 manifest 的 `file:` 条目后重编：无 `-define:XFRAMEWORK_FMOD`、无 `error CS`，条件程序集
+  被排除。
+
+### 9.3 API 签名
+
+用 2.04 的真实 `FMODUnity` 程序集编译通过：
+
+- `RuntimeManager.CreateInstance(string)` → `FMOD.Studio.EventInstance`
+- `EventInstance.start/stop(STOP_MODE.ALLOWFADEOUT)/release/setPaused/setVolume/setPitch/`
+  `set3DAttributes/setParameterByName/setParameterByNameWithLabel/getPlaybackState/getPaused/isValid`
+- `RuntimeManager.LoadBank(string,bool)/UnloadBank(string)/HasBankLoaded(string)/GetBus(string)` →
+  `FMOD.Studio.Bus`；`bus.setVolume/setMute/setPaused`
+- snapshot：`CreateInstance("snapshot:/...")` + `start/stop/release`
+
+探针自身的 `FMODUnity.STOP_MODE` / `FMOD.Debug` 歧义只需在调用处写全名，不是签名差异。
+
+### 9.4 `RuntimeManager` / `Settings` 初始化时序
+
+- **首次运行**（`FMODStudioSettings.asset` 不存在）：`Settings.Instance` 在所有档位非空（FMOD 自动创建
+  默认 settings），但 `RuntimeManager` 在 `SubsystemRegistration`、`AfterAssembliesLoaded`、
+  `BeforeSceneLoad`、`AfterSceneLoad` 及测试体均抛
+  `SystemNotInitializedException: [FMOD] Initialization failed`；日志伴随
+  `Cannot find integration settings, creating default settings` 与
+  `Cannot find properties for platform default/playInEditor, creating default properties`。
+- **第二次运行**（settings 已落盘）：`Settings.Instance` 非空，`RuntimeManager.IsMuted` 在
+  **全部**上述档位返回 OK（`muted=False`）。
+- 结论：`Settings.Instance` 在 `SubsystemRegistration` 已可用；但**首轮自动创建的默认 settings 不足以
+  让同一轮的 `RuntimeManager` 初始化成功**。Phase 2 自动安装不能盲目在 `SubsystemRegistration`
+  初始化；应要求消费方先跑 FMOD Setup Wizard（或至少让 settings 资产先落盘），或把首轮失败当作可重试
+  状态，不要留下半初始化门面。
+
+### 9.5 阻塞项
+
+- 真实 bank/event 冒烟仍需 FMOD Studio 2.04 工程 + 构建好的 bank；本机没有 FMOD Studio，本轮未做。
+- 最终验证需在干净克隆（无 FMOD）与有 FMOD 两种环境分别跑全量。
 
 ---
 
-## 十、与既有结论的关系（下一轮别重提）
+## 十、实施状态
+
+- **Phase 1（2026-10-26，已完成）**：核心中立控制面 + FMOD-free provider + `FmodAudioSettings` + fake
+  backend 测试 + `AudioManager` 桥接 + 包内守卫 + 公开 API 基线。当前不可实际播放 FMOD。
+- **Phase 2（探针完成，待实现）**：2026-11-07 用本地 2.04 UPM 包完成条件 asmdef / `versionDefines` /
+  API / 初始化时序探针；条件集成程序集、真实 `FmodEventBackend`、自动安装与真实 bank/event 冒烟仍未
+  实现。自动安装需按 §9.4 处理首轮 settings 不可用的情况。
+
+---
+
+## 十一、与既有结论的关系（下一轮别重提）
 
 - **旧的 `FmodAudio.Install` / `FmodAudioOptions` 公开门面已废弃**：被 2026-10-26「只经 AudioManager +
   自动安装 + 配置资产」取代。
