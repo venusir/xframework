@@ -64,6 +64,8 @@ namespace XFramework.XAudio.Fmod.Tests
         internal bool FailSetParameter;
         internal bool FailGlobalParameter;
         internal bool FailBankLoad;
+        internal readonly HashSet<string> FailBankLoadNames =
+            new HashSet<string>(StringComparer.Ordinal);
         internal bool FailBankUnload;
         internal bool FailBankQuery;
         internal bool FailBusVolume;
@@ -186,7 +188,7 @@ namespace XFramework.XAudio.Fmod.Tests
         public bool LoadBank(string bank, bool loadSamples)
         {
             Calls.Add("LoadBank:" + bank + ":" + loadSamples);
-            if (FailBankLoad)
+            if (FailBankLoad || FailBankLoadNames.Contains(bank))
                 return false;
 
             BankLoads.Add((bank, loadSamples));

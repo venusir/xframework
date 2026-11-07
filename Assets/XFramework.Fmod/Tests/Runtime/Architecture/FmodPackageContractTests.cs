@@ -52,6 +52,7 @@ namespace XFramework.XAudio.Fmod.Tests
             Assert.IsFalse(typeof(IFmodEventBackend).IsPublic);
             Assert.IsFalse(typeof(FmodProviderOptions).IsPublic);
             Assert.IsFalse(typeof(FmodEventSlotTable).IsPublic);
+            Assert.IsFalse(typeof(FmodInstaller).IsPublic);
         }
 
         [Test]

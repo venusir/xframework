@@ -57,7 +57,8 @@ Runtime/
 ├── FmodProviderOptions.cs             # internal：settings 快照
 ├── IFmodEventBackend.cs               # internal：FMOD-free backend 缝
 ├── FmodEventSlotTable.cs              # internal：index + generation 槽位表
-└── FmodAudioProvider.cs               # internal：IAudioProvider + 五个能力接口实现
+├── FmodAudioProvider.cs               # internal：IAudioProvider + 五个能力接口实现
+└── FmodInstaller.cs                   # internal：自动安装的 FMOD-free 逻辑（前置检查/bank/接线）
 ```
 
 `FmodAudioSettings` 字段：`Enabled`、`EventPathPrefix`、`Banks`、`LoadBankSamples`、`OwnsBanks`、
