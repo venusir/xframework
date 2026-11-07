@@ -5,7 +5,8 @@ using XFramework.XAudio;
 namespace XFramework.XAudio.Fmod.Tests
 {
     /// <summary>
-    /// <see cref="FmodAudioSettings"/> 的默认值、归一化与快照构造。资产本身不产生运行时效果。
+    /// <see cref="FmodAudioSettings"/> 的默认值、归一化与快照构造。资产只提供配置形状；
+    /// 自动安装消费逻辑由 <c>FmodInstallerTests</c> 覆盖。
     /// </summary>
     [TestFixture]
     public class FmodSettingsTests

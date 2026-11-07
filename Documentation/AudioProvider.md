@@ -338,31 +338,35 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 
 ---
 
-## 六、FMOD 分包（Phase 1 已实现；Phase 2 条件集成待 SDK）
+## 六、FMOD 分包（Phase 1 + Phase 2 已实现）
 
 详见 `Documentation/FMOD.md`。
 
 - **Phase 1 已实现**：`Assets/XFramework.Fmod/` 的 `Venusy609.Xframework.Fmod` 程序集
   （refs 核心 + UniTask，不引用 FMOD）：
   - `FmodAudioSettings`（public 唯一公开类型，配置资产）；
-  - `FmodProviderOptions` / `IFmodEventBackend` / `FmodEventSlotTable` / `FmodAudioProvider`（全部 internal）；
+  - `FmodProviderOptions` / `IFmodEventBackend` / `FmodEventSlotTable` / `FmodAudioProvider` /
+    `FmodInstaller`（全部 internal）；
   - provider 实现 `IAudioProvider` + 五个 core internal 能力接口；
-  - fake backend + provider/设置/桥接测试 + 包内守卫。
-- **Phase 2 待实现**：`Venusy609.Xframework.Fmod.Unity` 条件集成程序集，引用 `FMODUnity`，放真实
-  `FmodEventBackend` 与自动安装；用 `versionDefines`（实际 FMOD 2.04 UPM 包名）+ `defineConstraints`
-  （`XFRAMEWORK_FMOD`）门控。**两个程序集各自带 versionDefines/defineConstraints**（符号按程序集）。
+  - fake backend + provider/设置/桥接/安装测试 + 包内守卫。
+- **Phase 2 已实现**：`Venusy609.Xframework.Fmod.Unity` 条件集成程序集（`Runtime/Integration/`），引用
+  `FMODUnity`，放真实 `FmodEventBackend` 与 `FmodAutoInstall`；用 `versionDefines`
+  （`com.fmod.fmod-for-unity.v204` / `2.4.0`）+ `defineConstraints`（`XFRAMEWORK_FMOD`）门控。
+  **两个程序集各自带 versionDefines/defineConstraints**（符号按程序集）。
 - **不提供 `FmodAudio.Install` / `FmodAudioOptions`**：公开控制面只有 `AudioManager`；扩展包只公开
   `FmodAudioSettings` 配置资产。
-- **自动安装**：Phase 2 在 `Resources` 检测到 `FmodAudioSettings` 且 `Enabled`、`AudioManager` 未初始化时，
-  先构造 backend/provider（加载 banks）成功后再 `SetProvider`；失败清理半成品、记 Error。已初始化则
-  Warning + 跳过，不覆盖显式注入。
-- **条件 asmdef 悬空引用必须先做最小探针**；若不可行，回退到 Editor 生成集成源码到消费方 `Assets/`。
+- **自动安装（Phase 2 已实现）**：`FmodAutoInstall` 在 `BeforeSceneLoad` 检测 `Resources` 中的
+  `FmodAudioSettings`；`Enabled` 且 `AudioManager` 未初始化时，`FmodInstaller` 先构造 backend/provider
+  （加载 banks）成功后再 `SetProvider`；失败清理半成品、记 Error。已初始化则 Warning + 跳过；首轮
+  `FMODStudioSettings` 缺失时 Error + 跳过（需先跑 Setup Wizard）。
+- **条件 asmdef 悬空引用探针已通过**：无 FMOD 时 `defineConstraints` 排除后不报 missing assembly
+  （§FMOD.md §九）；不需要回退到 Editor 生成源码。
 - **守卫放 PlayMode 的 `Tests/Runtime/Architecture`**，不引用条件程序集/FMOD；`-Filter Fmod` 默认跑
-  PlayMode，避免 Editor 守卫被静默跳过。
+  PlayMode，避免 Editor 守卫被静默跳过。条件测试单独放 `Tests/Runtime/Integration`。
 
 ---
 
-## 七、测试与门禁（Phase 1 已执行；Phase 2 待 SDK）
+## 七、测试与门禁（Phase 1 + Phase 2 已执行）
 
 核心（已执行）：
 
@@ -370,19 +374,17 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 - `-UpdateApiBaseline`：控制面源兼容新增；基线更新后重跑绿灯；
 - `Tools/check-docs.ps1 -Enforce` 通过。
 
-扩展包（Phase 1 已执行）：
+扩展包（Phase 1 + Phase 2 已执行）：
 
-- `Tools/run-tests.ps1 -Filter Fmod`：provider / 设置 / 桥接 / 包内守卫全绿（干净克隆无 FMOD 也编译、也跑）；
-- `-UpdateFmodApiBaseline`：`FmodPublicApiBaseline.txt` 生成后重跑绿灯；
-- 守卫：README 必答节/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、公开 API 基线、
-  仓库不提交 `FmodAudioSettings.asset`。
-
-Phase 2 待执行：
-
-- 条件 asmdef 探针：无 FMOD 时 `defineConstraints` 排除后不得报「missing assembly」；
-  有 FMOD 时 `XFRAMEWORK_FMOD` 自动定义、集成程序集编译；
-- 真实 bank/event 冒烟：`XFW_FMOD_BANK` / `XFW_FMOD_EVENT` 环境变量驱动，缺省跳过；
-- 自动安装档位探针（RuntimeManager 初始化时机）与 `XFW_DISABLE_FMOD_AUTOINSTALL=1`；
+- `Tools/run-tests.ps1 -Filter Fmod`：provider / 设置 / 桥接 / 安装 / 条件测试 / 包内守卫全绿；
+  **无 FMOD（干净克隆）与有 FMOD 两种环境都跑**；
+- `-UpdateFmodApiBaseline`：Phase 2 公开面未变（Integration 全 internal），无需更新；
+- 守卫：README 必答节/文件树、`.meta`、包边界、包契约、依赖声明（Integration 豁免）、AutoInit
+  源码守卫、Integration asmdef 条件门控/内部可见性、公开 API 基线、仓库不提交
+  `FmodAudioSettings.asset`；
+- 真实 bank/event 冒烟：`XFW_FMOD_BANK` / `XFW_FMOD_EVENT` 环境变量驱动，缺省 `Assert.Ignore`；
+  本机无 FMOD Studio 2.04 工程，本轮跳过；
+- 自动安装档位 `BeforeSceneLoad` 已按探针选定；`XFW_DISABLE_FMOD_AUTOINSTALL=1` 已实现；
 - 干净克隆 + 有 FMOD 两种环境跑全量；`git status` 核对 `.meta` / manifest / lock 未误提交。
 
 ---
@@ -401,11 +403,14 @@ Phase 2 待执行：
 
 5. **扩展公开 API 基线 / `-UpdateFmodApiBaseline` 开关**：**已实现** provider 程序集基线
    （`FmodPublicApiBaselineTests` + `.txt`）；`run-tests.ps1` 增加 `-UpdateFmodApiBaseline`
-   （写盘后按设计判失败，重跑才绿灯）。集成程序集契约测试留 Phase 2。
+   （写盘后按设计判失败，重跑才绿灯）。集成程序集契约测试已实现
+   （`IntegrationAsmdef_IsConditionallyGated` / `IntegrationSources_AreInternalOnly`）；Integration
+   全 internal，不需要公开 API 基线。
 6. **Wwise 范围**：Wwise 适配器仍 `暂不做`。重开判据：真实 Wwise 项目 + SDK 可编译验证。
-7. **FMOD SDK 与 `packages-lock.json`**：目标为 **FMOD 2.04 Asset Store UPM**；不提交 SDK、
-   manifest 的 SDK 条目或 `packages-lock.json` 本地改动；2.03 可手动 UPM 化/`.unitypackage` 作兜底。
-   实际包名以安装后的 `package.json` 为准（Phase 2 探针）。
+7. **FMOD SDK 与 `packages-lock.json`**：目标为 **FMOD 2.04 UPM**；已实测包名
+   `com.fmod.fmod-for-unity.v204` / 版本 `2.4.0`。不提交 SDK、manifest 的 SDK 条目或
+   `packages-lock.json` 本地改动；2.03 可手动 UPM 化/`.unitypackage` 作兜底。首轮
+   `FMODStudioSettings` 缺失时自动安装跳过（FMOD.md §九）。
 8. **`FmodAudioProvider` 可见性**：**已实现 internal**；扩展包公开面只有 `FmodAudioSettings` 配置资产。
    不再有 `FmodAudio` / `FmodAudioOptions`。
 9. **守卫位置**：**已实现 PlayMode 的 `Tests/Runtime/Architecture`**（理由见 §六），未做纯 Editor 守卫。

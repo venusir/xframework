@@ -5,10 +5,11 @@ using XFramework.XAudio;
 namespace XFramework.XAudio.Fmod
 {
     /// <summary>
-    /// FMOD 扩展的配置资产。在 <c>Resources</c> 中放一份即可启用自动安装（Phase 2 生效）。
+    /// FMOD 扩展的配置资产。在任意 <c>Resources</c> 目录放一份即可启用自动安装（Phase 2 已实现）。
     /// <para><b>这是配置数据，不是控制 API</b>：第三方控制音效只经 <see cref="AudioManager"/>；
     /// 本类型只提供 Inspector 编辑入口与 internal 快照属性。</para>
-    /// <para><b>Phase 1</b>：真实集成程序集尚未实现，本资产当前不产生运行时效果。</para>
+    /// <para><b>Phase 2</b>：条件集成程序集读取本资产并安装 provider；首轮
+    /// <c>FMODStudioSettings</c> 不存在时自动安装跳过（需先运行 FMOD Setup Wizard）。</para>
     /// </summary>
     [CreateAssetMenu(menuName = "XFramework/FMOD Audio Settings", fileName = "FmodAudioSettings")]
     public sealed class FmodAudioSettings : ScriptableObject
@@ -27,7 +28,7 @@ namespace XFramework.XAudio.Fmod
 
         [Header("Bank")]
         [SerializeField]
-        [Tooltip("启动时加载的 bank 名/路径；Phase 2 生效。")]
+        [Tooltip("启动时加载的 bank 文件名（如 Master / Master.strings，不是 bank:/ 路径）。")]
         private string[] _banks = Array.Empty<string>();
 
         [SerializeField]

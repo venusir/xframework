@@ -6,13 +6,14 @@ XFramework 的可选 FMOD 音频扩展。目标形态是：第三方引入本包
 `AudioManager`**——播放、停止、暂停、三档音量、参数/RTPC、bank、bus、snapshot、逐次 3D 位置都从
 `AudioManager` 进入；本包不提供 `FmodAudio` 之类的第二套公开门面。
 
-> **当前阶段（0.1.0，FMOD-free 层）**：本包只包含 FMOD-free 的 provider 逻辑、配置资产与测试，
-> **不能实际播放 FMOD**。真实 FMOD 集成程序集（条件编译 + `FMODUnity` + 自动安装）需要 FMOD 2.04
-> Asset Store UPM 与 SDK 验证，尚未加入。请勿在当前阶段把本包当作可用的 FMOD 适配器发布。
+> **当前阶段（0.2.0，Phase 2 已实现）**：FMOD-free provider 层 + 条件集成程序集 + 真实 FMOD 2.04
+> backend + 自动安装。消费方需自行安装 FMOD for Unity 2.04 并先运行 FMOD Setup Wizard；首轮
+> `FMODStudioSettings.asset` 不存在时自动安装会跳过（下一轮才可用）。真实 bank/event 冒烟需要
+> Studio 2.04 工程 + bank。
 
 ## 快速使用
 
-以下为目标形态（Phase 2 生效；当前阶段不会自动安装，也不会创建 FMOD 实例）：
+Phase 2 已生效；FMOD 2.04 与 Setup Wizard 是前置条件：
 
 1. 安装核心包 `com.venusy609.xframework`。
 2. 安装 **FMOD for Unity 2.04**（本包不打包、不代装）：
@@ -24,7 +25,10 @@ XFramework 的可选 FMOD 音频扩展。目标形态是：第三方引入本包
      Scripting Define Symbols 加 `XFRAMEWORK_FMOD`，否则条件集成程序集被排除，只剩 FMOD-free 层。
 3. 运行 FMOD Setup Wizard，准备好 FMOD 工程与 bank。
 4. 在 `Assets/Resources/` 下创建 `FmodAudioSettings`（菜单 `Assets > Create > XFramework > FMOD Audio Settings`）。
-5. 不调用 `AudioManager.Initialize()`；扩展会在启动时检测配置资产并安装 provider。
+5. 不调用 `AudioManager.Initialize()`；扩展会在 `BeforeSceneLoad` 检测配置资产并安装 provider。
+   首次播放前必须先运行 FMOD Setup Wizard；若 `Assets/Resources/FMOD/FMODStudioSettings.asset`
+   不存在，自动安装会记 Error 并跳过（不会创建 FMOD 实例）。测试/消费方可用环境变量
+   `XFW_DISABLE_FMOD_AUTOINSTALL=1` 关闭自动安装。
 6. 用 `AudioManager` 操作音效：
 
 ```csharp
@@ -67,8 +71,12 @@ Runtime/
 ```
 
 `FmodAudioSettings` 字段：`Enabled`、`EventPathPrefix`、`Banks`、`LoadBankSamples`、`OwnsBanks`、
-`MaxVoices`、`MasterVolume`、`MasterMuted`。它是配置资产，不是控制 API；provider/backend/options
-全部 internal。
+`MaxVoices`、`MasterVolume`、`MasterMuted`。`Banks` 是 bank 文件名（如 `Master` / `Master.strings`），
+不是 `bank:/` 路径。它是配置资产，不是控制 API；provider/backend/options 全部 internal。
+
+`Tests/Runtime/Integration/` 的条件测试使用独立 asmdef
+（`Venusy609.Xframework.Fmod.Unity.Tests`），因为不能把 `FMODUnity` 引用塞进无条件测试程序集；
+这是按编译条件拆分，不是按模块新建测试 asmdef。
 
 ## 行为契约
 
@@ -79,9 +87,10 @@ Runtime/
 - `SetBusVolume` 原样透传、不做核心钳制；框架三档音量与 FMOD bus 音量是两层。
 - 起播前参数由核心校验并复制；provider 在事件 `start()` 前应用。
 - 内置 provider 不支持参数/bank/bus/snapshot；`AudioSourceProvider` 支持 `SetPosition`。
-- **provider 已实现 core internal 的五个能力接口**（参数/bank/bus/snapshot/3D）；当前用 fake backend
-  验证 `AudioManager` 控制面到 provider 的端到端桥接。真实 FMOD backend 在 Phase 2。
-- 本包当前不产生运行时效果；自动安装与真实 backend 在 Phase 2。
+- **provider 已实现 core internal 的五个能力接口**（参数/bank/bus/snapshot/3D）；Phase 2 的真实
+  `FmodEventBackend` 已接入 `AudioManager` 控制面，`FmodInstaller` 负责自动安装。
+- **自动安装**：`AudioManager` 已初始化时跳过（不覆盖项目注入）；首轮无 `FMODStudioSettings` 时
+  Error + 跳过；`Banks` / `LoadBankSamples` / `OwnsBanks` / `XFW_DISABLE_FMOD_AUTOINSTALL` 见快速使用。
 
 ## 线程契约
 
@@ -92,12 +101,14 @@ Runtime/
 
 - 槽位表零 GC（数组 + 代际）；每次播放一次 provider 句柄分配（值类型，无堆分配）。
 - 起播前参数数组由核心在非空时复制一次；无参播放不分配。
-- FMOD 调用本身的开销未实测（Phase 2）。
+- FMOD 调用本身的开销未实测；bank 加载同步阻塞（见已知限制）。
 
 ## 已知限制
 
-- **Phase 1 不可实际播放 FMOD**：真实集成程序集未实现，配置资产当前只提供形状/默认值。
-- 逐次参数/bank/bus/snapshot 需要真实 FMOD backend；内置 provider 一律返回 `false`。
+- **首轮需要 FMOD Setup Wizard**：`FMODStudioSettings.asset` 不存在时自动安装 Error + 跳过；
+  下一轮才可用。不会自动创建默认 settings，也不会留下半初始化门面。
+- **真实 bank/event 冒烟未在仓库环境验证**：需要 `XFW_FMOD_EVENT` / `XFW_FMOD_BANK` 与 FMOD Studio
+  2.04 工程 + bank；缺省测试跳过。
 - 无逐 voice 暂停/音量、无事件回调、无普通事件 stop fade。
 - FMOD 的 `Loop` / `Pitch` / 3D 衰减最终由 Studio 事件编排决定；框架参数只能近似。
 - `AudioListener.pause` / `AudioListener.volume` 不作用于 FMOD；项目暂停走 `AudioManager.Pause()`。

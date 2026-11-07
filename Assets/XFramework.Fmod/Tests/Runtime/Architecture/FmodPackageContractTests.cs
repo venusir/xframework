@@ -63,7 +63,7 @@ namespace XFramework.XAudio.Fmod.Tests
                 Assert.Ignore("找不到 XFramework.Fmod 包根；跳过 package.json 契约。");
 
             StringAssert.Contains("\"name\": \"com.venusy609.xframework.fmod\"", json);
-            StringAssert.Contains("\"version\": \"0.1.0\"", json);
+            StringAssert.Contains("\"version\": \"0.2.0\"", json);
             StringAssert.Contains("\"unity\": \"6000.3\"", json);
             StringAssert.Contains("\"dependencies\": {}", json);
         }

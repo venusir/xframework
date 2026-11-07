@@ -1,9 +1,9 @@
 {
 	"name": "com.venusy609.xframework.fmod",
 	"displayName": "XFramework FMOD",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"unity": "6000.3",
-	"description": "XFramework 的可选 FMOD 音频扩展：FMOD-free provider 层与 FmodAudioSettings 配置资产。第三方控制音效只经 AudioManager；真实 FMOD 集成程序集待 SDK 验证（当前不可实际播放 FMOD）。",
+	"description": "XFramework 的可选 FMOD 音频扩展：FMOD-free provider 层、真实 FMOD 2.04 条件集成程序集与自动安装。第三方控制音效只经 AudioManager；消费方需自行安装 FMOD for Unity 2.04（com.fmod.fmod-for-unity.v204）。",
 	"keywords": [
 		"framework",
 		"audio",

@@ -21,8 +21,9 @@ Unity 的模块化基础设施框架：一组彼此正交、可单独取用的�
 > **包本体在 [`Assets/XFramework/`](Assets/XFramework/)。** Cinemachine 3.x 的相机后端已内置在 Camera 模块
 > （`Runtime/Camera/Cinemachine/`）；另有一个**可选**的 Luban 配置扩展包在
 > [`Assets/XFramework.Luban/`](Assets/XFramework.Luban/)，核心包不依赖它、不用 Luban 的项目无需安装。
-> 还有一个**开发中**的 FMOD 音频扩展包在 [`Assets/XFramework.Fmod/`](Assets/XFramework.Fmod/)：
-> 当前只有 FMOD-free 层，**不能实际播放 FMOD**，真实 FMOD 集成待 SDK 验证。
+> 还有一个可选的 FMOD 音频扩展包在 [`Assets/XFramework.Fmod/`](Assets/XFramework.Fmod/)：
+> Phase 2 已实现 FMOD-free 层 + 条件集成程序集 + 真实 FMOD 2.04 backend + 自动安装；消费方需自行
+> 安装 FMOD for Unity 2.04 并先运行 Setup Wizard。
 > 仓库根是一个**完整的 Unity 开发工程**（`ProjectSettings/`、场景、测试与构建工具都在这里），UPM 包只是它的一个子目录——
 > 这就是下面引入方式必须带 `?path=` 的原因。
 
@@ -62,13 +63,14 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 扩展包提供 Editor 一键导表、生成式 `IConfigRow<TKey>` 行接口实现与强类型适配器，并把 map / 单行 / 带索引表
 注册进 `ConfigManager`；细节见[扩展包 README](Assets/XFramework.Luban/README.md)。核心包仍不内建、不依赖 Luban。
 
-### 可选：FMOD 音频扩展（开发中）
+### 可选：FMOD 音频扩展
 
-`Assets/XFramework.Fmod/`（`com.venusy609.xframework.fmod`）当前只交付 **Phase 1 FMOD-free 层**：
-provider 逻辑、`FmodAudioSettings` 配置资产、fake backend 测试与包内守卫。**它不能实际播放 FMOD**；
-真实 FMOD 2.04 Asset Store UPM 集成、自动安装与真实 bank 冒烟待 SDK 验证。控制音效的公开入口只有
-`AudioManager`，扩展包不提供 `FmodAudio` 门面。细节见[扩展包 README](Assets/XFramework.Fmod/README.md)；
-当前阶段不提供安装 URL。
+`Assets/XFramework.Fmod/`（`com.venusy609.xframework.fmod`）已交付 **Phase 2**：FMOD-free provider
+层、条件集成程序集（真实 FMOD 2.04 `FmodEventBackend`）与自动安装。消费方需自行安装 FMOD for Unity
+2.04（`com.fmod.fmod-for-unity.v204` / 2.4.0），并先运行 FMOD Setup Wizard；首轮
+`FMODStudioSettings` 缺失时自动安装跳过。控制音效的公开入口只有 `AudioManager`，扩展包不提供
+`FmodAudio` 门面。真实 bank/event 冒烟需要 Studio 工程 + bank。细节见
+[扩展包 README](Assets/XFramework.Fmod/README.md)；安装 URL 待包发布。
 
 ## 开发这个仓库
 

@@ -144,7 +144,8 @@ await Bootstrap.RunAsync();
 > 上表列的是**功能亮点**，不是模块全集：Asset / Save / Data / Settings / Localization / File / Serialize / Diagnostics 八个模块见下方「模块索引」与各自的 README。
 >
 > 音频的 provider 中立控制面（参数/RTPC、bank、bus、snapshot、逐次 3D）只经 `AudioManager`；可选 FMOD 扩展包
-> `com.venusy609.xframework.fmod` 处于开发中（Phase 1 为 FMOD-free 层，当前不可实际播放 FMOD）。
+> `com.venusy609.xframework.fmod` 的 Phase 2 已实现（条件集成程序集 + 真实 FMOD 2.04 backend +
+> 自动安装）；消费方需自行安装 FMOD 2.04 并先运行 Setup Wizard。
 
 ## 模块索引
 
