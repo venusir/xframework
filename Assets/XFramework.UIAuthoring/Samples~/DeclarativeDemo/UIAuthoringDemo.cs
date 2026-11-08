@@ -3,6 +3,7 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XLog;
 using XFramework.XMessage;
+using XFramework.XUI;
 using XFramework.XUI.Authoring;
 
 namespace XFramework.Example
@@ -22,6 +23,10 @@ namespace XFramework.Example
         [Header("面板资源地址（换成你自己的）")]
         [SerializeField] private string panelAddress = "ui/panels/demo";
 
+        [Header("HUD（可选：把场景里的 3D 目标拖进来）")]
+        [SerializeField] private Transform hudTarget;
+        [SerializeField] private string hudAddress = "ui/huds/demo";
+
         private IDisposable _customSubscription;
         private IDisposable _dialogSubscription;
 
@@ -34,12 +39,17 @@ namespace XFramework.Example
                 "demo.confirm", OnDialogResult);
 
             OpenAsync().Forget();
+            AttachHudAsync().Forget();
         }
 
         private void OnDestroy()
         {
             _customSubscription?.Dispose();
             _dialogSubscription?.Dispose();
+
+            // HUD 的关闭入口只有一个：按目标调用 HideHud（面板的关闭入口不适用）。
+            if (hudTarget != null && UIManager.IsInitialized)
+                UIManager.HideHud(hudTarget);
         }
 
         private async UniTaskVoid OpenAsync()
@@ -53,6 +63,23 @@ namespace XFramework.Example
             }
 
             LogManager.Info(DemoLog, "已打开声明式面板：{0}", panel.AssetPath);
+        }
+
+        private async UniTaskVoid AttachHudAsync()
+        {
+            if (hudTarget == null || string.IsNullOrEmpty(hudAddress))
+                return;
+
+            // HUD 没有 userData；它跟随 hudTarget，目标丢失/CloseAllAsync 时由核心自动回收。
+            UIDeclarativeHudItem hud = await UIManager.ShowHudAsync<UIDeclarativeHudItem>(
+                hudTarget, hudAddress);
+            if (hud == null)
+            {
+                LogManager.Warning(DemoLog, "附加声明式 HUD 失败：{0}", hudAddress);
+                return;
+            }
+
+            LogManager.Info(DemoLog, "已附加声明式 HUD：{0}", hudAddress);
         }
 
         private static void OnCustomAction(UIAuthoringActionMessage message)

@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `UIDeclarativeHudItem : UIHudItem`：声明式 HUD（阶段 2b），`Kind=Hud` 的定义只绑定静态文本；不绑定动作，关闭用核心 `UIManager.HideHud(target)`。
+- 校验器新增 `UI-AUTH-HUD-*`（根 RectTransform、动作/页签不支持、文本节点超深），扫描器候选加入 HUD。
+- `Samples~/Templates/Hud.prefab`、`Samples~/DeclarativeDemo` 的 DemoHud 预制体/定义与演示脚本 HUD 跟随。
+
+### Not verified
+
+- HUD 模板的裸消费方导入验收（P3 机制已过，实际模板未跑）。
+
 ## [0.1.0] - 2026-11-08
 
 ### Added

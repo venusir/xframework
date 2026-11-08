@@ -7,7 +7,7 @@
 - 核心包零改动：面板/对话框仍继承 `UIPanelBase` / `UIDialogPanel<string>`，加载、排序、遮罩、栈、池化全部复用核心。
 - 单根限制：`UIDeclarativePanel` 同一时刻只能打开一个；多页用同一预制体内的子页/页签。
 - `UIDeclarativeDialogPanel` 是独立具体类型，可与声明式面板同时打开；结果类型固定 `string`。
-- 阶段 2a 只覆盖面板与对话框；HUD、数据源、声明式 Popup 不在本版本。
+- 阶段 2a 覆盖面板与对话框，阶段 2b 覆盖 HUD 静态文本；数据源、声明式 Popup 不在本版本。
 
 ## 快速使用
 
@@ -21,7 +21,7 @@
 
 `Create → XFramework/UI Authoring/Panel Definition`，设置：
 
-- `Kind`：`Panel` 或 `Dialog`（`Hud` 留给后续阶段，本版本校验器报未实现）。
+- `Kind`：`Panel` / `Dialog` / `Hud`（HUD 只支持静态文本，不能配动作/页签）。
 - `TextBindings`：`NodeName` + 字面量或本地化 key。
 - `ActionBindings`：按钮节点名 + 动作列表。
 - `TabGroups`：组名 + 一组节点名。
@@ -66,7 +66,18 @@ MessageManager.Subscribe<string, UIAuthoringActionMessage>("shop.buy", msg =>
 
 动作消息**不带面板引用**，不要在回调外保存 `msg` 里的上下文；**不要用 `SubscribeBuffered`**（会重放最后一条动作）。
 
-### 6. 运行两个校验器
+### 6. HUD（静态文本）
+
+```csharp
+var hud = await UIManager.ShowHudAsync<UIDeclarativeHudItem>(target.transform, "ui/huds/npc");
+```
+
+- HUD 定义 `Kind = Hud`，只读 `TextBindings`；`ActionBindings` / `TabGroups` 会被校验器拒绝/告警，运行时不绑定。
+- 没有 `userData`；动态数据留阶段 3。同一目标同时只能挂一个 HUD，重复调用会替换。
+- 关闭用 `UIManager.HideHud(target.transform)`；`CloseAllAsync` 会连带回收 HUD。
+- 跟随目标、屏幕后隐藏、目标丢失回收全部由核心 `UIHudItem` 完成；不要重写 `OnUpdate`。
+
+### 7. 运行两个校验器
 
 - 核心：`Tools/XFramework/UI/Validate UI Prefabs`（预制体结构、命名、根 RectTransform、YooAsset 采集等）。
 - 本包：`Tools/XFramework/UI Authoring/Validate Declarative Panels`（定义与节点、动作参数/顺序、目标根类型、地址解析）。
@@ -84,7 +95,7 @@ Assets/XFramework.UIAuthoring/
 │   ├── UIPanelDefinition.cs / UIPanelDefinitionKind.cs
 │   ├── UITextBinding.cs / UIActionBinding.cs / UITabGroup.cs
 │   ├── UIAction.cs / UIActionKind.cs / UITipActionConfig.cs
-│   ├── UIDeclarativePanel.cs / UIDeclarativeDialogPanel.cs
+│   ├── UIDeclarativePanel.cs / UIDeclarativeDialogPanel.cs / UIDeclarativeHudItem.cs
 │   ├── UIDeclarativeNodeFinder.cs / UIDeclarativeBinder.cs
 │   ├── UIActionSession.cs / UIActionExecutor.cs
 │   ├── IUIActionRuntime.cs / UIManagerActionRuntime.cs
@@ -102,7 +113,7 @@ Assets/XFramework.UIAuthoring/
 ├── Tests/
 │   ├── Runtime/
 │   │   ├── Venusy609.Xframework.UI.Authoring.Tests.asmdef
-│   │   ├── UIDeclarativePanelTests.cs / UIDeclarativeDialogPanelTests.cs
+│   │   ├── UIDeclarativePanelTests.cs / UIDeclarativeDialogPanelTests.cs / UIDeclarativeHudItemTests.cs
 │   │   ├── UIActionExecutorTests.cs / UIAuthoringNavigationTests.cs
 │   │   ├── UIAuthoringActionMessageTests.cs / UIAuthoringTestPaths.cs
 │   │   └── Architecture/（README/meta/边界/AutoInit/依赖/API 基线守卫）
@@ -113,19 +124,19 @@ Assets/XFramework.UIAuthoring/
 │       ├── UIAuthoringAddressProviderTests.cs
 │       └── UIPanelDefinitionEditorTests.cs
 └── Samples~/
-    ├── Templates/（Panel.prefab、Dialog.prefab、.sample.json）
-    └── DeclarativeDemo/（面板/对话框预制体 + 定义资产 + UIAuthoringDemo.cs + .sample.json）
+    ├── Templates/（Panel.prefab、Dialog.prefab、Hud.prefab、.sample.json）
+    └── DeclarativeDemo/（面板/对话框/HUD 预制体 + 定义资产 + UIAuthoringDemo.cs + .sample.json）
 ```
 
 ## 模板与示例
 
 通过 Package Manager 的 Samples 页签导入：
 
-- **声明式面板/对话框模板**（`Samples~/Templates`）：`Panel.prefab` / `Dialog.prefab`。根节点已带 `Canvas` / `GraphicRaycaster` 与声明式根组件，子节点按 `txt_` / `btn_` 命名；复制一份作为你的面板起点，再加子页与节点。
-- **声明式 UI 示例**（`Samples~/DeclarativeDemo`）：`DemoPanel.prefab` / `DemoDialog.prefab` + 两个定义资产 + `UIAuthoringDemo.cs`。导入后需要：
-  1. 把两个预制体加入消费方 YooAsset **主资源采集**，地址分别设为 `ui/panels/demo` / `ui/dialogs/demo`（与定义里的 `ShowDialog.AssetPath` 一致）；
-  2. 两个定义资产与预制体**同包采集**（或同包 `DependAssetCollector`）；
-  3. 场景里放一个 `UIRootNode`，把 `UIAuthoringDemo` 挂到任意物体上按 Play。
+- **声明式面板/对话框/HUD 模板**（`Samples~/Templates`）：`Panel.prefab` / `Dialog.prefab` / `Hud.prefab`。根节点已带 `Canvas` / `GraphicRaycaster` 与声明式根组件，子节点按 `txt_` / `btn_` 命名；复制一份作为你的起点，再加子页与节点。
+- **声明式 UI 示例**（`Samples~/DeclarativeDemo`）：`DemoPanel.prefab` / `DemoDialog.prefab` / `DemoHud.prefab` + 三个定义资产 + `UIAuthoringDemo.cs`。导入后需要：
+  1. 把三个预制体加入消费方 YooAsset **主资源采集**，地址分别设为 `ui/panels/demo` / `ui/dialogs/demo` / `ui/huds/demo`（与定义里的 `ShowDialog.AssetPath` 和演示脚本的 `hudAddress` 一致）；
+  2. 三个定义资产与预制体**同包采集**（或同包 `DependAssetCollector`）；
+  3. 场景里放一个 `UIRootNode`，把 `UIAuthoringDemo` 挂到任意物体上按 Play；可选地把一个 3D 目标拖到 `hudTarget` 看 HUD 跟随。
 
 模板是**导入时复制**：包升级不会覆盖你改过的模板；卸载本包后模板根组件会变成 Missing Script。模板只是起点，不是运行时强制结构。
 
@@ -138,23 +149,25 @@ Assets/XFramework.UIAuthoring/
 - **`Open` / `Push`**：只用于 C# 面板，内部用 `OpenAsync<UIPanelBase>` / `PushAsync<UIPanelBase>`；目标不能是声明式面板或任何 `UIDialogPanel<>`；动作不带 `userData`，需要数据的导航走 `Custom`。
 - **`ShowDialog`**：单飞；已有声明式对话框打开时拒绝并 Warning，不启动第二个等待。
 - **`Custom`**：keyed 消息；无通配符、无反射、无第二事件系统。
+- **HUD**：`UIDeclarativeHudItem : UIHudItem`，只绑定文本；`Kind=Hud`；无 `userData`、不入栈、不进面板字典；同一目标只挂一个；关闭用 `HideHud(target)`，`CloseAllAsync` 连带回收。
 - **定义资产**：可为空（静态预制体）；`Kind` 必须与根组件一致。
 
 ## 线程契约
 
-全部在主线程调用：创建/打开/关闭面板、执行动作、发布/订阅消息、编辑器校验。本包不做线程调度，也不提供跨线程入口。
+全部在主线程调用：创建/打开/关闭面板与 HUD、执行动作、发布/订阅消息、编辑器校验。本包不做线程调度，也不提供跨线程入口。
 
 ## 性能代价
 
-- 绑定与节点查找只在 `OnOpen` 发生；没有每帧 `OnUpdate`，没有每帧分配。
+- 文本绑定与节点查找只在 `OnOpen` 发生；本包不新增每帧 `OnUpdate`，没有每帧分配。
 - 按钮动作只在点击时执行；`Custom` 发布的 keyed 消息由 `MessageManager` 处理，正常路径零分配。
-- 声明式面板无每帧逻辑，`UpdateTier` 保持默认即可。
+- HUD 的每帧跟随由核心 `UIHudItem` 执行，代价与 C# HUD 相同；声明式面板/对话框无每帧逻辑，`UpdateTier` 保持默认即可。
 
 ## 已知限制
 
 - **单根**：不能同时打开两个 `UIDeclarativePanel`；需要并存请用 C# 面板或阶段 4 的独立 Popup 类型。
 - **对话框结果**：固定 `string`；`ParentClosed` 目前归入 `Canceled`；自定义 `TResult` 请写 C# `UIDialogPanel<TResult>`。
-- **HUD / 数据源 / Popup**：本版本未实现；HUD 仍写 C# `UIHudItem`，动态数据绑定留后续阶段。
+- **HUD 只做静态文本**：`UIDeclarativeHudItem` 不支持动作/页签/动态数据；无 `userData`、不入面板字典、同一目标只挂一个，关闭用 `HideHud(target)`。
+- **数据源 / Popup**：本版本未实现，数据绑定留阶段 3、声明式 Popup 留阶段 4。
 - **`Open`/`Push` 无 `userData`**：需要给 C# 面板传数据的导航走 `Custom`。
 - **Tip 本地化**：核心 `TipConfig` 只接收原始字符串；需要本地化时调用方先 `LocalizationManager.Get(key)`。
 - **UGUI Text 本地化**：核心只给 TMP 提供 `BindToLocalizedText`；UGUI `Text` 由本包手动 `Get/Subscribe`。
