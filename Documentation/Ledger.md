@@ -19,11 +19,12 @@
 
 模块清单与链接的唯一维护处是 `Documentation/Modules/README.md` 的文件表——本文**不复制那份清单**（同一份名单三处维护就是漂移的起点）。每个模块文件的「决策台账」节是该模块条目的唯一落点；`Tools/check-docs.ps1 -Enforce` 会核「每个模块都有台账」与「文件表与 `Runtime/` 子目录双向相等」。
 
-七份**随外部漂移**的维护向文档不在台账体系里、在此登记为指针：
+八份**维护向**文档不在台账体系里、在此登记为指针：
 
 - `Documentation/CI.md`——CI 的成本要点与裁定（暂不接入 + 三条重开判据）；
 - `Documentation/Luban.md`——配置表工具接入配方（已核对事实与版本漂移点；2026-10-24 起记录扩展包工作流与端到端探针结论）；
 - `Documentation/FairyGUI.md`——第三方 UI 方案评估（不接成后端 / 不做平级包 + 重开判据）；
+- `Documentation/UIAuthoring.md`——面向策划的 UI 制作方案评估（独立扩展包 `com.venusy609.xframework.ui.authoring` 的分阶段设计、四档需求、探针与开放裁定点；待裁）；
 - `Documentation/Cinemachine.md`——Cinemachine 3.1.7 后端的版本 / 3.x API 实测 / 升级与漂移点（已并入核心包 `Runtime/Camera/Cinemachine/`，核心 asmdef 硬引用 Cinemachine）；
 - `Documentation/AudioProvider.md`——核心 `IAudioProvider` 播放引擎缝与 provider 中立控制面（2026-10-25/26 已实现；FMOD Phase 2 真实集成 2026-11-07 已实现，真实 bank/event 冒烟待 Studio 工程；Wwise 仍暂不做）；
 - `Documentation/FMOD.md`——FMOD 扩展的 provider 层、仅 AudioManager 的公开面、自动安装与 Phase 2 条件程序集（Phase 1 FMOD-free 与 Phase 2 真实集成都已实现；SDK 探针 2026-11-07 通过，真实 bank/event 冒烟待 Studio 工程）；
