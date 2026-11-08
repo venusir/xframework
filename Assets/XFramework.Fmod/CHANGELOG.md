@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- 自动安装失败清理只卸载本次安装成功加载的 bank：失败点之后出现的项目预加载 bank 不再被误卸载；
+  重复 bank 条目不再导致回滚漏卸；外层失败清理与成功路径统一使用安装开始时的配置快照。
+- `TryInstall` 的 `backendFactory == null` 检查提前到所有前置早退之前，与 XML 契约一致。
+- `PlayAsync` 对 null/空白 location 返回 default 而非抛 `ArgumentNullException`；占槽后的路径解析
+  移入异常隔离区，异常时必定归还槽位。
+- 真实 backend 的 `SetBusVolume` / `SetBusMuted` / `SetBusPaused` 在 Dispose 后返回 false；
+  `SafeStopAndRelease` 的 `isValid()` 纳入异常隔离。
+
+### Changed
+
+- 包内守卫射程加宽：公开类型正则覆盖修饰符 / record / delegate；asmdef 绑定
+  `versionDefines.define` 与 `defineConstraints` 同值并覆盖 Tests asmdef；README 检查精确包名/版本；
+  Resources 资产检查覆盖所有 Resources 目录；README 文件树按相对路径比较；`.meta` 根检查仅在
+  `Assets/` 布局执行；AutoInit 改用属性正则；包边界扫描全部文本文件。
+- 文档明确两条边界：显式 `UnloadBank` 不受 `OwnsBanks` 限制；`SetPaused` / `SetVolume` 的 false
+  语义比核心预期更宽，当前只记录不改行为。
+
+### Removed
+
+- 删除未使用的 internal `FmodProviderOptions.Default`。
+
 ## [0.2.0] - 2026-11-07
 
 ### Added

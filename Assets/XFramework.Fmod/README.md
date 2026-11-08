@@ -49,7 +49,9 @@ AudioManager.StopSnapshot("snapshot:/Pause");
 ```
 
 起播前参数用 `AudioPlayOptions.InitialParameters`；`AudioManager.Play` 返回时可能仍在加载，
-逐次控制需要句柄已激活时请用 `PlayAsync`。
+逐次控制需要句柄已激活时请用 `PlayAsync`。该 Loading 窗口属于内置 provider 的资源加载；
+FMOD provider 不加载资源，`PlayAsync` 同步完成，`Play` 返回时通常已起播，但核心契约不承诺
+同步激活。
 
 ## 模块结构
 
@@ -74,6 +76,12 @@ Runtime/
 `MaxVoices`、`MasterVolume`、`MasterMuted`。`Banks` 是 bank 文件名（如 `Master` / `Master.strings`），
 不是 `bank:/` 路径。它是配置资产，不是控制 API；provider/backend/options 全部 internal。
 
+`Banks` 按顺序加载；空白项与重复项跳过；任一 bank 加载失败时，只回滚本次安装成功加载的 bank，
+安装前已加载的项目 bank 不动。`LoadBankSamples` 直接作为 `RuntimeManager.LoadBank` 的第二个参数。
+`OwnsBanks=true` 时 provider 在销毁时卸载自己新加载的 bank，但显式 `AudioManager.UnloadBank`
+始终执行、不受它限制。`EventPathPrefix` 默认 `event:/`；空字符串表示不补前缀（location 原样作为
+事件路径），`null` 归一为 `event:/`。
+
 `Tests/Runtime/Integration/` 的条件测试使用独立 asmdef
 （`Venusy609.Xframework.Fmod.Unity.Tests`），因为不能把 `FMODUnity` 引用塞进无条件测试程序集；
 这是按编译条件拆分，不是按模块新建测试 asmdef。
@@ -90,7 +98,8 @@ Runtime/
 - **provider 已实现 core internal 的五个能力接口**（参数/bank/bus/snapshot/3D）；Phase 2 的真实
   `FmodEventBackend` 已接入 `AudioManager` 控制面，`FmodInstaller` 负责自动安装。
 - **自动安装**：`AudioManager` 已初始化时跳过（不覆盖项目注入）；首轮无 `FMODStudioSettings` 时
-  Error + 跳过；`Banks` / `LoadBankSamples` / `OwnsBanks` / `XFW_DISABLE_FMOD_AUTOINSTALL` 见快速使用。
+  Error + 跳过；bank 按 `Banks` 顺序加载，空白/重复跳过，失败只回滚本次成功加载的 bank；
+  安装开始时会快照配置，之后修改资产不影响本次安装。`XFW_DISABLE_FMOD_AUTOINSTALL` 见快速使用。
 
 ## 线程契约
 
@@ -99,7 +108,9 @@ Runtime/
 
 ## 性能代价
 
-- 槽位表零 GC（数组 + 代际）；每次播放一次 provider 句柄分配（值类型，无堆分配）。
+- 槽位表零 GC（数组 + 代际）；provider 句柄是值类型、无堆分配。补事件前缀时 `BuildEventPath`
+  会拼接一次 `prefix + location` 字符串，因此整次播放并非全程零分配；空前缀或 location 已带前缀时
+  不拼接。
 - 起播前参数数组由核心在非空时复制一次；无参播放不分配。
 - FMOD 调用本身的开销未实测；bank 加载同步阻塞（见已知限制）。
 
@@ -113,6 +124,14 @@ Runtime/
 - FMOD 的 `Loop` / `Pitch` / 3D 衰减最终由 Studio 事件编排决定；框架参数只能近似。
 - `AudioListener.pause` / `AudioListener.volume` 不作用于 FMOD；项目暂停走 `AudioManager.Pause()`。
 - bank 加载同步阻塞；没有异步 bank 加载 API。
+- **显式 `UnloadBank` 不受 `OwnsBanks` 限制**：`OwnsBanks` 只约束 provider 销毁时卸载哪些 bank；
+  「项目预加载的 bank 永不卸载」只适用于自动安装失败清理与 provider Dispose。项目主动调用
+  `AudioManager.UnloadBank` 仍会卸载任意已加载 bank。
+- **`SetPaused` / `SetVolume` 的 false 语义比核心预期更宽**：核心把 provider 返回 `false` 当作
+  音源已消失并回收槽位；FMOD backend 在 `RESULT != OK` 时也返回 `false`，瞬时失败可能提前回收
+  voice。当前只记录该边界，等真实 FMOD 证据再决定是否收紧。
+- **预加载 bank 的 `LoadBankSamples` 不会补载**：若项目已加载 bank、但当时未加载采样数据，
+  配置里的 `LoadBankSamples=true` 不会改变它；请保证预加载时就带上采样数据。
 - 扩展包的 XML 文档不随核心文档门禁检查，质量靠评审。
 
 ## 设计取舍
