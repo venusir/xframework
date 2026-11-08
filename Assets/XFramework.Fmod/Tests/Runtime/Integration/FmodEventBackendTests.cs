@@ -73,6 +73,17 @@ namespace XFramework.XAudio.Fmod.Unity.Tests
         }
 
         [Test]
+        public void BusSetters_AfterDispose_ReturnFalse()
+        {
+            var backend = new FmodEventBackend(false);
+            backend.Dispose();
+
+            Assert.IsFalse(backend.SetBusVolume("bus:/SFX", 1f));
+            Assert.IsFalse(backend.SetBusMuted("bus:/SFX", true));
+            Assert.IsFalse(backend.SetBusPaused("bus:/SFX", true));
+        }
+
+        [Test]
         public void RealEvent_StartStopRelease_WhenConfigured()
         {
             string eventPath = Environment.GetEnvironmentVariable("XFW_FMOD_EVENT");

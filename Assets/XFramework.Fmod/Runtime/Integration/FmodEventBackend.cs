@@ -443,11 +443,11 @@ namespace XFramework.XAudio.Fmod.Unity
             return !_disposed && _instances.TryGetValue(instanceId, out instance);
         }
 
-        private static bool TryGetBus(string busPath, out Bus bus)
+        private bool TryGetBus(string busPath, out Bus bus)
         {
             bus = default;
 
-            if (string.IsNullOrWhiteSpace(busPath))
+            if (_disposed || string.IsNullOrWhiteSpace(busPath))
                 return false;
 
             try
@@ -468,8 +468,16 @@ namespace XFramework.XAudio.Fmod.Unity
         private static void SafeStopAndRelease(EventInstance instance,
             FMOD.Studio.STOP_MODE stopMode)
         {
-            if (!instance.isValid())
+            try
+            {
+                if (!instance.isValid())
+                    return;
+            }
+            catch (Exception)
+            {
+                // isValid 本身失败也不阻断 Dispose 的其余清理。
                 return;
+            }
 
             try
             {
