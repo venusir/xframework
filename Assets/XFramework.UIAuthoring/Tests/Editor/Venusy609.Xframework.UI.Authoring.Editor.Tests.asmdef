@@ -4,7 +4,11 @@
     "references": [
         "Venusy609.Xframework",
         "Venusy609.Xframework.UI.Authoring",
-        "Unity.TextMeshPro"
+        "Venusy609.Xframework.UI.Authoring.Editor",
+        "UniTask",
+        "Unity.TextMeshPro",
+        "YooAsset",
+        "YooAsset.Editor"
     ],
     "includePlatforms": [
         "Editor"
