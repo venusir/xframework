@@ -1,6 +1,9 @@
+using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using XFramework.XLog;
+using XFramework.XMessage;
+using XFramework.XUI.Data;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI.Authoring
@@ -66,6 +69,75 @@ namespace XFramework.XUI.Authoring
         public UniTask ShowTipAsync(string text, TipConfig config, CancellationToken cancellationToken)
         {
             return UIManager.ShowTipAsync(text, config, cancellationToken);
+        }
+
+        public bool IsDeclarativeDialogOpen => UIManager.IsOpen<UIDeclarativeDialogPanel>();
+
+        public UIDeclarativeDialogPanel GetDeclarativeDialog() =>
+            UIManager.GetPanel<UIDeclarativeDialogPanel>();
+
+        public async UniTask<UIAuthoringDialogResult> ShowDeclarativeDialogAsync(
+            string assetPath, string actionId, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrEmpty(assetPath) || string.IsNullOrEmpty(actionId))
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowDialog: assetPath or actionId is empty.");
+                return new UIAuthoringDialogResult(UIAuthoringDialogStatus.OpenFailed, null);
+            }
+
+            if (UIManager.IsOpen<UIDeclarativeDialogPanel>())
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowDialog rejected: a declarative dialog is already open.");
+                var rejected = new UIAuthoringDialogResult(UIAuthoringDialogStatus.OpenFailed, null);
+                PublishDialogResult(actionId, rejected);
+                return rejected;
+            }
+
+            bool opened = false;
+            IDisposable subscription = UIManager.Subscribe((PanelOpenedMessage message) =>
+            {
+                if (message.PanelType == typeof(UIDeclarativeDialogPanel)
+                    && UIManager.GetPanel<UIDeclarativeDialogPanel>()?.AssetPath == assetPath)
+                {
+                    opened = true;
+                }
+            });
+
+            string resultId = null;
+            UIAuthoringDialogStatus status;
+            try
+            {
+                resultId = await UIManager.ShowDialogAsync<UIDeclarativeDialogPanel, string>(
+                    assetPath, cancellationToken: cancellationToken);
+
+                status = !opened
+                    ? UIAuthoringDialogStatus.OpenFailed
+                    : resultId != null
+                        ? UIAuthoringDialogStatus.Selected
+                        : UIAuthoringDialogStatus.Canceled;
+            }
+            catch (Exception ex)
+            {
+                LogManager.Error(UIAuthoringLog.Category, "ShowDialog failed: {0}", ex);
+                status = UIAuthoringDialogStatus.OpenFailed;
+            }
+            finally
+            {
+                subscription.Dispose();
+            }
+
+            var dialogResult = new UIAuthoringDialogResult(status, resultId);
+            PublishDialogResult(actionId, dialogResult);
+            return dialogResult;
+        }
+
+        private static void PublishDialogResult(string actionId, UIAuthoringDialogResult result)
+        {
+            MessageManager.Publish<string, UIAuthoringDialogResultMessage>(
+                actionId,
+                new UIAuthoringDialogResultMessage(actionId, result.Status, result.ResultId));
         }
 
         public void SetLayerVisibility(int layer, bool visible)

@@ -69,5 +69,34 @@ namespace XFramework.XUI.Authoring.Tests
             Assert.That(result, Is.Null);
             Assert.That(runtime.OpenDeclarativeCalls, Is.EqualTo(0));
         }
+
+        [Test]
+        public async Task ShowDialog_ForwardsStatus()
+        {
+            var runtime = new FakeActionRuntime
+            {
+                DialogResult = new UIAuthoringDialogResult(UIAuthoringDialogStatus.Selected, "confirm"),
+            };
+
+            UIAuthoringDialogStatus status = await UIAuthoringNavigation.ShowDialogAsync(
+                runtime, "ui/dialog", "shop.confirm", default);
+
+            Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.Selected));
+            Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(1));
+            Assert.That(runtime.LastDialogAddress, Is.EqualTo("ui/dialog"));
+            Assert.That(runtime.LastDialogActionId, Is.EqualTo("shop.confirm"));
+        }
+
+        [Test]
+        public async Task ShowDialog_EmptyActionId_ReturnsOpenFailed()
+        {
+            var runtime = new FakeActionRuntime();
+
+            UIAuthoringDialogStatus status = await UIAuthoringNavigation.ShowDialogAsync(
+                runtime, "ui/dialog", string.Empty, default);
+
+            Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(0));
+        }
     }
 }

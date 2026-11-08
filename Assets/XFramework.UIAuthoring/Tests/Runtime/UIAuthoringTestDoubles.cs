@@ -29,6 +29,12 @@ namespace XFramework.XUI.Authoring.Tests
         internal string LastLayerCall;
         internal int ReplaceCalls;
         internal string LastReplaceTarget;
+        internal UIDeclarativeDialogPanel DeclarativeDialog;
+        internal int ShowDeclarativeDialogCalls;
+        internal string LastDialogAddress;
+        internal string LastDialogActionId;
+        internal UIAuthoringDialogResult DialogResult =
+            new UIAuthoringDialogResult(UIAuthoringDialogStatus.Selected, "confirm");
         internal Exception CloseException;
         internal UniTaskCompletionSource Gate;
 
@@ -101,6 +107,19 @@ namespace XFramework.XUI.Authoring.Tests
             return UniTask.CompletedTask;
         }
 
+        public bool IsDeclarativeDialogOpen => DeclarativeDialog != null;
+
+        public UIDeclarativeDialogPanel GetDeclarativeDialog() => DeclarativeDialog;
+
+        public UniTask<UIAuthoringDialogResult> ShowDeclarativeDialogAsync(
+            string assetPath, string actionId, CancellationToken cancellationToken)
+        {
+            ShowDeclarativeDialogCalls++;
+            LastDialogAddress = assetPath;
+            LastDialogActionId = actionId;
+            return UniTask.FromResult(DialogResult);
+        }
+
         public void SetLayerVisibility(int layer, bool visible)
         {
             SetLayerVisibilityCalls++;
@@ -120,6 +139,12 @@ namespace XFramework.XUI.Authoring.Tests
         {
             var go = new GameObject(name, typeof(RectTransform));
             return go.AddComponent<UIDeclarativePanel>();
+        }
+
+        internal static UIDeclarativeDialogPanel CreateDialogPanel(string name = "Dialog")
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            return go.AddComponent<UIDeclarativeDialogPanel>();
         }
 
         internal static UIPanelDefinition CreateDefinition(

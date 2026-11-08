@@ -43,6 +43,19 @@ namespace XFramework.XUI.Authoring.Tests
             return (executor, runtime, session, panel, definition);
         }
 
+        private (UIActionExecutor executor, FakeActionRuntime runtime, UIActionSession session,
+            UIDeclarativeDialogPanel dialog, UIPanelDefinition definition) CreateDialog()
+        {
+            UIDeclarativeDialogPanel dialog = UIAuthoringTestFactory.CreateDialogPanel();
+            _created.Add(dialog.gameObject);
+            UIPanelDefinition definition = UIAuthoringTestFactory.CreateDefinition(UIPanelDefinitionKind.Dialog);
+            var binder = new UIDeclarativeBinder(dialog, definition);
+            var runtime = new FakeActionRuntime();
+            var session = new UIActionSession(runtime, dialog);
+            var executor = new UIActionExecutor(session, definition, binder);
+            return (executor, runtime, session, dialog, definition);
+        }
+
         private static UIActionBinding Binding(params UIAction[] actions)
         {
             return new UIActionBinding { Actions = new List<UIAction>(actions) };
@@ -204,6 +217,44 @@ namespace XFramework.XUI.Authoring.Tests
             Assert.That(called, Is.True);
             Assert.That(received.ActionId, Is.EqualTo("shop.buy"));
             Assert.That(received.Payload, Is.EqualTo("42"));
+        }
+
+        [Test]
+        public async Task ShowDialog_ForwardsToRuntime()
+        {
+            var (executor, runtime, _, _, _) = Create();
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.ShowDialog,
+                AssetPath = "ui/dialog",
+                ActionId = "shop.confirm",
+            }));
+
+            Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(1));
+            Assert.That(runtime.LastDialogAddress, Is.EqualTo("ui/dialog"));
+            Assert.That(runtime.LastDialogActionId, Is.EqualTo("shop.confirm"));
+        }
+
+        [Test]
+        public async Task CloseWithResult_OnDialog_SetsResultOnClose()
+        {
+            var (executor, runtime, _, dialog, definition) = CreateDialog();
+            dialog.SetDefinitionForTest(definition);
+            dialog.SetRuntimeForTest(runtime);
+            await dialog.OpenForTestAsync();
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.CloseWithResult,
+                ResultId = "confirm",
+            }));
+
+            Assert.That(runtime.CloseCalls, Is.EqualTo(1));
+
+            await dialog.CloseForTestAsync();
+            string result = await dialog.WaitResultAsync();
+            Assert.That(result, Is.EqualTo("confirm"));
         }
 
         [Test]

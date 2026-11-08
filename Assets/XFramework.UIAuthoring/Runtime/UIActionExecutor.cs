@@ -131,9 +131,23 @@ namespace XFramework.XUI.Authoring
                     return;
 
                 case UIActionKind.CloseWithResult:
+                    {
+                        if (_session.Panel is UIDeclarativeDialogPanel dialog)
+                        {
+                            await dialog.CloseWithResultAsync(action.ResultId);
+                            _session.Invalidate();
+                        }
+                        else
+                        {
+                            LogManager.Warning(UIAuthoringLog.Category,
+                                "CloseWithResult requires a declarative dialog.");
+                        }
+                        return;
+                    }
+
                 case UIActionKind.ShowDialog:
-                    LogManager.Warning(UIAuthoringLog.Category,
-                        "Action '{0}' is not implemented in this build.", action.Kind);
+                    await _session.Runtime.ShowDeclarativeDialogAsync(
+                        action.AssetPath, action.ActionId, default);
                     return;
 
                 case UIActionKind.HideSelf:

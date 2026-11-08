@@ -36,6 +36,13 @@ namespace XFramework.XUI.Authoring
 
         UniTask ShowTipAsync(string text, TipConfig config, CancellationToken cancellationToken);
 
+        bool IsDeclarativeDialogOpen { get; }
+
+        UIDeclarativeDialogPanel GetDeclarativeDialog();
+
+        UniTask<UIAuthoringDialogResult> ShowDeclarativeDialogAsync(string assetPath, string actionId,
+            CancellationToken cancellationToken);
+
         void SetLayerVisibility(int layer, bool visible);
 
         void SetLayerInteractive(int layer, bool interactive);

@@ -53,5 +53,37 @@ namespace XFramework.XUI.Authoring
 
             return await runtime.OpenDeclarativeAsync(assetPath, layer, cancellationToken);
         }
+
+        /// <summary>
+        /// 打开声明式对话框并等待结果状态；结果详情由 <see cref="UIAuthoringDialogResultMessage"/> 发布。
+        /// </summary>
+        public static UniTask<UIAuthoringDialogStatus> ShowDialogAsync(
+            string assetPath,
+            string actionId,
+            CancellationToken cancellationToken = default)
+        {
+            return ShowDialogAsync(new UIManagerActionRuntime(), assetPath, actionId, cancellationToken);
+        }
+
+        internal static async UniTask<UIAuthoringDialogStatus> ShowDialogAsync(
+            IUIActionRuntime runtime,
+            string assetPath,
+            string actionId,
+            CancellationToken cancellationToken)
+        {
+            if (runtime == null)
+                throw new ArgumentNullException(nameof(runtime));
+
+            if (string.IsNullOrEmpty(assetPath) || string.IsNullOrEmpty(actionId))
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowDialogAsync: assetPath or actionId is empty.");
+                return UIAuthoringDialogStatus.OpenFailed;
+            }
+
+            UIAuthoringDialogResult result = await runtime.ShowDeclarativeDialogAsync(
+                assetPath, actionId, cancellationToken);
+            return result.Status;
+        }
     }
 }
