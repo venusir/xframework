@@ -78,6 +78,18 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public void AudioManagerUnloadBank_ReachesBackend()
+        {
+            Assert.IsTrue(AudioManager.LoadBank("Master"));
+            Assert.IsTrue(AudioManager.IsBankLoaded("Master"));
+
+            Assert.IsTrue(AudioManager.UnloadBank("Master"));
+            Assert.IsFalse(AudioManager.IsBankLoaded("Master"));
+            Assert.AreEqual(1, _backend.BankUnloads.Count);
+            Assert.AreEqual("Master", _backend.BankUnloads[0]);
+        }
+
+        [Test]
         public async Task AudioManagerDestroy_DisposesProviderAndBackend()
         {
             await AudioManager.PlayAsync("event:/a");
