@@ -91,6 +91,13 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 - 已做：**`AudioHandle` 相等语义**（2026-10-20 · R3-AUD-004，公开 API 源兼容新增）——实现 `IEquatable<AudioHandle>` 与 `==`/`!=`/`GetHashCode`，按 Id / Generation 比较；代际是身份的一部分（ABA 防线）；基线已同步，回归 `Handles_CompareByIdAndGeneration`。
 - 已做：**音量刷新假 null、Sweep 的 break**（2026-10-20 · R3-AUD-002/003，本轮修复）——外部销毁的播放源上写 `volume` 会抛 MissingReference；当时 `Sweep`（现拆为 `AudioManagerImpl.SweepVoices` + `AudioSourceProvider.Poll`）的 `break` 让后面槽位不计入 active、其余死槽位轮不到。修法：刷新时跳过 `Source == null`；`break` 改 `continue`。
 - 已做：**全局暂停期间不回收在播音效（AudioListener.pause）**（2026-10-18 · 探针 + 本提交）——探针实测 `AudioListener.pause = true` 会让 `AudioSource.isPlaying` 变 false；`SweepVoices` 与 `AudioSourceProvider.Poll` 的 `Playing` / `Starting` 两态都识别全局暂停（暂停期间不回收、不计超时拍），恢复后照常判定（AUD-013）。
+- 已做：**FMOD 自动安装失败回滚按「本次成功加载的 bank」记账**（2026-11-08 · `da815828` / `0f0b8d60`）——安装开始时快照并去重 `Banks`，`loadedBanks` 只记录本次成功加载的 bank；失败点之后出现的项目预加载 bank 不再被误卸载，重复条目不再导致回滚漏卸；`backendFactory == null` 检查前移到全部早退之前。回归 `FmodInstallerTests` 五条新用例（修复前红）。
+- 已做：**FMOD provider/backend 失败路径收紧**（2026-11-08 · `1501fb30` / `176e5cc7` / `f81b76fc`）——`PlayAsync` 对 null/空白 location 返回 default 且不占槽；`BuildEventPath` 移入 try；backend 的 bus 三方法在 Dispose 后返回 false；`SafeStopAndRelease` 的 `isValid()` 纳入异常隔离；删除未使用的 internal `FmodProviderOptions.Default`。
+- 已做：**FMOD 包内守卫射程加宽**（2026-11-08 · `58631415` / `d73d5f32` / `e2e6a816` / `3d624463`）——公开类型正则覆盖修饰符/record/delegate；asmdef 绑定 `versionDefines.define` 与 `defineConstraints` 同值并覆盖 Tests asmdef；README 精确包名/版本；Resources 全目录扫描；README 文件树按相对路径；`.meta` 根仅 Assets 布局；AutoInit 属性正则；包边界全文本扫描。另补 `UnloadBank` 桥接用例（`6061a78a`）。
+- 暂不做：**不改核心对 `SetPaused` / `SetVolume` 返回 false 的回收行为**（2026-11-08 · 用户裁定）——核心把 false 当作音源已消失并回收槽位；FMOD backend 在任意 `RESULT != OK` 时也返回 false，语义更宽，瞬时失败可能提前回收 voice。本轮只写包 README 已知限制与 `FMOD.md`。重开判据：真实 FMOD 调用出现可复现的瞬时 false 导致误回收。
+- 已做：**明确显式 `AudioManager.UnloadBank` 不受 `OwnsBanks` 限制**（2026-11-08 · 文档订正）——「项目预加载的 bank 永不卸载」只适用于自动安装失败清理与 provider Dispose；包 README 与 `FMOD.md` 已写明。
+- 暂不做：**FMOD provider/backend 的主线程断言**（2026-11-08）——README 声明全部成员限主线程，但代码没有断言；核心 Audio 也没有同类断言，扩展包单独加会制造不一致。重开判据：出现跨线程误用的真实事故，或核心 Audio 统一加上主线程断言。
+- 未做：**预加载 bank 的 `LoadBankSamples` 补载**（2026-11-08）——若项目已加载 bank 且当时未加载采样数据，配置里的 `LoadBankSamples=true` 不会改变它；`FmodEventBackend.LoadBank` 对已加载 bank 提前返回。需要真实 bank 证据再决定是否补载。
 
 ## 与其它模块的边界（下一轮审计时先看这里）
 
