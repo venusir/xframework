@@ -3,7 +3,7 @@
 > **收件人**：框架作者 + 下一轮审计者。**不是**使用文档。
 > 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`（核心）与 `Assets/XFramework.UIAuthoring/README.md`（扩展包）——用法、已知限制、设计取舍一律留在那里，本文件不复述。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a 已实施并交付**（提交 `275f0168`→`1d2b5ce5`，扩展包 `Assets/XFramework.UIAuthoring/`），2b/3/4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
+> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；扩展包 `Assets/XFramework.UIAuthoring/`），3/4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
 
 ---
 
@@ -657,6 +657,8 @@ public static class UIDataProviderRegistry
 
 ### 7.9 `UIDeclarativeHudItem` 设计
 
+**状态（2026-11-08）**：已按本节实施（阶段 2b），提交 `e0e2679d`→`c2161bd0`；只做文本/本地化，未暴露 HUD 动作。
+
 - 基类 `UIHudItem : UIViewBase`；预制体根挂 `UIDeclarativeHudItem`，继承 `[RequireComponent(CanvasGroup)]`；根需要 `RectTransform`。
 - `OnOpenImpl`：先 `base.OnOpenImpl(userData)`（缓存相机/CanvasGroup、关 Raycaster），再按定义绑定文本/动作；`OnCloseImpl`：先解绑再 `base.OnCloseImpl(immediate)`；`OnPoolRecycle` 走基类释放 `Track`。
 - 不重写 `OnUpdate`；跟随、屏幕后隐藏、目标丢失回收全由 `UIHudItem` 负责。
@@ -735,6 +737,8 @@ public static class UIDataProviderRegistry
 - 包内自设守卫全部落地；`run-tests` 全量覆盖。
 
 ### 8.3 阶段 2b：声明式 HUD（文本）
+
+**状态（2026-11-08）**：已实施并交付（提交 `e0e2679d`→`c2161bd0`）。`UIDeclarativeHudItem`、HUD 校验规则 `UI-AUTH-HUD-*`、扫描器候选、`Samples~/Templates/Hud.prefab` 与 DemoHud 示例、包 README/CHANGELOG 与 Runtime API 基线全部落地；核心 `Assets/XFramework/**` 零改动。验证：UIAuthoring PlayMode 44 例 / EditMode 22 例全绿；模板经核心与扩展校验器 0 Error；示例编译通过。HUD 模板的裸消费方导入验收未跑（见 §十 P3）。
 
 **交付物**
 
@@ -816,7 +820,7 @@ public static class UIDataProviderRegistry
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
 | P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 构建图已过；**运行时半场（真实构建 / PlayMode 同包与依赖加载）未跑**——阶段 2a 已按 SO 落地，该验收仍待一次性探针 |
-| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` 模板已随 2a 交付（`Samples~/Templates/Panel.prefab` / `Dialog.prefab`，核心校验器 0 Error）；**裸消费方导入验收未跑**；HUD 模板待 2b |
+| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 Panel / Dialog / Hud 模板已随 2a/2b 交付（`Samples~/Templates/Panel.prefab` / `Dialog.prefab` / `Hud.prefab`，核心与扩展校验器 0 Error）；**裸消费方导入验收未跑** |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
 | P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
 | P6 IL2CPP/AOT | `IUIDataProvider.TryGet<T>` 的泛型实例化、无反射 | `[未实测]` | 阶段 3 至少一次 IL2CPP 构建；必要时 `link.xml` |
@@ -872,7 +876,7 @@ public static class UIDataProviderRegistry
 
 | 编号 | 决策 | 现在必须定？ | 阻塞什么 | 推荐 |
 |---|---|---|---|---|
-| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a 已完成（2026-11-08）**，下一阶段 2b |
+| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a/2b 已完成（2026-11-08）**，下一阶段 3 |
 | **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包或同包依赖采集）；P2 构建图已过，运行时 2a 补测 |
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |
