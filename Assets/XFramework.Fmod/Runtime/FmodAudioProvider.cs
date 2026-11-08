@@ -10,9 +10,9 @@ namespace XFramework.XAudio.Fmod
     /// <summary>
     /// FMOD 的 FMOD-free provider：只依赖 <see cref="IFmodEventBackend"/> 的 <c>int</c> 句柄，
     /// 干净克隆（无 FMOD）也能编译与用 fake backend 测试。
-    /// <para><b>provider 只做播放原语</b>；通道、三档音量、暂停闸门、计数与诊断仍由核心
-    /// <c>AudioManagerImpl</c> 负责。provider 句柄是 <c>槽位下标 + 代际</c>，不把 FMOD 实例塞进
-    /// <c>int</c>。</para>
+    /// <para><b>provider 实现播放原语</b>，并实现 core internal 的五个可选能力接口（参数 / bank /
+    /// bus / snapshot / 3D）；通道、三档音量、暂停闸门、计数与诊断仍由核心 <c>AudioManagerImpl</c>
+    /// 负责。provider 句柄是 <c>槽位下标 + 代际</c>，不把 FMOD 实例塞进 <c>int</c>。</para>
     /// <para><b>线程</b>：全部成员限主线程调用。</para>
     /// </summary>
     internal sealed class FmodAudioProvider : IAudioProvider, IAudioParameterProvider, IAudioBankProvider,
@@ -54,6 +54,14 @@ namespace XFramework.XAudio.Fmod
             if (request.ValidityToken.IsCancellationRequested)
                 return UniTask.FromResult(default(AudioProviderHandle));
 
+            // 输入校验先于预占：空资源键不是「槽位已满」，也不应把调用方取消吞掉。
+            if (string.IsNullOrWhiteSpace(location))
+            {
+                LogManager.Warning(LogCategories.Audio,
+                    "FMOD provider 的 location 为 null/空白，播放失败。");
+                return UniTask.FromResult(default(AudioProviderHandle));
+            }
+
             if (!_slots.TryReserve(out int slotIndex, out AudioProviderHandle handle))
             {
                 LogManager.Warning(LogCategories.Audio,
@@ -62,11 +70,12 @@ namespace XFramework.XAudio.Fmod
                 return UniTask.FromResult(default(AudioProviderHandle));
             }
 
-            string eventPath = BuildEventPath(location);
             int backendId = 0;
 
             try
             {
+                // 预占之后的全部路径都在异常隔离区内：任何异常都必须归还槽位。
+                string eventPath = BuildEventPath(location);
                 backendId = _backend.Create(eventPath);
                 if (backendId == 0)
                 {

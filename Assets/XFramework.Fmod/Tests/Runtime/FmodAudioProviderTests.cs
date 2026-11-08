@@ -94,6 +94,41 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public async Task PlayAsync_NullLocation_ReturnsDefaultWithoutConsumingSlot()
+        {
+            var provider = new FmodAudioProvider(_backend, new FmodProviderOptions("event:/", 1));
+            try
+            {
+                LogAssert.Expect(LogType.Warning, new Regex("location"));
+
+                var failed = await provider.PlayAsync(null, Request());
+                Assert.IsTrue(failed.IsDefault);
+                Assert.AreEqual(0, _backend.CreateCalls);
+
+                var handle = await provider.PlayAsync("event:/ok", Request());
+                Assert.IsFalse(handle.IsDefault, "空 location 不应占用槽位。");
+            }
+            finally
+            {
+                provider.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task PlayAsync_EmptyOrWhitespaceLocation_ReturnsDefaultWithoutCreating()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex("location"));
+            var empty = await _provider.PlayAsync(string.Empty, Request());
+            Assert.IsTrue(empty.IsDefault);
+
+            LogAssert.Expect(LogType.Warning, new Regex("location"));
+            var whitespace = await _provider.PlayAsync("   ", Request());
+            Assert.IsTrue(whitespace.IsDefault);
+
+            Assert.AreEqual(0, _backend.CreateCalls);
+        }
+
+        [Test]
         public async Task PlayAsync_AppliesInitialParametersBeforeStart()
         {
             var parameters = new[]
