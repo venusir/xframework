@@ -343,6 +343,18 @@ public class MainMenuPanel : UIPanelBase
 
 > **自检**：菜单 `Tools/XFramework/UI/Validate UI Prefabs` 会扫描选中文件夹（默认 `Assets`）下的 UI 候选预制体，检查上述根组件、绑定位置、约定前缀深度/类型/重名、根 RectTransform、池化变换、YooAsset 采集与 Tip 文本。扫描只读、不修改预制体，也不会在保存或构建时自动触发；`UIBinder` 的手工绑定和代码里的地址字符串不在检查范围内。
 
+#### 策划协作：预制体交接清单
+
+当前核心包的 UI 仍由程序写面板 / HUD / 对话框类；策划负责预制体、节点命名与 YooAsset 采集。交接前按下面三条核对：
+
+1. **面板**：根节点挂程序提供的 `UIPanelBase` 派生脚本；`UIPanelBinding` 与脚本同根；约定节点用 `txt_/img_/sld_/tgl_/btn_` 前缀、最多 5 层；根 RectTransform 自己设；进 YooAsset **主资源采集**。核心校验器对面板跑 `UI-PREFAB-001`–`008`。
+2. **HUD**：根节点挂程序提供的 `UIHudItem` 派生脚本；`Canvas` / `GraphicRaycaster` / `CanvasGroup` 由 `RequireComponent` 自动补；根需要 `RectTransform`；进主资源采集。**核心校验器对 HUD 只查根组件与 YooAsset 采集（`001`/`008`）**——约定命名、深度、重名、根 RectTransform 需要人工核对。
+3. **Tip**：根节点挂 `UITipItem`；根需要 `RectTransform`，根或后代必须有 `TMP_Text`；`CanvasGroup` 自动补；默认地址 `PF_UITipText`，程序可在 `Initialize` 后改 `TipAssetPath`；进主资源采集。核心校验器对 Tip 查 `001`/`008`/`009`（缺 TMP 文本）。
+
+**校验器是手动的**：菜单不会在保存或构建时自动跑；`UIBinder` 手工绑定与代码里的地址字符串不在检查范围；CI 目前没有机器可读的校验入口。HUD 的约定命名不在核心射程内，这是当前已知边界，不是使用方配置错误。
+
+**谁来改什么**：策划改预制体、命名、采集登记；程序改面板 / HUD / 对话框类、打开调用与地址字符串。Tip 的文字由调用方传入，预制体由策划维护。
+
 ### 5. 打开/关闭面板
 
 ```csharp
@@ -1355,9 +1367,9 @@ UIManager.ClearPreloads();
   **没有**做按 LRU 自动卸载——那是策略，应由项目决定何时调用。
 - **`Time.timeScale = 0` 会冻结整条 UI 每帧通路**（面板 `OnUpdate`、HUD 跟随、Tip 动画），因为驱动器挂在
   `UpdateManager` 的逻辑时间轴上。门面没有时间轴开关，逃生口与注意事项见「面板驱动更新」一节的警告框。
-- **手动 `UIManager.Update` 只驱动每帧档（Tier0）与 HUD**：分档面板（Tier1–7）由各自的档位驱动器驱动，
+- **手动 `UIManager.Update` 只驱动每帧档（Tier0）、HUD 与 Tip**：分档面板（Tier1–7）由各自的档位驱动器驱动，
   手动入口不覆盖它们；`Time.timeScale = 0` 时靠手动调用救不了分档面板。完整恢复路径见上一条与
-  UIA-002 的 `Initialize` 重注册（**`Initialize` 与 `SetInstance` 都会重接每帧与现存分档驱动器**）。
+  UIA-002 的 `Initialize` 重注册（**`Initialize` 与 `SetInstance` 都会重接每帧驱动器**）。
 - **面板的排序与分层方案不可替换**：`UISorting` 是静态类，面板**打开 / 置顶**时由 `RestampSortingOrders`
   按显示栈重排（关闭只摘栈、序号可能留空洞）；`UILayers` 的五个值是**建议值**（你可以给自己的层号），但排序空间的形状
   （层步长 32、每层 30 个面板序号（遮罩占第 31 个）、层号上限 899）是**模块不变量**——它与遮罩排序、栈重排、回池复位共同依赖，
@@ -1369,7 +1381,8 @@ UIManager.ClearPreloads();
   （R4-UIA-001）。把清理逻辑放在 `OnPoolRecycle` 里，不要只放在 `OnClose`。
 - **外部调用 `UpdateManager.Clear()` 会摘掉 UI 的驱动器**：它是公开 API，UI 无从感知，只有下一次
   `UIManager.Initialize` 才会重新注册——它会把**每帧驱动器与已有的全部分档驱动器**一起接回去；
-  `SetInstance` **不会**重接驱动器（UIA-002 / R3-UIA-010）。若你的重置流程里调了它，请在同一流程里重新进入
+  `SetInstance` **会**重接每帧驱动器（`EnsureFrameDriverRegistered`），但不会重新注册注入实例已有的分档驱动器
+  （UIA-002 / R3-UIA-010）。若你的重置流程里调了它，请在同一流程里重新进入
   UI 的 `Initialize`，否则界面会静默静止。
 - **UI 没有任何线程契约的运行时断言**：面板 / HUD / Tip 的创建、开合与驱动都必须在主线程调用（Unity 对象
   本身的约束），模块不做检测也不做切线程——跨线程调用是未定义行为。
