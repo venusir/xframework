@@ -16,31 +16,36 @@ namespace XFramework.XUI.Authoring
     /// </summary>
     internal sealed class UIDeclarativeBinder
     {
-        private readonly UIPanelBase _panel;
+        private readonly UIViewBase _view;
         private readonly UIPanelDefinition _definition;
 
-        internal UIDeclarativeBinder(UIPanelBase panel, UIPanelDefinition definition)
+        internal UIDeclarativeBinder(UIViewBase view, UIPanelDefinition definition)
         {
-            _panel = panel;
+            _view = view;
             _definition = definition;
         }
 
         internal void Bind(UIActionExecutor executor)
         {
-            if (_panel == null || _definition == null)
+            BindTexts();
+
+            if (_view == null || _definition == null || _definition.ActionBindings == null)
                 return;
 
-            if (_definition.TextBindings != null)
-            {
-                for (int i = 0; i < _definition.TextBindings.Count; i++)
-                    BindText(_definition.TextBindings[i]);
-            }
+            for (int i = 0; i < _definition.ActionBindings.Count; i++)
+                BindAction(_definition.ActionBindings[i], executor);
+        }
 
-            if (_definition.ActionBindings != null)
-            {
-                for (int i = 0; i < _definition.ActionBindings.Count; i++)
-                    BindAction(_definition.ActionBindings[i], executor);
-            }
+        /// <summary>
+        /// 只绑定文本：HUD（2b）没有动作，面板/对话框经 <see cref="Bind"/> 顺带绑定按钮。
+        /// </summary>
+        internal void BindTexts()
+        {
+            if (_view == null || _definition == null || _definition.TextBindings == null)
+                return;
+
+            for (int i = 0; i < _definition.TextBindings.Count; i++)
+                BindText(_definition.TextBindings[i]);
         }
 
         internal void SelectTab(string groupName, int index)
@@ -73,7 +78,7 @@ namespace XFramework.XUI.Authoring
 
             for (int i = 0; i < group.NodeNames.Count; i++)
             {
-                Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, group.NodeNames[i]);
+                Transform node = UIDeclarativeNodeFinder.Find(_view.transform, group.NodeNames[i]);
                 if (node == null)
                 {
                     Warn("SelectTab: node '{0}' not found.", group.NodeNames[i]);
@@ -86,7 +91,7 @@ namespace XFramework.XUI.Authoring
 
         internal void SetActive(string nodeName, bool active)
         {
-            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, nodeName);
+            Transform node = UIDeclarativeNodeFinder.Find(_view.transform, nodeName);
             if (node == null)
             {
                 Warn("SetActive: node '{0}' not found.", nodeName);
@@ -101,7 +106,7 @@ namespace XFramework.XUI.Authoring
             if (binding == null || string.IsNullOrEmpty(binding.NodeName))
                 return;
 
-            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, binding.NodeName);
+            Transform node = UIDeclarativeNodeFinder.Find(_view.transform, binding.NodeName);
             if (node == null)
             {
                 Warn("Text binding: node '{0}' not found.", binding.NodeName);
@@ -142,7 +147,7 @@ namespace XFramework.XUI.Authoring
             try
             {
                 // 显式传 owner：订阅会登记到面板 Track，回池时统一释放。
-                text.BindToLocalizedText(binding.LocalizationKey, _panel);
+                text.BindToLocalizedText(binding.LocalizationKey, _view);
             }
             catch (Exception ex)
             {
@@ -170,7 +175,7 @@ namespace XFramework.XUI.Authoring
                 text.text = LocalizationManager.Get(key);
                 IDisposable subscription = LocalizationManager.Subscribe(
                     _ => text.text = LocalizationManager.Get(key));
-                _panel.Track(subscription);
+                _view.Track(subscription);
             }
             catch (Exception ex)
             {
@@ -183,7 +188,7 @@ namespace XFramework.XUI.Authoring
             if (binding == null || string.IsNullOrEmpty(binding.ButtonNodeName))
                 return;
 
-            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, binding.ButtonNodeName);
+            Transform node = UIDeclarativeNodeFinder.Find(_view.transform, binding.ButtonNodeName);
             if (node == null)
             {
                 Warn("Action binding: button node '{0}' not found.", binding.ButtonNodeName);
@@ -198,7 +203,7 @@ namespace XFramework.XUI.Authoring
             }
 
             IDisposable handle = button.BindToClick(() => executor.ExecuteAsync(binding).Forget());
-            _panel.Track(handle);
+            _view.Track(handle);
         }
 
         private static void Warn(string format, params object[] args)

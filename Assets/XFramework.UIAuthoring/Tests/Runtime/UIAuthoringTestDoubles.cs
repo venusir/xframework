@@ -147,6 +147,12 @@ namespace XFramework.XUI.Authoring.Tests
             return go.AddComponent<UIDeclarativeDialogPanel>();
         }
 
+        internal static UIDeclarativeHudItem CreateHud(string name = "Hud")
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            return go.AddComponent<UIDeclarativeHudItem>();
+        }
+
         internal static UIPanelDefinition CreateDefinition(
             UIPanelDefinitionKind kind = UIPanelDefinitionKind.Panel)
         {
@@ -172,12 +178,12 @@ namespace XFramework.XUI.Authoring.Tests
             property.SetValue(panel, assetPath);
         }
 
-        internal static void InvokePoolRecycle(UIPanelBase panel)
+        internal static void InvokePoolRecycle(UIViewBase view)
         {
-            MethodInfo method = typeof(UIPanelBase).GetMethod(
+            MethodInfo method = typeof(UIViewBase).GetMethod(
                 "OnPoolRecycle",
                 BindingFlags.Instance | BindingFlags.NonPublic);
-            method.Invoke(panel, null);
+            method.Invoke(view, null);
         }
 
         internal static void Destroy(UnityEngine.Object obj)
