@@ -813,7 +813,7 @@ public static class UIDataProviderRegistry
 | 探针 | 问题 | 状态 | 何时跑 / 影响 |
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
-| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | `[未实测]` | **阶段 2a 前必跑**（决定 D2 SO/内联）：同包、依赖、跨包三种配置 + SO 未采集负向 + 开合/回池/`UnloadPanelAssetAsync` 后 SO 生命周期 |
+| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 运行时加载仍待阶段 2a 的 PlayMode/真实构建补测；D2 可选 SO（同包/依赖采集） |
 | P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | `[未实测]` | 阶段 2a（面板/对话框模板）与 2b（HUD 模板）前各跑一次裸消费方导入探针 |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
 | P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
@@ -823,6 +823,25 @@ public static class UIDataProviderRegistry
 | P9 Tip 本地化 | Tip 只有原始字符串，没有本地化重载 | **源码已坐实**（`TipConfig` 无 key） | 阶段 3 手工探针：调用方 `LocalizationManager.Get` 后显示；不纳入自动化 |
 | P10 声明式 Popup | 复用 `UIDeclarativePanel` 时与主面板抢单根；遮罩/捕获层行为 | **源码已坐实**（§2.3/§2.5），未跑 Unity | 阶段 2a 用 PlayMode 用例固化「同时开面板+弹窗会怎样」；阶段 4 再决定独立类型 |
 | P11 扩展包 Samples~ 登记 | `check-docs.ps1` 样例根是硬编码列表；新包不登记就没有编译通道 | **源码已坐实**（`Tools/check-docs.ps1:513-518`） | 阶段 2a 建包时同步改 `Tools/check-docs.ps1`；跑一次 `check-docs -Enforce` 验证 |
+
+### 10.1 P2 构建图探针结果（2026-11-08）
+
+**方法**：临时 Unity 工程（不碰仓库），YooAsset 2.3.18；创建 SO + `ProbeRef` prefab，按四组 collector 调 `AssetBundleCollectorSettingData.Setting.BeginCollect("ProbePackage", simulateBuild: false, useAssetDependencyDB: false)`，看 prefab 的 `CollectAssetInfo`、`DependAssets` 与 SO 的 `BundleName`。
+
+| case | prefab bundle | SO 显式 | SO 依赖 | SO bundle | 结论 |
+|---|---|---|---|---|---|
+| same | `probepackage_assets_probe_runtime.bundle` | true | true | 同一 bundle | 同包安全 |
+| dep | `...runtime.bundle` | true | true | `...shared.bundle` | 依赖采集安全 |
+| cross | `...runtime.bundle` | false | true | 未显式（隐式依赖） | 仍会进构建图；若 SharedPackage 也构建则可能重复 |
+| missing | `...runtime.bundle` | false | true | 未显式（隐式依赖） | 仍会进构建图；不会 null |
+
+**结论**：
+
+1. **SO 被 prefab 引用就一定会进构建图**：同包是显式；`DependAssetCollector` 是独立依赖 bundle；未采集/跨包是隐式依赖。`null` 只会在 SO 资产被删除/引用丢失时出现，不会因为「没被主资源采集」出现。
+2. **v1 定义资产应与 prefab 同包采集，或放在同包的 `DependAssetCollector`**：避免跨包显式采集导致同一 SO 被两个包各带一份；跨包共享留到有真实需求时再评估。
+3. **运行时加载仍需补测**：本探针是构建图（`BeginCollect`），不是运行时。`EditorSimulate` 的 `SimulateBuild` 会设置 `ECollectFlags.IgnoreGetDependencies / IgnoreStaticCollector / IgnoreDependCollector`（`CollectCommand.cs:40-44`），因此不能拿 EditorSimulate 证明依赖 bundle 加载；阶段 2a 用真实构建 / PlayMode 跑一次同包与依赖两种配置。
+
+**对 D2 的影响**：SO 的「未采集 → null」风险被排除；D2 仍推荐 SO，但采集规则写死为「同包或同包 `DependAssetCollector`」。P2 的运行时半场保留为 2a 验收项。
 
 ---
 
@@ -835,7 +854,7 @@ public static class UIDataProviderRegistry
 | 编号 | 决策 | 现在必须定？ | 阻塞什么 | 推荐 |
 |---|---|---|---|---|
 | **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4 |
-| **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包采集）；P2 失败停下确认后回退内联 |
+| **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包或同包依赖采集）；P2 构建图已过，运行时 2a 补测 |
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |
 | **D5**（Q7） | 声明式 Popup | 可延迟到阶段 4 | Popup 的零代码 | v1 不做；阶段 4 独立类型 |
@@ -876,16 +895,16 @@ public static class UIDataProviderRegistry
 | **B. 组件内联序列化字段** | `UIDeclarativePanel` 上挂一个 `[Serializable]` 定义类 | 随预制体走，零额外依赖；没有 P2 风险；分发最简单 | 不可复用；预制体 YAML diff 大；定义 Inspector 挤在组件上；变体复制定义 |
 | **C. 混合** | 组件同时有 `_definition`（SO）与 `_inline`，二选一 | 无 SO 也能用；可共享 | 两条真相；校验/优先级/迁移复杂；v1 不值得 |
 
-**推荐 A（同包采集）**：`UIPanelDefinition` 与预制体放同一 YooAsset 采集包/同一目录；先跑 P2。若 P2 失败，**停下确认 D2**，确认后整体回退 B，不做混合。理由：定义资产是「策划可编辑」的核心载体；SO 的独立校验与干净 diff 对长期维护价值最高。
+**推荐 A（同包采集）**：`UIPanelDefinition` 与预制体放同一 YooAsset 采集包/同一目录，或放在同包的 `DependAssetCollector`；先跑 P2。**P2 构建图已跑（§10.1）**：引用 SO 必进构建图；同包/依赖采集安全；未采集/跨包是隐式依赖；`null` 只在资产缺失时出现。因此 v1 不存在「SO 没被主资源采集就为 null」的风险，D2 可以直接选 SO；运行时加载仍需阶段 2a 补测。跨包共享定义会带来重复打包，v1 不做。
 
-**P2 的已知事实**（`[源码核对·YooAsset 2.3.18]` + `[未实测]`）：YooAsset 的 `LoadAssetAsync` 没有依赖参数，依赖加载发生在 `ProviderOperation` 内部：清单里的 `DependBundleIDs` 会被自动加载；未被显式采集的依赖会作为隐式依赖并入引用方 bundle。所以「预制体引用的 SO」大概率能加载，但**本仓没有任何预制体/SO/采集配置/真实构建用例**（`Assets` 下 `.prefab`/`.asset` 数量为 0），必须用 P2 探针实测同包、依赖、跨包三种配置；还要加两类对照：**SO 未采集 → 引用为 null**（负向），以及**开合/回池/`UnloadPanelAssetAsync` 后 SO 仍有效**（生命周期），不能只测「能加载」。
+**P2 的已知事实**（`[源码核对·YooAsset 2.3.18]` + `[构建图实测 2026-11-08]` + `[运行时未实测]`）：YooAsset 的 `LoadAssetAsync` 没有依赖参数，依赖加载发生在 `ProviderOperation` 内部：清单里的 `DependBundleIDs` 会被自动加载；未被显式采集的依赖会作为隐式依赖并入引用方 bundle。构建图探针（§10.1）已验证：prefab 引用的 SO 在 same/dep 是显式、在 cross/missing 是隐式依赖，四种配置都进构建图。**运行时**加载仍要阶段 2a 用真实构建 / PlayMode 补测——`EditorSimulate` 的 `SimulateBuild` 会忽略依赖收集，不能拿它证明依赖 bundle 加载。
 
 **补充权衡**：
 
 - **SO 作为预制体子资产**（`AssetDatabase.AddObjectToAsset`）：有 SO 的 Inspector/独立校验，又随预制体走、无 YooAsset 依赖；代价是每预制体一份、需要编辑器工具维护子资产。它是「既不想内联、又怕 P2」的折中；v1 不推荐（工具成本），但值得记下。
 - **同包采集与「可复用」有张力**：同包只允许同一采集包内的预制体共享定义；跨包共享必须走依赖采集，正是 P2 的另一配置。v1 的复用边界写死为「同包」，跨包留到 P2 通过后。
 - **扩展校验器必须自建 YooAsset 地址目录**：核心 `YooAssetUIPrefabAddressProvider` 是 `internal sealed`，扩展无法复用；`Open`/`Push` 目标解析与「定义资产是否被采集」都要重复实现。这是 2a 的真实工作量。
-- **空定义策略**：`_definition == null` 既可能是「故意静态预制体」，也可能是「SO 没被采集」；运行时无法区分。推荐：null = 静态预制体（允许打开），但校验器在预制体根有 `UIDeclarativePanel` 且 `_definition` 为空时给 Warning（提示「若不是有意静态，请检查 SO 采集」）；不要求定义非空。
+- **空定义策略**：`_definition == null` 既可能是「故意静态预制体」，也可能是「SO 资产缺失/引用丢失」；「没被主资源采集」已由 P2 构建图排除（§10.1）。推荐：null = 静态预制体（允许打开），但校验器在预制体根有 `UIDeclarativePanel` 且 `_definition` 为空时给 Warning（提示检查引用/采集），不要求定义非空。
 
 **如果选 B**：实现最快、分发最稳，但每个预制体一份定义，页面多了以后重复与 diff 噪音会线性增长；后续想共享需要迁移。
 
@@ -1042,7 +1061,7 @@ public static class UIDataProviderRegistry
 
 **这套组合的代价与风险**：
 
-- **P2** 决定 SO/内联；失败则**停下确认 D2**（不自动改写定义形态），确认后整体回退内联。
+- **P2 构建图已过**（§10.1）：引用 SO 必进构建图；同包/依赖安全；未采集/跨包是隐式依赖。运行时加载留阶段 2a 的真实构建 / PlayMode 补测；不再保留「P2 失败自动回退内联」的分支。跨包显式采集会重复打包，v1 写死「同包或同包 `DependAssetCollector`」。
 - **P3** 决定模板导入后的脚本引用；失败则模板改为「结构配方 + 程序挂脚本」，或把模板放到消费方项目自建。
 - **扩展校验器要自建地址目录**（核心 provider 是 `internal sealed`）；`Open`/`Push` 目标解析、定义资产采集检查都重复实现，是 2a 的真实工作量。
 - **`ShowDialog`/`ShowTip` 只在门面、不在 `IUIManager`**；扩展的测试与 fake 需要包一层，真实集成用探针。
@@ -1050,7 +1069,7 @@ public static class UIDataProviderRegistry
 - 核心零改动；不新增公开 API；不引第三方依赖。
 - 阶段 2a 的实现量最大（包骨架、定义、两个类型、动作、绑定、校验器、示例、测试、守卫），需要单独的实施计划与提交拆分。
 
-**如果用户不逐项回复**：文档按上述推荐默认落盘（D2 SO + P2 失败即停、D3 A'、D4 A、D5 v1 不做、D6 string + 状态、D7 面板/对话框随 2a、HUD 随 2b、D8 2b 文本 only、D9/D10 默认）；**实施不启动**——D1 是唯一必须明确说「开始」的项。
+**如果用户不逐项回复**：文档按上述推荐默认落盘（D2 SO（P2 构建图已过，运行时 2a 补测）、D3 A'、D4 A、D5 v1 不做、D6 string + 状态、D7 面板/对话框随 2a、HUD 随 2b、D8 2b 文本 only、D9/D10 默认）；**实施不启动**——D1 是唯一必须明确说「开始」的项。
 
 ---
 
