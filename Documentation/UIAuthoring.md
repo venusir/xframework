@@ -814,7 +814,7 @@ public static class UIDataProviderRegistry
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
 | P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 运行时加载仍待阶段 2a 的 PlayMode/真实构建补测；D2 可选 SO（同包/依赖采集） |
-| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | `[未实测]` | 阶段 2a（面板/对话框模板）与 2b（HUD 模板）前各跑一次裸消费方导入探针 |
+| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativeHudItem` 模板在 2a/2b 各补一次 |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
 | P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
 | P6 IL2CPP/AOT | `IUIDataProvider.TryGet<T>` 的泛型实例化、无反射 | `[未实测]` | 阶段 3 至少一次 IL2CPP 构建；必要时 `link.xml` |
@@ -842,6 +842,23 @@ public static class UIDataProviderRegistry
 3. **运行时加载仍需补测**：本探针是构建图（`BeginCollect`），不是运行时。`EditorSimulate` 的 `SimulateBuild` 会设置 `ECollectFlags.IgnoreGetDependencies / IgnoreStaticCollector / IgnoreDependCollector`（`CollectCommand.cs:40-44`），因此不能拿 EditorSimulate 证明依赖 bundle 加载；阶段 2a 用真实构建 / PlayMode 跑一次同包与依赖两种配置。
 
 **对 D2 的影响**：SO 的「未采集 → null」风险被排除；D2 仍推荐 SO，但采集规则写死为「同包或同包 `DependAssetCollector`」。P2 的运行时半场保留为 2a 验收项。
+
+### 10.2 P3 模板机制探针结果（2026-11-08）
+
+**方法**：本地 UPM 包 `com.xfw.uiauthoring.probe`（`Runtime/ProbePanel.cs` + asmdef + `Samples~/Templates/Probe.prefab`），裸消费方工程通过 `file:` 引用；把样例 Prefab 复制进 `Assets`（模拟 Package Manager 的 Sample 导入结果），用 `PrefabUtility.SaveAsPrefabAsset` 从实例创建 Prefab Variant，再实例化 Variant。
+
+| 配置 | 包程序集 | 样例 Prefab | Prefab 组件 | Variant 组件 | 实例化组件 |
+|---|---|---|---|---|---|
+| 有包 | `Xfw.UIAuthoring.Probe.dll` ✅ | ✅ | ✅ | ✅ | ✅ |
+| 移除包 | ❌ | ✅（Prefab 仍在） | ❌ Missing Script | ❌ | ❌ |
+
+**结论**：
+
+1. **包内脚本 → 样例 Prefab → Prefab Variant → 消费方实例**这条链是通的：脚本 GUID 在包 `Runtime`，样例 Prefab 在 `Samples~/Templates`，复制到消费方后 GUID 仍解析；Variant 保留脚本引用；实例化后组件可 `GetComponent`。
+2. **移除包后模板会变 Missing Script**：模板不是自包含资产；README 必须写明「模板导入后归项目所有，卸载扩展包会断脚本引用」。
+3. **范围**：本探针用的是 `ProbePanel : MonoBehaviour` 替身，且样例是「复制进 Assets」模拟 Package Manager 导入；实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativeHudItem` 模板（含 core 依赖、真实 Sample 导入入口）在 2a/2b 各补一次。
+
+**对 D7 的影响**：模板机制可用；D7 的「面板/对话框随 2a、HUD 随 2b」不变；模板维护成本（导入后不随包升级）是已知边界。
 
 ---
 
@@ -1008,6 +1025,8 @@ public static class UIDataProviderRegistry
 
 **推荐 A**：面板/对话框模板随阶段 2a，HUD 模板随 2b；阶段 1 只交付文档 + P2/P3 探针。理由：预制体根节点必须挂 `UIPanelBase` 子类，没有可挂载脚本就是 Missing Script；模板的价值在于固定根结构，必须有真实根组件。
 
+**P3 机制已过（§10.2）**：包内脚本 → 样例 Prefab → Prefab Variant → 消费方实例的脚本引用全部保持；移除包后变 Missing Script，是已知边界。实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativeHudItem` 模板在 2a/2b 各补一次。
+
 **补充（模板是「一次性起点」，不是长期同步资产）**：`Samples~` 是导入时复制，包更新不会自动更新消费方已经复制出去的模板；卸载扩展包后模板根脚本会变 Missing Script。README 要写明「模板导入后归项目所有，包升级不覆盖」。P3 分两类跑：面板/对话框模板、HUD 模板。
 
 ### 11.10 D8 HUD 实施阶段与交互性
@@ -1053,7 +1072,7 @@ public static class UIDataProviderRegistry
 
 ### 11.13 推荐组合与下一步
 
-1. **先跑 P2/P3 探针**：P2（预制体引用的 SO 随 YooAsset 加载，含负向/生命周期）决定 D2；P3（模板跨项目导入，按面板/对话框与 HUD 分两类）决定 D7。
+1. **P2/P3 已跑**（§10.1 / §10.2）：P2 构建图通过（SO 必进构建图；同包/依赖安全；运行时留 2a 补测）；P3 模板机制通过（实际模板留 2a/2b 补测）。
 2. **阶段 2a**：面板/对话框模板（随 2a）+ `UIDeclarativePanel` + `UIDeclarativeDialogPanel`（string 结果 + 状态字段）+ 动作集（A：基类型打开；D3 A'：keyed message、消息不带 `View`、禁用缓冲订阅；`ShowDialog` 单飞）+ 两个校验器。
 3. **阶段 2b**：HUD 模板（随 2b）+ `UIDeclarativeHudItem` 文本/本地化；2b 不暴露 HUD 动作，关闭用 `HideHud(target)`。
 4. **阶段 3**：`IUIDataProvider` + 面板/HUD 数据绑定；HUD 才真正有用。
@@ -1062,7 +1081,7 @@ public static class UIDataProviderRegistry
 **这套组合的代价与风险**：
 
 - **P2 构建图已过**（§10.1）：引用 SO 必进构建图；同包/依赖安全；未采集/跨包是隐式依赖。运行时加载留阶段 2a 的真实构建 / PlayMode 补测；不再保留「P2 失败自动回退内联」的分支。跨包显式采集会重复打包，v1 写死「同包或同包 `DependAssetCollector`」。
-- **P3** 决定模板导入后的脚本引用；失败则模板改为「结构配方 + 程序挂脚本」，或把模板放到消费方项目自建。
+- **P3 机制已过**（§10.2）：包内脚本 → 样例 Prefab → Variant → 实例的脚本引用保持；移除包后 Missing Script 是已知边界。实际模板 2a/2b 补测。
 - **扩展校验器要自建地址目录**（核心 provider 是 `internal sealed`）；`Open`/`Push` 目标解析、定义资产采集检查都重复实现，是 2a 的真实工作量。
 - **`ShowDialog`/`ShowTip` 只在门面、不在 `IUIManager`**；扩展的测试与 fake 需要包一层，真实集成用探针。
 - **HUD 交互是独立设计题**：2b 只做文本；按钮/动作需要 `interactive` 开关或程序触发入口，v1 不做。
