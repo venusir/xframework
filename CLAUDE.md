@@ -110,8 +110,8 @@
 | `Documentation/Luban.md` | 维护者(接第三方配置表工具时) | 接入配方:框架侧契约、工具链步骤、已核对事实与版本漂移点。**随第三方工具版本漂移的内容只在这里,不进包** |
 | `Documentation/CI.md` | 维护者(排期与重开 CI 时) | CI 的成本要点(Unity 许可形态 / runner / 与测试壳关系,外部事实标核对状态)与裁定:暂不接入 + 三条重开判据。**随外部平台政策漂移的内容只在这里,不进包** |
 | `Documentation/Cinemachine.md` | 维护者(升级 Cinemachine / 审计相机后端时) | Cinemachine 3.1.7 后端的版本、3.x API 实测事实、升级与漂移点;后端已并入核心包 `Runtime/Camera/Cinemachine/`。**随 Cinemachine 版本漂移的内容只在这里,不进包** |
-| `Documentation/AudioProvider.md` | 维护者(实现/审计 Audio 播放引擎缝时) | `IAudioProvider` 设计与实现记录:核心语义与播放原语边界、`Poll` 状态机、容量/取消/通道副作用、provider 中立控制面(参数/bank/bus/snapshot/3D)、FMOD 分包形状、测试与门禁、已定 / 待裁(扩展)。核心 2026-10-25 已实现并完成复审修复;2026-10-26 新增中立控制面与 FMOD-free 扩展包;真实 FMOD 集成/Wwise 待后续 |
-| `Documentation/FMOD.md` | 维护者(评估音频中间件适配 / 升级 FMOD 时) | FMOD 扩展的 provider 能力映射、仅 AudioManager 的公开面、自动安装与 Phase 2 条件程序集(Phase 1 FMOD-free 已实现;真实 SDK 集成待探针)。**随 FMOD 版本漂移的内容只在这里,不进包** |
+| `Documentation/AudioProvider.md` | 维护者(实现/审计 Audio 播放引擎缝时) | `IAudioProvider` 设计与实现记录:核心语义与播放原语边界、`Poll` 状态机、容量/取消/通道副作用、provider 中立控制面(参数/bank/bus/snapshot/3D)、FMOD 分包形状、测试与门禁、已定 / 待裁(扩展)。核心 2026-10-25 已实现并完成复审修复;2026-10-26 新增中立控制面与 FMOD-free 扩展包;2026-11-07 Phase 2 真实 FMOD 集成已实现(真实 bank/event 冒烟待 Studio 工程);Wwise 待后续 |
+| `Documentation/FMOD.md` | 维护者(评估音频中间件适配 / 升级 FMOD 时) | FMOD 扩展的 provider 能力映射、仅 AudioManager 的公开面、自动安装与 Phase 2 条件程序集(Phase 1 FMOD-free 与 Phase 2 真实集成均已实现;真实 bank/event 冒烟待 Studio 工程)。**随 FMOD 版本漂移的内容只在这里,不进包** |
 | `Documentation/Wwise.md` | 维护者(评估音频中间件适配 / 升级 Wwise 时) | Wwise 的 `IAudioProvider` 设计(未实现)、Launcher 安装、许可限制、PlayingID/回调与 bank 模型。**随 Wwise 版本漂移的内容只在这里,不进包** |
 | `Assets/XFramework/CHANGELOG.md` | 双方 | 变更流水:改了什么、为什么、根因与实测证据 |
 
