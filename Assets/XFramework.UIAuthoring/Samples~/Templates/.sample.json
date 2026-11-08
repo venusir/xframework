@@ -1,0 +1,5 @@
+{
+	"displayName": "声明式面板/对话框模板",
+	"description": "预置根结构（Canvas / GraphicRaycaster / 声明式根组件）与命名子节点的 Panel / Dialog 预制体；复制后加子页，再按定义资产配置节点名。",
+	"createSeparatePackage": false
+}

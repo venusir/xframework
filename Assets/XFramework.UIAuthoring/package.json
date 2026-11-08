@@ -20,5 +20,17 @@
   "licensesUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/LICENSE.md",
   "documentationUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/README.md",
   "changelogUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/CHANGELOG.md",
+  "samples": [
+    {
+      "displayName": "声明式面板/对话框模板",
+      "description": "预置根结构（Canvas / GraphicRaycaster / 声明式根组件）与命名子节点的 Panel / Dialog 预制体；复制后加子页，再按定义资产配置节点名。",
+      "path": "Samples~/Templates"
+    },
+    {
+      "displayName": "声明式 UI 示例",
+      "description": "声明式面板 + 对话框 + 定义资产 + 演示脚本：按钮打开对话框并用 CloseWithResult 返回结果，另含 Custom 动作消息。",
+      "path": "Samples~/DeclarativeDemo"
+    }
+  ],
   "dependencies": {}
 }

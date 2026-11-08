@@ -510,12 +510,13 @@ if ($Module) {
         if ($treeProblems.Count -gt 10) { Write-Host "      …共 $($treeProblems.Count) 处" -ForegroundColor Yellow }
     }
     # 示例编译：Samples~ 不参与 Unity 编译，单独走一条临时 csproj（见 Tools/check-samples.ps1）。
-    # 两个样例根都要编：核心包与同级可选包 XFramework.Luban。
+    # 三个样例根都要编：核心包与同级可选包 XFramework.Luban、XFramework.UIAuthoring。
     $sampleProblems = @()
     $sampleScript = Join-Path $PSScriptRoot "check-samples.ps1"
     $sampleRoots = @(
         "Assets/XFramework/Samples~",
-        "Assets/XFramework.Luban/Samples~"
+        "Assets/XFramework.Luban/Samples~",
+        "Assets/XFramework.UIAuthoring/Samples~"
     )
     if (Test-Path $sampleScript) {
         foreach ($samplesRoot in $sampleRoots) {

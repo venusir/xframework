@@ -117,6 +117,18 @@ Assets/XFramework.UIAuthoring/
     └── DeclarativeDemo/（面板/对话框预制体 + 定义资产 + UIAuthoringDemo.cs + .sample.json）
 ```
 
+## 模板与示例
+
+通过 Package Manager 的 Samples 页签导入：
+
+- **声明式面板/对话框模板**（`Samples~/Templates`）：`Panel.prefab` / `Dialog.prefab`。根节点已带 `Canvas` / `GraphicRaycaster` 与声明式根组件，子节点按 `txt_` / `btn_` 命名；复制一份作为你的面板起点，再加子页与节点。
+- **声明式 UI 示例**（`Samples~/DeclarativeDemo`）：`DemoPanel.prefab` / `DemoDialog.prefab` + 两个定义资产 + `UIAuthoringDemo.cs`。导入后需要：
+  1. 把两个预制体加入消费方 YooAsset **主资源采集**，地址分别设为 `ui/panels/demo` / `ui/dialogs/demo`（与定义里的 `ShowDialog.AssetPath` 一致）；
+  2. 两个定义资产与预制体**同包采集**（或同包 `DependAssetCollector`）；
+  3. 场景里放一个 `UIRootNode`，把 `UIAuthoringDemo` 挂到任意物体上按 Play。
+
+模板是**导入时复制**：包升级不会覆盖你改过的模板；卸载本包后模板根组件会变成 Missing Script。模板只是起点，不是运行时强制结构。
+
 ## 行为契约
 
 - **单根**：`UIDeclarativePanel` 是单一具体类型，核心按具体类型登记；同一时刻只能打开一个声明式面板。
