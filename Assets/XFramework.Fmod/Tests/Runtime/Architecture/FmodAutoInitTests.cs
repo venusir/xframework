@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Reflection;
+using System.Text.RegularExpressions;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -11,6 +12,16 @@ namespace XFramework.XAudio.Fmod.Tests
     [TestFixture]
     public class FmodAutoInitTests
     {
+        private static readonly Regex RuntimeEntryPattern = new Regex(
+            @"^[ \t]*\[\s*(?:UnityEngine\.)?RuntimeInitializeOnLoadMethod(?:Attribute)?" +
+            @"\s*\(\s*(?:UnityEngine\.)?RuntimeInitializeLoadType\.BeforeSceneLoad\s*\)\s*\]",
+            RegexOptions.Multiline);
+
+        private static readonly Regex EditorEntryPattern = new Regex(
+            @"^[ \t]*\[\s*(?:UnityEditor\.)?InitializeOnLoadMethod(?:Attribute)?" +
+            @"\s*(?:\(\s*\))?\s*\]",
+            RegexOptions.Multiline);
+
         [Test]
         public void IntegrationAutoInstall_HasRuntimeEntryAndEscapeHatch()
         {
@@ -18,11 +29,42 @@ namespace XFramework.XAudio.Fmod.Tests
             if (source == null)
                 Assert.Ignore("找不到 Integration/FmodAutoInstall.cs；跳过 AutoInit 源码守卫。");
 
-            StringAssert.Contains("RuntimeInitializeOnLoadMethod", source);
-            StringAssert.Contains("RuntimeInitializeLoadType.BeforeSceneLoad", source);
-            StringAssert.Contains("XFW_DISABLE_FMOD_AUTOINSTALL", source);
-            StringAssert.DoesNotContain("[InitializeOnLoadMethod", source,
+            Assert.IsTrue(RuntimeEntryPattern.IsMatch(source),
+                "自动安装必须挂 [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]。");
+            Assert.IsFalse(EditorEntryPattern.IsMatch(source),
                 "自动安装不应挂编辑器 InitializeOnLoadMethod；它只在运行时创建 FMOD 实例。");
+            StringAssert.Contains("XFW_DISABLE_FMOD_AUTOINSTALL", source);
+        }
+
+        [Test]
+        public void AutoInitSourceValidator_RequiresBeforeSceneLoadAttribute()
+        {
+            const string afterOnly =
+                "// BeforeSceneLoad\n" +
+                "[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]\n" +
+                "private static void AutoInstall() {}";
+            Assert.IsFalse(RuntimeEntryPattern.IsMatch(afterOnly),
+                "注释里的 BeforeSceneLoad 不应让错误档位蒙混过关。");
+
+            const string correct =
+                "[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]\n" +
+                "private static void AutoInstall() {}";
+            Assert.IsTrue(RuntimeEntryPattern.IsMatch(correct));
+        }
+
+        [Test]
+        public void AutoInitSourceValidator_RejectsEditorAttributeAliases()
+        {
+            string[] aliases =
+            {
+                "[InitializeOnLoadMethod]",
+                "[InitializeOnLoadMethod()]",
+                "[UnityEditor.InitializeOnLoadMethod]",
+                "[UnityEditor.InitializeOnLoadMethodAttribute]",
+            };
+
+            foreach (string alias in aliases)
+                Assert.IsTrue(EditorEntryPattern.IsMatch(alias), "应命中：" + alias);
         }
 
         [Test]
