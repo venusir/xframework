@@ -11,11 +11,13 @@ namespace XFramework.XAudio
     /// 音频管理器外观。提供静态方法直接访问播放、通道音量与查询能力。
     /// <para>内部持有 <see cref="IAudioManager"/> 实例（默认 <see cref="AudioManagerImpl"/>），所有调用委托到该实例。</para>
     /// <para>使用前需调用 <see cref="Initialize"/> 或 <see cref="SetInstance"/>。</para>
-    /// <para><b>资源一律以 location 字符串标识</b>，经 <c>XAsset</c> 异步加载——本模块不提供直接传
-    /// <c>AudioClip</c> 的重载。这带来两点：界面上的公开面<b>不含任何 Unity 内置音频类型</b>，第三方可以把
-    /// 整套底层换掉——推荐实现 <see cref="IAudioProvider"/> 并经 <see cref="SetProvider"/> 注入
-    /// （保留框架的通道/音量/暂停/计数语义），整体替换管理器见 <see cref="IAudioManager"/>；
-    /// 以及每次播放的资源生命周期只有一套语义，调用方不会因为「自己释放了资源」而让声音静默中断。</para>
+    /// <para><b>资源一律以 location 字符串标识</b>：默认内置实现把它当作 <c>XAsset</c> 资源地址并异步
+    /// 加载；自定义 <see cref="IAudioProvider"/>（如 FMOD 扩展）可把 location 解释为自己的事件名。
+    /// 本模块不提供直接传 <c>AudioClip</c> 的重载。这带来两点：界面上的公开面<b>不含任何 Unity 内置
+    /// 音频类型</b>，第三方可以把整套底层换掉——推荐实现 <see cref="IAudioProvider"/> 并经
+    /// <see cref="SetProvider"/> 注入（保留框架的通道/音量/暂停/计数语义），整体替换管理器见
+    /// <see cref="IAudioManager"/>；以及每次播放的资源生命周期只有一套语义，调用方不会因为「自己释放了
+    /// 资源」而让声音静默中断。</para>
     /// </summary>
     /// <example>
     /// <code>
