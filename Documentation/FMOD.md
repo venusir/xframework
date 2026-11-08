@@ -1,9 +1,9 @@
-# FMOD —— 扩展包设计与实施状态（Phase 1 FMOD-free 已实现；Phase 2 集成待 SDK）
+# FMOD —— 扩展包设计与实施状态（Phase 1 FMOD-free 与 Phase 2 真实集成均已实现；真实 bank/event 冒烟待 Studio 工程）
 
 > **收件人**：框架维护者（实现或审计 FMOD 扩展时）。**不是**随包发布的使用文档。
 > **状态**：核心 provider 中立控制面与 `Assets/XFramework.Fmod` 的 FMOD-free 层已于 2026-10-26 实现；
-> 真实 FMOD 集成程序集（条件编译 + `FMODUnity` + 自动安装）**尚未实现**，需要 FMOD 2.04 Asset Store UPM
-> 与 SDK 探针。
+> 真实 FMOD 集成程序集（条件编译 + `FMODUnity` + 自动安装）已于 2026-11-07 实现并用本地 UPM 包完成
+> 签名/包名/初始化档位探针。真实 bank/event 冒烟仍需 FMOD Studio 2.04 工程 + bank。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
@@ -16,7 +16,8 @@
 | `[未实测]` | 只有官方文档或推理支撑 |
 
 **核对基准**：FMOD for Unity 2.04（Asset Store UPM；2.04 为 UPM-only，2.03 仍可手动 UPM 化）。
-**本机未安装 FMOD SDK，Phase 2 的真实 API 签名、包名、程序集名与初始化档位均未实测。**
+**2026-11-07 已用本地 UPM 包 `com.fmod.fmod-for-unity.v204` / `2.4.0` 完成 API 签名、包名、程序集名
+与初始化档位探针（§九）；本仓当前 manifest 不含 FMOD，真实 bank/event 冒烟仍需 Studio 工程。**
 
 ---
 
@@ -92,16 +93,16 @@ internal interface IAudioSpatialProvider { bool TrySetPosition(AudioProviderHand
 | bus | `AudioManager.SetBusVolume/SetBusMuted/SetBusPaused` | 路径如 `bus:/SFX`；核心原样透传 |
 | snapshot | `AudioManager.StartSnapshot/StopSnapshot` | 路径如 `snapshot:/Pause`；停止用 ALLOWFADEOUT（Phase 2） |
 | bank | `AudioManager.LoadBank/UnloadBank/IsBankLoaded` | 同步加载；大 bank 会阻塞 |
-| `set3DAttributes` | `AudioPlayOptions.Position` + `AudioManager.SetPosition` | 起播写一次，之后手动更新；不自动跟随 Transform |
+| `set3DAttributes` | `AudioPlayOptions.Position` + `AudioManager.SetPosition` | 仅当 `AudioPlaybackRequest.SpatialBlend > 0` 时起播写一次，之后手动更新；不自动跟随 Transform |
 | 事件内建循环 | `AudioPlayOptions.Loop` 不生效 | 以 Studio 事件编排为准；`Poll` 报告真实状态 |
 
 ### 3.1 provider 原语映射
 
-| provider 成员 | FMOD 实现（Phase 2 目标） |
+| provider 成员 | FMOD 实现（Phase 2 已实现） |
 | --- | --- |
 | `PlayAsync(location, request, ct)` | 解析事件路径 → `RuntimeManager.CreateInstance` → 应用起播前参数 → volume/pitch/3D → `start()`；失败释放并返回 default |
 | `Stop(handle)` | `EventInstance.stop(...)`；返回是否真的停掉 |
-| `Release(handle)` | 停播（若需要）→ `release()` → 归还槽位、递增代际；幂等 |
+| `Release(handle)` | 停播（若需要）→ `release()` → 归还槽位；代际在下次 `TryReserve` 占槽时递增；幂等 |
 | `SetPaused(handle, paused)` | `setPaused`；句柄失效返回 false |
 | `SetVolume(handle, volume)` | `setVolume`（最终音量，核心已算好） |
 | `Poll(handle)` | `isValid` / `getPlaybackState` / `getPaused` → `Invalid` / `Starting` / `Playing` / `Paused` / `Stopped` |
@@ -161,6 +162,8 @@ Assets/XFramework.Fmod/
   构造 backend、加载 `settings.Banks`（`LoadBankSamples`）→ 构造 `FmodAudioProvider` →
   `AudioManager.SetProvider(provider, settings.CreateAudioInitOptions())`。失败先清理本次新加载的 bank
   与半成品、记 Error，`AudioManager` 保持未初始化。
+- 失败回滚只卸载「本次安装成功加载的 bank」：安装开始时会快照并去重 `Banks`，预加载 bank 永不进入
+  ownership；回滚与成功路径使用同一份快照，不重新读取配置资产。
 - `OwnsBanks` 只卸载 provider 自己成功加载、且加载前未加载的 bank；项目预加载的 bank 永不卸载。
   bank 参数是文件名（`Master` / `Master.strings`），不是 `bank:/` 路径。
 - 配置资产在启动时读一次并快照；之后修改资产不生效。
@@ -176,12 +179,17 @@ Assets/XFramework.Fmod/
 - `AudioManager.Pause()` 只暂停活跃 voice，不暂停 bus/snapshot；`AudioListener.pause` / `AudioListener.volume`
   不作用于 FMOD。
 - bank 在 `LoadBank` 时同步加载；大 bank 会卡主线程。
-- `AudioOptions.Loop` 不生效；`Pitch` / `SpatialBlend` 只能近似；3D 衰减/遮挡由 Studio 事件编排。
+- `AudioPlayOptions.Loop` 不生效；`Pitch` / `SpatialBlend` 只能近似；3D 衰减/遮挡由 Studio 事件编排。
 - `AudioManager.Play` 返回时可能仍在 Loading：`SetParameter` / `SetPosition` 可能返回 false；起播前参数用
   `InitialParameters`，需要立即逐次控制用 `PlayAsync`。
 - 无逐 voice 暂停/音量、无事件回调、无普通事件 stop fade、无 Wwise。
 - 扩展包 Phase 2 已实现；首轮 `FMODStudioSettings` 缺失时自动安装跳过（需先跑 Setup Wizard），
   根 README 已更新状态。
+- **显式 `AudioManager.UnloadBank` 不受 `OwnsBanks` 限制**：`OwnsBanks` 只约束 provider 销毁时
+  卸载哪些 bank；「项目预加载的 bank 永不卸载」只适用于自动安装失败清理与 provider Dispose。
+- **`SetPaused` / `SetVolume` 的 false 语义比核心预期更宽**：核心把 provider 返回 false 当作音源已
+  消失并回收槽位；FMOD backend 在 `RESULT != OK` 时也返回 false，瞬时失败可能提前回收 voice。
+  只记录，不改行为；重开判据见 `Modules/Audio.md` 台账。
 
 ---
 
@@ -286,6 +294,11 @@ Assets/XFramework.Fmod/
   `FmodEventBackend`、`FmodInstaller` / `FmodAutoInstall` 自动安装、条件测试与包内守卫。自动安装
   `BeforeSceneLoad`；`AudioManager` 已初始化时跳过；首轮 `FMODStudioSettings` 缺失时 Error + 跳过。
   真实 bank/event 冒烟需 FMOD Studio 2.04 工程 + bank，缺省 `Assert.Ignore`。
+- **2026-11-08 审计修复（已做）**：自动安装失败回滚改为按「本次成功加载的 bank」记账；`PlayAsync`
+  拒绝 null/空白 location 并保证占槽后异常归还；backend 的 bus 三方法在 Dispose 后返回 false；
+  `SafeStopAndRelease` 的 `isValid()` 纳入异常隔离；包内守卫加宽（公开类型正则、asmdef 绑定、
+  精确包名/版本、Resources 全目录、README 相对路径树、`.meta` 根布局、AutoInit 属性正则、包边界
+  全文本扫描）。
 
 ---
 
@@ -304,3 +317,8 @@ Assets/XFramework.Fmod/
 - **Wwise 仍 `暂不做`**：核心已有中立控制面，但 Wwise 的 RTPC/PlayingID/回调/3D emitter 映射未验证；
   重开判据是真实 Wwise 项目 + SDK 可编译验证（见 `Documentation/Wwise.md`）。
 - **核心包不声明 FMOD 依赖**；扩展包 `package.json.dependencies` 为空。
+- **自动安装回滚按「本次成功加载的 bank」记账**：不再用「当前已加载且不在已见列表」反推 ownership；
+  失败点之后才出现的项目预加载 bank 不会被误卸载，重复条目在快照阶段去重。
+- **`SetPaused` / `SetVolume` 的 false 语义与显式 `UnloadBank` 边界只记录不改行为**（2026-11-08 ·
+  用户裁定）：前者等真实 FMOD 出现可复现的瞬时 false 误回收再收紧；后者明确 `OwnsBanks` 只约束
+  provider 销毁，显式 `UnloadBank` 始终可卸载任意已加载 bank。

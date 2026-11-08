@@ -211,7 +211,7 @@
 
 **同级可选包**：`Assets/XFramework.Luban/` 不在核心六道门禁的射程内（`check-docs.ps1` 的 XML 文档/源码参与/`Runtime/` 模块树/`Assets/XFramework` 的 `.meta` 扫描、`PublicApiBaselineTests`、核心 README 守卫只扫 `Assets/XFramework`）。它的测试随全量 `run-tests.ps1` 运行；包内自设守卫覆盖 README 结构/文件树、`.meta` 完整性、包边界（`Documentation/` 引用）、`AutoInit` 族清单、Runtime / Editor 公开 API 基线（`-UpdateLubanApiBaseline`）与依赖声明。示例由 `check-docs.ps1 -Enforce` 经 `check-samples.ps1 -SamplesRoot Assets/XFramework.Luban/Samples~` 编译。发布时与核心包共用同一个仓库 tag，安装 URL 用 `?path=Assets/XFramework.Luban`。
 
-`Assets/XFramework.Fmod/` 同样是同级可选包，但当前是 **Phase 1 FMOD-free 层**（provider/配置资产/测试/守卫；真实 FMOD 集成待 SDK）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、Runtime 公开 API 基线（`-UpdateFmodApiBaseline`）与「仓库不提交能触发自动安装的 settings 资产」。没有 `Samples~`（无 SDK 时不可编译）；FMOD SDK 版本/安装方式以 `Assets/XFramework.Fmod/README.md` 为唯一真相，不提交 SDK / manifest / lock 本地改动。
+`Assets/XFramework.Fmod/` 同样是同级可选包，当前是 **Phase 1 FMOD-free + Phase 2 真实集成**（provider/配置资产/测试/守卫 + 条件集成程序集与自动安装；真实 bank/event 冒烟待 Studio 工程）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、Runtime 公开 API 基线（`-UpdateFmodApiBaseline`）与「仓库不提交能触发自动安装的 settings 资产」。没有 `Samples~`（无 SDK 时不可编译）；FMOD SDK 版本/安装方式以 `Assets/XFramework.Fmod/README.md` 为唯一真相，不提交 SDK / manifest / lock 本地改动。
 
 ### OpenUPM（待上架）
 

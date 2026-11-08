@@ -29,7 +29,7 @@
 - **将来 Wwise 适配器只实现 `IAudioProvider`**，不实现 `IAudioManager`、不重写通道/音量/暂停/计数；
 - **Wwise 适配器现在仍不做**：没有真实 Wwise 项目落地、没有 SDK 可编译验证；
 - **本次只出设计文档**；核心缝与内置 `AudioSourceProvider` 作参照已实现，FMOD 的 FMOD-free provider
-  层也已实现（真实 FMOD 集成待 SDK），Wwise 等真实项目再开；
+  层与 Phase 2 真实集成（2026-11-07）也已实现，Wwise 等真实项目再开；
 - **核心中立控制面可映射但未验证**：`AudioManager.SetParameter` / `SetGlobalParameter` / `LoadBank` /
   `SetBusVolume` / `StartSnapshot` / `SetPosition` 对 Wwise 的 RTPC/switch/state、bank、bus、state 的映射
   尚未设计；provider 能力接口目前是 core internal 且只经 `InternalsVisibleTo` 给官方 FMOD 扩展，
@@ -44,8 +44,8 @@ Wwise 侧比 FMOD 多出来的硬差异（决定了它不能靠猜缝）：
 
 这正是 `Documentation/Modules/Audio.md` 的「已推翻：不提供 `IAudioProvider` 分层引擎缝」条目
 原来说「凭记忆猜缝大概率是谁都不合身的最小公约数」的原因；现在有了核心缝 + 内置
-`AudioSourceProvider` 作参照（FMOD 的 FMOD-free provider 层也已实现，真实集成待 SDK），Wwise 仍要等
-真实 API 落地再设计细节。
+`AudioSourceProvider` 作参照（FMOD 的 FMOD-free provider 层与 Phase 2 真实集成 2026-11-07 也已实现），
+Wwise 仍要等真实 API 落地再设计细节。
 
 ---
 
@@ -138,8 +138,8 @@ B 的 Wwise 适配器必须等真实 API 落地后再定细节；现在只记录
 三条**都**成立才值得实现 Wwise 适配器：
 
 1. **有真实 Wwise 项目**，且 Wwise SDK 可在本仓或 CI 编译验证；
-2. provider 缝已实现（核心）；FMOD 的 FMOD-free provider 层也已实现（真实集成待 SDK），不作为
-   Wwise 的前置；
+2. provider 缝已实现（核心）；FMOD 的 FMOD-free provider 层与 Phase 2 真实集成也已实现，
+   不作为 Wwise 的前置；
 3. 至少一个 Wwise 适配器在真实项目跑通：真实 bank、Event 回调、3D emitter、至少一个目标平台真机。
 
 验证方式（将来执行）：一次性探针工程 → Launcher 集成 Wwise → 最小 provider → 跑 bank / Event /

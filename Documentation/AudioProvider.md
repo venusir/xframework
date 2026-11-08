@@ -1,9 +1,9 @@
-# AudioProvider —— `IAudioProvider` 播放引擎缝（核心与 FMOD-free 扩展已实现；真实 FMOD 集成待 SDK）
+# AudioProvider —— `IAudioProvider` 播放引擎缝（核心、FMOD-free 扩展与 Phase 2 真实集成已实现；真实 bank/event 冒烟待 Studio 工程）
 
 > **收件人**：框架维护者（实现或审计 Audio 播放引擎缝时）。**不是**使用文档。
 > **状态**：核心 provider 缝于 2026-10-25 实现并完成复审修复；2026-10-26 新增 **provider 中立控制面**
-> （参数/RTPC、bank、bus、snapshot、逐次 3D）与 **FMOD-free 扩展包**（`Assets/XFramework.Fmod/`）。
-> **真实 FMOD 集成程序集、SDK 探针与 Wwise 适配器仍未实现**。
+> （参数/RTPC、bank、bus、snapshot、逐次 3D）与 **FMOD-free 扩展包**（`Assets/XFramework.Fmod/`）；
+> 2026-11-07 **Phase 2 真实 FMOD 集成已实现并用本地 UPM 包完成探针**。Wwise 适配器仍未实现。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
@@ -13,11 +13,11 @@
 | `[本仓核对]` | 直接读本仓现有 `Runtime/Audio/` 与测试得出，可当场复现 |
 | `[代理逐行核对]` | 2026-10-25 的 Plan 代理按现有代码逐行核对出的缺口与归属 |
 | `[已实现]` | 核心/扩展已落地并跑过测试；以实际代码与公开 API 基线为准 |
-| `[设计稿]` | 真实 FMOD 集成 / Wwise 扩展的候选形状，**尚未编译、尚未跑测试** |
+| `[设计稿]` | Wwise 扩展的候选形状；FMOD Phase 2 已实现并有探针 |
 | `[待裁]` | 需要用户拍板的取舍；本文件给推荐但不冒充已定 |
 
 **核对基准**：2026-10-26 的 `Assets/XFramework/Runtime/Audio/`、`Assets/XFramework.Fmod/` 与对应测试。
-核心 Audio 定向与扩展 Fmod 定向全绿；真实 FMOD 集成与 Wwise 仍未实现。
+核心 Audio 定向与扩展 Fmod 定向全绿；Phase 2 真实 FMOD 集成已实现；Wwise 仍未实现。
 
 ---
 
@@ -38,7 +38,7 @@
   由核心 `AudioManager` 对外；provider 侧能力接口为 core internal，经 `InternalsVisibleTo` 给官方
   FMOD 扩展。旧的 `FmodAudio.Install` 公开门面方案已废弃。
 - **FMOD 扩展**：`Assets/XFramework.Fmod/` 的 FMOD-free 层已实现（provider + 配置资产 + fake backend
-  测试 + 守卫）；真实 FMOD 集成程序集待 FMOD 2.04 SDK 验证。
+  测试 + 守卫）；Phase 2 真实集成程序集已实现（2026-11-07 用本地 FMOD 2.04 UPM 包探针验证）。
 - **Wwise 扩展**：仍 `暂不做`，重开判据是真实 Wwise 项目 + SDK 可编译验证。
 
 为什么不选 A（整体替换 `IAudioManager`）的要点，见 `Documentation/FMOD.md` §三：
@@ -196,7 +196,7 @@ public static class AudioManager
   `IAudioBusProvider` / `IAudioSnapshotProvider` / `IAudioSpatialProvider`。它们经
   `InternalsVisibleTo("Venusy609.Xframework.Fmod")` 给官方扩展；不是第三方可自由实现的公开契约。
   第三方 provider 仍可用 `TryGetProviderHandle` 自行处理逐次控制。
-- FMOD-free 扩展 `FmodAudioProvider` 已实现五个接口；真实 `FmodEventBackend` 在 Phase 2。
+- FMOD-free 扩展 `FmodAudioProvider` 已实现五个接口；真实 `FmodEventBackend` 已在 Phase 2 实现。
 
 ---
 
@@ -427,7 +427,7 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 - **框架音量 → 项目 AudioMixer 路由仍不内建**：R3-AUD-001 已实测 `outputAudioMixerGroup` 恒 null；
   B 之后如果项目要路由，只能实现自定义 provider（内置 provider 不提供路由扩展点）。
 - **`IAudioProvider` 已实现**：2026-10-25 用户裁定 B，核心已落地；2026-10-26 新增 provider 中立控制面与
-  FMOD-free 扩展包。真实 FMOD 集成待 Phase 2；Wwise 仍 `暂不做`。台账见 `Documentation/Modules/Audio.md`。
+  FMOD-free 扩展包；2026-11-07 Phase 2 真实集成已实现。Wwise 仍 `暂不做`。台账见 `Documentation/Modules/Audio.md`。
 - **`IAudioManager` / `SetInstance` 不删除**：B 是推荐的中间件路径，不是唯一替换路径。
 - **`FmodAudio.Install` / `FmodAudioOptions` 不提供**：被 2026-10-26「只经 AudioManager + 自动安装 +
   `FmodAudioSettings`」取代。
