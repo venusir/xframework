@@ -90,7 +90,7 @@ Assets/XFramework.UIAuthoring/
 │   ├── IUIActionRuntime.cs / UIManagerActionRuntime.cs
 │   ├── UIAuthoringNavigation.cs
 │   ├── UIAuthoringActionMessage.cs
-│   ├── UIAuthoringDialogResultMessage.cs / UIAuthoringDialogStatus.cs
+│   ├── UIAuthoringDialogResult.cs / UIAuthoringDialogResultMessage.cs / UIAuthoringDialogStatus.cs
 │   └── UIAuthoringLog.cs
 ├── Editor/
 │   ├── Venusy609.Xframework.UI.Authoring.Editor.asmdef

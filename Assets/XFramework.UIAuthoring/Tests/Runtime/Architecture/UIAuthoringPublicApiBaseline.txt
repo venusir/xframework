@@ -1,0 +1,96 @@
+# XFramework UI Authoring Runtime 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/UIAuthoringPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateUIAuthoringApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
+#
+# 射程：Runtime 程序集 Venusy609.Xframework.UI.Authoring（公开类型与 public 成员）。
+# Editor 程序集 Venusy609.Xframework.UI.Authoring.Editor 另见同目录的 UIAuthoringEditorPublicApiBaseline.txt。
+XFramework.XUI.Authoring.UIAction  ::  .ctor()
+XFramework.XUI.Authoring.UIAction  ::  public sealed class
+XFramework.XUI.Authoring.UIAction.ActionId  ::  string
+XFramework.XUI.Authoring.UIAction.AssetPath  ::  string
+XFramework.XUI.Authoring.UIAction.BoolValue  ::  bool
+XFramework.XUI.Authoring.UIAction.GroupName  ::  string
+XFramework.XUI.Authoring.UIAction.Index  ::  int
+XFramework.XUI.Authoring.UIAction.Kind  ::  XFramework.XUI.Authoring.UIActionKind
+XFramework.XUI.Authoring.UIAction.Layer  ::  int
+XFramework.XUI.Authoring.UIAction.NodeName  ::  string
+XFramework.XUI.Authoring.UIAction.Payload  ::  string
+XFramework.XUI.Authoring.UIAction.ResultId  ::  string
+XFramework.XUI.Authoring.UIAction.Text  ::  string
+XFramework.XUI.Authoring.UIAction.TipConfig  ::  XFramework.XUI.Authoring.UITipActionConfig
+XFramework.XUI.Authoring.UIActionBinding  ::  .ctor()
+XFramework.XUI.Authoring.UIActionBinding  ::  public sealed class
+XFramework.XUI.Authoring.UIActionBinding.Actions  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UIAction>
+XFramework.XUI.Authoring.UIActionBinding.ButtonNodeName  ::  string
+XFramework.XUI.Authoring.UIActionKind  ::  public enum : int
+XFramework.XUI.Authoring.UIActionKind.CloseAll  ::  = 1
+XFramework.XUI.Authoring.UIActionKind.CloseSelf  ::  = 0
+XFramework.XUI.Authoring.UIActionKind.CloseWithResult  ::  = 13
+XFramework.XUI.Authoring.UIActionKind.Custom  ::  = 12
+XFramework.XUI.Authoring.UIActionKind.HideSelf  ::  = 14
+XFramework.XUI.Authoring.UIActionKind.Open  ::  = 3
+XFramework.XUI.Authoring.UIActionKind.Pop  ::  = 5
+XFramework.XUI.Authoring.UIActionKind.Push  ::  = 4
+XFramework.XUI.Authoring.UIActionKind.Replace  ::  = 2
+XFramework.XUI.Authoring.UIActionKind.SelectTab  ::  = 11
+XFramework.XUI.Authoring.UIActionKind.SetActive  ::  = 10
+XFramework.XUI.Authoring.UIActionKind.SetLayerInteractive  ::  = 9
+XFramework.XUI.Authoring.UIActionKind.SetLayerVisibility  ::  = 8
+XFramework.XUI.Authoring.UIActionKind.ShowDialog  ::  = 7
+XFramework.XUI.Authoring.UIActionKind.ShowTip  ::  = 6
+XFramework.XUI.Authoring.UIAuthoringActionMessage  ::  .ctor(string actionId, string payload)
+XFramework.XUI.Authoring.UIAuthoringActionMessage  ::  public readonly struct
+XFramework.XUI.Authoring.UIAuthoringActionMessage.ActionId  ::  readonly string
+XFramework.XUI.Authoring.UIAuthoringActionMessage.Payload  ::  readonly string
+XFramework.XUI.Authoring.UIAuthoringDialogResultMessage  ::  .ctor(string actionId, XFramework.XUI.Authoring.UIAuthoringDialogStatus status, string resultId)
+XFramework.XUI.Authoring.UIAuthoringDialogResultMessage  ::  public readonly struct
+XFramework.XUI.Authoring.UIAuthoringDialogResultMessage.ActionId  ::  readonly string
+XFramework.XUI.Authoring.UIAuthoringDialogResultMessage.ResultId  ::  readonly string
+XFramework.XUI.Authoring.UIAuthoringDialogResultMessage.Status  ::  readonly XFramework.XUI.Authoring.UIAuthoringDialogStatus
+XFramework.XUI.Authoring.UIAuthoringDialogStatus  ::  public enum : int
+XFramework.XUI.Authoring.UIAuthoringDialogStatus.Canceled  ::  = 1
+XFramework.XUI.Authoring.UIAuthoringDialogStatus.OpenFailed  ::  = 2
+XFramework.XUI.Authoring.UIAuthoringDialogStatus.Selected  ::  = 0
+XFramework.XUI.Authoring.UIAuthoringNavigation  ::  public static class
+XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIAuthoringDialogStatus> ShowDialogAsync(string assetPath, string actionId, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIDeclarativePanel> OpenAsync(string assetPath, int layer = 100, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  .ctor()
+XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
+XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
+XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  public sealed class : XFramework.XUI.View.UIDialogPanel<string>
+XFramework.XUI.Authoring.UIDeclarativePanel  ::  .ctor()
+XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
+XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
+XFramework.XUI.Authoring.UIDeclarativePanel  ::  public sealed class : XFramework.XUI.View.UIPanelBase
+XFramework.XUI.Authoring.UIPanelDefinition  ::  .ctor()
+XFramework.XUI.Authoring.UIPanelDefinition  ::  public sealed class : UnityEngine.ScriptableObject
+XFramework.XUI.Authoring.UIPanelDefinition.ActionBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UIActionBinding>
+XFramework.XUI.Authoring.UIPanelDefinition.Kind  ::  XFramework.XUI.Authoring.UIPanelDefinitionKind
+XFramework.XUI.Authoring.UIPanelDefinition.TabGroups  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UITabGroup>
+XFramework.XUI.Authoring.UIPanelDefinition.TextBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UITextBinding>
+XFramework.XUI.Authoring.UIPanelDefinition.Version  ::  int
+XFramework.XUI.Authoring.UIPanelDefinitionKind  ::  public enum : int
+XFramework.XUI.Authoring.UIPanelDefinitionKind.Dialog  ::  = 2
+XFramework.XUI.Authoring.UIPanelDefinitionKind.Hud  ::  = 1
+XFramework.XUI.Authoring.UIPanelDefinitionKind.Panel  ::  = 0
+XFramework.XUI.Authoring.UITabGroup  ::  .ctor()
+XFramework.XUI.Authoring.UITabGroup  ::  public sealed class
+XFramework.XUI.Authoring.UITabGroup.GroupName  ::  string
+XFramework.XUI.Authoring.UITabGroup.NodeNames  ::  System.Collections.Generic.List<string>
+XFramework.XUI.Authoring.UITextBinding  ::  .ctor()
+XFramework.XUI.Authoring.UITextBinding  ::  public sealed class
+XFramework.XUI.Authoring.UITextBinding.Literal  ::  string
+XFramework.XUI.Authoring.UITextBinding.LocalizationKey  ::  string
+XFramework.XUI.Authoring.UITextBinding.NodeName  ::  string
+XFramework.XUI.Authoring.UITextBinding.UseLocalization  ::  bool
+XFramework.XUI.Authoring.UITipActionConfig  ::  .ctor()
+XFramework.XUI.Authoring.UITipActionConfig  ::  XFramework.XUI.TipConfig ToTipConfig()
+XFramework.XUI.Authoring.UITipActionConfig  ::  public sealed class
+XFramework.XUI.Authoring.UITipActionConfig.Color  ::  UnityEngine.Color
+XFramework.XUI.Authoring.UITipActionConfig.Duration  ::  float
+XFramework.XUI.Authoring.UITipActionConfig.FloatDistance  ::  float
+XFramework.XUI.Authoring.UITipActionConfig.FontSize  ::  float
+XFramework.XUI.Authoring.UITipActionConfig.UseWorldPos  ::  bool
+XFramework.XUI.Authoring.UITipActionConfig.WorldPos  ::  UnityEngine.Vector3

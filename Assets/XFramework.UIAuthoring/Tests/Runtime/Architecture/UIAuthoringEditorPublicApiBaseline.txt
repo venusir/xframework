@@ -1,0 +1,11 @@
+# XFramework UI Authoring Editor 程序集公开 API 基线（自动生成，勿手工编辑）
+#
+# 生成：Tests/Runtime/Architecture/UIAuthoringEditorPublicApiBaselineTests.cs
+# 更新：pwsh -File Tools/run-tests.ps1 -UpdateUIAuthoringApiBaseline
+# 比较：按 \n 拆行、去行尾 \r，忽略 '#' 开头的行；其余任何一行的增删都是公开面变化。
+#
+# 射程：Editor 程序集 Venusy609.Xframework.UI.Authoring.Editor（只反映编辑器编译产物）。
+# Runtime 程序集 Venusy609.Xframework.UI.Authoring 另见同目录的 UIAuthoringPublicApiBaseline.txt。
+XFramework.XUI.Authoring.Editor.UIPanelDefinitionEditor  ::  .ctor()
+XFramework.XUI.Authoring.Editor.UIPanelDefinitionEditor  ::  public sealed class : UnityEditor.Editor
+XFramework.XUI.Authoring.Editor.UIPanelDefinitionEditor  ::  void OnInspectorGUI()
