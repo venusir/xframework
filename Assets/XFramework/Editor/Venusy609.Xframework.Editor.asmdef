@@ -1,7 +1,9 @@
 {
     "name": "Venusy609.Xframework.Editor",
     "references": [
-      "Venusy609.Xframework"
+      "Venusy609.Xframework",
+      "YooAsset",
+      "YooAsset.Editor"
     ],
     "includePlatforms": [
         "Editor"
