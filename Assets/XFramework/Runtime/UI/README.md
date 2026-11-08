@@ -328,6 +328,21 @@ public class MainMenuPanel : UIPanelBase
 }
 ```
 
+#### 预制体要求
+
+面板脚本写完后，预制体由项目在 Unity 里自行搭建。以下约束不是建议——违反后大多**只在运行时报错或静默失效**：
+
+- **根节点挂具体面板脚本**：面板组件必须在预制体根节点。工厂只对根节点 `GetComponent<T>()`，挂在子节点上会得到「预制体缺少组件」的错误并销毁实例。
+- **`UIPanelBinding` 与面板脚本同根**：`UIPanelBase.Binding` 只查自己所在的 GameObject；挂在子节点上的绑定不会生效。
+- **RectTransform 自己设好**：框架不会调整面板根节点。全屏面板通常四向拉伸（anchorMin `(0,0)`、anchorMax `(1,1)`、sizeDelta `0`）；对话框/弹窗按实际尺寸与 pivot 设置——`ShowPopupAsync` 会读它来定位。
+- **Canvas 排序不用管**：管理器会重写面板 Canvas 的 `sortingOrder`，预制体里手填的值不会保留。
+- **根节点保持单位变换**：对象池复用取回实例时会把根节点的 `localPosition` / `localRotation` / `localScale` 重置为 `0` / identity / `1`；偏移与缩放请放到子节点，否则首次打开与复用后的外观会不一致。
+- **约定节点**：`txt_` / `img_` / `sld_` / `tgl_` / `btn_` 前缀、最多 5 层深度、同名只保留第一个——详见 3.4 命名约定（`BindByConvention`）。`txt_` 只认 UGUI `Text`，不认 `TMP_Text`；要用 TMP 请走 `UIBinder.BindToText` 精确绑定。
+- **进 YooAsset 主资源采集包**：`OpenAsync<T>("address")` 按地址加载；没被主资源采集器收录的预制体运行时加载不到。只作为静态/依赖资源采集同样无法按地址加载。
+- **HUD / Tip**：HUD 根节点挂 `UIHudItem` 派生脚本；Tip 根节点挂 `UITipItem`，且根下必须有 `TMP_Text`。组件自动补齐规则见各自的「预制体要求」小节。
+
+> **自检**：菜单 `Tools/XFramework/UI/Validate UI Prefabs` 会扫描选中文件夹（默认 `Assets`）下的 UI 候选预制体，检查上述根组件、绑定位置、约定前缀深度/类型/重名、根 RectTransform、池化变换、YooAsset 采集与 Tip 文本。扫描只读、不修改预制体，也不会在保存或构建时自动触发；`UIBinder` 的手工绑定和代码里的地址字符串不在检查范围内。
+
 ### 5. 打开/关闭面板
 
 ```csharp
@@ -910,6 +925,8 @@ UIManager.HideHud(monster.transform);
 - **GraphicRaycaster**：由 `UIViewBase` 的 `[RequireComponent(typeof(GraphicRaycaster))]` 自动添加
 - **CanvasGroup**：由 `UIHudItem` 的 `[RequireComponent(typeof(CanvasGroup))]` 自动添加
 
+> 自检：`Tools/XFramework/UI/Validate UI Prefabs` 会检查 `UIHudItem` 派生脚本是否挂在预制体根节点。
+
 > 预制体挂载到 `Layer_HUD` 容器后，Canvas 的 rendering 层级由 `UIHudManagerImpl` 统一控制（独立 Canvas，sortingOrder = 30000）。
 
 ### 设计要点
@@ -987,6 +1004,8 @@ UIManager.ShowTipAsync("暴击！999", new TipConfig
 - **TextMeshPro - Text (UI)** — 文字渲染，名称不限，`UITipItem` 会通过 `GetComponentInChildren` 自动查找
 - **CanvasGroup** — 透明度控制（`UITipItem` 通过 `[RequireComponent(typeof(CanvasGroup))]` 自动添加）
 - **UITipItem** — Tip 播放逻辑（框架提供，挂载到预制体根节点）
+
+> 自检：`Tools/XFramework/UI/Validate UI Prefabs` 会检查根节点是否为 `UITipItem`、根下是否有 `TMP_Text`。
 
 预制体通过 `AssetManager` 的资源系统加载，**对象池由 `AssetManager` 统一管理**，无需额外配置。
 

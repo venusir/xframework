@@ -33,6 +33,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   名称空白抛 `ArgumentException`；provider 异常隔离。`SetBusVolume` 原样透传、不做核心钳制。
   源兼容新增；公开 API 基线已更新。
 
+#### UI
+
+- **新增编辑期 UI 预制体校验器**（2026-11-08）：菜单 `Tools/XFramework/UI/Validate UI Prefabs`，
+  扫描选中文件夹（默认 `Assets`）下的 UI 候选预制体，检查面板 / HUD / Tip 根组件、`UIPanelBinding` 位置、
+  约定前缀的 5 层深度 / 组件类型 / 重名、面板根 RectTransform 与池化变换、YooAsset 主资源采集、
+  Tip 的 `TMP_Text` 等九类问题；报告按预制体分组并可点击定位。实现全部 `internal`，不改变公开 API，
+  不修改预制体，不在保存或构建时自动触发。同步补充 `Runtime/UI/README.md` 的「预制体要求」小节。
+
 ## [0.4.0] - 2026-10-25
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；
