@@ -78,7 +78,9 @@ namespace XFramework.XAudio.Fmod.Tests
 
         internal bool ThrowOnCreate;
         internal bool ThrowOnStart;
+        internal bool ThrowOnPoll;
         internal bool ThrowOnSetParameter;
+        internal Action<int> OnStart;
         internal bool ThrowOnRelease;
         internal bool ThrowOnDispose;
 
@@ -112,6 +114,7 @@ namespace XFramework.XAudio.Fmod.Tests
         {
             StartCalls++;
             Calls.Add("Start:" + instanceId);
+            OnStart?.Invoke(instanceId);
 
             if (ThrowOnStart)
                 throw new InvalidOperationException("fake start boom");
@@ -270,6 +273,8 @@ namespace XFramework.XAudio.Fmod.Tests
         public AudioProviderPlaybackState Poll(int instanceId)
         {
             PollCalls++;
+            if (ThrowOnPoll)
+                throw new InvalidOperationException("fake poll boom");
             if (PollUnknown)
                 return (AudioProviderPlaybackState)99;
 

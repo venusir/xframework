@@ -129,6 +129,39 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public async Task PlayAsync_EmptyPrefix_UsesLocationAsIs()
+        {
+            var provider = new FmodAudioProvider(_backend, new FmodProviderOptions(string.Empty, 4));
+            try
+            {
+                await provider.PlayAsync("SFX/Footstep", Request());
+                Assert.AreEqual("SFX/Footstep", _backend.LastEventPath);
+            }
+            finally
+            {
+                provider.Dispose();
+            }
+        }
+
+        [Test]
+        public async Task PlayAsync_CustomPrefix_AddsPrefixOnce()
+        {
+            var provider = new FmodAudioProvider(_backend, new FmodProviderOptions("custom:/", 4));
+            try
+            {
+                await provider.PlayAsync("SFX/Footstep", Request());
+                Assert.AreEqual("custom:/SFX/Footstep", _backend.LastEventPath);
+
+                await provider.PlayAsync("custom:/AlreadyPrefixed", Request());
+                Assert.AreEqual("custom:/AlreadyPrefixed", _backend.LastEventPath);
+            }
+            finally
+            {
+                provider.Dispose();
+            }
+        }
+
+        [Test]
         public async Task PlayAsync_AppliesInitialParametersBeforeStart()
         {
             var parameters = new[]
@@ -265,6 +298,47 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public async Task PlayAsync_FailSetPitch_ReleasesBackendInstance()
+        {
+            _backend.FailSetPitch = true;
+            LogAssert.Expect(LogType.Warning, new Regex("播放参数设置失败"));
+
+            var handle = await _provider.PlayAsync("event:/SFX/Footstep", Request());
+
+            Assert.IsTrue(handle.IsDefault);
+            Assert.AreEqual(0, _backend.StartCalls);
+            Assert.AreEqual(1, _backend.ReleasedIds.Count);
+            Assert.AreEqual(_backend.LastCreatedId, _backend.ReleasedIds[0]);
+        }
+
+        [Test]
+        public async Task PlayAsync_FailSet3D_ReleasesBackendInstance()
+        {
+            _backend.FailSet3D = true;
+            LogAssert.Expect(LogType.Warning, new Regex("播放参数设置失败"));
+
+            var handle = await _provider.PlayAsync("event:/SFX/Footstep",
+                Request(spatialBlend: 1f, position: Vector3.one));
+
+            Assert.IsTrue(handle.IsDefault);
+            Assert.AreEqual(0, _backend.StartCalls);
+            Assert.AreEqual(1, _backend.ReleasedIds.Count);
+        }
+
+        [Test]
+        public async Task PlayAsync_FailSetPaused_ReleasesBackendInstance()
+        {
+            _backend.FailSetPaused = true;
+            LogAssert.Expect(LogType.Warning, new Regex("暂停设置失败"));
+
+            var handle = await _provider.PlayAsync("event:/SFX/Footstep", Request(paused: true));
+
+            Assert.IsTrue(handle.IsDefault);
+            Assert.AreEqual(1, _backend.StartCalls);
+            Assert.AreEqual(1, _backend.ReleasedIds.Count);
+        }
+
+        [Test]
         public async Task PlayAsync_BackendCreateThrows_IsIsolatedAndSlotIsReusable()
         {
             _backend.ThrowOnCreate = true;
@@ -287,6 +361,19 @@ namespace XFramework.XAudio.Fmod.Tests
             var handle = await _provider.PlayAsync("event:/SFX/Footstep", Request());
 
             Assert.IsTrue(handle.IsDefault);
+            Assert.AreEqual(1, _backend.ReleasedIds.Count);
+        }
+
+        [Test]
+        public void PlayAsync_StartCancelsCallerToken_ReleasesAndThrows()
+        {
+            using var cts = new CancellationTokenSource();
+            _backend.OnStart = _ => cts.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() =>
+                _provider.PlayAsync("event:/SFX/Footstep", Request(), cts.Token));
+
+            Assert.AreEqual(1, _backend.StartCalls);
             Assert.AreEqual(1, _backend.ReleasedIds.Count);
         }
 
@@ -385,6 +472,17 @@ namespace XFramework.XAudio.Fmod.Tests
             _backend.PollUnknown = true;
             Assert.AreEqual(AudioProviderPlaybackState.Invalid, _provider.Poll(handle));
             Assert.AreEqual(AudioProviderPlaybackState.Invalid, _provider.Poll(default));
+        }
+
+        [Test]
+        public async Task Poll_BackendThrows_ReturnsInvalid()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            _backend.ThrowOnPoll = true;
+
+            LogAssert.Expect(LogType.Error, new Regex("Poll 调用抛出异常"));
+
+            Assert.AreEqual(AudioProviderPlaybackState.Invalid, _provider.Poll(handle));
         }
 
         #endregion
@@ -504,6 +602,44 @@ namespace XFramework.XAudio.Fmod.Tests
 
             var after = await _provider.PlayAsync("event:/c", Request());
             Assert.IsTrue(after.IsDefault);
+        }
+
+        [Test]
+        public async Task AfterDispose_AllMembersAreSafe()
+        {
+            var handle = await _provider.PlayAsync("event:/a", Request());
+            Assert.IsFalse(handle.IsDefault);
+
+            _provider.Dispose();
+
+            var after = await _provider.PlayAsync("event:/b", Request());
+            Assert.IsTrue(after.IsDefault);
+            Assert.IsFalse(_provider.Stop(handle));
+            Assert.IsFalse(_provider.SetPaused(handle, true));
+            Assert.IsFalse(_provider.SetVolume(handle, 0.5f));
+            Assert.AreEqual(AudioProviderPlaybackState.Invalid, _provider.Poll(handle));
+            Assert.DoesNotThrow(() => _provider.Release(handle));
+
+            var parameters = (IAudioParameterProvider)_provider;
+            Assert.IsFalse(parameters.TrySetParameter(handle, new AudioParameter("Health", 1f)));
+            Assert.IsFalse(parameters.TrySetGlobalParameter(new AudioParameter("Weather", 1f)));
+
+            var bank = (IAudioBankProvider)_provider;
+            Assert.IsFalse(bank.TryLoadBank("Master", false));
+            Assert.IsFalse(bank.TryUnloadBank("Master"));
+            Assert.IsFalse(bank.IsBankLoaded("Master"));
+
+            var bus = (IAudioBusProvider)_provider;
+            Assert.IsFalse(bus.TrySetBusVolume("bus:/SFX", 1f));
+            Assert.IsFalse(bus.TrySetBusMuted("bus:/SFX", true));
+            Assert.IsFalse(bus.TrySetBusPaused("bus:/SFX", true));
+
+            var snapshot = (IAudioSnapshotProvider)_provider;
+            Assert.IsFalse(snapshot.TryStartSnapshot("snapshot:/Pause"));
+            Assert.IsFalse(snapshot.TryStopSnapshot("snapshot:/Pause"));
+
+            var spatial = (IAudioSpatialProvider)_provider;
+            Assert.IsFalse(spatial.TrySetPosition(handle, Vector3.zero));
         }
 
         [Test]
