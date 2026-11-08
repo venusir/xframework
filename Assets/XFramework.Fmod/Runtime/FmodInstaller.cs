@@ -26,12 +26,16 @@ namespace XFramework.XAudio.Fmod
         /// <para><b>失败回滚只卸载本次安装成功加载的 bank</b>：安装开始时会快照并去重
         /// <see cref="FmodAudioSettings.Banks"/>；安装前已加载的项目 bank 永不纳入 ownership。
         /// 回滚使用同一份快照，不重新读取配置资产。</para>
-        /// <exception cref="ArgumentNullException"><paramref name="backendFactory"/> 为 null 时抛出。</exception>
+        /// <exception cref="ArgumentNullException"><paramref name="backendFactory"/> 为 null 时抛出；
+        /// 该检查先于 settings/已初始化/FMOD settings 的全部前置早退。</exception>
         internal static bool TryInstall(
             FmodAudioSettings settings,
             Func<IFmodEventBackend> backendFactory,
             bool fmodSettingsReady)
         {
+            if (backendFactory == null)
+                throw new ArgumentNullException(nameof(backendFactory));
+
             if (settings == null || !settings.Enabled)
                 return false;
 
@@ -48,9 +52,6 @@ namespace XFramework.XAudio.Fmod
                     "未找到 FMODStudioSettings，跳过 FMOD 自动安装；请先运行 FMOD Setup Wizard 并配置 Studio 工程/bank。");
                 return false;
             }
-
-            if (backendFactory == null)
-                throw new ArgumentNullException(nameof(backendFactory));
 
             // 安装开始时的快照：之后不再读 settings；factory/加载/回滚使用同一份数据。
             List<string> plannedBanks = SnapshotBanks(settings.Banks);

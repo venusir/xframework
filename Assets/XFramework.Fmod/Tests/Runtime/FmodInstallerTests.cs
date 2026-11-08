@@ -59,6 +59,17 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public void NullFactory_ThrowsBeforePreconditionShortCircuit()
+        {
+            Assert.Throws<ArgumentNullException>(
+                () => FmodInstaller.TryInstall(null, null, false));
+
+            _settings.Enabled = false;
+            Assert.Throws<ArgumentNullException>(
+                () => FmodInstaller.TryInstall(_settings, null, true));
+        }
+
+        [Test]
         public void Disabled_DoesNotInstall()
         {
             _settings.Enabled = false;
