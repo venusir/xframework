@@ -66,6 +66,8 @@ namespace XFramework.XAudio.Fmod.Tests
         internal bool FailBankLoad;
         internal readonly HashSet<string> FailBankLoadNames =
             new HashSet<string>(StringComparer.Ordinal);
+        internal readonly HashSet<string> ThrowOnBankLoadNames =
+            new HashSet<string>(StringComparer.Ordinal);
         internal bool FailBankUnload;
         internal bool FailBankQuery;
         internal bool FailBusVolume;
@@ -188,6 +190,8 @@ namespace XFramework.XAudio.Fmod.Tests
         public bool LoadBank(string bank, bool loadSamples)
         {
             Calls.Add("LoadBank:" + bank + ":" + loadSamples);
+            if (ThrowOnBankLoadNames.Contains(bank))
+                throw new InvalidOperationException("fake bank load boom: " + bank);
             if (FailBankLoad || FailBankLoadNames.Contains(bank))
                 return false;
 

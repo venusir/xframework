@@ -139,6 +139,82 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
+        public void BankLoadFailure_DoesNotUnloadPreloadedBankAfterFailurePoint()
+        {
+            _settings.Banks = new[] { "A", "B" };
+            _backend.LoadedBanks.Add("B");
+            _backend.FailBankLoadNames.Add("A");
+
+            LogAssert.Expect(LogType.Error, new Regex("bank 'A'"));
+
+            Assert.IsFalse(FmodInstaller.TryInstall(_settings, _factory, true));
+            Assert.IsEmpty(_backend.BankUnloads);
+            Assert.IsTrue(_backend.LoadedBanks.Contains("B"));
+            Assert.IsTrue(_backend.Disposed);
+            Assert.IsFalse(AudioManager.IsInitialized);
+        }
+
+        [Test]
+        public void DuplicateBanks_RollbackUnloadsOnce()
+        {
+            _settings.Banks = new[] { "A", "A", "Broken" };
+            _backend.FailBankLoadNames.Add("Broken");
+
+            LogAssert.Expect(LogType.Error, new Regex("bank 'Broken'"));
+
+            Assert.IsFalse(FmodInstaller.TryInstall(_settings, _factory, true));
+            Assert.AreEqual(1, _backend.BankUnloads.Count);
+            Assert.AreEqual("A", _backend.BankUnloads[0]);
+
+            int loadCalls = 0;
+            foreach (string call in _backend.Calls)
+            {
+                if (call == "LoadBank:A:False")
+                    loadCalls++;
+            }
+
+            Assert.AreEqual(1, loadCalls, "重复 bank 条目只应加载一次。");
+        }
+
+        [Test]
+        public void FactoryMutatesSettings_InstallUsesEntrySnapshot()
+        {
+            _settings.Banks = new[] { "A" };
+            _factory = () =>
+            {
+                _factoryCalls++;
+                _settings.Banks = new[] { "B" };
+                return _backend;
+            };
+
+            Assert.IsTrue(FmodInstaller.TryInstall(_settings, _factory, true));
+            Assert.AreEqual(1, _backend.BankLoads.Count);
+            Assert.AreEqual("A", _backend.BankLoads[0].Bank,
+                "安装应使用入口快照，factory 之后的 settings 变更不应生效。");
+        }
+
+        [Test]
+        public void OuterFailureCleanup_UsesEntrySnapshotAndUnloadsLoadedBanks()
+        {
+            _settings.Banks = new[] { "A", "B" };
+            _backend.ThrowOnBankLoadNames.Add("B");
+            _factory = () =>
+            {
+                _factoryCalls++;
+                _settings.Banks = new[] { "A" };
+                return _backend;
+            };
+
+            LogAssert.Expect(LogType.Error, new Regex("自动安装失败"));
+
+            Assert.IsFalse(FmodInstaller.TryInstall(_settings, _factory, true));
+            Assert.AreEqual(1, _backend.BankUnloads.Count);
+            Assert.AreEqual("A", _backend.BankUnloads[0]);
+            Assert.IsTrue(_backend.Disposed);
+            Assert.IsFalse(AudioManager.IsInitialized);
+        }
+
+        [Test]
         public void FactoryThrows_DoesNotInstall()
         {
             _factory = () => throw new InvalidOperationException("fake factory boom");

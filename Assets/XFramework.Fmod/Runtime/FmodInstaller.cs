@@ -23,6 +23,9 @@ namespace XFramework.XAudio.Fmod
         /// <param name="backendFactory">真实 backend 工厂。</param>
         /// <param name="fmodSettingsReady">FMOD 的 <c>FMODStudioSettings</c> 资产是否已存在。</param>
         /// <returns>成功接线返回 <c>true</c>。</returns>
+        /// <para><b>失败回滚只卸载本次安装成功加载的 bank</b>：安装开始时会快照并去重
+        /// <see cref="FmodAudioSettings.Banks"/>；安装前已加载的项目 bank 永不纳入 ownership。
+        /// 回滚使用同一份快照，不重新读取配置资产。</para>
         /// <exception cref="ArgumentNullException"><paramref name="backendFactory"/> 为 null 时抛出。</exception>
         internal static bool TryInstall(
             FmodAudioSettings settings,
@@ -49,8 +52,15 @@ namespace XFramework.XAudio.Fmod
             if (backendFactory == null)
                 throw new ArgumentNullException(nameof(backendFactory));
 
+            // 安装开始时的快照：之后不再读 settings；factory/加载/回滚使用同一份数据。
+            List<string> plannedBanks = SnapshotBanks(settings.Banks);
+            bool loadSamples = settings.LoadBankSamples;
+            FmodProviderOptions providerOptions = settings.CreateProviderOptions();
+            AudioInitOptions initOptions = settings.CreateAudioInitOptions();
+
+            // 只记录本次安装成功加载的 bank；预加载 bank 永不进入这里。
+            var loadedBanks = new List<string>();
             IFmodEventBackend backend = null;
-            var preExistingBanks = new List<string>();
 
             try
             {
@@ -62,40 +72,35 @@ namespace XFramework.XAudio.Fmod
                     return false;
                 }
 
-                string[] banks = settings.Banks;
-                for (int i = 0; i < banks.Length; i++)
+                for (int i = 0; i < plannedBanks.Count; i++)
                 {
-                    string bank = banks[i];
-                    if (string.IsNullOrWhiteSpace(bank) || Contains(preExistingBanks, bank))
-                        continue;
+                    string bank = plannedBanks[i];
 
                     if (backend.IsBankLoaded(bank))
-                    {
-                        // 项目预加载的 bank 永不卸载：只记录，不纳入 ownership。
-                        preExistingBanks.Add(bank);
                         continue;
-                    }
 
-                    if (!backend.LoadBank(bank, settings.LoadBankSamples))
+                    if (!backend.LoadBank(bank, loadSamples))
                     {
                         LogManager.Error(LogCategories.Audio,
                             "FMOD bank '{0}' 加载失败，自动安装中止。", bank);
-                        Cleanup(backend, banks, preExistingBanks);
+                        Cleanup(backend, loadedBanks);
                         DisposeBackend(backend);
                         return false;
                     }
+
+                    loadedBanks.Add(bank);
                 }
 
-                var provider = new FmodAudioProvider(backend, settings.CreateProviderOptions());
+                var provider = new FmodAudioProvider(backend, providerOptions);
                 try
                 {
-                    AudioManager.SetProvider(provider, settings.CreateAudioInitOptions());
+                    AudioManager.SetProvider(provider, initOptions);
                 }
                 catch (Exception e)
                 {
                     LogManager.Exception(LogCategories.Audio, e,
                         "FMOD 自动安装：AudioManager.SetProvider 抛出异常，已回滚。");
-                    Cleanup(backend, banks, preExistingBanks);
+                    Cleanup(backend, loadedBanks);
                     try
                     {
                         provider.Dispose();
@@ -116,7 +121,7 @@ namespace XFramework.XAudio.Fmod
                 LogManager.Exception(LogCategories.Audio, e, "FMOD 自动安装失败，已回滚。");
                 if (backend != null)
                 {
-                    Cleanup(backend, settings.Banks, preExistingBanks);
+                    Cleanup(backend, loadedBanks);
                     DisposeBackend(backend);
                 }
 
@@ -139,20 +144,38 @@ namespace XFramework.XAudio.Fmod
             return false;
         }
 
-        /// <summary>
-        /// 失败清理：只卸载本次新加载、且当前仍已加载的 bank；项目预加载的 bank 不动。
-        /// </summary>
-        private static void Cleanup(IFmodEventBackend backend, string[] banks, List<string> preExistingBanks)
+        /// <summary>复制并去重 bank 列表；空白项跳过。</summary>
+        private static List<string> SnapshotBanks(string[] banks)
         {
-            if (backend == null || banks == null)
-                return;
+            var snapshot = new List<string>(banks?.Length ?? 0);
+            if (banks == null)
+                return snapshot;
 
             for (int i = 0; i < banks.Length; i++)
             {
                 string bank = banks[i];
-                if (string.IsNullOrWhiteSpace(bank) || Contains(preExistingBanks, bank))
+                if (string.IsNullOrWhiteSpace(bank) || Contains(snapshot, bank))
                     continue;
 
+                snapshot.Add(bank);
+            }
+
+            return snapshot;
+        }
+
+        /// <summary>
+        /// 失败清理：只卸载本次安装成功加载、且当前仍已加载的 bank；项目预加载的 bank 从未进入
+        /// <paramref name="loadedBanks"/>，因此不会被这里卸载。
+        /// </summary>
+        private static void Cleanup(IFmodEventBackend backend, List<string> loadedBanks)
+        {
+            if (backend == null || loadedBanks == null)
+                return;
+
+            // 逆序卸载：后加载的 bank 可能依赖先加载的 bank。
+            for (int i = loadedBanks.Count - 1; i >= 0; i--)
+            {
+                string bank = loadedBanks[i];
                 try
                 {
                     if (backend.IsBankLoaded(bank))
