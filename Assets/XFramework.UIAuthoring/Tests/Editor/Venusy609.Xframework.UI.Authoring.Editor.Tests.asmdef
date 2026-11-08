@@ -1,0 +1,23 @@
+{
+    "name": "Venusy609.Xframework.UI.Authoring.Editor.Tests",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.UI.Authoring",
+        "Unity.TextMeshPro"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

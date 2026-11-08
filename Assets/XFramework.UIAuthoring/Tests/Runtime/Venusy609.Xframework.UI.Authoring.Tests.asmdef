@@ -1,0 +1,21 @@
+{
+    "name": "Venusy609.Xframework.UI.Authoring.Tests",
+    "rootNamespace": "",
+    "references": [
+        "Venusy609.Xframework",
+        "Venusy609.Xframework.UI.Authoring",
+        "UniTask"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": false,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false,
+    "optionalUnityReferences": [
+        "TestAssemblies"
+    ]
+}

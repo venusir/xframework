@@ -1,0 +1,24 @@
+{
+  "name": "com.venusy609.xframework.ui.authoring",
+  "displayName": "XFramework UI Authoring",
+  "version": "0.1.0",
+  "unity": "6000.3",
+  "description": "面向策划的声明式 UI 制作扩展：在 UGUI 预制体上挂 UIDeclarativePanel / UIDeclarativeDialogPanel，用 UIPanelDefinition 配置文本、动作与页签，程序只保留一次打开调用。核心包零改动。",
+  "keywords": [
+    "framework",
+    "ui",
+    "ugui",
+    "authoring",
+    "declarative",
+    "unity"
+  ],
+  "author": {
+    "name": "venusir",
+    "url": "https://github.com/venusir"
+  },
+  "license": "MIT",
+  "licensesUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/LICENSE.md",
+  "documentationUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/README.md",
+  "changelogUrl": "https://github.com/venusir/xframework/blob/main/Assets/XFramework.UIAuthoring/CHANGELOG.md",
+  "dependencies": {}
+}
