@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace XFramework.XAudio.Fmod.Tests
 {
@@ -13,6 +14,34 @@ namespace XFramework.XAudio.Fmod.Tests
     public class FmodDependencyDeclarationTests
     {
         private const string ForbiddenTypePrefix = "FMODUnity";
+
+        /// <summary>
+        /// 公开类型声明的源码扫描：覆盖修饰符、属性前缀与 <c>record</c>/<c>delegate</c>，
+        /// 避免「Integration 全 internal」被新形状绕过。
+        /// </summary>
+        private static readonly Regex PublicTypePattern = new Regex(
+            @"^[ \t]*(?:\[[^\]]*\][ \t]*)*public[ \t]+" +
+            @"(?:(?:static|sealed|abstract|partial|readonly|unsafe|new|ref)[ \t]+)*" +
+            @"(?:class|struct|interface|enum|record|delegate)\b",
+            RegexOptions.Multiline);
+
+#pragma warning disable CS0649 // JsonUtility 通过反射赋值
+        [Serializable]
+        private sealed class AsmdefGate
+        {
+            public string[] references;
+            public string[] defineConstraints;
+            public VersionDefine[] versionDefines;
+        }
+
+        [Serializable]
+        private sealed class VersionDefine
+        {
+            public string name;
+            public string expression;
+            public string define;
+        }
+#pragma warning restore CS0649
 
         [Test]
         public void PackageJson_DependenciesStayEmpty()
@@ -56,18 +85,92 @@ namespace XFramework.XAudio.Fmod.Tests
         }
 
         [Test]
-        public void IntegrationAsmdef_IsConditionallyGated()
+        public void IntegrationAsmdefs_BindDefineToConstraints()
         {
-            string asmdef = FmodTestPaths.ReadText(
+            AssertIntegrationAsmdefIsGated(
                 "Runtime/Integration/Venusy609.Xframework.Fmod.Unity.asmdef");
-            if (asmdef == null)
-                Assert.Ignore("找不到 Integration asmdef；跳过条件门控守卫。");
+            AssertIntegrationAsmdefIsGated(
+                "Tests/Runtime/Integration/Venusy609.Xframework.Fmod.Unity.Tests.asmdef");
+        }
 
-            StringAssert.Contains("\"FMODUnity\"", asmdef);
-            StringAssert.Contains("\"com.fmod.fmod-for-unity.v204\"", asmdef);
-            StringAssert.Contains("\"2.4.0\"", asmdef);
-            StringAssert.Contains("\"XFRAMEWORK_FMOD\"", asmdef);
-            StringAssert.Contains("\"defineConstraints\"", asmdef);
+        private static void AssertIntegrationAsmdefIsGated(string relativePath)
+        {
+            string json = FmodTestPaths.ReadText(relativePath);
+            if (json == null)
+                Assert.Ignore("找不到 " + relativePath + "；跳过条件门控守卫。");
+
+            AsmdefGate gate;
+            try
+            {
+                gate = JsonUtility.FromJson<AsmdefGate>(json);
+            }
+            catch (Exception)
+            {
+                gate = null;
+            }
+
+            Assert.IsNotNull(gate, "无法解析 asmdef JSON：" + relativePath);
+            Assert.IsNotNull(gate.references, relativePath + " 缺少 references");
+            Assert.GreaterOrEqual(Array.IndexOf(gate.references, "FMODUnity"), 0,
+                relativePath + " 必须引用 FMODUnity");
+            Assert.IsNotNull(gate.defineConstraints, relativePath + " 缺少 defineConstraints");
+
+            VersionDefine matched = null;
+            if (gate.versionDefines != null)
+            {
+                for (int i = 0; i < gate.versionDefines.Length; i++)
+                {
+                    VersionDefine candidate = gate.versionDefines[i];
+                    if (candidate != null && string.Equals(candidate.name,
+                            "com.fmod.fmod-for-unity.v204", StringComparison.Ordinal))
+                    {
+                        matched = candidate;
+                        break;
+                    }
+                }
+            }
+
+            Assert.IsNotNull(matched,
+                relativePath + " 缺少包名 com.fmod.fmod-for-unity.v204 的 versionDefines 条目");
+            Assert.AreEqual("2.4.0", matched.expression,
+                relativePath + " 的版本表达式必须是 2.4.0");
+            Assert.IsFalse(string.IsNullOrWhiteSpace(matched.define),
+                relativePath + " 的 versionDefines.define 不能为空");
+            Assert.GreaterOrEqual(Array.IndexOf(gate.defineConstraints, matched.define), 0,
+                relativePath + " 的 defineConstraints 必须包含 versionDefines.define（" +
+                matched.define + "）");
+        }
+
+        [Test]
+        public void PublicTypeScanner_DetectsAllModifierForms()
+        {
+            string[] positives =
+            {
+                "public class A {}",
+                "public static class B {}",
+                "public abstract class C {}",
+                "public sealed class D {}",
+                "public partial class E {}",
+                "public readonly struct F {}",
+                "public ref struct G {}",
+                "public record H {}",
+                "public delegate void I();",
+                "  [Serializable] public sealed partial class J {}",
+            };
+
+            foreach (string positive in positives)
+                Assert.IsTrue(PublicTypePattern.IsMatch(positive), "应命中：" + positive);
+
+            string[] negatives =
+            {
+                "internal class A {}",
+                "// public class B {}",
+                "public void Method() {}",
+                "public int Field;",
+            };
+
+            foreach (string negative in negatives)
+                Assert.IsFalse(PublicTypePattern.IsMatch(negative), "不应命中：" + negative);
         }
 
         [Test]
@@ -86,7 +189,7 @@ namespace XFramework.XAudio.Fmod.Tests
                          integration, "*.cs", SearchOption.AllDirectories))
             {
                 string text = File.ReadAllText(file);
-                if (Regex.IsMatch(text, @"\bpublic\s+(?:sealed\s+)?(?:class|struct|interface|enum)\b"))
+                if (PublicTypePattern.IsMatch(text))
                     violations.Add(file);
             }
 
@@ -105,6 +208,8 @@ namespace XFramework.XAudio.Fmod.Tests
             StringAssert.Contains("FMOD for Unity", readme);
             StringAssert.Contains("2.04", readme);
             StringAssert.Contains("Asset Store", readme);
+            StringAssert.Contains("com.fmod.fmod-for-unity.v204", readme);
+            StringAssert.Contains("2.4.0", readme);
         }
     }
 }
