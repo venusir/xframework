@@ -1,0 +1,209 @@
+using System;
+using Cysharp.Threading.Tasks;
+using TMPro;
+using UnityEngine;
+using UnityEngine.UI;
+using XFramework.XLog;
+using XFramework.XLocalization;
+using XFramework.XUI.Data;
+using XFramework.XUI.View;
+
+namespace XFramework.XUI.Authoring
+{
+    /// <summary>
+    /// 把定义资产绑定到面板预制体：文本、按钮动作、页签。
+    /// <para>所有订阅/句柄登记到面板的 <c>Track</c>，由回池/销毁统一释放；本类不定义自清理路径。</para>
+    /// </summary>
+    internal sealed class UIDeclarativeBinder
+    {
+        private readonly UIPanelBase _panel;
+        private readonly UIPanelDefinition _definition;
+
+        internal UIDeclarativeBinder(UIPanelBase panel, UIPanelDefinition definition)
+        {
+            _panel = panel;
+            _definition = definition;
+        }
+
+        internal void Bind(UIActionExecutor executor)
+        {
+            if (_panel == null || _definition == null)
+                return;
+
+            if (_definition.TextBindings != null)
+            {
+                for (int i = 0; i < _definition.TextBindings.Count; i++)
+                    BindText(_definition.TextBindings[i]);
+            }
+
+            if (_definition.ActionBindings != null)
+            {
+                for (int i = 0; i < _definition.ActionBindings.Count; i++)
+                    BindAction(_definition.ActionBindings[i], executor);
+            }
+        }
+
+        internal void SelectTab(string groupName, int index)
+        {
+            if (_definition?.TabGroups == null || string.IsNullOrEmpty(groupName))
+                return;
+
+            UITabGroup group = null;
+            for (int i = 0; i < _definition.TabGroups.Count; i++)
+            {
+                if (_definition.TabGroups[i] != null
+                    && string.Equals(_definition.TabGroups[i].GroupName, groupName, StringComparison.Ordinal))
+                {
+                    group = _definition.TabGroups[i];
+                    break;
+                }
+            }
+
+            if (group == null)
+            {
+                Warn("SelectTab: group '{0}' not found in definition.", groupName);
+                return;
+            }
+
+            if (group.NodeNames == null || index < 0 || index >= group.NodeNames.Count)
+            {
+                Warn("SelectTab: index {0} out of range for group '{1}'.", index, groupName);
+                return;
+            }
+
+            for (int i = 0; i < group.NodeNames.Count; i++)
+            {
+                Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, group.NodeNames[i]);
+                if (node == null)
+                {
+                    Warn("SelectTab: node '{0}' not found.", group.NodeNames[i]);
+                    continue;
+                }
+
+                node.gameObject.SetActive(i == index);
+            }
+        }
+
+        internal void SetActive(string nodeName, bool active)
+        {
+            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, nodeName);
+            if (node == null)
+            {
+                Warn("SetActive: node '{0}' not found.", nodeName);
+                return;
+            }
+
+            node.gameObject.SetActive(active);
+        }
+
+        private void BindText(UITextBinding binding)
+        {
+            if (binding == null || string.IsNullOrEmpty(binding.NodeName))
+                return;
+
+            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, binding.NodeName);
+            if (node == null)
+            {
+                Warn("Text binding: node '{0}' not found.", binding.NodeName);
+                return;
+            }
+
+            TMP_Text tmp = node.GetComponent<TMP_Text>();
+            if (tmp != null)
+            {
+                BindTmpText(tmp, binding);
+                return;
+            }
+
+            Text text = node.GetComponent<Text>();
+            if (text != null)
+            {
+                BindUguiText(text, binding);
+                return;
+            }
+
+            Warn("Text binding: node '{0}' has neither TMP_Text nor Text.", binding.NodeName);
+        }
+
+        private void BindTmpText(TMP_Text text, UITextBinding binding)
+        {
+            if (!binding.UseLocalization)
+            {
+                text.text = binding.Literal ?? string.Empty;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(binding.LocalizationKey))
+            {
+                Warn("Text binding: node '{0}' uses localization but has no key.", binding.NodeName);
+                return;
+            }
+
+            try
+            {
+                // 显式传 owner：订阅会登记到面板 Track，回池时统一释放。
+                text.BindToLocalizedText(binding.LocalizationKey, _panel);
+            }
+            catch (Exception ex)
+            {
+                Warn("Text binding: localization failed for node '{0}': {1}", binding.NodeName, ex.Message);
+            }
+        }
+
+        private void BindUguiText(Text text, UITextBinding binding)
+        {
+            if (!binding.UseLocalization)
+            {
+                text.text = binding.Literal ?? string.Empty;
+                return;
+            }
+
+            if (string.IsNullOrEmpty(binding.LocalizationKey))
+            {
+                Warn("Text binding: node '{0}' uses localization but has no key.", binding.NodeName);
+                return;
+            }
+
+            try
+            {
+                string key = binding.LocalizationKey;
+                text.text = LocalizationManager.Get(key);
+                IDisposable subscription = LocalizationManager.Subscribe(
+                    _ => text.text = LocalizationManager.Get(key));
+                _panel.Track(subscription);
+            }
+            catch (Exception ex)
+            {
+                Warn("Text binding: localization failed for node '{0}': {1}", binding.NodeName, ex.Message);
+            }
+        }
+
+        private void BindAction(UIActionBinding binding, UIActionExecutor executor)
+        {
+            if (binding == null || string.IsNullOrEmpty(binding.ButtonNodeName))
+                return;
+
+            Transform node = UIDeclarativeNodeFinder.Find(_panel.transform, binding.ButtonNodeName);
+            if (node == null)
+            {
+                Warn("Action binding: button node '{0}' not found.", binding.ButtonNodeName);
+                return;
+            }
+
+            Button button = node.GetComponent<Button>();
+            if (button == null)
+            {
+                Warn("Action binding: node '{0}' has no Button.", binding.ButtonNodeName);
+                return;
+            }
+
+            IDisposable handle = button.BindToClick(() => executor.ExecuteAsync(binding).Forget());
+            _panel.Track(handle);
+        }
+
+        private static void Warn(string format, params object[] args)
+        {
+            LogManager.Warning(UIAuthoringLog.Category, format, args);
+        }
+    }
+}
