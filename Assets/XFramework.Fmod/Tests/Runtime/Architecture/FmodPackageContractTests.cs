@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using NUnit.Framework;
@@ -93,10 +95,70 @@ namespace XFramework.XAudio.Fmod.Tests
             if (!Directory.Exists(repoPackage))
                 Assert.Ignore("消费方布局；跳过仓库 settings 资产检查。");
 
-            string asset = Path.Combine(Application.dataPath, "Resources", "FmodAudioSettings.asset");
-            Assert.IsFalse(File.Exists(asset),
-                "仓库不得提交 Assets/Resources/FmodAudioSettings.asset：Phase 2 的自动安装会读取它，" +
-                "在有 FMOD SDK 的机器上污染全量测试。");
+            List<string> hits = CollectFmodSettingsAssets(Application.dataPath);
+            Assert.IsEmpty(hits,
+                "仓库不得提交任何 Resources/FmodAudioSettings.asset：Phase 2 的自动安装会读取它，" +
+                "在有 FMOD SDK 的机器上污染全量测试。\n  " + string.Join("\n  ", hits));
+        }
+
+        [Test]
+        public void ResourcesScan_FindsNestedResourcesAndSkipsIgnoredFolders()
+        {
+            string dir = Path.Combine(Path.GetTempPath(),
+                "xfw-fmod-resources-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                string nested = Path.Combine(dir, "Config", "Resources");
+                Directory.CreateDirectory(nested);
+                string hit = Path.Combine(nested, "FmodAudioSettings.asset");
+                File.WriteAllText(hit, "x");
+
+                string ignored = Path.Combine(dir, "Ignored~", "Resources");
+                Directory.CreateDirectory(ignored);
+                File.WriteAllText(Path.Combine(ignored, "FmodAudioSettings.asset"), "x");
+
+                List<string> hits = CollectFmodSettingsAssets(dir);
+                CollectionAssert.AreEqual(new[] { hit }, hits);
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        private static List<string> CollectFmodSettingsAssets(string assetsRoot)
+        {
+            var hits = new List<string>();
+            foreach (string dir in Directory.EnumerateDirectories(
+                         assetsRoot, "Resources", SearchOption.AllDirectories))
+            {
+                if (ShouldSkipDirectory(dir, assetsRoot))
+                    continue;
+
+                string asset = Path.Combine(dir, "FmodAudioSettings.asset");
+                if (File.Exists(asset))
+                    hits.Add(asset);
+            }
+
+            return hits;
+        }
+
+        private static bool ShouldSkipDirectory(string dir, string root)
+        {
+            string relative = Path.GetRelativePath(root, dir);
+            string[] segments = relative.Split(
+                Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            foreach (string segment in segments)
+            {
+                if (segment.StartsWith(".", StringComparison.Ordinal) ||
+                    segment.EndsWith("~", StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }
