@@ -24,7 +24,7 @@
 - `Documentation/CI.md`——CI 的成本要点与裁定（暂不接入 + 三条重开判据）；
 - `Documentation/Luban.md`——配置表工具接入配方（已核对事实与版本漂移点；2026-10-24 起记录扩展包工作流与端到端探针结论）；
 - `Documentation/FairyGUI.md`——第三方 UI 方案评估（不接成后端 / 不做平级包 + 重开判据）；
-- `Documentation/UIAuthoring.md`——面向策划的 UI 制作方案评估（独立扩展包 `com.venusy609.xframework.ui.authoring` 的分阶段设计、四档需求、探针与开放裁定点；待裁）；
+- `Documentation/UIAuthoring.md`——面向策划的 UI 制作方案评估（独立扩展包 `com.venusy609.xframework.ui.authoring` 的分阶段设计、四档需求、HUD/Dialog 设计、第三方框架对照、探针与开放裁定点；2026-11-08 全面审计；用户已裁定接受单根、只重开模板、HUD/Dialog 设计纳入，实施待排）；
 - `Documentation/Cinemachine.md`——Cinemachine 3.1.7 后端的版本 / 3.x API 实测 / 升级与漂移点（已并入核心包 `Runtime/Camera/Cinemachine/`，核心 asmdef 硬引用 Cinemachine）；
 - `Documentation/AudioProvider.md`——核心 `IAudioProvider` 播放引擎缝与 provider 中立控制面（2026-10-25/26 已实现；FMOD Phase 2 真实集成 2026-11-07 已实现，真实 bank/event 冒烟待 Studio 工程；Wwise 仍暂不做）；
 - `Documentation/FMOD.md`——FMOD 扩展的 provider 层、仅 AudioManager 的公开面、自动安装与 Phase 2 条件程序集（Phase 1 FMOD-free 与 Phase 2 真实集成都已实现；SDK 探针 2026-11-07 通过，真实 bank/event 冒烟待 Studio 工程）；
