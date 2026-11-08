@@ -47,7 +47,8 @@ namespace XFramework.XUI.Authoring.Editor
                     continue;
 
                 if (prefab.GetComponent<UIDeclarativePanel>() == null
-                    && prefab.GetComponent<UIDeclarativeDialogPanel>() == null)
+                    && prefab.GetComponent<UIDeclarativeDialogPanel>() == null
+                    && prefab.GetComponent<UIDeclarativeHudItem>() == null)
                 {
                     continue;
                 }

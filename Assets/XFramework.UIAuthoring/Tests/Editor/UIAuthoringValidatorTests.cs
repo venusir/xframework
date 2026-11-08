@@ -54,6 +54,13 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             return go.AddComponent<UIDeclarativeDialogPanel>();
         }
 
+        private UIDeclarativeHudItem CreateHud()
+        {
+            var go = new GameObject("Hud", typeof(RectTransform));
+            _created.Add(go);
+            return go.AddComponent<UIDeclarativeHudItem>();
+        }
+
         private UIPanelDefinition CreateDefinition(UIPanelDefinitionKind kind)
         {
             var definition = ScriptableObject.CreateInstance<UIPanelDefinition>();
@@ -355,6 +362,67 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
 
             Assert.That(Has(issues, UIAuthoringRuleIds.ActionNotAllowed), Is.True);
+        }
+
+        [Test]
+        public void HudDefinition_TextBinding_NoHudRuleViolation()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            CreateChild(hud.transform, "txt_name", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.TextBindings.Add(new UITextBinding { NodeName = "txt_name", Literal = "NPC" });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudActionNotSupported), Is.False);
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudTabNotSupported), Is.False);
+            Assert.That(Has(issues, UIAuthoringRuleIds.TextNodeMissing), Is.False);
+        }
+
+        [Test]
+        public void HudDefinitionWithActions_Reports()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            CreateChild(hud.transform, "txt_name", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_close",
+                Actions = new List<UIAction> { new UIAction { Kind = UIActionKind.CloseSelf } },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudActionNotSupported), Is.True);
+        }
+
+        [Test]
+        public void HudDefinitionWithTabs_Warns()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.TabGroups.Add(new UITabGroup { GroupName = "tabs", NodeNames = new List<string> { "page_a" } });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudTabNotSupported), Is.True);
+        }
+
+        [Test]
+        public void HudTextNodeTooDeep_ReportsDepth()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            Transform node = hud.transform;
+            for (int depth = 1; depth <= 6; depth++)
+                node = CreateChild(node, "layer_" + depth);
+            CreateChild(node, "txt_deep", typeof(UnityEngine.UI.Text));
+
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.TextBindings.Add(new UITextBinding { NodeName = "txt_deep", Literal = "x" });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudNodeDepthExceeded), Is.True);
         }
 
         [Test]

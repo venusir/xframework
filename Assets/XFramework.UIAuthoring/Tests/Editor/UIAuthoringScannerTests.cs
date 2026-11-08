@@ -54,6 +54,36 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
         }
 
+        [Test]
+        public void Scan_DeclarativeHudPrefab_IsCollected()
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+                AssetDatabase.CreateFolder("Assets", "__XfwUIAuthoringTests__");
+
+            var definition = ScriptableObject.CreateInstance<UIPanelDefinition>();
+            definition.Kind = UIPanelDefinitionKind.Hud;
+            string definitionPath = TempFolder + "/HudDefinition.asset";
+            AssetDatabase.CreateAsset(definition, definitionPath);
+
+            var go = new GameObject("Hud", typeof(RectTransform));
+            UIDeclarativeHudItem hud = go.AddComponent<UIDeclarativeHudItem>();
+            hud.SetDefinitionForTest(definition);
+            string prefabPath = TempFolder + "/Hud.prefab";
+            PrefabUtility.SaveAsPrefabAsset(go, prefabPath);
+            Object.DestroyImmediate(go);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            Assert.That(prefab, Is.Not.Null, "临时 HUD 预制体未导入");
+            Assert.That(prefab.GetComponent<UIDeclarativeHudItem>(), Is.Not.Null);
+
+            List<UIAuthoringScanResult> results = UIAuthoringScanner.Scan(new[] { TempFolder });
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
+        }
+
         private static void DeleteTempFolder()
         {
             if (AssetDatabase.IsValidFolder(TempFolder))

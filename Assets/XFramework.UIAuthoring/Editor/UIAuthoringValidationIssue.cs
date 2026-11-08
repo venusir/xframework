@@ -18,7 +18,6 @@ namespace XFramework.XUI.Authoring.Editor
         internal const string RootComponentMissing = "UI-AUTH-001";
         internal const string DefinitionMissing = "UI-AUTH-002";
         internal const string KindMismatch = "UI-AUTH-003";
-        internal const string HudNotSupported = "UI-AUTH-004";
 
         internal const string TextNodeMissing = "UI-AUTH-010";
         internal const string TextTargetMissing = "UI-AUTH-011";
@@ -38,6 +37,11 @@ namespace XFramework.XUI.Authoring.Editor
         internal const string TabInvalid = "UI-AUTH-051";
 
         internal const string GlobalAction = "UI-AUTH-060";
+
+        internal const string HudRootRectTransformMissing = "UI-AUTH-HUD-001";
+        internal const string HudActionNotSupported = "UI-AUTH-HUD-002";
+        internal const string HudTabNotSupported = "UI-AUTH-HUD-003";
+        internal const string HudNodeDepthExceeded = "UI-AUTH-HUD-004";
     }
 
     /// <summary>

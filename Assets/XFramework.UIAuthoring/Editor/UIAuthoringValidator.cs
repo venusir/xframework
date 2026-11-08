@@ -14,6 +14,9 @@ namespace XFramework.XUI.Authoring.Editor
     {
         private const int MaxNodeDepth = 5;
 
+        /// <summary>HUD 深度诊断的搜索硬上限，避免异常层级拖垮校验。</summary>
+        private const int MaxHudSearchDepth = 32;
+
         internal static List<UIAuthoringIssue> Validate(
             GameObject root,
             UIPanelDefinition definition,
@@ -27,30 +30,26 @@ namespace XFramework.XUI.Authoring.Editor
 
             UIDeclarativePanel panel = root.GetComponent<UIDeclarativePanel>();
             UIDeclarativeDialogPanel dialog = root.GetComponent<UIDeclarativeDialogPanel>();
-            if (panel == null && dialog == null)
+            UIDeclarativeHudItem hud = root.GetComponent<UIDeclarativeHudItem>();
+            if (panel == null && dialog == null && hud == null)
             {
                 Add(issues, UIAuthoringRuleIds.RootComponentMissing, UIAuthoringIssueSeverity.Error,
-                    "根节点没有 UIDeclarativePanel / UIDeclarativeDialogPanel。");
+                    "根节点没有 UIDeclarativePanel / UIDeclarativeDialogPanel / UIDeclarativeHudItem。");
                 return issues;
             }
 
             if (definition == null)
             {
                 Add(issues, UIAuthoringRuleIds.DefinitionMissing, UIAuthoringIssueSeverity.Warning,
-                    "面板没有绑定 UIPanelDefinition；若是静态预制体可忽略，否则请检查引用。");
-                return issues;
-            }
-
-            if (definition.Kind == UIPanelDefinitionKind.Hud)
-            {
-                Add(issues, UIAuthoringRuleIds.HudNotSupported, UIAuthoringIssueSeverity.Error,
-                    "HUD 定义在阶段 2a 尚未实现。");
+                    "根节点没有绑定 UIPanelDefinition；若是静态预制体可忽略，否则请检查引用。");
                 return issues;
             }
 
             UIPanelDefinitionKind rootKind = panel != null
                 ? UIPanelDefinitionKind.Panel
-                : UIPanelDefinitionKind.Dialog;
+                : dialog != null
+                    ? UIPanelDefinitionKind.Dialog
+                    : UIPanelDefinitionKind.Hud;
 
             if (definition.Kind != rootKind)
             {
@@ -60,6 +59,13 @@ namespace XFramework.XUI.Authoring.Editor
             }
 
             Dictionary<string, int> nodeCounts = CountNodes(root.transform);
+
+            if (rootKind == UIPanelDefinitionKind.Hud)
+            {
+                ValidateHud(root, definition, nodeCounts, issues);
+                return issues;
+            }
+
             var resultIds = new HashSet<string>(StringComparer.Ordinal);
 
             ValidateTextBindings(root.transform, definition, nodeCounts, issues);
@@ -68,6 +74,56 @@ namespace XFramework.XUI.Authoring.Editor
             ValidateTabGroups(root.transform, definition, nodeCounts, issues);
 
             return issues;
+        }
+
+        /// <summary>
+        /// HUD（阶段 2b）只支持静态文本：根必须有 RectTransform，定义里不能有动作/页签。
+        /// 节点约定规则核心校验器不查（只跑 001/008），由这里补上。
+        /// </summary>
+        private static void ValidateHud(GameObject root, UIPanelDefinition definition,
+            Dictionary<string, int> nodeCounts, List<UIAuthoringIssue> issues)
+        {
+            if (!(root.transform is RectTransform))
+            {
+                Add(issues, UIAuthoringRuleIds.HudRootRectTransformMissing,
+                    UIAuthoringIssueSeverity.Error, "HUD 根节点必须有 RectTransform。");
+            }
+
+            if (definition.ActionBindings != null && definition.ActionBindings.Count > 0)
+            {
+                Add(issues, UIAuthoringRuleIds.HudActionNotSupported,
+                    UIAuthoringIssueSeverity.Error,
+                    "HUD 在阶段 2b 只支持文本，不支持动作绑定；关闭 HUD 请用程序调用 UIManager.HideHud。");
+            }
+
+            if (definition.TabGroups != null && definition.TabGroups.Count > 0)
+            {
+                Add(issues, UIAuthoringRuleIds.HudTabNotSupported,
+                    UIAuthoringIssueSeverity.Warning, "HUD 不支持页签组，TabGroups 会被忽略。");
+            }
+
+            if (definition.TextBindings != null)
+            {
+                for (int i = 0; i < definition.TextBindings.Count; i++)
+                {
+                    UITextBinding binding = definition.TextBindings[i];
+                    if (binding == null || string.IsNullOrEmpty(binding.NodeName))
+                        continue;
+
+                    Transform node = FindNodeAnyDepth(root.transform, binding.NodeName, 0,
+                        out int depth);
+                    if (node != null && depth > MaxNodeDepth)
+                    {
+                        Add(issues, UIAuthoringRuleIds.HudNodeDepthExceeded,
+                            UIAuthoringIssueSeverity.Warning,
+                            "文本节点位于第 " + depth + " 层，超过约定绑定的 " + MaxNodeDepth +
+                            " 层上限（根为第 0 层），运行时不会绑定。",
+                            binding.NodeName);
+                    }
+                }
+            }
+
+            ValidateTextBindings(root.transform, definition, nodeCounts, issues);
         }
 
         private static void ValidateTextBindings(Transform root, UIPanelDefinition definition,
@@ -420,6 +476,33 @@ namespace XFramework.XUI.Authoring.Editor
             if (root == null || string.IsNullOrEmpty(nodeName))
                 return null;
             return FindNodeRecursive(root, nodeName, 0);
+        }
+
+        /// <summary>
+        /// 不限约定深度地找节点，只为报出「第几层超限」；搜索本身仍设硬上限防止异常层级。
+        /// </summary>
+        private static Transform FindNodeAnyDepth(Transform node, string nodeName, int depth,
+            out int foundDepth)
+        {
+            foundDepth = -1;
+            if (node == null || depth > MaxHudSearchDepth)
+                return null;
+
+            if (string.Equals(node.name, nodeName, StringComparison.Ordinal))
+            {
+                foundDepth = depth;
+                return node;
+            }
+
+            for (int i = 0; i < node.childCount; i++)
+            {
+                Transform found = FindNodeAnyDepth(node.GetChild(i), nodeName, depth + 1,
+                    out foundDepth);
+                if (found != null)
+                    return found;
+            }
+
+            return null;
         }
 
         private static Transform FindNodeRecursive(Transform node, string nodeName, int depth)
