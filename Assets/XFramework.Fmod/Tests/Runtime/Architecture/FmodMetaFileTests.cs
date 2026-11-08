@@ -1,6 +1,8 @@
+using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
+using UnityEngine;
 
 namespace XFramework.XAudio.Fmod.Tests
 {
@@ -18,7 +20,10 @@ namespace XFramework.XAudio.Fmod.Tests
                 Assert.Ignore("找不到 XFramework.Fmod 包根；跳过 .meta 守卫。");
 
             var missing = new List<string>();
-            CheckEntry(root, missing);
+
+            // 只有嵌入 Assets/ 的布局才把包根当作资源；UPM PackageCache 的包根没有同级 .meta。
+            if (IsUnderAssets(root))
+                CheckEntry(root, missing);
 
             foreach (string entry in Directory.EnumerateFileSystemEntries(root, "*", SearchOption.AllDirectories))
             {
@@ -30,6 +35,34 @@ namespace XFramework.XAudio.Fmod.Tests
 
             Assert.IsEmpty(missing,
                 "以下包内条目缺少同名 .meta：\n  " + string.Join("\n  ", missing));
+        }
+
+        [Test]
+        public void RootMeta_IsRequiredOnlyUnderAssetsLayout()
+        {
+            string dir = Path.Combine(Path.GetTempPath(),
+                "xfw-fmod-meta-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            try
+            {
+                var missing = new List<string>();
+                if (IsUnderAssets(dir))
+                    CheckEntry(dir, missing);
+
+                Assert.IsEmpty(missing, "非 Assets 布局不应要求包根 .meta。");
+            }
+            finally
+            {
+                Directory.Delete(dir, true);
+            }
+        }
+
+        private static bool IsUnderAssets(string path)
+        {
+            string assets = Path.GetFullPath(Application.dataPath)
+                .Replace('\\', '/').TrimEnd('/') + "/";
+            string normalized = Path.GetFullPath(path).Replace('\\', '/');
+            return normalized.StartsWith(assets, StringComparison.OrdinalIgnoreCase);
         }
 
         private static void CheckEntry(string path, List<string> missing)

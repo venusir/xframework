@@ -51,15 +51,49 @@ namespace XFramework.XAudio.Fmod.Tests
             string runtime = Path.Combine(root, "Runtime");
             foreach (string file in Directory.GetFiles(runtime, "*", SearchOption.AllDirectories))
             {
-                if (file.EndsWith(".meta", System.StringComparison.Ordinal))
+                string relative = Path.GetRelativePath(runtime, file).Replace('\\', '/');
+                if (relative.EndsWith(".meta", System.StringComparison.Ordinal) ||
+                    HasIgnoredSegment(relative))
+                {
                     continue;
+                }
 
-                fromDisk.Add(Path.GetFileName(file));
+                fromDisk.Add("Runtime/" + relative);
             }
 
             Assert.IsNotEmpty(fromReadme, "README 的 ## 模块结构 未解析出 Runtime 文件");
             CollectionAssert.AreEquivalent(fromDisk, fromReadme,
                 "README 的 ## 模块结构 与 Runtime/ 磁盘文件不一致（漏收或残影）");
+        }
+
+        [Test]
+        public void ReadRuntimeTree_PreservesNestedDirectories()
+        {
+            const string readme = "## 模块结构\n\n```text\n" +
+                                  "Runtime/\n" +
+                                  "├── A.cs\n" +
+                                  "└── Sub/\n" +
+                                  "    └── A.cs\n" +
+                                  "```\n";
+
+            HashSet<string> paths = ReadRuntimeTree(readme);
+            CollectionAssert.AreEquivalent(
+                new[] { "Runtime/A.cs", "Runtime/Sub/A.cs" }, paths);
+        }
+
+        private static bool HasIgnoredSegment(string relativePath)
+        {
+            string[] segments = relativePath.Split('/');
+            foreach (string segment in segments)
+            {
+                if (segment.StartsWith(".", System.StringComparison.Ordinal) ||
+                    segment.EndsWith("~", System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private static HashSet<string> ReadRuntimeTree(string readme)
@@ -78,10 +112,68 @@ namespace XFramework.XAudio.Fmod.Tests
                 return files;
 
             string block = readme.Substring(fenceStart + 3, fenceEnd - fenceStart - 3);
-            foreach (Match match in Regex.Matches(block, @"(?<name>[A-Za-z0-9_.]+\.(?:cs|asmdef))"))
-                files.Add(match.Groups["name"].Value);
+            var directories = new List<string>();
+            string[] lines = block.Split('\n');
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                string line = lines[i].TrimEnd('\r');
+                if (line.Length == 0)
+                    continue;
+
+                int prefix = 0;
+                while (prefix < line.Length && IsTreeChar(line[prefix]))
+                    prefix++;
+
+                string rest = line.Substring(prefix);
+                int comment = rest.IndexOf('#');
+                if (comment >= 0)
+                    rest = rest.Substring(0, comment);
+
+                rest = rest.Trim();
+                if (rest.Length == 0)
+                    continue;
+
+                int depth = prefix / 4;
+                if (rest.EndsWith("/", System.StringComparison.Ordinal))
+                {
+                    while (directories.Count > depth)
+                        directories.RemoveAt(directories.Count - 1);
+                    while (directories.Count < depth)
+                        directories.Add(string.Empty);
+
+                    directories.Add(rest.TrimEnd('/'));
+                    continue;
+                }
+
+                if (!rest.EndsWith(".cs", System.StringComparison.Ordinal) &&
+                    !rest.EndsWith(".asmdef", System.StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (depth == 0 || directories.Count < depth)
+                    continue;
+
+                var path = new System.Text.StringBuilder();
+                for (int d = 0; d < depth; d++)
+                {
+                    if (d > 0)
+                        path.Append('/');
+                    path.Append(directories[d]);
+                }
+
+                path.Append('/');
+                path.Append(rest);
+                files.Add(path.ToString());
+            }
 
             return files;
+        }
+
+        private static bool IsTreeChar(char value)
+        {
+            return value == ' ' || value == '│' || value == '├' || value == '└' || value == '─';
         }
     }
 }
