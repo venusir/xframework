@@ -1,7 +1,8 @@
 namespace XFramework.XAudio.Fmod
 {
     /// <summary>
-    /// <see cref="FmodAudioSettings"/> 的不可变快照，供 provider 使用。
+    /// provider 需要的不可变快照：只承载 <see cref="EventPathPrefix"/> 与 <see cref="MaxVoices"/>；
+    /// 其余配置（Banks / LoadBankSamples / OwnsBanks / 三档音量）由安装器或核心选项直接读取。
     /// <para>资产在启动时读取一次；之后修改资产不影响已构造的 provider。</para>
     /// </summary>
     internal readonly struct FmodProviderOptions
@@ -23,13 +24,6 @@ namespace XFramework.XAudio.Fmod
             EventPathPrefix = eventPathPrefix ?? "event:/";
             MaxVoices = maxVoices < 1 ? 1 : maxVoices;
         }
-
-        #endregion
-
-        #region Static
-
-        /// <summary>默认选项：<c>event:/</c> 前缀、32 个槽位。</summary>
-        internal static FmodProviderOptions Default => new FmodProviderOptions("event:/", 32);
 
         #endregion
     }
