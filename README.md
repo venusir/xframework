@@ -72,6 +72,20 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 `FmodAudio` 门面。真实 bank/event 冒烟需要 Studio 工程 + bank。细节见
 [扩展包 README](Assets/XFramework.Fmod/README.md)；安装 URL 待包发布。
 
+### 可选：UI 制作扩展
+
+`Assets/XFramework.UIAuthoring/`（`com.venusy609.xframework.ui.authoring`）阶段 2a 已交付：声明式面板
+`UIDeclarativePanel` 与声明式对话框 `UIDeclarativeDialogPanel : UIDialogPanel<string>`，复用核心的
+加载、排序、遮罩、栈与池化，核心包零改动。策划在 UGUI 预制体 + 定义资产里配置文本、按钮动作与页签，
+程序只保留一次打开调用；提供面板/对话框模板与可直接运行的示例（Package Manager 的 Samples 页签导入）。
+
+```
+https://github.com/venusir/xframework.git?path=Assets/XFramework.UIAuthoring#<发布 tag>
+```
+
+HUD、数据源与声明式 Popup 留后续阶段。单根限制、动作集与已知限制见
+[扩展包 README](Assets/XFramework.UIAuthoring/README.md)。
+
 ## 开发这个仓库
 
 规则见 [`CLAUDE.md`](CLAUDE.md)，流程、提交节奏与这三条门禁的纪律见 [`Documentation/Workflow.md`](Documentation/Workflow.md)。

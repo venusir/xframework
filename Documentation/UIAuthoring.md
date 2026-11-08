@@ -1,9 +1,9 @@
 # UI 制作（面向策划）—— 评估与方案（维护侧）
 
 > **收件人**：框架作者 + 下一轮审计者。**不是**使用文档。
-> 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`——用法、已知限制、设计取舍一律留在那里，本文件不复述。
+> 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`（核心）与 `Assets/XFramework.UIAuthoring/README.md`（扩展包）——用法、已知限制、设计取舍一律留在那里，本文件不复述。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入），实施待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
+> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a 已实施并交付**（提交 `275f0168`→`1d2b5ce5`，扩展包 `Assets/XFramework.UIAuthoring/`），2b/3/4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
 
 ---
 
@@ -101,7 +101,7 @@
 - `TipConfig` 含 `Vector3? WorldPos`，Unity 不序列化可空值类型；`ShowTip` 动作应定义扩展自己的 DTO，运行时拼 `TipConfig`。
 - `UIAuthoringActionMessage` 原设计持有 `UIDeclarativePanel`。审计发现 `MessageManager` 的 keyed 发布会把最后一条写进重放缓存，带 `View` 会持有已关闭/回池的面板引用；最终推荐 A'：消息不带 `View`，只带 `ActionId`/`Payload`；若需要面板上下文，改用 `EventStream<T>` 注册表（§11.5 D3 C）。
 - 实际门面是 `SetLayerVisibility`，不是 `SetLayerVisible`（`UIManager.cs:513`）。
-- `ShowTipAsync` / `ShowDialogAsync` / `ShowPopupAsync` / `TipAssetPath` 只在门面，不在 `IUIManager`；扩展的 fake `IUIManager` 拦不到，测试要包一层。
+- `ShowDialogAsync` / `ShowPopupAsync` / `TipAssetPath` 只在门面，不在 `IUIManager`；`ShowTipAsync` 在 `IUIManager` 上（`IUIManager.cs:231`）。扩展的 fake `IUIManager` 只能拦到 `ShowTipAsync`，其余要包一层。
 - 新扩展包 `package.json` 要带 `samples` 数组与 `LICENSE.md`（Luban 先例 `package.json:22-28`）；维护向记录留在本文件，不新建 `Documentation/Modules/XFramework.UIAuthoring.md`（先例 `Documentation/Modules/README.md:83-84`）。
 - 核心 `Assets/XFramework` 下 `*.prefab` 零命中；`Samples~/Example/UISample.cs` 明确「不附带预制体」。阶段 2a/2b 的模板要从零建，P3 探针不是可选项。
 - 「只有模板、没有 Runtime 代码」的模板不可用：预制体根必须挂 `UIPanelBase` 子类；没有可挂载脚本就是 Missing Script。面板/对话框模板与阶段 2a 的 `UIDeclarativePanel`/`UIDeclarativeDialogPanel` 一起发，HUD 模板与 2b 的 `UIDeclarativeHudItem` 一起发；若坚持阶段 1 只发模板，只能随包发一个最小 `UIEmptyPanel : UIPanelBase` 占位。
@@ -704,6 +704,8 @@ public static class UIDataProviderRegistry
 
 ### 8.2 阶段 2a：声明式面板 + 声明式对话框 + 动作
 
+**状态（2026-11-08）**：已实施并交付（提交 `275f0168`→`1d2b5ce5`）。扩展包 `Assets/XFramework.UIAuthoring/` 含 Runtime/Editor/Tests/Samples 全部产物；核心 `Assets/XFramework/**` 零改动。验证：PlayMode 19 例 / EditMode 17 例全绿；模板经核心预制体校验器扫描 0 Error；`check-docs.ps1 -Enforce`（含新包示例编译）通过。**一次性验收未跑**：P2 的运行时半场（真实构建 / PlayMode 同包与依赖加载）与 P3 的实际模板裸消费方导入，见 §十。
+
 **前置裁定**：Q1 已裁定接受单根；Q3 定义资产形态推荐 SO（实施前用 P2 探针确认）。
 
 **交付物**
@@ -729,7 +731,7 @@ public static class UIDataProviderRegistry
 
 - EditMode：定义/动作计划/校验规则/节点目录的纯逻辑；fake `IUIActionRuntime`；无需 YooAsset。
 - PlayMode：`UIDeclarativePanel` 的打开/关闭/回池、按钮/开关动作、`UIActionSession` 的 ABA（打开中关闭再重开）、`UIDeclarativeDialogPanel` 的结果通道/状态/单飞、`ShowDialog` 动作、provider 尚未接入时的静态绑定；用 fake `IUIManager` 测导航。
-- `ShowTipAsync` / `ShowDialogAsync` 只在门面、不在 `IUIManager`：扩展测试要包一层或走门面；真实核心集成（`UIManager.OpenAsync` / `ShowDialogAsync` + YooAsset）用一次性探针，不做日常单测。
+- `ShowDialogAsync` 只在门面、不在 `IUIManager`；`ShowTipAsync` 在 `IUIManager` 上（`IUIManager.cs:231`）。扩展测试要包一层或走门面；真实核心集成（`UIManager.OpenAsync` / `ShowDialogAsync` + YooAsset）用一次性探针，不做日常单测。
 - 包内自设守卫全部落地；`run-tests` 全量覆盖。
 
 ### 8.3 阶段 2b：声明式 HUD（文本）
@@ -813,8 +815,8 @@ public static class UIDataProviderRegistry
 | 探针 | 问题 | 状态 | 何时跑 / 影响 |
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
-| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 运行时加载仍待阶段 2a 的 PlayMode/真实构建补测；D2 可选 SO（同包/依赖采集） |
-| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativeHudItem` 模板在 2a/2b 各补一次 |
+| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 构建图已过；**运行时半场（真实构建 / PlayMode 同包与依赖加载）未跑**——阶段 2a 已按 SO 落地，该验收仍待一次性探针 |
+| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` 模板已随 2a 交付（`Samples~/Templates/Panel.prefab` / `Dialog.prefab`，核心校验器 0 Error）；**裸消费方导入验收未跑**；HUD 模板待 2b |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
 | P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
 | P6 IL2CPP/AOT | `IUIDataProvider.TryGet<T>` 的泛型实例化、无反射 | `[未实测]` | 阶段 3 至少一次 IL2CPP 构建；必要时 `link.xml` |
@@ -870,7 +872,7 @@ public static class UIDataProviderRegistry
 
 | 编号 | 决策 | 现在必须定？ | 阻塞什么 | 推荐 |
 |---|---|---|---|---|
-| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4 |
+| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a 已完成（2026-11-08）**，下一阶段 2b |
 | **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包或同包依赖采集）；P2 构建图已过，运行时 2a 补测 |
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |

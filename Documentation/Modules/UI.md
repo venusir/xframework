@@ -141,7 +141,9 @@ Runtime/UI/
 - 已做：**弹窗尺寸按屏幕像素换算**（2026-10-17 · `069e0c3`，UI-C-001）——`ShowPopupAsync` 改传 `GetScreenRect(rect).size`，挂 `CanvasScaler` 不再错位。
 - 已做：**`UpdateManager.Clear()` 后的驱动器恢复**（2026-10-17 · `5681ce1`，UIA-002）——`Initialize` 在早退前重接每帧驱动器，并一并重注册现存分档驱动器。
 
-- 未做：**面向策划的 UI 制作方案——独立扩展包（声明式面板 / HUD / 对话框）**（2026-11-08 · 用户裁定，见 `Documentation/UIAuthoring.md`）——用户已裁定：接受单根限制（核心零改动，多页用同一预制体内的子页/页签）；只重开「预制体模板」一项；HUD 与 Dialog 的声明式设计纳入本方案（`UIDeclarativeHudItem` / `UIDeclarativeDialogPanel : UIDialogPanel<string>`）；向导、面板脚本与地址常量生成、可视化设计器、保存/构建门禁、校验器自动修复维持不做。实施按阶段 1（模板）、2a（面板+对话框）、2b（HUD）、3（数据源）排期。定义资产形态（SO vs 内联）、动作出口（keyed message vs 静态注册表）、动作模型（基类型打开 vs 类型字段）待实施前确认。
+- 已做：**声明式 UI 制作扩展包（阶段 2a）**（2026-11-08 · `275f0168`→`1d2b5ce5`，见 `Documentation/UIAuthoring.md`）——`Assets/XFramework.UIAuthoring/`（`com.venusy609.xframework.ui.authoring`）：`UIDeclarativePanel` / `UIDeclarativeDialogPanel : UIDialogPanel<string>`、`UIPanelDefinition` 定义资产、封闭动作集与 `UIActionSession`、`Custom`/对话框结果 keyed 消息、`UIAuthoringNavigation` 单根/单飞入口、编辑器校验器（`UI-AUTH-*`）与 Inspector、模板/示例、Runtime/Editor 公开 API 基线等包内守卫；**核心 `Assets/XFramework/**` 零改动**；PlayMode 19 例 / EditMode 17 例、`check-docs -Enforce`（含新包示例编译）全绿。P2 运行时与 P3 实际模板的裸消费方验收仍待一次性探针。
+
+- 未做：**面向策划的 UI 制作方案——独立扩展包（声明式面板 / HUD / 对话框）**（2026-11-08 · 用户裁定，见 `Documentation/UIAuthoring.md`）——用户已裁定：接受单根限制（核心零改动，多页用同一预制体内的子页/页签）；只重开「预制体模板」一项；HUD 与 Dialog 的声明式设计纳入本方案（`UIDeclarativeHudItem` / `UIDeclarativeDialogPanel : UIDialogPanel<string>`）；向导、面板脚本与地址常量生成、可视化设计器、保存/构建门禁、校验器自动修复维持不做。实施按阶段 1（模板）、2a（面板+对话框）、2b（HUD）、3（数据源）排期。定义资产形态（SO vs 内联）、动作出口（keyed message vs 静态注册表）、动作模型（基类型打开 vs 类型字段）待实施前确认。**2026-11-08 阶段 2a 已落地**：定义资产取 SO、动作出口取 keyed `MessageManager`（消息不带面板引用、禁缓冲订阅）、`Open`/`Push` 走 `OpenAsync<UIPanelBase>`；核心零改动；2b/3/4 待做。
 
 （本节由模块 README 的「建了什么 / 还差什么」与历轮审计结论合流。2026-09-30 `e613867` 搬入前者——
 README 只留使用方要知道的边界（「面板资源不会自动卸载」→ 其 `## 已知限制`）。2026-10-01 **第一轮
@@ -199,5 +201,5 @@ README 只留使用方要知道的边界（「面板资源不会自动卸载」�
 - 已做：**UI 补两条假 OnResume 守卫与 Dispose 隔离覆盖**（2026-10-25 · `e33a6d84`，R4-UIA-006，本轮补测试）——`PopToAsync` 目标已栈顶 / `PopToRootAsync` 栈深 ≤1；`Destroy` 时一个 provider 的 `DetachAll` 异常不阻断另一个。
 - 已做：**`img_` 源类型不匹配编辑器告警**（2026-10-25 · `e7d519cc`，R4-UIB-005）——三个分支都不匹配时 `#if UNITY_EDITOR` 打 Warning（带属性名/源类型），Release 零开销。回归 `UIPanelBindingConventionTests.ImgNodeWithUnsupportedSourceType_Warns`（改前静默）。
 - 已推翻：**~~暂不做：预制体模板~~**（原条目「暂不做：面板创建向导 / 预制体模板 / 面板脚本与地址常量生成」的模板一项；2026-11-08 · 用户裁定）——被 2026-11-08『未做：受限预制体模板随扩展包分发』取代；向导、面板脚本、地址常量生成维持暂不做。
-- 未做：**受限预制体模板**（2026-11-08 · 用户裁定）——扩展包 `Samples~/Templates` 随附面板 / HUD / Dialog 三种受限 Prefab Variant；模板必须带可挂载的根组件（与阶段 2a 的 `UIDeclarativePanel` 一起发，或发最小 `UIEmptyPanel` 占位）。向导、面板脚本、地址常量生成维持暂不做。
+- 未做：**受限预制体模板**（2026-11-08 · 用户裁定）——扩展包 `Samples~/Templates` 随附面板 / HUD / Dialog 三种受限 Prefab Variant；模板必须带可挂载的根组件（与阶段 2a 的 `UIDeclarativePanel` 一起发，或发最小 `UIEmptyPanel` 占位）。向导、面板脚本、地址常量生成维持暂不做。**面板/对话框模板 2a 已交付**（`Samples~/Templates/Panel.prefab` / `Dialog.prefab`，经核心预制体校验器 0 Error）；HUD 模板待 2b。
 
