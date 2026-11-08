@@ -60,6 +60,9 @@ XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  .ctor()
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  public sealed class : XFramework.XUI.View.UIDialogPanel<string>
+XFramework.XUI.Authoring.UIDeclarativeHudItem  ::  .ctor()
+XFramework.XUI.Authoring.UIDeclarativeHudItem  ::  Cysharp.Threading.Tasks.UniTask OnOpenImpl(object userData)
+XFramework.XUI.Authoring.UIDeclarativeHudItem  ::  public sealed class : XFramework.XUI.View.UIHudItem
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  .ctor()
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
