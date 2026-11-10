@@ -28,6 +28,7 @@ namespace XFramework.XUI.Authoring
         internal void Bind(UIActionExecutor executor)
         {
             BindTexts();
+            BindData();
 
             if (_view == null || _definition == null || _definition.ActionBindings == null)
                 return;
@@ -46,6 +47,14 @@ namespace XFramework.XUI.Authoring
 
             for (int i = 0; i < _definition.TextBindings.Count; i++)
                 BindText(_definition.TextBindings[i]);
+        }
+
+        /// <summary>
+        /// 绑定数据（阶段 3）：在静态文本之后执行，同节点冲突时数据绑定胜出。
+        /// </summary>
+        internal void BindData()
+        {
+            UIDeclarativeDataBinder.Bind(_view, _definition);
         }
 
         internal void SelectTab(string groupName, int index)
@@ -208,7 +217,9 @@ namespace XFramework.XUI.Authoring
 
         private static void Warn(string format, params object[] args)
         {
-            LogManager.Warning(UIAuthoringLog.Category, format, args);
+            // 显式 string.Format：直接传 params object[] 会被 LogManager 的单参泛型重载
+            // Warning<T1>(category, template, T1) 抢走（T1 = object[]），格式串原样输出。
+            LogManager.Warning(UIAuthoringLog.Category, string.Format(format, args));
         }
     }
 }

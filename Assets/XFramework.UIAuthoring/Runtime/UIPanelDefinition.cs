@@ -24,5 +24,8 @@ namespace XFramework.XUI.Authoring
 
         /// <summary>页签组。</summary>
         public List<UITabGroup> TabGroups = new List<UITabGroup>();
+
+        /// <summary>数据绑定（阶段 3）：节点 ← <see cref="IUIDataProvider"/> 的数据键。</summary>
+        public List<UIDataBinding> DataBindings = new List<UIDataBinding>();
     }
 }

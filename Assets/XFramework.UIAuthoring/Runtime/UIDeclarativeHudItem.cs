@@ -53,6 +53,7 @@ namespace XFramework.XUI.Authoring
             {
                 var binder = new UIDeclarativeBinder(this, _definition);
                 binder.BindTexts();
+                binder.BindData();
             }
             catch (Exception ex)
             {

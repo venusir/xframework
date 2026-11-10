@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XReactive;
 using XFramework.XUI;
 using XFramework.XUI.View;
 
@@ -130,6 +132,34 @@ namespace XFramework.XUI.Authoring.Tests
         {
             SetLayerInteractiveCalls++;
             LastLayerCall = "interactive:" + layer + ":" + interactive;
+        }
+    }
+
+    /// <summary>
+    /// 数据源测试替身：键 → 响应式属性的字典；可选让每次解析抛异常，验证注册表的异常隔离。
+    /// </summary>
+    internal sealed class FakeDataProvider : IUIDataProvider
+    {
+        internal readonly Dictionary<string, object> Values = new Dictionary<string, object>(StringComparer.Ordinal);
+
+        internal Exception ThrowOnTryGet;
+
+        public bool TryGet<T>(string key, out IReactiveProperty<T> source)
+        {
+            if (ThrowOnTryGet != null)
+                throw ThrowOnTryGet;
+
+            source = null;
+            if (!Values.TryGetValue(key, out object value))
+                return false;
+
+            if (value is IReactiveProperty<T> typed)
+            {
+                source = typed;
+                return true;
+            }
+
+            return false;
         }
     }
 
