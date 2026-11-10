@@ -6,6 +6,8 @@
 #
 # 射程：Runtime 程序集 Venusy609.Xframework.UI.Authoring（公开类型与 public 成员）。
 # Editor 程序集 Venusy609.Xframework.UI.Authoring.Editor 另见同目录的 UIAuthoringEditorPublicApiBaseline.txt。
+XFramework.XUI.Authoring.IUIDataProvider  ::  bool TryGet<T>(string key, out XFramework.XReactive.IReactiveProperty<T> source)
+XFramework.XUI.Authoring.IUIDataProvider  ::  public interface
 XFramework.XUI.Authoring.UIAction  ::  .ctor()
 XFramework.XUI.Authoring.UIAction  ::  public sealed class
 XFramework.XUI.Authoring.UIAction.ActionId  ::  string
@@ -56,6 +58,24 @@ XFramework.XUI.Authoring.UIAuthoringDialogStatus.Selected  ::  = 0
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  public static class
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIAuthoringDialogStatus> ShowDialogAsync(string assetPath, string actionId, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIDeclarativePanel> OpenAsync(string assetPath, int layer = 100, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XUI.Authoring.UIDataBinding  ::  .ctor()
+XFramework.XUI.Authoring.UIDataBinding  ::  public sealed class
+XFramework.XUI.Authoring.UIDataBinding.DataKey  ::  string
+XFramework.XUI.Authoring.UIDataBinding.Format  ::  string
+XFramework.XUI.Authoring.UIDataBinding.Kind  ::  XFramework.XUI.Authoring.UIDataBindingKind
+XFramework.XUI.Authoring.UIDataBinding.NodeName  ::  string
+XFramework.XUI.Authoring.UIDataBinding.TwoWay  ::  bool
+XFramework.XUI.Authoring.UIDataBindingKind  ::  public enum : int
+XFramework.XUI.Authoring.UIDataBindingKind.Active  ::  = 6
+XFramework.XUI.Authoring.UIDataBindingKind.Color  ::  = 2
+XFramework.XUI.Authoring.UIDataBindingKind.FillAmount  ::  = 3
+XFramework.XUI.Authoring.UIDataBindingKind.Slider  ::  = 4
+XFramework.XUI.Authoring.UIDataBindingKind.Sprite  ::  = 1
+XFramework.XUI.Authoring.UIDataBindingKind.Text  ::  = 0
+XFramework.XUI.Authoring.UIDataBindingKind.Toggle  ::  = 5
+XFramework.XUI.Authoring.UIDataProviderRegistry  ::  public static class
+XFramework.XUI.Authoring.UIDataProviderRegistry  ::  static void Register(XFramework.XUI.Authoring.IUIDataProvider provider)
+XFramework.XUI.Authoring.UIDataProviderRegistry  ::  static void Unregister(XFramework.XUI.Authoring.IUIDataProvider provider)
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  .ctor()
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
 XFramework.XUI.Authoring.UIDeclarativeDialogPanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
@@ -70,6 +90,7 @@ XFramework.XUI.Authoring.UIDeclarativePanel  ::  public sealed class : XFramewor
 XFramework.XUI.Authoring.UIPanelDefinition  ::  .ctor()
 XFramework.XUI.Authoring.UIPanelDefinition  ::  public sealed class : UnityEngine.ScriptableObject
 XFramework.XUI.Authoring.UIPanelDefinition.ActionBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UIActionBinding>
+XFramework.XUI.Authoring.UIPanelDefinition.DataBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UIDataBinding>
 XFramework.XUI.Authoring.UIPanelDefinition.Kind  ::  XFramework.XUI.Authoring.UIPanelDefinitionKind
 XFramework.XUI.Authoring.UIPanelDefinition.TabGroups  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UITabGroup>
 XFramework.XUI.Authoring.UIPanelDefinition.TextBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UITextBinding>
