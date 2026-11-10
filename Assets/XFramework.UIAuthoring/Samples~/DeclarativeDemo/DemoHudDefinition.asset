@@ -14,10 +14,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: Venusy609.Xframework.UI.Authoring::XFramework.XUI.Authoring.UIPanelDefinition
   Kind: 1
   Version: 1
-  TextBindings:
-  - NodeName: txt_name
-    Literal: NPC
-    LocalizationKey: 
-    UseLocalization: 0
+  TextBindings: []
   ActionBindings: []
   TabGroups: []
+  DataBindings:
+  - NodeName: txt_name
+    Kind: 0
+    DataKey: demo.hudName
+    TwoWay: 0
+    Format:
+  - NodeName: img_hp
+    Kind: 3
+    DataKey: demo.hp
+    TwoWay: 0
+    Format:

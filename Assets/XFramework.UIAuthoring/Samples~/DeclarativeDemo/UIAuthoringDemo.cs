@@ -3,16 +3,18 @@ using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XLog;
 using XFramework.XMessage;
+using XFramework.XReactive;
 using XFramework.XUI;
 using XFramework.XUI.Authoring;
 
 namespace XFramework.Example
 {
     /// <summary>
-    /// 声明式 UI 示例：打开 DemoPanel，按钮动作全部来自定义资产
-    /// （<c>ShowDialog</c> / <c>Custom</c> / <c>CloseSelf</c>），本脚本只保留一次打开调用与消息订阅。
-    /// <para><b>前置</b>：场景里有 <c>UIRootNode</c>；DemoPanel / DemoDialog 预制体与两个定义资产已加入
-    /// 消费方 YooAsset 主资源采集（面板地址与 <c>panelAddress</c> 一致，对话框地址与定义里
+    /// 声明式 UI 示例：打开 DemoPanel，按钮动作来自定义资产
+    /// （<c>ShowDialog</c> / <c>Custom</c> / <c>CloseSelf</c>），文本/颜色/滑条/开关来自
+    /// <see cref="UIAuthoringDemoDataProvider"/>；本脚本只保留注册数据源、一次打开调用与消息订阅。
+    /// <para><b>前置</b>：场景里有 <c>UIRootNode</c>；DemoPanel / DemoDialog / DemoHud 预制体与三个定义资产
+    /// 已加入消费方 YooAsset 主资源采集（面板地址与 <c>panelAddress</c> 一致，对话框地址与定义里
     /// <c>ShowDialog.AssetPath</c> 一致，默认为 <c>ui/dialogs/demo</c>）。</para>
     /// <para>完整说明见包 README 的「模板与示例」。</para>
     /// </summary>
@@ -29,9 +31,17 @@ namespace XFramework.Example
 
         private IDisposable _customSubscription;
         private IDisposable _dialogSubscription;
+        private UIAuthoringDemoDataProvider _dataProvider;
+        private float _elapsed;
+        private float _progressDirection = 1f;
+        private float _hpDirection = -1f;
 
         private void Start()
         {
+            // 数据源是全局接缝：先注册，再打开/附加任何声明式视图。
+            _dataProvider = new UIAuthoringDemoDataProvider();
+            UIDataProviderRegistry.Register(_dataProvider);
+
             // 动作消息不带面板引用；用返回的句柄控制生命周期
             _customSubscription = MessageManager.Subscribe<string, UIAuthoringActionMessage>(
                 "demo.custom", OnCustomAction);
@@ -42,10 +52,51 @@ namespace XFramework.Example
             AttachHudAsync().Forget();
         }
 
+        private void Update()
+        {
+            if (_dataProvider == null)
+                return;
+
+            // 每 0.1 秒推一次值，演示「数据变化 → 视图自动刷新」；滑条/开关仍可由玩家操作写回。
+            _elapsed += Time.deltaTime;
+            if (_elapsed < 0.1f)
+                return;
+            _elapsed = 0f;
+
+            Push(_dataProvider.GetProperty<float>(UIAuthoringDemoDataProvider.ProgressKey),
+                ref _progressDirection, 0.05f);
+            Push(_dataProvider.GetProperty<float>(UIAuthoringDemoDataProvider.HpKey),
+                ref _hpDirection, 0.1f);
+        }
+
+        private static void Push(ReactiveProperty<float> property, ref float direction, float step)
+        {
+            if (property == null)
+                return;
+
+            float next = property.Value + step * direction;
+            if (next >= 1f)
+            {
+                next = 1f;
+                direction = -1f;
+            }
+            else if (next <= 0f)
+            {
+                next = 0f;
+                direction = 1f;
+            }
+
+            property.Value = next;
+        }
+
         private void OnDestroy()
         {
             _customSubscription?.Dispose();
             _dialogSubscription?.Dispose();
+
+            UIDataProviderRegistry.Unregister(_dataProvider);
+            _dataProvider?.Dispose();
+            _dataProvider = null;
 
             // HUD 的关闭入口只有一个：按目标调用 HideHud（面板的关闭入口不适用）。
             if (hudTarget != null && UIManager.IsInitialized)

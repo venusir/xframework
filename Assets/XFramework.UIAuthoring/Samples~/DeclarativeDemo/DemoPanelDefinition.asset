@@ -14,11 +14,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Venusy609.Xframework.UI.Authoring::XFramework.XUI.Authoring.UIPanelDefinition
   Kind: 0
   Version: 1
-  TextBindings:
-  - NodeName: txt_title
-    Literal: "\u58F0\u660E\u5F0F\u9762\u677F\u793A\u4F8B"
-    LocalizationKey: 
-    UseLocalization: 0
+  TextBindings: []
   ActionBindings:
   - ButtonNodeName: btn_dialog
     Actions:
@@ -81,3 +77,24 @@ MonoBehaviour:
       ResultId: 
       GroupName: 
   TabGroups: []
+  DataBindings:
+  - NodeName: txt_title
+    Kind: 0
+    DataKey: demo.title
+    TwoWay: 0
+    Format:
+  - NodeName: img_tint
+    Kind: 2
+    DataKey: demo.tint
+    TwoWay: 0
+    Format:
+  - NodeName: sld_progress
+    Kind: 4
+    DataKey: demo.progress
+    TwoWay: 1
+    Format:
+  - NodeName: tgl_mute
+    Kind: 5
+    DataKey: demo.mute
+    TwoWay: 1
+    Format:

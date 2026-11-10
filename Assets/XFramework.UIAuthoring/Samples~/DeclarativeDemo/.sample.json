@@ -1,5 +1,5 @@
 {
 	"displayName": "声明式 UI 示例",
-	"description": "声明式面板 + 对话框 + HUD + 定义资产 + 演示脚本：按钮打开对话框并用 CloseWithResult 返回结果，Custom 动作消息，可选 3D 目标跟随 HUD。",
+	"description": "声明式面板 + 对话框 + HUD + 定义资产 + 演示脚本 + 示例数据源：按钮打开对话框并用 CloseWithResult 返回结果，Custom 动作消息，文本/颜色/滑条双向/开关双向/HUD 血条由 UIAuthoringDemoDataProvider 提供，可选 3D 目标跟随 HUD。",
 	"createSeparatePackage": false
 }

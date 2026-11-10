@@ -9,12 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `UIDeclarativeHudItem : UIHudItem`：声明式 HUD（阶段 2b），`Kind=Hud` 的定义只绑定静态文本；不绑定动作，关闭用核心 `UIManager.HideHud(target)`。
+- `IUIDataProvider` / `UIDataProviderRegistry`（阶段 3）：强类型 `TryGet<T>` 数据源接缝，后注册优先，provider 异常隔离，`SubsystemRegistration` 会话复位。
+- `UIDataBinding` / `UIDataBindingKind`（Text / Sprite / Color / FillAmount / Slider / Toggle / Active）与 `UIPanelDefinition.DataBindings`；Panel / HUD / Dialog 打开时绑定，订阅随回池释放。
+- `Slider` / `Toggle` 双向：源实现 `IReactivePropertyWriter<T>` 时启用；只读源降级为单向并告警。
+- 校验器新增 `UI-AUTH-070..075`（节点/空 key/目标组件/TwoWay/Format/同节点冲突）与 `UI-AUTH-HUD-005`（HUD 双向不可交互）。
+- `UIDeclarativeHudItem`：声明式 HUD（阶段 2b），`Kind=Hud` 的定义只绑定静态文本；不绑定动作，关闭用核心 `UIManager.HideHud(target)`。
 - 校验器新增 `UI-AUTH-HUD-*`（根 RectTransform、动作/页签不支持、文本节点超深），扫描器候选加入 HUD。
 - `Samples~/Templates/Hud.prefab`、`Samples~/DeclarativeDemo` 的 DemoHud 预制体/定义与演示脚本 HUD 跟随。
+- `Samples~/DeclarativeDemo` 增加 `UIAuthoringDemoDataProvider`、DemoPanel 的图片/滑条/开关节点与 DemoHud 血条，演示文本、颜色、滑条双向、开关双向、HUD 数据绑定。
+
+### Fixed
+
+- `UIDeclarativeBinder` 的告警 helper 直接传 `params object[]` 会被 `LogManager` 的单参泛型重载抢走，格式串原样输出；改为显式 `string.Format` 后再记日志。
 
 ### Not verified
 
+- YooAsset 定义资产运行时加载（同包 / 依赖采集）——一次性验收未跑，结论边界见包 README。
 - HUD 模板的裸消费方导入验收（P3 机制已过，实际模板未跑）。
 
 ## [0.1.0] - 2026-11-08
