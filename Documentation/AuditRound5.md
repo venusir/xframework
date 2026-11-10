@@ -64,7 +64,7 @@
 | 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；2 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 已完成 | §6、§8、附录 C | provider 缝逐行复核未发现新 P1/P2；2 条 Audio P3 + 2 条 UI 校验器 P3 |
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 已完成 | §6、§8、附录 C | T2 15 模块 + T3 8 模块；Luban R4 批次 3/4 修复复核；3 条 Luban P3 |
-| 7 | B6 工程面与发布 | 待做 | §6、§7 | |
+| 7 | B6 工程面与发布 | 已完成 | §6、§7 | 门禁/守卫/四包元数据/发布就绪；1 P2 + 5 P3 |
 | 8 | B7 报告收口 | 待做 | §2 总览、§4–§13、附录 B/C | |
 | 9 | B8 收尾验证 | 待做 | 附录 A | FULL + DOC + 自证 |
 
@@ -158,6 +158,15 @@
 
 > 核心 Audio 的 provider 缝与内置 `AudioSourceProvider` 本轮逐行复核（`PlayAsync` 预占 → validity 注册 → 加载 → 取消/作废代际 → 起播 → 租约交接；`Stop`/`Release`/`SetPaused`/`SetVolume`/`Poll`；池的 `Invalidate`/`RebuildVoice`；核心 `PlayCoreAsync` 的 OCE 与 false 分支、`SweepVoices`、`Pause`/`Resume`、`RefreshVolumes`）。**未发现新的 P1/P2**；R4-AUD-001 的坏源重建与 R4 后的 provider 缝修复（P1-1/P1-2/P1-3、C1–C6）均有代码 + 用例证据。
 
+### 工程面（门禁 / 守卫 / 包元数据 / 发布）
+
+- **R5-ENG-001 · P2 · A3/D3**：`Tools/check-docs.ps1`（编译范围只列 `Assets/XFramework/Runtime` 与 `Assets/XFramework/Editor`）——本轮用 `dotnet build <包 csproj> -p:DocumentationFile=...` 对三个扩展包实测 XML 文档告警：**UIAuthoring 8 条 CS1591**（7 个公开/受保护 override + `UIPanelDefinitionEditor.OnInspectorGUI`）、**Luban 1 条 CS1574**（`AssetLubanDataProvider` 的死 cref，见 R5-LBN-002）、Fmod-free 0 条。这些告警不进任何门禁（包内守卫只查结构/API 形状，不编译文档），R4-ADJ-03 的「暂不做」由此有了第一份实测证据。建议至少给三个包各加一条 DocumentationFile 编译探针（或把 `check-docs.ps1` 的扫描根/项目列表泛化），否则包内 XML 文档只能靠评审。
+- **R5-ENG-002 · P3 · D1**：`Assets/XFramework/Editor/Venusy609.Xframework.Editor.asmdef:2-8` —— 新增的 UI 预制体校验器让核心 Editor 程序集引用 `YooAsset` 与 `YooAsset.Editor`；`Tests/Editor/Architecture/DependencyDeclarationTests` 仍只校验「README 依赖表 / 安装器清单 / manifest 三处已列项逐字一致」，**不反查 asmdef 引用**（R4 已登记「未做」）。当前 YooAsset 已在三处声明，故不构成缺陷；但这是该缺口的第二个实例（第一个是 Input System / Cinemachine 漏列）。建议在反查机制落地前，至少把「Editor asmdef 的引用集合」写进依赖声明测试的射程说明或台账。
+- **R5-ENG-003 · P3 · A1**：`README.md:77` —— UIAuthoring 小节开头仍写「阶段 2a 已交付」，而同节 `:86` 已列 2b/3/4；同一段落自相矛盾。建议改为「阶段 2a/2b/3/4 已交付」或把首句改成不绑阶段的描述。
+- **R5-ENG-004 · P3 · D4**：`Documentation/Modules/README.md:81-84` —— 「可选扩展包」只有 Luban 与 Fmod 的「不建 `Modules/<包>.md`」条目；UIAuthoring 的维护向记录同样在 `Documentation/UIAuthoring.md`（`Ledger.md` §二与 `CLAUDE.md` 文档分层已登记），但本节没有对应指针。建议补一条同形条目，避免维护者在本文件里找不到 UIAuthoring 的台账位置。
+- **R5-ENG-005 · P3 · 发布**：四个 `package.json` 版本分别为核心 `0.4.0`、Luban `0.1.0`、Fmod `0.2.0`、UIAuthoring `0.1.0`；`git tag` 仍只有 `0.3.0`，四个包的 `[Unreleased]` 均有未发布内容（核心 Audio provider 缝 + UI 校验器；Fmod 的 bank/backend 修复；UIAuthoring 的 2b/3/4）。R4-ADJ-04 的「0.4.0 / Luban 0.1.0 tag」仍未做，本轮新增 Fmod 0.2.0 与 UIAuthoring 0.1.0 两个 tag 缺口。建议发布流程按「核心 0.4.0 + 三个扩展包同 tag」一次核对（tag 是用户动作）。
+- **R5-ENG-006 · P3 · D3**：`Assets/XFramework.UIAuthoring/Tests/Runtime/Architecture/UIAuthoringDependencyDeclarationTests.cs:33-50` 与 `Assets/XFramework.Fmod/Tests/Runtime/Architecture/FmodDependencyDeclarationTests.cs` —— 两个包的依赖守卫只查 Runtime asmdef；UIAuthoring 的 **Editor asmdef** 已引用 `YooAsset` / `YooAsset.Editor` / TMP，Fmod 的 Integration asmdef 引用 `FMODUnity`（有专门守卫）。Editor 侧新增依赖目前没有包内守卫，也没有 README 依赖表变更；当前 YooAsset 是核心既有依赖，故不构成缺陷。建议把 Editor asmdef 纳入包依赖守卫的射程说明。
+
 ### Luban（扩展包，R4 复审）
 
 - **R5-LBN-001 · P3 · A1/B2**：`Assets/XFramework.Luban/Runtime/AssetManagerLubanAssetSource.cs:24-48` —— `LoadTextAssetsAsync` 先把句柄映射成 `LubanTextSlice`（保存 `TextAsset` 引用），在 `finally` 里 `Dispose` 全部句柄，**之后**才调用 `MapTextAssets` 读 `slice.Asset.bytes`。类注释写的是「把 TextAsset / RawFile 句柄读成字节后立即释放」，实现顺序相反；当前依赖 YooAsset `AutoUnloadBundleWhenUnused=false`（默认）让资源在 Release 后仍存活。若消费方把该选项置 true 或在此期间触发未使用资源卸载，映射可能读到已卸载的 `TextAsset`（`bytes` 空/异常）。建议在 `try` 内把 `bytes` 复制进切片（`LubanTextSlice` 存 `byte[]`），与 `LoadRawFileAsync` 的 `GetRawFileData()` 在 `using` 内读取同形。
@@ -193,7 +202,38 @@
 
 ## 7. 跨模块主题
 
-（待 B6/B7 填充）
+### 7.1 前轮修复的残留与「修复只改一处」
+
+R4 的 71 条全部有处置，但本轮仍能看到同族问题的第二次显形：`R5-UAU-001`（控制器拦下关闭后会话失效）与 R4-UIB-003 的控制器门控同源——都是「关闭路径返回了，但调用方不知道」；`R5-AUD-001`（Audio 不在复位族）与 R4-AST-006 的「在途 impl 订阅静态事件」同族——静态态只丢引用不够。共同根因仍是「修复提交只改被引用的一处」；实施轮继续按「一个修复核对五处 + 改前必红」。
+
+### 7.2 扩展包文档门禁射程（R5-ENG-001）
+
+R4-ADJ-03 把扩展包 XML 文档留给评审；本轮实测两个包已有 **9 条**文档告警（UIAuthoring 8 CS1591 + Luban 1 CS1574），证明这条射程缺口在增长。是否把 `check-docs.ps1` 的扫描根/项目列表泛化，还是给每个包加一条 DocumentationFile 探针，是实施轮的工程裁定（R5-ADJ 候选）；不改变「核心六道门禁只扫核心包」的现有口径。
+
+### 7.3 发布就绪（四包）
+
+- 核心 `package.json` 0.4.0、`[Unreleased]` 含 Audio provider 缝 + UI 校验器；`git tag` 仍只有 0.3.0（R4-ADJ-04 未做）。
+- Luban 0.1.0、Fmod 0.2.0、UIAuthoring 0.1.0 均无 tag；三个包的 `[Unreleased]` 分别有 R4 修复 / Phase 2 修复 / 阶段 2b/3/4。
+- 根 README 与包 README 的安装 URL 仍是 `#<发布 tag>` 占位（核心 `:39,54,83`、Luban `:22,34`）。
+- 结论：**未就绪**；tag 与 URL 是发布动作，不阻塞代码审计。
+
+### 7.4 依赖真相与 asmdef 反查（R5-ENG-002/006）
+
+核心三处（包 README 依赖表 / 安装器清单 / manifest）仍一致（`DependencyDeclarationTests` 全绿）；但 `DependencyDeclarationTests` 不反查 asmdef，本轮新增的 Editor asmdef 引用（`YooAsset` / `YooAsset.Editor`）与 UIAuthoring Editor asmdef 的引用只在运行时被读到，不在包依赖守卫射程。当前不构成编译缺陷（YooAsset 已声明），但反查机制未建的缺口由 R4 的「未做」继续承接。
+
+### 7.5 「类型即身份」边界在新包上的复用
+
+UIAuthoring 的 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativePopupPanel` 用**不同具体类型**绕开核心「按具体类型登记」的单根限制（`Documentation/UIAuthoring.md` §2.3）；核心零改动。这不是新机制，而是对既有约束的正面利用。R5 复核：三种类型可同时打开、各自单飞，与设计一致；`Open`/`Push` 校验接受 Popup 是这条边界的反例（R5-UAU-003）。
+
+### 7.6 条件编译与测试真实性（FMOD / UIAuthoring）
+
+FMOD 的 Integration 程序集与 7 个集成用例只在 `XFRAMEWORK_FMOD` 下编译，干净克隆的默认全量不编译它们（R5-FMD-006）；UIAuthoring 的生产 `UIManagerActionRuntime` 零直接测试（R5-UAU-010）。两处共同说明：**包内守卫覆盖「结构/形状」，行为覆盖仍靠 fake 与一次性探针**。实施轮应优先把「生产运行时/真实后端」的缝补上，而不是增加结构守卫。
+
+### 7.7 台账、计数与文档状态
+
+- `check-docs -Enforce` 535 条台账（R4 冻结 463；增长来自 R4 实施轮、FMOD/UIAuthoring 包与新增模块条目）。
+- `Modules/README.md` 可选扩展包缺 UIAuthoring 指针（R5-ENG-004）；根 README 阶段 2a（R5-ENG-003）；`Documentation/UIAuthoring.md` 维护向漂移（R5-UAU-009）。
+- `Documentation/ModuleAudit.md` 与 `CLAUDE.md` 的 AuditRound5 登记已在本轮步骤 0 完成。
 
 ## 8. 逐模块审计记录
 
@@ -282,7 +322,16 @@
 - **第三方对照**：FairyGUI / UI Toolkit 的结论沿用 `Documentation/UIAuthoring.md` §6.6 与 `FairyGUI.md`，本轮未重做；本轮新增的对照点是「声明式制作层与核心具体类型注册的耦合」——单根限制来自核心按具体类型登记，Popup 用独立类型绕开，与设计文档一致。
 - **残留与不确定**：P6 IL2CPP/AOT（`IUIDataProvider.TryGet<T>` 泛型实例化）未验证；TMP 只有一次性探针、自动化仍只测 UGUI `Text`；真实核心 `UIManager` 集成仍以 fake 为主；`Samples~` 的 Prefab/定义资产未做本轮导入回归；包无发布 tag（0.1.0，阶段 2b/3/4 在 `[Unreleased]`）。
 
-（其余对象待 B4–B6 填充：Luban、Audio、UI 校验器、15 个 T2 核心模块、8 个 T3 核心模块、工程面。）
+### 工程面（Tools / 守卫 / 示例 / 包元数据 / 发布）
+
+- **范围与输入**：`Tools/run-tests.ps1`（`-TimeoutSeconds`、四个 `-Update*` 开关）、`check-docs.ps1`（覆盖范围/门禁码/三组 Samples 根）、`check-samples.ps1`；核心 11 个 Architecture 守卫 + 三个扩展包的守卫清单；四个 `package.json`、`git tag`、四份 `CHANGELOG` 的 `[Unreleased]`；根 README、`Documentation/Modules/README.md`、`Documentation/Workflow.md`、`Documentation/Ledger.md`、`CLAUDE.md` 的文档分层登记。
+- **18 类留痕**：A1 命中（根 README 阶段 2a、Modules README 可选包缺 UIAuthoring，R5-ENG-003/004）；A2 扫过（核心 11 处门面完备性守卫 + 包内门面/可见性守卫）；A3 命中（扩展包 XML 文档告警实测非零，R5-ENG-001）；B1–B6 扫过（工程面无生命周期/并发/共享槽）；C1 扫过（基准套件 6 个 `[Explicit]` 不进门禁）；C2 扫过（`run-tests` 超时已实现，退出码 3 与失败/无结果区分，`Workflow.md:104`）；D1 命中（Editor asmdef 新引用与依赖反查缺口，R5-ENG-002；包依赖守卫 Editor 侧射程，R5-ENG-006）；D2 扫过；D3 命中（窗口/集成态/包文档测试缺口已分别登记在 UAU/UIE/FMD/LBN 条目）；D4 命中（Modules README 可选包指针，R5-ENG-004）；D5 扫过；E/F 扫过。
+- **门禁快照**：BUILD 0 error；FULL PlayMode 2405/2405、EditMode 749（743 + 6 skip）；DOC 通过（0 门禁码、535 条台账、24/24 文件树、三组 Samples 编译）。`-Update*` 四个开关（核心 / Luban / Fmod / UIAuthoring 双基线）均在 `Workflow.md:107-111` 与脚本中一致。
+- **新发现**：R5-ENG-001..006（§6）。
+- **前轮修复偏差**：R4-ENG-001/002/003/005/009 已修；ENG-004（check-docs 不覆盖扩展包）以 R5-ENG-001 的实测证据重新提交；ENG-006（Editor 基线）已做；ENG-007（示例只守编译）维持。
+- **旧结论复核**：CI 仍暂不接入（`CI.md` 三条重开判据未触发）；包在子目录 / `Tests` 不移出 / 不做 Git 钩子维持；OpenUPM 仍待上架（外部动作）。
+- **第三方对照**：无（工程面为本仓流程）。
+- **残留**：扩展包 tag、OpenUPM、真实 CI、`check-docs` 射程泛化、依赖反查。
 
 ## 9. 待裁的一次性裁定建议
 
@@ -375,3 +424,9 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 | R5-LBN-001 | P3 | Luban | TextAsset 句柄先释放、后读 `bytes` |
 | R5-LBN-002 | P3 | Luban | `AssetLubanDataProvider` 的 `AssetManager` cref 无法解析（CS1574） |
 | R5-LBN-003 | P3 | Luban | README 安装 URL 仍为 `#<tag>` 占位、包无 tag |
+| R5-ENG-001 | P2 | 工程面 | 扩展包 XML 文档告警实测非零且无门禁（UIAuthoring 8 / Luban 1） |
+| R5-ENG-002 | P3 | 工程面 | 核心 Editor asmdef 新引用 YooAsset，依赖反查仍缺 |
+| R5-ENG-003 | P3 | 工程面 | 根 README 的 UIAuthoring 小节仍写「阶段 2a」 |
+| R5-ENG-004 | P3 | 工程面 | `Modules/README.md` 可选扩展包缺 UIAuthoring 指针 |
+| R5-ENG-005 | P3 | 发布 | 四个包均无发布 tag，`[Unreleased]` 均有未发内容 |
+| R5-ENG-006 | P3 | 工程面 | 扩展包依赖守卫不覆盖 Editor asmdef |
