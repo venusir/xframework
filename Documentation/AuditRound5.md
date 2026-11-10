@@ -60,7 +60,7 @@
 | 0 | 生成审计文档骨架与登记 | 已完成 | 全文骨架 | `CLAUDE.md` 文档分层表 + `ModuleAudit.md` 轮次列表已同步 |
 | 1 | B0 边界与基线 | 已完成 | §0、附录 A | BUILD 0 error；PLAY 2405/2405、EDIT 743 通过 + 6 skip；DOC 通过（535 条台账） |
 | 2 | B1 R4 修复复核 | 已完成 | §3 | 3 P1 逐条读 diff + 用例；51 P2 / 17 P3 聚合 + 抽样；11 ADJ、18 PRB 对台账；未发现二次回归 |
-| 3 | B2 FMOD 包全量 | 待做 | §6、§8、附录 C | 首次审计；默认无 SDK |
+| 3 | B2 FMOD 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P2 + 6 P3；FMOD-free XML 告警探针 0 条；Integration 默认不编译，已登记 |
 | 4 | B3 UIAuthoring 包全量 | 待做 | §6、§8、附录 C | 首次审计 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 待做 | §6、§8、附录 C | |
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 待做 | §6、§8、附录 C | |
@@ -144,7 +144,17 @@
 
 ## 6. R5 P2 清单（按模块）
 
-（待填：UI / Camera / Config / Asset / Input / Localization / Audio / Settings / Save / Update / Pipeline / Pool / File / Serialize / Scene / Diagnostics / Luban / FMOD / UIAuthoring / 工程面）
+> 一条一行；`[回归]` 表示由前轮修复引入，`[跨模块]` 表示归拥有方立条，`[需实测]` 表示需运行期/真机证据。P3 也列在各模块下，便于下一轮按模块取用。
+
+### FMOD（扩展包，首次审计）
+
+- **R5-FMD-001 · P2 · D4/A2**：`Assets/XFramework.Fmod/Runtime/Integration/FmodEventBackend.cs:162-168` —— `SetGlobalParameter` 在 `RuntimeManager.IsInitialized == false` 时直接返回 `false`，而其余 FMOD 入口（`CreateInstance` / `LoadBank` / `GetBus` / `HasBankLoaded`）都会经 `RuntimeManager.Instance` 懒初始化。首次在「还没有 bank/播放」时设置全局 RTPC（常见顺序：先设全局参数再起播）会静默失败——核心 `AudioManagerImpl.TrySetGlobalParameter`（`:207-220`）只透传 `false`，不记日志；包 README 只写「参数经 AudioManager」，未写这个前置。建议删掉该早退（`StudioSystem` 会懒初始化，`SystemNotInitializedException` 已被下方 catch），或至少打一条一次性 Warning 并写入已知限制。验证：PlayMode 探针，在未加载 bank/未播放时 `AudioManager.SetGlobalParameter` → 断言 `true`；改前必红。
+- **R5-FMD-002 · P3 · A1/C2 [需实测]**：`Assets/XFramework.Fmod/README.md:107,115,126` 与 `Documentation/FMOD.md` 的「bank 加载同步阻塞」——FMOD 2.04 的 `RuntimeManager.LoadBank` 在 **Android + `AndroidUseOBB`** 与 **WebGL** 走协程（SDK `RuntimeManager.cs:1003-1013` 的 `StartCoroutine(loadFromWeb)`），`FmodEventBackend.LoadBank`（`:191-216`）在协程尚未完成时就返回 `true`；安装成功不等于 bank 已可用，异步失败也不会回传给安装器。建议 README 按平台写明该例外（或安装后轮询 `RuntimeManager.HaveAllBanksLoaded`），并标 `需实测`。
+- **R5-FMD-003 · P3 · A1**：`Documentation/FMOD.md:153` 写「`FmodAudioSettings` 放在任意 `Resources` 目录」，而 `FmodAutoInstall.cs:18,38` 用 `Resources.Load<FmodAudioSettings>("FmodAudioSettings")`——只认 Resources 根级（或命名为该路径的资源）；`Resources/Settings/FmodAudioSettings.asset` 这类嵌套路径不会被找到。包 README `:29` 的「在 `Assets/Resources/` 下创建」是准确的，维护向文档应同步收窄。建议改为「任意 `Resources` 目录的根级」。
+- **R5-FMD-004 · P3 · A1**：`Documentation/AudioProvider.md:407` 引用不存在的 fixture 名 `IntegrationAsmdef_IsConditionallyGated`；实际 fixture 是 `FmodDependencyDeclarationTests.IntegrationAsmdefs_BindDefineToConstraints`（`FmodDependencyDeclarationTests.cs:88`）。建议按真实名订正。
+- **R5-FMD-005 · P3 · A1/D1**：`Assets/XFramework.Fmod/README.md:24-25` 的「包名不是预期时手动加 `XFRAMEWORK_FMOD`」没有写明前提：Integration asmdef 硬引用 `FMODUnity`（`Runtime/Integration/Venusy609.Xframework.Fmod.Unity.asmdef:4`），若 FMOD 未安装却手动定义该符号，Integration 程序集会进入编译并因缺少 `FMODUnity` / `FMOD.Studio` 类型报 CS0246。建议补一句「仅在 FMOD 已安装（或同名 `FMODUnity` 程序集存在）时手动定义」。
+- **R5-FMD-006 · P3 · D3**：`Assets/XFramework.Fmod/Runtime/Integration/FmodEventBackend.cs` 与 `Tests/Runtime/Integration/FmodEventBackendTests.cs` 只在 `XFRAMEWORK_FMOD` 定义时编译（两个 asmdef 都有 `defineConstraints`）。干净克隆的默认全量（本仓当前 2405 例）**不包含**这 7 个集成用例，也不编译 Integration 源码；现有证据是 2026-11-07 的一次性两态实测（`Documentation/FMOD.md` §七/§九）。建议在包 README 的「已知限制」写明「默认门禁只编译 FMOD-free 层」，并把「有 SDK 全量」登记为一次性探针（R5-PRB-xx）。
+- **R5-FMD-007 · P3 · D3**：`Tests/Runtime/FmodSettingsTests.cs` 只以 `ScriptableObject.CreateInstance` 构造配置，没有资产往返（`AssetDatabase.CreateAsset` / `LoadAssetAtPath`）用例；`FmodAudioSettings` 的序列化字段一旦在某 Unity 版本不序列化，`FmodAutoInstall` 会读到默认值而测试全绿。建议补一条 EditMode 资产往返（与 R4-CONF-003 同形），或写明「配置资产由 Inspector 负责、包不承诺序列化契约」。
 
 ## 7. 跨模块主题
 
@@ -152,7 +162,19 @@
 
 ## 8. 逐模块审计记录
 
-（待 B2–B6 填充：24 个核心模块 + 3 个扩展包 + 工程面，每个对象记录范围与输入、18 类判据留痕、前轮修复偏差、旧结论复核、开口项、第三方对照、残留与不确定。）
+> 每个对象记录：范围与输入、18 类判据留痕、前轮修复偏差、旧结论复核、开口项、第三方对照、残留与不确定。P0/P1 明细见 §4/§5，P2/P3 明细见 §6。
+
+### FMOD（T1 扩展包全量，首次）
+
+- **范围与输入**：`Assets/XFramework.Fmod/` Runtime 8 个 `.cs`（`FmodAudioProvider` / `FmodEventSlotTable` / `FmodAudioSettings` / `FmodProviderOptions` / `IFmodEventBackend` / `FmodInstaller` / `AssemblyInfo`）、`Integration/` 4 个（`FmodEventBackend` / `FmodAutoInstall` / `AssemblyInfo` / asmdef）、Tests 16 文件（12 fixture / 92 例）、Architecture 6 个守卫 fixture、README / CHANGELOG / package.json、`Documentation/FMOD.md` / `Documentation/AudioProvider.md`、核心 Audio 接缝；FMOD 2.04 本地 SDK 源码（`E:\UnityPackages\com.fmod.fmod-for-unity.v204`，`src/RuntimeManager.cs` / `src/Settings.cs` / `src/RuntimeUtils.cs`）。
+- **18 类留痕**：A1 命中（`FMOD.md:153` 的 Resources 射程、README 的 bank 同步说法、`AudioProvider.md:407` fixture 名、手动 define 前提，R5-FMD-002/003/004/005）；A2 命中（`SetGlobalParameter` 首次调用早退，R5-FMD-001）；A3 **人工扫过**（FMOD-free 程序集用 `dotnet build -p:DocumentationFile` 实测 0 条 XML 告警；Integration 因无 SDK 未编译，人工读注释未发现未转义泛型/死链，不能声称编译器已验）；B1 扫过（`Dispose` 后全部成员返回 default/false，`FmodAudioProvider` 与 `FmodEventBackend` 分别有幂等 Dispose 与 after-dispose 用例）；B2 扫过（槽位表代际 + `Release` 幂等 + 所有失败路径先归还槽位；`Dispose` 逆序释放 bank）；B3 扫过（provider 对 backend 的每次调用都 try/catch；installer 对 bank/backend 清理逐段隔离；backend 自身只对已知 FMOD 异常兜底，未知异常由 provider/installer 兜住）；B4 **命中-已文档化**（README 声明全部主线程，代码零断言；`Modules/Audio.md:99` 已记「暂不做」，R5 不重开，列为残留）；B5 扫过（`_instances` 按事件释放、`_ownedBanks` 按卸载移除、槽位表容量固定）；B6 不适用（无共享协调协议；provider/backend 无静态状态）；C1 扫过（provider 原语同步、`UniTask.FromResult` 无额外堆分配；`BuildEventPath` 拼接已写入「性能代价」）；C2 命中（Android OBB / WebGL 的 bank 协程，R5-FMD-002 标 `需实测`）；D1 扫过（FMOD-free 不引用 `FMODUnity`；Integration 硬引用只在条件程序集；包边界/依赖声明守卫在位）；D2 不适用（无重载）；D3 命中（Integration 默认不编译/不跑、配置资产无往返，R5-FMD-006/007）；D4 命中（全局参数首次调用静默 false，R5-FMD-001）；D5 扫过（依赖核心 `IAudioProvider` + 五个 internal 能力接口，无缺失原语；`SetPaused`/`SetVolume` 的宽 false 语义已在 README 与核心台账 `暂不做`）；E 扫过（bank/bus/snapshot 名称交给 FMOD 键空间，重名语义由 FMOD 定义并写入 README）；F 命中-低（`UnloadBank` 返回「是否已卸载」= `!HasBankLoaded`，与核心 XML 一致；引用了别的持有者时返回 false 属可接受语义，不单列）。
+- **前轮修复偏差**：R4 未审计 FMOD；2026-11-08 的包内修复批（`da815828` / `0f0b8d60` / `1501fb30` / `176e5cc7` / `f81b76fc` / `58631415` / `d73d5f32` / `e2e6a816` / `3d624463`）均有代码 + 用例/守卫证据，本轮未发现二次回归。
+- **旧结论复核**：`Documentation/AudioProvider.md` §九与 `Documentation/FMOD.md` §十一的「不提供 FmodAudio 门面 / 能力接口 internal / 配置资产自动安装 / 不内建 SDK」全部维持；`Modules/Audio.md` 的「SetPaused/SetVolume 宽 false 只记录」与「主线程断言暂不做」维持。
+- **开口项**：R5-FMD-001 建议进修复批次；R5-FMD-002/006 进探针轨（Android OBB/WebGL、有 SDK 全量）；R5-FMD-003/004/005/007 为文档/测试补齐。
+- **第三方对照**：FMOD 2.04 `RuntimeManager.LoadBank` 的引用计数（`loadedBanks.RefCount`）与异步平台分支、`RegisterLoadedBank` 的 `BankLoadException`（同步路径会抛；异步路径在协程内失败只记日志）、`Settings.SettingsAssetPath` = `FMOD/FMODStudioSettings`、`RuntimeManager` 懒初始化（`Instance` 属性）。**上游注意**：`RuntimeManager.LoadBank` 在 `RegisterLoadedBank` 抛 `BankLoadException` 时已 `loadingBanksRef++` 但不会 `--`，`HaveAllBanksLoaded` 会永久为 false；本包不使用该属性，如实记录为第三方事实。
+- **残留与不确定**：真实 bank/event 冒烟（需 Studio 2.04 工程 + `XFW_FMOD_EVENT` / `XFW_FMOD_BANK`）仍未跑；Integration 程序集与 7 个集成用例在本环境默认不编译；Android OBB/WebGL 的异步 bank 未实测；包无发布 tag（0.2.0）。
+
+（其余对象待 B3–B6 填充：UIAuthoring、Luban、Audio、UI 校验器、15 个 T2 核心模块、8 个 T3 核心模块、工程面。）
 
 ## 9. 待裁的一次性裁定建议
 
@@ -213,4 +235,14 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 
 ## 附录 C. R5 发现 ID 索引
 
-（待 B7 填充）
+> 按 ID 排序；一句话为报告内标题/首句的压缩，完整证据见对应节。其余模块的行随 B3–B7 追加。
+
+| ID | 级别 | 模块 | 一句话 |
+|---|---|---|---|
+| R5-FMD-001 | P2 | FMOD | `SetGlobalParameter` 在 RuntimeManager 未初始化时静默返回 false |
+| R5-FMD-002 | P3 | FMOD | Android OBB / WebGL 下 bank 异步加载，README 称同步阻塞 |
+| R5-FMD-003 | P3 | FMOD | `FMOD.md` 写「任意 Resources 目录」，实际只认根级路径 |
+| R5-FMD-004 | P3 | FMOD | `AudioProvider.md` 引用不存在的 fixture 名 |
+| R5-FMD-005 | P3 | FMOD | README 手动定义 `XFRAMEWORK_FMOD` 未写 FMOD 必须已安装 |
+| R5-FMD-006 | P3 | FMOD | Integration 程序集与 7 个集成用例默认不编译/不跑 |
+| R5-FMD-007 | P3 | FMOD | `FmodAudioSettings` 配置资产无序列化往返用例 |
