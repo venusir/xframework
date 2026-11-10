@@ -16,6 +16,7 @@ namespace XFramework.XUI.Authoring.Editor.Tests
                 Assert.That(definition.TextBindings, Is.Empty);
                 Assert.That(definition.ActionBindings, Is.Empty);
                 Assert.That(definition.TabGroups, Is.Empty);
+                Assert.That(definition.DataBindings, Is.Empty);
                 Assert.That(definition.Version, Is.GreaterThan(0));
             }
             finally
@@ -39,6 +40,18 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             Assert.That((int)UIActionKind.Custom, Is.EqualTo(12));
             Assert.That((int)UIActionKind.CloseWithResult, Is.EqualTo(13));
             Assert.That((int)UIActionKind.HideSelf, Is.EqualTo(14));
+        }
+
+        [Test]
+        public void DataBindingKindValues_AreStable()
+        {
+            Assert.That((int)UIDataBindingKind.Text, Is.EqualTo(0));
+            Assert.That((int)UIDataBindingKind.Sprite, Is.EqualTo(1));
+            Assert.That((int)UIDataBindingKind.Color, Is.EqualTo(2));
+            Assert.That((int)UIDataBindingKind.FillAmount, Is.EqualTo(3));
+            Assert.That((int)UIDataBindingKind.Slider, Is.EqualTo(4));
+            Assert.That((int)UIDataBindingKind.Toggle, Is.EqualTo(5));
+            Assert.That((int)UIDataBindingKind.Active, Is.EqualTo(6));
         }
 
         [Test]

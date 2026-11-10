@@ -38,10 +38,18 @@ namespace XFramework.XUI.Authoring.Editor
 
         internal const string GlobalAction = "UI-AUTH-060";
 
+        internal const string DataNodeMissing = "UI-AUTH-070";
+        internal const string DataKeyMissing = "UI-AUTH-071";
+        internal const string DataTargetMissing = "UI-AUTH-072";
+        internal const string DataTwoWayNotSupported = "UI-AUTH-073";
+        internal const string DataFormatIgnored = "UI-AUTH-074";
+        internal const string DataNodeConflict = "UI-AUTH-075";
+
         internal const string HudRootRectTransformMissing = "UI-AUTH-HUD-001";
         internal const string HudActionNotSupported = "UI-AUTH-HUD-002";
         internal const string HudTabNotSupported = "UI-AUTH-HUD-003";
         internal const string HudNodeDepthExceeded = "UI-AUTH-HUD-004";
+        internal const string HudTwoWayNotInteractive = "UI-AUTH-HUD-005";
     }
 
     /// <summary>

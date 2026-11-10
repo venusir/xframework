@@ -444,5 +444,236 @@ namespace XFramework.XUI.Authoring.Editor.Tests
 
             Assert.That(Has(issues, UIAuthoringRuleIds.ActionNotAllowed), Is.False);
         }
+
+        #region Data bindings
+
+        [Test]
+        public void DataNodeMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "missing", Kind = UIDataBindingKind.Text, DataKey = "demo.title",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataNodeMissing), Is.True);
+        }
+
+        [Test]
+        public void DataKeyMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title", Kind = UIDataBindingKind.Text, DataKey = string.Empty,
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataKeyMissing), Is.True);
+        }
+
+        [Test]
+        public void DataTextTargetMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title");
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title", Kind = UIDataBindingKind.Text, DataKey = "demo.title",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTargetMissing), Is.True);
+        }
+
+        [Test]
+        public void DataImageTargetMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "img_icon");
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "img_icon", Kind = UIDataBindingKind.Sprite, DataKey = "demo.icon",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTargetMissing), Is.True);
+        }
+
+        [Test]
+        public void DataSliderTargetMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "sld_progress");
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "sld_progress", Kind = UIDataBindingKind.Slider, DataKey = "demo.progress",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTargetMissing), Is.True);
+        }
+
+        [Test]
+        public void DataToggleTargetMissing_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "tgl_flag");
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "tgl_flag", Kind = UIDataBindingKind.Toggle, DataKey = "demo.flag",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTargetMissing), Is.True);
+        }
+
+        [Test]
+        public void DataTwoWayOnText_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title",
+                Kind = UIDataBindingKind.Text,
+                DataKey = "demo.title",
+                TwoWay = true,
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTwoWayNotSupported), Is.True);
+        }
+
+        [Test]
+        public void DataFormatOnSlider_Warns()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "sld_progress", typeof(Slider));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "sld_progress",
+                Kind = UIDataBindingKind.Slider,
+                DataKey = "demo.progress",
+                Format = "{0:P0}",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataFormatIgnored), Is.True);
+        }
+
+        [Test]
+        public void DataAndTextSameNode_Warns()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.TextBindings.Add(new UITextBinding { NodeName = "txt_title", Literal = "x" });
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title", Kind = UIDataBindingKind.Text, DataKey = "demo.title",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataNodeConflict), Is.True);
+        }
+
+        [Test]
+        public void DataDuplicateNode_Warns()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title", typeof(UnityEngine.UI.Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title", Kind = UIDataBindingKind.Text, DataKey = "demo.title",
+            });
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_title", Kind = UIDataBindingKind.Text, DataKey = "demo.subtitle",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataNodeConflict), Is.True);
+        }
+
+        [Test]
+        public void HudDataBinding_IsAllowed()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            CreateChild(hud.transform, "img_hp", typeof(Image));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "img_hp", Kind = UIDataBindingKind.FillAmount, DataKey = "demo.hp",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataNodeMissing), Is.False);
+            Assert.That(Has(issues, UIAuthoringRuleIds.DataTargetMissing), Is.False);
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudTwoWayNotInteractive), Is.False);
+        }
+
+        [Test]
+        public void HudTwoWayDataBinding_Warns()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            CreateChild(hud.transform, "sld_progress", typeof(Slider));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "sld_progress",
+                Kind = UIDataBindingKind.Slider,
+                DataKey = "demo.progress",
+                TwoWay = true,
+            });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudTwoWayNotInteractive), Is.True);
+        }
+
+        [Test]
+        public void HudDataNodeTooDeep_ReportsDepth()
+        {
+            UIDeclarativeHudItem hud = CreateHud();
+            Transform node = hud.transform;
+            for (int depth = 1; depth <= 6; depth++)
+                node = CreateChild(node, "layer_" + depth);
+            CreateChild(node, "txt_deep", typeof(UnityEngine.UI.Text));
+
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Hud);
+            definition.DataBindings.Add(new UIDataBinding
+            {
+                NodeName = "txt_deep", Kind = UIDataBindingKind.Text, DataKey = "demo.title",
+            });
+
+            List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.HudNodeDepthExceeded), Is.True);
+        }
+
+        #endregion
     }
 }

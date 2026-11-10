@@ -69,6 +69,7 @@ namespace XFramework.XUI.Authoring.Editor
             var resultIds = new HashSet<string>(StringComparer.Ordinal);
 
             ValidateTextBindings(root.transform, definition, nodeCounts, issues);
+            ValidateDataBindings(root.transform, definition, rootKind, nodeCounts, issues);
             ValidateActionBindings(root.transform, definition, rootKind, nodeCounts, resultIds,
                 addresses, addressCheckPerformed, loadPrefab, issues);
             ValidateTabGroups(root.transform, definition, nodeCounts, issues);
@@ -93,7 +94,7 @@ namespace XFramework.XUI.Authoring.Editor
             {
                 Add(issues, UIAuthoringRuleIds.HudActionNotSupported,
                     UIAuthoringIssueSeverity.Error,
-                    "HUD 在阶段 2b 只支持文本，不支持动作绑定；关闭 HUD 请用程序调用 UIManager.HideHud。");
+                    "HUD 不支持动作绑定；关闭 HUD 请用程序调用 UIManager.HideHud。");
             }
 
             if (definition.TabGroups != null && definition.TabGroups.Count > 0)
@@ -105,25 +106,37 @@ namespace XFramework.XUI.Authoring.Editor
             if (definition.TextBindings != null)
             {
                 for (int i = 0; i < definition.TextBindings.Count; i++)
-                {
-                    UITextBinding binding = definition.TextBindings[i];
-                    if (binding == null || string.IsNullOrEmpty(binding.NodeName))
-                        continue;
+                    WarnIfHudNodeTooDeep(root.transform, definition.TextBindings[i]?.NodeName, issues);
+            }
 
-                    Transform node = FindNodeAnyDepth(root.transform, binding.NodeName, 0,
-                        out int depth);
-                    if (node != null && depth > MaxNodeDepth)
-                    {
-                        Add(issues, UIAuthoringRuleIds.HudNodeDepthExceeded,
-                            UIAuthoringIssueSeverity.Warning,
-                            "文本节点位于第 " + depth + " 层，超过约定绑定的 " + MaxNodeDepth +
-                            " 层上限（根为第 0 层），运行时不会绑定。",
-                            binding.NodeName);
-                    }
-                }
+            if (definition.DataBindings != null)
+            {
+                for (int i = 0; i < definition.DataBindings.Count; i++)
+                    WarnIfHudNodeTooDeep(root.transform, definition.DataBindings[i]?.NodeName, issues);
             }
 
             ValidateTextBindings(root.transform, definition, nodeCounts, issues);
+            ValidateDataBindings(root.transform, definition, UIPanelDefinitionKind.Hud, nodeCounts, issues);
+        }
+
+        /// <summary>
+        /// HUD 的深度检查不限规则深度地找节点，只为报出「第几层超限」。
+        /// </summary>
+        private static void WarnIfHudNodeTooDeep(Transform root, string nodeName,
+            List<UIAuthoringIssue> issues)
+        {
+            if (string.IsNullOrEmpty(nodeName))
+                return;
+
+            Transform node = FindNodeAnyDepth(root, nodeName, 0, out int depth);
+            if (node != null && depth > MaxNodeDepth)
+            {
+                Add(issues, UIAuthoringRuleIds.HudNodeDepthExceeded,
+                    UIAuthoringIssueSeverity.Warning,
+                    "绑定节点位于第 " + depth + " 层，超过约定绑定的 " + MaxNodeDepth +
+                    " 层上限（根为第 0 层），运行时不会绑定。",
+                    nodeName);
+            }
         }
 
         private static void ValidateTextBindings(Transform root, UIPanelDefinition definition,
@@ -158,6 +171,156 @@ namespace XFramework.XUI.Authoring.Editor
                         "文本绑定启用了本地化但没有 LocalizationKey。", node.name);
                 }
             }
+        }
+
+        /// <summary>
+        /// 数据绑定规则：节点/深度、空 key、目标组件、TwoWay 与 Format 的适用范围、
+        /// 同节点冲突，以及 HUD 的不可交互双向绑定提示。
+        /// <para>不检查「定义资产是否被 YooAsset 采集」：被预制体引用的 SO 必进构建图
+        /// （构建图探针已证实），该检查会误报。</para>
+        /// </summary>
+        private static void ValidateDataBindings(Transform root, UIPanelDefinition definition,
+            UIPanelDefinitionKind kind, Dictionary<string, int> nodeCounts,
+            List<UIAuthoringIssue> issues)
+        {
+            if (definition.DataBindings == null)
+                return;
+
+            HashSet<string> textNodes = CollectTextBindingNodes(definition);
+            var boundNodes = new HashSet<string>(StringComparer.Ordinal);
+
+            for (int i = 0; i < definition.DataBindings.Count; i++)
+            {
+                UIDataBinding binding = definition.DataBindings[i];
+                if (binding == null)
+                    continue;
+
+                if (string.IsNullOrEmpty(binding.DataKey))
+                {
+                    Add(issues, UIAuthoringRuleIds.DataKeyMissing, UIAuthoringIssueSeverity.Error,
+                        "数据绑定的 DataKey 不能为空。", binding.NodeName ?? string.Empty);
+                }
+
+                if (!string.IsNullOrEmpty(binding.NodeName))
+                {
+                    if (!boundNodes.Add(binding.NodeName))
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataNodeConflict,
+                            UIAuthoringIssueSeverity.Warning,
+                            "同一节点配置了多条数据绑定，后一条会覆盖前一条。", binding.NodeName);
+                    }
+
+                    if (textNodes.Contains(binding.NodeName))
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataNodeConflict,
+                            UIAuthoringIssueSeverity.Warning,
+                            "同一节点同时配置了文本绑定与数据绑定，数据绑定会覆盖静态文本。",
+                            binding.NodeName);
+                    }
+                }
+
+                if (!RequireNode(root, binding.NodeName, nodeCounts,
+                        UIAuthoringRuleIds.DataNodeMissing, "数据绑定", issues))
+                    continue;
+
+                Transform node = FindNode(root, binding.NodeName);
+                ValidateDataTarget(node, binding, issues);
+
+                bool isTwoWayKind = binding.Kind == UIDataBindingKind.Slider
+                                    || binding.Kind == UIDataBindingKind.Toggle;
+
+                if (binding.TwoWay && !isTwoWayKind)
+                {
+                    Add(issues, UIAuthoringRuleIds.DataTwoWayNotSupported,
+                        UIAuthoringIssueSeverity.Error,
+                        "TwoWay 只支持 Slider / Toggle 数据绑定。", binding.NodeName);
+                }
+
+                if (!string.IsNullOrEmpty(binding.Format) && binding.Kind != UIDataBindingKind.Text)
+                {
+                    Add(issues, UIAuthoringRuleIds.DataFormatIgnored,
+                        UIAuthoringIssueSeverity.Warning,
+                        "Format 只对 Text 数据绑定生效，其它种类会被忽略。", binding.NodeName);
+                }
+
+                if (kind == UIPanelDefinitionKind.Hud && binding.TwoWay && isTwoWayKind)
+                {
+                    Add(issues, UIAuthoringRuleIds.HudTwoWayNotInteractive,
+                        UIAuthoringIssueSeverity.Warning,
+                        "HUD 默认关闭 Raycaster，双向绑定只能由代码写回，玩家无法操作。",
+                        binding.NodeName);
+                }
+            }
+        }
+
+        private static void ValidateDataTarget(Transform node, UIDataBinding binding,
+            List<UIAuthoringIssue> issues)
+        {
+            switch (binding.Kind)
+            {
+                case UIDataBindingKind.Text:
+                    if (node.GetComponent<TMP_Text>() == null && node.GetComponent<Text>() == null)
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataTargetMissing,
+                            UIAuthoringIssueSeverity.Error,
+                            "数据绑定的节点既没有 TMP_Text 也没有 UGUI Text。", node.name);
+                    }
+                    break;
+
+                case UIDataBindingKind.Sprite:
+                case UIDataBindingKind.Color:
+                case UIDataBindingKind.FillAmount:
+                    if (node.GetComponent<Image>() == null)
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataTargetMissing,
+                            UIAuthoringIssueSeverity.Error,
+                            "数据绑定种类 " + binding.Kind + " 需要节点上有 Image。", node.name);
+                    }
+                    break;
+
+                case UIDataBindingKind.Slider:
+                    if (node.GetComponent<Slider>() == null)
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataTargetMissing,
+                            UIAuthoringIssueSeverity.Error,
+                            "数据绑定种类 Slider 需要节点上有 Slider。", node.name);
+                    }
+                    break;
+
+                case UIDataBindingKind.Toggle:
+                    if (node.GetComponent<Toggle>() == null)
+                    {
+                        Add(issues, UIAuthoringRuleIds.DataTargetMissing,
+                            UIAuthoringIssueSeverity.Error,
+                            "数据绑定种类 Toggle 需要节点上有 Toggle。", node.name);
+                    }
+                    break;
+
+                case UIDataBindingKind.Active:
+                    break;
+
+                default:
+                    Add(issues, UIAuthoringRuleIds.DataTargetMissing,
+                        UIAuthoringIssueSeverity.Error,
+                        "未知的数据绑定种类：" + binding.Kind + "。", node.name);
+                    break;
+            }
+        }
+
+        private static HashSet<string> CollectTextBindingNodes(UIPanelDefinition definition)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            if (definition.TextBindings == null)
+                return names;
+
+            for (int i = 0; i < definition.TextBindings.Count; i++)
+            {
+                UITextBinding text = definition.TextBindings[i];
+                if (text != null && !string.IsNullOrEmpty(text.NodeName))
+                    names.Add(text.NodeName);
+            }
+
+            return names;
         }
 
         private static void ValidateActionBindings(Transform root, UIPanelDefinition definition,
