@@ -12,7 +12,7 @@
 - 上一轮边界：`d29f4f50`（R4，2026-10-25）。
 - 区间变更：`d29f4f50..b2bb5a8a` 共 147 个提交、487 个文件、+33,534 / −1,510。核心 Runtime 变动集中在 Audio（provider 缝 + 控制面）与 UI（R4 修复批次 + 编辑期预制体校验器）；Config / Asset / Diagnostics / Save / Input / Camera / Update / Settings / Pool / Pipeline / Localization / File / Serialize / Scene 为 R4 修复批次；Bootstrap / Data / Event / Lock / Log / Message / Reactive / Timer 的 Runtime 零变更。新增两个扩展包：`Assets/XFramework.Fmod/`（76 文件 / +5,358）、`Assets/XFramework.UIAuthoring/`（178 文件 / +13,314）；Luban 扩展包 24 文件变更（R4 批次 3/4 修复）。
 - 深度分档：T1 全量 4 个对象（Fmod 包、UIAuthoring 包、核心 Audio、核心 Editor UI 预制体校验器）+ T1 增量复审 1 个（Luban）+ T2 增量 15 个核心模块 + T3 紧凑 8 个核心模块 + 工程面专项 1 个跨切单元。24 个核心模块与 3 个扩展包全部留 18 类判据痕（见 §8）。
-- 基线门禁（B0 待实测；最近一次全量记录为 2026-11-10）：PlayMode 2405/2405、EditMode 749（743 通过 + 6 skip）、0 失败；BUILD 在 B0 复跑；`check-docs.ps1 -Enforce` 已于步骤 0 跑通（门禁码 0 条、24 模块 / 535 条台账、README 文件树 24/24、三组示例编译通过），B0 再复跑一次并回填附录 A。
+- 基线门禁（B0 实测，2026-11-10）：BUILD 两个核心 csproj 0 error（20 / 34 条告警全部来自 PackageCache 的 Input System / Cinemachine / YooAsset，包内仅 1 条 CS0618 不在文档门禁统计面）；FULL PlayMode 2405/2405、EditMode 749/749（743 通过 + 6 skip）、0 失败；`check-docs.ps1 -Enforce` 通过（门禁码 0 条、24 模块 / 535 条台账、README 文件树 24/24、三组示例编译通过）。
 - 台账计数（`check-docs.ps1 -Enforce` 口径，2026-11-10）：535 条（模块 24 个 + `Ledger.md` 框架级）。
 - 证据等级：`实测` = 本轮实际跑过门禁/探针/读第三方源码可证；`推理` = 调用链/静态状态可证但未运行；`需实测` = 运行期或真机才能确认，已给命令。
 - 路径约定：未特别说明时，`Runtime/...` / `Editor/...` / `Tests/...` 相对 `Assets/XFramework/`；扩展包的路径显式以 `Assets/XFramework.Luban/` / `Assets/XFramework.Fmod/` / `Assets/XFramework.UIAuthoring/` 开头；`Documentation/...` 相对仓库根。
@@ -58,7 +58,7 @@
 | # | 批次 | 状态 | 产出节 | 备注 |
 |---|---|---|---|---|
 | 0 | 生成审计文档骨架与登记 | 已完成 | 全文骨架 | `CLAUDE.md` 文档分层表 + `ModuleAudit.md` 轮次列表已同步 |
-| 1 | B0 边界与基线 | 待做 | §0、附录 A | BUILD / FULL / DOC 复跑 |
+| 1 | B0 边界与基线 | 已完成 | §0、附录 A | BUILD 0 error；PLAY 2405/2405、EDIT 743 通过 + 6 skip；DOC 通过（535 条台账） |
 | 2 | B1 R4 修复复核 | 待做 | §3 | 71 条 + ADJ + PRB |
 | 3 | B2 FMOD 包全量 | 待做 | §6、§8、附录 C | 首次审计；默认无 SDK |
 | 4 | B3 UIAuthoring 包全量 | 待做 | §6、§8、附录 C | 首次审计 |
@@ -114,7 +114,7 @@
 
 ## 附录 A. 探针与命令
 
-### A.1 基线与门禁（B0 实测后回填）
+### A.1 基线与门禁（2026-11-10，边界 `b2bb5a8a`）
 
 ```bash
 # 构建（幂等；--artifacts-path 避开 Unity 生成的 obj/bin）
@@ -128,7 +128,11 @@ pwsh -File Tools/run-tests.ps1
 pwsh -File Tools/check-docs.ps1 -Enforce
 ```
 
-结果：（待 B0 回填）
+结果：
+
+- BUILD：Runtime 0 error / 20 warning；Editor 0 error / 34 warning（告警全部来自 PackageCache；包内仅 `UIHudManager.cs:131` 的 CS0618，不在文档门禁统计面）。
+- FULL：PlayMode 2405/2405、EditMode 749（743 通过 + 6 skip）、0 失败；合计 54.1s（PlayMode 32.7s + EditMode 20.9s）。
+- DOC：门禁码 0 条；24 模块 / 535 条台账；README 文件树 24/24；三组示例编译通过。
 
 ### A.2 审计自证
 
