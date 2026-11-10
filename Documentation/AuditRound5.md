@@ -59,7 +59,7 @@
 |---|---|---|---|---|
 | 0 | 生成审计文档骨架与登记 | 已完成 | 全文骨架 | `CLAUDE.md` 文档分层表 + `ModuleAudit.md` 轮次列表已同步 |
 | 1 | B0 边界与基线 | 已完成 | §0、附录 A | BUILD 0 error；PLAY 2405/2405、EDIT 743 通过 + 6 skip；DOC 通过（535 条台账） |
-| 2 | B1 R4 修复复核 | 待做 | §3 | 71 条 + ADJ + PRB |
+| 2 | B1 R4 修复复核 | 已完成 | §3 | 3 P1 逐条读 diff + 用例；51 P2 / 17 P3 聚合 + 抽样；11 ADJ、18 PRB 对台账；未发现二次回归 |
 | 3 | B2 FMOD 包全量 | 待做 | §6、§8、附录 C | 首次审计；默认无 SDK |
 | 4 | B3 UIAuthoring 包全量 | 待做 | §6、§8、附录 C | 首次审计 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 待做 | §6、§8、附录 C | |
@@ -70,7 +70,69 @@
 
 ## 3. 前轮修复复核（R4）
 
-（待 B1 填充：71 条 R4 发现的 `ID → 提交 → 代码/测试/文档 → 结论`；R4-ADJ-01..11 落盘复核；R4-PRB-01..18 探针轨状态；R4 修复引入的回归与部分修复。）
+> 复核口径：每条落到「代码 / 测试 / 文档」三处证据之一；提交信息只是索引，不作为修复证明。本轮对 P1 逐条读 diff 与用例；P2/P3 按模块聚合复核 + 代码类抽样（抽样名单见各模块条目）；ADJ 逐条对台账与代码；PRB 对台账与配方。
+
+### 3.1 R4 P1（3 条）
+
+| R4 ID | 修复提交 | 本轮证据 | 结论 |
+|---|---|---|---|
+| R4-UIA-001 | `616d64d8` | `UIViewBase` 新增 `IsRecycled` / `RecycleGeneration` / `MarkRecycled` / `MarkReopened`（`UIViewBase.cs:48-70`）；`UIManagerImpl.OpenCoreAsync` 三处「世代变化即放弃」守卫（`UIManagerImpl.cs:637-760`），`SettleOpening` 改按 entry 身份摘账（`:1928-1937`）；回归 `UIPanelConcurrencyTests.Dispose_DuringInFlightOpen_DoesNotCallOnCloseAfterRecycle` / `..._ReinitializedPanelStaysOpen`（改前双红） | **已修复** |
+| R4-UIB-001 | `28116446` | `PruneOverlayHolds` 改为 `!ReferenceEquals(owner, null) && owner == null`（`UIManagerImpl.cs:2284-2299`）；回归 `UIMaskTests.ShowMask_WithoutOwner_SurvivesUnrelatedPanelDestroyed` | **已修复** |
+| R4-UIB-002 | `5559dc2b` | `UIHudManager` 新增按 target 实例 ID 的单槽在途表 `_inFlightAttach`、`AttachCoreAsync` 注册前复检、`SettleAttach` 身份摘账、`MarkReopened` 复位认领标记（`UIHudManager.cs:75-84,150-300`）；回归 `UIHudManagerTests.ShowHudAsync_SameTargetConcurrent_InstantiatesOnce` / `CloseAllAsync_AfterConcurrentAttach_LeavesNoActiveHud`（改前 2 次实例化 / 残留 1 个） | **已修复** |
+
+### 3.2 R4 P2（51 条）聚合复核
+
+> 按模块列出处置证据与抽样复核结果。全部 51 条均落到代码/测试/文档之一，**未发现完全未处置项**。
+
+- **UI（10 条）**：UIA-002（`OnPoolRecycle` try/catch + `UIPanelPoolLifecycleTests.CloseAsync_OnPoolRecycleThrows_StillPublishesClosedAndCallsAfterClose` / `UIHudManagerTests.ShowHudAsync_OnOpenAndPoolRecycleThrow_PreservesOnOpenException`）、UIA-003/UIA-004/UIB-006/UIB-007（README 四处：`SetInstance` 重接、`MaxIndexInLayer = 30`、`BindToLocalizedText` 释放口径、§11 围栏）、UIA-005（`ApplyLayerInteractivityToContainer` + `UILayerApiTests.SetLayerInteractive_BeforeContainerExists_AppliesToNewContainer`）、UIA-006（`PopTo`/`PopToRoot` 假 OnResume + Dispose provider 隔离，`e33a6d84`）、UIB-003（控制器全关回调门控 + `UIPanelSelfCloseTests.CloseAllAsync_NoPanels_*` / `..._ControllerBlocksClose_*`）、UIB-004（换 provider 异常隔离 + `UIAsyncTokenTests` 三例）、UIB-005（`img_` 类型不匹配 `#if UNITY_EDITOR` 告警 + `UIPanelBindingConventionTests.ImgNodeWithUnsupportedSourceType_Warns`）。**抽样读 diff：UIA-001/002/005、UIB-002/003/004/005，均与报告承诺一致。**
+- **Config（6 条）**：CONF-001（null 校验前移到在途分支之前 + `ConfigManagerImplTests.PreloadTableAsync_NullLoaderWhileTableInFlight_ThrowsConfigException` / `...Global...`）、CONF-002（`ConfigAssetLease` + `ConfigAssetLoaderTests.LoadTextAsync_TypeMismatch_ReleasesLeaseOnceAndExplains` / `LoadTableAsync_...`）、CONF-003（`ScriptableObjectAssetRoundTripTests` 真实 `CreateAsset/SaveAssets/LoadAssetAtPath`）、CONF-004（`ConfigTable` XML 写明键==Id）、CONF-005（在途登记按 `(Type, Kind)` 分槽 + `PreloadTableAsync_ThirdCallerJoinsAfterCrossIdentityInFlight_LoadsOnce`）、CONF-006（在途告警比较 loader 实例 + `PreloadTableAsync_SameTypeDifferentLoaderInstance_WarnsAndSharesFirst`）。
+- **Asset（7 条）**：AST-001（`SetInstance` 处置旧实例/退订 + `AssetManagerFacadeTests.SetInstance_AfterFrameworkInitialize_DisposesPreviousInstance` 等三例）、AST-002（`AssetBootstrapStage` 按实例身份清理 + `BootstrapStageTests`）、AST-003（`YooAssetPackageStateTests` 两例 + 三入口守卫）、AST-004（日志/README 改「回池等待复用」）、AST-005（下载最终进度走隔离）、AST-006（`SessionResetTests` 在途 impl 退订）、AST-007（README `Destroy()` 文案与交叉引用）。
+- **Camera（5 条）**：CAM-001（README 写明同一目标中途 cut 的例外 + `CinemachineCameraEventTests.SameTargetCut_DuringBlend_PublishesDeactivatedAndCompletedWithoutActivated`）、CAM-002（`Activate_WhileExternalOverrideMakesTargetActive_TakesBoostOwnership`）、CAM-003/004（`Subscribe` 令牌说法与重载示例文档）、CAM-005（`DestroyedRegisteredActiveCamera_DeactivatedCarriesItsId`）。
+- **Diagnostics（2 条）**：DIAG-001（`Register_OrderGetterThrows_StillRegistersAtEnd` / `..._ExistingPanelOrderThrows_...`）、DIAG-002（`Table_EmptyTrailingColumn_HeaderAndSeparatorAgree`）。
+- **Save（2 条）**：SAVE-001（`Modules/Save.md:41` 去掉会漂移的计数）、SAVE-002（`SaveManagerImplTests.DeleteSlotAsync_BackupOnly_DeletesAndDoesNotRecover` / `SlotExistsAsync_BackupOnly_ReturnsTrue`）。
+- **Input（1 条）**：INP-001（`InputSystemProviderTests.GetButtonPressDuration_IsPerPlayer` + 预热用例）。
+- **Settings（1 条）**：SET-001（`EncryptedSettingsStoreTests.LoadAsync_SyncInner_DecryptsOnPoolAndParsesOnMainThread`）。
+- **Scene（1 条）**：SCN-001（`SceneLoadTests.LoadSceneAsync_ActivateWithInvalidScene_WarnsWithLocationAndReturnsHandle`）。
+- **Localization（1 条）**：LOC-001（`LocalizationManagerTests.GetFormat_PlaceholderValueWithCompositeItem_RendersLiterally`）。
+- **Update（1 条）**：UPD-001（`Runtime/Update/README.md:327` 与 `UpdateManager.cs:371` 已改为「`Initialize` / `SetInstance` 都会重接」）。
+- **Pipeline（1 条）**：PIPE-001（`SequenceStageTests.Execute_Success_WritesCompletedTerminal`，容器在 finally 前写 Completed/1f）。
+- **Pool（1 条）**：POOL-001（`PoolTests.Return_WhenPoolFull_DiscardCallbackThrows_IsIsolated` + `Get_RentCallbackThrows_InvokesDiscardCallback`）。
+- **File（1 条）**：FILE-001（`IFileProvider.cs:19` 改为「null/空 = 域根」）。
+- **Serialize（1 条）**：SER-001（`Runtime/Serialize/README.md:74,86` 写明 `ResetForNewSession` 会清掉更早注册）。
+- **Luban（10 条 P2）**：LBN-002（`LubanAssetProviderTests` 成功映射九例）、LBN-003/015（`LubanProcessRunnerTests` 成功/非零/超时/大输出/中文 UTF-8）、LBN-004（`LubanIntegrationGeneratorTests.Generate_WriteTrue_EmitsAllFilesAndManifest`）、LBN-005（`LubanBootstrapStageTests` 加入在途所有权）、LBN-006（`LubanConfigTests` provider 级错误带表名/location）、LBN-008（`LubanIntegrationWriterTests` 目录拒绝 + manifest 回滚，writer 改为 staging→backup→commit→rollback）、LBN-010（`LubanConfigTests.InitializeAsync_JoiningDifferentAdapter_Warns`）、LBN-013（`LubanEditorPublicApiBaseline.txt` + fixture）、LBN-001/007/011/012/016（包 README 收窄措辞/补类型/零拷贝说明）。
+- **工程面（4 条 P2）**：ENG-001（基线注释不再写固定数）、ENG-002（`Workflow.md:108-111` 四个更新开关齐备）、ENG-003（`ModuleReadme.md` 文件树门禁描述已改双向）、ENG-009（`CHANGELOG.md:408` 行为变更表收录 `MaxIndexInLayer` 31→30）。
+
+### 3.3 R4 P3（17 条）聚合复核
+
+17 条均已处置：AST-004/005/006/007 与 CONF-004/006、LBN-015/016/017、LOC-001、PIPE-001、POOL-001、SER-001、UIA-006 有对应代码/测试（见 §3.2 同 ID）；ENG-007 维持「示例只守编译」（`Workflow.md` 已写明）、ENG-008 由 R4-ADJ-01 记为 `暂不做`（`Modules/README.md:83`）。
+
+### 3.4 R4-ADJ-01..11 落盘复核
+
+| ADJ | R4 建议 | 当前台账/代码 | 结论 |
+|---|---|---|---|
+| 01 | `暂不做`（Luban 台账留在 `Luban.md`） | `Modules/README.md:83`、`Ledger.md:140` | 一致 |
+| 02 | `已做`（Editor 公开 API 基线） | `Ledger.md:141`；`EditorPublicApiBaseline.txt` + `LubanEditorPublicApiBaseline.txt` 均存在 | 一致 |
+| 03 | `暂不做`（check-docs 不覆盖 Luban XML/源文件） | `Ledger.md:63`；`check-docs.ps1` 路径仍硬绑 `Assets/XFramework`，第六项覆盖三个 `Samples~` | 一致 |
+| 04 | `未做`（0.4.0 / Luban 0.1.0 tag） | `git tag` 仍只有 `0.3.0` | 一致（用户动作） |
+| 05 | `已做`（run-tests 超时） | `Tools/run-tests.ps1:48,85,324` 有 `-TimeoutSeconds`；`Workflow.md:104` | 一致 |
+| 06 | `已做`（Luban 写盘暂存/回滚） | `LubanIntegrationWriter.cs:114-200` staging/backup/rollback；`Ledger.md:144` | 一致 |
+| 07 | `已做`（UISorting 行为变更表） | `CHANGELOG.md:408` | 一致 |
+| 08 | `已做`（Luban 措辞） | `a05decb8`；包 README 已收窄 | 一致 |
+| 09 | `已做`（主线程断言射程） | `Assets/XFramework.Luban/README.md:182-188` 写「写入口断言、查询面不设」 | 一致 |
+| 10 | `已做`（ConfigTable 键==Id） | `ConfigTable.cs:14-16` XML | 一致 |
+| 11 | `未做`（Save 双路径线程改造） | `Modules/Save.md:41` | 一致 |
+
+### 3.5 R4 探针轨（PRB-01..18）
+
+- **已落成回归用例**（随批次 0/1 修复）：PRB-01（三条 UI P1 红证）、PRB-02（CONF-001 null loader）、PRB-04（AST-001 换出旧 impl 退订）、PRB-05（AST-003 初始化失败包）、PRB-07（LBN-002 默认资产源）、PRB-08（LBN-003 ProcessRunner）、PRB-10/11（CAM-001/002）、PRB-13（SAVE-002）、PRB-14（AUD-001）、PRB-15（INP-001）、PRB-16（SET-001）、PRB-17（PIPE-001）。
+- **已执行并结案**：PRB-12（0.3.0→0.4.0 迁移表编译探针，`9e9c622c`）、PRB-18（Serialize 更早注册被清，`bc0c4abd`）。
+- **仍 `未做`**：PRB-03（真 YooAsset「有效句柄 + 类型不符」的 RefCount，`Modules/Config.md:101`）、PRB-09（Linux Editor 大小写 / cwd，`Documentation/Luban.md:526`）；R3-PRB-02/03/04（真包低内存 / IL2CPP / macOS Server）继续 `未做`（`Modules/Config.md:98-99`、`Modules/File.md:48`）。
+- **状态与 R4 §11 一致**，无「台账写已做但代码无证据」的项。
+
+### 3.6 R4 修复引入的回归复核（R5 视角）
+
+- R4 §7.8 点名的 2 条回归（R4-CONF-001、R4-UIA-003/UPD-001 文档反向）与 5 条部分修复（UIB-005/006、AST-005、LBN-005、SAVE-002、AUD-001）**均已在批次 0–3 关闭**，本轮抽样读 diff 未发现二次回归。
+- 抽样读的修复 diff：`616d64d8`（UIA-001）、`28116446`（UIB-001）、`5559dc2b`（UIB-002）、`4f4165b4`（CONF-001）、`c95b784d`（SET-001）、`19870f43`（LBN-005）、`140f2b1f`/`6645fbad`/`3b7e2e7a`/`2719c4f2`（AST-001/002/003/006）、`0fb50617`（LOC-001）。**未发现修复引入的新缺陷**；B2–B5 的模块审计将继续覆盖未抽样的修复面。
 
 ## 4. R5 P0 清单
 
