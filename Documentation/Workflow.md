@@ -214,7 +214,7 @@
 
 `Assets/XFramework.Fmod/` 同样是同级可选包，当前是 **Phase 1 FMOD-free + Phase 2 真实集成**（provider/配置资产/测试/守卫 + 条件集成程序集与自动安装；真实 bank/event 冒烟待 Studio 工程）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、包契约、依赖声明、Phase 1 无 AutoInit、Runtime 公开 API 基线（`-UpdateFmodApiBaseline`）与「仓库不提交能触发自动安装的 settings 资产」。没有 `Samples~`（无 SDK 时不可编译）；FMOD SDK 版本/安装方式以 `Assets/XFramework.Fmod/README.md` 为唯一真相，不提交 SDK / manifest / lock 本地改动。
 
-`Assets/XFramework.UIAuthoring/` 也是同级可选包（声明式面板/对话框/HUD 与数据绑定，阶段 2a/2b/3）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、AutoInit 族（仅 `UIDataProviderRegistry` 会话复位）、Runtime / Editor 公开 API 基线（`-UpdateUIAuthoringApiBaseline`）与依赖声明。示例与模板由 `check-docs.ps1 -Enforce` 经 `check-samples.ps1 -SamplesRoot Assets/XFramework.UIAuthoring/Samples~` 编译（`Samples~` 本身被 Unity 忽略，但 Prefab/定义资产连同 `.meta` 随包提交）。发布时与核心包共用同一个仓库 tag，安装 URL 用 `?path=Assets/XFramework.UIAuthoring`。
+`Assets/XFramework.UIAuthoring/` 也是同级可选包（声明式面板/对话框/HUD/Popup 与数据绑定，阶段 2a/2b/3/4）。它不在核心六道门禁射程；测试随全量 `run-tests.ps1` 运行；包内守卫覆盖 README 结构/文件树、`.meta`、包边界、AutoInit 族（仅 `UIDataProviderRegistry` 会话复位）、Runtime / Editor 公开 API 基线（`-UpdateUIAuthoringApiBaseline`）与依赖声明。示例与模板由 `check-docs.ps1 -Enforce` 经 `check-samples.ps1 -SamplesRoot Assets/XFramework.UIAuthoring/Samples~` 编译（`Samples~` 本身被 Unity 忽略，但 Prefab/定义资产连同 `.meta` 随包提交）。发布时与核心包共用同一个仓库 tag，安装 URL 用 `?path=Assets/XFramework.UIAuthoring`。
 
 ### OpenUPM（待上架）
 

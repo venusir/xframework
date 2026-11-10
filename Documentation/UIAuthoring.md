@@ -3,7 +3,7 @@
 > **收件人**：框架作者 + 下一轮审计者。**不是**使用文档。
 > 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`（核心）与 `Assets/XFramework.UIAuthoring/README.md`（扩展包）——用法、已知限制、设计取舍一律留在那里，本文件不复述。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b/3 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；3：`fe1ae657`→`b25203cb`；扩展包 `Assets/XFramework.UIAuthoring/`），4 待排（见 §十一）；**一次性验收 P2/P3/P5 已于 2026-11-10 跑通**（§10.3）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
+> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b/3/4 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；3：`fe1ae657`→`b25203cb`；4：`c231bc23`→`2e721767`；扩展包 `Assets/XFramework.UIAuthoring/`）；**一次性验收 P2/P3/P5 已于 2026-11-10 跑通**（§10.3）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
 
 ---
 
@@ -788,8 +788,22 @@ public static class UIDataProviderRegistry
 
 ### 8.5 阶段 4（可选）：声明式 Popup 独立类型
 
-- `UIDeclarativePopupPanel : UIPanelBase` + `ShowPopup` 动作（锚点节点名、address、direction/align、closeOnClickOutside）。
-- 只有出现「主面板 + 弹窗并存」的真实需求才开；否则复用 `UIDeclarativePanel` 并接受单根限制。
+**状态（2026-11-10）**：用户明确要求开项并已交付（提交 `c231bc23`→`2e721767`）。
+
+**交付物**
+
+- `UIDeclarativePopupPanel : UIPanelBase`（`Kind=Popup`，与面板/对话框可同时打开）。
+- `UIActionKind.ShowPopup` + `UIAction.AnchorNodeName` / `Direction` / `Align` / `CloseOnClickOutside`；`UIAuthoringNavigation.ShowPopupAsync`（同地址重摆、异地址拒绝）。
+- 编辑器规则 `UI-AUTH-080`（锚点缺失/非 RectTransform）；`ShowPopup` 仅允许 `Kind=Panel`，Dialog/Popup 定义报 `ActionNotAllowed`。
+- `Samples~/Templates/Popup.prefab` 与 DemoPopup 示例（面板 `btn_popup` 经 `ShowPopup` 打开）。
+
+**v1 边界**：同一时刻只能开一个声明式 Popup；弹窗内不能再开声明式 Popup；层固定 `UILayers.Popup`；`closeOnClickOutside` 只在核心内置 `UIManagerImpl` 生效；打开后不跟随锚点移动。嵌套子菜单需要 C# 面板或未来的多个具体类型，不在 v1。
+
+**验证**：新增 PlayMode 9 例（4 Popup + 2 执行器 + 3 导航）与 EditMode 8 例（7 校验 + 1 扫描）全绿；示例预制体经临时导入与扩展校验器 0 Error；`check-docs -Enforce` 通过。
+
+### 8.6 阶段 4 之后的边界
+
+声明式 UI 制作线（阶段 1–4）到此完整：面板、对话框、HUD、Popup 四形态均可用定义资产 + 封闭动作集 + 数据绑定表达，程序只保留一次打开调用与一个数据源。后续若出现新需求，按 `Documentation/Modules/UI.md` 的台账与本文 §五「明确不做」的重开判据处理；不自动扩展动作词汇表或新增第五种形态。
 
 ### 8.6 裁定点与门禁
 
@@ -837,7 +851,7 @@ public static class UIDataProviderRegistry
 | P7 真实核心集成 | 扩展测试无法注入核心 `UIManager.PanelFactoryFactory`（internal） | 已知边界 | 用 fake runtime 测逻辑；真实 `UIManager.OpenAsync` 用一次性 EditorSimulate 探针 |
 | P8 HUD 校验射程 | 核心校验器对 HUD 实际只跑 `001/008`；扩展 HUD 规则是否覆盖节点/深度/重名/根 RectTransform | **源码已坐实**（§1.5.4），扩展规则未实现 | 阶段 2b 前用一条 EditMode 用例固化；面板与 HUD 规则分开 |
 | P9 Tip 本地化 | Tip 只有原始字符串，没有本地化重载 | **源码已坐实**（`TipConfig` 无 key） | 阶段 3 手工探针：调用方 `LocalizationManager.Get` 后显示；不纳入自动化 |
-| P10 声明式 Popup | 复用 `UIDeclarativePanel` 时与主面板抢单根；遮罩/捕获层行为 | **源码已坐实**（§2.3/§2.5），未跑 Unity | 阶段 2a 用 PlayMode 用例固化「同时开面板+弹窗会怎样」；阶段 4 再决定独立类型 |
+| P10 声明式 Popup | 复用 `UIDeclarativePanel` 时与主面板抢单根；遮罩/捕获层行为 | **源码已坐实**（§2.3/§2.5），未跑 Unity | 阶段 4 已实现独立类型 `UIDeclarativePopupPanel`（§8.5），单根冲突消除 |
 | P11 扩展包 Samples~ 登记 | `check-docs.ps1` 样例根是硬编码列表；新包不登记就没有编译通道 | **源码已坐实**（`Tools/check-docs.ps1:513-518`） | 阶段 2a 建包时同步改 `Tools/check-docs.ps1`；跑一次 `check-docs -Enforce` 验证 |
 
 ### 10.1 P2 构建图探针结果（2026-11-08）
@@ -908,7 +922,7 @@ public static class UIDataProviderRegistry
 
 | 编号 | 决策 | 现在必须定？ | 阻塞什么 | 推荐 |
 |---|---|---|---|---|
-| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a/2b/3 已完成（2026-11-10）**，下一阶段 4（可选） |
+| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a/2b/3/4 已完成（2026-11-10）**，无后续阶段 |
 | **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包或同包依赖采集）；P2 构建图已过，运行时 2a 补测 |
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |
@@ -1017,6 +1031,8 @@ public static class UIDataProviderRegistry
 
 ### 11.7 D5（Q7）声明式 Popup：复用 / 独立类型 / 不做
 
+> **状态（2026-11-10）**：用户明确要求开阶段 4，已按选项 B 交付（`UIDeclarativePopupPanel` + `ShowPopup`，见 §8.5）。本节保留原决策过程。
+
 **控制什么**：主面板开着时，能不能再弹一个声明式弹窗。
 
 | 选项 | 做法 | 优 | 劣 |
@@ -1114,7 +1130,7 @@ public static class UIDataProviderRegistry
 2. **阶段 2a**：面板/对话框模板（随 2a）+ `UIDeclarativePanel` + `UIDeclarativeDialogPanel`（string 结果 + 状态字段）+ 动作集（A：基类型打开；D3 A'：keyed message、消息不带 `View`、禁用缓冲订阅；`ShowDialog` 单飞）+ 两个校验器。
 3. **阶段 2b**：HUD 模板（随 2b）+ `UIDeclarativeHudItem` 文本/本地化；2b 不暴露 HUD 动作，关闭用 `HideHud(target)`。
 4. **阶段 3（已完成，2026-11-10）**：`IUIDataProvider` + 面板/HUD/Dialog 数据绑定；HUD 才真正有用。P2 运行时/P3 实际模板/P5 TMP 一次性验收已于 2026-11-10 跑通（§10.3）。
-5. **阶段 4（可选，下一阶段）**：`UIDeclarativePopupPanel`。
+5. **阶段 4（已完成，2026-11-10）**：`UIDeclarativePopupPanel` + `ShowPopup` 已按独立类型交付（§8.5）；声明式 UI 制作线到此完整。
 
 **这套组合的代价与风险**：
 
