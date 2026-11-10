@@ -62,7 +62,7 @@
 | 2 | B1 R4 修复复核 | 已完成 | §3 | 3 P1 逐条读 diff + 用例；51 P2 / 17 P3 聚合 + 抽样；11 ADJ、18 PRB 对台账；未发现二次回归 |
 | 3 | B2 FMOD 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P2 + 6 P3；FMOD-free XML 告警探针 0 条；Integration 默认不编译，已登记 |
 | 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；2 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
-| 5 | B4 核心新面（Audio / UI 校验器） | 待做 | §6、§8、附录 C | |
+| 5 | B4 核心新面（Audio / UI 校验器） | 已完成 | §6、§8、附录 C | provider 缝逐行复核未发现新 P1/P2；2 条 Audio P3 + 2 条 UI 校验器 P3 |
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 待做 | §6、§8、附录 C | |
 | 7 | B6 工程面与发布 | 待做 | §6、§7 | |
 | 8 | B7 报告收口 | 待做 | §2 总览、§4–§13、附录 B/C | |
@@ -146,6 +146,18 @@
 
 > 一条一行；`[回归]` 表示由前轮修复引入，`[跨模块]` 表示归拥有方立条，`[需实测]` 表示需运行期/真机证据。P3 也列在各模块下，便于下一轮按模块取用。
 
+### Audio（T1 核心新面：provider 缝 + 控制面）
+
+- **R5-AUD-001 · P3 · B6/D4 [需实测]**：`Assets/XFramework/Runtime/Audio/AudioManager.cs:692-700`、`Assets/XFramework.Fmod/Runtime/FmodInstaller.cs:42-47` —— `AudioManager` 的跨会话静态态（`_instance` / `_instanceInitialized` / provider / 通道 / 暂停）**不在 `ResetForNewSession` 族**（`Tests/Runtime/Architecture/SessionResetTests.cs:161-171` 的清单里没有 Audio），只靠 `AutoInit` 订阅 `Application.quitting` 来 `Destroy`。关闭域重载 + 若该事件不触发，第二会话会复用上一会话的 manager；内置 `AudioSourceProvider` 能靠坏源重建自愈，但 FMOD 自动安装会因 `FmodInstaller` 的 `AudioManager.IsInitialized` 早退（`:42-47`）**不再重装 provider / 加载 bank**。现有手工「关闭域重载连跑两遍」验收（2026-10-14/10-20）包含 Audio 用例但不能区分 `quitting` 是否真的触发。建议：把 Audio 纳入会话复位族（或明确写入台账「依赖 quitting」），并用关闭域重载 + FMOD 的手工探针确认第二会话 bank/事件可用。
+- **R5-AUD-002 · P3 · A1/D4**：`Assets/XFramework/Runtime/Audio/README.md:350-351` —— 「生命周期与清理」的探测型豁免总表只写「未初始化 / 已销毁时安全返回 false」，没有写**加载窗口内**（`Loading` 状态）同样返回 `false`；同一 README 的 API 参考 `:123` 与 `SetPosition` 的 XML（`AudioManager.cs:520`）各自写了这一点，但只读总表的人会误以为拿到句柄后控制面立即可用。建议在总表下补一句「加载窗口内一律 false；起播前请用 `InitialParameters` / `AudioPlayOptions.Position`」。
+
+### UI 编辑期预制体校验器（T1 核心新面）
+
+- **R5-UIE-001 · P3 · A1/D4**：`Assets/XFramework/Editor/UI/UIPrefabValidator.cs:110-136` —— 面板根节点**完全没有** `UIPanelBinding` 时，`rootBindings.Length == 0` 分支只在「子节点存在 binding」时报告 `UI-PREFAB-002`；若整个预制体没有 binding，则约定节点的前缀/深度/类型/重名检查（规则 003–005）全部跳过，也不报告「缺少 binding」。核心 UI README `:350` 把「`UIPanelBinding` 与脚本同根」写成预制体要求，校验器没有对应的「缺失」诊断。建议补一条 `BindingMissing`（Warning）或把规则 002 的文案/射程写清；补一条 EditMode 用例。
+- **R5-UIE-002 · P3 · D3**：`Assets/XFramework/Editor/UI/UIPrefabValidatorWindow.cs`（293 行）与 `UIPrefabValidationReport` 的窗口渲染/排序/汇总没有自动化用例；`UIPrefabValidatorTests`（29）与 `UIPrefabScannerTests`（7）覆盖了规则与扫描主体。IMGUI 窗口是编辑器手工验收项，建议在 README 的「已知限制」保留「窗口未自动化」。
+
+> 核心 Audio 的 provider 缝与内置 `AudioSourceProvider` 本轮逐行复核（`PlayAsync` 预占 → validity 注册 → 加载 → 取消/作废代际 → 起播 → 租约交接；`Stop`/`Release`/`SetPaused`/`SetVolume`/`Poll`；池的 `Invalidate`/`RebuildVoice`；核心 `PlayCoreAsync` 的 OCE 与 false 分支、`SweepVoices`、`Pause`/`Resume`、`RefreshVolumes`）。**未发现新的 P1/P2**；R4-AUD-001 的坏源重建与 R4 后的 provider 缝修复（P1-1/P1-2/P1-3、C1–C6）均有代码 + 用例证据。
+
 ### UIAuthoring（扩展包，首次审计）
 
 - **R5-UAU-001 · P2 · B1/B2/B6/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85` 与 `UIDeclarativeDialogPanel.cs:44-49,83-94` —— 控制器拦下关闭时（核心 `ClosePanelInternalAsync` 返回 `false`，`UIManagerImpl.cs:2058-2064`；`UIManager.CloseAsync` 返回 `UniTask` 不暴露结果，`UIManager.cs:393-399`），`CloseSelf` / `Replace` 的执行器仍无条件 `_session.Invalidate()`，面板实际没关但动作会话失效——面板继续显示，其按钮全部变成空操作。`CloseWithResultAsync` 还会先把 `_pendingResultId` 写入、关闭被拦后不清：面板仍在，之后被 `CloseAllAsync` / 父面板 / Dispose 回池关闭时，`OnClose` 会把过期结果兑现给核心结果通道；Dispose 回池不复位该字段，池化实例下一次复用时仍带着上一代的待兑现结果。现有用例只覆盖成功路径（`UIActionExecutorTests.Replace_UsesRuntimeReplace` 断言 `session.IsValid == false`），无「控制器拦下」用例。建议：`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 await 后查 `Panel.IsOpen`），仅在真正关闭时失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空。验证：PlayMode 用拦下关闭的 Fake controller 试点 `CloseSelf` / `CloseWithResult` / `Replace`，改前必红。
@@ -190,6 +202,26 @@
 - **开口项**：R5-FMD-001 建议进修复批次；R5-FMD-002/006 进探针轨（Android OBB/WebGL、有 SDK 全量）；R5-FMD-003/004/005/007 为文档/测试补齐。
 - **第三方对照**：FMOD 2.04 `RuntimeManager.LoadBank` 的引用计数（`loadedBanks.RefCount`）与异步平台分支、`RegisterLoadedBank` 的 `BankLoadException`（同步路径会抛；异步路径在协程内失败只记日志）、`Settings.SettingsAssetPath` = `FMOD/FMODStudioSettings`、`RuntimeManager` 懒初始化（`Instance` 属性）。**上游注意**：`RuntimeManager.LoadBank` 在 `RegisterLoadedBank` 抛 `BankLoadException` 时已 `loadingBanksRef++` 但不会 `--`，`HaveAllBanksLoaded` 会永久为 false；本包不使用该属性，如实记录为第三方事实。
 - **残留与不确定**：真实 bank/event 冒烟（需 Studio 2.04 工程 + `XFW_FMOD_EVENT` / `XFW_FMOD_BANK`）仍未跑；Integration 程序集与 7 个集成用例在本环境默认不编译；Android OBB/WebGL 的异步 bank 未实测；包无发布 tag（0.2.0）。
+
+### Audio（T1 全量：provider 缝 + 控制面）
+
+- **范围与输入**：`Assets/XFramework/Runtime/Audio/` 29 个 `.cs`（R4 后新增 12 个：`IAudioProvider` / `AudioProviderHandle` / `AudioProviderPlaybackState` / `AudioPlaybackRequest` / `AudioParameter` / `AudioSourceProvider` / `AudioManagedVoice` 与五个能力接口；`AudioManagerImpl` +1,022 行、`AudioManager` +304、`AudioSourcePool` 重写）；Tests 22 文件 / 217 例（`AudioProviderSeamTests` 41、`AudioControlSurfaceTests` 15、`AudioMixerControlTests` 12、`AudioParameterTests` 3、`AudioSpatialTests` 6 等）；README、`Documentation/Modules/Audio.md`、`Documentation/AudioProvider.md`；FMOD 包的 provider 实现。
+- **18 类留痕**：A1 命中（探测型表缺「加载窗口内 false」的统一表述，R5-AUD-002）；A2 扫过（公开 `IAudioProvider` + `TryGetProviderHandle`，能力接口 internal 经 IVT，与 README「中间件能力」一致）；A3 扫过（核心文档门禁 0 条）；B1 扫过（`Dispose` 后全部成员安全；`Destroy` 隔离 provider Dispose 异常）；B2 扫过（validity 注册 → `Invalidate` 归还池槽；代际防晚到续体；租约释放点恰好一次）；B3 扫过（provider 调用、取消回调、Dispose、音量刷新逐段 try/catch）；B4 **命中-已文档化**（无主线程断言，README/台账已写）；B5 扫过（槽位固定、通道表只随写入增长、租赁随释放清理）；B6 命中（会话复位族不含 Audio，R5-AUD-001）；C1 扫过（`PlayAsync` 同步原语 + 每次播放一次 validity 注册，无每帧分配；`BuildEventPath` 只在 FMOD provider）；C2 扫过（`StartingTimeoutTicks` 真机未验证，已在台账 `未做`）；D1 扫过；D2 扫过（`AudioParameter` 两个构造按 `float` / `string` 区分，`null` 只匹配 string；`AudioPlayOptions` 7 参构造源兼容）；D3 扫过（provider 缝 41 例覆盖失败/取消/异常/容量）；D4 命中（加载窗口 false 的文档表述，R5-AUD-002）；D5 扫过；E 扫过（通道字符串、保留 master）；F 扫过（`IsPlaying` vs `ActiveVoiceCount`、`Poll` 与状态查询一致）。
+- **前轮修复偏差**：R4-AUD-001（坏源重建/丢弃）已修并有 `AudioPoolTests` 两例；R4 之后的 provider 缝修复批（`2142ec25` P1-1/2/3、`53265018` P2、`31e47c3b` CTS 复用）均有代码 + 用例证据，本轮未发现二次回归。
+- **旧结论复核**：不提供 `Play(AudioClip)`、不建 Mixer 路由入口、v2 候选（抢占/淡入淡出/切后台/借用 AudioSource）全部维持；`Modules/Audio.md` 的 `暂不做`（主线程断言、宽 false 语义）维持。
+- **开口项**：R5-AUD-001 进探针轨（关闭域重载 + FMOD 手工两遍）；R5-AUD-002 文档订正。
+- **第三方对照**：FMOD 2.04 / Wwise 的播放原语映射沿用 `Documentation/AudioProvider.md`；本轮用本地 FMOD SDK 复核了 `RuntimeManager` 懒初始化与 bank 引用计数（见 FMOD 条）。
+- **残留**：`StartingTimeoutTicks` 真机、`AudioListener.pause` 平台差异、IL2CPP、关闭域重载两遍（含 FMOD）、每次 Play 的 validity 注册分配未量化。
+
+### UI 编辑期预制体校验器（T1 核心新面）
+
+- **范围与输入**：`Assets/XFramework/Editor/UI/` 9 个 `.cs`（`UIPrefabValidator` 394 行、扫描器 232、地址目录 193、YooAsset 实现 102、报告 199、窗口 293、候选探测 42、TMP 探测 50、规则号 84）；Tests 2 文件 / 36 例（校验器 29、扫描器 7）；核心 UI README 的「预制体要求」与「自检」两节；`Venusy609.Xframework.Editor.asmdef` 新增 `YooAsset` / `YooAsset.Editor` 引用。
+- **18 类留痕**：A1 命中（面板无 binding 时约定检查静默跳过，R5-UIE-001）；A2 扫过（实现全 internal，无公开面）；A3 扫过（核心文档门禁覆盖 Editor 程序集，0 条）；B1 不适用（无生命周期对象）；B2 不适用（不回调、不回池）；B3 扫过（扫描器逐预制体 try/catch，地址 provider 失败回退报告通知）；B4 不适用（编辑器同步）；B5 扫过（每次扫描建目录，扫描结束即丢）；B6 不适用（无静态状态）；C1 扫过（编辑器路径，允许 `BuildPath` 的字符串分配）；C2 扫过（`simulateBuild: true` 的主资源语义已核对 YooAsset 2.3.18）；D1 扫过（Editor asmdef 新增 YooAsset 引用属预期；依赖声明守卫不反查 asmdef，见 §7.5）；D2 不适用（无重载）；D3 命中（窗口/报告无自动化，R5-UIE-002）；D4 扫过（地址不可用时以报告通知跳过，不静默）；D5 扫过；E 扫过（节点名键按大小写不敏感，与运行时一致）；F 扫过（规则与运行时同一套前缀/深度/重名语义）。
+- **前轮修复偏差**：R4 未覆盖（本功能 2026-11-08 新增）；R4-UIB-009 的 `img_` 编辑器告警与本校验器无交集。
+- **旧结论复核**：「校验器手动、不在保存/构建时自动触发」「不做地址字符串扫描/自动修复」维持（核心 UI README `:354` 与台账）。
+- **开口项**：R5-UIE-001 补规则/文档；R5-UIE-002 登记窗口未自动化。
+- **第三方对照**：YooAsset 2.3.18 `BeginCollect(simulateBuild:true)` 的主资源/依赖语义与 `AssetBundleCollectorSetting` 静态门面会创建资产的行为（避开方式与 UIAuthoring 包地址 provider 相同）。
+- **残留**：HUD 只查 001/008（核心 README `:351` 已写明）、窗口无自动化、地址检查需工程内唯一采集配置、Unity 6 TMP 类型探测按全名。
 
 ### UIAuthoring（T1 扩展包全量，首次）
 
@@ -287,3 +319,7 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 | R5-UAU-012 | P3 | UIAuthoring | 异地址拒绝返回已存在面板，调用方无法区分 |
 | R5-UAU-013 | P3 | UIAuthoring | `ShowDialogAsync` 空参数不发布结果消息 |
 | R5-UAU-014 | P3 | UIAuthoring | `actionId` 是全局键空间，未写唯一性约定 |
+| R5-AUD-001 | P3 | Audio | 跨会话静态态只靠 `Application.quitting`，FMOD 自动安装可能第二会话不重装 |
+| R5-AUD-002 | P3 | Audio | 探测型总表未写「加载窗口内也返回 false」 |
+| R5-UIE-001 | P3 | UI 校验器 | 面板无 `UIPanelBinding` 时约定检查静默跳过、不报缺失 |
+| R5-UIE-002 | P3 | UI 校验器 | 校验窗口/报告无自动化用例 |
