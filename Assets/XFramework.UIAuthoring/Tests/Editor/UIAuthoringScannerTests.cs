@@ -32,6 +32,7 @@ namespace XFramework.XUI.Authoring.Editor.Tests
 
             var definition = ScriptableObject.CreateInstance<UIPanelDefinition>();
             definition.Kind = UIPanelDefinitionKind.Panel;
+            definition.TextBindings.Add(new UITextBinding { NodeName = "missing_node", Literal = "x" });
             string definitionPath = TempFolder + "/PanelDefinition.asset";
             AssetDatabase.CreateAsset(definition, definitionPath);
 
@@ -52,6 +53,8 @@ namespace XFramework.XUI.Authoring.Editor.Tests
 
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
+            Assert.That(Has(results[0].Issues, UIAuthoringRuleIds.TextNodeMissing), Is.True,
+                "扫描器必须真正读到 _definition，否则定义相关规则会被整体跳过");
         }
 
         [Test]
@@ -82,6 +85,17 @@ namespace XFramework.XUI.Authoring.Editor.Tests
 
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
+        }
+
+        private static bool Has(List<UIAuthoringIssue> issues, string ruleId)
+        {
+            for (int i = 0; i < issues.Count; i++)
+            {
+                if (issues[i].RuleId == ruleId)
+                    return true;
+            }
+
+            return false;
         }
 
         private static void DeleteTempFolder()

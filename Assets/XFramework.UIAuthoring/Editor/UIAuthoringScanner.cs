@@ -67,9 +67,24 @@ namespace XFramework.XUI.Authoring.Editor
             return results;
         }
 
+        /// <summary>
+        /// 从预制体根上的声明式组件读取定义资产。
+        /// <para><b>必须对组件而不是 GameObject 建 <see cref="SerializedObject"/></b>：
+        /// GameObject 的序列化面只有 m_Name / m_Component 等自身字段，找不到组件上的
+        /// <c>_definition</c>——对 GameObject 调用会让定义恒为 null，校验被静默跳过。</para>
+        /// </summary>
         private static UIPanelDefinition ReadDefinition(GameObject prefab)
         {
-            var serialized = new SerializedObject(prefab);
+            Component component = prefab.GetComponent<UIDeclarativePanel>();
+            if (component == null)
+                component = prefab.GetComponent<UIDeclarativeDialogPanel>();
+            if (component == null)
+                component = prefab.GetComponent<UIDeclarativeHudItem>();
+
+            if (component == null)
+                return null;
+
+            var serialized = new SerializedObject(component);
             SerializedProperty property = serialized.FindProperty("_definition");
             return property != null ? property.objectReferenceValue as UIPanelDefinition : null;
         }
