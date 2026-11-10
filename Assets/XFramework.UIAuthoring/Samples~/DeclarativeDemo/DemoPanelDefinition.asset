@@ -76,6 +76,30 @@ MonoBehaviour:
       Payload: 
       ResultId: 
       GroupName: 
+  - ButtonNodeName: btn_popup
+    Actions:
+    - Kind: 15
+      AssetPath: ui/popups/demo
+      Layer: 100
+      NodeName:
+      BoolValue: 0
+      Index: 0
+      Text:
+      TipConfig:
+        UseWorldPos: 0
+        WorldPos: {x: 0, y: 0, z: 0}
+        Color: {r: 1, g: 1, b: 1, a: 1}
+        Duration: 2
+        FloatDistance: 0
+        FontSize: 0
+      ActionId:
+      Payload:
+      ResultId:
+      GroupName:
+      AnchorNodeName: btn_popup
+      Direction: 1
+      Align: 0
+      CloseOnClickOutside: 1
   TabGroups: []
   DataBindings:
   - NodeName: txt_title

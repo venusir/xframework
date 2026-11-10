@@ -10,6 +10,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `IUIDataProvider` / `UIDataProviderRegistry`（阶段 3）：强类型 `TryGet<T>` 数据源接缝，后注册优先，provider 异常隔离，`SubsystemRegistration` 会话复位。
+- `UIDeclarativePopupPanel : UIPanelBase`（阶段 4）与 `UIPanelDefinitionKind.Popup`：声明式锚定弹窗，可与声明式面板/对话框同时打开。
+- `UIActionKind.ShowPopup` 与 `UIAction.AnchorNodeName` / `Direction` / `Align` / `CloseOnClickOutside`；`UIAuthoringNavigation.ShowPopupAsync`（同地址重摆、异地址拒绝）。
+- 校验器新增 `UI-AUTH-080`（ShowPopup 锚点缺失/非 RectTransform）；`ShowPopup` 仅允许 Panel 定义，Dialog/Popup 报 ActionNotAllowed。
+- `Samples~/Templates/Popup.prefab` 与 DemoPopup 示例（面板 `btn_popup` 经 `ShowPopup` 打开）。
 - `UIDataBinding` / `UIDataBindingKind`（Text / Sprite / Color / FillAmount / Slider / Toggle / Active）与 `UIPanelDefinition.DataBindings`；Panel / HUD / Dialog 打开时绑定，订阅随回池释放。
 - `Slider` / `Toggle` 双向：源实现 `IReactivePropertyWriter<T>` 时启用；只读源降级为单向并告警。
 - 校验器新增 `UI-AUTH-070..075`（节点/空 key/目标组件/TwoWay/Format/同节点冲突）与 `UI-AUTH-HUD-005`（HUD 双向不可交互）。

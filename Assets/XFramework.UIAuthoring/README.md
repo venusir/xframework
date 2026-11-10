@@ -7,7 +7,7 @@
 - 核心包零改动：面板/对话框仍继承 `UIPanelBase` / `UIDialogPanel<string>`，加载、排序、遮罩、栈、池化全部复用核心。
 - 单根限制：`UIDeclarativePanel` 同一时刻只能打开一个；多页用同一预制体内的子页/页签。
 - `UIDeclarativeDialogPanel` 是独立具体类型，可与声明式面板同时打开；结果类型固定 `string`。
-- 阶段 2a 覆盖面板与对话框，阶段 2b 覆盖 HUD 静态文本，阶段 3 增加 `IUIDataProvider` 数据绑定；声明式 Popup 不在本版本。
+- 阶段 2a 覆盖面板与对话框，阶段 2b 覆盖 HUD 静态文本，阶段 3 增加 `IUIDataProvider` 数据绑定，阶段 4 增加声明式锚定弹窗；所有形态共用同一份定义资产格式。
 
 ## 快速使用
 
@@ -124,7 +124,33 @@ UIDataProviderRegistry.Unregister(provider); // 顺序与注册相反；注册�
 - 每个视图打开时解析一次；运行期**替换 provider 或新增 key 不会重绑**已打开的视图。
 - 数据绑定在静态文本之后执行：同一节点同时配了 `TextBindings` 与 `DataBindings` 时数据绑定胜出（校验器给 Warning）。
 
-### 8. 运行两个校验器
+### 8. 锚定弹窗（阶段 4）
+
+声明式弹窗是独立具体类型 `UIDeclarativePopupPanel : UIPanelBase`，可以与一个声明式面板、一个声明式对话框同时打开；同一时刻只能开一个声明式弹窗。
+
+- **定义**：`Kind = Popup`，节点/动作/数据绑定与面板同型；`CloseWithResult` 不允许（弹窗没有结果通道）。
+- **程序入口**：
+
+```csharp
+var popup = await UIAuthoringNavigation.ShowPopupAsync(
+    anchorRect, "ui/popups/demo",
+    UIPopupDirection.Down, UIPopupAlign.Start, closeOnClickOutside: true);
+```
+
+- **动作入口**：在 `Kind = Panel` 的定义里给按钮配 `ShowPopup`：
+
+| 字段 | 含义 |
+|---|---|
+| `AnchorNodeName` | 动作所在面板子树内的锚点节点（必须是 `RectTransform`，深度 ≤5） |
+| `AssetPath` | 弹窗预制体地址 |
+| `Direction` / `Align` | 复用核心 `UIPopupDirection` / `UIPopupAlign` |
+| `CloseOnClickOutside` | 默认 `true`；只有核心内置 `UIManagerImpl` 生效 |
+
+- 弹窗层固定 `UILayers.Popup`（200）；打开时由核心摆一次位置，之后不跟随锚点。
+- 已有一个声明式弹窗时：同地址会重聚焦并重摆到新锚点；异地址拒绝并 Warning。
+- `ShowPopup` 只允许出现在 `Kind = Panel` 的定义里——声明式弹窗内不能再开声明式弹窗（同一具体类型只能一个）。
+
+### 9. 运行两个校验器
 
 - 核心：`Tools/XFramework/UI/Validate UI Prefabs`（预制体结构、命名、根 RectTransform、YooAsset 采集等）。
 - 本包：`Tools/XFramework/UI Authoring/Validate Declarative Panels`（定义与节点、动作参数/顺序、目标根类型、地址解析）。
@@ -181,10 +207,10 @@ Assets/XFramework.UIAuthoring/
 
 通过 Package Manager 的 Samples 页签导入：
 
-- **声明式面板/对话框/HUD 模板**（`Samples~/Templates`）：`Panel.prefab` / `Dialog.prefab` / `Hud.prefab`。根节点已带 `Canvas` / `GraphicRaycaster` 与声明式根组件，子节点按 `txt_` / `btn_` 命名；复制一份作为你的起点，再加子页与节点。
-- **声明式 UI 示例**（`Samples~/DeclarativeDemo`）：`DemoPanel.prefab` / `DemoDialog.prefab` / `DemoHud.prefab` + 三个定义资产 + `UIAuthoringDemo.cs` + `UIAuthoringDemoDataProvider.cs`。DemoPanel 演示标题文本、图片颜色、滑条双向、开关双向；DemoHud 演示名字文本与血条填充量，数据由示例 provider 每 0.1 秒推一次。导入后需要：
-  1. 把三个预制体加入消费方 YooAsset **主资源采集**，地址分别设为 `ui/panels/demo` / `ui/dialogs/demo` / `ui/huds/demo`（与定义里的 `ShowDialog.AssetPath` 和演示脚本的 `hudAddress` 一致）；
-  2. 三个定义资产与预制体**同包采集**（或同包 `DependAssetCollector`）；
+- **声明式面板/对话框/HUD/Popup 模板**（`Samples~/Templates`）：`Panel.prefab` / `Dialog.prefab` / `Hud.prefab` / `Popup.prefab`。根节点已带 `Canvas` / `GraphicRaycaster` 与声明式根组件，子节点按 `txt_` / `btn_` 命名；复制一份作为你的起点，再加子页与节点。
+- **声明式 UI 示例**（`Samples~/DeclarativeDemo`）：`DemoPanel.prefab` / `DemoDialog.prefab` / `DemoHud.prefab` / `DemoPopup.prefab` + 四个定义资产 + `UIAuthoringDemo.cs` + `UIAuthoringDemoDataProvider.cs`。DemoPanel 演示标题文本、图片颜色、滑条双向、开关双向与 `ShowPopup` 按钮；DemoHud 演示名字文本与血条填充量；DemoPopup 演示锚定弹窗与 `CloseSelf`。导入后需要：
+  1. 把四个预制体加入消费方 YooAsset **主资源采集**，地址分别设为 `ui/panels/demo` / `ui/dialogs/demo` / `ui/huds/demo` / `ui/popups/demo`（与定义里的 `ShowDialog.AssetPath`、`ShowPopup.AssetPath` 和演示脚本的 `hudAddress` 一致）；
+  2. 四个定义资产与预制体**同包采集**（或同包 `DependAssetCollector`）；
   3. 场景里放一个 `UIRootNode`，把 `UIAuthoringDemo` 挂到任意物体上按 Play；可选地把一个 3D 目标拖到 `hudTarget` 看 HUD 跟随。
 
 模板是**导入时复制**：包升级不会覆盖你改过的模板；卸载本包后模板根组件会变成 Missing Script。模板只是起点，不是运行时强制结构。
@@ -202,6 +228,7 @@ Assets/XFramework.UIAuthoring/
 - **定义资产**：可为空（静态预制体）；`Kind` 必须与根组件一致。
 - **数据绑定**：只在打开时解析一次；`TryGet` 的 key 缺失或类型不匹配只告警；`TwoWay` 仅 `Slider`/`Toggle`，只读源降级单向；`DataBindings` 在 `TextBindings` 之后执行。
 - **数据源注册表**：静态状态；`Register` 同一实例幂等，`Unregister` 不 Dispose；启动时按 `SubsystemRegistration` 清空（关闭域重载也成立）。
+- **Popup**：`UIDeclarativePopupPanel : UIPanelBase`，`Kind=Popup`；与声明式面板/对话框可同时打开，同一时刻只能开一个声明式弹窗；`ShowPopup` 仅允许 `Kind=Panel` 的定义；层固定 `UILayers.Popup`；点击外部关闭只在核心内置 `UIManagerImpl` 生效。
 
 ## 线程契约
 
@@ -219,7 +246,7 @@ Assets/XFramework.UIAuthoring/
 - **单根**：不能同时打开两个 `UIDeclarativePanel`；需要并存请用 C# 面板或阶段 4 的独立 Popup 类型。
 - **对话框结果**：固定 `string`；`ParentClosed` 目前归入 `Canceled`；自定义 `TResult` 请写 C# `UIDialogPanel<TResult>`。
 - **HUD 只做静态文本与数据绑定**：`UIDeclarativeHudItem` 不支持动作/页签；无 `userData`、不入面板字典、同一目标只挂一个，关闭用 `HideHud(target)`。
-- **声明式 Popup**：本版本未实现，留阶段 4。
+- **声明式 Popup**：同一时刻只能开一个；弹窗内不能再开声明式弹窗（`ShowPopup` 只允许 Panel 定义）；打开后不跟随锚点移动；`closeOnClickOutside` 只在核心内置 `UIManagerImpl` 生效；层固定 `UILayers.Popup`。
 - **数据源是全局注册表**：没有「按定义资产指定 provider」；多个 provider 共用一个 key 时后注册者优先。
 - **数据键没有编辑器期候选/校验**：provider 是运行时对象，校验器只能检查节点、目标组件与配置形状（`UI-AUTH-070..075`），不能判断 key 是否存在。
 - **运行期替换 provider 不重绑**：数据绑定在打开时解析一次；打开后注册/替换 provider 或新增 key，已打开视图不会更新。
@@ -238,6 +265,7 @@ Assets/XFramework.UIAuthoring/
 - **扩展包而非核心**：声明式面板属于可选的制作层，不进入核心包的「不预设 GamePlay 架构」边界。
 - **SO 定义资产而非内联**：独立校验、干净 diff、可复用；同包采集已验证定义会随预制体进构建图。
 - **全局数据源注册表 + 强类型 `TryGet<T>`**：provider 只写一个，解析无反射、无装箱；代价是不能按定义资产指定 provider，多个 provider 共用一个 key 时后注册优先。
+- **Popup 独立具体类型而非复用 `UIDeclarativePanel`**：核心按具体类型登记面板，复用会让弹窗与主面板抢单根；独立类型可与面板/对话框并存。
 - **复用核心 `UIBinder` / `IReactiveProperty`**：双向绑定、异常隔离与订阅生命周期沿用既有实现，不引入第二套绑定或事件系统。
 - **keyed 消息而非第二事件系统**：复用 `MessageManager` 的订阅/异常隔离；消息不带面板引用，避免 keyed 重放缓存持有已回池对象。
 - **动作集封闭且只含 UI 级动词**：领域语义一律走 `Custom`。
