@@ -61,7 +61,7 @@
 | 1 | B0 边界与基线 | 已完成 | §0、附录 A | BUILD 0 error；PLAY 2405/2405、EDIT 743 通过 + 6 skip；DOC 通过（535 条台账） |
 | 2 | B1 R4 修复复核 | 已完成 | §3 | 3 P1 逐条读 diff + 用例；51 P2 / 17 P3 聚合 + 抽样；11 ADJ、18 PRB 对台账；未发现二次回归 |
 | 3 | B2 FMOD 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P2 + 6 P3；FMOD-free XML 告警探针 0 条；Integration 默认不编译，已登记 |
-| 4 | B3 UIAuthoring 包全量 | 待做 | §6、§8、附录 C | 首次审计 |
+| 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；2 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 待做 | §6、§8、附录 C | |
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 待做 | §6、§8、附录 C | |
 | 7 | B6 工程面与发布 | 待做 | §6、§7 | |
@@ -146,6 +146,23 @@
 
 > 一条一行；`[回归]` 表示由前轮修复引入，`[跨模块]` 表示归拥有方立条，`[需实测]` 表示需运行期/真机证据。P3 也列在各模块下，便于下一轮按模块取用。
 
+### UIAuthoring（扩展包，首次审计）
+
+- **R5-UAU-001 · P2 · B1/B2/B6/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85` 与 `UIDeclarativeDialogPanel.cs:44-49,83-94` —— 控制器拦下关闭时（核心 `ClosePanelInternalAsync` 返回 `false`，`UIManagerImpl.cs:2058-2064`；`UIManager.CloseAsync` 返回 `UniTask` 不暴露结果，`UIManager.cs:393-399`），`CloseSelf` / `Replace` 的执行器仍无条件 `_session.Invalidate()`，面板实际没关但动作会话失效——面板继续显示，其按钮全部变成空操作。`CloseWithResultAsync` 还会先把 `_pendingResultId` 写入、关闭被拦后不清：面板仍在，之后被 `CloseAllAsync` / 父面板 / Dispose 回池关闭时，`OnClose` 会把过期结果兑现给核心结果通道；Dispose 回池不复位该字段，池化实例下一次复用时仍带着上一代的待兑现结果。现有用例只覆盖成功路径（`UIActionExecutorTests.Replace_UsesRuntimeReplace` 断言 `session.IsValid == false`），无「控制器拦下」用例。建议：`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 await 后查 `Panel.IsOpen`），仅在真正关闭时失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空。验证：PlayMode 用拦下关闭的 Fake controller 试点 `CloseSelf` / `CloseWithResult` / `Replace`，改前必红。
+- **R5-UAU-002 · P2 · B3/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIManagerActionRuntime.cs:111-126` —— `ShowDeclarativeDialogAsync` 的 `catch (Exception ex)` 把 `OperationCanceledException` 一并吞掉：`UIAuthoringNavigation.ShowDialogAsync(..., cancellationToken)` 的取消会变成 `OpenFailed` 返回、发布一条结果消息并记一条 Error 日志。同一包的 `OpenAsync` 会正常把 OCE 抛给调用方（`UIAuthoringNavigation.cs:43-55`），两条公开入口的取消语义不一致；公开 API 的 XML 也未写「取消会返回 OpenFailed」。建议单独 `catch (OperationCanceledException)` 并重抛（或明确文档化），补一条取消用例。
+- **R5-UAU-003 · P3 · A1/A2**：`Assets/XFramework.UIAuthoring/Editor/UIAuthoringValidator.cs:483-497` —— `Open` / `Push` 的目标根检查只拒绝 `UIDeclarativePanel` 与 `UIDialogPanel<>`，**没有拒绝 `UIDeclarativePopupPanel`**（它是 `UIPanelBase`，谓词返回 true）；README 的行为契约写「`Open` / `Push`：只用于 C# 面板」。运行期 `UIManager.OpenAsync<UIPanelBase>` 也会照常打开一个弹窗预制体（按普通面板层），绕过弹窗的锚定/层语义。建议把 `target.GetComponent<UIDeclarativePopupPanel>() != null` 加入拒绝条件，并补一条校验用例。
+- **R5-UAU-004 · P3 · A2/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionKind.cs:51-52`、`Editor/UIAuthoringValidator.cs:375-380`、`Runtime/UIDeclarativeHudItem.cs:52-57`、`Runtime/UIActionExecutor.cs:158-160` —— `HideSelf` 三条路径都不可达：校验器对所有 Kind 直接报错「只适用于 HUD」，HUD 从不绑定动作，执行器只打一条「只对 HUD 有效」的 Warning。它作为公开枚举值存在但没有任何可用场景。建议明确「保留为未来 HUD 动作、当前不可用」写进 XML/README，或在预 1.0 的版本里删除（公开 API 变更需单独确认）。
+- **R5-UAU-005 · P3 · A1**：`Assets/XFramework.UIAuthoring/Runtime/UIActionBinding.cs:12` 写「按钮节点名（该节点**或其根上**必须有 `Button`）」，而 `UIDeclarativeBinder.BindAction`（`:200-215`）与校验器（`:344-353`）都只查节点自身 `GetComponent<Button>()`；把 `Button` 放在父节点会静默不绑定。建议把文档改为「该节点上必须有 Button」。
+- **R5-UAU-006 · P3 · A3**：包内 8 个公开/受保护成员缺 XML 注释（实测 `dotnet build ... -p:DocumentationFile`）：`UIDeclarativePanel.OnOpen/OnClose`、`UIDeclarativeDialogPanel.OnOpen/OnClose`、`UIDeclarativePopupPanel.OnOpen/OnClose`、`UIDeclarativeHudItem.OnOpenImpl`、`UIPanelDefinitionEditor.OnInspectorGUI`，全部 CS1591。它们都在公开 API 基线内（基线把 `protected` 视为可见），但核心 `check-docs.ps1 -Enforce` 只扫 `Assets/XFramework`，这 8 条在任何门禁里都不会出现。建议补 `<inheritdoc/>` 或 `<summary>`，并把该探针纳入工程面门禁讨论（见 R5-ENG-001）。
+- **R5-UAU-007 · P3 · A1/D4**：`Assets/XFramework.UIAuthoring/Editor/UIAuthoringValidator.cs:172-176` —— 「启用本地化但没有 LocalizationKey」复用 `UI-AUTH-010 TextNodeMissing` 规则号；规则名与实际条件不符，IDE/报告里无法区分「节点不存在」与「缺 key」。建议新增独立规则号（如 `UI-AUTH-013`），或把该分支并入 010 的明确文案。
+- **R5-UAU-008 · P3 · A1**：`Assets/XFramework.UIAuthoring/package.json:6` 与 `README.md:24` 的形态列表只写 `Panel` / `Dialog` / `Hud`，漏了 `Popup`（`UIPanelDefinitionKind.Popup=3`，README 第 8 节已完整描述阶段 4）。建议同步包描述与 Kind 列表。
+- **R5-UAU-009 · P3 · A1**：`Documentation/UIAuthoring.md` 的维护向记录与实现漂移：多处仍列 `ParentClosed` 状态（`:494,528,674,725,930,1059,1062`），而 `UIAuthoringDialogStatus` 只有 `Selected/Canceled/OpenFailed`，包 README `:247` 已写「ParentClosed 归入 Canceled」；`:430-437` 的 HUD 设计草图仍写「绑定文本/动作/数据」与 `HideSelf` 调 `UIManager.HideHud`，实现只绑定文本与数据；`### 8.6` 标题重复（`:804` 与 `:808`）；模板被称为 `Prefab Variant`（`:244,342,344,416,836,847`）而实际是普通 Prefab（无 `m_PrefabInstance`）。建议按实现订正或标注「设计稿，未照此实现」。
+- **R5-UAU-010 · P3 · D3**：`Assets/XFramework.UIAuthoring/Runtime/UIManagerActionRuntime.cs` 的生产实现没有直接测试；`UIAuthoringNavigationTests` / `UIActionExecutorTests` 全部用 `FakeActionRuntime`。`ShowDeclarativeDialogAsync` 的「是否真正打开」判定（订阅 `PanelOpenedMessage` + `GetPanel<...>()?.AssetPath`）、单飞拒绝、异常与取消路径、`ReplaceDeclarativeAsync` 的拦截分支均只经 fake 间接覆盖；UAU-001/002 正落在这些未覆盖分支上。建议至少补「生产 runtime + 假 UIManager」或把状态判定抽成可测的纯函数。
+- **R5-UAU-011 · P3 · C1**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:18-22` —— 构造函数接收 `UIPanelDefinition definition` 但从未使用；三个面板 OnOpen 都传了它。建议删除参数（内部类型，无公开影响）。
+- **R5-UAU-012 · P3 · A1/F**：`Assets/XFramework.UIAuthoring/Runtime/UIAuthoringNavigation.cs:49-53`（面板）与 `:139-143`（弹窗）—— 异地址拒绝时返回**已存在的面板/弹窗**（非 null）；README `:43` 只写「异地址会被拒绝并 Warning」，`快速使用` 的 `if (panel == null)` 注释只提「资源加载失败/被控制器拦下」。调用方拿到的非 null 返回值可能指向另一个地址，照 `panel` 操作会作用错对象。建议文档写明返回值语义，或拒绝时返回 null 并让调用方重新查询。
+- **R5-UAU-013 · P3 · D4**：`Assets/XFramework.UIAuthoring/Runtime/UIAuthoringNavigation.cs:78-83` —— `ShowDialogAsync` 在 `assetPath`/`actionId` 为空时直接返回 `OpenFailed`，**不发布** `UIAuthoringDialogResultMessage`；而同包 `UIManagerActionRuntime.ShowDeclarativeDialogAsync` 对空参数发布结果消息（`:83-97`）。同一语义两条路径的可观测性不一致；若项目只靠消息驱动 UI，会漏掉这类失败。
+- **R5-UAU-014 · P3 · E**：`UIAuthoringActionMessage` / `UIAuthoringDialogResultMessage` 按 `actionId` 走 `MessageManager` 全局键空间；两个面板使用同一个 `actionId`（如都叫 `confirm`）会互相收到消息。README 的「自定义动作」节只写「项目按 actionId 订阅」，未写「actionId 需全项目唯一 / 建议加面板前缀」。建议在行为契约补一句键空间约定。
+
 ### FMOD（扩展包，首次审计）
 
 - **R5-FMD-001 · P2 · D4/A2**：`Assets/XFramework.Fmod/Runtime/Integration/FmodEventBackend.cs:162-168` —— `SetGlobalParameter` 在 `RuntimeManager.IsInitialized == false` 时直接返回 `false`，而其余 FMOD 入口（`CreateInstance` / `LoadBank` / `GetBus` / `HasBankLoaded`）都会经 `RuntimeManager.Instance` 懒初始化。首次在「还没有 bank/播放」时设置全局 RTPC（常见顺序：先设全局参数再起播）会静默失败——核心 `AudioManagerImpl.TrySetGlobalParameter`（`:207-220`）只透传 `false`，不记日志；包 README 只写「参数经 AudioManager」，未写这个前置。建议删掉该早退（`StudioSystem` 会懒初始化，`SystemNotInitializedException` 已被下方 catch），或至少打一条一次性 Warning 并写入已知限制。验证：PlayMode 探针，在未加载 bank/未播放时 `AudioManager.SetGlobalParameter` → 断言 `true`；改前必红。
@@ -174,7 +191,17 @@
 - **第三方对照**：FMOD 2.04 `RuntimeManager.LoadBank` 的引用计数（`loadedBanks.RefCount`）与异步平台分支、`RegisterLoadedBank` 的 `BankLoadException`（同步路径会抛；异步路径在协程内失败只记日志）、`Settings.SettingsAssetPath` = `FMOD/FMODStudioSettings`、`RuntimeManager` 懒初始化（`Instance` 属性）。**上游注意**：`RuntimeManager.LoadBank` 在 `RegisterLoadedBank` 抛 `BankLoadException` 时已 `loadingBanksRef++` 但不会 `--`，`HaveAllBanksLoaded` 会永久为 false；本包不使用该属性，如实记录为第三方事实。
 - **残留与不确定**：真实 bank/event 冒烟（需 Studio 2.04 工程 + `XFW_FMOD_EVENT` / `XFW_FMOD_BANK`）仍未跑；Integration 程序集与 7 个集成用例在本环境默认不编译；Android OBB/WebGL 的异步 bank 未实测；包无发布 tag（0.2.0）。
 
-（其余对象待 B3–B6 填充：UIAuthoring、Luban、Audio、UI 校验器、15 个 T2 核心模块、8 个 T3 核心模块、工程面。）
+### UIAuthoring（T1 扩展包全量，首次）
+
+- **范围与输入**：`Assets/XFramework.UIAuthoring/` Runtime 31 个 `.cs`、Editor 7 个、Tests 25 文件 / 124 例（63 Runtime + 12 Architecture + 49 Editor）、7 个 Architecture 守卫 fixture、`Samples~/Templates`（Panel / Dialog / Hud / Popup 普通 Prefab）与 `Samples~/DeclarativeDemo`、README / CHANGELOG / package.json、`Documentation/UIAuthoring.md`；核心 UI 接缝（`UIPanelBase` / `UIDialogPanel<string>` / `UIHudItem` / `UIManager.ShowPopupAsync` / `UIBinder`）。
+- **18 类留痕**：A1 命中（Kind 列表、`ButtonNodeName` 文档、缺本地化 key 的规则号、维护向记录漂移，R5-UAU-005/007/008/009）；A2 命中（`Open`/`Push` 目标接受 `UIDeclarativePopupPanel`，R5-UAU-003）；A3 命中（8 条 CS1591 实测，R5-UAU-006）；B1 命中（控制器拦下关闭后会话仍失效，R5-UAU-001）；B2 命中（`_pendingResultId` 跨 Dispose 回池存活，R5-UAU-001）；B3 命中（`ShowDialog` 取消被吞，R5-UAU-002）；B4 **命中-已文档化**（全部主线程、代码零断言；核心 UI 同样无断言，列为残留不重开）；B5 扫过（注册表按项目注销、面板级订阅由 `Track` 释放）；B6 扫过（`UIDataProviderRegistry.ResetForNewSession` 在 `SubsystemRegistration`，守卫登记）；C1 扫过（绑定只在 OnOpen，值变化走强类型回调；`Format` 每次变化一次字符串已写入「性能代价」）；C2 扫过（YooAsset 构建图与模板导入探针已做）；D1 扫过（只用核心公开面；Editor asmdef 新增 `YooAsset` / `YooAsset.Editor` 引用，依赖声明守卫只查 Runtime asmdef）；D2 不适用（无重载）；D3 命中（生产 `UIManagerActionRuntime` 零直接测试、拦截路径零覆盖，R5-UAU-010）；D4 命中（`ShowDialogAsync` 空参数不发布结果、异地址返回非 null，R5-UAU-012/013）；D5 扫过（核心已给 `OpenAsync` / `ShowPopupAsync` / `ShowDialogAsync` / HUD 原语，无缺失）；E 命中（`actionId` 全局键空间，R5-UAU-014）；F 命中（异地址拒绝时返回已存在面板，R5-UAU-012）。
+- **前轮修复偏差**：R4 未覆盖本包（阶段 2a/2b/3/4 均在 R4 之后）；2026-11-08 的设计审计（`Documentation/UIAuthoring.md` §1.5）已修的事实与引用错误本轮复核维持；实现期的 `9981bf5c`（扫描器按根组件读定义）有代码 + 用例证据。
+- **旧结论复核**：设计文档的三条裁定（单根、只重开模板、HUD/Dialog 纳入）与三条「不做」（可视化设计器、保存/构建门禁、向导/脚本/地址生成）全部维持；SO 定义资产、keyed 消息、独立 Popup 具体类型的取舍与实现一致。
+- **开口项**：R5-UAU-001/002 建议进修复批次；R5-UAU-003..014 为文档/测试/规则号补齐。
+- **第三方对照**：FairyGUI / UI Toolkit 的结论沿用 `Documentation/UIAuthoring.md` §6.6 与 `FairyGUI.md`，本轮未重做；本轮新增的对照点是「声明式制作层与核心具体类型注册的耦合」——单根限制来自核心按具体类型登记，Popup 用独立类型绕开，与设计文档一致。
+- **残留与不确定**：P6 IL2CPP/AOT（`IUIDataProvider.TryGet<T>` 泛型实例化）未验证；TMP 只有一次性探针、自动化仍只测 UGUI `Text`；真实核心 `UIManager` 集成仍以 fake 为主；`Samples~` 的 Prefab/定义资产未做本轮导入回归；包无发布 tag（0.1.0，阶段 2b/3/4 在 `[Unreleased]`）。
+
+（其余对象待 B4–B6 填充：Luban、Audio、UI 校验器、15 个 T2 核心模块、8 个 T3 核心模块、工程面。）
 
 ## 9. 待裁的一次性裁定建议
 
@@ -246,3 +273,17 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 | R5-FMD-005 | P3 | FMOD | README 手动定义 `XFRAMEWORK_FMOD` 未写 FMOD 必须已安装 |
 | R5-FMD-006 | P3 | FMOD | Integration 程序集与 7 个集成用例默认不编译/不跑 |
 | R5-FMD-007 | P3 | FMOD | `FmodAudioSettings` 配置资产无序列化往返用例 |
+| R5-UAU-001 | P2 | UIAuthoring | 控制器拦下关闭后动作会话仍失效、`CloseWithResult` 残留待兑现结果 |
+| R5-UAU-002 | P2 | UIAuthoring | `ShowDialog` 的取消被吞成 `OpenFailed` + Error 日志 |
+| R5-UAU-003 | P3 | UIAuthoring | `Open`/`Push` 校验接受声明式 Popup 作目标 |
+| R5-UAU-004 | P3 | UIAuthoring | `UIActionKind.HideSelf` 三条路径均不可达 |
+| R5-UAU-005 | P3 | UIAuthoring | `ButtonNodeName` 文档说「或根上」，代码只查节点自身 |
+| R5-UAU-006 | P3 | UIAuthoring | 8 个公开/受保护成员缺 XML 注释（CS1591） |
+| R5-UAU-007 | P3 | UIAuthoring | 缺本地化 key 复用 `UI-AUTH-010` 规则号 |
+| R5-UAU-008 | P3 | UIAuthoring | package.json / README 的 Kind 列表漏 Popup |
+| R5-UAU-009 | P3 | UIAuthoring | 维护向文档的 ParentClosed / Variant / 8.6 / HUD 动作漂移 |
+| R5-UAU-010 | P3 | UIAuthoring | 生产 `UIManagerActionRuntime` 零直接测试 |
+| R5-UAU-011 | P3 | UIAuthoring | `UIActionExecutor` 构造参数 `definition` 未使用 |
+| R5-UAU-012 | P3 | UIAuthoring | 异地址拒绝返回已存在面板，调用方无法区分 |
+| R5-UAU-013 | P3 | UIAuthoring | `ShowDialogAsync` 空参数不发布结果消息 |
+| R5-UAU-014 | P3 | UIAuthoring | `actionId` 是全局键空间，未写唯一性约定 |
