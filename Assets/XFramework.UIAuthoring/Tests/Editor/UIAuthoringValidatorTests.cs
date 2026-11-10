@@ -61,6 +61,13 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             return go.AddComponent<UIDeclarativeHudItem>();
         }
 
+        private UIDeclarativePopupPanel CreatePopup()
+        {
+            var go = new GameObject("Popup", typeof(RectTransform));
+            _created.Add(go);
+            return go.AddComponent<UIDeclarativePopupPanel>();
+        }
+
         private UIPanelDefinition CreateDefinition(UIPanelDefinitionKind kind)
         {
             var definition = ScriptableObject.CreateInstance<UIPanelDefinition>();
@@ -672,6 +679,175 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             List<UIAuthoringIssue> issues = Validate(hud.gameObject, definition, null, null);
 
             Assert.That(Has(issues, UIAuthoringRuleIds.HudNodeDepthExceeded), Is.True);
+        }
+
+        #endregion
+
+        #region Popup
+
+        [Test]
+        public void PopupDefinition_MatchesPopupRoot()
+        {
+            UIDeclarativePopupPanel popup = CreatePopup();
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Popup);
+
+            List<UIAuthoringIssue> issues = Validate(popup.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.KindMismatch), Is.False);
+        }
+
+        [Test]
+        public void ShowPopup_MissingAnchor_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "btn_popup", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_popup",
+                Actions = new List<UIAction>
+                {
+                    new UIAction
+                    {
+                        Kind = UIActionKind.ShowPopup,
+                        AssetPath = "popup",
+                        AnchorNodeName = "missing_anchor",
+                    },
+                },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.PopupAnchorMissing), Is.True);
+        }
+
+        [Test]
+        public void ShowPopup_AnchorWithoutRectTransform_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "btn_popup", typeof(Button));
+            var anchorGo = new GameObject("anchor");
+            _created.Add(anchorGo);
+            anchorGo.transform.SetParent(panel.transform, false);
+
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_popup",
+                Actions = new List<UIAction>
+                {
+                    new UIAction
+                    {
+                        Kind = UIActionKind.ShowPopup,
+                        AssetPath = "popup",
+                        AnchorNodeName = "anchor",
+                    },
+                },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.PopupAnchorMissing), Is.True);
+        }
+
+        [Test]
+        public void ShowPopup_TargetNotPopup_Reports()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "btn_popup", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_popup",
+                Actions = new List<UIAction>
+                {
+                    new UIAction
+                    {
+                        Kind = UIActionKind.ShowPopup,
+                        AssetPath = "not_popup",
+                        AnchorNodeName = "btn_popup",
+                    },
+                },
+            });
+
+            var target = new GameObject("NotPopup", typeof(RectTransform));
+            _created.Add(target);
+            var targets = new Dictionary<string, GameObject> { ["not_popup"] = target };
+            UIAuthoringAddressCatalog catalog = CreateCatalog(targets);
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, catalog, targets);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.TargetInvalid), Is.True);
+        }
+
+        [Test]
+        public void ShowPopup_OnDialog_ReportsNotAllowed()
+        {
+            UIDeclarativeDialogPanel dialog = CreateDialog();
+            CreateChild(dialog.transform, "btn_popup", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Dialog);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_popup",
+                Actions = new List<UIAction>
+                {
+                    new UIAction
+                    {
+                        Kind = UIActionKind.ShowPopup,
+                        AssetPath = "popup",
+                        AnchorNodeName = "btn_popup",
+                    },
+                },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(dialog.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.ActionNotAllowed), Is.True);
+        }
+
+        [Test]
+        public void ShowPopup_OnPopup_ReportsNotAllowed()
+        {
+            UIDeclarativePopupPanel popup = CreatePopup();
+            CreateChild(popup.transform, "btn_popup", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Popup);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_popup",
+                Actions = new List<UIAction>
+                {
+                    new UIAction
+                    {
+                        Kind = UIActionKind.ShowPopup,
+                        AssetPath = "popup",
+                        AnchorNodeName = "btn_popup",
+                    },
+                },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(popup.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.ActionNotAllowed), Is.True);
+        }
+
+        [Test]
+        public void CloseWithResult_OnPopup_ReportsNotAllowed()
+        {
+            UIDeclarativePopupPanel popup = CreatePopup();
+            CreateChild(popup.transform, "btn_ok", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Popup);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_ok",
+                Actions = new List<UIAction>
+                {
+                    new UIAction { Kind = UIActionKind.CloseWithResult, ResultId = "ok" },
+                },
+            });
+
+            List<UIAuthoringIssue> issues = Validate(popup.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.ActionNotAllowed), Is.True);
         }
 
         #endregion

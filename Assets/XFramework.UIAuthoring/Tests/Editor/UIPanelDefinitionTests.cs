@@ -31,6 +31,7 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             Assert.That((int)UIPanelDefinitionKind.Panel, Is.EqualTo(0));
             Assert.That((int)UIPanelDefinitionKind.Hud, Is.EqualTo(1));
             Assert.That((int)UIPanelDefinitionKind.Dialog, Is.EqualTo(2));
+            Assert.That((int)UIPanelDefinitionKind.Popup, Is.EqualTo(3));
         }
 
         [Test]

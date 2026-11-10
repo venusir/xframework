@@ -87,6 +87,39 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
         }
 
+        [Test]
+        public void Scan_DeclarativePopupPrefab_IsCollected()
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+                AssetDatabase.CreateFolder("Assets", "__XfwUIAuthoringTests__");
+
+            var definition = ScriptableObject.CreateInstance<UIPanelDefinition>();
+            definition.Kind = UIPanelDefinitionKind.Popup;
+            definition.DataBindings.Add(new UIDataBinding { NodeName = "missing_node", Kind = UIDataBindingKind.Text, DataKey = "k" });
+            string definitionPath = TempFolder + "/PopupDefinition.asset";
+            AssetDatabase.CreateAsset(definition, definitionPath);
+
+            var go = new GameObject("Popup", typeof(RectTransform));
+            UIDeclarativePopupPanel popup = go.AddComponent<UIDeclarativePopupPanel>();
+            popup.SetDefinitionForTest(definition);
+            string prefabPath = TempFolder + "/Popup.prefab";
+            PrefabUtility.SaveAsPrefabAsset(go, prefabPath);
+            Object.DestroyImmediate(go);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(prefabPath);
+            Assert.That(prefab, Is.Not.Null, "临时 Popup 预制体未导入");
+            Assert.That(prefab.GetComponent<UIDeclarativePopupPanel>(), Is.Not.Null);
+
+            List<UIAuthoringScanResult> results = UIAuthoringScanner.Scan(new[] { TempFolder });
+
+            Assert.That(results.Count, Is.EqualTo(1));
+            Assert.That(results[0].AssetPath, Is.EqualTo(prefabPath));
+            Assert.That(Has(results[0].Issues, UIAuthoringRuleIds.DataNodeMissing), Is.True,
+                "扫描器必须读到 Popup 根组件上的 _definition");
+        }
+
         private static bool Has(List<UIAuthoringIssue> issues, string ruleId)
         {
             for (int i = 0; i < issues.Count; i++)

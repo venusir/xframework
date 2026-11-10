@@ -47,6 +47,7 @@ namespace XFramework.XUI.Authoring.Editor
                     continue;
 
                 if (prefab.GetComponent<UIDeclarativePanel>() == null
+                    && prefab.GetComponent<UIDeclarativePopupPanel>() == null
                     && prefab.GetComponent<UIDeclarativeDialogPanel>() == null
                     && prefab.GetComponent<UIDeclarativeHudItem>() == null)
                 {
@@ -76,6 +77,8 @@ namespace XFramework.XUI.Authoring.Editor
         private static UIPanelDefinition ReadDefinition(GameObject prefab)
         {
             Component component = prefab.GetComponent<UIDeclarativePanel>();
+            if (component == null)
+                component = prefab.GetComponent<UIDeclarativePopupPanel>();
             if (component == null)
                 component = prefab.GetComponent<UIDeclarativeDialogPanel>();
             if (component == null)

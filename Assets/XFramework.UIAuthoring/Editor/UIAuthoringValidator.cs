@@ -29,12 +29,14 @@ namespace XFramework.XUI.Authoring.Editor
                 return issues;
 
             UIDeclarativePanel panel = root.GetComponent<UIDeclarativePanel>();
+            UIDeclarativePopupPanel popup = root.GetComponent<UIDeclarativePopupPanel>();
             UIDeclarativeDialogPanel dialog = root.GetComponent<UIDeclarativeDialogPanel>();
             UIDeclarativeHudItem hud = root.GetComponent<UIDeclarativeHudItem>();
-            if (panel == null && dialog == null && hud == null)
+            if (panel == null && popup == null && dialog == null && hud == null)
             {
                 Add(issues, UIAuthoringRuleIds.RootComponentMissing, UIAuthoringIssueSeverity.Error,
-                    "根节点没有 UIDeclarativePanel / UIDeclarativeDialogPanel / UIDeclarativeHudItem。");
+                    "根节点没有 UIDeclarativePanel / UIDeclarativePopupPanel / " +
+                    "UIDeclarativeDialogPanel / UIDeclarativeHudItem。");
                 return issues;
             }
 
@@ -47,9 +49,11 @@ namespace XFramework.XUI.Authoring.Editor
 
             UIPanelDefinitionKind rootKind = panel != null
                 ? UIPanelDefinitionKind.Panel
-                : dialog != null
-                    ? UIPanelDefinitionKind.Dialog
-                    : UIPanelDefinitionKind.Hud;
+                : popup != null
+                    ? UIPanelDefinitionKind.Popup
+                    : dialog != null
+                        ? UIPanelDefinitionKind.Dialog
+                        : UIPanelDefinitionKind.Hud;
 
             if (definition.Kind != rootKind)
             {
@@ -375,10 +379,17 @@ namespace XFramework.XUI.Authoring.Editor
                 return;
             }
 
-            if (kind == UIPanelDefinitionKind.Panel && action.Kind == UIActionKind.CloseWithResult)
+            if (kind != UIPanelDefinitionKind.Dialog && action.Kind == UIActionKind.CloseWithResult)
             {
                 Add(issues, UIAuthoringRuleIds.ActionNotAllowed, UIAuthoringIssueSeverity.Error,
                     "CloseWithResult 只能用于 Dialog。");
+                return;
+            }
+
+            if (kind == UIPanelDefinitionKind.Popup && action.Kind == UIActionKind.ShowPopup)
+            {
+                Add(issues, UIAuthoringRuleIds.ActionNotAllowed, UIAuthoringIssueSeverity.Error,
+                    "声明式 Popup 同时只能有一个，弹窗内不能再开声明式 Popup。");
                 return;
             }
 
@@ -461,6 +472,14 @@ namespace XFramework.XUI.Authoring.Editor
                         addresses, addressCheckPerformed, loadPrefab, issues);
                     break;
 
+                case UIActionKind.ShowPopup:
+                    ValidatePopupAnchor(root, action, nodeCounts, issues);
+                    ValidateTarget(action.AssetPath, UIAuthoringRuleIds.TargetInvalid,
+                        target => target.GetComponent<UIDeclarativePopupPanel>() != null,
+                        "ShowPopup 目标根必须是 UIDeclarativePopupPanel。",
+                        addresses, addressCheckPerformed, loadPrefab, issues);
+                    break;
+
                 case UIActionKind.Open:
                 case UIActionKind.Push:
                     ValidateTarget(action.AssetPath, UIAuthoringRuleIds.TargetInvalid,
@@ -505,6 +524,21 @@ namespace XFramework.XUI.Authoring.Editor
                 case UIActionKind.SelectTab:
                     ValidateSelectTab(root, definition, action, nodeCounts, issues);
                     break;
+            }
+        }
+
+        private static void ValidatePopupAnchor(Transform root, UIAction action,
+            Dictionary<string, int> nodeCounts, List<UIAuthoringIssue> issues)
+        {
+            if (!RequireNode(root, action.AnchorNodeName, nodeCounts,
+                    UIAuthoringRuleIds.PopupAnchorMissing, "ShowPopup 锚点", issues))
+                return;
+
+            Transform node = FindNode(root, action.AnchorNodeName);
+            if (node != null && !(node is RectTransform))
+            {
+                Add(issues, UIAuthoringRuleIds.PopupAnchorMissing, UIAuthoringIssueSeverity.Error,
+                    "ShowPopup 锚点必须是 RectTransform。", action.AnchorNodeName);
             }
         }
 

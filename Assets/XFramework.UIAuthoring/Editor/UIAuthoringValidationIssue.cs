@@ -45,6 +45,8 @@ namespace XFramework.XUI.Authoring.Editor
         internal const string DataFormatIgnored = "UI-AUTH-074";
         internal const string DataNodeConflict = "UI-AUTH-075";
 
+        internal const string PopupAnchorMissing = "UI-AUTH-080";
+
         internal const string HudRootRectTransformMissing = "UI-AUTH-HUD-001";
         internal const string HudActionNotSupported = "UI-AUTH-HUD-002";
         internal const string HudTabNotSupported = "UI-AUTH-HUD-003";
