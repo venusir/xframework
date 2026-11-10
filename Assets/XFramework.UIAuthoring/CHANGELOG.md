@@ -24,8 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Not verified
 
-- YooAsset 定义资产运行时加载（同包 / 依赖采集）——一次性验收未跑，结论边界见包 README。
-- HUD 模板的裸消费方导入验收（P3 机制已过，实际模板未跑）。
+- IL2CPP/AOT（P6）：`IUIDataProvider.TryGet<T>` 的泛型实例化未做 IL2CPP 构建验证。
+- TMP 路径只做了一次性探针；日常自动化测试仍只覆盖 UGUI `Text`（TMP Essentials 不随包提交）。
 
 ## [0.1.0] - 2026-11-08
 

@@ -230,7 +230,7 @@ Assets/XFramework.UIAuthoring/
 - **UGUI Text 本地化**：核心只给 TMP 提供 `BindToLocalizedText`；UGUI `Text` 由本包手动 `Get/Subscribe`。
 - **校验器是手动的**：保存/构建不会自动触发；CI 没有机器可读结果 API。
 - **模板是导入时复制**：包升级不会自动更新消费方模板；卸载本包后模板根脚本会变 Missing Script。
-- **定义资产采集**：推荐与预制体同包采集，或同包 `DependAssetCollector`；跨包显式采集会重复打包。
+- **定义资产采集**：推荐与预制体同包采集，或同包 `DependAssetCollector`；跨包显式采集会重复打包。同包与 `DependAssetCollector` 两种配置已用真实构建 + `OfflinePlayMode` 实测，定义资产随预制体加载（不为 null）。
 - **动作消息禁止缓冲订阅**：`SubscribeBuffered` 会重放最后一条动作，使用 `Subscribe`。
 
 ## 设计取舍

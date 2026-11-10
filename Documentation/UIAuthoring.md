@@ -3,7 +3,7 @@
 > **收件人**：框架作者 + 下一轮审计者。**不是**使用文档。
 > 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`（核心）与 `Assets/XFramework.UIAuthoring/README.md`（扩展包）——用法、已知限制、设计取舍一律留在那里，本文件不复述。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b/3 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；3：`fe1ae657`→`b25203cb`；扩展包 `Assets/XFramework.UIAuthoring/`），4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
+> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b/3 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；3：`fe1ae657`→`b25203cb`；扩展包 `Assets/XFramework.UIAuthoring/`），4 待排（见 §十一）；**一次性验收 P2/P3/P5 已于 2026-11-10 跑通**（§10.3）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
 
 ---
 
@@ -767,7 +767,7 @@ public static class UIDataProviderRegistry
 - **不做「共享定义的引用扫描」**：扫描窗口按预制体逐个校验，共享定义自然会被覆盖；单定义反查引用属编辑器 UX 增强，不属本轮。
 - **TMP 本地化路径不做自动化**：TMP Essentials 未导入的项目行为不同，保留 P5 一次性手工探针；自动化只测 UGUI `Text` 的语言切换。
 - **顺带修复扫描器缺陷**（提交 `9981bf5c`）：`SerializedObject(GameObject)` 读不到组件上的 `_definition`，定义校验曾被整体静默跳过；改为对声明式根组件建 `SerializedObject`。
-- **真实 YooAsset EditorSimulate / 运行时加载探针未跑**：与 2a/2b 的 P2/P3 同处理，记为一次性验收（§十）。
+- **一次性验收已跑（2026-11-10）**：P2 运行时（真实构建 + `OfflinePlayMode`，同包与 `DependAssetCollector`）、P3 实际模板导入、P5 TMP 绑定全部通过（§10.3）；P6 IL2CPP/AOT 仍待。
 
 **交付物**
 
@@ -829,10 +829,10 @@ public static class UIDataProviderRegistry
 | 探针 | 问题 | 状态 | 何时跑 / 影响 |
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
-| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 构建图已过；**运行时半场（真实构建 / PlayMode 同包与依赖加载）未跑**——2a/3 均已按 SO 落地，该验收仍待一次性探针 |
-| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 Panel / Dialog / Hud 模板已随 2a/2b 交付（`Samples~/Templates/Panel.prefab` / `Dialog.prefab` / `Hud.prefab`，核心与扩展校验器 0 Error）；**裸消费方导入验收未跑** |
+| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现。**运行时实测（2026-11-10）**：真实构建 + `OfflinePlayMode` 下同包与 `DependAssetCollector` 两种配置的 `_definition` 均非 null（§10.3） | 已跑 |
+| P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script。**实际模板实测（2026-11-10）**：Panel / Dialog / Hud 三个模板导入后脚本与预期子节点全部解析、扩展校验器 0 Error（§10.3） | 实际模板已验；裸消费方机制沿用 §10.2（本轮未重复搭裸工程） |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
-| P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
+| P5 TMP 绑定 | TMP Essentials 未导入时能否测 | **实测（2026-11-10）**：临时导入 TMP Essentials 后，TMP 本地化语言切换与数据绑定均通过（§10.3） | 日常自动化仍只测 UGUI `Text`；TMP 资源不随包提交 |
 | P6 IL2CPP/AOT | `IUIDataProvider.TryGet<T>` 的泛型实例化、无反射 | `[未实测]` | 阶段 3 至少一次 IL2CPP 构建；必要时 `link.xml` |
 | P7 真实核心集成 | 扩展测试无法注入核心 `UIManager.PanelFactoryFactory`（internal） | 已知边界 | 用 fake runtime 测逻辑；真实 `UIManager.OpenAsync` 用一次性 EditorSimulate 探针 |
 | P8 HUD 校验射程 | 核心校验器对 HUD 实际只跑 `001/008`；扩展 HUD 规则是否覆盖节点/深度/重名/根 RectTransform | **源码已坐实**（§1.5.4），扩展规则未实现 | 阶段 2b 前用一条 EditMode 用例固化；面板与 HUD 规则分开 |
@@ -875,6 +875,28 @@ public static class UIDataProviderRegistry
 3. **范围**：本探针用的是 `ProbePanel : MonoBehaviour` 替身，且样例是「复制进 Assets」模拟 Package Manager 导入；实际 `UIDeclarativePanel` / `UIDeclarativeDialogPanel` / `UIDeclarativeHudItem` 模板（含 core 依赖、真实 Sample 导入入口）在 2a/2b 各补一次。
 
 **对 D7 的影响**：模板机制可用；D7 的「面板/对话框随 2a、HUD 随 2b」不变；模板维护成本（导入后不随包升级）是已知边界。
+
+### 10.3 P2 运行时 / P3 实际模板 / P5 TMP 探针结果（2026-11-10）
+
+**方法**：在仓库测试壳内搭临时探针程序集（用完即删，不产生提交）：
+
+- **P2 运行时**：用 YooAsset 2.3.18 `ScriptableBuildPipeline` 真实构建两个包——`UIAuthoringProbeSame`（预制体 + 定义资产同一 `MainAssetCollector`）与 `UIAuthoringProbeDepend`（预制体 Main + 定义资产 `DependAssetCollector`，`UniqueBundleName=true`）；构建产物复制到 `StreamingAssets/yoo`，PlayMode 用 `OfflinePlayModeParameters` 加载预制体并实例化，反射读取根组件 `_definition`。
+- **P3 实际模板**：把 `Samples~/Templates/{Panel,Dialog,Hud}.prefab` 连同 `.meta` 临时复制进 `Assets`（模拟 Package Manager 的 Sample 导入结果），用 EditMode 用例加载并运行扩展校验器。
+- **P5 TMP**：从 `com.unity.ugui` 的 `TMP Essential Resources.unitypackage` 临时解包到 `Assets/TextMesh Pro`，PlayMode 用例验证 TMP_Text 的本地化语言切换与数据绑定。
+
+| 探针 | 结果 |
+|---|---|
+| P2 同包 | 构建成功；`OfflinePlayMode` 加载 `ProbePanel` 成功；`_definition` 非 null，`DataBindings` 数量 1 |
+| P2 DependAssetCollector | 构建成功；同上；定义资产随依赖 bundle 加载，`_definition` 非 null |
+| P3 实际模板 | Panel / Dialog / Hud 三个预制体导入后根脚本与预期子节点全部解析；扩展校验器 0 Error（定义为空只报 `UI-AUTH-002` Warning） |
+| P5 TMP | 本地化 TMP 文本：初始「标题」→ `SetLanguage("en")` 后「Title」；TMP 数据绑定：初始「TMP」→ 源更新后「Next」 |
+
+**结论与边界**：
+
+1. P2 的运行时半场**通过**：真实构建 + `OfflinePlayMode` 下，同包与同包 `DependAssetCollector` 两种采集都能让预制体引用的 SO 非 null；§10.1 的构建图结论在运行时成立。
+2. P3 验证的是**实际模板资产**的 GUID/脚本引用；裸消费方的包安装机制（UPM 包 → Sample 复制 → Variant → 实例）沿用 §10.2 的既有结论，本轮未重复搭裸工程。模板仍是「导入时复制」，卸载包会断脚本引用（已知边界）。
+3. P5 证明 TMP_Text 路径可用；自动化测试仍只覆盖 UGUI `Text`（TMP Essentials 不进仓、不随包提交）。探针资源已删除。
+4. 探针只验证「`_definition` 是否随包/依赖加载」与「TMP 文本通道」；数据绑定的行为断言由包内 21 例 PlayMode 测试覆盖，未在探针中重复。
 
 ---
 
@@ -1091,7 +1113,7 @@ public static class UIDataProviderRegistry
 1. **P2/P3 已跑**（§10.1 / §10.2）：P2 构建图通过（SO 必进构建图；同包/依赖安全；运行时留 2a 补测）；P3 模板机制通过（实际模板留 2a/2b 补测）。
 2. **阶段 2a**：面板/对话框模板（随 2a）+ `UIDeclarativePanel` + `UIDeclarativeDialogPanel`（string 结果 + 状态字段）+ 动作集（A：基类型打开；D3 A'：keyed message、消息不带 `View`、禁用缓冲订阅；`ShowDialog` 单飞）+ 两个校验器。
 3. **阶段 2b**：HUD 模板（随 2b）+ `UIDeclarativeHudItem` 文本/本地化；2b 不暴露 HUD 动作，关闭用 `HideHud(target)`。
-4. **阶段 3（已完成，2026-11-10）**：`IUIDataProvider` + 面板/HUD/Dialog 数据绑定；HUD 才真正有用。数据源运行时加载探针仍待一次性验收。
+4. **阶段 3（已完成，2026-11-10）**：`IUIDataProvider` + 面板/HUD/Dialog 数据绑定；HUD 才真正有用。P2 运行时/P3 实际模板/P5 TMP 一次性验收已于 2026-11-10 跑通（§10.3）。
 5. **阶段 4（可选，下一阶段）**：`UIDeclarativePopupPanel`。
 
 **这套组合的代价与风险**：
