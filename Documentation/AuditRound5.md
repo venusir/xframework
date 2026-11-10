@@ -97,7 +97,7 @@
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 已完成 | §6、§8、附录 C | T2 15 模块 + T3 8 模块；Luban R4 批次 3/4 修复复核；3 条 Luban P3 |
 | 7 | B6 工程面与发布 | 已完成 | §6、§7 | 门禁/守卫/四包元数据/发布就绪；1 P2 + 5 P3 |
 | 8 | B7 报告收口 | 已完成 | §2 总览、§4–§13、附录 B/C | 总览 34 条（1 P1 / 3 P2 / 30 P3）；ADJ/实施计划/探针轨/台账索引落盘 |
-| 9 | B8 收尾验证 | 待做 | 附录 A | FULL + DOC + 自证 |
+| 9 | B8 收尾验证 | 已完成 | 附录 A | FULL 2405/2405 + 743 通过（6 skip）、DOC 通过；ID 34 = 附录 C 34 行；`git status` 只含本轮文档 |
 
 ## 3. 前轮修复复核（R4）
 
@@ -532,6 +532,7 @@ pwsh -File Tools/check-docs.ps1 -Enforce
 - BUILD：Runtime 0 error / 20 warning；Editor 0 error / 34 warning（告警全部来自 PackageCache；包内仅 `UIHudManager.cs:131` 的 CS0618，不在文档门禁统计面）。
 - FULL：PlayMode 2405/2405、EditMode 749（743 通过 + 6 skip）、0 失败；合计 54.1s（PlayMode 32.7s + EditMode 20.9s）。
 - DOC：门禁码 0 条；24 模块 / 535 条台账；README 文件树 24/24；三组示例编译通过。
+- **B8 复跑（2026-11-10）**：FULL PlayMode 2405/2405、EditMode 749（743 通过 + 6 skip）、0 失败；DOC 再次通过（与基线一致）；报告自证 34 个 ID 去重 = 34 行附录 C。
 
 ### A.2 审计自证
 
