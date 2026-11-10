@@ -3,7 +3,7 @@
 > **收件人**：框架作者 + 下一轮审计者。**不是**使用文档。
 > 使用方文档在 `Assets/XFramework/Runtime/UI/README.md`（核心）与 `Assets/XFramework.UIAuthoring/README.md`（扩展包）——用法、已知限制、设计取舍一律留在那里，本文件不复述。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
-> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；扩展包 `Assets/XFramework.UIAuthoring/`），3/4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
+> **状态**：评估已落盘；2026-11-08 完成全面审计并得到用户裁定（接受单根、只重开预制体模板、HUD/Dialog 设计纳入）；**阶段 2a/2b/3 已实施并交付**（2a：`275f0168`→`1d2b5ce5`；2b：`e0e2679d`→`c2161bd0`；3：`fe1ae657`→`b25203cb`；扩展包 `Assets/XFramework.UIAuthoring/`），4 待排（见 §十一）。模块台账条目在 `Documentation/Modules/UI.md` 的「决策台账」节。
 
 ---
 
@@ -759,6 +759,16 @@ public static class UIDataProviderRegistry
 
 ### 8.4 阶段 3：数据源接缝 + 三形态数据绑定
 
+**状态（2026-11-10）**：已实施并交付（提交 `fe1ae657`→`b25203cb`）。`IUIDataProvider` / `UIDataProviderRegistry`、`UIDataBinding` / `UIDataBindingKind`、Panel/HUD/Dialog 的 `DataBindings`、`Slider`/`Toggle` 双向、编辑器规则 `UI-AUTH-070..075` 与 `UI-AUTH-HUD-005`、示例 provider 与 Demo 预制体/定义全部落地；核心 `Assets/XFramework/**` 零改动。验证：新增 PlayMode 22 例（21 数据绑定 + 1 语言切换）与 EditMode 15 例（13 校验器 + 2 定义/枚举）全绿；示例预制体经临时导入与扩展校验器 0 Error；`check-docs.ps1 -Enforce`（含示例编译）通过。
+
+**与原文的差异**：
+
+- **不做「定义资产 YooAsset 采集」检查**：P2 构建图探针（§10.1）已证明被预制体引用的 SO 必进构建图，该检查会误报。
+- **不做「共享定义的引用扫描」**：扫描窗口按预制体逐个校验，共享定义自然会被覆盖；单定义反查引用属编辑器 UX 增强，不属本轮。
+- **TMP 本地化路径不做自动化**：TMP Essentials 未导入的项目行为不同，保留 P5 一次性手工探针；自动化只测 UGUI `Text` 的语言切换。
+- **顺带修复扫描器缺陷**（提交 `9981bf5c`）：`SerializedObject(GameObject)` 读不到组件上的 `_definition`，定义校验曾被整体静默跳过；改为对声明式根组件建 `SerializedObject`。
+- **真实 YooAsset EditorSimulate / 运行时加载探针未跑**：与 2a/2b 的 P2/P3 同处理，记为一次性验收（§十）。
+
 **交付物**
 
 - `IUIDataProvider` / `UIDataProviderRegistry` / 绑定适配（Text/TMP/Image/Slider/Toggle/Active；双向 Slider/Toggle）。
@@ -819,7 +829,7 @@ public static class UIDataProviderRegistry
 | 探针 | 问题 | 状态 | 何时跑 / 影响 |
 |---|---|---|---|
 | P1 单类型多地址 | `OpenAsync<UIDeclarativePanel>` 开第二个地址的实际行为 | **源码已坐实**（§2.3），未跑 Unity | 阶段 2a 前用一条 PlayMode 用例固化；README 写明「不支持」 |
-| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 构建图已过；**运行时半场（真实构建 / PlayMode 同包与依赖加载）未跑**——阶段 2a 已按 SO 落地，该验收仍待一次性探针 |
+| P2 YooAsset 定义资产采集 | 预制体引用的 `UIPanelDefinition` 是否随包/依赖加载 | **构建图实测**（2026-11-08 · YooAsset 2.3.18 `BeginCollect(simulateBuild:false)`）：引用 SO 必进构建图；same/dep 显式、cross/missing 隐式依赖；null 只在资产缺失时出现 | 构建图已过；**运行时半场（真实构建 / PlayMode 同包与依赖加载）未跑**——2a/3 均已按 SO 落地，该验收仍待一次性探针 |
 | P3 Prefab Variant 模板分发 | `Samples~/Templates` 中的基础 Prefab + Variant 能否在消费方项目导入并保持脚本引用 | **机制实测**（2026-11-08 · 本地 UPM 包 + 裸消费方）：包程序集产出、样例 Prefab / Variant / 实例的脚本引用全部保持；移除包后变 Missing Script | 实际 Panel / Dialog / Hud 模板已随 2a/2b 交付（`Samples~/Templates/Panel.prefab` / `Dialog.prefab` / `Hud.prefab`，核心与扩展校验器 0 Error）；**裸消费方导入验收未跑** |
 | P4 UI Toolkit | 是否值得另立换栈评估 | `[未实测]`，本文落盘前从未评估 | 仅当用户认真考虑换栈时做 30–60 分钟探针（UIDocument、Input System only、运行时绑定、TMP、GC、与 `UIManager` 共存） |
 | P5 TMP 绑定 | TMP Essentials 未导入时能否测 | 核心已有覆盖缺口 | 阶段 3 手工探针；自动化只测非 TMP 路径 |
@@ -876,7 +886,7 @@ public static class UIDataProviderRegistry
 
 | 编号 | 决策 | 现在必须定？ | 阻塞什么 | 推荐 |
 |---|---|---|---|---|
-| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a/2b 已完成（2026-11-08）**，下一阶段 3 |
+| **D1** | 实施范围与顺序 | 是（决定下一步做什么） | 全部实施 | 阶段 1（P2/P3 探针）→ 2a → 2b → 3 → 4；**2a/2b/3 已完成（2026-11-10）**，下一阶段 4（可选） |
 | **D2**（Q3） | 定义资产形态：SO / 内联 / 混合 | 是（阶段 2a 代码前） | `UIPanelDefinition` 形状、YooAsset 采集 | SO（同包或同包依赖采集）；P2 构建图已过，运行时 2a 补测 |
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |
@@ -1081,8 +1091,8 @@ public static class UIDataProviderRegistry
 1. **P2/P3 已跑**（§10.1 / §10.2）：P2 构建图通过（SO 必进构建图；同包/依赖安全；运行时留 2a 补测）；P3 模板机制通过（实际模板留 2a/2b 补测）。
 2. **阶段 2a**：面板/对话框模板（随 2a）+ `UIDeclarativePanel` + `UIDeclarativeDialogPanel`（string 结果 + 状态字段）+ 动作集（A：基类型打开；D3 A'：keyed message、消息不带 `View`、禁用缓冲订阅；`ShowDialog` 单飞）+ 两个校验器。
 3. **阶段 2b**：HUD 模板（随 2b）+ `UIDeclarativeHudItem` 文本/本地化；2b 不暴露 HUD 动作，关闭用 `HideHud(target)`。
-4. **阶段 3**：`IUIDataProvider` + 面板/HUD 数据绑定；HUD 才真正有用。
-5. **阶段 4（可选）**：`UIDeclarativePopupPanel`。
+4. **阶段 3（已完成，2026-11-10）**：`IUIDataProvider` + 面板/HUD/Dialog 数据绑定；HUD 才真正有用。数据源运行时加载探针仍待一次性验收。
+5. **阶段 4（可选，下一阶段）**：`UIDeclarativePopupPanel`。
 
 **这套组合的代价与风险**：
 

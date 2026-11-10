@@ -83,7 +83,7 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 https://github.com/venusir/xframework.git?path=Assets/XFramework.UIAuthoring#<发布 tag>
 ```
 
-阶段 2b 另交付 HUD 静态文本（`UIDeclarativeHudItem : UIHudItem`）；数据源与声明式 Popup 留后续阶段。单根限制、动作集与已知限制见
+阶段 2b 另交付 HUD 静态文本（`UIDeclarativeHudItem : UIHudItem`），阶段 3 交付 `IUIDataProvider` 数据绑定；声明式 Popup 留阶段 4。单根限制、动作集与已知限制见
 [扩展包 README](Assets/XFramework.UIAuthoring/README.md)。
 
 ## 开发这个仓库
