@@ -11,8 +11,12 @@ XFramework.XUI.Authoring.IUIDataProvider  ::  public interface
 XFramework.XUI.Authoring.UIAction  ::  .ctor()
 XFramework.XUI.Authoring.UIAction  ::  public sealed class
 XFramework.XUI.Authoring.UIAction.ActionId  ::  string
+XFramework.XUI.Authoring.UIAction.Align  ::  XFramework.XUI.UIPopupAlign
+XFramework.XUI.Authoring.UIAction.AnchorNodeName  ::  string
 XFramework.XUI.Authoring.UIAction.AssetPath  ::  string
 XFramework.XUI.Authoring.UIAction.BoolValue  ::  bool
+XFramework.XUI.Authoring.UIAction.CloseOnClickOutside  ::  bool
+XFramework.XUI.Authoring.UIAction.Direction  ::  XFramework.XUI.UIPopupDirection
 XFramework.XUI.Authoring.UIAction.GroupName  ::  string
 XFramework.XUI.Authoring.UIAction.Index  ::  int
 XFramework.XUI.Authoring.UIAction.Kind  ::  XFramework.XUI.Authoring.UIActionKind
@@ -41,6 +45,7 @@ XFramework.XUI.Authoring.UIActionKind.SetActive  ::  = 10
 XFramework.XUI.Authoring.UIActionKind.SetLayerInteractive  ::  = 9
 XFramework.XUI.Authoring.UIActionKind.SetLayerVisibility  ::  = 8
 XFramework.XUI.Authoring.UIActionKind.ShowDialog  ::  = 7
+XFramework.XUI.Authoring.UIActionKind.ShowPopup  ::  = 15
 XFramework.XUI.Authoring.UIActionKind.ShowTip  ::  = 6
 XFramework.XUI.Authoring.UIAuthoringActionMessage  ::  .ctor(string actionId, string payload)
 XFramework.XUI.Authoring.UIAuthoringActionMessage  ::  public readonly struct
@@ -58,6 +63,7 @@ XFramework.XUI.Authoring.UIAuthoringDialogStatus.Selected  ::  = 0
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  public static class
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIAuthoringDialogStatus> ShowDialogAsync(string assetPath, string actionId, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIDeclarativePanel> OpenAsync(string assetPath, int layer = 100, System.Threading.CancellationToken cancellationToken = default)
+XFramework.XUI.Authoring.UIAuthoringNavigation  ::  static Cysharp.Threading.Tasks.UniTask<XFramework.XUI.Authoring.UIDeclarativePopupPanel> ShowPopupAsync(UnityEngine.RectTransform anchor, string assetPath, XFramework.XUI.UIPopupDirection direction = Auto, XFramework.XUI.UIPopupAlign align = Start, bool closeOnClickOutside = True, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XUI.Authoring.UIDataBinding  ::  .ctor()
 XFramework.XUI.Authoring.UIDataBinding  ::  public sealed class
 XFramework.XUI.Authoring.UIDataBinding.DataKey  ::  string
@@ -87,6 +93,10 @@ XFramework.XUI.Authoring.UIDeclarativePanel  ::  .ctor()
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
 XFramework.XUI.Authoring.UIDeclarativePanel  ::  public sealed class : XFramework.XUI.View.UIPanelBase
+XFramework.XUI.Authoring.UIDeclarativePopupPanel  ::  .ctor()
+XFramework.XUI.Authoring.UIDeclarativePopupPanel  ::  Cysharp.Threading.Tasks.UniTask OnClose()
+XFramework.XUI.Authoring.UIDeclarativePopupPanel  ::  Cysharp.Threading.Tasks.UniTask OnOpen(object userData)
+XFramework.XUI.Authoring.UIDeclarativePopupPanel  ::  public sealed class : XFramework.XUI.View.UIPanelBase
 XFramework.XUI.Authoring.UIPanelDefinition  ::  .ctor()
 XFramework.XUI.Authoring.UIPanelDefinition  ::  public sealed class : UnityEngine.ScriptableObject
 XFramework.XUI.Authoring.UIPanelDefinition.ActionBindings  ::  System.Collections.Generic.List<XFramework.XUI.Authoring.UIActionBinding>
@@ -99,6 +109,7 @@ XFramework.XUI.Authoring.UIPanelDefinitionKind  ::  public enum : int
 XFramework.XUI.Authoring.UIPanelDefinitionKind.Dialog  ::  = 2
 XFramework.XUI.Authoring.UIPanelDefinitionKind.Hud  ::  = 1
 XFramework.XUI.Authoring.UIPanelDefinitionKind.Panel  ::  = 0
+XFramework.XUI.Authoring.UIPanelDefinitionKind.Popup  ::  = 3
 XFramework.XUI.Authoring.UITabGroup  ::  .ctor()
 XFramework.XUI.Authoring.UITabGroup  ::  public sealed class
 XFramework.XUI.Authoring.UITabGroup.GroupName  ::  string
