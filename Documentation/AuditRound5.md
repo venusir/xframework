@@ -63,7 +63,7 @@
 | 3 | B2 FMOD 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P2 + 6 P3；FMOD-free XML 告警探针 0 条；Integration 默认不编译，已登记 |
 | 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；2 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 已完成 | §6、§8、附录 C | provider 缝逐行复核未发现新 P1/P2；2 条 Audio P3 + 2 条 UI 校验器 P3 |
-| 6 | B5 核心增量（T2 / T3 / Luban 复审） | 待做 | §6、§8、附录 C | |
+| 6 | B5 核心增量（T2 / T3 / Luban 复审） | 已完成 | §6、§8、附录 C | T2 15 模块 + T3 8 模块；Luban R4 批次 3/4 修复复核；3 条 Luban P3 |
 | 7 | B6 工程面与发布 | 待做 | §6、§7 | |
 | 8 | B7 报告收口 | 待做 | §2 总览、§4–§13、附录 B/C | |
 | 9 | B8 收尾验证 | 待做 | 附录 A | FULL + DOC + 自证 |
@@ -158,6 +158,12 @@
 
 > 核心 Audio 的 provider 缝与内置 `AudioSourceProvider` 本轮逐行复核（`PlayAsync` 预占 → validity 注册 → 加载 → 取消/作废代际 → 起播 → 租约交接；`Stop`/`Release`/`SetPaused`/`SetVolume`/`Poll`；池的 `Invalidate`/`RebuildVoice`；核心 `PlayCoreAsync` 的 OCE 与 false 分支、`SweepVoices`、`Pause`/`Resume`、`RefreshVolumes`）。**未发现新的 P1/P2**；R4-AUD-001 的坏源重建与 R4 后的 provider 缝修复（P1-1/P1-2/P1-3、C1–C6）均有代码 + 用例证据。
 
+### Luban（扩展包，R4 复审）
+
+- **R5-LBN-001 · P3 · A1/B2**：`Assets/XFramework.Luban/Runtime/AssetManagerLubanAssetSource.cs:24-48` —— `LoadTextAssetsAsync` 先把句柄映射成 `LubanTextSlice`（保存 `TextAsset` 引用），在 `finally` 里 `Dispose` 全部句柄，**之后**才调用 `MapTextAssets` 读 `slice.Asset.bytes`。类注释写的是「把 TextAsset / RawFile 句柄读成字节后立即释放」，实现顺序相反；当前依赖 YooAsset `AutoUnloadBundleWhenUnused=false`（默认）让资源在 Release 后仍存活。若消费方把该选项置 true 或在此期间触发未使用资源卸载，映射可能读到已卸载的 `TextAsset`（`bytes` 空/异常）。建议在 `try` 内把 `bytes` 复制进切片（`LubanTextSlice` 存 `byte[]`），与 `LoadRawFileAsync` 的 `GetRawFileData()` 在 `using` 内读取同形。
+- **R5-LBN-002 · P3 · A3**：`Assets/XFramework.Luban/Runtime/AssetLubanDataProvider.cs:9` —— `<see cref="AssetManager"/>` 缺 `using XFramework.XAsset;`（或全名），实测 `dotnet build ... -p:DocumentationFile` 报 **CS1574**；本包不在核心文档门禁射程（R4-ADJ-03），该死链不会被任何门禁看见。建议补 using/全名，并见 R5-ENG-001。
+- **R5-LBN-003 · P3 · D3/A1**：`Assets/XFramework.Luban/README.md:22,34` 的安装 URL 仍是 `#<tag>` 占位，`package.json` 为 `0.1.0` 且无 tag；R4-ADJ-04 仍 `未做`（用户动作）。建议在发布流程中替换，或在 README 明示「当前只能按 `main` 安装」。
+
 ### UIAuthoring（扩展包，首次审计）
 
 - **R5-UAU-001 · P2 · B1/B2/B6/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85` 与 `UIDeclarativeDialogPanel.cs:44-49,83-94` —— 控制器拦下关闭时（核心 `ClosePanelInternalAsync` 返回 `false`，`UIManagerImpl.cs:2058-2064`；`UIManager.CloseAsync` 返回 `UniTask` 不暴露结果，`UIManager.cs:393-399`），`CloseSelf` / `Replace` 的执行器仍无条件 `_session.Invalidate()`，面板实际没关但动作会话失效——面板继续显示，其按钮全部变成空操作。`CloseWithResultAsync` 还会先把 `_pendingResultId` 写入、关闭被拦后不清：面板仍在，之后被 `CloseAllAsync` / 父面板 / Dispose 回池关闭时，`OnClose` 会把过期结果兑现给核心结果通道；Dispose 回池不复位该字段，池化实例下一次复用时仍带着上一代的待兑现结果。现有用例只覆盖成功路径（`UIActionExecutorTests.Replace_UsesRuntimeReplace` 断言 `session.IsValid == false`），无「控制器拦下」用例。建议：`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 await 后查 `Panel.IsOpen`），仅在真正关闭时失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空。验证：PlayMode 用拦下关闭的 Fake controller 试点 `CloseSelf` / `CloseWithResult` / `Replace`，改前必红。
@@ -222,6 +228,49 @@
 - **开口项**：R5-UIE-001 补规则/文档；R5-UIE-002 登记窗口未自动化。
 - **第三方对照**：YooAsset 2.3.18 `BeginCollect(simulateBuild:true)` 的主资源/依赖语义与 `AssetBundleCollectorSetting` 静态门面会创建资产的行为（避开方式与 UIAuthoring 包地址 provider 相同）。
 - **残留**：HUD 只查 001/008（核心 README `:351` 已写明）、窗口无自动化、地址检查需工程内唯一采集配置、Unity 6 TMP 类型探测按全名。
+
+### Luban（T1 复审：R4 批次 3/4 修复）
+
+- **范围与输入**：`Assets/XFramework.Luban/` Runtime 15 个 `.cs`、Editor 15 个、Tests 71 文件（R4 后变更 24 文件）、Architecture 守卫 fixture（AutoInit / 依赖 / Editor+Runtime API 基线 / `.meta` / 包边界 / README）、README / CHANGELOG / package.json、`Documentation/Luban.md`；核心 `Config` / `Asset` / `Bootstrap` / `Log` 接缝。
+- **18 类留痕**：A1 命中（TextAsset 释放顺序、死 cref，R5-LBN-001/002）；A2 扫过（`ILubanConfigAdapter` 契约完整；`LubanConfigBridge` 依赖核心公开面）；A3 命中（实测 CS1574，R5-LBN-002；包不在文档门禁射程）；B1 扫过（`Destroy`/`ResetForNewSession` 代际 + 在途取消；引导阶段所有权已按 `CurrentImpl` 比对）；B2 命中（TextAsset 句柄先释放后读字节，R5-LBN-001）；B3 扫过（注册失败 `TryUnregister`、引导失败复位、写盘回滚）；B4 **命中-已文档化**（主线程断言只覆盖写入口，R4-ADJ-09 已收窄 README）；B5 扫过（等待者按代际摘除，无无界缓存）；B6 扫过（`_generation` + `_inflightCts` + `_initWaiters` 按代际过滤；`ResetForNewSession` 只丢引用）；C1 扫过（初始化路径分配；无每帧路径）；C2 扫过（路径大小写 / cwd 仍待 Linux 探针 R4-PRB-09）；D1 扫过（FMOD-free 包不引用 Luban 程序集；包边界守卫）；D2 扫过（`RegisterTable` 两个重载按参数个数区分）；D3 命中（TextAsset 真实句柄生命周期只经 seam 间接覆盖，R5-LBN-001）；D4 扫过（provider 级错误带表名/location；写盘失败带可操作消息）；D5 扫过（核心已有 `RegisterTable` / `RegisterGlobal` / `AssetManager.LoadAllAsync`）；E 扫过（表键 = 行类型 + 主键）；F 扫过（`ConfigChanged` 逐表触发已文档化）。
+- **前轮修复偏差**：R4-LBN-002/003/004/005/006/008/010/013/015/017 逐条有代码 + 用例/守卫证据；LBN-001/007/011/012/016 为文档；LBN-009（Linux 大小写/cwd）仍 `未做`（R4-PRB-09）；LBN-014 已按口径订正。未发现二次回归。
+- **旧结论复核**：`Documentation/Luban.md` §7.8 六条（不重建核心适配层、不公开 `ILubanDataProvider`、不做 bin-offset/分片、不支持三个 JSON target、不做 Roslyn generator、不移入核心 Runtime）全部维持。
+- **开口项**：R5-LBN-001（TextAsset 字节复制）建议进修复批次；R5-LBN-002 文档；R5-LBN-003 发布动作。
+- **第三方对照**：Luban 5.1.0 生成物事实（`Tables` 在 `namespace cfg`、map 表 `DataMap`、list 私有字典 + `DataList`）沿用 R4，本轮未重读生成器。
+- **残留与不确定**：Linux Editor 路径探针（R4-PRB-09）、真实 YooAsset TextAsset 的释放-读取时序、包发布 tag。
+
+### T2 增量复审（15 个核心模块）
+
+> 方法：读 R4 修复提交 diff + 当前变更文件全文 + 对应回归用例；18 类逐类扫过，只列命中与残留。除下列条目外**未发现新 P1/P2**。
+
+- **Config**：`ConfigManagerImpl`（(Type, Kind) 在途槽、loader 实例比较）、`ScriptableObjectLoader`/`ConfigTextLoader`（`IConfigAssetLease` + `using`）、新增 `ConfigAssetLease`。抽样确认 CONF-001/002/005/006 修复无回归；A3 文档门禁 0 条。**残留**：SO 资产在句柄 Release 后仍被表持有（R3-PRB-02 低内存假 null 探针仍 `未做`），本轮不重开。
+- **Asset**：`AssetManager.SetInstance`（旧实例按所有权 Dispose/Detach）、`AssetBootstrapStage`（代际 + 所有权）、`YooAssetManagerImpl.GetInitializedPackage`、`SessionResetTests` 在途 impl。抽样确认 AST-001/002/003/006 无回归；B6 代际槽已按 R4 修复。**残留**：真 YooAsset 包状态 / EditorSimulate 探针沿用既有登记。
+- **UI Runtime**：三条 P1 修复已逐条读 diff 与用例（§3.1）；UIA-002/005、UIB-003/004/005 修复在读 `UIManagerImpl`/`UIHudManager` 当前代码时复核，未发现二次回归。**残留**：`UIViewBase.IsRecycled` 是 internal 新状态，未进公开 API 基线（internal 不承诺）。
+- **Diagnostics**：DIAG-001 `SafeOrder`（坏 Order 兜底 `int.MaxValue` + Error）、DIAG-002 `lastColumn` 统一表头/分隔线；用例在位。
+- **Save**：SAVE-002 `DeleteSlotAsync` 改「载荷 || 备份」；`DeleteSlotAsync_BackupOnly_DeletesAndDoesNotRecover` 锁定。
+- **Input**：INP-001 `(action, playerId)` 计时 + `_durationRequests` + 每玩家控件边沿；`GetButtonPressDuration_IsPerPlayer` 锁定。
+- **Camera**：CAM-002 `TransitionToSlot` 提前返回也接管 boost；CAM-005 `FindSlotByCamera`/`ResolveCameraId` 用 `ReferenceEquals` 保留已销毁注册相机 id；用例 `Activate_WhileExternalOverride...` / `DestroyedRegisteredActiveCamera_...` 在位。
+- **Update**：UPD-001 README/XML 已改为「`Initialize` / `SetInstance` 都会重接」；无代码变更。
+- **Settings**：SET-001 读侧池线程只做 IO/解密、解析切回主线程；`LoadAsync_SyncInner_DecryptsOnPoolAndParsesOnMainThread` 锁定。
+- **Pool**：POOL-001 `Return` 满池丢弃回调 try/catch；`Return_WhenPoolFull_DiscardCallbackThrows_IsIsolated` 锁定。
+- **Pipeline**：PIPE-001 容器在 finally 前写 `Completed`/`1f`；`Execute_Success_WritesCompletedTerminal` 锁定。
+- **Localization**：LOC-001 `GetFormat` 的替换值花括号转义、`Get` 不转义；`GetFormat_PlaceholderValueWithCompositeItem_RendersLiterally` 锁定。
+- **File**：仅 README（null/空 = 域根）变更；无代码。
+- **Serialize**：仅 README（`ResetForNewSession` 清更早注册）变更；无代码。
+- **Scene**：SCN-001 激活失败告警用 `Scene.IsValid() && isLoaded ? name : location`；`LoadSceneAsync_ActivateWithInvalidScene_WarnsWithLocationAndReturnsHandle` 锁定。
+
+### T3 紧凑留痕（8 个核心模块）
+
+> R4 后 Runtime 零变更；读模块 README/台账关键面，18 类逐类扫过，无新证据即维持旧结论。
+
+- **Bootstrap**：阶段所有权/逆序 Shutdown/取消传播维持；R4-BST 无新项。
+- **Data**：快照脏集合/`OnClear` 隔离/会话复位维持。
+- **Event**：`EventStream` 池化与 `onEmpty` 隔离维持；`SubscriptionTracker` 的 Editor 计数不自动清零仍是测试夹具约定。
+- **Lock**：先绑定后派发、包内表述维持；ABA 红证仍缺（R3 开口项）。
+- **Log**：`ILogSink` 摘除、Flush、JSONL 维持；无新面。
+- **Message**：`TryBindToDestroy` / `BindToContext` 维持；keyed 全局键空间与 `Release` 无主线程防线仍是 R3 开口项。
+- **Reactive**：双承诺文档化、`Select` 单算子、集合变更流维持；装箱量无法用本仓尺子实测（RCT-010）。
+- **Timer**：档位/跨表补扫/锚点维持；`TimerTierTests` 红证在位。
 
 ### UIAuthoring（T1 扩展包全量，首次）
 
@@ -323,3 +372,6 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 | R5-AUD-002 | P3 | Audio | 探测型总表未写「加载窗口内也返回 false」 |
 | R5-UIE-001 | P3 | UI 校验器 | 面板无 `UIPanelBinding` 时约定检查静默跳过、不报缺失 |
 | R5-UIE-002 | P3 | UI 校验器 | 校验窗口/报告无自动化用例 |
+| R5-LBN-001 | P3 | Luban | TextAsset 句柄先释放、后读 `bytes` |
+| R5-LBN-002 | P3 | Luban | `AssetLubanDataProvider` 的 `AssetManager` cref 无法解析（CS1574） |
+| R5-LBN-003 | P3 | Luban | README 安装 URL 仍为 `#<tag>` 占位、包无 tag |
