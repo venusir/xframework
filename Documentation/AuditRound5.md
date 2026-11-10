@@ -55,17 +55,48 @@
 
 > 状态词：`待做` / `进行中` / `已完成`。每步一个原子提交（`docs(audit): ...`）；提交前跑本步验证。§2 的「总览统计」在 B7 收口时补到本表上方；本表保留为过程记录。
 
+### 2.1 总览
+
+- **34 条新发现：0 P0 / 1 P1 / 3 P2 / 30 P3。** 分布：UIAuthoring 14、FMOD 7、Luban 3（扩展包合计 24）；核心 Audio 2、核心 UI 校验器 2；工程面 / 发布 6。
+- **R4 复核**：71/71 有处置；R4-ADJ-01..11 与代码/台账一致；R4-PRB 中 14 条落成回归用例、2 条已执行、2 条仍 `未做`（PRB-03/09），另有 R3-PRB-02/03/04 继续 `未做`。**未发现 R4 修复引入的二次回归。**
+- **本轮最需要先读的 10 条**：
+  1. **R5-UAU-001（P1）**：控制器拦下 `CloseSelf`/`Replace`/`CloseWithResult` 后会话仍失效；面板仍开着但按钮全空，对话框残留结果可能在后续关闭时误兑现。
+  2. **R5-UAU-002（P2）**：`ShowDialogAsync` 把 `OperationCanceledException` 吞成 `OpenFailed` + Error 日志。
+  3. **R5-FMD-001（P2）**：`SetGlobalParameter` 在 RuntimeManager 未初始化时静默 `false`（先设 RTPC 再起播的常见顺序）。
+  4. **R5-ENG-001（P2）**：扩展包 XML 文档告警实测非零（UIAuthoring 8 CS1591 + Luban 1 CS1574），且无任何门禁。
+  5. **R5-LBN-001（P3）**：`LoadTextAssetsAsync` 先释放句柄、后读 `TextAsset.bytes`；依赖 `AutoUnloadBundleWhenUnused=false`。
+  6. **R5-UAU-003（P3）**：`Open`/`Push` 校验接受 `UIDeclarativePopupPanel` 作目标，与「只用于 C# 面板」不符。
+  7. **R5-UAU-010（P3）**：生产 `UIManagerActionRuntime` 零直接测试，UAU-001/002 正落在未覆盖分支上。
+  8. **R5-AUD-001（P3，需实测）**：Audio 的跨会话静态态只靠 `Application.quitting`；关闭域重载 + 该事件不触发时 FMOD 自动安装不会重跑。
+  9. **R5-UAU-006（P3）**：UIAuthoring 8 个公开/受保护成员缺 XML 注释（CS1591），公开 API 基线包含它们。
+  10. **R5-ENG-005（P3）**：四个包均无发布 tag，`[Unreleased]` 均有未发内容（核心 Audio/UI、Fmod 修复、UIAuthoring 2b/3/4）。
+
+### 2.2 严重度分布（按模块）
+
+| 模块 | P1 | P2 | P3 |
+|---|---:|---:|---:|
+| UIAuthoring | 1 | 1 | 12 |
+| FMOD | 0 | 1 | 6 |
+| 核心 Audio | 0 | 0 | 2 |
+| 核心 UI 校验器 | 0 | 0 | 2 |
+| Luban | 0 | 0 | 3 |
+| 工程面 / 发布 | 0 | 1 | 5 |
+
+> 其余 24 个核心模块本轮未发现新 P1/P2（T2 抽样/T3 紧凑；见 §8）。
+
+### 2.3 执行进度表
+
 | # | 批次 | 状态 | 产出节 | 备注 |
 |---|---|---|---|---|
 | 0 | 生成审计文档骨架与登记 | 已完成 | 全文骨架 | `CLAUDE.md` 文档分层表 + `ModuleAudit.md` 轮次列表已同步 |
 | 1 | B0 边界与基线 | 已完成 | §0、附录 A | BUILD 0 error；PLAY 2405/2405、EDIT 743 通过 + 6 skip；DOC 通过（535 条台账） |
 | 2 | B1 R4 修复复核 | 已完成 | §3 | 3 P1 逐条读 diff + 用例；51 P2 / 17 P3 聚合 + 抽样；11 ADJ、18 PRB 对台账；未发现二次回归 |
 | 3 | B2 FMOD 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P2 + 6 P3；FMOD-free XML 告警探针 0 条；Integration 默认不编译，已登记 |
-| 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；2 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
+| 4 | B3 UIAuthoring 包全量 | 已完成 | §6、§8、附录 C | 首次审计；1 P1 + 1 P2 + 12 P3；XML 文档探针实测 8 条 CS1591；控制器拦截路径零覆盖 |
 | 5 | B4 核心新面（Audio / UI 校验器） | 已完成 | §6、§8、附录 C | provider 缝逐行复核未发现新 P1/P2；2 条 Audio P3 + 2 条 UI 校验器 P3 |
 | 6 | B5 核心增量（T2 / T3 / Luban 复审） | 已完成 | §6、§8、附录 C | T2 15 模块 + T3 8 模块；Luban R4 批次 3/4 修复复核；3 条 Luban P3 |
 | 7 | B6 工程面与发布 | 已完成 | §6、§7 | 门禁/守卫/四包元数据/发布就绪；1 P2 + 5 P3 |
-| 8 | B7 报告收口 | 待做 | §2 总览、§4–§13、附录 B/C | |
+| 8 | B7 报告收口 | 已完成 | §2 总览、§4–§13、附录 B/C | 总览 34 条（1 P1 / 3 P2 / 30 P3）；ADJ/实施计划/探针轨/台账索引落盘 |
 | 9 | B8 收尾验证 | 待做 | 附录 A | FULL + DOC + 自证 |
 
 ## 3. 前轮修复复核（R4）
@@ -136,11 +167,18 @@
 
 ## 4. R5 P0 清单
 
-（待填）
+**本轮未发现 P0。** R4 的 71 条无 P0 回归；新面（Audio provider 缝、UI 预制体校验器、FMOD Phase 2、UIAuthoring 阶段 2a/2b/3/4）未发现「默认路径必然损坏数据或整体不可用」的缺陷。
 
 ## 5. R5 P1 清单
 
-（待填）
+### R5-UAU-001 · P1 · B1/B2/B6/D4 · 控制器拦下关闭后会话仍失效；对话框残留待兑现结果
+
+- **位置**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85`（`CloseSelf` / `Replace` 在 `await` 后无条件 `_session.Invalidate()`）、`Runtime/UIDeclarativeDialogPanel.cs:44-49,83-94`（`_pendingResultId` 先写、关闭失败不清）、核心 `Assets/XFramework/Runtime/UI/UIManagerImpl.cs:2058-2064`（`OnBeforeCloseAsync` 返回 false 时直接 `return false`）与 `UIManager.cs:393-399`（`CloseAsync` 返回 `UniTask`，不向调用方暴露是否关闭）。
+- **发现**：`IUIController` 的关闭拦截是框架公开能力；`UIManager.CloseAsync` 在控制器拦下时不抛、不返回结果，UIAuthoring 的执行器无法区分「已关闭」与「被拦下」。`CloseSelf` / `Replace` 无论结果都 `_session.Invalidate()`：面板实际仍打开，但 `UIActionExecutor.ExecuteAsync` 在 `!_session.IsValid` 时直接返回，面板上所有按钮动作变成空操作。`CloseWithResultAsync` 还先把 `_pendingResultId` 写入并在 `OnClose` 兑现；关闭被拦后该字段不清，面板仍开着，之后被 `CloseAllAsync` / 父面板关闭 / Dispose 回池时会把过期结果当作本次选择兑现。Dispose 回池路径不经过 `OnClose`（R4-UIA-001 修复后），池化实例下一次复用时仍带上一代的 `_pendingResultId`。
+- **失败场景**：对话框用 `CloseWithResult("confirm")` 确认；控制器因「未填必填项」拦下关闭；玩家取消后父面板关闭/`CloseAllAsync` → 核心结果通道收到 `"confirm"`；或声明式面板的控制器拦下 `CloseSelf` → 面板留在屏幕上但所有按钮不再响应，只能靠外部关闭。
+- **建议**：让 `IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 `await` 后检查 `_session.Panel.IsOpen`），**仅真正关闭时**失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空；控制器拦截是正常业务分支，不应把面板变成不可操作。
+- **验证**：PlayMode 用 `IUIController.OnBeforeCloseAsync` 返回 false 的 fake controller，分别试点 `CloseSelf` / `CloseWithResult` / `Replace`：断言会话仍有效、按钮动作仍可执行、后续真正关闭时结果不误兑现；改前必红。另补一条「Dispose 回池后重开同一对话框，结果通道不携带上一代 pending」。
+- **落点**：`Runtime/UIActionExecutor.cs`、`Runtime/UIDeclarativeDialogPanel.cs`、`Runtime/IUIActionRuntime.cs`、`Runtime/UIManagerActionRuntime.cs`、测试、CHANGELOG 行为变更；实施批次 0。
 
 ## 6. R5 P2 清单（按模块）
 
@@ -175,7 +213,7 @@
 
 ### UIAuthoring（扩展包，首次审计）
 
-- **R5-UAU-001 · P2 · B1/B2/B6/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85` 与 `UIDeclarativeDialogPanel.cs:44-49,83-94` —— 控制器拦下关闭时（核心 `ClosePanelInternalAsync` 返回 `false`，`UIManagerImpl.cs:2058-2064`；`UIManager.CloseAsync` 返回 `UniTask` 不暴露结果，`UIManager.cs:393-399`），`CloseSelf` / `Replace` 的执行器仍无条件 `_session.Invalidate()`，面板实际没关但动作会话失效——面板继续显示，其按钮全部变成空操作。`CloseWithResultAsync` 还会先把 `_pendingResultId` 写入、关闭被拦后不清：面板仍在，之后被 `CloseAllAsync` / 父面板 / Dispose 回池关闭时，`OnClose` 会把过期结果兑现给核心结果通道；Dispose 回池不复位该字段，池化实例下一次复用时仍带着上一代的待兑现结果。现有用例只覆盖成功路径（`UIActionExecutorTests.Replace_UsesRuntimeReplace` 断言 `session.IsValid == false`），无「控制器拦下」用例。建议：`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 await 后查 `Panel.IsOpen`），仅在真正关闭时失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空。验证：PlayMode 用拦下关闭的 Fake controller 试点 `CloseSelf` / `CloseWithResult` / `Replace`，改前必红。
+- **R5-UAU-001 · P1 · B1/B2/B6/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionExecutor.cs:72-85` 与 `UIDeclarativeDialogPanel.cs:44-49,83-94` —— 控制器拦下关闭时（核心 `ClosePanelInternalAsync` 返回 `false`，`UIManagerImpl.cs:2058-2064`；`UIManager.CloseAsync` 返回 `UniTask` 不暴露结果，`UIManager.cs:393-399`），`CloseSelf` / `Replace` 的执行器仍无条件 `_session.Invalidate()`，面板实际没关但动作会话失效——面板继续显示，其按钮全部变成空操作。`CloseWithResultAsync` 还会先把 `_pendingResultId` 写入、关闭被拦后不清：面板仍在，之后被 `CloseAllAsync` / 父面板 / Dispose 回池关闭时，`OnClose` 会把过期结果兑现给核心结果通道；Dispose 回池不复位该字段，池化实例下一次复用时仍带着上一代的待兑现结果。现有用例只覆盖成功路径（`UIActionExecutorTests.Replace_UsesRuntimeReplace` 断言 `session.IsValid == false`），无「控制器拦下」用例。建议：`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 返回是否真的关闭（或执行器在 await 后查 `Panel.IsOpen`），仅在真正关闭时失效会话；`_pendingResultId` 在 `OnOpen` 与关闭失败分支清空。验证：PlayMode 用拦下关闭的 Fake controller 试点 `CloseSelf` / `CloseWithResult` / `Replace`，改前必红。
 - **R5-UAU-002 · P2 · B3/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIManagerActionRuntime.cs:111-126` —— `ShowDeclarativeDialogAsync` 的 `catch (Exception ex)` 把 `OperationCanceledException` 一并吞掉：`UIAuthoringNavigation.ShowDialogAsync(..., cancellationToken)` 的取消会变成 `OpenFailed` 返回、发布一条结果消息并记一条 Error 日志。同一包的 `OpenAsync` 会正常把 OCE 抛给调用方（`UIAuthoringNavigation.cs:43-55`），两条公开入口的取消语义不一致；公开 API 的 XML 也未写「取消会返回 OpenFailed」。建议单独 `catch (OperationCanceledException)` 并重抛（或明确文档化），补一条取消用例。
 - **R5-UAU-003 · P3 · A1/A2**：`Assets/XFramework.UIAuthoring/Editor/UIAuthoringValidator.cs:483-497` —— `Open` / `Push` 的目标根检查只拒绝 `UIDeclarativePanel` 与 `UIDialogPanel<>`，**没有拒绝 `UIDeclarativePopupPanel`**（它是 `UIPanelBase`，谓词返回 true）；README 的行为契约写「`Open` / `Push`：只用于 C# 面板」。运行期 `UIManager.OpenAsync<UIPanelBase>` 也会照常打开一个弹窗预制体（按普通面板层），绕过弹窗的锚定/层语义。建议把 `target.GetComponent<UIDeclarativePopupPanel>() != null` 加入拒绝条件，并补一条校验用例。
 - **R5-UAU-004 · P3 · A2/D4**：`Assets/XFramework.UIAuthoring/Runtime/UIActionKind.cs:51-52`、`Editor/UIAuthoringValidator.cs:375-380`、`Runtime/UIDeclarativeHudItem.cs:52-57`、`Runtime/UIActionExecutor.cs:158-160` —— `HideSelf` 三条路径都不可达：校验器对所有 Kind 直接报错「只适用于 HUD」，HUD 从不绑定动作，执行器只打一条「只对 HUD 有效」的 Warning。它作为公开枚举值存在但没有任何可用场景。建议明确「保留为未来 HUD 动作、当前不可用」写进 XML/README，或在预 1.0 的版本里删除（公开 API 变更需单独确认）。
@@ -335,23 +373,143 @@ FMOD 的 Integration 程序集与 7 个集成用例只在 `XFRAMEWORK_FMOD` 下�
 
 ## 9. 待裁的一次性裁定建议
 
-（待 B7 填充）
+> 审计期只写建议；台账状态由实施轮经用户确认后更新。状态词按 `Modules/README.md` 的六词表。
+
+| ID | 模块 | 问题 | 推荐 | 理由 | 落点 | 重开判据 |
+|---|---|---|---|---|---|---|
+| R5-ADJ-01 | UIAuthoring | `UIActionKind.HideSelf` 三条路径均不可达 | `暂不做`（保留枚举、文档写清「为未来 HUD 动作预留」） | 删除是公开 API 变更且预 1.0；补 HUD 动作需要新设计 | 包 README / XML / 台账 | 出现真实的 HUD 动作需求 |
+| R5-ADJ-02 | 工程面 | 扩展包 XML 文档告警无门禁（实测 9 条） | `未做`（每包加 DocumentationFile 探针） | 成本低、证据已现形；泛化 `check-docs` 可后置 | `Tools/check-docs.ps1` 或包内守卫 | 探针接入后关闭 |
+| R5-ADJ-03 | 工程面 | 依赖清单从 asmdef 反查仍未建 | `未做`（维持 R4 结论） | 当前三处声明一致；Editor asmdef 是第二个实例但无缺陷 | `Documentation/Ledger.md` | 再出现一次漏列事故 |
+| R5-ADJ-04 | 发布 | 四个包均无 tag / 安装 URL 占位 | `未做`（用户执行） | 发布流程动作，不是代码缺陷 | `CHANGELOG.md` / `package.json` / tag | 发布流程启动 |
+| R5-ADJ-05 | Audio | 会话复位族是否纳入 Audio | `待裁` | 加入 `ResetForNewSession` 会改变「只丢引用」边界；不改则依赖 `Application.quitting` 需实测 | `Modules/Audio.md` | 关闭域重载 + FMOD 探针显示第二会话失效 |
+| R5-ADJ-06 | UIAuthoring | 异地址拒绝时返回已存在面板 | `待裁`（文档化 vs 返回 null） | 返回 null 是行为变更；文档化成本低 | 包 README / XML | 调用方依赖返回值区分的真实需求 |
+| R5-ADJ-07 | FMOD | `AudioManager` 已初始化时自动安装跳过 | `暂不做`（文档写清「先装 FMOD 再初始化」） | 支持晚装会与 `SetProvider` 的 Destroy 语义冲突 | 包 README / `Documentation/FMOD.md` | 出现「先初始化 AudioManager 再想装 FMOD」的真实使用方 |
+
+> `未做/暂不做/待裁` 在写入台账前须经用户确认；公开 API / 破坏性变更（R5-ADJ-01 若选择删除）须单独确认。
 
 ## 10. R5 分步实施计划
 
-（待 B7 填充）
+> 审计轮只出计划；实施轮按「一行一提交、测试与修复同提交、行为变更同提交写 CHANGELOG」执行。命令缩写：`PM(x)` = `run-tests.ps1 -Filter "x" -Platform PlayMode`；`EM(x)` = EditMode；`ALL(x)` = 双平台；`FULL` = 全量；`DOC` = `check-docs.ps1 -Enforce`；`BUILD` = 两个核心 csproj；`API` = 公开 API 基线流程。每条 P1/P2 修复先写「改前必红」。
+
+### 批次 0：P1（先止血）
+
+| # | 提交信息 | 覆盖 | 验证 |
+|---|---|---|---|
+| 0.1 | `fix(ui-authoring): 控制器拦下关闭时保持会话与结果 (R5-UAU-001)` | `UIActionExecutor` / `UIDeclarativeDialogPanel` / `IUIActionRuntime` / `UIManagerActionRuntime`、PlayMode 红证、CHANGELOG 行为变更 | `PM(UIAuthoring)`；改前必红；`DOC` |
+| 0.2 | `fix(ui-authoring): ShowDialog 取消不再吞成 OpenFailed (R5-UAU-002)` | `UIManagerActionRuntime`、取消用例、CHANGELOG | `PM(UIAuthoring)`；改前必红；`DOC` |
+
+### 批次 1：P2 与证据型工程项
+
+| # | 提交信息 | 覆盖 | 验证 |
+|---|---|---|---|
+| 1.1 | `fix(fmod): SetGlobalParameter 不再早退于 RuntimeManager 初始化前 (R5-FMD-001)` | `FmodEventBackend`、FMOD-free fake 不能覆盖真实 RuntimeManager，需集成态或探针 | `PM(Fmod)`；`DOC`；集成态标 `需实测` |
+| 1.2 | `chore(tools): 扩展包 XML 文档探针 (R5-ENG-001)` | `check-docs.ps1` 或包内守卫；UIAuthoring/Luban/Fmod 三个 csproj | `DOC`；红证：注入一条 CS1591 必红 |
+| 1.3 | `fix(luban): TextAsset 字节在句柄释放前复制 (R5-LBN-001)` | `AssetManagerLubanAssetSource`、映射用例 | `PM(Luban)`；`EM(Luban)`；改前必红；`DOC` |
+
+### 批次 2：P3 代码 / 测试补齐
+
+- 代表项：R5-UAU-003（Open/Push 拒绝 Popup）、R5-UAU-010（生产 runtime 测试缝）、R5-UAU-011（删未用构造参数）、R5-UAU-013（空参数发布结果）、R5-FMD-007（配置资产往返）、R5-UIE-001（missing binding 规则）、R5-LBN-002（死 cref）、R5-ENG-002/006（依赖反查/守卫射程）。
+- 验证：`PM/EM/ALL`；改前必红；`DOC`。
+
+### 批次 3：P3 文档 / 发布清扫
+
+- 代表项：R5-UAU-004..009/012/014（包 README/XML/维护记录/规则号）；R5-FMD-002..006（README/FMOD.md/AudioProvider.md）；R5-AUD-002（探测型总表）；R5-LBN-003（tag 占位）；R5-ENG-003/004（根 README、Modules README）；R5-ENG-005（四包 tag/URL，用户动作）。
+- 验证：`DOC` + 人工对照；发布动作单独走流程。
+
+### 批次 4：裁定与探针
+
+- 用户逐条裁定 §9 的 R5-ADJ-01..07，写入模块台账 / `Ledger.md`。
+- 执行 §11 的 R5-PRB-01..08 中可在本环境运行的项；其余登记 `未做` + 配方。
 
 ## 11. 遗留承接与探针轨
 
-（待 B7 填充：R3/R4 遗留探针 + R5 新增探针）
+### 11.1 前轮遗留（仍未执行）
+
+| ID | 内容 | 状态 | 配方 |
+|---|---|---|---|
+| R3-PRB-02 | 真 YooAsset 低内存 `GetGlobal` 假 null | 未做 | 真包环境；`Modules/Config.md:98` |
+| R3-PRB-03 | IL2CPP High stripping `[Preserve]` | 未做 | 真机构建；`Modules/Config.md:99` |
+| R3-PRB-04 | macOS Server 构建 | 未做 | Server Build Support；`Modules/File.md:48` |
+| R4-PRB-03 | 真 YooAsset「有效句柄 + 类型不符」RefCount | 未做 | `Modules/Config.md:101` |
+| R4-PRB-09 | Linux Editor 大小写 / cwd | 未做 | `Documentation/Luban.md:526` |
+
+### 11.2 R5 新增探针
+
+| ID | 关联 | 内容 | 状态 |
+|---|---|---|---|
+| R5-PRB-01 | R5-AUD-001 | 关闭域重载连跑两遍 + `FmodAudioSettings`/bank：第二会话断言 FMOD provider 已重装、bank 可加载 | 待执行（手工；需 Studio 工程） |
+| R5-PRB-02 | R5-FMD-002 | Android OBB / WebGL：`LoadBank` 返回后 `HaveAllBanksLoaded` 与首次 `Play` 的时序 | 待执行（需真机/平台构建） |
+| R5-PRB-03 | R5-LBN-001 | `AutoUnloadBundleWhenUnused=true` 下 TextAsset 释放后读 `bytes` 的结果 | 待执行（YooAsset 初始化参数探针） |
+| R5-PRB-04 | R5-UAU-001 | 控制器拦下 `CloseSelf`/`Replace`/`CloseWithResult` 的红证（批次 0 落成用例，不以探针结案） | 待执行（实施批次 0） |
+| R5-PRB-05 | R5-UAU-002 | `ShowDialogAsync` 取消路径的 OCE 断言 | 待执行（实施批次 0） |
+| R5-PRB-06 | R5-ENG-001 | 三个扩展包 DocumentationFile 探针纳入门禁后的红证 | 待执行（实施批次 1） |
+| R5-PRB-07 | R5-UAU-006 | UIAuthoring IL2CPP/AOT（P6）与 TMP 自动化 | 待执行（环境项） |
+| R5-PRB-08 | R5-FMD-006 | 有 FMOD SDK 的全量（Integration 7 例） | 待执行（2026-11-07 已有两态记录，本轮未复跑） |
 
 ## 12. 已评估未采纳 / 不重开清单
 
-（待 B7 填充：R4 §12 的维持复核 + R5 新增否决项）
+### 12.1 承接 R4 §12.1 的框架级条目
+
+| 条目 | R4 状态 | R5 复核 | 结论 |
+|---|---|---|---|
+| Network 基础层 | 暂不做 | 仓内仍零消费者 | 维持 |
+| 代码热更（HybridCLR） | 暂不做 | 仍无真实接入方；Luban 不是代码热更 | 维持 |
+| GM / 调试命令台 | 暂不做 | 仍无使用方给出命令集/权限/发布形态 | 维持 |
+| App 生命周期 | 暂不做 | `pause` 仍只有 Settings 一处消费者 | 维持 |
+| 性能基准套件 | 已做 | 6 个 `[Explicit]` 基准仍在 | 维持 |
+| 示例覆盖面 | 已做 | `Samples~/Playable` 仍在 | 维持 |
+| 包自身 Git URL 说明 | 已做 | README 已说明 + 钉 0.4.0 示例 | 维持（发版时更新） |
+
+### 12.2 承接 R4 §12.2 / §12.3
+
+- 框架级结构性 `不做` 组（状态机/行为树/ECS/时间模型/生命周期树、Update 组 API、DI 容器、Tween、Addressables、新手引导、平台 SDK 聚合、网络同步、统一 Profile、模块内部策略接口化、远程配置、崩溃上报、红点、画质档位、埋点/统计上报、热更编排）——R5 未发现推翻证据，**不重开**。
+- 带判据的 `不做`（CI、`Tests~`/移出包目录、包在子目录、Git 钩子/Issue·PR 模板/`CONTRIBUTING`）——判据未触发，维持。
+- Luban §7.8 六条（不重建核心适配层、不公开 `ILubanDataProvider`、不做 bin-offset/分片、不支持三个 JSON target、不做 Roslyn generator、不移入核心 Runtime）——维持。
+- UIAuthoring 设计文档的三条「不做」（可视化设计器、保存/构建门禁、向导/脚本/地址生成）——维持。
+
+### 12.3 R5 新增否决 / 不重开
+
+| 条目 | 状态 | 理由 | 重开判据 |
+|---|---|---|---|
+| 为扩展包新建 `Modules/<包>.md` | 暂不做（R4-ADJ-01 + Fmod 条目） | 维护记录在 `Documentation/Luban.md` / `FMOD.md` / `UIAuthoring.md`；新建会撞模块集 | 扩展包需要与核心模块同构的台账门禁时 |
+| 把 FMOD SDK / manifest 条目提交入仓 | 不做 | 不可再分发；包 README 是版本真相 | 无 |
+| 给 UIAuthoring 加保存/构建自动校验 | 暂不做 | 设计文档 §5.3 的代价与误报理由仍成立 | 团队要求「无效预制体不得入库/出包」且已有稳定 CI |
 
 ## 13. 台账同步索引
 
-（待 B7 填充）
+> 审计期**不写台账**；以下为实施轮（或用户确认后）的落点。R5 新发现修复落地后，才由实施提交记 `已做`。
+
+### 13.1 裁定建议
+
+| 建议 ID | 模块 | R5 建议 | 落点 |
+|---|---|---|---|
+| R5-ADJ-01 | UIAuthoring | `暂不做`（HideSelf 保留并文档化） | 包 README / XML / `Documentation/UIAuthoring.md` |
+| R5-ADJ-02 | 工程面 | `未做`（扩展包 XML 探针） | `Tools/check-docs.ps1` / 包内守卫 |
+| R5-ADJ-03 | 工程面 | `未做`（asmdef 反查，维持 R4） | `Documentation/Ledger.md` |
+| R5-ADJ-04 | 发布 | `未做`（四包 tag/URL，用户动作） | `CHANGELOG.md` / `package.json` / tag |
+| R5-ADJ-05 | Audio | `待裁`（会话复位族是否含 Audio） | `Modules/Audio.md` |
+| R5-ADJ-06 | UIAuthoring | `待裁`（异地址返回语义） | 包 README / XML |
+| R5-ADJ-07 | FMOD | `暂不做`（晚装自动安装） | 包 README / `Documentation/FMOD.md` |
+
+### 13.2 R5 发现的台账落点
+
+- **P1（R5-UAU-001）**：实施后记 `已做`，带提交号与 PlayMode 用例；落 `Documentation/UIAuthoring.md`（暂不在 `Modules/`）。
+- **P2/P3**：修复落地前不记台账；落地后按模块记 `已做`（纯文档订正按需记）。落点：`Documentation/UIAuthoring.md`（UAU-*）、`Documentation/FMOD.md`（FMD-*，核心 Audio 的条目落 `Modules/Audio.md`）、`Documentation/Luban.md`（LBN-*）、`Modules/UI.md`（UIE-* 与核心 UI 的校验器边界）、`Modules/Audio.md`（AUD-*）、`Documentation/Ledger.md`（ENG-* 框架级）。
+- **工程面**：R5-ENG-001..006 落 `Documentation/Workflow.md` / `ModuleReadme.md` / `Modules/README.md` / `Ledger.md`；是否需要台账条目按 §9 裁定。
+
+### 13.3 框架级台账（`Documentation/Ledger.md`）
+
+- 新增 `未做`：扩展包 XML 文档探针（R5-ADJ-02）；四包 tag/URL（R5-ADJ-04）。
+- 维持 `未做`：依赖清单从 asmdef 反查（R5-ADJ-03，R4 遗留）。
+- 新增 `待裁`：Audio 会话复位族（R5-ADJ-05）；UIAuthoring 异地址返回语义（R5-ADJ-06）。
+- 新增 `暂不做`：UIAuthoring HideSelf（R5-ADJ-01）；FMOD 晚装自动安装（R5-ADJ-07）。
+- §四复核记录追加：R4 探针轨状态 + R5 新探针指针。
+
+### 13.4 探针轨
+
+- R3-PRB-02/03/04、R4-PRB-03/09 维持 `未做` + 原配方。
+- R5-PRB-01..08 在对应模块/维护文档登记 `未做`，配方见 §11；R5-PRB-04/05 在实施批次 0 落成用例后改 `已做`；R5-PRB-06 在批次 1 落成门禁后改 `已做`。
+- 关闭域重载两遍仍是跨模块手工项（`Ledger.md` §四 / `Workflow.md` §六），R5 未复跑。
 
 ## 附录 A. 探针与命令
 
@@ -388,7 +546,11 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 
 ## 附录 B. 待取证
 
-（待 B7 填充）
+- **R5 新增**：R5-PRB-01..08（§11.2）；优先级最高的是 R5-PRB-01（关闭域重载 + FMOD 第二会话）与 R5-PRB-04/05（UAU-001/002 的红证，实施批次 0 必做）。
+- **前轮遗留**：R3-PRB-02（真 YooAsset 低内存 `GetGlobal` 假 null）、R3-PRB-03（IL2CPP High stripping）、R3-PRB-04（macOS Server）、R4-PRB-03（真 YooAsset 类型不符 RefCount）、R4-PRB-09（Linux 路径）。
+- **环境项**：UIAuthoring IL2CPP/AOT（P6）、TMP 自动化、有 FMOD SDK 的全量（Integration 7 例）、Android OBB/WebGL bank 异步、真实 bank/event 冒烟。
+- **手工项**：关闭域重载连跑两遍（`Workflow.md` §六）、真实 YooAsset 场景卸载序、真实 `PlayableDirector` 接管/释放。
+- **无法在本环境验证**：真机性能、Console/平台存档 SDK、OpenUPM 上架。
 
 ## 附录 C. R5 发现 ID 索引
 
@@ -403,7 +565,7 @@ grep -oE '^\| R5-[A-Z]+-[0-9]{3} \| P[0-3]' Documentation/AuditRound5.md | sort 
 | R5-FMD-005 | P3 | FMOD | README 手动定义 `XFRAMEWORK_FMOD` 未写 FMOD 必须已安装 |
 | R5-FMD-006 | P3 | FMOD | Integration 程序集与 7 个集成用例默认不编译/不跑 |
 | R5-FMD-007 | P3 | FMOD | `FmodAudioSettings` 配置资产无序列化往返用例 |
-| R5-UAU-001 | P2 | UIAuthoring | 控制器拦下关闭后动作会话仍失效、`CloseWithResult` 残留待兑现结果 |
+| R5-UAU-001 | P1 | UIAuthoring | 控制器拦下关闭后动作会话仍失效、`CloseWithResult` 残留待兑现结果 |
 | R5-UAU-002 | P2 | UIAuthoring | `ShowDialog` 的取消被吞成 `OpenFailed` + Error 日志 |
 | R5-UAU-003 | P3 | UIAuthoring | `Open`/`Push` 校验接受声明式 Popup 作目标 |
 | R5-UAU-004 | P3 | UIAuthoring | `UIActionKind.HideSelf` 三条路径均不可达 |
