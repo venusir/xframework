@@ -51,6 +51,14 @@
 - **核心 UI 校验器**：9 条规则与扫描器；`YooAssetUIPrefabAddressProvider` 避开静态门面；Editor asmdef 新增 `YooAsset` / `YooAsset.Editor` 引用（依赖声明守卫未反查 asmdef，R4 遗留 `未做`）。
 - **工程面**：四个包均无发布 tag（核心 0.4.0 / Luban 0.1.0 / Fmod 0.2.0 / UIAuthoring 0.1.0）；根 README `:77` 仍写「阶段 2a 已交付」而 `:86` 已列 2b/3/4；`Documentation/Modules/README.md`「可选扩展包」只登记 Luban/Fmod，未登记 UIAuthoring。
 
+**复查后未升级为发现的线索**（逐条说明理由）：
+
+- UIAuthoring HUD 校验在 `HudActionNotSupported` 后提前 return、不再跑逐动作诊断——HUD 不支持动作是设计边界，一条总错误已足够（R4 同型处理）。
+- FMOD `OwnsBanks` 由 factory lambda 在安装开始时读取，而 `FmodInstaller` 的「快照」在紧邻的同步代码里执行——同一主线程调用内无可观察差异，不单列。
+- FMOD provider/backend 无主线程断言——`Modules/Audio.md:99` 已记「暂不做」，与核心 Audio 一致，不重开。
+- 核心 UI 校验器对 HUD 只查 `001`/`008`——核心 UI README `:351,354` 已写明是已知边界，不单列。
+- `UIPrefabValidator` 规则 003 的重复名提示在组件缺失时少于运行时——与运行时缓存语义一致（先修类型再重名），仅文档边界。
+
 ## 2. 执行进度
 
 > 状态词：`待做` / `进行中` / `已完成`。每步一个原子提交（`docs(audit): ...`）；提交前跑本步验证。§2 的「总览统计」在 B7 收口时补到本表上方；本表保留为过程记录。
