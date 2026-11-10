@@ -759,7 +759,7 @@ public static class UIDataProviderRegistry
 
 ### 8.4 阶段 3：数据源接缝 + 三形态数据绑定
 
-**状态（2026-11-10）**：已实施并交付（提交 `fe1ae657`→`b25203cb`）。`IUIDataProvider` / `UIDataProviderRegistry`、`UIDataBinding` / `UIDataBindingKind`、Panel/HUD/Dialog 的 `DataBindings`、`Slider`/`Toggle` 双向、编辑器规则 `UI-AUTH-070..075` 与 `UI-AUTH-HUD-005`、示例 provider 与 Demo 预制体/定义全部落地；核心 `Assets/XFramework/**` 零改动。验证：新增 PlayMode 22 例（21 数据绑定 + 1 语言切换）与 EditMode 15 例（13 校验器 + 2 定义/枚举）全绿；示例预制体经临时导入与扩展校验器 0 Error；`check-docs.ps1 -Enforce`（含示例编译）通过。
+**状态（2026-11-10）**：已实施并交付（提交 `fe1ae657`→`b25203cb`）。`IUIDataProvider` / `UIDataProviderRegistry`、`UIDataBinding` / `UIDataBindingKind`、Panel/HUD/Dialog 的 `DataBindings`、`Slider`/`Toggle` 双向、编辑器规则 `UI-AUTH-070..075` 与 `UI-AUTH-HUD-005`、示例 provider 与 Demo 预制体/定义全部落地；核心 `Assets/XFramework/**` 零改动。验证：新增 PlayMode 22 例（21 数据绑定 + 1 语言切换）与 EditMode 14 例（13 校验器 + 1 定义/枚举）全绿；示例预制体经临时导入与扩展校验器 0 Error；`check-docs.ps1 -Enforce`（含示例编译）通过。
 
 **与原文的差异**：
 
