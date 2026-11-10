@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using XFramework.XLog;
 using XFramework.XMessage;
 using XFramework.XUI.Data;
@@ -138,6 +139,20 @@ namespace XFramework.XUI.Authoring
             MessageManager.Publish<string, UIAuthoringDialogResultMessage>(
                 actionId,
                 new UIAuthoringDialogResultMessage(actionId, result.Status, result.ResultId));
+        }
+
+        public bool IsDeclarativePopupOpen => UIManager.IsOpen<UIDeclarativePopupPanel>();
+
+        public UIDeclarativePopupPanel GetDeclarativePopup() =>
+            UIManager.GetPanel<UIDeclarativePopupPanel>();
+
+        public UniTask<UIDeclarativePopupPanel> ShowDeclarativePopupAsync(RectTransform anchor,
+            string assetPath, UIPopupDirection direction, UIPopupAlign align, bool closeOnClickOutside,
+            CancellationToken cancellationToken)
+        {
+            return UIManager.ShowPopupAsync<UIDeclarativePopupPanel>(
+                anchor, assetPath, direction, align, UILayers.Popup, null, closeOnClickOutside,
+                cancellationToken);
         }
 
         public void SetLayerVisibility(int layer, bool visible)

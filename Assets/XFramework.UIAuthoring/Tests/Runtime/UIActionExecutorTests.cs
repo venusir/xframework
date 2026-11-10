@@ -7,6 +7,7 @@ using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
 using XFramework.XMessage;
+using XFramework.XUI;
 
 namespace XFramework.XUI.Authoring.Tests
 {
@@ -288,6 +289,51 @@ namespace XFramework.XUI.Authoring.Tests
 
             runtime.Gate.TrySetResult();
             await first;
+        }
+
+        [Test]
+        public async Task ShowPopup_ResolvesAnchorAndForwardsOptions()
+        {
+            var (executor, runtime, _, panel, _) = Create();
+            UIDeclarativePopupPanel popup = UIAuthoringTestFactory.CreatePopup();
+            _created.Add(popup.gameObject);
+            UIAuthoringTestFactory.SetAssetPath(popup, "ui/popups/demo");
+            runtime.DeclarativePopup = popup;
+
+            Transform anchor = UIAuthoringTestFactory.CreateChild(panel.transform, "btn_anchor");
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.ShowPopup,
+                AssetPath = "ui/popups/demo",
+                AnchorNodeName = "btn_anchor",
+                Direction = UIPopupDirection.Right,
+                Align = UIPopupAlign.End,
+                CloseOnClickOutside = false,
+            }));
+
+            Assert.That(runtime.ShowDeclarativePopupCalls, Is.EqualTo(1));
+            Assert.That(runtime.LastPopupAddress, Is.EqualTo("ui/popups/demo"));
+            Assert.That(runtime.LastPopupAnchor, Is.SameAs(anchor));
+            Assert.That(runtime.LastPopupDirection, Is.EqualTo(UIPopupDirection.Right));
+            Assert.That(runtime.LastPopupAlign, Is.EqualTo(UIPopupAlign.End));
+            Assert.That(runtime.LastPopupCloseOnClickOutside, Is.False);
+        }
+
+        [Test]
+        public async Task ShowPopup_MissingAnchor_WarnsAndSkips()
+        {
+            var (executor, runtime, _, _, _) = Create();
+            LogAssert.Expect(LogType.Warning, new Regex("ShowPopup: anchor node 'missing' not found"));
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.ShowPopup,
+                AssetPath = "ui/popups/demo",
+                AnchorNodeName = "missing",
+            }));
+
+            Assert.That(runtime.ShowDeclarativePopupCalls, Is.EqualTo(0));
         }
     }
 }

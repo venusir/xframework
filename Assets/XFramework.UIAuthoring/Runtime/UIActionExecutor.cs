@@ -1,5 +1,6 @@
 using System;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using XFramework.XLog;
 using XFramework.XMessage;
 
@@ -150,6 +151,10 @@ namespace XFramework.XUI.Authoring
                         action.AssetPath, action.ActionId, default);
                     return;
 
+                case UIActionKind.ShowPopup:
+                    await ShowPopupAsync(action);
+                    return;
+
                 case UIActionKind.HideSelf:
                     LogManager.Warning(UIAuthoringLog.Category, "HideSelf is only valid for HUD.");
                     return;
@@ -158,6 +163,45 @@ namespace XFramework.XUI.Authoring
                     LogManager.Warning(UIAuthoringLog.Category,
                         "Unknown action kind '{0}'.", action.Kind);
                     return;
+            }
+        }
+
+        /// <summary>
+        /// 打开声明式弹窗：锚点取自当前面板子树；失败只告警，不中断/半拆面板。
+        /// </summary>
+        private async UniTask ShowPopupAsync(UIAction action)
+        {
+            if (string.IsNullOrEmpty(action.AnchorNodeName))
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowPopup: anchor node name is empty.");
+                return;
+            }
+
+            Transform anchor = UIDeclarativeNodeFinder.Find(
+                _session.Panel.transform, action.AnchorNodeName);
+            if (anchor == null)
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowPopup: anchor node '{0}' not found.", action.AnchorNodeName);
+                return;
+            }
+
+            if (!(anchor is RectTransform rect))
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowPopup: anchor node '{0}' has no RectTransform.", action.AnchorNodeName);
+                return;
+            }
+
+            UIDeclarativePopupPanel popup = await UIAuthoringNavigation.ShowPopupAsync(
+                _session.Runtime, rect, action.AssetPath, action.Direction, action.Align,
+                action.CloseOnClickOutside, default);
+
+            if (popup == null)
+            {
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowPopup: opening '{0}' failed or was rejected.", action.AssetPath);
             }
         }
     }

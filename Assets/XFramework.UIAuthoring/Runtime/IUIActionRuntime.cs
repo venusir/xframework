@@ -1,5 +1,6 @@
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using XFramework.XUI.View;
 
 namespace XFramework.XUI.Authoring
@@ -41,6 +42,18 @@ namespace XFramework.XUI.Authoring
         UIDeclarativeDialogPanel GetDeclarativeDialog();
 
         UniTask<UIAuthoringDialogResult> ShowDeclarativeDialogAsync(string assetPath, string actionId,
+            CancellationToken cancellationToken);
+
+        bool IsDeclarativePopupOpen { get; }
+
+        UIDeclarativePopupPanel GetDeclarativePopup();
+
+        /// <summary>
+        /// 打开声明式锚定弹窗。守卫（同地址重摆 / 异地址拒绝）由 <see cref="UIAuthoringNavigation"/>
+        /// 统一承担；本方法是裸操作，生产实现直接转发核心 <c>UIManager.ShowPopupAsync</c>。
+        /// </summary>
+        UniTask<UIDeclarativePopupPanel> ShowDeclarativePopupAsync(RectTransform anchor,
+            string assetPath, UIPopupDirection direction, UIPopupAlign align, bool closeOnClickOutside,
             CancellationToken cancellationToken);
 
         void SetLayerVisibility(int layer, bool visible);

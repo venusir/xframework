@@ -1,6 +1,7 @@
 using System;
 using System.Threading;
 using Cysharp.Threading.Tasks;
+using UnityEngine;
 using XFramework.XLog;
 using XFramework.XUI;
 
@@ -84,6 +85,65 @@ namespace XFramework.XUI.Authoring
             UIAuthoringDialogResult result = await runtime.ShowDeclarativeDialogAsync(
                 assetPath, actionId, cancellationToken);
             return result.Status;
+        }
+
+        /// <summary>
+        /// 打开声明式锚定弹窗。已有声明式弹窗时：同地址重聚焦并重摆到新锚点，异地址拒绝并 Warning。
+        /// <para>可同时打开一个声明式面板、一个声明式对话框与一个声明式弹窗（三者是不同具体类型）。</para>
+        /// </summary>
+        public static UniTask<UIDeclarativePopupPanel> ShowPopupAsync(
+            RectTransform anchor,
+            string assetPath,
+            UIPopupDirection direction = UIPopupDirection.Auto,
+            UIPopupAlign align = UIPopupAlign.Start,
+            bool closeOnClickOutside = true,
+            CancellationToken cancellationToken = default)
+        {
+            return ShowPopupAsync(new UIManagerActionRuntime(), anchor, assetPath,
+                direction, align, closeOnClickOutside, cancellationToken);
+        }
+
+        internal static async UniTask<UIDeclarativePopupPanel> ShowPopupAsync(
+            IUIActionRuntime runtime,
+            RectTransform anchor,
+            string assetPath,
+            UIPopupDirection direction,
+            UIPopupAlign align,
+            bool closeOnClickOutside,
+            CancellationToken cancellationToken)
+        {
+            if (runtime == null)
+                throw new ArgumentNullException(nameof(runtime));
+
+            if (anchor == null)
+            {
+                LogManager.Warning(UIAuthoringLog.Category, "ShowPopupAsync: anchor is null.");
+                return null;
+            }
+
+            if (string.IsNullOrEmpty(assetPath))
+            {
+                LogManager.Warning(UIAuthoringLog.Category, "ShowPopupAsync: assetPath is empty.");
+                return null;
+            }
+
+            UIDeclarativePopupPanel existing = runtime.GetDeclarativePopup();
+            if (existing != null)
+            {
+                if (string.Equals(existing.AssetPath, assetPath, StringComparison.Ordinal))
+                {
+                    return await runtime.ShowDeclarativePopupAsync(anchor, assetPath, direction, align,
+                        closeOnClickOutside, cancellationToken);
+                }
+
+                LogManager.Warning(UIAuthoringLog.Category,
+                    "ShowPopupAsync rejected: a different declarative popup is already open ('{0}').",
+                    existing.AssetPath);
+                return existing;
+            }
+
+            return await runtime.ShowDeclarativePopupAsync(anchor, assetPath, direction, align,
+                closeOnClickOutside, cancellationToken);
         }
     }
 }

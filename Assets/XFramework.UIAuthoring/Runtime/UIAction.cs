@@ -44,5 +44,17 @@ namespace XFramework.XUI.Authoring
 
         /// <summary>页签组名（SelectTab）。</summary>
         public string GroupName;
+
+        /// <summary>弹窗锚点节点名（ShowPopup；必须在动作所在面板的子树内）。</summary>
+        public string AnchorNodeName;
+
+        /// <summary>弹窗展开方向（ShowPopup）。</summary>
+        public UIPopupDirection Direction = UIPopupDirection.Auto;
+
+        /// <summary>弹窗在垂直展开轴上的对齐（ShowPopup）。</summary>
+        public UIPopupAlign Align = UIPopupAlign.Start;
+
+        /// <summary>点击弹窗外部是否关闭（ShowPopup；仅核心内置 <c>UIManagerImpl</c> 生效）。</summary>
+        public bool CloseOnClickOutside = true;
     }
 }

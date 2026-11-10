@@ -1,6 +1,10 @@
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Cysharp.Threading.Tasks;
 using NUnit.Framework;
+using UnityEngine;
+using UnityEngine.TestTools;
+using XFramework.XUI;
 
 namespace XFramework.XUI.Authoring.Tests
 {
@@ -97,6 +101,80 @@ namespace XFramework.XUI.Authoring.Tests
 
             Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
             Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ShowPopup_NoExisting_Opens()
+        {
+            var runtime = new FakeActionRuntime();
+            var anchorGo = new GameObject("Anchor", typeof(RectTransform));
+            try
+            {
+                var anchor = (RectTransform)anchorGo.transform;
+
+                UIDeclarativePopupPanel result = await UIAuthoringNavigation.ShowPopupAsync(
+                    runtime, anchor, "ui/popup", UIPopupDirection.Down, UIPopupAlign.Center, true,
+                    default);
+
+                Assert.That(runtime.ShowDeclarativePopupCalls, Is.EqualTo(1));
+                Assert.That(runtime.LastPopupAddress, Is.EqualTo("ui/popup"));
+                Assert.That(runtime.LastPopupAnchor, Is.SameAs(anchor));
+                Assert.That(result, Is.Null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(anchorGo);
+            }
+        }
+
+        [Test]
+        public async Task ShowPopup_SameAddress_RefocusesAndRepositions()
+        {
+            UIDeclarativePopupPanel popup = UIAuthoringTestFactory.CreatePopup();
+            var anchorGo = new GameObject("Anchor", typeof(RectTransform));
+            try
+            {
+                UIAuthoringTestFactory.SetAssetPath(popup, "ui/popup");
+                var runtime = new FakeActionRuntime { DeclarativePopup = popup };
+
+                UIDeclarativePopupPanel result = await UIAuthoringNavigation.ShowPopupAsync(
+                    runtime, (RectTransform)anchorGo.transform, "ui/popup",
+                    UIPopupDirection.Auto, UIPopupAlign.Start, true, default);
+
+                Assert.That(runtime.ShowDeclarativePopupCalls, Is.EqualTo(1));
+                Assert.That(result, Is.SameAs(popup));
+            }
+            finally
+            {
+                Object.DestroyImmediate(anchorGo);
+                UIAuthoringTestFactory.Destroy(popup.gameObject);
+            }
+        }
+
+        [Test]
+        public async Task ShowPopup_DifferentAddress_Rejects()
+        {
+            UIDeclarativePopupPanel popup = UIAuthoringTestFactory.CreatePopup();
+            var anchorGo = new GameObject("Anchor", typeof(RectTransform));
+            try
+            {
+                UIAuthoringTestFactory.SetAssetPath(popup, "ui/other");
+                var runtime = new FakeActionRuntime { DeclarativePopup = popup };
+                LogAssert.Expect(LogType.Warning,
+                    new Regex("ShowPopupAsync rejected: a different declarative popup is already open"));
+
+                UIDeclarativePopupPanel result = await UIAuthoringNavigation.ShowPopupAsync(
+                    runtime, (RectTransform)anchorGo.transform, "ui/popup",
+                    UIPopupDirection.Auto, UIPopupAlign.Start, true, default);
+
+                Assert.That(runtime.ShowDeclarativePopupCalls, Is.EqualTo(0));
+                Assert.That(result, Is.SameAs(popup));
+            }
+            finally
+            {
+                Object.DestroyImmediate(anchorGo);
+                UIAuthoringTestFactory.Destroy(popup.gameObject);
+            }
         }
     }
 }

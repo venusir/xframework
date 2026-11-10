@@ -37,6 +37,13 @@ namespace XFramework.XUI.Authoring.Tests
         internal string LastDialogActionId;
         internal UIAuthoringDialogResult DialogResult =
             new UIAuthoringDialogResult(UIAuthoringDialogStatus.Selected, "confirm");
+        internal UIDeclarativePopupPanel DeclarativePopup;
+        internal int ShowDeclarativePopupCalls;
+        internal string LastPopupAddress;
+        internal RectTransform LastPopupAnchor;
+        internal UIPopupDirection LastPopupDirection;
+        internal UIPopupAlign LastPopupAlign;
+        internal bool LastPopupCloseOnClickOutside;
         internal Exception CloseException;
         internal UniTaskCompletionSource Gate;
 
@@ -122,6 +129,23 @@ namespace XFramework.XUI.Authoring.Tests
             return UniTask.FromResult(DialogResult);
         }
 
+        public bool IsDeclarativePopupOpen => DeclarativePopup != null;
+
+        public UIDeclarativePopupPanel GetDeclarativePopup() => DeclarativePopup;
+
+        public UniTask<UIDeclarativePopupPanel> ShowDeclarativePopupAsync(RectTransform anchor,
+            string assetPath, UIPopupDirection direction, UIPopupAlign align, bool closeOnClickOutside,
+            CancellationToken cancellationToken)
+        {
+            ShowDeclarativePopupCalls++;
+            LastPopupAnchor = anchor;
+            LastPopupAddress = assetPath;
+            LastPopupDirection = direction;
+            LastPopupAlign = align;
+            LastPopupCloseOnClickOutside = closeOnClickOutside;
+            return UniTask.FromResult(DeclarativePopup);
+        }
+
         public void SetLayerVisibility(int layer, bool visible)
         {
             SetLayerVisibilityCalls++;
@@ -175,6 +199,12 @@ namespace XFramework.XUI.Authoring.Tests
         {
             var go = new GameObject(name, typeof(RectTransform));
             return go.AddComponent<UIDeclarativeDialogPanel>();
+        }
+
+        internal static UIDeclarativePopupPanel CreatePopup(string name = "Popup")
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            return go.AddComponent<UIDeclarativePopupPanel>();
         }
 
         internal static UIDeclarativeHudItem CreateHud(string name = "Hud")

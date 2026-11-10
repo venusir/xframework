@@ -50,5 +50,8 @@ namespace XFramework.XUI.Authoring
 
         /// <summary>隐藏 HUD 自身（仅 HUD；2a 校验器拒绝）。</summary>
         HideSelf = 14,
+
+        /// <summary>打开一个声明式锚定弹窗（仅 Panel；锚点取自当前面板子树）。</summary>
+        ShowPopup = 15,
     }
 }

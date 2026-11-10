@@ -144,7 +144,7 @@ Assets/XFramework.UIAuthoring/
 │   ├── IUIDataProvider.cs / UIDataProviderRegistry.cs
 │   ├── UIDataBinding.cs / UIDataBindingKind.cs
 │   ├── UIAction.cs / UIActionKind.cs / UITipActionConfig.cs
-│   ├── UIDeclarativePanel.cs / UIDeclarativeDialogPanel.cs / UIDeclarativeHudItem.cs
+│   ├── UIDeclarativePanel.cs / UIDeclarativeDialogPanel.cs / UIDeclarativeHudItem.cs / UIDeclarativePopupPanel.cs
 │   ├── UIDeclarativeNodeFinder.cs / UIDeclarativeBinder.cs / UIDeclarativeDataBinder.cs
 │   ├── UIActionSession.cs / UIActionExecutor.cs
 │   ├── IUIActionRuntime.cs / UIManagerActionRuntime.cs
