@@ -28,9 +28,13 @@ namespace XFramework.XConfig.Luban
                 for (int i = 0; i < handles.Length; i++)
                 {
                     var handle = handles[i];
+
+                    // 在句柄仍有效的窗口内把字节读出来：否则离开 finally 后读 TextAsset.bytes 会
+                    // 依赖 YooAsset「释放句柄但不卸载资源」的默认设置（AutoUnloadBundleWhenUnused=false）。
+                    // 读取顺序与 LoadRawFileAsync 的 GetRawFileData() 在 using 内读取同形（R5-LBN-001）。
                     slices[i] = new LubanTextSlice(
                         handle.IsValid,
-                        handle.IsValid ? handle.Asset : null,
+                        handle.IsValid && handle.Asset != null ? handle.Asset.bytes : null,
                         handle.LastError);
                 }
             }
@@ -65,9 +69,9 @@ namespace XFramework.XConfig.Luban
         }
 
         /// <summary>
-        /// 纯映射：把 TextAsset 切片映射成 <see cref="ILubanTextAssetHandle"/>（R4-LBN-002 测试缝）。
+        /// 纯映射：把已读出的 TextAsset 字节切片映射成 <see cref="ILubanTextAssetHandle"/>（R4-LBN-002 测试缝）。
         /// <para>真实 <see cref="AssetHandle{T}"/> 只能由 YooAsset 句柄构造，测试进程造不出「有效句柄 +
-        /// 成功字节」；把映射逻辑抽到这里后，成功/无效/Asset=null 三态都能直接覆盖。句柄的获取与释放
+        /// 成功字节」；把映射逻辑抽到这里后，成功/无效/字节=null 三态都能直接覆盖。句柄的获取与释放
         /// 仍由真实 YooAsset 探针背书。</para>
         /// </summary>
         internal static ILubanTextAssetHandle[] MapTextAssets(IReadOnlyList<LubanTextSlice> slices)
@@ -78,7 +82,7 @@ namespace XFramework.XConfig.Luban
                 var slice = slices[i];
                 results[i] = new TextAssetResult(
                     slice.IsValid,
-                    slice.IsValid && slice.Asset != null ? slice.Asset.bytes : null,
+                    slice.IsValid ? slice.Bytes : null,
                     slice.LastError);
             }
             return results;
@@ -151,17 +155,21 @@ namespace XFramework.XConfig.Luban
             }
         }
 
-        /// <summary>TextAsset 句柄的纯映射输入（R4-LBN-002 测试缝）。</summary>
+        /// <summary>
+        /// TextAsset 的纯映射输入（R4-LBN-002 测试缝）。
+        /// <para>存的是<b>句柄有效期内读出的字节</b>，不是 <see cref="TextAsset"/> 引用——切片离开加载
+        /// 方法后句柄已释放，再持引用就会让读取时机依赖 YooAsset 的卸载设置（R5-LBN-001）。</para>
+        /// </summary>
         internal readonly struct LubanTextSlice
         {
             internal readonly bool IsValid;
-            internal readonly TextAsset Asset;
+            internal readonly byte[] Bytes;
             internal readonly string LastError;
 
-            internal LubanTextSlice(bool isValid, TextAsset asset, string lastError)
+            internal LubanTextSlice(bool isValid, byte[] bytes, string lastError)
             {
                 IsValid = isValid;
-                Asset = asset;
+                Bytes = bytes;
                 LastError = lastError;
             }
         }

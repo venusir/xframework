@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+- **TextAsset 句柄先释放、后读字节（R5-LBN-001）**：`AssetManagerLubanAssetSource.LoadTextAssetsAsync`
+  原先在 `finally` 释放全部句柄之后才调用 `MapTextAssets` 读 `TextAsset.bytes`，依赖 YooAsset
+  `AutoUnloadBundleWhenUnused=false` 让资源在 Release 后仍存活。修法：`LubanTextSlice` 改存
+  **句柄有效期内读出的 `byte[]`**，读取发生在 `try` 内，与 `LoadRawFileAsync` 在 `using` 内读
+  `GetRawFileData()` 同形；不再持有 `TextAsset` 引用。真实句柄释放时序仍待 R5-PRB-03 探针。
 - **接入代码写盘中途失败会留下半套文件（R4-LBN-008 / R4-ADJ-06）**：原先逐个文件写盘（写 tmp → 删旧 →
   move），中途失败会留下半套新文件 + 旧 manifest，且「删旧与 move 之间」崩溃会丢目标文件。修法：全部内容
   先写进输出目录下的隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，

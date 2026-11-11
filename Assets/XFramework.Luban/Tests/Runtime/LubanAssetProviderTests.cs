@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using NUnit.Framework;
-using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XConfig;
 using XFramework.XConfig.Luban;
@@ -37,28 +36,22 @@ namespace XFramework.XConfig.Luban.Tests
         public void MapTextAssets_CoversValidInvalidAndMissingAsset()
         {
             // R4-LBN-002：真实 AssetHandle 只能由 YooAsset 句柄构造，成功映射此前零直接覆盖。
-            var text = new TextAsset("abc");
-            try
-            {
-                var results = AssetManagerLubanAssetSource.MapTextAssets(
-                    new[]
-                    {
-                        new AssetManagerLubanAssetSource.LubanTextSlice(true, text, null),
-                        new AssetManagerLubanAssetSource.LubanTextSlice(false, null, "404"),
-                        new AssetManagerLubanAssetSource.LubanTextSlice(true, null, null),
-                    });
+            // R5-LBN-001：切片改存「句柄有效期内读出的字节」，不再持有 TextAsset 引用。
+            var results = AssetManagerLubanAssetSource.MapTextAssets(
+                new[]
+                {
+                    new AssetManagerLubanAssetSource.LubanTextSlice(
+                        true, System.Text.Encoding.UTF8.GetBytes("abc"), null),
+                    new AssetManagerLubanAssetSource.LubanTextSlice(false, null, "404"),
+                    new AssetManagerLubanAssetSource.LubanTextSlice(true, null, null),
+                });
 
-                Assert.That(results[0].IsValid, Is.True);
-                Assert.That(System.Text.Encoding.UTF8.GetString(results[0].Bytes), Is.EqualTo("abc"));
-                Assert.That(results[1].IsValid, Is.False);
-                Assert.That(results[1].LastError, Is.EqualTo("404"));
-                Assert.That(results[2].IsValid, Is.True);
-                Assert.That(results[2].Bytes, Is.Null, "有效但 Asset 为 null 时不上报字节");
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(text);
-            }
+            Assert.That(results[0].IsValid, Is.True);
+            Assert.That(System.Text.Encoding.UTF8.GetString(results[0].Bytes), Is.EqualTo("abc"));
+            Assert.That(results[1].IsValid, Is.False);
+            Assert.That(results[1].LastError, Is.EqualTo("404"));
+            Assert.That(results[2].IsValid, Is.True);
+            Assert.That(results[2].Bytes, Is.Null, "有效但字节为 null 时不上报字节");
         }
 
         [Test]
