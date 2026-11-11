@@ -74,7 +74,7 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 
 ### 可选：UI 制作扩展
 
-`Assets/XFramework.UIAuthoring/`（`com.venusy609.xframework.ui.authoring`）阶段 2a 已交付：声明式面板
+`Assets/XFramework.UIAuthoring/`（`com.venusy609.xframework.ui.authoring`）阶段 2a/2b/3/4 已交付：声明式面板
 `UIDeclarativePanel` 与声明式对话框 `UIDeclarativeDialogPanel : UIDialogPanel<string>`，复用核心的
 加载、排序、遮罩、栈与池化，核心包零改动。策划在 UGUI 预制体 + 定义资产里配置文本、按钮动作与页签，
 程序只保留一次打开调用；提供面板/对话框模板与可直接运行的示例（Package Manager 的 Samples 页签导入）。
@@ -83,7 +83,7 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 https://github.com/venusir/xframework.git?path=Assets/XFramework.UIAuthoring#<发布 tag>
 ```
 
-阶段 2b 另交付 HUD 静态文本（`UIDeclarativeHudItem : UIHudItem`），阶段 3 交付 `IUIDataProvider` 数据绑定，阶段 4 交付声明式锚定弹窗（`UIDeclarativePopupPanel` + `ShowPopup`）。单根限制、动作集与已知限制见
+阶段 2b 的 HUD 静态文本（`UIDeclarativeHudItem : UIHudItem`）、阶段 3 的 `IUIDataProvider` 数据绑定与阶段 4 的声明式锚定弹窗（`UIDeclarativePopupPanel` + `ShowPopup`）同样已交付。单根限制、动作集与已知限制见
 [扩展包 README](Assets/XFramework.UIAuthoring/README.md)。
 
 ## 开发这个仓库
