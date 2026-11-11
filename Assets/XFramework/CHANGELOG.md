@@ -41,6 +41,15 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   Tip 的 `TMP_Text` 等九类问题；报告按预制体分组并可点击定位。实现全部 `internal`，不改变公开 API，
   不修改预制体，不在保存或构建时自动触发。同步补充 `Runtime/UI/README.md` 的「预制体要求」小节。
 
+### Fixed
+
+#### Audio
+
+- **`AudioManager` 纳入会话复位族**（2026-11-11 · R5-ADJ-05）：新增
+  `AudioManager.ResetForNewSession`（`SubsystemRegistration`，只丢引用不 Dispose）。关闭域重载且
+  `Application.quitting` 未触发时，第二个会话不再复用上一会话的 manager——`Initialize` 能正常重新
+  初始化，FMOD 自动安装也会重跑（此前会因 `IsInitialized` 为真早退）。
+
 ## [0.4.0] - 2026-10-25
 
 > **本版含新增模块与公开 API 变更，其中有破坏性变更**：新增 `XScene` 场景管理模块；

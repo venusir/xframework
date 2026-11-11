@@ -154,6 +154,23 @@ namespace XFramework.XAudio
             }
         }
 
+        /// <summary>
+        /// 会话开始时复位静态状态（<see cref="RuntimeInitializeLoadType.SubsystemRegistration"/>，
+        /// 早于首场景 <c>Awake</c>）。
+        /// <para><b>为什么需要</b>：关闭域重载时上一会话的静态字段会存活到这一会话，而
+        /// <c>Application.quitting</c> 若不触发，<see cref="Initialize"/> 会告警后早退、继续挂在上一会话
+        /// 那个已随域销毁的实例上；FMOD 自动安装也会因 <see cref="IsInitialized"/> 为真而不再重装
+        /// provider / 加载 bank。</para>
+        /// <para><b>只丢引用、不调 <c>Dispose</c></b>：旧实例握着的 Unity 对象多已随域销毁，在会话开头
+        /// Dispose 只会制造异常与噪音；实例清理归 <see cref="Destroy"/>（谁初始化谁清理）。</para>
+        /// </summary>
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        internal static void ResetForNewSession()
+        {
+            _instance = null;
+            _instanceInitialized = false;
+        }
+
         #endregion
 
         #region Public API — Playback

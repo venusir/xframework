@@ -11,6 +11,7 @@ using UnityEngine.InputSystem;
 using UnityEngine.TestTools;
 using XFramework.XAsset;
 using XFramework.XAsset.Tests;
+using XFramework.XAudio;
 using XFramework.XBootstrap;
 using XFramework.XCamera;
 using XFramework.XCamera.Tests;
@@ -112,6 +113,7 @@ namespace XFramework.Architecture.Tests
         {
             // 归零：不依赖上一个 fixture 的 TearDown（SetUp 中途失败时它不会执行）
             UIManager.Destroy();
+            AudioManager.Destroy();
             CameraManager.Destroy();
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
@@ -134,6 +136,7 @@ namespace XFramework.Architecture.Tests
         public void TearDown()
         {
             UIManager.Destroy();
+            AudioManager.Destroy();
             CameraManager.Destroy();
             ConfigManager.Destroy();
             LocalizationManager.Destroy();
@@ -160,6 +163,7 @@ namespace XFramework.Architecture.Tests
             UpdateManager.AutoInit();
             UpdateManager.ResetForNewSession();
 
+            AudioManager.ResetForNewSession();
             UIManager.ResetForNewSession();
             CameraManager.ResetForNewSession();
             ConfigManager.ResetForNewSession();
@@ -280,6 +284,20 @@ namespace XFramework.Architecture.Tests
         #endregion
 
         #region 门面逐个复位
+
+        [Test]
+        public void Audio_ReinitializesAfterSessionReset()
+        {
+            AudioManager.Initialize();
+            Assert.IsTrue(AudioManager.IsInitialized, "前提校验：会话 1 应当初始化成功");
+
+            SimulateNewSession();
+            Assert.IsFalse(AudioManager.IsInitialized,
+                "复位后门面应回到未初始化态——否则第二会话会复用上一会话的 manager，FMOD 自动安装也不会重跑");
+
+            AudioManager.Initialize();
+            Assert.IsTrue(AudioManager.IsInitialized, "第二个会话必须能重新初始化，而不是告警后早退");
+        }
 
         [Test]
         public void UI_ReinitializesAfterSessionReset()

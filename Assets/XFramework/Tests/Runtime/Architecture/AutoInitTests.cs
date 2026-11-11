@@ -65,6 +65,7 @@ namespace XFramework.Architecture.Tests
             (typeof(MessageManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(Serializer), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
             (typeof(AudioManager), "AutoInit", RuntimeInitializeLoadType.AfterSceneLoad),
+            (typeof(AudioManager), "ResetForNewSession", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(TimerManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
             (typeof(DesktopFileProvider), "PrimeRootsOnLoad", RuntimeInitializeLoadType.BeforeSceneLoad),
             (typeof(LogManager), "AutoInit", RuntimeInitializeLoadType.SubsystemRegistration),
