@@ -173,6 +173,26 @@ namespace XFramework.XUI.Authoring.Editor.Tests
         }
 
         [Test]
+        public void LocalizationKeyMissing_UsesDedicatedRule()
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "txt_title", typeof(Text));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.TextBindings.Add(new UITextBinding
+            {
+                NodeName = "txt_title",
+                UseLocalization = true,
+            });
+
+            List<UIAuthoringIssue> issues = Validate(panel.gameObject, definition, null, null);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.TextLocalizationKeyMissing), Is.True,
+                "启用本地化但缺 key 应有独立规则号");
+            Assert.That(Has(issues, UIAuthoringRuleIds.TextNodeMissing), Is.False,
+                "不得复用 TextNodeMissing：节点本身存在");
+        }
+
+        [Test]
         public void ButtonMissing_Reports()
         {
             UIDeclarativePanel panel = CreatePanel();

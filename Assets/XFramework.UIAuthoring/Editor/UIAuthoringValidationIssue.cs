@@ -22,6 +22,7 @@ namespace XFramework.XUI.Authoring.Editor
         internal const string TextNodeMissing = "UI-AUTH-010";
         internal const string TextTargetMissing = "UI-AUTH-011";
         internal const string NodeDuplicated = "UI-AUTH-012";
+        internal const string TextLocalizationKeyMissing = "UI-AUTH-013";
 
         internal const string ButtonNodeMissing = "UI-AUTH-020";
         internal const string ButtonMissing = "UI-AUTH-021";

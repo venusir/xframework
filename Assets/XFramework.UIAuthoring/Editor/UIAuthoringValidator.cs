@@ -171,7 +171,8 @@ namespace XFramework.XUI.Authoring.Editor
 
                 if (binding.UseLocalization && string.IsNullOrEmpty(binding.LocalizationKey))
                 {
-                    Add(issues, UIAuthoringRuleIds.TextNodeMissing, UIAuthoringIssueSeverity.Warning,
+                    // 独立规则号：复用 TextNodeMissing 会让「节点不存在」与「缺 key」在报告里无法区分
+                    Add(issues, UIAuthoringRuleIds.TextLocalizationKeyMissing, UIAuthoringIssueSeverity.Warning,
                         "文本绑定启用了本地化但没有 LocalizationKey。", node.name);
                 }
             }
