@@ -56,7 +56,7 @@ namespace XFramework.XUI.Authoring
                 IUIActionRuntime runtime = RuntimeOverride ?? new UIManagerActionRuntime();
                 var session = new UIActionSession(runtime, this);
                 var binder = new UIDeclarativeBinder(this, _definition);
-                var executor = new UIActionExecutor(session, _definition, binder);
+                var executor = new UIActionExecutor(session, binder);
 
                 _session = session;
                 Track(session);

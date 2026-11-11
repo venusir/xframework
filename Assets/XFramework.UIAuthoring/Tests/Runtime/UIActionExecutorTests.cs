@@ -40,7 +40,7 @@ namespace XFramework.XUI.Authoring.Tests
             var binder = new UIDeclarativeBinder(panel, definition);
             var runtime = new FakeActionRuntime();
             var session = new UIActionSession(runtime, panel);
-            var executor = new UIActionExecutor(session, definition, binder);
+            var executor = new UIActionExecutor(session, binder);
             return (executor, runtime, session, panel, definition);
         }
 
@@ -53,7 +53,7 @@ namespace XFramework.XUI.Authoring.Tests
             var binder = new UIDeclarativeBinder(dialog, definition);
             var runtime = new FakeActionRuntime();
             var session = new UIActionSession(runtime, dialog);
-            var executor = new UIActionExecutor(session, definition, binder);
+            var executor = new UIActionExecutor(session, binder);
             return (executor, runtime, session, dialog, definition);
         }
 

@@ -15,7 +15,7 @@ namespace XFramework.XUI.Authoring
         private readonly UIDeclarativeBinder _binder;
         private bool _isExecuting;
 
-        internal UIActionExecutor(UIActionSession session, UIPanelDefinition definition, UIDeclarativeBinder binder)
+        internal UIActionExecutor(UIActionSession session, UIDeclarativeBinder binder)
         {
             _session = session;
             _binder = binder;
