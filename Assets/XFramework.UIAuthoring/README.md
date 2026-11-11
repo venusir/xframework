@@ -21,7 +21,7 @@
 
 `Create → XFramework/UI Authoring/Panel Definition`，设置：
 
-- `Kind`：`Panel` / `Dialog` / `Hud`（HUD 只支持静态文本，不能配动作/页签）。
+- `Kind`：`Panel` / `Dialog` / `Hud` / `Popup`（HUD 只支持静态文本与数据绑定，不能配动作/页签；Popup 是独立具体类型，可与面板/对话框同时打开）。
 - `TextBindings`：`NodeName` + 字面量或本地化 key。
 - `ActionBindings`：按钮节点名 + 动作列表。
 - `TabGroups`：组名 + 一组节点名。
