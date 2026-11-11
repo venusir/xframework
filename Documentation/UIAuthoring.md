@@ -19,6 +19,15 @@
 
 **一个前提**：本文所有行号取自 2026-11-08 的工作树（HEAD `9ec131b6`）；2026-11-08 全面审计已逐条复核，源码改动后**先重新核对再引用**。
 
+**设计稿与实现的漂移（2026-11-11 · R5-UAU-009 订正）**——本文是「设计稿 + 实施记录」，下面四处是设计稿写法，**以实现为准**：
+
+| 设计稿里写的 | 实现是什么 |
+|---|---|
+| `UIAuthoringDialogStatus` 含 `ParentClosed` | 只有 `Selected` / `Canceled` / `OpenFailed`；父面板关闭导致对话框被收掉归入 `Canceled`（包 README 已写死） |
+| HUD 绑定文本 / 动作 / 数据，`HideSelf` 调 `UIManager.HideHud` | HUD **只绑定文本与数据**，不绑定动作；`HideSelf` 当前三条路径均不可达（保留枚举，见 §十二） |
+| 模板是 `Prefab Variant` | 实际模板是**普通 Prefab**（`Samples~/Templates/*.prefab` 无 `m_PrefabInstance`）；§十 P3 探针验证的是「Prefab → Variant → 实例」这条**机制**，不是实际模板形态 |
+| `### 8.6` | 后一个已改为 `### 8.7`（重号订正） |
+
 ---
 
 ## 一、结论摘要
@@ -413,7 +422,7 @@
 | Runtime 程序集 | `Venusy609.Xframework.UI.Authoring`；引用 `Venusy609.Xframework`、`UniTask`；命名空间 `XFramework.XUI.Authoring` |
 | Editor 程序集 | `Venusy609.Xframework.UI.Authoring.Editor`；`includePlatforms: [Editor]`；引用扩展 Runtime（**不引用核心 Editor**） |
 | 测试程序集 | `Venusy609.Xframework.UI.Authoring.Tests`（Runtime 测试）/ `.Editor.Tests`；各自 asmdef |
-| 示例 | `Samples~/Templates`（面板/HUD/Dialog 三种受限 Variant）、`Samples~/DeclarativeDemo`（阶段 2a/2b）；两个目录都要登记到 `Tools/check-docs.ps1` 的样例根列表 |
+| 示例 | `Samples~/Templates`（面板/HUD/Dialog 三种受限普通 Prefab）、`Samples~/DeclarativeDemo`（阶段 2a/2b）；两个目录都要登记到 `Tools/check-docs.ps1` 的样例根列表 |
 | 文档 | 扩展包 `README.md` + `CHANGELOG.md` + `LICENSE.md`；**不指向 `Documentation/`**；维护向记录留在本文件，不新建 `Documentation/Modules/XFramework.UIAuthoring.md` |
 | 守卫 | 镜像 Luban：README/文件树、`.meta` 完整性、包边界（扩展包自带，不能依赖核心 `PackageBoundaryTests`）、AutoInit 族清单、Runtime/Editor 公开 API 基线、依赖声明；核心六道门禁前五项不扫扩展包，第六项示例编译需显式登记；全量 `run-tests.ps1` 覆盖测试 |
 
@@ -434,7 +443,8 @@ public sealed class UIDeclarativeHudItem : UIHudItem
 {
     [SerializeField] private UIPanelDefinition _definition;
     // OnOpenImpl：base.OnOpenImpl(userData) → 绑定；OnCloseImpl：解绑 → base.OnCloseImpl
-    // 不重写 OnUpdate；HideSelf 动作调 UIManager.HideHud(FollowTarget)
+    // 不重写 OnUpdate
+    // 【设计稿，未照此实现】HUD 不绑定动作；HideSelf 当前不可达（见 §〇 订正与 §十二）
 }
 
 public sealed class UIDeclarativeDialogPanel : UIDialogPanel<string>
@@ -491,7 +501,7 @@ DataBindings: List<UIDataBinding>  // nodeName, kind, dataKey, twoWay, format?�
 | `Push` | `assetPath`, `layer` | Panel | 压栈一个 **C# 面板** | 实现用 `PushAsync<UIPanelBase>`；边界同 `Open` |
 | `Pop` | — | Panel | 退栈 | 栈空时无操作 |
 | `ShowTip` | `text`, `tipConfig` | 全部 | `UIManager.ShowTipAsync(text, ToTipConfig(...))` | `tipConfig` 是扩展 DTO，不能直接序列化 `TipConfig`（含 `Vector3?`） |
-| `ShowDialog` | `assetPath`, `actionId` | Panel | `await ShowDialogAsync<UIDeclarativeDialogPanel, string>`，把结果作为 `UIAuthoringDialogResultMessage`（keyed by `actionId`）发布 | 单飞：已有声明式对话框打开时拒绝 + Warning，避免 `BeginDialogCycle` 假取消；结果带 Selected/Canceled/OpenFailed/ParentClosed 状态；面板保持打开 |
+| `ShowDialog` | `assetPath`, `actionId` | Panel | `await ShowDialogAsync<UIDeclarativeDialogPanel, string>`，把结果作为 `UIAuthoringDialogResultMessage`（keyed by `actionId`）发布 | 单飞：已有声明式对话框打开时拒绝 + Warning，避免 `BeginDialogCycle` 假取消；结果带 Selected/Canceled/OpenFailed 状态（`ParentClosed` 归入 `Canceled`）；面板保持打开 |
 | `CloseWithResult` | `resultId` | Dialog | `SetResult(resultId)` → `CloseSelfAsync()` | 必须最后一步；`resultId` 不能为空；同一对话框内不重复 |
 | `HideSelf` | — | Hud | `UIManager.HideHud(FollowTarget)` | 必须最后一步；HUD 没有 `CloseSelf` 语义。v1 2b 不暴露（`Raycaster` 关闭，按钮点不到）；需程序触发/`interactive` 开关后再启用 |
 | `SetLayerVisibility` | `layer`, `visible` | Panel | 整层显隐 | 与门面同名（`UIManager.cs:513`）；全局副作用，编辑器警告 |
@@ -525,7 +535,7 @@ public readonly struct UIAuthoringActionMessage
 public readonly struct UIAuthoringDialogResultMessage
 {
     public readonly string ActionId;   // ShowDialog 动作的 actionId
-    public readonly UIAuthoringDialogStatus Status; // Selected / Canceled / OpenFailed / ParentClosed
+    public readonly UIAuthoringDialogStatus Status; // Selected / Canceled / OpenFailed（ParentClosed 归入 Canceled）
     public readonly string ResultId;   // Selected 时的按钮结果 ID；其余为 null
 }
 // 发布：MessageManager.Publish<string, UIAuthoringDialogResultMessage>(actionId, msg)
@@ -671,7 +681,7 @@ public static class UIDataProviderRegistry
 
 - `public sealed class UIDeclarativeDialogPanel : UIDialogPanel<string>`；结果类型固定 `string`（按钮结果 ID）。Unity 不能把开放泛型 `MonoBehaviour` 挂到预制体上，单一具体类型才能零代码。
 - 按钮动作 `CloseWithResult(resultId)`：`SetResult(resultId)` → `CloseSelfAsync()`；必须最后一步；`resultId` 非空；同一对话框内不重复。
-- 外部关闭（`CloseAsync`/`CloseAllAsync`/`Dispose`）返回 `null`；但 `null` 也覆盖「面板打开失败 / 控制器拦截」，所以 `UIDeclarativeDialogPanel` 要记录 `WasOpened`，`ShowDialog` 动作把它与 `ResultId` 一起归类为 `UIAuthoringDialogStatus`（Selected / Canceled / OpenFailed / ParentClosed），不能只报 `null`。
+- 外部关闭（`CloseAsync`/`CloseAllAsync`/`Dispose`）返回 `null`；但 `null` 也覆盖「面板打开失败 / 控制器拦截」，所以 `UIDeclarativeDialogPanel` 要记录 `WasOpened`，`ShowDialog` 动作把它与 `ResultId` 一起归类为 `UIAuthoringDialogStatus`（Selected / Canceled / OpenFailed；父面板关闭归入 `Canceled`），不能只报 `null`。
 - `ShowDialog` 动作单飞：已有声明式对话框打开时拒绝 + Warning，不启动第二个等待（否则 `BeginDialogCycle` 会把上一轮等待者以 `default` 唤醒，造成假取消）。
 - `ShowDialogAsync<UIDeclarativeDialogPanel, string>(address, ...)` 满足 `where TPanel : UIDialogPanel<string>`；遮罩、结果通道、回池兜底全部复用核心。
 - 独立具体类型：与 `UIDeclarativePanel` 可以同时打开；同一时刻只能有一个声明式对话框；核心的重复 `ShowDialogAsync` 会复用现有实例并重置结果通道，不同地址的第二个不会被加载；扩展的 `ShowDialog` 动作在此之上单飞（拒绝 + Warning）。
@@ -722,7 +732,7 @@ public static class UIDataProviderRegistry
 **验收**
 
 - 策划在一个预制体内完成：静态展示、按钮关闭/跳转/发消息、开关切换、页签切换；该页不需要任何专属 C#。
-- 策划在对话框定义里用 `CloseWithResult` 表达确认/取消/三选一；`ShowDialogAsync<UIDeclarativeDialogPanel,string>` 返回结果 ID，`ShowDialog` 动作同时发布 `Selected/Canceled/OpenFailed/ParentClosed` 状态。
+- 策划在对话框定义里用 `CloseWithResult` 表达确认/取消/三选一；`ShowDialogAsync<UIDeclarativeDialogPanel,string>` 返回结果 ID，`ShowDialog` 动作同时发布 `Selected/Canceled/OpenFailed` 状态（`ParentClosed` 归入 `Canceled`）。
 - 打开该页只需一次 C# 调用（或由另一个 C# 流程打开）；声明式面板之间不直接 `Push`。
 - 直接调用 `UIManager.OpenAsync<UIDeclarativePanel>(第二个地址)` 的行为被 README 明确标为不支持；扩展入口 `UIAuthoringNavigation` 拒绝 + Warning。
 - 核心包 `git diff -- Assets/XFramework` 为空；核心测试全绿。
@@ -805,7 +815,7 @@ public static class UIDataProviderRegistry
 
 声明式 UI 制作线（阶段 1–4）到此完整：面板、对话框、HUD、Popup 四形态均可用定义资产 + 封闭动作集 + 数据绑定表达，程序只保留一次打开调用与一个数据源。后续若出现新需求，按 `Documentation/Modules/UI.md` 的台账与本文 §五「明确不做」的重开判据处理；不自动扩展动作词汇表或新增第五种形态。
 
-### 8.6 裁定点与门禁
+### 8.7 裁定点与门禁
 
 | 时点 | 触发的条目 | 原因 |
 |---|---|---|
@@ -927,7 +937,7 @@ public static class UIDataProviderRegistry
 | **D3**（Q4） | 自定义动作出口 | 阶段 2a 动作实现前 | `Custom` 与 `ShowDialog` 结果 | keyed `MessageManager`，消息不带 `View`，禁用缓冲订阅 |
 | **D4**（Q8） | C# 面板导航动作 | 阶段 2a 动作实现前 | `Open` / `Push` 动作 | A：`OpenAsync<UIPanelBase>` |
 | **D5**（Q7） | 声明式 Popup | 可延迟到阶段 4 | Popup 的零代码 | v1 不做；阶段 4 独立类型 |
-| **D6** | 声明式对话框结果失败语义（Q6 已定 `string`） | 是（阶段 2a API 前） | `UIDeclarativeDialogPanel` | `string` + 状态字段（Selected/Canceled/OpenFailed/ParentClosed） |
+| **D6** | 声明式对话框结果失败语义（Q6 已定 `string`） | 是（阶段 2a API 前） | `UIDeclarativeDialogPanel` | `string` + 状态字段（Selected/Canceled/OpenFailed；`ParentClosed` 归入 `Canceled`） |
 | **D7** | 模板交付 | 是（阶段 1/2a 前） | 模板的可用性 | 面板/对话框随 2a；HUD 随 2b |
 | **D8** | HUD 实施阶段与交互性 | 可延迟到阶段 2b 前 | HUD 的零代码 | 2b 文本 only + 3 数据；v1 不做交互/动作 |
 | **D10** | 边界约束（核心零改动 / Tools / 许可 / 全局动作） | 是（实施前） | 实施边界 | 见 11.12 表 |
@@ -1056,10 +1066,10 @@ public static class UIDataProviderRegistry
 | 选项 | 做法 | 优 | 劣 |
 |---|---|---|---|
 | **A. 扩展把三种情况合并为「无结果」** | `UIAuthoringDialogResultMessage.ResultId = null` | 最简单 | 项目无法区分「用户取消」与「弹窗没打开」；无法做埋点/错误提示 |
-| **B. 结果消息带状态（推荐）** | `UIAuthoringDialogResultMessage` 增加 `UIAuthoringDialogStatus`：`Selected` / `Canceled` / `OpenFailed` / `ParentClosed` | 项目能区分；动作层可记录/提示 | 需要在 `ShowDialog` 动作里检测「是否真正打开过」（例如让 `UIDeclarativeDialogPanel` 在 `OnOpen` 成功后记录 `WasOpened`） |
+| **B. 结果消息带状态（推荐）** | `UIAuthoringDialogResultMessage` 增加 `UIAuthoringDialogStatus`：`Selected` / `Canceled` / `OpenFailed`（设计稿含 `ParentClosed`，实现归入 `Canceled`） | 项目能区分；动作层可记录/提示 | 需要在 `ShowDialog` 动作里检测「是否真正打开过」（例如让 `UIDeclarativeDialogPanel` 在 `OnOpen` 成功后记录 `WasOpened`） |
 | **C. 只保留 `string`，空串表示未选择** | 校验器禁止空串作为有效 resultId | 少一个字段 | 仍无法区分失败与取消；不推荐 |
 
-**推荐 B**：结果消息带状态；`ResultId` 仅在 `Selected` 时有意义。实现上让 `UIDeclarativeDialogPanel` 在 `OnOpen` 成功后记录 `WasOpened`；`ShowDialog` 动作返回后按 `WasOpened` / `ResultId` 归类。父面板关闭导致对话框被收掉的情况归 `ParentClosed` 或 `Canceled`，二选一在 README 写死。
+**推荐 B**：结果消息带状态；`ResultId` 仅在 `Selected` 时有意义。实现上让 `UIDeclarativeDialogPanel` 在 `OnOpen` 成功后记录 `WasOpened`；`ShowDialog` 动作返回后按 `WasOpened` / `ResultId` 归类。父面板关闭导致对话框被收掉的情况归 `ParentClosed` 或 `Canceled`，二选一在 README 写死（**实现选了 `Canceled`**）。
 
 **附带确认（重入）**：已有声明式对话框打开时，再 `ShowDialogAsync` 会 `BeginDialogCycle()` 把上一轮等待者以 `default` 唤醒（`UIDialogPanel.cs:101-111`），造成「假取消」。`ShowDialog` 动作必须单飞：检测到 `IsOpen<UIDeclarativeDialogPanel>()` 时拒绝并 Warning，不启动第二个等待；或先关闭现有对话框再开（第一轮仍收到 `Canceled`，需明确）。推荐 **拒绝 + Warning**。
 
