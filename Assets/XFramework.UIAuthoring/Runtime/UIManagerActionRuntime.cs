@@ -125,6 +125,11 @@ namespace XFramework.XUI.Authoring
                         ? UIAuthoringDialogStatus.Selected
                         : UIAuthoringDialogStatus.Canceled;
             }
+            catch (OperationCanceledException)
+            {
+                // 取消不是业务结果：与 OpenAsync 一致向调用方传播，不吞成 OpenFailed
+                throw;
+            }
             catch (Exception ex)
             {
                 LogManager.Error(UIAuthoringLog.Category, "ShowDialog failed: {0}", ex);

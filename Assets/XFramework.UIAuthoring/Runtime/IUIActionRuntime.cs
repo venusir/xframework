@@ -48,6 +48,12 @@ namespace XFramework.XUI.Authoring
 
         UIDeclarativeDialogPanel GetDeclarativeDialog();
 
+        /// <summary>
+        /// 打开声明式对话框并等待结果。
+        /// <para><b>取消会向调用方抛出 <see cref="System.OperationCanceledException"/></b>，与
+        /// <see cref="UIAuthoringNavigation.OpenAsync"/> 同一口径；取消不是业务结果，不返回
+        /// <c>OpenFailed</c>、也不发布结果消息。</para>
+        /// </summary>
         UniTask<UIAuthoringDialogResult> ShowDeclarativeDialogAsync(string assetPath, string actionId,
             CancellationToken cancellationToken);
 

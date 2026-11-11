@@ -104,6 +104,18 @@ namespace XFramework.XUI.Authoring.Tests
         }
 
         [Test]
+        public void ShowDialog_Cancellation_Propagates()
+        {
+            var runtime = new FakeActionRuntime
+            {
+                DialogException = new System.OperationCanceledException(),
+            };
+
+            Assert.CatchAsync<System.OperationCanceledException>(async () =>
+                await UIAuthoringNavigation.ShowDialogAsync(runtime, "ui/dialog", "shop.confirm", default));
+        }
+
+        [Test]
         public async Task ShowPopup_NoExisting_Opens()
         {
             var runtime = new FakeActionRuntime();

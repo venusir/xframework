@@ -45,6 +45,7 @@ namespace XFramework.XUI.Authoring.Tests
         internal UIPopupAlign LastPopupAlign;
         internal bool LastPopupCloseOnClickOutside;
         internal Exception CloseException;
+        internal Exception DialogException;
         internal bool CloseSucceeds = true;
         internal bool ReplaceSucceeds = true;
         internal UniTaskCompletionSource Gate;
@@ -128,6 +129,8 @@ namespace XFramework.XUI.Authoring.Tests
             ShowDeclarativeDialogCalls++;
             LastDialogAddress = assetPath;
             LastDialogActionId = actionId;
+            if (DialogException != null)
+                throw DialogException;
             return UniTask.FromResult(DialogResult);
         }
 

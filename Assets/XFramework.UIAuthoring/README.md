@@ -223,7 +223,7 @@ Assets/XFramework.UIAuthoring/
 - **`Replace`**：先关闭当前声明式面板，再打开目标；目标打开失败时当前面板已经关闭（已知代价）。
 - **控制器拦下关闭**：`IUIController.OnBeforeCloseAsync` 返回 `false` 时，`CloseSelf` / `Replace` / `CloseWithResult` 不使动作会话失效（面板仍开着、按钮仍可用）；`CloseWithResult` 的待兑现结果被立即丢弃，之后的正常关闭不会把它当成用户的选择。
 - **`Open` / `Push`**：只用于 C# 面板，内部用 `OpenAsync<UIPanelBase>` / `PushAsync<UIPanelBase>`；目标不能是声明式面板或任何 `UIDialogPanel<>`；动作不带 `userData`，需要数据的导航走 `Custom`。
-- **`ShowDialog`**：单飞；已有声明式对话框打开时拒绝并 Warning，不启动第二个等待。
+- **`ShowDialog`**：单飞；已有声明式对话框打开时拒绝并 Warning，不启动第二个等待。取消令牌触发时向调用方抛 `OperationCanceledException`（与 `OpenAsync` 一致），不返回 `OpenFailed`、不发布结果消息。
 - **`Custom`**：keyed 消息；无通配符、无反射、无第二事件系统。
 - **HUD**：`UIDeclarativeHudItem : UIHudItem`，只绑定文本与数据；`Kind=Hud`；无 `userData`、不入栈、不进面板字典；同一目标只挂一个；关闭用 `HideHud(target)`，`CloseAllAsync` 连带回收。
 - **定义资产**：可为空（静态预制体）；`Kind` 必须与根组件一致。
