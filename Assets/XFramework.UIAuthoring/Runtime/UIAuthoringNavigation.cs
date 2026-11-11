@@ -3,6 +3,7 @@ using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XLog;
+using XFramework.XMessage;
 using XFramework.XUI;
 
 namespace XFramework.XUI.Authoring
@@ -79,6 +80,15 @@ namespace XFramework.XUI.Authoring
             {
                 LogManager.Warning(UIAuthoringLog.Category,
                     "ShowDialogAsync: assetPath or actionId is empty.");
+
+                // 与 UIManagerActionRuntime 的同一分支保持可观测性一致：有 actionId 就发布失败结果
+                if (!string.IsNullOrEmpty(actionId))
+                {
+                    MessageManager.Publish<string, UIAuthoringDialogResultMessage>(
+                        actionId,
+                        new UIAuthoringDialogResultMessage(
+                            actionId, UIAuthoringDialogStatus.OpenFailed, null));
+                }
                 return UIAuthoringDialogStatus.OpenFailed;
             }
 

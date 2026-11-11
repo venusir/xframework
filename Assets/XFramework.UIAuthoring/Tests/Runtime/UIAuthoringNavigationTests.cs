@@ -4,6 +4,7 @@ using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools;
+using XFramework.XMessage;
 using XFramework.XUI;
 
 namespace XFramework.XUI.Authoring.Tests
@@ -101,6 +102,49 @@ namespace XFramework.XUI.Authoring.Tests
 
             Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
             Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ShowDialog_EmptyAssetPath_PublishesOpenFailed_WhenActionIdPresent()
+        {
+            var runtime = new FakeActionRuntime();
+            UIAuthoringDialogResultMessage received = default;
+            bool published = false;
+
+            using (MessageManager.Subscribe<string, UIAuthoringDialogResultMessage>(
+                       "shop.confirm", message =>
+                       {
+                           received = message;
+                           published = true;
+                       }))
+            {
+                UIAuthoringDialogStatus status = await UIAuthoringNavigation.ShowDialogAsync(
+                    runtime, string.Empty, "shop.confirm", default);
+
+                Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            }
+
+            Assert.That(published, Is.True, "空 assetPath 的失败也要发布结果，消息驱动的 UI 才收得到");
+            Assert.That(received.Status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            Assert.That(runtime.ShowDeclarativeDialogCalls, Is.EqualTo(0));
+        }
+
+        [Test]
+        public async Task ShowDialog_EmptyActionId_DoesNotPublish()
+        {
+            var runtime = new FakeActionRuntime();
+            bool published = false;
+
+            using (MessageManager.Subscribe<string, UIAuthoringDialogResultMessage>(
+                       "shop.confirm", _ => published = true))
+            {
+                UIAuthoringDialogStatus status = await UIAuthoringNavigation.ShowDialogAsync(
+                    runtime, "ui/dialog", string.Empty, default);
+
+                Assert.That(status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            }
+
+            Assert.That(published, Is.False, "actionId 为空时无消息键可发");
         }
 
         [Test]

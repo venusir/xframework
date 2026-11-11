@@ -1,4 +1,5 @@
 using System;
+using System.Threading.Tasks;
 using NUnit.Framework;
 using XFramework.XMessage;
 using XFramework.XUI;
@@ -32,6 +33,31 @@ namespace XFramework.XUI.Authoring.Tests
             UIManager.Destroy();
             UpdateManager.Clear();
             MessageManager.Clear();
+        }
+
+        [Test]
+        public async Task ShowDialog_EmptyAssetPath_PublishesOpenFailed_WhenActionIdPresent()
+        {
+            var runtime = new UIManagerActionRuntime();
+            UIAuthoringDialogResultMessage received = default;
+            bool published = false;
+
+            using (MessageManager.Subscribe<string, UIAuthoringDialogResultMessage>(
+                       "confirm", message =>
+                       {
+                           received = message;
+                           published = true;
+                       }))
+            {
+                UIAuthoringDialogResult result = await runtime.ShowDeclarativeDialogAsync(
+                    string.Empty, "confirm", default);
+
+                Assert.That(result.Status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            }
+
+            Assert.That(published, Is.True, "空 assetPath 的失败也要发布结果");
+            Assert.That(received.Status, Is.EqualTo(UIAuthoringDialogStatus.OpenFailed));
+            Assert.That(_fake.OpenCalls, Is.EqualTo(0), "空参数不应触达核心打开路径");
         }
 
         [Test]

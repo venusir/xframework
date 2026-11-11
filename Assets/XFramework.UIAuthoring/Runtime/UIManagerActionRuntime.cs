@@ -90,7 +90,12 @@ namespace XFramework.XUI.Authoring
             {
                 LogManager.Warning(UIAuthoringLog.Category,
                     "ShowDialog: assetPath or actionId is empty.");
-                return new UIAuthoringDialogResult(UIAuthoringDialogStatus.OpenFailed, null);
+                var rejected = new UIAuthoringDialogResult(UIAuthoringDialogStatus.OpenFailed, null);
+
+                // actionId 为空时无消息键可发；有键时失败也要发布，消息驱动的 UI 才收得到
+                if (!string.IsNullOrEmpty(actionId))
+                    PublishDialogResult(actionId, rejected);
+                return rejected;
             }
 
             if (UIManager.IsOpen<UIDeclarativeDialogPanel>())

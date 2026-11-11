@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `ShowDialog` 在空 `assetPath` / `actionId` 上的失败现在与其它拒绝分支一致：返回 `OpenFailed`，`actionId` 非空时同时发布 `UIAuthoringDialogResultMessage`（`UIAuthoringNavigation` 与 `UIManagerActionRuntime` 两个入口一致）。
 - 编辑器校验器新增独立规则 `UI-AUTH-013`（文本绑定启用本地化但缺 `LocalizationKey`）；此前复用 `UI-AUTH-010 TextNodeMissing`，报告里无法区分「节点不存在」与「缺 key」。
 - 编辑器校验器现在拒绝把 `UIDeclarativePopupPanel` 作为 `Open` / `Push` 的目标（此前只拒绝声明式面板与 `UIDialogPanel<>`，弹窗会被当普通面板层打开，绕过锚定/层语义）。
 - `ShowDialog` 的取消不再被吞成 `OpenFailed` + Error 日志：`OperationCanceledException` 原样传播给调用方，与 `OpenAsync` 的取消语义一致。
