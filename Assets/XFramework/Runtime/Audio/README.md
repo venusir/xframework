@@ -352,6 +352,11 @@ AudioManager.Destroy();   // 停止全部播放、归还全部资源（内置 pr
 | `CopyChannels`（诊断回读） | 清空缓冲并返回 `0`，不抛（与 Asset 的诊断回读同一宽容口径；AUD-006） |
 | 其余全部（`Play` / `PlayAsync` / `StopAll` / 音量 / 查询计数） | 抛 `InvalidOperationException` |
 
+**加载窗口内同样一律返回 `false`**：`PlayAsync` 已开始但资源仍在加载（`Loading`）时，参数 / bank /
+bus / snapshot / 位置的控制面**不会排队**，全部返回 `false`（与「未初始化 / 已销毁」同一宽容口径）。
+要带参数或位置起播，请用 `AudioPlayOptions.InitialParameters` / `AudioPlayOptions.Position`——那是唯一
+保证在起播前生效的通道。
+
 ## 线程契约
 
 **全部成员限主线程调用。** 本模块不提供线程安全保证，也不做线程断言（Release 下无开销，但也就没有检测）。
