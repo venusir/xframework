@@ -404,7 +404,7 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 5. **扩展公开 API 基线 / `-UpdateFmodApiBaseline` 开关**：**已实现** provider 程序集基线
    （`FmodPublicApiBaselineTests` + `.txt`）；`run-tests.ps1` 增加 `-UpdateFmodApiBaseline`
    （写盘后按设计判失败，重跑才绿灯）。集成程序集契约测试已实现
-   （`IntegrationAsmdef_IsConditionallyGated` / `IntegrationSources_AreInternalOnly`）；Integration
+   （`IntegrationAsmdefs_BindDefineToConstraints` / `IntegrationSources_AreInternalOnly`）；Integration
    全 internal，不需要公开 API 基线。
 6. **Wwise 范围**：Wwise 适配器仍 `暂不做`。重开判据：真实 Wwise 项目 + SDK 可编译验证。
 7. **FMOD SDK 与 `packages-lock.json`**：目标为 **FMOD 2.04 UPM**；已实测包名
