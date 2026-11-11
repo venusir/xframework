@@ -1,5 +1,6 @@
 using System;
 using FMOD.Studio;
+using FMODUnity;
 using NUnit.Framework;
 using XFramework.XAudio;
 
@@ -106,6 +107,33 @@ namespace XFramework.XAudio.Fmod.Unity.Tests
                 Assert.IsTrue(backend.SetPaused(id, false));
                 Assert.IsTrue(backend.Stop(id));
                 backend.Release(id);
+            }
+            finally
+            {
+                backend.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// R5-FMD-001 的行为冒烟：未加载 bank / 未起播时设置全局参数必须成功，并触发 RuntimeManager
+        /// 懒初始化。需要 Studio 工程里已定义该全局参数；未配置环境变量时跳过（`需实测`）。
+        /// </summary>
+        [Test]
+        public void RealGlobalParameter_BeforeBankLoad_WhenConfigured()
+        {
+            string name = Environment.GetEnvironmentVariable("XFW_FMOD_GLOBAL_PARAM");
+            if (string.IsNullOrWhiteSpace(name))
+                Assert.Ignore("未配置 XFW_FMOD_GLOBAL_PARAM；跳过全局参数懒初始化冒烟。");
+
+            var backend = new FmodEventBackend(false);
+            try
+            {
+                // 不断言调用前 IsInitialized == false：前面的冒烟可能已初始化过它。
+                // 关键是这次调用本身成功，且之后 RuntimeManager 处于已初始化状态。
+                Assert.IsTrue(backend.SetGlobalParameter(new AudioParameter(name, 0.5f)),
+                    "未加载 bank / 未起播时设置全局参数失败；请确认 Studio 工程定义了该全局参数");
+                Assert.IsTrue(RuntimeManager.IsInitialized,
+                    "设置全局参数必须触发 RuntimeManager 懒初始化");
             }
             finally
             {

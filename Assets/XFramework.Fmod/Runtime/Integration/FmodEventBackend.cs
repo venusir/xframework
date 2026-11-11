@@ -164,9 +164,9 @@ namespace XFramework.XAudio.Fmod.Unity
             if (_disposed || string.IsNullOrWhiteSpace(parameter.Name))
                 return false;
 
-            if (!RuntimeManager.IsInitialized)
-                return false;
-
+            // 不在这里检查 RuntimeManager 的初始化标记：StudioSystem 会经 RuntimeManager 懒初始化，
+            // 而「先设全局参数再起播」是常见顺序——早退会让第一次调用静默失败。真正的初始化失败由
+            // 下面的 SystemNotInitializedException 兜底（R5-FMD-001）。
             try
             {
                 if (parameter.IsLabel)

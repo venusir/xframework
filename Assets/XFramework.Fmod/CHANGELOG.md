@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `SetGlobalParameter` 不再在 `RuntimeManager` 未初始化时提前返回 `false`：`StudioSystem` 会懒初始化，
+  「先设全局参数再起播」的第一个调用现在能成功（行为冒烟 `XFW_FMOD_GLOBAL_PARAM` 需实测）。
 - 自动安装失败清理只卸载本次安装成功加载的 bank：失败点之后出现的项目预加载 bank 不再被误卸载；
   重复 bank 条目不再导致回滚漏卸；外层失败清理与成功路径统一使用安装开始时的配置快照。
 - `TryInstall` 的 `backendFactory == null` 检查提前到所有前置早退之前，与 XML 契约一致。
