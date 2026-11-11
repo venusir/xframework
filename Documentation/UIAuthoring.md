@@ -1146,6 +1146,12 @@ public static class UIDataProviderRegistry
 
 ---
 
+## 十二、R5 审计修复（2026-11-11）
+
+- 已做：**控制器拦下关闭时保持动作会话与结果**（2026-11-11 · `f2117fb1`，R5-UAU-001，本轮修复）——`IUIActionRuntime.CloseAsync` / `ReplaceDeclarativeAsync` 改为返回「是否真的关闭」；`UIActionExecutor` 的 `CloseSelf` / `Replace` / `CloseWithResult` 仅在真正关闭时 `Invalidate`；`UIDeclarativeDialogPanel.CloseWithResultAsync` 在关闭被拦时立即丢弃 `_pendingResultId`，并在 `OnOpen` 复位。回归：`UIActionExecutorTests.CloseSelf_ControllerBlocksClose_KeepsSessionAndContinuesChain` / `Replace_ControllerBlocksClose_KeepsSessionValid` / `CloseWithResult_ControllerBlocksClose_ClearsPendingAndKeepsSession`、`UIDeclarativeDialogPanelTests.ReopenAfterCloseWithResult_DoesNotCarryPendingFromPreviousCycle`（改前 4 例红）。**边界**：生产实现的 `!panel.IsOpen` 判定不在包单测射程（测试钩子绕过核心生命周期），由核心控制器拦截用例 + 评审背书。
+- 已做：**ShowDialog 取消不再吞成 OpenFailed**（2026-11-11 · `d887d696`，R5-UAU-002，本轮修复）——`UIManagerActionRuntime` 在通用 catch 前单独 `catch (OperationCanceledException) { throw; }`；新增 `UIManagerActionRuntimeTests`（经 `UIManager.SetInstance` 注入 `FakeUIManagerForAuthoring`，不再只靠 fake runtime 间接覆盖）与导航层取消传播用例。回归：`ShowDialog_Cancellation_PropagatesAndPublishesNothing`（改前红）、`UIAuthoringNavigationTests.ShowDialog_Cancellation_Propagates`。
+- 已做：**公开/受保护成员 XML 注释补齐**（2026-11-11 · `6767f5f0`，R5-UAU-006，本轮修复）——三个面板的 `OnOpen`/`OnClose`、`UIDeclarativeHudItem.OnOpenImpl`、`UIPanelDefinitionEditor.OnInspectorGUI` 补 `<inheritdoc/>` / `<summary>`；顺带修掉两处 `CS0419`（`IUIActionRuntime` 与 `UIDeclarativePopupPanel` 的异重载 cref）。`check-docs.ps1` 对 UI.Authoring 两个 csproj 实测 0 条门禁码。
+
 ## 附录：源码证据索引
 
 | 文件 | 看什么 |

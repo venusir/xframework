@@ -299,6 +299,14 @@ Assets/XFramework.Fmod/
   `SafeStopAndRelease` 的 `isValid()` 纳入异常隔离；包内守卫加宽（公开类型正则、asmdef 绑定、
   精确包名/版本、Resources 全目录、README 相对路径树、`.meta` 根布局、AutoInit 属性正则、包边界
   全文本扫描）。
+- **2026-11-11 R5-FMD-001（代码已做 · 行为 `需实测`）**：`FmodEventBackend.SetGlobalParameter`
+  删掉 `!RuntimeManager.IsInitialized` 早退——`StudioSystem` 会懒初始化，「先设全局参数再起播」的
+  第一个调用不再静默失败（`e91b0bb3`）。无 SDK 环境用源码结构守卫
+  `FmodIntegrationSourceTests.SetGlobalParameter_DoesNotEarlyReturnOnRuntimeManagerInit` 锁定（改前红）。
+  **SDK 探针**：临时把本地 `com.fmod.fmod-for-unity.v204` 挂进 `Packages/manifest.json` 后跑
+  `Fmod` 过滤（94 例：86 FMOD-free + 8 Integration，91 通过 / 3 跳过，0 失败），Integration 程序集
+  与 7 例集成测试实际编译并运行；manifest 已还原、未提交（对应 R5-PRB-08 `已执行`）。真实全局参数
+  行为仍需 Studio 工程定义该参数后跑 `XFW_FMOD_GLOBAL_PARAM` 冒烟（`需实测`）。
 
 ---
 

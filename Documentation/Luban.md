@@ -536,3 +536,8 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 - 已做：**删除未使用 using**（2026-10-25 · `a24166a9`，R4-LBN-017，本轮清理）——`LubanConfigImpl.cs` 的 `XFramework.XAsset`。
 - 已做：**Editor 程序集公开 API 基线**（2026-10-25 · `075c6109`，R4-ADJ-02 / R4-LBN-013，本轮补齐）——`LubanEditorPublicApiBaselineTests` + `LubanEditorPublicApiBaseline.txt`，与 Runtime 基线共用 `LubanPublicApiSnapshot` / `LubanPublicApiBaselineCheck`；`-UpdateLubanApiBaseline` 同一开关覆盖两组。Editor 面不承诺语义化版本，基线只保证「变了会被看见」。
 - 已做：**接入代码写盘 prepare→commit→rollback**（2026-10-25 · `5c839bb0`，R4-ADJ-06 / R4-LBN-008，本轮修复）——全部内容先落隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，manifest 最后提交；任一步失败逆序回滚。回归 `LubanIntegrationWriterTests.Write_TargetIsDirectory_RejectedBeforeAnyWrite` / `Write_ManifestCommitFails_RollsBackNewAndReplacedFiles`（改前抛裸 `IOException` 且留半套文件）。边界：只覆盖进程内失败，崩溃 / 断电不自动恢复。
+
+### 7.11 R5 审计修复（2026-11-11）
+
+- 已做：**TextAsset 句柄先释放、后读字节**（2026-11-11 · `6dad720a`，R5-LBN-001，本轮修复）——`AssetManagerLubanAssetSource.LoadTextAssetsAsync` 原先在 `finally` 释放全部句柄之后才 `MapTextAssets` 读 `TextAsset.bytes`，依赖 YooAsset `AutoUnloadBundleWhenUnused=false`。修法：`LubanTextSlice` 改存**句柄有效期内读出的 `byte[]`**，读取移入 `try`，与 `LoadRawFileAsync` 在 `using` 内读 `GetRawFileData()` 同形；映射测试改为字节输入。**边界**：真实句柄释放时序无法用单测复现，仍由 R5-PRB-03（`AutoUnloadBundleWhenUnused=true` 探针）背书，当前 `未做`。
+- 已做：**`AssetLubanDataProvider` 的 `AssetManager` cref 补 using**（2026-11-11 · `6b98bbd3`，R5-LBN-002，本轮修复）——`dotnet build -p:DocumentationFile` 实测 `CS1574` 清零；该包 XML 告警已随 R5-ENG-001 纳入 `check-docs.ps1 -Enforce`。

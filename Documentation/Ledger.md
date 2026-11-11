@@ -182,6 +182,8 @@
 > **2026-10-25 第四轮批次 4 裁定落盘**：R4-ADJ-01 `暂不做`（落本文件 §三与 `Modules/README.md`）；ADJ-02 `已做`；ADJ-03 复核判据未触发、维持 `暂不做`；ADJ-04 `未做`（版本小节 / 元数据已就绪，tag 是用户动作）；ADJ-05 / ADJ-06 `已做`；ADJ-11 `未做`（落 `Modules/Save.md` 原条目，不另建）。ADJ-07（`UISorting` 进行为变更表）由 `acf0e0e6` 关闭，ADJ-08 / ADJ-09（Luban 措辞与主线程断言射程）由 `a05decb8` 关闭，ADJ-10（`ConfigTable` 键==Id 契约）由 `e74ad9fe` 关闭——均属批次 2 的文档修复，不另造条目。
 >
 > **2026-10-25 第四轮探针轨状态汇总**：批次 0–3 的回归用例已覆盖 PRB-01 / 02 / 04–08 / 10 / 11 / 13–17（对应 fixture 见各模块台账的「回归」条目）；PRB-12 / PRB-18 本批执行（见上）；仍 `未做`：PRB-03（真 YooAsset「有效句柄 + 类型不符」的 RefCount，见 `Modules/Config.md`）、PRB-09（Linux Editor 大小写 / cwd，见 `Documentation/Luban.md` §7.9）；关闭域重载连跑两遍、真 YooAsset 场景卸载序、真机 / IL2CPP 仍为手工 / 环境项（本轮未复跑）。
+>
+> **2026-11-11 第五轮探针轨（批次 0–1）**：R5-PRB-04/05（UAU-001 控制器拦截、UAU-002 取消）已随修复落成 PlayMode 用例（`f2117fb1` / `d887d696`）；R5-PRB-06（扩展包 XML 探针红证）已随 `check-docs.ps1` 泛化落地（`6a085a97`，注入 CS1591 实测红、还原后绿）；R5-PRB-08（有 SDK 全量）已执行——临时挂本地 `com.fmod.fmod-for-unity.v204` 跑 `Fmod` 过滤 94 例（91 通过 / 3 跳过 / 0 失败），manifest 已还原、未提交。仍 `未做`：R5-PRB-01（关闭域重载 + FMOD 手工两遍）、PRB-02（Android OBB / WebGL bank 异步）、PRB-03（`AutoUnloadBundleWhenUnused=true` 下 TextAsset 释放后读字节）、PRB-07（IL2CPP/AOT 与 TMP 自动化）；配方见 `AuditRound5.md` §11.2。
 
 ## 五、同类框架对照（快照）
 
