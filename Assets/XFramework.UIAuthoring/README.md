@@ -218,6 +218,8 @@ Assets/XFramework.UIAuthoring/
 ## 行为契约
 
 - **单根**：`UIDeclarativePanel` 是单一具体类型，核心按具体类型登记；同一时刻只能打开一个声明式面板。
+- **导航入口的拒绝返回值**：`UIAuthoringNavigation.OpenAsync` / `ShowPopupAsync` 在异地址已存在时拒绝并 Warning，**返回已存在的实例（非 null）**；要区分「新打开」与「被拒绝」请核对返回实例的 `AssetPath`。
+- **动作消息的键空间**：`UIAuthoringActionMessage` / `UIAuthoringDialogResultMessage` 按 `actionId` 走 `MessageManager` 的**全局**键空间；两个面板使用同一 `actionId`（如都叫 `confirm`）会互相收到消息，建议加面板前缀并保证全项目唯一。
 - **对话框**：`UIDeclarativeDialogPanel : UIDialogPanel<string>`；`CloseWithResult(resultId)` 设置结果并关闭；外部关闭返回 `null`。
 - **动作顺序**：动作链串行；`CloseSelf` / `CloseWithResult` 必须最后；同一 session 同时只跑一条链，重复点击忽略并 Warning。
 - **`Replace`**：先关闭当前声明式面板，再打开目标；目标打开失败时当前面板已经关闭（已知代价）。

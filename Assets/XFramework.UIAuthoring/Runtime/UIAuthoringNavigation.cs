@@ -17,6 +17,8 @@ namespace XFramework.XUI.Authoring
     {
         /// <summary>
         /// 打开声明式面板。已有声明式面板时：同地址重聚焦，异地址拒绝并 Warning。
+        /// <para><b>异地址拒绝的返回值是「已存在的面板」，不是 null</b>：调用方要区分「打开了新面板」与
+        /// 「被拒绝、屏幕上仍是另一个地址」时，必须核对返回实例的 <c>AssetPath</c>。</para>
         /// </summary>
         public static UniTask<UIDeclarativePanel> OpenAsync(
             string assetPath,
@@ -100,6 +102,8 @@ namespace XFramework.XUI.Authoring
         /// <summary>
         /// 打开声明式锚定弹窗。已有声明式弹窗时：同地址重聚焦并重摆到新锚点，异地址拒绝并 Warning。
         /// <para>可同时打开一个声明式面板、一个声明式对话框与一个声明式弹窗（三者是不同具体类型）。</para>
+        /// <para><b>异地址拒绝的返回值是「已存在的弹窗」，不是 null</b>：调用方应核对返回实例的
+        /// <c>AssetPath</c> 再操作，避免作用到另一个地址的弹窗上。</para>
         /// </summary>
         public static UniTask<UIDeclarativePopupPanel> ShowPopupAsync(
             RectTransform anchor,
