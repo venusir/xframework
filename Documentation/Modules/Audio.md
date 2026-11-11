@@ -57,6 +57,7 @@ Tests/Runtime/Audio/          # 全部 PlayMode；无 EditMode 侧（没有 Edit
 
 ## 决策台账
 
+- 已做：**探测型总表补「加载窗口内一律 false」**（2026-11-11 · `b9315b56`，R5-AUD-002）——`Runtime/Audio/README.md` 的探测型总表下方补一句：`PlayAsync` 已起播但资源仍在加载时，参数 / bank / bus / snapshot / 位置控制面全部返回 `false`、不排队；起播前要用 `AudioPlayOptions.InitialParameters` / `Position`。
 - 已做：**`AudioManager` 纳入会话复位族**（2026-11-11 · `65e5536a`，R5-ADJ-05）——新增 `AudioManager.ResetForNewSession`（`SubsystemRegistration`，只丢引用不 Dispose），登记 `AutoInitTests` 族清单与 `SessionResetTests`（`Audio_ReinitializesAfterSessionReset`，去掉复位调用即红）。关闭域重载且 `Application.quitting` 未触发时，第二会话不再复用上一会话的 manager，FMOD 自动安装会重跑。**边界**：关闭域重载 + FMOD 的手工两遍仍是 R5-PRB-01（`未做`）。
 - 已做：**`Play()` 后同步读一次 `isPlaying`**（2026-10-17 · `248d473`，AUD-001）——短于一拍的 one-shot 不再卡在 `Starting` 到 60 拍超时并误报；实测（P-06）`Play()` 后同步读为真。
 

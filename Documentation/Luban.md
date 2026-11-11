@@ -541,3 +541,4 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 
 - 已做：**TextAsset 句柄先释放、后读字节**（2026-11-11 · `6dad720a`，R5-LBN-001，本轮修复）——`AssetManagerLubanAssetSource.LoadTextAssetsAsync` 原先在 `finally` 释放全部句柄之后才 `MapTextAssets` 读 `TextAsset.bytes`，依赖 YooAsset `AutoUnloadBundleWhenUnused=false`。修法：`LubanTextSlice` 改存**句柄有效期内读出的 `byte[]`**，读取移入 `try`，与 `LoadRawFileAsync` 在 `using` 内读 `GetRawFileData()` 同形；映射测试改为字节输入。**边界**：真实句柄释放时序无法用单测复现，仍由 R5-PRB-03（`AutoUnloadBundleWhenUnused=true` 探针）背书，当前 `未做`。
 - 已做：**`AssetLubanDataProvider` 的 `AssetManager` cref 补 using**（2026-11-11 · `6b98bbd3`，R5-LBN-002，本轮修复）——`dotnet build -p:DocumentationFile` 实测 `CS1574` 清零；该包 XML 告警已随 R5-ENG-001 纳入 `check-docs.ps1 -Enforce`。
+- 已做：**安装 URL 与 tag 状态说明**（2026-11-11 · `a10191ea`，R5-LBN-003）——包 README 写明当前无发布 tag，`#<tag>` 先替换为具体提交号或 `main`；tag 是维护者发布动作（R5-ADJ-04）。

@@ -120,6 +120,14 @@
 - 不做：**无 CI——暂不接入**（2026-10-13 · 用户裁定）——当前 0 fork / 无 PR 流程，且三条门禁由人跑到今天**尚未发生过「漏跑门禁」的实际事故**：CI 今天买到的是「对一件没发生过的故障的保险」，代价是一条会腐烂的维护链（许可续期、版本可得性、冷导入）。**自托管 runner 被单独排除**（GitHub 明确劝阻把自托管 runner 挂到公开仓——fork PR 会在那台机器上执行任意代码）。重开判据（成文于 `CI.md` §四）：① 出现第二个贡献者或外部 PR 流程；② 发布节奏显著加快**且**实际发生过一次漏跑门禁；③ 仓库转私有。成本要点与「若重开的最小路径」见 `Documentation/CI.md`。
 - 已做：**`AudioManager` 纳入会话复位族**（2026-11-11 · `65e5536a`，R5-ADJ-05）——新增 `AudioManager.ResetForNewSession`（`SubsystemRegistration`，只丢引用不 Dispose），登记 `AutoInitTests` 族清单与 `SessionResetTests`。关闭域重载且 `Application.quitting` 未触发时，第二会话不再复用上一会话的 manager，FMOD 自动安装会重跑。边界：关闭域重载 + FMOD 的手工两遍仍是 R5-PRB-01（`未做`）。详见 `Modules/Audio.md`。
 
+- 暂不做：**`UIActionKind.HideSelf` 的可达化**（2026-11-11 · R5-ADJ-01，用户裁定）——校验器对所有 Kind 报错、HUD 不绑定动作、执行器只告警，三条路径均不可达；删除是公开 API 变更且预 1.0，补 HUD 动作入口需要新设计。保留枚举并在 XML / 包 README 标注「当前不可用」。重开判据：出现真实的 HUD 动作需求。
+
+- 已做：**UIAuthoring 导航入口的拒绝返回语义文档化**（2026-11-11 · `26f35cac`，R5-ADJ-06）——`OpenAsync` / `ShowPopupAsync` 异地址拒绝时返回已存在实例（非 null），README 行为契约与 XML 写明调用方应核对 `AssetPath`；不改返回值语义。重开判据：调用方依赖返回值区分「新打开」与「被拒绝」的真实需求。
+
+- 暂不做：**FMOD 自动安装支持「`AudioManager` 已初始化后再装」**（2026-11-11 · R5-ADJ-07，用户裁定）——与 `SetProvider` 先 Destroy 旧实例的语义冲突；改为文档写死「先装 FMOD 再初始化 `AudioManager`」（包 README + `Documentation/FMOD.md`）。重开判据：出现真实的「先初始化再想装 FMOD」使用方。
+
+- 未做：**四个包的发布 tag 与安装 URL**（2026-11-11 · R5-ADJ-04 / R5-ENG-005）——核心 `0.4.0`、Luban `0.1.0`、Fmod `0.2.0`、UIAuthoring `0.1.0` 均无 tag，README 安装 URL 仍是 `#<tag>` 占位；`[Unreleased]` 均有未发布内容。tag 是用户动作，不阻塞代码修复。重开判据：发布流程启动。
+
 - 不做：**`Tests~` / 把测试移出包目录——不采纳（维持现状）**（2026-10-14 · 步骤 11）——`~` 在 Unity 里只是「隐藏 / 不导入」、**不是「不分发」**（本机 PackageCache 里第三方包的 `Documentation~` / `Samples~` / `Tests/` 都实实在在躺在磁盘上），且改名后**门禁会给假绿**（实测：双平台各报 0 用例而脚本退出码 0，该缺口已随轮补上）；「移出包目录」可行但收益不抵成本——代价实测：**499 个文件**（228 `.cs` / 268 `.meta` / 2 asmdef / 1 基线文本，共 **51,056 行**）+ **两处代码级硬路径**（`PublicApiBaselineTests.cs` 的基线路径、`AllocationRulerTests.cs` 的白名单常量）+ **96 行文档引用**（含 `CLAUDE.md` 8 处规则；`CHANGELOG` 的 11 处按本仓纪律属有意保留的历史）；而收益只是消费方少 ~499 个文件的导入——**不是「少编译 45k 行」**，因为测试程序集在导入方本就不产出（**裸消费方探针复核**：`file:` 引本仓包的工程里同工程五个官方包——inputsystem / ugui / timeline 系 / test-framework / SBP——的 `Tests/` 也一个都没产出 ⇒「`testables` 未列即不编译」是全局规则，不是本包特例）。重开判据：消费方实测反馈「导入耗时 / 包体」不可接受，或 Unity 改变 `~` / `testables` 的语义。
 - 不做：**包在子目录——不重构（维持现状）**（2026-10-14 · 步骤 11）——`?path=` 是 UPM 的官方支持用法，「不能直接当子模块包用」**≠**「不支持子模块」（包 README「方式二」已给 `file:` 配方）；把包搬到仓库根能修好「子模块即包」，代价是全仓重构（测试壳 junction、两条 `Tools/*.ps1` 的仓库根推导、全部 `Application.dataPath` 推导、96 行文档引用）。重开判据：出现「必须用 submodule、且不接受 `file:` 配方」的真实使用方；或包要拆成独立仓库发布。
 - 不做：**Git 钩子 / Issue·PR 模板 / `CONTRIBUTING` 三项**（2026-10-14 · 用户确认）——与 CI 项同源判据（0 fork / 无 PR 流程 / 未发生过漏跑门禁）；钩子另有硬成本（每次提交付约 82s 测试 + 90~180s 文档）；模板塑造的是**外部来件**而实测 0 issue / 0 PR；本仓流程真相已有两处（`Workflow.md` 管流程、`CLAUDE.md` 管规则），另起一份就是第二份真相。重开判据（与 `CI.md` 联动，届时**四项同轮重裁**）：① 出现第二个贡献者或外部 PR 流程；② 实际发生过一次漏跑门禁。

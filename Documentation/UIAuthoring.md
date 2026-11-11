@@ -1167,6 +1167,10 @@ public static class UIDataProviderRegistry
 - 已做：**删除 `UIActionExecutor` 未使用的 `definition` 参数**（2026-11-11 · `3eff320a`，R5-UAU-011）——三个面板与测试工厂同步；无公开面变化。
 - 已做：**生产 `UIManagerActionRuntime` 直接覆盖**（2026-11-11 · `949f31a7`，R5-UAU-010）——抽 `ResolveDialogStatus` 纯函数测四态；`FakeUIManagerForAuthoring` 经 `UIManager.SetInstance` 覆盖空参数、单飞拒绝、打开返回 null、取消传播、`Replace` 被拦与成功、已关闭面板的 `CloseAsync`。**边界**：`!panel.IsOpen` 的「被拦」侧与真 facade 的 `Selected`/`Canceled` 端到端仍无覆盖（测试钩子绕过核心生命周期），由核心控制器用例 + 评审背书。
 - 已做：**Editor asmdef 引用纳入包守卫**（2026-11-11 · `6325451b`，R5-ENG-006）——`UIAuthoringDependencyDeclarationTests.EditorAsmdef_ReferencesOnlyDeclaredAssemblies` 逐字锁定 TMP / YooAsset / YooAsset.Editor；红证：期望集合临时加假项即红。
+- 已做：**`ButtonNodeName` 文档改为只认节点自身**（2026-11-11 · `c300fc83`，R5-UAU-005）——绑定与校验器都只查 `GetComponent<Button>()`；父节点上的 `Button` 会静默不绑定。
+- 已做：**Kind 列表补 `Popup`**（2026-11-11 · `5ba26fc2`，R5-UAU-008）——包 README 与 `package.json` 描述同步四形态。
+- 已做：**维护向记录按实现订正**（2026-11-11 · `3e81a0f5`，R5-UAU-009）——§〇 增「设计稿与实现的漂移」表：`ParentClosed` 不存在（归入 `Canceled`）、HUD 不绑定动作、模板是普通 Prefab、重号 `### 8.6` 改 `### 8.7`；相关状态列表同步。
+- 已做：**导航返回语义与 actionId 键空间**（2026-11-11 · `26f35cac`，R5-UAU-012/014 / R5-ADJ-06）——异地址拒绝返回已存在实例（非 null）写进 README 与 XML；README 行为契约补「actionId 走全局键空间、需全项目唯一」。
 - 暂不做：**`UIActionKind.HideSelf` 的可达化**（2026-11-11 · R5-ADJ-01，用户裁定）——三条路径均不可达：校验器对所有 Kind 直接报错、HUD 从不绑定动作、执行器只打 Warning；`Raycaster` 默认关闭，HUD 上按钮也点不到。删除是公开 API 变更且预 1.0，补 HUD 动作入口需要新设计（`TryExecuteAction` 或 `interactive` 开关），本轮只把「保留、当前不可用」写进 XML 与包 README。重开判据：出现真实的 HUD 动作需求。
 
 ## 附录：源码证据索引

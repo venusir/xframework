@@ -311,6 +311,11 @@ Assets/XFramework.Fmod/
   `Fmod` 过滤（94 例：86 FMOD-free + 8 Integration，91 通过 / 3 跳过，0 失败），Integration 程序集
   与 7 例集成测试实际编译并运行；manifest 已还原、未提交（对应 R5-PRB-08 `已执行`）。真实全局参数
   行为仍需 Studio 工程定义该参数后跑 `XFW_FMOD_GLOBAL_PARAM` 冒烟（`需实测`）。
+- **2026-11-11 R5 文档订正（已做）**：`c73fe324` 记录 bank 在 Android OBB / WebGL 走协程的例外
+  （`需实测`）、手动 `XFRAMEWORK_FMOD` 需 FMOD 已安装、默认门禁只编译 FMOD-free 层、配置资产序列化
+  由 Inspector 负责（FMD-002/005/006/007）；`94294da1` 把 `AudioProvider.md` 的集成契约 fixture 名
+  改为真实的 `IntegrationAsmdefs_BindDefineToConstraints`（FMD-004）；`FmodAudioSettings` 的 Resources
+  路径收窄为**根级**（FMD-003）。ADJ-07 的「先装 FMOD 再初始化」见 §五。
 
 ---
 
