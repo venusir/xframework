@@ -31,6 +31,13 @@ namespace XFramework.Architecture.Tests
     /// 的 <c>samples</c> 声明与包内目录必须对得上——示例目录在 <c>Samples~/</c> 下（Unity 完全忽略它），
     /// 声明写错或目录被移走时 Package Manager 的 Samples 页签会**静默空着**，没有别的地方会报。
     /// </para>
+    /// <para>
+    /// <b>射程边界（R5-ENG-002）</b>：本 fixture 只证明「三处已列项逐字一致」，**不反查 asmdef 的
+    /// <c>references</c>**——程序集引用了未登记的依赖时这里不会红。已出现两个实例：当年 Input System
+    /// 的漏列，与 2026-11-08 UI 预制体校验器给核心 Editor asmdef 新增的 <c>YooAsset</c> /
+    /// <c>YooAsset.Editor</c> 引用。反查机制仍 `未做`（见框架级决策台账）；UIAuthoring 扩展包的
+    /// Editor asmdef 已由包内 fixture 逐字锁定，但那仍是包内清单，不是从 references 反查。
+    /// </para>
     /// </summary>
     [TestFixture]
     public class DependencyDeclarationTests
