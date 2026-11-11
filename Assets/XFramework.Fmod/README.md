@@ -23,6 +23,8 @@ Phase 2 已生效；FMOD 2.04 与 Setup Wizard 是前置条件：
      `"com.fmod.fmod-for-unity.v204": "file:<本机路径>"`（开发期本地改动，不要提交）。
    - 若实际包名不是 `com.fmod.fmod-for-unity.v204`，`versionDefines` 不会命中；需在 Player Settings 的
      Scripting Define Symbols 加 `XFRAMEWORK_FMOD`，否则条件集成程序集被排除，只剩 FMOD-free 层。
+     **仅在 FMOD 已安装时手动定义**：Integration asmdef 硬引用 `FMODUnity`，FMOD 不在时会因缺少
+     `FMODUnity` / `FMOD.Studio` 类型报 `CS0246`。
 3. 运行 FMOD Setup Wizard，准备好 FMOD 工程与 bank。
 4. 在 `Assets/Resources/` 下创建 `FmodAudioSettings`（菜单 `Assets > Create > XFramework > FMOD Audio Settings`）。
 5. 不调用 `AudioManager.Initialize()`；扩展会在 `BeforeSceneLoad` 检测配置资产并安装 provider。
@@ -97,7 +99,8 @@ Runtime/
 - 内置 provider 不支持参数/bank/bus/snapshot；`AudioSourceProvider` 支持 `SetPosition`。
 - **provider 已实现 core internal 的五个能力接口**（参数/bank/bus/snapshot/3D）；Phase 2 的真实
   `FmodEventBackend` 已接入 `AudioManager` 控制面，`FmodInstaller` 负责自动安装。
-- **自动安装**：`AudioManager` 已初始化时跳过（不覆盖项目注入）；首轮无 `FMODStudioSettings` 时
+- **自动安装**：`AudioManager` 已初始化时跳过（不覆盖项目注入）——**请先让自动安装跑完再初始化
+  `AudioManager`**（正常流程是不手动调 `Initialize`）；首轮无 `FMODStudioSettings` 时
   Error + 跳过；bank 按 `Banks` 顺序加载，空白/重复跳过，失败只回滚本次成功加载的 bank；
   安装开始时会快照配置，之后修改资产不影响本次安装。`XFW_DISABLE_FMOD_AUTOINSTALL` 见快速使用。
 
@@ -123,7 +126,13 @@ Runtime/
 - 无逐 voice 暂停/音量、无事件回调、无普通事件 stop fade。
 - FMOD 的 `Loop` / `Pitch` / 3D 衰减最终由 Studio 事件编排决定；框架参数只能近似。
 - `AudioListener.pause` / `AudioListener.volume` 不作用于 FMOD；项目暂停走 `AudioManager.Pause()`。
-- bank 加载同步阻塞；没有异步 bank 加载 API。
+- bank 加载在桌面 / 移动端常规路径上同步阻塞；没有异步 bank 加载 API。**例外（`需实测`）**：
+  FMOD 2.04 在 **Android + `AndroidUseOBB`** 与 **WebGL** 上把 `LoadBank` 走协程，`LoadBank` 返回
+  `true` 时 bank 可能尚未真正可用；安装成功不等于 bank 立即可用，异步失败也不会回传给安装器。
+- **默认门禁只编译 FMOD-free 层**：Integration 程序集与 7 例集成测试需要 FMOD SDK（`XFRAMEWORK_FMOD`）；
+  干净克隆的全量不包含它们，二者由一次性探针与包内源码结构守卫覆盖。
+- **配置资产由 Inspector 负责序列化**：`FmodAudioSettings` 是普通 `ScriptableObject`，包不额外承诺
+  序列化契约或资产往返测试；字段以属性面板显示为准。
 - **显式 `UnloadBank` 不受 `OwnsBanks` 限制**：`OwnsBanks` 只约束 provider 销毁时卸载哪些 bank；
   「项目预加载的 bank 永不卸载」只适用于自动安装失败清理与 provider Dispose。项目主动调用
   `AudioManager.UnloadBank` 仍会卸载任意已加载 bank。
@@ -132,7 +141,8 @@ Runtime/
   voice。当前只记录该边界，等真实 FMOD 证据再决定是否收紧。
 - **预加载 bank 的 `LoadBankSamples` 不会补载**：若项目已加载 bank、但当时未加载采样数据，
   配置里的 `LoadBankSamples=true` 不会改变它；请保证预加载时就带上采样数据。
-- 扩展包的 XML 文档不随核心文档门禁检查，质量靠评审。
+- 扩展包的 XML 文档告警已随 `check-docs.ps1 -Enforce` 纳入门禁（FMOD-free 程序集；有 SDK 时的
+  Integration 程序集不在此列）。
 
 ## 设计取舍
 

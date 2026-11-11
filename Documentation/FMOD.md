@@ -144,18 +144,22 @@ Assets/XFramework.Fmod/
 - 包内守卫：README 结构/文件树、`.meta`、包边界、包契约、依赖声明（Integration 豁免）、AutoInit
   源码守卫、Integration asmdef 条件门控/内部可见性、Runtime 公开 API 基线；`run-tests.ps1
   -UpdateFmodApiBaseline` 更新基线。
-- 扩展包 XML 文档不在核心 `check-docs` 射程，质量靠评审（已知缺口，与 Luban 同型）。
+- 扩展包 XML 文档告警自 2026-11-11 起随 `check-docs.ps1 -Enforce` 纳入门禁（FMOD-free 程序集；有 SDK 的
+  Integration 程序集不在此列）。
 
 ---
 
 ## 五、自动安装与配置资产（Phase 2 已实现）
 
-- `FmodAudioSettings` 放在任意 `Resources` 目录；`Enabled` 为 false 或无资产 → 不安装。
+- `FmodAudioSettings` 放在任意 `Resources` 目录的**根级**（`Resources.Load<FmodAudioSettings>("FmodAudioSettings")`）；
+  `Resources/Settings/FmodAudioSettings.asset` 这类嵌套路径不会被找到。`Enabled` 为 false 或无资产 → 不安装。
 - 入口 `FmodAutoInstall.AutoInstall` 挂 `[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]`，
   **只挂运行时特性**；不挂 `[InitializeOnLoadMethod]`（编辑期不创建 FMOD 实例）。档位依据 §9.4 探针。
 - `XFW_DISABLE_FMOD_AUTOINSTALL=1` → 直接返回（测试/消费方逃生口）。
 - `AudioManager.IsInitialized` 为 true → 记 Warning 并返回，**不覆盖项目已显式注入的管理器/provider**
-  （`SetProvider` 会先 Destroy 旧实例，所以这是硬前置）。
+  （`SetProvider` 会先 Destroy 旧实例，所以这是硬前置）。2026-11-11 R5-ADJ-07 用户裁定 `暂不做`
+  「晚装」支持（与 `SetProvider` 的 Destroy 语义冲突），改为文档写死「先装 FMOD 再初始化
+  `AudioManager`」；重开判据：出现真实的「先初始化再想装 FMOD」使用方。
 - 首轮 `FMODStudioSettings.asset` 不存在（`Resources.Load("FMOD/FMODStudioSettings")` 为 null）→
   Error「先跑 FMOD Setup Wizard」+ 跳过；不自动创建默认 settings、不半初始化（§9.4）。
 - 安装逻辑在 FMOD-free 的 `FmodInstaller.TryInstall(settings, backendFactory, fmodSettingsReady)`：
