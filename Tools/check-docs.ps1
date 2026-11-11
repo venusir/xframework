@@ -97,10 +97,11 @@
     用源码结构守卫兜底）。`-Enforce` 下任一请求的 csproj 缺失都会判失败——否则「项目没生成」会
     表现为 0 告警的假绿。
 
-    **为什么不用 `.Editor.Tests.csproj` 单入口**（它的引用链一次编译即覆盖三者，能省一次编译）？
-    2026-09-27 实测证伪：`-p:DocumentationFile` **不会透传给被引用的工程**——用它编译时只有入口
-    工程自己产出文档，包程序集的告警一条也不会出现（在 Runtime 侧注入缺陷验证过；生成的 XML 里
-    也只有入口工程的类型）。所以必须**逐工程**编译，别为此改了默认值。
+    **为什么逐工程编译（而不是用引用链一次覆盖全部）**：`-p:DocumentationFile` 是**全局属性**，
+    同一次 build 里被引用的工程也会拿到同一个路径——多个工程写同一个 XML：并行时 CSC 直接报
+    CS0016「文件被另一个进程占用」（2026-11-11 扩到七个工程后必现），串行时最后写入者覆盖前者。
+    所以这里对每个入口工程单独开一次 build，并加 `-m:1` 串行化。2026-09-27 曾记录「不会透传给
+    被引用工程」，该结论只在单工程 / 增量构建下成立；现行做法不依赖它，告警解析只看 stdout。
 
 .PARAMETER Enforce
     门禁模式：**门禁码**（脚本顶部的 $GatedCodes）的包内告警数必须为 0，否则退出码 1；未纳门的
@@ -230,8 +231,11 @@ foreach ($p in $Project) {
 
     $docFile = Join-Path $env:TEMP ("xfw-doc-check-" + [IO.Path]::GetFileNameWithoutExtension($p) + ".xml")
     Write-Host "编译 $p …" -ForegroundColor DarkGray
+    # -m:1 必须给：DocumentationFile 是全局属性，同一次 build 里被引用的工程也会拿到同一个路径，
+    # 并行构建时它们会并发写同一个文件，CSC 报 CS0016「文件被另一个进程占用」的假故障
+    # （实测：连续快跑必现；串行后消失。先前的「不会透传」结论只在单工程构建下成立）。
     $raw = dotnet build $projPath --artifacts-path (Join-Path $env:TEMP "xfw-doc-artifacts") `
-        -p:DocumentationFile=$docFile -t:Rebuild -v:q --nologo 2>&1
+        -p:DocumentationFile=$docFile -t:Rebuild -v:q --nologo -m:1 2>&1
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "编译失败（exit=$LASTEXITCODE）。文档告警无从谈起，先修编译错误：`n$($raw | Select-String -Pattern 'error CS' | Select-Object -First 10 | ForEach-Object { $_.Line })"
