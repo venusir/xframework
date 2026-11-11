@@ -37,6 +37,9 @@ XFramework 的**可选** Luban 配置扩展：Editor 一键导表、生成式行
 > UPM 的 `package.json` 不支持 Git URL 依赖，所以本包的 `dependencies` 为空；三条依赖都需要手动加入
 > `Packages/manifest.json`。安装顺序很重要：先核心包，再 Luban 运行时，最后本包。
 
+> **发布状态**（2026-11-11）：本扩展包尚未打发布 tag，核心包的 `0.4.0` 也尚未打 tag；上面的
+> `#<tag>` 请先替换为具体提交号（或 `main`），tag 发布后再换成版本 tag。tag 是维护者的发布动作。
+
 > **版本配套**：扩展包自身版本为 `0.1.0`（见 `package.json`），与仓库 tag 不是同一套版本号。本包与核心包
 > 共用仓库 tag；当前发版 tag 为 `0.4.0`，两处安装 URL 的 `#` 修订必须相同（核心需 ≥ `0.4.0`——Camera / Scene
 > 已内置）。混搭不同 tag 不在验证范围内。
