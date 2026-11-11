@@ -11,7 +11,7 @@ namespace XFramework.XUI.Authoring
     /// 配置文本、动作与数据绑定。
     /// <para>与 <see cref="UIDeclarativePanel"/> 是不同具体类型，可与普通声明式面板、对话框同时打开；
     /// 同一时刻只能开一个声明式弹窗（核心按具体类型登记）。</para>
-    /// <para>由 <see cref="UIAuthoringNavigation.ShowPopupAsync"/> 或定义里的 <see cref="UIActionKind.ShowPopup"/>
+    /// <para>由 <see cref="UIAuthoringNavigation.ShowPopupAsync(RectTransform, string, UIPopupDirection, UIPopupAlign, bool, System.Threading.CancellationToken)"/> 或定义里的 <see cref="UIActionKind.ShowPopup"/>
     /// 打开；关闭用 <see cref="UIActionKind.CloseSelf"/>，或点击外部（仅核心内置 <c>UIManagerImpl</c>）。</para>
     /// </summary>
     public sealed class UIDeclarativePopupPanel : UIPanelBase
@@ -41,6 +41,7 @@ namespace XFramework.XUI.Authoring
             return OnClose();
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnOpen(object userData)
         {
             if (_definition == null)
@@ -73,6 +74,7 @@ namespace XFramework.XUI.Authoring
             return UniTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnClose()
         {
             _session?.Invalidate();

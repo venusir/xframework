@@ -8,6 +8,9 @@ namespace XFramework.XUI.Authoring.Editor
     [CustomEditor(typeof(UIPanelDefinition))]
     public sealed class UIPanelDefinitionEditor : UnityEditor.Editor
     {
+        /// <summary>
+        /// 绘制 <see cref="UIPanelDefinition"/> 的默认 Inspector。
+        /// </summary>
         public override void OnInspectorGUI()
         {
             serializedObject.Update();

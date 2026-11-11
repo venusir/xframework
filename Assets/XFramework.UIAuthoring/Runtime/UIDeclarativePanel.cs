@@ -37,6 +37,7 @@ namespace XFramework.XUI.Authoring
             return OnClose();
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnOpen(object userData)
         {
             if (_definition == null)
@@ -69,6 +70,7 @@ namespace XFramework.XUI.Authoring
             return UniTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnClose()
         {
             _session?.Invalidate();

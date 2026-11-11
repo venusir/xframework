@@ -33,6 +33,7 @@ namespace XFramework.XUI.Authoring
             return OnCloseImpl(true);
         }
 
+        /// <inheritdoc/>
         protected override async UniTask OnOpenImpl(object userData)
         {
             // 先让基类缓存相机/CanvasGroup 并关闭 Raycaster（HUD 默认不可交互）。

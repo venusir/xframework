@@ -57,6 +57,7 @@ namespace XFramework.XUI.Authoring
             return closed;
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnOpen(object userData)
         {
             // 回池路径不经过 OnClose：池化实例必须在这里清掉上一代的待兑现结果
@@ -92,6 +93,7 @@ namespace XFramework.XUI.Authoring
             return UniTask.CompletedTask;
         }
 
+        /// <inheritdoc/>
         protected override UniTask OnClose()
         {
             if (!string.IsNullOrEmpty(_pendingResultId))
