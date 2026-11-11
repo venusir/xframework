@@ -490,9 +490,12 @@ namespace XFramework.XUI.Authoring.Editor
                                 return false;
                             if (panel is UIDeclarativePanel)
                                 return false;
+                            // 声明式弹窗同样是 UIPanelBase：放行会按普通面板层打开，绕过弹窗的锚定/层语义
+                            if (panel is UIDeclarativePopupPanel)
+                                return false;
                             return !IsDialogPanelType(panel.GetType());
                         },
-                        action.Kind + " 目标根必须是具体 UIPanelBase，且不能是声明式面板/任何 UIDialogPanel<>。",
+                        action.Kind + " 目标根必须是具体 UIPanelBase，且不能是声明式面板/声明式弹窗/任何 UIDialogPanel<>。",
                         addresses, addressCheckPerformed, loadPrefab, issues);
                     break;
 

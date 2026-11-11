@@ -24,6 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 编辑器校验器现在拒绝把 `UIDeclarativePopupPanel` 作为 `Open` / `Push` 的目标（此前只拒绝声明式面板与 `UIDialogPanel<>`，弹窗会被当普通面板层打开，绕过锚定/层语义）。
 - `ShowDialog` 的取消不再被吞成 `OpenFailed` + Error 日志：`OperationCanceledException` 原样传播给调用方，与 `OpenAsync` 的取消语义一致。
 - 控制器拦下关闭（`OnBeforeCloseAsync` 返回 `false`）时，`CloseSelf` / `Replace` / `CloseWithResult` 不再使动作会话失效——面板仍开着，按钮不再变成空操作。
 - `CloseWithResult` 在关闭被拦下时立即丢弃待兑现结果，并在下一次 `OnOpen` 复位；过期选择不会再被之后的 `CloseAllAsync` / 父面板关闭 / 回池误兑现。

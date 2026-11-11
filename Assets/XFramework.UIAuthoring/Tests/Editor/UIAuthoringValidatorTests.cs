@@ -236,6 +236,34 @@ namespace XFramework.XUI.Authoring.Editor.Tests
             Assert.That(Has(issues, UIAuthoringRuleIds.TargetInvalid), Is.True);
         }
 
+        [TestCase(UIActionKind.Open)]
+        [TestCase(UIActionKind.Push)]
+        public void OpenOrPushTargetPopup_Reports(UIActionKind kind)
+        {
+            UIDeclarativePanel panel = CreatePanel();
+            CreateChild(panel.transform, "btn_nav", typeof(Button));
+            UIPanelDefinition definition = CreateDefinition(UIPanelDefinitionKind.Panel);
+            definition.ActionBindings.Add(new UIActionBinding
+            {
+                ButtonNodeName = "btn_nav",
+                Actions = new List<UIAction>
+                {
+                    new UIAction { Kind = kind, AssetPath = "popup" },
+                },
+            });
+
+            var target = new GameObject("popup", typeof(RectTransform));
+            _created.Add(target);
+            target.AddComponent<UIDeclarativePopupPanel>();
+            var targets = new Dictionary<string, GameObject> { ["popup"] = target };
+
+            List<UIAuthoringIssue> issues = Validate(
+                panel.gameObject, definition, CreateCatalog(targets), targets);
+
+            Assert.That(Has(issues, UIAuthoringRuleIds.TargetInvalid), Is.True,
+                "Open/Push 只用于 C# 面板，声明式弹窗必须拒绝");
+        }
+
         [Test]
         public void OpenTargetCSharp_NoTargetError()
         {
