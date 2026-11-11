@@ -41,6 +41,9 @@
     改码只改那里——将来某码若要分阶段收编，把它留在 $CodeLabels、暂不放进 $GatedCodes，输出里会以
     「诊断码合计」单独标出，不会隐形）。统计面之外的其它编译告警只计一行明示、不进任何判定；
     要看完整分布加 `-p:DocumentationFile=<路径> -t:Rebuild` 从原始输出里筛。
+    **统计范围**：核心包 `Assets/XFramework` 与三个扩展包 `Assets/XFramework.Luban` /
+    `Assets/XFramework.Fmod` / `Assets/XFramework.UIAuthoring`（扩展包只统计 XML 告警，其余四项
+    仍只扫核心，见 `-Project`）。
 
     **遮蔽关系：** CS1570 会掩盖同一块注释里的 CS1574——块解析失败后，块内 cref 一律不再被检查。
     所以「没有 CS1574」推不出「链接都有效」，先清 CS1570 再看 CS1574 的真实数量。
@@ -83,8 +86,16 @@
     只看某个模块（如 Config、UI、Update），并逐条列出该模块的 文件:行号 + 告警内容。
 
 .PARAMETER Project
-    要检查的生成项目，默认包自身的两个程序集（Runtime 与 Editor），与 Tests 无关——用例的
+    要检查的生成项目，默认核心包的两个程序集（Runtime 与 Editor）加三个扩展包的五个程序集
+    （Luban / Luban.Editor / Fmod / UI.Authoring / UI.Authoring.Editor），与 Tests 无关——用例的
     文档注释不随包发布，不在本脚本关注范围。PackageCache 下第三方包的告警一律剔除。
+
+    **射程差异**：XML 文档告警覆盖全部默认项目；`.meta`、决策台账、README 文件树与「源文件未参与
+    编译」四项仍只扫核心包 `Assets/XFramework`。扩展包不建 `Documentation/Modules/<包>.md`（见
+    `Documentation/Modules/README.md` 的「可选扩展包」），故台账检查不适用。Fmod 的
+    `Runtime/Integration/` 在未安装 SDK 时没有 csproj，也不参与本检查（包内 `FmodIntegrationSourceTests`
+    用源码结构守卫兜底）。`-Enforce` 下任一请求的 csproj 缺失都会判失败——否则「项目没生成」会
+    表现为 0 告警的假绿。
 
     **为什么不用 `.Editor.Tests.csproj` 单入口**（它的引用链一次编译即覆盖三者，能省一次编译）？
     2026-09-27 实测证伪：`-p:DocumentationFile` **不会透传给被引用的工程**——用它编译时只有入口
@@ -104,7 +115,15 @@
 #>
 param(
     [string]$Module = "",
-    [string[]]$Project = @("Venusy609.Xframework.csproj", "Venusy609.Xframework.Editor.csproj"),
+    [string[]]$Project = @(
+        "Venusy609.Xframework.csproj",
+        "Venusy609.Xframework.Editor.csproj",
+        "Venusy609.Xframework.Luban.csproj",
+        "Venusy609.Xframework.Luban.Editor.csproj",
+        "Venusy609.Xframework.Fmod.csproj",
+        "Venusy609.Xframework.UI.Authoring.csproj",
+        "Venusy609.Xframework.UI.Authoring.Editor.csproj"
+    ),
     [switch]$Enforce
 )
 
@@ -200,10 +219,12 @@ foreach ($item in (Get-ChildItem $pkgRoot -Recurse -Force -ErrorAction SilentlyC
 
 $warnings = @()
 $other = @()
+$missingProjects = @()
 foreach ($p in $Project) {
     $projPath = Join-Path $repoRoot $p
     if (-not (Test-Path $projPath)) {
         Write-Warning "找不到 $p —— Unity 尚未生成该工程？先在编辑器里打开一次工程再跑本脚本。"
+        $missingProjects += $p
         continue
     }
 
@@ -221,9 +242,17 @@ foreach ($p in $Project) {
         if ($text -notmatch '^(.*?)\((\d+),(\d+)\): warning (CS\d+):') { continue }
         $path = $Matches[1]; $lineNo = [int]$Matches[2]; $code = $Matches[4]
 
-        # 只留包自身：剔除 Library/PackageCache 下的第三方包告警
+        # 只留包自身：剔除 Library/PackageCache 下的第三方包告警。
+        # 包名捕获到第一个路径段即可：核心是 XFramework，扩展包是 XFramework.<后缀>。
+        # 扩展包的 $rel 带包名前缀，避免与核心同名文件在去重键上相撞。
         $rel = $null
-        if ($path -match '(?i)[\\/]Assets[\\/]XFramework[\\/](.+)$') { $rel = ($Matches[1] -replace '\\', '/') }
+        $package = $null
+        $inner = $null
+        if ($path -match '(?i)[\\/]Assets[\\/](XFramework(?:\.[^\\/]+)?)[\\/](.+)$') {
+            $package = $Matches[1]
+            $inner = ($Matches[2] -replace '\\', '/')
+            $rel = if ($package -eq 'XFramework') { $inner } else { "$package/$inner" }
+        }
         if (-not $rel) { continue }
 
         # 统计面之外的码只记一行明示、永不进门禁——把候选码收进统计面，正是为了不再有
@@ -245,11 +274,17 @@ foreach ($p in $Project) {
 
         $warnings += [pscustomobject]@{
             Project = $owner
+            Package = $package
             File    = $rel
             Line    = $lineNo
             Code    = $code
             Msg     = $msg.Trim()
-            Module  = if ($rel -match '^(Runtime|Editor)/([^/]+)') { "$($Matches[1])/$($Matches[2])" } else { $rel }
+            # 核心沿用「Runtime/<模块>」；扩展包按「<包>/Runtime|Editor」分组（包内文件直接在 Runtime/ 下）
+            Module  = if ($package -eq 'XFramework') {
+                          if ($inner -match '^(Runtime|Editor)/([^/]+)') { "$($Matches[1])/$($Matches[2])" } else { $rel }
+                      } else {
+                          if ($inner -match '^(Runtime|Editor)') { "$package/$($Matches[1])" } else { $package }
+                      }
         }
     }
 }
@@ -548,6 +583,9 @@ if (-not $Enforce) {
 # ---------- 门禁模式 ----------
 
 $problems = @()
+if ($missingProjects.Count -gt 0) {
+    $problems += "请求的工程不存在：$($missingProjects -join '、')——Unity 未生成 csproj 时 XML 告警无从产生，此时报的「0 条」不可信"
+}
 $gatedWarnings = @($warnings | Where-Object { $GatedCodes -contains $_.Code })
 if ($gatedWarnings.Count -gt 0) {
     $byCode = ($gatedWarnings | Group-Object Code | Sort-Object Name | ForEach-Object { "$($_.Name)×$($_.Count)" }) -join "、"
