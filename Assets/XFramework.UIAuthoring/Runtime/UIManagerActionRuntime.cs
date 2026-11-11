@@ -124,11 +124,7 @@ namespace XFramework.XUI.Authoring
                 resultId = await UIManager.ShowDialogAsync<UIDeclarativeDialogPanel, string>(
                     assetPath, cancellationToken: cancellationToken);
 
-                status = !opened
-                    ? UIAuthoringDialogStatus.OpenFailed
-                    : resultId != null
-                        ? UIAuthoringDialogStatus.Selected
-                        : UIAuthoringDialogStatus.Canceled;
+                status = ResolveDialogStatus(opened, resultId);
             }
             catch (OperationCanceledException)
             {
@@ -148,6 +144,19 @@ namespace XFramework.XUI.Authoring
             var dialogResult = new UIAuthoringDialogResult(status, resultId);
             PublishDialogResult(actionId, dialogResult);
             return dialogResult;
+        }
+
+        /// <summary>
+        /// 结果状态映射（纯函数，便于直接覆盖四态）：没打开 = <c>OpenFailed</c>；打开了且有结果 =
+        /// <c>Selected</c>；打开了但用户没选（外部关闭）= <c>Canceled</c>。
+        /// </summary>
+        internal static UIAuthoringDialogStatus ResolveDialogStatus(bool opened, string resultId)
+        {
+            if (!opened)
+                return UIAuthoringDialogStatus.OpenFailed;
+            return resultId != null
+                ? UIAuthoringDialogStatus.Selected
+                : UIAuthoringDialogStatus.Canceled;
         }
 
         private static void PublishDialogResult(string actionId, UIAuthoringDialogResult result)
