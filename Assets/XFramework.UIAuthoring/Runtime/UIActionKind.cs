@@ -48,7 +48,11 @@ namespace XFramework.XUI.Authoring
         /// <summary>设置对话框结果并关闭（仅 Dialog）。</summary>
         CloseWithResult = 13,
 
-        /// <summary>隐藏 HUD 自身（仅 HUD；2a 校验器拒绝）。</summary>
+        /// <summary>
+        /// 隐藏 HUD 自身（为未来 HUD 动作预留，<b>当前不可用</b>）。
+        /// <para>校验器对所有 Kind 直接报错；HUD 不绑定动作、执行器只打一条 Warning。保留枚举值是为了
+        /// 将来补 HUD 动作入口时不改公开枚举（R5-ADJ-01，2026-11-11 用户裁定 `暂不做`）。</para>
+        /// </summary>
         HideSelf = 14,
 
         /// <summary>打开一个声明式锚定弹窗（仅 Panel；锚点取自当前面板子树）。</summary>

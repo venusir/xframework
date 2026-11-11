@@ -247,6 +247,7 @@ Assets/XFramework.UIAuthoring/
 - **单根**：不能同时打开两个 `UIDeclarativePanel`；需要并存请用 C# 面板或阶段 4 的独立 Popup 类型。
 - **对话框结果**：固定 `string`；`ParentClosed` 目前归入 `Canceled`；自定义 `TResult` 请写 C# `UIDialogPanel<TResult>`。
 - **HUD 只做静态文本与数据绑定**：`UIDeclarativeHudItem` 不支持动作/页签；无 `userData`、不入面板字典、同一目标只挂一个，关闭用 `HideHud(target)`。
+- **`UIActionKind.HideSelf` 当前不可用**：校验器对所有 Kind 报错、HUD 不绑定动作、执行器只告警；它保留为未来 HUD 动作入口的枚举值（预 1.0 不做删除，R5-ADJ-01）。
 - **声明式 Popup**：同一时刻只能开一个；弹窗内不能再开声明式弹窗（`ShowPopup` 只允许 Panel 定义）；打开后不跟随锚点移动；`closeOnClickOutside` 只在核心内置 `UIManagerImpl` 生效；层固定 `UILayers.Popup`。
 - **数据源是全局注册表**：没有「按定义资产指定 provider」；多个 provider 共用一个 key 时后注册者优先。
 - **数据键没有编辑器期候选/校验**：provider 是运行时对象，校验器只能检查节点、目标组件与配置形状（`UI-AUTH-070..075`），不能判断 key 是否存在。
