@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Cysharp.Threading.Tasks;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.UI;
@@ -55,6 +56,29 @@ namespace XFramework.XUI.Authoring.Tests
             await dialog.CloseForTestAsync();
             string result = await dialog.WaitResultAsync();
             Assert.That(result, Is.EqualTo("confirm"));
+        }
+
+        [Test]
+        public async Task ReopenAfterCloseWithResult_DoesNotCarryPendingFromPreviousCycle()
+        {
+            // 回池路径不经过 OnClose（R4-UIA-001），上一轮的待兑现结果只能在 OnOpen 复位。
+            UIDeclarativeDialogPanel dialog = UIAuthoringTestFactory.CreateDialogPanel();
+            _created.Add(dialog.gameObject);
+            UIPanelDefinition definition = UIAuthoringTestFactory.CreateDefinition(
+                UIPanelDefinitionKind.Dialog);
+            var runtime = new FakeActionRuntime();
+            dialog.SetDefinitionForTest(definition);
+            dialog.SetRuntimeForTest(runtime);
+
+            await dialog.OpenForTestAsync();
+            await dialog.CloseWithResultAsync("confirm");
+
+            // 模拟池化实例直接重开：不经过 OnClose，OnOpen 必须清掉上一轮的待兑现结果
+            await dialog.OpenForTestAsync();
+            await dialog.CloseForTestAsync();
+
+            Assert.That(dialog.WaitResultAsync().Status, Is.EqualTo(UniTaskStatus.Pending),
+                "重开的对话框不得携带上一轮的待兑现结果");
         }
 
         [Test]

@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- 控制器拦下关闭（`OnBeforeCloseAsync` 返回 `false`）时，`CloseSelf` / `Replace` / `CloseWithResult` 不再使动作会话失效——面板仍开着，按钮不再变成空操作。
+- `CloseWithResult` 在关闭被拦下时立即丢弃待兑现结果，并在下一次 `OnOpen` 复位；过期选择不会再被之后的 `CloseAllAsync` / 父面板关闭 / 回池误兑现。
 - `UIDeclarativeBinder` 的告警 helper 直接传 `params object[]` 会被 `LogManager` 的单参泛型重载抢走，格式串原样输出；改为显式 `string.Format` 后再记日志。
 
 ### Not verified

@@ -25,13 +25,20 @@ namespace XFramework.XUI.Authoring
         /// 关闭当前声明式面板并打开目标声明式面板。
         /// <para>关闭会使当前 session 失效；因此「关闭后打开」必须在同一运行时方法内完成，
         /// 执行器不能在 <c>CloseAsync</c> 返回后自行继续。</para>
+        /// <para><b>返回是否真的切换</b>：控制器可以拦下关闭（面板仍开着），此时不打开目标面板并返回
+        /// <c>false</c>——调用方必须据此保留当前会话，不能把「面板还在、按钮全失效」留给使用方。</para>
         /// </summary>
-        UniTask ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
+        UniTask<bool> ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
             CancellationToken cancellationToken);
 
         UniTask PopAsync(bool immediate, CancellationToken cancellationToken);
 
-        UniTask CloseAsync(UIPanelBase panel, bool immediate, CancellationToken cancellationToken);
+        /// <summary>
+        /// 关闭指定面板。
+        /// <para><b>返回是否真的关闭</b>：<c>IUIController.OnBeforeCloseAsync</c> 返回 <c>false</c> 时
+        /// 核心只告警并保留面板，本方法返回 <c>false</c>。调用方据此决定会话是否失效。</para>
+        /// </summary>
+        UniTask<bool> CloseAsync(UIPanelBase panel, bool immediate, CancellationToken cancellationToken);
 
         UniTask CloseAllAsync(bool immediate, CancellationToken cancellationToken);
 

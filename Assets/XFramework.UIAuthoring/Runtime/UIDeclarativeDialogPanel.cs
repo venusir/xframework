@@ -39,17 +39,29 @@ namespace XFramework.XUI.Authoring
         }
 
         /// <summary>
-        /// 设置待兑现的结果并通过运行时关闭；结果在 <see cref="OnClose"/> 中写入，控制器拦下关闭时不会误兑现。
+        /// 设置待兑现的结果并通过运行时关闭；结果在 <see cref="OnClose"/> 中写入。
+        /// <para><b>返回是否真的关闭</b>。控制器拦下关闭时面板仍开着，此处立即丢弃待兑现结果并返回
+        /// <c>false</c>——否则该结果会在之后的任意一次正常关闭（<c>CloseAllAsync</c>、父面板关闭、
+        /// 回池）时被误当成用户本次的选择兑现。</para>
         /// </summary>
-        internal async UniTask CloseWithResultAsync(string resultId)
+        internal async UniTask<bool> CloseWithResultAsync(string resultId)
         {
+            var session = _session;
+            if (session == null)
+                return false;
+
             _pendingResultId = resultId;
-            if (_session != null)
-                await _session.Runtime.CloseAsync(this, false, default);
+            bool closed = await session.Runtime.CloseAsync(this, false, default);
+            if (!closed)
+                _pendingResultId = null;
+            return closed;
         }
 
         protected override UniTask OnOpen(object userData)
         {
+            // 回池路径不经过 OnClose：池化实例必须在这里清掉上一代的待兑现结果
+            _pendingResultId = null;
+
             if (_definition == null)
                 return UniTask.CompletedTask;
 

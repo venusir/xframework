@@ -70,8 +70,9 @@ namespace XFramework.XUI.Authoring
             switch (action.Kind)
             {
                 case UIActionKind.CloseSelf:
-                    await _session.Runtime.CloseAsync(_session.Panel, false, default);
-                    _session.Invalidate();
+                    // 控制器可以拦下关闭：面板仍在时不能失效会话，否则面板上的按钮全部变成空操作
+                    if (await _session.Runtime.CloseAsync(_session.Panel, false, default))
+                        _session.Invalidate();
                     return;
 
                 case UIActionKind.CloseAll:
@@ -79,9 +80,12 @@ namespace XFramework.XUI.Authoring
                     return;
 
                 case UIActionKind.Replace:
-                    await _session.Runtime.ReplaceDeclarativeAsync(
-                        _session.Panel, action.AssetPath, action.Layer, default);
-                    _session.Invalidate();
+                    // 同上：关闭被拦下时置换中止，当前面板仍在，会话必须保持有效
+                    if (await _session.Runtime.ReplaceDeclarativeAsync(
+                            _session.Panel, action.AssetPath, action.Layer, default))
+                    {
+                        _session.Invalidate();
+                    }
                     return;
 
                 case UIActionKind.Open:
@@ -135,8 +139,9 @@ namespace XFramework.XUI.Authoring
                     {
                         if (_session.Panel is UIDeclarativeDialogPanel dialog)
                         {
-                            await dialog.CloseWithResultAsync(action.ResultId);
-                            _session.Invalidate();
+                            // 关闭被拦下时结果已被丢弃，面板仍开着，会话保持有效
+                            if (await dialog.CloseWithResultAsync(action.ResultId))
+                                _session.Invalidate();
                         }
                         else
                         {

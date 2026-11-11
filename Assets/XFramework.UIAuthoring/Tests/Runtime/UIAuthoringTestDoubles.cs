@@ -45,6 +45,8 @@ namespace XFramework.XUI.Authoring.Tests
         internal UIPopupAlign LastPopupAlign;
         internal bool LastPopupCloseOnClickOutside;
         internal Exception CloseException;
+        internal bool CloseSucceeds = true;
+        internal bool ReplaceSucceeds = true;
         internal UniTaskCompletionSource Gate;
 
         public bool IsDeclarativePanelOpen => DeclarativePanel != null;
@@ -79,12 +81,12 @@ namespace XFramework.XUI.Authoring.Tests
             return UniTask.FromResult<UIPanelBase>(null);
         }
 
-        public UniTask ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
+        public UniTask<bool> ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
             CancellationToken cancellationToken)
         {
             ReplaceCalls++;
             LastReplaceTarget = targetAssetPath;
-            return UniTask.CompletedTask;
+            return UniTask.FromResult(ReplaceSucceeds);
         }
 
         public UniTask PopAsync(bool immediate, CancellationToken cancellationToken)
@@ -93,13 +95,13 @@ namespace XFramework.XUI.Authoring.Tests
             return UniTask.CompletedTask;
         }
 
-        public UniTask CloseAsync(UIPanelBase panel, bool immediate, CancellationToken cancellationToken)
+        public UniTask<bool> CloseAsync(UIPanelBase panel, bool immediate, CancellationToken cancellationToken)
         {
             CloseCalls++;
             LastClosedPanel = panel;
             if (CloseException != null)
                 throw CloseException;
-            return UniTask.CompletedTask;
+            return UniTask.FromResult(CloseSucceeds);
         }
 
         public UniTask CloseAllAsync(bool immediate, CancellationToken cancellationToken)

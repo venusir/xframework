@@ -79,6 +79,23 @@ namespace XFramework.XUI.Authoring.Tests
         }
 
         [Test]
+        public async Task CloseSelf_ControllerBlocksClose_KeepsSessionAndContinuesChain()
+        {
+            var (executor, runtime, session, _, _) = Create();
+            runtime.CloseSucceeds = false;
+
+            await executor.ExecuteAsync(Binding(
+                Action(UIActionKind.CloseSelf),
+                new UIAction { Kind = UIActionKind.ShowTip, Text = "still here" }));
+
+            Assert.That(runtime.CloseCalls, Is.EqualTo(1));
+            Assert.That(session.IsValid, Is.True,
+                "控制器拦下关闭时面板仍开着，动作会话不得失效");
+            Assert.That(runtime.ShowTipCalls, Is.EqualTo(1),
+                "面板仍在时后续动作应继续执行");
+        }
+
+        [Test]
         public async Task Open_UsesCSharpBaseRuntime()
         {
             var (executor, runtime, _, _, _) = Create();
@@ -123,6 +140,24 @@ namespace XFramework.XUI.Authoring.Tests
             Assert.That(runtime.ReplaceCalls, Is.EqualTo(1));
             Assert.That(runtime.LastReplaceTarget, Is.EqualTo("ui/next"));
             Assert.That(session.IsValid, Is.False);
+        }
+
+        [Test]
+        public async Task Replace_ControllerBlocksClose_KeepsSessionValid()
+        {
+            var (executor, runtime, session, _, _) = Create();
+            runtime.ReplaceSucceeds = false;
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.Replace,
+                AssetPath = "ui/next",
+                Layer = 140,
+            }));
+
+            Assert.That(runtime.ReplaceCalls, Is.EqualTo(1));
+            Assert.That(session.IsValid, Is.True,
+                "置换被拦下时当前面板仍在，动作会话不得失效");
         }
 
         [Test]
@@ -256,6 +291,30 @@ namespace XFramework.XUI.Authoring.Tests
             await dialog.CloseForTestAsync();
             string result = await dialog.WaitResultAsync();
             Assert.That(result, Is.EqualTo("confirm"));
+        }
+
+        [Test]
+        public async Task CloseWithResult_ControllerBlocksClose_ClearsPendingAndKeepsSession()
+        {
+            var (executor, runtime, session, dialog, definition) = CreateDialog();
+            dialog.SetDefinitionForTest(definition);
+            dialog.SetRuntimeForTest(runtime);
+            await dialog.OpenForTestAsync();
+            runtime.CloseSucceeds = false;
+
+            await executor.ExecuteAsync(Binding(new UIAction
+            {
+                Kind = UIActionKind.CloseWithResult,
+                ResultId = "confirm",
+            }));
+
+            Assert.That(session.IsValid, Is.True,
+                "关闭被拦下时对话框仍开着，动作会话不得失效");
+
+            // 之后由别的途径关闭（CloseAll / 父面板 / 回池）：过期结果不得兑现
+            await dialog.CloseForTestAsync();
+            Assert.That(dialog.WaitResultAsync().Status, Is.EqualTo(UniTaskStatus.Pending),
+                "被拦下的选择不得在后续关闭时误兑现");
         }
 
         [Test]

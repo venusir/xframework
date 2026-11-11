@@ -36,7 +36,7 @@ namespace XFramework.XUI.Authoring
             return UIManager.PushAsync<UIPanelBase>(assetPath, layer, null, cancellationToken);
         }
 
-        public async UniTask ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
+        public async UniTask<bool> ReplaceDeclarativeAsync(UIPanelBase current, string targetAssetPath, int layer,
             CancellationToken cancellationToken)
         {
             await UIManager.CloseAsync(current, false, cancellationToken);
@@ -46,10 +46,11 @@ namespace XFramework.XUI.Authoring
             {
                 LogManager.Warning(UIAuthoringLog.Category,
                     "Replace aborted: current declarative panel is still open (close was blocked).");
-                return;
+                return false;
             }
 
             await UIManager.OpenAsync<UIDeclarativePanel>(targetAssetPath, layer, null, cancellationToken);
+            return true;
         }
 
         public UniTask PopAsync(bool immediate, CancellationToken cancellationToken)
@@ -57,9 +58,14 @@ namespace XFramework.XUI.Authoring
             return UIManager.PopAsync(immediate, cancellationToken);
         }
 
-        public UniTask CloseAsync(UIPanelBase panel, bool immediate, CancellationToken cancellationToken)
+        public async UniTask<bool> CloseAsync(UIPanelBase panel, bool immediate,
+            CancellationToken cancellationToken)
         {
-            return UIManager.CloseAsync(panel, immediate, cancellationToken);
+            await UIManager.CloseAsync(panel, immediate, cancellationToken);
+
+            // 核心的 CloseAsync 不向调用方暴露「是否真的关闭」：控制器拦下时只告警并保留面板。
+            // 面板是否仍开着是唯一可观察的真相（OnClose 只在真正关闭时跑）。
+            return panel == null || !panel.IsOpen;
         }
 
         public UniTask CloseAllAsync(bool immediate, CancellationToken cancellationToken)
