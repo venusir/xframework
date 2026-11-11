@@ -277,3 +277,4 @@ Assets/XFramework.UIAuthoring/
 - 核心包 `com.venusy609.xframework`（`Assets/XFramework/`）。
 - UniTask、YooAsset、TextMeshPro、Input System、Cinemachine（核心包的第三方依赖；安装顺序见核心包 README）。
 - 本包 `package.json` 的 `dependencies` 为空；UPM 不支持 Git URL 传递依赖，必须手动按顺序安装。
+- 包内 asmdef 的引用集合由 `UIAuthoringDependencyDeclarationTests` 逐字锁定（Runtime 与 Editor 两套）；Editor asmdef 额外引用 `YooAsset` / `YooAsset.Editor` / `Unity.TextMeshPro`，新增引用需同步本节与守卫。
