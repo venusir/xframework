@@ -5,7 +5,8 @@
         "Venusy609.Xframework",
         "Venusy609.Xframework.Fmod",
         "Venusy609.Xframework.Fmod.Unity",
-        "FMODUnity"
+        "FMODUnity",
+        "UniTask"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

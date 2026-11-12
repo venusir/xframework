@@ -7,10 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- 端到端门控冒烟 `FmodEndToEndTests`（`XFW_FMOD_E2E=1` + `XFW_FMOD_EVENT` / `XFW_FMOD_BANK` /
+  `XFW_FMOD_GLOBAL_PARAM`）：验证 `FmodAutoInstall` → 真实 `FmodEventBackend` → `AudioManager`
+  公开面的播放 / bank / 全局参数全链路；缺省 `Assert.Ignore`。
+- 2026-11-12 真实 bank/event 冒烟实测记录：三条既有门控冒烟 8/8、端到端 1/1、有 SDK 的 `Fmod`
+  过滤 95 例（86 FMOD-free + 9 Integration）91 通过 / 4 跳过 / 0 失败。
+
 ### Fixed
 
 - `SetGlobalParameter` 不再在 `RuntimeManager` 未初始化时提前返回 `false`：`StudioSystem` 会懒初始化，
-  「先设全局参数再起播」的第一个调用现在能成功（行为冒烟 `XFW_FMOD_GLOBAL_PARAM` 需实测）。
+  「先设全局参数再起播」的第一个调用现在能成功（行为冒烟 `XFW_FMOD_GLOBAL_PARAM` 已于 2026-11-12
+  实测通过）。
 - 自动安装失败清理只卸载本次安装成功加载的 bank：失败点之后出现的项目预加载 bank 不再被误卸载；
   重复 bank 条目不再导致回滚漏卸；外层失败清理与成功路径统一使用安装开始时的配置快照。
 - `TryInstall` 的 `backendFactory == null` 检查提前到所有前置早退之前，与 XML 契约一致。

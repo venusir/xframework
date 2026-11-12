@@ -8,8 +8,8 @@ XFramework 的可选 FMOD 音频扩展。目标形态是：第三方引入本包
 
 > **当前阶段（0.2.0，Phase 2 已实现）**：FMOD-free provider 层 + 条件集成程序集 + 真实 FMOD 2.04
 > backend + 自动安装。消费方需自行安装 FMOD for Unity 2.04 并先运行 FMOD Setup Wizard；首轮
-> `FMODStudioSettings.asset` 不存在时自动安装会跳过（下一轮才可用）。真实 bank/event 冒烟需要
-> Studio 2.04 工程 + bank。
+> `FMODStudioSettings.asset` 不存在时自动安装会跳过（下一轮才可用）。真实 bank/event 冒烟已在仓库
+> 环境用 FMOD Studio 2.04 + 官方 Examples 工程实测通过；消费方仍需自己的 Studio 工程 + bank。
 
 ## 快速使用
 
@@ -121,15 +121,18 @@ Runtime/
 
 - **首轮需要 FMOD Setup Wizard**：`FMODStudioSettings.asset` 不存在时自动安装 Error + 跳过；
   下一轮才可用。不会自动创建默认 settings，也不会留下半初始化门面。
-- **真实 bank/event 冒烟未在仓库环境验证**：需要 `XFW_FMOD_EVENT` / `XFW_FMOD_BANK` 与 FMOD Studio
-  2.04 工程 + bank；缺省测试跳过。
+- **真实 bank/event 冒烟已在仓库环境实测（2026-11-12）**：FMOD Studio 2.04 + 官方 Examples 工程
+  构建 Desktop bank，三条 backend 冒烟 8/8、自动安装端到端 1/1 通过。用例由环境变量门控，缺省
+  `Assert.Ignore`：`XFW_FMOD_EVENT`（如 `event:/Ambience/City`）、`XFW_FMOD_BANK`（bank 文件名，
+  如 `VO`）、`XFW_FMOD_GLOBAL_PARAM`（Studio 工程里**全局作用域**的参数名）；端到端另需
+  `XFW_FMOD_E2E=1`，且项目里要有根级 `FmodAudioSettings`。消费方仍需自己的 Studio 工程与 bank。
 - 无逐 voice 暂停/音量、无事件回调、无普通事件 stop fade。
 - FMOD 的 `Loop` / `Pitch` / 3D 衰减最终由 Studio 事件编排决定；框架参数只能近似。
 - `AudioListener.pause` / `AudioListener.volume` 不作用于 FMOD；项目暂停走 `AudioManager.Pause()`。
 - bank 加载在桌面 / 移动端常规路径上同步阻塞；没有异步 bank 加载 API。**例外（`需实测`）**：
   FMOD 2.04 在 **Android + `AndroidUseOBB`** 与 **WebGL** 上把 `LoadBank` 走协程，`LoadBank` 返回
   `true` 时 bank 可能尚未真正可用；安装成功不等于 bank 立即可用，异步失败也不会回传给安装器。
-- **默认门禁只编译 FMOD-free 层**：Integration 程序集与 7 例集成测试需要 FMOD SDK（`XFRAMEWORK_FMOD`）；
+- **默认门禁只编译 FMOD-free 层**：Integration 程序集与 9 例集成测试需要 FMOD SDK（`XFRAMEWORK_FMOD`）；
   干净克隆的全量不包含它们，二者由一次性探针与包内源码结构守卫覆盖。
 - **配置资产由 Inspector 负责序列化**：`FmodAudioSettings` 是普通 `ScriptableObject`，包不额外承诺
   序列化契约或资产往返测试；字段以属性面板显示为准。
