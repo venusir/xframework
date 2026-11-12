@@ -128,7 +128,8 @@ Runtime/Audio/
 | `bool SetPosition(AudioHandle, Vector3)` | 更新逐次 3D 世界坐标；内置 provider 支持（写 `AudioSource.transform.position`），2D 播放也写入但不产生空间化效果 |
 
 这些方法由 provider 的可选能力决定；当前只有官方 FMOD 扩展的 provider 实现全部能力（Phase 1
-FMOD-free + Phase 2 真实集成已实现；真实 bank/event 冒烟需 Studio 工程）。内置 `AudioSourceProvider`
+FMOD-free + Phase 2 真实集成已实现；真实 bank/event 冒烟已在仓库环境实测通过，消费方仍需自己的
+Studio 工程与 bank）。内置 `AudioSourceProvider`
 只实现 `SetPosition`。`SetInstance` 注入的自定义管理器
 与第三方 `IAudioProvider` 不参与这些方法，统一返回 `false`；名称参数为 null/空白时抛 `ArgumentException`。
 框架三档音量与 provider 的 bus/snapshot 音量是两层，注意不要对同一声音重复控制。
@@ -273,8 +274,8 @@ AudioManager.SetProvider(new MyWwiseAudioProvider());
 这与 `InputManager` 换 Rewired 是同一形态（整套底层引擎被替换，而非按平台/能力切分的分层 Provider）。
 
 **核心包不随包提供** Wwise / FMOD 的官方适配器；FMOD 有一个独立的可选扩展包
-`com.venusy609.xframework.fmod`（Phase 1 FMOD-free + Phase 2 真实集成已实现；真实 bank/event 冒烟需
-Studio 工程），Wwise 仍需项目自行实现。
+`com.venusy609.xframework.fmod`（Phase 1 FMOD-free + Phase 2 真实集成已实现；真实 bank/event 冒烟已
+在仓库环境实测通过，消费方仍需自己的 Studio 工程与 bank），Wwise 仍需项目自行实现。
 第三方 provider 的高级能力（参数/bank/bus/snapshot）目前只对官方扩展开放；自定义 provider 可用
 `TryGetProviderHandle` 自行处理。
 
@@ -376,7 +377,8 @@ bus / snapshot / 位置的控制面**不会排队**，全部返回 `false`（与
   `AudioManager.SetPosition(handle, position)` 手动更新；要自动跟随仍需项目侧每帧写 Transform 的宿主
   （见「与相邻模块的关系」的「与音频中间件的边界」）。
 - **内置 provider 只实现 `SetPosition`**：参数/bank/bus/snapshot 控制方法在内置 provider 下返回 `false`；
-  这些能力由可选 FMOD 扩展的 provider 实现（Phase 2 真实集成已实现；真实 bank/event 冒烟需 Studio 工程）。
+  这些能力由可选 FMOD 扩展的 provider 实现（Phase 2 真实集成已实现；真实 bank/event 冒烟已在仓库环境
+  实测通过，消费方仍需自己的 Studio 工程与 bank）。
 - **切后台不会自动暂停。** 本模块不接 `OnApplicationPause`——「是谁暂停的、谁来恢复」必须由项目掌握
   （玩家本来就在暂停菜单里切后台时，回到前台不能替他 `Resume`）。需要的话由项目在自己的生命周期回调里
   调 `Pause()` / `Resume()`。

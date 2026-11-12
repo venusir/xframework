@@ -69,7 +69,8 @@ https://github.com/focus-creative-games/luban_unity.git#v1.2.0
 层、条件集成程序集（真实 FMOD 2.04 `FmodEventBackend`）与自动安装。消费方需自行安装 FMOD for Unity
 2.04（`com.fmod.fmod-for-unity.v204` / 2.4.0），并先运行 FMOD Setup Wizard；首轮
 `FMODStudioSettings` 缺失时自动安装跳过。控制音效的公开入口只有 `AudioManager`，扩展包不提供
-`FmodAudio` 门面。真实 bank/event 冒烟需要 Studio 工程 + bank。细节见
+`FmodAudio` 门面。真实 bank/event 冒烟已在仓库环境用 FMOD Studio 2.04 + 官方 Examples 工程实测通过
+（消费方仍需自己的 Studio 工程与 bank）。细节见
 [扩展包 README](Assets/XFramework.Fmod/README.md)；安装 URL 待包发布。
 
 ### 可选：UI 制作扩展

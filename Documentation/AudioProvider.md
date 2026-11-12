@@ -1,9 +1,10 @@
-# AudioProvider —— `IAudioProvider` 播放引擎缝（核心、FMOD-free 扩展与 Phase 2 真实集成已实现；真实 bank/event 冒烟待 Studio 工程）
+# AudioProvider —— `IAudioProvider` 播放引擎缝（核心、FMOD-free 扩展与 Phase 2 真实集成已实现；真实 bank/event 冒烟已实测）
 
 > **收件人**：框架维护者（实现或审计 Audio 播放引擎缝时）。**不是**使用文档。
 > **状态**：核心 provider 缝于 2026-10-25 实现并完成复审修复；2026-10-26 新增 **provider 中立控制面**
 > （参数/RTPC、bank、bus、snapshot、逐次 3D）与 **FMOD-free 扩展包**（`Assets/XFramework.Fmod/`）；
-> 2026-11-07 **Phase 2 真实 FMOD 集成已实现并用本地 UPM 包完成探针**。Wwise 适配器仍未实现。
+> 2026-11-07 **Phase 2 真实 FMOD 集成已实现并用本地 UPM 包完成探针**；2026-11-12 真实 bank/event
+> 冒烟已实测通过。Wwise 适配器仍未实现。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
@@ -382,8 +383,9 @@ provider 需要的字段（`Source` / `SlotObject` / `Generation` / `ClipLease` 
 - 守卫：README 必答节/文件树、`.meta`、包边界、包契约、依赖声明（Integration 豁免）、AutoInit
   源码守卫、Integration asmdef 条件门控/内部可见性、公开 API 基线、仓库不提交
   `FmodAudioSettings.asset`；
-- 真实 bank/event 冒烟：`XFW_FMOD_BANK` / `XFW_FMOD_EVENT` 环境变量驱动，缺省 `Assert.Ignore`；
-  本机无 FMOD Studio 2.04 工程，本轮跳过；
+- 真实 bank/event 冒烟：`XFW_FMOD_BANK` / `XFW_FMOD_EVENT` / `XFW_FMOD_GLOBAL_PARAM` 驱动，
+  缺省 `Assert.Ignore`；2026-11-12 用 FMOD Studio 2.04 + 官方 Examples 工程实测通过
+  （三条 backend 冒烟 8/8、端到端 `FmodEndToEndTests` 1/1；配方与证据见 `Documentation/FMOD.md` §9.6）；
 - 自动安装档位 `BeforeSceneLoad` 已按探针选定；`XFW_DISABLE_FMOD_AUTOINSTALL=1` 已实现；
 - 干净克隆 + 有 FMOD 两种环境跑全量；`git status` 核对 `.meta` / manifest / lock 未误提交。
 

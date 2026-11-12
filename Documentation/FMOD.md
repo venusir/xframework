@@ -1,9 +1,10 @@
-# FMOD —— 扩展包设计与实施状态（Phase 1 FMOD-free 与 Phase 2 真实集成均已实现；真实 bank/event 冒烟待 Studio 工程）
+# FMOD —— 扩展包设计与实施状态（Phase 1 FMOD-free 与 Phase 2 真实集成均已实现；真实 bank/event 冒烟已实测）
 
 > **收件人**：框架维护者（实现或审计 FMOD 扩展时）。**不是**随包发布的使用文档。
 > **状态**：核心 provider 中立控制面与 `Assets/XFramework.Fmod` 的 FMOD-free 层已于 2026-10-26 实现；
 > 真实 FMOD 集成程序集（条件编译 + `FMODUnity` + 自动安装）已于 2026-11-07 实现并用本地 UPM 包完成
-> 签名/包名/初始化档位探针。真实 bank/event 冒烟仍需 FMOD Studio 2.04 工程 + bank。
+> 签名/包名/初始化档位探针；真实 bank/event 冒烟已于 2026-11-12 用 FMOD Studio 2.04 与官方 Examples
+> 工程实测通过（§9.6、§十）。
 > **本文件不随 UPM 包发布**：它在仓库根 `Documentation/` 下，第三方在包内看不到它。
 
 ## 〇、核对状态（先读这一节）
@@ -17,7 +18,7 @@
 
 **核对基准**：FMOD for Unity 2.04（Asset Store UPM；2.04 为 UPM-only，2.03 仍可手动 UPM 化）。
 **2026-11-07 已用本地 UPM 包 `com.fmod.fmod-for-unity.v204` / `2.4.0` 完成 API 签名、包名、程序集名
-与初始化档位探针（§九）；本仓当前 manifest 不含 FMOD，真实 bank/event 冒烟仍需 Studio 工程。**
+与初始化档位探针（§九）；2026-11-12 已完成真实 bank/event 冒烟（§9.6），本仓 manifest 仍不含 FMOD。**
 
 ---
 
@@ -283,10 +284,36 @@ Assets/XFramework.Fmod/
   初始化；应要求消费方先跑 FMOD Setup Wizard（或至少让 settings 资产先落盘），或把首轮失败当作可重试
   状态，不要留下半初始化门面。
 
-### 9.5 阻塞项
+### 9.5 阻塞项（2026-11-12 更新）
 
-- 真实 bank/event 冒烟仍需 FMOD Studio 2.04 工程 + 构建好的 bank；本机没有 FMOD Studio，本轮未做。
-- 最终验证需在干净克隆（无 FMOD）与有 FMOD 两种环境分别跑全量。
+- **真实 bank/event 冒烟已闭合**（§9.6）。
+- **仍待做**：R5-PRB-01（关闭域重载 + FMOD 手工两遍；已有可复跑的 `FmodEndToEndTests` 门控用例，
+  但「同一编辑器会话跑两遍」仍是手工步骤）、R5-PRB-02（Android OBB / WebGL 的 bank 协程时序）。
+- 最终验证需在干净克隆（无 FMOD）与有 FMOD 两种环境分别跑全量；2026-11-12 只跑了 `Fmod` 过滤与无 SDK 全量。
+
+### 9.6 真实 bank/event 冒烟（2026-11-12 已实测）
+
+- **环境**：Unity 6000.4.5f1；FMOD Studio 2.04.00（Build #168298）；FMOD for Unity
+  `com.fmod.fmod-for-unity.v204` / `2.4.0`（本地 UPM，仓外）。
+- **Studio 工程**：官方 `Examples.fspackage` 经 `fmodstudiocl -unpack` 解包，`-build -platforms "Desktop"`
+  构建；bank 复制到仓外扁平目录 `E:\UnityPackages\fmod-probe\banks`。示例工程本身没有全局参数，
+  用脚本补 `XFwProbe`，并挂到 `event:/UI/Okay` 以避免未引用被构建裁剪。
+- **踩到的坑（下一轮直接照做）**：`studio.project.workspace.addGameParameter(...)` 创建的参数
+  **默认是局部作用域**（`p.parameter.isGlobal == false`）；不显式设 `isGlobal = true` 时，构建出的
+  bank 里没有全局参数，引擎 `getParameterDescriptionCount` 返回 0，`setParameterByName` 返回
+  `ERR_EVENT_NOTFOUND`。冒烟用例先红后绿，恰好证明 `XFW_FMOD_GLOBAL_PARAM` 的断言不是空转。
+- **Unity 接线（临时、未提交）**：manifest 挂本地 FMOD 包；探针脚本生成
+  `Assets/Resources/FMOD/FMODStudioSettings.asset`（`HasPlatforms=false`、`SourceBankPath` 指向
+  bank 目录、`BankLoadType=All`、`MasterBanks=["Master"]`、`Banks=["SFX"]`）与根级
+  `FmodAudioSettings.asset`；冒烟期间临时资产与 manifest 均已还原。
+- **结果**：
+  - `FmodEventBackendTests` 8/8 通过、0 跳过：`event:/Ambience/City` 起播/暂停/恢复/停止/释放、
+    bank `VO` 加载/卸载、全局参数 `XFwProbe` 懒初始化均成功；
+  - `FmodEndToEndTests` 1/1 通过：`FmodAutoInstall` → 真实 backend → `AudioManager.PlayAsync` /
+    `LoadBank` / `SetGlobalParameter` 公开面全链路；
+  - `Fmod` 过滤 95 例（86 FMOD-free + 9 Integration）：91 通过 / 4 跳过 / 0 失败（对应 R5-PRB-08 复跑）。
+- **批处理音频**：`run-tests.ps1` 的 `-batchmode -nographics` 下 FMOD 初始化与真实播放均成功，
+  不需要 GUI 回退。
 
 ---
 
@@ -303,14 +330,18 @@ Assets/XFramework.Fmod/
   `SafeStopAndRelease` 的 `isValid()` 纳入异常隔离；包内守卫加宽（公开类型正则、asmdef 绑定、
   精确包名/版本、Resources 全目录、README 相对路径树、`.meta` 根布局、AutoInit 属性正则、包边界
   全文本扫描）。
-- **2026-11-11 R5-FMD-001（代码已做 · 行为 `需实测`）**：`FmodEventBackend.SetGlobalParameter`
+- **2026-11-11 R5-FMD-001（代码已做 · 行为 2026-11-12 已实测）**：`FmodEventBackend.SetGlobalParameter`
   删掉 `!RuntimeManager.IsInitialized` 早退——`StudioSystem` 会懒初始化，「先设全局参数再起播」的
   第一个调用不再静默失败（`e91b0bb3`）。无 SDK 环境用源码结构守卫
   `FmodIntegrationSourceTests.SetGlobalParameter_DoesNotEarlyReturnOnRuntimeManagerInit` 锁定（改前红）。
   **SDK 探针**：临时把本地 `com.fmod.fmod-for-unity.v204` 挂进 `Packages/manifest.json` 后跑
   `Fmod` 过滤（94 例：86 FMOD-free + 8 Integration，91 通过 / 3 跳过，0 失败），Integration 程序集
-  与 7 例集成测试实际编译并运行；manifest 已还原、未提交（对应 R5-PRB-08 `已执行`）。真实全局参数
-  行为仍需 Studio 工程定义该参数后跑 `XFW_FMOD_GLOBAL_PARAM` 冒烟（`需实测`）。
+  与 8 例集成测试实际编译并运行；manifest 已还原、未提交（对应 R5-PRB-08 `已执行`）。真实全局参数
+  行为已于 2026-11-12 用 Studio 工程跑 `XFW_FMOD_GLOBAL_PARAM` 冒烟通过（§9.6）。
+- **2026-11-12 真实 bank/event 冒烟（已实测）**：用官方 Examples 工程构建 Desktop bank，跑通三条
+  既有门控冒烟与新增的 `FmodEndToEndTests`（`XFW_FMOD_E2E=1`）；`Fmod` 过滤 95 例（86 + 9），
+  91 通过 / 4 跳过 / 0 失败。临时 manifest / FMODStudioSettings / FmodAudioSettings / bank 均未提交，
+  已还原。详见 §9.6。
 - **2026-11-11 R5 文档订正（已做）**：`c73fe324` 记录 bank 在 Android OBB / WebGL 走协程的例外
   （`需实测`）、手动 `XFRAMEWORK_FMOD` 需 FMOD 已安装、默认门禁只编译 FMOD-free 层、配置资产序列化
   由 Inspector 负责（FMD-002/005/006/007）；`94294da1` 把 `AudioProvider.md` 的集成契约 fixture 名
