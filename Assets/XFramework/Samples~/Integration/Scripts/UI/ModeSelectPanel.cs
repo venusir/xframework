@@ -70,7 +70,8 @@ namespace XFramework.Samples.Integration
 
         private void OnOdd()
         {
-            // 第二个模式在后续步骤接入。
+            UIManager.PopAsync().Forget();
+            AppFlowController.Current?.EnterGameAsync(OddOneOutSession.ModeIdValue).Forget();
         }
 
         private void OnBack()
@@ -94,8 +95,8 @@ namespace XFramework.Samples.Integration
             if (table.TryGet("odd", out var oddRow))
                 SetText(_odd, LocalizationManager.Get(oddRow.DisplayKey));
 
-            _odd.interactable = false;
-            _hint.text = LocalizationManager.Get("mode.odd_soon");
+            _odd.interactable = true;
+            _hint.text = string.Empty;
         }
 
         private T Find<T>(string childName) where T : Component

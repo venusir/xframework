@@ -1,4 +1,5 @@
 using System;
+using UnityEngine;
 using UnityEngine.UI;
 
 namespace XFramework.Samples.Integration
@@ -55,6 +56,16 @@ namespace XFramework.Samples.Integration
                 return;
 
             _labels[index].text = text;
+        }
+
+        /// <summary>设置一个目标的背景色（OddOneOut 用）。</summary>
+        public void SetTargetColor(int index, Color color)
+        {
+            if (index < 0 || index >= _targets.Length || _targets[index] == null)
+                return;
+
+            if (_targets[index].targetGraphic is Image image)
+                image.color = color;
         }
 
         /// <summary>隐藏全部目标。</summary>

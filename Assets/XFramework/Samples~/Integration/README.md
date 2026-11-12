@@ -18,8 +18,8 @@
 | Data / Save | 数据块、存档槽位、结算后保存 |
 | Config | 模式表与全局规则：JSON 经 `AssetManager` 加载，运行期按 id 查询 |
 | Data / Save | 数据块、存档槽位、结算后保存最佳分 |
-| Scene / Pipeline | 加载游戏场景的进度管线（M3 接入） |
-| Camera | CinemachineBrain + 相机注册 / 切换 / 震屏（M3 接入） |
+| Scene / Pipeline | 加载游戏场景的进度管线：Asset 预载 → Scene 加载 → UI 打开，进度汇总到加载面板 |
+| Camera | CinemachineBrain + 相机注册 / 切换 / 跟随 / 震屏 |
 | Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log / Diagnostics | 流程、倒计时、对象池、退出锁、摘要落盘、诊断页签 |
 
 > 本示例只使用**公开 API**；它不随包编译，由仓库的示例编译门禁单独校验。
@@ -43,8 +43,10 @@
 ## 3. 操作
 
 - **主菜单**：开始游戏 / 设置 / 语言 / 退出。
-- **模式选择**：点星（当前可用）与找异色（后续步骤开放）。
+- **模式选择**：点星与找异色两种模式。
 - **点星**：随机目标亮起，点中得分；30 秒倒计时结束进入结算。
+- **找异色**：每回合在色块中选出异色，答错扣时间；回合走完或超时进入结算。
+- **暂停**：游戏中按 Esc（或手柄 Start）打开暂停面板（继续 / 重开 / 主菜单 / 退出）。
 - **设置**：主音量、BGM、音效三个滑条 + 提示开关；**应用**写盘，**恢复默认**回退。
 - **语言**：中文 / English，切换后面板文本即时刷新。
 - **退出**：二次确认 → 关面板 → 存档 → 保存设置 → 写摘要 → 逆序清理 → 退出。
@@ -61,9 +63,9 @@ Integration/
 │   ├── Config/      模式表与全局规则
 │   ├── Data/        数据块
 │   ├── Game/        会话接口、棋盘视图、点星玩法与工厂
-│   ├── Pipeline/    加载管线（M3）
-│   ├── UI/          启动屏、主菜单、设置、语言、确认框、玩法面板
-│   └── Diagnostics/ 诊断页签（M3）
+│   ├── Pipeline/    加载管线（Asset 预载 → Scene → UI）
+│   ├── UI/          启动屏、主菜单、设置、语言、确认框、模式选择、玩法、暂停、加载、结算
+│   └── Diagnostics/ 诊断页签
 ├── Prefabs/         面板预制体（文件名即地址）
 ├── Scenes/          Integration.Boot.unity / Integration.Game.unity
 ├── Audio/           BGM 与音效

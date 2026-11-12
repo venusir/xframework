@@ -5,6 +5,8 @@ using XFramework.XAsset;
 using XFramework.XAudio;
 using XFramework.XBootstrap;
 using XFramework.XData;
+using XFramework.XDiagnostics;
+using XFramework.XInput;
 using XFramework.XLock;
 using XFramework.XLog;
 using XFramework.XLocalization;
@@ -31,6 +33,9 @@ namespace XFramework.Samples.Integration
         #region Constants
 
         private const int ExitLockType = 1;
+        private const int EnterLockType = 2;
+
+        private static readonly IntegrationDiagnosticPanel DiagnosticPanel = new IntegrationDiagnosticPanel();
 
         #endregion
 
@@ -64,18 +69,55 @@ namespace XFramework.Samples.Integration
         }
 
         /// <summary>
-        /// 进入游戏：Additive 加载游戏场景 → 打开玩法面板。
-        /// <para>游戏场景与 Boot 场景并存——UIRoot 在 Boot 场景里，单场景加载会把它一起卸掉。</para>
+        /// 进入游戏：加载面板 + Pipeline（预载 → 场景 → 玩法面板）。
+        /// <para>进入锁防止双击；游戏场景 Additive 加载——UIRoot 在 Boot 场景里，单场景加载会把它一起卸掉。</para>
         /// </summary>
         public async UniTask EnterGameAsync(string modeId)
         {
+            if (LockManager.Global.IsLocked(EnterLockType))
+                return;
+
+            var handle = LockManager.Global.AddLock(EnterLockType, this);
+            try
+            {
+                await UIManager.CloseAsync<PausePanel>();
+                await UIManager.CloseAsync<GamePanel>();
+                await UnloadGameSceneAsync();
+
+                _currentMode = modeId;
+                var loading = await UIManager.OpenAsync<LoadingPanel>(
+                    IntegrationAddresses.Loading, UILayers.Top, null, destroyCancellationToken);
+
+                try
+                {
+                    _gameScene = await GameLoadingPipeline.RunAsync(
+                        modeId, loading, destroyCancellationToken);
+                }
+                finally
+                {
+                    await UIManager.CloseAsync<LoadingPanel>();
+                }
+            }
+            finally
+            {
+                handle.Dispose();
+            }
+        }
+
+        /// <summary>重开一局：关掉现有面板后重新进入。</summary>
+        public async UniTask RestartGameAsync(string modeId)
+        {
+            await UIManager.CloseAllAsync();
+            await EnterGameAsync(modeId);
+        }
+
+        /// <summary>返回主菜单：卸场景并重新聚焦主菜单面板。</summary>
+        public async UniTask OpenMainMenuAsync()
+        {
             await UnloadGameSceneAsync();
-
-            _gameScene = await SceneManager.LoadSceneAsync(IntegrationAddresses.GameScene,
-                SceneLoadOptions.Additive, cancellationToken: destroyCancellationToken);
-
-            await UIManager.PushAsync<GamePanel>(IntegrationAddresses.GamePanel,
-                UILayers.Default, modeId, destroyCancellationToken);
+            _lastRun = LastRunStore.Read();
+            await UIManager.OpenAsync<MainMenuPanel>(IntegrationAddresses.MainMenu,
+                UILayers.Default, _lastRun, destroyCancellationToken);
         }
 
         /// <summary>结算：更新数据块 → 落盘 → 卸场景 → 打开结算面板。</summary>
@@ -83,6 +125,7 @@ namespace XFramework.Samples.Integration
         {
             await UIManager.CloseAsync<GamePanel>();
             await UnloadGameSceneAsync();
+            await AssetManager.UnloadUnusedAssetsAsync(cancellationToken: destroyCancellationToken);
 
             if (_data != null)
             {
@@ -151,6 +194,7 @@ namespace XFramework.Samples.Integration
                 MessageManager.Clear();
                 TimerManager.CancelAll();
                 PoolManager.ClearAll();
+                DiagnosticsManager.Unregister(DiagnosticPanel);
 
                 // 先释放本次退出锁，再销毁锁管理器——反过来会让 handle.Dispose() 撞上已销毁的门面。
                 handle.Dispose();
@@ -178,9 +222,11 @@ namespace XFramework.Samples.Integration
         private LastRunSummary _lastRun = new LastRunSummary();
         private IDisposable _exitSubscription;
         private IDisposable _settingsSubscription;
+        private IDisposable _pauseSubscription;
         private IntegrationData _data;
         private AssetSceneHandle _gameScene;
         private AudioHandle _bgm;
+        private string _currentMode = TapRushSession.ModeIdValue;
 
         #endregion
 
@@ -216,6 +262,10 @@ namespace XFramework.Samples.Integration
             _exitSubscription = null;
             _settingsSubscription?.Dispose();
             _settingsSubscription = null;
+            _pauseSubscription?.Dispose();
+            _pauseSubscription = null;
+
+            DiagnosticsManager.Unregister(DiagnosticPanel);
 
             if (ReferenceEquals(Current, this))
                 Current = null;
@@ -244,6 +294,10 @@ namespace XFramework.Samples.Integration
 
             _data = DataManager.GetOrCreateBlock<IntegrationData>();
 
+            DiagnosticsManager.Register(DiagnosticPanel);
+            if (InputManager.IsInitialized)
+                _pauseSubscription = InputManager.ObservePressed("Pause", OnPausePressed);
+
             // 语言表地址模板：切换语言时框架按 {0} 拼出 Integration.Lang_en 这样的地址。
             LocalizationManager.LanguageAssetPath = IntegrationAddresses.LanguagePathFormat;
 
@@ -265,6 +319,16 @@ namespace XFramework.Samples.Integration
             ApplyAudioSettings();
             AudioManager.Play(IntegrationAddresses.Click,
                 new AudioPlayOptions(AudioChannels.UI));
+        }
+
+        private void OnPausePressed()
+        {
+            if (!UIManager.IsInitialized)
+                return;
+
+            // 只在游戏面板开着、且没有暂停面板时响应，避免重复压栈。
+            if (UIManager.IsOpen<GamePanel>() && !UIManager.IsOpen<PausePanel>())
+                UIManager.PushAsync<PausePanel>(IntegrationAddresses.Pause, UILayers.Popup, _currentMode).Forget();
         }
 
         private static void ApplyAudioSettings()

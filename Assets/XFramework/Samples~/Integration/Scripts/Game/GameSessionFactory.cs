@@ -13,6 +13,8 @@ namespace XFramework.Samples.Integration
             {
                 case TapRushSession.ModeIdValue:
                     return new TapRushSession();
+                case OddOneOutSession.ModeIdValue:
+                    return new OddOneOutSession();
                 default:
                     return null;
             }

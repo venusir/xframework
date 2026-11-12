@@ -49,7 +49,9 @@ $prefabs = @(
     "Integration.Confirm",
     "Integration.ModeSelect",
     "Integration.GamePanel",
-    "Integration.Result"
+    "Integration.Result",
+    "Integration.Pause",
+    "Integration.Loading"
 )
 $scenes = @("Integration.Boot.unity", "Integration.Game.unity")
 

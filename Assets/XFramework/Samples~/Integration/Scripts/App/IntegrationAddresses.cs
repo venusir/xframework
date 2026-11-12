@@ -29,6 +29,12 @@ namespace XFramework.Samples.Integration
         /// <summary>结算面板预制体。</summary>
         public const string Result = "Integration.Result";
 
+        /// <summary>暂停面板预制体。</summary>
+        public const string Pause = "Integration.Pause";
+
+        /// <summary>加载面板预制体。</summary>
+        public const string Loading = "Integration.Loading";
+
         /// <summary>游戏场景（Additive 加载）。</summary>
         public const string GameScene = "Integration.Game";
 

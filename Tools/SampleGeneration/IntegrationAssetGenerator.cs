@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using Unity.Cinemachine;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
@@ -66,6 +67,8 @@ namespace XFramework.Samples.Integration.Editor
             CreateModeSelectPrefab();
             CreateGamePanelPrefab();
             CreateResultPrefab();
+            CreatePausePrefab();
+            CreateLoadingPrefab();
 
             CreateBootScene(languageTable);
             CreateGameScene();
@@ -230,6 +233,42 @@ namespace XFramework.Samples.Integration.Editor
             SavePrefab(root.gameObject, PrefabRoot + "/Integration.Result.prefab");
         }
 
+        private static void CreatePausePrefab()
+        {
+            var root = CreatePanelRoot<PausePanel>("Integration.Pause");
+            CreateText(root, "txt_title", "已暂停", 36, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -100f), new Vector2(900f, 50f));
+            CreateText(root, "txt_binding", "", 20, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f),
+                new Vector2(0f, -160f), new Vector2(900f, 30f));
+            CreateButton(root, "btn_resume", "继续", new Vector2(0f, -260f), new Vector2(300f, 56f));
+            CreateButton(root, "btn_restart", "重开一局", new Vector2(0f, -340f), new Vector2(300f, 56f));
+            CreateButton(root, "btn_menu", "返回主菜单", new Vector2(0f, -420f), new Vector2(300f, 56f));
+            CreateButton(root, "btn_exit", "退出游戏", new Vector2(0f, -500f), new Vector2(300f, 56f));
+
+            SavePrefab(root.gameObject, PrefabRoot + "/Integration.Pause.prefab");
+        }
+
+        private static void CreateLoadingPrefab()
+        {
+            var root = CreatePanelRoot<LoadingPanel>("Integration.Loading");
+            CreateText(root, "txt_title", "加载中", 32, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -200f), new Vector2(900f, 44f));
+            CreateText(root, "txt_status", "", 20, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f),
+                new Vector2(0f, -270f), new Vector2(900f, 30f));
+
+            var progress = CreateImage(root, "img_progress", new Color(0.3f, 0.6f, 1f, 1f));
+            var rt = progress.rectTransform;
+            rt.anchorMin = rt.anchorMax = new Vector2(0.5f, 1f);
+            rt.pivot = new Vector2(0.5f, 1f);
+            rt.sizeDelta = new Vector2(600f, 20f);
+            rt.anchoredPosition = new Vector2(0f, -330f);
+            progress.type = Image.Type.Filled;
+            progress.fillMethod = Image.FillMethod.Horizontal;
+            progress.fillAmount = 0f;
+
+            SavePrefab(root.gameObject, PrefabRoot + "/Integration.Loading.prefab");
+        }
+
         private static void CreateGameScene()
         {
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -239,6 +278,24 @@ namespace XFramework.Samples.Integration.Editor
             backdrop.name = "GameBackdrop";
             backdrop.transform.position = new Vector3(0f, 0f, 5f);
             backdrop.transform.localScale = new Vector3(12f, 8f, 1f);
+
+            var gameCameraGo = new GameObject("GameCamera",
+                typeof(CinemachineCamera), typeof(CinemachineImpulseListener));
+            var gameCamera = gameCameraGo.GetComponent<CinemachineCamera>();
+            gameCameraGo.transform.position = new Vector3(0f, 0f, -8f);
+
+            var resultCameraGo = new GameObject("ResultCamera",
+                typeof(CinemachineCamera), typeof(CinemachineImpulseListener));
+            var resultCamera = resultCameraGo.GetComponent<CinemachineCamera>();
+            resultCameraGo.transform.position = new Vector3(0f, 0f, -10f);
+
+            var controllerGo = new GameObject("GameSceneController", typeof(GameSceneController));
+            var controller = controllerGo.GetComponent<GameSceneController>();
+            var so = new SerializedObject(controller);
+            so.FindProperty("_gameCamera").objectReferenceValue = gameCamera;
+            so.FindProperty("_resultCamera").objectReferenceValue = resultCamera;
+            so.FindProperty("_followTarget").objectReferenceValue = backdrop.transform;
+            so.ApplyModifiedPropertiesWithoutUndo();
 
             EditorSceneManager.SaveScene(scene, SceneRoot + "/Integration.Game.unity");
         }
@@ -267,6 +324,9 @@ namespace XFramework.Samples.Integration.Editor
             camera.backgroundColor = new Color(0.05f, 0.06f, 0.08f, 1f);
             camera.orthographic = true;
             camera.transform.position = new Vector3(0f, 0f, -10f);
+
+            // Cinemachine 的输出端；Game 场景里的 vcam 由 CameraManager 注册/切换。
+            cameraGo.AddComponent<CinemachineBrain>();
 
             var uiRootGo = new GameObject("UIRoot", typeof(RectTransform), typeof(Canvas),
                 typeof(CanvasScaler), typeof(GraphicRaycaster), typeof(UIRootNode));

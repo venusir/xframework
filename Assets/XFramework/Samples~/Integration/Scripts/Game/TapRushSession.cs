@@ -186,6 +186,10 @@ namespace XFramework.Samples.Integration
             _score.Value += _rules.ScorePerHit > 0 ? _rules.ScorePerHit : 1;
             _hits.Emit(new TapHitEvent(index, _score.Value));
             PlaySound(IntegrationAddresses.Correct);
+
+            if (XFramework.XCamera.CameraManager.IsInitialized)
+                XFramework.XCamera.CameraManager.Shake(0.12f);
+
             SpawnNext();
         }
 
