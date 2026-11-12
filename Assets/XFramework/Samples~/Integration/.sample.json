@@ -1,0 +1,5 @@
+{
+	"displayName": "XFramework 全流程接入示例",
+	"description": "真实资源接入参考：Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。导入后按 README 把示例资源加入 YooAsset 采集，打开 Integration.Boot.unity 按 Play。",
+	"createSeparatePackage": false
+}
