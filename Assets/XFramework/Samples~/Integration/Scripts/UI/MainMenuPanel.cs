@@ -8,7 +8,7 @@ using XFramework.XUI.View;
 namespace XFramework.Samples.Integration
 {
     /// <summary>
-    /// 主菜单：打开设置 / 语言，或退出。玩法入口（Play）在后续步骤接上。
+    /// 主菜单：开始游戏 / 设置 / 语言 / 退出。
     /// <para>面板子节点按命名约定用 <c>transform.Find</c> 获取；预制体由示例的资源生成器产出，
     /// 第三方可以在导入后的 Hierarchy 里看到同样的结构。</para>
     /// </summary>

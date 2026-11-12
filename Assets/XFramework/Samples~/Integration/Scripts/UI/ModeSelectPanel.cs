@@ -10,7 +10,7 @@ namespace XFramework.Samples.Integration
 {
     /// <summary>
     /// 模式选择：从 Config 的模式表读出两个模式，点击进入对应玩法。
-    /// <para>第二个模式（OddOneOut）在后续步骤接入；当前置灰。</para>
+    /// <para>两个模式（点星 / 找异色）从 Config 的模式表读出，点击进入对应玩法。</para>
     /// </summary>
     public sealed class ModeSelectPanel : UIPanelBase
     {
