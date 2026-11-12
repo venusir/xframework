@@ -218,7 +218,7 @@ Samples~/Integration/
   - 探针实测：18 个地址全部 `CheckLocationValid == true`；MainMenu 预制体与 Click 音频加载有效；`UIManager.OpenAsync<UIPanelBase>("Integration.Loading")` 成功；Game 场景 Additive 加载 + 卸载成功。
   - 两个坑：① Unity 的 NUnit 版本没有 `Assert.Warn`（CS0117）→ 改成 `Debug.LogWarning`；② 探针单独加载 Game 场景时没有 Boot 场景的 `CinemachineBrain`，`GameSceneController` 原先记 **Error** 被测试框架判为未处理错误 → 下调为 Warning（无 Brain 只影响相机演示，不影响场景其余内容）。
 - 2026-11-12：**M6 完成**。包 README 示例清单改为四组并登记 `Integration`；CHANGELOG `[Unreleased] → ### Added → #### Samples` 增加条目；决策台账新增「完整 UI 纵切示例」并显式关闭 2026-10-21 的残余项；示例 README 已含导入三步 / 操作 / 已知限制。
-  - **待用户确认**：`CLAUDE.md` 的「文档分层」表尚未登记 `Documentation/Integration.md`（按仓规，CLAUDE.md 的修改需用户确认）。
+  - **待用户确认**：`CLAUDE.md` 的「文档分层」表尚未登记 `Documentation/Integration.md`（按仓规，CLAUDE.md 的修改需用户确认）。→ **2026-11-13 用户确认并已登记。**
   - **M6 提交**：`3a4a2870`。
 - 2026-11-12：**M7 进行中**——全量双平台测试后台运行中；提交链：`a46c256a` / `f8c3f85d` / `f51b2e38`（M1）、`4e5cf2fa`（M2）、`e1a5f7cf`（M3）、`e8fa483b`（M4）、`9d700c19`（M5）、`3a4a2870`（M6）。
 - 2026-11-12：**M7 完成，全量门禁绿**。
@@ -226,4 +226,4 @@ Samples~/Integration/
   - 修正：探针方法改名；`SettingsPanel.OnApply` 与 `LanguagePanel.SwitchAsync` 的 `async void` 改为 `UniTask`（仓规：`async void` 仅限 Unity 生命周期入口）；找异色单回合时长 45s → 20s。
   - 复跑：**PlayMode 2437 例（2436 通过 / 0 失败 / 1 跳过 = 探针环境变量门控）；EditMode 752 例（746 通过 / 0 失败 / 6 跳过）**；`check-samples` 43 个 `.cs` 通过；`check-docs.ps1 -Enforce` 通过；最终示例的导入探针复跑 **1/1 通过**。
   - 行尾：`git ls-files --eol` 确认示例文本文件全部 `i/lf`，4 个 WAV 为 `-text`（二进制，符合 `.gitattributes`）。
-  - 仍待用户确认：`CLAUDE.md` 文档分层表登记 `Documentation/Integration.md`。
+  - **2026-11-13**：`Documentation/Integration.md` 已登记进 `CLAUDE.md` 的「文档分层」表（用户确认）。

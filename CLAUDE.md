@@ -115,6 +115,7 @@
 | `Documentation/AudioProvider.md` | 维护者(实现/审计 Audio 播放引擎缝时) | `IAudioProvider` 设计与实现记录:核心语义与播放原语边界、`Poll` 状态机、容量/取消/通道副作用、provider 中立控制面(参数/bank/bus/snapshot/3D)、FMOD 分包形状、测试与门禁、已定 / 待裁(扩展)。核心 2026-10-25 已实现并完成复审修复;2026-10-26 新增中立控制面与 FMOD-free 扩展包;2026-11-07 Phase 2 真实 FMOD 集成已实现(真实 bank/event 冒烟待 Studio 工程);Wwise 待后续 |
 | `Documentation/FMOD.md` | 维护者(评估音频中间件适配 / 升级 FMOD 时) | FMOD 扩展的 provider 能力映射、仅 AudioManager 的公开面、自动安装与 Phase 2 条件程序集(Phase 1 FMOD-free 与 Phase 2 真实集成均已实现;真实 bank/event 冒烟待 Studio 工程)。**随 FMOD 版本漂移的内容只在这里,不进包** |
 | `Documentation/UIAuthoring.md` | 维护者(维护 / 扩展 UI 制作扩展包时) | 面向策划的声明式 UI 制作方案与分阶段实施记录:设计裁定、封闭动作集、包结构与阶段状态、第三方框架对照、探针结果与已否决形状。使用方文档在 `Assets/XFramework.UIAuthoring/README.md`,维护向结论与阶段记录只在这里 |
+| `Documentation/Integration.md` | 维护者(实施 / 审计示例时) | `Samples~/Integration` 全流程接入示例的实施与进度文档:分步计划(M0–M7)、模块覆盖清单、资源地址与 YooAsset 采集方案、启动/退出接线、验证阶梯(编译 / 结构守卫 / 导入探针)、偏离记录与追加式进度日志。**只记录本示例的落地过程与未决项**;使用方文档在 `Assets/XFramework/Samples~/Integration/README.md`,跨模块结论仍归决策台账 |
 | `Documentation/Wwise.md` | 维护者(评估音频中间件适配 / 升级 Wwise 时) | Wwise 的 `IAudioProvider` 设计(未实现)、Launcher 安装、许可限制、PlayingID/回调与 bank 模型。**随 Wwise 版本漂移的内容只在这里,不进包** |
 | `Assets/XFramework/CHANGELOG.md` | 双方 | 变更流水:改了什么、为什么、根因与实测证据 |
 
