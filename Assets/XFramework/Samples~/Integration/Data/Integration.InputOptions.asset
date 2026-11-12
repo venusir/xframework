@@ -1,0 +1,16 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8308e2cdfd944e76963289550d357d36, type: 3}
+  m_Name: Integration.InputOptions
+  m_EditorClassIdentifier: Venusy609.Xframework::XFramework.XInput.Default.InputSystemOptionsAsset
+  _asset: {fileID: -944628639613478452, guid: 933713992a8245e8b80217af30b98162, type: 3}
+  _initialActionMap: Integration
