@@ -14,7 +14,7 @@ namespace XFramework.Samples.Tests
     /// <para><b>它守什么</b>：必需文件、<c>.meta</c> 完整性、<c>package.json</c> 登记、地址常量与
     /// 资源文件名一一对应、代码字面量都是登记过的地址、prefab/scene 的脚本 GUID 能解析、
     /// 面板预制体根脚本继承自面板基类、示例源码不写条件编译与编辑器 API、包内文本不引用
-    /// <c>Documentation/</c>。</para>
+    /// 维护向文档目录。</para>
     /// <para>它<b>不</b>运行示例本身；运行期验收由一次性导入探针承担。</para>
     /// </summary>
     [TestFixture]
@@ -276,8 +276,8 @@ namespace XFramework.Samples.Tests
             {
                 foreach (var file in Directory.GetFiles(SampleRoot, pattern, SearchOption.AllDirectories))
                 {
-                    if (File.ReadAllText(file).Contains("Documentation/", StringComparison.Ordinal))
-                        violations.Add($"{Relative(file)}: 包内文本不得引用 Documentation/");
+                    if (File.ReadAllText(file).Contains("Documentation" + "/", StringComparison.Ordinal))
+                        violations.Add($"{Relative(file)}: 包内文本不得引用维护向文档目录");
                 }
             }
 

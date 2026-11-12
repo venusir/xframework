@@ -8,6 +8,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+#### Samples
+
+- **新增 `Samples~/Integration` 全流程接入示例**（2026-11-12）：启动 → 主菜单 → 模式选择 → 设置 / 语言 → 加载 → 游戏 → 暂停 → 结算 → 退出；覆盖 Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。随示例附预制体 / 场景 / 音频 / 配置表；导入后需把示例资源加入项目的 YooAsset 采集（示例 README 三步），`EditorSimulate` 仅编辑器可跑。新增常驻结构守卫与一次性导入验收探针（`Tools/verify-integration-sample.ps1`）。
+
 #### Audio
 
 - **起播前参数：`AudioParameter` 与 `AudioPlayOptions.InitialParameters`**（2026-10-26）：

@@ -168,7 +168,7 @@ Samples~/Integration/
 | **M3** | 第二种玩法 + 高级模块接线 | OddOneOut、暂停/加载面板、GameLoadingPipeline、Cinemachine 相机、诊断页、Lock/Update/Pool/Event 接线 | `check-samples.ps1`；L3 探针 | `feat(samples): Integration 高级模块接线` | 已完成（运行期验收留 M5） |
 | **M4** | 常驻结构守卫：prefab/scene YAML 的脚本 GUID、地址、`.meta`、`samples` 路径 | `Tests/Runtime/Samples/IntegrationSampleStructureTests.cs` + meta | `run-tests.ps1 -Fixture IntegrationSampleStructureTests -Platform PlayMode` | `test(samples): Integration 资产结构守卫` | 已完成 |
 | **M5** | 导入验收探针 + 脚本 | `IntegrationProbeTests.cs` + meta、`IntegrationVerifySetup.cs`、`Tools/verify-integration-sample.ps1` | fixture（无 env 跳过）+ 脚本跑通 L3 | `test(samples): Integration 导入验收探针` | 已完成（1/1 通过） |
-| **M6** | 登记与文档：`package.json` samples、包 README 示例段、示例 README、CHANGELOG、决策台账残余结案 | 文档与登记 | `run-tests.ps1 -Fixture DependencyDeclarationTests -Platform EditMode`；`-Filter PackageBoundaryTests -Platform PlayMode`；`check-docs.ps1 -Enforce` | `docs(samples): Integration 示例登记与说明`<br>`docs(ledger): 完整 UI 纵切残余结案` | 未开始 |
+| **M6** | 登记与文档：`package.json` samples、包 README 示例段、示例 README、CHANGELOG、决策台账残余结案 | 文档与登记 | `run-tests.ps1 -Fixture DependencyDeclarationTests -Platform EditMode`；`-Filter PackageBoundaryTests -Platform PlayMode`；`check-docs.ps1 -Enforce` | `docs(samples): Integration 示例登记与说明`<br>`docs(ledger): 完整 UI 纵切残余结案` | 已完成 |
 | **M7** | 收尾：全量双平台 + 文档门禁 + 行尾检查 + 进度回填 | 门禁结果 | `run-tests.ps1`（全量，0 失败）；`check-docs.ps1 -Enforce`；`git ls-files --eol` | 如有修复再提交 | 未开始 |
 
 ## 六、风险与待核（M0 结论）
@@ -217,3 +217,5 @@ Samples~/Integration/
 - 2026-11-12：**M5 完成，导入验收探针实测通过（1/1）**。`Tools/verify-integration-sample.ps1` 复制示例到 `Assets/Samples/Integration` → 临时 Editor 方法创建 `DefaultPackage` 采集设置（Enable Addressable + `AddressByFileName` / `PackDirectory` / `CollectAll`）→ `XFW_INTEGRATION_PROBE=1` 跑 `IntegrationProbeTests` → finally 清理全部临时物。
   - 探针实测：18 个地址全部 `CheckLocationValid == true`；MainMenu 预制体与 Click 音频加载有效；`UIManager.OpenAsync<UIPanelBase>("Integration.Loading")` 成功；Game 场景 Additive 加载 + 卸载成功。
   - 两个坑：① Unity 的 NUnit 版本没有 `Assert.Warn`（CS0117）→ 改成 `Debug.LogWarning`；② 探针单独加载 Game 场景时没有 Boot 场景的 `CinemachineBrain`，`GameSceneController` 原先记 **Error** 被测试框架判为未处理错误 → 下调为 Warning（无 Brain 只影响相机演示，不影响场景其余内容）。
+- 2026-11-12：**M6 完成**。包 README 示例清单改为四组并登记 `Integration`；CHANGELOG `[Unreleased] → ### Added → #### Samples` 增加条目；决策台账新增「完整 UI 纵切示例」并显式关闭 2026-10-21 的残余项；示例 README 已含导入三步 / 操作 / 已知限制。
+  - **待用户确认**：`CLAUDE.md` 的「文档分层」表尚未登记 `Documentation/Integration.md`（按仓规，CLAUDE.md 的修改需用户确认）。
