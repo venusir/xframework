@@ -206,3 +206,4 @@ Samples~/Integration/
   - **生成器两个坑**：① `& Unity.exe` 会立即返回、拿不到退出码（Unity 派生工作进程）→ 改用 `Start-Process -Wait`，与 `run-tests.ps1` 一致；② `SerializedObject` 对继承自包程序集的 `_inputOptions` 字段在 batchmode 下序列化成 `fileID: 0` → 改用反射写字段 + `EditorUtility.SetDirty`，已实测落盘为 `{fileID: 11400000, guid: ...}`。
   - Unity 安装路径不在 Hub 候选里（本机为 `D:\Program Files\Unity\6000.4.5f1\Editor\Unity.exe`），已在脚本候选中补 `D:\Program Files\Unity\<version>\Editor\Unity.exe`。
   - **偏离**：示例文本用普通 `UnityEngine.UI.Text`（仓库未导入 TMP Essentials），`UIBinder` / `UITipItem` 暂不使用。
+  - **M1 提交**：`a46c256a`（脚本 + 数据 + 本文档）、`f8c3f85d`（生成器 + 预制体/场景/InputOptions）。
