@@ -58,7 +58,7 @@ namespace XFramework.Samples.Tests
         private static string ImportedRoot => Path.Combine(Application.dataPath, ImportedRelative);
 
         [Test]
-        public async Task ImportedSample_AssetsLoad_AndUiAudioSceneWork()
+        public async Task ImportedSample_AssetsLoad_AndUIAudioSceneWork()
         {
             if (Environment.GetEnvironmentVariable(ProbeEnvVar) != "1")
             {

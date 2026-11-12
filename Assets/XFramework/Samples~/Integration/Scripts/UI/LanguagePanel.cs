@@ -72,7 +72,12 @@ namespace XFramework.Samples.Integration
             SwitchAsync("en");
         }
 
-        private async void SwitchAsync(string language)
+        private void SwitchAsync(string language)
+        {
+            SwitchAsyncCore(language).Forget();
+        }
+
+        private async UniTask SwitchAsyncCore(string language)
         {
             await AppFlowController.Current.SwitchLanguageAsync(language);
             RefreshTexts();

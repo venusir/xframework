@@ -108,7 +108,12 @@ namespace XFramework.Samples.Integration
 
         #region Actions
 
-        private async void OnApply()
+        private void OnApply()
+        {
+            ApplyAsync().Forget();
+        }
+
+        private async UniTask ApplyAsync()
         {
             await SettingsManager.SaveAsync<IntegrationSettings>(destroyCancellationToken);
             MessageManager.Publish(new SettingsAppliedMessage(

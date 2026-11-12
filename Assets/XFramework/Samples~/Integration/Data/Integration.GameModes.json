@@ -10,7 +10,7 @@
     {
       "Id": "odd",
       "DisplayKey": "mode.odd",
-      "Duration": 45.0,
+      "Duration": 20.0,
       "TargetCount": 4,
       "Rounds": 5
     }
