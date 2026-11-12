@@ -1,0 +1,6 @@
+{
+  "DefaultDuration": 30.0,
+  "TargetCount": 6,
+  "Rounds": 5,
+  "ScorePerHit": 1
+}

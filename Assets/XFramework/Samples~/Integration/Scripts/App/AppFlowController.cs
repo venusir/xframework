@@ -1,18 +1,22 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XAsset;
 using XFramework.XAudio;
 using XFramework.XBootstrap;
+using XFramework.XData;
 using XFramework.XLock;
 using XFramework.XLog;
 using XFramework.XLocalization;
 using XFramework.XMessage;
 using XFramework.XPool;
 using XFramework.XSave;
+using XFramework.XScene;
 using XFramework.XSettings;
 using XFramework.XTimer;
 using XFramework.XUI;
 using XFramework.XUI.View;
+using AssetSceneHandle = XFramework.XAsset.AssetSceneHandle;
 
 namespace XFramework.Samples.Integration
 {
@@ -53,6 +57,52 @@ namespace XFramework.Samples.Integration
             return UIManager.PushAsync<LanguagePanel>(IntegrationAddresses.Language, UILayers.Popup);
         }
 
+        /// <summary>打开模式选择面板。</summary>
+        public UniTask OpenModeSelectAsync()
+        {
+            return UIManager.PushAsync<ModeSelectPanel>(IntegrationAddresses.ModeSelect, UILayers.Popup);
+        }
+
+        /// <summary>
+        /// 进入游戏：Additive 加载游戏场景 → 打开玩法面板。
+        /// <para>游戏场景与 Boot 场景并存——UIRoot 在 Boot 场景里，单场景加载会把它一起卸掉。</para>
+        /// </summary>
+        public async UniTask EnterGameAsync(string modeId)
+        {
+            await UnloadGameSceneAsync();
+
+            _gameScene = await SceneManager.LoadSceneAsync(IntegrationAddresses.GameScene,
+                SceneLoadOptions.Additive, cancellationToken: destroyCancellationToken);
+
+            await UIManager.PushAsync<GamePanel>(IntegrationAddresses.GamePanel,
+                UILayers.Default, modeId, destroyCancellationToken);
+        }
+
+        /// <summary>结算：更新数据块 → 落盘 → 卸场景 → 打开结算面板。</summary>
+        public async UniTask ShowResultAsync(IntegrationResult result)
+        {
+            await UIManager.CloseAsync<GamePanel>();
+            await UnloadGameSceneAsync();
+
+            if (_data != null)
+            {
+                _data.Sessions++;
+                _data.LastMode = result.ModeId;
+                if (result.ModeId == TapRushSession.ModeIdValue)
+                    _data.BestTapScore = Mathf.Max(_data.BestTapScore, result.Score);
+                else
+                    _data.BestOddScore = Mathf.Max(_data.BestOddScore, result.Score);
+
+                DataManager.MarkDirty<IntegrationData>();
+            }
+
+            if (SaveManager.IsInitialized)
+                await SaveManager.SaveAsync(0, destroyCancellationToken);
+
+            await UIManager.PushAsync<ResultPanel>(IntegrationAddresses.Result,
+                UILayers.Popup, result, destroyCancellationToken);
+        }
+
         /// <summary>切换语言：经 Localization 模块加载语言表，并写回设置。</summary>
         public async UniTask SwitchLanguageAsync(string language)
         {
@@ -85,6 +135,7 @@ namespace XFramework.Samples.Integration
                     return;
 
                 await UIManager.CloseAllAsync();
+                await UnloadGameSceneAsync();
 
                 if (SaveManager.IsInitialized)
                     await SaveManager.SaveAsync(0, destroyCancellationToken);
@@ -93,6 +144,9 @@ namespace XFramework.Samples.Integration
                     await SettingsManager.SaveAsync<IntegrationSettings>(destroyCancellationToken);
 
                 await LastRunStore.WriteAsync(_lastRun, destroyCancellationToken);
+
+                AudioManager.Stop(_bgm);
+                AudioManager.Destroy();
 
                 MessageManager.Clear();
                 TimerManager.CancelAll();
@@ -123,6 +177,10 @@ namespace XFramework.Samples.Integration
         private BootScreen _bootScreen;
         private LastRunSummary _lastRun = new LastRunSummary();
         private IDisposable _exitSubscription;
+        private IDisposable _settingsSubscription;
+        private IntegrationData _data;
+        private AssetSceneHandle _gameScene;
+        private AudioHandle _bgm;
 
         #endregion
 
@@ -156,6 +214,8 @@ namespace XFramework.Samples.Integration
         {
             _exitSubscription?.Dispose();
             _exitSubscription = null;
+            _settingsSubscription?.Dispose();
+            _settingsSubscription = null;
 
             if (ReferenceEquals(Current, this))
                 Current = null;
@@ -171,6 +231,18 @@ namespace XFramework.Samples.Integration
 
             _exitSubscription = MessageManager.Subscribe<ExitRequestedMessage>(
                 _ => RequestExitAsync().Forget());
+            _settingsSubscription = MessageManager.Subscribe<SettingsAppliedMessage>(OnSettingsApplied);
+
+            AudioManager.Initialize(new AudioInitOptions { MaxVoices = 16 });
+            ApplyAudioSettings();
+            _bgm = await AudioManager.PlayAsync(IntegrationAddresses.Bgm,
+                new AudioPlayOptions(AudioChannels.Bgm, loop: true), cancellationToken);
+
+            // 有存档就先恢复数据块，再让主菜单显示“上次游玩”。
+            if (SaveManager.IsInitialized)
+                await SaveManager.TryLoadAsync(0, cancellationToken);
+
+            _data = DataManager.GetOrCreateBlock<IntegrationData>();
 
             // 语言表地址模板：切换语言时框架按 {0} 拼出 Integration.Lang_en 这样的地址。
             LocalizationManager.LanguageAssetPath = IntegrationAddresses.LanguagePathFormat;
@@ -186,6 +258,30 @@ namespace XFramework.Samples.Integration
                 UILayers.Default, _lastRun, cancellationToken);
 
             LogManager.Info(IntegrationLogCategories.Flow, "启动完成：language={0}", language);
+        }
+
+        private void OnSettingsApplied(SettingsAppliedMessage message)
+        {
+            ApplyAudioSettings();
+            AudioManager.Play(IntegrationAddresses.Click,
+                new AudioPlayOptions(AudioChannels.UI));
+        }
+
+        private static void ApplyAudioSettings()
+        {
+            AudioManager.MasterVolume = IntegrationSettingRefs.MasterVolume.Value;
+            AudioManager.SetChannelVolume(AudioChannels.Bgm, IntegrationSettingRefs.BgmVolume.Value);
+            AudioManager.SetChannelVolume(AudioChannels.SE, IntegrationSettingRefs.SfxVolume.Value);
+            AudioManager.SetChannelVolume(AudioChannels.UI, IntegrationSettingRefs.SfxVolume.Value);
+        }
+
+        private async UniTask UnloadGameSceneAsync()
+        {
+            if (!_gameScene.IsValid)
+                return;
+
+            await _gameScene.UnloadAsync(destroyCancellationToken);
+            _gameScene = default;
         }
 
         #endregion

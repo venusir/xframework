@@ -22,5 +22,16 @@
   "language.current_format": "Current: {0}",
   "common.confirm": "Confirm",
   "common.cancel": "Cancel",
-  "exit.confirm": "Exit the game?"
+  "exit.confirm": "Exit the game?",
+  "mode.title": "Select mode",
+  "mode.back": "Back",
+  "mode.tap": "Tap Rush",
+  "mode.odd": "Odd One Out",
+  "mode.odd_soon": "Odd One Out opens in a later step",
+  "game.score_format": "Score: {0}",
+  "result.title": "Round over",
+  "result.score_format": "Score: {0}",
+  "result.best_format": "Best: {0}",
+  "result.retry": "Retry",
+  "result.menu": "Main menu"
 }

@@ -41,6 +41,18 @@ if (-not (Test-Path $generatorSource)) {
     throw "生成器源码不存在：$generatorSource"
 }
 
+# 生成物清单（验证与移动共用；顺序无关）
+$prefabs = @(
+    "Integration.MainMenu",
+    "Integration.Settings",
+    "Integration.Language",
+    "Integration.Confirm",
+    "Integration.ModeSelect",
+    "Integration.GamePanel",
+    "Integration.Result"
+)
+$scenes = @("Integration.Boot.unity", "Integration.Game.unity")
+
 # Unity 版本与路径
 $versionFile = Join-Path $repoRoot "ProjectSettings/ProjectVersion.txt"
 if (-not (Test-Path $versionFile)) {
@@ -84,6 +96,27 @@ if (Test-Path "$temp.meta") {
 
 New-Item -ItemType Directory -Force (Join-Path $temp "Editor") | Out-Null
 New-Item -ItemType Directory -Force (Join-Path $temp "Data") | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $temp "Generated/Prefabs") | Out-Null
+New-Item -ItemType Directory -Force (Join-Path $temp "Generated/Scenes") | Out-Null
+
+# 预置已有 .meta：生成器覆盖资源内容，但 GUID 保持不变（否则每次重生成都会换 GUID，
+# 引用这些资源的场景/预制体会跟着漂移）。
+foreach ($name in $prefabs) {
+    $meta = Join-Path $samples "Prefabs/$name.prefab.meta"
+    if (Test-Path $meta) {
+        Copy-Item $meta (Join-Path $temp "Generated/Prefabs/$name.prefab.meta") -Force
+    }
+}
+foreach ($name in $scenes) {
+    $meta = Join-Path $samples "Scenes/$name.meta"
+    if (Test-Path $meta) {
+        Copy-Item $meta (Join-Path $temp "Generated/Scenes/$name.meta") -Force
+    }
+}
+$inputMeta = Join-Path $samples "Data/Integration.InputOptions.asset.meta"
+if (Test-Path $inputMeta) {
+    Copy-Item $inputMeta (Join-Path $temp "Generated/Integration.InputOptions.asset.meta") -Force
+}
 
 Copy-Item -Path (Join-Path $samples "Scripts") -Destination $temp -Recurse -Force
 Copy-Item -Path $generatorSource -Destination (Join-Path $temp "Editor/IntegrationAssetGenerator.cs") -Force
@@ -122,12 +155,6 @@ if ($proc.ExitCode -ne 0) {
 }
 
 # 3. 校验产物
-$prefabs = @(
-    "Integration.MainMenu",
-    "Integration.Settings",
-    "Integration.Language",
-    "Integration.Confirm"
-)
 foreach ($name in $prefabs) {
     $path = Join-Path $temp "Generated/Prefabs/$name.prefab"
     if (-not (Test-Path $path)) {
@@ -135,9 +162,11 @@ foreach ($name in $prefabs) {
     }
 }
 
-$scene = Join-Path $temp "Generated/Scenes/Integration.Boot.unity"
-if (-not (Test-Path $scene)) {
-    throw "生成器没有产出启动场景。日志：$logPath"
+foreach ($name in $scenes) {
+    $path = Join-Path $temp "Generated/Scenes/$name"
+    if (-not (Test-Path $path)) {
+        throw "生成器没有产出场景 $path。日志：$logPath"
+    }
 }
 
 $inputOptions = Join-Path $temp "Generated/Integration.InputOptions.asset"
@@ -157,8 +186,10 @@ foreach ($name in $prefabs) {
     }
 }
 
-foreach ($suffix in @("Integration.Boot.unity", "Integration.Boot.unity.meta")) {
-    Move-Item -Path (Join-Path $temp "Generated/Scenes/$suffix") -Destination (Join-Path $sceneTarget $suffix) -Force
+foreach ($name in $scenes) {
+    foreach ($suffix in @($name, "$name.meta")) {
+        Move-Item -Path (Join-Path $temp "Generated/Scenes/$suffix") -Destination (Join-Path $sceneTarget $suffix) -Force
+    }
 }
 
 foreach ($suffix in @("Integration.InputOptions.asset", "Integration.InputOptions.asset.meta")) {

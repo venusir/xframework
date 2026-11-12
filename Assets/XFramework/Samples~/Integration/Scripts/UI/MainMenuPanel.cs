@@ -42,8 +42,8 @@ namespace XFramework.Samples.Integration
             _language.onClick.AddListener(OnLanguage);
             _exit.onClick.AddListener(OnExit);
 
-            // 玩法在后续步骤接入；先禁用，避免点了没反应。
-            _play.interactable = false;
+            // 玩法入口：打开模式选择。
+            _play.interactable = true;
 
             if (userData is LastRunSummary summary)
                 _lastRun.text = string.Format(LocalizationManager.Get("menu.last_format"),
@@ -75,7 +75,7 @@ namespace XFramework.Samples.Integration
 
         private void OnPlay()
         {
-            // 后续步骤：进入类型选择。
+            AppFlowController.Current?.OpenModeSelectAsync().Forget();
         }
 
         private void OnSettings()

@@ -20,6 +20,36 @@ namespace XFramework.Samples.Integration
         /// <summary>确认对话框预制体。</summary>
         public const string Confirm = "Integration.Confirm";
 
+        /// <summary>模式选择面板预制体。</summary>
+        public const string ModeSelect = "Integration.ModeSelect";
+
+        /// <summary>玩法面板预制体。</summary>
+        public const string GamePanel = "Integration.GamePanel";
+
+        /// <summary>结算面板预制体。</summary>
+        public const string Result = "Integration.Result";
+
+        /// <summary>游戏场景（Additive 加载）。</summary>
+        public const string GameScene = "Integration.Game";
+
+        /// <summary>模式表（Config JSON 表）。</summary>
+        public const string GameModes = "Integration.GameModes";
+
+        /// <summary>全局规则（Config JSON 对象）。</summary>
+        public const string Rules = "Integration.Rules";
+
+        /// <summary>背景音乐。</summary>
+        public const string Bgm = "Integration.Bgm";
+
+        /// <summary>按钮点击音。</summary>
+        public const string Click = "Integration.Click";
+
+        /// <summary>命中/成功音。</summary>
+        public const string Correct = "Integration.Correct";
+
+        /// <summary>失误音。</summary>
+        public const string Wrong = "Integration.Wrong";
+
         /// <summary>
         /// 语言表地址模板。<c>{0}</c> 为语言标识（如 <c>zh_Hans</c> / <c>en</c>）。
         /// <para>交给 <c>LocalizationManager.LanguageAssetPath</c>，切换语言时由框架按模板拼地址。</para>

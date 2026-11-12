@@ -22,5 +22,16 @@
   "language.current_format": "当前语言：{0}",
   "common.confirm": "确定",
   "common.cancel": "取消",
-  "exit.confirm": "确定要退出游戏吗？"
+  "exit.confirm": "确定要退出游戏吗？",
+  "mode.title": "选择模式",
+  "mode.back": "返回",
+  "mode.tap": "点星",
+  "mode.odd": "找异色",
+  "mode.odd_soon": "找异色模式将在后续步骤开放",
+  "game.score_format": "得分：{0}",
+  "result.title": "本局结束",
+  "result.score_format": "得分：{0}",
+  "result.best_format": "最佳：{0}",
+  "result.retry": "再来一局",
+  "result.menu": "返回主菜单"
 }

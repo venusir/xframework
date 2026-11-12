@@ -63,8 +63,12 @@ namespace XFramework.Samples.Integration.Editor
             CreateSettingsPrefab();
             CreateLanguagePrefab();
             CreateConfirmPrefab();
+            CreateModeSelectPrefab();
+            CreateGamePanelPrefab();
+            CreateResultPrefab();
 
             CreateBootScene(languageTable);
+            CreateGameScene();
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
             Debug.Log("[Integration] Asset generation finished.");
@@ -159,6 +163,84 @@ namespace XFramework.Samples.Integration.Editor
                 anchorAtTop: true);
 
             SavePrefab(root.gameObject, PrefabRoot + "/Integration.Confirm.prefab");
+        }
+
+        private static void CreateModeSelectPrefab()
+        {
+            var root = CreatePanelRoot<ModeSelectPanel>("Integration.ModeSelect");
+            CreateText(root, "txt_title", "选择模式", 36, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -80f), new Vector2(900f, 50f));
+            CreateButton(root, "btn_mode_tap", "点星", new Vector2(0f, -200f), new Vector2(360f, 64f));
+            CreateButton(root, "btn_mode_odd", "找异色", new Vector2(0f, -290f), new Vector2(360f, 64f));
+            CreateText(root, "txt_hint", "", 18, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f),
+                new Vector2(0f, -390f), new Vector2(900f, 30f));
+            CreateButton(root, "btn_back", "返回", new Vector2(0f, -500f), new Vector2(260f, 56f));
+
+            SavePrefab(root.gameObject, PrefabRoot + "/Integration.ModeSelect.prefab");
+        }
+
+        private static void CreateGamePanelPrefab()
+        {
+            var root = CreatePanelRoot<GamePanel>("Integration.GamePanel");
+            CreateText(root, "txt_mode", "", 30, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -60f), new Vector2(900f, 44f));
+            CreateText(root, "txt_score", "0", 26, TextAnchor.MiddleLeft, Color.white,
+                new Vector2(-320f, -130f), new Vector2(240f, 40f));
+            CreateText(root, "txt_time", "", 24, TextAnchor.MiddleRight, Color.white,
+                new Vector2(320f, -130f), new Vector2(240f, 40f));
+
+            var timeFill = CreateImage(root, "img_time_fill", new Color(0.3f, 0.6f, 1f, 1f));
+            var timeRt = timeFill.rectTransform;
+            timeRt.anchorMin = timeRt.anchorMax = new Vector2(0.5f, 1f);
+            timeRt.pivot = new Vector2(0.5f, 1f);
+            timeRt.sizeDelta = new Vector2(600f, 16f);
+            timeRt.anchoredPosition = new Vector2(0f, -190f);
+            timeFill.type = Image.Type.Filled;
+            timeFill.fillMethod = Image.FillMethod.Horizontal;
+            timeFill.fillOrigin = 0;
+            timeFill.fillAmount = 1f;
+
+            var x = new[] { -220f, 0f, 220f };
+            var y = new[] { -310f, -430f };
+            for (int row = 0; row < 2; row++)
+            {
+                for (int col = 0; col < 3; col++)
+                {
+                    int index = row * 3 + col;
+                    CreateButton(root, "btn_target_" + index, "★",
+                        new Vector2(x[col], y[row]), new Vector2(140f, 100f));
+                }
+            }
+
+            SavePrefab(root.gameObject, PrefabRoot + "/Integration.GamePanel.prefab");
+        }
+
+        private static void CreateResultPrefab()
+        {
+            var root = CreatePanelRoot<ResultPanel>("Integration.Result");
+            CreateText(root, "txt_title", "本局结束", 36, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -120f), new Vector2(900f, 50f));
+            CreateText(root, "txt_score", "", 28, TextAnchor.MiddleCenter, Color.white,
+                new Vector2(0f, -220f), new Vector2(900f, 40f));
+            CreateText(root, "txt_best", "", 22, TextAnchor.MiddleCenter, new Color(0.7f, 0.75f, 0.8f),
+                new Vector2(0f, -270f), new Vector2(900f, 34f));
+            CreateButton(root, "btn_retry", "再来一局", new Vector2(-140f, -400f), new Vector2(240f, 56f));
+            CreateButton(root, "btn_menu", "返回主菜单", new Vector2(140f, -400f), new Vector2(240f, 56f));
+
+            SavePrefab(root.gameObject, PrefabRoot + "/Integration.Result.prefab");
+        }
+
+        private static void CreateGameScene()
+        {
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+
+            // 一个简单的 3D 背景：Additive 加载后由 Boot 场景的相机渲染，UI 在其上。
+            var backdrop = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            backdrop.name = "GameBackdrop";
+            backdrop.transform.position = new Vector3(0f, 0f, 5f);
+            backdrop.transform.localScale = new Vector3(12f, 8f, 1f);
+
+            EditorSceneManager.SaveScene(scene, SceneRoot + "/Integration.Game.unity");
         }
 
         #endregion

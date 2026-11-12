@@ -21,8 +21,10 @@ namespace XFramework.Samples.Integration
             // 先登记框架默认组合 + 基类字段面（Asset / Input / UI / Data / Save / Localization）
             base.ConfigureStages();
 
-            // 再追加示例自己的阶段：Settings(90) 与 Localization(90) 并行；AppReady(91) 收尾。
+            // 再追加示例自己的阶段：Settings(90) / Config(90) 与 Localization(90) 并行；
+            // AppReady(91) 收尾。
             Bootstrap.Register(new GameSettingsBootstrapStage());
+            Bootstrap.Register(new GameConfigBootstrapStage());
             Bootstrap.Register(new AppReadyBootstrapStage(_appFlow));
         }
     }
