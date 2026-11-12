@@ -36,7 +36,9 @@ namespace XFramework.Samples.Integration
             var brain = FindAnyObjectByType<CinemachineBrain>();
             if (brain == null)
             {
-                LogManager.Error(IntegrationLogCategories.Flow,
+                // 无 Brain 只影响相机演示，不影响场景其余内容；用 Warning 而不是 Error
+                // （导入探针会单独 Additive 加载本场景，那时 Boot 场景的 Brain 不在场）。
+                LogManager.Warning(IntegrationLogCategories.Flow,
                     "Game 场景找不到 CinemachineBrain；相机示例已跳过。");
                 return;
             }
