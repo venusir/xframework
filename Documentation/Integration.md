@@ -166,7 +166,7 @@ Samples~/Integration/
 | **M1** | 第一条可玩纵切：启动 → 主菜单 → 设置 → 语言 → 退出 | 启动器/AppFlow/Settings/语言/主菜单/设置/语言/确认框 + Boot 场景 + 4 个预制体 + 中英表 + 输入资产 + 生成器 | `check-samples.ps1`；`check-docs.ps1 -Enforce`；生成器跑通 | `feat(samples): Integration 启动与设置纵切`（脚本+数据）<br>`feat(samples): Integration 预制体与启动场景`（生成器+资产） | 已完成（运行期验收留 M5） |
 | **M2** | 进入游戏：类型选择 + TapRush + 音频 + 结算 + 存档 | Config 行/规则/阶段、Data、会话接口、TapRush、ModeSelect/Game/Result 面板、Game 场景、模式表/规则表、4 个 wav | `check-samples.ps1`；L3 探针（加载 Game 场景、得分、存档） | `feat(samples): Integration 玩法与结算` | 已完成（运行期验收留 M5） |
 | **M3** | 第二种玩法 + 高级模块接线 | OddOneOut、暂停/加载面板、GameLoadingPipeline、Cinemachine 相机、诊断页、Lock/Update/Pool/Event 接线 | `check-samples.ps1`；L3 探针 | `feat(samples): Integration 高级模块接线` | 已完成（运行期验收留 M5） |
-| **M4** | 常驻结构守卫：prefab/scene YAML 的脚本 GUID、地址、`.meta`、`samples` 路径 | `Tests/Runtime/Samples/IntegrationSampleStructureTests.cs` + meta | `run-tests.ps1 -Fixture IntegrationSampleStructureTests -Platform PlayMode` | `test(samples): Integration 资产结构守卫` | 未开始 |
+| **M4** | 常驻结构守卫：prefab/scene YAML 的脚本 GUID、地址、`.meta`、`samples` 路径 | `Tests/Runtime/Samples/IntegrationSampleStructureTests.cs` + meta | `run-tests.ps1 -Fixture IntegrationSampleStructureTests -Platform PlayMode` | `test(samples): Integration 资产结构守卫` | 已完成 |
 | **M5** | 导入验收探针 + 脚本 | `IntegrationProbeTests.cs` + meta、`IntegrationVerifySetup.cs`、`Tools/verify-integration-sample.ps1` | fixture（无 env 跳过）+ 脚本跑通 L3 | `test(samples): Integration 导入验收探针` | 未开始 |
 | **M6** | 登记与文档：`package.json` samples、包 README 示例段、示例 README、CHANGELOG、决策台账残余结案 | 文档与登记 | `run-tests.ps1 -Fixture DependencyDeclarationTests -Platform EditMode`；`-Filter PackageBoundaryTests -Platform PlayMode`；`check-docs.ps1 -Enforce` | `docs(samples): Integration 示例登记与说明`<br>`docs(ledger): 完整 UI 纵切残余结案` | 未开始 |
 | **M7** | 收尾：全量双平台 + 文档门禁 + 行尾检查 + 进度回填 | 门禁结果 | `run-tests.ps1`（全量，0 失败）；`check-docs.ps1 -Enforce`；`git ls-files --eol` | 如有修复再提交 | 未开始 |
@@ -212,3 +212,5 @@ Samples~/Integration/
   - 生成器新增「预置已有 `.meta`」逻辑，尽量避免每次重生成换 GUID（能否被 Unity 保留待下一次生成验证）。
 - 2026-11-12：**M3 完成（运行期验收留 M5）**。新增 OddOneOut（Update + ListPool + 计时）、`GameLoadingPipeline`（Asset 预载 → Scene 加载 → UI 打开）、`GameSceneController`（Cinemachine 注册 / 切换 / 跟随 / 震屏）、暂停 / 加载面板、诊断页签、Input 暂停键与 Lock 进入锁；`check-samples` 43 个 `.cs` 通过。
   - **GUID 预置验证通过**：本次重生成只改了 `.prefab/.unity` 内容，既有 `.meta` 与 InputOptions 资产 GUID 未漂移（`git status` 只剩资源文件 ` M`，meta 无 ` M`）。
+- 2026-11-12：**M4 完成**。新增 `Tests/Runtime/Samples/IntegrationSampleStructureTests.cs`（10 例全绿）：必需文件、`.meta` 完整性、`package.json` 登记、地址常量 ↔ 资源文件名一一对应、代码字面量都是登记地址、prefab/scene 脚本 GUID 可解析、面板根脚本继承基类、场景引用控制器、无条件编译/`UnityEditor`、无 `Documentation/` 引用。`package.json` 的 samples 数组已在 M4 登记（早于 M6，因为守卫要读它）。
+  - 踩坑：`Path.Combine` 的 `/` 与 `Directory.GetFiles` 的 `\` 混用导致 `StartsWith` 误判——守卫里加了统一分隔符的 `IsUnder`。

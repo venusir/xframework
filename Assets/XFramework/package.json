@@ -40,6 +40,11 @@
 			"displayName": "Cinemachine 相机示例",
 			"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；核心包已内置 Cinemachine 3.x 后端。",
 			"path": "Samples~/Cinemachine"
+		},
+		{
+			"displayName": "XFramework 全流程接入示例",
+			"description": "真实资源接入参考：Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。导入后按 README 把示例资源加入 YooAsset 采集，打开 Integration.Boot.unity 按 Play。",
+			"path": "Samples~/Integration"
 		}
 	],
 	"dependencies": {}
