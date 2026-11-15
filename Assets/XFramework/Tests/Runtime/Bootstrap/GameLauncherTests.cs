@@ -155,6 +155,14 @@ namespace XFramework.XBootstrap.Tests
             field.SetValue(launcher, value);
         }
 
+        /// <summary>同上，写 <see cref="BootstrapProfile"/> 的私有字段（模拟 Inspector 里填 Profile 资产）。</summary>
+        private static void SetProfileField(BootstrapProfile profile, string fieldName, object value)
+        {
+            var field = typeof(BootstrapProfile).GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.IsNotNull(field, $"找不到字段 {fieldName}——它被改名了吗？改名请同步本夹具");
+            field.SetValue(profile, value);
+        }
+
         private static T FindStage<T>() where T : class, IBootstrapStage
         {
             for (int i = 0; i < Bootstrap.Stages.Count; i++)
@@ -167,33 +175,36 @@ namespace XFramework.XBootstrap.Tests
         }
 
         /// <summary>
-        /// 字段填了就注入到对应模块：包名/存档版本进 options，UI/Input/Localization 各自登记一个阶段。
+        /// Profile 填了就注入到对应模块：包名/存档版本进 options，UI/Input/Localization 各自登记一个阶段。
         /// <para>做法：先让 GameObject <b>保持未激活</b>再 <c>AddComponent</c>——未激活时 Awake 不跑，
         /// 于是有窗口把字段设好，再 <c>SetActive(true)</c> 触发 Awake。</para>
         /// </summary>
         [Test]
-        public void Awake_WithFields_InjectsThemIntoModules()
+        public void Awake_WithProfile_InjectsItIntoModules()
         {
             var go = new GameObject("launcher-configured");
             go.SetActive(false);
             var uiRoot = new GameObject("ui-root", typeof(RectTransform));
             var inputOptions = ScriptableObject.CreateInstance<InputSystemOptionsAsset>();
+            var profile = ScriptableObject.CreateInstance<BootstrapProfile>();
             try
             {
+                SetProfileField(profile, "_assetPackageName", "MyPack");
+                SetProfileField(profile, "_saveVersion", 7);
+                SetProfileField(profile, "_inputOptions", inputOptions);
+                SetProfileField(profile, "_defaultLanguage", "en");
+
                 var launcher = go.AddComponent<DefaultGameLauncher>();
-                SetField(launcher, "_assetPackageName", "MyPack");
-                SetField(launcher, "_saveVersion", 7);
+                SetField(launcher, "_profile", profile);
                 SetField(launcher, "_uiRoot", uiRoot.transform);
-                SetField(launcher, "_inputOptions", inputOptions);
-                SetField(launcher, "_defaultLanguage", "en");
 
                 go.SetActive(true);   // 此刻 Awake 才跑
 
                 Assert.AreEqual(6, Bootstrap.Stages.Count,
-                    "默认三件 + UI + Input + Localization");
+                    "Asset / Data / Save + UI + Input + Localization");
 
                 var asset = FindStage<AssetBootstrapStage>();
-                Assert.IsNotNull(asset, "Asset 阶段应被字段面重建（替换掉内置那份）");
+                Assert.IsNotNull(asset, "Asset 阶段应携带 Profile 的选项");
                 Assert.AreEqual("MyPack", asset.Options.PackageName, "包名应注入 Asset 阶段");
                 Assert.AreEqual(7, FindStage<SaveBootstrapStage>()?.Options.CurrentVersion,
                     "存档版本应注入 Save 阶段");
@@ -206,6 +217,46 @@ namespace XFramework.XBootstrap.Tests
                 Object.DestroyImmediate(go);
                 Object.DestroyImmediate(uiRoot);
                 Object.DestroyImmediate(inputOptions);
+                Object.DestroyImmediate(profile);
+            }
+        }
+
+        /// <summary>
+        /// Profile 的默认值与旧字段面默认值一致：空包名 / Offline / 自动回收 / 版本 1 / 无输入 / 空语言；
+        /// 条件阶段只看「值是否提供」，不因为 Profile 存在就盲目登记。
+        /// </summary>
+        [Test]
+        public void Awake_ProfileWithDefaultValues_RegistersDefaultsAndUIOnly()
+        {
+            var go = new GameObject("launcher-profile-defaults");
+            go.SetActive(false);
+            var uiRoot = new GameObject("ui-root", typeof(RectTransform));
+            var profile = ScriptableObject.CreateInstance<BootstrapProfile>();
+            try
+            {
+                var launcher = go.AddComponent<DefaultGameLauncher>();
+                SetField(launcher, "_profile", profile);
+                SetField(launcher, "_uiRoot", uiRoot.transform);
+
+                go.SetActive(true);
+
+                Assert.AreEqual(4, Bootstrap.Stages.Count, "默认三件 + UI");
+                var asset = FindStage<AssetBootstrapStage>();
+                Assert.IsNotNull(asset);
+                Assert.IsNull(asset.Options.PackageName, "空包名应归一为 null（默认包）");
+                Assert.AreEqual(AssetPlayMode.Offline, asset.Options.PlayMode,
+                    "Profile 默认值与旧字段默认值一致");
+                Assert.IsTrue(asset.Options.AutoReclaimOnLowMemory);
+                Assert.AreEqual(1, FindStage<SaveBootstrapStage>()?.Options.CurrentVersion,
+                    "Profile 默认存档版本为 1");
+                Assert.IsNull(FindStage<InputBootstrapStage>(), "输入资产为空不应登记 Input");
+                Assert.IsNull(FindStage<LocalizationBootstrapStage>(), "默认语言为空不应登记 Localization");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+                Object.DestroyImmediate(uiRoot);
+                Object.DestroyImmediate(profile);
             }
         }
 
@@ -298,8 +349,8 @@ namespace XFramework.XBootstrap.Tests
             Assert.AreEqual(0, CountSerializedFields(typeof(GameLauncher)),
                 "抽象底座不得携带任何序列化字段（Inspector 干净）");
 
-            Assert.AreEqual(8, CountSerializedFields(typeof(DefaultGameLauncher)),
-                "字段面（Asset×3 / Save×1 / UI×1 / Input×1 / Localization×2）应都在默认实现上");
+            Assert.AreEqual(2, CountSerializedFields(typeof(DefaultGameLauncher)),
+                "字段面（Profile + UI Root）应都在默认实现上");
         }
 
         /// <summary>统计类型自身声明的序列化字段（public 或带 <see cref="SerializeField"/>）。</summary>
