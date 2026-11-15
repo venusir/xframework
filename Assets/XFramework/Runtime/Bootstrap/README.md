@@ -22,6 +22,13 @@ await Bootstrap.RunAsync(progress: myProgress);
 Bootstrap.Register(new MyServiceBootstrapStage());
 Bootstrap.Register(new LocalizationBootstrapStage("en", myLanguageTable));
 await Bootstrap.RunAsync();
+
+// 业务侧等「启动就绪」：可取消；失败/取消时重抛本次运行的异常
+await Bootstrap.WaitUntilReadyAsync(destroyCancellationToken);
+
+// 启动画面也可以直接轮询状态与最近一帧进度
+if (Bootstrap.State == BootstrapState.Completed) { /* 收起遮罩 */ }
+float progress = Bootstrap.LastProgress?.OverallProgress ?? 0f;
 ```
 
 退出时反向清理：
@@ -43,14 +50,15 @@ Bootstrap.Clear();                            // 清空登记表（不影响已�
 
 ```text
 Runtime/Bootstrap/
-├── Bootstrap.cs            # 静态门面：登记表（Register / Unregister / Clear / Stages）+ RunAsync / Shutdown
+├── Bootstrap.cs            # 静态门面：登记表 + RunAsync / Shutdown / State / WaitUntilReadyAsync / LastProgress
+├── BootstrapState.cs       # 启动状态枚举（Idle / Running / Completed / Failed / Cancelled）
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
-├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含任何配置字段，ConfigureStages 为抽象
+├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象，暴露 StartupTask
 └── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 五组 / 八个 Inspector 字段
 ```
 
-五个文件都是公开面，本模块没有 `internal` 类型。
+这些文件都是公开面，本模块没有 `internal` 类型。
 
 ## 行为契约
 
@@ -85,6 +93,23 @@ Runtime/Bootstrap/
 
 **`Shutdown` 不修改登记表。** 它只调各阶段的 `Shutdown`；阶段实例仍留在表里。同一会话内再 `RunAsync`
 会重跑同一批实例；启动失败后重试同样从头重跑。需要「重建」时先 `Bootstrap.Clear()` 再重新构造、登记。
+
+### 就绪信号与重入
+
+`Bootstrap` 暴露三个拉取/等待面（**都在主线程使用**）：
+
+| 成员 | 语义 |
+| ---- | ---- |
+| `State` | 最近一次运行的终局：`Idle` / `Running` / `Completed` / `Failed` / `Cancelled`。会话复位回 `Idle`。 |
+| `WaitUntilReadyAsync(ct)` | `Completed` 立即完成；`Failed` / `Cancelled` **重抛本次运行的异常**；`Running` 等本次运行；`Idle` 等下一次运行开始并结束（可取消，会话复位也会取消）。 |
+| `LastProgress` | 最近一帧 `PipelineProgress` 快照；运行开始时新建、每次进度广播全量覆盖；会话复位清空。启动画面轮询它即可。 |
+
+**重入是 join，不是忽略。** `RunAsync` 在途时，第二次调用**返回第一次运行的任务**（同一个完成源，
+可多路 await）；第二次调用的令牌**不参与本次运行**。旧行为「警告后立即返回」已删除——那会让第二个
+调用方误以为启动已完成。
+
+**`GameLauncher.StartupTask`** 是这个启动器实例的启动任务：成功完成，失败时与 `RunAsync` 同样抛出，
+组件在启动途中销毁时以 `OperationCanceledException` 收场。在 `Start` 之前访问也有效。
 
 **同一会话只应有一个 `GameLauncher`。** `GameLauncher` 会 `DontDestroyOnLoad`——**只对根 GameObject 生效**，
 请把启动器挂在根对象上；挂在子对象上时切场景会随父对象销毁并触发 `Shutdown`，拆掉全部全局服务。每个场景各挂
@@ -226,11 +251,11 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **运行中修改登记表只告警、不阻止**（`Register` / `Unregister` / `RegisterDefaults` / `Clear`），后果与理由见上面「设计取舍」的「登记表请在 `RunAsync` 之前定稿」段：运行中新增的阶段本轮不执行（但会被 `Shutdown` 扫到）；运行中注销 / 清掉的阶段本轮仍执行但拿不到 `Shutdown`。
 
-**中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 仍会被重入守卫忽略**——要等它收敛，请持有第一次调用的任务。
+**中止在途启动是协作式的，有两条覆盖边界（2026-10-13 实测并修复后如实记录）。** `Shutdown` 会先中止在途运行、`GameLauncher.Start` 也把 `destroyCancellationToken` 传给了 `RunAsync`——「启动途中销毁 `GameLauncher`」这条默认入口路径已关闭（原缺陷实测会留下三条 Error，`GameLauncherFrameTests` 用例 3 留作端到端证据）。但：① **不响应取消的阶段仍会跑完**——它不观察令牌，谁也停不下它，整轮在它的沉降点才收场；期间真实模块若撞上「已被销毁」（如 `AssetManager.Destroy` 作废初始化代际），照旧留下失败链（用例 3 的三条 Error 原样保留，正是这条边界的证据）；② `Shutdown` 返回时在途运行只是「已收到取消信号」，**同帧再调 `RunAsync` 会 join 那次在途运行**（而不是开新的一轮）——要等它收敛，持有第一次调用的任务或 `WaitUntilReadyAsync`。
 
 **`RunAsync` 的 `OperationCanceledException` 携带本次运行的链接令牌。** `Shutdown` 触发的中止里调用方令牌并未取消，携带它会让 `catch when (ex.CancellationToken == myToken)` 这类过滤与语义都对不上。判据用 `OperationCanceledException.CancellationToken.IsCancellationRequested`，**不要比对令牌身份**。另注意一个既有的边界形态：阶段自抛 `OperationCanceledException` 时，链接令牌本身可能尚未取消（`CanBeCanceled == true` 而 `IsCancellationRequested == false`）——异常的类型才是终局判据。
 
-**模块有两处静态态，写测试时要复位。** 登记表与在途运行的取消源都跨用例存活：`Clear()` 清登记表；用例中途 `Shutdown` 过在途启动的，请等那一次运行收敛（持有它的任务）再开始下一个用例——否则在途运行会经重入守卫**静默吞掉**后续的 `RunAsync`，表现是「第二个用例什么都没发生」。
+**模块有四处静态态，写测试时要复位。** 登记表、在途运行的取消源、就绪状态（`State` / `LastProgress` / 等待者）都跨用例存活：`Clear()` 清登记表；会话复位（`SubsystemRegistration` 自动触发，测试可手动调）清就绪面并取消 Idle 等待者；用例中途 `Shutdown` 过在途启动的，请等那一次运行收敛（持有它的任务）再开始下一个用例——在途期间再调 `RunAsync` 会 **join 第一次运行**（不再是静默吞掉），若第一个用例的闸门没放行，第二个用例会跟着挂住。
 
 **没有「早于 Asset」的保留相位。** `BootstrapPhases` 从 0（Asset）开始；自定义阶段从 90 起。需要在 Asset 之前完成的初始化，请在调用 `RunAsync` 之前自行完成（例如一个独立的 `Pipeline` 或直接 `await`），不要依赖负相位号——`Pipeline` 只按数值升序排序，负值当前会最先执行，但这不是保留承诺。
 
@@ -274,7 +299,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 **为什么未登记任何阶段不抛异常？** 零配置使用静态服务的项目本就不需要引导流程，此时 `RunAsync` 打一条警告后直接返回。这与门面模板里 `EnsureInitialized` 抛 `InvalidOperationException` 的取向不同，是有意为之。
 
-**为什么 `RunAsync` 重入只警告并忽略？** 每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的那次**立即返回、不代表启动完成**——调用方要「等启动结束」，应共享第一次调用的任务，而不是再调一次。
+**为什么 `RunAsync` 重入返回第一次运行的任务？** 每次调用都会装配一条**新**管线（管线自身的重入守卫是实例级的），并发两次会让同一批阶段跑两遍。共享第一次运行的任务既阻止了双跑，又让第二个调用方**真的等到了启动结束**；第二次调用的令牌不参与本次运行（只认第一次调用方的令牌），这是 join 语义里唯一需要文档写死的细节。完成源用 `UniTaskCompletionSource` 而不是把 `async` 方法的 `UniTask` 存起来——状态机 `UniTask` 只允许 await 一次，多路调用方会撞上「Token version is not matched」。
 
 **登记表请在 `RunAsync` 之前定稿。** 运行中的修改（`Register` / `Unregister` / `RegisterDefaults` / `Clear`）照常生效但都打警告，因为后果都反直觉：运行中新增的阶段**本轮不执行**（装配期已快照）但会被 `Shutdown` 扫到；运行中注销 / 清掉的阶段**本轮仍执行**但拿不到 `Shutdown`（资源泄漏的候选）。
 

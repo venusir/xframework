@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Added
 
+#### Bootstrap
+
+- **启动就绪面**（2026-11-15）：新增 `BootstrapState` 枚举与 `Bootstrap.State` / `Bootstrap.WaitUntilReadyAsync(CancellationToken)` / `Bootstrap.LastProgress`。`WaitUntilReadyAsync` 在 `Completed` 立即返回、在 `Failed` / `Cancelled` 重抛本次运行的异常、在 `Idle` 等待下一次运行（可取消）；`LastProgress` 是最近一帧 `PipelineProgress` 快照，启动画面可直接轮询。**`RunAsync` 重入语义变更**：在途时的第二次调用从「警告并立即返回」改为**返回第一次运行的任务（join）**，第二次调用的令牌不参与本次运行——旧行为会让第二个调用方误以为启动已完成。源兼容新增；公开 API 基线已更新。
+- **`GameLauncher.StartupTask`**（2026-11-15）：启动器实例的启动任务；成功完成、失败时以同一异常收场、组件在启动途中销毁时以 `OperationCanceledException` 收场，在 `Start` 之前访问也有效。
+
 #### Samples
 
 - **新增 `Samples~/Integration` 全流程接入示例**（2026-11-12）：启动 → 主菜单 → 模式选择 → 设置 / 语言 → 加载 → 游戏 → 暂停 → 结算 → 退出；覆盖 Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。随示例附预制体 / 场景 / 音频 / 配置表；导入后需把示例资源加入项目的 YooAsset 采集（示例 README 三步），`EditorSimulate` 仅编辑器可跑。新增常驻结构守卫与一次性导入验收探针（`Tools/verify-integration-sample.ps1`）。

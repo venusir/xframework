@@ -326,13 +326,16 @@ XFramework.XAudio.IAudioProvider.SetVolume  ::  public bool(XFramework.XAudio.Au
 XFramework.XAudio.IAudioProvider.Stop  ::  public bool(XFramework.XAudio.AudioProviderHandle handle)
 XFramework.XBootstrap.Bootstrap  ::  public static class
 XFramework.XBootstrap.Bootstrap.Clear  ::  public static void()
+XFramework.XBootstrap.Bootstrap.LastProgress  ::  public static XFramework.XPipeline.PipelineProgress LastProgress { get; }
 XFramework.XBootstrap.Bootstrap.Register  ::  public static void(XFramework.XBootstrap.IBootstrapStage stage)
 XFramework.XBootstrap.Bootstrap.RegisterDefaults  ::  public static void()
 XFramework.XBootstrap.Bootstrap.RunAsync  ::  public static Cysharp.Threading.Tasks.UniTask(System.IProgress<XFramework.XPipeline.PipelineProgress> progress = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XBootstrap.Bootstrap.Shutdown  ::  public static void()
 XFramework.XBootstrap.Bootstrap.Stages  ::  public static System.Collections.Generic.IReadOnlyList<XFramework.XBootstrap.IBootstrapStage> Stages { get; }
+XFramework.XBootstrap.Bootstrap.State  ::  public static XFramework.XBootstrap.BootstrapState State { get; }
 XFramework.XBootstrap.Bootstrap.Unregister  ::  public static bool(XFramework.XBootstrap.IBootstrapStage stage)
 XFramework.XBootstrap.Bootstrap.Unregister  ::  public static int() where T : XFramework.XBootstrap.IBootstrapStage
+XFramework.XBootstrap.Bootstrap.WaitUntilReadyAsync  ::  public static Cysharp.Threading.Tasks.UniTask(System.Threading.CancellationToken cancellationToken = default)
 XFramework.XBootstrap.BootstrapPhases  ::  public static class
 XFramework.XBootstrap.BootstrapPhases.Asset  ::  public const int = 0
 XFramework.XBootstrap.BootstrapPhases.Data  ::  public const int = 3
@@ -341,12 +344,19 @@ XFramework.XBootstrap.BootstrapPhases.Localization  ::  public const int = 90
 XFramework.XBootstrap.BootstrapPhases.Save  ::  public const int = 4
 XFramework.XBootstrap.BootstrapPhases.UI  ::  public const int = 2
 XFramework.XBootstrap.BootstrapPhases.UserStart  ::  public const int = 90
+XFramework.XBootstrap.BootstrapState  ::  public enum : int
+XFramework.XBootstrap.BootstrapState.Cancelled  ::  = 4
+XFramework.XBootstrap.BootstrapState.Completed  ::  = 2
+XFramework.XBootstrap.BootstrapState.Failed  ::  = 3
+XFramework.XBootstrap.BootstrapState.Idle  ::  = 0
+XFramework.XBootstrap.BootstrapState.Running  ::  = 1
 XFramework.XBootstrap.DefaultGameLauncher  ::  public class : XFramework.XBootstrap.GameLauncher
 XFramework.XBootstrap.DefaultGameLauncher#ctor  ::  public()
 XFramework.XBootstrap.DefaultGameLauncher.ConfigureStages  ::  protected override void()
 XFramework.XBootstrap.GameLauncher  ::  public abstract class : UnityEngine.MonoBehaviour
 XFramework.XBootstrap.GameLauncher#ctor  ::  protected()
 XFramework.XBootstrap.GameLauncher.ConfigureStages  ::  protected abstract void()
+XFramework.XBootstrap.GameLauncher.StartupTask  ::  public Cysharp.Threading.Tasks.UniTask StartupTask { get; }
 XFramework.XBootstrap.IBootstrapStage  ::  public interface : XFramework.XPipeline.IPhaseStage
 XFramework.XBootstrap.IBootstrapStage.Shutdown  ::  public void()
 XFramework.XCamera.CameraBlendStyle  ::  public enum : int
