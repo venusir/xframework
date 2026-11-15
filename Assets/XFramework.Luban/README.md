@@ -64,7 +64,7 @@ XFramework 的**可选** Luban 配置扩展：Editor 一键导表、生成式行
 
 ### 3. 生成
 
-菜单 **XFramework/Luban/生成配置表**：
+菜单 **Tools/XFramework/Luban/生成配置表**：
 
 1. 调用 `dotnet Luban.dll` 生成代码与数据；
 2. 解析生成的代码；

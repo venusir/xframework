@@ -118,7 +118,7 @@ dotnet <LUBAN>\Luban.dll -t all -c cs-simple-json  -d json --conf <CONF_DIR> -x 
 ```
 
 > **2026-10-24 已实跑**：把 `-t all` 换成工程里的 target（如 `client`）即可；两种 target 均成功。
-> 日常用扩展包的 `XFramework/Luban/生成配置表` 菜单会调用同样的命令并继续生成行接口实现/适配器；
+> 日常用扩展包的 `Tools/XFramework/Luban/生成配置表` 菜单会调用同样的命令并继续生成行接口实现/适配器；
 > 手工命令只作为回退。
 
 `[一手核对]` 5.1.0 里 C# 侧的 codeTarget 有：`cs-bin`、`cs-simple-json`、`cs-newtonsoft-json`（另有 `cs-dotnet-json`、`cs-editor-json`、`cs_pb` 的模板目录）。**codeTarget 要与 dataTarget 配套**（选 `cs-bin` 就配 `-d bin`）。
@@ -295,7 +295,7 @@ static void Register<T, TKey>(IEnumerable<T> rows) where T : IConfigRow<TKey>
 
 - 安装：核心包 → `com.code-philosophy.luban`（`luban_unity` v1.2.0）→ `Assets/XFramework.Luban`；
 - 设置：Project Settings → XFramework Luban；
-- 生成：`XFramework/Luban/生成配置表`（运行 Luban + 生成行接口实现/适配器），或 `仅重新生成接入代码` / `校验接入`；
+- 生成：`Tools/XFramework/Luban/生成配置表`（运行 Luban + 生成行接口实现/适配器），或 `仅重新生成接入代码` / `校验接入`；
 - 启动：`Bootstrap.Register(new LubanBootstrapStage(new GeneratedLubanConfigAdapter()))`，或
   `await LubanConfig.InitializeAsync(adapter, new LubanOptions { DataRoot = "configs" })`；
 - 生成物：`ILubanConfigAdapter` 实现、`IConfigRow<TKey>` 行接口实现、`.luban-integration-manifest`；

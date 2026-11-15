@@ -11,7 +11,7 @@ namespace XFramework.XConfig.Luban.Editor
     /// </summary>
     internal static class LubanMenu
     {
-        internal const string MenuRoot = "XFramework/Luban/";
+        internal const string MenuRoot = "Tools/XFramework/Luban/";
         internal const string GenerateMenu = MenuRoot + "生成配置表";
         internal const string RefreshIntegrationMenu = MenuRoot + "仅重新生成接入代码";
         internal const string ValidateMenu = MenuRoot + "校验接入";

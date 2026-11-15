@@ -44,9 +44,9 @@
 
 正常流程用 Editor 菜单：
 
-1. `XFramework/Luban/设置...`，把 Luban.dll、`LubanProject/luban.conf`、
+1. `Tools/XFramework/Luban/设置...`，把 Luban.dll、`LubanProject/luban.conf`、
    代码目录 `Generated/Code`、数据目录 `Data`、接入代码目录 `Generated/Integration` 填好；
-2. `XFramework/Luban/生成配置表`。
+2. `Tools/XFramework/Luban/生成配置表`。
 
 手动回退：`LubanProject/gen.ps1 -LubanDll <path>` 或 `LUBAN_DLL=<path> LubanProject/gen.sh`。
 

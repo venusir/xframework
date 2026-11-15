@@ -1,5 +1,5 @@
 # 用法：先 cd 到本目录，再把 -LubanDll 指向你的 Luban.dll。
-# 正常流程建议直接用 Editor 菜单 XFramework/Luban/生成配置表；
+# 正常流程建议直接用 Editor 菜单 Tools/XFramework/Luban/生成配置表；
 # 这个脚本是「手动导表」的回退路径。
 param(
     [Parameter(Mandatory = $true)]

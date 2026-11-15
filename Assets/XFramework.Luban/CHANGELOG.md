@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+
+- **编辑器菜单根统一到 `Tools/XFramework`**（2026-11-15）：`XFramework/Luban/*` 迁为 `Tools/XFramework/Luban/*`（生成配置表 / 仅重新生成接入代码 / 校验接入 / 设置...），与核心包及其它扩展包同根；生成代码头注释同步改为新路径，`Project/XFramework/Luban` 设置页路径不变。功能与公开 API 不变。
+
 ### Fixed
 
 - **TextAsset 句柄先释放、后读字节（R5-LBN-001）**：`AssetManagerLubanAssetSource.LoadTextAssetsAsync`
