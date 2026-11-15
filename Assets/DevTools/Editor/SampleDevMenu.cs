@@ -20,6 +20,7 @@ namespace XFramework.DevTools
 
         private const string IntegrationScene = "Assets/Samples/Integration/Scenes/Integration.Boot.unity";
         private const string ExampleScene = "Assets/Samples/Example/Example.unity";
+        private const string CinemachineScene = "Assets/Samples/Cinemachine/Cinemachine.unity";
         private const string PendingSceneKey = "Xfw.SampleDevMenu.PendingScene";
         private const string PendingPlayKey = "Xfw.SampleDevMenu.PendingPlay";
         private const string PendingCollectorKey = "Xfw.SampleDevMenu.PendingCollector";
@@ -60,6 +61,19 @@ namespace XFramework.DevTools
 
         [MenuItem("Tools/XFramework/Samples/Example/Import and Open Scene", true)]
         private static bool ValidateExampleMenu() => CanRunSilently();
+
+        #endregion
+
+        #region Menu — Cinemachine
+
+        [MenuItem("Tools/XFramework/Samples/Cinemachine/Import and Open Scene", false, 30)]
+        public static void ImportCinemachineAndOpen()
+        {
+            ImportSample("Cinemachine", CinemachineScene, play: false, ensureCollector: false);
+        }
+
+        [MenuItem("Tools/XFramework/Samples/Cinemachine/Import and Open Scene", true)]
+        private static bool ValidateCinemachineMenu() => CanRunSilently();
 
         #endregion
 

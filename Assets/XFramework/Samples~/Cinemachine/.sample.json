@@ -1,5 +1,5 @@
 {
 	"displayName": "Cinemachine 相机示例",
-	"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；需要 Cinemachine 3.x。",
+	"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；需要 Cinemachine 3.x。导入后打开 Cinemachine.unity 按 Play，IMGUI 面板可操作切换、压栈、震屏与目标旋转。",
 	"createSeparatePackage": false
 }
