@@ -1,8 +1,12 @@
 using UnityEngine;
 using XFramework.XAsset;
 using XFramework.XBootstrap;
+using XFramework.XData;
+using XFramework.XInput;
+using XFramework.XLocalization;
 using XFramework.XLog;
 using XFramework.XSave;
+using XFramework.XUI;
 
 namespace XFramework.Samples.Integration
 {
@@ -39,21 +43,22 @@ namespace XFramework.Samples.Integration
             }
 
             // 数据 → 阶段：字段怎么落到 options 由使用方决定（这里用示例 Profile 的形状）。
-            Bootstrap.Register(BootstrapStages.Asset(new AssetInitOptions
+            // 构造入口在各阶段自己的模块里——框架不提供中央目录。
+            Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions
             {
                 PackageName = string.IsNullOrEmpty(_profile.AssetPackageName) ? null : _profile.AssetPackageName,
                 PlayMode = _profile.PlayMode,
                 AutoReclaimOnLowMemory = _profile.AutoReclaimOnLowMemory,
             }));
-            Bootstrap.Register(BootstrapStages.Data());
-            Bootstrap.Register(BootstrapStages.Save(new SaveOptions { CurrentVersion = _profile.SaveVersion }));
+            Bootstrap.Register(new DataBootstrapStage());
+            Bootstrap.Register(new SaveBootstrapStage(new SaveOptions { CurrentVersion = _profile.SaveVersion }));
 
             if (_uiRoot != null)
-                Bootstrap.Register(BootstrapStages.UI(_uiRoot));
+                Bootstrap.Register(new UIBootstrapStage(_uiRoot));
             if (_profile.InputOptions != null)
-                Bootstrap.Register(BootstrapStages.Input(_profile.InputOptions.ToOptions()));
+                Bootstrap.Register(new InputBootstrapStage(_profile.InputOptions.ToOptions()));
             if (!string.IsNullOrEmpty(_profile.DefaultLanguage))
-                Bootstrap.Register(BootstrapStages.Localization(_profile.DefaultLanguage, _profile.LanguageTable));
+                Bootstrap.Register(new LocalizationBootstrapStage(_profile.DefaultLanguage, _profile.LanguageTable));
 
             // 示例自己的阶段：Settings(90) / Config(90) 与 Localization(90) 并行。
             Bootstrap.Register(new GameSettingsBootstrapStage());

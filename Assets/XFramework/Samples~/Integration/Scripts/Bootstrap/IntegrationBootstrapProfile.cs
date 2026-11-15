@@ -6,7 +6,7 @@ namespace XFramework.Samples.Integration
 {
     /// <summary>
     /// 示例自己的启动配置资产：框架不提供 Profile 形状，字段由使用方决定。
-    /// <para>字段与 <c>BootstrapStages</c> 的构造一一对应；换输入后端的项目把 <c>_inputOptions</c>
+    /// <para>字段与各内置阶段的构造函数一一对应；换输入后端的项目把 <c>_inputOptions</c>
     /// 换成自己的 provider 资产即可，其余字段按需增删。装配代码在
     /// <see cref="IntegrationLauncher.ConfigureStages"/>。</para>
     /// </summary>

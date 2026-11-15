@@ -18,7 +18,7 @@ namespace XFramework.XBootstrap
     /// <see cref="RunAsync"/>，再</b>按执行序的逆序（相位降序）反向清理。</para>
     /// <para><b>为什么是显式登记而不是反射发现：</b>零反射、顺序可控、可测试，且使用方一眼能看出
     /// 到底有哪些东西会在这个启动流程里跑。框架不替使用方决定该初始化什么——登记什么、按什么相位，
-    /// 全由使用方自己写（内置阶段的构造入口见 <see cref="BootstrapStages"/>）。</para>
+    /// 全由使用方自己写（内置阶段的构造入口就是各模块自己的阶段类型，如 <c>AssetBootstrapStage</c>）。</para>
     /// <para><b>未登记任何阶段不是错误</b>：<see cref="RunAsync"/> 打一条警告后直接返回，
     /// 不抛异常（零配置使用静态服务的项目本就不需要引导流程）。这与门面模板里
     /// <c>EnsureInitialized</c> 抛 <see cref="InvalidOperationException"/> 的取向不同，是有意为之。</para>

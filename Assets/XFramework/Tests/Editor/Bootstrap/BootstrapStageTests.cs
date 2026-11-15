@@ -439,9 +439,9 @@ namespace Venusy609.Xframework.Editor.Tests
             try
             {
                 // 显式登记三件（框架不提供默认组合），再按精确类型替换其一
-                Bootstrap.Register(BootstrapStages.Asset());
-                Bootstrap.Register(BootstrapStages.Data());
-                Bootstrap.Register(BootstrapStages.Save());
+                Bootstrap.Register(new AssetBootstrapStage());
+                Bootstrap.Register(new DataBootstrapStage());
+                Bootstrap.Register(new SaveBootstrapStage());
                 Assert.AreEqual(1, Bootstrap.Unregister<SaveBootstrapStage>(), "应摘掉内置的 Save 阶段");
 
                 var custom = new SaveBootstrapStage();

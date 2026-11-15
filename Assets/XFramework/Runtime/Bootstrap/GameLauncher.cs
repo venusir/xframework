@@ -95,8 +95,8 @@ namespace XFramework.XBootstrap
         /// 默认组合悄悄跑了」的中间态：
         /// <list type="bullet">
         /// <item><b>完全自控</b>：只实现本方法即可（如 <c>Bootstrap.Register(new MyServiceBootstrapStage());</c>）
-        /// ——登记什么、按什么相位，全由你定。内置阶段的构造入口见 <see cref="BootstrapStages"/>。</item>
-        /// <item><b>先装配数据再追加</b>：你自己的 Profile 资产 → <c>BootstrapStages.*</c> 的装配代码就写在本方法里；
+        /// ——登记什么、按什么相位，全由你定。内置阶段的构造入口就是各模块自己的阶段类型（<c>AssetBootstrapStage</c> 等）。</item>
+        /// <item><b>先装配数据再追加</b>：你自己的 Profile 资产 → <c>new XxxBootstrapStage(...)</c> 的装配代码就写在本方法里；
         /// 示例见 Integration 示例的 <c>IntegrationLauncher</c>。</item>
         /// </list>
         /// <para>时机：<see cref="Awake"/> 内、<c>Start</c> 跑管线之前。登记先后不影响执行顺序

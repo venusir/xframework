@@ -12,8 +12,7 @@ namespace XFramework.XInput.Default
     /// 框架类型，于是可序列化的载体也只能住在这里。守卫见
     /// <c>Tests/Editor/Architecture/ModuleBoundaryTests.UnityInputTypes_StayInsideTheDefaultNamespace</c>。</para>
     /// <para>用法：建一个本资产（<c>Create → XFramework → Input System Options</c>），把 <c>.inputactions</c>
-    /// 拖进资产槽；交给 <c>BootstrapStages.Input(config.ToOptions())</c>，或自行
-    /// <c>Bootstrap.Register(new InputBootstrapStage(config.ToOptions()))</c>。</para>
+    /// 拖进资产槽；登记 <c>Bootstrap.Register(new InputBootstrapStage(config.ToOptions()))</c>。</para>
     /// </summary>
     [CreateAssetMenu(fileName = "InputSystemOptions", menuName = "XFramework/Input System Options")]
     public sealed class InputSystemOptionsAsset : ScriptableObject
