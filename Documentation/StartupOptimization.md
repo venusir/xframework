@@ -282,6 +282,7 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 | 5 | 编辑器 / 构建时校验 + 诊断面板升级 | Editor 新增 | Editor 测试 + `check-docs` |
 | 6 | 子阶段超时（Pipeline） | 视形状 | Pipeline + Bootstrap 测试 |
 | 7 | 待裁：Settings/Config 核心 stage、N3 自动启动根 | 视裁定 | 按裁定 |
+| 8 | 待裁：内置阶段 provider/manager 参数 + `AudioBootstrapStage`（§11.6） | 新增 | API 基线 + CHANGELOG + 定向测试 |
 
 ### 阶段 1 细节
 
@@ -329,6 +330,7 @@ Tools/check-docs.ps1 -Enforce
 - `GameLauncher` 抽象底座不动（零字段 + `abstract ConfigureStages`）。
 - 测试：`GameLauncherTests` 字段数 8 → 2；`Awake_WithFields_*` 改为构造 `BootstrapProfile`；新增「profile 为空 = 默认三件 + 可选 UI」用例。
 - 文档：`Runtime/Bootstrap/README.md`、`DefaultGameLauncher` XML、包 README 的「三种用法」改为「零配置 / Profile / 子类覆写」。
+- 模板：`Tools/XFramework` 菜单生成启动器子类模板，预置 Asset/Save/Input/UI/Config/File/Settings/Audio 的 provider 注入示例（见 §11.3）。
 - CHANGELOG：`### Added`（`BootstrapProfile`、`BootstrapStages.FromProfile`）+ 迁移表（7 字段移除；创建 Profile、复制值、赋 `_profile`）。
 
 ### 阶段 4 细节（样例迁移）
@@ -342,7 +344,7 @@ Tools/check-docs.ps1 -Enforce
 
 - 新增 `Assets/XFramework/Editor/Bootstrap/BootstrapValidator.cs` + 菜单项（`Tools/XFramework` 下）。
 - 可选的 `IPreprocessBuildWithReport` 构建前校验。
-- 校验项：Profile 存在、Host 有 `RemoteServices`、启动场景 index 0、无重复 Launcher。
+- 校验项：Profile 存在、Host 有 `RemoteServices`、自定义 provider 未接线、启动场景 index 0、无重复 Launcher。
 - `BootstrapDiagnosticPanel` 升级；Editor 公开 API 基线按需更新。
 - 探头：在 Integration 场景制造「缺 `RemoteServices` 的 Host」与「重复内置阶段」，确认校验能报出来。
 
@@ -377,6 +379,9 @@ Tools/check-docs.ps1 -Enforce
 | 13 | Mono 入口形状 | N0 启动场景 / N3 自动启动根 | **N0** | 场景结构 |
 | 14 | 7 字段移除的迁移 | CHANGELOG 迁移表 + 样例同步 / 编辑器迁移工具 / 不做 | **CHANGELOG + 样例同步** | 破坏性变更 |
 | 15 | 继承结构 | 保留拆分 / 合并 / 合并 + Obsolete 壳 | **保留拆分**（合并留独立主版本） | 类型/场景 GUID |
+| 16 | 内置阶段 provider/manager 参数 + `AudioBootstrapStage` | 排期 / 不排 | **排期**（中期） | 公开 API、所有权 |
+| 17 | 启动器子类模板 + provider 编辑器校验 | 排期 / 不排 | **排期** | Editor/文档 |
+| 18 | Profile 是否容纳 provider | data-only / 加 SO provider 槽 | **data-only**（已裁定） | 公开 API、序列化 |
 
 ---
 
@@ -745,7 +750,7 @@ Integration.BootstrapProfile.asset
 
 ### 10.6 待裁定
 
-第八节已追加 9–15：Profile 形状、启动入口形状、Profile 消费方式、加载通道、Mono 入口形状、7 字段迁移、继承结构。本节不另立裁定项。
+第八节已追加 9–15：Profile 形状、启动入口形状、Profile 消费方式、加载通道、Mono 入口形状、7 字段迁移、继承结构。本节不另立裁定项；**provider 替换路径见 §11（待裁定 16–18）**。
 
 ### 10.7 遮罩悖论：为什么 UI 启动流程必须有根对象
 
@@ -754,6 +759,171 @@ Integration.BootstrapProfile.asset
 - `AfterSceneLoad` 时遮罩可见，但已晚于场景 `Awake`；`Start` 与 RIL 的顺序没有契约。
 - 结论：**只要启动期间需要 UI，入口就必须锚在一个对象上**。这不是框架缺陷，是 Unity 的场景/生命周期模型。N0（启动场景 Launcher）与 N3（启动根预制体）是两种诚实的锚定方式；N4 只适合无 UI/纯静态项目。
 - 遮罩仍是**表现层**：它读 `Bootstrap.State`/进度，不进 `IBootstrapStage`；交互式 UI（登录/同意条款）属于 `AppFlowController` 的业务流程，放在 `WaitUntilReadyAsync` 之后。
+
+---
+
+## 十一、第三方替换 provider 的路径（2026-11-15 追加）
+
+> 本节回答「第三方怎么改各类功能的 provider」。**权威索引是包 README 的「可替换的实现一览」**（`Assets/XFramework/README.md:179-207`）；本节补的是**启动流程里的注入位置、时机与所有权**，以及现有阶段的缺口。
+
+### 11.0 短答
+
+- 框架**没有统一的 provider 容器**，这是刻意的：注入形态按模块差异化（`Initialize(实例)` / 工厂委托 / `SetInstance` / options / `SetProvider` / 注册表 / 无注入点），DI 容器与 Installer 形状均已被台账否决。
+- **provider 是代码，不是数据**：`BootstrapProfile` 只装 7 个数据值，不装 provider；换 provider 的位置是启动器子类的 `ConfigureStages` 覆写（唯一与 `Awake` 顺序无关的组合根），或在 `RunAsync` 之前的代码注入。
+- 替换分三层：**管理器级**（换整个后端）、**provider 级**（换单个引擎/服务）、**注册追加级**（不换主服务，只加 sink/格式/页签）；无后端的模块按设计不提供接口。
+
+### 11.1 三层替换
+
+| 层级 | 换什么 | 代表接线 |
+|---|---|---|
+| **管理器级** | 整个后端实现 | Asset `SetInstance(IAssetManager)`；Save `Initialize(factory, options)`；Data `Initialize(IDataManager)`；Localization `SetInstance`；UI `SetInstance(IUIManager)`；Config `SetInstance(IConfigManager)`；Audio `SetInstance(IAudioManager)`（逃生口）；Log `Initialize(ILogManager)` |
+| **Provider 级** | 单个引擎/服务 | Asset `RemoteServices` / `DecryptionServices`；Save `CryptoProvider`；Input `Initialize(IInputProvider)` / `InputBootstrapStage(provider)` / `SetProvider`；UI `SetController` / `SetTipProvider` / `SetHudProvider`；Audio `SetProvider(IAudioProvider)`；File `Initialize(IFileProvider)` + `IAtomicFileProvider` / `IDirectoryProvider` + `SetCryptoProvider`；Settings `ISettingsStore` / `IAsyncSettingsStore` / 迁移器 / 校验器；Config `IConfigLoader`；Serialize `Register(ISerializer)`；Log `AddSink(ILogSink)` |
+| **注册追加级** | 不换主服务，只加条目 | Serialize `Register` / `Unregister`；Log `AddSink` / `RemoveSink`；Diagnostics `Register(IDiagnosticPanel)`；Message `AddFilter`；Pool `Configure<T>` |
+| **无注入点（按设计）** | 不可换 | Scene（走 Asset 的 `IAssetSceneLoader`）；Camera（后端 internal，仅 Cinemachine）；Message broker（internal，只能加过滤器）；Update / Timer / Lock（纯静态）；Event / Reactive（无注入句柄）；Pool 管理器（单池可 `new Pool<T>`） |
+
+### 11.2 逐模块 cookbook
+
+| 功能 | 契约 | 接线 | 时机与所有权 |
+|---|---|---|---|
+| **Asset 管理器** | `IAssetManager` | `AssetManager.SetInstance` | 任意时刻；设置即视为已初始化、作废在途初始化。框架创建的旧实例被退订并 Dispose；注入的 `AssetManagerImpl` 只退订；第三方实现不动。`Destroy` 会销毁当前实例（含注入） |
+| **Asset 远端/解密** | `IAssetRemoteServices` / `IAssetDecryptionServices` | `AssetInitOptions` 字段 | 首次 `InitializeAsync` 前；`Host` 必须非空 `RemoteServices`；`EditorSimulate` 忽略两者 |
+| **Save 后端** | `ISaveManager` | `SaveManager.Initialize(factory, options)` | 首次使用前；重复 Initialize 告警忽略。`SaveBootstrapStage` 无 factory 参数，必须前置注入或自写阶段；阶段看到已初始化会早退、不接管清理 |
+| **Save 加密** | `ICryptoProvider` | `SaveOptions.CryptoProvider` | 阶段构造前；仅作用于 `FileDomain.SaveData`；换密钥会让旧存档不可读 |
+| **Input 后端** | `IInputProvider` | `Initialize(provider)` / `InputBootstrapStage(provider)` / `SetProvider` | 阶段 1；`Initialize` 注册帧驱动，`SetProvider` 不注册（需自行 `Tick`）；`Destroy` 释放 provider；第三方静态订阅需自行退订 |
+| **UI 管理器** | `IUIManager` | `UIManager.SetInstance` | 任意时刻；旧实例只在「门面自己创建」时 Dispose；`Destroy` 会销毁当前实例（含注入）；注入实现只接每帧档 |
+| **UI 拦截/提示/HUD** | `IUIController` / `IUITipProvider` / `IUIHudProvider` | `SetController` / `SetTipProvider` / `SetHudProvider`；`UIBootstrapStage(root, controller)` | 初始化后也可；`SetController` 只对内置 `UIManagerImpl` 生效；Tip/HUD 注入会补调 `SetUIRoot`，旧 provider 只 `DetachAll` 不 Dispose |
+| **Audio 引擎** | `IAudioProvider` | `AudioManager.SetProvider` | 首次播放前；会先销毁旧管理器并 Dispose 旧 provider；同一实例重复传入抛异常 |
+| **Audio 管理器** | `IAudioManager` | `AudioManager.SetInstance` | 首次使用前；不 Dispose 旧实例，已初始化时先 `Destroy` |
+| **File 后端** | `IFileProvider`（可选 `IAtomicFileProvider` / `IDirectoryProvider`） | `FileManager.Initialize(provider)` **一次性** | 首次文件操作前；换实现必须先 `Destroy()`；缺失可选能力按「降级 + 告警」处理；门面探测的是 `_baseProvider` |
+| **File 加密** | `ICryptoProvider` | `SetCryptoProvider(provider, domain)` | 任意时刻；按域生效；换密钥会让旧文件不可读 |
+| **Settings 存储** | `ISettingsStore`（可选 `IAsyncSettingsStore`） | `Initialize<T>(store, ...)` / `SetStore<T>` | 该类型首次使用前；按类型绑定；`SetStore` 只换后端、不重载/迁移 |
+| **Settings 迁移/校验** | `ISettingsMigrator<T>` / `ISettingsValidator<T>` | `SetMigrator<T>` / `SetValidator<T>` | 该类型实例存在后；构造期初始加载已完成，注册后需再 `Load<T>()` |
+| **Config 管理器** | `IConfigManager` | `ConfigManager.SetInstance` | 首次加载/查询前；不 Dispose 注入实例；`ConfigChanged` 只对内置实现触发 |
+| **Config 加载器** | `IConfigLoader` | `PreloadTableAsync` / `PreloadGlobalAsync` 调用点 | 调用时逐次传入；**不能全局注册新格式**；加载器必须无状态 |
+| **Data 管理器** | `IDataManager` | `DataManager.Initialize(impl)` | 首次访问前；`null` 等价于 `Shutdown`；无 options/工厂；`Shutdown` 不触发 `OnClear` |
+| **Localization 管理器** | `ILocalizationManager` | `LocalizationManager.SetInstance` | 首次使用前；不 Dispose 被替换实例；**资产加载路径不可换**（`SwitchLanguageAsync` 固定走 `LanguageAssetLoader` + Asset） |
+| **Serialize 格式** | `ISerializer` | `Register` / `Unregister` | 任意时刻；同名后注册者胜；会话复位会清掉第三方格式，需复位后重注册 |
+| **Log 管理器/sink** | `ILogManager` / `ILogSink` | `Initialize` / `AddSink` / `RemoveSink` | `LogOptions` 必须在场景加载前；`Configure` 会丢弃自定义 sink 并复位档位；替换 `ILogManager` 会停用 Unity 全量捕获 |
+| **Diagnostics 页签** | `IDiagnosticPanel` / `IDiagnosticPanelView` | `Register` / 实现视图 | 任意时刻；注册表无后端；运行时页签在关闭域重载时需自行避免累积 |
+| **Camera** | 无公开后端契约 | `Initialize(CinemachineBrain)` | 无公开替换点；`ICameraBackend` internal，替换后端等于替换模块 |
+| **Scene** | 无 `ISceneManager` | 通过 Asset 的 `IAssetSceneLoader` | 要换场景后端，需整体替换 `IAssetManager` 并实现该能力接口 |
+| **Message** | 无 broker 注入 | `AddFilter` / `RemoveFilter` | 无后端；`IMessageBroker` internal |
+| **Update / Timer / Lock** | 无 | 注册 / 创建 API | 纯静态服务，无后端可换 |
+| **Pool** | 管理器级无注入；单池可 `new Pool<T>` | `Configure<T>` / `GetPool<T>` | `Configure` 必须在首次建池前；已建池需先 `RemovePool<T>` |
+| **Event / Reactive** | 无注入句柄 | 自行实现接口 | 框架没有接收入口 |
+| **Bootstrap / Pipeline** | 不是换后端，是装配入口 | `Bootstrap.Register` / `Unregister<T>`；`Pipeline.Create()` + `AddStage` | 阶段登记必须在 `RunAsync` 前；运行期修改只告警 |
+
+### 11.3 放到启动流程里
+
+**唯一与 `Awake` 顺序无关的组合根是启动器的 `ConfigureStages` 覆写。** 在里面有两种写法：
+
+**A. 阶段构造注入（推荐，若阶段支持）**
+
+- `new AssetBootstrapStage(new AssetInitOptions { RemoteServices = ..., DecryptionServices = ... })`
+- `new InputBootstrapStage(new RewiredProvider())`
+- `new UIBootstrapStage(uiRoot, new MyUIController())`
+- `new SaveBootstrapStage(new SaveOptions { CryptoProvider = ... })`
+- `new LocalizationBootstrapStage("en", table)`
+
+**B. 预注入，让内置阶段早退（阶段不支持 provider 时）**
+
+- `DataManager.Initialize(custom)`、`SaveManager.Initialize(factory, options)`、`UIManager.SetInstance(custom)`、`LocalizationManager.SetInstance(custom)`、`AssetManager.SetInstance(custom)`——**在 `RunAsync` 之前**。
+- 内置阶段执行时看到「已初始化」就早退，并且不接管清理；你的实例仍归你。
+- 注意：`AssetManager.Destroy()` / `UIManager.Destroy()` 会销毁注入实例；`SaveManager.Shutdown()` / `DataManager.Shutdown()` 只丢引用。
+
+**C. 非阶段模块**
+
+- Config / File / Settings / Serialize / Log / Audio 没有内置引导阶段，在首次使用前注入。
+- `LogOptions` 必须在场景加载前（`BeforeSceneLoad`），启动器覆盖不到。
+- Audio 没有 `AudioBootstrapStage`；在组合根或 FMOD 自动安装里初始化。
+
+**示例（`DefaultGameLauncher` 子类）：**
+
+```csharp
+protected override void ConfigureStages()
+{
+    // 1) 预注入：内置阶段随后看到已初始化并早退，不接管清理。
+    //    Save 的 options 只在这里生效（Initialize 重复调用会告警忽略），
+    //    所以 crypto/factory 必须放在这一次；不要再登记第二个 Save 阶段改 options。
+    SaveManager.Initialize(() => new MySaveManager(), new SaveOptions
+    {
+        CurrentVersion = 1,
+        CryptoProvider = new AesCryptoProvider(),
+    });
+    DataManager.Initialize(new MyDataManager());
+
+    // 2) 让基类登记 Profile/UI 阶段（可选；也可以完全不调 base 自行登记）
+    base.ConfigureStages();
+
+    // 3) 阶段构造注入：替换/追加带 provider 的阶段
+    Bootstrap.Unregister<AssetBootstrapStage>();
+    Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions
+    {
+        PackageName = "Main",
+        PlayMode = AssetPlayMode.Host,
+        RemoteServices = new MyRemoteServices(),
+        DecryptionServices = new MyDecryptionServices(),
+    }));
+    Bootstrap.Unregister<InputBootstrapStage>();
+    Bootstrap.Register(new InputBootstrapStage(new RewiredProvider()));
+    Bootstrap.Unregister<UIBootstrapStage>();
+    Bootstrap.Register(new UIBootstrapStage(_uiRoot, new MyUIController()));
+
+    // 4) 非阶段模块
+    ConfigManager.SetInstance(new MyConfigManager());
+    FileManager.Initialize(new MyFileProvider());
+    SettingsManager.Initialize<MySettings>(new MyStore());
+    Serializer.Register(new MySerializer());
+    LogManager.AddSink(new MyLogSink());
+}
+```
+
+> `IntegrationLauncher` 目前只演示阶段登记与数据配置（`GameSettingsBootstrapStage` 用 `SettingsManager.Initialize<T>` + store/validator/migrator；`GameConfigBootstrapStage` 用 `ConfigManager.Initialize()`），**没有注入 provider**；真实 provider 注入的仓内先例是 FMOD 扩展的 `FmodInstaller` 调 `AudioManager.SetProvider`。
+
+### 11.4 Profile 边界
+
+- `BootstrapProfile` 只装 7 个数据值；**provider 是代码，不是数据**，装不进 Profile。
+- 唯一「资产化 provider」的路径：provider 自己实现成 `ScriptableObject`，自定义启动器用**具体 SO 类型**字段引用、代码里转接口（Bootstrap README 的 `MyRemoteServicesAsset` 先例）。它不是通用机制；普通 C# provider 只能代码注入。
+- **本轮裁定：Profile 保持 data-only，不新增 provider 槽。** `ProviderProfile` / provider 注册表 / Installer 形状一律不建议——只有 SO provider 能进资产，且会重开已否决的 DI/Installer 裁决。
+
+### 11.5 现有缝的尖锐处
+
+- `SaveBootstrapStage` 只有 `SaveOptions`，**没有 factory 参数**；换 `ISaveManager` 必须在 `RunAsync` 前注入或自写阶段。
+- `DataBootstrapStage` 内部固定 `new DataManagerImpl()`，**没有实例参数**；同理。
+- `UIBootstrapStage` 只收 `Transform` + `IUIController`，**不能注入 `IUIManager` / Tip / HUD**；管理器要前置 `SetInstance`。
+- `LocalizationBootstrapStage` 只收语言数据，**不能注入 `ILocalizationManager`**。
+- **没有 `AudioBootstrapStage`**；Audio 必须在组合根或 FMOD 自动安装里初始化。
+- File base provider 一次性；换必须 `Destroy()` + `Initialize()`。
+- Serialize 的第三方格式会被会话复位清掉，需复位后重新注册。
+- `LogManager.Configure` 会丢弃自定义 sink 并复位档位；替换 `ILogManager` 会停用 Unity 全量捕获。
+- Camera 后端、Audio 高级能力接口（参数/bank/bus/snapshot/3D）为 internal：第三方只能换 `IAudioProvider` 的公开原语，或用 `TryGetProviderHandle` 自行处理逐次控制。
+- Settings 没有管理器工厂；Localization 的资产加载路径不可换；Message broker / Update 调度器 / Timer 核心没有注入点。
+
+### 11.6 改进
+
+**短期（推荐）：**
+
+- 把本节 cookbook 作为维护向索引；使用方入口仍指向包 README 与各模块 README。
+- 启动器子类模板：预置 Asset/Save/Input/UI/Config/File/Settings/Audio 的注入示例，放在 `Tools/XFramework` 菜单下。
+- 编辑器校验：Host 缺 `RemoteServices`、自定义 provider 未接线、Profile/字段冲突、启动场景 index 0、无重复 Launcher。
+
+**中期（待裁，本轮推荐排期）：**
+
+给内置阶段加**可选 provider/manager 参数**，并补 `AudioBootstrapStage`。这是 source-compatible 的构造注入，不是 DI 容器：
+
+- `SaveBootstrapStage(SaveOptions options = null, SaveManagerFactory factory = null)`
+- `DataBootstrapStage(IDataManager manager = null)`
+- `UIBootstrapStage(Transform uiRoot, IUIController controller = null, IUIManager manager = null)`
+- `LocalizationBootstrapStage(string defaultLanguage = "zh_Hans", Dictionary<string,string> data = null, ILocalizationManager manager = null)`（TextAsset 重载同）
+- `AudioBootstrapStage(AudioInitOptions options = null, IAudioProvider provider = null)`（新阶段）
+
+约束：可选参数/新类型，source-compatible；注入实例归调用方，阶段只销毁自己初始化的；公开 API 基线 + CHANGELOG `### Added`；测试覆盖「注入实例不被阶段 Shutdown 销毁」。
+
+**不做：** `ProviderProfile` / provider 注册表 / Installer 形状 / 把 provider 塞进 Profile。
+
+### 11.7 待裁定
+
+第八节已追加 16–18：内置阶段 provider/manager 参数、启动器模板 + 编辑器校验、Profile 是否容纳 provider。本节不另立裁定项。
 
 ---
 
@@ -771,6 +941,8 @@ Integration.BootstrapProfile.asset
 - `RuntimeInitializeOnLoadMethod`：`BeforeSceneLoad` 时场景对象已加载但未激活、`Awake` 未跑；`AfterSceneLoad` 时 `Awake`/`OnEnable` 已跑、可 `FindObjectsByType`；同档回调顺序不保证。
 - **遮罩时序（本轮修正的直接依据）：** `BeforeSceneLoad` 时场景 UI（遮罩）不可用；静态入口若自造 UI 根则已创建对象。详见 §10.7。
 - **本轮裁定的破坏性变更：** `DefaultGameLauncher` 的 7 个数据字段移除，字段面 8→2（`_profile` + `_uiRoot`）；抽象底座仍 0 字段；需要 CHANGELOG 迁移表 + Integration 场景同步。
+- **Provider 可替换性：** 权威表在 `Assets/XFramework/README.md:179-207`；注入形态刻意差异化（`Initialize(实例)` / 工厂 / `SetInstance` / options / `SetProvider` / 注册表 / 无注入点）。Save/Data/UI/Localization 阶段当前缺少 provider/manager 构造参数；Audio 没有内置引导阶段；Camera 后端与 Audio 高级能力接口为 internal。详见 §11。
+- **Profile 与 provider：** `BootstrapProfile` 只装 7 个数据值；provider 是代码，不能进 Profile（本轮裁定 data-only，不新增 provider 槽）。
 - 第三方：VContainer `LifetimeScope` / `VContainerSettings`（Preloaded Settings + 根 `LifetimeScope` 预制体 + 编辑器 `BeforeSceneLoad` 钩子）/ `IAsyncStartable`；Zenject `ProjectContext` / `SceneContext` / `ScriptableObjectInstaller` / `BindExecutionOrder`；Reflex `ReflexSettings`（`Resources`）+ `ContainerScope`（每场景仍需）；Addressables `IInitializableObject` / `ObjectInitializationData`（在 catalog 之前、无 teardown）；UGF `GameFrameworkEntry` / `GameEntry` / `BaseComponent`；QFramework `Architecture<T>`（懒初始化、半初始化风险）；Unity `RuntimeInitializeOnLoadMethod` / `DefaultExecutionOrder` / `playModeStartScene`；UGS `UnityServices.State`；DOTween 自动初始化 + 隐藏 DDOL driver；SRDebugger `SRDebug.Init()`。
 
 **代码路径推断（未实测）：**
