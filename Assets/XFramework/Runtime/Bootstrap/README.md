@@ -188,6 +188,15 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里�
 > 启动器的 `Awake` 与你的 `Awake` 先后由 Unity 决定，外部先跑时会产生同相位双份。选一个入口；
 > 要替换内置阶段，走 `ConfigureStages` 覆写。
 
+### 编辑器校验
+
+菜单 **`Tools/XFramework/Bootstrap/Validate Bootstrap`** 做一次只读体检：Build Settings 的启动场景索引 0、
+当前打开场景里的启动器数量、Profile 的 Host 模式是否可能缺 `RemoteServices`、登记表里是否重复登记了内置阶段。
+错误 / 警告 / 提示输出到 Console，可点击定位对象。
+
+**边界**：Build Settings 的场景只检查索引与启用状态（不打开场景扫描）；登记表检查只在 PlayMode
+（或使用方手动登记后）有效——编辑模式下 `Awake` 不会跑。校验器不修改场景、资产或登记表。
+
 ⚠ **`DefaultGameLauncher`（以及它的抽象底座 `GameLauncher`）覆盖不到的两样**：① **`LogOptions`**——日志配置要在**任何场景加载之前**生效（`SubsystemRegistration` 就立默认实现，正是为了不丢启动期日志），场景组件结构性地晚一步，需要时用 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 自己调 `LogManager.Configure`；② **服务实例**（同上，它们本就是代码对象而非数据）。
 
 ## 自定义实现

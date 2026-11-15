@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **启动就绪面**（2026-11-15）：新增 `BootstrapState` 枚举与 `Bootstrap.State` / `Bootstrap.WaitUntilReadyAsync(CancellationToken)` / `Bootstrap.LastProgress`。`WaitUntilReadyAsync` 在 `Completed` 立即返回、在 `Failed` / `Cancelled` 重抛本次运行的异常、在 `Idle` 等待下一次运行（可取消）；`LastProgress` 是最近一帧 `PipelineProgress` 快照，启动画面可直接轮询。**`RunAsync` 重入语义变更**：在途时的第二次调用从「警告并立即返回」改为**返回第一次运行的任务（join）**，第二次调用的令牌不参与本次运行——旧行为会让第二个调用方误以为启动已完成。源兼容新增；公开 API 基线已更新。
 - **`GameLauncher.StartupTask`**（2026-11-15）：启动器实例的启动任务；成功完成、失败时以同一异常收场、组件在启动途中销毁时以 `OperationCanceledException` 收场，在 `Start` 之前访问也有效。
 - **登记便捷层：`BootstrapStage.Create` 与 `BootstrapStages` 目录**（2026-11-15）：委托工厂把「只调一次初始化」的样板类收成一次调用（所有权归调用方，`Shutdown` 由调用方提供）；`BootstrapStages` 为内置六阶段提供构造入口（`Asset` / `Data` / `Save` / `UI` / `Input` / `Localization`），只构造、不登记，不改变相位语义。源兼容新增；公开 API 基线已更新。
+- **Bootstrap 编辑器校验**（2026-11-15）：菜单 `Tools/XFramework/Bootstrap/Validate Bootstrap` 只读检查 Build Settings 启动场景索引 0、多启动器、Profile 的 Host 模式缺 `RemoteServices`、内置阶段重复登记；错误/警告/提示输出到 Console 并带可点击对象。实现全部 `internal`，不改变公开 API，不修改场景 / 资产 / 登记表，不在保存或构建时自动触发。
 - **`BootstrapProfile` + `BootstrapStages.FromProfile`**（2026-11-15）：装 7 个启动数据值的 `ScriptableObject`（Asset×3 / Save×1 / Input×1 / Localization×2），可复用、可做环境变体；`FromProfile(profile, uiRoot)` 显式登记 Asset / Data / Save，再按值条件登记 UI / Input / Localization。**只装数据**：服务实例（`RemoteServices` / `CryptoProvider` / 自定义 provider）仍走启动器子类的 `ConfigureStages` 覆写。
 
 #### Samples
