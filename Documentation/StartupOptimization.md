@@ -1,7 +1,7 @@
 # 启动方式评估与优化计划
 
 > **状态：** 阶段 0–6 已实施（2026-11-15）；阶段 7 / 8 待裁。
-> **同日后续裁定（2026-11-15，晚于本计划实施）：**「启动组合整体交还使用方」——`DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults` 已删除，保留 `GameLauncher` 底座与 `BootstrapStage.Create` 委托工厂；中央目录 `BootstrapStages` 同日稍后也删除。D2 / D3 / D7 的默认实现与目录一半随之中止，长期结论见 `Modules/Bootstrap.md` 台账。本文档保留原评估与计划快照，不重写。
+> **同日后续裁定（2026-11-15，晚于本计划实施）：**「启动组合整体交还使用方」——`DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults` 已删除，保留 `GameLauncher` 底座与 `BootstrapStage.Create` 委托工厂；中央目录 `BootstrapStages` 同日稍后也删除。D2 / D3 / D7 的默认实现与目录一半随之中止；D1 的 `GameLauncher.StartupTask` 也已移除（与 `WaitUntilReadyAsync` 重复），保留全局就绪面。长期结论见 `Modules/Bootstrap.md` 台账。本文档保留原评估与计划快照，不重写。
 > **范围：** Bootstrap / GameLauncher / BootstrapProfile / Pipeline 子阶段超时 / provider 替换路径 / 启动诊断与编辑器校验。
 > **读者：** 维护者（实施本轮优化时）+ 下一轮审计者。
 > **阅读顺序：** 先读 §0（最终结论与计划）；§1–§6 是评估依据，§10–§11 是追加论证；**冲突时以 §0 + §7 为准**。
@@ -18,7 +18,7 @@
 
 | # | 结论 | 落地位置 |
 |---|---|---|
-| **D1** | **就绪面**：`BootstrapState` / `State` / `WaitUntilReadyAsync` / 重入 join / `GameLauncher.StartupTask`。批准本计划即视为重开两条 `暂不做`。 | 阶段 1 |
+| **D1** | **就绪面**：`BootstrapState` / `State` / `WaitUntilReadyAsync` / 重入 join / `GameLauncher.StartupTask`。批准本计划即视为重开两条 `暂不做`。**2026-11-15 后续**：`StartupTask` 已移除，其余保留。 | 阶段 1 |
 | **D2** | **Profile + launcher**：`BootstrapProfile` 装 7 个数据值；`DefaultGameLauncher` 只保留 `_profile` + `_uiRoot`；7 个数据字段移除；零配置语义不变；破坏性迁移。**2026-11-15 后续**：三者当日整体移除，Profile 形状移入示例。 | 阶段 3 |
 | **D3** | **继承拆分保留**：`GameLauncher` 抽象零字段 + `DefaultGameLauncher` 两字段；合并留独立主版本。**2026-11-15 后续**：默认实现已删除，抽象底座保留。 | 阶段 3 |
 | **D4** | **入口**：N0 启动场景 Launcher 主线；N3 自动启动根可选；N4 仅 headless/纯静态。 | 阶段 3/4、7 |
@@ -319,7 +319,7 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 | 0 | 0.1 | 本文档定稿（§0/§7/§8、历史口径标注） | — | `check-docs -Enforce` |
 | 0 | 0.2 | `Documentation/Modules/Bootstrap.md`「零使用」订正；裁定落模块台账 | — | `check-docs -Enforce` |
 | 1 | 1.1 | `BootstrapState` / `State` / `WaitUntilReadyAsync` / 重入 join；`ResetForNewSession` 等待者复位；测试 | — | `run-tests -Filter Bootstrap` |
-| 1 | 1.2 | `GameLauncher.StartupTask`；测试 | 1.1 | 定向 |
+| 1 | 1.2 | `GameLauncher.StartupTask`；测试（2026-11-15 后续：已移除） | 1.1 | 定向 |
 | 1 | 1.3 | Public API 基线 + CHANGELOG `### Added` + Bootstrap README | 1.1/1.2 | 基线重跑 + `check-docs` |
 | 2 | 2.1 | `BootstrapStage.Create`；测试 + 基线 | — | 定向 |
 | 2 | 2.2 | `BootstrapStages` 目录（Asset/Data/Save/UI/Input/Localization）；测试 + 基线（2026-11-15 后续：已删除） | 2.1 | 定向 |

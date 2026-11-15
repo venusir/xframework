@@ -1,5 +1,4 @@
 using System;
-using Cysharp.Threading.Tasks;
 using UnityEngine;
 using XFramework.XLog;
 
@@ -14,6 +13,9 @@ namespace XFramework.XBootstrap
     /// <para><b>它仍是可选件，不是框架的必需入口。</b>不用它的话，在自己的启动流程里调
     /// <see cref="Bootstrap.RunAsync"/> 就行——每帧派发由 <c>UpdateManager</c> 注入的 PlayerLoop 完成，
     /// 与本组件无关，场景里没有它也照常运转。</para>
+    /// <para><b>启动结果怎么等</b>：本组件不额外暴露任务——需要「启动就绪」的代码统一等
+    /// <see cref="Bootstrap.WaitUntilReadyAsync"/>（全局就绪面，失败/取消时重抛本次运行的异常），
+    /// 它不依赖本组件的实例，也不受场景里有没有启动器影响。</para>
     /// <para><b>必须挂在根 GameObject 上</b>：<c>DontDestroyOnLoad</c> 只对根对象生效；挂在子对象上时
     /// 切场景会随父对象一起销毁并触发 <c>Shutdown</c>，拆掉全部全局服务（R3-BST-002）。</para>
     /// <para><b>本组件覆盖不到的两样</b>：① <c>LogOptions</c>——日志配置要在<b>任何场景加载之前</b>生效
@@ -22,29 +24,6 @@ namespace XFramework.XBootstrap
     /// </summary>
     public abstract class GameLauncher : MonoBehaviour
     {
-        #region Private Fields
-
-        /// <summary>
-        /// <see cref="StartupTask"/> 的兑现源：<c>Start</c> 成功/失败/取消时落位；组件在 <c>Start</c>
-        /// 之前被销毁时由 <c>OnDestroy</c> 取消，避免等待者永远挂起。
-        /// </summary>
-        private readonly UniTaskCompletionSource _startup = new UniTaskCompletionSource();
-
-        #endregion
-
-        #region Public Properties
-
-        /// <summary>
-        /// 本次启动的任务：成功完成；<see cref="Bootstrap.RunAsync"/> 失败时以同一异常收场；
-        /// 被取消（含组件在启动途中销毁）时以 <see cref="OperationCanceledException"/> 收场。
-        /// <para><b>在 <c>Start</c> 之前访问也有效</b>——它等待的是当前/下一次运行。
-        /// 与 <see cref="Bootstrap.WaitUntilReadyAsync"/> 的分工：本属性绑定「这个启动器实例」的启动，
-        /// 后者是全局就绪面，不经启动器的静态入口也能用。</para>
-        /// </summary>
-        public UniTask StartupTask => _startup.Task;
-
-        #endregion
-
         #region Lifecycle Methods
 
         void Awake()
@@ -65,24 +44,19 @@ namespace XFramework.XBootstrap
                 // （OnDestroy 的 Shutdown 也会中止在途运行，这里是纵深防御：令牌是调用方一侧的
                 // 显式声明，不依赖 Shutdown 被调到。）
                 await Bootstrap.RunAsync(cancellationToken: destroyCancellationToken);
-                _startup.TrySetResult();
             }
             catch (OperationCanceledException)
             {
                 // 启动被取消属正常路径（例如应用退出），不当作错误
-                _startup.TrySetCanceled();
             }
             catch (Exception exception)
             {
-                _startup.TrySetException(exception);
                 LogManager.Error(LogCategories.GameLauncher, "启动失败：{0}", exception);
             }
         }
 
         void OnDestroy()
         {
-            // 启动尚未落位就销毁：等待者收到取消，而不是永远挂着。
-            _startup.TrySetCanceled();
             Bootstrap.Shutdown();
         }
 

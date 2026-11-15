@@ -355,7 +355,6 @@ XFramework.XBootstrap.BootstrapState.Running  ::  = 1
 XFramework.XBootstrap.GameLauncher  ::  public abstract class : UnityEngine.MonoBehaviour
 XFramework.XBootstrap.GameLauncher#ctor  ::  protected()
 XFramework.XBootstrap.GameLauncher.ConfigureStages  ::  protected abstract void()
-XFramework.XBootstrap.GameLauncher.StartupTask  ::  public Cysharp.Threading.Tasks.UniTask StartupTask { get; }
 XFramework.XBootstrap.IBootstrapStage  ::  public interface : XFramework.XPipeline.IPhaseStage
 XFramework.XBootstrap.IBootstrapStage.Shutdown  ::  public void()
 XFramework.XCamera.CameraBlendStyle  ::  public enum : int

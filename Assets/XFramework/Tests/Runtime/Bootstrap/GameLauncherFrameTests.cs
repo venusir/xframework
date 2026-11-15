@@ -295,67 +295,6 @@ namespace XFramework.XBootstrap.Tests
             }
         }
 
-        [Test]
-        public async Task StartupTask_CompletesWhenStartupCompletes()
-        {
-            var stage = new GateStage { StageName = "跨帧", Frames = 2 };
-            FrameLauncher.Stages = new IBootstrapStage[] { stage };
-
-            var go = new GameObject("launcher-startup-task");
-            try
-            {
-                var launcher = go.AddComponent<FrameLauncher>();
-
-                // Start 在下一帧才跑：StartupTask 在此之前应仍在途，而不是伪造「已就绪」
-                Assert.AreEqual(UniTaskStatus.Pending, launcher.StartupTask.Status);
-
-                await launcher.StartupTask;
-
-                Assert.IsTrue(stage.CompletedCount >= 1, "StartupTask 完成时启动阶段应已跑完");
-                Assert.AreEqual(BootstrapState.Completed, Bootstrap.State);
-            }
-            finally
-            {
-                if (go != null) UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        [Test]
-        public async Task StartupTask_FaultsWhenStartupFails()
-        {
-            var bad = new GateStage { StageName = "失败", ThrowOnExecute = true };
-            FrameLauncher.Stages = new IBootstrapStage[] { bad };
-
-            var go = new GameObject("launcher-startup-fail");
-            try
-            {
-                var launcher = go.AddComponent<FrameLauncher>();
-
-                LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed"));
-                LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed"));
-                LogAssert.Expect(LogType.Error, new Regex(@"\[GameLauncher\] 启动失败"));
-
-                // NUnit 的 ThrowsAsync 只接受 Task 返回的委托，UniTask 用 try/catch 承接
-                InvalidOperationException exception = null;
-                try
-                {
-                    await launcher.StartupTask;
-                }
-                catch (InvalidOperationException e)
-                {
-                    exception = e;
-                }
-
-                Assert.IsNotNull(exception, "启动失败时 StartupTask 应以异常收场");
-                StringAssert.Contains("启动失败", exception.Message);
-                Assert.AreEqual(BootstrapState.Failed, Bootstrap.State);
-            }
-            finally
-            {
-                if (go != null) UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
         #endregion
     }
 }

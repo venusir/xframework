@@ -57,7 +57,7 @@ Runtime/Bootstrap/
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapStage.cs       # 委托阶段工厂：BootstrapStage.Create
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
-└── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象，暴露 StartupTask
+└── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象
 ```
 
 这些文件都是公开面，本模块没有 `internal` 类型。
@@ -109,9 +109,6 @@ Runtime/Bootstrap/
 **重入是 join，不是忽略。** `RunAsync` 在途时，第二次调用**返回第一次运行的任务**（同一个完成源，
 可多路 await）；第二次调用的令牌**不参与本次运行**。旧行为「警告后立即返回」已删除——那会让第二个
 调用方误以为启动已完成。
-
-**`GameLauncher.StartupTask`** 是这个启动器实例的启动任务：成功完成，失败时与 `RunAsync` 同样抛出，
-组件在启动途中销毁时以 `OperationCanceledException` 收场。在 `Start` 之前访问也有效。
 
 **同一会话只应有一个 `GameLauncher`。** `GameLauncher` 会 `DontDestroyOnLoad`——**只对根 GameObject 生效**，
 请把启动器挂在根对象上；挂在子对象上时切场景会随父对象销毁并触发 `Shutdown`，拆掉全部全局服务。每个场景各挂
@@ -303,7 +300,7 @@ Bootstrap.Register(new LocalizationBootstrapStage("en", languageTable));
 
 ## 已知限制
 
-**框架不提供开箱启动器、Profile、默认组合或中央构造目录。** `GameLauncher` 只有生命周期接线与 `StartupTask`；字段面（配置资产、UI 根）与登记代码都由使用方写；内置阶段由各模块自己的公开构造函数构造。`Samples~/Integration` 是可复制的模板，不是框架契约——字段形状可以按项目需要增删。
+**框架不提供开箱启动器、Profile、默认组合或中央构造目录。** `GameLauncher` 只有生命周期接线；字段面（配置资产、UI 根）与登记代码都由使用方写；内置阶段由各模块自己的公开构造函数构造。`Samples~/Integration` 是可复制的模板，不是框架契约——字段形状可以按项目需要增删。
 
 **超时是「报告失败」，不是「真正中止」。** `Bootstrap.Register(stage, timeoutSeconds)` 把超时下沉到该引导阶段（0 / 负值 / NaN / ±∞ = 不启用）：触发时置该子阶段 `Failed` 并取消其令牌，整轮启动以失败收场。但**不响应取消的阶段仍会跑完**——它在自己的沉降点收场，启动不再等它（与 `IPipeline.AddStage(stage, timeoutSeconds)` 同一条乐观超时边界，见 Pipeline README）。组失败后管线照常失败并停止后续相位。
 

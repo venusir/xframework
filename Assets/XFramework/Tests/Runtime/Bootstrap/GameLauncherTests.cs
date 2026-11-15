@@ -115,8 +115,8 @@ namespace XFramework.XBootstrap.Tests
         /// <summary>
         /// 底座**不带序列化字段**：Inspector 干净（Unity 无法隐藏继承来的序列化字段，
         /// 所以「不带字段」只能靠类型层次来保证）。
-        /// <para>判据是**序列化面**而不是「任何实例字段」：`StartupTask` 需要一个非序列化的完成源，
-        /// 它不进 Inspector、不影响这条契约；把断言写成「零实例字段」会让实现被迫改用全局状态。</para>
+        /// <para>判据是**序列化面**而不是「任何实例字段」：非序列化状态不进 Inspector、
+        /// 不影响这条契约；把断言写成「零实例字段」会过度约束实现。</para>
         /// </summary>
         [Test]
         public void BaseClass_HasNoSerializedFields()
