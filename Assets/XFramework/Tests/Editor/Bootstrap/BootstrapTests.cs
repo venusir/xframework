@@ -295,6 +295,31 @@ namespace Venusy609.Xframework.Editor.Tests
             Assert.AreEqual(3, Bootstrap.Stages.Count, "重复调用 RegisterDefaults 不应叠加（按类型跳过已存在的内置阶段）");
         }
 
+        [Test]
+        public void Register_WithTimeout_StageRunsNormallyWhenNotTriggered()
+        {
+            var stage = NewStage("timed", 0);
+            Bootstrap.Register(stage, 5f);
+
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, stage.ExecuteCount, "超时未触发时阶段应正常执行");
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State);
+        }
+
+        [Test]
+        public void Register_WithNonFiniteTimeout_NormalizedToDisabled()
+        {
+            var stage = NewStage("timed", 0);
+            Bootstrap.Register(stage, float.PositiveInfinity);
+
+            // +∞ 若未归一，TimeSpan.FromSeconds 会溢出；持续挂起则会在沉降点被取消
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, stage.ExecuteCount);
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State);
+        }
+
         #endregion
 
         #region 执行

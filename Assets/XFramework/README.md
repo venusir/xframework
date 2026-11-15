@@ -230,13 +230,13 @@ await Bootstrap.RunAsync();
 | **Data** | `IDataManager` 整体替换（`DataManager.Initialize(impl)`，**传 `null` 等价于 `Shutdown()`**）——**无 options** | 初始化时 |
 | **Localization** | `ILocalizationManager` 整体替换；`Initialize(lang, data)` / `SetLanguageData` 注入数据；`LanguageAssetPath`（语言表地址模板）/ `FallbackLanguage`；`LocalizationBootstrapStage`（含 `TextAsset` 重载）——**换实现换不掉 `SwitchLanguageAsync` 的加载路径**（它走门面内部的 loader，见模块 README） | 运行时实时（下次切换 / 下次回退读取） |
 | **Serialize** | `ISerializer` 按格式名 `Register` / `Unregister`（公开 `Register` 同名覆盖；**`Initialize` 遇同名注册保留使用方的并告警**）；`Get` / `TryGet` / `Default` 取用 | 实时 |
-| **Bootstrap** | 登记表：`Register` / `Unregister` / `Unregister<T>` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options**；相位号常量见 `BootstrapPhases`；`DefaultGameLauncher` 的八个 Inspector 字段 + `ConfigureStages()` 覆写 | 实时（须在 `RunAsync` 之前） |
+| **Bootstrap** | 登记表：`Register`（可带子阶段超时 `timeoutSeconds`）/ `Unregister` / `Unregister<T>` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options**；相位号常量见 `BootstrapPhases`；`DefaultGameLauncher` 的 `_profile` + `_uiRoot` 两个 Inspector 字段（Profile 装 7 个数据值）+ `ConfigureStages()` 覆写 | 实时（须在 `RunAsync` 之前） |
 | **Update** | 注册参数（`order` / `initialTier` / `timeMode`——**`RegisterFixed` 没有 `timeMode`**）；`AutoDriveEnabled`（关掉即停止 PlayerLoop 自动派发，改为自行 `Tick`）；运行时 `Pause` / `Resume` / `Clear` / `Enable` / `Disable`——**无 options**；`timeMode` 注册时读一次 | 注册时 / 实时 |
 | **Lock** | `AutoReleaseOnDestroy`（运行时可变；关掉后**不再新建销毁绑定**，且对**已销毁主体**的操作不再被拒）；`LockType` 是**使用方自建**的常量类——框架不预设锁类型 | 实时 |
 | **Event** | **无配置点**（订阅期钩子 `EventStream.Create(onEmpty)` 除外） | — |
 | **Reactive** | 构造期：`ReactiveProperty<T>(T initialValue, IEqualityComparer<T> comparer)`——自定义「相同值不通知」的相等语义（浮点容差等）；`Select(..., comparer)` 对派生值同理；`ReactiveDictionary<TKey,TValue>(IEqualityComparer<TKey> comparer)`——键比较器（引用类型作键时的逃生口，大小写不敏感等） | 构造时 |
 | **Timer** | **无配置点**（每次调用的 `UpdateTimeMode` 与取消令牌） | — |
-| **Pipeline** | 装配期：`AddStage(stage, timeoutSeconds)` / `IPhaseStage.Phase` / `IPipelineStage.Name`·`Weight` / `ParallelStage`·`SequenceStage`（可传 `name`）/ `BuildPhaseGroups(..., nameFormat)` / 四个终局与进度事件——**无 options** | 装配时 |
+| **Pipeline** | 装配期：`AddStage(stage, timeoutSeconds)` / `IPhaseStage.Phase` / `IPipelineStage.Name`·`Weight` / `ParallelStage`（可传 `name` / 子阶段 `timeoutSeconds`）·`SequenceStage`（可传 `name`）/ `BuildPhaseGroups(..., nameFormat, timeoutSeconds)` / 四个终局与进度事件——**无 options** | 装配时 |
 | **Diagnostics** | **无配置点**（页签是**运行时登记**不是配置：`DiagnosticsManager.Register(IDiagnosticPanel)`；渲染契约 `IDiagnosticPanelView` 由 Editor 侧实现） | — |
 
 ## 路径与目录

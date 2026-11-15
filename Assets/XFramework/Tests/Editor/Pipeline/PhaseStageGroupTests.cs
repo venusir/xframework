@@ -42,6 +42,34 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void BuildPhaseGroups_WithTimeouts_PassesPerChildTimeouts()
+        {
+            var a = new FakePhaseStage { Phase = 0, Name = "a" };
+            var b = new FakePhaseStage { Phase = 0, Name = "b" };
+            var c = new FakePhaseStage { Phase = 1, Name = "c" };
+
+            var groups = Pipeline.BuildPhaseGroups(
+                new IPhaseStage[] { a, b, c }, timeoutSeconds: new[] { 1f, 2f, 3f });
+
+            Assert.AreEqual(2, groups.Count);
+
+            var first = (ParallelStage)groups[0];
+            Assert.AreEqual(2, first.ChildTimeouts.Count, "同相位两个子阶段应各带自己的超时");
+            Assert.AreEqual(1f, first.ChildTimeouts[0]);
+            Assert.AreEqual(2f, first.ChildTimeouts[1]);
+
+            var second = (ParallelStage)groups[1];
+            Assert.AreEqual(3f, second.ChildTimeouts[0], "超时应随阶段一起被分到对应相位组");
+        }
+
+        [Test]
+        public void BuildPhaseGroups_TimeoutCountMismatch_Throws()
+        {
+            Assert.Throws<ArgumentException>(() => Pipeline.BuildPhaseGroups(
+                new IPhaseStage[] { new FakePhaseStage() }, timeoutSeconds: new float[0]));
+        }
+
+        [Test]
         public void EmptyInput_ReturnsEmptyList()
         {
             var groups = Pipeline.BuildPhaseGroups(new IPhaseStage[0]);

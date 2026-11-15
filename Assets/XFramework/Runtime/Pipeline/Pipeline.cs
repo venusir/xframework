@@ -27,17 +27,26 @@ namespace XFramework.XPipeline
         /// 空列表返回空清单。</param>
         /// <param name="nameFormat">相位组名格式(相位号作为格式化参数),默认 "Phase-{0}"。
         /// null 抛 <see cref="ArgumentNullException"/>。</param>
+        /// <param name="timeoutSeconds">与 <paramref name="stages"/> 同序的<b>子阶段超时</b>(秒;0/负值/非有限值 = 不启用),
+        /// 可为 null(全部不启用)。非 null 时长度必须与 <paramref name="stages"/> 相同。超时只报告失败并取消令牌,
+        /// 不响应取消的子阶段仍会跑完(与 <see cref="IPipeline.AddStage(IPipelineStage, float)"/> 同一边界)。</param>
         /// <returns>按相位升序排列的 <see cref="ParallelStage"/> 清单,每组一个。</returns>
+        /// <exception cref="ArgumentException"><paramref name="timeoutSeconds"/> 非 null 且长度与
+        /// <paramref name="stages"/> 不同时抛出。</exception>
         public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
-            IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}")
+            IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}",
+            IReadOnlyList<float> timeoutSeconds = null)
         {
             if (stages == null)
                 throw new ArgumentNullException(nameof(stages));
             if (nameFormat == null)
                 throw new ArgumentNullException(nameof(nameFormat));
+            if (timeoutSeconds != null && timeoutSeconds.Count != stages.Count)
+                throw new ArgumentException("timeoutSeconds must match stages count.", nameof(timeoutSeconds));
 
-            // 按相位分组(组内保持输入顺序,装配期一次遍历,零 LINQ)
-            var groups = new Dictionary<int, List<IPhaseStage>>();
+            // 按相位分组(组内保持输入顺序,装配期一次遍历,零 LINQ)。
+            // 存索引而不是阶段对象：超时列表与阶段列表同序，分组后仍要按索引取回对应的超时。
+            var groups = new Dictionary<int, List<int>>();
             for (int i = 0; i < stages.Count; i++)
             {
                 var stage = stages[i];
@@ -46,10 +55,10 @@ namespace XFramework.XPipeline
 
                 if (!groups.TryGetValue(stage.Phase, out var list))
                 {
-                    list = new List<IPhaseStage>();
+                    list = new List<int>();
                     groups.Add(stage.Phase, list);
                 }
-                list.Add(stage);
+                list.Add(i);
             }
 
             // 相位升序,每相位一个并行阶段
@@ -60,7 +69,18 @@ namespace XFramework.XPipeline
             for (int i = 0; i < phases.Count; i++)
             {
                 int phase = phases[i];
-                result.Add(new ParallelStage(groups[phase], string.Format(nameFormat, phase)));
+                var indexes = groups[phase];
+
+                var groupStages = new List<IPipelineStage>(indexes.Count);
+                var groupTimeouts = new List<float>(indexes.Count);
+                for (int j = 0; j < indexes.Count; j++)
+                {
+                    int index = indexes[j];
+                    groupStages.Add(stages[index]);
+                    groupTimeouts.Add(timeoutSeconds == null ? 0f : timeoutSeconds[index]);
+                }
+
+                result.Add(new ParallelStage(groupStages, string.Format(nameFormat, phase), groupTimeouts));
             }
             return result;
         }

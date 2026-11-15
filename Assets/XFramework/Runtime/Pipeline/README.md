@@ -41,6 +41,12 @@ pipeline.AddStage(new ParallelStage(new IPipelineStage[] { new InitStage(), new 
 pipeline.AddStage(new PostStage { Weight = 0f }); // 瞬时阶段,不占进度
 pipeline.AddStage(new InitStage(), 30f);     // 30 秒超时:超时置 Failed 并停止后续阶段
 
+// 并行组内的单个子阶段超时(与阶段同序;0/负值/NaN = 不启用)
+pipeline.AddStage(new ParallelStage(
+    new IPipelineStage[] { new InitStage(), new LoadStage() },
+    "Parallel-Timeouts",
+    new[] { 10f, 0f }));                     // InitStage 10 秒超时,LoadStage 不限
+
 // 容器组合:并行组内先 Init 后 Load(串行子段),与 PostStage 并行——嵌套树表达任意串并行组合
 pipeline.AddStage(new ParallelStage(new IPipelineStage[]
 {
@@ -176,8 +182,10 @@ public interface IPhaseStage : IPipelineStage
 
 ```csharp
 // 按相位分组装配:每组一个 ParallelStage(组内并行、组内保持输入顺序),返回按相位升序的清单
+// timeoutSeconds 与 stages 同序(可选):非 null 时长度必须相同,按索引随阶段一起进入相位组
 public static IReadOnlyList<IPipelineStage> BuildPhaseGroups(
-    IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}");
+    IReadOnlyList<IPhaseStage> stages, string nameFormat = "Phase-{0}",
+    IReadOnlyList<float> timeoutSeconds = null);
 ```
 
 #### 相位分组调度示意
@@ -204,6 +212,7 @@ Phase 90: [LocalizationBootstrapStage]────────┘
 - **取消**: `RunAsync(CancellationToken)` 取消后当前阶段收到已取消的 token,尚未开始的阶段不再执行,触发 `OnCancelled`,**不触发** `OnCompleted` 与 `OnFailed`;阶段自行抛 `OperationCanceledException` 同样视为取消。阶段可以对取消无感并正常返回,但**阶段沉降后 token 已取消即判取消**——否则最后一个阶段那样收场会直接落进完成终局,取消被静默吞掉(容器与顶层同一判据)
 - **契约兜底**: 阶段正常返回但未写终态(未调用 `SetState`)时自动视为完成(进度 1f),不会阻塞调度
 - **阶段超时**: `AddStage(stage, timeoutSeconds)` 为单个阶段设置超时(0/负值/NaN 不启用);超时触发 → 取消当前阶段运行并置 `Failed`(描述含超时信息)经 `OnFailed` 报告,后续阶段不再执行;不响应取消的挂起阶段不阻塞管线(在途任务被放弃,其后续上下文写入被忽略)
+- **子阶段超时**: `ParallelStage(stages, name, timeoutSeconds)` 与 `BuildPhaseGroups(..., timeoutSeconds)` 把超时下沉到组内单个子阶段(与阶段同序);某个子阶段超时 → 置该子上下文 `Failed` 并取消在途兄弟,组走失败终局。**同一条边界**:超时只中止编排、不真正中止阶段——不响应取消的子阶段仍会跑完,只是其后续上下文写入被组门铃挡掉
 - **阶段日志**: 顶层阶段开始/结束经 `Debug.Log` 记录耗时(`[Pipeline] Stage 'X' start` / `'X' completed|failed|cancelled|timed out in Nms`),便于诊断执行时间分布;容器(并行/串行)组内子阶段不输出 start/end 日志(组级失败已有 `[Pipeline] Parallel/Sequence stage failed: ...` 诊断日志兜底)
 - **重入守卫**: 运行中重复调用 `RunAsync` 打 `[Pipeline]` 警告忽略;空阶段列表打警告并直接触发完成
 - **运行期装配防护**: 运行中 `AddStage` 打 `[Pipeline] AddStage: already running` 警告并忽略(阶段列表运行期只读,运行中上下文已按启动时刻快照,入列会错位)

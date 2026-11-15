@@ -161,6 +161,87 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
+        public void ChildTimeout_TriggersFailure_AndCancelsSiblings()
+        {
+            var slow = new CtxCapturingStage { Name = "slow", Gate = new UniTaskCompletionSource() };
+            var sibling = new FakeStage { Name = "sibling", Gate = new UniTaskCompletionSource() };
+            var stage = new ParallelStage(
+                new IPipelineStage[] { slow, sibling }, "Group", new[] { 1f, 0f });
+
+            var timer = new UniTaskCompletionSource();
+            stage.TimeoutTaskFactory = (_, _) => timer.Task;
+
+            string failedReason = null;
+            bool completed = false;
+            var pipeline = Pipeline.Create();
+            pipeline.OnFailed += r => failedReason = r;
+            pipeline.OnCompleted += () => completed = true;
+            pipeline.AddStage(stage);
+
+            LogAssert.Expect(LogType.Error,
+                new Regex(@"\[Pipeline\] Parallel stage failed: slow \(\d+\.\d+s\): Stage 'slow' timed out"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+
+            var task = pipeline.RunAsync();
+            Assert.AreEqual(1, slow.ExecuteCount, "子阶段应已启动");
+            timer.TrySetResult(); // 触发子阶段超时
+            task.GetAwaiter().GetResult();
+
+            Assert.AreEqual(PipelineStageState.Failed, slow.LastContext.State, "超时应置该子阶段 Failed");
+            StringAssert.Contains("timed out", slow.LastContext.Description);
+            Assert.IsTrue(slow.LastToken.IsCancellationRequested, "超时应取消该子阶段的令牌");
+            Assert.IsTrue(sibling.LastToken.IsCancellationRequested, "超时应经聚合器取消在途兄弟");
+            StringAssert.Contains("timed out", failedReason, "组失败原因应含超时信息");
+            Assert.IsFalse(completed, "子阶段超时不得触发完成事件");
+        }
+
+        [Test]
+        public void ChildTimeout_NotTriggered_NormalCompletion()
+        {
+            var child = new FakeStage { Name = "child" };
+            var stage = new ParallelStage(new IPipelineStage[] { child }, "Group", new[] { 5f });
+
+            // 永不触发的计时器：子阶段先完成应走正常分支
+            stage.TimeoutTaskFactory = (_, _) => new UniTaskCompletionSource().Task;
+
+            bool completed = false;
+            string failedReason = null;
+            var pipeline = Pipeline.Create();
+            pipeline.OnCompleted += () => completed = true;
+            pipeline.OnFailed += r => failedReason = r;
+            pipeline.AddStage(stage);
+
+            pipeline.RunAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(1, child.ExecuteCount);
+            Assert.IsTrue(completed, "未触发子阶段超时应正常完成");
+            Assert.IsNull(failedReason);
+        }
+
+        [Test]
+        public void ChildTimeout_ZeroOrNegative_Disabled()
+        {
+            var a = new FakeStage { Name = "A", Gate = new UniTaskCompletionSource() };
+            var b = new FakeStage { Name = "B", Gate = new UniTaskCompletionSource() };
+            var stage = new ParallelStage(new IPipelineStage[] { a, b }, "Group", new[] { 0f, -1f });
+
+            // 永不完成的计时器：若超时被误启用，WhenAny 永不完成 → 本测试死锁（验证信号）
+            stage.TimeoutTaskFactory = (_, _) => UniTask.Never(CancellationToken.None);
+
+            bool completed = false;
+            var pipeline = Pipeline.Create();
+            pipeline.OnCompleted += () => completed = true;
+            pipeline.AddStage(stage);
+
+            var task = pipeline.RunAsync();
+            a.Gate.TrySetResult();
+            b.Gate.TrySetResult();
+            task.GetAwaiter().GetResult();
+
+            Assert.IsTrue(completed, "0/负值超时应不启用，正常完成");
+        }
+
+        [Test]
         public void Timeout_ParallelStage_PropagatesToChildren()
         {
             var child = new FakeStage { Name = "child", Gate = new UniTaskCompletionSource() };

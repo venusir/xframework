@@ -31,6 +31,9 @@ namespace XFramework.XBootstrap
         /// <summary>按登记顺序保存的引导阶段。清理时按相位逆序遍历。</summary>
         private static readonly List<IBootstrapStage> StageList = new List<IBootstrapStage>();
 
+        /// <summary>与 <see cref="StageList"/> 同序的子阶段超时（秒；0 = 不启用）。两表必须同步增删。</summary>
+        private static readonly List<float> StageTimeoutList = new List<float>();
+
         /// <summary>是否有一次 <see cref="RunAsync"/> 在途。运行期登记表只读（改动只告警、不阻止）。</summary>
         private static bool _isRunning;
 
@@ -114,6 +117,21 @@ namespace XFramework.XBootstrap
         /// <exception cref="ArgumentNullException"><paramref name="stage"/> 为 null 时抛出。</exception>
         public static void Register(IBootstrapStage stage)
         {
+            Register(stage, 0f);
+        }
+
+        /// <summary>
+        /// 登记一个带子阶段超时的引导阶段。
+        /// <para><b>超时语义</b>：超时只报告失败并取消该阶段收到的令牌，<b>不响应取消的阶段仍会跑完</b>——
+        /// 它在自己的沉降点收场，组不再等待它。0 / 负值 / NaN / ±∞ 一律按「不启用」处理。
+        /// 这是 <see cref="IPipeline.AddStage(IPipelineStage, float)"/> 的超时在相位组内的等价物
+        /// （Bootstrap 每相位装配为一个 <see cref="ParallelStage"/>，顶层超时够不到单个引导阶段）。</para>
+        /// </summary>
+        /// <param name="stage">要登记的阶段。</param>
+        /// <param name="timeoutSeconds">超时秒数；0 / 负值 / 非有限值 = 不启用。</param>
+        /// <exception cref="ArgumentNullException"><paramref name="stage"/> 为 null 时抛出。</exception>
+        public static void Register(IBootstrapStage stage, float timeoutSeconds)
+        {
             if (stage == null)
                 throw new ArgumentNullException(nameof(stage));
 
@@ -134,6 +152,15 @@ namespace XFramework.XBootstrap
             }
 
             StageList.Add(stage);
+            StageTimeoutList.Add(NormalizeTimeout(timeoutSeconds));
+        }
+
+        /// <summary>把超时归一为「秒数或 0（不启用）」；与 PipelineImpl.AddStage 的非有限值口径一致。</summary>
+        private static float NormalizeTimeout(float timeoutSeconds)
+        {
+            return float.IsNaN(timeoutSeconds) || float.IsInfinity(timeoutSeconds) || timeoutSeconds < 0f
+                ? 0f
+                : timeoutSeconds;
         }
 
         /// <summary>
@@ -158,6 +185,7 @@ namespace XFramework.XBootstrap
                 if (ReferenceEquals(StageList[i], stage))
                 {
                     StageList.RemoveAt(i);
+                    StageTimeoutList.RemoveAt(i);
 
                     if (_isRunning)
                     {
@@ -188,6 +216,7 @@ namespace XFramework.XBootstrap
                 if (StageList[i].GetType() == typeof(T))
                 {
                     StageList.RemoveAt(i);
+                    StageTimeoutList.RemoveAt(i);
                     removed++;
                 }
             }
@@ -242,6 +271,7 @@ namespace XFramework.XBootstrap
             }
 
             StageList.Add(stage);
+            StageTimeoutList.Add(0f);
         }
 
         /// <summary>
@@ -259,6 +289,7 @@ namespace XFramework.XBootstrap
             }
 
             StageList.Clear();
+            StageTimeoutList.Clear();
         }
 
         /// <summary>
@@ -279,6 +310,7 @@ namespace XFramework.XBootstrap
         internal static void ResetForNewSession()
         {
             StageList.Clear();
+            StageTimeoutList.Clear();
 
             // 作废上一会话所有在途运行的收尾权：它们的 finally 不得再清 _isRunning
             _runGeneration++;
@@ -667,16 +699,19 @@ namespace XFramework.XBootstrap
         /// </summary>
         private static IPipeline BuildPipeline()
         {
-            // 装配期快照：Pipeline 的相位分组需要在构造时拿到完整列表
+            // 装配期快照：Pipeline 的相位分组需要在构造时拿到完整列表；
+            // 超时表与阶段表同序快照——两表必须来自同一时刻，不能一边读字段一边读列表。
             var phaseStages = new List<IPhaseStage>(StageList.Count);
+            var timeouts = new List<float>(StageTimeoutList.Count);
             for (int i = 0; i < StageList.Count; i++)
             {
                 phaseStages.Add(StageList[i]);
+                timeouts.Add(StageTimeoutList[i]);
             }
 
             IPipeline pipeline = Pipeline.Create();
 
-            IReadOnlyList<IPipelineStage> groups = Pipeline.BuildPhaseGroups(phaseStages);
+            IReadOnlyList<IPipelineStage> groups = Pipeline.BuildPhaseGroups(phaseStages, timeoutSeconds: timeouts);
             for (int i = 0; i < groups.Count; i++)
             {
                 pipeline.AddStage(groups[i]);

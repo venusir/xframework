@@ -15,6 +15,11 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **登记便捷层：`BootstrapStage.Create` 与 `BootstrapStages` 目录**（2026-11-15）：委托工厂把「只调一次初始化」的样板类收成一次调用（所有权归调用方，`Shutdown` 由调用方提供）；`BootstrapStages` 为内置六阶段提供构造入口（`Asset` / `Data` / `Save` / `UI` / `Input` / `Localization`），只构造、不登记，不改变相位语义。源兼容新增；公开 API 基线已更新。
 - **Bootstrap 编辑器校验**（2026-11-15）：菜单 `Tools/XFramework/Bootstrap/Validate Bootstrap` 只读检查 Build Settings 启动场景索引 0、多启动器、Profile 的 Host 模式缺 `RemoteServices`、内置阶段重复登记；错误/警告/提示输出到 Console 并带可点击对象。实现全部 `internal`，不改变公开 API，不修改场景 / 资产 / 登记表，不在保存或构建时自动触发。
 - **`BootstrapProfile` + `BootstrapStages.FromProfile`**（2026-11-15）：装 7 个启动数据值的 `ScriptableObject`（Asset×3 / Save×1 / Input×1 / Localization×2），可复用、可做环境变体；`FromProfile(profile, uiRoot)` 显式登记 Asset / Data / Save，再按值条件登记 UI / Input / Localization。**只装数据**：服务实例（`RemoteServices` / `CryptoProvider` / 自定义 provider）仍走启动器子类的 `ConfigureStages` 覆写。
+- **`Bootstrap.Register(stage, timeoutSeconds)`**（2026-11-15）：把超时下沉到单个引导阶段（0 / 负值 / NaN / ±∞ = 不启用）。触发时置该子阶段 `Failed` 并取消其在途同胞，整轮启动以失败收场；**不响应取消的阶段仍会跑完**（乐观超时，与 `IPipeline.AddStage(stage, timeoutSeconds)` 同一边界）。源兼容新增；公开 API 基线已更新。
+
+#### Pipeline
+
+- **`ParallelStage` / `Pipeline.BuildPhaseGroups` 支持子阶段超时**（2026-11-15）：`ParallelStage(stages, name, timeoutSeconds)` 与 `BuildPhaseGroups(stages, nameFormat, timeoutSeconds)` 接受与阶段同序的超时列表（0 / 负值 / 非有限值 = 不启用）。某个子阶段超时 → 置该子上下文 `Failed`、取消在途兄弟、组走失败终局；不等待被放弃的子阶段沉降。**源兼容新增（可选参数）**，公开 API 基线的两行签名随之变化（`ParallelStage` 2 参 → 3 参、`BuildPhaseGroups` 2 参 → 3 参）；API 基线已更新，无破坏性源码变更。
 
 #### Samples
 

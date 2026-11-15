@@ -25,15 +25,22 @@ namespace XFramework.XPipeline
         /// <param name="stages">子阶段列表。null 或空抛 <see cref="ArgumentException"/>。</param>
         /// <param name="name">阶段名称(进度描述)。相位分组装配按 nameFormat 生成(如 "Phase-0"),默认 "Parallel";
         /// null 抛 <see cref="ArgumentNullException"/>(与 <see cref="Pipeline.BuildPhaseGroups"/> 对 nameFormat 的防御一致)。</param>
-        public ParallelStage(IReadOnlyList<IPipelineStage> stages, string name = "Parallel")
+        /// <param name="timeoutSeconds">与 <paramref name="stages"/> 同序的子阶段超时(秒;0/负值/非有限值 = 不启用),
+        /// 可为 null(全部不启用)。非 null 时长度必须与 <paramref name="stages"/> 相同。
+        /// <para>超时只报告失败并取消令牌，<b>不响应取消的子阶段仍会跑完</b>——触发后本组不等待其沉降，直接走失败终局。</para></param>
+        public ParallelStage(IReadOnlyList<IPipelineStage> stages, string name = "Parallel",
+                             IReadOnlyList<float> timeoutSeconds = null)
         {
             if (stages == null || stages.Count == 0)
                 throw new ArgumentException("stages must not be null or empty.", nameof(stages));
             if (name == null)
                 throw new ArgumentNullException(nameof(name));
+            if (timeoutSeconds != null && timeoutSeconds.Count != stages.Count)
+                throw new ArgumentException("timeoutSeconds must match stages count.", nameof(timeoutSeconds));
 
             _children = new List<IPipelineStage>(stages);
             _name = name;
+            _childTimeouts = new List<float>(_children.Count);
 
             // 阶段权重 = Σ子阶段声明权重,构造期缓存;运行期子上下文权重改写不参与(防任务权重泄漏到管线级)
             for (int i = 0; i < _children.Count; i++)
@@ -42,6 +49,13 @@ namespace XFramework.XPipeline
                 if (_children[i] == null)
                     throw new ArgumentNullException(nameof(stages), $"stages[{i}] is null.");
                 _weight += _children[i].Weight;
+
+                // 非有限值按「不启用」归一（与 PipelineImpl.AddStage 同一口径）：+∞ 会让
+                // TimeSpan.FromSeconds 溢出，而调用方显然不是想「永远等」。
+                float timeout = timeoutSeconds == null ? 0f : timeoutSeconds[i];
+                _childTimeouts.Add(float.IsNaN(timeout) || float.IsInfinity(timeout) || timeout <= 0f
+                    ? 0f
+                    : timeout);
             }
 
             _aggregator = new StageAggregator(_children.Count);
@@ -95,7 +109,7 @@ namespace XFramework.XPipeline
             var wrappers = new List<UniTask<bool>>(_children.Count);
             for (int i = 0; i < _children.Count; i++)
             {
-                wrappers.Add(StageExecution.RunStageAsync(_children[i], _aggregator.ChildContexts[i], cts.Token));
+                wrappers.Add(RunChildAsync(i, cts));
             }
 
             // 沉降:RunStageAsync 已吞掉全部异常/OCE,WhenAll 正常返回,保证本阶段返回时无在途子阶段
@@ -151,12 +165,79 @@ namespace XFramework.XPipeline
 
         #endregion
 
+        #region Private Methods
+
+        /// <summary>执行单个子阶段：无超时直接走共享包装，有超时则与计时任务竞速。</summary>
+        private UniTask<bool> RunChildAsync(int index, CancellationTokenSource groupCts)
+        {
+            float timeout = _childTimeouts[index];
+            if (timeout <= 0f)
+                return StageExecution.RunStageAsync(_children[index], _aggregator.ChildContexts[index], groupCts.Token);
+
+            return RunChildWithTimeoutAsync(index, timeout, groupCts);
+        }
+
+        /// <summary>
+        /// 带超时的子阶段执行：与计时任务竞速。
+        /// <para>超时获胜时只标记子上下文 <see cref="PipelineStageState.Failed"/> 并<b>不等待在途子阶段沉降</b>
+        /// （挂死任务不得阻塞组）；聚合器在状态写入时取消其余兄弟。被放弃任务的后续上下文写入由
+        /// <see cref="StageAggregator.Settle"/> 关闸挡掉。</para>
+        /// <para>返回 true 表示以取消结束（外部取消赢得竞速），与 <see cref="StageExecution"/> 的约定一致。</para>
+        /// </summary>
+        private async UniTask<bool> RunChildWithTimeoutAsync(int index, float timeoutSeconds,
+                                                             CancellationTokenSource groupCts)
+        {
+            IPipelineStage child = _children[index];
+            PipelineStageContext childContext = _aggregator.ChildContexts[index];
+
+            // 独立计时源与组取消联动：外部取消经链接同步传播给计时任务。
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(groupCts.Token);
+            var stageTask = StageExecution.RunStageAsync(child, childContext, groupCts.Token);
+            var timeoutTask = TimeoutTaskFactory(timeoutSeconds, timeoutCts.Token);
+
+            // WhenAny 内部观测全部任务，被放弃的在途任务无未观察异常
+            var (raceCancelled, race) = await UniTask.WhenAny<bool>(stageTask, timeoutTask)
+                .SuppressCancellationThrow();
+
+            if (raceCancelled)
+            {
+                // 竞速期间外部取消：交回调用方统一走取消路径
+                return true;
+            }
+
+            if (race.hasResultLeft)
+            {
+                // 子阶段先结束：终止悬挂的计时任务
+                timeoutCts.Cancel();
+                return race.result;
+            }
+
+            // 超时获胜：置子上下文失败（聚合器据此取消其余兄弟），不等待在途子阶段沉降
+            childContext.SetDescription($"Stage '{child.Name}' timed out after {timeoutSeconds}s");
+            childContext.SetState(PipelineStageState.Failed);
+            return false;
+        }
+
+        #endregion
+
         #region Private Fields
 
         readonly List<IPipelineStage> _children;
+        readonly List<float> _childTimeouts;
         readonly string _name;
         readonly float _weight;
         readonly StageAggregator _aggregator;
+
+        /// <summary>
+        /// 子阶段超时计时任务工厂（测试缝，internal）：生产路径为真实墙钟延时
+        /// （<see cref="DelayType.Realtime"/>，不受 timeScale 影响）；EditMode 阻塞式测试注入确定性计时器
+        /// （真实延时由 PlayerLoop 泵送，阻塞测试中永不触发）。与 <see cref="PipelineImpl"/> 的同名缝同形。
+        /// </summary>
+        internal Func<float, CancellationToken, UniTask> TimeoutTaskFactory =
+            (seconds, token) => UniTask.Delay(TimeSpan.FromSeconds(seconds), DelayType.Realtime, cancellationToken: token);
+
+        /// <summary>与 <see cref="_children"/> 同序的子阶段超时（测试缝，只读）。</summary>
+        internal IReadOnlyList<float> ChildTimeouts => _childTimeouts;
 
         /// <summary>主阶段上下文(由管线注入),聚合广播的转发目标。沉降后保持引用供诊断/测试读取。</summary>
         internal PipelineStageContext _stageCtx;

@@ -18,8 +18,8 @@
 Bootstrap.RegisterDefaults();
 await Bootstrap.RunAsync(progress: myProgress);
 
-// 或者自己挑
-Bootstrap.Register(new MyServiceBootstrapStage());
+// 或者自己挑（第二个参数是子阶段超时；0/负值/NaN = 不启用）
+Bootstrap.Register(new MyServiceBootstrapStage(), 10f);
 Bootstrap.Register(new LocalizationBootstrapStage("en", myLanguageTable));
 await Bootstrap.RunAsync();
 
@@ -289,7 +289,7 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 
 ## 已知限制
 
-**没有超时手段。** `IPipeline.AddStage(stage, timeoutSeconds)` 的超时只作用在**阶段**粒度，而本模块每相位装配为一个 `ParallelStage`——从 Bootstrap 侧无处传入超时。一个不响应取消、又永不返回的阶段会挂死整个启动流程（乐观超时只在直接使用 Pipeline 时可用，见 Pipeline README）。
+**超时是「报告失败」，不是「真正中止」。** `Bootstrap.Register(stage, timeoutSeconds)` 把超时下沉到该引导阶段（0 / 负值 / NaN / ±∞ = 不启用）：触发时置该子阶段 `Failed` 并取消其令牌，整轮启动以失败收场。但**不响应取消的阶段仍会跑完**——它在自己的沉降点收场，启动不再等它（与 `IPipeline.AddStage(stage, timeoutSeconds)` 同一条乐观超时边界，见 Pipeline README）。组失败后管线照常失败并停止后续相位。
 
 **`Shutdown` 可能在阶段从未执行过时被调用。** 启动在它之前失败/取消、它是在 `RunAsync` 运行中才登记的，或启动在途被 `Shutdown` 中止——`Bootstrap.Shutdown` 都会扫到它。清理实现要能在「本阶段什么都没做」时安全空转——六个内置阶段都按此口径（例如 `LocalizationBootstrapStage` 只在确实由自己完成初始化时才销毁门面）。
 

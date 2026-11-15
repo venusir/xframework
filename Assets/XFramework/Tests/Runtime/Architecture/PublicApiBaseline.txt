@@ -328,6 +328,7 @@ XFramework.XBootstrap.Bootstrap  ::  public static class
 XFramework.XBootstrap.Bootstrap.Clear  ::  public static void()
 XFramework.XBootstrap.Bootstrap.LastProgress  ::  public static XFramework.XPipeline.PipelineProgress LastProgress { get; }
 XFramework.XBootstrap.Bootstrap.Register  ::  public static void(XFramework.XBootstrap.IBootstrapStage stage)
+XFramework.XBootstrap.Bootstrap.Register  ::  public static void(XFramework.XBootstrap.IBootstrapStage stage, float timeoutSeconds)
 XFramework.XBootstrap.Bootstrap.RegisterDefaults  ::  public static void()
 XFramework.XBootstrap.Bootstrap.RunAsync  ::  public static Cysharp.Threading.Tasks.UniTask(System.IProgress<XFramework.XPipeline.PipelineProgress> progress = null, System.Threading.CancellationToken cancellationToken = default)
 XFramework.XBootstrap.Bootstrap.Shutdown  ::  public static void()
@@ -1348,12 +1349,12 @@ XFramework.XPipeline.IPipelineStage.ExecuteAsync  ::  public Cysharp.Threading.T
 XFramework.XPipeline.IPipelineStage.Name  ::  public string Name { get; }
 XFramework.XPipeline.IPipelineStage.Weight  ::  public float Weight { get; }
 XFramework.XPipeline.ParallelStage  ::  public sealed class : XFramework.XPipeline.IPipelineStage
-XFramework.XPipeline.ParallelStage#ctor  ::  public(System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPipelineStage> stages, string name = "Parallel")
+XFramework.XPipeline.ParallelStage#ctor  ::  public(System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPipelineStage> stages, string name = "Parallel", System.Collections.Generic.IReadOnlyList<float> timeoutSeconds = null)
 XFramework.XPipeline.ParallelStage.ExecuteAsync  ::  public virtual Cysharp.Threading.Tasks.UniTask(XFramework.XPipeline.PipelineStageContext context, System.Threading.CancellationToken cancellationToken)
 XFramework.XPipeline.ParallelStage.Name  ::  public string Name { get; }
 XFramework.XPipeline.ParallelStage.Weight  ::  public float Weight { get; }
 XFramework.XPipeline.Pipeline  ::  public static class
-XFramework.XPipeline.Pipeline.BuildPhaseGroups  ::  public static System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPipelineStage>(System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPhaseStage> stages, string nameFormat = "Phase-{0}")
+XFramework.XPipeline.Pipeline.BuildPhaseGroups  ::  public static System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPipelineStage>(System.Collections.Generic.IReadOnlyList<XFramework.XPipeline.IPhaseStage> stages, string nameFormat = "Phase-{0}", System.Collections.Generic.IReadOnlyList<float> timeoutSeconds = null)
 XFramework.XPipeline.Pipeline.Create  ::  public static XFramework.XPipeline.IPipeline()
 XFramework.XPipeline.PipelineProgress  ::  public class : System.IProgress<XFramework.XPipeline.PipelineProgress>
 XFramework.XPipeline.PipelineProgress#ctor  ::  public()
