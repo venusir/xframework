@@ -1,10 +1,49 @@
 # 启动方式评估与优化计划
 
-> **状态：** 评估完成，计划待裁定；本文件只记录 2026-11-15 的评估与计划，不代表任何条目已批准实施。
-> **范围：** Bootstrap / GameLauncher / Pipeline 子阶段超时 / 启动诊断与编辑器校验。
+> **状态：** 结论已形成；分步计划待批准实施（2026-11-15）。
+> **范围：** Bootstrap / GameLauncher / BootstrapProfile / Pipeline 子阶段超时 / provider 替换路径 / 启动诊断与编辑器校验。
 > **读者：** 维护者（实施本轮优化时）+ 下一轮审计者。
-> **真相分流：** 本文件只记评估与计划；用户裁定后的长期结论仍按收件人分流到 `Assets/XFramework/Runtime/Bootstrap/README.md`（使用方契约）、`Documentation/Modules/Bootstrap.md`（模块决策台账）、`Documentation/Ledger.md`（跨模块结论）。
+> **阅读顺序：** 先读 §0（最终结论与计划）；§1–§6 是评估依据，§10–§11 是追加论证；**冲突时以 §0 + §7 为准**。
+> **真相分流：** 本文件只记评估、结论与计划；用户裁定后的长期结论仍按收件人分流到 `Assets/XFramework/Runtime/Bootstrap/README.md`（使用方契约）、`Documentation/Modules/Bootstrap.md`（模块决策台账）、`Documentation/Ledger.md`（跨模块结论）。
 > **行号说明：** 下文行号以 2026-11-15 工作区为准；引用时优先看符号名。
+
+---
+
+## 零、最终结论与分步计划（2026-11-15）
+
+> 本节是最终结论与阅读入口。**与早期章节冲突时以本节 + §7 为准。** §1–§6 是评估依据，§10–§11 是追加论证；§7 是唯一执行计划，§8 是裁定状态。
+
+### 0.1 最终设计 D1–D10
+
+| # | 结论 | 落地位置 |
+|---|---|---|
+| **D1** | **就绪面**：`BootstrapState` / `State` / `WaitUntilReadyAsync` / 重入 join / `GameLauncher.StartupTask`。批准本计划即视为重开两条 `暂不做`。 | 阶段 1 |
+| **D2** | **Profile + launcher**：`BootstrapProfile` 装 7 个数据值；`DefaultGameLauncher` 只保留 `_profile` + `_uiRoot`；7 个数据字段移除；零配置语义不变；破坏性迁移。 | 阶段 3 |
+| **D3** | **继承拆分保留**：`GameLauncher` 抽象零字段 + `DefaultGameLauncher` 两字段；合并留独立主版本。 | 阶段 3 |
+| **D4** | **入口**：N0 启动场景 Launcher 主线；N3 自动启动根可选；N4 仅 headless/纯静态。 | 阶段 3/4、7 |
+| **D5** | **遮罩悖论**：UI 启动流程必须有根对象；遮罩是表现层，不是 `IBootstrapStage`。 | §10.7 |
+| **D6** | **Provider 替换**：无统一容器；`ConfigureStages` 是组合根；管理器级/provider 级/注册追加级；Profile data-only。 | §11 |
+| **D7** | **登记便捷层**：`BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试。 | 阶段 2 |
+| **D8** | **编辑器校验 + 诊断面板升级**。 | 阶段 5 |
+| **D9** | **Pipeline 子阶段超时**。 | 阶段 6 |
+| **D10** | **内置阶段 provider/manager 参数 + `AudioBootstrapStage`**（中期、可延后）。 | 阶段 8 |
+
+### 0.2 明确不做
+
+- DI 容器 / Installer / `ProviderProfile` / provider 注册表；全局 Profile；N5 懒初始化。
+- 删除 `GameLauncher`；本轮合并继承结构；Settings/Config 核心 stage（默认不做）。
+- 把 provider 塞进 `BootstrapProfile`（data-only）。
+
+### 0.3 裁定状态
+
+- **已裁定（对话）**：P1 窄 Profile；P1-a + 移除 7 个数据字段；N0 启动场景 Launcher；保留 `GameLauncher`/`DefaultGameLauncher` 拆分；Profile data-only；阶段 8 作为中期改进方向。
+- **批准即裁定（推荐执行）**：就绪面与重入 join（重开两条 `暂不做`）；阶段 2 工厂/目录；阶段 5 编辑器校验；阶段 6 超时；阶段 3 零配置语义与迁移方案。
+- **仍待裁**：阶段 7 的 Settings/Config 核心 stage 与 N3；阶段 8 的实际排期；模板/校验是否与阶段 3 同批。
+
+### 0.4 历史章节处理
+
+- §1/§2/§3/§4.2c 的「8 个字段」是 §10 裁定前的评估口径，不作为实施依据；实施口径是 `BootstrapProfile` + `_uiRoot`（2 字段）。
+- §7 是唯一执行计划；§8 是裁定状态；§10/§11 只保留论证，不另写阶段编号。
 
 ---
 
@@ -13,7 +52,7 @@
 用户对现有启动方式仍不满意，确认集中在三处：
 
 1. **无就绪 / 进度 / 失败信号**：`GameLauncher.Start` 是 `async void`，失败只留日志；进度不转发；没有可 await 的完成信号。Integration 样例不得不自造 `AppReadyBootstrapStage`（相位 91）才能让业务流程知道启动结束。
-2. **配置只覆盖一半**：`DefaultGameLauncher` 的 8 个 Inspector 字段之外，`RemoteServices` / `DecryptionServices` / `CryptoProvider` / 自定义 provider/controller 只能继承子类写代码；部分模块没有内置引导阶段。
+2. **配置只覆盖一半（历史口径）**：原 `DefaultGameLauncher` 的 8 个 Inspector 字段之外，`RemoteServices` / `DecryptionServices` / `CryptoProvider` / 自定义 provider/controller 只能继承子类写代码；部分模块没有内置引导阶段。§10 已裁定改为 `BootstrapProfile` + `_uiRoot`（7 个数据字段移除），但「服务实例仍只能写代码」的结论不变。
 3. **登记与相位太手工**：新增服务 = 实现 `IBootstrapStage` 类 + 手挑一个 int 相位 + 登记；`UserStart` 与 `Localization` 同为 90；`Save` 依赖 `Data` 只是注释约定，机器不校验。
 
 ### 1.1 总结论
@@ -52,7 +91,7 @@
 | 启动器无完成/失败信号 | `GameLauncher.Start`（`Assets/XFramework/Runtime/Bootstrap/GameLauncher.cs:34-54`） | 业务侧只能自造阶段或轮询门面 |
 | 重入静默返回 | `Bootstrap.RunAsync`（`Bootstrap.cs:287-291`） | 第二个调用方误以为启动完成 |
 | 不转发进度 | `GameLauncher` 未使用 `RunAsync` 的 `IProgress` 参数 | 启动画面拿不到进度 |
-| 服务实例不可序列化 | `DefaultGameLauncher` 8 个字段之外全在代码里 | 远程资源、加密、自定义 provider 必须写子类 |
+| 服务实例不可序列化 | 原 8 个字段之外全在代码里（§10 后为 Profile + `_uiRoot`；结论不变） | 远程资源、加密、自定义 provider 必须写子类 |
 | 相位靠人记 | `BootstrapPhases`（`BootstrapPhases.cs`） | `UserStart == Localization == 90`；依赖关系无机器校验 |
 | 零编辑器校验 | 全仓无 `IPreprocessBuildWithReport` / `playModeStartScene` 引用 | 启动场景缺失、重复阶段、Host 缺服务只能运行时才炸 |
 | 诊断面只列表 | `Editor/Diagnostics/Panels/BootstrapDiagnosticPanel.cs:23` | 没有运行状态、耗时、失败原因 |
@@ -70,7 +109,7 @@
 | **EllanJiang GameFramework** | 组件 `Awake` 自注册；`BaseComponent.Update` 泵核心 | 模块 `Priority` int，大值先 | 无（同步） | 预制体上的组件字段 | 无 |
 | **QFramework** | 静态懒加载 `Architecture<T>.Interface` | 先 Model 后 System，登记序 | 无 | 纯代码 `Init()` | 无 |
 | **Unity 内建** | `RuntimeInitializeOnLoadMethod` 五档；同档内**顺序不保证** | `DefaultExecutionOrder`（小值先） | 无 | — | `playModeStartScene`（编辑器辅助） |
-| **XFramework（现状）** | `GameLauncher.Awake/Start`；手动 `RunAsync` | `Phase` int，同相位并行 | `RunAsync` 返回 UniTask，但**启动器不暴露**；重入静默返回 | 8 个 Inspector 字段 + 代码子类 | **无** |
+| **XFramework（评估时）** | `GameLauncher.Awake/Start`；手动 `RunAsync` | `Phase` int，同相位并行 | `RunAsync` 返回 UniTask，但**启动器不暴露**；重入静默返回 | 原 8 字段；§10 后为 Profile + `_uiRoot` + 代码子类 | **无** |
 
 ### 3.2 三条可迁移结论
 
@@ -174,9 +213,9 @@ Zenject 的解法是 `ScriptableObjectInstaller`——**资产里写代码**。�
 
 **建议**：先提供 `BootstrapStages` 工厂目录（见 4.3），让这些模块有现成的组装件；是否升级为「核心 stage + `DefaultGameLauncher` 字段」需要逐模块论证，**默认不做**。
 
-#### 2c. 字段面维护——可选，低优先级
+#### 2c. 字段面维护——可选，低优先级（历史口径）
 
-8 个字段硬编码在 `DefaultGameLauncher`，加模块要改类、改反射字段数测试（`Tests/Runtime/Bootstrap/GameLauncherTests.cs:294-303` 锁定 8 个）。可以拆成按模块的 `[Serializable]` settings 组（组合，不是继承），降低改类频率。纯重构，不增加能力，建议随 2b 一起做或不做。
+原 8 个字段硬编码在 `DefaultGameLauncher`，加模块要改类、改反射字段数测试（`Tests/Runtime/Bootstrap/GameLauncherTests.cs:294-303` 锁定 8 个）。§10 已裁定改为 `_profile` + `_uiRoot`（2 字段），本节不再作为实施项；字段数断言按阶段 3 改为 2。
 
 #### 与台账的关系
 
@@ -226,6 +265,8 @@ Zenject 的解法是 `ScriptableObjectInstaller`——**资产里写代码**。�
 - 是否有重复的内置阶段类型（`RegisterDefaults` 与 `DefaultGameLauncher` 混用）。
 - `AssetPlayMode.Host` 是否注入了 `RemoteServices`（R3-AST-009）。
 - `_uiRoot` 是否已填（若期望 UIBootstrapStage 初始化）。
+- `BootstrapProfile` 是否存在、是否与旧字段冲突（迁移后）。
+- 自定义 provider 是否接线（Host 的 `RemoteServices`、自定义 `IInputProvider`/`IAudioProvider` 等）。
 - 可选的 `playModeStartScene` 菜单开关（默认不覆盖用户配置）。
 
 ### 5.2 诊断面板升级
@@ -268,23 +309,38 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 
 ---
 
-## 七、分阶段实施计划
+## 七、分步实施计划（唯一执行计划）
 
-> 每阶段以「用户裁定通过」为前提；未裁定的阶段不实施。每阶段是一个原子提交边界，验证通过后再提交，不提前实现后续阶段。
+> 本节是唯一的阶段/提交拆分；§10.4/§11.6 只保留论证，不再另写编号。每阶段以裁定通过为前提；每个提交是原子边界，先定向、再全量、再文档门禁；不提前实现后续提交。
 
-| 阶段 | 内容 | 公开 API | 验证 |
-|---|---|---|---|
-| 0 | 文档订正（`Bootstrap.md`「零使用」）+ 裁定落台账 | 无 | `Tools/check-docs.ps1 -Enforce` |
-| 1 | 就绪状态 + 共享任务 + 重入 join + `GameLauncher.StartupTask` | 新增 | API 基线 + CHANGELOG `### Added`；`run-tests.ps1 -Filter Bootstrap` + 全量 |
-| 2 | `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试 | 新增 | 定向 + 全量；API 基线 |
-| 3 | `BootstrapProfile` + `DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）+ 测试改写 | 新增/破坏性 | API 基线 + CHANGELOG `### Added` + 迁移表；定向 + 全量 |
-| 4 | 样例迁移（Profile 资产 + 场景赋 `_profile` + 删除 `AppReadyBootstrapStage`） | 无 | `check-docs` + 样例编译 + 手动冒烟 |
-| 5 | 编辑器 / 构建时校验 + 诊断面板升级 | Editor 新增 | Editor 测试 + `check-docs` |
-| 6 | 子阶段超时（Pipeline） | 视形状 | Pipeline + Bootstrap 测试 |
-| 7 | 待裁：Settings/Config 核心 stage、N3 自动启动根 | 视裁定 | 按裁定 |
-| 8 | 待裁：内置阶段 provider/manager 参数 + `AudioBootstrapStage`（§11.6） | 新增 | API 基线 + CHANGELOG + 定向测试 |
+| 阶段 | 提交 | 内容 | 依赖 | 验证 |
+|---|---|---|---|---|
+| 0 | 0.1 | 本文档定稿（§0/§7/§8、历史口径标注） | — | `check-docs -Enforce` |
+| 0 | 0.2 | `Documentation/Modules/Bootstrap.md`「零使用」订正；裁定落模块台账 | — | `check-docs -Enforce` |
+| 1 | 1.1 | `BootstrapState` / `State` / `WaitUntilReadyAsync` / 重入 join；`ResetForNewSession` 等待者复位；测试 | — | `run-tests -Filter Bootstrap` |
+| 1 | 1.2 | `GameLauncher.StartupTask`；测试 | 1.1 | 定向 |
+| 1 | 1.3 | Public API 基线 + CHANGELOG `### Added` + Bootstrap README | 1.1/1.2 | 基线重跑 + `check-docs` |
+| 2 | 2.1 | `BootstrapStage.Create`；测试 + 基线 | — | 定向 |
+| 2 | 2.2 | `BootstrapStages` 目录（Asset/Data/Save/UI/Input/Localization）；测试 + 基线 | 2.1 | 定向 |
+| 2 | 2.3 | 内置不变量测试（`Save.Phase > Data.Phase` 等）+ README | 2.2 | 定向 + 全量 |
+| 3 | 3.1 | `BootstrapProfile` + `BootstrapStages.FromProfile`；测试 + 基线 | 2 | 定向 |
+| 3 | 3.2 | `DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）+ 测试 + XML | 3.1 | 定向 + 全量 |
+| 3 | 3.3 | 包 README / 模块 README / 模块台账 / CHANGELOG 迁移表 | 3.2 | `check-docs` |
+| 4 | 4.1 | `Integration.BootstrapProfile.asset` + `Integration.Boot.unity` 迁移 | 1、3 | 样例编译 |
+| 4 | 4.2 | 删除 `AppReadyBootstrapStage`；`AppFlowController` 等 `WaitUntilReadyAsync`；`BootScreen` 读状态；样例文档 | 4.1 | `run-tests -Filter Sample` + 手动冒烟 |
+| 5 | 5.1 | `BootstrapValidator` + 菜单 + Editor 测试 | 3 | Editor 测试 |
+| 5 | 5.2 | `BootstrapDiagnosticPanel` 升级 + Editor 测试 | 5.1 | Editor 测试 |
+| 6 | 6.1 | Pipeline `ParallelStage` 子阶段超时 + 测试 + README | — | Pipeline/Bootstrap 测试 |
+| 7 | — | 待裁：Settings/Config 核心 stage；N3 自动启动根 | — | 按裁定 |
+| 8 | 8.1 | `SaveBootstrapStage(options, factory)` + `DataBootstrapStage(manager)` + 测试 | 3、5 | 定向 |
+| 8 | 8.2 | `UIBootstrapStage(root, controller, manager)` + `LocalizationBootstrapStage(..., manager)` + 测试 | 8.1 | 定向 |
+| 8 | 8.3 | `AudioBootstrapStage(options, provider)` + 测试 + README | 8.2 | 定向 + 全量 |
+
+**依赖与排期：** 阶段 2 先于 3（`FromProfile` 复用目录）；阶段 1 先于 4（样例用 `WaitUntilReadyAsync`）；阶段 3 先于 4、5；阶段 6 独立可后置；阶段 8 是中期改进，不阻塞 0–6；阶段 7 默认不做/可选，不进入主线提交。
 
 ### 阶段 1 细节
+
+**提交拆分：** 1.1 核心（`Bootstrap` 就绪面/重入 join/会话复位）；1.2 `GameLauncher.StartupTask`；1.3 API 基线/CHANGELOG/README。
 
 **改动文件（预计）：**
 
@@ -294,11 +350,12 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 - `Assets/XFramework/Tests/Editor/Bootstrap/BootstrapTests.cs`、`Tests/Runtime/Bootstrap/GameLauncherTests.cs`、`GameLauncherFrameTests.cs`：状态迁移、等待者、失败重抛、重入 join、销毁取消。
 - `Assets/XFramework/Tests/Runtime/Architecture/PublicApiBaseline.txt`、`CHANGELOG.md`。
 
-**必须定稿的语义（实施前请用户确认）：**
+**语义（批准本计划即按此实施）：**
 
-| 场景 | 建议语义 |
+| 场景 | 语义 |
 |---|---|
 | 第二次 `RunAsync` 在途 | 返回第一次运行的任务；第二调用方的令牌不参与本次运行（文档写明） |
+| `GameLauncher.StartupTask` 在 `Start` 前/后 | 均等待当前/下一次运行完成；失败时与 `RunAsync` 同样抛出 |
 | `WaitUntilReadyAsync` 在 `Completed` | 立即完成 |
 | `WaitUntilReadyAsync` 在 `Failed` / `Cancelled` | 抛出本次运行的异常 |
 | `WaitUntilReadyAsync` 在 `Idle` | 等待下一次运行开始并结束；可取消 |
@@ -317,6 +374,8 @@ Tools/check-docs.ps1 -Enforce
 
 ### 阶段 2 细节
 
+**提交拆分：** 2.1 `BootstrapStage.Create`；2.2 `BootstrapStages` 目录；2.3 内置不变量测试/README。
+
 - 新增 `Assets/XFramework/Runtime/Bootstrap/BootstrapStage.cs`（委托工厂）与 `BootstrapStages.cs`（内置目录）。
 - 委托阶段的 `Shutdown` 由调用方提供；不替调用方判断所有权。
 - 内置不变量测试放 `Tests/Editor/Bootstrap/BootstrapInvariantTests.cs`（或并入现有 Bootstrap 测试）。
@@ -324,8 +383,10 @@ Tools/check-docs.ps1 -Enforce
 
 ### 阶段 3 细节（Profile + launcher 改造）
 
+**提交拆分：** 3.1 `BootstrapProfile` + `BootstrapStages.FromProfile`；3.2 `DefaultGameLauncher` 改造/测试；3.3 文档/迁移表。
+
 - 新增 `Assets/XFramework/Runtime/Bootstrap/BootstrapProfile.cs`：`public sealed class BootstrapProfile : ScriptableObject`，7 个 `[SerializeField] private` 字段 + `internal` getter；默认值镜像旧字段。
-- 新增 `BootstrapStages.FromProfile(BootstrapProfile profile, Transform uiRoot)`（或 `profile.CreateStages(uiRoot)`）：显式登记 Asset/Data/Save + 条件 UI/Input/Localization。
+- 新增 `BootstrapStages.FromProfile(BootstrapProfile profile, Transform uiRoot)`：显式登记 Asset/Data/Save + 条件 UI/Input/Localization。
 - 改造 `DefaultGameLauncher`：移除 7 个数据字段，保留 `_profile` + `_uiRoot`；`ConfigureStages` 分支（profile 非空 / 空 → `RegisterDefaults()` + 条件 UI）。
 - `GameLauncher` 抽象底座不动（零字段 + `abstract ConfigureStages`）。
 - 测试：`GameLauncherTests` 字段数 8 → 2；`Awake_WithFields_*` 改为构造 `BootstrapProfile`；新增「profile 为空 = 默认三件 + 可选 UI」用例。
@@ -335,12 +396,16 @@ Tools/check-docs.ps1 -Enforce
 
 ### 阶段 4 细节（样例迁移）
 
+**提交拆分：** 4.1 Profile 资产/场景迁移；4.2 删 `AppReadyBootstrapStage`/就绪迁移/样例文档。
+
 - 新增 `Samples~/Integration/Data/Integration.BootstrapProfile.asset`，复制旧场景值（package ""、EditorSimulate、autoReclaim true、saveVersion 1、`Integration.InputOptions`、zh_Hans、language table）。
 - `Integration.Boot.unity`：`Launcher` 的 `_profile` 指向新资产；清掉 7 个旧字段键；保留 `_uiRoot`；`IntegrationLauncher` 继承不变。
 - 删除 `AppReadyBootstrapStage`；`AppFlowController.Start` 改为 `await Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)`；`BootScreen` 读 `Bootstrap.State`/进度。
 - 手动冒烟：启动、切场景、退出。
 
 ### 阶段 5 细节（编辑器校验 + 诊断）
+
+**提交拆分：** 5.1 `BootstrapValidator` + 菜单；5.2 诊断面板。
 
 - 新增 `Assets/XFramework/Editor/Bootstrap/BootstrapValidator.cs` + 菜单项（`Tools/XFramework` 下）。
 - 可选的 `IPreprocessBuildWithReport` 构建前校验。
@@ -350,6 +415,8 @@ Tools/check-docs.ps1 -Enforce
 
 ### 阶段 6 细节（超时）
 
+**提交拆分：** 6.1 Pipeline 子阶段超时。
+
 - `Runtime/Pipeline/ParallelStage.cs` 支持子阶段超时；Bootstrap 侧按需传入。
 - 边界如实写进 Pipeline README 与 Bootstrap README：超时只能报告失败并取消令牌，不响应取消的阶段仍会跑完。
 
@@ -358,30 +425,42 @@ Tools/check-docs.ps1 -Enforce
 - Settings/Config 核心 stage：先逐模块论证初始化 API 是否可通用；默认不做。
 - N3 自动启动根：独立可选；需要 settings asset + 根预制体 + `BeforeSceneLoad`；默认关闭，不改变「Launcher 可选」的契约。
 
+### 阶段 8 细节（provider/manager 参数，中期）
+
+**提交拆分：** 8.1 Save factory + Data manager；8.2 UI manager + Localization manager；8.3 `AudioBootstrapStage`。
+
+- `SaveBootstrapStage(SaveOptions options = null, SaveManagerFactory factory = null)`：工厂透传；已初始化时早退、不接管清理。
+- `DataBootstrapStage(IDataManager manager = null)`：`null` 走默认 `DataManagerImpl`。
+- `UIBootstrapStage(Transform uiRoot, IUIController controller = null, IUIManager manager = null)`：manager 非空走 `SetInstance`。
+- `LocalizationBootstrapStage(string defaultLanguage = "zh_Hans", Dictionary<string,string> data = null, ILocalizationManager manager = null)`（TextAsset 重载同）：manager 非空走 `SetInstance`。
+- `AudioBootstrapStage(AudioInitOptions options = null, IAudioProvider provider = null)`（新阶段）：provider 非空走 `SetProvider`。
+- 约束：source-compatible；注入实例归调用方，阶段只销毁自己初始化的；API 基线 + CHANGELOG `### Added`；测试覆盖「注入实例不被阶段 `Shutdown` 销毁」。
+- 排期：不阻塞阶段 0–6，可在阶段 5 之后单独排。
+
 ---
 
-## 八、待裁定清单
+## 八、裁定状态
 
-| # | 裁定项 | 选项 | 默认推荐 | 影响面 |
-|---|---|---|---|---|
-| 1 | 是否重开「就绪句柄」与「重入 join」两条 `暂不做` | 重开 / 维持 | **重开** | 公开 API、基线、CHANGELOG |
-| 2 | 若只允许一条最小修法：是否接受「重入改为警告并抛出」 | 接受 / 不接受 | 接受作为退路 | 行为变更（现有调用方） |
-| 3 | `GameLauncher` 是否暴露 `StartupTask` | 暴露 / 不暴露 | 暴露 | 公开 API |
-| 4 | 配置面：接受「服务实例只能写代码 + 模板/工厂改善」，还是重开 Installer 形状 | 前者 / 重开 | **前者** | 如重开则触及台账 `不做` |
-| 5 | 是否为 Settings/Config 补核心 stage | 补 / 不补 | **不补**（Settings 泛型按类型、Config 预加载是项目知识） | 公开 API、默认组合 |
-| 6 | 编辑器 / 构建时校验是否排期 | 排期 / 不排 | **排期** | 纯 Editor，无运行时 API |
-| 7 | 子阶段超时是否排期 | 排期 / 不排 | 后置 | Pipeline 公开面 |
-| 8 | 本轮报告的落点 | 本文件 / 模块台账 / 仅对话 | 本文件 + 裁定后落模块台账 | 文档 |
-| 9 | Profile 形状 | P1 窄 Profile / P2 每模块独立 SO / P3 全局 Profile / P4 可编程 Profile / 不做 | **P1 窄 Profile** | 公开 API、资产形态、台账划线 |
-| 10 | 启动入口形状 | N0 启动场景 Launcher / N3 自动启动根 / N4 静态入口 / N2 静态助手 / N1 文档配方 / 维持现状 | **N0**（N3 可选；N4 headless） | 公开 API、样例迁移、生命周期 |
-| 11 | Profile 消费方式 | `DefaultGameLauncher` 的 `_profile` + `_uiRoot`（7 数据字段移除）/ `ProfileGameLauncher` / 静态入口专用 | **`DefaultGameLauncher` + `_profile`**（保留拆分） | 公开 API、序列化迁移 |
-| 12 | Profile 加载通道与测试开关 | 直接引用（N0/N3）/ `Resources` / Preloaded；N4 才需要测试 opt-out | **直接引用**；N4 headless 另行处理 | 运行时行为、测试隔离 |
-| 13 | Mono 入口形状 | N0 启动场景 / N3 自动启动根 | **N0** | 场景结构 |
-| 14 | 7 字段移除的迁移 | CHANGELOG 迁移表 + 样例同步 / 编辑器迁移工具 / 不做 | **CHANGELOG + 样例同步** | 破坏性变更 |
-| 15 | 继承结构 | 保留拆分 / 合并 / 合并 + Obsolete 壳 | **保留拆分**（合并留独立主版本） | 类型/场景 GUID |
-| 16 | 内置阶段 provider/manager 参数 + `AudioBootstrapStage` | 排期 / 不排 | **排期**（中期） | 公开 API、所有权 |
-| 17 | 启动器子类模板 + provider 编辑器校验 | 排期 / 不排 | **排期** | Editor/文档 |
-| 18 | Profile 是否容纳 provider | data-only / 加 SO provider 槽 | **data-only**（已裁定） | 公开 API、序列化 |
+| # | 裁定项 | 状态 | 结论 |
+|---|---|---|---|
+| 1 | 就绪句柄 / 重入 join | 批准即裁定 | 重开，按 D1 |
+| 2 | 最小修法（警告并抛出） | 不采用 | 直接实现 join |
+| 3 | `GameLauncher.StartupTask` | 批准即裁定 | 暴露 |
+| 4 | 配置面（Installer 形状） | 已裁定 | 不重开；代码 + 模板/工厂 |
+| 5 | Settings/Config 核心 stage | 已裁定 | 默认不做 |
+| 6 | 编辑器 / 构建时校验 | 批准即裁定 | 阶段 5 |
+| 7 | 子阶段超时 | 批准即裁定 | 阶段 6 |
+| 8 | 报告落点 | 已裁定 | 本文件 + 裁定后落模块台账 |
+| 9 | Profile 形状 | 已裁定 | P1 窄 Profile |
+| 10 | 启动入口形状 | 已裁定 | N0（N3 可选；N4 headless） |
+| 11 | Profile 消费方式 | 已裁定 | `DefaultGameLauncher` 的 `_profile` + `_uiRoot`；7 数据字段移除；保留拆分 |
+| 12 | Profile 加载通道 | 已裁定 | 直接引用（N0/N3）；N4 headless 另行 |
+| 13 | Mono 入口形状 | 已裁定 | N0 |
+| 14 | 7 字段移除的迁移 | 已裁定 | CHANGELOG 迁移表 + 样例同步 |
+| 15 | 继承结构 | 已裁定 | 保留拆分 |
+| 16 | 内置阶段 provider/manager 参数 + `AudioBootstrapStage` | 已裁定方向，排期待裁 | 阶段 8 |
+| 17 | 启动器子类模板 + provider 编辑器校验 | 批准即裁定 | 阶段 3/5 |
+| 18 | Profile 是否容纳 provider | 已裁定 | data-only |
 
 ---
 
@@ -707,14 +786,7 @@ static void Boot()
 
 **为什么不是 P3/P4/N5：** P3 全局 Profile 维持 `Ledger.md:99` 的 `不做`；P4 是 `Bootstrap.md:56` 否决的 Installer 形状；N5 懒初始化会让启动失败与顺序变成隐式的（QFramework 的半初始化是反例）。
 
-**实施顺序：**
-
-1. **阶段 1（先做）：就绪状态** —— `Bootstrap.State`、`WaitUntilReadyAsync`、重入 join、`GameLauncher.StartupTask`。没有它，遮罩与业务侧仍然只能自造 `AppReadyBootstrapStage`。
-2. **阶段 2：登记便捷层** —— `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试（见 §7 阶段 2）。
-3. **阶段 3：P1 Profile** —— `BootstrapProfile`、`BootstrapStages.FromProfile`、`DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）、测试改写、API 基线、CHANGELOG 迁移表。
-4. **阶段 4：样例迁移** —— 新建 `Integration.BootstrapProfile.asset`，场景赋 `_profile`、清旧字段、保留 `_uiRoot`；删 `AppReadyBootstrapStage`，`AppFlowController` 等 `WaitUntilReadyAsync`。
-5. **阶段 5：编辑器校验** —— Profile 存在、Host 有 `RemoteServices`、启动场景 index 0、无重复 Launcher。
-6. **阶段 6：子阶段超时**（Pipeline）；N3 作为独立可选阶段。
+**实施顺序：** 见 §7（唯一执行计划）。主线：阶段 1 就绪面 → 阶段 2 工厂/目录 → 阶段 3 Profile → 阶段 4 样例 → 阶段 5 校验 → 阶段 6 超时；阶段 7/8 可选。
 
 **样例迁移后的形态（示意）：**
 
@@ -750,7 +822,7 @@ Integration.BootstrapProfile.asset
 
 ### 10.6 待裁定
 
-第八节已追加 9–15：Profile 形状、启动入口形状、Profile 消费方式、加载通道、Mono 入口形状、7 字段迁移、继承结构。本节不另立裁定项；**provider 替换路径见 §11（待裁定 16–18）**。
+第八节裁定状态 9–15：Profile 形状、启动入口形状、Profile 消费方式、加载通道、Mono 入口形状、7 字段迁移、继承结构。本节不另立裁定项；**provider 替换路径见 §11（裁定状态 16–18）**。
 
 ### 10.7 遮罩悖论：为什么 UI 启动流程必须有根对象
 
@@ -923,11 +995,13 @@ protected override void ConfigureStages()
 
 ### 11.7 待裁定
 
-第八节已追加 16–18：内置阶段 provider/manager 参数、启动器模板 + 编辑器校验、Profile 是否容纳 provider。本节不另立裁定项。
+第八节裁定状态 16–18：内置阶段 provider/manager 参数、启动器模板 + 编辑器校验、Profile 是否容纳 provider。本节不另立裁定项。
 
 ---
 
 ## 附录 A：事实核对状态
+
+> **口径说明：** §1/§2/§3/§4.2c 的「8 字段」是 §10 裁定前的评估；最终实施口径见 §0/§7（`BootstrapProfile` + `_uiRoot`，2 字段）。
 
 **已核对（源码 / 官方文档）：**
 
