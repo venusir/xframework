@@ -53,6 +53,8 @@ Runtime/Bootstrap/
 ├── Bootstrap.cs            # 静态门面：登记表 + RunAsync / Shutdown / State / WaitUntilReadyAsync / LastProgress
 ├── BootstrapState.cs       # 启动状态枚举（Idle / Running / Completed / Failed / Cancelled）
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
+├── BootstrapStage.cs       # 委托阶段工厂：BootstrapStage.Create
+├── BootstrapStages.cs      # 内置阶段目录：Asset / Data / Save / UI / Input / Localization 的构造入口
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
 ├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象，暴露 StartupTask
 └── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 五组 / 八个 Inspector 字段
@@ -218,6 +220,32 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 ```
 
 写 `ExecuteAsync` 时遵守的四条 Pipeline 契约见「行为契约 → 阶段义务」。
+
+### 用工厂和目录少写样板
+
+**只调一次初始化**的阶段不必单独建类：
+
+```csharp
+Bootstrap.Register(BootstrapStage.Create(
+    BootstrapPhases.UserStart,
+    "MyService",
+    ct => MyService.InitializeAsync(ct),
+    shutdown: MyService.Destroy));          // 所有权归你：工厂只负责调用
+```
+
+**内置阶段**用目录构造，登记代码集中可读：
+
+```csharp
+Bootstrap.Register(BootstrapStages.Asset(new AssetInitOptions { PlayMode = AssetPlayMode.Host }));
+Bootstrap.Register(BootstrapStages.Data());
+Bootstrap.Register(BootstrapStages.Save(new SaveOptions { CurrentVersion = 2 }));
+Bootstrap.Register(BootstrapStages.UI(uiRoot, controller));
+Bootstrap.Register(BootstrapStages.Input(inputOptionsAsset.ToOptions()));
+Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
+```
+
+目录**只构造、不登记**，也不改变相位语义；`DefaultGameLauncher` 的 Profile 路径内部复用它。
+委托阶段不提供 context 写入接口——需要自己报告描述/进度的阶段，仍应实现 `IBootstrapStage`。
 
 ## 内置相位约定
 
