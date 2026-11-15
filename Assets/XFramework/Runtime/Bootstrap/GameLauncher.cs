@@ -22,6 +22,29 @@ namespace XFramework.XBootstrap
     /// </summary>
     public abstract class GameLauncher : MonoBehaviour
     {
+        #region Private Fields
+
+        /// <summary>
+        /// <see cref="StartupTask"/> 的兑现源：<c>Start</c> 成功/失败/取消时落位；组件在 <c>Start</c>
+        /// 之前被销毁时由 <c>OnDestroy</c> 取消，避免等待者永远挂起。
+        /// </summary>
+        private readonly UniTaskCompletionSource _startup = new UniTaskCompletionSource();
+
+        #endregion
+
+        #region Public Properties
+
+        /// <summary>
+        /// 本次启动的任务：成功完成；<see cref="Bootstrap.RunAsync"/> 失败时以同一异常收场；
+        /// 被取消（含组件在启动途中销毁）时以 <see cref="OperationCanceledException"/> 收场。
+        /// <para><b>在 <c>Start</c> 之前访问也有效</b>——它等待的是当前/下一次运行。
+        /// 与 <see cref="Bootstrap.WaitUntilReadyAsync"/> 的分工：本属性绑定「这个启动器实例」的启动，
+        /// 后者是全局就绪面，不经启动器的静态入口也能用。</para>
+        /// </summary>
+        public UniTask StartupTask => _startup.Task;
+
+        #endregion
+
         #region Lifecycle Methods
 
         void Awake()
@@ -42,19 +65,24 @@ namespace XFramework.XBootstrap
                 // （OnDestroy 的 Shutdown 也会中止在途运行，这里是纵深防御：令牌是调用方一侧的
                 // 显式声明，不依赖 Shutdown 被调到。）
                 await Bootstrap.RunAsync(cancellationToken: destroyCancellationToken);
+                _startup.TrySetResult();
             }
             catch (OperationCanceledException)
             {
                 // 启动被取消属正常路径（例如应用退出），不当作错误
+                _startup.TrySetCanceled();
             }
             catch (Exception exception)
             {
+                _startup.TrySetException(exception);
                 LogManager.Error(LogCategories.GameLauncher, "启动失败：{0}", exception);
             }
         }
 
         void OnDestroy()
         {
+            // 启动尚未落位就销毁：等待者收到取消，而不是永远挂着。
+            _startup.TrySetCanceled();
             Bootstrap.Shutdown();
         }
 

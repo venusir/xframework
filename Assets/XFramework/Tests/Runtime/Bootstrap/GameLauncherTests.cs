@@ -289,17 +289,32 @@ namespace XFramework.XBootstrap.Tests
         /// 底座**不带序列化字段**、字段面全在默认实现上——这是这次拆分的另一半目的：
         /// 完全自控的人在 Inspector 里应当是干净的（Unity 无法隐藏继承来的序列化字段，
         /// 所以「不带字段」只能靠类型层次来保证）。
+        /// <para>判据是**序列化面**而不是「任何实例字段」：`StartupTask` 需要一个非序列化的完成源，
+        /// 它不进 Inspector、不影响这条契约；把断言写成「零实例字段」会让实现被迫改用全局状态。</para>
         /// </summary>
         [Test]
-        public void BaseClass_HasNoFields_WhileDefaultCarriesTheSurface()
+        public void BaseClass_HasNoSerializedFields_WhileDefaultCarriesTheSurface()
         {
-            var baseFields = typeof(GameLauncher).GetFields(
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.IsEmpty(baseFields, "抽象底座不得携带任何实例字段");
+            Assert.AreEqual(0, CountSerializedFields(typeof(GameLauncher)),
+                "抽象底座不得携带任何序列化字段（Inspector 干净）");
 
-            var defaultFields = typeof(DefaultGameLauncher).GetFields(
-                BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public);
-            Assert.AreEqual(8, defaultFields.Length, "字段面（Asset×3 / Save×1 / UI×1 / Input×1 / Localization×2）应都在默认实现上");
+            Assert.AreEqual(8, CountSerializedFields(typeof(DefaultGameLauncher)),
+                "字段面（Asset×3 / Save×1 / UI×1 / Input×1 / Localization×2）应都在默认实现上");
+        }
+
+        /// <summary>统计类型自身声明的序列化字段（public 或带 <see cref="SerializeField"/>）。</summary>
+        private static int CountSerializedFields(System.Type type)
+        {
+            var fields = type.GetFields(BindingFlags.Instance | BindingFlags.Public |
+                                        BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+            int count = 0;
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (fields[i].IsPublic || fields[i].IsDefined(typeof(SerializeField), inherit: false))
+                    count++;
+            }
+
+            return count;
         }
 
         #endregion
