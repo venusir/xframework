@@ -121,9 +121,10 @@ Runtime/Bootstrap/
 ### 替换内置阶段
 
 **唯一与 `Awake` 顺序无关的路径是启动器的 `ConfigureStages` 覆写。** `DefaultGameLauncher` 在自己的
-`Awake` 里无条件登记默认阶段（Asset 无条件登记、Save 会被它替换）；另一个组件在自己 `Awake` 里的
-`Unregister` / `Register` 与它的先后由 Unity 决定，先跑时会被覆盖或形成同相位双份。继承启动器，
-在 `base.ConfigureStages()` 之后替换，才是与顺序无关的写法。
+`Awake` 里登记启动阶段：零配置走 `RegisterDefaults()`（按类型跳过），Profile 走 `BootstrapStages.FromProfile`
+（显式登记）；另一个组件在自己 `Awake` 里的 `Unregister` / `Register` 与它的先后由 Unity 决定——零配置
+路径通常能靠按类型跳过相容，**Profile 路径则会形成同相位双份**。继承启动器，在 `base.ConfigureStages()`
+之后替换，才是与顺序无关的写法。
 
 ## 典型场景
 
@@ -184,9 +185,10 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里�
 
 **进阶三：干脆不用它** —— 在自己的启动流程里调 `Bootstrap.Register` / `RunAsync`。
 
-> ⚠ **不要同时使用 `RegisterDefaults()` 与 `DefaultGameLauncher`。** 两者都会登记 Asset / Data / Save；
-> 启动器的 `Awake` 与你的 `Awake` 先后由 Unity 决定，外部先跑时会产生同相位双份。选一个入口；
-> 要替换内置阶段，走 `ConfigureStages` 覆写。
+> ⚠ **不要把 `RegisterDefaults()` 与 `DefaultGameLauncher` 的 Profile 路径混用。** 零配置路径自身会调
+> `RegisterDefaults()`（按类型跳过），外部先跑不会叠加；**Profile 路径是显式登记**——启动器的 `Awake`
+> 与你的 `Awake` 先后由 Unity 决定，外部先跑时会形成同相位双份。选一个入口；要替换内置阶段，
+> 走 `ConfigureStages` 覆写。
 
 ### 编辑器校验
 
@@ -320,10 +322,11 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 > ```
 >
 > 这三步之间插入别的登记不会改变结果。但**不要把它和 `DefaultGameLauncher` 的 `Awake` 混在一起**：
-> 启动器在自己的 `Awake` 里会无条件登记默认阶段（Asset 无条件登记、Save 会被它替换），而 Unity
-> 不保证两个组件 `Awake` 的先后。你的组件先跑时，启动器稍后的登记会让 Asset 同相位双份，或把你
-> 登记的 `SaveBootstrapStage` 一并摘掉。**唯一与 `Awake` 顺序无关的替换路径是继承启动器并覆写
-> `ConfigureStages()`**——在 `base.ConfigureStages()` 之后 `Unregister<T>()` + `Register(...)`。
+> 启动器在自己的 `Awake` 里登记启动阶段（零配置走 `RegisterDefaults` 的按类型跳过，Profile 走
+> `FromProfile` 的显式登记），而 Unity 不保证两个组件 `Awake` 的先后。你的组件先跑时，Profile 路径
+> 会形成同相位双份；零配置路径则可能把你登记的同类型阶段当「已存在」而跳过默认那份。
+> **唯一与 `Awake` 顺序无关的替换路径是继承启动器并覆写 `ConfigureStages()`**——在
+> `base.ConfigureStages()` 之后 `Unregister<T>()` + `Register(...)`。
 >
 > **旧姿势（先 `Register` 再 `RegisterDefaults()`）仍然有效**——后者按类型跳过已存在的内置阶段，于是
 > 不会重复；但它同样只适用于同一段登记代码。反过来写（先 `RegisterDefaults()` 再 `Register` 同类型的

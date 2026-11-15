@@ -168,9 +168,10 @@ namespace XFramework.XBootstrap
         /// <para><b>替换内置阶段的推荐姿势</b>：先 <see cref="RegisterDefaults"/>，再用
         /// <see cref="Unregister{T}()"/> 摘掉不要的那个，最后 <see cref="Register(IBootstrapStage)"/> 自己的实例。
         /// <b>「与调用顺序无关」只在同一段登记代码内成立</b>：<see cref="DefaultGameLauncher"/> 在自己的
-        /// Awake 里会无条件登记默认阶段（Asset 无条件登记、Save 会被它替换），而 Unity 不保证两个组件
-        /// Awake 的先后；使用方的 Awake 先跑时，启动器稍后的登记会覆盖或重复这次替换。唯一与 Awake
-        /// 顺序无关的路径是继承启动器并覆写其 <c>ConfigureStages</c>，在 <c>base</c> 之后替换。</para>
+        /// Awake 里登记启动阶段（零配置走 <see cref="RegisterDefaults"/>，Profile 走
+        /// <see cref="BootstrapStages.FromProfile"/> 的显式登记），而 Unity 不保证两个组件 Awake 的先后；
+        /// 使用方的 Awake 先跑时，Profile 路径会形成同相位双份（零配置路径的 RegisterDefaults 按类型跳过）。
+        /// 唯一与 Awake 顺序无关的路径是继承启动器并覆写其 <c>ConfigureStages</c>，在 <c>base</c> 之后替换。</para>
         /// </summary>
         /// <param name="stage">要注销的阶段实例。</param>
         /// <returns>移除了返回 true；该实例不在登记表中返回 false（不打日志）。</returns>
