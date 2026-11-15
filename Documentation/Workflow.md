@@ -157,11 +157,13 @@
 
 场景生成：
 
-- `pwsh -File Tools/generate-integration-sample.ps1`
 - `pwsh -File Tools/generate-sample-scene.ps1 -Sample Example|Cinemachine`
 
-两者都要求测试壳已 `-Setup`、`Assets/Samples` 已清理；它们把脚本与 `.meta` 复制到临时目录（保 GUID），
-batchmode 生成后把场景 / 预制体移回 `Samples~/`，最后删除临时目录。
+要求测试壳已 `-Setup`、`Assets/Samples` 已清理；它把脚本与 `.meta` 复制到临时目录（保 GUID），
+batchmode 生成后把场景移回 `Samples~/`，最后删除临时目录。
+
+> Integration 示例的生成器（`generate-integration-sample.ps1` + `IntegrationAssetGenerator.cs`）已于
+> 2026-11-15 删除——它在 Profile 迁移后已无法运行，产物本身已提交在 `Samples~/Integration/`。
 
 验收脚本 `Tools/verify-integration-sample.ps1` 已改为直接调用
 `Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（不再复制临时 Editor 方法）；**已存在任何采集设置时

@@ -152,10 +152,10 @@ Samples~/Integration/
 ### 4.6 资产制作（不用 MCP）
 
 - **手写并提交**：全部 `.cs`、`.json`、`.inputactions`、`.meta`。
-- **一次性 Editor 生成**：预制体、两个场景、`Integration.InputOptions.asset`；生成器源码提交在 `Tools/SampleGeneration/IntegrationAssetGenerator.cs`，由 `Tools/generate-integration-sample.ps1` 复制到临时 `Assets/__XfwIntegrationGen__/`（连同示例脚本与 `.meta`，保持 GUID）后用 Unity batchmode `-executeMethod ...Generate -quit -logFile <绝对路径>` 运行（优先测试壳 `<repo>.TestRun` 避免编辑器锁）。生成物 + Unity 写出的 `.meta` 移回 `Samples~/Integration/`，删除临时目录。
+- **生成物（已提交）**：预制体、两个场景、`Integration.InputOptions.asset` 都在 `Samples~/Integration/` 里。**原一次性生成器已删除**（2026-11-15）：`Tools/SampleGeneration/IntegrationAssetGenerator.cs` 与 `Tools/generate-integration-sample.ps1` 在 Profile 迁移后已无法运行（仍写 7 个已删字段、反射旧的 `_inputOptions`）。要重建资产，按本节与「生成物约定」手工做，或另写一个新生成器。
 - **采集设置**：`Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（原 `Tools/SampleGeneration/IntegrationVerifySetup.cs`，2026-11-15 迁移）；严格版供 `Tools/verify-integration-sample.ps1` 的 `-executeMethod` 调用，幂等版供开发菜单复用已有配置。
 - **音频**：PowerShell `BinaryWriter` 合成 PCM 16-bit mono 44.1kHz `.wav`。
-- 生成器注意：面板根挂具体面板脚本、`RectTransform` 显式全屏拉伸、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、子节点按 `txt_/btn_/sld_/tgl_` 命名；启动器私有字段用 `SerializedObject` 写入——**该生成器在本轮之前已随 Profile 迁移失效**（它仍写 7 个已删字段并反射旧的 `_inputOptions`），待修复或连同脚本一并删除；`EventSystem` 用 `InputSystemUIInputModule`；Boot 相机持唯一 `AudioListener`。
+- 生成物约定（重建时按此检查）：面板根挂具体面板脚本、`RectTransform` 显式全屏拉伸、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、子节点按 `txt_/btn_/sld_/tgl_` 命名；启动器私有字段用 `SerializedObject` 写入；`EventSystem` 用 `InputSystemUIInputModule`；Boot 相机持唯一 `AudioListener`。
 
 ## 五、分步实施计划与状态
 
