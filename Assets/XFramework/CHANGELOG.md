@@ -48,6 +48,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ### Fixed
 
+#### UI
+
+- **`AssetManager` 已销毁时面板回池不再报错**（2026-11-15）：退出 / 停止 Play 的拆卸顺序可能是 `DefaultGameLauncher.OnDestroy → Bootstrap.Shutdown()` 先关掉 AssetManager、`UIRootNode.OnDestroy → UIManager.Dispose` 后回池面板。默认 `AssetPanelFactory.Release` 在 AssetManager 未初始化时改为直接销毁实例（此时已无池可回，实例本就随场景销毁），不再把正常退出变成一条红色 Error。回归用例 `AssetPanelFactoryTests.Release_AssetManagerUninitialized_DestroysInstanceWithoutThrowing`。
+
 #### Samples
 
 - **Integration 示例全流程修复**（2026-11-15）：语言切换不再被 `HasLanguage` 的缓存判断拦截（首次切 English / 启动恢复已保存语言）；「恢复默认」会重新把音量推给 AudioManager；结算后同步更新 `_lastRun`，主菜单与退出落盘不再显示上一会话摘要；结算「返回主菜单」重新打开主菜单以显示最新摘要；进入游戏前关闭全部面板，主菜单不再留在游戏 UI 后面。`AudioSample` 在无 YooAsset 地址时降级为一条 Warning 并跳过播放，不再产生红色错误。

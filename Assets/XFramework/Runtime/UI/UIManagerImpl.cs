@@ -532,7 +532,7 @@ namespace XFramework.XUI
                 }
                 catch (Exception e)
                 {
-                    // 逐面板隔离（UI-C-010）：AssetManager 已销毁时面板回池会抛；
+                    // 逐面板隔离（UI-C-010）：回池钩子或工厂释放仍可能抛；
                     // 一个失败不得截断其余面板的清理。
                     LogManager.Exception(LogCategories.UIManager, e,
                         string.Format("回池面板 {0} 时抛出异常，已跳过并继续",

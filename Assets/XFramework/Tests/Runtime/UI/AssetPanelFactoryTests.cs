@@ -81,5 +81,21 @@ namespace XFramework.XUI.Tests
             Assert.AreEqual(1, _asset.DestroyCount);
             Assert.IsFalse(panel.gameObject.activeSelf, "默认工厂的回收走 AssetManager 的池语义（失活）");
         }
+
+        [Test]
+        public async System.Threading.Tasks.Task Release_AssetManagerUninitialized_DestroysInstanceWithoutThrowing()
+        {
+            var go = new GameObject("panel", typeof(FakePanel));
+            var panel = go.GetComponent<FakePanel>();
+
+            // 模拟退出/停止 Play 的拆卸顺序：启动器先关 AssetManager，UI 根随后才回池。
+            AssetManager.Destroy();
+
+            _factory.Release(panel);
+
+            await Cysharp.Threading.Tasks.UniTask.DelayFrame(1);
+
+            Assert.IsTrue(panel == null, "AssetManager 已销毁时，面板实例应直接销毁而不是抛异常");
+        }
     }
 }
