@@ -19,6 +19,7 @@ namespace XFramework.DevTools
         #region Constants
 
         private const string IntegrationScene = "Assets/Samples/Integration/Scenes/Integration.Boot.unity";
+        private const string ExampleScene = "Assets/Samples/Example/Example.unity";
         private const string PendingSceneKey = "Xfw.SampleDevMenu.PendingScene";
         private const string PendingPlayKey = "Xfw.SampleDevMenu.PendingPlay";
         private const string PendingCollectorKey = "Xfw.SampleDevMenu.PendingCollector";
@@ -49,6 +50,19 @@ namespace XFramework.DevTools
 
         #endregion
 
+        #region Menu — Example
+
+        [MenuItem("Tools/XFramework/Samples/Example/Import and Open Scene", false, 20)]
+        public static void ImportExampleAndOpen()
+        {
+            ImportSample("Example", ExampleScene, play: false, ensureCollector: false);
+        }
+
+        [MenuItem("Tools/XFramework/Samples/Example/Import and Open Scene", true)]
+        private static bool ValidateExampleMenu() => CanRunSilently();
+
+        #endregion
+
         #region Menu — Clean
 
         [MenuItem("Tools/XFramework/Samples/Clean Imported Samples", false, 100)]
@@ -60,7 +74,7 @@ namespace XFramework.DevTools
             if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
                 return;
 
-            foreach (var sample in new[] { "Integration" })
+            foreach (var sample in new[] { "Integration", "Example", "Cinemachine" })
                 DeleteAssetFolder("Assets/Samples/" + sample);
 
             var samplesDir = Path.Combine(ProjectRoot, "Assets/Samples");
