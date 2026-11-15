@@ -233,10 +233,10 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 登记框架内置的三个引导阶段：Asset(Phase 0) → Data(Phase 3) → Save(Phase 4)。
-        /// <para>这是「开箱可用」的默认组合，不是强制——只想要其中一部分就自己逐个 <see cref="Register"/>。
+        /// <para>这是「开箱可用」的默认组合，不是强制——只想要其中一部分就自己逐个 <see cref="Register(IBootstrapStage)"/>。
         /// Localization 不在默认组合内：它需要语言数据，由使用方自行构造并登记。</para>
         /// <para><b>可重复调用</b>：它按类型跳过已存在的内置阶段，因此重复调用不会叠加
-        /// （这是与 <see cref="Register"/> 唯一的语义差异——后者按实例去重，见其说明）。</para>
+        /// （这是与 <see cref="Register(IBootstrapStage)"/> 唯一的语义差异——后者按实例去重，见其说明）。</para>
         /// <para><b>要替换其中某个内置阶段</b>：用 <see cref="Unregister{T}()"/> 摘掉它再
         /// <see cref="Register(IBootstrapStage)"/> 自己的实例——不要依赖与本方法的调用先后
         /// （与 <see cref="DefaultGameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
@@ -295,7 +295,7 @@ namespace XFramework.XBootstrap
         /// <summary>
         /// 会话开始时清空静态登记表。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
         /// 取消 Reload Domain）时 <see cref="StageList"/> 会跨播放会话存活，而会话 2 的
-        /// <c>ConfigureStages</c> 只能**追加**新实例（<see cref="Register"/> 按实例去重、
+        /// <c>ConfigureStages</c> 只能**追加**新实例（<see cref="Register(IBootstrapStage)"/> 按实例去重、
         /// <see cref="RegisterDefaults"/> 按类型跳过）——旧阶段实例留在表里被一起装配：同相位并行双跑
         /// （旧阶段握着上一会话已销毁场景的引用），退出时还会被双份 <see cref="Shutdown"/>
         /// （第二次 <c>AssetManager.Destroy</c> 撞上已置空的实例）。

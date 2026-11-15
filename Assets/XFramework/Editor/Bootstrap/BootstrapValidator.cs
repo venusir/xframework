@@ -46,7 +46,7 @@ namespace XFramework.Editor.BootstrapValidation
         public const string LauncherWithoutProfile = "BST-VAL-005";
 
         /// <summary>启动器没有填 UI 根（不会登记 UI 阶段——提示级）。</summary>
-        public const string LauncherWithoutUiRoot = "BST-VAL-006";
+        public const string LauncherWithoutUIRoot = "BST-VAL-006";
 
         /// <summary>当前打开的场景里没有启动器（可能用静态入口——提示级）。</summary>
         public const string NoLauncherInOpenScenes = "BST-VAL-007";
@@ -188,7 +188,7 @@ namespace XFramework.Editor.BootstrapValidation
 
                 if (uiRootProperty != null && uiRootProperty.objectReferenceValue == null)
                 {
-                    issues.Add(new BootstrapIssue(BootstrapRuleIds.LauncherWithoutUiRoot,
+                    issues.Add(new BootstrapIssue(BootstrapRuleIds.LauncherWithoutUIRoot,
                         BootstrapIssueSeverity.Info,
                         "启动器没有填 UI 根：不会登记 UI 阶段（用 UIRootNode 自动初始化时属正常）。",
                         launcher));

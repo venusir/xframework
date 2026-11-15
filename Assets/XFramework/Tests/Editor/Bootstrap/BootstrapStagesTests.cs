@@ -129,17 +129,17 @@ namespace Venusy609.Xframework.Editor.Tests
                 Assert.AreEqual("Pack", asset.Options.PackageName);
                 Assert.AreEqual(3, ((SaveBootstrapStage)Bootstrap.Stages[2]).Options.CurrentVersion);
 
-                bool hasUi = false;
+                bool hasUI = false;
                 bool hasInput = false;
                 bool hasLocalization = false;
                 for (int i = 0; i < Bootstrap.Stages.Count; i++)
                 {
-                    if (Bootstrap.Stages[i] is UIBootstrapStage) hasUi = true;
+                    if (Bootstrap.Stages[i] is UIBootstrapStage) hasUI = true;
                     if (Bootstrap.Stages[i] is InputBootstrapStage) hasInput = true;
                     if (Bootstrap.Stages[i] is LocalizationBootstrapStage) hasLocalization = true;
                 }
 
-                Assert.IsTrue(hasUi);
+                Assert.IsTrue(hasUI);
                 Assert.IsTrue(hasInput);
                 Assert.IsTrue(hasLocalization);
             }

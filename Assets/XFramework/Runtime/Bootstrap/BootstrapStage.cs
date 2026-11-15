@@ -8,9 +8,9 @@ namespace XFramework.XBootstrap
 
     /// <summary>
     /// 委托形式的引导阶段工厂：把「只调一次初始化」的样板类收成一次 <see cref="Create"/>。
-    /// <para><b>所有权归调用方</b>：工厂不替你判断初始化与清理的边界——<paramref name="shutdown"/>
+    /// <para><b>所有权归调用方</b>：工厂不替你判断初始化与清理的边界——<c>shutdown</c>
     /// 由你提供（可以是 null，表示本阶段没有需要反向清理的东西）。委托里初始化了什么，
-    /// 就由传入的 <paramref name="shutdown"/> 负责拆掉；阶段只负责调用它，
+    /// 就由传入的 <c>shutdown</c> 负责拆掉；阶段只负责调用它，
     /// 并且可能在 <c>ExecuteAsync</c> 从未执行过时被调用（见 <see cref="IBootstrapStage.Shutdown"/>）。</para>
     /// <para>需要在执行中写描述/进度、或需要可重入的所有权判定的阶段，仍应实现 <see cref="IBootstrapStage"/>。</para>
     /// </summary>

@@ -54,7 +54,7 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void LauncherWithoutProfileAndUiRoot_ReportsInfos()
+        public void LauncherWithoutProfileAndUIRoot_ReportsInfos()
         {
             var launcher = new GameObject("launcher-zero").AddComponent<DefaultGameLauncher>();
             try
@@ -63,7 +63,7 @@ namespace Venusy609.Xframework.Editor.Tests
 
                 Assert.IsNotNull(Find(issues, BootstrapRuleIds.LauncherWithoutProfile),
                     "无 Profile 应给出零配置提示");
-                Assert.IsNotNull(Find(issues, BootstrapRuleIds.LauncherWithoutUiRoot),
+                Assert.IsNotNull(Find(issues, BootstrapRuleIds.LauncherWithoutUIRoot),
                     "无 UI 根应给出提示");
             }
             finally

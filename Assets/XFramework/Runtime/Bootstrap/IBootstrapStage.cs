@@ -8,7 +8,7 @@ namespace XFramework.XBootstrap
     /// <para>它在 <see cref="IPhaseStage"/> 的相位契约之上只补一件事——<b>清理</b>：
     /// <see cref="IPipelineStage.ExecuteAsync"/> 负责初始化，<see cref="Shutdown"/> 负责反向清理。
     /// 执行、相位分组、并行、进度聚合、失败即停、取消传播全部由 Pipeline 模块提供，本接口不再引入第二套执行契约。</para>
-    /// <para>登记经 <see cref="Bootstrap.Register"/>；<see cref="Bootstrap.RunAsync"/> 按相位分组装配并运行管线；
+    /// <para>登记经 <see cref="Bootstrap.Register(IBootstrapStage)"/>；<see cref="Bootstrap.RunAsync"/> 按相位分组装配并运行管线；
     /// <see cref="Bootstrap.Shutdown"/> <b>先中止在途的 <see cref="Bootstrap.RunAsync"/>，再</b>按<b>执行序的逆序</b>
     /// （相位降序）调用各阶段的 <see cref="Shutdown"/>。</para>
     /// </summary>
