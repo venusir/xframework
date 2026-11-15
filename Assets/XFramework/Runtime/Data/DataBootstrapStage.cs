@@ -9,6 +9,8 @@ namespace XFramework.XData
     /// <summary>
     /// <see cref="DataManager"/> 的引导阶段。Phase = <see cref="BootstrapPhases.Data"/>（3），晚于 Asset、早于 Save。
     /// <para>同步瞬时阶段：无取消窗口（没有可取消的 await），故忽略 <c>cancellationToken</c>。</para>
+    /// <para>本类型是本模块对 Bootstrap 契约的<b>唯一引用</b>：模块管理器不依赖 Bootstrap，
+    /// 不使用引导管线时直接调用管理器的初始化方法即可。</para>
     /// </summary>
     public sealed class DataBootstrapStage : IBootstrapStage
     {

@@ -642,5 +642,5 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
   https://github.com/tuyoogame/YooAsset.git
   ```
   在 Unity 中通过 Package Manager → "Add package from git URL..." 添加。
-- `XFramework.XBootstrap` / `XFramework.XPipeline` — `AssetBootstrapStage`（Phase 0）实现引导阶段契约与相位分组编排
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — 引导阶段适配器（`AssetBootstrapStage.cs`）实现 `IBootstrapStage` 与相位分组；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们
 - `UniTask`（框架层已提供）

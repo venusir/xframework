@@ -9,6 +9,8 @@ namespace XFramework.XAsset
     /// <summary>
     /// <see cref="AssetManager"/> 的引导阶段：把资源管理器的初始化交给框架启动流程。
     /// <para>Phase = <see cref="BootstrapPhases.Asset"/>（0），<b>排在最早</b>——本地化、UI 等模块的数据都要经 YooAsset 地址加载，必须等它就绪。</para>
+    /// <para>本类型是本模块对 Bootstrap 契约的<b>唯一引用</b>：模块管理器不依赖 Bootstrap，
+    /// 不使用引导管线时直接调用管理器的初始化方法即可。</para>
     /// </summary>
     public sealed class AssetBootstrapStage : IBootstrapStage
     {

@@ -17,6 +17,8 @@ namespace XFramework.XInput
     /// 「换后端」因此也能只写一行且清理对称。</para>
     /// <para><b>已初始化则早退、且不接管</b>：使用方可能已自行 <c>Initialize</c>，那就直接完成、
     /// 不重复调用（那只会打一条重复初始化告警）、也不在 <see cref="Shutdown"/> 里销毁它。</para>
+    /// <para>本类型是本模块对 Bootstrap 契约的<b>唯一引用</b>：模块管理器不依赖 Bootstrap，
+    /// 不使用引导管线时直接调用管理器的初始化方法即可。</para>
     /// </summary>
     public sealed class InputBootstrapStage : IBootstrapStage
     {

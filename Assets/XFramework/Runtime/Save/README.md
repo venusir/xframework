@@ -266,7 +266,7 @@ SaveManager.Initialize(() => new MyCloudSaveManager());
 - `XFramework.XData` - 数据块管理
 - `XFramework.XSerialize` - 序列化
 - `XFramework.XFileManager` - 文件读写
-- `XFramework.XBootstrap` / `XFramework.XPipeline` - 引导阶段（仅 `SaveBootstrapStage.cs` 使用；不登记引导阶段的项目不需要它们）
+- `XFramework.XBootstrap` / `XFramework.XPipeline` - 引导阶段适配器（`SaveBootstrapStage.cs`）实现 `IBootstrapStage`；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们
 - `UniTask` - 异步操作
 - `XFramework.XLog` - 日志（`LogManager`，分类 `Save`）
 

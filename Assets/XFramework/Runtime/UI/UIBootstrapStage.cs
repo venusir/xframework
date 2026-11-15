@@ -15,6 +15,8 @@ namespace XFramework.XUI
     /// <para><b>已初始化则早退、且不接管</b>：<c>UIRootNode.Awake</c> 会自动初始化、使用方也可能手动
     /// <c>Initialize</c>；那两种情况下本阶段直接完成并标记「不是本阶段初始化的」，<see cref="Shutdown"/>
     /// 因此不会销毁别人的管理器（照 <c>LocalizationBootstrapStage</c> 的「谁初始化谁清理」先例）。</para>
+    /// <para>本类型是本模块对 Bootstrap 契约的<b>唯一引用</b>：模块管理器不依赖 Bootstrap，
+    /// 不使用引导管线时直接调用管理器的初始化方法即可。</para>
     /// </summary>
     public sealed class UIBootstrapStage : IBootstrapStage
     {

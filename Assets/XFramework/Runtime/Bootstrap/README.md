@@ -385,3 +385,4 @@ finally { UpdateManager.Resume(); }
 - **UniTask** —— 异步
 - **`GameLauncher`** 另需 XLog（启动失败日志）
 - **模块核心不引用任何具体模块**：本模块只依赖 XPipeline + UniTask，`GameLauncher` 另需 XLog。内置阶段（`AssetBootstrapStage` / `DataBootstrapStage` / `SaveBootstrapStage` / `UIBootstrapStage` / `InputBootstrapStage` / `LocalizationBootstrapStage`）各自住在所属模块里，由使用方直接构造；Integration 示例的启动器用到上述全部六个。
+- **反向的单向契约依赖**：各模块的引导阶段适配器（`*BootstrapStage.cs`）引用本模块的 `IBootstrapStage` / `BootstrapPhases`；**各模块的管理器不引用本模块**。方向是「模块适配器 → Bootstrap 契约」，不存在循环——`BootstrapPhases` 是引导顺序的单一代码真相，适配器只是声明自己在这张表里的位置。

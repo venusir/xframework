@@ -17,6 +17,8 @@ namespace XFramework.XLocalization
     /// </code>
     /// <para>与其它内置阶段一样，本类型是 <c>public</c> 的：使用方需要能构造、替换、
     /// 或自行组合这些阶段，而不是只能接受框架预设的那一套。</para>
+    /// <para>本类型是本模块对 Bootstrap 契约的<b>唯一引用</b>：模块管理器不依赖 Bootstrap，
+    /// 不使用引导管线时直接调用管理器的初始化方法即可。</para>
     /// </summary>
     public sealed class LocalizationBootstrapStage : IBootstrapStage
     {

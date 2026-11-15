@@ -1465,6 +1465,7 @@ canvas.sortingOrder = UISorting.SystemOrder;                   // 用保留带�
 ## 依赖
 
 - `XFramework.XAsset` — 通过 `AssetManager.InstantiateAsync` 加载面板预制体
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — 引导阶段适配器（`UIBootstrapStage.cs`）实现 `IBootstrapStage`；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们
 - `UniTask`（框架层已提供）
 - UGUI（`UnityEngine.Canvas`、`UnityEngine.UI.GraphicRaycaster`）
 - 可选：`XFramework.XLocalization`（语言切换联动）

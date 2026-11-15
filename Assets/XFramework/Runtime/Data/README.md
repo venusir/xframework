@@ -312,3 +312,9 @@ SaveBootstrapStage (引导阶段，Phase=4)
 - **Block 数据模型**：所有需要持久化的数据都应实现 `IDataBlock`，按 GamePlay 模块组织（如背包系统、任务系统）。每个 Block 内部可自由使用 List、Dictionary、单值等结构，简单全局设置也可以作为 Block 实现。
 - **序列化接口**：`CreateSnapshot()` 遍历所有 Block 调用 `OnSave()` 生成 `DataSnapshot`；`ApplySnapshot(data)` 恢复数据。另支持单块快照（`CreateBlockSnapshot<T>()` / `ApplyBlockSnapshot(snap)`）与脏标记（`MarkDirty<T>()`），用于增量保存。
 - **存读档分离**：文件读写、加密、云同步等持久化操作由 Save 模块（XFramework.XSave）负责，不在 DataManager 职责范围内。
+
+## 依赖
+
+- `XFramework.XLog` — 日志（`LogManager`）
+- `XFramework.XSerialize` — 序列化（数据块快照）
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — 引导阶段适配器（`DataBootstrapStage.cs`）实现 `IBootstrapStage`；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们

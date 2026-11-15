@@ -604,6 +604,7 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
   }
   ```
 - Unity Input System Test Framework（随 Input System 包自带，仅测试 asmdef 引用，无额外安装）
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — 引导阶段适配器（`InputBootstrapStage.cs`）实现 `IBootstrapStage`；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们
 - 可选：Rewired（如需自定义实现）
 - 框架内依赖：`XMessage`（设备连接 / 断开与手柄类型变化经消息总线发布）、`XEvent`（`Observe*` 的帧脉冲流）、
   `XUpdate`（`Initialize` 成功后自动注册帧驱动）

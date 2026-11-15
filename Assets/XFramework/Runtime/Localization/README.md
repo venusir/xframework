@@ -420,6 +420,5 @@ Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
 
 - `XFramework.XAsset` — 通过 `AssetManager` 加载语言 JSON 文件
 - `XFramework.XMessage` — `LanguageChangedMessage` 经 `MessageManager` 广播（发布的替代品是它，模块不暴露 C# event）
-- `XFramework.XBootstrap` — `IBootstrapStage` 引导阶段契约（LocalizationBootstrapStage，Phase 90）
-- `XFramework.XPipeline` — `IPhaseStage` 相位阶段契约与相位分组
+- `XFramework.XBootstrap` / `XFramework.XPipeline` — 引导阶段适配器（`LocalizationBootstrapStage.cs`）实现 `IBootstrapStage`（Phase 90）；**仅该文件引用**，模块管理器不依赖它们，不登记引导阶段的项目不需要它们
 - `UniTask`（框架层已提供）
