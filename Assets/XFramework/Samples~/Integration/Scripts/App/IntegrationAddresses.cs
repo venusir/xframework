@@ -44,6 +44,9 @@ namespace XFramework.Samples.Integration
         /// <summary>全局规则（Config JSON 对象）。</summary>
         public const string Rules = "Integration.Rules";
 
+        /// <summary>示例自己的启动配置资产（场景直接引用；收集器按文件名给它地址）。</summary>
+        public const string BootstrapProfile = "Integration.BootstrapProfile";
+
         /// <summary>背景音乐。</summary>
         public const string Bgm = "Integration.Bgm";
 
