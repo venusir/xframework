@@ -204,15 +204,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bd272d8192a54da7a1be0cc08d570596, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::XFramework.Samples.Integration.IntegrationLauncher
-  _assetPackageName: 
-  _assetPlayMode: 0
-  _autoReclaimOnLowMemory: 1
-  _saveVersion: 1
+  _profile: {fileID: 11400000, guid: b38c0a38adf4aa2c6fdbf4931b13c4bb, type: 2}
   _uiRoot: {fileID: 2075573239}
-  _inputOptions: {fileID: 11400000, guid: fd4f623d12fba6b44a046c6fd3c5adfd, type: 2}
-  _defaultLanguage: zh_Hans
-  _languageTable: {fileID: 4900000, guid: 58e021a5082d468a98c31aa2b53b4a04, type: 3}
-  _appFlow: {fileID: 1556696386}
 --- !u!4 &790695825
 Transform:
   m_ObjectHideFlags: 0
