@@ -19,9 +19,11 @@ Runtime/Bootstrap/
 ├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：无序列化字段，ConfigureStages 为抽象，暴露 StartupTask
 └── DefaultGameLauncher.cs  # 开箱默认启动器：_profile + _uiRoot 两个 Inspector 字段
 
+Editor/Bootstrap/           # BootstrapValidator（只读校验 + 菜单 Tools/XFramework/Bootstrap/Validate Bootstrap）
 Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
 Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪面语义）、BootstrapStageTests（内置阶段直连）、
-                            # BootstrapFactoryTests（委托工厂与目录）、BootstrapInvariantTests（相位不变量）
+                            # BootstrapFactoryTests（委托工厂）、BootstrapStagesTests（目录 / FromProfile）、
+                            # BootstrapInvariantTests（相位不变量）、BootstrapValidatorTests、BootstrapDiagnosticPanelTests
 ```
 
 （本节 2026-10-16 补建——此前是 23 份里唯二没有文件结构的一份。）
