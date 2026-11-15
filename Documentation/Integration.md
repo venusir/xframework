@@ -147,11 +147,13 @@ Samples~/Integration/
 - 所有地址集中在 `IntegrationAddresses.cs`（唯一真相）；L2 守卫校验「地址常量 ↔ 资源文件 basename」一一对应。
 - 消费方 README 三步：① Package Manager 导入示例；② 在 `AssetBundleCollectorSetting` 的 `DefaultPackage` 勾 Enable Addressable，新建组 + `MainAssetCollector`（Address Rule `AddressByFileName`、Pack Rule `PackDirectory`、Filter Rule `CollectAll`），路径指向导入的 `Integration` 根目录；③ 打开 `Integration.Boot.unity` 按 Play。要出 Player：把启动器的 Asset Play Mode 改为 Offline/Host 并先构建资源包。
 - 仓内 L3：复制到 `Assets/Samples/Integration` → 一次性 Editor 方法创建唯一 collector setting → 跑探针 → 删除导入目录 / setting / `Bundles/`。**这些临时物一律不提交**。
+- **仓内一键启动（2026-11-15）**：菜单 `Tools/XFramework/Samples/Integration/Import and Open Boot Scene` 把示例复制到 `Assets/Samples/Integration`、用 `Assets/DevTools/Editor/IntegrationCollectorSetup.cs` 幂等补齐采集组 `IntegrationDev`，然后打开 `Integration.Boot.unity`；`Import, Open and Play` 直接进 Play。清理菜单 `Tools/XFramework/Samples/Clean Imported Samples` 删除导入副本、工具创建的采集组与 `Bundles/`。这些开发产物已进 `.gitignore`。验收脚本仍走严格版 `CreateCollectorSetting`（已有任何采集设置则拒绝），不再复制临时 Editor 方法。
 
 ### 4.6 资产制作（不用 MCP）
 
 - **手写并提交**：全部 `.cs`、`.json`、`.inputactions`、`.meta`。
 - **一次性 Editor 生成**：预制体、两个场景、`Integration.InputOptions.asset`；生成器源码提交在 `Tools/SampleGeneration/IntegrationAssetGenerator.cs`，由 `Tools/generate-integration-sample.ps1` 复制到临时 `Assets/__XfwIntegrationGen__/`（连同示例脚本与 `.meta`，保持 GUID）后用 Unity batchmode `-executeMethod ...Generate -quit -logFile <绝对路径>` 运行（优先测试壳 `<repo>.TestRun` 避免编辑器锁）。生成物 + Unity 写出的 `.meta` 移回 `Samples~/Integration/`，删除临时目录。
+- **采集设置**：`Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（原 `Tools/SampleGeneration/IntegrationVerifySetup.cs`，2026-11-15 迁移）；严格版供 `Tools/verify-integration-sample.ps1` 的 `-executeMethod` 调用，幂等版供开发菜单复用已有配置。
 - **音频**：PowerShell `BinaryWriter` 合成 PCM 16-bit mono 44.1kHz `.wav`。
 - 生成器注意：面板根挂具体面板脚本、`RectTransform` 显式全屏拉伸、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、子节点按 `txt_/btn_/sld_/tgl_` 命名；`DefaultGameLauncher` 私有字段用 `SerializedObject` 写入；`EventSystem` 用 `InputSystemUIInputModule`；Boot 相机持唯一 `AudioListener`。
 
@@ -167,9 +169,31 @@ Samples~/Integration/
 | **M2** | 进入游戏：类型选择 + TapRush + 音频 + 结算 + 存档 | Config 行/规则/阶段、Data、会话接口、TapRush、ModeSelect/Game/Result 面板、Game 场景、模式表/规则表、4 个 wav | `check-samples.ps1`；L3 探针（加载 Game 场景、得分、存档） | `feat(samples): Integration 玩法与结算` | 已完成（运行期验收留 M5） |
 | **M3** | 第二种玩法 + 高级模块接线 | OddOneOut、暂停/加载面板、GameLoadingPipeline、Cinemachine 相机、诊断页、Lock/Update/Pool/Event 接线 | `check-samples.ps1`；L3 探针 | `feat(samples): Integration 高级模块接线` | 已完成（运行期验收留 M5） |
 | **M4** | 常驻结构守卫：prefab/scene YAML 的脚本 GUID、地址、`.meta`、`samples` 路径 | `Tests/Runtime/Samples/IntegrationSampleStructureTests.cs` + meta | `run-tests.ps1 -Fixture IntegrationSampleStructureTests -Platform PlayMode` | `test(samples): Integration 资产结构守卫` | 已完成 |
-| **M5** | 导入验收探针 + 脚本 | `IntegrationProbeTests.cs` + meta、`IntegrationVerifySetup.cs`、`Tools/verify-integration-sample.ps1` | fixture（无 env 跳过）+ 脚本跑通 L3 | `test(samples): Integration 导入验收探针` | 已完成（1/1 通过） |
+| **M5** | 导入验收探针 + 脚本 | `IntegrationProbeTests.cs` + meta、`Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（2026-11-15 迁移）、`Tools/verify-integration-sample.ps1` | fixture（无 env 跳过）+ 脚本跑通 L3 | `test(samples): Integration 导入验收探针` | 已完成（1/1 通过） |
 | **M6** | 登记与文档：`package.json` samples、包 README 示例段、示例 README、CHANGELOG、决策台账残余结案 | 文档与登记 | `run-tests.ps1 -Fixture DependencyDeclarationTests -Platform EditMode`；`-Filter PackageBoundaryTests -Platform PlayMode`；`check-docs.ps1 -Enforce` | `docs(samples): Integration 示例登记与说明`<br>`docs(ledger): 完整 UI 纵切残余结案` | 已完成 |
 | **M7** | 收尾：全量双平台 + 文档门禁 + 行尾检查 + 进度回填 | 门禁结果 | `run-tests.ps1`（全量，0 失败）；`check-docs.ps1 -Enforce`；`git ls-files --eol` | 如有修复再提交 | 已完成 |
+| **M8** | 仓库内一键启动 + 人工全流程走查 | `Assets/DevTools/Editor/SampleDevMenu.cs`、`IntegrationCollectorSetup.cs`、菜单与清理；`Documentation/Workflow.md` | 菜单导入 / 打开 / Play / 清理；走查记录见 §5.1 | `feat(tools): 仓库内示例一键导入与启动`<br>`docs(samples): Integration 人工全流程验收记录` | 进行中（工具已落地，待人工走查） |
+
+### 5.1 人工全流程验收记录
+
+> **M5 是导入探针**（18 个地址 + 一个面板 + 场景加载），**不是**完整流程走查。本节记录第一次真人按 Play 走完流程；用户报告前保持「待执行」。
+
+| 日期 | Unity | YooAsset | commit | 执行人 | 步骤结果 | Console 异常 | 后续 |
+|---|---|---|---|---|---|---|---|
+| 待执行 | 6000.4.5f1 | 2.3.18 | — | — | — | — | — |
+
+走查清单（详细预期见 `Documentation/Workflow.md` 的 Samples 小节）：
+
+1. 启动 → 主菜单：BootScreen 各行 `[ok]`，主菜单显示标题、四个按钮与「累计 / 上次模式 / 最佳」。
+2. 设置：滑条可拖；应用写盘；**恢复默认后 BGM 音量立即回默认**。
+3. 语言：English 即时生效且无「语言 'en' 未加载」；重启后恢复已保存语言。
+4. 模式选择：点星 / 找异色与时长正确。
+5. 点星：加载进度、30 秒倒计时、点中加分、结算；**主菜单不在游戏 UI 后面**。
+6. 重试 / 结算 → 主菜单：摘要显示本局更新后的值。
+7. 找异色：5 回合、20 秒/回合、答错扣时。
+8. 暂停：Esc 打开、倒计时冻结；继续 / 重开 / 主菜单 / 退出 均正常。
+9. 退出：确认框 → 存档 / 设置 / 摘要落盘 → BootScreen 显示「服务已清理…」。
+10. 持久化：再次 Play，摘要与最佳分保留。
 
 ## 六、风险与待核（M0 结论）
 
@@ -227,3 +251,7 @@ Samples~/Integration/
   - 复跑：**PlayMode 2437 例（2436 通过 / 0 失败 / 1 跳过 = 探针环境变量门控）；EditMode 752 例（746 通过 / 0 失败 / 6 跳过）**；`check-samples` 43 个 `.cs` 通过；`check-docs.ps1 -Enforce` 通过；最终示例的导入探针复跑 **1/1 通过**。
   - 行尾：`git ls-files --eol` 确认示例文本文件全部 `i/lf`，4 个 WAV 为 `-text`（二进制，符合 `.gitattributes`）。
   - **2026-11-13**：`Documentation/Integration.md` 已登记进 `CLAUDE.md` 的「文档分层」表（用户确认）。
+- 2026-11-15：**M8 启动前修复**。代码阅读发现并修复五处会在走查中暴露的缺陷：语言切换被 `HasLanguage` 缓存判断拦截（首次切 English / 启动恢复语言）、「恢复默认」不重推音量、结算后 `_lastRun` 不更新（主菜单/退出落盘显示上一会话）、结算「返回主菜单」不重新打开主菜单、进入游戏不关闭主菜单（`Push` 只失焦不隐藏）。`AudioSample` 增加无 YooAsset 地址时的降级 Warning。提交 `a5be4894`。
+- 2026-11-15：**开发菜单落地**。新增 `Assets/DevTools/Editor/SampleDevMenu.cs`（导入 / 打开 / Play / 清理）与 `IntegrationCollectorSetup.cs`（从 `Tools/SampleGeneration/IntegrationVerifySetup.cs` 迁移，严格版 + 幂等版 + 清理）；`Tools/verify-integration-sample.ps1` 改为直接调用新类，且已有采集设置时**拒绝**而不是删除。提交 `a8a74a27`。
+- 2026-11-15：**Example / Cinemachine 场景与 README 落地**。新增 `ExampleSampleHub` / `CinemachineSampleOverlay`、两个场景与 README、生成器 `ExampleSceneGenerator.cs` / `CinemachineSceneGenerator.cs` 与通用 `Tools/generate-sample-scene.ps1`；提交 `00776d17` / `fd729141`。新增结构守卫 `ExampleSampleStructureTests` / `CinemachineSampleStructureTests`（红灯证明后 9/9、10/10 全绿），提交 `5323f9a1`。
+- 2026-11-15：**M8 进行中**。菜单可导入 / 配置 / 打开；人工走查由用户执行，结果填入 §5.1。M8 完成前不标记「已完成」。

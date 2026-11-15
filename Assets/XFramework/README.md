@@ -432,8 +432,8 @@ git commit -m "chore: 更新 XFramework 子模块"
 包内还带有四组**示例**：
 
 - `Samples~/Playable`：零资产的可玩纵切（Bootstrap → Data → Save → Message / Reactive / Timer / File / Log）。导入后打开 `Playable.unity` 按 Play 即可，不需要预制体或 YooAsset 采集配置。
-- `Samples~/Example`：Reactive / Message / UI / Audio / Timer / Diagnostics 六个模块的用法演示。
-- `Samples~/Cinemachine`：把 `CinemachineBrain` 与两个 vcam 接进 `CameraManager`，演示 `SwitchTo` / `Push` / `Pop`、`SetFollow`、`Shake` 与 `SwitchToAsync`。
+- `Samples~/Example`：Reactive / Message / UI / Audio / Timer / Diagnostics 六个模块的用法演示。导入后打开 `Example.unity` 按 Play；场景挂了 Reactive / Message / Timer / Audio 与一块 IMGUI 操作面板（`UISample` 需要你自己的 YooAsset 面板预制体，不在场景里；Audio 需已注册地址）。
+- `Samples~/Cinemachine`：把 `CinemachineBrain` 与两个 vcam 接进 `CameraManager`，演示 `SwitchTo` / `Push` / `Pop`、`SetFollow`、`Shake` 与 `SwitchToAsync`。导入后打开 `Cinemachine.unity` 按 Play；IMGUI 面板可触发切换 / 压栈 / 震屏。
 - `Samples~/Integration`：全流程接入示例（启动 → 主菜单 → 模式选择 → 设置 / 语言 → 加载 → 游戏 → 暂停 → 结算 → 退出），覆盖 Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。**需要先按示例 README 把资源加入项目的 YooAsset 采集配置**；想要零配置先看 Playable。
 
 目录名末尾的 `~` 是 UPM 约定——Unity 完全忽略它，所以示例**不会**自动混进你的工程；要取用就在 Package Manager 里选中 XFramework → **Samples** 页签 → Import。

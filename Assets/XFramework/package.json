@@ -28,7 +28,7 @@
 	"samples": [
 		{
 			"displayName": "XFramework 模块示例",
-			"description": "各模块的用法演示：Reactive（响应式属性）、Message（消息总线、请求-响应、缓冲重放）、UI（面板开合与显示栈、遮罩引用计数、层级开关、Tip 与 HUD）、Audio（通道与三档音量、播放句柄、暂停/恢复）、Timer（冷却查询与重开、固定间隔、随对象销毁自动停表、双时间轴）、Diagnostics（给自己的游戏加一个诊断页签）。",
+			"description": "各模块的用法演示：Reactive（响应式属性）、Message（消息总线、请求-响应、缓冲重放）、UI（面板开合与显示栈、遮罩引用计数、层级开关、Tip 与 HUD）、Audio（通道与三档音量、播放句柄、暂停/恢复）、Timer（冷却查询与重开、固定间隔、随对象销毁自动停表、双时间轴）、Diagnostics（给自己的游戏加一个诊断页签）。导入后打开 Example.unity 按 Play；场景含 Reactive / Message / Timer / Audio 与 Diagnostics 页签；Audio 需已注册 YooAsset 地址，UISample 需自备面板预制体（不在场景里）。",
 			"path": "Samples~/Example"
 		},
 		{
@@ -38,7 +38,7 @@
 		},
 		{
 			"displayName": "Cinemachine 相机示例",
-			"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；核心包已内置 Cinemachine 3.x 后端。",
+			"description": "把 CinemachineBrain 与两个 vcam 接进 CameraManager，演示 SwitchTo / Push / Pop、SetFollow、Shake 与 SwitchToAsync；核心包已内置 Cinemachine 3.x 后端。导入后打开 Cinemachine.unity 按 Play，IMGUI 面板可操作切换、压栈、震屏与目标旋转。",
 			"path": "Samples~/Cinemachine"
 		},
 		{

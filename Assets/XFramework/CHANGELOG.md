@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 #### Samples
 
 - **新增 `Samples~/Integration` 全流程接入示例**（2026-11-12）：启动 → 主菜单 → 模式选择 → 设置 / 语言 → 加载 → 游戏 → 暂停 → 结算 → 退出；覆盖 Asset / UI / Audio / Settings / Localization / Input / Data / Save / Config / Scene / Camera / Diagnostics 与 Bootstrap / Pipeline / Message / Reactive / Timer / Update / Pool / Lock / File / Serialize / Log。随示例附预制体 / 场景 / 音频 / 配置表；导入后需把示例资源加入项目的 YooAsset 采集（示例 README 三步），`EditorSimulate` 仅编辑器可跑。新增常驻结构守卫与一次性导入验收探针（`Tools/verify-integration-sample.ps1`）。
+- **新增 `Samples~/Example` 与 `Samples~/Cinemachine` 可启动场景与 README**（2026-11-15）：`Example.unity` 挂载 Reactive / Message / Timer / Audio 与 IMGUI 操作面板（`UISample` 需自备 YooAsset 面板预制体，不在场景里；Audio 需已注册地址）；`Cinemachine.unity` 含 Brain、两台 vcam、ImpulseListener、跟随目标与 IMGUI 操作面板。两者均不需要 YooAsset 采集；新增结构守卫 `ExampleSampleStructureTests` / `CinemachineSampleStructureTests`。
 
 #### Audio
 
@@ -46,6 +47,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   不修改预制体，不在保存或构建时自动触发。同步补充 `Runtime/UI/README.md` 的「预制体要求」小节。
 
 ### Fixed
+
+#### Samples
+
+- **Integration 示例全流程修复**（2026-11-15）：语言切换不再被 `HasLanguage` 的缓存判断拦截（首次切 English / 启动恢复已保存语言）；「恢复默认」会重新把音量推给 AudioManager；结算后同步更新 `_lastRun`，主菜单与退出落盘不再显示上一会话摘要；结算「返回主菜单」重新打开主菜单以显示最新摘要；进入游戏前关闭全部面板，主菜单不再留在游戏 UI 后面。`AudioSample` 在无 YooAsset 地址时降级为一条 Warning 并跳过播放，不再产生红色错误。
 
 #### Audio
 

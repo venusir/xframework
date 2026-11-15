@@ -61,7 +61,7 @@ Assets/XFramework/Tests/Runtime/Camera/
 ├── CinemachineCameraAsyncTests.cs         # PlayMode：完成 / 取代 / 取消 / 错误结果
 └── ...（CameraManagerTests / CameraDirectorTests / CameraDiagnosticsTests / FakeCameraBackend）
 
-Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + .sample.json（不参与 Unity 编译）
+Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + CinemachineSampleOverlay.cs + Cinemachine.unity + README.md（不参与 Unity 编译）
 ```
 
 ## 四、Cinemachine 3.1.7 实测事实（一手读包内源码 + 运行时测试）
@@ -137,7 +137,7 @@ Assets/XFramework/Samples~/Cinemachine/    # CameraSample.cs + .sample.json（�
   依赖表 / JSON 块与开发 `Packages/manifest.json` 三处并逐字一致，由 `DependencyDeclarationTests` 守卫。
 - **安装顺序不再存在**：核心包与 Cinemachine 后端同属一个 UPM 包；按包 README 装好第三方依赖即可。
 - **`package.json` 的 `dependencies` 仍留空**：UPM 不支持 Git URL 依赖，本仓所有依赖都走 manifest + 安装器。
-- **示例**：`Samples~/Cinemachine` 不参与 Unity 编译；`.cs.meta` 手工维护，由 `check-samples.ps1` 编译校验。
+- **示例**：`Samples~/Cinemachine` 不参与 Unity 编译；`.cs.meta` 手工维护，由 `check-samples.ps1` 编译校验。2026-11-15 新增可启动场景 `Cinemachine.unity`（Brain + 两台 vcam + ImpulseListener + 跟随目标）、IMGUI 操作面板 `CinemachineSampleOverlay.cs` 与 README；场景由生成器 `Tools/SampleGeneration/CinemachineSceneGenerator.cs` 经 `Tools/generate-sample-scene.ps1 -Sample Cinemachine` 生成；结构由 `CinemachineSampleStructureTests` 守卫。
 
 ## 七、升级 Cinemachine 3.x 时重看哪里
 

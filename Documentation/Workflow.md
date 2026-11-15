@@ -123,7 +123,7 @@
 
 - 生成临时 csproj，把 `Samples~/**/*.cs` 编进包程序集与 Unity 托管程序集；`check-docs.ps1 -Enforce` 已自动调用（第六项）。
 - **前提与 dotnet 门禁相同**：先让 Unity 导入一次（生成 csproj 与 `Library/ScriptAssemblies`）。前置缺失时脚本直接失败，不给假绿。
-- 只守编译：场景 / 预制体的引用由人工验收或一次性探针覆盖。
+- 只守编译：场景 / 预制体的引用由人工验收或结构守卫覆盖。Integration 由 `IntegrationSampleStructureTests` 守；Example / Cinemachine 由 `ExampleSampleStructureTests` / `CinemachineSampleStructureTests` 守（纯文件读取：必需文件、`.meta`、`m_Script` GUID、序列化引用、登记与 README）。
 
 ### 性能基准套件
 
@@ -137,6 +137,36 @@
 `<仓库名>.TestRun` 通过 junction 共享本仓库的 `Assets/Packages/ProjectSettings`，但拥有独立 `Library`。
 因此**跑测试不必关闭编辑器**，且 Unity 为新文件生成的 `.meta` 会直接落回真实仓库。
 新机器上先跑一次 `pwsh -File Tools/run-tests.ps1 -Setup`。
+
+### 示例场景：仓库内一键启动
+
+`Samples~/` 带 `~`，AssetDatabase 不索引：场景打不开、脚本不编译、YooAsset 采集不到。菜单在
+`Assets/DevTools/Editor/SampleDevMenu.cs`（包外，不随 UPM 发布），把示例复制到 `Assets/Samples/<示例>`
+后打开场景：
+
+- `Tools/XFramework/Samples/Integration/Import and Open Boot Scene` —— 复制示例、幂等补齐 YooAsset
+  采集组 `IntegrationDev`、打开 `Integration.Boot.unity`。
+- `Tools/XFramework/Samples/Integration/Import, Open and Play` —— 同上并直接进 Play。
+- `Tools/XFramework/Samples/Example/Import and Open Scene` —— 打开 `Example.unity`（无需采集）。
+- `Tools/XFramework/Samples/Cinemachine/Import and Open Scene` —— 打开 `Cinemachine.unity`（无需采集）。
+- `Tools/XFramework/Samples/Clean Imported Samples` —— 删除导入副本、工具创建的采集组与 `Bundles/`。
+
+`Assets/Samples/`、`AssetBundleCollectorSetting.asset`、`Bundles/`、`Assets/__Xfw*Gen__/` 都已进
+`.gitignore`；跑全量测试或生成器前先清理导入副本，避免示例类型在 `Assembly-CSharp` 里重复。
+**batchmode 无法驱动交互式 Play**：批处理只用于生成资产 / 创建采集 / 跑探针；真人走查必须在编辑器里按 Play。
+
+场景生成：
+
+- `pwsh -File Tools/generate-integration-sample.ps1`
+- `pwsh -File Tools/generate-sample-scene.ps1 -Sample Example|Cinemachine`
+
+两者都要求测试壳已 `-Setup`、`Assets/Samples` 已清理；它们把脚本与 `.meta` 复制到临时目录（保 GUID），
+batchmode 生成后把场景 / 预制体移回 `Samples~/`，最后删除临时目录。
+
+验收脚本 `Tools/verify-integration-sample.ps1` 已改为直接调用
+`Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（不再复制临时 Editor 方法）；**已存在任何采集设置时
+拒绝运行**（不会替用户删除配置），先跑 Clean 菜单或手动移走它。人工走查协议与验收记录在
+`Documentation/Integration.md` §5.1；它**不进门禁**（Claude 不能点击 UI）。
 
 ## 六、这套流程没覆盖到的地方
 

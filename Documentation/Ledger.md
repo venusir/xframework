@@ -154,6 +154,8 @@
 - 已做：**`run-tests.ps1` 可选超时**（2026-10-25 · R4-ADJ-05 / R4-ENG-005；`22c7ef65`）——新增 `-TimeoutSeconds`（默认 0 = 不启用）；超时终止 Unity 并以退出码 3 结束，与测试失败（1）/ 无结果文件（2）分开报；默认路径仍走 `Start-Process -Wait`，行为不变。
 - 已做：**Luban 接入代码写盘 prepare→commit→rollback**（2026-10-25 · R4-ADJ-06 / R4-LBN-008；`5c839bb0`）——全部内容先写进隐藏暂存目录，提交时旧文件先移成备份、新文件再移入目标，stale 文件也先移成备份，manifest 最后提交；任一步失败逆序回滚并抛带可操作消息的 `LubanGenerationException`。边界：只覆盖进程内可捕获的失败，崩溃 / 断电不自动恢复（备份留在隐藏暂存目录）。
 
+- 已做：**示例「直接启动场景走完完整流程」与仓库内一键启动**（2026-11-15 · 提交 `a8a74a27` / `00776d17` / `fd729141` / `5323f9a1`）——Integration 在仓内通过 `Tools/XFramework/Samples/Integration/...` 菜单导入到 `Assets/Samples/`、幂等补齐 YooAsset 采集组并打开 `Integration.Boot.unity`（`Import, Open and Play` 直接进 Play），采集代码迁到包外的 `Assets/DevTools/Editor/IntegrationCollectorSetup.cs`；`Tools/verify-integration-sample.ps1` 改为已有采集设置时拒绝。新增 `Samples~/Example` / `Samples~/Cinemachine` 可启动场景、IMGUI 操作面板与 README，并加结构守卫。Integration 走查前修了五处流程缺陷（语言切换 / 恢复默认音量 / 上次游玩摘要 / 结算返回主菜单 / 进入游戏关闭主菜单）与 `AudioSample` 无 YooAsset 地址的降级。**人工全流程走查（M8）仍待用户执行**，记录在 `Documentation/Integration.md` §5.1；未完成前不把它当「已验收」。
+
 ## 四、复核记录
 
 已否决项与「暂不做」项**逐条复核**的记录（2026-10-15 由当时的框架级评估报告 §六 迁入本账）。
