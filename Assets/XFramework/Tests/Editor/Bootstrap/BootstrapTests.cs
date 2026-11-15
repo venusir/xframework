@@ -381,7 +381,7 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void RunAsync_SecondCallWhileRunning_WarnsAndReturns()
+        public void RunAsync_SecondCallWhileRunning_JoinsFirstRun()
         {
             var stage = NewStage("gated", 0);
             stage.Gate = new UniTaskCompletionSource();
@@ -390,15 +390,41 @@ namespace Venusy609.Xframework.Editor.Tests
             UniTask first = Bootstrap.RunAsync();
             Assert.AreEqual(1, stage.ExecuteCount, "首次调用应已启动阶段");
 
-            // 第二次调用不 await：断言的是「有没有再跑一遍」，而不是它何时返回
-            // （旧实现会再装配一条管线、同步把 ExecuteCount 推到 2）
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，忽略本次调用。"));
-            Bootstrap.RunAsync();
+            // 第二次调用返回第一次运行的任务：不得再装配一条管线，也不得立即返回假装已就绪
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，返回第一次运行的任务"));
+            UniTask second = Bootstrap.RunAsync();
 
             Assert.AreEqual(1, stage.ExecuteCount, "重入调用不得让同一批阶段跑两遍");
+            Assert.AreEqual(UniTaskStatus.Pending, second.Status, "重入返回的任务应仍在途，而不是立即完成");
 
             stage.Gate.TrySetResult();
             first.GetAwaiter().GetResult();
+            Assert.DoesNotThrow(() => second.GetAwaiter().GetResult(),
+                "重入调用应 join 第一次运行，并随它一起成功完成");
+        }
+
+        [Test]
+        public void RunAsync_SecondCallWithToken_SecondTokenDoesNotParticipate()
+        {
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(stage);
+
+            UniTask first = Bootstrap.RunAsync();
+            var cts = new CancellationTokenSource();
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，返回第一次运行的任务"));
+            UniTask second = Bootstrap.RunAsync(cancellationToken: cts.Token);
+
+            // 第二次调用的令牌不参与本次运行：取消它不得中止第一次运行
+            cts.Cancel();
+            Assert.AreEqual(BootstrapState.Running, Bootstrap.State);
+
+            stage.Gate.TrySetResult();
+            first.GetAwaiter().GetResult();
+            second.GetAwaiter().GetResult();
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State,
+                "第二次调用的令牌被取消不应影响第一次运行");
         }
 
         [Test]
@@ -585,8 +611,8 @@ namespace Venusy609.Xframework.Editor.Tests
             oldStage.Gate.TrySetResult();
             Assert.Throws<OperationCanceledException>(() => oldRun.GetAwaiter().GetResult());
 
-            // 第三次调用必须仍被重入守卫忽略；若守卫被误清，它会真的重跑 newStage
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，忽略本次调用。"));
+            // 第三次调用必须仍被重入守卫 join 到新运行；若守卫被误清，它会真的重跑 newStage
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 已在运行中，返回第一次运行的任务"));
             UniTask third = Bootstrap.RunAsync();
 
             Assert.AreEqual(1, newStage.ExecuteCount, "旧运行收尾不得清掉新运行持有的 _isRunning");
@@ -594,6 +620,244 @@ namespace Venusy609.Xframework.Editor.Tests
             newStage.Gate.TrySetResult();
             third.GetAwaiter().GetResult();
             newRun.GetAwaiter().GetResult();
+        }
+
+        #endregion
+
+        #region 就绪面（State / WaitUntilReadyAsync / LastProgress）
+
+        [Test]
+        public void State_Transitions_ThroughRunLifecycle()
+        {
+            Assert.AreEqual(BootstrapState.Idle, Bootstrap.State, "初始状态应为 Idle");
+
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(stage);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(BootstrapState.Running, Bootstrap.State, "在途运行应处于 Running");
+
+            stage.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State, "成功收敛后应为 Completed");
+        }
+
+        [Test]
+        public void State_Failed_AfterStageThrows()
+        {
+            var bad = NewStage("bad", 0);
+            bad.ThrowOnExecute = true;
+            Bootstrap.Register(bad);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): bad boom"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+
+            Assert.Throws<InvalidOperationException>(
+                () => Bootstrap.RunAsync().GetAwaiter().GetResult());
+
+            Assert.AreEqual(BootstrapState.Failed, Bootstrap.State, "失败收敛后应为 Failed");
+        }
+
+        [Test]
+        public void State_Cancelled_AfterCancelledRun()
+        {
+            var cts = new CancellationTokenSource();
+            var stage = NewStage("cancelling", 0);
+            stage.CancelAfterStart = cts;
+            Bootstrap.Register(stage);
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+
+            Assert.Throws<OperationCanceledException>(
+                () => Bootstrap.RunAsync(cancellationToken: cts.Token).GetAwaiter().GetResult());
+
+            Assert.AreEqual(BootstrapState.Cancelled, Bootstrap.State, "取消收敛后应为 Cancelled");
+        }
+
+        [Test]
+        public void RunAsync_NoStages_StateCompletedAndProgressFilled()
+        {
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] 未登记任何引导阶段"));
+
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State, "零阶段也是一次已完成的启动");
+            Assert.IsNotNull(Bootstrap.LastProgress);
+            Assert.AreEqual(1f, Bootstrap.LastProgress.OverallProgress, 0.001f,
+                "没有管线广播时也应把快照补成完成态");
+            Assert.AreEqual("Completed", Bootstrap.LastProgress.Description);
+        }
+
+        [Test]
+        public void LastProgress_ReflectsFinalSnapshot_AndResetsWithSession()
+        {
+            Bootstrap.Register(NewStage("progress", 0));
+
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Assert.IsNotNull(Bootstrap.LastProgress, "运行开始时应建立快照持有者");
+            Assert.AreEqual(1f, Bootstrap.LastProgress.OverallProgress, 0.001f);
+            Assert.AreEqual("Completed", Bootstrap.LastProgress.Description);
+            Assert.AreEqual(1, Bootstrap.LastProgress.CompletedStageCount);
+
+            Bootstrap.ResetForNewSession();
+            Assert.IsNull(Bootstrap.LastProgress, "会话复位应清空进度快照");
+        }
+
+        [Test]
+        public void WaitUntilReady_Completed_ReturnsImmediately()
+        {
+            Bootstrap.Register(NewStage("done", 0));
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            UniTask waiter = Bootstrap.WaitUntilReadyAsync();
+
+            Assert.AreEqual(UniTaskStatus.Succeeded, waiter.Status, "Completed 状态应同步完成");
+            waiter.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void WaitUntilReady_Running_CompletesWithRun()
+        {
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(stage);
+
+            UniTask run = Bootstrap.RunAsync();
+            UniTask waiter = Bootstrap.WaitUntilReadyAsync();
+            Assert.AreEqual(UniTaskStatus.Pending, waiter.Status, "运行在途时等待者不应提前完成");
+
+            stage.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+            waiter.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void WaitUntilReady_Failed_RethrowsRunException()
+        {
+            var bad = NewStage("bad", 0);
+            bad.ThrowOnExecute = true;
+            Bootstrap.Register(bad);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): bad boom"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+
+            var runException = Assert.Throws<InvalidOperationException>(
+                () => Bootstrap.RunAsync().GetAwaiter().GetResult());
+
+            var waitedException = Assert.Throws<InvalidOperationException>(
+                () => Bootstrap.WaitUntilReadyAsync().GetAwaiter().GetResult());
+
+            Assert.AreSame(runException, waitedException,
+                "WaitUntilReadyAsync 应重抛本次运行的同一个异常（含原始堆栈）");
+        }
+
+        [Test]
+        public void WaitUntilReady_Cancelled_ThrowsOperationCanceled()
+        {
+            var cts = new CancellationTokenSource();
+            var stage = NewStage("cancelling", 0);
+            stage.CancelAfterStart = cts;
+            Bootstrap.Register(stage);
+
+            LogAssert.Expect(LogType.Warning, new Regex(@"\[Pipeline\] Pipeline cancelled"));
+            Assert.Throws<OperationCanceledException>(
+                () => Bootstrap.RunAsync(cancellationToken: cts.Token).GetAwaiter().GetResult());
+
+            Assert.Throws<OperationCanceledException>(
+                () => Bootstrap.WaitUntilReadyAsync().GetAwaiter().GetResult(),
+                "Cancelled 状态应重抛本次运行的取消异常");
+        }
+
+        [Test]
+        public void WaitUntilReady_Idle_WaitsForNextRun()
+        {
+            UniTask waiter = Bootstrap.WaitUntilReadyAsync();
+            Assert.AreEqual(UniTaskStatus.Pending, waiter.Status, "Idle 时应等待下一次运行");
+
+            var stage = NewStage("gated", 0);
+            stage.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(stage);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(UniTaskStatus.Pending, waiter.Status, "运行开始后应转为等待本次运行完成");
+
+            stage.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+            waiter.GetAwaiter().GetResult();
+        }
+
+        [Test]
+        public void WaitUntilReady_Idle_Cancellable()
+        {
+            var cts = new CancellationTokenSource();
+            UniTask waiter = Bootstrap.WaitUntilReadyAsync(cts.Token);
+
+            cts.Cancel();
+
+            Assert.Throws<OperationCanceledException>(() => waiter.GetAwaiter().GetResult());
+        }
+
+        [Test]
+        public void ResetForNewSession_CancelsIdleWaitersAndResetsState()
+        {
+            UniTask waiter = Bootstrap.WaitUntilReadyAsync();
+
+            Bootstrap.ResetForNewSession();
+
+            Assert.Throws<OperationCanceledException>(() => waiter.GetAwaiter().GetResult(),
+                "会话复位应取消旧会话的 Idle 等待者");
+            Assert.AreEqual(BootstrapState.Idle, Bootstrap.State);
+        }
+
+        [Test]
+        public void Shutdown_WhenIdle_DoesNotChangeState()
+        {
+            Assert.AreEqual(BootstrapState.Idle, Bootstrap.State);
+
+            Bootstrap.Shutdown();
+
+            Assert.AreEqual(BootstrapState.Idle, Bootstrap.State, "Shutdown 不改就绪状态");
+        }
+
+        [Test]
+        public void Shutdown_WhenCompleted_DoesNotChangeState()
+        {
+            Bootstrap.Register(NewStage("done", 0));
+            Bootstrap.RunAsync().GetAwaiter().GetResult();
+
+            Bootstrap.Shutdown();
+
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State,
+                "Shutdown 只清理，不把已完成的状态改回 Idle");
+        }
+
+        [Test]
+        public void FailedRun_ThenNewRun_StateReturnsToRunning()
+        {
+            var bad = NewStage("bad", 0);
+            bad.ThrowOnExecute = true;
+            Bootstrap.Register(bad);
+
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Parallel stage failed: bad \(\d+\.\d+s\): bad boom"));
+            LogAssert.Expect(LogType.Error, new Regex(@"\[Pipeline\] Pipeline failed:"));
+            Assert.Throws<InvalidOperationException>(
+                () => Bootstrap.RunAsync().GetAwaiter().GetResult());
+            Assert.AreEqual(BootstrapState.Failed, Bootstrap.State);
+
+            Bootstrap.Clear();
+            var gated = NewStage("gated", 0);
+            gated.Gate = new UniTaskCompletionSource();
+            Bootstrap.Register(gated);
+
+            UniTask run = Bootstrap.RunAsync();
+            Assert.AreEqual(BootstrapState.Running, Bootstrap.State,
+                "再次运行应清除上一次失败状态并回到 Running");
+
+            gated.Gate.TrySetResult();
+            run.GetAwaiter().GetResult();
+            Assert.AreEqual(BootstrapState.Completed, Bootstrap.State);
         }
 
         #endregion

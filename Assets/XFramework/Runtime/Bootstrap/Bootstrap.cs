@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Runtime.ExceptionServices;
 using System.Threading;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
@@ -45,9 +46,34 @@ namespace XFramework.XBootstrap
         /// 本次在途 <see cref="RunAsync"/> 的取消源（非在途时为 null）。
         /// <para>由 <see cref="RunAsync"/> 在重入守卫之后创建（链接调用方令牌），<see cref="Shutdown"/>
         /// 取消它以<b>先中止在途、后清理</b>；释放归创建它的那次运行（局部变量 + 身份校验，
-        /// 见 <see cref="RunAsync"/> 收尾处的注释）。</para>
+        /// 见 <c>RunCoreAsync</c> 收尾处的注释）。</para>
         /// </summary>
         private static CancellationTokenSource _runCts;
+
+        /// <summary>当前运行状态（<see cref="BootstrapState"/> 的单一真值）；会话复位回 Idle。</summary>
+        private static BootstrapState _state = BootstrapState.Idle;
+
+        /// <summary>最近一次运行失败/取消的异常（保留原始堆栈）；下一次运行开始时清空。</summary>
+        private static ExceptionDispatchInfo _lastException;
+
+        /// <summary>最近一次运行的进度快照（运行开始时新建；会话复位清空）。</summary>
+        private static PipelineProgress _lastProgress;
+
+        /// <summary>在途运行的任务；重入 join 时原样返回给第二个调用方。</summary>
+        private static UniTask _currentRunTask;
+
+        /// <summary>本次运行的完成源（每次运行新建；<see cref="WaitUntilReadyAsync"/> 的 Running 等待目标）。</summary>
+        private static UniTaskCompletionSource _currentRunCompletion;
+
+        /// <summary>「下一次运行开始」的信号源（Idle 等待者共享；每次运行开始时完成并清空）。</summary>
+        private static UniTaskCompletionSource _nextRunStarted;
+
+        /// <summary>
+        /// 会话级取消源：让 Idle 等待者在会话复位时收到取消，而不是无限挂起。
+        /// <para>复位时取消并替换，<b>不 Dispose</b>（等待者仍持有旧令牌）——每个播放会话最多留下
+        /// 一个待回收的源。关闭域重载时静态字段本身会被重置，不构成跨会话泄漏。</para>
+        /// </summary>
+        private static CancellationTokenSource _sessionCts = new CancellationTokenSource();
 
         #endregion
 
@@ -58,6 +84,21 @@ namespace XFramework.XBootstrap
         /// <para><b>这是实时视图</b>，不是快照——后续登记会反映出来。只读用途，勿缓存后假定其不变。</para>
         /// </summary>
         public static IReadOnlyList<IBootstrapStage> Stages => StageList;
+
+        /// <summary>
+        /// 当前启动状态（最近一次 <see cref="RunAsync"/> 的结果）。会话复位回 <see cref="BootstrapState.Idle"/>。
+        /// <para><b>拉取面</b>：启动画面可直接轮询它；要等待完成请用 <see cref="WaitUntilReadyAsync"/>——
+        /// 后者可取消，并在失败/取消时重抛本次运行的异常。</para>
+        /// </summary>
+        public static BootstrapState State => _state;
+
+        /// <summary>
+        /// 最近一次运行的进度快照；从未运行或会话复位后为 <c>null</c>。
+        /// <para><b>运行开始时新建，每次管线进度广播时全量覆盖</b>——启动画面可直接轮询它，不必自己实现
+        /// <see cref="IProgress{T}"/>。失败/取消后仍保留最后一帧。它是快照持有者，不是线程安全容器：
+        /// 读取与 <see cref="RunAsync"/> 同在主线程。</para>
+        /// </summary>
+        public static PipelineProgress LastProgress => _lastProgress;
 
         #endregion
 
@@ -258,6 +299,27 @@ namespace XFramework.XBootstrap
                     "会话复位时取消回调抛出异常，已隔离并继续。");
             }
             _runCts = null;
+
+            // 就绪面状态一并复位：旧会话的失败/取消不得污染新会话。
+            _state = BootstrapState.Idle;
+            _lastException = null;
+            _lastProgress = null;
+            _currentRunTask = default;
+            _currentRunCompletion = null;
+            _nextRunStarted = null;
+
+            // 唤醒并作废上一会话的 Idle 等待者：它们等的是「下一次运行」，而那个运行已属于旧会话。
+            // 不 Dispose 旧源——等待者的 AttachExternalCancellation 仍持有它的令牌。
+            try
+            {
+                _sessionCts.Cancel();
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(LogCategories.Bootstrap, e,
+                    "会话复位时取消等待者抛出异常，已隔离并继续。");
+            }
+            _sessionCts = new CancellationTokenSource();
         }
 
         #endregion
@@ -270,29 +332,127 @@ namespace XFramework.XBootstrap
         /// 启动失败是致命的，调用方必须能感知。</para>
         /// <para><b>在途期间调用 <see cref="Shutdown"/> 会中止本次运行</b>：取消经链接令牌传播，
         /// 管线在下一个阶段边界停止；中止是协作式的——不观察令牌的阶段会先跑完自己（见 README 已知限制）。</para>
-        /// <para><b>重入只警告并忽略</b>（与 Pipeline 实例自身的重入守卫同形）：每次调用都会装配一条
-        /// 新管线（管线守卫是实例级的），并发两次会让同一批阶段跑两遍。被忽略的调用<b>立即返回、
-        /// 不代表启动完成</b>——要「等启动结束」，请共享第一次调用的任务，而不是再调一次。</para>
+        /// <para><b>重入返回第一次运行的任务（join）</b>（与 Pipeline 实例自身的重入守卫同形）：每次调用都会
+        /// 装配一条新管线（管线守卫是实例级的），并发两次会让同一批阶段跑两遍。第二次调用的令牌
+        /// <b>不参与本次运行</b>——本次运行只认第一次调用方的令牌；第二个调用方 await 返回的任务即可
+        /// 等到真正的启动结束。</para>
+        /// <para>运行结束后可以再次调用（先 <see cref="Shutdown"/> 或失败后重试）：状态重置为
+        /// <see cref="BootstrapState.Running"/>，重新装配管线，上一次运行的异常不再影响新运行。</para>
         /// </summary>
-        /// <param name="progress">进度接收者，可为 null。</param>
-        /// <param name="cancellationToken">取消令牌；<see cref="Shutdown"/> 的中止信号与它链接后一并生效。</param>
-        /// <returns>管线跑完的异步任务。</returns>
+        /// <param name="progress">进度接收者，可为 null。无论是否传入，最近一帧快照都会写进 <see cref="LastProgress"/>。</param>
+        /// <param name="cancellationToken">取消令牌；<see cref="Shutdown"/> 的中止信号与它链接后一并生效。
+        /// 重入调用时本参数被忽略（见上）。</param>
+        /// <returns>管线跑完的异步任务；重入时返回第一次运行的任务。</returns>
         /// <exception cref="InvalidOperationException">任一阶段失败时抛出，消息含失败原因。</exception>
         /// <exception cref="OperationCanceledException">启动被取消时抛出（调用方令牌取消，或 <see cref="Shutdown"/>
         /// 中止在途运行）。异常携带的是本次运行的<b>链接令牌</b>——判据是
         /// <see cref="CancellationToken.IsCancellationRequested"/>，不要比对令牌身份。</exception>
-        public static async UniTask RunAsync(IProgress<PipelineProgress> progress = null,
-                                             CancellationToken cancellationToken = default)
+        public static UniTask RunAsync(IProgress<PipelineProgress> progress = null,
+                                       CancellationToken cancellationToken = default)
         {
             if (_isRunning)
             {
-                LogManager.Warning(LogCategories.Bootstrap, "RunAsync 已在运行中，忽略本次调用。");
-                return;
+                LogManager.Warning(LogCategories.Bootstrap,
+                    "RunAsync 已在运行中，返回第一次运行的任务（本次调用的令牌不参与本次运行）。");
+                return _currentRunTask;
             }
 
-            // 在首个 await 之前同步置位(async 方法在首个未完成 await 之前是同步执行的)
+            // 在首个 await 之前同步置位（RunCoreAsync 在首个未完成 await 之前同步执行）
             _isRunning = true;
             int runGeneration = ++_runGeneration;
+
+            _state = BootstrapState.Running;
+            _lastException = null;
+            _lastProgress = new PipelineProgress();
+
+            // 全部调用方（首次/重入/等待者）共享同一个完成源的任务。不能把 async 方法的 UniTask
+            // 存起来再返回——状态机 UniTask 只允许 await 一次（二次 await 抛「Token version is not matched」）。
+            var completion = new UniTaskCompletionSource();
+            _currentRunCompletion = completion;
+            _currentRunTask = completion.Task;
+
+            // Idle 等待者等的是「下一次运行」；本次运行就是那个「下一次」。
+            _nextRunStarted?.TrySetResult();
+            _nextRunStarted = null;
+
+            RunCoreAsync(progress, cancellationToken, runGeneration, completion);
+            return _currentRunTask;
+        }
+
+        /// <summary>
+        /// 等待启动就绪：当前/下一次运行结束时返回，失败或取消时<b>重抛本次运行的异常</b>。
+        /// <para><b>状态映射</b>：<see cref="BootstrapState.Completed"/> 立即完成；
+        /// <see cref="BootstrapState.Failed"/> / <see cref="BootstrapState.Cancelled"/> 抛出本次运行的异常
+        /// （与 <see cref="RunAsync"/> 的抛出契约一致）；<see cref="BootstrapState.Running"/> 等待本次运行结束；
+        /// <see cref="BootstrapState.Idle"/> 等待下一次运行开始并结束——可用 <paramref name="cancellationToken"/>
+        /// 取消，会话复位也会取消（抛出 <see cref="OperationCanceledException"/>）。</para>
+        /// <para>失败后再次 <see cref="RunAsync"/> 会清除上一次的异常：在那之前进入等待的调用方仍会收到
+        /// 上一次的结果；之后进入的会等新运行。</para>
+        /// </summary>
+        /// <param name="cancellationToken">取消令牌。</param>
+        /// <exception cref="InvalidOperationException">最近一次运行失败时抛出（原样重抛）。</exception>
+        /// <exception cref="OperationCanceledException">最近一次运行被取消、本调用被取消，或会话复位时抛出。</exception>
+        public static async UniTask WaitUntilReadyAsync(CancellationToken cancellationToken = default)
+        {
+            CancellationToken sessionToken = _sessionCts.Token;
+
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                sessionToken.ThrowIfCancellationRequested();
+
+                switch (_state)
+                {
+                    case BootstrapState.Completed:
+                        return;
+
+                    case BootstrapState.Failed:
+                    case BootstrapState.Cancelled:
+                        _lastException?.Throw();
+                        return;
+
+                    case BootstrapState.Running:
+                    {
+                        UniTaskCompletionSource completion = _currentRunCompletion;
+                        if (completion != null)
+                        {
+                            await completion.Task
+                                .AttachExternalCancellation(cancellationToken)
+                                .AttachExternalCancellation(sessionToken);
+                        }
+
+                        break;
+                    }
+
+                    default:
+                    {
+                        // Idle：等「下一次运行开始」。多个等待者共享同一个信号源，避免每个调用方各建一份。
+                        UniTaskCompletionSource started = _nextRunStarted;
+                        if (started == null)
+                        {
+                            started = new UniTaskCompletionSource();
+                            _nextRunStarted = started;
+                        }
+
+                        await started.Task
+                            .AttachExternalCancellation(cancellationToken)
+                            .AttachExternalCancellation(sessionToken);
+                        break;
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// <see cref="RunAsync"/> 的实现主体。状态/等待者收尾只落自己那一代（会话复位可能已让新运行并存）。
+        /// </summary>
+        private static async UniTaskVoid RunCoreAsync(IProgress<PipelineProgress> progress,
+                                                      CancellationToken cancellationToken,
+                                                      int runGeneration,
+                                                      UniTaskCompletionSource completion)
+        {
+            BootstrapState terminal = BootstrapState.Completed;
+            Exception failure = null;
 
             try
             {
@@ -308,15 +468,28 @@ namespace XFramework.XBootstrap
                     if (StageList.Count == 0)
                     {
                         LogManager.Warning(LogCategories.Bootstrap, "未登记任何引导阶段，RunAsync 直接返回。");
+
+                        // 没有管线就没有进度广播：手工把快照补成完成态，轮询 LastProgress 的启动画面
+                        // 才不会永远停在 0%（「没有阶段」本身就是一次已完成的启动）。
+                        PipelineProgress empty = _lastProgress;
+                        if (empty != null)
+                        {
+                            empty.OverallProgress = 1f;
+                            empty.Description = "Completed";
+                        }
+
                         return;
                     }
 
                     IPipeline pipeline = BuildPipeline();
 
-                    if (progress != null)
+                    // 快照持有者按运行局部化：会话复位会把 _lastProgress 置空并换掉，闭包不能跟着漂。
+                    PipelineProgress snapshot = _lastProgress;
+                    pipeline.OnProgressUpdate += value =>
                     {
-                        pipeline.OnProgressUpdate += value => progress.Report(value);
-                    }
+                        ((IProgress<PipelineProgress>)snapshot).Report(value);
+                        progress?.Report(value);
+                    };
 
                     // 终局从拉取面读：PipelineImpl.RunAsync 在失败/取消时都"正常返回"，
                     // 单看返回值分不出成功与失败（这正是旧 StartupAsync 把失败吞成日志的原因）。
@@ -362,13 +535,46 @@ namespace XFramework.XBootstrap
                     runCts.Dispose();
                 }
             }
+            catch (OperationCanceledException e)
+            {
+                terminal = BootstrapState.Cancelled;
+                failure = e;
+            }
+            catch (Exception e)
+            {
+                terminal = BootstrapState.Failed;
+                failure = e;
+            }
             finally
             {
-                // 只清自己那一代的归属：ResetForNewSession 可能在途递增代际并允许新运行开始，
-                // 旧运行的收尾不能把新运行的 _isRunning 一起清掉。
+                // 只落自己那一代的终局：ResetForNewSession 可能在途递增代际并允许新运行开始，
+                // 旧运行的收尾不能把新会话的状态/等待者一起改掉。
                 if (_runGeneration == runGeneration)
                 {
                     _isRunning = false;
+                    _state = terminal;
+                    _lastException = failure == null ? null : ExceptionDispatchInfo.Capture(failure);
+
+                    if (ReferenceEquals(_currentRunCompletion, completion))
+                    {
+                        _currentRunCompletion = null;
+                    }
+                }
+
+                // 完成源承载本次运行的终局：所有 RunAsync 调用方（含重入）与 WaitUntilReadyAsync
+                // 都等它，因此它必须是可多路 await 的 TCS 任务。必须在状态/异常落位之后完成——
+                // 唤醒的等待者要能立刻读到终局。旧代际的等待者已被会话复位取消，这里只是收尾。
+                if (failure == null)
+                {
+                    completion.TrySetResult();
+                }
+                else if (failure is OperationCanceledException canceled)
+                {
+                    completion.TrySetCanceled(canceled.CancellationToken);
+                }
+                else
+                {
+                    completion.TrySetException(failure);
                 }
             }
         }
