@@ -106,3 +106,18 @@ InitTestScene*.unity*
 TestLog*.txt
 TestResults*.xml
 /TestResults/
+
+# Dev-only sample imports and YooAsset temporary output (created by Assets/DevTools menus)
+/Assets/Samples/
+/Assets/Samples.meta
+/Assets/AssetBundleCollectorSetting.asset
+/Assets/AssetBundleCollectorSetting.asset.meta
+/Bundles/
+/Assets/__XfwIntegrationGen__/
+/Assets/__XfwIntegrationGen__.meta
+/Assets/__XfwIntegrationVerify__/
+/Assets/__XfwIntegrationVerify__.meta
+/Assets/__XfwExampleGen__/
+/Assets/__XfwExampleGen__.meta
+/Assets/__XfwCinemachineGen__/
+/Assets/__XfwCinemachineGen__.meta
