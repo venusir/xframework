@@ -28,14 +28,16 @@ $imported = Join-Path $repoRoot "Assets/Samples/Integration"
 $samplesDir = Join-Path $repoRoot "Assets/Samples"
 $tempEditor = Join-Path $repoRoot "Assets/__XfwIntegrationVerify__"
 $setting = Join-Path $repoRoot "Assets/AssetBundleCollectorSetting.asset"
-$setupSource = Join-Path $repoRoot "Tools/SampleGeneration/IntegrationVerifySetup.cs"
 $logPath = Join-Path $repoRoot "Logs/verify-integration.log"
 
 if (-not (Test-Path $samples)) {
     throw "示例目录不存在：$samples"
 }
-if (-not (Test-Path $setupSource)) {
-    throw "验收设置源码不存在：$setupSource"
+
+# 采集设置全工程只允许一份：已有则拒绝运行（可能来自开发菜单的导入）。
+# 绝不能在 Cleanup 里无条件删除——那会静默摧毁别人正在用的配置。
+if (Test-Path $setting) {
+    throw "已存在采集设置：$setting。请先运行菜单 Tools/XFramework/Samples/Clean Imported Samples，或手动移走它。"
 }
 
 # Unity 版本与路径
@@ -76,8 +78,6 @@ function Cleanup {
     Remove-IfExists "$imported.meta"
     Remove-IfExists $tempEditor
     Remove-IfExists "$tempEditor.meta"
-    Remove-IfExists $setting
-    Remove-IfExists "$setting.meta"
 
     # Samples 目录若已空，连目录与 meta 一起清掉。
     if ((Test-Path $samplesDir) -and -not (Get-ChildItem $samplesDir -Force | Select-Object -First 1)) {
@@ -93,17 +93,15 @@ function Cleanup {
 Cleanup
 
 $exitCode = 1
+$settingCreated = $false
 try {
     # 1. 导入副本
     New-Item -ItemType Directory -Force $imported | Out-Null
     Copy-Item -Path (Join-Path $samples "*") -Destination $imported -Recurse -Force
     Write-Host "已复制示例到：$imported"
 
-    # 2. 临时 Editor 设置脚本
-    New-Item -ItemType Directory -Force (Join-Path $tempEditor "Editor") | Out-Null
-    Copy-Item -Path $setupSource -Destination (Join-Path $tempEditor "Editor/IntegrationVerifySetup.cs") -Force
-
-    # 3. 创建临时采集设置（在测试壳里跑，Assets 是共享的）
+    # 2. 创建临时采集设置（在测试壳里跑，Assets 是共享的）
+    #    设置代码在 Assets/DevTools/Editor/IntegrationCollectorSetup.cs（测试壳随 Assets 一起编译）。
     New-Item -ItemType Directory -Force (Split-Path -Parent $logPath) | Out-Null
     if (Test-Path $logPath) {
         Remove-Item -Force $logPath
@@ -113,18 +111,20 @@ try {
         "-batchmode",
         "-nographics",
         "-projectPath", $shellPath,
-        "-executeMethod", "XFramework.Samples.Integration.Editor.IntegrationVerifySetup.CreateCollectorSetting",
+        "-executeMethod", "XFramework.DevTools.IntegrationCollectorSetup.CreateCollectorSetting",
         "-quit",
         "-logFile", $logPath
     )
 
     Write-Host "创建临时 YooAsset 采集设置..."
+    # 调用前就置位：batchmode 可能创建了资产后以非 0 退出，finally 仍需清掉它。
+    $settingCreated = $true
     $proc = Start-Process -FilePath $UnityPath -ArgumentList $setupArgs -NoNewWindow -PassThru -Wait
     if ($proc.ExitCode -ne 0) {
         throw "采集设置创建失败（退出码 $($proc.ExitCode)）。日志：$logPath"
     }
 
-    # 4. 运行导入探针
+    # 3. 运行导入探针
     $env:XFW_INTEGRATION_PROBE = "1"
     Write-Host "运行导入探针 IntegrationProbeTests..."
     & (Join-Path $PSScriptRoot "run-tests.ps1") -Fixture IntegrationProbeTests -Platform PlayMode
@@ -133,6 +133,10 @@ try {
 finally {
     Remove-Item Env:\XFW_INTEGRATION_PROBE -ErrorAction SilentlyContinue
     Cleanup
+    if ($settingCreated) {
+        Remove-IfExists $setting
+        Remove-IfExists "$setting.meta"
+    }
     Write-Host "临时物已清理。"
 }
 
