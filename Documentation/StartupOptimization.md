@@ -243,7 +243,7 @@ Zenject 的解法是 `ScriptableObjectInstaller`——**资产里写代码**。�
 
 ### 5.5 可选自动启动（VContainer 式）
 
-settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景按 Play」。用户未把它列为痛点，且触及「启动器可选」的定位，建议列为独立待裁项，不并入本轮。
+settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景按 Play」。用户未把它列为痛点，且触及「启动器可选」的定位，建议列为独立待裁项，不并入本轮。**2026-11-15 追加：已在第十节与「Mono + Profile」「静态入口 + Profile」等方案逐项比较，推荐结论见 §10.4。**
 
 ---
 
@@ -277,9 +277,11 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 | 0 | 文档订正（`Bootstrap.md`「零使用」）+ 裁定落台账 | 无 | `Tools/check-docs.ps1 -Enforce` |
 | 1 | 就绪状态 + 共享任务 + 重入 join + `GameLauncher.StartupTask` | 新增 | API 基线 + CHANGELOG `### Added`；`run-tests.ps1 -Filter Bootstrap` + 全量 |
 | 2 | `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试 | 新增 | 定向 + 全量；API 基线 |
-| 3 | 编辑器 / 构建时校验 + 诊断面板升级 | Editor 新增 | Editor 测试 + `check-docs` |
-| 4 | 子阶段超时（Pipeline） | 视形状 | Pipeline + Bootstrap 测试 |
-| 5 | 待裁：Settings/Config 核心 stage、可选自动启动 | 视裁定 | 按裁定 |
+| 3 | `BootstrapProfile` + `DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）+ 测试改写 | 新增/破坏性 | API 基线 + CHANGELOG `### Added` + 迁移表；定向 + 全量 |
+| 4 | 样例迁移（Profile 资产 + 场景赋 `_profile` + 删除 `AppReadyBootstrapStage`） | 无 | `check-docs` + 样例编译 + 手动冒烟 |
+| 5 | 编辑器 / 构建时校验 + 诊断面板升级 | Editor 新增 | Editor 测试 + `check-docs` |
+| 6 | 子阶段超时（Pipeline） | 视形状 | Pipeline + Bootstrap 测试 |
+| 7 | 待裁：Settings/Config 核心 stage、N3 自动启动根 | 视裁定 | 按裁定 |
 
 ### 阶段 1 细节
 
@@ -317,24 +319,42 @@ Tools/check-docs.ps1 -Enforce
 - 新增 `Assets/XFramework/Runtime/Bootstrap/BootstrapStage.cs`（委托工厂）与 `BootstrapStages.cs`（内置目录）。
 - 委托阶段的 `Shutdown` 由调用方提供；不替调用方判断所有权。
 - 内置不变量测试放 `Tests/Editor/Bootstrap/BootstrapInvariantTests.cs`（或并入现有 Bootstrap 测试）。
-- `DefaultGameLauncher` 改用 `BootstrapStages`，行为不变。
+- 后续阶段 3 的 Profile 映射复用 `BootstrapStages`。
 
-### 阶段 3 细节
+### 阶段 3 细节（Profile + launcher 改造）
+
+- 新增 `Assets/XFramework/Runtime/Bootstrap/BootstrapProfile.cs`：`public sealed class BootstrapProfile : ScriptableObject`，7 个 `[SerializeField] private` 字段 + `internal` getter；默认值镜像旧字段。
+- 新增 `BootstrapStages.FromProfile(BootstrapProfile profile, Transform uiRoot)`（或 `profile.CreateStages(uiRoot)`）：显式登记 Asset/Data/Save + 条件 UI/Input/Localization。
+- 改造 `DefaultGameLauncher`：移除 7 个数据字段，保留 `_profile` + `_uiRoot`；`ConfigureStages` 分支（profile 非空 / 空 → `RegisterDefaults()` + 条件 UI）。
+- `GameLauncher` 抽象底座不动（零字段 + `abstract ConfigureStages`）。
+- 测试：`GameLauncherTests` 字段数 8 → 2；`Awake_WithFields_*` 改为构造 `BootstrapProfile`；新增「profile 为空 = 默认三件 + 可选 UI」用例。
+- 文档：`Runtime/Bootstrap/README.md`、`DefaultGameLauncher` XML、包 README 的「三种用法」改为「零配置 / Profile / 子类覆写」。
+- CHANGELOG：`### Added`（`BootstrapProfile`、`BootstrapStages.FromProfile`）+ 迁移表（7 字段移除；创建 Profile、复制值、赋 `_profile`）。
+
+### 阶段 4 细节（样例迁移）
+
+- 新增 `Samples~/Integration/Data/Integration.BootstrapProfile.asset`，复制旧场景值（package ""、EditorSimulate、autoReclaim true、saveVersion 1、`Integration.InputOptions`、zh_Hans、language table）。
+- `Integration.Boot.unity`：`Launcher` 的 `_profile` 指向新资产；清掉 7 个旧字段键；保留 `_uiRoot`；`IntegrationLauncher` 继承不变。
+- 删除 `AppReadyBootstrapStage`；`AppFlowController.Start` 改为 `await Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)`；`BootScreen` 读 `Bootstrap.State`/进度。
+- 手动冒烟：启动、切场景、退出。
+
+### 阶段 5 细节（编辑器校验 + 诊断）
 
 - 新增 `Assets/XFramework/Editor/Bootstrap/BootstrapValidator.cs` + 菜单项（`Tools/XFramework` 下）。
 - 可选的 `IPreprocessBuildWithReport` 构建前校验。
+- 校验项：Profile 存在、Host 有 `RemoteServices`、启动场景 index 0、无重复 Launcher。
 - `BootstrapDiagnosticPanel` 升级；Editor 公开 API 基线按需更新。
 - 探头：在 Integration 场景制造「缺 `RemoteServices` 的 Host」与「重复内置阶段」，确认校验能报出来。
 
-### 阶段 4 细节
+### 阶段 6 细节（超时）
 
 - `Runtime/Pipeline/ParallelStage.cs` 支持子阶段超时；Bootstrap 侧按需传入。
 - 边界如实写进 Pipeline README 与 Bootstrap README：超时只能报告失败并取消令牌，不响应取消的阶段仍会跑完。
 
-### 阶段 5 细节
+### 阶段 7 细节
 
 - Settings/Config 核心 stage：先逐模块论证初始化 API 是否可通用；默认不做。
-- 可选自动启动：需要 settings asset + 根预制体 + `BeforeSceneLoad`；默认关闭，不改变「Launcher 可选」的契约。
+- N3 自动启动根：独立可选；需要 settings asset + 根预制体 + `BeforeSceneLoad`；默认关闭，不改变「Launcher 可选」的契约。
 
 ---
 
@@ -350,6 +370,13 @@ Tools/check-docs.ps1 -Enforce
 | 6 | 编辑器 / 构建时校验是否排期 | 排期 / 不排 | **排期** | 纯 Editor，无运行时 API |
 | 7 | 子阶段超时是否排期 | 排期 / 不排 | 后置 | Pipeline 公开面 |
 | 8 | 本轮报告的落点 | 本文件 / 模块台账 / 仅对话 | 本文件 + 裁定后落模块台账 | 文档 |
+| 9 | Profile 形状 | P1 窄 Profile / P2 每模块独立 SO / P3 全局 Profile / P4 可编程 Profile / 不做 | **P1 窄 Profile** | 公开 API、资产形态、台账划线 |
+| 10 | 启动入口形状 | N0 启动场景 Launcher / N3 自动启动根 / N4 静态入口 / N2 静态助手 / N1 文档配方 / 维持现状 | **N0**（N3 可选；N4 headless） | 公开 API、样例迁移、生命周期 |
+| 11 | Profile 消费方式 | `DefaultGameLauncher` 的 `_profile` + `_uiRoot`（7 数据字段移除）/ `ProfileGameLauncher` / 静态入口专用 | **`DefaultGameLauncher` + `_profile`**（保留拆分） | 公开 API、序列化迁移 |
+| 12 | Profile 加载通道与测试开关 | 直接引用（N0/N3）/ `Resources` / Preloaded；N4 才需要测试 opt-out | **直接引用**；N4 headless 另行处理 | 运行时行为、测试隔离 |
+| 13 | Mono 入口形状 | N0 启动场景 / N3 自动启动根 | **N0** | 场景结构 |
+| 14 | 7 字段移除的迁移 | CHANGELOG 迁移表 + 样例同步 / 编辑器迁移工具 / 不做 | **CHANGELOG + 样例同步** | 破坏性变更 |
+| 15 | 继承结构 | 保留拆分 / 合并 / 合并 + Obsolete 壳 | **保留拆分**（合并留独立主版本） | 类型/场景 GUID |
 
 ---
 
@@ -370,14 +397,381 @@ Tools/check-docs.ps1 -Enforce
 
 ---
 
+## 十、Profile 资产与无 Mono 入口（2026-11-15 追加）
+
+> 本节回答两个追加问题：配置能否独立为类似 "Profile" 的 ScriptableObject 资产；有没有比强制依赖 Mono 更优雅的启动方式。结论见 §10.4；待裁定项见第八节 9–12。
+
+### 10.0 两个问题的短答
+
+- **Profile：** 可以，但只能装「一半」。**P1 窄 Profile（数据资产）可行**，落在现有 `DefaultGameLauncher` 上；P3 全局 Profile 与 P4 可编程 Profile 不建议。
+- **无 Mono 入口：** 启动期间一旦需要 UI（加载遮罩），静态入口就不可行——首场景对象在 `BeforeSceneLoad` 尚未激活，自造 UI 根又回到 Mono/根对象。因此 **有 UI 的启动流程：Mono + Profile**；推荐 **P1 + N0（启动场景 Launcher）**，N3（自动启动根预制体）作为可选，N4（静态入口 + Profile）只用于 headless/纯静态项目。
+
+### 10.1 Profile 的四种形状
+
+#### P1 窄 Profile（单资产，装现有 7 个数据字段；`_uiRoot` 除外）
+
+```csharp
+[CreateAssetMenu(menuName = "XFramework/Bootstrap Profile", fileName = "BootstrapProfile")]
+public sealed class BootstrapProfile : ScriptableObject
+{
+    [Header("Asset")]
+    [SerializeField] private string _assetPackageName = "";
+    [SerializeField] private AssetPlayMode _assetPlayMode = AssetPlayMode.Offline;
+    [SerializeField] private bool _autoReclaimOnLowMemory = true;
+
+    [Header("Save")]
+    [SerializeField] private int _saveVersion = 1;
+
+    [Header("Input")]
+    [SerializeField] private InputSystemOptionsAsset _inputOptions;
+
+    [Header("Localization")]
+    [SerializeField] private string _defaultLanguage = "";
+    [SerializeField] private TextAsset _languageTable;
+}
+```
+
+消费方式三选一：
+
+| 方式 | 形状 | 优点 | 缺点 |
+|---|---|---|---|
+| **P1-a（本轮采用）** | `DefaultGameLauncher` 只保留 `[SerializeField] BootstrapProfile _profile` + `[SerializeField] Transform _uiRoot`；7 个数据字段移除 | 配置面清晰、无双真相；Profile 可复用/做环境变体；组件类型不变 | **破坏性**：旧场景的 7 个字段值不会自动迁移；需要 Profile 资产 + 场景迁移 |
+| **P1-b** | 新建 `ProfileGameLauncher : GameLauncher`，只有 `_profile` + `_uiRoot` | 语义干净；不动现有 8 字段契约与测试 | 多一个组件类型；项目要在两个组件间选 |
+| **P1-c** | Profile 只给静态入口用，`DefaultGameLauncher` 完全不动 | 零破坏；与无 Mono 路径天然配对 | 场景组件路径享受不到 Profile 的复用与环境变体 |
+
+**本轮裁定（2026-11-15）：采用 P1-a，且移除 7 个数据字段。** `DefaultGameLauncher` 的字段面 = `_profile` + `_uiRoot`；`GameLauncher` 抽象底座保持零字段（`GameLauncherTests:294-303` 的底座 0 字段断言不变，`DefaultGameLauncher` 的字段数断言 8 → 2）。`BootstrapProfile` 的 7 个值默认与旧字段逐字相同（空包名、`Offline`、`autoReclaim=true`、`saveVersion=1`、`_inputOptions=null`、空语言、`_languageTable=null`）。映射放在 `DefaultGameLauncher.ConfigureStages`：`_profile != null` 走 `BootstrapStages.FromProfile(_profile, _uiRoot)`，否则走 `RegisterDefaults()` + 条件 UI。
+
+**零配置语义不变：** `_profile == null` → 默认 Asset/Data/Save + `_uiRoot` 非空时的 UI 阶段；Input/Localization 只有 Profile 或子类能提供。**迁移要求：** 旧场景的 7 个值不会自动搬运；必须新建 `BootstrapProfile` 资产、复制旧值、赋给 `_profile`；`Integration.Boot.unity` 与下游场景同步；CHANGELOG 写迁移说明。**继承结构保留：** 抽象 `GameLauncher` + `DefaultGameLauncher` 的拆分不动；合并为单一 `GameLauncher` 会带来场景脚本 GUID/组件类型迁移，留到独立主版本，不与本次字段迁移捆绑。
+
+**能装：** Asset 三值、Save 版本、`InputSystemOptionsAsset`、语言 + `TextAsset`。全是 plain value 或 Unity 资源引用；`InputSystemOptionsAsset` 已是仓内先例（`Runtime/Input/Default/InputSystemOptionsAsset.cs`：`[SerializeField]` + `ToOptions()`）。
+
+**不能装：**
+
+| 装不进 | 原因 |
+|---|---|
+| `RemoteServices` / `DecryptionServices` / `CryptoProvider` | 接口型服务实例；Unity 不序列化普通接口字段。只有 provider 自己实现成 SO 时，才能用**具体 SO 类型**字段引用（`Runtime/Bootstrap/README.md` 已有先例） |
+| `_uiRoot` | 场景 `Transform`；SO 资产不能跨场景引用 |
+| `LogOptions` / File 域根预热 | 生效时机在 `SubsystemRegistration` / `BeforeSceneLoad`，场景组件引用 Profile 结构性地太晚 |
+| `SettingsManager.Initialize<T>` 的类型参数 | 泛型无法装进非泛型资产；`Config` 预加载哪些表是项目知识 |
+| Asset 自身参数（若 Profile 经 Asset/Config 加载） | 鸡生蛋：Asset 没初始化就加载不了 Profile，而 Profile 又要提供解析 Asset 所需的包名/PlayMode |
+
+**优点：** 配置面从 8 个字段缩到 1 个 Profile 引用；Profile 可复用、做环境变体（dev/prod 两个 asset）；`.asset` 比场景 YAML 更易 diff；有现成先例（`InputSystemOptionsAsset`）；不再有「字段 vs Profile」双真相。
+
+**缺点：** **破坏性**——7 个序列化字段移除，旧场景的值不会自动迁移；需要新建 Profile、复制值、改场景，并写 CHANGELOG 迁移说明；多一个公开类型 `BootstrapProfile` + API 基线 + 测试改写（字段数 8→2）；`.asset` 有版本/合并问题（字段改名要 `[FormerlySerializedAs]`，缺类型会静默变 null）；仍是「一个资产装多模块」，只是耦合面比全局 Profile 小。
+
+**与台账的关系：** 这不是 `Documentation/Ledger.md:99` 的「统一框架 Profile」——它不承担 Asset/Log/File 的前置配置，也不替代模块 options。但需要在模块台账新增一条 `待裁`，把两者的界线写死，否则后人会把它当成重开。
+
+**成本：** 低到中（1 个 SO + 1 个映射器 + 编辑器校验 + 测试 + 文档）。
+
+#### P2 每模块独立 SO
+
+```csharp
+[CreateAssetMenu] public sealed class AssetBootstrapOptionsAsset : ScriptableObject
+{
+    [SerializeField] private string _packageName;
+    [SerializeField] private AssetPlayMode _playMode;
+    [SerializeField] private bool _autoReclaim;
+    public AssetBootstrapStage CreateStage() => new(new AssetInitOptions { /* ... */ });
+}
+// InputSystemOptionsAsset 已存在；Save / Localization 同理
+```
+
+**优点：** 没有「一个文件装多模块」的共享耦合，最贴近「参数即契约」；每模块可独立复用、演进、校验；`InputSystemOptionsAsset` 已证明可行；可逐模块增量上线。
+
+**缺点：** 资产数量多、配置分散，「一个 Profile 看全貌」的便利消失；启动器/静态入口的接线变多，或需要一个组合列表（又回到中心化）；仍装不了服务实例、场景引用、前置配置；公开 API 面更大；资产自带 `CreateStage()` 会让资产类型与阶段构造耦合。
+
+**与台账的关系：** 不触碰「统一 Profile」的裁决，最容易论证为「健康形状」（每个模块自己的 options asset）。但要回答「谁来组合这些资产」——组合器本身可能变成新的中心。
+
+**成本：** 中（多个类型 + 组合器）。
+
+#### P3 全局 Profile
+
+一个 `FrameworkProfile` 资产装 Asset / Log / File / Save / UI / Input / Localization / Settings / Config / Audio 的全部值，经 Preloaded Assets 或 `Resources` 在 `BeforeSceneLoad` / `SubsystemRegistration` 读取，再由静态加载器映射到所有模块。
+
+**优点：** 一个地方看全；策划/运维友好；环境变体只换一个资产。
+
+**缺点：** 与 `Ledger.md:99` 的三条理由正面冲突——破坏「参数即契约」与「服务不依赖统一入口」；Asset 自身参数无法经 Asset 加载；一个文件装多模块破坏「可单独取用」。还需要新增 Preloaded/Resources 加载通道，并自带失败回退、版本化、热更/加密故事（台账说的「第二条配置来源」）。`LogOptions` 的 `SubsystemRegistration` 时机与 Preloaded Assets 的可用性需要实测。会替代模块 options（重开判据明确禁止）。公开面与迁移成本最大。
+
+**与台账的关系：** `不做`，维持。重开判据未满足。
+
+**成本：** 高，且需要先推翻既有裁决。
+
+#### P4 可编程 Profile / SO Installer
+
+```csharp
+[Serializable]
+public sealed class AssetConfigurator : IBootstrapConfigurator
+{
+    public string PackageName;
+    public AssetPlayMode PlayMode;
+    public void Configure() =>
+        Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions { /* ... */ }));
+}
+
+public sealed class BootstrapProfile : ScriptableObject
+{
+    [SerializeReference] private List<IBootstrapConfigurator> _configurators;
+}
+```
+
+或每个模块一个 `ScriptableObjectInstaller` 子类，覆写 `InstallStages()`。
+
+**优点：** 唯一能把「代码形状的配置」搬进资产的形状——配置器可以在 `Configure()` 里 `new MyRemoteServices(...)`，从而间接覆盖服务实例；模块可选、顺序可表达；一个资产组合全部启动步骤。
+
+**缺点：** 这正是 `Documentation/Modules/Bootstrap.md:56` 否决的 **Installer / 命名槽位** 形状；重开需要明确裁定，且原文是「无重开判据」。`[SerializeReference]` 不能序列化 `UnityEngine.Object` 引用，也不能保存带注入依赖/委托/原生句柄的运行时服务实例；配置器字段仍受普通序列化限制。启动顺序/失败语义从类型声明挪进数据，机器更难校验；资产里的代码字段与运行时代码存在版本漂移；场景引用仍然进不去。
+
+**与台账的关系：** `不做`（Installer / 命名槽位），需要显式重开。
+
+**成本：** 高，且属于架构方向变更。
+
+#### 10.1.5 Profile 形状对比
+
+| 维度 | P1 窄 Profile | P2 每模块 SO | P3 全局 Profile | P4 可编程 Profile |
+|---|---|---|---|---|
+| 覆盖面 | 现有 7 个数据字段（`_uiRoot` 除外） | 现有 7 个数据字段（拆分） | 全模块 | 可含服务实例构造 |
+| 服务实例 | 否 | 否（SO provider 可） | 否 | 可（代码构造） |
+| 场景引用 | 否 | 否 | 否 | 否 |
+| 前置配置（Log/File） | 否 | 否 | 是（需新通道） | 是（需新通道） |
+| 耦合 | 中（一个资产多模块） | 低 | 高 | 高 |
+| 与台账 | 新增窄形状，需划线 | 最容易论证健康 | `不做` | `不做`（Installer） |
+| 公开面/成本 | 低-中 | 中 | 高 | 高 |
+| 建议 | **可做候选** | **可做候选** | 维持不做 | 不建议 |
+
+### 10.2 启动入口的五种形状
+
+#### N0 现状：场景 `GameLauncher`
+
+**形式：** 用户把 `DefaultGameLauncher`（或子类）挂在启动场景根对象上；`Awake` 里 `DontDestroyOnLoad` + `ConfigureStages`，`Start` 里 `RunAsync(destroyCancellationToken)`，`OnDestroy` 里 `Shutdown`（`Runtime/Bootstrap/GameLauncher.cs`）。
+
+**优点：** 场景引用齐全（`_uiRoot`、`_appFlow`）；Unity 生命周期完整；Inspector 可配；测试可用 `AddComponent` 复现；职责清晰。
+
+**缺点：** 必须手工摆放；从其他场景按 Play 不启动；多启动器无守卫；必须挂根对象；`Awake` 顺序不确定；测试要复位静态表。
+
+**评价：** 首选；启动场景就是 composition root，遮罩与 UI 根都在同一场景里。
+
+#### N1 静态钩子 + 代码登记（已有能力）
+
+```csharp
+[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+static void Boot()
+{
+    Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions { /* ... */ }));
+    Bootstrap.RegisterDefaults();
+    BootAsync().Forget();
+}
+
+static async UniTaskVoid BootAsync()
+{
+    try { await Bootstrap.RunAsync(cancellationToken: Application.exitCancellationToken); }
+    catch (OperationCanceledException) { }
+    catch (Exception e) { LogManager.Error(LogCategories.Bootstrap, "启动失败：{0}", e); }
+}
+```
+
+**启动时机：** `BeforeSceneLoad`，在 `SubsystemRegistration` 的登记表清空之后、场景 `Awake` 之前；场景对象已加载但未激活。
+
+**优点：** 零新 API；任意场景可启动；最早的安全登记点；不需要 Mono；`UpdateManager` 照常派发；`Application.exitCancellationToken` 天然做生命周期令牌。
+
+**缺点：** 配置是代码；拿不到场景引用；异常处理、就绪信号、退出清理都要自己写；多个钩子会重复登记；PlayMode 测试也会触发；没有 Inspector。
+
+**评价：** 纯静态项目的合理选择；作为文档配方，不新增框架面。
+
+#### N2 `BootstrapEntry` 静态入口助手
+
+```csharp
+public static class BootstrapEntry
+{
+    // 由使用方在自己的 BeforeSceneLoad 钩子里调用（框架不反射发现）
+    public static void Start(Func<IBootstrapStage[]> configure);
+    public static UniTask StartupTask { get; }
+    public static event Action<Exception> Failed;
+}
+```
+
+内部负责：登记、`RunAsync(Application.exitCancellationToken)`、异常日志、`Application.quitting` 幂等订阅 + `Shutdown`、重复启动守卫、最近进度/状态（与阶段 1 的就绪面共用）。
+
+**启动时机：** 仍由使用方的 `BeforeSceneLoad` 钩子触发；`BootstrapEntry` 只收敛样板。
+
+**优点：** 比 N1 少写重复代码；统一失败/取消/清理语义；可作为无 Mono 路径的官方入口；不引入资产/加载通道。
+
+**缺点：** 仍需使用方写一个静态钩子；新增公开 API 与语义（谁是「已启动」、测试如何关闭、多入口如何处理）；没有场景引用；移动端暂停不覆盖。
+
+**评价：** 作为 N4/headless 的配套 API 有价值；单独存在时只是样板收敛器。
+
+#### N3 settings asset + 启动根预制体自动实例化（VContainer 式）
+
+```csharp
+[CreateAssetMenu(menuName = "XFramework/Bootstrap Settings")]
+public sealed class BootstrapSettings : ScriptableObject
+{
+    [SerializeField] private GameLauncher _launcherPrefab;
+    [SerializeField] private BootstrapProfile _profile;   // 可选
+    [SerializeField] private bool _autoStart = true;
+    [SerializeField] private bool _runInTests = false;
+}
+```
+
+- 资产放进 **Preloaded Assets**（编辑器助手自动加入，VContainer 的做法）或 `Resources`（FMOD 包已有先例）。
+- 框架的 `[RuntimeInitializeOnLoadMethod(BeforeSceneLoad)]` 读取 settings；若 `_autoStart` 且本会话尚未创建，则实例化 `_launcherPrefab` 并 `DontDestroyOnLoad`。
+- 预制体可自带 `GameLauncher`（或子类）+ UIRoot（Canvas/UIRootNode）+ EventSystem；场景引用全部在预制体内部。
+- 重复守卫：静态 `_created` 标志 + 场景中已有 Launcher 的检查；`_runInTests` 防测试运行器自动创建（VContainer issue #689 是真实反例）。
+
+**启动时机：** `BeforeSceneLoad` 预加载 settings → 实例化预制体（其 `Awake` 立即跑）→ 首个场景加载 → 预制体的 `Start` 跑 `RunAsync`。
+
+**优点：** 任意场景可启动；不需要手工摆放；场景引用、完整生命周期、Inspector、`destroyCancellationToken` 全部保留；复用现有 Launcher；预制体让 UIRoot/EventSystem 与 Launcher 一起常驻；VContainer 已验证。
+
+**缺点：** 仍然是 Mono，只是自动创建；多一个 settings asset + prefab；需要 Preloaded Assets 编辑器助手（或 Resources 魔法路径）；预制体不能引用场景对象；重复创建、场景重载、测试运行器、关闭域重载下的静态 settings 实例都是实际故障点；关闭域重载时 `OnEnable` 的静态单例可能不重跑。
+
+**评价：** 可选；适合「任意场景按 Play」或「遮罩要早于第一场景」的项目。否则 N0 更简单。
+
+#### N4 静态入口 + SO Profile（完全无 Mono）
+
+```csharp
+[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+static void Boot()
+{
+    var profile = Resources.Load<BootstrapProfile>("BootstrapProfile"); // 或 Preloaded
+    if (profile == null) { LogManager.Warning(LogCategories.Bootstrap, "未找到 BootstrapProfile。"); return; }
+    BootstrapEntry.Start(profile, config =>
+    {
+        // 服务实例从这里注入
+        // config.Asset.RemoteServices = new MyRemoteServices();
+        // config.Register(new GameSettingsBootstrapStage());
+    });
+}
+```
+
+**启动时机：** `BeforeSceneLoad`；场景对象未激活，`Awake` 未跑。
+
+**优点：** 完全无 Mono；任意场景；配置在资产里；启动早于场景 `Awake`；与 P1/P2 天然配对；对无 UI/无场景引用的项目最简洁；业务侧可 `await Bootstrap.WaitUntilReadyAsync`，不再需要 `AppReadyBootstrapStage`。
+
+**缺点：** 拿不到 `_uiRoot` / EventSystem；UI 根必须靠 `UIRootNode` 或另一个 `AfterSceneLoad` 适配器；`OnApplicationPause` / 移动端退出不覆盖（仓内已为 Settings 造隐藏 `DontDestroyOnLoad` 宿主，真要处理暂停还是得有一个 Mono）；Profile 的加载通道与失败回退要定义；异常、就绪、退出清理都要自己写（除非配合 N2）；测试运行器会触发静态钩子，需要关闭开关；服务实例仍然只能代码注册。
+
+**评价：** 只适合无 UI/纯静态项目；UI 游戏的遮罩悖论见 §10.7。作为 headless 备选，不作为主线。
+
+#### N5 懒初始化
+
+各门面首次使用时 `EnsureStartedAsync()`，内部做一次性异步初始化（Addressables / DOTween 式）。
+
+**优点：** 零入口；任意场景；最少仪式。
+
+**缺点：** 异步首次使用会造成帧尖峰与顺序隐式；失败可见性差；QFramework 的「异常后半初始化、无法重试」是直接反例；与现有显式相位/失败即停模型冲突；清理无生命周期。
+
+**评价：** 不建议用于全局启动；叶子服务可另议。
+
+#### 10.2.6 入口形状对比
+
+| 维度 | N0 场景 Launcher | N1 静态钩子 | N2 静态助手 | N3 自动启动根 | N4 静态+Profile | N5 懒初始化 |
+|---|---|---|---|---|---|---|
+| 手工摆放 | 是 | 否 | 否 | **否** | 否 | 否 |
+| 任意场景 | 否 | 是 | 是 | **是** | 是 | 是 |
+| 场景引用 | 是 | 否 | 否 | **是（预制体内）** | 否 | 之后才有 |
+| Mono | 是 | 否 | 否 | 是（自动创建） | 否 | 否 |
+| 完整生命周期 | 是 | 自己写 | 部分 | **是** | 自己写 | 否 |
+| 移动端暂停 | 是 | 否 | 否 | **是** | 否（需隐藏宿主） | 否 |
+| 配置载体 | Inspector | 代码 | 代码/Profile | Inspector/Profile | Profile | 代码 |
+| 失败可见性 | 日志 | 自己写 | 统一 | 日志 | 自己写 | 差 |
+| 测试隔离 | 中 | 差（钩子自动跑） | 中 | 需 `_runInTests` | 差 | 差 |
+| 新增 API | 无 | 无 | 小 | 中 | 中 | 大 |
+| 建议 | **首选** | 文档配方 | 可选配套 | **可选** | headless 专用 | 不建议 |
+
+### 10.3 六种可行组合
+
+| 组合 | 形状 | 任意场景 | 场景引用 | Mono | 配置资产 | 与台账 |
+|---|---|---|---|---|---|---|
+| **A0（推荐）** | P1 + N0 启动场景 Launcher | 否（需启动场景） | 是（场景内） | 是 | 是 | 新增窄 Profile 待裁；N0 是现有路径 |
+| **A** | P1 + N3 自动启动根 | 是 | 是（预制体） | 是（自动） | 是 | 新增窄 Profile 待裁；N3 独立待裁 |
+| **B** | P1 + N4 静态入口 | 是 | 否 | 否 | 是 | 仅 headless/纯静态；UI 场景不适用 |
+| **C** | P2 每模块 SO + N3 | 是 | 是 | 是（自动） | 是（多个） | 最容易论证「不集中」 |
+| **D** | P4 可编程 + N4 | 是 | 否 | 否 | 是（Installer） | 需重开 Installer 的 `不做` |
+| **E** | 不做 Profile + N1/N3 | 是（N3） | 是（N3） | 是/否 | 否 | 不碰既有裁决 |
+
+### 10.4 推荐：P1 + N0（Mono + Profile）
+
+**主线：P1（`DefaultGameLauncher` 的 `_profile` + `_uiRoot`）+ N0（启动场景 Launcher）。**
+
+- `BootstrapProfile` 只做 descriptor，不做容器；`BootstrapStages.FromProfile(profile, uiRoot)` 负责映射；`DefaultGameLauncher.ConfigureStages` 在 `_profile != null` 时调用它，否则走 `RegisterDefaults()` + 条件 UI。
+- 启动场景就是 composition root：Launcher 持 `_uiRoot`（以及遮罩所在的 UIRoot），Profile 持 Asset/Save/Input/Localization 数据；`Start` 在场景 `Awake` 之后跑，遮罩已可见。
+- 就绪面（阶段 1）让遮罩读 `State`/进度，业务 `await Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)`；`AppReadyBootstrapStage` 可以删除。
+- 服务实例与项目自定义阶段仍走 `ConfigureStages` 覆写（`IntegrationLauncher` 即此形状）。
+- **继承拆分保留**：抽象 `GameLauncher`（零字段 + `abstract ConfigureStages`）+ `DefaultGameLauncher`（`_profile` + `_uiRoot`）。合并为单一 `GameLauncher` 会带来场景脚本 GUID/组件类型迁移，留到独立主版本。
+
+**为什么不是 N4 主线：** 遮罩悖论——`BeforeSceneLoad` 时首场景对象已加载但未激活、`Awake` 未跑，静态入口拿不到场景 UI；如果它自己创建 UI 根，就已经有 Mono/根对象，「无 Mono」不成立。UI 游戏的启动流程必须有根对象（详见 §10.7）。
+
+**为什么 N3 是可选：** 它能把遮罩提前到第一场景之前，并解决「任意场景按 Play」；代价是 settings asset + 启动根预制体 + 重复创建/测试守卫。如果项目不需要这两点，N0 更简单。
+
+**为什么不是 P3/P4/N5：** P3 全局 Profile 维持 `Ledger.md:99` 的 `不做`；P4 是 `Bootstrap.md:56` 否决的 Installer 形状；N5 懒初始化会让启动失败与顺序变成隐式的（QFramework 的半初始化是反例）。
+
+**实施顺序：**
+
+1. **阶段 1（先做）：就绪状态** —— `Bootstrap.State`、`WaitUntilReadyAsync`、重入 join、`GameLauncher.StartupTask`。没有它，遮罩与业务侧仍然只能自造 `AppReadyBootstrapStage`。
+2. **阶段 2：登记便捷层** —— `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试（见 §7 阶段 2）。
+3. **阶段 3：P1 Profile** —— `BootstrapProfile`、`BootstrapStages.FromProfile`、`DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）、测试改写、API 基线、CHANGELOG 迁移表。
+4. **阶段 4：样例迁移** —— 新建 `Integration.BootstrapProfile.asset`，场景赋 `_profile`、清旧字段、保留 `_uiRoot`；删 `AppReadyBootstrapStage`，`AppFlowController` 等 `WaitUntilReadyAsync`。
+5. **阶段 5：编辑器校验** —— Profile 存在、Host 有 `RemoteServices`、启动场景 index 0、无重复 Launcher。
+6. **阶段 6：子阶段超时**（Pipeline）；N3 作为独立可选阶段。
+
+**样例迁移后的形态（示意）：**
+
+```text
+Integration.Boot.unity
+  UIRoot (Canvas + UIRootNode)
+  EventSystem
+  AppFlow (AppFlowController: Start -> await Bootstrap.WaitUntilReadyAsync)
+  BootScreen (读 Bootstrap.State / 进度)
+  Launcher (IntegrationLauncher : DefaultGameLauncher)
+    _profile: Integration.BootstrapProfile
+    _uiRoot: UIRoot
+    ConfigureStages -> base + GameSettings/GameConfig stages
+Integration.BootstrapProfile.asset
+  Asset: package "", EditorSimulate, autoReclaim true
+  Save: version 1
+  Input: Integration.InputOptions
+  Localization: zh_Hans + language table
+```
+
+### 10.5 边界与风险
+
+- **UI 根/遮罩必须由场景或根对象提供：** 遮罩是表现层，不是 `IBootstrapStage`；它观察 `Bootstrap.State`/进度。N0 的遮罩在启动场景里；N3 的遮罩在启动根预制体里；N4 不适合需要遮罩的项目。
+- **服务实例仍要代码：** Profile 装不了接口型 provider；`ConfigureStages` 覆写（或 N4/N2 的 `configure` 回调）是唯一诚实通道。
+- **Profile 直接引用，不需要加载通道：** N0/N3 由场景组件/预制体直接引用 Profile；`Resources`/Preloaded 只在 N4 headless 时才需要，且不在本轮推荐范围。
+- **迁移是显式的：** 7 个字段移除后，旧场景值不会自动搬进 Profile；必须新建 Profile、复制值、赋 `_profile`，并在 CHANGELOG 写迁移说明。样例 `Integration.Boot.unity` 同步迁移。
+- **继承拆分保留：** `GameLauncher` 抽象零字段 + `DefaultGameLauncher` 两字段；合并为单一 `GameLauncher` 会带来组件类型/GUID 迁移，留独立主版本。
+- **N0 需要启动场景：** 编辑器校验（Build Settings index 0 / `playModeStartScene`）兜底；如果必须任意场景 Play，选 N3。
+- **会话复位（N3/headless）：** 静态入口的已启动标志、等待者、订阅必须在 `SubsystemRegistration` 复位，与 `Bootstrap.ResetForNewSession` 同档且幂等。
+- **`Application.quitting` 平台限制：** 强制退出/崩溃/Android 暂停/UWP 不可靠；退出清理不能只靠它，样例的显式 `RequestExitAsync` 仍要保留。
+- **两条路径并存：** `GameLauncher`/`DefaultGameLauncher` 与 N3/N4 入口同一会话只能选一个；文档要与编辑器校验一起说明。
+- **就绪语义：** `WaitUntilReadyAsync` 在失败时重抛、在 `Idle` 时等待下一次运行等语义，必须在阶段 1 定稿（见 §7 阶段 1 的语义表）。
+
+### 10.6 待裁定
+
+第八节已追加 9–15：Profile 形状、启动入口形状、Profile 消费方式、加载通道、Mono 入口形状、7 字段迁移、继承结构。本节不另立裁定项。
+
+### 10.7 遮罩悖论：为什么 UI 启动流程必须有根对象
+
+- `BeforeSceneLoad` 时首场景对象已加载但**未激活**、`Awake` 未跑；场景里的 UIRoot/遮罩不可用。
+- 静态入口若在此时开始初始化，玩家看到黑屏；若它自己实例化 Canvas/遮罩，就已经创建了根对象；UI 组件本身也是 Mono，移动端暂停/退出还要隐藏宿主。
+- `AfterSceneLoad` 时遮罩可见，但已晚于场景 `Awake`；`Start` 与 RIL 的顺序没有契约。
+- 结论：**只要启动期间需要 UI，入口就必须锚在一个对象上**。这不是框架缺陷，是 Unity 的场景/生命周期模型。N0（启动场景 Launcher）与 N3（启动根预制体）是两种诚实的锚定方式；N4 只适合无 UI/纯静态项目。
+- 遮罩仍是**表现层**：它读 `Bootstrap.State`/进度，不进 `IBootstrapStage`；交互式 UI（登录/同意条款）属于 `AppFlowController` 的业务流程，放在 `WaitUntilReadyAsync` 之后。
+
+---
+
 ## 附录 A：事实核对状态
 
 **已核对（源码 / 官方文档）：**
 
-- 本仓 Bootstrap / GameLauncher / DefaultGameLauncher / BootstrapPhases / Pipeline 的行为与契约；测试锁定（含 `GameLauncherTests:294-303` 的 8 字段断言）。
-- `ProjectSettings/EditorBuildSettings.asset` 的 `m_Scenes: []`。
+- 本仓 Bootstrap / GameLauncher / DefaultGameLauncher / BootstrapPhases / Pipeline 的行为与契约；测试锁定（含 `GameLauncherTests:294-303` 的字段断言；本轮裁定后 `DefaultGameLauncher` 从 8 字段改为 2 字段，底座仍 0）。
+- `ProjectSettings/EditorBuildSettings.asset` 的 `m_Scenes: []`；`ProjectSettings/ProjectSettings.asset` 的 `preloadedAssets: []`。
 - `SettingsManager.Initialize<T>` 为按类型泛型；`ConfigManager.Initialize()` 无参。
-- 第三方：VContainer `LifetimeScope` / `VContainerSettings` / `IAsyncStartable`；Zenject `ProjectContext` / `SceneContext` / `ScriptableObjectInstaller` / `BindExecutionOrder`；UGF `GameFrameworkEntry` / `GameEntry` / `BaseComponent`；QFramework `Architecture<T>`；Unity `RuntimeInitializeOnLoadMethod` / `DefaultExecutionOrder` / `playModeStartScene`；UGS `UnityServices.State`；DOTween 自动初始化；SRDebugger `SRDebug.Init()`。
+- `UIRootNode`（`Runtime/UI/View/UIRootNode.cs`）：`Awake` 在 `UIManager` 未初始化时以自身 `Transform` 初始化；`OnDestroy` 只在自己是当前根时销毁。
+- 仓内隐藏 Mono 宿主先例：`Runtime/Settings/SettingsPauseNotifier.cs`（`OnApplicationPause`）、`Runtime/Audio/AudioSourcePool.cs` 的 `AudioHost`。
+- `Application.exitCancellationToken`：Unity 2022.3 文档确认「退出 Play 模式（编辑器）或退出应用时取消」；6000.4 实施前需用编译探针确认。
+- `Application.quitting`：强制退出/崩溃/Android 暂停/UWP 不可靠；`Application.wantsToQuit` 在编辑器退出 Play 时返回值被忽略、iOS/iPadOS 无法阻止终止。
+- `RuntimeInitializeOnLoadMethod`：`BeforeSceneLoad` 时场景对象已加载但未激活、`Awake` 未跑；`AfterSceneLoad` 时 `Awake`/`OnEnable` 已跑、可 `FindObjectsByType`；同档回调顺序不保证。
+- **遮罩时序（本轮修正的直接依据）：** `BeforeSceneLoad` 时场景 UI（遮罩）不可用；静态入口若自造 UI 根则已创建对象。详见 §10.7。
+- **本轮裁定的破坏性变更：** `DefaultGameLauncher` 的 7 个数据字段移除，字段面 8→2（`_profile` + `_uiRoot`）；抽象底座仍 0 字段；需要 CHANGELOG 迁移表 + Integration 场景同步。
+- 第三方：VContainer `LifetimeScope` / `VContainerSettings`（Preloaded Settings + 根 `LifetimeScope` 预制体 + 编辑器 `BeforeSceneLoad` 钩子）/ `IAsyncStartable`；Zenject `ProjectContext` / `SceneContext` / `ScriptableObjectInstaller` / `BindExecutionOrder`；Reflex `ReflexSettings`（`Resources`）+ `ContainerScope`（每场景仍需）；Addressables `IInitializableObject` / `ObjectInitializationData`（在 catalog 之前、无 teardown）；UGF `GameFrameworkEntry` / `GameEntry` / `BaseComponent`；QFramework `Architecture<T>`（懒初始化、半初始化风险）；Unity `RuntimeInitializeOnLoadMethod` / `DefaultExecutionOrder` / `playModeStartScene`；UGS `UnityServices.State`；DOTween 自动初始化 + 隐藏 DDOL driver；SRDebugger `SRDebug.Init()`。
 
 **代码路径推断（未实测）：**
 
@@ -402,6 +796,19 @@ Tools/check-docs.ps1 -Enforce
 - Entry points：<https://github.com/hadashiA/VContainer/blob/master/website/docs/integrations/entrypoint.mdx>
 - UniTask 集成：<https://github.com/hadashiA/VContainer/blob/master/website/docs/integrations/unitask.mdx>
 - Lifetime 概览：<https://vcontainer.hadashikick.jp/scoping/lifetime-overview>
+- Project root LifetimeScope（Preloaded Settings + 根预制体）：<https://vcontainer.hadashikick.jp/scoping/project-root-lifetimescope>
+
+**Addressables**
+
+- 初始化流程：<https://docs.unity3d.com/Packages/com.unity.addressables@2.7/manual/InitializeAsync.html>
+- `IInitializableObject`：<https://docs.unity3d.com/Packages/com.unity.addressables@2.7/api/UnityEngine.ResourceManagement.Util.IInitializableObject.html>
+- `ObjectInitializationData`：<https://docs.unity3d.com/Packages/com.unity.addressables@2.7/api/UnityEngine.ResourceManagement.Util.ObjectInitializationData.html>
+
+**Reflex**
+
+- 仓库与 README：<https://github.com/gustavopsantos/Reflex>
+- `ReflexSettings`：<https://raw.githubusercontent.com/gustavopsantos/Reflex/main/Assets/Reflex/Configuration/ReflexSettings.cs>
+- `UnityInjector`：<https://raw.githubusercontent.com/gustavopsantos/Reflex/main/Assets/Reflex/Injectors/UnityInjector.cs>
 
 **Zenject / Extenject**
 
@@ -425,6 +832,11 @@ Tools/check-docs.ps1 -Enforce
 - RuntimeInitializeOnLoadMethod：<https://docs.unity.com/en-us/engine/current/script-reference/unityengine/runtimeinitializeonloadmethodattribute>
 - DefaultExecutionOrder：<https://docs.unity3d.com/6000.0/Documentation/ScriptReference/DefaultExecutionOrder.html>
 - playModeStartScene：<https://docs.unity.com/en-us/engine/6000.3/script-reference/unityeditor/scenemanagement/editorscenemanager/playmodestartscene>
+- Application.quitting：<https://docs.unity.com/en-us/engine/current/script-reference/unityengine/application/quitting>
+- Application.wantsToQuit：<https://docs.unity.com/en-us/engine/6000.0/script-reference/unityengine/application/wantstoquit>
+- Application.exitCancellationToken：<https://docs.unity3d.com/2022.3/Documentation/ScriptReference/Application-exitCancellationToken.html>
+- Script serialization：<https://docs.unity3d.com/2022.3/Documentation/Manual/script-Serialization.html>
+- SerializeReference：<https://docs.unity3d.com/2022.3/Documentation/ScriptReference/SerializeReference.html>
 - Addressables 初始化：<https://docs.unity3d.com/Packages/com.unity.addressables@2.7/manual/InitializeAsync.html>
 
 **其他**
@@ -432,6 +844,8 @@ Tools/check-docs.ps1 -Enforce
 - Unity Gaming Services：<https://docs.unity.com/en-us/services/services-core-api>
 - UniTask：<https://github.com/Cysharp/UniTask>
 - DOTween：<https://dotween.demigiant.com/documentation.php>
+- DOTween 源码（`AutoInit` / 隐藏 driver）：<https://raw.githubusercontent.com/Demigiant/dotween/develop/_DOTween.Assembly/DOTween/DOTween.cs>
+- DOTweenComponent：<https://raw.githubusercontent.com/Demigiant/dotween/develop/_DOTween.Assembly/DOTween/Core/DOTweenComponent.cs>
 - SRDebugger：<https://www.stompyrobot.uk/tools/srdebugger/documentation/>
 
 ---
