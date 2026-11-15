@@ -71,6 +71,7 @@ namespace XFramework.Samples.Tests
                 "Data/Integration.GameModes.json",
                 "Data/Integration.Rules.json",
                 "Data/Integration.InputOptions.asset",
+                "Data/Integration.BootstrapProfile.asset",
             };
 
             foreach (var relative in required)
@@ -229,12 +230,17 @@ namespace XFramework.Samples.Tests
 
             var launcherGuid = ReadScriptGuid(Path.Combine(SampleRoot, "Scripts/Bootstrap/IntegrationLauncher.cs.meta"));
             var controllerGuid = ReadScriptGuid(Path.Combine(SampleRoot, "Scripts/Game/GameSceneController.cs.meta"));
+            var profileGuid = ReadScriptGuid(Path.Combine(SampleRoot, "Data/Integration.BootstrapProfile.asset.meta"));
 
             Assert.IsNotNull(launcherGuid, "IntegrationLauncher.cs.meta 没有 guid。");
             Assert.IsNotNull(controllerGuid, "GameSceneController.cs.meta 没有 guid。");
+            Assert.IsNotNull(profileGuid, "Integration.BootstrapProfile.asset.meta 没有 guid。");
 
-            StringAssert.Contains(launcherGuid, File.ReadAllText(bootScene),
+            var bootSceneText = File.ReadAllText(bootScene);
+            StringAssert.Contains(launcherGuid, bootSceneText,
                 "Boot 场景没有引用 IntegrationLauncher。");
+            StringAssert.Contains(profileGuid, bootSceneText,
+                "Boot 场景的启动器没有引用 Integration.BootstrapProfile（Profile 迁移不完整）。");
             StringAssert.Contains(controllerGuid, File.ReadAllText(gameScene),
                 "Game 场景没有引用 GameSceneController。");
         }

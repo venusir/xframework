@@ -1,5 +1,6 @@
 using UnityEngine;
 using XFramework.XAsset;
+using XFramework.XBootstrap;
 using XFramework.XData;
 using XFramework.XInput;
 using XFramework.XLocalization;
@@ -11,8 +12,8 @@ namespace XFramework.Samples.Integration
 {
     /// <summary>
     /// 启动加载屏（IMGUI 演示壳，<b>不走 UIManager</b>）。
-    /// <para>它存在的意义是把「各模块是否就绪」摆出来：启动阶段是异步的，业务层需要一个明确的
-    /// 完成信号（<see cref="AppFlowController.NotifyBootstrapped"/> 之前的可视反馈）。</para>
+    /// <para>它存在的意义是把「启动到哪一步、各模块是否就绪」摆出来：读 <see cref="Bootstrap.State"/> 与
+    /// <see cref="Bootstrap.LastProgress"/>（框架的就绪 / 进度拉取面），再列各模块门面的初始化状态。</para>
     /// <para>用 IMGUI 是为了让示例不依赖预制体与 TMP 字体资源；生产项目通常会换成真正的加载界面。</para>
     /// </summary>
     public sealed class BootScreen : MonoBehaviour
@@ -73,6 +74,15 @@ namespace XFramework.Samples.Integration
             else
             {
                 GUILayout.Label("正在启动 XFramework Integration 示例…");
+                GUILayout.Space(4f);
+
+                // 框架的就绪面：状态 + 最近一帧进度（不需要业务层自己维护完成信号）。
+                var progress = Bootstrap.LastProgress;
+                GUILayout.Label(string.Concat("状态：", Bootstrap.State.ToString(),
+                    progress == null ? string.Empty : string.Concat("  进度：", (progress.OverallProgress * 100f).ToString("F0"), "%")));
+                if (progress != null && !string.IsNullOrEmpty(progress.Description))
+                    GUILayout.Label(string.Concat("当前：", progress.Description));
+
                 GUILayout.Space(8f);
                 DrawRow("AssetManager", AssetManager.IsInitialized);
                 DrawRow("DataManager", DataManager.IsInitialized);

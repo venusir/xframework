@@ -101,8 +101,7 @@ Samples~/Integration/
 ├── .sample.json                       # Samples 页签显示名与说明
 ├── README.md                          # 导入 / 采集 / 运行 / 退出说明 + 模块接线表
 ├── Scripts/
-│   ├── Bootstrap/  IntegrationLauncher.cs、GameSettingsBootstrapStage.cs、
-│   │              AppReadyBootstrapStage.cs
+│   ├── Bootstrap/  IntegrationLauncher.cs、GameSettingsBootstrapStage.cs
 │   ├── App/        AppFlowController.cs、IntegrationAddresses.cs、IntegrationMessages.cs、
 │   │              LastRunStore.cs、IntegrationLogCategories.cs
 │   ├── Settings/   IntegrationSettings.cs、IntegrationSettingRefs.cs、
@@ -127,16 +126,17 @@ Samples~/Integration/
 ├── Audio/          Integration.Bgm.wav、Integration.Click.wav、Integration.Correct.wav、Integration.Wrong.wav
 └── Data/           Integration.GameModes.json、Integration.Rules.json、
                     Integration.Lang_zh_Hans.json、Integration.Lang_en.json、
-                    Integration.Actions.inputactions、Integration.InputOptions.asset
+                    Integration.Actions.inputactions、Integration.InputOptions.asset、
+                    Integration.BootstrapProfile.asset
 ```
 
 ### 4.4 启动与退出接线
 
-- `IntegrationLauncher : DefaultGameLauncher`，`ConfigureStages()`：
-  1. `base.ConfigureStages()` → Asset(0, 字段 `EditorSimulate`) / Input(1, 字段) / UI(2, 字段 `_uiRoot`) / Data(3) / Save(4, 字段) / Localization(90, 字段)；
+- `IntegrationLauncher : DefaultGameLauncher`，Inspector 面 = `_profile`（`Integration.BootstrapProfile` 资产）+ `_uiRoot`；`ConfigureStages()`：
+  1. `base.ConfigureStages()` → `BootstrapStages.FromProfile` 登记 Asset(0, Profile 的 `EditorSimulate`) / Data(3) / Save(4, Profile 的版本) / UI(2, `_uiRoot`) / Input(1, Profile 的输入资产) / Localization(90, Profile 的语言与表)；
   2. `Bootstrap.Register(new GameSettingsBootstrapStage())`（Phase 90，与 Localization 同相位并行——两者无相互依赖）；
-  3. `Bootstrap.Register(new AppReadyBootstrapStage(_appFlow))`（Phase 91，最后通知 AppFlow 启动完成）。
-- `BootScreen` 用 IMGUI 显示模块就绪清单；`AppReadyBootstrapStage` 完成 `UniTaskCompletionSource`；`AppFlowController.Start` 等待该信号（带 `destroyCancellationToken`）。
+  3. `Bootstrap.Register(new GameConfigBootstrapStage())`（Phase 90）。
+- `BootScreen` 用 IMGUI 显示 `Bootstrap.State` / `LastProgress` 与模块就绪清单；`AppFlowController.Start` 调 `Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)` 等启动就绪（失败时重抛并显示错误）。示例不再自造「启动完成」阶段。
 - 启动后：` LocalizationManager.LanguageAssetPath = "Integration.Lang_{0}"` → 按设置切语言 → 读上次游玩摘要（File+Serialize）→ 关闭 BootScreen → 打开主菜单。
 - 退出：`LockManager.Global.AddLock(Exit)` 防重复 → 二次确认 → `UIManager.CloseAllAsync` → `SaveManager.SaveAsync` → `SettingsManager.SaveAsync` → `LastRunStore.WriteAsync` → `MessageManager.Clear / TimerManager.CancelAll / PoolManager.ClearAll / LockManager.Dispose` → `Bootstrap.Shutdown()` → `Application.isEditor ? 显示「已清理，请手动停止 Play」 : Application.Quit()`。**不用 `#if UNITY_EDITOR`**（`Application.isEditor` 运行期判断）。
 - `GameLauncher.OnDestroy` 会再调一次 `Bootstrap.Shutdown()`；所有自定义阶段必须幂等。
@@ -202,7 +202,7 @@ Samples~/Integration/
 3. 导入路径含版本号：README 不写死绝对路径；L3 用 `Assets/Samples/Integration`。
 4. 面板预制体根要求：根组件具体面板类型、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、根 `RectTransform` 全屏拉伸、单位变换。
 5. `UIViewBase`/`UIPanelBase` 的 `OnUpdate/OnLanguageChanged/OnPause/OnResume` 为 `protected internal virtual`；跨程序集覆写只能写 `protected override`。
-6. `DefaultGameLauncher.Start` 不转发进度：用 `AppReadyBootstrapStage` + BootScreen 轮询。
+6. ~~`DefaultGameLauncher.Start` 不转发进度~~：2026-11-15 已由 `Bootstrap.State` / `LastProgress` / `WaitUntilReadyAsync` 解决，示例改用就绪面（见 §4.4）。
 7. `SceneLoadOptions.Additive` + `ActivateAfterLoad` 与 `SetActiveScene` 的配合；卸载后 `CameraManager.Destroy`。
 8. Cinemachine `Shake` 需要 vcam 上有 `CinemachineImpulseListener`（`CinemachineImpulse.cs:47-55`）。
 9. `InputSystemUIInputModule` 与示例 `.inputactions` 的 ActionMap 切换共存。

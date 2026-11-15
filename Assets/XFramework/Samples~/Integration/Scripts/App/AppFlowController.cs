@@ -44,12 +44,6 @@ namespace XFramework.Samples.Integration
         /// <summary>当前场景里的流程控制器（示例胶水；生产项目可用自己的注入方式）。</summary>
         public static AppFlowController Current { get; private set; }
 
-        /// <summary>由 <see cref="AppReadyBootstrapStage"/> 在全部启动阶段完成后调用。</summary>
-        public void NotifyBootstrapped()
-        {
-            _booted.TrySetResult();
-        }
-
         /// <summary>打开设置面板（压入显示栈）。</summary>
         public UniTask OpenSettingsAsync()
         {
@@ -236,7 +230,6 @@ namespace XFramework.Samples.Integration
 
         #region Private Fields
 
-        private readonly UniTaskCompletionSource _booted = new UniTaskCompletionSource();
         private BootScreen _bootScreen;
         private LastRunSummary _lastRun = new LastRunSummary();
         private IDisposable _exitSubscription;
@@ -260,8 +253,8 @@ namespace XFramework.Samples.Integration
         {
             try
             {
-                // 等 AppReadyBootstrapStage 的信号；对象销毁时随令牌中止。
-                await _booted.Task.AttachExternalCancellation(destroyCancellationToken);
+                // 等全局就绪面：成功返回；启动失败时重抛本次运行的异常；对象销毁时随令牌中止。
+                await Bootstrap.WaitUntilReadyAsync(destroyCancellationToken);
                 await OnBootstrappedAsync(destroyCancellationToken);
             }
             catch (OperationCanceledException)

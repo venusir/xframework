@@ -8,7 +8,7 @@
 
 | 模块 | 在示例里怎么用 |
 |---|---|
-| Bootstrap | `IntegrationLauncher` 继承 `DefaultGameLauncher`，追加 Settings 与「启动完成」阶段 |
+| Bootstrap | `IntegrationLauncher` 继承 `DefaultGameLauncher`（`Integration.BootstrapProfile` 资产 + UI 根），追加 Settings 与 Config 阶段；`AppFlowController` 用 `Bootstrap.WaitUntilReadyAsync` 等就绪 |
 | Asset | `EditorSimulate` 初始化、按地址加载面板 / 语言表 / 音频、预载与池状态 |
 | UI | `UIRootNode` + `UIManager.OpenAsync/PushAsync/PopAsync`、对话框、模态遮罩、语言回调 |
 | Audio | `AudioManager.Initialize`、BGM / 点击 / 判定音、音量通道 |
@@ -37,8 +37,9 @@
    （`Integration.MainMenu.prefab` → `Integration.MainMenu`）。
 3. **运行**：打开 `Integration.Boot.unity`，按 Play。
 
-> 启动器的 Asset Play Mode 固定为 `EditorSimulate`（仅编辑器可用）。要出 Player，请把它改成
-> `Offline` 或 `Host`，并先用 YooAsset 构建资源包。该模式忽略加密与远端服务。
+> Profile 资产（`Data/Integration.BootstrapProfile.asset`）里的 Asset Play Mode 固定为 `EditorSimulate`
+> （仅编辑器可用）。要出 Player，请把它改成 `Offline` 或 `Host`，并先用 YooAsset 构建资源包。
+> 该模式忽略加密与远端服务。
 
 ## 3. 操作
 
@@ -69,7 +70,7 @@ Integration/
 ├── Prefabs/         面板预制体（文件名即地址）
 ├── Scenes/          Integration.Boot.unity / Integration.Game.unity
 ├── Audio/           BGM 与音效
-└── Data/            语言表、模式表、输入动作
+└── Data/            语言表、模式表、输入动作、Bootstrap Profile 资产
 ```
 
 ## 5. 已知限制
