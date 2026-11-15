@@ -31,8 +31,8 @@ namespace XFramework.XBootstrap.Tests
         #region Test Doubles
 
         /// <summary>
-        /// 只登记静态字段里的阶段。<b>刻意不调 <c>Bootstrap.RegisterDefaults</c></b>：那会装上
-        /// Asset / Data / Save 三件——Asset 阶段真走 YooAsset、Save 阶段扫真实 <c>persistentDataPath</c>。
+        /// 只登记静态字段里的阶段。<b>刻意不装 Asset / Save 内置阶段</b>：Asset 会真走 YooAsset、
+        /// Save 会扫真实 <c>persistentDataPath</c>。
         /// 静态字段是刻意的：<c>Awake</c> 在 <c>AddComponent</c> 时同步跑，实例字段来不及设。
         /// </summary>
         private sealed class FrameLauncher : GameLauncher

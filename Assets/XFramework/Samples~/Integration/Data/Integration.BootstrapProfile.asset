@@ -9,9 +9,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 0}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 673ed83976d57c70c697096479d11210, type: 3}
+  m_Script: {fileID: 11500000, guid: f3a17c9d5b6e4d2a8c0b7e1f9d3a5c62, type: 3}
   m_Name: Integration.BootstrapProfile
-  m_EditorClassIdentifier: Venusy609.Xframework::XFramework.XBootstrap.BootstrapProfile
+  m_EditorClassIdentifier: Assembly-CSharp::XFramework.Samples.Integration.IntegrationBootstrapProfile
   _assetPackageName:
   _assetPlayMode: 0
   _autoReclaimOnLowMemory: 1

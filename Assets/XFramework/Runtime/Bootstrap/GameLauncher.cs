@@ -9,8 +9,8 @@ namespace XFramework.XBootstrap
     /// <summary>
     /// 启动器的<b>生命周期底座</b>：把 <see cref="Bootstrap"/> 接到 Unity 的生命周期上。
     /// <para>它<b>不含任何配置字段</b>——登记什么完全由子类的 <see cref="ConfigureStages"/> 决定。
-    /// 要「挂上就能在 Inspector 里配」请直接用 <see cref="DefaultGameLauncher"/>（本类的开箱默认实现）；
-    /// 要完全自控（服务实例、自定义阶段、换输入后端…）就继承本类：Inspector 里不会有任何无关字段。</para>
+    /// 框架不提供开箱启动器：字段面（Profile 资产、UI 根）与装配代码都由使用方写在子类里，
+    /// 模板见本模块 README 的「典型场景」与 Integration 示例的 <c>IntegrationLauncher</c>。</para>
     /// <para><b>它仍是可选件，不是框架的必需入口。</b>不用它的话，在自己的启动流程里调
     /// <see cref="Bootstrap.RunAsync"/> 就行——每帧派发由 <c>UpdateManager</c> 注入的 PlayerLoop 完成，
     /// 与本组件无关，场景里没有它也照常运转。</para>
@@ -95,9 +95,9 @@ namespace XFramework.XBootstrap
         /// 默认组合悄悄跑了」的中间态：
         /// <list type="bullet">
         /// <item><b>完全自控</b>：只实现本方法即可（如 <c>Bootstrap.Register(new MyServiceBootstrapStage());</c>）
-        /// ——默认组合要不要、按什么相位，全由你定；要默认组合就调 <see cref="Bootstrap.RegisterDefaults"/>。</item>
-        /// <item><b>在默认实现上微调</b>：继承 <see cref="DefaultGameLauncher"/> 覆写它更省事——那边已经把
-        /// 「字段面 → 各模块 options」那套装配写好了。</item>
+        /// ——登记什么、按什么相位，全由你定。内置阶段的构造入口见 <see cref="BootstrapStages"/>。</item>
+        /// <item><b>先装配数据再追加</b>：你自己的 Profile 资产 → <c>BootstrapStages.*</c> 的装配代码就写在本方法里；
+        /// 示例见 Integration 示例的 <c>IntegrationLauncher</c>。</item>
         /// </list>
         /// <para>时机：<see cref="Awake"/> 内、<c>Start</c> 跑管线之前。登记先后不影响执行顺序
         /// （执行序由相位决定），但整张表必须在 <see cref="Bootstrap.RunAsync"/> 之前定稿。</para>

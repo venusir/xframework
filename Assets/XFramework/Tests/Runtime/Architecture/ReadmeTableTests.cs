@@ -91,7 +91,7 @@ namespace XFramework.Architecture.Tests
         /// </summary>
         private static readonly (string Module, string Reason)[] FeatureTableExemptions =
         {
-            ("Asset", "基础设施：第三方主要经 Bootstrap / DefaultGameLauncher 接触它"),
+            ("Asset", "基础设施：第三方主要经 Bootstrap / 启动器接触它"),
             ("Save", "基础设施：经 Bootstrap 装配，用法在 Save 的 README"),
             ("Data", "底层设施：经 Bootstrap 装配"),
             ("Settings", "设置类型由业务定义，没有统一入口"),

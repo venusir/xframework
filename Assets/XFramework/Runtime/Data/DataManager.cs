@@ -15,7 +15,7 @@ namespace XFramework.XData
     /// </summary>
     /// <example>
     /// <code>
-    /// // 登记 DataBootstrapStage（Bootstrap.RegisterDefaults() 已包含）即可自动完成初始化。
+    /// // 登记 DataBootstrapStage（BootstrapStages.Data() 构造）即可自动完成初始化。
     /// // 业务代码直接使用静态调用：
     /// var bag = DataManager.GetOrCreateBlock&lt;BagData&gt;();
     /// bag.Items.Add(new BagItem { id = 1001, count = 1 });
@@ -207,7 +207,7 @@ namespace XFramework.XData
         {
             if (_impl == null)
                 throw new DataException(
-                    "DataManager 尚未初始化。请登记 DataBootstrapStage（Bootstrap.RegisterDefaults() 已包含），或手动调用 DataManager.Initialize(impl)。");
+                    "DataManager 尚未初始化。请登记 DataBootstrapStage（BootstrapStages.Data() 构造），或手动调用 DataManager.Initialize(impl)。");
         }
 
         #endregion

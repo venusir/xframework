@@ -17,8 +17,8 @@ namespace XFramework.XBootstrap
     /// <see cref="Pipeline.BuildPhaseGroups"/>）；<see cref="Shutdown"/> <b>先中止在途的
     /// <see cref="RunAsync"/>，再</b>按执行序的逆序（相位降序）反向清理。</para>
     /// <para><b>为什么是显式登记而不是反射发现：</b>零反射、顺序可控、可测试，且使用方一眼能看出
-    /// 到底有哪些东西会在这个启动流程里跑。框架不替使用方决定该初始化什么——
-    /// <see cref="RegisterDefaults"/> 只是把最常用的三件（Asset / Data / Save）打包好，用不用随你。</para>
+    /// 到底有哪些东西会在这个启动流程里跑。框架不替使用方决定该初始化什么——登记什么、按什么相位，
+    /// 全由使用方自己写（内置阶段的构造入口见 <see cref="BootstrapStages"/>）。</para>
     /// <para><b>未登记任何阶段不是错误</b>：<see cref="RunAsync"/> 打一条警告后直接返回，
     /// 不抛异常（零配置使用静态服务的项目本就不需要引导流程）。这与门面模板里
     /// <c>EnsureInitialized</c> 抛 <see cref="InvalidOperationException"/> 的取向不同，是有意为之。</para>
@@ -165,13 +165,10 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 注销一个已登记的引导阶段（按实例）。
-        /// <para><b>替换内置阶段的推荐姿势</b>：先 <see cref="RegisterDefaults"/>，再用
-        /// <see cref="Unregister{T}()"/> 摘掉不要的那个，最后 <see cref="Register(IBootstrapStage)"/> 自己的实例。
-        /// <b>「与调用顺序无关」只在同一段登记代码内成立</b>：<see cref="DefaultGameLauncher"/> 在自己的
-        /// Awake 里登记启动阶段（零配置走 <see cref="RegisterDefaults"/>，Profile 走
-        /// <see cref="BootstrapStages.FromProfile"/> 的显式登记），而 Unity 不保证两个组件 Awake 的先后；
-        /// 使用方的 Awake 先跑时，Profile 路径会形成同相位双份（零配置路径的 RegisterDefaults 按类型跳过）。
-        /// 唯一与 Awake 顺序无关的路径是继承启动器并覆写其 <c>ConfigureStages</c>，在 <c>base</c> 之后替换。</para>
+        /// <para><b>替换已登记的内置阶段</b>：先 <see cref="Unregister{T}()"/> 摘掉它，再
+        /// <see cref="Register(IBootstrapStage)"/> 自己的实例；两步写在同一段登记代码里。</para>
+        /// <para><b>为什么强调同一段</b>：登记表是全局静态的，两段独立 <c>Awake</c> 的先后由 Unity 决定。
+        /// 启动器的 <c>ConfigureStages</c> 是唯一有确定调用栈的地方，替换应放在那里。</para>
         /// </summary>
         /// <param name="stage">要注销的阶段实例。</param>
         /// <returns>移除了返回 true；该实例不在登记表中返回 false（不打日志）。</returns>
@@ -204,8 +201,8 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 按<b>精确类型</b>注销全部匹配的阶段，返回移除数量。
-        /// <para>「精确类型」与 <see cref="RegisterDefaults"/> 的跳过口径一致：<b>派生类不会被连带移除</b>
-        /// （`GetType() == typeof(T)`，因此传接口类型也不会命中任何阶段）。</para>
+        /// <para>判据是 <c>GetType() == typeof(T)</c>：<b>派生类不会被连带移除</b>
+        /// （因此传接口类型也不会命中任何阶段）。</para>
         /// </summary>
         /// <typeparam name="T">要移除的引导阶段类型。</typeparam>
         /// <returns>移除的数量；无匹配返回 0（不打日志）。</returns>
@@ -233,49 +230,6 @@ namespace XFramework.XBootstrap
         }
 
         /// <summary>
-        /// 登记框架内置的三个引导阶段：Asset(Phase 0) → Data(Phase 3) → Save(Phase 4)。
-        /// <para>这是「开箱可用」的默认组合，不是强制——只想要其中一部分就自己逐个 <see cref="Register(IBootstrapStage)"/>。
-        /// Localization 不在默认组合内：它需要语言数据，由使用方自行构造并登记。</para>
-        /// <para><b>可重复调用</b>：它按类型跳过已存在的内置阶段，因此重复调用不会叠加
-        /// （这是与 <see cref="Register(IBootstrapStage)"/> 唯一的语义差异——后者按实例去重，见其说明）。</para>
-        /// <para><b>要替换其中某个内置阶段</b>：用 <see cref="Unregister{T}()"/> 摘掉它再
-        /// <see cref="Register(IBootstrapStage)"/> 自己的实例——不要依赖与本方法的调用先后
-        /// （与 <see cref="DefaultGameLauncher"/> 同场时先后由 Unity 决定，见 README）。</para>
-        /// <para><b>运行中调用会告警</b>：新增的阶段本轮不执行（装配期已快照），但会参与后续的
-        /// <see cref="Shutdown"/>。</para>
-        /// </summary>
-        public static void RegisterDefaults()
-        {
-            if (_isRunning)
-            {
-                LogManager.Warning(LogCategories.Bootstrap,
-                    "RunAsync 运行中调用 RegisterDefaults：本轮不会执行新增的阶段（装配期已快照），但它们会参与后续的 Shutdown。");
-            }
-
-            RegisterDefaultsEntry(new XAsset.AssetBootstrapStage());
-            RegisterDefaultsEntry(new XData.DataBootstrapStage());
-            RegisterDefaultsEntry(new XSave.SaveBootstrapStage());
-        }
-
-        /// <summary>
-        /// <see cref="RegisterDefaults"/> 专用：同类型已存在则跳过，不打警告（重复调用是正常用法）。
-        /// </summary>
-        private static void RegisterDefaultsEntry(IBootstrapStage stage)
-        {
-            Type type = stage.GetType();
-            for (int i = 0; i < StageList.Count; i++)
-            {
-                if (StageList[i].GetType() == type)
-                {
-                    return;
-                }
-            }
-
-            StageList.Add(stage);
-            StageTimeoutList.Add(0f);
-        }
-
-        /// <summary>
         /// 清空登记表。测试复位用。
         /// <para>不影响已初始化的服务——它只管登记表。</para>
         /// <para><b>运行中调用会告警</b>：在途阶段仍会执行（装配期已快照），但它们不会再收到
@@ -296,8 +250,8 @@ namespace XFramework.XBootstrap
         /// <summary>
         /// 会话开始时清空静态登记表。**关闭域重载**（Project Settings → Editor → Enter Play Mode Options →
         /// 取消 Reload Domain）时 <see cref="StageList"/> 会跨播放会话存活，而会话 2 的
-        /// <c>ConfigureStages</c> 只能**追加**新实例（<see cref="Register(IBootstrapStage)"/> 按实例去重、
-        /// <see cref="RegisterDefaults"/> 按类型跳过）——旧阶段实例留在表里被一起装配：同相位并行双跑
+        /// <c>ConfigureStages</c> 只能**追加**新实例（<see cref="Register(IBootstrapStage)"/> 按实例去重）
+        /// ——旧阶段实例留在表里被一起装配：同相位并行双跑
         /// （旧阶段握着上一会话已销毁场景的引用），退出时还会被双份 <see cref="Shutdown"/>
         /// （第二次 <c>AssetManager.Destroy</c> 撞上已置空的实例）。
         /// <para><b>为什么挂在 <c>SubsystemRegistration</c></b>：它早于首场景 <c>Awake</c>，因而早于

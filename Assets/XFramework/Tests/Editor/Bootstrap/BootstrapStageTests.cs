@@ -433,13 +433,15 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void RegisterDefaults_ThenUnregister_ThenRegister_ReplacesBuiltInOutOfOrder()
+        public void Unregister_ThenRegister_ReplacesBuiltInStage()
         {
             Bootstrap.Clear();
             try
             {
-                // README 推荐的替换姿势：与调用顺序解耦（DefaultGameLauncher 在 Awake 里登记默认组合也照用）
-                Bootstrap.RegisterDefaults();
+                // 显式登记三件（框架不提供默认组合），再按精确类型替换其一
+                Bootstrap.Register(BootstrapStages.Asset());
+                Bootstrap.Register(BootstrapStages.Data());
+                Bootstrap.Register(BootstrapStages.Save());
                 Assert.AreEqual(1, Bootstrap.Unregister<SaveBootstrapStage>(), "应摘掉内置的 Save 阶段");
 
                 var custom = new SaveBootstrapStage();

@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using XFramework.XAsset;
@@ -9,12 +8,24 @@ using XFramework.Editor.BootstrapValidation;
 namespace Venusy609.Xframework.Editor.Tests
 {
     /// <summary>
-    /// 编辑器校验器的规则判定：多启动器、Profile 的 Host 提醒、Duplicate 内置阶段、
-    /// Asset 阶段缺 RemoteServices。只读校验，不修改场景 / 资产。
+    /// 编辑器校验器的规则判定：多启动器、Duplicate 内置阶段、Asset 阶段缺 RemoteServices。
+    /// 只读校验，不修改场景 / 资产。
     /// <para>Build Settings 的检查依赖工程设置，测试只断言「不抛异常」，不断言具体结果。</para>
     /// </summary>
     class BootstrapValidatorTests
     {
+        #region Test Doubles
+
+        /// <summary>探针：什么都不登记——校验器只关心「场景里有没有 GameLauncher」。</summary>
+        private sealed class ProbeLauncher : GameLauncher
+        {
+            protected override void ConfigureStages()
+            {
+            }
+        }
+
+        #endregion
+
         #region Setup / Teardown
 
         [SetUp]
@@ -36,8 +47,8 @@ namespace Venusy609.Xframework.Editor.Tests
         [Test]
         public void MultipleLaunchers_ReportsError()
         {
-            var first = new GameObject("launcher-a").AddComponent<DefaultGameLauncher>();
-            var second = new GameObject("launcher-b").AddComponent<DefaultGameLauncher>();
+            var first = new GameObject("launcher-a").AddComponent<ProbeLauncher>();
+            var second = new GameObject("launcher-b").AddComponent<ProbeLauncher>();
             try
             {
                 var issues = BootstrapValidator.Validate();
@@ -50,48 +61,6 @@ namespace Venusy609.Xframework.Editor.Tests
             {
                 Object.DestroyImmediate(first.gameObject);
                 Object.DestroyImmediate(second.gameObject);
-            }
-        }
-
-        [Test]
-        public void LauncherWithoutProfileAndUIRoot_ReportsInfos()
-        {
-            var launcher = new GameObject("launcher-zero").AddComponent<DefaultGameLauncher>();
-            try
-            {
-                var issues = BootstrapValidator.Validate();
-
-                Assert.IsNotNull(Find(issues, BootstrapRuleIds.LauncherWithoutProfile),
-                    "无 Profile 应给出零配置提示");
-                Assert.IsNotNull(Find(issues, BootstrapRuleIds.LauncherWithoutUIRoot),
-                    "无 UI 根应给出提示");
-            }
-            finally
-            {
-                Object.DestroyImmediate(launcher.gameObject);
-            }
-        }
-
-        [Test]
-        public void ProfileWithHost_WithoutRegisteredAssetStage_ReportsWarning()
-        {
-            var profile = ScriptableObject.CreateInstance<BootstrapProfile>();
-            var launcher = new GameObject("launcher-host").AddComponent<DefaultGameLauncher>();
-            try
-            {
-                SetField(profile, "_assetPlayMode", AssetPlayMode.Host);
-                SetField(launcher, "_profile", profile);
-
-                var issues = BootstrapValidator.Validate();
-
-                var issue = Find(issues, BootstrapRuleIds.HostWithoutRemoteServices);
-                Assert.IsNotNull(issue, "Profile 配 Host 且登记表无 Asset 阶段时应提醒注入 RemoteServices");
-                Assert.AreEqual(BootstrapIssueSeverity.Warning, issue.Value.Severity);
-            }
-            finally
-            {
-                Object.DestroyImmediate(launcher.gameObject);
-                Object.DestroyImmediate(profile);
             }
         }
 
@@ -144,13 +113,6 @@ namespace Venusy609.Xframework.Editor.Tests
             }
 
             return null;
-        }
-
-        private static void SetField(object target, string fieldName, object value)
-        {
-            var field = target.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
-            Assert.IsNotNull(field, $"找不到字段 {fieldName}——它被改名了吗？改名请同步本夹具");
-            field.SetValue(target, value);
         }
 
         #endregion

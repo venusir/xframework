@@ -9,8 +9,8 @@ namespace XFramework.Samples.Integration
 {
     /// <summary>
     /// 自定义启动阶段：初始化 Settings 模块。
-    /// <para><b>为什么示例自己写一个</b>：核心包的默认组合（<c>Bootstrap.RegisterDefaults</c>）只含
-    /// Asset / Data / Save；Settings 没有内置阶段，需要每个项目按自己的路径与选项接线——
+    /// <para><b>为什么示例自己写一个</b>：框架只提供内置的 Asset / Data / Save / UI / Input / Localization 阶段；
+    /// Settings 没有内置阶段，需要每个项目按自己的路径与选项接线——
     /// 本类就是那个接线示例（实现 <see cref="IBootstrapStage"/>，Phase 取 <see cref="BootstrapPhases.UserStart"/>）。</para>
     /// <para>它与内置的 Localization 阶段同相位（90）并行：两者没有相互依赖；设置只碰本地文件，
     /// 语言表的加载由 Localization 阶段自己完成。</para>

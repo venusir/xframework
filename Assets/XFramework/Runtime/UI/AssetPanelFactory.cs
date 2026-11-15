@@ -47,8 +47,8 @@ namespace XFramework.XUI
             if (panel == null || panel.gameObject == null)
                 return;
 
-            // 拆卸顺序宽容（与 AssetManager.UnloadSceneAsync 同族）：DefaultGameLauncher.OnDestroy
-            // 可能先关掉 AssetManager，随后 UIRootNode.OnDestroy 才回池面板。此时已没有池可回，
+            // 拆卸顺序宽容（与 AssetManager.UnloadSceneAsync 同族）：启动器（GameLauncher 子类）的
+            // OnDestroy 可能先关掉 AssetManager，随后 UIRootNode.OnDestroy 才回池面板。此时已没有池可回，
             // 实例本来就随场景销毁——直接销毁即可，不把正常退出变成一条红色 Error。
             if (!AssetManager.IsInitialized)
             {

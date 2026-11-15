@@ -16,15 +16,15 @@ namespace XFramework.XBootstrap
 
         /// <summary>
         /// 输入模块初始化。晚于 <see cref="Asset"/>（输入资产可能经资源系统加载）。
-        /// <para>不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内——它需要资产；由 <c>DefaultGameLauncher</c>
-        /// 的字段面或使用方自行构造 <see cref="XFramework.XInput.InputBootstrapStage"/> 登记。</para>
+        /// <para>它需要资产，不属于任何预设——由使用方自行构造 <see cref="XFramework.XInput.InputBootstrapStage"/>
+        /// （或经 <see cref="BootstrapStages"/>）登记。</para>
         /// </summary>
         public const int Input = 1;
 
         /// <summary>
         /// UI 模块初始化。晚于 <see cref="Asset"/>（面板预制体经地址加载）。
-        /// <para>不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内——它需要场景里的 Canvas 根；由
-        /// <c>DefaultGameLauncher</c> 的字段面或使用方自行构造 <see cref="XFramework.XUI.UIBootstrapStage"/> 登记。</para>
+        /// <para>它需要场景里的 Canvas 根，不属于任何预设；由使用方自行构造
+        /// <see cref="XFramework.XUI.UIBootstrapStage"/>（或经 <see cref="BootstrapStages"/>）登记。</para>
         /// </summary>
         public const int UI = 2;
 
@@ -38,7 +38,7 @@ namespace XFramework.XBootstrap
         /// </summary>
         public const int Save = 4;
 
-        /// <summary>本地化数据加载。不在 <see cref="Bootstrap.RegisterDefaults"/> 的组合内，由使用方自行构造并登记。</summary>
+        /// <summary>本地化数据加载。它需要语言数据，不属于任何预设；由使用方自行构造并登记。</summary>
         public const int Localization = 90;
 
         /// <summary>

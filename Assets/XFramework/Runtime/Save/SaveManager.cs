@@ -360,7 +360,7 @@ namespace XFramework.XSave
         {
             if (_impl == null)
                 throw new InvalidOperationException(
-                    "[Save] SaveManager 尚未初始化。请登记 SaveBootstrapStage（Bootstrap.RegisterDefaults() 已包含），或手动调用 SaveManager.Initialize()。");
+                    "[Save] SaveManager 尚未初始化。请登记 SaveBootstrapStage（BootstrapStages.Save() 构造），或手动调用 SaveManager.Initialize()。");
         }
 
         #endregion

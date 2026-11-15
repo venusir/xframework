@@ -57,7 +57,7 @@ namespace XFramework.Playable
             try
             {
                 // 只登记本示例真正用到的两个阶段：Data(3) → Save(4)。
-                // RegisterDefaults() 还会登记 Asset(0)，那需要 YooAsset 的采集配置，故不用。
+                // Asset(0) 需要 YooAsset 的采集配置，故不登记（框架不提供任何默认组合，登记什么由使用方定）。
                 Bootstrap.Register(new DataBootstrapStage());
                 Bootstrap.Register(new SaveBootstrapStage());
                 await Bootstrap.RunAsync(cancellationToken: destroyCancellationToken);

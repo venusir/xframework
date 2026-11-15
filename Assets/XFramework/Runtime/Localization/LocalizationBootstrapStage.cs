@@ -11,8 +11,7 @@ namespace XFramework.XLocalization
 
     /// <summary>
     /// <see cref="LocalizationManager"/> 的引导阶段。Phase = <see cref="BootstrapPhases.Localization"/>（90），晚于框架内置相位。
-    /// <para><b>不在 <see cref="Bootstrap.RegisterDefaults"/> 的默认组合内</b>——它需要语言数据，
-    /// 由使用方构造并显式登记：</para>
+    /// <para><b>不属于任何预设组合</b>——它需要语言数据，由使用方构造并显式登记：</para>
     /// <code>
     /// Bootstrap.Register(new LocalizationBootstrapStage("en", myLanguageTable));
     /// </code>

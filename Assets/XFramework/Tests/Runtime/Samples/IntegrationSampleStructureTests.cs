@@ -59,6 +59,7 @@ namespace XFramework.Samples.Tests
                 ".sample.json",
                 "README.md",
                 "Scripts/Bootstrap/IntegrationLauncher.cs",
+                "Scripts/Bootstrap/IntegrationBootstrapProfile.cs",
                 "Scripts/App/AppFlowController.cs",
                 "Scripts/Game/GameSceneController.cs",
                 "Scripts/Diagnostics/IntegrationDiagnosticPanel.cs",

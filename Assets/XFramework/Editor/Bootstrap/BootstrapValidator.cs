@@ -39,14 +39,8 @@ namespace XFramework.Editor.BootstrapValidation
         /// <summary>Asset 阶段配了 Host 却没有注入 <c>RemoteServices</c>。</summary>
         public const string HostWithoutRemoteServices = "BST-VAL-003";
 
-        /// <summary>同一内置阶段类型登记了多次（<c>RegisterDefaults</c> 与启动器混用等）。</summary>
+        /// <summary>同一内置阶段类型登记了多次（例如两处启动代码各登记一遍）。</summary>
         public const string DuplicateBuiltInStages = "BST-VAL-004";
-
-        /// <summary>启动器没有赋 Profile（零配置路径——提示级）。</summary>
-        public const string LauncherWithoutProfile = "BST-VAL-005";
-
-        /// <summary>启动器没有填 UI 根（不会登记 UI 阶段——提示级）。</summary>
-        public const string LauncherWithoutUIRoot = "BST-VAL-006";
 
         /// <summary>当前打开的场景里没有启动器（可能用静态入口——提示级）。</summary>
         public const string NoLauncherInOpenScenes = "BST-VAL-007";
@@ -83,11 +77,12 @@ namespace XFramework.Editor.BootstrapValidation
     }
 
     /// <summary>
-    /// Bootstrap 的编辑器校验：启动场景、启动器、Profile 与登记表的一致性。
+    /// Bootstrap 的编辑器校验：启动场景、启动器与登记表的一致性。
     /// <para><b>只读</b>——不修改场景 / 资产 / 登记表。菜单入口在
     /// <c>Tools/XFramework/Bootstrap/Validate Bootstrap</c>。</para>
     /// <para><b>边界如实</b>：Build Settings 的场景只检查索引与启用状态（不打开场景扫描）；
-    /// 登记表检查只在 PlayMode 或使用方手动登记后有效（编辑模式下 <c>Awake</c> 不会跑）。</para>
+    /// 登记表检查只在 PlayMode 或使用方手动登记后有效（编辑模式下 <c>Awake</c> 不会跑）。
+    /// <b>启动器字段与 Profile 归使用方</b>——校验器不读它们，只读框架拥有的面。</para>
     /// </summary>
     internal static class BootstrapValidator
     {
@@ -162,57 +157,6 @@ namespace XFramework.Editor.BootstrapValidation
                     $"发现 {launchers.Length} 个 GameLauncher：同一会话只应有一个启动器，任一实例销毁都会拆掉全局服务。",
                     launchers[0]));
             }
-
-            for (int i = 0; i < launchers.Length; i++)
-            {
-                var launcher = launchers[i];
-                if (!(launcher is DefaultGameLauncher))
-                    continue;
-
-                var serialized = new SerializedObject(launcher);
-                var profileProperty = serialized.FindProperty("_profile");
-                var uiRootProperty = serialized.FindProperty("_uiRoot");
-
-                var profile = profileProperty?.objectReferenceValue as BootstrapProfile;
-                if (profile == null)
-                {
-                    issues.Add(new BootstrapIssue(BootstrapRuleIds.LauncherWithoutProfile,
-                        BootstrapIssueSeverity.Info,
-                        "启动器没有赋 BootstrapProfile：走零配置路径（默认三件 + UI Root 非空时的 UI 阶段）。",
-                        launcher));
-                }
-                else
-                {
-                    ValidateProfile(profile, issues);
-                }
-
-                if (uiRootProperty != null && uiRootProperty.objectReferenceValue == null)
-                {
-                    issues.Add(new BootstrapIssue(BootstrapRuleIds.LauncherWithoutUIRoot,
-                        BootstrapIssueSeverity.Info,
-                        "启动器没有填 UI 根：不会登记 UI 阶段（用 UIRootNode 自动初始化时属正常）。",
-                        launcher));
-                }
-            }
-        }
-
-        private static void ValidateProfile(BootstrapProfile profile, List<BootstrapIssue> issues)
-        {
-            var serialized = new SerializedObject(profile);
-            var modeProperty = serialized.FindProperty("_assetPlayMode");
-            if (modeProperty == null || modeProperty.enumValueIndex != (int)AssetPlayMode.Host)
-                return;
-
-            // 登记表里已有 Asset 阶段时，由 ValidateRegistry 给出权威判定（能读到 options）；
-            // 编辑模式下登记表为空，这里只能按 Profile 的值提醒。
-            if (FindRegisteredAssetStage() != null)
-                return;
-
-            issues.Add(new BootstrapIssue(BootstrapRuleIds.HostWithoutRemoteServices,
-                BootstrapIssueSeverity.Warning,
-                "Profile 的 Asset Play Mode 是 Host：启动前必须在 ConfigureStages 里给 AssetInitOptions 注入 RemoteServices，" +
-                "否则启动抛 ArgumentException（Profile 只装数据，不装服务实例）。",
-                profile));
         }
 
         private static void ValidateRegistry(List<BootstrapIssue> issues)
@@ -257,18 +201,6 @@ namespace XFramework.Editor.BootstrapValidation
                 BootstrapIssueSeverity.Error,
                 "Asset 阶段配了 Host 但 RemoteServices 为 null：启动会在 Asset 阶段抛 ArgumentException（R3-AST-009）。",
                 null));
-        }
-
-        private static AssetBootstrapStage FindRegisteredAssetStage()
-        {
-            var stages = BootstrapRegistry.Stages;
-            for (int i = 0; i < stages.Count; i++)
-            {
-                if (stages[i] is AssetBootstrapStage asset)
-                    return asset;
-            }
-
-            return null;
         }
 
         #endregion

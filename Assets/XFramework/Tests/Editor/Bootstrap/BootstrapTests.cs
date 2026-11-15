@@ -270,32 +270,6 @@ namespace Venusy609.Xframework.Editor.Tests
         }
 
         [Test]
-        public void RegisterDefaults_RegistersAssetDataSave_WithExpectedPhases()
-        {
-            Bootstrap.RegisterDefaults();
-
-            Assert.AreEqual(3, Bootstrap.Stages.Count);
-
-            var phases = new List<int>();
-            for (int i = 0; i < Bootstrap.Stages.Count; i++)
-            {
-                phases.Add(Bootstrap.Stages[i].Phase);
-            }
-
-            // 登记顺序即相位顺序：Asset(0) → Data(3) → Save(4)
-            CollectionAssert.AreEqual(new[] { 0, 3, 4 }, phases);
-        }
-
-        [Test]
-        public void RegisterDefaults_CalledTwice_DoesNotDuplicate()
-        {
-            Bootstrap.RegisterDefaults();
-            Bootstrap.RegisterDefaults();
-
-            Assert.AreEqual(3, Bootstrap.Stages.Count, "重复调用 RegisterDefaults 不应叠加（按类型跳过已存在的内置阶段）");
-        }
-
-        [Test]
         public void Register_WithTimeout_StageRunsNormallyWhenNotTriggered()
         {
             var stage = NewStage("timed", 0);
@@ -475,26 +449,6 @@ namespace Venusy609.Xframework.Editor.Tests
 
             stage.Gate.TrySetResult();
             first.GetAwaiter().GetResult();
-        }
-
-        [Test]
-        public void RegisterDefaults_WhileRunning_WarnsButProceeds()
-        {
-            var gated = NewStage("gated", 0);
-            gated.Gate = new UniTaskCompletionSource();
-            Bootstrap.Register(gated);
-
-            UniTask run = Bootstrap.RunAsync();
-            Assert.AreEqual(1, gated.ExecuteCount, "首次调用应已启动阶段");
-
-            // 运行中 RegisterDefaults 与 Register 同一后果：本轮不执行、但会参与后续 Shutdown
-            LogAssert.Expect(LogType.Warning, new Regex(@"\[Bootstrap\] RunAsync 运行中调用 RegisterDefaults"));
-            Bootstrap.RegisterDefaults();
-
-            Assert.AreEqual(4, Bootstrap.Stages.Count, "警告不阻止登记：默认三件应被追加");
-
-            gated.Gate.TrySetResult();
-            run.GetAwaiter().GetResult();
         }
 
         [Test]

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using XFramework.XAsset;
@@ -79,41 +78,6 @@ namespace XFramework.XBootstrap
         public static IBootstrapStage Localization(string defaultLanguage, TextAsset table)
         {
             return new LocalizationBootstrapStage(defaultLanguage, table);
-        }
-
-        /// <summary>
-        /// 按 <see cref="BootstrapProfile"/> 登记启动阶段：显式登记 Asset / Data / Save，
-        /// 再按值是否提供条件登记 UI（<paramref name="uiRoot"/> 非空）/ Input（输入资产非空）/
-        /// Localization（默认语言非空）。
-        /// <para><b>显式登记，不调 <see cref="Bootstrap.RegisterDefaults"/> 的按类型跳过</b>：调用方（启动器）
-        /// 已经决定了这条路径，重复登记属于登记表被外部并发修改的既有边界，不在本方法里静默吞掉。</para>
-        /// </summary>
-        /// <param name="profile">配置资产。不能为 null。</param>
-        /// <param name="uiRoot">场景里的 UI 根；null 表示不登记 UI 阶段。</param>
-        /// <exception cref="ArgumentNullException"><paramref name="profile"/> 为 null 时抛出。</exception>
-        public static void FromProfile(BootstrapProfile profile, Transform uiRoot)
-        {
-            if (profile == null)
-                throw new ArgumentNullException(nameof(profile));
-
-            Bootstrap.Register(Asset(new AssetInitOptions
-            {
-                PackageName = string.IsNullOrEmpty(profile.AssetPackageName) ? null : profile.AssetPackageName,
-                PlayMode = profile.PlayMode,
-                AutoReclaimOnLowMemory = profile.AutoReclaimOnLowMemory,
-            }));
-
-            Bootstrap.Register(Data());
-            Bootstrap.Register(Save(new SaveOptions { CurrentVersion = profile.SaveVersion }));
-
-            if (uiRoot != null)
-                Bootstrap.Register(UI(uiRoot));
-
-            if (profile.InputOptions != null)
-                Bootstrap.Register(Input(profile.InputOptions.ToOptions()));
-
-            if (!string.IsNullOrEmpty(profile.DefaultLanguage))
-                Bootstrap.Register(Localization(profile.DefaultLanguage, profile.LanguageTable));
         }
     }
 }
