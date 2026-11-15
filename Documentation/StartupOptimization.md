@@ -1,7 +1,7 @@
 # 启动方式评估与优化计划
 
 > **状态：** 阶段 0–6 已实施（2026-11-15）；阶段 7 / 8 待裁。
-> **同日后续裁定（2026-11-15，晚于本计划实施）：**「启动组合整体交还使用方」——`DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults` 已删除，保留 `GameLauncher` 底座与 `BootstrapStages` 目录；D2 / D3 的默认实现一半随之中止，长期结论见 `Modules/Bootstrap.md` 台账。本文档保留原评估与计划快照，不重写。
+> **同日后续裁定（2026-11-15，晚于本计划实施）：**「启动组合整体交还使用方」——`DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults` 已删除，保留 `GameLauncher` 底座与 `BootstrapStage.Create` 委托工厂；中央目录 `BootstrapStages` 同日稍后也删除。D2 / D3 / D7 的默认实现与目录一半随之中止，长期结论见 `Modules/Bootstrap.md` 台账。本文档保留原评估与计划快照，不重写。
 > **范围：** Bootstrap / GameLauncher / BootstrapProfile / Pipeline 子阶段超时 / provider 替换路径 / 启动诊断与编辑器校验。
 > **读者：** 维护者（实施本轮优化时）+ 下一轮审计者。
 > **阅读顺序：** 先读 §0（最终结论与计划）；§1–§6 是评估依据，§10–§11 是追加论证；**冲突时以 §0 + §7 为准**。
@@ -24,7 +24,7 @@
 | **D4** | **入口**：N0 启动场景 Launcher 主线；N3 自动启动根可选；N4 仅 headless/纯静态。 | 阶段 3/4、7 |
 | **D5** | **遮罩悖论**：UI 启动流程必须有根对象；遮罩是表现层，不是 `IBootstrapStage`。 | §10.7 |
 | **D6** | **Provider 替换**：无统一容器；`ConfigureStages` 是组合根；管理器级/provider 级/注册追加级；Profile data-only。 | §11 |
-| **D7** | **登记便捷层**：`BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试。 | 阶段 2 |
+| **D7** | **登记便捷层**：`BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试。**2026-11-15 后续**：目录已删除，工厂与不变量测试保留。 | 阶段 2 |
 | **D8** | **编辑器校验 + 诊断面板升级**。 | 阶段 5 |
 | **D9** | **Pipeline 子阶段超时**。 | 阶段 6 |
 | **D10** | **内置阶段 provider/manager 参数 + `AudioBootstrapStage`**（中期、可延后）。 | 阶段 8 |
@@ -62,7 +62,7 @@
 |---|---|---|---|
 | 无就绪 / 进度 / 失败信号 | **真缺口**，三个里最值得做 | `Bootstrap` 增加运行状态 + 共享就绪任务 + 重入合并；`GameLauncher` 暴露 `StartupTask` | 是（两条 `暂不做`） |
 | 配置只覆盖一半 | **大部分是结构性限制**，小部分是可改善的 ergonomics | 服务实例继续走代码通道；补子类模板与 stage 工厂目录；不建议 Installer 形状 | 否（维持 `不做`） |
-| 登记与相位太手工 | **不是设计落后**（整数排序是业界常态），缺便捷路径与机器校验 | `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试 | 否（维持 `不做`） |
+| 登记与相位太手工 | **不是设计落后**（整数排序是业界常态），缺便捷路径与机器校验 | `BootstrapStage.Create` + `BootstrapStages` 目录 + 内置不变量测试（目录已于 2026-11-15 后续删除） | 否（维持 `不做`） |
 
 外围另有四项，按性价比排序：**编辑器 / 构建时校验**（最高）、诊断面板升级、子阶段超时（模块台账唯一 `未做`）、文档订正（`Bootstrap.md` 的「零使用」已过期）。
 
@@ -212,7 +212,7 @@ Zenject 的解法是 `ScriptableObjectInstaller`——**资产里写代码**。�
 - `ConfigManager.Initialize()` 是无参通用的，但「预加载哪些表」是项目知识，框架无法代劳。
 - Luban 扩展包已有自己的 `LubanBootstrapStage`。
 
-**建议**：先提供 `BootstrapStages` 工厂目录（见 4.3），让这些模块有现成的组装件；是否升级为「核心 stage + `DefaultGameLauncher` 字段」需要逐模块论证，**默认不做**。
+**建议**：先提供 `BootstrapStages` 工厂目录（见 4.3），让这些模块有现成的组装件（2026-11-15 后续：该目录已删除，构造入口回到各阶段自己的构造函数）；是否升级为「核心 stage + `DefaultGameLauncher` 字段」需要逐模块论证，**默认不做**。
 
 #### 2c. 字段面维护——可选，低优先级（历史口径）
 
@@ -239,7 +239,7 @@ Zenject 的解法是 `ScriptableObjectInstaller`——**资产里写代码**。�
 #### 建议
 
 1. **`BootstrapStage.Create(...)` 工厂**：`BootstrapStage.Create(phase, name, ct => UniTask, shutdown: null)`，消灭「只调一次 Initialize」的样板类。注意：委托阶段不替你管所有权，文档要写明。
-2. **`BootstrapStages` 目录**：`BootstrapStages.Asset(options)` / `.Save(options)` / `.UI(root)` / `.Data()` / `.Localization(lang, table)` / `.Input(options)`，让登记代码可读且集中；`DefaultGameLauncher` 改用它。
+2. **`BootstrapStages` 目录**：`BootstrapStages.Asset(options)` / `.Save(options)` / `.UI(root)` / `.Data()` / `.Localization(lang, table)` / `.Input(options)`，让登记代码可读且集中；`DefaultGameLauncher` 改用它。（2026-11-15 后续：目录已删除。）
 3. **`RegisterDefaults` 的 skip 参数 / 构建器**：`RegisterDefaults(BootstrapDefaults.SkipAsset)` 之类，替掉 unregister 舞蹈。可选。
 4. **内置不变量测试**：`Save.Phase > Data.Phase`、`UserStart == Localization` 是有意为之、`BootstrapPhases` 预留区间不被内置阶段占用——纯测试，无 API。
 5. **校验型依赖元数据（可选，不推荐先做）**：可选接口 `IBootstrapStageDependency { DependsOn }`，只在登记时校验「依赖已登记且相位严格更小」，**不参与排序**。它是注释约定与拓扑排序之间的中间态；如果 4 的测试够用，就不必引入。
@@ -322,7 +322,7 @@ settings asset + 根预制体 + `BeforeSceneLoad` 兜底，解决「任意场景
 | 1 | 1.2 | `GameLauncher.StartupTask`；测试 | 1.1 | 定向 |
 | 1 | 1.3 | Public API 基线 + CHANGELOG `### Added` + Bootstrap README | 1.1/1.2 | 基线重跑 + `check-docs` |
 | 2 | 2.1 | `BootstrapStage.Create`；测试 + 基线 | — | 定向 |
-| 2 | 2.2 | `BootstrapStages` 目录（Asset/Data/Save/UI/Input/Localization）；测试 + 基线 | 2.1 | 定向 |
+| 2 | 2.2 | `BootstrapStages` 目录（Asset/Data/Save/UI/Input/Localization）；测试 + 基线（2026-11-15 后续：已删除） | 2.1 | 定向 |
 | 2 | 2.3 | 内置不变量测试（`Save.Phase > Data.Phase` 等）+ README | 2.2 | 定向 + 全量 |
 | 3 | 3.1 | `BootstrapProfile` + `BootstrapStages.FromProfile`；测试 + 基线（2026-11-15 后续：已删除） | 2 | 定向 |
 | 3 | 3.2 | `DefaultGameLauncher` 改造（7 字段移除、`_profile` + `_uiRoot`）+ 测试 + XML（2026-11-15 后续：已删除） | 3.1 | 定向 + 全量 |

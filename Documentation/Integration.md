@@ -67,7 +67,7 @@
 |---|---|
 | Asset | `EditorSimulate` 初始化、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`、`CheckLocationValid`、`GetPoolStatus` |
 | Audio | `Initialize`、`Play/PlayAsync`、`MasterVolume`、`SetChannelVolume`、`Pause/Resume`、`StopAll`、`CopyChannels`、`Destroy` |
-| Bootstrap | `GameLauncher.ConfigureStages` 覆写、`BootstrapStages` 目录装配、`IBootstrapStage`、`BootstrapPhases.UserStart`、`Bootstrap.Shutdown` |
+| Bootstrap | `GameLauncher.ConfigureStages` 覆写、各内置阶段的直接构造、`IBootstrapStage`、`BootstrapPhases.UserStart`、`Bootstrap.Shutdown` |
 | Camera | `Initialize(CinemachineBrain)`、`Register`、`SwitchTo`、`SetFollow`、`Shake`、`SwitchToAsync`、`Destroy`、`CopyCameras/GetState` |
 | Config | `Initialize`、`PreloadTableAsync<GameModeRow>`、`PreloadGlobalAsync<IntegrationRules>`、`Get/GetGlobal`、`Unload`、`CopyLoaded` |
 | Data | `GetOrCreateBlock`、`MarkDirty`、`HasDirtyBlocks` |
@@ -133,7 +133,7 @@ Samples~/Integration/
 ### 4.4 启动与退出接线
 
 - `IntegrationLauncher : GameLauncher`，Inspector 面 = `_profile`（自建的 `IntegrationBootstrapProfile` 资产）+ `_uiRoot`；`ConfigureStages()`：
-  1. 用 `BootstrapStages.*` 装配 Asset(0, Profile 的 `EditorSimulate`) / Data(3) / Save(4, Profile 的版本) / UI(2, `_uiRoot`) / Input(1, Profile 的输入资产) / Localization(90, Profile 的语言与表)；
+  1. 用各内置阶段的构造函数装配 Asset(0, Profile 的 `EditorSimulate`) / Data(3) / Save(4, Profile 的版本) / UI(2, `_uiRoot`) / Input(1, Profile 的输入资产) / Localization(90, Profile 的语言与表)；
   2. `Bootstrap.Register(new GameSettingsBootstrapStage())`（Phase 90，与 Localization 同相位并行——两者无相互依赖）；
   3. `Bootstrap.Register(new GameConfigBootstrapStage())`（Phase 90）。
 - `BootScreen` 用 IMGUI 显示 `Bootstrap.State` / `LastProgress` 与模块就绪清单；`AppFlowController.Start` 调 `Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)` 等启动就绪（失败时重抛并显示错误）。示例不再自造「启动完成」阶段。

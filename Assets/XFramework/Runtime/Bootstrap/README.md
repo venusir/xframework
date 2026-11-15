@@ -9,15 +9,15 @@
 1. 一个**显式登记表**（`Bootstrap.Register`）——零反射，顺序可控
 2. 一个**按相位装配并运行**的入口（`Bootstrap.RunAsync`）
 
-至于登记哪些模块、按什么顺序，由使用方决定——内置阶段用 `BootstrapStages.*` 构造，自己的阶段直接 `new`。框架不提供预设组合。
+至于登记哪些模块、按什么顺序，由使用方决定——内置阶段直接 `new` 各模块自己的阶段类，自定义阶段同样直接 `new`。框架不提供预设组合，也不提供中央构造目录。
 
 ## 快速使用
 
 ```csharp
 // 登记什么由你定：内置阶段用目录构造，自己的阶段直接 new
-Bootstrap.Register(BootstrapStages.Asset());
-Bootstrap.Register(BootstrapStages.Data());
-Bootstrap.Register(BootstrapStages.Save());
+Bootstrap.Register(new AssetBootstrapStage());
+Bootstrap.Register(new DataBootstrapStage());
+Bootstrap.Register(new SaveBootstrapStage());
 await Bootstrap.RunAsync(progress: myProgress);
 
 // 需要自己掌控的（第二个参数是子阶段超时；0/负值/NaN = 不启用）
@@ -56,7 +56,6 @@ Runtime/Bootstrap/
 ├── BootstrapState.cs       # 启动状态枚举（Idle / Running / Completed / Failed / Cancelled）
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapStage.cs       # 委托阶段工厂：BootstrapStage.Create
-├── BootstrapStages.cs      # 内置阶段目录：Asset / Data / Save / UI / Input / Localization 的构造入口
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
 └── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象，暴露 StartupTask
 ```
@@ -142,36 +141,36 @@ public sealed class MyLauncher : GameLauncher
         if (_profile == null)
             return;
 
-        Bootstrap.Register(BootstrapStages.Asset(new AssetInitOptions
+        Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions
         {
             PackageName = string.IsNullOrEmpty(_profile.AssetPackageName) ? null : _profile.AssetPackageName,
             PlayMode = _profile.PlayMode,
             AutoReclaimOnLowMemory = _profile.AutoReclaimOnLowMemory,
         }));
-        Bootstrap.Register(BootstrapStages.Data());
-        Bootstrap.Register(BootstrapStages.Save(new SaveOptions { CurrentVersion = _profile.SaveVersion }));
+        Bootstrap.Register(new DataBootstrapStage());
+        Bootstrap.Register(new SaveBootstrapStage(new SaveOptions { CurrentVersion = _profile.SaveVersion }));
 
         if (_uiRoot != null)
-            Bootstrap.Register(BootstrapStages.UI(_uiRoot));
+            Bootstrap.Register(new UIBootstrapStage(_uiRoot));
         if (_profile.InputOptions != null)
-            Bootstrap.Register(BootstrapStages.Input(_profile.InputOptions.ToOptions()));
+            Bootstrap.Register(new InputBootstrapStage(_profile.InputOptions.ToOptions()));
         if (!string.IsNullOrEmpty(_profile.DefaultLanguage))
-            Bootstrap.Register(BootstrapStages.Localization(_profile.DefaultLanguage, _profile.LanguageTable));
+            Bootstrap.Register(new LocalizationBootstrapStage(_profile.DefaultLanguage, _profile.LanguageTable));
     }
 }
 ```
 
 完整可运行版本见 Integration 示例的 `IntegrationLauncher` / `IntegrationBootstrapProfile`。
 
-**Profile 只是示例的一种形状**（下表是示例字段到构造的映射）。字段怎么取舍由你定：只用 Asset / Data / Save 的项目可以删掉其余字段；换输入后端（Rewired 等）把 `_inputOptions` 换成自己的 provider 资产，或删掉该字段、改在 `ConfigureStages` 里 `Register(BootstrapStages.Input(myProvider))`。
+**Profile 只是示例的一种形状**（下表是示例字段到构造的映射）。字段怎么取舍由你定：只用 Asset / Data / Save 的项目可以删掉其余字段；换输入后端（Rewired 等）把 `_inputOptions` 换成自己的 provider 资产，或删掉该字段、改在 `ConfigureStages` 里 `Register(new InputBootstrapStage(myProvider))`。
 
 | 示例字段（`IntegrationBootstrapProfile`） | 落到哪 |
 | ---- | ------ |
-| Asset 包名 / 运行模式 / 低内存自动回收 | `AssetInitOptions` → `BootstrapStages.Asset(...)` |
-| Save 存档格式版本上限 | `SaveOptions` → `BootstrapStages.Save(...)` |
-| Input 配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | `BootstrapStages.Input(asset.ToOptions())`（**资产留空则不登记**）。字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内 |
-| 默认语言 / 语言表（扁平 JSON 的 `TextAsset`） | `BootstrapStages.Localization(...)`（**语言留空则不登记**；表可空——此时该阶段打一条警告后跳过） |
-| （不在 Profile 里——`Transform` 是场景引用） | `_uiRoot` 非空时 `BootstrapStages.UI(...)`（留空则不登记——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
+| Asset 包名 / 运行模式 / 低内存自动回收 | `AssetInitOptions` → `new AssetBootstrapStage(...)` |
+| Save 存档格式版本上限 | `SaveOptions` → `new SaveBootstrapStage(...)` |
+| Input 配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | `new InputBootstrapStage(asset.ToOptions())`（**资产留空则不登记**）。字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内 |
+| 默认语言 / 语言表（扁平 JSON 的 `TextAsset`） | `new LocalizationBootstrapStage(...)`（**语言留空则不登记**；表可空——此时该阶段打一条警告后跳过） |
+| （不在 Profile 里——`Transform` 是场景引用） | `_uiRoot` 非空时 `new UIBootstrapStage(...)`（留空则不登记——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
 
 各模块 options 的权威定义仍在各模块 README（`已知限制` / options 的 XML）。
 **服务实例装不进资产**：`RemoteServices` / `CryptoProvider` / 自定义 provider 由你直接在 `ConfigureStages` 里构造并传给对应阶段。
@@ -187,8 +186,8 @@ protected override void ConfigureStages()
         PlayMode = AssetPlayMode.Host,
         RemoteServices = _remoteServices,
     }));
-    Bootstrap.Register(BootstrapStages.Data());
-    Bootstrap.Register(BootstrapStages.Save());
+    Bootstrap.Register(new DataBootstrapStage());
+    Bootstrap.Register(new SaveBootstrapStage());
 
     Bootstrap.Register(new MyServiceBootstrapStage());
 }
@@ -219,7 +218,7 @@ protected override void ConfigureStages()
 本模块的实现方入口：写一个启动阶段并登记。
 
 - **实现哪个契约**：`IBootstrapStage`（= `IPhaseStage` + 同步 `Shutdown`）；Phase / Name / Weight 的约定见「内置相位约定」与「行为契约」。
-- **怎么接线**：`Bootstrap.Register(stage)`；内置阶段用 `BootstrapStages.*` 构造；替换已登记的内置阶段用 `Unregister<T>()` 再 `Register`（按精确类型匹配，见「设计取舍」）。
+- **怎么接线**：`Bootstrap.Register(stage)`；内置阶段直接 `new` 各模块的阶段类；替换已登记的内置阶段用 `Unregister<T>()` 再 `Register`（按精确类型匹配，见「设计取舍」）。
 - **要守什么**：阶段义务（幂等清理、所有权、可重入、执行契约）见「行为契约」；线程要求见「线程契约」；超时 / 从未执行 / 协作式取消等边界见「已知限制」。
 
 ### 定义一个阶段
@@ -252,7 +251,7 @@ public sealed class MyServiceBootstrapStage : IBootstrapStage
 
 写 `ExecuteAsync` 时遵守的四条 Pipeline 契约见「行为契约 → 阶段义务」。
 
-### 用工厂和目录少写样板
+### 用工厂少写样板
 
 **只调一次初始化**的阶段不必单独建类：
 
@@ -264,18 +263,18 @@ Bootstrap.Register(BootstrapStage.Create(
     shutdown: MyService.Destroy));          // 所有权归你：工厂只负责调用
 ```
 
-**内置阶段**用目录构造，登记代码集中可读：
+**内置阶段**直接 `new` 各模块的阶段类（构造入口随阶段走，没有中央目录）：
 
 ```csharp
-Bootstrap.Register(BootstrapStages.Asset(new AssetInitOptions { PlayMode = AssetPlayMode.Host }));
-Bootstrap.Register(BootstrapStages.Data());
-Bootstrap.Register(BootstrapStages.Save(new SaveOptions { CurrentVersion = 2 }));
-Bootstrap.Register(BootstrapStages.UI(uiRoot, controller));
-Bootstrap.Register(BootstrapStages.Input(inputOptionsAsset.ToOptions()));
-Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
+Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions { PlayMode = AssetPlayMode.Host }));
+Bootstrap.Register(new DataBootstrapStage());
+Bootstrap.Register(new SaveBootstrapStage(new SaveOptions { CurrentVersion = 2 }));
+Bootstrap.Register(new UIBootstrapStage(uiRoot, controller));
+Bootstrap.Register(new InputBootstrapStage(inputOptionsAsset.ToOptions()));
+Bootstrap.Register(new LocalizationBootstrapStage("en", languageTable));
 ```
 
-目录**只构造、不登记**，也不改变相位语义；示例启动器的 `ConfigureStages` 就是直接用它装配。
+示例启动器的 `ConfigureStages` 就是直接这样装配。
 委托阶段不提供 context 写入接口——需要自己报告描述/进度的阶段，仍应实现 `IBootstrapStage`。
 
 ## 内置相位约定
@@ -304,7 +303,7 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 
 ## 已知限制
 
-**框架不提供开箱启动器、Profile 或默认组合。** `GameLauncher` 只有生命周期接线与 `StartupTask`；字段面（配置资产、UI 根）与登记代码都由使用方写。`BootstrapStages` 只构造阶段，不决定登记谁。`Samples~/Integration` 是可复制的模板，不是框架契约——字段形状可以按项目需要增删。
+**框架不提供开箱启动器、Profile、默认组合或中央构造目录。** `GameLauncher` 只有生命周期接线与 `StartupTask`；字段面（配置资产、UI 根）与登记代码都由使用方写；内置阶段由各模块自己的公开构造函数构造。`Samples~/Integration` 是可复制的模板，不是框架契约——字段形状可以按项目需要增删。
 
 **超时是「报告失败」，不是「真正中止」。** `Bootstrap.Register(stage, timeoutSeconds)` 把超时下沉到该引导阶段（0 / 负值 / NaN / ±∞ = 不启用）：触发时置该子阶段 `Failed` 并取消其令牌，整轮启动以失败收场。但**不响应取消的阶段仍会跑完**——它在自己的沉降点收场，启动不再等它（与 `IPipeline.AddStage(stage, timeoutSeconds)` 同一条乐观超时边界，见 Pipeline README）。组失败后管线照常失败并停止后续相位。
 
@@ -324,6 +323,8 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 
 **为什么是显式登记而不是反射发现？** 零反射、顺序可控、可测试，且使用方一眼能看出到底有哪些东西会在这个启动流程里跑。
 
+**为什么没有中央构造目录？** 每个内置阶段都有公开构造函数，`new AssetBootstrapStage(options)` 已经是它自己模块里的构造入口；再加一层 `BootstrapStages.Asset(options)` 只是转发，却会让 Bootstrap 模块引用全部六个模块。构造随阶段走，模块边界保持单向（阶段依赖本模块的 `IBootstrapStage`，本模块不依赖任何具体模块）。
+
 **登记表按实例去重，不按类型。** 同一个实例重复登记会被忽略，但**同类型的多个实例可以共存**——登记表是「初始化步骤列表」，不是「每类型一个的容器」，参数化的阶段用同一类型登记多次是合法的。没有按类型跳过的预设：重复登记同类型阶段由校验器（BST-VAL-004）在编辑器里报出。
 
 **替换内置阶段用 `Unregister`：它消掉「同类型阶段是另一个步骤还是替换品」的歧义。**
@@ -331,7 +332,7 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 > ⚠ **「顺序无关」只在同一段登记代码内成立。**
 >
 > ```csharp
-> Bootstrap.Register(BootstrapStages.Asset());            // 内置那份
+> Bootstrap.Register(new AssetBootstrapStage());          // 内置那份
 > Bootstrap.Unregister<AssetBootstrapStage>();            // 摘掉内置的那个
 > Bootstrap.Register(new AssetBootstrapStage(myOptions)); // 换成自己的
 > ```
@@ -341,7 +342,7 @@ Bootstrap.Register(BootstrapStages.Localization("en", languageTable));
 > 摘掉的是对方的实例。**唯一与 `Awake` 顺序无关的替换路径是启动器的 `ConfigureStages()`**——
 > 那里是确定调用栈，替换就写在那。
 >
-> 反过来写（先 `Register(BootstrapStages.Asset())` 再 `Register(new AssetBootstrapStage(custom))`）
+> 反过来写（先 `Register(new AssetBootstrapStage())` 再 `Register(new AssetBootstrapStage(custom))`）
 > **两者都会被登记**，同一个门面被初始化两次，第二次会被门面自身的幂等守卫挡下并打警告，而
 > **你的 options 被静默忽略**。框架无从区分「另一个同类型阶段」与「同一个阶段的替换品」——
 > `Unregister` 就是为消掉这个歧义而存在的。
@@ -383,4 +384,4 @@ finally { UpdateManager.Resume(); }
 - **XFramework.XPipeline** —— 阶段契约与相位分组装配
 - **UniTask** —— 异步
 - **`GameLauncher`** 另需 XLog（启动失败日志）
-- **`BootstrapStages`** 的构造入口分别引用内置阶段所在的模块：XAsset / XData / XSave / XUI / XInput（含 `XInput.Default`）/ XLocalization。模块核心不依赖任何具体模块；Integration 示例的启动器用到上述全部六个。
+- **模块核心不引用任何具体模块**：本模块只依赖 XPipeline + UniTask，`GameLauncher` 另需 XLog。内置阶段（`AssetBootstrapStage` / `DataBootstrapStage` / `SaveBootstrapStage` / `UIBootstrapStage` / `InputBootstrapStage` / `LocalizationBootstrapStage`）各自住在所属模块里，由使用方直接构造；Integration 示例的启动器用到上述全部六个。

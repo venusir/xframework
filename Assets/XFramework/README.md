@@ -49,9 +49,9 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 需要按顺序初始化的服务实现 `IBootstrapStage`，然后显式登记（框架不提供默认组合，登记什么由你定）：
 
 ```csharp
-Bootstrap.Register(BootstrapStages.Asset());                           // Phase 0
-Bootstrap.Register(BootstrapStages.Data());                            // Phase 3
-Bootstrap.Register(BootstrapStages.Save());                            // Phase 4
+Bootstrap.Register(new AssetBootstrapStage());                         // Phase 0
+Bootstrap.Register(new DataBootstrapStage());                          // Phase 3
+Bootstrap.Register(new SaveBootstrapStage());                          // Phase 4
 Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myTable)); // Phase 90
 await Bootstrap.RunAsync(progress: myProgress);
 // ...
@@ -115,9 +115,9 @@ public static class LockType
 
 ```csharp
 // 只登记你要的模块——框架不提供默认组合
-Bootstrap.Register(BootstrapStages.Asset());
-Bootstrap.Register(BootstrapStages.Data());
-Bootstrap.Register(BootstrapStages.Save());
+Bootstrap.Register(new AssetBootstrapStage());
+Bootstrap.Register(new DataBootstrapStage());
+Bootstrap.Register(new SaveBootstrapStage());
 await Bootstrap.RunAsync();
 ```
 
@@ -224,8 +224,8 @@ await Bootstrap.RunAsync();
 | **Camera** | 无 options；每次过渡的 `duration` / `CameraBlendStyle`；相机注册在运行时经 `CameraManager.Register`（显式 id 或 `@auto/N`）；预制体可用 `CinemachineCameraRegistration` | 调用时 |
 | **Audio** | `AudioInitOptions` 4 字段（`PrewarmVoices` 只对内置 provider 有意义）；`IAudioManager` 整体替换或 `IAudioProvider` 播放引擎替换（`SetProvider`，推荐）；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `SetChannelMuted` / `RegisterChannel` / `Pause` / `Resume`；每次播放 `AudioPlayOptions` 7 字段（新增 `InitialParameters`）、`RegisterChannel` 用 `AudioChannelConfig` 2 字段；`AudioChannels` 推荐通道名（`"master"` 是保留名）；provider 中立控制面 `SetParameter` / `SetGlobalParameter` / `LoadBank` / `UnloadBank` / `IsBankLoaded` / `SetBusVolume` / `SetBusMuted` / `SetBusPaused` / `StartSnapshot` / `StopSnapshot` / `SetPosition`（内置 provider 仅支持 `SetPosition`） | `SetProvider` 立即生效；初始化时快照；运行时项立即扫活跃播放源；控制面由 provider 能力决定 |
 | **Settings** | `SettingsOptions` 5 字段；**按类型**注入 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（均可运行时替换；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点）；`defaultFactory` 决定持久层无数据时的默认值 | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
-| **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `UIBootstrapStage` / `BootstrapStages.UI(uiRoot)`）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
-| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / `BootstrapStages.Input(...)`）；**换后端**：`Initialize(IInputProvider)` 或 `InputBootstrapStage(IInputProvider)`（`SetProvider` 不注册帧驱动）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
+| **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `new UIBootstrapStage(uiRoot)`）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
+| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `new InputBootstrapStage(...)`）；**换后端**：`Initialize(IInputProvider)` 或 `InputBootstrapStage(IInputProvider)`（`SetProvider` 不注册帧驱动）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
 | **Save** | `SaveOptions` 2 字段（版本号 / 加密 Provider，后者接线到 `FileDomain.SaveData`）；`SaveManagerFactory` 整体替换；运行时 `SetCurrentVersion` / `SetCurrentPlayer` / `ClearCurrentPlayer` | 初始化时；运行时项实时（**写操作进行中会抛** `InvalidOperationException`） |
 | **File** | `IFileProvider` 整体替换（**一次性**：换它必须先 `Destroy()`，重复 `Initialize` 只告警忽略）；`ICryptoProvider` 按域接线（`SetCryptoProvider`，可随时调）；可选能力接口 `IAtomicFileProvider` / `IDirectoryProvider`（装饰器须一并实现）；**四个域根不可配**（换根 = 换 provider） | provider 在首次 `Initialize` 时定；加密与运行时项实时 |
 | **Pool** | `PoolConfig` 3 字段；`PoolManager.Configure<T>`（**池已存在则忽略**，需先 `RemovePool<T>`）与四个集合池各自的 `Configure`（**无活跃实例时**生效，会重建池）；`Pool<T>` 公开构造可自带 `onRent` / `onReturn` / `onDestroy` 与 `IPoolable` / `IPoolDiscardable` 钩子 | 见左列两种口径；集合池在「无活跃实例」那一刻重配 |

@@ -14,7 +14,7 @@ XFramework 资源管理模块提供异步资源加载、实例化、场景切换
 using XFramework.XAsset;
 
 // 方式一：交给 Bootstrap 引导管线（推荐）
-// 登记 BootstrapStages.Asset() 会构造 AssetBootstrapStage（Phase 0）并自动处理初始化；
+// 登记 new AssetBootstrapStage()（Phase 0）即自动处理初始化；
 // 也可直接登记：Bootstrap.Register(new AssetBootstrapStage());
 
 // 方式二：手动初始化

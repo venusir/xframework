@@ -26,7 +26,7 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
   沿用 `"Player"`。
 - **交给启动引导（可选）**：`Bootstrap.Register(new InputBootstrapStage(new InputSystemOptions { Asset = myActions }))`
   ——Phase 1、晚于 Asset，清理跟着 `Bootstrap.Shutdown` 走。两条语义：**已初始化则早退**、
-  **只销毁自己初始化的那份**。启动器 / Profile 里填了输入配置资产、经 `BootstrapStages.Input` 登记的，就是这个阶段。
+  **只销毁自己初始化的那份**。启动器 / Profile 里填了输入配置资产、登记 `new InputBootstrapStage(...)` 的，就是这个阶段。
 - **Inspector 里配输入**：建一份 `InputSystemOptionsAsset`（`Create → XFramework → Input System Options`，
   资产槽拖 `.inputactions` + 初始 ActionMap 名），`config.ToOptions()` 即可交给上面任一入口。
   它住在 `XInput.Default` 内是**边界要求**：Unity 输入类型只允许出现在该命名空间里
@@ -504,7 +504,7 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
     protected override void ConfigureStages()
     {
         Bootstrap.Register(new InputBootstrapStage(new RewiredProvider()));
-        // 其余阶段按需登记（如 BootstrapStages.Data() / Save()）
+        // 其余阶段按需登记（如 new DataBootstrapStage() / new SaveBootstrapStage()）
     }
 }
 ```
