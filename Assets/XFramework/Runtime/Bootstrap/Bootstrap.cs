@@ -362,7 +362,9 @@ namespace XFramework.XBootstrap
             _nextRunStarted?.TrySetResult();
             _nextRunStarted = null;
 
-            RunCoreAsync(progress, cancellationToken, runGeneration, completion);
+            // 显式 fire-and-forget：主体自己 try/catch/finally 收敛终局（异常进 completion），
+            // 不会落到 UniTaskScheduler；调用方的等待面是上面那个共享完成源的任务。
+            RunCoreAsync(progress, cancellationToken, runGeneration, completion).Forget();
             return _currentRunTask;
         }
 
