@@ -46,6 +46,10 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
   Tip 的 `TMP_Text` 等九类问题；报告按预制体分组并可点击定位。实现全部 `internal`，不改变公开 API，
   不修改预制体，不在保存或构建时自动触发。同步补充 `Runtime/UI/README.md` 的「预制体要求」小节。
 
+### Changed
+
+- **编辑器菜单根统一到 `Tools/XFramework`**（2026-11-15）：`XFramework/Install Dependencies` 迁为 `Tools/XFramework/Install Dependencies`，与 Diagnostics / UI 校验等入口同根。使用方从旧路径找不到菜单时改走新路径；功能、公开 API 与运行时行为不变。
+
 ### Fixed
 
 #### UI

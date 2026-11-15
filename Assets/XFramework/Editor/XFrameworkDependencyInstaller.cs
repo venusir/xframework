@@ -7,7 +7,7 @@
 //
 // 本脚本处理 UPM 包依赖（UniTask、YooAsset、Newtonsoft.Json）→ 写入 Packages/manifest.json
 //
-// 使用方式: 菜单栏 -> XFramework -> Install Dependencies
+// 使用方式: 菜单栏 -> Tools -> XFramework -> Install Dependencies
 // -----------------------------------------------------------------------------
 
 using System;
@@ -55,7 +55,7 @@ namespace Venusy609.Xframework.Editor
 
         #endregion
 
-        [MenuItem("XFramework/Install Dependencies")]
+        [MenuItem("Tools/XFramework/Install Dependencies")]
         private static void InstallDependencies()
         {
             int mismatchCount = InstallUPMDependencies();
@@ -186,7 +186,7 @@ namespace Venusy609.Xframework.Editor
 
         #endregion
 
-        [MenuItem("XFramework/Install Dependencies", true)]
+        [MenuItem("Tools/XFramework/Install Dependencies", true)]
         private static bool ValidateInstallDependencies()
         {
             return true;

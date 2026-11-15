@@ -352,7 +352,7 @@ XFramework 依赖以下第三方包。由于 Unity 包管理器的限制，这�
 }
 ```
 
-也可以走一键安装：菜单栏 **XFramework → Install Dependencies** 会把上表五个包写进 `Packages/manifest.json`，值与本表逐字相同；若检出**未钉修订**的 Git URL（旧版 README 的写法）会自动纠正，其余不一致只告警、不替你改动。
+也可以走一键安装：菜单栏 **Tools → XFramework → Install Dependencies** 会把上表五个包写进 `Packages/manifest.json`，值与本表逐字相同；若检出**未钉修订**的 Git URL（旧版 README 的写法）会自动纠正，其余不一致只告警、不替你改动。
 
 > **依赖版本只有一份真相：上面这张表。** 安装器清单与 `Packages/manifest.json` 必须与它逐字一致，由 `Tests/Editor/Architecture/DependencyDeclarationTests` 机械守卫。
 
