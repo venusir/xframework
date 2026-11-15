@@ -13,10 +13,11 @@ Runtime/Bootstrap/
 ├── BootstrapState.cs       # 启动状态枚举（Idle / Running / Completed / Failed / Cancelled）
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapStage.cs       # 委托阶段工厂（BootstrapStage.Create）
-├── BootstrapStages.cs      # 内置阶段目录（Asset / Data / Save / UI / Input / Localization）
+├── BootstrapStages.cs      # 内置阶段目录（Asset / Data / Save / UI / Input / Localization）+ FromProfile
+├── BootstrapProfile.cs     # 7 个数据值的 ScriptableObject（Profile 资产）
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
 ├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：无序列化字段，ConfigureStages 为抽象，暴露 StartupTask
-└── DefaultGameLauncher.cs  # 开箱默认启动器：五组 / 八个 Inspector 字段
+└── DefaultGameLauncher.cs  # 开箱默认启动器：_profile + _uiRoot 两个 Inspector 字段
 
 Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
 Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪面语义）、BootstrapStageTests（内置阶段直连）、

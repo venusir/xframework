@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 - **启动就绪面**（2026-11-15）：新增 `BootstrapState` 枚举与 `Bootstrap.State` / `Bootstrap.WaitUntilReadyAsync(CancellationToken)` / `Bootstrap.LastProgress`。`WaitUntilReadyAsync` 在 `Completed` 立即返回、在 `Failed` / `Cancelled` 重抛本次运行的异常、在 `Idle` 等待下一次运行（可取消）；`LastProgress` 是最近一帧 `PipelineProgress` 快照，启动画面可直接轮询。**`RunAsync` 重入语义变更**：在途时的第二次调用从「警告并立即返回」改为**返回第一次运行的任务（join）**，第二次调用的令牌不参与本次运行——旧行为会让第二个调用方误以为启动已完成。源兼容新增；公开 API 基线已更新。
 - **`GameLauncher.StartupTask`**（2026-11-15）：启动器实例的启动任务；成功完成、失败时以同一异常收场、组件在启动途中销毁时以 `OperationCanceledException` 收场，在 `Start` 之前访问也有效。
 - **登记便捷层：`BootstrapStage.Create` 与 `BootstrapStages` 目录**（2026-11-15）：委托工厂把「只调一次初始化」的样板类收成一次调用（所有权归调用方，`Shutdown` 由调用方提供）；`BootstrapStages` 为内置六阶段提供构造入口（`Asset` / `Data` / `Save` / `UI` / `Input` / `Localization`），只构造、不登记，不改变相位语义。源兼容新增；公开 API 基线已更新。
+- **`BootstrapProfile` + `BootstrapStages.FromProfile`**（2026-11-15）：装 7 个启动数据值的 `ScriptableObject`（Asset×3 / Save×1 / Input×1 / Localization×2），可复用、可做环境变体；`FromProfile(profile, uiRoot)` 显式登记 Asset / Data / Save，再按值条件登记 UI / Input / Localization。**只装数据**：服务实例（`RemoteServices` / `CryptoProvider` / 自定义 provider）仍走启动器子类的 `ConfigureStages` 覆写。
 
 #### Samples
 
@@ -55,6 +56,14 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 
 - **编辑器菜单根统一到 `Tools/XFramework`**（2026-11-15）：`XFramework/Install Dependencies` 迁为 `Tools/XFramework/Install Dependencies`，与 Diagnostics / UI 校验等入口同根。使用方从旧路径找不到菜单时改走新路径；功能、公开 API 与运行时行为不变。
+
+#### Bootstrap
+
+- **`DefaultGameLauncher` 的 7 个 Inspector 数据字段移除，改为 `BootstrapProfile` 资产**（2026-11-15）：字段面从 8 个缩到 2 个（`_profile` + `_uiRoot`）。**破坏性变更**：旧场景的字段值不会自动迁移。迁移步骤：① 新建 `BootstrapProfile` 资产（`Create > XFramework > Bootstrap Profile`）；② 把旧场景的 Asset（包名 / 运行模式 / 低内存回收）、Save（版本）、Input（配置资产）、Localization（默认语言 / 语言表）值复制进去；③ 把资产赋给启动器的 `_profile`；④ 保存场景清掉旧字段数据。**零配置语义不变**：`_profile` 留空 = 默认 Asset / Data / Save + UI Root 非空时的 UI 阶段。
+
+  | 旧写法 | 新写法 | 说明 |
+  |---|---|---|
+  | `DefaultGameLauncher` 的 7 个 Inspector 字段（`_assetPackageName` / `_assetPlayMode` / `_autoReclaimOnLowMemory` / `_saveVersion` / `_inputOptions` / `_defaultLanguage` / `_languageTable`） | `DefaultGameLauncher._profile`（`BootstrapProfile` 资产） | 值不变，载体改为可复用 / 可做环境变体的资产；`_uiRoot` 仍是场景字段 |
 
 ### Fixed
 

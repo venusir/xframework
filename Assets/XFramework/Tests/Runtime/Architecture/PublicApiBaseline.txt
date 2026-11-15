@@ -344,11 +344,14 @@ XFramework.XBootstrap.BootstrapPhases.Localization  ::  public const int = 90
 XFramework.XBootstrap.BootstrapPhases.Save  ::  public const int = 4
 XFramework.XBootstrap.BootstrapPhases.UI  ::  public const int = 2
 XFramework.XBootstrap.BootstrapPhases.UserStart  ::  public const int = 90
+XFramework.XBootstrap.BootstrapProfile  ::  public sealed class : UnityEngine.ScriptableObject
+XFramework.XBootstrap.BootstrapProfile#ctor  ::  public()
 XFramework.XBootstrap.BootstrapStage  ::  public static class
 XFramework.XBootstrap.BootstrapStage.Create  ::  public static XFramework.XBootstrap.IBootstrapStage(int phase, string name, System.Func<System.Threading.CancellationToken, Cysharp.Threading.Tasks.UniTask> execute, System.Action shutdown = null, float weight = 1f)
 XFramework.XBootstrap.BootstrapStages  ::  public static class
 XFramework.XBootstrap.BootstrapStages.Asset  ::  public static XFramework.XBootstrap.IBootstrapStage(XFramework.XAsset.AssetInitOptions options = null)
 XFramework.XBootstrap.BootstrapStages.Data  ::  public static XFramework.XBootstrap.IBootstrapStage()
+XFramework.XBootstrap.BootstrapStages.FromProfile  ::  public static void(XFramework.XBootstrap.BootstrapProfile profile, UnityEngine.Transform uiRoot)
 XFramework.XBootstrap.BootstrapStages.Input  ::  public static XFramework.XBootstrap.IBootstrapStage(XFramework.XInput.Default.InputSystemOptions options)
 XFramework.XBootstrap.BootstrapStages.Input  ::  public static XFramework.XBootstrap.IBootstrapStage(XFramework.XInput.IInputProvider provider)
 XFramework.XBootstrap.BootstrapStages.Localization  ::  public static XFramework.XBootstrap.IBootstrapStage(string defaultLanguage = "zh_Hans", System.Collections.Generic.Dictionary<string, string> data = null)

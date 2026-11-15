@@ -57,7 +57,8 @@ Runtime/Bootstrap/
 ├── BootstrapStages.cs      # 内置阶段目录：Asset / Data / Save / UI / Input / Localization 的构造入口
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
 ├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：不含序列化字段，ConfigureStages 为抽象，暴露 StartupTask
-└── DefaultGameLauncher.cs  # 开箱默认启动器：底座 + 五组 / 八个 Inspector 字段
+├── BootstrapProfile.cs     # 7 个数据值的 ScriptableObject（Profile 资产）
+└── DefaultGameLauncher.cs  # 开箱默认启动器：_profile + _uiRoot 两个 Inspector 字段
 ```
 
 这些文件都是公开面，本模块没有 `internal` 类型。
@@ -128,17 +129,23 @@ Runtime/Bootstrap/
 
 ### 用 DefaultGameLauncher 启动时怎么带配置
 
-`DefaultGameLauncher` 在 Inspector 上提供一组**声明式配置字段**——挂上它、填字段，`Awake` 里自动组装成各模块的 options 注入，`Start` 里跑管线。**全为默认/留空时，登记表与行为与零配置完全一致。**
+`DefaultGameLauncher` 的 Inspector 面只有**两个字段**：`_profile`（`BootstrapProfile` 资产）与 `_uiRoot`（场景里的 Canvas 根）。挂上它、赋 Profile、`Start` 里跑管线。
 
-| 分组 | 字段 | 落到哪 |
+**`_profile` 留空 = 零配置**：`Bootstrap.RegisterDefaults()`（Asset / Data / Save）+ `_uiRoot` 非空时的 UI 阶段——与旧的「全默认字段」行为一致。`Input` / `Localization` 只有 Profile 或子类能提供（它们需要资产 / 语言数据，不属于零配置默认组合）。
+
+**`_profile` 非空**：`BootstrapStages.FromProfile(_profile, _uiRoot)` 显式登记 Asset / Data / Save，再按值条件登记 UI / Input / Localization：
+
+| Profile 分组 | 值 | 落到哪 |
 | ---- | ---- | ------ |
-| Asset | 主包名 / 运行模式 / 低内存自动回收 | 重建 `AssetBootstrapStage` 并把字段装进 `AssetInitOptions` |
-| Save | 存档格式版本上限 | 重建 `SaveBootstrapStage` 并把字段装进 `SaveOptions` |
-| UI | UI 根节点（场景里的 Canvas 根） | 登记 `UIBootstrapStage`（**留空则不登记**——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
-| Input | 输入配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | 登记 `InputBootstrapStage`（**资产留空则不登记**）。注①：字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内；注②：**换后端（Rewired 等）请保持留空**，并在 `ConfigureStages` 覆写里（`base` 之后先 `Unregister<InputBootstrapStage>()` 再）`Register(new InputBootstrapStage(myProvider))`——字段非空时 `base` 已登记默认 Input 阶段，直接追加会形成同相位双份 |
+| Asset | 主包名 / 运行模式 / 低内存自动回收 | 装进 `AssetInitOptions`，构造 `AssetBootstrapStage` |
+| Save | 存档格式版本上限 | 装进 `SaveOptions`，构造 `SaveBootstrapStage` |
+| Input | 输入配置资产（`InputSystemOptionsAsset`：输入资产 + 初始 ActionMap 名） | 登记 `InputBootstrapStage`（**资产留空则不登记**）。注①：字段类型是框架类型而非 `InputActionAsset`——Unity 输入类型按模块边界只允许住在 `XInput.Default` 内；注②：**换后端（Rewired 等）请保持留空**，并在 `ConfigureStages` 覆写里（`base` 之后先 `Unregister<InputBootstrapStage>()` 再）`Register(new InputBootstrapStage(myProvider))`——Profile 非空时 `base` 已登记默认 Input 阶段，直接追加会形成同相位双份 |
 | Localization | 默认语言 / 语言表（扁平 JSON 的 `TextAsset`） | 登记 `LocalizationBootstrapStage`（**语言留空则不登记**；表可空——此时该阶段打一条警告后跳过） |
+| UI | （不在 Profile 里——`Transform` 是场景引用） | `_uiRoot` 非空时登记 `UIBootstrapStage`（留空则不登记——用 `UIRootNode` 自动初始化或自行 `Initialize`） |
 
-复制的字段与各模块 options 一一对应，权威定义仍在各模块 README（`已知限制` / options 的 XML）。
+Profile 的 7 个值与各模块 options 一一对应，权威定义仍在各模块 README（`已知限制` / options 的 XML）。
+**Profile 只装数据**：服务实例（`RemoteServices` / `CryptoProvider` / 自定义 provider）装不进资产，仍走 `ConfigureStages` 覆写。
+**迁移**：旧场景的 7 个字段值不会自动搬进 Profile——新建 Profile 资产、复制旧值、赋给 `_profile`（CHANGELOG 有迁移表）。
 
 **进阶一：覆写 `ConfigureStages()`** —— 服务实例（`IAssetRemoteServices` / `ICryptoProvider` / `IAssetDecryptionServices`）与自定义阶段从这里进；调 `base` 之后追加或替换，不调 `base` 则完全自建：
 
@@ -149,7 +156,7 @@ public sealed class MyLauncher : DefaultGameLauncher
 
     protected override void ConfigureStages()
     {
-        base.ConfigureStages();                       // 字段面照常生效
+        base.ConfigureStages();                       // Profile / 零配置路径照常生效
         Bootstrap.Unregister<AssetBootstrapStage>();  // 再换掉 Asset，把服务实例装进去
         Bootstrap.Register(new AssetBootstrapStage(new AssetInitOptions
         {
@@ -162,7 +169,7 @@ public sealed class MyLauncher : DefaultGameLauncher
 
 **进阶二：完全自控（Inspector 里一个字段都不要）** —— 继承抽象底座 `GameLauncher` 并实现 `ConfigureStages`：
 本组件被拆成两层正是为了这一档。Unity **无法隐藏继承来的序列化字段**，所以「Inspector 干净」只能靠类型层次保证——
-底座 `GameLauncher` 不带字段（`ConfigureStages` 是抽象方法，编译器强制你实现），`DefaultGameLauncher` 才带那八个字段。
+底座 `GameLauncher` 不带序列化字段（`ConfigureStages` 是抽象方法，编译器强制你实现），`DefaultGameLauncher` 只带 `_profile` + `_uiRoot` 两个。
 
 ```csharp
 public sealed class MyLauncher : GameLauncher   // 抽象底座：Inspector 里不会有任何配置字段
