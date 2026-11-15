@@ -1,6 +1,7 @@
 using System;
 using Cysharp.Threading.Tasks;
 using UnityEngine;
+using XFramework.XAsset;
 using XFramework.XAudio;
 using XFramework.XLog;
 
@@ -32,9 +33,22 @@ namespace XFramework.Example
 
         private async void Start()
         {
+            // 音频资源只走 XAsset（YooAsset）地址加载。没有资源管线时先退出，
+            // 否则加载失败会被 Audio 模块收口成一条红色 Error，示例的场景就「不干净」了。
+            if (!AssetManager.IsInitialized ||
+                !AssetManager.CheckLocationValid(_bgmLocation) ||
+                !AssetManager.CheckLocationValid(_hitLocation) ||
+                !AssetManager.CheckLocationValid(_uiClickLocation))
+            {
+                LogManager.Warning(SampleLogCategories.Example,
+                    "AudioSample 跳过播放：需要 YooAsset 资源地址 '{0}'（先完成采集配置）。", _bgmLocation);
+                return;
+            }
+
             // 1. 初始化。零配置可用：同时播放上限 32、主音量满、播放源惰性创建
             //    （从不播放的项目一个 GameObject 都不会建）
             AudioManager.Initialize();
+            IsReady = true;
 
             // 2. 一次性音效：fire-and-forget。异常已由框架收口，调用方不必（也不应）再包 .Forget()
             AudioManager.Play(_hitLocation, new AudioPlayOptions(AudioChannels.SE, volumeScale: 0.8f));
@@ -71,18 +85,39 @@ namespace XFramework.Example
 
         #region 演示：接到 UI 上的几个入口
 
+        /// <summary>
+        /// 是否已检测到音频地址并完成 AudioManager 初始化。
+        /// <para>未就绪时下面的入口都是安全空操作——场景里挂了本组件但没有资源管线也不会报错。</para>
+        /// </summary>
+        public bool IsReady { get; private set; }
+
         /// <summary>设置面板：音效通道音量。</summary>
-        public void SetSEVolume(float volume) => AudioManager.SetChannelVolume(AudioChannels.SE, volume);
+        public void SetSEVolume(float volume)
+        {
+            if (AudioManager.IsInitialized)
+                AudioManager.SetChannelVolume(AudioChannels.SE, volume);
+        }
 
         /// <summary>设置面板：一键静音人声。静音只是听不见，播放不会中断。</summary>
-        public void SetVoiceMuted(bool muted) => AudioManager.SetChannelMuted(AudioChannels.Voice, muted);
+        public void SetVoiceMuted(bool muted)
+        {
+            if (AudioManager.IsInitialized)
+                AudioManager.SetChannelMuted(AudioChannels.Voice, muted);
+        }
 
         /// <summary>设置面板：总音量。</summary>
-        public void SetMasterVolume(float volume) => AudioManager.MasterVolume = volume;
+        public void SetMasterVolume(float volume)
+        {
+            if (AudioManager.IsInitialized)
+                AudioManager.MasterVolume = volume;
+        }
 
         /// <summary>暂停菜单：暂停/恢复全部音频（含暂停期间新起的声音）。</summary>
         public void SetPaused(bool paused)
         {
+            if (!AudioManager.IsInitialized)
+                return;
+
             if (paused)
                 AudioManager.Pause();
             else
@@ -90,10 +125,14 @@ namespace XFramework.Example
         }
 
         /// <summary>按钮：播一个界面音。</summary>
-        public void PlayUIClick() => AudioManager.Play(_uiClickLocation, AudioPlayOptions.Default);
+        public void PlayUIClick()
+        {
+            if (AudioManager.IsInitialized)
+                AudioManager.Play(_uiClickLocation, AudioPlayOptions.Default);
+        }
 
         /// <summary>调试用：当前有几路声音在播（含加载中与已暂停的）。</summary>
-        public int ActiveVoices => AudioManager.ActiveVoiceCount;
+        public int ActiveVoices => AudioManager.IsInitialized ? AudioManager.ActiveVoiceCount : 0;
 
         #endregion
 

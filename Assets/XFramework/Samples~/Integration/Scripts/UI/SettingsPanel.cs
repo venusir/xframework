@@ -125,6 +125,11 @@ namespace XFramework.Samples.Integration
         {
             SettingsManager.Reset<IntegrationSettings>();
             _hints.SetIsOnWithoutNotify(IntegrationSettingRefs.ShowHints.Value);
+
+            // 复位只换设置对象；音量要重新推给 AudioManager 必须走与应用相同的消息通道。
+            MessageManager.Publish(new SettingsAppliedMessage(
+                IntegrationSettingRefs.MasterVolume.Value, IntegrationSettingRefs.ShowHints.Value));
+
             _status.text = LocalizationManager.Get("settings.reset_done");
         }
 

@@ -72,7 +72,17 @@ namespace XFramework.Samples.Integration
 
         private void OnMenu()
         {
-            UIManager.PopAsync().Forget();
+            GoMenuAsync().Forget();
+        }
+
+        private async UniTaskVoid GoMenuAsync()
+        {
+            // 结算后显示栈里只剩本面板；重新打开主菜单才能拿到更新后的「上次游玩」摘要。
+            await UIManager.CloseAllAsync();
+
+            var flow = AppFlowController.Current;
+            if (flow != null)
+                await flow.OpenMainMenuAsync();
         }
 
         #endregion

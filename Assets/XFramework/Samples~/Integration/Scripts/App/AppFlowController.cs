@@ -80,8 +80,8 @@ namespace XFramework.Samples.Integration
             var handle = LockManager.Global.AddLock(EnterLockType, this);
             try
             {
-                await UIManager.CloseAsync<PausePanel>();
-                await UIManager.CloseAsync<GamePanel>();
+                // Push 只让栈顶失焦、不隐藏；不关主菜单会让它留在游戏 UI 后面。
+                await UIManager.CloseAllAsync();
                 await UnloadGameSceneAsync();
 
                 _currentMode = modeId;
@@ -115,7 +115,8 @@ namespace XFramework.Samples.Integration
         public async UniTask OpenMainMenuAsync()
         {
             await UnloadGameSceneAsync();
-            _lastRun = LastRunStore.Read();
+
+            // 用内存里的最新摘要，不要回读文件：结算刚更新过 _lastRun，文件要等退出才写。
             await UIManager.OpenAsync<MainMenuPanel>(IntegrationAddresses.MainMenu,
                 UILayers.Default, _lastRun, destroyCancellationToken);
         }
@@ -137,6 +138,11 @@ namespace XFramework.Samples.Integration
                     _data.BestOddScore = Mathf.Max(_data.BestOddScore, result.Score);
 
                 DataManager.MarkDirty<IntegrationData>();
+
+                // 同步内存摘要：主菜单显示与退出落盘都读它，否则永远停在上一会话。
+                _lastRun.Sessions = _data.Sessions;
+                _lastRun.LastMode = _data.LastMode;
+                _lastRun.BestScore = Mathf.Max(_data.BestTapScore, _data.BestOddScore);
             }
 
             if (SaveManager.IsInitialized)
@@ -146,17 +152,30 @@ namespace XFramework.Samples.Integration
                 UILayers.Popup, result, destroyCancellationToken);
         }
 
-        /// <summary>切换语言：经 Localization 模块加载语言表，并写回设置。</summary>
+        /// <summary>切换语言：经 Localization 模块按需加载语言表，并写回设置。</summary>
         public async UniTask SwitchLanguageAsync(string language)
         {
-            if (string.IsNullOrEmpty(language) || !LocalizationManager.HasLanguage(language))
+            if (string.IsNullOrEmpty(language))
             {
-                LogManager.Warning(IntegrationLogCategories.Flow, "语言 '{0}' 未加载，切换已忽略。", language);
+                LogManager.Warning(IntegrationLogCategories.Flow, "语言标识为空，切换已忽略。");
                 return;
             }
 
-            await LocalizationManager.SwitchLanguageAsync(language, destroyCancellationToken);
-            IntegrationSettingRefs.Language.Value = language;
+            try
+            {
+                // 不预判 HasLanguage：它只看缓存，首次切到未缓存的语言会被错误拦截；
+                // SwitchLanguageAsync 自己会「已缓存则同步切换，否则按地址加载」。
+                await LocalizationManager.SwitchLanguageAsync(language, destroyCancellationToken);
+                IntegrationSettingRefs.Language.Value = language;
+            }
+            catch (OperationCanceledException)
+            {
+                // 对象销毁或调用方取消：切换中止，不是错误。
+            }
+            catch (Exception e)
+            {
+                LogManager.Exception(IntegrationLogCategories.Flow, e, "切换语言失败");
+            }
         }
 
         /// <summary>
@@ -301,9 +320,9 @@ namespace XFramework.Samples.Integration
             // 语言表地址模板：切换语言时框架按 {0} 拼出 Integration.Lang_en 这样的地址。
             LocalizationManager.LanguageAssetPath = IntegrationAddresses.LanguagePathFormat;
 
+            // 已保存的语言可能尚未加载（首次启动只注入默认语言），交给同一个按需加载入口。
             var language = IntegrationSettingRefs.Language.Value;
-            if (LocalizationManager.HasLanguage(language))
-                await LocalizationManager.SwitchLanguageAsync(language, cancellationToken);
+            await SwitchLanguageAsync(language);
 
             _lastRun = LastRunStore.Read();
             _bootScreen?.MarkReady();
