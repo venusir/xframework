@@ -227,7 +227,7 @@ Runtime/Update/
 
 每帧由注入 PlayerLoop 的三个驱动系统推进（分别落在 `Update.ScriptRunBehaviourUpdate`、
 `PreLateUpdate.ScriptRunBehaviourLateUpdate`、`FixedUpdate.ScriptRunBehaviourFixedUpdate`），
-因此**不需要场景里存在 `DefaultGameLauncher` 或其它 MonoBehaviour**。
+因此**不需要场景里存在启动器或其它 MonoBehaviour**。
 
 - 注入基于 `PlayerLoop.GetCurrentPlayerLoop()` 且只插入不替换，因此与 UniTask 等同样靠注入
   PlayerLoop 工作的库共存；`IsDrivingPlayerLoop` 可查询三个驱动是否都已生效（**诊断用**：每次查询

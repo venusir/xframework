@@ -68,7 +68,7 @@ Runtime/Log/LogCategories.cs                     # CameraManager 分类
 - 不做：**Timeline / 过场相机进本模块**（2026-10-17 · 用户场景裁定）——过场由 Timeline 的 Cinemachine Track 接管 Brain；本模块的 boost 不挡 Timeline override；`ActiveCameraId` 对未注册过场 vcam 为 `null`。无重开判据。
 - 不做：**UI 相机绑定（ScreenSpaceCamera / WorldSpace 画布）**（2026-10-17 · 立项裁定）——UI 根强制 `ScreenSpaceOverlay`；相机类型 / RenderTexture / 是否挡输入是项目结构。无重开判据。
 - 暂不做：**独立 Camera 诊断页签**（2026-10-17 · v1.1 候选）——概览页的 Camera 行已读 `GetState()`；没有「排查相机状态需要独立页签」的真实使用方。重开判据：出现该需求。
-- 暂不做：**`IBootstrapStage` / `DefaultGameLauncher` 相机字段**（2026-10-17 · v1.1 候选）——后端由组合根注入；`DefaultGameLauncher` 没有可序列化的相机注册表。重开判据：出现「启动引导必须负责相机初始化」的真实使用方。
+- 暂不做：**`IBootstrapStage` / `DefaultGameLauncher` 相机字段**（2026-10-17 · v1.1 候选）——后端由组合根注入；`DefaultGameLauncher` 没有可序列化的相机注册表。重开判据：出现「启动引导必须负责相机初始化」的真实使用方。**2026-11-15 补注**：`DefaultGameLauncher` 已删除，本条自动失效。
 - 已做：**Cinemachine 3.1.7 后端硬合并进核心包**（2026-10-22 · 用户裁定）——扩展包 / 独立 asmdef 删除；核心 asmdef 硬引用 `Unity.Cinemachine`；类型在 2026-10-23 重命名为 `CinemachineCameraBackend`，位置与门禁不变。证据：`Documentation/Cinemachine.md`、`DependencyDeclarationTests`、`ModuleBoundaryTests`。
 - 已做：**2026-10-24 重新审计与 P1/P2 修复**（2026-10-24）——修：未初始化提示指向 internal API、作者状态快照时点、`SetLookAt(null)` 语义、强制 cut 回归、死栈顶 Pop、注销截断混合、同通道 boost 过滤、震屏早建 source；补 `HardIn` / `HardOut`（公开 API 源兼容 +2）。证据：`CinemachineCameraBackendTests` / `CameraDirectorTests` / `CinemachineCameraAsyncTests` / `CameraDiagnosticsTests`；清单见「审计记忆」与 CHANGELOG。
 - 不做：**Unreal 式 Camera Modifier 栈（FOV / 后期 / 跟随的临时叠加与自动恢复）**（2026-10-24）——本模块只做薄绑定；行为叠加走 Cinemachine 组件。无重开判据。

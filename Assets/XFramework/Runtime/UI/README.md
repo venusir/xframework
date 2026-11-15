@@ -42,7 +42,7 @@ Bootstrap.Register(new UIBootstrapStage(uiRootTransform, myController));   // Ph
 
 `UIBootstrapStage` 的两条语义：**已初始化则早退**（`UIRootNode.Awake` 或你手动 `Initialize` 过就算），
 **只销毁自己初始化的那份**——空转阶段不会把别人的管理器拆掉。
-`DefaultGameLauncher` 的 Inspector 字段里填了 UI 根，就是登记这个阶段（见 Bootstrap 模块 README）。
+启动器里填了 UI 根、经 `BootstrapStages.UI` 登记的，就是这个阶段（见 Bootstrap 模块 README）。
 
 ### 2. 自定义 Controller（可选：调度控制）
 

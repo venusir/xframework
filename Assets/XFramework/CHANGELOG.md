@@ -76,7 +76,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 #### UI
 
-- **`AssetManager` 已销毁时面板回池不再报错**（2026-11-15）：退出 / 停止 Play 的拆卸顺序可能是 `DefaultGameLauncher.OnDestroy → Bootstrap.Shutdown()` 先关掉 AssetManager、`UIRootNode.OnDestroy → UIManager.Dispose` 后回池面板。默认 `AssetPanelFactory.Release` 在 AssetManager 未初始化时改为直接销毁实例（此时已无池可回，实例本就随场景销毁），不再把正常退出变成一条红色 Error。回归用例 `AssetPanelFactoryTests.Release_AssetManagerUninitialized_DestroysInstanceWithoutThrowing`。
+- **`AssetManager` 已销毁时面板回池不再报错**（2026-11-15）：退出 / 停止 Play 的拆卸顺序可能是启动器的 `OnDestroy → Bootstrap.Shutdown()` 先关掉 AssetManager、`UIRootNode.OnDestroy → UIManager.Dispose` 后回池面板。默认 `AssetPanelFactory.Release` 在 AssetManager 未初始化时改为直接销毁实例（此时已无池可回，实例本就随场景销毁），不再把正常退出变成一条红色 Error。回归用例 `AssetPanelFactoryTests.Release_AssetManagerUninitialized_DestroysInstanceWithoutThrowing`。
 
 #### Samples
 

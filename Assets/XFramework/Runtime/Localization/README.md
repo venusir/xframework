@@ -21,7 +21,7 @@ using System.Collections.Generic;
 // 方式一：通过 Bootstrap 引导阶段初始化（推荐）
 // 登记后由启动管线在 Phase 90 执行：
 // Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myLanguageData));
-// 它不在 Bootstrap.RegisterDefaults() 的默认组合内——本地化需要语言数据，须显式登记
+// 它不属于任何预设组合——本地化需要语言数据，须显式登记
 
 // 方式二：手动初始化
 var defaultData = new Dictionary<string, string>

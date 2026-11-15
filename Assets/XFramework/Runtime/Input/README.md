@@ -26,7 +26,7 @@ XInput 是一个**解耦**的输入抽象层，不依赖任何特定的游戏类
   沿用 `"Player"`。
 - **交给启动引导（可选）**：`Bootstrap.Register(new InputBootstrapStage(new InputSystemOptions { Asset = myActions }))`
   ——Phase 1、晚于 Asset，清理跟着 `Bootstrap.Shutdown` 走。两条语义：**已初始化则早退**、
-  **只销毁自己初始化的那份**。`DefaultGameLauncher` 的 Inspector 字段里填了输入配置资产，登记的就是这个阶段。
+  **只销毁自己初始化的那份**。启动器 / Profile 里填了输入配置资产、经 `BootstrapStages.Input` 登记的，就是这个阶段。
 - **Inspector 里配输入**：建一份 `InputSystemOptionsAsset`（`Create → XFramework → Input System Options`，
   资产槽拖 `.inputactions` + 初始 ActionMap 名），`config.ToOptions()` 即可交给上面任一入口。
   它住在 `XInput.Default` 内是**边界要求**：Unity 输入类型只允许出现在该命名空间里
@@ -504,7 +504,7 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
     protected override void ConfigureStages()
     {
         Bootstrap.Register(new InputBootstrapStage(new RewiredProvider()));
-        // 其余阶段按需登记（要框架默认组合就 Bootstrap.RegisterDefaults()）
+        // 其余阶段按需登记（如 BootstrapStages.Data() / Save()）
     }
 }
 ```
@@ -512,11 +512,11 @@ public sealed class MyLauncher : GameLauncher   // 抽象底座：完全自控�
 不用启动器时同理，在自己的启动流程里 `Bootstrap.Register(new InputBootstrapStage(myProvider))` 即可；
 `Shutdown` 会经 `InputManager.Destroy()` 释放它（对自定义 provider 同样 `Dispose`）。
 
-> **为什么这里继承的是底座而不是 `DefaultGameLauncher`？** 后者那个 Input 字段
-> （`InputSystemOptionsAsset`）是**默认后端**的配置载体——填它等于让框架去建 Unity Input System
-> 的默认提供者。**换后端属于「服务实例」而非「数据」**，与 `RemoteServices` / `CryptoProvider` 同档，
-> 一律走代码注入（这条边界同样适用于别的模块：音频换 Wwise / 资源换实现，都是 `SetInstance` 而不是字段）。
-> 继承底座还有个直接好处：Inspector 里不会挂着一堆你根本用不上的配置字段。
+> **为什么换后端要写代码而不是填字段？** `InputSystemOptionsAsset` 是**默认后端**的配置载体——
+> 填它等于让框架去建 Unity Input System 的默认提供者。**换后端属于「服务实例」而非「数据」**，与
+> `RemoteServices` / `CryptoProvider` 同档，一律走代码注入（这条边界同样适用于别的模块：音频换
+> Wwise / 资源换实现，都是 `SetInstance` 而不是字段）。如果自建的启动器 Profile 里还留着
+> `InputSystemOptionsAsset` 字段，换后端时删掉它，改在 `ConfigureStages` 里登记自己的 provider。
 
 ## 内部机制
 

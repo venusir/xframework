@@ -111,7 +111,7 @@ using XFramework.XBootstrap;
 using XFramework.XPipeline;
 
 Bootstrap.Register(new ConfigBootstrapStage());
-Bootstrap.RegisterDefaults();   // 可选:登记框架内置的 Asset / Data / Save 三个阶段
+Bootstrap.Register(BootstrapStages.Asset());   // 内置阶段按需登记（这里以 Asset 为例）
 
 // 一键启动(按相位分组装配 → 运行)
 await Bootstrap.RunAsync();

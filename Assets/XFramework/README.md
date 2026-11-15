@@ -46,10 +46,12 @@ XFramework 是一个为 Unity 设计的**模块化基础设施框架**。它提�
 
 ### 启动引导
 
-需要按顺序初始化的服务实现 `IBootstrapStage`，然后显式登记：
+需要按顺序初始化的服务实现 `IBootstrapStage`，然后显式登记（框架不提供默认组合，登记什么由你定）：
 
 ```csharp
-Bootstrap.RegisterDefaults();                                          // Asset(0) → Data(3) → Save(4)
+Bootstrap.Register(BootstrapStages.Asset());                           // Phase 0
+Bootstrap.Register(BootstrapStages.Data());                            // Phase 3
+Bootstrap.Register(BootstrapStages.Save());                            // Phase 4
 Bootstrap.Register(new LocalizationBootstrapStage("zh_Hans", myTable)); // Phase 90
 await Bootstrap.RunAsync(progress: myProgress);
 // ...
@@ -58,7 +60,7 @@ Bootstrap.Shutdown();                                                  // 先中
 
 `RunAsync` 在失败与取消时**抛出**——启动失败是致命的，不该只留一条日志。整块是**可选**的：零配置项目与自建启动流程的项目都可以不用它。
 
-挂 `DefaultGameLauncher`（场景组件）是零配置起步；要带配置就填它的 Inspector 字段，或继承它覆写 `ConfigureStages()`。要完全自控（Inspector 里一个字段都不要）则继承抽象底座 `GameLauncher` 并实现 `ConfigureStages()`。
+`GameLauncher`（MonoBehaviour）只是可选的生命周期底座：继承它实现 `ConfigureStages()`，字段面与登记代码都写在你自己的子类里——模板见 Bootstrap 模块 README 与 Integration 示例。
 
 > 📖 详见 **[Runtime/Bootstrap/README.md](Runtime/Bootstrap/README.md)**
 
@@ -112,12 +114,14 @@ public static class LockType
 ### 方式二：带启动引导
 
 ```csharp
-// 场景里挂一个 DefaultGameLauncher 即可——它带一组 Inspector 配置字段（Asset 包名/模式、存档版本、
-// UI 根、输入资产、默认语言），填了就注入对应模块，留空则那个模块不初始化：
-// 或在自己的启动流程里显式调用：
-Bootstrap.RegisterDefaults();
+// 只登记你要的模块——框架不提供默认组合
+Bootstrap.Register(BootstrapStages.Asset());
+Bootstrap.Register(BootstrapStages.Data());
+Bootstrap.Register(BootstrapStages.Save());
 await Bootstrap.RunAsync();
 ```
+
+要挂在场景里，继承 `GameLauncher` 写一个自己的启动器（字段面随你定）；完整模板见 Integration 示例。
 
 ## 主要功能
 
@@ -215,13 +219,13 @@ await Bootstrap.RunAsync();
 | 模块 | 你能配置什么（入口） | 何时生效 |
 |---|---|---|
 | **Log** | `LogOptions` 11 字段（`LogManager.Configure`——**会丢弃已加的自定义 sink 并复位分类档位**）；`ILogSink` 追加 / 移除；`ILogManager` 整体替换（**注入非内置实现会停用 Unity 全量捕获**，替换前会有一条 `[LogManager]` 提醒）；`MinimumLevel` / `SetCategoryLevel` / `ResetCategoryLevel`；自定义分类 `LogCategory.Get` | options 在 `Configure` 时快照；档位与输出端实时 |
-| **Asset** | `AssetInitOptions` 5 字段（主包名 / PlayMode / 远端服务 / 解密服务 / 低内存回收；**`DefaultGameLauncher` 字段面覆盖第 1、2、4 项**，两个服务走覆写）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
+| **Asset** | `AssetInitOptions` 5 字段（主包名 / PlayMode / 远端服务 / 解密服务 / 低内存回收；**启动器的自建字段面按需覆盖前几项**，两个服务走代码注入）；`IAssetManager` 整体替换；运行时 `SetPoolMaxSize` / `CreateDownloader` 参数 | 初始化时；运行时项实时 |
 | **Scene** | 每次加载的 `SceneLoadOptions` 3 字段（模式 / 叠加后激活 / 切完回收）——**模块无 options、无注入点** | 每次加载时 |
 | **Camera** | 无 options；每次过渡的 `duration` / `CameraBlendStyle`；相机注册在运行时经 `CameraManager.Register`（显式 id 或 `@auto/N`）；预制体可用 `CinemachineCameraRegistration` | 调用时 |
 | **Audio** | `AudioInitOptions` 4 字段（`PrewarmVoices` 只对内置 provider 有意义）；`IAudioManager` 整体替换或 `IAudioProvider` 播放引擎替换（`SetProvider`，推荐）；运行时 `MasterVolume` / `MasterMuted` / `SetChannelVolume` / `SetChannelMuted` / `RegisterChannel` / `Pause` / `Resume`；每次播放 `AudioPlayOptions` 7 字段（新增 `InitialParameters`）、`RegisterChannel` 用 `AudioChannelConfig` 2 字段；`AudioChannels` 推荐通道名（`"master"` 是保留名）；provider 中立控制面 `SetParameter` / `SetGlobalParameter` / `LoadBank` / `UnloadBank` / `IsBankLoaded` / `SetBusVolume` / `SetBusMuted` / `SetBusPaused` / `StartSnapshot` / `StopSnapshot` / `SetPosition`（内置 provider 仅支持 `SetPosition`） | `SetProvider` 立即生效；初始化时快照；运行时项立即扫活跃播放源；控制面由 provider 能力决定 |
 | **Settings** | `SettingsOptions` 5 字段；**按类型**注入 `ISettingsStore` / `ISettingsMigrator<T>` / `ISettingsValidator<T>`（均可运行时替换；`IAsyncSettingsStore` 是 store 上的能力探测，不是独立注入点）；`defaultFactory` 决定持久层无数据时的默认值 | options 初始化时快照；注入点实时（换 Store 后需自行 `Load`） |
-| **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `UIBootstrapStage` / `DefaultGameLauncher` 字段面填 UI 根）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
-| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / `DefaultGameLauncher` 字段面指向一份 `InputSystemOptionsAsset`）；**换后端**：`Initialize(IInputProvider)` 或 `InputBootstrapStage(IInputProvider)`（`SetProvider` 不注册帧驱动）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
+| **UI** | `Initialize(Transform uiRoot, IUIController = null)`（或登记 `UIBootstrapStage` / `BootstrapStages.UI(uiRoot)`）；`IUIManager` 与三个 provider（`IUIController` / `IUITipProvider` / `IUIHudProvider`）均可整体替换；`TipAssetPath`（**静态属性**，注入自定义 `IUIManager` 或 `IUITipProvider` 后失效）；每次 Tip 用 `TipConfig`、遮罩用 `UIMaskStyle`；`UILayers` 是**建议值**、`UISorting` 是**推导源（不可配）**；`OpenAsync` / `PushAsync` 的 `layer` 与 `ShowMask` 的 `alpha` 默认值；实例参数（`UpdateTier` / `FollowTarget` / `ScreenOffset`）；`UIRootNode.applySafeArea` | provider 换后即时；`TipAssetPath` 下次显示生效；实例参数每帧读 |
+| **Input** | 自己加载 actions 资产后 `Initialize(new InputSystemOptions { Asset = …, InitialActionMap = … })`（或登记 `InputBootstrapStage` / `BootstrapStages.Input(...)`）；**换后端**：`Initialize(IInputProvider)` 或 `InputBootstrapStage(IInputProvider)`（`SetProvider` 不注册帧驱动）——无参 `Initialize()` 走 `Resources` 默认 + `"Player"` map | 初始化时 |
 | **Save** | `SaveOptions` 2 字段（版本号 / 加密 Provider，后者接线到 `FileDomain.SaveData`）；`SaveManagerFactory` 整体替换；运行时 `SetCurrentVersion` / `SetCurrentPlayer` / `ClearCurrentPlayer` | 初始化时；运行时项实时（**写操作进行中会抛** `InvalidOperationException`） |
 | **File** | `IFileProvider` 整体替换（**一次性**：换它必须先 `Destroy()`，重复 `Initialize` 只告警忽略）；`ICryptoProvider` 按域接线（`SetCryptoProvider`，可随时调）；可选能力接口 `IAtomicFileProvider` / `IDirectoryProvider`（装饰器须一并实现）；**四个域根不可配**（换根 = 换 provider） | provider 在首次 `Initialize` 时定；加密与运行时项实时 |
 | **Pool** | `PoolConfig` 3 字段；`PoolManager.Configure<T>`（**池已存在则忽略**，需先 `RemovePool<T>`）与四个集合池各自的 `Configure`（**无活跃实例时**生效，会重建池）；`Pool<T>` 公开构造可自带 `onRent` / `onReturn` / `onDestroy` 与 `IPoolable` / `IPoolDiscardable` 钩子 | 见左列两种口径；集合池在「无活跃实例」那一刻重配 |
@@ -230,7 +234,7 @@ await Bootstrap.RunAsync();
 | **Data** | `IDataManager` 整体替换（`DataManager.Initialize(impl)`，**传 `null` 等价于 `Shutdown()`**）——**无 options** | 初始化时 |
 | **Localization** | `ILocalizationManager` 整体替换；`Initialize(lang, data)` / `SetLanguageData` 注入数据；`LanguageAssetPath`（语言表地址模板）/ `FallbackLanguage`；`LocalizationBootstrapStage`（含 `TextAsset` 重载）——**换实现换不掉 `SwitchLanguageAsync` 的加载路径**（它走门面内部的 loader，见模块 README） | 运行时实时（下次切换 / 下次回退读取） |
 | **Serialize** | `ISerializer` 按格式名 `Register` / `Unregister`（公开 `Register` 同名覆盖；**`Initialize` 遇同名注册保留使用方的并告警**）；`Get` / `TryGet` / `Default` 取用 | 实时 |
-| **Bootstrap** | 登记表：`Register`（可带子阶段超时 `timeoutSeconds`）/ `Unregister` / `Unregister<T>` / `RegisterDefaults` / `Clear`（`Stages` 是实时只读视图）——**无 options**；相位号常量见 `BootstrapPhases`；`DefaultGameLauncher` 的 `_profile` + `_uiRoot` 两个 Inspector 字段（Profile 装 7 个数据值）+ `ConfigureStages()` 覆写 | 实时（须在 `RunAsync` 之前） |
+| **Bootstrap** | 登记表：`Register`（可带子阶段超时 `timeoutSeconds`）/ `Unregister` / `Unregister<T>` / `Clear`（`Stages` 是实时只读视图）——**无 options**；相位号常量见 `BootstrapPhases`；启动器由使用方继承 `GameLauncher` 实现 `ConfigureStages()`（字段面随你定） | 实时（须在 `RunAsync` 之前） |
 | **Update** | 注册参数（`order` / `initialTier` / `timeMode`——**`RegisterFixed` 没有 `timeMode`**）；`AutoDriveEnabled`（关掉即停止 PlayerLoop 自动派发，改为自行 `Tick`）；运行时 `Pause` / `Resume` / `Clear` / `Enable` / `Disable`——**无 options**；`timeMode` 注册时读一次 | 注册时 / 实时 |
 | **Lock** | `AutoReleaseOnDestroy`（运行时可变；关掉后**不再新建销毁绑定**，且对**已销毁主体**的操作不再被拒）；`LockType` 是**使用方自建**的常量类——框架不预设锁类型 | 实时 |
 | **Event** | **无配置点**（订阅期钩子 `EventStream.Create(onEmpty)` 除外） | — |
@@ -247,7 +251,7 @@ await Bootstrap.RunAsync();
 |---|---|---|---|
 | 日志落盘目录 | `{persistentDataPath}/XLog`（取不到回退 `{临时目录}/XLog`） | **能** | `LogOptions.FileDirectory` + `LogManager.Configure` |
 | 日志文件命名 | `xlog-{时间}-{会话}-p{n}.jsonl` | **不能** | 内置 sink 的私有常量——要换命名只能自行实现 `ILogSink` / `ILogManager` |
-| 资源默认包名 | `DefaultPackage` | **能** | `AssetInitOptions.PackageName`（`DefaultGameLauncher` 字段面同名项）；额外包走 `InitializePackageAsync`，**它不改主包** |
+| 资源默认包名 | `DefaultPackage` | **能** | `AssetInitOptions.PackageName`（启动器 / Profile 的同名项）；额外包走 `InitializePackageAsync`，**它不改主包** |
 | YooAsset 文件系统根（`packageRoot`）/ 文件系统类 | YooAsset 工厂的默认值 | **不能** | 只能整体替换 `IAssetManager` |
 | 存档域与槽位布局 | `FileDomain.SaveData` + `{playerId}/slot_{N}.save`（`.meta` 侧车；无 playerId 时直接落域根） | **不能** | 只能整体替换 `ISaveManager`（`SaveManagerFactory`） |
 | File 四个域根（AppData / SaveData / Streaming / Cache） | 由 Unity 的 `persistentDataPath` / `streamingAssetsPath` / `temporaryCachePath` 决定 | **不能** | 换根 = 换 `IFileProvider`。（原子写的 `.tmp` / `.bak` 后缀是 `FilePathUtility` 上的 **`public const`**——可读、不可改） |
@@ -265,7 +269,7 @@ await Bootstrap.RunAsync();
 
 | 名字 / 值 | 性质与能否更改 | 详情 |
 |---|---|---|
-| `Player`（初始 ActionMap 名） | **可改**：`InputSystemOptions.InitialActionMap`（`DefaultGameLauncher` 字段面填 `InputSystemOptionsAsset` 时是它的同名项）；传 `null` / 空串则不自动切换（保持全部 map 常开） | [Input](Runtime/Input/README.md) |
+| `Player`（初始 ActionMap 名） | **可改**：`InputSystemOptions.InitialActionMap`（填 `InputSystemOptionsAsset` 时是它的同名项）；传 `null` / 空串则不自动切换（保持全部 map 常开） | [Input](Runtime/Input/README.md) |
 | `"master"`（音频保留通道名） | **不能当通道用**：总音量由 `MasterVolume` / `MasterMuted` 表达；把它传给通道 API 会抛 `ArgumentException` | [Audio](Runtime/Audio/README.md) |
 | `AudioChannels` 推荐通道名 | **建议值**：`default` / `bgm` / `se` / `voice` / `ui`——通道域是开放字符串，自建自己的通道名即可 | [Audio](Runtime/Audio/README.md) |
 | `UILayers` / `UISorting` | `UILayers` 是**建议值**（可以给自己的层号）；`UISorting` 是排序空间的**推导源（不变量）**——改常量不会让框架按新值重排 | [UI](Runtime/UI/README.md) |

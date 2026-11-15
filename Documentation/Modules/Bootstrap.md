@@ -13,16 +13,14 @@ Runtime/Bootstrap/
 ├── BootstrapState.cs       # 启动状态枚举（Idle / Running / Completed / Failed / Cancelled）
 ├── IBootstrapStage.cs      # 阶段契约：IPhaseStage + 一个同步 Shutdown
 ├── BootstrapStage.cs       # 委托阶段工厂（BootstrapStage.Create）
-├── BootstrapStages.cs      # 内置阶段目录（Asset / Data / Save / UI / Input / Localization）+ FromProfile
-├── BootstrapProfile.cs     # 7 个数据值的 ScriptableObject（Profile 资产）
+├── BootstrapStages.cs      # 内置阶段目录（Asset / Data / Save / UI / Input / Localization）
 ├── BootstrapPhases.cs      # 框架内置阶段的相位号常量（0–89 由框架保留）
-├── GameLauncher.cs         # 启动器底座（MonoBehaviour）：无序列化字段，ConfigureStages 为抽象，暴露 StartupTask
-└── DefaultGameLauncher.cs  # 开箱默认启动器：_profile + _uiRoot 两个 Inspector 字段
+└── GameLauncher.cs         # 启动器底座（MonoBehaviour）：无序列化字段，ConfigureStages 为抽象，暴露 StartupTask
 
 Editor/Bootstrap/           # BootstrapValidator（只读校验 + 菜单 Tools/XFramework/Bootstrap/Validate Bootstrap）
-Tests/Runtime/Bootstrap/    # GameLauncherTests、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
+Tests/Runtime/Bootstrap/    # GameLauncherTests（底座契约）、GameLauncherFrameTests（用例 3 是「启动途中销毁」的端到端证据）
 Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪面语义）、BootstrapStageTests（内置阶段直连）、
-                            # BootstrapFactoryTests（委托工厂）、BootstrapStagesTests（目录 / FromProfile）、
+                            # BootstrapFactoryTests（委托工厂）、BootstrapStagesTests（目录）、
                             # BootstrapInvariantTests（相位不变量）、BootstrapValidatorTests、BootstrapDiagnosticPanelTests
 ```
 
@@ -35,6 +33,7 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪
 - **登记表自 2026-10-02 起支持注销**（`Unregister` / `Unregister<T>`）：此前「替换内置阶段」只能靠调用顺序（先 `Register` 再 `RegisterDefaults`），而启动器在 `Awake` 里会无条件登记默认组合，与使用方 `Awake` 的先后由 Unity 决定。
 - **`GameLauncher` 自 2026-10-02 起拆为两层**：抽象底座 `GameLauncher`（只有生命周期接线 + `abstract ConfigureStages`，**零序列化字段**）与默认实现 `DefaultGameLauncher`（八个 Inspector 字段 + 字段驱动的登记）。拆的理由：Unity 无法隐藏继承来的序列化字段，「完全自控的人 Inspector 里干净」只能靠类型层次保证；`abstract` 顺带让编译器兜住「忘了覆写」。**这是破坏性变更**——原先 `class X : GameLauncher` 的代码编译不过（迁移说明见 `CHANGELOG`）。
 - **`Shutdown` 自 2026-10-13 起先中止在途 `RunAsync`、再清理**（`948aadb`；`GameLauncher.Start` 同时改传 `destroyCancellationToken`）：此前清理与在途运行互不感知——「被 `Shutdown` 过的后置相位仍会在自己的 `Shutdown` 之后被执行」。修法（Bootstrap 内部链接取消源）与两条实现硬约束见下节未决处置。
+- **2026-11-15 当日撤销「两层拆分」的默认实现一半**（用户裁定「启动组合整体交还使用方」）：删除 `DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults`；抽象底座 `GameLauncher`、登记表 `Bootstrap` 与构造目录 `BootstrapStages` 保留。示例 `Samples~/Integration` 的 `IntegrationLauncher` / `IntegrationBootstrapProfile` 成为模板。理由：同一份「两字段 + 装配」形状被校验器 / 示例 / 测试三处各编码一次；Profile 的 `_inputOptions` 类型把默认后端绑进框架级数据资产；`RegisterDefaults` 的按类型跳过与 `Register` 的按实例去重构成两条语义。`DefaultGameLauncher` 与 `RegisterDefaults` 已发布（0.3.0）→ 破坏性变更（CHANGELOG 有迁移表）；`BootstrapProfile` / `FromProfile` 未发布 → 直接撤掉。
 - **「`Unregister` 与调用顺序无关」的承诺于 2026-10-17 收窄**：此前 README / XML 声称替换内置阶段与调用顺序无关、在 `DefaultGameLauncher` 在场时同样可用。控制流复核显示启动器在自己的 `Awake` 里**无条件**登记 Asset、并用 `Unregister<SaveBootstrapStage>()` 摘掉所有 Save 阶段——使用方组件的 `Awake` 先跑时仍会被覆盖或双份登记。README 现明确：唯一与 `Awake` 顺序无关的路径是继承启动器覆写 `ConfigureStages`；外部 `Awake` 的替换不保证；`RegisterDefaults` 与启动器混用也会产生同相位双份。
 
 ## 决策台账
@@ -68,11 +67,11 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪
 
 （2026-10-02 追记：用户问「以 `GameLauncher` 为框架配置与模块编排核心是否更合理、框架自身模块初始化顺序是否确定」。顺序的答案是「六条通路、只有 Bootstrap 那条是契约」；核心化的答案是**不采纳**，但采纳了一个最小扩展点——两条结论见下。）
 
-- 不做：**`GameLauncher` 作为框架的配置与编排核心**（2026-10-02 · 追记）——三条理由：① 与三处成文决定正面相撞——包 README「框架刻意**不提供统一的配置文件**……**参数即契约**」、架构的关键设计决策「服务不依赖统一入口」、本组件自己的定性「可选件、不是必需入口」；② 配置的形状是**代码不是数据**（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例，Inspector/资产序列化不了），且一半配置的生效时机**早于任何场景**（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`）——场景组件结构性地覆盖不到，装进去只能得到「半张脸」；③ 两处沿革**刻意不挂靠它**（删节点系统时解除 GameLauncher ↔ Update；Settings 落盘特意不挂它，原话「把落盘挂在一个可缺席的组件上会让本选项的承诺落空」），且它当前**零使用**（2026-11-15 订正：Integration 示例已挂 `IntegrationLauncher`，不再是零使用——原文的「零使用」是 2026-10-02 的评估口径）。**采纳的替代形状**：给它一个最小扩展点 `protected virtual void ConfigureStages()`（默认实现即 `RegisterDefaults()`，覆写即可带配置）——把「带配置」变成一次 override，而不是把配置中心化。无重开判据。
+- 不做：**`GameLauncher` 作为框架的配置与编排核心**（2026-10-02 · 追记）——三条理由：① 与三处成文决定正面相撞——包 README「框架刻意**不提供统一的配置文件**……**参数即契约**」、架构的关键设计决策「服务不依赖统一入口」、本组件自己的定性「可选件、不是必需入口」；② 配置的形状是**代码不是数据**（`AssetInitOptions.RemoteServices` / `SaveOptions.CryptoProvider` 是服务实例，Inspector/资产序列化不了），且一半配置的生效时机**早于任何场景**（`LogOptions` 走 `SubsystemRegistration`、File 域根预热走 `BeforeSceneLoad`）——场景组件结构性地覆盖不到，装进去只能得到「半张脸」；③ 两处沿革**刻意不挂靠它**（删节点系统时解除 GameLauncher ↔ Update；Settings 落盘特意不挂它，原话「把落盘挂在一个可缺席的组件上会让本选项的承诺落空」），且它当前**零使用**（2026-11-15 订正：Integration 示例已挂 `IntegrationLauncher`，不再是零使用——原文的「零使用」是 2026-10-02 的评估口径）。**采纳的替代形状**：给它一个最小扩展点 `protected virtual void ConfigureStages()`（默认实现即 `RegisterDefaults()`，覆写即可带配置）——把「带配置」变成一次 override，而不是把配置中心化。**2026-11-15 补注**：`ConfigureStages` 早已改为 `abstract`；`RegisterDefaults` 已删除，登记代码全部由使用方写。无重开判据。
 - 暂不做：**把 `Awake` / `Start` / `OnDestroy` 改成 `protected virtual`**（2026-10-02 · 追记）——`async void Start` 变 virtual 会诱使「override 不调 base」这类错误；`ConfigureStages` 已覆盖绝大多数定制需求。重开判据：出现需要改启动/清理时机的真实情形。
 - 已做：**子阶段粒度超时**（原 2026-10-02「未做」；2026-11-15 落地 · 用户裁定「启动方式评估与优化计划」）——原结论：Bootstrap 每相位装配为一个 `ParallelStage`，而超时只在管线顶层阶段粒度存在，从 Bootstrap 侧无法为单个引导阶段设置超时。落地形状：`ParallelStage` 构造新增与子阶段同序的 `timeoutSeconds`，`Pipeline.BuildPhaseGroups` 透传，`Bootstrap.Register(stage, timeoutSeconds)` 在登记时指定（两表同序增删，`Clear`/`ResetForNewSession` 一起清）。**边界如实保留**：超时只报告失败并取消令牌，不响应取消的阶段仍会跑完（乐观超时）。回归 `BootstrapTests.Register_WithTimeout_*`、`PipelineTimeoutTests.ChildTimeout_*`。
 - 已做：**静态登记表跨播放会话存活——会话复位钩子落地**（2026-10-12 · `ebeaf4e`）——关闭域重载时上一轮播放登记的阶段不会被自动清除，
-  而会话 2 的 `ConfigureStages` 只能**追加**新实例（`Register` 按实例去重、`RegisterDefaults` 按类型跳过）
+  而会话 2 的 `ConfigureStages` 只能**追加**新实例（`Register` 按实例去重；当时 `RegisterDefaults` 还按类型跳过，该 API 已于 2026-11-15 删除）
   ——旧阶段实例留在表里被一起装配：同相位并行双跑（旧阶段握着上一会话已销毁场景的引用），
   退出时还会被双份 `Shutdown`（第二次 `AssetManager.Destroy` 撞上已置空的实例）。
   现在 `Bootstrap` 也有会话复位钩子（`ResetForNewSession`，挂 `RuntimeInitializeOnLoadMethod` 的
@@ -80,20 +79,21 @@ Tests/Editor/Bootstrap/     # BootstrapTests（登记 / 执行 / 清理 / 就绪
   **`Clear()` 的定位不变**（测试复位用）——两者都只清登记表、不影响已初始化的服务。
   回归用例：`Tests/Runtime/Architecture/SessionResetTests.Bootstrap_ResetClearsTheStageRegistry`（已做改前必红）。
 - 已做：**运行中 `Shutdown` 与在途 `RunAsync` 交叠——实测并随修复覆盖第三方路径**（2026-10-13 · `948aadb`）——`GameLauncherFrameTests` 用例 2/3 与上条同源同结论：`Shutdown` 不取消任何东西，在途管线（装配期快照）照常执行其剩余阶段；第三方在自己的代码里调 `RunAsync` 且不传令牌时交叠同样成立。**已随上条一并修复**：中止不依赖调用方传令牌（Bootstrap 内部链接取消源），第三方路径由 `BootstrapTests` 的新用例钉住。
-- 已做：**运行中的 `RegisterDefaults` / `Clear` 补告警**（2026-10-17 · `f7e50df` · 重新审计）——README / XML 承诺「运行中修改登记表只告警」，但这两条路径静默改表；现在与 `Register` / `Unregister` 同形告警，并说明后果（新增阶段本轮不执行但会被 `Shutdown` 扫到；`Clear` 清掉的阶段在途仍执行但拿不到 `Shutdown`）。回归用例 `BootstrapTests.RegisterDefaults_WhileRunning_WarnsButProceeds` / `Clear_WhileRunning_WarnsButProceeds`（改前必红：`Expected log did not appear`）。
+- 已做：**运行中的 `RegisterDefaults` / `Clear` 补告警**（2026-10-17 · `f7e50df` · 重新审计）——README / XML 承诺「运行中修改登记表只告警」，但这两条路径静默改表；现在与 `Register` / `Unregister` 同形告警，并说明后果（新增阶段本轮不执行但会被 `Shutdown` 扫到；`Clear` 清掉的阶段在途仍执行但拿不到 `Shutdown`）。回归用例 `BootstrapTests.RegisterDefaults_WhileRunning_WarnsButProceeds` / `Clear_WhileRunning_WarnsButProceeds`（改前必红：`Expected log did not appear`）。**2026-11-15 补注**：`RegisterDefaults` 已删除，前一条用例随之移除；`Register` / `Clear` 的告警路径仍在。
 - 已做：**会话复位 × 在途运行的 `_isRunning` 代际修复**（2026-10-17 · `1b13809` · 重新审计）——`ResetForNewSession` 允许新旧运行并存，旧实现却在 `finally` 无条件清 `_isRunning`，会把新运行正在持有的守卫一起清掉，第三个 `RunAsync` 被错误放行、同一批阶段并发跑两遍。改用运行代际号做归属。回归用例 `BootstrapTests.ResetForNewSession_DuringInFlightRun_OldRunDoesNotClearNewRunsGuard`（改前必红：`Expected: 1 But was: 2`）。
 - 已做：**Asset / Data / Save 引导阶段的清理所有权对齐**（2026-10-17 · `7d6a4be` + `8d9e650` · 重新审计）——三个阶段新增 `_initializedByThisStage`，`Shutdown` 只销毁自己初始化的那份，与 Localization / Input / UI 的「谁初始化谁清理」一致。**Asset 的标记放在 `await` 之前**：初始化在途时 `Shutdown` 仍须由本阶段作废在途任务——这条由全量 PlayMode 的 `GameLauncherFrameTests` 抓到（标记放在 `await` 之后会让失败链证据消失，`8d9e650` 修正）。回归用例 `BootstrapStageTests` 六个所有权用例（三条改前必红）。逐模块记录见 `Modules/Asset.md` / `Data.md` / `Save.md`。
-- 不做：**`DefaultGameLauncher` 按相位补缺 / 同相位冲突告警**（2026-10-17 · 重新审计）——按相位补缺会改变字段面语义（外部登记的同相位阶段是否算「替换」无法判定），冲突告警则会把「使用方有意替换」也变成噪音；本轮采纳的是文档收窄：唯一与 `Awake` 顺序无关的路径是覆写 `ConfigureStages`。重开判据：出现第三方真实踩坑报告。
+- 不做：**`DefaultGameLauncher` 按相位补缺 / 同相位冲突告警**（2026-10-17 · 重新审计）——按相位补缺会改变字段面语义（外部登记的同相位阶段是否算「替换」无法判定），冲突告警则会把「使用方有意替换」也变成噪音；本轮采纳的是文档收窄：唯一与 `Awake` 顺序无关的路径是覆写 `ConfigureStages`。重开判据：出现第三方真实踩坑报告。**2026-11-15 补注**：`DefaultGameLauncher` 已删除，本条自动失效。
 - 不做：**`BootstrapPhases.PreAsset` 常量 / 负相位契约**（2026-10-17 · 重新审计）——框架不为「早于 Asset」保留槽位；需要时在 `RunAsync` 之前自行初始化。公开常量会把一个未论证的位置变成承诺。重开判据：出现真实第三方诉求。
 - 不做：**多启动器守卫**（2026-10-17 · 重新审计）——不给 `GameLauncher` 引入单例静态态；README 写明「同一会话只应有一个启动器」。重开判据：出现真实多启动器用法。
 - 不做：**改 `BootstrapPhases.UserStart` 的值**（2026-10-17 · 重新审计）——它与 `Localization` 同值 90 是「不依赖本地化的业务阶段尽早开始」的有意取舍；依赖本地化的阶段取更大值，README 已写明。无重开判据。
 - 已做：**Shutdown 取消隔离与登记表快照**（2026-10-20 · R3-BST-001/003，本轮修复）——`_runCts.Cancel()` 在阶段注册的取消回调抛异常时会以 `AggregateException` 在任何 `stage.Shutdown()` 之前逃出；`Shutdown` 在活引用 `StageList` 上索引遍历，阶段 `Shutdown` 里 `Clear/Unregister` 会越界或跳过其余阶段。修法：`Cancel` 逐处 try/catch 记 Error；入口先快照登记表；回归 `BootstrapTests` 两例（改前异常逃逸/跳过阶段）。
-- 已做：**启动配置收窄为 `BootstrapProfile`（P1-a：`DefaultGameLauncher` 只留 `_profile` + `_uiRoot`）**（2026-11-15 · 用户裁定「启动方式评估与优化计划」）——7 个数据字段（Asset×3 / Save×1 / Input×1 / Localization×2）移入 `ScriptableObject` 资产；零配置语义不变（`_profile == null` → `RegisterDefaults()` + 条件 UI）。**破坏性变更**：旧场景字段值不会自动迁移，需新建 Profile、复制值、赋 `_profile`；迁移表进 CHANGELOG。**与 `Ledger.md`「统一框架 Profile」的界线**：本 Profile 只装 Bootstrap 的 7 个数据值，不承担 Asset/Log/File 的前置配置、不替代模块 options，也不作为全局容器——那条 `不做` 维持。继承拆分保留（抽象底座零字段 + 默认实现两字段），合并留独立主版本。
+- 已推翻：**~~启动配置收窄为 `BootstrapProfile`（P1-a：`DefaultGameLauncher` 只留 `_profile` + `_uiRoot`）~~**（2026-11-15 · 用户裁定「启动方式评估与优化计划」）——~~7 个数据字段（Asset×3 / Save×1 / Input×1 / Localization×2）移入 `ScriptableObject` 资产；零配置语义不变（`_profile == null` → `RegisterDefaults()` + 条件 UI）。**破坏性变更**：旧场景字段值不会自动迁移，需新建 Profile、复制值、赋 `_profile`；迁移表进 CHANGELOG。**与 `Ledger.md`「统一框架 Profile」的界线**：本 Profile 只装 Bootstrap 的 7 个数据值，不承担 Asset/Log/File 的前置配置、不替代模块 options，也不作为全局容器——那条 `不做` 维持。继承拆分保留（抽象底座零字段 + 默认实现两字段），合并留独立主版本。~~ **同日被「启动组合整体交还使用方」取代**：`DefaultGameLauncher`、`BootstrapProfile` 与 `BootstrapStages.FromProfile` 全部删除，Profile 形状与装配代码移入 Integration 示例。界线结论不变——框架**不提供任何 Profile / 全局配置容器**（与 `Ledger.md` 那条 `不做` 同向）。
 - 已做：**启动入口维持 N0（启动场景 Launcher）主线，N3 自动启动根可选，N4 仅 headless**（2026-11-15 · 用户裁定）——遮罩悖论：启动期间需要 UI 时入口必须锚在对象上；静态入口在 `BeforeSceneLoad` 拿不到场景 UI，自造 UI 根又回到 Mono。N3 需要 settings asset + 启动根预制体 + 重复创建/测试守卫，列独立待裁项。
 - 已做：**登记便捷层：`BootstrapStage.Create` 委托工厂 + `BootstrapStages` 目录**（2026-11-15 · 用户裁定）——消灭「只调一次 Initialize」的样板类；目录让登记代码集中可读。委托阶段不替调用方管所有权（`Shutdown` 由调用方提供）；相位模型与显式登记语义不变。另加内置不变量测试（`Save.Phase > Data.Phase`、`UserStart == Localization` 等），把注释约定变成机器校验。
-- 已做：**编辑器校验 + 诊断面板升级**（2026-11-15 · 用户裁定）——`Tools/XFramework` 菜单校验启动场景 / 重复启动器 / Profile 与 Host 接线等；诊断面板补运行状态、进度、失败原因。此前「零编辑器校验」与「诊断面板只列表」是评估确认的缺口。
+- 已做：**编辑器校验 + 诊断面板升级**（2026-11-15 · 用户裁定）——`Tools/XFramework` 菜单校验启动场景 / 重复启动器 / Profile 与 Host 接线等；诊断面板补运行状态、进度、失败原因。此前「零编辑器校验」与「诊断面板只列表」是评估确认的缺口。**2026-11-15 补注**：启动器字段与 Profile 规则随类型删除；校验器现查启动场景 / 启动器数量 / 登记表重复 / Asset 阶段 Host 缺 `RemoteServices`。
 - 已做：**provider 替换路径成文：无统一容器，`ConfigureStages` 是唯一与 `Awake` 顺序无关的组合根**（2026-11-15 · 用户裁定）——替换分管理器级 / provider 级 / 注册追加级；Profile data-only。中期改进（内置阶段参数）见下条。**不做**：DI 容器 / Installer / `ProviderProfile` / provider 注册表。
 - 未做：**内置阶段 provider/manager 构造参数 + `AudioBootstrapStage`**（2026-11-15 · 用户裁定方向，排期待裁）——`SaveBootstrapStage(options, factory)`、`DataBootstrapStage(manager)`、`UIBootstrapStage(root, controller, manager)`、`LocalizationBootstrapStage(..., manager)` 与新增 `AudioBootstrapStage(options, provider)`；source-compatible，注入实例归调用方、阶段只销毁自己初始化的那份。
+- 已做：**启动组合整体交还使用方：删除 `DefaultGameLauncher`、`BootstrapProfile`、`BootstrapStages.FromProfile` 与 `Bootstrap.RegisterDefaults`**（2026-11-15 · 用户裁定）——框架只保留生命周期底座 `GameLauncher`、登记表 `Bootstrap` 与构造目录 `BootstrapStages`；字段面、Profile 形状与装配代码归使用方（模板在 Integration 示例）。编辑器校验删掉 BST-VAL-005/006 与 003 的 Profile 分支。**破坏性变更**：`DefaultGameLauncher` / `RegisterDefaults` 在 0.3.0 已发布（迁移表见 CHANGELOG）；Profile / FromProfile 未发布。**判据**：同一形状三处重复 + Profile 绑默认后端 + 两条去重语义。**覆盖代价**：`FromProfile` 的映射用例随类型删除，改由示例编译门禁与手工验收覆盖。
 
 ## 审计轮次
 

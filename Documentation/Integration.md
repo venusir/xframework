@@ -67,7 +67,7 @@
 |---|---|
 | Asset | `EditorSimulate` 初始化、`PreloadAllAsync`、`UnloadUnusedAssetsAsync`、`CheckLocationValid`、`GetPoolStatus` |
 | Audio | `Initialize`、`Play/PlayAsync`、`MasterVolume`、`SetChannelVolume`、`Pause/Resume`、`StopAll`、`CopyChannels`、`Destroy` |
-| Bootstrap | `DefaultGameLauncher.ConfigureStages` 覆写、`IBootstrapStage`、`BootstrapPhases.UserStart`、`Bootstrap.Shutdown` |
+| Bootstrap | `GameLauncher.ConfigureStages` 覆写、`BootstrapStages` 目录装配、`IBootstrapStage`、`BootstrapPhases.UserStart`、`Bootstrap.Shutdown` |
 | Camera | `Initialize(CinemachineBrain)`、`Register`、`SwitchTo`、`SetFollow`、`Shake`、`SwitchToAsync`、`Destroy`、`CopyCameras/GetState` |
 | Config | `Initialize`、`PreloadTableAsync<GameModeRow>`、`PreloadGlobalAsync<IntegrationRules>`、`Get/GetGlobal`、`Unload`、`CopyLoaded` |
 | Data | `GetOrCreateBlock`、`MarkDirty`、`HasDirtyBlocks` |
@@ -101,7 +101,7 @@ Samples~/Integration/
 ├── .sample.json                       # Samples 页签显示名与说明
 ├── README.md                          # 导入 / 采集 / 运行 / 退出说明 + 模块接线表
 ├── Scripts/
-│   ├── Bootstrap/  IntegrationLauncher.cs、GameSettingsBootstrapStage.cs
+│   ├── Bootstrap/  IntegrationLauncher.cs、IntegrationBootstrapProfile.cs、GameSettingsBootstrapStage.cs
 │   ├── App/        AppFlowController.cs、IntegrationAddresses.cs、IntegrationMessages.cs、
 │   │              LastRunStore.cs、IntegrationLogCategories.cs
 │   ├── Settings/   IntegrationSettings.cs、IntegrationSettingRefs.cs、
@@ -132,8 +132,8 @@ Samples~/Integration/
 
 ### 4.4 启动与退出接线
 
-- `IntegrationLauncher : DefaultGameLauncher`，Inspector 面 = `_profile`（`Integration.BootstrapProfile` 资产）+ `_uiRoot`；`ConfigureStages()`：
-  1. `base.ConfigureStages()` → `BootstrapStages.FromProfile` 登记 Asset(0, Profile 的 `EditorSimulate`) / Data(3) / Save(4, Profile 的版本) / UI(2, `_uiRoot`) / Input(1, Profile 的输入资产) / Localization(90, Profile 的语言与表)；
+- `IntegrationLauncher : GameLauncher`，Inspector 面 = `_profile`（自建的 `IntegrationBootstrapProfile` 资产）+ `_uiRoot`；`ConfigureStages()`：
+  1. 用 `BootstrapStages.*` 装配 Asset(0, Profile 的 `EditorSimulate`) / Data(3) / Save(4, Profile 的版本) / UI(2, `_uiRoot`) / Input(1, Profile 的输入资产) / Localization(90, Profile 的语言与表)；
   2. `Bootstrap.Register(new GameSettingsBootstrapStage())`（Phase 90，与 Localization 同相位并行——两者无相互依赖）；
   3. `Bootstrap.Register(new GameConfigBootstrapStage())`（Phase 90）。
 - `BootScreen` 用 IMGUI 显示 `Bootstrap.State` / `LastProgress` 与模块就绪清单；`AppFlowController.Start` 调 `Bootstrap.WaitUntilReadyAsync(destroyCancellationToken)` 等启动就绪（失败时重抛并显示错误）。示例不再自造「启动完成」阶段。
@@ -155,7 +155,7 @@ Samples~/Integration/
 - **一次性 Editor 生成**：预制体、两个场景、`Integration.InputOptions.asset`；生成器源码提交在 `Tools/SampleGeneration/IntegrationAssetGenerator.cs`，由 `Tools/generate-integration-sample.ps1` 复制到临时 `Assets/__XfwIntegrationGen__/`（连同示例脚本与 `.meta`，保持 GUID）后用 Unity batchmode `-executeMethod ...Generate -quit -logFile <绝对路径>` 运行（优先测试壳 `<repo>.TestRun` 避免编辑器锁）。生成物 + Unity 写出的 `.meta` 移回 `Samples~/Integration/`，删除临时目录。
 - **采集设置**：`Assets/DevTools/Editor/IntegrationCollectorSetup.cs`（原 `Tools/SampleGeneration/IntegrationVerifySetup.cs`，2026-11-15 迁移）；严格版供 `Tools/verify-integration-sample.ps1` 的 `-executeMethod` 调用，幂等版供开发菜单复用已有配置。
 - **音频**：PowerShell `BinaryWriter` 合成 PCM 16-bit mono 44.1kHz `.wav`。
-- 生成器注意：面板根挂具体面板脚本、`RectTransform` 显式全屏拉伸、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、子节点按 `txt_/btn_/sld_/tgl_` 命名；`DefaultGameLauncher` 私有字段用 `SerializedObject` 写入；`EventSystem` 用 `InputSystemUIInputModule`；Boot 相机持唯一 `AudioListener`。
+- 生成器注意：面板根挂具体面板脚本、`RectTransform` 显式全屏拉伸、`Canvas`/`GraphicRaycaster` 由 `RequireComponent` 自动补、子节点按 `txt_/btn_/sld_/tgl_` 命名；启动器私有字段用 `SerializedObject` 写入——**该生成器在本轮之前已随 Profile 迁移失效**（它仍写 7 个已删字段并反射旧的 `_inputOptions`），待修复或连同脚本一并删除；`EventSystem` 用 `InputSystemUIInputModule`；Boot 相机持唯一 `AudioListener`。
 
 ## 五、分步实施计划与状态
 

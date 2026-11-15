@@ -14,8 +14,8 @@ XFramework 资源管理模块提供异步资源加载、实例化、场景切换
 using XFramework.XAsset;
 
 // 方式一：交给 Bootstrap 引导管线（推荐）
-// Bootstrap.RegisterDefaults() 会登记 AssetBootstrapStage（Phase 0）自动处理初始化；
-// 也可单独登记：Bootstrap.Register(new AssetBootstrapStage());
+// 登记 BootstrapStages.Asset() 会构造 AssetBootstrapStage（Phase 0）并自动处理初始化；
+// 也可直接登记：Bootstrap.Register(new AssetBootstrapStage());
 
 // 方式二：手动初始化
 await AssetManager.InitializeAsync();
@@ -598,7 +598,7 @@ Release 下断言整段不编译，**没有任何运行期保护**，请按契�
 17. **包复用下运行模式与模拟清单不会自动刷新**：包已初始化成功时 `InitializeAsync` 跳过上游初始化
     （同一会话重初始化、关闭域重载后的第二次播放都会跳过模拟构建），模式在包首次成功初始化后固定；
     `Destroy()` 也不会从 YooAssets 注册表移除包。需要刷新请重开编辑器或触发域重载。
-18. **Player 构建误留 EditorSimulate 会中止启动**：`DefaultGameLauncher` 的 Inspector 值随场景序列化；
+18. **Player 构建误留 EditorSimulate 会中止启动**：启动器的 Inspector 值随场景序列化；
     打包前未改回 Offline / Host 时，Asset 引导阶段（Phase 0）抛 `PlatformNotSupportedException`，
     整条启动管线中止。打包检查该字段。
 

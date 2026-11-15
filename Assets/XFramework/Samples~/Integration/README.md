@@ -8,7 +8,7 @@
 
 | 模块 | 在示例里怎么用 |
 |---|---|
-| Bootstrap | `IntegrationLauncher` 继承 `DefaultGameLauncher`（`Integration.BootstrapProfile` 资产 + UI 根），追加 Settings 与 Config 阶段；`AppFlowController` 用 `Bootstrap.WaitUntilReadyAsync` 等就绪 |
+| Bootstrap | `IntegrationLauncher` 继承 `GameLauncher`，用自建的 `IntegrationBootstrapProfile` 资产 + UI 根装配 Asset / Data / Save / UI / Input / Localization，再追加 Settings 与 Config 阶段；`AppFlowController` 用 `Bootstrap.WaitUntilReadyAsync` 等就绪。**框架不提供开箱启动器——这两个文件就是模板** |
 | Asset | `EditorSimulate` 初始化、按地址加载面板 / 语言表 / 音频、预载与池状态 |
 | UI | `UIRootNode` + `UIManager.OpenAsync/PushAsync/PopAsync`、对话框、模态遮罩、语言回调 |
 | Audio | `AudioManager.Initialize`、BGM / 点击 / 判定音、音量通道 |
@@ -24,6 +24,8 @@
 
 > 本示例只使用**公开 API**；它不随包编译，由仓库的示例编译门禁单独校验。
 
+> **启动器模板**：`Scripts/Bootstrap/IntegrationLauncher.cs` + `IntegrationBootstrapProfile.cs` 是「自己写启动器与 Profile」的完整参考——框架只提供 `GameLauncher` 底座，字段面与装配都由使用方写。Profile 的字段按项目需要增删（例如换输入后端时删掉 `_inputOptions`，改登记自己的 provider）。
+
 ## 2. 导入与配置（三步）
 
 1. **导入示例**：Package Manager → XFramework → Samples → **XFramework 全流程接入示例** → Import。
@@ -37,7 +39,7 @@
    （`Integration.MainMenu.prefab` → `Integration.MainMenu`）。
 3. **运行**：打开 `Integration.Boot.unity`，按 Play。
 
-> Profile 资产（`Data/Integration.BootstrapProfile.asset`）里的 Asset Play Mode 固定为 `EditorSimulate`
+> 示例 Profile（`Data/Integration.BootstrapProfile.asset`）里的 Asset Play Mode 固定为 `EditorSimulate`
 > （仅编辑器可用）。要出 Player，请把它改成 `Offline` 或 `Host`，并先用 YooAsset 构建资源包。
 > 该模式忽略加密与远端服务。
 
@@ -70,7 +72,7 @@ Integration/
 ├── Prefabs/         面板预制体（文件名即地址）
 ├── Scenes/          Integration.Boot.unity / Integration.Game.unity
 ├── Audio/           BGM 与音效
-└── Data/            语言表、模式表、输入动作、Bootstrap Profile 资产
+└── Data/            语言表、模式表、输入动作、示例自己的 Bootstrap Profile 资产
 ```
 
 ## 5. 已知限制
